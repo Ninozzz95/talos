@@ -209,7 +209,9 @@ test('⛔⛔⛔⛔ FIG-01 — la figlia DELEGATA da una madre locale resta sul m
   const registro = registroComeIlServer({ porta: motore.porta, cartella });
   spegniTutteAllaFine(fixture, registro);
 
-  const { sessionId } = registro.avvia('task-vero', { provider: 'local', runtimeId: 'llama.cpp', modelId: 'mio.gguf' });
+  const { sessionId } = registro.avvia('task-vero', {
+    provider: 'local', runtimeId: 'llama.cpp', modelId: 'mio.gguf', /* F3-10: la delega è di Normale */
+  });
   const figlia = await attendiFigliaEFermala(registro, sessionId, {
     finoA: () => motore.richieste.some((r) => JSON.stringify(r?.messages ?? '').includes(SEGRETO)),
   });
@@ -268,7 +270,9 @@ test('⛔⛔ FIG-03 — una madre CLOUD passa alla figlia il SUO modello, esatta
   });
   spegniTutteAllaFine(fixture, registro);
 
-  const { sessionId } = registro.avvia('task-vero', { modelloScelto: 'deepseek:un-modello' });
+  const { sessionId } = registro.avvia('task-vero', {
+    modelloScelto: 'deepseek:un-modello', /* F3-10: la delega è di Normale */
+  });
   const figlia = await attendiFigliaEFermala(registro, sessionId);
   try { await attendiFine(registro, sessionId, 10_000); } catch { /* la madre puo restare appesa sull attrezzo della figlia fermata: non e cio che si misura qui */ }
 

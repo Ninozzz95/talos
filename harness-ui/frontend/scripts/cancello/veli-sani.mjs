@@ -114,7 +114,8 @@ export const VIE_PER_APRIRE = Object.freeze({
   veloEsporta: { comando: 'export' },
   // ⛔ 17/09, PO-27: il velo del «Primo avvio» non è più un velo irraggiungibile — non è più un
   //    velo. Quella modale è stata sostituita da uno stato vuoto dentro la conversazione.
-  veloFornitori: { innesco: '[data-apre-velo="veloFornitori"]' },
+  // ⛔ 23/09/2026, decisione owner: il velo «Fornitori e accessi» (`veloFornitori`) è tolto — i fornitori
+  //    si aprono solo in Laboratorio modelli → scheda «Provider». Non è più un velo da guardare.
   veloRinominaModello: { innesco: '[data-apre-velo="veloRinominaModello"]' },
   veloEliminaModello: { innesco: '[data-apre-velo="veloEliminaModello"]' },
   veloAnnullaDownload: { innesco: '[data-apre-velo="veloAnnullaDownload"]' },

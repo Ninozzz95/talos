@@ -40,6 +40,21 @@ test('RIPRESA-GRAFO-DAGRE — upstream reale dispone 200 nodi senza sovrapposizi
   }
 });
 
+test('R4-GRAPH-5000-BOUNDED: a visible page stays small while the total remains truthful', () => {
+  const figli = Array.from({ length: 4_999 }, (_, i) => ({
+    sessionId: `agent-${i}`, taskCorto: `Agente ${i}`, conclusa: i % 2 === 0,
+  }));
+  const data = { corrente: { sessionId: 'root', conclusa: false }, figli };
+  const first = modelloGrafoAgenti(data, { offset: 0, limit: 14 });
+  const second = modelloGrafoAgenti(data, { offset: 14, limit: 14 });
+  assert.equal(first.totale, 5_000);
+  assert.equal(first.totaleFiltrati, 5_000);
+  assert.equal(first.nodi.length, 14);
+  assert.equal(second.nodi.length, 14);
+  assert.notEqual(first.nodi[0].id, second.nodi[0].id);
+  assert.ok(first.archi.length <= 13);
+});
+
 test('RIPRESA-GRAFO-TELEMETRIA — misure reali, copertura parziale e file distinti', () => {
  const dati = { corrente: { sessionId:'p', conclusa:false }, figli:[
  {sessionId:'a',conclusa:false,attivita:{chiamate:4,file:[{percorso:'src/a',scritto:true}],fileTagliati:2,passi:[]}},

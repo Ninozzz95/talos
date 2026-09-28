@@ -86,12 +86,16 @@ for (const [larghezza, altezza] of [[1024, 800], [1440, 900]]) {
         const ultima = await page.evaluate(() => {
           const barra = document.querySelector('.talos-sidebar');
           const piede = barra.querySelector('.talos-sidebar__foot');
-          const righe = [...document.querySelectorAll('#sessionList .talos-session-item, #sessionList .td-session-row')];
-          const r = righe[righe.length - 1]?.getBoundingClientRect();
+          // Lo store browser e isolato e puo non avere sessioni. In quel
+          // caso l'ultima riga reale e l'intestazione «Sessioni», non una
+          // sessione inventata soltanto per soddisfare la fixture.
+          const righe = [...barra.querySelectorAll('.talos-nav-item, .td-nav-head, .talos-sidebar__block-head, #sessionList .talos-session-item')]
+            .filter((nodo) => nodo.getClientRects().length > 0);
+          const r = righe.map((nodo) => nodo.getBoundingClientRect()).sort((a, b) => a.bottom - b.bottom).at(-1);
           const pr = piede?.getBoundingClientRect();
           return r && pr ? { intera: r.bottom <= pr.top + 0.5, sotto: Math.round(r.bottom), piede: Math.round(pr.top) } : null;
         });
-        expect(ultima, 'la scena non si è formata: nessuna riga di sessione da misurare').not.toBeNull();
+        expect(ultima, 'la scena non si è formata: nessuna riga visibile da misurare').not.toBeNull();
         expect(ultima.intera, `la barra non sborda ma l'ultima riga non è intera: finisce a ${ultima.sotto}, il piede inizia a ${ultima.piede}`).toBe(true);
         return;
       }

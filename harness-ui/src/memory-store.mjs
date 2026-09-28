@@ -49,6 +49,7 @@ import { randomUUID } from 'node:crypto';
 import { promises as fsp } from 'node:fs';
 import { join } from 'node:path';
 import { idArchivioValido } from './id-archivio.mjs';
+import { cercaPerParole } from './ricerca-per-parole.mjs';
 
 const TITOLO_MASSIMO = 80;
 const CONTENUTO_MASSIMO = 600;
@@ -168,11 +169,12 @@ export async function trovaMemoriaPerTitolo({ cartella, title }, deps = {}) {
  * trovata per un ranking/fuzzy match), quindi non se ne inventa uno.
  */
 export function cercaMemorie(memorie, { query, limit = 5 } = {}) {
-  const cercato = String(query ?? '').trim().toLowerCase();
-  const trovate = cercato === ''
-    ? []
-    : memorie.filter((m) => m.titolo.toLowerCase().includes(cercato) || m.contenuto.toLowerCase().includes(cercato));
-  return { memorie: trovate.slice(0, limit), totale: trovate.length };
+  /* ⛔ 27/09/2026, decisione owner (`decisioni-owner-capacita-sezioni-27-09`): qui si cercava la FRASE INTERA, e una ricerca
+     vuota tornava zero. Sessione 56066b64: «memorie salvate dall'utente» e «*» non trovavano niente con 5 memorie nel
+     negozio. Ora per PAROLE (`ricerca-per-parole.mjs`, titolo ×3, corpo ×1), e vuota o «*» = tutte. `tutte` lo dice a chi
+     formatta l'esito. */
+  const { trovate, tutte } = cercaPerParole(memorie, query, (m) => ({ titolo: m.titolo, corpo: m.contenuto }));
+  return { memorie: trovate.slice(0, limit), totale: trovate.length, tutte };
 }
 
 /**

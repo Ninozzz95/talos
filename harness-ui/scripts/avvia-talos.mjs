@@ -22,10 +22,11 @@
  * handshake) girano sempre davvero; solo l'apertura del browser è finta.
  */
 import { spawn } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { readFileSync, rmSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+import { cartellaScratch } from '../src/scratch.mjs';
 
 const QUI = dirname(fileURLToPath(import.meta.url));
 const RADICE_HARNESS_UI = join(QUI, '..');
@@ -90,7 +91,8 @@ function apriBrowser(url) {
 }
 
 async function main() {
-  const cartellaHandshake = mkdtempSync(join(tmpdir(), 'talos-avvio-'));
+  // Corsia SCRATCH, 24/09/2026: l'handshake vive sotto la radice dei temporanei di TALOS (src/scratch.mjs), non in %TEMP%.
+  const cartellaHandshake = cartellaScratch('talos-avvio-');
   const fileHandshake = join(cartellaHandshake, 'report.json');
   const envFiglio = { ...process.env, TALOS_HARNESS_UI_REPORT_FILE: fileHandshake };
   /*
@@ -139,7 +141,7 @@ async function main() {
     figlio.kill();
     process.exitCode = 1;
   } finally {
-    try { rmSync(cartellaHandshake, { recursive: true, force: true }); } catch { /* pulizia migliore possibile */ }
+    try { rmSync(cartellaHandshake, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 }); } catch { /* pulizia migliore possibile: la pulizia all'avvio la toglie dopo 24 ore */ }
   }
 }
 

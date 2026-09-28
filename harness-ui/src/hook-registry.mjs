@@ -28,6 +28,7 @@
 import { createHash } from 'node:crypto';
 import { promises as fsp } from 'node:fs';
 import { isAbsolute, join, relative, resolve } from 'node:path';
+import { POSIZIONI_CONFIGURAZIONE, primaPerId } from './configurazione-progetto.mjs';
 import { createProcessPolicy, parseProcessCommand } from './process-policy.mjs';
 
 export class HookRegistryError extends Error {
@@ -107,24 +108,36 @@ export async function improntaHook({ comando, cartella }, deps = {}) {
   return createHash('sha256').update(`${comando}\0file\0${file.sort().join('\0')}`).digest('hex');
 }
 
+/*
+ * ⭐ PO-26, parte 2 (owner 24/09/2026) — Gli hook si leggono da DUE posizioni, in ordine di precedenza:
+ *   `.talos/hooks.json` e il nome di sempre nella radice del progetto. Il nome vecchio non si sposta e non smette di
+ *   valere (`src/configurazione-progetto.mjs`); una voce con lo stesso id in `.talos/` lo sostituisce. Un file
+ *   malformato in una delle due posizioni resta un errore dichiarato, col nome del file.
+ */
 export async function caricaHooks({ cartella }, deps = {}) {
+  const perFile = [];
+  for (const nomeFile of POSIZIONI_CONFIGURAZIONE.hooks) perFile.push(...(await caricaHooksDaFile({ cartella, nomeFile }, deps)).hooks);
+  return { hooks: primaPerId(perFile, (h) => h.id) };
+}
+
+async function caricaHooksDaFile({ cartella, nomeFile = NOME_FILE_HOOKS }, deps = {}) {
   const readFileFn = deps.readFileFn ?? fsp.readFile;
-  const percorso = join(cartella, NOME_FILE_HOOKS);
+  const percorso = join(cartella, nomeFile);
   let testo;
   try {
     testo = await readFileFn(percorso, 'utf8');
   } catch (errore) {
     if (errore?.code === 'ENOENT') return { hooks: [] };
-    throw new HookRegistryError(`Impossibile leggere ${NOME_FILE_HOOKS}: ${errore.message}`, 'HOOK_READ_FAILED');
+    throw new HookRegistryError(`Impossibile leggere ${nomeFile}: ${errore.message}`, 'HOOK_READ_FAILED');
   }
   let dati;
   try {
     dati = JSON.parse(testo);
   } catch {
-    throw new HookRegistryError(`${NOME_FILE_HOOKS} non è un JSON valido`, 'HOOK_MALFORMED');
+    throw new HookRegistryError(`${nomeFile} non è un JSON valido`, 'HOOK_MALFORMED');
   }
   if (!dati || !Array.isArray(dati.hooks)) {
-    throw new HookRegistryError(`${NOME_FILE_HOOKS} deve avere un campo "hooks" (array)`, 'HOOK_MALFORMED');
+    throw new HookRegistryError(`${nomeFile} deve avere un campo "hooks" (array)`, 'HOOK_MALFORMED');
   }
   const hooks = await Promise.all(dati.hooks.map(async (voce, indice) => {
     if (typeof voce?.id !== 'string' || voce.id.length === 0) {

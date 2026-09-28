@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
-import { disegnaAgenti } from '../../src/components/inspector.js';
+import { aggiornaInspector, disegnaAgenti } from '../../src/components/inspector.js';
 
 /*
  * ⛔⛔ PO-08 (10/09/2026) — la card di un sotto-agente si apre.
@@ -285,4 +285,21 @@ test('BC-03, AL CONTRARIO: la guardia MORDE su una frase divergente', () => {
 
 test('BC-03, AL CONTRARIO: la promessa smentita non è rimasta da nessuna parte nel template', () => {
   assert.doesNotMatch(TEMPLATE_AGENTI, /richieste di permesso/, '⛔ nessuno le mostra: prometterle è mentire in anticipo, anche in un attributo');
+});
+
+/*
+ * ⭐ F3-50 (25/09/2026), decisione owner D30 — con un workflow la scheda Agenti è del rail v2 (`rail-workflow.js`), montato da
+ *   `legacy/app.js` dentro `#railAgenti`: la sincronizzazione dell'inspector (34 chiamanti) non deve ridisegnarci sopra le
+ *   deleghe classiche. Si prova nei due versi: col segnale il contenitore resta com'è, senza si ridisegna come sempre.
+ */
+test('F3-50: con un workflow la sincronizzazione non ridisegna le deleghe classiche sopra il rail v2 (D30)', () => {
+  const d = documentoFinto();
+  const rail = d.createElement('div');
+  const segno = d.createElement('section'); segno.className = 'talos-wfr';
+  rail.append(segno);
+  const inspector = { querySelector: (sel) => (sel === '#railAgenti' ? rail : null), querySelectorAll: () => [] };
+  aggiornaInspector(inspector, { agenti: [FIGLIA], azioniAgenti: {}, agentiDelWorkflow: true }, { document: d });
+  assert.deepEqual(rail.figli, [segno], 'the v2 rail stays in place');
+  aggiornaInspector(inspector, { agenti: [FIGLIA], azioniAgenti: {}, agentiDelWorkflow: false }, { document: d });
+  assert.notDeepEqual(rail.figli, [segno], 'without a workflow the classic delegations draw as always');
 });

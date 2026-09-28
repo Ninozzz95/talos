@@ -25,7 +25,9 @@ import { join } from 'node:path';
 import test from 'node:test';
 
 import { createSessionRegistry, durateRagionamentoDaEventi, durateRagionamentoDaRecord } from '../src/session-registry.mjs';
+import { registraRiga } from '../src/session-store.mjs';
 import { rimuoviCartellaDiProva } from './aiuto/rimuovi-cartella-di-prova.mjs';
+import { cartellaDiProva, cartellaDiProvaAttesa } from './aiuto/cartelle-di-prova.mjs'; // DESK-TEMP-1, 23/09: la cartella nasce con la sua rimozione
 
 /** Legge i record `tipo:'tempi-giro'` scritti per una sessione. */
 function tempiScritti(cartellaStore, sessionId) {
@@ -39,8 +41,43 @@ function tempiScritti(cartellaStore, sessionId) {
  * Una sessione finta con un orologio che AVANZA: senza, ogni istante sarebbe lo stesso e il tempo
  * al primo token verrebbe 0 — cioè la prova direbbe verde misurando il nulla.
  */
+/*
+ * ⛔⛔ D2-b, 24/09/2026 — la cartella dello store NON si toglie finché la coda di scrittura non è vuota.
+ *   Il registro accoda gli eventi sul disco SENZA attenderli (`broadcast` è sincrona, `registraRiga` è
+ *   «fire-and-forget»), e `registraRiga` fa `mkdir` ricorsivo prima di ogni `appendFile`. Misurato con una
+ *   sonda sul registro vero (`rp2/sonda-scritture.mjs`, 24/09/2026): al momento in cui il test finisce le
+ *   righe `RunStarted`, `TextMessageStart/End`, `RunFinished` e i `grafo-agenti` sono ancora in coda, e
+ *   finiscono 1-2 ms DOPO la rimozione ⇒ la cartella rinasce. Prima lo copriva una seconda passata
+ *   dell'aiuto dopo 300 ms fissi: una corsa contro l'orologio che sotto carico si perde.
+ * ⇒ `src/session-store.mjs` non espone uno svuotamento della coda (`codeDiScrittura` è privata), ma il
+ *   registro accetta lo scrittore per iniezione (`registraRigaFn`, lo stesso seam che usano gli altri test):
+ *   qui lo scrittore VERO viene avvolto in uno che ricorda le scritture in volo, e `pulisci` aspetta che
+ *   siano finite TUTTE — anche quelle accodate mentre si aspettava — prima di rimuovere la cartella.
+ *   Fonte, 24/09/2026: Node v24 `Promise.allSettled` / MDN «waits for all promises to settle».
+ */
+function scrittoreCheSiPuoAspettare() {
+  const inVolo = new Set();
+  const registraRigaFn = (argomenti) => {
+    const scrittura = registraRiga(argomenti);
+    inVolo.add(scrittura);
+    scrittura.catch(() => {}).finally(() => inVolo.delete(scrittura));
+    return scrittura;
+  };
+  async function aspettaScritture() {
+    for (let giro = 0; giro < 1_000; giro += 1) {
+      if (inVolo.size) { await Promise.allSettled([...inVolo]); continue; }
+      // Coda vuota: si concede un giro del ciclo degli eventi a chi stava per accodare, e si ricontrolla.
+      await new Promise((r) => setImmediate(r));
+      if (!inVolo.size) return;
+    }
+    throw new Error('la coda di scrittura del registro non si svuota mai: la cartella non si può togliere');
+  }
+  return { registraRigaFn, aspettaScritture };
+}
+
 function bancoDiProva() {
-  const cartellaStore = mkdtempSync(join(tmpdir(), 'talos-tempi-'));
+  const cartellaStore = cartellaDiProva('talos-tempi-');
+  const scrittore = scrittoreCheSiPuoAspettare();
   let adesso = 1_700_000_000_000;
   const clock = () => new Date(adesso);
   const avanza = (ms) => { adesso += ms; };
@@ -48,6 +85,7 @@ function bancoDiProva() {
   let concludi = null;
   const registro = createSessionRegistry({
     cartellaStore,
+    registraRigaFn: scrittore.registraRigaFn,
     clock,
     avviaSessioneFn: (input) => {
       onEvento = input.onEvento;
@@ -62,13 +100,16 @@ function bancoDiProva() {
     modello: 'z-ai/glm-5.3-flash', chiave: 'k',
   });
   return {
-    cartellaStore, registro, avanza,
+    cartellaStore, registro, avanza, scrittore,
     get emetti() { return onEvento; },
     finisci(messaggiFinali = [{ role: 'user', content: 'ciao' }]) {
       onEvento({ type: 'RunFinished' });
       concludi({ ok: true, esito: { messaggiFinali } });
     },
-    pulisci() { rimuoviCartellaDiProva(cartellaStore); },
+    async pulisci() {
+      await scrittore.aspettaScritture();
+      rimuoviCartellaDiProva(cartellaStore);
+    },
   };
 }
 
@@ -190,6 +231,7 @@ test('⭐⭐ UNA SESSIONE RIAPERTA DAL DISCO sa ancora quanto ha ragionato — s
   /* Un registro NUOVO sullo stesso disco: è il riavvio del server, e gli istanti in memoria non ci sono più. */
   const riaperto = createSessionRegistry({
     cartellaStore: banco.cartellaStore,
+    registraRigaFn: banco.scrittore.registraRigaFn, // D2-b: anche le sue scritture si aspettano prima di pulire
     avviaSessioneFn: async () => ({ ok: true }),
     guardaWorkspaceFn: () => () => {},
     modello: 'z-ai/glm-5.3-flash',
@@ -339,7 +381,9 @@ test('⛔ e la riga non sostituisce «messaggi-finali»: le due convivono, ognun
   await new Promise((r) => setImmediate(r));
 
   const testo = readFileSync(join(banco.cartellaStore, `${sessionId}.jsonl`), 'utf8');
-  assert.ok(testo.includes('"tipo":"messaggi-finali"'), 'la riga di sempre resta');
+  // 24/09/2026 (F2-bis B): «la riga di sempre» è la storia di fine giro — `messaggi-finali` prima, `messaggi-delta`/`checkpoint` con `fase:'finale'` col journal a delta
+  const righeDelFile = testo.trim().split(/\r?\n/u).map((riga) => JSON.parse(riga));
+  assert.ok(righeDelFile.some((r) => r.tipo === 'messaggi-finali' || (['messaggi-delta', 'checkpoint'].includes(r.tipo) && r.fase === 'finale')), 'la riga di sempre resta');
   assert.ok(testo.includes('"tipo":"tempi-giro"'), 'e la misura si affianca');
   assert.equal(tempiScritti(banco.cartellaStore, sessionId)[0].primoTokenMs, 900);
 });

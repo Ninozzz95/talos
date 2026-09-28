@@ -181,7 +181,9 @@ test('MONTAGGIO-00 — presupposto: il markup servito ha le DUE forme, e i nomi 
         pannelloRuntime: ha('#panel-runtime'),
         cardMemoria: ha('#panel-runtime [data-c="MemoryMeter"][data-memory-meter]'),
         campoConId: ha('[data-memory-value="totale"][id]'),
-        veloFornitori: ha('#veloFornitori .talos-dialog__body'),
+        /* ⛔ 23/09/2026, decisione owner: il velo «Fornitori e accessi» è TOLTO («Toglierla: porta al
+           Model Lab»). La voce resta, col verso capovolto: il presupposto ora è che NON ci sia. */
+        veloFornitori: ha('#veloFornitori'),
       },
     };
   });
@@ -195,7 +197,7 @@ test('MONTAGGIO-00 — presupposto: il markup servito ha le DUE forme, e i nomi 
     },
     canonico: {
       schermo: true, pannelloInstallati: true, cercaInstallati: true, listaInstallati: true, pannelloHf: true,
-      cercaHf: true, pannelloDownload: true, coda: true, pannelloRuntime: true, cardMemoria: true, veloFornitori: true,
+      cercaHf: true, pannelloDownload: true, coda: true, pannelloRuntime: true, cardMemoria: true, veloFornitori: false,
       // ⛔ all'avvio i due alberi sono PULITI: la schermata non porta gli id del monolite e i campi
       //    della card non hanno ancora gli id che il travaso assegna (senza questo presupposto le
       //    due direzioni non si distinguerebbero, e la prova non proverebbe niente)
@@ -538,8 +540,10 @@ test('MONTAGGIO-04 — la memoria coi DATI VERI del server (capacity) e i fornit
     const risposta = await api('/api/v1/providers');
     const dati = risposta.corpo?.data ?? risposta.corpo;
     const items = Array.isArray(dati?.items) ? dati.items : null;
-    // velo vero del mockup: la funzione non deve esplodere nemmeno li'
-    const velo = await (async () => { const v = clona('#veloFornitori .talos-dialog__body'); banco().append(v); const e = esito(() => montaProviderPanel(v)).esito; return { esito: e, timbro: v.dataset.providerMontato ?? null, refresh: !!v.querySelector('#providerRefresh') }; })();
+    /* ⛔ 23/09/2026 — qui si montava anche il corpo del velo «Fornitori e accessi», per provare che
+       `montaProviderPanel` non esplode su un markup senza `#providerTestAll`. Il velo è tolto per
+       decisione owner, e con lui l'unico markup VERO di quella forma: la robustezza fuori dal guscio
+       (due montaggi, un solo `#providerRefresh`) la prova `lab-provider.spec.mjs` PROV-06. */
     // pannello legacy: e' la casa del monolite (app.js:2895, 4633 leggono #providerRefresh)
     const b = svuota();
     const panel = clona('#modelLabProvidersPanel');
@@ -556,16 +560,13 @@ test('MONTAGGIO-04 — la memoria coi DATI VERI del server (capacity) e i fornit
     const percorsoIgnoto = await api('/api/v1/providers/__c3_non_esiste/__rotta_ignota', { method: 'POST', headers: { 'content-type': 'application/json', accept: 'application/json' }, body: '{}' });
     return {
       stato: risposta.stato, righe: items?.length ?? null, primoFornitore: items?.[0]?.id ?? null,
-      velo, esitoMonta, dopoPrimo, dopoSecondo, esitoLista, ids,
+      esitoMonta, dopoPrimo, dopoSecondo, esitoLista, ids,
       ignoto: { stato: ignoto.stato, codice: ignoto.corpo?.error?.code ?? null },
       percorsoIgnoto: { stato: percorsoIgnoto.stato, codice: percorsoIgnoto.corpo?.error?.code ?? null },
     };
   });
   expect(fornitori.stato, 'la rotta dei fornitori deve rispondere').toBe(200);
   expect(fornitori.righe, 'il server deve dichiarare almeno un fornitore').toBeGreaterThan(0);
-  expect(fornitori.velo.esito, 'sul velo VERO del mockup non si esplode').toBe('ok');
-  expect(fornitori.velo.timbro).toBe('true');
-  expect(fornitori.velo.refresh, "sul velo non c'e' #providerTestAll: niente pulsanti inventati").toBe(false);
   expect(fornitori.esitoMonta).toBe('ok');
   expect(fornitori.dopoPrimo.test, 'il pulsante «Prova tutti» deve esistere').toBe(true);
   expect(fornitori.dopoPrimo.refresh, 'il montaggio crea UN #providerRefresh').toBe(1);

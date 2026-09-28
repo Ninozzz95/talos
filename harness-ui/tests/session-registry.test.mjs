@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, parse as parsePath } from 'node:path';
 import test from 'node:test';
@@ -30,6 +30,30 @@ import { imageMessageContent } from '../src/chat-image-attachments.mjs';
 // ⭐ L4 (11/09) — lo scrittore VERO del record recintato, per le fixture di ricerca.
 import { talosResearchReportDocument } from '../src/research/report.mjs';
 
+test('WF-PROPOSAL-REGISTRY-TRUST: session and model authority are supplied by registry', async () => {
+  const finta = sessioneControllabile();
+  let captured;
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn,
+    preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'provider/model', chiave: 'k',
+    workflowPlanProposeFn: async (input) => { captured = input; return { status: 'proposed' }; } });
+  const { sessionId } = registro.avvia('task-vero'); // F3-10: la proposta nasce in Normale
+  assert.equal(typeof finta.ultimoInput.onWorkflowPlanPropose, 'function');
+  assert.deepEqual(await finta.ultimoInput.onWorkflowPlanPropose({ core: { marker: true }, toolCallId: 'call_1' }),
+    { status: 'proposed' });
+  assert.deepEqual(captured, { sessionId, core: { marker: true }, toolCallId: 'call_1',
+    plannerModel: null, sessionModel: 'provider/model', modalitaOperativa: 'normale', agentRole: 'root' });
+  finta.concludi({ type: 'RunFinished' }, { ok: true, esito: { detto: 'done', comeFinita: 'concluso', messaggiFinali: [] } });
+});
+
+test('WF-PROPOSAL-REGISTRY-ABSENT: no planning Store means no callback reaches the kernel', () => {
+  const finta = sessioneControllabile();
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn,
+    preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'provider/model', chiave: 'k' });
+  registro.avvia('task-vero'); // F3-10: il modo di difetto, Normale
+  assert.equal(finta.ultimoInput.onWorkflowPlanPropose, undefined);
+  finta.concludi({ type: 'RunFinished' }, { ok: true, esito: { detto: 'done', comeFinita: 'concluso', messaggiFinali: [] } });
+});
+
 test('IMAGE-09 — dopo errore prima del checkpoint la ripresa conserva i pixel referenziati', async () => {
   const finta = sessioneControllabile();
   const image = { id: 'c'.repeat(64), nome: 'controllo.png', tipo: 'immagine', url: '/api/v1/chat-images/' + 'c'.repeat(64) };
@@ -56,7 +80,7 @@ test('IMAGE-05 — resume conserva riferimento immagine nel checkpoint e nel rep
     assert.ok(stored.includes(image.url));
   } finally {
     if (finta.chiamate) { finta.concludi({ type: 'RunFinished' }, { ok: true, esito: { messaggiFinali: finta.ultimoInput.messaggiIniziali } }); await attendiRegistroSuDisco(cartellaStore, sessionId, r => r.some(x => x.tipo === 'messaggi-finali' && x.versioneGiro === 2)); }
-    rimuoviCartellaDiProva(cartellaStore);
+    await rimuoviCartellaStoreDopoLeScritture(cartellaStore);
   }
 });
 import { WorkspaceTreeError } from '../src/workspace-tree.mjs';
@@ -70,7 +94,25 @@ import { NoteStoreError } from '../src/notes-store.mjs';
 import { TaskStoreError } from '../src/tasks-store.mjs';
 import { MemoryStoreError } from '../src/memory-store.mjs';
 import { ToolForgeStoreError } from '../src/tool-forge-store.mjs';
-import { leggiRegistro as leggiRegistroPerAttesa, registraRigaSync } from '../src/session-store.mjs';
+import { attendiScritture, leggiRegistro as leggiRegistroGrezzo, registraIntestazioneSync, registraRiga, registraRigaConfermata, registraRigaSync } from '../src/session-store.mjs';
+import { conVistaDiPrima, vistaNelFormatoDiPrima } from './aiuto/vista-journal-formato-di-prima.mjs';
+
+/* 26/09: una compattazione manuale riuscita risponde anche con `at` (la chiave della riga, la stessa dell'evento durevole),
+   `annullabile:false` e due stime intere; il resto della forma resta quello di prima. */
+function senzaStime({ at, tokenPrima, tokenDopo, ...resto }) {
+  assert.match(at, /^\d{4}-\d\d-\d\dT/u, `at: ${at}`);
+  assert.ok(Number.isSafeInteger(tokenPrima) && tokenPrima > 0 && Number.isSafeInteger(tokenDopo) && tokenDopo > 0, `stime ${tokenPrima} → ${tokenDopo}`);
+  return resto;
+}
+
+/*
+ * 24/09/2026 (F2-bis B, coordinatore) — le prove di questo file chiedono al disco «la storia del giro N c'è?» cercando i record
+ * di PRIMA del journal a delta (`messaggi-finali`, `checkpoint-ripresa`). Le attese leggono il journal nella VISTA di prima
+ * (`tests/aiuto/vista-journal-formato-di-prima.mjs`): stessa domanda, sul formato nuovo. Il registro, invece, legge sempre il
+ * file vero (`leggiRegistroGrezzo`).
+ */
+const leggiRegistroPerAttesa = conVistaDiPrima(leggiRegistroGrezzo);
+import { cartellaDiProva, cartellaDiProvaAttesa } from './aiuto/cartelle-di-prova.mjs'; // DESK-TEMP-1, 23/09: la cartella nasce con la sua rimozione
 
 // Ne' avviaSessione ne' talosLavora girano MAI qui, veri o finti a metà: si
 // inietta avviaSessioneFn/preparaEsecuzioneFn interamente controllati dal
@@ -87,6 +129,83 @@ import { leggiRegistro as leggiRegistroPerAttesa, registraRigaSync } from '../sr
 function createSessionRegistry(opzioni) {
   return createSessionRegistryReale({ guardaWorkspaceFn: () => () => {}, ...opzioni });
 }
+
+test('CTX-HEADER-PREWRITE-FAIL-CLOSED — nessun modello, RAM o replay dopo header rifiutato', async () => {
+  const cartellaStore = cartellaStoreVera();
+  const giro = sessioneControllabile();
+  try {
+    const registro = createSessionRegistry({
+      cartellaStore, modello: 'm', chiave: 'k',
+      preparaEsecuzioneFn: preparaEsecuzioneFinta, avviaSessioneFn: giro.avviaSessioneFn,
+      registraIntestazioneSyncFn: () => { throw new Error('C:\\private\\secret-journal'); },
+      registraRigaFn: async () => {}, registraRigaSyncFn: () => {},
+    });
+    const esito = registro.avvia('task-vero');
+    assert.equal(esito.code, 'SESSION_STORE_HEADER_FAILED');
+    assert.equal(esito.sessionId, undefined);
+    assert.equal(giro.chiamate, 0);
+    assert.deepEqual(registro.elenca(), []);
+    const riavvio = createSessionRegistry({ cartellaStore });
+    await riavvio.ripristina();
+    assert.deepEqual(riavvio.elenca(), []);
+  } finally {
+    if (giro.chiamate) { giro.concludi({ type: 'RunFinished' }); await new Promise((resolve) => setImmediate(resolve)); }
+    await rimuoviCartellaStoreDopoLeScritture(cartellaStore);
+  }
+});
+
+test('CTX-HEADER-STAGING-CLEANUP-NO-MODEL — alias non eliminabile blocca modello e restart', async () => {
+  const cartellaStore = cartellaStoreVera();
+  const giro = sessioneControllabile();
+  try {
+    const registro = createSessionRegistry({
+      cartellaStore, modello: 'm', chiave: 'k',
+      preparaEsecuzioneFn: preparaEsecuzioneFinta, avviaSessioneFn: giro.avviaSessioneFn,
+      registraIntestazioneSyncFn: (input) => registraIntestazioneSync(input, {
+        unlinkSyncFn: (path) => { if (path.endsWith('.pending')) throw new Error('file occupato'); unlinkSync(path); },
+      }),
+    });
+    const esito = registro.avvia('task-vero');
+    assert.equal(esito.code, 'SESSION_STORE_HEADER_FAILED');
+    assert.equal(giro.chiamate, 0);
+    assert.deepEqual(registro.elenca(), []);
+    const riavvio = createSessionRegistry({ cartellaStore });
+    await riavvio.ripristina();
+    assert.deepEqual(riavvio.elenca(), []);
+  } finally {
+    if (giro.chiamate) { giro.concludi({ type: 'RunFinished' }); await new Promise((resolve) => setImmediate(resolve)); }
+    await rimuoviCartellaStoreDopoLeScritture(cartellaStore);
+  }
+});
+
+test('CTX-HEADER-QUARANTINE-DIAGNOSTIC — restart conta e spiega il finale sospeso', async () => {
+  const cartellaStore = cartellaStoreVera();
+  const sessionId = 'sess-quarantine-diagnostic';
+  try {
+    assert.throws(() => registraIntestazioneSync(
+      { cartellaStore, sessionId, record: { tipo: 'intestazione', sessionId, schema: SCHEMA_SESSIONE } },
+      { unlinkSyncFn: () => { throw new Error('cleanup EACCES'); } },
+    ));
+    const riavvio = createSessionRegistry({ cartellaStore });
+    assert.deepEqual(await riavvio.ripristina(), { ripristinate: 0, totali: 1 });
+    assert.deepEqual(riavvio.elenca(), []);
+    assert.equal(riavvio.statoPersistenza().scartate[0]?.sessionId, sessionId);
+    assert.equal(riavvio.statoPersistenza().scartate[0]?.motivo, 'intestazione-in-quarantena');
+  } finally { await rimuoviCartellaStoreDopoLeScritture(cartellaStore); }
+});
+
+test('CTX-HEADER-ORPHAN-PENDING-RESTART — Doctor conta un pending senza journal senza divulgarne il prompt', async () => {
+  const cartellaStore = cartellaStoreVera();
+  const sessionId = 'sess-orphan-restart';
+  try {
+    writeFileSync(join(cartellaStore, `.${sessionId}.00000000-0000-4000-8000-000000000002.pending`), 'prompt-segreto');
+    const riavvio = createSessionRegistry({ cartellaStore });
+    assert.deepEqual(await riavvio.ripristina(), { ripristinate: 0, totali: 1 });
+    assert.deepEqual(riavvio.elenca(), []);
+    assert.deepEqual(riavvio.statoPersistenza().scartate, [{ sessionId, motivo: 'intestazione-pendente-senza-journal' }]);
+    assert.doesNotMatch(JSON.stringify(riavvio.statoPersistenza()), /prompt-segreto|\.pending/i);
+  } finally { await rimuoviCartellaStoreDopoLeScritture(cartellaStore); }
+});
 
 function preparaEsecuzioneFinta(taskId) {
   if (taskId !== 'task-vero') throw new TaskCatalogError(`Task non ammesso: ${taskId}`);
@@ -179,7 +298,7 @@ test('LOCAL-RESUME-JSON-01 — recupera nella stessa sessione senza riscrivere c
     assert.deepEqual(inviati.at(-1), { role: 'user', content: 'ci sie?' });
     const aggiornato = readFileSync(join(cartellaStore, `${sessionId}.jsonl`), 'utf8');
     assert.equal(aggiornato.slice(0, originale.length), originale, 'il prefisso originale è intatto');
-    const checkpoint = aggiornato.trim().split('\n').map(JSON.parse).find(r => r.tipo === 'checkpoint-ripresa');
+    const checkpoint = vistaNelFormatoDiPrima(aggiornato.trim().split('\n').map(JSON.parse)).find(r => r.tipo === 'checkpoint-ripresa');
     assert.equal(checkpoint.recupero.schema, 'talos.history-recovery.v1');
     assert.equal(checkpoint.recupero.correzioni[0].chiamata.function.arguments, '{');
     assert.equal(checkpoint.recupero.correzioni[0].risultati[0].content, 'README.md');
@@ -188,7 +307,7 @@ test('LOCAL-RESUME-JSON-01 — recupera nella stessa sessione senza riscrivere c
       finta.concludi({ type: 'RunFinished' }, { ok: true, esito: { messaggiFinali: finta.ultimoInput.messaggiIniziali } });
       await attendiRegistroSuDisco(cartellaStore, sessionId, r => r.some(x => x.tipo === 'messaggi-finali' && x.versioneGiro === 2));
     }
-    rimuoviCartellaDiProva(cartellaStore);
+    await rimuoviCartellaStoreDopoLeScritture(cartellaStore);
   }
 });
 
@@ -230,7 +349,7 @@ test('LOCAL-RESUME-JSON-02 — riavvio dopo checkpoint, stesso storico e recuper
       finta.concludi({ type: 'RunFinished' }, { ok: true, esito: { messaggiFinali: finta.ultimoInput.messaggiIniziali } });
       await attendiRegistroSuDisco(cartellaStore, sessionId, r => r.some(x => x.tipo === 'messaggi-finali' && x.versioneGiro === 3));
     }
-    rimuoviCartellaDiProva(cartellaStore);
+    await rimuoviCartellaStoreDopoLeScritture(cartellaStore);
   }
 });
 
@@ -247,7 +366,7 @@ test('LOCAL-RESUME-JSON-03 — disco non scrivibile, nessun runtime e nessuna mu
     assert.equal(readFileSync(join(cartellaStore, `${sessionId}.jsonl`), 'utf8'), originale);
     assert.equal(registro.resume(sessionId, 'riprova').code, 'SESSION_STORE_WRITE_FAILED');
     assert.equal(finta.chiamate, 0);
-  } finally { rimuoviCartellaDiProva(cartellaStore); }
+  } finally { await rimuoviCartellaStoreDopoLeScritture(cartellaStore); }
 });
 
 for (const caso of ['id assente', 'id duplicato', 'risultato duplicato']) {
@@ -264,7 +383,7 @@ for (const caso of ['id assente', 'id duplicato', 'risultato duplicato']) {
       await registro.ripristina();
       assert.equal(registro.resume(sessionId, 'continua').code, 'HISTORY_RECOVERY_AMBIGUOUS');
       assert.equal(finta.chiamate, 0);
-    } finally { rimuoviCartellaDiProva(cartellaStore); }
+    } finally { await rimuoviCartellaStoreDopoLeScritture(cartellaStore); }
   });
 }
 
@@ -289,7 +408,7 @@ test('LOCAL-RESUME-JSON-05 — contenuti multimodali e chiamate valide conservat
       finta.concludi({ type: 'RunFinished' }, { ok: true, esito: { messaggiFinali: finta.ultimoInput.messaggiIniziali } });
       await attendiRegistroSuDisco(cartellaStore, sessionId, r => r.some(x => x.tipo === 'messaggi-finali' && x.versioneGiro === 2));
     }
-    rimuoviCartellaDiProva(cartellaStore);
+    await rimuoviCartellaStoreDopoLeScritture(cartellaStore);
   }
 });
 
@@ -2200,6 +2319,106 @@ test('SESSION-RECOVERY-COMPLETE-04 — testo assistant chiuso entra una volta e 
   await new Promise((resolve) => setImmediate(resolve));
 });
 
+/*
+ * ⛔⛔ 25/09/2026 notte — IL LAVORO DEL GIRO FALLITO RESTA (sessione vera `c15ba17c…`, decisione owner «sì, sempre, come Hermes»).
+ * Il kernel attacca all'errore la storia coerente del giro (`storiaDelGiroFallito`), agent-service la restituisce come
+ * `messaggiDelGiro`, e il registro la salva SOLO se la storia di prima ne è il prefisso: l'archivio cresce solo in fondo
+ * (domanda della sessione «talos cli», P12 — il suo Context Engine sincronizza gli originali da qui).
+ */
+async function treGiriConIlSecondoFallito(risultatoDelSecondo) {
+  const giri = [sessioneControllabile(), sessioneControllabile(), sessioneControllabile()];
+  let n = 0;
+  const registro = createSessionRegistry({ avviaSessioneFn: (input) => giri[n++].avviaSessioneFn(input), preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+  const { sessionId } = registro.avvia('task-vero');
+  const storiaUno = [{ role: 'system', content: 's' }, { role: 'user', content: 'c' }, { role: 'assistant', content: 'primo giro fatto' }];
+  giri[0].concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' }, { esito: { messaggiFinali: storiaUno } });
+  await new Promise((r) => setImmediate(r));
+  registro.resume(sessionId, 'fai la pagina');
+  const primaDelSecondo = giri[1].ultimoInput.messaggiIniziali;
+  giri[1].concludi({ type: 'RunError', message: 'Il modello ha risposto senza testo né attrezzi.', code: 'PROVIDER_EMPTY_RESPONSE' },
+    risultatoDelSecondo(primaDelSecondo));
+  await new Promise((r) => setImmediate(r));
+  registro.resume(sessionId, 'continua');
+  return {
+    primaDelSecondo, dopo: giri[2].ultimoInput.messaggiIniziali,
+    chiudi: async () => { giri[2].concludi({ type: 'RunFinished', threadId: 't3', runId: 'r3' }); await new Promise((r) => setImmediate(r)); },
+  };
+}
+
+test('SESSION-RECOVERY-WORK-KEPT-24 — il giro fallito lascia attrezzi ed esiti, e la storia cresce solo in fondo', async () => {
+  const lavoro = [
+    { role: 'assistant', content: null, tool_calls: [{ id: 'call_e', type: 'function', function: { name: 'elenca', arguments: '{}' } }] },
+    { role: 'tool', tool_call_id: 'call_e', content: 'a.txt' },
+    { role: 'assistant', content: '[Il giro si è fermato qui per un errore: Il modello ha risposto senza testo né attrezzi.]' },
+  ];
+  const { primaDelSecondo, dopo, chiudi } = await treGiriConIlSecondoFallito((prima) => ({ ok: false, esito: null, codiceErrore: 'PROVIDER_EMPTY_RESPONSE', messaggiDelGiro: [...prima, ...lavoro] }));
+  assert.equal(primaDelSecondo.length, 4, 'la storia del primo giro più «fai la pagina»');
+  assert.deepEqual(dopo, [...primaDelSecondo, ...lavoro, { role: 'user', content: 'continua' }]);
+  await chiudi();
+});
+
+test('SESSION-RECOVERY-WORK-NOT-PREFIX-25 — al contrario: una storia del giro che riscrive quella di prima NON si salva', async () => {
+  const { primaDelSecondo, dopo, chiudi } = await treGiriConIlSecondoFallito((prima) => ({ ok: false, esito: null, codiceErrore: 'PROVIDER_EMPTY_RESPONSE',
+    messaggiDelGiro: [{ role: 'system', content: 'un altro sistema' }, ...prima.slice(1), { role: 'assistant', content: 'x' }] }));
+  assert.deepEqual(dopo, [...primaDelSecondo, { role: 'user', content: 'continua' }], 'come prima della cura: la storia di prima del giro');
+  await chiudi();
+});
+
+/*
+ * P19 (lane CLI, 27/09, commit `1568388d4`): senza il lavoro del giro, la cronologia riprende da ciò che l'ARCHIVIO del
+ * contesto dice di avere (`archivedMessages` degli hook), se allunga quella di prima. Cablaggio nel registro: gli hook
+ * arrivano da `contextHooksFn`, e il lavoro del giro (25/09) resta davanti.
+ */
+async function treGiriConArchivio(risultatoDelSecondo, archivio) {
+  const giri = [sessioneControllabile(), sessioneControllabile(), sessioneControllabile()];
+  let n = 0;
+  let primaDelSecondo = null;
+  const registro = createSessionRegistry({
+    avviaSessioneFn: (input) => giri[n++].avviaSessioneFn(input), preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k',
+    contextHooksFn: async () => ({ archivedMessages: () => archivio(primaDelSecondo) }),
+  });
+  const passa = () => new Promise((r) => setImmediate(r));
+  const { sessionId } = registro.avvia('task-vero');
+  await passa();
+  giri[0].concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' }, { esito: { messaggiFinali: [{ role: 'system', content: 's' }, { role: 'user', content: 'c' }, { role: 'assistant', content: 'fatto' }] } });
+  await passa();
+  registro.resume(sessionId, 'leggi le foto');
+  await passa();
+  primaDelSecondo = giri[1].ultimoInput.messaggiIniziali;
+  giri[1].concludi({ type: 'RunError', message: 'riassunto rifiutato', code: 'CTX_INVALID_SUMMARY' }, risultatoDelSecondo(primaDelSecondo));
+  await passa();
+  registro.resume(sessionId, 'continua');
+  await passa();
+  return {
+    primaDelSecondo, dopo: giri[2].ultimoInput.messaggiIniziali,
+    chiudi: async () => { giri[2].concludi({ type: 'RunFinished', threadId: 't3', runId: 'r3' }); await passa(); },
+  };
+}
+const SCAMBIO_P19 = [
+  { role: 'assistant', content: null, tool_calls: [{ id: 'c1', type: 'function', function: { name: 'leggi', arguments: '{"percorso":"a.png"}' } }] },
+  { role: 'tool', tool_call_id: 'c1', content: '"a.png" is a binary file (.png)' },
+];
+
+test('P19-REGISTRO-01 — giro fallito senza il suo lavoro: la cronologia riprende dall\'archivio che la allunga', async () => {
+  const { primaDelSecondo, dopo, chiudi } = await treGiriConArchivio(() => ({ ok: false, esito: null, codiceErrore: 'CTX_INVALID_SUMMARY' }), (prima) => [...prima, ...SCAMBIO_P19]);
+  assert.equal(primaDelSecondo.length, 4, 'la storia del primo giro più «leggi le foto»');
+  assert.deepEqual(dopo, [...primaDelSecondo, ...SCAMBIO_P19, { role: 'user', content: 'continua' }]);
+  await chiudi();
+});
+
+test('P19-REGISTRO-02 — al contrario: il lavoro del giro (25/09) resta davanti all\'archivio; un archivio che non allunga o che lancia non cambia niente', async () => {
+  const lavoro = [{ role: 'assistant', content: '[Il giro si è fermato qui per un errore: riassunto rifiutato]' }];
+  const conLavoro = await treGiriConArchivio((prima) => ({ ok: false, esito: null, messaggiDelGiro: [...prima, ...lavoro] }), (prima) => [...prima, ...SCAMBIO_P19]);
+  assert.deepEqual(conLavoro.dopo, [...conLavoro.primaDelSecondo, ...lavoro, { role: 'user', content: 'continua' }]);
+  await conLavoro.chiudi();
+  const corto = await treGiriConArchivio(() => ({ ok: false, esito: null }), (prima) => prima.slice(0, 2));
+  assert.deepEqual(corto.dopo, [...corto.primaDelSecondo, { role: 'user', content: 'continua' }]);
+  await corto.chiudi();
+  const rotto = await treGiriConArchivio(() => ({ ok: false, esito: null }), () => { throw new Error('archivio illeggibile'); });
+  assert.deepEqual(rotto.dopo, [...rotto.primaDelSecondo, { role: 'user', content: 'continua' }]);
+  await rotto.chiudi();
+});
+
 test('⭐⭐⭐ resume() su una sessione CONCLUSA: STESSO sessionId, un giro in più appeso allo STESSO buffer, mai un gap', async () => {
   const storiaDelPrimoGiro = [{ role: 'system', content: 's' }, { role: 'user', content: 'c' }, { role: 'assistant', content: 'primo giro fatto' }];
 
@@ -2349,7 +2568,7 @@ test('⭐⭐⭐ compatta(): chiama compattaSessioneFn con messaggiFinali/modello
 
   const risultato = await registro.compatta(sessionId);
   assert.deepEqual(inputCatturato, { messaggiFinali: storiaFinale, modello: 'z-ai/glm-4.7-flash', chiave: 'segreta' });
-  assert.deepEqual(risultato, { ok: true, compattato: true });
+  assert.deepEqual(senzaStime(risultato), { ok: true, compattato: true, annullabile: false });
 
   // ⭐ La prova che conta: compatta() ha mutato messaggiFinali sul posto —
   // il PROSSIMO giro (qui un resume, sulla STESSA voce) eredita il
@@ -2952,6 +3171,30 @@ test('SESSION-WATCHER-LIFECYCLE-30 — eliminare una sessione rilascia il watche
   assert.equal(fermati, 1);
 });
 
+test('CTX-DELETE-FAIL-PRESERVES-RAM — una delete fallita conserva elenco ed export per un retry', async () => {
+  const cartellaStore = cartellaStoreVera();
+  const finta = sessioneControllabile();
+  let fallisce = true;
+  try {
+    const registro = createSessionRegistry({
+      cartellaStore, avviaSessioneFn: finta.avviaSessioneFn,
+      preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k',
+      eliminaSessionePersistitaFn: async () => {
+        if (fallisce) throw Object.assign(new Error('unlink EACCES'), { code: 'SESSION_STORE_DELETE_FAILED' });
+      },
+    });
+    const { sessionId } = registro.avvia('task-vero');
+    finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+    await attendiRegistroSuDisco(cartellaStore, sessionId, (record) => record.some((riga) => riga.type === 'RunFinished'));
+    await assert.rejects(registro.elimina(sessionId), { code: 'SESSION_STORE_DELETE_FAILED' });
+    assert.equal(registro.elenca().some((voce) => voce.sessionId === sessionId), true);
+    assert.equal(registro.esporta(sessionId)?.sessionId, sessionId);
+    fallisce = false;
+    assert.deepEqual(await registro.elimina(sessionId), { ok: true });
+    assert.equal(registro.esporta(sessionId), null);
+  } finally { await rimuoviCartellaStoreDopoLeScritture(cartellaStore); }
+});
+
 /*
  * ⭐⭐⭐ FASE C (28/8) — sub-agenti, piano elegant-spinning-dongarra.md.
  * Verifica il FILO INTERO (session-registry → subagent-orchestrator →
@@ -2995,6 +3238,315 @@ test('⭐⭐⭐⭐ delega FILO INTERO: la madre riceve AVVIATO subito, continua 
   assert.equal(figliDelPadre.figli.length, 1, 'il registro riconosce la figlia come figlia DI QUESTO padre, non una sessione slegata');
   assert.equal(figliDelPadre.figli[0].esitoDelega, 'concluso');
   finta.concludi(0, { type: 'RunFinished', threadId: 't1', runId: 'r1' }, { ok: true, esito: { detto: 'madre conclusa', comeFinita: 'concluso', messaggiFinali: [] } });
+});
+
+test('AGENT-CHILD-ASK-PARENT-BLOCKS e AGENT-FOREIGN-ANSWER-DENIED: dialogo correlato alla famiglia', async () => {
+  const finta = sessioniControllabili();
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaEsisteFn: () => true });
+  const { sessionId: parentId } = registro.avvia('task-vero');
+  const { childId } = await finta.run(0).input.onDelega('controlla il contratto', '/tmp/figlio');
+  assert.equal(finta.run(0).input.agentRole, 'root');
+  assert.equal(finta.run(1).input.agentRole, 'child');
+  const pending = finta.run(1).input.askParentFn('Quale versione devo usare?');
+  const asked = registro.esporta(childId).eventi.find((event) => event.name === 'talos.agent-dialogue' && event.value?.status === 'requested');
+  assert.ok(asked);
+  assert.equal(asked.value.parentId, parentId);
+  assert.equal(asked.value.childId, childId);
+  assert.equal(asked.value.direction, 'child-to-parent');
+  assert.equal(registro.esporta(parentId).eventi.some((event) => event.value?.requestId === asked.value.requestId), true);
+  const delivered = finta.run(0).input.codaMessaggiFn();
+  assert.match(delivered, /Quale versione devo usare/);
+  let settled = false;
+  pending.then(() => { settled = true; });
+  await Promise.resolve();
+  assert.equal(settled, false);
+  assert.equal(finta.run(1).input.answerChildQuestionFn({ childId, requestId: asked.value.requestId, answer: 'falso' }).code, 'AGENT_DIALOGUE_FORBIDDEN');
+  assert.equal(finta.run(0).input.answerChildQuestionFn({ childId, requestId: 'non-esiste', answer: 'falso' }).code, 'AGENT_DIALOGUE_NOT_PENDING');
+  assert.deepEqual(finta.run(0).input.answerChildQuestionFn({ childId, requestId: asked.value.requestId, answer: 'Usa v1.' }), { ok: true });
+  assert.deepEqual(await pending, { status: 'answered', requestId: asked.value.requestId, answer: 'Usa v1.' });
+  assert.equal(finta.run(0).input.answerChildQuestionFn({ childId, requestId: asked.value.requestId, answer: 'duplicato' }).code, 'AGENT_DIALOGUE_NOT_PENDING');
+  finta.concludi(1, { type: 'RunFinished' });
+  finta.concludi(0, { type: 'RunFinished' });
+});
+
+test('AGENT-PARENT-ASK-CHILD: ricevuta asincrona, consegna e risposta correlata', async () => {
+  const finta = sessioniControllabili();
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaEsisteFn: () => true });
+  const { sessionId: parentId } = registro.avvia('task-vero');
+  const { childId } = await finta.run(0).input.onDelega('esamina la build', '/tmp/figlio');
+  const receipt = finta.run(0).input.askChildFn({ childId, question: 'Quale test è rosso?' });
+  assert.equal(receipt.status, 'requested');
+  assert.equal(typeof receipt.requestId, 'string');
+  assert.match(finta.run(1).input.codaMessaggiFn(), /Quale test è rosso/);
+  assert.equal(finta.run(1).input.answerParentQuestionFn({ requestId: receipt.requestId, answer: 'test A' }).ok, true);
+  assert.equal(finta.run(1).input.answerParentQuestionFn({ requestId: receipt.requestId, answer: 'test B' }).code, 'AGENT_DIALOGUE_NOT_PENDING');
+  assert.equal(registro.esporta(parentId).eventi.some((event) => event.value?.requestId === receipt.requestId && event.value?.status === 'answered'), true);
+  finta.concludi(1, { type: 'RunFinished' });
+  finta.concludi(0, { type: 'RunFinished' });
+});
+
+test('AGENT-CHILD-COMPLETES-WITH-QUESTION: fine del figlio cancella la domanda senza risposta', async () => {
+  const finta = sessioniControllabili();
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn,
+    preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaEsisteFn: () => true });
+  const { sessionId: parentId } = registro.avvia('task-vero');
+  const { childId } = await finta.run(0).input.onDelega('analizza', '/tmp/figlio');
+  const request = finta.run(0).input.askChildFn({ childId, question: 'Hai trovato il test?' });
+  assert.equal(request.status, 'requested');
+  finta.concludi(1, { type: 'RunFinished' }, { ok: true, esito: { detto: 'Non ho risposto.', comeFinita: 'concluso', messaggiFinali: [] } });
+  await new Promise((resolve) => setImmediate(resolve));
+  for (const sessionId of [parentId, childId]) {
+    assert.equal(registro.esporta(sessionId).eventi.some((event) => event.value?.requestId === request.requestId
+      && event.value?.status === 'cancelled'), true);
+  }
+  assert.equal(finta.run(1).input.answerParentQuestionFn({ requestId: request.requestId, answer: 'tardi' }).code,
+    'AGENT_DIALOGUE_NOT_PENDING');
+  finta.concludi(0, { type: 'RunFinished' });
+});
+
+test('AGENT-STOP-CANCEL e AGENT-NO-USER-CARD: fermare il figlio chiude il dialogo, non apre Ask', async () => {
+  const finta = sessioniControllabili();
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaEsisteFn: () => true });
+  const { sessionId: parentId } = registro.avvia('task-vero');
+  const { childId } = await finta.run(0).input.onDelega('analizza', '/tmp/figlio');
+  await assert.rejects(finta.run(1).input.chiediDomandaFn([{ id: 'x', question: 'Chiedi?' }]), { code: 'QUESTION_CHILD_FORBIDDEN' });
+  assert.equal(registro.esporta(childId).eventi.some((event) => event.type === 'UserQuestionRequested'), false);
+  const pending = finta.run(1).input.askParentFn('Serve una scelta?');
+  const requested = registro.esporta(childId).eventi.find((event) => event.value?.direction === 'child-to-parent' && event.value?.status === 'requested');
+  assert.equal(registro.ferma(childId), true);
+  assert.deepEqual(await pending, { status: 'cancelled', requestId: requested.value.requestId, reason: 'run-cancelled' });
+  assert.equal(registro.esporta(parentId).eventi.some((event) => event.value?.requestId === requested.value.requestId && event.value?.status === 'cancelled'), true);
+  assert.equal(registro.statoCoda(parentId).voci.some((entry) => entry.testo.includes(requested.value.requestId)), false,
+    'una domanda annullata non deve riapparire nella coda del padre');
+  finta.concludi(1, { type: 'RunError' });
+  finta.concludi(0, { type: 'RunFinished' });
+});
+
+test('AGENT-RESTART-CANCEL: una domanda inter-agente orfana diventa terminale nel journal', async () => {
+  const cartellaStore = cartellaStoreVera();
+  const requestId = 'dialogue-restart-1';
+  try {
+    const base = { taskId: 'task-vero', cartella: '/tmp/x', comandoProva: 'npm test', forkDa: null,
+      avviataAlle: new Date().toISOString(), modello: 'm', modelloPlanner: null, reasoning: null,
+      mobile: false, permessi: 'Workspace write', permessiPerAttrezzo: null };
+    for (const [sessionId, padreId, profonditaDelega] of [['parent-restart', null, 0], ['child-restart', 'parent-restart', 1]]) {
+      registraRigaSync({ cartellaStore, sessionId, record: { tipo: 'intestazione', sessionId, ...base,
+        task: { id: 'task-vero', consegna: 'c' }, padreId, profonditaDelega } });
+      registraRigaSync({ cartellaStore, sessionId, record: { type: 'RunStarted', threadId: sessionId, runId: sessionId, _sequenza: 1 } });
+      registraRigaSync({ cartellaStore, sessionId, record: { type: 'CUSTOM', name: 'talos.agent-dialogue',
+        value: { version: 1, requestId, parentId: 'parent-restart', childId: 'child-restart',
+          direction: 'child-to-parent', status: 'requested', question: 'Quale versione?' }, _sequenza: 2 } });
+      if (sessionId === 'parent-restart') registraRigaSync({ cartellaStore, sessionId, record: { tipo: 'coda',
+        voci: [{ id: 'queued-dialogue', testo: `Domanda ${requestId}`, origine: 'agent-dialogue', requestId,
+          childId: 'child-restart', dialogueKind: 'request' }], inPausa: false } });
+    }
+    const restored = createSessionRegistry({ cartellaStore, modello: 'm', chiave: 'k' });
+    await restored.ripristina();
+    assert.deepEqual(restored.statoCoda('parent-restart').voci, [], 'una richiesta rimasta in coda non torna rispondibile dopo restart');
+    for (const sessionId of ['parent-restart', 'child-restart']) {
+      const events = restored.esporta(sessionId).eventi.filter((event) => event.value?.requestId === requestId);
+      assert.deepEqual(events.map((event) => event.value.status), ['requested', 'cancelled']);
+      assert.equal(events[1].value.reason, 'server-restarted');
+      assert.equal(readFileSync(join(cartellaStore, sessionId + '.jsonl'), 'utf8').includes('server-restarted'), true);
+    }
+    const again = createSessionRegistry({ cartellaStore, modello: 'm', chiave: 'k' });
+    await again.ripristina();
+    assert.equal(again.esporta('child-restart').eventi.filter((event) => event.value?.requestId === requestId && event.value?.status === 'cancelled').length, 1);
+  } finally {
+    await rimuoviCartellaStoreDopoLeScritture(cartellaStore);
+  }
+});
+
+test('AGENT-ANSWER-SPLIT-RESTART: il journal figlio recupera answered del padre senza cancellazione falsa', async () => {
+  const cartellaStore = cartellaStoreVera();
+  const requestId = 'dialogue-split-restart-1';
+  try {
+    const base = { taskId: 'task-vero', cartella: '/tmp/x', comandoProva: 'npm test', forkDa: null,
+      avviataAlle: new Date().toISOString(), modello: 'm', modelloPlanner: null, reasoning: null,
+      mobile: false, permessi: 'Workspace write', permessiPerAttrezzo: null };
+    for (const [sessionId, padreId, profonditaDelega] of [['parent-split', null, 0], ['child-split', 'parent-split', 1]]) {
+      registraRigaSync({ cartellaStore, sessionId, record: { tipo: 'intestazione', sessionId, ...base,
+        task: { id: 'task-vero', consegna: 'c' }, padreId, profonditaDelega } });
+      registraRigaSync({ cartellaStore, sessionId, record: { type: 'RunStarted', threadId: sessionId, runId: sessionId, _sequenza: 1 } });
+      const value = { version: 1, requestId, parentId: 'parent-split', childId: 'child-split',
+        direction: 'child-to-parent', status: 'requested', question: 'Quale versione?' };
+      registraRigaSync({ cartellaStore, sessionId, record: { type: 'CUSTOM', name: 'talos.agent-dialogue', value, _sequenza: 2 } });
+      if (sessionId === 'parent-split') registraRigaSync({ cartellaStore, sessionId, record: { type: 'CUSTOM',
+        name: 'talos.agent-dialogue', value: { ...value, status: 'answered', answer: 'v1' }, _sequenza: 3 } });
+    }
+    const restored = createSessionRegistry({ cartellaStore, modello: 'm', chiave: 'k' });
+    await restored.ripristina();
+    for (const sessionId of ['parent-split', 'child-split']) {
+      const events = restored.esporta(sessionId).eventi.filter((event) => event.value?.requestId === requestId);
+      assert.deepEqual(events.map((event) => event.value.status), ['requested', 'answered']);
+      assert.equal(events[1].value.answer, 'v1');
+    }
+    const again = createSessionRegistry({ cartellaStore, modello: 'm', chiave: 'k' });
+    await again.ripristina();
+    assert.equal(again.esporta('child-split').eventi.filter((event) => event.value?.requestId === requestId && event.value?.status === 'answered').length, 1);
+  } finally {
+    await rimuoviCartellaStoreDopoLeScritture(cartellaStore);
+  }
+});
+
+test('AGENT-DELIVERY-FAIL-CLOSED: journal e coda falliti non producono una falsa risposta', async () => {
+  const finta = sessioniControllabili();
+  let failJournal = true;
+  let failQueue = false;
+  const registro = createSessionRegistry({ cartellaStore: '/store-finto',
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta,
+    modello: 'm', chiave: 'k', cartellaEsisteFn: () => true,
+    registraRigaFn: async () => {},
+    registraRigaSyncFn: ({ record }) => {
+      if (failJournal && record?.name === 'talos.agent-dialogue' && record.value?.status === 'requested') throw new Error('ENOSPC journal');
+      if (failQueue && record?.tipo === 'coda') throw new Error('ENOSPC queue');
+    },
+  });
+  const { sessionId: parentId } = registro.avvia('task-vero');
+  const { childId } = await finta.run(0).input.onDelega('ispeziona', '/tmp/figlio');
+  await assert.rejects(finta.run(1).input.askParentFn('Quale file?'), { code: 'AGENT_DIALOGUE_STORE_FAILED' });
+  assert.equal(registro.esporta(parentId).eventi.some((event) => event.value?.status === 'requested'), false);
+  failJournal = false;
+  failQueue = true;
+  const result = await finta.run(1).input.askParentFn('Quale file?');
+  assert.equal(result.status, 'cancelled');
+  assert.equal(result.reason, 'delivery-failed');
+  assert.equal(registro.esporta(parentId).eventi.some((event) => event.value?.requestId === result.requestId && event.value?.status === 'cancelled'), true);
+  failQueue = false;
+  finta.concludi(1, { type: 'RunFinished' });
+  finta.concludi(0, { type: 'RunFinished' });
+  assert.deepEqual(registro.statoCoda(parentId).voci, []);
+  assert.equal(registro.esporta(childId).eventi.some((event) => event.value?.requestId === result.requestId && event.value?.status === 'cancelled'), true);
+});
+
+test('AGENT-PARENT-WAKE: domanda del figlio riapre il padre concluso con requestId verificabile', async () => {
+  const finta = sessioniControllabili();
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta,
+    modello: 'm', chiave: 'k', cartellaEsisteFn: () => true });
+  const { sessionId: parentId } = registro.avvia('task-vero');
+  const { childId } = await finta.run(0).input.onDelega('indaga', '/tmp/figlio');
+  finta.concludi(0, { type: 'RunFinished' }, { ok: true, esito: { comeFinita: 'concluso',
+    messaggiFinali: [{ role: 'user', content: 'c' }, { role: 'assistant', content: 'attendo il figlio' }] } });
+  await new Promise((resolve) => setImmediate(resolve));
+  const pending = finta.run(1).input.askParentFn('Quale risultato serve?');
+  assert.equal(finta.chiamate, 3, 'il padre concluso deve ricevere un nuovo giro reale');
+  const request = registro.esporta(childId).eventi.find((event) => event.value?.status === 'requested' && event.value?.direction === 'child-to-parent');
+  assert.equal(finta.run(2).input.messaggiIniziali.at(-1).content.includes(request.value.requestId), true);
+  assert.deepEqual(finta.run(2).input.answerChildQuestionFn({ childId, requestId: request.value.requestId, answer: 'Una lista breve.' }), { ok: true });
+  assert.equal((await pending).answer, 'Una lista breve.');
+  finta.concludi(2, { type: 'RunFinished' });
+  finta.concludi(1, { type: 'RunFinished' });
+  assert.equal(registro.esporta(parentId).eventi.some((event) => event.value?.requestId === request.value.requestId && event.value?.status === 'answered'), true);
+});
+
+test('AGENT-ANSWER-SPLIT-JOURNAL: retry completa il child senza duplicare answered nel parent', async () => {
+  const finta = sessioniControllabili();
+  let childId = null;
+  let failChildAnswer = true;
+  const registro = createSessionRegistry({ cartellaStore: '/store-finto',
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta,
+    modello: 'm', chiave: 'k', cartellaEsisteFn: () => true,
+    registraRigaFn: async () => {},
+    registraRigaSyncFn: ({ sessionId, record }) => {
+      if (failChildAnswer && sessionId === childId && record?.name === 'talos.agent-dialogue'
+        && record.value?.status === 'answered') throw new Error('ENOSPC child answer');
+    },
+  });
+  const { sessionId: parentId } = registro.avvia('task-vero');
+  ({ childId } = await finta.run(0).input.onDelega('controlla', '/tmp/figlio'));
+  const pending = finta.run(1).input.askParentFn('Quale versione?');
+  const requestId = registro.esporta(childId).eventi.find((event) => event.value?.status === 'requested').value.requestId;
+  assert.equal(finta.run(0).input.answerChildQuestionFn({ childId, requestId, answer: 'v1' }).code, 'AGENT_DIALOGUE_STORE_FAILED');
+  assert.equal(registro.esporta(parentId).eventi.filter((event) => event.value?.requestId === requestId && event.value?.status === 'answered').length, 1);
+  assert.equal(registro.esporta(childId).eventi.filter((event) => event.value?.requestId === requestId && event.value?.status === 'answered').length, 0);
+  failChildAnswer = false;
+  assert.equal(finta.run(0).input.answerChildQuestionFn({ childId, requestId, answer: 'v2' }).code, 'AGENT_DIALOGUE_STORE_FAILED');
+  assert.equal(registro.esporta(childId).eventi.filter((event) => event.value?.requestId === requestId && event.value?.status === 'answered').length, 0);
+  assert.deepEqual(finta.run(0).input.answerChildQuestionFn({ childId, requestId, answer: 'v1' }), { ok: true });
+  assert.equal((await pending).answer, 'v1');
+  assert.equal(registro.esporta(parentId).eventi.filter((event) => event.value?.requestId === requestId && event.value?.status === 'answered').length, 1);
+  assert.equal(registro.esporta(childId).eventi.filter((event) => event.value?.requestId === requestId && event.value?.status === 'answered').length, 1);
+  finta.concludi(1, { type: 'RunFinished' });
+  finta.concludi(0, { type: 'RunFinished' });
+});
+
+/* 24/09/2026, decisione owner 36 — l'elenco d'attrezzi di serie SENZA «presenta il piano»: il vecchio piano dal testo finale. */
+const SENZA_PRESENT_PLAN = ['web_search', 'time_now', 'ask_user_question'];
+
+test('PLAN-FINAL-TEXT-NOT-A-PLAN-WITH-TOOL: col piano presentato dall’attrezzo, il testo finale di un giro in Piano non è un piano', async () => {
+  const finta = sessioniControllabili();
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn,
+    preparaEsecuzioneLiberaFn: preparaEsecuzioneLiberaFinta,
+    cartelleProgetto: [{ id: '0', percorso: '/tmp/progetto', nome: 'progetto' }], modello: 'm', chiave: 'k' });
+  const { sessionId } = registro.avviaLibero({ cartellaId: '0', consegna: 'Pianifica', modalitaOperativa: 'piano' });
+  assert.equal(typeof finta.run(0).input.presentaPianoFn, 'function', 'il root in Piano ha il canale della scelta');
+  assert.equal(finta.run(0).input.strumentiEstesi.includes('present_plan'), true);
+  finta.concludi(0, { type: 'RunFinished' }, { ok: true, esito: { detto: 'Va bene: il lavoro prosegue nella conversazione nuova.',
+    comeFinita: 'concluso', messaggiFinali: [] } });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(registro.esporta(sessionId).eventi.some((event) => event.name === 'talos.plan'), false);
+});
+
+test('PLAN-PROPOSAL-DURABLE-REPLAY e PLAN-REVISION: proposta reale versionata dopo due giri Piano', async () => {
+  const cartellaStore = cartellaStoreVera();
+  const finta = sessioniControllabili();
+  try {
+    // 24/09/2026, decisione owner 36: il piano dal testo finale vale solo per chi NON ha l'attrezzo «presenta il piano».
+    const registro = createSessionRegistry({ cartellaStore, avviaSessioneFn: finta.avviaSessioneFn,
+      preparaEsecuzioneLiberaFn: preparaEsecuzioneLiberaFinta, strumentiEstesi: SENZA_PRESENT_PLAN,
+      cartelleProgetto: [{ id: '0', percorso: '/tmp/progetto', nome: 'progetto' }], modello: 'm', chiave: 'k' });
+    const { sessionId } = registro.avviaLibero({ cartellaId: '0', consegna: 'Pianifica', modalitaOperativa: 'piano' });
+    finta.concludi(0, { type: 'RunFinished' }, { ok: true, esito: { detto: 'Piano uno', comeFinita: 'concluso',
+      messaggiFinali: [{ role: 'user', content: 'Pianifica' }, { role: 'assistant', content: 'Piano uno' }] } });
+    await new Promise((resolve) => setImmediate(resolve));
+    const first = registro.esporta(sessionId).eventi.find((event) => event.name === 'talos.plan');
+    assert.equal(first.value.schema, 'talos.plan.v1');
+    assert.equal(first.value.status, 'proposed');
+    assert.equal(first.value.revision, 1);
+    assert.equal(first.value.content, 'Piano uno');
+    assert.equal(first.value.sessionId, sessionId);
+    assert.equal(registro.resume(sessionId, 'Rivedi il piano').sessionId, sessionId);
+    finta.concludi(1, { type: 'RunFinished' }, { ok: true, esito: { detto: 'Piano due', comeFinita: 'concluso',
+      messaggiFinali: [{ role: 'user', content: 'Rivedi il piano' }, { role: 'assistant', content: 'Piano due' }] } });
+    await new Promise((resolve) => setImmediate(resolve));
+    const proposals = registro.esporta(sessionId).eventi.filter((event) => event.name === 'talos.plan');
+    assert.deepEqual(proposals.map((event) => event.value.revision), [1, 2]);
+    assert.equal(proposals[1].value.planId, first.value.planId);
+    const restored = createSessionRegistry({ cartellaStore, modello: 'm', chiave: 'k' });
+    await restored.ripristina();
+    assert.deepEqual(restored.esporta(sessionId).eventi.filter((event) => event.name === 'talos.plan')
+      .map((event) => event.value.content), ['Piano uno', 'Piano due']);
+  } finally { await rimuoviCartellaStoreDopoLeScritture(cartellaStore); }
+});
+
+test('PLAN-NO-FAKE-APPROVAL: normale o Piano fallito non emettono un piano approvato', async () => {
+  const finta = sessioniControllabili();
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn,
+    preparaEsecuzioneLiberaFn: preparaEsecuzioneLiberaFinta,
+    cartelleProgetto: [{ id: '0', percorso: '/tmp/progetto', nome: 'progetto' }], modello: 'm', chiave: 'k' });
+  const normal = registro.avviaLibero({ cartellaId: '0', consegna: 'Ciao', modalitaOperativa: 'normale' });
+  const failed = registro.avviaLibero({ cartellaId: '0', consegna: 'Pianifica', modalitaOperativa: 'piano' });
+  finta.concludi(0, { type: 'RunFinished' }, { ok: true, esito: { detto: 'Risposta', comeFinita: 'concluso', messaggiFinali: [] } });
+  finta.concludi(1, { type: 'RunError' }, { ok: false, esito: { detto: 'Piano apparente', comeFinita: 'fallito', messaggiFinali: [] } });
+  await new Promise((resolve) => setImmediate(resolve));
+  for (const sessionId of [normal.sessionId, failed.sessionId]) {
+    assert.equal(registro.esporta(sessionId).eventi.some((event) => event.name === 'talos.plan'), false);
+  }
+});
+
+test('PLAN-TOO-LARGE-UNAVAILABLE: contenuto oltre il limite non e troncato in una proposta falsa', async () => {
+  const finta = sessioniControllabili();
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn,
+    preparaEsecuzioneLiberaFn: preparaEsecuzioneLiberaFinta, strumentiEstesi: SENZA_PRESENT_PLAN,
+    cartelleProgetto: [{ id: '0', percorso: '/tmp/progetto', nome: 'progetto' }], modello: 'm', chiave: 'k' });
+  const { sessionId } = registro.avviaLibero({ cartellaId: '0', consegna: 'Pianifica', modalitaOperativa: 'piano' });
+  finta.concludi(0, { type: 'RunFinished' }, { ok: true, esito: { detto: 'x'.repeat(100_001),
+    comeFinita: 'concluso', messaggiFinali: [] } });
+  await new Promise((resolve) => setImmediate(resolve));
+  const plan = registro.esporta(sessionId).eventi.find((event) => event.name === 'talos.plan');
+  assert.equal(plan.value.status, 'unavailable');
+  assert.equal(plan.value.content, null);
+  assert.equal(plan.value.reason, 'PLAN_CONTENT_TOO_LARGE');
 });
 
 test('AGENTI LIVE: created/updated/completed arrivano agli antenati, con stato reale e senza argomenti o output privati', async () => {
@@ -3092,9 +3644,12 @@ test('DELEGA DURABILE: se la madre conclude prima della figlia, il risultato ent
       esito: { detto: 'risultato tardivo verificato', comeFinita: 'concluso', messaggiFinali: [] },
     });
     await new Promise((resolve) => setImmediate(resolve));
+    /* F3 (24/09): con la politica `busy` del negozio la storia del risultato tardivo può essere IN CODA (in ordine, dietro
+       agli eventi della figlia): si aspetta che atterri prima di leggere il disco. Le asserzioni sono le stesse. */
+    await attendiScritture({ cartellaStore });
 
     assert.deepEqual(registro.statoCoda(padreId), { ok: true, voci: [], inPausa: false });
-    const record = readFileSync(join(cartellaStore, `${padreId}.jsonl`), 'utf8').trim().split(/\r?\n/u).map((riga) => JSON.parse(riga));
+    const record = vistaNelFormatoDiPrima(readFileSync(join(cartellaStore, `${padreId}.jsonl`), 'utf8').trim().split(/\r?\n/u).map((riga) => JSON.parse(riga)));
     const finali = record.filter((riga) => riga.tipo === 'messaggi-finali').at(-1)?.messaggiFinali ?? [];
     const risultati = finali.filter((messaggio) => messaggio?.role === 'user' && String(messaggio.content).includes('talos.subagent-result.v1'));
     assert.equal(risultati.length, 1);
@@ -3105,7 +3660,7 @@ test('DELEGA DURABILE: se la madre conclude prima della figlia, il risultato ent
     const ultimaCoda = record.filter((riga) => riga.tipo === 'coda').at(-1);
     assert.deepEqual(ultimaCoda.voci, []);
   } finally {
-    rimuoviCartellaDiProva(cartellaStore);
+    await rimuoviCartellaStoreDopoLeScritture(cartellaStore);
   }
 });
 
@@ -3140,7 +3695,7 @@ test('DELEGA DURABILE: cronologia salvata svuota la FIFO anche se fallisce il so
   await new Promise((resolve) => setImmediate(resolve));
 
   assert.deepEqual(registro.statoCoda(padreId).voci, [], 'la copia gia salvata nello storico non deve restare inviabile una seconda volta');
-  const finali = recordSincroni.filter((record) => record.tipo === 'messaggi-finali').at(-1)?.messaggiFinali ?? [];
+  const finali = vistaNelFormatoDiPrima(recordSincroni).filter((record) => record.tipo === 'messaggi-finali').at(-1)?.messaggiFinali ?? [];
   assert.equal(finali.filter((messaggio) => String(messaggio.content).includes('talos.subagent-result.v1')).length, 1);
   const figlio = registro.elencaFigli(padreId).figli.find((voce) => voce.sessionId === avvio.childId);
   assert.match(figlio.erroreConsegnaDelega, /evento durevole di provenienza non e stato salvato/);
@@ -3298,7 +3853,7 @@ test('INVIA CODA: una delega ripresa conserva origine e childId sul RunStarted e
     assert.equal(ricevuti.slice(inizio).filter((evento) => evento.type === 'QueuedMessageDelivered').length, 0);
   } finally {
     if (finta.chiamate) finta.concludi({ type: 'RunFinished' }, { ok: true, esito: { messaggiFinali: finta.ultimoInput.messaggiIniziali, comeFinita: 'concluso' } });
-    rimuoviCartellaDiProva(cartellaStore);
+    await rimuoviCartellaStoreDopoLeScritture(cartellaStore);
   }
 });
 
@@ -3394,7 +3949,7 @@ test('DELEGA RECOVERY: crash dopo QueuedMessageDelivered conserva una sola conse
     assert.equal(contenuti.filter((contenuto) => contenuto === testo).length, 1, 'il risultato resta nel contesto canonico una volta sola');
   } finally {
     if (finta.chiamate) finta.concludi({ type: 'RunFinished' }, { ok: true, esito: { messaggiFinali: finta.ultimoInput.messaggiIniziali, comeFinita: 'concluso' } });
-    rimuoviCartellaDiProva(cartellaStore);
+    await rimuoviCartellaStoreDopoLeScritture(cartellaStore);
   }
 });
 
@@ -3428,7 +3983,7 @@ test('DELEGA RECOVERY: crash durante redirect attivo conserva una sola copia can
     assert.equal(contenuti.filter((contenuto) => contenuto === testo).length, 1, 'il risultato della figlia resta nel checkpoint una sola volta');
   } finally {
     if (finta.chiamate) finta.concludi({ type: 'RunFinished' }, { ok: true, esito: { messaggiFinali: finta.ultimoInput.messaggiIniziali, comeFinita: 'concluso' } });
-    rimuoviCartellaDiProva(cartellaStore);
+    await rimuoviCartellaStoreDopoLeScritture(cartellaStore);
   }
 });
 
@@ -3457,7 +4012,7 @@ test('DELEGA RECOVERY: checkpoint successivo resta autorevole sui risultati gia 
     assert.ok(contenuti.includes('Sintesi autorevole senza il testo integrale precedente'));
   } finally {
     if (finta.chiamate) finta.concludi({ type: 'RunFinished' }, { ok: true, esito: { messaggiFinali: finta.ultimoInput.messaggiIniziali, comeFinita: 'concluso' } });
-    rimuoviCartellaDiProva(cartellaStore);
+    await rimuoviCartellaStoreDopoLeScritture(cartellaStore);
   }
 });
 
@@ -3466,11 +4021,14 @@ test('⛔ accodaMessaggio: NOT_FOUND su un id inesistente', () => {
   assert.deepEqual(registro.accodaMessaggio('fantasma', 'ciao'), { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' });
 });
 
-test('⛔⛔ accodaMessaggio: SESSION_NOT_READY su una sessione GIÀ CONCLUSA — il percorso giusto lì è resume(), non la coda', () => {
+test('⛔⛔ accodaMessaggio: SESSION_NOT_READY su una sessione GIÀ CONCLUSA — il percorso giusto lì è resume(), non la coda', async () => {
   const finta = sessioneControllabile();
   const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaEsisteFn: () => true });
   const { sessionId } = registro.avvia('task-vero');
   finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+  /* REV-SESSION-READY (27/09/2026): «già conclusa» vuol dire ASSESTATA. Nella finestra fra l'evento finale e
+     l'assestamento la coda risponde «sta chiudendo il giro» (v3, REV-SESSION-READY-11): un'altra risposta, un altro caso. */
+  await registro.attendiAssestamento(sessionId);
 
   assert.deepEqual(
     registro.accodaMessaggio(sessionId, 'ciao'),
@@ -4170,7 +4728,28 @@ test('⛔ AL CONTRARIO — fidaPlugin su un id sessione inesistente: NOT_FOUND',
  * all'avvio.
  */
 function cartellaStoreVera() {
-  return mkdtempSync(join(tmpdir(), 'talos-session-store-registry-'));
+  return cartellaDiProva('talos-session-store-registry-');
+}
+/*
+ * ⛔ F3 (24/09/2026), punto 7 — la cartella si toglie DOPO che la coda di scrittura del negozio è vuota: prima una
+ *   scrittura in volo la ricreava 1-2 ms dopo la fine del test (`CartellaDiProvaRisorta`, tolleranza 2 in
+ *   `temp-nessun-residuo`). Con `attendiScritture` (onda 1, F2) la tolleranza scende a ZERO. Se il flush non si
+ *   svuota (`SESSION_STORE_FLUSH_EXHAUSTED`) si rimuove lo stesso: il cancello dei residui dirà il resto.
+ */
+async function attendiScrittureDelNegozio(cartellaStore) {
+  for (let giro = 0; giro < 3; giro += 1) {
+    try { await attendiScritture({ cartellaStore }); } catch { /* dichiarato dal cancello dei residui, non nascosto qui */ }
+    await new Promise((r) => setImmediate(r));
+  }
+}
+async function rimuoviCartellaStoreDopoLeScritture(cartellaStore) {
+  /* Tre giri: una continuazione di fine giro (`esecuzione.then` → storia, tempi, record) può accodare la SUA scrittura nel
+     tick dopo un flush riuscito su coda vuota — misurato: una cartella rinata su 66 nella prima passata del cancello. */
+  for (let giro = 0; giro < 3; giro += 1) {
+    try { await attendiScritture({ cartellaStore }); } catch { /* dichiarato dal cancello dei residui, non nascosto qui */ }
+    await new Promise((r) => setImmediate(r));
+  }
+  rimuoviCartellaDiProva(cartellaStore);
 }
 
 
@@ -4219,7 +4798,7 @@ test('SESSION-SETTINGS-DURABILITY-01 — impostazioni aggiornate guidano elenco,
     assert.deepEqual(ripristinata.permessiPerAttrezzo, { scrivi: 'nega', shell: 'chiedi' });
     assert.equal(ripristinata.nome, 'Rispondi solo con la parola: pong', 'il nome sopravvive al riavvio');
   } finally {
-    rimuoviCartellaDiProva(cartellaStore);
+    await rimuoviCartellaStoreDopoLeScritture(cartellaStore);
   }
 });
 
@@ -4251,7 +4830,7 @@ test('SESSION-SETTINGS-DURABILITY-01 contrario — una scrittura JSONL fallita n
     assert.equal(registro.elenca()[0].permessi, 'Workspace write');
     finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
   } finally {
-    rimuoviCartellaDiProva(cartellaStore);
+    await rimuoviCartellaStoreDopoLeScritture(cartellaStore);
   }
 });
 
@@ -4440,7 +5019,7 @@ test('⭐⭐⭐ Full access sopravvive a un riavvio del server: ripristina() ria
     assert.equal(finta.ultimoInput.cartella, parsePath('C:\\workspace-storico').root, 'dopo un riavvio, una sessione già a Full access resta allargata — mai ricastrata alla cartella di partenza');
     finta.concludi({ type: 'RunFinished', threadId: 't', runId: 'r2' });
   } finally {
-    rimuoviCartellaDiProva(cartellaStore);
+    await rimuoviCartellaStoreDopoLeScritture(cartellaStore);
   }
 });
 
@@ -4483,7 +5062,7 @@ test('⛔⛔⛔ AL CONTRARIO — senza cartellaStore: ZERO file scritti su disco
   assert.ok(true, 'nessuna eccezione, nessuna scrittura tentata');
 });
 
-test('⛔⛔⛔ AL CONTRARIO — l\'intestazione è GIÀ sul disco appena avvia() torna, ZERO attese: trovato dalla verifica dal vivo (30/8), un processo ucciso 6ms dopo la creazione perdeva la sessione per intero perché la scrittura fire-and-forget non aveva ancora toccato il disco', () => {
+test('⛔⛔⛔ AL CONTRARIO — l\'intestazione è GIÀ sul disco appena avvia() torna, ZERO attese: trovato dalla verifica dal vivo (30/8), un processo ucciso 6ms dopo la creazione perdeva la sessione per intero perché la scrittura fire-and-forget non aveva ancora toccato il disco', async () => {
   const cartellaStore = cartellaStoreVera();
   try {
     const finta = sessioneControllabile();
@@ -4497,7 +5076,7 @@ test('⛔⛔⛔ AL CONTRARIO — l\'intestazione è GIÀ sul disco appena avvia(
     assert.equal(record.tipo, 'intestazione');
     assert.equal(record.sessionId, sessionId);
   } finally {
-    rimuoviCartellaDiProva(cartellaStore);
+    await rimuoviCartellaStoreDopoLeScritture(cartellaStore);
   }
 });
 
@@ -4512,7 +5091,7 @@ test('⭐⭐⭐ CON cartellaStore: intestazione + eventi + messaggiFinali finisc
     const file = readdirSync(cartellaStore);
     assert.deepEqual(file, [`${sessionId}.jsonl`]);
   } finally {
-    rimuoviCartellaDiProva(cartellaStore);
+    await rimuoviCartellaStoreDopoLeScritture(cartellaStore);
   }
 });
 
@@ -4537,7 +5116,7 @@ test('⭐⭐⭐⭐⭐ ripristina(): una sessione CONCLUSA prima del riavvio torn
     assert.equal(elenco[0].conclusa, true);
     assert.equal(elenco[0].interrotta, false);
   } finally {
-    rimuoviCartellaDiProva(cartellaStore);
+    await rimuoviCartellaStoreDopoLeScritture(cartellaStore);
   }
 });
 
@@ -4606,7 +5185,7 @@ test('SESSION-RESTORE-LAZY-WATCHER-24 — boot e intervallo fra turni restano pa
     assert.equal(massimoWatcherVivi, 1, 'mai due watcher contemporanei per la stessa cronologia');
     finta.concludi({ type: 'RunFinished', threadId: 't3', runId: 'r3' });
   } finally {
-    rimuoviCartellaDiProva(cartellaStore);
+    await rimuoviCartellaStoreDopoLeScritture(cartellaStore);
   }
 });
 
@@ -4645,7 +5224,7 @@ test('REGISTRY-RESTORE-LATEST-HISTORY-18 — dopo più turni il riavvio eredita 
     );
     await attendiRegistroSuDisco(cartellaStore, fork.sessionId, (record) => record.some((r) => r.tipo === 'messaggi-finali'));
   } finally {
-    rimuoviCartellaDiProva(cartellaStore);
+    await rimuoviCartellaStoreDopoLeScritture(cartellaStore);
   }
 });
 
@@ -4667,7 +5246,7 @@ test('⭐⭐ J — ripristina() conserva il verdetto fallito di una delega di mo
     assert.equal(figli.figli[0].esitoDelega, 'fallito');
     assert.deepEqual(figli.figli[0].evidenzaDelega, { scritture: 0, artefatti: 0, toolCalls: 1, toolCallsOk: 1, toolCallsFalliti: 0, verificabile: true });
   } finally {
-    rimuoviCartellaDiProva(cartellaStore);
+    await rimuoviCartellaStoreDopoLeScritture(cartellaStore);
   }
 });
 
@@ -4689,7 +5268,7 @@ test('SESSION-RECOVERY-VERSIONED-FINAL-21 — uno snapshot finale correlato al g
     assert.equal(elenco[0].conclusa, true, 'solo uno snapshot correlato al giro corrente può sostituire l’evento terminale mancante');
     assert.equal(elenco[0].interrotta, false);
   } finally {
-    rimuoviCartellaDiProva(cartellaStore);
+    await rimuoviCartellaStoreDopoLeScritture(cartellaStore);
   }
 });
 
@@ -4711,7 +5290,7 @@ test('SESSION-RECOVERY-TRAILING-WORKSPACE-09 — WorkspaceChanged dopo RunError 
     assert.equal(voce.conclusa, true);
     assert.equal(voce.interrotta, false);
   } finally {
-    rimuoviCartellaDiProva(cartellaStore);
+    await rimuoviCartellaStoreDopoLeScritture(cartellaStore);
   }
 });
 
@@ -4735,7 +5314,7 @@ test('SESSION-RECOVERY-STALE-HISTORY-10 — una vecchia storia finale non conclu
     assert.equal(voce.conclusa, false);
     assert.equal(voce.interrotta, true);
   } finally {
-    rimuoviCartellaDiProva(cartellaStore);
+    await rimuoviCartellaStoreDopoLeScritture(cartellaStore);
   }
 });
 
@@ -4776,7 +5355,7 @@ test('SESSION-RECOVERY-LATE-FINAL-18 — una storia del giro precedente scritta 
       && record.some((item) => item.tipo === 'messaggi-finali' && item.versioneGiro === 3)
     ));
   } finally {
-    rimuoviCartellaDiProva(cartellaStore);
+    await rimuoviCartellaStoreDopoLeScritture(cartellaStore);
   }
 });
 
@@ -4796,7 +5375,7 @@ test('⛔⛔⛔ AL CONTRARIO — ripristina(): una sessione MAI conclusa (crash 
     assert.equal(elenco[0].conclusa, false);
     assert.equal(elenco[0].interrotta, true);
   } finally {
-    rimuoviCartellaDiProva(cartellaStore);
+    await rimuoviCartellaStoreDopoLeScritture(cartellaStore);
   }
 });
 
@@ -4857,7 +5436,7 @@ test('SESSION-RECOVERY-RESTART-02 — RunError ripristinato dal JSONL accetta un
       && record.some((item) => item.type === 'RunFinished')
     ));
   } finally {
-    rimuoviCartellaDiProva(cartellaStore);
+    await rimuoviCartellaStoreDopoLeScritture(cartellaStore);
   }
 });
 
@@ -4885,7 +5464,7 @@ test('SESSION-RECOVERY-INTERRUPTED-05 — una sessione interrotta dal riavvio ac
       && record.some((item) => item.type === 'RunFinished')
     ));
   } finally {
-    rimuoviCartellaDiProva(cartellaStore);
+    await rimuoviCartellaStoreDopoLeScritture(cartellaStore);
   }
 });
 
@@ -4952,7 +5531,7 @@ test('SESSION-RECOVERY-DURABLE-BEFORE-RUNTIME-11 — il checkpoint è sul disco 
       avviaSessioneFn: (input) => {
         chiamate += 1;
         if (chiamate === 1) return primoGiro.avviaSessioneFn(input);
-        const righe = readFileSync(join(cartellaStore, `${sessionId}.jsonl`), 'utf8').trim().split('\n').map((riga) => JSON.parse(riga));
+        const righe = vistaNelFormatoDiPrima(readFileSync(join(cartellaStore, `${sessionId}.jsonl`), 'utf8').trim().split('\n').map((riga) => JSON.parse(riga)));
         checkpointVistoPrimaDelRuntime = righe.some((record) => record.tipo === 'checkpoint-ripresa' && record.messaggi?.at(-1)?.content === 'follow-up durevole');
         return secondoGiro.avviaSessioneFn(input);
       },
@@ -4972,7 +5551,7 @@ test('SESSION-RECOVERY-DURABLE-BEFORE-RUNTIME-11 — il checkpoint è sul disco 
     secondoGiro.concludi({ type: 'RunFinished', threadId: 't2', runId: 'r2' });
     await attendiRegistroSuDisco(cartellaStore, sessionId, (record) => record.filter((item) => item.type === 'RunFinished').length === 2);
   } finally {
-    rimuoviCartellaDiProva(cartellaStore);
+    await rimuoviCartellaStoreDopoLeScritture(cartellaStore);
   }
 });
 
@@ -4986,7 +5565,8 @@ test('SESSION-RECOVERY-DURABLE-FAILURE-17 — un checkpoint fallito impedisce la
     modello: 'm', chiave: 'k', cartellaStore: 'store-finto',
     registraRigaFn: async () => {},
     registraRigaSyncFn: ({ record }) => {
-      if (record.tipo === 'checkpoint-ripresa') throw new Error('disco pieno');
+      // 24/09/2026 (F2-bis B): la ripresa è `checkpoint-ripresa` nel formato di prima, `messaggi-delta`/`checkpoint` con `fase:'ripresa'` in quello nuovo
+      if (record.tipo === 'checkpoint-ripresa' || (['messaggi-delta', 'checkpoint'].includes(record.tipo) && record.fase === 'ripresa')) throw new Error('disco pieno');
     },
   });
   const { sessionId } = registro.avvia('task-vero');
@@ -5041,7 +5621,7 @@ test('SESSION-RECOVERY-FOLLOWUP-FAILURE-12 — un follow-up fallito resta nella 
       && record.filter((item) => item.tipo === 'messaggi-finali').at(-1)?.messaggiFinali?.at(-1)?.content === 'riprova ora'
     ));
   } finally {
-    rimuoviCartellaDiProva(cartellaStore);
+    await rimuoviCartellaStoreDopoLeScritture(cartellaStore);
   }
 });
 
@@ -5118,7 +5698,7 @@ test('SESSION-RECOVERY-CHECKPOINT-CRASH-13 — un checkpoint senza terminale res
       && record.filter((item) => item.tipo === 'messaggi-finali').at(-1)?.messaggiFinali?.at(-1)?.content === 'riprova dopo crash'
     ));
   } finally {
-    rimuoviCartellaDiProva(cartellaStore);
+    await rimuoviCartellaStoreDopoLeScritture(cartellaStore);
   }
 });
 
@@ -5135,7 +5715,7 @@ test('⛔⛔ AL CONTRARIO — ripristina(): una sessione interrotta rifiuta fork
     const esito = secondo.forka(sessionId);
     assert.deepEqual(esito, { erroreAvvio: 'La sessione origine è stata interrotta da un riavvio del server e non ha una conversazione da ereditare: avvia una sessione nuova.', code: 'SESSION_NOT_READY' });
   } finally {
-    rimuoviCartellaDiProva(cartellaStore);
+    await rimuoviCartellaStoreDopoLeScritture(cartellaStore);
   }
 });
 
@@ -5152,7 +5732,7 @@ test('⛔⛔ AL CONTRARIO — ripristina(): una sessione interrotta rifiuta comp
     const esito = await secondo.compatta(sessionId);
     assert.deepEqual(esito, { erroreAvvio: 'Questa sessione è stata interrotta da un riavvio del server e non ha una conversazione da compattare: avvia una sessione nuova.', code: 'SESSION_NOT_READY' });
   } finally {
-    rimuoviCartellaDiProva(cartellaStore);
+    await rimuoviCartellaStoreDopoLeScritture(cartellaStore);
   }
 });
 
@@ -5184,7 +5764,7 @@ test('SESSION-RECOVERY-CHECKPOINT-BEFORE-START-22 — un checkpoint più nuovo d
     giroRetry.concludi({ type: 'RunFinished', threadId: 't3', runId: 'r3' });
     await attendiRegistroSuDisco(cartellaStore, sessionId, (record) => record.filter((item) => item.type === 'RunFinished').length === 2);
   } finally {
-    rimuoviCartellaDiProva(cartellaStore);
+    await rimuoviCartellaStoreDopoLeScritture(cartellaStore);
   }
 });
 
@@ -5224,7 +5804,7 @@ test('SESSION-RECOVERY-REDIRECT-CRASH-23 — un redirect applicato sopravvive al
     giroRetry.concludi({ type: 'RunFinished', threadId: 't3', runId: 'r3' });
     await attendiRegistroSuDisco(cartellaStore, sessionId, (record) => record.filter((item) => item.type === 'RunFinished').length === 2);
   } finally {
-    rimuoviCartellaDiProva(cartellaStore);
+    await rimuoviCartellaStoreDopoLeScritture(cartellaStore);
   }
 });
 
@@ -5346,7 +5926,7 @@ test('REDIRECT-REPLAY-15 — dopo un riavvio un redirect rimasto a metà viene c
     assert.equal(secondo.reindirizza(sessionId, 'riprova').code, 'SESSION_NOT_READY');
     await attendiRegistroSuDisco(cartellaStore, sessionId, (record) => record.some((r) => r.type === 'RunRedirectFailed' && r.redirectId === redirect.redirectId));
   } finally {
-    rimuoviCartellaDiProva(cartellaStore);
+    await rimuoviCartellaStoreDopoLeScritture(cartellaStore);
   }
 });
 
@@ -5373,7 +5953,7 @@ test('REDIRECT-REPLAY-OUT-OF-ORDER-19 — il replay riordina per sequenza e chiu
     assert.equal(eventi.at(-1).redirectId, 'd-fuori-ordine');
     await attendiRegistroSuDisco(cartellaStore, sessionId, (record) => record.some((r) => r.type === 'RunRedirectFailed' && r._sequenza === 4));
   } finally {
-    rimuoviCartellaDiProva(cartellaStore);
+    await rimuoviCartellaStoreDopoLeScritture(cartellaStore);
   }
 });
 
@@ -5483,7 +6063,7 @@ test('⛔⛔ AL CONTRARIO — ripristina(): una sessione interrotta rifiuta shel
     const esito = secondo.shell(sessionId, 'echo ciao');
     assert.deepEqual(esito, { erroreAvvio: 'Questa sessione è stata interrotta da un riavvio del server: un comando diretto qui richiederebbe scrivere sopra una cronologia che non concluderà mai. Avvia una sessione nuova.', code: 'SESSION_NOT_READY' });
   } finally {
-    rimuoviCartellaDiProva(cartellaStore);
+    await rimuoviCartellaStoreDopoLeScritture(cartellaStore);
   }
 });
 
@@ -5500,7 +6080,7 @@ test('⛔⛔⛔ AL CONTRARIO — ripristina(): una sessione interrotta rifiuta a
     const esito = secondo.accodaMessaggio(sessionId, 'un messaggio che nessuno leggerà mai');
     assert.deepEqual(esito, { erroreAvvio: 'Questa sessione è stata interrotta da un riavvio del server: un messaggio in coda qui non verrebbe mai consegnato. Avvia una sessione nuova.', code: 'SESSION_NOT_READY' });
   } finally {
-    rimuoviCartellaDiProva(cartellaStore);
+    await rimuoviCartellaStoreDopoLeScritture(cartellaStore);
   }
 });
 
@@ -5524,7 +6104,7 @@ test('⛔⛔ AL CONTRARIO — ripristina(): una sessione già VIVA in memoria (s
     assert.equal(dopo.interrotta, false, 'una sessione viva non è mai "interrotta" solo perché ripristina() è stata chiamata di nuovo');
     assert.deepEqual(prima, dopo);
   } finally {
-    rimuoviCartellaDiProva(cartellaStore);
+    await rimuoviCartellaStoreDopoLeScritture(cartellaStore);
   }
 });
 
@@ -5541,7 +6121,7 @@ test('Doctor può leggere il riepilogo delle sessioni corrotte senza cancellarle
     assert.equal(stato.scartate[0].motivo, 'corrotta');
     assert.ok(existsSync(join(cartellaStore, 'sess-corrotto.jsonl')));
   } finally {
-    rimuoviCartellaDiProva(cartellaStore);
+    await rimuoviCartellaStoreDopoLeScritture(cartellaStore);
   }
 });
 
@@ -5983,7 +6563,7 @@ test('WORKSPACE-CHANGED-EPHEMERAL-01 — WorkspaceChanged arriva agli iscritti v
     assert.ok(righe.some((r) => r.type === 'RunStarted'), 'AL CONTRARIO: gli eventi del giro si persistono ancora');
     assert.equal(righe.filter((r) => r.type === 'WorkspaceChanged').length, 0, 'nessun WorkspaceChanged finisce nel log della sessione');
   } finally {
-    rimuoviCartellaDiProva(cartellaStore);
+    await rimuoviCartellaStoreDopoLeScritture(cartellaStore);
   }
 });
 
@@ -6008,7 +6588,7 @@ test('WORKSPACE-CHANGED-EPHEMERAL-02 — al ripristino i WorkspaceChanged già s
     const [voce] = registro.elenca();
     assert.equal(voce.conclusa, true, 'AL CONTRARIO: il filtro non cambia il verdetto di chiusura');
   } finally {
-    rimuoviCartellaDiProva(cartellaStore);
+    await rimuoviCartellaStoreDopoLeScritture(cartellaStore);
   }
 });
 
@@ -6061,7 +6641,7 @@ test('W0-01 — ogni file scartato al ripristino ha un motivo: vuota, senza-inte
     writeFileSync(join(cartellaStore, 'sess-senza-testa.jsonl'), '{"type":"RunStarted","_sequenza":1}\n');
     writeFileSync(join(cartellaStore, 'sess-corrotta.jsonl'), '{"tipo":"intestazione"}\nCORROTTA\n{"type":"RunError"}\n');
     writeFileSync(join(cartellaStore, 'sess-illeggibile.jsonl'), '{"tipo":"intestazione","task":"x"}\n');
-    const leggiVera = leggiRegistroPerAttesa;
+    const leggiVera = leggiRegistroGrezzo; // il registro legge il file VERO, mai la vista delle prove
     const registro = createSessionRegistry({
       modello: 'm', chiave: 'k', cartellaStore,
       leggiRegistroFn: async (args) => {
@@ -6080,7 +6660,7 @@ test('W0-01 — ogni file scartato al ripristino ha un motivo: vuota, senza-inte
     // ⛔ Nessun file è stato toccato: il Doctor legge, non cancella.
     for (const nome of ['sess-vuota', 'sess-senza-testa', 'sess-corrotta', 'sess-illeggibile']) assert.ok(existsSync(join(cartellaStore, `${nome}.jsonl`)));
   } finally {
-    rimuoviCartellaDiProva(cartellaStore);
+    await rimuoviCartellaStoreDopoLeScritture(cartellaStore);
   }
 });
 
@@ -6096,7 +6676,7 @@ test('W0-01 — AL CONTRARIO: una sessione ripristinata bene non compare fra le 
     assert.equal(esito.ripristinate, 1);
     assert.deepEqual(secondo.statoPersistenza().scartate, []);
   } finally {
-    rimuoviCartellaDiProva(cartellaStore);
+    await rimuoviCartellaStoreDopoLeScritture(cartellaStore);
   }
   const senza = createSessionRegistry({ modello: 'm', chiave: 'k' });
   await senza.ripristina();
@@ -6125,11 +6705,16 @@ test('W0-02 — intestazione senza schema (file di prima) e con schema corrente 
     assert.match(stato.scartate[0].dettaglio, new RegExp(`schema ${SCHEMA_SESSIONE + 98}`));
     assert.ok(existsSync(join(cartellaStore, 'sess-futura.jsonl')), 'il file futuro non viene toccato');
   } finally {
-    rimuoviCartellaDiProva(cartellaStore);
+    await rimuoviCartellaStoreDopoLeScritture(cartellaStore);
   }
 });
 
-test('W0-02 — ogni intestazione NUOVA porta schema: SCHEMA_SESSIONE (= 1)', async () => {
+/*
+ * 24/09/2026 (F2-bis B, coordinatore) — lo schema passa a 2: la storia vive in `messaggi-delta`/`checkpoint`, e un TALOS
+ *   di prima che leggesse un file nuovo con schema 1 non troverebbe nessun `messaggi-finali` e mostrerebbe una
+ *   conversazione VUOTA senza dirlo. Con 2 quello stesso TALOS lo scarta come «schema-futuro»: la regola di W0-02.
+ */
+test('W0-02 — ogni intestazione NUOVA porta schema: SCHEMA_SESSIONE (= 2 dal journal a delta)', async () => {
   const cartellaStore = cartellaStoreVera();
   try {
     const finta = sessioneControllabile();
@@ -6137,10 +6722,10 @@ test('W0-02 — ogni intestazione NUOVA porta schema: SCHEMA_SESSIONE (= 1)', as
     const { sessionId } = registro.avvia('task-vero');
     const record = await attendiRegistroSuDisco(cartellaStore, sessionId, (r) => r.some((x) => x.tipo === 'intestazione'));
     const intestazione = record.find((r) => r.tipo === 'intestazione');
-    assert.equal(SCHEMA_SESSIONE, 1);
+    assert.equal(SCHEMA_SESSIONE, 2);
     assert.equal(intestazione.schema, SCHEMA_SESSIONE);
   } finally {
-    rimuoviCartellaDiProva(cartellaStore);
+    await rimuoviCartellaStoreDopoLeScritture(cartellaStore);
   }
 });
 
@@ -7007,7 +7592,7 @@ test('⛔⛔⛔ processes/metrics/export DICHIARANO interrotta:true su una sessi
     }
     assert.equal(secondo.esporta(sessionId).interrotta, true);
   } finally {
-    rimuoviCartellaDiProva(cartellaStore);
+    await rimuoviCartellaStoreDopoLeScritture(cartellaStore);
   }
 });
 
@@ -7602,7 +8187,7 @@ test('MSG-RIMOSSO-01 — la risposta se ne va dagli eventi e da `messaggiFinali`
     assert.ok(suDisco.some((r) => r.tipo === 'messaggio-rimosso' && r.riferimento === 'm1'), 'la lapide c e');
     assert.ok(suDisco.some((r) => r.type === 'TextMessageContent' && r.messageId === 'm1'), 'e la storia NON e stata riscritta: il registro resta a sola aggiunta');
   } finally {
-    rimuoviCartellaDiProva(cartellaStore);
+    await rimuoviCartellaStoreDopoLeScritture(cartellaStore);
   }
 });
 
@@ -7635,7 +8220,7 @@ test('MSG-RIMOSSO-02 — dopo un RIPRISTINO il messaggio non torna, e il modello
     assert.equal(inviati.filter((m) => m.role === 'assistant' && m.content === 'Ho letto il file.').length, 0, 'il modello non legge piu il messaggio cancellato');
     assert.ok(inviati.some((m) => m.role === 'user' && m.content === 'Leggi il file'), 'il resto della conversazione resta');
   } finally {
-    rimuoviCartellaDiProva(cartellaStore);
+    await rimuoviCartellaStoreDopoLeScritture(cartellaStore);
   }
 });
 
@@ -7799,7 +8384,7 @@ test('MSG-POSIZIONE-05 — la porta riporta `toltoDalModello`, e non dice «fatt
     assert.equal(esito.toltoDalModello, false, 'ma dalla conversazione del modello NO, e si dice');
     assert.equal(esito.motivo, 'posizione-assente');
   } finally {
-    rimuoviCartellaDiProva(cartellaStore);
+    await rimuoviCartellaStoreDopoLeScritture(cartellaStore);
   }
 });
 
@@ -7847,4 +8432,2559 @@ test('RIPRESA-QUATTRO-DELEGHE — padre operativo mentre quattro runtime figli r
  } finally {
   for(let i=finta.chiamate-1;i>=0;i--) finta.concludi(i,{type:'RunFinished',threadId:`t${i}`,runId:`r${i}`},{ok:true,esito:{detto:'finito',comeFinita:'concluso',messaggiFinali:[]}});
  }
+});
+
+test('CTX-LEGACY-RESTART-PERSISTENCE — il riassunto manuale resta nel journal e guida il resume dopo un nuovo registry', async () => {
+  const cartellaStore = cartellaStoreVera();
+  const primoGiro = sessioneControllabile();
+  const giroRipreso = sessioneControllabile();
+  const storia = [{ role: 'user', content: 'domanda originale' }, { role: 'assistant', content: 'risposta originale' }];
+  const riassunto = [{ role: 'system', content: 'Sintesi verificata' }, { role: 'user', content: 'continua' }];
+  try {
+    const primo = createSessionRegistry({
+      avviaSessioneFn: primoGiro.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta,
+      compattaSessioneFn: async () => ({ compattato: true, messaggi: riassunto }),
+      modello: 'z-ai/glm-5.3-flash', chiave: 'k', cartellaStore,
+    });
+    const { sessionId } = primo.avvia('task-vero');
+    primoGiro.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' }, { ok: true, esito: { messaggiFinali: storia } });
+    await attendiRegistroSuDisco(cartellaStore, sessionId, (righe) => righe.some((riga) => riga.tipo === 'messaggi-finali'));
+    assert.deepEqual(senzaStime(await primo.compatta(sessionId)), { ok: true, compattato: true, annullabile: false });
+
+    const dopoRestart = createSessionRegistry({
+      avviaSessioneFn: giroRipreso.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta,
+      modello: 'z-ai/glm-5.3-flash', chiave: 'k', cartellaStore,
+    });
+    await dopoRestart.ripristina();
+    assert.equal(dopoRestart.resume(sessionId, 'ancora').sessionId, sessionId);
+    assert.deepEqual(giroRipreso.ultimoInput.messaggiIniziali.slice(0, riassunto.length), riassunto);
+    const righe = vistaNelFormatoDiPrima(readFileSync(join(cartellaStore, `${sessionId}.jsonl`), 'utf8').trim().split('\n').map(JSON.parse));
+    assert.deepEqual(righe.filter((riga) => riga.tipo === 'messaggi-finali').at(-1).messaggiFinali, riassunto);
+  } finally {
+    if (giroRipreso.chiamate) {
+      giroRipreso.concludi({ type: 'RunFinished', threadId: 't2', runId: 'r2' });
+      await new Promise((resolve) => setImmediate(resolve));
+    }
+    await rimuoviCartellaStoreDopoLeScritture(cartellaStore);
+  }
+});
+
+test('CTX-LEGACY-COMPACT-MISSING-HEADER — nessun successo su un journal che il replay scarterà', async () => {
+  const cartellaStore = cartellaStoreVera();
+  const giro = sessioneControllabile();
+  let chiamateModello = 0;
+  try {
+    const registro = createSessionRegistry({
+      avviaSessioneFn: giro.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta,
+      compattaSessioneFn: async () => { chiamateModello += 1; return { compattato: true, messaggi: [{ role: 'system', content: 'sintesi' }] }; },
+      modello: 'z-ai/glm-5.3-flash', chiave: 'k', cartellaStore,
+    });
+    const { sessionId } = registro.avvia('task-vero');
+    giro.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' }, { ok: true, esito: { messaggiFinali: [{ role: 'user', content: 'prima' }] } });
+    await attendiRegistroSuDisco(cartellaStore, sessionId, (righe) => righe.some((riga) => riga.tipo === 'messaggi-finali'));
+    // Fixture legacy esplicita: le vecchie versioni potevano avviare una
+    // sessione pur senza header. Il prodotto nuovo non deve ricreare quel bug.
+    const pathJournal = join(cartellaStore, `${sessionId}.jsonl`);
+    const righeLegacy = readFileSync(pathJournal, 'utf8').trimEnd().split('\n');
+    assert.equal(JSON.parse(righeLegacy.shift()).tipo, 'intestazione');
+    writeFileSync(pathJournal, `${righeLegacy.join('\n')}\n`);
+    const risposta = await registro.compatta(sessionId);
+    assert.equal(risposta.code, 'SESSION_STORE_AMBIGUOUS');
+    assert.equal(chiamateModello, 0);
+    const riavvio = createSessionRegistry({ cartellaStore });
+    await riavvio.ripristina();
+    assert.equal(riavvio.statoPersistenza().scartate.find((item) => item.sessionId === sessionId)?.motivo, 'senza-intestazione');
+    assert.ok(!(await leggiRegistroPerAttesa({ cartellaStore, sessionId })).some((riga) => riga.messaggiFinali?.[0]?.content === 'sintesi'));
+  } finally {
+    await rimuoviCartellaStoreDopoLeScritture(cartellaStore);
+  }
+});
+
+test('CTX-LEGACY-COMPACT-NONJSON-MESSAGE — un riassunto con buchi non diverge fra RAM e replay', async () => {
+  const cartellaStore = cartellaStoreVera();
+  const giro = sessioneControllabile();
+  const storia = [{ role: 'user', content: 'originale' }, { role: 'assistant', content: 'risposta' }];
+  try {
+    const registro = createSessionRegistry({
+      avviaSessioneFn: giro.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta,
+      compattaSessioneFn: async () => ({ compattato: true, messaggi: [undefined, { role: 'user', content: 'sintesi' }] }),
+      modello: 'z-ai/glm-5.3-flash', chiave: 'k', cartellaStore,
+    });
+    const { sessionId } = registro.avvia('task-vero');
+    giro.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' }, { ok: true, esito: { messaggiFinali: storia } });
+    await attendiRegistroSuDisco(cartellaStore, sessionId, (righe) => righe.some((riga) => riga.tipo === 'messaggi-finali'));
+    assert.equal((await registro.compatta(sessionId)).code, 'SESSION_STORE_WRITE_FAILED');
+    const righe = await leggiRegistroPerAttesa({ cartellaStore, sessionId });
+    assert.deepEqual(righe.filter((riga) => riga.tipo === 'messaggi-finali').at(-1).messaggiFinali, storia);
+  } finally {
+    await rimuoviCartellaStoreDopoLeScritture(cartellaStore);
+  }
+});
+
+test('CTX-LEGACY-COMPACT-WRITE-FAIL-ROLLBACK — un append fallito non conferma né applica il riassunto', async () => {
+  const cartellaStore = cartellaStoreVera();
+  const primoGiro = sessioneControllabile();
+  const giroRipreso = sessioneControllabile();
+  const storia = [{ role: 'user', content: 'storia originale' }, { role: 'assistant', content: 'risposta originale' }];
+  const riassunto = [{ role: 'system', content: 'riassunto che non deve apparire' }];
+  let fallisciAppend = false;
+  let chiamate = 0;
+  try {
+    const primo = createSessionRegistry({
+      avviaSessioneFn: (input) => (++chiamate === 1 ? primoGiro.avviaSessioneFn(input) : giroRipreso.avviaSessioneFn(input)),
+      preparaEsecuzioneFn: preparaEsecuzioneFinta,
+      compattaSessioneFn: async () => ({ compattato: true, messaggi: riassunto }),
+      registraRigaConfermataFn: (input) => registraRigaConfermata(input, {
+        appendFileSyncFn: (path, data, options) => {
+          if (fallisciAppend) throw new Error('disco non disponibile');
+          return appendFileSync(path, data, options);
+        },
+      }),
+      modello: 'z-ai/glm-5.3-flash', chiave: 'k', cartellaStore,
+    });
+    const { sessionId } = primo.avvia('task-vero');
+    primoGiro.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' }, { ok: true, esito: { messaggiFinali: storia } });
+    await attendiRegistroSuDisco(cartellaStore, sessionId, (righe) => righe.some((riga) => riga.tipo === 'messaggi-finali'));
+    fallisciAppend = true;
+    const risultato = await primo.compatta(sessionId);
+    assert.equal(risultato.code, 'SESSION_STORE_WRITE_FAILED');
+    assert.notEqual(risultato.ok, true);
+    fallisciAppend = false;
+    assert.equal(primo.resume(sessionId, 'ritenta').sessionId, sessionId);
+    assert.deepEqual(giroRipreso.ultimoInput.messaggiIniziali.slice(0, storia.length), storia);
+  } finally {
+    fallisciAppend = false;
+    if (giroRipreso.chiamate) {
+      giroRipreso.concludi({ type: 'RunFinished', threadId: 't2', runId: 'r2' });
+      await new Promise((resolve) => setImmediate(resolve));
+    }
+    await rimuoviCartellaStoreDopoLeScritture(cartellaStore);
+  }
+});
+
+test('CTX-LEGACY-COMPACT-WRITE-FAIL-RESTART — il replay dopo append fallito conserva la storia originale', async () => {
+  const cartellaStore = cartellaStoreVera();
+  const primoGiro = sessioneControllabile();
+  const dopoRestart = sessioneControllabile();
+  const storia = [{ role: 'user', content: 'domanda originale' }, { role: 'assistant', content: 'risposta originale' }];
+  let fallisci = false;
+  try {
+    const primo = createSessionRegistry({
+      avviaSessioneFn: primoGiro.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta,
+      compattaSessioneFn: async () => ({ compattato: true, messaggi: [{ role: 'system', content: 'riassunto scartato' }] }),
+      registraRigaConfermataFn: (input) => registraRigaConfermata(input, {
+        appendFileSyncFn: (path, data, options) => {
+          if (fallisci) throw new Error('disco non disponibile');
+          return appendFileSync(path, data, options);
+        },
+      }),
+      modello: 'z-ai/glm-5.3-flash', chiave: 'k', cartellaStore,
+    });
+    const { sessionId } = primo.avvia('task-vero');
+    primoGiro.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' }, { ok: true, esito: { messaggiFinali: storia } });
+    await attendiRegistroSuDisco(cartellaStore, sessionId, (righe) => righe.some((riga) => riga.tipo === 'messaggi-finali'));
+    fallisci = true;
+    assert.equal((await primo.compatta(sessionId)).code, 'SESSION_STORE_WRITE_FAILED');
+    const secondo = createSessionRegistry({
+      avviaSessioneFn: dopoRestart.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta,
+      modello: 'z-ai/glm-5.3-flash', chiave: 'k', cartellaStore,
+    });
+    await secondo.ripristina();
+    assert.equal(secondo.resume(sessionId, 'ancora').sessionId, sessionId);
+    assert.deepEqual(dopoRestart.ultimoInput.messaggiIniziali.slice(0, storia.length), storia);
+  } finally {
+    fallisci = false;
+    if (dopoRestart.chiamate) {
+      dopoRestart.concludi({ type: 'RunFinished', threadId: 't2', runId: 'r2' });
+      await new Promise((resolve) => setImmediate(resolve));
+    }
+    await rimuoviCartellaStoreDopoLeScritture(cartellaStore);
+  }
+});
+
+test('CTX-LEGACY-COMPACT-CONCURRENT — una seconda compact non richiama il modello né sostituisce la prima', async () => {
+  const giro = sessioneControllabile();
+  const storia = [{ role: 'user', content: 'storia' }, { role: 'assistant', content: 'risposta' }];
+  const riassunto = [{ role: 'system', content: 'sintesi unica' }];
+  let libera;
+  const attesa = new Promise((resolve) => { libera = resolve; });
+  let chiamateModello = 0;
+  const registro = createSessionRegistry({
+    avviaSessioneFn: giro.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta,
+    compattaSessioneFn: async () => { chiamateModello += 1; await attesa; return { compattato: true, messaggi: riassunto }; },
+    modello: 'z-ai/glm-5.3-flash', chiave: 'k',
+  });
+  const { sessionId } = registro.avvia('task-vero');
+  giro.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' }, { ok: true, esito: { messaggiFinali: storia } });
+  await new Promise((resolve) => setImmediate(resolve));
+  const prima = registro.compatta(sessionId);
+  const seconda = registro.compatta(sessionId);
+  libera();
+  const [primaRisposta, secondaRisposta] = await Promise.all([prima, seconda]);
+  assert.deepEqual(senzaStime(primaRisposta), { ok: true, compattato: true, annullabile: false });
+  assert.equal(secondaRisposta.code, 'SESSION_NOT_READY');
+  assert.equal(chiamateModello, 1);
+});
+
+test('CTX-LEGACY-COMPACT-RUNNING-GUARD — una storia precedente non permette compact durante il giro vivo', async () => {
+  const primoGiro = sessioneControllabile();
+  const secondoGiro = sessioneControllabile();
+  let chiamate = 0;
+  let chiamateCompact = 0;
+  const registro = createSessionRegistry({
+    avviaSessioneFn: (input) => (++chiamate === 1 ? primoGiro.avviaSessioneFn(input) : secondoGiro.avviaSessioneFn(input)),
+    preparaEsecuzioneFn: preparaEsecuzioneFinta,
+    compattaSessioneFn: async () => { chiamateCompact += 1; return { compattato: true, messaggi: [{ role: 'system', content: 'non valido' }] }; },
+    modello: 'z-ai/glm-5.3-flash', chiave: 'k',
+  });
+  const { sessionId } = registro.avvia('task-vero');
+  primoGiro.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' }, { ok: true, esito: { messaggiFinali: [{ role: 'user', content: 'prima' }] } });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(registro.resume(sessionId, 'seconda').sessionId, sessionId);
+  try {
+    const risposta = await registro.compatta(sessionId);
+    assert.equal(risposta.code, 'SESSION_NOT_READY');
+    assert.equal(chiamateCompact, 0);
+  } finally {
+    secondoGiro.concludi({ type: 'RunFinished', threadId: 't2', runId: 'r2' });
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+});
+
+test('CTX-LEGACY-COMPACT-RESUME-RACE — una sintesi tardiva non vince su un nuovo giro', async () => {
+  const primoGiro = sessioneControllabile();
+  const secondoGiro = sessioneControllabile();
+  let chiamate = 0;
+  let libera;
+  const attesa = new Promise((resolve) => { libera = resolve; });
+  const registro = createSessionRegistry({
+    avviaSessioneFn: (input) => (++chiamate === 1 ? primoGiro.avviaSessioneFn(input) : secondoGiro.avviaSessioneFn(input)),
+    preparaEsecuzioneFn: preparaEsecuzioneFinta,
+    compattaSessioneFn: async () => { await attesa; return { compattato: true, messaggi: [{ role: 'system', content: 'sintesi ormai vecchia' }] }; },
+    modello: 'z-ai/glm-5.3-flash', chiave: 'k',
+  });
+  const { sessionId } = registro.avvia('task-vero');
+  primoGiro.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' }, { ok: true, esito: { messaggiFinali: [{ role: 'user', content: 'prima' }] } });
+  await new Promise((resolve) => setImmediate(resolve));
+  const compattazione = registro.compatta(sessionId);
+  try {
+    assert.equal(registro.resume(sessionId, 'nuovo giro').sessionId, sessionId);
+    libera();
+    const risposta = await compattazione;
+    assert.equal(risposta.code, 'SESSION_NOT_READY');
+    assert.deepEqual(secondoGiro.ultimoInput.messaggiIniziali.at(-1), { role: 'user', content: 'nuovo giro' });
+  } finally {
+    libera();
+    await compattazione;
+    if (secondoGiro.chiamate) {
+      secondoGiro.concludi({ type: 'RunFinished', threadId: 't2', runId: 'r2' });
+      await new Promise((resolve) => setImmediate(resolve));
+    }
+  }
+});
+
+test('CTX-LEGACY-COMPACT-QUEUE-RESUME-RACE — un nuovo giro invalida il riassunto mentre aspetta la coda journal', async () => {
+  const cartellaStore = cartellaStoreVera();
+  const primoGiro = sessioneControllabile();
+  const secondoGiro = sessioneControllabile();
+  const storia = [{ role: 'user', content: 'prima' }, { role: 'assistant', content: 'risposta' }];
+  let chiamate = 0;
+  let libera;
+  const attesa = new Promise((resolve) => { libera = resolve; });
+  let scritturaPrecedente;
+  let compattazione;
+  try {
+    const registro = createSessionRegistry({
+      avviaSessioneFn: (input) => (++chiamate === 1 ? primoGiro.avviaSessioneFn(input) : secondoGiro.avviaSessioneFn(input)),
+      preparaEsecuzioneFn: preparaEsecuzioneFinta,
+      compattaSessioneFn: async () => ({ compattato: true, messaggi: [{ role: 'system', content: 'sintesi vecchia' }] }),
+      modello: 'z-ai/glm-5.3-flash', chiave: 'k', cartellaStore,
+    });
+    const { sessionId } = registro.avvia('task-vero');
+    primoGiro.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' }, { ok: true, esito: { messaggiFinali: storia } });
+    await attendiRegistroSuDisco(cartellaStore, sessionId, (righe) => righe.some((riga) => riga.tipo === 'messaggi-finali'));
+    scritturaPrecedente = registraRiga(
+      { cartellaStore, sessionId, record: { tipo: 'prova-coda' } },
+      { appendFileFn: async (path, data, options) => { await attesa; appendFileSync(path, data, options); } },
+    );
+    compattazione = registro.compatta(sessionId);
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(registro.resume(sessionId, 'nuovo giro').sessionId, sessionId);
+    libera();
+    const risposta = await compattazione;
+    assert.equal(risposta.code, 'SESSION_NOT_READY');
+    await scritturaPrecedente;
+    const righe = await leggiRegistroPerAttesa({ cartellaStore, sessionId });
+    assert.ok(!righe.some((riga) => riga.tipo === 'messaggi-finali' && riga.messaggiFinali?.[0]?.content === 'sintesi vecchia'));
+    assert.deepEqual(secondoGiro.ultimoInput.messaggiIniziali.slice(0, storia.length), storia);
+  } finally {
+    libera?.();
+    await Promise.allSettled([compattazione, scritturaPrecedente].filter(Boolean));
+    if (secondoGiro.chiamate) {
+      secondoGiro.concludi({ type: 'RunFinished', threadId: 't2', runId: 'r2' });
+      await new Promise((resolve) => setImmediate(resolve));
+    }
+    await rimuoviCartellaStoreDopoLeScritture(cartellaStore);
+  }
+});
+
+test('CTX-LEGACY-COMPACT-POST-APPEND-THROW — record completo verificato conferma il compact anche se append lancia dopo', async () => {
+  const cartellaStore = cartellaStoreVera();
+  const primoGiro = sessioneControllabile();
+  const giroRipreso = sessioneControllabile();
+  const storia = [{ role: 'user', content: 'prima' }, { role: 'assistant', content: 'risposta' }];
+  const riassunto = [{ role: 'system', content: 'sintesi confermata' }];
+  let dopoAppend = false;
+  try {
+    const primo = createSessionRegistry({
+      avviaSessioneFn: primoGiro.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta,
+      compattaSessioneFn: async () => ({ compattato: true, messaggi: riassunto }),
+      registraRigaConfermataFn: (input) => registraRigaConfermata(input, {
+        appendFileSyncFn: (path, data, options) => {
+          appendFileSync(path, data, options);
+          if (dopoAppend) throw new Error('chiusura dopo append completo');
+        },
+      }),
+      modello: 'z-ai/glm-5.3-flash', chiave: 'k', cartellaStore,
+    });
+    const { sessionId } = primo.avvia('task-vero');
+    primoGiro.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' }, { ok: true, esito: { messaggiFinali: storia } });
+    await attendiRegistroSuDisco(cartellaStore, sessionId, (righe) => righe.some((riga) => riga.tipo === 'messaggi-finali'));
+    dopoAppend = true;
+    assert.deepEqual(senzaStime(await primo.compatta(sessionId)), { ok: true, compattato: true, annullabile: false });
+    const dopoRestart = createSessionRegistry({ avviaSessioneFn: giroRipreso.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'z-ai/glm-5.3-flash', chiave: 'k', cartellaStore });
+    await dopoRestart.ripristina();
+    assert.equal(dopoRestart.resume(sessionId, 'ancora').sessionId, sessionId);
+    assert.deepEqual(giroRipreso.ultimoInput.messaggiIniziali.slice(0, riassunto.length), riassunto);
+  } finally {
+    if (giroRipreso.chiamate) {
+      giroRipreso.concludi({ type: 'RunFinished', threadId: 't2', runId: 'r2' });
+      await new Promise((resolve) => setImmediate(resolve));
+    }
+    await rimuoviCartellaStoreDopoLeScritture(cartellaStore);
+  }
+});
+
+test('CTX-LEGACY-COMPACT-PARTIAL-APPEND-THROW — prefisso parziale non avvelena il journal per il retry', async () => {
+  const cartellaStore = cartellaStoreVera();
+  const giro = sessioneControllabile();
+  const storia = [{ role: 'user', content: 'prima' }, { role: 'assistant', content: 'risposta' }];
+  let scriviPrefisso = false;
+  try {
+    const registro = createSessionRegistry({
+      avviaSessioneFn: giro.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta,
+      compattaSessioneFn: async () => ({ compattato: true, messaggi: [{ role: 'system', content: 'sintesi' }] }),
+      registraRigaConfermataFn: (input) => registraRigaConfermata(input, {
+        appendFileSyncFn: (path, data, options) => {
+          if (scriviPrefisso) {
+            const riga = Buffer.from(data);
+            appendFileSync(path, riga.subarray(0, Math.floor(riga.length / 2)));
+            throw new Error('append interrotto a metà');
+          }
+          return appendFileSync(path, data, options);
+        },
+      }),
+      modello: 'z-ai/glm-5.3-flash', chiave: 'k', cartellaStore,
+    });
+    const { sessionId } = registro.avvia('task-vero');
+    giro.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' }, { ok: true, esito: { messaggiFinali: storia } });
+    await attendiRegistroSuDisco(cartellaStore, sessionId, (righe) => righe.some((riga) => riga.tipo === 'messaggi-finali'));
+    scriviPrefisso = true;
+    const risposta = await registro.compatta(sessionId);
+    assert.equal(risposta.code, 'SESSION_STORE_WRITE_FAILED');
+    const percorso = join(cartellaStore, `${sessionId}.jsonl`);
+    assert.ok(readFileSync(percorso, 'utf8').endsWith('\n'), 'il prefisso incompleto è rimosso prima di consentire nuove scritture');
+    registraRigaSync({ cartellaStore, sessionId, record: { tipo: 'prova-dopo-errore' } });
+    const righe = (await leggiRegistroPerAttesa({ cartellaStore, sessionId }));
+    assert.equal(righe.at(-1).tipo, 'prova-dopo-errore');
+    assert.deepEqual(righe.filter((riga) => riga.tipo === 'messaggi-finali').at(-1).messaggiFinali, storia);
+  } finally {
+    await rimuoviCartellaStoreDopoLeScritture(cartellaStore);
+  }
+});
+
+test('CTX-TRIAL-COMPACT-RUNNING-GUARD — il trial non crea job mentre un giro è vivo', async () => {
+  const giro = sessioneControllabile();
+  let chiamateTrial = 0;
+  const registro = createSessionRegistry({
+    avviaSessioneFn: giro.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta,
+    contextCompactFn: async () => { chiamateTrial += 1; return { ok: true, compattato: true }; },
+    modello: 'z-ai/glm-5.3-flash', chiave: 'k',
+  });
+  const { sessionId } = registro.avvia('task-vero');
+  try {
+    const risposta = await registro.compatta(sessionId);
+    assert.equal(risposta.code, 'SESSION_NOT_READY');
+    assert.equal(chiamateTrial, 0);
+  } finally {
+    giro.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+});
+
+test('CTX-TRIAL-COMPACT-CONCURRENT — due chiamate sul trial creano un solo job', async () => {
+  const giro = sessioneControllabile();
+  let chiamateTrial = 0;
+  let libera;
+  const attesa = new Promise((resolve) => { libera = resolve; });
+  const registro = createSessionRegistry({
+    avviaSessioneFn: giro.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta,
+    contextCompactFn: async () => { chiamateTrial += 1; await attesa; return { ok: true, compattato: true }; },
+    modello: 'z-ai/glm-5.3-flash', chiave: 'k',
+  });
+  const { sessionId } = registro.avvia('task-vero');
+  giro.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' }, { ok: true, esito: { messaggiFinali: [{ role: 'user', content: 'prima' }] } });
+  await new Promise((resolve) => setImmediate(resolve));
+  const prima = registro.compatta(sessionId);
+  const seconda = registro.compatta(sessionId);
+  libera();
+  const [primaRisposta, secondaRisposta] = await Promise.all([prima, seconda]);
+  assert.equal(primaRisposta.compattato, true);
+  assert.equal(secondaRisposta.code, 'SESSION_NOT_READY');
+  assert.equal(chiamateTrial, 1);
+});
+
+test('CTX-TRIAL-COMPACT-RESUME-RACE-HONEST — un job trial già committed non viene descritto come rollback', async () => {
+  const primoGiro = sessioneControllabile();
+  const secondoGiro = sessioneControllabile();
+  let chiamate = 0;
+  let libera;
+  const attesa = new Promise((resolve) => { libera = resolve; });
+  const registro = createSessionRegistry({
+    avviaSessioneFn: (input) => (++chiamate === 1 ? primoGiro.avviaSessioneFn(input) : secondoGiro.avviaSessioneFn(input)),
+    preparaEsecuzioneFn: preparaEsecuzioneFinta,
+    contextCompactFn: async () => { await attesa; return { ok: true, compattato: true, jobId: 'job-committed' }; },
+    modello: 'z-ai/glm-5.3-flash', chiave: 'k',
+  });
+  const { sessionId } = registro.avvia('task-vero');
+  primoGiro.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' }, { ok: true, esito: { messaggiFinali: [{ role: 'user', content: 'prima' }] } });
+  await new Promise((resolve) => setImmediate(resolve));
+  const compattazione = registro.compatta(sessionId);
+  try {
+    assert.equal(registro.resume(sessionId, 'nuovo giro').sessionId, sessionId);
+    libera();
+    const risposta = await compattazione;
+    assert.equal(risposta.code, 'SESSION_NOT_READY');
+    assert.match(risposta.erroreAvvio, /potrebbe|verific/i);
+    assert.doesNotMatch(risposta.erroreAvvio, /nessuna cronologia.*sostituita/i);
+  } finally {
+    libera();
+    await compattazione;
+    if (secondoGiro.chiamate) {
+      secondoGiro.concludi({ type: 'RunFinished', threadId: 't2', runId: 'r2' });
+      await new Promise((resolve) => setImmediate(resolve));
+    }
+  }
+});
+
+/*
+ * ⛔⛔ CTX-D2 / M9 — riparazione del 23/09/2026 notte (corsia CTX). La revisione avversaria ha trovato
+ *   che la risposta a una domanda Ask veniva confermata (HTTP e modello) PRIMA di essere sul disco, e
+ *   che la chiusura al riavvio di una domanda rimasta aperta non aveva nessun test (mutazione M9
+ *   sopravvissuta). Questi casi usano l'archivio VERO in una cartella di prova; il solo punto finto è
+ *   la scrittura del record `UserQuestionResolved`, trattenuta o rifiutata per aprire la finestra.
+ * Fonte dell'idempotenza: draft-ietf-httpapi-idempotency-key-header-07 §2.6 (consultato il 23/09/2026):
+ *   una richiesta ripetuta con la stessa chiave riceve «il risultato dell'operazione già completata,
+ *   successo o errore»; qui la chiave è il `requestId` e l'impronta è la risposta validata.
+ */
+const DOMANDA_ASK = [{ id: 'scelta', question: 'Quale?', options: [{ label: 'A', description: 'a' }, { label: 'B', description: 'b' }] }];
+
+function registroAskSuDisco(cartellaStore, registraRigaFn) {
+  const finta = sessioneControllabile();
+  const registro = createSessionRegistry({
+    cartellaStore, modello: 'm', chiave: 'k', cartellaEsisteFn: () => true,
+    preparaEsecuzioneFn: preparaEsecuzioneFinta, avviaSessioneFn: finta.avviaSessioneFn,
+    ...(registraRigaFn ? { registraRigaFn } : {}),
+  });
+  return { finta, registro };
+}
+
+async function apriDomandaAsk(cartellaStore, registraRigaFn) {
+  const { finta, registro } = registroAskSuDisco(cartellaStore, registraRigaFn);
+  const { sessionId } = registro.avvia('task-vero');
+  const alModello = finta.ultimoInput.chiediDomandaFn(DOMANDA_ASK);
+  await attendiRegistroSuDisco(cartellaStore, sessionId, (righe) => righe.some((r) => r.type === 'UserQuestionRequested'));
+  const { requestId } = registro.esporta(sessionId).eventi.find((e) => e.type === 'UserQuestionRequested');
+  return { finta, registro, sessionId, alModello, requestId };
+}
+
+async function statiDopoRiavvio(cartellaStore, sessionId) {
+  const dopo = createSessionRegistry({ cartellaStore, modello: 'm', chiave: 'k' });
+  await dopo.ripristina();
+  return { dopo, stati: dopo.esporta(sessionId).eventi.filter((e) => e.type === 'UserQuestionResolved').map((e) => e.status) };
+}
+
+const ancoraSospesa = (promessa) => Promise.race([promessa.then(() => false, () => false), new Promise((r) => setTimeout(() => r(true), 40))]);
+
+test('CTX-ASK-RESTART-ORPHAN-CANCELLED — una domanda Ask rimasta aperta diventa cancelled al riavvio, una volta sola e durevole', async () => {
+  const cartellaStore = cartellaStoreVera();
+  const { finta, sessionId, requestId } = await apriDomandaAsk(cartellaStore);
+  const primo = await statiDopoRiavvio(cartellaStore, sessionId);
+  const chiusa = primo.dopo.esporta(sessionId).eventi.filter((e) => e.type === 'UserQuestionResolved');
+  assert.deepEqual(chiusa.map((e) => [e.requestId, e.status]), [[requestId, 'cancelled']]);
+  await attendiRegistroSuDisco(cartellaStore, sessionId, (righe) => righe.some((r) => r.type === 'UserQuestionResolved'));
+  const secondo = await statiDopoRiavvio(cartellaStore, sessionId);
+  assert.deepEqual(secondo.stati, ['cancelled'], 'la chiusura è scritta sul disco e non si ripete a ogni riavvio');
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+  await attendiScrittureDelNegozio(cartellaStore); // F3 (24/09): niente scritture in coda quando il gancio di file toglie la cartella
+});
+
+test('CTX-ASK-SAVED-BEFORE-ACK — la risposta Ask si conferma (HTTP e modello) solo dopo che il suo record è sul disco', async () => {
+  const cartellaStore = cartellaStoreVera();
+  let apri; const cancello = new Promise((r) => { apri = r; });
+  const registraRigaFn = (arg) => (arg.record?.type === 'UserQuestionResolved') ? cancello.then(() => registraRiga(arg)) : registraRiga(arg);
+  const { finta, registro, sessionId, alModello, requestId } = await apriDomandaAsk(cartellaStore, registraRigaFn);
+  const ack = Promise.resolve(registro.rispondiDomanda(sessionId, requestId, { status: 'answered', answers: { scelta: 'A' } }));
+  assert.equal(await ancoraSospesa(ack), true, 'nessun ok prima che la scrittura sia confermata');
+  assert.equal(await ancoraSospesa(alModello), true, 'il modello non riceve la risposta prima del disco');
+  apri();
+  assert.deepEqual(await ack, { ok: true });
+  assert.deepEqual(await alModello, { status: 'answered', answers: { scelta: 'A' } });
+  assert.deepEqual((await statiDopoRiavvio(cartellaStore, sessionId)).stati, ['answered']);
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+  await attendiScrittureDelNegozio(cartellaStore); // F3 (24/09): niente scritture in coda quando il gancio di file toglie la cartella
+});
+
+test('CTX-ASK-WRITE-FAIL-TYPED — se la risposta non si salva: errore tipizzato, il modello non riceve «answered», il riavvio non contraddice', async () => {
+  const cartellaStore = cartellaStoreVera();
+  const registraRigaFn = (arg) => (arg.record?.type === 'UserQuestionResolved')
+    ? Promise.reject(Object.assign(new Error('ENOSPC simulato'), { code: 'ENOSPC' })) : registraRiga(arg);
+  const errori = console.error; console.error = () => {};
+  try {
+    const { finta, registro, sessionId, alModello, requestId } = await apriDomandaAsk(cartellaStore, registraRigaFn);
+    const ack = await registro.rispondiDomanda(sessionId, requestId, { status: 'answered', answers: { scelta: 'A' } });
+    assert.equal(ack.ok, undefined);
+    assert.equal(ack.code, 'QUESTION_ANSWER_NOT_SAVED');
+    const modello = await alModello;
+    assert.notEqual(modello.status, 'answered');
+    assert.deepEqual(modello, { status: 'cancelled', reason: 'answer-not-saved' });
+    // Idempotenza: la stessa risposta ripetuta riceve l'esito della prima (qui l'errore), una diversa resta 409.
+    assert.deepEqual(await registro.rispondiDomanda(sessionId, requestId, { status: 'answered', answers: { scelta: 'A' } }), ack);
+    assert.equal((await registro.rispondiDomanda(sessionId, requestId, { status: 'answered', answers: { scelta: 'B' } })).code, 'QUESTION_NOT_PENDING');
+    const { stati } = await statiDopoRiavvio(cartellaStore, sessionId);
+    assert.equal(stati.includes('answered'), false, 'il disco non può dire «answered» dopo un errore dato al client');
+    assert.equal(stati.at(-1), 'cancelled');
+    finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+  } finally { console.error = errori; }
+  await attendiScrittureDelNegozio(cartellaStore); // F3 (24/09): niente scritture in coda quando il gancio di file toglie la cartella
+});
+
+test('CTX-ASK-ANSWER-IDEMPOTENT — stessa risposta ripetuta (in volo, dopo, dopo un riavvio) dà l esito della prima; una diversa è QUESTION_NOT_PENDING', async () => {
+  const cartellaStore = cartellaStoreVera();
+  let apri; const cancello = new Promise((r) => { apri = r; });
+  const registraRigaFn = (arg) => (arg.record?.type === 'UserQuestionResolved') ? cancello.then(() => registraRiga(arg)) : registraRiga(arg);
+  const { finta, registro, sessionId, alModello, requestId } = await apriDomandaAsk(cartellaStore, registraRigaFn);
+  const stessa = { requestId, status: 'answered', answers: { scelta: 'A' } };
+  const diversa = { requestId, status: 'answered', answers: { scelta: 'B' } };
+  const prima = Promise.resolve(registro.rispondiDomanda(sessionId, requestId, stessa));
+  const inVolo = Promise.resolve(registro.rispondiDomanda(sessionId, requestId, stessa));
+  // In gara con un timer: una risposta diversa non deve agganciarsi alla promessa in volo (si bloccherebbe fino al disco).
+  const diversaInVolo = await Promise.race([Promise.resolve(registro.rispondiDomanda(sessionId, requestId, diversa)), new Promise((r) => setTimeout(() => r({ code: 'SOSPESA-SULLA-PRIMA' }), 200))]);
+  assert.equal(diversaInVolo.code, 'QUESTION_NOT_PENDING');
+  apri();
+  assert.deepEqual(await prima, { ok: true });
+  assert.deepEqual(await inVolo, { ok: true });
+  assert.deepEqual(await registro.rispondiDomanda(sessionId, requestId, stessa), { ok: true });
+  assert.equal((await registro.rispondiDomanda(sessionId, requestId, diversa)).code, 'QUESTION_NOT_PENDING');
+  assert.equal((await registro.rispondiDomanda(sessionId, requestId, { requestId, status: 'skipped' })).code, 'QUESTION_NOT_PENDING');
+  assert.deepEqual(await alModello, { status: 'answered', answers: { scelta: 'A' } });
+  const { dopo, stati } = await statiDopoRiavvio(cartellaStore, sessionId);
+  assert.deepEqual(stati, ['answered']);
+  assert.deepEqual(await dopo.rispondiDomanda(sessionId, requestId, stessa), { ok: true }, 'dopo il riavvio la ripetizione legge l esito salvato');
+  assert.equal((await dopo.rispondiDomanda(sessionId, requestId, diversa)).code, 'QUESTION_NOT_PENDING');
+  assert.equal((await dopo.rispondiDomanda(sessionId, 'mai-esistita', stessa)).code, 'QUESTION_NOT_PENDING');
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+  await attendiScrittureDelNegozio(cartellaStore); // F3 (24/09): niente scritture in coda quando il gancio di file toglie la cartella
+});
+
+/* ═══════ F6-1 ✨ «Genera messaggio» (26/09/2026) — UNA domanda al modello della SESSIONE (owner, F6 punto 9) ═══════ */
+
+test('F6-1 ✨ — chiediAllaSessione chiama il modello della SESSIONE, con la chiave letta al momento e il trasporto dell\'host', async () => {
+  /* ⛔ Il registro e la sessione hanno modelli DIVERSI apposta: con lo stesso modello una chiamata che usasse per sbaglio il
+     predefinito del registro passerebbe lo stesso (è la trappola raccontata in `compatta`, D3 del 17/09). */
+  const finta = sessioneControllabile();
+  const chiamate = [];
+  const trasporto = async () => new Response('{}');
+  let chiave = 'prima';
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneLiberaFn: preparaEsecuzioneLiberaFinta,
+    cartelleProgetto: [{ id: '0', percorso: '/tmp/progetto-vero', nome: 'progetto-vero' }],
+    modello: 'default/modello', chiaveFn: () => chiave, prontoFn: () => ({ pronto: true }),
+    fetchModelloFn: () => trasporto,
+    chiediAlModelloUnaVoltaFn: async (arg) => { chiamate.push(arg); return 'Add the GitHub tab'; },
+  });
+  const { sessionId } = registro.avviaLibero({ cartellaId: '0', consegna: 'fai qualcosa', modello: 'deepseek/deepseek-chat' });
+  chiave = 'di-adesso';
+  const esito = await registro.chiediAllaSessione(sessionId, 'la richiesta');
+  assert.deepEqual(esito, { testo: 'Add the GitHub tab', modello: 'deepseek/deepseek-chat' });
+  assert.equal(chiamate.length, 1);
+  assert.equal(chiamate[0].modello, 'deepseek/deepseek-chat', 'il modello della SESSIONE, non il predefinito del registro');
+  assert.equal(chiamate[0].chiave, 'di-adesso', 'la chiave si legge AL MOMENTO, come la compattazione');
+  assert.equal(chiamate[0].prompt, 'la richiesta');
+  assert.equal(chiamate[0].fetchDiRete, trasporto, 'il trasporto multi-fornitore dell\'host, non la fetch nuda verso OpenRouter');
+});
+
+test('F6-1 ✨ — senza un modello leggibile si rifiuta PRIMA di chiamare; un fornitore che fallisce è MODEL_CALL_FAILED', async () => {
+  const finta = sessioneControllabile();
+  let chiamato = false;
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta,
+    chiaveFn: () => 'k', prontoFn: () => ({ pronto: true }),
+    chiediAlModelloUnaVoltaFn: async () => { chiamato = true; return 'x'; },
+  });
+  const { sessionId } = registro.avvia('task-vero');
+  const senza = await registro.chiediAllaSessione(sessionId, 'p');
+  assert.equal(senza.code, 'SESSION_MODEL_UNKNOWN');
+  assert.equal(chiamato, false);
+  assert.equal((await registro.chiediAllaSessione('non-esiste', 'p')).code, 'NOT_FOUND');
+  const finta2 = sessioneControllabile();
+  const registro2 = createSessionRegistry({
+    avviaSessioneFn: finta2.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta,
+    modello: 'z-ai/glm-5.3-flash', chiaveFn: () => 'k', prontoFn: () => ({ pronto: true }),
+    chiediAlModelloUnaVoltaFn: async () => { throw new Error('Il fornitore non risponde (stato 429).'); },
+  });
+  const { sessionId: s2 } = registro2.avvia('task-vero');
+  const fallita = await registro2.chiediAllaSessione(s2, 'p');
+  assert.equal(fallita.code, 'MODEL_CALL_FAILED');
+  assert.match(fallita.erroreAvvio, /429/u);
+});
+
+/*
+ * ⭐ 27/09/2026, decisione owner (memoria `decisioni-owner-capacita-sezioni-27-09`, punto 3) — Board e Conversazioni per il
+ *   modello, dal registro VERO: la seconda sessione vede la prima (sfoglia, cerca, legge) e non vede se stessa.
+ */
+test('CONVERSAZIONI-REGISTRO — conversation_search vede le altre sessioni, non la corrente, e legge la conversazione', async () => {
+  const finta = sessioniControllabili();
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+  const { sessionId: prima } = registro.avvia('task-vero');
+  finta.emetti(0, { type: 'TextMessageStart', messageId: 'm1' });
+  finta.emetti(0, { type: 'TextMessageContent', messageId: 'm1', delta: 'Il saluto in stile pirata è pronto' });
+  finta.emetti(0, { type: 'TextMessageEnd', messageId: 'm1' });
+  finta.concludi(0, { type: 'RunFinished', outcome: { type: 'success' } }, { ok: true, esito: { detto: 'x', comeFinita: 'concluso', messaggiFinali: [] } });
+  await new Promise((fatto) => setImmediate(fatto));
+  const { sessionId: seconda } = registro.avvia('task-vero');
+  const leggi = finta.run(1).input.conversazioniFn;
+  assert.equal(typeof leggi, 'function', 'il registro passa la funzione alla sessione');
+  const board = await leggi({});
+  assert.match(board, /^Conversations: showing 1 of 1, most recent first\./u);
+  assert.ok(board.includes(`id ${prima}`) && !board.includes(`id ${seconda}`), 'la prima sì, la corrente no');
+  assert.match(await leggi({ query: 'pirata' }), new RegExp(`message #1 \\(model\\): Il saluto in stile pirata è pronto`, 'u'));
+  assert.match(await leggi({ conversation_id: prima }), /#1 model: Il saluto in stile pirata è pronto\nShowing messages 1-1 of 1: the end of the conversation\.$/u);
+  assert.match(await leggi({ conversation_id: seconda }), /that is the current conversation/u);
+  assert.match(await leggi({ conversation_id: 'inventata' }), /no conversation with id «inventata»/u);
+  finta.concludi(1, { type: 'RunFinished', outcome: { type: 'success' } }, { ok: true, esito: { detto: 'x', comeFinita: 'concluso', messaggiFinali: [] } });
+});
+
+/* ─── REV-SESSION-READY (27/09/2026, ticket della lane CLI) ─────────────────────────────────────────────────────────
+ * `RunFinished`/`RunError` arriva agli ascoltatori da `broadcast` PRIMA che `esecuzione.then` scriva `messaggiFinali`
+ * (`agent-service.mjs` emette l'evento finale con l'esito in mano e poi ritorna). Chi agisce dall'ascoltatore — la CLI
+ * compatta appena vede `RunFinished` — trovava «non ha una conversazione da compattare» al primo giro e, peggio, la
+ * cronologia del giro PRIMA dal secondo in poi. Confine scelto come Pi (`agent-session.ts` `agent_end` →
+ * `agent_settled`, `compact()` che passa da `waitForIdle()`, pin bf8e4b95): le operazioni che leggono la cronologia
+ * aspettano l'ASSESTAMENTO del giro (`compatta`, asincrona) o lo dichiarano (`resume`/`forka`, sincroni), e
+ * `attendiAssestamento(id)` è la porta per chi vuole aspettare. Nessun ritardo inventato: l'attesa è una promessa. */
+
+const MODELLO_REV = 'z-ai/glm-4.7-flash';
+const storiaDelGiro = (n) => [{ role: 'system', content: 's' }, { role: 'user', content: `domanda ${n}` }, { role: 'assistant', content: `risposta ${n}` }];
+const riassuntoDi = (storia) => [storia[0], { role: 'user', content: `[riassunto di ${storia.at(-1).content}]` }];
+
+function registroConGiri(n, opzioni = {}) {
+  const finte = Array.from({ length: n }, () => sessioneControllabile());
+  let i = 0;
+  const compattate = [];
+  const registro = createSessionRegistry({
+    avviaSessioneFn: (input) => finte[i++].avviaSessioneFn(input),
+    preparaEsecuzioneFn: preparaEsecuzioneFinta,
+    compattaSessioneFn: async ({ messaggiFinali }) => { compattate.push(messaggiFinali); return { compattato: true, messaggi: riassuntoDi(messaggiFinali), usage: null }; },
+    modello: MODELLO_REV, chiave: 'k', cartellaEsisteFn: () => true,
+    ...opzioni,
+  });
+  return { registro, finte, compattate };
+}
+
+test('REV-SESSION-READY-01 — RunFinished rende la cronologia disponibile a un compact IMMEDIATO (primo giro, dall\'ascoltatore)', async () => {
+  const { registro, finte, compattate } = registroConGiri(1);
+  const { sessionId } = registro.avvia('task-vero');
+  let compattazione = null;
+  registro.iscriviti(sessionId, (evento) => { if (evento.type === 'RunFinished') compattazione = registro.compatta(sessionId); });
+  finte[0].concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' }, { ok: true, esito: { comeFinita: 'concluso', messaggiFinali: storiaDelGiro(1) } });
+  assert.ok(compattazione, 'l\'ascoltatore ha chiesto la compattazione');
+  const esito = await compattazione;
+  assert.equal(esito.code, undefined, `compattazione rifiutata: ${esito.erroreAvvio}`);
+  assert.equal(esito.ok, true);
+  assert.deepEqual(compattate, [storiaDelGiro(1)], 'si compatta la cronologia del giro appena concluso');
+});
+
+test('REV-SESSION-READY-02 — dal secondo giro il compact immediato compatta la cronologia NUOVA, mai quella del giro prima', async () => {
+  const { registro, finte, compattate } = registroConGiri(2);
+  const { sessionId } = registro.avvia('task-vero');
+  finte[0].concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' }, { ok: true, esito: { comeFinita: 'concluso', messaggiFinali: storiaDelGiro(1) } });
+  await new Promise((r) => setImmediate(r));
+  assert.equal(registro.resume(sessionId, 'domanda 2').sessionId, sessionId);
+  let compattazione = null;
+  /* In microtask, come chi fa `await` nell'ascoltatore: a quel punto `conclusa` è già vera. `iscriviti` rigioca anche il
+     RunFinished del primo giro: si guarda solo quello del secondo. */
+  registro.iscriviti(sessionId, (evento) => { if (evento.type === 'RunFinished' && evento.runId === 'r2') queueMicrotask(() => { compattazione = registro.compatta(sessionId); }); });
+  finte[1].concludi({ type: 'RunFinished', threadId: 't2', runId: 'r2' }, { ok: true, esito: { comeFinita: 'concluso', messaggiFinali: storiaDelGiro(2) } });
+  await Promise.resolve();
+  const esito = await compattazione;
+  assert.equal(esito.ok, true, esito.erroreAvvio);
+  assert.deepEqual(compattate, [storiaDelGiro(2)], 'compattata la cronologia del SECONDO giro');
+});
+
+test('REV-SESSION-READY-03 — resume e forka nella finestra non usano MAI la cronologia del giro prima; dopo l\'assestamento sì, quella nuova', async () => {
+  const { registro, finte } = registroConGiri(4);
+  const { sessionId } = registro.avvia('task-vero');
+  finte[0].concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' }, { ok: true, esito: { comeFinita: 'concluso', messaggiFinali: storiaDelGiro(1) } });
+  await new Promise((r) => setImmediate(r));
+  registro.resume(sessionId, 'domanda 2');
+  let nellaFinestra = null;
+  registro.iscriviti(sessionId, (evento) => {
+    if (evento.type === 'RunFinished' && evento.runId === 'r2') queueMicrotask(() => { nellaFinestra = { ripresa: registro.resume(sessionId, 'domanda 3'), fork: registro.forka(sessionId) }; });
+  });
+  finte[1].concludi({ type: 'RunFinished', threadId: 't2', runId: 'r2' }, { ok: true, esito: { comeFinita: 'concluso', messaggiFinali: storiaDelGiro(2) } });
+  await Promise.resolve();
+  assert.equal(finte[2].chiamate, 0, 'nessun giro è partito dalla cronologia vecchia');
+  assert.equal(nellaFinestra.ripresa.code, 'SESSION_NOT_READY');
+  assert.equal(nellaFinestra.fork.code, 'SESSION_NOT_READY');
+  assert.match(nellaFinestra.ripresa.erroreAvvio, /sta chiudendo il giro/);
+  await registro.attendiAssestamento(sessionId);
+  assert.equal(registro.resume(sessionId, 'domanda 3').sessionId, sessionId);
+  assert.deepEqual(finte[2].ultimoInput.messaggiIniziali.slice(0, 3), storiaDelGiro(2), 'la ripresa parte dalla cronologia del secondo giro');
+  finte[2].concludi({ type: 'RunFinished', threadId: 't3', runId: 'r3' }, { ok: true, esito: { comeFinita: 'concluso', messaggiFinali: storiaDelGiro(3) } });
+  await registro.attendiAssestamento(sessionId);
+  const fork = registro.forka(sessionId);
+  assert.ok(fork.sessionId && fork.sessionId !== sessionId, fork.erroreAvvio);
+  assert.deepEqual(finte[3].ultimoInput.messaggiIniziali.slice(0, 3), storiaDelGiro(3), 'il fork eredita il terzo giro');
+  finte[3].concludi({ type: 'RunFinished', threadId: 't4', runId: 'r4' });
+  await new Promise((r) => setImmediate(r));
+});
+
+test('REV-SESSION-READY-04 — anche dopo un RunError il compact immediato vede il lavoro del giro, e un solo evento finale', async () => {
+  const { registro, finte, compattate } = registroConGiri(1);
+  const { sessionId } = registro.avvia('task-vero');
+  const finali = [];
+  let compattazione = null;
+  registro.iscriviti(sessionId, (evento) => {
+    if (evento.type === 'RunFinished' || evento.type === 'RunError') { finali.push(evento.type); compattazione = registro.compatta(sessionId); }
+  });
+  finte[0].concludi({ type: 'RunError', message: 'fermato', code: 'fermato' }, { ok: false, esito: { comeFinita: 'fermato', detto: 'fermato', messaggiFinali: storiaDelGiro(1) } });
+  const esito = await compattazione;
+  assert.equal(esito.ok, true, esito.erroreAvvio);
+  assert.deepEqual(compattate, [storiaDelGiro(1)]);
+  await new Promise((r) => setImmediate(r));
+  assert.deepEqual(finali, ['RunError'], 'un solo evento finale: l\'azione dell\'ascoltatore non ne genera un secondo');
+});
+
+test('REV-SESSION-READY-05 — un giro che LANCIA si assesta lo stesso: nessuna attesa appesa, un solo RunError', async () => {
+  const registro = createSessionRegistry({
+    avviaSessioneFn: async (input) => { input.onEvento({ type: 'RunStarted', threadId: 't1', runId: 'r1' }); throw new Error('guasto del servizio'); },
+    preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: MODELLO_REV, chiave: 'k',
+  });
+  const { sessionId } = registro.avvia('task-vero');
+  const finali = [];
+  registro.iscriviti(sessionId, (evento) => { if (evento.type === 'RunError' || evento.type === 'RunFinished') finali.push(evento.type); });
+  const scaduto = Symbol('scaduto');
+  const vinto = await Promise.race([registro.attendiAssestamento(sessionId).then(() => 'assestato'), new Promise((r) => setTimeout(() => r(scaduto), 2000))]);
+  assert.equal(vinto, 'assestato', 'l\'assestamento arriva anche sul ramo che lancia');
+  assert.deepEqual(finali, ['RunError']);
+  const compatta = await registro.compatta(sessionId);
+  assert.equal(compatta.code, 'SESSION_NOT_READY', 'senza cronologia resta il rifiuto onesto, non un\'attesa');
+  assert.match(compatta.erroreAvvio, /non ha una conversazione/);
+  await registro.attendiAssestamento('mai-esistito');
+});
+
+test('REV-SESSION-READY-06 — il compact immediato sopravvive al riavvio: il registro nuovo riparte dal riassunto', async () => {
+  const cartellaStore = mkdtempSync(join(tmpdir(), 'talos-rev-ready-'));
+  try {
+    const { registro, finte } = registroConGiri(1, { cartellaStore });
+    const { sessionId } = registro.avvia('task-vero');
+    let compattazione = null;
+    registro.iscriviti(sessionId, (evento) => { if (evento.type === 'RunFinished') compattazione = registro.compatta(sessionId); });
+    finte[0].concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' }, { ok: true, esito: { comeFinita: 'concluso', messaggiFinali: storiaDelGiro(1) } });
+    assert.equal((await compattazione).ok, true);
+    await attendiScritture({ cartellaStore, sessionId });
+    const dopo = sessioneControllabile();
+    const riavvio = createSessionRegistry({ cartellaStore, avviaSessioneFn: dopo.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: MODELLO_REV, chiave: 'k', cartellaEsisteFn: () => true });
+    await riavvio.ripristina();
+    assert.equal(riavvio.resume(sessionId, 'dopo il riavvio').sessionId, sessionId);
+    assert.deepEqual(dopo.ultimoInput.messaggiIniziali.slice(0, 2), riassuntoDi(storiaDelGiro(1)), 'dopo il riavvio la cronologia è quella compattata');
+    dopo.concludi({ type: 'RunFinished', threadId: 't2', runId: 'r2' }, { ok: true, esito: { comeFinita: 'concluso', messaggiFinali: [] } });
+    await attendiScritture({ cartellaStore, sessionId });
+  } finally {
+    await attendiScritture({ cartellaStore });
+    rimuoviCartellaDiProva(cartellaStore);
+  }
+});
+
+/* ─── REV-SESSION-READY v2 (27/09/2026) — i casi della revisione indipendente di Codex (8 punti) ───────────────────────── */
+
+/** Un giro dove l'evento finale e la risposta del servizio arrivano in due momenti diversi, come in `agent-service.mjs`
+    (evento finale, poi `await chiudiMcp()`, poi il ritorno). */
+function giroInDueTempi() {
+  let risolvi; let rifiuta; let onEvento = null; let input = null; let chiamate = 0;
+  const risposta = new Promise((a, b) => { risolvi = a; rifiuta = b; });
+  return {
+    avviaSessioneFn: async (entrata) => { chiamate += 1; input = entrata; onEvento = entrata.onEvento; onEvento({ type: 'RunStarted', threadId: 't', runId: `r${chiamate}` }); return risposta; },
+    emetti(evento) { onEvento(evento); },
+    risolvi(valore) { risolvi(valore); },
+    rifiuta(errore) { rifiuta(errore); },
+    get chiamate() { return chiamate; },
+    get ultimoInput() { return input; },
+  };
+}
+const unGiro = () => new Promise((r) => setImmediate(r));
+
+test('REV-SESSION-READY-07 — l\'attesa RESTA PENDENTE finché il servizio non ritorna, e poi si scioglie', async () => {
+  const giro = giroInDueTempi();
+  const dopo = sessioneControllabile();
+  let n = 0;
+  const registro = createSessionRegistry({ avviaSessioneFn: (i) => (n++ === 0 ? giro.avviaSessioneFn(i) : dopo.avviaSessioneFn(i)), preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: MODELLO_REV, chiave: 'k', cartellaEsisteFn: () => true });
+  const { sessionId } = registro.avvia('task-vero');
+  giro.emetti({ type: 'RunFinished', threadId: 't', runId: 'r1' });
+  let sciolta = false;
+  const attesa = registro.attendiAssestamento(sessionId).then(() => { sciolta = true; });
+  await unGiro(); await unGiro();
+  assert.equal(sciolta, false, 'con il servizio ancora in chiusura l\'attesa NON si scioglie');
+  assert.equal(registro.staChiudendoIlGiro(sessionId), true);
+  assert.equal(registro.resume(sessionId, 'subito').code, 'SESSION_NOT_READY', 'nella finestra la ripresa sincrona rifiuta');
+  giro.risolvi({ ok: true, esito: { comeFinita: 'concluso', messaggiFinali: storiaDelGiro(1) } });
+  await attesa;
+  assert.equal(sciolta, true);
+  assert.equal(registro.staChiudendoIlGiro(sessionId), false);
+  assert.equal(registro.resume(sessionId, 'domanda 2').sessionId, sessionId);
+  assert.deepEqual(dopo.ultimoInput.messaggiIniziali.slice(0, 3), storiaDelGiro(1));
+  dopo.concludi({ type: 'RunFinished', threadId: 't2', runId: 'r2' });
+  await unGiro();
+});
+
+test('REV-SESSION-READY-08 — un giro che RIPARTE dopo l\'evento finale (ripiego locale→cloud): «in corso» subito, niente giro in parallelo', async () => {
+  const giro = giroInDueTempi();
+  const registro = createSessionRegistry({ avviaSessioneFn: giro.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta,
+    compattaSessioneFn: async ({ messaggiFinali }) => ({ compattato: true, messaggi: riassuntoDi(messaggiFinali), usage: null }),
+    modello: MODELLO_REV, chiave: 'k', cartellaEsisteFn: () => true });
+  const { sessionId } = registro.avvia('task-vero');
+  giro.emetti({ type: 'RunError', message: 'il motore locale non parte', code: 'LOCAL_RUNTIME_FAILED' });
+  giro.emetti({ type: 'RunStarted', threadId: 't', runId: 'cloud' });
+  assert.equal(registro.staChiudendoIlGiro(sessionId), false, 'un giro ripartito non è una finestra di chiusura');
+  const ripresa = registro.resume(sessionId, 'nel mezzo');
+  assert.equal(ripresa.code, 'SESSION_NOT_READY');
+  assert.match(ripresa.erroreAvvio, /ancora in corso/);
+  assert.equal(giro.chiamate, 1, 'nessun secondo giro in parallelo a quello cloud');
+  const compatta = await registro.compatta(sessionId);
+  assert.match(compatta.erroreAvvio, /ancora in corso/, 'compatta risponde subito, non aspetta il giro cloud intero');
+  giro.emetti({ type: 'RunFinished', threadId: 't', runId: 'cloud' });
+  giro.risolvi({ ok: true, esito: { comeFinita: 'concluso', messaggiFinali: storiaDelGiro(1) } });
+  await registro.attendiAssestamento(sessionId);
+  assert.equal((await registro.compatta(sessionId)).ok, true);
+});
+
+test('REV-SESSION-READY-09 — secondo giro che LANCIA (ramo .catch): compatta non riassume la storia di prima al posto sua', async () => {
+  const primo = sessioneControllabile();
+  const secondo = giroInDueTempi();
+  const compattate = [];
+  let n = 0;
+  const registro = createSessionRegistry({ avviaSessioneFn: (i) => (n++ === 0 ? primo.avviaSessioneFn(i) : secondo.avviaSessioneFn(i)), preparaEsecuzioneFn: preparaEsecuzioneFinta,
+    compattaSessioneFn: async ({ messaggiFinali }) => { compattate.push(messaggiFinali); return { compattato: true, messaggi: riassuntoDi(messaggiFinali), usage: null }; },
+    modello: MODELLO_REV, chiave: 'k', cartellaEsisteFn: () => true });
+  const { sessionId } = registro.avvia('task-vero');
+  primo.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' }, { ok: true, esito: { comeFinita: 'concluso', messaggiFinali: storiaDelGiro(1) } });
+  await registro.attendiAssestamento(sessionId);
+  registro.resume(sessionId, 'domanda due');
+  let compattazione = null;
+  registro.iscriviti(sessionId, (e) => { if (e.type === 'RunError') compattazione = registro.compatta(sessionId); });
+  secondo.rifiuta(new Error('guasto del servizio'));
+  await registro.attendiAssestamento(sessionId);
+  const esito = await compattazione;
+  assert.equal(esito.code, 'SESSION_NOT_READY', 'non compatta la storia di PRIMA come se fosse l\'ultima');
+  assert.match(esito.erroreAvvio, /in sospeso/);
+  assert.deepEqual(compattate, [], 'il riassuntore non ha visto la storia vecchia');
+});
+
+test('REV-SESSION-READY-10 — l’assestamento aspetta la scrittura della storia; un errore di scrittura resta del SUO giro', async () => {
+  const STORIA = new Set(['messaggi-delta', 'checkpoint', 'messaggi-finali']);
+  const cartellaStore = mkdtempSync(join(tmpdir(), 'talos-rev-ready-v2-'));
+  let rifiutaScrittura = null;
+  const finta = sessioneControllabile();
+  try {
+    const registro = createSessionRegistry({
+      cartellaStore,
+      /* la storia del giro trova la coda «occupata» e passa dalla scrittura in coda, che risolvo io */
+      registraRigaSyncFn: ({ record }) => { if (STORIA.has(record?.tipo)) throw Object.assign(new Error('occupato'), { code: 'SESSION_STORE_BUSY' }); },
+      registraRigaFn: ({ record }) => (STORIA.has(record?.tipo) ? new Promise((_, b) => { rifiutaScrittura = b; }) : Promise.resolve()),
+      avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: MODELLO_REV, chiave: 'k', cartellaEsisteFn: () => true,
+    });
+    const { sessionId } = registro.avvia('task-vero');
+    const finali = [];
+    registro.iscriviti(sessionId, (e) => { if (e.type === 'RunFinished' || e.type === 'RunError') finali.push(e.code ?? e.type); });
+    finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' }, { ok: true, esito: { comeFinita: 'concluso', messaggiFinali: storiaDelGiro(1) } });
+    let sciolta = false;
+    const attesa = registro.attendiAssestamento(sessionId).then(() => { sciolta = true; });
+    await unGiro(); await unGiro();
+    assert.ok(rifiutaScrittura, 'la storia del giro è in scrittura');
+    assert.equal(sciolta, false, 'con la storia non ancora sul disco il giro non è assestato');
+    rifiutaScrittura(new Error('disco pieno'));
+    await attesa;
+    assert.deepEqual(finali, ['RunFinished', 'SESSION_STORE_WRITE_FAILED'], 'il fallimento arriva DENTRO la finestra del suo giro, prima dell’assestamento');
+  } finally {
+    rimuoviCartellaDiProva(cartellaStore);
+  }
+});
+
+/* v3 (owner 27/09: «decide all'assestamento»): la partenza automatica della v2 è tolta — Codex v2 punti 3, 4, 8, 9. */
+test('REV-SESSION-READY-11 — nella finestra la coda dice «sta chiudendo il giro»; nessun messaggio resta orfano, nessun giro parte da solo', async () => {
+  const primo = sessioneControllabile();
+  const dopo = sessioneControllabile();
+  let n = 0;
+  const registro = createSessionRegistry({ avviaSessioneFn: (i) => (n++ === 0 ? primo.avviaSessioneFn(i) : dopo.avviaSessioneFn(i)), preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: MODELLO_REV, chiave: 'k', cartellaEsisteFn: () => true });
+  const { sessionId } = registro.avvia('task-vero');
+  const accodati = [];
+  registro.iscriviti(sessionId, (e) => {
+    if (e.type !== 'RunFinished') return;
+    accodati.push(registro.accodaMessaggio(sessionId, 'dall’ascoltatore'));
+    queueMicrotask(() => { accodati.push(registro.accodaMessaggio(sessionId, 'in microtask')); });
+  });
+  primo.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' }, { ok: true, esito: { comeFinita: 'concluso', messaggiFinali: storiaDelGiro(1) } });
+  await registro.attendiAssestamento(sessionId);
+  for (let i = 0; i < 3; i += 1) await unGiro();
+  assert.equal(accodati.length, 2);
+  for (const esito of accodati) {
+    assert.equal(esito.code, 'SESSION_NOT_READY');
+    assert.match(esito.erroreAvvio, /sta chiudendo il giro/);
+  }
+  assert.equal(registro.statoCoda(sessionId).voci?.length ?? 0, 0, 'nella coda non è rimasto niente di orfano');
+  assert.equal(dopo.chiamate, 0, 'nessun giro è partito da solo');
+  assert.match(registro.accodaMessaggio(sessionId, 'dopo').erroreAvvio, /usa resume/, 'assestata, vale la regola di sempre');
+});
+
+test('REV-SESSION-READY-14 — un\'attesa iniziata sul RunError locale si sveglia sul RunStarted del cloud: «in corso», non il giro intero', async () => {
+  const giro = giroInDueTempi();
+  const registro = createSessionRegistry({ avviaSessioneFn: giro.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta,
+    compattaSessioneFn: async ({ messaggiFinali }) => ({ compattato: true, messaggi: riassuntoDi(messaggiFinali), usage: null }),
+    modello: MODELLO_REV, chiave: 'k', cartellaEsisteFn: () => true });
+  const { sessionId } = registro.avvia('task-vero');
+  let compattazione = null;
+  registro.iscriviti(sessionId, (e) => { if (e.type === 'RunError') compattazione = registro.compatta(sessionId); });
+  giro.emetti({ type: 'RunError', message: 'il motore locale non parte', code: 'LOCAL_RUNTIME_FAILED' });
+  giro.emetti({ type: 'RunStarted', threadId: 't', runId: 'cloud' });
+  const vinto = await Promise.race([compattazione.then((e) => e), new Promise((r) => setTimeout(() => r('appesa'), 1000))]);
+  assert.notEqual(vinto, 'appesa', 'la compattazione non aspetta il giro cloud intero');
+  assert.match(vinto.erroreAvvio, /ancora in corso/);
+  giro.emetti({ type: 'RunFinished', threadId: 't', runId: 'cloud' });
+  giro.risolvi({ ok: true, esito: { comeFinita: 'concluso', messaggiFinali: storiaDelGiro(1) } });
+  await registro.attendiAssestamento(sessionId);
+});
+
+test('REV-SESSION-READY-15 — il ripiego sul cloud al SECONDO giro: la sessione torna «in corso» e il fork non eredita la storia vecchia', async () => {
+  const primo = sessioneControllabile();
+  const secondo = giroInDueTempi();
+  let n = 0;
+  const registro = createSessionRegistry({ avviaSessioneFn: (i) => (n++ === 0 ? primo.avviaSessioneFn(i) : secondo.avviaSessioneFn(i)), preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: MODELLO_REV, chiave: 'k', cartellaEsisteFn: () => true });
+  const { sessionId } = registro.avvia('task-vero');
+  primo.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' }, { ok: true, esito: { comeFinita: 'concluso', messaggiFinali: storiaDelGiro(1) } });
+  await registro.attendiAssestamento(sessionId);
+  registro.resume(sessionId, 'domanda 2');
+  secondo.emetti({ type: 'RunError', message: 'il motore locale non parte', code: 'LOCAL_RUNTIME_FAILED' });
+  secondo.emetti({ type: 'RunStarted', threadId: 't', runId: 'cloud' });
+  const fork = registro.forka(sessionId);
+  assert.equal(fork.code, 'SESSION_NOT_READY', 'nessun fork dalla storia del primo giro mentre il secondo lavora');
+  assert.match(fork.erroreAvvio, /ancora in corso/);
+  assert.match(registro.resume(sessionId, 'nel mezzo').erroreAvvio ?? '', /ancora in corso/);
+  secondo.emetti({ type: 'RunFinished', threadId: 't', runId: 'cloud' });
+  secondo.risolvi({ ok: true, esito: { comeFinita: 'concluso', messaggiFinali: storiaDelGiro(2) } });
+  await registro.attendiAssestamento(sessionId);
+});
+
+test('REV-SESSION-READY-16 — una scrittura della storia che non torna mai non tiene appeso l\'assestamento oltre il tetto', async () => {
+  const STORIA = new Set(['messaggi-delta', 'checkpoint', 'messaggi-finali']);
+  const cartellaStore = mkdtempSync(join(tmpdir(), 'talos-rev-ready-v3-'));
+  const finta = sessioneControllabile();
+  try {
+    const registro = createSessionRegistry({
+      cartellaStore, tettoScritturaAssestamentoMs: 50,
+      registraRigaSyncFn: ({ record }) => { if (STORIA.has(record?.tipo)) throw Object.assign(new Error('occupato'), { code: 'SESSION_STORE_BUSY' }); },
+      registraRigaFn: ({ record }) => (STORIA.has(record?.tipo) ? new Promise(() => {}) : Promise.resolve()),
+      avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: MODELLO_REV, chiave: 'k', cartellaEsisteFn: () => true,
+    });
+    const { sessionId } = registro.avvia('task-vero');
+    finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' }, { ok: true, esito: { comeFinita: 'concluso', messaggiFinali: storiaDelGiro(1) } });
+    const vinto = await Promise.race([registro.attendiAssestamento(sessionId).then(() => 'assestato'), new Promise((r) => setTimeout(() => r('appesa'), 2000))]);
+    assert.equal(vinto, 'assestato', 'oltre il tetto l\'assestamento arriva');
+    assert.equal(registro.staChiudendoIlGiro(sessionId), false);
+  } finally {
+    rimuoviCartellaDiProva(cartellaStore);
+  }
+});
+
+test('REV-SESSION-READY-17 — l\'attesa unica riaspetta se, mentre aspettava, si apre la finestra di un giro nuovo', async () => {
+  const primo = giroInDueTempi();
+  /* Il caso di Codex (v2, punto 7): il giro della correzione annuncia la fine GIÀ dentro l'avvio — cioè prima che il
+     giro vecchio si assesti — e il suo servizio resta in volo. */
+  let risolviSecondo = null;
+  let chiamateSecondo = 0;
+  const secondoAvvia = async (input) => {
+    chiamateSecondo += 1;
+    input.onEvento({ type: 'RunStarted', threadId: 't', runId: 'r2' });
+    input.onEvento({ type: 'RunFinished', threadId: 't', runId: 'r2' });
+    return new Promise((r) => { risolviSecondo = r; });
+  };
+  let n = 0;
+  const registro = createSessionRegistry({ avviaSessioneFn: (i) => (n++ === 0 ? primo.avviaSessioneFn(i) : secondoAvvia(i)), preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: MODELLO_REV, chiave: 'k', cartellaEsisteFn: () => true });
+  const { sessionId } = registro.avvia('task-vero');
+  assert.ok(!registro.reindirizza(sessionId, 'correzione')?.erroreAvvio, 'correzione accettata');
+  primo.emetti({ type: 'RunFinished', threadId: 't', runId: 'r1' });
+  let fuori = false;
+  const attesa = registro.attendiFuoriDallaFinestra(sessionId).then(() => { fuori = true; });
+  primo.risolvi({ ok: true, esito: { comeFinita: 'concluso', messaggiFinali: storiaDelGiro(1) } });
+  for (let i = 0; i < 5; i += 1) await unGiro();
+  assert.equal(chiamateSecondo, 1, 'la correzione è ripartita');
+  assert.equal(registro.staChiudendoIlGiro(sessionId), true, 'la finestra del giro nuovo è aperta');
+  assert.equal(fuori, false, 'l\'attesa non si è fermata alla fine della prima finestra');
+  risolviSecondo({ ok: true, esito: { comeFinita: 'concluso', messaggiFinali: storiaDelGiro(2) } });
+  await attesa;
+  assert.equal(registro.staChiudendoIlGiro(sessionId), false);
+});
+
+test('REV-SESSION-READY-12 — un avvio che LANCIA in modo sincrono non lascia la sessione appesa', async () => {
+  const registro = createSessionRegistry({
+    avviaSessioneFn: (input) => { input.onEvento({ type: 'RunStarted', threadId: 't', runId: 'r' }); input.onEvento({ type: 'RunError', message: 'no', code: 'x' }); throw new Error('sincrono'); },
+    preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: MODELLO_REV, chiave: 'k', cartellaEsisteFn: () => true,
+  });
+  const { sessionId } = registro.avvia('task-vero');
+  const vinto = await Promise.race([registro.attendiAssestamento(sessionId).then(() => 'assestato'), new Promise((r) => setTimeout(() => r('appesa'), 2000))]);
+  assert.equal(vinto, 'assestato');
+  assert.equal(registro.staChiudendoIlGiro(sessionId), false);
+  assert.doesNotMatch(registro.resume(sessionId, 'riprovo').erroreAvvio ?? '', /sta chiudendo il giro/);
+});
+
+test('REV-SESSION-READY-13 — una correzione riparte dentro la chiusura: compatta dall’ascoltatore dice «in corso», non riassume la storia vecchia', async () => {
+  const primo = sessioneControllabile();
+  const secondo = sessioneControllabile();
+  const terzo = sessioneControllabile();
+  const compattate = [];
+  let n = 0;
+  const finte = [primo, secondo, terzo];
+  const registro = createSessionRegistry({ avviaSessioneFn: (i) => finte[n++].avviaSessioneFn(i), preparaEsecuzioneFn: preparaEsecuzioneFinta,
+    compattaSessioneFn: async ({ messaggiFinali }) => { compattate.push(messaggiFinali); return { compattato: true, messaggi: riassuntoDi(messaggiFinali), usage: null }; },
+    modello: MODELLO_REV, chiave: 'k', cartellaEsisteFn: () => true });
+  const { sessionId } = registro.avvia('task-vero');
+  primo.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' }, { ok: true, esito: { comeFinita: 'concluso', messaggiFinali: storiaDelGiro(1) } });
+  await registro.attendiAssestamento(sessionId);
+  registro.resume(sessionId, 'domanda 2');
+  const correzione = registro.reindirizza(sessionId, 'anzi, fai così');
+  assert.ok(!correzione?.erroreAvvio, `correzione accettata: ${correzione?.erroreAvvio}`);
+  let compattazione = null;
+  registro.iscriviti(sessionId, (e) => { if ((e.type === 'RunError' || e.type === 'RunFinished') && e.runId === 'r2') compattazione = registro.compatta(sessionId); });
+  secondo.concludi({ type: 'RunError', message: 'fermato per la correzione', code: 'fermato', runId: 'r2' }, { ok: false, esito: { comeFinita: 'fermato', detto: 'fermato', messaggiFinali: storiaDelGiro(2) } });
+  const esito = await compattazione;
+  assert.equal(terzo.chiamate, 1, 'la correzione è ripartita');
+  assert.equal(esito.code, 'SESSION_NOT_READY');
+  assert.match(esito.erroreAvvio, /ancora in corso/);
+  assert.deepEqual(compattate, [], 'nessuna storia riassunta mentre il giro corretto lavora');
+  terzo.concludi({ type: 'RunFinished', threadId: 't3', runId: 'r3' });
+  await registro.attendiAssestamento(sessionId);
+});
+
+test('REV-SESSION-READY-18 — la domanda di una figlia mentre il padre chiude il giro si ANNULLA subito: niente attese appese, niente ripresa', async () => {
+  const finta = sessioniControllabili();
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: MODELLO_REV, chiave: 'k', cartellaEsisteFn: () => true });
+  const { sessionId: parentId } = registro.avvia('task-vero');
+  await finta.run(0).input.onDelega('controlla il contratto', '/tmp/figlio');
+  let domanda = null;
+  registro.iscriviti(parentId, (e) => { if (e.type === 'RunError' && e.runId === 'r1') domanda = finta.run(1).input.askParentFn('Quale versione devo usare?'); });
+  finta.concludi(0, { type: 'RunError', message: 'fermato', code: 'fermato', runId: 'r1' }, { ok: false, esito: { comeFinita: 'fermato', detto: 'fermato', messaggiFinali: storiaDelGiro(1) } });
+  assert.ok(domanda, 'la figlia ha chiesto dentro la finestra');
+  const esito = await Promise.race([domanda, new Promise((r) => setTimeout(() => r('appesa'), 1000))]);
+  assert.notEqual(esito, 'appesa', 'la domanda non resta appesa');
+  assert.equal(esito.status, 'cancelled', `la domanda è annullata, onestamente: ${JSON.stringify(esito)}`);
+  await registro.attendiAssestamento(parentId);
+  for (let i = 0; i < 3; i += 1) await unGiro();
+  assert.equal(finta.chiamate, 2, 'il padre non riparte con una domanda annullata');
+  finta.concludi(1, { type: 'RunFinished', runId: 'r2' });
+  await unGiro();
+});
+
+test('REV-SESSION-READY-19 — l’assestamento del padre aspetta anche la scrittura del risultato della figlia', async () => {
+  const STORIA = new Set(['messaggi-delta', 'checkpoint', 'messaggi-finali']);
+  const cartellaStore = mkdtempSync(join(tmpdir(), 'talos-rev-ready-v3-figlia-'));
+  const rifiuti = [];
+  let occupato = false;
+  const finta = sessioniControllabili();
+  try {
+    const registro = createSessionRegistry({
+      cartellaStore, tettoScritturaAssestamentoMs: 5000,
+      /* la storia trova la coda occupata SOLO quando la prova lo decide, e allora la scrittura in coda la risolvo io */
+      registraRigaSyncFn: (argomenti) => { if (occupato && STORIA.has(argomenti.record?.tipo)) throw Object.assign(new Error('occupato'), { code: 'SESSION_STORE_BUSY' }); return registraRigaSync(argomenti); },
+      registraRigaFn: (argomenti) => (occupato && STORIA.has(argomenti.record?.tipo) ? new Promise((_, rifiuta) => { rifiuti.push(rifiuta); }) : registraRiga(argomenti)),
+      avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: MODELLO_REV, chiave: 'k', cartellaEsisteFn: () => true,
+    });
+    const { sessionId: parentId } = registro.avvia('task-vero');
+    await finta.run(0).input.onDelega('scrivi il modulo', '/tmp/figlio');
+    finta.concludi(1, { type: 'RunFinished', runId: 'r2' }, { ok: true, esito: { detto: 'Modulo scritto.', comeFinita: 'concluso', messaggiFinali: [] } });
+    await unGiro();
+    occupato = true;
+    finta.concludi(0, { type: 'RunFinished', runId: 'r1' }, { ok: true, esito: { comeFinita: 'concluso', messaggiFinali: storiaDelGiro(1) } });
+    let sciolta = false;
+    const attesa = registro.attendiAssestamento(parentId).then(() => { sciolta = true; });
+    for (let i = 0; i < 5; i += 1) await unGiro();
+    assert.ok(rifiuti.length > 0, 'la storia col risultato della figlia è in scrittura');
+    assert.equal(sciolta, false, 'con quella scrittura in volo il padre non è assestato');
+    for (const rifiuta of rifiuti) rifiuta(new Error('disco pieno'));
+    await attesa;
+  } finally {
+    await attendiScritture({ cartellaStore });
+    rimuoviCartellaDiProva(cartellaStore);
+  }
+});
+
+/* ─── REV-SESSION-READY v4 (27/09/2026, terza revisione di Codex; owner: «v4 stretta») ─── */
+test('REV-SESSION-READY-20 — il risultato di una figlia che arriva nella finestra finisce nella storia NUOVA, non in quella di prima', async () => {
+  /* Con una cartella di salvataggio vera, come nell'app: senza, l'integrazione nello storico non può scrivere e rinuncia
+     (il risultato resta in coda), e la prova non misurerebbe il caso di Codex (v3, punto 2). */
+  const cartellaStore = mkdtempSync(join(tmpdir(), 'talos-rev-ready-v4-figlia-'));
+  const finta = sessioniControllabili();
+  try {
+    const registro = createSessionRegistry({ cartellaStore, avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: MODELLO_REV, chiave: 'k', cartellaEsisteFn: () => true });
+    const { sessionId: parentId } = registro.avvia('task-vero');
+    finta.concludi(0, { type: 'RunFinished', runId: 'r1' }, { ok: true, esito: { comeFinita: 'concluso', messaggiFinali: storiaDelGiro(1) } });
+    await registro.attendiAssestamento(parentId);
+    registro.resume(parentId, 'domanda 2');
+    await finta.run(1).input.onDelega('scrivi il modulo', '/tmp/figlio');
+    /* il padre annuncia la fine del secondo giro, col servizio ancora in volo; in quel momento la figlia finisce */
+    finta.emetti(1, { type: 'RunFinished', runId: 'r2' });
+    finta.concludi(2, { type: 'RunFinished', runId: 'r3' }, { ok: true, esito: { detto: 'Modulo scritto.', comeFinita: 'concluso', messaggiFinali: [] } });
+    for (let i = 0; i < 3; i += 1) await unGiro();
+    finta.run(1).risolvi({ ok: true, esito: { comeFinita: 'concluso', messaggiFinali: storiaDelGiro(2) } });
+    await registro.attendiAssestamento(parentId);
+    assert.equal(registro.resume(parentId, 'domanda 3').sessionId, parentId);
+    const iniziali = finta.run(3).input.messaggiIniziali;
+    assert.deepEqual(iniziali.slice(0, 3), storiaDelGiro(2), 'la storia è quella del secondo giro');
+    assert.ok(iniziali.some((m) => m.role === 'user' && /Modulo scritto\./u.test(JSON.stringify(m.content))), 'e il risultato della figlia c’è, non è andato perso');
+    finta.concludi(3, { type: 'RunFinished', runId: 'r4' });
+    await registro.attendiAssestamento(parentId);
+  } finally {
+    await attendiScritture({ cartellaStore });
+    rimuoviCartellaDiProva(cartellaStore);
+  }
+});
+
+
+test('REV-SESSION-READY-21 — la scrittura tardiva di un risultato di figlia che fallisce NON chiude il giro dopo', async () => {
+  const STORIA = new Set(['messaggi-delta', 'checkpoint', 'messaggi-finali']);
+  const cartellaStore = mkdtempSync(join(tmpdir(), 'talos-rev-ready-v4-versione-'));
+  const rifiuti = [];
+  let occupato = false;
+  const finta = sessioniControllabili();
+  try {
+    const registro = createSessionRegistry({
+      cartellaStore,
+      registraRigaSyncFn: (argomenti) => { if (occupato && STORIA.has(argomenti.record?.tipo)) throw Object.assign(new Error('occupato'), { code: 'SESSION_STORE_BUSY' }); return registraRigaSync(argomenti); },
+      registraRigaFn: (argomenti) => (occupato && STORIA.has(argomenti.record?.tipo) ? new Promise((_, rifiuta) => { rifiuti.push(rifiuta); }) : registraRiga(argomenti)),
+      avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: MODELLO_REV, chiave: 'k', cartellaEsisteFn: () => true,
+    });
+    const { sessionId: parentId } = registro.avvia('task-vero');
+    await finta.run(0).input.onDelega('scrivi il modulo', '/tmp/figlio');
+    finta.concludi(0, { type: 'RunFinished', runId: 'r1' }, { ok: true, esito: { comeFinita: 'concluso', messaggiFinali: storiaDelGiro(1) } });
+    await registro.attendiAssestamento(parentId);
+    /* padre concluso e assestato: il risultato della figlia si integra FUORI da un giro, con la scrittura in coda */
+    occupato = true;
+    finta.concludi(1, { type: 'RunFinished', runId: 'r2' }, { ok: true, esito: { detto: 'Modulo scritto.', comeFinita: 'concluso', messaggiFinali: [] } });
+    for (let i = 0; i < 3; i += 1) await unGiro();
+    assert.ok(rifiuti.length > 0, 'la storia col risultato è in scrittura');
+    occupato = false;
+    /* intanto parte un giro nuovo del padre; poi la vecchia scrittura fallisce */
+    assert.equal(registro.resume(parentId, 'domanda 2').sessionId, parentId);
+    const finali = [];
+    registro.iscriviti(parentId, (e) => { if (e.type === 'RunError' || e.type === 'RunFinished') finali.push(e); }, registro.esporta(parentId).eventi.at(-1)?._sequenza ?? 0);
+    for (const rifiuta of rifiuti) rifiuta(new Error('disco pieno'));
+    for (let i = 0; i < 3; i += 1) await unGiro();
+    assert.deepEqual(finali, [], 'nessun RunError sul giro nuovo per una scrittura del giro di prima');
+    assert.match(registro.resume(parentId, 'nel mezzo').erroreAvvio ?? '', /ancora in corso/, 'il giro nuovo è ancora in corso');
+    finta.concludi(2, { type: 'RunFinished', runId: 'r3' });
+    await registro.attendiAssestamento(parentId);
+  } finally {
+    await attendiScritture({ cartellaStore });
+    rimuoviCartellaDiProva(cartellaStore);
+  }
+});
+
+
+test('REV-SESSION-READY-22 — l’attesa unica regge SEI finestre di fila (niente 409 alla sesta)', async () => {
+  const quante = 6;
+  let registro = null;
+  let sessionId = null;
+  let chiamate = 0;
+  const avviaSessioneFn = async (input) => {
+    chiamate += 1;
+    const n = chiamate;
+    input.onEvento({ type: 'RunStarted', threadId: 't', runId: `r${n}` });
+    /* ogni giro, tranne l'ultimo, chiede una correzione e annuncia la fine già nell'avvio; il servizio torna dopo */
+    if (n < quante) {
+      queueMicrotask(() => {
+        registro.reindirizza(sessionId, `correzione ${n}`);
+        input.onEvento({ type: 'RunFinished', threadId: 't', runId: `r${n}` });
+      });
+    } else {
+      queueMicrotask(() => input.onEvento({ type: 'RunFinished', threadId: 't', runId: `r${n}` }));
+    }
+    return new Promise((r) => setImmediate(() => r({ ok: true, esito: { comeFinita: 'concluso', messaggiFinali: storiaDelGiro(n) } })));
+  };
+  registro = createSessionRegistry({ avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: MODELLO_REV, chiave: 'k', cartellaEsisteFn: () => true });
+  ({ sessionId } = registro.avvia('task-vero'));
+  await Promise.resolve(); await Promise.resolve();
+  assert.equal(registro.staChiudendoIlGiro(sessionId), true, 'la prima finestra è aperta');
+  await registro.attendiFuoriDallaFinestra(sessionId);
+  assert.equal(chiamate, quante, `tutte le ${quante} finestre sono passate`);
+  assert.equal(registro.staChiudendoIlGiro(sessionId), false, 'all’uscita la sessione non è in chiusura');
+  assert.equal(registro.resume(sessionId, 'e adesso').sessionId, sessionId, 'e la ripresa riesce');
+});
+
+
+test('REV-SESSION-READY-23 — un secondo evento finale nella stessa finestra non fa perdere il risveglio a chi aspettava', async () => {
+  const giro = giroInDueTempi();
+  const registro = createSessionRegistry({ avviaSessioneFn: giro.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta,
+    compattaSessioneFn: async ({ messaggiFinali }) => ({ compattato: true, messaggi: riassuntoDi(messaggiFinali), usage: null }),
+    modello: MODELLO_REV, chiave: 'k', cartellaEsisteFn: () => true });
+  const { sessionId } = registro.avvia('task-vero');
+  giro.emetti({ type: 'RunError', message: 'il motore locale non parte', code: 'LOCAL_RUNTIME_FAILED' });
+  const compattazione = registro.compatta(sessionId);
+  giro.emetti({ type: 'RunError', message: 'di nuovo', code: 'LOCAL_RUNTIME_FAILED' });
+  giro.emetti({ type: 'RunStarted', threadId: 't', runId: 'cloud' });
+  const vinto = await Promise.race([compattazione, new Promise((r) => setTimeout(() => r('appesa'), 1000))]);
+  assert.notEqual(vinto, 'appesa', 'la prima attesa si sveglia sul RunStarted');
+  assert.match(vinto.erroreAvvio, /ancora in corso/);
+  giro.emetti({ type: 'RunFinished', threadId: 't', runId: 'cloud' });
+  giro.risolvi({ ok: true, esito: { comeFinita: 'concluso', messaggiFinali: storiaDelGiro(1) } });
+  await registro.attendiAssestamento(sessionId);
+});
+
+
+test('REV-SESSION-READY-24 — il tetto di serie sull’attesa della scrittura è 10 secondi (owner 27/09), non uno di più', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const STORIA = new Set(['messaggi-delta', 'checkpoint', 'messaggi-finali']);
+  const cartellaStore = mkdtempSync(join(tmpdir(), 'talos-rev-ready-v4-tetto-'));
+  const finta = sessioneControllabile();
+  try {
+    const registro = createSessionRegistry({
+      cartellaStore,
+      registraRigaSyncFn: ({ record }) => { if (STORIA.has(record?.tipo)) throw Object.assign(new Error('occupato'), { code: 'SESSION_STORE_BUSY' }); },
+      registraRigaFn: ({ record }) => (STORIA.has(record?.tipo) ? new Promise(() => {}) : Promise.resolve()),
+      avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: MODELLO_REV, chiave: 'k', cartellaEsisteFn: () => true,
+    });
+    const { sessionId } = registro.avvia('task-vero');
+    finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' }, { ok: true, esito: { comeFinita: 'concluso', messaggiFinali: storiaDelGiro(1) } });
+    for (let i = 0; i < 10; i += 1) await Promise.resolve();
+    t.mock.timers.tick(9_999);
+    for (let i = 0; i < 10; i += 1) await Promise.resolve();
+    assert.equal(registro.staChiudendoIlGiro(sessionId), true, 'a 9,999 s il giro sta ancora aspettando la scrittura');
+    t.mock.timers.tick(1);
+    for (let i = 0; i < 10; i += 1) await Promise.resolve();
+    assert.equal(registro.staChiudendoIlGiro(sessionId), false, 'a 10 s l’assestamento arriva');
+  } finally {
+    t.mock.timers.reset();
+    rimuoviCartellaDiProva(cartellaStore);
+  }
+});
+
+/* ─── REV-SESSION-READY v5 (27/09/2026 notte, quarta revisione di Codex; owner: «come Pi», l'assestamento non scrive) ─── */
+test('REV-SESSION-READY-25 — il risultato di una figlia arrivato nella finestra di un giro che FALLISCE non si perde: lo consegna il giro dopo', async () => {
+  /* Codex v4, punto 1: nel ramo `.catch` l'assestamento lo integrava nella storia del giro PRIMA e lo toglieva dalla coda,
+     mentre la ripresa parte da `messaggiPendente`: il risultato spariva. */
+  const cartellaStore = mkdtempSync(join(tmpdir(), 'talos-rev-ready-v5-catch-'));
+  const finta = sessioniControllabili();
+  try {
+    const registro = createSessionRegistry({ cartellaStore, avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: MODELLO_REV, chiave: 'k', cartellaEsisteFn: () => true });
+    const { sessionId: parentId } = registro.avvia('task-vero');
+    finta.concludi(0, { type: 'RunFinished', runId: 'r1' }, { ok: true, esito: { comeFinita: 'concluso', messaggiFinali: storiaDelGiro(1) } });
+    await registro.attendiAssestamento(parentId);
+    registro.resume(parentId, 'domanda 2');
+    await finta.run(1).input.onDelega('scrivi il modulo', '/tmp/figlio');
+    finta.emetti(1, { type: 'RunError', message: 'caduto', code: 'errore', runId: 'r2' });
+    finta.concludi(2, { type: 'RunFinished', runId: 'r3' }, { ok: true, esito: { detto: 'Modulo scritto.', comeFinita: 'concluso', messaggiFinali: [] } });
+    for (let i = 0; i < 3; i += 1) await unGiro();
+    finta.run(1).risolvi(Promise.reject(new Error('servizio caduto')));
+    await registro.attendiAssestamento(parentId);
+    for (let i = 0; i < 3; i += 1) await unGiro();
+    const ripresa = registro.resume(parentId, 'domanda 3');
+    assert.equal(ripresa.sessionId, parentId, JSON.stringify(ripresa));
+    const input = finta.run(3).input;
+    const neiMessaggi = input.messaggiIniziali.some((m) => /Modulo scritto\./u.test(JSON.stringify(m.content)));
+    const dallaCoda = JSON.stringify(input.codaMessaggiFn?.() ?? null);
+    assert.ok(neiMessaggi || /Modulo scritto\./u.test(dallaCoda), 'il risultato della figlia arriva al giro dopo, dalla storia o dalla coda');
+    finta.concludi(3, { type: 'RunFinished', runId: 'r4' });
+    await registro.attendiAssestamento(parentId);
+  } finally {
+    await attendiScritture({ cartellaStore });
+    rimuoviCartellaDiProva(cartellaStore);
+  }
+});
+
+test('REV-SESSION-READY-26 — una domanda della figlia già in coda quando il padre chiude il giro si ANNULLA: la figlia non resta appesa', async () => {
+  /* Codex v4, punto 5: chiesta col padre ancora al lavoro, dopo l'ultimo consumo della coda; senza partenza automatica
+     nessun giro l'avrebbe mai letta. */
+  const finta = sessioniControllabili();
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: MODELLO_REV, chiave: 'k', cartellaEsisteFn: () => true });
+  const { sessionId: parentId } = registro.avvia('task-vero');
+  await finta.run(0).input.onDelega('controlla il contratto', '/tmp/figlio');
+  const domanda = finta.run(1).input.askParentFn('Quale versione devo usare?');
+  await unGiro();
+  finta.concludi(0, { type: 'RunFinished', runId: 'r1' }, { ok: true, esito: { comeFinita: 'concluso', messaggiFinali: storiaDelGiro(1) } });
+  const esito = await Promise.race([domanda, new Promise((r) => setTimeout(() => r('appesa'), 1000))]);
+  assert.notEqual(esito, 'appesa', 'la domanda non resta appesa');
+  assert.equal(esito.status, 'cancelled', JSON.stringify(esito));
+  await registro.attendiAssestamento(parentId);
+  finta.concludi(1, { type: 'RunFinished', runId: 'r2' });
+  await unGiro();
+});
+
+test('REV-SESSION-READY-27 — la risposta del padre a una figlia che sta chiudendo il giro FALLISCE: niente «risposta data» falsa', async () => {
+  /* Codex v4, punto 6: `answerChildQuestionFn` chiudeva la domanda direttamente, senza la guardia di `deliverAgentDialogue`. */
+  const finta = sessioniControllabili();
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: MODELLO_REV, chiave: 'k', cartellaEsisteFn: () => true });
+  const { sessionId: parentId } = registro.avvia('task-vero');
+  const eventi = [];
+  registro.iscriviti(parentId, (e) => eventi.push(e));
+  await finta.run(0).input.onDelega('controlla il contratto', '/tmp/figlio');
+  const childId = finta.run(1).input.sessionId ?? registro.elenco?.().find((s) => s.sessionId !== parentId)?.sessionId;
+  const domanda = finta.run(1).input.askParentFn('Quale versione devo usare?');
+  await unGiro();
+  const requestId = JSON.stringify(eventi).match(/"requestId":"([0-9a-f-]{36})"/u)?.[1];
+  assert.ok(requestId, 'la domanda è registrata');
+  const figlioId = childId ?? JSON.stringify(eventi).match(/"childId":"([^"]+)"/u)?.[1];
+  finta.emetti(1, { type: 'RunFinished', runId: 'r2' });
+  const risposta = finta.run(0).input.answerChildQuestionFn({ requestId, childId: figlioId, answer: 'la 2' });
+  assert.equal(risposta?.code, 'AGENT_DIALOGUE_DELIVERY_FAILED', JSON.stringify(risposta));
+  const esito = await Promise.race([domanda, new Promise((r) => setTimeout(() => r('appesa'), 1000))]);
+  assert.equal(esito.status, 'cancelled', `la figlia non riceve una risposta dentro la sua finestra: ${JSON.stringify(esito)}`);
+  finta.run(1).risolvi({ ok: true });
+  finta.concludi(0, { type: 'RunFinished', runId: 'r1' });
+  await unGiro();
+});
+
+/* ─── REV-SESSION-READY v6 (27/09/2026 notte, quinta revisione di Codex; owner: «v6 su tutti i punti») ─── */
+/** Conta le scritture di UNA sessione, delegando allo store vero: `dopo` le accende quando la prova lo decide. */
+function contaScritture() {
+  const conta = { id: null, dopo: false, righe: [] };
+  const segna = (a) => { if (conta.dopo && a?.sessionId === conta.id) conta.righe.push(JSON.stringify(a.record)); };
+  return {
+    conta,
+    registraRigaSyncFn: (a) => { segna(a); return registraRigaSync(a); },
+    registraRigaFn: (a) => { segna(a); return registraRiga(a); },
+  };
+}
+
+test('REV-SESSION-READY-28 — dopo un giro FALLITO, due figlie: nessuno dei due risultati si perde', async () => {
+  /* Codex v5, punto 1: la seconda figlia faceva integrare entrambi i risultati nei vecchi `messaggiFinali` (la ripresa
+     parte da `messaggiPendente`) e svuotava la coda. */
+  const cartellaStore = mkdtempSync(join(tmpdir(), 'talos-rev-ready-v6-due-figlie-'));
+  const finta = sessioniControllabili();
+  try {
+    const registro = createSessionRegistry({ cartellaStore, avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: MODELLO_REV, chiave: 'k', cartellaEsisteFn: () => true });
+    const { sessionId: parentId } = registro.avvia('task-vero');
+    finta.concludi(0, { type: 'RunFinished', runId: 'r1' }, { ok: true, esito: { comeFinita: 'concluso', messaggiFinali: storiaDelGiro(1) } });
+    await registro.attendiAssestamento(parentId);
+    registro.resume(parentId, 'domanda 2');
+    await finta.run(1).input.onDelega('scrivi il modulo A', '/tmp/figlio-a');
+    await finta.run(1).input.onDelega('scrivi il modulo B', '/tmp/figlio-b');
+    finta.emetti(1, { type: 'RunError', message: 'caduto', code: 'errore', runId: 'r2' });
+    finta.concludi(2, { type: 'RunFinished', runId: 'r3' }, { ok: true, esito: { detto: 'Modulo A scritto.', comeFinita: 'concluso', messaggiFinali: [] } });
+    for (let i = 0; i < 3; i += 1) await unGiro();
+    finta.run(1).risolvi(Promise.reject(new Error('servizio caduto')));
+    await registro.attendiAssestamento(parentId);
+    finta.concludi(3, { type: 'RunFinished', runId: 'r4' }, { ok: true, esito: { detto: 'Modulo B scritto.', comeFinita: 'concluso', messaggiFinali: [] } });
+    for (let i = 0; i < 3; i += 1) await unGiro();
+    const ripresa = registro.resume(parentId, 'domanda 3');
+    assert.equal(ripresa.sessionId, parentId, JSON.stringify(ripresa));
+    const input = finta.run(4).input;
+    const consegnati = [JSON.stringify(input.messaggiIniziali)];
+    for (let i = 0; i < 4; i += 1) consegnati.push(JSON.stringify(input.codaMessaggiFn?.() ?? null));
+    const tutto = consegnati.join('\n');
+    assert.match(tutto, /Modulo A scritto\./u, 'il primo risultato arriva al giro dopo');
+    assert.match(tutto, /Modulo B scritto\./u, 'e anche il secondo');
+    finta.concludi(4, { type: 'RunFinished', runId: 'r5' });
+    await registro.attendiAssestamento(parentId);
+  } finally {
+    await attendiScritture({ cartellaStore });
+    rimuoviCartellaDiProva(cartellaStore);
+  }
+});
+
+for (const [nome, azione] of [['elimina', (registro, id) => registro.elimina(id)], ['chiudi', (registro) => registro.chiudi({ attesaMassimaMs: 2000 })]]) {
+  test(`REV-SESSION-READY-29 — dopo \`${nome}\` il servizio che torna tardi non scrive più niente per quella sessione`, async () => {
+    /* Codex v5, punti 2 e 3: il blocco di fine giro integrava il risultato della figlia (e con `elimina` ricreava il journal)
+       dopo che l'eliminazione o lo spegnimento erano già stati dichiarati conclusi. */
+    const cartellaStore = mkdtempSync(join(tmpdir(), `talos-rev-ready-v6-${nome}-`));
+    const finta = sessioniControllabili();
+    const { conta, registraRigaFn, registraRigaSyncFn } = contaScritture();
+    try {
+      const registro = createSessionRegistry({ cartellaStore, registraRigaFn, registraRigaSyncFn, avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: MODELLO_REV, chiave: 'k', cartellaEsisteFn: () => true });
+      const { sessionId: parentId } = registro.avvia('task-vero');
+      conta.id = parentId;
+      await finta.run(0).input.onDelega('scrivi il modulo', '/tmp/figlio');
+      finta.emetti(0, { type: 'RunFinished', runId: 'r1' });
+      finta.concludi(1, { type: 'RunFinished', runId: 'r2' }, { ok: true, esito: { detto: 'Modulo scritto.', comeFinita: 'concluso', messaggiFinali: [] } });
+      for (let i = 0; i < 3; i += 1) await unGiro();
+      const esito = await azione(registro, parentId);
+      assert.ok(!esito?.erroreAvvio, JSON.stringify(esito));
+      conta.dopo = true;
+      finta.run(0).risolvi({ ok: true, esito: { comeFinita: 'concluso', messaggiFinali: storiaDelGiro(1) } });
+      for (let i = 0; i < 6; i += 1) await unGiro();
+      await attendiScritture({ cartellaStore });
+      /* Dopo `elimina` NIENTE si scrive. Dopo `chiudi` la storia del giro si scrive come prima della v6 (è la sua fine), ma
+         il risultato della figlia no: nessuna riga che lo contenga. */
+      const vietate = nome === 'elimina' ? conta.righe : conta.righe.filter((riga) => /Modulo scritto/u.test(riga));
+      assert.deepEqual(vietate, [], `scritture dopo ${nome}: ${vietate.join(' | ').slice(0, 400)}`);
+      if (nome === 'elimina') assert.equal(existsSync(join(cartellaStore, `${parentId}.jsonl`)), false, 'il journal eliminato non ricompare');
+    } finally {
+      await attendiScritture({ cartellaStore });
+      rimuoviCartellaDiProva(cartellaStore);
+    }
+  });
+}
+
+test('REV-SESSION-READY-30 — l’annullamento delle domande arriva DOPO il terminale, con una sequenza più alta', async () => {
+  /* Codex v5, punto 4: dentro il broadcast del terminale l'annullamento prendeva la sequenza 4 e arrivava prima del
+     terminale (sequenza 3): una riconnessione dal cursore 4 perdeva il terminale. */
+  const finta = sessioniControllabili();
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: MODELLO_REV, chiave: 'k', cartellaEsisteFn: () => true });
+  const { sessionId: parentId } = registro.avvia('task-vero');
+  const arrivati = [];
+  registro.iscriviti(parentId, (e) => arrivati.push(e));
+  await finta.run(0).input.onDelega('controlla il contratto', '/tmp/figlio');
+  const domanda = finta.run(1).input.askParentFn('Quale versione devo usare?');
+  await unGiro();
+  finta.concludi(0, { type: 'RunFinished', runId: 'r1' }, { ok: true, esito: { comeFinita: 'concluso', messaggiFinali: storiaDelGiro(1) } });
+  assert.equal((await domanda).status, 'cancelled');
+  const terminale = arrivati.findIndex((e) => e.type === 'RunFinished');
+  const annullata = arrivati.findIndex((e) => e?.name === 'talos.agent-dialogue' && e.value?.status === 'cancelled');
+  assert.ok(terminale >= 0 && annullata >= 0, 'terminale e annullamento arrivati');
+  assert.ok(terminale < annullata, 'il terminale arriva prima dell’annullamento');
+  const sequenze = arrivati.map((e) => e._sequenza).filter((n) => typeof n === 'number');
+  assert.deepEqual(sequenze, [...sequenze].sort((a, b) => a - b), `le sequenze consegnate crescono: ${sequenze.join(',')}`);
+  await registro.attendiAssestamento(parentId);
+  finta.concludi(1, { type: 'RunFinished', runId: 'r2' });
+  await unGiro();
+});
+
+test('REV-SESSION-READY-31 — una domanda già LETTA dal giro e senza risposta si annulla quando il padre chiude', async () => {
+  /* Codex v5, punto 5: l'annullamento cercava solo nella coda, e una domanda uscita con `codaMessaggiFn` restava appesa. */
+  const finta = sessioniControllabili();
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: MODELLO_REV, chiave: 'k', cartellaEsisteFn: () => true });
+  const { sessionId: parentId } = registro.avvia('task-vero');
+  await finta.run(0).input.onDelega('controlla il contratto', '/tmp/figlio');
+  const domanda = finta.run(1).input.askParentFn('Quale versione devo usare?');
+  await unGiro();
+  assert.match(JSON.stringify(finta.run(0).input.codaMessaggiFn()), /Quale versione/u, 'il giro del padre ha letto la domanda');
+  finta.concludi(0, { type: 'RunError', message: 'caduto', code: 'errore', runId: 'r1' }, { ok: false, esito: { comeFinita: 'errore', messaggiFinali: storiaDelGiro(1) } });
+  const esito = await Promise.race([domanda, new Promise((r) => setTimeout(() => r('appesa'), 1000))]);
+  assert.notEqual(esito, 'appesa', 'la domanda non resta appesa');
+  assert.equal(esito.status, 'cancelled', JSON.stringify(esito));
+  await registro.attendiAssestamento(parentId);
+  finta.concludi(1, { type: 'RunFinished', runId: 'r2' });
+  await unGiro();
+});
+
+test('REV-SESSION-READY-32 — chi risponde DENTRO l’evento «cancelled» trova la domanda già chiusa, non la trasforma in «answered»', async () => {
+  /* Codex v5, punto 6: `closeAgentDialogue` pubblicava prima di togliere il record dai pendenti. */
+  const finta = sessioniControllabili();
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: MODELLO_REV, chiave: 'k', cartellaEsisteFn: () => true });
+  const { sessionId: parentId } = registro.avvia('task-vero');
+  await finta.run(0).input.onDelega('controlla il contratto', '/tmp/figlio');
+  const domanda = finta.run(1).input.askParentFn('Quale versione devo usare?');
+  await unGiro();
+  let rientro = null;
+  registro.iscriviti(parentId, (e) => {
+    if (e?.name === 'talos.agent-dialogue' && e.value?.status === 'cancelled' && rientro === null) {
+      rientro = finta.run(0).input.answerChildQuestionFn({ requestId: e.value.requestId, childId: e.value.childId, answer: 'la 2' });
+    }
+  });
+  finta.concludi(0, { type: 'RunFinished', runId: 'r1' }, { ok: true, esito: { comeFinita: 'concluso', messaggiFinali: storiaDelGiro(1) } });
+  assert.ok(rientro, 'l’ascoltatore ha risposto dentro l’annullamento');
+  assert.equal(rientro.code, 'AGENT_DIALOGUE_NOT_PENDING', JSON.stringify(rientro));
+  assert.equal((await domanda).status, 'cancelled');
+  await registro.attendiAssestamento(parentId);
+  finta.concludi(1, { type: 'RunFinished', runId: 'r2' });
+  await unGiro();
+});
+
+test('REV-SESSION-READY-33 — la risposta di una figlia al padre che sta chiudendo il giro FALLISCE', async () => {
+  /* Codex v5, punto 7: limitare la guardia alla sola risposta padre→figlia, e accettare la consegna di una `reply` nella
+     finestra, lasciava verdi tutte le prove. */
+  const finta = sessioniControllabili();
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: MODELLO_REV, chiave: 'k', cartellaEsisteFn: () => true });
+  const { sessionId: parentId } = registro.avvia('task-vero');
+  const eventi = [];
+  registro.iscriviti(parentId, (e) => eventi.push(e));
+  await finta.run(0).input.onDelega('controlla il contratto', '/tmp/figlio');
+  const childId = JSON.stringify(eventi).match(/"childId":"([^"]+)"/u)?.[1];
+  assert.ok(childId, 'la figlia è nata');
+  const chiesta = finta.run(0).input.askChildFn({ childId, question: 'Quale file hai letto?' });
+  assert.equal(chiesta.status, 'requested', JSON.stringify(chiesta));
+  finta.emetti(0, { type: 'RunFinished', runId: 'r1' });
+  const risposta = finta.run(1).input.answerParentQuestionFn({ requestId: chiesta.requestId, answer: 'README.md' });
+  assert.equal(risposta?.code, 'AGENT_DIALOGUE_DELIVERY_FAILED', JSON.stringify(risposta));
+  finta.run(0).risolvi({ ok: true, esito: { comeFinita: 'concluso', messaggiFinali: storiaDelGiro(1) } });
+  await registro.attendiAssestamento(parentId);
+  finta.concludi(1, { type: 'RunFinished', runId: 'r2' });
+  await unGiro();
+});
+
+test('REV-SESSION-READY-35 — giro RIUSCITO: un risultato di figlia arrivato nella finestra resta in coda, l’assestamento non lo consegna', async () => {
+  /* Codex v5, punto 7: reintrodurre l'integrazione all'assestamento quando `messaggiPendente` manca (il giro riuscito)
+     lasciava verdi tutte le prove. Owner 27/09, «come Pi»: l'assestamento non scrive; lo consegna il giro dopo. */
+  const STORIA = new Set(['messaggi-delta', 'checkpoint', 'messaggi-finali']);
+  const cartellaStore = mkdtempSync(join(tmpdir(), 'talos-rev-ready-v6-riuscito-'));
+  const rifiuti = [];
+  let occupato = false;
+  const finta = sessioniControllabili();
+  try {
+    const registro = createSessionRegistry({
+      cartellaStore,
+      registraRigaSyncFn: (argomenti) => { if (occupato && STORIA.has(argomenti.record?.tipo)) throw Object.assign(new Error('occupato'), { code: 'SESSION_STORE_BUSY' }); return registraRigaSync(argomenti); },
+      registraRigaFn: (argomenti) => (occupato && STORIA.has(argomenti.record?.tipo) ? new Promise((_, rifiuta) => { rifiuti.push(rifiuta); }) : registraRiga(argomenti)),
+      avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: MODELLO_REV, chiave: 'k', cartellaEsisteFn: () => true,
+    });
+    const { sessionId: parentId } = registro.avvia('task-vero');
+    const consegne = [];
+    registro.iscriviti(parentId, (e) => { if (e.type === 'QueuedMessageDelivered') consegne.push(e); });
+    await finta.run(0).input.onDelega('scrivi il modulo', '/tmp/figlio');
+    occupato = true;
+    finta.concludi(0, { type: 'RunFinished', runId: 'r1' }, { ok: true, esito: { comeFinita: 'concluso', messaggiFinali: storiaDelGiro(1) } });
+    for (let i = 0; i < 3; i += 1) await unGiro();
+    assert.equal(registro.staChiudendoIlGiro(parentId), true, 'la storia del giro è ancora in scrittura: finestra aperta');
+    finta.concludi(1, { type: 'RunFinished', runId: 'r2' }, { ok: true, esito: { detto: 'Modulo scritto.', comeFinita: 'concluso', messaggiFinali: [] } });
+    for (let i = 0; i < 3; i += 1) await unGiro();
+    occupato = false;
+    for (const rifiuta of rifiuti) rifiuta(new Error('disco pieno'));
+    await registro.attendiAssestamento(parentId);
+    for (let i = 0; i < 3; i += 1) await unGiro();
+    assert.deepEqual(consegne, [], 'l’assestamento non consegna niente');
+    assert.equal(registro.resume(parentId, 'domanda 2').sessionId, parentId);
+    assert.match(JSON.stringify(finta.run(2).input.codaMessaggiFn?.() ?? null), /Modulo scritto\./u, 'lo consegna il giro dopo, dalla coda');
+    finta.concludi(2, { type: 'RunFinished', runId: 'r3' });
+    await registro.attendiAssestamento(parentId);
+  } finally {
+    await attendiScritture({ cartellaStore });
+    rimuoviCartellaDiProva(cartellaStore);
+  }
+});
+
+test('REV-SESSION-READY-34 — DUE domande in coda quando il padre chiude: si annullano tutte e due', async () => {
+  /* Codex v5, punto 7: annullare solo la prima domanda lasciava verdi tutte le prove. */
+  const finta = sessioniControllabili();
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: MODELLO_REV, chiave: 'k', cartellaEsisteFn: () => true });
+  const { sessionId: parentId } = registro.avvia('task-vero');
+  await finta.run(0).input.onDelega('controlla il contratto', '/tmp/figlio-a');
+  await finta.run(0).input.onDelega('controlla il test', '/tmp/figlio-b');
+  const prima = finta.run(1).input.askParentFn('Quale versione devo usare?');
+  const seconda = finta.run(2).input.askParentFn('Quale cartella devo usare?');
+  await unGiro();
+  finta.concludi(0, { type: 'RunFinished', runId: 'r1' }, { ok: true, esito: { comeFinita: 'concluso', messaggiFinali: storiaDelGiro(1) } });
+  const esiti = await Promise.all([prima, seconda].map((p) => Promise.race([p, new Promise((r) => setTimeout(() => r('appesa'), 1000))])));
+  assert.deepEqual(esiti.map((e) => e?.status ?? e), ['cancelled', 'cancelled']);
+  await registro.attendiAssestamento(parentId);
+  finta.concludi(1, { type: 'RunFinished', runId: 'r2' });
+  finta.concludi(2, { type: 'RunFinished', runId: 'r3' });
+  await unGiro();
+});
+
+/* ─── REV-SESSION-READY v7 (27/09/2026 notte, sesta revisione di Codex; owner: «v7 su tutti e 7 i punti») ─── */
+const aspettaOAppesa = (promessa, ms = 300) => Promise.race([promessa, new Promise((r) => setTimeout(() => r('appesa'), ms))]);
+
+test('REV-SESSION-READY-36 — se la cancellazione dal disco FALLISCE, la sessione resta viva e continua a salvarsi', async () => {
+  /* Codex v6, punto 1: il segno «eliminata» restava, e da lì ogni scrittura fingeva di riuscire senza scrivere. */
+  const cartellaStore = mkdtempSync(join(tmpdir(), 'talos-rev-ready-v7-elimina-fallita-'));
+  const finta = sessioniControllabili();
+  const { conta, registraRigaFn, registraRigaSyncFn } = contaScritture();
+  try {
+    const registro = createSessionRegistry({
+      cartellaStore, registraRigaFn, registraRigaSyncFn,
+      eliminaSessionePersistitaFn: async () => { throw Object.assign(new Error('permesso negato'), { code: 'EPERM' }); },
+      avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: MODELLO_REV, chiave: 'k', cartellaEsisteFn: () => true,
+    });
+    const { sessionId } = registro.avvia('task-vero');
+    conta.id = sessionId;
+    finta.concludi(0, { type: 'RunFinished', runId: 'r1' }, { ok: true, esito: { comeFinita: 'concluso', messaggiFinali: storiaDelGiro(1) } });
+    await registro.attendiAssestamento(sessionId);
+    await assert.rejects(() => registro.elimina(sessionId), /permesso negato/u);
+    conta.dopo = true;
+    assert.equal(registro.resume(sessionId, 'domanda 2').sessionId, sessionId, 'la sessione è ancora nel registro');
+    finta.concludi(1, { type: 'RunFinished', runId: 'r2' }, { ok: true, esito: { comeFinita: 'concluso', messaggiFinali: storiaDelGiro(2) } });
+    await registro.attendiAssestamento(sessionId);
+    await attendiScritture({ cartellaStore });
+    assert.ok(conta.righe.some((riga) => /domanda 2/u.test(riga)), `il giro dopo il fallimento si salva: ${conta.righe.length} righe`);
+  } finally {
+    await attendiScritture({ cartellaStore });
+    rimuoviCartellaDiProva(cartellaStore);
+  }
+});
+
+test('REV-SESSION-READY-37 — dopo `elimina` una correzione in sospeso non fa ricomparire la sessione, e durante l’eliminazione non parte niente', async () => {
+  /* Codex v6, punto 2: il blocco della correzione richiamava `avviaESegui` con la voce eliminata e la rimetteva nel
+     registro, con lo stesso id e zero scritture; e una ripresa durante l'attesa dell'eliminazione veniva accettata. */
+  let sciogliEliminazione;
+  const cartellaStore = mkdtempSync(join(tmpdir(), 'talos-rev-ready-v7-redirect-'));
+  const finta = sessioniControllabili();
+  try {
+    const registro = createSessionRegistry({
+      cartellaStore,
+      eliminaSessionePersistitaFn: () => new Promise((r) => { sciogliEliminazione = r; }),
+      avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: MODELLO_REV, chiave: 'k', cartellaEsisteFn: () => true,
+    });
+    const { sessionId } = registro.avvia('task-vero');
+    assert.equal(registro.reindirizza(sessionId, 'anzi, fai così').ok, true);
+    finta.emetti(0, { type: 'RunError', message: 'fermato per la correzione', code: 'fermato', runId: 'r1' });
+    const eliminazione = registro.elimina(sessionId);
+    const durante = registro.resume(sessionId, 'riprendi');
+    assert.equal(durante.code, 'NOT_FOUND', `durante l'eliminazione non riparte niente: ${JSON.stringify(durante)}`);
+    sciogliEliminazione();
+    assert.deepEqual(await eliminazione, { ok: true });
+    finta.run(0).risolvi({ ok: false, esito: { comeFinita: 'fermato', detto: 'fermato', messaggiFinali: storiaDelGiro(1) } });
+    for (let i = 0; i < 6; i += 1) await unGiro();
+    assert.equal(finta.chiamate, 1, 'la correzione non è ripartita su una sessione eliminata');
+    assert.equal(registro.resume(sessionId, 'ancora').code, 'NOT_FOUND', 'la sessione non è ricomparsa');
+  } finally {
+    await attendiScritture({ cartellaStore });
+    rimuoviCartellaDiProva(cartellaStore);
+  }
+});
+
+test('REV-SESSION-READY-38 — una risposta il cui salvataggio fallisce IN RITARDO non si dichiara data', async () => {
+  /* Codex v6, punto 3: con lo store occupato la scrittura restava in coda, e il suo fallimento arrivava dopo «ok». */
+  const cartellaStore = mkdtempSync(join(tmpdir(), 'talos-rev-ready-v7-risposta-'));
+  const finta = sessioniControllabili();
+  let guasto = true;
+  const risposta = (record) => record?.name === 'talos.agent-dialogue' && record.value?.status === 'answered';
+  try {
+    const registro = createSessionRegistry({
+      cartellaStore,
+      registraRigaSyncFn: (a) => { if (guasto && risposta(a.record)) throw Object.assign(new Error('occupato'), { code: 'SESSION_STORE_BUSY' }); return registraRigaSync(a); },
+      registraRigaFn: (a) => (guasto && risposta(a.record) ? Promise.reject(Object.assign(new Error('disco pieno'), { code: 'ENOSPC' })) : registraRiga(a)),
+      avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: MODELLO_REV, chiave: 'k', cartellaEsisteFn: () => true,
+    });
+    const { sessionId: parentId } = registro.avvia('task-vero');
+    const eventi = [];
+    registro.iscriviti(parentId, (e) => eventi.push(e));
+    await finta.run(0).input.onDelega('controlla il contratto', '/tmp/figlio');
+    const domanda = finta.run(1).input.askParentFn('Quale versione devo usare?');
+    await unGiro();
+    const requestId = JSON.stringify(eventi).match(/"requestId":"([0-9a-f-]{36})"/u)?.[1];
+    const childId = JSON.stringify(eventi).match(/"childId":"([^"]+)"/u)?.[1];
+    const primo = await finta.run(0).input.answerChildQuestionFn({ requestId, childId, answer: 'la 2' });
+    assert.equal(primo?.code, 'AGENT_DIALOGUE_STORE_FAILED', JSON.stringify(primo));
+    assert.equal(await aspettaOAppesa(domanda), 'appesa', 'la figlia non riceve una risposta che non è stata salvata');
+    guasto = false;
+    assert.deepEqual(await finta.run(0).input.answerChildQuestionFn({ requestId, childId, answer: 'la 2' }), { ok: true }, 'riprovare è possibile');
+    assert.equal((await domanda).status, 'answered');
+    finta.concludi(1, { type: 'RunFinished', runId: 'r2' });
+    finta.concludi(0, { type: 'RunFinished', runId: 'r1' });
+    await registro.attendiAssestamento(parentId);
+  } finally {
+    await attendiScritture({ cartellaStore });
+    rimuoviCartellaDiProva(cartellaStore);
+  }
+});
+
+test('REV-SESSION-READY-39 — un evento emesso DENTRO un ascoltatore del terminale arriva dopo il terminale, con sequenze in ordine', async () => {
+  /* Codex v6, punto 4: con un ascoltatore che fa chiedere una figlia, `requested:3 → cancelled:4 → RunFinished:2`. */
+  const finta = sessioniControllabili();
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: MODELLO_REV, chiave: 'k', cartellaEsisteFn: () => true });
+  const { sessionId: parentId } = registro.avvia('task-vero');
+  await finta.run(0).input.onDelega('controlla il contratto', '/tmp/figlio');
+  let domanda = null;
+  registro.iscriviti(parentId, (e) => { if (e.type === 'RunFinished' && !domanda) domanda = finta.run(1).input.askParentFn('Quale versione?'); });
+  const arrivati = [];
+  registro.iscriviti(parentId, (e) => arrivati.push(e));
+  finta.concludi(0, { type: 'RunFinished', runId: 'r1' }, { ok: true, esito: { comeFinita: 'concluso', messaggiFinali: storiaDelGiro(1) } });
+  assert.ok(domanda, 'la figlia ha chiesto dentro l’ascoltatore');
+  assert.equal((await domanda).status, 'cancelled');
+  const terminale = arrivati.findIndex((e) => e.type === 'RunFinished');
+  const dialogo = arrivati.findIndex((e) => e?.name === 'talos.agent-dialogue');
+  assert.ok(terminale >= 0 && dialogo > terminale, `il terminale arriva prima del dialogo: ${arrivati.map((e) => e.type === 'CUSTOM' ? e.name : e.type).join(', ')}`);
+  const sequenze = arrivati.map((e) => e._sequenza).filter((n) => typeof n === 'number');
+  assert.deepEqual(sequenze, [...sequenze].sort((a, b) => a - b), `sequenze in ordine: ${sequenze.join(',')}`);
+  await registro.attendiAssestamento(parentId);
+  finta.concludi(1, { type: 'RunFinished', runId: 'r2' });
+  await unGiro();
+});
+
+test('REV-SESSION-READY-40 — un giro che RIPARTE dentro l’ascoltatore del terminale resta «in corso»: nessuna ripresa parallela', async () => {
+  /* Codex v6, punto 5: tornando al broadcast esterno il terminale rimetteva `conclusa=true` sopra il giro ripartito. */
+  const finta = sessioniControllabili();
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: MODELLO_REV, chiave: 'k', cartellaEsisteFn: () => true });
+  const { sessionId } = registro.avvia('task-vero');
+  await finta.run(0).input.onDelega('controlla il contratto', '/tmp/figlio');
+  /* Una domanda della figlia fatta PRIMA dell'errore: il giro riparte, quindi resta viva per il giro che riparte. */
+  const domanda = finta.run(1).input.askParentFn('Quale versione devo usare?');
+  await unGiro();
+  let ripartito = false;
+  registro.iscriviti(sessionId, (e) => { if (e.type === 'RunError' && !ripartito) { ripartito = true; finta.emetti(0, { type: 'RunStarted', threadId: 't1', runId: 'r1-cloud' }); } });
+  finta.emetti(0, { type: 'RunError', message: 'locale caduto', code: 'errore', runId: 'r1' });
+  assert.ok(ripartito);
+  const ripresa = registro.resume(sessionId, 'in parallelo?');
+  assert.equal(ripresa.code, 'SESSION_NOT_READY', JSON.stringify(ripresa));
+  assert.match(ripresa.erroreAvvio, /in corso/u);
+  assert.equal(await aspettaOAppesa(domanda, 100), 'appesa', 'la domanda non si annulla: il giro è ripartito e può ancora rispondere');
+  finta.concludi(0, { type: 'RunFinished', runId: 'r1-cloud' }, { ok: true, esito: { comeFinita: 'concluso', messaggiFinali: storiaDelGiro(1) } });
+  assert.equal((await aspettaOAppesa(domanda))?.status, 'cancelled', 'e si annulla quando il giro ripartito chiude senza rispondere');
+  await registro.attendiAssestamento(sessionId);
+  finta.concludi(1, { type: 'RunFinished', runId: 'r2' });
+  await unGiro();
+});
+
+test('REV-SESSION-READY-41 — uno Stop arrivato mentre la risposta si salva, se il salvataggio fallisce, chiude la domanda annullata', async () => {
+  /* Codex v6, punto 6: lo Stop non trovava la domanda (fuori dai pendenti) e il ripristino la rimetteva pendente. */
+  const cartellaStore = mkdtempSync(join(tmpdir(), 'talos-rev-ready-v7-stop-'));
+  const finta = sessioniControllabili();
+  let childId = null;
+  const rispostaDellaFiglia = (a) => a?.sessionId === childId && a.record?.name === 'talos.agent-dialogue' && a.record.value?.status === 'answered';
+  try {
+    const registro = createSessionRegistry({
+      cartellaStore,
+      registraRigaSyncFn: (a) => { if (rispostaDellaFiglia(a)) throw Object.assign(new Error('occupato'), { code: 'SESSION_STORE_BUSY' }); return registraRigaSync(a); },
+      registraRigaFn: (a) => (rispostaDellaFiglia(a) ? Promise.reject(Object.assign(new Error('disco pieno'), { code: 'ENOSPC' })) : registraRiga(a)),
+      avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: MODELLO_REV, chiave: 'k', cartellaEsisteFn: () => true,
+    });
+    const { sessionId: parentId } = registro.avvia('task-vero');
+    const eventi = [];
+    registro.iscriviti(parentId, (e) => eventi.push(e));
+    await finta.run(0).input.onDelega('controlla il contratto', '/tmp/figlio');
+    childId = JSON.stringify(eventi).match(/"childId":"([^"]+)"/u)?.[1];
+    const domanda = finta.run(1).input.askParentFn('Quale versione devo usare?');
+    await unGiro();
+    const requestId = JSON.stringify(eventi).match(/"requestId":"([0-9a-f-]{36})"/u)?.[1];
+    let fermato = false;
+    registro.iscriviti(parentId, (e) => { if (!fermato && e?.name === 'talos.agent-dialogue' && e.value?.status === 'answered') { fermato = true; registro.ferma(parentId); } });
+    const esito = await finta.run(0).input.answerChildQuestionFn({ requestId, childId, answer: 'la 2' });
+    assert.ok(fermato, 'lo Stop è arrivato durante il salvataggio');
+    assert.equal(esito?.code, 'AGENT_DIALOGUE_STORE_FAILED', JSON.stringify(esito));
+    const perLaFiglia = await aspettaOAppesa(domanda);
+    assert.equal(perLaFiglia?.status, 'cancelled', `la figlia non resta appesa: ${JSON.stringify(perLaFiglia)}`);
+    finta.concludi(0, { type: 'RunError', message: 'fermato', code: 'fermato', runId: 'r1' }, { ok: false, esito: { comeFinita: 'fermato', messaggiFinali: storiaDelGiro(1) } });
+    finta.concludi(1, { type: 'RunFinished', runId: 'r2' });
+    await registro.attendiAssestamento(parentId);
+  } finally {
+    await attendiScritture({ cartellaStore });
+    rimuoviCartellaDiProva(cartellaStore);
+  }
+});
+
+test('REV-SESSION-READY-42 — dopo `chiudi` la storia del GIRO si salva ancora: si ferma solo il risultato della figlia', async () => {
+  /* Codex v6, punto 7: bloccare OGNI scrittura dopo `chiudi()` lasciava verdi tutte le prove, e la storia del giro — che
+     deve continuare a salvarsi — si perdeva. */
+  const cartellaStore = mkdtempSync(join(tmpdir(), 'talos-rev-ready-v7-chiudi-storia-'));
+  const finta = sessioniControllabili();
+  const { conta, registraRigaFn, registraRigaSyncFn } = contaScritture();
+  try {
+    const registro = createSessionRegistry({ cartellaStore, registraRigaFn, registraRigaSyncFn, avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: MODELLO_REV, chiave: 'k', cartellaEsisteFn: () => true });
+    const { sessionId } = registro.avvia('task-vero');
+    conta.id = sessionId;
+    finta.emetti(0, { type: 'RunFinished', runId: 'r1' });
+    await registro.chiudi({ attesaMassimaMs: 2000 });
+    conta.dopo = true;
+    finta.run(0).risolvi({ ok: true, esito: { comeFinita: 'concluso', messaggiFinali: storiaDelGiro(1) } });
+    for (let i = 0; i < 6; i += 1) await unGiro();
+    await attendiScritture({ cartellaStore });
+    assert.ok(conta.righe.some((riga) => /risposta 1/u.test(riga)), `la storia del giro si salva: ${conta.righe.length} righe`);
+  } finally {
+    await attendiScritture({ cartellaStore });
+    rimuoviCartellaDiProva(cartellaStore);
+  }
+});
+
+test('REV-SESSION-READY-43 — giro riuscito con la scrittura della storia RIUSCITA in ritardo: l’assestamento non consegna il risultato della figlia', async () => {
+  /* Codex v6, punto 7: reintegrare all'assestamento solo quando la storia si salva lasciava verde la 35, che la fa fallire. */
+  const STORIA = new Set(['messaggi-delta', 'checkpoint', 'messaggi-finali']);
+  const cartellaStore = mkdtempSync(join(tmpdir(), 'talos-rev-ready-v7-riuscita-'));
+  const sospese = [];
+  let occupato = false;
+  const finta = sessioniControllabili();
+  try {
+    const registro = createSessionRegistry({
+      cartellaStore,
+      registraRigaSyncFn: (a) => { if (occupato && STORIA.has(a.record?.tipo)) throw Object.assign(new Error('occupato'), { code: 'SESSION_STORE_BUSY' }); return registraRigaSync(a); },
+      registraRigaFn: (a) => (occupato && STORIA.has(a.record?.tipo) ? new Promise((ok, ko) => { sospese.push(() => registraRiga(a).then(ok, ko)); }) : registraRiga(a)),
+      avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: MODELLO_REV, chiave: 'k', cartellaEsisteFn: () => true,
+    });
+    const { sessionId: parentId } = registro.avvia('task-vero');
+    const consegne = [];
+    registro.iscriviti(parentId, (e) => { if (e.type === 'QueuedMessageDelivered') consegne.push(e); });
+    await finta.run(0).input.onDelega('scrivi il modulo', '/tmp/figlio');
+    occupato = true;
+    finta.concludi(0, { type: 'RunFinished', runId: 'r1' }, { ok: true, esito: { comeFinita: 'concluso', messaggiFinali: storiaDelGiro(1) } });
+    for (let i = 0; i < 3; i += 1) await unGiro();
+    assert.ok(sospese.length > 0, 'la storia del giro è in scrittura');
+    finta.concludi(1, { type: 'RunFinished', runId: 'r2' }, { ok: true, esito: { detto: 'Modulo scritto.', comeFinita: 'concluso', messaggiFinali: [] } });
+    for (let i = 0; i < 3; i += 1) await unGiro();
+    occupato = false;
+    for (const scrivi of sospese) scrivi();
+    await registro.attendiAssestamento(parentId);
+    for (let i = 0; i < 3; i += 1) await unGiro();
+    assert.deepEqual(consegne, [], 'l’assestamento non consegna niente, anche con la storia salvata');
+    assert.equal(registro.resume(parentId, 'domanda 2').sessionId, parentId);
+    assert.match(JSON.stringify(finta.run(2).input.codaMessaggiFn?.() ?? null), /Modulo scritto\./u);
+    finta.concludi(2, { type: 'RunFinished', runId: 'r3' });
+    await registro.attendiAssestamento(parentId);
+  } finally {
+    await attendiScritture({ cartellaStore });
+    rimuoviCartellaDiProva(cartellaStore);
+  }
+});
+
+/* ─── REV-SESSION-READY v8 (27/09/2026 notte, settima revisione di Codex; owner: «v8 su 1,2,3,5,7 + limiti») ─── */
+const occupato = () => Object.assign(new Error('occupato'), { code: 'SESSION_STORE_BUSY' });
+const discoPieno = () => Object.assign(new Error('disco pieno'), { code: 'ENOSPC' });
+const statoDialogo = (record, stato) => record?.name === 'talos.agent-dialogue' && record.value?.status === stato;
+
+test('REV-SESSION-READY-44 — ciò che la sessione scrive DURANTE un’eliminazione poi fallita si scrive davvero', async () => {
+  /* Codex v7, punto 1: nell'attesa gli scrittori scartavano; con l'eliminazione fallita la risposta del giro era persa. */
+  const cartellaStore = mkdtempSync(join(tmpdir(), 'talos-rev-ready-v8-attesa-'));
+  const finta = sessioniControllabili();
+  const { conta, registraRigaFn, registraRigaSyncFn } = contaScritture();
+  let fallisci;
+  try {
+    const registro = createSessionRegistry({
+      cartellaStore, registraRigaFn, registraRigaSyncFn,
+      eliminaSessionePersistitaFn: () => new Promise((_, ko) => { fallisci = ko; }),
+      avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: MODELLO_REV, chiave: 'k', cartellaEsisteFn: () => true,
+    });
+    const { sessionId } = registro.avvia('task-vero');
+    conta.id = sessionId;
+    finta.emetti(0, { type: 'RunFinished', runId: 'r1' });
+    const eliminazione = registro.elimina(sessionId);
+    conta.dopo = true;
+    finta.run(0).risolvi({ ok: true, esito: { comeFinita: 'concluso', messaggiFinali: storiaDelGiro(1) } });
+    for (let i = 0; i < 6; i += 1) await unGiro();
+    assert.equal(conta.righe.some((riga) => /risposta 1/u.test(riga)), false, 'durante l’attesa niente arriva al disco');
+    fallisci(Object.assign(new Error('permesso negato'), { code: 'EPERM' }));
+    await assert.rejects(eliminazione, /permesso negato/u);
+    for (let i = 0; i < 3; i += 1) await unGiro();
+    await attendiScritture({ cartellaStore });
+    assert.ok(conta.righe.some((riga) => /risposta 1/u.test(riga)), `la storia del giro si scrive dopo il fallimento: ${conta.righe.length} righe`);
+  } finally {
+    await attendiScritture({ cartellaStore });
+    rimuoviCartellaDiProva(cartellaStore);
+  }
+});
+
+/** Un registro dove le scritture di uno stato del dialogo prima sono «occupate», poi falliscono; `salvate` conta quelle riuscite. */
+function registroColDialogoGuasto(finta, cartellaStore, { stato, guasto, soloSessione = () => true }) {
+  const salvate = [];
+  const colpita = (a) => guasto.attivo && statoDialogo(a.record, stato) && soloSessione(a.sessionId);
+  const registro = createSessionRegistry({
+    cartellaStore,
+    registraRigaSyncFn: (a) => { if (colpita(a)) throw occupato(); const r = registraRigaSync(a); if (statoDialogo(a.record, stato)) salvate.push(a.sessionId); return r; },
+    registraRigaFn: (a) => (colpita(a) ? Promise.reject(discoPieno()) : registraRiga(a).then((v) => { if (statoDialogo(a.record, stato)) salvate.push(a.sessionId); return v; })),
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: MODELLO_REV, chiave: 'k', cartellaEsisteFn: () => true,
+  });
+  return { registro, salvate };
+}
+
+test('REV-SESSION-READY-45 — il secondo tentativo di una risposta fallita la SALVA davvero, non si fida della memoria', async () => {
+  /* Codex v7, punto 2: l'evento non salvato restava in `voice.eventi` e valeva come «già salvato». */
+  const cartellaStore = mkdtempSync(join(tmpdir(), 'talos-rev-ready-v8-riprova-'));
+  const finta = sessioniControllabili();
+  const guasto = { attivo: true };
+  try {
+    const { registro, salvate } = registroColDialogoGuasto(finta, cartellaStore, { stato: 'answered', guasto });
+    const { sessionId: parentId } = registro.avvia('task-vero');
+    const eventi = [];
+    registro.iscriviti(parentId, (e) => eventi.push(e));
+    await finta.run(0).input.onDelega('controlla il contratto', '/tmp/figlio');
+    const domanda = finta.run(1).input.askParentFn('Quale versione devo usare?');
+    await unGiro();
+    const requestId = JSON.stringify(eventi).match(/"requestId":"([0-9a-f-]{36})"/u)?.[1];
+    const childId = JSON.stringify(eventi).match(/"childId":"([^"]+)"/u)?.[1];
+    assert.equal((await finta.run(0).input.answerChildQuestionFn({ requestId, childId, answer: 'la 2' }))?.code, 'AGENT_DIALOGUE_STORE_FAILED');
+    guasto.attivo = false;
+    assert.deepEqual(await finta.run(0).input.answerChildQuestionFn({ requestId, childId, answer: 'la 2' }), { ok: true });
+    await attendiScritture({ cartellaStore });
+    assert.deepEqual([...new Set(salvate)].sort(), [childId, parentId].sort(), 'la risposta è sul disco del padre e della figlia');
+    assert.equal((await domanda).status, 'answered');
+    finta.concludi(1, { type: 'RunFinished', runId: 'r2' });
+    finta.concludi(0, { type: 'RunFinished', runId: 'r1' });
+    await registro.attendiAssestamento(parentId);
+  } finally {
+    await attendiScritture({ cartellaStore });
+    rimuoviCartellaDiProva(cartellaStore);
+  }
+});
+
+test('REV-SESSION-READY-46 — una domanda il cui salvataggio fallisce SUBITO non parte, in tutti e due i versi', async () => {
+  /* v9 (owner 27/09 notte, «v9: tolgo l'attesa delle domande»): la domanda non aspetta più un journal in coda (l'attesa
+     della v8 ha aperto i punti 1, 3, 5 della revisione Codex v8). Un fallimento SINCRONO la ferma ancora; quello in
+     ritardo è il limite dichiarato. */
+  const cartellaStore = mkdtempSync(join(tmpdir(), 'talos-rev-ready-v9-domanda-'));
+  const finta = sessioniControllabili();
+  const guasto = { attivo: false };
+  try {
+    const registro = createSessionRegistry({
+      cartellaStore,
+      registraRigaSyncFn: (a) => { if (guasto.attivo && statoDialogo(a.record, 'requested')) throw Object.assign(new Error('guasto'), { code: 'EIO' }); return registraRigaSync(a); },
+      registraRigaFn: (a) => registraRiga(a),
+      avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: MODELLO_REV, chiave: 'k', cartellaEsisteFn: () => true,
+    });
+    const { sessionId: parentId } = registro.avvia('task-vero');
+    const eventi = [];
+    registro.iscriviti(parentId, (e) => eventi.push(e));
+    await finta.run(0).input.onDelega('controlla il contratto', '/tmp/figlio');
+    const childId = JSON.stringify(eventi).match(/"childId":"([^"]+)"/u)?.[1];
+    guasto.attivo = true;
+    const esito = await finta.run(0).input.askChildFn({ childId, question: 'Quale file hai letto?' });
+    assert.equal(esito?.code, 'AGENT_DIALOGUE_STORE_FAILED', JSON.stringify(esito));
+    assert.equal(finta.run(1).input.codaMessaggiFn(), null, 'la figlia non riceve una domanda mai salvata');
+    await assert.rejects(finta.run(1).input.askParentFn('E io?'), /journal/u, 'e vale anche nel verso figlia → padre');
+    guasto.attivo = false;
+    finta.concludi(1, { type: 'RunFinished', runId: 'r2' });
+    finta.concludi(0, { type: 'RunFinished', runId: 'r1' });
+    await registro.attendiAssestamento(parentId);
+  } finally {
+    await attendiScritture({ cartellaStore });
+    rimuoviCartellaDiProva(cartellaStore);
+  }
+});
+
+test('REV-SESSION-READY-47 — un salvataggio del padre fallito in ritardo, rimasto senza chi lo aspetta, non abbatte il processo', async () => {
+  /* Codex v7, punto 5: `childSaved === false` usciva prima di gestire `parentSaved`, e il suo rifiuto era «unhandled». */
+  const cartellaStore = mkdtempSync(join(tmpdir(), 'talos-rev-ready-v8-rifiuto-'));
+  const finta = sessioniControllabili();
+  const rifiuti = [];
+  const suRifiuto = (motivo) => rifiuti.push(motivo);
+  process.on('unhandledRejection', suRifiuto);
+  let parentId = null;
+  let childId = null;
+  try {
+    const registro = createSessionRegistry({
+      cartellaStore,
+      registraRigaSyncFn: (a) => {
+        if (statoDialogo(a.record, 'requested') && a.sessionId === childId) throw Object.assign(new Error('guasto'), { code: 'EIO' });
+        if (statoDialogo(a.record, 'requested') && a.sessionId === parentId) throw occupato();
+        return registraRigaSync(a);
+      },
+      registraRigaFn: (a) => (statoDialogo(a.record, 'requested') && a.sessionId === parentId ? Promise.reject(discoPieno()) : registraRiga(a)),
+      avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: MODELLO_REV, chiave: 'k', cartellaEsisteFn: () => true,
+    });
+    ({ sessionId: parentId } = registro.avvia('task-vero'));
+    const eventi = [];
+    registro.iscriviti(parentId, (e) => eventi.push(e));
+    await finta.run(0).input.onDelega('controlla il contratto', '/tmp/figlio');
+    childId = JSON.stringify(eventi).match(/"childId":"([^"]+)"/u)?.[1];
+    let esito = null;
+    registro.iscriviti(parentId, (e) => { if (e.type === 'RunFinished' && esito === null) esito = finta.run(0).input.askChildFn({ childId, question: 'Quale file?' }); });
+    finta.concludi(0, { type: 'RunFinished', runId: 'r1' }, { ok: true, esito: { comeFinita: 'concluso', messaggiFinali: storiaDelGiro(1) } });
+    assert.equal((await esito)?.code, 'AGENT_DIALOGUE_STORE_FAILED');
+    for (let i = 0; i < 6; i += 1) await unGiro();
+    await new Promise((r) => setTimeout(r, 20));
+    assert.deepEqual(rifiuti.map(String), [], 'nessun rifiuto senza gestore');
+    await registro.attendiAssestamento(parentId);
+    finta.concludi(1, { type: 'RunFinished', runId: 'r2' });
+    await unGiro();
+  } finally {
+    process.off('unhandledRejection', suRifiuto);
+    await attendiScritture({ cartellaStore });
+    rimuoviCartellaDiProva(cartellaStore);
+  }
+});
+
+test('REV-SESSION-READY-48 — se fallisce solo il salvataggio del PADRE, la risposta non si dichiara data', async () => {
+  /* Codex v7, punto 7: aspettare solo il salvataggio della figlia lasciava verdi tutte le prove. */
+  const cartellaStore = mkdtempSync(join(tmpdir(), 'talos-rev-ready-v8-solo-padre-'));
+  const finta = sessioniControllabili();
+  const guasto = { attivo: true };
+  const soloPadre = { id: null };
+  try {
+    const { registro } = registroColDialogoGuasto(finta, cartellaStore, { stato: 'answered', guasto, soloSessione: (id) => id === soloPadre.id });
+    const { sessionId: parentId } = registro.avvia('task-vero');
+    soloPadre.id = parentId;
+    const eventi = [];
+    registro.iscriviti(parentId, (e) => eventi.push(e));
+    await finta.run(0).input.onDelega('controlla il contratto', '/tmp/figlio');
+    const domanda = finta.run(1).input.askParentFn('Quale versione devo usare?');
+    await unGiro();
+    const requestId = JSON.stringify(eventi).match(/"requestId":"([0-9a-f-]{36})"/u)?.[1];
+    const childId = JSON.stringify(eventi).match(/"childId":"([^"]+)"/u)?.[1];
+    assert.equal((await finta.run(0).input.answerChildQuestionFn({ requestId, childId, answer: 'la 2' }))?.code, 'AGENT_DIALOGUE_STORE_FAILED');
+    assert.equal(await aspettaOAppesa(domanda), 'appesa');
+    guasto.attivo = false;
+    finta.concludi(1, { type: 'RunFinished', runId: 'r2' });
+    finta.concludi(0, { type: 'RunFinished', runId: 'r1' });
+    await registro.attendiAssestamento(parentId);
+  } finally {
+    await attendiScritture({ cartellaStore });
+    rimuoviCartellaDiProva(cartellaStore);
+  }
+});
+
+test('REV-SESSION-READY-49 — uno Stop della FIGLIA mentre la risposta si salva, se il salvataggio fallisce, chiude la domanda annullata', async () => {
+  /* Codex v7, punto 7: segnare `annullataDurante` solo per lo Stop del padre lasciava verdi tutte le prove. */
+  const cartellaStore = mkdtempSync(join(tmpdir(), 'talos-rev-ready-v8-stop-figlia-'));
+  const finta = sessioniControllabili();
+  const guasto = { attivo: true };
+  const soloFiglia = { id: null };
+  try {
+    const { registro } = registroColDialogoGuasto(finta, cartellaStore, { stato: 'answered', guasto, soloSessione: (id) => id === soloFiglia.id });
+    const { sessionId: parentId } = registro.avvia('task-vero');
+    const eventi = [];
+    registro.iscriviti(parentId, (e) => eventi.push(e));
+    await finta.run(0).input.onDelega('controlla il contratto', '/tmp/figlio');
+    const childId = JSON.stringify(eventi).match(/"childId":"([^"]+)"/u)?.[1];
+    soloFiglia.id = childId;
+    const domanda = finta.run(1).input.askParentFn('Quale versione devo usare?');
+    await unGiro();
+    const requestId = JSON.stringify(eventi).match(/"requestId":"([0-9a-f-]{36})"/u)?.[1];
+    let fermata = false;
+    registro.iscriviti(parentId, (e) => { if (!fermata && statoDialogo(e, 'answered')) { fermata = true; registro.ferma(childId); } });
+    assert.equal((await finta.run(0).input.answerChildQuestionFn({ requestId, childId, answer: 'la 2' }))?.code, 'AGENT_DIALOGUE_STORE_FAILED');
+    assert.ok(fermata, 'lo Stop della figlia è arrivato durante il salvataggio');
+    assert.equal((await aspettaOAppesa(domanda))?.status, 'cancelled');
+    guasto.attivo = false;
+    finta.concludi(1, { type: 'RunError', message: 'fermato', code: 'fermato', runId: 'r2' });
+    finta.concludi(0, { type: 'RunFinished', runId: 'r1' });
+    await registro.attendiAssestamento(parentId);
+  } finally {
+    await attendiScritture({ cartellaStore });
+    rimuoviCartellaDiProva(cartellaStore);
+  }
+});
+
+/* ─── REV-SESSION-READY v9 (27/09/2026 notte, ottava revisione di Codex; owner: «v9: tolgo l'attesa delle domande + curo») ─── */
+
+/** Store «occupato» come quello del server: una scrittura sincrona trova BUSY finché una asincrona della stessa sessione vola. */
+function scrittoriConOccupato() {
+  const inVolo = new Map();
+  const righe = [];
+  return {
+    righe,
+    registraRigaSyncFn: (a) => {
+      if ((inVolo.get(a.sessionId) ?? 0) > 0) throw occupato();
+      righe.push([a.sessionId, JSON.stringify(a.record)]);
+      return registraRigaSync(a);
+    },
+    registraRigaFn: (a) => {
+      inVolo.set(a.sessionId, (inVolo.get(a.sessionId) ?? 0) + 1);
+      return registraRiga(a).then((v) => { righe.push([a.sessionId, JSON.stringify(a.record)]); return v; })
+        .finally(() => inVolo.set(a.sessionId, inVolo.get(a.sessionId) - 1));
+    },
+  };
+}
+
+test('REV-SESSION-READY-50 — il ripristino dopo un’eliminazione fallita riscrive nell’ORDINE in cui si era scritto', async () => {
+  /* Codex v8, punto 6: ripristinare in ordine inverso lasciava verdi tutte le prove. */
+  const cartellaStore = mkdtempSync(join(tmpdir(), 'talos-rev-ready-v9-ordine-'));
+  const finta = sessioniControllabili();
+  const { conta, registraRigaFn, registraRigaSyncFn } = contaScritture();
+  let fallisci;
+  try {
+    const registro = createSessionRegistry({
+      cartellaStore, registraRigaFn, registraRigaSyncFn,
+      eliminaSessionePersistitaFn: () => new Promise((_, ko) => { fallisci = ko; }),
+      avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: MODELLO_REV, chiave: 'k', cartellaEsisteFn: () => true,
+    });
+    const { sessionId } = registro.avvia('task-vero');
+    conta.id = sessionId;
+    finta.emetti(0, { type: 'RunFinished', runId: 'r1' });
+    const eliminazione = registro.elimina(sessionId);
+    conta.dopo = true;
+    finta.emetti(0, { type: 'CUSTOM', name: 'talos.prova-ordine', value: { passo: 'A' } });
+    finta.emetti(0, { type: 'CUSTOM', name: 'talos.prova-ordine', value: { passo: 'B' } });
+    fallisci(Object.assign(new Error('permesso negato'), { code: 'EPERM' }));
+    await assert.rejects(eliminazione, /permesso negato/u);
+    await attendiScritture({ cartellaStore });
+    const passi = conta.righe.map((riga) => JSON.parse(riga)).filter((r) => r?.name === 'talos.prova-ordine').map((r) => r.value.passo);
+    assert.deepEqual(passi, ['A', 'B']);
+    finta.run(0).risolvi({ ok: true, esito: { comeFinita: 'concluso', messaggiFinali: storiaDelGiro(1) } });
+    await registro.attendiAssestamento(sessionId);
+  } finally {
+    await attendiScritture({ cartellaStore });
+    rimuoviCartellaDiProva(cartellaStore);
+  }
+});
+
+test('REV-SESSION-READY-51 — ripristino misto (asincrona poi sincrona) con lo store occupato: la storia del giro non si perde', async () => {
+  /* Codex v8, punto 2: le scritture ripartivano tutte insieme e la sincrona trovava lo store occupato. */
+  const cartellaStore = mkdtempSync(join(tmpdir(), 'talos-rev-ready-v9-misto-'));
+  const finta = sessioniControllabili();
+  const scrittori = scrittoriConOccupato();
+  let fallisci;
+  try {
+    const registro = createSessionRegistry({
+      cartellaStore, registraRigaFn: scrittori.registraRigaFn, registraRigaSyncFn: scrittori.registraRigaSyncFn,
+      eliminaSessionePersistitaFn: () => new Promise((_, ko) => { fallisci = ko; }),
+      avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: MODELLO_REV, chiave: 'k', cartellaEsisteFn: () => true,
+    });
+    const { sessionId } = registro.avvia('task-vero');
+    finta.emetti(0, { type: 'RunFinished', runId: 'r1' });
+    await attendiScritture({ cartellaStore });
+    const eliminazione = registro.elimina(sessionId);
+    finta.emetti(0, { type: 'CUSTOM', name: 'talos.prova-ordine', value: { passo: 'prima' } });
+    finta.run(0).risolvi({ ok: true, esito: { comeFinita: 'concluso', messaggiFinali: storiaDelGiro(1) } });
+    for (let i = 0; i < 6; i += 1) await unGiro();
+    fallisci(Object.assign(new Error('permesso negato'), { code: 'EPERM' }));
+    await assert.rejects(eliminazione, /permesso negato/u);
+    await attendiScritture({ cartellaStore });
+    for (let i = 0; i < 3; i += 1) await unGiro();
+    await attendiScritture({ cartellaStore });
+    assert.ok(scrittori.righe.some(([id, riga]) => id === sessionId && /risposta 1/u.test(riga)), 'la storia del giro è sul disco');
+  } finally {
+    await attendiScritture({ cartellaStore });
+    rimuoviCartellaDiProva(cartellaStore);
+  }
+});
+
+test('REV-SESSION-READY-52 — il secondo tentativo di una risposta non scrive un secondo «answered» dove il primo era riuscito', async () => {
+  /* Codex v8, punto 6: togliere del tutto la deduplicazione lasciava verdi tutte le prove. */
+  const cartellaStore = mkdtempSync(join(tmpdir(), 'talos-rev-ready-v9-doppio-'));
+  const finta = sessioniControllabili();
+  const guastoFiglia = { attivo: true, id: null };
+  const answeredPerSessione = new Map();
+  try {
+    const registro = createSessionRegistry({
+      cartellaStore,
+      registraRigaSyncFn: (a) => {
+        if (statoDialogo(a.record, 'answered')) {
+          if (guastoFiglia.attivo && a.sessionId === guastoFiglia.id) throw Object.assign(new Error('guasto'), { code: 'EIO' });
+          answeredPerSessione.set(a.sessionId, (answeredPerSessione.get(a.sessionId) ?? 0) + 1);
+        }
+        return registraRigaSync(a);
+      },
+      registraRigaFn: (a) => registraRiga(a),
+      avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: MODELLO_REV, chiave: 'k', cartellaEsisteFn: () => true,
+    });
+    const { sessionId: parentId } = registro.avvia('task-vero');
+    const eventi = [];
+    registro.iscriviti(parentId, (e) => eventi.push(e));
+    await finta.run(0).input.onDelega('controlla il contratto', '/tmp/figlio');
+    const childId = JSON.stringify(eventi).match(/"childId":"([^"]+)"/u)?.[1];
+    guastoFiglia.id = childId;
+    const domanda = finta.run(1).input.askParentFn('Quale versione devo usare?');
+    await unGiro();
+    const requestId = JSON.stringify(eventi).match(/"requestId":"([0-9a-f-]{36})"/u)?.[1];
+    assert.equal((await finta.run(0).input.answerChildQuestionFn({ requestId, childId, answer: 'la 2' }))?.code, 'AGENT_DIALOGUE_STORE_FAILED');
+    guastoFiglia.attivo = false;
+    assert.deepEqual(await finta.run(0).input.answerChildQuestionFn({ requestId, childId, answer: 'la 2' }), { ok: true });
+    assert.equal(answeredPerSessione.get(parentId), 1, 'nel padre un solo «answered»');
+    assert.equal(answeredPerSessione.get(childId), 1, 'nella figlia uno');
+    assert.equal((await domanda).status, 'answered');
+    finta.concludi(1, { type: 'RunFinished', runId: 'r2' });
+    finta.concludi(0, { type: 'RunFinished', runId: 'r1' });
+    await registro.attendiAssestamento(parentId);
+  } finally {
+    await attendiScritture({ cartellaStore });
+    rimuoviCartellaDiProva(cartellaStore);
+  }
+});
+
+test('REV-SESSION-READY-53 — un secondo tentativo mentre il salvataggio del padre è ancora IN VOLO aspetta il suo esito', async () => {
+  /* Codex v8, punto 4: `nonSalvato` non distingueva «in scrittura» da «salvato», e il secondo tentativo diceva «ok». */
+  const cartellaStore = mkdtempSync(join(tmpdir(), 'talos-rev-ready-v9-in-volo-'));
+  const finta = sessioniControllabili();
+  const ids = { padre: null, figlia: null };
+  let figliaGuasta = true;
+  let fallisciPadre;
+  try {
+    const registro = createSessionRegistry({
+      cartellaStore,
+      registraRigaSyncFn: (a) => {
+        if (statoDialogo(a.record, 'answered') && a.sessionId === ids.padre) throw occupato();
+        if (statoDialogo(a.record, 'answered') && a.sessionId === ids.figlia && figliaGuasta) throw Object.assign(new Error('guasto'), { code: 'EIO' });
+        return registraRigaSync(a);
+      },
+      registraRigaFn: (a) => (statoDialogo(a.record, 'answered') && a.sessionId === ids.padre ? new Promise((_, ko) => { fallisciPadre = ko; }) : registraRiga(a)),
+      avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: MODELLO_REV, chiave: 'k', cartellaEsisteFn: () => true,
+    });
+    ({ sessionId: ids.padre } = registro.avvia('task-vero'));
+    const eventi = [];
+    registro.iscriviti(ids.padre, (e) => eventi.push(e));
+    await finta.run(0).input.onDelega('controlla il contratto', '/tmp/figlio');
+    ids.figlia = JSON.stringify(eventi).match(/"childId":"([^"]+)"/u)?.[1];
+    const domanda = finta.run(1).input.askParentFn('Quale versione devo usare?');
+    await unGiro();
+    const requestId = JSON.stringify(eventi).match(/"requestId":"([0-9a-f-]{36})"/u)?.[1];
+    assert.equal((await finta.run(0).input.answerChildQuestionFn({ requestId, childId: ids.figlia, answer: 'la 2' }))?.code, 'AGENT_DIALOGUE_STORE_FAILED');
+    figliaGuasta = false;
+    const riprova = Promise.resolve(finta.run(0).input.answerChildQuestionFn({ requestId, childId: ids.figlia, answer: 'la 2' }));
+    assert.equal(await aspettaOAppesa(riprova, 100), 'appesa', 'il secondo tentativo aspetta il salvataggio del padre in volo');
+    fallisciPadre(discoPieno());
+    assert.equal((await riprova)?.code, 'AGENT_DIALOGUE_STORE_FAILED', 'il padre non ha salvato: niente «ok»');
+    assert.equal(await aspettaOAppesa(domanda, 100), 'appesa');
+    finta.concludi(1, { type: 'RunFinished', runId: 'r2' });
+    finta.concludi(0, { type: 'RunFinished', runId: 'r1' });
+    await registro.attendiAssestamento(ids.padre);
+  } finally {
+    await attendiScritture({ cartellaStore });
+    rimuoviCartellaDiProva(cartellaStore);
+  }
+});
+
+test('REV-SESSION-READY-54 — una domanda il cui journal è in coda è già fra le pendenti: lo Stop la annulla e nessun giro riparte', async () => {
+  /* Codex v8, punto 3: con l'attesa della v8 la domanda non era ancora pendente, lo Stop non la vedeva, e al completamento
+     del journal RIAVVIAVA il destinatario (giri da 2 a 3). */
+  const cartellaStore = mkdtempSync(join(tmpdir(), 'talos-rev-ready-v9-stop-domanda-'));
+  const finta = sessioniControllabili();
+  let parentId = null;
+  const sospese = [];
+  try {
+    const registro = createSessionRegistry({
+      cartellaStore,
+      registraRigaSyncFn: (a) => { if (statoDialogo(a.record, 'requested') && a.sessionId === parentId) throw occupato(); return registraRigaSync(a); },
+      registraRigaFn: (a) => (statoDialogo(a.record, 'requested') && a.sessionId === parentId ? new Promise((ok) => { sospese.push(() => registraRiga(a).then(ok)); }) : registraRiga(a)),
+      avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: MODELLO_REV, chiave: 'k', cartellaEsisteFn: () => true,
+    });
+    ({ sessionId: parentId } = registro.avvia('task-vero'));
+    await finta.run(0).input.onDelega('controlla il contratto', '/tmp/figlio');
+    const domanda = finta.run(1).input.askParentFn('Quale versione devo usare?');
+    await unGiro();
+    registro.ferma(parentId);
+    finta.concludi(0, { type: 'RunError', message: 'fermato', code: 'fermato', runId: 'r1' }, { ok: false, esito: { comeFinita: 'fermato', messaggiFinali: storiaDelGiro(1) } });
+    assert.equal((await aspettaOAppesa(domanda))?.status, 'cancelled', 'lo Stop annulla la domanda');
+    await registro.attendiAssestamento(parentId);
+    for (const scrivi of sospese) scrivi();
+    for (let i = 0; i < 6; i += 1) await unGiro();
+    assert.equal(finta.chiamate, 2, 'nessun giro riparte quando il journal finisce');
+    finta.concludi(1, { type: 'RunFinished', runId: 'r2' });
+    await unGiro();
+  } finally {
+    await attendiScritture({ cartellaStore });
+    rimuoviCartellaDiProva(cartellaStore);
+  }
+});
+
+/* ─── REV-SESSION-READY v10 (27/09/2026 notte, nona revisione di Codex; owner: «v10 su tutti e 4») ─── */
+
+/** Scrittori che registrano l'ORDINE in cui le righe `talos.prova-ordine` arrivano al disco, e sospendono il passo «A». */
+function scrittoriConASospeso(ids) {
+  const scritti = [];
+  const a = {};
+  a.arrivata = new Promise((ok) => { a.segnala = ok; });
+  const passoDi = (x) => (x.record?.name === 'talos.prova-ordine' ? x.record.value.passo : null);
+  return {
+    scritti, a,
+    registraRigaSyncFn: (x) => { const r = registraRigaSync(x); if (passoDi(x)) scritti.push(passoDi(x)); return r; },
+    registraRigaFn: (x) => {
+      const passo = passoDi(x);
+      if (passo === 'A' && x.sessionId === ids.sessione) {
+        return new Promise((ok, ko) => { a.rilascia = () => registraRiga(x).then((v) => { scritti.push('A'); ok(v); }, ko); a.segnala(); });
+      }
+      return registraRiga(x).then((v) => { if (passo) scritti.push(passo); return v; });
+    },
+  };
+}
+
+test('REV-SESSION-READY-55 — durante il ripristino le scritture NUOVE aspettano quelle trattenute: il journal resta in ordine', async () => {
+  /* Codex v9, punto 1: la sessione si riapriva PRIMA del ripristino, e un evento nuovo scavalcava quelli trattenuti (A, C, B). */
+  const cartellaStore = mkdtempSync(join(tmpdir(), 'talos-rev-ready-v10-ordine-'));
+  const finta = sessioniControllabili();
+  const ids = { sessione: null };
+  const scrittori = scrittoriConASospeso(ids);
+  let fallisci;
+  try {
+    const registro = createSessionRegistry({
+      cartellaStore, registraRigaFn: scrittori.registraRigaFn, registraRigaSyncFn: scrittori.registraRigaSyncFn,
+      eliminaSessionePersistitaFn: () => new Promise((_, ko) => { fallisci = ko; }),
+      avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: MODELLO_REV, chiave: 'k', cartellaEsisteFn: () => true,
+    });
+    ({ sessionId: ids.sessione } = registro.avvia('task-vero'));
+    finta.emetti(0, { type: 'RunFinished', runId: 'r1' });
+    await attendiScritture({ cartellaStore });
+    const eliminazione = registro.elimina(ids.sessione);
+    finta.emetti(0, { type: 'CUSTOM', name: 'talos.prova-ordine', value: { passo: 'A' } });
+    finta.emetti(0, { type: 'CUSTOM', name: 'talos.prova-ordine', value: { passo: 'B' } });
+    fallisci(Object.assign(new Error('permesso negato'), { code: 'EPERM' }));
+    await scrittori.a.arrivata;
+    finta.emetti(0, { type: 'CUSTOM', name: 'talos.prova-ordine', value: { passo: 'C' } });
+    for (let i = 0; i < 3; i += 1) await unGiro();
+    scrittori.a.rilascia();
+    await assert.rejects(eliminazione, /permesso negato/u);
+    for (let i = 0; i < 3; i += 1) await unGiro();
+    await attendiScritture({ cartellaStore });
+    assert.deepEqual(scrittori.scritti, ['A', 'B', 'C']);
+    finta.run(0).risolvi({ ok: true, esito: { comeFinita: 'concluso', messaggiFinali: storiaDelGiro(1) } });
+    await registro.attendiAssestamento(ids.sessione);
+  } finally {
+    await attendiScritture({ cartellaStore });
+    rimuoviCartellaDiProva(cartellaStore);
+  }
+});
+
+test('REV-SESSION-READY-56 — una seconda eliminazione DURANTE il ripristino non dice «ok» e non lascia un journal senza sessione', async () => {
+  /* Codex v9, punto 1: la seconda eliminazione tornava {ok:true}, poi il primo ripristino riscriveva B: registro vuoto,
+     journal ricreato senza intestazione. */
+  const cartellaStore = mkdtempSync(join(tmpdir(), 'talos-rev-ready-v10-seconda-'));
+  const finta = sessioniControllabili();
+  const ids = { sessione: null };
+  const scrittori = scrittoriConASospeso(ids);
+  let fallisci;
+  let eliminazioniSulDisco = 0;
+  try {
+    const registro = createSessionRegistry({
+      cartellaStore, registraRigaFn: scrittori.registraRigaFn, registraRigaSyncFn: scrittori.registraRigaSyncFn,
+      eliminaSessionePersistitaFn: () => { eliminazioniSulDisco += 1; return eliminazioniSulDisco === 1 ? new Promise((_, ko) => { fallisci = ko; }) : Promise.resolve(); },
+      avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: MODELLO_REV, chiave: 'k', cartellaEsisteFn: () => true,
+    });
+    ({ sessionId: ids.sessione } = registro.avvia('task-vero'));
+    finta.emetti(0, { type: 'RunFinished', runId: 'r1' });
+    finta.run(0).risolvi({ ok: true, esito: { comeFinita: 'concluso', messaggiFinali: storiaDelGiro(1) } });
+    await registro.attendiAssestamento(ids.sessione);
+    await attendiScritture({ cartellaStore });
+    const eliminazione = registro.elimina(ids.sessione);
+    finta.emetti(0, { type: 'CUSTOM', name: 'talos.prova-ordine', value: { passo: 'A' } });
+    finta.emetti(0, { type: 'CUSTOM', name: 'talos.prova-ordine', value: { passo: 'B' } });
+    fallisci(Object.assign(new Error('permesso negato'), { code: 'EPERM' }));
+    await scrittori.a.arrivata;
+    const seconda = await registro.elimina(ids.sessione);
+    assert.equal(seconda.ok, undefined, `la seconda eliminazione non riesce mentre la sessione torna: ${JSON.stringify(seconda)}`);
+    assert.equal(seconda.code, 'SESSION_NOT_READY');
+    assert.equal(eliminazioniSulDisco, 1, 'e non tocca il disco');
+    scrittori.a.rilascia();
+    await assert.rejects(eliminazione, /permesso negato/u);
+    await attendiScritture({ cartellaStore });
+    assert.ok(registro.elenca().some((s) => s.sessionId === ids.sessione), 'la sessione è tornata nel registro');
+    assert.deepEqual(scrittori.scritti, ['A', 'B']);
+  } finally {
+    await attendiScritture({ cartellaStore });
+    rimuoviCartellaDiProva(cartellaStore);
+  }
+});
+
+test('REV-SESSION-READY-57 — una scrittura sincrona trattenuta che fallisce al ripristino lo dice al giro (RunError), non solo al log', async () => {
+  /* Codex v9, punto 3: lo scrittore trattenuto tornava `undefined` (= riuscita); al ripristino l'errore finiva in console. */
+  const cartellaStore = mkdtempSync(join(tmpdir(), 'talos-rev-ready-v10-sync-fallita-'));
+  const finta = sessioniControllabili();
+  const guasto = { attivo: false };
+  const eio = () => Object.assign(new Error('errore di i/o'), { code: 'EIO' });
+  const colpita = (a) => guasto.attivo && /risposta 1/u.test(JSON.stringify(a.record ?? null));
+  let fallisci;
+  try {
+    const registro = createSessionRegistry({
+      cartellaStore,
+      registraRigaSyncFn: (a) => { if (colpita(a)) throw eio(); return registraRigaSync(a); },
+      registraRigaFn: (a) => (colpita(a) ? Promise.reject(eio()) : registraRiga(a)),
+      eliminaSessionePersistitaFn: () => new Promise((_, ko) => { fallisci = ko; }),
+      avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: MODELLO_REV, chiave: 'k', cartellaEsisteFn: () => true,
+    });
+    const { sessionId } = registro.avvia('task-vero');
+    const eventi = [];
+    registro.iscriviti(sessionId, (e) => eventi.push(e));
+    finta.emetti(0, { type: 'RunFinished', runId: 'r1' });
+    await attendiScritture({ cartellaStore });
+    const eliminazione = registro.elimina(sessionId);
+    guasto.attivo = true;
+    finta.run(0).risolvi({ ok: true, esito: { comeFinita: 'concluso', messaggiFinali: storiaDelGiro(1) } });
+    for (let i = 0; i < 6; i += 1) await unGiro();
+    fallisci(Object.assign(new Error('permesso negato'), { code: 'EPERM' }));
+    await assert.rejects(eliminazione, /permesso negato/u);
+    for (let i = 0; i < 3; i += 1) await unGiro();
+    await attendiScritture({ cartellaStore });
+    for (let i = 0; i < 3; i += 1) await unGiro();
+    const errori = eventi.filter((e) => e.type === 'RunError');
+    assert.ok(errori.some((e) => e.code === 'SESSION_STORE_WRITE_FAILED'), `il giro sa che la sua storia non è salvata: ${JSON.stringify(errori)}`);
+    guasto.attivo = false;
+  } finally {
+    await attendiScritture({ cartellaStore });
+    rimuoviCartellaDiProva(cartellaStore);
+  }
+});
+
+test('REV-SESSION-READY-58 — un secondo tentativo con una risposta DIVERSA non si conferma sopra la prima', async () => {
+  /* Codex v9, punto 4: togliere il confronto della risposta nella deduplicazione lasciava verdi tutte le prove; il mutante
+     confermava «la 2» nel padre e «la 3» nella figlia. */
+  const cartellaStore = mkdtempSync(join(tmpdir(), 'talos-rev-ready-v10-risposta-diversa-'));
+  const finta = sessioniControllabili();
+  const guastoFiglia = { attivo: true, id: null };
+  const risposteSalvate = [];
+  try {
+    const registro = createSessionRegistry({
+      cartellaStore,
+      registraRigaSyncFn: (a) => {
+        if (statoDialogo(a.record, 'answered')) {
+          if (guastoFiglia.attivo && a.sessionId === guastoFiglia.id) throw Object.assign(new Error('guasto'), { code: 'EIO' });
+          risposteSalvate.push([a.sessionId, a.record.value.answer]);
+        }
+        return registraRigaSync(a);
+      },
+      registraRigaFn: (a) => registraRiga(a),
+      avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: MODELLO_REV, chiave: 'k', cartellaEsisteFn: () => true,
+    });
+    const { sessionId: parentId } = registro.avvia('task-vero');
+    const eventi = [];
+    registro.iscriviti(parentId, (e) => eventi.push(e));
+    await finta.run(0).input.onDelega('controlla il contratto', '/tmp/figlio');
+    const childId = JSON.stringify(eventi).match(/"childId":"([^"]+)"/u)?.[1];
+    guastoFiglia.id = childId;
+    const domanda = finta.run(1).input.askParentFn('Quale versione devo usare?');
+    await unGiro();
+    const requestId = JSON.stringify(eventi).match(/"requestId":"([0-9a-f-]{36})"/u)?.[1];
+    assert.equal((await finta.run(0).input.answerChildQuestionFn({ requestId, childId, answer: 'la 2' }))?.code, 'AGENT_DIALOGUE_STORE_FAILED');
+    guastoFiglia.attivo = false;
+    const seconda = await finta.run(0).input.answerChildQuestionFn({ requestId, childId, answer: 'la 3' });
+    assert.notDeepEqual(seconda, { ok: true }, 'una risposta diversa da quella già salvata nel padre non si conferma');
+    assert.deepEqual(risposteSalvate.filter(([id]) => id === childId), [], 'nella figlia non finisce una risposta diversa da quella del padre');
+    assert.equal(await aspettaOAppesa(domanda, 100), 'appesa');
+    finta.concludi(1, { type: 'RunFinished', runId: 'r2' });
+    finta.concludi(0, { type: 'RunFinished', runId: 'r1' });
+    await registro.attendiAssestamento(parentId);
+  } finally {
+    await attendiScritture({ cartellaStore });
+    rimuoviCartellaDiProva(cartellaStore);
+  }
+});
+
+test('REV-SESSION-READY-59 — una risposta salvata IN RITARDO dopo lo Stop del padre non lo fa ripartire', async () => {
+  /* Codex v9, punto 2: `annullataDurante` contava solo se il journal falliva; riuscito, la risposta riavviava il padre fermato
+     (giri da 2 a 3). */
+  const cartellaStore = mkdtempSync(join(tmpdir(), 'talos-rev-ready-v10-risposta-tardi-'));
+  const finta = sessioniControllabili();
+  const ids = { figlia: null };
+  const sospese = [];
+  try {
+    const registro = createSessionRegistry({
+      cartellaStore,
+      registraRigaSyncFn: (a) => { if (statoDialogo(a.record, 'answered') && a.sessionId === ids.figlia) throw occupato(); return registraRigaSync(a); },
+      registraRigaFn: (a) => (statoDialogo(a.record, 'answered') && a.sessionId === ids.figlia ? new Promise((ok, ko) => { sospese.push(() => registraRiga(a).then(ok, ko)); }) : registraRiga(a)),
+      avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: MODELLO_REV, chiave: 'k', cartellaEsisteFn: () => true,
+    });
+    const { sessionId: parentId } = registro.avvia('task-vero');
+    ({ childId: ids.figlia } = await finta.run(0).input.onDelega('controlla il contratto', '/tmp/figlio'));
+    const chiesta = finta.run(0).input.askChildFn({ childId: ids.figlia, question: 'Quale file hai letto?' });
+    assert.equal(chiesta.status, 'requested', JSON.stringify(chiesta));
+    const risposta = Promise.resolve(finta.run(1).input.answerParentQuestionFn({ requestId: chiesta.requestId, answer: 'README.md' }));
+    assert.equal(await aspettaOAppesa(risposta, 50), 'appesa', 'il salvataggio della figlia è sospeso');
+    registro.ferma(parentId);
+    finta.concludi(0, { type: 'RunError', message: 'fermato', code: 'fermato', runId: 'r1' }, { ok: false, esito: { comeFinita: 'fermato', messaggiFinali: storiaDelGiro(1) } });
+    await registro.attendiAssestamento(parentId);
+    for (const scrivi of sospese) scrivi();
+    const esito = await risposta;
+    for (let i = 0; i < 6; i += 1) await unGiro();
+    assert.equal(finta.chiamate, 2, 'il padre fermato non riparte');
+    assert.equal(esito?.code, 'AGENT_DIALOGUE_DELIVERY_FAILED', `a chi risponde si dice che non è stata consegnata: ${JSON.stringify(esito)}`);
+    finta.concludi(1, { type: 'RunFinished', runId: 'r2' });
+    await unGiro();
+  } finally {
+    await attendiScritture({ cartellaStore });
+    rimuoviCartellaDiProva(cartellaStore);
+  }
+});
+
+test('REV-SESSION-READY-60 — la FIGLIA fermata mentre si salva la risposta del padre: la sua domanda si chiude annullata', async () => {
+  /* v10, verso opposto del punto 2 di Codex v9: qui chi aspetta la risposta è la figlia. */
+  const cartellaStore = mkdtempSync(join(tmpdir(), 'talos-rev-ready-v10-figlia-fermata-'));
+  const finta = sessioniControllabili();
+  const ids = { figlia: null };
+  const sospese = [];
+  try {
+    const registro = createSessionRegistry({
+      cartellaStore,
+      registraRigaSyncFn: (a) => { if (statoDialogo(a.record, 'answered') && a.sessionId === ids.figlia) throw occupato(); return registraRigaSync(a); },
+      registraRigaFn: (a) => (statoDialogo(a.record, 'answered') && a.sessionId === ids.figlia ? new Promise((ok, ko) => { sospese.push(() => registraRiga(a).then(ok, ko)); }) : registraRiga(a)),
+      avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: MODELLO_REV, chiave: 'k', cartellaEsisteFn: () => true,
+    });
+    const { sessionId: parentId } = registro.avvia('task-vero');
+    const eventi = [];
+    registro.iscriviti(parentId, (e) => eventi.push(e));
+    ({ childId: ids.figlia } = await finta.run(0).input.onDelega('controlla il contratto', '/tmp/figlio'));
+    const domanda = finta.run(1).input.askParentFn('Quale versione devo usare?');
+    await unGiro();
+    const requestId = JSON.stringify(eventi).match(/"requestId":"([0-9a-f-]{36})"/u)?.[1];
+    const risposta = Promise.resolve(finta.run(0).input.answerChildQuestionFn({ requestId, childId: ids.figlia, answer: 'la 2' }));
+    assert.equal(await aspettaOAppesa(risposta, 50), 'appesa');
+    registro.ferma(ids.figlia);
+    for (const scrivi of sospese) scrivi();
+    assert.equal((await aspettaOAppesa(domanda))?.status, 'cancelled', 'la figlia fermata non riceve la risposta');
+    assert.equal((await risposta)?.code, 'AGENT_DIALOGUE_DELIVERY_FAILED');
+    finta.concludi(1, { type: 'RunError', message: 'fermato', code: 'fermato', runId: 'r2' });
+    finta.concludi(0, { type: 'RunFinished', runId: 'r1' });
+    await registro.attendiAssestamento(parentId);
+  } finally {
+    await attendiScritture({ cartellaStore });
+    rimuoviCartellaDiProva(cartellaStore);
+  }
+});
+
+/* ─── REV-SESSION-READY v11 (27/09/2026 notte, decima revisione di Codex; owner: «v11 su tutti e 3, senza Codex») ─── */
+
+/** La figlia chiede al padre, il padre risponde, e il journal «answered» della FIGLIA resta sospeso finché non si rilascia. */
+async function rispostaSospesaAllaFiglia(prefisso) {
+  const cartellaStore = mkdtempSync(join(tmpdir(), prefisso));
+  const finta = sessioniControllabili();
+  const ids = { padre: null, figlia: null };
+  const sospese = [];
+  const registro = createSessionRegistry({
+    cartellaStore,
+    registraRigaSyncFn: (a) => { if (statoDialogo(a.record, 'answered') && a.sessionId === ids.figlia) throw occupato(); return registraRigaSync(a); },
+    registraRigaFn: (a) => (statoDialogo(a.record, 'answered') && a.sessionId === ids.figlia ? new Promise((ok, ko) => { sospese.push(() => registraRiga(a).then(ok, ko)); }) : registraRiga(a)),
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: MODELLO_REV, chiave: 'k', cartellaEsisteFn: () => true,
+  });
+  ({ sessionId: ids.padre } = registro.avvia('task-vero'));
+  const eventi = [];
+  registro.iscriviti(ids.padre, (e) => eventi.push(e));
+  ({ childId: ids.figlia } = await finta.run(0).input.onDelega('controlla il contratto', '/tmp/figlio'));
+  const domanda = finta.run(1).input.askParentFn('Quale versione devo usare?');
+  await unGiro();
+  const requestId = JSON.stringify(eventi).match(/"requestId":"([0-9a-f-]{36})"/u)?.[1];
+  const risposta = Promise.resolve(finta.run(0).input.answerChildQuestionFn({ requestId, childId: ids.figlia, answer: 'la 2' }));
+  assert.equal(await aspettaOAppesa(risposta, 50), 'appesa', 'il salvataggio della figlia è sospeso');
+  return { cartellaStore, finta, ids, registro, domanda, risposta, rilascia: () => { for (const scrivi of sospese) scrivi(); } };
+}
+
+test('REV-SESSION-READY-61 — uno Stop lanciato da chi ascolta l’annuncio della coda, alla chiusura della risposta, vale ancora', async () => {
+  /* Codex v10, punto 1: `concludi` toglieva il dialogo da «in chiusura» PRIMA di annunciare la coda: lo Stop annidato
+     non lo trovava, e la figlia fermata riceveva «answered». */
+  const prova = await rispostaSospesaAllaFiglia('talos-rev-ready-v11-stop-annidato-');
+  try {
+    let rilasciata = false;
+    let fermata = false;
+    prova.registro.iscriviti(prova.ids.padre, (e) => {
+      if (rilasciata && !fermata && e?.type === 'CUSTOM' && e.name === 'talos.coda') { fermata = true; prova.registro.ferma(prova.ids.figlia); }
+    });
+    rilasciata = true;
+    prova.rilascia();
+    const esito = await prova.risposta;
+    assert.ok(fermata, 'lo Stop è partito dall’annuncio della coda');
+    assert.equal((await aspettaOAppesa(prova.domanda))?.status, 'cancelled', 'la figlia fermata non riceve la risposta');
+    assert.equal(esito?.code, 'AGENT_DIALOGUE_DELIVERY_FAILED', JSON.stringify(esito));
+    prova.finta.concludi(1, { type: 'RunError', message: 'fermato', code: 'fermato', runId: 'r2' });
+    prova.finta.concludi(0, { type: 'RunFinished', runId: 'r1' });
+    await prova.registro.attendiAssestamento(prova.ids.padre);
+  } finally {
+    await attendiScritture({ cartellaStore: prova.cartellaStore });
+    rimuoviCartellaDiProva(prova.cartellaStore);
+  }
+});
+
+test('REV-SESSION-READY-62 — una risposta salvata mentre la figlia CHIUDE il giro non le arriva («v4 stretta» anche dopo il journal)', async () => {
+  /* Codex v10, punto 2: la finestra di chiusura si guardava solo PRIMA del journal. */
+  const prova = await rispostaSospesaAllaFiglia('talos-rev-ready-v11-finestra-');
+  try {
+    prova.finta.emetti(1, { type: 'RunFinished', runId: 'r2' });
+    prova.rilascia();
+    const esito = await prova.risposta;
+    assert.equal((await aspettaOAppesa(prova.domanda))?.status, 'cancelled', 'la figlia che chiude il giro non riceve la risposta');
+    assert.equal(esito?.code, 'AGENT_DIALOGUE_DELIVERY_FAILED', JSON.stringify(esito));
+    prova.finta.run(1).risolvi({ ok: true, esito: { comeFinita: 'concluso', messaggiFinali: storiaDelGiro(1) } });
+    prova.finta.concludi(0, { type: 'RunFinished', runId: 'r1' });
+    await prova.registro.attendiAssestamento(prova.ids.padre);
+  } finally {
+    await attendiScritture({ cartellaStore: prova.cartellaStore });
+    rimuoviCartellaDiProva(prova.cartellaStore);
+  }
+});
+
+test('REV-SESSION-READY-63 — fermato CHI RISPONDE mentre la risposta si salva: la risposta salvata arriva lo stesso', async () => {
+  /* Codex v10, punto 3: `fermateDurante?.size` al posto del destinatario lasciava verdi tutte le prove. */
+  const prova = await rispostaSospesaAllaFiglia('talos-rev-ready-v11-risponde-fermato-');
+  try {
+    prova.registro.ferma(prova.ids.padre);
+    prova.rilascia();
+    const esito = await prova.risposta;
+    assert.deepEqual(esito, { ok: true });
+    const arrivata = await aspettaOAppesa(prova.domanda);
+    assert.equal(arrivata?.status, 'answered', JSON.stringify(arrivata));
+    assert.equal(arrivata?.answer, 'la 2');
+    prova.finta.concludi(1, { type: 'RunFinished', runId: 'r2' });
+    prova.finta.concludi(0, { type: 'RunError', message: 'fermato', code: 'fermato', runId: 'r1' }, { ok: false, esito: { comeFinita: 'fermato', messaggiFinali: storiaDelGiro(1) } });
+    await prova.registro.attendiAssestamento(prova.ids.padre);
+  } finally {
+    await attendiScritture({ cartellaStore: prova.cartellaStore });
+    rimuoviCartellaDiProva(prova.cartellaStore);
+  }
 });

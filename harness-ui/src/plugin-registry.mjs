@@ -36,6 +36,7 @@ import { createHash } from 'node:crypto';
 import { createReadStream, promises as fsp } from 'node:fs';
 import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 
+import { POSIZIONI_CONFIGURAZIONE } from './configurazione-progetto.mjs';
 import { EVENTI_VALIDI } from './hook-registry.mjs';
 import { parseProcessCommand } from './process-policy.mjs';
 
@@ -278,7 +279,7 @@ function ripiegaImpronte(voci, impronte) {
 export async function improntaPacchettoPlugin({ cartella, pluginId }, deps = {}) {
   const readdirFn = deps.readdirFn ?? fsp.readdir;
   const maxFile = deps.maxFilePacchetto ?? MAX_FILE_PACCHETTO_PLUGIN;
-  const radice = join(cartella, NOME_CARTELLA_PLUGIN, pluginId);
+  const radice = await radiceDelPacchetto({ cartella, pluginId }, deps);
   return improntaDelleVoci(await elencaFileDelPacchetto(radice, { readdirFn, maxFile }), deps);
 }
 
@@ -566,20 +567,57 @@ export function frasePerGuastoPlugin(codice) {
  *   pacchetto non è un motivo per disarmare gli altri, e soprattutto non è un motivo per non
  *   dirlo: chi ha approvato un plugin e non lo vede più deve poter sapere perché.
  */
+/**
+ * ⭐ PO-26, parte 2 — la cartella di UN pacchetto: la prima che esiste fra `.talos/plugins/<id>` e
+ * `.harness-ui-plugins/<id>`, la stessa precedenza di `caricaPlugin`. Nessuna delle due ⇒ quella di sempre, e la
+ * lettura fallisce come prima (un pacchetto sparito non autorizza).
+ */
+async function radiceDelPacchetto({ cartella, pluginId }, deps = {}) {
+  const statFn = deps.statFn ?? fsp.stat;
+  for (const nomeCartella of POSIZIONI_CONFIGURAZIONE.plugin) {
+    const radice = join(cartella, nomeCartella, pluginId);
+    try {
+      if ((await statFn(radice)).isDirectory()) return radice;
+    } catch { /* non c'è in questa posizione */ }
+  }
+  return join(cartella, NOME_CARTELLA_PLUGIN, pluginId);
+}
+
+/*
+ * ⭐ PO-26, parte 2 (owner 24/09/2026) — I plugin si leggono da DUE posizioni, in ordine di precedenza:
+ *   `.talos/plugins/` e il nome di sempre nella radice del progetto. Il nome vecchio non si sposta e non smette di
+ *   valere (`src/configurazione-progetto.mjs`); una voce con lo stesso id in `.talos/` lo sostituisce.
+ */
 export async function caricaPlugin({ cartella }, deps = {}) {
+  const plugin = [];
+  const falliti = [];
+  const visti = new Set();
+  for (const nomeCartella of POSIZIONI_CONFIGURAZIONE.plugin) {
+    const qui = await caricaPluginDaCartella({ cartella, nomeCartella }, deps);
+    const nuovi = new Set();
+    for (const p of qui.plugin) if (!visti.has(p.id)) { plugin.push(p); nuovi.add(p.id); }
+    for (const f of qui.falliti) if (!visti.has(f.pluginId)) { falliti.push(f); nuovi.add(f.pluginId); }
+    for (const id of nuovi) visti.add(id);
+  }
+  plugin.sort((a, b) => a.id.localeCompare(b.id));
+  falliti.sort((a, b) => a.pluginId.localeCompare(b.pluginId));
+  return { plugin, falliti };
+}
+
+async function caricaPluginDaCartella({ cartella, nomeCartella = NOME_CARTELLA_PLUGIN }, deps = {}) {
   const readdirFn = deps.readdirFn ?? fsp.readdir;
   const readFileFn = deps.readFileFn ?? fsp.readFile;
   const maxFile = deps.maxFilePacchetto ?? MAX_FILE_PACCHETTO_PLUGIN;
   const maxBytePerFile = deps.maxBytePerFile ?? MAX_BYTE_FILE_PLUGIN;
   const maxBytePacchetto = deps.maxBytePacchetto ?? MAX_BYTE_PACCHETTO_PLUGIN;
   const flussoFn = deps.flussoFn ?? ((percorso) => createReadStream(percorso));
-  const cartellaPlugin = join(cartella, NOME_CARTELLA_PLUGIN);
+  const cartellaPlugin = join(cartella, nomeCartella);
   let voci;
   try {
     voci = await readdirFn(cartellaPlugin, { withFileTypes: true });
   } catch (errore) {
     if (errore?.code === 'ENOENT') return { plugin: [], falliti: [] };
-    throw new PluginRegistryError(`Impossibile leggere ${NOME_CARTELLA_PLUGIN}: ${errore.message}`, 'PLUGIN_READ_FAILED');
+    throw new PluginRegistryError(`Impossibile leggere ${nomeCartella}: ${errore.message}`, 'PLUGIN_READ_FAILED');
   }
   const plugin = [];
   const falliti = [];

@@ -63,7 +63,7 @@
  *   `@keyframes talos-orb-spin`) e `mobile/src/style.css` (`.talos-short-logo`, `.talos-short-logo-mark`),
  *   lette il 12/09 (commit 4ccbed1f, ramo `lane/voce-personale`). Il marchio corto è lo stesso file
  *   (`/talos/brand/logo-short.svg`, già servito da `static-files.mjs`). 1,5 s è il numero del mobile
- *   (`TALOS_CALM_SPECS.orb`); con «riduci le animazioni» l'anello sta fermo, come là.
+ *   (`TALOS_CALM_SPECS.orb`); con «riduci le animazioni» l'anello gira a metà velocità (24/09, vedi sotto).
  */
 .talos-orb{ position: relative; width: 2.25rem; height: 2.25rem; flex: none; border: 1px solid var(--talos-accent-soft, color-mix(in srgb, var(--talos-accent) 35%, transparent)); border-radius: 50%; display: grid; place-items: center; color: var(--talos-accent); }
 .talos-orb .talos-short-logo{ width: 1.2rem; height: 1.2rem; }
@@ -71,5 +71,12 @@
 .talos-short-logo{ display: inline-flex; width: 3rem; height: 3rem; flex: 0 0 auto; align-items: center; justify-content: center; color: var(--talos-accent); overflow: hidden; }
 .talos-short-logo-mark{ display: block; width: 92%; height: 92%; background: currentColor; mask: url('/talos/brand/logo-short.svg') center / contain no-repeat; -webkit-mask: url('/talos/brand/logo-short.svg') center / contain no-repeat; }
 @keyframes talos-orb-spin{ to { transform: rotate(360deg); } }
-body.reduce-motion .talos-orb.working::after{ animation: none; }
-@media (prefers-reduced-motion: reduce){ .talos-orb.working::after{ animation: none; } }
+/*
+ * ⛔ 24/09/2026 — COL MOVIMENTO RIDOTTO L'ANELLO SI CALMA, NON SI FERMA. Qui c'era `animation: none` (12/09, «come là», sul
+ *   mobile), ma l'owner l'aveva già deciso per l'indicatore d'attesa: 02/09 «un indicatore di stato essenziale si CALMA, non si
+ *   congela», 10/09 gli spegnimenti dell'attesa «NON LI VOGLIO» (`attesa-shimmer.css`). Sulla sua macchina il movimento ridotto è
+ *   acceso a livello di sistema: con `none` l'orb chiesto il 24/09 («la linea che gira») sarebbe rimasto fermo sul suo schermo.
+ *   Metà velocità: 3 s a giro invece di 1,5. Prova: REDUCED-MOTION-02 in `baseline-shell.spec.mjs`.
+ */
+body.reduce-motion .talos-orb.working::after{ animation-duration: 3000ms; }
+@media (prefers-reduced-motion: reduce){ .talos-orb.working::after{ animation-duration: 3000ms; } }

@@ -221,3 +221,153 @@ test('PH-FALLBACK-21 chiave mancante: errore PROVIDER_KEY_MISSING col nome umano
   assert.deepEqual(b.consumi,[],'nessuna ricevuta per una chiamata mai partita');
   assert.equal(b.richieste.length,0,'e nessuna chiamata di rete, davvero');
 });
+
+/*
+ * ⛔⛔ 24/09/2026 sera (bug dell'owner, decisione «continuare, come Hermes») — il flusso che si rompe a metà sulla strada
+ *   VERA del runtime (`eseguiConFallback`, nessuna riserva): l'errore pubblico in italiano deve portare con sé il testo già
+ *   arrivato, perché è il kernel a decidere di continuare da lì. Prima della cura arrivava la frase, e il testo no.
+ */
+test('PH-FALLBACK-STREAM-BREAK: senza riserva, l\'errore pubblico porta il testo già arrivato e resta transitorio', async t => {
+  const b = await banco(t, (_req, res) => {
+    res.writeHead(200, { 'Content-Type': 'text/event-stream' });
+    res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: 'Ecco il riepilogo' } }] })}\n\n`);
+    setTimeout(() => res.socket.destroy(), 30);
+  });
+  const f = creaFetchMultiProvider(fetch, { ...b.opzioni, fallbackProviders: [] });
+  await assert.rejects(() => esegui(f, { onDelta: () => {} }), (errore) => {
+    assert.equal(errore.code, 'PROVIDER_REQUEST_ERROR');
+    assert.equal(errore.transitorio, true, 'una connessione caduta è transitoria');
+    assert.equal(errore.parziale?.content, 'Ecco il riepilogo', 'il testo arrivato viaggia con l\'errore');
+    return true;
+  });
+});
+
+/*
+ * ⛔⛔⛔ 25/09/2026 sera — sessione VERA dell'owner (65d5683b, MiniCPM5-2B F16, «ciao» sul 4174): due volte
+ *   «Il fornitore non ha accettato la richiesta.» (`PROVIDER_REQUEST_ERROR`, classe `ignoto`). Nessun fornitore era
+ *   stato chiamato: il 4174 serviva una cartella senza il motore llama.cpp (`/api/v1/setup/stato` →
+ *   `localeConfigurato: false`), l'avvio automatico lanciava `LOCAL_RUNTIME_NOT_CONFIGURED`, e il catch del ripiego
+ *   lo classificava come un rifiuto del fornitore. È la STESSA forma della chiave mancante (PH-FALLBACK-21), su
+ *   un'altra condizione nata prima della rete; Hermes ha avuto lo stesso difetto (NousResearch/hermes-agent #7512:
+ *   il ripiego copre l'errore originale del modello locale) e il suo classificatore tiene sempre il messaggio
+ *   originale (`agent/error_classifier.py:1442-1445`, `_extract_message`, clone 65ad529 del 23/09).
+ * Misurato prima della cura, con una riproduzione che rifà il 4174 (archivio con tre chiavi, nessuna rete):
+ *   `PROVIDER_REQUEST_ERROR` «Il fornitore non ha accettato la richiesta.»; senza l'archivio, la stessa sessione
+ *   diceva già il vero (`LOCAL_RUNTIME_NOT_CONFIGURED`) — il difetto sta SOLO nel catch del ripiego.
+ * ⛔ Anche qui i due numeri contano: nessuna ricevuta, nessuna chiamata — e nessun cambio di fornitore, perché un
+ *   GGUF che sta in casa non si «ripiega» su un cloud (è già la regola di BC-79.2).
+ */
+const localeCon = (b, dipendenzeLocali) => ({ ...b.opzioni, dipendenze: { ...b.opzioni.dipendenze, ...dipendenzeLocali } });
+const erroreCon = (messaggio, code) => Object.assign(new Error(messaggio), { code });
+test('PH-FALLBACK-22 motore locale non configurato: il suo errore, nessun consumo, nessuna chiamata, nessun ripiego', async t => {
+  const b = await banco(t, (_req, res) => rispondiBene(res));
+  const f = creaFetchMultiProvider(fetch, localeCon(b, {
+    localePronto: () => false,
+    avviaLocale: () => { throw erroreCon('Il motore locale non è configurato su questo server.', 'LOCAL_RUNTIME_NOT_CONFIGURED'); },
+  }));
+  await assert.rejects(() => esegui(f, { modello: 'local:un-gguf' }), (errore) => {
+    assert.equal(errore.code, 'LOCAL_RUNTIME_NOT_CONFIGURED', 'un motore che manca non è un fornitore che rifiuta');
+    assert.match(errore.message, /motore locale non è configurato/u);
+    return true;
+  });
+  assert.deepEqual(b.consumi, [], 'nessuna ricevuta per una chiamata mai partita');
+  assert.equal(b.richieste.length, 0, 'nessuna chiamata di rete, nemmeno verso il fornitore di riserva');
+  assert.equal(b.eventi.filter((e) => e.tipo === 'cambio-fornitore').length, 0, 'e nessun cambio di fornitore');
+});
+test('PH-FALLBACK-23 motore locale morto all\'avvio: arriva la sua frase con le righe del motore', async t => {
+  const b = await banco(t, (_req, res) => rispondiBene(res));
+  const f = creaFetchMultiProvider(fetch, localeCon(b, {
+    localePronto: () => false,
+    avviaLocale: () => { throw erroreCon('llama-server si è chiuso dopo 3 s senza mai diventare pronto: unknown model architecture', 'RUNTIME_PROCESS_FAILED'); },
+  }));
+  await assert.rejects(() => esegui(f, { modello: 'local:un-gguf' }), (errore) => {
+    assert.equal(errore.code, 'RUNTIME_PROCESS_FAILED');
+    assert.match(errore.message, /unknown model architecture/u, 'la causa vera resta leggibile');
+    return true;
+  });
+  assert.deepEqual(b.consumi, []);
+  assert.equal(b.richieste.length, 0);
+  // 25/09 sera, Qwen3.8-27B dell'owner: un modello che non entra nella scheda ha il suo codice, e passa com'è anche lui
+  const g = creaFetchMultiProvider(fetch, localeCon(b, {
+    localePronto: () => false,
+    avviaLocale: () => { throw erroreCon('Il modello (16,7 GB) non entra nella memoria della scheda grafica (AMD Radeon RX 9070 XT: 15,9 GB, liberi 15,1 GB).', 'RUNTIME_OUT_OF_MEMORY'); },
+  }));
+  await assert.rejects(() => esegui(g, { modello: 'local:un-gguf' }), (errore) => {
+    assert.equal(errore.code, 'RUNTIME_OUT_OF_MEMORY');
+    assert.match(errore.message, /non entra nella memoria della scheda grafica/u);
+    return true;
+  });
+  // 27/09, Spark-X2.5-4B dell'owner (sessione ec3bc6c0): un'architettura che il motore non sa leggere passa com'è, con la sua frase
+  const h = creaFetchMultiProvider(fetch, localeCon(b, {
+    localePronto: () => false,
+    avviaLocale: () => { throw erroreCon('Il modello usa l’architettura «spark2_5», che il motore installato (llama.cpp b10517) non sa leggere: serve una versione più recente del motore, e riprovare non cambia niente.', 'RUNTIME_ARCH_UNSUPPORTED'); },
+  }));
+  await assert.rejects(() => esegui(h, { modello: 'local:un-gguf' }), (errore) => {
+    assert.equal(errore.code, 'RUNTIME_ARCH_UNSUPPORTED');
+    assert.match(errore.message, /«spark2_5».*llama\.cpp b10517/u);
+    return true;
+  });
+  assert.deepEqual(b.consumi, [], 'nessuna ricevuta per un motore che non è partito');
+  assert.equal(b.richieste.length, 0, 'e nessuna chiamata di rete');
+});
+test('PH-FALLBACK-24 indirizzo del motore mancante: errore di configurazione, non un rifiuto', async t => {
+  const b = await banco(t, (_req, res) => rispondiBene(res));
+  const f = creaFetchMultiProvider(fetch, localeCon(b, { leggiRuntime: () => ({}) }));
+  await assert.rejects(() => esegui(f, { modello: 'ollama:qwen3' }), (errore) => {
+    assert.equal(errore.code, 'PROVIDER_RUNTIME_INVALID');
+    assert.match(errore.message, /Manca l'indirizzo di/u);
+    return true;
+  });
+  assert.deepEqual(b.consumi, []);
+  assert.equal(b.richieste.length, 0);
+});
+/*
+ * ⛔⛔ 25/09/2026 sera, MiniCPM5 (sessione 5233facd): il 400 `exceed_context_size_error` di llama-server, sulla strada VERA del
+ *   4174 (archivio con chiavi, `eseguiConFallback`), deve arrivare al kernel col suo codice e i suoi numeri — mascherato da
+ *   «richiesta non valida» il kernel non potrebbe comprimere. Con e senza attrezzi nel corpo, e mai una riprova senza.
+ */
+test('PH-FALLBACK-25 contesto pieno del motore locale: il suo codice e i suoi numeri, con e senza attrezzi, nessuna riprova', async t => {
+  const pieno = JSON.stringify({ error: { code: 400, message: 'request (17230 tokens) exceeds the available context size (16384 tokens), try increasing it', type: 'exceed_context_size_error', n_prompt_tokens: 17230, n_ctx: 16384 } });
+  for (const attrezzi of [[], [{ type: 'function', function: { name: 'leggi', description: 'legge', parameters: { type: 'object', properties: {} } } }]]) {
+    const b = await banco(t, (_req, res) => rispondiBene(res));
+    const locali = [];
+    const f = creaFetchMultiProvider(fetch, localeCon(b, {
+      localePronto: () => true,
+      chiamaLocale: async (_percorso, opzioni) => { locali.push(JSON.parse(opzioni.body)); return new Response(pieno, { status: 400, headers: { 'Content-Type': 'application/json' } }); },
+    }));
+    await assert.rejects(() => esegui(f, { modello: 'local:un-gguf', attrezzi }), (errore) => {
+      assert.equal(errore.code, 'LOCAL_CONTEXT_EXCEEDED', `con ${attrezzi.length} attrezzi: il suo codice, non un guasto del fornitore`);
+      assert.match(errore.message, /\(17230 token\).*\(16384 token\)/u);
+      return true;
+    });
+    assert.equal(locali.length, 1, `con ${attrezzi.length} attrezzi: nessuna riprova senza attrezzi`);
+    assert.deepEqual(b.consumi, []);
+    assert.equal(b.richieste.length, 0, 'e nessun fornitore di riserva');
+  }
+});
+
+/*
+ * ⛔⛔ 25/09/2026 notte (sessione vera `c15ba17c…`, Gemini 3.8, decisione owner «come Hermes, in piccolo») — la risposta VUOTA
+ *   sulla strada vera del runtime. Prima: il kernel lanciava «flusso SSE senza contenuto», questo catch la chiamava
+ *   `flusso-interrotto`, metteva IN PANCHINA il fornitore, scriveva una ricevuta senza token e cercava una riserva.
+ *   Ora torna come risposta marcata `vuota` (decide il ciclo di `talosLavora`): ricevuta «completato» coi token veri,
+ *   nessun cambio di fornitore, nessuna panchina (la chiamata dopo va di nuovo allo stesso fornitore).
+ */
+test('PH-FALLBACK-EMPTY: una risposta vuota non è un guasto del fornitore, e la ricevuta conta i suoi token', async t => {
+  const b = await banco(t, (_req, res) => {
+    res.writeHead(200, { 'Content-Type': 'text/event-stream' });
+    res.write(`data: ${JSON.stringify({ choices: [{ delta: { reasoning: 'penso al file intero' } }] })}\n\n`);
+    res.write(`data: ${JSON.stringify({ error: { code: 502, message: 'Provider returned error' }, choices: [{ delta: { content: '' }, finish_reason: 'error', native_finish_reason: 'MALFORMED_FUNCTION_CALL' }] })}\n\n`);
+    res.write(`data: ${JSON.stringify({ choices: [], usage: { prompt_tokens: 50, completion_tokens: 6, cost: 0.001 } })}\n\n`);
+    res.end('data: [DONE]\n\n');
+  });
+  const f = creaFetchMultiProvider(fetch, b.opzioni);
+  const risultato = await esegui(f, { onDelta: () => {}, accettaVuota: true });
+  assert.equal(risultato.vuota?.nativeFinishReason, 'MALFORMED_FUNCTION_CALL');
+  assert.equal(b.consumi.length, 1);
+  assert.equal(b.consumi[0].esito, 'completato');
+  assert.equal(b.consumi[0].costoDichiarato, 0.001, 'il costo della chiamata vuota è nella ricevuta');
+  assert.equal(b.eventi.filter((e) => e.tipo === 'cambio-fornitore').length, 0, 'nessuna riserva');
+  await esegui(f, { onDelta: () => {}, accettaVuota: true });
+  assert.deepEqual(b.richieste.map((r) => r.url.split('/')[1]), ['deepseek', 'deepseek'], 'il fornitore non è finito in panchina');
+});

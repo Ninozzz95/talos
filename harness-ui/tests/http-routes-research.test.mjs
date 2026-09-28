@@ -11,6 +11,7 @@ import {
   cartellaDellaRicerca, creaRicerca, elencaRicerche, leggiRicerca, percorsoVoceLegacy, scriviRapporto,
 } from '../src/research-store.mjs';
 import { talosResearchReportDocument } from '../src/research/report.mjs';
+import { cartellaDiProva, cartellaDiProvaAttesa } from './aiuto/cartelle-di-prova.mjs'; // DESK-TEMP-1, 23/09: la cartella nasce con la sua rimozione
 
 /*
  * ═══════════════════════════════════════════════════════════════════════════════════════════
@@ -53,8 +54,8 @@ function rapportoRecintato({ passaggio = 'gli harness convergono sul controllo d
  * dall'esterno se una sessione è davvero ripartita.
  */
 async function banco(t, { leggiPaginaFn = async () => ({ url: '', stato: 200, corpo: '' }) } = {}) {
-  const radice = mkdtempSync(join(tmpdir(), 'talos-l5-'));
-  const cartellaStore = mkdtempSync(join(tmpdir(), 'talos-l5-store-'));
+  const radice = cartellaDiProva('talos-l5-');
+  const cartellaStore = cartellaDiProva('talos-l5-store-');
   t.after(() => {
     rmSync(radice, { recursive: true, force: true });
     rmSync(cartellaStore, { recursive: true, force: true });
@@ -267,7 +268,7 @@ test('⛔⛔ L5 — corpo con una chiave non ammessa: 400, e la chiave viene NOM
 
 /* ─────────────────────── 3. ELENCO E DETTAGLIO — IL CONTRATTO ─────────────────────── */
 
-test('⭐⭐⭐⭐ L5 — ELENCO: totale e diciannove campi del contratto, incluso il giudice effettivo BC-51', async (t) => {
+test('⭐⭐⭐⭐ L5 — ELENCO: totale e venti campi del contratto (per una ricerca in corso), incluso il giudice effettivo BC-51', async (t) => {
   const b = await banco(t);
   const { sessionId, ricercaId } = await conRicercaViva(b);
 
@@ -279,8 +280,11 @@ test('⭐⭐⭐⭐ L5 — ELENCO: totale e diciannove campi del contratto, inclu
   assert.equal(dati.ricerche.length, 1);
   assert.deepEqual(
     Object.keys(dati.ricerche[0]).sort(),
-    ['avviataAlle', 'bilancio', 'conclusaAlle', 'domanda', 'giudice', 'id', 'modello', 'modelloGiudice', 'motivo', 'motivoErrore', 'nome', 'padreId', 'proveDistinte', 'question', 'reportLibraryId', 'riprendibile', 'stato', 'titolo', 'ultimoMessaggio'],
+    ['avanzamento', 'avviataAlle', 'bilancio', 'conclusaAlle', 'domanda', 'giudice', 'id', 'modello', 'modelloGiudice', 'motivo', 'motivoErrore', 'nome', 'padreId', 'proveDistinte', 'question', 'reportLibraryId', 'riprendibile', 'stato', 'titolo', 'ultimoMessaggio'],
     /*
+     * 24/09/2026 sera: VENTI per una ricerca IN CORSO — `avanzamento` (decisione owner «Barra + fase e conteggi», commit
+     *   `1b8bc191b`, `src/research/avanzamento.mjs`). Questa prova è diventata rossa alla suite intera, come deve: il
+     *   campo esce solo per `stato: 'running'`, e qui la ricerca è viva.
      * BC-51 (12/09/2026): DICIANNOVE — aggiunto `giudice` ai diciotto di BC-44.
      * BC-44: `riprendibile` («il server accetterebbe Riprendi adesso?»)
      *   e `motivoErrore` (`{classe, transitorio}`, o `null`). ⛔ Il messaggio grezzo del fornitore

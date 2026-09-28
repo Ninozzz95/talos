@@ -7,10 +7,11 @@ import {
 } from 'node:fs';
 import { createPrivateKey } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
-import { isAbsolute, resolve } from 'node:path';
+import { isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { ID_DESTINAZIONE_CHAT } from './provider-registry.mjs';
+import { ID_DESTINAZIONE_CHAT, idPerWire } from './provider-registry.mjs';
+import { FORMA_ID_MODELLO_LOCALE } from './local-model-store.mjs';
 
 // P-L · JSON del runtime non segreto dell'agente esterno, letto solo alla richiesta.
 export const ENV_AGENTE_ESTERNO = 'TALOS_AGENTE_ESTERNO';
@@ -212,7 +213,15 @@ const FORMA_OPENROUTER = '~?[a-z0-9](?:[a-z0-9._-]{0,63}[a-z0-9])?\/[a-z0-9](?:[
  * qualcosa che nessuno voleva.
  */
 const FORMA_CON_FONTE = `(?:${FONTI_AMMESSE_MODELLO}):[a-z0-9](?:[a-z0-9._:/-]{0,127}[a-z0-9])?`;
-const FORMATO_MODELLO_RICHIESTA = new RegExp(`^(?:${FORMA_OPENROUTER}|${FORMA_CON_FONTE})$`, 'i');
+/*
+ * ⛔⛔ 25/09/2026 sera, decisione owner «Regola unica» — un modello del motore locale è un id dell'ARCHIVIO dei modelli, e
+ *   si valida con la sua grammatica (`FORMA_ID_MODELLO_LOCALE`, `local-model-store.mjs`), non con quella sopra: il
+ *   Qwen3.8-27B dell'owner aveva un id tagliato a 120 caratteri con un trattino in coda, l'archivio l'aveva accettato e la
+ *   chat rispondeva «Query non valida» a ogni messaggio. È anche la regola di Ollama (`types/model/name.go`,
+ *   `isValidPart`: `_ - .` in qualunque posizione dopo la prima). Solo per la fonte locale: le altre restano come sopra.
+ */
+const FORMA_LOCALE = `(?:${idPerWire('locale').join('|')}):${FORMA_ID_MODELLO_LOCALE}`;
+const FORMATO_MODELLO_RICHIESTA = new RegExp(`^(?:${FORMA_OPENROUTER}|${FORMA_CON_FONTE}|${FORMA_LOCALE})$`, 'i');
 
 /**
  * Pura — nessun throw, chi chiama decide il `code`/status HTTP giusto per
@@ -514,6 +523,25 @@ function parseContextTrial(env) {
   return Object.freeze(trial);
 }
 
+function parseWorkflowDataRoot(env) {
+  const explicit = env.TALOS_HARNESS_UI_WORKFLOW_DIR;
+  if (explicit !== undefined && explicit !== null && explicit !== '') {
+    if (typeof explicit !== 'string' || !isAbsolute(explicit.trim())) {
+      fail('TALOS_HARNESS_UI_WORKFLOW_DIR deve essere una cartella assoluta');
+    }
+    return resolve(explicit.trim());
+  }
+
+  const desktopDataRoot = env.TALOS_DESKTOP_DATA_DIR;
+  if (desktopDataRoot !== undefined && desktopDataRoot !== null && desktopDataRoot !== '') {
+    if (typeof desktopDataRoot !== 'string' || !isAbsolute(desktopDataRoot.trim())) {
+      fail('TALOS_DESKTOP_DATA_DIR deve essere una cartella assoluta quando configura Workflow');
+    }
+    return join(resolve(desktopDataRoot.trim()), 'workflows');
+  }
+  return null;
+}
+
 export function loadConfig(
   env,
   moduleUrl = new URL('../server.mjs', import.meta.url),
@@ -590,6 +618,7 @@ export function loadConfig(
     chiaveApi: typeof env.OPENROUTER_API_KEY === 'string' ? env.OPENROUTER_API_KEY : undefined,
     hfToken: typeof env.HF_TOKEN === 'string' && env.HF_TOKEN.trim() ? env.HF_TOKEN.trim() : undefined,
     cartellaStore: parseCartellaStore(env.TALOS_HARNESS_UI_SESSIONS_DIR, moduleUrl),
+    workflowDataRoot: parseWorkflowDataRoot(env),
     modelsDevUrl: parseModelsDevUrl(env.TALOS_HARNESS_UI_MODELS_DEV_URL),
     llamaServerPath: parseLlamaServerPath(env.TALOS_LLAMA_SERVER_PATH, moduleUrl, sondaMotore),
     llamaServerFallbackPath: typeof env.TALOS_LLAMA_SERVER_FALLBACK_PATH === 'string' && env.TALOS_LLAMA_SERVER_FALLBACK_PATH.trim()

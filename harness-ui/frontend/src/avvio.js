@@ -56,7 +56,7 @@
   var TEMI = ['forge', 'paper', 'terminal', 'aurora', 'glacier', 'ember', 'atlas', 'noir', 'signal', 'violet', 'claudius', 'basicus', 'telemetry', 'calm'];
   var VERSIONE_SCELTA = 2; /* = ASPETTO_SCELTA_VERSIONE in legacy/app.js */
   var modo = 'system';
-  var tema = 'calm';
+  var tema = 'forge'; /* il tema di serie: Forge (owner 24/09/2026 sera: «tema default forge»), uguale a DESKTOP_APPEARANCE_DEFAULTS in legacy/app.js */
   try {
     var grezzo = window.localStorage.getItem('talos.harness.desktop.settings.v1');
     if (grezzo) {
@@ -65,7 +65,7 @@
       modo = aspetto.colorMode || 'system';
       if (aspetto.themePresetVersione === VERSIONE_SCELTA && TEMI.indexOf(aspetto.themePreset) !== -1) tema = aspetto.themePreset;
     }
-  } catch (errore) { modo = 'system'; tema = 'calm'; }
+  } catch (errore) { modo = 'system'; tema = 'forge'; }
   var chiaro = modo === 'light' || (modo !== 'dark'
     && typeof window.matchMedia === 'function'
     && window.matchMedia('(prefers-color-scheme: light)').matches);

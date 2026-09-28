@@ -81,6 +81,9 @@ export const VARIABILI_DEL_SERVER_DICHIARATE_INNOCUE = Object.freeze([
   'TALOS_HARNESS_UI_REPORT_FILE',
   'TALOS_DESKTOP_DATA_DIR',
   'TALOS_HARNESS_UI_SESSIONS_DIR',
+  /* 24/09/2026, corsia SCRATCH — la radice dei temporanei di TALOS scelta dal guscio (`desktop/profile.mjs`): un
+     percorso sul disco della persona come le cartelle dei dati, non una credenziale. */
+  'TALOS_SCRATCH_DIR',
   'TALOS_LLAMA_SERVER_PATH',
   'TALOS_LLAMA_SERVER_FALLBACK_PATH',
   /* 18/09/2026 — entrata col lavoro di rilascio portato dal repo pubblico: il guscio installato indica al server QUALE file

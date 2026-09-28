@@ -39,7 +39,8 @@ test('R01-GUSCIO — finestra reale, cookie, Terminale, temi, riavvio, vassoio, 
     await pagina.waitForURL(url => url.hostname === '127.0.0.1' && url.pathname === '/' && !url.search, { timeout: 20000 });
     await pagina.locator('body').waitFor({ state: 'visible' });
     misure.launchPaginaProntaMs = performance.now() - inizio;
-    assert.equal(await pagina.evaluate(() => document.documentElement.dataset.talosTheme), 'calm');
+    // 27/09: il tema di serie è Forge dal 24/09 (owner: «tema default forge»), lo stesso di frontend/src/avvio.js:59.
+    assert.equal(await pagina.evaluate(() => document.documentElement.dataset.talosTheme), 'forge');
     const base = new URL(pagina.url()).origin;
     assert.notEqual(new URL(base).port, '4174');
     assert.equal((await fetch(base + '/api/v1/health')).status, 401);
@@ -106,6 +107,9 @@ test('R01-GUSCIO — finestra reale, cookie, Terminale, temi, riavvio, vassoio, 
         localStorage.setItem(key, JSON.stringify(settings));
       }, modo);
       await pagina.reload();
+      // 27/09: la prima foto dopo il ricaricamento prendeva il velo d'avvio invece della app (a 1024, nei due temi):
+      // si fotografa solo quando #talosAvvio è uscito dal DOM (frontend/src/avvio.js:98-113).
+      await pagina.locator('#talosAvvio').waitFor({ state: 'detached', timeout: 15000 });
       for (const [width, height] of [[1024, 800], [1440, 900]]) {
         await electronApp.evaluate(({ BrowserWindow }, dimensioni) => BrowserWindow.getAllWindows()[0].setContentSize(...dimensioni), [width, height]);
         await attendi(500);

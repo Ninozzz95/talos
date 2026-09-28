@@ -1,0 +1,162 @@
+{
+  "schema": "talos.workflow-definition-core.v1",
+  "definitionSchemaVersion": 1,
+  "title": "Invalid unbounded cycle fixture",
+  "objective": "Fixture strutturale: Invalid unbounded cycle fixture.",
+  "engineCompatibility": {
+    "minEngineSchemaVersion": 1,
+    "requiredFeatures": []
+  },
+  "nodes": [
+    {
+      "id": "a",
+      "kind": "gate",
+      "label": "A",
+      "instructions": null,
+      "role": "coordinator",
+      "inputs": [],
+      "outputs": [],
+      "capabilityProfile": "read",
+      "workspacePolicy": {
+        "mode": "none"
+      },
+      "modelPolicy": {
+        "mode": "inherit",
+        "model": null,
+        "reasoning": null
+      },
+      "activityPolicy": {
+        "effectClass": "pure",
+        "retryMode": "at-least-once",
+        "maxAttempts": 1,
+        "deadlineMs": null
+      },
+      "retryPolicy": {
+        "backoff": "none",
+        "jitter": false,
+        "retryOn": []
+      },
+      "cachePolicy": "same-run",
+      "writeSetHint": [],
+      "priority": 0,
+      "budget": {
+        "promptTokens": null,
+        "completionTokens": null,
+        "wallMs": null,
+        "agentSeconds": null,
+        "toolCalls": null,
+        "modelRequests": null,
+        "retryPromptTokens": null,
+        "retryModelRequests": null,
+        "knownCostUsd": null,
+        "attempts": 1
+      },
+      "metadata": {}
+    },
+    {
+      "id": "b",
+      "kind": "gate",
+      "label": "B",
+      "instructions": null,
+      "role": "coordinator",
+      "inputs": [],
+      "outputs": [],
+      "capabilityProfile": "read",
+      "workspacePolicy": {
+        "mode": "none"
+      },
+      "modelPolicy": {
+        "mode": "inherit",
+        "model": null,
+        "reasoning": null
+      },
+      "activityPolicy": {
+        "effectClass": "pure",
+        "retryMode": "at-least-once",
+        "maxAttempts": 1,
+        "deadlineMs": null
+      },
+      "retryPolicy": {
+        "backoff": "none",
+        "jitter": false,
+        "retryOn": []
+      },
+      "cachePolicy": "same-run",
+      "writeSetHint": [],
+      "priority": 0,
+      "budget": {
+        "promptTokens": null,
+        "completionTokens": null,
+        "wallMs": null,
+        "agentSeconds": null,
+        "toolCalls": null,
+        "modelRequests": null,
+        "retryPromptTokens": null,
+        "retryModelRequests": null,
+        "knownCostUsd": null,
+        "attempts": 1
+      },
+      "metadata": {}
+    }
+  ],
+  "edges": [
+    {
+      "id": "a_b",
+      "from": "a",
+      "to": "b",
+      "type": "control",
+      "condition": null,
+      "mapping": null
+    },
+    {
+      "id": "b_a",
+      "from": "b",
+      "to": "a",
+      "type": "retry",
+      "condition": null,
+      "mapping": null
+    }
+  ],
+  "budgets": {
+    "promptTokens": null,
+    "completionTokens": null,
+    "wallMs": 600000,
+    "agentSeconds": 600,
+    "toolCalls": 100,
+    "modelRequests": 20,
+    "retryPromptTokens": null,
+    "retryModelRequests": null,
+    "knownCostUsd": null
+  },
+  "limits": {
+    "maxLogicalNodes": 50,
+    "maxEdges": 100,
+    "maxGraphMutations": 10,
+    "maxFanoutPerNode": 10,
+    "maxAgentSessions": 10,
+    "maxDepth": 8
+  },
+  "policy": {
+    "capabilityCeiling": "read",
+    "externalTools": {
+      "mode": "deny",
+      "ids": []
+    },
+    "providerFallback": {
+      "mode": "forbidden",
+      "providers": []
+    },
+    "graphMutation": {
+      "mode": "coordinator-only",
+      "maxOperationsPerPatch": 20,
+      "maxAddedNodesPerPatch": 10,
+      "maxAddedEdgesPerPatch": 20
+    },
+    "human": {
+      "maxPending": 10,
+      "allowBatchIdenticalSchema": true
+    },
+    "finalApply": "user-explicit"
+  },
+  "acceptance": []
+}

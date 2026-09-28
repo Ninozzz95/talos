@@ -1,0 +1,168 @@
+{
+  "kind": "workflow-static-readiness-manifest",
+  "version": 1,
+  "repository": "talos-private/agent-virtual-machine",
+  "branch": "feat/workflow-graph-engineering-2026-09-20",
+  "baseline": "0813d7859d505ff9a4caa0153008e5c1f8db9a09",
+  "sourceHeadAudited": "c9b99efde1592062b8a47592639e58ee465aecf4",
+  "packHeadBeforeThisManifest": "ab01308ec602ee5d58c17641ee5989b8ad7f7522",
+  "remotePolicy": {
+    "commit": true,
+    "push": true,
+    "pullRequest": false,
+    "ciTrigger": false,
+    "merge": false,
+    "release": false,
+    "tag": false,
+    "mobileChanges": false,
+    "historyRewrite": false
+  },
+  "closedStatic": {
+    "architecture": {
+      "status": "closed",
+      "source": "PIANO-ESECUTIVO-TALOS-GRAPH-ENGINEERING-HARDENED-v3-2026-09-20.md"
+    },
+    "symbolMap": {
+      "status": "closed",
+      "source": "WORKFLOW-PREIMPLEMENTATION-LEDGER-v1-2026-09-20.md"
+    },
+    "schemaCatalog": {
+      "status": "closed",
+      "source": "WORKFLOW-SCHEMA-CATALOG-v2-2026-09-20.md"
+    },
+    "durableEventCatalog": {
+      "status": "closed",
+      "count": 53,
+      "source": "WORKFLOW-EVENT-CATALOG-v1-2026-09-20.md"
+    },
+    "contractFixtures": {
+      "status": "closed",
+      "source": "WORKFLOW-CONTRACT-FIXTURE-SPEC-v1-2026-09-20.md"
+    },
+    "mutationMap": {
+      "status": "closed",
+      "count": 105,
+      "manifest": "mutations-v1.json"
+    },
+    "failpoints": {
+      "status": "closed",
+      "count": 56,
+      "manifest": "failpoints-v1.json"
+    },
+    "crashScenarios": {
+      "status": "closed",
+      "count": 14,
+      "manifest": "crash-scenarios-v1.json"
+    },
+    "benchmarkScenarios": {
+      "status": "closed",
+      "count": 14,
+      "manifest": "benchmark-scenarios-v1.json"
+    },
+    "uiScenes": {
+      "status": "closed",
+      "count": 23,
+      "source": "frontend/lab/workflow-spec.js"
+    },
+    "canonicalHashVectors": {
+      "status": "closed",
+      "source": "tests/fixtures/workflow/hashes/"
+    },
+    "phaseLedger": {
+      "status": "closed",
+      "count": 16,
+      "source": "WORKFLOW-PREIMPLEMENTATION-LEDGER-v1-2026-09-20.md"
+    },
+    "dependencyAndLicenseDecision": {
+      "status": "closed",
+      "source": "WORKFLOW-PREIMPLEMENTATION-LEDGER-v1-2026-09-20.md"
+    },
+    "boundedNodeControl": {
+      "status": "closed",
+      "source": "WORKFLOW-SCHEMA-CATALOG-v2-2026-09-20.md",
+      "rule": "fanout/loop/subworkflow control is typed; metadata is never execution authority"
+    },
+    "commandDedupeVectors": {
+      "status": "closed",
+      "source": "tests/fixtures/workflow/vectors/command-dedupe-v1.json"
+    },
+    "finalAdversarialAudit": {
+      "status": "closed",
+      "source": "WORKFLOW-FINAL-ADVERSARIAL-AUDIT-v1-2026-09-20.md"
+    },
+    "resumePrompt": {
+      "status": "closed",
+      "source": "WORKFLOW-IMPLEMENTATION-RESUME-PROMPT-v1-2026-09-20.md",
+      "rule": "non-normative self-contained handoff; normative pack wins on conflict"
+    }
+  },
+  "intentionallyEmpirical": [
+    {
+      "id": "E001_PHASE0_LOCAL_GATES",
+      "requiredBefore": "phase-1",
+      "classification": [
+        "verified",
+        "regression",
+        "preexisting",
+        "environment",
+        "not_verifiable"
+      ]
+    },
+    {
+      "id": "E002_KERNEL_PARITY_RUNTIME_CHECK",
+      "requiredBefore": "kernel-change",
+      "classification": [
+        "identical",
+        "diverges",
+        "not_verifiable"
+      ]
+    },
+    {
+      "id": "E003_WINDOWS_WORKTREE_REALITY",
+      "requiredBefore": "writer-concurrency-enable"
+    },
+    {
+      "id": "E004_CRASH_RECOVERY_EXECUTION",
+      "requiredBefore": "durable-runtime-certification"
+    },
+    {
+      "id": "E005_INSTALLED_DESKTOP_RECOVERY",
+      "requiredBefore": "release-readiness"
+    },
+    {
+      "id": "E006_UI_SCREENSHOT_MATRIX",
+      "requiredBefore": "phase-11-close"
+    },
+    {
+      "id": "E007_10K_UI_PERFORMANCE",
+      "requiredBefore": "scale-claim"
+    },
+    {
+      "id": "E008_500_LEASE_SIMULATION",
+      "requiredBefore": "concurrency-claim"
+    },
+    {
+      "id": "E009_PROVIDER_REAL_METRICS",
+      "requiredBefore": "provider-threshold-tuning"
+    },
+    {
+      "id": "E010_POWERLOSS_DURABILITY",
+      "requiredBefore": "powerloss-claim"
+    },
+    {
+      "id": "E011_FANOUT_PARETO",
+      "requiredBefore": "adaptive-fanout-defaults"
+    },
+    {
+      "id": "E012_DAGRE_ELK_THRESHOLD",
+      "requiredBefore": "elkjs-dependency"
+    }
+  ],
+  "rule": "Static readiness is complete only when every closedStatic entry is closed and no new production change invalidates sourceHeadAudited assumptions. Empirical items must never be converted to static green.",
+  "integrity": {
+    "status": "closed",
+    "manifest": "static-pack-v1.json",
+    "packFreezeParent": "ab01308ec602ee5d58c17641ee5989b8ad7f7522",
+    "rule": "Every listed path/blobSha/sizeBytes must match the branch tree; static-pack-v1.json excludes itself."
+  }
+}

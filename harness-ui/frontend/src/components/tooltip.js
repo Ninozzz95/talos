@@ -43,15 +43,17 @@ export const RITARDO_MS = 350;
  */
 export function migraTitle(elemento) {
   if (!elemento || typeof elemento.getAttribute !== 'function') return '';
-  const gia = elemento.getAttribute(ATTRIBUTO);
-  if (gia) return gia;
   const tag = String(elemento.tagName || '').toLowerCase();
   if (tag === 'iframe' || elemento.ownerSVGElement || tag === 'svg') return '';
+  /* ⛔ 26/09: un `title` scritto DOPO la migrazione è il testo nuovo (il piede della chat li riscrive a ogni ridisegno):
+     prima vinceva il nostro attributo, e il suggerimento restava fermo al primo testo mentre ricompariva quello nativo. */
   const titolo = elemento.getAttribute('title');
-  if (!titolo || !titolo.trim()) return '';
-  elemento.setAttribute(ATTRIBUTO, titolo.trim());
-  elemento.removeAttribute('title');
-  return titolo.trim();
+  if (titolo && titolo.trim()) {
+    elemento.setAttribute(ATTRIBUTO, titolo.trim());
+    elemento.removeAttribute('title');
+    return titolo.trim();
+  }
+  return elemento.getAttribute(ATTRIBUTO) || '';
 }
 
 /** Il bersaglio più vicino che ha qualcosa da dire — `title` da migrare o il nostro attributo. */
@@ -100,9 +102,30 @@ export function collegaTooltip(documentObj = globalThis.document, { ritardo = RI
   let bersaglio = null;
   let timer = null;
   let dentroLaBolla = false;
+  /*
+   * ⛔⛔ 26/09/2026, difetti (6) e (7) delle foto di Ask e del Piano: dopo lo Stop «Interrompi adesso» restava sul bottone
+   *   diventato «Invia», e «Context Manager» restava disegnato SOPRA la finestra appena aperta — tutti e due finché il
+   *   puntatore non si spostava. Il meccanismo, uno solo: il clic chiude il suggerimento (`pointerdown`), ma dà anche il
+   *   fuoco al bottone, e `focusin` faceva ripartire il timer; 350 ms dopo il suggerimento si riapriva col testo di prima.
+   * ⭐ Hermes l'ha trovato e curato uguale (`apps/desktop/src/components/ui/tooltip.tsx:64-92`, clone 65ad529): «Menus and
+   *   dialogs return focus to their trigger… left the trigger's tip stuck open… Gate focus-opens to KEYBOARD focus», e
+   *   `:focus-visible` da solo non basta — serve anche il dispositivo dell'ultima interazione vera.
+   * ⇒ (1) al fuoco si apre solo se l'ultima interazione è stata la tastiera E l'elemento è `:focus-visible`;
+   *   (2) il fuoco che va su un ALTRO elemento — anche senza suggerimento, come il titolo di una finestra — chiude quello
+   *   aperto; (3) se il testo del bersaglio cambia mentre è aperto (Stop → Invia), il suggerimento si chiude: è vecchio.
+   */
+  let modalita = 'pointer';
+  const daTastiera = (el) => { if (modalita !== 'keyboard') return false; try { return el.matches(':focus-visible'); } catch { return true; } };
+  const Osservatore = documentObj.defaultView?.MutationObserver ?? globalThis.MutationObserver;
+  let testoMostrato = '';
+  // (3) si chiude solo se il testo CAMBIA: una riscrittura identica (il piede ridisegna a ogni evento) non è una notizia
+  const osservaTesto = typeof Osservatore === 'function'
+    ? new Osservatore(() => { if (bersaglio && migraTitle(bersaglio) !== testoMostrato) chiudi(); })
+    : null;
 
   const chiudi = () => {
     if (timer) { clearTimeout(timer); timer = null; }
+    osservaTesto?.disconnect();
     if (bersaglio) {
       bersaglio.removeAttribute('aria-describedby');
       bersaglio.style.anchorName = '';
@@ -114,6 +137,7 @@ export function collegaTooltip(documentObj = globalThis.document, { ritardo = RI
 
   const apri = (elemento, frase) => {
     bersaglio = elemento;
+    testoMostrato = frase;
     testo.textContent = frase;
     // il legame che un lettore di schermo può seguire: senza questo avremmo tolto e non dato
     elemento.setAttribute('aria-describedby', 'talosTip');
@@ -133,11 +157,16 @@ export function collegaTooltip(documentObj = globalThis.document, { ritardo = RI
     bolla.style.positionArea = lato;
     bolla.hidden = false;
     try { bolla.showPopover?.(); } catch { /* il fallback è `hidden`, già tolto */ }
+    osservaTesto?.observe(elemento, { attributes: true, attributeFilter: [ATTRIBUTO, 'title'] }); // (3)
   };
 
   const suEntrata = (evento) => {
+    const alFuoco = evento.type === 'focusin';
     const elemento = bersaglioDi(evento.target);
+    // (2) il fuoco è andato altrove — anche su qualcosa che non ha niente da dire: quello aperto non vale più
+    if (alFuoco && bersaglio && elemento !== bersaglio && !bolla.contains(evento.target)) chiudi();
     if (!elemento || elemento === bersaglio) return;
+    if (alFuoco && !daTastiera(evento.target)) return; // (1) il fuoco restituito da un clic non apre niente
     const frase = migraTitle(elemento);
     if (!frase) return;
     chiudi();
@@ -161,9 +190,9 @@ export function collegaTooltip(documentObj = globalThis.document, { ritardo = RI
   documentObj.addEventListener('focusin', suEntrata, true);
   documentObj.addEventListener('focusout', suUscita, true);
   // WCAG 1.4.13, «dismissible»: Esc lo chiude senza dover spostare il puntatore
-  documentObj.addEventListener('keydown', (evento) => { if (evento.key === 'Escape') chiudi(); }, true);
+  documentObj.addEventListener('keydown', (evento) => { modalita = 'keyboard'; if (evento.key === 'Escape') chiudi(); }, true);
   // un clic sta già facendo qualcos'altro: il suggerimento non deve restare lì sopra
-  documentObj.addEventListener('pointerdown', chiudi, true);
+  documentObj.addEventListener('pointerdown', () => { modalita = 'pointer'; chiudi(); }, true);
   documentObj.defaultView?.addEventListener?.('scroll', chiudi, { capture: true, passive: true });
 
   return () => {

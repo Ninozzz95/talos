@@ -18,6 +18,15 @@ const EN = {
   'Il contesto è cambiato. I dati sono aggiornati: verifica e ripeti la modifica.': 'The context changed. Data is refreshed: review and repeat your change.', 'Contesto non disponibile. Usa Aggiorna per riprovare.': 'Context unavailable. Use Refresh to retry.', 'Operazione non riuscita. Usa Aggiorna per verificare lo stato prima di riprovare.': 'Operation failed. Use Refresh to check the state before trying again.', 'Impostazioni salvate.': 'Settings saved.', 'Fatto salvato.': 'Fact saved.', 'Ricerca semantica non disponibile. La ricerca testuale resta attiva.': 'Semantic search unavailable. Text search remains active.', 'Ricerca semantica disponibile.': 'Semantic search available.', 'Completati': 'Completed', 'di': 'of',
 };
 EN['Non ci sono scambi precedenti da compattare mantenendo intero l’ultimo scambio. Nessun messaggio è stato modificato.'] = 'There are no earlier exchanges to compact while keeping the latest exchange intact. No messages were changed.';
+Object.assign(EN, {
+  'Qui puoi compattare la conversazione a mano. Fatti da non dimenticare, versioni e impostazioni avanzate non sono attivi per questa conversazione.': 'You can compact this conversation by hand here. Facts to keep, versions and advanced settings are not enabled for this conversation.',
+  'misurati all’ultima richiesta al modello': 'measured at the last request to the model', 'compattazione automatica oltre': 'automatic compaction above',
+  'Nessuna compattazione in corso.': 'No compaction in progress.', 'Riassumo la conversazione…': 'Summarizing the conversation…', 'Riassunto della conversazione in corso': 'Conversation summary in progress',
+  'Conversazione riassunta. La misura si aggiorna alla prossima risposta.': 'Conversation summarized. The measurement updates with the next response.',
+  'Il server non ha riassunto la conversazione: resta com’era.': 'The server did not summarize the conversation: it stays as it was.', 'Conversazione non riassunta.': 'Conversation not summarized.',
+  'Compattare adesso la conversazione? Il modello vedrà un riassunto al posto dei messaggi più vecchi; nella chat i messaggi restano visibili.': 'Compact the conversation now? The model will see a summary instead of the older messages; the messages stay visible in the chat.',
+  'Sì, compatta': 'Yes, compact', 'Operazione non riuscita.': 'Operation failed.',
+});
 function translateDefault(text) { return linguaCorrenteDiT() === 'en' ? (EN[text] ?? t(text)) : t(text); }
 const number = v => typeof v === 'number' && Number.isFinite(v) && v >= 0;
 
@@ -47,8 +56,27 @@ export function descriviContextCompactor(state, { translate = translateDefault }
 }
 
 const MOUNTED = new WeakMap();
+/*
+ * ⭐ 24/09/2026 sera — LA FINESTRA SI APRE SEMPRE, ANCHE SENZA IL TRIAL (decisione owner, testuale alla domanda
+ * «Cosa deve fare il bottone Context Manager quando il motore del contesto è spento?»: «Apre sempre la finestra»;
+ * e prima: «il click su context manager prima apriva una modale adesso fa compatta e basta»).
+ *
+ * `7a96744eb` (F5 onda 2, 24/09 13:04) aveva fatto compattare il bottone SUBITO sul 4174, dove il trial è spento
+ * per costruzione (`config.mjs:501`): un clic, nessuna finestra, nessuna conferma, e la storia della sessione
+ * del Desktop dell'owner passata da 48 messaggi a 3 (registro, checkpoint delle 22:00 e delle 22:11).
+ *
+ * ⇒ Il bottone apre questa finestra; quando `GET /context` risponde `CTX_NOT_ENABLED` e l'host passa `legacy`,
+ *   la finestra entra nel MODO SEMPLICE: misura dell'ultima richiesta (gli stessi numeri dell'avviso sopra il
+ *   composer), «Compatta ora» con conferma in linea, avanzamento ed esito dentro la finestra. Il resto del
+ *   trial (fatti, versioni, impostazioni) resta spento e lo dice.
+ * Fonti, 24/09/2026: Hermes `apps/desktop/src/app/shell/context-usage-panel.tsx` (il pannello del contesto
+ * MOSTRA e basta; la compressione è il comando esplicito `/compress`, `e2e/session-compression-and-queue-stop.spec.ts`);
+ * Claude Code `/context` guarda e `/compact` agisce (datacamp.com/tutorial/claude-code-slash-commands, 2026).
+ * `legacy` = { misura(sessionId) → Promise<{inputTokens, windowTokens, soglia}|null>, inCorso(sessionId) → bool,
+ *   compatta(sessionId) → Promise<{ stato: 'riassunta'|'invariata'|'errore'|'in-corso', messaggio? }> }.
+ */
 /** Mount the canonical #veloContesto markup. Transport, session and snapshots are injected. */
-export function montaContextCompactor(root, { client, sessionId, state = null, document: doc = root?.ownerDocument ?? globalThis.document, onState, onClose, modalManager = null, translate = translateDefault } = {}) {
+export function montaContextCompactor(root, { client, sessionId, state = null, document: doc = root?.ownerDocument ?? globalThis.document, onState, onClose, modalManager = null, translate = translateDefault, legacy = null } = {}) {
   if (MOUNTED.has(root)) return MOUNTED.get(root);
   if (!root?.querySelector('[data-context-body]') || !client) throw new TypeError('ContextCompactor richiede markup canonico e client.');
   const win = doc.defaultView ?? globalThis.window;
@@ -59,6 +87,8 @@ export function montaContextCompactor(root, { client, sessionId, state = null, d
   let available = Boolean(snapshot);
   let epoch = 0, sequence = 0, busy = false, destroyed = false, opened = !root.hidden, timer, requestController, trigger, editingId = null, editingSources = [], settingsDirty = false, versions = [], factsKey = '', versionsKey = '', sourcesKey = '', statusText = '';
   const inertBefore = new Map();
+  // modo semplice (trial spento, host con `legacy`): misura dell'ultima richiesta, conferma aperta, esito dell'ultima compattazione
+  let modoLegacy = false, confermaLegacy = false, esitoLegacy = null, misuraLegacy = null;
   const num = value => number(value) ? new Intl.NumberFormat(linguaCorrenteDiT() === 'en' ? 'en-US' : 'it-IT').format(value) : translate('Non disponibile');
   function element(tag, text, className) { const node = doc.createElement(tag); if (text != null) node.textContent = text; if (className) node.className = className; return node; }
   function button(text, action) { const node = element('button', translate(text), 'talos-button talos-button--ghost talos-button--sm'); node.type = 'button'; node.dataset.contextMutation = ''; node.disabled = busy || !snapshot; node.addEventListener('click', action); return node; }
@@ -158,7 +188,67 @@ export function montaContextCompactor(root, { client, sessionId, state = null, d
     q('native-help').hidden = snapshot?.capabilities?.nativeCompaction === true;
     root.setAttribute('aria-busy', String(busy));
     root.querySelector('[data-context-close]').setAttribute('aria-label', translate('Chiudi'));
-    if (opened && focused?.disabled && root.contains(focused)) q('title').focus({ preventScroll: true });
+    if (modoLegacy) renderLegacy(); else { delete root.dataset.contextModo; root.querySelector('[data-context-conferma-legacy]')?.remove(); }
+    // `doc.activeElement === focused`: se il render ha già spostato il fuoco (la conferma lo porta su «Sì, compatta»), non si ruba
+    if (opened && focused?.disabled && root.contains(focused) && doc.activeElement === focused) q('title').focus({ preventScroll: true });
+  }
+  /* Il modo semplice sovrascrive SOLO ciò che ha una sorgente vera: misura, stato del riassunto, «Compatta ora».
+     Fatti, versioni e impostazioni restano spenti da `available = false`, come prima. */
+  function renderLegacy() {
+    root.dataset.contextModo = 'legacy';
+    const m = misuraLegacy;
+    const input = number(m?.inputTokens) && m.inputTokens > 0 ? m.inputTokens : null;
+    const finestra = number(m?.windowTokens) && m.windowTokens > 0 ? m.windowTokens : null;
+    const known = input != null && finestra != null;
+    q('meter').hidden = !known;
+    if (known) { q('meter').max = finestra; q('meter').value = Math.min(input, finestra); q('meter').setAttribute('aria-valuetext', `${num(input)} / ${num(finestra)}`); }
+    const soglia = number(m?.soglia) && m.soglia > 0 ? ` · ${translate('compattazione automatica oltre')} ${num(m.soglia)}` : '';
+    q('measurement').textContent = input == null ? translate('Misura non ancora disponibile.')
+      : `${known ? `${num(input)} / ${num(finestra)}` : num(input)} token — ${translate('misurati all’ultima richiesta al modello')}${soglia}`;
+    q('input').textContent = num(input); q('window').textContent = num(finestra);
+    const inCorso = Boolean(legacy?.inCorso?.(sessionId));
+    const errore = !inCorso && esitoLegacy?.stato === 'errore';
+    q('job').textContent = translate(inCorso ? 'Riassumo la conversazione…'
+      : esitoLegacy?.stato === 'riassunta' ? 'Conversazione riassunta. La misura si aggiorna alla prossima risposta.'
+        : esitoLegacy?.stato === 'invariata' ? 'Il server non ha riassunto la conversazione: resta com’era.'
+          : errore ? 'Conversazione non riassunta.' : 'Nessuna compattazione in corso.');
+    q('progress').textContent = '';
+    const bar = q('progress-bar'); bar.hidden = !inCorso; bar.removeAttribute('value'); bar.setAttribute('aria-label', translate('Riassunto della conversazione in corso'));
+    q('job-error').hidden = !errore; q('job-error').textContent = errore ? (esitoLegacy.messaggio || translate('Operazione non riuscita.')) : '';
+    q('start').disabled = busy || inCorso || confermaLegacy || !sessionId;
+    let blocco = root.querySelector('[data-context-conferma-legacy]');
+    if (!confermaLegacy || inCorso) { blocco?.remove(); return; }
+    if (blocco) return;
+    blocco = element('div', null, 'talos-context__conflict'); blocco.dataset.contextConfermaLegacy = '';
+    blocco.setAttribute('role', 'group'); blocco.setAttribute('aria-label', translate('Compatta ora'));
+    const testo = element('p', translate('Compattare adesso la conversazione? Il modello vedrà un riassunto al posto dei messaggi più vecchi; nella chat i messaggi restano visibili.'));
+    const azioni = element('div', null, 'talos-context__actions');
+    const si = element('button', translate('Sì, compatta'), 'talos-button talos-button--primary'); si.type = 'button'; si.dataset.contextConfermaSi = '';
+    const no = element('button', translate('Annulla'), 'talos-button talos-button--ghost'); no.type = 'button'; no.dataset.contextConfermaNo = '';
+    si.addEventListener('click', () => { void confermaCompattazioneLegacy(); });
+    no.addEventListener('click', () => { confermaLegacy = false; render(); q('start').focus({ preventScroll: true }); });
+    azioni.append(si, no); blocco.append(testo, azioni);
+    q('start').parentElement.after(blocco);
+    si.focus({ preventScroll: true });
+  }
+  async function aggiornaMisuraLegacy(current) {
+    let misura = null;
+    try { misura = await legacy?.misura?.(sessionId) ?? null; } catch { misura = null; }
+    if (current !== epoch || destroyed || !modoLegacy) return;
+    misuraLegacy = misura; render();
+  }
+  async function confermaCompattazioneLegacy() {
+    if (!modoLegacy || !legacy || destroyed || legacy.inCorso?.(sessionId)) return;
+    const current = epoch;
+    confermaLegacy = false; esitoLegacy = null;
+    let promessa;
+    try { promessa = Promise.resolve(legacy.compatta(sessionId)); } catch (error) { promessa = Promise.resolve({ stato: 'errore', messaggio: error?.message }); }
+    render(); q('title').focus({ preventScroll: true });
+    let esito;
+    try { esito = await promessa; } catch (error) { esito = { stato: 'errore', messaggio: error?.message }; }
+    if (current !== epoch || destroyed) return;
+    esitoLegacy = esito?.stato === 'in-corso' ? null : (esito ?? null);
+    render(); void aggiornaMisuraLegacy(current);
   }
   function schedule() { clearTimeout(timer); if (opened && !destroyed && ACTIVE.has(descriviContextCompactor(snapshot).job?.state)) timer = setTimeout(() => refresh(), 1200); }
   async function refresh({ quiet = false } = {}) {
@@ -170,11 +260,16 @@ export function montaContextCompactor(root, { client, sessionId, state = null, d
       const [next, history] = await Promise.all([client.getContextState(requestOptions()), client.listContextVersions(requestOptions())]);
       if (current !== epoch || ticket !== sequence || destroyed) return null;
       if (next?.sessionId !== sessionId || !Array.isArray(history?.versions)) throw new Error('CTX_INVALID_RESPONSE');
-      snapshot = structuredClone(next); available = true; versions = history.versions.filter(v => v.sessionId === sessionId); render();
+      snapshot = structuredClone(next); available = true; modoLegacy = false; confermaLegacy = false; esitoLegacy = null; versions = history.versions.filter(v => v.sessionId === sessionId); render();
       if (!quiet) say(''); onState?.(structuredClone(snapshot)); schedule(); return snapshot;
     } catch (error) {
       if (current !== epoch || ticket !== sequence || destroyed || error.name === 'AbortError') return null;
-      available = false; render(); say(translate(error.code === 'CTX_NOT_ENABLED' ? 'Context Manager non è ancora attivo per questa conversazione. Nessun messaggio è stato modificato.' : 'Contesto non disponibile. Usa Aggiorna per riprovare.'), error.code !== 'CTX_NOT_ENABLED'); clearTimeout(timer); return null;
+      if (error.code === 'CTX_NOT_ENABLED' && legacy) {
+        available = false; modoLegacy = true; render(); clearTimeout(timer);
+        say(translate('Qui puoi compattare la conversazione a mano. Fatti da non dimenticare, versioni e impostazioni avanzate non sono attivi per questa conversazione.'));
+        void aggiornaMisuraLegacy(current); return null;
+      }
+      modoLegacy = false; available = false; render(); say(translate(error.code === 'CTX_NOT_ENABLED' ? 'Context Manager non è ancora attivo per questa conversazione. Nessun messaggio è stato modificato.' : 'Contesto non disponibile. Usa Aggiorna per riprovare.'), error.code !== 'CTX_NOT_ENABLED'); clearTimeout(timer); return null;
     }
   }
   async function mutate(action, success) {
@@ -197,7 +292,10 @@ export function montaContextCompactor(root, { client, sessionId, state = null, d
   }
   listen(q('auto'), 'change', () => { const auto = q('auto').checked; mutate(() => client.updateContextSettings(requestOptions({ patch: { auto } }))); });
   listen(q('refresh'), 'click', () => refresh());
-  listen(q('start'), 'click', () => mutate(() => client.startCompaction(requestOptions({ kind: 'compact' }))));
+  listen(q('start'), 'click', () => {
+    if (modoLegacy) { if (!legacy?.inCorso?.(sessionId)) { confermaLegacy = true; esitoLegacy = null; render(); } return; }
+    mutate(() => client.startCompaction(requestOptions({ kind: 'compact' })));
+  });
   listen(q('regenerate'), 'click', () => mutate(() => client.startCompaction(requestOptions({ kind: 'regenerate' }))));
   listen(q('cancel'), 'click', () => mutate(() => client.cancelCompaction(requestOptions({ jobId: descriviContextCompactor(snapshot).job.id }))));
   listen(q('resume'), 'click', () => mutate(() => client.resumeCompaction(requestOptions({ jobId: descriviContextCompactor(snapshot).job.id }))));
@@ -216,7 +314,7 @@ export function montaContextCompactor(root, { client, sessionId, state = null, d
   });
   function close() {
     if (!opened) return;
-    ++epoch; ++sequence; busy = false; opened = false; root.hidden = true; clearTimeout(timer); requestController?.abort();
+    ++epoch; ++sequence; busy = false; opened = false; confermaLegacy = false; root.hidden = true; clearTimeout(timer); requestController?.abort();
     for (const [node, old] of inertBefore) node.inert = old; inertBefore.clear();
     if (modalManager) modalManager.deactivate(root); else trigger?.focus?.({ preventScroll: true }); onClose?.();
   }
@@ -248,9 +346,12 @@ export function montaContextCompactor(root, { client, sessionId, state = null, d
   listen(win, EVENTO_LINGUA, languageChange);
   const api = {
     refresh, open, close,
+    /** L'host lo chiama quando una compattazione legacy parte o finisce altrove (avviso, errore, server): la finestra aperta lo segue. */
+    aggiornaLegacy() { if (!modoLegacy || destroyed) return; render(); if (opened) void aggiornaMisuraLegacy(epoch); },
     update(next) { if (next?.sessionId !== sessionId || (snapshot && next.revision < snapshot.revision)) return; snapshot = structuredClone(next); available = true; render(); schedule(); },
     setSession(nextSession, nextState = null) {
       ++epoch; ++sequence; requestController?.abort(); clearTimeout(timer); requestController = new AbortController(); busy = false; sessionId = nextSession;
+      modoLegacy = false; confermaLegacy = false; esitoLegacy = null; misuraLegacy = null;
       snapshot = nextState?.sessionId === sessionId ? structuredClone(nextState) : null; available = Boolean(snapshot); versions = []; settingsDirty = false; factsKey = versionsKey = sourcesKey = ''; resetEditor(); q('source-detail').hidden = true; q('source-text').textContent = ''; say(''); render();
       if (opened) return refresh();
     },

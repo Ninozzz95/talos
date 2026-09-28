@@ -324,6 +324,7 @@ async function avviaServerProprio() {
   const figlio = spawn(process.execPath, ['server.mjs'], {
     cwd: HARNESS,
     env: {
+      TALOS_HARNESS_UI_KEYRING: 'memoria', TALOS_SCRATCH_DIR: (globalThis.process?.env?.TEMP || globalThis.process?.env?.TMP || '.') + '/talos-scratch-di-prova', // 24/09/2026: mai la radice vera %LOCALAPPDATA%TALOS, // 23/09/2026: custodia delle chiavi di prova, mai quella vera di Windows
       ...process.env,
       TALOS_HARNESS_UI_PORT: String(porta),
       TALOS_HARNESS_UI_SESSIONS_DIR: cartella,

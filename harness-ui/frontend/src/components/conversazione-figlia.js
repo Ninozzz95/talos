@@ -83,7 +83,7 @@ import { renderizzaMarkdown } from './markdown.js';
 import { nomeUmanoAttrezzo } from './nomi-attrezzi.js';
 import { parola, plurale } from './plurale.js';
 /* ⛔ 20/09/2026 — lo stesso contratto che usa la chat: una regola sola per l'esito di un comando. */
-import { leggiEsitoComando } from './esito-comando.js';
+import { esitoDichiaraFallimento, leggiEsitoComando } from './esito-comando.js';
 
 /* ═══════════════════════════════════════════════════ La riduzione (pura) ═══ */
 
@@ -151,7 +151,8 @@ export function esitoDaContenuto(attrezzo, contenuto) {
     const esito = leggiEsitoComando(testo);
     return esito.verdetto && !esito.riuscito ? 'error' : 'success';
   }
-  return /^(?:REFUSED\.|ERROR\b|ERRORE\b|FAILED\b|FALLITO\b|NON RIUSCITO\b)/i.test(testo.trim()) ? 'error' : 'success';
+  /* 26/09, difetto (11): la regola generica vive in `esito-comando.js`, la stessa della chat — anche `<attrezzo> failed …`. */
+  return esitoDichiaraFallimento(attrezzo, testo) ? 'error' : 'success';
 }
 
 /**

@@ -106,6 +106,33 @@ export function cicla(lista, attiva, direzione) {
   return lista[(corrente + direzione + lista.length) % lista.length];
 }
 
+/**
+ * ⭐ 26/09/2026 (F6-1, owner: «margine 10 px + scorrimento») — dove portare lo scorrimento di una fila di schede perché quella attiva
+ * si veda tutta. Adattata da Hermes, `tab-strip-scroll.ts` (`tabStripScrollLeft`): se è già in vista si resta dove si è; se esce a
+ * sinistra si porta il suo inizio al bordo, se esce a destra la sua fine; mai oltre lo scorrimento possibile. (Il caso «ultima scheda
+ * → fino in fondo» di Hermes serve al loro «+» in coda, che qui non c'è.) `inizio`/`fine` sono misurati dall'inizio del contenuto.
+ */
+export function scorrimentoFilaSchede({ larghezza, scorrimento, contenuto, inizio, fine }) {
+  const massimo = Math.max(0, contenuto - larghezza);
+  if (inizio < scorrimento) return Math.max(0, Math.min(inizio, massimo));
+  if (fine > scorrimento + larghezza) return Math.max(0, Math.min(fine - larghezza, massimo));
+  return Math.max(0, Math.min(scorrimento, massimo));
+}
+
+/**
+ * La stessa cosa sul DOM: si scrive lo `scrollLeft` della fila e basta — mai `scrollIntoView`, che sposterebbe anche la colonna o la
+ * pagina. Rettangoli e non `offsetLeft`, come Hermes (`tab-strip-scroll.ts`): la fila non è il genitore posizionato della scheda.
+ */
+export function tieniInVistaScheda(scheda) {
+  const fila = scheda?.parentElement;
+  if (!fila || fila.scrollWidth <= fila.clientWidth) return;
+  const vista = fila.getBoundingClientRect();
+  const r = scheda.getBoundingClientRect();
+  const inizio = r.left - vista.left + fila.scrollLeft;
+  const prossimo = scorrimentoFilaSchede({ larghezza: fila.clientWidth, scorrimento: fila.scrollLeft, contenuto: fila.scrollWidth, inizio, fine: inizio + r.width });
+  if (prossimo !== fila.scrollLeft) fila.scrollLeft = prossimo;
+}
+
 export function nomeSchedaValido(nome) {
   const pulito = String(nome ?? '').trim();
   return pulito.length > 0 && pulito.length <= 40;

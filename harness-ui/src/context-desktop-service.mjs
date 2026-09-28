@@ -9,11 +9,19 @@ const validId = value => typeof value === 'string' && value.length > 0 && value.
 
 /** Desktop ownership and transport adaptation; archive paths and model credentials
  * never originate in the HTTP request. Every durable mutation has a receipt. */
-export function createDesktopContextService({ engine, store, loadLegacy, resolveSessionModel, isSessionEnabled, readSession, onEvent, runInference, clock = () => new Date().toISOString() }) {
+export function createDesktopContextService({ engine, store, loadLegacy, resolveSessionModel, isSessionEnabled, readSession, onEvent, runInference, registraAncora, clock = () => new Date().toISOString() }) {
   if (!engine || !store || typeof readSession !== 'function' || typeof resolveSessionModel !== 'function' || typeof isSessionEnabled !== 'function') fail('CTX_PORT_MISSING', 'Servizi desktop del contesto incompleti.');
   const queues = new Map();
   const deliveries = new Map();
   const ownedJobs = new Map();
+  /* 24/09 — F4: l'ultima proiezione preparata per sessione (ciò che è andato al modello) è la base
+     dell'ancora del fornitore: `captureProviderResponse` la sposa con `usage.prompt_tokens`. */
+  const ultimeProiezioni = new Map();
+  /* 24/09 — F4: le sessioni per cui questo processo ha già cercato job orfani (basta una volta: in
+     questo processo un job attivo è sempre nella mappa `running` del motore). */
+  const recuperate = new Set();
+  /* P18: per sessione, le impronte dei record gia' verificati e la revisione dell'archivio che le ha prodotte. */
+  const impronteVerificate = new Map();
   let closed = false;
   function serial(sessionId, task) {
     const previous = queues.get(sessionId) ?? Promise.resolve();
@@ -30,6 +38,15 @@ export function createDesktopContextService({ engine, store, loadLegacy, resolve
     if (!snapshot) {
       const jsonl = await loadLegacy?.({ sessionId });
       snapshot = jsonl ? await importLegacySession({ sessionId, jsonl, settings: parseContextSettings({}), metadata: {} }, { store }) : await store.initSession({ sessionId, settings: parseContextSettings({}) });
+    } else if (!recuperate.has(sessionId) && typeof engine.recoverInterruptedJobs === 'function') {
+      /*
+       * 24/09/2026 — F4, CTX-RESTART-ACTIVE-JOB-RECOVERY: al primo tocco della sessione in questo processo un job
+       * lasciato «in corso» da un processo morto viene dichiarato interrotto (`paused` + `CTX_JOB_INTERRUPTED`,
+       * vedi `engine.mjs::recoverInterrupted`), così il pannello non mostra un avanzamento che non avanza e la
+       * sessione può compattare di nuovo. Prima di oggi `GET /` rileggeva la riga com'era, per sempre.
+       */
+      snapshot = await engine.recoverInterruptedJobs({ sessionId });
+      recuperate.add(sessionId);
     }
     return snapshot;
   }
@@ -75,14 +92,27 @@ export function createDesktopContextService({ engine, store, loadLegacy, resolve
       await serial(sessionId, () => ensure(sessionId));
       return Object.freeze({
         capture: ({ messages }) => api.syncOriginals({ sessionId, messages }),
-        prepare: ({ messages, tools, signal }) => api.prepare({ sessionId, messages, tools, signal }),
+        /* 24/09 — F4, contratto con l'adapter (F1): `messages` = proiezione corretta, `originali` = grezzo. */
+        prepare: ({ messages, originali, tools, signal }) => api.prepare({ sessionId, messages, originali, tools, signal }),
         infer: ({ signal }, operation) => runInference ? runInference({ sessionId, priority: 'chat', signal }, operation) : operation(signal),
-        captureProviderResponse: async ({ response, giro }) => {
+        captureProviderResponse: async ({ response, giro, usage }) => {
           if (!response || typeof response !== 'object' || !Number.isSafeInteger(giro) || giro < 0) fail('CTX_INVALID_INPUT', 'Risposta del modello non archiviabile.');
           const bytes = Buffer.from(JSON.stringify({ schema: 'talos.context.provider-response.v1', runId, giro, response }), 'utf8');
           return serial(sessionId, async () => {
             await ensure(sessionId);
-            return store.putBlob({ sessionId, id: `provider-response-${digest({ runId, giro })}`, bytes, mimeType: 'application/json' });
+            const receipt = await store.putBlob({ sessionId, id: `provider-response-${digest({ runId, giro })}`, bytes, mimeType: 'application/json' });
+            /*
+             * 24/09/2026 — F4, punto 5: il numero VERO del fornitore (`usage.prompt_tokens`) diventa l'ancora della
+             * misura successiva, sposato alla proiezione appena inviata; il contatore separato (una chiamata in più,
+             * e per OpenRouter una stima) si usa solo quando il prefisso non combacia. Come Hermes
+             * `agent/usage_anchor.py:46-60`. ⛔ Il kernel oggi passa `{ response, giro }` senza `usage`
+             * (`talosHarness.mjs:8281`): finché quella riga non porta `usage`, qui non arriva nulla e si conta come prima.
+             */
+            if (registraAncora && usage && typeof usage === 'object' && ultimeProiezioni.has(sessionId)) {
+              const profile = await modelFor(sessionId);
+              registraAncora({ provider: profile.provider, model: profile.model, messages: ultimeProiezioni.get(sessionId), usage });
+            }
+            return receipt;
           });
         },
       });
@@ -166,20 +196,57 @@ export function createDesktopContextService({ engine, store, loadLegacy, resolve
       }
       fail('CTX_ROUTE_NOT_FOUND', 'Operazione del contesto non trovata.');
     },
+    /*
+     * P18 (26/09/2026, patch approvata dall'owner via la lane CLI): l'archivio non si RILEGGE a ogni capture. Le
+     * impronte dei record gia' verificati restano in memoria, legate alla revisione dell'archivio che le ha prodotte;
+     * se la revisione e' ancora quella (nessun altro ha scritto: una compattazione la cambia), si usano quelle invece
+     * di `allRecords` (misurato: ~25 ms a capture a 1.351 messaggi, cresce con la storia). Il confronto con OGNI
+     * messaggio resta: la divergenza si scopre come prima.
+     */
     syncOriginals({ sessionId, messages }) {
       return serial(sessionId, async () => {
         const snapshot = await ensure(sessionId);
         if (!Array.isArray(messages)) fail('CTX_INVALID_INPUT', 'Cronologia non valida.');
-        const saved = await allRecords(sessionId);
-        if (messages.length < saved.length || saved.some((record, index) => record.sha256 !== digest(messages[index]))) fail('CTX_HISTORY_DIVERGED', 'La cronologia attiva differisce dall’archivio. Gli originali sono conservati; occorre recuperare la versione completa.');
-        const records = messages.slice(saved.length).map((message, offset) => ({ id: `message-${saved.length + offset + 1}`, message, createdAt: clock(), origin: 'desktop-kernel' }));
+        const noto = impronteVerificate.get(sessionId);
+        const salvate = noto && Number.isInteger(snapshot?.revision) && noto.revision === snapshot.revision ? noto.impronte : (await allRecords(sessionId)).map((record) => record.sha256);
+        if (messages.length < salvate.length || salvate.some((impronta, index) => impronta !== digest(messages[index]))) {
+          impronteVerificate.delete(sessionId);
+          fail('CTX_HISTORY_DIVERGED', 'La cronologia attiva differisce dall’archivio. Gli originali sono conservati; occorre recuperare la versione completa.');
+        }
+        const records = messages.slice(salvate.length).map((message, offset) => ({ id: `message-${salvate.length + offset + 1}`, message, createdAt: clock(), origin: 'desktop-kernel' }));
         if (records.length) await store.appendOriginalBatch({ sessionId, records, expectedRevision: snapshot.revision });
-        return store.readContextSnapshot({ sessionId });
+        const dopo = await store.readContextSnapshot({ sessionId });
+        impronteVerificate.set(sessionId, { revision: dopo?.revision, impronte: [...salvate, ...records.map((record) => digest(record.message))] });
+        return dopo;
       });
     },
-    async prepare({ sessionId, messages, tools, signal }) {
-      await api.syncOriginals({ sessionId, messages });
-      const result = await engine.prepareForRequest({ sessionId, tools, sessionModel: await modelFor(sessionId), signal });
+    /*
+     * 24/09/2026 — F4: ARCHIVIO ≠ PROIEZIONE (T1/T2 della ricognizione). L'adapter desktop corregge gli esiti
+     * degli attrezzi PRIMA della richiesta; archiviare quella proiezione faceva divergere l'archivio (grezzo, da
+     * `capture`) alla richiesta dopo: `CTX_HISTORY_DIVERGED` alla seconda richiesta, riprodotto dalla sonda T2.
+     * Ora: si ARCHIVIA da `originali` quando c'è (ripiego: `messages`, come prima per chi non lo passa), si
+     * PROIETTA e si RIASSUME da `messages`. Una proiezione non allineata (lunghezza o ruoli diversi) si rifiuta
+     * prima di toccare l'archivio. Come Hermes (`hermes_state_messages.py:735-741`, clone `65ad529`) e Claude
+     * Code (issue #26125, 16/02/2026: «The full transcript is preserved in transcript.jsonl on disk» mentre al
+     * modello arrivano i «compacted summaries»): la trascrizione grezza e il contesto inviato sono due cose.
+     */
+    async prepare({ sessionId, messages, originali, tools, signal }) {
+      let projection;
+      if (originali !== undefined) {
+        if (!Array.isArray(originali) || !Array.isArray(messages) || messages.length !== originali.length || messages.some((message, index) => message?.role !== originali[index]?.role)) fail('CTX_INVALID_INPUT', 'La proiezione della richiesta non è allineata agli originali (lunghezza o ruoli diversi).');
+        projection = messages;
+      }
+      await api.syncOriginals({ sessionId, messages: originali === undefined ? messages : originali });
+      let result;
+      try { result = await engine.prepareForRequest({ sessionId, projection, tools, sessionModel: await modelFor(sessionId), signal }); }
+      catch (error) {
+        /* 25/09 — l'avviso «compattazione automatica in pausa» nasce anche quando la richiesta MUORE (contesto che non entra,
+           riassunto rifiutato mentre si aspettava): senza questa consegna restava nella coda fino alla richiesta dopo. Una
+           consegna fallita non copre l'errore vero della richiesta. */
+        await deliver(sessionId).catch(() => {});
+        throw error;
+      }
+      if (Array.isArray(result?.messages)) ultimeProiezioni.set(sessionId, result.messages);
       await deliver(sessionId);
       return result;
     },

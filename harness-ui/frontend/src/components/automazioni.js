@@ -1,4 +1,5 @@
 /** AutomationRow: programma e avvii registrati, mai esiti o costi dedotti. 05/09/2026. */
+import { nomeModelloUmano } from './chat-foot.js';
 export function statoAutomazione(attiva) {
  if(attiva===true)return {testo:'Attiva',tono:'success',prossimo:false};
  if(attiva===false)return {testo:'In pausa',tono:'',prossimo:true};
@@ -10,7 +11,9 @@ export function testiAutomazione(a,adesso=new Date()){
  const oggi=new Date(adesso).toISOString().slice(0,10),limite=intero(a.limiteAlGiorno)&&a.limiteAlGiorno>0?a.limiteAlGiorno:null;
  const conteggio=a.giornoContatore!==oggi?0:intero(a.eseguiteOggi)?a.eseguiteOggi:null;
  const raggiunto=limite!==null&&conteggio!==null&&conteggio>=limite;
- return {nome:typeof a.nome==='string'&&a.nome.trim()?a.nome:'Automazione senza nome',intervallo:intero(a.intervalloMinuti)&&a.intervalloMinuti>0?'Ogni '+a.intervalloMinuti+' min':'Intervallo non registrato',conteggio:conteggio===null||limite===null?'Conteggio non disponibile':conteggio+' di '+limite,ultima:a.ultimaEsecuzione==null?'Nessun avvio registrato':dataCompleta(a.ultimaEsecuzione),prossima:a.attiva===false?'In pausa':a.attiva!==true?'Stato da verificare':raggiunto?'Limite giornaliero raggiunto':dataCompleta(a.prossimaEsecuzione),creata:dataCompleta(a.creataAlle),task:typeof a.taskId==='string'?a.taskId:'Attività non registrata'};
+ return {nome:typeof a.nome==='string'&&a.nome.trim()?a.nome:'Automazione senza nome',intervallo:intero(a.intervalloMinuti)&&a.intervalloMinuti>0?'Ogni '+a.intervalloMinuti+' min':'Intervallo non registrato',conteggio:conteggio===null||limite===null?'Conteggio non disponibile':conteggio+' di '+limite,ultima:a.ultimaEsecuzione==null?'Nessun avvio registrato':dataCompleta(a.ultimaEsecuzione),prossima:a.attiva===false?'In pausa':a.attiva!==true?'Stato da verificare':raggiunto?'Limite giornaliero raggiunto':dataCompleta(a.prossimaEsecuzione),creata:dataCompleta(a.creataAlle),task:typeof a.taskId==='string'?a.taskId:'Attività non registrata',
+  // 24/09/2026, decisione owner: il modello salvato alla creazione; le automazioni di prima girano col predefinito del server.
+  modello:typeof a.modello==='string'&&a.modello.trim()?(nomeModelloUmano(a.modello)||a.modello):'Predefinito del server'};
 }
 export function filtraAutomazioni(elenco,{query='',stato='tutte'}={}){
  const q=String(query).trim().toLocaleLowerCase('it');
@@ -27,7 +30,7 @@ export function creaAutomationRow(a,{document:doc=globalThis.document,adesso=new
  if(stato.prossimo!==null){toggle.setAttribute('role','switch');toggle.setAttribute('aria-checked',String(a.attiva));toggle.setAttribute('aria-label','Automazione '+t.nome);toggle.append(el(doc,'span','talos-switch__thumb'));}else toggle.textContent='Stato da verificare';
  toggle.addEventListener('click',()=>onToggle?.(a,stato.prossimo));testa.append(toggle);
  const righe=el(doc,'div','talos-automation__runs');righe.append(kv(doc,'Prossimo avvio',t.prossima),kv(doc,'Avvii nel giorno UTC / limite',t.conteggio));
- const piede=el(doc,'div','talos-automation__head');const dettagli=el(doc,'button','talos-button talos-button--ghost talos-button--sm','Dettagli');dettagli.type='button';dettagli.dataset.autoDetails='';dettagli.setAttribute('aria-expanded',String(aperta));const pannello=el(doc,'div','talos-automation__runs');pannello.dataset.autoDettaglio='';pannello.hidden=!aperta;pannello.append(kv(doc,'Ultimo avvio registrato',t.ultima),kv(doc,'Creata',t.creata),kv(doc,'Attività',t.task));dettagli.addEventListener('click',()=>{pannello.hidden=!pannello.hidden;dettagli.setAttribute('aria-expanded',String(!pannello.hidden));onDettagli?.(a,!pannello.hidden);});piede.append(dettagli,el(doc,'span','talos-grow'));
+ const piede=el(doc,'div','talos-automation__head');const dettagli=el(doc,'button','talos-button talos-button--ghost talos-button--sm','Dettagli');dettagli.type='button';dettagli.dataset.autoDetails='';dettagli.setAttribute('aria-expanded',String(aperta));const pannello=el(doc,'div','talos-automation__runs');pannello.dataset.autoDettaglio='';pannello.hidden=!aperta;pannello.append(kv(doc,'Modello',t.modello),kv(doc,'Ultimo avvio registrato',t.ultima),kv(doc,'Creata',t.creata),kv(doc,'Attività',t.task));dettagli.addEventListener('click',()=>{pannello.hidden=!pannello.hidden;dettagli.setAttribute('aria-expanded',String(!pannello.hidden));onDettagli?.(a,!pannello.hidden);});piede.append(dettagli,el(doc,'span','talos-grow'));
  if(salvataggio&&salvataggioId===a.id){const attesa=el(doc,'span','talos-muted','Salvataggio…');attesa.setAttribute('role','status');piede.append(attesa);}
  const elimina=el(doc,'button','talos-button talos-button--ghost talos-button--sm','Elimina');elimina.type='button';elimina.dataset.autoElimina='';elimina.setAttribute('aria-label','Elimina '+t.nome);elimina.disabled=salvataggio;elimina.addEventListener('click',()=>onElimina?.(a));piede.append(elimina);riga.append(testa,righe,piede,pannello);return riga;
 }

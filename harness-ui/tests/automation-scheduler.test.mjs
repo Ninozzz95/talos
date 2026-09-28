@@ -199,3 +199,19 @@ test('⛔ AL CONTRARIO: un giro che FALLISCE non blocca per sempre i successivi'
 
   assert.deepEqual(registry.avviate, ['x'], 'il giro dopo il fallimento gira davvero');
 });
+
+/* 24/09/2026, decisione owner: l'automazione gira col modello salvato alla creazione; senza, col predefinito del server. */
+test('AUTO-MODEL-USED: il pianificatore avvia col modello salvato; senza modello non ne inventa uno', async () => {
+  const voci = [
+    { id: 'a1', taskId: 't1', attiva: true, modello: 'z-ai/glm-5.3-flash', prossimaEsecuzione: '2026-09-24T09:59:00.000Z', limiteAlGiorno: 3, eseguiteOggi: 0, giornoContatore: null },
+    { id: 'a2', taskId: 't2', attiva: true, prossimaEsecuzione: '2026-09-24T09:59:00.000Z', limiteAlGiorno: 3, eseguiteOggi: 0, giornoContatore: null },
+  ];
+  const opzioni = [];
+  const registry = { avvia(taskId, opts) { opzioni.push({ taskId, opts }); return { sessionId: 's-' + taskId }; } };
+  const scheduler = createAutomationScheduler({ store: storeFinto(voci), sessionRegistry: registry, clock: () => new Date('2026-09-24T10:00:00.000Z') });
+  await scheduler.unTick();
+  assert.deepEqual(opzioni, [
+    { taskId: 't1', opts: { senzaInterfaccia: true, modelloScelto: 'z-ai/glm-5.3-flash' } },
+    { taskId: 't2', opts: { senzaInterfaccia: true } },
+  ]);
+});

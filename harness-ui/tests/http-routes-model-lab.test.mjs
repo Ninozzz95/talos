@@ -96,7 +96,7 @@ test('HTTP-LOCAL-SESSION-01 inoltra provider/runtime/model e consenso senza pass
   const response = await fetch(`${base}/api/v1/sessions`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ taskId: 'task-vero', provider: 'local', runtimeId: 'ollama', modelId: 'qwen3:8b', fallbackConsent: true }) });
   assert.equal(response.status, 200);
   assert.equal(request.taskId, 'task-vero');
-  assert.deepEqual(request.options, { modelloScelto: null, modelloPlannerScelto: null, reasoningScelto: null, mobile: false, permessiScelto: null, permessiPerAttrezzoScelto: null, provider: 'local', runtimeId: 'ollama', modelId: 'qwen3:8b', fallbackConsent: true });
+  assert.deepEqual(request.options, { modelloScelto: null, modelloPlannerScelto: null, reasoningScelto: null, mobile: false, permessiScelto: null, permessiPerAttrezzoScelto: null, modalitaOperativaScelta: null, provider: 'local', runtimeId: 'ollama', modelId: 'qwen3:8b', fallbackConsent: true });
 });
 
 test('MODEL-LAB-HTTP-MODEL-ACTIONS-01 espone rinomina, copia percorso relativo ed eliminazione', async (t) => {

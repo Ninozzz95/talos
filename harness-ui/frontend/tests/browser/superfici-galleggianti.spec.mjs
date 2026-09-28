@@ -5,7 +5,22 @@
  */
 import { expect, test } from '@playwright/test';
 
-const opaco = (colore) => { const m = /rgba?\(([^)]+)\)/.exec(colore); if (!m) return false; const p = m[1].split(',').map((x) => Number(x.trim())); return p.length === 3 || p[3] >= 0.97; };
+/*
+ * ⛔ 25/09/2026 — il colore calcolato arriva in DUE forme: `rgb(r, g, b)` / `rgba(r, g, b, a)` e, quando il token passa da
+ *   `color-mix(in srgb, …)` (temi.css:118-141), `color(srgb r g b)` o `color(srgb r g b / a)` (CSS Color 4, alfa dopo la
+ *   barra). Il parser di prima conosceva solo la prima, e un fondo PIENO in `color(srgb …)` risultava «trasparente»: rosso
+ *   sul prodotto giusto (A/B del 25/09: rosso anche prima di ATLAS). Si legge l'alfa, in tutte e due le forme.
+ */
+const opaco = (colore) => {
+  const rgb = /rgba?\(([^)]+)\)/.exec(colore);
+  const srgb = /color\(srgb\s+([^)]+)\)/.exec(colore);
+  const corpo = rgb?.[1] ?? srgb?.[1];
+  if (!corpo) return false;
+  const [canali, alfaDopoBarra] = corpo.split('/');
+  const parti = canali.split(/[\s,]+/).filter(Boolean);
+  const alfa = alfaDopoBarra !== undefined ? Number(alfaDopoBarra.trim()) : parti.length === 4 ? Number(parti[3]) : 1;
+  return parti.length >= 3 && Number.isFinite(alfa) && alfa >= 0.97;
+};
 
 for (const tema of ['dark', 'light']) {
   test(`GALLEGGIANTI-01 (${tema}) — il toast ha uno sfondo pieno`, async ({ page }) => {

@@ -50,13 +50,19 @@
  *   diventa un dato dentro un pacchetto, mai un'istruzione per il modello.
  */
 import { join } from 'node:path';
-import { tmpdir } from 'node:os';
+import { radiceScratch } from './scratch.mjs';
 import { avviaBrowserVivo, trovaChromium, creaClientCdp, apriSchedaVuota, vaiA } from './browser-vivo.mjs';
 import { avviaTrasmissione, fermaTrasmissione, mandaClic, mandaTasto, mandaRotella, ridimensiona } from './browser-stream.mjs';
 import { installaOverlay, descriviElemento, raccogliErrori } from './browser-annota.mjs';
 
-/** Dove vive il profilo del browser pilotato: fuori dal progetto, dentro i temporanei di sistema. */
-export function cartellaProfiloPredefinita(base = tmpdir()) {
+/**
+ * Dove vive il profilo del browser pilotato: fuori dal progetto, sotto la radice dei temporanei di TALOS.
+ * ⛔ Owner, 24/09/2026: prima stava in `%TEMP%\talos-browser-vivo`; ora sta nella radice (`src/scratch.mjs`) ed è
+ *   soggetto alla sua pulizia (24 ore senza scritture nel sottoalbero): il profilo si ricrea alla navigazione dopo,
+ *   perché `avviaBrowserVivo` crea la cartella con `mkdir` ricorsivo (`browser-vivo.mjs:278`). Il nome resta
+ *   stabile: una sola finestra per server, un solo profilo. La vecchia cartella in TEMP la toglie la pulizia d'avvio.
+ */
+export function cartellaProfiloPredefinita(base = radiceScratch()) {
   return join(base, 'talos-browser-vivo');
 }
 

@@ -171,8 +171,11 @@ test('BC49: deposito unico del banco resta byte per byte, anche senza adattatore
   assert.match(r.risposta, /^deposited:/);
 });
 
-test('BC49: inventario e campi TALOS-BANCO invariati, eccetto le esenzioni DICHIARATE qui sotto (deposito, i tre attrezzi paginati, l\'attrezzo di modifica e il lotto di library_delete)', () => {
-  for (const [attrezzi, impronta] of [[ATTREZZI_OPENAI, '38d65a3f445bf470c5f79ace0b662ae1eaf619b22cbfabbe885676ee5c5bfd4b'], [ATTREZZI_ESTESI_OPENAI, '3b1ec130170b4e761cdcc27ced49228ddb6fd8296017ec22a9f4a272152845d4']]) {
+test('BC49: inventario e campi TALOS-BANCO invariati, eccetto le esenzioni dichiarate (deposito, paginazione, modifica, Ask, dialogo agenti, Workflow, lotti)', () => {
+  /* 27/09/2026 — l'impronta estesa passa da 3b1ec130… a 105dd078… per l'esenzione della prosa di memory_search/update/delete
+   * (vedi sotto). ⛔ Non è stata indovinata: la STESSA esenzione applicata all'inventario del commit 93e99fe2a (prima dei sei
+   * attrezzi nuovi) dà 105dd078… anche lì — prova misurata che nient'altro è cambiato. La base (38d65a3f…) non si tocca. */
+  for (const [attrezzi, impronta] of [[ATTREZZI_OPENAI, '38d65a3f445bf470c5f79ace0b662ae1eaf619b22cbfabbe885676ee5c5bfd4b'], [ATTREZZI_ESTESI_OPENAI, '105dd0788308b6fd1c637740053cf88e41146b3662a7ef5e00b0495bcd964cbc']]) {
     /* ⛔ PO-12 (13/09/2026) — TERZA esenzione, e la piu' forte delle tre: l'attrezzo NUOVO
      * (`file_edit`) si toglie INTERO dalla copia prima di misurare. Cosi' le due impronte qui
      * sopra NON sono state ristampate — sono le stesse identiche di ieri, e il fatto che
@@ -195,7 +198,115 @@ test('BC49: inventario e campi TALOS-BANCO invariati, eccetto le esenzioni DICHI
       assert.deepEqual([...schemaModifica.required].sort(), ['new_string', 'old_string', 'percorso']);
       assert.equal(schemaModifica.required.includes('replace_all'), false, 'replace_all deve restare OPZIONALE: il default e\' il match unico');
     }
-    const copia = structuredClone(attrezzi).filter((t) => (t.function ?? t).name !== 'file_edit');
+    /* ⛔ 21/09/2026 — Ask Question è un attrezzo esteso nuovo e intenzionale. Come `file_edit`,
+     * si esclude dal censimento storico soltanto DOPO averne fissato tutta la forma pubblica:
+     * così il vecchio hash continua a provare che nessuno dei 43 attrezzi precedenti è mutato. */
+    const domanda = attrezzi.map((t) => t.function ?? t).find((f) => f.name === 'ask_user_question');
+    if (attrezzi === ATTREZZI_OPENAI) {
+      assert.equal(domanda, undefined, 'ask_user_question deve restare un attrezzo ESTESO: il banco base non cambia');
+    } else {
+      assert.ok(domanda, 'ask_user_question è sparito dagli attrezzi estesi');
+      const schemaDomanda = domanda.parameters ?? domanda.input_schema;
+      assert.deepEqual(Object.keys(schemaDomanda.properties), ['questions']);
+      assert.deepEqual(schemaDomanda.required, ['questions']);
+      const domande = schemaDomanda.properties.questions;
+      assert.equal(domande.type, 'array');
+      assert.equal(domande.minItems, 1);
+      // 23/09/2026, decisione owner: 1-4 domande × 2-4 opzioni (era 1-3 × 2-5), come AskUserQuestion di Claude Code.
+      assert.equal(domande.maxItems, 4);
+      // 24/09/2026, decisione owner 32: «perché conta» obbligatorio (`why`) e al più un'opzione consigliata (`recommended`).
+      assert.deepEqual(Object.keys(domande.items.properties).sort(), ['id', 'multiSelect', 'options', 'question', 'why']);
+      assert.deepEqual([...domande.items.required].sort(), ['id', 'question', 'why']);
+      assert.equal(domande.items.properties.why.type, 'string');
+      assert.equal(domande.items.properties.why.maxLength, 300);
+      assert.equal(domande.items.properties.id.maxLength, 64);
+      assert.equal(domande.items.properties.id.pattern, '^[a-z][a-z0-9_]*$');
+      assert.equal(domande.items.properties.question.maxLength, 600);
+      const opzioni = domande.items.properties.options;
+      assert.equal(opzioni.minItems, 2);
+      assert.equal(opzioni.maxItems, 4);
+      assert.deepEqual(Object.keys(opzioni.items.properties).sort(), ['description', 'label', 'recommended']);
+      assert.equal(opzioni.items.properties.recommended.type, 'boolean');
+      assert.deepEqual([...opzioni.items.required].sort(), ['description', 'label']);
+      assert.equal(opzioni.items.properties.label.maxLength, 120);
+      assert.equal(opzioni.items.properties.description.maxLength, 300);
+      assert.equal(domande.items.properties.multiSelect.type, 'boolean');
+    }
+    /* BE-AGENT-DIALOGUE-01: quattro tool estesi nuovi, nessuno nel banco base.
+     * Fissarne nomi e campi prima di escluderli dall'impronta STORICA. */
+    const dialogueTools = {
+      ask_parent: ['question'],
+      answer_child_question: ['childId', 'requestId', 'answer'],
+      ask_child: ['childId', 'question'],
+      answer_parent_question: ['requestId', 'answer'],
+    };
+    for (const [name, fields] of Object.entries(dialogueTools)) {
+      const tool = attrezzi.map((entry) => entry.function ?? entry).find((entry) => entry.name === name);
+      if (attrezzi === ATTREZZI_OPENAI) assert.equal(tool, undefined, `${name} non deve entrare nel banco base`);
+      else {
+        assert.ok(tool, `${name} deve essere un attrezzo esteso`);
+        const schema = tool.parameters ?? tool.input_schema;
+        assert.equal(schema.type, 'object');
+        assert.deepEqual(Object.keys(schema.properties).sort(), [...fields].sort());
+        assert.deepEqual([...schema.required].sort(), [...fields].sort());
+        for (const field of fields) assert.equal(schema.properties[field].type, 'string');
+      }
+    }
+    const workflowTool = attrezzi.map((entry) => entry.function ?? entry).find((entry) => entry.name === 'workflow_plan_propose');
+    if (attrezzi === ATTREZZI_OPENAI) assert.equal(workflowTool, undefined, 'Workflow planning must remain an extended tool');
+    else {
+      assert.ok(workflowTool, 'Workflow planning tool is missing');
+      const schema = workflowTool.parameters ?? workflowTool.input_schema;
+      assert.equal(schema.type, 'object');
+      /* F3-11b (24/09/2026 notte, decisione owner 40): il modello vede SOLO la bozza corta; `core` resta per le prove e le API
+       * interne e non si annuncia più. La forma della bozza la fissa per intero WF-DRAFT-SCHEMA-PARITY. */
+      assert.deepEqual(Object.keys(schema.properties), ['draft']);
+      assert.equal(schema.properties.draft.type, 'object');
+      assert.deepEqual([...schema.properties.draft.required].sort(), ['nodes', 'objective', 'phases', 'title']);
+      assert.equal(schema.properties.draft.additionalProperties, false);
+      assert.deepEqual(schema.required, ['draft']);
+      assert.equal(schema.additionalProperties, false);
+      assert.match(workflowTool.description, /draft.*phases/u);
+      // F3-10 (23/09/2026): il modo «Workflow» è ritirato; la descrizione non promette più un modo che il modello non vede.
+      assert.doesNotMatch(workflowTool.description, /Workflow mode|Plan or Workflow/u);
+    }
+    /* 24/09/2026, decisione owner 36 — `present_plan` è un attrezzo esteso NUOVO e intenzionale (il piano approvabile, come
+     * ExitPlanMode di Claude Code). Come gli altri, si fissa tutta la sua forma pubblica PRIMA di escluderlo dal censimento
+     * storico: così l'impronta vecchia resta la prova che nessuno degli attrezzi precedenti è cambiato. */
+    const pianoTool = attrezzi.map((entry) => entry.function ?? entry).find((entry) => entry.name === 'present_plan');
+    if (attrezzi === ATTREZZI_OPENAI) assert.equal(pianoTool, undefined, 'present_plan deve restare un attrezzo ESTESO: il banco base non cambia');
+    else {
+      assert.ok(pianoTool, 'present_plan è sparito dagli attrezzi estesi');
+      const schema = pianoTool.parameters ?? pianoTool.input_schema;
+      assert.equal(schema.type, 'object');
+      assert.deepEqual(Object.keys(schema.properties), ['plan']);
+      assert.deepEqual(schema.required, ['plan']);
+      assert.equal(schema.properties.plan.type, 'string');
+      assert.equal(schema.properties.plan.maxLength, 100_000);
+      assert.match(pianoTool.description, /Plan mode/u);
+    }
+    /* ⭐ 27/09/2026, decisione owner (memoria `decisioni-owner-capacita-sezioni-27-09`) — sei attrezzi estesi NUOVI di sola
+     * lettura (elenco della memoria, cerca e leggi nelle note, cerca in attività e ricerche, Board e Conversazioni). Come gli
+     * altri nuovi: nomi, campi e obbligatori fissati qui PRIMA di toglierli dal censimento storico; nessuno entra nella base. */
+    const lettureSezioni = {
+      memory_list: [['limit'], []],
+      notes_search: [['limit', 'query'], ['query']],
+      notes_read: [['from', 'id'], ['id']],
+      tasks_search: [['limit', 'query', 'status'], ['query']],
+      research_search: [['limit', 'query'], ['query']],
+      conversation_search: [['around_message', 'conversation_id', 'folder', 'from', 'limit', 'query', 'status', 'window'], []],
+    };
+    for (const [nome, [campi, obbligatori]] of Object.entries(lettureSezioni)) {
+      const tool = attrezzi.map((entry) => entry.function ?? entry).find((entry) => entry.name === nome);
+      if (attrezzi === ATTREZZI_OPENAI) assert.equal(tool, undefined, `${nome} non deve entrare nel banco base`);
+      else {
+        assert.ok(tool, `${nome} deve essere un attrezzo esteso`);
+        const schema = tool.parameters ?? tool.input_schema;
+        assert.deepEqual(Object.keys(schema.properties).sort(), campi, nome);
+        assert.deepEqual([...(schema.required ?? [])].sort(), obbligatori, nome);
+      }
+    }
+    const copia = structuredClone(attrezzi).filter((t) => !['file_edit', 'ask_user_question', 'present_plan', 'workflow_plan_propose', ...Object.keys(dialogueTools), ...Object.keys(lettureSezioni)].includes((t.function ?? t).name));
     for (const t of copia) {
       const f = t.function ?? t;
       if (f.name === 'research_deposit') {
@@ -242,6 +353,20 @@ test('BC49: inventario e campi TALOS-BANCO invariati, eccetto le esenzioni DICHI
        *   lotti) l'impronta estesa COINCIDE (3b1ec130… su entrambi) — nient'altro e' cambiato:
        *   ne' un nome, ne' un campo, ne' un obbligatorio. E la lista base non si tocca:
        *   `library_delete` non c'e' nella base, e la sua impronta 38d65a3f… resta quella. */
+      /* ⭐ 27/09/2026, decisione owner (`decisioni-owner-capacita-sezioni-27-09`) — `memory_search` cerca PER PAROLE (vuota o
+       * «*» = tutte) e lo dice; `memory_update`/`memory_delete` nominano anche `memory_list` per trovare l'id. Cambia solo la
+       * PROSA (descrizioni dell'attrezzo e dei campi): nomi, campi e obbligatori restano quelli di prima. Si asserisce che cosa
+       * dice la prosa nuova, poi si toglie dalla copia — se l'impronta storica torna identica, nient'altro è cambiato. */
+      if (f.name === 'memory_search' || f.name === 'memory_update' || f.name === 'memory_delete') {
+        const schema = f.parameters ?? f.input_schema;
+        if (f.name === 'memory_search') {
+          assert.match(f.description, /empty query or "\*" returns them all/u, 'memory_search: la descrizione deve dire che vuota = tutte');
+          delete schema.properties.query.description;
+        }
+        else assert.match(f.description, /memory_list or memory_search/u, `${f.name}: deve nominare memory_list per l'id`);
+        if (f.name === 'memory_delete') delete schema.properties.id.description;
+        delete f.description;
+      }
       if (f.name === 'library_delete') {
         const schema = f.parameters ?? f.input_schema;
         assert.ok(schema.properties.ids, 'library_delete: manca il campo `ids` dei lotti');

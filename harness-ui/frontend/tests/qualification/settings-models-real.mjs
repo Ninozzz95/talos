@@ -15,7 +15,7 @@ const base = 'http://127.0.0.1:5196';
 await mkdir(out, { recursive: true });
 const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !/^(TALOS_|OPENAI_|ANTHROPIC_|OPENROUTER_|GOOGLE_API_KEY|GEMINI_API_KEY|NODE_OPTIONS)/i.test(key)));
 const result = { source: execFileSync('git',['rev-parse','HEAD'],{cwd:root,encoding:'utf8'}).trim(), node: process.version, mockedApis: false, paidInference: false, screenshots: [], checks: [], errors: [], warnings: [], failures: [], inspectedVisually: false };
-const server = spawn(process.execPath, [join(root, 'harness-ui/server.mjs')], { cwd: root, env: { ...env, TALOS_HARNESS_UI_HOST: '127.0.0.1', TALOS_HARNESS_UI_PORT: '5196', TALOS_DESKTOP_PROFILE: 'preview', TALOS_DESKTOP_DATA_DIR: data, TALOS_HARNESS_UI_SESSIONS_DIR: join(data, 'sessions'), TALOS_HARNESS_UI_PUBLIC_DIR: join(root, 'harness-ui/frontend/dist') }, stdio: ['ignore','pipe','pipe'] });
+const server = spawn(process.execPath, [join(root, 'harness-ui/server.mjs')], { cwd: root, env: { ...env, TALOS_HARNESS_UI_HOST: '127.0.0.1', TALOS_HARNESS_UI_PORT: '5196', TALOS_DESKTOP_PROFILE: 'preview', TALOS_DESKTOP_DATA_DIR: data, TALOS_HARNESS_UI_SESSIONS_DIR: join(data, 'sessions'), TALOS_HARNESS_UI_KEYRING: 'memoria', TALOS_SCRATCH_DIR: join(data, 'scratch'), TALOS_HARNESS_UI_PUBLIC_DIR: join(root, 'harness-ui/frontend/dist') }, stdio: ['ignore','pipe','pipe'] });
 let logs = '', browser, page;
 server.stdout.on('data', d => { logs += d; }); server.stderr.on('data', d => { logs += d; });
 async function snapshot(name) {
@@ -65,7 +65,8 @@ try {
   await page.locator('.talos-sidebar [data-vaia="impostazioni"]').first().click();
   await page.locator('#schermoImpostazioni').waitFor({state:'visible'});
   const sections=await page.locator('#schermoImpostazioni [data-settings-tab]').evaluateAll(nodes=>nodes.map(n=>n.dataset.settingsTab));
-  assert.equal(sections.length,10);assert.equal(new Set(sections).size,10);result.sections=sections;
+  // 23/09/2026, decisione owner: «Provider e accessi» tolta del tutto — nove sezioni, e nessuna `providers`.
+  assert.equal(sections.length,9);assert.equal(new Set(sections).size,9);assert.equal(sections.includes('providers'),false);result.sections=sections;
   result.redesigned=await page.locator('#schermoImpostazioni').getAttribute('data-settings-ui')==='v3';
   for(const mode of ['dark','light']) {
     await page.setViewportSize({width:1440,height:1000}); await color(mode);
@@ -86,7 +87,8 @@ try {
   if(result.redesigned) {
     await check('search-advanced',async()=>{await search('elastica');await snapshot('search-advanced');await page.locator('[data-settings-result="motionEasingSelect"]').click();assert.equal(await page.locator('[data-settings-advanced]').getAttribute('open'),'');assert.equal(await page.locator('#motionEasingSelect--calm').evaluate(el=>el===document.activeElement),true);await snapshot('advanced-focused');});
     await check('search-theme-studio',async()=>{await search('bilanciata');await snapshot('search-studio');await page.locator('[data-settings-result="motionQualitySelect"]').click();await page.locator('#td-studio-motionQualitySelect--calm').waitFor({state:'visible'});await snapshot('studio-deep-link');await page.keyboard.press('Escape');});
-    await check('search-provider-section',async()=>{await search('api key');await snapshot('search-provider');await page.locator('[data-settings-result="providers"]').click();await page.locator('#setting-panel-providers').waitFor({state:'visible'});});
+    // 23/09/2026: le parole dei fornitori portano al Laboratorio modelli (la sezione «Provider e accessi» è tolta).
+    await check('search-provider-section',async()=>{await search('api key');await snapshot('search-provider');await page.locator('[data-settings-result="models"]').click();await page.locator('#setting-panel-models').waitFor({state:'visible'});});
     await check('search-no-results',async()=>{await search('zz-no-setting');assert.equal(await page.locator('[data-settings-result]').count(),0);await snapshot('search-empty');await page.locator('[data-settings-clear]').click();});
     await check('single-setting-reset-and-save',async()=>{
       await choose('appearance');const control=page.locator('#uiFontScaleSelect');await selectValue(control,'large');

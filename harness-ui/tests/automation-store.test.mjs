@@ -8,9 +8,10 @@ import { rimuoviCartellaDiProva } from './aiuto/rimuovi-cartella-di-prova.mjs';
 import {
   AutomationStoreError, INTERVALLO_MINIMO_MINUTI, LIMITE_MASSIMO_AL_GIORNO, createAutomationStore,
 } from '../src/automation-store.mjs';
+import { cartellaDiProva, cartellaDiProvaAttesa } from './aiuto/cartelle-di-prova.mjs'; // DESK-TEMP-1, 23/09: la cartella nasce con la sua rimozione
 
 function storeFinto(t, orologio = () => new Date('2026-08-27T10:00:00.000Z')) {
-  const cartella = mkdtempSync(join(tmpdir(), 'talos-automations-'));
+  const cartella = cartellaDiProva('talos-automations-');
   t.after(() => rimuoviCartellaDiProva(cartella));
   return createAutomationStore({ cartella, clock: orologio });
 }
@@ -25,7 +26,7 @@ test('⭐ crea() nasce SEMPRE attiva:false — mai una spesa autonoma di sorpres
 });
 
 test('⭐⭐ crea() persiste DAVVERO: un secondo store sulla stessa cartella la rilegge', async (t) => {
-  const cartella = mkdtempSync(join(tmpdir(), 'talos-automations-'));
+  const cartella = cartellaDiProva('talos-automations-');
   t.after(() => rimuoviCartellaDiProva(cartella));
   const uno = createAutomationStore({ cartella });
   const due = createAutomationStore({ cartella });
@@ -112,9 +113,23 @@ test('⭐ elimina() rimuove davvero — elenca() non la ritrova più', async (t)
 });
 
 test('elenca() su una cartella che non esiste ancora torna vuoto, non un errore', async (t) => {
-  const cartella = join(mkdtempSync(join(tmpdir(), 'talos-automations-')), 'mai-creata');
+  const cartella = join(cartellaDiProva('talos-automations-'), 'mai-creata');
   t.after(() => rimuoviCartellaDiProva(cartella));
   const store = createAutomationStore({ cartella });
 
   assert.deepEqual(await store.elenca(), []);
+});
+
+/* 24/09/2026, decisione owner («come il mobile, subito»): il modello scelto alla creazione si salva con l'automazione. */
+test('AUTO-MODEL-SAVED: crea() salva il modello e lo rilegge dopo un riavvio; senza modello resta null; un modello malformato è rifiutato', async (t) => {
+  const cartella = cartellaDiProva('talos-automations-');
+  t.after(() => rimuoviCartellaDiProva(cartella));
+  const store = createAutomationStore({ cartella, clock: () => new Date('2026-09-24T18:00:00.000Z') });
+  const conModello = await store.crea({ taskId: 'x', intervalloMinuti: 30, modello: 'z-ai/glm-5.3-flash' });
+  assert.equal(conModello.modello, 'z-ai/glm-5.3-flash');
+  const senza = await store.crea({ taskId: 'y', intervalloMinuti: 30 });
+  assert.equal(senza.modello, null, 'senza modello: il predefinito del server, dichiarato come null');
+  const riletto = createAutomationStore({ cartella });
+  assert.equal((await riletto.leggi(conModello.id)).modello, 'z-ai/glm-5.3-flash');
+  await assert.rejects(store.crea({ taskId: 'z', intervalloMinuti: 30, modello: 'non un modello!' }), { code: 'AUTOMATION_INVALID' });
 });

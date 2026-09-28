@@ -25,12 +25,14 @@ export async function buildPreparedDesktopContextRequest({ messages, tools = [],
     const capability = await Promise.resolve(readModelCapabilities?.(model.model)).catch(() => null);
     const reasoning = normalizzaReasoningPerModello(requestOptions.reasoning, capability);
     if (reasoning !== undefined) requestOptions.reasoning = reasoning;
-  } else if (model.provider === 'openrouter') {
+  } else if (!chat && model.provider === 'openrouter') {
     /* 09/09 — una SINTESI chiede poco ragionamento (vedi callContextModel nell'adapter: misurato sul giro
        vero D1, senza questo campo glm-5.3-flash si mangiava il budget nel pensiero). Il corpo contato deve
        portare lo stesso campo del corpo inviato, o la misura non è quella della richiesta. */
     const capability = await Promise.resolve(readModelCapabilities?.(model.model)).catch(() => null);
     requestOptions.reasoning = normalizzaReasoningPerModello({ effort: 'low' }, capability);
+  } else if (!chat) {
+    Object.assign(requestOptions, opzioniRagionamentoPerSintesi(model.provider));
   }
   const compiled = await buildPreparedProviderRequest({ messages: preparedMessages, tools: preparedTools, model, signal, requestOptions });
   if (!ID_NATIVI_SDK.includes(model.provider) && !preparedTools.length) compiled.body.tools = [];
@@ -39,6 +41,74 @@ export async function buildPreparedDesktopContextRequest({ messages, tools = [],
     if (!chat) compiled.body.transforms = [];
   }
   return compiled;
+}
+
+/*
+ * 24/09/2026 — F4, punto 4: `reasoning` basso per la SINTESI anche fuori OpenRouter (il 09/09 era curato solo
+ * là). Solo chiavi che `buildPreparedProviderRequest` sa compilare (`reasoning_effort`, `reasoning`): il campo
+ * `thinking` di DeepSeek/Z.ai non è fra quelle, quindi là il pensiero resta acceso a sforzo basso.
+ * Fonti, lette il 24/09/2026:
+ * - OpenAI, guida «Reasoning» (developers.openai.com/api/docs/guides/reasoning): `reasoning_effort` accetta
+ *   `none, minimal, low, medium, high, xhigh, max`; «Setting … to `none` returns HTTP 400» su GPT-6 Astra ⇒ `low`.
+ *   Sul wire Responses il pinned SDK lo traduce in `reasoning.effort` (prova `CTX-WIRE-OPTIONS-openai`).
+ * - DeepSeek, «Thinking mode» (api-docs.deepseek.com/guides/thinking_mode): formato OpenAI con
+ *   `reasoning_effort` «low/high/max»; «Thinking mode is enabled by default, with the default effort being high».
+ * - llama.cpp, `tools/server/README.md`: `reasoning_effort` — «If `none`, reasoning/thinking is disabled».
+ * - Hermes `agent/context_compressor.py:3730-3733` (clone `65ad529`): «NO max_tokens: … a hard cap truncates
+ *   summaries (thinking models burn it on reasoning)» — loro tolgono il tetto, noi lo teniamo (decisione 09/09,
+ *   misurata sul giro D1) e abbassiamo il pensiero.
+ * Fornitori non documentati (zai, qwen, kimi, minimax, anthropic, gemini) ⇒ nessun campo: ignoto vuol dire niente.
+ * ⛔ Chi INVIA la sintesi (`runtime-owner-adapter.mjs::callContextModel`) deve portare le stesse opzioni, o il
+ * corpo contato non è quello inviato: la funzione è esportata apposta per quel file (non di questa corsia).
+ */
+export function opzioniRagionamentoPerSintesi(provider) {
+  if (provider === 'openai' || provider === 'deepseek') return { reasoning_effort: 'low' };
+  if (provider === 'local' || provider === 'llama.cpp' || provider === 'llamacpp') return { reasoning_effort: 'none' };
+  return {};
+}
+
+/*
+ * 24/09/2026 — F4, punto 5: L'ANCORA DEL FORNITORE. Il numero vero di `prompt_tokens` riportato dal fornitore
+ * nella risposta vale più del contatore separato (una chiamata in più; per OpenRouter, che non ha un endpoint
+ * di conteggio, una stima byte/3,5). Si ricorda per (fornitore, modello) insieme all'impronta di OGNI messaggio
+ * della richiesta contata; alla misura dopo, se il prefisso combacia messaggio per messaggio, il risultato è
+ * `prompt_tokens` (+ `completion_tokens` per la risposta del modello, che è il primo messaggio nuovo) + la stima
+ * dei SOLI messaggi aggiunti — `method: 'provider'`, `exact: false`. Prefisso diverso, modello diverso o richiesta
+ * più corta ⇒ si delega al contatore di sempre: nessun numero preso a caso. Come Hermes `agent/usage_anchor.py`
+ * (`65ad529`): `capture_usage_anchor(prompt_tokens, completion_tokens, messages)` (`:46-60`) e
+ * `anchored_context_tokens` — «Anchored prompt+completion tokens plus a rough estimate of ONLY the messages
+ * appended since; None when the anchor is missing or stale» (`:93-107`). Loro riconoscono il prefisso dall'impronta
+ * dell'ultimo messaggio; qui da tutte, che costa poco e non sbaglia su una storia riscritta in mezzo.
+ */
+export function conAncoraDelFornitore(counter) {
+  if (typeof counter?.countPreparedContext !== 'function') fail('CTX_TOKEN_PORT_INVALID', 'Serve un contatore da avvolgere.');
+  const impronta = message => createHash('sha256').update(JSON.stringify(message)).digest('hex');
+  const stima = messages => Math.ceil(Buffer.byteLength(JSON.stringify(messages), 'utf8') / 3.5) + messages.length * 4; // la stessa euristica del contatore
+  const ancore = new Map();
+  const chiave = (provider, model) => `${provider}\n${model}`;
+  return Object.freeze({
+    registraAncora({ provider, model, messages, usage }) {
+      const prompt = Number(usage?.prompt_tokens ?? usage?.input_tokens);
+      if (typeof provider !== 'string' || typeof model !== 'string' || !Array.isArray(messages) || !messages.length || !Number.isSafeInteger(prompt) || prompt <= 0) return false;
+      const completion = Number(usage.completion_tokens ?? usage.output_tokens);
+      ancore.set(chiave(provider, model), { impronte: messages.map(impronta), promptTokens: prompt, completionTokens: Number.isSafeInteger(completion) && completion > 0 ? completion : 0 });
+      return true;
+    },
+    async countPreparedContext(request) {
+      const { messages, tools = [], model, signal } = request ?? {};
+      const ancora = model && typeof model.provider === 'string' && typeof model.model === 'string' ? ancore.get(chiave(model.provider, model.model)) : undefined;
+      const valida = ancora && Array.isArray(messages) && messages.length >= ancora.impronte.length && Number.isSafeInteger(model.windowTokens) && model.windowTokens > 0 && Number.isSafeInteger(model.responseReserve) && model.responseReserve >= 0 && model.responseReserve < model.windowTokens && ancora.impronte.every((hash, index) => hash === impronta(messages[index]));
+      if (!valida) return counter.countPreparedContext(request);
+      signal?.throwIfAborted();
+      let delta = messages.slice(ancora.impronte.length);
+      let inputTokens = ancora.promptTokens;
+      if (delta[0]?.role === 'assistant') { inputTokens += ancora.completionTokens || stima([delta[0]]); delta = delta.slice(1); }
+      const aggiunti = delta.length ? stima(delta) : 0;
+      inputTokens += aggiunti;
+      const requestHash = createHash('sha256').update(JSON.stringify({ provider: model.provider, model: model.model, messages, tools })).digest('hex');
+      return { schema: 'talos.context.tokens.v1', inputTokens, windowTokens: model.windowTokens, responseReserve: model.responseReserve, method: 'provider', exact: false, requestHash, provider: model.provider, model: model.model, estimatedMarginTokens: Math.max(64, Math.ceil(aggiunti * 0.15)) };
+    },
+  });
 }
 
 export function createContextTokenCounter({ fetchFn, resolveProfile, hashFn = text => createHash('sha256').update(text).digest('hex') } = {}) {

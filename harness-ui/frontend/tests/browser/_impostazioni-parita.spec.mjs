@@ -10,6 +10,9 @@ import { join } from 'node:path';
  * screenshot; la gerarchia è dominio → schermata → scheda → campi; e il rischio vero sono le
  * AREE INTERE che mancano, non la profondità di quelle guardate.
  * Dieci sezioni da entrambi i lati, stessa larghezza, stessa condizione.
+ * ⛔ 23/09/2026, decisione owner: nell'app sono NOVE — «Provider e accessi» è tolta del tutto; il
+ *   mockup la portava come scorciatoia (`data-action="providers-tab"`) verso il Laboratorio modelli,
+ *   ed è lì che i fornitori vivono ora (scheda «Provider»).
  */
 const FOTO = join(import.meta.dirname, '..', '..', 'artifacts', 'impostazioni-parita-2026-09-18');
 const SEZIONI = [
@@ -19,7 +22,7 @@ const SEZIONI = [
   ['Memoria e contesto', 'memoria'],
   ['Sicurezza e privacy', 'privacy'],
   ['Laboratorio modelli', 'models'],
-  ['Provider e accessi', 'providers'],
+  // ⛔ 23/09/2026, decisione owner: «Provider e accessi» tolta del tutto — nell'app le sezioni sono nove.
   ['Costi e consumo', 'costi'],
   ['File e workspace', 'workspace'],
   ['Account, Doctor e backup', 'account'],
@@ -43,7 +46,7 @@ test('IMP-MOCKUP — tre ingressi disponibili nel mockup canonico, sette dichiar
   }
 });
 
-test('IMP-APP — le stesse dieci sezioni nell’app, dal pacchetto costruito', async ({ page }) => {
+test('IMP-APP — le nove sezioni nell’app, dal pacchetto costruito', async ({ page }) => {
   mkdirSync(FOTO, { recursive: true });
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.addInitScript(() => { window.localStorage.setItem('talos.harness.desktop.settings.v1', JSON.stringify({ version: 1, appearance: { uiLanguage: 'it', colorMode: 'dark' }, chat: {}, workspaces: {} })); });

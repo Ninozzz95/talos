@@ -104,3 +104,64 @@ test('CTX-RUNTIME-TRANSPORT-CONTEXT counts the same portable messages returned f
   assert.equal(result.measurement.requestHash, createHash('sha256').update(JSON.stringify(result.messages)).digest('hex'));
   assert.deepEqual((await runtime.store.readOriginals({ sessionId: 'chat' })).map(record => record.message), messages);
 });
+
+/*
+ * 24/09/2026 — F4, abilitazione per POLITICA. `createDesktopContextRuntime` accendeva il motore solo per un
+ * elenco di id noto all'avvio (`context-runtime.mjs:29,58`): una sessione creata dopo non poteva entrare mai.
+ * La politica è iniettata, valutata alla PRIMA richiesta della sessione e ricordata; senza politica resta
+ * l'elenco di oggi (nessun cambio di comportamento sul 4174).
+ */
+test('CTX-TRIAL-NEW-SESSION-ENABLED-BY-POLICY a session created after start-up enters by policy, and the fixed list stays as before', async t => {
+  const sessioni = new Map([['chat', { sessionId: 'chat', modello: 'local:fixture', conclusa: true }]]);
+  const { options, open } = await fixture(t, { readSession: id => sessioni.get(id) ?? null });
+  let valutazioni = 0;
+  const politica = await open({ enabledSessionIds: [], politicaAbilitazione: ({ sessionId, modello }) => { valutazioni++; return typeof sessionId === 'string' && modello === 'local:fixture'; } });
+  assert.ok(politica, 'con una politica il motore si accende anche senza elenco');
+  sessioni.set('nuova', { sessionId: 'nuova', modello: 'local:fixture', conclusa: true });
+  sessioni.set('altra', { sessionId: 'altra', modello: 'openrouter:x', conclusa: true });
+  assert.ok(await politica.service.createKernelHooks({ sessionId: 'nuova', runId: 'r1' }), 'politica «tutte» ⇒ la nuova entra');
+  assert.ok(await politica.service.createKernelHooks({ sessionId: 'nuova', runId: 'r2' }));
+  assert.equal(valutazioni, 1, 'la decisione si prende alla prima richiesta e si ricorda');
+  assert.equal(await politica.service.createKernelHooks({ sessionId: 'altra', runId: 'r3' }), undefined, 'la politica può dire no');
+  assert.equal(await politica.service.createKernelHooks({ sessionId: 'altra', runId: 'r4' }), undefined);
+  assert.equal(valutazioni, 2, 'anche il no si ricorda');
+  assert.equal(await politica.service.createKernelHooks({ sessionId: 'sconosciuta', runId: 'r5' }), undefined, 'una sessione che il registro non ha non si valuta');
+  assert.equal(await politica.store.readContextSnapshot({ sessionId: 'altra' }), null);
+  // Verso contrario: senza politica, elenco fisso come oggi — la nuova NON entra, e senza elenco il motore resta spento.
+  const elenco = await open({ enabledSessionIds: ['chat'] });
+  assert.ok(await elenco.service.createKernelHooks({ sessionId: 'chat', runId: 'r6' }));
+  assert.equal(await elenco.service.createKernelHooks({ sessionId: 'nuova', runId: 'r7' }), undefined);
+  assert.equal(await createDesktopContextRuntime({ ...options, enabledSessionIds: [] }), null);
+});
+
+/*
+ * 24/09/2026 — F4, punto 5: quando il fornitore ha già contato la richiesta (`usage.prompt_tokens` nella
+ * risposta) quel numero va preferito al contatore separato, che costa una chiamata e per OpenRouter è una
+ * stima. Come Hermes `agent/usage_anchor.py:93-107`: ancora del fornitore + stima dei SOLI messaggi aggiunti.
+ * ⛔ Sulla base il kernel non passa `usage` all'hook (`talosHarness.mjs:8281`): qui l'hook lo riceve dal
+ * test, come farà il kernel dopo la riga di F1/F3 riportata nel rapporto.
+ */
+test('CTX-TRIAL-PROVIDER-USAGE-PREFERRED the provider prompt_tokens anchors the next measurement and the separate counter is not called', async t => {
+  let conteggi = 0;
+  const { open } = await fixture(t, { tokenCounter: { countPreparedContext: async ({ messages, model }) => { conteggi++; return { schema: 'talos.context.tokens.v1', inputTokens: 10, windowTokens: model.windowTokens, responseReserve: model.responseReserve, method: 'heuristic', exact: false, requestHash: createHash('sha256').update(JSON.stringify(messages)).digest('hex'), provider: model.provider, model: model.model }; } } });
+  const runtime = await open();
+  const hooks = await runtime.service.createKernelHooks({ sessionId: 'chat', runId: 'run' });
+  const messages = [{ role: 'user', content: 'Leggi il file' }];
+  const primo = await hooks.prepare({ messages, tools: [] });
+  assert.equal(primo.measurement.method, 'heuristic'); assert.equal(conteggi, 1);
+  const risposta = { role: 'assistant', content: 'Ecco il file' };
+  await hooks.captureProviderResponse({ response: risposta, giro: 0, usage: { prompt_tokens: 777, completion_tokens: 5 } });
+  const secondo = await hooks.prepare({ messages: [...messages, risposta, { role: 'user', content: 'Grazie' }], tools: [] });
+  assert.equal(secondo.measurement.method, 'provider', 'il numero del fornitore vince');
+  assert.equal(secondo.measurement.exact, false, 'più una stima dei soli messaggi aggiunti: non esatto');
+  assert.ok(secondo.measurement.inputTokens >= 782 && secondo.measurement.inputTokens < 900, `777 + 5 + stima del delta, misurato ${secondo.measurement.inputTokens}`);
+  assert.equal(conteggi, 1, 'il contatore separato non si chiama quando il fornitore ha già contato');
+  // Verso contrario: un prefisso diverso (l’ancora non combacia) ⇒ si conta di nuovo, niente numero preso a caso.
+  const terzo = await hooks.prepare({ messages: [{ role: 'user', content: 'Altra conversazione' }, risposta], tools: [] }).catch(error => error);
+  assert.equal(terzo.code, 'CTX_HISTORY_DIVERGED');
+  const altro = await runtime.service.createKernelHooks({ sessionId: 'chat', runId: 'run-2' });
+  await altro.captureProviderResponse({ response: risposta, giro: 0, usage: { prompt_tokens: 0 } });
+  const quarto = await altro.prepare({ messages: [...messages, risposta, { role: 'user', content: 'Grazie' }, { role: 'assistant', content: 'Prego' }, { role: 'user', content: 'Ciao' }], tools: [] });
+  assert.equal(quarto.measurement.method, 'provider', 'l’ancora buona resta valida finché il prefisso combacia');
+  assert.equal(conteggi, 1);
+});

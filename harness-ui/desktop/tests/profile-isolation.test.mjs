@@ -72,7 +72,9 @@ test('ISOL: provider preview store does not expose production or environment cre
 test('ISOL: runtime bootstrap composes preview no-migration policy and guards destructive cleanup', () => {
   const server = readFileSync(new URL('../../server.mjs', import.meta.url), 'utf8');
   const main = readFileSync(new URL('../main.mjs', import.meta.url), 'utf8');
-  assert.match(server, /if \(scopePortachiavi === 'desktop'\)\s*\{\s*try\s*\{\s*const migrazione/);
+  // 24/09/2026: la custodia di prova (`TALOS_HARNESS_UI_KEYRING=memoria`, ef3b3859b) aggiunge `&& !portachiaviDiProva`
+  // alla stessa guardia: un server di prova non migra mai le chiavi vere. La regola dell'anteprima resta.
+  assert.match(server, /if \(scopePortachiavi === 'desktop'( && !portachiaviDiProva)?\)\s*\{\s*try\s*\{\s*const migrazione/);
   assert.match(main, /if \(profile.preview && process.argv.includes\('--talos-pulizia-dati'\)\)/);
   assert.ok(main.indexOf("app.setPath('sessionData'") < main.indexOf('app.requestSingleInstanceLock('));
 });

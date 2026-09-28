@@ -1,0 +1,216 @@
+{
+  "schema": "talos.workflow-definition-record.v1",
+  "workflowId": "00000000-0000-4000-8000-000000000001",
+  "version": 1,
+  "core": {
+    "schema": "talos.workflow-definition-core.v1",
+    "definitionSchemaVersion": 1,
+    "title": "Verifica e integra una modifica",
+    "objective": "Produrre una modifica verificata senza toccare direttamente il checkout dell'utente.",
+    "engineCompatibility": {
+      "minEngineSchemaVersion": 1,
+      "requiredFeatures": []
+    },
+    "nodes": [
+      {
+        "id": "implement",
+        "kind": "agent",
+        "label": "Implementa",
+        "instructions": "Applica la modifica nel worktree isolato.",
+        "role": "implementer",
+        "inputs": [],
+        "outputs": [
+          {
+            "name": "commit",
+            "type": "commit"
+          }
+        ],
+        "capabilityProfile": "workspace-write",
+        "workspacePolicy": {
+          "mode": "isolated-write"
+        },
+        "modelPolicy": {
+          "mode": "inherit",
+          "model": null,
+          "reasoning": null
+        },
+        "activityPolicy": {
+          "effectClass": "reconcilable",
+          "retryMode": "manual-on-uncertain",
+          "maxAttempts": 2,
+          "deadlineMs": null
+        },
+        "retryPolicy": {
+          "backoff": "exponential",
+          "jitter": true,
+          "retryOn": [
+            "transient_network"
+          ]
+        },
+        "cachePolicy": "never",
+        "writeSetHint": [
+          "src/**"
+        ],
+        "priority": 0,
+        "budget": {
+          "promptTokens": null,
+          "completionTokens": null,
+          "wallMs": 600000,
+          "agentSeconds": 600,
+          "toolCalls": 100,
+          "modelRequests": 20,
+          "retryPromptTokens": null,
+          "retryModelRequests": 5,
+          "knownCostUsd": null,
+          "attempts": 2
+        },
+        "metadata": {}
+      },
+      {
+        "id": "test",
+        "kind": "test",
+        "label": "Verifica",
+        "instructions": null,
+        "role": "tester",
+        "inputs": [
+          {
+            "name": "commit",
+            "type": "commit",
+            "required": true
+          }
+        ],
+        "outputs": [
+          {
+            "name": "report",
+            "type": "test-report"
+          }
+        ],
+        "capabilityProfile": "read",
+        "workspacePolicy": {
+          "mode": "integration"
+        },
+        "modelPolicy": {
+          "mode": "inherit",
+          "model": null,
+          "reasoning": null
+        },
+        "activityPolicy": {
+          "effectClass": "reconcilable",
+          "retryMode": "at-least-once",
+          "maxAttempts": 2,
+          "deadlineMs": null
+        },
+        "retryPolicy": {
+          "backoff": "exponential",
+          "jitter": true,
+          "retryOn": [
+            "transient_network"
+          ]
+        },
+        "cachePolicy": "never",
+        "writeSetHint": [],
+        "priority": 1,
+        "budget": {
+          "promptTokens": null,
+          "completionTokens": null,
+          "wallMs": 300000,
+          "agentSeconds": 300,
+          "toolCalls": 20,
+          "modelRequests": 0,
+          "retryPromptTokens": null,
+          "retryModelRequests": 0,
+          "knownCostUsd": null,
+          "attempts": 2
+        },
+        "metadata": {}
+      }
+    ],
+    "edges": [
+      {
+        "id": "implement_to_test",
+        "from": "implement",
+        "to": "test",
+        "type": "data",
+        "condition": null,
+        "mapping": [
+          {
+            "from": "commit",
+            "to": "commit"
+          }
+        ]
+      }
+    ],
+    "budgets": {
+      "promptTokens": 100000,
+      "completionTokens": 50000,
+      "wallMs": 1800000,
+      "agentSeconds": 1800,
+      "toolCalls": 500,
+      "modelRequests": 100,
+      "retryPromptTokens": 20000,
+      "retryModelRequests": 20,
+      "knownCostUsd": null
+    },
+    "limits": {
+      "maxLogicalNodes": 100,
+      "maxEdges": 200,
+      "maxGraphMutations": 20,
+      "maxFanoutPerNode": 20,
+      "maxAgentSessions": 20,
+      "maxDepth": 8
+    },
+    "policy": {
+      "capabilityCeiling": "workspace-write",
+      "externalTools": {
+        "mode": "deny",
+        "ids": []
+      },
+      "providerFallback": {
+        "mode": "forbidden",
+        "providers": []
+      },
+      "graphMutation": {
+        "mode": "coordinator-only",
+        "maxOperationsPerPatch": 50,
+        "maxAddedNodesPerPatch": 20,
+        "maxAddedEdgesPerPatch": 40
+      },
+      "human": {
+        "maxPending": 20,
+        "allowBatchIdenticalSchema": true
+      },
+      "finalApply": "user-explicit"
+    },
+    "acceptance": [
+      {
+        "id": "tests_pass",
+        "label": "I test richiesti sono verdi",
+        "source": {
+          "nodeId": "test",
+          "output": "report"
+        },
+        "evidenceKind": "test-report",
+        "minTrust": "deterministic-evidence",
+        "predicate": {
+          "op": "test-status",
+          "value": "passed"
+        },
+        "required": true
+      }
+    ]
+  },
+  "definitionHash": "sha256:9e55392af4131005fec0e0bd7e83fb066bd2ed288edb087a54897ce670f44ee1",
+  "proposal": {
+    "initiatingSessionId": "00000000-0000-4000-8000-000000000002",
+    "createdAt": "2026-09-20T13:37:00.000Z",
+    "plannerModel": "provider/planner-v2",
+    "sessionModel": "provider/model-v2"
+  },
+  "preflight": {
+    "errors": [],
+    "warnings": [
+      "Wrapper metadata intentionally differs from the baseline record fixture."
+    ],
+    "estimates": {}
+  }
+}

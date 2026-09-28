@@ -16,9 +16,19 @@ test('BOOT: fresh standalone starts on Home with no side effects', () => {
 test('BOOT: embedded navigation stays with host', () => {
   assert.equal(decideStartup({mode:'embedded',restoreWorkspace:true,explicitLaunch:{status:'available',target:{kind:'workspace',id:'x'}}}).action,'delegate-to-host');
 });
+/* 23/09/2026, decisione owner: «Provider e accessi» è tolta dalle Impostazioni e i fornitori vivono
+   solo in Laboratorio modelli → scheda «Provider». Il test protegge ancora la stessa cosa — una
+   navigazione voluta vince sul ripristino tardivo — con una destinazione che esiste. */
 test('BOOT: intentional navigation wins over late restoration', () => {
-  const d=decideStartup({mode:'standalone',restoreWorkspace:true,currentNavigation:{kind:'settings',section:'providers'},lastWorkspace:{status:'available',target:{kind:'workspace',id:'old'}}});
-  assert.deepEqual(d.target,{kind:'settings',section:'providers'});
+  const d=decideStartup({mode:'standalone',restoreWorkspace:true,currentNavigation:{kind:'settings',section:'models',labTab:'providers'},lastWorkspace:{status:'available',target:{kind:'workspace',id:'old'}}});
+  assert.deepEqual(d.target,{kind:'settings',section:'models',labTab:'providers'});
+});
+test('BOOT: the retired providers settings target is redirected, not dropped to Home', () => {
+  assert.deepEqual(normalizeTarget({kind:'settings',section:'providers'}),{kind:'settings',section:'models',labTab:'providers'});
+  const d=decideStartup({mode:'standalone',restoreWorkspace:true,explicitLaunch:{status:'available',target:{kind:'settings',section:'providers'}}});
+  assert.deepEqual(d.target,{kind:'settings',section:'models',labTab:'providers'});assert.equal(d.reason,'explicit-launch');
+  assert.deepEqual(normalizeTarget({kind:'settings',section:'models'}),{kind:'settings',section:'models'});
+  assert.equal(normalizeTarget({kind:'settings',section:'account'}),null);
 });
 test('BOOT: explicit unavailable intent never opens another workspace', () => {
   const d=decideStartup({mode:'standalone',restoreWorkspace:true,explicitLaunch:{status:'unavailable'},lastWorkspace:{status:'available',target:{kind:'workspace',id:'old'}}});

@@ -41,6 +41,7 @@ const CLASSE_B = new Map([
   ['tests/context-engine-server.test.mjs', 'il servizio del contesto e un processo figlio con un socket (`stop()`)'],
   ['tests/context-runtime.test.mjs', 'runtime desktop vivi, chiusi uno per uno nel teardown'],
   ['tests/git-service.test.mjs', '`execFileSync(git)` gira col cwd DENTRO la cartella: un git rimasto vivo la tiene'],
+  ['tests/git-service-remoto.test.mjs', 'F6-2: fetch/pull/push del servizio (asincroni, con Ferma e tempo massimo) girano col cwd DENTRO la cartella: un git rimasto vivo la tiene'],
   ['tests/harness-receipt-keypair.test.mjs', '`spawnSync` di uno script che scrive il .env dentro la cartella'],
   ['tests/http-routes-git.test.mjs', 'server HTTP in ascolto piu git col cwd nella cartella'],
   ['tests/http-routes-note-attivita-memoria.test.mjs', 'server HTTP in ascolto sulla cartella della prova'],

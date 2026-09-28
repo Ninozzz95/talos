@@ -182,3 +182,33 @@ test('RIPRESA-HF-FACCETTA-ZERO — una pagina parziale non cancella autore e tip
   assert.deepEqual(filtraRisultatiHf([...current, { repo: 'second-page/b', pipelineTag: 'text-generation' }], normalized).map(r => r.repo), ['second-page/b']);
   assert.deepEqual(normalizzaFiltriHf({ autore: [null, {}, '', 'x'.repeat(201)], accesso: ['inventato'] }, []).autore, []);
 });
+
+/* ATLAS F4 (owner 27/09/2026 notte): dalla riga modello dell'Atlas si porta solo la fila di etichette sotto il nome —
+   tipo, parametri, licenza, e solo ciò che il repository dichiara; la riga di dati perde il tipo e prende download e
+   preferiti; la riga di stato perde la licenza («via i doppioni»). */
+import { datiRigaHf, parametriLeggibiliHf } from '../../src/components/hf-catalogo.js';
+
+test('ATLAS-F4-01 — le etichette: tipo, parametri, licenza, solo se dichiarati', () => {
+  const pieno = datiRigaHf({ repo: 'Qwen/Qwen3-8B-GGUF', pipelineTag: 'text-generation', parameterCount: 8_190_000_000, license: 'apache-2.0', gated: false, downloads: 12_729_626, likes: 1034, ggufFiles: 3 });
+  assert.deepEqual(pieno.etichette, ['Conversazione e codice', '8,2B parametri', 'apache-2.0']);
+  assert.deepEqual(datiRigaHf({ repo: 'a/b', gated: false }).etichette, [], 'niente di dichiarato, niente etichette');
+  assert.deepEqual(datiRigaHf({ repo: 'a/b', pipelineTag: 'text-to-video' }).etichette, ['text-to-video'], 'un tipo senza traduzione resta quello dichiarato');
+});
+
+test('ATLAS-F4-02 — riga di dati senza il tipo, con download e preferiti; stato senza licenza', () => {
+  const autore = datiRigaHf({ repo: 'Qwen/Qwen3-8B-GGUF', pipelineTag: 'text-generation', license: 'apache-2.0', gated: false, downloads: 12_729_626, likes: 1034, ggufFiles: 3 });
+  assert.equal(autore.riga, `3 file compatibili · ${conteggio(12_729_626)} download · ♥ ${conteggio(1034)}`);
+  assert.equal(autore.stato.testo, 'Accesso aperto');
+  assert.equal(autore.stato.nota, null, 'la licenza sta nell’etichetta, non nello stato');
+  const conversione = datiRigaHf({ repo: 'unsloth/X-GGUF', pipelineTag: 'text-generation', gated: false, ggufFiles: 1 });
+  assert.equal(conversione.riga, 'Conversione della community · 1 file', 'la provenienza di una conversione è un altro dato: resta');
+  assert.equal(datiRigaHf({ repo: 'a/b' }).riga, '', 'nessun dato, riga vuota invece di trattini');
+  assert.equal(datiRepoHf({ repo: 'Qwen/Qwen3-8B-GGUF', pipelineTag: 'text-generation', ggufFiles: 3 }).sub1, 'Conversazione e codice · 3 file compatibili', 'il contratto di sub1 non cambia');
+});
+
+test('ATLAS-F4-03 — parametri in forma corta', () => {
+  assert.equal(parametriLeggibiliHf(7e9), '7B parametri');
+  assert.equal(parametriLeggibiliHf(30_500_000_000), '30,5B parametri');
+  assert.equal(parametriLeggibiliHf(350e6), '350M parametri');
+  for (const n of [null, 0, -1, '8000000000', 1.5]) assert.equal(parametriLeggibiliHf(n), null);
+});

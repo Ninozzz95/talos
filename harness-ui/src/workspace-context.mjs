@@ -12,8 +12,8 @@
  * albero di file SENZA metadati git nemmeno lì — quindi anche allora
  * `branch` resterà `null`. Dichiarato qui perché non sembri un bug futuro.
  */
-import { existsSync, readdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
 
 import { createProcessPolicy } from './process-policy.mjs';
 
@@ -101,6 +101,67 @@ function worktreeGit(cartella, exec) {
 }
 
 /**
+ * ⭐⭐ VELOCITÀ, AVVIO DEL GIRO (owner 27/09/2026: «misura dal messaggio alla prima richiesta, poi cura quello che pesa»).
+ *
+ * Misurato (sonda in-process, registro come il server, kernel vero, fornitore finto, monorepo): 51,7 ms dal messaggio alla
+ * prima richiesta, e il profilo della CPU mette 55 ms a giro in `spawnSync`, cioè i due `git rev-parse` SINCRONI qui
+ * sopra. Sincroni: per quel tempo il server INTERO è fermo — le altre sessioni, gli SSE, tutto.
+ * ⇒ Come Pi (`packages/coding-agent/src/core/footer-data-provider.ts:17-47`, `findGitPaths`: si risale fino a `.git`,
+ *   directory o file `gitdir:` di un worktree; `:240-247`, il ramo letto dal file `HEAD`, git solo per i reftable):
+ *   si leggono i file di git invece di lanciarlo.
+ * ⛔ Torna `undefined` («non lo so dai file») in ogni caso che il file non decide da solo — `GIT_DIR`/`GIT_WORK_TREE`
+ *   nell'ambiente, un `.git` illeggibile o strano, un `HEAD` che non è né un ramo né un commit, il segnaposto `.invalid`
+ *   dei repository reftable — e lì decide git, come prima.
+ * ⛔ Una differenza DICHIARATA: in un repository appena creato, senza commit, `rev-parse --abbrev-ref HEAD` fallisce
+ *   (quindi `null`), mentre qui si legge il ramo che nascerà (lo stesso di `git symbolic-ref --short HEAD` e di Pi).
+ * @returns {undefined | {branch: string|undefined, worktree: string|null}} `branch` undefined = chiedi a git
+ */
+function gitDaiFile(cartella) {
+  if (typeof cartella !== 'string' || cartella.length === 0) return undefined;
+  if (process.env.GIT_DIR || process.env.GIT_WORK_TREE || process.env.GIT_CEILING_DIRECTORIES) return undefined;
+  let dir = resolve(cartella);
+  for (;;) {
+    const percorsoGit = join(dir, '.git');
+    let stato = null;
+    try { stato = statSync(percorsoGit); } catch { stato = null; }
+    if (stato) {
+      let gitDir;
+      let worktree = null;
+      try {
+        if (stato.isDirectory()) gitDir = percorsoGit; // il principale: mai un worktree collegato
+        else if (stato.isFile()) {
+          const contenuto = readFileSync(percorsoGit, 'utf8').trim();
+          if (!contenuto.startsWith('gitdir:')) return undefined;
+          gitDir = resolve(dir, contenuto.slice('gitdir:'.length).trim());
+          /* Un worktree collegato ha il suo git-dir in `<comune>/worktrees/<nome>`: il nome sono gli ULTIMI due pezzi,
+             non il primo «worktrees» del percorso (un repo dentro `C:\worktrees\…` non è un worktree). */
+          const pezzi = gitDir.split(/[/\\]+/u).filter(Boolean);
+          worktree = pezzi.length >= 2 && pezzi[pezzi.length - 2] === 'worktrees' ? pezzi[pezzi.length - 1] : null;
+        }
+        else return undefined;
+        const head = readFileSync(join(gitDir, 'HEAD'), 'utf8').trim();
+        let branch;
+        if (head.startsWith('ref: refs/heads/')) {
+          const nome = head.slice('ref: refs/heads/'.length);
+          branch = nome && nome !== '.invalid' ? nome : undefined;
+        }
+        else if (/^[0-9a-f]{40}(?:[0-9a-f]{24})?$/u.test(head)) branch = 'HEAD'; // staccato: la parola di `--abbrev-ref`
+        return { branch, worktree };
+      } catch {
+        return undefined;
+      }
+    }
+    /* ⛔ Review 27/09: git, dopo `.git`, guarda se la cartella STESSA è una directory git (un repository bare, o l'interno di
+       un `.git`: `HEAD` + `objects` + `refs`, la sua `is_git_directory`). Senza questo, un bare dentro un altro repository
+       prendeva il ramo di quello esterno. Lì decide git. */
+    if (existsSync(join(dir, 'HEAD')) && existsSync(join(dir, 'objects')) && existsSync(join(dir, 'refs'))) return undefined;
+    const padre = dirname(dir);
+    if (padre === dir) return { branch: null, worktree: null }; // nessun `.git` fino alla radice: non è un repository
+    dir = padre;
+  }
+}
+
+/**
  * @param {{cartella:string, progetto:string|null}} input
  * @param {{exec?: Function}} [dipendenze] — SOLO per test: inietta
  *   un `exec` finto per provare "non è un repository git" senza spawnare un
@@ -112,12 +173,15 @@ export function leggiContestoWorkspace({ cartella, progetto = null }, { exec } =
     ...opzioni,
     cwd: opzioni.cwd ?? cartella,
   }));
+  /* ⭐⭐ VELOCITÀ (27/09/2026) — prima i file (vedi `gitDaiFile`); git solo per ciò che i file non decidono. Un `exec`
+     iniettato (le prove) resta sulla strada di prima, byte per byte. */
+  const daiFile = exec ? undefined : gitDaiFile(cartella);
   return {
     progetto,
     cartella,
-    branch: ramoGit(cartella, execFn),
+    branch: daiFile?.branch !== undefined ? daiFile.branch : ramoGit(cartella, execFn),
     // ⭐ 10/09 — il nome del worktree collegato: la scheda Ambiente lo scriveva `—` cablato.
-    worktree: worktreeGit(cartella, execFn),
+    worktree: daiFile ? daiFile.worktree : worktreeGit(cartella, execFn),
     // ⭐ 04/9, W1-13 — repository dentro il workspace: fiducia separata (mostrato nella scheda Ambiente)
     repoAnnidati: repoAnnidati(cartella),
   };

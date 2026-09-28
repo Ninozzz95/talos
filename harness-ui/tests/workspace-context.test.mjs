@@ -176,3 +176,100 @@ test('worktree, AL CONTRARIO: un percorso che finisce con «worktrees» non ha u
   });
   assert.equal(esito.worktree, null, '⛔ meglio nessun nome che un nome inventato dall’indice successivo');
 });
+
+/*
+ * ⭐⭐ VELOCITÀ, AVVIO DEL GIRO (owner 27/09/2026: «misura dal messaggio alla prima richiesta, poi cura quello che pesa»).
+ *
+ * Misurato con una sonda in-process (registro come il server, kernel vero, fornitore finto) sul monorepo: 51,7 ms dal
+ * messaggio alla prima richiesta, e il profilo della CPU dice che 55 ms a giro stavano in `spawnSync` — i due
+ * `git rev-parse` SINCRONI di questo file (ramo e worktree). Sincroni vuol dire che per quel tempo il server intero
+ * è fermo: le altre sessioni, gli SSE, tutto.
+ * ⇒ Come Pi (`packages/coding-agent/src/core/footer-data-provider.ts:17-47`, `findGitPaths`; `:240-247` il ramo letto
+ *   dal file `HEAD`, git solo per i repository reftable): si risale fino a `.git` e si leggono i file.
+ * Le prove tolgono git dal PATH: se il ramo arriva lo stesso, nessun processo è partito.
+ */
+const senzaGit = (fn) => {
+  const prima = process.env.PATH;
+  process.env.PATH = '';
+  try { return fn(); } finally { process.env.PATH = prima; }
+};
+const gitIn = (cartella, ...argomenti) => execFileSync('git', ['-C', cartella, ...argomenti], { encoding: 'utf8' }).trim();
+const commitVuoto = (cartella) => gitIn(cartella, '-c', 'user.name=prova', '-c', 'user.email=prova@example.invalid', 'commit', '--allow-empty', '--quiet', '-m', 'x');
+
+test('AVVIO-GIT-01 su questo repo (worktree collegato, sottocartella) ramo e worktree arrivano SENZA lanciare git', () => {
+  const conGit = leggiContestoWorkspace({ cartella: quiRepo, progetto: null });
+  const senza = senzaGit(() => leggiContestoWorkspace({ cartella: quiRepo, progetto: null }));
+  assert.equal(senza.branch, conGit.branch);
+  assert.equal(senza.worktree, conGit.worktree);
+  assert.equal(senza.branch, gitIn(quiRepo, 'rev-parse', '--abbrev-ref', 'HEAD'), 'lo stesso ramo che dice git');
+});
+
+test('AVVIO-GIT-02 repo principale e worktree collegato, ciascuno col suo ramo, senza git', () => {
+  const base = mkdtempSync(join(tmpdir(), 'avvio-git-'));
+  try {
+    const principale = join(base, 'principale');
+    mkdirSync(principale);
+    creaRepoVero(principale);
+    gitIn(principale, 'checkout', '--quiet', '-b', 'ramo-prova');
+    commitVuoto(principale);
+    const collegato = join(base, 'collegato');
+    gitIn(principale, 'worktree', 'add', '--quiet', '-b', 'altro', collegato);
+    const sotto = join(collegato, 'dentro');
+    mkdirSync(sotto);
+    const p = senzaGit(() => leggiContestoWorkspace({ cartella: principale }));
+    const c = senzaGit(() => leggiContestoWorkspace({ cartella: sotto }));
+    assert.deepEqual([p.branch, p.worktree], ['ramo-prova', null], 'il principale non è un worktree collegato');
+    assert.deepEqual([c.branch, c.worktree], ['altro', 'collegato'], 'anche da una sottocartella del collegato');
+  } finally {
+    rmSync(base, { recursive: true, force: true });
+  }
+});
+
+test('AVVIO-GIT-03 HEAD staccato: «HEAD», la stessa parola di `rev-parse --abbrev-ref HEAD`, senza git', () => {
+  const repo = mkdtempSync(join(tmpdir(), 'avvio-git-staccato-'));
+  try {
+    creaRepoVero(repo);
+    commitVuoto(repo);
+    gitIn(repo, 'checkout', '--quiet', '--detach');
+    assert.equal(gitIn(repo, 'rev-parse', '--abbrev-ref', 'HEAD'), 'HEAD');
+    assert.equal(senzaGit(() => leggiContestoWorkspace({ cartella: repo })).branch, 'HEAD');
+  } finally {
+    rmSync(repo, { recursive: true, force: true });
+  }
+});
+
+test('AVVIO-GIT-04 AL CONTRARIO: un repository reftable non si indovina dal file, si chiede a git (e senza git: null)', () => {
+  const repo = mkdtempSync(join(tmpdir(), 'avvio-git-reftable-'));
+  try {
+    execFileSync('git', ['init', '--quiet', '--ref-format=reftable', '--initial-branch=ramo-reftable', repo]);
+    commitVuoto(repo);
+    assert.equal(leggiContestoWorkspace({ cartella: repo }).branch, 'ramo-reftable', 'con git: il ramo vero');
+    assert.equal(senzaGit(() => leggiContestoWorkspace({ cartella: repo })).branch, null, 'senza git: non si inventa «.invalid»');
+  } finally {
+    rmSync(repo, { recursive: true, force: true });
+  }
+});
+
+test('AVVIO-GIT-05 AL CONTRARIO: una cartella che non è un repository resta null anche senza git', () => {
+  const vuota = mkdtempSync(join(tmpdir(), 'avvio-git-niente-'));
+  try {
+    const c = senzaGit(() => leggiContestoWorkspace({ cartella: vuota }));
+    assert.deepEqual([c.branch, c.worktree], [null, null]);
+  } finally {
+    rmSync(vuota, { recursive: true, force: true });
+  }
+});
+
+test('AVVIO-GIT-06 AL CONTRARIO: un repository BARE dentro un altro non prende il ramo di quello esterno (review 27/09)', () => {
+  const base = mkdtempSync(join(tmpdir(), 'avvio-git-bare-'));
+  try {
+    execFileSync('git', ['init', '--quiet', '--initial-branch=esterno', base]);
+    const nudo = join(base, 'nudo.git');
+    mkdirSync(nudo);
+    execFileSync('git', ['init', '--quiet', '--bare', '--initial-branch=interno', nudo]);
+    assert.notEqual(leggiContestoWorkspace({ cartella: nudo }).branch, 'esterno', 'con git: mai il ramo del repository esterno');
+    assert.equal(senzaGit(() => leggiContestoWorkspace({ cartella: nudo })).branch, null, 'senza git: non si sa, e si dice null');
+  } finally {
+    rmSync(base, { recursive: true, force: true });
+  }
+});

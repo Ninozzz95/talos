@@ -34,7 +34,8 @@ test('R03-DOPPIO-GUASTO — conserva le due code, non tenta un terzo processo',a
   assert.equal(chiamate.length,2);assert.equal(supervisor.status().state,'failed');assert.equal(supervisor.status().motore.ripiego.a,'cpu');assert.equal(serrature.length,2);
 });
 for(const [gpu,fallback] of [['generico',true],['driver',false],['memoria',true]])test('R03-NON-RIPIEGA — '+gpu+' fallback='+fallback,async t=>{
-  const {supervisor,chiamate}=banco(t,{gpu,fallback});await assert.rejects(supervisor.start(modello),e=>e.code==='RUNTIME_PROCESS_FAILED');assert.equal(chiamate.length,1);
+  // 25/09/2026 sera (decisione owner «carta vera»): la memoria piena ha il suo codice, `RUNTIME_OUT_OF_MEMORY`; gli altri no
+  const {supervisor,chiamate}=banco(t,{gpu,fallback});await assert.rejects(supervisor.start(modello),e=>e.code===(gpu==='memoria'?'RUNTIME_OUT_OF_MEMORY':'RUNTIME_PROCESS_FAILED'));assert.equal(chiamate.length,1);
   assert.equal(supervisor.status().motore.ripiego,null);
   if(gpu==='memoria')assert.equal(supervisor.status().motore.proposta.a,'cpu');
 });

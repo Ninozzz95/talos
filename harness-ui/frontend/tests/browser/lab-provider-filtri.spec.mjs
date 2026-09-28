@@ -263,7 +263,9 @@ test.describe('i filtri dei fornitori — conteggi veri, e filtrano davvero', ()
     /* ⛔ La ricerca è SCOPED al pannello: il VELO «Fornitori e accessi» tiene nel documento una
        card di esempio con `data-provider-id` (`popolaVeloFornitori`, la statica), e un
        `querySelectorAll('[data-provider-id]')` nudo la conterebbe — una prova che legge il
-       documento intero misura anche ciò che non sta provando. */
+       documento intero misura anche ciò che non sta provando.
+       (23/09/2026: il velo è tolto per decisione owner, quindi oggi quella card non c'è più; la
+       ricerca resta SCOPED per la stessa ragione — si misura solo ciò che si sta provando.) */
     const rimaste = await page.evaluate(() => [...document.querySelectorAll('#modelLabCard [data-model-lab-panel="providers"] [data-provider-id]')].map((n) => n.dataset.providerId).sort());
     expect(rimaste, 'impostata|daImpostare E provato = Alfa e Gamma').toEqual(['a-salvata', 'c-mancante']);
 

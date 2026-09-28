@@ -255,28 +255,6 @@ export const CAMPI_IMPOSTAZIONI = [
     ]
   },
   {
-    "id": "composerShapeSelect",
-    "chiave": "composerShape",
-    "tipo": "select",
-    "titolo": "Forma del composer",
-    "sezione": "chat",
-    "gruppo": "design",
-    "opzioni": [
-      [
-        "classic",
-        "Classica"
-      ],
-      [
-        "standard",
-        "Standard"
-      ],
-      [
-        "compact",
-        "Compatta"
-      ]
-    ]
-  },
-  {
     "id": "composerPlusSelect",
     "chiave": "composerPlus",
     "tipo": "select",
@@ -688,9 +666,39 @@ export const CAMPI_IMPOSTAZIONI = [
     "titolo": "Chat a tutta larghezza",
     "sezione": "chat",
     "gruppo": "chat"
+  },
+  {
+    "id": "askTimeoutSelect",
+    "chiave": "askTimeout",
+    "tipo": "select",
+    "titolo": "Scadenza delle domande",
+    "sezione": "chat",
+    "gruppo": "domande",
+    "opzioni": [
+      [
+        "none",
+        "Nessuna"
+      ],
+      [
+        "60",
+        "1 minuto"
+      ],
+      [
+        "300",
+        "5 minuti"
+      ],
+      [
+        "600",
+        "10 minuti"
+      ]
+    ]
   }
 ];
 /*
+ * ⛔ 23/09/2026 — NOVE, NON PIÙ DIECI. Decisione owner: «Provider e accessi» tolta del tutto
+ *   («Toglierla del tutto»): i fornitori si gestiscono SOLO in «Laboratorio modelli» → scheda
+ *   «Provider». Il vecchio id `providers` non è più una sezione: è un indirizzo ritirato che porta
+ *   lì (`SEZIONI_RITIRATE`, `features/settings/schema.ts`).
  * D2 (06/09) — «Dieci sezioni in due gruppi: comportamento · infrastruttura».
  * ⛔ Questo elenco è l'UNICA fonte: `montaImpostazioni` ricostruisce da qui le
  * voci di navigazione, quindi aggiungere una sezione solo nel mockup non basta
@@ -706,7 +714,6 @@ export const SEZIONI_IMPOSTAZIONI = [
   { "id": "memoria", "titolo": "Memoria e contesto", "gruppo": "comportamento" },
   { "id": "privacy", "titolo": "Sicurezza e privacy", "gruppo": "comportamento" },
   { "id": "models", "titolo": "Laboratorio modelli", "gruppo": "infrastruttura" },
-  { "id": "providers", "titolo": "Provider e accessi", "gruppo": "infrastruttura" },
   { "id": "costi", "titolo": "Costi e consumo", "gruppo": "infrastruttura" },
   { "id": "workspace", "titolo": "File e workspace", "gruppo": "infrastruttura" },
   { "id": "account", "titolo": "Account, Doctor e backup", "gruppo": "infrastruttura" }

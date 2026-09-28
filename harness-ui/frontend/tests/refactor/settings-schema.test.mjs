@@ -1,14 +1,26 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { SETTINGS_SECTIONS, CHAT_FIELDS, FIELD_HELP, sectionForField, normalizeSearch, buildSettingsIndex, searchSettings } from '../../src/features/settings/schema.ts';
+import { SETTINGS_SECTIONS, CHAT_FIELDS, FIELD_HELP, sectionForField, normalizeSearch, buildSettingsIndex, searchSettings, SEZIONI_RITIRATE, risolviSezioneImpostazioni } from '../../src/features/settings/schema.ts';
 import { CAMPI_IMPOSTAZIONI, SEZIONI_IMPOSTAZIONI } from '../../src/components/impostazioni-campi.js';
 import { CONTROLLI_MIGRATI } from '../../src/components/theme-studio.js';
 const index = () => buildSettingsIndex(CAMPI_IMPOSTAZIONI, CONTROLLI_MIGRATI, 'it', s=>s);
 
-test('SET-01 preserves all ten destinations and all forty stable setting IDs', () => {
+/* 23/09/2026, decisione owner esplicita (ledger R4 «DESK-COMPOSER-STANDARD-2026-09-23»): l'intera
+   impostazione «Forma del composer» (`composerShapeSelect`) è tolta, resta solo il composer Standard.
+   Quaranta ID diventano trentanove, e i controlli di lettura/scrittura da sei diventano cinque. */
+/* 23/09/2026, decisione owner: «Provider e accessi» è tolta del tutto («Toglierla del tutto»): le
+   destinazioni da dieci diventano NOVE, e l'elenco si scrive per intero — un conteggio da solo non
+   direbbe QUALE è sparita. I fornitori vivono solo in Laboratorio modelli → scheda «Provider». */
+/* 24/09/2026, decisione owner 35: «Scadenza delle domande» (Nessuna / 1 / 5 / 10 minuti) entra nella sezione Chat.
+   Trentanove ID diventano QUARANTA e i controlli di lettura/scrittura da cinque diventano sei. */
+test('SET-01 preserves all nine destinations and all forty stable setting IDs', () => {
   assert.deepEqual(Object.keys(SETTINGS_SECTIONS), SEZIONI_IMPOSTAZIONI.map(s=>s.id));
+  assert.deepEqual(Object.keys(SETTINGS_SECTIONS), ['appearance','chat','tools','memoria','privacy','models','costi','workspace','account']);
+  assert.equal(SEZIONI_IMPOSTAZIONI.some(s=>s.id==='providers'||s.titolo==='Provider e accessi'),false,'«Provider e accessi» è stata tolta dall owner');
   assert.equal(CAMPI_IMPOSTAZIONI.length,40);
+  assert.ok(CAMPI_IMPOSTAZIONI.some(f=>f.id==='askTimeoutSelect'),'la scadenza delle domande è un\'impostazione (decisione owner 35)');
+  assert.equal(CAMPI_IMPOSTAZIONI.some(f=>f.id==='composerShapeSelect'),false,'la forma del composer è stata tolta dall owner');
   assert.equal(new Set(index().map(e=>e.id)).size,index().length);
   for (const field of CAMPI_IMPOSTAZIONI) { assert.ok(FIELD_HELP[field.id]); assert.ok(index().some(e=>e.id===field.id)); }
 });
@@ -18,6 +30,7 @@ test('SET-01 migrated theme controls remain search destinations, not hidden matc
 });
 test('SET-01 separates six reading/writing controls without changing their values contract', () => {
   assert.equal(CHAT_FIELDS.size,6);
+  assert.ok(CHAT_FIELDS.has('askTimeoutSelect'));
   for (const id of CHAT_FIELDS) {
     const f=CAMPI_IMPOSTAZIONI.find(f=>f.id===id);assert.ok(f);assert.equal(sectionForField(f),'chat');assert.equal(f.sezione,'chat');
   }
@@ -30,9 +43,30 @@ test('SET-01 search normalizes accents, supports terms and includes option label
   assert.equal(searchSettings(index(),'   ').length,0);
 });
 test('SET-01 infrastructure sections without legacy setting rows are searchable', () => {
-  for (const [term,id] of [['api key','providers'],['permessi','tools'],['backup','account'],['privacy','privacy'],['hugging face','models'],['billing','costi']]) {
+  for (const [term,id] of [['api key','models'],['permessi','tools'],['backup','account'],['privacy','privacy'],['hugging face','models'],['billing','costi']]) {
     assert.ok(searchSettings(index(),term).some(e=>e.id===id),term);
   }
+});
+/* 23/09/2026, decisione owner — la ricerca delle parole dei fornitori porta a un posto VERO: il
+   Laboratorio modelli (che ha la scheda «Provider»), mai a un vuoto e mai a una sezione tolta. */
+test('SET-01 provider words lead to the Model laboratory, never to an empty result or a removed section', () => {
+  for (const term of ['provider','chiave','api key','fornitori','openrouter','credenziali','endpoint','accessi']) {
+    const trovati = searchSettings(index(),term);
+    assert.ok(trovati.length > 0, `«${term}» non deve dare un risultato vuoto`);
+    assert.ok(trovati.some(e=>e.kind==='section'&&e.id==='models'), `«${term}» deve portare a Laboratorio modelli`);
+    assert.equal(trovati.some(e=>e.id==='providers'||e.section==='providers'), false, `«${term}» porta a una sezione tolta`);
+  }
+});
+/* 23/09/2026 — l'indirizzo vecchio si RINVIA (semantica del 301), non ricade su «Aspetto». */
+test('SET-01 the retired providers id redirects to Model laboratory → Provider tab', () => {
+  assert.deepEqual(risolviSezioneImpostazioni('providers'), { section: 'models', labTab: 'providers' });
+  assert.deepEqual(risolviSezioneImpostazioni('models'), { section: 'models', labTab: null });
+  assert.deepEqual(risolviSezioneImpostazioni('appearance'), { section: 'appearance', labTab: null });
+  assert.equal(risolviSezioneImpostazioni('inesistente'), null);
+  assert.equal(risolviSezioneImpostazioni('__proto__'), null);
+  assert.equal(risolviSezioneImpostazioni(undefined), null);
+  // Un indirizzo ritirato non è MAI anche una sezione viva: sarebbero due case per lo stesso nome.
+  for (const id of Object.keys(SEZIONI_RITIRATE)) assert.equal(Object.hasOwn(SETTINGS_SECTIONS, id), false, id);
 });
 test('SET-01 index never consumes input values or credentials', () => {
   const fields=CAMPI_IMPOSTAZIONI.map(f=>({...f,value:'fixture-private-key',password:'fixture-password'}));

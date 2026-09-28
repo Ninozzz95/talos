@@ -940,3 +940,37 @@ test('la cancellazione (via onConclusioneFn): terminata:"cancelled", ZERO scritt
   assert.equal(record.terminata, 'cancelled');
   assert.equal(store.libreria.size, 0);
 });
+
+/* ⛔ 24/09/2026, decisione owner («Barra + fase e conteggi»): una ricerca IN CORSO porta il suo avanzamento nell'elenco e
+ * nel dettaglio, dagli stessi fatti (piano, giornale); una ricerca finita non lo porta nell'elenco (non serve alla riga). */
+test('RES-PROGRESS-LIST-AND-DETAIL: la ricerca in corso ha fase, frazione e conteggi nell’elenco e nel dettaglio', async () => {
+  const cartella = '/progresso';
+  const id = '5ee00000-0000-4000-8000-000000000001';
+  const store = storeFinto();
+  store.record.set(`${cartella}::${id}`, { id, domanda: 'Capitale dell’Australia', formato: 2, terminata: null, reportLibraryId: null });
+  const rami = [{ id: 'b1', question: 'fatti', estimate: { searches: 1, pages: 5, tokens: 9500 } },
+    { id: 'b2', question: 'contrarie', estimate: { searches: 1, pages: 5, tokens: 9500 } }];
+  store.piani.set(`${cartella}::${id}`, rami);
+  store.giornali.set(`${cartella}::${id}`, [
+    { at: '2026-09-24T17:36:35.187Z', kind: 'run_started', id, sessionId: id, question: 'Capitale dell’Australia', depth: 'quick', engine: 'device' },
+    { at: '2026-09-24T17:36:35.195Z', kind: 'plan_approved', branches: rami },
+    { at: '2026-09-24T17:36:47.733Z', kind: 'step_started', stepId: 'b1:search', branchId: 'b1', stepKind: 'search' },
+    { at: '2026-09-24T17:36:48.767Z', kind: 'step_finished', stepId: 'b1:search', spend: { searches: 1, pages: 0, tokens: 432 }, resultRef: null },
+    { at: '2026-09-24T17:36:56.660Z', kind: 'step_started', stepId: 'b1:read:1', branchId: 'b1', stepKind: 'read' },
+    { at: '2026-09-24T17:36:56.942Z', kind: 'step_finished', stepId: 'b1:read:1', spend: { searches: 0, pages: 1, tokens: 1916 }, resultRef: 'fonti/a.txt' },
+  ]);
+  const sessioni = new Map([[id, { conclusa: false, interrotta: false }]]);
+  const orch = creaResearchOrchestrator({ sessioni, ...store, avviaESeguiFn: () => { throw new Error('Il banco non deve avviare modelli'); } });
+  const voce = (await orch.elenca({ cartella })).ricerche[0];
+  assert.equal(voce.stato, 'running');
+  assert.equal(voce.avanzamento.fase, 'ricerca');
+  assert.equal(voce.avanzamento.passiStimati, 12);
+  assert.equal(voce.avanzamento.passiFatti, 2);
+  assert.equal(voce.avanzamento.fontiLette, 1);
+  assert.ok(voce.avanzamento.frazione > 0 && voce.avanzamento.frazione < 0.9);
+  const dettaglio = await orch.leggi({ cartella, id });
+  assert.deepEqual(dettaglio.avanzamento, voce.avanzamento, 'elenco e dettaglio dicono lo stesso avanzamento');
+  // Al contrario: la stessa ricerca conclusa non porta l'avanzamento nell'elenco.
+  store.record.set(`${cartella}::${id}`, { id, domanda: 'Capitale dell’Australia', formato: 2, terminata: 'cancelled', reportLibraryId: null });
+  assert.equal(Object.hasOwn((await orch.elenca({ cartella })).ricerche[0], 'avanzamento'), false);
+});

@@ -212,7 +212,7 @@ test('SEGNAVIA, AL CONTRARIO: il ripiego JavaScript muove ANCHE il raggio', () =
  */
 import { creaAttesa } from '../../src/components/conversazione.js';
 
-test('ORB (12/09, owner): la bolla d’attesa monta l’orb del mobile — cerchio, marchio corto, anello che ruota — e non più il segnavia', () => {
+test('ORB (12/09 → 24/09, owner): la bolla d’attesa NON monta più nessun orb né segnavia — l’orb vive nella testata del messaggio (creaMessaggioTalos)', () => {
   const creati = [];
   const finto = {
     createElementNS: (_ns, tag) => { const n = { tag, setAttribute() {}, getAttribute: () => null, append() {} }; creati.push(n); return n; },
@@ -224,15 +224,11 @@ test('ORB (12/09, owner): la bolla d’attesa monta l’orb del mobile — cerch
     createTextNode: (t) => ({ t }),
   };
   const { blocco } = creaAttesa({ etichetta: 'x' }, { document: finto });
-  const orb = creati.find((n) => typeof n.className === 'string' && /talos-orb/.test(n.className));
-  assert.ok(orb, 'esiste lo span .talos-orb');
-  assert.match(orb.className, /working/, 'durante l’attesa lavora: l’anello gira');
-  assert.equal(orb.getAttribute('aria-hidden'), 'true');
-  const marchio = orb.children.find((c) => /talos-short-logo/.test(c.className));
-  assert.ok(marchio, 'dentro: .talos-short-logo');
-  assert.ok(marchio.children.some((c) => /talos-short-logo-mark/.test(c.className)), 'e il marchio corto .talos-short-logo-mark');
+  /* ⛔ 24/09: due orb (bolla + testata) a schermo sul 4174 dell'owner. Qui NESSUN orb: sta nella testata (orb-testata-talos.test.mjs). */
+  assert.equal(creati.filter((n) => typeof n.className === 'string' && /talos-orb/.test(n.className)).length, 0, 'nessun orb nella bolla d’attesa');
   /* ⛔ AL CONTRARIO: niente più segnavia SVG nella bolla d’attesa, niente SMIL. */
   assert.equal(creati.filter((n) => n.tag === 'svg' || n.tag === 'animate' || n.tag === 'circle').length, 0, 'il segnavia a tre nodi non si monta più');
   const riga = blocco.children.find((c) => /talos-waiting__row/.test(c.className));
-  assert.equal(riga.children[0], orb, 'l’orb sta al posto del segnavia, primo nella riga');
+  assert.match(riga.children[0].className, /run-activity-label/, 'la riga comincia con la frase: cosa sta facendo');
+  assert.match(riga.children[1].className, /run-activity-elapsed/, 'e finisce con i secondi');
 });

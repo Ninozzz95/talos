@@ -41,3 +41,24 @@ test('PHASE1-BUILD-PARALLEL-01 produce un bundle ESM deterministico fuori da pub
     await rimuoviCartellaDiProvaAttesa(output);
   }
 });
+
+/*
+ * F5 File reader (26/09/2026) — il server statico serve al massimo 4 MiB per file (`MAX_STATIC_BYTES`): oltre, la richiesta
+ *   fallisce e la pagina non lo dice (la prova browser l'ha preso sulla resa PowerPoint, 6,7 MB non minificata). Qui si
+ *   chiedono al gestore VERO, sulla build vera, gli asset grossi: `app.js` (3 MB, il più vicino al tetto) e le rese Office.
+ */
+test('F5-BUILD-TETTO: ogni asset grosso della build si serve davvero, sotto il tetto del server statico', async () => {
+  const { createStaticHandler } = await import('../../../src/static-files.mjs');
+  const output = await mkdtemp(path.join(tmpdir(), 'talos-phase1-build-'));
+  try {
+    await buildProduction({ outputDir: output });
+    const serve = createStaticHandler(output);
+    for (const asset of ['/app.js', '/styles.css', '/lettore-foglio.js', '/lettore-ospite-documento.js', '/lettore-ospite-presentazione.js']) {
+      const risposta = await serve(asset);
+      assert.equal(risposta?.statusCode, 200, `${asset} non si serve`);
+      assert.match(risposta.contentType, /^text\/(?:javascript|css)/u, asset);
+    }
+  } finally {
+    await rimuoviCartellaDiProvaAttesa(output);
+  }
+});

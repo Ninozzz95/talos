@@ -53,7 +53,9 @@ export const COMMANDS: readonly CommandDefinition[] = Object.freeze([
   { id: 'share', label: 'Prepara una copia da condividere', description: 'Scegli il formato della trascrizione reale.', group: 'Sessione', icon: 'i-doc', keywords: 'share snapshot condividi copia', requirement: 'session' },
   { id: 'model', label: 'Scegli un modello', description: 'Cambia il modello per la prossima richiesta.', group: 'Configurazione', icon: 'i-bolt', keywords: 'model llm locale cloud', shortcut: 'mod ⇧ M' },
   { id: 'models', label: 'Modelli locali e download', description: 'Apri il laboratorio dei modelli.', group: 'Configurazione', icon: 'i-bolt', keywords: 'models local locale locali download gguf runtime ollama' },
-  { id: 'providers', label: 'Provider e accessi', description: 'Configura account e credenziali.', group: 'Configurazione', icon: 'i-shield', keywords: 'provider api key chiavi account' },
+  /* ⛔ 23/09/2026 — decisione owner: il comando porta a Laboratorio modelli → scheda «Provider» (prima
+     apriva «Account», e la descrizione prometteva account). La descrizione dice dove si arriva. */
+  { id: 'providers', label: 'Provider e accessi', description: 'Chiavi e indirizzi dei fornitori, nel Laboratorio modelli.', group: 'Configurazione', icon: 'i-shield', keywords: 'provider fornitori api key chiavi credenziali account' },
   { id: 'permissions', label: 'Permessi', description: 'Controlla le autorizzazioni senza modificarle automaticamente.', group: 'Configurazione', icon: 'i-shield', keywords: 'permissions access sicurezza' },
   { id: 'skills', label: 'Attrezzi, skill e connettori', description: 'Consulta capacità, MCP ed estensioni.', group: 'Configurazione', icon: 'i-bolt', keywords: 'skills mcp plugin gateway capability tools' },
   { id: 'control', label: 'Doctor', description: 'Leggi la diagnostica del sistema.', group: 'Configurazione', icon: 'i-settings', keywords: 'doctor diagnostics diagnostica salute agents hooks' },

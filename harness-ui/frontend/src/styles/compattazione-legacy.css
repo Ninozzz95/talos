@@ -1,0 +1,95 @@
+/*
+ * ⭐ F5 (onda 2), 24/09/2026 — LE SUPERFICI DELLA COMPATTAZIONE LEGACY.
+ *
+ * Tre cose, tutte nella grammatica che la chat ha già, nessun colore nuovo:
+ *  · l'avviso «contesto quasi pieno» sopra il composer porta ENTRAMBE le classi
+ *    `talos-avviso-piano talos-avviso-contesto`: è la sorella dell'avviso del piano (D4, 24/09) e ne
+ *    eredita ogni regola (`avviso-piano.css`) — qui solo ciò che cambia. Niente colore d'avvertimento:
+ *    è una notizia con l'azione accanto, non un pericolo (Claude Code docs `costs`: «not a usage limit»).
+ *  · la barra «Riassumo la conversazione…» è la riga di avanzamento del trial (`.talos-context-chat-progress`,
+ *    `index.css:2845`) senza il pulsante del Context Manager e con l'ALTEZZA FISSA: mentre lavora non
+ *    cambia di un pixel (decisione 6: «altezza fissa, niente salti nella chat»).
+ *  · la riga «Conversazione riassunta · X → Y token» è il separatore del trial (`.talos-context-separator`,
+ *    `index.css:2864`) con il menu «⋯» a destra e, aperto, il riassunto sotto la riga, a tutta larghezza.
+ */
+
+/* l'icona dell'avviso: stessa scatola dell'avviso del piano, il glifo della cronologia */
+.talos-avviso-contesto .talos-avviso-piano__icona { color: var(--talos-accent-text); }
+
+/* la barra legacy: una colonna sola (niente pulsante), altezza che non balla */
+.talos-context-chat-progress--legacy {
+  grid-template-columns: minmax(0, 1fr);
+  min-height: calc(var(--talos-space-md) * 2 + 1.5rem + 6px + var(--talos-space-sm));
+  box-sizing: border-box;
+}
+.talos-context-chat-progress--legacy > span { min-height: 1.5rem; display: flex; align-items: center; }
+/* indeterminata: MDN `<progress>` (28/08/2026) — senza `value` la barra dice «in corso, non so quanto».
+   24/09 sera: la stessa barra anche DENTRO la finestra del Context Manager (`[data-context-progress-bar]`), che nel
+   modo semplice mostra il riassunto in corso: prima lì un `<progress>` indeterminato era un binario vuoto e fermo. */
+/* il binario del motore (`::-webkit-progress-bar`) è una scatola che copre lo sfondo dell'elemento: se è pieno, il gradiente
+   che scorre sotto non si vede. Trasparente: il colore del binario lo dà già il gradiente (`--talos-panel-soft` ai lati). */
+.talos-context-chat-progress--legacy > progress:indeterminate::-webkit-progress-bar,
+.talos-context__progress[data-context-progress-bar]:indeterminate::-webkit-progress-bar { background: transparent; }
+.talos-context-chat-progress--legacy > progress:indeterminate,
+.talos-context__progress[data-context-progress-bar]:indeterminate {
+  background: linear-gradient(90deg, var(--talos-panel-soft) 0 35%, var(--talos-accent) 50%, var(--talos-panel-soft) 65% 100%);
+  background-size: 220% 100%;
+  animation: talosCompattazioneScorre 1.6s linear infinite;
+}
+@keyframes talosCompattazioneScorre { from { background-position: 100% 0; } to { background-position: -100% 0; } }
+/* ⛔ 24/09/2026 sera — qui c'era `animation: none`: col movimento ridotto (acceso in Windows sulla macchina dell'owner) la
+   barra restava FERMA, e l'owner ha visto «Riassumo la conversazione…» immobile: «si è bloccato così», «non ho visto una
+   barra di progresso». Decisione owner del 02/09 per gli indicatori di STATO: «si CALMA, non si congela» — come l'orb, che
+   col movimento ridotto gira a 3 s invece di 1,5 (`segnavia-mobile.css:81-82`). MDN «prefers-reduced-motion» (pagina
+   aggiornata il 10/06/2026): il movimento si riduce o si sostituisce, non si toglie per forza. Qui scorre un gradiente
+   dentro un binario di 6 px, niente cambia posizione né misura: si dimezza la velocità. */
+body.reduce-motion .talos-context-chat-progress--legacy > progress:indeterminate,
+body.reduce-motion .talos-context__progress[data-context-progress-bar]:indeterminate { animation-duration: 3.2s; }
+@media (prefers-reduced-motion: reduce) {
+  .talos-context-chat-progress--legacy > progress:indeterminate,
+  .talos-context__progress[data-context-progress-bar]:indeterminate { animation-duration: 3.2s; }
+}
+
+/*
+ * ⛔ 24/09/2026 sera — LA FINESTRA DEL CONTEXT MANAGER NEL MODO SEMPLICE, viste nelle foto del giro vero sul 4174
+ *   (`foto-context-manager-4174/01-*`, `02-*`), dove questa parte della finestra non era mai stata a schermo:
+ *   · il misuratore dei token usciva VERDE: è il colore di serie del motore per `<meter>` (le pseudo-parti
+ *     `::-webkit-meter-*`), che `accent-color` non tocca. Qui prende il binario e l'accento del tema, come la barra.
+ *   · la frase di stato stava incollata ai pulsanti e al riquadro della conferma: fuori dalla griglia della
+ *     panoramica, non aveva nessuno spazio sopra.
+ */
+.talos-context__meter::-webkit-meter-bar { background: var(--talos-panel-soft); border: 0; border-radius: 3px; height: 6px; }
+.talos-context__meter::-webkit-meter-optimum-value,
+.talos-context__meter::-webkit-meter-suboptimum-value,
+.talos-context__meter::-webkit-meter-even-less-good-value { background: var(--talos-accent); border-radius: 3px; }
+#veloContesto[data-context-modo="legacy"] [data-context-status]:not(:empty) { margin-top: var(--talos-space-md); }
+
+/* la riga persistente: il separatore, più il menu e il riassunto ripiegato */
+.talos-context-separator--legacy { flex-wrap: wrap; row-gap: var(--talos-space-xs); }
+.talos-context-separator--legacy > [data-compattazione-testo] { flex: 0 1 auto; min-width: 0; overflow-wrap: anywhere; }
+/* dopo il testo la linea riprende: il separatore resta un separatore, con la frase nel mezzo */
+.talos-context-separator--legacy::after { content: ""; height: 1px; background: var(--talos-border); flex: 1; }
+.talos-context-separator--legacy > [data-compattazione-menu] {
+  flex: none; width: 28px; min-width: 28px; height: 28px; padding: 0; order: 10;
+  border-radius: calc(var(--talos-radius-control) - 4px); color: var(--talos-muted);
+}
+.talos-context-separator--legacy > [data-compattazione-menu]:hover,
+.talos-context-separator--legacy > [data-compattazione-menu][aria-expanded="true"] { color: var(--talos-text); background: var(--talos-card-hover); }
+.talos-context-separator--legacy[data-compattazione-legacy="annullata"] > [data-compattazione-testo] { color: var(--talos-muted); }
+.talos-context-separator--legacy[data-compattazione-legacy="non-riuscita"] > [data-compattazione-testo] { color: var(--talos-warning); }
+.talos-context-separator--legacy > [data-compattazione-riassunto] {
+  flex-basis: 100%; order: 20; margin: var(--talos-space-xs) 0 0; padding: var(--talos-space-control) var(--talos-space-md);
+  border: 1px solid var(--talos-border); border-radius: var(--talos-radius-control); background: var(--talos-card-subtle);
+  color: var(--talos-assistant-text, var(--talos-text)); font-size: var(--talos-font-size-sm); line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere;
+  max-height: 40dvh; overflow: auto;
+}
+
+/* il menu «⋯» della riga: due voci brevi, mai a capo (così la larghezza misurata prima del posizionamento è quella vera) */
+.talos-menu-azioni.compattazione-menu .ft-actions-menu-item { white-space: nowrap; }
+
+/* la nota del journal riparato: il percorso della copia, leggibile e selezionabile */
+.talos-journal-riparato__percorso { display: flex; flex-wrap: wrap; align-items: center; gap: var(--talos-space-sm); margin-top: var(--talos-space-xs); }
+.talos-journal-riparato__percorso > code {
+  font-family: var(--talos-font-mono); font-size: var(--talos-font-size-xs); color: var(--talos-text);
+  padding: 2px 6px; border-radius: 6px; background: var(--talos-panel-soft); user-select: all; overflow-wrap: anywhere; min-width: 0;
+}

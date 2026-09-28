@@ -1,0 +1,93 @@
+{
+  "kind": "workflow-failpoint-manifest",
+  "version": 1,
+  "source": "WORKFLOW-VERIFICATION-SPEC-v1-2026-09-20.md",
+  "naming": "<service>.<operation>.<boundary>",
+  "allowedBoundaryVocabulary": [
+    "before_validate",
+    "after_validate",
+    "before_persist",
+    "after_persist",
+    "before_flush",
+    "after_flush",
+    "before_publish",
+    "after_publish",
+    "before_effect",
+    "after_effect",
+    "before_receipt",
+    "after_receipt",
+    "before_rename",
+    "after_rename",
+    "before_cleanup",
+    "after_cleanup"
+  ],
+  "groups": {
+    "store": [
+      "store.create_run.before_persist",
+      "store.create_run.after_persist",
+      "store.append_event.before_persist",
+      "store.append_event.after_persist",
+      "store.append_event.before_flush",
+      "store.append_event.after_flush",
+      "store.checkpoint.before_persist",
+      "store.checkpoint.after_persist",
+      "store.checkpoint.before_rename",
+      "store.checkpoint.after_rename",
+      "store.result.before_persist",
+      "store.result.after_persist",
+      "store.result.before_rename",
+      "store.result.after_rename",
+      "store.owner.before_bind",
+      "store.owner.after_bind",
+      "store.owner.before_record_persist",
+      "store.owner.after_record_persist",
+      "store.owner.before_release",
+      "store.owner.after_release",
+      "store.owner.unix_before_stale_probe",
+      "store.owner.unix_after_stale_probe",
+      "store.owner.unix_before_stale_unlink",
+      "store.owner.unix_after_stale_unlink"
+    ],
+    "activity": [
+      "activity.schedule.after_persist",
+      "activity.start.after_persist",
+      "activity.execute.before_effect",
+      "activity.execute.after_effect",
+      "activity.execute.before_receipt",
+      "activity.execute.after_receipt",
+      "activity.reconcile.before_effect",
+      "activity.reconcile.after_effect"
+    ],
+    "workspace": [
+      "workspace.capture.after_fingerprint_before",
+      "workspace.capture.after_tracked_patch",
+      "workspace.capture.after_untracked_manifest",
+      "workspace.capture.after_synthetic_worktree",
+      "workspace.capture.after_synthetic_commit",
+      "workspace.capture.before_fingerprint_after",
+      "worktree.create.after_git_add",
+      "worktree.create.before_verify",
+      "worktree.create.after_verify",
+      "worktree.writer_commit.after_effect",
+      "worktree.cleanup.before_remove",
+      "worktree.cleanup.after_remove",
+      "integration.merge.after_start",
+      "integration.merge.after_effect",
+      "integration.merge.before_receipt"
+    ],
+    "human": [
+      "human.request.after_persist",
+      "human.resolve.after_validate",
+      "human.resolve.after_persist",
+      "timer.schedule.after_persist",
+      "timer.fire.after_persist"
+    ],
+    "control": [
+      "graph.patch.after_validate",
+      "graph.patch.after_persist",
+      "control.pause.after_persist",
+      "control.cancel.after_persist"
+    ]
+  },
+  "failpointCount": 56
+}

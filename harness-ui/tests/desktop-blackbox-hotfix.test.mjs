@@ -46,14 +46,23 @@ test('desktop package filter includes the hotfix adapter', () => {
   assert.equal(fileProduzione('src/kernel/talosHarness.desktop-hotfix.mjs'), true);
 });
 
-test('T-01/T-02: an incomplete search never becomes a hard absence claim', () => {
-  const result = correggiEsitoToolDesktop({
-    name: 'cerca', args: { testo: 'needle' }, cartella: '/tmp',
-    content: 'no file matches. Scanned 20000 files (5000 read for content). Try a shorter or different "testo".\n⚠ incomplete scan: I stopped after collecting 20000 paths — the tree has more. Search inside a subfolder.',
-  });
+test('T-01/T-02: an incomplete search never becomes a hard absence claim', async () => {
+  /* 27/09/2026: the input is the kernel's REAL answer (a walk that hits the 20,000-path cap), not a hand-written
+     sentence — the old literal kept this test green after the kernel had stopped emitting it. */
+  const percorsi = Array.from({ length: 20_050 }, (_, i) => `b/f-${i}.txt`);
+  const disco = {
+    async elenca(dentro = '') {
+      if (dentro === '') return [{ nome: 'b', cartella: true, byte: 0 }];
+      return percorsi.map((p) => ({ nome: p.slice(2), cartella: false, byte: 6 }));
+    },
+    async leggi() { return 'niente'; },
+  };
+  const content = await canonical.cercaNelProgetto(disco, { testo: 'needle' });
+  assert.match(content, /⚠ incomplete scan: I stopped after collecting 20000 paths/);
+  const result = correggiEsitoToolDesktop({ name: 'cerca', args: { testo: 'needle' }, cartella: '/tmp', content });
   assert.match(result, /^SEARCH INCOMPLETE:/);
-  assert.match(result, /Absence is NOT established/i);
-  assert.doesNotMatch(result, /^no file matches\./i);
+  assert.match(result, /inconclusive search: no match was found in the files actually inspected, but the search was not exhaustive\./);
+  assert.doesNotMatch(result, /no file matches/i);
 });
 
 test('tool-call ids are resolved in conversation order, even if a provider reuses an id later', (t) => {

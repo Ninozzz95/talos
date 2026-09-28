@@ -12,10 +12,165 @@ import { API_SCHEMA, createHttpApp } from '../src/http-app.mjs';
 // HTTP vero fino a `avvia()` vero, non solo dalla funzione isolata (già
 // provata in session-registry.test.mjs).
 import { createSessionRegistry } from '../src/session-registry.mjs';
+import { eliminaSessionePersistita, leggiRegistro as leggiRegistroSessione, registraIntestazioneSync, registraRiga } from '../src/session-store.mjs';
 import { TaskCatalogError } from '../src/task-catalog.mjs';
 import { createChatImageStore } from '../src/chat-image-attachments.mjs';
 // ⭐ 10/9 — per la prova end-to-end del CRUD di Libreria: una voce VERA su disco, non un finto registro.
 import { CARTELLA_LIBRERIA, salvaVoce } from '../src/library-store.mjs';
+
+import { vistaNelFormatoDiPrima } from './aiuto/vista-journal-formato-di-prima.mjs';
+test('CTX-HEADER-HTTP-ERROR — entrambe le create espongono errore storage tipizzato senza 200', async (t) => {
+  const failure = { erroreAvvio: 'Intestazione non salvata', code: 'SESSION_STORE_HEADER_FAILED' };
+  const sessionRegistry = { avvia: () => failure, avviaLibero: () => failure };
+  const { base } = await listen(t, { sessionRegistry });
+  for (const [path, body] of [
+    ['/api/v1/sessions', { taskId: 'sconto-a-scaglioni' }],
+    ['/api/v1/sessions/custom', { cartellaLibera: 'C:/workspace', consegna: 'prova', permessi: 'Full access' }],
+  ]) {
+    const response = await fetch(`${base}${path}`, {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
+    });
+    assert.equal(response.status, 500, path);
+    const result = await response.json();
+    assert.equal(result.error.code, 'SESSION_STORE_HEADER_FAILED', path);
+  }
+});
+
+test('CTX-HEADER-HTTP-INTEGRATED — create reale fallisce prima del modello e retry sopravvive al restart', async (t) => {
+  const cartellaStore = mkdtempSync(join(tmpdir(), 'talos-header-http-'));
+  let fallisce = true;
+  let chiamateModello = 0;
+  const opzioni = {
+    cartellaStore, modello: 'm', chiave: 'k', guardaWorkspaceFn: () => () => {},
+    preparaEsecuzioneFn: (taskId) => ({ cartella: cartellaStore, comandoProva: 'node --test', task: { id: taskId, consegna: 'prova header' } }),
+    avviaSessioneFn: async (input) => {
+      chiamateModello += 1;
+      input.onEvento({ type: 'RunStarted', threadId: 'header-t', runId: 'header-r' });
+      input.onEvento({ type: 'RunFinished', threadId: 'header-t', runId: 'header-r' });
+      return { ok: true, esito: { comeFinita: 'concluso', messaggiFinali: [] } };
+    },
+  };
+  const registro = createSessionRegistry({
+    ...opzioni,
+    registraIntestazioneSyncFn: (input) => {
+      if (fallisce) throw new Error('EACCES intestazione');
+      return registraIntestazioneSync(input);
+    },
+  });
+  const { base, chiudi } = await listen(t, { sessionRegistry: registro });
+  const crea = () => fetch(`${base}/api/v1/sessions`, {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ taskId: 'sconto-a-scaglioni' }),
+  });
+  try {
+    const errore = await crea();
+    assert.equal(errore.status, 500);
+    assert.equal((await errore.json()).error.code, 'SESSION_STORE_HEADER_FAILED');
+    assert.equal(chiamateModello, 0);
+    assert.deepEqual(registro.elenca(), []);
+    assert.deepEqual((await (await fetch(`${base}/api/v1/sessions`)).json()).data.items, []);
+    const primaRipresa = createSessionRegistry(opzioni);
+    await primaRipresa.ripristina();
+    assert.deepEqual(primaRipresa.elenca(), []);
+
+    fallisce = false;
+    const risposta = await crea();
+    assert.equal(risposta.status, 200);
+    const { sessionId } = (await risposta.json()).data;
+    assert.equal(chiamateModello, 1);
+    let righe = null;
+    for (let i = 0; i < 100; i += 1) {
+      // 24/09/2026 (F2-bis B): la storia di fine giro nel formato a delta, vista come il record di prima (tests/aiuto/vista-journal-formato-di-prima.mjs)
+      righe = vistaNelFormatoDiPrima(await leggiRegistroSessione({ cartellaStore, sessionId }));
+      if (righe?.some((riga) => riga.tipo === 'messaggi-finali')) break;
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    assert.equal(righe?.[0]?.tipo, 'intestazione');
+    assert.equal(righe.some((riga) => riga.tipo === 'messaggi-finali'), true);
+    const dopoRipresa = createSessionRegistry(opzioni);
+    await dopoRipresa.ripristina();
+    assert.equal(dopoRipresa.elenca().some((voce) => voce.sessionId === sessionId), true);
+  } finally {
+    await chiudi();
+    assert.ok(cartellaStore.startsWith(join(tmpdir(), 'talos-header-http-')));
+    rmSync(cartellaStore, { recursive: true, force: true });
+  }
+});
+
+test('CTX-DELETE-ERROR-HTTP-CODE — fallimento storage conserva il codice tipizzato nella route delete', async () => {
+  const app = createHttpApp({
+    staticHandler: () => {},
+    sessionRegistry: { elimina: async () => { throw Object.assign(new Error('unlink EACCES'), { code: 'SESSION_STORE_DELETE_FAILED' }); } },
+  });
+  const server = createServer(app);
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  try {
+    const response = await fetch(`http://127.0.0.1:${server.address().port}/api/v1/sessions/delete-failure/delete`, { method: 'POST' });
+    assert.equal(response.status, 500);
+    assert.equal((await response.json()).error.code, 'SESSION_STORE_DELETE_FAILED');
+  } finally { await new Promise((resolve) => server.close(resolve)); }
+});
+
+test('CTX-DELETE-HTTP-INTEGRATED — errore, elenco/export, retry e restart usano il registro reale', async (t) => {
+  const cartellaStore = mkdtempSync(join(tmpdir(), 'talos-delete-http-'));
+  let fallisce = true;
+  const avviaSessioneFn = async (input) => {
+    input.onEvento({ type: 'RunStarted', threadId: 'delete-t', runId: 'delete-r' });
+    input.onEvento({ type: 'RunFinished', threadId: 'delete-t', runId: 'delete-r' });
+    return { ok: true, esito: { comeFinita: 'concluso', messaggiFinali: [] } };
+  };
+  const preparaEsecuzioneFn = (taskId) => ({
+    cartella: cartellaStore, comandoProva: 'node --test', task: { id: taskId, consegna: 'prova delete' },
+  });
+  const opzioni = {
+    cartellaStore, avviaSessioneFn, preparaEsecuzioneFn,
+    guardaWorkspaceFn: () => () => {}, modello: 'm', chiave: 'k',
+  };
+  const registro = createSessionRegistry({
+    ...opzioni,
+    eliminaSessionePersistitaFn: async (input) => {
+      if (fallisce) throw Object.assign(new Error('unlink EACCES'), { code: 'SESSION_STORE_DELETE_FAILED' });
+      return eliminaSessionePersistita(input);
+    },
+  });
+  const { base, chiudi } = await listen(t, { sessionRegistry: registro });
+  try {
+    const avvio = await fetch(`${base}/api/v1/sessions`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ taskId: 'sconto-a-scaglioni' }),
+    });
+    assert.equal(avvio.status, 200);
+    const { sessionId } = (await avvio.json()).data;
+    let record = null;
+    for (let i = 0; i < 100; i += 1) {
+      record = await leggiRegistroSessione({ cartellaStore, sessionId });
+      if (record?.some((riga) => riga.type === 'RunFinished')) break;
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    assert.equal(record?.some((riga) => riga.type === 'RunFinished'), true, JSON.stringify(record?.map((riga) => riga.type ?? riga.tipo)));
+
+    const path = `${base}/api/v1/sessions/${sessionId}`;
+    const errore = await fetch(`${path}/delete`, { method: 'POST' });
+    assert.equal(errore.status, 500);
+    assert.equal((await errore.json()).error.code, 'SESSION_STORE_DELETE_FAILED');
+    const elencoDopoErrore = (await (await fetch(`${base}/api/v1/sessions`)).json()).data.items;
+    assert.equal(elencoDopoErrore.some((voce) => voce.sessionId === sessionId), true);
+    assert.equal((await fetch(`${path}/export`)).status, 200);
+
+    fallisce = false;
+    assert.equal((await fetch(`${path}/delete`, { method: 'POST' })).status, 200);
+    const elencoDopoRetry = (await (await fetch(`${base}/api/v1/sessions`)).json()).data.items;
+    assert.equal(elencoDopoRetry.some((voce) => voce.sessionId === sessionId), false);
+    assert.equal((await fetch(`${path}/export`)).status, 404);
+    const dopoRestart = createSessionRegistry(opzioni);
+    await dopoRestart.ripristina();
+    assert.equal(dopoRestart.elenca().some((voce) => voce.sessionId === sessionId), false);
+  } finally {
+    await chiudi();
+    assert.ok(cartellaStore.startsWith(join(tmpdir(), 'talos-delete-http-')));
+    rmSync(cartellaStore, { recursive: true, force: true });
+  }
+});
 
 test('NATIVE-CATALOG-HTTP il selettore riceve cataloghi nativi senza credenziali', async () => {
   const calls = [];
@@ -107,6 +262,11 @@ function registroFinto() {
       this.ultimeImpostazioniSessione = { sessionId, patch };
       const voce = sessioni.get(sessionId);
       if (!voce) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
+      /* ⛔ 20/09/2026 — rispecchia il registro vero: solo il MODO è bloccato durante il run;
+         le altre impostazioni mantengono il comportamento già provato in questo fake. */
+      if (Object.hasOwn(patch, 'modalitaOperativa') && !voce.conclusa) {
+        return { erroreAvvio: 'La modalità di lavoro si cambia fra un giro e l’altro', code: 'SESSION_NOT_READY' };
+      }
       Object.assign(voce, patch);
       return { ok: true };
     },
@@ -200,6 +360,15 @@ function registroFinto() {
       if (!sessioni.has(sessionId)) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
       // ⛔ 07/9, O-49: il finto registro rispecchia quello vero — una richiesta decaduta non è una query sbagliata.
       if (requestId !== 'richiesta-vera') return { erroreAvvio: 'Questa richiesta di permesso non è più in attesa', code: 'APPROVAL_NOT_PENDING' };
+      return { ok: true };
+    },
+    /* ⛔ 20/09/2026 — il fake HTTP deve avere la stessa semantica requestId del registro vero:
+       una risposta vecchia è CONFLICT, non una query malformata e non risolve la domanda corrente. */
+    ultimaRispostaDomanda: null,
+    rispondiDomanda(sessionId, requestId, risposta) {
+      this.ultimaRispostaDomanda = { sessionId, requestId, risposta };
+      if (!sessioni.has(sessionId)) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
+      if (requestId !== 'domanda-vera') return { erroreAvvio: 'Questa domanda non è più in attesa', code: 'QUESTION_NOT_PENDING' };
       return { ok: true };
     },
     /*
@@ -427,9 +596,14 @@ async function listen(t, { sessionRegistry = registroFinto(), listaTaskDisponibi
     server.once('error', reject);
     server.listen(0, '127.0.0.1', resolve);
   });
-  t.after(() => new Promise((resolve) => server.close(resolve)));
+  let chiusura = null;
+  const chiudi = () => {
+    chiusura ??= new Promise((resolve, reject) => server.close((errore) => errore ? reject(errore) : resolve()));
+    return chiusura;
+  };
+  t.after(chiudi);
   const { port } = server.address();
-  return { base: `http://127.0.0.1:${port}`, sessionRegistry };
+  return { base: `http://127.0.0.1:${port}`, sessionRegistry, chiudi };
 }
 
 test('GET /api/v1/tasks torna l\'elenco leggero, avvolto nella busta standard', async (t) => {
@@ -504,7 +678,8 @@ test('⛔ POST /api/v1/sessions rifiuta un corpo che non è ESATTAMENTE {taskId}
       body: JSON.stringify(corpo),
     });
     assert.equal(risposta.status, 400, JSON.stringify(corpo));
-    assert.equal((await risposta.json()).error.code, 'QUERY_INVALID');
+    // 25/09/2026 sera: un modello con un nome non valido ha il suo codice (decisione owner «motivo vero»); il resto è la forma
+    assert.equal((await risposta.json()).error.code, 'modello' in corpo ? 'MODEL_ID_INVALID' : 'QUERY_INVALID', JSON.stringify(corpo));
   }
 });
 
@@ -528,7 +703,7 @@ test('POST /api/v1/sessions con client:\'mobile\' passa {mobile:true} a sessionR
     body: JSON.stringify({ taskId: 'sconto-a-scaglioni', client: 'mobile' }),
   });
   assert.equal(risposta.status, 200);
-  assert.deepEqual(sessionRegistry.ultimeOpzioniAvvio, { modelloScelto: null, modelloPlannerScelto: null, reasoningScelto: null, mobile: true, permessiScelto: null, permessiPerAttrezzoScelto: null });
+  assert.deepEqual(sessionRegistry.ultimeOpzioniAvvio, { modelloScelto: null, modelloPlannerScelto: null, reasoningScelto: null, mobile: true, permessiScelto: null, permessiPerAttrezzoScelto: null, modalitaOperativaScelta: null });
 });
 
 test('⛔ AL CONTRARIO: client:\'desktop\' ESPLICITO e client ASSENTE producono entrambi {mobile:false} — nessuna differenza di comportamento', async (t) => {
@@ -538,13 +713,13 @@ test('⛔ AL CONTRARIO: client:\'desktop\' ESPLICITO e client ASSENTE producono 
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ taskId: 'sconto-a-scaglioni', client: 'desktop' }),
   });
-  assert.deepEqual(sessionRegistry.ultimeOpzioniAvvio, { modelloScelto: null, modelloPlannerScelto: null, reasoningScelto: null, mobile: false, permessiScelto: null, permessiPerAttrezzoScelto: null });
+  assert.deepEqual(sessionRegistry.ultimeOpzioniAvvio, { modelloScelto: null, modelloPlannerScelto: null, reasoningScelto: null, mobile: false, permessiScelto: null, permessiPerAttrezzoScelto: null, modalitaOperativaScelta: null });
 
   await fetch(`${base}/api/v1/sessions`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ taskId: 'sconto-a-scaglioni' }),
   });
-  assert.deepEqual(sessionRegistry.ultimeOpzioniAvvio, { modelloScelto: null, modelloPlannerScelto: null, reasoningScelto: null, mobile: false, permessiScelto: null, permessiPerAttrezzoScelto: null });
+  assert.deepEqual(sessionRegistry.ultimeOpzioniAvvio, { modelloScelto: null, modelloPlannerScelto: null, reasoningScelto: null, mobile: false, permessiScelto: null, permessiPerAttrezzoScelto: null, modalitaOperativaScelta: null });
 });
 
 /*
@@ -568,8 +743,36 @@ test('⛔⛔ AL CONTRARIO — POST /api/v1/sessions con modelloPlanner malformat
     body: JSON.stringify({ taskId: 'sconto-a-scaglioni', modelloPlanner: 'senza-slash' }),
   });
   assert.equal(risposta.status, 400);
-  assert.equal((await risposta.json()).error.code, 'QUERY_INVALID');
+  // 25/09/2026 sera, decisione owner «motivo vero»: il suo codice e una frase per la persona, non «Query non valida»
+  assert.equal((await risposta.json()).error.code, 'MODEL_ID_INVALID');
   assert.equal(sessionRegistry.ultimeOpzioniAvvio, null, 'avvia non deve mai essere chiamato su un corpo rifiutato');
+});
+
+/*
+ * ⛔⛔⛔ 25/09/2026 sera, decisione owner «stesso tetto e motivo vero»: un avvio rifiutato diceva «Avvio non riuscito: Query non
+ *   valida» (il Qwen dell'owner, id tagliato su un trattino). Ogni rifiuto di avvio che una persona può incontrare ha ora il SUO
+ *   codice con una frase umana nella tabella dei messaggi, come i codici di O-49 (07/09): mai «OpenRouter», «vendor» o la forma
+ *   del corpo a schermo. Sulla rotta del compito libero, quella della chat.
+ */
+test('⛔⛔⛔ POST /api/v1/sessions/custom: modello, ragionamento e permessi non validi dicono il motivo vero, e l avvio non parte', async (t) => {
+  const { base, sessionRegistry } = await listen(t);
+  const casi = [
+    [{ modello: 'senza slash e spazi' }, 'MODEL_ID_INVALID', /modello/iu],
+    [{ reasoning: { effort: 'enorme' } }, 'REASONING_INVALID', /ragionamento/iu],
+    [{ permessi: 'Super Admin' }, 'PERMISSIONS_INVALID', /permess/iu],
+  ];
+  for (const [campo, codice, parola] of casi) {
+    const risposta = await fetch(`${base}/api/v1/sessions/custom`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cartellaId: '0', consegna: 'ciao', ...campo }),
+    });
+    assert.equal(risposta.status, 400);
+    const { error } = await risposta.json();
+    assert.equal(error.code, codice, JSON.stringify(campo));
+    assert.match(error.message, parola, 'la frase nomina ciò che va scelto di nuovo');
+    assert.doesNotMatch(error.message, /OpenRouter|vendor|effort|Query non valida|\{/u, 'nessun gergo e nessuna forma del corpo');
+  }
+  assert.equal(sessionRegistry.ultimeOpzioniAvvio, null, 'nessun avvio con un corpo rifiutato');
 });
 
 /*
@@ -599,7 +802,7 @@ test('⛔⛔ POST /api/v1/sessions con un permessi INVENTATO: QUERY_INVALID, mai
     body: JSON.stringify({ taskId: 'sconto-a-scaglioni', permessi: 'Super Admin' }),
   });
   assert.equal(risposta.status, 400);
-  assert.equal((await risposta.json()).error.code, 'QUERY_INVALID');
+  assert.equal((await risposta.json()).error.code, 'PERMISSIONS_INVALID'); // 25/09/2026 sera: il motivo vero
   assert.equal(sessionRegistry.ultimeOpzioniAvvio, null, 'mai raggiunto il registro con un permesso non valido');
 });
 
@@ -678,7 +881,7 @@ test('⛔⛔ AL CONTRARIO — un permesso INVENTATO resta rifiutato dalla FORMA,
     body: JSON.stringify({ cartellaLibera: 'C:/qualunque/percorso', consegna: 'fai qualcosa', permessi: 'Tutto quanto' }),
   });
   assert.equal(risposta.status, 400);
-  assert.equal((await risposta.json()).error.code, 'QUERY_INVALID');
+  assert.equal((await risposta.json()).error.code, 'PERMISSIONS_INVALID'); // 25/09/2026 sera: il motivo vero, sempre prima del registro
   assert.equal(sessionRegistry.ultimeOpzioniAvvioLibero, null, 'togliere il cancello sul permesso NON ha aperto la grammatica dei permessi: restano quattro nomi');
 });
 
@@ -725,7 +928,7 @@ test('⛔⛔ POST /api/v1/sessions con permessiPerAttrezzo su un nome attrezzo I
     body: JSON.stringify({ taskId: 'sconto-a-scaglioni', permessiPerAttrezzo: { strumento_inventato: 'nega' } }),
   });
   assert.equal(risposta.status, 400);
-  assert.equal((await risposta.json()).error.code, 'QUERY_INVALID');
+  assert.equal((await risposta.json()).error.code, 'PERMISSIONS_INVALID'); // 25/09/2026 sera: il motivo vero
   assert.equal(sessionRegistry.ultimeOpzioniAvvio, null, 'mai raggiunto il registro con una chiave attrezzo inventata');
 });
 
@@ -736,7 +939,7 @@ test('⛔⛔ AL CONTRARIO — POST /api/v1/sessions con permessiPerAttrezzo su u
     body: JSON.stringify({ taskId: 'sconto-a-scaglioni', permessiPerAttrezzo: { leggi: 'nega' } }),
   });
   assert.equal(risposta.status, 400);
-  assert.equal((await risposta.json()).error.code, 'QUERY_INVALID');
+  assert.equal((await risposta.json()).error.code, 'PERMISSIONS_INVALID'); // 25/09/2026 sera: il motivo vero
   assert.equal(sessionRegistry.ultimeOpzioniAvvio, null, 'leggi non passa mai dal gate: un override lì sarebbe ignorato in silenzio, stesso rifiuto di un nome inventato');
 });
 
@@ -747,7 +950,7 @@ test('⛔ AL CONTRARIO — POST /api/v1/sessions con un valore non fra sempre/ch
     body: JSON.stringify({ taskId: 'sconto-a-scaglioni', permessiPerAttrezzo: { scrivi: 'boh' } }),
   });
   assert.equal(risposta.status, 400);
-  assert.equal((await risposta.json()).error.code, 'QUERY_INVALID');
+  assert.equal((await risposta.json()).error.code, 'PERMISSIONS_INVALID'); // 25/09/2026 sera: il motivo vero
   assert.equal(sessionRegistry.ultimeOpzioniAvvio, null);
 });
 
@@ -762,6 +965,82 @@ test('⭐⭐⭐ POST /api/v1/sessions/custom con permessiPerAttrezzo valido arri
   });
   assert.equal(risposta.status, 200);
   assert.deepEqual(sessionRegistry.ultimeOpzioniAvvioLibero.permessiPerAttrezzo, { document_create: 'sempre' });
+});
+
+/*
+ * ⛔ 20/09/2026 — Ask Question aveva test kernel/registro ma non la porta HTTP reale.
+ * Questi casi bloccano drift di framing, status code e requestId prima del broker durevole.
+ */
+test('DOMANDA-HTTP-01 — answered raggiunge rispondiDomanda con requestId e answers intatti', async (t) => {
+  const { base, sessionRegistry } = await listen(t);
+  const { sessionId } = sessionRegistry.avvia('sconto-a-scaglioni');
+  const risposta = await fetch(`${base}/api/v1/sessions/${sessionId}/question`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ requestId: 'domanda-vera', status: 'answered', answers: { scelta: 'A' } }),
+  });
+  assert.equal(risposta.status, 200);
+  assert.deepEqual(sessionRegistry.ultimaRispostaDomanda, {
+    sessionId, requestId: 'domanda-vera',
+    risposta: { requestId: 'domanda-vera', status: 'answered', answers: { scelta: 'A' } },
+  });
+});
+
+test('DOMANDA-HTTP-02 — skipped è un esito valido e non inventa answers', async (t) => {
+  const { base, sessionRegistry } = await listen(t);
+  const { sessionId } = sessionRegistry.avvia('sconto-a-scaglioni');
+  const risposta = await fetch(`${base}/api/v1/sessions/${sessionId}/question`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ requestId: 'domanda-vera', status: 'skipped' }),
+  });
+  assert.equal(risposta.status, 200);
+  assert.deepEqual(sessionRegistry.ultimaRispostaDomanda.risposta, { requestId: 'domanda-vera', status: 'skipped' });
+});
+
+test('DOMANDA-HTTP-03 — requestId scaduto è 409 QUESTION_NOT_PENDING', async (t) => {
+  const { base, sessionRegistry } = await listen(t);
+  const { sessionId } = sessionRegistry.avvia('sconto-a-scaglioni');
+  const risposta = await fetch(`${base}/api/v1/sessions/${sessionId}/question`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ requestId: 'vecchia', status: 'answered', answers: { scelta: 'A' } }),
+  });
+  assert.equal(risposta.status, 409);
+  assert.equal((await risposta.json()).error.code, 'QUESTION_NOT_PENDING');
+});
+
+test('DOMANDA-HTTP-04 — sessione assente è 404 NOT_FOUND', async (t) => {
+  const { base } = await listen(t);
+  const risposta = await fetch(`${base}/api/v1/sessions/mai-esistita/question`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ requestId: 'domanda-vera', status: 'skipped' }),
+  });
+  assert.equal(risposta.status, 404);
+  assert.equal((await risposta.json()).error.code, 'NOT_FOUND');
+});
+
+test('DOMANDA-HTTP-05 — body malformed fallisce chiuso prima del registro', async (t) => {
+  const { base, sessionRegistry } = await listen(t);
+  const { sessionId } = sessionRegistry.avvia('sconto-a-scaglioni');
+  const invalidi = [
+    {},
+    { requestId: 'domanda-vera' },
+    { requestId: 'domanda-vera', status: 'boh' },
+    { requestId: 'domanda-vera', status: 'answered' },
+    { requestId: 'domanda-vera', status: 'answered', answers: null },
+    { requestId: 'domanda-vera', status: 'answered', answers: [] },
+    { requestId: 'domanda-vera', status: 'answered', answers: 'A' },
+    { requestId: 'domanda-vera', status: 'skipped', answers: {} },
+    { requestId: 'domanda-vera', status: 'cancelled', answers: {} },
+    { requestId: 'domanda-vera', status: 'skipped', extra: true },
+  ];
+  for (const body of invalidi) {
+    sessionRegistry.ultimaRispostaDomanda = null;
+    const risposta = await fetch(`${base}/api/v1/sessions/${sessionId}/question`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+    });
+    assert.equal(risposta.status, 400, JSON.stringify(body));
+    assert.equal((await risposta.json()).error.code, 'QUERY_INVALID', JSON.stringify(body));
+    assert.equal(sessionRegistry.ultimaRispostaDomanda, null, 'un body invalido non deve raggiungere il registro');
+  }
 });
 
 /*
@@ -1323,6 +1602,36 @@ test('SESSION-SETTINGS-HTTP-01 — aggiorna modello, reasoning e permessi della 
   assert.deepEqual(sessionRegistry.ultimeImpostazioniSessione, { sessionId, patch });
 });
 
+test('SESSION-SETTINGS-HTTP-MODO — modalitaOperativa valida arriva intatta al registro', async (t) => {
+  const { base, sessionRegistry } = await listen(t);
+  const creata = await fetch(`${base}/api/v1/sessions`, {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ taskId: 'sconto-a-scaglioni' }),
+  });
+  const sessionId = (await creata.json()).data.sessionId;
+  sessionRegistry._emetti(sessionId, { type: 'RunFinished', threadId: 't-modo', runId: 'r-modo' });
+  const risposta = await fetch(`${base}/api/v1/sessions/${sessionId}/settings`, {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ modalitaOperativa: 'piano' }),
+  });
+  assert.equal(risposta.status, 200);
+  assert.deepEqual(sessionRegistry.ultimeImpostazioniSessione, { sessionId, patch: { modalitaOperativa: 'piano' } });
+});
+
+test('SESSION-SETTINGS-HTTP-MODO-LIVE — cambiare modalità durante un run è 409 SESSION_NOT_READY', async (t) => {
+  const { base } = await listen(t);
+  const creata = await fetch(`${base}/api/v1/sessions`, {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ taskId: 'sconto-a-scaglioni' }),
+  });
+  const sessionId = (await creata.json()).data.sessionId;
+  const risposta = await fetch(`${base}/api/v1/sessions/${sessionId}/settings`, {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    // F3-10 (23/09/2026): «workflow» ora si ferma al parser (MODE-TWO-VALUES-ONLY-HTTP); qui si prova lo stato.
+    body: JSON.stringify({ modalitaOperativa: 'piano' }),
+  });
+  assert.equal(risposta.status, 409);
+  assert.equal((await risposta.json()).error.code, 'SESSION_NOT_READY');
+});
+
 test('SESSION-SETTINGS-HTTP-01 contrari — body vuoto, chiavi o valori non validi falliscono chiusi', async (t) => {
   const { base } = await listen(t);
   const creata = await fetch(`${base}/api/v1/sessions`, {
@@ -1337,6 +1646,7 @@ test('SESSION-SETTINGS-HTTP-01 contrari — body vuoto, chiavi o valori non vali
     { permessi: 'Scrivi ovunque' },
     { permessiPerAttrezzo: {} },
     { permessiPerAttrezzo: { leggi: 'sempre' } },
+    { modalitaOperativa: 'automatico' },
   ];
   for (const body of nonValidi) {
     const risposta = await fetch(`${base}/api/v1/sessions/${sessionId}/settings`, {
@@ -1360,6 +1670,36 @@ test('⭐ POST /api/v1/sessions/{id}/compact su una sessione conclusa: 200 e {co
   const corpo = await risposta.json();
   assert.equal(corpo.ok, true);
   assert.deepEqual(corpo.data, { compattato: true });
+});
+
+test('CTX-LEGACY-COMPACT-HTTP-503 — append fallito produce 503 tipizzato, mai falso compattato:true', async (t) => {
+  const sessionRegistry = registroFinto();
+  const { sessionId } = sessionRegistry.avvia('sconto-a-scaglioni');
+  sessionRegistry._emetti(sessionId, { type: 'RunFinished', threadId: 't1', runId: 'r1' });
+  sessionRegistry.compatta = async () => ({
+    erroreAvvio: 'Il riassunto non è stato salvato. La cronologia originale resta disponibile; riprova.',
+    code: 'SESSION_STORE_WRITE_FAILED',
+  });
+  const { base } = await listen(t, { sessionRegistry });
+  const risposta = await fetch(`${base}/api/v1/sessions/${sessionId}/compact`, { method: 'POST' });
+  assert.equal(risposta.status, 503);
+  const corpo = await risposta.json();
+  assert.equal(corpo.ok, false);
+  assert.equal(corpo.error.code, 'SESSION_STORE_WRITE_FAILED');
+  assert.notEqual(corpo.data?.compattato, true);
+});
+
+test('CTX-STORE-AMBIGUOUS-HTTP-503 — coda non riconciliabile blocca compact con 503, non con falso successo', async (t) => {
+  const sessionRegistry = registroFinto();
+  const { sessionId } = sessionRegistry.avvia('sconto-a-scaglioni');
+  sessionRegistry._emetti(sessionId, { type: 'RunFinished', threadId: 't1', runId: 'r1' });
+  sessionRegistry.compatta = async () => ({ erroreAvvio: 'Esito del journal incerto: verifica la sessione prima di riprovare.', code: 'SESSION_STORE_AMBIGUOUS' });
+  const { base } = await listen(t, { sessionRegistry });
+  const risposta = await fetch(`${base}/api/v1/sessions/${sessionId}/compact`, { method: 'POST' });
+  assert.equal(risposta.status, 503);
+  const corpo = await risposta.json();
+  assert.equal(corpo.error.code, 'SESSION_STORE_AMBIGUOUS');
+  assert.notEqual(corpo.data?.compattato, true);
 });
 
 test('⛔ POST /api/v1/sessions/{id}/compact su una sessione ANCORA IN CORSO: 409 SESSION_NOT_READY', async (t) => {
@@ -2389,12 +2729,15 @@ test('⛔ GET .../metrics rifiuta una query string, come le rotte vicine (requir
  */
 test('⛔⛔ GET .../processes e .../metrics DICHIARANO interrotta, invece di lasciarla indovinare', async (t) => {
   const cartellaStore = mkdtempSync(join(tmpdir(), 'talos-interrotta-'));
+  let sessionId;
+  let viva;
+  let morta;
   try {
     const primo = registroVeroConEventi(t, { cartellaStore, emetti: (onEvento) => { onEvento({ type: 'RunStarted', threadId: 't', runId: 'r1', input: { consegna: 'c' } }); } });
-    const { sessionId } = primo.avvia('sconto-a-scaglioni');
+    ({ sessionId } = primo.avvia('sconto-a-scaglioni'));
     for (let attesa = 0; attesa < 200 && !esisteIntestazione(cartellaStore, sessionId); attesa += 1) await new Promise((r) => setTimeout(r, 10));
 
-    const viva = await listen(t, { sessionRegistry: primo });
+    viva = await listen(t, { sessionRegistry: primo });
     for (const rotta of ['processes', 'metrics']) {
       const corpo = await (await fetch(`${viva.base}/api/v1/sessions/${sessionId}/${rotta}`)).json();
       assert.equal(corpo.data.interrotta, false, `${rotta} su una sessione VIVA`);
@@ -2403,13 +2746,19 @@ test('⛔⛔ GET .../processes e .../metrics DICHIARANO interrotta, invece di la
     const secondo = registroVeroConEventi(t, { cartellaStore });
     await secondo.ripristina();
     assert.equal(secondo.elenca()[0].interrotta, true, 'premessa: il ripristino la marca interrotta');
-    const morta = await listen(t, { sessionRegistry: secondo });
+    morta = await listen(t, { sessionRegistry: secondo });
     for (const rotta of ['processes', 'metrics']) {
       const corpo = await (await fetch(`${morta.base}/api/v1/sessions/${sessionId}/${rotta}`)).json();
       assert.equal(corpo.data.interrotta, true, `${rotta} su una sessione INTERROTTA da un riavvio`);
     }
   } finally {
-    rmSync(cartellaStore, { recursive: true, force: true });
+    try {
+      await morta?.chiudi();
+      await viva?.chiudi();
+      if (sessionId) await leggiRegistroSessione({ cartellaStore, sessionId });
+    } finally {
+      rmSync(cartellaStore, { recursive: true, force: true });
+    }
   }
 });
 
@@ -2567,4 +2916,239 @@ test('⭐⭐ GET .../events: chi apre la sessione DOPO riceve la coda subito dop
   assert.deepEqual(coda.value.voci.map((v) => v.testo), ['visibile ovunque']);
   assert.equal(haId(stato.frame.find((f) => datiDelFrame(f).name === 'talos.coda')), false, '⛔ stato, non storia: niente id SSE');
   await reader.cancel();
+});
+
+/*
+ * ⛔⛔ CTX-D2 — riparazione del 23/09/2026 notte (corsia CTX): la porta HTTP VERA con il registro VERO
+ *   e l'archivio vero in una cartella di prova. Il finto registro di questo file risponde sincrono e
+ *   non può dire niente su «prima si salva, poi si conferma» né sull'idempotenza.
+ *   Fonte: draft-ietf-httpapi-idempotency-key-header-07 §2.6 (consultato il 23/09/2026).
+ */
+async function domandaAskViaHttp(t, registraRigaFn) {
+  const cartellaStore = mkdtempSync(join(tmpdir(), 'talos-ask-http-'));
+  let chiediDomandaFn = null;
+  let risolviGiro;
+  const registro = createSessionRegistry({
+    cartellaStore, modello: 'm', chiave: 'k', guardaWorkspaceFn: () => () => {}, cartellaEsisteFn: () => true,
+    ...(registraRigaFn ? { registraRigaFn } : {}),
+    preparaEsecuzioneFn: (taskId) => ({ cartella: cartellaStore, comandoProva: 'node --test', task: { id: taskId, consegna: 'prova ask' } }),
+    avviaSessioneFn: (input) => {
+      chiediDomandaFn = input.chiediDomandaFn;
+      input.onEvento({ type: 'RunStarted', threadId: 'ask-t', runId: 'ask-r' });
+      return new Promise((r) => { risolviGiro = () => { input.onEvento({ type: 'RunFinished', threadId: 'ask-t', runId: 'ask-r' }); r({ ok: true, esito: { comeFinita: 'concluso', messaggiFinali: [] } }); }; });
+    },
+  });
+  const { base, chiudi } = await listen(t, { sessionRegistry: registro });
+  const { sessionId } = registro.avvia('sconto-a-scaglioni');
+  const alModello = chiediDomandaFn([{ id: 'scelta', question: 'Quale?', options: [{ label: 'A', description: 'a' }, { label: 'B', description: 'b' }] }]);
+  const { requestId } = registro.esporta(sessionId).eventi.find((e) => e.type === 'UserQuestionRequested');
+  const rispondi = (corpo) => fetch(`${base}/api/v1/sessions/${sessionId}/question`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ requestId, ...corpo }),
+  });
+  const pulisci = async () => {
+    risolviGiro?.();
+    await chiudi();
+    await new Promise((r) => setTimeout(r, 50));
+    assert.ok(cartellaStore.startsWith(join(tmpdir(), 'talos-ask-http-')));
+    rmSync(cartellaStore, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
+  };
+  return { registro, sessionId, requestId, alModello, rispondi, pulisci };
+}
+
+test('CTX-ASK-HTTP-IDEMPOTENT — la stessa risposta ripetuta è 200 come la prima; una diversa è 409', async (t) => {
+  const prova = await domandaAskViaHttp(t);
+  try {
+    const prima = await prova.rispondi({ status: 'answered', answers: { scelta: 'A' } });
+    assert.equal(prima.status, 200);
+    assert.deepEqual(await prova.alModello, { status: 'answered', answers: { scelta: 'A' } });
+    const ripetuta = await prova.rispondi({ status: 'answered', answers: { scelta: 'A' } });
+    assert.equal(ripetuta.status, 200, 'un retry della stessa risposta non è un conflitto');
+    assert.equal((await ripetuta.json()).ok, true);
+    const diversa = await prova.rispondi({ status: 'answered', answers: { scelta: 'B' } });
+    assert.equal(diversa.status, 409);
+    assert.equal((await diversa.json()).error.code, 'QUESTION_NOT_PENDING');
+  } finally { await prova.pulisci(); }
+});
+
+test('CTX-ASK-HTTP-NOT-SAVED — risposta non salvata: nessun 200, errore tipizzato, il modello non riceve «answered»', async (t) => {
+  const registraRigaFn = (arg) => (arg.record?.type === 'UserQuestionResolved')
+    ? Promise.reject(Object.assign(new Error('ENOSPC simulato'), { code: 'ENOSPC' })) : registraRiga(arg);
+  const errori = console.error; console.error = () => {};
+  const prova = await domandaAskViaHttp(t, registraRigaFn);
+  try {
+    const risposta = await prova.rispondi({ status: 'answered', answers: { scelta: 'A' } });
+    assert.equal(risposta.status, 500);
+    assert.equal((await risposta.json()).error.code, 'QUESTION_ANSWER_NOT_SAVED');
+    assert.deepEqual(await prova.alModello, { status: 'cancelled', reason: 'answer-not-saved' });
+    const ripetuta = await prova.rispondi({ status: 'answered', answers: { scelta: 'A' } });
+    assert.equal(ripetuta.status, 500, 'la ripetizione riceve l esito della prima, anche quando è un errore');
+  } finally { console.error = errori; await prova.pulisci(); }
+});
+
+/*
+ * ⛔ CTX-HEADER-HTTP-ERROR col registro VERO — 23/09/2026 notte. Il caso sopra usa un registro finto
+ *   che restituisce sempre il fallimento: con il `catch` del registro rotto (mutazione M1 della
+ *   revisione) restava verde. Qui le due create passano dal registro vero con l'intestazione rifiutata.
+ */
+test('CTX-HEADER-HTTP-ERROR-REAL-REGISTRY — entrambe le create col registro vero: 500 tipizzato, nessun modello, nessuna sessione', async (t) => {
+  const cartellaStore = mkdtempSync(join(tmpdir(), 'talos-header-http-'));
+  let chiamateModello = 0;
+  const registro = createSessionRegistry({
+    cartellaStore, modello: 'm', chiave: 'k', guardaWorkspaceFn: () => () => {}, cartellaEsisteFn: () => true,
+    registraIntestazioneSyncFn: () => { throw new Error('EACCES intestazione'); },
+    preparaEsecuzioneFn: (taskId) => ({ cartella: cartellaStore, comandoProva: 'node --test', task: { id: taskId, consegna: 'prova header' } }),
+    preparaEsecuzioneLiberaFn: (_cartelle, { cartellaLibera, consegna }) => ({ cartella: cartellaLibera, comandoProva: 'npm test', task: { consegna, consegnaCorta: consegna } }),
+    avviaSessioneFn: async () => { chiamateModello += 1; return { ok: true, esito: { comeFinita: 'concluso', messaggiFinali: [] } }; },
+  });
+  const { base, chiudi } = await listen(t, { sessionRegistry: registro });
+  const errori = console.error; console.error = () => {};
+  try {
+    for (const [path, body] of [
+      ['/api/v1/sessions', { taskId: 'sconto-a-scaglioni' }],
+      ['/api/v1/sessions/custom', { cartellaLibera: cartellaStore, consegna: 'prova', permessi: 'Full access' }],
+    ]) {
+      const response = await fetch(`${base}${path}`, {
+        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
+      });
+      assert.equal(response.status, 500, path);
+      assert.equal((await response.json()).error.code, 'SESSION_STORE_HEADER_FAILED', path);
+    }
+    assert.equal(chiamateModello, 0);
+    assert.deepEqual(registro.elenca(), []);
+  } finally {
+    console.error = errori;
+    await chiudi();
+    assert.ok(cartellaStore.startsWith(join(tmpdir(), 'talos-header-http-')));
+    rmSync(cartellaStore, { recursive: true, force: true });
+  }
+});
+
+/*
+ * ⛔ F3-10 (23/09/2026, decisione owner) — il modo «Workflow» è ritirato: un POST NUOVO con `workflow` si
+ *   rifiuta con un errore tipizzato su tutte e tre le rotte che accettavano il modo, prima di toccare il
+ *   registro. Il testo pubblico è il suo, non quello dell'errore interno.
+ */
+test('MODE-TWO-VALUES-ONLY-HTTP — sessione, sessione libera e impostazioni rifiutano «workflow» con 400 tipizzato', async (t) => {
+  const { base, sessionRegistry } = await listen(t);
+  const creata = await fetch(`${base}/api/v1/sessions`, {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ taskId: 'sconto-a-scaglioni' }),
+  });
+  const sessionId = (await creata.json()).data.sessionId;
+  sessionRegistry._emetti(sessionId, { type: 'RunFinished', threadId: 't-modo', runId: 'r-modo' });
+  sessionRegistry.ultimeOpzioniAvvio = null;
+  for (const [path, body] of [
+    ['/api/v1/sessions', { taskId: 'sconto-a-scaglioni', modalitaOperativa: 'workflow' }],
+    ['/api/v1/sessions/custom', { cartellaLibera: 'C:/workspace', consegna: 'prova', modalitaOperativa: 'workflow' }],
+    [`/api/v1/sessions/${sessionId}/settings`, { modalitaOperativa: 'workflow' }],
+  ]) {
+    const risposta = await fetch(`${base}${path}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+    assert.equal(risposta.status, 400, path);
+    const { error } = await risposta.json();
+    assert.equal(error.code, 'MODE_WORKFLOW_RETIRED', path);
+    assert.notEqual(error.title, 'Operazione non riuscita', `${path}: serve una copia pubblica sua, non quella dell'errore interno`);
+    assert.match(`${error.title} ${error.explanation} ${error.action}`, /Normale|Piano/, path);
+  }
+  assert.equal(sessionRegistry.ultimeOpzioniAvvio, null, 'il registro non è stato chiamato');
+  assert.equal(sessionRegistry.ultimeOpzioniAvvioLibero ?? null, null);
+  assert.equal(sessionRegistry.ultimeImpostazioniSessione ?? null, null);
+});
+
+/*
+ * 24/09/2026 — cablaggio della cura exFAT (decisione owner «ripiego sicuro»). Il negozio delle sessioni
+ * distingue ormai `SESSION_STORE_FS_UNSUPPORTED` con la causa; prima il registro appiattiva OGNI errore
+ * dell'intestazione su HEADER_FAILED e HTTP non conosceva il codice nuovo (⇒ INTERNAL_ERROR).
+ */
+test('EXFAT-HTTP-FS-UNSUPPORTED — un disco non adatto arriva alla persona col suo codice e la sua causa, senza modello', async (t) => {
+  const cartellaStore = mkdtempSync(join(tmpdir(), 'talos-exfat-http-'));
+  let chiamateModello = 0;
+  const registro = createSessionRegistry({
+    cartellaStore, modello: 'm', chiave: 'k', guardaWorkspaceFn: () => () => {},
+    preparaEsecuzioneFn: (taskId) => ({ cartella: cartellaStore, comandoProva: 'node --test', task: { id: taskId, consegna: 'prova exfat' } }),
+    avviaSessioneFn: async () => { chiamateModello += 1; return { ok: true, esito: { comeFinita: 'concluso', messaggiFinali: [] } }; },
+    registraIntestazioneSyncFn: () => {
+      const errore = new Error('Il disco non supporta i collegamenti né il ripiego');
+      errore.code = 'SESSION_STORE_FS_UNSUPPORTED'; errore.causa = 'non-supportato';
+      throw errore;
+    },
+  });
+  const esito = await registro.avvia('sconto-a-scaglioni');
+  assert.equal(esito.code, 'SESSION_STORE_FS_UNSUPPORTED', 'il registro deve propagare il codice del negozio');
+  assert.equal(esito.causa, 'non-supportato');
+  const { base } = await listen(t, { sessionRegistry: registro });
+  const response = await fetch(`${base}/api/v1/sessions`, {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ taskId: 'sconto-a-scaglioni' }),
+  });
+  assert.equal(response.status, 500);
+  const result = await response.json();
+  assert.equal(result.error.code, 'SESSION_STORE_FS_UNSUPPORTED');
+  assert.equal(result.error.title, 'Disco non adatto alle sessioni', 'la copia deve essere quella del disco, non INTERNAL_ERROR');
+  assert.equal(chiamateModello, 0, 'nessun modello parte senza intestazione');
+});
+
+/* ─── REV-SESSION-READY v2 (27/09/2026, revisione Codex punto 8) — la finestra di chiusura attraversa l'event loop
+   (`agent-service.mjs` chiude i server MCP con un `await` dopo l'evento finale): le rotte di ripresa e fork la ASPETTANO
+   invece di girare alla persona un «sta chiudendo il giro». ─── */
+for (const [nome, rotta, metodo] of [['resume', 'resume', 'resume'], ['fork', 'fork', 'forka']]) {
+  test(`REV-SESSION-READY-HTTP — POST ${nome} aspetta l’assestamento del giro in chiusura, poi procede`, async (t) => {
+    const sessionRegistry = registroFinto();
+    let sciogli;
+    const assestamento = new Promise((r) => { sciogli = r; });
+    let inChiusura = true;
+    const ordine = [];
+    const originale = sessionRegistry[metodo].bind(sessionRegistry);
+    sessionRegistry.staChiudendoIlGiro = () => inChiusura;
+    /* v3: le rotte usano l'attesa UNICA (riaspetta se si apre la finestra di un giro nuovo — Codex v2, punto 7). */
+    sessionRegistry.attendiFuoriDallaFinestra = async () => { ordine.push('attesa'); await assestamento; ordine.push('assestato'); };
+    sessionRegistry[metodo] = (...argomenti) => { ordine.push(metodo); return originale(...argomenti); };
+    const { base } = await listen(t, { sessionRegistry });
+    const { sessionId } = sessionRegistry.avvia('task-vero');
+    sessionRegistry._emetti?.(sessionId, { type: 'RunFinished', threadId: 't1', runId: 'r1' });
+    const richiesta = fetch(`${base}/api/v1/sessions/${sessionId}/${rotta}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' });
+    for (let i = 0; i < 20 && !ordine.includes('attesa'); i += 1) await new Promise((r) => setTimeout(r, 10));
+    assert.deepEqual(ordine, ['attesa'], `${metodo} non parte finché il giro non si è assestato`);
+    inChiusura = false;
+    sciogli();
+    const risposta = await richiesta;
+    assert.deepEqual(ordine, ['attesa', 'assestato', metodo]);
+    /* v3 (Codex v2, punto 10): non basta «non 500» — un 409 «sta chiudendo il giro» passava. Si pretende la riuscita. */
+    assert.equal(risposta.status, 200, await risposta.clone().text());
+    const corpo = await risposta.json();
+    if (metodo === 'resume') assert.equal(corpo.data.sessionId, sessionId);
+    else assert.ok(corpo.data.sessionId && corpo.data.sessionId !== sessionId, 'il fork ha una sessione nuova');
+  });
+}
+
+/* v4 (Codex v4, punto 8): togliere l'attesa dalla rotta della coda lasciava verdi le due prove qui sopra, e una richiesta
+   vera riceveva subito 409 «sta chiudendo il giro». La coda ASPETTA la finestra, poi decide il registro (owner 27/09,
+   «decide all'assestamento»): su un giro concluso la risposta è «usa resume», data DOPO l'assestamento. */
+test('REV-SESSION-READY-HTTP — POST queue aspetta l’assestamento del giro in chiusura, poi decide il registro', async (t) => {
+  const sessionRegistry = registroFinto();
+  let sciogli;
+  const assestamento = new Promise((r) => { sciogli = r; });
+  let inChiusura = true;
+  const ordine = [];
+  const originale = sessionRegistry.accodaMessaggio.bind(sessionRegistry);
+  sessionRegistry.staChiudendoIlGiro = () => inChiusura;
+  sessionRegistry.attendiFuoriDallaFinestra = async () => { ordine.push('attesa'); await assestamento; ordine.push('assestato'); };
+  sessionRegistry.accodaMessaggio = (...argomenti) => {
+    ordine.push('accodaMessaggio');
+    if (inChiusura) return { erroreAvvio: 'La sessione sta chiudendo il giro: riprova appena il giro è concluso.', code: 'SESSION_NOT_READY' };
+    return originale(...argomenti);
+  };
+  const { base } = await listen(t, { sessionRegistry });
+  const { sessionId } = sessionRegistry.avvia('task-vero');
+  sessionRegistry._emetti?.(sessionId, { type: 'RunFinished', threadId: 't1', runId: 'r1' });
+  const richiesta = fetch(`${base}/api/v1/sessions/${sessionId}/queue`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ messaggio: 'ancora una cosa' }) });
+  for (let i = 0; i < 20 && ordine.length === 0; i += 1) await new Promise((r) => setTimeout(r, 10));
+  assert.deepEqual(ordine, ['attesa'], 'la coda non decide finché il giro non si è assestato');
+  inChiusura = false;
+  sciogli();
+  const risposta = await richiesta;
+  assert.deepEqual(ordine, ['attesa', 'assestato', 'accodaMessaggio']);
+  const testo = await risposta.text();
+  assert.doesNotMatch(testo, /sta chiudendo il giro/u, 'dopo l’attesa non si risponde «sta chiudendo il giro»');
+  /* v6 (Codex v5, punto 7): forzare la rotta a 200 {ok:true} dopo il rifiuto del registro passava. Il registro, a giro
+     concluso, rifiuta con «usa resume»: la rotta lo deve girare così com'è, con un 409. */
+  assert.equal(risposta.status, 409, testo);
+  assert.match(testo, /usa resume/u);
 });

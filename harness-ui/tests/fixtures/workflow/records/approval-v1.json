@@ -1,0 +1,10 @@
+{
+  "schema": "talos.workflow-approval.v1",
+  "workflowId": "00000000-0000-4000-8000-000000000001",
+  "version": 1,
+  "definitionHash": "sha256:9e55392af4131005fec0e0bd7e83fb066bd2ed288edb087a54897ce670f44ee1",
+  "commandId": "00000000-0000-4000-8000-000000000003",
+  "approvedAt": "2026-09-20T12:01:00.000Z",
+  "approvedBy": "user",
+  "commandPayloadHash": "sha256:7794eeeae1f92efeaadf680115368ebbe22f3829aec6950fc4e12c85d4b08f86"
+}

@@ -163,3 +163,59 @@ export function rigaDiStatoComando(esito, millisecondi = null) {
   }
   return parti.filter(Boolean).join(' · ');
 }
+
+/*
+ * ⛔⛔ L'ESITO DI UN ATTREZZO CHE DICHIARA DI ESSERE FALLITO — 26/09/2026, difetto (11) delle foto del 25/09 (giro vero
+ *   GLM sul 4174): una proposta di workflow RESPINTA dal server appariva nella conversazione identica a una riuscita.
+ *   Il kernel scrive `workflow_plan_propose failed [WORKFLOW_DEFINITION_INVALID]: …` (`talosHarness.mjs:10646-10651`), e la
+ *   regola della chat riconosceva solo gli esiti che COMINCIANO con `REFUSED.`/`ERROR`/`FAILED`. Misurato nel kernel: 37
+ *   esiti hanno la forma `<attrezzo> failed…` (note, attività, memoria, libreria, ricerche, Officina, domanda, piano, proposta),
+ *   più due con un nome diverso da quello dell'attrezzo: `search failed` (`web_search`) e `delegation failed`
+ *   (`delega_sottotask`). Tutti arrivavano a schermo col pallino verde.
+ * ⭐ Hermes decide sui CAMPI (`isError`, `success:false`, `ok:false`, chiavi d'errore: `lib/tool-result-summary.ts:375-381`,
+ *   clone `65ad529` del 23/09): il nostro `ToolCallResult` non ha un campo d'errore (`agui-events.mjs`), e l'esito è una
+ *   stringa. ⇒ Si legge il CONTRATTO del kernel, stretto: il nome dell'attrezzo (o il suo alias), ` failed`, un codice
+ *   facoltativo fra parentesi quadre, i due punti. Un file letto che PARLA di un fallimento non è una lettura fallita.
+ * ⛔ Una regola sola per chat e pannello della figlia (`conversazione-figlia.js`, `esitoDaContenuto`).
+ */
+const ALIAS_ESITO_FALLITO = Object.freeze({ web_search: ['search'], delega_sottotask: ['delegation'] });
+const INIZIO_FALLITO = /^(?:REFUSED\.|ERROR\b|ERRORE\b|FAILED\b|FALLITO\b|NON RIUSCITO\b)/i;
+const escapeRegex = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/**
+ * Vero se l'esito testuale di un attrezzo (non `shell`, non `prova`: hanno il loro contratto) dichiara un fallimento.
+ * @param {string} nome l'id tecnico dell'attrezzo
+ * @param {string} testo l'esito grezzo
+ */
+export function esitoDichiaraFallimento(nome, testo) {
+  const t = String(testo ?? '').trim();
+  if (INIZIO_FALLITO.test(t)) return true;
+  const nomi = [String(nome ?? ''), ...(ALIAS_ESITO_FALLITO[nome] ?? [])].filter(Boolean);
+  return nomi.some((n) => new RegExp(`^${escapeRegex(n)} failed(?: \\[[A-Z0-9_]+\\])?:`, 'u').test(t));
+}
+
+/*
+ * ⭐ 27/09/2026, decisione owner 47 — UNA DOMANDA DEL MODELLO RESPINTA PER LA FORMA NON È UN GUASTO. Nella sessione 56066b64
+ *   glm-5.3-flash ha mandato `ask_user_question` due volte in una forma che il contratto rifiuta (`why` mancante, poi un campo
+ *   in più), e al terzo tentativo la domanda è arrivata: l'owner ha visto due errori rossi per una cosa che il modello aveva
+ *   corretto da solo. L'esito `ask_user_question failed [QUERY_INVALID]: …` (`talosHarness.mjs`, porta del modello) si
+ *   mostra come riga DISCRETA con il motivo in parole; il testo del kernel resta nel dettaglio, per le segnalazioni.
+ * ⇒ Qui si riconosce il caso e si traduce il motivo del contratto (`src/user-question-contract.mjs`) in una frase breve.
+ *   Solo `QUERY_INVALID`: `QUESTION_ALREADY_PENDING` e gli altri restano quello che sono.
+ * @returns {null | { frase: string, parametri?: object }} la frase è una chiave di traduzione (italiano), o null
+ */
+export function motivoDomandaDaCorreggere(nome, testo) {
+  if (nome !== 'ask_user_question') return null;
+  const m = /^ask_user_question failed \[QUERY_INVALID\]:\s*(.*)$/su.exec(String(testo ?? '').trim());
+  if (!m) return null;
+  const motivo = m[1];
+  if (/\.why è obbligatorio/u.test(motivo)) return { frase: 'mancava il perché' };
+  let n = /options deve contenere da (\d+) a (\d+) opzioni/u.exec(motivo);
+  if (n) return { frase: 'servono da {min} a {max} opzioni', parametri: { min: Number(n[1]), max: Number(n[2]) } };
+  n = /questions deve contenere da (\d+) a (\d+) domande/u.exec(motivo);
+  if (n) return { frase: 'servono da {min} a {max} domande', parametri: { min: Number(n[1]), max: Number(n[2]) } };
+  if (/opzioni duplicate/u.test(motivo)) return { frase: 'c’erano scelte doppie' };
+  if (/id domanda duplicato/u.test(motivo)) return { frase: 'c’erano domande doppie' };
+  if (/supera il limite/u.test(motivo)) return { frase: 'un testo era troppo lungo' };
+  return { frase: 'la forma non era valida' };
+}

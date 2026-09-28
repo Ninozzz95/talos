@@ -207,6 +207,18 @@ test('⛔⛔ AL CONTRARIO — il guardiano MORDE: ciò che la catena non nomina 
   assert.deepEqual(metodiAmmessiPerRotta('/api/v1/assistenza'), ['POST']);
 });
 
+test('WF-ROUTE-INVENTORY: proposal review and approval expose only their real methods', () => {
+  const proposal = '/api/v1/workflows/00000000-0000-4000-8000-000000000001/versions/1';
+  assert.deepEqual(metodiAmmessiPerRotta(proposal), ['GET', 'HEAD']);
+  assert.deepEqual(metodiAmmessiPerRotta(`${proposal}/approve`), ['POST']);
+  // F3-51c (25/09/2026): Avvia esiste (prima di questa fetta qui c'era `null`), e i controlli del run dichiarano solo POST
+  assert.deepEqual(metodiAmmessiPerRotta(`${proposal}/start`), ['POST']);
+  const run = '/api/v1/sessions/x/workflows/00000000-0000-4000-8000-000000000002';
+  for (const azione of ['pause', 'resume', 'cancel', 'retry']) assert.deepEqual(metodiAmmessiPerRotta(`${run}/${azione}`), ['POST'], azione);
+  assert.deepEqual(metodiAmmessiPerRotta(`${run}/retry-preview`), ['GET', 'HEAD']);
+  assert.equal(metodiAmmessiPerRotta(`${run}/stop`), null, 'only the four actions exist');
+});
+
 /*
  * ⭐⭐⭐⭐ 11/09 — IL CRUD DI NOTE/ATTIVITÀ/MEMORIA nell'inventario, risorsa per risorsa.
  * Il guardiano qui sopra prova che ogni rotta SERVITA sia dichiarata; questo prova il contrario

@@ -34,6 +34,7 @@
 import { createHash } from 'node:crypto';
 import { promises as fsp } from 'node:fs';
 import { join } from 'node:path';
+import { POSIZIONI_CONFIGURAZIONE, primaPerId } from './configurazione-progetto.mjs';
 
 export class McpRegistryError extends Error {
   constructor(message, code = 'MCP_CONFIG_INVALID') {
@@ -51,24 +52,36 @@ const NOME_FILE_MCP = '.harness-ui-mcp.json';
  * Uno schema malformato invece È un errore dichiarato (mai un server
  * fantasma silenziosamente ignorato, stesso principio di caricaHooks).
  */
+/*
+ * ⭐ PO-26, parte 2 (owner 24/09/2026) — I server MCP si leggono da DUE posizioni, in ordine di precedenza:
+ *   `.talos/mcp.json` e il nome di sempre nella radice del progetto. Il nome vecchio non si sposta e non smette di
+ *   valere (`src/configurazione-progetto.mjs`); una voce con lo stesso id in `.talos/` lo sostituisce. Un file
+ *   malformato in una delle due posizioni resta un errore dichiarato, col nome del file.
+ */
 export async function caricaServerMcp({ cartella }, deps = {}) {
+  const perFile = [];
+  for (const nomeFile of POSIZIONI_CONFIGURAZIONE.mcp) perFile.push(...(await caricaServerMcpDaFile({ cartella, nomeFile }, deps)).server);
+  return { server: primaPerId(perFile, (s) => s.id) };
+}
+
+async function caricaServerMcpDaFile({ cartella, nomeFile = NOME_FILE_MCP }, deps = {}) {
   const readFileFn = deps.readFileFn ?? fsp.readFile;
-  const percorso = join(cartella, NOME_FILE_MCP);
+  const percorso = join(cartella, nomeFile);
   let testo;
   try {
     testo = await readFileFn(percorso, 'utf8');
   } catch (errore) {
     if (errore?.code === 'ENOENT') return { server: [] };
-    throw new McpRegistryError(`Impossibile leggere ${NOME_FILE_MCP}: ${errore.message}`, 'MCP_CONFIG_READ_FAILED');
+    throw new McpRegistryError(`Impossibile leggere ${nomeFile}: ${errore.message}`, 'MCP_CONFIG_READ_FAILED');
   }
   let dati;
   try {
     dati = JSON.parse(testo);
   } catch {
-    throw new McpRegistryError(`${NOME_FILE_MCP} non è un JSON valido`, 'MCP_CONFIG_MALFORMED');
+    throw new McpRegistryError(`${nomeFile} non è un JSON valido`, 'MCP_CONFIG_MALFORMED');
   }
   if (!dati || !Array.isArray(dati.server)) {
-    throw new McpRegistryError(`${NOME_FILE_MCP} deve avere un campo "server" (array)`, 'MCP_CONFIG_MALFORMED');
+    throw new McpRegistryError(`${nomeFile} deve avere un campo "server" (array)`, 'MCP_CONFIG_MALFORMED');
   }
   const server = dati.server.map((voce, indice) => {
     if (typeof voce?.id !== 'string' || voce.id.length === 0) {

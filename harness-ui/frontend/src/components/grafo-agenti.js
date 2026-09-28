@@ -1,6 +1,7 @@
 import { creaCronologiaGrafo } from './cronologia-grafo.js';
 import { graphlib, layout } from '@dagrejs/dagre';
 import { nomeUmanoAttrezzo } from './nomi-attrezzi.js';
+import { linguaCorrenteDiT } from './lingua.js';
 
 const idValido = v => typeof v === 'string' && v.length > 0 && v.length <= 2048;
 const stati = { all: 'Tutti gli stati', active: 'In corso', waiting: 'Da approvare', done: 'Conclusi', interrupted: 'Interrotti', error: 'Non riusciti', unknown: 'Stato non disponibile' };
@@ -14,7 +15,14 @@ function stato(a) {
 
 const contaValida = n => Number.isSafeInteger(n) && n >= 0 ? n : null;
 const istante = s => typeof s === 'string' && Number.isFinite(Date.parse(s)) ? Date.parse(s) : null;
-const compatto = n => new Intl.NumberFormat('it-IT', { notation: 'compact', maximumFractionDigits: 1 }).format(n);
+/*
+ * ⛔ 23/09/2026 (riparazione D6 della revisione UI) — conteggi nella lingua ATTIVA e sempre raggruppati:
+ *   decisione owner «5.000» (in inglese «5,000»). In italiano `useGrouping: 'auto'` stampa «5000»; `'always'`
+ *   raggruppa anche le quattro cifre (MDN, Intl.NumberFormat() constructor, opzione useGrouping, consultato
+ *   23/09/2026). Anche la forma compatta segue la lingua invece di un 'it-IT' fisso.
+ */
+const conteggio = n => { try { return new Intl.NumberFormat(linguaCorrenteDiT(), { useGrouping: 'always' }).format(n); } catch { return String(n); } };
+const compatto = n => { try { return new Intl.NumberFormat(linguaCorrenteDiT(), { notation: 'compact', maximumFractionDigits: 1 }).format(n); } catch { return String(n); } };
 const tempo = ms => ms == null ? 'Durata non disponibile' : ms < 60000 ? `${Math.floor(ms / 1000)} s` : ms < 3600000 ? `${Math.floor(ms / 60000)} min` : `${Math.floor(ms / 3600000)} h ${Math.floor(ms / 60000) % 60} min`;
 
 /** Soltanto misure dichiarate: la mancanza di telemetria non equivale a zero. */
@@ -60,10 +68,15 @@ export function modelloGrafoAgenti({ corrente = {}, sessioni = [], figli = [] } 
   for (const a of mappa.values()) for (const [campo, tipo] of [['padreId', 'delega'], ['forkDa', 'ramo']]) {
     if (a[campo] !== a.sessionId && mappa.has(a[campo])) archi.push({ da: a[campo], a: a.sessionId, tipo });
   }
+  const adiacenze = new Map();
+  const numeroFigli = new Map();
+  for (const a of archi) {
+    if (!adiacenze.has(a.da)) adiacenze.set(a.da, []);
+    adiacenze.get(a.da).push(a.a);
+    numeroFigli.set(a.da, (numeroFigli.get(a.da) || 0) + 1);
+  }
   const discendenti = radici => {
     const visitati = new Set(radici), coda = [...radici];
-    const adiacenze = new Map();
-    for (const a of archi) { if (!adiacenze.has(a.da)) adiacenze.set(a.da, []); adiacenze.get(a.da).push(a.a); }
     for (let i = 0; i < coda.length; i++) for (const id of adiacenze.get(coda[i]) || []) {
       if (!visitati.has(id)) { visitati.add(id); coda.push(id); }
     }
@@ -76,12 +89,16 @@ export function modelloGrafoAgenti({ corrente = {}, sessioni = [], figli = [] } 
   for (const id of opzioni.collassati || []) for (const disc of discendenti([id])) if (disc !== id) nascosti.add(disc);
   const query = String(opzioni.query || '').trim().toLocaleLowerCase();
   const isolati = opzioni.isolato ? discendenti([opzioni.isolato]) : null;
-  const nodi = [...mappa.values()].filter(a => inclusi.has(a.sessionId) && !nascosti.has(a.sessionId) && (!isolati || isolati.has(a.sessionId))).map(a => ({
+  const filtrati = [...mappa.values()].filter(a => inclusi.has(a.sessionId) && !nascosti.has(a.sessionId) && (!isolati || isolati.has(a.sessionId))).map(a => ({
     id: a.sessionId, nome: a.taskCorto || a.nome || a.taskDelega || (typeof a.task === 'string' ? a.task : '') || 'Sessione senza titolo',
-    stato: stato(a), dati: a, figli: archi.filter(e => e.da === a.sessionId).length,
+    stato: stato(a), dati: a, figli: numeroFigli.get(a.sessionId) || 0,
   })).filter(n => (!query || `${n.nome} ${n.dati.modello || ''}`.toLocaleLowerCase().includes(query)) && (!opzioni.stato || opzioni.stato === 'all' || n.stato === opzioni.stato));
+  const offset = Number.isSafeInteger(opzioni.offset) && opzioni.offset > 0 ? opzioni.offset : 0;
+  const limit = Number.isSafeInteger(opzioni.limit) && opzioni.limit > 0 ? Math.min(opzioni.limit, 100) : null;
+  const nodi = limit == null ? filtrati : filtrati.slice(offset, offset + limit);
   const presenti = new Set(nodi.map(n => n.id));
-  return { nodi, archi: archi.filter(a => presenti.has(a.da) && presenti.has(a.a)), totale: inclusi.size };
+  return { nodi, archi: archi.filter(a => presenti.has(a.da) && presenti.has(a.a)),
+    totale: inclusi.size, totaleFiltrati: filtrati.length, offset, limit };
 }
 
 /** Il layout è calcolato dall'upstream reale; TALOS possiede dati, rendering e interazioni. */
@@ -111,6 +128,7 @@ export function montaGrafoAgenti(host, { dati, onApri, onChiudi, onAggiorna, onL
     stato: Object.hasOwn(stati, salvato.stato) ? salvato.stato : 'all', collassati: Array.isArray(salvato.collassati) ? salvato.collassati.filter(idValido).slice(0, 1000) : [],
     selezionato: idValido(salvato.selezionato) ? salvato.selezionato : null, isolato: null };
   let corrente = dati, disegno, zoom = 1, x = 0, y = 0, primo = true, segui = false, morto = false;
+  let vistaToccata = false, gruppoAperto = null, paginaGruppo = 0;
   const el = (tag, classe, testo) => { const n = d.createElement(tag); if (classe) n.className = classe; if (testo != null) n.textContent = testo; return n; };
   const bottone = (testo, azione, aria) => { const b = el('button', 'talos-button talos-button--ghost talos-button--sm', testo); b.type = 'button'; if (aria) b.setAttribute('aria-label', aria); b.addEventListener('click', azione); return b; };
   const root = el('section', 'talos-grafo'); root.dataset.c = 'GrafoAgenti'; root.setAttribute('aria-label', 'Diagramma della sessione');
@@ -142,16 +160,21 @@ export function montaGrafoAgenti(host, { dati, onApri, onChiudi, onAggiorna, onL
   fileCima.append(titoloFile, chiudiFile); const fileScelta = el('select', ''); fileScelta.setAttribute('aria-label', 'File da affiancare');
   const fileTesto = el('pre', ''); anteprima.append(fileCima, fileScelta, fileTesto);
   fileScelta.addEventListener('change', () => leggiFile(fileScelta._agente, fileScelta.value));
-  area.append(canvas, anteprima);
+  const aggregato = el('section', 'talos-grafo__aggregato'); aggregato.hidden = true;
+  aggregato.setAttribute('aria-label', 'Sessioni raggruppate per stato');
+  const gruppi = el('div', 'talos-grafo__gruppi');
+  const gruppoDettaglio = el('div', 'talos-grafo__gruppo-dettaglio');
+  aggregato.append(gruppi, gruppoDettaglio);
+  area.append(canvas, aggregato, anteprima);
   const mini = d.createElementNS('http://www.w3.org/2000/svg', 'svg'); mini.classList.add('talos-grafo__mini'); mini.setAttribute('role', 'button'); mini.setAttribute('aria-label', 'Panoramica del diagramma'); mini.setAttribute('preserveAspectRatio', 'none');
   mini.tabIndex = 0; mini.setAttribute('aria-description', 'Clicca un punto per centrarlo. Frecce per spostare la vista; Invio o Spazio per centrare il diagramma.'); canvas.append(mini);
   mini.addEventListener('pointerdown', e => e.stopPropagation());
-  mini.addEventListener('click', e => { const r = mini.getBoundingClientRect(); if (!disegno) return; x = canvas.clientWidth/2 - (e.clientX-r.left)/r.width*disegno.width*zoom; y = canvas.clientHeight/2 - (e.clientY-r.top)/r.height*disegno.height*zoom; trasforma(); });
+  mini.addEventListener('click', e => { const r = mini.getBoundingClientRect(); if (!disegno) return; vistaToccata = true; x = canvas.clientWidth/2 - (e.clientX-r.left)/r.width*disegno.width*zoom; y = canvas.clientHeight/2 - (e.clientY-r.top)/r.height*disegno.height*zoom; trasforma(); });
   mini.addEventListener('keydown', e => {
     if (!disegno) return;
     if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); x = canvas.clientWidth/2 - disegno.width*zoom/2; y = canvas.clientHeight/2 - disegno.height*zoom/2; trasforma(); }
     const delta = { ArrowLeft: [40,0], ArrowRight: [-40,0], ArrowUp: [0,40], ArrowDown: [0,-40] }[e.key];
-    if (delta) { e.preventDefault(); x += delta[0]; y += delta[1]; trasforma(); }
+    if (delta) { e.preventDefault(); vistaToccata = true; x += delta[0]; y += delta[1]; trasforma(); }
   });
   const timeline = el('div', 'talos-grafo__timeline');
   const cursore = el('input', ''); cursore.type = 'range'; cursore.min = '0'; cursore.max = '0'; cursore.step = '1'; cursore.setAttribute('aria-label', 'Cronologia osservata del diagramma');
@@ -204,7 +227,7 @@ export function montaGrafoAgenti(host, { dati, onApri, onChiudi, onAggiorna, onL
     const base = coverage === 'loading' ? 'Caricamento cronologia…' : coverage === 'unavailable' ? 'Storico precedente non registrato'
       : coverage === 'partial' || storico.partial ? 'Cronologia parziale · intervalli mancanti' : 'Dall’avvio';
     descrizioneReplay.textContent = erroreCronologia ? `Cronologia non aggiornata: ${erroreCronologia}`
-      : `${base}${persistita ? '' : ' · salvataggio non disponibile'}${storico.length ? ` · ${storico.length} eventi` : ''}${nuovi ? ` · ${nuovi} nuovi` : ''}`;
+      : `${base}${persistita ? '' : ' · salvataggio non disponibile'}${storico.length ? ` · ${conteggio(storico.length)} eventi` : ''}${nuovi ? ` · ${conteggio(nuovi)} nuovi` : ''}`;
     riprovaCronologia.hidden = !erroreCronologia;
   }
   function mostraIstante(indice) {
@@ -265,10 +288,11 @@ export function montaGrafoAgenti(host, { dati, onApri, onChiudi, onAggiorna, onL
   }
   function salva() { try { storage?.setItem(key, JSON.stringify(opzioni)); } catch { /* nessun errore di navigazione per quota/storage */ } }
   function trasforma() { mondo.style.transform = `translate(${x}px,${y}px) scale(${zoom})`; misura.textContent = `${Math.round(zoom * 100)}%`; aggiornaMini(); }
-  function scala(nuovo) { const precedente = zoom; zoom = Math.max(.15, Math.min(2, nuovo)); const cx = canvas.clientWidth / 2, cy = canvas.clientHeight / 2; x = cx - (cx - x) * zoom / precedente; y = cy - (cy - y) * zoom / precedente; trasforma(); }
-  function adatta() { if (!disegno?.nodi.length || !canvas.clientWidth || !canvas.clientHeight) return; zoom = Math.max(.15, Math.min(1, (canvas.clientWidth - 32) / disegno.width, (canvas.clientHeight - 32) / disegno.height)); x = (canvas.clientWidth - disegno.width * zoom) / 2; y = 16; trasforma(); }
+  function scala(nuovo) { vistaToccata = true; const precedente = zoom; zoom = Math.max(.15, Math.min(2, nuovo)); const cx = canvas.clientWidth / 2, cy = canvas.clientHeight / 2; x = cx - (cx - x) * zoom / precedente; y = cy - (cy - y) * zoom / precedente; trasforma(); }
+  function adatta() { if (!disegno?.nodi.length || !canvas.clientWidth || !canvas.clientHeight) return; vistaToccata = false; zoom = Math.max(.15, Math.min(1, (canvas.clientWidth - 32) / disegno.width, (canvas.clientHeight - 32) / disegno.height)); x = (canvas.clientWidth - disegno.width * zoom) / 2; y = 16; trasforma(); }
   function lettura() {
     if (!disegno?.nodi.length || !canvas.clientWidth || !canvas.clientHeight) return;
+    vistaToccata = true;
     zoom = Math.max(.8, Math.min(1, (canvas.clientWidth - 32) / disegno.width, (canvas.clientHeight - 32) / disegno.height));
     const id = opzioni.selezionato || corrente.corrente.sessionId;
     centra(disegno.nodi.some(n => n.id === id) ? id : disegno.nodi[0].id);
@@ -280,10 +304,56 @@ export function montaGrafoAgenti(host, { dati, onApri, onChiudi, onAggiorna, onL
   const nodiDom = new Map(), archiDom = new Map();
   const svg = d.createElementNS('http://www.w3.org/2000/svg', 'svg'); svg.setAttribute('aria-hidden', 'true'); mondo.append(svg);
   const vuoto = el('p', 'talos-grafo__vuoto', 'Nessun agente per questi filtri.'); mondo.append(vuoto);
+  function disegnaAggregato(modello) {
+    const perStato = new Map();
+    for (const nodo of modello.nodi) {
+      if (!perStato.has(nodo.stato)) perStato.set(nodo.stato, []);
+      perStato.get(nodo.stato).push(nodo);
+    }
+    const ordinati = Object.keys(etichetta).filter(chiave => perStato.has(chiave));
+    if (!perStato.has(gruppoAperto)) {
+      gruppoAperto = ordinati.toSorted((a, b) => perStato.get(b).length - perStato.get(a).length)[0] || null;
+      paginaGruppo = 0;
+    }
+    gruppi.replaceChildren(...ordinati.map(chiave => {
+      const quanti = perStato.get(chiave).length;
+      const card = bottone('', () => { gruppoAperto = chiave; paginaGruppo = 0; disegnaAggregato(modello); });
+      card.classList.add('talos-grafo__gruppo'); card.dataset.stato = chiave;
+      card.setAttribute('aria-pressed', String(gruppoAperto === chiave));
+      card.setAttribute('aria-label', `${stati[chiave]}: ${conteggio(quanti)} sessioni, mostra elenco`);
+      card.append(el('span', '', stati[chiave]), el('strong', 'talos-mono', conteggio(quanti)));
+      const barra = el('span', 'talos-grafo__gruppo-barra');
+      barra.style.width = `${Math.max(3, Math.round(quanti / modello.nodi.length * 100))}%`;
+      card.append(barra); return card;
+    }));
+    const selezionati = perStato.get(gruppoAperto) || [];
+    paginaGruppo = Math.min(paginaGruppo, Math.max(0, Math.ceil(selezionati.length / 12) - 1));
+    const inizio = paginaGruppo * 12;
+    const titolo = el('h3', '', `${stati[gruppoAperto] || 'Sessioni'} · ${conteggio(selezionati.length)}`);
+    const elenco = el('div', 'talos-grafo__gruppo-elenco');
+    for (const nodo of selezionati.slice(inizio, inizio + 12)) {
+      const apri = bottone(nodo.nome, () => { opzioni.selezionato = nodo.id; salva(); onApri?.(nodo.dati); });
+      apri.classList.add('talos-grafo__gruppo-riga');
+      apri.dataset.sessionId = nodo.id;
+      apri.setAttribute('aria-label', `Apri dettaglio ${nodo.nome}`);
+      elenco.append(apri);
+    }
+    const pagine = el('nav', 'talos-grafo__gruppo-pagine'); pagine.setAttribute('aria-label', 'Pagine del gruppo');
+    const precedente = bottone('Precedente', () => { paginaGruppo--; disegnaAggregato(modello); }, 'Pagina precedente del gruppo');
+    const successiva = bottone('Successiva', () => { paginaGruppo++; disegnaAggregato(modello); }, 'Pagina successiva del gruppo');
+    precedente.disabled = paginaGruppo === 0;
+    successiva.disabled = inizio + 12 >= selezionati.length;
+    pagine.append(precedente, el('span', 'talos-mono', `${conteggio(selezionati.length ? inizio + 1 : 0)}–${conteggio(Math.min(inizio + 12, selezionati.length))} di ${conteggio(selezionati.length)}`), successiva);
+    gruppoDettaglio.replaceChildren(titolo, elenco, pagine);
+  }
   function ridisegna() {
     if (morto) return;
-    disegno = layoutGrafoAgenti(modelloGrafoAgenti(corrente, opzioni));
     const intero = modelloGrafoAgenti(corrente, { ambito: opzioni.ambito });
+    const filtrato = modelloGrafoAgenti(corrente, opzioni);
+    const denso = filtrato.nodi.length > 14;
+    root.dataset.density = denso ? 'aggregate' : 'individual';
+    canvas.hidden = denso; aggregato.hidden = !denso; comandi.hidden = denso;
+    disegno = denso ? { nodi: [], archi: [], width: 0, height: 0 } : layoutGrafoAgenti(filtrato);
     const t = telemetriaGrafoAgenti(intero);
     root.dataset.obsoleto = String(Boolean(corrente.errore));
     const statistica = (chiave, numero, testo, filtra) => {
@@ -294,8 +364,18 @@ export function montaGrafoAgenti(host, { dati, onApri, onChiudi, onAggiorna, onL
     riepilogo.replaceChildren(statistica('active', t.active, 'In corso', 'active'), statistica('waiting', t.waiting, 'Da approvare', 'waiting'),
       statistica('done', t.done, 'Conclusi', 'done'), statistica('error', t.error, 'Errori', 'error'),
       statistica('chiamate', t.chiamate, 'Chiamate strumenti'), statistica('file', t.file, 'File coinvolti'), statistica('token', t.token, 'Token registrati'));
-    const copertura = el('small', 'talos-grafo__copertura', `Intero ambito · ${t.totale} sessioni · strumenti ${t.copertura}/${t.totale} · file ${t.coperturaFile}/${t.totale} · consumo ${t.coperturaToken}/${t.totale}${t.parziale ? ' · conteggi parziali' : ''}${t.scritti != null ? ` · ${t.scritti} file scritti` : ''}${t.interrupted ? ` · ${t.interrupted} interrotti` : ''}${t.unknown ? ` · ${t.unknown} stato non disponibile` : ''}`);
+    const copertura = el('small', 'talos-grafo__copertura', `Intero ambito · ${conteggio(t.totale)} sessioni · strumenti ${conteggio(t.copertura)}/${conteggio(t.totale)} · file ${conteggio(t.coperturaFile)}/${conteggio(t.totale)} · consumo ${conteggio(t.coperturaToken)}/${conteggio(t.totale)}${t.parziale ? ' · conteggi parziali' : ''}${t.scritti != null ? ` · ${conteggio(t.scritti)} file scritti` : ''}${t.interrupted ? ` · ${conteggio(t.interrupted)} interrotti` : ''}${t.unknown ? ` · ${conteggio(t.unknown)} stato non disponibile` : ''}`);
     riepilogo.append(copertura);
+    if (denso) {
+      for (const nodo of nodiDom.values()) nodo.remove(); nodiDom.clear();
+      for (const arco of archiDom.values()) arco.remove(); archiDom.clear();
+      svg.replaceChildren();
+      disegnaAggregato(filtrato);
+      avviso.textContent = `${conteggio(filtrato.nodi.length)} sessioni · gruppi derivati dagli stati registrati${corrente.errore ? ` · dati non aggiornati: ${corrente.errore}` : ''}`;
+      piede.textContent = 'Sessioni raggruppate per stato. Apri un gruppo e scegli una sessione per il dettaglio.';
+      aggiornaTimeline(); salva(); return;
+    }
+    piede.textContent = 'Linea continua: delega · tratteggiata: ramo. Seleziona un agente per aprire il dettaglio.';
     svg.setAttribute('width', String(disegno.width)); svg.setAttribute('height', String(disegno.height));
     const archiVivi = new Set();
     for (const a of disegno.archi) {
@@ -348,7 +428,7 @@ export function montaGrafoAgenti(host, { dati, onApri, onChiudi, onAggiorna, onL
     if (!passi.length) elencoRecenti.append(el('p', '', 'Nessuna attività con orario registrato.'));
     avviso.textContent = corrente.errore ? `Dati non aggiornati: ${corrente.errore}. Riprova con Aggiorna.` : `${disegno.nodi.length} nodi visibili · ${disegno.archi.length} collegamenti registrati${corrente.aggiornato ? ` · lettura ${new Date(corrente.aggiornato).toLocaleTimeString('it-IT')}` : ''}`;
     aggiornaTimeline(); aggiornaMini();
-    salva(); if (primo && canvas.clientWidth && canvas.clientHeight) { primo = false; lettura(); } else if (segui) centraAttivo();
+    salva(); if (primo && canvas.clientWidth && canvas.clientHeight) { primo = false; if (canvas.clientWidth < 600) adatta(); else lettura(); } else if (segui) centraAttivo();
   }
   let focusDaPuntatore = false;
   canvas.addEventListener('pointerdown', () => { focusDaPuntatore = true; }, true);
@@ -361,17 +441,18 @@ export function montaGrafoAgenti(host, { dati, onApri, onChiudi, onAggiorna, onL
   });
   let trascina = null;
   canvas.addEventListener('pointerdown', e => { if (e.button !== 0 || e.target.closest('button,input,select,article')) return; trascina = { id: e.pointerId, x: e.clientX, y: e.clientY, ox: x, oy: y }; canvas.setPointerCapture(e.pointerId); });
-  canvas.addEventListener('pointermove', e => { if (!trascina || e.pointerId !== trascina.id) return; x = trascina.ox + e.clientX - trascina.x; y = trascina.oy + e.clientY - trascina.y; trasforma(); });
+  canvas.addEventListener('pointermove', e => { if (!trascina || e.pointerId !== trascina.id) return; vistaToccata = true; x = trascina.ox + e.clientX - trascina.x; y = trascina.oy + e.clientY - trascina.y; trasforma(); });
   const fine = () => { trascina = null; }; canvas.addEventListener('pointerup', fine); canvas.addEventListener('pointercancel', fine); canvas.addEventListener('lostpointercapture', fine);
-  canvas.addEventListener('keydown', e => { if (e.target !== canvas) return; const m = { ArrowLeft: [40, 0], ArrowRight: [-40, 0], ArrowUp: [0, 40], ArrowDown: [0, -40] }[e.key]; if (m) { e.preventDefault(); x += m[0]; y += m[1]; trasforma(); } });
+  canvas.addEventListener('keydown', e => { if (e.target !== canvas) return; const m = { ArrowLeft: [40, 0], ArrowRight: [-40, 0], ArrowUp: [0, 40], ArrowDown: [0, -40] }[e.key]; if (m) { e.preventDefault(); vistaToccata = true; x += m[0]; y += m[1]; trasforma(); } });
   let dimensioniCanvas = { width: canvas.clientWidth, height: canvas.clientHeight };
   const osservatore = new ResizeObserver(() => {
     if (morto || !canvas.clientWidth || !canvas.clientHeight) return;
     const prima = dimensioniCanvas;
     dimensioniCanvas = { width: canvas.clientWidth, height: canvas.clientHeight };
     if (primo) { ridisegna(); return; }
-    if (!prima.width || !prima.height) { lettura(); return; }
+    if (!prima.width || !prima.height) { adatta(); return; }
     if (opzioni.selezionato) centra(opzioni.selezionato);
+    else if (!vistaToccata) adatta();
     else { x += (dimensioniCanvas.width - prima.width) / 2; y += (dimensioniCanvas.height - prima.height) / 2; trasforma(); }
   }); osservatore.observe(canvas);
   if (typeof onLeggiCronologia !== 'function') coverage = 'unavailable';

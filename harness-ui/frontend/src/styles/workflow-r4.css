@@ -1,0 +1,148 @@
+/* Ask Question stays immediately above the existing composer. No new navigation. */
+.talos-chat-foot > .talos-question-dock[hidden] { display: none; }
+.talos-question-dock { min-width: 0; max-height: min(62vh, 600px); overflow: auto; overscroll-behavior: contain; }
+.talos-question-dock .talos-question-card { margin: 0 0 8px; }
+.talos-question-card__questions { display: grid; gap: 12px; padding: 12px 14px; }
+.talos-question-card__fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
+.talos-question-card__fieldset legend { margin-bottom: 7px; font-weight: 600; line-height: 1.45; }
+.talos-question-card__fieldset .sheet-toggle-row { margin: 3px 0; }
+.talos-question-card__fieldset > .talos-field__input, .talos-question-card__fieldset > .talos-textarea { display: block; width: 100%; margin-top: 8px; box-sizing: border-box; }
+.talos-question-card__review { padding: 14px; }
+.talos-question-card__review-title { margin: 0 0 10px; color: var(--talos-text); font-size: .875rem; }
+.talos-question-card__review-list { margin: 0; display: grid; gap: 8px; }
+.talos-question-card__review-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--talos-border); }
+.talos-question-card__review-row dt { font-weight: 600; overflow-wrap: anywhere; }
+.talos-question-card__review-row dd { margin: 0; color: var(--talos-muted); overflow-wrap: anywhere; }
+.talos-question-card__warning, .talos-question-card__notice { margin: 8px 14px; color: var(--talos-muted); font-size: .75rem; }
+.talos-question-card__actions { padding: 10px 14px; }
+.talos-question-card__actions button:focus-visible, .talos-question-card__fieldset :focus-visible { outline: 2px solid var(--talos-accent); outline-offset: 2px; }
+.talos-question-card [hidden] { display: none; }
+@media (max-width: 620px) {
+  .talos-question-dock { max-height: 55vh; }
+  .talos-question-card__review-row { grid-template-columns: 1fr; gap: 3px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .talos-question-dock, .talos-question-card * { scroll-behavior: auto; transition-duration: 0s; animation-duration: 0s; }
+}
+
+/* La scheda del piano: da leggere (piano dal testo finale) o da approvare (piano presentato con l'attrezzo, 24/09/2026). */
+.talos-plan-artifact {
+  margin: 18px 0 10px;
+  max-width: 860px;
+  min-width: 0;
+  border: 1px solid var(--talos-border);
+  border-radius: var(--talos-radius-card, 12px);
+  background: var(--talos-panel);
+  color: var(--talos-text);
+  box-shadow: var(--talos-shadow-card);
+  overflow: hidden;
+}
+.talos-plan-artifact__heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--talos-border);
+}
+.talos-plan-artifact__heading h3 { margin: 0; font-size: 1rem; letter-spacing: -.015em; }
+.talos-plan-artifact__state {
+  flex: none;
+  padding: 4px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--talos-accent-border);
+  color: var(--talos-accent-text);
+  background: var(--talos-accent-soft);
+  font-size: .75rem;
+}
+.talos-plan-artifact__body {
+  max-height: min(45vh, 480px);
+  overflow: auto;
+  padding: 8px 18px 14px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+.talos-plan-artifact__body :is(h1,h2,h3,h4) { line-height: 1.3; margin: 16px 0 7px; }
+/* 24/09/2026, visto nella foto del giro vero: «## Passi» usciva a taglia di pagina (~28 px) dentro una scheda il cui titolo è
+   1 rem. I titoli del piano restano sotto il titolo della scheda: la gerarchia si legge dal peso, non dalla taglia. */
+.talos-plan-artifact__body :is(h1,h2) { font-size: 1rem; font-weight: 650; }
+.talos-plan-artifact__body :is(h3,h4) { font-size: .9375rem; font-weight: 600; }
+.talos-plan-artifact__body :is(ul,ol) { padding-inline-start: 1.5em; }
+.talos-plan-artifact__body :first-child { margin-top: 8px; }
+.talos-plan-artifact__body:focus-visible { outline: 2px solid var(--talos-accent); outline-offset: -3px; }
+.talos-plan-artifact__footer {
+  margin: 0;
+  padding: 10px 18px;
+  border-top: 1px solid var(--talos-border);
+  color: var(--talos-muted);
+  font-size: .75rem;
+}
+/* 24/09/2026, decisioni owner 36-39: il piano approvabile. Le quattro scelte sono righe-pulsante con titolo e una frase che
+   dice cosa succede (stessa gerarchia delle opzioni della scheda domanda); dopo la scelta il blocco diventa una ricevuta.
+   Solo token esistenti: la famiglia visiva la ridisegna il refactor ATLAS. */
+.talos-plan-artifact__choices { display: grid; gap: 8px; padding: 12px 18px 14px; border-top: 1px solid var(--talos-border); }
+.talos-plan-artifact__ask { margin: 0; font-weight: 600; font-size: .875rem; }
+.talos-plan-artifact__choice-list { display: grid; gap: 6px; }
+.talos-plan-artifact__choice {
+  display: flex; align-items: flex-start; width: 100%; min-width: 0; box-sizing: border-box;
+  padding: 9px 12px; border: 1px solid var(--talos-border); border-radius: var(--talos-radius-control, 8px);
+  background: var(--talos-panel); color: var(--talos-text); font: inherit; text-align: start; cursor: pointer;
+}
+.talos-plan-artifact__choice:hover:not(:disabled) { background: var(--talos-card-hover, var(--talos-panel-soft)); border-color: var(--talos-accent-border); }
+.talos-plan-artifact__choice:focus-visible { outline: 2px solid var(--talos-accent); outline-offset: 2px; }
+.talos-plan-artifact__choice:disabled { cursor: default; opacity: .6; }
+.talos-plan-artifact__choice[aria-expanded="true"] { border-color: var(--talos-accent-border); background: var(--talos-accent-soft); }
+.talos-plan-artifact__choices[aria-busy="true"] .talos-plan-artifact__choice:disabled { opacity: .5; }
+.talos-plan-artifact__choice-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.talos-plan-artifact__choice-title { font-weight: 600; overflow-wrap: anywhere; }
+.talos-plan-artifact__choice-description { color: var(--talos-muted); font-size: 11.5px; line-height: 1.45; overflow-wrap: anywhere; }
+.talos-plan-artifact__feedback { display: grid; gap: 6px; padding: 4px 0 2px 12px; }
+.talos-plan-artifact__feedback[hidden] { display: none; }
+.talos-plan-artifact__feedback-label { font-size: .8125rem; font-weight: 600; }
+.talos-plan-artifact__feedback .talos-textarea { min-height: 72px; }
+.talos-plan-artifact__feedback-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.talos-plan-artifact__error { margin: 0; color: var(--talos-danger); font-size: .8125rem; overflow-wrap: anywhere; }
+.talos-plan-artifact__error[hidden] { display: none; }
+.talos-plan-artifact__receipt { display: grid; gap: 6px; justify-items: start; padding: 12px 18px 14px; border-top: 1px solid var(--talos-border); }
+.talos-plan-artifact__receipt-line { margin: 0; overflow-wrap: anywhere; }
+.talos-plan-artifact__receipt-feedback { margin: 0; color: var(--talos-muted); overflow-wrap: anywhere; }
+.talos-plan-artifact__receipt-meta { margin: 0; color: var(--talos-muted); font-size: .75rem; font-variant-numeric: tabular-nums; }
+.talos-plan-artifact[data-status="cancelled"] .talos-plan-artifact__state { border-color: var(--talos-border); color: var(--talos-muted); background: transparent; }
+@media (max-width: 620px) {
+  .talos-plan-artifact__heading { padding: 12px; }
+  .talos-plan-artifact__body { padding: 8px 12px; max-height: 38vh; }
+  .talos-plan-artifact__footer { padding: 10px 12px; }
+  .talos-plan-artifact__choices, .talos-plan-artifact__receipt { padding: 10px 12px 12px; }
+}
+/* 23/09/2026, riparazione D7: etichetta e descrizione dell'opzione su due righe («StabilePer tutti» era
+   due inline attaccati). Stesso ritmo di `.sheet-toggle-row>span:first-child` in index.css:1239, che qui
+   non scatta perché il radio viene prima dello span. */
+.talos-question-card__option-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1 1 auto; }
+.talos-question-card__option-label { font-weight: 600; color: var(--talos-text); overflow-wrap: anywhere; }
+.talos-question-card__option-description { color: var(--talos-muted); font-size: 11.5px; line-height: 1.45; overflow-wrap: anywhere; }
+/* 24/09/2026 — Ask completa (decisioni owner 10, 11, 32): «perché conta», consigliata, tasti 1-9, ricevuta «Decisione».
+   Solo token esistenti: la famiglia visiva la ridisegna il refactor ATLAS insieme alla scheda di approvazione. */
+.talos-question-card__why { margin: 0 0 8px; color: var(--talos-muted); font-size: .75rem; line-height: 1.45; overflow-wrap: anywhere; }
+.talos-question-card__option-title { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; min-width: 0; }
+.talos-question-card__key { flex: none; align-self: flex-start; min-width: 18px; margin-top: 1px; padding: 0 4px; box-sizing: border-box;
+  border: 1px solid var(--talos-border); border-radius: 4px; color: var(--talos-muted); font: inherit; font-size: 11px; line-height: 16px; text-align: center; }
+.talos-question-card__key:empty { visibility: hidden; }
+/* La riga condivisa (`.sheet-toggle-row`, index.css:1343) centra in altezza: con il tasto numerato e un testo su due righe il
+   pallino finiva a metà altezza e il numero in alto. Nella scheda della domanda tutto parte dalla prima riga. */
+.talos-question-card__fieldset .sheet-toggle-row { align-items: flex-start; }
+.talos-question-card__fieldset .sheet-toggle-row > input { flex: none; margin-top: 3px; }
+.talos-question-card__recommended { font-size: 10.5px; }
+.talos-question-card__timer { flex: none; color: var(--talos-muted); font-size: .75rem; font-variant-numeric: tabular-nums; }
+.talos-question-card__timer[data-ultimi="true"] { color: var(--talos-warning, var(--talos-accent)); font-weight: 600; }
+.talos-question-card__receipt { display: grid; gap: 10px; padding: 12px 14px; }
+.talos-question-card__receipt-meta { margin: 0; color: var(--talos-muted); font-size: .75rem; }
+.talos-question-card__receipt-list { margin: 0; display: grid; gap: 10px; }
+.talos-question-card__receipt-row { display: grid; gap: 3px; min-width: 0; padding-bottom: 10px; border-bottom: 1px solid var(--talos-border); }
+.talos-question-card__receipt-row:last-child { padding-bottom: 0; border-bottom: 0; }
+.talos-question-card__receipt-question { font-weight: 600; overflow-wrap: anywhere; }
+.talos-question-card__receipt-answer { margin: 0; color: var(--talos-text); overflow-wrap: anywhere; }
+.talos-question-card__receipt-row .talos-question-card__why { margin: 0; }
+.talos-question-card__offered summary { width: fit-content; color: var(--talos-muted); font-size: .75rem; cursor: pointer; }
+.talos-question-card__offered summary:focus-visible { outline: 2px solid var(--talos-accent); outline-offset: 2px; }
+.talos-question-card__offered-list { display: grid; gap: 4px; margin: 6px 0 0; padding-left: 18px; font-size: .8125rem; }
+.talos-question-card__offered-item { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; }

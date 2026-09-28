@@ -31,12 +31,18 @@ const linguette = (page) => page.evaluate(() => [...document.querySelectorAll('.
 const rootWorkspace = process.env.TALOS_HARNESS_UI_PROJECT_DIRS?.split(';')[0]?.trim() || tmpdir();
 const cartellaDiProva = (prefisso) => mkdtempSync(join(rootWorkspace, prefisso));
 
+/* ⛔ 23/09/2026 — i DUE test di questo file salvano una chiave finta: contro un server esterno (il 4174)
+   non girano, perché lì la chiave è quella vera dell'owner. */
+test.skip(Boolean(process.env.TALOS_HARNESS_UI_BASE_URL?.trim()), 'salva una chiave finta: gira solo sul server di prova con la custodia in memoria');
+
 test('BC62-01 — entrare nella vista Terminale non crea schede: una per sessione, anche passando da A a B e ritorno, anche dopo una ricarica', async ({ page, request, baseURL }) => {
   test.setTimeout(180_000);
   await page.setViewportSize({ width: 1440, height: 900 });
-  /* Il server isolato parte senza credenziali reali. La sessione custom deve però attraversare
-     il cancello di configurazione; una chiave finta resta nel keyring in-memory e non viene mai
-     usata per una chiamata di rete in questa prova delle schede terminale. */
+  /* ⛔ 23/09/2026 — questa prova SALVA una chiave finta. Il vecchio commento diceva «resta nel keyring
+     in-memory»: era falso, il server di prova scriveva nel Credential Manager vero e la chiave
+     OpenRouter dell'owner è stata sostituita da `sk-bc62-fixture` (8 sessioni GLM rifiutate).
+     Ora il server di Playwright parte con `TALOS_HARNESS_UI_KEYRING=memoria`; contro un server
+     ESTERNO (`TALOS_HARNESS_UI_BASE_URL`, cioè il 4174) la prova non gira: lì la chiave è vera. */
   const chiave = await request.post(new URL('/api/v1/providers/openrouter/key', baseURL).href, { data: { key: 'sk-bc62-fixture' } });
   expect(chiave.ok(), 'configurazione provider fittizia del banco BC-62').toBe(true);
   const crea = async (nome) => {

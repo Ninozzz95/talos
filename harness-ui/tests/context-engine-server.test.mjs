@@ -37,6 +37,7 @@ test('CTX-SERVER-TRIAL-ROUNDTRIP real server imports and persists context across
   async function start() {
     child = spawn(process.execPath, ['server.mjs'], { cwd: root, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], env: {
       ...process.env, TALOS_HARNESS_UI_PORT: String(port), TALOS_HARNESS_UI_TOKEN: token,
+      TALOS_HARNESS_UI_KEYRING: 'memoria', TALOS_SCRATCH_DIR: join(directory, 'scratch'), // 24/09/2026: mai la radice vera %LOCALAPPDATA%TALOS
       TALOS_HARNESS_UI_SESSIONS_DIR: directory, TALOS_HARNESS_UI_PROJECT_DIRS: workspace,
       TALOS_CONTEXT_TRIAL: JSON.stringify({ sessionIds: [sessionId], models: [{ provider: 'openrouter', model, windowTokens: 16384, responseReserve: 2048 }] }),
     } });

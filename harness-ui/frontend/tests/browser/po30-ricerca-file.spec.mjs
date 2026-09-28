@@ -50,10 +50,14 @@ test('PO30-CERCA-01 — trova un file in una cartella MAI aperta, dice che cosa 
   await expect(page.locator('#fileTreeFilterHint')).toContainText('Non ho guardato dentro node_modules');
   expect(cercate.at(-1)).toBe('bersaglio');
 
+  /* F5 File reader (26/09/2026): «un clic lo apre» vuol dire il LETTORE nel rail, che legge i byte dalla rotta di scarico
+     (`/file?percorso=`), non più il testo da `/tree/file` per la vecchia modale. La premessa resta: il clic apre QUEL file. */
   let aperto = null;
-  await page.route('**/api/v1/sessions/po30r-*/tree/file?*', (r) => { aperto = new URL(r.request().url()).searchParams.get('percorso'); return r.fulfill({ contentType: 'application/json', body: JSON.stringify({ ok: true, data: { contenuto: 'x', troncato: false } }) }); });
+  await page.route('**/api/v1/sessions/po30r-*/file?*', (r) => { aperto = new URL(r.request().url()).searchParams.get('percorso'); return r.fulfill({ contentType: 'application/octet-stream', body: 'export const bersaglio = 1;\n' }); });
   await riga.click();
   await expect.poll(() => aperto).toBe('src/profondo/bersaglio.mjs');
+  await expect(page.locator('#railFileLettore .talos-lettore__nome')).toHaveText('bersaglio.mjs');
+  await expect(page.locator('#railFileLettore .talos-lettore__corpo')).toContainText('export const bersaglio = 1;');
 });
 
 test('PO30-CERCA-02 — svuotato il campo torna l’albero; una CARTELLA trovata si apre nell’albero e resta selezionata', async ({ page }) => {

@@ -95,3 +95,35 @@ test('R02-MOTORE — Vulkan verificato, ripiego CPU e override esplicito', async
   assert.equal(manuale.percorso, resolve('manuale.exe')); assert.equal(manuale.variante, 'personalizzato');
   assert.equal(scegliMotoreLocale({ percorsi: {}, env: {} }), undefined);
 });
+
+test('F63-APRI-FUORI: solo https://github.com/… va nel browser del sistema; al contrario ogni altra cosa resta chiusa', async () => {
+  const { apribileNelBrowserDelSistema } = await import('../runtime.mjs');
+  for (const si of ['https://github.com/talos-private/agent-virtual-machine/pull/13', 'https://github.com/x/y/actions/runs/1/job/2', 'https://github.com/login/device']) {
+    assert.equal(apribileNelBrowserDelSistema(si), true, si);
+  }
+  for (const no of [
+    'http://github.com/x/y/pull/1', 'https://github.com.evil.example/x', 'https://evil.example/github.com/x', 'https://gist.github.com/x',
+    'https://user:pass@github.com/x', 'https://github.com:8443/x', 'file:///C:/Windows/System32/calc.exe', 'javascript:alert(1)',
+    'ms-settings:privacy', 'C:\\Windows\\System32\\calc.exe', '', null, 'non un indirizzo',
+  ]) {
+    assert.equal(apribileNelBrowserDelSistema(no), false, String(no));
+  }
+});
+
+test('F5-NAV-CORNICE: una cornice di pagina resa naviga solo dentro il suo lasciapassare; le altre cornici non si toccano', async () => {
+  const { navigazioneCorniceConsentita } = await import('../runtime.mjs');
+  const base = 'http://127.0.0.1:41234';
+  const g = 'A'.repeat(43);
+  const pagina = `${base}/api/v1/pagine/${g}/index.html`;
+  assert.equal(navigazioneCorniceConsentita(base, pagina, `${base}/api/v1/pagine/${g}/guida/index.html`), true, 'un link interno');
+  assert.equal(navigazioneCorniceConsentita(base, pagina, 'https://esterno.example/?dati=segreti'), false, 'verso internet');
+  assert.equal(navigazioneCorniceConsentita(base, pagina, `${base}/api/v1/pagine/${'B'.repeat(43)}/x.html`), false, 'verso un altro lasciapassare');
+  assert.equal(navigazioneCorniceConsentita(base, pagina, `${base}/api/v1/sessions`), false, 'verso il resto dell\'API');
+  assert.equal(navigazioneCorniceConsentita(base, pagina, 'javascript:alert(1)'), false);
+  assert.equal(navigazioneCorniceConsentita(base, pagina, 'non un indirizzo'), false);
+  assert.equal(navigazioneCorniceConsentita(base, `${base}/api/v1/pagine//index.html`, `${base}/api/v1/pagine//x`), false, 'senza lasciapassare');
+  // cornici che NON sono pagine rese: il Browser di TALOS, una cornice appena creata
+  assert.equal(navigazioneCorniceConsentita(base, 'https://sito.example/', 'https://altro.example/'), true);
+  assert.equal(navigazioneCorniceConsentita(base, 'about:blank', pagina), true, 'la prima navigazione della cornice verso la pagina');
+  assert.equal(navigazioneCorniceConsentita(base, '', 'https://x.example/'), true);
+});

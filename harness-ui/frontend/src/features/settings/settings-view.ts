@@ -120,7 +120,9 @@ const words = {
      ⛔ Le parole sono quelle del PRODOTTO dove esistevano già (`Trasferisci le preferenze`,
      `Configurazione e diagnostica`, `Lettura e scrittura`, `Sessione corrente`): i titoli nuovi
      sono solo quelli che il prodotto non aveva, e sono elencati nel resoconto col perché. */
-  cartaAccessi: { it: 'Stato degli accessi', en: 'Access state' },
+  /* ⛔ 23/09/2026 — `cartaAccessi` («Stato degli accessi») è ritirata con la sezione «Provider e
+     accessi» (decisione owner): la sua carta non esiste più, e lo stato degli accessi lo dicono le
+     card della scheda «Provider» del laboratorio, fornitore per fornitore. */
   cartaPolicy: { it: 'Policy della sessione', en: 'Session policy' },
   cartaFonte: { it: 'Origine della ricerca web', en: 'Web search source' },
   cartaContesto: { it: 'Ripartizione del contesto', en: 'Context breakdown' },
@@ -156,7 +158,6 @@ const GRUPPI: ReadonlyArray<readonly [string, { it: string; en: string }]> = [
 const TESTATE_CARTA: ReadonlyArray<readonly [string, { it: string; en: string }]> = [
   ['chat-read', words.chatGroup],
   ['chat-facts', words.currentSession],
-  ['providers-state', words.cartaAccessi],
   ['tools-policy', words.cartaPolicy],
   ['tools-search', words.cartaFonte],
   ['memoria-context', words.cartaContesto],
@@ -757,14 +758,17 @@ export function createSettingsView(screen: HTMLElement, options: SettingsViewOpt
   }
   /*
    * ── I FATTI IN LISTA: LA CHIAVE A SINISTRA, IL VALORE A DESTRA ────────────────
-   * `#settingsProvidersList` (28 fornitrici) e `#settingsPrivacyList` (le preferenze salvate in
-   * questo browser) sono fatti misurati, e la loro forma è GIÀ chiave/valore: `<li>` con un nome
+   * ⛔ 23/09/2026 — `#settingsProvidersList` NON c'è più: la sezione «Provider e accessi» è tolta
+   *   del tutto (decisione owner) e lo stato dei fornitori vive nelle card della scheda «Provider»
+   *   del laboratorio. Resta la lista della privacy; il resto di questa nota vale per lei.
+   * `#settingsPrivacyList` (le preferenze salvate in
+   * questo browser) è un fatto misurato, e la sua forma è GIÀ chiave/valore: `<li>` con un nome
    * e il suo stato. Il vocabolario del mockup è `.talos-kv` (`dt`/`dd`, o `__k`/`__v`), e la
-   * traduzione non tocca chi le produce: `app.js` (`renderSettingsRiepiloghi`) le RISCRIVE a ogni
-   * cambio di sezione, quindi si vestono qui e si rivestono con un osservatore — non si riscrive
+   * traduzione non tocca chi la produce: `app.js` (`renderSettingsRiepiloghi`) la RISCRIVE a ogni
+   * cambio di sezione, quindi si veste qui e si riveste con un osservatore — non si riscrive
    * il produttore, che è di un'altra corsia.
    * ⛔ Il nodo resta un `<li>`: i lettori di lista e `settings-fatti-reali.spec.mjs` leggono
-   *   `#settingsProvidersList li` e `#settingsPrivacyList li`, e cambiarne il tag sarebbe una
+   *   `#settingsPrivacyList li`, e cambiarne il tag sarebbe una
    *   funzione persa per un vestito guadagnato.
    * ⛔ Le righe che NON hanno la forma non si vestono: il messaggio di lista vuota («Nessuna
    *   preferenza TALOS salvata…») è una frase, non una coppia, e resta com'è.
@@ -778,7 +782,7 @@ export function createSettingsView(screen: HTMLElement, options: SettingsViewOpt
       riga.classList.add('talos-kv'); chiave.classList.add('talos-kv__k'); valore.classList.add('talos-kv__v');
     }
   }
-  const listeFatti = [q<HTMLElement>('#settingsProvidersList'), q<HTMLElement>('#settingsPrivacyList')];
+  const listeFatti = [q<HTMLElement>('#settingsPrivacyList')];
   listeFatti.forEach(vesteFatti);
   const osservaFatti = new MutationObserver(() => listeFatti.forEach(vesteFatti));
   for (const lista of listeFatti) if (lista) osservaFatti.observe(lista, { childList: true });

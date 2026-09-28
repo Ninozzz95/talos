@@ -590,7 +590,8 @@ test.describe('la scheda Provider — il vestito del mockup sul contenuto vero',
   /*
    * ⛔ IL VERSO CONTRARIO DELLA CURA DI D9 — e senza questa prova la cura sarebbe una
    *   scommessa: nascondere la testata del pannello è giusto DENTRO il guscio, dove il
-   *   guscio ne porta già una; fuori — la schermata Impostazioni, il velo — quella
+   *   guscio ne porta già una; fuori — un laboratorio il cui guscio nega il montaggio (fino al
+   *   23/09/2026 anche il velo, tolto per decisione owner) — quella
    *   testata è l'UNICA che c'è, e nasconderla lascerebbe la pagina senza nome.
    *   `lab-montaggio-neutro.spec.mjs:571` pretende che il testo resti «Fornitori e accessi»:
    *   quella spec oggi si ferma prima, su una prova di un'ALTRA corsia (`misura-memoria`,
@@ -652,44 +653,28 @@ test.describe('la scheda Provider — il vestito del mockup sul contenuto vero',
    *   chat sul server dell'owner (`#schermoHome` doppio), e per la ragione di sempre:
    *   `getElementById`/`querySelector('#x')` tornano il PRIMO in ordine d'albero, quindi
    *   `aria-controls` e qualunque lettura per id possono finire sul nodo SBAGLIATO in silenzio.
-   * ⛔ Il velo «Fornitori e accessi» disegna lo STESSO fornitore del pannello, con lo stesso
-   *   renderer: due card accese insieme ⇒ due `id` uguali. Questa prova le accende insieme e conta.
+   * ⛔ Il velo «Fornitori e accessi» disegnava lo STESSO fornitore del pannello, con lo stesso
+   *   renderer: due card accese insieme ⇒ due `id` uguali. Fino al 22/09 questa prova le accendeva
+   *   insieme e contava.
+   * ⛔ 23/09/2026 — DECISIONE OWNER: il velo è TOLTO («Toglierla: porta al Model Lab»). Il doppione è
+   *   curato alla radice (una superficie sola), il suffisso `velo-` è tolto con lui, e la prova
+   *   protegge ancora la stessa cosa: nel DOCUMENTO INTERO ogni corpo di card ha un id unico, e
+   *   nessuna card di fornitore vive fuori dalla scheda «Provider».
    */
-  test('PROV-07 — l\'id del corpo della card è UNICO anche col velo aperto', async ({ page }) => {
+  test('PROV-07 — l\'id del corpo della card è UNICO in tutto il documento, e la card vive in UN posto solo', async ({ page }) => {
     await page.setViewportSize({ width: SOGLIE.larga, height: 900 });
     await apriProvider(page);
-    const chiuso = await page.evaluate(() => {
-      const ids = [...document.querySelectorAll('#modelLabCard [data-model-lab-panel="providers"] [data-provider-id] .talos-provider__body')].map((n) => n.id);
-      return { corpi: ids.length, unici: new Set(ids).size, doppi: ids.filter((x, i) => ids.indexOf(x) !== i) };
-    });
-    expect(chiuso.corpi, 'un corpo per card').toBeGreaterThanOrEqual(28);
-    expect(chiuso.doppi, 'col pannello da solo non ci sono id doppi').toEqual([]);
-
-    /* E ORA IL VELO, che è dove il doppione nasce: la stessa riga, disegnata una seconda volta. */
-    await page.evaluate(() => window.__talosHarnessUiRuntime.apriVeloMockup('veloFornitori'));
-    await expect(page.locator('#veloFornitori')).toBeVisible();
-    await page.evaluate(() => {
-      /* Il velo si popola dalla regia dell'app, che gira col bundle di ieri: si ridisegna con la
-         SORGENTE di oggi, come tutto il resto di questa prova. */
-      const lista = document.querySelector('#veloFornitori [data-velo-lista]');
-      const riga = window.__righe.find((r) => r.id === 'openrouter');
-      /*
-       * ⛔ LA LISTA SI SVUOTA PRIMA, e non è un dettaglio: il renderer RIUSA la card precedente
-       *   quando la sua firma non cambia (`aggiornaProviderList`), e quella lì l'ha disegnata il
-       *   bundle di ieri — con l'id vecchio. Senza questa riga la prova restava ROSSA anche dopo
-       *   la cura, e accusava il prodotto di un difetto che era della prova: l'ha detto il
-       *   secondo giro, non il ragionamento. Qui si vuole il disegno della SORGENTE di oggi.
-       */
-      lista.replaceChildren();
-      window.__prov.aggiornaProviderList(lista, [riga], { aperte: new Set(['openrouter']) });
-    });
-    await expect(page.locator('#veloFornitori article[data-provider-id]')).toHaveCount(1);
-    const aperto = await page.evaluate(() => {
+    const misura = await page.evaluate(() => {
+      const nelPannello = [...document.querySelectorAll('#modelLabCard [data-model-lab-panel="providers"] [data-provider-id] .talos-provider__body')].map((n) => n.id);
       const tutti = [...document.querySelectorAll('[data-provider-id] .talos-provider__body')].map((n) => n.id);
-      const doppi = tutti.filter((x, i) => tutti.indexOf(x) !== i);
-      return { corpi: tutti.length, doppi, esempio: doppi[0] ?? null };
+      const fuori = [...document.querySelectorAll('article[data-provider-id]')].filter((n) => !n.closest('#modelLabCard [data-model-lab-panel="providers"]')).length;
+      return { corpi: nelPannello.length, doppi: tutti.filter((x, i) => tutti.indexOf(x) !== i), suffissoVelo: tutti.filter((x) => x.startsWith('provider-body-velo-')), fuori, velo: document.querySelectorAll('#veloFornitori').length };
     });
-    expect(aperto.doppi, `questi id di corpo sono ripetuti: ${JSON.stringify(aperto.doppi)}`).toEqual([]);
+    expect(misura.corpi, 'un corpo per card').toBeGreaterThanOrEqual(28);
+    expect(misura.doppi, `questi id di corpo sono ripetuti: ${JSON.stringify(misura.doppi)}`).toEqual([]);
+    expect(misura.suffissoVelo, 'nessun corpo porta più il suffisso del velo').toEqual([]);
+    expect(misura.fuori, 'nessuna card di fornitore fuori dalla scheda «Provider»').toBe(0);
+    expect(misura.velo, 'il velo «Fornitori e accessi» non esiste più').toBe(0);
   });
 
   /*
@@ -776,19 +761,23 @@ test.describe('la scheda Provider — il vestito del mockup sul contenuto vero',
     expect(misura.dopo.ultimo.top, 'ed essersi mosso davvero').toBeLessThan(misura.prima.ultimo.top);
   });
 
-  test('PROV-05 — le card reggono la finestra stretta del velo, e il velo vero si apre ancora', async ({ page }) => {
-    await page.setViewportSize({ width: SOGLIE.larga, height: 900 });
+  /*
+   * ⛔ 23/09/2026 — PROV-05 provava che le card reggessero la finestra STRETTA del velo «Fornitori e
+   *   accessi» (una colonna, niente scorrimento orizzontale). Decisione owner: il velo è tolto. Ciò
+   *   che resta da proteggere è la stessa cosa sulla superficie che rimane: alla larghezza stretta
+   *   del desktop (1024) la griglia della scheda «Provider» sta in UNA colonna e la pagina non scorre
+   *   di lato — PROV-02 misura le colonne, questa misura lo sbordo.
+   */
+  test('PROV-05 — alla larghezza stretta la scheda «Provider» non sborda di lato, e il velo non esiste più', async ({ page }) => {
+    await page.setViewportSize({ width: SOGLIE.stretta, height: 800 });
     await apriProvider(page);
-    /* La porta VERA del velo è la sua funzione di runtime, come fa `velo-fornitori.spec.mjs`. */
-    await page.evaluate(() => window.__talosHarnessUiRuntime.apriVeloMockup('veloFornitori'));
-    await expect(page.locator('#veloFornitori')).toBeVisible();
-    await expect(page.locator('#veloFornitori article[data-provider-id]')).toHaveCount(1);
     const dentro = await page.evaluate(() => {
-      const c = document.querySelector('#veloFornitori article[data-provider-id]');
-      return { display: getComputedStyle(c.parentElement).display, colonne: getComputedStyle(c.parentElement).gridTemplateColumns.split(' ').length, eccede: document.documentElement.scrollWidth - window.innerWidth };
+      const lista = document.querySelector('#modelLabCard [data-model-lab-panel="providers"] #providerList');
+      return { colonne: getComputedStyle(lista).gridTemplateColumns.split(' ').length, eccede: document.documentElement.scrollWidth - window.innerWidth, velo: document.querySelectorAll('#veloFornitori').length };
     });
-    expect(dentro.colonne, 'un fornitore solo sta in una colonna sola').toBe(1);
-    expect(dentro.eccede, 'niente scorrimento orizzontale nel velo').toBeLessThanOrEqual(0);
+    expect(dentro.colonne, 'alla larghezza stretta una colonna sola').toBe(1);
+    expect(dentro.eccede, 'niente scorrimento orizzontale').toBeLessThanOrEqual(0);
+    expect(dentro.velo, 'il velo «Fornitori e accessi» non esiste più').toBe(0);
   });
 });
 

@@ -1,4 +1,5 @@
 import { defineConfig, devices } from '@playwright/test';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -16,7 +17,8 @@ export default defineConfig({
   webServer: {
     command: 'node server.mjs', cwd: fileURLToPath(new URL('..', import.meta.url)),
     url: `${baseURL}api/v1/health`, reuseExistingServer: false, timeout: 60_000,
-    stdout: 'pipe', stderr: 'pipe', env: process.env,
+    stdout: 'pipe', stderr: 'pipe',
+    env: { ...process.env, TALOS_HARNESS_UI_KEYRING: 'memoria', TALOS_SCRATCH_DIR: join(process.env.TALOS_RIPRESA_OUTPUT || tmpdir(), 'talos-scratch-di-prova') }, // 24/09/2026: custodia di prova e radice dei temporanei di prova, mai quelle vere
   },
   // 1.62.1 inietta un getter non protetto con serviceWorkers:block negli iframe
   // a origine opaca. Il prodotto non registra SW e ogni test ha un contesto nuovo.

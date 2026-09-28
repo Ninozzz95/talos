@@ -6,7 +6,9 @@
 .calm-select,.calm-check,.calm-range { font:inherit; color:var(--text,var(--talos-text,#e4e4e7)); box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
 .calm-select { display:flex; align-items:center; justify-content:space-between; gap:16px; min-height:42px; width:100%; min-width:0; padding:9px 12px; border:1px solid var(--border,var(--talos-border,#494b51)); border-radius:9px; background:var(--surface,var(--talos-panel,#28292d)); text-align:left; cursor:pointer; }
 .calm-select__value { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-.calm-select__chevron { font-size:20px; line-height:.7; color:var(--muted,var(--talos-muted,#aaa)); }
+/* 26/09, difetto (9): un'icona, non il carattere «⌄» (che si leggeva «v» sulla linea di base) — centrata sulla riga. */
+.calm-select__chevron { display:inline-flex; align-items:center; flex:0 0 auto; color:var(--muted,var(--talos-muted,#aaa)); }
+.calm-select__chevron > svg { width:16px; height:16px; }
 .calm-select[aria-expanded="true"] { border-color:var(--accent,var(--talos-accent,#c08b3c)); }
 .calm-select:focus-visible,.calm-check:focus-visible,.calm-range:focus-visible { outline:2px solid var(--accent,var(--talos-ring,#d8a650)); outline-offset:3px; }
 .calm-select:disabled,.calm-check:disabled,.calm-range[aria-disabled="true"] { opacity:.5; cursor:not-allowed; }
@@ -17,9 +19,13 @@
 .calm-option[aria-disabled="true"] { opacity:.45; cursor:not-allowed; }
 .calm-option__tick { visibility:hidden; color:var(--accent,var(--talos-accent,#c08b3c)); flex-shrink:0; }
 .calm-option[aria-selected="true"] .calm-option__tick { visibility:visible; }
-.calm-check { position:relative; display:grid; place-items:center; width:24px; height:24px; min-width:24px; padding:0; border:1px solid var(--border,var(--talos-border-strong,#62636a)); border-radius:6px; background:var(--surface,var(--talos-panel,#292a30)); cursor:pointer; }
+/* ⛔ ATLAS F1 (24/09/2026), Q-08 dell'owner: facce custom con le misure dell'Atlas — casella 15×15 (misurata sulla
+   foto del mockup), raggio 4 (il 6/24 di oggi riportato a 15, da confermare), spunta proporzionata. NON DEPLOYABILE
+   finché review avversaria e valutazione owner sul 4174 non la accettano. L'interruttore (role=switch, sotto) NON si
+   tocca: le sue misure vengono dal mockup Calm-Lab-04 e l'owner le decide una per una (Q-04). */
+.calm-check { position:relative; display:grid; place-items:center; width:15px; height:15px; min-width:15px; padding:0; border:1px solid var(--border,var(--talos-border-strong,#62636a)); border-radius:4px; background:var(--surface,var(--talos-panel,#292a30)); cursor:pointer; }
 .calm-check[aria-checked="true"],.calm-check[aria-checked="mixed"] { background:var(--accent,var(--talos-accent,#c08b3c)); border-color:transparent; color:var(--accent-ink,#17181c); }
-.calm-check__mark { visibility:hidden; font-size:15px; line-height:1; }
+.calm-check__mark { visibility:hidden; font-size:10px; line-height:1; }
 .calm-check[aria-checked="true"] .calm-check__mark { visibility:visible; }
 .calm-check[aria-checked="mixed"]:after { content:'−'; }
 .calm-check[role="switch"] { width:42px; height:25px; min-width:42px; border-radius:99px; }
@@ -27,9 +33,11 @@
 .calm-check[role="switch"]:after { content:''; width:17px; height:17px; border-radius:50%; background:var(--text,var(--talos-text,#e4e4e7)); position:absolute; left:3px; top:3px; }
 .calm-check[role="switch"][aria-checked="true"]:after { left:20px; background:#17181c; }
 .calm-control--range { gap:12px; width:100%; min-width:min(190px,100%); }
-.calm-range { position:relative; display:block; height:42px; min-width:90px; flex:1; touch-action:pan-y; cursor:ew-resize; }
-.calm-range__track { position:absolute; top:19px; height:4px; width:100%; border-radius:8px; background:linear-gradient(to right,var(--accent,var(--talos-accent,#c08b3c)) var(--calm-range-progress),var(--border,var(--talos-border-strong,#595b61)) var(--calm-range-progress)); }
-.calm-range__thumb { position:absolute; width:16px; height:16px; border-radius:50%; top:13px; left:clamp(0px,calc(var(--calm-range-progress) - 8px),calc(100% - 16px)); background:var(--accent,var(--talos-accent,#c08b3c)); border:2px solid var(--surface,var(--talos-panel,#292a30)); box-sizing:border-box; box-shadow:0 0 0 1px var(--accent,var(--talos-accent,#c08b3c)); }
+/* ATLAS F1, Q-08: il cursore dell'Atlas ha traccia 8 e pomello 16 (misurati sulla foto del mockup); l'area di presa
+   resta 24 (WCAG 2.2 «Target Size (Minimum)» 2.5.8), invisibile: a schermo contano traccia e pomello. */
+.calm-range { position:relative; display:block; height:24px; min-width:90px; flex:1; touch-action:pan-y; cursor:ew-resize; }
+.calm-range__track { position:absolute; top:8px; height:8px; width:100%; border-radius:4px; background:linear-gradient(to right,var(--accent,var(--talos-accent,#c08b3c)) var(--calm-range-progress),var(--border,var(--talos-border-strong,#595b61)) var(--calm-range-progress)); }
+.calm-range__thumb { position:absolute; width:16px; height:16px; border-radius:50%; top:4px; left:clamp(0px,calc(var(--calm-range-progress) - 8px),calc(100% - 16px)); background:var(--accent,var(--talos-accent,#c08b3c)); border:2px solid var(--surface,var(--talos-panel,#292a30)); box-sizing:border-box; box-shadow:0 0 0 1px var(--accent,var(--talos-accent,#c08b3c)); }
 .calm-range__value { min-width:3.5ch; text-align:right; font-variant-numeric:tabular-nums; font-size:.875em; color:var(--muted,var(--talos-muted,#aaa)); }
 @media (forced-colors:active) { .calm-select,.calm-listbox,.calm-check,.calm-range__thumb { border:1px solid ButtonText; } .calm-option.is-active { outline:1px solid Highlight; } .calm-range__track,.calm-range__thumb { background:ButtonText; } .calm-option__tick { color:ButtonText; } }
 

@@ -328,3 +328,56 @@ test('⛔ CERCA-17: quando la ricerca si ferma a 120, il conteggio residuo e\' u
   assert.match(esitoPochi, /… and 5 more matches not shown/);
   assert.ok(!esitoPochi.includes('+ more'), esitoPochi);
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 6. IL «NON C'E'» SI DICE SOLO QUANDO SI E' GUARDATO TUTTO (owner 27/09/2026: il rattoppo del pacchetto desktop
+//    portato nel kernel, e ripgrep «come Hermes»)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Un disco con i file dati a livello radice: `{ nome: byte }`; si legge solo cio' che sta sotto il tetto. */
+function discoConTaglie(taglie, contenuto = 'niente') {
+  return {
+    async elenca(dentro = '') {
+      if (dentro !== '') return [];
+      return Object.entries(taglie).map(([nome, byte]) => ({ nome, cartella: false, byte }));
+    },
+    async leggi(p) {
+      if (taglie[p] > 8_000_000) throw new Error(`oltre il tetto di taglia, non si apre: ${p}`);
+      return contenuto;
+    },
+  };
+}
+
+test('⛔ CERCA-18: un file saltato perche\' troppo grande si dice PER NOME, e zero risultati diventa «non conclusiva»', async () => {
+  const esito = await cercaNelProgetto(discoConTaglie({ 'enorme.json': 9_000_000, 'piccolo.txt': 6 }), { testo: 'ago' });
+  assert.match(esito, /^inconclusive search: no match was found in the files actually inspected, but the search was not exhaustive\./);
+  assert.match(esito, /⚠ incomplete scan: 1 file\(s\) were skipped because they exceed 8 MB: enorme\.json\. Inspect those paths directly or narrow the search\./);
+  assert.doesNotMatch(esito, /no file matches/);
+  // AL CONTRARIO: una camminata finita, senza tetti che mordono, resta un «non c'e'» netto.
+  const pulito = await cercaNelProgetto(discoConTaglie({ 'piccolo.txt': 6 }), { testo: 'ago' });
+  assert.match(pulito, /^no file matches\. Scanned 1 files/);
+  assert.doesNotMatch(pulito, /inconclusive|incomplete scan/);
+});
+
+test('CERCA-19: oltre venti file troppo grandi se ne nominano venti e il resto si conta', async () => {
+  const taglie = {};
+  for (let i = 0; i < 23; i += 1) taglie[`g-${String(i).padStart(2, '0')}.txt`] = 9_000_000;
+  const esito = await cercaNelProgetto(discoConTaglie(taglie), { testo: 'ago' });
+  assert.match(esito, /23 file\(s\) were skipped because they exceed 8 MB: g-00\.txt, .*g-19\.txt, … and 3 more\./);
+  assert.doesNotMatch(esito, /g-20\.txt/);
+});
+
+test('⛔ CERCA-20: con ripgrep un file da 9 MB si cerca davvero — il tetto degli 8 MB lo saltava in silenzio', async () => {
+  /* Prima: `--max-filesize 8000000` e la risposta era «no file matches "ago-nel-pagliaio"», senza avvisi. Il formato
+     `percorso:riga:testo` prova che a rispondere e' stato rg, non la camminata JS (che non da' la riga). */
+  const radice = await cartellaDiProva({
+    'log/enorme.log': 'riga di log qualunque\n'.repeat(450_000) + 'AGO-NEL-PAGLIAIO in fondo\n',
+    'src/a.txt': 'niente',
+  });
+  try {
+    const esito = await cercaNelProgetto(discoVero(radice), { testo: 'ago-nel-pagliaio' }, { radice });
+    assert.match(esito, /^log\/enorme\.log:450001:AGO-NEL-PAGLIAIO in fondo$/m);
+    assert.doesNotMatch(esito, /no file matches|inconclusive/);
+  }
+  finally { await rimuoviCartellaDiProvaAttesa(radice); }
+});

@@ -49,7 +49,9 @@ export const FILE_DI_CONTROLLO = Object.freeze({
   //   server MCP e ai plugin (session-registry.mjs), esattamente come `.hooks-trust`. Mancavano da questo elenco: senza,
   //   un attrezzo di scrittura del modello poteva scriverci dentro e AUTO-CONCEDERSI la fiducia. `ePercorsoDiControllo`
   //   risolve già il realpath, quindi la classificazione vale anche per un alias/symlink verso queste cartelle.
-  cartelleOvunque: Object.freeze(['.harness-ui-plugins', '.hooks-trust', '.mcp-trust', '.plugin-trust', '.claude', '.memory-store']),
+  // ⭐ PO-26, parte 2 (24/09/2026): `.talos/` è la cartella della configurazione del progetto (hook, MCP, plugin, skill),
+  //   quindi è controllo per intero, come `.claude/`.
+  cartelleOvunque: Object.freeze(['.harness-ui-plugins', '.hooks-trust', '.mcp-trust', '.plugin-trust', '.claude', '.memory-store', '.talos']),
   cartelleAllaRadice: Object.freeze(['skills']),
 });
 

@@ -1,0 +1,12 @@
+{
+  "schema": "talos.workflow-retry-fact.v1",
+  "runId": "00000000-0000-4000-8000-000000000011",
+  "nodeId": "implement",
+  "activityExecutionId": "00000000-0000-4000-8000-000000000032",
+  "attempt": 2,
+  "reasonClass": "rate_limit",
+  "backoffMs": 4000,
+  "jitterMs": 731,
+  "retryAt": "2026-09-20T12:10:04.731Z",
+  "budgetReservationId": "00000000-0000-4000-8000-000000000030"
+}

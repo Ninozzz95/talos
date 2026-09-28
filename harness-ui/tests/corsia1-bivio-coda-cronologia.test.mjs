@@ -100,6 +100,14 @@ test('⛔ il reindirizzamento passa SOLO da una scelta esplicita — 7 provenien
   assert.equal(respinte.length, 7);
 });
 
+test('R4-ASK-COMPOSER-REDIRECT: origine composer autorizzata solo durante Ask pendente', () => {
+  assert.equal(reindirizzoConsentito('composer-durante-ask', { askPendente: true }), true);
+  assert.equal(reindirizzoConsentito('composer-durante-ask', { askPendente: false }), false);
+  assert.equal(reindirizzoConsentito('composer-durante-ask'), false);
+  assert.equal(decidiInvio({ testo: 'correggi', giroAttivo: true, conCtrl: true }), AZIONE_ACCODA);
+  assert.equal(decidiInvio({ testo: '!npm test', giroAttivo: true }), AZIONE_COMANDO);
+});
+
 /* ───────────────────── 4. La scorciatoia «Reindirizza», dichiarata ───────────────────── */
 
 test('la scorciatoia si mostra solo a giro acceso e con del testo — 8 combinazioni', () => {
@@ -280,7 +288,25 @@ test('⛔ nessun segnaposto del composer promette che l Invio REINDIRIZZI', () =
     .map((pezzo) => pezzo.slice(0, pezzo.indexOf(';')));
   assert.ok(segnaposto.length >= 1, 'nessun segnaposto trovato: il cancello starebbe guardando il vuoto');
   assert.ok(segnaposto.some((r) => r.includes('Scrivi')), 'il cancello non ha in mano i segnaposto veri del composer');
+  /*
+   * ⛔ 23/09/2026, integrazione R4 — UNA sola eccezione, ed è voluta dall'owner: mentre una domanda
+   *   Ask è in attesa, l'Invio normale del composer indirizza il giro e chiude la domanda
+   *   (`reindirizzoConsentito('composer-durante-ask', { askPendente: true })`, ledger R4
+   *   «R4-ASK-COMPOSER-REDIRECT»). Lì il segnaposto dice il vero. La guardia la toglie SOLO se il
+   *   ramo è davvero condizionato a `domandePendenti.size > 0`, e pretende che l'eccezione esista
+   *   una volta sola: fuori da quel ramo, nessun segnaposto può promettere un reindirizzamento.
+   */
+  /* Senza regex e senza barre rovesce, per la stessa ragione scritta sopra: si confronta per testo. */
+  /* Gli a capo e i rientri non contano: ogni corsa di spazi diventa uno spazio solo. */
+  const compatta = (testo) => testo
+    .split(String.fromCharCode(13)).join(' ')
+    .split(String.fromCharCode(10)).join(' ')
+    .split(' ').filter(Boolean).join(' ');
+  const RAMO_ASK = "domandePendenti.size > 0 ? 'Scrivi un follow-up… Invio indirizza, Ctrl+Invio accoda'";
+  const conRamoAsk = segnaposto.filter((r) => compatta(r).includes(RAMO_ASK));
+  assert.equal(conRamoAsk.length, 1, 'il ramo Ask del segnaposto deve esistere una volta sola, condizionato alla domanda pendente');
   for (const riga of segnaposto) {
-    assert.ok(!riga.includes('Invio indirizza'), `un segnaposto promette che l'Invio reindirizza: ${riga.trim()}`);
+    const fuoriDalRamoAsk = compatta(riga).replace(RAMO_ASK, '');
+    assert.ok(!fuoriDalRamoAsk.includes('Invio indirizza'), `un segnaposto promette che l'Invio reindirizza: ${riga.trim()}`);
   }
 });

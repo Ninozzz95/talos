@@ -26,7 +26,7 @@ test('WorkspaceFooter: cartella, tema e fornitore dai dati del monolite — e ni
     assert.equal(testiPiede({ cartella: null, tema: id }).sotto, `Tema ${atteso}`, `⛔ il tema ${id} si presentava con un altro nome`);
   }
   /* ⛔ AL CONTRARIO: un id che non esiste davvero non deve far sparire il piede — lì il ripiego serve. */
-  assert.equal(testiPiede({ cartella: null, tema: 'inventato' }).sotto, 'Tema Calm');
+  assert.equal(testiPiede({ cartella: null, tema: 'inventato' }).sotto, 'Tema Forge', 'il ripiego è il tema di serie: Forge dal 24/09 sera (owner)');
 });
 
 /*
@@ -210,4 +210,30 @@ test('senza taskId non si inventa un nome, e una forma sconosciuta resta com è'
   assert.equal(nomeLeggibileSessione(''), 'Sessione senza nome');
   assert.equal(nomeLeggibileSessione(null), 'Sessione senza nome');
   assert.equal(nomeLeggibileSessione('corpus/refactor-42'), 'corpus/refactor-42');
+});
+
+/*
+ * ⛔ 24/09/2026, trovato guardando la foto del giro vero dopo il riavvio (decisione owner 29): la sessione con una domanda
+ *   ancora rispondibile diceva «interrotta · scrivi per riprenderla», cioè il contrario di ciò che serve. Una domanda aperta
+ *   chiede qualcosa alla persona come un'approvazione: «aspetta te», dal vivo e dopo un riavvio.
+ */
+test('SIDEBAR-ASK-WAITS-FOR-YOU: una domanda aperta è «aspetta te», anche dopo un riavvio', () => {
+  const viva = statoSessione({ conclusa: false, inAttesaDomanda: true });
+  assert.equal(viva.classe, 'attesa');
+  assert.equal(viva.testo, 'aspetta te');
+  const dopoRiavvio = statoSessione({ conclusa: false, interrotta: true, inAttesaDomanda: true });
+  assert.equal(dopoRiavvio.classe, 'attesa');
+  assert.match(dopoRiavvio.aiuto ?? '', /domanda/u, 'il titolo della riga dice che cosa aspetta');
+  assert.equal(statoSessione({ conclusa: false, interrotta: true }).classe, 'interrotto', 'senza domanda resta interrotta');
+});
+
+/* 24/09/2026, decisione owner 39 — un piano che aspetta la scelta chiede qualcosa alla persona come una domanda: «aspetta te»,
+ * dal vivo e dopo un riavvio (il piano resta approvabile), e il titolo della riga dice che cosa aspetta. */
+test('SIDEBAR-PLAN-WAITS-FOR-YOU: un piano da approvare è «aspetta te», anche dopo un riavvio', () => {
+  const viva = statoSessione({ conclusa: false, inAttesaPiano: true });
+  assert.equal(viva.classe, 'attesa');
+  assert.equal(viva.testo, 'aspetta te');
+  const dopoRiavvio = statoSessione({ conclusa: false, interrotta: true, inAttesaPiano: true });
+  assert.equal(dopoRiavvio.classe, 'attesa');
+  assert.match(dopoRiavvio.aiuto ?? '', /piano/u);
 });

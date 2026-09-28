@@ -8,7 +8,10 @@ export type Target =
   | { readonly kind: 'home' }
   | { readonly kind: 'workspace'; readonly id: string }
   | { readonly kind: 'session'; readonly workspaceId: string; readonly id: string }
-  | { readonly kind: 'settings'; readonly section: 'providers' | 'appearance' | 'permissions' }
+  /* ⛔ 23/09/2026 — `providers` non è più una sezione (decisione owner: «Provider e accessi» tolta del
+     tutto). Chi la chiede ancora riceve `models` con la scheda `providers` del laboratorio: vedi
+     `normalizeTarget`. */
+  | { readonly kind: 'settings'; readonly section: 'models' | 'appearance' | 'permissions'; readonly labTab?: 'providers' }
   | { readonly kind: 'doctor' };
 
 export type Availability =
@@ -47,8 +50,15 @@ export function normalizeTarget(value: unknown): Target | null {
     case 'workspace': return id(value.id) ? { kind: 'workspace', id: value.id } : null;
     case 'session': return id(value.id) && id(value.workspaceId)
       ? { kind: 'session', id: value.id, workspaceId: value.workspaceId } : null;
-    case 'settings': return value.section === 'providers' || value.section === 'appearance' || value.section === 'permissions'
-      ? { kind: 'settings', section: value.section } : null;
+    /* ⛔ 23/09/2026 — IL VECCHIO INDIRIZZO NON SI RIFIUTA E NON SI PERDE: si RINVIA. Decisione owner:
+       i fornitori vivono solo in Laboratorio modelli → scheda «Provider», quindi un lancio o una
+       navigazione che chiede ancora `providers` atterra lì (semantica del 301, RFC 9110 §15.4.2,
+       letta il 23/09/2026). Rifiutarlo (`null`) lo farebbe ricadere sulla Home, cioè in un posto
+       che non ha chiesto nessuno. */
+    case 'settings':
+      if (value.section === 'providers' || (value.section === 'models' && value.labTab === 'providers')) return { kind: 'settings', section: 'models', labTab: 'providers' };
+      return value.section === 'models' || value.section === 'appearance' || value.section === 'permissions'
+        ? { kind: 'settings', section: value.section } : null;
     default: return null;
   }
 }

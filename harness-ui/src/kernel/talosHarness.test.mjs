@@ -81,6 +81,30 @@ it('CTX-KERNEL-RAW-8000 archives full result and raw provider response before no
     assert.equal(result.messaggiFinali.find(m => m.role === 'tool').content, text)
     assert.equal(captured.at(-1).find(m => m.role === 'tool').content, text)
 })
+/* ⛔ 27/09/2026 (owner: il rattoppo T-03 del pacchetto desktop portato nel kernel): SENZA motore del contesto l'uscita
+   di un attrezzo si taglia a 8.000 DICHIARANDO quanto manca, testa e coda. Lo `slice(0, 8_000)` di prima perdeva la coda
+   (qui «ULTIMO VALORE») e non diceva niente: chi leggeva credeva di avere tutto. */
+it('CTX-KERNEL-NO-HOOKS-8000 without Context Engine a long tool result keeps head and tail and declares the cut', async (t) => {
+    const cartella = mkdtempSync(join(tmpdir(), 'tcec-kernel-'))
+    t.after(() => rmSync(cartella, { recursive: true, force: true }))
+    const text = 'dato '.repeat(3000) + 'ULTIMO VALORE'
+    let count = 0
+    const result = await talosLavora({ cartella, task: { consegna: 'leggi il file e controlla' }, modello: 'x', chiave: 'y', strumentiEstesi: ['document_create'],
+        onDocumento: async () => ({ ok: true, esito: text }),
+        fetchDiRete: async () => ({ ok: true, status: 200, json: async () => ({ choices: [{ message: count++ ? { role: 'assistant', content: 'fatto' } : { role: 'assistant', content: null, tool_calls: [{ id: 'd1', type: 'function', function: { name: 'document_create', arguments: '{' } }] } }] }), text: async () => '' }),
+    })
+    const tool = result.messaggiFinali.find(m => m.role === 'tool').content
+    assert.ok(tool.startsWith('dato dato '), tool.slice(0, 40))
+    assert.ok(tool.endsWith('ULTIMO VALORE'), tool.slice(-40))
+    assert.match(tool, new RegExp(`\\[tolti ${text.length - 8_000} caratteri dal mezzo\\]`))
+    // AL CONTRARIO: un'uscita sotto il tetto arriva intera, senza marcatore.
+    let count2 = 0
+    const corto = await talosLavora({ cartella, task: { consegna: 'leggi il file e controlla' }, modello: 'x', chiave: 'y', strumentiEstesi: ['document_create'],
+        onDocumento: async () => ({ ok: true, esito: 'breve ULTIMO VALORE' }),
+        fetchDiRete: async () => ({ ok: true, status: 200, json: async () => ({ choices: [{ message: count2++ ? { role: 'assistant', content: 'fatto' } : { role: 'assistant', content: null, tool_calls: [{ id: 'd1', type: 'function', function: { name: 'document_create', arguments: '{' } }] } }] }), text: async () => '' }),
+    })
+    assert.equal(corto.messaggiFinali.find(m => m.role === 'tool').content, 'breve ULTIMO VALORE')
+})
 it('CTX-KERNEL-PERSIST-GATE failed archival prevents the next model request and tool effects', async (t) => {
     const cartella = mkdtempSync(join(tmpdir(), 'tcec-kernel-'))
     t.after(() => rmSync(cartella, { recursive: true, force: true }))
@@ -128,6 +152,7 @@ import {
     avanzaCatena, verdettoTrifecta, rischioEffettivo, SICUREZZA_PER_ATTREZZO, CATENA_VUOTA,
     provaSenzaTest,
     eseguiComandoSandboxato,
+    leggiLibreriaStandardTs,
 } from './talosHarness.mjs'
 import { etichettaSandbox } from './etichetta-sandbox.mjs'
 
@@ -2734,7 +2759,7 @@ describe('talosLavora — web_search, artifact_create, document_create e time_no
     it('⭐⭐⭐ delega_sottotask: offerto solo se richiesto (8° attrezzo, come time_now/document_create)', async () => {
         const cartella = cartellaVuota(it)
         const rete = reteDiRisposte(CONCLUSO_SUBITO)
-        const esito = await talosLavora({ cartella, task: TASK, modello: 'x', chiave: 'y', fetchDiRete: rete.fetch, strumentiEstesi: ['delega_sottotask'] })
+        const esito = await talosLavora({ cartella, task: TASK, modello: 'x', chiave: 'y', fetchDiRete: rete.fetch, modalitaOperativa: 'normale', strumentiEstesi: ['delega_sottotask'] })
         assert.equal(esito.comeFinita, 'concluso')
         const nomiOfferti = rete.chiamate[0].corpo.tools.map((t) => t.function.name)
         assert.equal(nomiOfferti.length, 8)
@@ -2745,7 +2770,7 @@ describe('talosLavora — web_search, artifact_create, document_create e time_no
         const cartella = cartellaVuota(it)
         const CHIAMA_DELEGA = { role: 'assistant', content: null, tool_calls: [{ id: 'call_1', function: { name: 'delega_sottotask', arguments: '{"task":"fai qualcosa","cartella":"/tmp/altra-cartella"}' } }] }
         const rete = reteDiRisposte(CHIAMA_DELEGA, CONCLUSO_SUBITO)
-        const esito = await talosLavora({ cartella, task: TASK, modello: 'x', chiave: 'y', fetchDiRete: rete.fetch, strumentiEstesi: ['delega_sottotask'] })
+        const esito = await talosLavora({ cartella, task: TASK, modello: 'x', chiave: 'y', fetchDiRete: rete.fetch, modalitaOperativa: 'normale', strumentiEstesi: ['delega_sottotask'] })
         assert.equal(esito.comeFinita, 'concluso')
         const messaggioTool = rete.chiamate[1].corpo.messages.find((m) => m.role === 'tool')
         assert.match(messaggioTool.content, /not configured/)
@@ -2757,7 +2782,7 @@ describe('talosLavora — web_search, artifact_create, document_create e time_no
         const rete = reteDiRisposte(CHIAMA_DELEGA, CONCLUSO_SUBITO)
         const ricevuti = []
         const esito = await talosLavora({
-            cartella, task: TASK, modello: 'x', chiave: 'y', fetchDiRete: rete.fetch, strumentiEstesi: ['delega_sottotask'],
+            cartella, task: TASK, modello: 'x', chiave: 'y', fetchDiRete: rete.fetch, modalitaOperativa: 'normale', strumentiEstesi: ['delega_sottotask'],
             onDelega: async (task, cartellaFiglio) => { ricevuti.push({ task, cartellaFiglio }); return { riassunto: 'Fatto: modulo scritto e testato.', esito: 'concluso' } },
         })
         assert.equal(esito.comeFinita, 'concluso')
@@ -2782,7 +2807,7 @@ describe('talosLavora — web_search, artifact_create, document_create e time_no
         const rete = reteDiRisposte(CHIAMA_DELEGA, CONCLUSO_SUBITO)
         let vista = null
         const esito = await talosLavora({
-            cartella, task: TASK, modello: 'x', chiave: 'y', fetchDiRete: rete.fetch, strumentiEstesi: ['delega_sottotask'],
+            cartella, task: TASK, modello: 'x', chiave: 'y', fetchDiRete: rete.fetch, modalitaOperativa: 'normale', strumentiEstesi: ['delega_sottotask'],
             onDelega: async (task, dove) => { vista = { task, dove }; return { riassunto: 'figlio concluso', esito: 'concluso' } },
         })
         assert.equal(esito.comeFinita, 'concluso')
@@ -2797,7 +2822,7 @@ describe('talosLavora — web_search, artifact_create, document_create e time_no
         const rete = reteDiRisposte(CHIAMA_DELEGA, CONCLUSO_SUBITO)
         let vista = null
         const esito = await talosLavora({
-            cartella, task: TASK, modello: 'x', chiave: 'y', fetchDiRete: rete.fetch, strumentiEstesi: ['delega_sottotask'],
+            cartella, task: TASK, modello: 'x', chiave: 'y', fetchDiRete: rete.fetch, modalitaOperativa: 'normale', strumentiEstesi: ['delega_sottotask'],
             onDelega: async (task, dove) => { vista = { task, dove }; return { riassunto: 'fatto', esito: 'concluso' } },
         })
         assert.equal(esito.comeFinita, 'concluso')
@@ -2810,7 +2835,7 @@ describe('talosLavora — web_search, artifact_create, document_create e time_no
         const rete = reteDiRisposte(CHIAMA_DELEGA, CONCLUSO_SUBITO)
         let chiamata = false
         const esito = await talosLavora({
-            cartella, task: TASK, modello: 'x', chiave: 'y', fetchDiRete: rete.fetch, strumentiEstesi: ['delega_sottotask'],
+            cartella, task: TASK, modello: 'x', chiave: 'y', fetchDiRete: rete.fetch, modalitaOperativa: 'normale', strumentiEstesi: ['delega_sottotask'],
             onDelega: async () => { chiamata = true; return { riassunto: 'mai', esito: 'concluso' } },
         })
         assert.equal(esito.comeFinita, 'concluso')
@@ -2825,7 +2850,7 @@ describe('talosLavora — web_search, artifact_create, document_create e time_no
         const CHIAMA_DELEGA = { role: 'assistant', content: null, tool_calls: [{ id: 'call_1', function: { name: 'delega_sottotask', arguments: '{"task":"fai qualcosa","cartella":"/mnt/c/non-esiste"}' } }] }
         const rete = reteDiRisposte(CHIAMA_DELEGA, CONCLUSO_SUBITO)
         const esito = await talosLavora({
-            cartella, task: TASK, modello: 'x', chiave: 'y', fetchDiRete: rete.fetch, strumentiEstesi: ['delega_sottotask'],
+            cartella, task: TASK, modello: 'x', chiave: 'y', fetchDiRete: rete.fetch, modalitaOperativa: 'normale', strumentiEstesi: ['delega_sottotask'],
             onDelega: async () => ({ esito: 'rifiutato', motivo: 'la cartella /mnt/c/non-esiste non esiste su questo computer' }),
         })
         assert.equal(esito.comeFinita, 'concluso')
@@ -2839,7 +2864,7 @@ describe('talosLavora — web_search, artifact_create, document_create e time_no
         const CHIAMA_DELEGA = { role: 'assistant', content: null, tool_calls: [{ id: 'call_1', function: { name: 'delega_sottotask', arguments: '{"task":"fai qualcosa","cartella":"/tmp/altra-cartella"}' } }] }
         const rete = reteDiRisposte(CHIAMA_DELEGA, CONCLUSO_SUBITO)
         const esito = await talosLavora({
-            cartella, task: TASK, modello: 'x', chiave: 'y', fetchDiRete: rete.fetch, strumentiEstesi: ['delega_sottotask'],
+            cartella, task: TASK, modello: 'x', chiave: 'y', fetchDiRete: rete.fetch, modalitaOperativa: 'normale', strumentiEstesi: ['delega_sottotask'],
             onDelega: async () => ({ esito: 'rifiutato', motivo: 'limite di 10 figli concorrenti raggiunto' }),
         })
         assert.equal(esito.comeFinita, 'concluso')
@@ -2853,7 +2878,7 @@ describe('talosLavora — web_search, artifact_create, document_create e time_no
         const CHIAMA_DELEGA = { role: 'assistant', content: null, tool_calls: [{ id: 'call_1', function: { name: 'delega_sottotask', arguments: '{"task":"fai qualcosa","cartella":"/tmp/altra-cartella"}' } }] }
         const rete = reteDiRisposte(CHIAMA_DELEGA, CONCLUSO_SUBITO)
         const esito = await talosLavora({
-            cartella, task: TASK, modello: 'x', chiave: 'y', fetchDiRete: rete.fetch, strumentiEstesi: ['delega_sottotask'],
+            cartella, task: TASK, modello: 'x', chiave: 'y', fetchDiRete: rete.fetch, modalitaOperativa: 'normale', strumentiEstesi: ['delega_sottotask'],
             onDelega: async () => { throw new Error('registro sessioni non raggiungibile') },
         })
         assert.equal(esito.comeFinita, 'concluso')
@@ -4578,6 +4603,7 @@ describe('talosLavora - FASE K, R2 (planner costoso + editor economico)', () => 
         })
         await talosLavora({
             cartella, task: TASK, modello: 'editor-economico', modelloPlanner: 'planner-costoso', chiave: 'y', fetchDiRete: rete.fetch,
+            modalitaOperativa: 'normale',
             strumentiEstesi: ['web_search', 'document_create', 'generate_image', 'delega_sottotask', 'time_now'],
         })
         const nomiOffertiAlPlanner = rete.chiamate[0].corpo.tools.map((t) => t.function.name)
@@ -7675,5 +7701,33 @@ describe('PO-12 — il modello puo\' MODIFICARE un file invece di riscriverlo', 
             assert.equal(readFileSync(join(cartella, "CLAUDE.md"), "utf8"), "REGOLA MANOMESSA\n")
         }
         finally { pulisci(cartella) }
+    })
+})
+
+/*
+ * 25/09/2026 — i tipi base di TypeScript per il cancello sui .ts, anche dove il percorso fisso non può esistere (il pacchetto npm
+ * della CLI: `npm pack` esclude i node_modules annidati). Richiesta della sessione CLI, sì dell'owner lo stesso giorno.
+ */
+describe("leggiLibreriaStandardTs — il ripiego sulla risoluzione di Node", () => {
+    const assente = join(tmpdir(), "talos-nessuna-lib-typescript-" + process.pid)
+    it("percorso fisso assente e risoluzione presente: i tipi base si leggono lo stesso", async () => {
+        const testo = await leggiLibreriaStandardTs("lib.es5.d.ts", { cartellaFissa: assente })
+        assert.equal(typeof testo, "string")
+        assert.match(testo, /interface Array<T>/u)
+    })
+    it("percorso fisso presente: vince lui, la risoluzione non si chiama nemmeno", async () => {
+        const cartella = mkdtempSync(join(tmpdir(), "talos-lib-fissa-"))
+        try {
+            writeFileSync(join(cartella, "lib.es5.d.ts"), "// dal percorso fisso")
+            let chiamate = 0
+            const testo = await leggiLibreriaStandardTs("lib.es5.d.ts", { cartellaFissa: cartella, risolviCartella: () => { chiamate += 1; return assente } })
+            assert.equal(testo, "// dal percorso fisso")
+            assert.equal(chiamate, 0)
+        }
+        finally { rmSync(cartella, { recursive: true, force: true }) }
+    })
+    it("nessuno dei due: null, mai un errore", async () => {
+        const testo = await leggiLibreriaStandardTs("lib.es5.d.ts", { cartellaFissa: assente, risolviCartella: () => { throw new Error("Cannot find module typescript") } })
+        assert.equal(testo, null)
     })
 })

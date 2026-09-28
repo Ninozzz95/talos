@@ -1,0 +1,94 @@
+/*
+ * F5 File reader (26/09/2026) — il LETTORE (`components/lettore/lettore.js`), nel rail destro e a schermo intero.
+ *
+ * Nessun valore nuovo: la testata ha la grammatica della tab File (`scheda-file.css`, `.talos-file-head`: icona, nome con
+ * ellissi, comandi a destra), le tabelle quella della Libreria (`.td-file-tabella`), i colori sono i token del tema.
+ * ⛔ Lo sfondo di una pagina HTML resa NON si scrive qui: se la pagina non ne dichiara uno, il browser dipinge da solo il
+ *   suo «canvas» opaco quando lo schema di colori della cornice (quello del tema) e quello del documento differiscono
+ *   (CSS Color Adjustment, `color-scheme` sull'elemento che incornicia): la pagina resta com'è stata disegnata.
+ */
+.talos-lettore { display: flex; flex-direction: column; gap: var(--talos-space-sm); min-height: 0; height: 100%; }
+
+/* ⛔ Nel rail stretto (1024, un'immagine con lo zoom) i comandi schiacciavano i titoli fino a zero: il nome spariva e i dati
+   andavano a capo su quattro righe (foto 26/09). La testata ora va a capo: il nome tiene almeno 9rem, i comandi scendono. */
+.talos-lettore__testata { display: flex; flex-wrap: wrap; align-items: center; gap: var(--talos-space-xs) var(--talos-space-sm); min-height: var(--talos-control-height); }
+.talos-lettore__icona { display: grid; place-items: center; flex: none; width: 1.75rem; height: 1.75rem; border-radius: var(--talos-radius-control); background: var(--talos-panel-soft); color: var(--talos-muted); }
+.talos-lettore__icona > .i { width: 16px; height: 16px; }
+.talos-lettore__titoli { flex: 1 1 9rem; min-width: 0; }
+.talos-lettore__nome { margin: 0; font-size: var(--talos-font-size-md); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* il nome riceve il fuoco quando il lettore si apre (tabindex -1, fuori dal Tab): è un segno per chi ascolta, non un comando */
+.talos-lettore__nome:focus { outline: none; }
+.talos-lettore__meta { margin: 0; font-size: var(--talos-font-size-xs); color: var(--talos-muted); font-variant-numeric: tabular-nums; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.talos-lettore__comandi { display: flex; align-items: center; gap: var(--talos-space-xs); flex: none; margin-inline-start: auto; }
+.talos-lettore__zoom { display: flex; align-items: center; gap: var(--talos-space-xs); }
+.talos-lettore__zoom[hidden] { display: none; }
+.talos-lettore__percentuale { min-width: 4.5ch; text-align: center; font-size: var(--talos-font-size-xs); color: var(--talos-muted); font-variant-numeric: tabular-nums; }
+
+/* la riga delle viste esiste solo quando le viste sono due */
+.talos-lettore__riga { display: flex; }
+.talos-lettore__riga:has(> .talos-lettore__modi[hidden]) { display: none; }
+
+.talos-lettore__avviso { margin: 0; padding: var(--talos-space-xs) var(--talos-space-sm); border-radius: var(--talos-radius-control); border: 1px solid color-mix(in srgb, var(--talos-warning) 45%, transparent); background: color-mix(in srgb, var(--talos-warning) 10%, transparent); color: var(--talos-text); font-size: var(--talos-font-size-sm); }
+.talos-lettore__avviso[hidden] { display: none; }
+
+.talos-lettore__corpo { position: relative; flex: 1; min-height: 0; overflow: auto; border: 1px solid var(--talos-border-subtle); border-radius: var(--talos-radius-card); background: var(--talos-card); }
+.talos-lettore__corpo:focus-visible { outline: 2px solid var(--talos-ring); outline-offset: 2px; }
+.talos-lettore__attesa { margin: 0; padding: var(--talos-space-md); }
+.talos-lettore__nota { margin: 0; padding: var(--talos-space-xs) var(--talos-space-md) var(--talos-space-md); font-size: var(--talos-font-size-xs); color: var(--talos-muted); }
+
+/* testo, codice, Markdown */
+.talos-lettore__prosa { max-width: 72ch; padding: var(--talos-space-md) var(--talos-space-lg); line-height: 1.6; overflow-wrap: anywhere; }
+.talos-lettore__corpo > .talos-lettore__sorgente,
+.talos-lettore__corpo > pre.talos-lettore__sorgente { margin: 0; border: 0; border-radius: 0; min-height: 100%; }
+pre.talos-lettore__sorgente { padding: var(--talos-space-md); font-family: var(--talos-font-mono); font-size: var(--talos-font-size-sm); line-height: 1.55; white-space: pre; tab-size: 2; }
+
+/* tabelle: il riquadro della Libreria, ma senza tetto d'altezza (scorre il corpo) */
+.talos-lettore__tabella { max-height: none; border: 0; border-radius: 0; }
+.talos-lettore__corpo > .talos-button { margin: var(--talos-space-sm) var(--talos-space-md) var(--talos-space-md); }
+
+/* immagini: adattate alla finestra, o alla misura scelta (e allora si scorre) */
+.talos-lettore__corpo[data-zoom] { padding: var(--talos-space-md); }
+.talos-lettore__corpo[data-zoom="adatta"] { display: grid; place-items: center; overflow: hidden; }
+.talos-lettore__corpo[data-zoom="adatta"] > .talos-lettore__immagine { max-width: 100%; max-height: 100%; object-fit: contain; }
+.talos-lettore__immagine { display: block; margin: auto; image-rendering: auto; }
+
+/* PDF (lettore di Chromium) e pagine HTML rese: tutta l'altezza del corpo */
+.talos-lettore__corpo:has(> .talos-lettore__cornice) { overflow: hidden; }
+.talos-lettore__cornice { display: block; width: 100%; height: 100%; border: 0; }
+
+/* ciò che qui non si mostra: una frase e, se c'è, l'azione che lo fa davvero */
+.talos-lettore__fuori { display: flex; flex-direction: column; align-items: flex-start; gap: var(--talos-space-sm); padding: var(--talos-space-lg) var(--talos-space-md); max-width: 60ch; }
+.talos-lettore__fuori > p { margin: 0; color: var(--talos-text); }
+
+/* documenti Office (docx, pptx) resi in una cornice senza script: la loro carta è la loro */
+.talos-lettore__office { display: block; width: 100%; height: 100%; border: 0; }
+
+/* fogli di calcolo: la griglia della Libreria, con le intestazioni ferme mentre scorre il corpo */
+.talos-lettore__foglio { display: flex; flex-direction: column; min-height: 100%; }
+.talos-lettore__fogli { flex-wrap: wrap; margin: var(--talos-space-sm) var(--talos-space-md) 0; }
+.talos-lettore__griglia { overflow: visible; background-image: none; }
+.talos-lettore__griglia .td-file-tabella th[scope="row"],
+.talos-lettore__griglia .talos-lettore__angolo { position: sticky; left: 0; z-index: 2; color: var(--talos-muted); background: var(--talos-panel-soft); border-bottom-color: var(--talos-border); font-variant-numeric: tabular-nums; }
+.talos-lettore__griglia .talos-lettore__angolo { z-index: 3; }
+.talos-lettore__foglio-pannello { display: flex; flex-direction: column; min-height: 0; }
+
+/* ---- F5-4: dove vive il lettore ---- */
+/* nel rail, scheda File: il lettore prende il posto dell'albero e riempie la colonna (scorre il suo corpo, non la scheda).
+   ⛔ `:not([hidden])`: una regola con l'id batte il `display:none` di `[hidden]`, e la scheda chiusa riapparirebbe */
+#railFile[data-lettore="aperto"]:not([hidden]) { display: flex; flex-direction: column; overflow: hidden; }
+/* il contenitore dell'albero si chiama `#alberoCartella` nel markup ma `#inspector-files` a runtime (lo rinomina
+   `bridge/legacy-dom.js`): si prende per il suo `data-c`, che resta */
+#railFile[data-lettore="aperto"] > [data-c="FileTree"] { display: none; }
+.talos-file-lettore { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.talos-file-lettore[hidden] { display: none; }
+.talos-file-lettore > .talos-lettore { flex: 1; height: auto; }
+/* a schermo intero: il posto del diagramma (`.talos-grafo`, sotto la barra in alto), con il respiro della chat */
+.talos-lettore-schermo { padding: var(--talos-space-md) var(--talos-space-lg) var(--talos-space-lg); }
+.talos-lettore-schermo > .talos-lettore { flex: 1; height: auto; }
+/* nel dettaglio della Libreria il pannello scorre da sé: il lettore ha un'altezza sua, o un PDF sarebbe alto 150 px */
+.td-detail-body > .td-lettore-libreria { height: clamp(22rem, 62vh, 56rem); flex: none; }
+/* un titolo che va a capo nella colonna stretta: l'interlinea del testo (1,6) lo spezzava in due righe lontane (foto 26/09) */
+.talos-lettore__prosa :is(h1, h2, h3, h4) { line-height: 1.2; }
+/* nel dettaglio della Libreria il nome del file è già il titolo grande: nella testata del lettore resta per chi ascolta
+   (il fuoco e l'etichetta), non si ripete a vista */
+.td-lettore-libreria .talos-lettore__nome { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }

@@ -5,11 +5,12 @@ import { join, sep } from 'node:path';
 import test from 'node:test';
 
 import { WorkspaceLaunchError, createWorkspaceLaunchStore } from '../src/workspace-launch-store.mjs';
+import { cartellaDiProva, cartellaDiProvaAttesa } from './aiuto/cartelle-di-prova.mjs'; // DESK-TEMP-1, 23/09: la cartella nasce con la sua rimozione
 
 const CREDENTIAL = 'a'.repeat(64);
 
 function fixture({ now = 1_787_000_000_000, ttlMs = 120_000 } = {}) {
-  const root = mkdtempSync(join(tmpdir(), 'talos-workspace-launch-'));
+  const root = cartellaDiProva('talos-workspace-launch-');
   const workspace = join(root, 'Progetto con spazi Ω');
   mkdirSync(workspace);
   const credentialFile = join(root, 'launcher-token');
@@ -87,7 +88,7 @@ test('OPEN-WITH-TALOS-STORE-06 — consume rende l’intenzione monouso', () => 
 });
 
 test('OPEN-WITH-TALOS-STORE-07 — la credenziale viene generata una volta e poi riutilizzata', () => {
-  const root = mkdtempSync(join(tmpdir(), 'talos-workspace-launch-token-'));
+  const root = cartellaDiProva('talos-workspace-launch-token-');
   const credentialFile = join(root, 'launcher-token');
   let calls = 0;
   const options = { credentialFile, randomBytesFn: (bytes) => { calls += 1; return Buffer.alloc(bytes, 7); } };
@@ -100,7 +101,7 @@ test('OPEN-WITH-TALOS-STORE-07 — la credenziale viene generata una volta e poi
 });
 
 test('OPEN-WITH-TALOS-STORE-08 — una credenziale corrotta fallisce chiusa', () => {
-  const root = mkdtempSync(join(tmpdir(), 'talos-workspace-launch-corrupt-'));
+  const root = cartellaDiProva('talos-workspace-launch-corrupt-');
   const credentialFile = join(root, 'launcher-token');
   writeFileSync(credentialFile, 'troppo-corta');
   assert.throws(

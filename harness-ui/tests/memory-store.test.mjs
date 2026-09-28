@@ -198,8 +198,24 @@ test('⭐⭐ cercaMemorie: limit tronca i risultati, ma totale resta il conteggi
   assert.equal(esito.totale, 10);
 });
 
-test('⛔ AL CONTRARIO — cercaMemorie: una query vuota torna zero risultati, mai l\'intero elenco', () => {
-  const memorie = [{ id: 'mem-1', titolo: 'x', contenuto: 'y' }];
-  assert.deepEqual(cercaMemorie(memorie, { query: '' }).memorie, []);
-  assert.deepEqual(cercaMemorie(memorie, {}).memorie, []);
+/*
+ * ⛔ 27/09/2026, decisione owner (`decisioni-owner-capacita-sezioni-27-09`): qui c'era «una query vuota torna zero risultati,
+ *   mai l'intero elenco». Nella sessione 56066b64 quella regola, insieme alla ricerca per frase intera, ha lasciato il modello
+ *   senza nessuna strada per rispondere a «che memorie ho?» (5 memorie nel negozio, due ricerche vuote). La regola nuova è
+ *   quella di Hermes (`session_search` senza query = sfoglia) e dell'attrezzo memoria di Claude (`view /memories`): vuota o «*»
+ *   vuol dire TUTTE, e lo dice (`tutte: true`).
+ */
+test('⭐ cercaMemorie: una query vuota, assente o «*» torna TUTTE le memorie, e lo dice', () => {
+  const memorie = [{ id: 'mem-1', titolo: 'x', contenuto: 'y' }, { id: 'mem-2', titolo: 'z', contenuto: 'w' }];
+  for (const argomenti of [{ query: '' }, {}, { query: '*' }, { query: '  ' }]) {
+    const esito = cercaMemorie(memorie, argomenti);
+    assert.deepEqual(esito.memorie.map((m) => m.id), ['mem-1', 'mem-2'], JSON.stringify(argomenti));
+    assert.equal(esito.tutte, true);
+  }
+});
+
+test('⛔ AL CONTRARIO — cercaMemorie: parole che non ci sono tornano zero, e non è «tutte»', () => {
+  const esito = cercaMemorie([{ id: 'mem-1', titolo: 'x', contenuto: 'y' }], { query: 'memorie salvate dall’utente' });
+  assert.deepEqual(esito.memorie, []);
+  assert.equal(esito.tutte, false);
 });

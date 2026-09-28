@@ -74,12 +74,20 @@ test('⛔ cartellaId o consegna mancanti/vuoti sono QUERY_INVALID, non un crash'
   }
 });
 
-test('⛔⛔⛔ una consegna oltre il tetto di byte è rifiutata — non un prompt che cresce senza limite', (t) => {
+/*
+ * ⛔⛔⛔ 25/09/2026 sera, decisione owner «stesso tetto e motivo vero»: la PRIMA consegna aveva un tetto di 8.192 byte (nato il
+ *   27/08 con `25dd1f026`, senza una ragione scritta) mentre un messaggio successivo non ne ha nessuno oltre il corpo HTTP
+ *   (`requireResumeBody`, 10 MB). Un testo incollato di 31 KB come primo messaggio moriva con «Avvio non riuscito: Query non
+ *   valida». Hermes non mette tetti: un testo lungo diventa un segnaposto nel compositore e si espande all'invio
+ *   (`cli.py:852` `_PASTE_REF_RE`, `hermes_cli/cli_stream_mixin.py:202` `_expand_paste_references`, clone 65ad529). Il limite
+ *   vero resta la finestra del modello, che ha la sua carta. ⇒ La prima consegna si comporta come le successive.
+ */
+test('⭐⭐⭐ la prima consegna ha lo stesso tetto dei messaggi successivi: 31 KB passano', (t) => {
   const cartelle = [cartellaProgettoFinta(t)];
-  assert.throws(
-    () => preparaEsecuzioneLibera(cartelle, { cartellaId: '0', consegna: 'x'.repeat(9000) }),
-    (errore) => errore instanceof CustomTaskError && errore.code === 'QUERY_INVALID',
-  );
+  const lunga = 'Nota di lavoro: il registro dei processi resta leggibile. '.repeat(540);
+  assert.ok(Buffer.byteLength(lunga, 'utf8') > 30_000);
+  const esito = preparaEsecuzioneLibera(cartelle, { cartellaId: '0', consegna: lunga });
+  assert.equal(esito.task.consegna, lunga, 'la consegna arriva intera, non troncata');
 });
 
 /*

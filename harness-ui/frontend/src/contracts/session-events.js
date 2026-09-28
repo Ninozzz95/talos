@@ -4,6 +4,9 @@ export const SESSION_EVENT_TYPES = new Set([
   'ReasoningMessageStart', 'RunError', 'RunFinished', 'RunRedirectApplied',
   'RunRedirectCancelled', 'RunRedirectFailed', 'RunRedirectRequested',
   'RunStarted', 'StateDelta',
+  /* ⛔ 20/09/2026 — questi due eventi sono già emessi dal server e gestiti dal monolite:
+     il contratto modulare non può rifiutarli quando una superficie usa createSessionStreamFactory. */
+  'UserQuestionRequested', 'UserQuestionResolved',
   'TextMessageContent', 'TextMessageEnd', 'TextMessageStart', 'ToolCallArgs',
   /* ⛔⛔⛔ D-10B (10/09) — `ToolCallOutput` e' l'uscita di un comando MENTRE esce, e senza questa
      riga il giro MORIVA: `normalizeSessionEvent` non conosce i tipi fuori da questo insieme e

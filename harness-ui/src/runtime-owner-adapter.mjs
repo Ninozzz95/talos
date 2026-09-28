@@ -20,6 +20,7 @@ import { classificaErroreDiCorsa } from './research-orchestrator.mjs';
 import { normalizzaUsage, scontoDaCache } from './usage-cache.mjs'; // 12/09, P-B: i nomi della cache sono uno per fornitore, il lettore uno solo
 import { nativeProviderResponse, stripNativeMetadata } from './native-provider-adapter.mjs';
 import { preparaRichiestaCompatibile, OpenAiCompatibleRuntimeError } from './openai-compatible-runtime.mjs'; // P-D (12/09): Z.AI accetta solo alcuni livelli di ragionamento
+import { opzioniRagionamentoPerSintesi } from './context-token-counters.mjs'; // F3 (24/09): le stesse opzioni del corpo contato, fuori OpenRouter
 // P-L · ponte locale senza listener, sessione esterna posseduta dalla Response.
 import { rispostaAgenteAcp } from './acp-agent.mjs';
 // P-L · fine import instradamento.
@@ -146,6 +147,39 @@ class MotoreLocaleRifiutaError extends Error {
     // Diagnostica interna: non entra nella serializzazione pubblica dell'errore.
     Object.defineProperty(this, 'tentativi', { value: Object.freeze(tentativi.map(t => Object.freeze({ ...t }))) });
   }
+}
+
+/*
+ * ⛔⛔⛔ 25/09/2026 sera — IL CONTESTO PIENO NON È UN RIFIUTO DEGLI ATTREZZI. Sessione VERA dell'owner (5233facd, MiniCPM5 sul
+ *   4174): «Questo modello non usa gli attrezzi» dopo VENTIDUE chiamate di attrezzi riuscite. La finestra era di 16.384 token,
+ *   la conversazione l'ha superata e llama-server ha risposto 400 `exceed_context_size_error`; la riprova di BC-79.2 senza
+ *   attrezzi accorcia il prompt (misurato su b10517: 2.777 → 2.086 token con UN attrezzo, con 45 sono migliaia) e «riesce»:
+ *   il comportamento che BC-79.2 usa come prova era falsato proprio in questo caso.
+ * ⇒ Si riconosce dal campo STRUTTURATO `error.type` del corpo (non dalla frase, la stessa regola di BC-79.2), prima di ogni
+ *   riprova, e sale col suo codice: il kernel lo classifica come contesto pieno (`compattazione-desktop.mjs`), comprime e
+ *   riprova una volta — ciò che fa Hermes (`agent/error_classifier.py` `context_overflow`, `should_compress=True`, clone
+ *   65ad529 del 23/09/2026). Se non basta, resta questa frase coi numeri del motore. Gli attrezzi non si toccano.
+ */
+class ContestoLocalePienoError extends Error {
+  constructor(promptToken, finestraToken, dettaglio) {
+    const quanti = (n) => (Number.isSafeInteger(n) && n > 0 ? ` (${n} token)` : '');
+    super(`La conversazione${quanti(promptToken)} non entra nella finestra del modello locale${quanti(finestraToken)}.`);
+    this.name = 'ContestoLocalePienoError';
+    this.code = 'LOCAL_CONTEXT_EXCEEDED';
+    this.stato = 400;
+    this.promptToken = Number.isSafeInteger(promptToken) ? promptToken : null;
+    this.finestraToken = Number.isSafeInteger(finestraToken) ? finestraToken : null;
+    this.dettaglio = dettaglio;
+  }
+}
+
+/** Il 400 di llama-server per un prompt più lungo della finestra, dal suo campo `type`; null se è un altro 400. */
+function contestoLocalePieno(dettaglio) {
+  let corpo = null;
+  try { corpo = JSON.parse(dettaglio); } catch { return null; }
+  const errore = corpo?.error;
+  if (errore?.type !== 'exceed_context_size_error') return null;
+  return new ContestoLocalePienoError(Number(errore.n_prompt_tokens), Number(errore.n_ctx), dettaglio);
 }
 
 /** Legge soltanto il prefisso diagnostico, poi rilascia il corpo della risposta. */
@@ -336,6 +370,33 @@ function capabilityReasoning(capability) {
   return reasoning && typeof reasoning === 'object' ? reasoning : null;
 }
 
+/*
+ * ⛔ 24/09/2026 notte — MAI UN COSTO PIÙ ALTO DI QUELLO SCELTO (owner: «Sì, come il mobile», dopo la segnalazione della sessione
+ *   mobile). Prima, su un modello a ragionamento obbligatorio, «none» e ogni livello non supportato diventavano il
+ *   `default_effort` del catalogo: per `z-ai/glm-5.3-flash` (`supported_efforts: [max, high, low]`, `default_effort: max`,
+ *   misurato dalla sessione mobile il 24/09 su `GET /api/v1/models`) «Off» → max e «medium» → max, cioè il più CARO.
+ * ⇒ La regola di Hermes Agent `clamp_effort` (`agent/reasoning_effort.py:120-160`, PR #90350 del 20/08/2026, letta nel
+ *   clone del 24/09): un livello supportato passa com'è; altrimenti il più vicino PIÙ DEBOLE; se non c'è niente di più
+ *   debole, il minimo supportato; «none» non è mai la meta di un degrado. «Off» su un modello obbligatorio → il minimo
+ *   supportato (OpenRouter, «Reasoning tokens», letta il 24/09: «When `true`, hide disable controls and do not send
+ *   `effort: "none"` — the model rejects it»; un livello non supportato prende un 400).
+ *   Nessun `reasoning` nella richiesta resta come prima: il `default_effort` del catalogo (la stessa scelta del mobile,
+ *   commit `bf3a42c00` su `lane/talos-mobile-allineamento`). Un nome fuori dalla scala resta sul default, come prima.
+ */
+const SCALA_RAGIONAMENTO = Object.freeze(['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']);
+/** Il livello supportato più vicino e mai più caro di quello chiesto (Hermes `clamp_effort`); `null` se non si può dire. */
+export function livelloRagionamentoSenzaSalire(chiesto, supportati) {
+  if (!SCALA_RAGIONAMENTO.includes(chiesto)) return null;
+  const livelli = (supportati ?? []).filter((l) => typeof l === 'string' && l !== 'none' && SCALA_RAGIONAMENTO.includes(l));
+  if (!livelli.length) return null;
+  const pos = (l) => SCALA_RAGIONAMENTO.indexOf(l);
+  const minimo = livelli.reduce((a, b) => (pos(b) < pos(a) ? b : a));
+  if (chiesto === 'none') return minimo;
+  if (livelli.includes(chiesto)) return chiesto;
+  const sotto = livelli.filter((l) => pos(l) < pos(chiesto));
+  return sotto.length ? sotto.reduce((a, b) => (pos(b) > pos(a) ? b : a)) : minimo;
+}
+
 /**
  * Applica esclusivamente capacità dichiarate dal catalogo OpenRouter. Non
  * inventa effort: se un modello mandatory non espone un valore utilizzabile,
@@ -360,7 +421,9 @@ export function normalizzaReasoningPerModello(reasoning, capability) {
   const effort = typeof result.effort === 'string' ? result.effort : null;
   const nonSupportato = effort && effort !== 'none' && supported && !supported.includes(effort);
   if ((regole.mandatory === true && effort === 'none') || nonSupportato) {
-    if (defaultEffort) result.effort = defaultEffort;
+    // mai più caro: il più vicino più debole, o il minimo supportato; senza un elenco dichiarato resta il default del catalogo
+    const livello = livelloRagionamentoSenzaSalire(effort, supported) ?? defaultEffort;
+    if (livello) result.effort = livello;
     else delete result.effort;
   }
   if (regole.mandatory === true && !('effort' in result) && !('enabled' in result)) result.enabled = true;
@@ -823,6 +886,9 @@ function creaFetchInstradata(fetchDiRete = fetch, { risolvi = risolviDestinazion
       /* Il grezzo si legge ORA: dopo la riprova questa risposta non serve più, e il suo corpo
          resterebbe aperto. Serve solo come dettaglio dell'errore, mai a schermo. */
       const dettaglio = await leggiDettaglioRifiuto(prima);
+      // 25/09 sera: il contesto pieno non è un rifiuto degli attrezzi — nessuna riprova senza (vedi `ContestoLocalePienoError`)
+      const pieno = contestoLocalePieno(dettaglio);
+      if (pieno) throw pieno;
       const seconda = await spedisci(corpoSenzaAttrezzi());
       if (!seconda.ok) {
         const dettaglioSecondo = await leggiDettaglioRifiuto(seconda);
@@ -836,7 +902,14 @@ function creaFetchInstradata(fetchDiRete = fetch, { risolvi = risolviDestinazion
       if (typeof onAvviso === 'function') await onAvviso(AVVISO_MOTORE_SENZA_ATTREZZI);
       return seconda;
     }
-    return spedisci(corpoRiscritto);
+    const risposta = await spedisci(corpoRiscritto);
+    /* 25/09 sera: anche senza attrezzi nel corpo (o già tolti) il contesto pieno del motore locale sale col suo codice, invece
+       di arrivare al kernel come un 400 qualunque che il ripiego classificherebbe «richiesta non valida». */
+    if (!motoreLocale || risposta.status !== 400) return risposta;
+    const dettaglio = await leggiDettaglioRifiuto(risposta);
+    const pieno = contestoLocalePieno(dettaglio);
+    if (pieno) throw pieno;
+    return new Response(dettaglio, { status: risposta.status, statusText: risposta.statusText, headers: risposta.headers });
   };
 }
 
@@ -862,6 +935,27 @@ async function inviaCloudProtetta(rete, url, opzioni) {
   return new Response(JSON.stringify({ error: { message } }), { status: stato, headers: { 'Content-Type': 'application/json' } });
 }
 // P-K — fine
+
+/*
+ * ⛔⛔⛔ 25/09/2026 sera — sessione VERA dell'owner (65d5683b, un GGUF locale, «ciao»): due volte «Il fornitore non ha
+ *   accettato la richiesta.» senza che nessun fornitore fosse chiamato. Il server non aveva il motore llama.cpp
+ *   (`localeConfigurato: false`), l'avvio automatico lanciava `LOCAL_RUNTIME_NOT_CONFIGURED`, e il catch di
+ *   `eseguiConFallback` lo classificava `ignoto`: una diagnosi falsa, una ricevuta «interrotto» per una chiamata mai
+ *   partita, e la persona mandata a cambiare fornitore.
+ * ⇒ Questi codici nascono PRIMA della rete — risolvere la destinazione (`model-destination.mjs`), accendere il motore
+ *   (`server.mjs` `avviaLocale`, `llama-server-supervisor.mjs`) — e hanno già una frase loro: si rilanciano come sono,
+ *   senza classificarli, senza panchina, senza consumo e senza fornitore di riserva (lo stesso trattamento di
+ *   `PROVIDER_KEY_MISSING`, CLI-REQ-03). Un elenco CHIUSO e non un prefisso: un errore dell'HTTP del motore
+ *   (`RUNTIME_HTTP_ERROR`) o una connessione caduta a metà restano alla classificazione di sempre.
+ * Fonti: NousResearch/hermes-agent #7512 (il ripiego copre l'errore originale del modello locale); il classificatore di
+ *   Hermes tiene sempre il messaggio originale (`agent/error_classifier.py:1442-1445`, clone 65ad529 del 23/09/2026).
+ */
+const CONDIZIONI_PRIMA_DELLA_RETE = new Set([
+  'LOCAL_RUNTIME_NOT_CONFIGURED', 'LOCAL_RUNTIME_NOT_READY',
+  'RUNTIME_PROCESS_FAILED', 'RUNTIME_OUT_OF_MEMORY', 'RUNTIME_ARCH_UNSUPPORTED', 'RUNTIME_HEALTH_TIMEOUT', 'RUNTIME_ALREADY_RUNNING', 'RUNTIME_START_CANCELLED',
+  'RUNTIME_NOT_READY', 'RUNTIME_MISCONFIGURED', 'RUNTIME_INVALID',
+  'PROVIDER_RUNTIME_INVALID', 'MODEL_DESTINATION_INVALID',
+]);
 
 function erroreFornitorePubblico(classificazione, stato = null) {
   const messaggi = {
@@ -1152,8 +1246,18 @@ export function creaFetchMultiProvider(fetchDiRete = fetch, {
           /* ⛔ BC-79.2 — e nemmeno il rifiuto di un motore locale: non è transitorio, non è colpa di
              una chiave, e un fornitore di riserva non c'entra niente con un GGUF che sta in casa. */
           if (error?.code === 'LOCAL_ENGINE_REJECTED_REQUEST') throw error;
+          /* ⛔ 25/09/2026 — né un motore locale che non c'è o non parte, né una destinazione mal configurata: condizioni
+             nate PRIMA della rete, con una frase loro. Vedi `CONDIZIONI_PRIMA_DELLA_RETE`. */
+          if (CONDIZIONI_PRIMA_DELLA_RETE.has(error?.code)) throw error;
+          /* ⛔ 25/09/2026 sera — e nemmeno il contesto pieno del motore locale: non è transitorio, un fornitore di riserva non
+             c'entra, e mascherato da «richiesta non valida» il kernel non potrebbe più comprimere (`ContestoLocalePienoError`). */
+          if (error?.code === 'LOCAL_CONTEXT_EXCEEDED') throw error;
           const classificazione = contesto.errore ?? classificaGuasto(error, error?.stato ?? error?.statusCode);
           const pulito = erroreFornitorePubblico(classificazione, error?.stato ?? contesto.errore?.stato);
+          /* ⛔ 24/09/2026 sera (decisione owner «continuare, come Hermes»): il testo già arrivato di un flusso rotto a
+             metà viaggia con l'errore pubblico, perché è il kernel a decidere se continuare da lì. Senza questa riga la
+             frase italiana arrivava, e il testo no. */
+          if (error?.parziale) pulito.parziale = error.parziale;
           if (!contesto.errore && contesto.scelta) providerStore.mettiInPanchina(destinazione.provider, contesto.scelta.impronta, { classe: classificazione.classe });
           if (typeof onConsumoFornitore === 'function') await onConsumoFornitore({ tipo: 'consumo-fornitore', ...destinazione, usage: null, costoDichiarato: null, esito: classificazione.classe === 'traffico' ? 'traffico' : 'interrotto' });
           if (!classificazione.transitorio) throw pulito;
@@ -1501,9 +1605,18 @@ export function createOwnerRuntimeAdapter({
        */
       const capability = provider === 'openrouter' ? await Promise.resolve(modelCapabilityFn(model)).catch(() => null) : null;
       const reasoning = provider === 'openrouter' ? normalizzaReasoningPerModello({ effort: 'low' }, capability) : undefined;
+      /*
+       * ⭐ F3, onda 2 di F2 (24/09/2026) — FUORI da OpenRouter il corpo INVIATO porta le stesse opzioni di
+       *   ragionamento del corpo CONTATO (`context-token-counters.mjs::opzioniRagionamentoPerSintesi`, rapporto F4
+       *   punto 4): `reasoning_effort:'low'` per OpenAI/DeepSeek, `'none'` per un motore locale, niente per chi non si
+       *   conosce. Prima qui c'era `undefined` e i due corpi divergevano su questo campo. Fonti F4 (24/09/2026):
+       *   OpenAI «Reasoning» guide (`none` ⇒ 400 su GPT-6 Astra, quindi mai `none` a OpenAI), llama.cpp
+       *   `tools/server/README.md` («If `none`, reasoning/thinking is disabled»).
+       */
+      const opzioniSintesi = provider === 'openrouter' ? {} : (opzioniRagionamentoPerSintesi(provider) ?? {});
       const response = await routed(ENDPOINT_OPENROUTER, {
         method: 'POST', headers: { 'Content-Type': 'application/json', ...(key ? { Authorization: `Bearer ${key}` } : {}) },
-        body: JSON.stringify({ model: provider === 'openrouter' ? model : `${provider}:${model}`, messages: structuredClone(messages), tools: [], max_tokens: maxOutputTokens, stream: false, ...(reasoning ? { reasoning } : {}), ...(provider === 'openrouter' ? { transforms: [], plugins: [{ id: 'context-compression', enabled: false }] } : {}) }),
+        body: JSON.stringify({ model: provider === 'openrouter' ? model : `${provider}:${model}`, messages: structuredClone(messages), tools: [], max_tokens: maxOutputTokens, stream: false, ...(reasoning ? { reasoning } : {}), ...opzioniSintesi, ...(provider === 'openrouter' ? { transforms: [], plugins: [{ id: 'context-compression', enabled: false }] } : {}) }),
         /*
          * ⛔ P0 · punto 7 (16/09/2026) — la compattazione del contesto aveva anch'essa 180 s fissi.
          * È la chiamata che si fa proprio quando la conversazione è DIVENTATA GRANDE: il caso in cui

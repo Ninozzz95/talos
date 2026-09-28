@@ -103,12 +103,15 @@ test('PO30-FILE-03 — le viste: «Modificati in questa sessione» elenca i file
   expect(righe.sort()).toEqual(['src/registro.mjs', 'tests/registro.test.mjs']);
   await expect(page.locator('#fileTreeFilter'), 'la ricerca lavora sull’albero: fuori dall’albero non si offre').toBeHidden();
 
+  /* F5 File reader (26/09/2026): la riga apre il LETTORE nel rail, che legge i byte da `/file?percorso=` (non più il testo
+     da `/tree/file` per la vecchia modale); si chiude col suo comando, non con Esc (che con un giro vivo chiede di fermarlo). */
   let chiesto = null;
-  await page.route('**/api/v1/sessions/po30-*/tree/file?*', (r) => { chiesto = new URL(r.request().url()).searchParams.get('percorso'); return r.fulfill({ contentType: 'application/json', body: JSON.stringify({ ok: true, data: { contenuto: 'uno\n', troncato: false } }) }); });
+  await page.route('**/api/v1/sessions/po30-*/file?*', (r) => { chiesto = new URL(r.request().url()).searchParams.get('percorso'); return r.fulfill({ contentType: 'application/octet-stream', body: 'uno\n' }); });
   await page.locator('#fileModificati .talos-kv', { hasText: 'src/registro.mjs' }).click();
   await expect.poll(() => chiesto, { message: 'il clic sulla riga deve aprire QUEL file' }).toBe('src/registro.mjs');
+  await expect(page.locator('#railFileLettore .talos-lettore__nome')).toHaveText('registro.mjs');
 
-  await page.keyboard.press('Escape');
+  await page.locator('#railFileLettore').getByRole('button', { name: 'Chiudi il lettore' }).click();
   await page.locator('#railTabs [data-rail="file"]').click();
   await page.locator('#fileVista').click();
   await page.getByRole('menuitem', { name: 'Tutti i file' }).click();
@@ -216,3 +219,20 @@ for (const [larghezza, altezza] of [[1440, 900], [1024, 800]]) {
     });
   }
 }
+
+/*
+ * ⭐ 26/09/2026 (owner: «accenderla, come il disegno») — la spaziatura della PR #33 fra testata, ricerca, viste e albero.
+ * La regola (`scheda-file.css:10`) mirava a `#alberoCartella`, che a runtime si chiama `#inspector-files`: non si era mai
+ * applicata e i quattro blocchi stavano attaccati. Si misura sul contenitore VERO della scheda, per il suo `data-c`.
+ */
+test('PO30-FILE-07 — testata, ricerca, viste e albero hanno fra loro l’aria del disegno', async ({ page }) => {
+  await scena(page);
+  const m = await page.locator('#railFile > [data-c="FileTree"]').evaluate((c) => {
+    const figli = [...c.children].filter((n) => n.getBoundingClientRect().height > 0).map((n) => n.getBoundingClientRect());
+    return { display: getComputedStyle(c).display, spazi: figli.slice(1).map((r, i) => Math.round(r.top - figli[i].bottom)), aria: parseFloat(getComputedStyle(c).rowGap) };
+  });
+  expect(m.display, 'la regola del disegno si applica al contenitore vero').toBe('flex');
+  expect(m.aria, 'con l’aria del disegno (--talos-space-sm)').toBeGreaterThan(0);
+  expect(m.spazi.length, 'premessa: i blocchi della scheda ci sono').toBeGreaterThanOrEqual(3);
+  for (const spazio of m.spazi) expect(spazio, 'fra un blocco e l’altro c’è l’aria del disegno').toBeGreaterThanOrEqual(m.aria - 1);
+});

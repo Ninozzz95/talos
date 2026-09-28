@@ -1,5 +1,3 @@
-import {creaProviderCard} from '../src/components/provider-card.js';
-import {PROVIDER_CARD} from './fixtures/provider-card.js';
 import {creaRuntimeModello} from '../src/components/runtime-modelli.js';
 import {RUNTIME_MODELLI} from './fixtures/runtime-modelli.js';
 import {creaMisuraMemoria} from '../src/components/misura-memoria.js';
@@ -80,6 +78,15 @@ import { CONTEGGI } from './fixtures/luoghi.js';
 import { ADESSO, CORRENTE, FISSATE, SESSIONI } from './fixtures/sessioni.js';
 import { TESTATA } from './fixtures/testata.js';
 import { WORKSPACE } from './fixtures/workspace.js';
+/* 23/09 — R4 attività compatta: prototipo della proposta (docs/R4-ATTIVITA-COMPATTA-RICERCA-E-PROPOSTA-2026-09-23.md). */
+import { montaAttivitaCompatta } from './attivita-compatta.js';
+import {
+  montaWorkflowSpec,
+  workflowSpecInspectionSessions,
+  workflowSpecSceneFromLocation,
+  workflowSpecThemeFromLocation,
+  workflowSpecUrl,
+} from './workflow-spec.js';
 
 /*
  * IL LABORATORIO DEI COMPONENTI — la parità «a partire dai dati».
@@ -364,8 +371,39 @@ async function montaLibreriaFile({ apri = 'lib-md', modo = 'anteprima' } = {}) {
   return schermo;
 }
 
+function montaSessioniWorkflowSpec({ scena, tema }) {
+  const fissate = document.querySelector('.talos-sidebar__block:has(.talos-eyebrow[data-t="fissate"])');
+  const sessioni = document.querySelector('.talos-sidebar__sessions');
+  if (!sessioni) throw new Error('sidebar sessioni assente dal laboratorio WorkflowSpec');
+  for (const finta of document.querySelectorAll('.talos-sidebar .talos-session-item')) finta.remove();
+  if (fissate) fissate.hidden = true;
+  const adesso = new Date('2026-09-22T14:30:00+02:00');
+  for (const fixture of workflowSpecInspectionSessions()) {
+    const riga = creaSessionItem(fixture, {
+      adesso,
+      corrente: fixture.sceneId === scena,
+      onApri: () => location.assign(workflowSpecUrl({ sceneId: fixture.sceneId, theme: tema })),
+    });
+    riga.dataset.workflowReviewSession = fixture.sceneId;
+    riga.title = `Fixture di ispezione · ${fixture.nome}`;
+    sessioni.append(riga);
+  }
+  const conto = sessioni.querySelector('.talos-sidebar__block-head .talos-nav-item__count');
+  if (conto) conto.textContent = String(workflowSpecInspectionSessions().length);
+}
+
 const LABORATORI = {
- ProviderCard(){document.querySelector('#veloFornitori [data-c=ProviderCard]').replaceWith(creaProviderCard(PROVIDER_CARD[4],{aperta:true}));},
+  AttivitaCompatta() {
+    return montaAttivitaCompatta();
+  },
+  WorkflowSpec() {
+    const scena = workflowSpecSceneFromLocation(location);
+    const tema = workflowSpecThemeFromLocation(location);
+    montaSessioniWorkflowSpec({ scena, tema });
+    return montaWorkflowSpec({ scena });
+  },
+ /* ⛔ 23/09/2026 — qui stava `ProviderCard`, che metteva la card nel velo «Fornitori e accessi».
+    Il velo è tolto per decisione owner, e la riga di `componenti.spec.mjs` con lui (vedi lì). */
  RuntimeCard(){document.querySelector('#panel-runtime [data-c=RuntimeCard]').replaceWith(creaRuntimeModello(RUNTIME_MODELLI[0]));},
  MemoryMeter(){document.querySelector('#panel-runtime [data-c=MemoryMeter]').replaceWith(creaMisuraMemoria({capacita:CAPACITA_MEMORIA,runtimes:RUNTIME_MEMORIA}));},
  CatalogoModelli(){const p=document.querySelector('#panel-catalogo');p.querySelector('[data-catalog-list]').replaceChildren();p.querySelector('[data-catalog-detail]').replaceChildren();aggiornaCatalogoModelli(p,CATALOGO_MODELLI);},
@@ -620,7 +658,8 @@ const LABORATORI = {
         colonna.append(turno);
         continue;
       }
-      const messaggio = creaMessaggioTalos({ modello: t.modello, ora: t.ora, paragrafi: t.paragrafi });
+      // 25/09: come il prodotto (`app.js:10631`, `working` finché il giro è vivo) — un turno che aspetta ha l'orb che gira.
+      const messaggio = creaMessaggioTalos({ modello: t.modello, ora: t.ora, paragrafi: t.paragrafi, working: Boolean(t.attesa) });
       if (t.attivita) {
         const a = creaAttivita({ id: t.attivita.id, riassunto: t.attivita.riassunto, tempo: t.attivita.tempo, token: t.attivita.token });
         for (const r of t.attivita.righe) {
@@ -702,6 +741,43 @@ const LABORATORI = {
     for (const s of SESSIONI) sessioni.append(creaSessionItem(s, { adesso: ADESSO, corrente: s.sessionId === CORRENTE }));
     const conto = sessioni.querySelector('.talos-sidebar__block-head .talos-nav-item__count');
     if (conto) conto.textContent = '69'; // il conteggio del mockup è dell'intero store, non delle righe mostrate
+  },
+  /*
+   * ATLAS F1 (24/09/2026, Q-18 dell'owner) — il campione dei CONTROLLI per il cancello di parità col riferimento Atlas
+   * (`tests/parity/componenti.spec.mjs`). Stesse classi del prodotto, un esemplare per variante e stato, marcati con
+   * `data-s`: il cancello legge qui gli stili calcolati e li confronta coi valori di `mockup/atlas/atlas.css`.
+   * ⛔ Solo markup statico dentro una schermata-pagina: nessun dato, nessuna rete, nessun gestore.
+   */
+  ControlliF1() {
+    const centro = document.getElementById('centro');
+    const schermo = document.createElement('section');
+    schermo.id = 'schermoControlli';
+    schermo.className = 'talos-screen talos-page';
+    schermo.innerHTML = `
+      <div class="talos-stack" data-s="campione">
+        <div class="talos-row">
+          <button type="button" class="talos-button talos-button--secondary" data-s="sec"><svg class="i" data-s="secIcona" aria-hidden="true"><use href="#i-plus"/></svg>Secondario</button>
+          <button type="button" class="talos-button talos-button--primary" data-s="pri">Primario</button>
+          <button type="button" class="talos-button talos-button--ghost" data-s="ghost">Fantasma</button>
+          <button type="button" class="talos-button talos-button--secondary talos-button--sm" data-s="sm">Piccolo</button>
+          <button type="button" class="talos-button talos-button--secondary talos-icon-button" aria-label="Icona" data-s="icon"><svg class="i" aria-hidden="true"><use href="#i-plus"/></svg></button>
+          <button type="button" class="talos-button talos-button--secondary" disabled data-s="secOff">Spento</button>
+        </div>
+        <div class="talos-row">
+          <div class="talos-field" data-s="lenteBox"><svg class="i talos-field__icon" aria-hidden="true"><use href="#i-search"/></svg><input class="talos-field__input" type="search" placeholder="Cerca" data-s="lente"></div>
+          <div class="talos-field"><input class="talos-field__input" type="text" placeholder="Nome" data-s="campo"></div>
+          <div class="talos-field"><input class="talos-field__input" type="text" disabled placeholder="Spento" data-s="campoOff"></div>
+          <div class="talos-field"><input class="talos-field__input" type="text" aria-invalid="true" value="Non valido" data-s="campoErr"></div>
+          <select class="talos-select" data-s="select"><option>Ultima modifica</option></select>
+        </div>
+        <textarea class="talos-textarea" rows="3" data-s="area"></textarea>
+        <label class="talos-row"><input type="checkbox" data-s="casella"> Casella</label>
+        <ul class="talos-allegati__lista"><li class="talos-allegati__voce" data-s="chip"><span class="talos-allegati__nome">architettura.md</span><button type="button" class="talos-allegati__togli" aria-label="Togli" data-s="chipX">×</button></li></ul>
+        <div class="talos-choice-grid" role="radiogroup" aria-label="Scelta"><button type="button" class="talos-choice" role="radio" aria-checked="true" data-s="scelta"><span class="talos-choice__title" data-s="sceltaTitolo">Locale</span><p>Sul tuo dispositivo</p></button><button type="button" class="talos-choice" role="radio" aria-checked="false"><span class="talos-choice__title">API</span><p>Configurazione personale</p></button></div>
+        <div class="talos-toolbar" data-s="barra"><div class="talos-field" data-s="barraCampo"><svg class="i talos-field__icon" aria-hidden="true"><use href="#i-search"/></svg><input class="talos-field__input" type="search" placeholder="Cerca"></div><button type="button" class="talos-button talos-button--primary talos-button--sm">Crea</button></div>
+      </div>`;
+    centro.append(schermo);
+    mostraSchermo('schermoControlli', 'controlli');
   },
 };
 

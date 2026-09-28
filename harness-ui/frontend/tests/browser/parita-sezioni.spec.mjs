@@ -128,12 +128,15 @@ test('PARITA-02 · i conteggi sono CONTATI dal contratto, non scritti nel markup
   await apriAspetto(page);
   const attesi = GRUPPI_MOCKUP.map(([chiave]) => contati(chiave));
   // La prova si regge da sola: se il contratto cambia, qui cambia l'atteso.
-  expect(attesi, 'le partizioni del contratto non sono più quelle del mockup').toEqual([9, 4, 11, 1, 1]);
+  // 23/09/2026: la prima partizione passa da 9 a 8 perché l'owner ha tolto «Forma del composer»
+  // (ledger R4 «DESK-COMPOSER-STANDARD-2026-09-23»). Il mockup PR27 ne aveva 9: la differenza è voluta.
+  expect(attesi, 'le partizioni del contratto non sono più quelle del mockup').toEqual([8, 4, 11, 1, 1]);
   const letti = await page.locator('#setting-panel-appearance > [data-settings-group] [data-settings-group-count]').allTextContents();
   expect(letti).toEqual(attesi.map((n) => `${n} ${n === 1 ? 'CONTROLLO' : 'CONTROLLI'}`));
 });
 
-test('PARITA-03 · la pastiglia dice 40 e 14, e sono due conteggi diversi', async ({ page }) => {
+// 24/09/2026, decisione owner 35: con «Scadenza delle domande» i controlli del contratto sono 41 (righe a schermo 42).
+test('PARITA-03 · la pastiglia dice i controlli del contratto e i 14 temi, e sono due conteggi diversi', async ({ page }) => {
   await apriAspetto(page);
   const pastiglia = page.locator('#schermoImpostazioni .settings-badge');
   await expect(pastiglia).toBeVisible();
@@ -354,7 +357,8 @@ test('PARITA-09 · «Aggiungi modello» apre la modale, e le due strade portano 
   await expect(page.locator('#modelLabHfSearch')).toBeVisible();
 });
 
-test('PARITA-10 · le altre nove sezioni non hanno una testata di gruppo e si aprono come prima', async ({ page }) => {
+// 23/09/2026, decisione owner: «Provider e accessi» tolta del tutto — le «altre» sezioni sono otto, non nove.
+test('PARITA-10 · le altre otto sezioni non hanno una testata di gruppo e si aprono come prima', async ({ page }) => {
   await apriAspetto(page);
   /*
    * ⛔ AGGIORNATA il 19/09/2026 — e la ragione è un CAMBIO DI PROGETTO, non un test da piegare.

@@ -64,6 +64,41 @@ export function bilancioHtml(riga) {
   return bilancio;
 }
 
+/*
+ * ⛔ GLI ELENCHI ANNIDATI (26/09/2026, owner: «ora, prima di F6»). Fino a oggi ogni riga con un trattino entrava nello
+ *   STESSO elenco, qualunque fosse il suo rientro: le voci figlie uscivano piatte, sorelle della madre (visto nel lettore
+ *   dei file sul 4174, `Leggimi.md`). E «1. a», riga vuota, «2. b» faceva due elenchi che ripartivano entrambi da 1.
+ * Regola (CommonMark 0.31.2, §5.2 «List items» e §5.3 «Lists», spec.commonmark.org, letta il 26/09/2026): il contenuto
+ *   di una voce comincia alla colonna dopo il marcatore e i suoi spazi (1-4; con 5 o più, uno solo), e una riga appartiene
+ *   alla voce se è rientrata ALMENO fino a quella colonna — «- a» vuole 2 spazi per un figlio, «10) a» ne vuole 4. Un
+ *   elenco numerato comincia dal numero della sua prima voce. Marcatori: `-`, `*`, `+`, e numeri con `.` o `)`.
+ * ⛔ Restano «le basi», non un motore CommonMark: una riga NON rientrata subito dopo una voce chiude l'elenco (niente
+ *   continuazione «pigra», come faceva questo renderer prima), la riga vuota lo chiude sempre (vedi il ciclo: lo streaming
+ *   della chat taglia lì), e dentro una voce si rende solo testo — un recinto ``` rientrato chiude l'elenco e si rende
+ *   com'era.
+ */
+const VOCE_DI_LISTA = /^([ \t]*)([-*+]|\d{1,9}[.)])([ \t]+)(.*)$/;
+function larghezza(spazi) {
+  let n = 0;
+  for (const c of spazi) n += c === '\t' ? 4 - (n % 4) : 1;
+  return n;
+}
+/** La riga come voce d'elenco: rientro, colonna del contenuto, tipo, numero, testo; `null` se non lo è. */
+export function voceDiLista(riga) {
+  const m = VOCE_DI_LISTA.exec(riga);
+  if (!m) return null;
+  const rientro = larghezza(m[1]);
+  const spazi = larghezza(m[3]);
+  const ordinata = /\d/.test(m[2]);
+  return {
+    rientro,
+    colonna: rientro + m[2].length + (spazi >= 5 ? 1 : spazi),
+    ordinata,
+    numero: ordinata ? Number.parseInt(m[2], 10) : null,
+    testo: m[4],
+  };
+}
+
 /** Un elemento con del testo dentro, senza passare da innerHTML. */
 function elementoTesto(doc, tag, classe, valore) {
   const elemento = doc.createElement(tag);
@@ -123,6 +158,14 @@ export function renderizzaMarkdown(testoGrezzo, opzioni = {}) {
   const htmlFidato = opzioni.htmlFidato === true;
   const conLink = opzioni.linkMarkdown === true;
   /*
+   * ⭐ 27/09/2026, decisione owner (`decisioni-owner-capacita-sezioni-27-09`, punto 3) — IL LINK A UN'ALTRA CONVERSAZIONE.
+   *   `conversation_search` chiede al modello di scrivere `[titolo](talos://conversazione/<id>)` (come Hermes: «write its
+   *   `link` value verbatim», `session_search_tool.py:664-665`). Diventa un PULSANTE che apre quella conversazione, come la
+   *   barra laterale; non è un indirizzo e non esce dall'app. Si accende con `opzioni.linkConversazione` (la chat).
+   * ⛔ Solo questo schema: i link web in chat restano spenti come deciso il 18/09 (vedi sopra).
+   */
+  const conConversazioni = opzioni.linkConversazione === true;
+  /*
    * ⛔ `(?<!!)` NON È UN DETTAGLIO: SENZA, IL LINK MANGIA LE IMMAGINI. Trovato il 18/09/2026 da
    *   questa stessa review, sulla prova della scheda del modello: il README scrive
    *   `![licenza](https://example.invalid/licenza.png)`, e il pattern del link ci trovava dentro
@@ -133,14 +176,19 @@ export function renderizzaMarkdown(testoGrezzo, opzioni = {}) {
    *   distingue da un link, quindi è lì che si guarda. Così `![…](…)` resta **testo intero**, come
    *   deve essere finché non decidiamo di rendere le immagini.
    */
-  const PATTERN_INLINE = conLink
-    ? /(?<!!)\[([^\]]+)\]\(([^)\s]+)\)|\*\*([^*]+)\*\*|`([^`]+)`|\*([^*]+)\*|_([^_]+)_/g
-    : /\*\*([^*]+)\*\*|`([^`]+)`|\*([^*]+)\*|_([^_]+)_/g;
-  // Con i link accesi il primo gruppo è il link e gli altri slittano di due: la mappa dice dove
-  // sta cosa, invece di lasciare gli indici sparsi nel corpo.
-  const GRUPPI = conLink
-    ? { link: 1, linkUrl: 2, forte: 3, codice: 4, corsivoA: 5, corsivoB: 6 }
-    : { link: -1, linkUrl: -1, forte: 1, codice: 2, corsivoA: 3, corsivoB: 4 };
+  const PARTI_INLINE = [
+    ...(conConversazioni ? [String.raw`(?<!!)\[([^\]]+)\]\(talos:\/\/conversazione\/([A-Za-z0-9._-]{1,120})\)`] : []),
+    ...(conLink ? [String.raw`(?<!!)\[([^\]]+)\]\(([^)\s]+)\)`] : []),
+    String.raw`\*\*([^*]+)\*\*`, '`([^`]+)`', String.raw`\*([^*]+)\*`, '_([^_]+)_',
+  ];
+  const PATTERN_INLINE = new RegExp(PARTI_INLINE.join('|'), 'g');
+  // Ogni alternativa accesa davanti sposta di due i gruppi che seguono: la mappa dice dove sta cosa, invece di lasciare gli
+  // indici sparsi nel corpo.
+  const GRUPPI = { conv: -1, convId: -1, link: -1, linkUrl: -1 };
+  let prossimoGruppo = 1;
+  if (conConversazioni) { GRUPPI.conv = prossimoGruppo; GRUPPI.convId = prossimoGruppo + 1; prossimoGruppo += 2; }
+  if (conLink) { GRUPPI.link = prossimoGruppo; GRUPPI.linkUrl = prossimoGruppo + 1; prossimoGruppo += 2; }
+  Object.assign(GRUPPI, { forte: prossimoGruppo, codice: prossimoGruppo + 1, corsivoA: prossimoGruppo + 2, corsivoB: prossimoGruppo + 3 });
   function applicaInline(contenitore, segmento) {
     // grassetto **x**, corsivo *x*/_x_, codice inline `x`, ed eventualmente link [x](y) — un solo
     // giro, nessuna combinazione annidata (le "basi", non un parser a stati).
@@ -149,8 +197,16 @@ export function renderizzaMarkdown(testoGrezzo, opzioni = {}) {
     let match;
     while ((match = pattern.exec(segmento))) {
       if (match.index > ultimo) contenitore.appendChild(doc.createTextNode(segmento.slice(ultimo, match.index)));
+      const conversazione = GRUPPI.conv >= 0 ? match[GRUPPI.conv] : undefined;
       const link = GRUPPI.link >= 0 ? match[GRUPPI.link] : undefined;
-      if (link !== undefined) {
+      if (conversazione !== undefined) {
+        const b = doc.createElement('button');
+        b.type = 'button';
+        b.className = 'talos-link-conversazione';
+        b.setAttribute('data-conversazione', match[GRUPPI.convId]);
+        b.textContent = conversazione;
+        contenitore.appendChild(b);
+      } else if (link !== undefined) {
         const a = doc.createElement('a');
         const indirizzo = match[GRUPPI.linkUrl];
         if (urlAmmesso(indirizzo)) { a.setAttribute('href', indirizzo); a.setAttribute('target', '_blank'); a.setAttribute('rel', 'noopener noreferrer'); }
@@ -182,8 +238,7 @@ export function renderizzaMarkdown(testoGrezzo, opzioni = {}) {
     const fenceMatch = /^```/.test(riga.trim());
     // ⭐ 28/8, owner: "l'output della chat ha --- come separatore, formatta anche quello" — riga isolata di 3+ trattini/asterischi/underscore, nessun altro carattere: la sintassi Markdown per un separatore orizzontale. "---" non ha lo spazio dopo il primo trattino richiesto da listaMatch sotto, quindi le due regex non collidono su questa sintassi.
     const hrMatch = /^(-{3,}|\*{3,}|_{3,})\s*$/.test(riga.trim());
-    const listaMatch = /^(\s*)([-*])\s+(.*)$/.exec(riga);
-    const listaNumMatch = /^(\s*)(\d+)\.\s+(.*)$/.exec(riga);
+    const voce = voceDiLista(riga);
     const titoloMatch = /^(#{1,6})\s+(.*)$/.exec(riga);
     const citazioneMatch = /^ {0,3}>/.test(riga);
 
@@ -261,8 +316,7 @@ export function renderizzaMarkdown(testoGrezzo, opzioni = {}) {
         // laziness: solo la continuazione di un paragrafo, mai l'inizio di un altro blocco
         const apreUnAltroBlocco = /^```/.test(corrente.trim())
           || /^(-{3,}|\*{3,}|_{3,})\s*$/.test(corrente.trim())
-          || /^(\s*)([-*])\s+/.test(corrente)
-          || /^(\s*)(\d+)\.\s+/.test(corrente)
+          || voceDiLista(corrente) !== null
           || /^(#{1,6})\s+/.test(corrente);
         if (apreUnAltroBlocco) break;
         dentro.push(corrente);
@@ -344,19 +398,59 @@ export function renderizzaMarkdown(testoGrezzo, opzioni = {}) {
       frammento.appendChild(involucro);
       continue;
     }
-    if (listaMatch || listaNumMatch) {
+    if (voce) {
       chiudiParagrafo();
-      const ordinata = !!listaNumMatch;
-      const lista = doc.createElement(ordinata ? 'ol' : 'ul');
-      while (i < righe.length) {
-        const m = ordinata ? /^(\s*)(\d+)\.\s+(.*)$/.exec(righe[i]) : /^(\s*)([-*])\s+(.*)$/.exec(righe[i]);
-        if (!m) break;
+      /* La pila degli elenchi aperti: ognuno sa dove sta (`genitore`: il frammento o la voce che lo contiene), che tipo è
+         e la colonna del contenuto della sua ultima voce — la soglia oltre cui una riga le appartiene. */
+      const pila = [];
+      const apriLista = (v, genitore) => {
+        const lista = doc.createElement(v.ordinata ? 'ol' : 'ul');
+        if (v.ordinata && v.numero !== 1) lista.setAttribute('start', String(v.numero));
+        genitore.appendChild(lista);
+        pila.push({ lista, genitore, ordinata: v.ordinata, colonna: v.colonna, ultima: null });
+      };
+      const aggiungiVoce = (v) => {
+        const cima = pila[pila.length - 1];
         const li = doc.createElement('li');
-        applicaInline(li, m[3]);
-        lista.appendChild(li);
+        applicaInline(li, v.testo);
+        cima.lista.appendChild(li);
+        cima.ultima = li;
+        cima.colonna = v.colonna;
+      };
+      const rientroDi = (r) => larghezza(/^[ \t]*/.exec(r)[0]);
+      apriLista(voce, frammento);
+      aggiungiVoce(voce);
+      i += 1;
+      while (i < righe.length) {
+        const corrente = righe[i];
+        /* ⛔ La riga vuota CHIUDE l'elenco, come prima. Non è una svista rispetto a CommonMark (dove un elenco «largo» la
+           attraversa): lo streaming della chat (`confineBlocchiStabili`, legacy/app.js) taglia il testo all'ultima riga
+           vuota e rende i due pezzi separatamente, e garantisce che il risultato sia IDENTICO al tutto-insieme — un elenco
+           che attraversasse la riga vuota uscirebbe spezzato durante lo streaming e unito alla fine. La numerazione resta
+           giusta lo stesso: il secondo pezzo di «1. a / riga vuota / 2. b» comincia da 2 (`start`). */
+        if (corrente.trim() === '') break;
+        if (/^```/.test(corrente.trim())) break; // un recinto chiude l'elenco e si rende al suo posto, come prima
+        const v = voceDiLista(corrente);
+        if (!v) {
+          /* il seguito di una voce: vale solo se rientrato fino al suo contenuto (niente continuazione pigra) */
+          const livello = [...pila].reverse().find((l) => rientroDi(corrente) >= l.colonna);
+          if (!livello) break;
+          livello.ultima.appendChild(doc.createElement('br'));
+          applicaInline(livello.ultima, corrente.trim());
+          i += 1;
+          continue;
+        }
+        if (v.rientro >= pila[pila.length - 1].colonna) {
+          apriLista(v, pila[pila.length - 1].ultima); // abbastanza rientrata da stare DENTRO l'ultima voce: un sottoelenco
+        } else {
+          // si risale finché la voce non sta nel livello giusto: fuori dalla voce madre, se non è rientrata fino a lei
+          while (pila.length > 1 && v.rientro < pila[pila.length - 2].colonna) pila.pop();
+          const cima = pila[pila.length - 1];
+          if (cima.ordinata !== v.ordinata) { pila.pop(); apriLista(v, cima.genitore); } // cambia il tipo: elenco nuovo, stesso posto
+        }
+        aggiungiVoce(v);
         i += 1;
       }
-      frammento.appendChild(lista);
       continue;
     }
     if (riga.trim() === '') {

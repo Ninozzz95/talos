@@ -111,8 +111,16 @@ test('BC48-CBIS-NEGATIVO-MARCATORE: il cambio array/stringa non supera il cancel
   const primo = JSON.parse(misura.corpi[0]);
   primo.messages[1].content = [{ type: 'text', text: primo.messages[1].content, cache_control: { type: 'ephemeral', ttl: '1h' } }];
   const corpi = [JSON.stringify(primo), misura.corpi[1]];
-  assert.equal(confrontaCorpi(...corpi).byteUtf8, 443);
-  assert.throws(() => verificaPrefisso({ corpi, confronto: confrontaCorpi(...corpi) }, MINIMO_PREFISSO_LUNGO), /Prefisso anticipato/);
+  const confronto = confrontaCorpi(...corpi);
+  const secondo = JSON.parse(corpi[1]);
+  assert.equal(typeof primo.messages[0].content, 'string');
+  assert.equal(typeof secondo.messages[1].content, 'string');
+  const inizioContentMutato = corpi[0].indexOf('"content":[', corpi[0].indexOf('"messages":['));
+  assert.ok(inizioContentMutato > 0);
+  assert.equal(confronto.byteUtf8, Buffer.byteLength(corpi[0].slice(0, inizioContentMutato + '"content":'.length)));
+  assert.equal(confronto.prima, '[');
+  assert.equal(confronto.dopo, '"');
+  assert.throws(() => verificaPrefisso({ corpi, confronto }, MINIMO_PREFISSO_LUNGO), /Prefisso anticipato/);
 });
 
 test('BC48-CBIS-PERIMETRO: conserva altri modelli, immagini e blocchi estesi', async t => {

@@ -40,6 +40,14 @@ export const NOMI_UMANI_ATTREZZI = Object.freeze({
   generate_image: 'generazione di un’immagine',
   delega_sottotask: 'delega a un sotto-agente',
   time_now: 'data e ora',
+  ask_user_question: 'domanda alla persona',
+  present_plan: 'piano da approvare', // 24/09/2026, decisione owner 36
+  /* Integrazione 23/09: gli attrezzi di piano e di dialogo fra agenti arrivati col ramo Workflow. */
+  workflow_plan_propose: 'proposta di workflow', // 25/09/2026: non «piano di lavoro», il nome rifiutato dall'owner il 17/09
+  ask_parent: 'domanda all’agente che l’ha avviato',
+  answer_parent_question: 'risposta all’agente che l’ha avviato',
+  ask_child: 'domanda a un sotto-agente',
+  answer_child_question: 'risposta a un sotto-agente',
   tool_create: 'creazione di un attrezzo nuovo',
   library_list: 'elenco della Libreria',
   library_search: 'ricerca in Libreria',
@@ -50,19 +58,25 @@ export const NOMI_UMANI_ATTREZZI = Object.freeze({
   library_export: 'copia di un file di Libreria nel workspace',
   library_context_policy_update: 'regole d’uso della Libreria',
   notes_list: 'elenco delle note',
+  notes_search: 'ricerca fra le note',
+  notes_read: 'lettura di una nota',
   notes_create: 'scrittura di una nota',
   notes_update: 'modifica di una nota',
   notes_delete: 'eliminazione di una nota',
   tasks_list: 'elenco delle attività',
+  tasks_search: 'ricerca fra le attività',
   tasks_create: 'creazione di un’attività',
   tasks_complete: 'chiusura di un’attività',
   tasks_update: 'modifica di un’attività',
   tasks_delete: 'eliminazione di un’attività',
+  memory_list: 'elenco della memoria', // 27/09/2026, decisione owner: le letture delle sezioni
   memory_search: 'ricerca nella memoria',
   memory_write: 'scrittura in memoria',
   memory_update: 'correzione di una memoria',
   memory_delete: 'eliminazione di una memoria',
   research_list: 'elenco delle ricerche',
+  research_search: 'ricerca fra le ricerche',
+  conversation_search: 'ricerca nelle conversazioni',
   research_start: 'avvio di una ricerca approfondita',
   research_read: 'lettura del rapporto di ricerca',
   research_rename: 'rinomina di una ricerca',
@@ -135,6 +149,114 @@ export function origineAvvisoPlugin(origine) {
   return `${t(diviso[1] === 'tool' ? 'attrezzo' : 'gancio')} ${nome}`;
 }
 
+/*
+ * ─────────────────────────────────────────────────────────────────────────────
+ * R4 — LA TASSONOMIA DELLE SPECIE (24/09/2026, fase 2 del segmento compatto).
+ *
+ * Le parole con cui la riga del segmento CONTA ciò che l'agente ha fatto. Stanno qui, accanto ai nomi
+ * umani, perché la regola dell'owner del 04/09 vale anche per loro: un posto solo.
+ *
+ * ⛔ Nate da tre difetti misurati sul prodotto il 23/09 (documento di fase 1, §2.2): un `elenca` contato
+ *   come «ricerca completata» (`legacy/app.js:11493`, `cerca || elenca → 'cercato'`), una `file_edit`
+ *   riuscita detta «1 altra azione» (`:11505`, cadeva nel `default`), e un comando fallito assente dalla
+ *   riga. Decisioni dell'owner 23-24/09 (D1): tassonomia per specie — elenco ≠ ricerca, modifica ≠
+ *   «altra azione» — niente «completate» (ridondante), forma breve per quando la riga non ci sta, e mai
+ *   un conteggio troncato con «…».
+ * ⭐ Letto nel codice di Hermes (`apps/desktop/src/components/assistant-ui/tool/run-summary.ts:31-42`,
+ *   clone `65ad529` del 24/09/2026): `CATEGORY_ORDER = ['edit','explore','run','delegate','other']` con
+ *   il commento «Clause order is fixed so the same run always reads the same way, whichever category
+ *   happens to be live», e `CATEGORY_COPY` con `noun` singolare/plurale e i verbi `past`/`present`.
+ *   La FORMA è quella (ordine fisso, parole per specie, due tempi del verbo); si adatta, non si incolla:
+ *   Hermes mette elenco, ricerca, lettura e web sotto «Explored N files» (`:41-49`), e proprio quello è
+ *   il difetto da non ripetere.
+ * ⛔ Un attrezzo che non sta in tabella non diventa «altro»: si chiama col suo nome umano
+ *   (`nomeUmanoAttrezzo`) o col ripiego onesto (`nomeDiRipiegoAttrezzo`) — mai l'id tecnico.
+ * ⛔ Le parole restano italiane qui e passano da `t()` dove si leggono, come i nomi umani.
+ */
+export const SPECIE_ATTREZZI = Object.freeze({
+  lettura: Object.freeze({ icona: 'i-eye', uno: 'file letto', molti: 'file letti', breve: ['letto', 'letti'], fallitoUno: 'lettura non riuscita', fallitoMolti: 'letture non riuscite', filtro: 'Letture' }),
+  ricerca: Object.freeze({ icona: 'i-search', uno: 'ricerca', molti: 'ricerche', breve: ['ricerca', 'ricerche'], fallitoUno: 'ricerca non riuscita', fallitoMolti: 'ricerche non riuscite', filtro: 'Ricerche' }),
+  elenco: Object.freeze({ icona: 'i-folder', uno: 'cartella elencata', molti: 'cartelle elencate', breve: ['elenco', 'elenchi'], fallitoUno: 'elenco non riuscito', fallitoMolti: 'elenchi non riusciti', filtro: 'Elenchi' }),
+  modifica: Object.freeze({ icona: 'i-edit', uno: 'file modificato', molti: 'file modificati', breve: ['modifica', 'modifiche'], fallitoUno: 'modifica non riuscita', fallitoMolti: 'modifiche non riuscite', filtro: 'Modifiche' }),
+  creazione: Object.freeze({ icona: 'i-code', uno: 'file creato', molti: 'file creati', breve: ['nuovo', 'nuovi'], fallitoUno: 'creazione non riuscita', fallitoMolti: 'creazioni non riuscite', filtro: 'Nuovi file' }),
+  scrittura: Object.freeze({ icona: 'i-code', uno: 'file scritto', molti: 'file scritti', breve: ['scritto', 'scritti'], fallitoUno: 'scrittura non riuscita', fallitoMolti: 'scritture non riuscite', filtro: 'Scritture' }),
+  comando: Object.freeze({ icona: 'i-terminal', uno: 'comando', molti: 'comandi', breve: ['comando', 'comandi'], fallitoUno: 'comando non riuscito', fallitoMolti: 'comandi non riusciti', filtro: 'Comandi' }),
+  test: Object.freeze({ icona: 'i-check-sq', uno: 'giro di test', molti: 'giri di test', breve: ['test', 'test'], fallitoUno: 'giro di test non riuscito', fallitoMolti: 'giri di test non riusciti', filtro: 'Test' }),
+  'ricerca-web': Object.freeze({ icona: 'i-globe', uno: 'ricerca sul web', molti: 'ricerche sul web', breve: ['sul web', 'sul web'], fallitoUno: 'ricerca sul web non riuscita', fallitoMolti: 'ricerche sul web non riuscite', filtro: 'Web' }),
+  pagina: Object.freeze({ icona: 'i-web', uno: 'pagina aperta', molti: 'pagine aperte', breve: ['pagina', 'pagine'], fallitoUno: 'pagina non aperta', fallitoMolti: 'pagine non aperte', filtro: 'Pagine' }),
+  delega: Object.freeze({ icona: 'i-user', uno: 'delega', molti: 'deleghe', breve: ['delega', 'deleghe'], fallitoUno: 'delega non riuscita', fallitoMolti: 'deleghe non riuscite', filtro: 'Deleghe' }),
+});
+
+/** L'ordine fisso delle specie nella riga: chi legge trova sempre le stesse cose nello stesso posto. */
+export const ORDINE_SPECIE = Object.freeze(Object.keys(SPECIE_ATTREZZI));
+
+/** Il verbo della voce: al passato (fatto) e al presente (in corso, frase viva del segmento — D11). */
+export const VERBI_ATTREZZI = Object.freeze({
+  leggi: ['Letto', 'Legge'], cerca: ['Cercato', 'Cerca'], elenca: ['Elencato', 'Elenca'],
+  file_edit: ['Modificato', 'Modifica'], scrivi: ['Scritto', 'Scrive'], shell: ['Eseguito', 'Esegue'],
+  prova: ['Test eseguiti', 'Esegue i test'], web_search: ['Cercato sul web', 'Cerca sul web'], naviga: ['Aperto', 'Apre'],
+  delega_sottotask: ['Delegato', 'Delega'],
+});
+
+/**
+ * La specie di un attrezzo. `scrivi` si precisa quando arriva il suo StateDelta (`add` → creazione,
+ * `replace` → modifica); senza, resta «scrittura». Un attrezzo ignoto torna `altro:<id>`: l'id resta
+ * dentro la chiave perché `fraseSpecie` lo trasformi nel nome umano, mai in «altra azione».
+ * @param {string} nome l'id tecnico dell'attrezzo
+ * @param {string} [operazione] l'`op` dello StateDelta, per `scrivi`
+ */
+export function specieAttrezzo(nome, operazione) {
+  switch (String(nome ?? '')) {
+    case 'leggi': return 'lettura';
+    case 'cerca': return 'ricerca';
+    case 'elenca': return 'elenco';
+    case 'file_edit': return 'modifica';
+    case 'scrivi': return operazione === 'add' ? 'creazione' : operazione === 'replace' ? 'modifica' : 'scrittura';
+    case 'shell': return 'comando';
+    case 'prova': return 'test';
+    case 'web_search': return 'ricerca-web';
+    case 'naviga': return 'pagina';
+    case 'delega_sottotask': return 'delega';
+    default: return `altro:${String(nome ?? '')}`;
+  }
+}
+
+/** Il nome per una persona di un attrezzo, senza mai cadere sull'id: nome umano, poi ripiego leggibile. */
+export function nomeLeggibileAttrezzo(nome) {
+  return nomeUmanoAttrezzo(nome) || nomeDiRipiegoAttrezzo(nome) || t('attrezzo');
+}
+
+/**
+ * «2 cartelle elencate», «1 comando non riuscito», in forma breve «2 elenchi». Per una specie
+ * `altro:<id>` la frase è il nome umano, con «×N» quando sono più d'una.
+ * @param {string} specie
+ * @param {number} n
+ * @param {{fallito?:boolean, breve?:boolean}} [forma]
+ */
+export function fraseSpecie(specie, n, { fallito = false, breve = false } = {}) {
+  const s = SPECIE_ATTREZZI[specie];
+  if (s) {
+    const parola = fallito ? (n === 1 ? s.fallitoUno : s.fallitoMolti) : breve ? s.breve[n === 1 ? 0 : 1] : (n === 1 ? s.uno : s.molti);
+    return `${n} ${t(parola)}`;
+  }
+  const nome = nomeLeggibileAttrezzo(String(specie).replace(/^altro:/, ''));
+  const molti = n > 1 ? ` ×${n}` : '';
+  return fallito ? `${nome} ${t('non riuscita')}${molti}` : `${nome}${molti}`;
+}
+
+/** L'icona di una specie nello sprite; `i-bolt` per ciò che non ha una specie sua. */
+export function iconaSpecie(specie) {
+  return SPECIE_ATTREZZI[specie]?.icona || 'i-bolt';
+}
+
+/** [passato, presente] del verbo; per un attrezzo senza verbo nostro, il suo nome umano in tutti e due i tempi. */
+export function verboAttrezzo(nome) {
+  const verbi = VERBI_ATTREZZI[nome];
+  if (verbi) return [t(verbi[0]), t(verbi[1])];
+  const leggibile = nomeLeggibileAttrezzo(nome);
+  return [leggibile, leggibile];
+}
+
 /** Gli id tecnici per cui non abbiamo ancora un nome: un debito che si misura. */
 export function attrezziSenzaNome(ids, catalogo = null) {
   return [...new Set(ids || [])].filter((id) => nomeUmanoAttrezzo(id, catalogo) === null);
@@ -191,6 +313,13 @@ export const DESCRIZIONI_ATTREZZI = Object.freeze({
   artifact_create: 'Costruisce una paginetta interattiva e la mostra dentro la chat.',
   document_create: 'Crea un documento vero (PDF, Word, foglio di calcolo, presentazione) e lo salva nel progetto.',
   time_now: 'Chiede che ora e che giorno è su questo computer, invece di indovinarlo.',
+  ask_user_question: 'Mette in pausa il giro e chiede alla persona una decisione che non si può ricavare dai file o dal sistema.',
+  present_plan: 'In modalità Piano, presenta il piano finito e aspetta la tua scelta: procedere (chiedendo conferma, accettando le modifiche o in una conversazione nuova) o continuare a pianificare.',
+  workflow_plan_propose: 'Propone un workflow a fasi da rivedere e approvare: non lo approva e non lo avvia.',
+  ask_parent: 'Un sotto-agente chiede un fatto o una decisione all’agente che lo ha avviato, e aspetta la risposta.',
+  answer_parent_question: 'Un sotto-agente risponde a una domanda dell’agente che lo ha avviato.',
+  ask_child: 'Manda una domanda a un sotto-agente; la risposta arriva dopo, senza fermare il giro.',
+  answer_child_question: 'Risponde a una domanda arrivata da un sotto-agente.',
   delega_sottotask: 'Affida un pezzo di lavoro a una sessione figlia, che lavora in una cartella sua e riporta solo il risultato.',
   generate_image: 'Genera un’immagine da una descrizione e la salva nel progetto come file vero.',
   library_list: 'Elenca i file della Libreria del progetto.',
@@ -202,19 +331,25 @@ export const DESCRIZIONI_ATTREZZI = Object.freeze({
   library_export: 'Salva una copia di un file della Libreria dentro il progetto, come file visibile.',
   library_context_policy_update: 'Cambia quanto della Libreria può entrare nelle conversazioni.',
   notes_list: 'Elenca le tue note, dalla più aggiornata.',
+  notes_search: 'Cerca fra le tue note per parole.', // 27/09/2026, decisione owner: le letture delle sezioni
+  notes_read: 'Legge per intero una delle tue note.',
   notes_create: 'Scrive una nota per te.',
   notes_update: 'Cambia il titolo o il testo di una nota che esiste già.',
   notes_delete: 'Cancella una tua nota, per sempre.',
   tasks_list: 'Elenca le tue attività, con stato e priorità.',
+  tasks_search: 'Cerca fra le tue attività per parole.',
   tasks_create: 'Aggiunge un’attività alla tua lista.',
   tasks_complete: 'Segna un’attività come fatta, o la rimette in corso.',
   tasks_update: 'Cambia titolo, dettaglio o priorità di un’attività che esiste già.',
   tasks_delete: 'Cancella un’attività, per sempre.',
+  memory_list: 'Elenca tutto ciò che hai chiesto a TALOS di ricordare.',
   memory_search: 'Cerca fra le cose che hai chiesto a TALOS di ricordare.',
   memory_write: 'Salva una cosa che hai chiesto tu di ricordare per le prossime conversazioni.',
   memory_update: 'Corregge un ricordo che esiste già, invece di aggiungerne un secondo che dice il contrario.',
   memory_delete: 'Fa dimenticare un ricordo, così non viene più usato.',
   research_list: 'Elenca le ricerche approfondite fatte su questo progetto e com’è finita ognuna.',
+  research_search: 'Cerca fra le ricerche approfondite di questo progetto per parole.',
+  conversation_search: 'Guarda la Board, cerca nelle altre conversazioni e le legge.',
   research_start: 'Avvia una ricerca approfondita: cerca sul web, legge le fonti e scrive un rapporto. Dura minuti e consuma credito vero.',
   research_read: 'Legge il rapporto scritto da una ricerca finita.',
   research_rename: 'Cambia solo l’etichetta di una ricerca: non rifà niente.',

@@ -204,7 +204,78 @@ for (const tema of ['dark', 'light']) {
       }
 
       /* 2. ⛔ E IL NUMERO NON MANGIA L'ETICHETTA: dentro la scheda si legge la parola E il numero. */
-      expect(m.schede.map((s) => s.testo)).toEqual(['Contesto', 'File', 'Agenti 2', 'Processi 1']);
+      // 26/09/2026 — F6-1 (decisioni dell'owner su F6): la quinta scheda «GitHub», subito dopo File. Ci stanno tutte e cinque grazie
+      // al margine di 6 px delle schede (owner, stesso giorno, seconda risposta coi numeri giusti: «margine 6 px + scorrimento»).
+      expect(m.schede.map((s) => s.testo)).toEqual(['Contesto', 'File', 'GitHub', 'Agenti 2', 'Processi 1']);
     });
   }
 }
+
+/*
+ * ⭐ 26/09/2026 — F6-1, owner: «margine 6 px + scorrimento». Se un giorno le schede non bastassero (numeri a tre cifre, una lingua
+ * più lunga, un carattere più grande), la fila SCORRE dentro la colonna invece di uscirne, e la scheda scelta si vede TUTTA — anche
+ * con la tastiera. Il caso si provoca allargando le schede a mano: è l'unico modo per avere oggi una fila che non ci sta.
+ * ⛔ Al contrario: senza `tieniInVistaScheda` la scheda «Processi», scelta con la freccia, resterebbe tagliata dal bordo.
+ */
+test('BADGE-SCORRIMENTO — se le schede non ci stanno la fila scorre nella colonna, e la scheda scelta resta tutta in vista', async ({ page }) => {
+  await scena(page, { tema: 'dark', larghezza: 1024, altezza: 800 });
+  await page.addStyleTag({ content: '.talos-inspector__tabs .talos-tabs__tab{padding-inline:28px !important}' });
+  const misura = () => page.locator('#railTabs').evaluate((fila) => {
+    const colonna = fila.closest('.talos-inspector').getBoundingClientRect();
+    const vista = fila.getBoundingClientRect();
+    const scelta = fila.querySelector('[aria-selected="true"]').getBoundingClientRect();
+    return {
+      scorre: fila.scrollWidth > fila.clientWidth,
+      filaDentro: vista.right <= colonna.right + 1 && vista.left >= colonna.left - 1,
+      sceltaInVista: scelta.left >= vista.left - 1 && scelta.right <= vista.right + 1,
+      scrollLeft: fila.scrollLeft,
+    };
+  });
+  const prima = await misura();
+  expect(prima.scorre, 'la prova non ha provocato una fila che non ci sta: non proverebbe niente').toBe(true);
+  expect(prima.filaDentro, 'la fila esce dalla colonna invece di scorrere').toBe(true);
+  await page.locator('#railTabs [data-rail="contesto"]').focus();
+  for (let i = 0; i < 4; i += 1) await page.keyboard.press('ArrowRight');
+  await expect(page.locator('#railTabs [data-rail="processi"]')).toHaveAttribute('aria-selected', 'true');
+  const dopo = await misura();
+  expect(dopo.sceltaInVista, `la scheda scelta con la tastiera è tagliata dal bordo (scrollLeft ${dopo.scrollLeft})`).toBe(true);
+  expect(dopo.scrollLeft).toBeGreaterThan(0);
+  // e tornando alla prima (con la freccia a sinistra), la fila torna indietro fino all'inizio. Il giro dall'ultima alla prima ha
+  // la sua prova (BADGE-FRECCE-GIRO, sotto).
+  for (let i = 0; i < 4; i += 1) await page.keyboard.press('ArrowLeft');
+  await expect(page.locator('#railTabs [data-rail="contesto"]')).toHaveAttribute('aria-selected', 'true');
+  const tornata = await misura();
+  expect(tornata.sceltaInVista).toBe(true);
+  expect(tornata.scrollLeft).toBe(0);
+  /*
+   * ⭐ E quando la scheda la sceglie il CODICE, non la tastiera — com'è quando si apre un agente delegato dalla chat
+   *   (`$('#railTabs [data-rail="agenti"]')?.click()` in app.js). Con la tastiera è il browser a portare in vista la scheda
+   *   che prende il fuoco, quindi quel percorso da solo non vedeva `tieniInVistaScheda` (la mutazione restava verde, 26/09):
+   *   un `click()` dal codice non sposta il fuoco, e senza la funzione «Processi» resterebbe tagliata dal bordo.
+   */
+  await page.evaluate(() => document.querySelector('#railTabs [data-rail="processi"]').click());
+  await expect(page.locator('#railTabs [data-rail="processi"]')).toHaveAttribute('aria-selected', 'true');
+  const dalCodice = await misura();
+  expect(dalCodice.sceltaInVista, `la scheda scelta dal codice è tagliata dal bordo (scrollLeft ${dalCodice.scrollLeft})`).toBe(true);
+});
+
+/*
+ * ⭐ 26/09/2026 (owner: «sì», curarla) — la freccia gira fra le schede della STESSA fila: dall'ultima a destra si torna alla
+ * prima, dalla prima a sinistra si va all'ultima, e il fuoco non lascia mai la fila. Prima `.inspector-tabs button` prendeva
+ * anche le tre schede nascoste del pannello vecchio: il giro atterrava su una di quelle e nella colonna non restava nessuna
+ * scheda scelta.
+ */
+test('BADGE-FRECCE-GIRO — la freccia gira fra le cinque schede della colonna, nei due versi', async ({ page }) => {
+  await scena(page, { tema: 'dark', larghezza: 1440, altezza: 900 });
+  const scelta = () => page.locator('#railTabs [aria-selected="true"]').getAttribute('data-rail');
+  const fuocoNellaFila = () => page.evaluate(() => Boolean(document.activeElement?.closest('#railTabs')));
+  await page.locator('#railTabs [data-rail="processi"]').click();
+  await page.locator('#railTabs [data-rail="processi"]').focus();
+  await page.keyboard.press('ArrowRight');
+  expect(await scelta(), 'dall’ultima, a destra si torna alla prima').toBe('contesto');
+  expect(await fuocoNellaFila(), 'il fuoco resta nella fila').toBe(true);
+  await page.keyboard.press('ArrowLeft');
+  expect(await scelta(), 'dalla prima, a sinistra si va all’ultima').toBe('processi');
+  expect(await fuocoNellaFila()).toBe(true);
+  await expect(page.locator('#railTabs [aria-selected="true"]'), 'una scheda sola è scelta nella colonna').toHaveCount(1);
+});

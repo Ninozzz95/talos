@@ -48,6 +48,7 @@ test.beforeAll(async () => {
   ].map(JSON.stringify).join('\n') + '\n');
   await writeFile(join(directory, 'context-disabled-proof.jsonl'), (await readFile(join(directory, `${sessionId}.jsonl`), 'utf8')).replaceAll(sessionId, 'context-disabled-proof'));
   child = spawn(process.execPath, ['server.mjs'], { cwd: harness, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], env: {
+      TALOS_HARNESS_UI_KEYRING: 'memoria', TALOS_SCRATCH_DIR: (globalThis.process?.env?.TEMP || globalThis.process?.env?.TMP || '.') + '/talos-scratch-di-prova', // 24/09/2026: mai la radice vera %LOCALAPPDATA%TALOS, // 23/09/2026: custodia delle chiavi di prova, mai quella vera di Windows
     ...process.env, TALOS_HARNESS_UI_PORT: String(port), TALOS_HARNESS_UI_TOKEN: token,
     TALOS_HARNESS_UI_SESSIONS_DIR: directory, TALOS_HARNESS_UI_PROJECT_DIRS: workspace,
     TALOS_HARNESS_UI_PUBLIC_DIR: resolve(harness, 'frontend/dist'),
@@ -152,8 +153,15 @@ test('CTX-UI-DESKTOP-ROUNDTRIP pulsante, SQLite e replay della chat vera', async
   } finally { await store.close(); }
   await expect(page.locator('#conversation [data-context-chat-progress]')).toHaveCount(0);
   await expect(page.locator('#conversation [data-context-separator]')).toHaveCount(1);
-  await expect(page.locator('[data-runtime-usage]'), 'CTX-UI-USAGE-CLOSED-RELOAD').toContainText('2,0k');
-  await expect(page.locator('[data-runtime-cache]')).toContainText('cache 40%');
+  const verificaConsumoNelContesto = async () => {
+    await page.locator('#railTabs [data-rail="contesto"]').click();
+    const finestra = page.locator('#railContesto');
+    await expect(finestra).toBeVisible();
+    await expect(finestra.locator('.talos-kv__k').filter({ hasText: 'Conversazione' }).locator('..').locator('.talos-kv__v'), 'CTX-UI-USAGE-CLOSED-RELOAD').toContainText('2k');
+    await expect(finestra.locator('.talos-kv__k').filter({ hasText: 'Riusato dalla cache' }).locator('..').locator('.talos-kv__v')).toHaveText('non misurato');
+    await expect(finestra.locator('[data-c="TurnIndex"]')).not.toContainText('Nessun giro ancora');
+  };
+  await verificaConsumoNelContesto();
   for (const [width, height] of [[1920, 1080], [2560, 1440], [3840, 2160]]) {
     await page.setViewportSize({ width, height });
     await page.screenshot({ path: join(photos, `desktop-usage-${width}x${height}.png`) });
@@ -167,26 +175,19 @@ test('CTX-UI-DESKTOP-ROUNDTRIP pulsante, SQLite e replay della chat vera', async
   await page.reload(); await page.waitForFunction(() => window.__talosHarnessUiRuntime);
   await page.evaluate(({ sessionId, model }) => window.__talosHarnessUiRuntime.passaASessione(sessionId, 'fixture', 'Decisione sul database', model, { conclusa: true, modello: model }), { sessionId, model });
   await expect(page.locator('#conversation [data-context-separator]')).toHaveCount(1);
-  await expect(page.locator('[data-runtime-usage]')).toContainText('2,0k');
-  await expect(page.locator('[data-runtime-cache]')).toContainText('cache 40%');
+  await verificaConsumoNelContesto();
   await page.locator('#compactSessionBtn').click();
   await page.getByText('Da non dimenticare', { exact: true }).click();
   await expect(page.locator('[data-context-facts]')).toContainText('Il database deve restare locale.');
   expect(inference).toEqual([`${base}/api/v1/sessions/${sessionId}/context/jobs`]);
 });
 
-test('CTX-UI-DISABLED-OPEN opens Context Manager without a legacy compaction or inference', async ({ page, context }) => {
-  await context.addCookies([{ name: 'talos_token', value: token, url: base, httpOnly: true, sameSite: 'Strict' }]);
-  const mutations = [];
-  page.on('request', request => { if (/\/compact$|\/context\//.test(request.url()) && request.method() !== 'GET') mutations.push(request.url()); });
-  await page.goto(base); await page.waitForFunction(() => window.__talosHarnessUiRuntime);
-  await page.evaluate(model => window.__talosHarnessUiRuntime.passaASessione('context-disabled-proof', 'fixture', 'Contesto non ancora attivo', model, { conclusa: true, modello: model }), model);
-  await page.locator('#compactSessionBtn').click();
-  await expect(page.locator('#veloContesto')).toBeVisible();
-  await expect(page.locator('[data-context-status]')).toContainText('non è ancora attivo');
-  await expect(page.locator('[data-context-start]')).toBeDisabled();
-  await expect(page.locator('[data-context-auto]')).toBeDisabled();
-  await page.keyboard.press('Escape');
-  await expect(page.locator('#compactSessionBtn')).toBeFocused();
-  expect(mutations).toEqual([]);
-});
+/*
+ * ⛔ 24/09/2026 sera — «CTX-UI-DISABLED-FALLS-BACK» è stata TOLTA da qui. Provava che col trial spento il bottone
+ * «Context Manager» compattasse subito (F5 onda 2, `7a96744eb`): è il comportamento che l'owner ha bocciato la sera
+ * stessa («prima apriva una modale adesso fa compatta e basta»; «Apre sempre la finestra»). La prova di ciò che vale
+ * adesso — finestra sempre aperta, modo semplice, conferma, una POST legacy sola, zero mutazioni del trial — sta in
+ * `compattazione-legacy.spec.mjs` (`CTX-UI-WINDOW-ALWAYS-OPENS`), sul server della 4176, dove `GET /context` risponde
+ * davvero `CTX_NOT_ENABLED`. Questa spec avvia un suo server su una porta libera per accendere il trial, e dal 23/09 le
+ * prove girano solo sulla 4176.
+ */

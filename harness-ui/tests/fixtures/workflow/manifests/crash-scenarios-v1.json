@@ -1,0 +1,119 @@
+{
+  "kind": "workflow-crash-scenario-manifest",
+  "version": 1,
+  "source": "WORKFLOW-VERIFICATION-SPEC-v1-2026-09-20.md",
+  "scenarios": [
+    {
+      "name": "scheduled-before-start",
+      "trigger": {
+        "kind": "failpoint",
+        "name": "activity.schedule.after_persist"
+      },
+      "restartRequired": true
+    },
+    {
+      "name": "started-before-effect",
+      "trigger": {
+        "kind": "failpoint",
+        "name": "activity.start.after_persist"
+      },
+      "restartRequired": true
+    },
+    {
+      "name": "effect-before-receipt",
+      "trigger": {
+        "kind": "failpoint",
+        "name": "activity.execute.after_effect"
+      },
+      "restartRequired": true
+    },
+    {
+      "name": "result-rename-before-event",
+      "trigger": {
+        "kind": "failpoint",
+        "name": "store.result.after_rename"
+      },
+      "restartRequired": true
+    },
+    {
+      "name": "checkpoint-before-rename",
+      "trigger": {
+        "kind": "failpoint",
+        "name": "store.checkpoint.before_rename"
+      },
+      "restartRequired": true
+    },
+    {
+      "name": "baseline-after-synthetic-commit",
+      "trigger": {
+        "kind": "failpoint",
+        "name": "workspace.capture.after_synthetic_commit"
+      },
+      "restartRequired": true
+    },
+    {
+      "name": "writer-after-commit",
+      "trigger": {
+        "kind": "failpoint",
+        "name": "worktree.writer_commit.after_effect"
+      },
+      "restartRequired": true
+    },
+    {
+      "name": "merge-after-effect",
+      "trigger": {
+        "kind": "failpoint",
+        "name": "integration.merge.after_effect"
+      },
+      "restartRequired": true
+    },
+    {
+      "name": "human-after-request",
+      "trigger": {
+        "kind": "failpoint",
+        "name": "human.request.after_persist"
+      },
+      "restartRequired": true
+    },
+    {
+      "name": "patch-after-persist",
+      "trigger": {
+        "kind": "failpoint",
+        "name": "graph.patch.after_persist"
+      },
+      "restartRequired": true
+    },
+    {
+      "name": "pause-after-intent",
+      "trigger": {
+        "kind": "failpoint",
+        "name": "control.pause.after_persist"
+      },
+      "restartRequired": true
+    },
+    {
+      "name": "cancel-after-intent",
+      "trigger": {
+        "kind": "failpoint",
+        "name": "control.cancel.after_persist"
+      },
+      "restartRequired": true
+    },
+    {
+      "name": "cancel-during-effect",
+      "trigger": {
+        "kind": "controlled-adapter-gate",
+        "name": "effect-in-flight"
+      },
+      "restartRequired": false
+    },
+    {
+      "name": "store-owner-process-crash",
+      "trigger": {
+        "kind": "failpoint",
+        "name": "store.owner.after_record_persist"
+      },
+      "restartRequired": true
+    }
+  ]
+}

@@ -76,8 +76,10 @@ export const SELETTORE_SCELTA_PREDEFINITA = `[data-bivio="${SCELTA_PREDEFINITA_B
  *   che arrivi qui «per conseguenza» viene respinta invece di partire in silenzio.
  */
 export const ORIGINE_SCELTA_ESPLICITA = 'scelta-esplicita';
-export function reindirizzoConsentito(origine) {
-  return origine === ORIGINE_SCELTA_ESPLICITA;
+export const ORIGINE_COMPOSER_DURANTE_ASK = 'composer-durante-ask';
+export function reindirizzoConsentito(origine, { askPendente = false } = {}) {
+  return origine === ORIGINE_SCELTA_ESPLICITA
+    || (origine === ORIGINE_COMPOSER_DURANTE_ASK && askPendente === true);
 }
 
 /*

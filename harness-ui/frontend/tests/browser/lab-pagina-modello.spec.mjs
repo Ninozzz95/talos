@@ -240,9 +240,9 @@ test('RIPRESA-HF-DOWNLOAD-ROUTE — il montaggio reale della app passa il downlo
   await expect(page.locator('#paginaModelloFileChoices')).toHaveCount(1);
 });
 
-async function preparaRipresaHf(page, { download, appearance = {}, dallaLista = false } = {}) {
+async function preparaRipresaHf(page, { download, appearance = {}, dallaLista = false, repo = REPO_DATI } = {}) {
   const busta = data => ({ json: { ok: true, data, meta: { schema: 'talos.harness-ui.api.v1' } } });
-  await page.route('**/api/v1/huggingface/repo?**', route => route.fulfill(busta(REPO_DATI)));
+  await page.route('**/api/v1/huggingface/repo?**', route => route.fulfill(busta(repo)));
   await page.route('**/api/v1/model-lab/capacity**', route => route.fulfill(busta(CAPACITA)));
   await page.route('**/api/v1/local-models/fit-estimate?**', route => route.fulfill(busta(STIMA)));
   if (download) await page.route('**/api/v1/huggingface/download', download);
@@ -288,20 +288,49 @@ for (const width of [1440, 3840]) {
     await page.locator('#paginaModello [role="tab"]').nth(0).click();
     const prosa = page.locator('#paginaModello .readme-body');
     await expect(prosa).toBeVisible();
-    const m = await prosa.evaluate(n => { const r = n.getBoundingClientRect(), p = n.closest('.readme-surface').getBoundingClientRect(); return { width: r.width, offset: Math.abs(r.left + r.width / 2 - p.left - p.width / 2) }; });
-    expect(m.width).toBeGreaterThan(850); expect(m.width).toBeLessThanOrEqual(width >= 1920 ? 1031 : 961); expect(m.offset).toBeLessThan(2);
+    /* ⛔ 26/09/2026 — owner 25/09 sera: la pagina è larga quanto la colonna delle Impostazioni («la stessa larghezza della
+       pagina precedente»), non più quanto tutto il centro. La regola del mockup che resta è la sua: la prosa riempie la carta
+       fino al suo massimo (960, 1030 da 1920) e sta al centro. A 1440 la colonna è più stretta del massimo, quindi la prosa
+       prende tutta la carta (prima la prova pretendeva più di 850, che era la larghezza del centro intero). */
+    const m = await prosa.evaluate(n => { const r = n.getBoundingClientRect(), s = n.closest('.readme-surface'), p = s.getBoundingClientRect(); return { width: r.width, carta: s.clientWidth, offset: Math.abs(r.left + r.width / 2 - p.left - p.width / 2) }; });
+    const massimo = width >= 1920 ? 1031 : 961;
+    expect(m.width).toBeLessThanOrEqual(massimo); expect(m.width).toBeGreaterThanOrEqual(Math.min(m.carta, massimo - 1) - 1); expect(m.offset).toBeLessThan(2);
     const layout = await page.locator('#paginaModello .model-page').evaluate(n => {
       const tab = n.querySelector('[role="tab"][aria-selected="true"]');
       const header = n.querySelector('.readme-chrome');
-      return { width: n.getBoundingClientRect().width, underline: getComputedStyle(tab).borderBottomWidth,
+      return { width: n.getBoundingClientRect().width, pagina: n.parentElement.getBoundingClientRect().width, underline: getComputedStyle(tab).borderBottomWidth,
         radius: getComputedStyle(tab).borderRadius, headerGap: header.children[1].getBoundingClientRect().left - header.children[0].getBoundingClientRect().right };
     });
-    expect.soft(layout.width).toBeLessThanOrEqual(1261);
+    /* ⛔ Owner 27/09 («la larghezza non è full width», foto a ~2000 px): il contenitore riempie la colonna delle Impostazioni, non si
+       ferma più a 1260px — il massimo resta solo alla prosa (sopra). */
+    expect.soft(Math.abs(layout.width - layout.pagina)).toBeLessThanOrEqual(1);
     expect.soft(layout.underline).toBe('2px');
     expect.soft(layout.radius).toBe('0px');
     expect.soft(layout.headerGap).toBeLessThanOrEqual(16);
   });
 }
+/* 27/09/2026 — owner «errore chiaro ora» (sessione ec3bc6c0, Spark-X2.5-4B `spark2_5` su llama.cpp b10517): la scelta del file lo
+   dice PRIMA di scaricare, solo con un «no» misurato dal server (`motoreConosce: false`); «sì» e «non lo so» tacciono. */
+test('RIPRESA-HF-MOTORE — il motore che non sa leggere l architettura lo dice nella scelta del file, prima di scaricare', async ({ page }) => {
+  await preparaRipresaHf(page, { repo: { ...REPO_DATI, architettura: 'spark2_5', motoreConosce: false } });
+  const avviso = page.locator('#paginaModello [data-modello-scelta-file] [data-modello-motore="sconosciuto"]');
+  await expect(avviso).toHaveText('Il motore installato non sa leggere l’architettura «spark2_5» di questo modello: si può scaricare, ma non si avvierà finché il motore non viene aggiornato.');
+  await expect(avviso).toHaveAttribute('role', 'note');
+  // lo stesso respiro sopra e sotto (foto del 4174, 27/09: 12 px sopra, 4 sotto)
+  const respiro = await avviso.evaluate((n) => {
+    const b = n.getBoundingClientRect();
+    return { sopra: Math.round(b.top - n.previousElementSibling.getBoundingClientRect().bottom), sotto: Math.round(n.nextElementSibling.getBoundingClientRect().top - b.bottom) };
+  });
+  expect(Math.abs(respiro.sopra - respiro.sotto), `sopra ${respiro.sopra}, sotto ${respiro.sotto}`).toBeLessThanOrEqual(1);
+  await page.screenshot({ path: 'artifacts/ripresa-hf-motore.png' });
+});
+for (const motoreConosce of [true, null]) {
+  test(`RIPRESA-HF-MOTORE-ZITTO (${motoreConosce}) — AL CONTRARIO: con «sì» o «non lo so» nessun avviso`, async ({ page }) => {
+    await preparaRipresaHf(page, { repo: { ...REPO_DATI, architettura: 'qwen35', motoreConosce } });
+    await expect(page.locator('#paginaModello [data-modello-scelta-file] [data-modello-motore]')).toHaveCount(0);
+  });
+}
+
 test('RIPRESA-LAB-SENZA-RIEPILOGHI — i quattro riepiloghi rimossi dall’owner sono assenti', async ({ page }) => {
   await preparaRipresaHf(page, { dallaLista: true });
   await expect(page.locator('#modelLabCard .model-lab-ledger')).toHaveCount(0);
@@ -469,7 +498,10 @@ for (const colorMode of ['dark', 'light']) {
     const misure = await pagina.evaluate(el => {
       const glifo = el.querySelector('.model-glyph');
       const lista = el.querySelector('[data-hf-file-choices]');
-      return { zoom: el.currentCSSZoom, width: el.clientWidth, scrollWidth: el.scrollWidth,
+      return { zoom: el.currentCSSZoom, width: el.clientWidth, scrollWidth: el.scrollWidth, larghezzaPagina: parseFloat(getComputedStyle(el).width),
+        colonneStriscia: getComputedStyle(el.querySelector('.model-context-strip')).gridTemplateColumns.split(' ').length,
+        spaziLinguette: ((l) => l.slice(1).map((r, i) => r.left - l[i].right))([...el.querySelectorAll('.model-page-tabs [role="tab"]')].map(n => n.getBoundingClientRect())),
+        identita: getComputedStyle(el.querySelector('.toolbar-identity')).display,
         glyphWidth: getComputedStyle(glifo).width, glyphHeight: getComputedStyle(glifo).height,
         listaWidth: lista.clientWidth, listaScroll: lista.scrollWidth,
         radios: [...lista.querySelectorAll('[role="radio"]')].map(n => ({ width: n.clientWidth, scroll: n.scrollWidth })) };
@@ -480,8 +512,18 @@ for (const colorMode of ['dark', 'light']) {
     await expect(page.locator('#paginaModelloScarica')).toBeInViewport();
     await page.screenshot({ path: info.outputPath('selettore.png'), fullPage: true });
     expect.soft(Number(misure.zoom)).toBeCloseTo(1.3, 2);
-    expect.soft(misure.glyphWidth).toBe('70px');
-    expect.soft(misure.glyphHeight).toBe('70px');
+    /* ⛔ 26/09/2026 — la pagina sta nella colonna delle Impostazioni (owner 25/09 sera) e porta le larghezze strette del
+       prototipo come container query (`pagina-modello.css`, in fondo): fino a 716 px di pagina il glifo è 54 px
+       (`prototypes/calm-lab/src/styles.css:158`), sopra resta 70. Prima la prova pretendeva 70 anche qui perché la pagina
+       non aveva regole strette. */
+    expect(misure.larghezzaPagina, 'premessa: nella colonna stretta la pagina scende sotto le soglie del prototipo').toBeLessThanOrEqual(716);
+    expect.soft(misure.colonneStriscia, 'fino a 730 px la striscia va su due colonne (styles.css:157)').toBe(2);
+    expect.soft(misure.identita, 'fino a 930 px il nome nella barra si toglie: c’è già nel titolo (styles.css:156)').toBe('none');
+    /* Fino a 526 px le linguette si distribuiscono sulla riga (styles.css:159): nella foto a 1024 del 26/09 si toccavano. */
+    for (const spazio of misure.spaziLinguette) expect.soft(spazio, 'le linguette non si toccano').toBeGreaterThanOrEqual(8);
+    const glifoAtteso = misure.larghezzaPagina <= 716 ? 54 : 70;
+    expect.soft(parseFloat(misure.glyphWidth)).toBeCloseTo(glifoAtteso, 0);
+    expect.soft(parseFloat(misure.glyphHeight)).toBeCloseTo(glifoAtteso, 0);
     expect.soft(misure.scrollWidth).toBeLessThanOrEqual(misure.width + 1);
     expect.soft(misure.listaScroll).toBeLessThanOrEqual(misure.listaWidth + 1);
     for (const radio of misure.radios) expect.soft(radio.scroll).toBeLessThanOrEqual(radio.width + 1);

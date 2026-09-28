@@ -140,6 +140,32 @@ export function creaToast(dati) {
   return { scheda, chiudi, azione, testo, tono, durata: t.durata };
 }
 
+/*
+ * ⛔ 24/09/2026 — QUI C'ERANO `collocaPilaToast` e `COLLOCAZIONE_TOAST`, USCITE CON LA DECISIONE DELL'OWNER
+ *   del 23/09 notte (commit `f5990ac42`): «i toast devono stare sopra la sidebar destra, sempre in basso,
+ *   non tra la sidebar e il composer». Calcolavano la collocazione della sera prima — in fondo ACCANTO al
+ *   composer, o sopra di lui nella metà destra — e da quel commit `app.js` non le chiama più: la
+ *   collocazione la misura `misuraPilaToast` (legacy/app.js) sul rettangolo della barra destra, e qui resta
+ *   solo chi la SCRIVE sulla regione. In questo progetto una funzione senza chiamante è un difetto: esce, con
+ *   le sue prove (`tests/unit/toast-collocazione.test.mjs`). La loro storia sta nel `git log` di questo file.
+ */
+
+/** Scrive la collocazione sulla REGIONE (mai su `:root`: una scrittura lì invalida lo stile di tutto il documento). */
+export function applicaCollocazioneToast(regione, collocazione) {
+  if (!regione) return;
+  const proprieta = { left: '--toast-left', right: '--toast-right', bottom: '--toast-bottom', width: '--toast-width', maxHeight: '--toast-max-h' };
+  if (!collocazione || collocazione.modo === 'fondo') {
+    delete regione.dataset.posizione;
+    for (const nome of Object.values(proprieta)) regione.style.removeProperty(nome);
+    return;
+  }
+  regione.dataset.posizione = collocazione.modo;
+  for (const [chiave, nome] of Object.entries(proprieta)) {
+    if (Number.isFinite(collocazione[chiave])) regione.style.setProperty(nome, `${collocazione[chiave]}px`);
+    else regione.style.removeProperty(nome);
+  }
+}
+
 /**
  * La pila: appende alla regione del mockup, mostra la regione, tiene al più
  * tre schede vive, chiude col pulsante, ferma il timer sotto il mouse o col
@@ -167,9 +193,18 @@ export function creaPilaToast(regione, { animaUscita = (el, fine) => fine(), ent
   });
 
   return function mostra(titolo, messaggio = '', opzioni = {}) {
+    /* ⛔ 26/09 — trovato guardando la foto della prova dell'ombra: TRE «Collegato di nuovo» identici in pila per tre
+       riprese di fila, che non dicono niente più di uno. Letto nel codice di Hermes (`apps/desktop/src/store/
+       notifications.ts:243-246`, clone 65ad529): «A caller that can fire again for the same cause names its toast, so the
+       repeat replaces it». ⇒ Chi può ripetersi per la stessa causa passa una `chiave`, e il toast nuovo prende il posto
+       di quello vivo con la stessa chiave. Senza chiave nulla cambia: due avvisi uguali con un «Annulla» ciascuno
+       riguardano due cose diverse, e si tengono tutti e due. */
+    const chiave = typeof opzioni.chiave === 'string' && opzioni.chiave ? opzioni.chiave : null;
+    if (chiave) for (const vecchio of vivi()) if (vecchio.dataset.toastChiave === chiave) rimuovi(vecchio);
     for (const vecchio of vivi().slice(0, Math.max(0, vivi().length - (MASSIMO_IN_PILA - 1)))) rimuovi(vecchio);
     progressivo += 1;
     const { scheda, azione, durata } = creaToast({ id: progressivo, titolo, messaggio, tono: opzioni.tono, azione: opzioni.azione });
+    if (chiave) scheda.dataset.toastChiave = chiave;
     if (azione && typeof opzioni.azione?.esegui === 'function') {
       azione.addEventListener('click', () => { opzioni.azione.esegui(); rimuovi(scheda); });
     }

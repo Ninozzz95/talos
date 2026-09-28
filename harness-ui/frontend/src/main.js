@@ -18,8 +18,12 @@
  * mockup; il ponte si accorcia di una riga a ogni estrazione.
  */
 import { montaPonteLegacy } from './bridge/legacy-dom.js';
+import { montaBarraFinestra } from './components/barra-finestra.js';
 
 montaPonteLegacy(document);
+/* F7-1 (27/09/2026): la barra del titolo propria, solo nella finestra dell'app. PRIMA del monolite: c'è dal primo disegno
+   (sotto il velo) e i comandi di Windows prendono subito il colore del tema; i cambi di tema li segue da sola. */
+montaBarraFinestra();
 await import('./legacy/app.js');
 
 /*

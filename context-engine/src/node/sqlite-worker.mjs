@@ -382,6 +382,17 @@ const methods = {
     return parseRows('SELECT event_json FROM context_outbox WHERE session_id=? AND acknowledged=0 ORDER BY ordinal LIMIT ?', 'event_json', sessionId, limit);
   },
   ackContextEvent({ sessionId, eventId }) { id(sessionId, 'sessionId'); id(eventId); run('UPDATE context_outbox SET acknowledged=1 WHERE session_id=? AND id=?', sessionId, eventId); },
+  /*
+   * 25/09/2026 — ticket della CLI «riassunto rifiutato richiesto a ogni passo», decisione owner «pausa che cresce + segnale»:
+   *   l'AVVISO che la compattazione automatica è in pausa dopo un rifiuto. Id deterministico (uno per lavoro fallito, scelto
+   *   dal motore) e `ON CONFLICT DO NOTHING`: ogni passo del giro che lo ripete non ne aggiunge un secondo.
+   */
+  recordContextNotice({ sessionId, event }) {
+    id(sessionId, 'sessionId'); json(event);
+    if (!object(event) || event.sessionId !== sessionId) fail('A context notice belongs to its own session');
+    id(event.id);
+    run('INSERT INTO context_outbox(session_id,id,event_json) VALUES(?,?,?) ON CONFLICT(session_id,id) DO NOTHING', sessionId, event.id, JSON.stringify(event));
+  },
   recordUsage({ sessionId, jobId = null, operationId, usage }) {
     id(operationId); json(usage);
     if (!object(usage)) fail('Usage must be a JSON object');

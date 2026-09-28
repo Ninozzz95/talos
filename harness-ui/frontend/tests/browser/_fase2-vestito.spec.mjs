@@ -50,20 +50,13 @@ const MOCKUP = {
   riga: { display: 'flex', gap: '24px', paddingTop: '21px', paddingBottom: '21px', borderTopWidth: '1px' },
   etichetta: { fontSize: '14px', fontWeight: '550', lineHeight: '21px' },
   aiuto: { fontSize: '12px', lineHeight: '20.4px', marginTop: '6px' },
-  /*
-   * ⛔ LA CARTA DI SEZIONE NON PRENDE LE MISURE DEL MOCKUP, E QUESTA SPEC LO DICE INVECE DI
-   *    FARLO SEMBRARE UNA DIMENTICANZA. Il mockup di carte di SEZIONE non ne ha (le sue
-   *    `.settings-section` sono piatte: `padding:2px 0 0`), la sua unica carta è quella dei
-   *    CONTENUTI (`.provider-card`: `padding:22px; raggio:12px`), e i due numeri del brief
-   *    (`20px 24px`, raggio 14) sono i valori che l'app ha già — `--ui-radius-surface` di
-   *    `foundations.css:7`. Portarli a 22/12 fa diventare rosse due prove già esistenti che
-   *    questa corsia non può toccare (`sezioni-stile.spec.mjs:322` e `:505`), quindi la carta
-   *    resta com'è e la scelta (com'è · 22/12 · piatta) è dell'OWNER. Qui si PINNA lo stato
-   *    attuale, così il giorno in cui quella scelta arriva questa riga diventa rossa e si aggiorna
-   *    con essa.
-   */
+  /* Le altre otto sezioni restano card 20/24/14. La decisione Owner del 19/09
+   * ha tolto solo la card esterna del Laboratorio: `banda-laboratorio.css`
+   * mette la banda interna 20/22/12, evitando due cornici annidate. */
   cartaApp: { paddingTop: '20px', paddingBottom: '20px', paddingLeft: '24px', borderTopWidth: '1px', borderRadius: '14px' },
   gruppoPiatto: { paddingTop: '2px', paddingBottom: '0px', borderTopWidth: '0px', borderRadius: '0px' },
+  laboratorioSenzaCornice: { paddingTop: '0px', paddingBottom: '0px', paddingLeft: '0px', borderTopWidth: '0px', borderRadius: '0px' },
+  bandaLaboratorio: { paddingTop: '20px', paddingBottom: '20px', paddingLeft: '22px', borderTopWidth: '1px', borderRadius: '12px' },
   /*
    * La sezione ANNIDATA dentro una carta: piatta anche lei, ma senza nemmeno i 2px in alto —
    * `sezioni-stile.css` la porta a `padding:0` perché è già dentro il respiro della carta che la
@@ -79,8 +72,9 @@ const MOCKUP = {
 
 /**
  * LE DIECI SEZIONI, con la FORMA che ognuna ha davvero (misurata il 18/09/2026, non supposta).
- * `forma`: le cinque `.talos-settings__section` dell'Aspetto sono i GRUPPI PIATTI del mockup
- * (`padding:2px 0 0`), le altre nove sono CARTE (padding 22 / raggio 12).
+ * `forma`: i cinque gruppi dell'Aspetto sono piatti; otto sezioni sono
+ * card. Il Laboratorio ha contenitore esterno piatto e banda interna bordata
+ * per la decisione Owner successiva del 19/09.
  * I numeri sono i minimi osservati; `kv: 0` significa «questa sezione non ha righe chiave/valore»,
  * ed è un'informazione, non un'assenza di controllo.
  */
@@ -90,8 +84,10 @@ const SEZIONI = [
   { id: 'tools', carte: { min: 2, forma: 'carta' }, nidificate: 1, righe: { controllate: false }, kv: { min: 3 } },
   { id: 'memoria', carte: { min: 1, forma: 'carta' }, nidificate: 1, righe: { controllate: false }, kv: { min: 0 } },
   { id: 'privacy', carte: { min: 2, forma: 'carta' }, righe: { controllate: false }, kv: { min: 3 } },
-  { id: 'models', carte: { min: 1, forma: 'carta' }, righe: { controllate: false }, kv: { min: 20 } },
-  { id: 'providers', carte: { min: 1, forma: 'carta' }, righe: { controllate: false }, kv: { min: 10 } },
+  { id: 'models', carte: { min: 1, forma: 'laboratorio' }, righe: { controllate: false }, kv: { min: 20 } },
+  /* ⛔ 23/09/2026, decisione owner: «Provider e accessi» è tolta del tutto — qui stava la sua riga
+     (`kv: { min: 10 }`, i fatti di `#settingsProvidersList`). Le righe chiave/valore dei fornitori
+     sono ora solo nelle card della scheda «Provider» del laboratorio, misurate da `lab-provider.spec.mjs`. */
   { id: 'costi', carte: { min: 1, forma: 'carta' }, righe: { controllate: false }, kv: { min: 0 } },
   { id: 'workspace', carte: { min: 1, forma: 'carta' }, righe: { controllate: false }, kv: { min: 3 } },
   { id: 'account', carte: { min: 1, forma: 'carta' }, righe: { controllate: false }, kv: { min: 0 } },
@@ -127,7 +123,8 @@ async function avvia(page, tentate, colorMode) {
   await expect(page.locator('#schermoImpostazioni')).toBeVisible({ timeout: 10_000 });
   await expect(page.locator('#schermoImpostazioni[data-settings-ui="v3"]')).toHaveCount(1);
   const pannelli = await page.locator('[id^="setting-panel-"]').count();
-  expect(pannelli, 'i pannelli delle sezioni devono essere dieci: se sono meno, la misura sarebbe su una schermata incompleta').toBe(10);
+  /* 23/09/2026, decisione owner: da dieci a NOVE («Provider e accessi» tolta del tutto). */
+  expect(pannelli, 'i pannelli delle sezioni devono essere nove: se sono meno, la misura sarebbe su una schermata incompleta').toBe(9);
 }
 
 /** Apre una sezione e pretende che il suo pannello sia VISIBILE. */
@@ -171,7 +168,7 @@ function scostamenti(misurato, atteso) {
 }
 
 for (const tema of ['dark', 'light']) {
-  test(`FASE2-VESTITO — le dieci sezioni hanno il vestito del mockup (tema ${tema})`, async ({ page }) => {
+  test(`FASE2-VESTITO — le nove sezioni hanno il vestito del mockup (tema ${tema})`, async ({ page }) => {
     const tentate = [];
     await avvia(page, tentate, tema);
 
@@ -196,6 +193,7 @@ for (const tema of ['dark', 'light']) {
     let sezioniConKv = 0;
     let sezioniConCarta = 0;
     let sezioniPiatte = 0;
+    let laboratoriSenzaCornice = 0;
     let righeMisurate = 0;
     let kvMisurati = 0;
 
@@ -204,7 +202,8 @@ for (const tema of ['dark', 'light']) {
 
       /* ── LA CARTA (o il gruppo piatto) ──────────────────────────────────────────────────── */
       const piatto = sezione.carte.forma === 'piatto';
-      const attesoCarta = piatto ? MOCKUP.gruppoPiatto : MOCKUP.cartaApp;
+      const laboratorio = sezione.carte.forma === 'laboratorio';
+      const attesoCarta = laboratorio ? MOCKUP.laboratorioSenzaCornice : piatto ? MOCKUP.gruppoPiatto : MOCKUP.cartaApp;
       /*
        * ⛔ LE DUE CARTE CHE NON SONO CARTE, E PERCHÉ NON È UNA SCAPPATOIA.
        * In «Memoria» e in «Strumenti» c'è una sezione DENTRO una sezione — `#contestoVoci` e il
@@ -214,11 +213,13 @@ for (const tema of ['dark', 'light']) {
        * carta e le si controlla CONTRO la forma piatta del mockup, così restano un'affermazione
        * e non un buco.
        */
-      const sel = piatto ? '.talos-settings__section' : '.talos-settings__section:not(#contestoVoci):not([data-search-details])';
+      const sel = laboratorio ? '#modelLabCard.talos-settings__section' : piatto ? '.talos-settings__section' : '.talos-settings__section:not(#contestoVoci):not([data-search-details])';
       const carte = await stili(page, sezione.id, sel, Object.keys(attesoCarta));
       expect(carte.mancante, `${sezione.id}: la carta di sezione non esiste`).toBe(false);
       expect(carte.n, `${sezione.id}: carte di sezione`).toBeGreaterThanOrEqual(sezione.carte.min);
-      if (piatto) sezioniPiatte += 1; else sezioniConCarta += 1;
+      if (piatto) sezioniPiatte += 1;
+      else if (laboratorio) laboratoriSenzaCornice += 1;
+      else sezioniConCarta += 1;
       /*
        * ⛔ TUTTE le carte della sezione, non solo la prima: una carta sola giusta e tre sbagliate
        * è il modo in cui questo vestito si romperebbe senza che nessuno se ne accorga.
@@ -228,6 +229,12 @@ for (const tema of ['dark', 'light']) {
       carte.misure.forEach((m, i) => {
         expect(scostamenti(m, attesoCarta), `${sezione.id}: carta ${i + 1} di ${carte.n}`).toEqual({});
       });
+      if (laboratorio) {
+        await expect(page.locator('#setting-panel-models #modelLabCard .talos-lab__banda')).toBeVisible();
+        const banda = await stili(page, sezione.id, '#modelLabCard .talos-lab__banda', Object.keys(MOCKUP.bandaLaboratorio));
+        expect(banda.n, 'Laboratorio: una banda interna reale, non un pannello vuoto').toBe(1);
+        expect(scostamenti(banda.misure[0], MOCKUP.bandaLaboratorio), 'Laboratorio: la banda è la card interna').toEqual({});
+      }
       if (!piatto) {
         /*
          * ⛔ QUESTA RIGA BALLAAVA, e la causa è misurata: in «Strumenti» la sezione annidata
@@ -324,9 +331,12 @@ for (const tema of ['dark', 'light']) {
      * Un ciclo che non entra mai nel ramo giusto passa SEMPRE, e somiglia a un verde.
      */
     expect(sezioniConRighe, 'sezioni con la riga controllata').toBe(2); // Aspetto, Chat
-    expect(sezioniConKv, 'sezioni con le chiave/valore controllate').toBe(6); // Chat, Strumenti, Privacy, Laboratorio, Provider, File
-    expect(sezioniConCarta, 'sezioni con la carta controllata').toBe(9);
+    /* 23/09/2026, decisione owner: «Provider e accessi» tolta del tutto — una sezione con carta e
+       chiave/valore in meno (6 → 5, 8 → 7). */
+    expect(sezioniConKv, 'sezioni con le chiave/valore controllate').toBe(5); // Chat, Strumenti, Privacy, Laboratorio, File
+    expect(sezioniConCarta, 'sezioni con la carta controllata').toBe(7);
     expect(sezioniPiatte, 'sezioni coi gruppi piatti (Aspetto)').toBe(1);
+    expect(laboratoriSenzaCornice, 'Laboratorio senza card esterna, con banda interna misurata').toBe(1);
     expect(righeMisurate, 'righe di preferenza misurate in tutto').toBeGreaterThanOrEqual(28);
     expect(kvMisurati, 'righe chiave/valore misurate in tutto').toBeGreaterThanOrEqual(40);
 

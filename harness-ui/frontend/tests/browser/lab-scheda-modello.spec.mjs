@@ -1149,21 +1149,102 @@ test('SCHEDA-08 — le foto: i due temi, le due larghezze, e zero errori in cons
  * Questa prova tiene oneste le tre cose che il componente dichiara di non avere e che mette
  * chi lo monta: il CONTENITORE che scorre, il padding, e la rotta che lo riapre.
  */
-test('SCHEDA-09 — il montaggio: la pagina si apre dalla ROTTA dentro un contenitore che scorre', async ({ page }) => {
+/*
+ * ⛔ 26/09/2026 — IL CONTENITORE È CAMBIATO PER ORDINE DELL'OWNER (25/09 sera, con la foto del 4174: «la pagina del modello
+ *   abbia la stessa larghezza della pagina precedente e la sidebar delle impostazioni visibile come le altre pagine»).
+ *   Prima la pagina copriva tutto `#centro` e scorreva da sola col suo padding, e questa prova misurava quello. Ora sta nella
+ *   colonna delle Impostazioni al posto del Laboratorio: le cose che il componente non porta le danno la colonna (padding)
+ *   e la pagina delle Impostazioni (lo scorrimento). La prova misura QUESTO contratto.
+ */
+test('SCHEDA-09 — il montaggio: la pagina si apre dalla ROTTA nella colonna delle Impostazioni, con la barra delle sezioni accanto', async ({ page }) => {
   await page.route('**/api/v1/local-models**', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, data: { items: [] }, meta: {} }) }));
   await page.goto('/#/impostazioni/modelli/scheda/prova-1/card');
   const pagina = page.locator('#paginaModello');
   await expect(pagina, 'la rotta nell’indirizzo apre la pagina da sola').toBeVisible();
 
-  /* ⛔ Le tre cose che il componente NON porta e che chi monta deve dare. Misurate, non sperate. */
-  const misure = await pagina.evaluate((n) => { const s = getComputedStyle(n); return { overflow: s.overflowY, paddingX: s.paddingLeft, paddingY: s.paddingTop, z: Number(s.zIndex) }; });
-  expect(misure.overflow, 'la pagina scorre: senza, le ultime righe escono dal bordo').toBe('auto');
-  expect(parseFloat(misure.paddingX), 'e ha il padding che il componente non porta').toBeGreaterThan(0);
-  expect(parseFloat(misure.paddingY)).toBeGreaterThan(0);
+  const misure = await pagina.evaluate((n) => {
+    const colonna = n.parentElement;
+    const r = (el) => el.getBoundingClientRect();
+    const cs = getComputedStyle(colonna);
+    const interno = { sinistra: r(colonna).left + parseFloat(cs.paddingLeft) + parseFloat(cs.borderLeftWidth), larghezza: colonna.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight) };
+    const voce = document.querySelector('#setting-tab-models');
+    const scorritore = document.querySelector('#schermoImpostazioni .talos-page');
+    const visibile = (el) => Boolean(el) && r(el).width > 0 && getComputedStyle(el).visibility !== 'hidden';
+    return {
+      colonna: colonna.matches('#schermoImpostazioni .settings-content'),
+      sinistra: r(n).left - interno.sinistra,
+      larghezza: r(n).width - interno.larghezza,
+      voceVisibile: visibile(voce), voceScelta: voce?.getAttribute('aria-selected'),
+      barraASinistra: visibile(voce) && r(voce).right <= r(n).left,
+      briciola: visibile(colonna.querySelector('.settings-breadcrumb')),
+      laboratorio: visibile(document.querySelector('#modelLabCard')),
+      scorreLaPagina: getComputedStyle(scorritore).overflowY, scorreDaSola: getComputedStyle(n).overflowY,
+    };
+  });
+  expect(misure.colonna, 'la pagina sta nella colonna delle Impostazioni').toBe(true);
+  expect(Math.abs(misure.sinistra), 'parte dove parte la colonna').toBeLessThanOrEqual(1);
+  expect(Math.abs(misure.larghezza), 'ed è larga quanto la colonna: la larghezza della pagina precedente').toBeLessThanOrEqual(1);
+  expect(misure.voceVisibile, 'la barra delle sezioni resta visibile').toBe(true);
+  expect(misure.voceScelta, 'e accesa su «Laboratorio modelli»').toBe('true');
+  expect(misure.barraASinistra, 'la barra sta accanto, non sotto la pagina').toBe(true);
+  expect(misure.briciola, 'la briciola resta').toBe(true);
+  expect(misure.laboratorio, 'il laboratorio lascia il posto alla pagina').toBe(false);
+  expect(misure.scorreLaPagina, 'scorre la pagina delle Impostazioni').toBe('auto');
+  expect(misure.scorreDaSola, 'non un secondo scorritore dentro la colonna').toBe('visible');
+
+  /* Owner 27/09 («la larghezza non è full width», foto del 4174 a ~2000 px): anche su uno schermo largo il contenitore interno
+     riempie la colonna — prima si fermava a 1260px, centrato, e la pagina sembrava una colonna stretta in mezzo al vuoto. */
+  for (const larghezza of [2000, 1440]) {
+    await page.setViewportSize({ width: larghezza, height: 1000 });
+    const dentro = await pagina.evaluate((n) => {
+      const m = n.querySelector(':scope > .model-page');
+      const a = n.getBoundingClientRect(); const b = m?.getBoundingClientRect();
+      return b ? { dl: b.left - a.left, dw: b.width - a.width, w: b.width } : null;
+    });
+    expect(dentro, 'il contenitore del mockup c’è').not.toBeNull();
+    expect(Math.abs(dentro.dl), `${larghezza}: parte dal bordo della colonna`).toBeLessThanOrEqual(1);
+    expect(Math.abs(dentro.dw), `${larghezza}: larga quanto la colonna (${dentro.w}px)`).toBeLessThanOrEqual(1);
+  }
+  await page.screenshot({ path: 'artifacts/scheda09-pagina-modello-1440.png' });
 
   /* «Tutti i modelli» è la via d'uscita: il fuoco non resta in una pagina che non c'è più. */
   await expect(pagina.getByRole('button', { name: /tutti i modelli/i })).toBeVisible();
   await pagina.getByRole('button', { name: /tutti i modelli/i }).click();
   await expect(pagina).toBeHidden();
+  await expect(page.locator('#modelLabCard'), 'e il laboratorio torna').toBeVisible();
   expect(await page.evaluate(() => window.location.hash), 'la rotta non resta appesa dopo la chiusura').not.toContain('/scheda/');
+});
+
+test('SCHEDA-10 — una voce della barra chiude la pagina; «Tutti i modelli» riporta il laboratorio dove era', async ({ page }) => {
+  await page.setViewportSize({ width: 1024, height: 520 });
+  await page.route('**/api/v1/local-models**', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, data: { items: [] }, meta: {} }) }));
+  await page.goto('/');
+  await page.waitForFunction(() => window.__talosHarnessUiRuntime);
+  await page.evaluate(() => document.querySelector('.talos-sidebar [data-vaia="impostazioni"]')?.click());
+  await page.evaluate(() => document.querySelector('#setting-tab-models')?.click());
+  await expect(page.locator('#modelLabCard')).toBeVisible();
+  const scorritore = page.locator('#schermoImpostazioni .talos-page');
+  const alto = await scorritore.evaluate((n) => n.scrollHeight - n.clientHeight);
+  expect(alto, 'premessa: la pagina delle Impostazioni scorre abbastanza').toBeGreaterThan(300);
+  await scorritore.evaluate((n) => { n.scrollTop = 300; });
+  await page.evaluate(() => { window.location.hash = '#/impostazioni/modelli/scheda/prova-1/card'; });
+  const pagina = page.locator('#paginaModello');
+  await expect(pagina).toBeVisible();
+  expect(await scorritore.evaluate((n) => n.scrollTop), 'la pagina del modello parte dall’alto').toBe(0);
+  await pagina.getByRole('button', { name: /tutti i modelli/i }).click();
+  await expect(pagina).toBeHidden();
+  expect(await scorritore.evaluate((n) => n.scrollTop), '«Tutti i modelli» riporta il laboratorio dove era').toBe(300);
+
+  await page.evaluate(() => { window.location.hash = '#/impostazioni/modelli/scheda/prova-1/card'; });
+  await expect(pagina).toBeVisible();
+  await page.evaluate(() => document.querySelector('#setting-tab-appearance')?.click());
+  await expect(pagina, 'un’altra voce della barra chiude la pagina').toBeHidden();
+  await expect(page.locator('#setting-tab-appearance')).toHaveAttribute('aria-selected', 'true');
+  expect(await page.evaluate(() => window.location.hash), 'e la rotta non resta appesa').not.toContain('/scheda/');
+  await page.evaluate(() => { window.location.hash = '#/impostazioni/modelli/scheda/prova-1/card'; });
+  await expect(pagina).toBeVisible();
+  await expect(page.locator('#setting-tab-models'), 'riaprendola, la barra torna su «Laboratorio modelli»').toHaveAttribute('aria-selected', 'true');
+  await page.evaluate(() => document.querySelector('#setting-tab-models')?.click());
+  await expect(pagina, 'anche la voce del laboratorio riporta al laboratorio').toBeHidden();
+  await expect(page.locator('#modelLabCard')).toBeVisible();
 });

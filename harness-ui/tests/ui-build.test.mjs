@@ -6,9 +6,10 @@ import test from 'node:test';
 
 import { buildUi } from '../scripts/build-ui.mjs';
 import { verifyUiManifest } from '../scripts/verify-ui-manifest.mjs';
+import { cartellaDiProva, cartellaDiProvaAttesa } from './aiuto/cartelle-di-prova.mjs'; // DESK-TEMP-1, 23/09: la cartella nasce con la sua rimozione
 
 async function sourceFixture() {
-  const root = await mkdtemp(join(tmpdir(), 'talos-ui-source-'));
+  const root = await cartellaDiProvaAttesa('talos-ui-source-');
   await writeFile(join(root, 'index.html'), '<!doctype html>');
   await writeFile(join(root, 'app.js'), 'console.log("ok")');
   await writeFile(join(root, 'styles.css'), ':root{}');
@@ -16,14 +17,14 @@ async function sourceFixture() {
 }
 
 test('UI build produces a hash manifest and verification passes', async () => {
-  const source = await sourceFixture(); const output = await mkdtemp(join(tmpdir(), 'talos-ui-dist-'));
+  const source = await sourceFixture(); const output = await cartellaDiProvaAttesa('talos-ui-dist-');
   const manifest = await buildUi({ sourceDir: source, outputDir: output });
   assert.equal(manifest.files.length, 3);
   assert.equal((await verifyUiManifest({ distDir: output })).files.length, 3);
 });
 
 test('UI manifest fails closed when an asset changes after build', async () => {
-  const source = await sourceFixture(); const output = await mkdtemp(join(tmpdir(), 'talos-ui-dist-'));
+  const source = await sourceFixture(); const output = await cartellaDiProvaAttesa('talos-ui-dist-');
   await buildUi({ sourceDir: source, outputDir: output });
   await writeFile(join(output, 'app.js'), 'alterato');
   await assert.rejects(verifyUiManifest({ distDir: output }), /UI asset drift: app\.js/);

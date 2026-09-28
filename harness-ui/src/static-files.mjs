@@ -1,6 +1,8 @@
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
+import { PDFJS_CMAPS, PDFJS_DECODIFICATORI_JS, PDFJS_FONT_STANDARD } from './pdfjs-risorse.mjs';
+
 const MAX_STATIC_BYTES = 4_194_304;
 /** ⭐ Riconciliazione con la copia mobile (24/8) — vedi harness-ui-due-copie-divergenti.md: stessi 10 file .woff2, stesso font/weight/subset. */
 const FONT_FILES = Object.freeze([
@@ -69,6 +71,28 @@ const STATIC_ASSETS = Object.freeze({
    * su, dove è costato una verifica dal vivo per accorgersene.
    */
   '/vendor/prism/prism.js': { file: 'vendor/prism/prism.js', contentType: 'text/javascript; charset=utf-8' },
+  /* refactor dei grafi (decisione owner 26, 25/09/2026): il worker di elkjs 0.12.0 (EPL-2.0 OR GPL-3.0-or-later) che dispone il
+     diagramma del workflow fuori dal thread principale. Vendorizzato come xterm e Prism: licenza e impronta nel manifesto. */
+  '/vendor/elk/elk-worker.min.js': { file: 'vendor/elk/elk-worker.min.js', contentType: 'text/javascript; charset=utf-8' },
+  /* F5 File reader (26/09/2026): le tre rese Office del lettore, entry a parte della build, caricate solo quando si apre
+     un documento — i fogli (SheetJS) da `app.js`; Word (docx-preview) e presentazioni (pptx-viewer-core) dalla PAGINA
+     OSPITE, che li carica come script classici col suo nonce e ci costruisce dentro il documento (26/09 pomeriggio). */
+  '/lettore-foglio.js': { file: 'lettore-foglio.js', contentType: 'text/javascript; charset=utf-8' },
+  '/lettore-ospite-documento.js': { file: 'lettore-ospite-documento.js', contentType: 'text/javascript; charset=utf-8' },
+  '/lettore-ospite-presentazione.js': { file: 'lettore-ospite-presentazione.js', contentType: 'text/javascript; charset=utf-8' },
+  /* ATLAS F3 (27/09/2026, owner: la card della Libreria come il mobile, «prima pagina con pdf.js»): pdfjs-dist 6.3.289
+     (Apache-2.0), vendorizzato come elk; la libreria si carica per indirizzo solo quando una card PDF entra in vista, e il
+     worker lo apre lei (`GlobalWorkerOptions.workerSrc`). Stessa origine: lo ammettono `script-src 'self'` e, in assenza di
+     `worker-src`, la sua ricaduta su `script-src`. */
+  '/vendor/pdfjs/pdf.min.mjs': { file: 'vendor/pdfjs/pdf.min.mjs', contentType: 'text/javascript; charset=utf-8' },
+  '/vendor/pdfjs/pdf.worker.min.mjs': { file: 'vendor/pdfjs/pdf.worker.min.mjs', contentType: 'text/javascript; charset=utf-8' },
+  /* ATLAS F3 (27/09/2026, owner: «aggiungi le risorse») — le risorse che il worker di pdf.js chiede (`cMapUrl`,
+     `standardFontDataUrl`, `wasmUrl` con `useWasm:false`). Elenco ESPLICITO da `pdfjs-risorse.mjs`, lo stesso che il build
+     copia: `file` resta un valore cablato, mai costruito dal percorso della richiesta. Il worker le chiede con `fetch`
+     (CMap e font) e con `import()` (i decodificatori): stessa origine, ammessa da `connect-src 'self'` e `script-src 'self'`. */
+  ...Object.fromEntries(PDFJS_CMAPS.map((nome) => [`/vendor/pdfjs/cmaps/${nome}`, { file: `vendor/pdfjs/cmaps/${nome}`, contentType: 'application/octet-stream' }])),
+  ...Object.fromEntries(PDFJS_FONT_STANDARD.map((nome) => [`/vendor/pdfjs/standard_fonts/${nome}`, { file: `vendor/pdfjs/standard_fonts/${nome}`, contentType: nome.endsWith('.ttf') ? 'font/ttf' : 'application/octet-stream' }])),
+  ...Object.fromEntries(PDFJS_DECODIFICATORI_JS.map((nome) => [`/vendor/pdfjs/wasm/${nome}`, { file: `vendor/pdfjs/wasm/${nome}`, contentType: 'text/javascript; charset=utf-8' }])),
 });
 
 export function createStaticHandler(publicDir, fsAdapter = { readFile }) {

@@ -1,0 +1,153 @@
+/*
+ * ⭐ F3-50 (25/09/2026) — il rail «Agenti» del workflow nella colonna di destra. Target visivo ESATTO: i mockup R4 approvati
+ *   il 23/09 (livelli 14, 200 e 5.000), colonna di destra. Solo token Calm esistenti (`tokens.css`): i toni sono miscele dei
+ *   token di stato col fondo della card, come nel diagramma (`grafo-workflow.css`), così il tema scuro conserva la gerarchia.
+ *   Il contenitore scorre già (`.talos-inspector__body`, cioè `#railAgenti`): il rail non ha uno scorrevole suo.
+ */
+.talos-wfr {
+  display: flex; flex-direction: column; gap: 10px; min-width: 0;
+  font-family: var(--talos-font-ui); color: var(--talos-text);
+}
+.talos-wfr [data-tono="ok"] { --wfr-tono: var(--talos-success); }
+.talos-wfr [data-tono="corso"] { --wfr-tono: var(--talos-accent); }
+.talos-wfr [data-tono="attesa"] { --wfr-tono: var(--talos-muted); }
+.talos-wfr [data-tono="avviso"] { --wfr-tono: var(--talos-warning); }
+.talos-wfr [data-tono="errore"] { --wfr-tono: var(--talos-danger); }
+.talos-wfr [data-tono="neutro"] { --wfr-tono: var(--talos-border-strong); }
+.talos-wfr [hidden] { display: none !important; }
+.talos-wfr .i { width: 16px; height: 16px; flex: none; }
+.talos-wfr :focus-visible { outline: 2px solid var(--talos-accent); outline-offset: 2px; }
+/* gli elementi cliccabili restano gli stessi mentre il contenuto si riempie in loco: i figli non prendono il puntatore */
+.talos-wfr button * { pointer-events: none; }
+.talos-wfr button { font: inherit; }
+
+/* le testate: «Richiede attenzione · Vedi tutto (N)», «Agenti della sessione · 14» */
+.talos-wfr__testa { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; min-width: 0; }
+.talos-wfr__testa--elenco { margin-top: 4px; }
+.talos-wfr__titolo { margin: 0; font-size: .8125rem; font-weight: 600; color: var(--talos-text); }
+.talos-wfr__conto { margin-inline-start: auto; font-size: .75rem; color: var(--talos-muted); font-variant-numeric: tabular-nums; }
+.talos-wfr__link {
+  border: 0; background: none; padding: 2px 0; font-size: .75rem; color: var(--talos-muted); cursor: pointer;
+  font-variant-numeric: tabular-nums;
+}
+/* decisione owner 19: la porta del diagramma, piccola, in cima e a destra, solo a diagramma chiuso */
+.talos-wfr__porta { align-self: flex-end; display: inline-flex; align-items: center; gap: 6px; margin-bottom: -2px; }
+.talos-wfr__porta .i { width: 14px; height: 14px; }
+/* decisione owner 20: nascosta ma al suo posto — `visibility` la toglie anche dal fuoco e dall'albero accessibile */
+.talos-wfr__porta[data-nascosta="true"] { visibility: hidden; }
+.talos-wfr__link:hover, .talos-wfr__link[aria-pressed="true"] { color: var(--talos-text); text-decoration: underline; text-underline-offset: 3px; }
+.talos-wfr__togli {
+  display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border: 1px solid var(--talos-border);
+  border-radius: var(--talos-radius-pill); background: var(--talos-card); color: var(--talos-text); font-size: .6875rem; cursor: pointer;
+}
+.talos-wfr__togli .i { width: 11px; height: 11px; }
+.talos-wfr__togli:hover { border-color: var(--talos-border-strong); }
+
+/* «Richiede attenzione»: card calde, icona in un tondo (mockup 14/200/5.000) */
+.talos-wfr__attenzione, .talos-wfr__elenco { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; min-width: 0; }
+.talos-wfr__voce-attenzione {
+  display: flex; align-items: center; gap: 12px; width: 100%; min-width: 0; padding: 10px 12px; box-sizing: border-box; text-align: start;
+  border: 1px solid color-mix(in srgb, var(--talos-warning) 30%, var(--talos-border)); border-radius: var(--talos-radius-card);
+  background: color-mix(in srgb, var(--talos-warning) 7%, var(--talos-card)); color: var(--talos-text); cursor: pointer;
+}
+.talos-wfr__voce-attenzione:hover { border-color: color-mix(in srgb, var(--talos-warning) 50%, var(--talos-border)); }
+.talos-wfr__voce-attenzione[aria-pressed="true"] { border-color: var(--talos-accent); box-shadow: inset 0 0 0 1px var(--talos-accent); }
+.talos-wfr__voce-attenzione .talos-wfr__segno {
+  display: inline-grid; place-items: center; flex: none; width: 34px; height: 34px; border-radius: 50%;
+  background: color-mix(in srgb, var(--wfr-tono) 16%, var(--talos-card)); color: var(--wfr-tono);
+}
+.talos-wfr__voce-attenzione .talos-wfr__segno .i { width: 18px; height: 18px; }
+/* mockup 200/5.000: la X degli errori sta in un tondo PIENO, bianca */
+.talos-wfr__voce-attenzione[data-tono="errore"] .talos-wfr__segno { background: color-mix(in srgb, var(--talos-danger) 16%, var(--talos-card)); }
+.talos-wfr__voce-attenzione[data-tono="errore"] .talos-wfr__segno .i {
+  width: 20px; height: 20px; padding: 5px; box-sizing: border-box; border-radius: 50%; background: var(--talos-danger); color: var(--talos-text-on-accent); stroke-width: 2.6;
+}
+.talos-wfr__testi { display: grid; gap: 2px; flex: 1; min-width: 0; }
+.talos-wfr__voce-titolo { font-size: .8125rem; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.talos-wfr__voce-sotto { font-size: .75rem; color: var(--talos-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.talos-wfr__freccia { color: var(--talos-muted); }
+
+/* ricerca e interruttore: una linea sottile li separa dall'attenzione (mockup) */
+.talos-wfr__campo { position: relative; display: flex; align-items: center; margin-top: 8px; padding-top: 16px; border-top: 1px solid var(--talos-border-subtle); }
+.talos-wfr__lente { position: absolute; inset-inline-start: 11px; color: var(--talos-muted); }
+.talos-wfr__cerca {
+  width: 100%; min-width: 0; height: 36px; box-sizing: border-box; padding: 0 10px 0 34px;
+  border: 1px solid var(--talos-border); border-radius: var(--talos-radius-control); background: var(--talos-card);
+  color: var(--talos-text); font: inherit; font-size: .8125rem;
+}
+.talos-wfr__cerca::placeholder { color: var(--talos-muted); }
+.talos-wfr__cerca:focus-visible { outline: 2px solid var(--talos-accent); outline-offset: 0; border-color: var(--talos-accent-border); }
+.talos-wfr__modi {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 2px; padding: 2px; box-sizing: border-box;
+  border: 1px solid var(--talos-border); border-radius: var(--talos-radius-control); background: var(--talos-panel-soft);
+}
+.talos-wfr__modo {
+  position: relative; height: 30px; border: 1px solid transparent; border-radius: calc(var(--talos-radius-control) - 2px);
+  background: transparent; color: var(--talos-muted); font-size: .8125rem; cursor: pointer;
+}
+.talos-wfr__modo:hover { color: var(--talos-text); }
+.talos-wfr__modo[aria-pressed="true"] { background: var(--talos-card); border-color: var(--talos-border); color: var(--talos-text); font-weight: 600; }
+/* mockup 14: il segmento scelto ha il suo filo d'accento */
+.talos-wfr__modo[aria-pressed="true"]::after {
+  content: ""; position: absolute; inset-inline: 30%; bottom: 3px; height: 2px; border-radius: var(--talos-radius-pill); background: var(--talos-accent);
+}
+
+/* Agenti (≤ 25, mockup 14): righe fitte separate da un filo, stato a parole in colore */
+.talos-wfr[data-modo="agenti"] .talos-wfr__elenco { gap: 0; }
+.talos-wfr__agente {
+  display: flex; align-items: center; gap: 10px; width: 100%; min-width: 0; min-height: 32px; padding: 6px 8px; box-sizing: border-box;
+  border: 1px solid transparent; border-bottom-color: var(--talos-border-subtle); border-radius: 0; background: transparent;
+  color: var(--talos-text); text-align: start; cursor: pointer;
+}
+.talos-wfr__agente:hover { background: var(--talos-card-hover); }
+.talos-wfr__agente[aria-current="true"] {
+  border-color: color-mix(in srgb, var(--talos-accent) 45%, transparent); border-radius: 8px;
+  background: color-mix(in srgb, var(--talos-accent-soft) 60%, var(--talos-card));
+}
+.talos-wfr__punto { display: inline-block; flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--wfr-tono, var(--talos-border-strong)); }
+.talos-wfr__nome { flex: 1; min-width: 0; font-size: .8125rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.talos-wfr__stato { flex: none; font-size: .78125rem; color: color-mix(in srgb, var(--wfr-tono) 85%, var(--talos-text)); }
+.talos-wfr__agente[data-tono="attesa"] .talos-wfr__stato, .talos-wfr__agente[data-tono="neutro"] .talos-wfr__stato { color: var(--talos-muted); }
+
+/* Gruppi (> 25, mockup 200/5.000): una card per fase con icona, conteggio, barra e percentuale */
+.talos-wfr__gruppo {
+  display: flex; align-items: center; gap: 14px; width: 100%; min-width: 0; padding: 12px 14px; box-sizing: border-box; text-align: start;
+  border: 1px solid var(--talos-border); border-radius: var(--talos-radius-card); background: var(--talos-card); color: var(--talos-text); cursor: pointer;
+}
+.talos-wfr__gruppo:hover { border-color: var(--talos-border-strong); }
+.talos-wfr__gruppo .talos-wfr__segno { display: inline-flex; flex: none; color: var(--talos-text); }
+.talos-wfr__gruppo .talos-wfr__segno .i { width: 22px; height: 22px; stroke-width: 1.5; }
+.talos-wfr__gruppo[aria-current="true"] { border-color: color-mix(in srgb, var(--talos-accent) 55%, var(--talos-border)); background: color-mix(in srgb, var(--talos-accent-soft) 55%, var(--talos-card)); }
+.talos-wfr__gruppo[aria-current="true"] .talos-wfr__segno { color: var(--talos-accent); }
+.talos-wfr__gruppo .talos-wfr__voce-titolo { font-size: .84375rem; font-weight: 500; }
+.talos-wfr__barra { display: flex; align-items: center; gap: 10px; margin-top: 4px; min-width: 0; }
+.talos-wfr__barra-traccia { position: relative; flex: 1; height: 8px; border-radius: var(--talos-radius-pill); background: var(--talos-panel-soft); border: 1px solid var(--talos-border-subtle); overflow: hidden; }
+.talos-wfr__barra-pieno { position: absolute; inset-block: 0; inset-inline-start: 0; border-radius: inherit; background: var(--talos-success); }
+/* mockup 200: la barra è verde; l'accento spetta solo al gruppo scelto nel diagramma; gli errori come nel diagramma */
+.talos-wfr__gruppo[data-tono="errore"] .talos-wfr__barra-pieno { background: var(--talos-danger); }
+.talos-wfr__gruppo[aria-current="true"] .talos-wfr__barra-pieno { background: var(--talos-accent); }
+.talos-wfr__barra-valore { min-width: 4ch; font-size: .75rem; color: var(--talos-muted); text-align: end; font-variant-numeric: tabular-nums; }
+
+.talos-wfr__altri { align-self: flex-start; }
+.talos-wfr__esito { margin: 0; font-size: .75rem; color: var(--talos-muted); }
+.talos-wfr__esito:empty { display: none; }
+
+/* i totali in fondo: 2×2 fino a 25 agenti (mockup 14), due colonne con un filo oltre (mockup 200/5.000) */
+.talos-wfr__totali {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 14px 16px; margin-top: 14px; padding: 14px 16px;
+  border: 1px solid var(--talos-border); border-radius: var(--talos-radius-card); background: var(--talos-card);
+}
+.talos-wfr__totali:empty { display: none; }
+.talos-wfr__totali[data-livello="gruppi"] .talos-wfr__totale + .talos-wfr__totale { padding-inline-start: 16px; border-inline-start: 1px solid var(--talos-border); }
+.talos-wfr__totale { display: grid; gap: 4px; min-width: 0; }
+.talos-wfr__totale-etichetta { display: inline-flex; align-items: center; gap: 7px; min-width: 0; font-size: .75rem; color: var(--talos-muted); }
+.talos-wfr__totale-etichetta .i { width: 15px; height: 15px; color: var(--talos-muted); }
+.talos-wfr__totale-valore { font-size: 1.25rem; font-weight: 600; line-height: 1.2; font-variant-numeric: tabular-nums; color: var(--talos-text); }
+.talos-wfr__totale[data-tono="corso"] .talos-wfr__totale-valore { color: color-mix(in srgb, var(--talos-accent) 85%, var(--talos-text)); }
+.talos-wfr__totale[data-tono="ok"] .talos-wfr__totale-valore { color: color-mix(in srgb, var(--talos-success) 85%, var(--talos-text)); }
+
+@media (prefers-reduced-motion: no-preference) {
+  .talos-wfr__voce-attenzione, .talos-wfr__gruppo, .talos-wfr__agente, .talos-wfr__modo {
+    transition: background-color var(--talos-motion-duration-control, .12s) var(--talos-motion-ease), border-color var(--talos-motion-duration-control, .12s) var(--talos-motion-ease);
+  }
+}

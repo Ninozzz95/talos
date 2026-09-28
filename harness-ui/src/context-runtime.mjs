@@ -5,6 +5,7 @@ import { createSqliteContextStore } from '../../context-engine/src/node/sqlite-s
 import { createContextModelAdapter } from './context-provider-adapter.mjs';
 import { createContextInferenceScheduler } from './context-inference-scheduler.mjs';
 import { createDesktopContextService } from './context-desktop-service.mjs';
+import { conAncoraDelFornitore } from './context-token-counters.mjs';
 import { separaFonteModello } from './model-destination.mjs';
 
 const fail = (code, message) => { throw Object.assign(new Error(message), { code }); };
@@ -22,11 +23,35 @@ export async function resolveDesktopContextProfile({ profiles, provider, model, 
 
 /** Desktop composition root. Model metadata, credentials, counter transport and
  * common usage policy are backend ports; no model payload chooses a DB path. */
-export async function createDesktopContextRuntime({ sessionDirectory, enabledSessionIds = [], readSession, resolveModelProfile, tokenCounter, callModel, usagePolicy, onEvent, loadLegacy } = {}) {
+/*
+ * 24/09/2026 — F4: ABILITAZIONE PER POLITICA. `politicaAbilitazione({ sessionId, createdAt, modello, session })
+ * → boolean | Promise<boolean>` è iniettabile; si valuta alla PRIMA richiesta della sessione e si ricorda per la
+ * vita del processo (sì e no). Senza politica resta l'elenco fisso di oggi, e senza elenco il motore resta
+ * spento: nessun cambio di comportamento sul 4174 (`config.mjs:501` continua a vietare il trial là; chi lo
+ * accende è un'altra fase). ⛔ `createdAt` oggi è `null`: `leggiSessioneContesto` (`session-registry.mjs:4652`)
+ * non lo espone — la riga è di F3, qui si passa ciò che il registro dà.
+ */
+export async function createDesktopContextRuntime({ sessionDirectory, enabledSessionIds = [], politicaAbilitazione, readSession, resolveModelProfile, tokenCounter, callModel, usagePolicy, onEvent, loadLegacy } = {}) {
   if (!Array.isArray(enabledSessionIds) || enabledSessionIds.some(id => typeof id !== 'string' || !/^[a-zA-Z0-9_-]{1,256}$/u.test(id))) fail('CTX_INVALID_INPUT', 'Elenco delle conversazioni di prova non valido.');
-  if (!enabledSessionIds.length) return null;
+  if (politicaAbilitazione !== undefined && typeof politicaAbilitazione !== 'function') fail('CTX_INVALID_INPUT', 'La politica di abilitazione deve essere una funzione.');
+  if (!enabledSessionIds.length && !politicaAbilitazione) return null;
   if (typeof sessionDirectory !== 'string' || !isAbsolute(sessionDirectory) || typeof readSession !== 'function' || typeof resolveModelProfile !== 'function' || typeof tokenCounter?.countPreparedContext !== 'function' || typeof callModel !== 'function') fail('CTX_PORT_MISSING', 'Configurazione server del motore del contesto incompleta.');
   const enabled = new Set(enabledSessionIds);
+  const decisioni = new Map();
+  async function isEnabled(sessionId) {
+    if (enabled.has(sessionId)) return true;
+    if (!politicaAbilitazione) return false;
+    if (decisioni.has(sessionId)) return decisioni.get(sessionId);
+    if (typeof sessionId !== 'string' || !/^[a-zA-Z0-9_-]{1,256}$/u.test(sessionId)) return false;
+    const session = await readSession(sessionId);
+    if (!session) return false; // una sessione che il registro non conosce non si giudica (e non si ricorda)
+    const esito = (await politicaAbilitazione({ sessionId, createdAt: session.createdAt ?? null, modello: session.modello ?? null, session })) === true;
+    decisioni.set(sessionId, esito);
+    return esito;
+  }
+  const abilitate = () => new Set([...enabled, ...[...decisioni].filter(([, esito]) => esito).map(([sessionId]) => sessionId)]);
+  /* 24/09 — F4, punto 5: l'ultimo `prompt_tokens` del fornitore ancora la misura successiva (vedi `conAncoraDelFornitore`). */
+  const contatore = conAncoraDelFornitore(tokenCounter);
   const directory = resolve(sessionDirectory);
   const store = createSqliteContextStore({ databasePath: join(directory, 'context', 'context.sqlite') });
   const scheduler = createContextInferenceScheduler();
@@ -53,11 +78,11 @@ export async function createDesktopContextRuntime({ sessionDirectory, enabledSes
       ? scheduler.run({ resource: 'local-inference', priority: 'background', signal: request.signal }, signal => callModel({ ...request, signal }))
       : callModel(request),
   });
-  const engine = createContextEngine({ store, model: adapter, tokenCounter, usagePolicy });
+  const engine = createContextEngine({ store, model: adapter, tokenCounter: contatore, usagePolicy });
   const service = createDesktopContextService({
-    engine, store, readSession, isSessionEnabled: id => enabled.has(id), resolveSessionModel: sessionProfile, onEvent,
+    engine, store, readSession, isSessionEnabled: isEnabled, resolveSessionModel: sessionProfile, onEvent, registraAncora: contatore.registraAncora,
     loadLegacy: loadLegacy ?? (async ({ sessionId }) => {
-      if (!enabled.has(sessionId)) fail('CTX_NOT_ENABLED', 'Conversazione non abilitata.');
+      if (!await isEnabled(sessionId)) fail('CTX_NOT_ENABLED', 'Conversazione non abilitata.');
       try { return await readFile(join(directory, `${sessionId}.jsonl`), 'utf8'); }
       catch (error) { if (error.code === 'ENOENT') return null; fail('CTX_LEGACY_READ_FAILED', 'Il registro originale non è leggibile. Nessuna nuova inferenza è stata avviata.'); }
     }),
@@ -75,7 +100,7 @@ export async function createDesktopContextRuntime({ sessionDirectory, enabledSes
       closing = (async () => {
         try {
           await service.close();
-          for (const sessionId of enabled) {
+          for (const sessionId of abilitate()) {
             const snapshot = await store.readContextSnapshot({ sessionId });
             for (const job of snapshot?.jobs ?? []) {
               if (!['committed', 'failed', 'cancelled'].includes(job.state)) await engine.cancelCompaction({ sessionId, jobId: job.id });

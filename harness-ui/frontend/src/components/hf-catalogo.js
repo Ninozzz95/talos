@@ -668,8 +668,23 @@ export function raggruppaRisultatiHf(risultati = []) {
 export function datiRigaHf(item = {}) {
   const base = datiRepoHf(item);
   const richiesto = base.gated;
+  /*
+   * ATLAS F4 (owner 27/09/2026 notte: «di 5 prendiamo solo i badge sotto il nome»; tipo, parametri, licenza; «via i
+   *   doppioni dalle righe»; download e preferiti «nella riga di dati»). Dall'Atlas (`atlas.js` `modelRow`: la fila di
+   *   `badge()` sotto il nome) si porta SOLO la fila di etichette, coi dati che il repository DICHIARA — niente valori
+   *   inventati: un'etichetta che il repository non dichiara non compare.
+   */
+  const tipoDichiarato = item.pipelineTag ? (TIPI[item.pipelineTag] || item.pipelineTag) : null;
+  const etichette = [tipoDichiarato, parametriLeggibiliHf(item.parameterCount), item.license || null].filter(Boolean);
+  /* La riga di dati: il tipo è nell'etichetta (resta solo la provenienza di una conversione, che è un altro dato), poi file,
+     download e preferiti. `sub1` resta com'è: il suo contratto è provato da `tests/unit/hf-catalogo.test.mjs`. */
+  const pezziSub1 = String(base.sub1 || '').split(' · ');
+  const riga = [...(base.conversione ? pezziSub1 : pezziSub1.slice(1)),
+    base.download ? `${base.download} download` : null, base.likes ? `♥ ${base.likes}` : null].filter(Boolean).join(' · ');
   return {
     ...base,
+    etichette,
+    riga,
     accesso: valoreFaccettaHf(item, 'accesso'),
     /*
      * `.row-availability` del mockup: un pallino colorato e lo stato. Il tono non è decorazione —
@@ -683,12 +698,20 @@ export function datiRigaHf(item = {}) {
      *   dove c'è lo spazio: in riga resta lo stato, che è corto e non si taglia. Per un repository
      *   aperto invece la licenza resta: è corta e non c'era altrove.
      */
-    stato: { testo: richiesto ? 'Accesso richiesto' : item.gated === false ? 'Accesso aperto' : 'Accesso non dichiarato', tono: richiesto ? 'warning' : item.gated === false ? 'success' : 'muted', nota: richiesto ? null : base.sub2 },
+    /* ATLAS F4: la licenza sta nell'etichetta, la riga dello stato dice solo lo stato (owner: «via i doppioni»). */
+    stato: { testo: richiesto ? 'Accesso richiesto' : item.gated === false ? 'Accesso aperto' : 'Accesso non dichiarato', tono: richiesto ? 'warning' : item.gated === false ? 'success' : 'muted', nota: null },
     /* `.row-capacity` del mockup: un numero grande, la sua etichetta, e sotto un secondo fatto.
        I due numeri veri che la ricerca porta sono i download e i preferiti. */
     capacita: { misura: base.download, etichetta: 'download', nota: base.likes ? `♥ ${base.likes} preferiti` : null },
     revisione: item.revision || null,
   };
+}
+
+/** ATLAS F4 — i parametri totali DICHIARATI in forma corta («7B», «30,5B», «350M»); `null` se il repository non li dice. */
+export function parametriLeggibiliHf(n) {
+  if (!Number.isSafeInteger(n) || n <= 0) return null;
+  const [valore, unita] = n >= 1e9 ? [n / 1e9, 'B'] : n >= 1e6 ? [n / 1e6, 'M'] : [n / 1e3, 'K'];
+  return `${new Intl.NumberFormat('it-IT', { maximumFractionDigits: 1 }).format(valore)}${unita} parametri`;
 }
 
 /** La nota sotto le faccette distingue il totale dichiarato da contesto, memoria e parametri attivi. */
@@ -725,7 +748,10 @@ export function creaRigaHf(dati, { selezionato = false, seleziona, document: d =
   const testo = el(d, 'span', 'talos-list-row__text');
   const titolo = el(d, 'span', 'talos-list-row__title', nome);
   if (dati.badge) titolo.appendChild(badge(d, dati.badge.testo, dati.badge.tono));
-  const meta = el(d, 'span', 'talos-list-row__sub', dati.sub1);
+  /* ATLAS F4: la fila di etichette dell'Atlas SOTTO IL NOME (owner: «i badge sotto il nome»). */
+  const etichette = el(d, 'span', 'talos-hf-etichette'); etichette.dataset.c = 'ModelTags';
+  for (const testoEtichetta of dati.etichette ?? []) etichette.appendChild(badge(d, testoEtichetta));
+  const meta = el(d, 'span', 'talos-list-row__sub', dati.riga ?? dati.sub1);
   /* `.row-availability`: il pallino porta il tono, il testo porta lo stato E la condizione d'uso
      (`sub2`), che è ciò che la riga diceva già dal 06/09 e che non si perde cambiando vestito.
      ⛔ IL PALLINO VIVE SOLO DENTRO UN CONTENITORE FLESSIBILE, e non è un dettaglio: `.talos-dot`
@@ -742,21 +768,14 @@ export function creaRigaHf(dati, { selezionato = false, seleziona, document: d =
   const pallino = el(d, 'span', `talos-dot talos-dot--sm talos-dot--${dati.stato.tono}`); pallino.setAttribute('aria-hidden', 'true');
   rigaStato.append(pallino, el(d, 'span', '', dati.stato.nota ? `${dati.stato.testo} · ${dati.stato.nota}` : dati.stato.testo));
   stato.append(rigaStato);
-  testo.append(titolo, meta, stato);
-  const aside = el(d, 'span', 'talos-list-row__aside');
-  const capacita = el(d, 'span', 'talos-stack'); capacita.dataset.c = 'Capacity';
+  testo.append(titolo, ...(etichette.children.length ? [etichette] : []), meta, stato);
   /*
-   * ⛔ 06/09: `datiRepoHf` calcolava `download` e `likes` da sempre e la riga li BUTTAVA — due dati
-   * chiesti al server, pagati, e mai disegnati. Sono l'unico segnale di reputazione che una riga di
-   * repository può portare (l'ordinamento della barra ordina proprio per questi due). Restano fuori
-   * quando il server non li manda: un trattino al posto di un numero non è informazione — e la
-   * colonna si stringe invece di mostrare un buco.
+   * ⛔ 06/09: `datiRepoHf` calcolava `download` e `likes` da sempre e la riga li BUTTAVA — due dati chiesti al server,
+   *   pagati, e mai disegnati. ATLAS F4 (owner 27/09): non stanno più in una colonna a destra ma nella riga di dati
+   *   (`dati.riga`), e restano fuori quando il server non li manda.
    */
-  if (dati.capacita.misura) capacita.append(el(d, 'strong', '', dati.capacita.misura), el(d, 'small', 'talos-muted', dati.capacita.etichetta));
-  if (dati.capacita.nota) capacita.append(el(d, 'span', 'talos-muted talos-mono--xs', dati.capacita.nota));
-  if (capacita.children.length) aside.appendChild(capacita);
   const chevron = icona(d, 'i-chevron-right', 'i talos-hf-chevron'); chevron.setAttribute('aria-hidden', 'true');
-  b.append(ic, testo, aside, chevron);
+  b.append(ic, testo, chevron);
   if (typeof seleziona === 'function') b.addEventListener('click', () => seleziona(dati.id));
   return b;
 }

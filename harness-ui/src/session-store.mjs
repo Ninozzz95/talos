@@ -37,8 +37,13 @@
  * pochi millisecondi), non l'intera sessione. Scelta esplicita, non
  * un taglio silenzioso.
  */
-import { promises as fsp, mkdirSync, appendFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { randomUUID } from 'node:crypto';
+import { promises as fsp, constants as fsConstants, createReadStream, createWriteStream, mkdirSync, appendFileSync, closeSync, existsSync, linkSync, openSync, readFileSync, readSync, statSync, truncateSync, unlinkSync, writeFileSync } from 'node:fs';
+import { join, resolve, sep } from 'node:path';
+import { createInterface } from 'node:readline';
+import { Readable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
+import { setTimeout as attendiMs } from 'node:timers/promises';
 
 export class SessionStoreError extends Error {
   constructor(message, code = 'SESSION_STORE_FAILED') {
@@ -98,6 +103,116 @@ function percorsoDi(cartellaStore, sessionId) {
  * rotta in mezzo (danno vero).
  */
 const codeDiScrittura = new Map();
+const percorsiConCodaIncerta = new Set();
+
+/*
+ * ⭐⭐⭐ 24/09/2026 — F2, il WRITER SINCRONO E LA CODA (J3, i due RED di Codex `CTX-STORE-SYNC-LEAPFROGS-QUEUED`
+ * e `CTX-STORE-SYNC-DURING-PARTIAL-ASYNC`, 0/2 sulla base `e2eb2a5ce`). `registraRigaSync` guardava solo
+ * l'ultimo byte del file, mai `codeDiScrittura`: scavalcava un append asincrono già prenotato (le righe
+ * finivano invertite) e, se lo trovava a metà, AVVELENAVA il percorso per tutta la vita del processo (J1).
+ *
+ * ⛔ Perché una POLITICA e non una guardia fissa: il ledger Codex (`docs/CTX-JOURNAL-SINGLE-WRITER-2026-09-23.md`)
+ *   aveva misurato una guardia BUSY isolata sul sync incompatibile coi chiamanti del registro (390 test): 5
+ *   `registraRigaSyncFn` + 9 `durableSync` in `session-registry.mjs` non sanno gestire un rifiuto. L'onda 1
+ *   va sul 4174 PRIMA che l'onda 2 migri quei chiamanti ⇒ il default resta `'scavalca'` (il comportamento di
+ *   oggi, riga per riga) e il writer unico si chiede: `impostaPoliticaScritturaSync('busy')` — oppure
+ *   `TALOS_SESSION_STORE_SYNC=busy` nell'ambiente, che serve all'onda 2 per CONTARE i chiamanti che cadono
+ *   senza toccare il registro. Con `'busy'` un sync che trova una coda in volo lancia `SESSION_STORE_BUSY`
+ *   PRIMA di toccare il disco e senza avvelenare niente: la coda è viva, non incerta.
+ * ⭐ Forma vista nei concorrenti (letti nel codice, 24/09/2026): Claude Code scrive il trascritto JSONL da un
+ *   solo processo per sessione e dichiara che «If you resume the same session in two terminals without
+ *   forking, messages from both interleave into one transcript» (doc «Manage sessions») — il writer unico è
+ *   una disciplina del chiamante, non del formato; Hermes tiene la verità in SQLite («many reader threads,
+ *   one writer», `hermes_state.py`) e ricade su un JSONL in append (`hermes_state.py:421-436`) solo se il
+ *   database sparisce sotto un processo vivo.
+ */
+const POLITICHE_SYNC = new Set(['scavalca', 'busy']);
+let politicaSync = process.env.TALOS_SESSION_STORE_SYNC === 'busy' ? 'busy' : 'scavalca';
+
+/** Imposta la politica del writer sincrono ('scavalca' | 'busy'); ritorna quella precedente. */
+export function impostaPoliticaScritturaSync(politica) {
+  if (!POLITICHE_SYNC.has(politica)) {
+    throw new SessionStoreError(`Politica del writer sincrono sconosciuta: ${String(politica)} (ammesse: scavalca, busy).`, 'SESSION_STORE_BAD_POLICY');
+  }
+  const precedente = politicaSync;
+  politicaSync = politica;
+  return precedente;
+}
+
+export function politicaScritturaSync() {
+  return politicaSync;
+}
+
+function rifiutaSeCodaInVolo(percorso) {
+  if (politicaSync === 'busy' && codeDiScrittura.has(percorso)) {
+    throw new SessionStoreError('Il registro ha una scrittura in corso: la scrittura sincrona è stata rifiutata, riprova quando la coda è vuota.', 'SESSION_STORE_BUSY');
+  }
+}
+
+/*
+ * ⭐⭐⭐ 24/09/2026 — F2, TRANSITORIO ≠ AVVELENATO. Prima, QUALUNQUE errore dell'append aggiungeva il percorso a
+ * `percorsiConCodaIncerta`: un EBUSY/EPERM dell'antivirus o di un lettore concorrente (Windows Defender
+ * «opens files as they're written… the target may still be held open by the scanner», npm/write-file-atomic#227;
+ * graceful-fs ritenta EACCES/EPERM/EBUSY) bloccava la sessione per sempre, con ZERO byte scritti.
+ * ⇒ Il discriminante non è il codice: è la DIMENSIONE del file prima/dopo. Se non è cambiata, il file è
+ *   intatto e l'errore si propaga senza avvelenare; se è cambiata (append parziale), o non si può misurare,
+ *   la coda è incerta come prima. I codici transitori restano annotati sull'errore (`transitorio: true`) per
+ *   chi vuole ritentare.
+ */
+const CODICI_TRANSITORI = new Set(['EBUSY', 'EPERM', 'EAGAIN', 'EACCES', 'EMFILE', 'ENFILE']);
+
+function avvelenaSeIlFileECambiato(percorso, dimensionePrima, errore) {
+  let dopo;
+  try { dopo = dimensioneOZero(percorso); }
+  catch { percorsiConCodaIncerta.add(percorso); return; }
+  if (dopo !== dimensionePrima) { percorsiConCodaIncerta.add(percorso); return; }
+  if (errore && typeof errore === 'object' && CODICI_TRANSITORI.has(errore.code)) errore.transitorio = true;
+}
+
+function erroreCodaIncerta() {
+  return new SessionStoreError('La coda del registro non è verificabile: interrompi le scritture e controlla il journal prima di riprovare.', 'SESSION_STORE_AMBIGUOUS');
+}
+
+function rifiutaCodaIncerta(percorso) {
+  if (percorsiConCodaIncerta.has(percorso)) throw erroreCodaIncerta();
+}
+
+function dimensioneOZero(percorso) {
+  try { return statSync(percorso).size; }
+  catch (errore) { if (errore?.code === 'ENOENT') return 0; throw errore; }
+}
+
+function leggiByteDa(percorso, posizione, lunghezza) {
+  const bytes = Buffer.alloc(lunghezza);
+  const fd = openSync(percorso, 'r');
+  try {
+    let letti = 0;
+    while (letti < lunghezza) {
+      const n = readSync(fd, bytes, letti, lunghezza - letti, posizione + letti);
+      if (n === 0) throw erroreCodaIncerta();
+      letti += n;
+    }
+    return bytes;
+  } finally {
+    closeSync(fd);
+  }
+}
+
+function verificaCodaAppendibile(percorso) {
+  rifiutaCodaIncerta(percorso);
+  const dimensione = dimensioneOZero(percorso);
+  if (dimensione === 0) return;
+  let ultimoByte;
+  try { ultimoByte = leggiByteDa(percorso, dimensione - 1, 1)[0]; }
+  catch (errore) {
+    if (errore?.code === 'SESSION_STORE_AMBIGUOUS') percorsiConCodaIncerta.add(percorso);
+    throw errore;
+  }
+  if (ultimoByte !== 10) {
+    percorsiConCodaIncerta.add(percorso);
+    throw erroreCodaIncerta();
+  }
+}
 
 export async function registraRiga({ cartellaStore, sessionId, record, durable = false }, deps = {}) {
   const mkdirFn = deps.mkdirFn ?? fsp.mkdir;
@@ -108,7 +223,14 @@ export async function registraRiga({ cartellaStore, sessionId, record, durable =
   const precedente = codeDiScrittura.get(percorso) ?? Promise.resolve();
   const corrente = precedente.catch(() => {}).then(async () => {
     await mkdirFn(cartellaStore, { recursive: true });
-    await appendFileFn(percorso, riga, durable ? { encoding: 'utf8', flush: true } : 'utf8');
+    verificaCodaAppendibile(percorso);
+    const prima = dimensioneOZero(percorso);
+    try {
+      await appendFileFn(percorso, riga, durable ? { encoding: 'utf8', flush: true } : 'utf8');
+    } catch (errore) {
+      avvelenaSeIlFileECambiato(percorso, prima, errore); // 24/09/2026: zero byte scritti ⇒ nessun veleno
+      throw errore;
+    }
   });
   codeDiScrittura.set(percorso, corrente);
   // La mappa non deve crescere per sempre: chi è l'ultimo della fila la ripulisce.
@@ -146,8 +268,350 @@ export async function registraRiga({ cartellaStore, sessionId, record, durable =
 export function registraRigaSync({ cartellaStore, sessionId, record }, deps = {}) {
   const mkdirSyncFn = deps.mkdirSyncFn ?? mkdirSync;
   const appendFileSyncFn = deps.appendFileSyncFn ?? appendFileSync;
+  const percorso = percorsoDi(cartellaStore, sessionId);
+  // 24/09/2026 — con politica 'busy' una coda in volo è un rifiuto pulito, PRIMA di guardare il disco
+  // (l'ultimo byte di un append a metà non dice niente sulla coda: dice solo che è a metà).
+  rifiutaSeCodaInVolo(percorso);
   mkdirSyncFn(cartellaStore, { recursive: true });
-  appendFileSyncFn(percorsoDi(cartellaStore, sessionId), `${JSON.stringify(record)}\n`, 'utf8');
+  verificaCodaAppendibile(percorso);
+  const prima = dimensioneOZero(percorso);
+  try {
+    appendFileSyncFn(percorso, `${JSON.stringify(record)}\n`, 'utf8');
+  } catch (errore) {
+    avvelenaSeIlFileECambiato(percorso, prima, errore); // 24/09/2026: zero byte scritti ⇒ nessun veleno
+    throw errore;
+  }
+}
+
+/*
+ * ⭐⭐⭐ 24/09/2026 — F2, IL FLUSH DEL NEGOZIO. `codeDiScrittura` era privata e nessuno poteva aspettarla:
+ * lo shutdown del server (`server.mjs`) non svuotava la coda, `aggiorna-4174.ps1` uccideva con `-Force`, e
+ * `tests/temp-nessun-residuo.test.mjs` tollerava 2 cartelle «rinate» per il registro proprio per questo.
+ * ⭐ Forma dei concorrenti (letta nel codice, 24/09/2026): Hermes allo spegnimento SVUOTA ciò che ha in
+ *   sospeso su disco (`gateway/shutdown_flush.py:81-91` `flush_pending_to_file`, `os.fsync` della cartella
+ *   alla `:55-62`) e lo rigioca al riavvio (`recover_pending_to_db`, `:209`); Claude Code «saves continuously
+ *   to local transcript files» (doc «Manage sessions»). Qui la coda è in memoria: il flush aspetta che si
+ *   svuoti, e RIPETE, perché una scrittura può accodarne un'altra dentro la propria continuazione.
+ * ⛔ Tetto di giri dichiarato: una sessione che continua a scrivere non si svuota mai; oltre `giriMassimi`
+ *   l'errore lo dice (`SESSION_STORE_FLUSH_EXHAUSTED`) invece di appendere lo shutdown per sempre. Il
+ *   «fence» (smettere di accettare scritture nuove) è del chiamante — onda 2, `chiudi()` del registro.
+ */
+const GIRI_MASSIMI_FLUSH = 1000;
+
+function percorsoSottoCartella(percorso, cartella) {
+  const radice = resolve(cartella);
+  const p = resolve(percorso);
+  return p === radice || p.startsWith(radice.endsWith(sep) ? radice : radice + sep);
+}
+
+/**
+ * Attende che le scritture in coda si svuotino: tutte, quelle di una cartella, o quelle di una sessione.
+ * Ritorna `{ giri, scrittureAttese, percorsi }`; lancia `SESSION_STORE_FLUSH_EXHAUSTED` se dopo
+ * `giriMassimi` giri la coda non è ancora vuota. Non fallisce mai per una scrittura fallita (allSettled):
+ * chi ha accodato ha già il suo errore.
+ */
+export async function attendiScritture({ cartellaStore, sessionId, giriMassimi = GIRI_MASSIMI_FLUSH } = {}) {
+  const bersaglio = cartellaStore && sessionId ? resolve(percorsoDi(cartellaStore, sessionId)) : null;
+  const inAmbito = (percorso) => {
+    if (bersaglio) return resolve(percorso) === bersaglio;
+    if (cartellaStore) return percorsoSottoCartella(percorso, cartellaStore);
+    return true;
+  };
+  const percorsi = new Set();
+  let giri = 0;
+  let scrittureAttese = 0;
+  for (;;) {
+    const fotografia = [...codeDiScrittura.entries()].filter(([percorso]) => inAmbito(percorso));
+    if (fotografia.length === 0) return { giri, scrittureAttese, percorsi: [...percorsi] };
+    giri += 1;
+    if (giri > giriMassimi) {
+      throw new SessionStoreError(`Il negozio delle sessioni non si è svuotato dopo ${giriMassimi} giri di attesa: ${fotografia.length} scrittura/e ancora in coda (${fotografia.map(([p]) => p).join(', ')}).`, 'SESSION_STORE_FLUSH_EXHAUSTED');
+    }
+    for (const [percorso] of fotografia) percorsi.add(percorso);
+    scrittureAttese += fotografia.length;
+    await Promise.allSettled(fotografia.map(([, promessa]) => promessa));
+    // La pulizia della mappa (`finally` di chi ha accodato) corre nei microtask successivi al settle:
+    // un giro dell'event loop lascia anche entrare le scritture accodate dalle continuazioni.
+    await new Promise((r) => setImmediate(r));
+  }
+}
+
+/*
+ * ⭐⭐⭐ 23/09/2026 — EXFAT, decisione owner «ripiego sicuro» (sostituisce il «rifiuto» del ledger
+ * `docs/CTX-JOURNAL-SINGLE-WRITER-2026-09-23.md:39`). Ricerca 10×4 del 23/09/2026 in
+ * `scratchpad/RICERCA-10x4-EXFAT-SESSIONI.md`, fonti primarie lette quel giorno:
+ * - `CreateHardLinkW` «only supported on the NTFS file system», ReFS «No» (Microsoft Learn,
+ *   aggiornato 01/07/2025): su exFAT/FAT32 e su ReFS/Dev Drive NESSUNA sessione poteva nascere;
+ * - su exFAT `fs.link` fallisce con **EISDIR** su un file regolare (libuv traduce
+ *   ERROR_INVALID_FUNCTION; nodejs/node#65817, 05/09/2026) — Netcatty PR #3484 (22/09/2026) ricade
+ *   su EISDIR/EPERM/EACCES/EXDEV/ENOTSUP/ENOSYS;
+ * - Node non dice il tipo di file system su Windows (`statfsSync().type === 0`, misurato): la
+ *   capacità si PROVA, non si legge. La prova è il primo link vero, sul file di staging, nella
+ *   cartella dell'archivio; l'esito si memorizza per cartella (forma di Hermes
+ *   `hermes_state_wal.py:255-265`: prova la modalità forte, ricadi, dillo UNA volta);
+ * - il ripiego è `writeFileSync(finale, …, { flag: 'wx', flush: true })`: 'wx' = O_CREAT|O_EXCL =
+ *   `CREATE_NEW` su Windows, «fails if the path exists» (doc Node v24 fs, letta il 23/09/2026 via
+ *   ctx7 `/websites/nodejs_latest-v24_x_api`); `flush: true` = `fsyncSync` dopo la scrittura.
+ *   ⛔ MAI `rename`: libuv lo chiama con MOVEFILE_REPLACE_EXISTING e sovrascrive (misurato);
+ * - ⛔ su exFAT l'identità `dev`+`ino` non regge (openclaw/fs-safe PR #235: 42 rename su 48
+ *   cambiano identità): nel ripiego la conferma è sui BYTE riletti, mai sull'identità.
+ * ⛔ Promessa abbassata e dichiarata: exFAT non ha giornale (TexFAT è solo Windows CE, spec
+ *   Microsoft), quindi un crash a metà scrittura può lasciare un finale vuoto o una riga spezzata.
+ *   Il replay li tratta già come «vuota» (l'ultima riga non valida non è mai un record, sopra).
+ * ⛔ Un EPERM/EACCES transitorio (antivirus) su NTFS porta la cartella nel ripiego per la vita del
+ *   processo: direzione sicura (niente sovrascrittura, byte verificati), promessa sul crash più debole.
+ */
+const CODICI_LINK_NON_SUPPORTATO = new Set(['EISDIR', 'EPERM', 'EACCES', 'EXDEV', 'ENOTSUP', 'EOPNOTSUPP', 'ENOSYS', 'EINVAL']);
+const modalitaPerCartella = new Map();
+
+/** 'link' | 'senza-link' | null (non ancora provata in questo processo). Per il Doctor. */
+export function modalitaPubblicazioneIntestazione(cartellaStore) {
+  return modalitaPerCartella.get(resolve(cartellaStore)) ?? null;
+}
+
+function causaDa(codice) {
+  if (codice === 'ENOSPC' || codice === 'EDQUOT') return 'spazio';
+  if (codice === 'EROFS') return 'sola-lettura';
+  if (codice === 'EACCES' || codice === 'EPERM') return 'permessi';
+  if (['ENOTSUP', 'EOPNOTSUPP', 'ENOSYS', 'EISDIR', 'EINVAL'].includes(codice)) return 'non-supportato';
+  return 'io';
+}
+
+const TESTO_CAUSA = Object.freeze({
+  spazio: 'il disco della cartella sessioni è pieno',
+  'sola-lettura': 'il disco della cartella sessioni è in sola lettura',
+  permessi: 'il sistema ha negato la creazione del file nella cartella sessioni',
+  'non-supportato': 'il file system della cartella sessioni non supporta né i collegamenti né la creazione esclusiva dei file',
+  io: 'il disco della cartella sessioni ha restituito un errore di lettura o scrittura',
+  'verifica-byte': 'il disco non ha restituito i byte appena scritti',
+});
+
+function erroreConCausa(causa, codiceOriginale, testo = TESTO_CAUSA[causa]) {
+  const code = causa === 'non-supportato' ? 'SESSION_STORE_FS_UNSUPPORTED' : 'SESSION_STORE_HEADER_FAILED';
+  const errore = new SessionStoreError(`Sessione non avviata: ${testo}${codiceOriginale ? ` (${codiceOriginale})` : ''}.`, code);
+  errore.causa = causa;
+  if (codiceOriginale) errore.codiceOriginale = codiceOriginale;
+  return errore;
+}
+
+/** Pubblica la sola intestazione nuova senza rendere visibile un prefisso parziale al replay. */
+export function registraIntestazioneSync({ cartellaStore, sessionId, record }, deps = {}) {
+  const mkdirSyncFn = deps.mkdirSyncFn ?? mkdirSync;
+  const writeFileSyncFn = deps.writeFileSyncFn ?? writeFileSync;
+  const linkSyncFn = deps.linkSyncFn ?? linkSync;
+  const unlinkSyncFn = deps.unlinkSyncFn ?? unlinkSync;
+  const existsSyncFn = deps.existsSyncFn ?? existsSync;
+  const readFileSyncFn = deps.readFileSyncFn ?? readFileSync;
+  const statSyncFn = deps.statSyncFn ?? statSync;
+  const logger = deps.logger ?? console;
+  const chiaveCartella = resolve(cartellaStore);
+  const finale = percorsoDi(cartellaStore, sessionId);
+  const staging = join(cartellaStore, `.${sessionId}.${randomUUID()}.pending`);
+  const attesi = Buffer.from(`${JSON.stringify(record)}\n`, 'utf8');
+  let conservaStaging = false;
+  let stagingRimosso = false;
+
+  /*
+   * Il finale del ripiego è NOSTRO solo se l'abbiamo creato con 'wx' (CREATE_NEW): nessun altro
+   * può averlo creato dopo. Se non si riesce a toglierlo, un marcatore `.quarantena` lo esclude
+   * dal replay (l'identità `ino` qui non vale, vedi sopra).
+   */
+  function togliFinaleNostroOIsolalo() {
+    let rimosso = false;
+    try { unlinkSyncFn(finale); rimosso = true; }
+    catch {
+      try { statSyncFn(finale); } catch (verifica) { if (verifica?.code === 'ENOENT') rimosso = true; }
+    }
+    if (rimosso) return;
+    percorsiConCodaIncerta.add(finale);
+    try { writeFileSyncFn(join(cartellaStore, `.${sessionId}.${randomUUID()}.quarantena`), '', { flag: 'wx', flush: true }); }
+    catch { /* il disco rifiuta anche il marcatore: resta il blocco in memoria sugli append */ }
+  }
+
+  function pubblicaSenzaLink() {
+    try { writeFileSyncFn(finale, attesi, { flag: 'wx', flush: true }); }
+    catch (errore) {
+      if (errore?.code === 'EEXIST') {
+        throw new SessionStoreError('La sessione ha già un registro persistito.', 'SESSION_STORE_HEADER_EXISTS');
+      }
+      // Creato e poi scrittura fallita: ciò che c'è è un prefisso NOSTRO. Byte diversi dal
+      // prefisso = non nostro (mai toccato); illeggibile = incerto, quindi isolato.
+      let presenti = null;
+      let incerto = false;
+      try { presenti = readFileSyncFn(finale); }
+      catch (lettura) { if (lettura?.code !== 'ENOENT') incerto = true; }
+      if (incerto || (presenti && presenti.length <= attesi.length && presenti.equals(attesi.subarray(0, presenti.length)))) {
+        togliFinaleNostroOIsolalo();
+      }
+      throw erroreConCausa(causaDa(errore?.code), errore?.code);
+    }
+    let riletti = null;
+    try { riletti = readFileSyncFn(finale); } catch { riletti = null; }
+    if (riletti && riletti.equals(attesi)) return;
+    togliFinaleNostroOIsolalo();
+    throw erroreConCausa('verifica-byte', null, riletti
+      ? 'la rilettura dei byte del file della sessione non coincide con quanto scritto'
+      : 'la rilettura dei byte del file della sessione non è riuscita');
+  }
+
+  function annunciaSenzaLink(codice) {
+    if (modalitaPerCartella.get(chiaveCartella) === 'senza-link') return;
+    modalitaPerCartella.set(chiaveCartella, 'senza-link');
+    try {
+      logger?.warn?.(`[session-store] la cartella delle sessioni è su un file system senza collegamenti (${codice}): `
+        + 'le sessioni nuove si pubblicano con creazione esclusiva e rilettura dei byte; un crash a metà scrittura può lasciare un file vuoto, scartato al ripristino.');
+    } catch { /* un logger guasto non cambia l'esito */ }
+  }
+
+  function statoFinale() {
+    try {
+      const origine = statSyncFn(staging, { bigint: true });
+      let pubblicato;
+      try { pubblicato = statSyncFn(finale, { bigint: true }); }
+      catch (errore) { return errore?.code === 'ENOENT' ? 'assente' : 'ignoto'; }
+      if (!origine.isFile() || !pubblicato.isFile() || origine.ino === 0n) return 'ignoto';
+      return origine.dev === pubblicato.dev && origine.ino === pubblicato.ino ? 'proprio' : 'estraneo';
+    } catch { return 'ignoto'; }
+  }
+
+  function finaleCompletoEProprio() {
+    try {
+      if (statoFinale() !== 'proprio') return false;
+      if (statSyncFn(finale, { bigint: true }).size !== BigInt(attesi.length)) return false;
+      return readFileSyncFn(finale).equals(attesi);
+    } catch { return false; }
+  }
+
+  function annullaPubblicazioneSePropria() {
+    if (statoFinale() === 'proprio') {
+      try { unlinkSyncFn(finale); } catch { /* verificare lo stato reale sotto */ }
+    }
+    const stato = statoFinale();
+    if (stato === 'proprio' || stato === 'ignoto') conservaStaging = true;
+  }
+
+  mkdirSyncFn(cartellaStore, { recursive: true });
+  if (existsSyncFn(finale)) {
+    throw new SessionStoreError('La sessione ha già un registro persistito.', 'SESSION_STORE_HEADER_EXISTS');
+  }
+  // Cartella già provata senza collegamenti: niente staging, niente alias `.pending`.
+  if (modalitaPerCartella.get(chiaveCartella) === 'senza-link') return pubblicaSenzaLink();
+  let ripiega = false;
+  try {
+    writeFileSyncFn(staging, attesi, { flag: 'wx', flush: true });
+    if (!readFileSyncFn(staging).equals(attesi)) {
+      throw new SessionStoreError('La scrittura dell’intestazione non è verificabile.', 'SESSION_STORE_HEADER_FAILED');
+    }
+    let erroreLink = null;
+    try { linkSyncFn(staging, finale); }
+    catch (errore) { erroreLink = errore; }
+    // La prova del link: fallito con un codice «non supportato» e nessun finale creato ⇒ il file
+    // system non ha i collegamenti. Lo staging (senza alias) deve sparire PRIMA del ripiego: una
+    // sua copia della testata accanto al finale non sarebbe distinguibile per `ino` su exFAT.
+    if (erroreLink && CODICI_LINK_NON_SUPPORTATO.has(erroreLink.code) && statoFinale() === 'assente') {
+      try { unlinkSyncFn(staging); stagingRimosso = true; }
+      catch {
+        try { statSyncFn(staging); } catch (verifica) { if (verifica?.code === 'ENOENT') stagingRimosso = true; }
+      }
+      if (!stagingRimosso) {
+        conservaStaging = true; // residuo di diagnosi senza journal, escluso dal replay
+        throw erroreConCausa('io', erroreLink.code, 'il file temporaneo della prova dei collegamenti non è stato eliminato');
+      }
+      annunciaSenzaLink(erroreLink.code);
+      ripiega = true;
+    } else {
+      // Anche se linkSync lancia DOPO avere creato il nome, solo byte completi
+      // e la stessa identità NTFS sono una conferma. Altrimenti il pending
+      // conserva la quarantena finché il finale proprio non è eliminato.
+      if (!finaleCompletoEProprio()) {
+        annullaPubblicazioneSePropria();
+        throw erroreLink ?? new SessionStoreError('La pubblicazione dell’intestazione non è verificabile.', 'SESSION_STORE_HEADER_FAILED');
+      }
+      // Un .pending rimasto sarebbe un secondo hard link alla conversazione:
+      // deve sparire PRIMA di avviare il modello o confermare la sessione.
+      try { unlinkSyncFn(staging); }
+      catch (errore) {
+        try { statSyncFn(staging, { bigint: true }); }
+        catch (verifica) { if (verifica?.code === 'ENOENT') stagingRimosso = true; }
+        if (!stagingRimosso) {
+          annullaPubblicazioneSePropria();
+          throw new SessionStoreError('Il collegamento temporaneo non è stato eliminato.', 'SESSION_STORE_HEADER_FAILED');
+        }
+      }
+      stagingRimosso = true;
+      if (!modalitaPerCartella.has(chiaveCartella)) modalitaPerCartella.set(chiaveCartella, 'link');
+    }
+  } finally {
+    if (!conservaStaging && !stagingRimosso) {
+      try { unlinkSyncFn(staging); }
+      catch { /* senza finale proprio, residuo di diagnosi escluso dal replay */ }
+    }
+  }
+  if (ripiega) pubblicaSenzaLink();
+}
+
+/**
+ * Accoda una riga manuale sullo stesso serializzatore degli eventi. Il ritorno
+ * conferma i byte effettivi, anche se la primitiva ha lanciato dopo l'append.
+ * Una coda diversa dal solo prefisso atteso non viene mai troncata.
+ */
+export function registraRigaConfermata({ cartellaStore, sessionId, record, puoAccodareFn, confermaFn }, deps = {}) {
+  const percorso = percorsoDi(cartellaStore, sessionId);
+  const bytesAttesi = Buffer.from(`${JSON.stringify(record)}\n`, 'utf8');
+  const appendFileSyncFn = deps.appendFileSyncFn ?? appendFileSync;
+  const truncateSyncFn = deps.truncateSyncFn ?? truncateSync;
+  const precedente = codeDiScrittura.get(percorso) ?? Promise.resolve();
+  const corrente = precedente.catch(() => {}).then(() => {
+    rifiutaCodaIncerta(percorso);
+    if (typeof puoAccodareFn === 'function' && !puoAccodareFn()) {
+      throw new SessionStoreError('Lo stato è cambiato prima della scrittura del record.', 'SESSION_STORE_PRECONDITION_FAILED');
+    }
+    mkdirSync(cartellaStore, { recursive: true });
+    let prima;
+    try {
+      verificaCodaAppendibile(percorso);
+      prima = dimensioneOZero(percorso);
+    } catch (errore) {
+      percorsiConCodaIncerta.add(percorso);
+      throw errore?.code === 'SESSION_STORE_AMBIGUOUS' ? errore : erroreCodaIncerta();
+    }
+    let erroreScrittura = null;
+    try { appendFileSyncFn(percorso, bytesAttesi, { flush: true }); }
+    catch (errore) { erroreScrittura = errore; }
+    try {
+      const delta = dimensioneOZero(percorso) - prima;
+      if (delta < 0 || delta > bytesAttesi.length) throw erroreCodaIncerta();
+      const coda = delta ? leggiByteDa(percorso, prima, delta) : Buffer.alloc(0);
+      if (delta === bytesAttesi.length && coda.equals(bytesAttesi)) {
+        if (typeof confermaFn === 'function') {
+          try { confermaFn(); }
+          catch { throw erroreCodaIncerta(); }
+        }
+        return;
+      }
+      if (delta === 0) {
+        if (erroreScrittura) throw erroreScrittura;
+        throw erroreCodaIncerta();
+      }
+      if (delta < bytesAttesi.length && coda.equals(bytesAttesi.subarray(0, delta))) {
+        truncateSyncFn(percorso, prima);
+        if (dimensioneOZero(percorso) !== prima) throw erroreCodaIncerta();
+        if (erroreScrittura) throw erroreScrittura;
+        throw new SessionStoreError('La scrittura era parziale; il prefisso è stato rimosso.', 'SESSION_STORE_WRITE_FAILED');
+      }
+      throw erroreCodaIncerta();
+    } catch (errore) {
+      if (errore === erroreScrittura) throw errore;
+      if (errore?.code === 'SESSION_STORE_WRITE_FAILED') throw errore;
+      percorsiConCodaIncerta.add(percorso);
+      throw errore?.code === 'SESSION_STORE_AMBIGUOUS' ? errore : erroreCodaIncerta();
+    }
+  });
+  codeDiScrittura.set(percorso, corrente);
+  corrente.catch(() => {}).finally(() => {
+    if (codeDiScrittura.get(percorso) === corrente) codeDiScrittura.delete(percorso);
+  });
+  return corrente;
 }
 
 /**
@@ -155,18 +619,62 @@ export function registraRigaSync({ cartellaStore, sessionId, record }, deps = {}
  * all'avvio del server. Cartella assente ⇒ `[]`, mai un errore (un
  * primo avvio non ha ancora nessuna sessione salvata).
  */
-export async function elencaSessioniPersistite({ cartellaStore }, deps = {}) {
+export async function elencaSessioniPersistite({ cartellaStore, conDiagnostica = false }, deps = {}) {
   const readdirFn = deps.readdirFn ?? fsp.readdir;
+  const statFn = deps.statFn ?? fsp.stat;
   let voci;
   try {
     voci = await readdirFn(cartellaStore, { withFileTypes: true });
   } catch (errore) {
-    if (errore?.code === 'ENOENT') return [];
+    if (errore?.code === 'ENOENT') return conDiagnostica ? { sessionIds: [], quarantined: [] } : [];
     throw new SessionStoreError(`Impossibile leggere ${cartellaStore}: ${errore.message}`, 'SESSION_STORE_READ_FAILED');
   }
-  return voci
-    .filter((v) => v.isFile() && v.name.endsWith(ESTENSIONE))
+  const sessionIdsTutti = voci.filter((v) => v.isFile() && v.name.endsWith(ESTENSIONE))
     .map((v) => v.name.slice(0, -ESTENSIONE.length));
+  const sessionIdsSet = new Set(sessionIdsTutti);
+  const candidati = [];
+  const pendingSenzaJournal = new Set();
+  const nomePending = /^\.(.+)\.([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.pending$/iu;
+  // 23/09/2026, EXFAT: marcatore del ripiego senza link (`registraIntestazioneSync`), scritto solo
+  // quando un finale non verificato non si è potuto togliere. Senza identità affidabile vale il nome.
+  const nomeQuarantena = /^\.(.+)\.([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.quarantena$/iu;
+  const inQuarantena = new Set();
+  for (const voce of voci) {
+    if (!voce.isFile()) continue;
+    const marcatore = nomeQuarantena.exec(voce.name);
+    if (marcatore) {
+      if (sessionIdsSet.has(marcatore[1])) inQuarantena.add(marcatore[1]);
+      continue;
+    }
+    const match = nomePending.exec(voce.name);
+    if (!match) continue;
+    if (sessionIdsSet.has(match[1])) candidati.push({ sessionId: match[1], nome: voce.name });
+    else pendingSenzaJournal.add(match[1]);
+  }
+  // Scansione lineare e stat con concorrenza limitata: 5.000 sessioni logiche
+  // non devono generare un prodotto cartesiano né migliaia di I/O simultanei.
+  for (let i = 0; i < candidati.length; i += 16) {
+    const risultati = await Promise.all(candidati.slice(i, i + 16).map(async ({ sessionId, nome }) => {
+      try {
+        const [pending, finale] = await Promise.all([
+          statFn(join(cartellaStore, nome), { bigint: true }),
+          statFn(percorsoDi(cartellaStore, sessionId), { bigint: true }),
+        ]);
+        if (!pending.isFile() || !finale.isFile()) return null;
+        if (pending.ino === 0n) return sessionId; // identità non verificabile: fail-closed
+        return pending.dev === finale.dev && pending.ino === finale.ino ? sessionId : null;
+      } catch (errore) {
+        return errore?.code === 'ENOENT' ? null : sessionId; // errore I/O: non caricare un possibile ghost
+      }
+    }));
+    for (const sessionId of risultati) if (sessionId) inQuarantena.add(sessionId);
+  }
+  const sessionIds = sessionIdsTutti.filter((id) => !inQuarantena.has(id));
+  if (!conDiagnostica) return sessionIds;
+  return { sessionIds, quarantined: [
+    ...[...inQuarantena].map((sessionId) => ({ sessionId, motivo: 'intestazione-in-quarantena' })),
+    ...[...pendingSenzaJournal].map((sessionId) => ({ sessionId, motivo: 'intestazione-pendente-senza-journal' })),
+  ] };
 }
 
 /**
@@ -179,16 +687,328 @@ export async function elencaSessioniPersistite({ cartellaStore }, deps = {}) {
  */
 export async function eliminaSessionePersistita({ cartellaStore, sessionId }, deps = {}) {
   const unlinkFn = deps.unlinkFn ?? fsp.unlink;
+  const percorso = percorsoDi(cartellaStore, sessionId);
+  const precedente = codeDiScrittura.get(percorso) ?? Promise.resolve();
+  const corrente = precedente.catch(() => {}).then(async () => {
+    try {
+      await unlinkFn(percorso);
+    } catch (errore) {
+      if (errore?.code === 'ENOENT') return;
+      throw new SessionStoreError(`Impossibile eliminare la sessione ${sessionId}: ${errore.message}`, 'SESSION_STORE_DELETE_FAILED');
+    }
+  });
+  codeDiScrittura.set(percorso, corrente);
+  corrente.catch(() => {}).finally(() => {
+    if (codeDiScrittura.get(percorso) === corrente) codeDiScrittura.delete(percorso);
+  });
+  return corrente;
+}
+
+/*
+ * ⭐⭐⭐ 24/09/2026 — F2, LA RIPARAZIONE DELLA CODA SPEZZATA (J1, decisione owner 7 del 24/09/2026: «riparazione
+ * automatica al riavvio: backup `.bak` + troncamento all'ultimo `\n`, dichiarata, mai silenziosa»).
+ * Prima, una coda incerta avvelenava la sessione per tutta la vita del processo E di nuovo a ogni riavvio
+ * (`percorsiConCodaIncerta` non aveva un solo `.delete`): il `resume` rispondeva «riprova» a chi non poteva
+ * riuscire. Il caso più comune è il riavvio del 4174 con `-Force` a metà append (J2).
+ *
+ * Cosa fa, nell'ordine — e ogni passo è quello che si può disfare:
+ *   1. legge i byte e trova la coda: ciò che segue l'ultimo `\n`;
+ *   2. ⛔ una coda che è un JSON VALIDO non è spezzata: è un record a cui manca solo il `\n` (un crash fra
+ *      i byte del record e il terminatore). Si COMPLETA appendendo `\n`, niente si scarta, niente backup;
+ *   3. una coda non parsabile (o, a coda vuota, un'ULTIMA riga terminata ma non parsabile — la forma
+ *      `{"tipo":\n` di un append fallito) si scarta: PRIMA la copia `<file>.jsonl.bak-<iso>` con
+ *      `COPYFILE_EXCL` (mai sopra un backup esistente), POI il prefisso sano su un temporaneo
+ *      `<file>.jsonl.<uuid>.riparazione` con `flush:true`, POI `rename` sopra il journal — mai un
+ *      `truncate` in-place: se il processo muore in mezzo, il journal è o intero o riparato, e il backup c'è.
+ *      ⛔ Qui `rename` sopra un file esistente è VOLUTO: doc Node v24 `fs.rename` (ctx7, 24/09/2026) «In the
+ *      case that newPath already exists, it will be overwritten». Il divieto exFAT del 23/09 vale per la
+ *      NASCITA della testata, dove sovrascrivere era il difetto.
+ *      Ritentativi su EPERM/EBUSY/EACCES del rename (antivirus che tiene il file: npm/write-file-atomic#227,
+ *      forma di graceful-fs), pochi e brevi.
+ *   4. una riga rotta NON ultima non si tocca mai: è `SESSION_STORE_CORRUPT` (danno altrove, non crash).
+ * ⭐ Forma dei concorrenti (nel codice, 24/09/2026): Hermes legge i JSONL altrui saltando la riga non parsabile
+ *   (`hermes_cli/foreign_sessions.py:51-55`, `except ValueError: continue`) — qui si fa lo stesso in lettura
+ *   e in più si RIPARA il file perché gli append tornino possibili, tenendo i byte originali.
+ */
+const RITENTATIVI_RENAME = [0, 20, 60, 120, 250];
+
+function marcaTemporale() {
+  return new Date().toISOString().replace(/[:.]/g, '-');
+}
+
+function esitoNonRiparato(extra = {}) {
+  return { riparato: false, righeScartate: 0, byteScartati: 0, backup: null, ...extra };
+}
+
+/*
+ * ⭐⭐⭐ 24/09/2026 — F2-bis, corsia A: LA RIPARAZIONE RESTA A STREAM. La prima stesura (F2, stessa mattina)
+ * leggeva il file INTERO in un Buffer (`readFile`) e riscriveva il prefisso sano da quel Buffer: sul journal
+ * di una sessione lunga (963 MiB a 300 turni, banco F2 §2.7) è lo stesso muro del replay — `fs.readFile`
+ * rifiuta oltre 2 GiB (`ERR_FS_FILE_TOO_LARGE`, doc Node v24 `errors`, letta il 24/09/2026 via ctx7
+ * `/websites/nodejs_latest-v24_x_api`: «consider using fs.createReadStream() to read the file in chunks»)
+ * e prima ancora tiene in RAM un file che non serve tenere. Della riparazione servono solo DUE cose:
+ *   · la coda: i byte dopo l'ultimo `\n` e l'ultima riga terminata ⇒ si leggono ALL'INDIETRO a blocchi di
+ *     64 KiB (`leggiCodaAllIndietro`) finché si sono visti due `\n` o l'inizio del file — la memoria è al
+ *     più due record più un blocco, qualunque sia la taglia del journal;
+ *   · il prefisso sano ⇒ si COPIA a stream, `createReadStream(percorso, { end: fineSana - 1 })` →
+ *     `createWriteStream(temporaneo, { flags: 'wx', flush: true })` con `stream.pipeline` (`end` è
+ *     inclusivo, doc Node v24 `fs.createReadStream`; `flush` «the underlying file descriptor is flushed
+ *     prior to closing it», supportata da v21.0.0/v20.10.0 — doc `fs.createWriteStream`, letta il
+ *     24/09/2026). Mai un Buffer del prefisso.
+ * Il resto (backup `COPYFILE_EXCL`, `rename` sopra il journal coi ritentativi, mai `truncate` in-place)
+ * è quello di F2, invariato.
+ */
+const BLOCCO_CODA = 64 * 1024;
+
+/**
+ * Legge la fine del file all'indietro, a blocchi, finché ha visto due `\n` (o l'inizio del file).
+ * Ritorna `{ base, coda }`: `coda` sono gli ultimi byte del file e `base` la loro posizione nel file.
+ */
+function leggiCodaAllIndietro(percorso, dimensione) {
+  const fd = openSync(percorso, 'r');
+  const pezzi = [];
+  let fine = dimensione;
+  let newline = 0;
   try {
-    await unlinkFn(percorsoDi(cartellaStore, sessionId));
-  } catch (errore) {
-    if (errore?.code === 'ENOENT') return;
-    throw new SessionStoreError(`Impossibile eliminare la sessione ${sessionId}: ${errore.message}`, 'SESSION_STORE_DELETE_FAILED');
+    while (fine > 0 && newline < 2) {
+      const inizio = Math.max(0, fine - BLOCCO_CODA);
+      const pezzo = Buffer.alloc(fine - inizio);
+      let letti = 0;
+      while (letti < pezzo.length) {
+        const n = readSync(fd, pezzo, letti, pezzo.length - letti, inizio + letti);
+        if (n === 0) throw erroreCodaIncerta();
+        letti += n;
+      }
+      for (let i = pezzo.indexOf(10); i !== -1; i = pezzo.indexOf(10, i + 1)) newline += 1;
+      pezzi.unshift(pezzo);
+      fine = inizio;
+    }
+  } finally {
+    closeSync(fd);
   }
+  return { base: fine, coda: Buffer.concat(pezzi) };
+}
+
+async function riparaCodaSpezzataInterna(percorso, deps = {}) {
+  const copyFileFn = deps.copyFileFn ?? fsp.copyFile;
+  const renameFn = deps.renameFn ?? fsp.rename;
+  const appendFileFn = deps.appendFileFn ?? fsp.appendFile;
+  const unlinkFn = deps.unlinkFn ?? fsp.unlink;
+  const createReadStreamFn = deps.createReadStreamFn ?? createReadStream;
+  const createWriteStreamFn = deps.createWriteStreamFn ?? createWriteStream;
+  let dimensione;
+  try { dimensione = statSync(percorso).size; }
+  catch (errore) {
+    if (errore?.code === 'ENOENT') return esitoNonRiparato({ motivo: 'assente' });
+    throw errore;
+  }
+  if (dimensione === 0) return esitoNonRiparato({ motivo: 'vuoto' });
+
+  // `bytes` sono SOLO gli ultimi byte del file: un offset locale `i` sta nel file a `base + i`.
+  const { base, coda: bytes } = leggiCodaAllIndietro(percorso, dimensione);
+  const ultimoNl = bytes.lastIndexOf(10);
+  let fineSana;     // lunghezza (nel file) del prefisso da conservare
+  let byteScartati; // i byte da scartare
+  if (ultimoNl !== bytes.length - 1) {
+    const coda = bytes.subarray(ultimoNl + 1); // senza `\n` nella coda letta si è arrivati all'inizio del file
+    let valido = false;
+    try { JSON.parse(coda.toString('utf8')); valido = true; } catch { /* spezzata */ }
+    if (valido) {
+      // Caso 2: record intero senza terminatore — si completa, non si scarta.
+      await appendFileFn(percorso, '\n', { flush: true });
+      percorsiConCodaIncerta.delete(percorso);
+      return { riparato: true, completata: true, righeScartate: 0, byteScartati: 0, backup: null, byteConservati: dimensione + 1 };
+    }
+    fineSana = base + ultimoNl + 1;
+    byteScartati = coda.length;
+  } else {
+    // Coda vuota: l'ultima riga TERMINATA è parsabile? Se no (append fallito con newline), si scarta lei sola.
+    const inizioUltima = ultimoNl === 0 ? 0 : bytes.lastIndexOf(10, ultimoNl - 1) + 1;
+    const ultima = bytes.subarray(inizioUltima, ultimoNl);
+    if (ultima.length === 0) return esitoNonRiparato({ motivo: 'sano' });
+    try { JSON.parse(ultima.toString('utf8')); return esitoNonRiparato({ motivo: 'sano' }); }
+    catch { /* rotta e terminata */ }
+    fineSana = base + inizioUltima;
+    byteScartati = bytes.length - inizioUltima;
+  }
+
+  const backup = `${percorso}.bak-${marcaTemporale()}`;
+  await copyFileFn(percorso, backup, fsConstants.COPYFILE_EXCL);
+  const temporaneo = `${percorso}.${randomUUID()}.riparazione`;
+  try {
+    await pipeline(
+      fineSana > 0 ? createReadStreamFn(percorso, { end: fineSana - 1 }) : Readable.from([]),
+      createWriteStreamFn(temporaneo, { flags: 'wx', flush: true }),
+    );
+    let ultimoErrore = null;
+    for (const pausa of RITENTATIVI_RENAME) {
+      if (pausa) await attendiMs(pausa);
+      try { await renameFn(temporaneo, percorso); ultimoErrore = null; break; }
+      catch (errore) {
+        ultimoErrore = errore;
+        if (!CODICI_TRANSITORI.has(errore?.code)) break;
+      }
+    }
+    if (ultimoErrore) throw ultimoErrore;
+  } catch (errore) {
+    try { await unlinkFn(temporaneo); } catch { /* il temporaneo ha un nome unico e non è mai letto dal replay */ }
+    throw errore;
+  }
+  percorsiConCodaIncerta.delete(percorso);
+  return { riparato: true, completata: false, righeScartate: 1, byteScartati, backup, byteConservati: fineSana };
 }
 
 /**
- * Legge un registro per intero — una riga JSON per riga del file.
+ * Ripara ESPLICITAMENTE la coda spezzata di un journal (`{ percorso }` oppure `{ cartellaStore, sessionId }`),
+ * in fila con le altre operazioni su quel file. Ritorna il record di riparazione:
+ * `{ riparato, completata, righeScartate, byteScartati, backup, byteConservati }` — `riparato:false` su un
+ * file sano, vuoto o assente (con `motivo`). Lancia se il backup o la riscrittura falliscono: in quel caso
+ * il journal è INTATTO e la coda resta incerta.
+ */
+export function riparaCodaSpezzata({ percorso, cartellaStore, sessionId }, deps = {}) {
+  const bersaglio = percorso ?? percorsoDi(cartellaStore, sessionId);
+  const precedente = codeDiScrittura.get(bersaglio) ?? Promise.resolve();
+  const corrente = precedente.catch(() => {}).then(() => riparaCodaSpezzataInterna(bersaglio, deps));
+  codeDiScrittura.set(bersaglio, corrente);
+  corrente.catch(() => {}).finally(() => {
+    if (codeDiScrittura.get(bersaglio) === corrente) codeDiScrittura.delete(bersaglio);
+  });
+  return corrente;
+}
+
+/*
+ * ⭐⭐⭐ 24/09/2026 — F2-bis, corsia A: IL JOURNAL SI LEGGE A STREAM, RIGA PER RIGA. Fino a stamattina
+ * `leggiRegistro` faceva `readFile(percorso, 'utf8')` + `split('\n')`: TUTTO il file in una stringa, poi tutte
+ * le righe, poi tutti i record, vivi insieme (RSS 4,4× la taglia del file, banco F2 §2.7). E una stringa V8
+ * non supera 2^29-24 caratteri (~512 MiB): col formato di oggi il replay MORIVA a ~218 turni con
+ * «Invalid string length» (3 giri su 3 a 300 turni, banco F2 §2.7) e il riavvio del 4174 perdeva la sessione
+ * («lettura-fallita» in `ripristina`), senza che nessun test lo dicesse. Oltre c'era il muro di `fs.readFile`
+ * a 2 GiB (`ERR_FS_FILE_TOO_LARGE`; doc Node v24 `errors`, letta il 24/09/2026 via ctx7
+ * `/websites/nodejs_latest-v24_x_api`: «consider using fs.createReadStream() to read the file in chunks»).
+ *
+ * ⇒ Qui una sola strada per tutti: `leggiRegistroAStream` (la porta per il registro, corsia B) consegna ogni
+ *   record a `perRiga` appena la sua riga è parsata e lo lascia andare; `leggiRegistro` è la stessa lettura
+ *   con un `perRiga` che accumula — stesso contratto di prima (array, `riparazione` non enumerabile), ma il
+ *   muro della stringa non c'è più. Forma presa dalla doc Node v24 `readline` (letta il 24/09/2026 via ctx7):
+ *   `createInterface({ input: createReadStream(...), crlfDelay: Infinity })` + evento `'line'` + attesa
+ *   della chiusura — «Performance is not on par with the traditional 'line' event API. Use 'line' instead for
+ *   performance-sensitive applications» (§ `rl[Symbol.asyncIterator]()`), e «The 'line' event is also emitted
+ *   if new data has been read from a stream and that stream ends without a final end-of-line marker» — per
+ *   questo l'ultima riga spezzata ARRIVA come riga, e la coda incerta si riconosce dall'ultimo byte del file
+ *   letto PRIMA di aprire lo stream, non dal lettore. ⛔ La doc dice anche che «Errors in the input stream are
+ *   not forwarded» dall'iteratore: qui l'errore dello stream si ascolta a mano e diventa `SESSION_STORE_READ_FAILED`.
+ * ⛔ Lo stream si apre con `end: dimensione - 1` (inclusivo): la lettura vede la fotografia del file al via,
+ *   coerente con l'ultimo byte già guardato, anche se qualcosa lo allunga nel frattempo.
+ * ⭐ Lo stesso nei concorrenti (letti nel codice, 24/09/2026): Hermes legge i JSONL di Claude/Codex riga per
+ *   riga (`hermes_cli/foreign_sessions.py:49-56` `for line in f: … json.loads(line)`), mai il file intero.
+ *
+ * Contratto di `perRiga(record, { indice, byte })`: SINCRONA (il ritorno si guarda solo per `false` =
+ * «fermati qui», che chiude lo stream e ritorna `interrotta:true`); `byte` è la taglia della riga in UTF-8
+ * SENZA il fine riga; un'eccezione di `perRiga` ferma la lettura e arriva al chiamante così com'è, senza
+ * toccare il file. Un errore lo si lancia; un lavoro asincrono lo si accumula e lo si fa dopo.
+ * ⛔ `readline` tratta anche un `\r` solo come fine riga: nel journal non può comparire (JSON.stringify lo
+ *   scrive `\\r`), e `\r\n` con `crlfDelay: Infinity` è UNA riga — parità con lo `split('\n')` di prima.
+ */
+function inCodaDelPercorso(percorso, lavoro) {
+  const precedente = codeDiScrittura.get(percorso) ?? Promise.resolve();
+  const corrente = precedente.catch(() => {}).then(lavoro);
+  codeDiScrittura.set(percorso, corrente);
+  corrente.catch(() => {}).finally(() => {
+    if (codeDiScrittura.get(percorso) === corrente) codeDiScrittura.delete(percorso);
+  });
+  return corrente;
+}
+
+async function leggiAStreamInterna(percorso, sessionId, perRiga, deps = {}) {
+  const createReadStreamFn = deps.createReadStreamFn ?? createReadStream;
+  const erroreDiLettura = (errore) => new SessionStoreError(`Impossibile leggere la sessione ${sessionId}: ${errore?.message ?? String(errore)}`, 'SESSION_STORE_READ_FAILED');
+  let dimensione;
+  try { dimensione = statSync(percorso).size; }
+  catch (errore) {
+    if (errore?.code === 'ENOENT') return null;
+    throw erroreDiLettura(errore);
+  }
+  if (dimensione === 0) return { record: 0, byte: 0, riparazione: null, interrotta: false };
+  let terminato;
+  try { terminato = leggiByteDa(percorso, dimensione - 1, 1)[0] === 10; }
+  catch (errore) { throw erroreDiLettura(errore); }
+
+  let indice = 0;
+  let letti = 0;
+  let rottaPendente = false; // una riga non parsabile: è un crash a metà append solo se resta l'ULTIMA
+  let fermata = null;        // { errore } | { interrotta: true }
+  const input = createReadStreamFn(percorso, { encoding: 'utf8', end: dimensione - 1 });
+  const rl = createInterface({ input, crlfDelay: Infinity });
+  const ferma = (esito) => {
+    if (fermata) return;
+    fermata = esito;
+    rl.close();
+    input.destroy();
+  };
+  rl.on('line', (riga) => {
+    if (fermata) return; // `rl.close()` non ferma le righe già in un blocco: si ignorano
+    if (riga.trim() === '') return;
+    if (rottaPendente) {
+      ferma({ errore: new SessionStoreError(`La sessione ${sessionId} ha una riga corrotta (non l'ultima): il file non è un crash a metà append, è danneggiato altrove.`, 'SESSION_STORE_CORRUPT') });
+      return;
+    }
+    let record;
+    try { record = JSON.parse(riga); }
+    catch { rottaPendente = true; return; }
+    letti += 1;
+    let esito;
+    try { esito = perRiga(record, { indice: indice++, byte: Buffer.byteLength(riga, 'utf8') }); }
+    catch (errore) { ferma({ errore }); return; }
+    if (esito === false) ferma({ interrotta: true });
+  });
+  await new Promise((resolve) => {
+    input.on('error', (errore) => { if (!fermata) fermata = { errore: erroreDiLettura(errore) }; rl.close(); });
+    // La chiusura dello STREAM (fd chiuso) è il segnale completo: arriva dopo l'ultima riga, anche su
+    // errore (autoClose) e dopo `destroy()`. Il `close` di readline arriverebbe prima, a fd ancora aperto.
+    input.on('close', resolve);
+  });
+  if (fermata?.errore) throw fermata.errore;
+
+  let riparazione = null;
+  const codaIncerta = !terminato || (rottaPendente && !fermata);
+  if (codaIncerta) {
+    percorsiConCodaIncerta.add(percorso);
+    // Siamo già dentro la coda di questo percorso: la riparazione va chiamata INTERNA, mai l'esportata
+    // (si accoderebbe dietro se stessa). I record consegnati sono già giusti: l'ultima riga scartata dal
+    // parse è la stessa che la riparazione toglie dal file; quella valida senza `\n` è stata consegnata.
+    try { riparazione = await riparaCodaSpezzataInterna(percorso, deps); }
+    catch (errore) {
+      percorsiConCodaIncerta.add(percorso);
+      riparazione = esitoNonRiparato({ errore: `${errore?.code ? `${errore.code}: ` : ''}${errore?.message ?? String(errore)}` });
+    }
+  }
+  return { record: letti, byte: dimensione, riparazione, interrotta: Boolean(fermata?.interrotta) };
+}
+
+/**
+ * Legge un registro A STREAM, riga per riga: `perRiga(record, { indice, byte })` per ogni record, in fila
+ * con le altre operazioni sul file. Ritorna `null` se il journal non esiste, altrimenti
+ * `{ record, byte, riparazione, interrotta }`: `record` quanti ne ha consegnati, `byte` la taglia del file al
+ * via, `riparazione` come `riparaCodaSpezzata` (o `null` se la coda era sana), `interrotta` se `perRiga` ha
+ * ritornato `false`. Una riga rotta NON ultima ⇒ `SESSION_STORE_CORRUPT` (i record prima sono già stati
+ * consegnati); un errore del disco ⇒ `SESSION_STORE_READ_FAILED`; un'eccezione di `perRiga` ⇒ la stessa.
+ */
+export function leggiRegistroAStream({ cartellaStore, sessionId, perRiga }, deps = {}) {
+  if (typeof perRiga !== 'function') {
+    throw new SessionStoreError('leggiRegistroAStream vuole perRiga(record, { indice, byte }).', 'SESSION_STORE_BAD_ARGUMENT');
+  }
+  const percorso = percorsoDi(cartellaStore, sessionId);
+  return inCodaDelPercorso(percorso, () => leggiAStreamInterna(percorso, sessionId, perRiga, deps));
+}
+
+/**
+ * Legge un registro per intero — una riga JSON per riga del file — e ritorna l'array dei record.
+ * ⭐ 24/09/2026 (F2-bis): è `leggiRegistroAStream` con un `perRiga` che accumula — mai il file in una stringa.
+ * ⭐ 24/09/2026 (F2): se trova la coda incerta la RIPARA da sola (vedi `riparaCodaSpezzataInterna`) e lo
+ * dichiara: il risultato è l'array dei record con una proprietà NON enumerabile `riparazione` — additiva,
+ * invisibile a `deepEqual`/`JSON.stringify`/spread — che il registro legge per dirlo nella chat
+ * («recuperata, N righe scartate»). Se la riparazione fallisce la lettura resta valida, la coda resta
+ * incerta (append vietati, come prima) e `riparazione.riparato` è `false` con `errore`.
  * ⭐⭐⭐ L'ULTIMA riga, se non è JSON valido, viene SCARTATA in silenzio
  * (mai un errore che perde l'intero file): è esattamente il caso di
  * un crash a metà scrittura, l'unica corruzione che l'append-only
@@ -197,24 +1017,15 @@ export async function eliminaSessionePersistita({ cartellaStore, sessionId }, de
  * ultima malformata è invece un errore dichiarato: quello indica un
  * file danneggiato in un altro modo, non un crash a metà append.
  */
-export async function leggiRegistro({ cartellaStore, sessionId }, deps = {}) {
-  const readFileFn = deps.readFileFn ?? fsp.readFile;
-  let testo;
-  try {
-    testo = await readFileFn(percorsoDi(cartellaStore, sessionId), 'utf8');
-  } catch (errore) {
-    if (errore?.code === 'ENOENT') return null;
-    throw new SessionStoreError(`Impossibile leggere la sessione ${sessionId}: ${errore.message}`, 'SESSION_STORE_READ_FAILED');
-  }
-  const righe = testo.split('\n').filter((r) => r.trim() !== '');
-  const record = [];
-  for (let i = 0; i < righe.length; i++) {
-    try {
-      record.push(JSON.parse(righe[i]));
-    } catch {
-      if (i === righe.length - 1) break; // ultima riga, possibile crash a metà scrittura: scartata, non fatale
-      throw new SessionStoreError(`La sessione ${sessionId} ha una riga corrotta (non l'ultima): il file non è un crash a metà append, è danneggiato altrove.`, 'SESSION_STORE_CORRUPT');
+export function leggiRegistro({ cartellaStore, sessionId }, deps = {}) {
+  const percorso = percorsoDi(cartellaStore, sessionId);
+  return inCodaDelPercorso(percorso, async () => {
+    const record = [];
+    const esito = await leggiAStreamInterna(percorso, sessionId, (r) => { record.push(r); }, deps);
+    if (esito === null) return null;
+    if (esito.riparazione) {
+      Object.defineProperty(record, 'riparazione', { value: esito.riparazione, enumerable: false, configurable: true, writable: true });
     }
-  }
-  return record;
+    return record;
+  });
 }

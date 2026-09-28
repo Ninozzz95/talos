@@ -86,7 +86,7 @@ export function fornitoreDelModello(modello) {
 /** Le due righe del piede dai dati del monolite. */
 export function testiPiede({ cartella, nomeAnteprima, tema, modello } = {}) {
   const titolo = nomeDaPercorso(cartella) || (typeof nomeAnteprima === 'string' && nomeAnteprima.trim()) || 'Workspace locale';
-  const nomeTema = NOMI_TEMA[tema] || NOMI_TEMA.calm;
+  const nomeTema = NOMI_TEMA[tema] || NOMI_TEMA.forge; // il ripiego dice il tema di serie (owner 24/09/2026 sera: «tema default forge»)
   const fornitore = nomeFornitore(fornitoreDelModello(modello));
   return { titolo, sotto: fornitore ? `Tema ${nomeTema} · ${fornitore}` : `Tema ${nomeTema}` };
 }

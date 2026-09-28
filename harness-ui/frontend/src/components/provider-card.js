@@ -382,7 +382,7 @@ function apriConfigurazioneProvider(card,row){
  dialogo.addEventListener('keydown',(e)=>{if(e.key==='Escape')e.stopPropagation();});
  dialogo.addEventListener('close',()=>{
   /* IL CORPO TORNA DOVE STAVA, e torna con lo stato che aveva: se la card lo teneva aperto in
-     linea (`aperta`, che è il caso del velo), si riapre in linea; se era chiuso, si richiude. */
+     linea (`aperta`), si riapre in linea; se era chiuso, si richiude. */
   if(doveStava.genitore)doveStava.genitore.insertBefore(corpo,doveStava.dopo&&doveStava.dopo.isConnected?doveStava.dopo:null);
   corpo.hidden=doveStava.hidden;
   corpo.style.removeProperty('padding');corpo.style.removeProperty('border-top');
@@ -459,8 +459,8 @@ function aggiornaStatoConfigura(card,aperto){
 const filtroVuoto=()=>({cerca:'',credenziale:[],prova:[]});
 /* Lo stato della lista filtrata: i filtri accesi, le righe dell'ultimo disegno e con che opzioni —
    così un chip può RIDISEGNARE senza che nessuno glielo debba ripassare. Una `WeakMap` e non una
-   proprietà sul nodo: la lista del velo e quella del pannello sono due nodi diversi, e ognuno ha
-   il suo stato senza che l'uno debba sapere dell'altro. */
+   proprietà sul nodo: ogni lista ha il suo stato senza che un'altra debba saperlo (fino al
+   23/09/2026 le liste erano due, il pannello e il velo «Fornitori e accessi», tolto per decisione owner). */
 const statoLista=new WeakMap();
 
 /** La faccetta della credenziale a cui un fornitore appartiene: una sola, sempre. */
@@ -634,7 +634,7 @@ function aggiungiCampiCloud(body,row){
 }
 // P-K — fine
 
-export function creaProviderCard(row,{aperta=false,prova=null,occupato=false,onMenu=null,onAzionePool=null,ambito=''}={}){
+export function creaProviderCard(row,{aperta=false,prova=null,occupato=false,onMenu=null,onAzionePool=null}={}){
  const esterno=row.id==='esterno',configurazionePropria=esterno||CLOUD_CONFIGURABILI.has(row.id);
  /*
   * ⛔⛔ L'ID DEL CORPO PORTA IL NOME DELLA SUPERFICIE — segnalato dalla corsia 4 il 19/09/2026 e
@@ -649,8 +649,13 @@ export function creaProviderCard(row,{aperta=false,prova=null,occupato=false,onM
   *   cancello dell'identità (`tests/browser/fixtures/inventario-sezioni.json`, chiave `models`,
   *   118 id). Rinominarli lo farebbe diventare rosso — cioè la cura di un difetto ne aprirebbe
   *   un altro. ⇒ `ambito` è vuoto per il pannello, `'velo'` per il dialogo: **1 e 1**, non 2 e 0.
+  * ⛔ 23/09/2026 — IL VELO NON C'È PIÙ, e il doppione è curato alla RADICE. Decisione owner: il velo
+  *   «Fornitori e accessi» è tolto («Toglierla: porta al Model Lab»), quindi ogni fornitore ha UNA
+  *   card sola nel documento — quella della scheda «Provider». Il parametro `ambito` e il suffisso
+  *   `velo-` sono tolti con lui: l'id del pannello resta `provider-body-<id>`, lo stesso di sempre
+  *   (il cancello dell'identità non cambia), e l'unicità la prova `lab-provider.spec.mjs` PROV-07.
   */
- const idCorpo='provider-body-'+(ambito?ambito+'-':'')+row.id;
+ const idCorpo='provider-body-'+row.id;
  const d=statoProvider(row,prova),busy=occupato||d.occupato,card=el('article','talos-card talos-provider');card.dataset.c='ProviderCard';card.dataset.providerId=row.id;card.setAttribute('aria-busy',String(busy));if(prova)card.dataset.provaEsito=prova.esito;
  vesti(card,VESTITO.carta);
  /*
@@ -914,7 +919,7 @@ export function creaProviderCard(row,{aperta=false,prova=null,occupato=false,onM
   *   senza, due regie della app farebbero la loro parte su questo clic —
   *     · `app.js`, ascoltatore delegato sulla radice: `[aria-expanded][aria-controls]` ⇒ scrive
   *       `aria-expanded` INVERTITO e `c.hidden = aperto` sul corpo (la disclosure del mockup);
-  *     · `app.js`, delega su `#providerList`/`#veloFornitori`: `[data-provider-toggle]` ⇒ inverte
+  *     · `app.js`, delega su `#providerList`: `[data-provider-toggle]` ⇒ inverte
   *       `providerAperti` e RIDISEGNA la lista.
   *   ⇒ Il corpo verrebbe aperto in linea E spostato nella modale, e il ridisegno porterebbe via la
   *     card con dentro la modale appena aperta: una modale che si chiude da sola, senza un errore.
@@ -933,7 +938,7 @@ export function aggiornaProviderList(lista,rows,opzioni={}){
  vesti(lista,VESTITO.griglia);
  /*
   * I FILTRI — solo dove sono stati INSTALLATI (`montaProviderPanel`, cioè la scheda Provider).
-  * La lista del velo non ha lo stato e non li disegna: è lo stesso renderer, con una riga sola.
+  * Una lista che non è passata di lì (una prova, la vetrina dei componenti) non ha lo stato e non li disegna.
   */
  const stato=statoLista.get(lista);
  if(stato){stato.rows=rows;stato.opzioni=opzioni;}
@@ -952,13 +957,10 @@ export function aggiornaProviderList(lista,rows,opzioni={}){
  const focus=document.activeElement,focusId=focus?.closest('[data-provider-id]')?.dataset.providerId;
  const old=new Map([...lista.querySelectorAll('[data-provider-id]')].map(n=>[n.dataset.providerId,n]));
  /*
-  * ⛔ L'AMBITO — la stessa riga può essere disegnata in DUE posti insieme (il pannello del
-  *   laboratorio e il velo «Fornitori e accessi»): è da lì che nasceva `#provider-body-openrouter`
-  *   doppio. Il segno della superficie ce l'ha la LISTA, non il chiamante: il velo la marca
-  *   `data-velo-lista` (`app.js`, `popolaVeloFornitori`), il pannello no. ⇒ Si legge da qui, e
-  *   nessun chiamante deve ricordarsi di passarlo — che è il modo in cui un parametro si dimentica.
+  * ⛔ 23/09/2026 — QUI SI LEGGEVA L'AMBITO della lista (pannello o velo «Fornitori e accessi»), perché
+  *   la stessa riga poteva essere disegnata in due posti e far nascere `#provider-body-openrouter`
+  *   doppio. Il velo è tolto per decisione owner: la lista è UNA, e l'ambito con lui.
   */
- const ambito=lista.hasAttribute?.('data-velo-lista')||lista.closest?.('#veloFornitori')?'velo':'';
  /*
   * ⛔ LA MODALE NON SI PERDE NEL RIDISEGNO, e non è un dettaglio: SALVARE RIDISEGNA. Il
   *   salvataggio della configurazione chiama il «Aggiorna» del prodotto (`providerRefresh`), la
@@ -971,7 +973,7 @@ export function aggiornaProviderList(lista,rows,opzioni={}){
   *   ruberebbe il posto al primo controllo della modale riaperta).
   */
  const daRiaprire=[];
- const cards=visibili.map(row=>{const op={aperta:aperte.has(row.id),prova:prove.get(row.id)||null,occupato:occupati.has(row.id)||caricamento},signature=JSON.stringify([row,op,typeof onAzionePool==='function']),precedente=old.get(row.id);if(precedente?.dataset.salvataggioCollegamento==='in-corso'||precedente?.dataset.providerSignature===signature&&!precedente.dataset.providerReset)return precedente;if(precedente?.querySelector?.(':scope > .talos-provider__modale[open]'))daRiaprire.push(row);const card=creaProviderCard(row,{...op,onMenu,onAzionePool,ambito});card.dataset.providerSignature=signature;
+ const cards=visibili.map(row=>{const op={aperta:aperte.has(row.id),prova:prove.get(row.id)||null,occupato:occupati.has(row.id)||caricamento},signature=JSON.stringify([row,op,typeof onAzionePool==='function']),precedente=old.get(row.id);if(precedente?.dataset.salvataggioCollegamento==='in-corso'||precedente?.dataset.providerSignature===signature&&!precedente.dataset.providerReset)return precedente;if(precedente?.querySelector?.(':scope > .talos-provider__modale[open]'))daRiaprire.push(row);const card=creaProviderCard(row,{...op,onMenu,onAzionePool});card.dataset.providerSignature=signature;
  if(precedente&&!precedente.dataset.providerReset){for(const input of card.querySelectorAll('input,textarea')){const attr=[...input.attributes].find(a=>a.name.startsWith('data-provider-'));const prima=precedente.querySelector('['+attr.name+']');if(prima){prima.disabled=input.disabled;prima.className=input.className;prima.placeholder=input.placeholder;input.replaceWith(prima);}}}
  const feedback=precedente?.querySelector('[data-provider-feedback]'),target=card.querySelector('[data-provider-feedback]');if(feedback&&target)target.replaceWith(feedback);return card;});lista.replaceChildren(...cards);
  if(focusId){if(focus.isConnected&&!focus.disabled)focus.focus({preventScroll:true});else cards.find(n=>n.dataset.providerId===focusId)?.querySelector('[data-provider-toggle]')?.focus({preventScroll:true});}
@@ -1003,9 +1005,8 @@ export function montaProviderPanel(panel){
  const test=panel.querySelector('#providerTestAll')||panel.querySelector('[data-provider-test-all]');
  if(test&&!panel.querySelector('#providerRefresh')){test.className='talos-button talos-button--secondary talos-button--sm';test.dataset.c='Button';const refresh=button('refresh','Aggiorna');refresh.id='providerRefresh';delete refresh.dataset.providerAction;test.before(refresh);}
  /*
-  * I FILTRI NASCONO QUI, una volta sola, sopra la lista della scheda Provider. Il VELO non passa di
-  * qui (`popolaVeloFornitori` disegna la sua lista da sé) e non li ha: là dentro c'è UN fornitore,
-  * e una barra che filtra un elemento solo è arredamento.
+  * I FILTRI NASCONO QUI, una volta sola, sopra la lista della scheda Provider — che dal 23/09/2026 è
+  * l'UNICA lista dei fornitori (il velo «Fornitori e accessi» è tolto per decisione owner).
   */
  installaFiltriFornitori(panel.querySelector('#providerList'));
  curaDoppiaTestata(panel,head,title,note);
@@ -1022,12 +1023,13 @@ export function montaProviderPanel(panel){
  *
  *   ⇒ Il difetto ESISTE, ed è questo: **due nomi per la stessa pagina**, a 30 px di distanza.
  *   ⛔ La cura NON è cancellare un nodo: il `<h4>` è la testata del pannello legacy, che vive
- *     ANCHE fuori dal guscio (la schermata Impostazioni, il velo) e là è l'unica che c'è.
+ *     ANCHE fuori dal guscio (quando il guscio nega il montaggio; fino al 23/09/2026 anche nel velo
+ *     «Fornitori e accessi», tolto per decisione owner) e là è l'unica che c'è.
  *     E `tests/browser/lab-montaggio-neutro.spec.mjs:571` pretende che il suo testo resti
  *     «Fornitori e accessi». ⇒ Si nasconde (`hidden`), non si rimuove: il testo resta nel DOM,
  *     il cancello resta verde, e chi guarda vede UNA testata sola.
  *   ⛔ E si nasconde SOLO DENTRO IL GUSCIO: la condizione è «questo pannello sta in una carta del
- *     laboratorio che porta già la frase della scheda?». Fuori di lì — velo compreso — la testata
+ *     laboratorio che porta già la frase della scheda?». Fuori di lì la testata
  *     del pannello resta al suo posto, com'era.
  *   ⛔ La FRASE del pannello non si butta: scende nell'avviso in fondo alla griglia, che è la
  *     posizione in cui il mockup tiene la sua nota di sicurezza (`.inline-notice`, misurato:

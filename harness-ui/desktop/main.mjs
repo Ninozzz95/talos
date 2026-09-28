@@ -6,19 +6,30 @@ import { pathToFileURL } from 'node:url';
 import { app, BrowserWindow, dialog, Menu, powerMonitor, screen, shell, Tray } from 'electron';
 import { creaCicloDiVita } from './lifecycle.mjs';
 import { leggiStatoFinestra, salvaStatoFinestra } from './window-state.mjs';
-import { creaAvvioFiglio, risolviPercorsi, scegliMotoreLocale, scegliPortaEffimera, urlIngresso, validaHandshake } from './runtime.mjs';
+import { coloriDellaBarra, puntoDelMenu } from './barra-finestra.mjs';
+import { apribileNelBrowserDelSistema, creaAvvioFiglio, navigazioneCorniceConsentita, risolviPercorsi, scegliMotoreLocale, scegliPortaEffimera, urlIngresso, validaHandshake } from './runtime.mjs';
 import { creaRegistro } from './log.mjs';
 import { desktopProfile } from './profile.mjs';
+import { migraDatiBrowser } from './migrazione-browser.mjs';
 
 const packageMetadata = JSON.parse(readFileSync(join(app.getAppPath(), 'package.json'), 'utf8'));
-const profile = desktopProfile({ metadata: packageMetadata, env: process.env, appData: app.getPath('appData') });
+const profile = desktopProfile({ metadata: packageMetadata, env: process.env, appData: app.getPath('appData'), localAppData: process.env.LOCALAPPDATA });
 app.setName(profile.name);
 if (process.platform === 'win32') app.setAppUserModelId(profile.appId);
 // Set both paths before the single-instance lock and before Chromium creates a session.
+/*
+ * ⛔ Owner, 24/09/2026 — la sessione di Chromium passa da Roaming a %LOCALAPPDATA%\<nome>\browser (profile.mjs). Al
+ *   primo avvio si migra (desktop/migrazione-browser.mjs): solo le voci di Chromium, mai sovrascrivendo, e se qualcosa
+ *   è occupato si rimette a posto e questo avvio resta sulla cartella vecchia. `app.setPath` vuole la cartella già
+ *   esistente (Electron docs/api/app.md). Nei rami di pulizia (disinstallazione) non si sposta niente.
+ */
+const PULIZIA_IN_CORSO = process.argv.includes('--talos-pulizia-dati') || process.argv.includes('--talos-pulizia-scratch');
+const migrazioneBrowser = PULIZIA_IN_CORSO ? { cartella: profile.sessionData, stato: 'saltata' }
+  : migraDatiBrowser({ da: profile.sessionDataPrecedente, a: profile.sessionData });
 mkdirSync(profile.dataDir, { recursive: true });
-mkdirSync(profile.sessionData, { recursive: true });
+mkdirSync(migrazioneBrowser.cartella, { recursive: true });
 app.setPath('userData', profile.dataDir);
-app.setPath('sessionData', profile.sessionData);
+app.setPath('sessionData', migrazioneBrowser.cartella);
 app.commandLine.appendSwitch('ignore-gpu-blocklist');
 app.commandLine.appendSwitch('lang', 'it');
 /*
@@ -46,6 +57,21 @@ if (profile.preview && process.argv.includes('--talos-pulizia-dati')) {
       app.exit(1);
     }
   })();
+} else if (process.argv.includes('--talos-pulizia-scratch')) {
+  /*
+   * ⛔ Owner, 24/09/2026 — alla disinstallazione la radice dei temporanei si toglie SEMPRE (installer.nsh la chiama
+   *   fuori dalla scelta sui dati). La toglie Node e non `RMDir /r` di NSIS: il `myDelete` di NSIS
+   *   (Source/exehead/util.c) scende in ogni cartella con FILE_ATTRIBUTE_DIRECTORY, giunzioni comprese, mentre
+   *   `fs.rmSync` di Node 24 toglie la giunzione senza toccare il bersaglio (misurato il 23/09/2026). Solo la radice:
+   *   mai le cartelle sopra, che possono essere dell'utente. Esce 1 se non ci riesce (l'uninstaller non ne dipende).
+   */
+  try {
+    rmSync(profile.scratchDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+    app.exit(0);
+  } catch (errore) {
+    console.error('Pulizia dei temporanei non riuscita: ' + (errore?.code ?? errore?.message ?? errore));
+    app.exit(1);
+  }
 } else if (!app.requestSingleInstanceLock()) app.exit(0);
 else avviaGuscio();
 
@@ -57,7 +83,17 @@ function avviaGuscio() {
   const token = randomBytes(32).toString('hex');
   const segreti = Object.entries(process.env).filter(([k]) => /TOKEN|KEY|SECRET|PASSWORD/i.test(k)).map(([, v]) => v);
   const registro = creaRegistro(fileRegistro, [token, ...segreti]);
-  const cartellaHandshake = mkdtempSync(join(dataDir, 'avvio-'));
+  if (migrazioneBrowser.stato === 'migrata' || migrazioneBrowser.stato === 'rimandata') {
+    const { stato, cartella, spostate, copiate, lasciate, errori } = migrazioneBrowser;
+    registro.scrivi('Dati del browser interno: ' + JSON.stringify({ stato, cartella, spostate, copiate, lasciate, errori }));
+  }
+  /*
+   * ⛔ Corsia SCRATCH, 24/09/2026 — l'handshake nasce sotto la radice dei temporanei (profile.scratchDir), non
+   *   più nella cartella dati in Roaming, dove ogni crash lasciava un `avvio-*` per sempre (3 trovate il 23/09).
+   *   Le vecchie le toglie la pulizia all'avvio del server (src/scratch.mjs, dopo 24 ore di silenzio).
+   */
+  mkdirSync(profile.scratchDir, { recursive: true });
+  const cartellaHandshake = mkdtempSync(join(profile.scratchDir, 'avvio-'));
   const figli = new Set();
   let finestra = null; let vassoio = null; let base = null;
   let staUscendo = false; let uscitaPronta = false; let dialogoAperto = false;
@@ -141,8 +177,11 @@ function avviaGuscio() {
       if (!existsSync(percorsi.server)) throw new Error('Il servizio locale manca dal pacchetto.');
       const port = await scegliPortaEffimera();
       if (staUscendo) throw new Error('Chiusura in corso.');
+      /* Corsia SCRATCH: un'app aperta da giorni può vedersi togliere la cartella dalla pulizia di un ALTRO processo
+         (24 ore senza scritture): si ricrea prima di ogni figlio, o il nuovo handshake non avrebbe dove scriversi. */
+      mkdirSync(cartellaHandshake, { recursive: true });
       const reportFile = join(cartellaHandshake, 'figlio-' + (++generazione) + '.json');
-      const avvio = creaAvvioFiglio({ execPath: process.execPath, percorsi, port, token, reportFile, dataDir, motoreLocale, keyringScope: profile.keyringScope });
+      const avvio = creaAvvioFiglio({ execPath: process.execPath, percorsi, port, token, reportFile, dataDir, scratchDir: profile.scratchDir, motoreLocale, keyringScope: profile.keyringScope });
       const proc = spawn(avvio.command, avvio.args, avvio.options);
       const handle = { proc, port, reportFile, generazione, terminato: false, get exitCode() { return proc.exitCode; } };
       figli.add(handle);
@@ -229,19 +268,47 @@ function avviaGuscio() {
       finestra = new BrowserWindow({
         width: stato.width, height: stato.height, x: stato.x, y: stato.y, minWidth: 900, minHeight: 600,
         title: profile.name, show: false, backgroundColor: '#1e1f22', icon: join(app.getAppPath(), 'assets', 'talos.png'),
+        /* F7-1 (owner 27/09, «barra propria come Hermes»): la barra di Windows sparisce, i comandi veri restano (Snap
+           layout compreso) sopra la striscia che disegna la pagina — Hermes `apps/desktop/electron/main.ts:13945`. Il
+           colore di partenza è quello del fondo; la pagina lo corregge col suo `theme-color` (sotto). */
+        titleBarStyle: 'hidden', titleBarOverlay: coloriDellaBarra('#1e1f22'),
         webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true },
       });
       const questa = finestra;
       if (stato.massimizzata) questa.maximize();
       questa.once('ready-to-show', () => { if (!staUscendo && !questa.isDestroyed()) questa.show(); });
       if (profile.preview) questa.webContents.on('page-title-updated', (event, title) => { event.preventDefault(); questa.setTitle(`${profile.name} — ${title}`); });
-      questa.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+      /* F6-3 (27/09): la finestra nuova si nega SEMPRE; un indirizzo di github.com (una PR, un controllo) va al browser del
+         sistema, come nell'esempio di Electron security.md §14 (`setImmediate` + `shell.openExternal`, poi `deny`) */
+      questa.webContents.setWindowOpenHandler(({ url }) => {
+        /* F7-1 (owner 27/09, «senza ponte»): il pulsante «⋯» della striscia chiede il menu con un indirizzo che qui si nega
+           e diventa il menu NATIVO di sempre (lo stesso della riga dei menu, con le sue scorciatoie), nel punto del
+           pulsante. Le coordinate arrivano in pixel CSS: il fattore di ingrandimento della pagina le porta in DIP. */
+        const punto = puntoDelMenu(url);
+        if (punto) {
+          const zoom = questa.webContents.getZoomFactor();
+          const dove = 'x' in punto ? { x: Math.round(punto.x * zoom), y: Math.round(punto.y * zoom) } : {};
+          setImmediate(() => { if (!questa.isDestroyed()) Menu.getApplicationMenu()?.popup({ window: questa, ...dove }); });
+          return { action: 'deny' };
+        }
+        if (apribileNelBrowserDelSistema(url)) setImmediate(() => { shell.openExternal(url).catch(() => {}); });
+        return { action: 'deny' };
+      });
+      /* F7-1: il colore della striscia arriva dal `<meta name="theme-color">` della pagina; i comandi di Windows lo seguono. */
+      questa.webContents.on('did-change-theme-color', (_evento, colore) => {
+        const colori = coloriDellaBarra(colore);
+        if (colori && !questa.isDestroyed()) { try { questa.setTitleBarOverlay(colori); } catch { /* piattaforma senza overlay */ } }
+      });
       const controllaNavigazione = (evento, destinazione) => {
         try { if (new URL(destinazione).origin === base) return; } catch { /* URL non valido */ }
         evento.preventDefault();
       };
       questa.webContents.on('will-navigate', controllaNavigazione);
       questa.webContents.on('will-redirect', controllaNavigazione);
+      // F5: una cornice di pagina HTML resa nel lettore non naviga fuori dal suo lasciapassare (runtime.mjs)
+      questa.webContents.on('will-frame-navigate', (evento) => {
+        if (!evento.isMainFrame && !navigazioneCorniceConsentita(base, evento.frame?.url ?? '', evento.url)) evento.preventDefault();
+      });
       let timer;
       const salvaDifferito = () => { clearTimeout(timer); timer = setTimeout(salva, 300); };
       for (const evento of ['resize', 'move', 'maximize', 'unmaximize']) questa.on(evento, salvaDifferito);

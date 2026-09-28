@@ -33,6 +33,15 @@ test('migraTitle: chi ce l’ha già non viene toccato, e il vuoto non diventa u
   assert.equal(migraTitle(null), '');
 });
 
+test('migraTitle: un title scritto DOPO la migrazione è il testo nuovo (26/09: «Interrompi adesso» restava su «Invia»)', () => {
+  const b = elemento({ title: 'Interrompi adesso' });
+  assert.equal(migraTitle(b), 'Interrompi adesso');
+  b.setAttribute('title', 'Invia'); // l'app aggiorna il bottone dopo lo Stop
+  assert.equal(migraTitle(b), 'Invia');
+  assert.equal(b.getAttribute(ATTRIBUTO), 'Invia');
+  assert.equal(b.hasAttribute('title'), false, 'e il riquadro nativo non torna');
+});
+
 test('⛔ AL CONTRARIO — su iframe e SVG il title NON si tocca: lì è il nome, non un suggerimento', () => {
   const frame = elemento({ tag: 'iframe', title: 'Anteprima della pagina' });
   assert.equal(migraTitle(frame), '');

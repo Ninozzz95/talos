@@ -1,0 +1,217 @@
+{
+  "kind": "workflow-static-pack-integrity",
+  "version": 1,
+  "repository": "talos-private/agent-virtual-machine",
+  "branch": "feat/workflow-graph-engineering-2026-09-20",
+  "baseline": "0813d7859d505ff9a4caa0153008e5c1f8db9a09",
+  "productionSourceHeadAudited": "c9b99efde1592062b8a47592639e58ee465aecf4",
+  "protectedAdversarialFreeze": "cf657109d096e3f10fa8ceac84d48a8acbdd9609",
+  "packFreezeParent": "ab01308ec602ee5d58c17641ee5989b8ad7f7522",
+  "excludes": [
+    "harness-ui/tests/fixtures/workflow/manifests/static-pack-v1.json"
+  ],
+  "fileCount": 40,
+  "files": [
+    {
+      "path": "harness-ui/docs/PIANO-ESECUTIVO-TALOS-GRAPH-ENGINEERING-HARDENED-v3-2026-09-20.md",
+      "blobSha": "4699d5e71e4ab09957c8cf95adf193b8389cefd2",
+      "sizeBytes": 148414
+    },
+    {
+      "path": "harness-ui/docs/TALOS-WORKFLOW-IMPLEMENTER-START-HERE-2026-09-20.md",
+      "blobSha": "24ebcad409946c0dc8102b1766801a345fcb15a0",
+      "sizeBytes": 13203
+    },
+    {
+      "path": "harness-ui/docs/WORKFLOW-CONTRACT-FIXTURE-SPEC-v1-2026-09-20.md",
+      "blobSha": "e0f5b97605a88ea07ef4851548f83779424d4c6c",
+      "sizeBytes": 17455
+    },
+    {
+      "path": "harness-ui/docs/WORKFLOW-EVENT-CATALOG-v1-2026-09-20.md",
+      "blobSha": "ea726ae009a7d7e19e4d8eca50909e79e8976dd9",
+      "sizeBytes": 24736
+    },
+    {
+      "path": "harness-ui/docs/WORKFLOW-FINAL-ADVERSARIAL-AUDIT-v1-2026-09-20.md",
+      "blobSha": "cf786788b9b4fb050699b4235940df659b0bd04f",
+      "sizeBytes": 5636
+    },
+    {
+      "path": "harness-ui/docs/WORKFLOW-IMPLEMENTATION-RESUME-PROMPT-v1-2026-09-20.md",
+      "blobSha": "882b9b4ce7ebfd4290f44397d5375125fe4aef4a",
+      "sizeBytes": 29912
+    },
+    {
+      "path": "harness-ui/docs/WORKFLOW-MUTATION-TEST-MAP-v1-2026-09-20.md",
+      "blobSha": "9b5c1e470c8c912af6324b1fbb65729fc3b79b1d",
+      "sizeBytes": 15750
+    },
+    {
+      "path": "harness-ui/docs/WORKFLOW-PREIMPLEMENTATION-LEDGER-v1-2026-09-20.md",
+      "blobSha": "89a5b5157566a9c8aa2421a4e5c963ae63b33bfd",
+      "sizeBytes": 60506
+    },
+    {
+      "path": "harness-ui/docs/WORKFLOW-PREIMPLEMENTATION-PACK-INDEX-v1-2026-09-20.md",
+      "blobSha": "873e8545b41b20de8b43c37b87627e13162cccfe",
+      "sizeBytes": 14306
+    },
+    {
+      "path": "harness-ui/docs/WORKFLOW-SCHEMA-CATALOG-v2-2026-09-20.md",
+      "blobSha": "4adb2d16b54b9eb729f05afb720208016bdd846d",
+      "sizeBytes": 33525
+    },
+    {
+      "path": "harness-ui/docs/WORKFLOW-STATIC-DEFINITION-OF-READY-v1-2026-09-20.md",
+      "blobSha": "14b68ea87d33117b8ee98a459261112f20e0232f",
+      "sizeBytes": 4040
+    },
+    {
+      "path": "harness-ui/docs/WORKFLOW-UI-CONTRACT-CALM-v1-2026-09-20.md",
+      "blobSha": "bf772fa81d6f668e41229a55107205523ba1e617",
+      "sizeBytes": 12763
+    },
+    {
+      "path": "harness-ui/docs/WORKFLOW-UI-STORYBOARD-v1-2026-09-20.md",
+      "blobSha": "d308e3ddcc5f1214fae8f62d1555195415b2407b",
+      "sizeBytes": 7960
+    },
+    {
+      "path": "harness-ui/docs/WORKFLOW-VERIFICATION-SPEC-v1-2026-09-20.md",
+      "blobSha": "e8b9ddd6b0c6841366338136beed8d686f9e1347",
+      "sizeBytes": 20256
+    },
+    {
+      "path": "harness-ui/frontend/lab/main.js",
+      "blobSha": "66a688861fd81dc3d691ab0ec964d3946905a38f",
+      "sizeBytes": 46224
+    },
+    {
+      "path": "harness-ui/frontend/lab/workflow-spec.js",
+      "blobSha": "94b93ff568ca6d91eea8584d30cce7f3919c3adf",
+      "sizeBytes": 23742
+    },
+    {
+      "path": "harness-ui/tests/fixtures/workflow/definitions/core-v1-diamond.json",
+      "blobSha": "8dc1f3ba9caea310373a6e3af44d7e68a6ed4b58",
+      "sizeBytes": 6128
+    },
+    {
+      "path": "harness-ui/tests/fixtures/workflow/definitions/core-v1-loop.json",
+      "blobSha": "0963d38f7170bf40ed4c38c71df6a08f5c04ce59",
+      "sizeBytes": 3847
+    },
+    {
+      "path": "harness-ui/tests/fixtures/workflow/definitions/core-v1-minimal.json",
+      "blobSha": "b52a868faee24c43c759aea138ba1516aa91aefe",
+      "sizeBytes": 4521
+    },
+    {
+      "path": "harness-ui/tests/fixtures/workflow/definitions/invalid-capability-escalation.json",
+      "blobSha": "56d411432b5159f82ec03825f08bcd5be4ce8d0d",
+      "sizeBytes": 2424
+    },
+    {
+      "path": "harness-ui/tests/fixtures/workflow/definitions/invalid-cycle.json",
+      "blobSha": "57804bbb1d6f4af4d2d6971dca154e6078ff7700",
+      "sizeBytes": 3668
+    },
+    {
+      "path": "harness-ui/tests/fixtures/workflow/hashes/hash-core-a-record-metadata-changed.json",
+      "blobSha": "b0903190e91a3a4832482840ff4328fa800bd5cb",
+      "sizeBytes": 5527
+    },
+    {
+      "path": "harness-ui/tests/fixtures/workflow/hashes/hash-core-a-reordered.json",
+      "blobSha": "192fd7fc19b055895a6f2437019b78cbd767500d",
+      "sizeBytes": 4521
+    },
+    {
+      "path": "harness-ui/tests/fixtures/workflow/hashes/hash-core-a.json",
+      "blobSha": "b52a868faee24c43c759aea138ba1516aa91aefe",
+      "sizeBytes": 4521
+    },
+    {
+      "path": "harness-ui/tests/fixtures/workflow/hashes/hash-core-b-semantic-change.json",
+      "blobSha": "199e23dbbcc69de3c854db344d253895c2741913",
+      "sizeBytes": 4522
+    },
+    {
+      "path": "harness-ui/tests/fixtures/workflow/hashes/hash-expectations-v1.json",
+      "blobSha": "cf9b6357770cba9b797d8b2283042413c5d3ef3a",
+      "sizeBytes": 1514
+    },
+    {
+      "path": "harness-ui/tests/fixtures/workflow/hashes/rfc8785-conformance-v1.json",
+      "blobSha": "7b6197eaa8ae12a2930af3c94b28072d2255908c",
+      "sizeBytes": 1501
+    },
+    {
+      "path": "harness-ui/tests/fixtures/workflow/manifests/benchmark-scenarios-v1.json",
+      "blobSha": "0f6c5b83bd9acfcfec87d0ae0a2bf79c5773d4e8",
+      "sizeBytes": 829
+    },
+    {
+      "path": "harness-ui/tests/fixtures/workflow/manifests/crash-scenarios-v1.json",
+      "blobSha": "c2c9717ade1d1e7b1c23128286da3262379ff654",
+      "sizeBytes": 2783
+    },
+    {
+      "path": "harness-ui/tests/fixtures/workflow/manifests/failpoints-v1.json",
+      "blobSha": "fb5960819b061176b58475f54538474722a4b881",
+      "sizeBytes": 2968
+    },
+    {
+      "path": "harness-ui/tests/fixtures/workflow/manifests/mutations-v1.json",
+      "blobSha": "870658a573b72da1088ac47c23470aa19db94d9c",
+      "sizeBytes": 25263
+    },
+    {
+      "path": "harness-ui/tests/fixtures/workflow/manifests/phases-v1.json",
+      "blobSha": "7d96de768e065103453f7ec41f56c2c23e61f413",
+      "sizeBytes": 4642
+    },
+    {
+      "path": "harness-ui/tests/fixtures/workflow/manifests/readiness-v1.json",
+      "blobSha": "4d10afa8cfc7906379f23773c10f14f31f23ddf7",
+      "sizeBytes": 4919
+    },
+    {
+      "path": "harness-ui/tests/fixtures/workflow/records/approval-v1.json",
+      "blobSha": "ad834ecb559799f64dc59ac944c82a404b9993c6",
+      "sizeBytes": 434
+    },
+    {
+      "path": "harness-ui/tests/fixtures/workflow/records/definition-record-v1.json",
+      "blobSha": "bae2512a1388563fc3063c013c47446371d5b2b1",
+      "sizeBytes": 5421
+    },
+    {
+      "path": "harness-ui/tests/fixtures/workflow/vectors/budget-reservation-v1.json",
+      "blobSha": "6b09f4a691e80df1b42befaa3678964db742d68b",
+      "sizeBytes": 620
+    },
+    {
+      "path": "harness-ui/tests/fixtures/workflow/vectors/command-dedupe-v1.json",
+      "blobSha": "f525af3d9f143de3662b8aec90b92e186d9449cd",
+      "sizeBytes": 1446
+    },
+    {
+      "path": "harness-ui/tests/fixtures/workflow/vectors/provider-control-v1.json",
+      "blobSha": "f424783aec88dd81688e5f27c3fac853f4445ebd",
+      "sizeBytes": 308
+    },
+    {
+      "path": "harness-ui/tests/fixtures/workflow/vectors/retry-fact-v1.json",
+      "blobSha": "5d338b0514bf48ddec8f55e461328c0a770569b9",
+      "sizeBytes": 381
+    },
+    {
+      "path": "harness-ui/tests/fixtures/workflow/vectors/timer-fact-v1.json",
+      "blobSha": "2cc96fa020a0a2dd58d592a7deea024689e3706f",
+      "sizeBytes": 337
+    }
+  ],
+  "rule": "Every listed path/blobSha/sizeBytes must match the branch tree before implementation. This manifest excludes itself to avoid self-reference."
+}

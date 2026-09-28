@@ -48,9 +48,11 @@ export function runFinished({ threadId, runId, outcome, result }) {
     return evento
 }
 
-export function runError({ message, code }) {
+export function runError({ message, code, classe }) {
     const evento = { type: 'RunError', message }
     if (code !== undefined) evento.code = code
+    // F3-41a (25/09/2026): la classe del guasto del fornitore, quando il kernel l'ha già decisa — estensione dichiarata come `contesto`.
+    if (classe !== undefined) evento.classe = classe
     return evento
 }
 
@@ -326,6 +328,28 @@ export function queuedMessageDelivered({ testo }) {
  */
 export function approvalResolved({ requestId, approvato }) {
     return { type: 'ApprovalResolved', requestId, approvato }
+}
+
+/*
+ * ⛔ 24/09/2026, decisione owner 10 — la RICEVUTA della domanda nasce alla richiesta: domanda (con `why` e la consigliata,
+ *   dentro `questions`), QUANDO (`at`), QUALE chiamata (`toolCallId`), da quale modo e agente (`origine`), e se il registro
+ *   ha salvato la storia per riprenderla dopo un riavvio (`ripristinabile`, decisione 29). La risoluzione porta esito,
+ *   risposta, CHI (`da`: 'persona' | 'sistema'), QUANDO e perché (`motivo`) se non è una risposta.
+ *   Campi facoltativi: un chiamante che non li conosce produce l'evento di prima, identico.
+ */
+export function userQuestionRequested({ requestId, questions, at, toolCallId, origine, ripristinabile }) {
+    return {
+        type: 'UserQuestionRequested', requestId, questions,
+        ...(at ? { at } : {}), ...(toolCallId ? { toolCallId } : {}), ...(origine ? { origine } : {}),
+        ...(typeof ripristinabile === 'boolean' ? { ripristinabile } : {}),
+    }
+}
+
+export function userQuestionResolved({ requestId, status, answers = null, at, da, motivo }) {
+    return {
+        type: 'UserQuestionResolved', requestId, status, ...(answers ? { answers } : {}),
+        ...(at ? { at } : {}), ...(da ? { da } : {}), ...(motivo ? { motivo } : {}),
+    }
 }
 
 /**

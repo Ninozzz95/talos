@@ -60,3 +60,22 @@ test('NAV-02: empty results and arrow wrap have deterministic selection', () => 
 for (const patch of [{isComposing:true}, {key:'Process'}, {keyCode:229}, {defaultPrevented:true}, {target:{closest:selector => selector === '.xterm' ? {} : null}}]) test(`NAV-02: global shortcuts preserve composition, consumed events and terminal ${Object.keys(patch)[0]}`, () => {
   assert.equal(riconosci({ key:'k', ctrlKey:true, ...patch }, {apple:false}), null);
 });
+/*
+ * 23/09/2026, decisione owner — il comando «providers» e l'azione `openProviders` aprivano
+ * «Account» (un difetto), «Collega un modello» apriva il velo «Fornitori e accessi» (tolto).
+ * Ogni strada ora passa dalla stessa funzione, e quella funzione atterra su Laboratorio modelli →
+ * scheda «Provider». Questa è la metà statica; la metà viva è `tests/browser/velo-fornitori.spec.mjs`.
+ */
+test('NAV-02: every provider entry point lands on Model laboratory → Provider, never on Account or the removed velo', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const app = await readFile(new URL('../../src/legacy/app.js', import.meta.url), 'utf8');
+  const corpo = /function apriProviderDelLaboratorio\(\) \{([\s\S]*?)\n  \}/.exec(app)?.[1] ?? '';
+  assert.match(corpo, /setView\('settings', \{ dallInizio: true \}\);\s*setSettingsSection\('models'\);\s*setModelLabSection\('providers'\);/);
+  assert.match(app, /case 'providers': apriProviderDelLaboratorio\(\); break;/);
+  assert.match(app, /openProviders: apriProviderDelLaboratorio,/);
+  assert.match(app, /\[TESTI_MESSAGGIO\.collegaModello, apriProviderDelLaboratorio\]/);
+  assert.doesNotMatch(app, /case 'providers':[^\n]*setSettingsSection\('account'\)/);
+  // Il CODICE del velo è sparito (le note datate che lo nominano restano, e non contano).
+  assert.doesNotMatch(app, /\$\('#veloFornitori'\)|popolaVeloFornitori\(|apriFornitoreDelVelo\(|apriVeloMockup\('veloFornitori'\)|id === 'veloFornitori'/);
+  assert.equal(commandById('providers').description, 'Chiavi e indirizzi dei fornitori, nel Laboratorio modelli.');
+});

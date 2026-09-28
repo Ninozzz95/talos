@@ -1,0 +1,45 @@
+{
+  "kind": "workflow-command-dedupe-vectors",
+  "version": 1,
+  "canonicalization": "RFC 8785 (JCS)",
+  "digest": "SHA-256",
+  "rule": "commandId is excluded; commandType + target + semantic payload are hashed.",
+  "cases": [
+    {
+      "name": "approve-definition",
+      "projection": {
+        "schema": "talos.workflow-command-dedupe.v1",
+        "commandType": "approve-definition",
+        "target": {
+          "workflowId": "00000000-0000-4000-8000-000000000001",
+          "definitionVersion": 1,
+          "runId": null,
+          "nodeId": null,
+          "requestId": null
+        },
+        "payload": {
+          "definitionHash": "sha256:9e55392af4131005fec0e0bd7e83fb066bd2ed288edb087a54897ce670f44ee1"
+        }
+      },
+      "expectedHash": "sha256:7794eeeae1f92efeaadf680115368ebbe22f3829aec6950fc4e12c85d4b08f86"
+    },
+    {
+      "name": "start-run",
+      "projection": {
+        "schema": "talos.workflow-command-dedupe.v1",
+        "commandType": "start-run",
+        "target": {
+          "workflowId": "00000000-0000-4000-8000-000000000001",
+          "definitionVersion": 1,
+          "runId": null,
+          "nodeId": null,
+          "requestId": null
+        },
+        "payload": {
+          "definitionHash": "sha256:9e55392af4131005fec0e0bd7e83fb066bd2ed288edb087a54897ce670f44ee1"
+        }
+      },
+      "expectedHash": "sha256:e9fc6ba327ff9f8f3f46f040a50a2f4ac62dab6327a87581f3495b45859ae1ac"
+    }
+  ]
+}

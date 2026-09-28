@@ -1,3 +1,4 @@
+import { creaAvanzamentoRicerca } from './ricerca-avanzamento.js'; // 24/09/2026: barra + fase e conteggi
 /*
  * ricerca-dettaglio.js — lotto L7: dove una ricerca approfondita si CONSULTA.
  *
@@ -1384,6 +1385,11 @@ function vistaAndata(doc, voce, ctx, dettaglio) {
     righe.append(nodo(doc, 'dt', '', etichetta), nodo(doc, 'dd', '', valore));
   };
   riga('Stato', frasi.parola);
+  /* 24/09/2026, decisione owner («Barra + fase e conteggi»): una ricerca in corso mostra a che punto è, prima dei fatti;
+     l'avanzamento del dettaglio è il più fresco, altrimenti quello dell'elenco. */
+  const avanzamento = voce?.stato === 'running' ? (ricerca?.avanzamento ?? voce?.avanzamento ?? null) : null;
+  const bloccoAvanzamento = avanzamento ? creaAvanzamentoRicerca(doc, avanzamento) : null;
+  if (bloccoAvanzamento) pezzi.push(bloccoAvanzamento);
   /* ⛔ Sotto il titolo la spiegazione c'è già, tranne che sulle concluse: qui si scrive solo quando
      lassù non c'è, o la stessa frase compare due volte nella stessa schermata. */
   if (conclusaDavvero(voce?.stato)) riga('Cosa è successo', frasi.spiegazione);

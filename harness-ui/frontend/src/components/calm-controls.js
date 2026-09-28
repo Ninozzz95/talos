@@ -222,7 +222,13 @@ export function mountCalmControls(root = globalThis.document, { scope = null } =
     r.restore.push(() => { if (oldFocus) Object.defineProperty(source, 'focus', oldFocus); else delete source.focus; });
     if (kind === 'select') {
       control.setAttribute('role', 'combobox'); control.setAttribute('aria-haspopup', 'listbox'); control.setAttribute('aria-expanded', 'false');
-      r.value = node('span', 'calm-select__value'); const chevron = node('span', 'calm-select__chevron'); chevron.textContent = '⌄'; chevron.setAttribute('aria-hidden', 'true'); control.append(r.value, chevron);
+      /* ⛔ 26/09, difetto (9) delle foto di Ask e del Piano: la freccia era il carattere «⌄», che nel font dell'interfaccia si
+         legge «v» e siede sulla linea di base (visto sul 4174 nei due temi). È l'icona del nostro set, `#i-chevron`, come le
+         altre frecce dell'app (e come Hermes, che usa un'icona e non un carattere). */
+      r.value = node('span', 'calm-select__value'); const chevron = node('span', 'calm-select__chevron'); chevron.setAttribute('aria-hidden', 'true');
+      const freccia = doc.createElementNS('http://www.w3.org/2000/svg', 'svg'); freccia.setAttribute('class', 'i'); freccia.setAttribute('aria-hidden', 'true');
+      const uso = doc.createElementNS('http://www.w3.org/2000/svg', 'use'); uso.setAttribute('href', '#i-chevron'); freccia.append(uso); chevron.append(freccia);
+      control.append(r.value, chevron);
       on(control, 'click', event => { event.preventDefault(); event.stopPropagation(); if (openRecord === r) close(); else open(r); });
       on(control, 'keydown', event => selectKey(r, event));
     } else if (kind === 'check') {

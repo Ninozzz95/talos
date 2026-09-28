@@ -1,0 +1,40 @@
+{
+  "kind": "workflow-canonical-hash-expectations",
+  "version": 1,
+  "canonicalization": "RFC 8785 (JCS)",
+  "digest": "SHA-256",
+  "referenceCrossCheck": {
+    "coreA": {
+      "methodA": "Python recursive key sort + UTF-8 + SHA-256; valid for this fixture because all keys are ASCII and all numbers are integers.",
+      "methodB": "Node.js recursive UTF-16-compatible key sort + JSON.stringify primitives + UTF-8 + SHA-256.",
+      "bothProduced": "sha256:9e55392af4131005fec0e0bd7e83fb066bd2ed288edb087a54897ce670f44ee1"
+    }
+  },
+  "cases": [
+    {
+      "input": "hash-core-a.json",
+      "select": "$",
+      "expectedHash": "sha256:9e55392af4131005fec0e0bd7e83fb066bd2ed288edb087a54897ce670f44ee1"
+    },
+    {
+      "input": "hash-core-a-reordered.json",
+      "select": "$",
+      "expectedHash": "sha256:9e55392af4131005fec0e0bd7e83fb066bd2ed288edb087a54897ce670f44ee1"
+    },
+    {
+      "input": "hash-core-a-record-metadata-changed.json",
+      "select": "$.core",
+      "expectedHash": "sha256:9e55392af4131005fec0e0bd7e83fb066bd2ed288edb087a54897ce670f44ee1"
+    },
+    {
+      "input": "hash-core-b-semantic-change.json",
+      "select": "$",
+      "expectedHash": "sha256:2350e7849267acaeba9ae68005932600bfc540d3adc1bb2f41a20b721cce678e"
+    }
+  ],
+  "relations": [
+    "hash(hash-core-a.json) == hash(hash-core-a-reordered.json)",
+    "hash(hash-core-a.json) == hash(hash-core-a-record-metadata-changed.json#core)",
+    "hash(hash-core-a.json) != hash(hash-core-b-semantic-change.json)"
+  ]
+}

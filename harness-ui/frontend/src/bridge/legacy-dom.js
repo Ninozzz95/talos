@@ -191,7 +191,7 @@ export function montaPonteLegacy(documentObj = document) {
   battezza(inspector, { id: 'inspectorPanel', classi: ['inspector-panel'] });
   battezza(uno(inspector, '.talos-resizer--inspector'), { classi: ['panel-resize-handle'], dati: { resize: 'inspector' } });
   battezza(uno(inspector, '#railTabs'), { classi: ['inspector-tabs'] });
-  const schede = { contesto: 'context', file: 'files', agenti: 'agents', processi: 'processes' };
+  const schede = { contesto: 'context', file: 'files', github: 'github', agenti: 'agents', processi: 'processes' }; // github: F6-1, 26/09
   for (const [rail, nome] of Object.entries(schede)) {
     const tab = uno(inspector, `[data-rail="${rail}"]`);
     battezza(tab, { id: `inspector-tab-${nome}`, dati: { 'inspector-tab': nome } });

@@ -296,7 +296,20 @@ function costruisciScheletro(schermo, doc, stato) {
   const aggiorna = nodo(doc, 'button', 'talos-button talos-button--secondary talos-button--sm', 'Aggiorna');
   aggiorna.type = 'button';
   aggiorna.dataset.aggiorna = '';
-  barra.append(campo, cresci, ordine, segmento, aggiorna);
+  /* ATLAS F3 (27/09/2026, owner Q-11): la Libreria mostra i filtri veri nella forma a TENDINA dell'Atlas
+     (`atlas.js` `smallSelect('Tipo documento', …)` accanto alla ricerca), non nella riga di pastiglie. Stessa scelta,
+     stesso stato (`stato.filtro`), stessi conteggi: cambia solo il controllo. Le altre sezioni restano a pastiglie. */
+  const tendinaFiltri = config.filtriATendina ? nodo(doc, 'select', 'td-select') : null;
+  if (tendinaFiltri) {
+    tendinaFiltri.dataset.filtri = '';
+    tendinaFiltri.setAttribute('aria-label', `Filtri ${config.nome}`);
+  }
+  barra.append(campo, ...(tendinaFiltri ? [tendinaFiltri] : []), cresci, ordine, segmento, aggiorna);
+  /* ⛔ Revisione Codex 27/09, rilievo 14: la regola di casa (owner 13/09) vuole «niente controlli nativi», e aperta la
+     tendina era quella del sistema. `calm-controls.js` riveste i `<select>` dentro `[data-calm-controls]` (`main.js`) con la
+     tendina a tema che le Impostazioni usano già: la barra della Libreria entra in quell'ambito. Le altre sezioni no
+     (fuori dal perimetro di F3: debito registrato). */
+  if (config.filtriATendina) barra.dataset.calmControls = '';
 
   const blocco = nodo(doc, 'div', 'td-bulk');
   const etichettaTutte = nodo(doc, 'label', 'td-bulk-select');
@@ -342,7 +355,7 @@ function costruisciScheletro(schermo, doc, stato) {
   stato.nodi = {
     sezione, spazio, master, intro, cerca, ordine, segmento, aggiorna,
     blocco, selezionaTutte, conteggioBlocco, eliminaBlocco, esitoBlocco,
-    filtri, risultati, divisorio, dettaglio, statoRiga,
+    filtri, tendinaFiltri, risultati, divisorio, dettaglio, statoRiga,
   };
   collegaBarra(schermo, doc, stato);
   collegaDivisorio(doc, stato);
@@ -406,6 +419,10 @@ function collegaBarra(schermo, doc, stato) {
     const b = e.target.closest?.('[data-filtro]');
     if (!b) return;
     stato.filtro = b.dataset.filtro;
+    disegna(schermo, doc, stato);
+  });
+  stato.nodi.tendinaFiltri?.addEventListener('change', () => {
+    stato.filtro = stato.nodi.tendinaFiltri.value;
     disegna(schermo, doc, stato);
   });
 }
@@ -608,6 +625,9 @@ function disegnaCrudo(schermo, doc, stato) {
   selezionaTutte.disabled = stato.batchInCorso || stato.idsVisibili.length === 0;
   conteggioBlocco.textContent = `${stato.selezionateInBlocco.size} selezionat${stato.selezionateInBlocco.size === 1 ? 'a' : 'e'}`;
   eliminaBlocco.disabled = stato.batchInCorso || stato.selezionateInBlocco.size === 0;
+  /* Revisione Codex 27/09, rilievo 12: «fisso su tutte le card appena una è scelta» si legge dallo STATO, non dalle caselle
+     a schermo — un filtro che nasconde la card scelta lasciava la selezione viva e i cerchi spenti. */
+  if (stato.nodi.sezione) stato.nodi.sezione.dataset.selezioneAttiva = String(stato.selezionateInBlocco.size > 0);
   esitoBlocco.textContent = stato.batchEsito;
 
   // La riga di stato è quella del prodotto: qui ci passa sopra solo quando non c'è un errore da dire.
@@ -626,8 +646,18 @@ function disegnaCrudo(schermo, doc, stato) {
   // I filtri, coi conteggi veri sull'elenco intero.
   /* ⛔ Un filtro solo non è un filtro: la riga sparisce invece di mostrare un bottone che non
      sceglie niente. (Il mockup ne disegna sempre almeno uno, «Tutte», anche quando è inutile.) */
-  barraFiltri.hidden = config.filtri.length <= 1;
+  const { tendinaFiltri } = stato.nodi;
+  barraFiltri.hidden = config.filtri.length <= 1 || Boolean(tendinaFiltri);
   const conteggi = contaPerFiltro(tutte, config.filtri);
+  if (tendinaFiltri) {
+    tendinaFiltri.hidden = config.filtri.length <= 1;
+    tendinaFiltri.replaceChildren(...config.filtri.map((f, i) => {
+      const op = nodo(doc, 'option', '', `${f.etichetta} (${conteggi[i]})`);
+      op.value = f.id;
+      return op;
+    }));
+    tendinaFiltri.value = stato.filtro;
+  }
   const fuocoFiltro = doc.activeElement?.dataset?.filtro;
   barraFiltri.replaceChildren(...config.filtri.map((f, i) => {
     const b = nodo(doc, 'button', 'td-filter', f.etichetta);
@@ -699,7 +729,8 @@ function disegnaScheda(doc, stato, voce) {
   scheda.dataset.item = id;
   scheda.dataset.selected = String(String(stato.selezione) === id);
   scheda.dataset.batchSelected = String(stato.selezionateInBlocco.has(id));
-  const pezzi = config.scheda(voce, { doc, icona: (n, c) => icona(doc, n, c), etichetta: (t, tono) => etichetta(doc, t, tono) }) || {};
+  /* `vista` (ATLAS F3, 27/09): la Libreria disegna la card del mobile solo a SCHEDE; a elenco resta com'era (owner). */
+  const pezzi = config.scheda(voce, { doc, icona: (n, c) => icona(doc, n, c), etichetta: (t, tono) => etichetta(doc, t, tono), vista: stato.vista }) || {};
   if (pezzi.dati) for (const [k, v] of Object.entries(pezzi.dati)) scheda.dataset[k] = String(v);
 
   const apri = nodo(doc, 'button', 'td-card-open');

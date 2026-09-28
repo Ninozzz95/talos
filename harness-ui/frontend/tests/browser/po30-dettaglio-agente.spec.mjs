@@ -7,6 +7,7 @@ import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { expect, test } from '@playwright/test';
 import { PNG } from 'pngjs';
+import { chiudiToastAperti } from './aiuto-toast.mjs';
 
 const FOTO = join(import.meta.dirname, '..', '..', 'artifacts', 'po30-dettaglio-agente');
 const ALBERO = { '': [{ nome: 'src', cartella: true }, { nome: 'README.md', cartella: false }], src: [{ nome: 'registro.mjs', cartella: false }] };
@@ -366,6 +367,7 @@ for (const larghezza of [1440, 390]) {
     const card = grafo.locator('[data-nodo-id="po30d-figlia-a"]');
     // Apri visuale diagramma richiude già il rail mobile.
     for (const parte of ['.talos-grafo__badge-stato', '.talos-grafo__misure']) {
+      await chiudiToastAperti(page); // decisione owner 23/09: il toast può coprire il grafo, si chiude come farebbe una persona
       await card.locator(parte).click();
       await expect(dettaglio(page)).toBeVisible();
       await expect(dettaglio(page)).toHaveAttribute('data-sessione-figlia', 'po30d-figlia-a');

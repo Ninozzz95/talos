@@ -6,9 +6,48 @@ import { createServer } from 'node:net';
 import { basename, dirname, isAbsolute, join } from 'node:path';
 import { createProcessPolicy } from './process-policy.mjs';
 import { statSync } from 'node:fs';
+import { leggiArchitetturaGguf } from './gguf-header.mjs';
+import { RIGA_ARCHITETTURA_SCONOSCIUTA, buildDelMotore, libreriaDelMotorePresente, motoreConosceArchitettura, testoArchitetturaSconosciuta } from './motore-architetture.mjs';
 
 const LOOPBACK = '127.0.0.1';
 const DEFAULT_TIMEOUT_MS = 15_000;
+
+/*
+ * ⛔⛔⛔ 25/09/2026 sera — IL MODELLO CHE NON ENTRA SI DICE COSÌ, COI NUMERI. Sessione dell'owner eb5acb34: Qwen3.8-27B Q4
+ *   (16,7 GB) su una RX 9070 XT da 16 GB, e l'errore diceva «si è chiuso dopo 5 s senza mai diventare pronto: … failed to
+ *   load model …», che la carta leggeva come «non si è acceso in tempo, riprova». Riprovare non cambia niente: la scheda non
+ *   ha spazio. Decisione owner «carta vera»; lo stesso rimedio di Hermes (`hermes_cli/local_runtime/estimator.py:141-157`,
+ *   `physics_check`: «try a smaller model or a supported smaller quant», clone 65ad529 del 23/09/2026).
+ * ⇒ La memoria della scheda si prende dalla riga che llama-server stampa all'avvio («- Vulkan0 : NOME (N MiB, M MiB free)»):
+ *   è la sua misura, nel momento del caricamento. I GB sono quelli del Laboratorio modelli (byte / 2^30, una cifra).
+ */
+const RIGA_MEMORIA_DISPOSITIVO = /-\s+(?:Vulkan|CUDA|ROCm|Metal|SYCL)\d*\s*:\s*(.+?)\s*\((\d+)\s*MiB,\s*(\d+)\s*MiB free\)/u;
+function memoriaDelDispositivo(riga) {
+  const m = RIGA_MEMORIA_DISPOSITIVO.exec(riga);
+  return m ? { nome: m[1], totaleMiB: Number(m[2]), liberaMiB: Number(m[3]) } : null;
+}
+/*
+ * ⛔⛔ 27/09/2026 — IL MODELLO CHE IL MOTORE NON SA LEGGERE SI DICE COSÌ (sessione dell'owner ec3bc6c0, Spark-X2.5-4B: architettura
+ *   `spark2_5`, motore b10517). Prima si diceva «si è chiuso dopo 0 s … failed to load model» con le ULTIME quattro righe, e la
+ *   riga col perché era la quinta dal fondo. Owner 27/09: «errore chiaro ora, motore dopo». Dettagli in `motore-architetture.mjs`.
+ */
+function erroreArchitettura(architettura, binario, righeMotore = []) {
+  const errore = new LlamaServerSupervisorError(testoArchitetturaSconosciuta(architettura, buildDelMotore(binario)), 'RUNTIME_ARCH_UNSUPPORTED');
+  errore.architettura = architettura;
+  errore.righeMotore = righeMotore;
+  return errore;
+}
+const inGb = (byte) => (byte / 2 ** 30).toLocaleString('it-IT', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+function erroreMemoriaPiena(primo, modelPath) {
+  let byte = 0;
+  try { byte = statSync(modelPath).size; } catch { byte = 0; }
+  const d = primo?.memoriaDispositivo ?? null;
+  const modello = byte >= 2 ** 30 / 10 ? ` (${inGb(byte)} GB)` : '';
+  const scheda = d ? ` (${d.nome}: ${inGb(d.totaleMiB * 2 ** 20)} GB, liberi ${inGb(d.liberaMiB * 2 ** 20)} GB)` : '';
+  const errore = new LlamaServerSupervisorError(`Il modello${modello} non entra nella memoria della scheda grafica${scheda}.`, 'RUNTIME_OUT_OF_MEMORY');
+  errore.righeMotore = primo?.righeMotore ?? [];
+  return errore;
+}
 /*
  * ⛔⛔⛔ 03/9 — «PERCHE' CAZZO NE DEVI USARE UNO DA 600 MILIONI?».
  *
@@ -369,6 +408,8 @@ export function createLlamaServerSupervisor({
       entry.residuoStderr = parti.pop();
       for (const riga of parti) {
         if (riga.trim() === '') continue;
+        // 25/09/2026 sera: la memoria della scheda come la misura il motore all'avvio, per dirla se il modello non ci sta
+        if (!entry.memoriaDispositivo) entry.memoriaDispositivo = memoriaDelDispositivo(riga);
         entry.ultimeRighe.push(riga.trim());
         if (entry.ultimeRighe.length > 12) entry.ultimeRighe.shift();
       }
@@ -547,12 +588,16 @@ export function createLlamaServerSupervisor({
        * l'errore PORTA le ultime righe del motore.
        */
       if (entry.closed) {
+        /* la rete di sicurezza del controllo prima dell'avvio: se llama.cpp dice che non conosce l'architettura, lo si dice così */
+        const sconosciuta = entry.ultimeRighe.map((r) => RIGA_ARCHITETTURA_SCONOSCIUTA.exec(r)?.[1]).find(Boolean);
+        if (sconosciuta) throw erroreArchitettura(sconosciuta, binario, [...entry.ultimeRighe]);
         const detto = entry.ultimeRighe.slice(-4).join(' | ');
         const errore = new LlamaServerSupervisorError(
           `llama-server si è chiuso dopo ${Math.round((Date.now() - (deadline - attesa)) / 1000)} s senza mai diventare pronto${detto ? `: ${detto}` : ''}`,
           'RUNTIME_PROCESS_FAILED',
         );
         errore.righeMotore = [...entry.ultimeRighe];
+        errore.memoriaDispositivo = entry.memoriaDispositivo ?? null;
         throw errore;
       }
       const result = await health({ signal: AbortSignal.any([operation.controller.signal, AbortSignal.timeout(Math.max(1, deadline - Date.now()))]) });
@@ -603,6 +648,14 @@ export function createLlamaServerSupervisor({
         operation.locked = true;
       }
       checkStart(operation);
+      /* ⭐ 27/09: prima di avviare, il motore sa leggere l'architettura del file? Solo un «no» misurato ferma; «non lo so» parte. */
+      /* ⛔ Solo se accanto al binario c'è la libreria: altrimenti il controllo non vale, e un `await` in più cambierebbe l'ordine
+         dell'avvio che le prove del preflight fissano (misurato: due rosse con la lettura sempre) — il posto di un aggancio è una misura. */
+      if (libreriaDelMotorePresente(binaryPath)) {
+        const architettura = await leggiArchitetturaGguf(modelPath);
+        checkStart(operation);
+        if (motoreConosceArchitettura(binaryPath, architettura) === false) throw erroreArchitettura(architettura, binaryPath);
+      }
       const apiKey = randomBytes(32).toString('hex');
       motore = nuovoMotore(motoreIniziale.variante);
       try {
@@ -612,7 +665,7 @@ export function createLlamaServerSupervisor({
         const guasto = motore.variante === 'vulkan' && primo.code === 'RUNTIME_PROCESS_FAILED' ? classificaGuastoVulkan(primo.righeMotore ?? []) : null;
         if (guasto?.classe === 'memoria') {
           motore.proposta = { a: 'cpu', motivo: `${guasto.motivo}; sul processore il modello può girare, più lento: la scelta è della persona` };
-          throw primo;
+          throw erroreMemoriaPiena(primo, modelPath); // 25/09 sera: la carta vera, coi numeri (vedi `erroreMemoriaPiena`)
         }
         if (!guasto || !fallbackBinaryPath) throw primo;
         const primaEntry = current;

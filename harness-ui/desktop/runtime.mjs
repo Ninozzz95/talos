@@ -40,7 +40,7 @@ export function scegliMotoreLocale({ percorsi, env = process.env, sonda = spawnS
 
 function portaValida(port) { return Number.isInteger(port) && port >= 1024 && port <= 65535 && port !== 4174; }
 
-export function creaAvvioFiglio({ execPath, percorsi, port, token, reportFile, dataDir, motoreLocale, env = process.env, keyringScope = 'desktop' }) {
+export function creaAvvioFiglio({ execPath, percorsi, port, token, reportFile, dataDir, scratchDir, motoreLocale, env = process.env, keyringScope = 'desktop' }) {
   if (!isAbsolute(execPath ?? '')) throw new Error('Percorso eseguibile assoluto richiesto.');
   if (!portaValida(port)) throw new Error('La porta del figlio non è consentita.');
   if (!/^[a-f0-9]{64}$/.test(token ?? '')) throw new Error('Credenziale locale non valida.');
@@ -74,6 +74,12 @@ export function creaAvvioFiglio({ execPath, percorsi, port, token, reportFile, d
      */
     TALOS_HARNESS_UI_KEYRING_SCOPE: keyringScope,
   });
+  /*
+   * Corsia SCRATCH, 24/09/2026: la radice dei temporanei scelta dal guscio (profile.mjs). Senza, il figlio la
+   * dedurrebbe da TALOS_DESKTOP_DATA_DIR (che qui c'è sempre) e finirebbe in Roaming anche quando i dati non
+   * sono stati spostati. Assegnazione semplice per nome: la forma che la guardia CLI-REQ-04 (a) sa leggere.
+   */
+  if (scratchDir) ambiente.TALOS_SCRATCH_DIR = scratchDir;
   return { command: execPath, args: ['--import', pathToFileURL(percorsi.bootstrap).href, percorsi.server], options: {
     cwd: percorsi.root, env: ambiente, stdio: ['ignore', 'pipe', 'pipe', 'ipc'], windowsHide: true, shell: false,
   } };
@@ -104,4 +110,36 @@ export function urlIngresso(base, token) {
   if (url.protocol !== 'http:' || url.hostname !== '127.0.0.1' || !portaValida(Number(url.port)) || url.username || url.password || !/^[a-f0-9]{64}$/.test(token)) throw new Error('Indirizzo locale non consentito.');
   url.pathname = '/'; url.search = ''; url.hash = ''; url.searchParams.set('token', token);
   return url.href;
+}
+
+/*
+ * F6-3 (27/09/2026, decisione 28 dell'owner) — «Apri la PR» e il clic su un controllo vanno nel BROWSER DEL SISTEMA, che ha già
+ * l'accesso a GitHub. La finestra nuova si nega sempre (`setWindowOpenHandler` → `deny`); solo un indirizzo che passa di qui va
+ * a `shell.openExternal` (Electron, security.md §14-15: «Do not use shell.openExternal with untrusted content»; letto il 27/09
+ * via Context7 `/electron/electron`). ⇒ `https:` esatto, host `github.com` esatto, nessuna credenziale, nessuna porta.
+ */
+export function apribileNelBrowserDelSistema(indirizzo) {
+  let u;
+  try { u = new URL(String(indirizzo ?? '')); } catch { return false; }
+  return u.protocol === 'https:' && u.hostname === 'github.com' && !u.port && !u.username && !u.password;
+}
+
+/*
+ * F5 File reader (26/09/2026) — una cornice di PAGINA RESA non esce dal suo lasciapassare.
+ * La pagina HTML resa nel lettore vive in un iframe a origine nulla su `/api/v1/pagine/<lasciapassare>/…`, senza rete
+ * (`connect-src 'none'`); l'unico canale che la CSP non chiude è la navigazione della cornice STESSA verso un altro
+ * indirizzo, che porta con sé l'URL (CSP Embedded Enforcement blocca la risposta, non la richiesta). Nel guscio la si
+ * ferma qui (`will-frame-navigate`, `event.preventDefault()` provato dalla spec di Electron): da una cornice di pagina
+ * resa si va solo dentro lo STESSO lasciapassare. Ogni altra cornice e la finestra principale non si toccano.
+ */
+export function navigazioneCorniceConsentita(base, daUrl, aUrl) {
+  let da;
+  try { da = new URL(daUrl); } catch { return true; }
+  if (da.origin !== base || !da.pathname.startsWith('/api/v1/pagine/')) return true;
+  const gettone = da.pathname.split('/')[4];
+  if (!gettone) return false;
+  try {
+    const a = new URL(aUrl);
+    return a.origin === base && a.pathname.startsWith(`/api/v1/pagine/${gettone}/`);
+  } catch { return false; }
 }

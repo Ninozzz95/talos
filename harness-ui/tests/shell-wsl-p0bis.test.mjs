@@ -22,6 +22,7 @@ import { mkdtempSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import * as kernel from '../src/kernel/talosHarness.mjs'
+import { cartellaDiProva, cartellaDiProvaAttesa } from './aiuto/cartelle-di-prova.mjs'; // DESK-TEMP-1, 23/09: la cartella nasce con la sua rimozione
 
 /**
  * WSL risponde su questa macchina? Stessa domanda che si fa `distroWslPredefinita`
@@ -53,7 +54,7 @@ const WSL_C_E = wslRisponde()
 const MOTIVO_SALTO = 'wsl.exe non risponde su questa macchina (`wsl -l -q` vuoto o in errore, oppure la distro non esegue un comando): prova d\'integrazione NON eseguita, non passata'
 
 let cartella
-before(() => { cartella = mkdtempSync(join(tmpdir(), 'p0bis-shell-')) })
+before(() => { cartella = cartellaDiProva('p0bis-shell-') })
 
 /* ──────────────────────────────────────────────────────────────────────────────
  * BC-54 — `wsl.exe … -- bash -lc "<script>"` fa passare la riga da DUE shell.

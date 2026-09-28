@@ -41,6 +41,18 @@ test('contaFigliAttivi: conta SOLO i figli non conclusi dello stesso padre', () 
   assert.equal(orch.contaFigliAttivi('padre-1'), 2, 'un figlio concluso non conta più come attivo');
 });
 
+test('M005_INTERRUPTED_CHILD_COUNTS_ACTIVE', () => {
+  const sessioni = new Map([
+    ['padre-1', vocePadre()],
+    ['morto', { cartella: '/m', padreId: 'padre-1', conclusa: false, interrotta: true }],
+    ['vivo', { cartella: '/v', padreId: 'padre-1', conclusa: false, interrotta: false }],
+    ['concluso', { cartella: '/c', padreId: 'padre-1', conclusa: true, interrotta: false }],
+  ]);
+  const orch = creaSubagentOrchestrator({ sessioni, cartellaEsisteFn: () => true, avviaESeguiFn: () => ({ sessionId: 'mai' }) });
+  assert.equal(orch.contaFigliAttivi('padre-1'), 1,
+    'solo il worker realmente vivo deve consumare uno slot concorrente');
+});
+
 test('elencaFigli: elenco vero, ordinato per avvio, include task/conclusa/esitoDelega', () => {
   const sessioni = new Map([
     ['padre-1', vocePadre()],
@@ -265,6 +277,23 @@ test(`⛔⛔⛔ delegaSottoTask: ${LIMITE_FIGLI_CONCORRENTI}° figlio già attiv
   assert.equal(esito.esito, 'rifiutato');
   assert.match(esito.motivo, new RegExp(`${LIMITE_FIGLI_CONCORRENTI} figli concorrenti`));
   assert.equal(chiamata, false);
+});
+
+test(`⭐⭐ AL CONTRARIO — ${LIMITE_FIGLI_CONCORRENTI} figli interrotti non bloccano una nuova delega`, async () => {
+  const sessioni = new Map([['padre-1', vocePadre()]]);
+  for (let i = 0; i < LIMITE_FIGLI_CONCORRENTI; i += 1) {
+    sessioni.set(`morto-${i}`, { cartella: `/m${i}`, padreId: 'padre-1', conclusa: false, interrotta: true });
+  }
+  let chiamata = 0;
+  const orch = creaSubagentOrchestrator({
+    sessioni,
+    cartellaEsisteFn: () => true,
+    avviaESeguiFn: () => { chiamata += 1; return { sessionId: 'figlio-nuovo' }; },
+  });
+  const esito = await orch.delegaSottoTask({ sessionPadreId: 'padre-1', task: 'x', cartella: '/nuovo' });
+  assert.equal(esito.esito, 'avviato');
+  assert.equal(esito.childId, 'figlio-nuovo');
+  assert.equal(chiamata, 1, 'gli slot di processi morti non devono saturare il limite legacy');
 });
 
 test('⭐⭐⭐ delegaSottoTask: avvio riuscito — torna AVVIATO subito e il terminale reale viaggia sul callback separato', async () => {
@@ -539,4 +568,26 @@ test('elencaFigli: una figlia ripristinata dal disco (senza consegnaCorta) ricav
   assert.equal(figli[0].taskCorto, 'conta le righe di parte1.md');
   assert.equal(figli[1].taskCorto, null, 'senza consegna il campo è null, e la scheda mostra la sua frase di ripiego');
   assert.equal(figli[1].task, null);
+});
+
+/*
+ * ⛔ F3-10 (23/09/2026, decisione owner D05-a) — il figlio nasce SEMPRE in Normale. Prima ereditava
+ *   `padre.modalitaOperativa ?? 'workflow'`: un padre senza modo scritto (le voci di prova, un chiamante
+ *   vecchio) generava un figlio in un modo che il prodotto non ha più.
+ */
+test('CHILD-MODE-NOT-WORKFLOW — qualunque sia il modo del padre, il figlio nasce in Normale', async () => {
+  for (const modoPadre of [undefined, null, 'normale', 'piano', 'workflow']) {
+    const sessioni = new Map([['padre-1', { ...vocePadre({ cartella: '/progetto' }), modalitaOperativa: modoPadre }]]);
+    const viste = [];
+    const orch = creaSubagentOrchestrator({
+      sessioni, cartellaEsisteFn: () => true,
+      avviaESeguiFn: (opzioni) => {
+        viste.push(opzioni);
+        opzioni.onConclusioneFn({ ok: true, esito: { detto: 'fatto', comeFinita: 'concluso' } });
+        return { sessionId: 'figlio-1' };
+      },
+    });
+    assert.equal((await orch.delegaSottoTask({ sessionPadreId: 'padre-1', task: 'x' })).esito, 'avviato', String(modoPadre));
+    assert.equal(viste[0].modalitaOperativaRichiesta, 'normale', String(modoPadre));
+  }
 });

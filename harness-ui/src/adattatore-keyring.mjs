@@ -76,3 +76,43 @@ export async function creaAdattatorePortachiaviSistema() {
     remove: (servizio, account) => { try { new Entry(servizio, account).deletePassword(); } catch { /* assenza già rimossa */ } },
   };
 }
+
+/*
+ * ⛔⛔ (23/09/2026) — IL SERVER DI PROVA CANCELLAVA LA CHIAVE VERA DELL'OWNER.
+ *
+ * La prova browser BC-62 salva `sk-bc62-fixture` come chiave OpenRouter e il suo commento credeva
+ * che finisse «nel keyring in-memory». Non esisteva: il server di Playwright usava il Credential
+ * Manager VERO, nello spazio senza suffisso che è lo stesso del 4174. Misurato il 23/09 alle 20:36:
+ * la voce `openrouter` del pool è diventata un valore di 15 caratteri, la chiave precedente è stata
+ * tolta dal rimpiazzo del pool, e otto sessioni GLM sono finite con «Credenziale rifiutata».
+ *
+ * ⇒ Una custodia di PROVA, scelta da `TALOS_HARNESS_UI_KEYRING=memoria`: una Map per processo,
+ *   che muore col server. Precedente: la libreria Python `keyring` sceglie il backend dei test con
+ *   `PYTHON_KEYRING_BACKEND` (https://keyring.readthedocs.io/en/stable/, letta il 23/09/2026).
+ * ⛔ Valore STRICT come lo scope: assente → custodia di sistema; «memoria» → questa; altro → errore
+ *   d'avvio. E chi usa la memoria NON prende semi dall'ambiente (`server.mjs`): un server di prova
+ *   non deve trovarsi in mano la chiave vera dell'owner da `OPENROUTER_API_KEY`.
+ */
+export const PORTACHIAVI_MEMORIA = 'memoria';
+
+export function leggiPortachiaviDiProva(env = process.env) {
+  const valore = env.TALOS_HARNESS_UI_KEYRING;
+  if (valore === undefined || valore === '') return false;
+  if (String(valore).trim() === PORTACHIAVI_MEMORIA) return true;
+  throw new Error(`TALOS_HARNESS_UI_KEYRING="${valore}" non è valida: la variabile accetta "memoria" o nessun valore.`);
+}
+
+export function creaAdattatorePortachiaviInMemoria() {
+  const voci = new Map();
+  const chiave = (servizio, account) => `${servizio}\u0000${account}`;
+  return {
+    get: (servizio, account) => voci.get(chiave(servizio, account)) ?? null,
+    set: (servizio, account, valore) => { voci.set(chiave(servizio, account), String(valore)); },
+    remove: (servizio, account) => { voci.delete(chiave(servizio, account)); },
+  };
+}
+
+/** La fabbrica che il server usa: la custodia di prova se chiesta, altrimenti quella del sistema. */
+export async function creaAdattatorePortachiavi(env = process.env) {
+  return leggiPortachiaviDiProva(env) ? creaAdattatorePortachiaviInMemoria() : creaAdattatorePortachiaviSistema();
+}

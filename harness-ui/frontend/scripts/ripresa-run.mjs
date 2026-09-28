@@ -1,6 +1,6 @@
 import { spawn, spawnSync } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync, createWriteStream, readdirSync, copyFileSync, existsSync, symlinkSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync, createWriteStream, readdirSync, copyFileSync, existsSync, symlinkSync, lstatSync, rmdirSync, unlinkSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve, dirname, relative, isAbsolute } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -15,22 +15,99 @@ const git = (...args) => {
   return result.stdout.trim();
 };
 
-export function creaEsecuzione(kind) {
+/*
+ * ⛔⛔ D2-a, 24/09/2026 — LO STATO DI UNA ESECUZIONE NON RESTA IN TEMP, E IN TEMP NON RESTANO GIUNZIONI.
+ *
+ * Misurato dalla revisione avversaria (23/09 notte): UNA corsa di `tests/unit/ripresa-isolamento.test.mjs`
+ * lasciava 8 cartelle `talos-ripresa-*` in TEMP — 2 con un clone del repo e **4 giunzioni** ai
+ * `node_modules` VERI (`creaSnapshot`, `symlinkSync(…, 'junction')`) — più 8 cartelle di rapporti in
+ * `frontend/artifacts/ripresa/`. `creaEsecuzione` creava lo stato e nessuno lo toglieva.
+ * ⛔ Le giunzioni sono la trappola già pagata il 17/09 («robocopy /MIR segue le giunzioni e svuota i
+ *   node_modules veri»): chi ripulisce la TEMP con uno strumento che SEGUE i reparse point svuota i
+ *   `node_modules` di questo repo.
+ *
+ * ⇒ `rimuoviStato(run)`: PRIMA si staccano tutti i collegamenti dell'albero (visita con `lstat`, che non
+ *   segue il collegamento), POI si controlla che non ne resti nessuno — altrimenti ci si FERMA — e solo
+ *   allora si rimuove l'albero. Con `conserva: true` (per `esegui`: `TALOS_RIPRESA_CONSERVA_STATO=1`) lo
+ *   stato resta da ispezionare, ma SENZA giunzioni: quelle si staccano sempre.
+ *
+ * Fonti, lette il 24/09/2026:
+ *   · Microsoft Learn, «RemoveDirectoryW function (fileapi.h)» (ms.date 15/12/2023): «RemoveDirectory can be
+ *     used to remove a directory junction. […] the target directory itself is not affected by removing a
+ *     junction which targets it […] RemoveDirectory will remove the specified link regardless of whether the
+ *     target directory is empty or not». `fs.rmdirSync` su Windows arriva lì (libuv `fs__rmdir`).
+ *   · Node v24, `fs.lstat`: se il percorso è un collegamento simbolico, si interroga il collegamento, non il
+ *     suo bersaglio.
+ *   · MISURATO su questa macchina (Node v24.18.0, Windows 11, sonda `rp2/sonda-giunzione.mjs`): `lstatSync`
+ *     su una giunzione ⇒ `isSymbolicLink() true, isDirectory() false`; `rmdirSync(giunzione)` toglie il
+ *     collegamento e il bersaglio conserva i suoi file. E `rmSync` ricorsivo di Node 24 NON segue la
+ *     giunzione: il pericolo sta negli strumenti ESTERNI (robocopy, pulitori), per questo la cura è non
+ *     LASCIARE giunzioni in TEMP, non solo rimuoverle bene.
+ */
+function elencaCollegamenti(radice) {
+  const trovati = [];
+  const visita = (cartella) => {
+    for (const nome of readdirSync(cartella)) {
+      const percorso = join(cartella, nome);
+      const info = lstatSync(percorso);
+      if (info.isSymbolicLink()) trovati.push(percorso);
+      else if (info.isDirectory()) visita(percorso);
+    }
+  };
+  if (existsSync(radice) && !lstatSync(radice).isSymbolicLink()) visita(radice);
+  return trovati;
+}
+
+/** Stacca ogni collegamento (giunzione o symlink) sotto `radice` SENZA toccare il bersaglio. Ritorna quanti. */
+export function staccaCollegamenti(radice) {
+  const collegamenti = elencaCollegamenti(radice);
+  for (const collegamento of collegamenti) {
+    // Giunzione o symlink a cartella: RemoveDirectory toglie SOLO il collegamento. Symlink a file: unlink.
+    try { rmdirSync(collegamento); } catch (errore) {
+      if (!['ENOTDIR', 'EINVAL', 'EPERM'].includes(errore?.code)) throw errore;
+      unlinkSync(collegamento);
+    }
+  }
+  return collegamenti.length;
+}
+
+/**
+ * Toglie lo stato isolato di un'esecuzione (`run.state`, in TEMP). Le evidenze in `run.output` restano:
+ * sono il rapporto della corsa, non il suo stato. `rimuovi` è iniettabile solo per la prova.
+ */
+export function rimuoviStato(run, { conserva = false, rimuovi = rmSync } = {}) {
+  if (!run?.state || !existsSync(run.state)) return { staccati: 0, rimosso: false };
+  const staccati = staccaCollegamenti(run.state);
+  const rimasti = elencaCollegamenti(run.state);
+  if (rimasti.length) throw new Error(`Collegamenti non staccati nello stato ripresa, rimozione fermata: ${rimasti.join(', ')}`);
+  if (conserva) return { staccati, rimosso: false };
+  rimuovi(run.state, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
+  return { staccati, rimosso: true };
+}
+
+export function creaEsecuzione(kind, { radiceRapporti = join(frontend, 'artifacts', 'ripresa') } = {}) {
   if (!/^[a-z-]+$/.test(kind)) throw new Error('Tipo esecuzione non valido');
   const id = `${new Date().toISOString().replaceAll(/[:.]/g, '-')}-${kind}-${randomUUID().slice(0, 8)}`;
-  const output = join(frontend, 'artifacts', 'ripresa', id);
+  // D2-a, 24/09: `radiceRapporti` serve alle prove, che mettono i rapporti in una TEMP loro e li tolgono.
+  const output = join(radiceRapporti, id);
   mkdirSync(output, { recursive: true });
   const state = mkdtempSync(join(tmpdir(), 'talos-ripresa-'));
   const run = { id, kind, output, state, data: join(state, 'data'), home: join(state, 'home'), temp: join(state, 'tmp'), workspace: join(state, 'workspace'), manifest: join(output, 'manifest.json') };
-  for (const dir of [run.data, run.home, run.temp, run.workspace, join(run.home, 'AppData/Roaming'), join(run.home, 'AppData/Local'), join(run.data, 'sessions')]) mkdirSync(dir, { recursive: true });
-  run.bundle = join(run.temp, 'talos-phase1-bundle');
-  json(run.manifest, {
-    schema: 'talos.ripresa.run.v1', ...run, created: new Date().toISOString(),
-    head: git('rev-parse', 'HEAD'), release: 'desktop-v0.1.13', releaseHead: git('rev-parse', 'desktop-v0.1.13^{commit}'),
-    status: git('status', '--short'), node: process.version, keyring: 'test-only-memory',
-    locks: ['package-lock.json', '../package-lock.json'].map(file => ({ file, sha256: createHash('sha256').update(readFileSync(resolve(frontend, file))).digest('hex') })),
-    limitations: ['Keyring OS e provider autenticati non certificati', 'Nessuna prova della 4174', 'Trace e screenshot solo per test browser eseguiti'],
-  });
+  try {
+    for (const dir of [run.data, run.home, run.temp, run.workspace, join(run.home, 'AppData/Roaming'), join(run.home, 'AppData/Local'), join(run.data, 'sessions')]) mkdirSync(dir, { recursive: true });
+    run.bundle = join(run.temp, 'talos-phase1-bundle');
+    json(run.manifest, {
+      schema: 'talos.ripresa.run.v1', ...run, created: new Date().toISOString(),
+      head: git('rev-parse', 'HEAD'), release: 'desktop-v0.1.13', releaseHead: git('rev-parse', 'desktop-v0.1.13^{commit}'),
+      status: git('status', '--short'), node: process.version, keyring: 'test-only-memory',
+      locks: ['package-lock.json', '../package-lock.json'].map(file => ({ file, sha256: createHash('sha256').update(readFileSync(resolve(frontend, file))).digest('hex') })),
+      limitations: ['Keyring OS e provider autenticati non certificati', 'Nessuna prova della 4174', 'Trace e screenshot solo per test browser eseguiti'],
+    });
+  } catch (errore) {
+    // D2-a: uno stato nato a metà (es. tag mancante in un clone superficiale) non resta in TEMP.
+    rimuoviStato(run);
+    throw errore;
+  }
   return run;
 }
 
@@ -132,10 +209,27 @@ export function elencaTestBackend(root = repo) {
   ].sort();
 }
 
-export async function esegui(kind, args = []) {
+/*
+ * D2-a, 24/09/2026 — `esegui` toglie il SUO stato alla fine, anche su errore (`finally`): i rapporti
+ * restano in `run.output`, lo stato in TEMP (clone, giunzioni, dati, home finta) no. Per ispezionarlo dopo
+ * una corsa: `TALOS_RIPRESA_CONSERVA_STATO=1` — resta, ma con le giunzioni già staccate.
+ * ⚠️ Un processo UCCISO (kill, crash della macchina) non arriva al `finally`: quello stato resta, e resta
+ *   il debito della raccolta a posteriori (D2-d della revisione, non curato qui).
+ * `radiceRapporti` e `conservaStato` sono opzioni per le prove.
+ */
+export async function esegui(kind, args = [], { radiceRapporti, conservaStato = process.env.TALOS_RIPRESA_CONSERVA_STATO === '1' } = {}) {
   if (!['build', 'unit', 'backend', 'browser', 'browser-release', 'list'].includes(kind)) throw new Error('Usare build, unit, backend, browser, browser-release o list');
   if (args.some(arg => /^--(config|output|reporter|workers|project|ui|headed|debug|update-snapshots)/.test(arg))) throw new Error('Override del banco non consentito');
-  const run = creaEsecuzione(kind);
+  const run = creaEsecuzione(kind, radiceRapporti ? { radiceRapporti } : {});
+  try {
+    return await eseguiNelloStato(run, kind, args);
+  } finally {
+    const { staccati, rimosso } = rimuoviStato(run, { conserva: conservaStato });
+    console.log(`Stato isolato ${rimosso ? 'rimosso' : 'conservato'}: ${run.state} (collegamenti staccati: ${staccati})`);
+  }
+}
+
+async function eseguiNelloStato(run, kind, args) {
   if (kind !== 'list') creaSnapshot(run, { release: kind === 'browser-release' });
   const env = creaAmbienteIsolato(run);
   console.log(`RIPRESA ${run.id}\nRapporti: ${run.output}\nStato isolato: ${run.state}`);

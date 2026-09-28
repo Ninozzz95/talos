@@ -8,6 +8,7 @@ import { TESTI as TESTI_BROWSER } from '../../src/components/browser.js';
 import { TESTI as TESTI_CONNESSIONE } from '../../src/components/connessione.js';
 import { AZIONI_FILE } from '../../src/components/review.js'; // BC-63, 17/09: le voci del menu delle linguette della Revisione
 import { TESTI_MESSAGGIO } from '../../src/components/conversazione.js'; // PO-27, 17/09: azioni sul messaggio e invito del primo avvio
+import { TESTI_PR } from '../../src/components/scheda-github.js'; // F6-3, 27/09: il gruppo «Pull request» della scheda GitHub
 
 // P-i18n (06/09) — la copertura dell'inglese si MISURA sulle frasi vere del codice, categoria per categoria.
 
@@ -28,6 +29,7 @@ const frasiComponenti = [
   /* ⛔ PO-27, 17/09 (D4): le frasi nuove entrano nel cancello. Una frase scritta a mano dentro una
      funzione non è nemmeno misurabile, e «non tradotta» avrebbe lo stesso aspetto di «non vista». */
   ...Object.values(TESTI_MESSAGGIO),
+  ...Object.values(TESTI_PR), // F6-3, 27/09
 ];
 
 test('I18N-COPERTURA: ogni frase di Impostazioni, attrezzi e componenti ha l’inglese', () => {

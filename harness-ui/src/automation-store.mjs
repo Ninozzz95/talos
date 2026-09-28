@@ -25,6 +25,8 @@ import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
+import { modelloRichiestaValido } from './config.mjs';
+
 export const INTERVALLO_MINIMO_MINUTI = 5;
 export const LIMITE_MASSIMO_AL_GIORNO = 10;
 
@@ -84,7 +86,14 @@ export function createAutomationStore({
    * tetti duri, mai un valore silenziosamente corretto (un limite "aggiustato
    * da solo" nasconderebbe all'owner cosa ha davvero chiesto).
    */
-  async function crea({ taskId, nome, intervalloMinuti, limiteAlGiorno = 3 }) {
+  /*
+   * ⛔ 24/09/2026, decisione owner («come il mobile, subito»): l'automazione SALVA il modello scelto nella chat al momento
+   *   della creazione e gira con quello, invece del predefinito del server che nessuno vedeva. Stessa validazione del
+   *   modello di una sessione (`modelloRichiestaValido`). Senza modello (automazioni di prima, o nessun modello scelto)
+   *   resta `null` e l'interfaccia lo dice: «predefinito del server». Ricerca della sessione mobile (24/09): Hermes, Claude
+   *   Code Routines, Codex, Cursor mostrano il modello del job; Hermes #59031 e #114690 sono guasti di un modello non visto.
+   */
+  async function crea({ taskId, nome, intervalloMinuti, limiteAlGiorno = 3, modello = null }) {
     if (typeof taskId !== 'string' || taskId.length === 0) {
       throw new AutomationStoreError('taskId mancante');
     }
@@ -94,12 +103,16 @@ export function createAutomationStore({
     if (!Number.isInteger(limiteAlGiorno) || limiteAlGiorno < 1 || limiteAlGiorno > LIMITE_MASSIMO_AL_GIORNO) {
       throw new AutomationStoreError(`limiteAlGiorno deve essere un intero fra 1 e ${LIMITE_MASSIMO_AL_GIORNO}`);
     }
+    if (modello !== null && modello !== undefined && !modelloRichiestaValido(modello)) {
+      throw new AutomationStoreError('modello non valido');
+    }
     const voce = {
       id: randomUUID(),
       taskId,
       nome: typeof nome === 'string' && nome.length > 0 ? nome : taskId,
       intervalloMinuti,
       limiteAlGiorno,
+      modello: typeof modello === 'string' ? modello : null,
       attiva: false,
       creataAlle: clock().toISOString(),
       ultimaEsecuzione: null,

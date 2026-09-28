@@ -107,8 +107,13 @@ function git(argomenti, cwd) {
 export async function statoGit(percorso, { profondita = PROFONDITA_REPO_ANNIDATI, eseguiGit = git } = {}) {
   const dentro = await eseguiGit(['rev-parse', '--is-inside-work-tree'], percorso);
   if (!dentro || dentro.trim() !== 'true') return null;
-  const ramo = (await eseguiGit(['rev-parse', '--abbrev-ref', 'HEAD'], percorso) || '').trim() || null;
-  const stato = await eseguiGit(['status', '--porcelain'], percorso);
+  /* P18 (26/09/2026): ramo e stato sono indipendenti, si chiedono INSIEME (misurato all'avvio di un turno: ~55 ms
+     in meno, due processi git in fila diventano uno accanto all'altro). */
+  const [ramoGrezzo, stato] = await Promise.all([
+    eseguiGit(['rev-parse', '--abbrev-ref', 'HEAD'], percorso),
+    eseguiGit(['status', '--porcelain'], percorso),
+  ]);
+  const ramo = (ramoGrezzo || '').trim() || null;
   const nonSalvate = stato === null ? null : stato.split('\n').filter((r) => r.trim()).length;
   const annidati = await repoAnnidati(percorso, profondita);
   return { ramo, nonSalvate, repoAnnidati: annidati };

@@ -98,7 +98,7 @@ export default Object.freeze({
   'Cambia il modello per la prossima richiesta.': 'Change the model for your next request.',
   'Modelli locali e download': 'Local models and downloads',
   'Apri il laboratorio dei modelli.': 'Open the model lab.',
-  'Configura account e credenziali.': 'Configure accounts and credentials.',
+  'Chiavi e indirizzi dei fornitori, nel Laboratorio modelli.': 'Provider keys and addresses, in the model lab.',
   'Permessi': 'Permissions',
   'Controlla le autorizzazioni senza modificarle automaticamente.': 'Review permissions without changing them automatically.',
   'Attrezzi, skill e connettori': 'Tools, skills and connectors',

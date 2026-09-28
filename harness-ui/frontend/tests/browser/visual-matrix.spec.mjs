@@ -25,12 +25,11 @@ const scenarios = [
   ['tool-lifecycle-complete-1440x900', { width: 1440, height: 900 }, 'tool-complete'],
   ['waiting-loader-1440x900', { width: 1440, height: 900 }, 'waiting-loader'],
   ['composer-standard-1440x900', { width: 1440, height: 900 }, 'composer-standard'],
-  ['composer-classic-1440x900', { width: 1440, height: 900 }, 'composer-classic'],
-  ['composer-compact-1440x900', { width: 1440, height: 900 }, 'composer-compact'],
   ['compact-390x844', { width: 390, height: 844 }, 'empty'],
 ];
 
-const outputDir = resolve(process.cwd(), 'artifacts', 'visual-audit-2026-09-01');
+const outputDir = resolve(process.env.TALOS_VISUAL_MATRIX_OUTPUT_DIR
+  || resolve(process.cwd(), 'artifacts', 'visual-audit-2026-09-01'));
 
 async function injectConversation(page, kind) {
   if (!['active', 'approval', 'long', 'full-width', 'chat-standard'].includes(kind)) return;
@@ -40,14 +39,16 @@ async function injectConversation(page, kind) {
     const widthComparison = variant === 'full-width' || variant === 'chat-standard';
     if (widthComparison) {
       const shortUser = document.createElement('article');
-      shortUser.className = 'message user-message';
-      shortUser.innerHTML = '<div class="message-bubble">Ci sei?</div>';
+      shortUser.className = 'talos-message talos-message--user';
+      shortUser.dataset.c = 'Message';
+      shortUser.innerHTML = '<div class="talos-message__body message-bubble">Ci sei?</div>';
       conversation.appendChild(shortUser);
     }
     const user = document.createElement('article');
-    user.className = 'message user-message';
+    user.className = widthComparison ? 'talos-message talos-message--user' : 'message user-message';
+    if (widthComparison) { user.dataset.c = 'Message'; user.dataset.testid = 'r4-long-user'; }
     const userBubble = document.createElement('div');
-    userBubble.className = 'message-bubble';
+    userBubble.className = widthComparison ? 'talos-message__body message-bubble' : 'message-bubble';
     userBubble.textContent = widthComparison
       ? 'Analizza l’intero workspace, confronta ogni dipendenza, verifica i contratti pubblici e prepara una risposta completa. Includi i rischi di regressione, le prove sintetiche, le verifiche reali e le fonti primarie consultate. Concludi con una consegna esplicita che renda misurabile la larghezza massima della bolla utente senza cambiare il composer.'
       : variant === 'long'
@@ -55,7 +56,8 @@ async function injectConversation(page, kind) {
       : 'Rifinisci la superficie desktop e verifica ogni stato operativo.';
     user.appendChild(userBubble);
     const assistant = document.createElement('article');
-    assistant.className = 'message assistant-message';
+    assistant.className = widthComparison ? 'talos-message' : 'message assistant-message';
+    if (widthComparison) assistant.dataset.c = 'Message';
     const copy = document.createElement('div');
     copy.className = 'assistant-copy';
     const paragraph = document.createElement('p');
@@ -240,19 +242,7 @@ async function applyScenario(page, kind) {
      * (la CSS rispetta la preferenza) — quindi la metrica più sotto può ancora smentire.
      */
     await expect(page.locator('.talos-waiting [data-testid="talos-assistant-orb"]')).toBeVisible();
-  } else if (kind.startsWith('composer-')) {
-    await clickDirect('[data-vaia="impostazioni"]');
-    await clickDirect('#setting-tab-appearance');
-    /*
-     * ⛔ 18/09/2026 — `force: true` perché il `<select>` nativo non è più il controllo VISIBILE:
-     * `#composerShapeSelect` è `class="talos-select" aria-hidden="true" tabindex="-1"` dietro il
-     * controllo a tema (`TalosThemedSelect`), e Playwright senza `force` si ferma su «element is not
-     * visible» (misurato, sonda-matrix2.mjs, porta 4197). Il valore vive nel nativo — la sonda lo
-     * rilegge dopo la selezione (`valore: "classic"`) e la forma si applica davvero: cambia il raggio
-     * del composer (`src/styles/index.css:654-656`, `:root[data-talos-composer-shape="classic"]`
-     * `.talos-composer{border-radius:8px}`).
-     */
-    await page.locator('#composerShapeSelect').selectOption(kind.slice('composer-'.length), { force: true });
+  } else if (kind === 'composer-standard') {
     await vaiA('chat');
     await injectConversation(page, 'active');
   } else {
@@ -261,7 +251,7 @@ async function applyScenario(page, kind) {
   await page.waitForTimeout(250);
 }
 
-test('@visual 24-scenario visual matrix stays inside the desktop contract', async ({ browser }) => {
+test('@visual 22-scenario visual matrix stays inside the desktop contract', async ({ browser }) => {
   test.setTimeout(120_000);
   await mkdir(outputDir, { recursive: true });
   const allMetrics = [];
@@ -315,6 +305,7 @@ test('@visual 24-scenario visual matrix stays inside the desktop contract', asyn
         const rect = composer.getBoundingClientRect();
         return { width: rect.width, height: rect.height, minHeight: style.minHeight, borderRadius: style.borderRadius, padding: style.padding };
       })(),
+      longUserWidth: document.querySelector('[data-testid="r4-long-user"]')?.getBoundingClientRect().width ?? null,
       /*
        * ⛔ 18/09/2026 — DUE METRICHE CHE MISURAVANO IL NULLA (entrambi i selettori: 0 nodi nel DOM vivo).
        * `.real-tool-note[data-tool-state]` non esiste: l'attributo lo scrive
@@ -347,61 +338,24 @@ test('@visual 24-scenario visual matrix stays inside the desktop contract', asyn
   }
   const composerStandard = allMetrics.find((item) => item.scenario === 'chat-standard-1920x1080')?.composerGeometry;
   const composerFullWidth = allMetrics.find((item) => item.scenario === 'chat-full-width-1920x1080')?.composerGeometry;
-  /*
-   * ⛔ 18/09/2026 — QUESTA RIGA DICEVA UNA COSA FALSA, e lo si vedeva solo adesso.
-   * Diceva `expect(composerFullWidth).toEqual(composerStandard)` con l'etichetta «full width must
-   * preserve the original composer geometry»: cioè che la modalità a tutta larghezza NON tocca il
-   * composer. Non è vero, ed è voluto: `src/styles/index.css:96-101` (07/9, owner: «metti la
-   * larghezza massima della chat di 768px di default» ⇒ `--talos-measure-w:768px`) scrive nero su
-   * bianco «La modalita a tutta larghezza NON passa di qui: `:root.chat-full-width` mette
-   * `max-width:none` sulla colonna e `calc(100% - 56px)` sul piede, e continua a farlo»; e
-   * `index.css:708` allarga proprio i figli del piede (`--talos-colonna-chat:100%; width:calc(100% -
-   * var(--talos-turno-coda)); max-width:none`). Le misure del 07/9 citate lì accanto («allargava la
-   * colonna e il composer (1216 e 1212)») confermano che il composer più largo è il COMPORTAMENTO
-   * atteso, non una regressione — lì il difetto era che i MESSAGGI restavano a 768.
-   * ⛔ E la prova non poteva accorgersene: fino a ieri `composerGeometry` cercava `.composer`, che ha
-   * 0 nodi, quindi tornava `null` per tutti e 24 gli scenari e `toEqual(null, null)` era verde per
-   * COSTRUZIONE. Ripuntata su `#composerForm` (sopra), i numeri veri sono comparsi: a 1920×1080,
-   * standard **768** (esattamente la misura del 07/9) contro full width **1072**.
-   * ⇒ L'invariante che il prodotto promette davvero è: la modalità a tutta larghezza è una questione
-   * di LARGHEZZA (del piede, della colonna e delle bolle) e non deve toccare la FORMA del composer —
-   * altezza, raggio, padding restano gli stessi — mentre la larghezza DEVE cambiare, altrimenti la
-   * coppia di scenari non sta misurando niente. Misurato il 18/09/2026 nel giro di questa spec:
-   * forma identica nei due (`height 120`, `borderRadius 18px`, `padding "14px 14px 12px"`,
-   * `minHeight 0px`), larghezza 768 → 1072. (Playwright: `toEqual` è l'uguaglianza stretta, la forma
-   * si confronta dopo aver tolto la sola chiave che DEVE differire — playwright.dev/docs/api/
-   * class-genericassertions, consultato il 18/09/2026.)
-   */
+  /* Decisione R4 Owner successiva: il composer conserva misura e forma;
+   * si allargano i messaggi. La fixture usa ora `.talos-message`, il
+   * componente realmente distribuito, invece degli articoli legacy. */
   const { width: larghezzaStandard, ...formaStandard } = composerStandard || {};
   const { width: larghezzaFullWidth, ...formaFullWidth } = composerFullWidth || {};
   expect(formaFullWidth, 'full width must not touch the composer SHAPE (height, radius, padding)').toEqual(formaStandard);
-  expect(larghezzaFullWidth, 'full width must widen the composer, or the toggle is doing nothing').toBeGreaterThan(larghezzaStandard);
-  /*
-   * ⛔ 18/09/2026 — non sono più tre volte 116. Misurate a 1440×900 sulla schermata chat, forma per
-   * forma, su `#composerForm` (artefatti di questa spec, `composer-<forma>-1440x900.json`):
-   *   standard 690×**120**, raggio **18px**, padding `14px 14px 12px`
-   *   classic  690×**120**, raggio  **8px**, stesso padding
-   *   compact  690×**102,5**, raggio **11px**, padding `8px 10px 6px`
-   * `standard` e `classic` condividono l'altezza e si distinguono per il RAGGIO; `compact` è più
-   * bassa perché cambia padding e minimo dell'input (`src/styles/index.css:654-656`).
-   * ⛔ E LA MISURA HA UNA RISOLUZIONE: il primo giro di questa cura dichiarava «compact 103», che era
-   * una lettura ARROTONDATA da una sonda; il valore vero è **102,5**, e `toBe(103)` su un'altezza
-   * frazionaria è un'asserzione che nessuna pagina può soddisfare. Si confronta con la precisione
-   * dichiarata (`toBeCloseTo`, ±0,05) e l'invariante resta quello che conta: due forme alte uguali e
-   * distinte dal raggio, una più bassa, e nessuna delle tre che cambia LARGHEZZA (690 tutte e tre).
-   */
-  const formeComposer = {
-    standard: { height: 120, borderRadius: '18px' },
-    classic: { height: 120, borderRadius: '8px' },
-    compact: { height: 102.5, borderRadius: '11px' },
-  };
-  for (const forma of ['standard', 'classic', 'compact']) {
-    const geometry = allMetrics.find((item) => item.scenario === `composer-${forma}-1440x900`)?.composerGeometry;
-    expect(geometry?.height, `${forma} must preserve the mockup composer height`).toBeCloseTo(formeComposer[forma].height, 1);
-    expect(geometry?.borderRadius, `${forma} must preserve the mockup composer radius`).toBe(formeComposer[forma].borderRadius);
-    expect(geometry?.width, `${forma} must not change the composer width`).toBe(690);
-  }
-  expect(formeComposer.compact.height, 'compact must be the LOWER shape').toBeLessThan(formeComposer.standard.height);
+  expect(larghezzaFullWidth, 'full width must preserve the composer width').toBeCloseTo(larghezzaStandard, 0);
+  const messaggioStandard = allMetrics.find((item) => item.scenario === 'chat-standard-1920x1080')?.longUserWidth;
+  const messaggioFullWidth = allMetrics.find((item) => item.scenario === 'chat-full-width-1920x1080')?.longUserWidth;
+  expect(messaggioStandard).toBeGreaterThan(0);
+  expect(messaggioFullWidth, 'full width must widen a real Message, not the composer').toBeGreaterThan(messaggioStandard);
+  /* Owner 23/09: l'intera scelta Forma del composer Desktop e' ritirata.
+   * La matrice continua a misurare il composer canonico Standard e tutti
+   * gli altri scenari, inclusa la viewport responsive 390x844. */
+  const composerCanonical = allMetrics.find((item) => item.scenario === 'composer-standard-1440x900')?.composerGeometry;
+  expect(composerCanonical?.height, 'Standard composer height').toBeCloseTo(120, 1);
+  expect(composerCanonical?.borderRadius, 'Standard composer radius').toBe('18px');
+  expect(composerCanonical?.width, 'Standard composer width').toBe(690);
   await writeFile(resolve(outputDir, 'index.json'), `${JSON.stringify({ generatedAt: new Date().toISOString(), scenarios: allMetrics }, null, 2)}\n`, 'utf8');
-  expect(allMetrics).toHaveLength(24);
+  expect(allMetrics).toHaveLength(22);
 });

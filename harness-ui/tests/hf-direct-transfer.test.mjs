@@ -7,6 +7,7 @@ import { Readable } from 'node:stream';
 import test from 'node:test';
 import { createLocalModelStore } from '../src/local-model-store.mjs';
 import { createHfDirectTransfer } from '../src/hf-direct-transfer.mjs';
+import { rimuoviCartellaDiProvaAttesa } from './aiuto/rimuovi-cartella-di-prova.mjs';
 
 const bytes = Buffer.from('GGUF-fixture');
 const sha = createHash('sha256').update(bytes).digest('hex');
@@ -16,7 +17,7 @@ async function setup(t, fetchImpl) {
   const store = createLocalModelStore({ rootDir: root });
   const hub = { resolveDownload: async () => ({ url: 'https://cdn-lfs.huggingface.co/model.gguf' }) };
   const transfer = createHfDirectTransfer({ rootDir: root, modelStore: store, hubClient: hub, fetchImpl });
-  t.after(async () => {});
+  t.after(() => rimuoviCartellaDiProvaAttesa(root));
   return { root, store, transfer };
 }
 

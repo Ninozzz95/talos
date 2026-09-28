@@ -54,7 +54,8 @@ test('R04-ASSET — installer R-02, ZIP completo, SHA e note esplicite', () => {
   assert.equal(pacchetto.build.nsis.artifactName, 'TALOS-Setup-${version}.${ext}');
   assert.equal(pacchetto.build.win.artifactName, 'TALOS-${version}-win.${ext}');
   assert.equal(pacchetto.build.nsis.perMachine, false);
-  assert.equal(pacchetto.build.nsis.oneClick, true);
+  // F7-2 (owner 27/09/2026, «NSIS assistito + benvenuto in app»): da un clic ad ASSISTITO; /S resta per lo smoke della CI.
+  assert.equal(pacchetto.build.nsis.oneClick, false);
   assert.equal(pacchetto.build.publish, null);
   assert.match(passo('asset').run, /scripts\/release-assets\.mjs/);
   assert.match(passo('smoke').run, /scripts\/ci-smoke\.ps1/);

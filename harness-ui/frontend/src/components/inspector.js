@@ -775,6 +775,19 @@ function kv(d, k, v, classeV = '') { const r = el(d, 'div', 'talos-kv'); r.appen
    italiano (nato il 06/09 per il difetto BH-12, nove componenti che scrivevano «1 ricordi»). Qui
    si leggeva «1 scritture»: la decima occorrenza dello stesso difetto. */
 import { plurale } from './plurale.js';
+import { linguaCorrenteDiT } from './lingua.js';
+
+/*
+ * ⛔ 23/09/2026 (riparazione D6 della revisione UI) — i conteggi degli agenti si scrivono col raggruppamento
+ *   della LINGUA ATTIVA e SEMPRE raggruppati: decisione owner «5.000», e in inglese «5,000». Il predefinito di
+ *   Intl (`useGrouping: 'auto'`) in italiano stampa «5000» (preferenza della lingua per le quattro cifre);
+ *   `'always'` raggruppa anche lì (MDN, Intl.NumberFormat() constructor, opzione useGrouping, consultato
+ *   23/09/2026: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Intl/NumberFormat/NumberFormat).
+ *   Stessa scelta del laboratorio approvato (`lab/workflow-spec.js`, `useGrouping:'always'`).
+ */
+function conteggioAgenti(n) {
+  try { return new Intl.NumberFormat(linguaCorrenteDiT(), { useGrouping: 'always' }).format(n); } catch { return String(n); }
+}
 
 const SVG_NS_INSPECTOR = 'http://www.w3.org/2000/svg';
 function chevron(d) {
@@ -831,16 +844,24 @@ export function disegnaAgenti(d, contenitore, agenti, azioni = {}) {
       const filtro = el(d, 'div', 'talos-agenti-stati'); filtro.setAttribute('role', 'group'); filtro.setAttribute('aria-label', 'Filtra stato agenti');
       const conto = el(d, 'span'); conto.setAttribute('role', 'status');
       const righe = el(d, 'div', 'talos-agenti-elenco');
-      barra.append(titolo, grafo, cerca, filtro, conto); contenitore.replaceChildren(barra, righe);
-      s = { sessionId: azioni.sessionId, cerca, filtro, valore: 'tutti', conto, righe, dati: [], azioni: {} };
+      const pagine = el(d, 'nav', 'talos-agenti-pagine'); pagine.setAttribute('aria-label', 'Pagine degli agenti');
+      const precedente = el(d, 'button', 'talos-button talos-button--ghost talos-button--sm', 'Precedente'); precedente.type = 'button'; precedente.setAttribute('aria-label', 'Pagina precedente');
+      const pagina = el(d, 'span', 'talos-mono');
+      const successiva = el(d, 'button', 'talos-button talos-button--ghost talos-button--sm', 'Successiva'); successiva.type = 'button'; successiva.setAttribute('aria-label', 'Pagina successiva');
+      pagine.append(precedente, pagina, successiva);
+      barra.append(titolo, grafo, cerca, filtro, conto); contenitore.replaceChildren(barra, righe, pagine);
+      s = { sessionId: azioni.sessionId, cerca, filtro, valore: 'tutti', conto, righe, dati: [], azioni: {}, pagina: 0 };
       const disegna = () => {
         const q = s.cerca.value.toLocaleLowerCase().trim();
         const filtrati = s.dati.filter(a => (!q || `${a.taskCorto || ''} ${a.task || ''} ${a.modello || ''}`.toLocaleLowerCase().includes(q)) && (s.valore === 'tutti' || statoDelega(a) === s.valore));
-        const testoConto = s.azioni.errore ? `Dati non aggiornati: ${s.azioni.errore}` : `${filtrati.length} di ${s.dati.length} agenti · tutti i livelli`;
+        const paginaMassima = Math.max(0, Math.ceil(filtrati.length / 25) - 1);
+        s.pagina = Math.min(s.pagina, paginaMassima);
+        const inizio = s.pagina * 25;
+        const testoConto = s.azioni.errore ? `Dati non aggiornati: ${s.azioni.errore}` : `${conteggioAgenti(filtrati.length)} di ${conteggioAgenti(s.dati.length)} agenti · tutti i livelli`;
         if (s.conto.textContent !== testoConto) s.conto.textContent = testoConto;
         const attivo = d.activeElement, rigaAttiva = s.righe.contains(attivo) ? attivo.closest('[data-sessione-figlia]') : null;
         const idAttivo = rigaAttiva?.dataset.sessioneFiglia, menuAttivo = attivo?.getAttribute('aria-haspopup') === 'menu';
-        disegnaAgenti(d, s.righe, filtrati, { onApri: s.azioni.onApri, onMenu: s.azioni.onMenu, compatta: true });
+        disegnaAgenti(d, s.righe, filtrati.slice(inizio, inizio + 25), { onApri: s.azioni.onApri, onMenu: s.azioni.onMenu, compatta: true });
         if (s.dati.length && !filtrati.length) s.righe.replaceChildren(el(d, 'p', 'talos-inspector__hint', 'Nessun agente per questi filtri.'));
         if (idAttivo) {
           const riga = [...s.righe.querySelectorAll('[data-sessione-figlia]')].find(n => n.dataset.sessioneFiglia === idAttivo);
@@ -850,12 +871,18 @@ export function disegnaAgenti(d, contenitore, agenti, azioni = {}) {
           b.setAttribute('aria-pressed', String(b.dataset.stato === s.valore));
           b.hidden = ['ignoto', 'interrotta'].includes(b.dataset.stato) && s.valore !== b.dataset.stato && !s.dati.some(a => statoDelega(a) === b.dataset.stato);
         }
+        pagine.hidden = filtrati.length <= 25;
+        pagina.textContent = `${conteggioAgenti(filtrati.length ? inizio + 1 : 0)}–${conteggioAgenti(Math.min(inizio + 25, filtrati.length))} di ${conteggioAgenti(filtrati.length)}`;
+        precedente.disabled = s.pagina === 0; successiva.disabled = s.pagina >= paginaMassima;
       };
       for (const [valore, testo] of [['tutti', 'Tutti'], ['in-corso', 'Attivi'], ['attesa', 'In attesa'], ['fallita', 'Errori'], ['conclusa', 'Terminati'], ['interrotta', 'Interrotti'], ['ignoto', 'Non disponibili']]) {
         const b = el(d, 'button', '', testo); b.type = 'button'; b.dataset.stato = valore;
-        b.addEventListener('click', () => { s.valore = valore; disegna(); }); filtro.append(b);
+        b.addEventListener('click', () => { s.valore = valore; s.pagina = 0; disegna(); }); filtro.append(b);
       }
-      s.disegna = disegna; cerca.addEventListener('input', disegna); grafo.addEventListener('click', () => s.azioni.onGrafo());
+      s.disegna = disegna; cerca.addEventListener('input', () => { s.pagina = 0; disegna(); });
+      precedente.addEventListener('click', () => { s.pagina--; disegna(); precedente.focus(); });
+      successiva.addEventListener('click', () => { s.pagina++; disegna(); successiva.focus(); });
+      grafo.addEventListener('click', () => s.azioni.onGrafo());
       filtriAgenti.set(contenitore, s);
     }
     s.dati = Array.isArray(agenti) ? agenti : []; s.azioni = azioni; s.disegna(); return s.dati.length;
@@ -1216,8 +1243,10 @@ export function aggiornaInspector(inspector, dati = {}, { document: d = globalTh
   const agenti = inspector.querySelector('#railAgenti');
   /* ⛔ Quando una conversazione figlia è aperta, `#railAgenti` è `hidden` per scelta di chi l'ha
      aperta (il pannello vive come suo FRATELLO): la scheda resta sporca, e `chiudiConversazioneFiglia`
-     rimette `hidden = false` e richiama la sincronizzazione — l'elenco si ridisegna lì. */
-  if (agenti && !schedaDaSaltare(inspector, agenti, 'agenti')) disegnaAgenti(d, agenti, dati.agenti, dati.azioniAgenti || {});
+     rimette `hidden = false` e richiama la sincronizzazione — l'elenco si ridisegna lì.
+     ⭐ F3-50 (25/09/2026), decisione owner D30: con un workflow la scheda è del rail v2 (`rail-workflow.js`, montato da
+     `legacy/app.js`), che la aggiorna da sé; qui non si ridisegnano le deleghe classiche sopra di lui. */
+  if (agenti && !dati.agentiDelWorkflow && !schedaDaSaltare(inspector, agenti, 'agenti')) disegnaAgenti(d, agenti, dati.agenti, dati.azioniAgenti || {});
   const processi = inspector.querySelector('#railProcessi');
   if (schedaDaSaltare(inspector, processi, 'processi')) return;
   /*

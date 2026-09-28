@@ -95,14 +95,17 @@ export function nomiTemi(campi = CAMPI_IMPOSTAZIONI) {
 }
 
 /**
- * L'ordine dell'ELENCO dello studio: Calm per primo, come nel mockup (owner 12/09: «calm primo»).
+ * L'ordine dell'ELENCO dello studio: Forge, poi Calm, poi gli altri nell'ordine di sempre.
+ * Owner 24/09/2026 notte: Forge è il tema di serie e va primo anche qui («sì»), e Calm — primo dal 12/09
+ * («calm primo») — resta subito dopo («Forge, poi Calm, poi gli altri»).
  * ⛔ Non si riordina il contratto: il `<select>` delle Impostazioni resta com'è (è nascosto dalla
  *   migrazione, e la sua chiave salvata non cambia). Si riordina SOLO ciò che la persona guarda,
- *   e in modo stabile: Calm in testa, gli altri nell'ordine di sempre.
+ *   e in modo stabile: le teste nell'ordine dato, gli altri nell'ordine di sempre; una testa che manca si salta.
  */
-export function conCalmPrimo(temi) {
-  const i = temi.findIndex((t) => t.id === 'calm');
-  return i <= 0 ? temi.slice() : [temi[i], ...temi.slice(0, i), ...temi.slice(i + 1)];
+export const TEMI_IN_TESTA = Object.freeze(['forge', 'calm']);
+export function conTemiInTesta(temi, teste = TEMI_IN_TESTA) {
+  const inTesta = teste.map((id) => temi.find((t) => t.id === id)).filter(Boolean);
+  return [...inTesta, ...temi.filter((t) => !inTesta.includes(t))];
 }
 
 const REGOLA_TEMA = /^:root\[data-talos-theme=["']?([a-z]+)["']?\]$/i;
@@ -283,7 +286,7 @@ export function aspettoCorrente(doc = globalThis.document) {
   const radice = doc.documentElement;
   const dalControllo = (id) => doc.getElementById(id)?.value || doc.getElementById(`setting-${id}`)?.value || '';
   return {
-    tema: radice.getAttribute('data-talos-theme') || dalControllo('themePresetSelect') || 'calm',
+    tema: radice.getAttribute('data-talos-theme') || dalControllo('themePresetSelect') || 'forge', // tema di serie (owner 24/09/2026 sera: «tema default forge»)
     modo: dalControllo('colorModeSelect') || (radice.getAttribute('data-theme') === 'light' ? 'light' : 'system'),
   };
 }
@@ -674,10 +677,10 @@ function miniConversazione(doc) {
 /* ------------------------------------------------------------------------- la modale vera */
 
 export function apriStudioTemi({ document: doc = globalThis.document } = {}) {
-  const temi = conCalmPrimo(nomiTemi());
+  const temi = conTemiInTesta(nomiTemi());
   const semi = leggiSemiTemi(doc);
   let { tema: scelto, modo } = aspettoCorrente(doc);
-  if (!temi.some((t) => t.id === scelto)) scelto = temi[0]?.id || 'calm';
+  if (!temi.some((t) => t.id === scelto)) scelto = temi.some((t) => t.id === 'forge') ? 'forge' : (temi[0]?.id || 'forge'); // il ripiego è il tema di serie, non il primo dell'elenco
 
   const studio = nodo(doc, 'div', 'td-theme-studio');
 

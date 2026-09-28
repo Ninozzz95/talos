@@ -249,6 +249,28 @@ test('modelloRichiestaValido accetta i 12 alias reali "-latest" di OpenRouter (p
 });
 
 /*
+ * ⛔⛔⛔ 25/09/2026 sera, bug dell'owner con la foto: il Qwen3.8-27B appena scaricato dava «Avvio non riuscito: Query non
+ *   valida» a ogni messaggio. Il suo id (quello VERO, qui sotto) è tagliato a 120 caratteri e finisce con un trattino:
+ *   l'archivio dei modelli lo ammette (`local-model-store.mjs`, `ID`), la chat no. Decisione owner «Regola unica»: un id
+ *   `local:` si valida con la grammatica dell'archivio, come fa Ollama (`types/model/name.go`, `isValidPart`: `_ - .` in
+ *   qualunque posizione dopo la prima). ⛔ Al contrario: le altre fonti e il formato OpenRouter restano come prima.
+ */
+test('modelloRichiestaValido: un id locale si valida con la grammatica dell\'archivio, e SOLO quello', () => {
+  const qwen = 'HauhauCS-Qwen3-8-27B-Uncensored-HauhauCS-Aggressive-MTP-GGUF-993a5971fda8-Qwen3-8-27B-Uncensored-HauhauCS-Aggressive-Q4-';
+  assert.equal(modelloRichiestaValido(`local:${qwen}`), true, 'il modello scaricato dall\'owner si può usare in chat');
+  assert.equal(modelloRichiestaValido('local:openbmb-MiniCPM5-2B-GGUF-2079a22f3bea-MiniCPM5-2B-F16-gguf'), true);
+  assert.equal(modelloRichiestaValido(`local:${'a'.repeat(127)}-`), true, 'il più lungo id dell\'archivio, trattino in coda compreso');
+  /* ⛔ La regola locale si AGGIUNGE e non restringe: ciò che passava prima passa ancora (la forma con fonte ammetteva già
+     fino a 129 caratteri per ogni fonte), perché una sessione salvata non deve smettere di aprirsi. */
+  assert.equal(modelloRichiestaValido('local:qwen3:0.6b'), true, 'un id locale che passava prima passa ancora');
+  assert.equal(modelloRichiestaValido('local:-comincia-col-trattino'), false, 'il primo carattere resta una lettera o una cifra');
+  assert.equal(modelloRichiestaValido('local:con spazio'), false);
+  assert.equal(modelloRichiestaValido('local:'), false);
+  assert.equal(modelloRichiestaValido('ollama:qwen3-'), false, 'le altre fonti restano come prima');
+  assert.equal(modelloRichiestaValido('vendor/nome-'), false, 'e il formato OpenRouter anche');
+});
+
+/*
  * ⭐⭐⭐ 28/8 — LA PILLOLA PERMESSI, owner: "read only/workspace write/on
  * request/full access" — le stesse quattro stringhe del foglio
  * decorativo esistente in app.js (sheetTemplates.permissions), una

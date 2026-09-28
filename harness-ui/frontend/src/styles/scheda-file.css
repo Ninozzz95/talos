@@ -7,7 +7,12 @@
  * I due menu della testata usano lo STESSO ancoraggio del menu «⋯» della barra in alto (`position-anchor`), con gli stessi
  * valori di `.talos-menu`: non un terzo modo di aprire un menu.
  */
-#railFile #alberoCartella{display:flex; flex-direction:column; gap:var(--talos-space-sm); min-height:0}
+/* ⛔ 26/09/2026 (owner: «accenderla, come il disegno»): la regola mirava a `#alberoCartella`, che a runtime si chiama
+   `#inspector-files` (lo rinomina `bridge/legacy-dom.js:219`), e non si era mai applicata: la testata, la ricerca, le viste e
+   l'albero stavano attaccati. Si prende per il suo `data-c`, che resta, come fa già `lettore.css:79-81`; `:not([hidden])`
+   perché una regola con l'id batterebbe il `display:none` di `[hidden]`. E solo col lettore CHIUSO: la regola del lettore aperto
+   che nasconde l'albero ha la stessa specificità di questa, e deciderebbe l'ordine dei fogli. */
+#railFile:not([data-lettore="aperto"]) > [data-c="FileTree"]:not([hidden]){display:flex; flex-direction:column; gap:var(--talos-space-sm); min-height:0}
 
 .talos-file-head{display:flex; align-items:center; gap:var(--talos-space-sm); min-height:var(--talos-control-height)}
 .talos-file-head > .i{width:16px; height:16px; flex:none; color:var(--talos-muted)}

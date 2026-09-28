@@ -15,11 +15,11 @@ function automationStoreFinto() {
     async elenca() {
       return [...voci.values()].sort((a, b) => a.creataAlle.localeCompare(b.creataAlle));
     },
-    async crea({ taskId, nome, intervalloMinuti, limiteAlGiorno = 3 }) {
+    async crea({ taskId, nome, intervalloMinuti, limiteAlGiorno = 3, modello = null }) {
       if (intervalloMinuti < 5) throw new AutomationStoreError('intervalloMinuti troppo basso');
       contatore += 1;
       const voce = {
-        id: `a${contatore}`, taskId, nome: nome ?? taskId, intervalloMinuti, limiteAlGiorno,
+        id: `a${contatore}`, taskId, nome: nome ?? taskId, intervalloMinuti, limiteAlGiorno, modello,
         attiva: false, creataAlle: `2026-08-27T10:0${contatore}:00.000Z`, ultimaEsecuzione: null,
         prossimaEsecuzione: null, eseguiteOggi: 0, giornoContatore: null,
       };
@@ -153,4 +153,18 @@ test('⛔⛔ senza automationStore configurato, le rotte POST tornano 405 — st
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ taskId: 'x', intervalloMinuti: 30 }),
   });
   assert.equal(risposta.status, 405);
+});
+
+/* 24/09/2026, decisione owner: il modulo manda il modello scelto nella chat; la rotta lo valida come quello di una sessione. */
+test('AUTO-MODEL-HTTP: POST con modello lo salva; un modello malformato è 400 e non arriva allo store', async (t) => {
+  const { base } = await listen(t);
+  const ok = await fetch(`${base}/api/v1/automations`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ taskId: 'x', intervalloMinuti: 30, modello: 'z-ai/glm-5.3-flash' }) });
+  assert.equal(ok.status, 200);
+  assert.equal((await ok.json()).data.modello, 'z-ai/glm-5.3-flash');
+  const rotto = await fetch(`${base}/api/v1/automations`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ taskId: 'y', intervalloMinuti: 30, modello: 'non un modello!' }) });
+  assert.equal(rotto.status, 400);
+  const elenco = await (await fetch(`${base}/api/v1/automations`)).json();
+  assert.deepEqual(elenco.data.items.map((v) => v.taskId), ['x'], 'il corpo rifiutato non crea niente');
 });

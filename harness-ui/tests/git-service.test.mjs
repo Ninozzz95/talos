@@ -95,6 +95,17 @@ test('⭐⭐ il parser: la rinomina consuma il campo IN PIÙ senza disallineare 
   assert.deepEqual(voci[2], { x: '?', y: '?', percorsoRepo: 'terzo.txt', daRepo: null });
 });
 
+test('WORKFLOW-BASELINE-CHARACTERIZATION — porcelain -z preserva newline e Unicode nel pathname', () => {
+  /*
+   * ⛔ 20/09/2026 — non creare davvero un filename con newline: su Windows i
+   * control character non sono validi. Il parser però deve restare corretto
+   * davanti all'output Git NUL-delimited prodotto su filesystem che li ammettono.
+   */
+  const grezzo = '?? riga\nspezzata.txt\0?? città-€.txt\0';
+  const voci = analizzaStatoPorcelain(grezzo);
+  assert.deepEqual(voci.map((voce) => voce.percorsoRepo), ['riga\nspezzata.txt', 'città-€.txt']);
+});
+
 /* ═══════════════════════ 3. STAGED contro NON STAGED ═══════════════════════ */
 
 test('⭐⭐⭐ staged e non-staged si distinguono per i DUE caratteri XY: X è l\'indice, Y l\'albero di lavoro', async (t) => {
@@ -460,33 +471,42 @@ test('⛔⛔ una sessione SCONOSCIUTA non prende NIENTE: nessun ripiego su una c
   }
 });
 
-/* ═══════════════════ 10. IL PIN: `push` NON DEVE ESISTERE ═══════════════════ */
+/* ═══════════════════ 10. IL PIN del remoto (riscritto in F6-2, 27/09/2026) ═══════════════════ */
 
-test('⛔⛔⛔ PIN — `push` e `remote` non esistono in questo servizio, in nessuna forma (se qualcuno li aggiunge, questo test diventa rosso)', () => {
+test('⛔⛔⛔ PIN — il remoto ha regole scritte: `push` in UN posto, sempre `--porcelain`, MAI forzato; niente prompt nel terminale', () => {
   const sorgente = readFileSync(join(QUI, '..', 'src', 'git-service.mjs'), 'utf8');
-  /* ⛔ Si guarda il CODICE, non i commenti: un commento che spiega perché il push non c'è è esattamente ciò che vogliamo tenere. */
+  /* ⛔ Si guarda il CODICE, non i commenti: i commenti spiegano le regole e nominano ciò che è vietato. */
   const codice = sorgente
     .replace(/\/\*[\s\S]*?\*\//gu, '')
     .replace(/^\s*\/\/.*$/gmu, '');
-  for (const proibito of ['push', 'remote', 'fetch', 'pull']) {
-    assert.equal(
-      new RegExp(`['"\`]${proibito}['"\`]`, 'u').test(codice), false,
-      `«${proibito}» è comparso nel codice di git-service.mjs: il push si chiede all'owner, ogni volta`,
-    );
+  /* Dal 05/09 al 27/09 qui si pinnava «push non esiste». Owner 26/09 (decisione 2) e 27/09 (16-23): esiste, con queste regole. */
+  /* ⛔ Si conta la STRINGA 'push', cioè l'argomento passato a git: il regex dei remoti (`(fetch|push)`) e un testo d'errore non sono comandi. */
+  const push = [...codice.matchAll(/'push'/gu)];
+  assert.equal(push.length, 1, `'push' compare ${push.length} volte nel codice: deve stare in UN solo posto (invia)`);
+  assert.match(codice, /\['push', '--porcelain'/u, 'il push si legge dai flag di --porcelain, non dall inglese');
+  for (const vietato of ['--force', '--force-with-lease', '--force-if-includes', '--mirror']) {
+    assert.equal(codice.includes(vietato), false, `«${vietato}» è comparso nel codice: un push forzato o distruttivo non esiste`);
   }
-  /*
-   * ⛔ E nemmeno come parola nuda, fuori da una stringa (una variabile, una
-   * costante, un pezzo di lista costruito altrove). `Array.prototype.push` è
-   * l'unica forma ammessa, e si riconosce dal punto che la precede: la
-   * negazione è mirata alla CHIAMATA DI METODO, non alla parola in generale.
-   */
-  assert.equal(/(?<![.\w])push\b/u.test(codice), false, 'la parola `push` compare nel codice di git-service.mjs fuori da una chiamata di metodo');
-  /* ⛔ AL CONTRARIO — la guardia deve MORDERE: su un codice che chiama davvero `git push`, deve accendersi. */
-  assert.equal(/(?<![.\w])push\b/u.test("git(cartella, ['push', 'origin'])"), true, 'la guardia non riconoscerebbe un `git push` vero');
-  assert.equal(/(?<![.\w])push\b/u.test('voci.push(riga);'), false, 'la guardia scambia un array per un comando git');
+  /* e gli ARGOMENTI del push, presi dalla riga che lo costruisce: né cancellazioni né potature né `-f` (quello di `clean -f` in `annulla` è un'altra cosa) */
+  const argomentiPush = /\['push'[^\]]*\]/u.exec(codice)?.[0] ?? '';
+  assert.ok(argomentiPush.includes("'--porcelain'"), argomentiPush);
+  for (const vietato of ["'-f'", '--delete', '--prune', '--tags', '--all']) {
+    assert.equal(argomentiPush.includes(vietato), false, `«${vietato}» fra gli argomenti del push: ${argomentiPush}`);
+  }
+  assert.match(codice, /GIT_TERMINAL_PROMPT: '0'/u, 'un comando di rete non chiede mai nel terminale');
+  assert.equal(codice.includes('--autostash'), false, 'niente autostash: i file che bloccano si dicono per nome (owner, punto 20)');
+  /* ⛔ AL CONTRARIO — la guardia deve MORDERE: su un codice che forza, deve accendersi. */
+  assert.equal(/'push'/u.test("git(cartella, ['push', '--force'])"), true, 'la guardia non riconoscerebbe un git push vero');
+  assert.equal(/'push'/u.test('voci.push(riga);'), false, 'la guardia scambia un array per un comando git');
 
   const superficie = Object.keys(creaServizioGit({ cartellaDiSessione: () => null })).sort();
-  assert.deepEqual(superficie, ['commit', 'ramo', 'stage', 'stato', 'unstage'], 'la superficie del servizio è cambiata: nessuna porta nuova senza un sì esplicito');
+  /* ⭐ 26/09/2026 — F6-1 (memoria `decisioni-owner-f6-github-26-09`): locale con diff, annulla, commit di ciò che è preparato,
+     ultimo commit, rami, stash, storia, pezzi, ✨. ⭐ 27/09 — F6-2 (punti 16-23): remoti, sincronizzazione, recupera + ferma,
+     scarica, invia. Tutto ciò che parla col remoto sta in queste cinque porte, e in nessun'altra. ⭐ 27/09 — F6-2 passo 4
+     (decisione 24): `modificheFra` e `diffFra`, le modifiche di un commit del grafo — sola lettura, nessuna rete. ⭐ 27/09 — F6-3
+     (decisione 25): `perLaPr`, la bozza di una PR (base, rami del remoto, commit) — sola lettura, nessuna rete; GitHub sta in
+     `gh-service.mjs`, mai qui. ⭐ 28/09 — `inizializza`, il `git init` del pulsante «come VS Code»: locale, nessuna rete. */
+  assert.deepEqual(superficie, ['accantona', 'accantonati', 'annulla', 'annullaUltimoCommit', 'cambiaRamo', 'commit', 'commitPreparato', 'creaRamo', 'diff', 'diffFra', 'diffPerMessaggio', 'eliminaRamo', 'fermaRecupero', 'inizializza', 'invia', 'modificaUltimoCommit', 'modificheFra', 'perLaPr', 'pezzo', 'rami', 'ramo', 'recupera', 'remoti', 'rinominaRamo', 'riprendiAccantonato', 'scarica', 'scartaAccantonato', 'sincronizzazione', 'stage', 'stato', 'storia', 'unstage']);
 });
 
 /* ═══════════════════ 11. Il perché del Buffer, e le briciole ═══════════════════ */
@@ -573,6 +593,30 @@ test('⭐⭐ un CONFLITTO non è né staged né non-staged: è una terza cosa, e
   assert.equal(commit.code, 'GIT_NOTHING_TO_COMMIT');
 });
 
+test('WORKFLOW-BASELINE-CHARACTERIZATION — un submodule dirty è osservato come modifica ma NON è un repoAnnidato non tracciato', async (t) => {
+  const { base, g } = repoVero(t);
+  const sorgente = mkdtempSync(join(tmpdir(), 'talos-git-submodule-source-'));
+  t.after(() => rmSync(sorgente, { recursive: true, force: true }));
+  const sg = (...args) => execFileSync('git', args, { cwd: sorgente, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+  sg('init', '-q');
+  sg('config', 'user.email', 'sub@example.invalid');
+  sg('config', 'user.name', 'Submodule');
+  writeFileSync(join(sorgente, 'dentro.txt'), 'base\n');
+  sg('add', '--', 'dentro.txt');
+  sg('commit', '-q', '-m', 'base');
+
+  g('-c', 'protocol.file.allow=always', 'submodule', 'add', '-q', sorgente, 'vendor/sub');
+  g('commit', '-q', '-m', 'aggiungi submodule');
+  writeFileSync(join(base, 'vendor', 'sub', 'dentro.txt'), 'dirty\n');
+
+  const esito = await servizio({ s1: base }).stato({ sessionId: 's1' });
+  const voce = esito.voci.find((v) => v.percorso === 'vendor/sub');
+  assert.ok(voce, 'un submodule dirty non può sparire dallo stato del workspace');
+  assert.equal(voce.nonStaged, true);
+  assert.equal(voce.repoAnnidato, false,
+    'repoAnnidato significa repository NON tracciato: la futura WorkspaceBaseline deve distinguere il gitlink con un parser dedicato, non riusare questo flag');
+});
+
 test('⭐ un WORKTREE (dove `.git` è un FILE, non una cartella) è un repository come gli altri', async (t) => {
   const { base, g } = repoVero(t);
   writeFileSync(join(base, 'x.txt'), 'x\n');
@@ -596,4 +640,95 @@ test('⭐ un WORKTREE (dove `.git` è un FILE, non una cartella) è un repositor
   const ramo = await git.ramo({ sessionId: 's1' });
   assert.equal(ramo.ramo, 'lane/prova');
   g('worktree', 'remove', '--force', wt);
+});
+
+/* ═══════════ 28/09 — «Inizializza repository», come VS Code (owner: anche senza accesso a GitHub) ═══════════ */
+
+/** Una cartella usa-e-getta che NON è un repository — e lo si verifica, invece di supporlo. */
+function cartellaNonRepo(t) {
+  const base = mkdtempSync(join(tmpdir(), 'talos-git-init-'));
+  t.after(() => rmSync(base, { recursive: true, force: true }));
+  let dentro = true;
+  try { execFileSync('git', ['rev-parse', '--git-dir'], { cwd: base, stdio: 'ignore' }); } catch { dentro = false; }
+  assert.equal(dentro, false, `premessa: ${base} non deve stare dentro un repository`);
+  return base;
+}
+
+test('INIT-01 — una cartella qualunque diventa un repository: .git c\'è, il ramo è quello della configurazione, i file sono «nuovi»', async (t) => {
+  const base = cartellaNonRepo(t);
+  writeFileSync(join(base, 'leggimi.md'), 'ciao\n');
+  const git = servizio({ s1: base }, { cartellaUtenteFn: () => join(tmpdir(), 'non-contiene-questa') });
+  assert.equal((await git.stato({ sessionId: 's1' })).code, 'GIT_NOT_A_REPOSITORY');
+
+  const esito = await git.inizializza({ sessionId: 's1' });
+  assert.ok(!('erroreAvvio' in esito), esito.erroreAvvio);
+  assert.equal(existsSync(join(base, '.git')), true);
+  let atteso = 'main';
+  try { atteso = execFileSync('git', ['config', '--get', 'init.defaultBranch'], { cwd: base, encoding: 'utf8' }).trim() || 'main'; } catch { /* nessuna configurazione: main */ }
+  assert.equal(esito.ramo, atteso, 'il ramo iniziale: la configurazione di chi usa l\'app, altrimenti main');
+  assert.deepEqual(esito.stato.voci.map((v) => [v.percorso, v.tipo]), [['leggimi.md', 'nonTracciato']]);
+  assert.equal(esito.stato.base, null, 'nessun commit ancora: la base è null, non inventata');
+
+  const ancora = await git.inizializza({ sessionId: 's1' });
+  assert.equal(ancora.code, 'GIT_ALREADY_A_REPOSITORY', 'la seconda volta si rifiuta, non reinizializza');
+});
+
+test('INIT-02 — dentro un repository (anche in una sottocartella) si rifiuta: nessun repository annidato', async (t) => {
+  const { base } = repoVero(t);
+  mkdirSync(join(base, 'sotto'));
+  const git = servizio({ radice: base, sotto: join(base, 'sotto') });
+  assert.equal((await git.inizializza({ sessionId: 'radice' })).code, 'GIT_ALREADY_A_REPOSITORY');
+  assert.equal((await git.inizializza({ sessionId: 'sotto' })).code, 'GIT_ALREADY_A_REPOSITORY');
+  assert.equal(existsSync(join(base, 'sotto', '.git')), false);
+  assert.equal((await git.inizializza({ sessionId: 'ignota' })).code, 'NOT_FOUND');
+});
+
+test('INIT-03 — una cartella che CONTIENE la cartella utente vuole la conferma, come VS Code; confermata, si crea', async (t) => {
+  const base = cartellaNonRepo(t);
+  const git = servizio({ s1: base }, { cartellaUtenteFn: () => join(base, 'Utenti', 'io') });
+  const senza = await git.inizializza({ sessionId: 's1' });
+  assert.equal(senza.code, 'GIT_INIT_NEEDS_CONFIRM');
+  assert.equal(existsSync(join(base, '.git')), false, 'senza conferma non si tocca niente');
+  assert.equal((await git.inizializza({ sessionId: 's1', conferma: 'true' })).code, 'GIT_INIT_NEEDS_CONFIRM', 'la conferma vale solo come true');
+  const uguale = servizio({ s1: base }, { cartellaUtenteFn: () => base });
+  assert.equal((await uguale.inizializza({ sessionId: 's1' })).code, 'GIT_INIT_NEEDS_CONFIRM', 'la cartella utente stessa');
+  const con = await git.inizializza({ sessionId: 's1', conferma: true });
+  assert.ok(!('erroreAvvio' in con), con.erroreAvvio);
+  assert.equal(existsSync(join(base, '.git')), true);
+});
+
+test('INIT-04 — il ramo iniziale: main SOLO se non è configurato; e un rifiuto diverso da «not a git repository» non inizializza', async () => {
+  const chiamate = [];
+  let configurato = null;
+  let rifiuto = 'fatal: not a git repository (or any of the parent directories): .git\n';
+  const eseguiGitFn = async (_cartella, argomenti) => {
+    chiamate.push(argomenti.filter((a) => a !== '--no-optional-locks' && a !== '--literal-pathspecs'));
+    if (argomenti.includes('--git-dir')) return { codice: 128, stdout: '', stderr: rifiuto };
+    if (argomenti.includes('--get')) return configurato ? { codice: 0, stdout: `${configurato}\n`, stderr: '' } : { codice: 1, stdout: '', stderr: '' };
+    return { codice: 0, stdout: '', stderr: '' };
+  };
+  const cartella = join(tmpdir(), 'talos-init-finta-inesistente');
+  const git = servizio({ s1: cartella }, { eseguiGitFn, esisteFn: () => false, cartellaUtenteFn: () => join(tmpdir(), 'altrove') });
+  const init = () => chiamate.find((a) => a.includes('init'));
+
+  await git.inizializza({ sessionId: 's1' });
+  assert.deepEqual(init(), ['-c', 'init.defaultBranch=main', 'init', '-q']);
+
+  chiamate.length = 0;
+  configurato = 'trunk';
+  await git.inizializza({ sessionId: 's1' });
+  assert.deepEqual(init(), ['init', '-q'], 'chi ha scelto un ramo iniziale lo tiene');
+
+  chiamate.length = 0;
+  rifiuto = "fatal: detected dubious ownership in repository at 'C:/x'\n";
+  const dubbio = await git.inizializza({ sessionId: 's1' });
+  assert.equal(dubbio.code, 'GIT_COMMAND_FAILED');
+  assert.match(dubbio.erroreAvvio, /dubious ownership/u);
+  assert.equal(init(), undefined, 'git non ha potuto guardare: nessun init');
+
+  chiamate.length = 0;
+  rifiuto = 'fatal: not a git repository\n';
+  const conPunto = servizio({ s1: cartella }, { eseguiGitFn, esisteFn: (p) => p.endsWith('.git'), cartellaUtenteFn: () => join(tmpdir(), 'altrove') });
+  assert.equal((await conPunto.inizializza({ sessionId: 's1' })).code, 'GIT_ALREADY_A_REPOSITORY', 'un .git sul disco basta a fermarsi');
+  assert.equal(init(), undefined);
 });

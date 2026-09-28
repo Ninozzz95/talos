@@ -51,11 +51,9 @@ const FONTI_RICERCA = {
  * ⛔ È l'elenco ATTESO: se un id sparisce, l'uguaglianza è rossa. Ed è un elenco PIENO, non vuoto:
  *   un confronto fra due elenchi vuoti passerebbe per costruzione e non proverebbe niente.
  */
+/* ⛔ 23/09/2026, decisione owner: «Provider e accessi» è tolta del tutto dalle Impostazioni — la sua voce (`settings-group-providers-state`, `settingsProvidersList`) esce
+   dall'elenco con lei; lo stato dei fornitori vive nelle card della scheda «Provider» del laboratorio. */
 const SEZIONI = [
-  {
-    id: 'providers',
-    idAttesi: ['settings-group-providers-state', 'settingsProvidersList'],
-  },
   {
     id: 'privacy',
     idAttesi: [
@@ -109,8 +107,8 @@ async function avvia(page, { lingua = 'it' } = {}) {
 
 test('FORME-01 · ogni carta delle tre sezioni ha la sua TESTATA, col titolo dal contratto', async ({ page }) => {
   const tentate = await avvia(page);
+  /* 23/09/2026, decisione owner: «Provider e accessi» è tolta del tutto dalle Impostazioni: la carta «Stato degli accessi» non esiste più. */
   const attese = {
-    providers: ['Stato degli accessi'],
     privacy: ['Dati locali del browser', 'Trasferisci le preferenze'],
     tools: ['Policy della sessione', 'Origine della ricerca web'],
   };
@@ -134,7 +132,9 @@ test('FORME-01 · ogni carta delle tre sezioni ha la sua TESTATA, col titolo dal
 
 test('FORME-02 · i fatti misurati sono una lista CHIAVE/VALORE, non due liste di nodi', async ({ page }) => {
   const tentate = await avvia(page);
-  for (const [sezione, lista] of [['providers', 'settingsProvidersList'], ['privacy', 'settingsPrivacyList']]) {
+  /* 23/09/2026, decisione owner: «Provider e accessi» è tolta del tutto dalle Impostazioni: `settingsProvidersList` è tolta con lei; la lista della privacy resta, e la prova non
+     diventa vacua (`righe.length > 0` qui sotto). */
+  for (const [sezione, lista] of [['privacy', 'settingsPrivacyList']]) {
     await apriSezione(page, sezione);
     const righe = await page.evaluate((id) => {
       const nodo = document.getElementById(id);
@@ -160,7 +160,8 @@ test('FORME-02 · i fatti misurati sono una lista CHIAVE/VALORE, non due liste d
 
 test('FORME-03 · le azioni stanno in UNA banda in fondo al pannello, non dentro le carte', async ({ page }) => {
   const tentate = await avvia(page);
-  for (const sezione of ['providers', 'privacy', 'tools']) {
+  /* 23/09/2026, decisione owner: «Provider e accessi» è tolta del tutto dalle Impostazioni. */
+  for (const sezione of ['privacy', 'tools']) {
     await apriSezione(page, sezione);
     const forma = await page.evaluate((s) => {
       const pannello = document.getElementById(`setting-panel-${s}`);
@@ -241,14 +242,13 @@ test('FORME-05 · la copia che la testata ha spostato c\'è ancora, in italiano 
    * Le parole sono quelle del prodotto (le stesse di `static-copy.ts`), non inventate.
    */
   const attesi = {
+    /* 23/09/2026, decisione owner: «Provider e accessi» è tolta del tutto dalle Impostazioni: niente più «Stato degli accessi» / «Access state». */
     it: {
-      providers: ['Stato degli accessi'],
       privacy: ['Dati locali del browser', 'Trasferisci le preferenze'],
       tools: ['Policy della sessione', 'Origine della ricerca web'],
       costi: ['Consumo registrato'],
     },
     en: {
-      providers: ['Access state'],
       privacy: ['Local browser data', 'Transfer preferences'],
       tools: ['Session policy', 'Web search source'],
       costi: ['Recorded usage'],

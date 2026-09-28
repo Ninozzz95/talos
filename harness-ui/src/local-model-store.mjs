@@ -16,7 +16,13 @@ const MANIFEST_KEYS = ['id', 'repo', 'revision', 'files', 'bytes', 'sha256', 'li
 const FILE_KEYS = ['path', 'bytes', 'sha256'];
 const SHA256 = /^[a-f0-9]{64}$/i;
 const REVISION = /^[a-f0-9]{40,64}$/i;
-const ID = /^[a-z0-9][a-z0-9._-]{0,127}$/i;
+/*
+ * ⛔ 25/09/2026 — la grammatica dell'id è UNA, ed è questa: la chat la usa per i modelli `local:` (`config.mjs`,
+ *   `modelloRichiestaValido`). Prima erano due, e l'archivio accettava un id che la chat rifiutava (il Qwen3.8-27B
+ *   dell'owner, tagliato a 120 caratteri con un trattino in coda: «Query non valida» a ogni messaggio).
+ */
+export const FORMA_ID_MODELLO_LOCALE = '[a-z0-9][a-z0-9._-]{0,127}';
+const ID = new RegExp(`^${FORMA_ID_MODELLO_LOCALE}$`, 'i');
 
 function invalid(message) {
   return new LocalModelStoreError(message, 'MODEL_INVALID');

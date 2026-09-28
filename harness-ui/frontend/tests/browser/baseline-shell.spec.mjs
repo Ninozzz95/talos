@@ -636,7 +636,7 @@ test('LAG-REPLAY-TEXT-32 — molti delta storici fanno un solo commit visuale fi
     return {
       mutations,
       text: conversation.querySelector('.assistant-copy')?.textContent || '',
-      messages: conversation.querySelectorAll('.assistant-message').length,
+      messages: conversation.querySelectorAll('.talos-message[data-c="Message"]').length,
     };
   });
   expect(result.text).toBe('a'.repeat(250));
@@ -807,7 +807,11 @@ test('cold start does not expose invented runtime telemetry', async ({ page }) =
   for (const value of ['wt/auth', 'feat/mobile', '18.7k / 128k', '142 tok/s', 'cache 78%', 'Attrezzi\n7', 'Browser\nScoped']) {
     expect(text).not.toContain(value);
   }
-  await expect(page.locator('[data-runtime-usage]')).toHaveText('Contesto non osservato');
+  const finestra = page.locator('#railContesto');
+  await expect(finestra).toBeVisible();
+  await expect(finestra.locator('.talos-kv__k').filter({ hasText: 'Conversazione' }).locator('..').locator('.talos-kv__v')).toHaveText('—');
+  await expect(finestra.locator('.talos-kv__k').filter({ hasText: 'Riusato dalla cache' }).locator('..').locator('.talos-kv__v')).toHaveText('non misurato');
+  await expect(page.locator('[data-runtime-usage]')).toHaveCount(0);
   await expect(page.locator('[data-environment-label]').first()).toHaveText('Ambiente non osservato');
 });
 
@@ -841,14 +845,14 @@ test('Nuova sessione usa la workspace desktop senza configurazione manuale', asy
   await expect(page.locator('#sheetBody')).not.toContainText('Imposta TALOS_HARNESS_UI_PROJECT_DIRS');
 });
 
-test('OPEN-WITH-TALOS-BROWSER-01 — il fragment prepara il workspace senza inventare Full access', async ({ page }) => {
+test('OPEN-WITH-TALOS-BROWSER-01 — il fragment apre la scelta esplicita senza inventare Full access', async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   const launchId = 'A'.repeat(32);
   let corpoAvvio = null;
   await page.route(`**/api/v1/workspace-launches/${launchId}`, async (route) => route.fulfill({
     status: 200,
     contentType: 'application/json',
-    body: JSON.stringify({ ok: true, data: { id: launchId, nome: 'Progetto Ω', scadeAlle: '2026-09-01T12:02:00.000Z' } }),
+    body: JSON.stringify({ ok: true, data: { id: launchId, nome: 'Progetto Ω', scadeAlle: '2027-01-01T12:02:00.000Z' } }),
   }));
   await page.route('**/api/v1/sessions/custom', async (route) => {
     corpoAvvio = route.request().postDataJSON();
@@ -857,16 +861,22 @@ test('OPEN-WITH-TALOS-BROWSER-01 — il fragment prepara il workspace senza inve
   await page.route('**/api/v1/sessions/session-open-with/events', async (route) => route.fulfill({ status: 200, contentType: 'text/event-stream', body: '' }));
 
   await page.goto(`/#open-workspace=${launchId}`);
+  await expect(page.locator('#sheetDialog')).toBeVisible();
+  await expect(page.locator('#sheetTitle')).toHaveText('Su quale progetto lavora TALOS?');
+  await expect(page.locator('[data-workspace-selected-path]')).toHaveText('Progetto Ω · scelta da Windows');
+  await expect(page.locator('#workspaceChooserSubmit')).toContainText('Progetto Ω');
+  await page.locator('#workspaceChooserSubmit').click();
+  await expect(page.locator('#sheetDialog')).toBeHidden();
   await expect(page.locator('#sessionTitle')).toHaveText('Nuova · Progetto Ω');
-  await expect(page.locator('#conversation')).toContainText('Sessione pronta su Progetto Ω.');
+  await expect(page.locator('#conversation .talos-empty__title')).toHaveText('Cosa costruiamo in Progetto Ω?');
   await expect(page.locator('#inspector-files .file-tree')).toContainText('Progetto Ω');
   await expect(page.locator('#inspector-files .file-tree')).toContainText('I file appariranno appena inizi la sessione.');
   await expect(page.locator('#inspector-files .file-tree')).not.toContainText('Nessuna cartella ancora scelta');
   await expect(page.locator('[data-open-sheet="permissions"] span')).toHaveText('Scrive nel progetto');
   await expect.poll(() => new URL(page.url()).hash).toBe('');
-  const visualDir = resolve(process.cwd(), 'artifacts', 'visual-audit-2026-09-01');
-  await mkdir(visualDir, { recursive: true });
-  await page.screenshot({ path: resolve(visualDir, 'open-with-talos-1440x900.png'), fullPage: true });
+  await testInfo.attach('open-with-talos-1440x900.png', {
+    body: await page.screenshot({ fullPage: true }), contentType: 'image/png',
+  });
 
   await page.locator('#composerInput').fill('Controlla il progetto');
   await page.locator('#composerForm').evaluate((form) => form.requestSubmit());
@@ -1256,7 +1266,13 @@ test('Nuova automazione comunica in linguaggio naturale quando non ci sono attiv
   }));
   await apriChat(page);
   await page.locator('[data-vaia="automazioni"]').evaluate((element) => element.click());
-  await page.locator('[data-automation-action="new"]').evaluate((element) => element.click());
+  /* ⛔ 24/09/2026 notte — il selettore nudo `[data-automation-action="new"]` trova DUE bottoni: quello della schermata vera
+     e la copia del guscio legacy nascosto (`#talos-legacy`, `frammenti.html:119`) ⇒ violazione di «strict mode», rossa dal
+     giorno della schermata nuova. E il bottone vero è spento apposta mentre l'elenco si carica (`app.js:20563`,
+     `salvataggio: … || vistaAutomazioni.caricamento`): si aspetta che sia attivo e si clicca come la persona. */
+  const nuova = page.locator('#schermoAutomazioni [data-automation-action="new"]');
+  await expect(nuova).toBeEnabled();
+  await nuova.click();
   await expect(page.locator('#sheetBody')).toContainText('Non ci sono ancora attività pronte');
   await expect(page.locator('#sheetBody')).not.toContainText('TASK_NOT_AVAILABLE');
 });
@@ -1540,20 +1556,25 @@ test('REDUCED-MOTION-02 — l’indicatore resta leggibile e CALMO con movimento
    *   (`talos-assistant-orb`). Queste righe controllano l'animazione di un componente che in questo punto non
    *   c'è: vanno riscritte sull'orb da chi tocca l'attesa, non spente.
    */
-  const punti = page.locator('.talos-line-loader-node');
-  await expect(punti).toHaveCount(3);
-  await expect(page.locator('.talos-line-loader-head, .run-activity-shimmer')).toHaveCount(0);
-  await expect(page.locator('.talos-line-loader-sweep')).toHaveCount(1);
-  for (const punto of await punti.all()) await expect(punto).toHaveCSS('animation-name', 'talosLineNodeFill');
-  await expect(page.locator('.talos-line-loader-sweep')).toHaveCSS('animation-name', 'talosLineSweep');
-  // ⛔ La prova che conta: il browser le sta DAVVERO eseguendo, e non a
-  // durata zero (il modo in cui `animation:none` si traveste da animazione).
-  const stato = await page.locator('.talos-line-loader').first().evaluate((el) => el.getAnimations({ subtree: true }).map((a) => ({ p: a.playState, d: a.effect?.getTiming().duration, i: a.effect?.getTiming().iterations })));
-  expect(stato).toHaveLength(4);
-  expect(stato.every((a) => a.p === 'running' && a.d > 100 && a.i === Infinity)).toBe(true);
+  /*
+   * ⭐ 24/09/2026 — RISCRITTA SULL'ORB, come chiedeva la nota del 13/09 qui sopra («vanno riscritte sull'orb da chi tocca
+   *   l'attesa»): da oggi l'orb vive nella TESTATA del messaggio TALOS (owner 24/09, «l'orb con la linea che gira»), e col
+   *   movimento ridotto l'anello GIRA PIÙ LENTO, non si ferma — owner 02/09 «si CALMA, non si congela», owner 10/09 sugli
+   *   spegnimenti dell'attesa «NON LI VOGLIO». La regola del 12/09 copiata dal mobile («l'anello sta fermo») li contraddiceva.
+   *   Si prova che l'animazione c'è, che il browser la esegue davvero, all'infinito, e più lenta della velocità normale (1,5 s).
+   */
+  const orb = page.locator('#conversation .talos-message__head .talos-orb.working');
+  await expect(orb).not.toHaveCount(0);
+  const stato = await orb.last().evaluate((el) => el.getAnimations({ subtree: true }).map((a) => ({
+    nome: a.animationName, p: a.playState, d: a.effect?.getTiming().duration, i: a.effect?.getTiming().iterations, pseudo: a.effect?.pseudoElement ?? null,
+  })));
+  const giro = stato.filter((a) => a.nome === 'talos-orb-spin');
+  expect(giro, JSON.stringify(stato)).toHaveLength(1);
+  expect(giro[0]).toMatchObject({ p: 'running', i: Infinity, pseudo: '::after' });
+  expect(giro[0].d, 'col movimento ridotto l’anello è più calmo, mai fermo').toBeGreaterThan(1500);
 });
 
-test('RUN-PRIMARY-STOP-03/RUN-QUEUE-04 — durante il run il primario ferma, Enter accoda e il testo abilita Reindirizza', async ({ page }) => {
+test('RUN-PRIMARY-STOP-03/RUN-QUEUE-04 — durante il run il primario ferma, Enter apre il bivio e Accoda invia il testo', async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   let stopCalls = 0;
   let queued = null;
@@ -1595,7 +1616,32 @@ test('RUN-PRIMARY-STOP-03/RUN-QUEUE-04 — durante il run il primario ferma, Ent
   await expect(page.locator('#redirectRunButton')).toBeVisible();
   await page.screenshot({ path: resolve(visualDir, 'run-stop-redirect-composer-1024x800.png'), fullPage: true });
   await page.locator('#composerInput').press('Enter');
+  await expect(page.locator('.talos-bivio[data-c="SendChoice"]')).toBeVisible();
+  await expect(page.locator('.talos-bivio [data-bivio="accoda"]')).toBeFocused();
+  expect(queued, 'Enter non deve scegliere al posto della persona').toBeNull();
+  await page.locator('.talos-bivio [data-bivio="accoda"]').click();
   await expect.poll(() => queued).toEqual({ messaggio: 'prima attendi il confine sicuro' });
+  const toast = page.locator('#regioneToast .talos-toast').last();
+  await expect(toast).toBeVisible();
+  await toast.locator('[data-toast-chiudi]').focus(); // il timer si ferma mentre la notifica e letta
+  for (const viewport of [
+    { width: 1920, height: 1080 }, { width: 2560, height: 1440 },
+    { width: 1440, height: 900 }, { width: 1280, height: 800 },
+    { width: 1024, height: 800 },
+  ]) {
+    await page.setViewportSize(viewport);
+    await expect(toast).toBeVisible();
+    const hit = await page.evaluate(() => {
+      const button = document.querySelector('.send-btn');
+      const box = button.getBoundingClientRect();
+      const top = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+      return { stop: button === top || button.contains(top), top: top?.outerHTML.slice(0, 160) ?? null };
+    });
+    expect(hit.stop, `${viewport.width}x${viewport.height}: toast blocca Stop; top=${hit.top}`).toBe(true);
+    await testInfo.attach(`run-toast-${viewport.width}x${viewport.height}.png`, {
+      body: await page.screenshot({ fullPage: false }), contentType: 'image/png',
+    });
+  }
   await page.locator('.send-btn').click();
   await expect.poll(() => stopCalls).toBe(1);
 });
@@ -1791,7 +1837,14 @@ test('TOOL-BATCH-HIDDEN-REASONING-01 — il ragionamento nascosto non spezza il 
   expect(batches).toEqual({ batches: 1, rows: 2, reasoningHidden: true });
 });
 
-test('TOOL-BATCH-REASONING-VISIBILE-02 — un ragionamento CON testo fra due comandi è un confine: due gruppi, in ordine', async ({ page }) => {
+test('TOOL-BATCH-REASONING-VISIBILE-02 — un ragionamento CON testo fra due comandi sta NEL segmento, in ordine e visibile', async ({ page }) => {
+  /*
+   * ⛔ 23/09/2026, integrazione R4 — la regola dei confini è cambiata per ordine dell'owner (ticket
+   *   «R4-CHAT-ATTIVITA-COMPATTA», regole 1 e 3): attrezzi e ragionamenti CONSECUTIVI formano un solo
+   *   segmento compatto; il confine lo fanno la prosa del modello, il cambio turno, un gate umano o un
+   *   evento critico — non più il ragionamento. Aprendo il segmento ogni voce resta nell'ordine degli
+   *   eventi e il ragionamento resta leggibile. La prova ora pretende questo, al posto dei due gruppi.
+   */
   /*
    * ⛔ Il verso contrario della prova qui sopra, nata col ragionamento compresso (13/09 sera): senza testo
    *   il ragionamento non ha riga e non spezza il gruppo; con testo la riga c'è, e il comando che viene
@@ -1812,16 +1865,19 @@ test('TOOL-BATCH-REASONING-VISIBILE-02 — un ragionamento CON testo fra due com
     runtime.handleRealEvent({ type: 'ReasoningMessageStart', messageId: 'reasoning-visible', _sequenza: 90152 }, generation);
     runtime.handleRealEvent({ type: 'ReasoningMessageContent', messageId: 'reasoning-visible', delta: 'Prima guardo il README.', _sequenza: 90153 }, generation);
     runtime.handleRealEvent({ type: 'ToolCallStart', toolCallId: 'tool-after-v', toolCallName: 'cerca', _sequenza: 90154 }, generation);
-    const gruppi = [...document.querySelectorAll('#conversation [data-c="ActivityBundle"]:not(.real-reasoning-note)')];
+    const segmenti = [...document.querySelectorAll('#conversation .talos-activity--segment')];
+    const voci = segmenti[0] ? [...segmenti[0].querySelectorAll('.tool-batch-items > [data-c="ActivityBundle"]')] : [];
     const nota = document.querySelector('.real-reasoning-note');
-    const segue = (a, b) => Boolean(a && b && (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING));
     return {
-      batches: gruppi.length,
+      segmenti: segmenti.length,
+      voci: voci.length,
       reasoningHidden: nota?.hidden ?? true,
-      ordine: segue(gruppi[0], nota) && segue(nota, gruppi[1]),
+      // tool prima, ragionamento in mezzo, tool dopo: l'ordine degli eventi, non un riordino
+      ordine: voci.length === 3 && !voci[0].classList.contains('real-reasoning-note')
+        && voci[1] === nota && !voci[2].classList.contains('real-reasoning-note'),
     };
   });
-  expect(esito).toEqual({ batches: 2, reasoningHidden: false, ordine: true });
+  expect(esito).toEqual({ segmenti: 1, voci: 3, reasoningHidden: false, ordine: true });
 });
 
 test('TOOL-LIFECYCLE-SAME-ROW-01 — start, argomenti ed esito aggiornano la stessa riga', async ({ page }) => {
@@ -1836,7 +1892,7 @@ test('TOOL-LIFECYCLE-SAME-ROW-01 — start, argomenti ed esito aggiornano la ste
     session.toolCallNomi.clear();
     const generation = session.generation;
     runtime.handleRealEvent({ type: 'ToolCallStart', toolCallId: 'read-one', toolCallName: 'leggi', _sequenza: 90201 }, generation);
-    const before = document.querySelector('.real-tool-note');
+    const before = document.querySelector('#conversation .talos-tool-row[data-c="ToolRow"]');
     const start = {
       state: before?.dataset.toolState ?? null,
       busy: before?.getAttribute('aria-busy'),
@@ -1845,7 +1901,7 @@ test('TOOL-LIFECYCLE-SAME-ROW-01 — start, argomenti ed esito aggiornano la ste
     runtime.handleRealEvent({ type: 'ToolCallArgs', toolCallId: 'read-one', delta: '{"percorso":"src/app.js"}', _sequenza: 90202 }, generation);
     const during = before?.querySelector('.tool-note-summary-text')?.textContent ?? '';
     runtime.handleRealEvent({ type: 'ToolCallResult', toolCallId: 'read-one', content: 'contenuto letto', _sequenza: 90203 }, generation);
-    const after = document.querySelector('.real-tool-note');
+    const after = document.querySelector('#conversation .talos-tool-row[data-c="ToolRow"]');
     return {
       sameNode: before === after,
       start,
@@ -1861,7 +1917,7 @@ test('TOOL-LIFECYCLE-SAME-ROW-01 — start, argomenti ed esito aggiornano la ste
     sameNode: true,
     start: { state: 'running', busy: 'true', text: 'Lettura file…' },
     during: 'Lettura di src/app.js…',
-    end: { state: 'complete', busy: 'false', text: '1 file letto' },
+    end: { state: 'complete', busy: 'false', text: '1 file read' /* 26/09: parole delle specie, tradotte (la prova gira in inglese) */ },
   });
 });
 
@@ -1878,7 +1934,7 @@ test('TOOL-DESCRIPTION-LIFECYCLE-04 — la descrizione del modello resta nella s
     session.toolCallNomi.clear();
     const generation = session.generation;
     runtime.handleRealEvent({ type: 'ToolCallStart', toolCallId: 'described-shell', toolCallName: 'shell', _sequenza: 90211 }, generation);
-    const row = document.querySelector('.real-tool-note');
+    const row = document.querySelector('#conversation .talos-tool-row[data-c="ToolRow"]');
     runtime.handleRealEvent({
       type: 'ToolCallArgs',
       toolCallId: 'described-shell',
@@ -1887,15 +1943,16 @@ test('TOOL-DESCRIPTION-LIFECYCLE-04 — la descrizione del modello resta nella s
     }, generation);
     const during = row?.querySelector('.tool-note-summary-text')?.textContent ?? '';
     runtime.handleRealEvent({ type: 'ToolCallResult', toolCallId: 'described-shell', content: 'exit 0\npass 7\nfail 0', _sequenza: 90213 }, generation);
-    const after = document.querySelector('.real-tool-note');
-    document.querySelector('.tool-batch-summary')?.click();
-    after?.querySelector('.tool-note-summary')?.click();
+    const after = document.querySelector('#conversation .talos-tool-row[data-c="ToolRow"]');
+    document.querySelector('#conversation .talos-activity__head')?.click();
+    after?.click();
     return {
       sameNode: row === after,
       during,
       final: after?.querySelector('.tool-note-summary-text')?.textContent ?? '',
-      detail: after?.querySelector('.tool-note-detail')?.textContent ?? '',
-      batch: document.querySelector('.tool-batch-summary .tool-note-summary-text')?.textContent ?? '',
+      detail: after?.nextElementSibling?.matches('.tool-note-detail')
+        ? after.nextElementSibling.textContent : '',
+      batch: document.querySelector('#conversation .talos-activity__head .tool-note-summary-text')?.textContent ?? '',
     };
   });
   expect(result.sameNode).toBe(true);
@@ -1903,7 +1960,7 @@ test('TOOL-DESCRIPTION-LIFECYCLE-04 — la descrizione del modello resta nella s
   expect(result.final).toBe('Verifica la configurazione del server');
   expect(result.detail).toContain('comando: node --test tests/config.test.mjs');
   expect(result.detail).not.toContain('descrizione:');
-  expect(result.batch).toBe('1 comando eseguito');
+  expect(result.batch).toBe('1 command'); // 26/09: le parole del segmento (D1), tradotte come il segmento (questa prova gira in inglese)
   await page.screenshot({ path: 'artifacts/tool-description-1440x900.png', fullPage: true });
   await page.setViewportSize({ width: 1024, height: 800 });
   await page.screenshot({ path: 'artifacts/tool-description-1024x800.png', fullPage: true });
@@ -1929,9 +1986,9 @@ test('TOOL-BATCH-AGGREGATION-01 — cinque letture diventano un solo totale gram
         runtime.handleRealEvent({ type: 'ToolCallResult', toolCallId: id, content: 'ok', _sequenza: sequenceBase + index * 3 + 2 }, session.generation);
       }
       return {
-        batches: document.querySelectorAll('.tool-batch').length,
-        rows: document.querySelectorAll('.tool-batch .real-tool-note').length,
-        summary: document.querySelector('.tool-batch-summary .tool-note-summary-text')?.textContent ?? '',
+        batches: document.querySelectorAll('#conversation .talos-activity[data-c="ActivityBundle"]').length,
+        rows: document.querySelectorAll('#conversation .talos-activity[data-c="ActivityBundle"] .talos-tool-row[data-c="ToolRow"]').length,
+        summary: document.querySelector('#conversation .talos-activity__head .tool-note-summary-text')?.textContent ?? '',
       };
     };
     reset();
@@ -1940,8 +1997,8 @@ test('TOOL-BATCH-AGGREGATION-01 — cinque letture diventano un solo totale gram
     const plural = runReads(5, 90400);
     return { singular, plural };
   });
-  expect(summaries.singular).toEqual({ batches: 1, rows: 1, summary: '1 file letto' });
-  expect(summaries.plural).toEqual({ batches: 1, rows: 5, summary: '5 file letti' });
+  expect(summaries.singular).toEqual({ batches: 1, rows: 1, summary: '1 file read' }); // 26/09: la testa passa da t(), come il segmento
+  expect(summaries.plural).toEqual({ batches: 1, rows: 5, summary: '5 files read' });
 });
 
 test('TOOL-LIFECYCLE-ERROR-01 — l’errore conclude la riga e aggiorna il batch correlato', async ({ page }) => {
@@ -1957,11 +2014,11 @@ test('TOOL-LIFECYCLE-ERROR-01 — l’errore conclude la riga e aggiorna il batc
     const generation = session.generation;
     runtime.handleRealEvent({ type: 'ToolCallStart', toolCallId: 'old-shell', toolCallName: 'shell', _sequenza: 90501 }, generation);
     runtime.handleRealEvent({ type: 'ToolCallArgs', toolCallId: 'old-shell', delta: '{"comando":"exit 1"}', _sequenza: 90502 }, generation);
-    const oldRow = document.querySelector('.real-tool-note');
+    const oldRow = document.querySelector('#conversation .talos-tool-row[data-c="ToolRow"]');
     runtime.handleRealEvent({ type: 'TextMessageContent', messageId: 'visible-boundary', delta: 'Continuo.', _sequenza: 90503 }, generation);
     runtime.handleRealEvent({ type: 'ToolCallStart', toolCallId: 'new-read', toolCallName: 'leggi', _sequenza: 90504 }, generation);
     runtime.handleRealEvent({ type: 'ToolCallResult', toolCallId: 'old-shell', content: 'exit 1\nfailed', _sequenza: 90505 }, generation);
-    const batches = [...document.querySelectorAll('.tool-batch-summary .tool-note-summary-text')].map((node) => node.textContent);
+    const batches = [...document.querySelectorAll('#conversation .talos-activity__head .tool-note-summary-text')].map((node) => node.textContent);
     return {
       rowState: oldRow?.dataset.toolState ?? null,
       rowBusy: oldRow?.getAttribute('aria-busy'),
@@ -1972,125 +2029,58 @@ test('TOOL-LIFECYCLE-ERROR-01 — l’errore conclude la riga e aggiorna il batc
   expect(result).toEqual({
     rowState: 'error',
     rowBusy: 'false',
-    rowText: '1 comando fallito',
-    batches: ['1 comando eseguito (1 errore)', 'Lettura di 1 file…'],
+    rowText: '1 command failed', // 26/09: le parole delle specie (D1), tradotte — questa prova gira in inglese
+    batches: ['1 command (1 error)', 'Reading 1 file…'], // 26/09: le parole del segmento (D1), tutte tradotte (prima la testa restava italiana)
   });
 });
 
-async function triggerWaitingLoader(page) {
-  await page.route('**/api/v1/sessions', async (route) => {
-    if (route.request().method() === 'GET') {
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({ ok: true, data: { items: [] }, meta: { schema: 'talos.harness-ui.api.v1' } }),
-      });
-      return;
-    }
-    await new Promise((resolve) => setTimeout(resolve, 1_500));
-    await route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({ ok: true, data: { sessionId: 'waiting-loader-session' }, meta: { schema: 'talos.harness-ui.api.v1' } }),
-    });
-  });
-  await apriChat(page); // ⛔ 18/09/2026 — il loader vive NELLA chat: senza il gesto d'ingresso resta nascosto (vedi apriChat)
+/*
+ * ⛔ 24/09/2026 notte — RISCRITTE SUL CONTRATTO DI OGGI. Le due prove qui sotto cercavano il segnavia a linea e tre nodi
+ *   (`.real-waiting-note .talos-line-loader`, porta di `TalosLineLoader.vue`, owner 02/09) dentro la bolla d'attesa. Ma:
+ *   · 12/09, owner: «mettilo al posto del segnavia con i pallini e la linea» — la bolla monta l'ORB, non più il segnavia
+ *     (`creaAttesa`, `conversazione.js:1233-1241`), e `.real-waiting-note` non esiste più;
+ *   · 24/09, owner: l'orb vive in UN posto solo, la testata del messaggio TALOS (`conversazione.js:1242-1245`).
+ *   Erano rosse dal 12/09 («3 debiti noti» della suite browser). Resta vero lo SCOPO, ed è quello che provano ancora:
+ *   mentre si aspetta, l'indicatore si vede MUOVERE fra due fotogrammi (pixel, non solo `getAnimations`) — col movimento
+ *   normale e col movimento ridotto (owner 02/09 «si CALMA, non si congela»). `REDUCED-MOTION-02` prova la durata
+ *   dell'anello e `ORB-TESTATA-03` il suo ciclo di vita: qui si guardano i pixel, e che l'orb sia UNO.
+ */
+async function orbInAttesa(page) {
+  await apriChat(page); // ⛔ 18/09/2026 — l'attesa vive NELLA chat: senza il gesto d'ingresso resta nascosta (vedi apriChat)
   await page.evaluate(() => {
-    void window.__talosHarnessUiRuntime.startRealSession({
-      id: 'waiting-loader-task',
-      nome: 'Verifica loader',
-      consegna: 'Verifica il movimento del loader.',
-    });
+    const runtime = window.__talosHarnessUiRuntime;
+    runtime.handleRealEvent({ type: 'ReasoningMessageStart', messageId: 'attesa-orb', _sequenza: 90031 }, runtime.realSessionState.generation);
   });
-  const loader = page.locator('.real-waiting-note .talos-line-loader');
-  await expect(loader).toBeVisible();
-  return loader;
+  await expect(page.locator('.talos-waiting')).toContainText('Ragionamento in corso');
+  const orb = page.locator('#conversation .talos-orb.working');
+  await expect(orb, 'un solo orb che lavora: quello della testata (24/09, due orb = doppione)').toHaveCount(1);
+  await expect(page.locator('#conversation .talos-message__head .talos-orb.working')).toHaveCount(1);
+  await expect(page.locator('.talos-waiting .talos-orb, .talos-waiting .talos-line-loader'), 'la bolla d’attesa non porta un secondo indicatore').toHaveCount(0);
+  return orb;
+}
+async function pixelCambiati(locator, attesaMs = 480) {
+  const primo = PNG.sync.read(await locator.screenshot({ animations: 'allow' }));
+  await locator.page().waitForTimeout(attesaMs);
+  const secondo = PNG.sync.read(await locator.screenshot({ animations: 'allow' }));
+  expect(secondo.width).toBe(primo.width);
+  expect(secondo.height).toBe(primo.height);
+  return pixelmatch(primo.data, secondo.data, null, primo.width, primo.height, { threshold: 0.05 });
 }
 
-test('WAITING-LOADER-MOTION-01 — il loader reale è quello del mobile e avanza fra due fotogrammi', async ({ page }) => {
-  /*
-   * ⛔⛔⛔ 02/9 — contratto CAMBIATO per ordine diretto dell'owner: "usa
-   * direttamente la stessa identica immagine animata del mobile... ci deve
-   * essere una linea che attraversa i dot". La versione precedente di
-   * questo test PRETENDEVA l'assenza dello sweep
-   * (`.talos-line-loader-sweep` count 0) e una durata legata al token
-   * `--motion-response-activity`: era la divergenza desktop congelata in
-   * un test. Ora si prova la cosa vera — la linea ESISTE, e sweep + tre
-   * nodi girano tutti all'infinito (4 animazioni, non 3).
-   */
-  const loader = await triggerWaitingLoader(page);
-  await expect(page.locator('.run-activity-shimmer, .talos-line-loader-head')).toHaveCount(0);
-  await expect(loader.locator('.talos-line-loader-track')).toHaveCount(1);
-  await expect(loader.locator('.talos-line-loader-sweep')).toHaveCount(1);
-  await expect(loader.locator('.talos-line-loader-node')).toHaveCount(3);
-  const { animationState, geometria } = await loader.evaluate((element) => ({
-    geometria: {
-      viewBox: element.getAttribute('viewBox'),
-      nodi: [...element.querySelectorAll('.talos-line-loader-node')].map((n) => n.getAttribute('cx')),
-    },
-    animationState: element.getAnimations({ subtree: true }).map((animation) => ({
-      playState: animation.playState,
-      duration: animation.effect?.getTiming().duration,
-      iterations: animation.effect?.getTiming().iterations,
-    })),
-  }));
-  expect(geometria.viewBox).toBe('0 0 96 16');
-  expect(geometria.nodi).toEqual(['16', '48', '80']);
-  expect(animationState).toHaveLength(4); // lo sweep + i tre nodi (la traccia è ferma per disegno)
-  expect(animationState.every((animation) => animation.playState === 'running')).toBe(true);
-  expect(animationState.every((animation) => animation.duration > 0)).toBe(true);
-  expect(animationState.every((animation) => animation.iterations === Infinity)).toBe(true);
+test('WAITING-LOADER-MOTION-01 — mentre si aspetta, l’orb della testata si vede muovere fra due fotogrammi', async ({ page }) => {
+  const orb = await orbInAttesa(page);
+  const cambiati = await pixelCambiati(orb);
+  expect(cambiati, 'l’anello gira: fra due fotogrammi a 480 ms i pixel cambiano').toBeGreaterThan(0);
   const visualDir = resolve(process.cwd(), 'artifacts', 'visual-audit-2026-09-01');
   await mkdir(visualDir, { recursive: true });
   await page.screenshot({ path: resolve(visualDir, 'response-activity-dots-1440x900.png'), fullPage: true });
-  const first = PNG.sync.read(await loader.screenshot({ animations: 'allow' }));
-  await page.waitForTimeout(480);
-  const second = PNG.sync.read(await loader.screenshot({ animations: 'allow' }));
-  expect(first.width).toBe(second.width);
-  expect(first.height).toBe(second.height);
-  const changed = pixelmatch(first.data, second.data, null, first.width, first.height, { threshold: 0.05 });
-  expect(changed).toBeGreaterThan(0);
 });
 
-test('WAITING-LOADER-REDUCED-MOTION-01 — ridurre il movimento CALMA il loader, non lo congela', async ({ page }) => {
-  /*
-   * ⛔ 02/9 — contratto CAMBIATO deliberatamente: la versione precedente di
-   * questo test pretendeva `changed === 0` (congelamento totale) sotto
-   * `prefers-reduced-motion: reduce`. Owner, dal vivo: "il logo di
-   * caricamento non è animato" — su una macchina reale con quella
-   * preferenza attiva a livello di sistema (misurato via CDP, non
-   * presunto) il congelamento si vedeva come un loader rotto durante
-   * un'attesa reale. Vedi il commento su `talosLineNodeBreath` in
-   * styles.css: un "sto ancora lavorando" resta vivo (più calmo — sola
-   * opacità, nessuno scale — non il pulse pieno) anche a movimento
-   * ridotto, non zittito del tutto. Qui si prova solo "vivo", non
-   * "quanto": il "più calmo del pulse pieno" è già provato a livello di
-   * sorgente CSS in tests/response-activity-indicator.test.mjs
-   * (RESPONSE-ACTIVITY-REDUCED-03, keyframe `talosLineNodeBreath` invece
-   * di `talosLineNodePulse`) — misurato qui il 02/9: 93 pixel cambiati
-   * su 480ms con la nuova keyframe, 0 con quella vecchia.
-   */
+test('WAITING-LOADER-REDUCED-MOTION-01 — ridurre il movimento CALMA l’orb, non lo congela', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
-  const loader = await triggerWaitingLoader(page);
-  const first = PNG.sync.read(await loader.screenshot({ animations: 'allow' }));
-  await page.waitForTimeout(480);
-  const second = PNG.sync.read(await loader.screenshot({ animations: 'allow' }));
-  const changed = pixelmatch(first.data, second.data, null, first.width, first.height, { threshold: 0.05 });
-  const nodeStyles = await loader.locator('.talos-line-loader-node').evaluateAll((nodes) => nodes.map((node) => ({
-    stroke: getComputedStyle(node).stroke,
-    strokeWidth: getComputedStyle(node).strokeWidth,
-    opacity: getComputedStyle(node).opacity,
-  })));
-  expect(changed).toBeGreaterThan(0);
-  expect(nodeStyles).toHaveLength(3);
-  /*
-   * ⛔ 02/9 — si guarda lo STROKE, non il fill: nel disegno del mobile i
-   * nodi sono cerchi VUOTI (`fill: transparent`) che si riempiono solo
-   * quando lo sweep li raggiunge — il fill trasparente è il loro stato
-   * normale, non un nodo invisibile. Quello che deve essere sempre
-   * visibile è il contorno.
-   */
-  expect(nodeStyles.every((node) => node.stroke !== 'none' && node.stroke !== 'rgba(0, 0, 0, 0)' && node.opacity !== '0')).toBe(true);
+  const orb = await orbInAttesa(page);
+  const cambiati = await pixelCambiati(orb);
+  expect(cambiati, 'col movimento ridotto l’anello gira più lento, ma a schermo si muove ancora').toBeGreaterThan(0);
   const visualDir = resolve(process.cwd(), 'artifacts', 'visual-audit-2026-09-01');
   await mkdir(visualDir, { recursive: true });
   await page.screenshot({ path: resolve(visualDir, 'response-activity-reduced-1440x900.png'), fullPage: true });
@@ -2100,30 +2090,40 @@ test('lo streaming porta l’ultimo output verso il centro della conversazione',
   await apriChat(page);
   const metrics = await page.evaluate(async () => {
     const conversation = document.querySelector('#conversation');
+    const scroller = conversation.closest('.talos-conversation');
     conversation.replaceChildren();
     for (let i = 0; i < 18; i += 1) {
-      const previous = document.createElement('article');
-      previous.className = 'message assistant-message';
-      previous.style.height = '90px';
+      const turn = document.createElement('article');
+      turn.className = 'talos-turn';
+      turn.dataset.turno = 'talos';
+      turn.style.minHeight = '90px';
+      const previous = document.createElement('div');
+      previous.className = 'talos-message';
+      previous.dataset.c = 'Message';
       previous.textContent = `Output precedente ${i}`;
-      conversation.appendChild(previous);
+      turn.appendChild(previous);
+      conversation.appendChild(turn);
     }
-    conversation.scrollTop = 0;
+    scroller.scrollTop = scroller.scrollHeight;
+    await new Promise((resolve) => setTimeout(resolve, 0));
     const runtime = window.__talosHarnessUiRuntime;
     const session = runtime.realSessionState;
     session.sequenzeViste.clear();
     session.testoGrezzoMessaggi.clear();
     runtime.handleRealEvent({ type: 'TextMessageContent', messageId: 'stream-center', delta: 'Ultimo output in streaming', _sequenza: 90201 }, session.generation);
     await new Promise((resolve) => setTimeout(resolve, 100));
-    const output = conversation.querySelector('.assistant-message:last-child');
-    const containerRect = conversation.getBoundingClientRect();
+    const output = session.messageElements.get('stream-center');
+    if (!output) throw new Error('Messaggio streaming non montato per messageId');
+    const containerRect = scroller.getBoundingClientRect();
     const outputRect = output.getBoundingClientRect();
     return {
-      targetCenter: outputRect.top + outputRect.height / 2 - containerRect.top,
-      viewport: conversation.clientHeight,
-      scrollTop: conversation.scrollTop,
+      targetCenter: outputRect.bottom - containerRect.top,
+      viewport: scroller.clientHeight,
+      scrollTop: scroller.scrollTop,
+      text: output.textContent,
     };
   });
+  expect(metrics.text).toContain('Ultimo output in streaming');
   expect(metrics.scrollTop).toBeGreaterThan(0);
   expect(metrics.targetCenter).toBeGreaterThan(metrics.viewport * 0.4);
   expect(metrics.targetCenter).toBeLessThan(metrics.viewport * 0.6);
@@ -2226,45 +2226,52 @@ test('SETTINGS-VIEW-ISOLATION-01 — impostazioni non lasciano trasparire chat e
   await expect(page.locator('#composerForm')).not.toBeVisible();
 });
 
-test('CHAT-FULL-WIDTH-01 — allarga solo messaggi e bolle, mai il composer', async ({ page }) => {
+test('CHAT-FULL-WIDTH-01 — allarga solo messaggi e bolle, mai il composer', async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 1920, height: 1080 });
   await apriChat(page);
 
   const preparaMessaggi = async () => {
     await page.locator('#conversation').evaluate((conversation) => {
       conversation.replaceChildren();
-      const user = document.createElement('article');
-      user.className = 'message user-message';
-      user.innerHTML = '<div class="message-bubble">Analizza l’intero workspace, confronta ogni dipendenza, verifica i contratti pubblici e prepara una risposta completa. Includi i rischi di regressione, le prove sintetiche, le verifiche reali e le fonti primarie consultate. Concludi con una consegna esplicita che renda misurabile la larghezza massima della bolla utente senza cambiare il composer.</div>';
-      const assistant = document.createElement('article');
-      assistant.className = 'message assistant-message';
-      assistant.innerHTML = '<div class="assistant-copy"><p>Ho analizzato il workspace e raccolto evidenze sufficienti per misurare la risposta su tutta la larghezza disponibile della conversazione, senza modificare il composer.</p></div>';
+      const user = document.createElement('div');
+      user.className = 'talos-turn';
+      user.dataset.c = 'Turn';
+      user.innerHTML = '<div class="talos-turn-spine"></div><div class="talos-message talos-message--user" data-c="Message"><div class="talos-message__body message-bubble"><p>Analizza l’intero workspace, confronta ogni dipendenza, verifica i contratti pubblici e prepara una risposta completa. Includi i rischi di regressione, le prove sintetiche, le verifiche reali e le fonti primarie consultate. Concludi con una consegna esplicita che renda misurabile la larghezza massima della bolla utente senza cambiare il composer.</p></div></div>';
+      const assistant = document.createElement('div');
+      assistant.className = 'talos-turn';
+      assistant.dataset.c = 'Turn';
+      assistant.innerHTML = '<div class="talos-turn-spine"></div><div class="talos-message" data-c="Message"><div class="talos-message__copy"><div class="assistant-copy"><p>Ho analizzato il workspace e raccolto evidenze sufficienti per misurare la risposta su tutta la larghezza disponibile della conversazione, senza modificare il composer.</p></div></div></div>';
       conversation.append(user, assistant);
     });
   };
   const misura = () => page.evaluate(() => {
     const conversation = document.querySelector('#conversation');
-    const padding = getComputedStyle(conversation);
+    const turn = conversation.querySelector('.talos-turn');
+    const coda = Number.parseFloat(getComputedStyle(turn).getPropertyValue('--talos-turno-coda'));
     const composer = document.querySelector('#composerForm');
     const composerStyle = getComputedStyle(composer);
     return {
       composer: composer.getBoundingClientRect().width,
       composerGeometry: {
-        height: composer.getBoundingClientRect().height,
+        /* ⛔ 26/09/2026: al mezzo pixel. Letto esatto, dopo una ricarica diceva 119,99994 contro 120 — l'arrotondamento del
+           layout, non una forma diversa (A/B del 26/09: rossa anche sul frontend di prima, valori diversi a ogni giro).
+           È un numero letto oltre la sua risoluzione (lezione del 13/09); un cambio vero, da mezzo pixel in su, resta rosso. */
+        height: Math.round(composer.getBoundingClientRect().height * 2) / 2,
         minHeight: composerStyle.minHeight,
         borderRadius: composerStyle.borderRadius,
         padding: composerStyle.padding,
       },
-      disponibile: conversation.clientWidth - Number.parseFloat(padding.paddingLeft) - Number.parseFloat(padding.paddingRight),
-      utente: document.querySelector('.message-bubble').getBoundingClientRect().width,
-      assistente: document.querySelector('.assistant-message').getBoundingClientRect().width,
+      disponibile: turn.getBoundingClientRect().width - coda,
+      utente: document.querySelector('.talos-message--user .talos-message__body').getBoundingClientRect().width,
+      assistente: document.querySelector('.talos-turn:last-child .talos-message').getBoundingClientRect().width,
     };
   });
 
   await preparaMessaggi();
   const prima = await misura();
-  expect(prima.utente).toBeLessThanOrEqual(681);
-  expect(prima.assistente).toBeLessThanOrEqual(761);
+  expect(prima.utente).toBeLessThanOrEqual(prima.assistente * 0.72 + 1);
+  expect(prima.assistente).toBeLessThanOrEqual(768);
+  await testInfo.attach('full-width-before-1920x1080.png', { body: await page.screenshot({ fullPage: true }), contentType: 'image/png' });
 
   await page.locator('[data-vaia="impostazioni"]').click();
   await page.locator('#setting-tab-chat').click();
@@ -2279,9 +2286,11 @@ test('CHAT-FULL-WIDTH-01 — allarga solo messaggi e bolle, mai il composer', as
   expect.soft(estesa.assistente, 'la risposta deve occupare la larghezza disponibile').toBeGreaterThan(prima.assistente + 200);
   expect.soft(Math.abs(estesa.utente - estesa.disponibile)).toBeLessThanOrEqual(1);
   expect.soft(Math.abs(estesa.assistente - estesa.disponibile)).toBeLessThanOrEqual(1);
+  await testInfo.attach('full-width-after-1920x1080.png', { body: await page.screenshot({ fullPage: true }), contentType: 'image/png' });
 
   await page.reload();
   await expect(page.locator('html')).toHaveClass(/chat-full-width/);
+  await page.locator('.talos-nav-item[data-vaia="chat"]').click();
   await preparaMessaggi();
   const ricaricata = await misura();
   expect(Math.abs(ricaricata.composer - prima.composer)).toBeLessThanOrEqual(1);
@@ -2296,11 +2305,42 @@ test('CHAT-FULL-WIDTH-01 — allarga solo messaggi e bolle, mai il composer', as
   const ripristinata = await misura();
   expect(Math.abs(ripristinata.composer - prima.composer)).toBeLessThanOrEqual(1);
   expect(ripristinata.composerGeometry).toEqual(prima.composerGeometry);
-  expect(ripristinata.utente).toBeLessThanOrEqual(681);
-  expect(ripristinata.assistente).toBeLessThanOrEqual(761);
+  expect(ripristinata.utente).toBeLessThanOrEqual(ripristinata.assistente * 0.72 + 1);
+  expect(ripristinata.assistente).toBeLessThanOrEqual(768);
 });
 
-test('COMPOSER-SHAPE-FULL-WIDTH-01 — il toggle full width preserva ogni forma del composer', async ({ page }) => {
+test('DESK-COMPOSER-STANDARD-01 — il Desktop non offre più Forma del composer', async ({ page }) => {
+  await page.goto('/');
+  await page.locator('.talos-sidebar [data-vaia="impostazioni"]').click();
+  await page.locator('#setting-tab-chat').click();
+  await expect(page.locator('#schermoImpostazioni [data-setting-row="composerShapeSelect"]')).toHaveCount(0);
+  await expect(page.locator('#composerShapeSelect, #setting-composerShapeSelect')).toHaveCount(0);
+  await expect(page.locator('#settingsChatFacts')).not.toContainText('Forma del composer');
+});
+
+test('DESK-COMPOSER-STANDARD-02 — classic e compact storici migrano a Standard dopo reload', async ({ page }) => {
+  await page.goto('/');
+  for (const storico of ['classic', 'compact']) {
+    await page.evaluate((value) => localStorage.setItem('talos.harness.desktop.settings.v1', JSON.stringify({
+      version: 1, appearance: { composerShape: value, messageStyle: 'bubbles', chatFontScale: 'expanded' }, chat: {}, workspaces: {},
+    })), storico);
+    await page.reload();
+    await page.locator('.talos-nav-item[data-vaia="chat"]').click();
+    await expect(page.locator('html')).toHaveAttribute('data-talos-composer-shape', 'standard');
+    await expect(page.locator('html')).toHaveAttribute('data-talos-message-style', 'bubbles');
+    await expect(page.locator('#composerForm')).toHaveCSS('min-height', '120px');
+    await expect(page.locator('#composerForm')).toHaveCSS('border-radius', '18px');
+    const salvato = await page.evaluate(() => JSON.parse(localStorage.getItem('talos.harness.desktop.settings.v1') || '{}'));
+    expect(salvato.appearance?.composerShape).toBeUndefined();
+    expect(salvato.appearance?.messageStyle).toBe('bubbles');
+    expect(salvato.appearance?.chatFontScale).toBe('expanded');
+    await page.reload();
+    await expect(page.locator('html')).toHaveAttribute('data-talos-composer-shape', 'standard');
+    await expect(page.locator('html')).toHaveAttribute('data-talos-message-style', 'bubbles');
+  }
+});
+
+test('COMPOSER-SHAPE-FULL-WIDTH-01 — il toggle full width preserva il composer Standard', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await apriChat(page);
   const misuraComposer = () => page.locator('#composerForm').evaluate((composer) => {
@@ -2308,60 +2348,31 @@ test('COMPOSER-SHAPE-FULL-WIDTH-01 — il toggle full width preserva ogni forma 
     const rect = composer.getBoundingClientRect();
     return { width: rect.width, height: rect.height, minHeight: style.minHeight, borderRadius: style.borderRadius, padding: style.padding };
   });
-
-  for (const forma of ['standard', 'classic', 'compact']) {
-    await page.locator('[data-vaia="impostazioni"]').click();
-    await page.locator('#setting-tab-chat').click();
-    /*
-     * ⛔ 18/09/2026 — `selectOption('#composerShapeSelect')` non poteva riuscire: il `select`
-     * nativo è nascosto (`data-calm-source`, `display:none`, 0×0) e il vivo è la faccia
-     * `#composerShapeSelect--calm`. Due difetti in una riga: la scheda era «appearance» mentre
-     * la forma del composer vive in «chat» (contratto `impostazioni-campi.js:262`, `sezione:
-     * "chat"`), e il nodo da guidare è la faccia, non il nativo.
-     * L'etichetta è quella vera dell'opzione («Standard»/«Classica»/«Compatta»,
-     * `impostazioni-campi.js:264-272`), presa dal contratto e non inventata.
-     */
-    expect(await scegliCalm(page, 'composerShapeSelect', forma), `forma ${forma}`).toBe(1);
-    /* ⛔ 18/09/2026 — il ritorno alla chat non passa più dalla striscia delle schede: dalle
-     * impostazioni è `visibile:false` e il clic su un nodo nascosto va in timeout a 30 s. La porta
-     * viva è la voce di navigazione (misurato: 1 nodo visibile anche dalle impostazioni, e il clic
-     * riporta la vista «chat» col composer visibile). */
-    await page.locator('.talos-nav-item[data-vaia="chat"]').click();
-    const prima = await misuraComposer();
-
-    await page.locator('[data-vaia="impostazioni"]').click();
-    await page.locator('#setting-tab-chat').click();
-    const fullWidth = toggleFullWidth(page);
-    if (await fullWidth.isChecked()) await spegniFullWidth(page);
-    await accendiFullWidth(page);
-    await page.locator('#schermoChat .mode-tab[data-vaia="chat"]').click();
-    const dopo = await misuraComposer();
-    expect(dopo, `forma ${forma}`).toEqual(prima);
-
-    await page.reload();
-    expect(await misuraComposer(), `forma ${forma} dopo reload`).toEqual(prima);
-    await page.locator('[data-vaia="impostazioni"]').click();
-    await page.locator('#setting-tab-chat').click();
-    await spegniFullWidth(page);
-    await page.locator('#schermoChat .mode-tab[data-vaia="chat"]').click();
-  }
+  const prima = await misuraComposer();
+  expect(prima.height).toBe(120);
+  await page.locator('[data-vaia="impostazioni"]').click();
+  await page.locator('#setting-tab-chat').click();
+  const fullWidth = toggleFullWidth(page);
+  if (await fullWidth.isChecked()) await spegniFullWidth(page);
+  await accendiFullWidth(page);
+  await page.locator('.talos-nav-item[data-vaia="chat"]').click();
+  expect(await misuraComposer(), 'forma Standard dopo full width').toEqual(prima);
+  await page.reload();
+  await page.locator('.talos-nav-item[data-vaia="chat"]').click();
+  expect(await misuraComposer(), 'forma Standard dopo reload').toEqual(prima);
+  await page.locator('[data-vaia="impostazioni"]').click();
+  await page.locator('#setting-tab-chat').click();
+  await spegniFullWidth(page);
+  await page.locator('.talos-nav-item[data-vaia="chat"]').click();
+  expect(await misuraComposer(), 'forma Standard dopo spegnimento').toEqual(prima);
 });
 
-test('COMPOSER-LAYOUT-01 — forme leggibili, multilinea e altezza stabile al reload', async ({ page }) => {
+test('COMPOSER-LAYOUT-01 — Standard leggibile, multilinea e altezza stabile al reload', async ({ page }) => {
 
   for (const viewport of [{ width: 1440, height: 900 }, { width: 1024, height: 800 }]) {
     await page.setViewportSize(viewport);
     await apriChat(page);
-    for (const forma of ['standard', 'classic', 'compact']) {
-      await page.locator('[data-vaia="impostazioni"]').click();
-      /* ⛔ 18/09/2026 — stessa cura di COMPOSER-SHAPE-FULL-WIDTH-01, per la stessa misura
-       * (misurato sulla 4199, `%TEMP%\corsia5\z6.log`): il `select` nativo è nascosto e la
-       * forma vive nella scheda «chat» (`impostazioni-campi.js:262`), quindi si guida la
-       * faccia `#composerShapeSelect--calm` con l'etichetta vera dell'opzione. */
-      await page.locator('#setting-tab-chat').click();
-      expect(await scegliCalm(page, 'composerShapeSelect', forma), `forma ${forma}`).toBe(1);
-      await page.locator('.talos-nav-item[data-vaia="chat"]').click();
-
+    {
       const misura = await page.locator('#composerForm').evaluate((composer) => {
         const input = composer.querySelector('textarea');
         const toolbar = composer.querySelector('.talos-composer__bar');
@@ -2372,9 +2383,9 @@ test('COMPOSER-LAYOUT-01 — forme leggibili, multilinea e altezza stabile al re
           toolbarTop: toolbar.getBoundingClientRect().top,
         };
       });
-      expect(misura.height).toBeGreaterThan(80);
+      expect(misura.height).toBe(120);
       const altezzaIniziale = misura.height;
-      expect(misura.inputBottom, `${viewport.width}px · ${forma} · input`).toBeLessThanOrEqual(misura.toolbarTop + 1);
+      expect(misura.inputBottom, `${viewport.width}px · Standard · input`).toBeLessThanOrEqual(misura.toolbarTop + 1);
 
       await page.locator('#composerInput').fill('Prima riga\nSeconda riga');
       const multilinea = await page.locator('#composerForm').evaluate((composer) => ({
@@ -2388,27 +2399,28 @@ test('COMPOSER-LAYOUT-01 — forme leggibili, multilinea e altezza stabile al re
       await page.reload();
       await page.locator('.talos-nav-item[data-vaia="chat"]').click();
       const dopoReload = await page.locator('#composerForm').evaluate((composer) => composer.getBoundingClientRect().height);
-      expect(Math.abs(dopoReload - altezzaIniziale), `${viewport.width}px · ${forma} · reload`).toBeLessThanOrEqual(1);
+      expect(Math.abs(dopoReload - altezzaIniziale), `${viewport.width}px · Standard · reload`).toBeLessThanOrEqual(1);
     }
   }
 });
 
-test('CHAT-FULL-WIDTH-SHORT-BUBBLE-01 — una domanda breve non viene stirata', async ({ page }) => {
+test('CHAT-FULL-WIDTH-SHORT-BUBBLE-01 — una domanda breve non viene stirata', async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 1920, height: 1080 });
   await apriChat(page);
 
   const preparaDomandaBreve = async () => {
     await page.locator('#conversation').evaluate((conversation) => {
       conversation.replaceChildren();
-      const user = document.createElement('article');
-      user.className = 'message user-message';
-      user.innerHTML = '<div class="message-bubble">Ci sei?</div>';
-      conversation.append(user);
+      const turn = document.createElement('div');
+      turn.className = 'talos-turn';
+      turn.dataset.c = 'Turn';
+      turn.innerHTML = '<div class="talos-turn-spine"></div><div class="talos-message talos-message--user" data-c="Message"><div class="talos-message__body message-bubble"><p>Ci sei?</p></div></div>';
+      conversation.append(turn);
     });
   };
   const misura = () => page.evaluate(() => ({
     composer: document.querySelector('#composerForm').getBoundingClientRect().width,
-    bolla: document.querySelector('.message-bubble').getBoundingClientRect().width,
+    bolla: document.querySelector('.talos-message--user .talos-message__body').getBoundingClientRect().width,
   }));
 
   await preparaDomandaBreve();
@@ -2423,8 +2435,10 @@ test('CHAT-FULL-WIDTH-SHORT-BUBBLE-01 — una domanda breve non viene stirata', 
   expect(Math.abs(estesa.composer - prima.composer)).toBeLessThanOrEqual(1);
   expect(Math.abs(estesa.bolla - prima.bolla)).toBeLessThanOrEqual(1);
   expect(estesa.bolla).toBeLessThan(180);
+  await testInfo.attach('full-width-short-1920x1080.png', { body: await page.screenshot({ fullPage: true }), contentType: 'image/png' });
 
   await page.reload();
+  await page.locator('.talos-nav-item[data-vaia="chat"]').click();
   await preparaDomandaBreve();
   const ricaricata = await misura();
   expect(Math.abs(ricaricata.composer - prima.composer)).toBeLessThanOrEqual(1);
@@ -2508,10 +2522,10 @@ test('DESKTOP-SETTINGS-PERSISTENCE-01 — i controlli di aspetto producono stato
    * «combobox select-only» — faccia, listbox visibile, opzione per nome — ed è quello che fa
    * `scegliCalm` (vedi l'helper in cima al file).
    *
-   * ⛔ E I CONTROLLI VIVONO NELLE LORO SCHEDE, che non sono la stessa: `composerShape`,
-   * `messageStyle` e `streamingAnimation` stanno in «chat» (`impostazioni-campi.js:262, 302,
-   * 320`), `windowPresentation`, `motionEasing` e `immersiveHeader` in «appearance»
-   * (`:338, 570, 681`). Prima si passava solo per «appearance» e si pretendeva di scrivere
+   * ⛔ E I CONTROLLI VIVONO NELLE LORO SCHEDE: `messageStyle` e
+   * `streamingAnimation` stanno in «chat», mentre `windowPresentation`,
+   * `motionEasing` e `immersiveHeader` in «appearance». Prima si passava
+   * solo per «appearance» e si pretendeva di scrivere
    * controlli della scheda «chat»: un altro pezzo dello stesso difetto.
    *
    * ⛔ `#motionQualitySelect` NON si guida più da qui, e non è una resa: quella preferenza è
@@ -2522,7 +2536,8 @@ test('DESKTOP-SETTINGS-PERSISTENCE-01 — i controlli di aspetto producono stato
    * dentro Impostazioni conta ancora quelle righe. Segnalato, non nascosto.
    */
   await page.locator('#setting-tab-chat').click();
-  for (const [id, valore] of [['composerShapeSelect', 'compact'], ['messageStyleSelect', 'bubbles'], ['streamingAnimationSelect', 'fade']]) {
+  await expect(page.locator('[data-setting-row="composerShapeSelect"]')).toHaveCount(0);
+  for (const [id, valore] of [['messageStyleSelect', 'bubbles'], ['streamingAnimationSelect', 'fade']]) {
     expect(await scegliCalm(page, id, valore), `${id} · ${valore}`).toBe(1);
   }
   await page.locator('#setting-tab-appearance').click();
@@ -2533,7 +2548,7 @@ test('DESKTOP-SETTINGS-PERSISTENCE-01 — i controlli di aspetto producono stato
   expect(await scegliCalm(page, 'motionEasingSelect', 'soft')).toBe(1);
   await page.locator('#immersiveHeaderToggle--calm').click();
   await expect(page.locator('#immersiveHeaderToggle--calm')).toHaveAttribute('aria-checked', 'true');
-  await expect(page.locator('html')).toHaveAttribute('data-talos-composer-shape', 'compact');
+  await expect(page.locator('html')).toHaveAttribute('data-talos-composer-shape', 'standard');
   await expect(page.locator('html')).toHaveAttribute('data-talos-message-style', 'bubbles');
   /*
    * ⛔ L'animazione della risposta vale QUI e non dopo un ricaricamento: la scelta scrive
@@ -2550,7 +2565,7 @@ test('DESKTOP-SETTINGS-PERSISTENCE-01 — i controlli di aspetto producono stato
   await expect(page.locator('html')).toHaveAttribute('data-talos-motion-easing', 'soft');
   await expect(page.locator('html')).toHaveClass(/immersive-header/);
   await page.reload();
-  await expect(page.locator('html')).toHaveAttribute('data-talos-composer-shape', 'compact');
+  await expect(page.locator('html')).toHaveAttribute('data-talos-composer-shape', 'standard');
   await expect(page.locator('html')).toHaveAttribute('data-talos-message-style', 'bubbles');
   await expect(page.locator('html')).toHaveAttribute('data-talos-window-presentation', 'fullscreen');
   await expect(page.locator('html')).toHaveAttribute('data-talos-motion-easing', 'soft');
@@ -2585,12 +2600,14 @@ test('LAG-LIVE-INCREMENTAL-40 — i blocchi già chiusi non vengono ricreati a o
      *   QUELLA CLASSE NON ESISTE PIÙ. La prova falliva con `Cannot read properties of null` alla
      *   riga dei `children`: non stava misurando il rendering incrementale, stava misurando un
      *   selettore marcito — e infatti era rossa nella baseline senza che nessuno sapesse perché.
-     * Il corpo del messaggio oggi è `div.talos-message__copy > div.assistant-copy`
-     * (`legacy/app.js:11032-11034`), e la via AUTOREVOLE per arrivarci è la mappa del runtime, che
-     * non marcisce: `messageElements` è ciò che usa il monolite stesso (`app.js:1009`).
+     * Il corpo del messaggio oggi è `div.talos-message__copy > div.assistant-copy`, e la via
+     * AUTOREVOLE per arrivarci è la mappa del runtime, che non marcisce: `messageElements`.
+     * Integrazione 23/09: il ramo R4 aggiunge il lancio esplicito se il corpo manca, così un
+     * selettore marcito torna a essere un rosso con un nome invece di un null muto.
      */
-    const copia = runtime.realSessionState.messageElements.get(mid)?.querySelector('.assistant-copy') || null;
-    const primoNodo = copia?.firstElementChild || null;
+    const copia = runtime.realSessionState.messageElements.get(mid)?.querySelector('.assistant-copy');
+    if (!copia) throw new Error('Corpo streaming non montato per messageId');
+    const primoNodo = copia.firstElementChild || null;
     const primoTag = primoNodo?.tagName || null;
 
     invia('```js\nconst a = 1;\n\nconst b = 2;\n');   // fence APERTO con una riga vuota dentro: non deve chiudere il blocco

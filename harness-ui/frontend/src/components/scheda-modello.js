@@ -414,11 +414,24 @@ export function percorsoStima(bytes, { contextTokens = null } = {}) {
  * ⭐ L'`id` e il `path` sono la stessa stringa: è l'identità del download, e nasce dal repository e
  *   dal primo file del gruppo (ripuliti), non da altro.
  */
+/*
+ * ⛔⛔⛔ 25/09/2026 sera — L'ID DI UN DOWNLOAD NASCE QUI, E SOLO QUI. Era scritto in tre copie (questa e due in
+ *   `legacy/app.js`), tutte con un taglio nudo a 120 caratteri: sul Qwen3.8-27B dell'owner il taglio è caduto su un
+ *   trattino, e la chat ha rifiutato il modello a ogni messaggio («Query non valida»).
+ * ⇒ Dopo il taglio si tolgono i separatori in coda, come fa Hermes quando accorcia un nome
+ *   (`hermes_cli/kanban_transfer.py:195`, `preferred[:58].rstrip("-_")`, clone 65ad529 del 23/09/2026). Un id che non
+ *   tocca il tetto esce IDENTICO a prima: i modelli già sul disco si riconoscono ancora.
+ */
+export function idDelDownload(repo, revisione, percorso) {
+  const grezzo = `${String(repo ?? '').replace(/[^a-z0-9_-]/giu, '-')}-${String(revisione || 'main').slice(0, 12)}-${String(percorso ?? '').replace(/[^a-z0-9]/giu, '-')}`;
+  return grezzo.slice(0, 120).replace(/[^a-z0-9]+$/iu, '');
+}
+
 export function corpoDownloadHf(detail = {}, gruppo = null) {
   const file = Array.isArray(gruppo?.file) ? gruppo.file : [];
   const primo = file[0];
   if (!primo?.path) return null;
-  const id = `${String(detail.repo ?? '').replace(/[^a-z0-9_-]/giu, '-')}-${String(detail.revision || 'main').slice(0, 12)}-${String(primo.path).replace(/[^a-z0-9]/giu, '-')}`.slice(0, 120);
+  const id = idDelDownload(detail.repo, detail.revision, primo.path);
   return {
     id,
     repo: String(detail.repo ?? ''),
@@ -1539,6 +1552,18 @@ export function montaSchedaModello(contenitore, {
     const testa = nodo(doc, 'div', 'talos-cluster');
     testa.append(icona(doc, 'download', 'i i--sm'), nodo(doc, 'h3', 'talos-lab__heading talos-grow', 'Scegli il file da scaricare'));
     sezione.append(testa, paragrafo(doc, 'talos-label', NOTA_STIMA));
+    /*
+     * ⭐ 27/09/2026 — owner «errore chiaro ora, motore dopo» (sessione ec3bc6c0: Spark-X2.5-4B, architettura `spark2_5`, motore
+     *   b10517). Il server confronta l'architettura che l'hub dichiara (`gguf.architecture`) coi nomi che la libreria del motore
+     *   conosce (`motore-architetture.mjs`): solo un «no» misurato si dice; «non lo so» (`null`) tace.
+     */
+    if (stato.repo?.motoreConosce === false && stato.repo?.architettura) {
+      const avviso = paragrafo(doc, 'talos-callout', `Il motore installato non sa leggere l’architettura «${stato.repo.architettura}» di questo modello: si può scaricare, ma non si avvierà finché il motore non viene aggiornato.`);
+      avviso.dataset.c = 'Callout';
+      avviso.dataset.modelloMotore = 'sconosciuto';
+      avviso.setAttribute('role', 'note');
+      sezione.append(avviso);
+    }
 
     const dove = nodo(doc, 'div', 'talos-stack');
     sezione.append(dove);

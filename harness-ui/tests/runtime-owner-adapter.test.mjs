@@ -266,8 +266,35 @@ test('MODEL-REASONING-04 — modello mandatory non riceve effort none e conserva
   await fetchResiliente('https://openrouter.ai/api/v1/chat/completions', {
     method: 'POST', body: JSON.stringify({ model: 'google/gemini-3.7-flash', messages: [{ role: 'user', content: 'continua' }], reasoning: { effort: 'none', summary: 'auto' } }),
   });
-  assert.deepEqual(body.reasoning, { effort: 'medium', summary: 'auto' });
+  // ⛔ 24/09 notte (owner: «Sì, come il mobile»): «none» su un modello obbligatorio → il MINIMO supportato, non il default
+  assert.deepEqual(body.reasoning, { effort: 'low', summary: 'auto' });
   assert.deepEqual(body.messages, [{ role: 'user', content: 'continua' }]);
+});
+
+/*
+ * ⛔ 24/09/2026 notte — MAI UN COSTO PIÙ ALTO DI QUELLO SCELTO (owner: «Sì, come il mobile»). Il caso vero è glm-5.3-flash:
+ *   `supported_efforts: [max, high, low]`, `default_effort: max`. Prima «Off» e «medium» diventavano `max`.
+ *   Regola di Hermes `clamp_effort` (`agent/reasoning_effort.py:120-160`, PR #90350).
+ */
+test('MODEL-REASONING-NEVER-ESCALATE — su glm-5.3-flash nessun livello chiesto diventa più caro', async () => {
+  const { normalizzaReasoningPerModello, livelloRagionamentoSenzaSalire } = await import('../src/runtime-owner-adapter.mjs');
+  const glm = { reasoning: { mandatory: true, supportedEfforts: ['max', 'high', 'low'], defaultEffort: 'max' } };
+  const attesi = { none: 'low', minimal: 'low', low: 'low', medium: 'low', high: 'high', xhigh: 'high', max: 'max' };
+  for (const [chiesto, atteso] of Object.entries(attesi)) {
+    assert.deepEqual(normalizzaReasoningPerModello({ effort: chiesto }, glm), { effort: atteso }, `${chiesto} → ${atteso}`);
+  }
+  // nessuna scelta: resta il default del catalogo (decisione del mobile, uguale a prima)
+  assert.deepEqual(normalizzaReasoningPerModello(undefined, glm), { effort: 'max' });
+  // al contrario: un modello NON obbligatorio può spegnere il ragionamento; «none» resta «none»
+  const facoltativo = { reasoning: { mandatory: false, supportedEfforts: ['high', 'low', 'none'], defaultEffort: 'low' } };
+  assert.deepEqual(normalizzaReasoningPerModello({ effort: 'none' }, facoltativo), { effort: 'none' });
+  // «none» non è mai la meta di un degrado; sotto il minimo si sale al minimo supportato, mai oltre
+  assert.equal(livelloRagionamentoSenzaSalire('minimal', ['high', 'medium']), 'medium');
+  assert.equal(livelloRagionamentoSenzaSalire('xhigh', ['none', 'low', 'medium']), 'medium');
+  // un nome fuori dalla scala, o nessun elenco dichiarato: non si decide qui (resta il default, come prima)
+  assert.equal(livelloRagionamentoSenzaSalire('ultra', ['low', 'high']), null);
+  assert.equal(livelloRagionamentoSenzaSalire('none', []), null);
+  assert.deepEqual(normalizzaReasoningPerModello({ effort: 'none' }, { reasoning: { mandatory: true, defaultEffort: 'high' } }), { effort: 'high' });
 });
 
 test('OPENROUTER-RETRY-02 — errore SSE come primo evento diventa status ritentabile prima di mostrare output', async () => {

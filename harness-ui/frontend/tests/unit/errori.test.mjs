@@ -416,3 +416,120 @@ test('ERRORI-CHIAVE, al contrario: senza nome non se ne inventa uno, e un altro 
   /* ⛔ E la regola non si prende errori che non sono suoi: un rifiuto del fornitore resta tale. */
   assert.notEqual(spiegaErrore('Il fornitore non ha accettato la richiesta.', 'PROVIDER_REQUEST_ERROR').famiglia, 'chiave-fornitore');
 });
+
+/*
+ * 25/09/2026 sera, MiniCPM5 sul 4174 (sessione 5233facd): il motore locale pieno sale col suo codice e i suoi numeri, in italiano
+ * (`LOCAL_CONTEXT_EXCEEDED`, `src/runtime-owner-adapter.mjs`); la carta del contesto pieno deve riconoscerlo e rileggere i numeri.
+ */
+/*
+ * 25/09/2026 sera, sessione dell'owner eb5acb34 (Qwen3.8-27B Q4 su una scheda da 16 GB): la carta diceva «non si è acceso in
+ * tempo, riprova». Decisione owner «carta vera»: il modello non entra nella memoria della scheda, coi numeri, e il rimedio è una
+ * quantizzazione più piccola (come Hermes, `physics_check`). Riprovare non cambia niente, e la carta non lo propone.
+ */
+test('ERRORI-MODELLO-NON-ENTRA: la memoria della scheda piena ha la sua carta, non «non si è acceso in tempo»', () => {
+  const s = spiegaErrore('Il modello (16,7 GB) non entra nella memoria della scheda grafica (AMD Radeon RX 9070 XT: 15,9 GB, liberi 15,1 GB).', 'RUNTIME_OUT_OF_MEMORY');
+  assert.equal(s.id, 'modello-non-entra');
+  assert.match(s.cosa, /non entra nella memoria della scheda grafica/u);
+  assert.match(s.perche, /16,7 GB/u, 'i numeri del motore arrivano a schermo');
+  assert.match(s.rimedi.join(' '), /quantizzazione più piccola/u);
+  assert.doesNotMatch(s.rimedi.join(' '), /Riprova/u, 'riprovare non cambia niente: la carta non lo propone');
+  // al contrario: un motore che è solo lento ad accendersi resta la sua regola
+  assert.equal(spiegaErrore('llama-server non è diventato pronto entro 36 s (modello di 12 GB)', 'RUNTIME_HEALTH_TIMEOUT').id, 'runtime-non-pronto');
+});
+
+/*
+ * 27/09/2026, sessione dell'owner ec3bc6c0 (Spark-X2.5-4B, architettura `spark2_5`, motore b10517): la carta diceva «si è chiuso
+ * dopo 0 s … failed to load model». Owner «errore chiaro ora»: il motore non sa leggere quell'architettura, e riprovare non serve.
+ */
+test('ERRORI-ARCHITETTURA-SCONOSCIUTA: il motore che non sa leggere il modello ha la sua carta, col nome dell architettura', () => {
+  const testo = 'Il modello usa l’architettura «spark2_5», che il motore installato (llama.cpp b10517) non sa leggere: serve una versione più recente del motore, e riprovare non cambia niente.';
+  const s = spiegaErrore(testo, 'RUNTIME_ARCH_UNSUPPORTED');
+  assert.equal(s.id, 'architettura-sconosciuta');
+  assert.match(s.cosa, /non sa leggere questo modello/u);
+  assert.match(s.perche, /«spark2_5».*b10517/u);
+  assert.doesNotMatch(s.rimedi.join(' '), /\bRiprova\b/u);
+  // anche la forma di prima, col codice vecchio e la riga di llama.cpp dentro il messaggio, trova questa carta
+  assert.equal(spiegaErrore("llama-server si è chiuso dopo 0 s senza mai diventare pronto: E llama_model_load: error loading model: unknown model architecture: 'spark2_5'", 'RUNTIME_PROCESS_FAILED').id, 'architettura-sconosciuta');
+  // al contrario: la memoria piena resta la sua carta
+  assert.equal(spiegaErrore('Il modello (16,7 GB) non entra nella memoria della scheda grafica.', 'RUNTIME_OUT_OF_MEMORY').id, 'modello-non-entra');
+});
+
+test('ERRORI-CONTESTO-LOCALE: la finestra del modello locale piena ha la carta del contesto pieno, coi numeri', () => {
+  const s = spiegaErrore('La conversazione (17230 token) non entra nella finestra del modello locale (16384 token).', 'LOCAL_CONTEXT_EXCEEDED');
+  assert.equal(s.id, 'contesto-pieno');
+  assert.match(s.perche, /Servivano 17\.230 token, la finestra ne tiene 16\.384\./u);
+});
+
+/*
+ * ⛔⛔⛔ 25/09/2026 sera, metà A SCHERMO della sessione dell'owner 65d5683b (un GGUF locale, «ciao»): il server ora dice
+ *   il vero (`LOCAL_RUNTIME_NOT_CONFIGURED`, `src/runtime-owner-adapter.mjs` `CONDIZIONI_PRIMA_DELLA_RETE`), ma senza una
+ *   regola qui la carta direbbe «questa forma di errore non è ancora tradotta». Il rimedio è solo quello verificabile: il
+ *   progetto non documenta come si installa il motore, quindi la carta non lo inventa.
+ */
+test('ERRORI-MOTORE-LOCALE-ASSENTE: il motore che manca non è un fornitore che rifiuta', () => {
+  const s = spiegaErrore('Il motore locale non è configurato su questo server.', 'LOCAL_RUNTIME_NOT_CONFIGURED');
+  assert.equal(s.id, 'motore-locale-assente');
+  assert.equal(s.riconosciuto, true);
+  assert.match(s.cosa, /motore dei modelli locali/u);
+  assert.match(s.perche, /non è partita/u, 'la carta dice che non c\'è stato nessun consumo');
+  assert.doesNotMatch(`${s.cosa} ${s.perche} ${s.rimedi.join(' ')}`, /fornitore non ha accettato|llama-server|LOCAL_RUNTIME/u, 'nessuna colpa al fornitore e nessun nome tecnico');
+  assert.match(s.rimedi[0], /pillola del composer/u);
+  /* ⛔ Al contrario: un rifiuto vero del fornitore resta suo, e un motore che non si accende in tempo resta la sua regola. */
+  assert.equal(spiegaErrore('Il fornitore non ha accettato la richiesta.', 'PROVIDER_REQUEST_ERROR').id, 'fornitore-rifiuto');
+  assert.equal(spiegaErrore('llama-server non è diventato pronto entro 36 s (modello di 12 GB)', 'RUNTIME_HEALTH_TIMEOUT').id, 'runtime-non-pronto');
+});
+
+/*
+ * ⛔⛔ 24/09/2026 sera, bug dell'owner con la foto (sessione `65bf2ef2…`, gemini-3.8-flash): la carta diceva «Questa forma di
+ *   errore non è ancora tradotta» sopra «Troppo traffico presso il fornitore.», che il server scrive già in italiano. Le otto
+ *   frasi pubbliche di `erroreFornitorePubblico` (`src/runtime-owner-adapter.mjs`) si riconoscono tutte, ciascuna nella sua
+ *   famiglia; e al contrario una frase che non è nostra resta «sconosciuta», senza un rimedio inventato.
+ */
+test('ERRORI-FORNITORE-ITALIANO: le otto frasi pubbliche del server non sono più «non tradotte»', () => {
+  const attese = {
+    'Troppo traffico presso il fornitore.': 'quota',
+    'Credito non disponibile presso il fornitore.': 'quota',
+    'Connessione con il fornitore interrotta.': 'rete',
+    'Il fornitore ha superato il tempo massimo.': 'rete',
+    'Il fornitore non risponde.': 'rete',
+    'La risposta del fornitore si è interrotta.': 'risposta-interrotta',
+    'Credenziale rifiutata dal fornitore.': 'credenziale-rifiutata',
+    'Il fornitore non ha accettato la richiesta.': 'fornitore-rifiuto',
+  };
+  for (const [frase, id] of Object.entries(attese)) {
+    const s = spiegaErrore(frase, 'PROVIDER_REQUEST_ERROR');
+    assert.equal(s.id, id, frase);
+    assert.equal(s.riconosciuto, true, frase);
+    assert.doesNotMatch(s.perche, /non è ancora tradotta/u, frase);
+    assert.equal(s.tecnico, frase, 'il testo del server resta nel dettaglio, per incollarlo in una segnalazione');
+  }
+  assert.equal(spiegaErrore('Troppo traffico presso il fornitore.', 'PROVIDER_REQUEST_ERROR').cosa, 'Il fornitore ha rifiutato la richiesta per limiti di traffico o di credito.');
+});
+
+test('ERRORI-FORNITORE-ITALIANO, al contrario: una frase qualunque resta sconosciuta', () => {
+  const s = spiegaErrore('Qualcosa di mai visto è successo.', 'PROVIDER_REQUEST_ERROR');
+  assert.equal(s.id, 'sconosciuto');
+  assert.equal(s.riconosciuto, false);
+});
+
+/*
+ * ⛔⛔ 25/09/2026 notte — la risposta vuota di un modello di RETE dopo la scala del kernel (sessione vera `c15ba17c…`, Gemini
+ * 3.8). La frase la scrive `erroreRispostaVuota` (talosHarness.mjs); il rimedio «in più parti» solo col motivo noto.
+ */
+test('ERRORI-VUOTA-DOPO-TENTATIVI: codice e frase del kernel, col motivo del fornitore e i rimedi veri', () => {
+  const s = spiegaErrore('Il modello ha risposto senza testo né attrezzi (4 volte di fila; motivo del fornitore: MALFORMED_FUNCTION_CALL).', 'PROVIDER_EMPTY_RESPONSE');
+  assert.equal(s.id, 'risposta-vuota-dopo-tentativi');
+  assert.match(s.perche, /«MALFORMED_FUNCTION_CALL»/u);
+  assert.match(s.perche, /file intero/u);
+  assert.equal(s.rimedi.some((r) => /in più parti/u.test(r)), true);
+  assert.match(s.rimedi[0], /continua/u);
+  assert.doesNotMatch(`${s.cosa} ${s.perche}`, /interrott|modelli locali/u);
+});
+
+test('ERRORI-VUOTA-DOPO-TENTATIVI, al contrario: senza motivo non si inventa la causa, e la carta dei locali resta la sua', () => {
+  const s = spiegaErrore('Il modello ha risposto senza testo né attrezzi (una volta).', 'PROVIDER_EMPTY_RESPONSE');
+  assert.equal(s.id, 'risposta-vuota-dopo-tentativi');
+  assert.match(s.perche, /non ha detto il motivo/u);
+  assert.equal(s.rimedi.some((r) => /in più parti/u.test(r)), false);
+  assert.equal(spiegaErrore('flusso SSE senza contenuto ne tool_calls', 'internal-error').id, 'risposta-vuota');
+});

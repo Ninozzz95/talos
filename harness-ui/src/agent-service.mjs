@@ -38,6 +38,7 @@ import { contestoDelProgetto as contestoDelProgettoReale, aggiornamentoInCoda as
 import { creaFiltroGitignore as creaFiltroGitignoreReale } from './gitignore-elenco.mjs'; // P-13: le regole che decidono cosa NON elencare
 import { etichettaSandbox } from './kernel/etichetta-sandbox.mjs'; // BLOCCO 6 (B3): l'esito di una shell dice DOVE ha girato e che cosa e vero li
 import { creaFileWorkspace as creaFileWorkspaceReale, WorkspaceFileError } from './workspace-files.mjs';
+import { talosSafeFileStem } from './document-filename.mjs'; // owner 26/09: una cartella nel titolo di un documento si ripulisce come un nome di file
 import { preparaToolMcpPerSessione as preparaToolMcpPerSessioneReale } from './mcp-session.mjs';
 import { caricaSkill as caricaSkillReale } from './skill-registry.mjs';
 import { schemaIngressoAttrezzo } from './tool-schema-normalize.mjs';
@@ -78,6 +79,9 @@ import {
   eliminaMemoria as eliminaMemoriaReale,
   leggiMemoria as leggiMemoriaReale,
 } from './memory-store.mjs';
+// 27/09/2026, decisione owner (`decisioni-owner-capacita-sezioni-27-09`): le letture delle sezioni e le memorie nel prompt.
+import { cercaAttivita, cercaNote, elencoMemorie, leggiNotaIntera } from './letture-delle-sezioni.mjs';
+import { bloccoDelleMemorie } from './memorie-nel-prompt.mjs';
 import {
   elencaToolForgiati as elencaToolForgiatiReale,
   installaToolForgiato as installaToolForgiatoReale,
@@ -254,6 +258,17 @@ export async function avviaSessione({
    *   «AI Agent Sandbox: How to Safely Run Autonomous Agents in 2026», 11/09/2026).
    */
   cartellaCreazioni = null,
+  /*
+   * ⭐⭐⭐ PO-26 (owner 16/09 «PO-26 si», 24/09 «PO-26 intera, adesso») — DOVE vivono Libreria e Ricerca.
+   *   Una FUNZIONE che restituisce (una promessa del) la radice dei dati generati del progetto, sotto cui
+   *   stanno `.harness-ui-library/` e `.harness-ui-research/`. Il registro la dà (`datiDi(voce)`), il server
+   *   la fa puntare alla cartella dati dell'app (`src/cartella-dati-progetto.mjs`).
+   * ⛔ Una funzione e non un valore: si risolve solo quando un attrezzo della Libreria o il deposito del
+   *   rapporto la usa, così il giro parte senza un `await` in più (chi chiama conta su RunStarted già nel
+   *   buffer al ritorno). Assente ⇒ `cartella`, cioè il comportamento di prima per ogni chiamante che non la
+   *   passa (i test, il banco).
+   */
+  cartellaDatiProgettoFn = null,
   onEvento, segnaleStop, messaggiIniziali, reasoning, contextHooks, mobile = false,
   fallbackProviders = [], onCambioFornitore: depositaCambioFornitore,
   /*
@@ -269,6 +284,7 @@ export async function avviaSessione({
    * dichiara, e la cronologia lo mostra sotto la bolla utente.
    */
   permessi = null,
+  modalitaOperativa = 'normale',
   strumentiEstesi, ricercaWeb,
   // ⭐ 04/9, R-03 — trasporto iniettato per la ricerca SENZA chiave (DuckDuckGo, `duckduckgo-search.mjs`): inoltrato al kernel com'è (parametro `richiediRicercaFn` di talosLavora), undefined per le fonti con chiave.
   richiediRicercaFn,
@@ -338,6 +354,12 @@ export async function avviaSessione({
    * si ripete: aggiunto nello stesso commit del resto della fase.
    */
   onDelega,
+  chiediDomandaFn,
+  // 24/09/2026, decisioni owner 36-39: il canale della scelta sul piano, inoltrato SENZA logica come `chiediDomandaFn`.
+  presentaPianoFn,
+  agentRole, askParentFn, answerChildQuestionFn, askChildFn, answerParentQuestionFn, onWorkflowPlanPropose,
+  // D1 «Come Claude» (24/09/2026): inoltrati SENZA logica, come gli altri: il modo del padre letto a ogni chiamata e le figlie vive all'avvio.
+  modalitaOperativaCorrenteFn, figliViviAllAvvio,
   /*
    * ⭐⭐⭐ FASE D (28/8) — coda messaggi su una sessione IN CORSO. Stesso
    * principio di `hookFn`/`onDelega`: inoltrato SENZA logica propria, la
@@ -358,6 +380,12 @@ export async function avviaSessione({
    */
   onRicercaLista, onRicercaAvvia, onRicercaLeggi, onRicercaRinomina,
   onRicercaPausa, onRicercaRiprendi, onRicercaAnnulla, onRicercaElimina,
+  /*
+   * ⭐ 27/09/2026, decisione owner (`decisioni-owner-capacita-sezioni-27-09`) — due letture che solo il registro sa fare, e
+   *   che questo file inoltra dentro `onLetturaSezione`: `onRicercaCerca` (le ricerche di QUESTO progetto) e
+   *   `conversazioniFn` (le altre sessioni: Board e Conversazioni). Assenti = l'attrezzo lo dice, non inventa.
+   */
+  onRicercaCerca, conversazioniFn,
   /*
    * ⭐⭐⭐⭐ L8 (12/09/2026) — il compositore del record del rapporto della ricerca
    * approfondita. Inoltrato SENZA logica propria, come tutto il resto in questo file: lo
@@ -567,6 +595,10 @@ export async function avviaSessione({
    *   a questa funzione. Senza il parametro è `cartella`: il comportamento di prima, invariato.
    */
   const cartellaPerCreare = cartellaCreazioni || cartella;
+  /** PO-26 — la radice di Libreria e Ricerca del progetto (vedi `cartellaDatiProgettoFn` in testa). */
+  const cartellaDatiDelProgetto = typeof cartellaDatiProgettoFn === 'function'
+    ? () => Promise.resolve().then(() => cartellaDatiProgettoFn())
+    : async () => cartella;
   /*
    * ⛔ Il pannello File e la scheda Review mostrano un percorso RELATIVO AL WORKSPACE: se il file
    *   è stato depositato altrove (cioè `cartellaPerCreare !== cartella`), il solo nome sarebbe una
@@ -585,6 +617,11 @@ export async function avviaSessione({
     modello,
     reasoning: reasoning ?? null,
     permessi: permessi ?? null,
+    modalitaOperativa,
+    /* ⛔ 24/09/2026, decisione owner 36 — in questo giro il piano si presenta con l'attrezzo (e si approva sulla sua scheda):
+       lo schermo non deve fabbricare un «piano proposto» dal testo finale. Presente solo quando è vero. */
+    ...(modalitaOperativa === 'piano' && agentRole !== 'child' && typeof presentaPianoFn === 'function'
+      && Array.isArray(strumentiEstesi) && strumentiEstesi.includes('present_plan') ? { pianoConAttrezzo: true } : {}),
   };
 
   onEvento(runStarted({ threadId, runId, input: task, contesto }));
@@ -1052,7 +1089,10 @@ export async function avviaSessione({
       : reasoningMessageContent({ messageId, delta: evento.delta }));
   };
 
+  /* F3 (24/09/2026): il motivo dell'inizio (`soglia`/`emergenza`/`overflow`) si ricorda per giro, per riportarlo nella fine. */
+  const motivoCompattazionePerGiro = new Map();
   const onGiro = (evento) => {
+    if (evento.tipo === 'compattazione-inizio' && evento.motivo) motivoCompattazionePerGiro.set(evento.giro, evento.motivo);
     if (evento.tipo === 'risposta') {
       /*
        * ⛔ Chiude PRIMA di tradurre la risposta finale: un consumer che
@@ -1102,6 +1142,30 @@ export async function avviaSessione({
         messageId: randomUUID(), toolCallId: evento.toolCallId, content: evento.content,
         durataMs: evento.durataMs, comando: evento.comando, cwd: evento.cwd,
       }));
+      return;
+    }
+    /*
+     * ⭐ F3, onda 2 di F2 (24/09/2026) — LA COMPATTAZIONE SI VEDE (decisione 6 dell'owner: avviso, stato durante,
+     *   riga «X → Y token» con Annulla dopo). L'adapter desktop emette `compattazione-inizio`/`compattazione-fine`
+     *   su `onGiro` (rapporto F1 §6); qui diventano UN evento AG-UI `CUSTOM talos.compattazione`, persistito come
+     *   gli altri, così F5 disegna barra e separatore anche dopo una ricarica.
+     * ⛔ Il RIASSUNTO non viaggia nell'evento: sta nella riga `compattazione` del journal, scritta dal registro a
+     *   fine giro dal `recordDiCompattazione` del risultato. Una fonte sola per la proiezione (stessa disciplina
+     *   di `usageDaEventi`: si legge ciò che è persistito, non se ne tiene una seconda copia); nell'evento vanno i
+     *   NUMERI e l'identificativo `at`, che è ciò che serve alla riga «X → Y» e al pulsante Annulla.
+     */
+    if (evento.tipo === 'compattazione-inizio') {
+      onEvento({ type: 'CUSTOM', name: 'talos.compattazione', value: {
+        fase: 'inizio', giro: evento.giro, tokenPrima: evento.tokenMisurati ?? null, soglia: evento.soglia ?? null, motivo: evento.motivo ?? null,
+      } });
+      return;
+    }
+    if (evento.tipo === 'compattazione-fine') {
+      const record = evento.compattato ? evento.record : null;
+      onEvento({ type: 'CUSTOM', name: 'talos.compattazione', value: record
+        ? { fase: 'fine', giro: evento.giro, compattato: true, tokenPrima: record.tokenPrima ?? null, tokenDopo: record.tokenDopo ?? null, misura: record.misura ?? null, coveredThrough: record.coveredThrough, at: record.at, modello: record.modello ?? null, motivo: motivoCompattazionePerGiro.get(evento.giro) ?? null }
+        : { fase: 'fine', giro: evento.giro, compattato: false, motivo: evento.motivo ?? null } });
+      motivoCompattazionePerGiro.delete(evento.giro);
     }
   };
 
@@ -1149,7 +1213,7 @@ export async function avviaSessione({
      */
     try {
       await salvaVoceLibreriaFn({
-        cartella,
+        cartella: await cartellaDatiDelProgetto(),
         nome: `${(titolo || 'artefatto').replace(/[\\/:*?"<>|]/g, '-').slice(0, 80)}.html`,
         mediaType: 'text/html',
         origine: 'generated',
@@ -1244,6 +1308,31 @@ export async function avviaSessione({
    */
   const formatoAccodabile = (formato) => TALOS_SOURCE_TEXT_FORMATS.includes(formato) || ['md', 'csv'].includes(formato);
 
+  /*
+   * ⛔⛔ Owner 26/09/2026 («Rispettare la cartella») — un titolo come `tokenizer project/ricerca_tokenizer_gpt` VUOLE
+   *   una cartella: fino a oggi la barra diventava uno spazio e il file nasceva nella radice col nome storpiato
+   *   (sessione `c15ba17c`, 25/09). Qui si legge l'intenzione: tutto prima dell'ultima barra è una cartella RELATIVA
+   *   (ogni pezzo ripulito come un nome di file, `talosSafeFileStem`), l'ultimo pezzo è il titolo del documento.
+   *   La serratura vera è `normalizzaSottocartella` in `workspace-files.mjs`. Assoluti e `..` si rifiutano con la
+   *   frase che dice la strada giusta, non si «aggiustano».
+   */
+  const separaCartellaDalTitolo = (titolo) => {
+    if (typeof titolo !== 'string' || !/[\\/]/u.test(titolo)) return { sottocartella: '', titolo, rifiuto: null };
+    const pulito = titolo.trim();
+    if (/^[a-zA-Z]:/u.test(pulito) || /^[\\/]/u.test(pulito)) {
+      return { rifiuto: 'The title contains an absolute path. Put only a folder RELATIVE to the workspace before the name, like "reports/q3 summary", or no folder at all.' };
+    }
+    const pezzi = pulito.split(/[\\/]+/u);
+    const nome = (pezzi.pop() ?? '').trim();
+    if (!nome) return { rifiuto: 'The title ends with a slash: write the document name after the folder, like "reports/q3 summary".' };
+    const cartelle = pezzi.map((p) => p.trim()).filter((p) => p !== '' && p !== '.');
+    if (cartelle.some((p) => p === '..')) {
+      return { rifiuto: 'The folder in the title goes outside the workspace (".."). Use a folder inside the workspace, like "reports/q3 summary".' };
+    }
+    const sicure = cartelle.map((p) => talosSafeFileStem(p, 60, 'folder').replace(/[. ]+$/u, '') || 'folder');
+    return { sottocartella: sicure.join('/'), titolo: nome, rifiuto: null };
+  };
+
   const onDocumento = async (argomenti) => {
     const modalita = modalitaDelDocumento(argomenti);
     if (modalita === null) {
@@ -1252,9 +1341,12 @@ export async function avviaSessione({
         esito: `"${argomenti?.mode ?? argomenti?.modalita}" is not a mode. Use mode:"append" to add to the end of an existing file, or leave mode out to create a new one.`,
       };
     }
+    const cartellaDelTitolo = separaCartellaDalTitolo(argomenti?.title);
+    if (cartellaDelTitolo.rifiuto) return { ok: false, esito: cartellaDelTitolo.rifiuto };
+    const { sottocartella } = cartellaDelTitolo;
     let documento;
     try {
-      documento = await generateTalosDocumentFn(argomenti);
+      documento = await generateTalosDocumentFn(sottocartella ? { ...argomenti, title: cartellaDelTitolo.titolo } : argomenti);
     } catch (errore) {
       const dettaglio = errore instanceof Error ? errore.message : String(errore);
       return { ok: false, esito: `The document was not created: ${dettaglio}` };
@@ -1281,7 +1373,7 @@ export async function avviaSessione({
 
     let salvato;
     try {
-      salvato = await creaFileWorkspaceFn({ cartella: cartellaPerCreare, nome: documento.fileName, bytes: documento.bytes, modalita });
+      salvato = await creaFileWorkspaceFn({ cartella: cartellaPerCreare, nome: documento.fileName, bytes: documento.bytes, modalita, ...(sottocartella ? { sottocartella } : {}) });
     } catch (errore) {
       const dettaglio = errore instanceof WorkspaceFileError ? errore.message : (errore instanceof Error ? errore.message : String(errore));
       /*
@@ -1303,7 +1395,7 @@ export async function avviaSessione({
       if (errore instanceof WorkspaceFileError && errore.code === 'FILE_EXISTS') {
         return {
           ok: false,
-          esito: `"${documento.fileName}" already exists. To ADD to it, call document_create again with the same title and mode:"append" — the new body goes at the end of that same file. `
+          esito: `"${sottocartella ? `${sottocartella}/${documento.fileName}` : documento.fileName}" already exists. To ADD to it, call document_create again with the same title and mode:"append" — the new body goes at the end of that same file. `
             + 'To make a separate file instead, use a different title. Do not invent numbered variants of the same name.',
         };
       }
@@ -1358,7 +1450,7 @@ export async function avviaSessione({
     if (salvato.accodato !== true) {
       try {
         await salvaVoceLibreriaFn({
-          cartella,
+          cartella: await cartellaDatiDelProgetto(),
           nome: documento.fileName,
           mediaType: documento.mediaType,
           origine: 'generated',
@@ -1388,16 +1480,20 @@ export async function avviaSessione({
     const comeContinuare = formatoAccodabile(documento.format)
       ? ' To make it longer, call document_create again with the same title and mode:"append" instead of writing a second file.'
       : '';
+    /* Owner 26/09/2026: l'esito dice il percorso COMPLETO — relativo allo spazio di lavoro e sul disco — così il modello
+     * non deve cercarlo con `elenca`/`cerca` come nella sessione `c15ba17c`. */
+    const doveRelativo = salvato.percorso ?? documento.fileName;
+    const sulDisco = typeof salvato.assoluto === 'string' ? ` at ${salvato.assoluto}` : '';
     if (salvato.accodato === true) {
       const totale = Math.max(1, Math.round((salvato.byteTotali ?? documento.bytes.byteLength) / 1024));
       return {
         ok: true,
-        esito: `Appended ${dimensione} KB to "${documento.fileName}" — it is now ${totale} KB. Checked by reopening it: ${controllo.detail}.${comeContinuare}`,
+        esito: `Appended ${dimensione} KB to "${doveRelativo}"${sulDisco} — it is now ${totale} KB. Checked by reopening it: ${controllo.detail}.${comeContinuare}`,
       };
     }
     return {
       ok: true,
-      esito: `Created "${documento.fileName}" (${dimensione} KB) in the workspace. Checked by reopening it: ${controllo.detail}.${comeContinuare}`,
+      esito: `Created "${doveRelativo}" (${dimensione} KB)${sulDisco || ' in the workspace'}. Checked by reopening it: ${controllo.detail}.${comeContinuare}`,
     };
   };
 
@@ -1471,7 +1567,7 @@ export async function avviaSessione({
      */
     try {
       await salvaVoceLibreriaFn({
-        cartella,
+        cartella: await cartellaDatiDelProgetto(),
         nome: `${immagineGenerata.fileStem}.${estensione}`,
         mediaType: immagineGenerata.mediaType,
         origine: 'generated',
@@ -1519,7 +1615,7 @@ export async function avviaSessione({
    */
   const cursoriLibreria = creaCursoriLibreria();
   const onLibreriaLista = async (argomenti) => {
-    const voci = await elencaVociFn({ cartella });
+    const voci = await elencaVociFn({ cartella: await cartellaDatiDelProgetto() });
     return impaginaVociLibreria(voci, {
       origine: argomenti?.origin ?? 'all',
       fileType: argomenti?.file_type ?? 'all',
@@ -1528,11 +1624,11 @@ export async function avviaSessione({
     }, cursoriLibreria);
   };
   const onLibreriaCerca = async (argomenti) => {
-    const voci = await elencaVociConTestoFn({ cartella });
+    const voci = await elencaVociConTestoFn({ cartella: await cartellaDatiDelProgetto() });
     return cercaVociLibreria(voci, { query: argomenti?.query ?? '', limit: argomenti?.limit ?? 5, offset: argomenti?.offset ?? 0 });
   };
-  const onLibreriaLeggi = async (argomenti) => leggiVoceFn({ cartella, id: argomenti?.id ?? '' });
-  const onLibreriaOrigine = async (argomenti) => origineVoceFn({ cartella, id: argomenti?.id ?? '' });
+  const onLibreriaLeggi = async (argomenti) => leggiVoceFn({ cartella: await cartellaDatiDelProgetto(), id: argomenti?.id ?? '' });
+  const onLibreriaOrigine = async (argomenti) => origineVoceFn({ cartella: await cartellaDatiDelProgetto(), id: argomenti?.id ?? '' });
 
   /*
    * ⭐⭐⭐ 29/8 — FASE N, seconda fetta (mutazioni). Stesso contratto
@@ -1544,7 +1640,7 @@ export async function avviaSessione({
    * kernel — qui l'esito è un singolo messaggio, non una pagina).
    */
   const onLibreriaRinomina = async (argomenti) => {
-    const risultato = await rinominaVoceFn({ cartella, id: argomenti?.id ?? '', nome: argomenti?.name ?? '' });
+    const risultato = await rinominaVoceFn({ cartella: await cartellaDatiDelProgetto(), id: argomenti?.id ?? '', nome: argomenti?.name ?? '' });
     if (!risultato) {
       return { ok: false, esito: `No Library file has the id "${argomenti?.id}". Use library_list or library_search to find it.` };
     }
@@ -1560,7 +1656,7 @@ export async function avviaSessione({
      * In ogni altro caso (`ids` assente o array vuoto) il flusso singolo resta IDENTICO a prima.
      */
     if (Array.isArray(argomenti?.ids) && argomenti.ids.length > 0) {
-      const { eliminate, assenti } = await eliminaVociFn({ cartella, ids: argomenti.ids });
+      const { eliminate, assenti } = await eliminaVociFn({ cartella: await cartellaDatiDelProgetto(), ids: argomenti.ids });
       const parti = [];
       if (eliminate.length > 0) {
         parti.push(`Removed ${eliminate.length} ${eliminate.length === 1 ? 'file' : 'files'} from the Library: `
@@ -1569,7 +1665,7 @@ export async function avviaSessione({
       if (assenti.length > 0) parti.push(`Not found in the Library (already gone?): ${assenti.join(', ')}.`);
       return { ok: true, esito: parti.join(' ') || 'Nothing was deleted.' };
     }
-    const risultato = await eliminaVoceFn({ cartella, id: argomenti?.id ?? '' });
+    const risultato = await eliminaVoceFn({ cartella: await cartellaDatiDelProgetto(), id: argomenti?.id ?? '' });
     if (!risultato) {
       return { ok: false, esito: `No Library file has the id "${argomenti?.id}". It may already be gone.` };
     }
@@ -1603,7 +1699,7 @@ export async function avviaSessione({
   }
 
   const onLibreriaEsporta = async (argomenti) => {
-    const voci = await elencaVociFn({ cartella });
+    const voci = await elencaVociFn({ cartella: await cartellaDatiDelProgetto() });
     const trovata = trovaVoceLibreria(voci, argomenti?.reference ?? '');
     if (!trovata) {
       return { ok: false, esito: `No available Library file exactly matches "${argomenti?.reference}". Ask for the exact filename or Library id.` };
@@ -1622,7 +1718,7 @@ export async function avviaSessione({
      */
     let letta;
     try {
-      letta = await leggiBytesVoceFn({ cartella, id: trovata.id });
+      letta = await leggiBytesVoceFn({ cartella: await cartellaDatiDelProgetto(), id: trovata.id });
     } catch (errore) {
       const dettaglio = errore instanceof Error ? errore.message : String(errore);
       return { ok: false, esito: `"${trovata.nome}" could not be read from the Library: ${dettaglio}. No copy was saved.` };
@@ -1667,7 +1763,7 @@ export async function avviaSessione({
 
     let attuale;
     try {
-      attuale = await leggiPoliticaFn({ cartella });
+      attuale = await leggiPoliticaFn({ cartella: await cartellaDatiDelProgetto() });
     } catch (errore) {
       return { ok: false, esito: `The current Library policy could not be read. Nothing was changed. (${errore instanceof Error ? errore.message : String(errore)})` };
     }
@@ -1694,7 +1790,7 @@ export async function avviaSessione({
       }
       let ripristinata;
       try {
-        ripristinata = await scriviPoliticaFn({ cartella, valore: ricevuta.prima, revisioneAttesa: attuale.revision });
+        ripristinata = await scriviPoliticaFn({ cartella: await cartellaDatiDelProgetto(), valore: ricevuta.prima, revisioneAttesa: attuale.revision });
       } catch (errore) {
         return { ok: false, esito: `The Library policy could not be restored: ${errore instanceof Error ? errore.message : String(errore)}` };
       }
@@ -1726,7 +1822,7 @@ export async function avviaSessione({
 
     let aggiornata;
     try {
-      aggiornata = await scriviPoliticaFn({ cartella, valore: prossima, revisioneAttesa: attuale.revision });
+      aggiornata = await scriviPoliticaFn({ cartella: await cartellaDatiDelProgetto(), valore: prossima, revisioneAttesa: attuale.revision });
     } catch (errore) {
       return { ok: false, esito: `The Library policy could not be updated: ${errore instanceof Error ? errore.message : String(errore)}` };
     }
@@ -1860,8 +1956,39 @@ export async function avviaSessione({
     const tutte = await elencaMemorieFn({ cartella: cartellaMemoria });
     const richiesto = Number(argomenti?.limit);
     const limite = Number.isFinite(richiesto) ? Math.min(Math.max(richiesto, 1), 20) : 5;
-    return cercaMemorie(tutte, { query: argomenti?.query ?? '', limit: limite });
+    // 27/09/2026: `inTutto` — senza risultati l'esito dice quante memorie ci sono e come vederle.
+    return { ...cercaMemorie(tutte, { query: argomenti?.query ?? '', limit: limite }), inTutto: tutte.length };
   };
+
+  /*
+   * ⭐ 27/09/2026, decisione owner (`decisioni-owner-capacita-sezioni-27-09`, punti 2-3) — le letture NUOVE delle sezioni, un
+   *   canale solo verso il kernel (`ATTREZZI_LETTURA_SEZIONI`). Il testo lo compongono `letture-delle-sezioni.mjs` e, per le
+   *   conversazioni, `conversazioni-per-il-modello.mjs` dal registro.
+   */
+  const onLetturaSezione = async (nome, argomenti = {}) => {
+    switch (nome) {
+      case 'memory_list': return elencoMemorie(await elencaMemorieFn({ cartella: cartellaMemoria }), argomenti);
+      case 'notes_search': return cercaNote(await elencaNoteFn({ cartella: cartellaNote }), argomenti);
+      case 'notes_read': {
+        const id = String(argomenti?.id ?? '');
+        return leggiNotaIntera(id ? await leggiNotaFn({ cartella: cartellaNote, id }) : null, { ...argomenti, id });
+      }
+      case 'tasks_search': return cercaAttivita(await elencaAttivitaFn({ cartella: cartellaAttivita }), argomenti);
+      case 'research_search':
+        return typeof onRicercaCerca === 'function' ? onRicercaCerca(argomenti) : 'deep research is not configured on this harness.';
+      case 'conversation_search':
+        return typeof conversazioniFn === 'function' ? conversazioniFn(argomenti) : 'conversations are not available on this harness.';
+      default: throw new Error(`no section reader for ${nome}`);
+    }
+  };
+  /* ⭐ 27/09/2026, punto 1 («memoria come Hermes»): il blocco per il prompt di una sessione NUOVA. Una ripresa e una figlia non
+     lo leggono nemmeno (il kernel non lo userebbe; Hermes `delegate_tool.py:241`, `skip_memory=True`): la lettura in più
+     ritardava la prima richiesta della figlia, e FIG-01 — che aspetta proprio quella — cadeva 2 volte su 3 nella suite intera.
+     Un negozio illeggibile non ferma il giro: niente blocco, e gli attrezzi lo diranno. */
+  const sessioneNuova = !(Array.isArray(messaggiIniziali) && messaggiIniziali.length > 0);
+  const memorieNelPrompt = sessioneNuova && agentRole !== 'child'
+    ? await elencaMemorieFn({ cartella: cartellaMemoria }).then(bloccoDelleMemorie, () => null)
+    : null;
 
   const onMemoriaScrivi = async (argomenti) => {
     try {
@@ -1933,16 +2060,21 @@ export async function avviaSessione({
       // la cache della corsa e la finestra della pagina le costruisce `research-orchestrator.mjs`
       // («raccolta viva»). Assenti ⇒ il kernel si comporta esattamente come ieri.
       cacheWeb, onPaginaLetta,
-      livelloAccesso, chiediApprovazioneFn, hookFn: hookFnConPlugin, permessiPerAttrezzo, onDelega, codaMessaggiFn,
+      livelloAccesso, modalitaOperativa, chiediApprovazioneFn, chiediDomandaFn, presentaPianoFn,
+      agentRole, askParentFn, answerChildQuestionFn, askChildFn, answerParentQuestionFn, onWorkflowPlanPropose,
+      modalitaOperativaCorrenteFn, figliViviAllAvvio,
+      hookFn: hookFnConPlugin, permessiPerAttrezzo, onDelega, codaMessaggiFn,
       firma, toolMcp, chiamaToolMcpFn, skillsDisponibili, caricaSkillFn, toolPlugin, eseguiToolPluginFn,
       onLibreriaLista, onLibreriaCerca, onLibreriaLeggi, onLibreriaOrigine,
       onLibreriaRinomina, onLibreriaElimina, onLibreriaEsporta, onLibreriaPolitica,
       onNoteLista, onNoteCrea, onNoteAggiorna, onNoteElimina,
       onAttivitaLista, onAttivitaCrea, onAttivitaCompleta, onAttivitaAggiorna, onAttivitaElimina,
       onMemoriaCerca, onMemoriaScrivi, onMemoriaAggiorna, onMemoriaElimina,
+      onLetturaSezione, memorieNelPrompt, // 27/09/2026, decisione owner: le letture delle sezioni e le memorie nel prompt
       onRicercaLista, onRicercaAvvia, onRicercaLeggi, onRicercaRinomina,
       onRicercaPausa, onRicercaRiprendi, onRicercaAnnulla, onRicercaElimina,
       componiRapportoRicercaFn,
+      cartellaRicerche: cartellaDatiDelProgetto,
       onForgeCrea, toolForge, eseguiToolForgeFn,
     });
     onEvento(esitoInEventoFinale({ threadId, runId, esito }));
@@ -1973,7 +2105,15 @@ export async function avviaSessione({
     const code = codiceGrezzo && !/\s/.test(codiceGrezzo) && !ESITI_DEL_TASK.has(codiceGrezzo)
       ? codiceGrezzo
       : 'internal-error';
-    onEvento(runError({ message: messaggio, code }));
+    /*
+     * ⭐ F3-41a (25/09/2026) — anche la CLASSE del guasto, quando il kernel l'ha già decisa (`erroreFornitorePubblico`,
+     *   runtime-owner-adapter.mjs:896-905: `traffico`, `rete`, `guasto-fornitore`…). Il messaggio pubblico è in italiano
+     *   («Troppo traffico presso il fornitore.») e la tabella che riconosce le classi dalle frasi (`classificaErroreDiCorsa`)
+     *   non lo riconosce: senza questo campo, sul disco un 429 e un difetto nostro si leggono uguali, e un passo di Workflow
+     *   non può sapere se ritentare. Solo una parola in forma di classe, mai un oggetto.
+     */
+    const classe = typeof errore?.classe === 'string' && /^[a-z][a-z-]{0,39}$/u.test(errore.classe) ? errore.classe : undefined;
+    onEvento(runError({ message: messaggio, code, classe }));
     /*
      * ⭐⭐⭐ BC-44 (12/09/2026) — IL CODICE VIAGGIAVA SOLO NELL'EVENTO, e chi conclude legge il
      * VALORE DI RITORNO. Questo ramo tornava `erroreInterno` (la frase) e buttava `code`: chi
@@ -1985,7 +2125,13 @@ export async function avviaSessione({
      *   portava, stesso `message` e stesso `code`. Qui si aggiunge un campo al ritorno, e chi
      *   non lo legge non se ne accorge.
      */
-    return { threadId, runId, ok: false, esito: null, erroreInterno: messaggio, codiceErrore: code };
+    /*
+     * ⛔ 25/09/2026 notte (decisione owner «il lavoro fatto resta, sempre, come Hermes»): il kernel attacca all'errore la storia
+     *   coerente del giro (`storiaDelGiroFallito`). Viaggia nel valore di ritorno, ADDITIVA come `codiceErrore`: decide il
+     *   registro se salvarla (solo se la storia di prima ne è il prefisso).
+     */
+    const messaggiDelGiro = Array.isArray(errore?.messaggiDelGiro) ? errore.messaggiDelGiro : null;
+    return { threadId, runId, ok: false, esito: null, erroreInterno: messaggio, codiceErrore: code, ...(messaggiDelGiro ? { messaggiDelGiro } : {}) };
   } finally {
     /*
      * ⭐⭐⭐ 29/8 — FASE E: un server MCP è un processo figlio VERO
@@ -2034,6 +2180,28 @@ export async function compattaSessione({
     modello, chiave, messaggi: richiesta, attrezzi: [], fetchDiRete,
   });
   return compattaConversazioneFn(messaggiFinali, chiamaModello);
+}
+
+/**
+ * ⭐ F3, onda 2 di F2 (24/09/2026) — UNA richiesta di riassunto per la compattazione in BACKGROUND del registro
+ * (decisione 5 dell'owner: a fine giro, senza bloccare la persona). Il registro costruisce i messaggi con la catena
+ * pura dell'adapter (`compattazione-desktop.mjs`, rapporto F1 §6) e qui si chiama il modello della SESSIONE con lo
+ * stesso trasporto di un giro (`chiamaConRitenta`: stesso backoff, stesso `fetchDiRete` instradato).
+ * ⛔ `attrezzi: []` come `compattaSessione` e come l'adapter (`talosHarness.desktop-hotfix.mjs`, `chiediRiassunto`):
+ *   un riassuntore che potesse chiamare attrezzi non starebbe riassumendo. `maxOutputTokens` e `reasoning` (abbassato
+ *   dal registro con `reasoningPerRiassunto`) passano com'è: Hermes toglie il tetto («NO max_tokens … thinking models
+ *   burn it on reasoning», `agent/context_compressor.py:3730-3733`), noi lo teniamo e abbassiamo il ragionamento —
+ *   misurato il 09/09 sul giro D1 (`runtime-owner-adapter.mjs::callContextModel`).
+ * @returns {Promise<{scelta:object|null, finishReason:string|null, usage:object|null}>}
+ */
+export async function riassumiPerCompattazione({ modello, chiave, messaggi, maxOutputTokens, reasoning, fetchDiRete = fetch, segnaleStop }) {
+  const esito = await chiamaConRitenta({
+    modello, chiave, messaggi, attrezzi: [], fetchDiRete,
+    ...(Number.isSafeInteger(maxOutputTokens) && maxOutputTokens > 0 ? { maxOutputTokens } : {}),
+    ...(reasoning ? { reasoning } : {}),
+    ...(segnaleStop ? { segnaleStop } : {}),
+  });
+  return { scelta: esito?.scelta ?? null, finishReason: esito?.finishReason ?? null, usage: esito?.usage ?? null };
 }
 
 /**

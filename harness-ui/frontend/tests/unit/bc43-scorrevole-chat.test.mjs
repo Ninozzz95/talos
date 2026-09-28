@@ -48,7 +48,9 @@ function banco({ ridotto = false, ridottoApp = false } = {}) {
       disconnect() { misure.disconnesso = true; }
     },
     MutationObserver: class { observe(nodo) { misure.mutazioni = nodo; } disconnect() {} },
-    setTimeout: fn => fn(),
+    /* Sincrono, e restituisce null: nel browser la callback gira DOPO l'assegnazione dell'id e lo
+       riporta a null; qui gira prima, quindi lo stato finale giusto si ottiene restituendo null. */
+    setTimeout: fn => { fn(); return null; },
   };
   const doc = {
     defaultView: finestra,
@@ -98,6 +100,9 @@ function contestoScrollReale(b, { autoFollow = true } = {}) {
     streamingLastTargetTop: null,
     streamingScrollFrame: null,
     streamingScrollTarget: null,
+    /* Integrazione R4 23/09: lo scrittore unico ora cede il fotogramma a un flush di testo in attesa
+       (`streamingRenderFrame`) e scrive attraverso `applicaScrollStreamingOutput`. */
+    streamingRenderFrame: null,
     riarmate: 0,
     riarmaSeguiConversazione() { contesto.riarmate += 1; contesto.streamingAutoFollow = true; contesto.streamingLastTargetTop = null; },
     // fuori dall'invariante di questo file: lo spazio in coda ha il suo test (SPAZIO-CODA-01)
@@ -105,6 +110,9 @@ function contestoScrollReale(b, { autoFollow = true } = {}) {
     logStreaming() {},
   };
   contesto.scrollerConversazione = funzione('scrollerConversazione', contesto);
+  /* 24/09/2026 (jitter): il bersaglio lo sceglie `bersaglioDelFondo`; nel banco la colonna non ha turni e torna il nodo richiesto. */
+  contesto.bersaglioDelFondo = funzione('bersaglioDelFondo', contesto);
+  contesto.applicaScrollStreamingOutput = funzione('applicaScrollStreamingOutput', contesto);
   contesto.scrollStreamingOutput = funzione('scrollStreamingOutput', contesto);
   return contesto;
 }
@@ -118,6 +126,30 @@ test('BC43-02 — la bolla appesa passa dallo scrittore unico e muove solo lo sc
   assert.equal(b.scorrevole.scrollTop, 1050);
   assert.equal(b.colonna.scrollTop, 0);
   assert.equal(contesto.riarmate, 0, 'un evento del modello non riarma il seguito');
+});
+
+/*
+ * ⛔ 24/09/2026 (jitter, owner: «scatta in basso e in alto») — MENTRE SEGUE, LO SCRITTORE NON SALE MAI. Misurato sul browser e
+ *   con giri veri sul 4174: ogni salita dello scrittore (vista portata in fondo con il bersaglio qualche pixel sopra la metà;
+ *   la bolla del testo che si accorcia mentre il Markdown si ricompone) era uno scatto in alto. Forma di `use-stick-to-bottom`:
+ *   si scorre sui ridimensionamenti positivi, mai sui negativi. Qui i due versi: sotto la metà scende, sopra la metà resta.
+ */
+test('BC43-09 — lo scrittore scende col contenuto che cresce e non sale mai, nemmeno se il contenuto si accorcia', () => {
+  const b = banco();
+  const contesto = contestoScrollReale(b);
+  // la bolla sta a `fondo` px nel contenuto (top dello scorrevole 100): il suo rettangolo si sposta con lo scroll, come nel browser
+  let fondo = 1300;
+  const bolla = { isConnected: true, getBoundingClientRect: () => ({ bottom: 100 + fondo - b.scorrevole.scrollTop }) };
+  b.scorrevole.scrollTop = 1100; // la persona ha portato la vista in fondo: il bersaglio (1300 − 250 = 1050) sta 50 px SOPRA la metà
+  contesto.scrollStreamingOutput(bolla);
+  assert.equal(b.scorrevole.scrollTop, 1100, 'con il bersaglio sopra la metà lo scrittore non tira su la vista');
+  fondo = 1200; b.scorrevole.scrollHeight = 1700; // il contenuto si è ACCORCIATO di 100 px (la bolla che si ricompone)
+  contesto.scrollStreamingOutput(bolla);
+  assert.equal(b.scorrevole.scrollTop, 1100, 'nemmeno un accorciamento fa salire lo scrittore: ci pensa il browser, se serve');
+  fondo = 1500; b.scorrevole.scrollHeight = 2000; // il testo cresce oltre la metà
+  contesto.scrollStreamingOutput(bolla);
+  assert.equal(b.scorrevole.scrollTop, 1250, 'quando il bersaglio scende sotto la metà, lo scrittore scende con lui');
+  assert.equal(b.colonna.scrollTop, 0);
 });
 
 test('BC43-02-bis AL CONTRARIO — con il seguito spento nessuno tocca lo scroll, nemmeno di un pixel', () => {

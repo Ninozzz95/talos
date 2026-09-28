@@ -1,7 +1,7 @@
 /** SET-01: presentation metadata only. Values and validation remain with the existing preference owner. */
 export type SettingsLanguage = 'it' | 'en';
 export type LocalText = Readonly<{ it: string; en: string }>;
-export type SettingsSection = 'appearance' | 'chat' | 'tools' | 'memoria' | 'privacy' | 'models' | 'providers' | 'costi' | 'workspace' | 'account';
+export type SettingsSection = 'appearance' | 'chat' | 'tools' | 'memoria' | 'privacy' | 'models' | 'costi' | 'workspace' | 'account';
 export interface LegacySettingField {
   id: string; chiave: string; titolo: string; sezione: string; gruppo: string; tipo: string;
   opzioni?: readonly (readonly string[])[]; min?: number; max?: number; unita?: string;
@@ -18,13 +18,40 @@ export const SETTINGS_SECTIONS: Readonly<Record<SettingsSection, { title: LocalT
   tools: { title: text('Strumenti agente e permessi', 'Agent tools and permissions'), description: text('Controlla cosa può fare l’agente e da dove provengono le ricerche web.', 'Control what the agent can do and where web search results come from.'), scope: text('Sessione e server', 'Session and server'), icon: 'sliders', keywords: 'tools permissions permessi policy search ricerca web duckduckgo tavily brave chiave key' },
   memoria: { title: text('Memoria e contesto', 'Memory and context'), description: text('Leggi la ripartizione del contesto e i limiti disponibili. Le misure mancanti restano esplicite.', 'Review context allocation and available limits. Unavailable measurements stay explicit.'), scope: text('Sessione corrente', 'Current session'), icon: 'brain', keywords: 'memory contesto context tokens token memoria finestra compaction' },
   privacy: { title: text('Sicurezza e privacy', 'Security and privacy'), description: text('Gestisci i dati locali e trasferisci le preferenze. Pulizia e ripristino richiedono una scelta esplicita.', 'Manage local data and transfer preferences. Clearing or resetting always requires an explicit choice.'), scope: text('Questo profilo', 'This profile'), icon: 'shield', keywords: 'privacy security sicurezza dati data export esporta import importa backup reset ripristina' },
-  models: { title: text('Laboratorio modelli', 'Model laboratory'), eyebrow: text('Intelligenza, sotto controllo', 'Intelligence, under control'), description: text('Scegli dove eseguire i modelli. Accessi, cataloghi e runtime hanno stati distinti.', 'Choose where models run. Provider access, catalogues and runtimes have distinct states.'), scope: text('Computer e provider', 'Computer and providers'), icon: 'cpu', keywords: 'model modelli laboratorio lab runtime ollama lm studio gguf hugging face download gpu ram' },
-  providers: { title: text('Provider e accessi', 'Providers and access'), description: text('Controlla chiavi e indirizzi configurati. Una credenziale salvata non dimostra una connessione riuscita.', 'Review configured keys and addresses. A saved credential does not prove a successful connection.'), scope: text('Portachiavi e server', 'Keyring and server'), icon: 'key', keywords: 'provider api key chiave token endpoint address indirizzo openai anthropic openrouter gemini accessi' },
+  /* ⛔ 23/09/2026 — DECISIONE OWNER: «Provider e accessi» è TOLTA DEL TUTTO dalle Impostazioni
+     («Toglierla del tutto»). Era una seconda porta sugli STESSI fornitori della scheda «Provider»
+     del laboratorio qui sotto: due superfici per una cosa sola. Le sue parole di ricerca passano
+     qui, così chi cerca «chiave», «API key» o «provider» trova il posto vero e mai un vuoto.
+     Ricerca 23/09/2026 — Jakob Nielsen (NN/g), «Reduce Redundancy: Decrease Duplicated Design
+     Decisions»: «User interface complexity increases when a single feature or hypertext link is
+     presented in multiple ways». Il vecchio id `providers` resta solo come INDIRIZZO RITIRATO
+     (`SEZIONI_RITIRATE` sotto), mai come sezione. */
+  models: { title: text('Laboratorio modelli', 'Model laboratory'), eyebrow: text('Intelligenza, sotto controllo', 'Intelligence, under control'), description: text('Scegli dove eseguire i modelli. Accessi, cataloghi e runtime hanno stati distinti.', 'Choose where models run. Provider access, catalogues and runtimes have distinct states.'), scope: text('Computer e provider', 'Computer and providers'), icon: 'cpu', keywords: 'model modelli laboratorio lab runtime ollama lm studio gguf hugging face download gpu ram provider providers fornitore fornitori api key chiave chiavi credenziale credenziali token endpoint address indirizzo openai anthropic openrouter gemini accessi' },
   costi: { title: text('Costi e consumo', 'Costs and usage'), description: text('Consulta il consumo registrato per giorno e modello, distinguendo dati disponibili e mancanti.', 'Review recorded usage by day and model, distinguishing known values from missing data.'), scope: text('Sessioni registrate', 'Recorded sessions'), icon: 'chart', keywords: 'cost costi prezzo price token usage consumo billing spesa' },
   workspace: { title: text('File e workspace', 'Files and workspace'), description: text('Verifica cartella e sessione attive prima di cambiare spazio di lavoro.', 'Check the active folder and session before changing workspace.'), scope: text('Workspace corrente', 'Current workspace'), icon: 'folder', keywords: 'folder directory cartella file project progetto workspace path percorso' },
   account: { title: text('Account, Doctor e backup', 'Account, Doctor and backup'), description: text('Diagnostica, configurazione e recupero. Le verifiche si avviano solo su tua richiesta.', 'Diagnostics, configuration and recovery. Checks run only when you request them.'), scope: text('Questo computer', 'This computer'), icon: 'activity', keywords: 'account doctor diagnostica diagnostic backup recovery recupero configurazione' },
 };
-export const CHAT_FIELDS = new Set(['chatFontScaleSelect', 'composerShapeSelect', 'composerPlusSelect', 'messageStyleSelect', 'streamingAnimationSelect', 'chatFullWidthToggle']);
+/*
+ * ⛔ 23/09/2026 — GLI INDIRIZZI RITIRATI, e dove portano adesso. Owner: «Provider e accessi» tolta
+ *   del tutto; la gestione dei fornitori vive SOLO in Laboratorio modelli → scheda «Provider».
+ *   Un indirizzo vecchio (la sezione salvata in `talos.harness.desktop.settings.section.v1`, un
+ *   `setSettingsSection('providers')` rimasto in giro) non deve ricadere in silenzio su «Aspetto»:
+ *   porta alla casa nuova, sulla scheda giusta. È la semantica del 301: «the target resource has
+ *   been assigned a new permanent URI and any future references to this resource ought to use one
+ *   of the enclosed URIs» (RFC 9110 §15.4.2, letta il 23/09/2026) — per questo chi applica il
+ *   rinvio riscrive anche il ricordo salvato (`app.js`, `setSettingsSection`).
+ */
+export const SEZIONI_RITIRATE: Readonly<Record<string, Readonly<{ section: SettingsSection; labTab: string }>>> = Object.freeze({
+  providers: Object.freeze({ section: 'models', labTab: 'providers' }),
+});
+/** La destinazione vera di un id di sezione: vivo ⇒ sé stesso; ritirato ⇒ la sua casa nuova; ignoto ⇒ `null`. */
+export function risolviSezioneImpostazioni(id: unknown): { section: SettingsSection; labTab: string | null } | null {
+  const chiave = typeof id === 'string' ? id : '';
+  if (Object.hasOwn(SETTINGS_SECTIONS, chiave)) return { section: chiave as SettingsSection, labTab: null };
+  const ritirata = Object.hasOwn(SEZIONI_RITIRATE, chiave) ? SEZIONI_RITIRATE[chiave] : undefined;
+  return ritirata ? { section: ritirata.section, labTab: ritirata.labTab } : null;
+}
+export const CHAT_FIELDS = new Set(['chatFontScaleSelect', 'composerPlusSelect', 'messageStyleSelect', 'streamingAnimationSelect', 'chatFullWidthToggle', 'askTimeoutSelect']);
 export function sectionForField(field: LegacySettingField): SettingsSection {
   if (CHAT_FIELDS.has(field.id)) return 'chat';
   return Object.hasOwn(SETTINGS_SECTIONS, field.sezione) ? field.sezione as SettingsSection : 'appearance';
@@ -37,7 +64,8 @@ export const FIELD_HELP: Readonly<Record<string, LocalText>> = {
   sceneOverrideSelect: text('Scegli una scena oppure segui l’atmosfera del tema.', 'Choose a scene or follow the theme’s atmosphere.'),
   uiFontScaleSelect: text('Dimensione dei testi dell’interfaccia, indipendente dalla chat.', 'Interface text size, independent of conversation text.'),
   chatFontScaleSelect: text('Dimensione del testo nella conversazione.', 'Text size within the conversation.'),
-  composerShapeSelect: text('Scegli lo spazio occupato dall’area di scrittura.', 'Choose the size of the writing area.'),
+  // 24/09/2026, decisione owner 35.
+  askTimeoutSelect: text('Quanto aspetta una domanda di TALOS prima di scadere; alla scadenza il giro si ferma. Di serie non scade.', 'How long a TALOS question waits before it expires; when it expires the turn stops. By default it never expires.'),
   composerPlusSelect: text('Mostra gli strumenti aggiuntivi in un cassetto o in un menu.', 'Show additional tools in a drawer or a menu.'),
   messageStyleSelect: text('Presentazione della conversazione: sezioni o fumetti.', 'Conversation presentation: sections or bubbles.'),
   streamingAnimationSelect: text('Come viene mostrato il testo mentre arriva.', 'How incoming text is displayed.'),

@@ -486,6 +486,36 @@ test('⛔⛔⛔ BC79-10 — col portachiavi, un motore che rifiuta SEMPRE porta 
   }
 });
 
+/*
+ * ⛔⛔⛔ 25/09/2026 sera, sessione VERA dell'owner (5233facd, MiniCPM5 sul 4174): «Questo modello non usa gli attrezzi» dopo
+ *   che li aveva usati VENTIDUE volte. Il motore aveva 16.384 token di finestra, la conversazione li ha superati, e llama-server
+ *   ha risposto 400 `exceed_context_size_error`. La riprova senza attrezzi accorcia il prompt (misurato su b10517: 2.777 →
+ *   2.086 token con UN attrezzo; con 45 sono migliaia) e quindi «riesce»: il comportamento di BC79-03 era falsato.
+ * ⇒ Il contesto pieno si riconosce dal campo STRUTTURATO `type` (non dalla frase), non si riprova senza attrezzi, e sale col
+ *   suo codice e i suoi numeri: così il kernel può comprimere e riprovare (come Hermes, `context_overflow`, should_compress).
+ *   Qui il registro non ha la compressione: la prova guarda che l'errore arrivi com'è e che gli attrezzi restino.
+ */
+const GREZZO_CONTESTO = JSON.stringify({ error: { code: 400, message: 'request (17230 tokens) exceeds the available context size (16384 tokens), try increasing it', type: 'exceed_context_size_error', n_prompt_tokens: 17230, n_ctx: 16384 } });
+test('⛔⛔⛔ BC79-CTX — il contesto pieno non è un rifiuto degli attrezzi: nessuna riprova senza, il suo codice e i suoi numeri', async (t) => {
+  const cartella = cartellaDiProva(t, 'contesto-pieno');
+  // il caso vero: con gli attrezzi non entra, senza «entrerebbe» — è proprio ciò che ingannava la riprova
+  const motore = await accendiMotoreFinto(t, (richiesta) => (richiesta.haTools
+    ? { stato: 400, testo: GREZZO_CONTESTO }
+    : { frames: [fotogrammaTesto('senza attrezzi entrerebbe')] }));
+  const registro = registroComeIlServer({ porta: motore.porta, cartella });
+  spegniTutteAllaFine(t, registro);
+
+  const { sessionId } = registro.avvia('task-vero', localeLlama);
+  const eventi = await attendiFine(registro, sessionId);
+  const ultimo = eventi.at(-1);
+
+  assert.equal(motore.richieste.length, 1, `⛔ nessuna riprova senza attrezzi — richieste: ${JSON.stringify(motore.richieste.map((r) => r.haTools))}`);
+  assert.equal(ultimo.type, 'RunError');
+  assert.equal(ultimo.code, 'LOCAL_CONTEXT_EXCEEDED', `⛔ il suo codice, non un guasto del fornitore — ultimo: ${JSON.stringify(ultimo)}`);
+  assert.match(ultimo.message, /\(17230 token\).*\(16384 token\)/u, 'i numeri del motore restano leggibili');
+  assert.equal(quanteVolte(testoDetto(eventi), 'Questo modello non usa gli attrezzi'), 0, '⛔ e nessun avviso falso sugli attrezzi');
+});
+
 test('⛔⛔ BC79-08 — niente è uscito da 127.0.0.1 in nessuna prova di questo file', () => {
   assert.deepEqual(fuori, [], `⛔ uscite verso la rete vera: ${JSON.stringify(fuori)}`);
 });

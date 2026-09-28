@@ -158,7 +158,7 @@ test('R6 · l’etichetta più lunga dell’ordine entra nei 150 px?', async ({ 
  * e si rimisura tutto: riga, campo, selettore, e il segnaposto.
  * ==========================================================================
  */
-test('R7 · A/B delle faccette: senza la regola nuova il segnaposto è tagliato?', async ({ page }) => {
+test('R7 · A/B delle faccette: senza la regola nuova il selettore si prende il campo di ricerca?', async ({ page }) => {
   await page.setViewportSize({ width: 1920, height: 1080 });
   await apriLaboratorio(page);
   const misura = () => page.evaluate(() => {
@@ -196,8 +196,15 @@ test('R7 · A/B delle faccette: senza la regola nuova il segnaposto è tagliato?
   // Il verso che deve essere vero: la regola nuova deve CAMBIARE qualcosa (altrimenti è inerte).
   expect(tolte, 'la regola nuova non è nel CSS servito: cura INERTE').toBeGreaterThan(0);
   expect(prima.campo, 'senza la regola il campo non cambia: la regola non tocca questa riga').not.toBe(dopo.campo);
-  // E il difetto dichiarato nel commit: senza la regola il segnaposto NON ci sta.
-  expect(prima.tagliato, `il segnaposto dichiarato tagliato non lo è: ${breve(prima)}`).toBe(true);
+  /*
+   * ⛔ 25/09/2026 — il difetto dichiarato nel commit («senza la regola il segnaposto NON ci sta») era vero prima di ATLAS e
+   *   dopo non lo è più: stesso segnaposto «Cerca un repository GGUF…», ma con la metrica del campo di ATLAS servono 152 px e
+   *   senza la regola ne restano 173 (A/B del 25/09: R7 verde sul lato 0254a7876, rosso su ATLAS; a 1024/1280/1440 la riga va a
+   *   capo e la regola non incide). La regola serve ancora, e lo si prova su ciò che fa OGGI a 1920: senza, il selettore
+   *   d'ordine si prende la larghezza del campo di ricerca (misurati 701 contro 220).
+   */
+  expect(prima.ordine, `senza la regola il selettore non si allarga: ${breve(prima)}`).toBeGreaterThan(dopo.ordine);
+  expect(prima.campo, `senza la regola il campo di ricerca non si stringe: ${breve(prima)}`).toBeLessThan(dopo.campo);
   expect(dopo.tagliato, `con la cura il segnaposto è ancora tagliato: ${breve(dopo)}`).toBe(false);
 });
 
@@ -564,7 +571,18 @@ test('R15 · la × nei due temi, col contrasto calcolato', async ({ page }) => {
     await expect(page.locator('#schermoImpostazioni')).toBeVisible({ timeout: 10_000 });
     await page.locator('#settingsSearch').fill('tema');
     const m = await page.evaluate(() => {
-      const num = (c) => (c.match(/\d+(\.\d+)?/g) || []).map(Number);
+      /* ⛔ 25/09/2026 — `color(srgb 0.64 0.66 0.68)` (il `--talos-muted` passa da `color-mix`, temi.css:118-141) ha i canali
+         in 0..1: letti come 0..255 davano una × «quasi nera» e un contrasto di 1,06:1 a una × che ne ha ~8:1 — rosso sul
+         prodotto giusto, anche prima di ATLAS (A/B del 25/09). Si porta tutto in 0..255 con l'alfa al quarto posto. */
+      const num = (c) => {
+        const srgb = /color\(srgb\s+([^)]+)\)/.exec(c);
+        if (srgb) {
+          const [canali, alfa] = srgb[1].split('/');
+          const v = canali.trim().split(/\s+/).map(Number).map((x) => x * 255);
+          return alfa === undefined ? v : [...v, Number(alfa)];
+        }
+        return (c.match(/\d+(\.\d+)?/g) || []).map(Number);
+      };
       const lum = ([r, g, b]) => { const f = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }; return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b); };
       const fondo = (el) => { let n = el; while (n) { const c = getComputedStyle(n).backgroundColor; const a = num(c); if (a.length >= 3 && (a[3] === undefined || a[3] > 0)) return a.slice(0, 3); n = n.parentElement; } return [255, 255, 255]; };
       const clear = document.querySelector('[data-settings-clear]');

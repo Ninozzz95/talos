@@ -83,6 +83,7 @@ export default defineConfig({
         TALOS_HARNESS_UI_PORT: PORTA_ASPETTO,
         TALOS_HARNESS_UI_PUBLIC_DIR: DIST,
         TALOS_HARNESS_UI_SESSIONS_DIR: SESSIONI_BANCO,
+        TALOS_HARNESS_UI_KEYRING: 'memoria', TALOS_SCRATCH_DIR: path.join(SESSIONI_BANCO, 'scratch'), // 24/09/2026: mai la radice vera %LOCALAPPDATA%TALOS, // 23/09/2026: custodia delle chiavi di prova, mai quella vera di Windows
         TALOS_INTRO: '0',
       },
       reuseExistingServer: false,

@@ -268,13 +268,45 @@ for (const [signature, fallbackExpected, proposalExpected] of [
       assert.equal(binaries[1].args.includes('--cache-type-k'), false);
       await f.supervisor.stop();
     } else {
-      await assert.rejects(f.supervisor.start(options), e => e.code === 'RUNTIME_PROCESS_FAILED');
+      // 25/09/2026 sera: la memoria piena ha il suo codice (decisione owner «carta vera»), gli altri restano quelli di sempre
+      await assert.rejects(f.supervisor.start(options), e => e.code === (proposalExpected ? 'RUNTIME_OUT_OF_MEMORY' : 'RUNTIME_PROCESS_FAILED'));
       assert.equal(binaries.length, 1);
       assert.equal(Boolean(f.supervisor.status().motore.proposta), proposalExpected);
     }
     assert.deepEqual(locks, [['lock', 'test-model'], ['unlock', 'test-model']]);
   });
 }
+
+/*
+ * ⛔⛔⛔ 25/09/2026 sera, sessione dell'owner eb5acb34 (Qwen3.8-27B Q4, 16,7 GB, su una RX 9070 XT da 16 GB): «llama-server si
+ *   è chiuso dopo 5 s senza mai diventare pronto: … failed to load model …», e la carta diceva «non si è acceso in tempo,
+ *   riprova» — falso: la scheda non aveva spazio, e riprovare non cambia niente. Decisione owner: la carta dice il vero, coi
+ *   numeri. I numeri della scheda sono quelli che llama-server stesso stampa all'avvio (riga «- Vulkan0 : … (N MiB, M MiB free)»).
+ */
+test('GPU memory exhausted: its own code and the card numbers printed by the engine', async () => {
+  const f = fixture({
+    motore: { variante: 'vulkan', dispositivi: ['AMD Radeon RX 9070 XT'] },
+    fallbackBinaryPath: join(tmpdir(), 'talos-preflight-cpu', 'llama-server'),
+    sondaBinario: async (_exe, args) => args.includes('--help') ? '' : '-ngl -1',
+    spawnImpl: () => {
+      const child = childProcess();
+      queueMicrotask(() => {
+        child.stderr.emit('data', '0.00.071.172 I cmn  common_param:   - Vulkan0 : AMD Radeon RX 9070 XT (16304 MiB, 15416 MiB free)\n');
+        child.stderr.emit('data', 'ggml_vulkan: vk::Device::allocateMemory: ErrorOutOfDeviceMemory\n0.06.347.140 E llama_model_load_from_file_impl: failed to load model\n');
+        child.emit('close', 1, null);
+      });
+      return child;
+    },
+    fetchImpl: async () => ({ ok: false, status: 503 }),
+  });
+  await assert.rejects(f.supervisor.start(options), (e) => {
+    assert.equal(e.code, 'RUNTIME_OUT_OF_MEMORY');
+    assert.match(e.message, /non entra nella memoria della scheda grafica/u);
+    assert.match(e.message, /AMD Radeon RX 9070 XT: 15,9 GB, liberi 15,1 GB/u, 'the numbers come from the engine line, in GB like the model lab');
+    assert.doesNotMatch(e.message, /failed to load model/u, 'no engine jargon in the sentence');
+    return true;
+  });
+});
 
 test('cancellation between GPU failure and fallback never starts the CPU binary', async () => {
   const binaries = [];

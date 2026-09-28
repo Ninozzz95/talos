@@ -23,6 +23,7 @@ import { readFile } from 'node:fs/promises';
 import { isAbsolute, join, relative, resolve } from 'node:path';
 
 import { isPathInside } from '../path-policy.mjs';
+import * as compattazione from './compattazione-desktop.mjs';
 import * as kernel from './talosHarness.mjs';
 
 export * from './talosHarness.mjs';
@@ -32,6 +33,10 @@ export const NO_TEST_SUITE_CODE = 'NO_TEST_SUITE_CONFIGURED';
 export const STALL_DIAGNOSTIC_EVENT = 'desktop-harness-stall';
 
 const STALL_MS_DEFAULT = 45_000;
+/* Owner 26/09/2026: la compattazione nel giro si ferma solo davanti al pavimento vero; questa è la rete se la stima del
+ * pavimento sbaglia (Hermes ha la sua anti-thrash, `context_compressor.py:2569`). Sei compattazioni rimaste sopra la
+ * soglia in un turno sono già un'anomalia da vedere, non un regime. */
+const INEFFICACI_TOTALI_MASSIME = 6;
 const MAX_TIMER_MS = 2_147_483_647;
 const SHELL_COMBINED_NOTICE = '[shell output: stdout and stderr combined in arrival order; stream identity is not preserved]';
 const SEARCH_INCOMPLETE_NOTICE = 'SEARCH INCOMPLETE: results are partial; missing paths are NOT proof that a file does not exist.';
@@ -121,10 +126,10 @@ function shellExecutionBase(text) {
 export function correggiEsitoToolDesktop({ name, args, content, cartella }) {
   let text = String(content ?? '');
 
+  /* 27/09/2026 (owner): the kernel itself now opens an incomplete zero-match search with «inconclusive search: …»
+     (`RICERCA_NON_CONCLUSIVA`), for ripgrep and for the JS walk alike, so the «no file matches.» rewrite that lived here
+     could no longer fire. The notice stays: it also covers a PARTIAL result list, not only an empty one. */
   if (name === 'cerca' && /⚠\s*incomplete scan:/i.test(text)) {
-    if (/^no file matches\./i.test(text)) {
-      text = text.replace(/^no file matches\./i, 'no match was found in the scanned subset. Absence is NOT established.');
-    }
     if (!text.startsWith(SEARCH_INCOMPLETE_NOTICE)) text = `${SEARCH_INCOMPLETE_NOTICE}\n${text}`;
   }
 
@@ -342,46 +347,235 @@ function wrapOnGiro(original, { cartella, telemetry, calls }) {
   };
 }
 
+/*
+ * ⛔⛔⛔ LA COMPATTAZIONE DEL 4174 — RIFATTA IL 24/09/2026 (fase F2, corsia F1).
+ *
+ * Com'era, e perché era rotta (ricognizione `RICOGNIZIONE-CONTEXT-ENGINE-2026-09-24.md`, riprodotta sulla base
+ * `e2eb2a5ce` con la sonda `sonda-compattazione-hotfix.mjs`):
+ *   K1 — scattava su `serveCompattare(requestIndex, …)`, cioè sull'indice delle richieste DEL TURNO (`providerRequests`
+ *        riparte da 0 a ogni `talosLavora`): sei turni da tre attrezzi, 7.504 token, **zero** riassunti.
+ *   K2 — la proiezione viveva nella closure (`compacted`) e moriva col turno: il turno dopo rimandava la storia intera.
+ *   K3 — `compattaConversazione` teneva `messaggi[0]` e `[1]`, che sul desktop sono i DUE `system` (agente +
+ *        preambolo del progetto): la consegna della persona era buttata (`consegnaPresenteDopo: [false,false,false]`).
+ *   K4 — il riassuntore riceveva gli attrezzi (`attrezzi: tools`, 7 sul desktop, 4 in Piano).
+ *   K5 — in Piano `rawPrefixLength` contava anche il `system` effimero accodato dal kernel (`talosHarness.mjs:8216-8220`)
+ *        e la fetta dopo saltava l'`assistant` con la `tool_call`: **risultato di attrezzo orfano** (`…,0,1,1`).
+ *   K8 — un 400 «maximum context length» del fornitore uccideva il giro senza un ritentativo.
+ *   T1/T2 — il trial riceveva il CORRETTO in `prepare` e il GREZZO in `capture` ⇒ `CTX_HISTORY_DIVERGED`.
+ *
+ * Com'è, per decisione dell'owner del 24/09/2026 (brief comune F2):
+ *   - la SOGLIA è sulla finestra misurata: `usage.prompt_tokens` dell'ultima risposta del fornitore (l'ancora) più la
+ *     stima dei messaggi aggiunti dopo; senza ancora si stima tutto (caratteri/4) e lo si dichiara `stimato`. Scatta al
+ *     minore fra `TALOS_COMPACTION_TOKEN_CAP` (default 200K) e 0,75 × finestra (`finestraToken`: null oggi, la cabla
+ *     l'onda 2 dal catalogo). Valida dalla PRIMA richiesta del turno. Emergenza a 0,90 × finestra (tetto × 1,2 senza
+ *     finestra): bloccante anche quando la via normale è già stata tentata. Sotto soglia NON si compatta mai.
+ *   - la CODA LETTERALE: tutti i `system` iniziali, le ultime 3 richieste della persona, gli ultimi 2 scambi chiusi,
+ *     più l'indice meccanico (`compattazione-desktop.mjs`, funzioni pure: là stanno la forma e le fonti).
+ *   - il RIASSUNTORE non ha attrezzi, ha `max_tokens` dichiarato e ragionamento basso; un riassunto con attrezzo,
+ *     vuoto o troncato si ritenta subito UNA volta, poi si va avanti senza (e per questo turno la via normale tace).
+ *   - il PIANO si stacca prima e si riattacca dopo: non entra né nel riassunto né nell'archivio.
+ *   - il TRIAL riceve `messages` (corretto) E `originali` (grezzo), entrambi senza effimeri — contratto con F4.
+ *   - ogni compattazione produce un RECORD `talos.compattazione.v1` (`coveredThrough` + proiezione + numeri): emesso su
+ *     `onGiro({tipo:'compattazione-fine', record})` e sul risultato del giro in `recordDiCompattazione` (campo NUOVO,
+ *     gli altri restano com'erano). L'onda 2 lo persiste e lo ripassa come `recordCompattazioneIniziale`: il turno
+ *     dopo parte già proiettato senza ripagare il riassunto (`applicaRecord`).
+ *   - l'OVERFLOW dichiarato dal fornitore (`classificaErroreFornitore`) vale UN ritentativo con compattazione forzata;
+ *     poi l'errore passa com'è, con `classificazione:'contesto-pieno'` addosso.
+ *
+ * ⛔ Il PONTE dell'onda 1: la via normale scatta qui dentro, in `prepare`, bloccante. L'onda 2 la sposta in
+ *   background nel registro e lascia a `prepare` la sola emergenza: le funzioni pure sono già disegnate perché sia
+ *   solo un cambio di chiamante (stesso `dividi → richiesta → valuta → proiezione → record`, stesso `applicaRecord`).
+ *
+ * ⛔ Il ritentativo dell'overflow vive in `infer` e muta IN POSTO l'array che `prepare` ha restituito: il kernel
+ *   costruisce `invoke` leggendo `preparedContext?.messages` a OGNI chiamata (`talosHarness.mjs:8224-8228`), e
+ *   `chiamaConRitentaBase` serializza il corpo a ogni tentativo — quindi rimpiazzare il contenuto dell'array e
+ *   richiamare `invoke()` manda la storia compattata senza toccare il kernel (che non è di questa corsia). La forma
+ *   pulita sarebbe un `prepare` richiamato dal kernel dopo l'overflow: è scritta nel rapporto F1 come debito.
+ */
 function wrapContextHooks(original, {
   cartella, modello, chiave, fetchDiRete, segnaleStop, telemetry, extraUsage, emitOnGiro,
+  reasoning, soglie, recordIniziale = null, records = [],
 } = {}) {
-  let compacted = null;
-  let lastCompactionAttempt = -1;
+  let compacted = compattazione.eRecordValido(recordIniziale) ? recordIniziale : null;
   let compactions = 0;
   let providerRequests = 0;
+  /* L'ancora: il numero VERO del fornitore per la lista lunga `lunghezza`; null finché non arriva una risposta. */
+  let ancora = null;
+  let tentativiFallitiNelTurno = 0;
+  let compattazioniInefficaci = 0;
+  /* L'ultima compattazione ha trovato la coda letterale già al minimo (non rientrava nemmeno accorciata)? Solo allora
+   * un verdetto «inefficace» vuol dire «pavimento incomprimibile» (owner 26/09: ci si ferma solo lì). */
+  let ultimaCodaAlMinimo = false;
+  /* Il pavimento dell'ultima compattazione (testa + richieste letterali + coda già accorciata, stimato) e la stima
+   * della proiezione intera: al verdetto, lo scarto fra il numero VERO e la stima è ciò che i messaggi non contano
+   * (gli schemi degli attrezzi, il tokenizzatore) e si aggiunge al pavimento. */
+  let ultimoPavimentoStimato = 0;
+  let ultimaProiezioneStimata = 0;
+  /* Rete di sicurezza: quante compattazioni del turno sono rimaste sopra la soglia, per QUALUNQUE ragione. */
+  let inefficaciTotali = 0;
+  let attendeVerdetto = false;
+  let overflowRitentato = false;
+  /* La richiesta che `prepare` ha appena preparato: l'array (mutabile in posto), il grezzo e gli effimeri. */
+  let richiestaCorrente = null;
+  const reasoningRiassunto = compattazione.reasoningPerRiassunto(reasoning);
 
   const legacyMode = original === undefined || original === null;
   if (!legacyMode && typeof original.prepare !== 'function') {
     throw new TypeError('contextHooks.prepare must be a function when contextHooks is configured');
   }
 
-  const projectLegacy = (rawMessages) => {
-    if (!compacted) return rawMessages;
-    return [...compacted.messages, ...rawMessages.slice(compacted.rawPrefixLength)];
-  };
+  const projectLegacy = (rawMessages) => (compacted ? compattazione.applicaRecord(rawMessages, compacted) : rawMessages);
 
-  const maybeCompactLegacy = async (rawMessages, tools, requestIndex) => {
-    if (!legacyMode) return rawMessages;
-    let projected = projectLegacy(rawMessages);
-    if (requestIndex === lastCompactionAttempt || !kernel.serveCompattare(requestIndex, projected)) return projected;
-    lastCompactionAttempt = requestIndex;
-    emitOnGiro?.({ giro: requestIndex, tipo: 'compattazione-inizio' });
-    const result = await kernel.compattaConversazione(projected, (messages) => kernel.chiamaConRitenta({
+  const chiediRiassunto = async (messaggiRichiesta) => {
+    const esito = await kernel.chiamaConRitenta({
       modello,
       chiave,
-      messaggi: messages,
-      attrezzi: tools,
+      messaggi: messaggiRichiesta,
+      attrezzi: [],
+      maxOutputTokens: compattazione.MAX_TOKEN_RIASSUNTO,
+      ...(reasoningRiassunto ? { reasoning: reasoningRiassunto } : {}),
       ...(fetchDiRete ? { fetchDiRete } : {}),
       ...(segnaleStop ? { segnaleStop } : {}),
-    }));
-    emitOnGiro?.({ giro: requestIndex, tipo: 'compattazione-fine', compattato: result.compattato });
-    usageAdd(extraUsage, result.usage);
-    if (result.compattato) {
-      compacted = { rawPrefixLength: rawMessages.length, messages: result.messaggi };
-      projected = result.messaggi;
+    });
+    usageAdd(extraUsage, esito.usage);
+    return compattazione.valutaRispostaDiRiassunto(esito);
+  };
+
+  /**
+   * Una compattazione intera: divide, chiede il riassunto (un ritentativo immediato), costruisce proiezione e
+   * record. Ritorna la proiezione nuova, o `null` se non c'è niente da riassumere o il riassuntore ha fallito.
+   */
+  const compattaOra = async (rawMessages, projected, { requestIndex, motivo, tokenMisurati, misura, soglia }) => {
+    const divise = compattazione.dividiPerCompattazione(projected);
+    /*
+     * ⛔ Owner 26/09/2026, «Come Hermes»: la coda letterale sotto pressione si accorcia (inizio + fine degli esiti lunghi,
+     *   doppioni tolti) PRIMA di giudicare la proiezione — altrimenti due letture grandi nella coda la tengono sopra il
+     *   tetto per sempre (`compattazione-desktop.mjs`, «LA CODA LETTERALE NON È UN PAVIMENTO»).
+     */
+    const pressione = compattazione.riduciCodaSottoPressione(divise.coda, { budgetToken: compattazione.budgetCoda(soglie.soglia) });
+    const parti = { ...divise, coda: pressione.coda };
+    ultimaCodaAlMinimo = pressione.alMinimo;
+    ultimoPavimentoStimato = kernel.stimaTokenConversazione([...parti.testa, ...parti.richiesteLetterali, ...parti.coda]);
+    if (!parti.tagliabile) {
+      /* Niente da riassumere e la coda già dentro il suo tetto: nessun tentativo, nessun evento, nessuna chiamata. */
+      if (pressione.ridotti === 0) return null;
+      /* Niente da riassumere ma la coda si è accorciata: la proiezione nuova è deterministica, senza il riassuntore
+       * (Hermes `_FEASIBILITY_SKIP_MIDDLE_FRACTION`, `:1124-1127`: «dropping alone suffices»). */
+      emitOnGiro?.({ giro: requestIndex, tipo: 'compattazione-inizio', tokenMisurati, soglia, motivo });
+      const proiezioneSolaCoda = [...parti.testa, ...parti.mezzo, ...parti.coda];
+      const recordSolaCoda = compattazione.creaRecord({
+        coveredThrough: rawMessages.length,
+        riassunto: proiezioneSolaCoda,
+        tokenPrima: tokenMisurati,
+        tokenDopo: kernel.stimaTokenConversazione(proiezioneSolaCoda),
+        misura,
+        at: new Date().toISOString(),
+        modello,
+        indice: compacted?.indice ?? null,
+      });
+      compacted = recordSolaCoda;
+      ultimaProiezioneStimata = recordSolaCoda.tokenDopo ?? 0;
+      records.push(recordSolaCoda);
       compactions += 1;
+      ancora = null;
+      attendeVerdetto = true;
+      emitOnGiro?.({ giro: requestIndex, tipo: 'compattazione-fine', compattato: true, record: recordSolaCoda, soloCoda: true });
+      return proiezioneSolaCoda;
     }
-    return projected;
+    emitOnGiro?.({ giro: requestIndex, tipo: 'compattazione-inizio', tokenMisurati, soglia, motivo });
+    const richiesta = compattazione.costruisciRichiestaDiRiassunto(parti);
+    let esito;
+    for (let tentativo = 0; tentativo < 2; tentativo += 1) {
+      try { esito = await chiediRiassunto(richiesta); }
+      catch (errore) {
+        if (segnaleStop?.aborted) throw errore;
+        esito = { ok: false, riassunto: '', motivo: 'errore' };
+      }
+      if (esito.ok) break;
+    }
+    if (!esito.ok) {
+      tentativiFallitiNelTurno += 1;
+      emitOnGiro?.({ giro: requestIndex, tipo: 'compattazione-fine', compattato: false, motivo: esito.motivo });
+      return null;
+    }
+    const indice = compattazione.indiceMeccanico(parti.mezzo, { precedente: compacted?.indice ?? null });
+    const proiezione = compattazione.costruisciProiezione({
+      testa: parti.testa, richiesteLetterali: parti.richiesteLetterali, riassunto: esito.riassunto, indice: indice.testo, coda: parti.coda,
+    });
+    const record = compattazione.creaRecord({
+      coveredThrough: rawMessages.length,
+      riassunto: proiezione,
+      tokenPrima: tokenMisurati,
+      tokenDopo: kernel.stimaTokenConversazione(proiezione),
+      misura,
+      at: new Date().toISOString(),
+      modello,
+      indice,
+    });
+    compacted = record;
+    ultimaProiezioneStimata = record.tokenDopo ?? 0;
+    records.push(record);
+    compactions += 1;
+    ancora = null;
+    attendeVerdetto = true;
+    emitOnGiro?.({ giro: requestIndex, tipo: 'compattazione-fine', compattato: true, record });
+    return proiezione;
+  };
+
+  const maybeCompactLegacy = async (rawMessages, requestIndex) => {
+    const projected = projectLegacy(rawMessages);
+    const { token, misura } = compattazione.misuraOccupazione({ ancora, messaggi: projected, finestraToken: soglie.finestraToken });
+    const decisione = compattazione.decidiCompattazione({
+      token,
+      soglia: soglie.soglia,
+      emergenza: soglie.emergenza,
+      tentativiEsauriti: tentativiFallitiNelTurno >= 1 || compattazioniInefficaci >= 2 || inefficaciTotali >= INEFFICACI_TOTALI_MASSIME,
+      /*
+       * ⛔ L'emergenza non è infinita, e il primo giro di prove l'ha misurato: con un tetto sotto il «pavimento
+       *   incomprimibile» (system + preambolo + coda letterale) la proiezione restava sopra l'emergenza e l'adapter
+       *   pagava un riassunto a OGNI richiesta — 9 `emergenza` di fila nella prova, lo stesso ciclo di
+       *   anomalyco/opencode#50474 (22/09/2026). È il caso che Hermes descrive alla riga `context_compressor.py:1139-1142`
+       *   («the incompressible floor eats the reclaimed headroom and compaction re-fires every 1-2 turns»).
+       * ⇒ Due tentativi falliti, O due compattazioni riuscite ma inefficaci sul numero VERO, e per questo turno si
+       *   smette: la richiesta parte com'è e, se il fornitore dice «contesto pieno», resta il ritentativo K8.
+       * ⛔ Owner 26/09/2026: «inefficace» conta solo davanti al pavimento vero (vedi `aggiornaAncora`). La rete
+       *   `INEFFICACI_TOTALI_MASSIME` resta per il caso che la stima del pavimento sbagli: senza, un pavimento misurato
+       *   male tornerebbe il ciclo «un riassunto a ogni richiesta».
+       */
+      emergenzaEsaurita: tentativiFallitiNelTurno >= 2 || compattazioniInefficaci >= 2 || inefficaciTotali >= INEFFICACI_TOTALI_MASSIME,
+    });
+    if (!decisione.scatta) return projected;
+    const proiezione = await compattaOra(rawMessages, projected, {
+      requestIndex, motivo: decisione.motivo, tokenMisurati: token, misura, soglia: decisione.motivo === 'emergenza' ? soglie.emergenza : soglie.soglia,
+    });
+    return proiezione ?? projected;
+  };
+
+  /** Il numero vero del fornitore diventa l'ancora della prossima misura; e giudica l'ultima compattazione. */
+  const aggiornaAncora = (usage) => {
+    const promptTokens = Number(usage?.prompt_tokens);
+    if (!Number.isFinite(promptTokens) || promptTokens <= 0 || !richiestaCorrente) return;
+    ancora = { promptTokens, lunghezza: richiestaCorrente.lunghezzaProiezione, stima: kernel.stimaTokenConversazione(richiestaCorrente.array) };
+    if (attendeVerdetto) {
+      /* Come Hermes `_apply_real_prompt_verdict` (`context_compressor.py:2749-2782`): l'efficacia si giudica sul
+       * numero VERO della richiesta successiva, non sul numero di messaggi. */
+      attendeVerdetto = false;
+      /* Il contatore NON si azzera nel turno: un pavimento a cavallo della soglia alterna verdetti buoni e
+       * cattivi, e con l'azzeramento la prova misurava 4 compattazioni invece di 2. Due inefficaci e basta.
+       * ⛔ Owner 26/09/2026: ma «inefficace» conta SOLO se la coda era già al minimo — cioè se sopra la soglia resta
+       *   solo ciò che non si comprime (istruzioni, preambolo, attrezzi, l'ultimo esito accorciato). Con una coda
+       *   ancora riducibile il verdetto non spegne niente: la prossima compattazione la accorcerà (era il difetto del
+       *   24/09, due «inefficaci» con la coda piena di letture e poi 1,16 milioni di token). */
+      if (promptTokens >= soglie.soglia) {
+        inefficaciTotali += 1;
+        /* Il pavimento VERO: quello stimato più lo scarto misurato fra il numero del fornitore e la stima della
+         * proiezione (schemi degli attrezzi, tokenizzatore). Se da solo, più il riassunto massimo, arriva alla soglia,
+         * restano solo istruzioni e attrezzi: è il caso in cui Hermes smette (`context_compressor.py:2762-2782`). */
+        const scarto = Math.max(0, promptTokens - ultimaProiezioneStimata);
+        const pavimentoVero = ultimoPavimentoStimato + scarto + compattazione.MAX_TOKEN_RIASSUNTO;
+        if (ultimaCodaAlMinimo || pavimentoVero >= soglie.soglia) compattazioniInefficaci += 1;
+      }
+    }
   };
 
   const hooks = {
@@ -395,13 +589,17 @@ function wrapContextHooks(original, {
       telemetry.mark('provider-prepare');
       const requestIndex = providerRequests;
       providerRequests += 1;
+      /* Gli effimeri (il `system` del Piano) si staccano PRIMA di tutto: né riassunto, né archivio, né ancora. */
+      const { messaggi: grezzi, effimeri } = compattazione.staccaEffimeri(payload.messages);
       // Correct BEFORE any context-engine projection or legacy compaction so an
       // ambiguous raw tool result cannot be summarized into a false statement.
-      const inputMessages = correggiMessaggiDesktop(payload.messages, { cartella });
+      const inputMessages = correggiMessaggiDesktop(grezzi, { cartella });
       let prepared;
-      if (legacyMode) prepared = { messages: await maybeCompactLegacy(inputMessages, payload.tools, requestIndex) };
-      else prepared = await original.prepare({ ...payload, messages: inputMessages });
-      const messages = correggiMessaggiDesktop(prepared?.messages ?? inputMessages, { cartella });
+      if (legacyMode) prepared = { messages: await maybeCompactLegacy(inputMessages, requestIndex) };
+      else prepared = await original.prepare({ ...payload, messages: inputMessages, originali: grezzi });
+      const proiettati = correggiMessaggiDesktop(prepared?.messages ?? inputMessages, { cartella });
+      const messages = compattazione.riattaccaEffimeri(proiettati, effimeri);
+      if (legacyMode) richiestaCorrente = { array: messages, grezzi: inputMessages, effimeri, requestIndex, lunghezzaProiezione: proiettati.length };
       return { ...(prepared && typeof prepared === 'object' ? prepared : {}), messages };
     },
     async captureProviderResponse(payload) {
@@ -411,7 +609,39 @@ function wrapContextHooks(original, {
     },
     get compactions() { return compactions; },
   };
-  if (typeof original?.infer === 'function') hooks.infer = (...args) => original.infer(...args);
+  if (legacyMode) {
+    hooks.infer = async ({ signal } = {}, invoke) => {
+      try {
+        const esito = await invoke(signal);
+        aggiornaAncora(esito?.usage);
+        return esito;
+      } catch (errore) {
+        if (signal?.aborted || segnaleStop?.aborted) throw errore;
+        const classe = compattazione.classificaErroreFornitore(errore);
+        if (classe !== 'contesto-pieno') throw errore;
+        if (errore && typeof errore === 'object') errore.classificazione = classe;
+        if (overflowRitentato || !richiestaCorrente) throw errore;
+        overflowRitentato = true;
+        const { array, grezzi, effimeri, requestIndex } = richiestaCorrente;
+        const projected = projectLegacy(grezzi);
+        const { token, misura } = compattazione.misuraOccupazione({ ancora, messaggi: projected, finestraToken: soglie.finestraToken });
+        const proiezione = await compattaOra(grezzi, projected, { requestIndex, motivo: 'overflow', tokenMisurati: token, misura, soglia: soglie.soglia });
+        if (!proiezione) throw errore;
+        const nuova = compattazione.riattaccaEffimeri(correggiMessaggiDesktop(proiezione, { cartella }), effimeri);
+        array.splice(0, array.length, ...nuova);
+        richiestaCorrente.lunghezzaProiezione = nuova.length - effimeri.length;
+        try {
+          const esito = await invoke(signal);
+          aggiornaAncora(esito?.usage);
+          return esito;
+        } catch (secondo) {
+          /* Anche il ritentativo può finire in overflow: passa com'è, ma classificato come il primo. */
+          if (secondo && typeof secondo === 'object' && compattazione.classificaErroreFornitore(secondo) === 'contesto-pieno') secondo.classificazione = 'contesto-pieno';
+          throw secondo;
+        }
+      }
+    };
+  } else if (typeof original?.infer === 'function') hooks.infer = (...args) => original.infer(...args);
   return hooks;
 }
 
@@ -428,6 +658,15 @@ export async function talosLavora(input = {}) {
     esplicito: explicitTestCommand,
   });
   const onGiro = wrapOnGiro(input.onGiro, { cartella: input.cartella, telemetry, calls });
+  /*
+   * Le soglie si calcolano UNA volta per turno, dall'ambiente e dalla finestra che il chiamante passa
+   * (`finestraToken`: null oggi — la cabla l'onda 2 dal catalogo; con null vale il solo tetto assoluto).
+   */
+  const soglie = compattazione.calcolaSoglie({
+    tettoToken: compattazione.leggiTettoToken(process.env),
+    finestraToken: input.finestraToken ?? null,
+  });
+  const records = [];
   const contextHooks = wrapContextHooks(input.contextHooks, {
     cartella: input.cartella,
     modello: input.modello,
@@ -437,6 +676,10 @@ export async function talosLavora(input = {}) {
     telemetry,
     extraUsage,
     emitOnGiro: onGiro,
+    reasoning: input.reasoning,
+    soglie,
+    recordIniziale: input.recordCompattazioneIniziale ?? null,
+    records,
   });
   const onDelta = wrapOnDelta(input.onDelta, telemetry);
 
@@ -451,11 +694,14 @@ export async function talosLavora(input = {}) {
     });
     const usage = mergeUsage(result?.usage, extraUsage);
     const compattazioni = Number(result?.compattazioni ?? 0) + contextHooks.compactions;
-    if (!usage) return { ...result, compattazioni };
+    /* Campo NUOVO, additivo: i record di questo turno (vuoto se non si è compattato). Gli altri campi non cambiano. */
+    const recordDiCompattazione = [...records];
+    if (!usage) return { ...result, compattazioni, recordDiCompattazione };
     return {
       ...result,
       usage,
       compattazioni,
+      recordDiCompattazione,
       fuori: `${String(result?.detto ?? '').trim()}\n${JSON.stringify({ usage })}`.trim(),
     };
   } finally {

@@ -1,9 +1,18 @@
 import { validaFallbackProviders } from './model-destination.mjs';
 import { chiediMiglioramentoAlProvider } from './prompt-enhancer-provider.mjs';
+import { comprimiDiffPerMessaggio, promptMessaggioCommit, pulisciMessaggioGenerato } from './messaggio-commit.mjs'; // F6-1 ✨, 26/09
 import { CARTELLA_ASSISTENZA_PREDEFINITA, MAX_DOMANDA_ASSISTENZA, cercaAssistenza } from './assistenza.mjs';
-import { randomBytes, randomUUID } from 'node:crypto'; // 08/9, BH-06: il nonce CSP del documento, nuovo a ogni risposta
+import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto'; // 08/9, BH-06: il nonce CSP del documento, nuovo a ogni risposta; F3 (24/09): il gettone di spegnimento a tempo costante
+import { listRunSummariesForSession, readRunHistory, readRunState, removeRun } from './workflow/store.mjs';
+import { runStreamCursor, serveWorkflowRunStream } from './workflow/run-stream.mjs';
+import { startWorkflowRun } from './workflow/run-control.mjs';
+import { projectWorkflowOverview, projectWorkflowGroupPage, projectWorkflowNodeDetail, projectWorkflowEdgePage, projectWorkflowStateHistory, STATE_HISTORY_PAGE_MAX,
+  projectWorkflowLineage, LINEAGE_DIRECTIONS, LINEAGE_PAGE_MAX } from './workflow/read-model.mjs';
+import { approveWorkflowProposal, listWorkflowProposals, readPlannedWorkflowGraph,
+  readWorkflowProposal, reviseWorkflowBudgets } from './workflow/planning-control.mjs';
 import { leggiArtefatto as leggiArtefattoReale } from './artifact-store.mjs';
 import { nomiPerContentDisposition } from './workspace-files.mjs'; // PO-05: le due forme del nome per Content-Disposition (RFC 6266)
+import { creaLasciapassarePagine } from './pagine-lasciapassare.mjs'; // F5: gli indirizzi-capacità delle pagine HTML rese
 import { verificaIncorniciabile } from './browser-frame.mjs';
 import { decidiVia } from './browser-proxy-universale.mjs'; // 07/9: la scelta della corsia sta in un posto solo // K-I 06/9: la cornice del Browser si decide dalle intestazioni della pagina
 import { proxyPagina } from './browser-proxy.mjs';
@@ -102,6 +111,7 @@ const API_ERROR_CODES = new Set([
   'BROWSER_VIVO_SENZA_CONNESSIONE',
   'CONFIG_INVALID',
   'QUERY_INVALID',
+  'MODEL_ID_INVALID', 'REASONING_INVALID', 'PERMISSIONS_INVALID', // 25/09/2026 sera: i rifiuti d'avvio dicono il motivo vero
   'REPORT_UNAVAILABLE',
   'PAYLOAD_LIMIT',
   'METHOD_NOT_ALLOWED',
@@ -110,6 +120,13 @@ const API_ERROR_CODES = new Set([
   'TASK_CATALOG_UNAVAILABLE',
   'SESSION_NOT_READY',
   'SESSION_STORE_WRITE_FAILED',
+  'SESSION_STORE_HEADER_FAILED',
+  'SESSION_STORE_FS_UNSUPPORTED', // 24/09/2026: cura exFAT, disco senza collegamenti né ripiego
+  'SESSION_STORE_DELETE_FAILED',
+  'SESSION_STORE_AMBIGUOUS',
+  'SESSION_STORE_BUSY', // F3 (24/09): il negozio ha una scrittura in volo e il writer sincrono l'ha rispettata
+  'SERVER_SHUTTING_DOWN', // F3 (24/09): il fence dello spegnimento gentile del registro
+  'COMPACTION_NOT_FOUND', // F3 (24/09): Annulla su un identificativo che non è l'ultima compattazione
   'AUTOMATION_INVALID',
   'CATALOG_UNREACHABLE',
   'CATALOG_UPSTREAM_ERROR',
@@ -163,8 +180,26 @@ const API_ERROR_CODES = new Set([
   'PLUGIN_INVALID',
   /* ⭐ 30/8, QA visiva (Task 14) — DELETE su una sessione ancora viva (né conclusa né interrotta): un controller attivo potrebbe star lavorando davvero. */
   'SESSION_STILL_RUNNING',
+  /* Owner 26/09/2026: una conversazione con un Workflow ancora in corso non si elimina (i run si eliminano con lei, solo finiti). */
+  'WORKFLOW_RUN_NOT_FINISHED',
   /* ⭐ 07/9, O-49 — la risposta a una richiesta di consenso che nel frattempo non è più in attesa. */
   'APPROVAL_NOT_PENDING',
+  'QUESTION_NOT_PENDING',
+  /* ⛔ F3-10, 23/09/2026 — il modo Workflow è ritirato (400). */
+  'MODE_WORKFLOW_RETIRED',
+  /* ⛔ CTX-D2, 23/09/2026 — la risposta Ask non è stata salvata: mai un 200 (vedi rispondiDomanda). */
+  'QUESTION_ANSWER_NOT_SAVED',
+  /* ⛔ 24/09/2026, decisioni owner 36-39 — la scelta sul piano approvabile. */
+  'PLAN_NOT_PENDING', 'PLAN_STALE', 'PLAN_DECISION_NOT_SAVED', 'PLAN_APPROVAL_ORIGIN_FORBIDDEN',
+  'WORKFLOW_STORE_UNAVAILABLE',
+  'WORKFLOW_PROPOSAL_NOT_FOUND', 'WORKFLOW_DEFINITION_HASH_MISMATCH',
+  'WORKFLOW_COMMAND_CONFLICT', 'WORKFLOW_APPROVAL_CONFLICT', 'WORKFLOW_STORE_NEEDS_ATTENTION', 'WORKFLOW_APPROVAL_ORIGIN_FORBIDDEN',
+  /* F3-51c (25/09/2026): Avvia e i controlli del run. */
+  'WORKFLOW_RUNTIME_NOT_READY', 'WORKFLOW_RUN_STATE_CONFLICT', 'WORKFLOW_DEFINITION_NOT_APPROVED', 'WORKFLOW_START_UNSUPPORTED',
+  'WORKFLOW_COMMAND_ORIGIN_FORBIDDEN',
+  /* F3-33b (25/09/2026): «Modifica» i tetti (una versione nuova) e la v1 superata dall'approvazione della v2. */
+  'WORKFLOW_REVISION_INVALID', 'WORKFLOW_REVISION_EMPTY', 'WORKFLOW_VERSION_NOT_LATEST', 'WORKFLOW_ALREADY_STARTED',
+  'WORKFLOW_VERSION_SUPERSEDED', 'WORKFLOW_DEFINITION_INVALID',
   'WORKSPACE_LAUNCH_UNAUTHORIZED',
   'WORKSPACE_LAUNCH_NOT_AVAILABLE',
   'WORKSPACE_NOT_AVAILABLE',
@@ -181,12 +216,33 @@ const API_ERROR_CODES = new Set([
   /*
    * ⭐⭐⭐ 05/9, W1-05 — lo stato Git di una sessione (src/git-service.mjs),
    * la sorgente «Non committato» della Review a due sorgenti (W1-06).
-   * ⛔ Non c'è un codice per il push, perché non c'è un push: si chiede
-   * all'owner, ogni volta.
+   * ⛔ Dal 05/09 al 27/09 non c'era un codice per il push perché non c'era un push. F6-2 (27/09) lo apre con le sue
+   * regole (in testa a `git-service.mjs`): i codici del remoto stanno in fondo a questo elenco.
    */
-  'GIT_NOT_A_REPOSITORY', 'GIT_PATH_INVALID', 'GIT_PATHS_REQUIRED', 'GIT_MESSAGE_REQUIRED',
+  'GIT_NOT_A_REPOSITORY', 'GIT_ALREADY_A_REPOSITORY', 'GIT_INIT_NEEDS_CONFIRM', 'GIT_PATH_INVALID', 'GIT_PATHS_REQUIRED', 'GIT_MESSAGE_REQUIRED',
   'GIT_NOTHING_TO_COMMIT', 'GIT_WORKTREE_DIFFERS', 'GIT_COMMAND_FAILED', 'GIT_STORE_UNAVAILABLE',
   'GIT_TIMEOUT', 'GIT_OUTPUT_TOO_LARGE',
+  // ⭐ F6-1 (26/09): la scheda GitHub — diff, annulla, commit di ciò che è preparato
+  'GIT_DIFF_AREA_INVALID', 'GIT_PATH_UNCHANGED', 'GIT_NOTHING_TO_DISCARD', 'GIT_CONFLICTS', 'GIT_NESTED_REPO',
+  'GIT_STAGED_CHANGED', 'GIT_NOTHING_STAGED', 'GIT_STAGED_OUTSIDE',
+  // ⭐ F6-1 passo 3 (26/09): ultimo commit, rami, messi da parte
+  'GIT_HEAD_CHANGED', 'GIT_COMMIT_PUSHED', 'GIT_MERGE_COMMIT', 'GIT_COMMIT_OUTSIDE',
+  'GIT_BRANCH_INVALID', 'GIT_BRANCH_EXISTS', 'GIT_BRANCH_NOT_FOUND', 'GIT_BRANCH_CURRENT', 'GIT_BRANCH_NOT_MERGED', 'GIT_SWITCH_BLOCKED',
+  'GIT_NOTHING_TO_STASH', 'GIT_STASH_CHANGED', 'GIT_STASH_OUTSIDE', 'GIT_STASH_CONFLICT',
+  // ⭐ F6-2 (27/09): il remoto — recupera, scarica, invia
+  'GIT_NO_REMOTE', 'GIT_REMOTE_UNKNOWN', 'GIT_REMOTE_REQUIRED', 'GIT_REMOTE_MISMATCH', 'GIT_NO_UPSTREAM', 'GIT_UPSTREAM_GONE',
+  'GIT_DETACHED', 'GIT_BEHIND', 'GIT_WORKTREE_DIRTY', 'GIT_PULL_FAILED', 'GIT_PUSH_REJECTED', 'GIT_FETCH_RUNNING', 'GIT_ABORTED',
+  // ⭐ F6-2 passo 4 (27/09): le modifiche di un commit del grafo
+  'GIT_COMMIT_INVALID', 'GIT_COMMIT_UNKNOWN',
+  // ⭐ F6-3 (27/09): GitHub con `gh`
+  'GH_STORE_UNAVAILABLE', 'GH_NOT_INSTALLED', 'GH_NOT_LOGGED_IN', 'GH_UNSUPPORTED_PLATFORM', 'GH_DOWNLOAD_FAILED', 'GH_CHECKSUM_MISMATCH',
+  'GH_EXTRACT_FAILED', 'GH_TIMEOUT', 'GH_COMMAND_FAILED', 'GH_OUTPUT_INVALID', 'GH_OUTPUT_TOO_LARGE', 'GH_NOT_GITHUB', 'GH_BRANCH_NOT_PUSHED',
+  'GH_BASE_UNKNOWN', 'GH_INPUT_INVALID', 'GH_LOGIN_FAILED', 'GH_GIT_FAILED',
+  // ⭐ F6-1 (26/09): i pezzi del diff
+  'GIT_HUNK_INVALID', 'GIT_DIFF_CHANGED', 'GIT_HUNK_UNSUPPORTED', 'GIT_HUNK_FAILED',
+  // ⭐ F6-1 ✨ (26/09): il modello della sessione. SESSION_MODEL_UNKNOWN la dava già `compatta`, ma non era in elenco e usciva
+  //   come INTERNAL_ERROR 500: da qui vale per tutte e due (409, con la frase vera).
+  'SESSION_MODEL_UNKNOWN', 'MODEL_CALL_FAILED',
   'RUNTIME_NOT_AVAILABLE',
   'RUNTIME_UNREACHABLE',
   'RUNTIME_OPERATION_UNSUPPORTED',
@@ -222,6 +278,30 @@ const API_ERROR_CODES = new Set([
 ]);
 
 const STATUS_BY_CODE = Object.freeze({
+  WORKFLOW_STORE_UNAVAILABLE: 503,
+  WORKFLOW_PROPOSAL_NOT_FOUND: 404,
+  WORKFLOW_DEFINITION_HASH_MISMATCH: 409,
+  WORKFLOW_COMMAND_CONFLICT: 409,
+  WORKFLOW_APPROVAL_CONFLICT: 409,
+  WORKFLOW_STORE_NEEDS_ATTENTION: 503,
+  WORKFLOW_APPROVAL_ORIGIN_FORBIDDEN: 403,
+  /*
+   * F3-51c (25/09/2026) — lo stato del run non ammette il comando (una pausa su un run in pausa, un Riprova senza passi falliti,
+   *   un annullamento su un run finito): 409, come GitHub Actions («Cancel a workflow run»: 409 quando non si può) e Hermes
+   *   (`/v1/runs/{id}/stop`: 409 se il run non è attivo qui). Lo stesso id con un altro contenuto resta 409 come per Approva
+   *   (`WORKFLOW_COMMAND_CONFLICT`), anche se la bozza IETF Idempotency-Key suggerisce 422: la coerenza con la rotta esistente vince.
+   */
+  WORKFLOW_RUN_STATE_CONFLICT: 409,
+  WORKFLOW_DEFINITION_NOT_APPROVED: 409,
+  WORKFLOW_START_UNSUPPORTED: 422,
+  WORKFLOW_RUNTIME_NOT_READY: 503,
+  WORKFLOW_COMMAND_ORIGIN_FORBIDDEN: 403,
+  WORKFLOW_REVISION_INVALID: 400,
+  WORKFLOW_REVISION_EMPTY: 400,
+  WORKFLOW_VERSION_NOT_LATEST: 409,
+  WORKFLOW_ALREADY_STARTED: 409,
+  WORKFLOW_VERSION_SUPERSEDED: 409,
+  WORKFLOW_DEFINITION_INVALID: 422,
   BROWSER_VIVO_NON_CONFIGURATO: 503,
   BROWSER_VIVO_ASSENTE: 503,
   BROWSER_VIVO_SCHEDA_ASSENTE: 409,
@@ -232,6 +312,9 @@ const STATUS_BY_CODE = Object.freeze({
   BROWSER_VIVO_SENZA_CONNESSIONE: 500,
   CONFIG_INVALID: 500,
   QUERY_INVALID: 400,
+  MODEL_ID_INVALID: 400,
+  REASONING_INVALID: 400,
+  PERMISSIONS_INVALID: 400,
   /* ⛔ D-10F: una scelta diversa da wsl2/windows/null e' un errore di CHI CHIEDE, non del server.
      Senza dichiararlo qui, `normalizeError` lo degradava a INTERNAL_ERROR e rispondeva 500 —
      misurato dal vivo con `{"dove":"marte"}`. */
@@ -272,8 +355,79 @@ const STATUS_BY_CODE = Object.freeze({
    * committare in silenzio la cosa sbagliata.
    */
   GIT_NOT_A_REPOSITORY: 409,
+  GIT_ALREADY_A_REPOSITORY: 409,
+  GIT_INIT_NEEDS_CONFIRM: 409,
   GIT_NOTHING_TO_COMMIT: 409,
   GIT_WORKTREE_DIFFERS: 409,
+  /* ⭐ F6-1: stessi 409 — la richiesta è legittima, è lo stato attuale (l'area preparata cambiata, niente di preparato, file
+     preparati fuori dalla sessione, un conflitto, un repository annidato) a fermarla, e si risolve guardando di nuovo. */
+  GIT_PATH_UNCHANGED: 409,
+  GIT_NOTHING_TO_DISCARD: 409,
+  GIT_CONFLICTS: 409,
+  GIT_NESTED_REPO: 409,
+  GIT_STAGED_CHANGED: 409,
+  GIT_NOTHING_STAGED: 409,
+  GIT_STAGED_OUTSIDE: 409,
+  /* ⭐ F6-1 passo 3: stessi 409 — HEAD o la pila dei messi da parte cambiati sotto la scheda, un commit già inviato o di unione,
+     un ramo che esiste già / non esiste / è quello corrente / non è unito, un cambio che sovrascriverebbe, niente da mettere da parte. */
+  GIT_HEAD_CHANGED: 409,
+  GIT_COMMIT_PUSHED: 409,
+  GIT_MERGE_COMMIT: 409,
+  GIT_COMMIT_OUTSIDE: 409,
+  GIT_BRANCH_EXISTS: 409,
+  GIT_BRANCH_NOT_FOUND: 409,
+  GIT_BRANCH_CURRENT: 409,
+  GIT_BRANCH_NOT_MERGED: 409,
+  GIT_SWITCH_BLOCKED: 409,
+  GIT_NOTHING_TO_STASH: 409,
+  GIT_STASH_CHANGED: 409,
+  GIT_STASH_OUTSIDE: 409,
+  GIT_STASH_CONFLICT: 409,
+  /* ⭐ F6-1, pezzi: il diff è cambiato sotto la scheda, il file non ha pezzi (nuovo, binario, troppo lungo), git non riesce ad
+     applicare il pezzo — tutti stati da guardare di nuovo; un pezzo o un'azione che non esistono sono una domanda sbagliata (422). */
+  GIT_DIFF_CHANGED: 409,
+  GIT_HUNK_UNSUPPORTED: 409,
+  GIT_HUNK_FAILED: 409,
+  // ⭐ F6-2 (27/09): il remoto — uno stato che non permette l'azione è un 409; un remoto che non accetta è un 502; fermato è un 409
+  GIT_NO_REMOTE: 409,
+  GIT_REMOTE_MISMATCH: 409,
+  GIT_NO_UPSTREAM: 409,
+  GIT_UPSTREAM_GONE: 409,
+  GIT_DETACHED: 409,
+  GIT_BEHIND: 409,
+  GIT_WORKTREE_DIRTY: 409,
+  GIT_FETCH_RUNNING: 409,
+  GIT_ABORTED: 409,
+  GIT_PULL_FAILED: 502,
+  GIT_PUSH_REJECTED: 502,
+  GIT_HUNK_INVALID: 422,
+  GIT_REMOTE_UNKNOWN: 422,
+  GIT_REMOTE_REQUIRED: 422,
+  GIT_COMMIT_INVALID: 422,
+  // ⭐ F6-3 (27/09): uno stato che non permette l'azione è un 409; GitHub o il download che non rispondono bene, 502/504
+  GH_STORE_UNAVAILABLE: 503,
+  GH_NOT_INSTALLED: 409,
+  GH_NOT_LOGGED_IN: 409,
+  GH_UNSUPPORTED_PLATFORM: 409,
+  GH_NOT_GITHUB: 409,
+  GH_BRANCH_NOT_PUSHED: 409,
+  GH_BASE_UNKNOWN: 422,
+  GH_INPUT_INVALID: 422,
+  GH_DOWNLOAD_FAILED: 502,
+  GH_CHECKSUM_MISMATCH: 502,
+  GH_EXTRACT_FAILED: 502,
+  GH_COMMAND_FAILED: 502,
+  GH_OUTPUT_INVALID: 502,
+  GH_OUTPUT_TOO_LARGE: 502,
+  GH_LOGIN_FAILED: 502,
+  GH_GIT_FAILED: 502,
+  GH_TIMEOUT: 504,
+  GIT_COMMIT_UNKNOWN: 404,
+  SESSION_MODEL_UNKNOWN: 409,
+  /** Il fornitore del modello non ha risposto (o ha risposto vuoto): un guasto A MONTE, come CATALOG_UPSTREAM/HF_IMAGE_UPSTREAM. */
+  MODEL_CALL_FAILED: 502,
+  GIT_BRANCH_INVALID: 422,
+  GIT_DIFF_AREA_INVALID: 422,
   GIT_PATH_INVALID: 422,
   GIT_PATHS_REQUIRED: 422,
   GIT_MESSAGE_REQUIRED: 422,
@@ -284,6 +438,13 @@ const STATUS_BY_CODE = Object.freeze({
   GIT_COMMAND_FAILED: 500,
   HF_TRANSFER_COLLISION: 409,
   SESSION_STORE_WRITE_FAILED: 503,
+  SESSION_STORE_HEADER_FAILED: 500,
+  SESSION_STORE_FS_UNSUPPORTED: 500,
+  SESSION_STORE_DELETE_FAILED: 500,
+  SESSION_STORE_AMBIGUOUS: 503,
+  SESSION_STORE_BUSY: 503,
+  SERVER_SHUTTING_DOWN: 503,
+  COMPACTION_NOT_FOUND: 404,
   /** ⭐ 27/8 — un tetto duro dell'automazione violato (intervallo/limite fuori range) è un errore di CONTENUTO, non di forma: stesso status di ROW_INVALID. */
   AUTOMATION_INVALID: 422,
   /** ⭐ 27/8 — il catalogo modelli dipende da OpenRouter: quando è irraggiungibile o risponde male non è colpa del client. */
@@ -341,6 +502,7 @@ const STATUS_BY_CODE = Object.freeze({
   PLUGIN_INVALID: 422,
   /** ⭐ 30/8 — stesso status di SESSION_NOT_READY: la richiesta è legittima ma lo stato attuale (ancora in corso) la blocca. */
   SESSION_STILL_RUNNING: 409,
+  WORKFLOW_RUN_NOT_FINISHED: 409,
   /**
    * ⛔⛔⛔ 07/9, O-49 — era QUERY_INVALID (400), e l’owner leggeva a schermo
    * «Risposta non riuscita · Query non valida» premendo Approva su una scheda del permesso.
@@ -355,6 +517,18 @@ const STATUS_BY_CODE = Object.freeze({
    * che è cambiato sotto.
    */
   APPROVAL_NOT_PENDING: 409,
+  QUESTION_NOT_PENDING: 409,
+  /** ⛔ F3-10, 23/09/2026 — un valore ritirato è una richiesta sbagliata; Piano con figlie vive è lo stato che la blocca. */
+  MODE_WORKFLOW_RETIRED: 400,
+  /** ⛔ CTX-D2, 23/09/2026 — stesso 500 di SESSION_STORE_HEADER_FAILED/DELETE_FAILED: il salvataggio non è riuscito e l'esito è definitivo (la domanda è chiusa), ripetere non lo cambia. */
+  QUESTION_ANSWER_NOT_SAVED: 500,
+  /** ⛔ 24/09/2026 — la scelta sul piano: 409 quando lo stato è cambiato sotto (piano già deciso, o una revisione più nuova a
+   *  schermo), come APPROVAL_NOT_PENDING; 500 se il salvataggio della scelta non riesce (il piano resta in attesa); 403 fuori
+   *  dalla finestra TALOS, come l'approvazione dei Workflow (la scelta alza il permesso della sessione). */
+  PLAN_NOT_PENDING: 409,
+  PLAN_STALE: 409,
+  PLAN_DECISION_NOT_SAVED: 500,
+  PLAN_APPROVAL_ORIGIN_FORBIDDEN: 403,
   WORKSPACE_LAUNCH_UNAUTHORIZED: 403,
   WORKSPACE_LAUNCH_NOT_AVAILABLE: 410,
   WORKSPACE_NOT_AVAILABLE: 422,
@@ -440,8 +614,15 @@ const STATUS_BY_CODE = Object.freeze({
 });
 
 const MESSAGE_BY_CODE = Object.freeze({
+  WORKFLOW_STORE_UNAVAILABLE: 'Workflow non disponibile su questo server',
   CONFIG_INVALID: 'Configurazione non valida',
   QUERY_INVALID: 'Query non valida',
+  /* ⛔⛔ 25/09/2026 sera, decisione owner «motivo vero»: un avvio rifiutato diceva «Avvio non riuscito: Query non valida» (il
+     Qwen dell'owner). I rifiuti d'avvio che una persona può incontrare hanno una frase sua, come O-49 qui sotto: che cosa
+     scegliere di nuovo e dove. Le frasi tecniche dei controlli (formato OpenRouter, {effort?, summary?}) restano nei log. */
+  MODEL_ID_INVALID: 'Il modello scelto ha un nome che questo server non riconosce: sceglilo di nuovo dalla pillola del modello',
+  REASONING_INVALID: 'Il livello di ragionamento scelto non è fra quelli ammessi: sceglilo di nuovo dalla pillola del ragionamento',
+  PERMISSIONS_INVALID: 'I permessi scelti non sono fra quelli ammessi: sceglili di nuovo dalla pillola dei permessi',
   REPORT_UNAVAILABLE: 'Rapporto non ancora prodotto',
   SEARCH_SOURCE_INVALID: 'Fonte di ricerca non valida',
   SEARCH_KEY_REQUIRED: 'Serve una chiave per questa fonte',
@@ -460,6 +641,8 @@ const MESSAGE_BY_CODE = Object.freeze({
   BROWSER_PROXY_TROPPO_GRANDE: 'La pagina supera i 5 MB',
   BROWSER_PROXY_IRRAGGIUNGIBILE: 'La pagina non risponde',
   GIT_NOT_A_REPOSITORY: 'Questa cartella non è un repository git',
+  GIT_ALREADY_A_REPOSITORY: 'Questa cartella è già in un repository git',
+  GIT_INIT_NEEDS_CONFIRM: 'La cartella contiene la tua cartella utente: serve una conferma',
   GIT_PATH_INVALID: 'Percorso non valido per questa sessione',
   GIT_PATHS_REQUIRED: 'Serve almeno un percorso esplicito',
   GIT_MESSAGE_REQUIRED: 'Il commit vuole un messaggio',
@@ -469,6 +652,69 @@ const MESSAGE_BY_CODE = Object.freeze({
   GIT_STORE_UNAVAILABLE: 'Le funzioni git non sono disponibili su questo server',
   GIT_TIMEOUT: 'git non ha risposto entro il tempo massimo',
   GIT_OUTPUT_TOO_LARGE: 'L’uscita di git supera il limite consentito',
+  GIT_DIFF_AREA_INVALID: 'Area del diff non valida',
+  GIT_PATH_UNCHANGED: 'Questo file non ha modifiche da mostrare in quest’area',
+  GIT_NOTHING_TO_DISCARD: 'Non c’è niente da annullare su questi file',
+  GIT_CONFLICTS: 'Prima vanno risolti i conflitti',
+  GIT_NESTED_REPO: 'È un altro repository: non si tocca da qui',
+  GIT_STAGED_CHANGED: 'Ciò che è preparato è cambiato: guarda di nuovo e riprova',
+  GIT_NOTHING_STAGED: 'Non c’è niente di preparato da committare',
+  GIT_STAGED_OUTSIDE: 'Ci sono file preparati fuori dalla cartella della sessione',
+  GIT_HEAD_CHANGED: 'L’ultimo commit è cambiato: guarda di nuovo e riprova',
+  GIT_COMMIT_PUSHED: 'L’ultimo commit è già stato inviato: non si riscrive',
+  GIT_MERGE_COMMIT: 'L’ultimo commit è un’unione: non si annulla da qui',
+  GIT_COMMIT_OUTSIDE: 'L’ultimo commit tocca file fuori dalla cartella della sessione',
+  GIT_BRANCH_INVALID: 'Nome di ramo non valido',
+  GIT_BRANCH_EXISTS: 'Esiste già un ramo con questo nome',
+  GIT_BRANCH_NOT_FOUND: 'Questo ramo non esiste',
+  GIT_BRANCH_CURRENT: 'Il ramo corrente non si elimina',
+  GIT_BRANCH_NOT_MERGED: 'Il ramo ha commit che non sono in nessun altro ramo',
+  GIT_SWITCH_BLOCKED: 'Ci sono modifiche che il cambio di ramo sovrascriverebbe',
+  // ⭐ F6-2 (27/09): il remoto
+  GIT_NO_REMOTE: 'Questo repository non ha nessun remoto',
+  GIT_REMOTE_UNKNOWN: 'Remoto sconosciuto',
+  GIT_REMOTE_REQUIRED: 'Scegli il remoto su cui pubblicare il ramo',
+  GIT_REMOTE_MISMATCH: 'Il ramo segue un altro remoto',
+  GIT_NO_UPSTREAM: 'Il ramo non segue nessun ramo remoto: prima si pubblica',
+  GIT_UPSTREAM_GONE: 'Il ramo remoto non esiste più',
+  GIT_DETACHED: 'Nessun ramo: la HEAD è staccata',
+  GIT_BEHIND: 'Il ramo remoto ha commit che qui non ci sono: prima scarica',
+  GIT_WORKTREE_DIRTY: 'Scaricare sovrascriverebbe file con modifiche non committate',
+  GIT_PULL_FAILED: 'git pull non è riuscito',
+  GIT_PUSH_REJECTED: 'Il remoto non ha accettato l’invio',
+  GIT_FETCH_RUNNING: 'Un recupero è già in corso',
+  GIT_ABORTED: 'Fermato',
+  // ⭐ F6-2 passo 4 (27/09): le modifiche di un commit del grafo
+  GIT_COMMIT_INVALID: 'Un commit si indica col suo hash intero',
+  // ⭐ F6-3 (27/09): GitHub con `gh`
+  GH_STORE_UNAVAILABLE: 'GitHub non è disponibile su questo server',
+  GH_NOT_INSTALLED: 'GitHub CLI non è installata',
+  GH_NOT_LOGGED_IN: 'GitHub non è collegato',
+  GH_UNSUPPORTED_PLATFORM: 'TALOS non sa installare GitHub CLI su questo sistema',
+  GH_DOWNLOAD_FAILED: 'Il download di GitHub CLI non è riuscito',
+  GH_CHECKSUM_MISMATCH: 'Il file scaricato non ha l’impronta attesa: GitHub CLI non è stata installata',
+  GH_EXTRACT_FAILED: 'L’estrazione di GitHub CLI non è riuscita',
+  GH_TIMEOUT: 'GitHub non ha risposto entro il tempo massimo',
+  GH_COMMAND_FAILED: 'GitHub ha risposto con un errore',
+  GH_OUTPUT_INVALID: 'La risposta di GitHub non è leggibile',
+  GH_OUTPUT_TOO_LARGE: 'La risposta di GitHub supera il limite consentito',
+  GH_NOT_GITHUB: 'Il remoto del ramo non è su github.com',
+  GH_BRANCH_NOT_PUSHED: 'Il ramo va prima inviato su GitHub',
+  GH_BASE_UNKNOWN: 'Il ramo di base non c’è sul remoto',
+  GH_INPUT_INVALID: 'Titolo, testo o base della PR non validi',
+  GH_LOGIN_FAILED: 'GitHub CLI non ha dato un codice di accesso',
+  GH_GIT_FAILED: 'git non è riuscito',
+  GIT_COMMIT_UNKNOWN: 'Questo commit non c’è nel repository',
+  GIT_NOTHING_TO_STASH: 'Non ci sono modifiche da mettere da parte',
+  GIT_STASH_CHANGED: 'Ciò che è messo da parte è cambiato: guarda di nuovo',
+  GIT_STASH_OUTSIDE: 'Questa voce tocca file fuori dalla cartella della sessione',
+  GIT_STASH_CONFLICT: 'Riprendendo si sono creati conflitti: la voce resta messa da parte',
+  GIT_HUNK_INVALID: 'Pezzo o azione non validi',
+  GIT_DIFF_CHANGED: 'Il file è cambiato: guarda di nuovo le differenze',
+  GIT_HUNK_UNSUPPORTED: 'Questo file si prepara intero: non ha pezzi',
+  GIT_HUNK_FAILED: 'git non riesce ad applicare questo pezzo',
+  SESSION_MODEL_UNKNOWN: 'Non so quale modello usa questa sessione',
+  MODEL_CALL_FAILED: 'Il modello non ha risposto',
   PAYLOAD_LIMIT: 'Il contenuto supera la misura che il server accetta: accorcia il messaggio, oppure metti il testo in un file e allegalo',
   METHOD_NOT_ALLOWED: 'Metodo non consentito',
   NOT_FOUND: 'Risorsa non trovata',
@@ -509,6 +755,7 @@ const MESSAGE_BY_CODE = Object.freeze({
   MCP_INVALID: 'Configurazione server MCP non valida',
   PLUGIN_INVALID: 'Configurazione plugin non valida',
   SESSION_STILL_RUNNING: 'Sessione ancora in corso — fermala prima di eliminarla',
+  WORKFLOW_RUN_NOT_FINISHED: 'Un Workflow di questa conversazione è ancora in corso — annullalo prima di eliminarla',
   BROWSER_VIVO_NON_CONFIGURATO: 'Il browser pilotato non è configurato su questo TALOS',
   BROWSER_VIVO_ASSENTE: 'Non trovo un browser Chromium su questo computer: TALOS ne usa uno già installato, Chrome o Edge',
   BROWSER_VIVO_SCHEDA_ASSENTE: 'Questa sessione non ha una pagina aperta nel browser pilotato',
@@ -519,6 +766,13 @@ const MESSAGE_BY_CODE = Object.freeze({
   BROWSER_VIVO_SENZA_CONNESSIONE: 'Manca il modo di collegarsi al browser pilotato',
   /* ⛔ 07/9, O-49: questo testo finisce dentro il fumetto rosso in basso a destra — deve dire cos’è successo, non «Query non valida». */
   APPROVAL_NOT_PENDING: 'Questa richiesta di permesso non è più in attesa: la sessione è andata avanti',
+  QUESTION_NOT_PENDING: 'Questa domanda non è più in attesa: la sessione è andata avanti',
+  QUESTION_ANSWER_NOT_SAVED: 'La risposta non è stata salvata: la domanda è stata chiusa senza risposta',
+  PLAN_NOT_PENDING: 'Questo piano non aspetta più una scelta: la sessione è andata avanti',
+  PLAN_STALE: 'Il piano a schermo non è più l’ultimo: leggi la versione aggiornata e scegli su quella',
+  PLAN_DECISION_NOT_SAVED: 'La scelta sul piano non è stata salvata: il piano aspetta ancora, puoi riprovare',
+  PLAN_APPROVAL_ORIGIN_FORBIDDEN: 'La scelta sul piano deve partire da questa finestra di TALOS',
+  MODE_WORKFLOW_RETIRED: 'La modalità Workflow non esiste più: scegli Normale o Piano',
   WORKSPACE_LAUNCH_UNAUTHORIZED: 'Il comando locale non è autorizzato. Riavvia TALOS e riprova.',
   WORKSPACE_LAUNCH_NOT_AVAILABLE: 'Questo collegamento non è più disponibile. Usa di nuovo “Apri cartella con TALOS”.',
   WORKSPACE_NOT_AVAILABLE: 'La cartella non è disponibile. Controlla che esista e che TALOS possa lavorarci, poi riprova.',
@@ -961,12 +1215,142 @@ function sendJson(res, statusCode, value, method, extraHeaders) {
   send(res, statusCode, 'application/json; charset=utf-8', JSON.stringify(value), method, extraHeaders);
 }
 
+/*
+ * F5 File reader (26/09/2026) — i tipi della rotta `/pagina/`, dall'ESTENSIONE (con `nosniff`): ciò che una pagina HTML
+ * carica accanto a sé. Tutto il resto esce `application/octet-stream`, che il browser non esegue né disegna.
+ */
+const TIPI_PAGINA = Object.freeze({
+  html: 'text/html; charset=utf-8', htm: 'text/html; charset=utf-8', xhtml: 'application/xhtml+xml; charset=utf-8',
+  css: 'text/css; charset=utf-8', js: 'text/javascript; charset=utf-8', mjs: 'text/javascript; charset=utf-8',
+  json: 'application/json; charset=utf-8', txt: 'text/plain; charset=utf-8', svg: 'image/svg+xml',
+  png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp', avif: 'image/avif',
+  ico: 'image/x-icon', bmp: 'image/bmp', woff: 'font/woff', woff2: 'font/woff2', ttf: 'font/ttf', otf: 'font/otf',
+  mp3: 'audio/mpeg', wav: 'audio/wav', ogg: 'audio/ogg', mp4: 'video/mp4', webm: 'video/webm',
+});
+
+export function tipoPerPagina(nome) {
+  const estensione = String(nome ?? '').toLowerCase().split('.').pop();
+  return Object.hasOwn(TIPI_PAGINA, estensione) && String(nome).includes('.') ? TIPI_PAGINA[estensione] : 'application/octet-stream';
+}
+
+/**
+ * La politica delle sorgenti di una pagina resa (senza `sandbox` e `frame-ancestors`, che la rotta aggiunge): script,
+ * stili, immagini, font e media SOLO da `base` (la cartella di pagina della sessione, o la sola voce di Libreria) più
+ * `data:`/`blob:` dove ha senso; nessuna connessione, nessun modulo, nessun frame, nessun worker.
+ * ⛔ Il lettore (`frontend/src/components/lettore/`) mette la stessa stringa nell'attributo `csp` della cornice: si
+ *   costruisce da un posto solo per lato, e un test di ciascun lato la confronta con la forma qui sotto.
+ */
+export function politicaPagina(base) {
+  return [
+    "default-src 'none'",
+    `script-src ${base} 'unsafe-inline' 'unsafe-eval'`,
+    `style-src ${base} 'unsafe-inline'`,
+    `img-src ${base} data: blob:`,
+    `font-src ${base} data:`,
+    `media-src ${base} data: blob:`,
+    "connect-src 'none'",
+    "form-action 'none'",
+    "frame-src 'none'",
+    "worker-src 'none'",
+    "manifest-src 'none'",
+    "object-src 'none'",
+    "base-uri 'none'",
+  ].join('; ');
+}
+
 function requireNoQuery(url) {
   if ([...url.searchParams.keys()].length > 0) {
     const error = new Error('Query non valida');
     error.code = 'QUERY_INVALID';
     throw error;
   }
+}
+
+/* Pagina di una vista Workflow: solo `offset`/`limit`, una volta sola ciascuno, interi in forma canonica. */
+/* F3-42 (25/09/2026): la pagina di FASE accetta anche `sort=stato` (una volta sola, solo quel valore); le altre chiavi come
+   `workflowPageQuery`. */
+function workflowGroupQuery(url) {
+  const ordinamenti = url.searchParams.getAll('sort');
+  if (ordinamenti.length > 1 || (ordinamenti.length === 1 && ordinamenti[0] !== 'stato')) throw Object.assign(new Error('Query non valida'), { code: 'QUERY_INVALID' });
+  const senza = new URL(url);
+  senza.searchParams.delete('sort');
+  return { ...workflowPageQuery(senza, ['offset', 'limit'], 50), ...(ordinamenti.length ? { sort: 'stato' } : {}) };
+}
+
+/* Refactor dei grafi, decisione owner 30: `phaseId` ripetuto = le fasi aperte (al più 64, ognuna 1..128 caratteri); il resto
+   della query resta quello di una pagina di archi. Una fase che non esiste è 404 come per la pagina di fase (`RangeError`). */
+const FASI_DEGLI_ARCHI_MAX = 64;
+function workflowEdgeQuery(url) {
+  const fasi = url.searchParams.getAll('phaseId');
+  if (fasi.length > FASI_DEGLI_ARCHI_MAX || fasi.some((fase) => fase.length < 1 || fase.length > 128)) {
+    throw Object.assign(new Error('Query non valida'), { code: 'QUERY_INVALID' });
+  }
+  const senza = new URL(url);
+  senza.searchParams.delete('phaseId');
+  return { ...workflowPageQuery(senza, ['offset', 'limit'], 100), ...(fasi.length ? { phaseIds: fasi } : {}) };
+}
+
+/* Refactor dei grafi (decisioni owner 24 e 30): la discendenza di un passo, `direction` obbligatoria (a monte o a valle), pagine
+   fino a LINEAGE_PAGE_MAX. Una direzione diversa, o ripetuta, è una domanda sbagliata (400), non un passo che manca (404). */
+function workflowLineageQuery(url) {
+  const direzioni = url.searchParams.getAll('direction');
+  if (direzioni.length !== 1 || !LINEAGE_DIRECTIONS.includes(direzioni[0])) throw Object.assign(new Error('Query non valida'), { code: 'QUERY_INVALID' });
+  const senza = new URL(url);
+  senza.searchParams.delete('direction');
+  return { ...workflowPageQuery(senza, ['offset', 'limit'], LINEAGE_PAGE_MAX), direction: direzioni[0] };
+}
+
+function workflowPageQuery(url, allowed, maxLimit = 50) {
+  if ([...url.searchParams.keys()].some((key) => !allowed.includes(key))) throw Object.assign(new Error('Query non valida'), { code: 'QUERY_INVALID' });
+  if ([...url.searchParams.keys()].some((key) => url.searchParams.getAll(key).length !== 1)) throw Object.assign(new Error('Query duplicata'), { code: 'QUERY_INVALID' });
+  const number = (key, fallback, min, max) => {
+    const raw = url.searchParams.get(key);
+    if (raw === null) return fallback;
+    if (!/^(0|[1-9][0-9]*)$/.test(raw) || !Number.isSafeInteger(Number(raw)) || Number(raw) < min || Number(raw) > max) {
+      throw Object.assign(new Error('Query non valida'), { code: 'QUERY_INVALID' });
+    }
+    return Number(raw);
+  };
+  return { offset: number('offset', 0, 0, Number.MAX_SAFE_INTEGER), limit: number('limit', 50, 1, maxLimit) };
+}
+
+/*
+ * `If-None-Match` col confronto DEBOLE, come impone RFC 9110 §13.1.2 (letta il 25/09/2026): «A recipient MUST use the weak
+ * comparison function when comparing entity-tags for If-None-Match». Quindi `W/"x"` e `"x"` sono lo stesso validatore, e
+ * `*` vale sempre.
+ */
+function ifNoneMatchMatches(req, etag) {
+  const opaque = etag.replace(/^W\//, '');
+  const header = req.headers['if-none-match'];
+  return typeof header === 'string' && header.split(',').some((item) => {
+    const candidate = item.trim();
+    return candidate === '*' || candidate.replace(/^W\//, '') === opaque;
+  });
+}
+
+/*
+ * ⭐ F3-21 (25/09/2026) — le viste di una proposta (elenco, revisione, grafo pianificato) con ETag e 304. L'ETag è DEBOLE:
+ *   si calcola sui soli dati, mentre la busta porta `meta.generatedAt` che cambia a ogni risposta — due risposte con lo stesso
+ *   ETag sono equivalenti, non identiche byte per byte, ed è ciò che `W/` dichiara (RFC 9110 §8.8.1, «Weak versus Strong»).
+ */
+function sendWorkflowView(req, res, method, data, clock) {
+  const etag = `W/"sha256:${createHash('sha256').update(JSON.stringify(data)).digest('hex')}"`;
+  const headers = { ETag: etag, 'Cache-Control': 'private, no-cache' };
+  if (ifNoneMatchMatches(req, etag)) { res.writeHead(304, { ...SECURITY_HEADERS, ...headers }); res.end(); return; }
+  sendJson(res, 200, successEnvelope(data, clock), method, headers);
+}
+
+function sendWorkflowViewError(res, method, error, clock) {
+  const code = ['WORKFLOW_GROUP_NOT_FOUND', 'WORKFLOW_NODE_NOT_FOUND'].includes(error?.code) ? 'NOT_FOUND' : normalizeError(error).code;
+  sendJson(res, STATUS_BY_CODE[code] ?? 500, errorEnvelope(code, clock, { errore: error }), method);
+}
+
+function parseWorkflowVersionPath(raw) {
+  let decoded;
+  try { decoded = decodeURIComponent(raw); } catch { return null; }
+  if (raw !== decoded || !/^[1-9][0-9]*$/u.test(decoded)) return null;
+  const version = Number(decoded);
+  return Number.isSafeInteger(version) ? version : null;
 }
 
 function requireValidStaticQuery(url) {
@@ -1054,6 +1438,19 @@ function parseEsportaRicercaQuery(url) {
  * REGISTRATI e non curati: toccano rotte che non ho provato, e cambiarne lo stato senza una
  * prova per ciascuna sarebbe una modifica al buio.
  */
+/*
+ * ⛔ F3-10 (23/09/2026, decisione owner) — le tre rotte che accettano il modo (sessione, sessione libera,
+ *   impostazioni) lo validano QUI, in un punto solo: prima erano tre copie con `workflow` dentro. Un modo
+ *   ritirato ha il suo codice, perché chi lo manda sappia cosa scegliere invece.
+ */
+function requireModalitaOperativa(body) {
+  if (!('modalitaOperativa' in body) || ['normale', 'piano'].includes(body.modalitaOperativa)) return;
+  const ritirato = body.modalitaOperativa === 'workflow';
+  const errore = new Error(ritirato ? 'La modalità Workflow non esiste più: scegli normale o piano' : 'modalitaOperativa deve essere normale o piano');
+  errore.code = ritirato ? 'MODE_WORKFLOW_RETIRED' : 'QUERY_INVALID';
+  throw errore;
+}
+
 function normalizeError(error) {
   const code = API_ERROR_CODES.has(error?.code) ? error.code : 'INTERNAL_ERROR';
   return { code, statusCode: STATUS_BY_CODE[code] ?? 500 };
@@ -1100,6 +1497,33 @@ function normalizeError(error) {
 const ROTTA_MODELLI_FORNITORE = new RegExp(`^/api/v1/providers/(${ID_CATALOGO_IN_UI.join('|')})/models$`, 'u');
 
 const ROTTE_API = Object.freeze([
+  // ⭐ F3 (24/09): lo spegnimento gentile (loopback + gettone) e l'Annulla della compattazione automatica.
+  { schema: '/api/v1/admin/shutdown', metodi: ['POST'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/compaction\/([^/]+)\/undo$/, metodi: ['POST'] },
+  { schema: /^\/api\/v1\/workflows\/([^/]+)\/versions\/([^/]+)$/, metodi: ['GET'] },
+  { schema: /^\/api\/v1\/workflows\/([^/]+)\/versions\/([^/]+)\/approve$/, metodi: ['POST'] },
+  /* F3-33b (25/09/2026): «Modifica» i tetti, una versione nuova da riapprovare. */
+  { schema: /^\/api\/v1\/workflows\/([^/]+)\/versions\/([^/]+)\/revise$/, metodi: ['POST'] },
+  /* F3-51c (25/09/2026): Avvia, i controlli del run e l'anteprima di «Riprova». */
+  { schema: /^\/api\/v1\/workflows\/([^/]+)\/versions\/([^/]+)\/start$/, metodi: ['POST'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/workflows\/([^/]+)\/(pause|resume|cancel|retry)$/, metodi: ['POST'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/workflows\/([^/]+)\/retry-preview$/, metodi: ['GET'] },
+  /* F3-51d (25/09/2026): il flusso dal vivo di un run (SSE col cursore sulla sequenza del registro). */
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/workflows\/([^/]+)\/events$/, metodi: ['GET'] },
+  /* F3-21 (25/09/2026): il grafo PIANIFICATO di una proposta e l'elenco delle proposte di una sessione, in sola lettura. */
+  { schema: /^\/api\/v1\/workflows\/([^/]+)\/versions\/([^/]+)\/(graph|edges)$/, metodi: ['GET'] },
+  { schema: /^\/api\/v1\/workflows\/([^/]+)\/versions\/([^/]+)\/(groups|nodes)\/([^/]+)$/, metodi: ['GET'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/workflow-proposals$/, metodi: ['GET'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/workflows$/, metodi: ['GET'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/workflows\/([^/]+)\/graph$/, metodi: ['GET'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/workflows\/([^/]+)\/edges$/, metodi: ['GET'] },
+  /* Refactor dei grafi, decisione owner 29 (26/09/2026): la storia pubblica degli stati, per la riproduzione fedele. */
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/workflows\/([^/]+)\/history$/, metodi: ['GET'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/workflows\/([^/]+)\/groups\/([^/]+)$/, metodi: ['GET'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/workflows\/([^/]+)\/nodes\/([^/]+)$/, metodi: ['GET'] },
+  /* Refactor dei grafi, decisioni owner 24 e 30 (26/09/2026): la discendenza di un passo, per il focus a monte e a valle. */
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/workflows\/([^/]+)\/nodes\/([^/]+)\/lineage$/, metodi: ['GET'] },
+  { schema: /^\/api\/v1\/workflows\/([^/]+)\/versions\/([^/]+)\/nodes\/([^/]+)\/lineage$/, metodi: ['GET'] },
   { schema: '/api/v1/chat-images', metodi: ['POST'] },
   { schema: /^\/api\/v1\/chat-images\/[a-f0-9]{64}$/, metodi: ['GET'] },
   { schema: ROTTA_MODELLI_FORNITORE, metodi: ['GET'] },
@@ -1170,6 +1594,15 @@ const ROTTE_API = Object.freeze([
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/metrics$/, metodi: ['GET'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/git\/status$/, metodi: ['GET'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/git\/branch$/, metodi: ['GET'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/git\/diff$/, metodi: ['GET'] }, // F6-1, 26/09
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/git\/(log|branches|stashes|remotes|sync)$/, metodi: ['GET'] }, // F6-1 passo 3, 26/09; F6-2 (27/09): remoti e sincronizzazione
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/git\/(changes|changes-diff)$/, metodi: ['GET'] }, // F6-2 passo 4 (27/09): le modifiche di un commit del grafo
+  // ⭐ F6-3 (27/09): GitHub con `gh` — lo stato e le tre azioni globali; le PR della sessione (elenco GET, creazione POST), la bozza, i controlli
+  { schema: '/api/v1/github/status', metodi: ['GET'] },
+  { schema: /^\/api\/v1\/github\/(install|login|login-cancel)$/, metodi: ['POST'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/github\/pulls$/, metodi: ['GET', 'POST'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/github\/pull-draft$/, metodi: ['GET'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/github\/pulls\/([^/]+)\/checks$/, metodi: ['GET'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/skills$/, metodi: ['GET'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/([^/]+)\/batch$/, metodi: ['POST'] }, // FASE 3A: la risorsa viene validata dalla rotta
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/library$/, metodi: ['GET'] },
@@ -1190,6 +1623,12 @@ const ROTTE_API = Object.freeze([
    * contratti opposti sotto lo stesso indirizzo sarebbero un interruttore nascosto in una query.
    */
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/library\/([^/]+)\/anteprima$/, metodi: ['GET'] },
+  /* F5 File reader (26/09/2026): la RESA di una pagina HTML — il lasciapassare si chiede COL cookie, e con quello la
+     cornice legge la pagina e i vicini della sua cartella (percorso a segmenti: i link relativi si risolvono da soli). */
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/pagine$/, metodi: ['POST'] },
+  { schema: /^\/api\/v1\/pagine\/([^/]+)\/.*$/, metodi: ['GET'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/file\/anteprima$/, metodi: ['GET'] }, // F5: il PDF di un file della cartella, in linea
+  { schema: '/api/v1/lettore/ospite', metodi: ['GET'] }, // F5: la pagina ospite dei documenti Word e PowerPoint
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/library\/([^/]+)\/rivela$/, metodi: ['POST'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/library\/([^/]+)\/apri$/, metodi: ['POST'] }, // 10/09: l'azione Windows «Apri», gemella di «rivela»
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/library\/([^/]+)$/, metodi: ['PATCH', 'DELETE'] },
@@ -1254,7 +1693,7 @@ const ROTTE_API = Object.freeze([
   { schema: /^\/api\/v1\/huggingface\/downloads\/([^/]+)\/(pause|resume|cancel)$/, metodi: ['POST'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/cancel$/, metodi: ['POST'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/terminals\/([^/]+)\/close$/, metodi: ['POST'] },
-  { schema: /^\/api\/v1\/sessions\/([^/]+)\/git\/(stage|unstage|commit)$/, metodi: ['POST'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/git\/(stage|unstage|commit|discard|commit-staged|amend|undo-commit|switch|branch-create|branch-rename|branch-delete|stash|stash-pop|stash-drop|hunk|commit-message|fetch|fetch-stop|pull|push)$/, metodi: ['POST'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/rename$/, metodi: ['POST'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/delete$/, metodi: ['POST'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/tree\/rename$/, metodi: ['POST'] },
@@ -1289,6 +1728,8 @@ const ROTTE_API = Object.freeze([
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/comandi-nella-conversazione$/, metodi: ['POST'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/impostazioni-comandi$/, metodi: ['GET'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/approve$/, metodi: ['POST'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/question$/, metodi: ['POST'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/plan-decision$/, metodi: ['POST'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/queue$/, metodi: ['GET', 'POST'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/queue\/annulla$/, metodi: ['POST'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/queue\/invia$/, metodi: ['POST'] },
@@ -1453,7 +1894,7 @@ function requireFallbackProviders(value) {
 function requireTaskIdBody(body) {
   const chiavi = Object.keys(body ?? {});
   // ⭐⭐⭐ 29/8 — FASE K: modelloPlanner riusa la STESSA validazione di modello (modelloRichiestaValido) — è lo stesso formato OpenRouter, mai un secondo validatore.
-  const chiaviAmmesse = ['taskId', 'modello', 'modelloPlanner', 'reasoning', 'client', 'permessi', 'permessiPerAttrezzo', 'provider', 'runtimeId', 'modelId', 'fallbackConsent', 'fallbackProviders'];
+  const chiaviAmmesse = ['taskId', 'modello', 'modelloPlanner', 'reasoning', 'client', 'permessi', 'permessiPerAttrezzo', 'modalitaOperativa', 'provider', 'runtimeId', 'modelId', 'fallbackConsent', 'fallbackProviders'];
   const soloAmmesse = chiavi.length > 0 && chiavi.length <= chiaviAmmesse.length && chiavi.every((k) => chiaviAmmesse.includes(k)) && chiavi.includes('taskId');
   if (
     !soloAmmesse || typeof body.taskId !== 'string' || body.taskId.length === 0
@@ -1467,29 +1908,30 @@ function requireTaskIdBody(body) {
   }
   if ('modello' in body && body.modello !== undefined && !modelloRichiestaValido(body.modello)) {
     const errore = new Error('modello deve avere la forma "vendor/nome-modello" (formato OpenRouter)');
-    errore.code = 'QUERY_INVALID';
+    errore.code = 'MODEL_ID_INVALID';
     throw errore;
   }
   if ('modelloPlanner' in body && body.modelloPlanner !== undefined && !modelloRichiestaValido(body.modelloPlanner)) {
     const errore = new Error('modelloPlanner deve avere la forma "vendor/nome-modello" (formato OpenRouter)');
-    errore.code = 'QUERY_INVALID';
+    errore.code = 'MODEL_ID_INVALID';
     throw errore;
   }
   if ('reasoning' in body && !reasoningRichiestaValido(body.reasoning)) {
     const errore = new Error('reasoning deve essere {effort?, summary?} coi valori ammessi da OpenRouter');
-    errore.code = 'QUERY_INVALID';
+    errore.code = 'REASONING_INVALID';
     throw errore;
   }
   if ('permessi' in body && !permessiRichiestaValido(body.permessi)) {
     const errore = new Error('permessi deve essere uno fra "Read only", "Workspace write", "On request", "Full access"');
-    errore.code = 'QUERY_INVALID';
+    errore.code = 'PERMISSIONS_INVALID';
     throw errore;
   }
   if ('permessiPerAttrezzo' in body && !permessiPerAttrezzoRichiestaValido(body.permessiPerAttrezzo)) {
     const errore = new Error('permessiPerAttrezzo deve mappare scrivi/prova/shell/document_create a "sempre"/"chiedi"/"nega"');
-    errore.code = 'QUERY_INVALID';
+    errore.code = 'PERMISSIONS_INVALID';
     throw errore;
   }
+  requireModalitaOperativa(body);
   return {
     taskId: body.taskId,
     modello: 'modello' in body && body.modello !== undefined ? body.modello : null,
@@ -1498,6 +1940,7 @@ function requireTaskIdBody(body) {
     mobile: body.client === 'mobile',
     permessi: 'permessi' in body && body.permessi !== undefined ? body.permessi : null,
     permessiPerAttrezzo: 'permessiPerAttrezzo' in body && body.permessiPerAttrezzo !== undefined ? body.permessiPerAttrezzo : null,
+    modalitaOperativa: 'modalitaOperativa' in body ? body.modalitaOperativa : null,
     provider: body.provider ?? 'cloud', runtimeId: body.runtimeId ?? null, modelId: body.modelId ?? null,
     fallbackConsent: body.fallbackConsent === true,
     ...('fallbackProviders' in body ? { fallbackProviders: requireFallbackProviders(body.fallbackProviders) } : {}),
@@ -1568,7 +2011,7 @@ function requireHuggingFaceDownloadBody(body) {
 
 function requireCustomTaskBody(body) {
   // ⭐⭐⭐ 29/8 — FASE K: stesso principio di requireTaskIdBody, modelloPlanner riusa modelloRichiestaValido.
-  const AMMESSE = ['cartellaId', 'cartellaLibera', 'workspaceLaunchId', 'consegna', 'comandoProva', 'modello', 'modelloPlanner', 'reasoning', 'client', 'permessi', 'permessiPerAttrezzo', 'fallbackProviders'];
+  const AMMESSE = ['cartellaId', 'cartellaLibera', 'workspaceLaunchId', 'consegna', 'comandoProva', 'modello', 'modelloPlanner', 'reasoning', 'client', 'permessi', 'permessiPerAttrezzo', 'modalitaOperativa', 'fallbackProviders'];
   const chiavi = Object.keys(body ?? {});
   const haCartellaId = 'cartellaId' in body && body.cartellaId !== undefined;
   const haCartellaLibera = 'cartellaLibera' in body && body.cartellaLibera !== undefined;
@@ -1588,29 +2031,30 @@ function requireCustomTaskBody(body) {
   }
   if ('modello' in body && body.modello !== undefined && !modelloRichiestaValido(body.modello)) {
     const errore = new Error('modello deve avere la forma "vendor/nome-modello" (formato OpenRouter)');
-    errore.code = 'QUERY_INVALID';
+    errore.code = 'MODEL_ID_INVALID';
     throw errore;
   }
   if ('modelloPlanner' in body && body.modelloPlanner !== undefined && !modelloRichiestaValido(body.modelloPlanner)) {
     const errore = new Error('modelloPlanner deve avere la forma "vendor/nome-modello" (formato OpenRouter)');
-    errore.code = 'QUERY_INVALID';
+    errore.code = 'MODEL_ID_INVALID';
     throw errore;
   }
   if ('reasoning' in body && !reasoningRichiestaValido(body.reasoning)) {
     const errore = new Error('reasoning deve essere {effort?, summary?} coi valori ammessi da OpenRouter');
-    errore.code = 'QUERY_INVALID';
+    errore.code = 'REASONING_INVALID';
     throw errore;
   }
   if ('permessi' in body && !permessiRichiestaValido(body.permessi)) {
     const errore = new Error('permessi deve essere uno fra "Read only", "Workspace write", "On request", "Full access"');
-    errore.code = 'QUERY_INVALID';
+    errore.code = 'PERMISSIONS_INVALID';
     throw errore;
   }
   if ('permessiPerAttrezzo' in body && !permessiPerAttrezzoRichiestaValido(body.permessiPerAttrezzo)) {
     const errore = new Error('permessiPerAttrezzo deve mappare scrivi/prova/shell/document_create a "sempre"/"chiedi"/"nega"');
-    errore.code = 'QUERY_INVALID';
+    errore.code = 'PERMISSIONS_INVALID';
     throw errore;
   }
+  requireModalitaOperativa(body);
   return {
     ...(haCartellaId ? { cartellaId: body.cartellaId } : {}),
     ...(haCartellaLibera ? { cartellaLibera: body.cartellaLibera } : {}),
@@ -1624,6 +2068,7 @@ function requireCustomTaskBody(body) {
     mobile: body.client === 'mobile',
     permessi: 'permessi' in body && body.permessi !== undefined ? body.permessi : null,
     permessiPerAttrezzo: 'permessiPerAttrezzo' in body && body.permessiPerAttrezzo !== undefined ? body.permessiPerAttrezzo : null,
+    modalitaOperativa: 'modalitaOperativa' in body ? body.modalitaOperativa : null,
   };
 }
 
@@ -1634,12 +2079,13 @@ function requireCustomTaskBody(body) {
  * validati in automation-store.crea(), l'unico posto che li dichiara.
  */
 function requireAutomationCreateBody(body) {
-  const AMMESSE = ['taskId', 'nome', 'intervalloMinuti', 'limiteAlGiorno'];
+  const AMMESSE = ['taskId', 'nome', 'intervalloMinuti', 'limiteAlGiorno', 'modello']; // 24/09/2026: il modello si salva
   const chiavi = Object.keys(body ?? {});
   const soloAmmesse = chiavi.length > 0 && chiavi.every((k) => AMMESSE.includes(k))
     && chiavi.includes('taskId') && chiavi.includes('intervalloMinuti');
-  if (!soloAmmesse || typeof body.taskId !== 'string' || typeof body.intervalloMinuti !== 'number') {
-    const errore = new Error('Corpo non valido: atteso {taskId, intervalloMinuti, nome?, limiteAlGiorno?}');
+  if (!soloAmmesse || typeof body.taskId !== 'string' || typeof body.intervalloMinuti !== 'number'
+    || (body.modello !== undefined && !modelloRichiestaValido(body.modello))) {
+    const errore = new Error('Corpo non valido: atteso {taskId, intervalloMinuti, nome?, limiteAlGiorno?, modello?}');
     errore.code = 'QUERY_INVALID';
     throw errore;
   }
@@ -1648,6 +2094,7 @@ function requireAutomationCreateBody(body) {
     nome: typeof body.nome === 'string' ? body.nome : undefined,
     intervalloMinuti: body.intervalloMinuti,
     limiteAlGiorno: typeof body.limiteAlGiorno === 'number' ? body.limiteAlGiorno : undefined,
+    ...(typeof body.modello === 'string' ? { modello: body.modello } : {}),
   };
 }
 
@@ -1794,7 +2241,7 @@ function requireMemoriaBody(body, { creazione }) {
 
 /** Allowlist stretta per le preferenze che appartengono alla sessione. */
 function requireSessionSettingsBody(body) {
-  const ammesse = ['modello', 'modelloPlanner', 'reasoning', 'permessi', 'permessiPerAttrezzo', 'fallbackProviders'];
+  const ammesse = ['modello', 'modelloPlanner', 'reasoning', 'permessi', 'permessiPerAttrezzo', 'fallbackProviders', 'modalitaOperativa'];
   const chiavi = body && typeof body === 'object' && !Array.isArray(body) ? Object.keys(body) : [];
   if (chiavi.length === 0 || chiavi.some((chiave) => !ammesse.includes(chiave))) {
     const errore = new Error('Corpo non valido: attesa almeno una preferenza di sessione riconosciuta');
@@ -1803,29 +2250,30 @@ function requireSessionSettingsBody(body) {
   }
   if ('modello' in body && !modelloRichiestaValido(body.modello)) {
     const errore = new Error('modello deve avere la forma "vendor/nome-modello"');
-    errore.code = 'QUERY_INVALID';
+    errore.code = 'MODEL_ID_INVALID';
     throw errore;
   }
   if ('modelloPlanner' in body && body.modelloPlanner !== null && !modelloRichiestaValido(body.modelloPlanner)) {
     const errore = new Error('modelloPlanner deve essere null o avere la forma "vendor/nome-modello"');
-    errore.code = 'QUERY_INVALID';
+    errore.code = 'MODEL_ID_INVALID';
     throw errore;
   }
   if ('reasoning' in body && !reasoningRichiestaValido(body.reasoning)) {
     const errore = new Error('reasoning deve usare effort e summary ammessi');
-    errore.code = 'QUERY_INVALID';
+    errore.code = 'REASONING_INVALID';
     throw errore;
   }
   if ('permessi' in body && (body.permessi === null || !permessiRichiestaValido(body.permessi))) {
     const errore = new Error('permessi non riconosciuto');
-    errore.code = 'QUERY_INVALID';
+    errore.code = 'PERMISSIONS_INVALID';
     throw errore;
   }
   if ('permessiPerAttrezzo' in body && !permessiPerAttrezzoRichiestaValido(body.permessiPerAttrezzo)) {
     const errore = new Error('permessiPerAttrezzo non riconosciuto');
-    errore.code = 'QUERY_INVALID';
+    errore.code = 'PERMISSIONS_INVALID';
     throw errore;
   }
+  requireModalitaOperativa(body);
   return Object.fromEntries(chiavi.map((chiave) => [chiave, chiave === 'fallbackProviders' ? requireFallbackProviders(body[chiave]) : body[chiave]]));
 }
 
@@ -1909,6 +2357,51 @@ function requireApprovaBody(body) {
     throw errore;
   }
   return { requestId: body.requestId, approvato: body.approvato };
+}
+
+/*
+ * ⛔ 24/09/2026 — LA GUARDIA D'ORIGINE delle approvazioni che alzano ciò che TALOS può fare (Workflow approvato, piano approvato
+ *   che porta la sessione a scrivere). Estratta dalla rotta di approvazione dei Workflow (riparazione D2 e decisione owner «solo col
+ *   gettone» del 23/09) per usarla identica anche sul piano: una sola regola, due porte. Ritorna il motivo del rifiuto, o null.
+ *   Fonti: OWASP CSRF Prevention Cheat Sheet «Identifying the Target Origin»; W3C Fetch Metadata Request Headers; jupyter_server
+ *   security.rst; GHSA-9f65-56v6-gxw7 (lette il 23-24/09/2026, citate per esteso nella rotta dei Workflow).
+ */
+function rifiutoOrigineApprovazione(req, { token }) {
+  const origin = req.headers.origin;
+  const fetchSite = req.headers['sec-fetch-site'];
+  const portaAscolto = req.socket?.localPort;
+  const originiAmmesse = Number.isSafeInteger(portaAscolto) && portaAscolto > 0
+    ? new Set(['127.0.0.1', 'localhost', '[::1]'].map((h) => `http://${h}:${portaAscolto}`))
+    : new Set();
+  if (origin === undefined && fetchSite === undefined && !token) return 'non-browser-senza-gettone';
+  if ((origin !== undefined && !originiAmmesse.has(origin))
+    || (fetchSite !== undefined && fetchSite !== 'same-origin' && fetchSite !== 'none')) return 'altra-finestra';
+  return null;
+}
+
+function requireRispostaDomandaBody(body) {
+  const chiavi = Object.keys(body ?? {});
+  const ammesse = ['requestId', 'status', 'answers'];
+  const status = body?.status;
+  const answers = body?.answers;
+  /*
+   * ⛔ 20/09/2026 — answers appartiene solo ad answered: prima skipped/cancelled
+   * potevano portarlo, il parser lo scartava e il validatore canonico non vedeva
+   * mai il payload invalido. Il confine HTTP deve quindi fallire chiuso.
+   */
+  const answersCoerenti = status === 'answered'
+    ? (answers && typeof answers === 'object' && !Array.isArray(answers) && Object.hasOwn(body, 'answers'))
+    : !Object.hasOwn(body, 'answers');
+  const valido = chiavi.length >= 2 && chiavi.every((k) => ammesse.includes(k))
+    && typeof body?.requestId === 'string' && body.requestId.length > 0
+    && ['answered', 'skipped', 'cancelled', 'expired'].includes(status) // 24/09/2026, decisione owner 35: la scadenza
+    && answersCoerenti;
+  if (!valido) {
+    const errore = new Error('Corpo non valido: atteso {requestId, status: answered|skipped|cancelled|expired, answers?}');
+    errore.code = 'QUERY_INVALID';
+    throw errore;
+  }
+  return { requestId: body.requestId, status, ...(status === 'answered' ? { answers } : {}) };
 }
 
 /**
@@ -2186,7 +2679,11 @@ export function leggiRispostaMiglioramento(contenuto) {
 export function createHttpApp({
   /** ⛔ 16/09 — il tetto sul corpo delle richieste: 10 MiB di serie, vedi `MAX_REQUEST_BODY_BYTES`. Iniettabile per i test. */
   limiteCorpoByte = MAX_REQUEST_BODY_BYTES,
-  staticHandler, sessionRegistry = null, contextService = null, listaTaskDisponibili = () => [],
+  staticHandler, sessionRegistry = null, workflowStore = null, contextService = null, listaTaskDisponibili = () => [],
+  // F3-51c (25/09/2026): orchestratore e scheduler dei Workflow — senza, Avvia e i controlli rispondono «non disponibile» (D22)
+  workflowRuntime = null,
+  // F5 File reader (26/09/2026): i lasciapassare delle pagine HTML rese (`pagine-lasciapassare.mjs`); iniettabile per i test
+  lasciapassarePagine = creaLasciapassarePagine(),
   elencaCartelleProgetto = () => [], automationStore = null, diagnosiFn = null,
   // ⭐ 04/9, R-02 — stato del primo avvio (src/setup-stato.mjs): quali passi dell'intro sono già fatti, letti dalla realtà, mai un segreto.
   setupStatoFn = null,
@@ -2195,6 +2692,14 @@ export function createHttpApp({
   cartellaAssistenza = CARTELLA_ASSISTENZA_PREDEFINITA, cercaAssistenzaFn = cercaAssistenza,
   // ⭐ 04/9, W1-10 — token di loopback (config.token): quando c'è, /api/* vuole il cookie talos_token; `GET /?token=<t>` lo imposta e rimanda a `/`.
   token = null,
+  /*
+   * ⭐ F3, onda 2 di F2 (24/09/2026), decisione 8 — LO SPEGNIMENTO GENTILE: `{ gettone, spegniFn }`. Su Windows nessun
+   *   segnale dà un flush («'SIGTERM' is not supported on Windows», doc `process` di Node letta il 24/09/2026; Hermes
+   *   `gateway/run.py:5011` «On Windows SIGTERM is TerminateProcess»), quindi lo script del 4174 chiama
+   *   `POST /api/v1/admin/shutdown` col gettone letto dal file nella cartella dati (`server.mjs`), e solo dopo 10 s
+   *   usa `-Force`. `null` = rotta assente (404). Stessa forma degli altri gettoni non-browser (`x-talos-launcher-token`).
+   */
+  spegnimento = null,
   workspaceLaunchStore = null,
   /*
    * ⭐ 10/09 — dove tenere le favicon delle fonti prese una volta sola. `null` = funzione spenta,
@@ -2243,6 +2748,8 @@ export function createHttpApp({
    * ⛔⛔ Non espone il push, e non può: quella porta non esiste nel servizio.
    */
   gitService = null,
+  /* ⭐ F6-3 (27/09) — le PR con `gh` (`src/gh-service.mjs`): stato, installazione, collegamento, PR. Senza, le rotte GitHub rispondono 503. */
+  ghService = null,
   // ⭐⭐⭐ 28/8 — owner, coda: "directory più usate (tipo desktop downloads)". Zero config esterna (solo os.homedir()) — il default reale basta, nessun cablaggio in server.mjs come serve invece per elencaCartelleProgetto (quella dipende da TALOS_HARNESS_UI_PROJECT_DIRS).
   cartelleFrequentiFn = cartelleFrequentiReale,
   catalogoModelliFn = null, clock = () => new Date(), leggiArtefattoFn = leggiArtefattoReale,
@@ -2250,6 +2757,8 @@ export function createHttpApp({
   ritrattoCartellaFn = ritrattoCartella, // 06/9: iniettabile, cosi' le prove non camminano il disco vero
   capacitaMacchinaFn = null,
   localRuntimes = null, localModelStore = null, localModelTransfer = null, hfHubClient = null,
+  /* 27/09: `(architettura) → true|false|null`, il motore installato sa leggerla? (`motore-architetture.mjs`); senza, «non lo so» */
+  motoreConosceArchitetturaFn = null,
   localRuntimeProbe = null,
   hfImageProxyFn = null,
   runtimeBootstrapFn = null,
@@ -2492,10 +3001,404 @@ export function createHttpApp({
        *   se quello stato sia mai esistito.
        */
       const rientroOAuth = method === 'GET' && url.pathname.startsWith('/api/v1/auth/openrouter/ritorno');
-      if (!rientroOAuth && url.pathname.startsWith('/api/') && leggiCookie(req, 'talos_token') !== token) {
+      /* ⛔ F5 File reader (26/09/2026) — LA SECONDA ESENZIONE, con la stessa forma della prima: la difesa non è il cookie
+         ma un segreto più stretto. Le sottorisorse di una pagina resa partono da una cornice a origine nulla e arrivano
+         `cross-site`, SENZA il cookie Strict (misurato: `pagine-lasciapassare.mjs`); la rotta non serve NIENTE senza un
+         lasciapassare da 32 byte casuali, legato a una sessione e alla cartella di una pagina, che una richiesta COL cookie
+         ha chiesto un momento prima. Solo GET, solo sotto `/api/v1/pagine/`. */
+      const paginaConLasciapassare = method === 'GET' && url.pathname.startsWith('/api/v1/pagine/');
+      if (!rientroOAuth && !paginaConLasciapassare && url.pathname.startsWith('/api/') && leggiCookie(req, 'talos_token') !== token) {
         sendJson(res, 401, errorEnvelope('AUTH_REQUIRED', clock), method);
         return;
       }
+    }
+
+    /*
+     * ⭐ F3-21 (25/09/2026) — la proposta si VEDE. La revisione è limitata (niente Core: `proposalReview`), e i passi si
+     *   leggono dal grafo PIANIFICATO con le stesse forme del grafo di un run — panoramica, archi (≤100), pagina di fase (≤50),
+     *   dettaglio del passo. Tutto in sola lettura, con ETag e 304; fuori proprietario (sessione che non esiste più) è 404,
+     *   senza Store è 503.
+     */
+    const workflowProposalPath = (method === 'GET' || method === 'HEAD')
+      && /^\/api\/v1\/workflows\/([^/]+)\/versions\/([^/]+)(?:\/(graph|edges|groups\/[^/]+|nodes\/[^/]+\/lineage|nodes\/[^/]+))?$/.exec(url.pathname);
+    if (workflowProposalPath) {
+      try {
+        if (!workflowStore) { sendJson(res, 503, errorEnvelope('WORKFLOW_STORE_UNAVAILABLE', clock), method); return; }
+        let workflowId, version, resource, lineageNodeId = null;
+        try {
+          workflowId = decodeURIComponent(workflowProposalPath[1]);
+          version = parseWorkflowVersionPath(workflowProposalPath[2]);
+          // refactor dei grafi: la discendenza di un passo pianificato, riconosciuta sul percorso grezzo come per il run
+          if (/^nodes\/[^/]+\/lineage$/.test(workflowProposalPath[3] ?? '')) lineageNodeId = decodeURIComponent(workflowProposalPath[3].slice('nodes/'.length, -'/lineage'.length));
+          resource = lineageNodeId !== null ? 'lineage' : workflowProposalPath[3] ? decodeURIComponent(workflowProposalPath[3]) : null;
+        } catch { sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method); return; }
+        if (version === null) { sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method); return; }
+        const owner = { sessionExistsFn: (id) => Boolean(sessionRegistry?.leggiSessioneContesto?.(id)) };
+        const identity = { workflowId, version };
+        let data;
+        if (resource === null) { requireNoQuery(url); data = await readWorkflowProposal(workflowStore, identity, owner); }
+        else if (resource === 'graph') { requireNoQuery(url); data = await readPlannedWorkflowGraph(workflowStore, { ...identity, view: 'overview' }, owner); }
+        else if (resource === 'edges') {
+          data = await readPlannedWorkflowGraph(workflowStore, { ...identity, view: 'edges', ...workflowEdgeQuery(url) }, owner);
+        } else if (resource === 'lineage') {
+          data = await readPlannedWorkflowGraph(workflowStore, { ...identity, view: 'lineage', nodeId: lineageNodeId, ...workflowLineageQuery(url) }, owner);
+        } else if (resource.startsWith('groups/')) {
+          data = await readPlannedWorkflowGraph(workflowStore, { ...identity, view: 'group', phaseId: resource.slice('groups/'.length),
+            ...workflowGroupQuery(url) }, owner);
+        } else {
+          requireNoQuery(url);
+          data = await readPlannedWorkflowGraph(workflowStore, { ...identity, view: 'node', nodeId: resource.slice('nodes/'.length) }, owner);
+        }
+        sendWorkflowView(req, res, method, data, clock);
+      } catch (error) {
+        sendWorkflowViewError(res, method, error, clock);
+      }
+      return;
+    }
+
+    // F3-21: le proposte di una sessione, dallo Store (indice per sessione), la più recente prima, al più 50 per pagina.
+    const workflowProposalListPath = (method === 'GET' || method === 'HEAD')
+      && /^\/api\/v1\/sessions\/([^/]+)\/workflow-proposals$/.exec(url.pathname);
+    if (workflowProposalListPath) {
+      try {
+        let sessionId;
+        try { sessionId = decodeURIComponent(workflowProposalListPath[1]); }
+        catch { sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method); return; }
+        if (!sessionRegistry?.leggiSessioneContesto?.(sessionId)) { sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method); return; }
+        if (!workflowStore) { sendJson(res, 503, errorEnvelope('WORKFLOW_STORE_UNAVAILABLE', clock), method); return; }
+        const data = await listWorkflowProposals(workflowStore, { sessionId, ...workflowPageQuery(url, ['offset', 'limit'], 50) },
+          { sessionExistsFn: (id) => Boolean(sessionRegistry?.leggiSessioneContesto?.(id)) });
+        sendWorkflowView(req, res, method, data, clock);
+      } catch (error) {
+        sendWorkflowViewError(res, method, error, clock);
+      }
+      return;
+    }
+
+    /*
+     * ⭐ F3-33b (25/09/2026) — «Modifica» i tetti: `POST .../versions/{v}/revise` con `{definitionHash, budgets}` crea la
+     *   versione v+1 (`reviseWorkflowBudgets`, `planning-control.mjs`). Stesse difese di Approva: JSON esatto, Origin di
+     *   questa finestra, da un client non-browser solo col gettone (decisione 20). 201 alla nascita; lo stesso gesto ripetuto
+     *   ritrova la stessa versione (idempotente sul contenuto).
+     */
+    const workflowRevisePath = method === 'POST'
+      && /^\/api\/v1\/workflows\/([^/]+)\/versions\/([^/]+)\/revise$/.exec(url.pathname);
+    if (workflowRevisePath) {
+      try {
+        requireNoQuery(url);
+        if (!workflowStore) { sendJson(res, 503, errorEnvelope('WORKFLOW_STORE_UNAVAILABLE', clock), method); return; }
+        const contentType = typeof req.headers['content-type'] === 'string'
+          ? req.headers['content-type'].split(';', 1)[0].trim().toLowerCase() : '';
+        if (contentType !== 'application/json') {
+          throw Object.assign(new Error('Workflow revision requires application/json'), { code: 'QUERY_INVALID' });
+        }
+        const rifiutoOrigine = rifiutoOrigineApprovazione(req, { token });
+        if (rifiutoOrigine) {
+          throw Object.assign(new Error(rifiutoOrigine === 'non-browser-senza-gettone'
+            ? 'Workflow revision from a non-browser client requires the TALOS token'
+            : 'Workflow revision must originate from this TALOS window'), { code: 'WORKFLOW_COMMAND_ORIGIN_FORBIDDEN' });
+        }
+        let workflowId, version;
+        try { workflowId = decodeURIComponent(workflowRevisePath[1]); version = parseWorkflowVersionPath(workflowRevisePath[2]); }
+        catch { sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method); return; }
+        if (version === null) { sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method); return; }
+        const body = await leggiCorpoJsonCon(req, Math.min(limiteCorpoByte, 4_096));
+        if (!body || typeof body !== 'object' || Array.isArray(body)
+          || Object.keys(body).length !== 2 || !Object.hasOwn(body, 'definitionHash') || !Object.hasOwn(body, 'budgets')) {
+          throw Object.assign(new Error('Workflow revision body is invalid'), { code: 'QUERY_INVALID' });
+        }
+        const data = await reviseWorkflowBudgets(workflowStore, {
+          workflowId, version, definitionHash: body.definitionHash, budgets: body.budgets,
+        }, { sessionExistsFn: (id) => Boolean(sessionRegistry?.leggiSessioneContesto?.(id)) });
+        sendJson(res, 201, successEnvelope(data, clock), method, { 'Cache-Control': 'private, no-store' });
+      } catch (error) {
+        const normalized = normalizeError(error);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
+      }
+      return;
+    }
+
+    const workflowApprovePath = method === 'POST'
+      && /^\/api\/v1\/workflows\/([^/]+)\/versions\/([^/]+)\/approve$/.exec(url.pathname);
+    if (workflowApprovePath) {
+      try {
+        requireNoQuery(url);
+        if (!workflowStore) { sendJson(res, 503, errorEnvelope('WORKFLOW_STORE_UNAVAILABLE', clock), method); return; }
+        const contentType = typeof req.headers['content-type'] === 'string'
+          ? req.headers['content-type'].split(';', 1)[0].trim().toLowerCase() : '';
+        if (contentType !== 'application/json') {
+          throw Object.assign(new Error('Workflow approval requires application/json'), { code: 'QUERY_INVALID' });
+        }
+        /*
+         * Riparazione D2, 24/09/2026: l'origine attesa NON si ricava più dall'header Host della
+         * stessa richiesta. Con Host e Origin falsi ma coerenti (forma di un DNS rebinding:
+         * `attacker.example` che risolve a 127.0.0.1) il confronto passava, e Sec-Fetch-Site in
+         * quel caso vale proprio `same-origin`, quindi da solo non ferma niente.
+         * ⇒ L'origine attesa la conosce il SERVER: host di loopback (`config.mjs` LOOPBACK_HOSTS,
+         *   l'unico ascolto ammesso) sulla porta su cui il socket ha davvero accettato la
+         *   connessione (`req.socket.localPort`). Porta illeggibile ⇒ insieme vuoto ⇒ ogni
+         *   Origin presente è rifiutato (fail-closed).
+         * Fonti primarie lette il 24/09/2026: OWASP CSRF Prevention Cheat Sheet, «Identifying the
+         *   Target Origin»: «Configure your application to simply know its target origin … This
+         *   would be the most secure approach as its defined server side, so it is a trusted
+         *   value»; W3C Fetch Metadata Request Headers (21/09/2026): `none` solo per navigazioni
+         *   causate dall'utente. Il comportamento a header ASSENTI resta quello di prima (client
+         *   non-browser): OWASP lo lascia a una scelta di rischio, qui non la prendo io.
+         */
+        /*
+         * ⛔ 23/09/2026, decisione owner «solo col gettone»: una richiesta SENZA Origin e SENZA
+         *   Sec-Fetch-Site non viene da un browser (un programma sulla stessa macchina). Passa solo se il
+         *   server è avviato col gettone: lì l'intera `/api/` ha già preteso il cookie `talos_token`
+         *   più sopra, quindi chi arriva qui è autenticato. Senza gettone (il server di sviluppo, il 4174)
+         *   niente autentica quel programma, e l'approvazione si rifiuta.
+         *   Come Jupyter (una scrittura passa col gettone XSRF della sua pagina O col gettone di accesso,
+         *   mai senza nessuno dei due) e come Claude Code dopo CVE-2025-52882 (gettone obbligatorio sul
+         *   server locale). Fonti lette il 23/09/2026: jupyter_server docs/operators/security.rst;
+         *   GitHub Advisory GHSA-9f65-56v6-gxw7.
+         */
+        const rifiutoOrigine = rifiutoOrigineApprovazione(req, { token });
+        if (rifiutoOrigine === 'non-browser-senza-gettone') {
+          throw Object.assign(new Error('Workflow approval from a non-browser client requires the TALOS token'),
+            { code: 'WORKFLOW_APPROVAL_ORIGIN_FORBIDDEN' });
+        }
+        if (rifiutoOrigine === 'altra-finestra') {
+          throw Object.assign(new Error('Workflow approval must originate from this TALOS window'),
+            { code: 'WORKFLOW_APPROVAL_ORIGIN_FORBIDDEN' });
+        }
+        let workflowId, version;
+        try { workflowId = decodeURIComponent(workflowApprovePath[1]); version = parseWorkflowVersionPath(workflowApprovePath[2]); }
+        catch { sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method); return; }
+        if (version === null) { sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method); return; }
+        const body = await leggiCorpoJsonCon(req, Math.min(limiteCorpoByte, 4_096));
+        if (!body || typeof body !== 'object' || Array.isArray(body)
+          || Object.keys(body).length !== 2 || !Object.hasOwn(body, 'commandId')
+          || !Object.hasOwn(body, 'definitionHash')) {
+          throw Object.assign(new Error('Workflow approval body is invalid'), { code: 'QUERY_INVALID' });
+        }
+        const data = await approveWorkflowProposal(workflowStore, {
+          workflowId, version, commandId: body.commandId, definitionHash: body.definitionHash,
+        }, { sessionExistsFn: (id) => Boolean(sessionRegistry?.leggiSessioneContesto?.(id)) });
+        sendJson(res, 200, successEnvelope(data, clock), method, { 'Cache-Control': 'private, no-store' });
+      } catch (error) {
+        const normalized = normalizeError(error);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
+      }
+      return;
+    }
+
+    /*
+     * ⭐ F3-51c (25/09/2026) — AVVIA e i CONTROLLI del run (decisioni owner 5/D22: Avvia è un passo separato; 25/09: Pausa,
+     *   Annulla, Riprova). Stesse difese di Approva, lette una volta qui: JSON esatto, Origin di questa finestra, e da un client
+     *   non-browser solo col gettone (decisione 20). Il comando è durevole e idempotente nel motore (`run-control.mjs`,
+     *   `workflow-orchestrator.mjs` `requestRunControl`): la risposta è 202 (accettato, lo scheduler lavora dopo), come Hermes
+     *   (`api_server_runs.py:414-419`) e GitHub Actions; una ripetizione risponde con la stessa ricevuta e l'intestazione
+     *   `Idempotency-Replayed: true` (Hermes). Senza runtime (registro assente o recupero fallito) ⇒ 503 «non disponibile»:
+     *   un run avviato che nessuno esegue sarebbe un avvio finto.
+     */
+    const workflowStartPath = method === 'POST' && /^\/api\/v1\/workflows\/([^/]+)\/versions\/([^/]+)\/start$/.exec(url.pathname);
+    const workflowControlPath = method === 'POST'
+      && /^\/api\/v1\/sessions\/([^/]+)\/workflows\/([^/]+)\/(pause|resume|cancel|retry)$/.exec(url.pathname);
+    if (workflowStartPath || workflowControlPath) {
+      try {
+        requireNoQuery(url);
+        const contentType = typeof req.headers['content-type'] === 'string'
+          ? req.headers['content-type'].split(';', 1)[0].trim().toLowerCase() : '';
+        if (contentType !== 'application/json') throw Object.assign(new Error('A Workflow command requires application/json'), { code: 'QUERY_INVALID' });
+        const rifiutoOrigine = rifiutoOrigineApprovazione(req, { token });
+        if (rifiutoOrigine) {
+          throw Object.assign(new Error(rifiutoOrigine === 'non-browser-senza-gettone'
+            ? 'A Workflow command from a non-browser client requires the TALOS token'
+            : 'A Workflow command must originate from this TALOS window'), { code: 'WORKFLOW_COMMAND_ORIGIN_FORBIDDEN' });
+        }
+        if (!workflowStore) { sendJson(res, 503, errorEnvelope('WORKFLOW_STORE_UNAVAILABLE', clock), method); return; }
+        if (!workflowRuntime) { sendJson(res, 503, errorEnvelope('WORKFLOW_RUNTIME_NOT_READY', clock), method); return; }
+        const chiavi = workflowStartPath ? ['commandId', 'definitionHash'] : ['commandId'];
+        const body = await leggiCorpoJsonCon(req, Math.min(limiteCorpoByte, 4_096));
+        if (!body || typeof body !== 'object' || Array.isArray(body) || Object.keys(body).length !== chiavi.length
+          || !chiavi.every((chiave) => Object.hasOwn(body, chiave))) {
+          throw Object.assign(new Error('Workflow command body is invalid'), { code: 'QUERY_INVALID' });
+        }
+        const sessionExistsFn = (id) => Boolean(sessionRegistry?.leggiSessioneContesto?.(id));
+        let data;
+        if (workflowStartPath) {
+          let workflowId, version;
+          try { workflowId = decodeURIComponent(workflowStartPath[1]); version = parseWorkflowVersionPath(workflowStartPath[2]); }
+          catch { sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method); return; }
+          if (version === null) { sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method); return; }
+          // i tipi di passo che il runtime di questo server esegue (`scheduler.mjs` `eseguibileQui`: `agent` in sola lettura)
+          data = await startWorkflowRun(workflowStore, { workflowId, version, definitionHash: body.definitionHash, commandId: body.commandId },
+            { sessionExistsFn, supportedNodeKinds: ['agent'] });
+        } else {
+          let sessionId, runId;
+          try { sessionId = decodeURIComponent(workflowControlPath[1]); runId = decodeURIComponent(workflowControlPath[2]); }
+          catch { sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method); return; }
+          // di chi è il run: la sessione esiste e il run è suo — altrimenti 404, come le letture del grafo
+          if (!sessionExistsFn(sessionId)) { sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method); return; }
+          let run;
+          try { run = await readRunState(workflowStore, { runId }); }
+          catch (error) {
+            if (error?.code === 'WORKFLOW_RUN_NOT_FOUND' || error?.code === 'WORKFLOW_RUN_ID_INVALID' || error instanceof RangeError) {
+              sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method); return;
+            }
+            throw error;
+          }
+          if (run.events[0]?.type !== 'run_created' || run.events[0].payload.rootSessionId !== sessionId) {
+            sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method); return;
+          }
+          data = await workflowRuntime.orchestrator.requestRunControl({ runId, action: workflowControlPath[3], commandId: body.commandId });
+        }
+        // lo scheduler lavora DOPO la risposta: il comando è già durevole
+        workflowRuntime.scheduler.sveglia(data.runId);
+        sendJson(res, 202, successEnvelope(data, clock), method, {
+          'Cache-Control': 'private, no-store', ...(data.deduplicated ? { 'Idempotency-Replayed': 'true' } : {}),
+        });
+      } catch (error) {
+        const normalized = normalizeError(error);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
+      }
+      return;
+    }
+
+    // F3-51c: che cosa farebbe «Riprova» adesso e di quanto alzerebbe il tetto — il pulsante lo dice PRIMA (owner 25/09).
+    const workflowRetryPreviewPath = (method === 'GET' || method === 'HEAD')
+      && /^\/api\/v1\/sessions\/([^/]+)\/workflows\/([^/]+)\/retry-preview$/.exec(url.pathname);
+    if (workflowRetryPreviewPath) {
+      try {
+        requireNoQuery(url);
+        let sessionId, runId;
+        try { sessionId = decodeURIComponent(workflowRetryPreviewPath[1]); runId = decodeURIComponent(workflowRetryPreviewPath[2]); }
+        catch { sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method); return; }
+        if (!sessionRegistry?.leggiSessioneContesto?.(sessionId)) { sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method); return; }
+        if (!workflowStore) { sendJson(res, 503, errorEnvelope('WORKFLOW_STORE_UNAVAILABLE', clock), method); return; }
+        if (!workflowRuntime) { sendJson(res, 503, errorEnvelope('WORKFLOW_RUNTIME_NOT_READY', clock), method); return; }
+        let run;
+        try { run = await readRunState(workflowStore, { runId }); }
+        catch (error) {
+          if (error?.code === 'WORKFLOW_RUN_NOT_FOUND' || error?.code === 'WORKFLOW_RUN_ID_INVALID' || error instanceof RangeError) {
+            sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method); return;
+          }
+          throw error;
+        }
+        if (run.events[0]?.type !== 'run_created' || run.events[0].payload.rootSessionId !== sessionId) {
+          sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method); return;
+        }
+        const anteprima = await workflowRuntime.orchestrator.retryPreview({ runId });
+        sendJson(res, 200, successEnvelope({ schema: 'talos.workflow-retry-preview.v1', ...anteprima }, clock), method,
+          { 'Cache-Control': 'private, no-cache' });
+      } catch (error) {
+        const normalized = normalizeError(error);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
+      }
+      return;
+    }
+
+    /*
+     * ⭐ F3-51d (25/09/2026): il flusso dal vivo di un run (decisione owner D33). Stesse difese delle letture del grafo — la
+     *   sessione deve esistere e il run deve essere suo (404 altrimenti) — e poi `serveWorkflowRunStream` (`workflow/run-stream.mjs`).
+     *   Il cursore: `Last-Event-ID` alla riconnessione, `?after=<lastSeq del grafo>` alla prima apertura; nessun'altra query.
+     */
+    const workflowEventsPath = (method === 'GET' || method === 'HEAD') && /^\/api\/v1\/sessions\/([^/]+)\/workflows\/([^/]+)\/events$/.exec(url.pathname);
+    if (workflowEventsPath) {
+      try {
+        let sessionId, runId;
+        try { sessionId = decodeURIComponent(workflowEventsPath[1]); runId = decodeURIComponent(workflowEventsPath[2]); }
+        catch { sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method); return; }
+        const chiavi = [...url.searchParams.keys()];
+        if (chiavi.some((chiave) => chiave !== 'after') || chiavi.length > 1) throw Object.assign(new Error('Workflow stream query'), { code: 'QUERY_INVALID' });
+        const afterSeq = runStreamCursor({ lastEventId: req.headers['last-event-id'], after: url.searchParams.get('after') });
+        if (!sessionRegistry?.leggiSessioneContesto?.(sessionId)) { sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method); return; }
+        if (!workflowStore) { sendJson(res, 503, errorEnvelope('WORKFLOW_STORE_UNAVAILABLE', clock), method); return; }
+        let run;
+        try { run = await readRunState(workflowStore, { runId }); }
+        catch (error) {
+          if (error?.code === 'WORKFLOW_RUN_NOT_FOUND' || error?.code === 'WORKFLOW_RUN_ID_INVALID' || error instanceof RangeError) {
+            sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method); return;
+          }
+          throw error;
+        }
+        if (run.events[0]?.type !== 'run_created' || run.events[0].payload.rootSessionId !== sessionId) {
+          sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method); return;
+        }
+        // HEAD (l'inventario lo ammette per ogni GET): gli header del flusso, nessun corpo, nessuna iscrizione
+        if (method === 'HEAD') {
+          res.writeHead(200, { ...SECURITY_HEADERS, 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-store' });
+          res.end(); return;
+        }
+        await serveWorkflowRunStream({ res, store: workflowStore, runId, afterSeq, headers: SECURITY_HEADERS,
+          heartbeatMs: INTERVALLO_BATTITO_SSE_MS, setIntervalFn: impostaIntervalloFn, clearIntervalFn: cancellaIntervalloFn,
+          onError: (errore) => console.error('[workflow-stream]', errore?.code ?? '', errore instanceof Error ? errore.message : errore) });
+      } catch (error) {
+        // ⛔ dopo gli header del flusso un secondo corpo JSON non si può mandare: si chiude e basta
+        if (res.headersSent) { if (!res.writableEnded) res.end(); return; }
+        const code = error?.code === 'QUERY_INVALID' ? 'QUERY_INVALID' : error?.code === 'WORKFLOW_STORE_UNAVAILABLE' ? 'WORKFLOW_STORE_UNAVAILABLE' : 'INTERNAL_ERROR';
+        sendJson(res, STATUS_BY_CODE[code] ?? 500, errorEnvelope(code, clock, { errore: error }), method);
+      }
+      return;
+    }
+
+    // Workflow graph v2 is a session-scoped, read-only projection of verified Store facts.
+    // Keep this before generic session routes; no Definition or journal payload reaches JSON.
+    const workflowPath = (method === 'GET' || method === 'HEAD') && /^\/api\/v1\/sessions\/([^/]+)\/workflows(?:\/([^/]+)\/(graph|edges|history|groups\/[^/]+|nodes\/[^/]+\/lineage|nodes\/[^/]+))?$/.exec(url.pathname);
+    if (workflowPath) {
+      try {
+        let sessionId, runId, resource, lineageNodeId = null;
+        try {
+          sessionId = decodeURIComponent(workflowPath[1]);
+          runId = workflowPath[2] ? decodeURIComponent(workflowPath[2]) : null;
+          // la discendenza si riconosce sul percorso GREZZO: un `%2F` nell'id del passo non deve diventare un segmento
+          if (/^nodes\/[^/]+\/lineage$/.test(workflowPath[3] ?? '')) lineageNodeId = decodeURIComponent(workflowPath[3].slice('nodes/'.length, -'/lineage'.length));
+          resource = lineageNodeId !== null ? 'lineage' : workflowPath[3] ? decodeURIComponent(workflowPath[3]) : null;
+        } catch { sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method); return; }
+        if (!sessionRegistry?.leggiSessioneContesto?.(sessionId)) {
+          sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method); return;
+        }
+        if (!workflowStore) {
+          sendJson(res, 503, errorEnvelope('WORKFLOW_STORE_UNAVAILABLE', clock), method); return;
+        }
+        const pageQuery = (allowed, maxLimit = 50) => workflowPageQuery(url, allowed, maxLimit);
+        if (!runId) {
+          const { offset, limit } = pageQuery(['offset', 'limit']);
+          const runs = await listRunSummariesForSession(workflowStore, { rootSessionId: sessionId });
+          sendJson(res, 200, successEnvelope({ schema: 'talos.workflow-run-list.v1', sessionId,
+            total: runs.length, offset, limit, nextOffset: offset + limit < runs.length ? offset + limit : null,
+            items: runs.slice(offset, offset + limit) }, clock), method,
+          { 'Cache-Control': 'private, no-cache' });
+          return;
+        }
+        const group = resource?.startsWith('groups/');
+        const edges = resource === 'edges';
+        const history = resource === 'history';
+        const lineage = resource === 'lineage';
+        const { offset, limit, sort = null, phaseIds = null, direction = null } = group ? workflowGroupQuery(url) : edges ? workflowEdgeQuery(url)
+          : history ? pageQuery(['offset', 'limit'], STATE_HISTORY_PAGE_MAX) : lineage ? workflowLineageQuery(url)
+            : (requireNoQuery(url), { offset: 0, limit: 50 });
+        // la storia degli stati (decisione owner 29) viene dalla sua lettura: stessa verifica, senza ricopiare il giornale
+        const input = history ? await readRunHistory(workflowStore, { runId }) : await readRunState(workflowStore, { runId });
+        if (input.events[0]?.type !== 'run_created' || input.events[0].payload.rootSessionId !== sessionId) {
+          sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method); return;
+        }
+        let data;
+        if (resource === 'graph') data = projectWorkflowOverview(input);
+        else if (edges) data = projectWorkflowEdgePage(input, { offset, limit, phaseIds });
+        else if (history) data = projectWorkflowStateHistory(input, { offset, limit });
+        else if (lineage) data = projectWorkflowLineage(input, { nodeId: lineageNodeId, direction, offset, limit });
+        else if (group) data = projectWorkflowGroupPage(input, { phaseId: resource.slice('groups/'.length), offset, limit, sort });
+        else if (resource?.startsWith('nodes/')) data = projectWorkflowNodeDetail(input, { nodeId: resource.slice('nodes/'.length) });
+        else { sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method); return; }
+        const value = { ok: true, data, meta: { schema: API_SCHEMA, generatedAt: history ? input.lastAt : input.events.at(-1).at } };
+        const etag = `"sha256:${createHash('sha256').update(JSON.stringify(value)).digest('hex')}"`;
+        const headers = { ETag: etag, 'Cache-Control': 'private, no-cache' };
+        if (ifNoneMatchMatches(req, etag)) {
+          res.writeHead(304, { ...SECURITY_HEADERS, ...headers }); res.end(); return;
+        }
+        sendJson(res, 200, value, method, headers);
+      } catch (error) {
+        const code = error?.code === 'WORKFLOW_RUN_NOT_FOUND' || error instanceof RangeError ? 'NOT_FOUND'
+          : error?.code === 'QUERY_INVALID' || error?.code === 'WORKFLOW_RUN_ID_INVALID' ? 'QUERY_INVALID'
+            : error?.code === 'WORKFLOW_STORE_UNAVAILABLE' ? 'WORKFLOW_STORE_UNAVAILABLE' : 'INTERNAL_ERROR';
+        sendJson(res, STATUS_BY_CODE[code] ?? 500, errorEnvelope(code, clock, { errore: error }), method);
+      }
+      return;
     }
 
     /*
@@ -2712,6 +3615,108 @@ export function createHttpApp({
      * ⛔ La difesa sul percorso non è qui: è in `workspace-files.mjs`, la stessa delle altre rotte
      *   dell'albero (realpath + confine della cartella di sessione).
      */
+    /*
+     * F5 File reader (26/09/2026) — il PDF di un file della CARTELLA, IN LINEA: gemella della rotta `/library/:voceId/
+     * anteprima` (stesse intestazioni: `inline`, `application/pdf`, `nosniff`, `no-store`, CSP `default-src 'none';
+     * sandbox allow-scripts; object-src 'none'`). Serve perché la CSP della pagina di TALOS non ammette `blob:` in
+     * `frame-src` (misurato il 26/09: un PDF su blob: in una cornice è bloccato), mentre `'self'` sì; e il lettore PDF di
+     * Chromium, sotto queste intestazioni e in una pagina con la CSP vera, disegna il PDF (misurato nel guscio Electron
+     * 44.3.0, `scratchpad/prova-pdf-rotta-electron/`).
+     * ⛔ Qui il tipo lo decidono i BYTE (`%PDF-`, WHATWG MIME Sniffing §7.1), non l'estensione: il lettore ha già deciso
+     *   dai byte, e un file che non comincia così non esce mai come `application/pdf` da questo indirizzo (404).
+     */
+    const anteprimaFileMatch = method === 'GET' && sessionRegistry
+      ? /^\/api\/v1\/sessions\/([^/]+)\/file\/anteprima$/.exec(url.pathname)
+      : null;
+    if (anteprimaFileMatch) {
+      try {
+        let sessionId;
+        try { sessionId = decodeURIComponent(anteprimaFileMatch[1]); } catch { sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method); return; }
+        const percorso = parseTreeQuery(url);
+        const esito = await sessionRegistry.scaricaFile(sessionId, percorso);
+        if ('erroreAvvio' in esito) {
+          const errore = new Error(esito.erroreAvvio);
+          errore.code = esito.code;
+          throw errore;
+        }
+        if (esito.bytes.length < 5 || esito.bytes.subarray(0, 5).toString('latin1') !== '%PDF-') {
+          sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method);
+          return;
+        }
+        const nomi = nomiPerContentDisposition(esito.nome);
+        res.writeHead(200, {
+          'Content-Type': 'application/pdf',
+          'Content-Length': esito.bytes.length,
+          'Content-Disposition': `inline; filename="${nomi.ascii}"; filename*=UTF-8''${nomi.utf8}`,
+          'X-Content-Type-Options': 'nosniff',
+          'Cache-Control': 'private, no-store',
+          'Content-Security-Policy': "default-src 'none'; sandbox allow-scripts; object-src 'none'",
+        });
+        res.end(esito.bytes);
+      } catch (error) {
+        const normalized = normalizeError(error);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
+      }
+      return;
+    }
+
+    /*
+     * F5 File reader (26/09/2026) — la PAGINA OSPITE dei documenti Word e PowerPoint.
+     * La loro resa è HTML con stili in linea (`style=""` e `<style>`), e la CSP della pagina di TALOS li vieta
+     * (`style-src 'self' 'nonce-…'`; misurato il 26/09: un `setAttribute('style')` e un iframe `srcdoc`, che EREDITA la
+     * CSP del genitore, perdono tutti gli stili). Quindi il documento vive in una cornice con una CSP SUA: stili in linea
+     * sì, immagini e font solo `data:`, nessuna rete, e script solo col suo nonce. `sandbox allow-scripts` senza
+     * `allow-same-origin`: origine nulla, come le pagine HTML rese. È il disegno delle webview di VS Code
+     * (code.visualstudio.com/api/extension-guides/webview, letto il 26/09/2026: `default-src 'none'`, script propri col
+     * nonce, i dati via `postMessage`).
+     * ⛔ DAL 26/09 POMERIGGIO (owner: «ora, prima di F6») LA RESA SI FA QUI DENTRO. La pagina di TALOS manda i BYTE del file
+     *   e il formato; questo script carica `/lettore-ospite-<formato>.js` (script CLASSICO, col suo stesso nonce: un modulo
+     *   da un'origine nulla chiederebbe CORS), costruisce e ripulisce il documento (docx-preview o pptx-viewer-core, poi
+     *   DOMPurify) nel documento di QUESTA pagina e lo mette nel corpo. Prima lo costruiva la pagina di TALOS, e la sua CSP
+     *   segnalava ogni attributo `style` («Applying inline style violates…»: 39 avvisi per un Word, 59 per una
+     *   presentazione, misurati sul 4174). Se qualcosa fallisce lo si dice alla pagina (`talos-lettore-ospite-errore`), che
+     *   mostra la sua carta d'errore.
+     * ⛔ `innerHTML` non esegue gli `<script>` e la CSP non ammette script in linea senza il nonce né gestori d'evento:
+     *   anche un HTML non ripulito non potrebbe eseguire niente qui dentro.
+     * ⛔ ADATTA ALLA LARGHEZZA (26/09, foto sul 4174): una pagina Word ha la sua larghezza fissa (21 cm ≈ 794 px) e nel rail
+     *   (≈ 330 px) andava scorsa di lato. docx-preview non ha un'opzione per adattarla (`ignoreWidth` toglie la larghezza e
+     *   la pagina si stringe al contenuto): qui si misura quanto è largo il documento e, se non ci sta, lo si rimpicciolisce
+     *   con `zoom` — la vista «Larghezza pagina» di Word — e si rifà il conto quando la cornice cambia misura. Mai
+     *   ingrandito oltre il 100%. Le slide non ne hanno bisogno (scalano già da sole) e restano a 1.
+     */
+    if (method === 'GET' && url.pathname === '/api/v1/lettore/ospite') {
+      const nonce = creaNonceCsp();
+      const documento = `<!doctype html><html lang="it"><head><meta charset="utf-8"><title>Documento</title></head><body><script nonce="${nonce}">(() => {`
+        + `const genitore = window.parent; const nonce = document.currentScript.nonce;`
+        + `const RESE = { documento: '/lettore-ospite-documento.js', presentazione: '/lettore-ospite-presentazione.js' }; const caricate = new Map();`
+        + `const carica = (formato) => { if (!caricate.has(formato)) caricate.set(formato, new Promise((ok, ko) => {`
+        + ` const s = document.createElement('script'); s.nonce = nonce; s.src = RESE[formato];`
+        + ` s.onload = () => (window.TalosResaOspite && window.TalosResaOspite[formato] ? ok(window.TalosResaOspite[formato]) : ko(new Error('la resa non è pronta')));`
+        + ` s.onerror = () => { caricate.delete(formato); ko(new Error('la resa non si è caricata')); }; document.head.append(s); }));`
+        + ` return caricate.get(formato); };`
+        + `const adatta = () => { const radice = document.documentElement; radice.style.zoom = '1';`
+        + ` const largo = Math.max(document.body.scrollWidth, radice.scrollWidth); const scala = largo > innerWidth ? innerWidth / largo : 1;`
+        + ` radice.style.zoom = String(Math.max(0.2, Math.round(scala * 1000) / 1000)); radice.dataset.zoom = radice.style.zoom; };`
+        + `window.addEventListener('resize', adatta);`
+        + `window.addEventListener('message', async (e) => { if (e.source !== genitore || !e.data || e.data.tipo !== 'talos-lettore-documento' || !RESE[e.data.formato]) return;`
+        + ` try { const rendi = await carica(e.data.formato); const html = await rendi({ doc: document, finestra: window, byte: e.data.byte });`
+        + ` document.body.innerHTML = String(html ?? ''); adatta(); document.documentElement.dataset.pronto = 'si'; }`
+        + ` catch (errore) { document.documentElement.dataset.pronto = 'errore';`
+        + ` genitore.postMessage({ tipo: 'talos-lettore-ospite-errore', messaggio: String((errore && errore.message) || errore) }, '*'); } });`
+        + `genitore.postMessage({ tipo: 'talos-lettore-ospite-pronto' }, '*');`
+        + `})();</script></body></html>`;
+      res.writeHead(200, {
+        'Content-Type': 'text/html; charset=utf-8',
+        'Content-Length': Buffer.byteLength(documento),
+        'X-Content-Type-Options': 'nosniff',
+        'Cache-Control': 'no-store',
+        'Referrer-Policy': 'no-referrer',
+        'Content-Security-Policy': `sandbox allow-scripts; default-src 'none'; script-src 'nonce-${nonce}'; style-src 'unsafe-inline'; img-src data:; font-src data:; base-uri 'none'; form-action 'none'; frame-ancestors 'self'`,
+      });
+      res.end(documento);
+      return;
+    }
+
     const scaricoMatch = method === 'GET' && sessionRegistry
       ? /^\/api\/v1\/sessions\/([^/]+)\/file$/.exec(url.pathname)
       : null;
@@ -2883,6 +3888,124 @@ export function createHttpApp({
         });
         /* ⛔ Nessun ramo per HEAD: questo blocco si apre solo su `method === 'GET'`, esattamente
            come lo scarico qui sopra. Scriverlo lo farebbe sembrare servito, e non lo è. */
+        res.end(esito.bytes);
+      } catch (error) {
+        const normalized = normalizeError(error);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
+      }
+      return;
+    }
+
+    /*
+     * F5 File reader (26/09/2026) — la RESA di una pagina HTML, decisione owner «con script ma senza rete».
+     *
+     * Adattamento web del `<webview>` di Hermes (clone `65ad529`: `right-rail/preview-pane.tsx:1046-1048`, partizione
+     * propria, `sandbox=yes`, il file VERO con CSS, immagini e script accanto): il 4174 è una pagina, non Electron, quindi
+     * la cornice è un `iframe` e il contenimento viaggia con OGNI risposta (MDN «CSP: sandbox», web.dev «Play safely in
+     * sandboxed IFrames», letti il 26/09/2026):
+     *   · `sandbox allow-scripts` e MAI `allow-same-origin` — insieme sono la via d'uscita documentata dalla cornice.
+     *     Origine nulla: niente cookie, niente storage, niente accesso alla pagina di TALOS;
+     *   · `connect-src 'none'`, `form-action 'none'`, niente frame né worker: gli script disegnano, non chiamano la rete;
+     *   · ogni altra sorgente SOLO dallo stesso lasciapassare più `data:`/`blob:`: niente internet;
+     *   · `frame-ancestors 'self'`: la incornicia solo TALOS;
+     *   · `Allow-CSP-From` per la nostra origine: la cornice porta l'attributo `csp` (CSP Embedded Enforcement, W3C,
+     *     aggiornata 05/2026) e il browser NON DISEGNA nella cornice un documento che non accetta quella politica — una
+     *     pagina esterna non può travestirsi da TALOS. ⛔ La RICHIESTA di quella navigazione però parte (il controllo è
+     *     sulla risposta): nel guscio Electron la ferma `will-frame-navigate` (`desktop/main.mjs`), nel browser no — è il
+     *     rischio residuo dichiarato all'owner.
+     * Due porte:
+     *   · `POST /api/v1/sessions/:id/pagine` {percorso} | {voceId} — COL cookie: verifica che il file esista, sia dentro
+     *     la cartella di sessione e sia una pagina, e rende l'indirizzo con un lasciapassare nuovo
+     *     (`pagine-lasciapassare.mjs`: perché le sottorisorse della cornice non portano il cookie, misurato);
+     *   · `GET /api/v1/pagine/:lasciapassare/<segmenti>` — SENZA cookie, esente come il rientro OAuth: serve il file e i
+     *     suoi vicini, ma SOLO dentro la cartella della pagina (il prefisso sta nel lasciapassare, i segmenti non possono
+     *     risalire: niente `..`, `\`, `:`, vedi `leggiFilePagina`), o la sola voce di Libreria.
+     * ⛔ Il tipo si decide dall'ESTENSIONE, con `nosniff`: un tipo ignoto esce `application/octet-stream`.
+     * ⛔ I segmenti si decodificano UNO PER UNO: un `%2F` dentro un segmento non diventa un separatore.
+     * ⛔ La query si ignora (le pagine usano `stile.css?v=2` per la cache): non sceglie niente.
+     */
+    const creaPaginaMatch = method === 'POST' && sessionRegistry
+      ? /^\/api\/v1\/sessions\/([^/]+)\/pagine$/.exec(url.pathname)
+      : null;
+    if (creaPaginaMatch) {
+      try {
+        requireNoQuery(url);
+        let sessionId;
+        try { sessionId = decodeURIComponent(creaPaginaMatch[1]); } catch { sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method); return; }
+        const corpo = await leggiCorpoJson(req);
+        const chiavi = Object.keys(corpo ?? {});
+        const perVoce = chiavi.length === 1 && chiavi[0] === 'voceId' && typeof corpo.voceId === 'string' && corpo.voceId !== '';
+        const perPercorso = chiavi.length === 1 && chiavi[0] === 'percorso' && typeof corpo.percorso === 'string' && corpo.percorso !== '';
+        if (!perVoce && !perPercorso) {
+          const errore = new Error('Corpo non valido: atteso {percorso} o {voceId}');
+          errore.code = 'QUERY_INVALID';
+          throw errore;
+        }
+        const segmenti = perPercorso ? corpo.percorso.split('/') : null;
+        const esito = perPercorso
+          ? await sessionRegistry.leggiPagina(sessionId, segmenti)
+          : await sessionRegistry.scaricaVoceLibreria(sessionId, corpo.voceId);
+        if ('erroreAvvio' in esito) {
+          const errore = new Error(esito.erroreAvvio);
+          errore.code = esito.code;
+          throw errore;
+        }
+        if (!/^(?:text\/html|application\/xhtml\+xml)/u.test(tipoPerPagina(esito.nome))) {
+          const errore = new Error('Questo file non è una pagina HTML');
+          errore.code = 'QUERY_INVALID';
+          throw errore;
+        }
+        let ambito;
+        if (perVoce) ambito = { sessionId, voceId: corpo.voceId, nome: esito.nome };
+        else {
+          // il percorso nomina la pagina, o una cartella che vale il suo index.html: il prefisso è la cartella della pagina
+          const ultimo = segmenti[segmenti.length - 1];
+          const nominaIlFile = ultimo.toLowerCase() === String(esito.nome).toLowerCase();
+          ambito = { sessionId, prefisso: nominaIlFile ? segmenti.slice(0, -1) : segmenti.filter((s) => s !== ''), nome: esito.nome };
+        }
+        const gettone = lasciapassarePagine.crea(ambito);
+        if (req.aborted || res.destroyed) return;
+        sendJson(res, 200, successEnvelope({ indirizzo: `/api/v1/pagine/${gettone}/${encodeURIComponent(esito.nome)}` }, clock), method);
+      } catch (error) {
+        const normalized = normalizeError(error);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
+      }
+      return;
+    }
+
+    const paginaMatch = method === 'GET' && sessionRegistry
+      ? /^\/api\/v1\/pagine\/([^/]+)\/(.*)$/.exec(url.pathname)
+      : null;
+    if (paginaMatch) {
+      const ambito = lasciapassarePagine.usa(paginaMatch[1]);
+      let segmenti;
+      try { segmenti = paginaMatch[2].split('/').map((pezzo) => decodeURIComponent(pezzo)); } catch { segmenti = null; }
+      // un lasciapassare sconosciuto, scaduto o una codifica rotta: 404 senza dire quale dei tre
+      if (!ambito || !segmenti) { sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method); return; }
+      try {
+        let esito;
+        if (ambito.voceId) {
+          // una voce di Libreria non ha vicini: si serve lei, al suo nome, e nient'altro
+          if (segmenti.length !== 1 || segmenti[0] !== ambito.nome) { sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method); return; }
+          esito = await sessionRegistry.scaricaVoceLibreria(ambito.sessionId, ambito.voceId);
+        } else {
+          esito = await sessionRegistry.leggiPagina(ambito.sessionId, [...ambito.prefisso, ...segmenti]);
+        }
+        if ('erroreAvvio' in esito) {
+          const errore = new Error(esito.erroreAvvio);
+          errore.code = esito.code;
+          throw errore;
+        }
+        const origine = `http://${req.headers.host ?? '127.0.0.1'}`;
+        res.writeHead(200, {
+          'Content-Type': tipoPerPagina(esito.nome),
+          'Content-Length': esito.bytes.length,
+          'X-Content-Type-Options': 'nosniff',
+          'Cache-Control': 'private, no-store',
+          'Referrer-Policy': 'no-referrer',
+          'Content-Security-Policy': `sandbox allow-scripts; ${politicaPagina(`${origine}/api/v1/pagine/${paginaMatch[1]}/`)}; frame-ancestors 'self'`,
+          'Allow-CSP-From': origine,
+        });
         res.end(esito.bytes);
       } catch (error) {
         const normalized = normalizeError(error);
@@ -3634,11 +4757,11 @@ export function createHttpApp({
       try {
         requireNoQuery(url);
         const corpo = await leggiCorpoJson(req);
-        const { taskId, modello, modelloPlanner, reasoning, mobile, permessi, permessiPerAttrezzo, provider, runtimeId, modelId, fallbackConsent, fallbackProviders } = requireTaskIdBody(corpo);
+        const { taskId, modello, modelloPlanner, reasoning, mobile, permessi, permessiPerAttrezzo, modalitaOperativa, provider, runtimeId, modelId, fallbackConsent, fallbackProviders } = requireTaskIdBody(corpo);
         const opzioniSessione = {
           ...(fallbackProviders !== undefined ? { fallbackProviders } : {}),
           modelloScelto: modello, modelloPlannerScelto: modelloPlanner, reasoningScelto: reasoning, mobile,
-          permessiScelto: permessi, permessiPerAttrezzoScelto: permessiPerAttrezzo,
+          permessiScelto: permessi, permessiPerAttrezzoScelto: permessiPerAttrezzo, modalitaOperativaScelta: modalitaOperativa,
         };
         if (provider !== 'cloud' || runtimeId !== null || modelId !== null || fallbackConsent === true) {
           Object.assign(opzioniSessione, { provider, runtimeId, modelId, fallbackConsent });
@@ -3889,10 +5012,9 @@ export function createHttpApp({
      * di W1-10: stanno sotto `/api/`, quindi senza il cookie `talos_token`
      * sono già 401 molto prima di arrivare qui.
      *
-     * ⛔⛔⛔ NON ESISTE una POST di push, e non è una dimenticanza: il push si
-     * chiede all'owner ogni volta. `src/git-service.mjs` non ha quella porta,
-     * e `tests/git-service.test.mjs` la pinna leggendo il sorgente — se
-     * qualcuno la aggiungesse, quel test diventa rosso.
+     * ⛔⛔⛔ Dal 05/09 al 27/09 qui NON esisteva una POST di push. F6-2 (27/09/2026, decisioni dell'owner 2 e 16-23) la
+     * apre con regole scritte e pinnate (`tests/git-service.test.mjs`, `tests/http-routes-git.test.mjs`): mai forzato, mai
+     * dall'agente, conferma con remoto e ramo nella scheda prima del clic, esito letto dai flag di `--porcelain`.
      *
      * ⛔⛔ I percorsi arrivano dal client e sono SEMPRE espliciti: non esiste
      * una forma "tutto". L'indice git è CONDIVISO con l'owner e con le altre
@@ -3902,7 +5024,12 @@ export function createHttpApp({
      * La convalida dei percorsi (assoluti, `..`, magia di pathspec, `-`
      * iniziale) sta nel servizio, in un posto solo: GIT_PATH_INVALID.
      */
-    if (method === 'POST' && /^\/api\/v1\/sessions\/([^/]+)\/git\/(stage|unstage|commit)$/.test(url.pathname)) {
+    /*
+     * ⭐ F6-1 (26/09/2026, decisioni dell'owner su F6): due azioni in più sulla stessa riga — `discard` (annulla ciò che NON è
+     *   preparato, `gitService.annulla`) e `commit-staged` (commit di ciò che è preparato, con l'impronta che la scheda ha visto,
+     *   `gitService.commitPreparato`). Il push resta fuori fino a F6-2, dove l'owner ha deciso come si riscrive.
+     */
+    if (method === 'POST' && /^\/api\/v1\/sessions\/([^/]+)\/git\/(stage|unstage|commit|discard|commit-staged|amend|undo-commit|switch|branch-create|branch-rename|branch-delete|stash|stash-pop|stash-drop|hunk|commit-message|fetch|fetch-stop|pull|push|init)$/.test(url.pathname)) {
       try {
         requireNoQuery(url);
         if (!gitService) { const error = new Error('Git non disponibile'); error.code = 'GIT_STORE_UNAVAILABLE'; throw error; }
@@ -3911,14 +5038,117 @@ export function createHttpApp({
         const sessionId = decodeURIComponent(parti[4]);
         const azione = parti[6];
         /* ⛔ AL CONTRARIO — solo le chiavi previste da QUESTA azione: un corpo che ne porta altre è rifiutato, mai ignorato in silenzio (un `messaggio` su uno stage vorrebbe dire che chi chiama ha capito un'altra cosa). */
-        const ammesse = azione === 'commit' ? ['percorsi', 'messaggio'] : ['percorsi'];
+        const AMMESSE = {
+          commit: ['percorsi', 'messaggio'],
+          'commit-staged': ['messaggio', 'impronta'],
+          // ⭐ F6-1 passo 3 — ogni azione che riscrive o sceglie porta ciò che la scheda HA VISTO (commit, impronta, indice+commit)
+          amend: ['messaggio', 'impronta', 'commit'],
+          'undo-commit': ['commit'],
+          switch: ['ramo'],
+          'branch-create': ['ramo'],
+          'branch-rename': ['da', 'a'],
+          'branch-delete': ['ramo', 'forza'],
+          stash: ['messaggio', 'conNuovi'],
+          'stash-pop': ['indice', 'commit'],
+          'stash-drop': ['indice', 'commit'],
+          // ⭐ F6-1: un pezzo del diff — quale file, quale area, quale pezzo, l'impronta del diff visto, e cosa farne
+          hunk: ['percorso', 'area', 'indice', 'impronta', 'azione'],
+          // ⭐ F6-1 ✨: la prima riga che la persona ha già scritto (facoltativa) e la lingua dell'interfaccia
+          'commit-message': ['bozza', 'lingua'],
+          // ⭐ F6-2 (27/09): il remoto è l'unica scelta che arriva dalla scheda (conferma, punto 22); scarica e ferma non portano niente
+          fetch: ['remoto'],
+          'fetch-stop': [],
+          pull: [],
+          push: ['remoto'],
+          // ⭐ 28/09 (owner, «come VS Code»): `git init` nella cartella della sessione; `conferma` solo se contiene la cartella utente
+          init: ['conferma'],
+        };
+        const ammesse = AMMESSE[azione] ?? ['percorsi'];
         const chiavi = body && typeof body === 'object' && !Array.isArray(body) ? Object.keys(body) : null;
         if (chiavi === null || chiavi.some((k) => !ammesse.includes(k))) {
           const error = new Error('Corpo non valido'); error.code = 'QUERY_INVALID'; throw error;
         }
-        const esito = azione === 'commit'
-          ? await gitService.commit({ sessionId, percorsi: body.percorsi, messaggio: body.messaggio })
-          : await gitService[azione]({ sessionId, percorsi: body.percorsi });
+        const PORTE = {
+          commit: () => gitService.commit({ sessionId, percorsi: body.percorsi, messaggio: body.messaggio }),
+          'commit-staged': () => gitService.commitPreparato({ sessionId, messaggio: body.messaggio, impronta: body.impronta }),
+          discard: () => gitService.annulla({ sessionId, percorsi: body.percorsi }),
+          amend: () => gitService.modificaUltimoCommit({ sessionId, messaggio: body.messaggio, impronta: body.impronta, commit: body.commit }),
+          'undo-commit': () => gitService.annullaUltimoCommit({ sessionId, commit: body.commit }),
+          switch: () => gitService.cambiaRamo({ sessionId, ramo: body.ramo }),
+          'branch-create': () => gitService.creaRamo({ sessionId, ramo: body.ramo }),
+          'branch-rename': () => gitService.rinominaRamo({ sessionId, da: body.da, a: body.a }),
+          // ⛔ `forza` vale solo come `true` letterale: qualunque altra cosa è il primo tentativo, quello che chiede
+          'branch-delete': () => gitService.eliminaRamo({ sessionId, ramo: body.ramo, forza: body.forza === true }),
+          stash: () => gitService.accantona({ sessionId, messaggio: body.messaggio, conNuovi: body.conNuovi === true }),
+          'stash-pop': () => gitService.riprendiAccantonato({ sessionId, indice: body.indice, commit: body.commit }),
+          'stash-drop': () => gitService.scartaAccantonato({ sessionId, indice: body.indice, commit: body.commit }),
+          hunk: () => gitService.pezzo({ sessionId, percorso: body.percorso, area: body.area, indice: body.indice, impronta: body.impronta, azione: body.azione }),
+          /*
+           * ⭐ F6-2 (27/09/2026) — il remoto, con le regole scritte in testa a `git-service.mjs` (owner 26-27/09, punti 2 e 16-23):
+           *   recupera (solo col clic, fermabile), scarica (come GitHub Desktop, mai autostash), invia (mai forzato, remoto e ramo
+           *   confermati nella scheda PRIMA del clic — questa rotta non chiede: chi la chiama ha già confermato). L'agente non spinge
+           *   dal pannello: queste porte le apre solo la scheda.
+           */
+          fetch: () => gitService.recupera({ sessionId, remoto: body.remoto ?? null }),
+          'fetch-stop': () => gitService.fermaRecupero({ sessionId }),
+          pull: () => gitService.scarica({ sessionId }),
+          push: () => gitService.invia({ sessionId, remoto: body.remoto ?? null }),
+          // ⛔ `conferma` vale solo come `true` letterale, come `forza` sopra
+          init: () => gitService.inizializza({ sessionId, conferma: body.conferma === true }),
+          /*
+           * ⭐ F6-1 ✨ «Genera messaggio» (owner 26/09, punti 4 e 9: su clic, col modello della SESSIONE). Il diff lo dà il servizio
+           *   git, la richiesta la compone `messaggio-commit.mjs` (puro), il modello lo chiama il registro per la strada della
+           *   compattazione. Qui si mettono solo in fila: nessuna delle tre sa delle altre.
+           */
+          'commit-message': async () => {
+            if (typeof sessionRegistry?.chiediAllaSessione !== 'function') return { erroreAvvio: 'Il modello non è disponibile su questo server', code: 'MODEL_CALL_FAILED' };
+            if (body.bozza !== undefined && typeof body.bozza !== 'string') return { erroreAvvio: 'Corpo non valido', code: 'QUERY_INVALID' };
+            const d = await gitService.diffPerMessaggio({ sessionId });
+            if ('erroreAvvio' in d) return d;
+            const { testo, troncato } = comprimiDiffPerMessaggio(d.testo);
+            const prompt = promptMessaggioCommit({ diff: testo, soggetti: d.soggetti, bozza: body.bozza ?? '', lingua: body.lingua === 'en' ? 'en' : 'it', troncato });
+            const r = await sessionRegistry.chiediAllaSessione(sessionId, prompt);
+            if ('erroreAvvio' in r) return r;
+            const messaggio = pulisciMessaggioGenerato(r.testo);
+            if (!messaggio) return { erroreAvvio: 'Il modello non ha scritto un messaggio', code: 'MODEL_CALL_FAILED' };
+            return { messaggio, area: d.area, troncato, modello: r.modello };
+          },
+        };
+        const esito = PORTE[azione] ? await PORTE[azione]() : await gitService[azione]({ sessionId, percorsi: body.percorsi });
+        if ('erroreAvvio' in esito) { const error = new Error(esito.erroreAvvio); error.code = esito.code; throw error; }
+        sendJson(res, 200, successEnvelope(esito, clock), method);
+      } catch (error) {
+        const normalized = normalizeError(error);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
+      }
+      return;
+    }
+
+    /*
+     * ⭐ F6-3 (27/09/2026, decisioni owner 5-7, 25-28) — GitHub con `gh`: scarica il `gh` di TALOS, collega l'account (il codice
+     *   del device flow torna alla scheda), annulla il collegamento, crea una PR. Solo la scheda apre queste porte; la PR parte
+     *   solo da un ramo già inviato (`GH_BRANCH_NOT_PUSHED` altrimenti: l'invio ha la sua conferma, qui non si spinge niente).
+     */
+    if (method === 'POST' && (/^\/api\/v1\/github\/(install|login|login-cancel)$/.test(url.pathname) || /^\/api\/v1\/sessions\/([^/]+)\/github\/pulls$/.test(url.pathname))) {
+      try {
+        requireNoQuery(url);
+        if (!ghService) { const error = new Error('GitHub non disponibile'); error.code = 'GH_STORE_UNAVAILABLE'; throw error; }
+        const body = await leggiCorpoJson(req);
+        const chiavi = body && typeof body === 'object' && !Array.isArray(body) ? Object.keys(body) : null;
+        const crea = url.pathname.endsWith('/github/pulls');
+        /* ⛔ AL CONTRARIO — solo le chiavi previste: un corpo che ne porta altre è rifiutato, mai ignorato in silenzio */
+        const ammesse = crea ? ['titolo', 'testo', 'base', 'bozza'] : [];
+        if (chiavi === null || chiavi.some((k) => !ammesse.includes(k))) { const error = new Error('Corpo non valido'); error.code = 'QUERY_INVALID'; throw error; }
+        let esito;
+        if (crea) {
+          let sessionId;
+          try { sessionId = decodeURIComponent(url.pathname.split('/')[4]); } catch { sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method); return; }
+          if (body.bozza !== undefined && typeof body.bozza !== 'boolean') { const error = new Error('Corpo non valido'); error.code = 'QUERY_INVALID'; throw error; }
+          esito = await ghService.crea({ sessionId, titolo: body.titolo, testo: body.testo ?? '', base: body.base, bozza: body.bozza === true });
+        } else {
+          const azione = url.pathname.split('/').pop();
+          esito = azione === 'install' ? await ghService.installa() : azione === 'login' ? await ghService.collega() : await ghService.annullaCollegamento();
+        }
         if ('erroreAvvio' in esito) { const error = new Error(esito.erroreAvvio); error.code = esito.code; throw error; }
         sendJson(res, 200, successEnvelope(esito, clock), method);
       } catch (error) {
@@ -4280,14 +5510,37 @@ export function createHttpApp({
           sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method);
           return;
         }
+        /*
+         * ⭐ Owner 26/09/2026 («i run si eliminano con la loro sessione, e la conferma lo dice»): i Workflow della conversazione
+         *   se ne vanno con lei. Uno ancora in corso la blocca PRIMA (come una sessione in corso), così non resta mai una metà:
+         *   conversazione eliminata e run vivo, o il contrario. Un id che non ha la forma di un run-root (le sessioni di prova)
+         *   non ha Workflow.
+         */
+        const puoAvereWorkflow = workflowStore && /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(sessionId);
+        const runDellaSessione = puoAvereWorkflow ? await listRunSummariesForSession(workflowStore, { rootSessionId: sessionId }) : [];
+        const inCorso = runDellaSessione.filter((r) => !['succeeded', 'failed', 'cancelled'].includes(r.status));
+        if (inCorso.length > 0) {
+          const errore = new Error(`${inCorso.length} Workflow ancora in corso`);
+          errore.code = 'WORKFLOW_RUN_NOT_FINISHED';
+          throw errore;
+        }
         const esito = await sessionRegistry.elimina(sessionId);
         if ('erroreAvvio' in esito) {
           const errore = new Error(esito.erroreAvvio);
           errore.code = esito.code;
           throw errore;
         }
+        const workflowNonEliminati = [];
+        let workflowEliminati = 0;
+        for (const run of runDellaSessione) {
+          try { await removeRun(workflowStore, { runId: run.runId }); workflowEliminati += 1; } catch (errore) {
+            /* La conversazione è già eliminata: un run che non si toglie si DICE nella risposta e nel log, mai in silenzio. */
+            console.error(`[workflow] run ${run.runId} della sessione eliminata non rimosso:`, errore?.code ?? errore?.message);
+            workflowNonEliminati.push({ runId: run.runId, code: errore?.code ?? 'WORKFLOW_STORE_IO' });
+          }
+        }
         if (req.aborted || res.destroyed) return;
-        sendJson(res, 200, successEnvelope({ ok: true }, clock), method);
+        sendJson(res, 200, successEnvelope({ ok: true, workflowEliminati, workflowNonEliminati }, clock), method);
       } catch (error) {
         const normalized = normalizeError(error);
         sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
@@ -4586,6 +5839,10 @@ export function createHttpApp({
           sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method);
           return;
         }
+        /* REV-SESSION-READY v2 (27/09/2026): fra l'evento finale e l'assestamento la cronologia non è ancora quella del giro
+           appena chiuso, e la finestra attraversa l'event loop (chiusura dei server MCP). Si aspetta — millisecondi — invece
+           di ricevere «sta chiudendo il giro». Un giro ancora in corso non si aspetta: risponde il registro, come sempre. */
+        if (sessionRegistry.staChiudendoIlGiro?.(sessionIdOrigine)) await sessionRegistry.attendiFuoriDallaFinestra(sessionIdOrigine);
         const esito = sessionRegistry.forka(sessionIdOrigine);
         if ('erroreAvvio' in esito) {
           const errore = new Error(esito.erroreAvvio);
@@ -4624,6 +5881,8 @@ export function createHttpApp({
         const { body, immagini } = await imageInput(await leggiCorpoJson(req));
         const nuovoMessaggioUtente = requireResumeBody(body);
         if (!nuovoMessaggioUtente && immagini.length) throw Object.assign(new Error('Scrivi un messaggio per inviare le immagini.'), { code: 'QUERY_INVALID' });
+        /* REV-SESSION-READY v2: come per il fork, la finestra di chiusura si aspetta. */
+        if (sessionRegistry.staChiudendoIlGiro?.(sessionId)) await sessionRegistry.attendiFuoriDallaFinestra(sessionId);
         const esito = sessionRegistry.resume(sessionId, nuovoMessaggioUtente, immagini);
         if ('erroreAvvio' in esito) {
           const errore = new Error(esito.erroreAvvio);
@@ -4690,6 +5949,51 @@ export function createHttpApp({
       return;
     }
 
+    /*
+     * ⭐ F3 (24/09/2026), decisione 8 — `POST /api/v1/admin/shutdown`: SOLO loopback, SOLO col gettone (intestazione
+     *   `x-talos-shutdown-token`), confrontato a tempo costante su impronte sha256 (lunghezza fissa: `timingSafeEqual`
+     *   «must have the same byte length», doc Node v24 letta il 24/09/2026). Senza gettone o con gettone sbagliato:
+     *   401 `AUTH_REQUIRED` e NESSUNO spegnimento. Risponde 202 e spegne nel tick dopo, così la risposta parte.
+     */
+    /* Solo POST: gli altri metodi cadono nell'inventario (ROTTE_API), che risponde 405 con Allow — come ogni altra rotta. */
+    if (spegnimento && method === 'POST' && url.pathname === '/api/v1/admin/shutdown') {
+      const indirizzo = String(req.socket?.remoteAddress ?? '');
+      const loopback = indirizzo === '127.0.0.1' || indirizzo === '::1' || indirizzo === '::ffff:127.0.0.1';
+      const ricevuto = String(req.headers['x-talos-shutdown-token'] ?? '');
+      const atteso = String(spegnimento.gettone ?? '');
+      const combacia = loopback && ricevuto.length > 0 && atteso.length > 0
+        && timingSafeEqual(createHash('sha256').update(ricevuto).digest(), createHash('sha256').update(atteso).digest());
+      if (!combacia) { sendJson(res, 401, errorEnvelope('AUTH_REQUIRED', clock), method); return; }
+      sendJson(res, 202, successEnvelope({ spegnimento: 'avviato' }, clock), method);
+      setImmediate(() => { try { spegnimento.spegniFn?.(); } catch (errore) { console.error('[spegnimento] errore:', errore instanceof Error ? errore.message : errore); } });
+      return;
+    }
+
+    /*
+     * ⭐ F3 (24/09/2026), decisione 3/6 — ANNULLA una compattazione automatica: `POST /api/v1/sessions/:id/compaction/:at/undo`.
+     *   `:at` è l'identificativo del record (l'istante ISO in cui è nato, quello che l'evento `talos.compattazione` porta a
+     *   F5); il registro scrive una lapide e la proiezione torna grezza. Forma «risorsa/azione» come `/compact` qui sotto.
+     */
+    const undoMatch = method === 'POST' && sessionRegistry
+      && /^\/api\/v1\/sessions\/([^/]+)\/compaction\/([^/]+)\/undo$/.exec(url.pathname);
+    if (undoMatch) {
+      try {
+        requireNoQuery(url);
+        let sessionId; let at;
+        try { sessionId = decodeURIComponent(undoMatch[1]); at = decodeURIComponent(undoMatch[2]); }
+        catch { sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method); return; }
+        if (typeof sessionRegistry.annullaCompattazione !== 'function') { sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method); return; }
+        const esito = await sessionRegistry.annullaCompattazione(sessionId, at);
+        if ('erroreAvvio' in esito) { const errore = new Error(esito.erroreAvvio); errore.code = esito.code; throw errore; }
+        if (req.aborted || res.destroyed) return;
+        sendJson(res, 200, successEnvelope({ annullata: true }, clock), method);
+      } catch (error) {
+        const normalized = normalizeError(error);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
+      }
+      return;
+    }
+
     const compactMatch = method === 'POST' && sessionRegistry
       && /^\/api\/v1\/sessions\/([^/]+)\/compact$/.exec(url.pathname);
     if (compactMatch) {
@@ -4709,7 +6013,11 @@ export function createHttpApp({
           throw errore;
         }
         if (req.aborted || res.destroyed) return;
-        sendJson(res, 200, successEnvelope({ compattato: esito.compattato }, clock), method);
+        /* 26/09: con `at` e le stime quando la storia è stata ridotta — la chat aggiorna la riga e la misura (`compattaLegacy`). */
+        const riuscita = esito.compattato === true && typeof esito.at === 'string'
+          ? { at: esito.at, annullabile: esito.annullabile !== false, tokenPrima: esito.tokenPrima ?? null, tokenDopo: esito.tokenDopo ?? null }
+          : {};
+        sendJson(res, 200, successEnvelope({ compattato: esito.compattato, ...riuscita }, clock), method);
       } catch (error) {
         const normalized = normalizeError(error);
         sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
@@ -4952,10 +6260,78 @@ export function createHttpApp({
     /*
      * ⭐⭐⭐ 28/8 — la pillola permessi, livello "On request": l'owner
      * risponde a un'ApprovalRequested vista sulla connessione SSE.
-     * Stesso stile di /shell sopra — synchronous sessionRegistry call,
-     * mai un `await` lungo (rispondiApprovazione risolve una Promise
-     * già in sospeso, non ne avvia una nuova).
+     * Stesso stile di /shell sopra — mai un `await` lungo: l'unica attesa
+     * è la scrittura della risposta nel journal (CTX-D2, 23/09/2026).
      */
+    const questionMatch = method === 'POST' && sessionRegistry
+      && /^\/api\/v1\/sessions\/([^/]+)\/question$/.exec(url.pathname);
+    if (questionMatch) {
+      try {
+        requireNoQuery(url);
+        let sessionId;
+        try { sessionId = decodeURIComponent(questionMatch[1]); }
+        catch { sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method); return; }
+        const risposta = requireRispostaDomandaBody(await leggiCorpoJson(req));
+        /* ⛔ CTX-D2, 23/09/2026 notte — si ASPETTA la conferma del registro: il 200 parte solo dopo che
+           la risposta è sul disco (prima era una chiamata sincrona che dava ok prima della scrittura).
+           Una ripetizione della stessa risposta riceve l'esito della prima (idempotenza, vedi
+           `rispondiDomanda` in session-registry.mjs e draft-ietf-httpapi-idempotency-key-header-07 §2.6). */
+        const esito = await sessionRegistry.rispondiDomanda(sessionId, risposta.requestId, risposta);
+        if ('erroreAvvio' in esito) {
+          const errore = new Error(esito.erroreAvvio);
+          errore.code = esito.code;
+          throw errore;
+        }
+        if (req.aborted || res.destroyed) return;
+        sendJson(res, 200, successEnvelope({ ok: true }, clock), method);
+      } catch (error) {
+        const normalized = normalizeError(error);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
+      }
+      return;
+    }
+
+    /*
+     * ⛔ 24/09/2026 — LA SCELTA SUL PIANO (decisioni owner 36-39). Stessa forma della risposta alla domanda (il 200 parte solo
+     *   dopo che la scelta è sul disco, idempotente), più la guardia d'origine dei Workflow: «procedi…» alza il permesso della
+     *   sessione, e una pagina estranea non deve poterlo fare con il cookie della persona.
+     */
+    const planDecisionMatch = method === 'POST' && sessionRegistry
+      && /^\/api\/v1\/sessions\/([^/]+)\/plan-decision$/.exec(url.pathname);
+    if (planDecisionMatch) {
+      try {
+        requireNoQuery(url);
+        const contentType = typeof req.headers['content-type'] === 'string'
+          ? req.headers['content-type'].split(';', 1)[0].trim().toLowerCase() : '';
+        if (contentType !== 'application/json') {
+          throw Object.assign(new Error('La scelta sul piano vuole application/json'), { code: 'QUERY_INVALID' });
+        }
+        const rifiutoOrigine = rifiutoOrigineApprovazione(req, { token });
+        if (rifiutoOrigine) {
+          throw Object.assign(new Error(rifiutoOrigine === 'altra-finestra'
+            ? 'La scelta sul piano deve partire da questa finestra di TALOS'
+            : 'Un programma che non è un browser può scegliere sul piano solo col gettone di TALOS'), { code: 'PLAN_APPROVAL_ORIGIN_FORBIDDEN' });
+        }
+        let sessionId;
+        try { sessionId = decodeURIComponent(planDecisionMatch[1]); }
+        catch { sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method); return; }
+        // 32 KiB: il feedback arriva a 4.000 caratteri, fino a 6 byte ciascuno una volta scritto in JSON.
+        const corpo = await leggiCorpoJsonCon(req, Math.min(limiteCorpoByte, 32_768));
+        const esito = await sessionRegistry.rispondiPiano(sessionId, corpo);
+        if ('erroreAvvio' in esito) {
+          const errore = new Error(esito.erroreAvvio);
+          errore.code = esito.code;
+          throw errore;
+        }
+        if (req.aborted || res.destroyed) return;
+        sendJson(res, 200, successEnvelope({ ok: true }, clock), method);
+      } catch (error) {
+        const normalized = normalizeError(error);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
+      }
+      return;
+    }
+
     const approveMatch = method === 'POST' && sessionRegistry
       && /^\/api\/v1\/sessions\/([^/]+)\/approve$/.exec(url.pathname);
     if (approveMatch) {
@@ -5189,6 +6565,9 @@ export function createHttpApp({
         const corpo = await leggiCorpoJson(req);
         const { body, immagini } = await imageInput(corpo);
         const messaggio = requireQueueBody(body);
+        /* REV-SESSION-READY v3 (owner 27/09, «decide all'assestamento»): nella finestra di chiusura la coda rifiuta — qui si
+           aspetta che il giro sia chiuso, poi il registro decide come sempre (conclusa ⇒ «usa resume»). */
+        if (sessionRegistry.staChiudendoIlGiro?.(sessionId)) await sessionRegistry.attendiFuoriDallaFinestra(sessionId);
         const esito = sessionRegistry.accodaMessaggio(sessionId, messaggio, immagini);
         if ('erroreAvvio' in esito) {
           const errore = new Error(esito.erroreAvvio);
@@ -5530,7 +6909,9 @@ export function createHttpApp({
          */
         const listed = revision ? await hfHubClient.listGgufFiles(repo, detail.revision) : [];
         const files = revision && hfHubClient.pathsInfo ? await hfHubClient.pathsInfo(repo, detail.revision, listed.map((item) => item.path)) : listed;
-        data = { ...detail, files };
+        /* ⭐ 27/09 — owner «errore chiaro ora»: la pagina lo dice PRIMA di scaricare. `null` = non si sa (niente motore, niente dato). */
+        const motoreConosce = typeof motoreConosceArchitetturaFn === 'function' && detail.architettura ? motoreConosceArchitetturaFn(detail.architettura) : null;
+        data = { ...detail, files, motoreConosce: motoreConosce === true || motoreConosce === false ? motoreConosce : null };
       } else if (url.pathname === '/api/v1/huggingface/image') {
         const source = url.searchParams.get('url');
         if (!source) { const error = new Error('URL immagine mancante'); error.code = 'QUERY_INVALID'; throw error; }
@@ -5651,6 +7032,18 @@ export function createHttpApp({
          */
         const gitStatusMatch = gitService && /^\/api\/v1\/sessions\/([^/]+)\/git\/status$/.exec(url.pathname);
         const gitBranchMatch = gitService && /^\/api\/v1\/sessions\/([^/]+)\/git\/branch$/.exec(url.pathname);
+        // ⭐ F6-1 (26/09) — il diff di UN file: `?percorso=…&area=preparato|lavoro`, le due chiavi una volta sola, nient'altro
+        const gitDiffMatch = gitService && /^\/api\/v1\/sessions\/([^/]+)\/git\/diff$/.exec(url.pathname);
+        // ⭐ F6-2 passo 4 (27/09) — le modifiche di un commit del grafo: `changes?a=…[&da=…]` (i file) e
+        //   `changes-diff?a=…&percorso=…[&da=…][&prima=…]` (il diff di un file), sola lettura
+        const gitConfrontoMatch = gitService && /^\/api\/v1\/sessions\/([^/]+)\/git\/(changes|changes-diff)$/.exec(url.pathname);
+        // ⭐ F6-1 passo 3 (26/09) — storia (senza grafo: F6-2), rami locali, messi da parte: sola lettura, nessuna query
+        const gitElenchiMatch = gitService && /^\/api\/v1\/sessions\/([^/]+)\/git\/(log|branches|stashes|remotes|sync)$/.exec(url.pathname);
+        /* ⭐ F6-3 (27/09) — GitHub con `gh`: lo stato (installato? collegato?), le PR del ramo e le aperte, la bozza del modulo
+             (`?base=` facoltativa), i controlli di una PR. Sola lettura; il token non passa mai da qui (`src/gh-service.mjs`). */
+        const ghStatoMatch = ghService && url.pathname === '/api/v1/github/status';
+        const ghPrMatch = ghService && /^\/api\/v1\/sessions\/([^/]+)\/github\/(pulls|pull-draft)$/.exec(url.pathname);
+        const ghControlliMatch = ghService && /^\/api\/v1\/sessions\/([^/]+)\/github\/pulls\/([^/]+)\/checks$/.exec(url.pathname);
         // ⭐⭐⭐ 29/8 — FASE F: il Capability hub elenca le skill dichiarate — stesso principio, senza il concetto di fiducia (le skill non ce l'hanno).
         const skillsMatch = sessionRegistry && /^\/api\/v1\/sessions\/([^/]+)\/skills$/.exec(url.pathname);
         // ⭐⭐⭐ 29/8 — FASE N: il Capability hub elenca le voci di Libreria del progetto — stesso principio esatto di skillsMatch appena sopra (nessun concetto di fiducia).
@@ -5740,9 +7133,9 @@ export function createHttpApp({
             vivoDisponibile: Boolean(browserVivo),
           });
           data = { ...esitoCornice, via: scelta.via, percheVia: scelta.perche };
-        } else if (gitStatusMatch || gitBranchMatch) {
+        } else if (gitStatusMatch || gitBranchMatch || gitElenchiMatch) {
           requireNoQuery(url);
-          const trovato = gitStatusMatch ?? gitBranchMatch;
+          const trovato = gitStatusMatch ?? gitBranchMatch ?? gitElenchiMatch;
           let sessionId;
           try {
             sessionId = decodeURIComponent(trovato[1]);
@@ -5750,9 +7143,94 @@ export function createHttpApp({
             sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method);
             return;
           }
+          const elenco = gitElenchiMatch?.[2];
           const esito = gitStatusMatch
             ? await gitService.stato({ sessionId })
-            : await gitService.ramo({ sessionId });
+            : elenco === 'log' ? await gitService.storia({ sessionId })
+              : elenco === 'branches' ? await gitService.rami({ sessionId })
+                : elenco === 'stashes' ? await gitService.accantonati({ sessionId })
+                  // ⭐ F6-2 (27/09): i remoti e lo stato di sincronizzazione — sola lettura, nessun comando di rete
+                  : elenco === 'remotes' ? await gitService.remoti({ sessionId })
+                    : elenco === 'sync' ? await gitService.sincronizzazione({ sessionId })
+                      : await gitService.ramo({ sessionId });
+          if ('erroreAvvio' in esito) {
+            const errore = new Error(esito.erroreAvvio);
+            errore.code = esito.code;
+            throw errore;
+          }
+          data = esito;
+        } else if (gitDiffMatch) {
+          /* ⛔ Solo `percorso` e `area`, ognuna una volta sola: una chiave in più o ripetuta è una domanda sbagliata (QUERY_INVALID),
+             mai una parte ignorata. Il percorso lo convalida il servizio (GIT_PATH_INVALID), in un posto solo. */
+          const chiavi = [...url.searchParams.keys()];
+          if (chiavi.some((k) => k !== 'percorso' && k !== 'area') || ['percorso', 'area'].some((k) => url.searchParams.getAll(k).length !== 1)) {
+            throw Object.assign(new Error('Query non valida'), { code: 'QUERY_INVALID' });
+          }
+          let sessionId;
+          try {
+            sessionId = decodeURIComponent(gitDiffMatch[1]);
+          } catch {
+            sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method);
+            return;
+          }
+          const esito = await gitService.diff({ sessionId, percorso: url.searchParams.get('percorso'), area: url.searchParams.get('area') });
+          if ('erroreAvvio' in esito) {
+            const errore = new Error(esito.erroreAvvio);
+            errore.code = esito.code;
+            throw errore;
+          }
+          data = esito;
+        } else if (gitConfrontoMatch) {
+          /* ⛔ Come il diff: chiavi dichiarate e ognuna al più una volta; `a` (e per il diff `percorso`) obbligatorie. Gli hash e
+             il percorso li convalida il servizio (GIT_COMMIT_INVALID, GIT_PATH_INVALID), in un posto solo. */
+          const diUnFile = gitConfrontoMatch[2] === 'changes-diff';
+          const ammesse = diUnFile ? ['a', 'da', 'percorso', 'prima'] : ['a', 'da'];
+          const obbligatorie = diUnFile ? ['a', 'percorso'] : ['a'];
+          const chiavi = [...url.searchParams.keys()];
+          if (chiavi.some((k) => !ammesse.includes(k)) || ammesse.some((k) => url.searchParams.getAll(k).length > 1) || obbligatorie.some((k) => url.searchParams.getAll(k).length !== 1)) {
+            throw Object.assign(new Error('Query non valida'), { code: 'QUERY_INVALID' });
+          }
+          let sessionId;
+          try {
+            sessionId = decodeURIComponent(gitConfrontoMatch[1]);
+          } catch {
+            sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method);
+            return;
+          }
+          const da = url.searchParams.get('da');
+          const a = url.searchParams.get('a');
+          const esito = diUnFile
+            ? await gitService.diffFra({ sessionId, da, a, percorso: url.searchParams.get('percorso'), prima: url.searchParams.get('prima') })
+            : await gitService.modificheFra({ sessionId, da, a });
+          if ('erroreAvvio' in esito) {
+            const errore = new Error(esito.erroreAvvio);
+            errore.code = esito.code;
+            throw errore;
+          }
+          data = esito;
+        } else if (ghStatoMatch || ghPrMatch || ghControlliMatch) {
+          /* ⛔ Come le rotte git: nessuna query, tranne `base` sulla bozza (una volta sola). */
+          const bozza = ghPrMatch?.[2] === 'pull-draft';
+          const chiavi = [...url.searchParams.keys()];
+          if (bozza ? chiavi.some((k) => k !== 'base') || url.searchParams.getAll('base').length > 1 : chiavi.length > 0) {
+            throw Object.assign(new Error('Query non valida'), { code: 'QUERY_INVALID' });
+          }
+          /* il numero di una PR: cifre, senza zeri davanti, al più nove — una PR sola, mai un'opzione per `gh` */
+          if (ghControlliMatch && !/^[1-9]\d{0,8}$/u.test(ghControlliMatch[2])) throw Object.assign(new Error('Numero di PR non valido'), { code: 'QUERY_INVALID' });
+          let sessionId = null;
+          if (!ghStatoMatch) {
+            try {
+              sessionId = decodeURIComponent((ghPrMatch ?? ghControlliMatch)[1]);
+            } catch {
+              sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method);
+              return;
+            }
+          }
+          const esito = ghStatoMatch
+            ? await ghService.stato()
+            : ghControlliMatch ? await ghService.controlli({ sessionId, numero: Number(ghControlliMatch[2]) })
+              : bozza ? await ghService.bozza({ sessionId, base: url.searchParams.get('base') })
+                : await ghService.pullRequest({ sessionId });
           if ('erroreAvvio' in esito) {
             const errore = new Error(esito.erroreAvvio);
             errore.code = esito.code;

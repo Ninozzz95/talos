@@ -300,3 +300,21 @@ test('CTX-MEASURE-UPSERT one measurement per session: the latest wins, it surviv
   const reopened = createSqliteContextStore({ databasePath });
   try { assert.equal((await reopened.readContextSnapshot({ sessionId: 'a' })).measurement.tokens.requestHash, 'h2'); } finally { await reopened.close(); }
 });
+
+/*
+ * 25/09/2026 — ticket della CLI sui riassunti rifiutati: l'avviso della pausa è idempotente per id (ogni passo del giro
+ * lo riscrive, a schermo ne arriva UNO), non rinasce dopo la conferma di consegna, e non entra in un'altra sessione.
+ */
+test('CTX-NOTICE-IDEMPOTENT one notice per id across repeats and after acknowledgement, never in another session', async t => {
+  const { store } = await fixture(t);
+  await store.initSession({ sessionId: 'b', settings });
+  const notice = { schema: 'talos.context.event.v1', id: 'cooling-j1', sessionId: 'a', jobId: 'j1', kind: 'context.compaction.cooling', state: 'failed', createdAt, payload: { code: 'CTX_INVALID_SUMMARY', attempts: 1, waitSeconds: 60, retryAfter: '2026-09-08T00:01:00.000Z' } };
+  for (let i = 0; i < 3; i++) await store.recordContextNotice({ sessionId: 'a', event: notice });
+  const events = (await store.readContextOutbox({ sessionId: 'a' })).filter(event => event.kind === 'context.compaction.cooling');
+  assert.deepEqual(events, [notice]);
+  await store.ackContextEvent({ sessionId: 'a', eventId: notice.id });
+  await store.recordContextNotice({ sessionId: 'a', event: notice });
+  assert.deepEqual((await store.readContextOutbox({ sessionId: 'a' })).filter(event => event.id === notice.id), [], 'an acknowledged notice came back');
+  await assert.rejects(store.recordContextNotice({ sessionId: 'b', event: notice }), /belongs to its own session/u);
+  assert.deepEqual((await store.readContextOutbox({ sessionId: 'b' })).filter(event => event.id === notice.id), []);
+});

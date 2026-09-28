@@ -70,7 +70,14 @@ export class CustomTaskError extends Error {
 }
 
 const COMANDO_PROVA_DEFAULT = 'npm test';
-const CONSEGNA_MASSIMA_BYTE = 8192;
+/*
+ * ⛔⛔ 25/09/2026 sera, decisione owner «stesso tetto e motivo vero»: qui c'era `CONSEGNA_MASSIMA_BYTE = 8192` (dal 27/08,
+ *   `25dd1f026`, senza una ragione scritta). La PRIMA consegna era l'unico messaggio con un tetto: un messaggio successivo
+ *   (`requireResumeBody`, `http-app.mjs`) ha solo quello del corpo HTTP (10 MB), e un testo di 31 KB incollato come primo
+ *   messaggio moriva con «Avvio non riuscito: Query non valida». Hermes non ha tetti (un testo lungo diventa un segnaposto nel
+ *   compositore e si espande all'invio: `cli.py:852`, `hermes_cli/cli_stream_mixin.py:202`). Il limite vero è la finestra del
+ *   modello, che ha la sua carta (`LOCAL_CONTEXT_EXCEEDED`, contesto pieno). Prova: `custom-task.test.mjs`.
+ */
 
 /** Proiezione leggera per il menu — mai il percorso assoluto verso il browser: solo id e nome, stesso principio di `listaTaskDisponibili`. */
 export function elencaCartelleProgetto(cartelleProgetto) {
@@ -150,9 +157,6 @@ export function preparaEsecuzioneLibera(cartelleProgetto, { cartellaId, cartella
 
   if (typeof consegna !== 'string' || consegna.trim().length === 0) {
     throw new CustomTaskError('consegna mancante', 'QUERY_INVALID');
-  }
-  if (Buffer.byteLength(consegna, 'utf8') > CONSEGNA_MASSIMA_BYTE) {
-    throw new CustomTaskError(`consegna oltre ${CONSEGNA_MASSIMA_BYTE} byte`, 'QUERY_INVALID');
   }
 
   let comando = COMANDO_PROVA_DEFAULT;

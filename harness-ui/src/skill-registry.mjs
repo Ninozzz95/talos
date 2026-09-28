@@ -25,6 +25,7 @@
  */
 import { promises as fsp } from 'node:fs';
 import { join } from 'node:path';
+import { POSIZIONI_CONFIGURAZIONE, primaPerId } from './configurazione-progetto.mjs';
 
 export class SkillRegistryError extends Error {
   constructor(message, code = 'SKILL_INVALID') {
@@ -82,16 +83,29 @@ function analizzaSkillMd(testo, skillId) {
  * ignorata in silenzio, stesso principio di caricaHooks/caricaServerMcp)
  * — l'owner che ha sbagliato a scrivere un file deve saperlo.
  */
+/*
+ * ⭐ PO-26, parte 2 (owner 24/09/2026) — Le skill si leggono da DUE posizioni, in ordine di precedenza:
+ *   `.talos/skills/` e il nome di sempre nella radice del progetto. Il nome vecchio non si sposta e non smette di
+ *   valere (`src/configurazione-progetto.mjs`); una voce con lo stesso id in `.talos/` lo sostituisce.
+ */
 export async function caricaSkill({ cartella }, deps = {}) {
+  const tutte = [];
+  for (const nomeCartella of POSIZIONI_CONFIGURAZIONE.skills) tutte.push(...(await caricaSkillDaCartella({ cartella, nomeCartella }, deps)).skills);
+  const skills = primaPerId(tutte, (s) => s.id);
+  skills.sort((a, b) => a.id.localeCompare(b.id));
+  return { skills };
+}
+
+async function caricaSkillDaCartella({ cartella, nomeCartella = NOME_CARTELLA_SKILLS }, deps = {}) {
   const readdirFn = deps.readdirFn ?? fsp.readdir;
   const readFileFn = deps.readFileFn ?? fsp.readFile;
-  const cartellaSkills = join(cartella, NOME_CARTELLA_SKILLS);
+  const cartellaSkills = join(cartella, nomeCartella);
   let voci;
   try {
     voci = await readdirFn(cartellaSkills, { withFileTypes: true });
   } catch (errore) {
     if (errore?.code === 'ENOENT') return { skills: [] };
-    throw new SkillRegistryError(`Impossibile leggere ${NOME_CARTELLA_SKILLS}: ${errore.message}`, 'SKILL_READ_FAILED');
+    throw new SkillRegistryError(`Impossibile leggere ${nomeCartella}: ${errore.message}`, 'SKILL_READ_FAILED');
   }
   const skills = [];
   for (const voce of voci) {

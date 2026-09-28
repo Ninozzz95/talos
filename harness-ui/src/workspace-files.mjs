@@ -157,6 +157,52 @@ export async function leggiFilePerScarico({ cartella, percorso }, deps = {}) {
 }
 
 /**
+ * F5 File reader (26/09/2026, decisione owner «HTML con script ma senza rete») — un file della cartella per la RESA di
+ * una pagina HTML: la pagina e i suoi vicini (CSS, immagini, script relativi), serviti dalla rotta `/pagina/` con la CSP
+ * che la contiene (`http-app.mjs`). Stessa difesa delle sorelle (`risolviPercorsoEsistente`: niente assoluti né `\0`,
+ * `realpath`, confine della cartella di sessione), più due regole che valgono solo qui:
+ *   · i SEGMENTI arrivano uno per uno dall'indirizzo, e nessuno può essere vuoto, `.`, `..`, contenere `/`, `\` o `:` —
+ *     il `:` su Windows apre i flussi alternativi NTFS (`pagina.html:segreto` è un altro file dentro quello), e dentro un
+ *     nome di pagina non ha nessun uso legittimo;
+ *   · una CARTELLA vale il suo `index.html`, come per Hermes (`electron/main.ts`, `previewFileTarget`) e per ogni
+ *     server statico: un link relativo a `guida/` apre `guida/index.html`.
+ * @param {{cartella:string, segmenti:string[]}} richiesta — `segmenti` già decodificati; l'ultimo vuoto = «la cartella»
+ * @returns {Promise<{bytes:Buffer, dimensione:number, nome:string}>}
+ */
+export async function leggiFilePagina({ cartella, segmenti }, deps = {}) {
+  if (!Array.isArray(segmenti)) throw new WorkspaceFileError('Percorso non valido');
+  const pezzi = [...segmenti];
+  const cartellaChiesta = pezzi.length === 0 || pezzi[pezzi.length - 1] === '';
+  if (cartellaChiesta) pezzi.pop();
+  for (const pezzo of pezzi) {
+    if (typeof pezzo !== 'string' || pezzo === '' || pezzo === '.' || pezzo === '..' || /[\\/:\0]/u.test(pezzo)) {
+      throw new WorkspaceFileError('Percorso non valido');
+    }
+  }
+  const percorso = pezzi.join('/');
+  const { reale } = risolviPercorsoEsistente(cartella, percorso, deps, true);
+  const statFn = deps.statFn ?? fsp.stat;
+  let file = reale;
+  let stat = await statFn(file);
+  if (stat.isDirectory()) {
+    // la pagina di una cartella: il suo index.html, con la stessa difesa (un index.html che è un collegamento verso fuori cade)
+    ({ reale: file } = risolviPercorsoEsistente(cartella, percorso ? `${percorso}/index.html` : 'index.html', deps));
+    stat = await statFn(file);
+  } else if (cartellaChiesta) {
+    throw new WorkspaceFileError('File non trovato', 'FILE_NOT_FOUND'); // `pagina.html/` non è una cartella
+  }
+  if (!stat.isFile()) throw new WorkspaceFileError('File non trovato', 'FILE_NOT_FOUND');
+  if (stat.size > DIMENSIONE_MASSIMA_SCARICO) {
+    throw new WorkspaceFileError(
+      `File troppo grande da mostrare (${Math.round(stat.size / 1024 / 1024)} MB, tetto ${DIMENSIONE_MASSIMA_SCARICO / 1024 / 1024} MB)`,
+      'FILE_TOO_LARGE',
+    );
+  }
+  const bytes = await (deps.readFileFn ?? fsp.readFile)(file);
+  return { bytes, dimensione: stat.size, nome: file.split(/[\\/]/).pop() };
+}
+
+/**
  * "Rinomina" — `nuovoNome` è un NOME, non un percorso: niente `/`, `\`,
  * `..` — sposta il file nella STESSA cartella, non altrove (rinominare
  * ≠ spostare, stessa distinzione che fa ogni file manager reale).
@@ -260,7 +306,39 @@ export const DIMENSIONE_MASSIMA_CREAZIONE = 32 * 1024 * 1024;
  *
  * @param {{cartella:string, nome:string, bytes:Uint8Array|Buffer|string, modalita?:'nuovo'|'accoda'}} input
  */
-export async function creaFileWorkspace({ cartella, nome, bytes, modalita = 'nuovo' }, deps = {}) {
+/*
+ * ⛔⛔ Owner 26/09/2026 («Rispettare la cartella») — il modello ha chiesto un documento col titolo
+ *   `tokenizer project/ricerca_tokenizer_gpt` e il file è nato sul Desktop come `tokenizer project
+ *   ricerca_tokenizer_gpt.md` (la barra diventata spazio), fuori dalla cartella voluta, con un esito che
+ *   non diceva dove (sessione `c15ba17c`, 25/09). Da oggi una sottocartella RELATIVA si rispetta: le cartelle
+ *   mancanti si creano, sempre DENTRO lo spazio di lavoro — la forma di Hermes (`tools/file_operations.py:1254`,
+ *   «Write content atomically, creating parent directories as needed»).
+ * ⛔ Questa è la SERRATURA, non l'interpretazione del titolo (che sta in `agent-service.mjs`): qui arriva una
+ *   sottocartella già ripulita e si rifiuta per nome tutto ciò che potrebbe portare fuori — assoluti, `..`,
+ *   caratteri che Windows non accetta, nomi di periferica, punti o spazi in coda.
+ */
+const CARATTERI_VIETATI_IN_CARTELLA = /[<>:"|?*\u0000-\u001f]/u;
+const NOMI_DI_PERIFERICA = /^(?:con|prn|aux|nul|com\d|lpt\d)(?:\..*)?$/iu;
+export const PROFONDITA_MASSIMA_SOTTOCARTELLA = 8;
+
+export function normalizzaSottocartella(valore) {
+  if (valore === undefined || valore === null || valore === '') return '';
+  if (typeof valore !== 'string') throw new WorkspaceFileError('Cartella non valida', 'FOLDER_INVALID');
+  if (/^[a-zA-Z]:/u.test(valore) || /^[\\/]/u.test(valore)) {
+    throw new WorkspaceFileError('La cartella deve essere relativa allo spazio di lavoro, non un percorso assoluto', 'FOLDER_INVALID');
+  }
+  const pezzi = valore.split(/[\\/]+/u).filter((p) => p !== '' && p !== '.');
+  if (pezzi.some((p) => p === '..')) throw new WorkspaceFileError('Una cartella non può uscire dallo spazio di lavoro («..»)', 'FOLDER_INVALID');
+  if (pezzi.length > PROFONDITA_MASSIMA_SOTTOCARTELLA) throw new WorkspaceFileError(`Troppe cartelle annidate (al massimo ${PROFONDITA_MASSIMA_SOTTOCARTELLA})`, 'FOLDER_INVALID');
+  for (const p of pezzi) {
+    if (CARATTERI_VIETATI_IN_CARTELLA.test(p) || NOMI_DI_PERIFERICA.test(p) || /[. ]$/u.test(p) || p.length > 255) {
+      throw new WorkspaceFileError(`Nome di cartella non valido: «${p}»`, 'FOLDER_INVALID');
+    }
+  }
+  return pezzi.join('/');
+}
+
+export async function creaFileWorkspace({ cartella, nome, bytes, modalita = 'nuovo', sottocartella = '' }, deps = {}) {
   if (modalita !== 'nuovo' && modalita !== 'accoda') {
     throw new WorkspaceFileError('Modalità non valida: "nuovo" (rifiuta un nome già preso) o "accoda" (aggiunge in coda)');
   }
@@ -292,9 +370,23 @@ export async function creaFileWorkspace({ cartella, nome, bytes, modalita = 'nuo
       'CONTENT_TOO_LARGE',
     );
   }
+  const sotto = normalizzaSottocartella(sottocartella);
   const radiceReale = (deps.realpathSyncFn ?? realpathSync)(cartella);
-  const destinazione = join(radiceReale, nome);
+  let cartellaDestinazione = radiceReale;
+  if (sotto) {
+    const voluta = join(radiceReale, ...sotto.split('/'));
+    if (!isPathInside(radiceReale, voluta)) throw new WorkspaceFileError('Destinazione fuori dalla cartella del workspace');
+    await (deps.mkdirFn ?? fsp.mkdir)(voluta, { recursive: true });
+    /* ⛔ Il controllo lessicale non basta: una cartella che esisteva già può essere una GIUNZIONE che porta fuori
+     *   (la lezione di robocopy del 17/09). Si guarda dove finisce DAVVERO, dopo averla creata. */
+    cartellaDestinazione = (deps.realpathSyncFn ?? realpathSync)(voluta);
+    if (!isPathInside(radiceReale, cartellaDestinazione)) {
+      throw new WorkspaceFileError('La cartella esiste ma porta fuori dallo spazio di lavoro (collegamento o giunzione)', 'FOLDER_INVALID');
+    }
+  }
+  const destinazione = join(cartellaDestinazione, nome);
   if (!isPathInside(radiceReale, destinazione)) throw new WorkspaceFileError('Destinazione fuori dalla cartella del workspace');
+  const percorsoRelativo = sotto ? `${sotto}/${nome}` : nome;
   const accessFn = deps.accessFn ?? fsp.access;
   const esisteGia = await accessFn(destinazione).then(() => true, () => false);
   if (esisteGia && modalita === 'nuovo') throw new WorkspaceFileError('Esiste già un file con questo nome', 'FILE_EXISTS');
@@ -316,10 +408,10 @@ export async function creaFileWorkspace({ cartella, nome, bytes, modalita = 'nuo
     // ⛔ `appendFile` (flag 'a'), MAI leggi-concatena-riscrivi: quest'ultima perderebbe in silenzio
     //    ciò che qualcun altro ha scritto fra la lettura e la riscrittura.
     await (deps.appendFileFn ?? fsp.appendFile)(destinazione, bytes);
-    return { percorso: nome, accodato: true, byteTotali: stat.size + dimensione };
+    return { percorso: percorsoRelativo, assoluto: destinazione, accodato: true, byteTotali: stat.size + dimensione };
   }
   await (deps.writeFileFn ?? fsp.writeFile)(destinazione, bytes);
-  return { percorso: nome, ...(modalita === 'accoda' ? { accodato: false, byteTotali: dimensione } : {}) };
+  return { percorso: percorsoRelativo, assoluto: destinazione, ...(modalita === 'accoda' ? { accodato: false, byteTotali: dimensione } : {}) };
 }
 
 /**

@@ -1,0 +1,42 @@
+/*
+ * F7-1 (owner 27/09/2026) — la barra del titolo propria della finestra desktop (`components/barra-finestra.js`).
+ * Nasce solo nella finestra dell'app, dove Windows lascia lo spazio (Window Controls Overlay): alta quanto la zona che
+ * Windows riserva (`env(titlebar-area-height)`, 33 px) più 1 px di bordo = i 34 di Hermes, col fondo della app e i comandi
+ * veri a destra.
+ * Tutto da trascinare (`app-region: drag`, doc Electron «custom-window-interactions»), tranne il pulsante.
+ */
+.talos-barra-finestra {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  /* la zona dei comandi (33 px) più il bordo di 1 px, che resta SOTTO i comandi e non si interrompe (box-sizing di reset.css) */
+  height: calc(env(titlebar-area-height, 33px) + 1px);
+  padding-inline-start: calc(env(titlebar-area-x, 0px) + var(--talos-space-sm));
+  background: var(--talos-background);
+  border-bottom: 1px solid var(--talos-border-subtle);
+  user-select: none;
+  app-region: drag;
+  -webkit-app-region: drag;
+}
+
+.talos-barra-finestra__menu {
+  width: 28px;
+  min-width: 28px;
+  height: 28px;
+  min-height: 28px;
+  app-region: no-drag;
+  -webkit-app-region: no-drag;
+}
+
+/* ⛔ Una zona da trascinare prende i clic anche sotto ciò che le sta sopra (Electron calcola le regioni dal DOM): con un
+   dialogo o un menu aperto la striscia smette di trascinare, o il bordo alto del dialogo sposterebbe la finestra. */
+body:has(dialog[open]) .talos-barra-finestra,
+body:has(:popover-open:not(.talos-tip)) .talos-barra-finestra {
+  app-region: no-drag;
+  -webkit-app-region: no-drag;
+}
+
+/* I pannelli che misurano l'altezza della finestra tolgono anche la striscia (vedi `.talos-detail` in index.css). */
+:root[data-talos-finestra="app"] {
+  --talos-workspace-bar-h: calc(env(titlebar-area-height, 33px) + 1px);
+}

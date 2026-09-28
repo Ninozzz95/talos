@@ -314,19 +314,18 @@ test('PAR-05 — le schede del selettore modelli combaciano col registro (copia 
   }
 });
 
-test('PAR-06 — il <select> dei fornitori nel template porta gli stessi nomi del registro', () => {
+/*
+ * ⛔ PAR-06 È RITIRATA il 23/09/2026, come chiedeva la sua stessa asserzione («se è stato tolto, si
+ *   toglie anche questa prova»). Il `<select id="providerLab">` era la tendina del velo «Fornitori e
+ *   accessi», e l'owner ha deciso di togliere il velo («Toglierla: porta al Model Lab»): la tendina
+ *   non esiste più, quindi non c'è più un secondo elenco di fornitori scritto a mano nel template.
+ *   L'elenco che si vede è quello del server (`/api/v1/providers`), disegnato nella scheda
+ *   «Provider» del Laboratorio modelli — e il verso contrario, «nessuno lo riscrive», resta a PAR-07.
+ */
+test('PAR-06-bis — il template non riporta più la tendina dei fornitori del velo tolto', () => {
   const html = leggi('frontend/index.template.html');
-  const select = /<select class="talos-select" id="providerLab">(.*?)<\/select>/su.exec(html);
-  assert.ok(select, 'il selettore dei fornitori non è più nel template: se è stato tolto, si toglie anche questa prova');
-  /*
-   * ⛔ Si confrontano i `value`, cioè gli ID, non le etichette: il testo visibile di un selettore è
-   *   una scelta di spazio («Ollama» invece di «Ollama Local») e non deve diventare un contratto —
-   *   ma l'insieme dei fornitori sì. Gli `value` sono stati aggiunti il 12/09 proprio per questo:
-   *   senza, l'unica cosa confrontabile era il testo, e il cancello avrebbe imposto parole a una
-   *   superficie visiva invece di presidiare un elenco.
-   */
-  const opzioni = [...select[1].matchAll(/<option value="([^"]+)"/gu)].map((m) => m[1]);
-  stessiId(opzioni, ID_CON_CREDENZIALE, '<select id="providerLab">');
+  assert.equal(/id="providerLab"/u.test(html), false, 'la tendina del velo «Fornitori e accessi» è tornata nel template');
+  assert.equal(/id="veloFornitori"/u.test(html), false, 'il velo «Fornitori e accessi» è tornato nel template');
 });
 
 // ── 4. Nessuna copia rimasta indietro ─────────────────────────────────────────────────────────

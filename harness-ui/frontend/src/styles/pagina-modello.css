@@ -5,6 +5,8 @@
  * nelle sue foto («Ruolo di sistema» e la tabella dei Requisiti tagliate a 1440 e a 1024).
  * `z-index` sopra l'app e SOTTO i veli (che stanno a `--talos-z-app-overlay`): la pagina è una
  * schermata, non un dialogo, e un velo che si apre da lì deve restarle davanti.
+ * ⛔ 26/09/2026: nel prodotto la pagina NON usa più questa forma (sta nella colonna delle Impostazioni, vedi in fondo);
+ *   questa resta per chi la monta da sola — il banco di `lab-pagina-modello.spec.mjs`.
  */
 .talos-pagina-modello{
   position:fixed; inset:0; z-index:calc(var(--talos-z-app-overlay) - 10);
@@ -98,18 +100,34 @@
 .model-page-tabs,.model-page-tabs .talos-tabs__list{flex-wrap:wrap}
 .model-page [data-hf-file-choices] .talos-choice{min-width:0;overflow-wrap:anywhere}
 
-/* La pagina appartiene al centro della shell: la sidebar rimane raggiungibile.
-   La scala è già applicata al guscio e non va moltiplicata una seconda volta. */
-#centro.talos-model-page-open{position:relative}
-#centro.talos-model-page-open>:not(#paginaModello){visibility:hidden;pointer-events:none}
-#centro>.talos-pagina-modello{position:absolute;inset:0;zoom:1;z-index:5}
+/* ⭐ 26/09/2026 — La pagina sta nella colonna delle Impostazioni, al posto del Laboratorio (owner 25/09 sera: «la stessa
+   larghezza della pagina precedente e la sidebar delle impostazioni visibile come le altre pagine»; prototipo
+   `calm-lab/src/model-lab.mjs:7`, Hermes `settings/index.tsx:556-566`). Resta la briciola; il resto della colonna si toglie
+   dal flusso finché la pagina è aperta (la lista resta nel DOM e torna com'era). Scorre la pagina delle Impostazioni
+   (`.talos-page`), il padding è quello della colonna: la pagina qui non ne porta. La scala è già applicata al guscio e
+   non va moltiplicata una seconda volta (`zoom:1`). La barra della pagina resta in cima mentre si scorre, col suo
+   «Tutti i modelli» a portata (x-bookmarks-organizer PR #145: intestazione con «Indietro» ferma in cima). */
+.settings-content.talos-model-page-open>:not(#paginaModello):not(.settings-breadcrumb){display:none}
+.settings-content>.talos-pagina-modello{position:static;inset:auto;z-index:auto;overflow:visible;overscroll-behavior:auto;padding:0;background:transparent;zoom:1}
+/* L'aggancio si misura dentro il padding dello scorritore: con `top:0` la barra si fermava 28 px sotto il bordo e in quella
+   fascia passava il contenuto (foto sul 4174, 26/09). Come il prototipo (`top:-32px`, il suo padding), il `top` è il padding
+   della pagina delle Impostazioni cambiato di segno: 28 px (`design-system/settings.css:11`), 22 px sotto i 660 px del
+   contenitore `settings` (`:534`). */
+.settings-content>.talos-pagina-modello .model-page-toolbar{top:-28px;margin-top:0}
+@container settings (max-width:660px){.settings-content>.talos-pagina-modello .model-page-toolbar{top:-22px}}
+/* Owner 27/09 («la larghezza non è full width», foto del 4174 a ~2000 px): nella colonna delle Impostazioni il contenitore del
+   mockup non si ferma a 1260px centrato (la regola più sotto, nata per la pagina a tutto schermo): riempie la colonna, come le
+   altre pagine delle Impostazioni. La prosa della scheda HF resta alla sua misura di lettura (`.readme-body`, 960px). */
+.settings-content>.talos-pagina-modello>.model-page{max-width:none;margin-inline:0}
+/* 27/09 — l'avviso del motore che non sa leggere l'architettura: `talos-callout` ha il respiro solo sopra (margin-top:12px,
+   index.css:2274), e nelle foto del 4174 il pulsante «Misura su questo PC» gli stava a 4 px sotto. Lo stesso respiro sotto. */
+.talos-pagina-modello [data-modello-motore]{margin-bottom:12px}
 .model-page .readme-body{box-sizing:border-box;width:100%;max-width:960px;margin-inline:auto;padding:40px 48px 46px}
 .model-page .readme-body table{max-width:100%;display:block;overflow-x:auto}
 .model-page .readme-body pre{max-width:100%;overflow-x:auto}
 .model-page .readme-body img{max-width:100%;height:auto}
 @media(min-width:1920px){.model-page .readme-body{max-width:1030px;padding-inline:58px}}
-@media(max-width:1200px){.model-page .readme-body{padding:34px 35px}}
-@media(max-width:760px){.model-page .readme-body{padding:30px}}
+/* 26/09: le due regole per viewport della prosa (1200 e 760) sono passate alle container query in fondo al foglio. */
 
 /* La larghezza editoriale riguarda anche il contenitore esterno del mockup. */
 .talos-pagina-modello>.model-page{max-width:1260px;margin-inline:auto}
@@ -119,3 +137,75 @@
 .model-page .readme-chrome{justify-content:flex-start;gap:10px;flex-wrap:wrap}
 .model-page .readme-chrome>.talos-label{border-left:1px solid var(--talos-border);padding-left:13px;font-size:.6875rem;color:var(--talos-muted)}
 .model-page .readme-chrome>.talos-badge{margin-left:auto}
+
+/*
+ * ⭐ 26/09/2026 — LE LARGHEZZE STRETTE DEL PROTOTIPO, SULLA LARGHEZZA DELLA PAGINA.
+ * Nel prototipo (`prototypes/calm-lab/src/styles.css:156-159`) la pagina si adatta con quattro `@media` sulla finestra, in
+ * un'app con UNA barra (220 px) e la colonna con 25 px di margine per lato. Da noi la pagina ora sta nella colonna delle
+ * Impostazioni, accanto a DUE barre: a parità di finestra è molto più stretta (842 px a 1440, 480 a 1024). Le stesse regole
+ * si portano quindi sulla larghezza della PAGINA (container query, MDN «Container size and style queries», letta il
+ * 26/09/2026: le query stilano i discendenti del contenitore nominato più vicino), alle larghezze di colonna che il prototipo
+ * aveva a quelle finestre: 1200 → 930, 1000 → 730, 760 → 716 (lì la barra sparisce e i margini sono 22 px), 570 → 526.
+ * Si portano solo le regole delle classi che il nostro componente usa; `.button` del prototipo è `.talos-button`, le
+ * linguette sono `.talos-tabs__list` e `.talos-tabs__tab`.
+ */
+.talos-pagina-modello{container:pagina-modello / inline-size}
+@container pagina-modello (max-width:930px){
+  .toolbar-identity{display:none}
+  .model-page-tab-note{display:none}
+  .model-context-strip>div{padding:0 15px}
+  .model-page .readme-body{padding:34px 35px}
+  .model-hero h1{font-size:2.2rem}
+}
+@container pagina-modello (max-width:730px){
+  .model-context-strip{grid-template-columns:repeat(2,minmax(0,1fr));row-gap:20px}
+  .model-context-strip>div:nth-child(2){border:0}
+  .model-page-toolbar{gap:10px}
+  .model-page-actions{gap:6px}
+  .model-page-actions .talos-button{font-size:.6875rem;padding-inline:10px}
+  .readme-chrome{padding-inline:18px}
+  .readme-index{padding-inline:16px}
+  .readme-index>span{flex-basis:100%}
+}
+@container pagina-modello (max-width:716px){
+  .model-page-toolbar{min-height:64px}
+  .model-hero{padding-top:25px;gap:18px 12px}
+  .model-hero .model-glyph--large{width:54px;height:54px;border-radius:14px}
+  .model-hero .model-glyph--large svg{width:32px;height:32px}
+  .model-hero-identity{gap:14px}
+  .model-hero h1{font-size:2rem}
+  .model-hero-caption{font-size:.8125rem}
+  .model-page .model-page-tabs>.talos-tabs__list{gap:24px}
+  .model-page .model-page-tabs .talos-tabs__tab{font-size:.75rem}
+  .model-page .readme-body{padding:30px}
+  .readme-body h2{font-size:1.65rem}
+  .model-page-actions .talos-button .i{display:none}
+  .readme-index>span{flex-basis:auto}
+  .model-page-end{align-items:flex-start}
+}
+@container pagina-modello (max-width:526px){
+  .model-page-toolbar{align-items:flex-start;flex-wrap:wrap;gap:7px;padding:9px 0 12px}
+  .model-page-actions{width:100%;margin-left:0;display:grid;grid-template-columns:1fr 1.35fr}
+  .model-page-actions .talos-button{min-height:36px;font-size:.6875rem}
+  .model-page-actions .talos-button .i{display:block;width:14px}
+  .model-hero h1{font-size:1.85rem}
+  .model-hero .eyebrow{font-size:.5rem}
+  .model-repository{font-size:.6875rem}
+  .model-context-strip{gap:19px 0}
+  .model-context-strip>div{padding:0 14px}
+  .model-context-strip>div>.i{display:none}
+  .model-context-strip strong{font-size:.6875rem}
+  .model-context-strip small{font-size:.5rem}
+  /* Nel prototipo le linguette sono figlie dirette della riga; da noi stanno in una lista, che deve prendere la riga perché
+     `space-between` abbia spazio da distribuire (foto a 1024: le linguette si toccavano). */
+  .model-page .model-page-tabs>.talos-tabs__list{flex:1 1 auto;gap:0;justify-content:space-between}
+  .model-page .model-page-tabs .talos-tabs__tab{font-size:.625rem;gap:5px;min-height:52px}
+  .model-page-tabs .i{width:13px;height:13px}
+  .model-page .readme-body{padding:26px 20px 30px;font-size:.875rem;line-height:1.8}
+  .readme-body .readme-lead{font-size:.9375rem}
+  .readme-chrome{padding:9px 13px}
+  .readme-chrome>span{gap:7px}
+  .readme-index{gap:0;padding:11px 10px}
+  .readme-index>span{flex-basis:100%;padding-left:7px;margin-bottom:4px}
+  .readme-index button{font-size:.625rem;padding-inline:7px}
+}

@@ -6,7 +6,8 @@ import { test } from '@playwright/test';
  * fuori». Qui si MISURA, per ognuna delle dieci, che cosa c'è DENTRO: se è un'introduzione (che
  * ripete il tema della sezione) o un titolo di BLOCCO (che introduce un contenuto suo).
  */
-const SEZIONI = ['appearance', 'chat', 'tools', 'memoria', 'privacy', 'models', 'providers', 'costi', 'workspace', 'account'];
+// ⛔ 23/09/2026, decisione owner: «Provider e accessi» (`providers`) tolta del tutto — le sezioni sono nove.
+const SEZIONI = ['appearance', 'chat', 'tools', 'memoria', 'privacy', 'models', 'costi', 'workspace', 'account'];
 
 test('SONDA — le intestazioni DENTRO ogni sezione', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });

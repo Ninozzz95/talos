@@ -1,0 +1,22 @@
+{
+  "schema": "talos.workflow-budget-reservation.v1",
+  "reservationId": "00000000-0000-4000-8000-000000000031",
+  "runId": "00000000-0000-4000-8000-000000000011",
+  "nodeId": "implement",
+  "activityExecutionId": "00000000-0000-4000-8000-000000000032",
+  "leaseId": "00000000-0000-4000-8000-000000000033",
+  "leaseEpoch": 1,
+  "reserved": {
+    "promptTokens": 10,
+    "completionTokens": 70,
+    "wallMs": 60000,
+    "agentSeconds": 60,
+    "toolCalls": 1,
+    "modelRequests": 1,
+    "knownCostUsd": null
+  },
+  "state": "reserved",
+  "actual": null,
+  "reservedAt": "2026-09-20T12:03:00.000Z",
+  "settledAt": null
+}

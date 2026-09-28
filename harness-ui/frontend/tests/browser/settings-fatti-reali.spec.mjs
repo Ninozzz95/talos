@@ -41,9 +41,18 @@ test('SETTINGS-FATTI-44 — le sezioni Settings mostrano provider dal server, pr
       if (testata?.getAttribute('aria-expanded') === 'false') testata.click();
     }
     voceImpostazioni.click();
-    runtime.setSettingsSection('providers');
-    await runtime.renderSettingsRiepiloghi();
-    const provider = [...document.querySelectorAll('#settingsProvidersList li')].map((li) => li.textContent.replace(/\s+/g, ' ').trim());
+    /*
+     * ⛔ 23/09/2026 — DECISIONE OWNER: «Provider e accessi» è tolta del tutto dalle Impostazioni, e
+     *   con lei `#settingsProvidersList`. Ciò che questa prova proteggeva — lo stato dei fornitori
+     *   viene DAL SERVER, e un server muto non lascia a schermo una lista vecchia — resta vero, ma
+     *   sulla superficie unica: Laboratorio modelli → scheda «Provider», dove ci si arriva col
+     *   comando «providers» (la stessa porta della palette). Le card le disegna lo stesso
+     *   `/api/v1/providers` intercettato qui sopra; si aspetta che ci siano tutte e tre.
+     */
+    runtime.executeCommand('providers');
+    const pannello = () => document.querySelector('#modelLabCard [data-model-lab-panel="providers"]');
+    for (let i = 0; i < 100 && pannello()?.querySelectorAll('[data-provider-id]').length !== 3; i += 1) await new Promise((r) => setTimeout(r, 50));
+    const provider = ['openrouter', 'ollama', 'anthropic'].map((id) => pannello()?.querySelector(`[data-provider-id="${id}"]`)?.textContent.replace(/\s+/g, ' ').trim() ?? '');
     runtime.setSettingsSection('chat');
     await runtime.renderSettingsRiepiloghi();
     const chat = [...document.querySelectorAll('#settingsChatFacts div')].map((r) => [r.querySelector('dt').textContent, r.querySelector('dd').textContent]);
@@ -65,11 +74,12 @@ test('SETTINGS-FATTI-44 — le sezioni Settings mostrano provider dal server, pr
   });
   expect(esito.provider).toHaveLength(3);
   expect(esito.provider[0]).toContain('OpenRouter');
-  expect(esito.provider[0]).toContain('chiave configurata');
+  expect(esito.provider[0]).toContain('Chiave salvata');       // ← `keyConfigured:true` del server
   expect(esito.provider[1]).toContain('Ollama');
-  expect(esito.provider[1]).toContain('accesso pubblico, chiave non richiesta'); // ← stato: deriva da `requiresKey:false` del server
+  expect(esito.provider[1]).toContain('Chiave facoltativa');   // ← stato: deriva da `requiresKey:false` del server
   expect(esito.endpointAperto).toBe('https://openrouter.ai/api/v1');            // ← indirizzo: il suo posto è il campo della scheda
-  expect(esito.provider[2]).toContain('nessuna chiave');
+  expect(esito.provider[2]).toContain('Anthropic');
+  expect(esito.provider[2]).toContain('Chiave mancante');      // ← `requiresKey:true` e nessuna chiave
   expect(Object.fromEntries(esito.chat)['Testo chat']).toBe('Extra piccolo');
   expect(Object.fromEntries(esito.chat)['Chat a tutta larghezza']).toBe('Sì');
   expect(esito.privacy.some((v) => v.includes('talos.harness.desktop.settings.v1'))).toBe(true);
@@ -83,11 +93,11 @@ test('SETTINGS-FATTI-44 — le sezioni Settings mostrano provider dal server, pr
 
   // AL CONTRARIO: il server non risponde → messaggio onesto, mai una lista vecchia spacciata per attuale
   await page.route('**/api/v1/providers', async (route) => route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ ok: false, error: { code: 'INTERNAL_ERROR' } }) }));
-  const offline = await page.evaluate(async () => {
-    const runtime = window.__talosHarnessUiRuntime;
-    runtime.setSettingsSection('providers');
-    await runtime.renderSettingsRiepiloghi();
-    return document.querySelector('#settingsProvidersList').textContent;
-  });
-  expect(offline).toContain('non leggibile adesso');
+  /* 23/09/2026 — sulla scheda «Provider»: si rilegge col suo «Aggiorna» (`#providerRefresh`), e al
+     posto delle card deve comparire l'avviso, non le tre card di prima. */
+  await page.evaluate(() => window.__talosHarnessUiRuntime.executeCommand('providers'));
+  const pannello = page.locator('#modelLabCard [data-model-lab-panel="providers"]');
+  await pannello.locator('#providerRefresh').click();
+  await expect(pannello.getByRole('alert')).toBeVisible();
+  await expect(pannello.locator('[data-provider-id]')).toHaveCount(0);
 });

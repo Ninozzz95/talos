@@ -1,0 +1,46 @@
+/*
+ * ⭐ D4, 24/09/2026 — L'AVVISO «PIANO AGGIORNATO».
+ *
+ * Decisione owner (24/09, ricerca `.claude/RICERCA-10x4-REVISIONE-PIANO-2026-09-23.md`: dieci concorrenti,
+ * tutti un solo piano aggiornato in loco): la card del piano resta dov'è nata e si aggiorna; quando una
+ * revisione arriva e la card è fuori vista, QUI, sopra il composer, compare una riga con la strada per
+ * raggiungerla. Logica in `app.js` (`mostraAvvisoPiano`), markup nel piede della chat.
+ *
+ * ⛔ È la sorella della fascia del modo (`fascia-modo.css`): stesso raggio, stesso fondo, stessa icona nel
+ *   suo riquadro, stesso respiro sotto. Un solo pulsante d'azione, secondario come là: la scelta vera
+ *   (approvare, correggere) sta nella card, non qui. La chiusura è un'icona, non una seconda azione.
+ * ⛔ Nessun colore d'avvertimento: un piano rivisto è una buona notizia, non un pericolo.
+ */
+.talos-avviso-piano:not([hidden]){
+  display:flex;
+  align-items:center;
+  gap:var(--talos-space-inline);
+  margin-bottom:var(--talos-space-sm);
+  padding:var(--talos-space-xs) var(--talos-space-xs) var(--talos-space-xs) var(--talos-space-control);
+  border:1px solid var(--talos-border-strong);
+  border-radius:var(--talos-radius-control);
+  background:var(--talos-card-subtle);
+  color:var(--talos-assistant-text);
+  font-size:var(--talos-font-size-sm);
+}
+.talos-avviso-piano__icona{
+  flex:none;
+  display:inline-grid;
+  place-items:center;
+  width:28px;
+  height:28px;
+  border-radius:calc(var(--talos-radius-control) - 4px);
+  background:var(--talos-accent-soft);
+  color:var(--talos-accent-text);
+}
+.talos-avviso-piano__testo{
+  flex:1 1 auto;
+  min-width:0;
+  margin:0;
+}
+.talos-avviso-piano__azioni{
+  flex:none;
+  display:flex;
+  align-items:center;
+  gap:var(--talos-space-xs);
+}

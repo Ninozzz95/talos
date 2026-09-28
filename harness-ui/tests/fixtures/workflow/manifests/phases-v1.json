@@ -1,0 +1,183 @@
+{
+  "kind": "workflow-implementation-phase-manifest",
+  "version": 1,
+  "source": "WORKFLOW-PREIMPLEMENTATION-LEDGER-v1-2026-09-20.md",
+  "rule": "The ledger is normative. This manifest is an operational index and must not invent or override contracts.",
+  "phases": [
+    {
+      "phase": 0,
+      "id": "baseline",
+      "title": "Certify and harden baseline",
+      "prerequisites": [],
+      "commit": "test(harness): harden plan workflow and user-question baseline"
+    },
+    {
+      "phase": 1,
+      "id": "contracts-reducer",
+      "title": "Contracts + canonical JSON + pure reducer + indexes/reference model",
+      "prerequisites": [
+        0
+      ],
+      "commit": "feat(workflow): define versioned graph contracts and pure reducer"
+    },
+    {
+      "phase": 2,
+      "id": "store-cas",
+      "title": "StoreOwner + durable/versioned store + CAS + migrations",
+      "prerequisites": [
+        1
+      ],
+      "commit": "feat(workflow): add versioned append-only workflow and result stores"
+    },
+    {
+      "phase": 3,
+      "id": "human-gate",
+      "title": "HumanGate + timers + Question Broker",
+      "prerequisites": [
+        2
+      ],
+      "commit": "feat(workflow): persist and broker human decisions"
+    },
+    {
+      "phase": 4,
+      "id": "plan-compiler",
+      "title": "Plan compiler + preflight + exact hash approval",
+      "prerequisites": [
+        1,
+        2,
+        3
+      ],
+      "commit": "feat(plan): compile lint and hash approved workflow definitions"
+    },
+    {
+      "phase": 5,
+      "id": "activity-orchestrator",
+      "title": "Durable Activity protocol + Workflow Orchestrator",
+      "prerequisites": [
+        2,
+        3,
+        4
+      ],
+      "commit": "feat(workflow): execute durable fenced workflow activities"
+    },
+    {
+      "phase": 6,
+      "id": "scheduler",
+      "title": "Fair/adaptive scheduler + fencing + budget reservations",
+      "prerequisites": [
+        5
+      ],
+      "commit": "feat(workflow): schedule nodes with fair adaptive bounded concurrency"
+    },
+    {
+      "phase": 7,
+      "id": "workspace",
+      "title": "Exact WorkspaceBaseline + worktree/toolchain/port isolation",
+      "prerequisites": [
+        5,
+        6
+      ],
+      "commit": "feat(workflow): preserve workspace state and isolate verified writers"
+    },
+    {
+      "phase": 8,
+      "id": "patterns",
+      "title": "Adaptive canonical graph patterns + subworkflows",
+      "prerequisites": [
+        1,
+        5,
+        6
+      ],
+      "commit": "feat(workflow): add adaptive canonical graph engineering patterns"
+    },
+    {
+      "phase": 9,
+      "id": "results-integration",
+      "title": "ResultRef/provenance/verifier/integration",
+      "prerequisites": [
+        2,
+        7,
+        8
+      ],
+      "commit": "feat(workflow): preserve provenance verify and integrate isolated results"
+    },
+    {
+      "phase": 10,
+      "id": "policy-provider",
+      "title": "Capability/model/budget/provider resilience",
+      "prerequisites": [
+        5,
+        6,
+        9
+      ],
+      "commit": "feat(workflow): fence capabilities route models and govern provider capacity"
+    },
+    {
+      "phase": 11,
+      "id": "graph-ui",
+      "title": "Gap-safe scalable graph UI",
+      "prerequisites": [
+        2,
+        3,
+        5
+      ],
+      "commit": "feat(frontend): render durable workflow swarms with bounded stable graph UI"
+    },
+    {
+      "phase": 12,
+      "id": "controls",
+      "title": "Idempotent live control surface",
+      "prerequisites": [
+        5,
+        11
+      ],
+      "commit": "feat(workflow): add idempotent live graph control commands"
+    },
+    {
+      "phase": 13,
+      "id": "observability",
+      "title": "Replay-safe observability and diagnostics",
+      "prerequisites": [
+        2,
+        5,
+        6,
+        9,
+        10
+      ],
+      "commit": "feat(workflow): add replay-safe workflow observability and diagnostics"
+    },
+    {
+      "phase": 14,
+      "id": "optimizer",
+      "title": "Trace-derived optimizer proposal-only",
+      "prerequisites": [
+        8,
+        13
+      ],
+      "commit": "feat(workflow): propose trace-derived graph optimizations"
+    },
+    {
+      "phase": 15,
+      "id": "certification",
+      "title": "Mutation/fuzz/crash/scale/installed certification",
+      "prerequisites": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14
+      ],
+      "commit": "test(workflow): certify crash recovery scale and installed desktop"
+    }
+  ]
+}

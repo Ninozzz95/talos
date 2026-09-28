@@ -143,6 +143,7 @@ import {
   talosResearchIsTerminal, talosResearchNextStep, talosResearchRecover,
   talosResearchReplay, talosResearchSpent, talosResearchWorkLeft,
 } from './research/run.mjs';
+import { avanzamentoRicerca } from './research/avanzamento.mjs'; // 24/09/2026, decisione owner: barra + fase e conteggi
 import {
   talosResearchJudgePrompt, talosResearchPickJudge, talosResearchVerifiedStanding,
   talosResearchVerify,
@@ -949,6 +950,16 @@ export function creaResearchOrchestrator({
   creaRicercaFn, leggiRicercaFn, aggiornaRicercaFn, eliminaRicercaFn, elencaRicercheFn,
   salvaVoceLibreriaFn, leggiVoceLibreriaFn, eliminaVoceLibreriaFn,
   randomUUIDFn,
+  /*
+   * ⭐⭐⭐ PO-26 (24/09/2026) — DOVE stanno i file di una ricerca, dato la SUA sessione.
+   *
+   * Da PO-26 i file della ricerca vivono nella cartella dati del progetto, non nel progetto: la
+   * `cartella` che il registro passa ad `avvia`/`elenca`/`leggi` è già quella radice. Ma
+   * `riprendi`, `mettiInPausa` e `annulla` ricevono solo l'id, e leggevano `voce.cartella`: dopo
+   * PO-26 quella è la cartella di LAVORO della sessione, non la radice dei suoi file. ⇒ La chiedono
+   * al registro. Default: `voce.cartella`, cioè il comportamento di prima per chi non la passa.
+   */
+  cartellaDatiDiVoceFn = async (voce) => voce.cartella,
   /*
    * ⭐⭐⭐ L2 §6.5 (11/09) — IL PUNTO DI INNESTO DEL LETTORE DI RAPPORTI.
    *
@@ -1848,7 +1859,7 @@ export function creaResearchOrchestrator({
    *   `runtimeId`). Passarglielo trasformerebbe l'eredità in un guasto garantito alla prima
    *   chiamata. Il filtro sta in `session-registry.mjs`, dove il provider si conosce.
    */
-  async function avvia({ cartella, question, depth, padreId = null, modello = null, reasoning = null }) {
+  async function avvia({ cartella, cartellaLavoro = null, question, depth, padreId = null, modello = null, reasoning = null }) {
     const id = randomUUIDFn();
     const nome = nomeDallaDomanda(question);
     /*
@@ -1910,7 +1921,9 @@ export function creaResearchOrchestrator({
     await registra(cartella, id, { kind: 'plan_approved', branches: piano, auto: true });
     const costo = costoDetto(piano);
     avviaESeguiFn({
-      sessionId: id, cartella, taskId: 'ricerca',
+      /* ⭐ PO-26 — la sessione lavora nel PROGETTO; i suoi file (`cartella`) stanno nella cartella dati. Senza
+         `cartellaLavoro` le due coincidono, come prima. */
+      sessionId: id, cartella: cartellaLavoro ?? cartella, taskId: 'ricerca',
       /*
        * ⛔⛔⛔ L1 — `ricercaId` VIAGGIA DENTRO IL TASK, e questa è la riga che rende sicuro
        * `research_deposit`. Il kernel costruisce il percorso del rapporto da qui
@@ -2005,7 +2018,7 @@ export function creaResearchOrchestrator({
      * sincrona per contratto col kernel): se la riga non arriva, la pausa resta comunque vera
      * nella metadata — il giornale è la prova, non la condizione.
      */
-    registra(voce.cartella, id, { kind: 'run_pause_requested' });
+    Promise.resolve().then(() => cartellaDatiDiVoceFn(voce)).then((cartella) => registra(cartella, id, { kind: 'run_pause_requested' }), () => {});
     return { ok: true, esito: 'That research is paused. Everything it collected is kept, and it can be resumed.' };
   }
 
@@ -2014,8 +2027,8 @@ export function creaResearchOrchestrator({
     if (!voce) return { ok: false, esito: 'There is no research with that id. Call research_list to see the current ones.' };
     if (voce.conclusa) {
       // ⭐ una ricerca già ferma (in pausa, o già conclusa) si annulla lo stesso: cambia solo la metadata (terminata:'cancelled'), nessun abort da fare — mai un rifiuto per un caso che mobile stesso permette (research_cancel su una "paused"/"unfinished").
-      return aggiornaRicercaFn({ cartella: voce.cartella, id, terminata: 'cancelled' })
-        .then(() => registra(voce.cartella, id, { kind: 'run_cancelled' }))
+      return Promise.resolve().then(() => cartellaDatiDiVoceFn(voce))
+        .then((cartella) => aggiornaRicercaFn({ cartella, id, terminata: 'cancelled' }).then(() => registra(cartella, id, { kind: 'run_cancelled' })))
         .then(() => ({ ok: true, esito: 'That research is stopped for good. What it collected is still readable.' }));
     }
     voce._ricercaTerminataRichiesta = 'cancelled';
@@ -2075,7 +2088,7 @@ export function creaResearchOrchestrator({
   async function riprendi({ id, automatica = null }) {
     const voce = sessioni.get(id);
     if (!voce) return { ok: false, esito: 'There is no research with that id. Call research_list to see the current ones.' };
-    const cartella = voce.cartella;
+    const cartella = await cartellaDatiDiVoceFn(voce);
     /* ⛔ `auto` e `causa` solo quando la ripresa è davvero automatica: una riga che dicesse `auto:false` su ogni ripresa a mano sarebbe rumore, e il cancello della ripresa automatica legge proprio `auto === true`. */
     const rigaDiRipresa = automatica ? { kind: 'run_resumed', auto: true, causa: automatica } : { kind: 'run_resumed' };
 
@@ -2120,7 +2133,7 @@ export function creaResearchOrchestrator({
       await riapriLaMetadata(cartella, id);
       await registra(cartella, id, rigaDiRipresa);
       avviaESeguiFn({
-        sessionId: id, taskId: voce.taskId, cartella, task: voce.task, comandoProva: voce.comandoProva,
+        sessionId: id, taskId: voce.taskId, cartella: voce.cartellaBase ?? voce.cartella, task: voce.task, comandoProva: voce.comandoProva,
         messaggiIniziali: [...voce.messaggiFinali, { role: 'user', content: `${PROMPT_RIPRESA}\n${deposito}` }],
         forkDa: voce.forkDa, voceEsistente: voce,
         onConclusioneFn: (risultato) => onConclusioneRicerca({ cartella, id, risultato }),
@@ -2209,7 +2222,7 @@ export function creaResearchOrchestrator({
       await registra(cartella, id, { kind: 'step_started', stepId: prossimo.id, branchId: prossimo.branchId, stepKind: prossimo.kind });
     }
     avviaESeguiFn({
-      sessionId: id, taskId: voce.taskId, cartella, task: voce.task, comandoProva: voce.comandoProva,
+      sessionId: id, taskId: voce.taskId, cartella: voce.cartellaBase ?? voce.cartella, task: voce.task, comandoProva: voce.comandoProva,
       messaggiIniziali: [{ role: 'user', content: consegnaDiRipresa({ giro: recuperato, prossimo, rimasti, speso, fonti, task: voce.task, deposito }) }],
       forkDa: voce.forkDa, voceEsistente: voce,
       onConclusioneFn: (risultato) => onConclusioneRicerca({ cartella, id, risultato }),
@@ -2521,6 +2534,21 @@ export function creaResearchOrchestrator({
       const stato = statoVivo(r, sessioni.get(r.id));
       // ⛔ Gli stessi DUE stati di `leggi()`: sono i soli che parlano del rapporto, e sono i soli
       //   che possono mentire. Una `running`/`failed`/`cancelled` non ha un rapporto da smentire.
+      if (stato === 'running') {
+        /* ⛔ 24/09/2026, decisione owner («Barra + fase e conteggi»): una ricerca IN CORSO porta il suo avanzamento anche
+           nell'elenco, così la riga lo mostra senza aprire il dettaglio. Solo le `running`: sono le uniche che cambiano da
+           sole, e il loro giornale è piccolo. Un giornale illeggibile non ferma l'elenco: niente avanzamento, niente barra. */
+        let avanzamento = null;
+        try {
+          const { eventi } = await leggiGiornaleFn({ cartella, id: r.id });
+          const giro = talosResearchReplay(eventi);
+          const pianoSuDisco = await leggiPianoFn({ cartella, id: r.id });
+          avanzamento = avanzamentoRicerca({ piano: Array.isArray(pianoSuDisco) ? pianoSuDisco : (giro?.plan ?? []),
+            passi: giro?.steps ?? [], eventi, statoGiro: giro?.status ?? null, stato });
+        } catch { avanzamento = null; }
+        conStato.push({ ...voceEsposta(r, stato), avanzamento });
+        continue;
+      }
       if (stato !== 'done' && stato !== 'senza-rapporto') { conStato.push(voceEsposta(r, stato)); continue; }
       const giudizio = await giudicaRapporto({ cartella, record: r });
       conStato.push(voceEsposta({ ...r, motivoDettaglio: giudizio.motivoDettaglio ?? r.motivoDettaglio ?? null }, giudizio.stato, giudizio.letto));
@@ -2657,6 +2685,9 @@ export function creaResearchOrchestrator({
         ? talosResearchPlanTotals(pianoSuDisco)
         : (giro?.plan?.length ? talosResearchPlanTotals(giro.plan) : null),
       giornale: giro ? { eventi: eventi.length, righeSaltate, stato: giro.status } : null,
+      // 24/09/2026, decisione owner: fase, frazione e conteggi veri per la barra di avanzamento (research/avanzamento.mjs).
+      avanzamento: avanzamentoRicerca({ piano: Array.isArray(pianoSuDisco) ? pianoSuDisco : (giro?.plan ?? []),
+        passi: giro?.steps ?? [], eventi, statoGiro: giro?.status ?? null, stato }),
     };
   }
 

@@ -766,3 +766,257 @@ details.td-theme-note p { margin: 8px 0 0; }
   .model-picker-sources { scroll-behavior: auto; }
   .model-picker-source { animation: none; transition: none; }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+ * ⛔ ATLAS F2 — NOTE (24/09/2026). NON DEPLOYABILE finché la review avversaria del coordinatore non la accetta
+ *   e l'owner non la valuta sul 4174.
+ *
+ * La schermata Note prende la composizione e le misure delle voci `NotesScreen`, `NoteCard` e `NoteEditor` del
+ * mockup «TALOS UI Atlas» (`source/atlas.js:36-37, 146-148`; regole in `source/atlas.css`, ID del registro
+ * `registri/CSS-ATLAS.json` accanto a ogni riga). Dati, funzioni e comandi del prodotto restano tutti: ricerca,
+ * ordine, vista, «Aggiorna», selezione e cancellazione in blocco, divisorio (mouse e tastiera), espandi/chiudi,
+ * modulo con validazione, bozza, lettura Markdown, menu «⋯».
+ *
+ * ⛔ AMBITO: SOLO la sezione Note (`.td-section[data-section="note"]`). La stessa ricetta `td-*` disegna Libreria,
+ *   Memoria, Attività, Ricerca e Progetti, che nell'Atlas hanno composizioni loro (famiglie F3 e F7b): qui non
+ *   cambiano, e la prova ATLAS-F2-09 lo misura.
+ * ⛔ DECISIONI DELL'OWNER che valgono qui: Q-01 contorni e fondi dei CONTROLLI della 0.1.15 (i campi del modulo);
+ *   Q-06 testo mai sotto gli 11 px (etichette e piedi che l'Atlas scrive a 9-10); Q-10 il conteggio dell'editor è
+ *   in parole. NON applicato, e chiesto all'owner (rapporto F2): l'etichetta d'origine sulla card (l'elenco delle
+ *   note non porta `origine`), il selettore di vista, il testo della testata, la misura dei «⋯» della card, e le
+ *   voci NC-05 / NC-24.
+ * ═══════════════════════════════════════════════════════════════════════════════ */
+
+/* Testata della pagina — CSS-0346/0347/0348 (`.page-demo>header`, `h2`, `p`) e CSS-0015 (h1,h2,h3). L'Atlas non ha il
+   marchio a sinistra del titolo; il pulsante «Nuova nota» sta a destra (lo mette lì `montaPulsanteNuova`). */
+.td-section[data-section="note"] .td-intro { align-items: center; justify-content: space-between; gap: 18px; margin: 0 0 18px; }
+.td-section[data-section="note"] .td-intro > div { flex: 1 1 auto; min-width: 0; }
+.td-section[data-section="note"] .td-intro-mark { display: none; }
+.td-section[data-section="note"] .td-intro h2 { font-size: 22px; font-weight: 550; line-height: 1.5; letter-spacing: -.025em; margin: 0 0 4px; }
+.td-section[data-section="note"] .td-intro p { font-size: 11px; }
+.td-section[data-section="note"] .td-intro > [data-nuova] { flex: none; }
+.td-section[data-section="note"] .td-intro > [data-nuova] .i { width: 15px; height: 15px; }
+
+/* Strumenti — CSS-0349/0350 (`.page-tools`, `.page-tools .input-wrap`): gap 8, 14 sopra e sotto, la ricerca cresce
+   (min 170). Il select è quello dei controlli (F1, `controls.css`): qui si tolgono solo le misure proprie di `.td-select`. */
+.td-section[data-section="note"] .td-toolbar { gap: 8px; margin: 14px 0; }
+.td-section[data-section="note"] .td-search { flex: 1 1 0%; min-width: 170px; max-width: none; }
+.td-section[data-section="note"] .td-toolbar > .talos-grow { display: none; }
+.td-section[data-section="note"] .td-select { min-height: 0; height: 36px; max-width: none; padding: 0 32px 0 11px; border-radius: 9px; background: var(--talos-panel-soft); font-size: 12px; }
+
+/* La riga della selezione — `atlas.js:148` (`row between small`, margine 12 · 16), CSS-0152/0154/0159, e la casella
+   `.checkline` CSS-0188/0189: nessuna cornice, testo 11, spazio 9 fra casella e parola. */
+.td-section[data-section="note"] .td-bulk { min-height: 0; margin: 12px 0 16px; padding: 0; border: 0; background: transparent; font-size: 11px; }
+.td-section[data-section="note"] .td-bulk-select { gap: 9px; }
+
+/* Le card — CSS-0235/0236/0237/0239/0241/0243 (`.file-card`, `.selected`, `h4`, `footer`, `.note-card .note-excerpt`,
+   `.note-card footer`) e `.demo h4` (12 · 550). Altezza del contenuto, niente orecchio piegato, niente cambio di bordo
+   al passaggio del mouse (l'Atlas non ne ha); la card aperta si colora col fondo d'accento invece del bordo.
+   ⛔ Solo nella vista a SCHEDE (`.td-grid`): la vista a elenco (`.td-list`) ha la sua griglia a tre colonne e resta
+   com'è — l'Atlas non disegna un elenco di note. */
+.td-section[data-section="note"] .td-grid { gap: 12px; }
+.td-section[data-section="note"] .td-grid .td-card { border-radius: 10px; }
+.td-section[data-section="note"] .td-grid .td-card:hover { border-color: var(--talos-border); }
+.td-section[data-section="note"] .td-grid .td-card[data-selected="true"] { border-color: var(--talos-border); box-shadow: none; background: var(--talos-accent-soft); }
+.td-section[data-section="note"] .td-grid .td-note::after { display: none; }
+.td-section[data-section="note"] .td-grid .td-card-open { gap: 0; min-height: 0; padding: 13px; }
+.td-section[data-section="note"] .td-grid .td-card-top { min-height: 26px; padding-right: 36px; }
+.td-section[data-section="note"] .td-grid .td-card[data-batch-capable="true"] .td-card-top { padding-left: 23px; padding-right: 36px; }
+.td-section[data-section="note"] .td-grid .td-card-select { top: 19.5px; left: 13px; right: auto; width: 13px; height: 13px; }
+.td-section[data-section="note"] .td-grid .td-card-azioni { top: 10px; right: 10px; }
+.td-section[data-section="note"] .td-grid .td-card h3 { font-size: 12px; font-weight: 550; line-height: 1.5; letter-spacing: normal; margin: 12px 0 0; }
+/* ⛔ REVIEW AVVERSARIA 24/09 sera: l'estratto della ricetta è `white-space: pre-line` (mockup-td.css:94), e la riga vuota
+   fra due paragrafi si prendeva una delle tre righe (a 1024 restava «…pensiero.» e poi «…»). Nell'Atlas l'estratto è
+   testo continuo (`.note-excerpt` non dichiara `white-space`: vale `normal`). Con `normal` gli a capo diventano spazi
+   (MDN «white-space», agg. 27/08/2026: «New lines: collapse»). Solo la card delle Note. */
+.td-section[data-section="note"] .td-grid .td-excerpt { font-size: 11px; line-height: 1.7; color: var(--talos-muted); margin: 7px 0 0; -webkit-line-clamp: 3; white-space: normal; }
+.td-section[data-section="note"] .td-grid .td-card-bottom { margin-top: 12px; padding-top: 0; gap: 12px; font-size: 11px; }
+.td-section[data-section="note"] .td-card-quando { display: inline-flex; align-items: center; gap: 3px; min-width: 0; }
+.td-section[data-section="note"] .td-card-quando .i { width: 18px; height: 18px; flex: none; }
+
+/* Il dettaglio — CSS-0353/0354/0357 (`.page-demo .page-detail`, `header`, `footer`) e l'etichetta CSS-0116
+   (`.section-label`, 10 → 11 px per Q-06): una scheda con bordo e raggio 11 a 18 px dall'elenco, invece di una colonna
+   a filo. Il divisorio resta (è un comando: mouse e tastiera), e la sua larghezza entra nei 18. */
+.td-section[data-section="note"] .td-workspace[data-detail="true"] .td-master { padding-right: 11px; }
+.td-section[data-section="note"] .td-divider::before { background: transparent; }
+.td-section[data-section="note"] .td-divider:hover::before, .td-section[data-section="note"] .td-divider:focus-visible::before { background: var(--talos-accent); }
+.td-section[data-section="note"] .td-detail { margin: 28px 28px 28px 0; border: 1px solid var(--talos-border); border-radius: 11px; }
+.td-section[data-section="note"] .td-workspace[data-expanded="true"] .td-detail { width: auto; flex: 1 1 auto; margin: 28px; border: 1px solid var(--talos-border); }
+@container (max-width: 850px) { .td-section[data-section="note"] .td-workspace[data-detail="true"] .td-detail { width: auto; flex: 1 1 auto; margin: 24px; } }
+@container (max-width: 560px) { .td-section[data-section="note"] .td-workspace[data-detail="true"] .td-detail { margin: 20px; } }
+.td-section[data-section="note"] .td-detail-head { min-height: 0; padding: 18px 18px 14px; }
+.td-section[data-section="note"] .td-detail-head > span:first-child { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--talos-muted); }
+.td-section[data-section="note"] .td-detail-body { padding: 16px 18px 18px; }
+.td-section[data-section="note"] .td-detail-footer { justify-content: flex-end; gap: 8px; padding: 12px 18px 18px; }
+.td-section[data-section="note"] .td-detail-footer > .td-save-status { order: -1; margin-left: 0; margin-right: auto; font-size: 11px; line-height: 1.65; }
+.td-section[data-section="note"] .td-detail-footer .talos-button--primary .i { width: 15px; height: 15px; }
+
+/* L'editor — `editor()` (`atlas.js:37`): etichetta sopra il campo (CSS-0174 `.field-label`: 11, colore del testo,
+   7 di spazio), campi `.text-input` (CSS-0176: 36, 8/11, 12 px) con contorno e fondo dei campi della 0.1.15 (Q-01:
+   1 px, raggio 11, `panel-soft`), l'area di testo di `.page-detail textarea` (CSS-0355: minimo 170, 12 px,
+   interlinea 1.8), il fuoco di CSS-0010 (2 px, 3 di distanza). Il titoletto del modulo resta per chi legge con uno
+   screen reader, ma non si vede: l'Atlas lo dice nell'etichetta del dettaglio («Note / Nuova nota»). */
+.td-section[data-section="note"] .td-detail-body > h2:has(+ .td-modulo) { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; margin: 0; }
+.td-section[data-section="note"] .td-field-label { font-size: 11px; font-weight: 400; color: var(--talos-text); margin: 0 0 7px; }
+.td-section[data-section="note"] .td-field-sotto { margin: 0; min-height: 14px; }
+.td-section[data-section="note"] .td-modulo--note .td-edit-title,
+.td-section[data-section="note"] .td-modulo--note .td-edit-body { font: 400 12px/1.5 var(--talos-font-ui); letter-spacing: normal; min-height: 36px; padding: 8px 11px; border: 1px solid var(--talos-border); border-radius: 11px; background: var(--talos-panel-soft); color: var(--talos-text); }
+.td-section[data-section="note"] .td-modulo--note .td-edit-body { min-height: 170px; line-height: 1.8; resize: vertical; }
+.td-section[data-section="note"] .td-modulo--note .td-edit-scelta { min-height: 0; height: 36px; padding: 0 32px 0 11px; border-radius: 9px; background: var(--talos-panel-soft); font-size: 12px; }
+.td-section[data-section="note"] .td-modulo--note .td-edit-title[aria-invalid="true"],
+.td-section[data-section="note"] .td-modulo--note .td-edit-body[aria-invalid="true"] { border-color: var(--talos-danger); }
+.td-section[data-section="note"] .td-edit-title:focus-visible,
+.td-section[data-section="note"] .td-edit-body:focus-visible,
+.td-section[data-section="note"] .td-edit-scelta:focus-visible { outline-offset: 3px; }
+
+/* 24/09/2026, decisione owner («Barra + fase e conteggi»): l'avanzamento di una ricerca in corso, nella riga e nel dettaglio.
+   La barra è il <progress> a tema del sistema (.talos-context__progress, index.css); qui solo la disposizione. */
+.talos-research-progress { display: grid; gap: 4px; margin-top: 6px; min-width: 0; max-width: 360px; }
+.talos-research-progress__text { color: var(--talos-muted); font-size: .75rem; line-height: 1.4; overflow-wrap: anywhere; }
+.td-andata ~ .talos-research-progress, .talos-research-progress + .td-andata { margin-top: 10px; }
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+ * ⛔ ATLAS F3 — LIBRERIA (27/09/2026). NON DEPLOYABILE finché la review avversaria non la accetta e l'owner non la
+ *   valuta sul 4174. Contratto: `.claude/ATLAS-F3-CONTRATTO-E-GATE-2026-09-27.md` (worktree ATLAS).
+ *
+ * Due riferimenti, per decisione dell'owner del 27/09:
+ *  · la CARD è quella del MOBILE, «identica, non negoziabile» — `TalosMobileLibraryFileTile.vue`,
+ *    `TalosMobileLibraryArt.vue`, `TalosMobileLibraryFileGlyph.vue`, griglia `ContextScreen.vue:901` (ramo
+ *    `lane/talos-mobile-allineamento`). Le misure del mobile a partire da `md` (il desktop è sempre largo): anteprima
+ *    alta 10rem, nome 14/500/1,6 su due righe, dettaglio 12, 3rem liberi a destra per i puntini; SPAZI e RAGGI seguono
+ *    la densità e il raggio di serie del TEMA, come sul mobile (owner 27/09, rilievo 13 di Codex — qui sotto).
+ *    Due adattamenti dichiarati: i puntini hanno l'area di 36 px del desktop (Q-16; sul mobile 48, perché si toccano
+ *    col dito); i testi a 10 px del mobile salgono a 11 (Q-06, mai sotto gli 11 sul desktop);
+ *  · la PAGINA e il DETTAGLIO sono quelli dell'Atlas (`case'library'`, `page-tools`, `page-detail`, `spec-row`), come
+ *    F2 per le Note.
+ * ⛔ AMBITO: solo `.td-section[data-section="libreria"]`. Le altre sezioni td non cambiano.
+ * ═══════════════════════════════════════════════════════════════════════════════ */
+
+/*
+ * Densità e raggio PER TEMA, come il mobile (owner 27/09: «per tema, come il mobile»). Fonti: `talosThemes.ts`
+ * (`defaultDensity`, `defaultRadius` di ogni tema) e `design-tokens/src/index.ts` (`TALOS_LAYOUT_DENSITY_SCALE`,
+ * `TALOS_COMPONENT_RADIUS_SCALE`), ramo `lane/talos-mobile-allineamento`, letti il 27/09/2026. Il mobile da `md` in su usa
+ * `space-page` per anteprima e nome, `space-card` per il mini-documento, `space-inline` fra nome e dettaglio,
+ * `space-section` fra le card. Qui le stesse quattro grandezze, solo dentro la Libreria.
+ *   compatta  (forge, terminal, ember, noir, signal):          12 · 10 · 6 · 12 px
+ *   comoda    (aurora, atlas, violet, basicus, telemetry, calm): 16 · 12 · 8 · 16 px
+ *   ampia     (paper, glacier, claudius):                        20 · 16 · 10 · 20 px
+ *   raggio: sharp 0/0 · balanced 0,5/0,375rem · soft 0,75/0,75rem.
+ * La base è Forge, il tema di serie del desktop.
+ */
+.td-section[data-section="libreria"] { --lib-pagina: .75rem; --lib-card: .625rem; --lib-inline: .375rem; --lib-sezione: .75rem; --lib-raggio-card: .5rem; --lib-raggio-controllo: .375rem; }
+:root:is([data-talos-theme="aurora"], [data-talos-theme="atlas"], [data-talos-theme="violet"], [data-talos-theme="basicus"], [data-talos-theme="telemetry"], [data-talos-theme="calm"]) .td-section[data-section="libreria"] { --lib-pagina: 1rem; --lib-card: .75rem; --lib-inline: .5rem; --lib-sezione: 1rem; }
+:root:is([data-talos-theme="paper"], [data-talos-theme="glacier"], [data-talos-theme="claudius"]) .td-section[data-section="libreria"] { --lib-pagina: 1.25rem; --lib-card: 1rem; --lib-inline: .625rem; --lib-sezione: 1.25rem; }
+:root:is([data-talos-theme="terminal"], [data-talos-theme="glacier"], [data-talos-theme="ember"], [data-talos-theme="noir"], [data-talos-theme="basicus"], [data-talos-theme="telemetry"]) .td-section[data-section="libreria"] { --lib-raggio-card: 0rem; --lib-raggio-controllo: 0rem; }
+:root:is([data-talos-theme="aurora"], [data-talos-theme="violet"], [data-talos-theme="claudius"], [data-talos-theme="calm"]) .td-section[data-section="libreria"] { --lib-raggio-card: .75rem; --lib-raggio-controllo: .75rem; }
+
+/* Testata e strumenti — come F2 (Atlas `.page-demo>header`, `.page-tools`). */
+.td-section[data-section="libreria"] .td-intro { align-items: center; justify-content: space-between; gap: 18px; margin: 0 0 18px; }
+.td-section[data-section="libreria"] .td-intro > div { flex: 1 1 auto; min-width: 0; }
+.td-section[data-section="libreria"] .td-intro-mark { display: none; }
+.td-section[data-section="libreria"] .td-intro h2 { font-size: 22px; font-weight: 550; line-height: 1.5; letter-spacing: -.025em; margin: 0 0 4px; }
+.td-section[data-section="libreria"] .td-intro p { font-size: 11px; }
+.td-section[data-section="libreria"] .td-toolbar { gap: 8px; margin: 14px 0; }
+.td-section[data-section="libreria"] .td-search { flex: 1 1 0%; min-width: 170px; max-width: none; }
+.td-section[data-section="libreria"] .td-toolbar > .talos-grow { display: none; }
+.td-section[data-section="libreria"] .td-select { min-height: 0; height: 36px; max-width: none; padding: 0 32px 0 11px; border-radius: 9px; background: var(--talos-panel-soft); font-size: 12px; }
+/* ⛔ 27/09 notte (foto del 4174): con le tendine a tema (rilievo 14) il rivestimento è largo 100% (`calm-controls.css:5`,
+   `.calm-control--select { width:100% }`, pensato per le righe delle Impostazioni) e la barra andava su quattro righe. Qui
+   la tendina è larga quanto il suo contenuto e ha le misure che il `.td-select` aveva nella barra. Prova: ATLAS-F3-12. */
+.td-section[data-section="libreria"] .td-toolbar .calm-control--select { width: auto; flex: 0 0 auto; }
+.td-section[data-section="libreria"] .td-toolbar .calm-select { min-height: 0; height: 36px; gap: 10px; padding: 0 11px; border-radius: 9px; background: var(--talos-panel-soft); font-size: 12px; white-space: nowrap; }
+.td-section[data-section="libreria"] .td-bulk { min-height: 0; margin: 12px 0 16px; padding: 0; border: 0; background: transparent; font-size: 11px; }
+.td-section[data-section="libreria"] .td-bulk-select { gap: 9px; }
+
+/* La griglia del mobile (`CLASSE_GRIGLIA`): colonne da 8,5 a 13rem che riempiono la riga, spazio di sezione fra le card. */
+.td-section[data-section="libreria"] .td-grid { grid-template-columns: repeat(auto-fill, minmax(min(100%, clamp(8.5rem, 42%, 13rem)), 1fr)); align-items: start; gap: var(--lib-sezione); }
+
+/* La card (`.library-card` del mobile): un riquadro solo, niente cambio di bordo al passaggio (il mobile non ne ha). */
+.td-section[data-section="libreria"] .td-grid .td-document { display: flex; flex-direction: column; overflow: hidden; border-radius: var(--lib-raggio-card); background: var(--talos-card); }
+.td-section[data-section="libreria"] .td-grid .td-document:hover { border-color: var(--talos-border); }
+.td-section[data-section="libreria"] .td-grid .td-document[data-selected="true"] { border-color: var(--talos-accent-border); box-shadow: none; }
+.td-section[data-section="libreria"] .td-grid .td-document .td-card-open { gap: 0; min-height: 0; padding: 0; }
+.td-section[data-section="libreria"] .td-grid .td-document .td-card-open:focus-visible { outline: 2px solid var(--talos-ring); outline-offset: -2px; }
+.td-section[data-section="libreria"] .td-grid .td-document .td-card-top,
+.td-section[data-section="libreria"] .td-grid .td-document[data-batch-capable="true"] .td-card-top { display: block; min-height: 0; padding: 0; }
+
+/* L'anteprima (`TalosMobileLibraryArt.vue`): 10rem di altezza, fondo `panel-soft`, 1rem di respiro, contenuto al centro. */
+.td-section[data-section="libreria"] .td-lib-art { display: flex; align-items: center; justify-content: center; height: 10rem; overflow: hidden; padding: var(--lib-pagina); background: var(--talos-panel-soft); }
+.td-section[data-section="libreria"] .td-lib-immagine { max-width: 100%; max-height: 100%; object-fit: contain; }
+.td-section[data-section="libreria"] .td-lib-caricamento { display: block; width: 100%; height: 100%; border-radius: calc(var(--lib-raggio-controllo) / 2); background: var(--talos-secondary); }
+@media (prefers-reduced-motion: no-preference) {
+  .td-section[data-section="libreria"] .td-lib-caricamento { animation: td-lib-battito 2s cubic-bezier(.4, 0, .6, 1) infinite; }
+}
+@keyframes td-lib-battito { 50% { opacity: .5; } }
+/* Il mini-documento: 7rem, bordo, fondo `panel`, la barra d'accento 28×3, il titolo vero su tre righe, quattro barre. */
+.td-section[data-section="libreria"] .td-lib-mini { display: flex; flex-direction: column; width: 7rem; height: 100%; padding: var(--lib-card); border: 1px solid var(--talos-border); border-radius: calc(var(--lib-raggio-controllo) / 2); background: var(--talos-panel); }
+.td-section[data-section="libreria"] .td-lib-mini-segno { display: block; flex: none; width: 1.75rem; height: 3px; margin-bottom: var(--lib-inline); background: var(--talos-accent); }
+.td-section[data-section="libreria"] .td-lib-mini-titolo { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; font-size: 11px; font-weight: 600; line-height: 1.35; color: var(--talos-text); overflow-wrap: anywhere; }
+.td-section[data-section="libreria"] .td-lib-mini-riga { display: block; flex: none; height: 3px; margin-top: .5rem; background: var(--talos-border-strong); }
+/* Il glifo del formato (`TalosMobileLibraryFileGlyph.vue`, variante `grid`): icona da 28 in accento, estensione sotto. */
+.td-section[data-section="libreria"] .td-lib-glifo { display: flex; flex-direction: column; align-items: center; justify-content: center; width: 4rem; height: 4rem; min-width: 0; color: var(--talos-accent); }
+.td-section[data-section="libreria"] .td-lib-glifo .i { width: 28px; height: 28px; }
+.td-section[data-section="libreria"] .td-lib-estensione { max-width: 100%; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--talos-font-mono); font-size: 11px; font-weight: 600; letter-spacing: .025em; line-height: 1; color: var(--talos-muted); }
+
+/* Il nome e la riga di dettaglio: 1rem attorno, 3rem liberi a destra per i puntini. */
+.td-section[data-section="libreria"] .td-grid .td-document h3 { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; margin: 0; padding: var(--lib-pagina) 3rem 0 var(--lib-pagina); font-size: 14px; font-weight: 500; letter-spacing: normal; line-height: 1.6; color: var(--talos-text); }
+.td-section[data-section="libreria"] .td-grid .td-document .td-card-bottom { display: block; margin: 0; padding: var(--lib-inline) 3rem var(--lib-pagina) var(--lib-pagina); }
+.td-section[data-section="libreria"] .td-lib-dettaglio { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: var(--talos-muted); }
+.td-section[data-section="libreria"] .td-lib-dettaglio span { overflow: visible; white-space: inherit; }
+.td-section[data-section="libreria"] .td-lib-generato { color: var(--talos-accent); }
+
+/* I tre puntini: fuori dal bottone che apre, in basso a destra, rotondi e muti. */
+.td-section[data-section="libreria"] .td-lib-menu { position: absolute; right: 4px; bottom: 4px; z-index: 2; display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; padding: 0; border: 0; border-radius: 999px; background: transparent; color: var(--talos-muted); cursor: pointer; }
+.td-section[data-section="libreria"] .td-lib-menu:hover { background: var(--talos-panel-soft); color: var(--talos-text); }
+.td-section[data-section="libreria"] .td-lib-menu:focus-visible { outline: 2px solid var(--talos-ring); outline-offset: 0; }
+.td-section[data-section="libreria"] .td-lib-menu .i { width: 20px; height: 20px; }
+
+/* La selezione: il cerchio del mobile in alto a destra sull'anteprima (owner 27/09: visibile al passaggio o col fuoco, e
+   su tutte le card appena una è scelta). La casella resta un `<input>` vero, per la tastiera e lo screen reader; la spunta
+   la disegna la card, colorata col testo-sull'accento del tema. */
+.td-section[data-section="libreria"] .td-grid .td-document .td-card-select { appearance: none; top: 6px; right: 6px; left: auto; width: 24px; height: 24px; border: 2px solid rgb(255 255 255 / .8); border-radius: 999px; background: rgb(0 0 0 / .35); opacity: 0; transition: opacity var(--talos-motion-duration-control) var(--talos-motion-ease); }
+.td-section[data-section="libreria"] .td-grid .td-document:hover .td-card-select,
+.td-section[data-section="libreria"] .td-grid .td-document:focus-within .td-card-select,
+.td-section[data-section="libreria"][data-selezione-attiva="true"] .td-grid .td-card-select { opacity: 1; } /* dallo STATO, anche se la card scelta è filtrata via */
+.td-section[data-section="libreria"] .td-grid .td-document .td-card-select:checked { border-color: var(--talos-accent); background: var(--talos-accent); }
+.td-section[data-section="libreria"] .td-grid .td-document .td-card-select:focus-visible { outline: 2px solid var(--talos-ring); outline-offset: 2px; }
+.td-section[data-section="libreria"] .td-grid .td-document[data-batch-selected="true"] { border-color: var(--talos-accent); background: var(--talos-card); box-shadow: inset 0 0 0 2px var(--talos-accent); }
+.td-section[data-section="libreria"] .td-lib-adorni { display: contents; }
+.td-section[data-section="libreria"] .td-lib-spunta { display: none; }
+.td-section[data-section="libreria"] .td-grid .td-document[data-batch-selected="true"] .td-lib-spunta { position: absolute; top: 10px; right: 10px; z-index: 4; display: block; width: 16px; height: 16px; pointer-events: none; color: var(--talos-text-on-accent); }
+.td-section[data-section="libreria"] .td-lib-spunta .i { display: block; width: 16px; height: 16px; }
+
+/* Il dettaglio — Atlas `page-detail` (come F2 per le Note): una scheda con bordo e raggio 11 a 18 px dall'elenco. */
+.td-section[data-section="libreria"] .td-workspace[data-detail="true"] .td-master { padding-right: 11px; }
+.td-section[data-section="libreria"] .td-divider::before { background: transparent; }
+.td-section[data-section="libreria"] .td-divider:hover::before, .td-section[data-section="libreria"] .td-divider:focus-visible::before { background: var(--talos-accent); }
+.td-section[data-section="libreria"] .td-detail { margin: 28px 28px 28px 0; border: 1px solid var(--talos-border); border-radius: 11px; }
+.td-section[data-section="libreria"] .td-workspace[data-expanded="true"] .td-detail { width: auto; flex: 1 1 auto; margin: 28px; border: 1px solid var(--talos-border); }
+@container (max-width: 850px) { .td-section[data-section="libreria"] .td-workspace[data-detail="true"] .td-detail { width: auto; flex: 1 1 auto; margin: 24px; } }
+@container (max-width: 560px) { .td-section[data-section="libreria"] .td-workspace[data-detail="true"] .td-detail { margin: 20px; } }
+.td-section[data-section="libreria"] .td-detail-head { min-height: 0; padding: 18px 18px 14px; }
+.td-section[data-section="libreria"] .td-detail-head > span:first-child { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--talos-muted); }
+.td-section[data-section="libreria"] .td-detail-body { padding: 16px 18px 18px; }
+.td-section[data-section="libreria"] .td-detail-footer { flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 8px; padding: 12px 18px 18px; border-top: 1px solid var(--talos-border); }
+/* La riga vera ospitata nel piede: niente cornice, in riga accanto a «Copia percorso». Il suo testo (rinomina in linea, esito)
+   compare solo quando ha qualcosa da mostrare — prima era un riquadro vuoto alto quanto la riga. */
+.td-section[data-section="libreria"] .td-detail-footer .td-riuso-riga { min-width: 0; margin: 0; padding: 0; border: 0; }
+/* ⛔ Con l'id della schermata: `desktop-final.css:208-224` (`:root.talos-final-ui #schermoLibreria [data-c="LibraryRow"]`)
+   disegna OGNI riga della Libreria come una card a griglia con bordo, compresa questa, e batte per specificità (un id)
+   una regola di sole classi — misurato: `display:grid`, bordo 1 px, 153×154 px nel piede. */
+#schermoLibreria .td-section[data-section="libreria"] .td-detail-footer .td-riuso-riga [data-c="LibraryRow"] { display: flex; flex-direction: row; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; min-height: 0; padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+#schermoLibreria .td-section[data-section="libreria"] .td-detail-footer .td-riuso-riga [data-c="LibraryRow"] .talos-list-row__aside { padding: 0; border: 0; background: transparent; }
+.td-section[data-section="libreria"] .td-detail-footer .td-riuso-riga .talos-list-row__text:not(:has(.talos-list-row__rinomina:not([hidden]), .talos-list-row__messaggio:not([hidden]))) { display: none; }
+/* La testata del file: `header` + `.row` + `.file-symbol` + `.small` dell'Atlas; il simbolo 29×34 con l'estensione, che
+   cresce solo se l'estensione a 11 px (Q-06) non ci sta. */
+.td-section[data-section="libreria"] .td-lib-testata { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding-bottom: 14px; margin-bottom: 16px; border-bottom: 1px solid var(--talos-border); }
+.td-section[data-section="libreria"] .td-lib-testata-nome { display: inline-flex; align-items: center; gap: 10px; min-width: 0; }
+.td-section[data-section="libreria"] .td-lib-testata-nome strong { font-size: 11px; font-weight: 600; overflow-wrap: anywhere; }
+.td-section[data-section="libreria"] .td-lib-simbolo { display: grid; place-items: center; flex: none; min-width: 29px; height: 34px; padding: 0 3px; border: 1px solid var(--talos-border-strong); border-radius: 5px; background: var(--talos-panel-soft); color: var(--talos-accent-text); font-size: 11px; font-weight: 600; }
+/* Le righe etichetta/valore — Atlas `.spec-row`: 9 sopra e sotto, filetto, 11 px, etichetta muta. */
+.td-section[data-section="libreria"] .td-lib-righe { margin: 16px 0 0; }
+.td-section[data-section="libreria"] .td-lib-riga { display: flex; justify-content: space-between; gap: 14px; padding: 9px 0; border-bottom: 1px solid var(--talos-border); font-size: 11px; }
+.td-section[data-section="libreria"] .td-lib-riga dt { flex: none; color: var(--talos-muted); }
+.td-section[data-section="libreria"] .td-lib-riga dd { min-width: 0; margin: 0; text-align: right; overflow-wrap: anywhere; }
+.td-section[data-section="libreria"] .td-lib-riga .td-percorso { font-size: 11px; }
+.td-section[data-section="libreria"] .td-lib-riga .td-vai-sessione { min-height: 0; padding: 0; font-size: 11px; }

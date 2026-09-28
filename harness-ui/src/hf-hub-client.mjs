@@ -101,7 +101,10 @@ export function createHfHubClient({ fetchImpl = fetch, token, baseUrl = 'https:/
     const [meta, readme] = await Promise.all([request(`/api/models/${repo}`).then((r) => r.json()), request(`/${repo}/raw/${encodeURIComponent(rev)}/README.md`, { headers: { Accept: 'text/plain' } }).then((r) => r.text()).catch((error) => error.code === 'HF_HUB_UPSTREAM' ? '' : Promise.reject(error))]);
     const revisionResolved = /^[a-f0-9]{40,64}$/iu.test(meta.sha || '') ? meta.sha : rev;
     const card = extractModelCardImages(readme, { repo, revision: revisionResolved });
-    return { repo, revision: revisionResolved, gated: accessoHf(meta.gated), license: meta.cardData?.license || meta.license || null, readme: card.readme, images: card.images, downloads: meta.downloads ?? null, likes: meta.likes ?? null, pipelineTag: meta.pipeline_tag || null };
+    /* 27/09: l'architettura del GGUF come la dichiara l'hub (`gguf.architecture`, misurato su abenzerps/Spark-X2.5-4B-GGUF:
+       «spark2_5»): serve a dire PRIMA di scaricare se il motore installato sa leggerlo (`motore-architetture.mjs`). */
+    const architettura = typeof meta.gguf?.architecture === 'string' && meta.gguf.architecture ? meta.gguf.architecture : null;
+    return { repo, revision: revisionResolved, gated: accessoHf(meta.gated), license: meta.cardData?.license || meta.license || null, readme: card.readme, images: card.images, downloads: meta.downloads ?? null, likes: meta.likes ?? null, pipelineTag: meta.pipeline_tag || null, architettura };
   }
   async function listGgufFiles(repo, revision) {
     ensureRepo(repo); ensureRevision(revision);

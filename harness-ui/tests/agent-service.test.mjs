@@ -72,6 +72,70 @@ function talosLavoraFinto({ script, cattura = () => {} }) {
   };
 }
 
+test('AGENT-DIALOGUE-PASSTHROUGH: agent-service preserva ruolo e quattro canali del registro', async () => {
+  let observed;
+  const callbacks = {
+    askParentFn: async () => ({ status: 'answered' }),
+    answerChildQuestionFn: () => ({ ok: true }),
+    askChildFn: () => ({ status: 'requested' }),
+    answerParentQuestionFn: () => ({ ok: true }),
+  };
+  await avviaSessione({ cartella: '/tmp/x', task: { consegna: 'prova' }, modello: 'm', chiave: 'k',
+    onEvento: () => {}, agentRole: 'child', ...callbacks,
+    talosLavoraFn: talosLavoraFinto({ script: { esito: { comeFinita: 'concluso', detto: 'fatto' } }, cattura: (input) => { observed = input; } }),
+  });
+  assert.equal(observed.agentRole, 'child');
+  for (const [name, callback] of Object.entries(callbacks)) assert.strictEqual(observed[name], callback, name);
+});
+
+test('WF-PROPOSAL-AGENT-PASSTHROUGH: planning callback reaches the kernel unchanged', async () => {
+  let observed;
+  const onWorkflowPlanPropose = async () => ({ status: 'proposed' });
+  await avviaSessione({ cartella: '/tmp/x', task: { consegna: 'prova' }, modello: 'm', chiave: 'k',
+    onEvento: () => {}, modalitaOperativa: 'piano' /* F3-10: due modi soli */, onWorkflowPlanPropose,
+    talosLavoraFn: talosLavoraFinto({ script: { esito: { comeFinita: 'concluso', detto: 'fatto' } },
+      cattura: (input) => { observed = input; } }),
+  });
+  assert.strictEqual(observed.onWorkflowPlanPropose, onWorkflowPlanPropose);
+  assert.equal(observed.modalitaOperativa, 'piano');
+});
+
+test('D1-AGENT-PASSTHROUGH: il modo del padre e le figlie vive arrivano al kernel senza logica', async () => {
+  let observed;
+  const modalitaOperativaCorrenteFn = () => 'piano';
+  await avviaSessione({ cartella: '/tmp/x', task: { consegna: 'prova' }, modello: 'm', chiave: 'k',
+    onEvento: () => {}, agentRole: 'child', modalitaOperativaCorrenteFn, figliViviAllAvvio: true,
+    talosLavoraFn: talosLavoraFinto({ script: { esito: { comeFinita: 'concluso', detto: 'fatto' } }, cattura: (input) => { observed = input; } }),
+  });
+  assert.strictEqual(observed.modalitaOperativaCorrenteFn, modalitaOperativaCorrenteFn);
+  assert.equal(observed.figliViviAllAvvio, true);
+});
+
+/* 24/09/2026, decisioni owner 36-39 — il canale della scelta sul piano arriva al kernel, e RunStarted dice allo schermo che il
+ * piano di questo giro si presenta con l'attrezzo (niente «piano proposto» fabbricato dal testo finale). Al contrario: in Normale,
+ * per una figlia, o senza l'attrezzo in elenco, il segnale non c'è. */
+test('PLAN-AGENT-PASSTHROUGH: presentaPianoFn arriva al kernel; pianoConAttrezzo solo quando è vero', async () => {
+  const presentaPianoFn = async () => ({ decisione: 'continua-a-pianificare' });
+  const casi = [
+    [{ modalitaOperativa: 'piano', strumentiEstesi: ['present_plan'] }, true],
+    [{ modalitaOperativa: 'normale', strumentiEstesi: ['present_plan'] }, false],
+    [{ modalitaOperativa: 'piano', strumentiEstesi: ['present_plan'], agentRole: 'child' }, false],
+    [{ modalitaOperativa: 'piano', strumentiEstesi: ['web_search'] }, false],
+  ];
+  for (const [extra, atteso] of casi) {
+    let observed;
+    const eventi = [];
+    await avviaSessione({ cartella: '/tmp/x', task: { consegna: 'prova' }, modello: 'm', chiave: 'k', presentaPianoFn, ...extra,
+      onEvento: (e) => { eventi.push(e); },
+      talosLavoraFn: talosLavoraFinto({ script: { esito: { comeFinita: 'concluso', detto: 'fatto' } }, cattura: (input) => { observed = input; } }),
+    });
+    assert.strictEqual(observed.presentaPianoFn, presentaPianoFn);
+    const avvio = eventi.find((e) => e.type === 'RunStarted');
+    assert.equal(avvio.contesto.pianoConAttrezzo === true, atteso, JSON.stringify(extra));
+    if (!atteso) assert.equal(Object.hasOwn(avvio.contesto, 'pianoConAttrezzo'), false, 'assente, non false');
+  }
+});
+
 const TASK = { consegna: 'fai qualcosa' };
 
 /*
@@ -464,6 +528,25 @@ test('⛔ il CODICE di un errore che sa dirsi sopravvive: CTX_TRUNCATED_SUMMARY 
 });
 
 /*
+ * ⛔⛔ 25/09/2026 notte (sessione vera `c15ba17c…`, decisione owner «il lavoro fatto resta, sempre») — la storia del giro che
+ * il kernel attacca all'errore (`storiaDelGiroFallito`) attraversa agent-service nel valore di ritorno, insieme a codice e
+ * classe; e la carta dice la classe nuova, `risposta-vuota`.
+ */
+test('RISPOSTA-VUOTA-STORIA: la storia del giro fallito arriva nel ritorno, e la classe risposta-vuota sul RunError', async () => {
+  const eventi = [];
+  const storia = [{ role: 'user', content: 'c' }, { role: 'assistant', content: '[Il giro si è fermato qui per un errore: x]' }];
+  const errore = Object.assign(new Error('Il modello ha risposto senza testo né attrezzi (3 volte di fila).'),
+    { code: 'PROVIDER_EMPTY_RESPONSE', classe: 'risposta-vuota', transitorio: false, messaggiDelGiro: storia });
+  const risultato = await avviaSessione({ cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k', onEvento: (e) => eventi.push(e), talosLavoraFn: talosLavoraFinto({ script: { tipo: 'lancia', errore } }) });
+  assert.equal(risultato.codiceErrore, 'PROVIDER_EMPTY_RESPONSE');
+  assert.equal(risultato.messaggiDelGiro, storia);
+  assert.equal(eventi.at(-1).classe, 'risposta-vuota');
+  // al contrario: un errore senza storia non inventa il campo
+  const senza = await avviaSessione({ cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn: talosLavoraFinto({ script: { tipo: 'lancia', errore: new Error('boom') } }) });
+  assert.equal(Object.hasOwn(senza, 'messaggiDelGiro'), false);
+});
+
+/*
  * ⛔ AL CONTRARIO, e sono i due casi che tengono in piedi il commento del `catch`: un throw resta un
  * guasto del SERVIZIO, e non deve poter fingersi un esito del TASK passando per il `.code` di
  * un'eccezione qualunque. Né può finire in chat una frase intera travestita da codice.
@@ -484,6 +567,26 @@ test('⛔ AL CONTRARIO: un errore interno non si traveste da esito del task, e u
   }
 });
 
+/*
+ * ⭐ F3-41a (25/09/2026) — la CLASSE del guasto del fornitore arriva nel RunError: il messaggio pubblico è italiano e la tabella
+ * delle frasi non lo riconosce, quindi senza la classe un 429 e un nostro difetto sul disco si leggevano uguali.
+ */
+test('F3-41a RUNERROR-CLASSE: the provider failure class travels in RunError next to the code', async () => {
+  const eventi = [];
+  const errore = Object.assign(new Error('Troppo traffico presso il fornitore.'), { code: 'PROVIDER_REQUEST_ERROR', stato: 429, classe: 'traffico', transitorio: true });
+  await avviaSessione({ cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k', onEvento: (e) => eventi.push(e), talosLavoraFn: talosLavoraFinto({ script: { tipo: 'lancia', errore } }) });
+  assert.deepEqual(eventi.at(-1), { type: 'RunError', message: 'Troppo traffico presso il fornitore.', code: 'PROVIDER_REQUEST_ERROR', classe: 'traffico' });
+});
+
+test('F3-41a RUNERROR-CLASSE, reverse: no class, or anything that is not a class word, adds no field', async () => {
+  for (const classe of [undefined, 'Troppo traffico', 'TRAFFICO', 42, { classe: 'traffico' }, '']) {
+    const eventi = [];
+    const errore = Object.assign(new Error('boom'), { code: 'PROVIDER_REQUEST_ERROR', ...(classe === undefined ? {} : { classe }) });
+    await avviaSessione({ cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k', onEvento: (e) => eventi.push(e), talosLavoraFn: talosLavoraFinto({ script: { tipo: 'lancia', errore } }) });
+    assert.deepEqual(Object.keys(eventi.at(-1)).sort(), ['code', 'message', 'type'], `classe ${JSON.stringify(classe)} must not reach the event`);
+  }
+});
+
 test('⭐ RunStarted porta il contesto workspace (progetto/cartella/branch), letto PRIMA di emettere l\'evento', async () => {
   const eventi = [];
   const contestoFinto = { progetto: 'listino', cartella: '/tmp/x', branch: null };
@@ -495,7 +598,7 @@ test('⭐ RunStarted porta il contesto workspace (progetto/cartella/branch), let
     onEvento: (e) => eventi.push(e), talosLavoraFn, leggiContestoWorkspaceFn,
   });
 
-  assert.deepEqual(eventi[0].contesto, { ...contestoFinto, modello: 'm', reasoning: null, permessi: null });
+  assert.deepEqual(eventi[0].contesto, { ...contestoFinto, modello: 'm', reasoning: null, permessi: null, modalitaOperativa: 'normale' });
 });
 
 test('⛔ 02/09 — RunStarted dichiara il PERMESSO del giro nel contesto (la sessione dell\'owner era stata messa in Read only da un altro client e la UI diceva Full access)', async () => {
@@ -528,7 +631,7 @@ test('RUN-MODEL-TRACE-07 — RunStarted attribuisce modello e reasoning effettiv
   });
   assert.deepEqual(eventi[0].contesto, {
     progetto: 'talos', cartella: '/tmp/x', branch: 'lane/test',
-    modello: 'qwen/qwen3.8-flash', reasoning: { effort: 'high' }, permessi: null,
+    modello: 'qwen/qwen3.8-flash', reasoning: { effort: 'high' }, permessi: null, modalitaOperativa: 'normale',
   });
 });
 
@@ -2723,6 +2826,10 @@ test('⭐⭐⭐ eseguiCapacitaForge(memory.search) — composizione in due passi
     cartella: '/tmp/x', cartellaMemoria: '/tmp/m', cartellaForge: '/tmp/f', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn,
     elencaToolForgiatiFn: elencaToolForgiatiFintoConUno(manifest), elencaMemorieFn,
   });
+  /* 27/09/2026, decisione owner («memoria come Hermes»): la sessione legge la memoria UNA volta all'avvio, per il blocco del
+     prompt (`memorieNelPrompt`). Qui si conta solo ciò che fa la capacità. */
+  assert.deepEqual(chiamateElenco, [{ cartella: '/tmp/m' }], 'la lettura d’avvio per il prompt');
+  chiamateElenco.length = 0;
   const risultato = await catturato.eseguiToolForgeFn('forge_x', { query: 'brevi' });
   assert.equal(risultato.status, 'succeeded');
   assert.deepEqual(chiamateElenco, [{ cartella: '/tmp/m' }]);

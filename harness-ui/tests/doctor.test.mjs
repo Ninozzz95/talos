@@ -16,6 +16,27 @@ test('⭐ diagnosi() riporta i 4 controlli, con lo shell.enforcement DAVVERO ric
   assert.deepEqual(risultato, { chiaveApi: true, shell: 'wsl2', git: true, naviga: true });
 });
 
+test('DOCTOR-NEGOZIO-01 (24/09) — diagnosi() dice come il negozio pubblica l’intestazione: link, ripiego exFAT, o non ancora noto', async () => {
+  const base = { chiaveConfigurata: true, eseguiComandoSandboxatoFn: async () => ({ enforcement: 'desktop' }), spawnSyncFn: () => ({ status: 0 }) };
+  const link = await diagnosi({ ...base, negozioSessioni: { modalitaIntestazione: 'link', cartella: 'C:/dati/store' } });
+  assert.equal(link.negozioSessioni.modalitaIntestazione, 'link');
+  assert.equal(link.negozioSessioni.cartella, 'C:/dati/store');
+  assert.match(link.negozioSessioni.dettaglio, /collegamento/);
+  const ripiego = await diagnosi({ ...base, negozioSessioni: { modalitaIntestazione: 'senza-link' } });
+  assert.equal(ripiego.negozioSessioni.modalitaIntestazione, 'senza-link');
+  assert.match(ripiego.negozioSessioni.dettaglio, /exFAT/);
+  assert.equal('cartella' in ripiego.negozioSessioni, false, 'senza cartella non si inventa un percorso');
+  const ignoto = await diagnosi({ ...base, negozioSessioni: { modalitaIntestazione: null } });
+  assert.equal(ignoto.negozioSessioni.modalitaIntestazione, null);
+  assert.match(ignoto.negozioSessioni.dettaglio, /prima scrittura/);
+  /* al contrario: un valore che non è fra i tre non passa per buono */
+  const strano = await diagnosi({ ...base, negozioSessioni: { modalitaIntestazione: 'boh' } });
+  assert.equal(strano.negozioSessioni.modalitaIntestazione, null);
+  /* e senza il dato il Doctor non aggiunge la voce (i 4 controlli di sempre) */
+  const senza = await diagnosi(base);
+  assert.equal('negozioSessioni' in senza, false);
+});
+
 test('⭐ diagnosi() aggiunge il controllo cartelle solo quando riceve la configurazione reale', async () => {
   const risultato = await diagnosi({
     chiaveConfigurata: false,

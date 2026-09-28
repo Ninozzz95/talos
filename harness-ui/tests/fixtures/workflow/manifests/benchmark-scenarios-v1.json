@@ -1,0 +1,49 @@
+{
+  "kind": "workflow-benchmark-scenario-manifest",
+  "version": 1,
+  "source": "WORKFLOW-VERIFICATION-SPEC-v1-2026-09-20.md",
+  "scenarios": [
+    {
+      "id": "B001_GRAPH_200"
+    },
+    {
+      "id": "B002_GRAPH_500"
+    },
+    {
+      "id": "B003_GRAPH_1000"
+    },
+    {
+      "id": "B004_GRAPH_5000"
+    },
+    {
+      "id": "B005_GRAPH_10000_LOGICAL"
+    },
+    {
+      "id": "B006_100_AGENT_SIM"
+    },
+    {
+      "id": "B007_500_LEASE_SIM"
+    },
+    {
+      "id": "B008_25_REAL_WRITERS"
+    },
+    {
+      "id": "B009_1000_HUMAN_GATES_SIM"
+    },
+    {
+      "id": "B010_100_RECOVERY_NODES"
+    },
+    {
+      "id": "B011_10_RUN_FAIRNESS"
+    },
+    {
+      "id": "B012_PROVIDER_429_BURST"
+    },
+    {
+      "id": "B013_100_GRAPH_PATCHES_RESYNC"
+    },
+    {
+      "id": "B014_DIRTY_BASELINE_OWNER_EDIT"
+    }
+  ]
+}

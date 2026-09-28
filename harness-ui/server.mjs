@@ -1,5 +1,6 @@
 import './src/difesa-ricerca-programmi.mjs'; // ⛔ PER PRIMO: su Windows un `git.exe` dentro il workspace non deve battere il git vero (misura e fonti nel file)
-import { writeFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { randomBytes } from 'node:crypto'; // F3 (24/09): il gettone dello spegnimento gentile
 import { createServer } from 'node:http';
 import { createLocalResumeDiagnostics } from './src/local-resume-diagnostics.mjs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -9,10 +10,17 @@ import { createAutomationStore } from './src/automation-store.mjs';
 import { loadConfig, trovaPortaLibera } from './src/config.mjs';
 import { createHttpApp } from './src/http-app.mjs';
 import { createSessionRegistry } from './src/session-registry.mjs';
+import { impostaPoliticaScritturaSync, modalitaPubblicazioneIntestazione } from './src/session-store.mjs'; // F3 (24/09): il writer sincrono rispetta la coda; 24/09: la modalità dell'intestazione per il Doctor
+import { createWorkflowStore } from './src/workflow/store.mjs';
+import { proposeWorkflowFromTool } from './src/workflow/planning-control.mjs';
+import { createWorkflowOrchestrator } from './src/workflow-orchestrator.mjs';
+import { createAgentSessionAdapter } from './src/workflow/adapters/agent-session.mjs';
+import { createCapacitaAdattiva, createWorkflowScheduler } from './src/workflow/scheduler.mjs';
 import { createStaticHandler } from './src/static-files.mjs';
 import { listaTaskDisponibili } from './src/task-catalog.mjs';
 import { elencaCartelleProgetto } from './src/custom-task.mjs';
 import { diagnosi } from './src/doctor.mjs';
+import { avviaPuliziaScratch, statoScratch } from './src/scratch.mjs';
 import { statoPrimoAvvio } from './src/setup-stato.mjs';
 import { createSearchSourceStore } from './src/search-source-store.mjs';
 import { ENDPOINT_SENTINELLA_DUCKDUCKGO, creaTrasportoSenzaChiave } from './src/duckduckgo-search.mjs';
@@ -21,6 +29,7 @@ import { createModelsDevCatalog, createProviderModelCatalog } from './src/model-
 import { creaRegistroTerminali, MINUTI_PRIMA_DI_CHIUDERE_PTY_ORFANA } from './src/pty-terminal.mjs';
 import { creaRegistroSchedeTerminale } from './src/terminal-registry.mjs'; // ⭐ 05/9, W1-01
 import { creaServizioGit } from './src/git-service.mjs'; // ⭐ 05/9, W1-05
+import { creaServizioGh } from './src/gh-service.mjs'; // ⭐ F6-3, 27/09
 import { creaGestoreTerminaleWs } from './src/terminal-ws.mjs';
 import { misuraCapacitaMacchina } from './src/machine-capacity.mjs';
 import { createLocalModelStore } from './src/local-model-store.mjs';
@@ -30,10 +39,11 @@ import { createHfHubClient } from './src/hf-hub-client.mjs';
 import { createHfDirectTransfer } from './src/hf-direct-transfer.mjs';
 import { fetchAllowedHfImage } from './src/hf-image-proxy.mjs';
 import { createLlamaServerSupervisor } from './src/llama-server-supervisor.mjs';
+import { motoreConosceArchitettura } from './src/motore-architetture.mjs';
 import { createLlamaServerRuntime } from './src/local-runtime-llama-server.mjs';
 import { createProviderProbe } from './src/provider-probe.mjs';
 import { createProviderCredentialStore } from './src/provider-credential-store.mjs';
-import { leggiScopePortachiavi, avvolgiAdattatoreKeyring, creaAdattatorePortachiaviSistema } from './src/adattatore-keyring.mjs';
+import { leggiScopePortachiavi, avvolgiAdattatoreKeyring, creaAdattatorePortachiavi, leggiPortachiaviDiProva } from './src/adattatore-keyring.mjs';
 import { migraChiaviLegacySuDesktop } from './src/migrazione-chiavi.mjs';
 import { createGeneratedImageStore } from './src/generated-image-store.mjs';
 import { createOwnerRuntimeAdapter, creaFetchMultiProvider } from './src/runtime-owner-adapter.mjs';
@@ -54,6 +64,7 @@ import { creaGestoreBrowserVivo } from './src/browser-sessione-viva.mjs'; // 07/
 import { createLocalRuntimeProbe } from './src/local-runtime-probe.mjs';
 import { readGgufHeader } from './src/gguf-header.mjs';
 import { join, parse, isAbsolute } from 'node:path';
+import { CARTELLA_PROGETTI, creaCartellaDatiProgetto } from './src/cartella-dati-progetto.mjs'; // PO-26 (24/09): Libreria e Ricerca fuori dal progetto
 
 /** ⛔ Stessi tre nomi loopback validati in config.mjs (`LOOPBACK_HOSTS`, non esportato — costante minuscola e stabile, duplicarla qui è più semplice che aggiungere un export per tre stringhe). Un browser può presentarsi con uno qualunque dei tre alias anche se il server è bindato su un altro. */
 const ALIAS_LOOPBACK = ['127.0.0.1', '::1', 'localhost'];
@@ -69,13 +80,24 @@ function percorsoDatiDesktop(relativo) {
 async function startServer() {
   const config = loadConfig(process.env, import.meta.url);
   /*
+   * ⭐ F3, onda 2 di F2 (24/09/2026) — IL WRITER SINCRONO NON SCAVALCA PIÙ LA CODA (J3, rapporto F2 §2.2). Con
+   *   `'busy'` un sync che trova una scrittura in volo lancia `SESSION_STORE_BUSY` prima di toccare il disco, e il
+   *   registro lo ACCODA in ordine (`scriviRigaSyncOInCoda`) invece di scavalcare: le righe del journal restano
+   *   nell'ordine in cui sono nate. Una riga sola qui invece di 14 punti nel registro, com'era previsto dall'onda 1.
+   *   `TALOS_SESSION_STORE_SYNC=scavalca` rimette il comportamento vecchio, per diagnosi.
+   */
+  impostaPoliticaScritturaSync(process.env.TALOS_SESSION_STORE_SYNC === 'scavalca' ? 'scavalca' : 'busy');
+  /*
    * ⛔ (16/09/2026) — lo scope del portachiavi arriva dal guscio desktop (runtime.mjs). Null in
    * sviluppo: i nomi servizio restano quelli di sempre. «desktop»: l'app installata legge/scrive
    * `<servizio>-desktop` (namespace suo, nasce vuoto) e ignora i semi di chiavi dall'ambiente —
    * l'app prende le chiavi SOLO dalla UI. Vedi `src/adattatore-keyring.mjs`.
    */
   const scopePortachiavi = leggiScopePortachiavi(process.env);
-  const ignoraSemiAmbiente = scopePortachiavi !== null; // PR #27: vale per OGNI scope (anche l'anteprima), non solo «desktop»
+  /* 23/09/2026: anche la custodia di prova (`TALOS_HARNESS_UI_KEYRING=memoria`) ignora i semi: un server
+     di prova non deve ricevere la chiave vera dell'owner dall'ambiente. Vedi `src/adattatore-keyring.mjs`. */
+  const portachiaviDiProva = leggiPortachiaviDiProva(process.env);
+  const ignoraSemiAmbiente = scopePortachiavi !== null || portachiaviDiProva; // PR #27: vale per OGNI scope (anche l'anteprima), non solo «desktop»
   // Opt-in only: observe the real resumed turn without changing prompts or cache flags.
   const resumeDiagnostics = await createLocalResumeDiagnostics({ sourceFiles: {
     server: fileURLToPath(import.meta.url),
@@ -89,7 +111,7 @@ async function startServer() {
   try {
     /* ⛔ (16/09/2026) — l'adattatore arriva dalla fabbrica unica di `src/adattatore-keyring.mjs`,
        condivisa con la routine di pulizia alla disinstallazione: un contratto, nessuna copia. */
-    providerKeyring = avvolgiAdattatoreKeyring(await creaAdattatorePortachiaviSistema(), scopePortachiavi);
+    providerKeyring = avvolgiAdattatoreKeyring(await creaAdattatorePortachiavi(process.env), scopePortachiavi);
   } catch {
     console.warn('[provider-store] portachiavi del sistema non disponibile; Doctor segnalerà il limite');
   }
@@ -100,7 +122,7 @@ async function startServer() {
    * `src/migrazione-chiavi.mjs`.
    */
   // Preview never imports legacy or production credentials.
-  if (scopePortachiavi === 'desktop') {
+  if (scopePortachiavi === 'desktop' && !portachiaviDiProva) {
     try {
       const migrazione = await migraChiaviLegacySuDesktop({ markerFile: percorsoDatiDesktop('.chiavi-migrate.json') });
       if (migrazione.migrati.length) {
@@ -453,9 +475,74 @@ async function startServer() {
    * parte comunque — avviare una sessione fallisce per-richiesta con
    * CONFIG_INVALID, dichiarato al chiamante, non un rifiuto all'avvio.
    */
+  let workflowStore = null;
+  if (config.workflowDataRoot) {
+    try {
+      workflowStore = await createWorkflowStore({
+        workflowDataRoot: config.workflowDataRoot,
+        workspaceRoots: config.cartelleProgetto.map(({ percorso }) => percorso),
+        resultLimits: { maxItemBytes: 1_048_576, maxRunBytes: 67_108_864 },
+      });
+      // F3-41c (owner 25/09, «Da parte + rename»): i run nati a metà da un crollo non fermano più il registro — si DICONO, qui
+      for (const voce of workflowStore.quarantinedRuns ?? []) {
+        console.warn(`[workflow] run messo da parte all'avvio (${voce.code}): ${voce.scope} — niente è stato cancellato`);
+      }
+    } catch (error) {
+      console.error('Workflow Store non disponibile:', error?.code ?? 'WORKFLOW_STORE_UNAVAILABLE');
+    }
+  }
+  /*
+   * ⭐ F3, onda 2 di F2 (24/09/2026), decisione 2 — LA FINESTRA DEL MODELLO DAL CATALOGO, in sola lettura e SINCRONA.
+   *   `modelCatalog.ottieni()` è asincrona (rete + cache 10 min): qui si tiene l'ultima copia riuscita e la si rinfresca
+   *   in background quando è più vecchia della cache; il registro legge `contextLength` (`model-catalog.mjs:60`) senza
+   *   mai aspettare — `avviaESegui` è sincrona e `RunStarted` deve stare nel buffer al ritorno. Il nome arriva come lo
+   *   manda il giro (`modelloDiSessionePerRete`): `vendor/nome` per OpenRouter, `provider:nome` altrove — per questi
+   *   ultimi e per il locale il catalogo OpenRouter non risponde e vale il solo tetto (`null`, dichiarato).
+   */
+  const finestraDalCatalogo = (() => {
+    let modelli = null;
+    let aggiornatoAlle = 0;
+    let inCorso = null;
+    const rinfresca = () => {
+      inCorso ??= modelCatalog.ottieni().then((r) => { if (Array.isArray(r?.modelli)) { modelli = r.modelli; aggiornatoAlle = Date.now(); } }).catch(() => {}).finally(() => { inCorso = null; });
+    };
+    rinfresca();
+    return (modello) => {
+      if (Date.now() - aggiornatoAlle > 10 * 60 * 1000) rinfresca();
+      if (!Array.isArray(modelli) || typeof modello !== 'string') return null;
+      const nome = modello.startsWith('openrouter:') ? modello.slice('openrouter:'.length) : modello;
+      if (nome.includes(':')) return null;
+      const voce = modelli.find((m) => m.id === nome) ?? modelli.find((m) => m.id === `~${nome}` || (m.alias && m.id.slice(1) === nome));
+      return Number.isFinite(voce?.contextLength) && voce.contextLength > 0 ? voce.contextLength : null;
+    };
+  })();
+  /* F3 (24/09): l'oggetto della rotta di spegnimento; gettone e funzione si riempiono dopo che `shutdown` esiste. */
+  const spegnimentoPerLaApp = { gettone: null, spegniFn: null };
+  /*
+   * ⭐⭐⭐ PO-26 (owner 16/09 «PO-26 si», 24/09 «PO-26 intera, adesso») — Libreria e Ricerca di ogni progetto
+   *   vivono nella cartella dati dell'app, `<dati>/.workspaces/<slug>-<impronta>/`, non più nel progetto. La
+   *   prima volta che un progetto si tocca, ciò che le versioni precedenti avevano lasciato lì si sposta qui.
+   *   Il rapporto di ogni migrazione che ha fatto qualcosa va nel terminale del server: chi, da dove, dove.
+   */
+  const cartellaDatiProgetto = creaCartellaDatiProgetto({
+    radiceDati: percorsoDatiDesktop(`${CARTELLA_PROGETTI}/`),
+    onMigrazione: (r) => {
+      const conta = (k) => (Array.isArray(r[k]) ? r[k].length : 0);
+      console.log(`[dati-progetto] ${r.progetto} → ${r.destinazione}: spostate ${conta('spostate')}, unite ${conta('unite')}, doppioni tolti ${conta('doppioni')}, conflitti ${conta('conflitti')}, saltate ${conta('saltate')}, errori ${conta('errori')}`);
+      for (const c of r.conflitti ?? []) console.warn(`[dati-progetto] conflitto, resta nel progetto: ${join(r.progetto, c)}`);
+      for (const e of r.errori ?? []) console.warn(`[dati-progetto] errore su ${e.percorso}: ${e.codice ?? ''} ${e.messaggio}`);
+    },
+  });
   const sessionRegistry = resumeDiagnostics.wrapRegistry(createSessionRegistry(resumeDiagnostics.registryOptions({
+    cartellaDatiProgettoFn: cartellaDatiProgetto,
+    finestraTokenFn: finestraDalCatalogo,
     contextHooksFn: config.contextTrial ? input => contextRuntime.service.createKernelHooks(input) : undefined,
     contextCompactFn: config.contextTrial ? input => contextRuntime.service.compact(input) : undefined,
+    /* F3-11c (24/09 notte), decisione owner 42: un passo della bozza può chiedere un altro modello solo fra i disponibili
+       (il catalogo che serve `/api/v1/models`); se il catalogo non risponde, l'elenco resta ignoto e il compilatore lo dice. */
+    workflowPlanProposeFn: workflowStore ? input => proposeWorkflowFromTool(workflowStore, input, {
+      availableModelIdsFn: async () => ((await modelCatalog.ottieni())?.modelli ?? []).map((m) => m?.id).filter((id) => typeof id === 'string'),
+    }) : null,
     avviaSessioneFn: (input) => avviaSessione({
       ...input,
       talosLavoraFn: (runtimeInput) => ownerRuntime.talosLavora(runtimeInput),
@@ -555,6 +642,35 @@ async function startServer() {
    */
   const { ripristinate, totali } = await sessionRegistry.ripristina();
   if (totali > 0) console.log(`[session-store] ${ripristinate}/${totali} sessioni ripristinate da .sessions-store/`);
+  /*
+   * ⭐ F3-41b (25/09/2026) — IL RUNTIME DEI WORKFLOW, composto qui come chiedeva l'audit (`WFS` punto 1: il server componeva
+   *   Store, proposta e HTTP, ma non l'orchestratore, il recupero all'avvio né l'adattatore dei passi). DOPO il ripristino delle
+   *   sessioni (la riconciliazione di un passo cerca la sua sessione per legame), PRIMA di `listen`: quarantena → recupero →
+   *   scheduler. Se il recupero fallisce, il registro resta leggibile e lo scheduler non parte: nessun passo nuovo finché
+   *   qualcuno non guarda. Nessuna rotta nuova: `/start` arriva con F3-51 e sveglierà lo scheduler.
+   */
+  let workflowRuntime = null;
+  if (workflowStore) {
+    const capacita = createCapacitaAdattiva();
+    const orchestrator = createWorkflowOrchestrator({ store: workflowStore, capacityFn: () => capacita.politica(),
+      adapters: new Map([['agent-session', createAgentSessionAdapter({ sessions: sessionRegistry })]]) });
+    const scheduler = createWorkflowScheduler({ orchestrator, store: workflowStore, capacita,
+      onErrore: (errore, dove) => console.error(`[workflow] ${errore?.code ?? 'errore'}: ${errore?.message ?? errore}`, dove) });
+    try {
+      await orchestrator.recover();
+      await scheduler.avvia();
+      workflowRuntime = Object.freeze({ orchestrator, scheduler, capacita });
+      console.log('[workflow] runtime pronto: recupero fatto, al massimo 4 passi insieme');
+    } catch (errore) {
+      scheduler.ferma();
+      console.error(`[workflow] runtime in attesa di attenzione: ${errore?.code ?? errore?.message ?? errore}`);
+    }
+  }
+  // PO-26 — in sottofondo: una richiesta sulla stessa sessione aspetta la STESSA migrazione, non una seconda.
+  sessionRegistry.preparaCartelleDati().then(
+    (progetti) => { if (progetti > 0) console.log(`[dati-progetto] ${progetti} progetti controllati`); },
+    (errore) => console.warn(`[dati-progetto] passata iniziale non riuscita: ${errore?.message ?? errore}`),
+  );
   if (config.contextTrial) {
     const localCounterBase = 'http://talos-context-runtime.invalid/v1';
     const readLocalRuntime = async () => {
@@ -652,6 +768,12 @@ async function startServer() {
       ownerRuntime: ownerRuntimeState,
       catalogoTask: { disponibile: Boolean(taskCatalogProvider), dettaglio: taskCatalogProvider ? 'Elenco attività predefinite disponibile.' : 'L’elenco delle attività predefinite non è disponibile in questa installazione.' },
       sessioniPersistenza: typeof sessionRegistry.statoPersistenza === 'function' ? sessionRegistry.statoPersistenza() : undefined,
+      scratch: await statoScratch().catch(() => undefined),
+      /* 24/09/2026 — come il negozio pubblica l'intestazione di una sessione in QUESTA cartella ('link' | 'senza-link' | null
+         finché nessuna è stata scritta da questo avvio): la voce del Doctor esisteva dal commit 34e78a9d4 e nessuno gliela passava. */
+      negozioSessioni: config.cartellaStore
+        ? { modalitaIntestazione: modalitaPubblicazioneIntestazione(config.cartellaStore), cartella: config.cartellaStore }
+        : undefined,
     });
   };
   /*
@@ -710,6 +832,9 @@ async function startServer() {
     }),
   });
 
+  /* F6-3 (27/09): il servizio git serve anche alle PR (`gh-service` legge ramo, remoti e bozza da qui): uno solo, per entrambi. */
+  const servizioGit = creaServizioGit({ cartellaDiSessione: (sessionId) => sessionRegistry.cartellaDi(sessionId) });
+
   const app = createHttpApp({
     /*
      * ⛔ 16/09 — il tetto sul corpo delle richieste (10 MiB di serie, vedi `MAX_REQUEST_BODY_BYTES` in http-app.mjs):
@@ -736,6 +861,8 @@ async function startServer() {
     chatImageStore,
     staticHandler: createStaticHandler(config.publicDir),
     sessionRegistry,
+    workflowStore,
+    workflowRuntime, // F3-51c (25/09/2026): Avvia e i controlli del run; null ⇒ «non disponibile»
     terminalRegistry: registroSchedeTerminale, // ⭐ 05/9, W1-01
     /*
      * ⭐⭐⭐ 05/9, W1-05 — lo stato Git di una sessione: la sorgente
@@ -748,7 +875,12 @@ async function startServer() {
      * ⛔⛔ Non c'è nessun push da cablare: quella porta non esiste nel
      * servizio, per regola dell'owner.
      */
-    gitService: creaServizioGit({ cartellaDiSessione: (sessionId) => sessionRegistry.cartellaDi(sessionId) }),
+    gitService: servizioGit,
+    /*
+     * ⭐ F6-3 (27/09) — le PR con `gh` (decisioni owner 5-7, 25-28): il `gh` che TALOS scarica, se serve, sta nella cartella dati
+     *   (`.tools/gh/<versione>/`, ignorata da git come ogni `.tools/`); quello di sistema, se è abbastanza nuovo, ha la precedenza.
+     */
+    ghService: creaServizioGh({ cartellaStrumenti: percorsoDatiDesktop('.tools/gh/'), servizioGit }),
     // Un catalogo non configurato è uno stato degradato osservabile, non un crash HTTP.
     listaTaskDisponibili: () => (taskCatalogProvider ? listaTaskDisponibili(taskCatalogProvider) : []),
     elencaCartelleProgetto: () => elencaCartelleProgetto(config.cartelleProgetto),
@@ -764,6 +896,7 @@ async function startServer() {
     searchSourceStore,
     provaRicercaWebFn,
     token: config.token, // ⭐ 04/9, W1-10 — cancello a token per la shell Electron
+    spegnimento: spegnimentoPerLaApp, // F3 (24/09): la rotta di spegnimento gentile; gettone e funzione arrivano dopo l'ascolto (oggetto condiviso)
     catalogoModelliFn: (opts) => modelCatalog.ottieni(opts),
     // P-K (12/09) — i cataloghi cloud dipendono dal collegamento dell'owner: Bedrock si legge dalla sonda, Azure/Vertex dichiarano che serve una configurazione.
     catalogoFornitoriFn: (id, opts) => ['azure', 'bedrock', 'vertex'].includes(id) ? providerProbe.elencaModelli(id) : providerModelCatalog.ottieni(id, opts),
@@ -798,6 +931,8 @@ async function startServer() {
     localModelTransfer,
     localRuntimeProbe,
     hfHubClient,
+    // 27/09: la pagina di un modello HF dice prima di scaricare se il motore installato sa leggerne l'architettura
+    motoreConosceArchitetturaFn: (architettura) => (config.llamaServerPath ? motoreConosceArchitettura(config.llamaServerPath, architettura) : null),
     hfImageProxyFn: (url) => fetchAllowedHfImage(url),
     providerStore,
     providerProbe,
@@ -913,14 +1048,62 @@ async function startServer() {
     await closeRuntimeResources('shutdown', {
       resources: [
         { stop: () => automationScheduler.ferma() },
+        // F3-41b: lo scheduler si ferma PRIMA che il registro si chiuda (un passo che finisce dopo non scrive più niente)
+        ...(workflowRuntime ? [{ stop: () => workflowRuntime.scheduler.ferma() }] : []),
+        ...(workflowStore ? [{ close: () => workflowStore.close() }] : []),
         ...(contextRuntime ? [{ close: () => contextRuntime.close() }] : []),
         ...Object.values(localRuntimes).map((runtime) => ({ close: () => typeof runtime?.unload === 'function' ? runtime.unload() : undefined })),
       ],
       logger: console,
     });
     await resumeDiagnostics.flush();
+    /*
+     * ⭐ F3, onda 2 di F2 (24/09/2026), decisione 8 — il registro si chiude PRIMA di `server.close`: fence sulle operazioni
+     *   nuove e flush della coda del negozio (`attendiScritture`), con un tetto di 10 s. Un flush scaduto si DICE a log.
+     *   Forma di Hermes `gateway/shutdown_flush.py` («Flush pending messages … before shutdown to prevent data loss»).
+     */
+    try {
+      const esito = await sessionRegistry.chiudi({ attesaMassimaMs: 10_000 });
+      console.log(`[session-store] spegnimento: ${esito.scrittureAttese} scritture attese in ${esito.giri} giri${esito.scaduta ? ' — ATTENZIONE: flush scaduto, qualcosa può non essere su disco' : ''}${esito.sintesiInCorso ? ` · ${esito.sintesiInCorso} sintesi in background abbandonate` : ''}`);
+    } catch (errore) {
+      console.error('[session-store] chiusura del registro fallita:', errore instanceof Error ? errore.message : errore);
+    }
     server.close(() => process.exit(0));
+    /*
+     * ⛔⛔ 24/09/2026 — `close()` DA SOLO NON CHIUDE I FLUSSI APERTI. Segnalato dalla lane mobile (stesso difetto curato sul
+     *   telefono) e riprodotto qui: `tests/server-spegnimento-con-flussi-aperti.test.mjs`, con un flusso
+     *   `/api/v1/sessions/:id/events` aperto il processo restava vivo oltre 6 s dopo lo stop gentile. Node
+     *   (nodejs.org/api/http.html, letto il 24/09/2026): `server.close()` chiude solo le connessioni «not sending a request
+     *   or waiting for a response»; `closeAllConnections()` (v18.2.0) chiude anche quelle, e va chiamata DOPO `close()`
+     *   «to avoid race conditions where new connections are created between a call to this and a call to server.close».
+     *   Il registro ha già fatto il flush qui sopra: chiudere le risposte vive non perde niente.
+     * ⛔ `closeAllConnections` non tocca i socket passati a un altro protocollo (il WebSocket del terminale): per quelli
+     *   resta la rete di sicurezza, che esce comunque dopo 2 s e lo DICE a log. `unref`: da sola non tiene vivo il processo.
+     */
+    server.closeAllConnections?.();
+    setTimeout(() => {
+      console.error('[spegnimento] connessioni ancora aperte 2 s dopo la chiusura: esco comunque (il registro ha già fatto il flush)');
+      process.exit(1);
+    }, 2_000).unref();
   };
+  /*
+   * ⭐ F3 (24/09/2026), decisione 8 — il gettone dello spegnimento gentile: casuale a ogni avvio, scritto nella cartella
+   *   dei journal (`config.cartellaStore`; solo l'utente, `mode 0o600` — su Windows le ACL dell'utente) e letto da `scripts/aggiorna-4174.ps1`, che lo
+   *   presenta a `POST /api/v1/admin/shutdown` PRIMA di qualunque `Stop-Process -Force`.
+   */
+  let gettoneSpegnimento = null;
+  try {
+    gettoneSpegnimento = randomBytes(32).toString('hex');
+    /* Nella cartella dei journal (`config.cartellaStore`, gitignorata, dell'utente): mai accanto a `server.mjs` nel repo —
+       la prima stesura ci lasciava un file non tracciato quando una prova avviava il server (misurato: `?? .spegnimento-gettone`). */
+    mkdirSync(config.cartellaStore, { recursive: true });
+    writeFileSync(join(config.cartellaStore, '.spegnimento-gettone'), gettoneSpegnimento, { encoding: 'utf8', mode: 0o600 });
+  } catch (errore) {
+    gettoneSpegnimento = null;
+    console.error('[spegnimento] gettone non scritto (la rotta di spegnimento resta spenta):', errore instanceof Error ? errore.message : errore);
+  }
+  spegnimentoPerLaApp.gettone = gettoneSpegnimento;
+  spegnimentoPerLaApp.spegniFn = shutdown;
   process.once('SIGINT', shutdown);
   process.once('SIGTERM', shutdown);
   console.log(`Harness UI disponibile su http://${config.host}:${portaAscolto}`);
@@ -944,6 +1127,14 @@ async function startServer() {
    * riceve un errore): il runtime agente non configurato, e sessioni
    * scartate al ripristino.
    */
+  /*
+   * ⭐ Corsia SCRATCH, 24/09/2026 — la pulizia della radice dei temporanei (src/scratch.mjs) parte
+   * QUI, dopo che il server ascolta, e NON si attende: è asincrona, non lancia mai, e al massimo una
+   * volta l'ora fra processi (file-timbro). Toglie le voci il cui sottoalbero è fermo da 24 ore, più i
+   * residui storici fuori radice (talos-doctor-/talos-git-msg-/talos-avvio- in TEMP, avvio-* nella
+   * cartella dati del desktop). Come Hermes (`hermes_constants.py:1234-1248`).
+   */
+  void avviaPuliziaScratch();
   diagnosiFn().then((esito) => {
     /*
      * ⛔ `configurato:false` (nessun modulo indicato) è quanto ha rotto

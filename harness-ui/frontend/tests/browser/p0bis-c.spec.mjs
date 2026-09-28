@@ -498,7 +498,16 @@ for (const modo of ['dark', 'light']) {
      *   trova ogni sessione appena comincia — cioè quello che l'owner vede più spesso.
      */
     async function statoBarra(page, { giri, costo, conSpesa, pienaLarghezza = false }) {
-      await page.evaluate(({ g, c, conSpesa: cs, piena }) => {
+      /*
+       * ⛔ 26/09 — LA PROVA CORREVA CONTRO IL PRODOTTO. Misurato con una sonda (subito e dopo due fotogrammi, sequenza
+       *   di D2 (c)): dopo un `setViewportSize` il piede della chat si ridisegna e rimette `hidden` alla pillola della
+       *   spesa — giusto, questa sessione finta non ha costi (`chat-foot.js`, `costoChip.hidden = !dati.costo`). Lo
+       *   stato si scriveva in un `evaluate` e si leggeva nel successivo: se il ridisegno cadeva in mezzo, si misurava
+       *   la barra SENZA spesa e «la scala non scatta» (4 casi su 6, anche su HEAD; la regola CSS era giusta). ⇒ Prima
+       *   si lascia finire il ridisegno del ridimensionamento, poi stato e misura nella STESSA battuta.
+       */
+      await page.evaluate(() => new Promise((ok) => requestAnimationFrame(() => requestAnimationFrame(ok))));
+      return page.evaluate(({ g, c, conSpesa: cs, piena }) => {
         document.documentElement.classList.toggle('chat-full-width', Boolean(piena));
         const composer = document.querySelector('#composerForm');
         const pg = composer.querySelector('[data-runtime-giri]');
@@ -509,9 +518,10 @@ for (const modo of ['dark', 'light']) {
         if (cs) pc.querySelector('.talos-mono').textContent = c;
         composer.querySelector('[data-open-sheet="model"] .talos-chip__label').textContent = 'glm-5.3-flash';
         composer.querySelector('[data-open-sheet="permissions"] .talos-chip__label').textContent = 'Scrive nel progetto';
-      }, { g: giri, c: costo, conSpesa, piena: pienaLarghezza });
-      return page.evaluate(() => {
-        const composer = document.querySelector('#composerForm');
+        /* ⛔ 26/09 — dal difetto (3) la scala si sceglie MISURANDO (`components/scala-composer.js`), di norma un fotogramma
+           dopo il cambio. Aspettarlo qui riapre la corsa col piede (vedi sopra: in due fotogrammi il piede può rimettere
+           `hidden` alla spesa), e misurare senza leggerebbe uno stadio vecchio: si adatta SUBITO, nella stessa battuta. */
+        window.__talosHarnessUiRuntime.adattaScalaComposer();
         const barra = composer.querySelector('.talos-composer__bar');
         const leggi = (sel) => {
           const el = composer.querySelector(sel);
@@ -534,7 +544,7 @@ for (const modo of ['dark', 'light']) {
           barraSfonda: barra.scrollWidth > barra.clientWidth + 1,
           vuotoADestra: Math.round(composer.querySelector('.talos-composer__mic').getBoundingClientRect().left - composer.querySelector('#pillTerminale').getBoundingClientRect().right),
         };
-      });
+      }, { g: giri, c: costo, conSpesa, piena: pienaLarghezza });
     }
 
     test(`D2 (a) — con la SOLA pillola dei giri le etichette non cedono: a 1440 tutte intere (${modo})`, async ({ page }, info) => {
@@ -557,22 +567,23 @@ for (const modo of ['dark', 'light']) {
       await info.attach(`d2a-solo-giri-1440-${modo}.png`, { body: await foto(page, `d2a-solo-giri-1440-${modo}.png`, '#composerForm'), contentType: 'image/png' });
     });
 
-    test(`D2 (a) — con la sola pillola dei giri, a 1024 nessun nome sotto i 5 caratteri (${modo})`, async ({ page }, info) => {
+    test(`D2 (a) — con la sola pillola dei giri, a 1024 nessuna etichetta tagliata: cede ciò che serve, nell'ordine (${modo})`, async ({ page }, info) => {
       await page.setViewportSize({ width: 1024, height: 800 });
       const m = await statoBarra(page, { giri: '128/128', costo: '$0,00', conSpesa: false });
       misura(`d2a.1024.${modo}`, m);
       expect(m.giri.scroll).toBeLessThanOrEqual(m.giri.client);
       expect(m.barraSfonda).toBe(false);
-      /* ⛔ Prima ancora dei caratteri: senza spesa NESSUNO deve cedere, nemmeno a 1024. Senza questa
-         riga il test passava anche col CSS di prima (le etichette cedute venivano saltate dal
-         controllo qui sotto) — cioè non distingueva la cura dal difetto. */
-      for (const [chi, n] of [['modello', m.modello], ['permesso', m.permesso], ['terminale', m.terminale]]) {
-        expect(n.ceduta, `${chi} ceduto a 1024 senza spesa: la scala non doveva scattare`).toBe(false);
-      }
-      for (const [chi, n] of [['modello', m.modello], ['permesso', m.permesso], ['terminale', m.terminale]]) {
-        if (n.ceduta || n.intero) continue;
-        const visibili = Math.floor((n.larghezza / Math.max(1, n.scroll)) * n.testo.length);
-        expect(visibili, `${chi}: ${visibili} caratteri su ${n.testo.length}`).toBeGreaterThanOrEqual(CARATTERI_MINIMI_MODELLO);
+      /* ⛔ CONTRATTO CAMBIATO il 26/09 (difetto (3), foto di Ask e del Piano): qui si asseriva «senza spesa NESSUNO deve
+         cedere, nemmeno a 1024», e a 1024 la barra tagliava tre etichette coi puntini («Termin…»). La regola del 17/09
+         resta nel verso che conta — a 1440, dove lo spazio c'è, nessuno cede (sopra) — e qui diventa: niente tagliato,
+         «Terminale» cede per primo, il permesso solo dopo, il modello si stringe solo quando gli altri due hanno ceduto. */
+      expect(m.terminale.ceduta || m.terminale.intero, `«Terminale» tagliato: ${m.terminale.larghezza}px su ${m.terminale.scroll}`).toBe(true);
+      expect(m.permesso.ceduta || m.permesso.intero, `«Scrive nel progetto» tagliato: ${m.permesso.larghezza}px su ${m.permesso.scroll}`).toBe(true);
+      if (m.permesso.ceduta) expect(m.terminale.ceduta, 'il permesso ha ceduto prima di «Terminale»').toBe(true);
+      if (!m.modello.intero) {
+        expect(m.permesso.ceduta && m.terminale.ceduta, 'il modello si stringe solo dopo gli altri due').toBe(true);
+        const visibili = Math.floor((m.modello.larghezza / Math.max(1, m.modello.scroll)) * m.modello.testo.length);
+        expect(visibili, `modello: ${visibili} caratteri su ${m.modello.testo.length}`).toBeGreaterThanOrEqual(CARATTERI_MINIMI_MODELLO);
       }
       await info.attach(`d2a-solo-giri-1024-${modo}.png`, { body: await foto(page, `d2a-solo-giri-1024-${modo}.png`, '#composerForm'), contentType: 'image/png' });
     });

@@ -205,3 +205,33 @@ export async function readGgufHeader(path) {
     await handle.close();
   }
 }
+
+/**
+ * ⭐ 27/09/2026 — SOLO l'architettura (`general.architecture`), per sapere prima di avviare il motore se sa leggere il modello
+ * (`motore-architetture.mjs`). Si ferma alla chiave e legge al più 4 MiB: di solito è la prima (spec GGUF: «general.architecture»
+ * è obbligatoria; nel file Spark-X2.5 misurato il 27/09 è la chiave 0). `null` se il file non è un GGUF v3 leggibile o la chiave
+ * non arriva nel prefisso: chi chiama tratta `null` come «non lo so», mai come «non la conosce».
+ */
+export async function leggiArchitetturaGguf(path) {
+  let handle;
+  try {
+    handle = await open(path, 'r');
+    const { size } = await handle.stat();
+    const buffer = Buffer.alloc(Math.min(size, 4 * 1024 * 1024));
+    const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
+    const cursor = new Cursor(buffer.subarray(0, bytesRead));
+    if (cursor.bytes(4).toString('ascii') !== 'GGUF' || cursor.u32() !== 3) return null;
+    cursor.u64();
+    const quante = cursor.u64();
+    for (let i = 0n; i < quante; i += 1n) {
+      const chiave = cursor.string();
+      const valore = readTypedValue(cursor, cursor.u32());
+      if (chiave === 'general.architecture') return typeof valore === 'string' && valore ? valore : null;
+    }
+    return null;
+  } catch {
+    return null;
+  } finally {
+    await handle?.close().catch(() => {});
+  }
+}

@@ -168,15 +168,26 @@ export function creaMessaggioUtente({ testo = '', ora = '', meta = '' } = {}, op
  * in cui il monolite fa scorrere il testo (`.assistant-copy`, il suo gancio).
  * I paragrafi vanno direttamente nel messaggio, come nel mockup.
  */
-export function creaMessaggioTalos({ modello = '', ora = '', paragrafi = [] } = {}, opzioni = {}) {
+export function creaMessaggioTalos({ modello = '', ora = '', paragrafi = [], working = false } = {}, opzioni = {}) {
   const documentObj = opzioni.document || globalThis.document;
   const messaggio = el(documentObj, 'div', 'talos-message');
   messaggio.setAttribute('data-c', 'Message');
   const testata = el(documentObj, 'div', 'talos-message__head');
   /* ⛔ 10/09, owner, con la foto della testata davanti: «puoi levare il logo da qui e mantenere solo
      la scritta TALOS». Il glifo era stato ingrandito e liberato dalla capsula poche ore prima, nello
-     stesso giro: guardato a schermo, accanto a un nome in maiuscoletto, era rumore. Chi risponde lo
-     dice il nome; che stia lavorando lo dice il segnavia. */
+     stesso giro: guardato a schermo, accanto a un nome in maiuscoletto, era rumore.
+     ⭐ 24/09/2026, owner, ribaltando quella scelta con cognizione («non vedo più il logo di caricamento
+     TALOS dopo che scrivi la risposta… l'orb con la linea che gira»): l'ORB del mobile — lo stesso di
+     `creaAttesa`, `TalosMobileAssistantHeader.vue:7` — sta QUI, nella testata del messaggio, con
+     `working` finché il giro è vivo e fermo dopo. La bolla d'attesa sparisce al primo token (2-7 s
+     misurati, pochi ms con la cache calda): qui l'anello gira per tutta la risposta, come sul mobile. */
+  const orb = el(documentObj, 'span', working ? 'talos-orb working' : 'talos-orb');
+  orb.setAttribute('aria-hidden', 'true');
+  orb.setAttribute('data-testid', 'talos-message-orb');
+  const marchio = el(documentObj, 'span', 'talos-short-logo');
+  marchio.append(el(documentObj, 'span', 'talos-short-logo-mark'));
+  orb.append(marchio);
+  testata.append(orb);
   testata.append(el(documentObj, 'span', 'talos-message__who talos-message__who--talos', 'TALOS'), el(documentObj, 'span', 'talos-message__meta', [modello, ora].filter(Boolean).join(' · ')));
   messaggio.append(testata);
   for (const testo of paragrafi) messaggio.append(el(documentObj, 'p', null, testo));
@@ -773,9 +784,11 @@ export function creaRigaAttrezzo({ attrezzo = '', nome = '', dettaglio = '', esi
 export function impostaEsitoRiga(riga, esito) {
   const pallino = riga?.querySelector('.talos-dot');
   if (!pallino) return;
-  const tono = esito === 'running' ? 'live' : esito === 'success' ? 'success' : esito === 'error' ? 'danger' : null;
+  /* 26/09: `interrupted` — il giro si è fermato prima dell'esito; tono d'attenzione, non d'errore (difetto 2). */
+  const tono = esito === 'running' ? 'live' : esito === 'success' ? 'success' : esito === 'error' ? 'danger' : esito === 'interrupted' ? 'warning' : null;
   pallino.className = `talos-dot${tono ? ` talos-dot--${tono}` : ''}`;
-  riga.dataset.toolState = esito === 'running' ? 'running' : esito === 'error' ? 'error' : esito === 'success' ? 'complete' : '';
+  /* 27/09, decisione owner 47: `corretta` — il modello riformula una domanda respinta per la forma; pallino neutro, riga attenuata. */
+  riga.dataset.toolState = esito === 'running' ? 'running' : esito === 'error' ? 'error' : esito === 'success' ? 'complete' : esito === 'interrupted' ? 'interrupted' : esito === 'corretta' ? 'corrected' : '';
   if (!riga.dataset.toolState) delete riga.dataset.toolState;
 }
 
@@ -1228,16 +1241,14 @@ export function creaAttesa({ etichetta = 'Sto pensando…' } = {}, opzioni = {})
    *   del mobile; il CSS sta in `segnavia-mobile.css`. Il segnavia a tre nodi (10/09) resta nel CSS e
    *   in `animaSegnavia` per chi lo usa ancora, ma la bolla d'attesa non lo monta più.
    */
-  const orb = el(documentObj, 'span', 'talos-orb working');
-  orb.setAttribute('aria-hidden', 'true');
-  orb.setAttribute('data-testid', 'talos-assistant-orb');
-  const marchio = el(documentObj, 'span', 'talos-short-logo');
-  marchio.append(el(documentObj, 'span', 'talos-short-logo-mark'));
-  orb.append(marchio);
+  /* ⛔ 24/09/2026, dall'owner con la FOTO del 4174 davanti: l'orb qui E l'orb nella testata del messaggio (`creaMessaggioTalos`,
+     decisione dello stesso giorno) davano DUE anelli che giravano uno sopra l'altro — e la mia foto «durante» a 5 s lo
+     mostrava già, guardata e non vista. L'orb vive in UN posto solo, la testata: qui resta la riga onesta, cosa sta facendo
+     e da quanto. */
   const label = el(documentObj, 'span', 'talos-waiting__label run-activity-label', etichetta);
   const elapsed = el(documentObj, 'span', 'talos-mono talos-muted run-activity-elapsed', '0s');
   elapsed.setAttribute('aria-hidden', 'true');
-  riga.append(orb, label, elapsed);
+  riga.append(label, elapsed);
   /*
    * ⛔ 06/9, owner: «skeleton loader non ci deve essere». Le tre barre grigie promettevano una forma
    * (tre righe di testo) che la risposta vera non ha, e con «riduci le animazioni» acceso non luccicavano

@@ -51,6 +51,8 @@ import { statoAttivita, prioritaAttivita, testiAttivita, riepilogoAttivita } fro
 import { provenienzaVoceLibreria, tipoVoceLibreria, origineVoceLibreria, testiVoceLibreria, azioniLibreria, indirizzoFileLibreria, creaLibraryRow } from './libreria.js';
 import { nomeLeggibileSessione } from './session-item.js'; // BC-38: il nome umano di una sessione è scritto una volta sola
 import { magazzinoFileLibreria, montaAnteprimaFile, lettoreFileLibreria } from './libreria-anteprima.js';
+import { creaAnteprimaScheda, creaRigaDettaglio, dimenticaAnteprime, iconaSprite, presentazioneFileLibreria } from './libreria-scheda.js'; // ATLAS F3: la card è quella del mobile
+import { fonteDaLibreria } from './lettore/fonti.js'; // F5 File reader (26/09/2026): il dettaglio legge il file col lettore
 import { riepilogoRicerche } from './ricerca.js';
 /* 11/09 lotto L7 — la Ricerca approfondita ha un dentro: parole degli stati, bilancio, cinque
    viste, menu e esportazioni vivono in un file loro, come `libreria.js` per la Libreria. */
@@ -77,6 +79,7 @@ import {
   paroleErroreRete, parolaOrigine, parolaStato, STATI_ATTIVITA,
   costruisciModulo, montaTestoVoce, costruisciStatoAttivita, confermaEliminazione, accordo,
 } from './modulo-voce.js';
+import { creaAvanzamentoRicerca } from './ricerca-avanzamento.js'; // 24/09/2026: barra + fase e conteggi della ricerca in corso
 
 /* ------------------------------------------------------------------ utensili comuni, pure */
 
@@ -322,18 +325,74 @@ function scrittura(schermo, { schema, lista, opzioni, ridisegna }) {
     }
   }
 
+  /*
+   * ⛔ ATLAS F2 (24/09/2026) — NON DEPLOYABILE fino a review avversaria e valutazione owner sul 4174.
+   *   L'editor della NOTA (voce `NoteEditor` dell'Atlas, `source/atlas.js:37` `editor()`): la riga in fondo porta a
+   *   sinistra il conteggio e a destra «Annulla» poi «Salva» con la spunta. Per la decisione Q-10 dell'owner il conteggio
+   *   è in PAROLE (quello dell'Atlas è in caratteri) e sta nella riga di stato che il modulo ha già (`notaPiede`), quindi
+   *   nessun elemento nuovo: cambia il testo. Si aggiorna mentre si scrive, senza ridisegnare il modulo (il cursore e la
+   *   selezione restano dove sono: vedi `costruisciModulo`). Solo la nota: Memoria e Attività sono di un'altra famiglia.
+   */
+  const contaParoleNelModulo = schema.chiave === 'note';
+
+  /*
+   * Dove sta «Nuova nota» (vedi `montaPulsanteNuova`): nella testata della pagina se l'elenco si vede, nella barra in
+   * alto se il dettaglio l'ha nascosto. Un nodo solo che si sposta, così i bottoni visibili sono sempre uno.
+   */
+  function collocaNuova(b) {
+    const master = schermo.querySelector('.td-master');
+    const intro = schermo.querySelector('.td-intro');
+    const topbar = schermo.querySelector('.talos-topbar');
+    if (!b || !master || !intro) return;
+    const metti = () => {
+      const elencoNascosto = master.getClientRects().length === 0;
+      if (elencoNascosto && topbar) {
+        let strumenti = topbar.querySelector('.td-tools');
+        if (!strumenti) { strumenti = nodo(doc, 'div', 'td-tools'); topbar.append(strumenti); }
+        if (b.parentNode !== strumenti) strumenti.append(b);
+      } else if (b.parentNode !== intro) {
+        intro.append(b);
+      }
+    };
+    metti();
+    const Osservatore = doc.defaultView?.ResizeObserver;
+    if (typeof Osservatore === 'function' && m.nuovaOsservata !== master) {
+      m.osservatoreNuova?.disconnect();
+      m.osservatoreNuova = new Osservatore(() => collocaNuova(schermo.querySelector('[data-nuova]')));
+      m.osservatoreNuova.observe(master);
+      m.nuovaOsservata = master;
+    }
+  }
+  function notaPiede() {
+    if (!m.modulo) return null;
+    const stato = m.modulo.inCorso
+      ? 'Sto salvando…'
+      : (m.modulo.modo === 'crea' ? `Non ancora ${accordo(schema, 'salvat')}` : 'Modifiche non ancora salvate');
+    return contaParoleNelModulo ? `${plurale(conteggioParole(m.modulo.valori?.contenuto), 'parola', 'parole')} · ${stato}` : stato;
+  }
+
   function nodiModulo(doc2) {
     const mod = m.modulo;
     const titolo = nodo(doc2, 'h2', '', mod.modo === 'crea' ? schema.titoloNuova : schema.titoloModifica);
-    return [titolo, ...costruisciModulo(doc2, { schema, stato: mod, onSalva: salva })];
+    const onCambia = contaParoleNelModulo
+      ? () => { const riga = schermo.querySelector('.td-detail-footer > .td-save-status'); if (riga) riga.textContent = notaPiede(); }
+      : undefined;
+    return [titolo, ...costruisciModulo(doc2, { schema, stato: mod, onSalva: salva, onCambia })];
   }
 
   function azioniModulo(doc2) {
     const mod = m.modulo;
     const salvaBtn = bottone(doc2, mod.inCorso ? 'Salvo…' : 'Salva', { variante: 'primary', esegui: () => salva() });
     salvaBtn.disabled = Boolean(mod.inCorso);
-    const annullaBtn = bottone(doc2, 'Annulla', { variante: 'ghost', esegui: () => { chiudiModulo(); ridisegna(); } });
+    /* ATLAS F2: nella nota «Annulla» è il bottone di serie dell'Atlas (`button('Annulla',…,'tiny')`, non fantasma) e viene
+       PRIMA di «Salva», anche nell'ordine del DOM — l'ordine di lettura e di tabulazione è quello che si vede
+       (W3C C27). «Salva» porta la spunta dell'Atlas (`icon('check')`). Le altre sezioni restano com'erano. */
+    const annullaBtn = bottone(doc2, 'Annulla', { variante: contaParoleNelModulo ? 'secondary' : 'ghost', esegui: () => { chiudiModulo(); ridisegna(); } });
     annullaBtn.disabled = Boolean(mod.inCorso);
+    if (contaParoleNelModulo) {
+      salvaBtn.prepend(icona(doc2, 'check'));
+      return [annullaBtn, salvaBtn];
+    }
     return [salvaBtn, annullaBtn];
   }
 
@@ -501,22 +560,53 @@ function scrittura(schermo, { schema, lista, opzioni, ridisegna }) {
      * `.talos-page` — quindi il pulsante ci sta senza toccare l'impianto.
      * ⛔ Senza sessione o senza rete NON compare: un comando che non può funzionare non si mostra.
      */
-    montaPulsanteNuova: () => {
-      const topbar = schermo.querySelector('.talos-topbar');
-      if (!topbar) return null;
-      let strumenti = topbar.querySelector('.td-tools');
-      let b = strumenti?.querySelector('[data-nuova]') || null;
+    /*
+     * ⛔ ATLAS F2 (24/09/2026) — NON DEPLOYABILE fino a review avversaria e valutazione owner sul 4174.
+     *   `nellaTesta`: il pulsante va nella testata della PAGINA, a destra del titolo, piccolo e primario — dove lo mette
+     *   l'Atlas (`source/atlas.js:146` `pageHeader`, e :148 `button('Nuova nota','new-note','','primary tiny','plus')`).
+     *   Lo chiede solo la nota; Memoria e Attività restano nella barra in alto finché la loro famiglia non si porta.
+     *   Stesso gestore, stesso stato spento a modulo aperto: cambia il posto e la taglia, non il comportamento.
+     */
+    /*
+     * ⛔ REVIEW AVVERSARIA 24/09 sera (NON DEPLOYABILE fino a review e 4174) — quando la sezione è stretta e c'è un
+     *   dettaglio aperto, l'elenco si nasconde (`mockup-td.css:364-368`) e con lui la testata: «Nuova nota» spariva, e
+     *   prima di F2 stava nella barra in alto, sempre raggiungibile (regola owner «mai sotto la UI originale»). L'Atlas
+     *   non lo dice (le sue pagine non nascondono mai l'elenco). ⇒ SCELTA MIA, per non perdere la funzione, DA
+     *   CONFERMARE CON L'OWNER: lo STESSO bottone (un nodo solo, un solo gestore) si sposta nella barra in alto finché
+     *   l'elenco è nascosto, e torna nella testata quando riappare. Chi guarda se l'elenco c'è è un ResizeObserver
+     *   sull'elenco: la specifica lo fa scattare quando l'elemento passa a `display:none` e quando torna ad avere una
+     *   misura (W3C «Resize Observer Module Level 1», ED 22/11/2022; MDN «ResizeObserver», agg. 07/11/2025).
+     */
+    montaPulsanteNuova: ({ nellaTesta = false } = {}) => {
+      let ospite;
+      if (nellaTesta) {
+        ospite = schermo.querySelector('.td-intro');
+        const giaFatto = schermo.querySelector('.td-intro > [data-nuova], .talos-topbar .td-tools > [data-nuova]');
+        if (giaFatto || !servizio) {
+          if (!servizio) { giaFatto?.remove(); return null; }
+          giaFatto.disabled = Boolean(m.modulo);
+          collocaNuova(giaFatto);
+          return giaFatto;
+        }
+      } else {
+        const topbar = schermo.querySelector('.talos-topbar');
+        if (!topbar) return null;
+        ospite = topbar.querySelector('.td-tools');
+        if (!ospite && servizio) { ospite = nodo(doc, 'div', 'td-tools'); topbar.append(ospite); }
+      }
+      let b = ospite?.querySelector(':scope > [data-nuova]') || null;
       if (!servizio) { b?.remove(); return null; }
-      if (!strumenti) { strumenti = nodo(doc, 'div', 'td-tools'); topbar.append(strumenti); }
+      if (!ospite) return null;
       if (!b) {
-        b = nodo(doc, 'button', 'talos-button talos-button--primary');
+        b = nodo(doc, 'button', `talos-button talos-button--primary${nellaTesta ? ' talos-button--sm' : ''}`);
         b.type = 'button';
         b.dataset.nuova = '';
         b.append(icona(doc, 'plus'), nodo(doc, 'span', '', schema.titoloNuova));
         b.addEventListener('click', () => apriModulo('crea'));
-        strumenti.append(b);
+        ospite.append(b);
       }
       b.disabled = Boolean(m.modulo);
+      if (nellaTesta) collocaNuova(b);
       return b;
     },
     /** «Note / Dettaglio» diventa «Note / Modifica» mentre si scrive, come nel mockup. */
@@ -527,11 +617,7 @@ function scrittura(schermo, { schema, lista, opzioni, ridisegna }) {
          voce». Il nome lo porta lo schema, che è lo stesso del pulsante da cui si è arrivati. */
       if (m.modulo) testa.textContent = `${nome} / ${m.modulo.modo === 'crea' ? schema.titoloNuova : 'Modifica'}`;
     },
-    notaPiede: () => {
-      if (!m.modulo) return null;
-      if (m.modulo.inCorso) return 'Sto salvando…';
-      return m.modulo.modo === 'crea' ? `Non ancora ${accordo(schema, 'salvat')}` : 'Modifiche non ancora salvate';
-    },
+    notaPiede,
   };
 }
 
@@ -541,7 +627,7 @@ function scrittura(schermo, { schema, lista, opzioni, ridisegna }) {
  */
 function montaScrivibile(schermo, scrivi, config, ridisegna) {
   const quante = montaSezione(schermo, config);
-  scrivi.montaPulsanteNuova();
+  scrivi.montaPulsanteNuova({ nellaTesta: Boolean(config.nuovaNellaTesta) });
   scrivi.parolaTesta(config.nome);
   if (scrivi.sincronizza()) return ridisegna();
   return quante;
@@ -567,6 +653,7 @@ export function montaNote(schermo, note, opzioni = {}) {
     icona: 'doc',
     famiglia: 'td-note',
     sostantivo: 'nota',
+    nuovaNellaTesta: true, // ATLAS F2: «Nuova nota» nella testata della pagina (vedi `montaPulsanteNuova`)
     voci: scrivi.vociConBozza(),
     stato: { errore: opzioni.errore || null, caricamento: Boolean(opzioni.caricamento) },
     caricando: 'Leggo le note…',
@@ -587,7 +674,10 @@ export function montaNote(schermo, note, opzioni = {}) {
       alto: [ic('doc'), nodo(doc, 'span', '', 'Appunto')],
       corpo: [nodo(doc, 'p', 'td-excerpt', anteprima(n?.contenuto))],
       basso: [
-        nodo(doc, 'span', '', quandoNota(n?.aggiornataAlle ?? n?.creataAlle, adesso) || 'senza data'),
+        /* ATLAS F2 (NON DEPLOYABILE fino a review e 4174): la data col suo orologio, come il piede della card dell'Atlas
+           (`source/atlas.js:36` `noteCard`: `icon('clock')` + data). Il secondo pezzo resta il dato vero di oggi (le
+           parole): la «Nota locale» dell'Atlas non ha una sorgente ed è la NC-05, che decide l'owner. */
+        (() => { const q = nodo(doc, 'span', 'td-card-quando'); q.append(ic('clock'), nodo(doc, 'span', '', quandoNota(n?.aggiornataAlle ?? n?.creataAlle, adesso) || 'senza data')); return q; })(),
         nodo(doc, 'span', '', plurale(conteggioParole(n?.contenuto), 'parola', 'parole')),
       ],
       adorno: scrivi.adorno(n, doc),
@@ -631,8 +721,8 @@ export function montaNote(schermo, note, opzioni = {}) {
         }),
       ];
     },
-    notaPiede: () => scrivi.notaPiede() || 'Le note vivono in .notes-store/',
-    vuoto: { titolo: 'Nessuna nota', testo: 'TALOS scrive una nota quando trova qualcosa che vale la pena ricordare, e da qui le scrivi anche tu. Le note vivono in .notes-store/ e valgono per tutti i progetti.' },
+    notaPiede: () => scrivi.notaPiede() || 'Le note valgono per tutti i progetti',
+    vuoto: { titolo: 'Nessuna nota', testo: 'TALOS scrive una nota quando trova qualcosa che vale la pena ricordare, e da qui le scrivi anche tu. Le note valgono per tutti i progetti.' },
   }, ridisegna);
 }
 
@@ -813,11 +903,15 @@ export function aggiornaPaginaAttivita(schermo, attivita, opzioni = {}) {
        centimetri più in su dice già la stessa identica frase. Due volte la stessa cosa nella stessa
        schermata non è ridondanza innocua: è spazio tolto a ciò che non è ancora stato detto. */
     notaPiede: () => scrivi.notaPiede() || 'Lo stato si cambia da qui e dalla chat',
-    vuoto: { titolo: 'Nessuna attività', testo: 'Le attività sono globali, disponibili alle tue conversazioni. Le apre TALOS mentre lavora, e da qui le apri anche tu. Vivono in .tasks-store/.' },
+    vuoto: { titolo: 'Nessuna attività', testo: 'Le attività sono globali, disponibili alle tue conversazioni. Le apre TALOS mentre lavora, e da qui le apri anche tu.' },
   }, ridisegna);
 }
 
 /* --------------------------------------------------------------------------------- LIBRERIA */
+
+/* ATLAS F3: per il tasto destro sulla card, registrato UNA volta per schermata, le voci e l'apertura del menu più
+   recenti (ogni aggiornamento della pagina le rifà). */
+const ULTIMA_LIBRERIA = new WeakMap();
 
 export function aggiornaPaginaLibreria(schermo, voci, opzioni = {}) {
   const avvisa = notificatore(opzioni);
@@ -878,6 +972,71 @@ export function aggiornaPaginaLibreria(schermo, voci, opzioni = {}) {
     const esito = await servizioVero.apri(v?.id);
     if (!esito?.ok) avvisa('Non aperto', esito?.motivo || 'Il server non ha risposto.', { tono: 'errore' });
   }
+  /*
+   * F5 File reader (26/09/2026) — il dettaglio mostra il file col LETTORE, lo stesso della scheda File del rail
+   *   (`components/lettore/`): quattro famiglie di formati invece del solo testo. La app inietta ciò che vive in lei
+   *   (`opzioni.lettore`: blocco di codice della chat, caricatore delle rese Office, copia con conferma); senza, il
+   *   dettaglio resta l'anteprima di prima (`montaAnteprimaFile`), che è anche ciò che provano i test senza browser.
+   * ⛔ Il dettaglio si ridisegna per intero a ogni `disegna` (filtro, spunta, «Espandi»): il lettore si TIENE per voce
+   *   nel magazzino dello schermo, o ogni ridisegno rileggerebbe il file dal server. Cambia la voce, o il file cambia
+   *   nome o data ⇒ il lettore vecchio si smonta e se ne fa uno nuovo.
+   * ⛔ Il suo menu «⋯» porta solo «Copia il testo»: le azioni sul file stanno nella riga qui sotto, e due menu con le
+   *   stesse voci nello stesso pannello sono una scelta in più senza una cosa in più.
+   */
+  function lettoreDellaVoce(v, doc) {
+    const iniezione = opzioni.lettore;
+    if (!iniezione || typeof iniezione.crea !== 'function' || !sessionId || !v?.id) return null;
+    // la sessione nella chiave: la Libreria è per progetto, e due progetti possono avere una voce con lo stesso id e nome
+    const chiave = `${sessionId}|${v.id}|${testiVoceLibreria(v).nome}|${v?.aggiornatoIl ?? ''}`;
+    const tenuto = magazzinoFile.lettore;
+    if (tenuto?.chiave === chiave) return tenuto.istanza;
+    tenuto?.istanza?.distruggi?.();
+    const istanza = iniezione.crea({
+      doc,
+      fonte: fonteDaLibreria({ sessionId, voce: v, nome: testiVoceLibreria(v).nome }),
+      apriFuori: servizioVero?.apri ? () => { void apriConSistema(v); } : undefined,
+    });
+    istanza?.elemento?.classList?.add('td-lettore-libreria');
+    magazzinoFile.lettore = istanza ? { chiave, istanza } : null;
+    return istanza;
+  }
+  /*
+   * ATLAS F3 (27/09/2026) — i «⋯» della card, e il tasto destro sulla card, aprono il menu della riga VERA che il
+   *   dettaglio ospita: così «Rinomina» ed «Elimina», che lavorano in linea dentro quella riga, accadono dove si vedono.
+   *   Se il dettaglio non è su questa voce lo si apre prima, con lo stesso clic che farebbe la persona (il ridisegno è
+   *   sincrono: subito dopo, la riga c'è). Il menu si ancora ai «⋯» della card NUOVA, perché quella di prima il ridisegno
+   *   l'ha sostituita.
+   */
+  function apriMenuDellaVoce(v, ancora) {
+    if (typeof opzioni.onMenu !== 'function' || !v?.id) return;
+    const sezione = schermo.querySelector('.td-section[data-section="libreria"]');
+    const cardDi = () => [...(sezione?.querySelectorAll('.td-card') ?? [])].find((c) => c.dataset.item === String(v.id));
+    const card = cardDi();
+    if (card && card.dataset.selected !== 'true') card.querySelector('.td-card-open')?.click();
+    const riga = sezione?.querySelector('.td-detail .td-riuso-riga > .talos-list-row');
+    const voci = riga?.vociMenu?.();
+    if (!voci?.length) return;
+    /* ⛔ Revisione Codex 27/09, rilievo 1: sotto 850 px di sezione, col dettaglio aperto, l'elenco è `display:none`
+       (`mockup-td.css`, container query) e i puntini della card hanno un rettangolo nullo: il menu finiva fuori schermo.
+       Si ancora al primo che si VEDE — i puntini della card, poi «Tutte le azioni» nel piede del dettaglio. */
+    const siVede = (el) => Boolean(el?.isConnected) && el.getBoundingClientRect().width > 0;
+    const ancoraVisibile = [cardDi()?.querySelector('.td-lib-menu'), sezione?.querySelector('.td-detail .td-riuso-riga [data-azione="menu"]'), ancora?.ancoraEl]
+      .find(siVede) ?? null;
+    opzioni.onMenu(voci, (ancora?.ancoraEl || !siVede(cardDi())) && ancoraVisibile ? { ancoraEl: ancoraVisibile } : ancora);
+  }
+  ULTIMA_LIBRERIA.set(schermo, { voci: Array.isArray(voci) ? voci : [], apriMenuDellaVoce });
+  if (!schermo.dataset.menuContestualeLibreria) {
+    schermo.dataset.menuContestualeLibreria = 'si';
+    schermo.addEventListener('contextmenu', (e) => {
+      const card = e.target.closest?.('.td-section[data-section="libreria"] .td-card');
+      if (!card) return;
+      const ultima = ULTIMA_LIBRERIA.get(schermo);
+      const v = ultima?.voci.find((x) => String(x?.id) === card.dataset.item);
+      if (!v) return;
+      e.preventDefault();
+      ultima.apriMenuDellaVoce(v, { x: e.clientX, y: e.clientY });
+    });
+  }
   return montaSezione(schermo, {
     chiave: 'libreria',
     nome: 'Libreria',
@@ -887,7 +1046,10 @@ export function aggiornaPaginaLibreria(schermo, voci, opzioni = {}) {
     voci: Array.isArray(voci) ? voci : [],
     stato: { errore: opzioni.errore || null, caricamento: Boolean(opzioni.caricamento) },
     caricando: 'Caricamento Libreria…',
-    onAggiorna: opzioni.onAggiorna,
+    /* Revisione Codex 27/09, rilievo 9: un file cambiato FUORI da TALOS (Mostra nella cartella) non cambia la sua data nella
+       Libreria, quindi la sua anteprima in memoria resterebbe quella vecchia. «Aggiorna» è il gesto di chi vuole la verità:
+       dimentica le anteprime di questa sessione. */
+    onAggiorna: typeof opzioni.onAggiorna === 'function' ? () => { dimenticaAnteprime(sessionId); opzioni.onAggiorna(); } : opzioni.onAggiorna,
     eliminaInBlocco,
     onBatchCompletato: opzioni.onCambiata || opzioni.onAggiorna,
     filtri: [
@@ -900,77 +1062,87 @@ export function aggiornaPaginaLibreria(schermo, voci, opzioni = {}) {
     quandoDi: (v) => v?.aggiornatoIl ?? null,
     cercaIn: (v) => `${testiVoceLibreria(v).nome} ${tipoVoceLibreria(v?.fileType).testo} ${origineVoceLibreria(v?.origine)}`,
     sommarioBarra: (n, { errore, caricamento }) => (errore ? 'Libreria non disponibile' : caricamento ? 'Caricamento Libreria…' : `${plurale(n, 'file')} · Token non disponibili`),
-    scheda: (v, { doc, icona, etichetta }) => {
-      const tipo = tipoVoceLibreria(v?.fileType);
-      const t = testiVoceLibreria(v);
-      const copertina = nodo(doc, 'div', 'td-file-preview');
-      copertina.dataset.kind = estensioneFile(t.nome).toLowerCase();
-      copertina.append(nodo(doc, 'strong', '', estensioneFile(t.nome)), nodo(doc, 'span', '', t.nome));
+    /*
+     * ⛔⛔⛔ ATLAS F3 (27/09/2026) — LA CARD È QUELLA DEL MOBILE. Owner: «le carte devono essere identiche alla versione
+     *   mobile, non negoziabile». Riferimento `TalosMobileLibraryFileTile.vue` (ramo `lane/talos-mobile-allineamento`):
+     *   in alto l'anteprima a tutta larghezza, sotto il nome (al massimo due righe) e la riga «Generato · EXT», i tre
+     *   puntini in basso a destra FUORI dal bottone che apre. La parte pura e l'anteprima stanno in `libreria-scheda.js`.
+     * ⛔ Data e cartella NON stanno più nella card (owner 27/09, supera Q-09/BC-38 per la card): restano nel dettaglio.
+     */
+    filtriATendina: true,
+    scheda: (v, { doc, icona, etichetta, vista }) => {
+      /* La vista a ELENCO resta quella di prima (owner 27/09: «solo le card»): stessi pezzi di sempre. */
+      if (vista === 'elenco') {
+        const tipo = tipoVoceLibreria(v?.fileType);
+        const t = testiVoceLibreria(v);
+        const copertina = nodo(doc, 'div', 'td-file-preview');
+        copertina.dataset.kind = estensioneFile(t.nome).toLowerCase();
+        copertina.append(nodo(doc, 'strong', '', estensioneFile(t.nome)), nodo(doc, 'span', '', t.nome));
+        return {
+          alto: [icona(tipo.icona), nodo(doc, 'span', '', tipo.testo), etichetta(origineVoceLibreria(v?.origine), v?.origine === 'generated' ? 'accent' : '')],
+          corpo: [copertina],
+          /* ⭐ BC-38, owner: «nella card/riga SOLO la cartella» — nella riga dell'elenco vale ancora. */
+          basso: [
+            nodo(doc, 'span', '', t.dataBreve),
+            ...(prov(v).cartellaBreve ? [nodo(doc, 'span', '', `in ${prov(v).cartellaBreve}`)] : []),
+          ],
+        };
+      }
+      const menu = nodo(doc, 'button', 'td-lib-menu');
+      menu.type = 'button';
+      menu.setAttribute('aria-label', `Azioni su ${testiVoceLibreria(v).nome}`);
+      menu.setAttribute('aria-haspopup', 'menu');
+      menu.append(iconaSprite(doc, 'i-lib-more-vertical'));
+      menu.addEventListener('click', (e) => { e.stopPropagation(); apriMenuDellaVoce(v, { ancoraEl: menu }); });
+      /* La spunta del cerchio di selezione (lucide `Check`, come il mobile) è un elemento vero, non un disegno del CSS:
+         la colora il testo-sull'accento del tema, e compare solo sulla card scelta. `display: contents` sul contenitore:
+         spunta e puntini si posizionano sulla card. */
+      const adorni = nodo(doc, 'span', 'td-lib-adorni');
+      const spunta = nodo(doc, 'span', 'td-lib-spunta');
+      spunta.setAttribute('aria-hidden', 'true');
+      spunta.append(iconaSprite(doc, 'i-lib-check'));
+      adorni.append(spunta, ...(typeof opzioni.onMenu === 'function' ? [menu] : []));
       return {
-        alto: [icona(tipo.icona), nodo(doc, 'span', '', tipo.testo), etichetta(origineVoceLibreria(v?.origine), v?.origine === 'generated' ? 'accent' : '')],
-        corpo: [copertina],
-        /* ⭐ BC-38, owner: «nella card/riga SOLO la cartella». Nel piede della scheda sta accanto
-           alla data, come la seconda voce del piede di Note e Attività — stessa griglia, nessuna
-           decorazione nuova. Vuota su una voce che non porta la provenienza: niente riga. */
-        basso: [
-          nodo(doc, 'span', '', t.dataBreve),
-          ...(prov(v).cartellaBreve ? [nodo(doc, 'span', '', `in ${prov(v).cartellaBreve}`)] : []),
-        ],
+        dati: { forma: 'mobile' },
+        alto: [creaAnteprimaScheda(doc, v, { sessionId, indirizzoFile: indirizzoFileLibreria })],
+        basso: [creaRigaDettaglio(doc, v)],
+        adorno: adorni,
       };
     },
+    /*
+     * ATLAS F3 (27/09/2026, owner: «schema Atlas, dati di oggi») — il dettaglio prende la composizione di `page-detail`
+     *   (`atlas.js` `case'library'`): una testata col riquadro del tipo, il nome e l'origine (al posto di «Demo»), poi il
+     *   contenuto, poi le righe etichetta/valore (`.spec-row`), e in fondo «Copia percorso» + «Tutte le azioni»
+     *   (`azioniDettaglio`). Il nome grande sparisce: è già in testata.
+     */
     dettaglio: (v, { doc, etichetta }) => {
       const t = testiVoceLibreria(v);
-      const tipo = tipoVoceLibreria(v?.fileType);
-      const pezzi = [
-        meta(doc, [etichetta(tipo.testo), etichetta(origineVoceLibreria(v?.origine), v?.origine === 'generated' ? 'accent' : ''), nodo(doc, 'span', '', t.aggiornata ? `Aggiornato il ${t.aggiornata}` : 'Data non registrata')]),
-        nodo(doc, 'h2', '', t.nome),
-      ];
+      const testata = nodo(doc, 'header', 'td-lib-testata');
+      const sinistra = nodo(doc, 'span', 'td-lib-testata-nome');
+      sinistra.append(nodo(doc, 'span', 'td-lib-simbolo', presentazioneFileLibreria(t.nome, v?.mediaType).estensione), nodo(doc, 'strong', '', t.nome));
+      testata.append(sinistra, etichetta(origineVoceLibreria(v?.origine), v?.origine === 'generated' ? 'accent' : ''));
+      const pezzi = [testata];
       /*
        * ⛔ IL CONTENUTO STA SOPRA LE AZIONI. Una persona apre un file per LEGGERLO: le cinque cose
        *   che gli si possono fare vengono dopo aver visto che cos'è. (Nel mockup le azioni stanno
        *   addirittura nel piede del pannello, sotto tutto — riga 6083.)
        */
-      pezzi.push(...montaAnteprimaFile(v, {
-        doc,
-        magazzino: magazzinoFile,
-        ridisegna,
-        opzioni: {
-          leggiFile,
-          rendiMarkdown: opzioni.rendiMarkdown,
-          onApri: servizioVero?.apri ? apriConSistema : undefined,
-        },
-      }));
-      pezzi.push(nodo(doc, 'h3', '', 'Azioni sul file'));
-      /*
-       * ⛔ QUI NON SI RIFA' NIENTE. La riga della Libreria del 10/09 ha cinque azioni dietro un
-       *   menu «…» (più il tasto destro), la rinomina in linea, la conferma d'eliminazione con la
-       *   conseguenza scritta e il messaggio d'esito che resta sotto il nome. Rifarla nel dettaglio
-       *   vorrebbe dire tenere allineate due copie e, il primo giorno che si sbaglia, scendere
-       *   sotto la UI di ieri. Quindi il dettaglio OSPITA la riga vera.
-       */
-      const ospite = nodo(doc, 'div', 'td-riuso-riga');
-      const riga = creaLibraryRow(v, {
-        document: doc,
-        aperta: true,
-        sessionId,
-        azioni: servizio,
-        onCambiata: opzioni.onCambiata,
-        onMenu: opzioni.onMenu,
-        /* ⭐ BC-38: la riga ospitata qui porta le stesse due iniezioni dell'elenco — il menu «⸨»
-           che il dettaglio riusa è lo STESSO, quindi «Copia percorso» c'è in tutti e due i posti. */
-        nomeSessione: opzioni.nomeSessione,
-        copia: opzioni.copia,
-      });
-      /*
-       * ⛔ VISTO NELLA FOTO: nel riquadro «Azioni sul file» si vedeva solo un riquadro vuoto. Il
-       *   bottone c'era — è il «…» della riga — ma in una lista è affiancato al nome che lo spiega,
-       *   e qui il nome è nascosto perché il dettaglio lo ha già scritto in grande. Un'icona sola
-       *   dentro un riquadro vuoto non dice niente: qui prende la sua parola. Il nome accessibile
-       *   («Azioni su <file>») resta quello che la riga ha già messo nell'`aria-label`.
-       */
-      riga.querySelector('[data-azione="menu"]')?.prepend(doc.createTextNode('Tutte le azioni'));
-      ospite.append(riga);
-      pezzi.push(ospite);
+      const lettore = lettoreDellaVoce(v, doc);
+      if (lettore) {
+        // ATLAS F3: il contenuto è il corpo (`.doc-body`), senza titoletto — l'Atlas non ne ha uno.
+        pezzi.push(lettore.elemento);
+      } else {
+        pezzi.push(...montaAnteprimaFile(v, {
+          doc,
+          magazzino: magazzinoFile,
+          ridisegna,
+          opzioni: {
+            leggiFile,
+            rendiMarkdown: opzioni.rendiMarkdown,
+            onApri: servizioVero?.apri ? apriConSistema : undefined,
+          },
+        }));
+      }
       /*
        * ⭐⭐⭐ BC-38 (12/09/2026), owner: «nel dettaglio sidebar anche da chi sono stati creati e da
        *   quale sessione». Qui c'era una frase segnaposto — «Il file vive in .harness-ui-library/,
@@ -983,16 +1155,20 @@ export function aggiornaPaginaLibreria(schermo, voci, opzioni = {}) {
        * ⛔ Il percorso NON si accorcia: si manda a capo. Un percorso con i puntini non si incolla,
        *   e questo valore esiste per essere copiato (VS Code, «Copy Breadcrumbs Path»).
        */
+      /* ATLAS F3 (27/09/2026): le righe `.spec-row` dell'Atlas («Cartella», «Dimensione»), coi dati veri di oggi e senza
+         titoletto: Cartella · Creato da · Sessione · Aggiornato. La data sta qui perché dalla card è uscita (owner 27/09).
+         Resta un `<dl>`: etichetta e valore sono una coppia anche per chi legge con uno screen reader. */
       const p = prov(v);
-      pezzi.push(nodo(doc, 'h3', '', 'Dove vive'));
-      const righe = nodo(doc, 'dl', 'td-andata');
+      const righe = nodo(doc, 'dl', 'td-lib-righe');
       const rigaKV = (etichettaTesto, valore) => {
         if (!valore) return;
+        const riga = nodo(doc, 'div', 'td-lib-riga');
         const dd = nodo(doc, 'dd', '');
         dd.append(typeof valore === 'string' ? doc.createTextNode(valore) : valore);
-        righe.append(nodo(doc, 'dt', '', etichettaTesto), dd);
+        riga.append(nodo(doc, 'dt', '', etichettaTesto), dd);
+        righe.append(riga);
       };
-      if (p.percorso) {
+      if (p.cartella) {
         /*
          * ⛔ VISTO NELLA FOTO (01/… dark, 12/09): il percorso andava a capo in mezzo a una parola
          *   — «…Desktop.harnes / s-ui-library…» — perché `overflow-wrap: anywhere` spezza dove
@@ -1004,17 +1180,17 @@ export function aggiornaPaginaLibreria(schermo, voci, opzioni = {}) {
          *   stare dentro, non sfondare il pannello.
          */
         const codice = nodo(doc, 'code', 'td-percorso');
-        codice.dataset.percorso = p.percorso;
-        const segmenti = p.percorso.split(/(?<=[\\/])/u);
+        codice.dataset.cartella = p.cartella;
+        const segmenti = p.cartella.split(/(?<=[\\/])/u);
         segmenti.forEach((segmento, i) => {
           codice.append(doc.createTextNode(segmento));
           if (i < segmenti.length - 1) codice.append(doc.createElement('wbr'));
         });
-        rigaKV('Percorso', codice);
+        rigaKV('Cartella', codice);
       } else {
         /* ⛔ Stato onesto: la rotta non lo manda (server più vecchio del pannello). Si dice dov'è
            la cartella, che resta vero, invece di mostrare un percorso inventato. */
-        rigaKV('Percorso', 'Non registrato. Il file vive in .harness-ui-library/, dentro il progetto.');
+        rigaKV('Cartella', 'Non registrata. Il file sta nella cartella dati di TALOS, fuori dal progetto.'); // PO-26 (24/09): non più dentro il progetto
       }
       rigaKV('Creato da', `${p.creatoDa.chi}, ${p.creatoDa.dettaglio}`);
       if (p.sessione) {
@@ -1040,10 +1216,48 @@ export function aggiornaPaginaLibreria(schermo, voci, opzioni = {}) {
       } else {
         rigaKV('Sessione', 'Non registrata: il file è stato salvato prima che TALOS annotasse la conversazione d’origine.');
       }
+      rigaKV('Aggiornato', t.aggiornata || 'Data non registrata');
       pezzi.push(righe);
       return pezzi;
     },
-    vuoto: { titolo: 'Nessun file', testo: 'I file caricati o generati dall’agente compaiono qui. Vivono in .harness-ui-library/, dentro il progetto.' },
+    /*
+     * ATLAS F3 — il piede del dettaglio (`page-detail footer` dell'Atlas: «Copia titolo», per l'owner «Copia percorso»),
+     *   più «Tutte le azioni»: la riga VERA della Libreria, ospitata e compatta, con la sua rinomina in linea, la conferma
+     *   d'eliminazione e l'esito (10/09: rifarla vorrebbe dire due copie da tenere allineate).
+     * ⛔ Nel menu di QUESTA riga «Copia percorso» non c'è: sta già come bottone accanto, e riga e menu nello stesso posto
+     *   hanno intersezione vuota (owner 13/09). Il menu della CARD, invece, la porta: lì è l'unica strada.
+     */
+    azioniDettaglio: (v, { doc }) => {
+      const pezzi = [];
+      const p = prov(v);
+      if (p.percorso && typeof opzioni.copia === 'function') {
+        const copia = nodo(doc, 'button', 'talos-button talos-button--secondary talos-button--sm');
+        copia.type = 'button';
+        copia.dataset.azione = 'copia-percorso-dettaglio';
+        copia.append(iconaSprite(doc, 'i-copy'), doc.createTextNode('Copia percorso'));
+        copia.setAttribute('aria-label', `Copia il percorso di ${testiVoceLibreria(v).nome}`);
+        copia.addEventListener('click', () => { void opzioni.copia(p.percorso); });
+        pezzi.push(copia);
+      }
+      const ospite = nodo(doc, 'div', 'td-riuso-riga');
+      const riga = creaLibraryRow(v, {
+        document: doc,
+        aperta: true,
+        sessionId,
+        azioni: servizio,
+        onCambiata: opzioni.onCambiata,
+        onMenu: typeof opzioni.onMenu === 'function'
+          ? (voci, ancora) => opzioni.onMenu(voci.filter((voce) => voce.chiave !== 'copia-percorso'), ancora)
+          : null,
+        nomeSessione: opzioni.nomeSessione,
+        copia: opzioni.copia,
+      });
+      riga.querySelector('[data-azione="menu"]')?.prepend(doc.createTextNode('Tutte le azioni'));
+      ospite.append(riga);
+      pezzi.push(ospite);
+      return pezzi;
+    },
+    vuoto: { titolo: 'Nessun file', testo: 'I file caricati o generati dall’agente compaiono qui. Stanno nella cartella dati di TALOS, fuori dal progetto.' },
   });
 }
 
@@ -1391,7 +1605,8 @@ export function aggiornaPaginaRicerca(schermo, ricerche, opzioni = {}) {
   const spiegazioneVera = 'Ogni ricerca approfondita di questo progetto, col suo rapporto, le affermazioni verificate e le fonti da cui vengono.';
   for (const p of schermo.querySelectorAll('.talos-page__head p, .td-intro p')) {
     if (p.getAttribute('role') === 'status' || p.hasAttribute('data-research-esito')) continue;
-    if (p.textContent.includes('.harness-ui-research') || p.textContent.includes('non è ancora disponibile')) p.textContent = spiegazioneVera;
+    /* 26/09: il modello non dice più «I rapporti vivono in .harness-ui-research/» (guardia `nessuna-cartella-dati-a-schermo`): resta il solo ripiego sulla frase provvisoria. */
+    if (p.textContent.includes('non è ancora disponibile')) p.textContent = spiegazioneVera;
   }
 
   const visibili = montaSezione(schermo, {
@@ -1450,7 +1665,12 @@ export function aggiornaPaginaRicerca(schermo, ricerche, opzioni = {}) {
         : f.spiegazione;
       return {
         alto: [icona('globe'), etichetta(f.parola, f.tono)],
-        corpo: [nodo(doc, 'p', 'td-excerpt', riga)],
+        corpo: [
+          nodo(doc, 'p', 'td-excerpt', riga),
+          /* 24/09/2026, decisione owner («Barra + fase e conteggi»): una ricerca in corso dice a che punto è, nella scheda
+             stessa (il server manda `avanzamento` nell'elenco per le sole ricerche in corso). */
+          ...(r?.stato === 'running' && r?.avanzamento ? [creaAvanzamentoRicerca(doc, r.avanzamento, { etichetta: 'Avanzamento di ' + f.domanda })].filter(Boolean) : []),
+        ],
         /*
          * ⛔ TROVATO NELLA FOTO: «Avviata il 11/09/20…» e «Rapporto disponibi…», tutti e due
          *   troncati. `.td-card-bottom span` taglia con i puntini, e in 250 px di scheda due frasi

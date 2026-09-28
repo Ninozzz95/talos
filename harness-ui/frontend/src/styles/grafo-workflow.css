@@ -1,0 +1,332 @@
+/*
+ * ⭐ F3-42 (25/09/2026) — il diagramma del workflow al centro della chat. Target visivo ESATTO: i mockup R4 approvati il
+ *   23/09 (livelli 14, 200 e 5.000). Solo token Calm esistenti (`tokens.css`); i toni degli stati sono miscele dei token di
+ *   stato col fondo della card, così il tema scuro conserva geometria e gerarchia con la sua palette (ruling owner 23/09).
+ *   Il contenitore è quello del grafo delle deleghe (`.talos-grafo`, `grafo-agenti.css`): sotto la testata, sopra la chat.
+ */
+.talos-wfg {
+  --wfg-linea: var(--talos-border-strong);
+  --wfg-gap-colonne: 40px;
+  --wfg-gap-passi: 12px;
+  --wfg-rientro: 22px;
+  --wfg-raggio: 10px;
+  font-family: var(--talos-font-ui);
+  /* la larghezza che conta è quella del DIAGRAMMA, non della finestra: a 1440 con barra e rail aperti resta ~820 px */
+  container: talos-wfg / inline-size;
+}
+.talos-wfg [data-tono="ok"] { --wfg-tono: var(--talos-success); }
+.talos-wfg [data-tono="corso"] { --wfg-tono: var(--talos-accent); }
+.talos-wfg [data-tono="attesa"] { --wfg-tono: var(--talos-muted); }
+.talos-wfg [data-tono="avviso"] { --wfg-tono: var(--talos-warning); }
+.talos-wfg [data-tono="errore"] { --wfg-tono: var(--talos-danger); }
+.talos-wfg [data-tono="neutro"] { --wfg-tono: var(--talos-border-strong); }
+.talos-wfg :focus-visible { outline: 2px solid var(--talos-accent); outline-offset: 2px; }
+.talos-wfg [hidden] { display: none !important; }
+.talos-wfg .i { width: 16px; height: 16px; }
+/* Gli elementi che si cliccano restano gli stessi mentre il contenuto si aggiorna in loco (fotogrammi dal vivo): i loro figli
+   non ricevono il puntatore, così il bersaglio del clic è sempre l'elemento stabile e un aggiornamento fra pressione e
+   rilascio non lo perde (`grafo-workflow.js`, «vivi»). */
+.talos-wfg__passo *, .talos-wfg__riga *, .talos-wfg__scelta *, .talos-wfg__gruppo-apri *, .talos-wfg__icona-bottone *, .talos-wfg__link *,
+.talos-wfg__gruppo-corpo, .talos-wfg__gruppo-corpo * { pointer-events: none; }
+.talos-wfg__gruppo-corpo { display: contents; }
+
+/* ——— la testata: titolo, sommario e descrizione a sinistra; aggiornamento, «Torna alla chat» e comandi a destra ——— */
+.talos-wfg__cima { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 24px; align-items: start; padding: 22px 24px 10px; }
+.talos-wfg__titoli { display: grid; gap: 6px; min-width: 0; }
+.talos-wfg__titolo { margin: 0; font-size: 1.25rem; font-weight: 600; letter-spacing: -.02em; color: var(--talos-text); }
+.talos-wfg__sommario { margin: 6px 0 0; font-size: 1.0625rem; color: var(--talos-muted); overflow-wrap: anywhere; }
+.talos-wfg__sommario strong { color: var(--talos-text); font-weight: 600; }
+.talos-wfg__descrizione { margin: 0; font-size: .8125rem; color: var(--talos-muted); overflow-wrap: anywhere; }
+.talos-wfg__lato { display: grid; justify-items: end; gap: 12px; }
+.talos-wfg__lato-riga { display: flex; align-items: flex-start; gap: 18px; }
+.talos-wfg__aggiornato { display: grid; justify-items: end; gap: 4px; padding-top: 2px; font-size: .6875rem; color: var(--talos-muted); font-variant-numeric: tabular-nums; }
+.talos-wfg__stato-run { display: inline-flex; align-items: center; gap: 6px; }
+.talos-wfg__torna { white-space: nowrap; }
+.talos-wfg__comandi { display: flex; align-items: center; gap: 8px; }
+.talos-wfg__icona-bottone, .talos-wfg__scelta {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 32px; min-width: 32px; padding: 0 8px;
+  border: 1px solid var(--talos-border); border-radius: 8px; background: var(--talos-card); color: var(--talos-text); font: inherit; font-size: .75rem; cursor: pointer;
+}
+.talos-wfg__icona-bottone:hover:not(:disabled), .talos-wfg__scelta:hover { background: var(--talos-card-hover); border-color: var(--talos-border-strong); }
+.talos-wfg__icona-bottone:disabled { opacity: .45; cursor: default; }
+.talos-wfg__scelta { padding: 0 10px 0 12px; }
+.talos-wfg__scelta-freccia { width: 14px; height: 14px; color: var(--talos-muted); }
+.talos-wfg__menu-vista { position: relative; }
+.talos-wfg__menu {
+  position: absolute; z-index: var(--talos-z-menu, 30); top: calc(100% + 6px); inset-inline-start: 0; min-width: 180px; display: grid; padding: 4px;
+  border: 1px solid var(--talos-border); border-radius: 10px; background: var(--talos-panel); box-shadow: var(--talos-shadow-floating);
+}
+.talos-wfg__menu--destra { inset-inline-start: auto; inset-inline-end: 0; }
+.talos-wfg__menu-voce { display: flex; align-items: center; gap: 8px; min-height: 32px; padding: 6px 10px; border: 0; border-radius: 7px; background: transparent; color: var(--talos-text); font: inherit; font-size: .8125rem; text-align: start; cursor: pointer; }
+.talos-wfg__menu-voce:hover:not(:disabled), .talos-wfg__menu-voce:focus-visible { background: var(--talos-card-hover); }
+.talos-wfg__menu-voce[aria-checked="true"] { color: var(--talos-accent-text); font-weight: 600; }
+.talos-wfg__menu-voce:disabled { color: var(--talos-muted); cursor: default; }
+.talos-wfg__cerca { width: 220px; height: 32px; padding: 0 10px; border: 1px solid var(--talos-border); border-radius: 8px; background: var(--talos-card); color: var(--talos-text); font: inherit; font-size: .8125rem; }
+.talos-wfg__esito-cerca { padding: 0 24px; font-size: .6875rem; color: var(--talos-muted); }
+.talos-wfg__esito-cerca:empty { display: none; }
+.talos-wfg__avviso { margin: 0; padding: 8px 24px; font-size: .8125rem; color: var(--talos-muted); }
+
+/* ——— l'area del diagramma: scorre, e lo zoom sta sul mondo ——— */
+.talos-wfg__area { position: relative; flex: 1 1 auto; min-height: 0; overflow: auto; padding: 8px 24px 16px; overscroll-behavior: contain; }
+.talos-wfg__mondo { min-width: 0; }
+.talos-wfg [data-attenuato="true"] { opacity: .38; }
+.talos-wfg__punto { display: inline-block; flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--wfg-tono, var(--talos-border-strong)); }
+.talos-wfg__punto--vuoto { background: transparent; border: 1.5px solid var(--wfg-tono, var(--talos-border-strong)); width: 9px; height: 9px; box-sizing: border-box; }
+.talos-wfg__pill {
+  display: inline-flex; align-items: center; gap: 5px; width: fit-content; padding: 2px 9px; border-radius: var(--talos-radius-pill);
+  font-size: .6875rem; font-weight: 500; line-height: 1.5; white-space: nowrap;
+  color: color-mix(in srgb, var(--wfg-tono) 82%, var(--talos-text));
+  background: color-mix(in srgb, var(--wfg-tono) 14%, var(--talos-card));
+  border: 1px solid color-mix(in srgb, var(--wfg-tono) 26%, transparent);
+}
+.talos-wfg__pill[data-tono="attesa"], .talos-wfg__pill[data-tono="neutro"] { color: var(--talos-muted); background: var(--talos-panel-soft); border-color: var(--talos-border); }
+.talos-wfg__pill-icona { width: 11px !important; height: 11px !important; stroke-width: 2; }
+
+/* livello 14: la sessione principale in alto, le fasi in colonne sotto, i passi in fila con la loro staffa */
+.talos-wfg__albero { display: grid; justify-items: center; gap: 0; padding-bottom: 8px; }
+.talos-wfg__alto { position: relative; display: flex; justify-content: center; padding-bottom: 28px; }
+.talos-wfg__alto::after { content: ""; position: absolute; left: 50%; bottom: 0; height: 28px; border-left: 1px solid var(--wfg-linea); }
+.talos-wfg__coordinatore {
+  display: flex; gap: 14px; width: 300px; padding: 14px 16px; box-sizing: border-box;
+  border: 1.5px solid var(--talos-accent); border-radius: var(--wfg-raggio); background: var(--talos-card); color: var(--talos-text);
+}
+.talos-wfg__coordinatore-icona { display: inline-flex; color: var(--talos-accent); padding-top: 2px; }
+.talos-wfg__coordinatore-icona .i { width: 30px; height: 30px; stroke-width: 1.5; }
+.talos-wfg__coordinatore-corpo { display: grid; gap: 4px; min-width: 0; }
+.talos-wfg__coordinatore-nome { margin: 0; font-size: .875rem; font-weight: 600; overflow-wrap: anywhere; }
+.talos-wfg__coordinatore-riga { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.talos-wfg__fasi {
+  position: relative; display: grid; width: 100%; padding-top: 28px;
+  grid-template-columns: repeat(var(--fasi), minmax(240px, 1fr)); column-gap: var(--wfg-gap-colonne);
+  /* F3-50, foto a 1440 col rail aperto: «Fase 2 — Implementazione» andava su due righe e la sua colonna partiva più in basso.
+     Le colonne condividono le righe (subgrid): testate alla stessa altezza, primi passi allineati */
+  grid-template-rows: auto auto;
+}
+/* la linea orizzontale unisce i centri della prima e dell'ultima colonna; da lì una freccia scende su ogni fase */
+.talos-wfg__fasi::before {
+  content: ""; position: absolute; top: 0; border-top: 1px solid var(--wfg-linea);
+  inset-inline: calc((100% - (var(--fasi) - 1) * var(--wfg-gap-colonne)) / (2 * var(--fasi)));
+}
+.talos-wfg__colonna { position: relative; display: grid; align-content: start; gap: var(--wfg-gap-passi); min-width: 0; grid-row: span 2; grid-template-rows: subgrid; }
+.talos-wfg__colonna::before { content: ""; position: absolute; top: -28px; left: 50%; height: 22px; border-left: 1px solid var(--wfg-linea); }
+.talos-wfg__colonna::after { content: ""; position: absolute; top: -8px; left: calc(50% - 4px); border: 4px solid transparent; border-top: 5px solid var(--wfg-linea); border-bottom: 0; }
+.talos-wfg__fase {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 40px; padding: 8px 16px; box-sizing: border-box;
+  border: 1px solid var(--talos-border); border-radius: var(--wfg-raggio); background: var(--talos-card);
+}
+.talos-wfg__fase-nome { font-size: .875rem; font-weight: 600; color: var(--talos-text); overflow-wrap: anywhere; }
+.talos-wfg__fase-valore { display: inline-flex; align-items: center; gap: 7px; font-size: .8125rem; color: var(--talos-text); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.talos-wfg__passi { list-style: none; margin: 0; padding: 0 0 0 var(--wfg-rientro); display: grid; gap: var(--wfg-gap-passi); }
+.talos-wfg__passi > li { position: relative; min-width: 0; }
+/* la staffa: ogni passo disegna il suo tratto verticale (dal passo sopra) e la freccia che entra nella card */
+.talos-wfg__passi > li::before {
+  content: ""; position: absolute; inset-inline-start: calc(-1 * var(--wfg-rientro) + 4px); top: calc(-1 * var(--wfg-gap-passi) - 1px);
+  width: calc(var(--wfg-rientro) - 8px); height: calc(50% + var(--wfg-gap-passi) + 1px);
+  border-inline-start: 1px solid var(--wfg-linea); border-bottom: 1px solid var(--wfg-linea);
+}
+.talos-wfg__passi > li:first-child::before { top: calc(-1 * var(--wfg-gap-passi) - 20px); height: calc(50% + var(--wfg-gap-passi) + 20px); }
+.talos-wfg__passi > li::after { content: ""; position: absolute; inset-inline-start: -5px; top: calc(50% - 4px); border: 4px solid transparent; border-inline-start: 5px solid var(--wfg-linea); border-inline-end: 0; }
+/* compatte come nel mockup 14 (~80 px a quattro righe): cinque passi per colonna stanno sopra il pannello di dettaglio */
+.talos-wfg__passo {
+  display: grid; gap: 3px; width: 100%; padding: 9px 14px 10px; line-height: 1.35; box-sizing: border-box; text-align: start;
+  border: 1px solid var(--talos-border); border-radius: var(--wfg-raggio); background: var(--talos-card); color: var(--talos-text); font: inherit; cursor: pointer;
+  /* F3-50, foto sul 4174 a 1440 col rail aperto (25/09): una card larga ~218 px lasciava al nome 60 px e lo spezzava a metà
+     parola («Agen/te 09», «Docume/ntazione»). La card guarda la PROPRIA larghezza, sotto: la pillola scende sotto il nome. */
+  container: talos-wfg-passo / inline-size;
+}
+.talos-wfg__passo:hover { border-color: var(--talos-border-strong); }
+.talos-wfg__passo[aria-pressed="true"] { border: 1.5px solid var(--talos-accent); background: color-mix(in srgb, var(--talos-accent-soft) 55%, var(--talos-card)); padding: 8.5px 13.5px 9.5px; }
+.talos-wfg__passo-testa { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.talos-wfg__passo-nome { flex: 1 1 auto; min-width: 0; font-size: .8125rem; font-weight: 600; overflow-wrap: break-word; }
+.talos-wfg__passo-durata { flex: none; font-size: .75rem; color: var(--talos-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.talos-wfg__passo-freccia { width: 14px !important; height: 14px !important; color: var(--talos-text); }
+.talos-wfg__passo-modello { padding-inline-start: 18px; font-size: .75rem; color: var(--talos-muted); overflow-wrap: anywhere; }
+.talos-wfg__passo > .talos-wfg__pill { margin-inline-start: 18px; margin-block: 2px; }
+.talos-wfg__passo-testa > .talos-wfg__pill { flex: none; }
+/* una riga sola, come nel mockup 14: il testo intero sta nel dettaglio («Task corrente») */
+.talos-wfg__passo-compito { padding-inline-start: 18px; font-size: .75rem; color: var(--talos-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.talos-wfg__coordinatore .talos-wfg__passo-modello, .talos-wfg__coordinatore .talos-wfg__passo-compito { padding-inline-start: 0; }
+
+/* livello 200 / 5.000: una card per fase in fila, frecce fra le fasi, un gruppo aperto sotto */
+.talos-wfg__panoramica { display: grid; justify-items: start; min-width: 0; }
+.talos-wfg__fila { display: flex; align-items: stretch; width: 100%; min-width: 0; }
+.talos-wfg__gruppo {
+  /* 168 px: il nome più lungo dei ruoli di serie («Implementazione», «Documentazione») e la riga «In esecuzione 1.120» ci
+     stanno interi (foto del 25/09 a 1440 col rail aperto: a 150 px la parola si spezzava a metà); oltre, la fila scorre */
+  position: relative; flex: 1 1 0; min-width: 168px; display: grid; justify-items: center; align-content: start; gap: 4px; padding: 16px 16px 10px; box-sizing: border-box;
+  border: 1px solid var(--talos-border); border-radius: var(--wfg-raggio); background: var(--talos-card); color: var(--talos-text); cursor: pointer;
+}
+.talos-wfg__gruppo:hover { border-color: var(--talos-border-strong); }
+.talos-wfg__gruppo[data-aperto="true"] { border: 1.5px solid var(--talos-accent); background: color-mix(in srgb, var(--talos-accent-soft) 45%, var(--talos-card)); padding: 15.5px 15.5px 9.5px; }
+.talos-wfg__gruppo-icona { display: inline-flex; color: var(--talos-text); }
+.talos-wfg__gruppo-icona .i { width: 26px; height: 26px; stroke-width: 1.5; }
+.talos-wfg__gruppo[data-aperto="true"] .talos-wfg__gruppo-icona { color: var(--talos-accent); }
+.talos-wfg__gruppo-nome { margin: 6px 0 0; font-size: .9375rem; font-weight: 600; text-align: center; overflow-wrap: break-word; hyphens: auto; }
+.talos-wfg__gruppo-conto { font-size: .8125rem; color: var(--talos-muted); font-variant-numeric: tabular-nums; }
+.talos-wfg__barra { display: flex; align-items: center; gap: 8px; width: 100%; margin: 12px 0 6px; }
+.talos-wfg__barra-traccia { position: relative; flex: 1; height: 8px; border-radius: var(--talos-radius-pill); background: var(--talos-panel-soft); border: 1px solid var(--talos-border-subtle); overflow: hidden; }
+.talos-wfg__barra-pieno { position: absolute; inset-block: 0; inset-inline-start: 0; border-radius: inherit; background: var(--talos-success); }
+/* mockup 200: la barra è verde; l'accento spetta solo al gruppo APERTO */
+.talos-wfg__gruppo[data-aperto="true"] .talos-wfg__barra-pieno { background: var(--talos-accent); }
+.talos-wfg__gruppo[data-tono="errore"] .talos-wfg__barra-pieno { background: var(--talos-danger); }
+.talos-wfg__barra-valore { min-width: 3ch; font-size: .75rem; color: var(--talos-text); text-align: end; font-variant-numeric: tabular-nums; }
+.talos-wfg__conti { display: grid; gap: 7px; width: 100%; margin: 6px 0 0; }
+.talos-wfg__conto { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.talos-wfg__conto dt { display: inline-flex; align-items: center; gap: 8px; min-width: 0; font-size: .75rem; color: var(--talos-text); white-space: nowrap; }
+.talos-wfg__conto dd { margin: 0; font-size: .75rem; color: var(--talos-text); font-variant-numeric: tabular-nums; }
+.talos-wfg__gruppo-apri { margin-top: 10px; display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 24px; border: 0; border-radius: 6px; background: transparent; color: var(--talos-text); cursor: pointer; }
+.talos-wfg__gruppo-apri:hover { background: var(--talos-card-hover); }
+.talos-wfg__gira-su { transform: rotate(180deg); }
+.talos-wfg__gruppo[data-aperto="true"] .talos-wfg__gruppo-apri { color: var(--talos-accent); }
+.talos-wfg__freccia { position: relative; flex: none; width: 28px; align-self: flex-start; margin-top: 118px; height: 1px; background: var(--wfg-linea); }
+.talos-wfg__freccia::before { content: ""; position: absolute; left: -3px; top: -3px; width: 5px; height: 5px; border-radius: 50%; border: 1px solid var(--wfg-linea); background: var(--talos-background); }
+.talos-wfg__freccia::after { content: ""; position: absolute; right: -1px; top: -4px; border: 4px solid transparent; border-inline-start: 5px solid var(--wfg-linea); border-inline-end: 0; }
+.talos-wfg__freccia[data-slegata="true"] { background: transparent; }
+.talos-wfg__freccia[data-slegata="true"]::before, .talos-wfg__freccia[data-slegata="true"]::after { display: none; }
+.talos-wfg__discesa { position: relative; width: 1px; height: 44px; background: var(--wfg-linea); }
+.talos-wfg__discesa::after { content: ""; position: absolute; left: -4px; bottom: -1px; border: 4px solid transparent; border-top: 5px solid var(--wfg-linea); border-bottom: 0; }
+.talos-wfg__pannello {
+  width: min(760px, 100%); box-sizing: border-box; border: 1.5px solid var(--talos-accent); border-radius: var(--wfg-raggio); background: var(--talos-card); overflow: hidden;
+}
+.talos-wfg__pannello-testa { display: flex; align-items: center; gap: 12px; padding: 14px 20px; border-bottom: 1px solid var(--talos-border); }
+.talos-wfg__pannello-testa .talos-wfg__gruppo-icona { color: var(--talos-accent); }
+.talos-wfg__pannello-testa .talos-wfg__gruppo-icona .i { width: 22px; height: 22px; }
+.talos-wfg__pannello-nome { margin: 0; font-size: 1.0625rem; font-weight: 600; }
+.talos-wfg__pannello-cento { margin-inline-start: auto; font-size: .8125rem; color: var(--talos-text); font-variant-numeric: tabular-nums; }
+.talos-wfg__righe { display: grid; }
+.talos-wfg__riga {
+  display: grid; grid-template-columns: 10px minmax(0, 1fr) auto 64px 16px; align-items: center; gap: 14px; padding: 9px 20px; min-height: 50px; box-sizing: border-box;
+  border: 0; border-bottom: 1px solid var(--talos-border-subtle); background: transparent; color: var(--talos-text); font: inherit; text-align: start; cursor: pointer;
+}
+.talos-wfg__riga:hover { background: var(--talos-card-hover); }
+.talos-wfg__riga[aria-pressed="true"] { background: color-mix(in srgb, var(--talos-accent-soft) 55%, var(--talos-card)); }
+.talos-wfg__riga-testi { display: grid; gap: 2px; min-width: 0; }
+.talos-wfg__riga-nome { font-size: .8125rem; font-weight: 600; overflow-wrap: anywhere; }
+.talos-wfg__riga-sotto { font-size: .75rem; color: var(--talos-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.talos-wfg__riga-durata { font-size: .75rem; color: var(--talos-muted); text-align: end; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.talos-wfg__riga-freccia { width: 14px !important; height: 14px !important; color: var(--talos-muted); }
+.talos-wfg__pannello-piede { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; padding: 12px 20px; }
+.talos-wfg__link { display: inline-flex; align-items: center; gap: 6px; padding: 4px 2px; border: 0; background: transparent; color: var(--talos-text); font: inherit; font-size: .8125rem; cursor: pointer; }
+.talos-wfg__link:hover { color: var(--talos-accent-text); text-decoration: underline; text-underline-offset: 3px; }
+.talos-wfg__link .i { width: 14px; height: 14px; }
+.talos-wfg__pagine { margin-inline-end: auto; font-size: .75rem; color: var(--talos-muted); font-variant-numeric: tabular-nums; }
+.talos-wfg__vuoto { margin: 0; padding: 10px 0; font-size: .8125rem; color: var(--talos-muted); list-style: none; }
+.talos-wfg__righe > .talos-wfg__vuoto { padding: 14px 20px; }
+
+/* il pannello di dettaglio in basso: chi è, le evidenze, il compito (mockup 14) — senza percentuale per passo (D27) */
+.talos-wfg__dettaglio {
+  flex: none; position: relative; display: grid; grid-template-columns: minmax(240px, 1.15fr) minmax(0, 1fr) minmax(0, 1fr) auto; margin: 0 24px 16px;
+  border: 1.5px solid var(--talos-accent); border-radius: var(--wfg-raggio); background: var(--talos-card); color: var(--talos-text); max-height: 38vh; overflow: auto;
+}
+.talos-wfg__dettaglio-chi { display: flex; gap: 14px; padding: 16px 20px; min-width: 0; }
+.talos-wfg__dettaglio-icona { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 44px; height: 44px; border-radius: 12px; background: var(--talos-accent-soft); color: var(--talos-accent-text); }
+.talos-wfg__dettaglio-icona .i { width: 22px; height: 22px; }
+.talos-wfg__dettaglio-testi { display: grid; align-content: start; gap: 4px; min-width: 0; }
+.talos-wfg__dettaglio-testa { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; }
+.talos-wfg__dettaglio-nome { margin: 0; font-size: 1rem; font-weight: 600; overflow-wrap: anywhere; }
+.talos-wfg__dettaglio-testi .talos-wfg__passo-modello { padding: 0; }
+.talos-wfg__dettaglio-colonna { display: grid; align-content: start; gap: 8px; padding: 16px 20px; min-width: 0; border-inline-start: 1px solid var(--talos-border); }
+.talos-wfg__dettaglio-titolo { display: inline-flex; align-items: center; gap: 8px; margin: 0; font-size: .8125rem; font-weight: 600; }
+.talos-wfg__evidenze { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.talos-wfg__evidenza { display: grid; grid-template-columns: 14px auto minmax(0, 1fr) auto; align-items: center; gap: 8px; font-size: .75rem; color: var(--talos-muted); }
+.talos-wfg__evidenza .i { width: 14px; height: 14px; }
+.talos-wfg__evidenza-nome { color: var(--talos-text); white-space: nowrap; }
+.talos-wfg__evidenza-oggetto { font-family: var(--talos-font-mono); font-size: .6875rem; color: var(--talos-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; background: none; padding: 0; }
+.talos-wfg__evidenza-quando { white-space: nowrap; font-variant-numeric: tabular-nums; }
+/* il pannello resta basso (mockup 14: ~120 px) e non copre il diagramma: titolo e resto del compito si tagliano a due righe;
+   il testo intero resta nel DOM per chi legge con un lettore di schermo, e nel `title` */
+.talos-wfg__compito-titolo { margin: 0; font-size: .8125rem; color: var(--talos-text); overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.talos-wfg__compito-resto { margin: 0; font-size: .75rem; color: var(--talos-muted); overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.talos-wfg__dettaglio-altro { position: relative; padding: 12px 12px 0 0; }
+.talos-wfg__dettaglio-altro .talos-wfg__icona-bottone { border-color: transparent; background: transparent; }
+
+/* D32: la vista Lettura, un albero ARIA fasi → agenti */
+.talos-wfg__lettura { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 8px 24px 16px; }
+.talos-wfg__albero-lettura, .talos-wfg__voce-figli { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.talos-wfg__voce-figli { margin: 4px 0 8px; padding-inline-start: 26px; }
+.talos-wfg__voce { padding: 7px 10px; border-radius: 8px; font-size: .8125rem; color: var(--talos-text); cursor: pointer; overflow-wrap: anywhere; }
+.talos-wfg__voce:hover { background: var(--talos-card-hover); }
+.talos-wfg__voce[aria-selected="true"] { background: var(--talos-accent-soft); color: var(--talos-accent-text); }
+.talos-wfg__voce--fase { padding: 0; font-weight: 600; }
+.talos-wfg__voce--fase > .talos-wfg__voce-testo { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 8px; }
+.talos-wfg__voce--fase > .talos-wfg__voce-testo::before { content: ""; width: 6px; height: 6px; border-inline-end: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: rotate(-45deg); transition: transform var(--talos-motion-duration-control, .15s) var(--talos-motion-ease, ease); }
+.talos-wfg__voce--fase[aria-expanded="true"] > .talos-wfg__voce-testo::before { transform: rotate(45deg); }
+.talos-wfg__voce--fase > .talos-wfg__voce-figli { font-weight: 400; }
+.talos-wfg__voce--altri { color: var(--talos-muted); font-style: italic; }
+
+@media (prefers-reduced-motion: reduce) {
+  .talos-wfg__voce--fase > .talos-wfg__voce-testo::before { transition: none; }
+}
+/* foto sul 4174 a 1024 (25/09): la media query sulla finestra impilava male la testata e portava il dettaglio su due righe,
+   lasciando al diagramma 310 px. Si guarda la larghezza del diagramma (container query). */
+@container talos-wfg (max-width: 780px) {
+  .talos-wfg__cima { grid-template-columns: minmax(0, 1fr); }
+  .talos-wfg__lato { justify-items: stretch; }
+  .talos-wfg__lato-riga { justify-content: space-between; align-items: center; }
+  .talos-wfg__aggiornato { justify-items: start; }
+}
+@container talos-wfg (max-width: 640px) {
+  .talos-wfg__dettaglio { grid-template-columns: minmax(0, 1fr); }
+  .talos-wfg__dettaglio-colonna { border-inline-start: 0; border-top: 1px solid var(--talos-border); }
+  .talos-wfg__dettaglio-altro { position: absolute; top: 0; inset-inline-end: 0; }
+}
+/* F3-50, stessa foto a 1440 col rail aperto (diagramma ~780 px): nelle «Evidenze recenti» il percorso del file si riduceva a
+   «s…». Sotto i 900 px il percorso va su una riga sua, sotto l'attrezzo, e può andare a capo dove serve. */
+@container talos-wfg (max-width: 900px) {
+  .talos-wfg__evidenza { grid-template-columns: 14px minmax(0, 1fr) auto; row-gap: 2px; }
+  .talos-wfg__evidenza-quando { grid-row: 1; grid-column: 3; }
+  /* 26/09: `break-word` e non `anywhere` — i punti di a capo sono dopo le barre (`<wbr>`, `grafo-workflow.js`), non dentro i nomi */
+  .talos-wfg__evidenza-oggetto { grid-row: 2; grid-column: 2 / -1; white-space: normal; overflow-wrap: break-word; }
+}
+/* la card del passo, sotto i 280 px (nome + pillola «In attesa» + «—» non stanno in una riga senza spezzare le parole): la
+   pillola va a capo sotto il nome, allineata al testo; il `::after` è l'a capo della riga flessibile */
+@container talos-wfg-passo (max-width: 280px) {
+  .talos-wfg__passo-testa { flex-wrap: wrap; row-gap: 4px; }
+  /* la riga si decide sulla parola più lunga del nome, non sul nome intero: pallino, nome e durata restano insieme */
+  .talos-wfg__passo-nome { flex: 1 1 0; min-width: min-content; }
+  .talos-wfg__passo-testa::after { content: ""; order: 4; flex-basis: 100%; }
+  .talos-wfg__passo-testa > .talos-wfg__pill { order: 5; margin-inline-start: 18px; }
+}
+
+/*
+ * ⭐ F3-52 (25/09/2026) — i comandi del run nella testata (decisione owner 21): un pulsante secondo lo stato e un «…» con
+ *   gli altri, Annulla in fondo e separato. L'esito sotto, a parole (Hermes, `subagent-controls.tsx`: `role="status"`,
+ *   `role="alert"` se non è riuscito).
+ */
+.talos-wfg__run { display: inline-flex; align-items: center; gap: 6px; }
+.talos-wfg__run-principale { white-space: nowrap; }
+.talos-wfg__run-principale[aria-busy="true"] { cursor: progress; }
+.talos-wfg__menu-run { position: relative; }
+/* foto del 25/09: il «…» (32 px) accanto a «Pausa» (altezza dei controlli) non allineava le due altezze: qui prende la stessa */
+.talos-wfg__run .talos-wfg__icona-bottone { height: var(--talos-control-height); min-width: var(--talos-control-height); }
+.talos-wfg__menu-voce--pericolo { color: var(--talos-danger); }
+.talos-wfg__menu-separatore { height: 1px; margin: 4px 6px; background: var(--talos-border); }
+.talos-wfg__esito-run { margin: -4px 0 0; max-width: 46ch; font-size: .75rem; color: var(--talos-muted); text-align: end; }
+.talos-wfg__esito-run[data-tono="errore"] { color: var(--talos-danger); }
+
+/* la conferma di Annulla e Riprova (decisioni owner 22 e 23): un `<dialog>` in `body`, fuori dal diagramma, coi pezzi del
+   dialogo della app (`.talos-dialog`); qui si toglie lo stile del browser e si dà la misura di una conferma */
+dialog.talos-wfg-conferma {
+  width: min(480px, calc(100vw - 32px)); max-width: none; max-height: calc(100vh - 32px); padding: 0; border: 0;
+  background: transparent; color: var(--talos-text); overflow: visible;
+}
+dialog.talos-wfg-conferma::backdrop { background: var(--talos-overlay); }
+.talos-wfg-conferma__scatola { width: 100%; }
+.talos-wfg-conferma__testo { margin: 0; line-height: 1.5; text-wrap: pretty; } /* foto del 25/09: «di:» restava da solo a capo */
+.talos-wfg-conferma__righe { display: grid; gap: 6px; margin: 14px 0 0; padding: 12px 14px; border: 1px solid var(--talos-border); border-radius: var(--talos-radius-control); background: var(--talos-panel-soft); }
+.talos-wfg-conferma__riga { display: flex; justify-content: space-between; gap: 16px; font-size: .8125rem; }
+.talos-wfg-conferma__riga dt { color: var(--talos-muted); }
+.talos-wfg-conferma__riga dd { margin: 0; font-weight: 600; font-variant-numeric: tabular-nums; }
+/* ⭐ F6-2 (27/09/2026): un valore lungo (l'indirizzo di un remoto) va a capo invece di uscire dalla finestra */
+.talos-wfg-conferma__riga dd { min-width: 0; overflow-wrap: anywhere; text-align: end; }
+/* ⭐ F6-2: la scelta DENTRO la conferma (il remoto su cui pubblicare) — un gruppo di radio nostro, coi token del tema: il segno è un
+   anello che si riempie dell'accento, la riga scelta prende il bordo dell'accento. Nessun controllo nativo (owner 13/09). */
+.talos-wfg-conferma__scelte { display: grid; gap: 6px; margin: 12px 0 0; }
+.talos-wfg-conferma__scelta { display: grid; grid-template-columns: 12px minmax(0, 1fr); column-gap: 10px; align-items: center; width: 100%; padding: 8px 12px; border: 1px solid var(--talos-border); border-radius: var(--talos-radius-control); background: transparent; color: var(--talos-text); font: inherit; text-align: start; cursor: pointer; }
+.talos-wfg-conferma__scelta::before { content: ''; grid-row: 1 / span 2; width: 12px; height: 12px; box-sizing: border-box; border: 1.5px solid var(--talos-muted); border-radius: 50%; }
+.talos-wfg-conferma__scelta:hover { background: var(--talos-panel-soft); }
+.talos-wfg-conferma__scelta[aria-checked="true"] { border-color: var(--talos-accent); background: var(--talos-panel-soft); }
+.talos-wfg-conferma__scelta[aria-checked="true"]::before { border-color: var(--talos-accent); background: radial-gradient(circle, var(--talos-accent) 0 2.5px, transparent 3px); }
+.talos-wfg-conferma__scelta:focus-visible { outline: var(--talos-focus-width) solid var(--talos-accent); outline-offset: 1px; }
+.talos-wfg-conferma__scelta-nome { font-weight: 600; }
+.talos-wfg-conferma__scelta-dettaglio { grid-column: 2; font-size: .75rem; color: var(--talos-muted); overflow-wrap: anywhere; }

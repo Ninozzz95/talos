@@ -432,14 +432,15 @@ test('GUSCIO-05-bis — quando è l\'app a cambiare sezione, il guscio la segue'
   const card = page.locator('#modelLabCard');
 
   /*
-   * (a) LA STRADA VERA, battuta a mano: il pulsante «Gestisci chiavi e
-   * indirizzi» della scheda Provider delle Impostazioni
-   * (`src/legacy/frammenti.html:66`) porta `data-model-lab-go="providers"`, e
-   * `app.js:4582` lo traduce in `setSettingsSection('models')` +
-   * `setModelLabSection('providers')`. Nessuno di quei due passaggi è stato
-   * scritto da questa corsia.
+   * (a) LA STRADA VERA, battuta a mano. Fino al 22/09 era il pulsante «Gestisci chiavi e
+   * indirizzi» della sezione «Provider e accessi» delle Impostazioni
+   * (`data-model-lab-go="providers"`). ⛔ 23/09/2026, decisione owner: quella sezione è tolta
+   * del tutto, e ogni strada verso i fornitori passa dalla stessa funzione
+   * (`apriProviderDelLaboratorio` in `app.js`: `setSettingsSection('models')` +
+   * `setModelLabSection('providers')`). La si batte dal comando «providers», che è la sua
+   * porta nella palette. Nessuno di quei passaggi è stato scritto da questa corsia.
    */
-  await page.evaluate(() => document.querySelector('[data-model-lab-go="providers"]')?.click());
+  await page.evaluate(() => window.__talosHarnessUiRuntime.executeCommand('providers'));
   await expect(card.locator('#labSchedaProviders')).toHaveAttribute('aria-selected', 'true');
   await expect(card.locator('[data-lab-pannello="providers"]')).toBeVisible();
   await expect(card.locator('[data-model-lab-panel="providers"]')).toBeVisible();

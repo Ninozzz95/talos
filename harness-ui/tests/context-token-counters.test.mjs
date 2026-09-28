@@ -134,3 +134,49 @@ test('CTX-HEURISTIC-CALIBRATED bytes are not tokens: an Italian body of 39.5k by
   assert.ok(result.inputTokens >= Math.floor(bytes / 3.92), `la stima (${result.inputTokens}) deve restare PRUDENTE, mai sotto il conteggio vero (${Math.floor(bytes / 3.92)})`);
   assert.ok(result.inputTokens <= Math.ceil(bytes / 3.92 * 1.2), `la stima (${result.inputTokens}) non deve superare il vero di oltre il 20%`);
 });
+
+/*
+ * 24/09/2026 — F4, punto 4: `reasoning` basso per la SINTESI anche fuori OpenRouter. Fonti (lette il
+ * 24/09/2026): OpenAI «Reasoning» guide — `reasoning_effort` accetta `none, minimal, low, …`, ma «Setting … to
+ * `none` returns HTTP 400» su GPT-6 Astra ⇒ `low`; DeepSeek «Thinking mode» — formato OpenAI con
+ * `reasoning_effort` «low/high/max» (il campo `thinking` non è fra le opzioni compilabili di
+ * `buildPreparedProviderRequest`, quindi resta acceso a effort basso); llama.cpp `tools/server/README.md` —
+ * `reasoning_effort`: «If `none`, reasoning/thinking is disabled». Fornitori non documentati ⇒ nessun campo.
+ */
+test('CTX-SUMMARY-REASONING-LOW-OUTSIDE-OPENROUTER a summary profile carries a low reasoning effort per provider, a chat profile stays untouched', async () => {
+  const sintesi = provider => buildPreparedDesktopContextRequest({ messages, model: { provider, model: models[provider] ?? 'x', windowTokens: 16384, responseReserve: 2048 } });
+  assert.equal((await sintesi('openai')).body.reasoning?.effort, 'low', 'OpenAI (Responses): reasoning.effort low');
+  assert.equal((await sintesi('deepseek')).body.reasoning_effort, 'low', 'DeepSeek: reasoning_effort low');
+  assert.equal((await sintesi('local')).body.reasoning_effort, 'none', 'llama.cpp: reasoning_effort none disabilita il pensiero');
+  const zai = (await sintesi('zai')).body;
+  assert.equal(zai.reasoning_effort, undefined); assert.equal(zai.reasoning, undefined);
+  const chat = await buildPreparedDesktopContextRequest({ messages, model: { ...model('openai'), requestOptions: {} } });
+  assert.equal(chat.body.reasoning, undefined, 'la chat porta le SUE opzioni, non quelle della sintesi');
+});
+
+/*
+ * 24/09/2026 — F4, punto 5: ancora del fornitore. `conAncoraDelFornitore(counter)` preferisce l'ultimo
+ * `prompt_tokens` riportato dal fornitore quando il prefisso della richiesta combacia messaggio per messaggio,
+ * e stima solo il delta (Hermes `agent/usage_anchor.py:93-107`); altrimenti delega al contatore di sempre.
+ */
+test('CTX-COUNTER-PROVIDER-ANCHOR uses the anchored prompt_tokens for a matching prefix and delegates otherwise', async () => {
+  const { conAncoraDelFornitore } = await import('../src/context-token-counters.mjs');
+  let deleghe = 0;
+  const base = { countPreparedContext: async ({ model }) => { deleghe++; return { schema: 'talos.context.tokens.v1', inputTokens: 10, windowTokens: model.windowTokens, responseReserve: model.responseReserve, method: 'heuristic', exact: false, requestHash: 'c'.repeat(64), provider: model.provider, model: model.model }; } };
+  const contatore = conAncoraDelFornitore(base);
+  const selected = model('openrouter');
+  const storia = [{ role: 'user', content: 'Leggi il file' }];
+  assert.equal((await contatore.countPreparedContext({ messages: storia, tools: [], model: selected })).method, 'heuristic'); assert.equal(deleghe, 1);
+  contatore.registraAncora({ provider: selected.provider, model: selected.model, messages: storia, usage: { prompt_tokens: 500, completion_tokens: 7 } });
+  const risposta = { role: 'assistant', content: 'Ecco' };
+  const misura = await contatore.countPreparedContext({ messages: [...storia, risposta, { role: 'user', content: 'Grazie' }], tools: [], model: selected });
+  assert.equal(misura.method, 'provider'); assert.equal(misura.exact, false); assert.ok(misura.inputTokens > 507 && misura.inputTokens < 600, String(misura.inputTokens));
+  assert.equal(misura.windowTokens, selected.windowTokens); assert.equal(misura.provider, 'openrouter'); assert.match(misura.requestHash, /^[a-f0-9]{64}$/);
+  assert.equal(deleghe, 1);
+  assert.equal((await contatore.countPreparedContext({ messages: [{ role: 'user', content: 'Altro' }], tools: [], model: selected })).method, 'heuristic', 'prefisso diverso ⇒ delega');
+  assert.equal((await contatore.countPreparedContext({ messages: storia, tools: [], model: model('openai') })).method, 'heuristic', 'modello diverso ⇒ delega');
+  assert.equal((await contatore.countPreparedContext({ messages: [], tools: [], model: selected })).method, 'heuristic', 'più corto dell’ancora ⇒ delega');
+  assert.equal(deleghe, 4);
+  contatore.registraAncora({ provider: selected.provider, model: selected.model, messages: storia, usage: { prompt_tokens: -1 } });
+  assert.equal((await contatore.countPreparedContext({ messages: storia, tools: [], model: selected })).method, 'provider', 'un uso non valido non cancella l’ancora buona');
+});

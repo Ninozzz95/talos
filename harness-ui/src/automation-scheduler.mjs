@@ -33,7 +33,13 @@ export function createAutomationScheduler({
       const eseguiteOggi = voce.giornoContatore === oggi ? voce.eseguiteOggi : 0;
       if (eseguiteOggi >= voce.limiteAlGiorno) continue; // limite raggiunto: si tace fino a domani, non si ritenta ogni giro
 
-      const esito = sessionRegistry.avvia(voce.taskId);
+      // ⛔ 24/09/2026, decisione owner 30: nessuna interfaccia segue un'automazione — una domanda del modello si chiude
+      //   subito con l'ipotesi prudente dichiarata (`senzaInterfaccia`, session-registry.mjs).
+      // 24/09/2026, decisione owner: con il modello salvato alla creazione; senza, il predefinito del server (detto a schermo).
+      const esito = sessionRegistry.avvia(voce.taskId, {
+        senzaInterfaccia: true,
+        ...(typeof voce.modello === 'string' && voce.modello ? { modelloScelto: voce.modello } : {}),
+      });
       await store.registraEsecuzione(voce.id);
       onEsecuzione({ automazione: voce, esito });
     }

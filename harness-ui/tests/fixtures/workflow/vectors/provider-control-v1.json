@@ -1,0 +1,11 @@
+{
+  "schema": "talos.workflow-provider-control.v1",
+  "key": "openrouter/provider-model",
+  "circuit": "open",
+  "openedAt": "2026-09-20T12:20:00.000Z",
+  "halfOpenProbeAfter": "2026-09-20T12:21:00.000Z",
+  "retryBudgetRemaining": 3,
+  "durableSoftLimit": 4,
+  "reasonClass": "rate_limit",
+  "revision": 7
+}

@@ -21,7 +21,9 @@ for (const modo of ['dark', 'light']) {
 
     test.beforeEach(async ({ page }) => {
       await page.addInitScript((colorMode) => {
-        localStorage.setItem('talos.harness.desktop.settings.v1', JSON.stringify({ appearance: { colorMode } }));
+        /* ⛔ 24/09/2026 (R4 fase 2): la lingua si fissa a ITALIANO. Prima era «sistema» e il browser di prova è `en-US`; le
+           parole della riga del segmento passano ora da `t()` (D1, `i18n/en.js`), e queste prove leggono le parole italiane. */
+        localStorage.setItem('talos.harness.desktop.settings.v1', JSON.stringify({ appearance: { colorMode, uiLanguage: 'it' } }));
       }, modo);
       /*
        * ⛔⛔ 13/09 notte — il flusso finto dice quello che dice il server vero a una sessione senza storia: il confine
@@ -339,6 +341,306 @@ for (const modo of ['dark', 'light']) {
       await eventi(page, [avvio, confine, { type: 'ReasoningMessageStart', messageId: 'r9', _sequenza: 2 }, { type: 'ReasoningMessageContent', messageId: 'r9', delta: pensiero, _sequenza: 3 }]);
       const secondi = page.locator('#conversation .real-reasoning-note > .talos-activity__head .talos-measure');
       await expect(secondi, 'un ragionamento nato dopo il confine ha il suo orologio').toHaveText(/^\d+ s$/);
+    });
+
+    test(`R4-CHAT-ACTIVITY-SEGMENT-01 — tool e ragionamenti consecutivi occupano un segmento auditabile (${modo})`, async ({ page }) => {
+      await page.setViewportSize({ width: 1920, height: 1080 });
+      await apri(page, `segmento-${modo}`);
+      await eventi(page, [
+        avvio,
+        { type: 'ToolCallStart', toolCallId: 't1', toolCallName: 'leggi', _sequenza: 2 },
+        { type: 'ToolCallArgs', toolCallId: 't1', delta: '{"percorso":"src/app.js"}', _sequenza: 3 },
+        { type: 'ToolCallResult', toolCallId: 't1', ok: true, _sequenza: 4 },
+        { type: 'ReasoningMessageStart', messageId: 'r1', _sequenza: 5 },
+        { type: 'ReasoningMessageContent', messageId: 'r1', delta: 'Controllo il primo file e scelgo cosa cercare.', _sequenza: 6 },
+        { type: 'ReasoningMessageEnd', messageId: 'r1', _sequenza: 7 },
+        { type: 'ToolCallStart', toolCallId: 't2', toolCallName: 'cerca', _sequenza: 8 },
+        { type: 'ToolCallArgs', toolCallId: 't2', delta: '{"query":"test"}', _sequenza: 9 },
+        { type: 'ToolCallResult', toolCallId: 't2', ok: true, _sequenza: 10 },
+        { type: 'ReasoningMessageStart', messageId: 'r2', _sequenza: 11 },
+        { type: 'ReasoningMessageContent', messageId: 'r2', delta: 'I risultati indicano i test pertinenti.', _sequenza: 12 },
+        { type: 'ReasoningMessageEnd', messageId: 'r2', _sequenza: 13 },
+        { type: 'TextMessageStart', messageId: 'm1', _sequenza: 14 },
+        { type: 'TextMessageContent', messageId: 'm1', delta: 'Ho letto il file e trovato i test.', _sequenza: 15 },
+        { type: 'TextMessageEnd', messageId: 'm1', _sequenza: 16 },
+        { type: 'RunFinished', outcome: { type: 'success' }, _sequenza: 17 },
+      ]);
+      await expect(page.locator('#conversation .talos-turn[data-turno="talos"] .talos-turn-spine__n')).toHaveCount(2);
+      await expect(page.locator('#inspectorPanel')).toContainText('1 file letto');
+      /* ⛔ 26/09 (foto dell'owner): l'Indice dei giri legge la testa del gruppo, e diceva ancora «1 ricerca completata»
+         mentre il segmento parla per specie (D1 del 24/09: niente «completate»). Le parole ora sono UNE, `fraseSpecie`. */
+      await expect(page.locator('#inspectorPanel')).toContainText('1 ricerca');
+      await expect(page.locator('#inspectorPanel [data-c="TurnIndex"]')).not.toContainText(/complet|eseguit/u);
+      const segmento = page.locator('#conversation .talos-activity--segment');
+      await expect(segmento, 'un unico segmento tool/ragionamento prima della prosa').toHaveCount(1);
+      await expect(segmento.locator(':scope > .talos-activity__head')).toHaveAttribute('aria-expanded', 'false');
+      await expect(segmento.locator('.real-reasoning-note')).toHaveCount(2);
+      /* ⛔ CONTRATTO CAMBIATO il 24/09/2026 (R4 fase 2): i gruppi stanno in `.talos-activity__voci` dentro il corpo (che ora è
+         `hidden="until-found"` e senza padding), non più figli diretti del corpo. */
+      const gruppiTool = segmento.locator('.talos-activity__voci > [data-c="ActivityBundle"]:not(.real-reasoning-note)');
+      await expect(gruppiTool).toHaveCount(2);
+      await expect(gruppiTool.locator('[data-c="ToolRow"]')).toHaveCount(2);
+      /* ⛔ CONTRATTO CAMBIATO il 24/09/2026 (R4 fase 2, D1): dentro un segmento la riga di una voce dice «verbo · oggetto»
+         («Letto src/app.js», «Cercato»), non più il conteggio annidato («1 file letto», «1 ricerca completata»). L'ordine
+         degli eventi resta: attrezzo, ragionamento, attrezzo, ragionamento. */
+      const ordine = await segmento.locator('.talos-tool-row__name').allTextContents();
+      expect(ordine.join(' · ')).toMatch(/Letto.*Ragion.*Cercato.*Ragion/is);
+      await segmento.locator(':scope > .talos-activity__head').click();
+      await expect(segmento.locator('.real-reasoning-note').first()).toBeVisible();
+      await expect(segmento).toContainText('src/app.js');
+      await expect(segmento).toContainText('I risultati indicano i test pertinenti.');
+      await expect(page.locator('#conversation .talos-message__copy').last()).toContainText('Ho letto il file e trovato i test.');
+    });
+
+    test(`R4-CHAT-ACTIVITY-GAP-09 — il confine attività-testo resta leggibile (${modo})`, async ({ page }, testInfo) => {
+      await page.addInitScript((colorMode) => {
+        localStorage.setItem('talos.harness.desktop.settings.v1', JSON.stringify({
+          version: 1, appearance: { colorMode, uiLanguage: 'it' },
+        }));
+      }, modo);
+      await page.reload();
+      await page.waitForFunction(() => window.__talosHarnessUiRuntime);
+      await page.locator('#talosAvvio').waitFor({ state: 'detached', timeout: 8000 });
+      await apri(page, `activity-gap-${modo}`);
+      await eventi(page, [
+        avvio,
+        { type: 'ToolCallStart', toolCallId: 'gap-tool', toolCallName: 'leggi', _sequenza: 2 },
+        { type: 'ToolCallResult', toolCallId: 'gap-tool', ok: true, _sequenza: 3 },
+        { type: 'ReasoningMessageStart', messageId: 'gap-reasoning', _sequenza: 4 },
+        { type: 'ReasoningMessageContent', messageId: 'gap-reasoning', delta: 'Valuto il risultato.', _sequenza: 5 },
+        { type: 'ReasoningMessageEnd', messageId: 'gap-reasoning', _sequenza: 6 },
+        { type: 'TextMessageContent', messageId: 'gap-answer', delta: 'La risposta del modello comincia qui.', _sequenza: 7 },
+        { type: 'ToolCallStart', toolCallId: 'gap-tool-next', toolCallName: 'cerca', _sequenza: 8 },
+        { type: 'ToolCallResult', toolCallId: 'gap-tool-next', ok: true, _sequenza: 9 },
+        { type: 'ReasoningMessageStart', messageId: 'gap-reasoning-next', _sequenza: 10 },
+        { type: 'ReasoningMessageContent', messageId: 'gap-reasoning-next', delta: 'Verifico ancora.', _sequenza: 11 },
+        { type: 'ReasoningMessageEnd', messageId: 'gap-reasoning-next', _sequenza: 12 },
+        { type: 'TextMessageContent', messageId: 'gap-answer-next', delta: 'La seconda risposta segue la nuova attività.', _sequenza: 13 },
+      ]);
+      const segment = page.locator('#conversation .talos-activity--segment');
+      const activityToCopy = page.locator('#conversation .talos-message > .talos-activity--segment + .talos-message__copy');
+      const copyToActivity = page.locator('#conversation .talos-message > .talos-message__copy + .talos-activity--segment');
+      await expect(segment).toHaveCount(2);
+      await expect(activityToCopy).toHaveCount(2);
+      await expect(copyToActivity).toHaveCount(1);
+      await expect(activityToCopy.first()).toContainText('La risposta del modello');
+      await expect(activityToCopy.last()).toContainText('La seconda risposta');
+      for (const viewport of [{ width: 1920, height: 1080 }, { width: 2560, height: 1440 }]) {
+        await page.setViewportSize(viewport);
+        await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+        /*
+         * ⛔ 23/09/2026 (riparazione D3 della revisione UI) — si misura a STATO QUIETO. Il testo entra con
+         *   `talosEntrataMessaggio` (`aspetto.css:478-483`, translateY → 0 in 180 ms): durante l'entrata i due
+         *   spazi valgono 16+t e 16−t (i 16,398/15,602 visti da Codex), a fine animazione 16,000/16,000. Due rAF
+         *   non bastano: sulla base la prova era rossa 4 volte su 8. Si aspettano le animazioni FINITE del
+         *   sottoalbero della conversazione (le infinite — shimmer, pallini — non finiscono mai: MDN,
+         *   Element.getAnimations + Animation.finished, consultato 23/09/2026,
+         *   https://developer.mozilla.org/en-US/docs/Web/API/Element/getAnimations). La soglia NON cambia: se il
+         *   CSS sbaglia, lo spazio quieto resta sbagliato e la prova resta rossa.
+         */
+        const animazioniResidue = await page.evaluate(async () => {
+          const conversazione = document.querySelector('#conversation');
+          const finite = () => conversazione.getAnimations({ subtree: true }).filter((animazione) => {
+            const timing = animazione.effect?.getComputedTiming?.();
+            return animazione.playState === 'running' && Number.isFinite(timing?.endTime);
+          });
+          const scadenza = performance.now() + 3000;
+          while (finite().length && performance.now() < scadenza) {
+            await Promise.race([
+              Promise.all(finite().map((animazione) => animazione.finished.catch(() => null))),
+              new Promise((resolve) => setTimeout(resolve, 250)),
+            ]);
+          }
+          await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+          return finite().map((animazione) => animazione.animationName || animazione.constructor.name);
+        });
+        expect(animazioniResidue, 'la geometria si legge solo a stato quieto').toEqual([]);
+        const measure = await page.evaluate(() => {
+          const segment = document.querySelector('#conversation .talos-activity--segment');
+          const activityToCopy = [...document.querySelectorAll('#conversation .talos-message > .talos-activity--segment + .talos-message__copy')];
+          const copyToActivity = [...document.querySelectorAll('#conversation .talos-message > .talos-message__copy + .talos-activity--segment')];
+          const inner = segment?.querySelector('.talos-activity');
+          return {
+            width: innerWidth, height: innerHeight,
+            theme: document.documentElement.dataset.talosResolvedColorMode,
+            activityToCopyGaps: activityToCopy.map((copy) => copy.getBoundingClientRect().top - copy.previousElementSibling.getBoundingClientRect().bottom),
+            copyToActivityGaps: copyToActivity.map((card) => card.getBoundingClientRect().top - card.previousElementSibling.getBoundingClientRect().bottom),
+            activityToCopyMargins: activityToCopy.map((copy) => getComputedStyle(copy).marginTop),
+            copyToActivityMargins: copyToActivity.map((card) => getComputedStyle(card).marginTop),
+            innerMarginTop: inner ? getComputedStyle(inner).marginTop : null,
+            segmentHeadHeight: segment.querySelector(':scope > .talos-activity__head')?.getBoundingClientRect().height,
+            composerTop: document.querySelector('#schermoChat .talos-chat-foot')?.getBoundingClientRect().top,
+            copyBottom: activityToCopy.at(-1).getBoundingClientRect().bottom,
+          };
+        });
+        const screenshot = testInfo.outputPath(`r4-activity-gap-${viewport.width}x${viewport.height}-${modo}.png`);
+        for (const dismiss of await page.locator('#regioneToast [data-toast-chiudi]').all()) {
+          if (await dismiss.isVisible()) await dismiss.click();
+        }
+        await expect(page.locator('#regioneToast .talos-toast:visible')).toHaveCount(0);
+        await page.screenshot({ path: screenshot, fullPage: false, animations: 'disabled' });
+        await testInfo.attach(`browser-view-${viewport.width}-${modo}`, { path: screenshot, contentType: 'image/png' });
+        await testInfo.attach(`geometry-${viewport.width}-${modo}`, {
+          body: Buffer.from(JSON.stringify(measure)), contentType: 'application/json',
+        });
+        expect({ width: measure.width, height: measure.height }).toEqual(viewport);
+        expect(measure.theme).toBe(modo);
+        expect(measure.innerMarginTop).toBe('2px');
+        /* ⛔ CONTRATTO CAMBIATO il 24/09/2026 (R4 fase 2, D4): la testa del segmento è alta 30 px FISSI (era 34 per la
+           regola `.talos-activity--segment .talos-activity__head{min-height:34px}`). I respiri di GAP-09 restano 16 px. */
+        expect(measure.segmentHeadHeight).toBeGreaterThanOrEqual(29.5);
+        expect(measure.segmentHeadHeight).toBeLessThanOrEqual(30.5);
+        expect(measure.copyBottom).toBeLessThan(measure.composerTop);
+        expect(measure.activityToCopyGaps).toHaveLength(2);
+        expect(measure.copyToActivityGaps).toHaveLength(1);
+        expect(measure.activityToCopyMargins).toEqual(['16px', '16px']);
+        expect(measure.copyToActivityMargins).toEqual(['16px']);
+        for (const gap of measure.copyToActivityGaps) {
+          expect(Number(gap.toFixed(1)), 'il testo deve respirare prima della card successiva').toBeGreaterThanOrEqual(16);
+          expect(Number(gap.toFixed(1))).toBeLessThanOrEqual(20);
+        }
+        for (const gap of measure.activityToCopyGaps) {
+          expect(Number(gap.toFixed(1)), 'la card deve respirare prima del testo successivo').toBeGreaterThanOrEqual(16);
+          expect(Number(gap.toFixed(1))).toBeLessThanOrEqual(20);
+        }
+      }
+    });
+
+    test(`R4-CHAT-ACTIVITY-ERROR-02 — un tool fallito resta subito visibile nel segmento (${modo})`, async ({ page }) => {
+      await apri(page, `errore-segmento-${modo}`);
+      await eventi(page, [
+        avvio,
+        { type: 'ToolCallStart', toolCallId: 't1', toolCallName: 'leggi', _sequenza: 2 },
+        { type: 'ToolCallResult', toolCallId: 't1', content: 'file letto', _sequenza: 3 },
+        { type: 'ReasoningMessageStart', messageId: 'r1', _sequenza: 4 },
+        { type: 'ReasoningMessageContent', messageId: 'r1', delta: 'Controllo il risultato prima di cercare.', _sequenza: 5 },
+        { type: 'ReasoningMessageEnd', messageId: 'r1', _sequenza: 6 },
+        { type: 'ToolCallStart', toolCallId: 't2', toolCallName: 'cerca', _sequenza: 7 },
+        { type: 'ToolCallResult', toolCallId: 't2', content: 'ERROR ricerca non disponibile', _sequenza: 8 },
+        { type: 'RunFinished', outcome: { type: 'success' }, _sequenza: 9 },
+      ]);
+      const segmento = page.locator('#conversation .talos-activity--segment');
+      await expect(segmento).toHaveCount(1);
+      await expect(segmento.locator(':scope > .talos-activity__head')).toContainText('non riuscita');
+      /* ⛔ CONTRATTO CAMBIATO il 24/09/2026 (R4 fase 2, D3): il segmento NON si apre più da solo — il conteggio va in rosso
+         e la voce fallita resta FISSATA sotto la riga, leggibile a segmento chiuso (prima: 172 px aperti e la voce
+         comunque chiusa nel suo gruppo). L'esito grezzo resta nel documento (`until-found`), trovabile dalla ricerca. */
+      await expect(segmento.locator(':scope > .talos-activity__head')).toHaveAttribute('aria-expanded', 'false');
+      await expect(segmento.locator(':scope > .talos-activity__fissate .talos-activity__fissata')).toBeVisible();
+      await expect(segmento.locator(':scope > .talos-activity__fissate .talos-activity__fissata')).toContainText('Cercato');
+      await expect(segmento).toContainText('ERROR ricerca non disponibile');
+    });
+
+    test(`R4-CHAT-ACTIVITY-GATE-03 — il permesso interrompe il segmento senza nascondere la card (${modo})`, async ({ page }) => {
+      await apri(page, `gate-segmento-${modo}`);
+      await eventi(page, [
+        avvio,
+        { type: 'ToolCallStart', toolCallId: 't1', toolCallName: 'leggi', _sequenza: 2 },
+        { type: 'ToolCallResult', toolCallId: 't1', content: 'file letto', _sequenza: 3 },
+        { type: 'ReasoningMessageStart', messageId: 'r1', _sequenza: 4 },
+        { type: 'ReasoningMessageContent', messageId: 'r1', delta: 'Serve un permesso per procedere.', _sequenza: 5 },
+        { type: 'ReasoningMessageEnd', messageId: 'r1', _sequenza: 6 },
+        { type: 'ApprovalRequested', requestId: 'p1', azione: { tipo: 'scrivi', percorso: 'src/nuovo.js' }, _sequenza: 7 },
+      ]);
+      await expect(page.locator('#conversation .real-approval-card')).toBeVisible();
+      await eventi(page, [
+        { type: 'ApprovalResolved', requestId: 'p1', approvato: true, _sequenza: 8 },
+        { type: 'ToolCallStart', toolCallId: 't2', toolCallName: 'cerca', _sequenza: 9 },
+        { type: 'ToolCallResult', toolCallId: 't2', content: 'ricerca completata', _sequenza: 10 },
+        { type: 'RunFinished', outcome: { type: 'success' }, _sequenza: 11 },
+      ]);
+      const segmento = page.locator('#conversation .talos-activity--segment');
+      await expect(segmento).toHaveCount(1);
+      await expect(segmento.locator('[data-c="ToolRow"]')).toHaveCount(2);
+      const fuori = page.locator('#conversation [data-c="ActivityBundle"]:not(.talos-activity--segment):not(.real-reasoning-note)').last();
+      expect(await fuori.evaluate((element) => element.closest('.talos-activity--segment') === null)).toBe(true);
+      await expect(page.locator('#conversation .real-approval-card')).toBeVisible();
+    });
+
+    test(`R4-CHAT-ACTIVITY-SINGLE-04 — un tool solo non duplica la testata (${modo})`, async ({ page }) => {
+      await apri(page, `singolo-segmento-${modo}`);
+      await eventi(page, [
+        avvio,
+        { type: 'ToolCallStart', toolCallId: 't1', toolCallName: 'leggi', _sequenza: 2 },
+        { type: 'ToolCallResult', toolCallId: 't1', content: 'file letto', _sequenza: 3 },
+        { type: 'TextMessageContent', messageId: 'm1', delta: 'Ho letto il file.', _sequenza: 4 },
+        { type: 'RunFinished', outcome: { type: 'success' }, _sequenza: 5 },
+      ]);
+      await expect(page.locator('#conversation .talos-activity--segment')).toHaveCount(0);
+      const singolo = page.locator('#conversation .talos-activity--nuda');
+      await expect(singolo).toHaveCount(1);
+      await expect(singolo.locator(':scope > .talos-activity__head')).toBeHidden();
+      await expect(singolo.locator('[data-c="ToolRow"]')).toBeVisible();
+    });
+
+    test(`R4-CHAT-ACTIVITY-DIRECT-05 — il comando scritto dalla persona mostra subito l'output (${modo})`, async ({ page }) => {
+      await apri(page, `diretto-segmento-${modo}`);
+      await eventi(page, [
+        avvio,
+        { type: 'ToolCallStart', toolCallId: 't1', toolCallName: 'leggi', _sequenza: 2 },
+        { type: 'ToolCallResult', toolCallId: 't1', content: 'file letto', _sequenza: 3 },
+        { type: 'ReasoningMessageStart', messageId: 'r1', _sequenza: 4 },
+        { type: 'ReasoningMessageContent', messageId: 'r1', delta: 'Controllo il file.', _sequenza: 5 },
+        { type: 'ReasoningMessageEnd', messageId: 'r1', _sequenza: 6 },
+        { type: 'ComandoUtenteIniziato', comando: 'pwd', _sequenza: 7 },
+        { type: 'ToolCallStart', toolCallId: 't2', toolCallName: 'shell', _sequenza: 8 },
+        { type: 'ToolCallArgs', toolCallId: 't2', delta: '{"command":"pwd"}', _sequenza: 9 },
+        { type: 'ToolCallResult', toolCallId: 't2', content: 'C:\\workspace', _sequenza: 10 },
+        { type: 'ComandoUtenteFinito', _sequenza: 11 },
+      ]);
+      const segmentoModello = page.locator('#conversation .talos-activity--segment');
+      await expect(segmentoModello).toHaveCount(1);
+      const comandoMio = page.locator('#conversation [data-c="ActivityBundle"]:has([data-c="ToolRow"]):not(.talos-activity--segment)').last();
+      expect(await comandoMio.evaluate((element) => element.closest('.talos-activity--segment') === null)).toBe(true);
+      await expect(comandoMio.locator(':scope > .talos-activity__head')).toHaveAttribute('aria-expanded', 'true');
+      await expect(comandoMio.locator('[data-c="ToolRow"]')).toBeVisible();
+      await expect(comandoMio.locator('.tool-result-block')).toBeVisible();
+      await expect(comandoMio.locator('.tool-result-block')).toContainText('C:\\workspace');
+    });
+
+    test(`R4-CHAT-ACTIVITY-REPLAY-07 — la storia mantiene un solo segmento e ogni dettaglio dopo reload (${modo})`, async ({ page }) => {
+      const id = `replay-r4-${modo}`;
+      const storia = [
+        avvio,
+        { type: 'ToolCallStart', toolCallId: 't1', toolCallName: 'leggi', _sequenza: 2 },
+        { type: 'ToolCallArgs', toolCallId: 't1', delta: '{"percorso":"src/app.js"}', _sequenza: 3 },
+        { type: 'ToolCallResult', toolCallId: 't1', content: 'file letto', _sequenza: 4 },
+        { type: 'ReasoningMessageStart', messageId: 'r1', _sequenza: 5 },
+        { type: 'ReasoningMessageContent', messageId: 'r1', delta: 'Il primo file indica una ricerca mirata.', _sequenza: 6 },
+        { type: 'ReasoningMessageEnd', messageId: 'r1', _sequenza: 7 },
+        { type: 'ToolCallStart', toolCallId: 't2', toolCallName: 'cerca', _sequenza: 8 },
+        { type: 'ToolCallArgs', toolCallId: 't2', delta: '{"query":"test"}', _sequenza: 9 },
+        { type: 'ToolCallResult', toolCallId: 't2', content: 'test trovato', _sequenza: 10 },
+        { type: 'TextMessageContent', messageId: 'm1', delta: 'Ho trovato il test.', _sequenza: 11 },
+        { type: 'RunFinished', outcome: { type: 'success' }, _sequenza: 12 },
+        { type: 'CUSTOM', name: 'talos.fine-rigiocata', value: null, _sequenza: 13 },
+      ];
+      await page.route(`**/api/v1/sessions/ragionamento-${id}/events*`, (route) => route.fulfill({
+        contentType: 'text/event-stream',
+        body: `retry: 3600000\n${storia.map((event) => `data: ${JSON.stringify(event)}\n\n`).join('')}`,
+      }));
+      const verifica = async () => {
+        const segmento = page.locator('#conversation .talos-activity--segment');
+        await expect(segmento).toHaveCount(1);
+        await expect(segmento.locator('.talos-activity__voci > [data-c="ActivityBundle"]:not(.real-reasoning-note) [data-c="ToolRow"]')).toHaveCount(2); // 24/09: i gruppi stanno in `.talos-activity__voci` (contratto dichiarato)
+        await expect(segmento.locator('.real-reasoning-note')).toHaveCount(1);
+        await expect(segmento.locator(':scope > .talos-activity__head')).toContainText('1 file letto');
+        /* ⛔ CONTRATTO CAMBIATO il 24/09/2026 (R4 fase 2, D1): niente «completata» (ridondante) — «1 ricerca». */
+        await expect(segmento.locator(':scope > .talos-activity__head')).toContainText('1 ricerca');
+        await expect(segmento.locator(':scope > .talos-activity__head')).not.toContainText('completata');
+        await expect(page.locator('#conversation .talos-turn[data-turno="talos"] .talos-turn-spine__n')).toHaveCount(2);
+        await segmento.locator(':scope > .talos-activity__head').click();
+        await expect(segmento).toContainText('src/app.js');
+        await expect(segmento).toContainText('Il primo file indica una ricerca mirata.');
+        await expect(segmento).toContainText('test trovato');
+      };
+      await apri(page, id);
+      await verifica();
+      await page.reload();
+      await page.waitForFunction(() => window.__talosHarnessUiRuntime);
+      await page.locator('#talosAvvio').waitFor({ state: 'detached', timeout: 8000 });
+      await apri(page, id);
+      await verifica();
     });
   });
 }

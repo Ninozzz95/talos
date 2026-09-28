@@ -55,6 +55,47 @@ test('HF-HTTP-REPO-01 usa la revision RISOLTA da describeModel, non quella grezz
   assert.deepEqual(chiamate.find((c) => c[0] === 'pathsInfo').slice(1, 3), ['org/model', 'c'.repeat(40)]);
 });
 
+/*
+ * 27/09/2026 — owner «errore chiaro ora»: la pagina di un modello dice PRIMA di scaricare se il motore installato sa leggerne
+ * l'architettura (sessione ec3bc6c0, Spark-X2.5-4B `spark2_5` su llama.cpp b10517). Il dato dell'hub e il giudizio del motore si
+ * incontrano nella rotta; `null` = non si sa, e la pagina tace.
+ */
+test('HF-HTTP-REPO-ARCH — la rotta del dettaglio porta l architettura e se il motore la conosce; senza dato o senza motore dice null', async (t) => {
+  const chieste = [];
+  const conosciute = new Set(['qwen35', 'llama']);
+  const hub = (architettura) => ({
+    describeModel: async (repo) => ({ repo, revision: 'c'.repeat(40), readme: '', architettura }),
+    listGgufFiles: async () => [],
+    pathsInfo: async () => [],
+  });
+  const conosce = (architettura) => { chieste.push(architettura); return conosciute.has(architettura); };
+  const perRepo = async (base) => (await (await fetch(`${base}/api/v1/huggingface/repo?repo=${encodeURIComponent('org/model')}`)).json()).data;
+  let d = await perRepo(await listen(t, { hfHubClient: hub('spark2_5'), motoreConosceArchitetturaFn: conosce }));
+  assert.deepEqual([d.architettura, d.motoreConosce], ['spark2_5', false]);
+  d = await perRepo(await listen(t, { hfHubClient: hub('qwen35'), motoreConosceArchitetturaFn: conosce }));
+  assert.deepEqual([d.architettura, d.motoreConosce], ['qwen35', true]);
+  d = await perRepo(await listen(t, { hfHubClient: hub(null), motoreConosceArchitetturaFn: conosce }));
+  assert.equal(d.motoreConosce, null, 'l hub non dichiara l architettura: non si sa');
+  d = await perRepo(await listen(t, { hfHubClient: hub('spark2_5'), motoreConosceArchitetturaFn: () => null }));
+  assert.equal(d.motoreConosce, null, 'il motore non sa dirlo: non si sa');
+  d = await perRepo(await listen(t, { hfHubClient: hub('spark2_5') }));
+  assert.equal(d.motoreConosce, null, 'senza la funzione: non si sa');
+  assert.deepEqual(chieste, ['spark2_5', 'qwen35'], 'il motore si interroga solo con un architettura vera');
+});
+
+test('HF-HUB-ARCH — il client dell hub legge `gguf.architecture` dal dettaglio del modello (misurato su abenzerps/Spark-X2.5-4B-GGUF)', async () => {
+  const client = createHfHubClient({
+    fetchImpl: async (url) => {
+      const u = String(url);
+      if (u.includes('/api/models/')) return new Response(JSON.stringify({ id: 'abenzerps/Spark-X2.5-4B-GGUF', sha: 'f'.repeat(40), gguf: { total: 4112079360, architecture: 'spark2_5', context_length: 1048576 } }), { status: 200 });
+      return new Response('# card', { status: 200 });
+    },
+  });
+  assert.equal((await client.describeModel('abenzerps/Spark-X2.5-4B-GGUF')).architettura, 'spark2_5');
+  const senza = createHfHubClient({ fetchImpl: async (url) => (String(url).includes('/api/models/') ? new Response(JSON.stringify({ id: 'a/b', sha: 'f'.repeat(40) }), { status: 200 }) : new Response('', { status: 200 })) });
+  assert.equal((await senza.describeModel('a/b')).architettura, null);
+});
+
 test('⛔ HF-HTTP-REPO-02 AL CONTRARIO — una revision GREZZA non risolta (es. "main") non fa mai schiantare la rotta', async (t) => {
   const chiamate = [];
   const base = await listen(t, {

@@ -6,6 +6,107 @@ Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/). Versions
 
 ## Unreleased
 
+## desktop-v0.1.16 — 2026-09-28
+
+The biggest release so far: the model can plan, ask and run workflows with you, the app reads your
+files and your git repository, and the window and the installer become TALOS's own.
+
+### Added
+
+- **Workflows.** The model can propose a workflow — steps grouped in phases — as a short draft that
+  the server compiles and checks. It appears as a card in the chat: you approve it (or change its
+  limits, which makes a new version to approve), start it, and follow it in a diagram at the centre
+  of the chat. Steps run as read-only sessions, several at once, and a failed step is retried
+  according to why it failed. A run can be paused, resumed, cancelled, and its failed steps retried;
+  after a restart, a run picks up where it was. The Agents column follows the same run.
+- **Plan mode.** The mode selector offers *Normale* and *Piano*. In *Piano* the model presents a
+  plan on a single card that updates in place, and you choose: proceed asking before edits, proceed
+  accepting edits, proceed in a clean conversation, or keep planning with your feedback. A pending
+  plan survives a restart. Sub-agents started before the switch keep working.
+- **Questions from the model.** The model can stop and ask: up to four questions at a time, each
+  with two to four options and room for your own answer. Questions come one at a time, a question
+  survives a restart, and the sidebar shows which conversations are waiting for you. A time limit
+  for unanswered questions is optional, in Settings.
+- **File reader.** Files open in the right column, full screen, or from the Library: text, code,
+  Markdown, CSV, images, PDF, Word, Excel and PowerPoint, and HTML pages (their scripts run, the
+  network stays blocked, and the source is one click away). The type is told from the name and
+  from the bytes.
+- **The GitHub tab.** Your changes grouped as git sees them, with the diff of each file in the
+  column; stage, unstage or discard a whole file or a single hunk; commit what is staged; amend or
+  undo the last commit; create, switch, rename and delete branches; stash and restore; a history
+  graph with what is incoming and outgoing, where a commit opens its own changes. Fetch, pull and
+  push from the tab header — a push is never forced and always says where it goes. Pull requests
+  through the GitHub CLI: see, draft, create and check them. A commit message can be generated
+  with the session's model, or the commit handed to the agent. A folder that is not a repository
+  offers **Initialize Repository**, as in VS Code: local only, no GitHub account needed.
+- **Sections the model can use.** Your memories reach every new chat, and the model can list and
+  search them by words; it can also search and read your notes, tasks and research, browse the
+  Board, and find and read your past conversations, with a link that opens them.
+- **A compact activity segment** in the chat: what the model did in a turn, summarised in one row,
+  with a live phrase while it works, the failure pinned when there is one, and filters.
+- **Context you can see.** A warning before the context fills up, a live bar while a summary is
+  written, and a "X → Y tokens" row with Undo. The Context Manager button always opens its window;
+  compacting asks first.
+- **The window has its own title bar**: the window buttons follow the theme, and the "⋯" button
+  opens the app menu.
+- **An assisted installer**, in Italian: a welcome page, the AGPL licence with a plain summary of
+  what it allows, install for the current user without administrator rights, and "Avvia TALOS" at
+  the end. Uninstalling also removes TALOS's temporary files.
+- A deep research shows a progress bar with its phase and real counts.
+- An automation remembers the model it was created with, and says so.
+- Forge is the default theme, and the theme studio lists it first.
+
+### Changed
+
+- The *Workflow* mode is retired: delegation and questions are tools of *Normale*. A session saved
+  in *Workflow* mode opens with a banner that says so.
+- Library and research files live in TALOS's own data folder, no longer inside your project folder.
+- Providers and keys are managed only in the Model lab.
+- Notifications sit at the bottom beside the composer, and climb over it only when the sides are
+  full.
+- The conversation is saved as small deltas with checkpoints instead of being rewritten: long
+  sessions open and save faster, and a file cut short by a crash is repaired on the next start.
+
+### Performance
+
+- Reads the model asks for in the same answer run together, and they start while the answer is
+  still streaming.
+- Searches use ripgrep, and the git state is read from files when a session starts.
+- A long workflow history replays in linear time instead of quadratic.
+
+### Fixed
+
+- An answer cut off mid-stream continues instead of ending the turn; an empty answer
+  is no longer mistaken for an interrupted one, and a failed turn keeps the work it did.
+- A reasoning level costlier than the one you chose is never sent.
+- Reading a file stops at 1 MiB and says so, and a binary file's bytes never end up in the
+  conversation.
+- While following a streaming answer, the view never jumps up; a conversation that fits the screen
+  no longer scrolls.
+- The orb stops on Stop and on any error.
+- Sessions can be created on disks without hard links (exFAT, FAT32, ReFS).
+- A missing or failing local engine, a full context and a model too big for memory are each said
+  for what they are, instead of looking like a provider refusal.
+- Automatic compaction pauses after a refused summary, says for how long, and shortens the kept
+  tail under pressure instead of giving up.
+- Tooltips no longer reopen after a click; chip labels in the composer are no longer cut; select
+  arrows use the icon.
+
+### Verification
+
+- The release gates, in the order the release workflow runs them, on this commit:
+  - kernel: 615 passed, 1 skipped;
+  - frontend unit: 1,698;
+  - desktop pure: 102;
+  - the real Electron shell: 3;
+  - the installer builds (156.6 MB).
+- Server: 4,641 of 4,653 passed, 10 skipped, and two known intermittent reds:
+  - the delegated-child test of a local parent;
+  - a crash inside libuv when a test server exits after a clean shutdown. It passed 8 of 8 runs on
+    its own, and the journal was already flushed when it happened.
+- `kernel:controlla` still reports the declared divergence from the mobile kernel source (11,711
+  lines against 6,260), as in `desktop-v0.1.15`.
+
 ## desktop-v0.1.15 — 2026-09-20
 
 A day of fixes on what the chat *shows* you, and on one that was changing what it *told* you.

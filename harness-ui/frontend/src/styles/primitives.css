@@ -510,6 +510,8 @@ button.talos-list-row:focus-visible {
  *   proprio a chi sta leggendo in alto.
  */
 .talos-conversation { overflow-y: auto; overflow-anchor: auto; }
+/* ⛔ 24/09/2026 — questo file NON entra nel pacchetto servito (`main.css` non lo importa: `grep overflow-anchor public/styles.css`
+   trova solo `.td-master`). La regola viva di `data-segue` sta in `index.css`, accanto a `.talos-conversation`. */
 .talos-conversation__column { max-width: calc(92px + var(--talos-measure-w, 78ch)); margin: 0 auto; width: 100%; }
 .talos-turn { display: grid; grid-template-columns: calc(var(--talos-primary-height) * 1.85) minmax(0, 1fr); align-items: stretch; }
 .talos-turn-spine {

@@ -1,5 +1,6 @@
 /** ReportRow del mockup: metadati GET /research. WAI Tabs/Disclosure, 05/09/2026. */
 import {statoRicercaApprofondita,statoDellaVoce,articoloData} from './ricerca-dettaglio.js';
+import {creaAvanzamentoRicerca} from './ricerca-avanzamento.js';
 /*
  * ⛔ 11/09, lotto L7 — QUI NON C'E' PIU' UNA SECONDA TABELLA DI STATI.
  *   Ne esisteva una di cinque voci; la rotta adesso ne manda otto (i tre del cancello di consegna:
@@ -41,6 +42,8 @@ export function creaReportRow(ricerca,{document:doc=globalThis.document,aperta=f
  const riga=el(doc,'div','talos-list-row');riga.dataset.c='ReportRow';riga.dataset.researchId=ricerca?.id||'';riga.setAttribute('role','listitem');
  const icona=el(doc,'span','talos-list-row__icon'),svg=doc.createElementNS('http://www.w3.org/2000/svg','svg'),use=doc.createElementNS('http://www.w3.org/2000/svg','use');svg.setAttribute('class','i');svg.setAttribute('aria-hidden','true');use.setAttribute('href','#i-globe');svg.append(use);icona.append(svg);
  const testo=el(doc,'span','talos-list-row__text'),titolo=el(doc,'span','talos-list-row__title',t.titolo),sotto=el(doc,'span','talos-list-row__sub');titolo.title=t.titolo;testo.append(titolo,sotto);
+ // 24/09/2026, decisione owner («Barra + fase e conteggi»): una ricerca in corso dice a che punto è, nella riga stessa.
+ if(ricerca?.stato==='running'&&ricerca?.avanzamento){const av=creaAvanzamentoRicerca(doc,ricerca.avanzamento,{etichetta:'Avanzamento di '+t.titolo});if(av)testo.append(av);}
  const aside=el(doc,'span','talos-list-row__aside');aside.append(el(doc,'span','talos-badge'+(stato.tono?' talos-badge--'+stato.tono:''),stato.testo));
  /*
   * ⛔ 11/09, lotto L7 — il pulsante non è più `hidden` «in attesa della fase 3»: esiste quando c'è

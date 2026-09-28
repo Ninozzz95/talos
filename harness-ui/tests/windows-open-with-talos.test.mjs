@@ -9,6 +9,7 @@ import test from 'node:test';
 
 import { createHttpApp } from '../src/http-app.mjs';
 import { createWorkspaceLaunchStore } from '../src/workspace-launch-store.mjs';
+import { cartellaDiProva, cartellaDiProvaAttesa } from './aiuto/cartelle-di-prova.mjs'; // DESK-TEMP-1, 23/09: la cartella nasce con la sua rimozione
 
 const WINDOWS = process.platform === 'win32';
 /*
@@ -45,7 +46,7 @@ function removeTestRegistryRoot(registryRoot) {
 }
 
 test('OPEN-WITH-TALOS-WINDOWS-01 — il launcher PowerShell attraversa il vero endpoint locale', { skip: !WINDOWS }, async (t) => {
-  const root = mkdtempSync(join(tmpdir(), 'talos-open-with-e2e-'));
+  const root = cartellaDiProva('talos-open-with-e2e-');
   const workspace = join(root, 'Cartella con spazi Ω');
   mkdirSync(workspace);
   const credentialFile = join(root, 'launcher-token');
@@ -63,7 +64,7 @@ test('OPEN-WITH-TALOS-WINDOWS-01 — il launcher PowerShell attraversa il vero e
 });
 
 test('OPEN-WITH-TALOS-WINDOWS-02 — un file non viene presentato a TALOS come workspace', { skip: !WINDOWS }, async () => {
-  const root = mkdtempSync(join(tmpdir(), 'talos-open-with-file-'));
+  const root = cartellaDiProva('talos-open-with-file-');
   const result = await runPowerShell(join(scriptsDir, 'open-with-talos.ps1'), ['-WorkspacePath', join(root, 'assente'), '-NoBrowser']);
   assert.notEqual(result.code, 0);
   // 13/09: su un Windows in inglese (runner GitHub) PowerShell dice «Cannot find path … because it

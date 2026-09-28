@@ -182,3 +182,41 @@ export function aggiornaAvanzamentoContesto(container, snapshot, { onOpen, stale
   } else { bar.removeAttribute('value'); bar.removeAttribute('aria-valuetext'); }
   return row;
 }
+
+/*
+ * ⭐ F5 (onda 2), 24/09/2026 — LA BARRA PER IL LEGACY. Stessa riga del trial (`.talos-context-chat-progress`),
+ * ma senza segmenti da contare: il legacy fa UNA richiesta di riassunto e non sa quanto ci vuole, quindi la
+ * barra è INDETERMINATA (MDN `<progress>`, 28/08/2026: «If there is no value attribute, the progress bar is
+ * indeterminate») e senza stima del tempo (non c'è un campione da cui ricavarla — la disciplina qui sopra).
+ * Etichetta FISSA e umana mentre lavora, come Hermes desktop (`status.tsx:52`, «Summarizing thread»),
+ * non il testo grezzo del motore; altezza fissa via CSS (`compattazione-legacy.css`): mentre lavora non
+ * cambia di un pixel, e a `fase:'fine'` sparisce (chi la chiama passa `null`).
+ * Niente pulsante «Context Manager»: quel dialogo è del trial, e sul legacy non ha niente da mostrare.
+ */
+export function aggiornaAvanzamentoLegacy(container, stato, { sessionId, testo = null, inserisci = null, document: doc = container?.ownerDocument ?? globalThis.document } = {}) {
+  if (!container || !sessionId) return null;
+  // ⛔ Attributo SUO, non `data-context-chat-progress`: `aggiornaAvanzamentoContesto` qui sopra (:142-143) cerca
+  //   quell'attributo e lo RIMUOVE quando il trial non ha niente da mostrare — cioè a ogni `CTX_NOT_ENABLED`
+  //   del monitor, con un tempo che dipende dalla rete. Misurato sulla 4176: barra sparita in 2 corse su 3.
+  let row = container.querySelector('[data-compattazione-barra]');
+  if (!stato) { row?.remove(); return null; }
+  const english = linguaCorrenteDiT() === 'en';
+  if (!row || row.dataset.contextSession !== sessionId) {
+    row?.remove();
+    row = doc.createElement('section'); row.className = 'talos-context-chat-progress talos-context-chat-progress--legacy';
+    row.dataset.compattazioneBarra = ''; row.dataset.compattazioneLegacy = ''; row.dataset.contextSession = sessionId;
+    const span = doc.createElement('span'); span.dataset.contextChatText = '';
+    const status = doc.createElement('span'); status.dataset.contextChatStatus = ''; status.setAttribute('role', 'status');
+    span.append(status);
+    const bar = doc.createElement('progress'); bar.className = 'talos-context__progress';
+    row.append(span, bar);
+    // `inserisci` decide dove va (dentro il turno aperto, o in coda): una riga appesa alla colonna a metà turno spezza il turno TALOS
+    if (typeof inserisci === 'function') inserisci(row); else container.append(row);
+  }
+  row.dataset.contextState = 'summarizing'; row.dataset.compattazioneMotivo = stato.motivo ?? '';
+  row.querySelector('[data-context-chat-status]').textContent = testo ?? (english ? 'Summarizing the conversation…' : 'Riassumo la conversazione…');
+  const bar = row.querySelector('progress');
+  bar.hidden = false; bar.removeAttribute('value'); bar.removeAttribute('aria-valuetext');
+  bar.setAttribute('aria-label', english ? 'Conversation summary in progress' : 'Riassunto della conversazione in corso');
+  return row;
+}

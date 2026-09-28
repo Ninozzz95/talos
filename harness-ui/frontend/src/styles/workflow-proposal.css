@@ -1,0 +1,82 @@
+/*
+ * ⭐ F3-33a (25/09/2026) — la card della proposta di workflow nel transcript (decisione owner D20). Sorella della scheda del
+ *   Piano: prende da lì contenitore, testata, stato, corpo, piede ed errore (`workflow-r4.css`, `.talos-plan-artifact*`) e qui
+ *   aggiunge solo fasi, tetti, note del controllo e azioni. Solo token esistenti, nessuna palette nuova.
+ */
+.talos-workflow-proposal__body { display: grid; gap: 12px; max-height: none; }
+/* ⛔ 25/09/2026, seconda foto sul 4174: `.talos-plan-artifact__body :first-child { margin-top: 8px }` (0,2,0) colpiva ogni
+   PRIMO figlio del corpo — la prima riga della griglia dei tetti (8 px sotto le vicine) e il primo passo della lista. Qui si
+   azzera per tutto il corpo della card (stessa specificità, foglio caricato dopo) e il margine voluto torna solo sull'obiettivo. */
+.talos-workflow-proposal__body :first-child { margin-top: 0; }
+.talos-workflow-proposal__body > .talos-workflow-proposal__objective { margin: 8px 0 0; color: var(--talos-text); }
+.talos-workflow-proposal__loading { margin: 8px 0 0; color: var(--talos-muted); }
+
+/* Le fasi sono una sequenza: il numero dice l'ordine in cui si eseguono. */
+.talos-workflow-proposal__phases { display: grid; gap: 4px; margin: 0; padding-inline-start: 1.5em; }
+.talos-workflow-proposal__phase { padding-inline-start: 2px; }
+.talos-workflow-proposal__phase::marker { color: var(--talos-muted); font-variant-numeric: tabular-nums; }
+.talos-workflow-proposal__phase-label { font-weight: 600; overflow-wrap: anywhere; }
+.talos-workflow-proposal__phase-count { margin-inline-start: 4px; color: var(--talos-muted); font-size: .8125rem; font-variant-numeric: tabular-nums; }
+
+/* I tetti: etichetta a sinistra, valore allineato a destra, cifre in colonna. */
+.talos-workflow-proposal__limits { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 2px 20px; margin: 0; }
+.talos-workflow-proposal__limit { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; min-width: 0; padding: 5px 0; border-bottom: 1px solid var(--talos-border); }
+/* ⛔ 25/09/2026, visto nella foto sul 4174: la regola della scheda del Piano sul primo figlio del corpo
+   (`.talos-plan-artifact__body :first-child { margin-top: 8px }`, specificità 0,2,0) abbassava ogni etichetta sotto il suo
+   valore. Qui vince con 0,2,1. */
+.talos-workflow-proposal__limits .talos-workflow-proposal__limit > :is(dt, dd) { margin: 0; }
+.talos-workflow-proposal__limit dt { color: var(--talos-muted); font-size: .8125rem; }
+.talos-workflow-proposal__limit dd { margin: 0; font-size: .8125rem; font-variant-numeric: tabular-nums; text-align: end; overflow-wrap: anywhere; }
+/* F3-33b (25/09/2026): il valore della versione prima accanto a un tetto cambiato (D19 a: le differenze si vedono) */
+.talos-workflow-proposal__limit-was { display: block; color: var(--talos-muted); font-size: .75rem; }
+
+/* F3-33b: la testata dei tetti con «Modifica», e i tetti in modifica: campi in loco, unità, valore di prima, errore a parole */
+.talos-workflow-proposal__limits-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 28px; }
+.talos-workflow-proposal__limits-title { font-size: .8125rem; font-weight: 600; color: var(--talos-muted); }
+/* foto sul 4174 (25/09): con `flex-wrap` alcune righe mettevano l'etichetta a sinistra e altre sopra. La griglia la tiene
+   sempre a sinistra (va a capo lei, se serve) e il campo sempre a destra, allineato fra le colonne. */
+.talos-workflow-proposal__limits .talos-workflow-proposal__limit--edit { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; align-content: start; gap: 4px 10px; padding: 6px 0; }
+.talos-workflow-proposal__limits .talos-workflow-proposal__limit--edit > dd.talos-workflow-proposal__limit-field {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 2px 6px; margin: 0; flex: 0 1 auto; min-width: 0;
+}
+.talos-workflow-proposal__limit-input {
+  width: 11ch; min-width: 0; height: 30px; padding: 0 8px; box-sizing: border-box; text-align: end;
+  border: 1px solid var(--talos-border); border-radius: var(--talos-radius-control, 8px); background: var(--talos-card); color: var(--talos-text);
+  font: inherit; font-size: .8125rem; font-variant-numeric: tabular-nums;
+}
+.talos-workflow-proposal__limit-input:focus-visible { outline: 2px solid var(--talos-accent); outline-offset: 1px; }
+/* il costo è facoltativo e il suo segnaposto («non impostato») era tagliato a 11ch */
+.talos-workflow-proposal__limit-input[inputmode="decimal"] { width: 15ch; }
+.talos-workflow-proposal__limit-input[aria-invalid="true"] { border-color: var(--talos-danger); }
+/* larghezza fissa: i campi restano in colonna anche con unità lunghe e corte («min», «richieste») */
+.talos-workflow-proposal__limit-unit { width: 9ch; font-size: .75rem; color: var(--talos-muted); }
+.talos-workflow-proposal__limit-before, .talos-workflow-proposal__limit-error { grid-column: 1 / -1; font-size: .75rem; text-align: end; }
+.talos-workflow-proposal__limit-before { color: var(--talos-muted); }
+.talos-workflow-proposal__limit-error { color: var(--talos-danger); }
+.talos-workflow-proposal__limit-before:empty, .talos-workflow-proposal__limit-error:empty { display: none; }
+.talos-workflow-proposal__limit--edit label { color: var(--talos-muted); font-size: .8125rem; }
+/* foto a 1440 (25/09): tre colonne da 200 px non tengono etichetta, campo e unità — l'etichetta si spezzava a metà parola.
+   In modifica le colonne sono di almeno 300 px e l'etichetta va a capo solo fra le parole. */
+.talos-workflow-proposal__limits--edit { grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); }
+.talos-workflow-proposal__limits--edit .talos-workflow-proposal__limit > dt { overflow-wrap: normal; word-break: normal; }
+
+/* Le note del controllo preliminare: la parola «Da correggere» dice il peso anche senza il colore. */
+.talos-workflow-proposal__notes { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; }
+.talos-workflow-proposal__note { padding: 7px 10px; border-radius: var(--talos-radius-control, 8px); border: 1px solid var(--talos-border); color: var(--talos-muted); font-size: .8125rem; line-height: 1.45; overflow-wrap: anywhere; }
+.talos-workflow-proposal__note[data-kind="error"] { border-color: var(--talos-danger); color: var(--talos-text); }
+
+.talos-workflow-proposal__actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 12px 18px 14px; border-top: 1px solid var(--talos-border); }
+.talos-workflow-proposal__hint { margin: 0; flex: 1 1 240px; min-width: 0; color: var(--talos-muted); font-size: .8125rem; line-height: 1.45; overflow-wrap: anywhere; }
+.talos-workflow-proposal__actions .talos-plan-artifact__error { flex: 1 1 100%; }
+
+/* Lo stato finale si legge dalla parola; il bordo della pillola lo accompagna, non lo sostituisce. */
+.talos-workflow-proposal[data-status="non-disponibile"] .talos-plan-artifact__state,
+.talos-workflow-proposal[data-status="annullato"] .talos-plan-artifact__state,
+.talos-workflow-proposal[data-status="carica"] .talos-plan-artifact__state { border-color: var(--talos-border); color: var(--talos-muted); background: transparent; }
+.talos-workflow-proposal[data-status="attenzione"] .talos-plan-artifact__state,
+.talos-workflow-proposal[data-status="non-riuscito"] .talos-plan-artifact__state { border-color: var(--talos-danger); color: var(--talos-text); background: transparent; }
+
+@media (max-width: 620px) {
+  .talos-workflow-proposal__actions { padding: 10px 12px 12px; }
+  .talos-workflow-proposal__limits { grid-template-columns: 1fr; }
+}

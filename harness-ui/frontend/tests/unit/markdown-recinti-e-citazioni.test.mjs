@@ -351,3 +351,67 @@ test('BC29-CSS-TABELLA: anche la tabella GFM è vestita fuori dalla chat', () =>
   assert.deepEqual(ambite.map((r) => r.selettore), [], 'la tabella è ancora chiusa dentro la chat');
   assert.ok(regoleCon(CSS_SPEDITO, '.md-table').some(({ selettore, corpo }) => selettore.trim() === '.md-table' && /border-collapse/.test(corpo)));
 });
+
+/* ------------------------------------------------ gli elenchi annidati (F5, 26/09/2026, owner: «ora, prima di F6») */
+
+/* la forma di un albero di elenchi, leggibile: ul[li(a) li(b ul[li(c)])] */
+function forma(nodo) {
+  return (nodo.figli || []).filter((f) => f.tipo !== 'testo').map((f) => {
+    if (f.tag === 'ul' || f.tag === 'ol') return `${f.tag}${f.getAttribute('start') ? `@${f.getAttribute('start')}` : ''}[${forma(f)}]`;
+    if (f.tag === 'li') {
+      const testo = (f.figli || []).filter((x) => x.tipo === 'testo').map((x) => x.testo).join('').trim();
+      const dentro = forma(f);
+      return `li(${testo}${dentro ? ` ${dentro}` : ''})`;
+    }
+    return f.tag;
+  }).join(' ');
+}
+
+test('MD-ELENCHI-ANNIDATI: un figlio rientrato fino al contenuto della voce sta DENTRO la voce (Leggimi.md del lettore)', () => {
+  const { frammento } = rendi(['- Lettore', '- Le quattro famiglie', '  - testo e codice', '  - PDF, immagini', '- HTML'].join('\n'));
+  assert.equal(forma(frammento), 'ul[li(Lettore) li(Le quattro famiglie ul[li(testo e codice) li(PDF, immagini)]) li(HTML)]');
+});
+
+test('MD-ELENCHI-LIVELLI: tre livelli, il ritorno a quello di sopra, e numeri con puntini sotto una voce numerata', () => {
+  assert.equal(forma(rendi(['- a', '  - b', '    - c', '- d'].join('\n')).frammento), 'ul[li(a ul[li(b ul[li(c)])]) li(d)]');
+  assert.equal(forma(rendi(['1. uno', '   - x', '   - y', '2. due'].join('\n')).frammento), 'ol[li(uno ul[li(x) li(y)]) li(due)]');
+  assert.equal(forma(rendi(['- a', '  1. primo', '  2. secondo', '- b'].join('\n')).frammento), 'ul[li(a ol[li(primo) li(secondo)]) li(b)]');
+});
+
+test('MD-ELENCHI-COLONNA: la soglia è la colonna del contenuto (CommonMark §5.2) — al contrario, un rientro corto NON annida', () => {
+  // «- a» ha il contenuto in colonna 2: con UNO spazio la voce è una sorella
+  assert.equal(forma(rendi(['- a', ' - b'].join('\n')).frammento), 'ul[li(a) li(b)]');
+  // «10) a» ha il contenuto in colonna 4: con 4 spazi è un figlio, con 3 no (e cambiando tipo nasce un elenco nuovo)
+  assert.equal(forma(rendi(['10) dieci', '    - figlio'].join('\n')).frammento), 'ol@10[li(dieci ul[li(figlio)])]');
+  assert.equal(forma(rendi(['10) dieci', '   - vicino'].join('\n')).frammento), 'ol@10[li(dieci)] ul[li(vicino)]');
+});
+
+test('MD-ELENCHI-MARCATORI: «+» e «)» sono marcatori, e un elenco numerato comincia dal suo primo numero', () => {
+  assert.equal(forma(rendi('+ uno\n+ due').frammento), 'ul[li(uno) li(due)]');
+  assert.equal(forma(rendi('3) tre\n4) quattro').frammento), 'ol@3[li(tre) li(quattro)]');
+  // la riga vuota chiude l'elenco (lo streaming taglia lì), ma il secondo pezzo NON riparte da 1
+  assert.equal(forma(rendi('1. a\n\n2. b').frammento), 'ol[li(a)] ol@2[li(b)]');
+});
+
+test('MD-ELENCHI-SEGUITO: una riga rientrata continua la voce; una riga non rientrata chiude l’elenco (niente continuazione pigra)', () => {
+  const dentro = rendi('- prima riga\n  seguito della voce\n- altra').frammento;
+  const [primaVoce] = perTag(dentro, 'li');
+  assert.deepEqual(primaVoce.figli.map((f) => (f.tipo === 'testo' ? f.testo : f.tag)), ['prima riga', 'br', 'seguito della voce'], 'il seguito va a capo DENTRO la voce');
+  assert.equal(perTag(dentro, 'li').length, 2);
+  assert.deepEqual(formaDi(rendi('- voce\nparagrafo dopo').frammento), ['ul', 'p']);
+  // un recinto rientrato chiude l'elenco e resta un recinto
+  assert.deepEqual(formaDi(rendi('- voce\n  ```js\n  x()\n  ```').frammento), ['ul', 'pre']);
+});
+
+/* ⛔ L'invariante dello streaming della chat (`confineBlocchiStabili` in legacy/app.js): il testo si taglia all'ultima riga
+   vuota fuori da un recinto e i due pezzi si rendono SEPARATAMENTE — il DOM deve essere lo stesso del tutto-insieme. */
+test('MD-ELENCHI-STREAMING: tutto insieme = i due pezzi tagliati alla riga vuota, anche con elenchi annidati e numerati', () => {
+  const testo = ['Intro:', '', '1. uno', '   - a', '   - b', '2. due', '', '3. tre', '   - c', '', 'Fine.'].join('\n');
+  const intero = forma(rendi(testo).frammento);
+  for (let taglio = testo.indexOf('\n\n') + 2; taglio > 1; taglio = testo.indexOf('\n\n', taglio) + 2) {
+    const pezzi = `${forma(rendi(testo.slice(0, taglio)).frammento)} ${forma(rendi(testo.slice(taglio)).frammento)}`.trim();
+    assert.equal(pezzi, intero, `taglio alla posizione ${taglio}`);
+    if (testo.indexOf('\n\n', taglio) < 0) break;
+  }
+  assert.equal(intero, 'p ol[li(uno ul[li(a) li(b)]) li(due)] ol@3[li(tre ul[li(c)])] p');
+});

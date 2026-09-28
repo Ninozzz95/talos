@@ -112,7 +112,12 @@ export function aggiornaDettaglioCatalogo(mount,m,{fornitori}={}){
  const raw=el('details','talos-lab__space');raw.append(el('summary','','Valori originali per token (USD)'));raw.append(kv('Ingresso',m.prezzoPrompt??'Non dichiarato','catalogoPrezzoInputRaw'),kv('Uscita',m.prezzoCompletion??'Non dichiarato','catalogoPrezzoOutputRaw'));mount.append(raw);
  const stato=el('p','talos-muted','L’elenco dei modelli non verifica le credenziali del tuo account.');stato.id='catalogoStato';mount.append(stato);
  const use=el('button','talos-button talos-button--primary talos-button--block','Usa nella sessione');use.id='catalogoAzione';use.type='button';use.dataset.richiede='fase3';use.hidden=true;mount.append(use);
- const access=el('button','talos-button talos-button--ghost talos-button--sm','Fornitori e accessi');access.type='button';access.dataset.c='Button';access.dataset.apreVelo='veloFornitori';access.addEventListener('click',event=>{if(fornitori){event.stopPropagation();fornitori();}});mount.append(access);
+ /* ⛔ 23/09/2026 — questo pulsante apriva il velo «Fornitori e accessi» (`data-apre-velo`) quando chi
+    disegnava non passava `fornitori`. Il velo è tolto per decisione owner («Toglierla: porta al Model
+    Lab»): l'unica strada è `fornitori`, che nel prodotto porta alla scheda «Provider» del laboratorio
+    (`app.js`, `setModelLabSection('providers')`). Senza `fornitori` (la vetrina dei componenti) il
+    pulsante resta un disegno, come nel mockup: non apre più una seconda superficie. */
+ const access=el('button','talos-button talos-button--ghost talos-button--sm','Fornitori e accessi');access.type='button';access.dataset.c='Button';access.addEventListener('click',event=>{if(fornitori){event.stopPropagation();fornitori();}});mount.append(access);
 }
 /*
  * La barra si costruisce UNA volta per pannello e si aggiorna in place: rifarla a ogni tasto

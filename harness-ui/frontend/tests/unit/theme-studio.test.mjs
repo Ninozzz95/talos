@@ -99,9 +99,9 @@ test('STUDIO-CORRENTE: tema e modo si chiedono alla radice, non a una variabile 
     getElementById: (id) => (id === 'colorModeSelect' ? { value: 'dark' } : null),
   };
   assert.deepEqual(aspettoCorrente(doc), { tema: 'ember', modo: 'dark' });
-  // senza attributi e senza controlli: il default dichiarato, non «undefined» a schermo
+  // senza attributi e senza controlli: il default dichiarato, non «undefined» a schermo — Forge dal 24/09 sera (owner: «tema default forge»)
   const vuoto = { documentElement: { getAttribute: () => null }, getElementById: () => null };
-  assert.deepEqual(aspettoCorrente(vuoto), { tema: 'calm', modo: 'system' });
+  assert.deepEqual(aspettoCorrente(vuoto), { tema: 'forge', modo: 'system' });
 });
 
 test('TOAST-ANNULLA: l’azione reversibile porta con sé il modo di disfarla, e resta 11 secondi', () => {
@@ -150,8 +150,10 @@ test('STUDIO-MIGRATI: nello studio passano SOLO tema e sfondo animato, non la de
   assert.deepEqual([...CURSORI_SCENA].sort(), CONTROLLI_MIGRATI.filter((id) => campoDi(id).tipo === 'range').sort());
   /* ⛔ VERSO CONTRARIO, ed è la precisazione dell'owner del 12/09 («gli slider relativi
      dell'animazione e del tema, ovviamente»): densità delle liste, dimensione interfaccia, testo
-     chat, forma del composer e le preferenze di accessibilità RESTANO nelle Impostazioni. */
-  for (const id of ['uiDensitySelect', 'uiFontScaleSelect', 'chatFontScaleSelect', 'composerShapeSelect',
+     chat e le preferenze di accessibilità RESTANO nelle Impostazioni.
+     Owner 23/09: «Forma del composer» e' stata ritirata dal Desktop. */
+  assert.equal(campoDi('composerShapeSelect'), null);
+  for (const id of ['uiDensitySelect', 'uiFontScaleSelect', 'chatFontScaleSelect',
     'interfaceMotionToggle', 'reducedMotionToggle', 'pauseWhenHiddenToggle', 'respectDataSaverToggle',
     'motionProfileSelect', 'motionDurationRange', 'immersiveHeaderToggle']) {
     assert.equal(CONTROLLI_MIGRATI.includes(id), false, `${id} non deve passare nello studio`);
@@ -293,16 +295,19 @@ test('THEME-STUDIO · centraNellElenco scorre solo il contenitore dato, e senza 
   assert.equal(centraNellElenco(null, voce), 0);
 });
 
-/* 12/09, owner: «calm primo». L'elenco dello studio mette Calm in testa senza toccare il contratto. */
-test('THEME-STUDIO · conCalmPrimo mette Calm in testa e lascia gli altri nell’ordine del contratto', async () => {
-  const { conCalmPrimo, nomiTemi } = await import('../../src/components/theme-studio.js');
+/* 12/09, owner: «calm primo»; 24/09 notte: Forge (tema di serie) primo, «Forge, poi Calm, poi gli altri».
+   L'elenco dello studio si riordina senza toccare il contratto. */
+test('THEME-STUDIO · conTemiInTesta mette Forge e poi Calm in testa e lascia gli altri nell’ordine del contratto', async () => {
+  const { conTemiInTesta, nomiTemi } = await import('../../src/components/theme-studio.js');
   const dal = nomiTemi();
+  assert.equal(dal[0]?.id, 'forge', 'nel contratto Forge è primo: se cambia, questo test va riletto');
   assert.equal(dal.at(-1)?.id, 'calm', 'nel contratto Calm è ultimo: se cambia, questo test va riletto');
-  const ordinati = conCalmPrimo(dal);
-  assert.equal(ordinati[0].id, 'calm');
-  assert.deepEqual(ordinati.slice(1).map((t) => t.id), dal.slice(0, -1).map((t) => t.id));
+  const ordinati = conTemiInTesta(dal);
+  assert.deepEqual(ordinati.slice(0, 2).map((t) => t.id), ['forge', 'calm']);
+  assert.deepEqual(ordinati.slice(2).map((t) => t.id), dal.slice(1, -1).map((t) => t.id));
   assert.equal(ordinati.length, dal.length);
-  // al contrario: senza Calm, o con Calm già primo, l'elenco non cambia
-  assert.deepEqual(conCalmPrimo([{ id: 'a' }, { id: 'b' }]), [{ id: 'a' }, { id: 'b' }]);
-  assert.deepEqual(conCalmPrimo([{ id: 'calm' }, { id: 'b' }]), [{ id: 'calm' }, { id: 'b' }]);
+  // al contrario: senza le teste l'elenco non cambia; una testa che manca si salta; nessun doppione
+  assert.deepEqual(conTemiInTesta([{ id: 'a' }, { id: 'b' }]), [{ id: 'a' }, { id: 'b' }]);
+  assert.deepEqual(conTemiInTesta([{ id: 'b' }, { id: 'calm' }]).map((t) => t.id), ['calm', 'b']);
+  assert.equal(new Set(ordinati.map((t) => t.id)).size, ordinati.length);
 });

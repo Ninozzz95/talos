@@ -30,8 +30,9 @@ export const SETTINGS_COPY: ReadonlyArray<readonly [string, string, string]> = [
   ['#setting-panel-tools > .talos-card > p', 'Regole salvate con la sessione, conservate dopo un ricaricamento.', 'Rules saved with the session and retained after reloading.'],
   ['#setting-panel-tools [data-open-sheet="permissions"]', 'Gestisci permessi', 'Manage permissions'],
   ['#setting-panel-tools [data-vaia="capability"]', 'Gestisci strumenti', 'Manage tools'],
-  ['#setting-panel-providers > .talos-card > p', 'Stato della configurazione sul server locale. Una chiave presente non prova la connessione.', 'Configuration on the local server. A stored key does not prove connectivity.'],
-  ['#setting-panel-providers [data-model-lab-go]', 'Gestisci chiavi e indirizzi', 'Manage keys and addresses'],
+  /* ⛔ 23/09/2026 — le due righe di `#setting-panel-providers` sono ritirate con la sezione
+     (decisione owner, «Provider e accessi» tolta del tutto): il pannello non esiste più, e un
+     selettore che non pesca niente è una riga morta — la stessa ragione delle sette del 19/09. */
   ['#setting-panel-memoria > .talos-card > p:first-of-type', 'Quanto della finestra del modello è già occupato prima che tu scriva: descrizioni degli strumenti, istruzioni e ricordi. Il resto è disponibile alla conversazione.', 'Context already occupied before you write: tool descriptions, instructions and memories. The remainder is available to the conversation.'],
   ['#setting-panel-memoria > .talos-card > p:last-child', 'Il conto degli strumenti è una stima del testo dello schema, non dei token che conterà il fornitore.', 'Tool usage is an estimate of schema text, not the tokens the provider will count.'],
   ['#setting-panel-costi > .talos-card > p:first-of-type', 'Consumo per giorno e modello dalle sessioni registrate su questo computer. Nessuna chiamata a un fornitore.', 'Usage by day and model from sessions recorded on this computer. No provider request is made.'],

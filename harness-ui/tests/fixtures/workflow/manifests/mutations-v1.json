@@ -1,0 +1,743 @@
+{
+  "kind": "workflow-mutation-test-map",
+  "version": 1,
+  "source": "WORKFLOW-VERIFICATION-SPEC-v1-2026-09-20.md",
+  "rule": "Each target test contains a test whose title is exactly mutation.",
+  "entries": [
+    {
+      "mutationId": "M001",
+      "mutation": "M001_PLAN_WRITE_GATE_REMOVED",
+      "phase": 0,
+      "testFile": "tests/modalita-piano-workflow-domanda.test.mjs",
+      "testName": "M001_PLAN_WRITE_GATE_REMOVED"
+    },
+    {
+      "mutationId": "M002",
+      "mutation": "M002_PLAN_DYNAMIC_TOOL_EXPOSED",
+      "phase": 0,
+      "testFile": "tests/modalita-piano-workflow-domanda.test.mjs",
+      "testName": "M002_PLAN_DYNAMIC_TOOL_EXPOSED"
+    },
+    {
+      "mutationId": "M003",
+      "mutation": "M003_QUESTION_STALE_ACCEPTED",
+      "phase": 0,
+      "testFile": "tests/modalita-piano-workflow-domanda.test.mjs",
+      "testName": "M003_QUESTION_STALE_ACCEPTED"
+    },
+    {
+      "mutationId": "M004",
+      "mutation": "M004_QUESTION_OTHER_OVERWRITES_MULTI",
+      "phase": 0,
+      "testFile": "frontend/tests/browser/user-question.spec.mjs",
+      "testName": "M004_QUESTION_OTHER_OVERWRITES_MULTI"
+    },
+    {
+      "mutationId": "M005",
+      "mutation": "M005_INTERRUPTED_CHILD_COUNTS_ACTIVE",
+      "phase": 0,
+      "testFile": "tests/subagent-orchestrator.test.mjs",
+      "testName": "M005_INTERRUPTED_CHILD_COUNTS_ACTIVE"
+    },
+    {
+      "mutationId": "M006",
+      "mutation": "M006_NODE_READY_BEFORE_DEPS",
+      "phase": 1,
+      "testFile": "tests/workflow-run-model.test.mjs",
+      "testName": "M006_NODE_READY_BEFORE_DEPS"
+    },
+    {
+      "mutationId": "M007",
+      "mutation": "M007_COMMAND_DEDUPE_REMOVED",
+      "phase": 12,
+      "testFile": "tests/workflow-command-idempotency.test.mjs",
+      "testName": "M007_COMMAND_DEDUPE_REMOVED"
+    },
+    {
+      "mutationId": "M008",
+      "mutation": "M008_ACTIVITY_TERMINAL_DUPLICATED",
+      "phase": 1,
+      "testFile": "tests/workflow-run-model.test.mjs",
+      "testName": "M008_ACTIVITY_TERMINAL_DUPLICATED"
+    },
+    {
+      "mutationId": "M009",
+      "mutation": "M009_STALE_LEASE_ACCEPTED",
+      "phase": 5,
+      "testFile": "tests/workflow-activity-runner.test.mjs",
+      "testName": "M009_STALE_LEASE_ACCEPTED"
+    },
+    {
+      "mutationId": "M010",
+      "mutation": "M010_SCHEDULER_CAPACITY_EXCEEDED",
+      "phase": 6,
+      "testFile": "tests/workflow-scheduler.test.mjs",
+      "testName": "M010_SCHEDULER_CAPACITY_EXCEEDED"
+    },
+    {
+      "mutationId": "M011",
+      "mutation": "M011_ADAPTIVE_LIMIT_IGNORES_429",
+      "phase": 6,
+      "testFile": "tests/workflow-concurrency-controller.test.mjs",
+      "testName": "M011_ADAPTIVE_LIMIT_IGNORES_429"
+    },
+    {
+      "mutationId": "M012",
+      "mutation": "M012_RETRY_JITTER_SYNCHRONIZED",
+      "phase": 6,
+      "testFile": "tests/workflow-concurrency-controller.test.mjs",
+      "testName": "M012_RETRY_JITTER_SYNCHRONIZED"
+    },
+    {
+      "mutationId": "M013",
+      "mutation": "M013_PARENT_CANCEL_NOT_PROPAGATED",
+      "phase": 5,
+      "testFile": "tests/workflow-activity-runner.test.mjs",
+      "testName": "M013_PARENT_CANCEL_NOT_PROPAGATED"
+    },
+    {
+      "mutationId": "M014",
+      "mutation": "M014_EFFECT_WITHOUT_RECEIPT_MARKED_FAILED",
+      "phase": 5,
+      "testFile": "tests/workflow-activity-runner.test.mjs",
+      "testName": "M014_EFFECT_WITHOUT_RECEIPT_MARKED_FAILED"
+    },
+    {
+      "mutationId": "M015",
+      "mutation": "M015_REDUCER_READS_CLOCK_OR_RANDOM",
+      "phase": 1,
+      "testFile": "tests/workflow-run-model.test.mjs",
+      "testName": "M015_REDUCER_READS_CLOCK_OR_RANDOM"
+    },
+    {
+      "mutationId": "M016",
+      "mutation": "M016_OLD_EVENT_SCHEMA_NOT_MIGRATED",
+      "phase": 2,
+      "testFile": "tests/workflow-replay-compat.test.mjs",
+      "testName": "M016_OLD_EVENT_SCHEMA_NOT_MIGRATED"
+    },
+    {
+      "mutationId": "M017",
+      "mutation": "M017_CHECKPOINT_AHEAD_OF_JOURNAL_ACCEPTED",
+      "phase": 2,
+      "testFile": "tests/workflow-store.test.mjs",
+      "testName": "M017_CHECKPOINT_AHEAD_OF_JOURNAL_ACCEPTED"
+    },
+    {
+      "mutationId": "M018",
+      "mutation": "M018_RESULT_HASH_MISMATCH_ACCEPTED",
+      "phase": 2,
+      "testFile": "tests/workflow-result-store.test.mjs",
+      "testName": "M018_RESULT_HASH_MISMATCH_ACCEPTED"
+    },
+    {
+      "mutationId": "M019",
+      "mutation": "M019_UNTRUSTED_RESULT_MUTATES_GRAPH",
+      "phase": 9,
+      "testFile": "tests/workflow-results.test.mjs",
+      "testName": "M019_UNTRUSTED_RESULT_MUTATES_GRAPH"
+    },
+    {
+      "mutationId": "M020",
+      "mutation": "M020_CAPABILITY_CHILD_EXCEEDS_PARENT",
+      "phase": 1,
+      "testFile": "tests/workflow-contract.test.mjs",
+      "testName": "M020_CAPABILITY_CHILD_EXCEEDS_PARENT"
+    },
+    {
+      "mutationId": "M021",
+      "mutation": "M021_WRITER_BEFORE_WORKTREE_VERIFY",
+      "phase": 7,
+      "testFile": "tests/workflow-worktree.test.mjs",
+      "testName": "M021_WRITER_BEFORE_WORKTREE_VERIFY"
+    },
+    {
+      "mutationId": "M022",
+      "mutation": "M022_WORKER_CWD_OWNER_CHECKOUT",
+      "phase": 7,
+      "testFile": "tests/workflow-worktree.test.mjs",
+      "testName": "M022_WORKER_CWD_OWNER_CHECKOUT"
+    },
+    {
+      "mutationId": "M023",
+      "mutation": "M023_DIRTY_BASELINE_LOST",
+      "phase": 7,
+      "testFile": "tests/workflow-workspace-baseline.test.mjs",
+      "testName": "M023_DIRTY_BASELINE_LOST"
+    },
+    {
+      "mutationId": "M024",
+      "mutation": "M024_FINAL_DELTA_REINCLUDES_OWNER_DIRTY",
+      "phase": 9,
+      "testFile": "tests/workflow-integration.test.mjs",
+      "testName": "M024_FINAL_DELTA_REINCLUDES_OWNER_DIRTY"
+    },
+    {
+      "mutationId": "M025",
+      "mutation": "M025_OWNER_MIDRUN_EDIT_OVERWRITTEN",
+      "phase": 7,
+      "testFile": "tests/workflow-workspace-baseline.test.mjs",
+      "testName": "M025_OWNER_MIDRUN_EDIT_OVERWRITTEN"
+    },
+    {
+      "mutationId": "M026",
+      "mutation": "M026_UNTRACKED_SYMLINK_ESCAPES_ROOT",
+      "phase": 7,
+      "testFile": "tests/workflow-workspace-baseline.test.mjs",
+      "testName": "M026_UNTRACKED_SYMLINK_ESCAPES_ROOT"
+    },
+    {
+      "mutationId": "M027",
+      "mutation": "M027_STALE_WRITER_RESULT_INTEGRATED",
+      "phase": 9,
+      "testFile": "tests/workflow-integration.test.mjs",
+      "testName": "M027_STALE_WRITER_RESULT_INTEGRATED"
+    },
+    {
+      "mutationId": "M028",
+      "mutation": "M028_MERGE_CONFLICT_MARKED_SUCCESS",
+      "phase": 9,
+      "testFile": "tests/workflow-integration.test.mjs",
+      "testName": "M028_MERGE_CONFLICT_MARKED_SUCCESS"
+    },
+    {
+      "mutationId": "M029",
+      "mutation": "M029_LLM_OVERRIDES_FAILED_DETERMINISTIC_TEST",
+      "phase": 8,
+      "testFile": "tests/workflow-patterns.test.mjs",
+      "testName": "M029_LLM_OVERRIDES_FAILED_DETERMINISTIC_TEST"
+    },
+    {
+      "mutationId": "M030",
+      "mutation": "M030_JUDGE_POSITION_ORDER_UNCONTROLLED",
+      "phase": 8,
+      "testFile": "tests/workflow-patterns.test.mjs",
+      "testName": "M030_JUDGE_POSITION_ORDER_UNCONTROLLED"
+    },
+    {
+      "mutationId": "M031",
+      "mutation": "M031_IDENTICAL_REPAIR_LOOPS_FOREVER",
+      "phase": 8,
+      "testFile": "tests/workflow-patterns.test.mjs",
+      "testName": "M031_IDENTICAL_REPAIR_LOOPS_FOREVER"
+    },
+    {
+      "mutationId": "M032",
+      "mutation": "M032_FANOUT_EXCEEDS_LOGICAL_LIMIT",
+      "phase": 8,
+      "testFile": "tests/workflow-patterns.test.mjs",
+      "testName": "M032_FANOUT_EXCEEDS_LOGICAL_LIMIT"
+    },
+    {
+      "mutationId": "M033",
+      "mutation": "M033_STALE_GRAPH_VERSION_ACCEPTED",
+      "phase": 12,
+      "testFile": "tests/workflow-command-idempotency.test.mjs",
+      "testName": "M033_STALE_GRAPH_VERSION_ACCEPTED"
+    },
+    {
+      "mutationId": "M034",
+      "mutation": "M034_SSE_GAP_APPLIED_INCREMENTALLY",
+      "phase": 11,
+      "testFile": "frontend/tests/unit/workflow-stream.test.mjs",
+      "testName": "M034_SSE_GAP_APPLIED_INCREMENTALLY"
+    },
+    {
+      "mutationId": "M035",
+      "mutation": "M035_TELEMETRY_CHANGES_GRAPH_VERSION",
+      "phase": 11,
+      "testFile": "frontend/tests/unit/workflow-graph-model.test.mjs",
+      "testName": "M035_TELEMETRY_CHANGES_GRAPH_VERSION"
+    },
+    {
+      "mutationId": "M036",
+      "mutation": "M036_STATUS_UPDATE_TRIGGERS_FULL_LAYOUT",
+      "phase": 11,
+      "testFile": "frontend/tests/component/workflow-large-graph.spec.mjs",
+      "testName": "M036_STATUS_UPDATE_TRIGGERS_FULL_LAYOUT"
+    },
+    {
+      "mutationId": "M037",
+      "mutation": "M037_CULLING_MOUNTS_ALL_10K",
+      "phase": 11,
+      "testFile": "frontend/tests/component/workflow-large-graph.spec.mjs",
+      "testName": "M037_CULLING_MOUNTS_ALL_10K"
+    },
+    {
+      "mutationId": "M038",
+      "mutation": "M038_EDGES_SCALE_WITH_TOTAL_NOT_VIEWPORT",
+      "phase": 11,
+      "testFile": "frontend/tests/component/workflow-large-graph.spec.mjs",
+      "testName": "M038_EDGES_SCALE_WITH_TOTAL_NOT_VIEWPORT"
+    },
+    {
+      "mutationId": "M039",
+      "mutation": "M039_SHADOW_REPLAY_HASH_DIVERGENCE_IGNORED",
+      "phase": 1,
+      "testFile": "tests/workflow-run-model.test.mjs",
+      "testName": "M039_SHADOW_REPLAY_HASH_DIVERGENCE_IGNORED"
+    },
+    {
+      "mutationId": "M040",
+      "mutation": "M040_GET_MUTATES_JOURNAL",
+      "phase": 12,
+      "testFile": "tests/workflow-control-http.test.mjs",
+      "testName": "M040_GET_MUTATES_JOURNAL"
+    },
+    {
+      "mutationId": "M041",
+      "mutation": "M041_DEFINITION_HASH_INCLUDES_RECORD_IDENTITY",
+      "phase": 1,
+      "testFile": "tests/workflow-canonical-json.test.mjs",
+      "testName": "M041_DEFINITION_HASH_INCLUDES_RECORD_IDENTITY"
+    },
+    {
+      "mutationId": "M042",
+      "mutation": "M042_DEFINITION_HASH_NONCANONICAL_ORDER",
+      "phase": 1,
+      "testFile": "tests/workflow-canonical-json.test.mjs",
+      "testName": "M042_DEFINITION_HASH_NONCANONICAL_ORDER"
+    },
+    {
+      "mutationId": "M043",
+      "mutation": "M043_STORE_INSIDE_OWNER_WORKSPACE",
+      "phase": 2,
+      "testFile": "tests/workflow-config.test.mjs",
+      "testName": "M043_STORE_INSIDE_OWNER_WORKSPACE"
+    },
+    {
+      "mutationId": "M044",
+      "mutation": "M044_SECOND_PROCESS_WRITER_ACCEPTED",
+      "phase": 2,
+      "testFile": "tests/workflow-store-owner-process.test.mjs",
+      "testName": "M044_SECOND_PROCESS_WRITER_ACCEPTED"
+    },
+    {
+      "mutationId": "M045",
+      "mutation": "M045_CHECKPOINT_OVERWRITE_REQUIRED_FOR_RECOVERY",
+      "phase": 2,
+      "testFile": "tests/workflow-store.test.mjs",
+      "testName": "M045_CHECKPOINT_OVERWRITE_REQUIRED_FOR_RECOVERY"
+    },
+    {
+      "mutationId": "M046",
+      "mutation": "M046_JOURNAL_MIDDLE_VALID_JSON_CORRUPTION_UNDETECTED",
+      "phase": 2,
+      "testFile": "tests/workflow-store.test.mjs",
+      "testName": "M046_JOURNAL_MIDDLE_VALID_JSON_CORRUPTION_UNDETECTED"
+    },
+    {
+      "mutationId": "M047",
+      "mutation": "M047_READY_DUAL_WRITE_DRIFT",
+      "phase": 1,
+      "testFile": "tests/workflow-run-model.test.mjs",
+      "testName": "M047_READY_DUAL_WRITE_DRIFT"
+    },
+    {
+      "mutationId": "M048",
+      "mutation": "M048_EFFECT_BEFORE_DURABLE_STARTED",
+      "phase": 5,
+      "testFile": "tests/workflow-activity-runner.test.mjs",
+      "testName": "M048_EFFECT_BEFORE_DURABLE_STARTED"
+    },
+    {
+      "mutationId": "M049",
+      "mutation": "M049_NESTED_AGENT_EFFECT_UNTRACKED",
+      "phase": 5,
+      "testFile": "tests/workflow-activity-runner.test.mjs",
+      "testName": "M049_NESTED_AGENT_EFFECT_UNTRACKED"
+    },
+    {
+      "mutationId": "M050",
+      "mutation": "M050_BUDGET_OVERSUBSCRIBED_BY_CONCURRENT_RESERVATIONS",
+      "phase": 6,
+      "testFile": "tests/workflow-budget.test.mjs",
+      "testName": "M050_BUDGET_OVERSUBSCRIBED_BY_CONCURRENT_RESERVATIONS"
+    },
+    {
+      "mutationId": "M051",
+      "mutation": "M051_RETRY_JITTER_RECOMPUTED_AFTER_RESTART",
+      "phase": 3,
+      "testFile": "tests/workflow-timer.test.mjs",
+      "testName": "M051_RETRY_JITTER_RECOMPUTED_AFTER_RESTART"
+    },
+    {
+      "mutationId": "M052",
+      "mutation": "M052_BASELINE_OWNER_RACE_ACCEPTED",
+      "phase": 7,
+      "testFile": "tests/workflow-workspace-baseline.test.mjs",
+      "testName": "M052_BASELINE_OWNER_RACE_ACCEPTED"
+    },
+    {
+      "mutationId": "M053",
+      "mutation": "M053_TOOLCHAIN_ASSUMED_FROM_GIT_BASELINE",
+      "phase": 7,
+      "testFile": "tests/workflow-toolchain.test.mjs",
+      "testName": "M053_TOOLCHAIN_ASSUMED_FROM_GIT_BASELINE"
+    },
+    {
+      "mutationId": "M054",
+      "mutation": "M054_SSE_CLIENT_BUFFER_UNBOUNDED",
+      "phase": 11,
+      "testFile": "frontend/tests/unit/workflow-stream.test.mjs",
+      "testName": "M054_SSE_CLIENT_BUFFER_UNBOUNDED"
+    },
+    {
+      "mutationId": "M055",
+      "mutation": "M055_SERVER_READY_BEFORE_RECOVERY_QUARANTINE",
+      "phase": 5,
+      "testFile": "tests/workflow-activity-runner.test.mjs",
+      "testName": "M055_SERVER_READY_BEFORE_RECOVERY_QUARANTINE"
+    },
+    {
+      "mutationId": "M056",
+      "mutation": "M056_UNSAFE_HASH_OR_NODE_ID_USED_AS_WINDOWS_PATH",
+      "phase": 2,
+      "testFile": "tests/workflow-store.test.mjs",
+      "testName": "M056_UNSAFE_HASH_OR_NODE_ID_USED_AS_WINDOWS_PATH"
+    },
+    {
+      "mutationId": "M057",
+      "mutation": "M057_POWERLOSS_DURABILITY_OVERCLAIMED",
+      "phase": 2,
+      "testFile": "tests/workflow-store.test.mjs",
+      "testName": "M057_POWERLOSS_DURABILITY_OVERCLAIMED"
+    },
+    {
+      "mutationId": "M058",
+      "mutation": "M058_GRAPH_CYCLE_ESCAPES_SCC_LOOP_VALIDATION",
+      "phase": 1,
+      "testFile": "tests/workflow-contract.test.mjs",
+      "testName": "M058_GRAPH_CYCLE_ESCAPES_SCC_LOOP_VALIDATION"
+    },
+    {
+      "mutationId": "M059",
+      "mutation": "M059_CANCEL_SUBGRAPH_DELETES_EVIDENCE",
+      "phase": 5,
+      "testFile": "tests/workflow-activity-runner.test.mjs",
+      "testName": "M059_CANCEL_SUBGRAPH_DELETES_EVIDENCE"
+    },
+    {
+      "mutationId": "M060",
+      "mutation": "M060_HUMANGATE_SKIP_POLICY_IMPLICIT",
+      "phase": 3,
+      "testFile": "tests/workflow-question-broker.test.mjs",
+      "testName": "M060_HUMANGATE_SKIP_POLICY_IMPLICIT"
+    },
+    {
+      "mutationId": "M061",
+      "mutation": "M061_HUMANGATE_OTHER_ACCEPTED_WHEN_FORBIDDEN",
+      "phase": 3,
+      "testFile": "tests/workflow-question-broker.test.mjs",
+      "testName": "M061_HUMANGATE_OTHER_ACCEPTED_WHEN_FORBIDDEN"
+    },
+    {
+      "mutationId": "M062",
+      "mutation": "M062_HUMANGATE_TIMEOUT_WALLCLOCK_ONLY",
+      "phase": 3,
+      "testFile": "tests/workflow-timer.test.mjs",
+      "testName": "M062_HUMANGATE_TIMEOUT_WALLCLOCK_ONLY"
+    },
+    {
+      "mutationId": "M063",
+      "mutation": "M063_ANSWER_SCHEMA_HASH_IGNORED_FOR_BATCH",
+      "phase": 3,
+      "testFile": "tests/workflow-question-broker.test.mjs",
+      "testName": "M063_ANSWER_SCHEMA_HASH_IGNORED_FOR_BATCH"
+    },
+    {
+      "mutationId": "M064",
+      "mutation": "M064_STOREOWNER_PID_ONLY_STALE_PROOF",
+      "phase": 2,
+      "testFile": "tests/workflow-store-owner-process.test.mjs",
+      "testName": "M064_STOREOWNER_PID_ONLY_STALE_PROOF"
+    },
+    {
+      "mutationId": "M065",
+      "mutation": "M065_CAS_ORPHAN_PROMOTED_AS_RESULT",
+      "phase": 2,
+      "testFile": "tests/workflow-result-store.test.mjs",
+      "testName": "M065_CAS_ORPHAN_PROMOTED_AS_RESULT"
+    },
+    {
+      "mutationId": "M066",
+      "mutation": "M066_CAS_GC_DELETES_LIVE_REFERENCE",
+      "phase": 9,
+      "testFile": "tests/workflow-result-gc.test.mjs",
+      "testName": "M066_CAS_GC_DELETES_LIVE_REFERENCE"
+    },
+    {
+      "mutationId": "M067",
+      "mutation": "M067_PORT_BROKER_TOCTOU_DUPLICATE",
+      "phase": 7,
+      "testFile": "tests/workflow-port-broker.test.mjs",
+      "testName": "M067_PORT_BROKER_TOCTOU_DUPLICATE"
+    },
+    {
+      "mutationId": "M068",
+      "mutation": "M068_SPARSE_CHECKOUT_BASELINE_SILENTLY_WRONG",
+      "phase": 7,
+      "testFile": "tests/workflow-workspace-baseline.test.mjs",
+      "testName": "M068_SPARSE_CHECKOUT_BASELINE_SILENTLY_WRONG"
+    },
+    {
+      "mutationId": "M069",
+      "mutation": "M069_LFS_FILTER_BASELINE_SILENTLY_WRONG",
+      "phase": 7,
+      "testFile": "tests/workflow-workspace-baseline.test.mjs",
+      "testName": "M069_LFS_FILTER_BASELINE_SILENTLY_WRONG"
+    },
+    {
+      "mutationId": "M070",
+      "mutation": "M070_CASE_COLLISION_WORKTREE_SILENT",
+      "phase": 7,
+      "testFile": "tests/workflow-workspace-baseline.test.mjs",
+      "testName": "M070_CASE_COLLISION_WORKTREE_SILENT"
+    },
+    {
+      "mutationId": "M071",
+      "mutation": "M071_KERNEL_IMPORTS_NODE_ONLY_WORKFLOW_HASHING",
+      "phase": 1,
+      "testFile": "tests/workflow-kernel-boundary.test.mjs",
+      "testName": "M071_KERNEL_IMPORTS_NODE_ONLY_WORKFLOW_HASHING"
+    },
+    {
+      "mutationId": "M072",
+      "mutation": "M072_ERROR_CODE_MISSING_HTTP_STATUS",
+      "phase": 12,
+      "testFile": "tests/workflow-public-problem.test.mjs",
+      "testName": "M072_ERROR_CODE_MISSING_HTTP_STATUS"
+    },
+    {
+      "mutationId": "M073",
+      "mutation": "M073_WORKFLOW_DATA_ROOT_FALLS_BACK_TO_REPO",
+      "phase": 2,
+      "testFile": "tests/workflow-config.test.mjs",
+      "testName": "M073_WORKFLOW_DATA_ROOT_FALLS_BACK_TO_REPO"
+    },
+    {
+      "mutationId": "M074",
+      "mutation": "M074_ACCESSIBLE_READING_MODE_LOSES_GATE_OR_ERROR",
+      "phase": 11,
+      "testFile": "frontend/tests/browser/workflow-graph.spec.mjs",
+      "testName": "M074_ACCESSIBLE_READING_MODE_LOSES_GATE_OR_ERROR"
+    },
+    {
+      "mutationId": "M075",
+      "mutation": "M075_COMMAND_ID_REUSED_WITH_DIFFERENT_PAYLOAD",
+      "phase": 12,
+      "testFile": "tests/workflow-command-idempotency.test.mjs",
+      "testName": "M075_COMMAND_ID_REUSED_WITH_DIFFERENT_PAYLOAD"
+    },
+    {
+      "mutationId": "M076",
+      "mutation": "M076_PATCH_ID_REUSED_WITH_DIFFERENT_PAYLOAD",
+      "phase": 12,
+      "testFile": "tests/workflow-command-idempotency.test.mjs",
+      "testName": "M076_PATCH_ID_REUSED_WITH_DIFFERENT_PAYLOAD"
+    },
+    {
+      "mutationId": "M077",
+      "mutation": "M077_RESULT_SECRET_BYTES_LOGGED",
+      "phase": 13,
+      "testFile": "tests/workflow-telemetry.test.mjs",
+      "testName": "M077_RESULT_SECRET_BYTES_LOGGED"
+    },
+    {
+      "mutationId": "M078",
+      "mutation": "M078_COST_UNKNOWN_COERCED_TO_ZERO",
+      "phase": 10,
+      "testFile": "tests/workflow-budget.test.mjs",
+      "testName": "M078_COST_UNKNOWN_COERCED_TO_ZERO"
+    },
+    {
+      "mutationId": "M079",
+      "mutation": "M079_STOREOWNER_LIVE_SECOND_PROCESS_STEALS_ROOT",
+      "phase": 2,
+      "testFile": "tests/workflow-store-owner-process.test.mjs",
+      "testName": "M079_STOREOWNER_LIVE_SECOND_PROCESS_STEALS_ROOT"
+    },
+    {
+      "mutationId": "M080",
+      "mutation": "M080_WORKFLOW_READY_WHILE_UNCERTAIN_RECOVERY_PENDING",
+      "phase": 5,
+      "testFile": "tests/workflow-activity-runner.test.mjs",
+      "testName": "M080_WORKFLOW_READY_WHILE_UNCERTAIN_RECOVERY_PENDING"
+    },
+    {
+      "mutationId": "M081",
+      "mutation": "M081_CUSTOM_CAPABILITY_INFERRED_FROM_METADATA",
+      "phase": 1,
+      "testFile": "tests/workflow-contract.test.mjs",
+      "testName": "M081_CUSTOM_CAPABILITY_INFERRED_FROM_METADATA"
+    },
+    {
+      "mutationId": "M082",
+      "mutation": "M082_WORKFLOW_MODEL_ID_GRAMMAR_DIVERGES_FROM_SESSION",
+      "phase": 10,
+      "testFile": "tests/workflow-policy.test.mjs",
+      "testName": "M082_WORKFLOW_MODEL_ID_GRAMMAR_DIVERGES_FROM_SESSION"
+    },
+    {
+      "mutationId": "M083",
+      "mutation": "M083_ACCEPTANCE_ALLOWS_UNTRUSTED_EVIDENCE",
+      "phase": 1,
+      "testFile": "tests/workflow-contract.test.mjs",
+      "testName": "M083_ACCEPTANCE_ALLOWS_UNTRUSTED_EVIDENCE"
+    },
+    {
+      "mutationId": "M084",
+      "mutation": "M084_EDGE_CONDITION_EXECUTES_FREEFORM_EXPRESSION",
+      "phase": 1,
+      "testFile": "tests/workflow-contract.test.mjs",
+      "testName": "M084_EDGE_CONDITION_EXECUTES_FREEFORM_EXPRESSION"
+    },
+    {
+      "mutationId": "M085",
+      "mutation": "M085_BUDGET_OVERRUN_CLAMPED_TO_RESERVATION",
+      "phase": 10,
+      "testFile": "tests/workflow-budget.test.mjs",
+      "testName": "M085_BUDGET_OVERRUN_CLAMPED_TO_RESERVATION"
+    },
+    {
+      "mutationId": "M086",
+      "mutation": "M086_CHECKPOINT_CURRENT_HINT_BECOMES_AUTHORITY",
+      "phase": 2,
+      "testFile": "tests/workflow-store.test.mjs",
+      "testName": "M086_CHECKPOINT_CURRENT_HINT_BECOMES_AUTHORITY"
+    },
+    {
+      "mutationId": "M087",
+      "mutation": "M087_STATE_HASH_OMITS_DURABLE_CONTROL_STATE",
+      "phase": 1,
+      "testFile": "tests/workflow-run-model.test.mjs",
+      "testName": "M087_STATE_HASH_OMITS_DURABLE_CONTROL_STATE"
+    },
+    {
+      "mutationId": "M088",
+      "mutation": "M088_SECRET_ADJACENT_RESULT_EXPOSED_BY_DEFAULT",
+      "phase": 9,
+      "testFile": "tests/workflow-results.test.mjs",
+      "testName": "M088_SECRET_ADJACENT_RESULT_EXPOSED_BY_DEFAULT"
+    },
+    {
+      "mutationId": "M089",
+      "mutation": "M089_PROVIDER_CIRCUIT_RESETS_ON_RESTART",
+      "phase": 10,
+      "testFile": "tests/workflow-provider-control.test.mjs",
+      "testName": "M089_PROVIDER_CIRCUIT_RESETS_ON_RESTART"
+    },
+    {
+      "mutationId": "M090",
+      "mutation": "M090_STOREOWNER_RECORD_GRANTS_AUTHORITY_WITHOUT_OS_BIND",
+      "phase": 2,
+      "testFile": "tests/workflow-store-owner-process.test.mjs",
+      "testName": "M090_STOREOWNER_RECORD_GRANTS_AUTHORITY_WITHOUT_OS_BIND"
+    },
+    {
+      "mutationId": "M091",
+      "mutation": "M091_STOREOWNER_UNIX_STALE_CLEANUP_DELETES_NONSOCKET",
+      "phase": 2,
+      "testFile": "tests/workflow-store-owner-process.test.mjs",
+      "testName": "M091_STOREOWNER_UNIX_STALE_CLEANUP_DELETES_NONSOCKET"
+    },
+    {
+      "mutationId": "M092",
+      "mutation": "M092_TOOLCHAIN_REUSES_OWNER_IGNORED_NODE_MODULES",
+      "phase": 7,
+      "testFile": "tests/workflow-toolchain.test.mjs",
+      "testName": "M092_TOOLCHAIN_REUSES_OWNER_IGNORED_NODE_MODULES"
+    },
+    {
+      "mutationId": "M093",
+      "mutation": "M093_GRAPH_PATCH_MUTATES_IMMUTABLE_NODE_INSTRUCTIONS",
+      "phase": 1,
+      "testFile": "tests/workflow-contract.test.mjs",
+      "testName": "M093_GRAPH_PATCH_MUTATES_IMMUTABLE_NODE_INSTRUCTIONS"
+    },
+    {
+      "mutationId": "M094",
+      "mutation": "M094_TIMER_FIRES_SUPERSEDED_HUMAN_GATE",
+      "phase": 3,
+      "testFile": "tests/workflow-timer.test.mjs",
+      "testName": "M094_TIMER_FIRES_SUPERSEDED_HUMAN_GATE"
+    },
+    {
+      "mutationId": "M095",
+      "mutation": "M095_WORKFLOW_NATIVE_QUESTION_LIMIT_SILENTLY_REUSES_LEGACY_LIMIT",
+      "phase": 3,
+      "testFile": "tests/workflow-question-broker.test.mjs",
+      "testName": "M095_WORKFLOW_NATIVE_QUESTION_LIMIT_SILENTLY_REUSES_LEGACY_LIMIT"
+    },
+    {
+      "mutationId": "M096",
+      "mutation": "M096_RESULTREF_SENSITIVITY_USED_AS_AUTHORIZATION",
+      "phase": 9,
+      "testFile": "tests/workflow-results.test.mjs",
+      "testName": "M096_RESULTREF_SENSITIVITY_USED_AS_AUTHORIZATION"
+    },
+    {
+      "mutationId": "M097",
+      "mutation": "M097_STEER_STALE_LEASE_ACCEPTED",
+      "phase": 12,
+      "testFile": "tests/workflow-command-idempotency.test.mjs",
+      "testName": "M097_STEER_STALE_LEASE_ACCEPTED"
+    },
+    {
+      "mutationId": "M098",
+      "mutation": "M098_STEER_MUTATES_APPROVED_DEFINITION",
+      "phase": 12,
+      "testFile": "tests/workflow-command-idempotency.test.mjs",
+      "testName": "M098_STEER_MUTATES_APPROVED_DEFINITION"
+    },
+    {
+      "mutationId": "M099",
+      "mutation": "M099_PAUSE_INTENT_LOST_ON_RESTART",
+      "phase": 12,
+      "testFile": "tests/workflow-command-idempotency.test.mjs",
+      "testName": "M099_PAUSE_INTENT_LOST_ON_RESTART"
+    },
+    {
+      "mutationId": "M100",
+      "mutation": "M100_CANCEL_INTENT_LOST_ON_RESTART",
+      "phase": 12,
+      "testFile": "tests/workflow-command-idempotency.test.mjs",
+      "testName": "M100_CANCEL_INTENT_LOST_ON_RESTART"
+    },
+    {
+      "mutationId": "M101",
+      "mutation": "M101_GRAPH_PATCH_REPLAY_DEPENDS_ON_SIDE_METADATA",
+      "phase": 1,
+      "testFile": "tests/workflow-event-contract.test.mjs",
+      "testName": "M101_GRAPH_PATCH_REPLAY_DEPENDS_ON_SIDE_METADATA"
+    },
+    {
+      "mutationId": "M102",
+      "mutation": "M102_COMMAND_RECEIPT_SECOND_SOURCE_OF_TRUTH",
+      "phase": 12,
+      "testFile": "tests/workflow-command-idempotency.test.mjs",
+      "testName": "M102_COMMAND_RECEIPT_SECOND_SOURCE_OF_TRUTH"
+    },
+    {
+      "mutationId": "M103",
+      "mutation": "M103_UNTRACKED_ENV_SILENTLY_INCLUDED_OR_DROPPED",
+      "phase": 7,
+      "testFile": "tests/workflow-workspace-baseline.test.mjs",
+      "testName": "M103_UNTRACKED_ENV_SILENTLY_INCLUDED_OR_DROPPED"
+    },
+    {
+      "mutationId": "M104",
+      "mutation": "M104_TIMER_CANCEL_REQUIRES_MUTABLE_STATE",
+      "phase": 3,
+      "testFile": "tests/workflow-timer.test.mjs",
+      "testName": "M104_TIMER_CANCEL_REQUIRES_MUTABLE_STATE"
+    },
+    {
+      "mutationId": "M105",
+      "mutation": "M105_BUDGET_DIMENSION_VOCABULARY_DRIFTS",
+      "phase": 6,
+      "testFile": "tests/workflow-budget.test.mjs",
+      "testName": "M105_BUDGET_DIMENSION_VOCABULARY_DRIFTS"
+    }
+  ]
+}

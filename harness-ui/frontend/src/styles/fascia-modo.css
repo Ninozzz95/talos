@@ -1,0 +1,68 @@
+/*
+ * ⭐ F3-12, 24/09/2026 — LA FASCIA DEL MODO TOLTO.
+ *
+ * Una conversazione salvata col modo Workflow (tolto il 23/09, decisione owner) si apre con questa
+ * fascia sopra il composer: una frase, una nota, due scelte. Logica in `app.js`
+ * (`disegnaFasciaModoRitirato`), markup nel piede della chat di `index.template.html`.
+ *
+ * ⛔ Nessun colore nuovo: è un avviso su una cosa del PASSATO, non un pericolo — niente giallo di
+ *   avvertimento, niente rosso. Parla la lingua delle altre strisce del piede (la coda,
+ *   gli allegati): stesso raggio, stesso respiro sotto, stesso corpo del testo.
+ * ⛔ Il segno che la rende riconoscibile è l'ICONA nel suo riquadro: è la stessa della riga «Modo
+ *   di lavoro» nel foglio dei permessi, dove il modo si cambia dopo. Chi la vede qui la ritrova là.
+ * ⛔ Le due scelte hanno lo STESSO peso (entrambe secondarie): la fascia non sceglie per la persona,
+ *   e un pulsante primario accanto al tasto d'invio del composer gli farebbe concorrenza.
+ * ⛔ `:not([hidden])`: `[hidden]` ha già `display:none !important` in `index.css`, ma la regola qui
+ *   non deve nemmeno provarci a rimettere il flex su una fascia nascosta.
+ */
+.talos-fascia-modo:not([hidden]){
+  display:flex;
+  align-items:center;
+  gap:var(--talos-space-inline);
+  flex-wrap:wrap;
+  margin-bottom:var(--talos-space-sm);
+  padding:var(--talos-space-sm) var(--talos-space-sm) var(--talos-space-sm) var(--talos-space-control);
+  border:1px solid var(--talos-border-strong);
+  border-radius:var(--talos-radius-control);
+  background:var(--talos-card-subtle);
+  color:var(--talos-assistant-text);
+  font-size:var(--talos-font-size-sm);
+}
+.talos-fascia-modo__icona{
+  flex:none;
+  display:inline-grid;
+  place-items:center;
+  width:28px;
+  height:28px;
+  border-radius:calc(var(--talos-radius-control) - 4px);
+  background:var(--talos-accent-soft);
+  color:var(--talos-accent-text);
+}
+/* ⛔ Base larga (30rem): nella colonna della chat (~48rem) la frase resta su UNA riga e le due
+   scelte scendono sotto, allineate a destra, invece di spezzare la frase dell'owner a metà (visto
+   nella prima foto 1920×1080: «più.» da solo sulla seconda riga). Su una colonna larga stanno in fila. */
+.talos-fascia-modo__testo{
+  flex:1 1 30rem;
+  min-width:0;
+  display:flex;
+  flex-direction:column;
+  gap:2px;
+}
+.talos-fascia-modo__frase{
+  margin:0;
+  color:var(--talos-text);
+  font-weight:500;
+  line-height:1.35;
+}
+.talos-fascia-modo__nota{
+  margin:0;
+  color:var(--talos-muted);
+  font-size:var(--talos-font-size-xs);
+  line-height:1.35;
+}
+.talos-fascia-modo__azioni{
+  flex:none;
+  display:flex;
+  gap:var(--talos-space-sm);
+  margin-left:auto;
+}

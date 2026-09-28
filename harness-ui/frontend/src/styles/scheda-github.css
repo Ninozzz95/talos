@@ -1,0 +1,189 @@
+/*
+ * ⭐ F6-1 (26/09/2026) — LA SCHEDA «GitHub» DELLA COLONNA DESTRA (`components/scheda-github.js`).
+ *
+ * La grammatica e le misure sono quelle della scheda File (`scheda-file.css`, PO-30): testata col nome (qui il ramo) e un
+ * solo «⋯», righe da 36 px con la lettera di stato a larghezza fissa così le lettere stanno in colonna, azioni che compaiono
+ * sulla riga che si sta usando. Il diff usa la testata del lettore di F5 (`lettore.css`) e le righe del diff della chat
+ * (`diff-in-chat.css`). Solo token del tema: nessun colore, raggio o carattere nuovo.
+ */
+#railGithub{display:flex; flex-direction:column; min-height:0}
+.talos-github{display:flex; flex-direction:column; gap:var(--talos-space-sm); min-height:0}
+.talos-github__base{margin:0; overflow-wrap:anywhere}
+.talos-github__vuoto{margin:var(--talos-space-sm) 0 0}
+
+/* La casella del commit sta in cima, come in VS Code: il messaggio e il pulsante che dice cosa farà. */
+.talos-github-commit{display:flex; flex-direction:column; gap:var(--talos-space-sm)}
+.talos-github-commit__messaggio{min-height:64px; resize:vertical}
+.talos-github-commit__fai{align-self:stretch; justify-content:center}
+.talos-github-commit .talos-inspector__hint{margin:0}
+
+/* Un gruppo: il titolo col conteggio apre e chiude, l'azione di gruppo sta a destra. */
+.talos-github-gruppo{display:flex; flex-direction:column}
+.talos-github-gruppo__testa{display:flex; align-items:center; justify-content:space-between; gap:var(--talos-space-sm); min-height:32px}
+.talos-github-gruppo__titolo{display:inline-flex; align-items:center; gap:6px; min-height:28px; padding:0 var(--talos-space-xs); border:0; border-radius:var(--talos-radius-control); background:transparent; color:var(--talos-text); font:inherit; font-size:var(--talos-font-size-xs); font-weight:600; cursor:pointer}
+.talos-github-gruppo__titolo > .i{width:12px; height:12px; flex:none; color:var(--talos-muted); transition:transform var(--talos-motion-duration-control) var(--talos-motion-ease)}
+.talos-github-gruppo__titolo[aria-expanded="false"] > .i{transform:rotate(-90deg)}
+.talos-github-gruppo__titolo:focus-visible{outline:var(--talos-focus-width) solid var(--talos-accent); outline-offset:1px}
+.talos-github-gruppo__conto{color:var(--talos-muted); font-weight:500; font-variant-numeric:tabular-nums}
+.talos-github-gruppo__righe{display:flex; flex-direction:column; margin:0; padding:0; list-style:none}
+
+/* La riga: si apre il diff cliccandola; l'azione principale e «⋯» compaiono sulla riga che si usa. */
+.talos-github-riga{display:flex; align-items:center; gap:4px; min-height:36px; border-radius:var(--talos-radius-control)}
+.talos-github-riga:hover, .talos-github-riga:focus-within{background:var(--talos-card)}
+.talos-github-riga__apri{display:flex; flex:1; align-items:baseline; gap:8px; min-width:0; padding:4px var(--talos-space-xs); border:0; border-radius:var(--talos-radius-control); background:transparent; color:inherit; font:inherit; text-align:start; cursor:pointer}
+.talos-github-riga__apri:disabled{cursor:default}
+.talos-github-riga__apri:focus-visible{outline:var(--talos-focus-width) solid var(--talos-accent); outline-offset:calc(-1 * var(--talos-focus-width))}
+.talos-github-riga__lettera{flex:none; inline-size:1.25rem; text-align:center; font-size:var(--talos-font-size-xs); font-weight:600; color:var(--talos-accent)}
+.talos-github-riga__lettera--A, .talos-github-riga__lettera--U{color:var(--talos-success, var(--talos-accent))}
+.talos-github-riga__lettera--M, .talos-github-riga__lettera--T{color:var(--talos-warning, var(--talos-accent))}
+.talos-github-riga__lettera--D, .talos-github-riga__lettera--conflitto{color:var(--talos-danger)}
+.talos-github-riga__nome{flex:none; max-width:60%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.talos-github-riga__cartella{flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--talos-muted); font-size:var(--talos-font-size-xs)}
+.talos-github-riga > .talos-button{flex:none; opacity:0; transition:opacity var(--talos-motion-duration-control) var(--talos-motion-ease)}
+.talos-github-riga:hover > .talos-button, .talos-github-riga:focus-within > .talos-button{opacity:1}
+/* Senza un puntatore che passa sopra (tocco), le azioni si vedono sempre: altrimenti non si scoprirebbero mai. */
+@media (hover: none){ .talos-github-riga > .talos-button{opacity:1} }
+
+/* Il diff di un file: nel rail al posto dell'elenco, o nell'area della chat a schermo intero. */
+.talos-github-diff{display:flex; flex-direction:column; gap:var(--talos-space-sm); min-height:0}
+.talos-github-diff__indietro > .i{transform:rotate(90deg)}
+.talos-github-diff__corpo{min-height:0; overflow:auto}
+/* Dentro la carta del lettore il diff non si incornicia una seconda volta: una carta sola, come il sorgente del lettore che
+   lì dentro perde bordo e raggio (`lettore.css:41-42`), e le frasi rientrano quanto le intestazioni dei pezzi (12px).
+   Visto nelle foto sul 4174 (26/09): la base stava a 4px dal bordo e il bordo del diff si appoggiava a quello della carta.
+   Stessa forma di NiceGUI `tight()` e di Appian SAIL (carta esterna col bordo, interna senza) — ricerca del 26/09. */
+.talos-github-diff__corpo > .talos-inspector__hint{margin:0; padding:var(--talos-space-sm) 12px}
+.talos-github-diff__corpo > .talos-diff-chat{margin:0; border:0; border-block-start:1px solid var(--talos-border); border-radius:0}
+
+/* ⭐ F6-1 passo 3 (26/09/2026) — il ramo come pulsante, la richiesta in riga, la casella in modalità modifica, i messi da
+   parte e i commit recenti. Stessa grammatica di sopra: nessun colore, raggio o carattere nuovo. */
+/* Il pulsante prende solo la sua larghezza (e il «⋯» va in fondo col margine): così la freccetta sta accanto al nome, non in
+   fondo alla riga vicino al «⋯» (visto in foto, 26/09). */
+.talos-github__ramo{display:flex; flex:0 1 auto; margin-inline-end:auto; align-items:center; gap:6px; min-width:0; min-height:28px; padding:0 var(--talos-space-xs); border:0; border-radius:var(--talos-radius-control); background:transparent; color:var(--talos-text); font:inherit; text-align:start; cursor:pointer}
+.talos-github__ramo > .i{width:16px; height:16px; flex:none; color:var(--talos-muted)}
+.talos-github__ramo > .i:last-child{width:12px; height:12px}
+.talos-github__ramo:hover{background:var(--talos-card)}
+.talos-github__ramo:focus-visible{outline:var(--talos-focus-width) solid var(--talos-accent); outline-offset:1px}
+
+/* La richiesta in riga: titolo, campo, e i due pulsanti a destra — «Lascia stare» e il verbo di ciò che succede. */
+.talos-github-richiesta{display:flex; flex-direction:column; gap:var(--talos-space-sm); margin:0}
+.talos-github-richiesta__titolo{margin:0; font-size:var(--talos-font-size-xs); font-weight:600; color:var(--talos-text); overflow-wrap:anywhere}
+/* `.talos-field__error` vive in primitives.css, che non arriva al bundle: il colore di pericolo si mette qui, dal tema */
+.talos-github-richiesta__errore{margin:0; font-size:var(--talos-font-size-xs); color:var(--talos-danger)}
+.talos-github-richiesta__campo[aria-invalid="true"]{border-color:var(--talos-danger)}
+.talos-github-richiesta__piede{display:flex; justify-content:flex-end; gap:var(--talos-space-xs)}
+
+/* La casella del commit dice quando modifica un commit che c'è già, e come uscirne. */
+.talos-github-commit__modo{display:flex; align-items:center; justify-content:space-between; gap:var(--talos-space-sm); font-size:var(--talos-font-size-xs); color:var(--talos-muted)}
+
+/* Righe che non aprono niente (messi da parte, commit): stessa misura, niente mano. */
+.talos-github-riga__apri--fermo{cursor:default}
+.talos-github-riga__lettera > .i{width:14px; height:14px; vertical-align:-2px}
+.talos-github-riga__apri--due-righe{flex-direction:column; align-items:stretch; gap:2px}
+.talos-github-riga__apri--due-righe > .talos-github-riga__nome{max-width:100%}
+/* La voce messa da parte: l'icona a sinistra, nota e «su ramo · quando» su due righe. */
+.talos-github-riga__testi{display:flex; flex:1; flex-direction:column; gap:2px; min-width:0}
+.talos-github-riga__testi > .talos-github-riga__nome{max-width:100%}
+
+/* ⭐ F6-1 pezzi: i comandi stanno a destra nella testa del pezzo (`talos-diff-chat__pezzo`, la stessa della chat), sempre
+   visibili — nel diff si è già scelto il file, e un pulsante che compare solo al passaggio non si scopre col tocco. */
+.talos-github-pezzo__comandi{display:inline-flex; align-items:center; gap:4px; margin-inline-start:auto}
+.talos-github-diff__pezzi .talos-diff-chat__pezzo:has(.talos-github-pezzo__comandi){align-items:center}
+
+/* ⭐ F6-1 ✨: la stellina sta nell'angolo della casella; il testo non le passa sotto. Mentre il modello scrive, respira —
+   calma, mai ferma: col movimento ridotto è solo più lenta (regola del progetto sulle animazioni). */
+.talos-github-commit__campo{position:relative}
+.talos-github-commit__campo > .talos-github-commit__messaggio{display:block; width:100%; box-sizing:border-box; padding-inline-end:36px}
+.talos-github-commit__genera{position:absolute; inset-inline-end:6px; inset-block-end:6px}
+.talos-github-commit__genera[aria-busy="true"] > .i{animation:talos-github-pensa 1.4s ease-in-out infinite alternate}
+@keyframes talos-github-pensa{from{opacity:1}to{opacity:.35}}
+@media (prefers-reduced-motion: reduce){ .talos-github-commit__genera[aria-busy="true"] > .i{animation-duration:3.2s} }
+
+/* ⭐ F6-2 (27/09/2026) — la sincronizzazione sotto la testata: il pulsante che cambia (una sola azione in vista, come GitHub
+   Desktop), ↓ ↑ in cifre tabulari, e l'ultimo recupero spinto a destra. Nella colonna stretta va a capo invece di tagliare. */
+.talos-github-sinc{display:flex; flex-wrap:wrap; align-items:center; gap:6px var(--talos-space-sm); min-width:0}
+/* `talos-button--sm` vive in primitives.css, che non arriva al bundle (misurato 27/09): l'altezza del ramo accanto (28px) si mette qui */
+.talos-github-sinc__azione{flex:none; gap:6px; box-sizing:border-box; height:28px; min-height:28px; padding-block:0; padding-inline:10px; font-size:var(--talos-font-size-xs)}
+.talos-github-sinc__azione > .i{width:14px; height:14px}
+.talos-github-sinc__azione[aria-busy="true"] > .i{animation:talos-github-pensa 1.4s ease-in-out infinite alternate}
+@media (prefers-reduced-motion: reduce){ .talos-github-sinc__azione[aria-busy="true"] > .i{animation-duration:3.2s} }
+.talos-github-sinc__conti{display:inline-flex; gap:6px; font-size:var(--talos-font-size-xs); color:var(--talos-text); font-variant-numeric:tabular-nums}
+.talos-github-sinc__recupero{margin-inline-start:auto; font-size:var(--talos-font-size-xs); color:var(--talos-muted); white-space:nowrap}
+.talos-github-sinc__nota{margin:0; flex-basis:100%}
+.talos-github-blocco__testo{margin:0; padding:0; overflow-wrap:anywhere} /* allineato al titolo (foto 27/09: 4px di rientro) */
+
+/* ⭐ F6-2 passo 3 — il grafo della storia: la forma di VS Code (`scmHistory.ts:20-24`, `media/scm.css:160-208`) nel
+   linguaggio della scheda. Il ramo attuale ha l'accento, il suo remoto l'informazione; le altre corsie (rami già uniti)
+   restano neutre: la decisione 21 è «il ramo e il suo remoto», e un colore in più direbbe qualcosa che non c'è. L'altezza
+   della riga è quella che il grafo disegna (`ALTEZZA_RIGA_STORIA` in `scheda-github.js`): se cambia qui, cambia là. */
+/* il fondo dietro la lista (`.talos-inspector`, index.css:1624): il «foro» dei cerchi ha il suo colore, e sulla riga sotto il
+   puntatore quello della riga (`.talos-github-riga:hover`) */
+.talos-github-storia{--talos-github-fondo:var(--talos-background)}
+.talos-github-storia > .talos-github-riga--commit{height:50px; min-height:50px; align-items:stretch; gap:0}
+.talos-github-storia > .talos-github-riga--commit > .talos-github-riga__apri{justify-content:center; min-width:0; padding-inline-start:2px}
+.talos-github-grafo{flex:none; display:block; overflow:visible}
+.talos-github-grafo path{fill:none; stroke:var(--talos-muted); stroke-width:1px; stroke-linecap:round}
+.talos-github-grafo path[data-colore="locale"]{stroke:var(--talos-accent)}
+.talos-github-grafo path[data-colore="remoto"]{stroke:var(--talos-info)}
+.talos-github-grafo circle{fill:var(--talos-muted); stroke:var(--talos-github-fondo)}
+.talos-github-grafo circle[data-colore="locale"]{fill:var(--talos-accent)}
+.talos-github-grafo circle[data-colore="remoto"]{fill:var(--talos-info)}
+.talos-github-grafo circle[data-ruolo="foro"]{fill:var(--talos-github-fondo)}
+.talos-github-grafo circle[data-ruolo="tratteggio"]{fill:var(--talos-github-fondo); stroke-dasharray:4 2}
+.talos-github-grafo circle[data-ruolo="tratteggio"][data-colore="locale"]{stroke:var(--talos-accent)}
+.talos-github-grafo circle[data-ruolo="tratteggio"][data-colore="remoto"]{stroke:var(--talos-info)}
+.talos-github-riga:hover .talos-github-grafo circle, .talos-github-riga:focus-within .talos-github-grafo circle{stroke:var(--talos-card)}
+.talos-github-riga:hover .talos-github-grafo circle[data-ruolo="foro"], .talos-github-riga:focus-within .talos-github-grafo circle[data-ruolo="foro"],
+.talos-github-riga:hover .talos-github-grafo circle[data-ruolo="tratteggio"], .talos-github-riga:focus-within .talos-github-grafo circle[data-ruolo="tratteggio"]{fill:var(--talos-card)}
+.talos-github-riga:hover .talos-github-grafo circle[data-ruolo="tratteggio"][data-colore="locale"], .talos-github-riga:focus-within .talos-github-grafo circle[data-ruolo="tratteggio"][data-colore="locale"]{stroke:var(--talos-accent)}
+.talos-github-riga:hover .talos-github-grafo circle[data-ruolo="tratteggio"][data-colore="remoto"], .talos-github-riga:focus-within .talos-github-grafo circle[data-ruolo="tratteggio"][data-colore="remoto"]{stroke:var(--talos-info)}
+
+/* ⭐ F6-2 passo 4 — le righe dei file sotto una riga aperta del grafo: alte quanto il segnaposto delle corsie che le attraversa
+   (`ALTEZZA_RIGA_FILE_STORIA` in `scheda-github.js`), un po' rientrate come i figli di un albero (VS Code le mette sotto il
+   commit, `scmHistoryViewPane.ts:692-697`). Le righe di nota crescono col testo, e il loro segnaposto con loro. */
+.talos-github-storia > .talos-github-riga--file-commit{height:32px; min-height:32px; align-items:stretch; gap:0}
+.talos-github-storia > .talos-github-riga--file-commit > .talos-github-riga__apri{align-items:center; padding-inline-start:var(--talos-space-sm)}
+.talos-github-storia > .talos-github-riga--nota{height:auto}
+.talos-github-storia > .talos-github-riga--nota > .talos-github-grafo{height:auto}
+.talos-github-storia > .talos-github-riga--nota > .talos-inspector__hint{margin:0; align-self:center; padding:6px 0 6px var(--talos-space-sm)}
+
+/* ⭐ F6-3 (27/09/2026) — le pull request. Stessa grammatica della scheda: righe a due righe, la carta delle richieste in riga per
+   lo stato di GitHub CLI e per il modulo, il ramo-pulsante per la base. Gli esiti dei controlli hanno ognuno un'icona e il suo
+   numero (la grammatica di ↓N ↑M); il colore li ripete, non li sostituisce. Solo token del tema. */
+.talos-github-riga--pr{min-height:44px}
+.talos-github-riga--pr > .talos-github-riga__apri{align-items:center}
+.talos-github-riga--pr .talos-github-riga__lettera{color:var(--talos-accent)}
+.talos-github-riga--pr[data-bozza="true"] .talos-github-riga__lettera, .talos-github-riga--pr[data-stato="closed"] .talos-github-riga__lettera{color:var(--talos-muted)}
+.talos-github-riga--pr[data-stato="merged"] .talos-github-riga__lettera{color:var(--talos-info)}
+/* stato e esiti: nella colonna stretta gli esiti vanno a capo invece di tagliarsi (un esito tagliato è un'informazione persa) */
+.talos-github-pr__seconda{display:flex; flex-wrap:wrap; align-items:center; gap:2px var(--talos-space-sm); min-width:0; white-space:normal; overflow:visible}
+.talos-github-pr__esiti{display:inline-flex; align-items:center; gap:8px; font-variant-numeric:tabular-nums}
+.talos-github-pr__esito{display:inline-flex; align-items:center; gap:2px; color:var(--talos-muted)}
+.talos-github-pr__esito > .i{width:12px; height:12px; flex:none}
+.talos-github-pr__esito[data-esito="fallito"], .talos-github-riga__lettera[data-esito="fallito"]{color:var(--talos-danger)}
+.talos-github-pr__esito[data-esito="passato"], .talos-github-riga__lettera[data-esito="passato"]{color:var(--talos-success, var(--talos-accent))}
+.talos-github-pr__esito[data-esito="in-corso"], .talos-github-riga__lettera[data-esito="in-corso"]{color:var(--talos-info)}
+.talos-github-riga__lettera[data-esito="annullato"], .talos-github-riga__lettera[data-esito="saltato"]{color:var(--talos-muted)}
+/* i controlli sotto la PR: rientrati come i file sotto un commit, e più bassi */
+.talos-github-riga--controllo{min-height:30px}
+.talos-github-riga--controllo > .talos-github-riga__apri{align-items:center; padding-inline-start:var(--talos-space-md)}
+.talos-github-riga--controllo > .talos-github-riga__apri:disabled{cursor:default}
+.talos-github-pr__sotto{margin:var(--talos-space-sm) 0 2px; padding-inline:var(--talos-space-xs)}
+.talos-github-pr__vuota{display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:var(--talos-space-xs) var(--talos-space-sm); padding-inline:var(--talos-space-xs)}
+.talos-github-pr__vuota > .talos-inspector__hint{margin:0}
+/* il codice del device flow: si legge e si ricopia a mano, quindi grande, a spaziatura fissa, coi caratteri distanziati */
+.talos-github-pr__codice-riga{display:flex; align-items:center; gap:var(--talos-space-xs)}
+.talos-github-pr__codice{font-family:var(--talos-font-mono); font-size:var(--talos-font-size-lg); font-weight:600; letter-spacing:.12em; color:var(--talos-text); user-select:all}
+/* il modulo: ramo → base su una riga che va a capo nella colonna stretta; la descrizione si allunga a mano */
+.talos-github-pr__rami{display:flex; flex-wrap:wrap; align-items:center; gap:4px 6px; min-width:0; font-size:var(--talos-font-size-xs)}
+.talos-github-pr__ramo{min-width:0; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--talos-muted)}
+.talos-github-pr__freccia{color:var(--talos-muted)}
+.talos-github-pr__base{flex:0 1 auto; margin-inline-end:0}
+.talos-github-pr__testo{min-height:84px; resize:vertical}
+.talos-github-pr__bozza{display:flex; align-items:flex-start; gap:8px; font-size:var(--talos-font-size-xs); color:var(--talos-text); cursor:pointer}
+.talos-github-pr__bozza > .talos-checkbox{margin-block-start:1px}
+.talos-github-pr__bozza-testi{display:flex; flex-direction:column; gap:2px; min-width:0}
+.talos-github-pr__bozza-testi > .talos-github-riga__cartella{white-space:normal}
+/* le frasi d'aiuto nelle carte del gruppo stanno allineate al titolo e ai campi (foto sul 4174, 27/09: 3 px di rientro, lo
+   stesso che `talos-github-blocco__testo` toglie alla carta dello scarico) */
+.talos-github-pr__modulo .talos-inspector__hint, .talos-github-pr__stato .talos-inspector__hint{margin:0; padding:0}

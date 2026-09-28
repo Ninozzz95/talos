@@ -160,7 +160,9 @@ test('FONDO-01: `fondoConversazioneInVista` legge il layout una volta per fotogr
 
 test('SPAZIO-CODA-01: lo spazio in coda resta una scrittura sola, con la sua uscita anticipata', () => {
   // la funzione non cambia forma: quello che è cambiato è QUANTE volte la si chiama
-  const corpo = attorno(NUDO, 'function aggiornaSpazioCodaConversazione(', 700);
+  // 26/09 (difetto 5, opzione C dell'owner): il corpo è cresciuto — la riserva ora si misura sul contenuto — e la scrittura cadeva
+  // oltre i 700 caratteri guardati. L'invariante è lo stesso (una scrittura sola, con l'uscita anticipata): si guarda più lontano.
+  const corpo = attorno(NUDO, 'function aggiornaSpazioCodaConversazione(', 1400);
   assert.match(corpo, /if \(spazio === spazioCodaConversazioneUltimo\) return;/);
   assert.match(corpo, /setProperty\('--stream-follow-space'/);
 });

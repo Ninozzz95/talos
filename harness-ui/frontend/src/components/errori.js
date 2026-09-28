@@ -230,13 +230,32 @@ const REGOLE = [
         cosa: nome ? `Manca la chiave per ${nome}.` : 'Manca la chiave del fornitore scelto.',
         perche: 'Il modello scelto passa da un fornitore che vuole una chiave, e in questo computer non ce n’è una collegata. La richiesta non è nemmeno partita: nessun consumo, nessuna attesa.',
         rimedi: [
-          /* «per», non «di»: la stessa preposizione del messaggio del server (D18). */
-          nome ? `Collega la chiave per ${nome} da Impostazioni → Laboratorio modelli → Fornitori e accessi.` : 'Collega la chiave da Impostazioni → Laboratorio modelli → Fornitori e accessi.',
+          /* «per», non «di»: la stessa preposizione del messaggio del server (D18).
+             ⛔ 23/09/2026 — l'ultimo passo si chiama come la scheda che si VEDE, «Provider»: «Fornitori e
+             accessi» era il titolo del velo tolto per decisione owner (e, dentro il laboratorio, una
+             testata nascosta). Il pulsante «Collega un modello» accanto porta proprio lì. */
+          nome ? `Collega la chiave per ${nome} da Impostazioni → Laboratorio modelli → Provider.` : 'Collega la chiave da Impostazioni → Laboratorio modelli → Provider.',
           'Oppure scegli un altro modello dalla pillola del composer: uno locale non chiede nessuna chiave.',
         ],
         tecnico: t,
       };
     },
+  },
+  {
+    /*
+     * ⛔⛔⛔ 25/09/2026 sera — sessione dell'owner 65d5683b (un GGUF locale, «ciao»): la carta diceva «Il fornitore non ha
+     *   accettato la richiesta» e nessun fornitore era stato chiamato — il server non aveva il motore llama.cpp. Curato il
+     *   server (`CONDIZIONI_PRIMA_DELLA_RETE`, `src/runtime-owner-adapter.mjs`), qui arriva `LOCAL_RUNTIME_NOT_CONFIGURED`.
+     * ⛔ Come la chiave mancante, è una CONFIGURAZIONE e non un guasto: riprovare non serve. E un solo rimedio, quello che
+     *   si può verificare: il progetto non documenta come si installa il motore, e la carta non lo inventa.
+     */
+    id: 'motore-locale-assente',
+    riconosce: (t) => /\bLOCAL_RUNTIME_NOT_CONFIGURED\b/.test(t) || /motore locale non è configurato/i.test(t),
+    spiega: () => ({
+      cosa: 'Il motore dei modelli locali non c’è su questo server.',
+      perche: 'Il modello scelto gira su questo computer, e il server non ha trovato il motore che lo esegue. La richiesta non è partita: nessun fornitore chiamato, nessun consumo.',
+      rimedi: ['Scegli un modello di un fornitore dalla pillola del composer: non ha bisogno del motore locale.'],
+    }),
   },
   {
     /*
@@ -316,7 +335,8 @@ const REGOLE = [
   },
   {
     id: 'contesto-pieno',
-    riconosce: (t) => /exceed_context_size|exceeds the available context size|context (?:size|length) exceeded/i.test(t),
+    // 25/09 sera: anche il motore locale pieno, che sale col suo codice e i numeri in italiano (runtime-owner-adapter.mjs)
+    riconosce: (t) => /exceed_context_size|exceeds the available context size|context (?:size|length) exceeded|\bLOCAL_CONTEXT_EXCEEDED\b/i.test(t),
     spiega: (t) => {
       const numeri = /\((\d+)\s*tokens?\)[^(]*\((\d+)\s*tokens?\)/i.exec(t) || [];
       const chiesti = Number(numeri[1]) || null;
@@ -332,6 +352,42 @@ const REGOLE = [
         ],
       };
     },
+  },
+  {
+    /*
+     * ⛔⛔ 27/09/2026 — sessione dell'owner ec3bc6c0: Spark-X2.5-4B, architettura `spark2_5`, motore llama.cpp b10517 che non la
+     *   conosce («unknown model architecture: 'spark2_5'», misurato a mano). La carta diceva «si è chiuso dopo 0 s … failed to load
+     *   model»: vero e inutile. Ora il supervisore dà `RUNTIME_ARCH_UNSUPPORTED` col nome e la build (owner «errore chiaro ora»).
+     *   Sta PRIMA delle regole su «failed to load model», che altrimenti la prenderebbero.
+     */
+    id: 'architettura-sconosciuta',
+    riconosce: (t) => /\bRUNTIME_ARCH_UNSUPPORTED\b|non sa leggere:?|unknown model architecture/i.test(t),
+    spiega: (t) => ({
+      cosa: 'Il motore installato non sa leggere questo modello.',
+      perche: t.replace(/\bRUNTIME_ARCH_UNSUPPORTED\b\s*/u, '').trim(),
+      rimedi: [
+        'Scegli un altro modello nel Laboratorio modelli: con il motore di oggi questo non si avvia, e riprovare non cambia niente.',
+        'Il modello si potrà usare quando il motore llama.cpp sarà aggiornato a una versione che conosce la sua architettura.',
+      ],
+    }),
+  },
+  {
+    /*
+     * ⛔⛔⛔ 25/09/2026 sera — sessione dell'owner eb5acb34: Qwen3.8-27B Q4 (16,7 GB) su una scheda da 16 GB. La regola qui sotto
+     *   riconosceva «failed to load model» e diceva «non si è acceso in tempo, riprova»: falso, la scheda non aveva spazio e
+     *   riprovare non cambia niente. Ora il supervisore dà `RUNTIME_OUT_OF_MEMORY` coi numeri del motore (decisione owner «carta
+     *   vera»), e questa regola sta PRIMA. Il rimedio è quello di Hermes (`physics_check`): una quantizzazione più piccola.
+     */
+    id: 'modello-non-entra',
+    riconosce: (t) => /\bRUNTIME_OUT_OF_MEMORY\b|non entra nella memoria della scheda/i.test(t),
+    spiega: (t) => ({
+      cosa: 'Il modello non entra nella memoria della scheda grafica.',
+      perche: `${t.replace(/\bRUNTIME_OUT_OF_MEMORY\b\s*/u, '').trim()} Il motore ha provato a caricarlo e la scheda non aveva spazio: riprovare non cambia niente.`,
+      rimedi: [
+        'Scegli una quantizzazione più piccola dello stesso modello nel Laboratorio modelli: il file deve stare sotto la memoria della scheda, con un po’ di margine.',
+        'Oppure un modello più piccolo.',
+      ],
+    }),
   },
   {
     /*
@@ -424,6 +480,33 @@ const REGOLE = [
       };
     },
   },
+  /*
+   * ⛔⛔ 25/09/2026 notte (sessione vera `c15ba17c…`, Gemini 3.8; decisione owner «come Hermes, in piccolo») — la risposta vuota
+   *   di un modello di RETE, dopo la scala del kernel (una spinta, due ritentativi): `PROVIDER_EMPTY_RESPONSE`, con il motivo
+   *   del fornitore nella frase quando c'è. Prima arrivava come «La risposta del fornitore si è interrotta.» (falso) e la carta
+   *   generica qui sotto, scritta per i modelli locali, non avrebbe detto il vero nemmeno riconoscendola.
+   * ⛔ Il rimedio «a pezzi» compare SOLO col motivo `MALFORMED_FUNCTION_CALL`, la causa nota (googleapis/js-genai #1619:
+   *   un file intero in un argomento): senza quel motivo non lo sappiamo, e non lo si dice.
+   */
+  {
+    id: 'risposta-vuota-dopo-tentativi',
+    riconosce: (t, codice) => codice === 'PROVIDER_EMPTY_RESPONSE' || /ha risposto senza testo né attrezzi/u.test(t),
+    spiega: (tecnico) => {
+      const motivo = /motivo del fornitore: ([^)]+)\)/u.exec(tecnico)?.[1]?.trim() ?? null;
+      const malformata = /MALFORMED_FUNCTION_CALL/u.test(motivo ?? '');
+      return {
+        cosa: 'Il modello ha risposto senza testo e senza attrezzi, anche dopo che TALOS gli ha chiesto di continuare e ha riprovato.',
+        perche: motivo
+          ? `Il fornitore ha chiuso la risposta con il motivo «${motivo}».${malformata ? ' Succede quando il modello prova a scrivere in un attrezzo qualcosa di molto grande, come un file intero.' : ''}`
+          : 'Il fornitore non ha detto il motivo.',
+        rimedi: [
+          'Scrivi «continua»: il lavoro già fatto in questo giro è rimasto nella conversazione.',
+          ...(malformata ? ['Se il compito chiede un file molto lungo, chiedilo in più parti.'] : []),
+          'Se si ripete, prova lo stesso messaggio con un altro modello.',
+        ],
+      };
+    },
+  },
   {
     id: 'risposta-vuota',
     /*
@@ -465,9 +548,43 @@ const REGOLE = [
       rimedi: ['Riapri il foglio dei permessi e scegli di nuovo, poi riavvia il giro.'],
     }),
   },
+  /*
+   * ⛔⛔ 24/09/2026 sera, bug dell'owner con la foto (sessione `65bf2ef2…`, gemini-3.8-flash): la carta diceva «Questa forma
+   *   di errore non è ancora tradotta» sopra la frase «Troppo traffico presso il fornitore.», che è GIÀ italiana. Il server
+   *   scrive otto frasi pubbliche per i guasti del fornitore, tutte col codice `PROVIDER_REQUEST_ERROR`
+   *   (`src/runtime-owner-adapter.mjs`, `erroreFornitorePubblico`), e nessuna regola qui le riconosceva: cercavano solo le
+   *   forme inglesi. Le frasi si riconoscono per intero, perché sono un contratto nostro, non testo di terzi.
+   */
+  {
+    id: 'risposta-interrotta',
+    riconosce: (t) => /La risposta del fornitore si è interrotta/u.test(t),
+    spiega: () => ({
+      cosa: 'La risposta del modello si è interrotta prima della fine.',
+      perche: 'Il fornitore ha chiuso il flusso a metà. Il testo arrivato resta qui sopra.',
+      rimedi: ['Riprova il giro.', 'Se si ripete, scegli un altro modello o un altro fornitore.'],
+    }),
+  },
+  {
+    id: 'credenziale-rifiutata',
+    riconosce: (t) => /Credenziale (?:rifiutata|non accettata) dal fornitore/u.test(t),
+    spiega: () => ({
+      cosa: 'Il fornitore ha rifiutato la chiave.',
+      perche: 'La chiave salvata non è valida per questo fornitore, o è scaduta.',
+      rimedi: ['Controlla la chiave in Fornitori e accessi, poi riprova.'],
+    }),
+  },
+  {
+    id: 'fornitore-rifiuto',
+    riconosce: (t) => /Il fornitore non ha accettato la richiesta/u.test(t),
+    spiega: () => ({
+      cosa: 'Il fornitore non ha accettato la richiesta.',
+      perche: 'Non ha detto il motivo: il testo che ha mandato è qui sotto.',
+      rimedi: ['Riprova il giro.', 'Se si ripete, scegli un altro modello o un altro fornitore.'],
+    }),
+  },
   {
     id: 'rete',
-    riconosce: (t) => /ECONNREFUSED|ETIMEDOUT|fetch failed|network error|socket hang up/i.test(t),
+    riconosce: (t) => /ECONNREFUSED|ETIMEDOUT|fetch failed|network error|socket hang up|Connessione con il fornitore interrotta|Il fornitore non risponde|Il fornitore ha superato il tempo massimo/iu.test(t),
     spiega: () => ({
       cosa: 'La richiesta non è arrivata al modello.',
       perche: 'Il servizio non ha risposto: può essere la rete, il fornitore, o il runtime locale spento.',
@@ -476,7 +593,7 @@ const REGOLE = [
   },
   {
     id: 'quota',
-    riconosce: (t) => /\b429\b|rate.?limit|quota|insufficient (?:credit|balance)/i.test(t),
+    riconosce: (t) => /\b429\b|rate.?limit|quota|insufficient (?:credit|balance)|Troppo traffico presso il fornitore|Credito non disponibile presso il fornitore/iu.test(t),
     spiega: () => ({
       cosa: 'Il fornitore ha rifiutato la richiesta per limiti di traffico o di credito.',
       perche: 'Non è un errore del compito: è il conto o la soglia di chiamate al minuto.',

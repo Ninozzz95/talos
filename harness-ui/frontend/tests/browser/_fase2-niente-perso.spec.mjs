@@ -22,6 +22,10 @@ import { dirname, join } from 'node:path';
  *   DOM sarebbe rosso per costruzione. Si congela l'**identità** — gli `id`, i ganci `data-*`, le
  *   righe `[data-setting-row]` e il numero di controlli abilitati. Le forme possono cambiare;
  *   **l'identità no**, e il numero dei controlli può crescere ma **non calare**.
+ *   Eccezione Owner 23/09/2026: una sola impostazione Desktop è stata
+ *   ritirata esplicitamente, «Forma del composer» (3 id, 1 riga, 3
+ *   controlli). Il master storico resta byte-identico; il confronto
+ *   sottrae solo questa voce e continua a proteggere tutte le altre.
  *
  * ⛔ COSA FA DIVENTARE ROSSA QUESTA PROVA (provato, non dichiarato): si toglie un `id` da una
  *   sezione → elencato e rosso; si toglie una riga → rosso; si disabilita o si elimina un controllo
@@ -83,7 +87,7 @@ async function apriImpostazioni(page) {
   await expect(page.locator('#schermoImpostazioni')).toBeVisible({ timeout: 10_000 });
 }
 
-test('FASE2-NIENTE-PERSO · nessun id, nessun gancio, nessun controllo in meno', async ({ page }) => {
+test('FASE2-NIENTE-PERSO · nessun id, nessun gancio, nessun controllo in meno', async ({ page }, testInfo) => {
   test.setTimeout(60_000);
   /* ⛔ Un master assente NON si crea in silenzio: si scrive un candidato e si fallisce. */
   expect(existsSync(MASTER), `manca il golden master dell'identità (${MASTER}): rilanciare \`node artifacts/zoom-bar/inventario-identita.mjs\`, GUARDARE il diff e committarlo`).toBe(true);
@@ -96,23 +100,57 @@ test('FASE2-NIENTE-PERSO · nessun id, nessun gancio, nessun controllo in meno',
   await expect(page.locator('#modelLabInstalledPanel #modelloNome')).toBeVisible();
   const vivo = await inventarioStabile(page, RACCOGLI);
 
-  const mancanti = { sezioni: [], id: [], righe: [], calati: [] };
+  const ritirato = {
+    sezione: 'chat',
+    id: new Set(['composerShapeSelect', 'composerShapeSelect--calm', 'settingsHelp-composerShapeSelect']),
+    righe: new Set(['composerShapeSelect']),
+    controlli: 3,
+    ganci: { 'data-setting-row': 1, 'data-c': 1, 'data-testo-it': 4 },
+  };
+  /*
+   * ⛔ SECONDA ECCEZIONE, Owner 23/09/2026: la SEZIONE INTERA «Provider e accessi» (`providers`) è
+   *   tolta («Toglierla del tutto»). Il master resta byte-identico, come per la prima eccezione: si
+   *   sottrae SOLO questa sezione, e si pretende che sia davvero sparita (un ritiro che lascia la
+   *   sezione a schermo è un ritiro finto). Cosa conteneva e dove vive ora, voce per voce:
+   *     · `settingsProvidersList` (chiave sì/no per fornitore) → le card della scheda «Provider» del
+   *       Laboratorio modelli, che il master CONGELA GIÀ (sezione `models`: `#providerList`, i corpi
+   *       `provider-body-*`), dallo stesso `/api/v1/providers`;
+   *     · il suo unico controllo, «Gestisci chiavi e indirizzi» → era una porta verso quella stessa
+   *       scheda: ora ci portano il comando «providers», la Home e «Collega un modello»;
+   *     · `settings-group-providers-state` → la testata della carta tolta con lei.
+   *   ⇒ Nessuna FUNZIONE si perde: si perde una seconda porta sulla stessa funzione.
+   */
+  const sezioniRitirate = new Set(['providers']);
+  const ritirateAncoraPresenti = [...sezioniRitirate].filter((chiave) => Object.keys(vivo.sezioni).some((k) => k === chiave || k.startsWith(chiave + '#')));
+  const mancanti = { sezioni: [], id: [], righe: [], calati: [], ganci: [] };
   for (const [chiave, atteso] of Object.entries(master.sezioni)) {
     const ora = vivo.sezioni[chiave];
+    if (!ora && sezioniRitirate.has(chiave)) continue;
     if (!ora) { mancanti.sezioni.push(chiave); continue; }
     const idOra = new Set(ora.id);
-    for (const id of atteso.id) if (!idOra.has(id)) mancanti.id.push(`${chiave} → ${id}`);
+    for (const id of atteso.id) if (!idOra.has(id) && !(chiave === ritirato.sezione && ritirato.id.has(id))) mancanti.id.push(`${chiave} → ${id}`);
     const righeOra = new Set(ora.righe);
-    for (const r of atteso.righe) if (!righeOra.has(r)) mancanti.righe.push(`${chiave} → ${r}`);
-    if (ora.controlli < atteso.controlli) mancanti.calati.push(`${chiave}: ${atteso.controlli} → ${ora.controlli}`);
+    for (const r of atteso.righe) if (!righeOra.has(r) && !(chiave === ritirato.sezione && ritirato.righe.has(r))) mancanti.righe.push(`${chiave} → ${r}`);
+    const minControlli = atteso.controlli - (chiave === ritirato.sezione ? ritirato.controlli : 0);
+    if (ora.controlli < minControlli) mancanti.calati.push(`${chiave}: ${minControlli} → ${ora.controlli}`);
+    for (const [gancio, minimo] of Object.entries(atteso.ganci || {})) {
+      const ammessi = chiave === ritirato.sezione ? (ritirato.ganci[gancio] || 0) : 0;
+      if ((ora.ganci?.[gancio] || 0) < minimo - ammessi) mancanti.ganci.push(`${chiave} → ${gancio}: ${minimo - ammessi} → ${ora.ganci?.[gancio] || 0}`);
+    }
+    if (chiave === ritirato.sezione) {
+      for (const id of ritirato.id) if (idOra.has(id)) mancanti.id.push(`${chiave} → ${id} ancora presente`);
+      for (const r of ritirato.righe) if (righeOra.has(r)) mancanti.righe.push(`${chiave} → ${r} ancora presente`);
+    }
   }
 
-  if (mancanti.sezioni.length || mancanti.id.length || mancanti.righe.length || mancanti.calati.length) {
-    writeFileSync(MASTER.replace(/\.json$/, '.attuale.json'), JSON.stringify(vivo, null, 1));
+  if (Object.values(mancanti).some((items) => items.length)) {
+    writeFileSync(testInfo.outputPath('inventario-attuale.json'), JSON.stringify(vivo, null, 1));
     console.log('FASE2-NIENTE-PERSO ' + JSON.stringify({ ...mancanti, id: mancanti.id.slice(0, 20), righe: mancanti.righe.slice(0, 20) }, null, 1));
   }
+  expect(ritirateAncoraPresenti, 'una sezione ritirata dall owner è ancora a schermo').toEqual([]);
   expect(mancanti.sezioni, 'sezioni sparite').toEqual([]);
   expect(mancanti.id, 'id spariti — la regola è: nessuna funzione si perde').toEqual([]);
   expect(mancanti.righe, 'righe di impostazione sparite').toEqual([]);
   expect(mancanti.calati, 'controlli abilitati diminuiti in una sezione').toEqual([]);
+  expect(mancanti.ganci, 'ganci di sezione diminuiti').toEqual([]);
 });

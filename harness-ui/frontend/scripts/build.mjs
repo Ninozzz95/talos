@@ -8,6 +8,14 @@ import * as esbuild from 'esbuild';
 import { copyVendoredAssets } from './copy-vendored-assets.mjs';
 
 const FRONTEND_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+/*
+ * ⛔ ATLAS F3 (27/09/2026): `@napi-rs/canvas` è la tela NATIVA per Node che pdfjs-dist 6 porta come dipendenza facoltativa.
+ *   `emf-converter` (dentro pptx-viewer-core, rese Office di F5) la chiede con un `import()` protetto da «solo in Node»
+ *   (`dist/index.js:5042-5053`): finché il pacchetto non c'era esbuild lasciava correre, da quando pdf.js lo installa
+ *   esbuild lo trova e prova a impacchettare `fs`, `os` e un `.node` — build rossa. Esterno: l'import resta com'è e nel
+ *   browser non parte mai.
+ */
+const ESTERNI_SOLO_NODE = Object.freeze(['@napi-rs/canvas']);
 const DEFAULT_OUTPUT = path.join(FRONTEND_ROOT, 'dist');
 
 function assertSafeOutput(outputDir) {
@@ -57,6 +65,11 @@ export async function buildFrontend({
        disegno, mentre `app.js` è il bundle grosso che arriva dopo — è esattamente il lampo
        che il velo esiste per coprire. E non può stare inline: `ui-untrusted-content` vieta
        gli script con contenuto in `public/index.html`. */
+    /* F5 File reader (26/09/2026): le rese Office sono entry A PARTE, a nome fisso, caricate solo quando si apre un
+       documento — il foglio da `app.js` per indirizzo (`import('/lettore-foglio.js')`), Word e PowerPoint dalla pagina
+       ospite: docx-preview, SheetJS e pptx-viewer-core pesano megabyte che ogni avvio dovrebbe altrimenti analizzare (senza
+       `splitting` esbuild mette gli `import()` dinamici DENTRO il bundle). Le serve `static-files.mjs`, il manifesto le
+       elenca da solo. */
     entryPoints: { app: entryPoint, styles: 'src/styles/main.css', avvio: 'src/avvio.js' },
     outdir: output,
     entryNames: '[name]',
@@ -69,11 +82,30 @@ export async function buildFrontend({
     target: ['chrome120'],
     charset: 'utf8',
     legalComments: 'none',
-    external: ['./fonts/*', '/talos/*'], // 12/09: il marchio corto (/talos/brand/logo-short.svg) lo serve static-files.mjs, esbuild non deve risolverlo
+    external: ['./fonts/*', '/talos/*', ...ESTERNI_SOLO_NODE], // 12/09: il marchio corto (/talos/brand/logo-short.svg) lo serve static-files.mjs, esbuild non deve risolverlo
     metafile: true,
     sourcemap: false,
     minify: false,
     logLevel: 'silent',
+  });
+  /* ⛔ Le rese Office si MINIFICANO, e in una build a parte: `lettore-presentazione.js` non minificato pesa 6,7 MB e il
+     server statico ne serve al massimo 4 MiB (`MAX_STATIC_BYTES`, `static-files.mjs`) — misurato il 26/09 dalla prova
+     browser: «Failed to fetch dynamically imported module», cioè una presentazione che non si apre. Minificato è 3,1 MB
+     (pptx-viewer-core da solo sono 5,7 MB di sorgente). `app.js` resta leggibile com'è sempre stato. La prova
+     `tests/contract/build-output.test.mjs` controlla che ogni asset servito stia sotto il tetto. */
+  const renderOffice = { absWorkingDir: FRONTEND_ROOT, outdir: output, entryNames: '[name]', bundle: true, platform: 'browser', target: ['chrome120'], charset: 'utf8', legalComments: 'none', sourcemap: false, minify: true, logLevel: 'silent', external: [...ESTERNI_SOLO_NODE] };
+  // il foglio di calcolo resta un modulo della pagina (una tabella nostra: nessuno stile in linea)
+  await esbuild.build({ ...renderOffice, entryPoints: { 'lettore-foglio': 'src/components/lettore/office/foglio.js' }, format: 'esm' });
+  /* ⛔ Word e PowerPoint si rendono DENTRO la pagina ospite (26/09 pomeriggio, owner «ora, prima di F6»): i loro bundle li
+     carica QUELLA pagina, a origine nulla, come script CLASSICI col suo nonce — un modulo da un'origine nulla chiederebbe
+     CORS. Da qui `iife`: il bundle si registra su `globalThis.TalosResaOspite`. */
+  await esbuild.build({
+    ...renderOffice,
+    entryPoints: {
+      'lettore-ospite-documento': 'src/components/lettore/office/ospite-documento.js',
+      'lettore-ospite-presentazione': 'src/components/lettore/office/ospite-presentazione.js',
+    },
+    format: 'iife',
   });
   await writeFile(path.join(output, 'index.html'), await readFile(path.join(FRONTEND_ROOT, htmlTemplate), 'utf8'), 'utf8');
   await copyVendoredAssets({ frontendRoot: FRONTEND_ROOT, outputDir: output });

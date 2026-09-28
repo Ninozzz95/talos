@@ -283,7 +283,10 @@ export function creaSubagentOrchestrator({
   function contaFigliAttivi(sessionPadreId) {
     let n = 0;
     for (const voce of sessioni.values()) {
-      if (voce.padreId === sessionPadreId && !voce.conclusa) n += 1;
+      /* ⛔ 20/09/2026 — una figlia ripristinata dopo la morte del processo ha
+         `conclusa:false` MA `interrotta:true`: non c'è più nessun worker che occupi
+         capacità. Contarla qui saturerebbe per sempre il limite legacy con processi morti. */
+      if (voce.padreId === sessionPadreId && voce.conclusa !== true && voce.interrotta !== true) n += 1;
     }
     return n;
   }
@@ -528,6 +531,9 @@ export function creaSubagentOrchestrator({
         reasoningRichiesto: padre.reasoning ?? null,
         permessiRichiesti: padre.permessi ?? null,
         permessiPerAttrezzoRichiesti: padre.permessiPerAttrezzo ?? null,
+        /* ⛔ F3-10 (23/09/2026, decisione owner D05-a): la figlia nasce SEMPRE in Normale, col suo ruolo di
+           figlia. Prima ereditava `padre.modalitaOperativa ?? 'workflow'`, cioè un modo che non esiste più. */
+        modalitaOperativaRichiesta: 'normale',
         onConclusioneFn: (risultatoSessione) => {
           completaConclusione(risultatoSessione);
         },

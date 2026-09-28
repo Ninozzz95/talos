@@ -33,8 +33,8 @@
  *                            lingua della radice (AT-03 rossa)
  *     · `senza-giro`       — il verso di RITORNO del movimento ridotto diventa un no-op: dopo
  *                            `no-preference` la tela non riparte piu' (MUT-04 rossa)
- *     · `senza-tetto`      — via `max-width:300px` dal foglio: in una traccia da 420 la colonna
- *                            misura 420 (AT-02 rossa)
+ *     · `tetto-disattivato` — il foglio successivo sovrascrive `max-width:300px` con `none`:
+ *                            in una traccia da 420 la colonna misura 420 (AT-02 rossa)
  *
  * ⛔ COSA NON PROVA, dichiarato. (1) Non prova che il montaggio in pagina lo faccia qualcun altro:
  *   `settings-view.ts` e' di un'altra corsia e non e' toccato da qui. (2) Non conta i fotogrammi al
@@ -237,6 +237,10 @@ async function apri(page, {
     && document.querySelector('.appearance-preview, #talosApp, main, body'),
   ), null, { timeout: 15000 });
 
+  /* La app monta anche la propria preview in Impostazioni: i suoi nodi
+     preesistenti non sono perdite causate dalla fixture di questa spec. */
+  page.anteprimaBaselineGlobale = await page.evaluate(() => document.querySelectorAll('.appearance-preview, .appearance-canvas').length);
+
   await monta(page, { traccia, modulo, foglio });
   return page;
 }
@@ -296,8 +300,8 @@ async function monta(page, { traccia = 300, modulo = SENTIERO_MODULO, foglio = S
      scena (`dataset.scene`, lo scrive l'engine in `disegna()`, `theme-studio.js:528`), non un tempo
      fisso. E' l'attesa-di-render che le fonti chiedono, presa dal prodotto stesso. */
   await page.waitForFunction((testoStato) => {
-    const c = document.querySelector('.appearance-preview canvas');
-    const d = document.querySelector('.appearance-preview .scene-caption');
+    const c = document.querySelector('#at-tela .appearance-preview canvas');
+    const d = document.querySelector('#at-tela .appearance-preview .scene-caption');
     if (!c?.dataset?.scene || !c.dataset.sceneStatus || c.dataset.sceneStatus === 'assente') return false;
     /* ⛔ E NON BASTA LO STATO DELL'ENGINE. Prima si aspettava solo `dataset.sceneStatus`, e AT-05 e'
        passata due volte e la terza e' caduta leggendo «Anteprima animata» su uno stato gia'
@@ -338,7 +342,7 @@ const LEGGI = () => {
     };
   };
   const classe = (el) => (el.className?.baseVal ?? el.className) || el.tagName;
-  const colonna = document.querySelector('.appearance-preview');
+  const colonna = document.querySelector('#at-tela .appearance-preview');
   const finestra = colonna?.querySelector('.preview-window') || null;
   const canvas = colonna?.querySelector('canvas') || null;
   const corpo = finestra?.querySelector('.preview-body') || null;
@@ -454,7 +458,7 @@ const leggi = async (page) => await page.evaluate(LEGGI);
 
 /** L'impronta dei pixel della tela: un numero piccolo, cosi' non attraversa la rete un PNG intero. */
 const IMPRONTA = () => {
-  const c = document.querySelector('.appearance-preview canvas');
+  const c = document.querySelector('#at-tela .appearance-preview canvas');
   if (!c) return null;
   const dati = c.toDataURL('image/png');
   let impronta = 0;
@@ -637,7 +641,7 @@ test.describe('la colonna dell\'anteprima viva — il port di «Aspetto e movime
        regola non provata. */
     const allaTraccia = await page.evaluate(() => {
       document.getElementById('at-tela').style.gridTemplateColumns = 'minmax(0,1fr) 20px';
-      return +document.querySelector('.appearance-preview').getBoundingClientRect().width.toFixed(2);
+      return +document.querySelector('#at-tela .appearance-preview').getBoundingClientRect().width.toFixed(2);
     });
     expect(allaTraccia, 'la colonna segue la traccia, senza pavimento e senza sbordare').toBeCloseTo(20, 1);
     await page.evaluate(() => { document.getElementById('at-tela').style.gridTemplateColumns = 'minmax(0,1fr) 240px'; });
@@ -695,7 +699,7 @@ test.describe('la colonna dell\'anteprima viva — il port di «Aspetto e movime
        NON viene ricreato (la mutazione `lingua-fissa` fa cadere proprio questa parte). */
     await monta(page);
     const canvasPrima = await page.evaluate(() => {
-      const c = document.querySelector('.appearance-preview canvas');
+      const c = document.querySelector('#at-tela .appearance-preview canvas');
       c.dataset.marcaDiProva = '42';
       return { scena: c.dataset.scene, stato: c.dataset.sceneStatus };
     });
@@ -707,7 +711,7 @@ test.describe('la colonna dell\'anteprima viva — il port di «Aspetto e movime
     const dopoTorno = await leggi(page);
     expect(dopoTorno.testi.data).toBe(TESTI_ANTEPRIMA.it.data);
     const canvasDopo = await page.evaluate(() => {
-      const c = document.querySelector('.appearance-preview canvas');
+      const c = document.querySelector('#at-tela .appearance-preview canvas');
       return { marca: c.dataset.marcaDiProva ?? null, scena: c.dataset.scene, stato: c.dataset.sceneStatus };
     });
     expect(canvasDopo.marca, 'il canvas NON si ricrea al cambio di lingua: si riscrivono i testi').toBe('42');
@@ -917,7 +921,10 @@ test.describe('la colonna dell\'anteprima viva — il port di «Aspetto e movime
     const finale = await leggi(page);
     expect(finale.tagColonna).toBeNull();
     expect(finale.erroriPagina).toEqual([]);
-    expect(await page.evaluate(() => document.querySelectorAll('.appearance-preview, .appearance-canvas').length)).toBe(0);
+    expect(await page.evaluate(() => document.querySelectorAll('#at-tela .appearance-preview, #at-tela .appearance-canvas').length),
+      'la fixture non deve lasciare colonna o canvas').toBe(0);
+    expect(await page.evaluate(() => document.querySelectorAll('.appearance-preview, .appearance-canvas').length),
+      'nessuna nuova preview o canvas deve restare nell’app').toBe(page.anteprimaBaselineGlobale);
   });
 
   test('ANTEPRIMA-09 — la traccia stretta del mockup (1200 px): la colonna scende a 250, e la foto', async ({ page }) => {
@@ -1033,11 +1040,12 @@ test.describe('le mutazioni — la prova che ogni riga conta', () => {
     expect(await laTelaCambia(page), 'mutato: la preferenza e\' tornata e l\'anteprima no, per sempre').toBe(false);
   });
 
-  test('MUT-05 — senza il tetto nel foglio, la colonna si allarga quanto la traccia', async ({ page }) => {
+  test('MUT-05 — override del tetto nel foglio successivo: la colonna segue la traccia', async ({ page }) => {
     const css = await readFile(join(RADICE, 'src', 'styles', 'anteprima-tema.css'), 'utf8');
     expect(css).toContain('max-width: 300px;');
-    const senzaTetto = css.replace('max-width: 300px;', '');
-    expect(senzaTetto, 'la mutazione deve togliere DAVVERO la riga').not.toBe(css);
+    const tettoDisattivato = css.replace('max-width: 300px;', 'max-width: none;');
+    expect(tettoDisattivato, 'la mutazione deve sovrascrivere DAVVERO la riga').not.toBe(css);
+    expect(tettoDisattivato).toContain('max-width: none;');
 
     /* ⛔ IL CONTROLLO DEL CONTROLLO: prima si misura la stessa pagina col foglio VERO, e la colonna
        deve stare nei 300. Senza questo passo, un foglio che non arrivasse affatto darebbe lo stesso
@@ -1045,7 +1053,9 @@ test.describe('le mutazioni — la prova che ogni riga conta', () => {
     await apri(page, { traccia: 420 });
     expect((await leggi(page)).colonna.larghezza, 'col foglio vero la colonna sta nei 300').toBeCloseTo(MOCKUP.larghezzaColonna, 1);
 
-    await apri(page, { traccia: 420, foglio: '/__at-muta/senza-tetto.css', css: senzaTetto });
+    /* Il bundle della app contiene già il foglio originale: rimuovere la
+       dichiarazione solo dal secondo link lascerebbe attivo il tetto del bundle. */
+    await apri(page, { traccia: 420, foglio: '/__at-muta/tetto-disattivato.css', css: tettoDisattivato });
     const m = await leggi(page);
     expect(m.colonna.maxWidth, 'il foglio mutato e\' proprio quello servito').toBe('none');
     expect(m.colonna.larghezza, 'mutata: 300 era il tetto, senza il tetto e\' la traccia').toBeCloseTo(420, 1);

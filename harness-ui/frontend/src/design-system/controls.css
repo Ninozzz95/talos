@@ -1,23 +1,56 @@
 /* DS-03. Canonical controls used by the production entry. Theme values remain semantic. */
-.talos-button{min-height:var(--talos-control-height); display:inline-flex; align-items:center; justify-content:center; gap:var(--talos-space-inline); padding:0 var(--talos-space-md); border:var(--talos-focus-width) solid transparent; border-radius:var(--ui-radius-control); background:transparent; color:var(--talos-text); font:600 var(--ui-font-control)/1.25 var(--talos-font-ui); white-space:nowrap; cursor:pointer; transition:color var(--talos-motion-duration-control) var(--talos-motion-ease),background-color var(--talos-motion-duration-control) var(--talos-motion-ease),border-color var(--talos-motion-duration-control) var(--talos-motion-ease),transform var(--talos-motion-duration-control) var(--talos-motion-ease)}
+/*
+ * ⛔ ATLAS F1 (24/09/2026) — NON DEPLOYABILE finché la review avversaria non la accetta e l'owner
+ *   non la valuta sul 4174. Misure, testo e stati dal mockup «TALOS UI Atlas» (`source/atlas.css`
+ *   `.btn` 36 px · 7/13 · 12 px · 1.35 · peso 400 · gap 8 · icona 15; `.btn.tiny` 29 · 5/9;
+ *   `.btn.icon-only` 34×34; `button:disabled` opacità .45); CONTORNO (spessore 2 px, colore, raggio
+ *   9/8) e FONDI della Desktop 0.1.15, per decisione owner Q-01 del 24/09/2026; niente ombra interna
+ *   sul primario (Q-01b); testo mai sotto gli 11 px (Q-06).
+ *   ⛔ Le altezze NON scendono sotto i 36 px: è il cancello «desktop primary controls meet the 36 px
+ *   hit-area gate» (tests/browser/baseline-shell.spec.mjs:1274-1304, «La soglia resta 36, non si tocca»,
+ *   18/09/2026). L'Atlas dà 36 al bottone (coincide) e 34 al bottone-icona: qui l'icona resta 36 e la
+ *   scelta è una domanda all'owner (Q-16). `max()` tiene la scala del design system (`--ui-control`,
+ *   foundations.css) senza mai scendere sotto la soglia, anche in densità compatta.
+ *   Il padding è quello dell'Atlas (7/13; `.tiny` 5/9). Misurato il 24/09 con due A/B nello stesso
+ *   momento, cambiando solo il padding (0 contro 7): sui 104 bottoni visibili di 15 schermate nessuna
+ *   altezza e nessuna larghezza cambia; CHAT-FULL-WIDTH-01 è verde con tutti e due, BC78-4b rosso con
+ *   tutti e due. Il rosso di CHAT-FULL-WIDTH-01 veniva dal bottone-icona a 34 (composer a 120,00006 px)
+ *   ed è curato dal minimo di 36; BC78-4b viene dal piede della barra laterale (esito F1, §BC78-4b).
+ *   Gate 10×4 in `.claude/ATLAS-F1-CONTRATTO-E-GATE-2026-09-24.md` §7, consultato il 24/09/2026:
+ *   Hermes `apps/desktop/src/components/ui/button.tsx:11-15` (testo 12 px, taglia dal padding),
+ *   shadcn `button.tsx` c257f68 04/09/2026 (default 36), W3C «Understanding 1.4.11» 15/06/2026 (il
+ *   bordo non serve se testo/icona identificano il controllo, lo stato sì).
+ *   ⛔ La transizione resta sui token di movimento della app (`--talos-motion-duration-control`,
+ *   scritti da `aggiornaMotionDesktop`): l'owner non vuole che la preferenza del sistema spenga il
+ *   movimento (attesa-shimmer.css:121, aspetto.css:492). Dall'Atlas si prende CHE COSA si anima —
+ *   solo fondo e bordo — non il suo spegnimento universale.
+ */
+.talos-button{min-height:max(36px, calc(var(--ui-control) - 4px)); display:inline-flex; align-items:center; justify-content:center; gap:var(--ui-space-2); padding:7px 13px; border:var(--talos-focus-width) solid transparent; border-radius:var(--ui-radius-control); background:transparent; color:var(--talos-text); font:400 var(--talos-font-size-xs)/1.35 var(--talos-font-ui); white-space:nowrap; cursor:pointer; transition:background-color var(--talos-motion-duration-control) var(--talos-motion-ease),border-color var(--talos-motion-duration-control) var(--talos-motion-ease)}
+.talos-button :where(.i:not(.i--sm):not(.i--xs)){width:15px; height:15px}
 .talos-button:hover:not(:disabled){transform:none}
 .talos-button:active:not(:disabled){transform:translateY(0)}
-.talos-button:disabled{color:var(--talos-muted); cursor:not-allowed; opacity:.58}
+/* Atlas `button:disabled`: si spegne con l'opacità, il colore del testo resta quello della variante. */
+.talos-button:disabled{cursor:not-allowed; opacity:.45}
 /* ⛔ 07/9, guardando gli screenshot: un pulsante PRIMARIO disabilitato restava oro pieno con il
    testo scuro sopra — «Porta i commenti nella chat» sembrava il pulsante da premere e non si
    leggeva. L'opacità da sola non basta su un fondo saturo: chi è spento si spegne davvero. */
+/* ⛔ ATLAS F1: il primario spento RESTA quello della 0.1.15 (fondo, bordo, testo, .75). L'Atlas non mostra
+   un primario spento, e il fondo è della 0.1.15 per Q-01: niente da inventare. */
 .talos-button--primary:disabled{background:var(--talos-panel-soft); border-color:var(--talos-border); color:var(--talos-muted); opacity:.75}
-.talos-button--primary{min-height:var(--talos-primary-height); background:var(--talos-accent); color:var(--talos-text-on-accent); box-shadow:inset 0 1px rgba(255,255,255,.14)}
+.talos-button--primary{min-height:max(36px, calc(var(--ui-control) - 4px)); background:var(--talos-accent); color:var(--talos-text-on-accent); font-weight:600}
 .talos-button--primary:hover:not(:disabled){background:var(--talos-accent-hover)}
 .talos-button--secondary{border-color:var(--talos-border); background:var(--talos-panel-soft)}
 .talos-button--secondary:hover:not(:disabled),.talos-button--ghost:hover:not(:disabled){border-color:var(--talos-border-strong); background:var(--talos-card-hover)}
-.talos-button--ghost{color:var(--talos-assistant-text)}
+.talos-button--ghost{color:var(--talos-text)}
 .talos-button--danger{color:var(--talos-danger)}
-.talos-button--sm{min-height:var(--ui-control-small); padding-inline:var(--talos-space-inline); font-size:var(--talos-font-size-xs); border-radius:8px}
-.talos-button--md{min-height:var(--talos-control-height)}
+/* Atlas `.btn.tiny`: 29 · 5/9; testo 11 (Q-06: mai sotto gli 11 px); raggio 8 della 0.1.15. */
+.talos-button--sm{min-height:calc(var(--ui-control-small) - 3px); padding:5px 9px; font-size:.6875rem; border-radius:8px}
+/* L'Atlas ha una sola altezza di serie: «md» è quella. */
+.talos-button--md{min-height:max(36px, calc(var(--ui-control) - 4px))}
 .talos-button--lg{min-height:var(--talos-primary-height); padding-inline:var(--talos-space-lg); font-size:var(--talos-font-size-md)}
 .talos-button--block{width:100%}
-.talos-icon-button{width:var(--talos-touch-target); min-width:var(--talos-touch-target); padding:0}
+/* Atlas `.btn.icon-only` è 34×34; qui 36×36 per il cancello dei 36 px (vedi testata, Q-16 all'owner). */
+.talos-icon-button{width:max(36px, calc(var(--ui-control) - 6px)); min-width:max(36px, calc(var(--ui-control) - 6px)); min-height:max(36px, calc(var(--ui-control) - 6px)); padding:0}
 .talos-icon-button.talos-button--round{border-radius:var(--talos-radius-pill)}
 
 .talos-badge{min-height:26px; display:inline-flex; align-items:center; gap:var(--talos-space-sm); padding:0 10px; border:1px solid var(--talos-border-subtle); border-radius:var(--talos-radius-pill); background:var(--talos-card); color:var(--talos-assistant-text); font:500 12px/1 var(--talos-font-ui); white-space:nowrap}
@@ -78,7 +111,10 @@ input.talos-switch:checked::after{background:var(--talos-accent); transform:tran
 
 /* ⛔ 07/9 — «tutti i component custom»: valgono anche per le tredici caselle NUDE del monolite
    (`frammenti.html`), che senza classe prendevano il quadratino blu di Windows. */
-.talos-checkbox,input[type="checkbox"]:not(.talos-switch){width:20px; height:20px; border-radius:6px; border:1px solid var(--talos-border); background:var(--talos-panel-soft); display:grid; place-items:center; color:var(--talos-text-on-accent); flex:none; cursor:pointer; transition:background-color var(--talos-motion-duration-control) var(--talos-motion-ease),border-color var(--talos-motion-duration-control) var(--talos-motion-ease)}
+/* ⛔ ATLAS F1 (24/09/2026, Q-08 dell'owner: «facce custom di oggi con le misure dell'Atlas, niente
+   controlli nativi a vista») — la casella dell'Atlas è 15×15 (misurata sulla sua foto); raggio 4, cioè
+   il 6/20 di oggi riportato a 15 px (da confermare all'owner). Bordo e fondo invariati. */
+.talos-checkbox,input[type="checkbox"]:not(.talos-switch){width:15px; height:15px; border-radius:4px; border:1px solid var(--talos-border); background:var(--talos-panel-soft); display:grid; place-items:center; color:var(--talos-text-on-accent); flex:none; cursor:pointer; transition:background-color var(--talos-motion-duration-control) var(--talos-motion-ease),border-color var(--talos-motion-duration-control) var(--talos-motion-ease)}
 .talos-checkbox[aria-checked="true"]{background:var(--talos-accent); border-color:var(--talos-accent)}
 .talos-checkbox--lg{width:28px; height:28px; border-radius:8px}
 .talos-checkbox .i{width:13px; height:13px}
@@ -86,7 +122,7 @@ input.talos-switch:checked::after{background:var(--talos-accent); transform:tran
 input.talos-checkbox,input[type="checkbox"]:not(.talos-switch){appearance:none; -webkit-appearance:none; margin:0}
 /* La spunta e disegnata, non un carattere: cosi eredita il colore del tema e non cambia col font.
    Il triangolo di `clip-path` e la forma di Modern CSS, ridotta alla nostra casella da 20 px. */
-input.talos-checkbox::before,input[type="checkbox"]:not(.talos-switch)::before{content:""; width:11px; height:11px; background:var(--talos-text-on-accent); clip-path:polygon(14% 44%,0 65%,50% 100%,100% 16%,80% 0,43% 62%); transform:scale(0); transform-origin:center; transition:transform var(--talos-motion-duration-control) var(--talos-motion-ease)}
+input.talos-checkbox::before,input[type="checkbox"]:not(.talos-switch)::before{content:""; width:8px; height:8px; background:var(--talos-text-on-accent); clip-path:polygon(14% 44%,0 65%,50% 100%,100% 16%,80% 0,43% 62%); transform:scale(0); transform-origin:center; transition:transform var(--talos-motion-duration-control) var(--talos-motion-ease)}
 input.talos-checkbox--lg::before{width:15px; height:15px}
 input.talos-checkbox:checked,input[type="checkbox"]:not(.talos-switch):checked{background:var(--talos-accent); border-color:var(--talos-accent)}
 input.talos-checkbox:checked::before,input[type="checkbox"]:not(.talos-switch):checked::before{transform:scale(1)}
@@ -98,17 +134,34 @@ input.talos-checkbox:disabled,input[type="checkbox"]:not(.talos-switch):disabled
   input.talos-switch:checked::after,.talos-switch[aria-checked="true"] .talos-switch__thumb{background:SelectedItem}
 }
 
+/*
+ * ⛔ ATLAS F1 (24/09/2026) — il campo dell'Atlas: `.text-input` 36 · 8/11 · 12 px, e il campo con la
+ *   lente `.input-wrap` 38 con il testo a 11 + 16 + 7 = 34 dal bordo interno. Raggio 11, bordo e fondo
+ *   della 0.1.15 (Q-01). Il cromo resta sull'INPUT (il markup non cambia): con l'icona assoluta a 12 px
+ *   il risultato a schermo è quello del contenitore dell'Atlas. Stati dell'Atlas che qui mancavano:
+ *   spento (.45) e `aria-invalid` (bordo danger — MDN «aria-invalid», 02/06/2025: si scrive dopo la
+ *   validazione, e lo scrivono già modelli-installati.js:310, modulo-voce.js:403, browser.js:669).
+ *   Il fuoco è quello dell'Atlas: niente anello-ombra né bordo accento, solo il contorno di fuoco
+ *   (l'ombra sparisce in alto contrasto: MDN «forced-colors», 20/04/2026). Hermes fa lo stesso:
+ *   `apps/desktop/src/styles.css:1403-1414` (clone 65ad529, 23/09/2026).
+ *   «--sm» non ha più un'altezza sua: l'Atlas ha una sola misura per il campo con la lente.
+ */
 .talos-field{position:relative}
-.talos-field__input{height:40px; width:100%; padding:0 12px 0 38px; border-radius:11px; border:1px solid var(--talos-border); background:var(--talos-panel-soft); color:var(--talos-text); font-size:13.5px}
+.talos-field__input{height:36px; width:100%; padding:0 11px; border-radius:11px; border:1px solid var(--talos-border); background:var(--talos-panel-soft); color:var(--talos-text); font-size:var(--talos-font-size-xs); line-height:1.5}
+.talos-field__icon ~ .talos-field__input{height:38px; padding-left:34px}
 .talos-field__input::placeholder{color:var(--talos-muted)}
-.talos-field__input:focus{outline:none; border-color:var(--talos-accent-border); box-shadow:0 0 0 3px var(--talos-accent-soft)}
+.talos-field__input:focus{outline:none}
+.talos-field__input:disabled{opacity:.45; cursor:not-allowed}
+.talos-field__input[aria-invalid="true"]{border-color:var(--talos-danger)}
 .talos-field__icon{position:absolute; left:12px; top:50%; transform:translateY(-50%); color:var(--talos-muted); width:16px; height:16px}
-.talos-field--sm .talos-field__input{height:36px; padding-left:34px}
+.talos-field--sm .talos-field__input{padding-left:34px}
 /* ⛔ 07/9 — la regola vale per OGNI `select`, non solo per quelli che ricordano la classe. Nel
    foglio Permessi del monolite i menu erano grigio chiaro col testo scuro, cioe' il disegno di
    Windows dentro il tema Calm (foto `C02-fogli/permissions.png`). Vestire l'ELEMENTO invece della
    classe chiude anche i quattordici del monolite e quelli che nasceranno domani. */
-select,.talos-select{height:36px; padding:0 32px 0 12px; border-radius:9px; border:1px solid var(--talos-border); background:var(--talos-panel-soft); color:var(--talos-text); font-size:13px; appearance:none; -webkit-appearance:none; background-image:linear-gradient(45deg,transparent 50%,var(--talos-muted) 50%),linear-gradient(135deg,var(--talos-muted) 50%,transparent 50%); background-position:calc(100% - 16px) 15px,calc(100% - 11px) 15px; background-size:5px 5px; background-repeat:no-repeat}
+/* ⛔ ATLAS F1 (24/09/2026): testo 12 e 11 a sinistra come il select dell'Atlas (`.text-input,select` 8/11 · 12 px);
+   altezza 36, raggio 9, bordo e fondo della 0.1.15 (Q-01). */
+select,.talos-select{height:36px; padding:0 32px 0 11px; border-radius:9px; border:1px solid var(--talos-border); background:var(--talos-panel-soft); color:var(--talos-text); font-size:var(--talos-font-size-xs); appearance:none; -webkit-appearance:none; background-image:linear-gradient(45deg,transparent 50%,var(--talos-muted) 50%),linear-gradient(135deg,var(--talos-muted) 50%,transparent 50%); background-position:calc(100% - 16px) 15px,calc(100% - 11px) 15px; background-size:5px 5px; background-repeat:no-repeat}
 .talos-select--sm{height:32px}
 select:focus-visible,.talos-select:focus-visible{outline:2px solid var(--talos-accent); outline-offset:2px}
 /* ⭐ 07/9 — il bottone del select era già nostro (appearance:none + freccia disegnata), ma il MENU
@@ -119,7 +172,7 @@ select:focus-visible,.talos-select:focus-visible{outline:2px solid var(--talos-a
    (Chrome 135+, Safari 27) e modern-css.com «Customizable selects without a JavaScript library»:
    si adotta dentro `@supports`, e la freccia disegnata col gradiente va spenta o se ne vedono due. */
 @supports (appearance: base-select){
-  select,.talos-select{appearance:base-select; background-image:none; padding:0 12px; display:inline-flex; align-items:center; justify-content:space-between; gap:8px}
+  select,.talos-select{appearance:base-select; background-image:none; padding:0 11px; display:inline-flex; align-items:center; justify-content:space-between; gap:8px}
   /* il segno del menu e un CHEVRON come tutti gli altri della app, non il triangolo pieno del motore */
   select::picker-icon,.talos-select::picker-icon{content:""; width:8px; height:8px; border-right:1.6px solid var(--talos-muted); border-bottom:1.6px solid var(--talos-muted); transform:translateY(-2px) rotate(45deg); transition:transform var(--talos-motion-duration-control) var(--talos-motion-ease)}
   select:open::picker-icon,.talos-select:open::picker-icon{transform:translateY(1px) rotate(-135deg)}
@@ -176,6 +229,8 @@ select:focus-visible,.talos-select:focus-visible{outline:2px solid var(--talos-a
   outline: var(--talos-focus-width) solid var(--talos-ring);
   outline-offset: var(--talos-focus-offset);
 }
+/* ATLAS F1: il campo con la lente è il contenitore `.input-wrap` dell'Atlas, che porta il fuoco a 2 px di distanza. */
+.talos-field__icon ~ .talos-field__input:focus-visible { outline-offset: 2px; }
 @media (pointer: coarse) {
   .talos-button, .talos-tabs__tab { min-height: 44px; }
   .talos-icon-button { min-width: 44px; }

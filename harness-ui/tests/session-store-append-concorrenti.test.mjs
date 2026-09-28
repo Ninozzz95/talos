@@ -1,10 +1,12 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync } from 'node:fs';
+import { appendFileSync, createReadStream, mkdtempSync, readFileSync } from 'node:fs';
+import { appendFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 
 import { registraRiga } from '../src/session-store.mjs';
+import * as sessionStore from '../src/session-store.mjs';
 import { rimuoviCartellaDiProva } from './aiuto/rimuovi-cartella-di-prova.mjs';
 
 /*
@@ -92,4 +94,104 @@ test('W0-07 — sessioni DIVERSE non si aspettano fra loro: la serializzazione �
     assert.equal(suoi.length, 4, `la sessione ${s} ha tutte le sue righe`);
     assert.ok(suoi.every((r) => r.s === s), 'e nessuna riga di un\'altra sessione è finita qui dentro');
   }
+});
+
+test('CTX-STORE-QUEUED-BEFORE-MANUAL — il record confermato attende un append asincrono già in coda', async (t) => {
+  const cartellaStore = cartellaTemporanea(t);
+  const sessionId = 'sessione-ordine-compact';
+  let libera;
+  const attesa = new Promise((resolve) => { libera = resolve; });
+  const primo = registraRiga(
+    { cartellaStore, sessionId, record: { tipo: 'prima', payload: 'x'.repeat(128 * 1024) } },
+    { appendFileFn: async (path, data, options) => { await attesa; return appendFile(path, data, options); } },
+  );
+  let confermato = false;
+  const secondo = Promise.resolve()
+    .then(() => sessionStore.registraRigaConfermata({ cartellaStore, sessionId, record: { tipo: 'compatta' } }))
+    .then(() => { confermato = true; });
+  secondo.catch(() => {}); // Il RED per API mancante non deve produrre un unhandled rejection prima del join.
+  try {
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(confermato, false, 'il secondo record non precede la prima scrittura bloccata');
+  } finally {
+    libera();
+  }
+  await Promise.all([primo, secondo]);
+  const righe = readFileSync(join(cartellaStore, `${sessionId}.jsonl`), 'utf8').trim().split('\n').map(JSON.parse);
+  assert.deepEqual(righe.map((riga) => riga.tipo), ['prima', 'compatta']);
+});
+
+test('CTX-STORE-CALLBACKS-IN-QUEUE — la guardia decide dopo la coda e il commit in memoria segue i byte completi', async (t) => {
+  const cartellaStore = cartellaTemporanea(t);
+  const sessionId = 'sessione-guardia-compact';
+  let libera;
+  const attesa = new Promise((resolve) => { libera = resolve; });
+  const primo = registraRiga(
+    { cartellaStore, sessionId, record: { tipo: 'prima' } },
+    { appendFileFn: async (path, data, options) => { await attesa; return appendFile(path, data, options); } },
+  );
+  let valido = true;
+  let conferme = 0;
+  const compact = sessionStore.registraRigaConfermata({
+    cartellaStore, sessionId, record: { tipo: 'compatta-non-valida' },
+    puoAccodareFn: () => valido,
+    confermaFn: () => { conferme += 1; },
+  });
+  compact.catch(() => {});
+  valido = false;
+  libera();
+  await primo;
+  await assert.rejects(compact, (error) => error?.code === 'SESSION_STORE_PRECONDITION_FAILED');
+  assert.equal(conferme, 0);
+  await sessionStore.registraRigaConfermata({
+    cartellaStore, sessionId, record: { tipo: 'compatta-valida' },
+    puoAccodareFn: () => true,
+    confermaFn: () => {
+      const righe = readFileSync(join(cartellaStore, `${sessionId}.jsonl`), 'utf8').trim().split('\n').map(JSON.parse);
+      assert.equal(righe.at(-1).tipo, 'compatta-valida');
+      conferme += 1;
+    },
+  });
+  assert.equal(conferme, 1);
+  const righe = readFileSync(join(cartellaStore, `${sessionId}.jsonl`), 'utf8').trim().split('\n').map(JSON.parse);
+  assert.deepEqual(righe.map((riga) => riga.tipo), ['prima', 'compatta-valida']);
+});
+
+test('CTX-STORE-READ-WAITS-INFLIGHT-WRITE — una lettura non avvelena un append incompleto ma ancora vivo', async (t) => {
+  const cartellaStore = cartellaTemporanea(t);
+  const sessionId = 'sessione-read-write-race';
+  const record = { tipo: 'evento', payload: 'x'.repeat(1024) };
+  let segnalaPrefisso;
+  const prefisso = new Promise((resolve) => { segnalaPrefisso = resolve; });
+  let libera;
+  const attesa = new Promise((resolve) => { libera = resolve; });
+  const writer = registraRiga(
+    { cartellaStore, sessionId, record },
+    { appendFileFn: async (path, data) => {
+      const meta = Math.floor(data.length / 2);
+      appendFileSync(path, data.slice(0, meta));
+      segnalaPrefisso();
+      await attesa;
+      appendFileSync(path, data.slice(meta));
+    } },
+  );
+  await prefisso;
+  let letturaIniziata = false;
+  // 24/09/2026 (F2-bis): la lettura è a stream, la seam è `createReadStreamFn` (prima `readFileFn`).
+  const lettura = sessionStore.leggiRegistro({ cartellaStore, sessionId }, {
+    createReadStreamFn: (path, opzioni) => {
+      letturaIniziata = true;
+      return createReadStream(path, opzioni);
+    },
+  });
+  try {
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(letturaIniziata, false, 'la lettura deve aspettare il writer della stessa sessione');
+  } finally {
+    libera();
+  }
+  await writer;
+  assert.deepEqual(await lettura, [record]);
+  await registraRiga({ cartellaStore, sessionId, record: { tipo: 'dopo' } });
+  assert.deepEqual((await sessionStore.leggiRegistro({ cartellaStore, sessionId })).map((riga) => riga.tipo), ['evento', 'dopo']);
 });

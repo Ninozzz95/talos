@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { iconaDelDominio, dominioAmmesso, MAX_BYTE_ICONA, VALIDITA_MS } from '../src/favicon-proxy.mjs';
+import { cartellaDiProva, cartellaDiProvaAttesa } from './aiuto/cartelle-di-prova.mjs'; // DESK-TEMP-1, 23/09: la cartella nasce con la sua rimozione
 
 /*
  * ⛔⛔ LE FAVICON DELLE FONTI, e perché passano dal server.
@@ -18,7 +19,7 @@ import { iconaDelDominio, dominioAmmesso, MAX_BYTE_ICONA, VALIDITA_MS } from '..
  * ⛔ Nessuna prova qui tocca la rete: `fetchFn` è iniettato, sempre.
  */
 
-const cartella = () => mkdtemp(join(tmpdir(), 'favicon-'));
+const cartella = () => cartellaDiProvaAttesa('favicon-');
 const PNG = Buffer.from('89504e470d0a1a0a0000000d49484452', 'hex');
 const rispostaPng = () => ({
   ok: true,

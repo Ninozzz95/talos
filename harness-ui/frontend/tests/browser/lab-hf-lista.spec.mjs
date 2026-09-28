@@ -147,10 +147,15 @@ const righe = (page) => page.locator('#modelLabHfResults .talos-list-row');
 /** Usa la tendina Calm visibile, quindi lo stesso percorso di mouse/tastiera dell'app. */
 async function scegliCalm(page, selettore, valore) {
   const sorgente = page.locator(selettore);
-  const testo = (await sorgente.locator(`option[value="${valore}"]`).textContent())?.trim();
+  const option = sorgente.locator(`option[value="${valore}"]`);
+  const testo = (await option.textContent())?.trim();
   if (!testo) throw new Error(`Opzione ${valore} assente da ${selettore}`);
+  const index = await option.evaluate((node) => node.index);
   await page.locator(`${selettore}--calm`).click();
-  await page.getByRole('option', { name: testo, exact: true }).click();
+  const visibile = page.locator(`${selettore}--calm--listbox [role="option"][data-index="${index}"]`);
+  await expect(visibile).toContainText(testo);
+  await expect(visibile).toHaveAttribute('aria-disabled', 'false');
+  await visibile.click();
   await expect(sorgente).toHaveValue(valore);
 }
 const scegliFaccetta = (page, chiave, valore) => scegliCalm(page, `#modelLabHfFaccetta-${chiave}`, valore);
@@ -232,9 +237,12 @@ test('RIPRESA-HF-AZZERA — il comando visibile ripulisce query, server filter, 
     await scegliCalm(page, '#modelLabHfSortControl', ordine);
     await expect.poll(() => calls.at(-1)?.sort).toBe(ordine);
   }
+  // La faccetta deve essere scelta mentre i risultati la offrono: dopo i
+  // filtri author/filter il combobox la disabilita, correttamente.
+  await scegliFaccetta(page, 'parametri', '3-8b');
+  await expect(page.locator('[data-hf-faccetta="parametri"]')).toHaveValue('3-8b');
   await page.locator('#modelLabHfAuthorControl').fill('ripresa');
   await page.locator('#modelLabHfFiltersControl').fill('q4');
-  await scegliFaccetta(page, 'parametri', '3-8b');
   await page.locator('#modelLabHfSearch').fill('nessuno');
   await page.locator('#modelLabHfSearch').press('Enter');
   await expect(page.locator('#vuotoHf')).toBeVisible();
@@ -406,7 +414,8 @@ test.describe('la lista Hugging Face col disegno del mockup', () => {
     await expect(richiesto2).toBeEnabled();
     await expect(richiesto2).toContainText('1');
     const rigaGated = page.locator('#modelLabHfResults .talos-list-row[data-hf="Community/Gemma-3-12B-GGUF"]');
-    await expect(rigaGated.locator('.talos-badge')).toHaveText('Accesso richiesto');
+    /* ATLAS F4: sotto il nome ora ci sono anche le etichette (tipo, licenza): il badge dell'accesso è quello del TITOLO. */
+    await expect(rigaGated.locator('.talos-list-row__title .talos-badge')).toHaveText('Accesso richiesto');
     /* ⛔ In riga resta lo STATO, corto: la condizione estesa («Verifica le condizioni prima del
        download») sta nel callout `#hfAccesso` del pannello. Misurato il 19/09/2026: messa sulla riga,
        il testo andava a 325 px in una scatola da 320 e veniva tagliato a metà parola, senza i
@@ -482,10 +491,13 @@ test.describe('la lista Hugging Face col disegno del mockup', () => {
        system (34×34) e la differenza è dichiarata nel referto, non nascosta. */
     expect(await riga.locator('.talos-list-row__icon').evaluate((n) => { const r = n.getBoundingClientRect(); return [Math.round(r.width), Math.round(r.height)]; })).toEqual([34, 34]);
     await expect(riga.locator('.talos-list-row__title')).toHaveText('unsloth / Qwen3-Coder-30B-A3B-Instruct-GGUF');
-    /* Tre righe di testo, come il `.model-row-copy` del mockup: nome (col badge), meta, stato. */
-    await expect(riga.locator('.talos-list-row__text > *')).toHaveCount(3);
-    await expect(riga.locator('.talos-list-row__sub').first()).toHaveText('Conversione della community');
-    await expect(riga.locator('.talos-list-row__sub').nth(1)).toHaveText('Accesso aperto · Licenza apache-2.0');
+    /* ATLAS F4 (owner 27/09/2026 notte: «di 5 prendiamo solo i badge sotto il nome»; «via i doppioni»; download e
+       preferiti «nella riga di dati»): nome (col badge), la fila di etichette dell'Atlas, riga di dati, stato. */
+    await expect(riga.locator('.talos-list-row__text > *')).toHaveCount(4);
+    await expect(riga.locator('.talos-list-row__text > *').nth(1)).toHaveAttribute('data-c', 'ModelTags');
+    expect(await riga.locator('[data-c="ModelTags"] .talos-badge').allTextContents()).toEqual(['Conversazione e codice', 'apache-2.0']);
+    await expect(riga.locator('.talos-list-row__sub').first()).toHaveText('Conversione della community · 12,7 M download · ♥ 1 k');
+    await expect(riga.locator('.talos-list-row__sub').nth(1)).toHaveText('Accesso aperto');
 
     /* ⛔ IL PALLINO DELLO STATO — e si MISURA, non si guarda: `.talos-dot`
        (`design-system/controls.css:138`) dichiara `width`/`height`/`flex:none` e **nessun
@@ -498,9 +510,10 @@ test.describe('la lista Hugging Face col disegno del mockup', () => {
     await expect(pallino).toHaveClass(/talos-dot--success/);
     expect(await pallino.evaluate((n) => { const r = n.getBoundingClientRect(); return [Math.round(r.width), Math.round(r.height), getComputedStyle(n.parentElement).display]; })).toEqual([6, 6, 'flex']);
 
-    /* La colonna delle capacità del mockup: un numero, la sua etichetta, e sotto un secondo fatto —
-       i due numeri veri che la ricerca porta (download e preferiti). */
-    expect(await riga.locator('[data-c="Capacity"]').evaluate((n) => [...n.children].map((c) => c.textContent))).toEqual(['12,7 M', 'download', '♥ 1 k preferiti']);
+    /* ATLAS F4: la colonna delle capacità non c'è più — download e preferiti stanno nella riga di dati (sopra). */
+    await expect(riga.locator('[data-c="Capacity"]')).toHaveCount(0);
+    /* Le etichette hanno la forma del `.badge` dell'Atlas (`atlas.css`): 10 px, raggio 5, niente grassetto. */
+    expect(await riga.locator('[data-c="ModelTags"] .talos-badge').first().evaluate((n) => { const s = getComputedStyle(n); return [s.fontSize, s.borderTopLeftRadius, s.fontWeight]; })).toEqual(['10px', '5px', '400']);
     await expect(riga.locator('.talos-hf-chevron')).toHaveCount(1);
 
     /* ⛔ E LE TRE RIGHE DI TESTO NON SI TAGLIANO. La riga è `nowrap` e non manda a capo
@@ -522,7 +535,9 @@ test.describe('la lista Hugging Face col disegno del mockup', () => {
        si prova in HF-LISTA-03, sull'oggetto giusto. */
     await expect(page.locator('#modelLabHfResults .talos-badge', { hasText: 'Accesso richiesto' })).toHaveCount(0);
     /* E il badge che C'È sui dati veri è quello dell'autore del modello, sull'ottava riga. */
-    await expect(rigaDi(page, 'RichardErkhov/model-hub_-_Mistral-7B-Instruct-v0.2-gguf').locator('.talos-badge')).toHaveText('Autore del modello');
+    await expect(rigaDi(page, 'RichardErkhov/model-hub_-_Mistral-7B-Instruct-v0.2-gguf').locator('.talos-list-row__title .talos-badge')).toHaveText('Autore del modello');
+    /* Owner 27/09 notte («cura i due difetti»): il badge del titolo non sta più attaccato al nome. */
+    expect(await rigaDi(page, 'RichardErkhov/model-hub_-_Mistral-7B-Instruct-v0.2-gguf').locator('.talos-list-row__title .talos-badge').evaluate((n) => getComputedStyle(n).marginLeft)).toBe('8px');
   });
 
   test('HF-LISTA-06 — il clic esce dalla riga: il nodo, l’evento e cosa porta', async ({ page }) => {
@@ -811,4 +826,39 @@ test('RIPRESA-HF-FACCETTA-PERSISTENTE — autore della seconda pagina sopravvive
   await expect(page.locator('#modelLabHfFaccetta-autore')).toHaveValue('second-page');
   await page.locator('[data-hf-azzera]').click();
   await expect(righe(page)).toHaveCount(21);
+});
+
+/*
+ * ⭐ 26/09/2026 — owner 25/09 sera: la pagina del modello sta nella colonna delle Impostazioni, al posto del Laboratorio.
+ *   La lista resta nel DOM (solo tolta dal flusso): «Tutti i modelli» deve riportarla DOVE ERA, e l'apertura parte dall'alto.
+ *   Il ritorno passa da `ripristinaListaHf`, che chiama `setView` e riporterebbe in cima: la prova guarda proprio questo.
+ */
+test('RIPRESA-HF-SCORRIMENTO — la pagina del modello parte dall’alto e «Tutti i modelli» riporta la lista dove era', async ({ page }) => {
+  await page.setViewportSize({ width: 1024, height: 600 });
+  const repo = 'ripresa/modello-12';
+  await page.route('**/api/v1/huggingface/repo?**', route => route.fulfill({ json: { ok: true, data: {
+    repo, revision: 'a'.repeat(40), readme: '# Modello dodici', files: [], gated: false, license: 'mit',
+  } } }));
+  await apriHfHttp(page, route => route.fulfill({ json: { ok: true, data: { items: paginaHfFixture(0, 20), nextCursor: null } } }));
+  const riga = page.locator(`[data-hf="${repo}"]`);
+  await riga.scrollIntoViewIfNeeded();
+  const scorritore = page.locator('#schermoImpostazioni .talos-page');
+  const prima = await scorritore.evaluate(n => n.scrollTop);
+  expect(prima, 'premessa: la lista è scorsa').toBeGreaterThan(200);
+  await riga.click();
+  await expect(page.locator('#paginaModello')).toBeVisible();
+  expect(await scorritore.evaluate(n => n.scrollTop), 'la pagina del modello parte dall’alto').toBe(0);
+  /* Come una persona: legge la pagina scorrendola, poi torna. Il `setView` di `ripristinaListaHf` ricorda lo scorrimento di
+     ADESSO e lo riapplica per 1,2 s: se il ritorno della lista arrivasse dopo, verrebbe riscritto. */
+  const barra = await scorritore.evaluate(n => ({ posto: Math.round(n.querySelector('#paginaModello .model-page-toolbar').getBoundingClientRect().top - n.getBoundingClientRect().top), corsa: n.scrollHeight - n.clientHeight }));
+  expect(barra.corsa, 'premessa: la pagina del modello scorre oltre il posto della sua barra').toBeGreaterThan(barra.posto + 20);
+  await scorritore.evaluate((n, y) => { n.scrollTop = y; }, barra.posto + 20);
+  /* La barra della pagina resta agganciata AL BORDO: con `top:0` si fermava sotto il padding dello scorritore (28 px) e in
+     quella fascia passava il contenuto (foto sul 4174, 26/09). */
+  const aggancio = await scorritore.evaluate(n => Math.round(n.querySelector('#paginaModello .model-page-toolbar').getBoundingClientRect().top - n.getBoundingClientRect().top));
+  expect(Math.abs(aggancio), 'la barra della pagina sta sul bordo dello scorritore').toBeLessThanOrEqual(1);
+  await page.locator('#paginaModello [data-modello-indietro]').click();
+  await expect(page.locator('#paginaModello')).toBeHidden();
+  await expect(riga).toBeVisible();
+  expect(await scorritore.evaluate(n => n.scrollTop), '«Tutti i modelli» riporta la lista dove era').toBe(prima);
 });
