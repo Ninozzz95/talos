@@ -58,6 +58,16 @@ test('R04-GO-ENV-CURRENT-STEP-019 — il builder usa il Go verificato nello stes
   assert.match(beforeBuild, /TALOS_GO_BINARY=\$go.*\$env:GITHUB_ENV/u);
 });
 
+test('R04-SMOKE-REPORT-GATE-019 — il gate usa la ricevuta dello smoke e non un exit code nativo rimasto', () => {
+  const pretag = load(readFileSync(new URL('../../../.github/workflows/desktop-pretag-installer.yml', import.meta.url), 'utf8'));
+  const smoke = pretag.jobs['desktop-installer'].steps.find(item => item.name === 'installa, avvia e disinstalla prima del tag');
+  assert.ok(smoke);
+  assert.match(smoke.run, /scripts\/ci-smoke\.ps1/u);
+  assert.match(smoke.run, /R04-ci-smoke\.json/u, 'La ricevuta del ciclo installato deve essere letta.');
+  assert.match(smoke.run, /completato/u, 'Solo una ricevuta completa supera il gate.');
+  assert.doesNotMatch(smoke.run, /\$LASTEXITCODE/u, 'Uno script PowerShell non azzera il codice lasciato da un nativo interno.');
+});
+
 test('CI-CHAT-UPLOAD-BUILD-019 — il server prova gli upload dopo il helper Go verificato', () => {
   const ci = load(readFileSync(new URL('../../../.github/workflows/ci.yml', import.meta.url), 'utf8'));
   const steps = ci.jobs.desktop.steps;

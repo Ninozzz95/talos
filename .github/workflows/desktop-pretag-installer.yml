@@ -75,7 +75,11 @@ jobs:
           $version = (Get-Content harness-ui/desktop/package.json -Raw | ConvertFrom-Json).version
           $installer = "harness-ui/desktop/dist/TALOS-Setup-$version.exe"
           ./harness-ui/desktop/scripts/ci-smoke.ps1 -Installer $installer
-          if ($LASTEXITCODE -ne 0) { throw 'Smoke installer fallito.' }
+          $reportPath = 'harness-ui/desktop/.prove/R04-ci-smoke.json'
+          $report = Get-Content -LiteralPath $reportPath -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
+          if ($report.schema -cne 'talos.desktop.ci-smoke.v1' -or $report.completato -cne $true) {
+            throw "Smoke installer incompleto: $reportPath"
+          }
 
       - if: always()
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
