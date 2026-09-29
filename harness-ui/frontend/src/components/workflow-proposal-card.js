@@ -313,11 +313,12 @@ export function disegnaCardProposta(section, {
       azioni.append(make('p', 'talos-workflow-proposal__hint', (quando ? `Approvato alle ${quando}.` : 'Approvato.') + soloLettura));
     } else {
       const quando = ora(run?.createdAt);
-      azioni.append(make('p', 'talos-workflow-proposal__hint', quando ? `Avviato alle ${quando}.` : 'Avviato.'));
+      azioni.append(make('p', 'talos-workflow-proposal__hint',
+        `${quando ? `Avviato alle ${quando}.` : 'Avviato.'}${run?.runId ? ` Run ${run.runId}.` : ''}`));
     }
     // F3-42 (25/09/2026), D20: dalla card si apre il diagramma di QUESTO workflow — pianificato prima dell'avvio, il run dopo
     if (typeof onApriDiagramma === 'function' && !inModifica) {
-      const diagramma = bottone('Apri diagramma', 'talos-button--ghost', 'diagramma', false);
+      const diagramma = bottone(run?.runId ? 'Apri in Board' : 'Apri diagramma', 'talos-button--ghost', 'diagramma', false);
       diagramma.addEventListener?.('click', () => onApriDiagramma());
       azioni.append(diagramma);
     }

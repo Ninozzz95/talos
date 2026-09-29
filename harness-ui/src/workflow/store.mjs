@@ -1258,14 +1258,38 @@ export async function listRunSummariesForSession(store, { rootSessionId } = {}) 
   const root = join(store.root, 'runs');
   const entries = await readdir(root, { withFileTypes: true });
   const matches = [];
+  const definitions = new Map();
   for (const entry of entries) {
     if (!entry.isDirectory() || !UUID_V4.test(entry.name) || store.quarantineMarked?.has(entry.name)) continue;
     const { state, events } = await readRunState(store, { runId: entry.name });
     if (events[0]?.type === 'run_created' && events[0].payload.rootSessionId === rootSessionId) {
+      const { workflowId, definitionVersion: version, definitionHash } = events[0].payload;
+      const key = `${workflowId}:${version}`;
+      if (!definitions.has(key)) definitions.set(key, await readDefinition(store, { workflowId, version }));
+      const definition = definitions.get(key);
+      if (definition.definitionHash !== definitionHash) {
+        throw storeError('Workflow run does not match its verified Definition', 'WORKFLOW_STORE_CORRUPT');
+      }
+      const startedAt = events.find((event) => event.type === 'run_started')?.at ?? null;
+      const finishedAt = events.find((event) => ['run_succeeded', 'run_failed', 'run_cancelled'].includes(event.type))?.at ?? null;
+      const startMs = startedAt === null ? NaN : Date.parse(startedAt);
+      const finishMs = finishedAt === null ? NaN : Date.parse(finishedAt);
+      const durationMs = Number.isFinite(startMs) && Number.isFinite(finishMs) && finishMs >= startMs
+        ? finishMs - startMs : null;
+      const nodeStates = [...state.nodes.values()].map((node) => node.state);
+      const terminal = new Set(['succeeded', 'failed', 'cancelled', 'skipped', 'superseded']);
+      const active = new Set(['leased', 'running', 'retry_wait', 'waiting_human', 'reconciling']);
+      const models = new Set(events.filter((event) => event.type === 'agent_session_created')
+        .map((event) => event.payload?.model).filter((model) => typeof model === 'string' && model));
       /* F3 Workflow UI (25/09/2026): la card della proposta nel transcript deve ritrovare, anche dopo una ricarica, il SUO run
          e dirne lo stato — prima la riga portava solo id e data, e nessuna lettura pubblica legava un run al suo workflow. */
       matches.push({ runId: entry.name, createdAt: events[0].at, workflowId: events[0].payload.workflowId,
-        version: events[0].payload.definitionVersion, status: state.run?.status ?? null });
+        version, status: state.run?.status ?? null, title: definition.core.title,
+        startedAt, finishedAt, durationMs,
+        steps: { total: nodeStates.length, terminal: nodeStates.filter((status) => terminal.has(status)).length,
+          failed: nodeStates.filter((status) => status === 'failed').length,
+          active: nodeStates.filter((status) => active.has(status)).length },
+        model: models.size === 0 ? 'unknown' : models.size === 1 ? [...models][0] : 'mixed' });
     }
   }
   return matches.sort((left, right) => comparableUtcTimestamp(right.createdAt).localeCompare(comparableUtcTimestamp(left.createdAt), 'en')

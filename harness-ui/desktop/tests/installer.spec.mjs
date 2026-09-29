@@ -7,6 +7,7 @@ import { join, resolve, isAbsolute } from 'node:path';
 import { cpus, totalmem, version, release } from 'node:os';
 import { root, attendi } from './support.mjs';
 import { inventario, verificaImpronta } from '../scripts/prepara-pacchetto.mjs';
+import { nomiArtefatti } from '../scripts/release-assets.mjs';
 
 const require = createRequire(import.meta.url);
 const attivo = process.platform === 'win32' && process.env.TALOS_R02_INSTALLER === '1';
@@ -36,8 +37,10 @@ function processiDaCartella(cartella) {
 
 test('R02-INSTALLER — installazione reale, cookie, PTY incluso, motori, persistenza e disinstallazione', { skip: !attivo, timeout: 240000 }, async () => {
   const { _electron } = require('../../frontend/node_modules/playwright');
-  const installer = join(root, 'dist/TALOS-Setup-0.1.0.exe');
-  const zip = join(root, 'dist/TALOS-0.1.0-win.zip');
+  const { version: versione } = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
+  const nomi = nomiArtefatti(versione);
+  const installer = join(root, 'dist', nomi.exe);
+  const zip = join(root, 'dist', nomi.zip);
   assert.ok(existsSync(installer) && existsSync(zip), 'Eseguire prima npm run dist.');
   const predefinita = join(process.env.LOCALAPPDATA, 'Programs', 'talos-desktop');
   const destinazione = process.env.TALOS_R02_INSTALL_DIR || predefinita;

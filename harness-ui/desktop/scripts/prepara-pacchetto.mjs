@@ -142,6 +142,7 @@ async function estraiRuntime(file, destinazione) {
 
 export async function preparaPacchetto() {
   if (process.platform !== 'win32' || process.arch !== 'x64') throw new Error('Il pacchetto R-02 richiede Windows x64.');
+  await esegui(process.execPath, [join(root, '../scripts/build-chat-upload-helper.mjs')], root);
   await mkdir(cache, { recursive: true });
   // Prima di cancellare ricorsivamente, verifica destinazione assoluta e assenza junction.
   if (resolve(staging) !== join(root, '.staging') || !staging.startsWith(root + sep) || (existsSync(staging) && lstatSync(staging).isSymbolicLink())) throw new Error('Staging non sicuro.');
@@ -153,6 +154,10 @@ export async function preparaPacchetto() {
   // Lista delle radici di produzione: nessuna copia indiscriminata del repository.
   for (const nome of ['server.mjs', 'package.json', 'package-lock.json']) await copyFile(join(root, '..', nome), join(backend, nome));
   for (const nome of ['src', 'public']) await copiaAlberoProduzione(join(root, '..', nome), join(backend, nome));
+  await mkdir(join(backend, 'native'));
+  await copyFile(join(root, '../native/talos-chat-upload.exe'), join(backend, 'native/talos-chat-upload.exe'));
+  await copyFile(join(root, '../native/GO-LICENSE.txt'), join(backend, 'native/GO-LICENSE.txt'));
+  await esegui(join(backend, 'native/talos-chat-upload.exe'), ['--version'], root);
   for (const nome of ['package.json', 'package-lock.json', 'THIRD_PARTY_NOTICES.md']) await copyFile(join(root, '../..', 'context-engine', nome), join(contesto, nome));
   await copiaAlberoProduzione(join(root, '../..', 'context-engine/src'), join(contesto, 'src'));
   await copiaAssistenza({ sorgente: join(root, '../..', 'docs/assistenza'), destinazione: join(staging, 'docs/assistenza') });
@@ -175,6 +180,7 @@ export async function preparaPacchetto() {
     'TALOS Desktop — pacchetto di prova non firmato. Versione e commit nel manifesto della build.',
     'Electron 44.3.0 (MIT): LICENSE e LICENSES.chromium.html nella radice installata.',
     'llama.cpp b10517 (MIT): https://github.com/ggml-org/llama.cpp/tree/b10517 ; avvisi negli archivi inclusi.',
+    'Go 1.27.1 (BSD-3-Clause): il helper upload include la standard library; licenza in harness-ui/native/GO-LICENSE.txt.',
     'Dipendenze Node: licenze originali conservate nei rispettivi node_modules.',
     'Licenza del repository: vedere LICENZA-REPOSITORY.txt. Le dipendenze mantengono le proprie licenze.',
     'Nessun modello GGUF, aggiornamento automatico o telemetria aggiunto da R-02.',

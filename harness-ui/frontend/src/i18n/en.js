@@ -87,7 +87,11 @@ export default Object.freeze({
     'creazione di un’attività': 'creating a task', 'data e ora': 'date and time', 'delega a un sotto-agente': 'delegating to a sub-agent',
     'domanda alla persona': 'asking the user a question',
     'piano da approvare': 'plan awaiting approval', // 24/09/2026, decisione owner 36
+    'richiesta della modalità Piano': 'requesting Plan mode',
     'proposta di workflow': 'proposing a workflow',
+    'stato del workflow': 'workflow status',
+    'lettura del risultato di un passo': 'reading a step result',
+    'controllo del workflow': 'workflow control',
     'domanda all’agente che l’ha avviato': 'asking the parent agent',
     'risposta all’agente che l’ha avviato': 'answering the parent agent',
     'domanda a un sotto-agente': 'asking a sub-agent',

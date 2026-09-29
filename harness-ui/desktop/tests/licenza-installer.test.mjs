@@ -48,3 +48,11 @@ test('F7-INST-03 — installer assistito, solo per l’utente, in italiano, con 
   assert.match(script, /!insertmacro MUI_PAGE_WELCOME\s+(?:;[^\n]*\s+)*!define MUI_PAGE_HEADER_TEXT "Licenza di TALOS"/u,
     'la testata della pagina di licenza non dice «Accordo»: definita subito dopo il benvenuto, vale per la pagina dopo');
 });
+
+test('F7-INST-README-019 — la guida descrive l’installer assistito e la cartella reale', () => {
+  const guide = leggi('README.md').toString('utf8');
+  assert.match(guide, /per-user assisted NSIS setup/u);
+  assert.match(guide, /%LOCALAPPDATA%\\Programs\\TALOS/u);
+  assert.match(guide, /does not offer a folder chooser/u);
+  assert.doesNotMatch(guide, /one-click setup|Programs\\talos-desktop/u);
+});

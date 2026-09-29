@@ -1,4 +1,5 @@
 import { createServer } from 'node:net';
+import { lstatSync, readFileSync, writeFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -85,8 +86,9 @@ export function creaAvvioFiglio({ execPath, percorsi, port, token, reportFile, d
   } };
 }
 
-// Il backend rifiuta listen(0). La prenotazione viene rilasciata prima dello spawn:
-// una collisione fallisce esplicitamente, il ciclo ripete la scelta, senza porte fisse.
+// Il backend rifiuta listen(0). La prenotazione viene rilasciata prima dello spawn.
+// Il primo avvio assegna una porta per profilo; i successivi la riusano per mantenere l'origine Chromium.
+// Una collisione fallisce esplicitamente e conserva i dati, senza spostare l'origine in silenzio.
 export async function scegliPortaEffimera() {
   const port = await new Promise((resolvePort, reject) => {
     const server = createServer();
@@ -97,6 +99,48 @@ export async function scegliPortaEffimera() {
     });
   });
   if (!portaValida(port)) throw new Error('Il sistema non ha assegnato una porta consentita.');
+  return port;
+}
+
+// The pre-0.1.19 shell recorded its loopback port, but did not pin the Chromium origin.
+// Reuse the last startup of this profile; never copy or rewrite historical storage areas.
+function ultimaPortaDalRegistro(file) {
+  let ultima = null;
+  for (const nome of [file + '.precedente', file]) {
+    let contenuto;
+    try {
+      const stat = lstatSync(nome);
+      if (!stat.isFile() || stat.size > 2_100_000) continue;
+      contenuto = readFileSync(nome, 'utf8');
+    } catch { continue; }
+    for (const riga of contenuto.split('\n')) {
+      const match = /^(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z) Servizio locale avviato: pid \d+, porta (\d+), generazione \d+\.$/u.exec(riga.trimEnd());
+      if (!match) continue;
+      const tempo = Date.parse(match[1]);
+      const port = Number(match[2]);
+      if (!Number.isFinite(tempo) || !portaValida(port)) continue;
+      if (!ultima || tempo >= ultima.tempo) ultima = { tempo, port };
+    }
+  }
+  return ultima?.port;
+}
+
+/** Keep the Chromium origin stable for this desktop profile across full process restarts. */
+export async function scegliPortaPersistente(file) {
+  const read = () => {
+    const stat = lstatSync(file);
+    if (!stat.isFile() || stat.size > 256) throw new Error('File origine Desktop non valido.');
+    let record;
+    try { record = JSON.parse(readFileSync(file, 'utf8')); }
+    catch { throw new Error('File origine Desktop non valido.'); }
+    if (record?.version !== 1 || !portaValida(record.port)) throw new Error('Porta origine Desktop non valida.');
+    return record.port;
+  };
+  try { return read(); }
+  catch (error) { if (error?.code !== 'ENOENT') throw error; }
+  const port = ultimaPortaDalRegistro(join(dirname(file), 'registro.log')) ?? await scegliPortaEffimera();
+  try { writeFileSync(file, JSON.stringify({ version: 1, port }), { flag: 'wx', mode: 0o600, flush: true }); }
+  catch (error) { if (error?.code === 'EEXIST') return read(); throw error; }
   return port;
 }
 

@@ -52,6 +52,12 @@ test('RELEASE-018-PROMPT-ENHANCE: composer through real route and session provid
     await page.locator('#miglioraPromptBtn').click();
     const panel = page.locator('#miglioraPromptPannello');
     await expect(panel).toBeVisible();
+    const clickRicevuto = await panel.getByRole('button', { name: 'Migliora', exact: true }).evaluate((button) => {
+      const box = button.getBoundingClientRect();
+      const target = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+      return target === button || button.contains(target);
+    });
+    expect(clickRicevuto, 'RELEASE-019-PROMPT-HITTEST: Inspector copre il pulsante').toBe(true);
     await panel.getByRole('button', { name: 'Migliora', exact: true }).click();
     await expect(panel.getByText(improved, { exact: true })).toBeVisible();
     expect(requestBody).toEqual({ prompt: originale, profondita: 'equilibrata' });
@@ -281,10 +287,36 @@ test('STREAMING-LIVE-SMOOTH-03 — cursore e dissolvenza raggiungono il DOM al f
 
   for (const risultato of risultati) {
     expect(risultato.deltaRicevuti).toBe(240);
-    expect(risultato.visibile).toBe(risultato.atteso);
+    expect(risultato.visibile, `${risultato.modalita}: ${risultato.atteso.length - risultato.visibile.length} caratteri gia ricevuti sono ancora invisibili; ultimo render: ${JSON.stringify(risultato.ultimoRender)}`).toBe(risultato.atteso);
     expect(risultato.frameDopoUltimoDelta, `${risultato.modalita}: T3→T4 = ${risultato.lagFinaleMs} ms; ultimo render: ${JSON.stringify(risultato.ultimoRender)}`).toBeLessThanOrEqual(1);
     expect(risultato.durataRenderMassimaMs, `${risultato.modalita}: render applicativo oltre la soglia W3C di 50 ms`).toBeLessThan(50);
   }
+});
+
+test('STREAMING-HIDDEN-FALLBACK-019 — il testo ricevuto non aspetta un rAF sospeso', async ({ page }) => {
+  await page.goto(process.env.TALOS_URL_CANCELLO || 'http://127.0.0.1:4174/');
+  await apriConversazioneVisibile(page);
+  const risultato = await page.evaluate(async () => {
+    const runtime = window.__talosHarnessUiRuntime;
+    const sessione = runtime.realSessionState;
+    const conversazione = document.querySelector('#conversation');
+    conversazione.replaceChildren();
+    sessione.messageElements.clear();
+    sessione.testoGrezzoMessaggi.clear();
+    sessione.renderIncrementale?.clear?.();
+    sessione.sequenzeViste.clear();
+    sessione.deferHistoricalRendering = false;
+    Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' });
+    try {
+      runtime.handleRealEvent({ type: 'TextMessageContent', messageId: 'hidden-fallback-019',
+        delta: 'Testo completo in finestra nascosta.', _sequenza: 99001 }, sessione.generation);
+      await new Promise(resolve => setTimeout(resolve, 100));
+      return conversazione.querySelector('.assistant-copy')?.textContent || '';
+    } finally {
+      delete document.visibilityState;
+    }
+  });
+  expect(risultato).toBe('Testo completo in finestra nascosta.');
 });
 
 /*

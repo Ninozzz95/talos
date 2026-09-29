@@ -3627,7 +3627,7 @@ test('AGENTI LIVE: una nipote mantiene parentId reale ma viene notificata anche 
   finta.concludi(0, { type: 'RunError', code: 'fermato', threadId: 't1', runId: 'r1' }, { ok: false, esito: { detto: 'fermata', comeFinita: 'fermato', messaggiFinali: [] } });
 });
 
-test('DELEGA DURABILE: se la madre conclude prima della figlia, il risultato entra nello storico una volta sola con provenienza persistita', async () => {
+test('DELEGA DURABILE: se la madre conclude prima della figlia, il risultato ammette un giro sintetico con ID persistito', async () => {
   const cartellaStore = cartellaStoreVera();
   const finta = sessioniControllabili();
   try {
@@ -3643,20 +3643,25 @@ test('DELEGA DURABILE: se la madre conclude prima della figlia, il risultato ent
       ok: true,
       esito: { detto: 'risultato tardivo verificato', comeFinita: 'concluso', messaggiFinali: [] },
     });
-    await new Promise((resolve) => setImmediate(resolve));
-    /* F3 (24/09): con la politica `busy` del negozio la storia del risultato tardivo può essere IN CODA (in ordine, dietro
-       agli eventi della figlia): si aspetta che atterri prima di leggere il disco. Le asserzioni sono le stesse. */
+    await new Promise((resolve) => setTimeout(resolve, 80));
+    assert.equal(finta.chiamate, 3, 'la madre riparte una volta dopo la figlia');
+    assert.equal(finta.run(2).input.messaggiIniziali.at(-1).talosOrigin, 'delegation-notice');
+    assert.deepEqual(finta.run(2).input.task.childIds, [avvio.childId]);
+    finta.concludi(2, { type: 'RunFinished', threadId: 't3', runId: 'r3' }, {
+      ok: true, esito: { detto: 'integrato', comeFinita: 'concluso', messaggiFinali: finta.run(2).input.messaggiIniziali },
+    });
+    await registro.attendiAssestamento(padreId);
     await attendiScritture({ cartellaStore });
 
     assert.deepEqual(registro.statoCoda(padreId), { ok: true, voci: [], inPausa: false });
     const record = vistaNelFormatoDiPrima(readFileSync(join(cartellaStore, `${padreId}.jsonl`), 'utf8').trim().split(/\r?\n/u).map((riga) => JSON.parse(riga)));
     const finali = record.filter((riga) => riga.tipo === 'messaggi-finali').at(-1)?.messaggiFinali ?? [];
-    const risultati = finali.filter((messaggio) => messaggio?.role === 'user' && String(messaggio.content).includes('talos.subagent-result.v1'));
+    const risultati = finali.filter((messaggio) => messaggio?.talosOrigin === 'delegation-notice' && String(messaggio.content).includes('talos.subagent-result.v1'));
     assert.equal(risultati.length, 1);
     assert.match(risultati[0].content, /risultato tardivo verificato/);
     assert.ok(risultati[0].content.includes(avvio.childId));
-    const consegna = record.find((riga) => riga.type === 'QueuedMessageDelivered' && riga.origine === 'delega' && riga.childId === avvio.childId);
-    assert.ok(consegna, 'la provenienza del risultato consegnato deve sopravvivere al reload');
+    const consegna = record.find((riga) => Array.isArray(riga.consegnaCoda?.codaIds) && riga.consegnaCoda.codaIds.length === 1);
+    assert.ok(consegna, 'gli ID consegnati nel checkpoint devono sopravvivere al reload');
     const ultimaCoda = record.filter((riga) => riga.tipo === 'coda').at(-1);
     assert.deepEqual(ultimaCoda.voci, []);
   } finally {
@@ -3664,10 +3669,10 @@ test('DELEGA DURABILE: se la madre conclude prima della figlia, il risultato ent
   }
 });
 
-test('DELEGA DURABILE: cronologia salvata svuota la FIFO anche se fallisce il solo evento di provenienza', async () => {
+test('DELEGA DURABILE: un checkpoint di ammissione rifiutato lascia la FIFO per il recupero', async () => {
   const finta = sessioniControllabili();
   const recordSincroni = [];
-  let negaProvenienza = false;
+  let negaAmmissione = false;
   const registro = createSessionRegistry({
     cartellaStore: '/store-finto',
     avviaSessioneFn: finta.avviaSessioneFn,
@@ -3675,7 +3680,7 @@ test('DELEGA DURABILE: cronologia salvata svuota la FIFO anche se fallisce il so
     modello: 'm', chiave: 'k', cartellaEsisteFn: () => true,
     registraRigaFn: async () => {},
     registraRigaSyncFn: ({ record }) => {
-      if (negaProvenienza && record?.type === 'QueuedMessageDelivered') throw new Error('ENOSPC provenance');
+      if (negaAmmissione && Array.isArray(record?.consegnaCoda?.codaIds)) throw new Error('ENOSPC admission');
       recordSincroni.push(structuredClone(record));
     },
   });
@@ -3685,20 +3690,19 @@ test('DELEGA DURABILE: cronologia salvata svuota la FIFO anche se fallisce il so
     ok: true,
     esito: { detto: 'madre conclusa', comeFinita: 'concluso', messaggiFinali: [{ role: 'user', content: 'c' }, { role: 'assistant', content: 'madre conclusa' }] },
   });
-  await new Promise((resolve) => setImmediate(resolve));
-  negaProvenienza = true;
+  await registro.attendiAssestamento(padreId);
+  negaAmmissione = true;
 
   finta.concludi(1, { type: 'RunFinished' }, {
     ok: true,
     esito: { detto: 'risultato persistito', comeFinita: 'concluso', messaggiFinali: [] },
   });
-  await new Promise((resolve) => setImmediate(resolve));
+  await new Promise((resolve) => setTimeout(resolve, 80));
 
-  assert.deepEqual(registro.statoCoda(padreId).voci, [], 'la copia gia salvata nello storico non deve restare inviabile una seconda volta');
-  const finali = vistaNelFormatoDiPrima(recordSincroni).filter((record) => record.tipo === 'messaggi-finali').at(-1)?.messaggiFinali ?? [];
-  assert.equal(finali.filter((messaggio) => String(messaggio.content).includes('talos.subagent-result.v1')).length, 1);
-  const figlio = registro.elencaFigli(padreId).figli.find((voce) => voce.sessionId === avvio.childId);
-  assert.match(figlio.erroreConsegnaDelega, /evento durevole di provenienza non e stato salvato/);
+  assert.equal(registro.statoCoda(padreId).voci.length, 1, 'nessun risultato viene consumato se il checkpoint non è durevole');
+  assert.equal(finta.chiamate, 2, 'il runtime del padre non riparte senza ammissione');
+  assert.equal(recordSincroni.some((record) => Array.isArray(record?.consegnaCoda?.codaIds)), false);
+  assert.equal(registro.statoCoda(padreId).voci[0].childId, avvio.childId);
 });
 
 test('⭐⭐⭐ 06/9 — la delega sulla STESSA cartella del padre parte, e il figlio eredita il modello della madre', async () => {
@@ -9538,7 +9542,7 @@ test('REV-SESSION-READY-19 — l’assestamento del padre aspetta anche la scrit
 });
 
 /* ─── REV-SESSION-READY v4 (27/09/2026, terza revisione di Codex; owner: «v4 stretta») ─── */
-test('REV-SESSION-READY-20 — il risultato di una figlia che arriva nella finestra finisce nella storia NUOVA, non in quella di prima', async () => {
+test('REV-SESSION-READY-20 — il risultato nella finestra segue lo storico nuovo con un giro sintetico dopo l’assestamento', async () => {
   /* Con una cartella di salvataggio vera, come nell'app: senza, l'integrazione nello storico non può scrivere e rinuncia
      (il risultato resta in coda), e la prova non misurerebbe il caso di Codex (v3, punto 2). */
   const cartellaStore = mkdtempSync(join(tmpdir(), 'talos-rev-ready-v4-figlia-'));
@@ -9556,11 +9560,16 @@ test('REV-SESSION-READY-20 — il risultato di una figlia che arriva nella fines
     for (let i = 0; i < 3; i += 1) await unGiro();
     finta.run(1).risolvi({ ok: true, esito: { comeFinita: 'concluso', messaggiFinali: storiaDelGiro(2) } });
     await registro.attendiAssestamento(parentId);
-    assert.equal(registro.resume(parentId, 'domanda 3').sessionId, parentId);
+    await new Promise((resolve) => setTimeout(resolve, 70));
+    assert.equal(finta.chiamate, 4, 'un solo sollecito dopo l’assestamento del secondo giro');
     const iniziali = finta.run(3).input.messaggiIniziali;
     assert.deepEqual(iniziali.slice(0, 3), storiaDelGiro(2), 'la storia è quella del secondo giro');
-    assert.ok(iniziali.some((m) => m.role === 'user' && /Modulo scritto\./u.test(JSON.stringify(m.content))), 'e il risultato della figlia c’è, non è andato perso');
-    finta.concludi(3, { type: 'RunFinished', runId: 'r4' });
+    assert.ok(iniziali.some((m) => m.talosOrigin === 'delegation-notice' && /Modulo scritto\./u.test(JSON.stringify(m.content))), 'il risultato è notificato senza fingersi la persona');
+    finta.concludi(3, { type: 'RunFinished', runId: 'r4' }, { ok: true, esito: { comeFinita: 'concluso', messaggiFinali: iniziali } });
+    await registro.attendiAssestamento(parentId);
+    assert.equal(registro.resume(parentId, 'domanda 3').sessionId, parentId);
+    assert.ok(finta.run(4).input.messaggiIniziali.some((m) => m.talosOrigin === 'delegation-notice'));
+    finta.concludi(4, { type: 'RunFinished', runId: 'r5' });
     await registro.attendiAssestamento(parentId);
   } finally {
     await attendiScritture({ cartellaStore });
@@ -10378,7 +10387,8 @@ test('REV-SESSION-READY-47 — un salvataggio del padre fallito in ritardo, rima
     assert.deepEqual(rifiuti.map(String), [], 'nessun rifiuto senza gestore');
     await registro.attendiAssestamento(parentId);
     finta.concludi(1, { type: 'RunFinished', runId: 'r2' });
-    await unGiro();
+    await registro.attendiAssestamento(childId);
+    await registro.chiudi();
   } finally {
     process.off('unhandledRejection', suRifiuto);
     await attendiScritture({ cartellaStore });

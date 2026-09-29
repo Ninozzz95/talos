@@ -80,7 +80,7 @@ test('SETTINGS-FATTI-44 — le sezioni Settings mostrano provider dal server, pr
   expect(esito.endpointAperto).toBe('https://openrouter.ai/api/v1');            // ← indirizzo: il suo posto è il campo della scheda
   expect(esito.provider[2]).toContain('Anthropic');
   expect(esito.provider[2]).toContain('Chiave mancante');      // ← `requiresKey:true` e nessuna chiave
-  expect(Object.fromEntries(esito.chat)['Testo chat']).toBe('Extra piccolo');
+  expect(Object.fromEntries(esito.chat)['Testo chat']).toBe('Predefinito');
   expect(Object.fromEntries(esito.chat)['Chat a tutta larghezza']).toBe('Sì');
   expect(esito.privacy.some((v) => v.includes('talos.harness.desktop.settings.v1'))).toBe(true);
   /* ⛔ 18/09/2026 — qui si pretendeva «Workspace write», il nome INTERNO della politica. Il prodotto

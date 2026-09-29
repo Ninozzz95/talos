@@ -37,7 +37,7 @@ export function creaClientProposta({ fetchFn = globalThis.fetch, API = (p) => p,
    * sotto l'ultima, che resta avviabile finché l'ultima non è approvata (decisione owner). Se l'elenco non risponde, la card
    * resta sulla versione della ricevuta, come prima.
    */
-  async function leggi({ workflowId, version }) {
+  async function leggi({ workflowId, version }, { runId = null } = {}) {
     const enc = encodeURIComponent;
     const proposte = await leggiJson(`/api/v1/sessions/${enc(sessionId)}/workflow-proposals?limit=50`).catch(() => null);
     const versioni = proposte?.status === 200
@@ -46,17 +46,30 @@ export function creaClientProposta({ fetchFn = globalThis.fetch, API = (p) => p,
     const rev = await leggiJson(`/api/v1/workflows/${enc(workflowId)}/versions/${ultima}`);
     if (rev.status === 404) return { nonDisponibile: true };
     if (rev.status !== 200 || !rev.corpo?.data) throw Object.assign(new Error('revisione non leggibile'), { status: rev.status });
+    const leggiRuns = async () => {
+      if (!runId) return leggiJson(`/api/v1/sessions/${enc(sessionId)}/workflows`);
+      let offset = 0;
+      while (true) {
+        const pagina = await leggiJson(`/api/v1/sessions/${enc(sessionId)}/workflows?offset=${offset}&limit=50`);
+        if (pagina.status !== 200) return pagina;
+        const run = (pagina.corpo?.data?.items ?? []).find((r) => r.runId === runId);
+        if (run) return { status: 200, corpo: { data: { items: [run] } } };
+        const next = pagina.corpo?.data?.nextOffset;
+        if (!Number.isSafeInteger(next) || next <= offset) return { status: 200, corpo: { data: { items: [] } } };
+        offset = next;
+      }
+    };
     const [runs, prima] = await Promise.all([
-      leggiJson(`/api/v1/sessions/${enc(sessionId)}/workflows`),
+      leggiRuns(),
       ultima > 1 ? leggiJson(`/api/v1/workflows/${enc(workflowId)}/versions/${ultima - 1}`).catch(() => null) : null,
     ]);
     const run = runs.status === 200
-      ? (runs.corpo?.data?.items ?? []).find((r) => r.workflowId === workflowId) ?? null
+      ? (runs.corpo?.data?.items ?? []).find((r) => r.workflowId === workflowId && (!runId || r.runId === runId)) ?? null
       : null;
     const approvata = rev.corpo.data.status !== 'approved'
       ? versioni.find((voce) => voce.version < ultima && voce.status === 'approved') ?? null : null;
     return {
-      revisione: rev.corpo.data, run,
+      revisione: rev.corpo.data, run, ...(runId && !run ? { runNonTrovato: true } : {}),
       precedente: prima?.status === 200 ? prima.corpo?.data?.budgets ?? null : null,
       avviabilePrima: approvata ? { version: approvata.version, definitionHash: approvata.definitionHash } : null,
     };
@@ -82,9 +95,9 @@ export function creaClientProposta({ fetchFn = globalThis.fetch, API = (p) => p,
   async function avvia({ workflowId, version, definitionHash }) {
     const esito = await comando(`/api/v1/workflows/${encodeURIComponent(workflowId)}/versions/${version}/start`, { commandId: uuid(), definitionHash });
     if (!esito.ambiguo) return esito;
-    const dopo = await leggi({ workflowId, version }).catch(() => null);
-    // il run di QUESTA versione (F3-33b: la card può avviare anche la versione approvata prima dell'ultima)
-    return dopo?.run?.version === version ? { ok: true, riletto: true } : { ok: false, ambiguo: true };
+    // Un run della stessa versione non prova che QUESTO commandId sia stato ammesso.
+    // Conservare l'esito incerto finché una ricevuta esatta lo identifica.
+    return { ok: false, ambiguo: true };
   }
   /**
    * F3-33b: «Modifica» i tetti ⇒ la versione N+1. Nessun `commandId`: la versione nasce dal contenuto, quindi lo stesso gesto

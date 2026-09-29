@@ -38,6 +38,19 @@ export function creaClientGrafo({ fetchFn = globalThis.fetch, API = (p) => p, se
    * «Apri diagramma»: vince il run di quella versione, se c'è, altrimenti la sua vista pianificata.
    */
   async function sorgente(preferita = null) {
+    if (preferita?.runId) {
+      let offset = 0;
+      while (true) {
+        const { data } = await leggi(`${sessione}/workflows?offset=${offset}&limit=50`);
+        const run = (data?.items ?? []).find((r) => r.runId === preferita.runId);
+        if (run) return (!preferita.workflowId || run.workflowId === preferita.workflowId)
+          && (preferita.version === undefined || run.version === preferita.version)
+          ? { tipo: 'run', runId: run.runId, workflowId: run.workflowId, version: run.version, status: run.status, createdAt: run.createdAt }
+          : null;
+        if (!Number.isSafeInteger(data?.nextOffset) || data.nextOffset <= offset) return null;
+        offset = data.nextOffset;
+      }
+    }
     const [runs, proposte] = await Promise.all([
       leggi(`${sessione}/workflows?limit=50`).then((r) => r.data?.items ?? [], () => []),
       leggi(`${sessione}/workflow-proposals?limit=50`).then((r) => r.data?.items ?? [], () => []),
@@ -128,11 +141,20 @@ export function creaClientGrafo({ fetchFn = globalThis.fetch, API = (p) => p, se
   }
 
   /** Il dettaglio di un passo: i fatti dal run (se c'è) e il compito dalla revisione della versione. */
-  async function passo(s, nodeId) {
+  async function passo(s, nodeId, { outputOffset = 0 } = {}) {
     const pianificato = leggi(`${versione(s)}/nodes/${enc(nodeId)}`).then((r) => r.data, () => null);
     if (s.tipo !== 'run') return { ...(await pianificato ?? {}), nodeId };
-    const [run, piano] = await Promise.all([leggi(`${delRun(s)}/nodes/${enc(nodeId)}`).then((r) => r.data), pianificato]);
+    const page = outputOffset > 0 ? `?outputOffset=${outputOffset}` : '';
+    const [run, piano] = await Promise.all([leggi(`${delRun(s)}/nodes/${enc(nodeId)}${page}`).then((r) => r.data), pianificato]);
     return { ...run, instructions: piano?.instructions ?? null, model: piano?.model ?? null };
+  }
+  async function output(s, nodeId, resultId) {
+    if (s?.tipo !== 'run' || !resultId) throw new Error('Risultato del run non valido');
+    return (await leggi(`${delRun(s)}/nodes/${enc(nodeId)}/output?resultId=${enc(resultId)}`)).data;
+  }
+  function outputRawUrl(s, nodeId, resultId) {
+    if (s?.tipo !== 'run' || !resultId) throw new Error('Risultato del run non valido');
+    return API(`${delRun(s)}/nodes/${enc(nodeId)}/output?resultId=${enc(resultId)}&format=raw`);
   }
 
   /**
@@ -258,5 +280,5 @@ export function creaClientGrafo({ fetchFn = globalThis.fetch, API = (p) => p, se
     return (await leggi(`${delRun(s)}/retry-preview`)).data;
   }
 
-  return Object.freeze({ sorgente, revisione, panoramica, gruppo, passo, segui, evidenze, comando, anteprimaRiprova, archi, storia, discendenza });
+  return Object.freeze({ sorgente, revisione, panoramica, gruppo, passo, output, outputRawUrl, segui, evidenze, comando, anteprimaRiprova, archi, storia, discendenza });
 }

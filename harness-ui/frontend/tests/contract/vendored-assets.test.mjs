@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import { mkdtemp, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -9,10 +10,22 @@ import { PDFJS_CMAPS, PDFJS_DECODIFICATORI_JS, PDFJS_FONT_STANDARD, PDFJS_LICENZ
 import { createStaticHandler } from '../../../src/static-files.mjs';
 import { rimuoviCartellaDiProvaAttesa } from '../../../tests/aiuto/rimuovi-cartella-di-prova.mjs';
 
-test('PHASE1-ASSET-ALLOWLIST-01 copia esattamente font, licenze upstream e marchio', async () => {
+test('PHASE1-ASSET-ALLOWLIST-01 copia esattamente font, licenze upstream e marchio', async (t) => {
   const output = await mkdtemp(path.join(tmpdir(), 'talos-phase1-assets-'));
   try {
     await buildProduction({ outputDir: output });
+    await t.test('F5-VENDOR-LICENSE-BYTES-019 conserva nel repository i byte dichiarati dal manifest', async () => {
+      const bytes = await readFile(path.join(output, 'vendor/lettore/LICENSE-docx-preview'));
+      const cwd = path.resolve(import.meta.dirname, '../../../..');
+      const oid = (args) => execFileSync('git', ['hash-object', ...args, '--stdin'], {
+        cwd, input: bytes, encoding: 'utf8',
+      }).trim();
+      assert.equal(
+        oid(['--path=harness-ui/public/vendor/lettore/LICENSE-docx-preview']),
+        oid(['--no-filters']),
+        'Git non deve normalizzare i byte della licenza usati dal build-manifest',
+      );
+    });
     const manifest = JSON.parse(await readFile(path.join(output, 'asset-manifest.json'), 'utf8'));
     assert.equal(manifest.schema, 'talos.desktop.assets.v1');
     // 26 dal 05/09: +3 di Prism (LICENSE, README, prism.js), che la pagina originale caricava e il template nuovo carica allo stesso modo.

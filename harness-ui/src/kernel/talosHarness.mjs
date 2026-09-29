@@ -89,6 +89,7 @@ import { LIMITI_DOMANDA_UTENTE, validaDomandeUtente, ESITO_DOMANDA_SENZA_INTERFA
 import { LIMITI_PIANO, validaPiano, esitoPianoPerIlModello } from '../plan-contract.mjs'
 import { discoNode, fontiDaDisco, cancelloSemantico, libreriaStandard }
     from './dist/kernelPerIlBanco.js'
+import { pezzoConSeparatore } from './accoda-con-a-capo.mjs' // T-15 28/09: l'append non salda le righe (il modulo documenta fonti e perché)
 
 /**
  * ⭐ Ri-esportato per Harness UI (piano elegant-spinning-dongarra.md, §1.3,
@@ -1716,14 +1717,33 @@ const ATTREZZI = [
     },
     {
         name: 'cerca',
+        /*
+         * ⛔⛔⛔ T-13 (audit ZIP revisione, 28/09/2026, owner D6: «AND fra testo e nome» + parametro
+         *   `dentro`): fino a ieri `testo`+`nome` insieme tornavano l'UNIONE — chiedere «namespace»
+         *   fra i «.mjs» restituiva anche i .md col testo — e non c'era modo di restringere a una
+         *   sottocartella mentre l'avviso del tetto diceva «Search inside a subfolder», una via
+         *   che NON ESISTEVA. La descrizione ADESSO dichiara l'AND a parole, perché il modello
+         *   non può rispettare una regola che gli è stata detta male.
+         * Ricerca prima della cura (28/09): opencode `tool/grep.ts:12-16` (`path`+`include`),
+         * Hermes `tools/file_tools.py:1276-1277` (`path`+`file_glob`, «Filter files by pattern
+         * in grep mode»), claude-code `sdk-tools.d.ts` GrepInput (`path` = rg PATH, `glob` = rg
+         * --glob), ripgrep GUIDE.md («ripgrep limited its search to the `src` directory»).
+         * Tutti e tre filtrano nome E percorso INSIEME e restringono la cartella con un
+         * argomento dedicato: questa è la stessa forma, nella grammatica nostra.
+         */
         description: 'Finds files anywhere in the workspace, at any depth. '
             + 'Give "testo" to find files CONTAINING that text (e.g. the name of a failing test), '
-            + 'and/or "nome" to match the file path. Returns matching paths, most relevant first.',
+            + 'and/or "nome" to match the file path. '
+            + 'With BOTH "testo" and "nome", only the files that match BOTH are returned (AND): '
+            + 'text "namespace" + name ".mjs" finds .mjs files containing "namespace". '
+            + 'Give "dentro" to search inside ONE subfolder of the workspace, e.g. "src" — much faster than searching everywhere. '
+            + 'Returns matching paths, most relevant first.',
         input_schema: {
             type: 'object',
             properties: {
                 testo: { type: 'string', description: 'text to look for inside files' },
                 nome: { type: 'string', description: 'fragment of the file name or path' },
+                dentro: { type: 'string', description: 'limit the search to this subfolder of the workspace, e.g. "src/kernel"' },
             },
             required: [],
         },
@@ -3193,10 +3213,79 @@ const ATTREZZI_ESTESI = [
             requestId: { type: 'string' }, answer: { type: 'string' },
         }, required: ['requestId', 'answer'] },
     },
+    /*
+     * ⛔⛔⛔ F-012 / rilievo 2 dell'owner (audit ZIP revisione, 28/09/2026, piano 0.1.19 §1.5) — «il
+     *   modello non vede gli agenti del workflow né ne verifica il progresso»: le rotte esistevano
+     *   (`http-app.mjs`) ma NESSUN attrezzo del kernel le raggiungeva. Chi avvia un'automazione non
+     *   poteva né guardarla né fermarla. Tre attrezzi, il cablaggio come le letture di sezione
+     *   (owner 27/09): il kernel delega a `onWorkflowFn(nome, argomenti)`, la catena server →
+     *   registro → agent-service la riempie con le funzioni GIÀ esistenti di store/read-model.
+     * Ricerca 28/09: NESSUN concorrente espone i run DAG al modello — opencode `tool/task.ts` è
+     *   solo il lancio di subagent («background=true launches the subagent asynchronously»), con
+     *   la notifica alla fine; Hermes dà i risultati dei task padri solo nella consegna dei figli
+     *   (`kanban_db.py:4110-4150`, già citato in `adapters/agent-session.mjs`). La forma del
+     *   vincolo è nostra: Piano vede solo le due letture (`workflow_control` NON è in
+     *   ATTREZZI_PIANO), ai figli e alle sessioni di passo non si offre, il taglio si dichiara.
+     */
+    {
+        name: 'workflow_status',
+        description: 'Shows the automation runs (workflows) of this session: status, current step, '
+            + 'step counts, start time and duration, and the output reference (sha256) of every finished step. '
+            + 'Give "runId" for the detail of one run; with no arguments, the list of this session\'s runs. Read-only.',
+        input_schema: { type: 'object', properties: {
+            runId: { type: 'string', description: 'one run\'s detail; omit it for the list of this session\'s runs' },
+        }, required: [] },
+    },
+    {
+        name: 'workflow_output',
+        description: 'Reads a finished step output from the verified content store. If the step has multiple '
+            + 'outputs, first returns their IDs, type, MIME and size; choose one with resultId. Text is paginated '
+            + 'by character offset and limit. Binary bytes are never decoded. A workflow step may read only its direct finished predecessors.',
+        input_schema: { type: 'object', properties: {
+            runId: { type: 'string' }, nodeId: { type: 'string' },
+            resultId: { type: 'string', description: 'the exact recorded output ID; required when a step published multiple results' },
+            offset: { type: 'number', description: 'first character to show (default 0)' },
+            limit: { type: 'number', description: 'how many characters to show (default 4000, max 16000)' },
+        }, required: ['runId', 'nodeId'] },
+    },
+    {
+        name: 'workflow_control',
+        description: 'Pauses, resumes or cancels a workflow run of this session. Pause takes effect when the '
+            + 'steps in flight finish; resume restarts scheduling; cancel stops the run. Returns the REAL '
+            + 'outcome of the control, never a generic done. Not available in Plan mode.',
+        input_schema: { type: 'object', properties: {
+            runId: { type: 'string' },
+            azione: { type: 'string', enum: ['pause', 'resume', 'cancel'] },
+        }, required: ['runId', 'azione'] },
+    },
+    /*
+     * ⛔⛔⛔ Rilievo 3 dell'owner (audit ZIP revisione, 28/09/2026, piano 0.1.19 §1.7, decisione
+     *   D3 «Piano su richiesta del modello = attrezzo del modello + fascia») — fin qui il modo
+     *   Piano lo accendeva solo la persona, dalla pill: il modello che capiva di aver bisogno di
+     *   un piano prima di toccare il codice non poteva chiederlo. L'attrezzo ACCODA il cambio: la
+     *   patch `modalitaOperativa:'piano'` la applica il registro alla FINE del giro (dove la
+     *   guard di `aggiornaImpostazioni` la accetta), con l'evento `talos.impostazioni-sessione`
+     *   motivo `'piano-richiesto-dal-modello'` — la fascia in chat la dichiara (§3.2).
+     * Ricerca 28/09: opencode `tool/plan-enter.txt` — «Use this tool to suggest switching to
+     *   plan agent when the user's request would benefit from planning before implementation…
+     *   This tool will ask the user if they want to switch to plan agent»: il modello PROPONE il
+     *   cambio, la persona lo vede. Claude Code non ha l'equivalente (shift+tab, persona).
+     *   ⛔ Offerto SOLO al root in NORMALE: mai in Piano (non si chiede di entrare dove si è), mai
+     *   ai figli, mai senza canale (`onRichiestaPianoFn`).
+     */
+    {
+        name: 'request_plan_mode',
+        description: 'Ask the user to switch this session to Plan mode: call this when the task needs a plan '
+            + 'before any change. The switch happens between turns; the banner in chat tells the person.',
+        input_schema: { type: 'object', properties: {}, required: [] },
+    },
 ]
 /** ⭐ Stesso motivo dell'export sopra: la parte opzionale della superficie, per l'impronta. */
 /** 27/09/2026, decisione owner (capacità delle sezioni): gli attrezzi che passano da `onLetturaSezione`. */
 export const ATTREZZI_LETTURA_SEZIONI = new Set(['memory_list', 'notes_search', 'notes_read', 'tasks_search', 'research_search', 'conversation_search'])
+
+/** F-012 (piano 0.1.19 §1.5, 28/09): i tre attrezzi dei run dei Workflow, che passano da `onWorkflowFn`. */
+export const ATTREZZI_WORKFLOW = new Set(['workflow_status', 'workflow_output', 'workflow_control'])
 
 export const ATTREZZI_ESTESI_OPENAI = ATTREZZI_ESTESI.map((a) => ({
     type: 'function',
@@ -4188,7 +4277,11 @@ function percorsoComeDiscoNode(radice, percorso) {
  *   letto e non decodificato, per sapere che c'e' altro) anche su un file senza a capo o cresciuto dopo lo `stat`; l'handle
  *   si chiude su riuscita, errore e Stop.
  * ⛔ Solo `leggi`: le letture integrali di modifica, ricevute e cancello semantico (`disco.leggi`) restano quelle di prima.
- * ⛔ Il BOM resta (`ignoreBOM: true` lo TIENE, doc Node 24 `util.TextDecoder`): identico a `readFile(…, "utf8")`.
+ * ⛔ T-01 (28/09/2026, owner: «nella 19»): il BOM NON si restituisce più (`ignoreBOM: false`, il default dello standard
+ *   WHATWG Encoding / MDN `TextDecoder.ignoreBOM`, verificato il 28/09/2026: `false` TOGLIE il BOM iniziale dall'output,
+ *   `true` lo mantiene). Qui il decoder lavora a flusso dal byte 0, quindi il BOM è sempre nel primo pezzo decodificato e lo
+ *   strip è sicuro per costruzione (anche se un blocco piccolo lo spezza: il decoder a flusso ricuce come i caratteri multibyte).
+ *   Il file sul disco resta byte per byte com'è: cambia solo il testo che esce dall'attrezzo. Test: `tests/bom-leggi.test.mjs`.
  */
 export const MAX_BYTE_LEGGI = 1024 * 1024
 export const BYTE_CAMPIONE_BINARIO = 8000
@@ -4200,7 +4293,7 @@ export async function leggiTestoLimitato(radice, percorso, {
     const handle = await apriFn(percorsoComeDiscoNode(radice, percorso), 'r')
     try {
         const { size: byteSulDisco } = await handle.stat()
-        const decodificatore = new TextDecoder('utf-8', { ignoreBOM: true })
+        const decodificatore = new TextDecoder('utf-8', { ignoreBOM: false }) // T-01 28/09: il BOM non arriva al modello (vedi commento qui sopra)
         const buffer = Buffer.allocUnsafe(Math.max(1, Math.min(Math.max(blocco, campione), tetto + 1)))
         const pezzi = []
         let letti = 0
@@ -4289,7 +4382,7 @@ function eseguiRipgrep(rg, argomenti, cartella, segnale) {
     })
 }
 const percorsoDaRg = (p) => p.replace(/\\/gu, '/').replace(/^\.\//u, '')
-async function cercaConRipgrep(radice, testo, chiaveNome, segnale) {
+async function cercaConRipgrep(radice, testo, chiaveNome, dentro, segnale) {
     const rg = await percorsoRipgrep()
     if (!rg) return null
     const comuni = ['--no-config', '--hidden', '--no-require-git', '--glob', '!.git', '--glob', '!node_modules']
@@ -4299,9 +4392,11 @@ async function cercaConRipgrep(radice, testo, chiaveNome, segnale) {
        file grandi IN SILENZIO: una parola dentro un log da 9 MB risultava «no file matches». Hermes, opencode e Pi non hanno
        quel tetto; rg su una ricerca a testo fisso scorre il file a buffer incrementale (memoria limitata, FAQ di ripgrep), il
        tempo lo chiude TEMPO_MAX_RG_MS e l'uscita MAX_BYTE_RG. */
+    /* ⛔⛔ T-13 (28/09): `dentro` è il PATH di rg (GUIDE.md: «ripgrep limited its search to the `src` directory») —
+       i percorsi in uscita restano relativi alla radice del workspace, la grammatica che `leggi` già parla. */
     const ricerca = await eseguiRipgrep(rg, [...comuni, '--line-number', '--with-filename', '--no-heading', '--color', 'never',
         '--fixed-strings', '--ignore-case', '--max-count', String(MAX_RIGHE_PER_FILE), '--max-columns', String(MAX_COLONNE_RG),
-        '--max-columns-preview', '-e', testo, '--', '.'], radice, segnale)
+        '--max-columns-preview', '-e', testo, '--', dentro || '.'], radice, segnale)
     if (ricerca === null) return null
     if (ricerca.fermato) return 'stopped: the search was interrupted.'
     /* rg lavora in parallelo e non promette un ordine: si ordina qui, cosi' la stessa domanda da' la stessa risposta. */
@@ -4313,22 +4408,22 @@ async function cercaConRipgrep(radice, testo, chiaveNome, segnale) {
         if (!perFile.has(percorso)) perFile.set(percorso, [])
         perFile.get(percorso).push(`${percorso}:${m[2]}:${m[3].trim()}`)
     }
-    let perNome = []
-    if (chiaveNome) {
-        const elenco = await eseguiRipgrep(rg, [...comuni, '--files', '.'], radice, segnale)
-        if (elenco === null) return null
-        if (elenco.fermato) return 'stopped: the search was interrupted.'
-        perNome = elenco.testo.split(/\r?\n/u).filter(Boolean).map(percorsoDaRg).filter((p) => p.toLowerCase().includes(chiaveNome)).sort()
-    }
+    /* ⛔⛔⛔ T-13 (28/09, owner D6): `nome` con `testo` è un FILTRO, non un secondo elenco — l'AND vero.
+       Fino a ieri qui si affiancavano i risultati per nome puri (`--files` filtrati): chiedere «namespace»
+       fra i «.mjs» tornava anche i .md col testo. L'elenco per nome PURO resta, come prima, nella
+       camminata di `cercaNelProgetto` quando `testo` è assente (questa funzione non si chiama mai,
+       in quel caso). I concorrenti filtrano allo stesso modo: Hermes `file_tools.py:1277` `file_glob`
+       («Filter files by pattern in grep mode»), claude-code `glob` («maps to rg --glob»). */
+    const file = [...perFile.keys()].filter((p) => !chiaveNome || p.toLowerCase().includes(chiaveNome)).sort()
     const avvisi = []
-    if (ricerca.scaduto) avvisi.push(`⚠ incomplete scan: the search took longer than ${TEMPO_MAX_RG_MS / 1000} s and was stopped. Search inside a subfolder.`)
+    if (ricerca.scaduto) avvisi.push(`⚠ incomplete scan: the search took longer than ${TEMPO_MAX_RG_MS / 1000} s and was stopped. Search inside a subfolder with \`dentro\` (e.g. "src").`)
     if (ricerca.tagliato) avvisi.push('⚠ incomplete scan: too much output — the matches below are a part of them. Narrow the search.')
     const coda = avvisi.length > 0 ? `\n${avvisi.join('\n')}` : ''
-    const file = [...perFile.keys()].sort()
-    if (file.length === 0 && perNome.length === 0) {
-        return `${esitoSenzaRisultati(avvisi, `no file matches "${testo}"`)} (searched with ripgrep; .gitignore respected, binaries skipped). Try a shorter or different "testo".${coda}`
+    if (file.length === 0) {
+        const dove = chiaveNome ? ` in paths containing "${chiaveNome}"` : ''
+        return `${esitoSenzaRisultati(avvisi, `no file matches "${testo}"${dove}`)} (searched with ripgrep; .gitignore respected, binaries skipped). Try a shorter or different "testo"${chiaveNome ? ' or a broader "nome"' : ''}.${coda}`
     }
-    const righe = perNome.slice(0, MAX_RISULTATI)
+    const righe = []
     let righeTesto = 0, fileMostrati = 0
     for (const f of file) {
         if (fileMostrati >= MAX_RISULTATI || righeTesto >= MAX_RIGHE_RG) break
@@ -4338,9 +4433,7 @@ async function cercaConRipgrep(radice, testo, chiaveNome, segnale) {
         fileMostrati += 1
     }
     const fileTagliati = file.length - fileMostrati
-    const nomiTagliati = perNome.length - Math.min(perNome.length, MAX_RISULTATI)
     return righe.join('\n')
-        + (nomiTagliati > 0 ? `\n… and ${nomiTagliati} more paths matching "${chiaveNome}" not shown — narrow the search.` : '')
         // ⛔ Il taglio si DICHIARA, come nella camminata JS: «40 file» non deve leggersi come «sono 40».
         + (fileTagliati > 0 ? `\n… and ${fileTagliati} more files with matches not shown — narrow the search.` : '')
         + (file.some((f) => perFile.get(f).length >= MAX_RIGHE_PER_FILE) ? `\n(at most ${MAX_RIGHE_PER_FILE} matching lines per file are shown)` : '')
@@ -4370,19 +4463,54 @@ async function cercaConRipgrep(radice, testo, chiaveNome, segnale) {
  * @param {{radice?: string}} [opzioni] — la cartella VERA, per leggere il `.gitignore`.
  *   Assente (test, ponte del telefono) ⇒ si usa il ripiego `POTATE_SENZA_GITIGNORE`.
  */
-export async function cercaNelProgetto(disco, { testo, nome }, { radice, segnale } = {}) {
+export async function cercaNelProgetto(disco, { testo, nome, dentro }, { radice, segnale } = {}) {
     const chiaveTesto = String(testo ?? '').trim().toLowerCase()
     const chiaveNome = String(nome ?? '').trim().toLowerCase()
     if (!chiaveTesto && !chiaveNome) return 'give at least one of "testo" or "nome".'
+    /*
+     * ⛔⛔⛔ T-13 (28/09/2026, owner D6) — `dentro`: la sottocartella che l'avviso del tetto
+     *   prometteva da sempre («Search inside a subfolder») senza che esistesse un modo di
+     *   chiederla. La validazione sta QUI, una volta sola, prima delle due strade (ripgrep e
+     *   camminata JS): stesso cancello per entrambe, niente seconda validazione da tenere
+     *   allineata alla prima.
+     * ⛔ La grammatica è quella di `elenca` (RISALITA per il «..»), più il rifiuto degli
+     *   assoluti, più l'ESISTENZA VERA della cartella: una ricerca in una sottocartella che
+     *   non c'è NON è «no file matches» — direbbe al modello «la parola non c'è» su un posto
+     *   mai guardato. L'esistenza si chiede al DISCO (non al fs diretto): così la prova vale
+     *   anche per il ponte del telefono, che di radice non ne ha.
+     * ⛔ `dentro` vuoto, `.` o assente = la radice, cioè il comportamento di sempre, byte per byte.
+     */
+    let dentroPulito = ''
+    const grezzoDentro = dentro === undefined || dentro === null ? '' : String(dentro).trim()
+    if (grezzoDentro !== '' && grezzoDentro !== '.') {
+        if (RISALITA.test(grezzoDentro) || /^(?:[a-zA-Z]:|\/|\\\\)/u.test(grezzoDentro)) {
+            return `REFUSED. "${grezzoDentro}" is not a subfolder of this workspace: \`dentro\` takes a folder INSIDE the workspace, e.g. "src" or "src/kernel". Nothing was searched.`
+        }
+        dentroPulito = grezzoDentro.replace(/\\/gu, '/').replace(/^\.\//u, '').replace(/\/+$/u, '')
+        if (RISALITA.test(dentroPulito)) {
+            return `REFUSED. "${grezzoDentro}" is not a subfolder of this workspace: \`dentro\` takes a folder INSIDE the workspace, e.g. "src" or "src/kernel". Nothing was searched.`
+        }
+        try {
+            const voci = await disco.elenca(dentroPulito)
+            if (!Array.isArray(voci)) throw new Error('non è un elenco')
+        } catch {
+            return `REFUSED. "${dentroPulito}" is not a folder of this workspace. \`dentro\` takes a subfolder INSIDE the workspace, e.g. "src" — check the project map you received at the start, or leave \`dentro\` out to search everywhere. Nothing was searched.`
+        }
+    }
     /* P18 fase 3: con la cartella vera e un ripgrep disponibile, la ricerca nel contenuto la fa `rg`.
        `null` = rg assente o fallito: si prosegue con la camminata JS qui sotto, invariata. */
     if (chiaveTesto && radice) {
-        const conRg = await cercaConRipgrep(radice, String(testo).trim(), chiaveNome, segnale)
+        const conRg = await cercaConRipgrep(radice, String(testo).trim(), chiaveNome, dentroPulito, segnale)
         if (conRg !== null) return conRg
     }
 
     const filtro = await filtroDelProgetto(radice)
     const { percorsi, dimensioni, stato } = await tuttiIPercorsi(disco, { filtro })
+    /* ⛔⛔ T-13: la camminata vede SOLO la sottocartella chiesta — stessa promessa di `dentro`
+       sulla via rg. L'elenco filtrato è anche il conto onesto dei file «Scanned»: dire 500 quando
+       si è guardato solo `src` è il solito tetto silenzioso al contrario. */
+    const prefissoDentro = dentroPulito ? `${dentroPulito}/` : ''
+    const daScansionare = prefissoDentro ? percorsi.filter((p) => p.startsWith(prefissoDentro)) : percorsi
     /* P18 (vincolo desktop a, 26/09): lo Stop ferma anche la camminata JS, non solo rg — fino a 8 `cerca` possono
        essere partite insieme, e nessuna deve finire in sottofondo dopo «Ferma». */
     if (segnale?.aborted) return 'stopped: the search was interrupted.'
@@ -4393,11 +4521,19 @@ export async function cercaNelProgetto(disco, { testo, nome }, { radice, segnale
        cosi' chi legge puo' aprirlo da se' invece di credere che la parola non ci sia. I primi 20, poi il conto. */
     const fileTroppoGrandi = []
 
-    for (const p of percorsi) {
+    for (const p of daScansionare) {
         if (segnale?.aborted) return 'stopped: the search was interrupted.'
         const basso = p.toLowerCase()
         const combaciaNome = chiaveNome && basso.includes(chiaveNome)
-        if (combaciaNome) { perNome.push(p); continue }
+        /*
+         * ⛔⛔⛔ T-13 (28/09, owner D6: «AND fra testo e nome») — il ramo che la UNIONE rendeva
+         *   sbagliato: qui un file che combaciava il NOME veniva spinto nei risultati SENZA
+         *   guardare il testo. Con entrambi, il nome è un VINCOLO da superare, non un posto
+         *   nella lista: chi non lo supera non si legge nemmeno (stesso risparmio di rg con
+         *   --glob: i file esclusi non vengono aperti), chi lo supera scende al testo.
+         */
+        if (combaciaNome && !chiaveTesto) { perNome.push(p); continue }
+        if (chiaveNome && !combaciaNome) continue
         if (!chiaveTesto) continue
         if (ESTENSIONI_BINARIE.has(estensioneDiPercorso(basso))) { conto.binari += 1; continue }
         const taglia = dimensioni.get(p)
@@ -4424,7 +4560,7 @@ export async function cercaNelProgetto(disco, { testo, nome }, { radice, segnale
      * «non c'e'» da «non sono arrivato fino in fondo». */
     const avvisi = []
     if (stato.tettoPercorsi) {
-        avvisi.push(`⚠ incomplete scan: I stopped after collecting ${MAX_FILE} paths — the tree has more. Search inside a subfolder.`)
+        avvisi.push(`⚠ incomplete scan: I stopped after collecting ${MAX_FILE} paths — the tree has more. Search inside a subfolder with \`dentro\` (e.g. "src").`)
     }
     if (conto.tettoLetture) {
         avvisi.push(`⚠ incomplete scan: I stopped after reading ${MAX_FILE_LETTI} files. Narrow the search.`)
@@ -4449,7 +4585,7 @@ export async function cercaNelProgetto(disco, { testo, nome }, { radice, segnale
                 + (conto.illeggibili > 0 ? `, ${conto.illeggibili} unreadable` : '')
                 + ')'
             : ''
-        return `${esitoSenzaRisultati(avvisi, 'no file matches.')} Scanned ${percorsi.length} files${dettaglio}.`
+        return `${esitoSenzaRisultati(avvisi, 'no file matches.')} Scanned ${daScansionare.length} files${dettaglio}.`
             + (chiaveTesto ? ' Try a shorter or different "testo".' : '')
             + coda
     }
@@ -4808,10 +4944,16 @@ const USCITA_NESSUNA_SUITE = 127
  *   **frase con cui il runner dichiara di non aver trovato niente**, che è un'affermazione sua.
  *     · **Node** — `ℹ tests 0` nella riga del suo reporter: misurato qui il 20/09/2026.
  *     · **Mocha** — `Error: No test files found`: mochajs/mocha #3650/#3654, «error and exit, dont
- *       warn» (l'esito del cambio è che ora è un errore con uscita, non un avviso).
+ *       warn» (l'esito del cambio è che ora è un errore con uscita, non un avviso). E il caso
+ *       VERO «exit 0 + zero verificato»: `0 passing` (#4062, letto 28/09/2026), aggiunto dal
+ *       piano 0.1.19 §1.4 — la suite IE11 muta per MESI in CI.
  *     · **Jest** — `No tests found` (il messaggio della sua scoperta dei file).
  *     · **Vitest** — `No test files found` (il messaggio che accompagna l'uscita 1 di default,
  *       docs `passWithNoTests`).
+ *     · **Playwright** — `no tests found`, stessa frase di Jest: MA esce **1** (ricerca 28/09:
+ *       stackoverflow.com/q/71053528 e /q/78366666, microsoft/playwright #18369), quindi il
+ *       guard sull'uscita 0 lo esclude — per lui il caso loud non può presentarsi; la frase
+ *       resta per un wrapper che gli ribassi il codice d'uscita.
  *     · **pytest** — **NON incluso di proposito**: nessuna fonte verificata né per il messaggio né
  *       per il codice. Meglio un buco dichiarato che una regola inventata — una regola sbagliata
  *       qui produce **falsi rossi**, che sono peggio del difetto che cura.
@@ -4823,8 +4965,17 @@ const USCITA_NESSUNA_SUITE = 127
  */
 const DICHIARAZIONI_ZERO_TEST = Object.freeze([
     /(?:^|\n)\s*(?:ℹ\s*)?tests\s+0\s*(?:\n|$)/i,   // Node — riga del reporter, misurata
-    /no test files found/i,                        // Mocha
-    /no tests found/i,                             // Jest
+    /no test files found/i,                        // Mocha / Vitest (la frase è la stessa)
+    /no tests found/i,                             // Jest / Playwright (la frase è la stessa)
+    /*
+     * ⛔⛔ F-017 residuo (piano 0.1.19 §1.4, 28/09/2026) — Mocha con «0 passing» esce **0**:
+     *   mochajs/mocha #4062 (letto 28/09: la suite IE11 muta per MESI in CI; #4123 aggiunse
+     *   `--forbid-empty-suite`, ma i soli test PENDING scivolano lo stesso). È il VERO caso
+     *   «exit 0 + zero verificato» — gli altri runner, in questa famiglia, escono 1.
+     * ⛔ Il confine `(?:^|\s)` non è cosmetico: «10 passing» contiene «0 passing» come
+     *   SOTTOSTRINGA, e accusare una suite che ha passato 10 test è il falso rosso peggiore.
+     */
+    /(?:^|\s)0 passing/i,                          // Mocha — «0 passing» con uscita 0 (#4062)
 ]);
 
 /** `true` se l'esito dichiara che NON è stato eseguito nessun test. Vedi la nota sopra. */
@@ -4868,20 +5019,28 @@ function eseguiProva(comando, cartella, { segnaleStop } = {}) {
              *   **127**, non un codice nuovo — perché è lo stesso fatto: *niente è stato verificato*.
              *   È anche il codice che la riga dei Processi già traduce in «Non eseguito» invece che
              *   in un pallino rosso: una prova che non è partita non è una prova fallita.
+             * ⛔⛔ F-017 residuo (piano 0.1.19 §1.4, 28/09): il messaggio è quello del piano, parola
+             *   per parola — «exit 0 but NO tests ran (…): this is not a pass. Create the suite or
+             *   point the command at the folder that has one.» — e al posto dei puntini la RIGA
+             *   dichiarata dal runner, CITATA non parafrasata: è la prova di che cosa è successo.
+             *   Il comando È GIRATO («non blocca l'esecuzione» del piano): il silenzio diventa
+             *   dichiarazione, la prova non sparisce.
              */
             if (provaSenzaTest(codice, grezzo)) {
+                const rigaDichiarata = grezzo.split(/\r?\n/u).find((r) => DICHIARAZIONI_ZERO_TEST.some((re) => re.test(`${r}\n`)))
                 risolvi({
                     codice: USCITA_NESSUNA_SUITE,
                     /*
-                     * ⛔ Il conteggio dichiarato si CITA, non si parafrasa: è la prova di che cosa è successo.
                      * ⛔⛔ E LA TESTATA NON SI SCRIVE QUI — 20/09/2026, quarto referto avversario: la
                      *   scriveva anche il chiamante, che avvolge ogni esito come `exit ${codice}\n${testo}`
                      *   (`:8659`, `:8669`, `:8771`), e il risultato era **due volte** `exit 127`: una
                      *   resta a schermo come riga tecnica, perché lo strip ne toglie una sola.
                      *   Il ramo fratello qui sotto (`testo: uscita`) non la scrive: era questo l'unico
                      *   fuori posto. Il codice viaggia in `codice`, la testata la mette chi lo avvolge.
+                     *   L'«exit 0 but» del messaggio è quello del RUNNER, non il nostro: il nostro
+                     *   sta nella testata che il chiamante scrive sopra.
                      */
-                    testo: `nessuna suite trovata: il runner ha eseguito ZERO test, quindi niente e stato verificato.\n${uscita}`,
+                    testo: `exit 0 but NO tests ran (${(rigaDichiarata ?? '').trim()}): this is not a pass. Create the suite or point the command at the folder that has one.\n${uscita}`,
                 })
                 return
             }
@@ -8219,6 +8378,20 @@ export async function talosLavora({
      */
     onLetturaSezione, memorieNelPrompt,
     /*
+     * ⛔⛔ F-012 (piano 0.1.19 §1.5, 28/09) — `onWorkflowFn(nome, argomenti)` è il canale dei TRE attrezzi
+     *   dei run dei Workflow (`ATTREZZI_WORKFLOW`): chi ha lo store e l'orchestratore restituisce il testo
+     *   pronto (le funzioni PURE in `src/workflow/per-il-modello.mjs`, la lettura vera in
+     *   `server.mjs`). `workflow_status`/`workflow_output` sono di Piano (sola lettura);
+     *   `workflow_control` no. Assente ⇒ i tre non si OFFRONO (niente attrezzo che non può rispondere).
+     */
+    onWorkflowFn,
+    /*
+     * ⛔⛔ Rilievo 3 (piano §1.7, 28/09) — `onRichiestaPianoFn() => {ok, motivo?}` è il canale
+     *   dell'attrezzo `request_plan_mode`: ACCODA il cambio di modo (lo applica il registro a
+     *   fine giro, mai durante). Assente ⇒ l'attrezzo non si offre.
+     */
+    onRichiestaPianoFn,
+    /*
      * ⭐⭐⭐ FASE N, ottavo sistema (30/8) — Deep Research. `onRicercaLista`
      * torna dati grezzi ({ricerche,totale}, formattati da
      * `formattaListaRicerche`), `onRicercaLeggi` torna
@@ -8504,7 +8677,9 @@ export async function talosLavora({
         ? [...ATTREZZI_OPENAI, ...ATTREZZI_ESTESI_OPENAI.filter((a) => strumentiEstesi.includes(a.function.name))]
         : ATTREZZI_OPENAI
     const needsRoleFilter = agentRole === 'child' || (strumentiEstesi ?? []).some((name) =>
-        ['ask_parent', 'answer_parent_question', 'ask_child', 'answer_child_question', 'workflow_plan_propose', 'present_plan'].includes(name))
+        ['ask_parent', 'answer_parent_question', 'ask_child', 'answer_child_question', 'workflow_plan_propose', 'present_plan', 'request_plan_mode'].includes(name)
+        // F-012 (§1.5): i tre dei run hanno filtri loro (root, runtime presente) — quando chiesti, si filtra
+        || ATTREZZI_WORKFLOW.has(name))
     const filterBaseTools = (a, negati = negatiDalLivello) => {
         const name = a.function.name
         if (negati.has(name)) return false
@@ -8517,6 +8692,13 @@ export async function talosLavora({
         // D1 «Come Claude» (24/09/2026): in Piano si risponde ancora alle figlie vive.
         if (modalitaOperativa === 'piano' && name === 'answer_child_question' && figliViviAllAvvio !== true) return false
         if (name === 'workflow_plan_propose' && (agentRole === 'child' || typeof onWorkflowPlanPropose !== 'function')) return false
+        /* ⛔ F-012 (piano §1.5): i run si offrono SOLO al root col runtime presente — ai figli no
+           (chi lavora per conto di un altro non guida i run) e senza `onWorkflowFn` no (un attrezzo
+           che non può rispondere non si offre: meglio assente che rotto). */
+        if (ATTREZZI_WORKFLOW.has(name) && (agentRole === 'child' || typeof onWorkflowFn !== 'function')) return false
+        /* ⛔ Rilievo 3 (piano §1.7): il modo Piano lo può chiedere SOLO il root in Normale, col
+           canale presente — in Piano l'attrezzo non esiste, ai figli nemmeno. */
+        if (name === 'request_plan_mode' && (agentRole === 'child' || modalitaOperativa === 'piano' || typeof onRichiestaPianoFn !== 'function')) return false
         return true
     }
     const attrezziBase = negatiDalLivello.size || needsRoleFilter
@@ -8590,6 +8772,9 @@ export async function talosLavora({
         'notes_list', 'tasks_list', 'memory_search', 'research_list', 'research_read',
         // 27/09/2026, decisione owner (capacità delle sezioni): le letture nuove
         'memory_list', 'notes_search', 'notes_read', 'tasks_search', 'research_search', 'conversation_search',
+        // F-012 (piano 0.1.19 §1.5, 28/09): del Piano entrano SOLO le due letture dei run —
+        // `workflow_control` muove un run e dalla modalità Piano non si tocca niente.
+        'workflow_status', 'workflow_output',
         // D1 «Come Claude» (24/09/2026): rispondere a una figlia viva non è esecutivo; delegare e chiederle no.
         ...(figliViviAllAvvio === true ? ['answer_child_question'] : []),
     ])
@@ -9485,7 +9670,19 @@ export async function talosLavora({
                      * ⇒ Si proietta il DOPO in memoria — nessuna scrittura in piu': `contenutoPrima`
                      *   e' la lettura che questo ramo faceva gia' comunque.
                      */
-                    const contenutoProiettato = accoda ? `${contenutoPrimaPerApprovazione ?? ''}${contenuto}` : contenuto
+                    /*
+                     * ⛔⛔ T-15 (28/09/2026, owner: «nella 19») — L'APPEND NON SALDA LE RIGHE.
+                     * Il pezzo che va al disco e' `'\n' + contenuto` quando il file esiste, non e' vuoto,
+                     * non finisce con `\n` e il pezzo non inizia con `\n` (UNA implementazione in
+                     * `./accoda-con-a-capo.mjs`, condivisa con `document_create`). La decisione si prende
+                     * QUI — prima del permesso e del cancello semantico — perche' la proiezione sotto
+                     * deve mostrare il file COME SARA', col separatore: e l'esito in coda al ramo conta
+                     * il pezzo effettivo e lo DICHIARA («incl. 1 newline separator»).
+                     */
+                    const { pezzo: pezzoEffettivo, separatore } = accoda
+                        ? await pezzoConSeparatore(percorsoComeDiscoNode(cartella, percorso), contenuto)
+                        : { pezzo: contenuto, separatore: false }
+                    const contenutoProiettato = accoda ? `${contenutoPrimaPerApprovazione ?? ''}${pezzoEffettivo}` : contenuto
                     const permesso = await verificaPermessoScrittura(
                         {
                             tipo: 'scrivi', percorso,
@@ -9531,7 +9728,7 @@ export async function talosLavora({
                              * e' la via per un'aggiunta atomica per singola chiamata). Stessa scelta
                              * gia' presa in `workspace-files.mjs` per `document_create`.
                              */
-                            await disco.scrivi(percorso, contenuto, modalita)
+                            await disco.scrivi(percorso, accoda ? pezzoEffettivo : contenuto, modalita) // T-15: il pezzo col suo separatore, sempre UNA sola append
                             /*
                              * ⭐⭐⭐ 29/8 — la postcondizione: rilegge DAVVERO il file
                              * appena scritto. Un "written" che il modello riceve deve
@@ -9543,7 +9740,7 @@ export async function talosLavora({
                              * deve ricevere il file VERO di adesso, non il solo pezzo aggiunto —
                              * altrimenti il diff direbbe che il file e' stato sostituito dal pezzo.
                              */
-                            const verdetto = await postcondizioneDiScrivi(disco, percorso, contenuto, modalita)
+                            const verdetto = await postcondizioneDiScrivi(disco, percorso, accoda ? pezzoEffettivo : contenuto, modalita) // T-15: il cancello verifica il pezzo VERO, separatore compreso
                             /*
                              * ⛔ DICHIARATO: per un'aggiunta questo e' il «dopo» RICOSTRUITO in
                              * memoria (quello che c'era + il pezzo), non una rilettura. E' la stessa
@@ -9584,7 +9781,7 @@ export async function talosLavora({
                                  * check the write landed»).
                                  */
                                 esito = accoda
-                                    ? `appended to: ${percorso} (+${contenuto.length} characters; the file is now ${contenutoDopo.length}). `
+                                    ? `appended to: ${percorso} (+${pezzoEffettivo.length} characters${separatore ? ' incl. 1 newline separator' : ''}; the file is now ${contenutoDopo.length}). `
                                         + `Call \`scrivi\` again with mode:"append" on this same path for the next part.`
                                     : `written: ${percorso}`
                                 /*
@@ -11074,6 +11271,54 @@ export async function talosLavora({
                         }
                         catch (rotto) {
                             esito = `${nome} failed: ${rotto instanceof Error ? rotto.message : String(rotto)}`
+                        }
+                    }
+                }
+                /*
+                 * ⛔⛔ F-012 (piano 0.1.19 §1.5, 28/09) — i TRE attrezzi dei run dei Workflow. Stessa
+                 *   scorciatoia delle letture di sezione: il kernel consegna nome e argomenti VERI a
+                 *   `onWorkflowFn` e ne stampa il testo — la logica (read-model, CAS, requestRunControl)
+                 *   vive dove vive già, fuori da questo file. ⛔ La modalità Piano ha già fermato
+                 *   `workflow_control` prima di qui (`bloccatoDalPiano`, l'allowlist di ATTREZZI_PIANO):
+                 *   questa è difesa in profondità, non il cancello. ⛔ L'esito onesto quando il canale
+                 *   manca resta: un attrezzo chiamato a forza non deve crollare il giro.
+                 */
+                else if (ATTREZZI_WORKFLOW.has(nome)) {
+                    if (typeof onWorkflowFn !== 'function') {
+                        esito = `${nome} is not configured on this harness: the workflow runtime is not available.`
+                    }
+                    else {
+                        try {
+                            esito = uscitaUtile(String(await onWorkflowFn(nome, argomenti ?? {})), 16_000, 0.25)
+                        }
+                        catch (rotto) {
+                            esito = `${nome} failed: ${rotto instanceof Error ? rotto.message : String(rotto)}`
+                        }
+                    }
+                }
+                /*
+                 * ⛔⛔ Rilievo 3 (piano 0.1.19 §1.7, 28/09) — la richiesta del modo Piano. Il kernel
+                 *   NON cambia il modo: lo ACCODA il registro (patch a fine giro, evento
+                 *   `talos.impostazioni-sessione` motivo `'piano-richiesto-dal-modello'`). La
+                 *   frase al modello è quella del piano, parola per parola: dice QUANDO (dal
+                 *   prossimo giro) e COSA preparare (`present_plan` sarà disponibile).
+                 *   ⛔ In Piano l'attrezzo non è offerto e `bloccatoDalPiano` (allowlist) lo
+                 *   rifiuterebbe comunque: difesa in profondità. ⛔ `ok:false` porta il MOTIVO
+                 *   del canale, mai un «requested» finto.
+                 */
+                else if (nome === 'request_plan_mode') {
+                    if (typeof onRichiestaPianoFn !== 'function') {
+                        esito = 'request_plan_mode is not configured on this harness.'
+                    }
+                    else {
+                        try {
+                            const risposta = await onRichiestaPianoFn()
+                            esito = risposta?.ok === false
+                                ? `request_plan_mode: ${risposta?.motivo ?? 'not now.'}`
+                                : 'Plan mode requested: it will be active from the next turn. Prepare the plan; `present_plan` will be available then.'
+                        }
+                        catch (rotto) {
+                            esito = `request_plan_mode failed: ${rotto instanceof Error ? rotto.message : String(rotto)}`
                         }
                     }
                 }

@@ -142,16 +142,21 @@ test('CONTESTO-PROMESSA: quello che la sezione promette e non misura lo DICHIARA
 // 23/09, integrazione Workflow: 51 — i cinque attrezzi di piano e di dialogo fra agenti del ramo backend
 //   (`workflow_plan_propose`, `ask_parent`, `answer_parent_question`, `ask_child`, `answer_child_question`).
 // 24/09/2026, decisione owner 36: 52 — `present_plan`, il piano da approvare (fetta F3-30).
-test('C10-DESCRIZIONI: 58 attrezzi, tutte in italiano, senza markdown a schermo', async () => {
+// 28/09/2026, 0.1.19: 62 — `request_plan_mode` e i tre tool di lettura/controllo workflow.
+test('C10-DESCRIZIONI: 62 attrezzi, tutte in italiano, senza markdown a schermo', async () => {
   const m = await import('../../src/components/nomi-attrezzi.js');
   const ids = Object.keys(m.DESCRIZIONI_ATTREZZI);
-  assert.equal(ids.length, 58);
+  assert.equal(ids.length, 62);
   // 27/09/2026, decisione owner (capacità delle sezioni): le sei letture nuove hanno la loro descrizione e il loro nome umano
   for (const nuovo of ['memory_list', 'notes_search', 'notes_read', 'tasks_search', 'research_search', 'conversation_search']) {
     assert.ok(ids.includes(nuovo), `manca la descrizione di ${nuovo}`);
     assert.ok(!/_/u.test(m.nomeLeggibileAttrezzo(nuovo)), `nome tecnico a schermo per ${nuovo}`);
   }
   assert.ok(ids.includes('present_plan'), 'il piano da approvare ha la sua descrizione');
+  for (const nuovo of ['request_plan_mode', 'workflow_status', 'workflow_output', 'workflow_control']) {
+    assert.ok(ids.includes(nuovo), `manca la descrizione di ${nuovo}`);
+    assert.ok(m.NOMI_UMANI_ATTREZZI[nuovo], `manca il nome umano di ${nuovo}`);
+  }
   for (const nuovo of ['workflow_plan_propose', 'ask_parent', 'answer_parent_question', 'ask_child', 'answer_child_question']) {
     assert.ok(ids.includes(nuovo), `manca la descrizione di ${nuovo}`);
   }

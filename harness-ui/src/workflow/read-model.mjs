@@ -418,11 +418,14 @@ function indiceDerivati(events, nodeIds) {
   };
 }
 
-export function projectWorkflowNodeDetail(input, { nodeId } = {}) {
+export function projectWorkflowNodeDetail(input, { nodeId, outputOffset = 0 } = {}) {
+  if (!Number.isSafeInteger(outputOffset) || outputOffset < 0) throw new RangeError('Workflow output offset must be nonnegative');
   const state = values(input);
   const node = state.definition.nodes.find((entry) => entry.id === nodeId);
   if (!node) throw new RangeError('Workflow node not found');
   const nodeState = state.nodes.get(nodeId);
+  const allResultIds = nodeState?.resultRefIds ?? [];
+  const resultIds = allResultIds.slice(outputOffset, outputOffset + 20);
   const events = input.events ?? [];
   /* il passo di un run porta i fatti derivati (D27), dalla sua riga. ⛔ NON il compito: il run non serializza la Definition
      (`WF-HTTP-SECRET-OMISSION`, riga 1 di questo file); il «Task corrente» si legge dalla revisione della versione
@@ -430,7 +433,26 @@ export function projectWorkflowNodeDetail(input, { nodeId } = {}) {
   return {
     ...base(state), ...safeRow(node, state, events, state.planned ? null : indiceDerivati(events, new Set([nodeId]))),
     attempt: nodeState?.attempt ?? 0,
-    resultRefIds: (nodeState?.resultRefIds ?? []).slice(0, 20),
+    resultRefIds: resultIds,
+    totalOutputs: allResultIds.length,
+    outputOffset,
+    nextOutputOffset: outputOffset + 20 < allResultIds.length ? outputOffset + 20 : null,
+    /* F-014 (piano §1.6): gli OUTPUT del passo concluso — il ref (sha256) e un'ANTEPRIMA di al più
+       NODE_OUTPUT_PREVIEW_MAX caratteri, con `truncated` dichiarato: la Board (§3.4) mostra
+       l'anteprima e l'integrale lo serve la rotta output. Pura: viene dallo stato (summary dei
+       ref), stessa domanda = stessi byte = stesso ETag. */
+    outputs: resultIds
+      .map((id) => state.resultRefs?.get(id))
+      .filter(Boolean)
+      .map((ref) => ({
+        resultId: ref.id,
+        sha256: ref.sha256,
+        bytes: ref.bytes,
+        kind: ref.kind,
+        contentType: ref.contentType,
+        preview: anteprimaOutput(ref.summary),
+        truncated: ref.bytes > Buffer.byteLength(String(ref.summary ?? ''), 'utf8'),
+      })),
   };
 }
 
@@ -477,6 +499,18 @@ export function projectPlannedWorkflowOverview(record) {
  *   (WF-HTTP-SECRET-OMISSION), e il diagramma di un run legge l'anteprima da questa pagina della sua versione.
  */
 export const PLANNED_TASK_PREVIEW_MAX = 140;
+/*
+ * ⛔⛔ F-014 (piano 0.1.19 §1.6, 28/09) — l'ANTEPRIMA dell'OUTPUT di un nodo concluso, la stessa
+ *   regola di PLANNED_TASK_PREVIEW_MAX qui accanto: al più 2.000 caratteri nel dettaglio del
+ *   passo di un run; l'integrale si chiede alla rotta `.../nodes/:nodeId/output` (la Board,
+ *   §3.4) o con l'attrezzo `workflow_output` (§1.5). Un'anteprima è un invito, non un tetto
+ *   travestito: `truncated` dice che c'è altro.
+ */
+export const NODE_OUTPUT_PREVIEW_MAX = 2000;
+function anteprimaOutput(summary) {
+  const caratteri = [...String(summary ?? '')];
+  return caratteri.length > NODE_OUTPUT_PREVIEW_MAX ? `${caratteri.slice(0, NODE_OUTPUT_PREVIEW_MAX - 1).join('').trimEnd()}…` : caratteri.join('');
+}
 function anteprimaCompito(instructions) {
   const riga = String(instructions ?? '').split(/\r?\n/u).map((voce) => voce.trim()).find(Boolean) ?? '';
   const caratteri = [...riga];

@@ -3,7 +3,7 @@
   var TEMI = ["forge", "paper", "terminal", "aurora", "glacier", "ember", "atlas", "noir", "signal", "violet", "claudius", "basicus", "telemetry", "calm"];
   var VERSIONE_SCELTA = 2;
   var modo = "system";
-  var tema = "calm";
+  var tema = "forge";
   try {
     var grezzo = window.localStorage.getItem("talos.harness.desktop.settings.v1");
     if (grezzo) {
@@ -14,7 +14,7 @@
     }
   } catch (errore) {
     modo = "system";
-    tema = "calm";
+    tema = "forge";
   }
   var chiaro = modo === "light" || modo !== "dark" && typeof window.matchMedia === "function" && window.matchMedia("(prefers-color-scheme: light)").matches;
   var radice = document.documentElement;

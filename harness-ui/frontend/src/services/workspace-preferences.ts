@@ -25,9 +25,9 @@ const validId = (v: unknown): v is string => typeof v === 'string' && v.trim().l
 export function normalizeWorkspacePreferences(raw: unknown): WorkspacePreferences {
   /* ⛔ 18/09/2026 — il record non porta più `presets`: un profilo che lo ha ancora viene letto senza
      quel campo e riscritto senza alla prima modifica (vedi il blocco in testa al file). */
-  const defaults: WorkspacePreferences = { version: 2, density: 'comfortable', restoreWorkspace: true, lastSession: null };
+  const defaults: WorkspacePreferences = { version: 2, density: 'compact', restoreWorkspace: true, lastSession: null };
   if (!record(raw) || raw.version !== 2) return defaults;
-  return { ...defaults, density: raw.density === 'compact' ? 'compact' : 'comfortable', restoreWorkspace: raw.restoreWorkspace !== false,
+  return { ...defaults, density: raw.density === 'comfortable' ? 'comfortable' : 'compact', restoreWorkspace: raw.restoreWorkspace !== false,
     lastSession: validId(raw.lastSession) ? raw.lastSession : null };
 }
 /*

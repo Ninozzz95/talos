@@ -20,9 +20,9 @@ Version 0.1.x is early development (SemVer 0.y.z): anything may change between r
 
 Download `TALOS-Setup-<version>.exe` from the
 [Releases page](https://github.com/Ninozzz95/talos/releases) (tags `desktop-v*`) and double-click
-it. The installer is a per-user NSIS one-click setup: it installs under
-`%LOCALAPPDATA%\Programs\talos-desktop`, adds a "TALOS" shortcut and starts the app. It never asks
-for administrator rights and does not show a folder chooser.
+it. The installer is a per-user assisted NSIS setup with welcome and licence pages. It installs
+under `%LOCALAPPDATA%\Programs\TALOS`, adds a "TALOS" shortcut and offers to start the app. It never
+asks for administrator rights and does not offer a folder chooser.
 
 Alternatively download `TALOS-<version>-win.zip`, extract it **completely** into a writable folder
 and start `TALOS.exe`, keeping `resources` and the DLLs next to the executable. The zip uses the

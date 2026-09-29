@@ -293,6 +293,20 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'npm ci context-engine fallito.' }
 
       - if: steps.dove.outputs.ci == 'si'
+        name: Go 1.27.1 verificato per il server
+        run: |
+          $archive = Join-Path $env:RUNNER_TEMP 'go1.27.1.windows-amd64.zip'
+          $directory = Join-Path $env:RUNNER_TEMP 'talos-go-1.27.1'
+          Invoke-WebRequest -Uri 'https://go.dev/dl/go1.27.1.windows-amd64.zip' -OutFile $archive
+          $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $archive).Hash.ToLowerInvariant()
+          if ($hash -ne 'a3911b5e0e1b1053f25ed0675f4c1c6aad1e2bfcf253df2b9be4caabd2edd95d') { throw 'Archivio Go non conforme.' }
+          Expand-Archive -LiteralPath $archive -DestinationPath $directory
+          $go = Join-Path $directory 'go/bin/go.exe'
+          $env:TALOS_GO_BINARY = $go
+          npm --prefix harness-ui run build:chat-upload
+          if ($LASTEXITCODE -ne 0) { throw 'Build helper upload fallita.' }
+
+      - if: steps.dove.outputs.ci == 'si'
         name: server
         run: node --test tests/*.test.mjs
         working-directory: harness-ui
@@ -314,17 +328,20 @@ jobs:
         name: il browser
         run: node harness-ui/frontend/node_modules/playwright/cli.js install chromium
 
-      - if: steps.dove.outputs.ci == 'si'
-        name: unit del frontend
-        run: npm run test:unit
-        working-directory: harness-ui/frontend
-
+      # 28/09/2026: il build PRIMA delle unita', come in release.yml («costruisci il frontend e consegnalo» sta davanti ai
+      # cancelli). `tests/playwright-public-dir.test.mjs` legge `dist/build-manifest.json`: con l'ordine vecchio il run
+      # 36402785877 su main e' stato rosso su tre sue prove, mentre la release dello stesso albero era verde.
       - if: steps.dove.outputs.ci == 'si'
         name: build del frontend
         run: |
           npm --prefix harness-ui/frontend run build
           if ($LASTEXITCODE -ne 0) { throw 'Build frontend fallita.' }
           Copy-Item -Path harness-ui/frontend/dist/* -Destination harness-ui/public/ -Recurse -Force
+
+      - if: steps.dove.outputs.ci == 'si'
+        name: unit del frontend
+        run: npm run test:unit
+        working-directory: harness-ui/frontend
 
       - if: steps.dove.outputs.ci == 'si'
         name: test puri desktop

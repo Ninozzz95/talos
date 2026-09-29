@@ -270,6 +270,25 @@ test('BC49: inventario e campi TALOS-BANCO invariati, eccetto le esenzioni dichi
       // F3-10 (23/09/2026): il modo «Workflow» è ritirato; la descrizione non promette più un modo che il modello non vede.
       assert.doesNotMatch(workflowTool.description, /Workflow mode|Plan or Workflow/u);
     }
+    /* 0.1.19: F-012 e richiesta Piano sono quattro tool estesi nuovi. Si verifica
+       il loro contratto prima di escluderli dall'impronta storica. */
+    const runTools = {
+      workflow_status: [['runId'], []],
+      workflow_output: [['limit', 'nodeId', 'offset', 'resultId', 'runId'], ['nodeId', 'runId']],
+      workflow_control: [['azione', 'runId'], ['azione', 'runId']],
+      request_plan_mode: [[], []],
+    };
+    for (const [name, [fields, required]] of Object.entries(runTools)) {
+      const tool = attrezzi.map((entry) => entry.function ?? entry).find((entry) => entry.name === name);
+      if (attrezzi === ATTREZZI_OPENAI) assert.equal(tool, undefined, `${name} non deve entrare nel banco base`);
+      else {
+        assert.ok(tool, `${name} deve essere esteso`);
+        const schema = tool.parameters ?? tool.input_schema;
+        assert.equal(schema.type, 'object');
+        assert.deepEqual(Object.keys(schema.properties).sort(), fields, name);
+        assert.deepEqual([...schema.required].sort(), required, name);
+      }
+    }
     /* 24/09/2026, decisione owner 36 — `present_plan` è un attrezzo esteso NUOVO e intenzionale (il piano approvabile, come
      * ExitPlanMode di Claude Code). Come gli altri, si fissa tutta la sua forma pubblica PRIMA di escluderlo dal censimento
      * storico: così l'impronta vecchia resta la prova che nessuno degli attrezzi precedenti è cambiato. */
@@ -306,9 +325,21 @@ test('BC49: inventario e campi TALOS-BANCO invariati, eccetto le esenzioni dichi
         assert.deepEqual([...(schema.required ?? [])].sort(), obbligatori, nome);
       }
     }
-    const copia = structuredClone(attrezzi).filter((t) => !['file_edit', 'ask_user_question', 'present_plan', 'workflow_plan_propose', ...Object.keys(dialogueTools), ...Object.keys(lettureSezioni)].includes((t.function ?? t).name));
+    const copia = structuredClone(attrezzi).filter((t) => !['file_edit', 'ask_user_question', 'present_plan', 'workflow_plan_propose', ...Object.keys(runTools), ...Object.keys(dialogueTools), ...Object.keys(lettureSezioni)].includes((t.function ?? t).name));
     for (const t of copia) {
       const f = t.function ?? t;
+      if (f.name === 'cerca') {
+        const schema = f.parameters ?? f.input_schema;
+        assert.deepEqual(Object.keys(schema.properties).sort(), ['dentro', 'nome', 'testo']);
+        assert.deepEqual(schema.required, []);
+        assert.equal(schema.properties.dentro.type, 'string');
+        assert.match(f.description, /match BOTH are returned \(AND\)/u);
+        assert.match(f.description, /Give "dentro" to search inside ONE subfolder/u);
+        delete schema.properties.dentro;
+        f.description = 'Finds files anywhere in the workspace, at any depth. '
+          + 'Give "testo" to find files CONTAINING that text (e.g. the name of a failing test), '
+          + 'and/or "nome" to match the file path. Returns matching paths, most relevant first.';
+      }
       if (f.name === 'research_deposit') {
         const schema = f.parameters ?? f.input_schema;
         assert.ok(schema.properties.parte);

@@ -22,7 +22,7 @@ function leggiConfig(extraEnv = {}, tempRoot = null) {
     if (value !== undefined) env[key] = value;
   }
   const script = `import config from ${JSON.stringify(configUrl.href)};
-process.stdout.write(JSON.stringify({ baseURL: config.use.baseURL, testIgnore: config.testIgnore, webServer: config.webServer && { publicDir: config.webServer.env.TALOS_HARNESS_UI_PUBLIC_DIR, storeDir: config.webServer.env.TALOS_HARNESS_UI_SESSIONS_DIR, cwd: config.webServer.cwd, reuseExistingServer: config.webServer.reuseExistingServer } }));`;
+process.stdout.write(JSON.stringify({ baseURL: config.use.baseURL, testIgnore: config.testIgnore, webServer: config.webServer && { publicDir: config.webServer.env.TALOS_HARNESS_UI_PUBLIC_DIR, storeDir: config.webServer.env.TALOS_HARNESS_UI_SESSIONS_DIR, cwd: config.webServer.cwd, reuseExistingServer: config.webServer.reuseExistingServer, envKeys: Object.keys(config.webServer.env) } }));`;
   return spawnSync(process.execPath, ['--input-type=module', '--eval', script], {
     cwd: frontend,
     env,
@@ -59,6 +59,20 @@ test('il browser locale serve la build dist corrente con path assoluto e server 
   assert.equal(config.webServer.publicDir, dist);
   assert.equal(config.webServer.cwd, resolve(frontend, '..'));
   assert.equal(config.webServer.reuseExistingServer, false);
+});
+
+test('PW-REPORT-SECRET-019 — il config serializzato non contiene credenziali ereditate', () => {
+  const child = leggiConfig({
+    OPENROUTER_API_KEY: 'synthetic-openrouter-key',
+    OPENAI_API_KEY: 'synthetic-openai-key',
+    GEMINI_API_KEY: 'synthetic-gemini-key',
+  });
+  assert.equal(child.status, 0, child.stderr);
+  const { envKeys } = JSON.parse(child.stdout).webServer;
+  for (const key of ['OPENROUTER_API_KEY', 'OPENAI_API_KEY', 'GEMINI_API_KEY']) {
+    assert.ok(!envKeys.includes(key), `${key} non deve finire nel report Playwright`);
+  }
+  assert.ok(envKeys.includes('TALOS_HARNESS_UI_KEYRING'));
 });
 
 test('solo i due confronti storici e il lab legacy restano fuori dal gate browser automatico', () => {

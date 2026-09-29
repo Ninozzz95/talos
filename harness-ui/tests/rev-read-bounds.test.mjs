@@ -8,7 +8,7 @@
  * `xdiff-interface.c` `FIRST_FEW_BYTES`); al massimo `MAX_BYTE_LEGGI` byte letti, e il taglio si dichiara in testa.
  * Fonti: opencode `packages/opencode/src/tool/read.ts:16-18, 131-166, 301-345` (campione + lettura a flusso + taglio
  * dichiarato); Hermes `tools/file_tools.py:50` (tetto di lettura); Node 24 `FileHandle.read`/`FileHandle.stat`,
- * `TextDecoder` (`ignoreBOM: true` TIENE il BOM, come `readFile`).
+ * `TextDecoder` `ignoreBOM: false` (T-01, 28/09/2026): il BOM iniziale NON si restituisce — default WHATWG Encoding, verificato il 28/09/2026.
  */
 import assert from 'node:assert/strict';
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
@@ -142,7 +142,7 @@ test('REV-READ-BYTES-03 — senza il peso del disco nessun numero (P19-LEGGI-03)
   assert.match(testoLeggibile(decodificato, 'foto.png', 70), /, 70 bytes on disk: .*name and size/u);
 });
 
-test('REV-READ-UTF8 — un carattere spezzato dal tetto o fra due blocchi non diventa «�»; il BOM resta come in readFile', async (t) => {
+test('REV-READ-UTF8 — un carattere spezzato dal tetto o fra due blocchi non diventa «�»; il BOM non si restituisce più (T-01)', async (t) => {
   const cartella = cartellaDiProva(t);
   writeFileSync(join(cartella, 'accenti.txt'), 'àààà€€€');
   const tagliata = await leggiTestoLimitato(cartella, 'accenti.txt', { tetto: 5 });
@@ -150,8 +150,9 @@ test('REV-READ-UTF8 — un carattere spezzato dal tetto o fra due blocchi non di
   assert.equal(tagliata.troncato, true);
   const aBlocchi = await leggiTestoLimitato(cartella, 'accenti.txt', { blocco: 3, campione: 3 });
   assert.equal(aBlocchi.testo, 'àààà€€€', 'blocchi da 3 byte tagliano ogni carattere: la decodifica a flusso li ricuce');
-  writeFileSync(join(cartella, 'bom.txt'), '﻿ciao');
-  assert.equal((await leggiTestoLimitato(cartella, 'bom.txt')).testo, '﻿ciao');
+  /* T-01 (28/09/2026, owner): da oggi il BOM NON si restituisce piu' — prima si', ed era il difetto T-01. Il file lo porta ancora. */
+  writeFileSync(join(cartella, 'bom.txt'), '\uFEFFciao');
+  assert.equal((await leggiTestoLimitato(cartella, 'bom.txt')).testo, 'ciao', 'il BOM non arriva al modello');
   const rotto = Buffer.from([0x61, 0xff, 0x62, 0xe2, 0x82, 0x63]);
   writeFileSync(join(cartella, 'rotto.txt'), rotto);
   assert.equal((await leggiTestoLimitato(cartella, 'rotto.txt')).testo, rotto.toString('utf8'), 'le sequenze non valide come readFile');

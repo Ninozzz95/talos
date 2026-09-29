@@ -25,8 +25,14 @@ function sha256(text) {
   return `sha256:${createHash('sha256').update(text, 'utf8').digest('hex')}`;
 }
 
-/** La consegna di un passo: il compito approvato e, se il passo dipende da altri, i loro risultati come istantanee. */
-export function consegnaDelPasso(step, predecessors = { items: [], omitted: 0 }) {
+/**
+ * La consegna di un passo: il compito approvato e, se il passo dipende da altri, i loro risultati
+ * come istantanee. `runId` (F-014, piano 0.1.19 §1.6) serve alla FRASE del moncone: quando il
+ * risultato è troncato, il figlio non vede solo il taglio — vede la STRADA per l'output intero
+ * (`workflow_output(runId, nodeId)`). Assente (prove, contesti senza run): la riga resta quella di
+ * sempre, byte per byte.
+ */
+export function consegnaDelPasso(step, predecessors = { items: [], omitted: 0 }, { runId = null } = {}) {
   const righe = [String(step.instructions ?? step.label ?? '').trim()];
   const items = Array.isArray(predecessors?.items) ? predecessors.items : [];
   if (items.length > 0) {
@@ -38,7 +44,11 @@ export function consegnaDelPasso(step, predecessors = { items: [], omitted: 0 })
       else if (!item.results?.length) righe.push('(no result recorded)');
       for (const result of item.results ?? []) {
         righe.push(result.summary);
-        if (result.truncated) righe.push(`[truncated: the full result is ${result.bytes} bytes]`);
+        if (result.truncated) {
+          righe.push(runId
+            ? `[truncated: the full result is ${result.bytes} bytes — read it with workflow_output(${JSON.stringify(runId)}, ${JSON.stringify(item.nodeId)})]`
+            : `[truncated: the full result is ${result.bytes} bytes]`);
+        }
       }
     }
     if (predecessors.omitted > 0) righe.push('', `(${predecessors.omitted} more steps this one depends on are not shown.)`);
@@ -113,7 +123,7 @@ export function createAgentSessionAdapter({ sessions, nowMsFn = () => Date.now()
     const step = ctx.step;
     if (step?.kind !== 'agent' || step.capabilityProfile !== 'read') return fallito('validation');
     const modelloChiesto = step.modelPolicy?.mode === 'explicit' ? step.modelPolicy.model : (ctx.run?.sessionModel ?? null);
-    const consegna = consegnaDelPasso(step, ctx.predecessors);
+    const consegna = consegnaDelPasso(step, ctx.predecessors, { runId: ctx.run?.runId ?? null }); // F-014 (§1.6): la FRASE del moncone nomina il run
     const inizio = nowMsFn();
     const avvio = sessions.avviaSessioneDiPasso({ legame: legameDa(ctx), rootSessionId: ctx.run?.rootSessionId ?? null,
       consegna, titolo: step.label, modello: modelloChiesto });

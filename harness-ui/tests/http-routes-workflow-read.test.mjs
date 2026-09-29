@@ -125,9 +125,10 @@ test('WF-HTTP-RUN-ORDER: run piu recente prima, createdAt dal fatto verificato e
   assert.equal(body.data.nextOffset, 1);
   // F3 Workflow UI (25/09): la riga porta anche il workflow e lo stato, perché la card della proposta ritrovi il suo run
   const legame = { workflowId: definition.workflowId, version: definition.version, status: 'created' };
-  assert.deepEqual(body.data.items, [{ runId: newerId, createdAt: '2026-09-23T11:00:00.000Z', ...legame }]);
+  assert.deepEqual(body.data.items.map(({ runId, createdAt, workflowId, version, status }) => ({ runId, createdAt, workflowId, version, status })),
+    [{ runId: newerId, createdAt: '2026-09-23T11:00:00.000Z', ...legame }]);
   const second = await fetch(`${base}/api/v1/sessions/${rootSessionId}/workflows?offset=1&limit=1`);
-  assert.deepEqual((await second.json()).data.items,
+  assert.deepEqual((await second.json()).data.items.map(({ runId, createdAt, workflowId, version, status }) => ({ runId, createdAt, workflowId, version, status })),
     [{ runId: olderId, createdAt: '2026-09-23T10:00:00.000Z', ...legame }]);
 });
 

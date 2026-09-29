@@ -34,7 +34,7 @@ test('WF-RAIL-UI-14: up to 25 steps the rail lists the agents, attention holds o
   /* la posizione DENTRO il contenuto del rail (non nella finestra): se il bersaglio è coperto un istante — qui dal toast
      «Collegato di nuovo» della fixture — il clic di Playwright riprova facendo scorrere il contenitore, e una misura nella
      finestra accuserebbe il test invece del layout (sonda `sonda-scorre-rail.mjs`, 25/09: 581 → 581, nessuno scroll nostro) */
-  const nelContenuto = () => riga.evaluate((n) => { const r = n.closest('#railAgenti'); return n.getBoundingClientRect().top - r.getBoundingClientRect().top + r.scrollTop; });
+  const nelContenuto = () => riga.evaluate((n) => { const r = n.closest('#railAgenti'); const rect = r.getBoundingClientRect(); const scala = rect.width / r.offsetWidth; return n.getBoundingClientRect().top - rect.top + r.scrollTop * scala; });
   const prima = await nelContenuto();
   await riga.click();
   const grafo = page.locator('#schermoChat > [data-c="GrafoAgenti"]');

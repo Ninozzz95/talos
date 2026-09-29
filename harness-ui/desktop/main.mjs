@@ -7,7 +7,7 @@ import { app, BrowserWindow, dialog, Menu, powerMonitor, screen, shell, Tray } f
 import { creaCicloDiVita } from './lifecycle.mjs';
 import { leggiStatoFinestra, salvaStatoFinestra } from './window-state.mjs';
 import { coloriDellaBarra, puntoDelMenu } from './barra-finestra.mjs';
-import { apribileNelBrowserDelSistema, creaAvvioFiglio, navigazioneCorniceConsentita, risolviPercorsi, scegliMotoreLocale, scegliPortaEffimera, urlIngresso, validaHandshake } from './runtime.mjs';
+import { apribileNelBrowserDelSistema, creaAvvioFiglio, navigazioneCorniceConsentita, risolviPercorsi, scegliMotoreLocale, scegliPortaPersistente, urlIngresso, validaHandshake } from './runtime.mjs';
 import { creaRegistro } from './log.mjs';
 import { desktopProfile } from './profile.mjs';
 import { migraDatiBrowser } from './migrazione-browser.mjs';
@@ -175,7 +175,7 @@ function avviaGuscio() {
       const motoreLocale = scegliMotoreLocale({ percorsi, preferenza: motoreLocalePreferito });
       if (motoreLocale) registro.scrivi('Motore locale: ' + JSON.stringify(motoreLocale));
       if (!existsSync(percorsi.server)) throw new Error('Il servizio locale manca dal pacchetto.');
-      const port = await scegliPortaEffimera();
+      const port = await scegliPortaPersistente(join(dataDir, 'desktop-origin.json'));
       if (staUscendo) throw new Error('Chiusura in corso.');
       /* Corsia SCRATCH: un'app aperta da giorni può vedersi togliere la cartella dalla pulizia di un ALTRO processo
          (24 ore senza scritture): si ricrea prima di ogni figlio, o il nuovo handshake non avrebbe dove scriversi. */
