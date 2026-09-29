@@ -52,6 +52,7 @@ jobs:
           if ($hash -ne 'a3911b5e0e1b1053f25ed0675f4c1c6aad1e2bfcf253df2b9be4caabd2edd95d') { throw 'Archivio Go non conforme.' }
           Expand-Archive -LiteralPath $archive -DestinationPath $directory
           $go = Join-Path $directory 'go/bin/go.exe'
+          $env:TALOS_GO_BINARY = $go
           "TALOS_GO_BINARY=$go" >> $env:GITHUB_ENV
           npm --prefix harness-ui run build:chat-upload
           if ($LASTEXITCODE -ne 0) { throw 'Build helper upload fallita.' }

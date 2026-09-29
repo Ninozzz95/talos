@@ -46,6 +46,32 @@ test('R04-PRETAG-INSTALLER — la PR prova NSIS su Windows prima del tag senza p
   assert.doesNotMatch(JSON.stringify(job), /gh release|gh auth|git push|pull_request_target|secrets\.|contents:\s*write/);
 });
 
+test('R04-GO-ENV-CURRENT-STEP-019 — il builder usa il Go verificato nello stesso step', () => {
+  const pretag = load(readFileSync(new URL('../../../.github/workflows/desktop-pretag-installer.yml', import.meta.url), 'utf8'));
+  const go = pretag.jobs['desktop-installer'].steps.find(item => item.name === 'Go 1.27.1 verificato');
+  assert.ok(go);
+  const build = 'npm --prefix harness-ui run build:chat-upload';
+  const beforeBuild = go.run.slice(0, go.run.indexOf(build));
+  assert.ok(go.run.includes(build), 'Manca la build del helper.');
+  assert.match(beforeBuild, /\$env:TALOS_GO_BINARY\s*=\s*\$go/u,
+    'GITHUB_ENV rende la variabile disponibile solo agli step successivi.');
+  assert.match(beforeBuild, /TALOS_GO_BINARY=\$go.*\$env:GITHUB_ENV/u);
+});
+
+test('CI-CHAT-UPLOAD-BUILD-019 — il server prova gli upload dopo il helper Go verificato', () => {
+  const ci = load(readFileSync(new URL('../../../.github/workflows/ci.yml', import.meta.url), 'utf8'));
+  const steps = ci.jobs.desktop.steps;
+  const server = steps.find(item => item.name === 'server');
+  const go = steps.find(item => item.name === 'Go 1.27.1 verificato per il server');
+  assert.ok(server && go, 'Manca la compilazione Go prima della suite server.');
+  assert.ok(steps.indexOf(go) < steps.indexOf(server));
+  assert.match(go.run, /go1\.27\.1\.windows-amd64\.zip/u);
+  assert.match(go.run, /a3911b5e0e1b1053f25ed0675f4c1c6aad1e2bfcf253df2b9be4caabd2edd95d/u);
+  const build = 'npm --prefix harness-ui run build:chat-upload';
+  assert.ok(go.run.includes(build));
+  assert.match(go.run.slice(0, go.run.indexOf(build)), /\$env:TALOS_GO_BINARY\s*=\s*\$go/u);
+});
+
 test('R04-WINDOWS — Node 24, PowerShell, cache e cancelli prima dello staging', () => {
   assert.equal(desktop['runs-on'], 'windows-latest');
   assert.equal(desktop.defaults.run.shell, 'pwsh');

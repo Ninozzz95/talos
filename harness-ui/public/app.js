@@ -48258,6 +48258,7 @@ var init_app = __esm({
         return { righeRender: render4.length, righeLente: lente.length, sogliaMs, durataMediaMs: Math.round(media * 10) / 10, piuLenta };
       };
       let streamingRenderFrame = null;
+      let streamingRenderFallback = null;
       const streamingRenderPending = /* @__PURE__ */ new Set();
       let treeRenderTimer = null;
       let treeRenderInFlight = null;
@@ -48410,18 +48411,12 @@ var init_app = __esm({
         const m = String(testo2).match(/\S+/g);
         return m ? m.length : 0;
       }
-      const STREAM_DRENAGGIO_MS = 500;
-      const STREAM_TETTO_PER_FLUSH = 30;
       function avanzaRitmoStreaming(statoRender, testo2, modalita, ora5) {
         const ritmo = RITMO_STREAMING[modalita];
         const precedente = statoRender.mostrato;
-        const arretrato = testo2.length - precedente;
-        const dtMs = statoRender.ultimoTickMs === null ? 0 : Math.max(0, ora5 - statoRender.ultimoTickMs);
         statoRender.ultimoTickMs = ora5;
-        if (arretrato <= 0) return 0;
-        const proposto = arretrato * dtMs / STREAM_DRENAGGIO_MS;
-        const passo = Math.max(1, Math.min(arretrato, Math.ceil(proposto), STREAM_TETTO_PER_FLUSH));
-        statoRender.mostrato = precedente + passo;
+        if (testo2.length <= precedente) return 0;
+        statoRender.mostrato = testo2.length;
         if (ritmo.perParola) {
           const nuoveParole = contaParole(testo2.slice(precedente, statoRender.mostrato));
           for (let k = 0; k < nuoveParole; k += 1) statoRender.paroleRecenti.push(ora5);
@@ -48429,7 +48424,7 @@ var init_app = __esm({
           while (statoRender.paroleRecenti.length > 0 && statoRender.paroleRecenti[0] < soglia) statoRender.paroleRecenti.shift();
           if (statoRender.paroleRecenti.length > 400) statoRender.paroleRecenti.splice(0, statoRender.paroleRecenti.length - 400);
         }
-        return passo;
+        return statoRender.mostrato - precedente;
       }
       function avvolgiParoleRecenti(copia3, tempi, ora5) {
         let restanti = tempi.length;
@@ -48516,15 +48511,11 @@ var init_app = __esm({
         }
         return true;
       }
-      const STREAM_DELTA_FLUSH_MS = 33;
-      const MAX_STREAM_FLUSH_GAP_MS = 250;
-      let ultimoFlushMs = 0;
-      let costoUltimoFlushMs = 0;
-      let misuraFlushRaf = null;
       function flushMessaggiStreaming() {
+        if (streamingRenderFrame !== null) window.cancelAnimationFrame?.(streamingRenderFrame);
+        if (streamingRenderFallback !== null) window.clearTimeout(streamingRenderFallback);
         streamingRenderFrame = null;
-        const iniziatoMs = performance.now();
-        ultimoFlushMs = iniziatoMs;
+        streamingRenderFallback = null;
         const messageIds = [...streamingRenderPending];
         for (const messageId of messageIds) renderizzaMessaggioStreamingOra(messageId);
         if (streamingScrollTarget && streamingAutoFollow) {
@@ -48535,28 +48526,22 @@ var init_app = __esm({
           }
           applicaScrollStreamingOutput();
         }
-        const costoScrittura = performance.now() - iniziatoMs;
-        costoUltimoFlushMs = costoScrittura;
-        if (typeof window.requestAnimationFrame !== "function") return;
-        if (misuraFlushRaf !== null) window.cancelAnimationFrame?.(misuraFlushRaf);
-        misuraFlushRaf = window.requestAnimationFrame((inizioFrame) => {
-          misuraFlushRaf = null;
-          if (ultimoFlushMs !== iniziatoMs) return;
-          costoUltimoFlushMs = costoScrittura + Math.max(0, performance.now() - inizioFrame);
-        });
       }
       function programmaRenderMessaggioStreaming(messageId) {
         streamingRenderPending.add(messageId);
-        if (streamingRenderFrame !== null) return;
-        const pavimento = Math.min(Math.max(STREAM_DELTA_FLUSH_MS, costoUltimoFlushMs * 3), MAX_STREAM_FLUSH_GAP_MS);
-        const attesaMs = Math.max(0, pavimento - (performance.now() - ultimoFlushMs));
-        streamingRenderFrame = window.setTimeout(flushMessaggiStreaming, attesaMs);
+        if (streamingRenderFrame !== null || streamingRenderFallback !== null) return;
+        if (document.visibilityState === "visible" && typeof window.requestAnimationFrame === "function") {
+          streamingRenderFrame = window.requestAnimationFrame(flushMessaggiStreaming);
+          streamingRenderFallback = window.setTimeout(flushMessaggiStreaming, 33);
+        } else {
+          streamingRenderFallback = window.setTimeout(flushMessaggiStreaming, 0);
+        }
       }
       function cancellaRenderMessaggiStreaming() {
-        if (streamingRenderFrame !== null) window.clearTimeout(streamingRenderFrame);
-        if (misuraFlushRaf !== null && typeof window.cancelAnimationFrame === "function") window.cancelAnimationFrame(misuraFlushRaf);
-        misuraFlushRaf = null;
+        if (streamingRenderFrame !== null) window.cancelAnimationFrame?.(streamingRenderFrame);
+        if (streamingRenderFallback !== null) window.clearTimeout(streamingRenderFallback);
         streamingRenderFrame = null;
+        streamingRenderFallback = null;
         streamingRenderPending.clear();
       }
       function cancellaRenderAlberoDifferito() {
@@ -65084,6 +65069,7 @@ ${testo2}`;
         el30.style.position = "absolute";
         el30.style.left = "0";
         el30.style.bottom = "calc(100% + var(--talos-space-sm))";
+        el30.style.maxWidth = "100%";
         el30.style.zIndex = "var(--talos-z-menu)";
         el30.style.boxShadow = "var(--talos-shadow-floating)";
         $3("#composerForm")?.append(el30);

@@ -779,6 +779,7 @@ import { aggiornaWorkspaceFooter, fornitoreDelModello, testiPiede as testiPiedeW
     return { righeRender: render.length, righeLente: lente.length, sogliaMs, durataMediaMs: Math.round(media * 10) / 10, piuLenta };
   };
   let streamingRenderFrame = null;
+  let streamingRenderFallback = null;
   const streamingRenderPending = new Set();
   let treeRenderTimer = null;
   let treeRenderInFlight = null;
@@ -1113,67 +1114,21 @@ import { aggiornaWorkspaceFooter, fornitoreDelModello, testiPiede as testiPiedeW
    * la cadenza del paint; la preferenza sceglie l'effetto visivo, mai quanto
    * tempo trattenere contenuto che il provider ha già consegnato.
    */
-  /*
-   * ⭐⭐⭐ 20/09/2026 — IL RITMO NON ERA UN RITMO: RIVELAVA TUTTO, SUBITO.
-   *
-   * Owner: «ancora scattosa ma meglio, non c'è un'animazione o qualcosa di più smooth? guarda sempre
-   * hermes, l'ho provato io ed è molto più snappy e smooth allo stesso tempo».
-   *
-   * ⛔ LA MISURA, e non un'impressione: campionando la lunghezza del testo a OGNI fotogramma durante
-   *   uno stream, la crescita per fotogramma era **p50 = 0, p90 = 85, p99 = max = 120 caratteri, con
-   *   172 fotogrammi su 343 a ZERO**. Cioè: metà dei fotogrammi non mostrava niente e l'altra metà
-   *   ne mostrava fino a 120 in un colpo. **Il testo non scorreva: saltava.**
-   *   ⇒ E la misura dei fotogrammi non poteva vederlo: restano a 60 fps in tutti e due i casi. Lo
-   *     scatto era nel RITMO, non nel disegno.
-   *
-   * ⛔ LA CAUSA, una riga: `statoRender.mostrato = testo.length` — si rivelava tutto ciò che era
-   *   arrivato, subito. Il testo cresceva quindi seguendo gli SCATTI del fornitore: un burst da 200
-   *   caratteri era un salto di 200.
-   *
-   * ⇒ LA CURA È LA FORMULA DI HERMES, copiata:
-   *   `daRivelare = arretrato × dt / STREAM_DRENAGGIO_MS`, con un **tetto per flush** perché un dump
-   *   enorme non si disegni come una lastra sola. In parole: si tiene il testo arrivato IN ARRETRATO
-   *   e lo si rivela a cadenza, accelerando quando l'arretrato cresce — a regime la rivelazione
-   *   eguaglia l'arrivo, e il testo resta indietro di una frazione di secondo (il «buffer di
-   *   anticipo»), che è esattamente ciò che rende il flusso uniforme invece che a strappi.
-   *   Le costanti sono le sue: 500 ms di drenaggio, tetto 30 caratteri per flush.
-   *
-   * ⛔ TRE COSE CHE NON SI ROMPONO, e sono le ragioni per cui questa cura è piccola:
-   *   1. **il drenaggio esiste già**: `:1069-1071` richiede un altro render finché c'è arretrato, e
-   *      spegne `is-streaming` SOLO quando è in pari E il messaggio è finito;
-   *   2. **`none` non passa di qui**: con movimento ridotto o cronologia differita il chiamante
-   *      rivela tutto prima di entrare in questa funzione — l'animazione resta spenta;
-   *   3. **il testo non resta mai troncato**: l'arretrato si svuota sempre, perché il ciclo continua
-   *      finché non è zero.
-   */
-  const STREAM_DRENAGGIO_MS = 500;
-  const STREAM_TETTO_PER_FLUSH = 30;
-
   function avanzaRitmoStreaming(statoRender, testo, modalita, ora) {
     const ritmo = RITMO_STREAMING[modalita];
     const precedente = statoRender.mostrato;
-    const arretrato = testo.length - precedente;
-    const dtMs = statoRender.ultimoTickMs === null ? 0 : Math.max(0, ora - statoRender.ultimoTickMs);
     statoRender.ultimoTickMs = ora;
-    if (arretrato <= 0) return 0;
-    /*
-     * ⛔ IL PASSO. `Math.max(1, …)` perché un fotogramma deve pur muoversi: se il calcolo desse zero
-     *   il testo resterebbe fermo per sempre e il ciclo di drenaggio girerebbe a vuoto.
-     *   Il tetto evita la lastra unica su un dump; il `min` con l'arretrato evita di andare oltre.
-     */
-    const proposto = (arretrato * dtMs) / STREAM_DRENAGGIO_MS;
-    const passo = Math.max(1, Math.min(arretrato, Math.ceil(proposto), STREAM_TETTO_PER_FLUSH));
-    statoRender.mostrato = precedente + passo;
+    if (testo.length <= precedente) return 0;
+    // Il testo ricevuto entra tutto nel prossimo paint; la dissolvenza non trattiene contenuto.
+    statoRender.mostrato = testo.length;
     if (ritmo.perParola) {
-      /* ⛔ Le parole «recenti» sono quelle del pezzo APPENA rivelato, non di tutto l'arretrato: con
-         il passo limitato le due cose non coincidono più. */
       const nuoveParole = contaParole(testo.slice(precedente, statoRender.mostrato));
       for (let k = 0; k < nuoveParole; k += 1) statoRender.paroleRecenti.push(ora);
       const soglia = ora - ritmo.dissolvenzaMs;
       while (statoRender.paroleRecenti.length > 0 && statoRender.paroleRecenti[0] < soglia) statoRender.paroleRecenti.shift();
       if (statoRender.paroleRecenti.length > 400) statoRender.paroleRecenti.splice(0, statoRender.paroleRecenti.length - 400);
     }
-    return passo;
+    return statoRender.mostrato - precedente;
   }
 
   /**
@@ -1307,41 +1262,12 @@ import { aggiornaWorkspaceFooter, fornitoreDelModello, testiPiede as testiPiedeW
     return true;
   }
 
-  /*
-   * ⭐⭐⭐ 20/09/2026 — IL PAVIMENTO FRA DUE FLUSH, ADATTIVO. **Portato da Hermes.**
-   *
-   * Owner: «lo streaming è ancora scattoso … guarda il codice di hermes, dobbiamo copiare esattamente
-   * i metodi che fa lui e adattarli al nostro codice».
-   *
-   * ⛔ IL DIFETTO, nelle parole di Hermes stessi (`apps/desktop/src/app/session/hooks/use-message-stream/index.ts`,
-   *   costanti `STREAM_DELTA_FLUSH_MS` e `MAX_STREAM_FLUSH_GAP_MS`): la schedulazione era «16 ms, solo
-   *   rAF», e a 30-80 token/s questo significava **un commit e una ri-parsata markdown per OGNI
-   *   token**, con un costo **lineare nella lunghezza dell'ultimo blocco**. Qui era **identico**:
-   *   `programmaRenderMessaggioStreaming` schedulava solo con rAF.
-   *
-   * ⇒ Le tre parti del metodo, copiate:
-   *   1. un **pavimento** di 33 ms fra due flush: a 60 token/s entrano ~2 token per commit, e il
-   *      testo cresce comunque a 30 fps — «grande guadagno percepito sulle risposte lunghe»;
-   *   2. il pavimento è **ADATTIVO**: `min(max(33, costoUltimoFlush × 3), 250)`. Si **misura** quanto è
-   *      costato l'ultimo flush e si lascia al thread ~75% di tempo libero per l'input: un flush
-   *      economico resta a 30 fps di testo, uno caro **cede fps di testo invece della reattività**;
-   *   3. il costo misurato **comprende il fotogramma in cui il commit avviene** — fermare il cronometro
-   *      alla fine della scrittura lo fisserebbe vicino a zero e il pavimento non si adatterebbe mai.
-   *
-   * ⛔ E si schedula con un **TIMER, mai con rAF**: Chromium **mette in pausa i rAF** di un renderer
-   *   che considera nascosto, e «nascosto» non è una cosa che questo codice possa verificare. Con i
-   *   rAF, una finestra ridotta a icona **non flusha mai**.
-   */
-  const STREAM_DELTA_FLUSH_MS = 33;
-  const MAX_STREAM_FLUSH_GAP_MS = 250;
-  let ultimoFlushMs = 0;
-  let costoUltimoFlushMs = 0;
-  let misuraFlushRaf = null;
-
+  // Un flush per paint visibile; il timer di riserva mantiene aggiornato un renderer nascosto.
   function flushMessaggiStreaming() {
+    if (streamingRenderFrame !== null) window.cancelAnimationFrame?.(streamingRenderFrame);
+    if (streamingRenderFallback !== null) window.clearTimeout(streamingRenderFallback);
     streamingRenderFrame = null;
-    const iniziatoMs = performance.now();
-    ultimoFlushMs = iniziatoMs;
+    streamingRenderFallback = null;
     const messageIds = [...streamingRenderPending];
     for (const messageId of messageIds) renderizzaMessaggioStreamingOra(messageId);
     // Il markdown e la posizione vengono dipinti insieme. Una seconda rAF
@@ -1354,37 +1280,24 @@ import { aggiornaWorkspaceFooter, fornitoreDelModello, testiPiede as testiPiedeW
       }
       applicaScrollStreamingOutput();
     }
-    const costoScrittura = performance.now() - iniziatoMs;
-    costoUltimoFlushMs = costoScrittura;
-    /* ⛔ La misura si completa nel fotogramma in cui il commit viene davvero dipinto. Se ne può
-       essere in attesa UNA sola: la misura di un flush più nuovo vince, e un renderer nascosto non
-       deve accumulare callback parcheggiate. */
-    if (typeof window.requestAnimationFrame !== 'function') return;
-    if (misuraFlushRaf !== null) window.cancelAnimationFrame?.(misuraFlushRaf);
-    misuraFlushRaf = window.requestAnimationFrame((inizioFrame) => {
-      misuraFlushRaf = null;
-      if (ultimoFlushMs !== iniziatoMs) return; /* un flush più nuovo sta già misurando il suo */
-      costoUltimoFlushMs = costoScrittura + Math.max(0, performance.now() - inizioFrame);
-    });
   }
 
   function programmaRenderMessaggioStreaming(messageId) {
     streamingRenderPending.add(messageId);
-    if (streamingRenderFrame !== null) return;
-    const pavimento = Math.min(Math.max(STREAM_DELTA_FLUSH_MS, costoUltimoFlushMs * 3), MAX_STREAM_FLUSH_GAP_MS);
-    const attesaMs = Math.max(0, pavimento - (performance.now() - ultimoFlushMs));
-    streamingRenderFrame = window.setTimeout(flushMessaggiStreaming, attesaMs);
+    if (streamingRenderFrame !== null || streamingRenderFallback !== null) return;
+    if (document.visibilityState === 'visible' && typeof window.requestAnimationFrame === 'function') {
+      streamingRenderFrame = window.requestAnimationFrame(flushMessaggiStreaming);
+      streamingRenderFallback = window.setTimeout(flushMessaggiStreaming, 33);
+    } else {
+      streamingRenderFallback = window.setTimeout(flushMessaggiStreaming, 0);
+    }
   }
 
   function cancellaRenderMessaggiStreaming() {
-    /* ⛔ UNO SOLO: le due versioni (la mia nuova e quella di prima) facevano cose diverse, e
-       tenerle tutte e due era il doppione che questo progetto ha già pagato con `#schermoHome`.
-       Questa fa l'unione: spegne il TIMER, annulla la misura del costo, azzera i riferimenti e
-       svuota la coda dei messaggi in attesa. */
-    if (streamingRenderFrame !== null) window.clearTimeout(streamingRenderFrame);
-    if (misuraFlushRaf !== null && typeof window.cancelAnimationFrame === 'function') window.cancelAnimationFrame(misuraFlushRaf);
-    misuraFlushRaf = null;
+    if (streamingRenderFrame !== null) window.cancelAnimationFrame?.(streamingRenderFrame);
+    if (streamingRenderFallback !== null) window.clearTimeout(streamingRenderFallback);
     streamingRenderFrame = null;
+    streamingRenderFallback = null;
     streamingRenderPending.clear();
   }
 
@@ -23794,6 +23707,7 @@ ${testo}`;
     el.style.position = 'absolute';
     el.style.left = '0';
     el.style.bottom = 'calc(100% + var(--talos-space-sm))';
+    el.style.maxWidth = '100%'; // resta nella colonna del composer anche con UI ingrandita e Inspector aperto
     el.style.zIndex = 'var(--talos-z-menu)';
     el.style.boxShadow = 'var(--talos-shadow-floating)';
     $('#composerForm')?.append(el);
