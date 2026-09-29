@@ -4,9 +4,10 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "build:chat-upload": "node scripts/build-chat-upload-helper.mjs",
     "build:ui": "node scripts/build-ui.mjs",
     "verify:ui": "node scripts/verify-ui-manifest.mjs",
-    "verify:all": "node --test tests/*.test.mjs labs/electron-shell/*.test.mjs && node --test src/kernel/talosHarness.test.mjs && node scripts/kernel-controlla.mjs && npm --prefix frontend run verify",
+    "verify:all": "npm run build:chat-upload && node --test tests/*.test.mjs labs/electron-shell/*.test.mjs && node --test src/kernel/talosHarness.test.mjs && node scripts/kernel-controlla.mjs && npm --prefix frontend run verify",
     "aggiorna": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/aggiorna-4174.ps1",
     "kernel:controlla": "node scripts/kernel-controlla.mjs",
     "test:kernel": "node --test src/kernel/talosHarness.test.mjs",

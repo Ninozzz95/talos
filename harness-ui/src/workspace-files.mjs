@@ -24,6 +24,7 @@ import { dirname, isAbsolute, join, relative, sep } from 'node:path';
 
 import { isPathInside } from './path-policy.mjs';
 import { createProcessPolicy } from './process-policy.mjs';
+import { pezzoConSeparatore } from './kernel/accoda-con-a-capo.mjs';
 
 /* BC-64 (17/09): Esplora file è l'UNICO programma che lanciamo perché la persona lo VEDA — con la finestra
    nascosta «Rivela in Esplora file» riusciva e non mostrava niente (misura in `process-policy.mjs`). */
@@ -407,8 +408,20 @@ export async function creaFileWorkspace({ cartella, nome, bytes, modalita = 'nuo
     }
     // ⛔ `appendFile` (flag 'a'), MAI leggi-concatena-riscrivi: quest'ultima perderebbe in silenzio
     //    ciò che qualcun altro ha scritto fra la lettura e la riscrittura.
-    await (deps.appendFileFn ?? fsp.appendFile)(destinazione, bytes);
-    return { percorso: percorsoRelativo, assoluto: destinazione, accodato: true, byteTotali: stat.size + dimensione };
+    // ⛔⛔ T-15 (28/09/2026, owner: «nella 19») — l'append NON SALDA LE RIGHE: per il TESTO si
+    //    antepone UN `\n` quando il file esiste, non è vuoto, non finisce già con `\n` e il pezzo
+    //    non inizia con `\n` (UNA implementazione in `src/kernel/accoda-con-a-capo.mjs`, condivisa
+    //    con l'attrezzo `scrivi` del kernel: questo file resta fuori dal kernel, importa il modulo
+    //    e non il kernel intero). Solo testo: su byte BINARI un `0x0A` in mezzo non separerebbe
+    //    righe, le corromperebbe. Sempre UNA sola append: `appendFile('\n' + pezzo)`.
+    const daScrivere = typeof bytes === 'string'
+      ? await pezzoConSeparatore(destinazione, bytes)
+      : { pezzo: bytes, separatore: false };
+    await (deps.appendFileFn ?? fsp.appendFile)(destinazione, daScrivere.pezzo);
+    const dimensioneEffettiva = typeof daScrivere.pezzo === 'string'
+      ? Buffer.byteLength(daScrivere.pezzo, 'utf8')
+      : daScrivere.pezzo.byteLength;
+    return { percorso: percorsoRelativo, assoluto: destinazione, accodato: true, byteTotali: stat.size + dimensioneEffettiva };
   }
   await (deps.writeFileFn ?? fsp.writeFile)(destinazione, bytes);
   return { percorso: percorsoRelativo, assoluto: destinazione, ...(modalita === 'accoda' ? { accodato: false, byteTotali: dimensione } : {}) };

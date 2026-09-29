@@ -314,17 +314,20 @@ jobs:
         name: il browser
         run: node harness-ui/frontend/node_modules/playwright/cli.js install chromium
 
-      - if: steps.dove.outputs.ci == 'si'
-        name: unit del frontend
-        run: npm run test:unit
-        working-directory: harness-ui/frontend
-
+      # 28/09/2026: il build PRIMA delle unita', come in release.yml («costruisci il frontend e consegnalo» sta davanti ai
+      # cancelli). `tests/playwright-public-dir.test.mjs` legge `dist/build-manifest.json`: con l'ordine vecchio il run
+      # 36402785877 su main e' stato rosso su tre sue prove, mentre la release dello stesso albero era verde.
       - if: steps.dove.outputs.ci == 'si'
         name: build del frontend
         run: |
           npm --prefix harness-ui/frontend run build
           if ($LASTEXITCODE -ne 0) { throw 'Build frontend fallita.' }
           Copy-Item -Path harness-ui/frontend/dist/* -Destination harness-ui/public/ -Recurse -Force
+
+      - if: steps.dove.outputs.ci == 'si'
+        name: unit del frontend
+        run: npm run test:unit
+        working-directory: harness-ui/frontend
 
       - if: steps.dove.outputs.ci == 'si'
         name: test puri desktop

@@ -34,6 +34,7 @@ distribuzione; gli avvisi del monorepo sono in [THIRD_PARTY_NOTICES.md](../THIRD
 | Pacchetto / componente | Versione | Licenza | Fonte upstream della licenza |
 | --- | --- | --- | --- |
 | Electron | 44.3.0 | MIT | https://github.com/electron/electron/blob/v44.3.0/LICENSE |
+| Go standard library/runtime, compiled into `talos-chat-upload.exe` | 1.27.1 | BSD-3-Clause | https://go.dev/dl/ ; exact licence in `native/GO-LICENSE.txt` |
 | node-pty | 1.1.0 | MIT | https://github.com/microsoft/node-pty/blob/v1.1.0/LICENSE |
 | llama.cpp, CPU e Vulkan | b10517 (`dc72703fc69698b1ea68ece8d2dd8a96e6a4e1fe`) | MIT | https://github.com/ggml-org/llama.cpp/blob/b10517/LICENSE |
 | png-js | 1.1.0 | MIT (testo incluso nel pacchetto; campo assente nel lock) | https://github.com/foliojs/png.js/blob/master/LICENSE |

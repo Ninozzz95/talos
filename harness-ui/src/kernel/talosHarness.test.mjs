@@ -261,6 +261,22 @@ describe('PROVA-ZERO-TEST — la dichiarazione di zero test, e il suo verso cont
         assert.equal(provaSenzaTest(0, 'Error: No test files found: "test"\n'), true)
         assert.equal(provaSenzaTest(0, 'No tests found, exiting with code 1'), true)
     })
+    /*
+     * ⛔⛔ F-017 residuo (piano 0.1.19 §1.4, 28/09/2026) — Mocha con «0 passing» esce **0**
+     *   (mochajs/mocha #4062: la suite IE11 muta per mesi in CI; #4123 aggiunse
+     *   `--forbid-empty-suite`, ma una suite di soli test PENDING scivola lo stesso): è il
+     *   vero caso «exit 0 + zero verificato», non un angolo. Playwright al contrario NON può
+     *   dare il caso: «no tests found» esce 1 (ricerca 28/09: SO #71053528/#78366666,
+     *   microsoft/playwright #18369) — il guard sull'uscita lo esclude già.
+     */
+    it('⛔ F-017 — «0 passing» di Mocha con uscita 0: la CI muta di #4062', () => {
+        assert.equal(provaSenzaTest(0, '0 passing (2ms)'), true)
+        assert.equal(provaSenzaTest(0, '  0 passing (2ms)\n  3 pending\n'), true, 'anche i soli PENDING: niente è stato verificato')
+    })
+    it('⛔ F-017, AL CONTRARIO — «10 passing» è lavoro fatto, non zero', () => {
+        assert.equal(provaSenzaTest(0, '10 passing (5ms)'), false, '«10 passing» contiene «0 passing» come sottostringa: il confine conta')
+        assert.equal(provaSenzaTest(1, 'no tests found'), false, 'Playwright esce 1: già un fallimento, la lettura del testo non serve')
+    })
     it('⛔ E IL VERSO CONTRARIO: una suite che ESEGUE i test NON viene toccata', () => {
         assert.equal(provaSenzaTest(0, 'ℹ tests 1\nℹ suites 1\nℹ pass 1\nℹ fail 0'), false)
         assert.equal(provaSenzaTest(0, 'ℹ tests 137\nℹ pass 137\nℹ fail 0'), false)
@@ -3090,7 +3106,7 @@ describe('talosLavora — verificaPermessoScrittura (livelloAccesso/chiediApprov
         assert.match(messaggioTool.content, /exit 0/)
     })
 
-    it('⛔⛔⛔ il COLLEGAMENTO: una dichiarazione di zero test diventa «nessuna suite» (uscita 127)', async () => {
+    it('⛔⛔⛔ il COLLEGAMENTO: una dichiarazione di zero test diventa loud, col messaggio del piano (uscita 127)', async () => {
         const cartella = cartellaVuota(it)
         writeFileSync(join(cartella, 'package.json'), JSON.stringify({
             name: 'senza-test', version: '1.0.0',
@@ -3100,8 +3116,18 @@ describe('talosLavora — verificaPermessoScrittura (livelloAccesso/chiediApprov
         const esito = await talosLavora({ cartella, task: TASK, modello: 'x', chiave: 'y', fetchDiRete: rete.fetch })
         assert.equal(esito.comeFinita, 'concluso')
         const messaggioTool = rete.chiamate[1].corpo.messages.find((m) => m.role === 'tool')
-        assert.match(messaggioTool.content, /nessuna suite trovata/, 'il modello deve leggere che NIENTE e stato verificato')
-        assert.match(messaggioTool.content, /ZERO test/)
+        /*
+         * ⛔ F-017 residuo (piano 0.1.19 §1.4, 28/09): il messaggio è quello del piano, parola per
+         *   parola — «exit 0 but NO tests ran (…): this is not a pass. Create the suite or point
+         *   the command at the folder that has one.» — e al posto dei puntini la RIGA del runner,
+         *   citata. Il ramo è DIVERSO dal cancello statico: quello parla del manifesto mancante,
+         *   questo di test che non sono stati eseguiti — i due messaggi non si confondono.
+         */
+        assert.match(messaggioTool.content, /NO tests ran/, 'il modello deve leggere che NIENTE e stato verificato')
+        assert.match(messaggioTool.content, /this is not a pass/, 'e CHE COSA vuol dire: non lascia indovinare')
+        assert.match(messaggioTool.content, /Create the suite or point the command at the folder that has one/, 'e dice la strada per uscirne')
+        assert.match(messaggioTool.content, /ℹ tests 0/, 'la riga dichiarata dal runner si CITA, non si parafrasa')
+        assert.doesNotMatch(messaggioTool.content, /nessuna suite trovata/, 'questo ramo non è il cancello statico: qui il manifesto c\'era, i test non erano')
         assert.match(messaggioTool.content, /exit 127/, 'lo stesso codice della suite mancante: non e partita, non e fallita')
         /*
          * ⛔ UNA VOLTA SOLA — 20/09/2026, quarto referto avversario. `eseguiProva` scriveva la testata

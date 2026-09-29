@@ -639,7 +639,66 @@ export function montaGrafoWorkflow(host, {
     // ⛔ in riproduzione le evidenze restano quelle del vivo: gli eventi persistiti della sessione non hanno un orario
     //   (`session-registry.mjs:1605`), quindi non si possono fermare all'istante rigiocato — si dice, non si finge
     if (stato.t !== null && run) elenco.append(el('li', 'talos-wfg__vuoto', 'Sono quelle di adesso: le evidenze non hanno un orario e la riproduzione non le ferma.'));
-    detProve.replaceChildren(provaTesta, elenco);
+    const outputParts = [provaTesta, elenco];
+    if (run && !info.carica && (info.totalOutputs > 0 || info.outputs?.length > 0)) {
+      const outputTitle = el('h4', 'talos-wfg__dettaglio-titolo', `Risultati (${Number.isSafeInteger(info.totalOutputs) ? info.totalOutputs : 0})`);
+      const outputs = el('ul', 'talos-wfg__outputs');
+      for (const ref of info.outputs ?? []) {
+        if (!ref?.resultId) continue;
+        const item = el('li', 'talos-wfg__output');
+        const facts = [ref.kind || 'risultato', ref.contentType || 'tipo sconosciuto', Number.isSafeInteger(ref.bytes) ? `${cifra(ref.bytes)} byte` : 'dimensione sconosciuta'];
+        item.append(el('div', 'talos-wfg__output-meta', facts.join(' · ')));
+        const complete = info.fullById?.[ref.resultId];
+        if (ref.preview && (complete?.content === undefined || complete.content === null)) {
+          item.append(el('pre', 'talos-wfg__output-preview', ref.preview));
+        }
+        if (complete?.content !== undefined && complete.content !== null) {
+          const full = el('pre', 'talos-wfg__output-full', complete.content);
+          full.tabIndex = -1; item.append(full);
+        } else if (complete?.content === null) {
+          item.append(el('p', 'talos-wfg__vuoto', 'Contenuto binario: scarica il file per aprirlo.'));
+        } else if (complete?.error) item.append(el('p', 'talos-wfg__vuoto', `Lettura fallita (${complete.error}). Riprova.`));
+        const mediaType = String(ref.contentType ?? '').split(';', 1)[0].trim().toLowerCase();
+        const textEligible = mediaType.startsWith('text/') || mediaType === 'application/json'
+          || mediaType.endsWith('+json') || mediaType === 'application/xml' || mediaType.endsWith('+xml');
+        if ((!complete || complete.error) && textEligible) {
+          const open = bottone('Mostra tutto', 'talos-wfg__link talos-wfg__output-open');
+          open.addEventListener('click', async () => {
+            open.disabled = true; open.textContent = 'Caricamento…';
+            let result;
+            try { result = await client.output(sorgente, info.nodeId, ref.resultId); }
+            catch (error) { result = { error: error?.message ?? 'errore sconosciuto' }; }
+            if (morto || stato.selezionato !== info.nodeId || stato.dettaglio?.nodeId !== info.nodeId) return;
+            stato.dettaglio.fullById ??= {};
+            stato.dettaglio.fullById[ref.resultId] = result?.resultId === ref.resultId || result?.error ? result : { error: 'risultato incoerente' };
+            disegnaDettaglio();
+          });
+          item.append(open);
+        }
+        const raw = el('a', 'talos-wfg__link talos-wfg__output-download', 'Scarica');
+        raw.href = client.outputRawUrl(sorgente, info.nodeId, ref.resultId);
+        raw.setAttribute('download', ''); item.append(raw);
+        outputs.append(item);
+      }
+      if (outputs.children.length === 0) outputs.append(el('li', 'talos-wfg__vuoto', 'Nessun risultato disponibile.'));
+      outputParts.push(outputTitle, outputs);
+      if (info.nextOutputOffset !== null && Number.isSafeInteger(info.nextOutputOffset)) {
+        const more = bottone(`Mostra altri risultati (${cifra(info.totalOutputs - info.outputs.length)} ancora)`, 'talos-wfg__link talos-wfg__output-more');
+        more.addEventListener('click', async () => {
+          more.disabled = true;
+          try {
+            const page = await client.passo(sorgente, info.nodeId, { outputOffset: info.nextOutputOffset });
+            if (morto || stato.selezionato !== info.nodeId || stato.dettaglio?.nodeId !== info.nodeId) return;
+            const known = new Set(stato.dettaglio.outputs.map((entry) => entry.resultId));
+            stato.dettaglio.outputs.push(...(page.outputs ?? []).filter((entry) => !known.has(entry.resultId)));
+            stato.dettaglio.nextOutputOffset = page.nextOutputOffset;
+            disegnaDettaglio();
+          } catch { more.disabled = false; more.textContent = 'Lettura fallita. Riprova'; }
+        });
+        outputParts.push(more);
+      }
+    }
+    detProve.replaceChildren(...outputParts);
 
     const compitoTesta = el('h4', 'talos-wfg__dettaglio-titolo'); compitoTesta.append(icona('i-eye'), el('span', null, 'Task corrente'));
     const righe = String(info.instructions ?? '').split(/\r?\n/u).map((r) => r.trim()).filter(Boolean);

@@ -116,7 +116,14 @@ function nodeDefinition(definition, nodeId) {
  */
 const PREDECESSORS_MAX = 20;
 
-function predecessorResults(snapshot, nodeId) {
+/*
+ * ⛔⛔ F-014 (piano 0.1.19 §1.6, 28/09) — ogni risultato del predecessore porta anche il suo `sha256`:
+ *   il figlio che riceve lo snapshot sa non solo CHE c'è un moncone, ma QUALE output integrale
+ *   chiedere con `workflow_output(runId, nodeId)`. Esportata per le prove (stessa ragione per cui
+ *   il kernel esporta `verificaPermessoScrittura`): un test la esercita con uno snapshot vero
+ *   senza far girare l'intero run.
+ */
+export function predecessorResults(snapshot, nodeId) {
   const definition = snapshot.definition;
   const froms = [...new Set(definition.edges.filter((edge) => edge.to === nodeId && edge.type !== 'retry').map((edge) => edge.from))]
     .sort((left, right) => left.localeCompare(right, 'en'));
@@ -130,7 +137,7 @@ function predecessorResults(snapshot, nodeId) {
       state: nodeState?.state ?? 'pending',
       completedAt: finished?.at ?? null,
       results: Object.freeze(refs.map((ref) => Object.freeze({
-        resultId: ref.id, summary: ref.summary, bytes: ref.bytes,
+        resultId: ref.id, sha256: ref.sha256, summary: ref.summary, bytes: ref.bytes,
         truncated: ref.bytes > Buffer.byteLength(ref.summary, 'utf8'),
       }))),
     });
@@ -543,6 +550,7 @@ export function createActivityRunner({
       outcomeSchemaVersion: v2 ? 2 : 1,
       step: Object.freeze(structuredClone(node)),
       run: Object.freeze({
+        runId: snapshot.state.run?.runId ?? null, // F-014 (§1.6): la FRASE dello snapshot nomina il run
         rootSessionId: snapshot.events?.[0]?.payload?.rootSessionId ?? null,
         definitionHash: snapshot.events?.[0]?.payload?.definitionHash ?? null,
         sessionModel: snapshot.definitionRecord?.proposal?.sessionModel ?? null,

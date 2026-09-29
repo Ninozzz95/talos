@@ -218,3 +218,69 @@ describe('BC-57 — `prova` senza una suite da lanciare', () => {
         assert.ok(esiti[4].includes('4 scritture'), `il contatore e\' andato avanti, non ripartito: ${esiti[4]}`)
     })
 })
+
+/*
+ * ⛔⛔⛔ F-017 RESIDUO (audit ZIP revisione, 28/09/2026; piano 0.1.19 §1.4) — la seconda falla
+ * della famiglia BC-57, quella che il cancello statico NON può vedere: «zero test eseguiti» e
+ * «tutti i test passano» hanno lo STESSO codice di uscita (misurato il 20/09: `node --test` in
+ * una cartella senza test esce 0 stampando «tests 0»). Il runner esiste, lo script esiste, il
+ * comando è semplice: il cancello fa bene a lasciarlo partire — la cura legge l'USCITA dei
+ * runner, non i loro argomenti.
+ *
+ * ⛔ E MOCHA È IL CASO VERO, non un angolo: mochajs/mocha #4062 (letto 28/09/2026) — una suite
+ *   Selenium su IE11 ha stampato «0 passing» per MESI in CI con exit 0, perché il file di test
+ *   aveva una sintassi che IE11 non supportava e mocha conta «0 failures» come successo. Da
+ *   lì il flag `--forbid-empty-suite` (#4123); ma i soli test PENDING scivolano lo stesso.
+ * ⛔ Playwright NON può dare il caso loud: «no tests found» esce 1 (ricerca 28/09/2026:
+ *   stackoverflow.com/q/71053528 e /q/78366666, microsoft/playwright #18369) — un'uscita
+ *   diversa da zero è già un fallimento, il guard la esclude. La sua frase è coperta dalla
+ *   stessa regex di Jest, ma il caso exit-0 non si può presentare.
+ *
+ * Il messaggio è quello del piano (§1.4), parola per parola: «exit 0 but NO tests ran (…):
+ * this is not a pass. Create the suite or point the command at the folder that has one.» —
+ * con al posto dei puntini la RIGA DICHIARATA dal runner, citata non parafrasata.
+ *
+ * ⛔⛔ L'AMBIENTE DEL TEST SI RIPULISCE, non si cambia il prodotto: `node --test` figlio eredita
+ *   `NODE_TEST_CONTEXT=child-v8` e `NODE_TEST_WORKER_ID` (misurato qui con una sonda il
+ *   28/09/2026) e crede di essere una ricorsione del runner: «skipping running files», exit 0
+ *   SENZA il riepilogo. Il 4174 di produzione non gira sotto `node --test`, quindi il caso è
+ *   un artefatto di QUESTA sede: si tolgono i due marcatori attorno alla chiamata e si
+ *   riproducono le condizioni di produzione.
+ */
+const ambienteDiProduzione = async (corpo) => {
+    const tolte = {}
+    for (const k of ['NODE_TEST_CONTEXT', 'NODE_TEST_WORKER_ID']) {
+        if (k in process.env) { tolte[k] = process.env[k]; delete process.env[k] }
+    }
+    try { return await corpo() } finally { for (const [k, v] of Object.entries(tolte)) process.env[k] = v }
+}
+
+describe('F-017 residuo — «exit 0» con ZERO test eseguiti NON è un pass', () => {
+    it('⭐⭐⭐ `node --test` in una cartella senza test: l\'exit 0 del runner NON passa per un pass', async (t) => {
+        const cartella = cartellaTemporanea(t)
+        const { esiti, ricevute } = await ambienteDiProduzione(() => giro(cartella, [chiamata('prova')], { comandoProva: 'node --test' }))
+        assert.ok(esiti[0].includes('NO tests ran'), `atteso «NO tests ran» nel messaggio: ${esiti[0]}`)
+        assert.ok(esiti[0].includes('this is not a pass'), 'il messaggio lo DICE, non lascia indovinare')
+        assert.ok(esiti[0].includes('tests 0'), 'la dichiarazione del runner si CITA, non si parafrasa')
+        assert.ok(!esiti[0].startsWith('exit 0'), 'l\'exit 0 del runner non può arrivare al modello come esito')
+        assert.notEqual(ricevute.at(-1).evidence.exitCode, 0, 'la ricevuta non porta uno zero: chi legge a macchina non deve vedere un successo')
+    })
+
+    it('⭐ AL CONTRARIO — «tests 12» con i 12 passing: un pass normale, nessuna accusa', async (t) => {
+        const cartella = cartellaTemporanea(t)
+        writeFileSync(join(cartella, 'dodici.test.mjs'),
+            'import test from \'node:test\'; import assert from \'node:assert/strict\';\n'
+            + 'for (let i = 0; i < 12; i++) test(\'passa \' + i, () => assert.ok(true));\n')
+        const { esiti } = await ambienteDiProduzione(() => giro(cartella, [chiamata('prova')], { comandoProva: 'node --test' }))
+        assert.ok(esiti[0].startsWith('exit 0'), `la suite vera è passata: ${esiti[0]}`)
+        assert.ok(!esiti[0].includes('NO tests ran'), 'una suite che ha eseguito 12 test non va accusata')
+        assert.ok(esiti[0].includes('tests 12'), 'e il suo conteggio vero arriva in conversazione')
+    })
+
+    it('⛔ «0 passing» di Mocha con uscita 0 (mochajs/mocha #4062): la CI muta diventa loud', async (t) => {
+        const cartella = cartellaTemporanea(t, { packageJson: { name: 'x', version: '1.0.0', scripts: { test: 'node -e "console.log(\'0 passing (2ms)\')"' } } })
+        const { esiti } = await giro(cartella, [chiamata('prova')])
+        assert.ok(esiti[0].includes('NO tests ran'), `«0 passing» con exit 0 è il caso #4062: deve essere loud. Ricevuto: ${esiti[0]}`)
+        assert.ok(esiti[0].includes('0 passing (2ms)'), 'la riga di mocha viene citata')
+    })
+})

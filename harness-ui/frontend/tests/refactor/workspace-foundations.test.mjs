@@ -56,7 +56,14 @@ test('CORE: disposal releases every owned resource once even after errors',()=>{
 });
 test('PREFS: defaults do not inherit legacy keys or grant permissions',()=>{
  const st=memory();st.setItem('talos.harness.desktop.settings.v1',JSON.stringify({permissions:'Full access'}));
- const p=createWorkspacePreferences(()=>st);assert.equal(p.read().lastSession,null);assert.equal(p.read().density,'comfortable');assert.equal(st.data.size,1);
+ const p=createWorkspacePreferences(()=>st);assert.equal(p.read().lastSession,null);assert.equal(p.read().density,'compact');assert.equal(st.data.size,1);
+});
+test('UI-DEFAULTS-FRESH: a new workspace is compact while a saved comfortable choice remains',()=>{
+ const fresh=memory();assert.equal(createWorkspacePreferences(()=>fresh).read().density,'compact');
+ assert.equal(fresh.data.size,0,'startup does not persist a synthetic choice');
+ const stored=memory();stored.setItem(WORKSPACE_PREFERENCES_KEY,JSON.stringify({version:2,density:'comfortable',restoreWorkspace:true,lastSession:null}));
+ const preferences=createWorkspacePreferences(()=>stored);preferences.adoptLegacyDensity('compatta');
+ assert.equal(preferences.read().density,'comfortable');
 });
 test('PREFS: getItem or denied getter cannot prevent workspace startup',()=>{
  const p=createWorkspacePreferences(()=>{throw new Error('SecurityError');});assert.equal(p.persistent,false);assert.doesNotThrow(()=>p.update({density:'compact'}));assert.equal(p.read().density,'compact');
@@ -68,13 +75,13 @@ test('PREFS: absence of storage is represented, not reported as persisted',()=>a
 test('PREFS: an update changes one preference and leaves the others alone',()=>{
  const st=memory();const p=createWorkspacePreferences(()=>st);
  p.update({lastSession:'session-1'});
- assert.equal(p.read().lastSession,'session-1');assert.equal(p.read().density,'comfortable');assert.equal(p.read().restoreWorkspace,true);
+ assert.equal(p.read().lastSession,'session-1');assert.equal(p.read().density,'compact');assert.equal(p.read().restoreWorkspace,true);
 });
 test('PREFS: corrupt and future documents recover without changing stored bytes',()=>{
  const st=memory();st.setItem(WORKSPACE_PREFERENCES_KEY,'broken');assert.equal(createWorkspacePreferences(()=>st).read().version,2);assert.equal(st.getItem(WORKSPACE_PREFERENCES_KEY),'broken');
- assert.equal(normalizeWorkspacePreferences({version:999,density:'compact'}).density,'comfortable');
+ assert.equal(normalizeWorkspacePreferences({version:999,density:'compact'}).density,'compact');
 });
-test('PREFS: returned snapshots do not mutate internal state',()=>{const p=createWorkspacePreferences(()=>memory());const a=p.read();a.density='compact';a.lastSession='x';assert.equal(p.read().density,'comfortable');assert.equal(p.read().lastSession,null);});
+test('PREFS: returned snapshots do not mutate internal state',()=>{const p=createWorkspacePreferences(()=>memory());const a=p.read();a.density='comfortable';a.lastSession='x';assert.equal(p.read().density,'compact');assert.equal(p.read().lastSession,null);});
 /* ⛔ 18/09/2026 — qui si provava che la storia delle disposizioni stava entro 64 voci: era un tetto
    della mappa dei PRESET, uscita con la funzione. Nessun altro campo ha una mappa, quindi la prova
    non ha più soggetto e non si riscrive «per far numero». */

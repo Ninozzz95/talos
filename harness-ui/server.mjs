@@ -16,6 +16,7 @@ import { proposeWorkflowFromTool } from './src/workflow/planning-control.mjs';
 import { createWorkflowOrchestrator } from './src/workflow-orchestrator.mjs';
 import { createAgentSessionAdapter } from './src/workflow/adapters/agent-session.mjs';
 import { createCapacitaAdattiva, createWorkflowScheduler } from './src/workflow/scheduler.mjs';
+import { creaOnWorkflowFn } from './src/workflow/per-il-modello.mjs';
 import { createStaticHandler } from './src/static-files.mjs';
 import { listaTaskDisponibili } from './src/task-catalog.mjs';
 import { elencaCartelleProgetto } from './src/custom-task.mjs';
@@ -543,6 +544,15 @@ async function startServer() {
     workflowPlanProposeFn: workflowStore ? input => proposeWorkflowFromTool(workflowStore, input, {
       availableModelIdsFn: async () => ((await modelCatalog.ottieni())?.modelli ?? []).map((m) => m?.id).filter((id) => typeof id === 'string'),
     }) : null,
+    /*
+     * ⛔⛔ F-012 (piano 0.1.19 §1.5, 28/09) — il canale dei TRE attrezzi dei run (`workflow_status`/
+     * `workflow_output`/`workflow_control`), l'unico pezzo che il modello mancava. La fabbrica è
+     * in `src/workflow/per-il-modello.mjs` e riusa le funzioni GIÀ esistenti (read-model, CAS,
+     * `requestRunControl` + `scheduler.sveglia`): nessuna logica di dominio nuova, solo esposizione.
+     * `runtimeFn` è RITARDATO di proposito: l'orchestratore nasce sotto (adattatore dei passi →
+     * registro) e la chiusura lo legge quando il modello chiama, non quando il registro si costruisce.
+     */
+    workflowPerIlModelloFn: workflowStore ? creaOnWorkflowFn({ store: workflowStore, runtimeFn: () => workflowRuntime }) : null,
     avviaSessioneFn: (input) => avviaSessione({
       ...input,
       talosLavoraFn: (runtimeInput) => ownerRuntime.talosLavora(runtimeInput),

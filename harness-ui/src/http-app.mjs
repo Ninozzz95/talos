@@ -4,6 +4,8 @@ import { comprimiDiffPerMessaggio, promptMessaggioCommit, pulisciMessaggioGenera
 import { CARTELLA_ASSISTENZA_PREDEFINITA, MAX_DOMANDA_ASSISTENZA, cercaAssistenza } from './assistenza.mjs';
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto'; // 08/9, BH-06: il nonce CSP del documento, nuovo a ogni risposta; F3 (24/09): il gettone di spegnimento a tempo costante
 import { listRunSummariesForSession, readRunHistory, readRunState, removeRun } from './workflow/store.mjs';
+import { readResultBytes } from './workflow/result-store.mjs'; // F-014 (§1.6): l'output integrale di un passo, verificato
+import { decodeWorkflowResultText, selectWorkflowResult } from './workflow/output-access.mjs';
 import { runStreamCursor, serveWorkflowRunStream } from './workflow/run-stream.mjs';
 import { startWorkflowRun } from './workflow/run-control.mjs';
 import { projectWorkflowOverview, projectWorkflowGroupPage, projectWorkflowNodeDetail, projectWorkflowEdgePage, projectWorkflowStateHistory, STATE_HISTORY_PAGE_MAX,
@@ -12,6 +14,7 @@ import { approveWorkflowProposal, listWorkflowProposals, readPlannedWorkflowGrap
   readWorkflowProposal, reviseWorkflowBudgets } from './workflow/planning-control.mjs';
 import { leggiArtefatto as leggiArtefattoReale } from './artifact-store.mjs';
 import { nomiPerContentDisposition } from './workspace-files.mjs'; // PO-05: le due forme del nome per Content-Disposition (RFC 6266)
+import { saveChatFile } from './chat-file-upload.mjs';
 import { creaLasciapassarePagine } from './pagine-lasciapassare.mjs'; // F5: gli indirizzi-capacità delle pagine HTML rese
 import { verificaIncorniciabile } from './browser-frame.mjs';
 import { decidiVia } from './browser-proxy-universale.mjs'; // 07/9: la scelta della corsia sta in un posto solo // K-I 06/9: la cornice del Browser si decide dalle intestazioni della pagina
@@ -210,6 +213,7 @@ const API_ERROR_CODES = new Set([
   'SEARCH_SOURCE_INVALID', 'SEARCH_KEY_REQUIRED', 'SEARCH_KEY_INVALID', 'SEARCH_ENDPOINT_INVALID', 'SEARCH_STORE_UNAVAILABLE', 'SEARCH_NOT_READY', 'SEARCH_BLOCKED', 'SEARCH_UNREACHABLE', 'SEARCH_FAILED',
   // ⭐ 04/9, W1-10 — token di loopback della shell Electron: /api/* senza il cookie talos_token.
   'AUTH_REQUIRED',
+  'CHAT_FILE_ORIGIN_FORBIDDEN',
   /* ⭐⭐⭐ 05/9, W1-01 — schede terminale per sessione (src/terminal-registry.mjs). Il tetto NON è burocrazia: su Windows ogni PTY porta con sé un processo conhost (node-pty#471). */
   'TERMINAL_LIMIT_REACHED', 'TERMINAL_STORE_UNAVAILABLE',
   'BROWSER_PROXY_SOLO_LOCALE', 'BROWSER_PROXY_NON_HTML', 'BROWSER_PROXY_TROPPO_GRANDE', 'BROWSER_PROXY_IRRAGGIUNGIBILE', // Browser con annotazione 06/9
@@ -553,6 +557,7 @@ const STATUS_BY_CODE = Object.freeze({
   SEARCH_UNREACHABLE: 502,
   SEARCH_FAILED: 502,
   AUTH_REQUIRED: 401,
+  CHAT_FILE_ORIGIN_FORBIDDEN: 403,
   RUNTIME_NOT_AVAILABLE: 503,
   RUNTIME_UNREACHABLE: 503,
   RUNTIME_OPERATION_UNSUPPORTED: 409,
@@ -634,6 +639,7 @@ const MESSAGE_BY_CODE = Object.freeze({
   SEARCH_UNREACHABLE: 'La fonte di ricerca non è raggiungibile',
   SEARCH_FAILED: 'La ricerca non è riuscita',
   AUTH_REQUIRED: 'Questo server accetta solo la finestra TALOS che lo ha avviato',
+  CHAT_FILE_ORIGIN_FORBIDDEN: 'Carica il file dalla finestra TALOS di questa sessione',
   TERMINAL_LIMIT_REACHED: 'Hai già il massimo di terminali aperti per questa sessione: chiudine uno e riprova',
   TERMINAL_STORE_UNAVAILABLE: 'I terminali non sono disponibili su questo server',
   BROWSER_PROXY_SOLO_LOCALE: 'Il proxy con annotazione vale solo per un dev server sul tuo computer',
@@ -1521,10 +1527,13 @@ const ROTTE_API = Object.freeze([
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/workflows\/([^/]+)\/history$/, metodi: ['GET'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/workflows\/([^/]+)\/groups\/([^/]+)$/, metodi: ['GET'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/workflows\/([^/]+)\/nodes\/([^/]+)$/, metodi: ['GET'] },
+  /* F-014 (piano 0.1.19 §1.6, 28/09): l'output INTEGRALE di un passo concluso, i byte verificati dal CAS. */
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/workflows\/([^/]+)\/nodes\/([^/]+)\/output$/, metodi: ['GET'] },
   /* Refactor dei grafi, decisioni owner 24 e 30 (26/09/2026): la discendenza di un passo, per il focus a monte e a valle. */
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/workflows\/([^/]+)\/nodes\/([^/]+)\/lineage$/, metodi: ['GET'] },
   { schema: /^\/api\/v1\/workflows\/([^/]+)\/versions\/([^/]+)\/nodes\/([^/]+)\/lineage$/, metodi: ['GET'] },
   { schema: '/api/v1/chat-images', metodi: ['POST'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/chat-files$/, metodi: ['POST'] },
   { schema: /^\/api\/v1\/chat-images\/[a-f0-9]{64}$/, metodi: ['GET'] },
   { schema: ROTTA_MODELLI_FORNITORE, metodi: ['GET'] },
   // ⭐ 10/09: le favicon delle fonti, servite dal server perché il browser non bussi ai siti citati.
@@ -3338,7 +3347,7 @@ export function createHttpApp({
 
     // Workflow graph v2 is a session-scoped, read-only projection of verified Store facts.
     // Keep this before generic session routes; no Definition or journal payload reaches JSON.
-    const workflowPath = (method === 'GET' || method === 'HEAD') && /^\/api\/v1\/sessions\/([^/]+)\/workflows(?:\/([^/]+)\/(graph|edges|history|groups\/[^/]+|nodes\/[^/]+\/lineage|nodes\/[^/]+))?$/.exec(url.pathname);
+    const workflowPath = (method === 'GET' || method === 'HEAD') && /^\/api\/v1\/sessions\/([^/]+)\/workflows(?:\/([^/]+)\/(graph|edges|history|groups\/[^/]+|nodes\/[^/]+\/lineage|nodes\/[^/]+\/output|nodes\/[^/]+))?$/.exec(url.pathname);
     if (workflowPath) {
       try {
         let sessionId, runId, resource, lineageNodeId = null;
@@ -3357,11 +3366,23 @@ export function createHttpApp({
         }
         const pageQuery = (allowed, maxLimit = 50) => workflowPageQuery(url, allowed, maxLimit);
         if (!runId) {
-          const { offset, limit } = pageQuery(['offset', 'limit']);
+          const { offset, limit } = pageQuery(['offset', 'limit', 'stato', 'q']);
+          const stato = url.searchParams.get('stato');
+          const allowedStatuses = new Set(['created', 'running', 'paused', 'needs_attention', 'succeeded', 'failed', 'cancelled']);
+          if (stato !== null && !allowedStatuses.has(stato)) {
+            throw Object.assign(new Error('Stato Workflow non valido'), { code: 'QUERY_INVALID' });
+          }
+          const rawQuery = url.searchParams.get('q');
+          const query = rawQuery?.trim().toLocaleLowerCase('it') ?? null;
+          if (rawQuery !== null && (!query || rawQuery.length > 256 || /[\u0000-\u001f\u007f]/u.test(rawQuery))) {
+            throw Object.assign(new Error('Ricerca Workflow non valida'), { code: 'QUERY_INVALID' });
+          }
           const runs = await listRunSummariesForSession(workflowStore, { rootSessionId: sessionId });
+          const filtered = runs.filter((run) => (stato === null || run.status === stato)
+            && (query === null || run.title.toLocaleLowerCase('it').includes(query) || run.runId.toLowerCase().includes(query)));
           sendJson(res, 200, successEnvelope({ schema: 'talos.workflow-run-list.v1', sessionId,
-            total: runs.length, offset, limit, nextOffset: offset + limit < runs.length ? offset + limit : null,
-            items: runs.slice(offset, offset + limit) }, clock), method,
+            total: filtered.length, offset, limit, nextOffset: offset + limit < filtered.length ? offset + limit : null,
+            items: filtered.slice(offset, offset + limit) }, clock), method,
           { 'Cache-Control': 'private, no-cache' });
           return;
         }
@@ -3369,9 +3390,48 @@ export function createHttpApp({
         const edges = resource === 'edges';
         const history = resource === 'history';
         const lineage = resource === 'lineage';
+        /*
+         * ⛔⛔ F-014 (piano 0.1.19 §1.6, 28/09) — l'output integrale di un passo concluso, i byte
+         *   VERIFICATI dal CAS (sha256 ricontata alla lettura, `result-store.mjs`). La query si
+         *   legge a parte: il default è TUTTO («la rotta serve tutto», §3.4 — il Board non pagina
+         *   a schermo), e un tetto di 50 di nascosto sarebbe il solito taglio silenzioso.
+         */
+        const output = resource?.startsWith('nodes/') && resource.endsWith('/output');
+        const numeriOutput = output ? (() => {
+          const chiavi = [...url.searchParams.keys()];
+           if (chiavi.some((k) => !['offset', 'limit', 'resultId', 'format'].includes(k)) || chiavi.some((k) => url.searchParams.getAll(k).length !== 1)) {
+            throw Object.assign(new Error('Query non valida'), { code: 'QUERY_INVALID' });
+          }
+          const numero = (chiave, ripiego) => {
+            const grezzo = url.searchParams.get(chiave);
+            if (grezzo === null) return ripiego;
+            if (!/^(0|[1-9][0-9]*)$/u.test(grezzo) || !Number.isSafeInteger(Number(grezzo)) || Number(grezzo) > 2_000_000) {
+              throw Object.assign(new Error('Query non valida'), { code: 'QUERY_INVALID' });
+            }
+            return Number(grezzo);
+          };
+           const resultId = url.searchParams.get('resultId') ?? undefined;
+           const format = url.searchParams.get('format') ?? 'json';
+           if (resultId === '' || !['json', 'raw'].includes(format)
+             || (format === 'raw' && (resultId === undefined || url.searchParams.has('offset') || url.searchParams.has('limit')))) {
+             throw Object.assign(new Error('Query non valida'), { code: 'QUERY_INVALID' });
+           }
+           return { offset: numero('offset', 0), limit: numero('limit', null), resultId, format };
+        })() : null;
+        const nodeDetail = resource?.startsWith('nodes/') && !output;
+        const outputOffset = nodeDetail ? (() => {
+          const keys = [...url.searchParams.keys()];
+          if (keys.some((key) => key !== 'outputOffset') || keys.length > 1) throw Object.assign(new Error('Query non valida'), { code: 'QUERY_INVALID' });
+          const raw = url.searchParams.get('outputOffset');
+          if (raw === null) return 0;
+          if (!/^(0|[1-9][0-9]*)$/u.test(raw) || !Number.isSafeInteger(Number(raw)) || Number(raw) > 2_000_000) {
+            throw Object.assign(new Error('Query non valida'), { code: 'QUERY_INVALID' });
+          }
+          return Number(raw);
+        })() : null;
         const { offset, limit, sort = null, phaseIds = null, direction = null } = group ? workflowGroupQuery(url) : edges ? workflowEdgeQuery(url)
           : history ? pageQuery(['offset', 'limit'], STATE_HISTORY_PAGE_MAX) : lineage ? workflowLineageQuery(url)
-            : (requireNoQuery(url), { offset: 0, limit: 50 });
+            : output ? numeriOutput : nodeDetail ? { offset: 0, limit: 50 } : (requireNoQuery(url), { offset: 0, limit: 50 });
         // la storia degli stati (decisione owner 29) viene dalla sua lettura: stessa verifica, senza ricopiare il giornale
         const input = history ? await readRunHistory(workflowStore, { runId }) : await readRunState(workflowStore, { runId });
         if (input.events[0]?.type !== 'run_created' || input.events[0].payload.rootSessionId !== sessionId) {
@@ -3382,8 +3442,43 @@ export function createHttpApp({
         else if (edges) data = projectWorkflowEdgePage(input, { offset, limit, phaseIds });
         else if (history) data = projectWorkflowStateHistory(input, { offset, limit });
         else if (lineage) data = projectWorkflowLineage(input, { nodeId: lineageNodeId, direction, offset, limit });
+        else if (output) {
+          const nodeId = resource.slice('nodes/'.length, -'/output'.length);
+          const selected = selectWorkflowResult(input, { runId, nodeId, resultId: numeriOutput.resultId });
+          if (selected.kind === 'absent') throw new RangeError(`Workflow node output not found: ${nodeId}`);
+          if (selected.kind === 'index') {
+            data = { schema: 'talos.workflow-node-output-index.v1', runId, sessionId, nodeId,
+              total: selected.results.length, results: selected.results };
+          } else {
+            const ref = selected.ref;
+            const bytes = await readResultBytes({ workflowDataRoot: workflowStore.root, sha256: ref.sha256, maxBytes: workflowStore.resultLimits.maxItemBytes });
+            if (numeriOutput.format === 'raw') {
+              const nomi = nomiPerContentDisposition(`workflow-${nodeId}-${ref.id}.bin`);
+              res.writeHead(200, { ...SECURITY_HEADERS, 'Content-Type': 'application/octet-stream',
+                'Content-Length': bytes.length, 'Cache-Control': 'private, no-store',
+                'Content-Disposition': `attachment; filename="${nomi.ascii}"; filename*=UTF-8''${nomi.utf8}` });
+              if (method !== 'HEAD') res.end(bytes); else res.end();
+              return;
+            }
+            const decoded = decodeWorkflowResultText(ref, bytes);
+            if (decoded.text === null) {
+              data = { schema: 'talos.workflow-node-output.v1', runId, sessionId, nodeId,
+                resultId: ref.id, sha256: ref.sha256, bytes: ref.bytes, kind: ref.kind,
+                contentType: ref.contentType, content: null, reason: decoded.reason, rawAvailable: true };
+            } else {
+              const caratteri = [...decoded.text];
+              const da = numeriOutput.offset;
+              const fino = numeriOutput.limit === null ? caratteri.length : Math.min(da + numeriOutput.limit, caratteri.length);
+              data = { schema: 'talos.workflow-node-output.v1', runId, sessionId, nodeId,
+                resultId: ref.id, sha256: ref.sha256, bytes: ref.bytes, kind: ref.kind,
+                contentType: ref.contentType, totalCharacters: caratteri.length,
+                offset: da, shownCharacters: da >= caratteri.length ? 0 : fino - da,
+                content: da >= caratteri.length ? '' : caratteri.slice(da, fino).join('') };
+            }
+          }
+        }
         else if (group) data = projectWorkflowGroupPage(input, { phaseId: resource.slice('groups/'.length), offset, limit, sort });
-        else if (resource?.startsWith('nodes/')) data = projectWorkflowNodeDetail(input, { nodeId: resource.slice('nodes/'.length) });
+        else if (nodeDetail) data = projectWorkflowNodeDetail(input, { nodeId: resource.slice('nodes/'.length), outputOffset });
         else { sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method); return; }
         const value = { ok: true, data, meta: { schema: API_SCHEMA, generatedAt: history ? input.lastAt : input.events.at(-1).at } };
         const etag = `"sha256:${createHash('sha256').update(JSON.stringify(value)).digest('hex')}"`;
@@ -4667,6 +4762,40 @@ export function createHttpApp({
         });
         res.end(file.bytes);
       } catch (error) {
+        const normalized = normalizeError(error);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
+      }
+      return;
+    }
+
+    const chatFileMatch = method === 'POST' && sessionRegistry
+      && /^\/api\/v1\/sessions\/([^/]+)\/chat-files$/u.exec(url.pathname);
+    if (chatFileMatch) {
+      try {
+        requireNoQuery(url);
+        const rejectedOrigin = rifiutoOrigineApprovazione(req, { token });
+        if (rejectedOrigin) throw Object.assign(new Error('File upload must originate from this TALOS window'),
+          { code: 'CHAT_FILE_ORIGIN_FORBIDDEN' });
+        if (req.headers['content-type'] !== 'application/octet-stream') {
+          throw Object.assign(new Error('Il file richiede application/octet-stream'), { code: 'QUERY_INVALID' });
+        }
+        const encodedName = req.headers['x-talos-file-name'];
+        if (typeof encodedName !== 'string' || !encodedName) {
+          throw Object.assign(new Error('Nome del file mancante'), { code: 'QUERY_INVALID' });
+        }
+        let name;
+        try { name = decodeURIComponent(encodedName); }
+        catch { throw Object.assign(new Error('Nome del file non codificato correttamente'), { code: 'QUERY_INVALID' }); }
+        const sessionId = decodeURIComponent(chatFileMatch[1]);
+        const workspace = await sessionRegistry.cartellaPerChatFile(sessionId);
+        if ('erroreAvvio' in workspace) {
+          throw Object.assign(new Error(workspace.erroreAvvio), { code: workspace.code });
+        }
+        const uploaded = await saveChatFile({ rootDir: workspace.cartella, name, source: req });
+        if (req.aborted || res.destroyed) return;
+        sendJson(res, 201, successEnvelope(uploaded, clock), method);
+      } catch (error) {
+        if (req.aborted || res.destroyed) return;
         const normalized = normalizeError(error);
         sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
       }

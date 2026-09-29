@@ -109,7 +109,7 @@ test('WF-PROPOSAL-OPEN-DIAGRAM: «Apri diagramma» is on the card in every state
     { revisione: revisione({ status: 'approved' }), run: { runId: 'r', status: 'succeeded', createdAt: '2026-09-25T11:36:24.380Z' } }]) {
     disegnaCardProposta(card, { document, ...vista, onApprova: () => {}, onAvvia: () => {}, onApriDiagramma });
     const diagramma = bottoni(card).find((b) => b.dataset.azione === 'diagramma');
-    assert.equal(diagramma?.textContent, 'Apri diagramma');
+    assert.equal(diagramma?.textContent, vista.run?.runId ? 'Apri in Board' : 'Apri diagramma');
     diagramma.listeners.click[0]();
   }
   assert.equal(aperture, 3);

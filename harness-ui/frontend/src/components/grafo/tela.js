@@ -81,6 +81,9 @@ export function creaTela(host, opzioni) {
   tela.append(mondo, lod, etichette, minimappa, annuncio);
   host.append(tela);
 
+  // Il viewport XYFlow usa coordinate CSS locali; getBoundingClientRect() include lo zoom dell'interfaccia.
+  const dimensioniTela = () => ({ width: tela.clientWidth, height: tela.clientHeight });
+
   let disp = null;
   let vista = { x: 0, y: 0, zoom: 1 };
   let dati = null;
@@ -137,7 +140,8 @@ export function creaTela(host, opzioni) {
     const verso = accumulo < 0 ? 1 : -1;
     accumulo = 0;
     const r = tela.getBoundingClientRect();
-    zoomAttorno(prossimoZoom(vista.zoom, verso), e.clientX - r.left, e.clientY - r.top, 90);
+    const scala = r.width / tela.clientWidth || 1;
+    zoomAttorno(prossimoZoom(vista.zoom, verso), (e.clientX - r.left) / scala, (e.clientY - r.top) / scala, 90);
   }, { capture: true, passive: false });
   function zoomAttorno(k, px, py, durata = 160) {
     const wx = (px - vista.x) / vista.zoom, wy = (py - vista.y) / vista.zoom;
@@ -315,7 +319,7 @@ export function creaTela(host, opzioni) {
 
   /* ——— i passi: solo i visibili, con il livello di dettaglio ——— */
   function mondoVisibile() {
-    const r = tela.getBoundingClientRect();
+    const r = dimensioniTela();
     const m = MARGINE_VISIBILE / vista.zoom;
     return { x0: -vista.x / vista.zoom - m, y0: -vista.y / vista.zoom - m, x1: (r.width - vista.x) / vista.zoom + m, y1: (r.height - vista.y) / vista.zoom + m, w: r.width, h: r.height };
   }
@@ -508,7 +512,7 @@ export function creaTela(host, opzioni) {
   let mini = null;
   function disegnaMinimappa() {
     if (!disp) return;
-    const r = tela.getBoundingClientRect();
+    const r = dimensioniTela();
     const W = disp.larghezza, H = disp.altezza;
     // si vede quando serve: il grafo non entra nella vista, e non è una scena piccola (a 14 passi basta «Adatta»)
     const entra = (W * vista.zoom <= r.width + 1 && H * vista.zoom <= r.height + 1 && vista.x >= -1 && vista.y >= -1) || disp.passi.size + disp.blocchi.length <= 25;
@@ -546,7 +550,7 @@ export function creaTela(host, opzioni) {
   /* ——— tastiera: frecce fra gli agenti (vicino nella direzione), Invio dettaglio, +/−/0 ——— */
   tela.addEventListener('keydown', (e) => {
     if (e.target !== tela && !e.target.classList?.contains('gv-passo')) return;
-    const r = tela.getBoundingClientRect();
+    const r = dimensioniTela();
     if (e.key === '+' || e.key === '=') { e.preventDefault(); zoomAttorno(prossimoZoom(vista.zoom, 1), r.width / 2, r.height / 2); return; }
     if (e.key === '-') { e.preventDefault(); zoomAttorno(prossimoZoom(vista.zoom, -1), r.width / 2, r.height / 2); return; }
     if (e.key === '0') { e.preventDefault(); api.adatta(); return; }
@@ -630,26 +634,26 @@ export function creaTela(host, opzioni) {
     impostaEvidenza(nuova) { evidenza = { ...evidenza, ...nuova }; if (!disp || !dati) return; classificaArchi(); disegnaVisibili(); },
     adatta({ anima = true } = {}) {
       if (!disp) return undefined;
-      const r = tela.getBoundingClientRect();
+      const r = dimensioniTela();
       const k = Math.min(1, Math.max(ZOOM_MIN, Math.min((r.width - 48) / disp.larghezza, (r.height - 48) / disp.altezza)));
       return pz.setViewport({ x: (r.width - disp.larghezza * k) / 2, y: Math.max(16, (r.height - disp.altezza * k) / 2), zoom: k }, { duration: anima && !movimentoRidotto() ? 220 : 0 });
     },
     /** Tutta la larghezza nella vista, con la cima in alto; `false` (e niente si muove) se lo zoom scenderebbe sotto `minimo`. */
     adattaInLarghezza({ minimo = LOD_COMPATTO } = {}) {
       if (!disp) return false;
-      const r = tela.getBoundingClientRect();
+      const r = dimensioniTela();
       const k = Math.min(1, (r.width - 48) / disp.larghezza);
       if (k < minimo) return false;
       pz.setViewport({ x: (r.width - disp.larghezza * k) / 2, y: 16, zoom: k }, { duration: 0 });
       return true;
     },
-    zoomA(k) { const r = tela.getBoundingClientRect(); return zoomAttorno(k, r.width / 2, r.height / 2); },
-    passo(verso) { const r = tela.getBoundingClientRect(); return zoomAttorno(prossimoZoom(vista.zoom, verso), r.width / 2, r.height / 2); },
+    zoomA(k) { const r = dimensioniTela(); return zoomAttorno(k, r.width / 2, r.height / 2); },
+    passo(verso) { const r = dimensioniTela(); return zoomAttorno(prossimoZoom(vista.zoom, verso), r.width / 2, r.height / 2); },
     /** Porta un passo (o un blocco) nella vista; con `soloSeFuori` non si muove se lo si vede già. */
     vaiA(id, { soloSeFuori = false, zoom = null, durata = 260 } = {}) {
       const p = disp?.passi.get(dati?.chiaveDi(id) ?? id) ?? disp?.blocchi.find((b) => b.id === id || b.phaseId === id);
       if (!p) return;
-      const r = tela.getBoundingClientRect();
+      const r = dimensioniTela();
       const k = zoom ?? Math.max(vista.zoom, 0.8);
       const sx = p.x * vista.zoom + vista.x, sy = p.y * vista.zoom + vista.y;
       if (soloSeFuori && sx > 24 && sy > 24 && sx + p.w * vista.zoom < r.width - 24 && sy + p.h * vista.zoom < r.height - 24) return;
@@ -660,7 +664,7 @@ export function creaTela(host, opzioni) {
     mostraInAlto(id, k = 0.8) {
       const b = disp?.blocchi.find((q) => q.id === id || q.phaseId === id);
       if (!b) return undefined;
-      const r = tela.getBoundingClientRect();
+      const r = dimensioniTela();
       // ⛔ foto del 26/09 (scene 200 e 5.000 nel prodotto): se il blocco non entra, a sinistra resta il suo CORRIDOIO — lì sta
       //   il contatore dell'arco fuso in entrata, che col blocco a filo del bordo usciva tagliato (a 5.000 si leggeva «0»)
       const x = b.w * k < r.width - 48 ? (r.width - b.w * k) / 2 - b.x * k : 24 + 64 * k - b.x * k;

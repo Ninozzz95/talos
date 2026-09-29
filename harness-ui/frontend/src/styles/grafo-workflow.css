@@ -14,6 +14,8 @@
   /* la larghezza che conta è quella del DIAGRAMMA, non della finestra: a 1440 con barra e rail aperti resta ~820 px */
   container: talos-wfg / inline-size;
 }
+.talos-grafo.talos-wfg { overflow-y: auto; }
+.talos-wfg .gv-area { min-height: min(400px, 50vh); }
 .talos-wfg [data-tono="ok"] { --wfg-tono: var(--talos-success); }
 .talos-wfg [data-tono="corso"] { --wfg-tono: var(--talos-accent); }
 .talos-wfg [data-tono="attesa"] { --wfg-tono: var(--talos-muted); }
@@ -330,3 +332,10 @@ dialog.talos-wfg-conferma::backdrop { background: var(--talos-overlay); }
 .talos-wfg-conferma__scelta:focus-visible { outline: var(--talos-focus-width) solid var(--talos-accent); outline-offset: 1px; }
 .talos-wfg-conferma__scelta-nome { font-weight: 600; }
 .talos-wfg-conferma__scelta-dettaglio { grid-column: 2; font-size: .75rem; color: var(--talos-muted); overflow-wrap: anywhere; }
+.talos-wfg__outputs { display: grid; gap: 8px; list-style: none; padding: 0; margin: 0; min-width: 0; }
+.talos-wfg__output { min-width: 0; padding: 7px; border: 1px solid var(--talos-border); border-radius: 6px; }
+.talos-wfg__output-meta { font-size: .75rem; color: var(--talos-muted); overflow-wrap: anywhere; }
+.talos-wfg__output-preview, .talos-wfg__output-full { margin: 6px 0; padding: 7px; max-height: 14rem; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font: 12px/1.45 var(--talos-font-mono); color: var(--talos-text); background: var(--talos-surface); }
+.talos-wfg__output-full { max-height: min(50vh, 36rem); }
+.talos-wfg__output-open, .talos-wfg__output-download, .talos-wfg__output-more { display: inline-block; margin-inline-end: 10px; font: inherit; }
+.talos-wfg__output-download:focus-visible, .talos-wfg__output-open:focus-visible, .talos-wfg__output-more:focus-visible { outline: 2px solid var(--talos-accent); outline-offset: 2px; }

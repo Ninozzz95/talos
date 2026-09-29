@@ -17,6 +17,35 @@ const run = passi.map(p => p.run || '').join('\n');
 const pacchetto = JSON.parse(readFileSync(new URL('../package.json', import.meta.url)));
 const passo = id => { const p = passi.find(p => p.id === id); assert.ok(p, `Passo mancante: ${id}`); return p; };
 
+test('R04-PRETAG-INSTALLER — la PR prova NSIS su Windows prima del tag senza permessi di pubblicazione', () => {
+  const pretag = load(readFileSync(new URL('../../../.github/workflows/desktop-pretag-installer.yml', import.meta.url), 'utf8'));
+  assert.ok(pretag.on.pull_request, 'Il gate deve partire su pull_request.');
+  assert.equal(pretag.on.pull_request_target, undefined);
+  assert.deepEqual(pretag.permissions, { contents: 'read' });
+  const job = pretag.jobs['desktop-installer'];
+  assert.equal(job['runs-on'], 'windows-latest');
+  assert.equal(job.defaults.run.shell, 'pwsh');
+  assert.equal(job.env.CSC_IDENTITY_AUTO_DISCOVERY, 'false');
+  assert.equal(job.env.TALOS_R02_BUILDER_NETWORK, '1');
+  const steps = job.steps;
+  const setup = steps.find(p => p.uses?.startsWith('actions/setup-node@'));
+  const checkout = steps.find(p => p.uses?.startsWith('actions/checkout@'));
+  assert.equal(checkout.with['persist-credentials'], false);
+  assert.equal(String(setup.with['node-version']), '24');
+  const named = name => { const p = steps.find(item => item.name === name); assert.ok(p, name); return p; };
+  const go = named('Go 1.27.1 verificato');
+  assert.match(go.run, /a3911b5e0e1b1053f25ed0675f4c1c6aad1e2bfcf253df2b9be4caabd2edd95d/);
+  const dist = named('costruisci NSIS e ZIP');
+  const smoke = named('installa, avvia e disinstalla prima del tag');
+  assert.match(dist.run, /npm --prefix harness-ui\/desktop run dist/);
+  assert.match(smoke.run, /scripts\/ci-smoke\.ps1/);
+  assert.ok(steps.indexOf(go) < steps.indexOf(dist));
+  assert.ok(steps.indexOf(dist) < steps.indexOf(smoke));
+  assert.ok(steps.find(p => p.uses?.startsWith('actions/upload-artifact@') && p.if === 'always()'));
+  for (const p of steps.filter(item => item.uses)) assert.match(p.uses, /@[a-f0-9]{40}$/);
+  assert.doesNotMatch(JSON.stringify(job), /gh release|gh auth|git push|pull_request_target|secrets\.|contents:\s*write/);
+});
+
 test('R04-WINDOWS — Node 24, PowerShell, cache e cancelli prima dello staging', () => {
   assert.equal(desktop['runs-on'], 'windows-latest');
   assert.equal(desktop.defaults.run.shell, 'pwsh');

@@ -616,6 +616,10 @@ tests/session-registry.test.mjs:12  guardiaDiStallo(registro, SOGLIE_STALLO_PRED
           <div class="talos-fascia-modo__testo"><p class="talos-fascia-modo__frase" role="status" data-fascia-modo-testo></p><p class="talos-fascia-modo__nota" data-fascia-modo-nota>Scegli come continuare: vale per i prossimi messaggi.</p></div>
           <div class="talos-fascia-modo__azioni"><button type="button" class="talos-button talos-button--secondary talos-button--sm" data-fascia-modo-scelta="normale">Continua in Normale</button><button type="button" class="talos-button talos-button--secondary talos-button--sm" data-fascia-modo-scelta="piano">Continua in Piano</button></div>
         </div>
+        <div class="talos-fascia-modo" data-c="PlanModeReadyNotice" id="fasciaPianoRichiesto" hidden>
+          <span class="talos-fascia-modo__icona" aria-hidden="true"><svg class="i"><use href="#i-git"/></svg></span>
+          <div class="talos-fascia-modo__testo"><p class="talos-fascia-modo__frase" role="status" data-fascia-piano-testo></p><p class="talos-fascia-modo__nota">Il prossimo messaggio preparerà un piano senza modificare i file.</p></div>
+        </div>
         <!-- ⭐ D4, 24/09/2026 — l'avviso «Piano aggiornato»: la card del piano resta dov'è e si aggiorna; se è fuori vista, questa riga porta lì. Testo scritto da app.js (mostraAvvisoPiano); la frase è una regione viva educata, i pulsanti ne stanno fuori. -->
         <div class="talos-avviso-piano" data-c="PlanUpdatedNotice" id="avvisoPiano" role="group" aria-label="Piano aggiornato" hidden>
           <span class="talos-avviso-piano__icona" aria-hidden="true"><svg class="i"><use href="#i-check"/></svg></span>

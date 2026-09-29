@@ -387,6 +387,18 @@ export async function avviaSessione({
    */
   onRicercaCerca, conversazioniFn,
   /*
+   * ⛔⛔ F-012 (piano 0.1.19 §1.5, 28/09) — il canale dei TRE attrezzi dei run dei Workflow
+   *   (`workflow_status`/`workflow_output`/`workflow_control`). Questo file NON aggiunge logica,
+   *   inoltra e basta (come conversazioniFn): lo compone il server (`creaOnWorkflowFn`) e lo
+   *   lega alla sessione il registro (`rootSessionId`). Assente = il kernel non li offre.
+   */
+  onWorkflowFn,
+  /*
+   * ⛔⛔ Rilievo 3 (piano 0.1.19 §1.7, 28/09) — il canale di `request_plan_mode`: inoltrato così
+   *   com'è (il registro lo costruisce: accoda il cambio del modo, la patch va a fine giro).
+   */
+  onRichiestaPianoFn,
+  /*
    * ⭐⭐⭐⭐ L8 (12/09/2026) — il compositore del record del rapporto della ricerca
    * approfondita. Inoltrato SENZA logica propria, come tutto il resto in questo file: lo
    * costruisce `research-orchestrator.componiRapportoRicerca` (che usa `src/research/report.mjs`)
@@ -2071,6 +2083,8 @@ export async function avviaSessione({
       onAttivitaLista, onAttivitaCrea, onAttivitaCompleta, onAttivitaAggiorna, onAttivitaElimina,
       onMemoriaCerca, onMemoriaScrivi, onMemoriaAggiorna, onMemoriaElimina,
       onLetturaSezione, memorieNelPrompt, // 27/09/2026, decisione owner: le letture delle sezioni e le memorie nel prompt
+      onWorkflowFn, // F-012 (piano 0.1.19 §1.5): i tre attrezzi dei run, inoltrato com'è
+      onRichiestaPianoFn, // Rilievo 3 (§1.7): la richiesta del modo Piano, inoltrata com'è
       onRicercaLista, onRicercaAvvia, onRicercaLeggi, onRicercaRinomina,
       onRicercaPausa, onRicercaRiprendi, onRicercaAnnulla, onRicercaElimina,
       componiRapportoRicercaFn,

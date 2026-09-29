@@ -44,6 +44,7 @@ import { montaGrafoAgenti, modelloGrafoAgenti } from '../components/grafo-agenti
 import { montaGrafoWorkflow } from '../components/grafo-workflow.js'; // F3-42, 25/09/2026: il diagramma del workflow (D30)
 import { creaClientGrafo } from '../components/workflow-graph-client.js';
 import { montaRailWorkflow } from '../components/rail-workflow.js'; // F3-50, 25/09/2026: il rail «Agenti» del workflow (D30)
+import { montaCronologiaWorkflow } from '../components/workflow-history.js';
 import { applicaDecisionePiano, createPlanArtifact, parsePlanEvent } from '../components/plan-artifact.js';
 import { bozzaDaiTetti, creaCardProposta, disegnaCardProposta, leggiRicevutaProposta } from '../components/workflow-proposal-card.js'; // F3-33a, 25/09/2026
 import { creaClientProposta, testoErroreComando, TESTO_AMBIGUO } from '../components/workflow-proposal-client.js';
@@ -9926,6 +9927,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   let diagrammaInApertura = false;
   let grafoWorkflowChiave = null; // la sorgente del diagramma aperto: un clic nel rail sullo stesso workflow non lo rimonta
   let railWorkflow = null; // F3-50: il rail v2 in `#railAgenti` quando la sessione ha un workflow (D30)
+  let cronologiaWorkflow = null;
   let railWorkflowChiave = null;
   let railWorkflowAttivi = 0;
   let railLettura = 0;
@@ -9940,6 +9942,18 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
 
   function mostraRisultatoDelega(evento) {
     if (evento?.origine !== 'delega') return false;
+    if (Array.isArray(evento.risultatiDelega)) {
+      for (const item of evento.risultatiDelega) {
+        if (!item || typeof item.codaId !== 'string' || typeof item.childId !== 'string'
+          || typeof item.testo !== 'string' || risultatiDelegaMostrati.has(item.codaId)) continue;
+        const risultato = descriviRisultatoDelega(item.testo, item.childId);
+        appendStatusNote(risultato ? `${risultato.titolo}\n${risultato.testo}`
+          : `Il sotto-agente ${item.childId} ha consegnato un risultato. È disponibile nel suo dettaglio.`, false,
+        { meta: risultato?.errore ? 'Notifica di sistema · sotto-agente non concluso' : 'Notifica di sistema · risultato del sotto-agente' });
+        risultatiDelegaMostrati.add(item.codaId);
+      }
+      return true;
+    }
     if (evento.codaId && risultatiDelegaMostrati.has(evento.codaId)) return true;
     const risultato = descriviRisultatoDelega(evento.testo ?? evento.consegna, evento.childId);
     appendStatusNote(risultato ? `${risultato.titolo}\n${risultato.testo}` : 'Un sotto-agente ha consegnato il risultato. È disponibile nel suo dettaglio.', false,
@@ -10014,7 +10028,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const id = state.realSession.id;
     if (!id) return;
     // F3-50: dal rail, a diagramma aperto sullo stesso workflow, si va al gruppo o al passo senza rimontare
-    if (iniziale && grafoWorkflow && preferita && grafoWorkflowChiave === `${id}|${preferita.workflowId}|${preferita.version}`) {
+    if (iniziale && grafoWorkflow && preferita && grafoWorkflowChiave === `${id}|${preferita.runId ?? ''}|${preferita.workflowId}|${preferita.version}`) {
       grafoWorkflow.vai(iniziale);
       return;
     }
@@ -10026,6 +10040,10 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     if (mia !== aperturaDiagramma || state.realSession.id !== id) return;
     diagrammaInApertura = false;
     if (!sorgente) {
+      if (preferita?.runId) {
+        toast('Run non trovato', 'La ricevuta non corrisponde a un run di questa sessione. Nessun altro run è stato aperto.');
+        return;
+      }
       grafoWorkflow?.distruggi(); grafoWorkflow = null;
       apriGrafoAgenti(figlia);
       return;
@@ -10040,7 +10058,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     lettoreFileLasciaLoSchermo(); // F5: il posto è uno, il lettore a schermo intero torna nel rail
     host.classList.add('talos-grafo-aperto');
     const nota = state.sessionSelection.available.get(id) || {};
-    grafoWorkflowChiave = `${id}|${sorgente.workflowId}|${sorgente.version}`;
+    grafoWorkflowChiave = `${id}|${sorgente.runId ?? ''}|${sorgente.workflowId}|${sorgente.version}`;
     grafoWorkflow = montaGrafoWorkflow(host, {
       client, sorgente, iniziale,
       onSelezione: (selezione) => railWorkflow?.evidenzia(selezione),
@@ -10069,6 +10087,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     return typeof contenitore.checkVisibility === 'function' ? contenitore.checkVisibility({ visibilityProperty: true }) : !contenitore.hidden;
   }
   function smontaRailWorkflow() {
+    cronologiaWorkflow?.distruggi(); cronologiaWorkflow = null;
     if (!railWorkflow) { railWorkflowChiave = null; return; }
     railWorkflow.distruggi(); railWorkflow = null; railWorkflowChiave = null; railWorkflowAttivi = 0;
     aggiornaInspectorDaStato();
@@ -10101,7 +10120,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     try { sorgente = await client.sorgente(); } catch { sorgente = null; }
     if (mia !== railLettura || state.realSession.id !== id) return;
     const chiave = sorgente ? `${id}|${sorgente.tipo}|${sorgente.runId ?? ''}|${sorgente.workflowId}|${sorgente.version}` : null;
-    if (chiave && chiave === railWorkflowChiave) { railWorkflow?.aggiorna(); return; }
+    if (chiave && chiave === railWorkflowChiave) { railWorkflow?.aggiorna(); void cronologiaWorkflow?.aggiorna(); return; }
     smontaRailWorkflow();
     const contenitore = $('#railAgenti');
     if (!chiave || !contenitore) return;
@@ -10110,8 +10129,12 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     railWorkflow = montaRailWorkflow(contenitore, {
       client, sorgente,
       visibile: () => railVisibile(contenitore),
-      onApri: (dove) => apriDiagramma({ preferita: { workflowId: sorgente.workflowId, version: sorgente.version }, iniziale: dove }),
+      onApri: (dove) => apriDiagramma({ preferita: { runId: sorgente.runId, workflowId: sorgente.workflowId, version: sorgente.version }, iniziale: dove }),
       onConteggio: (n) => { railWorkflowAttivi = n; aggiornaInspectorDaStato(); },
+    });
+    cronologiaWorkflow = montaCronologiaWorkflow(contenitore, {
+      fetchFn: (path) => fetch(API(path)), sessionId: id,
+      onApri: (run) => apriDiagramma({ preferita: run }),
     });
     osservaVisibilitaRail(contenitore);
     // un diagramma già aperto dice subito che cosa ha scelto, e il rail non offre la porta
@@ -10515,12 +10538,12 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
      *    raggiungibile da tastiera e il suo titolo si legge): cambia quello che promette.
      */
     const senzaContatto = attivo && contattoPerso();
-    sendButton.disabled = !attivo && uploadImmaginiInCorso();
+    sendButton.disabled = !attivo && uploadAllegatiInCorso();
     sendButton.setAttribute('aria-label', senzaContatto ? 'Il server non risponde' : attivo ? 'Interrompi risposta' : 'Invia');
     sendButton.title = senzaContatto ? 'Il server non risponde: la richiesta di fermare non arriverebbe.' : attivo ? 'Interrompi adesso' : 'Invia';
     if (use) use.setAttribute('href', attivo ? '#i-stop' : '#i-send');
     redirectRunButton.hidden = !mostraPulsanteReindirizzo({ giroAttivo: attivo, haTesto });
-    redirectRunButton.disabled = redirectOccupato || uploadImmaginiInCorso();
+    redirectRunButton.disabled = redirectOccupato || uploadAllegatiInCorso();
     redirectRunButton.setAttribute('aria-label', 'Reindirizza con il testo scritto');
     aggiornaParoleCodaAVista(); // ⭐ 14/09: l'azione sulla coda segue il giro — «Indirizza ora» vivo, «Invia ora» fermo
     // ⭐ 3/9 — item 10: un suggerimento vale solo a riposo, campo vuoto, niente in coda.
@@ -11258,7 +11281,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   }
 
   function accodaDalComposer(testo) {
-    if (attendiUploadImmagini()) return;
+    if (attendiUploadAllegati()) return;
     ricordaTestoInviato(testo);
     const immagini = allegatiComposer.filter(a => a.tipo === 'immagine');
     const completo = testoConAllegati(testo);
@@ -12523,10 +12546,21 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const client = creaClientProposta({ fetchFn: (...a) => fetch(...a), API, sessionId });
     let vista = { carica: true };
     let flusso = null;
+    const chiaveRunRicevuto = `talos.workflow-run-receipt:${sessionId}:${evento.toolCallId}`;
+    let runRicevuto = null;
+    try { runRicevuto = sessionStorage.getItem(chiaveRunRicevuto); } catch { /* storage non disponibile */ }
+    const salvaRunRicevuto = (runId) => {
+      if (typeof runId !== 'string' || !runId) return false;
+      runRicevuto = runId;
+      try { sessionStorage.setItem(chiaveRunRicevuto, runId); } catch { /* resta disponibile nel giro corrente */ }
+      return true;
+    };
     // F3-33b: la versione mostrata è l'ULTIMA del workflow (una modifica dei tetti ne crea una nuova), non quella della ricevuta
     const versioneMostrata = () => ({ workflowId: ricevuta.workflowId, version: vista.revisione?.version ?? ricevuta.version,
       definitionHash: vista.revisione?.definitionHash ?? ricevuta.definitionHash });
-    const onApriDiagramma = () => apriDiagramma({ preferita: { workflowId: ricevuta.workflowId, version: versioneMostrata().version } });
+    const onApriDiagramma = () => apriDiagramma({ preferita: {
+      runId: runRicevuto ?? vista.run?.runId ?? null, workflowId: ricevuta.workflowId,
+      version: runRicevuto ? vista.run?.version : versioneMostrata().version } });
     const disegna = (extra = {}) => disegnaCardProposta(card, { document, ...vista, bozzaTetti: vista.bozza ?? null, ...extra,
       onApprova, onAvvia, onApriDiagramma, onModifica, onAnnullaModifica, onSalvaTetti, onAvviaPrima });
     /* F3-50 (25/09/2026): il flusso del run è UNO, condiviso con rail e diagramma (`workflow-graph-client.js`,
@@ -12547,10 +12581,11 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         onFine: () => { flusso = null; },
       });
     };
-    const rileggi = async ({ bozza = null } = {}) => {
+    const rileggi = async ({ bozza = null, mostraRunStorico = true } = {}) => {
       try {
-        const letto = await client.leggi(ricevuta);
-        vista = letto.nonDisponibile ? { nonDisponibile: true } : { ...letto, bozza };
+        const letto = await client.leggi(ricevuta, { runId: runRicevuto });
+        vista = letto.nonDisponibile ? { nonDisponibile: true } : { ...letto, bozza,
+          ...(!mostraRunStorico && !runRicevuto ? { run: null } : {}) };
       } catch { vista = { nonDisponibile: true }; }
       if (card.isConnected) { disegna(); segui(); }
       if (sessionId === state.realSession.id) void aggiornaRailWorkflow(); // F3-50: proposta nuova, avvio, versione nuova
@@ -12566,7 +12601,12 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       if (!vista.revisione) return;
       disegna({ inVolo: 'avvia' });
       const esito = await client.avvia(versioneMostrata());
-      await rileggi();
+      if (esito.ok && !salvaRunRicevuto(esito.dati?.runId)) {
+        await rileggi({ mostraRunStorico: false });
+        disegna({ errore: 'L’avvio non ha restituito un ID del run verificabile. Nessun run è stato attribuito a questo comando.' });
+        return;
+      }
+      await rileggi({ mostraRunStorico: esito.ok });
       if (!esito.ok) disegna({ errore: esito.ambiguo ? TESTO_AMBIGUO : testoErroreComando(esito.code) });
     }
     /* F3-33b (25/09/2026), decisioni owner: i tetti si modificano nella card, in loco; «Salva» crea la versione N+1 da
@@ -12596,7 +12636,12 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       if (!prima) return;
       disegna({ inVolo: 'avvia-prima' });
       const esito = await client.avvia({ workflowId: ricevuta.workflowId, version: prima.version, definitionHash: prima.definitionHash });
-      await rileggi();
+      if (esito.ok && !salvaRunRicevuto(esito.dati?.runId)) {
+        await rileggi({ mostraRunStorico: false });
+        disegna({ errore: 'L’avvio non ha restituito un ID del run verificabile. Nessun run è stato attribuito a questo comando.' });
+        return;
+      }
+      await rileggi({ mostraRunStorico: esito.ok });
       if (!esito.ok) disegna({ errore: esito.ambiguo ? TESTO_AMBIGUO : testoErroreComando(esito.code) });
     }
     void rileggi();
@@ -15837,8 +15882,8 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
        da Aspetto, e da quel momento il timbro lo rende definitivo. */
     themePresetVersione: 0, sceneOverrideVersione: 0, backgroundMotionVersione: 0,
     themePreset: 'forge', colorMode: 'system', sceneOverride: 'follow-theme', // tema di serie: Forge (owner 24/09/2026 sera: «tema default forge»); una scelta timbrata v2 resta com'è
-    uiDensity: 'comoda', uiLanguage: 'sistema', // 06/9 B8: densità delle liste (mockup `data-densita`) e lingua dei menu (H21)
-    uiFontScale: 'default', chatFontScale: 'xcompact', composerShape: 'standard',
+    uiDensity: 'compatta', uiLanguage: 'sistema', // 06/9 B8: densità delle liste (mockup `data-densita`) e lingua dei menu (H21)
+    uiFontScale: 'large', chatFontScale: 'balanced', composerShape: 'standard',
     composerPlus: 'drawer', messageStyle: 'sections', streamingAnimation: 'fade',
     windowPresentation: 'drawer', immersiveHeader: false, chatFullWidth: false, reducedMotion: false,
     askTimeout: 'none', // 24/09/2026, decisione owner 35: la scadenza delle domande di TALOS, spenta di serie
@@ -16341,7 +16386,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     documento.appearance = { ...DESKTOP_APPEARANCE_DEFAULTS };
     if (!salvaImpostazioniDesktop(documento)) return;
     const composerSaved = resetComposerSize();
-    workspacePreferences.update({ density: 'comfortable' });
+    workspacePreferences.update({ density: 'compact' });
     applicaAspettoDesktop(documento.appearance);
     const screen = $('#schermoImpostazioni');
     montaImpostazioni(screen, documento.appearance, { recupera: id => $('#' + id), cambiaSezione: setSettingsSection, defaultValues: DESKTOP_APPEARANCE_DEFAULTS, ripristinaAspetto: resettaAspettoDesktop });
@@ -17925,6 +17970,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
      */
     if (evento.type === 'CUSTOM' && evento.name === 'talos.fine-rigiocata') {
       state.realSession.inRigiocata = false;
+      disegnaFasciaPianoRichiesto();
       accendiRagionamentiApertiDopoLaStoria();
       /*
        * ⛔ 14/09, giro vero della coda (due finestre): aperta una sessione CONCLUSA, `deferHistoricalRendering` restava vero per
@@ -18014,6 +18060,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
        RESTA): dal vivo la pagina li rilegge da qui. In RIGIOCATA no: la verità di adesso è il contratto della sessione, già
        applicato all'apertura (`applicaImpostazioniSessione`), e un cambio fatto DOPO a mano non deve tornare indietro. */
     if (evento.type === 'CUSTOM' && evento.name === 'talos.impostazioni-sessione') {
+      registraCambioPianoRichiesto(evento.value);
       if (state.realSession.inRigiocata) return;
       const valore = evento.value ?? {};
       if (['normale', 'piano'].includes(valore.modalitaOperativa)) state.modalitaOperativa = valore.modalitaOperativa;
@@ -18023,6 +18070,10 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       return;
     }
     if (['RunStarted', 'RunFinished', 'RunError'].includes(evento.type)) ultimoEventoGrafoMadre = { type: evento.type, code: evento.code };
+    if (evento.type === 'RunStarted') {
+      statoFasciaPianoRichiesto().richiesto = false;
+      disegnaFasciaPianoRichiesto();
+    }
     if (grafoAgenti && ['ToolCallStart', 'ToolCallResult', 'StateDelta', 'UserQuestionRequested', 'UserQuestionResolved', 'ApprovalRequested', 'ApprovalResolved', 'RunStarted', 'RunFinished', 'RunError'].includes(evento.type) && frameGrafoMadre === null) {
       frameGrafoMadre = requestAnimationFrame(() => { frameGrafoMadre = null; if (generation === state.realSession.generation) aggiornaGrafoAgenti(); });
     }
@@ -18180,7 +18231,9 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
          *   rigiocata, che è la stessa fonte da cui la chat ridisegna le bolle.
          */
         const domandaDelGiro = typeof evento.input?.consegna === 'string' ? evento.input.consegna : evento.input?.consegnaCorta;
-        if (typeof domandaDelGiro === 'string' && domandaDelGiro.trim() !== '') state.realSession.ultimaDomanda = domandaDelGiro;
+        if (evento.input?.origine !== 'delega' && typeof domandaDelGiro === 'string' && domandaDelGiro.trim() !== '') {
+          state.realSession.ultimaDomanda = domandaDelGiro;
+        }
         contextMonitor?.setRunning(true);
         /*
          * ⛔⛔⛔ 06/9, CB-04 — QUI è il confine fra due invii: il consumo
@@ -19331,6 +19384,10 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    */
   function collegaEventiSessione(sessionId, generation) {
     state.realSession.id = sessionId;
+    const fasciaPiano = statoFasciaPianoRichiesto();
+    if (fasciaPiano.sessionId !== sessionId) Object.assign(fasciaPiano, { sessionId, richiesto: false, modoContratto: null });
+    else fasciaPiano.richiesto = false;
+    disegnaFasciaPianoRichiesto();
     disegnaFasciaModoRitirato(); // F3-12: la fascia del modo tolto è della sessione a schermo, non di quella di prima
     programmaSchedaGithub(); // F6-1: la scheda GitHub è della sessione a schermo
     nascondiAvvisoPiano(); // D4: l'avviso del piano è della sessione a schermo
@@ -19470,6 +19527,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       resettaSuperficiRealiDedicate();
     }
     state.realSession.id = null;
+    disegnaFasciaPianoRichiesto();
     disegnaFasciaModoRitirato(); // F3-12: nessuna sessione, nessuna fascia
     programmaSchedaGithub(); // F6-1: nessuna sessione, niente modifiche da mostrare
     nascondiAvvisoPiano(); // D4: nessuna sessione, nessun avviso
@@ -19566,7 +19624,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   }
 
   async function reindirizzaSessioneReale(testo) {
-    if (attendiUploadImmagini()) return false;
+    if (attendiUploadAllegati()) return false;
     const immagini = allegatiComposer.filter(a => a.tipo === 'immagine');
     const sessionId = state.realSession.id;
     const pulito = String(testo || (immagini.length ? 'Descrivi l’immagine allegata.' : '')).trim();
@@ -20337,6 +20395,28 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       });
     }
   }
+  function statoFasciaPianoRichiesto() {
+    state.fasciaPianoRichiesto ??= { sessionId: null, richiesto: false, modoContratto: null };
+    return state.fasciaPianoRichiesto;
+  }
+  function disegnaFasciaPianoRichiesto() {
+    const fascia = document.getElementById('fasciaPianoRichiesto');
+    if (!fascia) return;
+    const stato = statoFasciaPianoRichiesto();
+    const visibile = Boolean(state.realSession.id && stato.sessionId === state.realSession.id
+      && stato.richiesto && stato.modoContratto === 'piano' && !state.realSession.inRigiocata);
+    fascia.hidden = !visibile;
+    const testo = fascia.querySelector('[data-fascia-piano-testo]');
+    if (testo) testo.textContent = visibile ? tr('Piano attivo dal prossimo giro') : '';
+  }
+  function registraCambioPianoRichiesto(valore) {
+    if (!valore || !['normale', 'piano'].includes(valore.modalitaOperativa)) return;
+    const stato = statoFasciaPianoRichiesto();
+    if (stato.sessionId !== state.realSession.id) Object.assign(stato, { sessionId: state.realSession.id, richiesto: false });
+    if (!state.realSession.inRigiocata) stato.modoContratto = valore.modalitaOperativa;
+    stato.richiesto = valore.modalitaOperativa === 'piano' && valore.motivo === 'piano-richiesto-dal-modello';
+    disegnaFasciaPianoRichiesto();
+  }
   async function scegliModoDallaFascia(modo) {
     const sessionId = state.realSession.id;
     const stato = statoFasciaModo();
@@ -20374,6 +20454,13 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       ? sessione.permessi
       : DESKTOP_CHAT_DEFAULTS.permissions;
     state.modalitaOperativa = normalizzaModoDiLavoro(sessione?.modalitaOperativa);
+    if (sessionId) {
+      const fasciaPiano = statoFasciaPianoRichiesto();
+      if (fasciaPiano.sessionId !== sessionId) Object.assign(fasciaPiano, { sessionId, richiesto: false });
+      fasciaPiano.modoContratto = state.modalitaOperativa;
+      if (fasciaPiano.modoContratto !== 'piano') fasciaPiano.richiesto = false;
+      disegnaFasciaPianoRichiesto();
+    }
     // F3-12: il contratto dice se la sessione era in Workflow (solo quando si sa DI QUALE sessione parla).
     if (sessionId) registraContrattoPerFasciaModo(sessionId, sessione);
     state.permessiPerAttrezzo = sessione?.permessiPerAttrezzo && typeof sessione.permessiPerAttrezzo === 'object'
@@ -22665,7 +22752,9 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         const costo = document.createElement('span');
         costo.className = 'talos-allegati__costo';
         costo.textContent = a.costoIgnoto ? 'costo ignoto' : costoAllegato(a, state.model).etichetta;
-        if (a.costoIgnoto) costo.title = 'Non sono riuscito a leggere le misure dell’immagine: il costo vero lo vedrai nel consumo del giro.';
+        if (a.costoIgnoto) costo.title = a.tipo === 'immagine'
+          ? 'Non sono riuscito a leggere le misure dell’immagine: il costo vero lo vedrai nel consumo del giro.'
+          : 'Il costo del file dipende da come verrà letto durante il giro.';
         const togli = document.createElement('button');
         togli.type = 'button';
         togli.className = 'talos-allegati__togli';
@@ -22725,12 +22814,13 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   }
   function svuotaAllegati() { state.imageDraftEpoch = (state.imageDraftEpoch || 0) + 1; allegatiComposer.length = 0; disegnaAllegati(); }
 
-  function uploadImmaginiInCorso() {
-    return (state.imageUploads || []).some(u => u.generation === state.realSession.generation && u.epoch === (state.imageDraftEpoch || 0));
+  function uploadAllegatiInCorso() {
+    return [...(state.imageUploads || []), ...(state.fileUploads || [])]
+      .some(u => u.generation === state.realSession.generation && u.epoch === (state.imageDraftEpoch || 0));
   }
-  function attendiUploadImmagini() {
-    if (!uploadImmaginiInCorso()) return false;
-    toast('Caricamento immagine', 'Attendi che compaia l’anteprima prima di inviare.');
+  function attendiUploadAllegati() {
+    if (!uploadAllegatiInCorso()) return false;
+    toast('Caricamento allegato', 'Attendi la ricevuta del file prima di inviare.');
     return true;
   }
 
@@ -22805,9 +22895,29 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       finally { state.imageUploads = state.imageUploads.filter(u => u !== upload); syncRunComposerState(); }
       return;
     }
-    let caratteri = file.size;
-    try { caratteri = (await file.text()).length; } catch { /* un binario resta alla sua taglia in byte */ }
-    aggiungiAllegato({ tipo: 'testo', nome: nomeBreveAllegato(file.name), percorso: file.name, caratteri });
+    if (file.size > 25 * 1024 * 1024) { toast('File troppo grande', 'Massimo 25 MiB per file.'); return; }
+    const sessionId = state.realSession.id;
+    if (!sessionId) { toast('File non allegato', 'Apri una conversazione prima di allegare un file.'); return; }
+    const upload = { generation: state.realSession.generation, epoch: state.imageDraftEpoch || 0 };
+    (state.fileUploads ||= []).push(upload);
+    syncRunComposerState();
+    try {
+      const response = await fetchSorvegliata(API(`/api/v1/sessions/${encodeURIComponent(sessionId)}/chat-files`), {
+        method: 'POST', headers: { 'Content-Type': 'application/octet-stream', 'X-Talos-File-Name': encodeURIComponent(file.name) },
+        body: file,
+      });
+      const result = await response.json().catch(() => null);
+      if (!response.ok || !result?.ok || result.data?.tipo !== 'file' || typeof result.data.percorso !== 'string') {
+        throw new Error(response.status === 413 ? 'Massimo 25 MiB per file.' : 'Il server non ha confermato la copia del file.');
+      }
+      if (upload.generation !== state.realSession.generation || upload.epoch !== (state.imageDraftEpoch || 0)) return;
+      aggiungiAllegato({ ...result.data, costoIgnoto: true });
+    } catch (error) {
+      if (upload.generation === state.realSession.generation) toast('File non allegato', error.message);
+    } finally {
+      state.fileUploads = state.fileUploads.filter(u => u !== upload);
+      syncRunComposerState();
+    }
   }
   /*
    * ⛔ 06/9, misurato con la sonda: con `new Image()` le misure tornavano a zero e l'allegato
@@ -22834,7 +22944,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   }
 
   function submitPrompt(text, { mostra = null, allegati = [] } = {}) {
-    if (attendiUploadImmagini()) return false;
+    if (attendiUploadAllegati()) return false;
     const immagini = allegati.filter(a => a.tipo === 'immagine');
     const value = String(text || '').trim();
     if (!value) return false;
@@ -24190,7 +24300,7 @@ ${testo}`;
   composerInput.addEventListener('keydown', (event) => {
     if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
       event.preventDefault();
-      if (attendiUploadImmagini()) return;
+      if (attendiUploadAllegati()) return;
       const testo = composerInput.value.trim() || (allegatiComposer.some(a => a.tipo === 'immagine') ? 'Descrivi l’immagine allegata.' : '');
       /*
        * ⛔⛔⛔ D-10D — UN COMANDO NON E' NE' UN INDIRIZZO NE' UNA CODA.

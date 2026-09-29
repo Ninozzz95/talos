@@ -161,7 +161,8 @@ export default defineConfig({
     stdout: 'pipe',
     stderr: 'pipe',
     env: {
-      ...process.env,
+      // Playwright eredita gia process.env nel processo server. Copiarlo qui
+      // serializza le chiavi nel report JSON (config.webServer.env).
       TALOS_HARNESS_UI_PORT: String(PORTA_TEST),
       TALOS_HARNESS_UI_SESSIONS_DIR: STORE_ISOLATO,
       // ⛔ 23/09/2026: custodia delle chiavi in memoria. Senza, una prova che salva una chiave finta

@@ -6,6 +6,46 @@ Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/). Versions
 
 ## Unreleased
 
+## desktop-v0.1.19 — 2026-09-29
+
+This release candidate addresses workflow results, chat attachments and settings lost after a
+restart. It also adds visible history and output controls to the workflow Board.
+
+### Added
+
+- Non-image files chosen, pasted or dropped into chat are copied into the session workspace before
+  they are attached. The UI waits for the upload receipt and passes the real relative path to the
+  agent. Each file is limited to 25 MiB; collisions receive a distinct name.
+- Workflow history can be searched and filtered by state. The Board opens a run by its exact ID,
+  pages through its results and offers the complete text or an explicit download for binary output.
+
+### Fixed
+
+- A dependent workflow step can read a completed direct predecessor's result without gaining
+  workflow control. Multiple results require an explicit selection; binary results are not decoded
+  as text, and links are not downloaded implicitly.
+- Results from delegated child sessions remain queued durably and wake an idle parent once with the
+  pending results. Stopped or unsettled parents keep the results for explicit recovery.
+- A request to enter Plan mode takes effect only after the turn and settings write succeed. The
+  banner and next turn follow the persisted mode, including after a restart.
+- A workflow start receipt opens the run it created, even when another run of the same version
+  exists; ambiguous starts do not claim an unrelated run.
+- System settings, including sidebar widths and chat/interface text sizes, persist across normal
+  restarts. New profiles start with a large interface, default chat text and compact lists. The
+  last recorded origin from a 0.1.18 installation is reused on upgrade without deleting older
+  browser data.
+- Chat file uploads use a bounded stream and a verified workspace root. The upload helper does not
+  inherit server credentials, and Playwright reports no longer serialize the test server's full
+  environment.
+
+### Known limits
+
+- Settings stored in origins older than the last recorded 0.1.18 origin, or in an origin without a
+  reliable launch record, remain intact but are not imported automatically.
+- A real Space Bunny Alpha run verified file reading, the exact answer and chat/model replay after
+  reload. The other model-driven workflow, delegation and upload-to-reading scenarios have
+  deterministic contract and browser coverage but have not all been certified with a live model.
+
 ## desktop-v0.1.18 — 2026-09-28
 
 Same product as `desktop-v0.1.16` and `desktop-v0.1.17`, which never published: both release jobs

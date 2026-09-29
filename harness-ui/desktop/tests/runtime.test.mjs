@@ -1,10 +1,38 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { resolve, join } from 'node:path';
-import { risolviPercorsi, creaAvvioFiglio, scegliPortaEffimera, validaHandshake, urlIngresso } from '../runtime.mjs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { risolviPercorsi, creaAvvioFiglio, scegliPortaEffimera, scegliPortaPersistente, validaHandshake, urlIngresso } from '../runtime.mjs';
 import { scegliMotoreLocale } from '../runtime.mjs';
 
 const percorsiR03 = { root: resolve('r'), server: resolve('r/server.mjs'), bootstrap: resolve('r/child-bootstrap.mjs'), localRuntime: { cpu: resolve('cpu/llama-server.exe'), vulkan: resolve('vulkan/llama-server.exe') } };
+test('PREFS-PORT-FILE — one OS-assigned port is retained per isolated desktop profile', async t => {
+  const dir = mkdtempSync(join(tmpdir(), 'talos-pref-origin-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const file = join(dir, 'desktop-origin.json');
+  const first = await scegliPortaPersistente(file);
+  assert.ok(first > 1023 && first !== 4174);
+  assert.equal(await scegliPortaPersistente(file), first);
+  assert.deepEqual(JSON.parse(readFileSync(file, 'utf8')), { version: 1, port: first });
+  writeFileSync(file, '{invalid', 'utf8');
+  await assert.rejects(scegliPortaPersistente(file), /origine|porta|file/u);
+});
+test('PREFS-LEGACY-LOG: the latest valid own startup record pins the former origin without merging profiles', async t => {
+  const dir = mkdtempSync(join(tmpdir(), 'talos-pref-legacy-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const file = join(dir, 'desktop-origin.json');
+  const log = join(dir, 'registro.log');
+  const row = (time, port) => `${time} Servizio locale avviato: pid 123, porta ${port}, generazione 1.\n`;
+  writeFileSync(log + '.precedente', row('2026-09-27T10:00:00.000Z', 49501));
+  writeFileSync(log, row('2026-09-28T10:00:00.000Z', 49502) +
+    '2026-09-29T10:00:00.000Z Servizio locale avviato: pid 123, porta 4174, generazione 1.\n' +
+    '2026-09-29T11:00:00.000Z user text Servizio locale avviato: pid 123, porta 49503, generazione 1.\n');
+  assert.equal(await scegliPortaPersistente(file), 49502);
+  assert.deepEqual(JSON.parse(readFileSync(file, 'utf8')), { version: 1, port: 49502 });
+  writeFileSync(file, '{invalid');
+  await assert.rejects(scegliPortaPersistente(file), /origine|porta|file/u);
+});
 test('R03-DISPOSITIVI — Vulkan solo con un dispositivo enumerato, sonda limitata e senza shell', () => {
   const scelta = scegliMotoreLocale({ percorsi: percorsiR03, env: {}, sonda: (p, args, options) => {
     assert.deepEqual(args, ['--list-devices']); assert.equal(options.shell, false); assert.ok(options.timeout > 0 && options.timeout <= 15000);

@@ -42,8 +42,12 @@ export const NOMI_UMANI_ATTREZZI = Object.freeze({
   time_now: 'data e ora',
   ask_user_question: 'domanda alla persona',
   present_plan: 'piano da approvare', // 24/09/2026, decisione owner 36
+  request_plan_mode: 'richiesta della modalità Piano',
   /* Integrazione 23/09: gli attrezzi di piano e di dialogo fra agenti arrivati col ramo Workflow. */
   workflow_plan_propose: 'proposta di workflow', // 25/09/2026: non «piano di lavoro», il nome rifiutato dall'owner il 17/09
+  workflow_status: 'stato del workflow',
+  workflow_output: 'lettura del risultato di un passo',
+  workflow_control: 'controllo del workflow',
   ask_parent: 'domanda all’agente che l’ha avviato',
   answer_parent_question: 'risposta all’agente che l’ha avviato',
   ask_child: 'domanda a un sotto-agente',
@@ -315,7 +319,11 @@ export const DESCRIZIONI_ATTREZZI = Object.freeze({
   time_now: 'Chiede che ora e che giorno è su questo computer, invece di indovinarlo.',
   ask_user_question: 'Mette in pausa il giro e chiede alla persona una decisione che non si può ricavare dai file o dal sistema.',
   present_plan: 'In modalità Piano, presenta il piano finito e aspetta la tua scelta: procedere (chiedendo conferma, accettando le modifiche o in una conversazione nuova) o continuare a pianificare.',
+  request_plan_mode: 'Chiede di passare alla modalità Piano dal giro successivo. Il cambio avviene solo dopo la conclusione riuscita e il salvataggio della sessione.',
   workflow_plan_propose: 'Propone un workflow a fasi da rivedere e approvare: non lo approva e non lo avvia.',
+  workflow_status: 'Legge lo stato dei workflow della sessione o il dettaglio di un run, senza modificarli.',
+  workflow_output: 'Legge un risultato testuale di un passo concluso; se i risultati sono più di uno, mostra gli ID da scegliere. Per un file binario mostra solo i metadati.',
+  workflow_control: 'Chiede di mettere in pausa, riprendere o fermare un workflow della sessione e ne restituisce la ricevuta.',
   ask_parent: 'Un sotto-agente chiede un fatto o una decisione all’agente che lo ha avviato, e aspetta la risposta.',
   answer_parent_question: 'Un sotto-agente risponde a una domanda dell’agente che lo ha avviato.',
   ask_child: 'Manda una domanda a un sotto-agente; la risposta arriva dopo, senza fermare il giro.',
