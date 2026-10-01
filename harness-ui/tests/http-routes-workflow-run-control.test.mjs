@@ -18,6 +18,7 @@ import { approveWorkflowProposal, proposeWorkflowFromTool } from '../src/workflo
 import { createCapacitaAdattiva, createWorkflowScheduler } from '../src/workflow/scheduler.mjs';
 import { createWorkflowStore, listRunIds, readRunState } from '../src/workflow/store.mjs';
 import { rimuoviCartellaDiProva } from './aiuto/rimuovi-cartella-di-prova.mjs';
+import { creaAttesaAProgresso } from './aiuto/attesa-a-progresso.mjs';
 
 const sessionId = '83000000-0000-4000-8000-000000000001';
 const altraSessione = '83000000-0000-4000-8000-000000000002';
@@ -58,17 +59,11 @@ function adattatoreFinto() {
 }
 
 // 15 s: nella suite intera (carico e un fsync a ogni fatto) 3 s non bastavano — misurato, due rosse solo lì
-async function aspettaChe(condizione, ms = 15_000) {
-  const fine = Date.now() + ms;
-  while (Date.now() < fine) {
-    if (await condizione()) return true;
-    await new Promise((r) => setTimeout(r, 5));
-  }
-  return Boolean(await condizione());
-}
+/* 01/10/2026: l'attesa conta il tempo SENZA progresso delle cartelle dati del banco (tests/aiuto/attesa-a-progresso.mjs). */
+const { aspettaChe, segui } = creaAttesaAProgresso({ ms: 15_000 });
 
 async function banco(t, { conRuntime = true } = {}) {
-  const root = mkdtempSync(join(tmpdir(), 'talos-workflow-http-run-control-'));
+  const root = segui(mkdtempSync(join(tmpdir(), 'talos-workflow-http-run-control-')));
   const store = await createWorkflowStore({ workflowDataRoot: root, workspaceRoots: [],
     resultLimits: { maxItemBytes: 1_048_576, maxRunBytes: 8_388_608 } });
   const finto = adattatoreFinto();
