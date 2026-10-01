@@ -63,8 +63,8 @@ test('PK-UI-02/03 — campi cloud reali, salvataggio HTTP, ricarica, errore e di
   const css = await build({ absWorkingDir: tmpdir(), plugins: [sorgenti], entryPoints: [resolve(frontend, 'src/styles/main.css')], tsconfigRaw: {}, bundle: true, write: false, external: ['./fonts/*'], logLevel: 'silent' });
   const browser = await chromium.launch({ channel: 'chrome', headless: true });
   t.after(() => browser.close());
-  for (const width of [1440, 390]) {
-    const page = await browser.newPage({ viewport: { width, height: 1000 }, reducedMotion: 'reduce' });
+  for (const width of [1920, 1440, 390]) {
+    const page = await browser.newPage({ viewport: { width, height: width === 1920 ? 1080 : 1000 }, reducedMotion: 'reduce' });
     t.after(() => page.close());
     const errors = []; page.on('pageerror', e => errors.push(e.message));
     await page.route('**/*', route => route.request().url().startsWith(base + '/') ? route.continue() : route.abort());
@@ -109,7 +109,7 @@ test('PK-UI-02/03 — campi cloud reali, salvataggio HTTP, ricarica, errore e di
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
     assert.equal(await page.evaluate(() => matchMedia('(prefers-reduced-motion: reduce)').matches), true);
     const foto = await preparaCartellaFoto('bc12-provider-pk');
-    await page.screenshot({ path: resolve(foto, `PK-UI-${width}.png`), fullPage: true });
+    if (width === 1920) await page.screenshot({ path: resolve(foto, `PK-UI-${width}.png`), fullPage: true });
     assert.deepEqual(errors, []);
   }
 });

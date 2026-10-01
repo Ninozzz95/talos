@@ -1,4 +1,6 @@
 import { validaFallbackProviders } from './model-destination.mjs';
+import { pipeline } from 'node:stream/promises';
+import { prepareProcessOutputDownload } from './process-output-download.mjs';
 import { chiediMiglioramentoAlProvider } from './prompt-enhancer-provider.mjs';
 import { comprimiDiffPerMessaggio, promptMessaggioCommit, pulisciMessaggioGenerato } from './messaggio-commit.mjs'; // F6-1 ✨, 26/09
 import { CARTELLA_ASSISTENZA_PREDEFINITA, MAX_DOMANDA_ASSISTENZA, cercaAssistenza } from './assistenza.mjs';
@@ -211,9 +213,11 @@ const API_ERROR_CODES = new Set([
   'PROVIDER_POOL_FULL', 'PROVIDER_KEY_NOT_FOUND', 'PROVIDER_FALLBACK_INVALID', 'PROVIDER_FALLBACK_TOOLS_UNSUPPORTED', // P-H (12/09): pool di chiavi e riserve — senza questa riga il codice vero cadeva nel 500 di fondo
   // ⭐ 04/9, R-03 — fonte della ricerca web (search-source-store.mjs, duckduckgo-search.mjs).
   'SEARCH_SOURCE_INVALID', 'SEARCH_KEY_REQUIRED', 'SEARCH_KEY_INVALID', 'SEARCH_ENDPOINT_INVALID', 'SEARCH_STORE_UNAVAILABLE', 'SEARCH_NOT_READY', 'SEARCH_BLOCKED', 'SEARCH_UNREACHABLE', 'SEARCH_FAILED',
+  'WSL_STORE_UNAVAILABLE', // F009 (01/10/2026): la preferenza dell'utente di WSL
   // ⭐ 04/9, W1-10 — token di loopback della shell Electron: /api/* senza il cookie talos_token.
   'AUTH_REQUIRED',
   'CHAT_FILE_ORIGIN_FORBIDDEN',
+  'PAGE_ORIGIN_FORBIDDEN',
   /* ⭐⭐⭐ 05/9, W1-01 — schede terminale per sessione (src/terminal-registry.mjs). Il tetto NON è burocrazia: su Windows ogni PTY porta con sé un processo conhost (node-pty#471). */
   'TERMINAL_LIMIT_REACHED', 'TERMINAL_STORE_UNAVAILABLE',
   'BROWSER_PROXY_SOLO_LOCALE', 'BROWSER_PROXY_NON_HTML', 'BROWSER_PROXY_TROPPO_GRANDE', 'BROWSER_PROXY_IRRAGGIUNGIBILE', // Browser con annotazione 06/9
@@ -552,12 +556,14 @@ const STATUS_BY_CODE = Object.freeze({
   SEARCH_KEY_INVALID: 422,
   SEARCH_ENDPOINT_INVALID: 422,
   SEARCH_STORE_UNAVAILABLE: 503,
+  WSL_STORE_UNAVAILABLE: 503,
   SEARCH_NOT_READY: 409,
   SEARCH_BLOCKED: 502,
   SEARCH_UNREACHABLE: 502,
   SEARCH_FAILED: 502,
   AUTH_REQUIRED: 401,
   CHAT_FILE_ORIGIN_FORBIDDEN: 403,
+  PAGE_ORIGIN_FORBIDDEN: 403,
   RUNTIME_NOT_AVAILABLE: 503,
   RUNTIME_UNREACHABLE: 503,
   RUNTIME_OPERATION_UNSUPPORTED: 409,
@@ -634,12 +640,14 @@ const MESSAGE_BY_CODE = Object.freeze({
   SEARCH_KEY_INVALID: 'Chiave di ricerca non valida',
   SEARCH_ENDPOINT_INVALID: 'Indirizzo della fonte non valido',
   SEARCH_STORE_UNAVAILABLE: 'Portachiavi della ricerca non disponibile',
+  WSL_STORE_UNAVAILABLE: 'Preferenze di WSL non disponibili',
   SEARCH_NOT_READY: 'La fonte di ricerca non è pronta',
   SEARCH_BLOCKED: 'La fonte di ricerca ha rifiutato la richiesta',
   SEARCH_UNREACHABLE: 'La fonte di ricerca non è raggiungibile',
   SEARCH_FAILED: 'La ricerca non è riuscita',
   AUTH_REQUIRED: 'Questo server accetta solo la finestra TALOS che lo ha avviato',
   CHAT_FILE_ORIGIN_FORBIDDEN: 'Carica il file dalla finestra TALOS di questa sessione',
+  PAGE_ORIGIN_FORBIDDEN: 'Apri la pagina dalla finestra TALOS di questa sessione',
   TERMINAL_LIMIT_REACHED: 'Hai già il massimo di terminali aperti per questa sessione: chiudine uno e riprova',
   TERMINAL_STORE_UNAVAILABLE: 'I terminali non sono disponibili su questo server',
   BROWSER_PROXY_SOLO_LOCALE: 'Il proxy con annotazione vale solo per un dev server sul tuo computer',
@@ -1506,6 +1514,7 @@ const ROTTE_API = Object.freeze([
   // ⭐ F3 (24/09): lo spegnimento gentile (loopback + gettone) e l'Annulla della compattazione automatica.
   { schema: '/api/v1/admin/shutdown', metodi: ['POST'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/compaction\/([^/]+)\/undo$/, metodi: ['POST'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/compaction-policy$/, metodi: ['GET'] },
   { schema: /^\/api\/v1\/workflows\/([^/]+)\/versions\/([^/]+)$/, metodi: ['GET'] },
   { schema: /^\/api\/v1\/workflows\/([^/]+)\/versions\/([^/]+)\/approve$/, metodi: ['POST'] },
   /* F3-33b (25/09/2026): «Modifica» i tetti, una versione nuova da riapprovare. */
@@ -1527,6 +1536,7 @@ const ROTTE_API = Object.freeze([
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/workflows\/([^/]+)\/history$/, metodi: ['GET'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/workflows\/([^/]+)\/groups\/([^/]+)$/, metodi: ['GET'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/workflows\/([^/]+)\/nodes\/([^/]+)$/, metodi: ['GET'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/process-outputs\/([^/]+)$/, metodi: ['GET'] },
   /* F-014 (piano 0.1.19 §1.6, 28/09): l'output INTEGRALE di un passo concluso, i byte verificati dal CAS. */
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/workflows\/([^/]+)\/nodes\/([^/]+)\/output$/, metodi: ['GET'] },
   /* Refactor dei grafi, decisioni owner 24 e 30 (26/09/2026): la discendenza di un passo, per il focus a monte e a valle. */
@@ -1574,6 +1584,7 @@ const ROTTE_API = Object.freeze([
   { schema: '/api/v1/browser/vivo/schermo', metodi: ['GET'] },
   { schema: '/api/v1/browser/vivo/stato', metodi: ['GET'] },
   { schema: '/api/v1/search-source', metodi: ['GET'] },
+  { schema: '/api/v1/wsl', metodi: ['GET', 'POST'] }, // F009 (01/10/2026): i fatti di WSL e la preferenza dell'utente normale
   { schema: '/api/v1/sessions', metodi: ['GET', 'POST'] },
   { schema: '/api/v1/assistenza', metodi: ['POST'] },
   { schema: '/api/v1/automations', metodi: ['GET', 'POST'] },
@@ -2698,6 +2709,8 @@ export function createHttpApp({
   setupStatoFn = null,
   // ⭐ 04/9, R-03 — fonte della ricerca web scelta dalle Impostazioni (parità mobile) + prova reale.
   searchSourceStore = null, provaRicercaWebFn = null,
+  // F009 (owner 01/10/2026) — l'utente di WSL: i fatti (GET) e la preferenza «usa un utente normale» (POST).
+  preferenzeWslStore = null,
   cartellaAssistenza = CARTELLA_ASSISTENZA_PREDEFINITA, cercaAssistenzaFn = cercaAssistenza,
   // ⭐ 04/9, W1-10 — token di loopback (config.token): quando c'è, /api/* vuole il cookie talos_token; `GET /?token=<t>` lo imposta e rimanda a `/`.
   token = null,
@@ -3341,6 +3354,58 @@ export function createHttpApp({
         if (res.headersSent) { if (!res.writableEnded) res.end(); return; }
         const code = error?.code === 'QUERY_INVALID' ? 'QUERY_INVALID' : error?.code === 'WORKFLOW_STORE_UNAVAILABLE' ? 'WORKFLOW_STORE_UNAVAILABLE' : 'INTERNAL_ERROR';
         sendJson(res, STATUS_BY_CODE[code] ?? 500, errorEnvelope(code, clock, { errore: error }), method);
+      }
+      return;
+    }
+
+    const processOutputPath=(method==='GET'||method==='HEAD')&&/^\/api\/v1\/sessions\/([^/]+)\/process-outputs\/([^/]+)$/.exec(url.pathname);
+    if(processOutputPath){
+      const controller=new AbortController();
+      const abort=()=>{if(!res.writableFinished)controller.abort();};
+      req.once('aborted',abort);res.once('close',abort);
+      try{
+        const keys=[...url.searchParams.keys()];
+        if(keys.length!==new Set(keys).size||keys.some(k=>!['stream','offset','limit','format'].includes(k)))throw Object.assign(new Error('Invalid query'),{code:'OUTPUT_INVALID_INPUT'});
+        const args={outputId:decodeURIComponent(processOutputPath[2])};
+        for(const key of keys){
+          const value=url.searchParams.get(key);
+          if(key==='offset'||key==='limit'){
+            if(!/^(0|[1-9]\d*)$/.test(value))throw Object.assign(new Error('Invalid byte range'),{code:'OUTPUT_INVALID_INPUT'});
+            args[key]=Number(value);
+          }else args[key]=value;
+        }
+        if(typeof sessionRegistry?.leggiOutputProcesso!=='function')throw Object.assign(new Error('Output reader unavailable'),{code:'OUTPUT_SESSION_UNAVAILABLE'});
+        const sessionId=decodeURIComponent(processOutputPath[1]);
+        if(args.format==='download'){
+          if(keys.some(k=>!['stream','format'].includes(k)))throw Object.assign(new Error('Download does not accept byte ranges'),{code:'OUTPUT_INVALID_INPUT'});
+          const {snapshot,chunks}=await prepareProcessOutputDownload((...a)=>sessionRegistry.leggiOutputProcesso(...a),
+            {sessionId,outputId:args.outputId,stream:args.stream},{signal:controller.signal});
+          res.writeHead(200,{...SECURITY_HEADERS,'Content-Type':'application/octet-stream','Content-Length':String(snapshot.bytes),
+            'Cache-Control':'private, no-store','Content-Disposition':`attachment; filename="output-${snapshot.outputId}-${snapshot.stream}-retained.bin"`,
+            'X-Talos-Output-State':snapshot.state,'X-Talos-Output-Snapshot-Bytes':String(snapshot.bytes),
+            'X-Talos-Output-Stored-Bytes':String(snapshot.storedBytes),'X-Talos-Output-Observed-Bytes':String(snapshot.observedBytes),
+            'X-Talos-Output-Footer-Status':snapshot.footerStatus});
+          if(method==='HEAD')res.end();
+          else await pipeline(chunks,res,{signal:controller.signal});
+          return;
+        }
+        const data=await sessionRegistry.leggiOutputProcesso(sessionId,args,{signal:controller.signal});
+        if(args.format==='raw'){
+          res.writeHead(200,{...SECURITY_HEADERS,'Content-Type':'application/octet-stream','Content-Length':data.data.length,
+            'Cache-Control':'private, no-store','Content-Disposition':`attachment; filename="output-${data.outputId}-${data.stream}-${data.offset}-${data.bytes}.bin"`,
+            'X-Talos-Output-Offset':String(data.offset),'X-Talos-Output-Next-Offset':data.nextOffset===null?'':String(data.nextOffset),
+            'X-Talos-Output-Available-Bytes':String(data.availableBytes),'X-Talos-Output-State':data.state});
+          res.end(method==='HEAD'?undefined:data.data);
+        }else sendJson(res,200,successEnvelope(data,clock),method,{'Cache-Control':'private, no-store'});
+      }catch(error){
+        // An interrupted attachment must fail as a transfer, never look like a complete file with JSON appended.
+        if(res.headersSent||controller.signal.aborted){if(!res.destroyed)res.destroy();return;}
+        const code=error?.code==='OUTPUT_NOT_FOUND'?'NOT_FOUND':error instanceof URIError?'OUTPUT_INVALID_INPUT':
+          ['OUTPUT_INVALID_INPUT','OUTPUT_OFFSET_NOT_TEXT_BOUNDARY','OUTPUT_SESSION_UNAVAILABLE','OUTPUT_INTEGRITY_FAILED'].includes(error?.code)?error.code:'OUTPUT_READ_FAILED';
+        const status=code==='NOT_FOUND'?404:code==='OUTPUT_SESSION_UNAVAILABLE'?503:['OUTPUT_INVALID_INPUT','OUTPUT_OFFSET_NOT_TEXT_BOUNDARY'].includes(code)?400:500;
+        sendJson(res,status,errorEnvelope(code,clock),method);
+      }finally{
+        req.removeListener('aborted',abort);res.removeListener('close',abort);
       }
       return;
     }
@@ -4025,6 +4090,9 @@ export function createHttpApp({
     if (creaPaginaMatch) {
       try {
         requireNoQuery(url);
+        if (rifiutoOrigineApprovazione(req, { token }) === 'altra-finestra') {
+          throw Object.assign(new Error('Apri la pagina dalla finestra TALOS di questa sessione'), { code: 'PAGE_ORIGIN_FORBIDDEN' });
+        }
         let sessionId;
         try { sessionId = decodeURIComponent(creaPaginaMatch[1]); } catch { sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method); return; }
         const corpo = await leggiCorpoJson(req);
@@ -4971,6 +5039,27 @@ export function createHttpApp({
       return;
     }
 
+    /*
+     * ⛔⛔ F009 (owner 01/10/2026, «come gli altri, insieme») — la preferenza dell'utente di WSL. Stessa disciplina della fonte
+     * di ricerca: corpo con SOLO il campo atteso, errori con codice dichiarato. Risponde con lo stato aggiornato (fatti
+     * compresi), così chi ha cambiato la scelta vede subito con che utente gireranno i comandi.
+     */
+    if (method === 'POST' && url.pathname === '/api/v1/wsl') {
+      try {
+        requireNoQuery(url);
+        if (!preferenzeWslStore) { const error = new Error('Preferenze di WSL non configurate'); error.code = 'WSL_STORE_UNAVAILABLE'; throw error; }
+        const body = await leggiCorpoJson(req, 4 * 1024);
+        const keys = Object.keys(body || {});
+        if (keys.length !== 1 || typeof body.usaUtenteNormale !== 'boolean') { const error = new Error('Corpo non valido'); error.code = 'QUERY_INVALID'; throw error; }
+        preferenzeWslStore.imposta({ usaUtenteNormale: body.usaUtenteNormale });
+        sendJson(res, 200, successEnvelope(await preferenzeWslStore.stato(), clock), method);
+      } catch (error) {
+        const normalized = normalizeError(error);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
+      }
+      return;
+    }
+
     const providerTestMatch = /^\/api\/v1\/providers\/([^/]+)\/test$/.exec(url.pathname);
     if (method === 'POST' && providerTestMatch) {
       try {
@@ -5669,7 +5758,9 @@ export function createHttpApp({
           }
         }
         if (req.aborted || res.destroyed) return;
-        sendJson(res, 200, successEnvelope({ ok: true, workflowEliminati, workflowNonEliminati }, clock), method);
+        sendJson(res, 200, successEnvelope({ ok: true, workflowEliminati, workflowNonEliminati,
+          ...(esito.outputCleanup ? {outputCleanup: esito.outputCleanup} : {}),
+        }, clock), method);
       } catch (error) {
         const normalized = normalizeError(error);
         sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
@@ -6123,6 +6214,25 @@ export function createHttpApp({
       return;
     }
 
+    const policyMatch = method === 'GET' && sessionRegistry && typeof sessionRegistry.politicaCompattazione === 'function'
+      && /^\/api\/v1\/sessions\/([^/]+)\/compaction-policy$/.exec(url.pathname);
+    if (policyMatch) {
+      try {
+        requireNoQuery(url);
+        let sessionId;
+        try { sessionId = decodeURIComponent(policyMatch[1]); }
+        catch { sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method); return; }
+        const policy = sessionRegistry.politicaCompattazione(sessionId);
+        if ('erroreAvvio' in policy) { const error = new Error(policy.erroreAvvio); error.code = policy.code; throw error; }
+        if (req.aborted || res.destroyed) return;
+        sendJson(res, 200, successEnvelope(policy, clock), method);
+      } catch (error) {
+        const normalized = normalizeError(error);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
+      }
+      return;
+    }
+
     const compactMatch = method === 'POST' && sessionRegistry
       && /^\/api\/v1\/sessions\/([^/]+)\/compact$/.exec(url.pathname);
     if (compactMatch) {
@@ -6293,7 +6403,7 @@ export function createHttpApp({
         try { sessionId = decodeURIComponent(doveMatch[1]); }
         catch { sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method); return; }
         const corpo = await leggiCorpoJson(req);
-        const esito = sessionRegistry.doveGiranoIComandi(sessionId, corpo?.dove ?? null);
+        const esito = await sessionRegistry.doveGiranoIComandi(sessionId, corpo?.dove ?? null);
         if ('erroreAvvio' in esito) { const e = new Error(esito.erroreAvvio); e.code = esito.code; throw e; }
         if (req.aborted || res.destroyed) return;
         sendJson(res, 200, successEnvelope({ ok: true, dove: esito.dove }, clock), method);
@@ -6346,7 +6456,7 @@ export function createHttpApp({
         try { sessionId = decodeURIComponent(conversazioneMatch[1]); }
         catch { sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method); return; }
         const corpo = await leggiCorpoJson(req);
-        const esito = sessionRegistry.comandiNellaConversazione(sessionId, corpo?.acceso);
+        const esito = await sessionRegistry.comandiNellaConversazione(sessionId, corpo?.acceso);
         if ('erroreAvvio' in esito) { const e = new Error(esito.erroreAvvio); e.code = esito.code; throw e; }
         if (req.aborted || res.destroyed) return;
         sendJson(res, 200, successEnvelope({ ok: true, acceso: esito.acceso }, clock), method);
@@ -7083,6 +7193,11 @@ export function createHttpApp({
         if (!sessionRegistry?.elencaAttrezziPredefiniti) { const errore = new Error('Elenco attrezzi non configurato'); errore.code = 'REPORT_UNAVAILABLE'; throw errore; }
         const esito = await sessionRegistry.elencaAttrezziPredefiniti();
         data = { attrezzi: esito.attrezzi, errore: esito.errore };
+      } else if (url.pathname === '/api/v1/wsl') {
+        /* F009 — i fatti di WSL e la preferenza: il foglio «Dove girano i comandi» e le Impostazioni li mostrano. */
+        requireNoQuery(url);
+        if (!preferenzeWslStore) { const error = new Error('Preferenze di WSL non configurate'); error.code = 'WSL_STORE_UNAVAILABLE'; throw error; }
+        data = await preferenzeWslStore.stato();
       } else if (url.pathname === '/api/v1/search-source') {
         requireNoQuery(url);
         if (!searchSourceStore) { const error = new Error('Fonte di ricerca non configurata'); error.code = 'SEARCH_STORE_UNAVAILABLE'; throw error; }

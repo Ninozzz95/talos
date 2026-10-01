@@ -83,6 +83,7 @@ const CLASSI_DEL_GUASTO = Object.freeze({
 });
 
 export function classeDelFallimento({ classeErrore = null, codiceErrore = null } = {}) {
+  if (codiceErrore === 'PROVIDER_OUTCOME_UNKNOWN') return { errorClass: 'internal', retryable: false };
   if (codiceErrore === 'PROVIDER_NETWORK_ERROR') return { errorClass: 'transient_network', retryable: true };
   const [errorClass, retryable] = CLASSI_DEL_GUASTO[classeErrore] ?? ['internal', false];
   return { errorClass, retryable };

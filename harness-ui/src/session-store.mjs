@@ -60,6 +60,16 @@ function percorsoDi(cartellaStore, sessionId) {
   return join(cartellaStore, `${sessionId}${ESTENSIONE}`);
 }
 
+/*
+ * Politica di taglio di `naviga` (owner 01/10/2026, «Come Hermes» + «per sessione, come Claude Code»): le pagine web
+ * tagliate si salvano intere qui, una cartella per sessione, e se ne vanno con lei (`eliminaSessionePersistita`).
+ * Claude Code fa lo stesso con `<progetto>/<sessione>/tool-results/`. ⛔ Una SOTTOcartella del negozio, non un file
+ * accanto ai journal: `elencaSessioniPersistite` guarda solo i FILE `.jsonl`, e una cartella non diventa mai una sessione.
+ */
+export function cartellaPagineWebDi(cartellaStore, sessionId) {
+  return join(cartellaStore, 'pagine-web', sessionId);
+}
+
 /**
  * Accoda UNA riga — mai una riscrittura del file intero (la classe di
  * bug vista in ricerca, vedi la testa del file). `record` è già serializzabile (un evento AG-UI,
@@ -677,6 +687,23 @@ export async function elencaSessioniPersistite({ cartellaStore, conDiagnostica =
   ] };
 }
 
+/** Verify journal presence without following links; uncertainty is never absence. */
+export async function esisteSessionePersistita({ cartellaStore, sessionId }, deps = {}) {
+  // Store IDs are database keys, not necessarily filesystem-safe session IDs.
+  // Recovery must never turn a forged key or an unreadable journal into "absent".
+  if (typeof sessionId !== 'string' || !/^[a-zA-Z0-9_-]{1,256}$/.test(sessionId)) {
+    throw new SessionStoreError('Identificatore sessione non valido per il recupero.', 'SESSION_STORE_INSPECTION_FAILED');
+  }
+  try {
+    const info = await (deps.lstatFn ?? fsp.lstat)(percorsoDi(cartellaStore, sessionId));
+    if (!info.isFile() || info.isSymbolicLink()) throw new SessionStoreError('Il registro della sessione non e un file regolare.', 'SESSION_STORE_INSPECTION_FAILED');
+    return true;
+  } catch (error) {
+    if (error?.code === 'ENOENT') return false;
+    throw new SessionStoreError('Impossibile verificare la presenza del registro della sessione.', 'SESSION_STORE_INSPECTION_FAILED');
+  }
+}
+
 /**
  * ⭐⭐⭐ 30/8, QA visiva (Task 14) — trovato dal vivo: nessun modo di
  * eliminare una sessione, né qui né lato client. 144+ sessioni
@@ -687,10 +714,18 @@ export async function elencaSessioniPersistite({ cartellaStore, conDiagnostica =
  */
 export async function eliminaSessionePersistita({ cartellaStore, sessionId }, deps = {}) {
   const unlinkFn = deps.unlinkFn ?? fsp.unlink;
+  const rmFn = deps.rmFn ?? fsp.rm;
   const percorso = percorsoDi(cartellaStore, sessionId);
   const precedente = codeDiScrittura.get(percorso) ?? Promise.resolve();
   const corrente = precedente.catch(() => {}).then(async () => {
     try {
+      /*
+       * Le pagine web salvate della sessione (owner 01/10/2026, «per sessione, come Claude Code») se ne vanno con lei, e
+       * PRIMA del journal: se non si possono togliere la sessione resta intera, e il registro la rimette com'era.
+       * ⛔ `fs.rm` ricorsivo stacca un collegamento o una giunzione senza entrarci (lezione robocopy del 17/09: la
+       *   cartella a cui punta non si svuota — NAV-STORE-02 lo prova con una giunzione vera).
+       */
+      await rmFn(cartellaPagineWebDi(cartellaStore, sessionId), { recursive: true, force: true, maxRetries: 3 });
       await unlinkFn(percorso);
     } catch (errore) {
       if (errore?.code === 'ENOENT') return;

@@ -143,6 +143,27 @@ test('PROVIDER-PROBE-05 — un provider senza chiave (Ollama) si prova lo stesso
   assert.equal(chiamate[0].headers.Authorization, undefined);
 });
 
+for (const status of [401, 403]) test(`P2-PROBE-KEYLESS-${status} non dichiara rifiutata una credenziale assente`, async () => {
+  const { probe, chiamate } = sonda({ chiave: null, endpoint: 'http://127.0.0.1:11434', risposta: { ok: false, status } });
+  const esito = await probe.prova('ollama');
+  assert.equal(esito.esito, 'non-autorizzato');
+  assert.equal(esito.httpStatus, status);
+  assert.equal(esito.credenzialeVerificata, null);
+  assert.doesNotMatch(esito.motivo, /credenziale.*rifiutat|chiave.*rifiutat/iu);
+  assert.equal(chiamate.length, 1);
+  assert.equal(chiamate[0].headers.Authorization, undefined);
+});
+
+test('P2-PROBE-OPTIONAL-KEY-403 conserva la chiave come non giudicata', async () => {
+  const { probe, chiamate } = sonda({ chiave: 'finta-ollama', endpoint: 'http://127.0.0.1:11434', risposta: { ok: false, status: 403 } });
+  const esito = await probe.prova('ollama');
+  assert.equal(esito.esito, 'non-autorizzato');
+  assert.equal(esito.httpStatus, 403);
+  assert.equal(esito.credenzialeVerificata, null);
+  assert.match(esito.motivo, /accesso|permess/iu);
+  assert.equal(chiamate[0].headers.Authorization, undefined, 'la sonda Ollama non invia la chiave facoltativa');
+});
+
 test('PROVIDER-PROBE-06 — un servizio che non risponde è «irraggiungibile», mai «rifiutato»', async () => {
   const { probe } = sonda({ lancia: Object.assign(new Error('boom'), { name: 'TypeError' }) });
   const esito = await probe.prova('openai');

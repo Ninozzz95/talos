@@ -108,6 +108,17 @@ test('R02-PERCORSI — binari inclusi nelle risorse e scoperta sorgente conserva
   const p = risolviPercorsi({ appPath, isPackaged: true, resourcesPath: resolve('risorse') });
   assert.deepEqual(p.localRuntime, { cpu: resolve('risorse/local-runtime/cpu/llama-server.exe'), vulkan: resolve('risorse/local-runtime/vulkan/llama-server.exe') });
   assert.equal(risolviPercorsi({ appPath }).localRuntime, undefined);
+  assert.equal(p.casaLinux, resolve('risorse/casa-linux/linux-x64'), 'fase B: i binari per Linux stanno nelle risorse, come llama');
+  assert.equal(risolviPercorsi({ appPath }).casaLinux, undefined);
+  assert.equal(risolviPercorsi({ appPath, isPackaged: true, resourcesPath: resolve('risorse'), harnessDir: resolve('dichiarato') }).casaLinux, undefined);
+});
+
+test('CASA-LINUX-AMBIENTE — installato: il server riceve TALOS_CASA_LINUX; dal sorgente resta quello dell ambiente (o nessuno)', () => {
+  const base = { execPath: resolve('Electron.exe'), port: 49152, token: 'a'.repeat(64), dataDir: resolve('profilo') };
+  const installato = creaAvvioFiglio({ ...base, percorsi: { ...percorsiR03, casaLinux: resolve('risorse/casa-linux/linux-x64') }, env: { TALOS_CASA_LINUX: 'vecchio' } });
+  assert.equal(installato.options.env.TALOS_CASA_LINUX, resolve('risorse/casa-linux/linux-x64'), 'il pacchetto vince su un valore ereditato');
+  assert.equal(creaAvvioFiglio({ ...base, percorsi: percorsiR03, env: {} }).options.env.TALOS_CASA_LINUX, undefined);
+  assert.equal(creaAvvioFiglio({ ...base, percorsi: percorsiR03, env: { TALOS_CASA_LINUX: 'dichiarato' } }).options.env.TALOS_CASA_LINUX, 'dichiarato');
 });
 
 test('R02-MOTORE — Vulkan verificato, ripiego CPU e override esplicito', async () => {

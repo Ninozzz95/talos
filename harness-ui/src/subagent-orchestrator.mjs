@@ -23,6 +23,7 @@
 import { existsSync, statSync } from 'node:fs';
 import { riassuntoAttivitaSessione } from './attivita-figlia.mjs';
 import { parse as parsePath } from 'node:path';
+import { delegaLimitata, modalitaDelega } from './delegation-contract.mjs';
 
 export const LIMITE_FIGLI_CONCORRENTI = 10;
 
@@ -37,12 +38,15 @@ export const LIMITE_FIGLI_CONCORRENTI = 10;
 export const LIMITE_PROFONDITA_DELEGA = 2;
 
 const TOOL_ERRORE_ESPLICITO = /^(?:\s*(?:error\b|exit\s+[1-9]\d*\b)|.*\b(?:ENOENT|no such file or directory|could not|unable to|failed to|not accessible|no file matches|non riesco|problema di configurazione)\b)/i;
-const TASK_SCRITTURA_ESPLICITA = /\b(?:scriv\w*|modific\w*|aggiorn\w*|cre\w*|aggiung\w*|elimin\w*|rinomin\w*|implement\w*|write|modify|update|create|add|delete|rename|implement)\b/i;
+// Compatibility heuristic for old journals, never an authorization mechanism.
+const VERBO_SCRITTURA = '(?:scriv\\w*|modific\\w*|aggiorn\\w*|crea(?:re|te|to|ta|ti)?|aggiung\\w*|elimin\\w*|rinomin\\w*|implement\\w*|writ(?:e|es|ing)|modify(?:ing)?|modifying|updat(?:e|es|ing)|creat(?:e|es|ing)|add(?:ing)?|delet(?:e|es|ing)|renam(?:e|es|ing))';
+const TASK_SCRITTURA_ESPLICITA = new RegExp(`\\b${VERBO_SCRITTURA}\\b`, 'i');
+const SCRITTURE_NEGATE = new RegExp(`\\b(?:senza|non(?:\\s+(?:devi|deve|puoi|bisogna))?|without|do\\s+not|don't)\\s+(?:mai\\s+)?${VERBO_SCRITTURA}\\b(?:\\s*(?:,\\s*(?:(?:e|o|and|or)\\s+)?|(?:e|o|and|or)\\s+)${VERBO_SCRITTURA}\\b)*`, 'gi');
 
 /** Una richiesta esplicita di modifica richiede una prova di file/artefatto, non solo una risposta tool. */
 export function taskRichiedeEvidenzaScrittura(task) {
   const testo = typeof task === 'string' ? task : task?.consegna ?? task?.consegnaCorta ?? '';
-  return TASK_SCRITTURA_ESPLICITA.test(String(testo));
+  return TASK_SCRITTURA_ESPLICITA.test(compitoDaPromptDiDelega(String(testo)).replace(SCRITTURE_NEGATE, ''));
 }
 
 /**
@@ -68,7 +72,13 @@ export function analizzaEvidenzaDelega(eventi) {
     }
     if (evento?.type !== 'ToolCallResult') continue;
     toolCalls += 1;
-    if (TOOL_ERRORE_ESPLICITO.test(String(evento.content ?? ''))) toolCallsFalliti += 1;
+    // Runtime metadata has priority over untrusted file/tool contents. Old journals
+    // retain their compatibility fallback until their producers supply a typed result.
+    const codicePresente = Number.isSafeInteger(evento.exitCode);
+    const erroreEsplicito = evento.isError === true || (codicePresente && evento.exitCode !== 0);
+    const esitoNoto = typeof evento.isError === 'boolean' || codicePresente;
+    const fallito = esitoNoto ? erroreEsplicito : TOOL_ERRORE_ESPLICITO.test(String(evento.content ?? ''));
+    if (fallito) toolCallsFalliti += 1;
     else toolCallsOk += 1;
   }
   return {
@@ -99,6 +109,9 @@ function motivoEvidenzaMancante(evidenza, richiestaScrittura = false) {
  * @param {{task?:string|object}} [contesto] richiesta originale, per distinguere una lettura da una modifica
  */
 export function esitoDelegaDaRisultato(risultato, eventi, contesto = {}) {
+  if (modalitaDelega(contesto.task) === 'invalida') {
+    return { esito: 'fallito', riassunto: null, motivo: 'Il contratto della delega non è valido: nessuna capacità può essere assunta.' };
+  }
   if (risultato?.ok) {
     const evidenza = analizzaEvidenzaDelega(eventi);
     const richiestaScrittura = taskRichiedeEvidenzaScrittura(contesto.task);
@@ -370,13 +383,25 @@ export function creaSubagentOrchestrator({
    * un'eccezione: il dispatcher del kernel lo traduce in un REFUSED
    * onesto per il modello, stessa disciplina di ogni altro cancello.
    */
-  function delegaSottoTask({ sessionPadreId, task, cartella }) {
+  function delegaSottoTask({ sessionPadreId, task, cartella, modalita = 'lettura' }) {
     return new Promise((resolve) => {
       const padre = sessioni.get(sessionPadreId);
       if (!padre) {
         resolve({ esito: 'rifiutato', motivo: 'la sessione padre non esiste più' });
         return;
       }
+      if (!['lettura', 'modifica'].includes(modalita)) {
+        resolve({ esito: 'rifiutato', motivo: 'La modalità della delega deve essere lettura o modifica.' });
+        return;
+      }
+      if (modalita === 'modifica' && (padre.permessi === 'Read only' || delegaLimitata(padre.task))) {
+        resolve({ esito: 'rifiutato', motivo: 'La sessione padre è limitata alla lettura: non può delegare modifiche.' });
+        return;
+      }
+      const taskFiglio = {
+        consegna: task, consegnaCorta: compitoDaPromptDiDelega(task),
+        contrattoDelega: { schema: 'talos.delegation.v1', modalita },
+      };
       /*
        * ⛔⛔⛔⛔ BC-76, secondo giro — PRIMA di tutto il resto, perché è l'unico rifiuto che protegge
        *   qualcosa che non si può disfare: una conversazione già uscita dal computer.
@@ -453,7 +478,7 @@ export function creaSubagentOrchestrator({
         conclusioneGestita = true;
         const voceFiglia = sessioni.get(figlioId);
         const eventi = voceFiglia?.eventi;
-        const esito = esitoDelegaDaRisultato(risultatoSessione, eventi, { task });
+        const esito = esitoDelegaDaRisultato(risultatoSessione, eventi, { task: taskFiglio });
         if (voceFiglia) {
           voceFiglia.esitoDelega = esito.esito;
           voceFiglia.evidenzaDelega = analizzaEvidenzaDelega(eventi);
@@ -521,7 +546,7 @@ export function creaSubagentOrchestrator({
          * ⇒ La forma corta si costruisce QUI, dove si sa che quella stringa è il prompt di una delega:
          *   `session-registry` non può saperlo, e il kernel dell'owner non è mio.
          */
-        task: { consegna: task, consegnaCorta: compitoDaPromptDiDelega(task) },
+        task: taskFiglio,
         padreId: sessionPadreId,
         profonditaDelega: profonditaVoluta,
         /* ⛔ BC-76: non `padre.modello` — vedi `modelloPerLaFigliaFn` in testa a questa funzione.
@@ -529,8 +554,10 @@ export function creaSubagentOrchestrator({
            prefisso della sua fonte, cioè l'unico che tiene la figlia sul motore di casa. */
         modelloRichiesta: modelloScelto.modello,
         reasoningRichiesto: padre.reasoning ?? null,
-        permessiRichiesti: padre.permessi ?? null,
-        permessiPerAttrezzoRichiesti: padre.permessiPerAttrezzo ?? null,
+        permessiRichiesti: modalita === 'lettura' ? 'Read only' : padre.permessi ?? null,
+        permessiPerAttrezzoRichiesti: modalita === 'lettura'
+          ? Object.fromEntries(Object.entries(padre.permessiPerAttrezzo ?? {}).filter(([, valore]) => valore === 'nega'))
+          : { ...padre.permessiPerAttrezzo },
         /* ⛔ F3-10 (23/09/2026, decisione owner D05-a): la figlia nasce SEMPRE in Normale, col suo ruolo di
            figlia. Prima ereditava `padre.modalitaOperativa ?? 'workflow'`, cioè un modo che non esiste più. */
         modalitaOperativaRichiesta: 'normale',
@@ -553,7 +580,7 @@ export function creaSubagentOrchestrator({
       resolve({
         esito: 'avviato',
         childId: figlioId,
-        riassunto: `Sotto-agente ${figlioId} avviato in background. Continua il lavoro: il risultato finale verrà consegnato separatamente quando sarà disponibile.`,
+        riassunto: `Sotto-agente ${figlioId} avviato in background (${modalita === 'lettura' ? 'sola lettura' : 'modifiche entro i permessi del padre'}). Continua il lavoro: il risultato finale verrà consegnato separatamente quando sarà disponibile.`,
       });
     });
   }

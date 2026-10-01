@@ -10,7 +10,7 @@ export function computeContextBudget(options) {
   return { ...profile, inputLimit, inputTokens, headroom: inputLimit - inputTokens, targetTokens: Math.floor(inputLimit * settings.targetRatio), triggerTokens: Math.floor(inputLimit * settings.triggerRatio), fits: inputTokens <= inputLimit, shouldPrepare: inputTokens >= inputLimit * settings.triggerRatio };
 }
 
-export function selectClosedPrefix(records, { retainRecentTurns = 2, force = false } = {}) {
+export function selectClosedPrefix(records, { retainRecentTurns = 2, force = false, withinTurn = false } = {}) {
   const userIndices = records.flatMap((record, index) => record.message.role === 'user' ? [index] : []);
   const desired = userIndices.length > retainRecentTurns ? userIndices[userIndices.length - retainRecentTurns] ?? records.length : 0;
   const pending = new Set();
@@ -26,6 +26,16 @@ export function selectClosedPrefix(records, { retainRecentTurns = 2, force = fal
   let cut = boundaries.filter(value => value <= desired).at(-1) ?? 0;
   // A manual request may retain fewer turns, but never half of the latest exchange.
   if (!cut && force) cut = boundaries.filter(value => value <= (userIndices.at(-1) ?? 0)).at(-1) ?? 0;
+  // G02 (01/10, like Hermes protect_last_n and Codex mid-turn auto-compaction): with no earlier exchange (a long first
+  // turn), the closed tool exchanges of the current turn may be summarised. The latest closed exchange stays whole and an
+  // open call is never split (boundaries exist only where no call is pending); the turn's person's message is shown
+  // verbatim before the summary by the composition (engine.mjs `compiled`). At least one exchange must go to the summary.
+  // Only on request (`withinTurn`): the engine asks for it when the context no longer fits, never at the soft trigger,
+  // or a turn whose tools take most of the trigger would be compacted at nearly every step (measured through the CLI).
+  if (!cut && force && withinTurn && userIndices.length) {
+    const withinTurn = boundaries.filter(value => value > userIndices.at(-1) + 1);
+    if (withinTurn.length >= 2) cut = withinTurn.at(-2);
+  }
   return { prefix: records.slice(0, cut), tail: records.slice(cut), pendingCalls: [...pending], coveredThrough: records[cut - 1]?.sequence ?? 0 };
 }
 

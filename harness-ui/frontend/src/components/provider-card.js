@@ -317,12 +317,22 @@ function iconaAzione(nome,lato='16px'){
  *   lette il 19/09/2026). Le vie d'uscita restano TRE e tutte visibili: Annulla, la croce, Esc.
  *   La differenza è dichiarata nella tabella del resoconto, non nascosta.
  *
- * ⛔ E IL PIEDE NON CHIUDE DOPO IL SALVATAGGIO. L'esito del salvataggio è un messaggio del
- *   prodotto (`[data-provider-feedback]`) che vive DENTRO il corpo — cioè dentro questa modale:
- *   chiudendo subito, un errore («Collegamento non salvato») finirebbe in un nodo appena sparito,
- *   e l'utente vedrebbe la modale chiudersi come se fosse andata bene. ⇒ Si salva e si resta.
+ * ⛔⛔ UN «SALVA» SOLO, CHE SALVA TUTTO E CHIUDE — owner 01/10/2026, dopo averlo provato: «quando inserisco
+ *   una chiave API la modale non si chiude quando faccio salva, rimane aperta e non c'è nessun messaggio di
+ *   successo, fa confondere molto». Riprodotto sul 4174 (POST intercettate): il piede era cablato a
+ *   `save-runtime` per quasi tutti i fornitori, quindi «Salva configurazione» mandava SOLO indirizzo e tempo;
+ *   la chiave incollata la salvava soltanto il pulsante INTERNO «Aggiungi chiave», e chi premeva quello in
+ *   fondo la perdeva in silenzio, con un «Collegamento salvato.» di 3,5 secondi. Decisione owner «Un Salva
+ *   solo, come Hermes»: Hermes (`apps/desktop/src/app/settings/connections-registry.tsx:410-484`) manda in
+ *   UN salvataggio tutto ciò che si è scritto — il segreto solo se digitato — e poi chiude l'editor
+ *   (`setEditor(null)`); un errore lascia l'editor aperto. Lo fa anche il mockup approvato (`save-provider` →
+ *   `closeModal(false)`): la versione del 19/09 («si salva e si resta») se n'era discostata.
+ *   ⇒ chiave scritta → si salva; indirizzo o tempo cambiati → si salvano; poi la modale si chiude e chi la
+ *     ospita annuncia il successo (`onConfigurazioneSalvata`); un errore resta DENTRO la modale, in rosso,
+ *     finché non lo chiudi tu. Il pulsante interno che salvava la sola chiave, qui dentro, si nasconde: due
+ *     pulsanti che salvano cose diverse sono esattamente come si è persa la chiave.
  */
-function apriConfigurazioneProvider(card,row){
+function apriConfigurazioneProvider(card,row,{onSalvaConfigurazione=null,onConfigurazioneSalvata=null}={}){
  if(!card||card.querySelector(':scope > .talos-provider__modale'))return null;
  const doc=card.ownerDocument||globalThis.document;
  const corpo=card.querySelector('.talos-provider__body');if(!corpo)return null;
@@ -361,13 +371,62 @@ function apriConfigurazioneProvider(card,row){
   *     parola del pulsante che preme davvero.
   */
  const salvaRuntime=corpo.querySelector('[data-provider-action="save-runtime"]');
- const salvaChiave=corpo.querySelector('[data-provider-action="save-key"]');
- const vero=salvaRuntime||salvaChiave;
- if(vero){
-  const primaria=el('button','talos-button talos-button--primary talos-button--sm',salvaRuntime?'Salva configurazione':(vero.textContent||'Salva'));
-  primaria.type='button';primaria.dataset.providerModaleSalva=salvaRuntime?'runtime':'chiave';
+ const campoChiave=corpo.querySelector('[data-provider-key]');
+ const salvaChiaveInterno=corpo.querySelector('[data-provider-salva-chiave]');
+ const configurazionePropria=row.id==='esterno'||CLOUD_CONFIGURABILI.has(row.id);
+ if(salvaRuntime||campoChiave){
+  const primaria=el('button','talos-button talos-button--primary talos-button--sm','Salva');
+  primaria.type='button';primaria.dataset.providerModaleSalva='';
   vesti(primaria,VESTITO.modale.pulsante);
-  primaria.addEventListener('click',()=>vero.click());
+  /* I doppioni spariscono finché la modale è aperta, e tornano alla chiusura (la card in linea li usa ancora): il pulsante
+     interno che salvava la sola chiave, il «⋯» la cui unica voce è «Salva collegamento», e la riga che resta senza niente. */
+  const nascosti=[];const nascondi=(n)=>{if(n&&!n.hidden){n.hidden=true;nascosti.push(n);}};
+  nascondi(salvaChiaveInterno);
+  const altre=corpo.querySelector('[data-provider-altre-azioni]');if(altre?.dataset.providerAltreAzioni==='solo-salva')nascondi(altre);
+  const rigaAzioni=(salvaChiaveInterno||altre)?.parentElement;if(rigaAzioni&&[...rigaAzioni.children].every(c=>c.hidden))nascondi(rigaAzioni);
+  dialogo.addEventListener('close',()=>{for(const n of nascosti)n.hidden=false;});
+  const avvisa=(testo,errore)=>{
+   const feedback=corpo.querySelector('[data-provider-feedback]');if(!feedback)return;
+   feedback.textContent=testo;feedback.classList.toggle('is-error',errore);feedback.setAttribute('role',errore?'alert':'status');
+   feedback.hidden=false;feedback.scrollIntoView?.({block:'nearest'});
+  };
+  const salva=async()=>{
+   if(dialogo.dataset.salvataggio==='in-corso')return;
+   const chiave=(campoChiave?.value||'').trim();
+   const letto=salvaRuntime&&!configurazionePropria?leggiCollegamentoProvider(row,corpo):null;
+   const collegamento=letto&&(letto.endpoint!==(row.endpoint||'')||letto.timeoutSeconds!==Number(row.timeoutSeconds??60))?{endpoint:letto.endpoint,timeoutSeconds:letto.timeoutSeconds}:null;
+   if(!chiave&&!collegamento&&!configurazionePropria){avvisa('Niente da salvare: incolla una chiave o cambia un campo.',false);return;}
+   const controlli=[...dialogo.querySelectorAll('input,textarea,button')],prima=controlli.map(c=>c.disabled);
+   dialogo.dataset.salvataggio='in-corso';card.dataset.salvataggioCollegamento='in-corso';dialogo.setAttribute('aria-busy','true');controlli.forEach(c=>{c.disabled=true;});primaria.textContent='Salvo…';
+   const salvato=[];
+   try{
+    /* Una chiamata per cosa: se la seconda fallisce, la prima è passata e lo si sa — il campo della chiave si svuota, e un
+       secondo «Salva» non aggiunge la stessa chiave due volte al gruppo. */
+    const chiama=async(dati,fase)=>{
+     if(typeof onSalvaConfigurazione!=='function')throw Object.assign(new Error('Questa schermata non sa salvare.'),{fase});
+     await onSalvaConfigurazione({provider:row.id,pool:Boolean(salvaChiaveInterno&&!salvaChiaveInterno.dataset.providerAction),chiave:'',collegamento:null,...dati});
+    };
+    if(chiave){await chiama({chiave},'chiave');salvato.push('chiave');campoChiave.value='';}
+    if(collegamento){await chiama({collegamento},'collegamento');salvato.push('collegamento');}
+    if(configurazionePropria){
+     try{await salvaCollegamentoProvider(row,corpo);}catch(e){throw Object.assign(e,{fase:'collegamento'});}
+     salvato.push('collegamento');
+    }
+   }catch(errore){
+    const motivo=errore?.message||'Il server locale non ha risposto.';
+    avvisa(errore?.fase==='collegamento'
+     ?(salvato.includes('chiave')?`La chiave è salvata, ma la configurazione no: ${motivo}`:`La configurazione non è stata salvata: ${motivo}`)
+     :`La chiave non è stata salvata: ${motivo}`,true);
+    return;
+   }finally{
+    delete dialogo.dataset.salvataggio;delete card.dataset.salvataggioCollegamento;dialogo.setAttribute('aria-busy','false');controlli.forEach((c,i)=>{c.disabled=prima[i];});primaria.textContent='Salva';
+   }
+   chiudiModale();
+   onConfigurazioneSalvata?.({provider:row.id,etichetta:row.label||row.id,salvato});
+  };
+  primaria.addEventListener('click',salva);
+  /* Invio in un campo a una riga salva, come «Salva» (Hermes, `credential-key-ui.tsx`: «Enter saves a key»). */
+  telaio.addEventListener('keydown',(e)=>{if(e.key==='Enter'&&e.target instanceof HTMLInputElement&&!e.isComposing){e.preventDefault();salva();}});
   /* ⛔ «Annulla» E LA CROCE NON PORTANO `aria-expanded`: la regia del mockup (`app.js`, ascoltatore
      delegato sulla radice) tratta OGNI `[aria-expanded][aria-controls]` come una disclosure e la
      inverte da sé — è il difetto già misurato il 18/09 in `catalogo-faccette.js`. Questi due
@@ -385,7 +444,7 @@ function apriConfigurazioneProvider(card,row){
      linea (`aperta`), si riapre in linea; se era chiuso, si richiude. */
   if(doveStava.genitore)doveStava.genitore.insertBefore(corpo,doveStava.dopo&&doveStava.dopo.isConnected?doveStava.dopo:null);
   corpo.hidden=doveStava.hidden;
-  corpo.style.removeProperty('padding');corpo.style.removeProperty('border-top');
+  corpo.style.removeProperty('padding');corpo.style.removeProperty('border-top');corpo.style.removeProperty('grid-template-columns');
   dialogo.remove();
   aggiornaStatoConfigura(card,false);
   /*
@@ -402,7 +461,9 @@ function apriConfigurazioneProvider(card,row){
  /* Il corpo, dentro la modale, perde il suo padding e il suo filetto: quelli sono della card
     aperta in linea, e qui li porta il telaio (`2px 26px 24px`, dal mockup). */
  corpo.hidden=false;
- Object.assign(corpo.style,{padding:'0',borderTop:'0'});
+ /* E dentro la modale una colonna sola a TUTTA larghezza (owner 01/10: i campi stavano in 370 px su 690). La griglia della card
+    (`repeat(auto-fit,minmax(220px,320px))`, index.css) è pensata per la card in linea; il mockup qui ha blocchi pieni. */
+ Object.assign(corpo.style,{padding:'0',borderTop:'0',gridTemplateColumns:'minmax(0,1fr)'});
  dialogo.append(testa,telaio,piede);
  card.append(dialogo);
  if(typeof dialogo.showModal==='function')dialogo.showModal();else dialogo.setAttribute('open','');
@@ -634,7 +695,7 @@ function aggiungiCampiCloud(body,row){
 }
 // P-K — fine
 
-export function creaProviderCard(row,{aperta=false,prova=null,occupato=false,onMenu=null,onAzionePool=null}={}){
+export function creaProviderCard(row,{aperta=false,prova=null,occupato=false,onMenu=null,onAzionePool=null,onSalvaConfigurazione=null,onConfigurazioneSalvata=null}={}){
  const esterno=row.id==='esterno',configurazionePropria=esterno||CLOUD_CONFIGURABILI.has(row.id);
  /*
   * ⛔⛔ L'ID DEL CORPO PORTA IL NOME DELLA SUPERFICIE — segnalato dalla corsia 4 il 19/09/2026 e
@@ -807,7 +868,7 @@ export function creaProviderCard(row,{aperta=false,prova=null,occupato=false,onM
   *   `[data-provider-action]` (app.js:3197, 4700) le trova al `.click()` senza sapere del menu.
   */
  const actions=el('div','talos-cluster');
- const salva=button('save-key',poolCollegato?'Aggiungi chiave':'Salva chiave','primary');
+ const salva=button('save-key',poolCollegato?'Aggiungi chiave':'Salva chiave','primary');salva.dataset.providerSalvaChiave='';
  if(poolCollegato){
   delete salva.dataset.providerAction;
   salva.addEventListener('click',async()=>{
@@ -859,7 +920,9 @@ export function creaProviderCard(row,{aperta=false,prova=null,occupato=false,onM
   const tre=el('button','talos-button talos-button--ghost talos-icon-button talos-button--sm');tre.type='button';
   tre.setAttribute('aria-label','Altre azioni per '+(row.label||row.id));tre.setAttribute('aria-haspopup','menu');
   tre.append(simboloProvider('i-more'));
-  const voci=()=>vociMenu.map(v=>({chiave:v.chiave,etichetta:v.etichetta,icona:v.icona,pericolo:v.pericolo,separaPrima:v.separaPrima,aziona:()=>v.elemento.click()}));
+  /* Dentro la modale «Salva collegamento» non si offre: lo fa già il «Salva» del piede (owner 01/10, «Un Salva solo»). */
+  const voci=()=>vociMenu.filter(v=>!(v.chiave==='save-runtime'&&card.querySelector(':scope > .talos-provider__modale[open]'))).map(v=>({chiave:v.chiave,etichetta:v.etichetta,icona:v.icona,pericolo:v.pericolo,separaPrima:v.separaPrima,aziona:()=>v.elemento.click()}));
+  tre.dataset.providerAltreAzioni=vociMenu.every(v=>v.chiave==='save-runtime')?'solo-salva':'';
   tre.addEventListener('click',()=>onMenu(voci(),{ancora:tre}));
   /* Il tasto destro sulla card apre lo stesso menu, alle coordinate del puntatore. */
   card.addEventListener('contextmenu',(e)=>{e.preventDefault();onMenu(voci(),{x:e.clientX,y:e.clientY});});
@@ -924,7 +987,7 @@ export function creaProviderCard(row,{aperta=false,prova=null,occupato=false,onM
   *   ⇒ Il corpo verrebbe aperto in linea E spostato nella modale, e il ridisegno porterebbe via la
   *     card con dentro la modale appena aperta: una modale che si chiude da sola, senza un errore.
   */
- configura.addEventListener('click',(e)=>{e.stopPropagation();apriConfigurazioneProvider(card,row);});
+ configura.addEventListener('click',(e)=>{e.stopPropagation();apriConfigurazioneProvider(card,row,{onSalvaConfigurazione,onConfigurazioneSalvata});});
  piede.append(configura);
  if(!esterno){test.disabled=busy;vesti(test,VESTITO.pulsante);test.prepend(iconaAzione('verifica'));piede.append(test);}
  card.append(body,piede);
@@ -932,7 +995,7 @@ export function creaProviderCard(row,{aperta=false,prova=null,occupato=false,onM
  return card;
 }
 export function aggiornaProviderList(lista,rows,opzioni={}){
- const {aperte=new Set(),prove=new Map(),occupati=new Set(),caricamento=false,errore=null,onMenu=null,onAzionePool=null}=opzioni;
+ const {aperte=new Set(),prove=new Map(),occupati=new Set(),caricamento=false,errore=null,onMenu=null,onAzionePool=null,onSalvaConfigurazione=null,onConfigurazioneSalvata=null}=opzioni;
  if(!lista)return;lista.className='talos-provider-list';lista.setAttribute('aria-busy',String(caricamento));
  /* La griglia del mockup (due colonne a 1122 di contenuto, una a 754): vedi `VESTITO.griglia`. */
  vesti(lista,VESTITO.griglia);
@@ -973,12 +1036,12 @@ export function aggiornaProviderList(lista,rows,opzioni={}){
   *   ruberebbe il posto al primo controllo della modale riaperta).
   */
  const daRiaprire=[];
- const cards=visibili.map(row=>{const op={aperta:aperte.has(row.id),prova:prove.get(row.id)||null,occupato:occupati.has(row.id)||caricamento},signature=JSON.stringify([row,op,typeof onAzionePool==='function']),precedente=old.get(row.id);if(precedente?.dataset.salvataggioCollegamento==='in-corso'||precedente?.dataset.providerSignature===signature&&!precedente.dataset.providerReset)return precedente;if(precedente?.querySelector?.(':scope > .talos-provider__modale[open]'))daRiaprire.push(row);const card=creaProviderCard(row,{...op,onMenu,onAzionePool});card.dataset.providerSignature=signature;
+ const cards=visibili.map(row=>{const op={aperta:aperte.has(row.id),prova:prove.get(row.id)||null,occupato:occupati.has(row.id)||caricamento},signature=JSON.stringify([row,op,typeof onAzionePool==='function']),precedente=old.get(row.id);if(precedente?.dataset.salvataggioCollegamento==='in-corso'||precedente?.dataset.providerSignature===signature&&!precedente.dataset.providerReset)return precedente;if(precedente?.querySelector?.(':scope > .talos-provider__modale[open]'))daRiaprire.push(row);const card=creaProviderCard(row,{...op,onMenu,onAzionePool,onSalvaConfigurazione,onConfigurazioneSalvata});card.dataset.providerSignature=signature;
  if(precedente&&!precedente.dataset.providerReset){for(const input of card.querySelectorAll('input,textarea')){const attr=[...input.attributes].find(a=>a.name.startsWith('data-provider-'));const prima=precedente.querySelector('['+attr.name+']');if(prima){prima.disabled=input.disabled;prima.className=input.className;prima.placeholder=input.placeholder;input.replaceWith(prima);}}}
  const feedback=precedente?.querySelector('[data-provider-feedback]'),target=card.querySelector('[data-provider-feedback]');if(feedback&&target)target.replaceWith(feedback);return card;});lista.replaceChildren(...cards);
  if(focusId){if(focus.isConnected&&!focus.disabled)focus.focus({preventScroll:true});else cards.find(n=>n.dataset.providerId===focusId)?.querySelector('[data-provider-toggle]')?.focus({preventScroll:true});}
  /* E la modale che era aperta si riapre sulla card nuova — vedi la nota sopra `daRiaprire`. */
- for(const row of daRiaprire)apriConfigurazioneProvider(cards.find(n=>n.dataset.providerId===row.id),row);
+ for(const row of daRiaprire)apriConfigurazioneProvider(cards.find(n=>n.dataset.providerId===row.id),row,{onSalvaConfigurazione,onConfigurazioneSalvata});
 }
 /*
  * ⛔ 18/09/2026 — IL PANNELLO SI MONTA UNA VOLTA SOLA, E REGGE ENTRAMBE LE DIREZIONI (corsia 3).

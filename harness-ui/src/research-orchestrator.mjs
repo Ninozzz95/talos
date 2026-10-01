@@ -816,6 +816,7 @@ export function classificaErroreDiCorsa({ codice = null, messaggio = null } = {}
   const esito = (classe) => ({ classe, transitorio: CLASSI_TRANSITORIE.has(classe) });
 
   // 1. Il codice, quando dice davvero qualcosa. `internal-error` NON dice niente: è il default.
+  if (c === 'PROVIDER_OUTCOME_UNKNOWN') return esito('esito-incerto');
   if (CODICI_ESITO_DEL_TASK.has(c)) return esito(CODICI_ESITO_DEL_TASK.get(c));
   if (c.startsWith('CTX_')) return esito('contesto');
   // P-L (12/09): i guasti dell'agente esterno ACP hanno la loro classe, così una ricerca ricostruita dal codice salvato non torna «ignoto».
@@ -911,6 +912,9 @@ function causaDellaCaduta(record, voceSessione) {
  *   errore; «ricerca fallita» sarebbe farlo pagare all'owner.
  */
 function motivoDelloStato(stato, dettaglio = null, motivoErrore = null) {
+  if (stato === 'failed' && motivoErrore?.classe === 'esito-incerto') {
+    return 'La richiesta al fornitore ha un esito incerto. Il lavoro già fatto è conservato. Riprendi esplicitamente quando vuoi continuare: una nuova richiesta può comportare un altro costo.';
+  }
   /*
    * ⭐⭐⭐ BC-44 — quando la caduta è transitoria la frase cambia, e cambia in due punti: dice
    *   CHI è caduto (mai «la ricerca non ce l'ha fatta»: non è stata lei) e dice che si riprende.
@@ -2119,7 +2123,8 @@ export function creaResearchOrchestrator({
      */
     const record = await leggiRicercaFn({ cartella, id });
     /* ⛔ La causa REGISTRATA se c'è, altrimenti quella DEDOTTA dal `RunError` che la sessione ha già in `voce.eventi`: senza la seconda, la cura non curerebbe nessuna delle ricerche già cadute — compresa quella che l'ha fatta scrivere. */
-    const cadutaRiprendibile = record?.terminata === 'failed' && causaDellaCaduta(record, voce)?.transitorio === true;
+    const causa = causaDellaCaduta(record, voce);
+    const cadutaRiprendibile = record?.terminata === 'failed' && (causa?.transitorio === true || causa?.classe === 'esito-incerto');
     if (record?.terminata === 'done' || record?.terminata === 'cancelled') {
       return { ok: false, esito: `That research is ${record.terminata} and will not be resumed: start a new one if you need more.` };
     }
@@ -2505,7 +2510,7 @@ export function creaResearchOrchestrator({
        *   Dichiarato, non dimenticato.
        */
       riprendibile: stato === 'paused'
-        || (stato === 'failed' && (r.terminata !== 'failed' || caduta?.transitorio === true)),
+        || (stato === 'failed' && (r.terminata !== 'failed' || caduta?.transitorio === true || caduta?.classe === 'esito-incerto')),
       motivoErrore: caduta
         ? { classe: caduta.classe ?? 'ignoto', transitorio: caduta.transitorio === true }
         : null,

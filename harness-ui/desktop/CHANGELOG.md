@@ -6,6 +6,95 @@ Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/). Versions
 
 ## Unreleased
 
+## desktop-v0.1.20 — 2026-10-01
+
+Commands and file tools now work in the same place: with WSL installed, a session's shell and its reads, writes and
+searches run in the same Linux, using a Node.js and a ripgrep for Linux that ship inside the installer. Long files,
+large projects, long web pages and command output are also easier for the model to read in full.
+
+### Added
+
+- **One place for commands and files.** With WSL installed and commands set to *Automatico* or *Linux (WSL2)*, the
+  model's file tools — read, write, edit, list and search — run in the same Linux as its commands, through Node.js
+  24.18.0 and ripgrep 15.0.0 for Linux bundled in the installer (hashes pinned and checked again when the package is
+  built). Nothing is installed in your distribution. The model works with Linux paths; permissions, receipts and the
+  Review show the Windows path of the same file. *Windows* keeps everything on Windows, as before.
+- **The Linux user is stated.** The permissions sheet says which Linux user runs the commands and what holds on the
+  Windows drives: there is no isolation, and `/mnt/c` is your Windows disk. A switch, on by default, uses a normal
+  user when the distribution has one, and shows the command to create one when it has none. When a command would run
+  as root and nobody would otherwise be asked, TALOS asks once per session.
+- **Searches that keep going.** In a very large project a search is no longer stopped at 20 seconds and handed to a
+  slower fallback: the reply shows what was found so far, the search keeps running in the session (at most two at a
+  time, ten minutes each), and the model picks it up again by reference. Results come in pages. Folders inside WSL
+  get 60 seconds, and when the system runs out of threads ripgrep is retried on one thread.
+- **Long web pages are kept whole.** When a page is too long for the model, the full text is saved with the session
+  and the note at the top of the page says exactly how to read the part in the middle. The saved pages are deleted
+  with the session.
+- **Files are read by lines.** The model reads up to 2,000 lines or 100 KB at a time and continues where it stopped;
+  a single line too long to show is continued from the byte where it was cut. Binary files can be read as hex, and an
+  empty file says that it is empty.
+- **Command output that lasts.** The output of the model's commands is kept per session: it can be read back after a
+  restart or a crash, viewed in its own panel, downloaded in full and deleted. Output that a Windows program writes in
+  an OEM code page (cp850 in Italy, for example) can be read in that code page instead of being reported as binary,
+  and the preview says when it is not faithful UTF-8.
+- **Provider retries you can see.** When a provider fails, the chat shows the automatic retry with a countdown and a
+  Stop, and the wait the provider asks for is honoured, in seconds or milliseconds.
+- Long conversations open already scrolled to the end, behind a loading indicator, instead of being built in view and
+  stopping above the last answer.
+- A sub-agent's result in the chat is rendered as Markdown, with *Mostra tutto* when it is long.
+
+### Changed
+
+- The model must have read a file in full before it replaces it, and the file must not have changed since; otherwise
+  the write is refused, with the two ways out (read it first, or edit only the part that changes). A replacement says
+  that it replaced a file.
+- A read-only session, and every workflow step, can still show an artifact but no longer copies it into the
+  Library.
+- The dialog that configures a provider has a single *Salva*: it saves the key you pasted and the changed address or
+  timeout, closes, and confirms. Errors stay inside the dialog.
+- *Riprendi il lavoro* on the Home lists your conversations, not the helper sessions of a delegation.
+- Choice cards (permissions, web search source, model files) align their content to the top, so the titles in a row
+  line up.
+- When the context does not fit, a long first turn can be compacted inside the turn; your request stays word for word
+  above the summary.
+- The model is told how long a workflow run has been idle, not only how long it ran up to its last event.
+
+### Fixed
+
+- A command that reaches its time limit now stops together with everything it started. On Windows the program under
+  the shell kept running, and the reply waited for it to end by itself.
+- Stopping a command that has already exited no longer targets its process id, which Windows may have given to
+  another program in the meantime.
+- In the installed app, a test run in a folder with no test suite reported success, because it started a second copy
+  of TALOS. It now exits 127 and says that no test suite is configured.
+- A Linux symbolic link on a Windows drive, which Windows cannot follow, is explained — where it points and what to
+  do — instead of being reported as a permission error or a missing file.
+- A local provider that answers 401 or 403 when no key was sent no longer reports a rejected key.
+- An error whose outcome is uncertain says so, without claiming that the request was not sent. After a crash, an
+  interrupted request is not sent again at startup, and what had already arrived is recovered.
+- OpenRouter's 402 answers are told apart: a budget that is only temporarily committed is waited for; a key limit or
+  exhausted credit is reported, never worked around with another key or provider.
+- A tool that changes files no longer reports success when its reply is missing, false or invalid.
+- A read inside a long line that hits an invalid byte says which byte it is and how to inspect it.
+- Searches name the paths ripgrep could not read instead of reporting a generic error, and searches by file name are
+  complete.
+- Artifacts and Library cards keep pointing to the exact item they were made from.
+- On Windows, a path that starts with a single slash, which can mean two different places, is refused instead of
+  guessed.
+
+### Known limits
+
+- Running file tools in Linux needs WSL 2 and a project folder reachable from Linux. Under heavy load the WSL service
+  can stop answering for about 30 seconds; TALOS retries once before its Linux process is ready and records the
+  retry.
+- A forked conversation reads its parent's saved web pages only after asking.
+- If the app is killed, a search still running in the background ends on its own.
+- On Windows, a command that leaves a program running in the background with its output still open (for example
+  `start /b` in cmd) keeps the reply waiting, and Stop does not end it; in Linux (WSL) the reply arrives only at the
+  time limit, and what the command printed may be lost. Use a separate terminal for servers that must keep running.
+- The model has no tool to stop one of its own commands: Stop and the time limit do.
+- TALOS records when an answer was cut by the output limit, but the desktop app does not show it yet.
+
 ## desktop-v0.1.19 — 2026-09-29
 
 This release candidate addresses workflow results, chat attachments and settings lost after a

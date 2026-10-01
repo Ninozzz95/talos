@@ -343,6 +343,12 @@ export function createProviderProbe({ leggiChiave, leggiRuntime, fetchImpl = fet
         ? `${etichetta}: credenziale non accettata (HTTP 401).`
         : `${etichetta}: accesso negato (HTTP 403); controlla i permessi.`, modelli: null, millisecondi, httpStatus: risposta.status };
       // P-K — fine
+      const chiaveInviata = Boolean(chiave && (intestazioni.Authorization || intestazioni['x-api-key'] || sonda.auth === 'query'));
+      if (!chiaveInviata || (risposta.status === 403 && !record?.chiaveObbligatoria)) {
+        return nonGiudicata({ provider, esito: 'non-autorizzato', motivo: risposta.status === 401
+          ? `${etichetta}: l'endpoint richiede autenticazione (HTTP 401); verifica indirizzo e accesso configurati.`
+          : `${etichetta}: accesso negato (HTTP 403); verifica i permessi del server o del modello.`, modelli: null, millisecondi, httpStatus: risposta.status });
+      }
       return { provider, esito: 'non-autorizzato', credenzialeVerificata: false, motivo: `${etichetta} ha rifiutato la credenziale (HTTP ${risposta.status}).`, modelli: null, millisecondi, httpStatus: risposta.status };
     }
     if (!risposta.ok) {

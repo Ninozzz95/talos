@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
+import { spawnSync } from 'node:child_process';
 import test from 'node:test';
 
 import { creaAvvioFiglio } from '../desktop/runtime.mjs';
@@ -124,8 +125,33 @@ test('T-07: default npm test is replaced by an explicit no-suite diagnostic when
    *   «Non eseguito». Sul desktop una suite che non esiste veniva dipinta come un fallimento,
    *   mentre il vero è che **non è partita**. Ora i due lati dicono lo stesso numero.
    */
-  assert.match(command, /process\.exit\(127\)/, 'lo stesso codice della suite mancante del canonico');
-  assert.doesNotMatch(command, /process\.exit\(2\)/, 'un 2 qui ridipinge come FALLIMENTO una prova che non e partita');
+  assert.match(command, /exit 127$/, 'lo stesso codice della suite mancante del canonico');
+  assert.doesNotMatch(command, /exit\(?\s*2\)?$/, 'un 2 qui ridipinge come FALLIMENTO una prova che non e partita');
+});
+
+test('T-07 F017: the no-suite command launches no executable — 127 with its sentence in cmd and in bash, whatever runs the server', async (t) => {
+  /*
+   * ⛔⛔ F017 (01/10/2026) — riprodotto sulla build Preview: «prova» senza suite usciva 0 nell'app installata. Il comando era
+   *   `"${process.execPath}" -e "…exit(127)"`: nel pacchetto execPath è TALOS.exe, e `child-bootstrap.mjs:19` toglie
+   *   ELECTRON_RUN_AS_NODE prima del server ⇒ TALOS.exe partiva come APP (seconda istanza, uscita 0). Dal sorgente execPath è
+   *   node.exe e dava 127: per questo nessuna prova lo vedeva.
+   */
+  const dir = tempDir(t);
+  writeFileSync(join(dir, 'package.json'), JSON.stringify({ name: 'fixture', scripts: {} }));
+  const command = await comandoProvaDesktop({ cartella: dir, comandoProva: 'npm test' });
+  assert.ok(!command.includes(process.execPath), `nessun eseguibile del processo nel comando: ${command}`);
+  assert.doesNotMatch(command, /\s-e\s/, 'nessun programma lanciato con uno script');
+  const atteso = /^NO_TEST_SUITE_CONFIGURED: workspace has no usable npm scripts\.test, verification was not run\.\r?\n$/;
+  const cmd = spawnSync(command, { cwd: dir, shell: true, encoding: 'utf8', windowsHide: true, env: { PATH: process.env.PATH, SystemRoot: process.env.SystemRoot ?? '', ComSpec: process.env.ComSpec ?? '' } });
+  assert.equal(cmd.status, 127, `${process.platform === 'win32' ? 'cmd.exe' : 'sh'}: ${cmd.stderr}`);
+  assert.match(cmd.stderr, atteso);
+  assert.equal(cmd.stdout, '');
+  const wsl = process.platform === 'win32' ? spawnSync('wsl.exe', ['--exec', 'sh', '-c', 'echo ok'], { encoding: 'utf8', timeout: 15_000, windowsHide: true }) : null;
+  if (wsl?.status === 0) {
+    const bash = spawnSync('wsl.exe', ['--exec', 'bash', '-c', command], { encoding: 'utf8', windowsHide: true, timeout: 60_000 });
+    assert.equal(bash.status, 127, `bash in WSL (la casa Linux): ${bash.stderr}`);
+    assert.match(bash.stderr, atteso);
+  }
 });
 
 test('T-07 contrary cases: a real test or malformed package.json keeps npm test and its truthful diagnostic', async (t) => {
@@ -224,7 +250,9 @@ test('configured context hooks without prepare fail closed before provider infer
 
 test('T-03: tool results longer than 8k reach the next model turn intact when Context Engine is off', async (t) => {
   const dir = tempDir(t);
-  const payload = `${'A'.repeat(9_500)}<END>`;
+  // LEGGI IBRIDA (owner 30/09): una riga oltre 2000 caratteri si accorcia apposta; la garanzia qui è un'altra — un
+  // risultato oltre 8k arriva intatto a motore di contesto spento — quindi lo stesso peso, in righe normali.
+  const payload = `${`${'A'.repeat(99)}\n`.repeat(95)}<END>`;
   writeFileSync(join(dir, 'large.txt'), payload);
   const requests = [];
   let call = 0;
@@ -254,7 +282,7 @@ test('T-03: tool results longer than 8k reach the next model turn intact when Co
   assert.ok(tool.content.length > 8_000);
 });
 
-test('T-09: the reflection checkpoint is a user message, never text appended to a tool result', async (t) => {
+test('T-09: repeated tool use preserves results without adding an unsolicited user message', async (t) => {
   const dir = tempDir(t);
   writeFileSync(join(dir, 'small.txt'), 'SMALL-CONTENT');
   const requests = [];
@@ -280,8 +308,8 @@ test('T-09: the reflection checkpoint is a user message, never text appended to 
 
   assert.equal(requests.length, 8);
   const checkpointRequest = requests[7];
-  const checkpoint = checkpointRequest.messages.find((message) => message.role === 'user' && /checkpoint di riflessione/i.test(String(message.content)));
-  assert.ok(checkpoint, 'the checkpoint must be a separate user message');
+  assert.deepEqual(checkpointRequest.messages.filter((message) => message.role === 'user').map((message) => message.content),
+    ['Read the file repeatedly for the checkpoint test.'], 'only the actual user prompt may appear');
   const previousTool = [...checkpointRequest.messages].reverse().find((message) => message.role === 'tool');
   assert.equal(previousTool.content, 'SMALL-CONTENT', 'the tool result must remain byte-identical');
 });

@@ -22,7 +22,7 @@ function leggiConfig(extraEnv = {}, tempRoot = null) {
     if (value !== undefined) env[key] = value;
   }
   const script = `import config from ${JSON.stringify(configUrl.href)};
-process.stdout.write(JSON.stringify({ baseURL: config.use.baseURL, testIgnore: config.testIgnore, webServer: config.webServer && { publicDir: config.webServer.env.TALOS_HARNESS_UI_PUBLIC_DIR, storeDir: config.webServer.env.TALOS_HARNESS_UI_SESSIONS_DIR, cwd: config.webServer.cwd, reuseExistingServer: config.webServer.reuseExistingServer, envKeys: Object.keys(config.webServer.env) } }));`;
+process.stdout.write(JSON.stringify({ baseURL: config.use.baseURL, testIgnore: config.testIgnore, webServer: config.webServer && { publicDir: config.webServer.env.TALOS_HARNESS_UI_PUBLIC_DIR, storeDir: config.webServer.env.TALOS_HARNESS_UI_SESSIONS_DIR, dataDir: config.webServer.env.TALOS_DESKTOP_DATA_DIR, cwd: config.webServer.cwd, reuseExistingServer: config.webServer.reuseExistingServer, envKeys: Object.keys(config.webServer.env) } }));`;
   return spawnSync(process.execPath, ['--input-type=module', '--eval', script], {
     cwd: frontend,
     env,
@@ -59,6 +59,14 @@ test('il browser locale serve la build dist corrente con path assoluto e server 
   assert.equal(config.webServer.publicDir, dist);
   assert.equal(config.webServer.cwd, resolve(frontend, '..'));
   assert.equal(config.webServer.reuseExistingServer, false);
+});
+
+test('OUTPUT19-PROFILE-ISOLATION: every desktop store uses the test profile, overriding an inherited owner profile', () => {
+  const child = leggiConfig({TALOS_DESKTOP_DATA_DIR: resolve(tmpdir(), 'owner-profile-must-not-be-used')});
+  assert.equal(child.status, 0, child.stderr);
+  const {dataDir, storeDir} = JSON.parse(child.stdout).webServer;
+  assert.equal(typeof dataDir, 'string'); assert.equal(dataDir, storeDir);
+  assert.notEqual(dataDir, resolve(tmpdir(), 'owner-profile-must-not-be-used'));
 });
 
 test('PW-REPORT-SECRET-019 — il config serializzato non contiene credenziali ereditate', () => {

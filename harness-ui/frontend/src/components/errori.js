@@ -199,6 +199,54 @@ function grezzoContesto(tecnico, codice) {
 
 /** Il codice tecnico e il messaggio grezzo, come li manda il server. */
 const REGOLE = [
+  ...[
+    {
+      codice: 'PROVIDER_BUDGET_OCCUPIED', id: 'budget-occupato',
+      cosa: 'Il budget è temporaneamente occupato da altre richieste.',
+      perche: 'Il servizio ha rifiutato questa richiesta prima di inviarla al modello. Le richieste in corso o appena concluse impegnano ancora il budget; il tentativo automatico si è fermato.',
+      rimedi: ['Attendi che le altre richieste si concludano e che i costi vengano contabilizzati, poi scrivi «continua».'],
+    },
+    {
+      codice: 'PROVIDER_KEY_SPEND_LIMIT', id: 'limite-spesa-chiave',
+      cosa: 'Il limite di spesa della chiave è stato raggiunto.',
+      perche: 'Il servizio segnala il tetto di spesa configurato per questa chiave. TALOS non l’ha sospesa né sostituita.',
+      rimedi: ['Controlla il limite della chiave sul sito del servizio: puoi modificarlo oppure attendere il ripristino previsto dal tuo account.', 'Riprendi la conversazione dopo aver verificato il limite.'],
+    },
+    {
+      codice: 'PROVIDER_REQUEST_BUDGET', id: 'richiesta-costosa',
+      cosa: 'La richiesta supera il budget disponibile.',
+      perche: 'Il costo stimato di questa singola richiesta supera il budget che il servizio può impegnare. Ripetere la stessa richiesta non risolve il limite.',
+      rimedi: ['Controlla il credito sul sito del servizio, oppure riduci il contesto con Context Manager prima di riprendere.', 'TALOS conserva la conversazione e non ha modificato automaticamente la richiesta.'],
+    },
+    {
+      codice: 'PROVIDER_CREDIT_LIMIT', id: 'credito-insufficiente',
+      cosa: 'Il credito disponibile non copre questa richiesta.',
+      perche: 'Il servizio segnala un limite di credito. La risposta non fornisce un saldo verificato da mostrare.',
+      rimedi: ['Controlla il credito sul sito del servizio e riprendi dopo aver risolto il limite.'],
+    },
+    {
+      codice: 'PROVIDER_PAYMENT_REQUIRED', id: 'limite-spesa-sconosciuto',
+      cosa: 'Il servizio ha rifiutato la richiesta per un limite di spesa.',
+      perche: 'La risposta non permette di distinguere il credito, il limite della chiave o il budget temporaneamente occupato. TALOS non ha ripetuto la richiesta né sospeso la chiave.',
+      rimedi: ['Controlla credito e limiti sul sito del servizio prima di riprendere.'],
+    },
+  ].map(({ codice, id, ...testi }) => ({
+    id, famiglia: 'limite-fornitore', riconosce: (_testo, code) => code === codice,
+    spiega: tecnico => ({ ...testi, tecnico: tecnico.includes(codice) ? tecnico : `[${codice}]${tecnico ? ` ${tecnico}` : ''}` }),
+  })),
+  {
+    // RETRY05: il codice del backend prevale sulle parole del messaggio.
+    // Un esito incerto non dimostra invio mancato, costo nullo o credenziale invalida.
+    id: 'esito-fornitore-incerto',
+    famiglia: 'esito-fornitore-incerto',
+    riconosce: (_testo, codice) => codice === 'PROVIDER_OUTCOME_UNKNOWN',
+    spiega: (tecnico, codice) => ({
+      cosa: 'Non è stato possibile completare la risposta del modello.',
+      perche: 'TALOS non può confermare l’esito della richiesta e non l’ha reinviata automaticamente. Il testo già ricevuto e il lavoro precedente restano nella conversazione.',
+      rimedi: ['Per riprendere, scrivi «continua» nella stessa sessione. È una nuova richiesta e può comportare un altro costo.'],
+      tecnico: tecnico.includes(codice) ? tecnico : `[${codice}]${tecnico ? ` ${tecnico}` : ''}`,
+    }),
+  },
   {
     /*
      * ⭐⭐⭐ CLI-REQ-03, metà A SCHERMO (17/09/2026) — LA CHIAVE CHE MANCA NON È UN GUASTO.
@@ -586,8 +634,8 @@ const REGOLE = [
     id: 'rete',
     riconosce: (t) => /ECONNREFUSED|ETIMEDOUT|fetch failed|network error|socket hang up|Connessione con il fornitore interrotta|Il fornitore non risponde|Il fornitore ha superato il tempo massimo/iu.test(t),
     spiega: () => ({
-      cosa: 'La richiesta non è arrivata al modello.',
-      perche: 'Il servizio non ha risposto: può essere la rete, il fornitore, o il runtime locale spento.',
+      cosa: 'Il collegamento con il modello si è interrotto.',
+      perche: 'Il messaggio ricevuto non permette di stabilire la causa o se il modello abbia elaborato la richiesta. Può dipendere dalla connessione, dal fornitore o dal runtime locale.',
       rimedi: ['Controlla la connessione e riprova.', 'Se il modello è locale, verifica che il runtime sia acceso nel Laboratorio.'],
     }),
   },
@@ -689,6 +737,8 @@ export function spiegaErrore(messaggio, codice = '', contesto = {}) {
  * separare «il contesto non si è compattato» da «la tua richiesta è andata storta».
  */
 const VESTIZIONI = {
+  'limite-fornitore': { badge: 'Limite del servizio', titolo: 'TALOS · richiesta sospesa', tono: 'warning' },
+  'esito-fornitore-incerto': { badge: 'Risposta interrotta', titolo: 'TALOS · ripresa manuale', tono: 'warning' },
   fermato: { badge: 'Fermato', titolo: 'TALOS · fermato', tono: 'accent' },
   /*
    * ⛔ 13/09 — un cambio di direzione non è un guasto E non è nemmeno una notizia: il giro riparte

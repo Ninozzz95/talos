@@ -27,7 +27,7 @@ lista.onclick=async e=>{const toggle=e.target.closest('[data-provider-toggle]');
 await window.carica();window.pronto=true;
 </script></body></html>`;
 
-for (const [nome, width, height] of [['desktop', 1440, 1000], ['mobile', 390, 844]]) test(`PKLB-DOM-${nome}: campi, menu, persistenza, bozze, errori e prova senza prompt`, async t => {
+for (const [nome, width, height] of [['desktop-1080p', 1920, 1080], ['desktop', 1440, 1000], ['mobile', 390, 844]]) test(`PKLB-DOM-${nome}: campi, menu, persistenza, bozze, errori e prova senza prompt`, async t => {
   const cwd = mkdtempSync(join(tmpdir(), 'talos-pklbis-dom-')), runtimeFile = join(cwd, 'preferenze.json'), diario = join(cwd, 'diario.jsonl');
   let store = createProviderCredentialStore({ env: {}, runtimeFile });
   const probe = createProviderProbe({ env: {}, leggiRuntime: id => store.getRuntime(id), leggiChiave: id => store.getKey(id), fetchImpl: () => assert.fail('Cloud vietato') });
@@ -102,5 +102,5 @@ for (const [nome, width, height] of [['desktop', 1440, 1000], ['mobile', 390, 84
   assert.equal(await card('esterno').getByLabel('Comando', { exact: true }).inputValue(), 'relativo');
   assert.deepEqual(errori, []);
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, 'nessuna eccedenza orizzontale');
-  if (process.env.PKLB_ARTEFATTI) await page.screenshot({ path: join(process.env.PKLB_ARTEFATTI, `PKL-BIS-${nome}.png`), fullPage: true });
+  if (process.env.PKLB_ARTEFATTI && width >= 1920 && height >= 1080) await page.screenshot({ path: join(process.env.PKLB_ARTEFATTI, `PKL-BIS-${nome}.png`), fullPage: true });
 });

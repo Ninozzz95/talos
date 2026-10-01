@@ -113,19 +113,30 @@ export function leggiTettoToken(env = {}) {
   return valore;
 }
 
+/** Solo un tetto impostato deliberatamente; l'assenza non limita una finestra verificata. */
+export function leggiTettoEsplicito(env = {}) {
+  const grezzo = env?.[VARIABILE_TETTO_TOKEN];
+  if (grezzo === undefined || grezzo === null || String(grezzo).trim() === '') return null;
+  const testo = String(grezzo).trim();
+  if (!/^\d+$/.test(testo)) return null;
+  const valore = Number(testo);
+  return Number.isSafeInteger(valore) && valore > 0 ? valore : null;
+}
+
 /**
  * Le due soglie. `finestraToken` è la finestra del modello dal catalogo (`model-catalog.mjs`, `contextLength`):
  * oggi l'adapter riceve `null` (la cabla l'onda 2), e con `null` vale il solo tetto.
  */
-export function calcolaSoglie({ tettoToken = TETTO_TOKEN_DEFAULT, finestraToken = null } = {}) {
-  const tetto = Number.isFinite(tettoToken) && tettoToken > 0 ? tettoToken : TETTO_TOKEN_DEFAULT;
+export function calcolaSoglie({ tettoToken = null, finestraToken = null } = {}) {
+  const tettoEsplicito = Number.isSafeInteger(tettoToken) && tettoToken > 0 ? tettoToken : null;
   const finestra = Number.isFinite(finestraToken) && finestraToken > 0 ? finestraToken : null;
   if (finestra === null) {
-    return { soglia: tetto, emergenza: Math.ceil(tetto * MOLTIPLICATORE_EMERGENZA_SENZA_FINESTRA), fonte: 'tetto', tettoToken: tetto, finestraToken: null };
+    const soglia = tettoEsplicito ?? TETTO_TOKEN_DEFAULT;
+    return { soglia, warningTokens: Math.floor(soglia * 0.8), emergenza: Math.ceil(soglia * MOLTIPLICATORE_EMERGENZA_SENZA_FINESTRA), fonte: tettoEsplicito === null ? 'fallback' : 'tetto', tettoToken: soglia, finestraToken: null };
   }
   const daFinestra = Math.floor(finestra * FRAZIONE_FINESTRA);
-  const soglia = Math.min(tetto, daFinestra);
-  return { soglia, emergenza: Math.floor(finestra * FRAZIONE_EMERGENZA), fonte: soglia === tetto ? 'tetto' : 'finestra', tettoToken: tetto, finestraToken: finestra };
+  const soglia = tettoEsplicito === null ? daFinestra : Math.min(tettoEsplicito, daFinestra);
+  return { soglia, warningTokens: Math.floor(soglia * 0.8), emergenza: Math.floor(finestra * FRAZIONE_EMERGENZA), fonte: tettoEsplicito !== null && soglia === tettoEsplicito ? 'tetto' : 'finestra', tettoToken: tettoEsplicito, finestraToken: finestra };
 }
 
 /**
@@ -453,7 +464,7 @@ export function budgetCoda(soglia) {
 export function accorciaTesto(testo, { inizio = CARATTERI_INIZIO_ESITO, fine = CARATTERI_FINE_ESITO } = {}) {
   if (typeof testo !== 'string' || testo.length < CARATTERI_MINIMI_RIDUCIBILI || testo.length <= inizio + fine) return testo;
   const tolti = testo.length - inizio - fine;
-  return `${testo.slice(0, inizio)}\n[… ${tolti.toLocaleString('en-US')} ${MARCATORE_ACCORCIATO}. The full output is kept in the session history; re-read the file or re-run the command if you need the missing part.]\n${testo.slice(-fine)}`;
+  return `${testo.slice(0, inizio)}\n[… ${tolti.toLocaleString('en-US')} ${MARCATORE_ACCORCIATO} (TALOS context projection, not a byte range). Original message kept in session history. Use leggi (offset/limit are lines; byteOffset continues inside an over-long line), or process_output when outputId is available. Do not re-run a command to recover omitted bytes.]\n${testo.slice(-fine)}`;
 }
 
 /** Gli argomenti di una chiamata si accorciano DENTRO il JSON (Hermes `:3009-3022`): una stringa JSON rotta farebbe 400. */

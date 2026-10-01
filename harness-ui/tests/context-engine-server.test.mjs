@@ -39,6 +39,7 @@ test('CTX-SERVER-TRIAL-ROUNDTRIP real server imports and persists context across
       ...process.env, TALOS_HARNESS_UI_PORT: String(port), TALOS_HARNESS_UI_TOKEN: token,
       TALOS_HARNESS_UI_KEYRING: 'memoria', TALOS_SCRATCH_DIR: join(directory, 'scratch'), // 24/09/2026: mai la radice vera %LOCALAPPDATA%TALOS
       TALOS_HARNESS_UI_SESSIONS_DIR: directory, TALOS_HARNESS_UI_PROJECT_DIRS: workspace,
+      TALOS_DESKTOP_DATA_DIR: join(directory, 'desktop'), // 01/10/2026: mai le cartelle dati di default (sono quelle del 4174 vivo: memorie, note, Forge, archivio output, modelli)
       TALOS_CONTEXT_TRIAL: JSON.stringify({ sessionIds: [sessionId], models: [{ provider: 'openrouter', model, windowTokens: 16384, responseReserve: 2048 }] }),
     } });
     child.stdout.resume(); child.stderr.resume();

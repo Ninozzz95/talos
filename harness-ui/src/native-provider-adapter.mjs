@@ -8,7 +8,7 @@ import { tokenDaCache, tokenScrittiInCache } from './usage-cache.mjs';
 
 // Only this adapter knows the SDK message format. The kernel owns tool execution.
 export function stripNativeMetadata(messages) {
-  return messages.map(({ talos_provider_state, ...message }) => message);
+  return messages.map(({ talos_provider_state, talos_recovery, ...message }) => message);
 }
 
 export function toNativeMessages(messages, { provider, model }) {

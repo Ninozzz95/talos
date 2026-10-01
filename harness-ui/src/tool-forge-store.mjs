@@ -178,3 +178,143 @@ export async function eliminaToolForgiato({ cartella, id }, deps = {}) {
   await rmFn(percorsoVoce(cartella, id), { force: true });
   return { id };
 }
+
+
+/* M10-C — owner-managed revision history. The active <id>.json remains the only runtime source. */
+const OWNER_HISTORY_DIR = '.owner-versions';
+const OWNER_HISTORY_LIMIT = 10;
+const OWNER_AUDIT_LIMIT = 256;
+/*
+ * G02 (nota della review desktop del merge df591a648): due cambi della persona sullo STESSO strumento, in parallelo,
+ *   rileggevano e riscrivevano insieme audit.jsonl e meta.json: una riga d'audit (e il massimo mai visto) poteva
+ *   perdersi. Le operazioni della persona su uno strumento ora girano una dopo l'altra, nell'ordine di chiamata. Vale
+ *   dentro un processo (la cartella Forge è di un'app sola); fra due processi non c'è un lucchetto su disco.
+ */
+const codaPerStrumento = new Map();
+function inFilaPerStrumento(cartella, id, lavoro) {
+  const chiave = `${cartella}\0${id}`;
+  const questo = (codaPerStrumento.get(chiave) ?? Promise.resolve()).then(lavoro, lavoro);
+  const fine = questo.then(() => {}, () => {});
+  codaPerStrumento.set(chiave, fine);
+  fine.then(() => { if (codaPerStrumento.get(chiave) === fine) codaPerStrumento.delete(chiave); });
+  return questo;
+}
+const OWNER_ID = /^[a-z0-9][a-z0-9_-]{2,63}$/;
+
+function ownerDir(cartella, id) { return join(cartella, OWNER_HISTORY_DIR, id); }
+function ownerVersionsDir(cartella, id) { return join(ownerDir(cartella, id), 'versions'); }
+function ownerMetaPath(cartella, id) { return join(ownerDir(cartella, id), 'meta.json'); }
+function ownerAuditPath(cartella, id) { return join(ownerDir(cartella, id), 'audit.jsonl'); }
+function ownerVersionPath(cartella, id, revision) { return join(ownerVersionsDir(cartella, id), revision + '.json'); }
+function validOwnerInput(id, revision) {
+  if (typeof id !== 'string' || !OWNER_ID.test(id)) throw new ToolForgeStoreError('owner-managed tool id is invalid', 'FORGE_INVALID');
+  if (!Number.isSafeInteger(revision) || revision < 1) throw new ToolForgeStoreError('owner revision must be a positive integer', 'FORGE_INVALID');
+}
+async function readOwnerMeta(cartella, id, deps = {}) {
+  const readFileFn = deps.readFileFn ?? fsp.readFile;
+  try {
+    const value = JSON.parse(await readFileFn(ownerMetaPath(cartella, id), 'utf8'));
+    return { maxRevision: Number.isSafeInteger(value?.maxRevision) && value.maxRevision > 0 ? value.maxRevision : 0 };
+  } catch (error) {
+    if (error?.code === 'ENOENT') return { maxRevision: 0 };
+    throw new ToolForgeStoreError(`${id}: owner version metadata unreadable: ${error.message}`, 'FORGE_READ_FAILED');
+  }
+}
+async function appendOwnerAudit(cartella, id, event, deps = {}) {
+  const mkdirFn = deps.mkdirFn ?? fsp.mkdir;
+  const readFileFn = deps.readFileFn ?? fsp.readFile;
+  const writeFileFn = deps.writeFileFn ?? fsp.writeFile;
+  await mkdirFn(ownerDir(cartella, id), { recursive: true });
+  let rows = [];
+  try { rows = (await readFileFn(ownerAuditPath(cartella, id), 'utf8')).split('\n').filter(Boolean).map((line) => JSON.parse(line)); }
+  catch (error) { if (error?.code !== 'ENOENT') throw new ToolForgeStoreError(`${id}: owner audit unreadable: ${error.message}`, 'FORGE_READ_FAILED'); }
+  rows.push(event);
+  rows = rows.slice(-OWNER_AUDIT_LIMIT);
+  await writeFileFn(ownerAuditPath(cartella, id), rows.map((row) => JSON.stringify(row)).join('\n') + '\n', 'utf8');
+}
+async function pruneOwnerVersions(cartella, id, deps = {}) {
+  const readdirFn = deps.readdirFn ?? fsp.readdir;
+  const rmFn = deps.rmFn ?? fsp.rm;
+  let names = [];
+  try { names = await readdirFn(ownerVersionsDir(cartella, id)); } catch { return; }
+  const revisions = names.map((name) => /^([1-9][0-9]*)\.json$/.exec(name)).filter(Boolean).map((match) => Number(match[1])).filter(Number.isSafeInteger).sort((a, b) => a - b);
+  for (const revision of revisions.slice(0, Math.max(0, revisions.length - OWNER_HISTORY_LIMIT))) await rmFn(ownerVersionPath(cartella, id, revision), { force: true });
+}
+
+/**
+ * Owner-only versioned install/update. This intentionally does NOT replace installaToolForgiato:
+ * model tool_create remains create-only and same-id conflicts forever.
+ */
+export function installaVersioneToolForgiatoOwner(input, deps = {}) {
+  return inFilaPerStrumento(input?.cartella, input?.manifest?.id, () => installaVersioneInFila(input, deps));
+}
+async function installaVersioneInFila({ cartella, revision, manifest, capacita, azioni, rischio, evidence }, deps = {}) {
+  validOwnerInput(manifest?.id, revision);
+  const mkdirFn = deps.mkdirFn ?? fsp.mkdir;
+  const writeFileFn = deps.writeFileFn ?? fsp.writeFile;
+  const readdirFn = deps.readdirFn ?? fsp.readdir;
+  const active = await leggiToolForgiato({ cartella, id: manifest.id }, deps);
+  if (active && active.ownerManaged !== true) throw new ToolForgeStoreError(`tool "${manifest.id}" exists with legacy/model provenance and cannot be silently adopted`, 'FORGE_OWNER_ADOPTION_REQUIRED');
+  if (!active) {
+    let existing = []; try { existing = await readdirFn(cartella); } catch {}
+    if (existing.filter((name) => name.endsWith('.json')).length >= MAX_TOOL_INSTALLATI) throw new ToolForgeStoreError('the tool registry on this device is full — remove an unused tool first', 'FORGE_REGISTRY_FULL');
+  }
+  const meta = await readOwnerMeta(cartella, manifest.id, deps);
+  const maxEver = Math.max(meta.maxRevision, Number.isSafeInteger(active?.ownerRevision) ? active.ownerRevision : 0);
+  if (revision <= maxEver) throw new ToolForgeStoreError(`owner revision ${revision} is not newer than max-ever revision ${maxEver}`, 'FORGE_VERSION_NOT_NEWER');
+  await mkdirFn(ownerVersionsDir(cartella, manifest.id), { recursive: true });
+  const at = new Date().toISOString();
+  const record = {
+    id: manifest.id, manifest, capacita: Array.isArray(capacita) ? capacita : [], azioni: Array.isArray(azioni) ? azioni : [],
+    rischio: typeof rischio === 'string' ? rischio : 'R1', abilitato: false, installatoAlle: at,
+    ownerManaged: true, ownerRevision: revision, evidence: evidence ?? null,
+  };
+  try { await writeFileFn(ownerVersionPath(cartella, manifest.id, revision), JSON.stringify(record, null, 2), { encoding: 'utf8', flag: 'wx' }); }
+  catch (error) { if (error?.code === 'EEXIST') throw new ToolForgeStoreError(`owner revision ${revision} already exists`, 'FORGE_VERSION_NOT_NEWER'); throw error; }
+  await mkdirFn(cartella, { recursive: true });
+  await writeFileFn(percorsoVoce(cartella, manifest.id), JSON.stringify(record, null, 2), 'utf8');
+  await writeFileFn(ownerMetaPath(cartella, manifest.id), JSON.stringify({ maxRevision: revision }, null, 2), 'utf8');
+  await appendOwnerAudit(cartella, manifest.id, { kind: active ? 'update' : 'install', revision, at }, deps);
+  await pruneOwnerVersions(cartella, manifest.id, deps);
+  return record;
+}
+
+export async function elencaVersioniToolForgiatoOwner({ cartella, id }, deps = {}) {
+  if (typeof id !== 'string' || !OWNER_ID.test(id)) throw new ToolForgeStoreError('owner-managed tool id is invalid', 'FORGE_INVALID');
+  const readdirFn = deps.readdirFn ?? fsp.readdir;
+  const readFileFn = deps.readFileFn ?? fsp.readFile;
+  let names = []; try { names = await readdirFn(ownerVersionsDir(cartella, id)); } catch (error) { if (error?.code === 'ENOENT') return []; throw error; }
+  const revisions = names.map((name) => /^([1-9][0-9]*)\.json$/.exec(name)).filter(Boolean).map((match) => Number(match[1])).filter(Number.isSafeInteger).sort((a, b) => a - b);
+  const rows = [];
+  for (const revision of revisions) {
+    try { const value = JSON.parse(await readFileFn(ownerVersionPath(cartella, id, revision), 'utf8')); rows.push({ ...value, revision }); }
+    catch (error) { throw new ToolForgeStoreError(`${id} revision ${revision} unreadable: ${error.message}`, 'FORGE_READ_FAILED'); }
+  }
+  return rows;
+}
+
+export async function leggiAuditToolForgiatoOwner({ cartella, id }, deps = {}) {
+  if (typeof id !== 'string' || !OWNER_ID.test(id)) throw new ToolForgeStoreError('owner-managed tool id is invalid', 'FORGE_INVALID');
+  const readFileFn = deps.readFileFn ?? fsp.readFile;
+  try { return (await readFileFn(ownerAuditPath(cartella, id), 'utf8')).split('\n').filter(Boolean).map((line) => JSON.parse(line)); }
+  catch (error) { if (error?.code === 'ENOENT') return []; throw new ToolForgeStoreError(`${id}: owner audit unreadable: ${error.message}`, 'FORGE_READ_FAILED'); }
+}
+
+export function ripristinaVersioneToolForgiatoOwner(input, deps = {}) {
+  return inFilaPerStrumento(input?.cartella, input?.id, () => ripristinaVersioneInFila(input, deps));
+}
+async function ripristinaVersioneInFila({ cartella, id, revision }, deps = {}) {
+  validOwnerInput(id, revision);
+  const readFileFn = deps.readFileFn ?? fsp.readFile;
+  const writeFileFn = deps.writeFileFn ?? fsp.writeFile;
+  const active = await leggiToolForgiato({ cartella, id }, deps);
+  if (!active) throw new ToolForgeStoreError(`tool "${id}" does not exist`, 'FORGE_NOT_FOUND');
+  if (active.ownerManaged !== true) throw new ToolForgeStoreError(`tool "${id}" is not owner-managed`, 'FORGE_OWNER_ADOPTION_REQUIRED');
+  let snapshot;
+  try { snapshot = JSON.parse(await readFileFn(ownerVersionPath(cartella, id, revision), 'utf8')); }
+  catch (error) { if (error?.code === 'ENOENT') throw new ToolForgeStoreError(`owner revision ${revision} is not retained`, 'FORGE_VERSION_NOT_FOUND'); throw new ToolForgeStoreError(`${id} revision ${revision} unreadable: ${error.message}`, 'FORGE_READ_FAILED'); }
+  const restored = { ...snapshot, abilitato: false };
+  await writeFileFn(percorsoVoce(cartella, id), JSON.stringify(restored, null, 2), 'utf8');
+  await appendOwnerAudit(cartella, id, { kind: 'rollback', revision, at: new Date().toISOString() }, deps);
+  return restored;
+}

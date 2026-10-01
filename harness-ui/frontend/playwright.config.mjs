@@ -165,6 +165,8 @@ export default defineConfig({
       // serializza le chiavi nel report JSON (config.webServer.env).
       TALOS_HARNESS_UI_PORT: String(PORTA_TEST),
       TALOS_HARNESS_UI_SESSIONS_DIR: STORE_ISOLATO,
+      // Isolate every desktop store, including process output, not only journals.
+      TALOS_DESKTOP_DATA_DIR: STORE_ISOLATO,
       // ⛔ 23/09/2026: custodia delle chiavi in memoria. Senza, una prova che salva una chiave finta
       // (BC-62) cancellava la chiave OpenRouter VERA dell'owner nel Credential Manager. Vedi
       // `src/adattatore-keyring.mjs`, `creaAdattatorePortachiaviInMemoria`.
@@ -176,7 +178,9 @@ export default defineConfig({
   use: {
     baseURL,
     trace: 'on-first-retry',
-    screenshot: 'only-on-failure',
+    // Le catture esplicite dei test visivi impostano prima un viewport >= 1920x1080.
+    // Un fallimento su viewport funzionali più piccoli non deve produrre un PNG automatico.
+    screenshot: 'off',
     video: 'off',
   },
   projects: [

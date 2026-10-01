@@ -198,7 +198,7 @@ async function apriProvider(page, { colorMode = 'dark', test = false } = {}) {
     });
   }
   await page.addInitScript((modo) => {
-    window.localStorage.setItem('talos.harness.desktop.settings.v1', JSON.stringify({ version: 1, appearance: { colorMode: modo, themePreset: 'calm', themePresetVersione: 2, uiLanguage: 'it' }, chat: {}, workspaces: {} }));
+    window.localStorage.setItem('talos.harness.desktop.settings.v1', JSON.stringify({ version: 1, appearance: { colorMode: modo, themePreset: 'calm', themePresetVersione: 2, uiLanguage: 'it', uiFontScale: 'default' }, chat: {}, workspaces: {} }));
   }, colorMode);
   await serviIlModulo(page);
   await page.goto('/');
@@ -474,16 +474,12 @@ test.describe('la scheda Provider — il vestito del mockup sul contenuto vero',
     expect(stato.avviso, 'e deve dire le verifiche distinte, che è la frase vera').toContain('verifiche distinte');
     expect(stato.avviso, 'la frase del mockup è del prototipo: qui sarebbe falsa').not.toContain('stato temporaneo del prototipo');
     expect(stato.annulla).toBe('Annulla');
-    /* ⛔ LA PRIMARIA È IL GESTO VERO DELLA CARD, e il suo nome lo dice. Il mockup porta «Salva
-       configurazione demo»: la sua è un'azione di PROTOTIPO. Qui la primaria preme il pulsante
-       che la card premerebbe davvero — per OpenAI la CONFIGURAZIONE (indirizzo e tempo massimo,
-       il `save-runtime` che la regia serve da sempre), per un fornitore che non ne ha una, la
-       chiave. Un piede che promette «Salva configurazione» dove non c'è niente da configurare
-       sarebbe la stessa classe di difetto del pulsante che promette un'altra cosa. */
-    expect(stato.primaria).toBe('Salva configurazione');
-    expect(stato.primariaTipo).toBe('runtime');
-    // Il montaggio reale passa l'adapter per più chiavi; il comando mantiene un listener proprio.
-    await expect(card.getByRole('button', { name: 'Aggiungi chiave', exact: true })).toBeVisible();
+    /* ⛔ Owner 01/10/2026, «Un Salva solo, come Hermes». La primaria del 19/09 premeva `save-runtime` e si chiamava
+       «Salva configurazione»: chi incollava una chiave e premeva quella la perdeva, perché la chiave la salvava solo il
+       pulsante INTERNO. Ora la primaria si chiama «Salva», salva tutto ciò che si è scritto e chiude; il pulsante interno,
+       dentro la modale, è nascosto (la card in linea lo usa ancora). */
+    expect(stato.primaria).toBe('Salva');
+    await expect(card.getByRole('button', { name: 'Aggiungi chiave', exact: true }), 'dentro la modale un pulsante solo salva').toBeHidden();
     /* Il fuoco entra nel primo controllo utile, non sul contenitore. */
     expect(stato.fuocoDentro, 'il fuoco è rimasto fuori dalla modale').toBe(true);
     expect(stato.fuocoSu, 'il fuoco entra nel primo controllo UTILE').toBe('chiave');
@@ -524,9 +520,10 @@ test.describe('la scheda Provider — il vestito del mockup sul contenuto vero',
     await card.locator('[data-provider-modale-salva]').click();
     await expect.poll(() => salvataggi.length).toBe(1);
     expect(salvataggi[0].corpo.endpoint).toBe('https://esempio.test/v1');
-    await expect(modale, 'il ridisegno della lista si è portato via la modale').toHaveCount(1);
+    /* Owner 01/10/2026: dopo «Salva» la modale si CHIUDE e il successo si annuncia (prima restava aperta, senza un esito visibile). */
+    await expect(card.locator(':scope > .talos-provider__modale'), 'dopo «Salva» la modale deve chiudersi').toHaveCount(0);
+    await expect(page.locator('#regioneToast, #toastRegion').first(), 'il successo si annuncia').toContainText('Configurazione salvata');
     await expect(card.locator('.talos-provider__fatti'), 'la card nuova porta il dato nuovo').toContainText('Indirizzo personalizzato');
-    await expect(card.locator('[data-provider-modale-salva]'), 'e la modale è quella della card nuova').toHaveCount(1);
 
     /*
      * ── LA PRIMARIA SALVA DAVVERO ─────────────────────────────────────────────────────
@@ -534,13 +531,13 @@ test.describe('la scheda Provider — il vestito del mockup sul contenuto vero',
      * scritto dentro la modale arriva al salvataggio — i campi sono gli STESSI nodi del corpo,
      * non due copie che si somigliano.
      */
+    await configura.click();
     await card.locator('[data-provider-endpoint]').fill('https://esempio.test/v2');
     await card.locator('[data-provider-modale-salva]').click();
     await expect.poll(() => salvataggi.length, { message: 'la primaria della modale non ha salvato niente' }).toBe(2);
     expect(salvataggi[1].percorso).toBe('/api/v1/providers/openai/runtime');
     expect(salvataggi[1].corpo.endpoint, 'l\'indirizzo scritto nella modale arriva al salvataggio').toBe('https://esempio.test/v2');
-    /* L'esito vive DENTRO la modale, dove stanno i campi: è la ragione per cui non si chiude. */
-    await expect(card.locator('[data-provider-feedback]')).toHaveText('Collegamento salvato.');
+    await expect(card.locator(':scope > .talos-provider__modale')).toHaveCount(0);
 
 
     // Attendiamo la card aggiornata e chiudiamo la modale prima della sonda HTTP simulata.

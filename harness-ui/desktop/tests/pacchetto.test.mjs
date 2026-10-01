@@ -58,6 +58,16 @@ test('R02-ASSISTENZA — corpus copiato, impronta inventariata e mapping runtime
   );
 });
 
+test('R02-CASA-LINUX — i binari per Linux escono dallo staging verso le risorse, dove il guscio li cerca', () => {
+  /* Fase B «casa di esecuzione» (owner 01/10/2026, «dentro l'installatore»): `.staging/casa-linux` → `resources/casa-linux`,
+     che è il percorso di `risolviPercorsi` (`runtime.test.mjs`, R02-PERCORSI). Due metà che devono combaciare. */
+  const packageJson = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
+  assert.deepEqual(packageJson.build.extraResources.filter(resource => resource.to === 'casa-linux'), [{ from: '.staging/casa-linux', to: 'casa-linux' }]);
+  const script = readFileSync(new URL('../scripts/prepara-pacchetto.mjs', import.meta.url), 'utf8');
+  assert.match(script, /const casaLinux = join\(staging, 'casa-linux', 'linux-x64'\);/);
+  assert.match(script, /verificaCasaLinux\(casaLinux, \{ controllaImpronte: true \}\)/, 'i binari estratti si riverificano contro il loro manifesto');
+});
+
 test('R02-COMPLETEZZA — ogni file di produzione tracciato in src entra nel pacchetto', async () => {
   /* 28/09/2026: `src/scratch.mjs` restava fuori perché il suo NOME cadeva in una regola pensata per le cartelle, e il server
      installato non partiva. Una selezione per esclusione va provata al contrario: tutto ciò che il repository traccia come

@@ -12,8 +12,10 @@ import { ultimoSegmento as ultimoSegmentoWorkspace } from '../domain/workspace-p
 import {creaSceltaFallback} from '../components/fonti-modelli.js';
 import { AZIONE_ACCODA, AZIONE_BIVIO, AZIONE_COMANDO, ORIGINE_COMPOSER_DURANTE_ASK, ORIGINE_SCELTA_ESPLICITA, SELETTORE_SCELTA_PREDEFINITA, creaCronologiaComposer, decidiInvio, mostraPulsanteReindirizzo, reindirizzoConsentito } from './invio-durante-il-giro.js'; // Corsia 1 (13/09): il bivio accoda/reindirizza, e la freccia su
 import { colonnaConversazione, scorrevoleConversazione } from '../bridge/conversazione-dom.js';
+import { montaProviderRetry } from '../components/provider-retry.js';
 import {aggiornaProviderList,montaProviderPanel} from '../components/provider-card.js';
 import { POLITICHE, nomeUmanoPolitica, descrizionePolitica, notaPolitica, valoriPolitiche } from '../components/politiche.js';
+import { testiUtenteWsl, testiDoveGiranoIComandi } from '../components/utente-wsl.js'; // F009 (owner 01/10/2026): con che utente girano i comandi Linux; fase B: la casa Linux
 import { PROVIDER_DIRETTI, eFonteDiretta, fontiDelSelettore, modelliDellaFonte, fraseVuotoDiretto, senzaChiave, aggiornaTestoModelloSelettore } from '../components/fonti-modelli.js'; // BC-12 (11/09): «Diretti» si spezza in una scheda per fornitore // P-C (12/09): un motore locale non ha chiave da collegare
 import { statoAvvioSessione } from '../components/avvio-sessione.js'; // BC-14 (11/09): «Avvia» non mente più sul perché è fermo
 import { nomeLeggibileSessione, identitaSessione, aggiornaSessionItem } from '../components/session-item.js'; // N1 (10/09): la riga della sessione viva cambia sul posto · BC-36/37 (12/09): nome e permesso da UNA fonte sola
@@ -44,6 +46,7 @@ import { montaGrafoAgenti, modelloGrafoAgenti } from '../components/grafo-agenti
 import { montaGrafoWorkflow } from '../components/grafo-workflow.js'; // F3-42, 25/09/2026: il diagramma del workflow (D30)
 import { creaClientGrafo } from '../components/workflow-graph-client.js';
 import { montaRailWorkflow } from '../components/rail-workflow.js'; // F3-50, 25/09/2026: il rail «Agenti» del workflow (D30)
+import { montaSelettoreGrafo, montaSelettoreRail } from '../components/grafo-sorgenti.js';
 import { montaCronologiaWorkflow } from '../components/workflow-history.js';
 import { applicaDecisionePiano, createPlanArtifact, parsePlanEvent } from '../components/plan-artifact.js';
 import { bozzaDaiTetti, creaCardProposta, disegnaCardProposta, leggiRicevutaProposta } from '../components/workflow-proposal-card.js'; // F3-33a, 25/09/2026
@@ -53,6 +56,8 @@ import { confermaModale } from '../components/modale-td.js'; // 11/09 lotto G: a
 import { montaScorciatoiaTemi } from '../components/theme-studio.js'; // 11/09 lotto F
 import { aggiornaBoard, creaRigaBoard, cartellaDaExport } from '../components/board.js'; // 05/9 Fase 2: Board
 import { applicaCollocazioneToast, creaPilaToast } from '../components/toast.js';
+import { creaAvvisiEliminazione } from '../components/session-deletion-feedback.js';
+import { normalizzaRicevutaOutput, creaLettoreOutput } from '../components/process-output.js';
 import { creaSorveglianzaConnessione, aggiornaStatoConnessione } from '../components/connessione.js'; // 05/9 T-15: stato onesto della connessione
 import { aggiornaPannelloNotifiche, apriPannelloNotifiche, nomeCampanella, deveAvvisareFuoriDallaFinestra, testoNotificaSistema, statoConsensoNotifiche } from '../components/notifiche.js'; // 06/9 T-17: pannello «Aspetta te» del mockup; 06/9 G29: notifica di sistema
 import { aggiornaInstallati, montaInstallati, gb } from '../components/modelli-installati.js'; // 06/9 B6.8: scheda «Installati» del Model Lab
@@ -73,6 +78,7 @@ import { impacchetta as impacchettaAnnotazioni } from '../components/annotazioni
 import { aggiornaConteggiNav } from '../components/nav-item.js'; // 05/9 Fase 2: NavItem — i badge dei Luoghi sono dati veri
 import { creaSessionItem, sessioniRadice, ordinaSessioniAdAlbero, statoSessione } from '../components/session-item.js';
 import { mountUserQuestionDock } from '../components/user-question-dock.js';
+import { creaCardArtefatto } from '../components/artifact-card.js';
 import { montaConversazioneFiglia } from '../components/conversazione-figlia.js'; // PO-08 (10/09): la conversazione di un sotto-agente, nel pannello
 /* PO-06 (10/09): l'esito di un comando, detto a una persona.
    ⛔ `rigaEsitoDaMostrare` e `senzaIntestazione` arrivano dallo STESSO contratto (20/09): la regola
@@ -115,7 +121,7 @@ import { aggiornaSeparatoreContesto, aggiornaSeparatoreLegacy, alternaRiassuntoL
 import { createContextClient } from '../services/context-client.js';
 import { createContextMonitor } from '../services/context-monitor.js';
 import { aggiornaAvanzamentoContesto, aggiornaAvanzamentoLegacy } from '../components/context-progress.js'; // F5, 24/09/2026: la barra anche per il legacy
-import { interpretaEventoCompattazione, valutaSogliaContesto, sogliaLegacy, testoRigaCompattazione, testoBarraLegacy, montaAvvisoContesto, aggiornaAvvisoContesto, aggiornaNotaJournalRiparato, compattaLegacy, annullaCompattazioneLegacy } from '../components/compattazione-legacy.js'; // F5, 24/09/2026: la compattazione legacy che si vede e si può fare
+import { interpretaEventoCompattazione, valutaSogliaContesto, testoRigaCompattazione, testoBarraLegacy, montaAvvisoContesto, aggiornaAvvisoContesto, aggiornaNotaJournalRiparato, compattaLegacy, annullaCompattazioneLegacy } from '../components/compattazione-legacy.js'; // F5, 24/09/2026: la compattazione legacy che si vede e si può fare
 import { aggiornaDiffReview, aggiornaSommarioSchedeReview, chiaveFileReview, creaSchedeReview, etichettaFileReview, nascondiAzioniFase3, riassuntoReviewTestata as riassuntoReviewPerTestata } from '../components/review.js'; // 05/9 Fase 2: Review — elenco dei file e diff nel disegno; 17/09 BC-75: `etichettaFileReview` è la regola del nome, e non si riscrive qui del mockup; 17/09 BC-63: le linguette sono il componente condiviso col Terminale
 import { creaStatoVuoto, suggerimentiDallaCartella } from '../components/stato-vuoto.js'; // 05/9 Fase 2: EmptyState — lo stato vuoto del mockup, dai fatti della cartella
 import { montaGuscioLaboratorio } from '../components/lab-cornice-v3.js'; // 18/09 corsia 2: il guscio a quattro schede del Laboratorio modelli — monta i comandi legacy in una scheda sola
@@ -486,6 +492,7 @@ import { aggiornaWorkspaceFooter, fornitoreDelModello, testiPiede as testiPiedeW
   const appShell = $('#app');
   const views = $$('.view-pane');
   const chatConversation = scorrevoleConversazione(colonnaConversazione(ROOT()));
+  const providerRetryUi = montaProviderRetry({ contenitore: () => $('#conversation'), onShow: () => nascondiAttesaRisposta() });
   const mobileViewButtons = $$('[data-mobile-view]');
   const modeTabs = $$('.mode-tab');
   const backdrop = $('#overlayBackdrop');
@@ -639,7 +646,12 @@ import { aggiornaWorkspaceFooter, fornitoreDelModello, testiPiede as testiPiedeW
     pubblicaSegui();
     streamingLastTargetTop = null; // nessun bersaglio nostro da confrontare: il prossimo scroll umano decide da solo
     streamingUserScrollHold = false;
-    fermaFondoRipristino?.(); // la persona ha preso in mano la conversazione: il custode del ripristino si fa da parte
+    /* ⛔⛔ 30/09/2026 — MA NON DURANTE LA RIGIOCATA. `appendRealTaskStart` chiama il riarmo come «la persona ha scritto» anche per
+       le bolle STORICHE: misurato sul 4174 (`a214dd29`, stack catturato), la prima bolla rigiocata spegneva il custode a 107 ms,
+       prima che arrivasse la cronologia — la chat si scopriva subito e restava 787 px sopra il fondo. Una bolla rigiocata è
+       passato (`talos.fine-rigiocata` segna il confine, `handleRealEvent`), non un gesto: il custode resta finché la storia
+       non è finita. */
+    if (!state.realSession.inRigiocata) fermaFondoRipristino?.(); // la persona ha preso in mano la conversazione: il custode del ripristino si fa da parte
   }
   /*
    * Il custode del fondo durante il ripristino (`mantieniFondoDuranteRipristino`) pubblica qui il suo
@@ -2567,6 +2579,9 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     misuraPilaToast();
     return mostraToast(String(title), message == null ? '' : String(message?.message ?? message), opzioni);
   }
+  const avvisiEliminazione = creaAvvisiEliminazione({storage: () => window.sessionStorage, mostraToast: toast});
+  avvisiEliminazione.mostra();
+  let outputSessionController = new AbortController();
 
   /**
    * 05/9 T-15, owner «approvato adesso»: a server caduto lo schermo taceva.
@@ -3214,7 +3229,26 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       const base='/api/v1/providers/'+encodeURIComponent(provider);
       await apiPost(base+(azione==='aggiungi'?'/keys':'/keys/remove'),azione==='aggiungi'?{key}:{impronta});
       await caricaProviderModelLab();
-    },aperte:state.modelLab.providerAperti,prove:state.modelLab.provePr,occupati:state.modelLab.providerOccupati,caricamento:state.modelLab.loadingProviders,errore:state.modelLab.providerError,
+    },
+      /* Owner 01/10/2026, «Un Salva solo, come Hermes»: il «Salva» della modale «Configura» manda la chiave scritta e poi la
+         configurazione cambiata, e NON ridisegna (la modale si chiude prima: un ridisegno a metà la riaprirebbe sulla card
+         nuova). L'errore porta la sua fase, così la modale dice QUALE delle due non è passata. */
+      onSalvaConfigurazione:async({provider,chiave,pool,collegamento})=>{
+        const base='/api/v1/providers/'+encodeURIComponent(provider);
+        if(chiave){try{await apiPost(base+(pool?'/keys':'/key'),{key:chiave});}
+          catch(error){throw Object.assign(new Error(messaggioErroreUtente(error,'Il server non ha accettato la chiave.')),{fase:'chiave'});}}
+        if(collegamento){try{await apiPost(base+'/runtime',collegamento);}
+          catch(error){throw Object.assign(new Error(messaggioErroreUtente(error,'Il server non ha accettato la configurazione.')),{fase:'collegamento'});}}
+        state.modelLab.provePr?.delete(provider);
+      },
+      /* …e a modale chiusa, l'esito si annuncia (il pulsante dice «Salva», l'avviso dice «salvata») e la lista si rilegge. */
+      onConfigurazioneSalvata:({etichetta,salvato})=>{
+        const chiave=salvato.includes('chiave'),configurazione=salvato.includes('collegamento');
+        toast(chiave&&configurazione?'Chiave e configurazione salvate':chiave?'Chiave salvata':'Configurazione salvata',
+          chiave?`${etichetta}: la chiave è nel portachiavi del computer.`:`${etichetta}: configurazione aggiornata.`);
+        void caricaProviderModelLab();
+      },
+      aperte:state.modelLab.providerAperti,prove:state.modelLab.provePr,occupati:state.modelLab.providerOccupati,caricamento:state.modelLab.loadingProviders,errore:state.modelLab.providerError,
       /* ⛔ 10/09 — le azioni di un fornitore non stanno più in fila: qui si passa chi sa aprire
          il menu condiviso `.ft-actions-menu`, lo stesso della Libreria e dell'albero dei file.
          `posizionamento` arriva come {ancora} dal clic sui «⋯» e come {x,y} dal tasto destro. */
@@ -7651,19 +7685,27 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   async function eliminaSessioneBersaglio() {
     const bersaglio = state.sessioneTarget;
     if (!bersaglio) return { ok: false, motivo: 'Nessuna sessione scelta.' };
+    let esito;
     try {
-      await apiPost(`/api/v1/sessions/${encodeURIComponent(bersaglio.sessionId)}/delete`, {});
+      esito = await apiPost(`/api/v1/sessions/${encodeURIComponent(bersaglio.sessionId)}/delete`, {});
     } catch (error) {
       toast('Eliminazione non riuscita', messaggioErroreUtente(error));
       return { ok: false, motivo: messaggioErroreUtente(error, 'la trascrizione è ancora al suo posto') };
     }
-    toast('Sessione eliminata', bersaglio.nome);
+    const avviso = avvisiEliminazione.registra(esito);
+    if (!avviso.pending) toast('Sessione eliminata', bersaglio.nome);
     if (state.realSession.id === bersaglio.sessionId) {
-      window.location.reload();
+      if (avviso.pending && !avviso.persisted) avvisiEliminazione.mostra({dopoLettura: () => window.location.reload()});
+      else window.location.reload();
       return { ok: true };
     }
-    await aggiornaElencoSessioniReali();
-    if (state.board.initialized) await refreshSessionsBoard();
+    if (avviso.pending) avvisiEliminazione.mostra();
+    try {
+      await aggiornaElencoSessioniReali();
+      if (state.board.initialized) await refreshSessionsBoard();
+    } catch {
+      toast('Elenco non aggiornato', 'La sessione è stata eliminata. Ricarica la pagina per aggiornare l’elenco.', {tono: 'avviso'});
+    }
     return { ok: true };
   }
 
@@ -7801,6 +7843,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
        * (cosi lo stato a schermo e quello vero) e aggancia dopo, una volta sola per radice.
        */
       disegnaPermessiIn(velo);
+      caricaUtenteWslIn(velo); // F009: i fatti di WSL a ogni apertura (la preferenza e l'utente possono essere cambiati)
       /*
        * ⭐⭐⭐ D-10T — le due scelte sui comandi si RILEGGONO dal server all'apertura.
        *
@@ -9032,6 +9075,54 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    * ⛔ Una radice si aggancia UNA VOLTA (`dataset.permessiCollegati`): ridisegnare le righe non
    *   deve moltiplicare gli ascoltatori, e il ridisegno qui capita a ogni scelta.
    */
+  /*
+   * ⛔⛔ F009 (owner 01/10/2026, «esito e foglio della shell», interruttore «nel foglio, sotto la riga») — il blocco «con che
+   *   utente girano i comandi in Linux» del velo dei permessi. I testi sono di `components/utente-wsl.js` (puri, provati da
+   *   soli); qui si mettono con `textContent`. Senza risposta del server il blocco resta nascosto: un fatto che non
+   *   abbiamo non si scrive.
+   */
+  /*
+   * Fase B «casa di esecuzione» (owner 01/10/2026, «anche Automatico») — con la casa Linux pronta, «Automatico» e «Linux (WSL2)»
+   *   dicono che anche gli attrezzi dei file lavorano in Linux (`testiDoveGiranoIComandi`); senza, tornano i testi del template,
+   *   conservati la prima volta in `data-testo-di-sempre`. La scelta stessa (aria-checked) resta di `disegnaPermessiIn`.
+   */
+  function disegnaDoveGiranoIn(radice, dati) {
+    const testi = testiDoveGiranoIComandi(dati);
+    for (const [chiave, scelta] of [['automatico', ''], ['linux', 'wsl2']]) {
+      const bottone = $(`[data-dove-choice="${scelta}"]`, radice);
+      if (!bottone) continue;
+      for (const [selettore, campo] of [['.talos-choice__sub', 'sub'], ['.talos-badge', 'badge']]) {
+        const elemento = $(selettore, bottone);
+        if (!elemento) continue;
+        if (elemento.dataset.testoDiSempre === undefined) elemento.dataset.testoDiSempre = elemento.textContent;
+        elemento.textContent = testi?.[chiave]?.[campo] ?? elemento.dataset.testoDiSempre;
+      }
+    }
+  }
+  function disegnaUtenteWslIn(radice, dati) {
+    disegnaDoveGiranoIn(radice, dati);
+    const blocco = $('#veloPermessiWsl', radice);
+    if (!blocco) return;
+    const testi = testiUtenteWsl(dati);
+    blocco.hidden = !testi.visibile;
+    if (!testi.visibile) return;
+    $('#veloPermessiWslChi', radice).textContent = testi.chi;
+    $('#veloPermessiWslDischi', radice).textContent = testi.dischi;
+    const nota = $('#veloPermessiWslNota', radice);
+    nota.textContent = testi.nota;
+    if (testi.comando) {
+      const comando = document.createElement('span');
+      comando.className = 'talos-mono';
+      comando.textContent = testi.comando;
+      nota.append(' ', comando);
+    }
+    $('#veloPermessiWslNormale', radice).checked = testi.acceso;
+  }
+  async function caricaUtenteWslIn(radice) {
+    try { disegnaUtenteWslIn(radice, await apiGet('/api/v1/wsl')); }
+    catch { disegnaUtenteWslIn(radice, null); }
+  }
+
   function collegaAzioniPermessi(radice, { dopoLaScelta = () => {}, ridisegna = () => {} } = {}) {
     if (!radice) return;
     /*
@@ -9041,6 +9132,26 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
      *   il server RIFIUTA per davvero (400 DOVE_NON_VALIDO), non e' una formalità.
      * ⛔ E se non c'e' una sessione aperta non si finge: la scelta appartiene a una sessione.
      */
+    /*
+     * F009 — l'interruttore dell'utente normale vale per TUTTE le sessioni (`POST /api/v1/wsl`), quindi non chiede una
+     * sessione aperta. Lo stato a schermo lo riscrive la risposta del server; se la scrittura fallisce torna com'era.
+     */
+    const interruttoreWsl = $('#veloPermessiWslNormale', radice);
+    if (interruttoreWsl && !interruttoreWsl.dataset.wslCollegato) {
+      interruttoreWsl.dataset.wslCollegato = 'si';
+      interruttoreWsl.addEventListener('change', async () => {
+        const voluto = interruttoreWsl.checked;
+        interruttoreWsl.disabled = true;
+        try {
+          disegnaUtenteWslIn(radice, await apiPost('/api/v1/wsl', { usaUtenteNormale: voluto }));
+        } catch (errore) {
+          interruttoreWsl.checked = !voluto;
+          toast('Scelta non applicata', messaggioErroreUtente(errore, 'Riprova, o guarda Doctor se si ripete.'));
+        } finally {
+          interruttoreWsl.disabled = false;
+        }
+      });
+    }
     $$('[data-dove-choice]', radice).forEach((button) => {
       if (button.dataset.doveCollegato) return;
       button.dataset.doveCollegato = 'si';
@@ -9527,21 +9638,11 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     if (deleteSessionConfirm) {
       $('[data-delete-session-cancel]', sheetBody)?.addEventListener('click', () => closeEmbeddedDialog(sheetDialog));
       deleteSessionConfirm.addEventListener('click', async () => {
-        const bersaglio = state.sessioneTarget;
-        if (!bersaglio) return;
-        try {
-          await apiPost(`/api/v1/sessions/${encodeURIComponent(bersaglio.sessionId)}/delete`, {});
-          closeEmbeddedDialog(sheetDialog);
-          toast('Sessione eliminata', bersaglio.nome);
-          if (state.realSession.id === bersaglio.sessionId) {
-            window.location.reload();
-            return;
-          }
-          await aggiornaElencoSessioniReali();
-          if (state.board.initialized) await refreshSessionsBoard();
-        } catch (error) {
-          toast('Eliminazione non riuscita', error.message);
-        }
+        if (deleteSessionConfirm.disabled) return;
+        deleteSessionConfirm.disabled = true;
+        const esito = await eliminaSessioneBersaglio();
+        if (esito.ok) closeEmbeddedDialog(sheetDialog);
+        else deleteSessionConfirm.disabled = false;
       });
     }
 
@@ -9840,6 +9941,8 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   let diagrammaInApertura = false;
   let grafoWorkflowChiave = null; // la sorgente del diagramma aperto: un clic nel rail sullo stesso workflow non lo rimonta
   let railWorkflow = null; // F3-50: il rail v2 in `#railAgenti` quando la sessione ha un workflow (D30)
+  let railSorgenti = null;
+  let selettoreGrafo = null;
   let cronologiaWorkflow = null;
   let railWorkflowChiave = null;
   let railWorkflowAttivi = 0;
@@ -9853,6 +9956,61 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   const agentiInDiretta = new Map();
   const risultatiDelegaMostrati = new Set();
 
+  /*
+   * ⭐ 30/09/2026 — IL RIQUADRO DEL RISULTATO DEL SOTTO-AGENTE (owner 28/09, punto 1; il 30/09 «formattala in MD… tutto il
+   *   punto 1»). Prima era `appendStatusNote(titolo + testo)`: il compito INTERO in testa (il brief «Sei nella cartella…
+   *   Analizza attentamente SOLO…») e il risultato come testo piano — `##`, `**`, tabelle `|---|` grezzi — senza limite
+   *   d'altezza, una nota per più schermate. Ora:
+   *   - il compito è UNA riga (il resto nel suggerimento al passaggio), non il brief ripetuto;
+   *   - il risultato passa dal renderer della chat (`renderizzaMarkdownSemplice`, lo stesso dei messaggi);
+   *   - il corpo è accorciato, e «Mostra tutto» lo apre. Il pulsante c'è SOLO se il testo è tagliato davvero: lo decide un
+   *     ResizeObserver, perché la nota può nascere in una chat ancora nascosta (rigiocata, `is-restoring`) dove l'altezza
+   *     non si misura al momento dell'inserimento.
+   * ⛔ Il sollecito automatico del padre (punto 2) resta DOPO la release: tocca la regola «decide all'assestamento».
+   */
+  function appendRisultatoDelega(risultato, meta) {
+    const nota = creaNotaSistema({ tipo: risultato.errore ? 'warning' : 'info', badge: 'Nota', titolo: meta, testo: '' });
+    nota.classList.add('real-session-status', 'talos-risultato-delega');
+    if (risultato.errore) nota.dataset.tone = 'warning';
+    const corpoNota = nota.lastElementChild;
+    corpoNota.classList.add('talos-risultato-delega__contenuto');
+    corpoNota.querySelector(':scope > p')?.remove();
+    const compito = String(risultato.titolo ?? '').trim();
+    if (compito) {
+      const riga = document.createElement('div');
+      riga.className = 'talos-risultato-delega__compito';
+      riga.textContent = compito.split('\n').find((r) => r.trim())?.trim() ?? compito;
+      riga.title = compito;
+      corpoNota.append(riga);
+    }
+    const corpo = document.createElement('div');
+    corpo.className = 'talos-risultato-delega__corpo assistant-copy';
+    corpo.append(renderizzaMarkdownSemplice(risultato.testo));
+    const bottone = document.createElement('button');
+    bottone.type = 'button';
+    bottone.className = 'talos-button talos-button--ghost talos-button--sm talos-risultato-delega__apri';
+    bottone.textContent = 'Mostra tutto';
+    bottone.setAttribute('aria-expanded', 'false');
+    bottone.hidden = true;
+    bottone.addEventListener('click', () => {
+      const aperta = nota.classList.toggle('is-aperta');
+      bottone.textContent = aperta ? 'Mostra meno' : 'Mostra tutto';
+      bottone.setAttribute('aria-expanded', aperta ? 'true' : 'false');
+      aggiornaTaglio();
+    });
+    function aggiornaTaglio() {
+      const tagliata = !nota.classList.contains('is-aperta') && corpo.scrollHeight > corpo.clientHeight + 1;
+      corpo.dataset.tagliata = tagliata ? 'si' : 'no';
+      bottone.hidden = !tagliata && !nota.classList.contains('is-aperta');
+    }
+    if (typeof ResizeObserver === 'function') new ResizeObserver(aggiornaTaglio).observe(corpo);
+    corpoNota.append(corpo, bottone);
+    nellaChat(nota);
+    aggiornaTaglio();
+    markMotionEnter(nota);
+    scorriAllaBollaAppesa(nota);
+  }
+
   function mostraRisultatoDelega(evento) {
     if (evento?.origine !== 'delega') return false;
     if (Array.isArray(evento.risultatiDelega)) {
@@ -9860,17 +10018,18 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         if (!item || typeof item.codaId !== 'string' || typeof item.childId !== 'string'
           || typeof item.testo !== 'string' || risultatiDelegaMostrati.has(item.codaId)) continue;
         const risultato = descriviRisultatoDelega(item.testo, item.childId);
-        appendStatusNote(risultato ? `${risultato.titolo}\n${risultato.testo}`
-          : `Il sotto-agente ${item.childId} ha consegnato un risultato. È disponibile nel suo dettaglio.`, false,
-        { meta: risultato?.errore ? 'Notifica di sistema · sotto-agente non concluso' : 'Notifica di sistema · risultato del sotto-agente' });
+        const meta = risultato?.errore ? 'Notifica di sistema · sotto-agente non concluso' : 'Notifica di sistema · risultato del sotto-agente';
+        if (risultato) appendRisultatoDelega(risultato, meta);
+        else appendStatusNote(`Il sotto-agente ${item.childId} ha consegnato un risultato. È disponibile nel suo dettaglio.`, false, { meta });
         risultatiDelegaMostrati.add(item.codaId);
       }
       return true;
     }
     if (evento.codaId && risultatiDelegaMostrati.has(evento.codaId)) return true;
     const risultato = descriviRisultatoDelega(evento.testo ?? evento.consegna, evento.childId);
-    appendStatusNote(risultato ? `${risultato.titolo}\n${risultato.testo}` : 'Un sotto-agente ha consegnato il risultato. È disponibile nel suo dettaglio.', false,
-      { meta: risultato?.errore ? 'Risultato del sotto-agente · non concluso' : 'Risultato del sotto-agente' });
+    const meta = risultato?.errore ? 'Risultato del sotto-agente · non concluso' : 'Risultato del sotto-agente';
+    if (risultato) appendRisultatoDelega(risultato, meta);
+    else appendStatusNote('Un sotto-agente ha consegnato il risultato. È disponibile nel suo dettaglio.', false, { meta });
     if (evento.codaId) risultatiDelegaMostrati.add(evento.codaId);
     return true;
   }
@@ -9881,6 +10040,37 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   let giroPianoProposto = false;
   let legacyPlanCard = null;
   const GRAFO_APERTO_KEY = 'talos.grafo.aperto.v1';
+  const GRAFO_TIPO_KEY = 'talos.grafo.tipo.v1:';
+
+  function tipoGrafoScelto(id) {
+    try { const tipo = sessionStorage.getItem(`${GRAFO_TIPO_KEY}${id}`); return tipo === 'deleghe' ? 'deleghe' : 'workflow'; }
+    catch { return 'workflow'; }
+  }
+  function ricordaTipoGrafo(id, tipo) {
+    if (tipo !== 'workflow' && tipo !== 'deleghe') return;
+    try { sessionStorage.setItem(`${GRAFO_TIPO_KEY}${id}`, tipo); } catch { /* storage non disponibile */ }
+  }
+  function ricordaGrafoAperto(id, tipo) {
+    try { sessionStorage.setItem(GRAFO_APERTO_KEY, JSON.stringify({ v: 2, id, tipo })); }
+    catch { /* storage non disponibile */ }
+  }
+  function grafoDaRiprendere(id) {
+    try {
+      const valore = sessionStorage.getItem(GRAFO_APERTO_KEY);
+      if (valore === id) return tipoGrafoScelto(id); // chiave della 0.1.19
+      const dato = JSON.parse(valore);
+      return dato?.v === 2 && dato.id === id && ['workflow', 'deleghe'].includes(dato.tipo) ? dato.tipo : null;
+    } catch { return null; }
+  }
+  function montaSceltaSulGrafo(tipo) {
+    selettoreGrafo?.distruggi(); selettoreGrafo = null;
+    if (!railWorkflow) return;
+    const radice = (tipo === 'workflow' ? grafoWorkflow : grafoAgenti)?.elemento;
+    const testata = radice?.querySelector(':scope > header');
+    if (testata) selettoreGrafo = montaSelettoreGrafo(testata, {
+      iniziale: tipo, onSelezione: (scelto) => { ricordaTipoGrafo(state.realSession.id, scelto); void apriDiagramma({ tipo: scelto }); },
+    });
+  }
 
   function datiGrafoAgenti() {
     const nota = state.sessionSelection.available.get(state.realSession.id) || {};
@@ -9889,13 +10079,13 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const chiamate = new Set(state.realSession.eventiAttrezzi.filter(e => e.type === 'ToolCallStart').map(e => e.toolCallId)).size;
     return {
       corrente: { ...nota, ultimoEsito: esitoMadre ? (esitoMadre.type === 'RunError' ? 'errore' : esitoMadre.type === 'RunFinished' ? 'concluso' : null) : nota.ultimoEsito, interrotta: esitoMadre ? esitoMadre.type === 'RunError' && esitoMadre.code === 'fermato' : nota.interrotta, motivoChiusura: esitoMadre ? (esitoMadre.code === 'fermato' ? 'fermata' : null) : nota.motivoChiusura, attivita: { chiamate, attrezzoCorrente: operazione, passi: [] }, sessionId: state.realSession.id, nome: state.session || 'Sessione corrente', cartella: state.realSession.cartellaAssoluta || nota.cartella, conclusa: !runRealeAttivo(), inAttesaApprovazione: state.realSession.approvazioniPendenti.size, usageSessione: state.realSession.usageSessione || nota.usageSessione },
-      sessioni: [...state.sessionSelection.available.values(), ...agentiInDiretta.values()], figli: state.realSession.figli || [],
+      sessioni: [...state.sessionSelection.available.values(), ...agentiInDiretta.values()].filter(a => a?.passoWorkflow == null), figli: state.realSession.figli || [],
       errore: figliErrore, aggiornato: figliAggiornati,
     };
   }
   function agentiPerInspector() {
     return modelloGrafoAgenti(datiGrafoAgenti()).nodi
-      .filter(n => n.id !== state.realSession.id)
+      .filter(n => n.id !== state.realSession.id && n.dati?.passoWorkflow == null)
       .map(n => ({ ...n.dati, taskCorto: n.dati.taskCorto || n.nome, numeroFigli: n.figli }));
   }
   function applicaEventoAgenti(value) {
@@ -9924,6 +10114,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   function chiudiGrafoAgenti({ ricorda = false } = {}) {
     aperturaDiagramma++; diagrammaInApertura = false;
     clearInterval(grafoTimer); grafoTimer = null;
+    selettoreGrafo?.distruggi(); selettoreGrafo = null;
     grafoAgenti?.distruggi(); grafoAgenti = null;
     grafoWorkflow?.distruggi(); grafoWorkflow = null; grafoWorkflowChiave = null;
     railWorkflow?.evidenzia(null); railWorkflow?.diagramma(false);
@@ -9937,9 +10128,15 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    *   card della proposta), e così il posto (`#schermoChat > [data-c="GrafoAgenti"]`) e il ritorno («Torna alla chat»).
    *   `preferita` ({workflowId, version}) arriva dalla card: si apre QUEL workflow.
    */
-  async function apriDiagramma({ figlia = null, preferita = null, iniziale = null } = {}) {
+  async function apriDiagramma({ figlia = null, preferita = null, iniziale = null, tipo = null } = {}) {
     const id = state.realSession.id;
     if (!id) return;
+    const scelto = figlia ? 'deleghe' : preferita ? 'workflow' : tipo ?? tipoGrafoScelto(id);
+    if (scelto === 'deleghe') {
+      aperturaDiagramma++; diagrammaInApertura = false;
+      apriGrafoAgenti(figlia);
+      return;
+    }
     // F3-50: dal rail, a diagramma aperto sullo stesso workflow, si va al gruppo o al passo senza rimontare
     if (iniziale && grafoWorkflow && preferita && grafoWorkflowChiave === `${id}|${preferita.runId ?? ''}|${preferita.workflowId}|${preferita.version}`) {
       grafoWorkflow.vai(iniziale);
@@ -9967,6 +10164,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     if (!host) return;
     clearInterval(grafoTimer); grafoTimer = null;
     grafoAgenti?.distruggi(); grafoAgenti = null;
+    selettoreGrafo?.distruggi(); selettoreGrafo = null;
     grafoWorkflow?.distruggi();
     lettoreFileLasciaLoSchermo(); // F5: il posto è uno, il lettore a schermo intero torna nel rail
     host.classList.add('talos-grafo-aperto');
@@ -9982,7 +10180,9 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       onApriSessione: (stepSessionId, riga) => passaASessione(stepSessionId, stepSessionId, riga.label || 'Agente del workflow',
         riga.effectiveModel?.model || state.model, { conclusa: true }),
     });
-    try { sessionStorage.setItem(GRAFO_APERTO_KEY, id); } catch { /* storage non disponibile */ }
+    ricordaTipoGrafo(id, 'workflow'); ricordaGrafoAperto(id, 'workflow');
+    railSorgenti?.seleziona('workflow');
+    montaSceltaSulGrafo('workflow');
     railWorkflow?.diagramma(true);
     // dal rail il fuoco resta a chi ha cliccato (la riga si evidenzia); dalla card e dalla porta del rail va a «Torna alla chat»
     if (!iniziale) grafoWorkflow.elemento.querySelector('.talos-wfg__torna')?.focus();
@@ -10001,8 +10201,9 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   }
   function smontaRailWorkflow() {
     cronologiaWorkflow?.distruggi(); cronologiaWorkflow = null;
-    if (!railWorkflow) { railWorkflowChiave = null; return; }
-    railWorkflow.distruggi(); railWorkflow = null; railWorkflowChiave = null; railWorkflowAttivi = 0;
+    railWorkflow?.distruggi(); railWorkflow = null; railWorkflowChiave = null; railWorkflowAttivi = 0;
+    railSorgenti?.distruggi(); railSorgenti = null;
+    selettoreGrafo?.distruggi(); selettoreGrafo = null;
     aggiornaInspectorDaStato();
   }
   function osservaVisibilitaRail(contenitore) {
@@ -10037,19 +10238,27 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     smontaRailWorkflow();
     const contenitore = $('#railAgenti');
     if (!chiave || !contenitore) return;
-    contenitore.replaceChildren();
+    railSorgenti = montaSelettoreRail(contenitore, {
+      iniziale: tipoGrafoScelto(id),
+      onSelezione: (tipo) => {
+        ricordaTipoGrafo(id, tipo);
+        railWorkflow?.visibilita();
+        if (grafoWorkflow || grafoAgenti) void apriDiagramma({ tipo });
+      },
+    });
     railWorkflowChiave = chiave;
-    railWorkflow = montaRailWorkflow(contenitore, {
+    railWorkflow = montaRailWorkflow(railSorgenti.workflowPanel, {
       client, sorgente,
-      visibile: () => railVisibile(contenitore),
+      visibile: () => railVisibile(railSorgenti.workflowPanel),
       onApri: (dove) => apriDiagramma({ preferita: { runId: sorgente.runId, workflowId: sorgente.workflowId, version: sorgente.version }, iniziale: dove }),
       onConteggio: (n) => { railWorkflowAttivi = n; aggiornaInspectorDaStato(); },
     });
-    cronologiaWorkflow = montaCronologiaWorkflow(contenitore, {
+    cronologiaWorkflow = montaCronologiaWorkflow(railSorgenti.workflowPanel, {
       fetchFn: (path) => fetch(API(path)), sessionId: id,
       onApri: (run) => apriDiagramma({ preferita: run }),
     });
     osservaVisibilitaRail(contenitore);
+    aggiornaInspectorDaStato();
     // un diagramma già aperto dice subito che cosa ha scelto, e il rail non offre la porta
     railWorkflow.diagramma(Boolean(grafoWorkflow));
     if (grafoWorkflow) { const sel = grafoWorkflow.stato(); railWorkflow.evidenzia({ gruppo: sel.gruppoAperto, passo: sel.selezionato }); }
@@ -10058,6 +10267,9 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
 
   function apriGrafoAgenti(figlia = null) {
     if (!state.realSession.id) return;
+    grafoWorkflow?.distruggi(); grafoWorkflow = null; grafoWorkflowChiave = null;
+    selettoreGrafo?.distruggi(); selettoreGrafo = null;
+    railWorkflow?.diagramma(false);
     setView('chat');
     closePanels();
     const host = $('[data-view="chat"]');
@@ -10093,7 +10305,9 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       grafoTimer = setInterval(() => { if (state.view === 'chat' && !document.hidden) void caricaFigliSessione(); }, 5000);
     }
     if (figlia?.sessionId) grafoAgenti.seleziona(figlia.sessionId);
-    try { sessionStorage.setItem(GRAFO_APERTO_KEY, state.realSession.id); } catch { /* storage non disponibile */ }
+    ricordaTipoGrafo(state.realSession.id, 'deleghe'); ricordaGrafoAperto(state.realSession.id, 'deleghe');
+    railSorgenti?.seleziona('deleghe');
+    montaSceltaSulGrafo('deleghe');
     aggiornaGrafoAgenti();
     host.querySelector('.talos-grafo button')?.focus();
   }
@@ -10131,6 +10345,8 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     aperta.contenitore?.remove();
     const elenco = $('#railAgenti');
     if (elenco) elenco.hidden = false;
+    // «Tutti gli agenti» riporta anche il diagramma alla panoramica completa.
+    grafoAgenti?.adatta();
     /* ⛔ `subito`: da oggi la colonna si disegna su un frame, ma qui l'elenco è appena tornato
        visibile e dev'essere aggiornato nello stesso istante in cui ricompare — un frame di elenco
        vecchio dopo un «Indietro» è esattamente lo sfarfallio che questa corsia toglie. */
@@ -10352,7 +10568,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       agenti,
       /* PO-08: la card diventa apribile solo perché qui c'è chi ascolta — senza questa funzione
          `disegnaAgenti` la lascia statica, e non promette niente che non può mantenere. */
-      azioniAgenti: { onApri: apriConversazioneFiglia, onMenu: menuDellaDelega, onGrafo: state.realSession.id ? (figlia) => apriDiagramma({ figlia }) : null, sessionId: state.realSession.id, errore: figliErrore },
+      azioniAgenti: { onApri: apriConversazioneFiglia, onMenu: menuDellaDelega, onGrafo: state.realSession.id ? (figlia) => apriDiagramma({ figlia, tipo: 'deleghe' }) : null, sessionId: state.realSession.id, errore: figliErrore },
       agentiDelWorkflow: Boolean(railWorkflow), // F3-50: la scheda è del rail v2
     });
     /*
@@ -10375,7 +10591,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const schede = inspector.querySelector('#railTabs');
     if (schede) {
       // F3-50: con un workflow il numero sono i suoi passi al lavoro, come la lista che si apre cliccandolo
-      impostaConteggioScheda(schede.querySelector('[data-rail="agenti"]'), railWorkflow ? railWorkflowAttivi : contaAgentiAttivi(agenti));
+      impostaConteggioScheda(schede.querySelector('[data-rail="agenti"]'), railWorkflowAttivi + contaAgentiAttivi(agenti));
       impostaConteggioScheda(schede.querySelector('[data-rail="processi"]'), contaProcessiAttivi(processi));
       tieniInVistaScheda(schede.querySelector('[aria-selected="true"]')); // un numero che cresce può spingerla fuori
     }
@@ -10430,7 +10646,10 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       if (state.realSession.id !== id || lettura !== figliLettura) return;
       figliErrore = error?.message || 'Impossibile leggere le deleghe';
     }
-    if (!grafoAgenti && !grafoWorkflow && !diagrammaInApertura) { try { if (sessionStorage.getItem(GRAFO_APERTO_KEY) === id && state.view === 'chat') void apriDiagramma(); } catch { /* storage non disponibile */ } }
+    if (!grafoAgenti && !grafoWorkflow && !diagrammaInApertura && state.view === 'chat') {
+      const tipo = grafoDaRiprendere(id);
+      if (tipo) void apriDiagramma({ tipo });
+    }
     aggiornaGrafoAgenti();
     aggiornaInspectorDaStato();
     aggiornaPuntiniStatoAlbero(); // PO-30: chi sta toccando quale file cambia insieme alle figlie
@@ -12428,10 +12647,11 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    * `allow-top-navigation`/`allow-popups`/`allow-forms` resta invariato:
    * script permessi, ogni via di fuga negata — il confine vero.
    */
-  function appendArtifactCard(titolo, id) {
+  function appendArtifactCard(evento) {
     // 05/9 Fase 2: Conversazione — la scheda dell'artefatto del mockup; «Apri» lo apre in una scheda del browser
-    const src = API(`/api/v1/artifacts/${encodeURIComponent(id)}`);
-    const { card: article, frame } = creaArtefatto({ titolo: titolo || 'Artefatto', src, onApri: () => window.open(src, '_blank', 'noopener') });
+    const sessionId = state.realSession.id;
+    const { card: article, frame } = creaCardArtefatto({ evento, sessionId, API,
+      ancoraValida: () => state.realSession.id === sessionId });
     article.classList.add('real-artifact-card');
     nellaChat(article);
     markMotionEnter(article);
@@ -13021,6 +13241,8 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
      */
     const frasiVere = [];
     if (typeof azione?.segreto?.frase === 'string' && azione.segreto.frase.trim()) frasiVere.push(azione.segreto.frase.trim());
+    /* F009 (owner 01/10/2026) — la conferma di root in WSL quando nessuno è interpellato: la frase la scrive il kernel (`confermaRootWsl`). */
+    if (typeof azione?.wslRoot?.frase === 'string' && azione.wslRoot.frase.trim()) frasiVere.push(azione.wslRoot.frase.trim());
     /* ⛔ Se si chiude anche la trifecta sono DUE fatti, non uno: si mostrano tutti e due — una lista
        di motivi si giudica da ciò che manca, e tacere il secondo sarebbe rassicurare a metà. */
     const trifecta = typeof azione?.trifecta === 'string' ? azione.trifecta.trim() : (azione?.trifecta === true ? 'Questa chiamata chiude la trifecta: dati privati, contenuto non attendibile e un modo per farli uscire.' : '');
@@ -13176,6 +13398,17 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
      */
     const davantiAUnSegreto = Boolean(azione?.segreto);
     if (davantiAUnSegreto) sessioneBtn.remove();
+    /*
+     * ⛔ F009 (owner 01/10/2026, «una volta per sessione») — la conferma di root in WSL vale per TUTTA la sessione: il kernel
+     *   ricorda il sì (`consensiSessione`). «Consenti una volta» sarebbe una promessa falsa, e «Per questa sessione»
+     *   scriverebbe `shell: sempre`, che è un'altra cosa. Restano due azioni: il sì per la sessione, e «Nega».
+     */
+    if (azione?.wslRoot && !davantiAUnSegreto) {
+      approvaBtn.textContent = 'Consenti per questa sessione';
+      sessioneBtn.remove();
+      const notaPiede = $('.talos-approval__foot-note', article);
+      if (notaPiede) notaPiede.textContent = 'Vale per tutta la sessione';
+    }
     let rispostaDataDaQuestaScheda = false;
     const rispondi = async (approvato, perSessione = false) => {
       negaBtn.disabled = true;
@@ -17845,6 +18078,18 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
 
   function handleRealEvent(evento, generation) {
     if (generation !== state.realSession.generation) return; // sessione più vecchia: scartato, non renderizzato
+    if (evento.type === 'CUSTOM' && evento.name === 'talos.process-output') {
+      const info = state.realSession.toolCallNomi.get(evento.value?.toolCallId);
+      const receipt = info && normalizzaRicevutaOutput(evento.value, {sessionId: state.realSession.id, toolCallId: evento.value.toolCallId});
+      if (receipt) {
+        disegnaArgomentiSeInAttesa(info);
+        if (info.outputReader) info.outputReader.aggiorna(receipt);
+        else info.outputReader = creaLettoreOutput({receipt, API, fetchFn: fetchSorvegliata, signal: outputSessionController.signal});
+        info.outputReader.monta(info.detail);
+      }
+      return;
+    }
+    providerRetryUi.evento(evento, { inReplay: state.realSession.inRigiocata, attivo: runRealeAttivo() });
     /*
      * ⭐ F5 (onda 2), 24/09/2026 — LA COMPATTAZIONE LEGACY SI VEDE. I tre eventi che il registro persiste e
      *   trasmette (`talos.compattazione`, `talos.compattazione-annullata`, `talos.journal-riparato`; contratto
@@ -18850,6 +19095,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
             }
           }
         }
+        info?.outputReader?.monta(info.detail);
         if (info?.batch && info.stato === 'running') {
           const { batch, categoria } = info;
           info.esito = testoEsito; // R4 (24/09): l'esito resta con la voce (per `exit N` nella riga del segmento)
@@ -18915,6 +19161,9 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
          */
         const recupero = Array.isArray(evento.delta) ? evento.delta.find(patch => patch?.path === '/recuperoCronologia') : null;
         if (recupero) {
+          if (recupero.value?.contestoRicostruito === true) {
+            appendStatusNote('Le istruzioni iniziali non erano state salvate. Per riprendere, TALOS le ha ricostruite dalle fonti attuali. I messaggi precedenti sono conservati.', false, { meta: 'Contesto ricostruito' });
+          }
           const numero = recupero.value?.chiamate;
           if (Number.isSafeInteger(numero) && numero > 0) {
             appendStatusNote(`${numero === 1 ? '1 chiamata incompleta è stata conservata' : `${numero} chiamate incomplete sono state conservate`} come nota nello storico. I messaggi originali sono intatti. Puoi continuare questa conversazione.`, false, { meta: 'Storico recuperato' });
@@ -18946,7 +19195,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       }
       case 'ArtifactCreated': {
         nascondiAttesaRisposta();
-        appendArtifactCard(evento.titolo, evento.id);
+        appendArtifactCard(evento);
         break;
       }
       case 'WorkspaceChanged': {
@@ -19316,7 +19565,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     state.realSession.inRigiocata = true;
     const source = new EventSource(API(`/api/v1/sessions/${encodeURIComponent(sessionId)}/events`));
     segnaTappaLatenza('sseCollegato');
-    source.onopen = () => { if (generation === state.realSession.generation) { state.realSession.inRigiocata = true; void aggiornaElencoSessioniReali().then(() => { if (generation === state.realSession.generation) void caricaFigliSessione(); }); } };
+    source.onopen = () => { if (generation === state.realSession.generation) { providerRetryUi.sospendi(); state.realSession.inRigiocata = true; void aggiornaElencoSessioniReali().then(() => { if (generation === state.realSession.generation) void caricaFigliSessione(); }); } };
     state.realSession.eventSource = source;
     source.onmessage = (message) => {
       sorveglianza?.segnalaEventoVivo(); // T-15: il canale è vivo
@@ -19340,6 +19589,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
      */
     source.onerror = () => {
       if (generation !== state.realSession.generation) return;
+      providerRetryUi.sospendi();
       const figliAttivi = [...(state.realSession.figli || []), ...agentiInDiretta.values()].some(a => a.conclusa === false && !a.interrotta);
       if (state.realSession.eventoTerminaleVisto && !figliAttivi) {
         source.close();
@@ -19355,6 +19605,8 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
 
   /** Chiude l'EventSource corrente (se c'è) e apre una nuova generazione. */
   function nuovaGenerazioneSessione({ continua = false } = {}) {
+    if (!continua) {outputSessionController.abort(); outputSessionController = new AbortController();}
+    providerRetryUi.reset();
     if (!continua) { risultatiDelegaMostrati.clear(); ultimoEventoGrafoMadre = null; if (frameGrafoMadre !== null) cancelAnimationFrame(frameGrafoMadre); frameGrafoMadre = null; agentiInDiretta.clear(); if (frameAgentiInDiretta !== null) cancelAnimationFrame(frameAgentiInDiretta); frameAgentiInDiretta = null; chiudiGrafoAgenti({ ricorda: true }); chiudiLettoreFile({ fuoco: false }); figliLettura++; figliErrore = null; figliAggiornati = null; state.realSession.figli = []; chiudiConversazioneFiglia(); }
     if (!continua) { contextCompactor?.close(); contextCompactor?.setSession(null); contextMonitor?.stop(); contextChatSnapshot = null; aggiornaAvanzamentoContesto($('#conversation'), null); }
     nascondiAttesaRisposta();
@@ -19884,7 +20136,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     state.realSession.ultimaRichiesta = { prompt_tokens: prompt, completion_tokens: completion };
     const id = state.realSession.id;
     const salvata = id ? compattazioneLegacy.ultimaMisura.get(id) : null;
-    if (salvata) compattazioneLegacy.ultimaMisura.set(id, { ...salvata, tokenMisurati: prompt + completion });
+    if (salvata) compattazioneLegacy.ultimaMisura.set(id, { ...salvata, tokenMisurati: prompt });
   }
   /** L'occupazione del contesto alla prossima richiesta, nella forma di `usage`; `null` = non la sappiamo. */
   function usageDelContesto() {
@@ -20067,29 +20319,28 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     }
     if (c.tipo === 'riparato') aggiornaNotaJournalRiparato(colonna, c, { document, inserisci: inserisciRigaCompattazione });
   }
-  /*
-   * L'AVVISO PRIMA DELLA SOGLIA (decisione 6). Da dove vengono i numeri, dichiarato: (1) l'ultimo evento
-   * `talos.compattazione` con `tokenMisurati`/`soglia` (dopo una compattazione: `tokenDopo` contro la stessa
-   * soglia); (2) altrimenti il `prompt_tokens` dell'ultimo `/usage` di questa sessione (è il contesto intero
-   * dell'ultima richiesta, cache compresa) contro `min(200K, 0,75 × contextLength del catalogo)`, la stessa
-   * regola del kernel (`compattazione-desktop.mjs:98`). ⛔ F3 non espone (ancora) un campo di stato con la
-   * misura per turno: quando lo farà, prende il posto della (2) — è scritto nel rapporto.
-   * La chiusura vale finché la misura non cambia: al giro dopo, se è ancora sopra, l'avviso torna.
-   */
-  /* I numeri dell'avviso, estratti il 24/09 sera perché la finestra del Context Manager (modo semplice) mostri GLI STESSI.
-     `serveFinestra`: la finestra vuole anche la dimensione del modello quando la misura viene da un evento; l'avviso no
-     (comportamento di prima, nessuna GET in più). `null` = la sessione è cambiata durante la lettura del catalogo. */
+  /* Avviso e Context Manager leggono la stessa policy dal registro. Il vecchio
+     evento resta per ricostruire il separatore, ma la sua soglia può appartenere
+     a un modello precedente. Una GET fallita mantiene il fallback prudenziale. */
   async function numeriSogliaContesto(sessionId, { serveFinestra = false } = {}) {
-    const salvati = compattazioneLegacy.ultimaMisura.get(sessionId) ?? null;
-    /* 26/09: l'ultima chiamata (o il «dopo» di una compattazione), mai il cumulativo del giro — vedi `usageDelContesto`. */
+    void serveFinestra; // compatibilità del chiamante: la GET è identica per avviso e finestra
+    const modelAtStart = state.model;
+    let policy = null;
+    try { policy = await apiGet(`/api/v1/sessions/${encodeURIComponent(sessionId)}/compaction-policy`); }
+    catch { /* Un errore di rete non diventa una finestra inventata. */ }
+    if (sessionId !== state.realSession.id || modelAtStart !== state.model) return null;
+    const valida = policy && Number.isSafeInteger(policy.triggerTokens) && policy.triggerTokens > 0
+      && Number.isSafeInteger(policy.warningTokens) && policy.warningTokens > 0
+      && ['route-minimum', 'explicit-cap', 'fallback'].includes(policy.source);
     const u = usageDelContesto();
-    const tokenMisurati = u ? Number(u.prompt_tokens) + Number(u.completion_tokens || 0) : null;
-    let finestra = finestraContestoDelModello();
-    if ((!salvati?.soglia || serveFinestra) && finestra == null && state.model && Number.isFinite(tokenMisurati) && tokenMisurati > 0) {
-      try { const catalogo = await apiGet('/api/v1/models'); if (catalogo?.modelli) state.modelLab.catalogoModelli = catalogo; finestra = finestraContestoDelModello(); } catch { /* senza catalogo vale il tetto assoluto */ }
-      if (sessionId !== state.realSession.id) return null;
-    }
-    return { tokenMisurati, soglia: salvati?.soglia ?? sogliaLegacy({ finestraToken: finestra }), finestra };
+    const tokenMisurati = Number.isFinite(Number(u?.prompt_tokens)) && Number(u?.prompt_tokens) > 0 ? Number(u.prompt_tokens) : null;
+    return {
+      tokenMisurati,
+      soglia: valida ? policy.triggerTokens : 200_000,
+      warningTokens: valida ? policy.warningTokens : 160_000,
+      finestra: valida && Number.isSafeInteger(policy.windowTokens) && policy.windowTokens > 0 ? policy.windowTokens : null,
+      source: valida ? policy.source : 'fallback',
+    };
   }
   async function aggiornaAvvisoSogliaContesto({ forza = false } = {}) {
     const sessionId = state.realSession.id;
@@ -20571,9 +20822,38 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    * aprendo una cronologia già conclusa) ad ogni frammento che arriva
    * durante il ripristino, invece di aspettare l'ultimo evento soltanto.
    */
+  /*
+   * ⛔ 30/09/2026 — owner: «per le sessioni più pesanti ci vuole uno spinner di caricamento… che non faccia pensare che si sia
+   *   bloccato tutto». L'indicatore vive accanto alla colonna, dentro lo scorrevole; si vede SOLO mentre la colonna porta
+   *   `is-restoring` (regola in `styles/index.css`, accanto a `.talos-conversation`): nessun mostra/nascondi da ricordare qui.
+   */
+  function assicuraCaricamentoCronologia(conversation) {
+    const scorrevole = conversation.parentElement;
+    if (!scorrevole || scorrevole.querySelector(':scope > .talos-caricamento-cronologia')) return;
+    const indicatore = document.createElement('div');
+    indicatore.className = 'talos-caricamento-cronologia';
+    indicatore.setAttribute('role', 'status');
+    indicatore.setAttribute('aria-live', 'polite');
+    const orb = document.createElement('span');
+    orb.className = 'talos-orb working';
+    orb.setAttribute('aria-hidden', 'true');
+    const logo = document.createElement('span');
+    logo.className = 'talos-short-logo';
+    const marchio = document.createElement('span');
+    marchio.className = 'talos-short-logo-mark';
+    logo.append(marchio);
+    orb.append(logo);
+    const testo = document.createElement('span');
+    testo.className = 'talos-caricamento-cronologia__testo';
+    testo.textContent = 'Apro la cronologia…';
+    indicatore.append(orb, testo);
+    scorrevole.insertBefore(indicatore, conversation);
+  }
+
   function mantieniFondoDuranteRipristino(generation) {
     const conversation = $('#conversation');
     if (!conversation) return;
+    assicuraCaricamentoCronologia(conversation);
     /*
      * ⛔⛔⛔ 06/9, owner: «se scrollo un po' più in alto e aspetto qualche secondo mi porta con uno
      * snap alla fine chat». Riprodotto e misurato: scrollato a 1039 su 2779, dopo 2,5 s si torna a
@@ -20628,10 +20908,28 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     // ⛔ 02/09 — misurato dal vivo: 12320 su 12334, 14px sopra il fondo per 4s filati. L'ultima MUTAZIONE di figli non è l'ultimo cambio di altezza: markMotionEnter cambia una classe (attributo, non childList) un frame dopo l'inserimento e il layout cresce ancora. Si osservano anche gli attributi, e alla fine del ripristino si ribatte il fondo su due frame successivi.
     osservatore.observe(conversation, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['class', 'style'] });
     const scroller = scrollerConversazione(conversation);
+    /*
+     * ⛔⛔ 30/09/2026 — owner: «le sessioni lunghe, quando uno le seleziona, devono essere scrollate verso la fine». Misurato sul
+     *   4174 (`a214dd29`, 14 turni): a 393 ms la chat era in fondo (altezza 13.560), a 767 ms il contenuto era cresciuto a
+     *   14.347 e la vista era rimasta a 12.821 — 787 px sopra il fondo, per sempre, con l'ultima risposta tagliata. Il custode
+     *   si spegneva all'evento terminale e l'ultima correzione era a +250 ms: una crescita DOPO (una scheda che si impagina, un
+     *   blocco che si ridisegna) non la seguiva nessuno. Con la rete lenta: 578 px sopra.
+     * ⇒ Dopo la comparsa si segue l'ALTEZZA, non gli eventi: un ResizeObserver sulla colonna, come `use-stick-to-bottom` in
+     *   Hermes (`apps/desktop/src/components/assistant-ui/thread/list.tsx:496-499`, `useStickToBottom({ initial: 'instant',
+     *   resize: 'instant' })`) e la PR gravity-ui/aikit #251 («re-pin the chat to the bottom when the content reflows»).
+     *   Si ferma come tutto il resto: la persona che scorre via (`suScroll`), un giro dal vivo, una sessione nuova, i 30 s.
+     */
+    let seguiAltezza = null;
+    const seguiCrescita = () => {
+      if (smesso || seguiAltezza || typeof ResizeObserver !== 'function') return;
+      seguiAltezza = new ResizeObserver(chiediFondo);
+      seguiAltezza.observe(conversation);
+    };
     const smetti = () => {
       if (smesso) return;
       smesso = true;
       osservatore.disconnect();
+      seguiAltezza?.disconnect();
       window.clearInterval(fermaSeFinito);
       conversation.classList.remove('is-restoring'); // mai lasciare la conversazione nascosta perché la persona ha scorso
       scroller?.removeEventListener('scroll', suScroll);
@@ -20661,10 +20959,13 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const fermaSeFinito = window.setInterval(() => {
       const viste = state.realSession.sequenzeViste?.size ?? 0;
       if (viste !== visteUltime) { visteUltime = viste; ultimoEventoNuovo = performance.now(); }
-      if (generation !== state.realSession.generation || state.realSession.eventoTerminaleVisto) {
+      /* ⛔ 30/09/2026 — la fine del ripristino è `talos.fine-rigiocata` (`inRigiocata` falso), non l'evento terminale: per una
+         sessione conclusa `eventoTerminaleVisto` è vero dal CLIC (O-48, `passaASessione`), e il custode scopriva la chat al
+         primo giro di questo intervallo, prima che la cronologia arrivasse. */
+      if (generation !== state.realSession.generation || !state.realSession.inRigiocata) {
         osservatore.disconnect();
         window.clearInterval(fermaSeFinito);
-        if (generation === state.realSession.generation) { scopri(); window.requestAnimationFrame(inFondo); window.setTimeout(inFondo, 250); }
+        if (generation === state.realSession.generation) { scopri(); window.requestAnimationFrame(inFondo); window.setTimeout(inFondo, 250); seguiCrescita(); }
       }
     }, 200);
     fermaFondoRipristino?.(); fermaFondoRipristino = smetti; // ⛔ dopo `fermaSeFinito`: `smetti` lo legge, e prima di qui sarebbe nella sua zona morta
@@ -20680,6 +20981,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       const fermoDa = performance.now() - ultimoEventoNuovo;
       if (fermoDa < 1_000 && performance.now() - inizioRipristino < 20_000) { window.setTimeout(reteDiSicurezza, 500); return; }
       scopri();
+      seguiCrescita();
     };
     window.setTimeout(reteDiSicurezza, 8_000);
     // Rete di sicurezza: mai un osservatore vivo per sempre se il segnale di fine non arriva (connessione caduta, sessione mai conclusa per davvero).

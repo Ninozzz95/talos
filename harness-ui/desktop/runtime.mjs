@@ -13,7 +13,9 @@ export function risolviPercorsi({ appPath, isPackaged = false, resourcesPath, ha
     cpu: join(resourcesPath, 'local-runtime', 'cpu', 'llama-server.exe'),
     vulkan: join(resourcesPath, 'local-runtime', 'vulkan', 'llama-server.exe'),
   }) : undefined;
-  return Object.freeze({ root: resolve(root), server: join(root, 'server.mjs'), bootstrap: join(appPath, 'child-bootstrap.mjs'), localRuntime });
+  /* Fase B «casa di esecuzione» (owner 01/10/2026, «dentro l'installatore»): Node e rg per Linux, come i runtime di llama. */
+  const casaLinux = isPackaged && !harnessDir ? join(resourcesPath, 'casa-linux', 'linux-x64') : undefined;
+  return Object.freeze({ root: resolve(root), server: join(root, 'server.mjs'), bootstrap: join(appPath, 'child-bootstrap.mjs'), localRuntime, casaLinux });
 }
 
 export function scegliMotoreLocale({ percorsi, env = process.env, sonda = spawnSync, preferenza = 'auto' }) {
@@ -81,6 +83,9 @@ export function creaAvvioFiglio({ execPath, percorsi, port, token, reportFile, d
    * sono stati spostati. Assegnazione semplice per nome: la forma che la guardia CLI-REQ-04 (a) sa leggere.
    */
   if (scratchDir) ambiente.TALOS_SCRATCH_DIR = scratchDir;
+  /* Fase B: dove sono i binari per Linux del pacchetto (`cartellaCasaLinux` nel server). Dal sorgente non si passa: il server usa
+     `.casa-linux/` preparata con `npm run prepara:casa-linux`, o la variabile già dichiarata dal sistema. */
+  if (percorsi.casaLinux) ambiente.TALOS_CASA_LINUX = percorsi.casaLinux;
   return { command: execPath, args: ['--import', pathToFileURL(percorsi.bootstrap).href, percorsi.server], options: {
     cwd: percorsi.root, env: ambiente, stdio: ['ignore', 'pipe', 'pipe', 'ipc'], windowsHide: true, shell: false,
   } };

@@ -137,7 +137,7 @@ test('⭐⭐⭐ 06/9 — delegaSottoTask: cartella UGUALE al padre, o assente, P
       return { sessionId: `figlio-${viste.length}` };
     },
   });
-  const uguale = await orch.delegaSottoTask({ sessionPadreId: 'padre-1', task: 'x', cartella: '/progetto' });
+  const uguale = await orch.delegaSottoTask({ sessionPadreId: 'padre-1', task: 'x', cartella: '/progetto', modalita: 'modifica' });
   assert.equal(uguale.esito, 'avviato');
   assert.equal(viste[0].cartella, '/progetto');
   // e senza cartella si lavora dove lavora il padre
@@ -313,11 +313,12 @@ test('⭐⭐⭐ delegaSottoTask: avvio riuscito — torna AVVIATO subito e il te
     onFiglioConclusoFn: (terminale) => terminali.push(terminale),
   });
   const esito = await Promise.race([
-    orch.delegaSottoTask({ sessionPadreId: 'padre-1', task: 'scrivi un modulo', cartella: '/figlio' }),
+    orch.delegaSottoTask({ sessionPadreId: 'padre-1', task: 'scrivi un modulo', cartella: '/figlio', modalita: 'modifica' }),
     new Promise((resolve) => setTimeout(() => resolve({ esito: 'timeout-test' }), 50)),
   ]);
   assert.equal(opzioniRicevute.cartella, '/figlio');
-  assert.deepEqual(opzioniRicevute.task, { consegna: 'scrivi un modulo', consegnaCorta: 'scrivi un modulo' } /* 09/09: la forma corta nasce qui — senza il marcatore «Compito:» del kernel resta la stringa intera, che è giusto: non si indovina un preambolo che non c'è */);
+  assert.deepEqual(opzioniRicevute.task, { consegna: 'scrivi un modulo', consegnaCorta: 'scrivi un modulo',
+    contrattoDelega: { schema: 'talos.delegation.v1', modalita: 'modifica' } });
   assert.equal(opzioniRicevute.padreId, 'padre-1');
   assert.equal(opzioniRicevute.profonditaDelega, 1);
   assert.equal(esito.esito, 'avviato');

@@ -5,7 +5,7 @@ import { apriDiagrammaDellaScena, costruisciScena, instradaScena } from './aiuto
 
 const evidence = resolve(process.cwd(), '..', '..', 'artifacts', 'visual-019');
 
-test('VISUAL-019-LAYOUT: inspect workflow history and full output at both release viewports and themes', async ({ page }) => {
+test('VISUAL-019-LAYOUT: inspect workflow history and full output at 1080p and above in both themes', async ({ page }) => {
   const scene = costruisciScena(14, { sessionId: 'visual-019-session', runId: 'visual-019-run' });
   await instradaScena(page, scene);
   await page.route(`**/api/v1/sessions/${scene.sessionId}/workflows?*`, (route) => route.fulfill({ json: { ok: true, data: {
@@ -30,12 +30,15 @@ test('VISUAL-019-LAYOUT: inspect workflow history and full output at both releas
   });
   const graph = await apriDiagrammaDellaScena(page, scene);
   const detail = graph.locator('.talos-wfg__dettaglio');
-  await expect(detail.locator('.talos-wfg__output')).toHaveCount(2);
-  await detail.locator('.talos-wfg__output').first().getByRole('button', { name: 'Mostra tutto' }).click();
-  await expect(detail.locator('.talos-wfg__output-full')).toHaveText(/Risultato completo/u);
+  await expect(detail.locator('.talos-wfg__output')).toHaveCount(0);
+  await detail.getByRole('button', { name: 'Apri risultati' }).click();
+  const panel = graph.getByRole('complementary', { name: 'Risultati del passo' });
+  await expect(panel.locator('.talos-wfg__output')).toHaveCount(2);
+  await panel.locator('.talos-wfg__output').first().getByRole('button', { name: 'Mostra tutto' }).click();
+  await expect(panel.locator('.talos-wfg__output-full')).toHaveText(/Risultato completo/u);
   await expect(page.locator('#railAgenti .talos-wfh__open')).toHaveCount(2);
   mkdirSync(evidence, { recursive: true });
-  for (const [width, height] of [[1024, 800], [1440, 900]]) {
+  for (const [width, height] of [[1920, 1080], [2560, 1440]]) {
     await page.setViewportSize({ width, height });
     for (const mode of ['light', 'dark']) {
       await page.evaluate((value) => {
@@ -48,9 +51,10 @@ test('VISUAL-019-LAYOUT: inspect workflow history and full output at both releas
       await page.screenshot({ path: join(evidence, `workflow-${width}x${height}-${mode}.png`), animations: 'disabled' });
     }
   }
+  await panel.getByRole('button', { name: 'Chiudi risultati' }).click();
   await graph.getByRole('button', { name: 'Torna alla chat' }).click();
   const history = page.locator('#railAgenti .talos-wfh');
-  for (const [width, height] of [[1024, 800], [1440, 900]]) {
+  for (const [width, height] of [[1920, 1080], [2560, 1440]]) {
     await page.setViewportSize({ width, height });
     if (!(await history.isVisible())) await page.locator('#schermoChat [data-azione="dettagli"]').click();
     for (const mode of ['light', 'dark']) {
@@ -66,7 +70,7 @@ test('VISUAL-019-LAYOUT: inspect workflow history and full output at both releas
   }
 });
 
-test('VISUAL-019-PLAN: inspect the durable plan banner at both release viewports and themes', async ({ page }) => {
+test('VISUAL-019-PLAN: inspect the durable plan banner at 1080p and above in both themes', async ({ page }) => {
   const sessionId = 'visual-019-plan';
   await page.route(`**/api/v1/sessions/${sessionId}/events*`, (route) => route.fulfill({
     contentType: 'text/event-stream', body: 'retry: 3600000\ndata: {"type":"CUSTOM","name":"talos.fine-rigiocata","value":null}\n\n',
@@ -87,7 +91,7 @@ test('VISUAL-019-PLAN: inspect the durable plan banner at both release viewports
   const banner = page.locator('#fasciaPianoRichiesto');
   await expect(banner).toBeVisible();
   await page.evaluate(() => document.querySelector('.talos-toast:not([hidden]) [data-toast-chiudi]')?.click());
-  for (const [width, height] of [[1024, 800], [1440, 900]]) {
+  for (const [width, height] of [[1920, 1080], [2560, 1440]]) {
     await page.setViewportSize({ width, height });
     for (const mode of ['light', 'dark']) {
       await page.evaluate((value) => {

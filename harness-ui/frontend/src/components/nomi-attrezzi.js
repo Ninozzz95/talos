@@ -46,6 +46,7 @@ export const NOMI_UMANI_ATTREZZI = Object.freeze({
   /* Integrazione 23/09: gli attrezzi di piano e di dialogo fra agenti arrivati col ramo Workflow. */
   workflow_plan_propose: 'proposta di workflow', // 25/09/2026: non «piano di lavoro», il nome rifiutato dall'owner il 17/09
   workflow_status: 'stato del workflow',
+  process_output: 'Risultato del comando',
   workflow_output: 'lettura del risultato di un passo',
   workflow_control: 'controllo del workflow',
   ask_parent: 'domanda all’agente che l’ha avviato',
@@ -322,6 +323,7 @@ export const DESCRIZIONI_ATTREZZI = Object.freeze({
   request_plan_mode: 'Chiede di passare alla modalità Piano dal giro successivo. Il cambio avviene solo dopo la conclusione riuscita e il salvataggio della sessione.',
   workflow_plan_propose: 'Propone un workflow a fasi da rivedere e approvare: non lo approva e non lo avvia.',
   workflow_status: 'Legge lo stato dei workflow della sessione o il dettaglio di un run, senza modificarli.',
+  process_output: 'Legge una parte del risultato conservato di un comando, senza eseguirlo di nuovo.',
   workflow_output: 'Legge un risultato testuale di un passo concluso; se i risultati sono più di uno, mostra gli ID da scegliere. Per un file binario mostra solo i metadati.',
   workflow_control: 'Chiede di mettere in pausa, riprendere o fermare un workflow della sessione e ne restituisce la ricevuta.',
   ask_parent: 'Un sotto-agente chiede un fatto o una decisione all’agente che lo ha avviato, e aspetta la risposta.',

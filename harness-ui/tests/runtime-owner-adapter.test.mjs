@@ -297,7 +297,7 @@ test('MODEL-REASONING-NEVER-ESCALATE — su glm-5.3-flash nessun livello chiesto
   assert.deepEqual(normalizzaReasoningPerModello({ effort: 'none' }, { reasoning: { mandatory: true, defaultEffort: 'high' } }), { effort: 'high' });
 });
 
-test('OPENROUTER-RETRY-02 — errore SSE come primo evento diventa status ritentabile prima di mostrare output', async () => {
+test('OPENROUTER-RETRY-02 — errore SSE come primo evento resta nel corpo HTTP200 per il kernel', async () => {
   const { creaFetchOpenRouterResiliente } = await import('../src/runtime-owner-adapter.mjs');
   const upstream = async () => new Response(flussoTemporizzato([
     { dopo: 0, testo: 'data: {"error":{"code":503,"message":"provider unavailable","metadata":{"error_type":"provider_unavailable"}},"choices":[{"delta":{},"finish_reason":"error"}]}\n\n' },
@@ -306,7 +306,7 @@ test('OPENROUTER-RETRY-02 — errore SSE come primo evento diventa status ritent
     'https://openrouter.ai/api/v1/chat/completions',
     { method: 'POST', body: JSON.stringify({ model: 'qwen/qwen3.8-flash', stream: true }) },
   );
-  assert.equal(risposta.status, 503);
+  assert.equal(risposta.status, 200);
   assert.match(await risposta.text(), /provider unavailable/);
 });
 
@@ -321,7 +321,9 @@ test('OPENROUTER-RETRY-02 contrario — errore dopo testo non riavvia il turno e
     { method: 'POST', body: JSON.stringify({ model: 'qwen/qwen3.8-flash', stream: true }) },
   );
   assert.equal(risposta.status, 200);
-  await assert.rejects(risposta.text(), /provider disconnected/);
+  const body = await risposta.text();
+  assert.match(body, /parziale/);
+  assert.match(body, /provider disconnected/);
 });
 
 for (const finale of [400, 503]) test(`RIPRESA-LOCALE-DOPPIO-RIFIUTO 400→${finale}: conserva entrambi senza esporre diagnostica`, async () => {

@@ -50,7 +50,7 @@ function talosLavoraFinto({ script, cattura = () => {} }) {
     }
     // ⭐⭐⭐ 28/8 — come per onScrittura sopra: il finto chiama onArtefatto ESATTAMENTE come farebbe il kernel vero (talosHarness.mjs), risultato incluso.
     for (const artefatto of script.artefatti ?? []) {
-      await input.onArtefatto?.(artefatto.titolo, artefatto.html);
+      await input.onArtefatto?.(artefatto.titolo, artefatto.html, artefatto.opzioni);
     }
     // ⭐⭐⭐ 28/8 — stesso principio, per onDocumento: il finto passa gli argomenti grezzi COSÌ COME li manderebbe il modello (nessuna forma diversa qui rispetto al kernel vero).
     for (const documento of script.documenti ?? []) {

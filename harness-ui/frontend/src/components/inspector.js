@@ -1246,7 +1246,10 @@ export function aggiornaInspector(inspector, dati = {}, { document: d = globalTh
      rimette `hidden = false` e richiama la sincronizzazione — l'elenco si ridisegna lì.
      ⭐ F3-50 (25/09/2026), decisione owner D30: con un workflow la scheda è del rail v2 (`rail-workflow.js`, montato da
      `legacy/app.js`), che la aggiorna da sé; qui non si ridisegnano le deleghe classiche sopra di lui. */
-  if (agenti && !dati.agentiDelWorkflow && !schedaDaSaltare(inspector, agenti, 'agenti')) disegnaAgenti(d, agenti, dati.agenti, dati.azioniAgenti || {});
+  const deleghe = inspector.querySelector('#railDeleghe') || agenti;
+  if (agenti && (!dati.agentiDelWorkflow || deleghe !== agenti) && !schedaDaSaltare(inspector, agenti, 'agenti')) {
+    disegnaAgenti(d, deleghe, dati.agenti, dati.azioniAgenti || {});
+  }
   const processi = inspector.querySelector('#railProcessi');
   if (schedaDaSaltare(inspector, processi, 'processi')) return;
   /*

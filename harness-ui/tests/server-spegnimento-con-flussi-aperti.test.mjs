@@ -58,6 +58,7 @@ async function avviaServerFiglio(t, prefisso) {
     TALOS_HARNESS_UI_KEYRING: 'memoria', TALOS_SCRATCH_DIR: join(cartella, 'scratch'),
     TALOS_HARNESS_UI_SESSIONS_DIR: cartella, TALOS_HARNESS_UI_PROJECT_DIRS: workspace,
     TALOS_HARNESS_UI_WORKFLOW_DIR: join(cartella, 'workflows'),
+    TALOS_DESKTOP_DATA_DIR: join(cartella, 'desktop'), // 01/10/2026: mai le cartelle dati di default (sono quelle del 4174 vivo: memorie, note, Forge, archivio output, modelli)
   } });
   const stato = { uscito: null, log: '' };
   const uscita = new Promise((ok) => figlio.once('exit', (code, signal) => { stato.uscito = { code, signal }; ok(stato.uscito); }));

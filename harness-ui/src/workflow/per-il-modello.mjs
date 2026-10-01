@@ -62,7 +62,25 @@ function secondiFra(dopo, prima) {
  * workflow_output(runId, nodeId)». L'input è la forma di `readRunState(store, {runId})`.
  * @param {{state:object, events:Array}} input
  */
-export function dettaglioRunPerIlModello(input) {
+/* ⛔ AUDIT29-RUN-DURATION (30/09/2026): un run bloccato da ~24 ore diceva «716 s so far» — era il tempo dal primo all'ULTIMO
+   evento, chiamato «so far». Concluso ⇒ inizio, fine, durata. In corso (anche in pausa o in attesa) ⇒ da quanto è partito e da
+   quanto non succede niente, all'ora di QUESTA chiamata, come Hermes (`tools/process_registry.py:1950`, `uptime_seconds =
+   time.time() - started_at`). Mai un «tempo attivo»: le pause non hanno un fatto che le misuri, e sommarle sarebbe inventare.
+   La UI non passa di qui: là il tempo lo calcola chi guarda (D27, `read-model.mjs`). Prove: RUN-DURATION-01..03. */
+const RUN_CONCLUSI = new Set(['succeeded', 'failed', 'cancelled']);
+
+function rigaDelTempo(run, avvio, fine, adesso) {
+    if (RUN_CONCLUSI.has(run.status)) {
+        return `started ${avvio}${fine && fine !== avvio ? `, ended ${fine} (${secondiFra(fine, avvio)} s)` : ''}`;
+    }
+    const dallAvvio = secondiFra(adesso, avvio);
+    const partenza = `started ${avvio}${dallAvvio !== null ? ` (${dallAvvio} s ago)` : ''}`;
+    const dallUltima = fine && fine !== avvio ? secondiFra(adesso, fine) : null;
+    const ultima = fine && fine !== avvio ? `; last activity ${fine}${dallUltima !== null ? ` (${dallUltima} s ago)` : ''}` : '';
+    return `${partenza}${ultima} — as of ${adesso}`;
+}
+
+export function dettaglioRunPerIlModello(input, { adesso = new Date().toISOString() } = {}) {
     const state = input?.state ?? {};
     const events = Array.isArray(input?.events) ? input.events : [];
     const run = state.run ?? {};
@@ -76,7 +94,7 @@ export function dettaglioRunPerIlModello(input) {
     righe.push(`run ${runId} — ${run.status ?? 'unknown'}${richieste.length > 0 ? ` (${richieste.join(', ')})` : ''}`);
     const avvio = events[0]?.at ?? null;
     const fine = events.at(-1)?.at ?? null;
-    if (avvio) righe.push(`started ${avvio}${fine && fine !== avvio ? `, ${secondiFra(fine, avvio)} s so far` : ''}`);
+    if (avvio) righe.push(rigaDelTempo(run, avvio, fine, adesso));
     const conteggi = righeConteggi(nodes);
     righe.push(`steps: ${nodes.size} — ${conteggi.join(', ')}`);
     const correnti = [...nodes.values()].filter((n) => !TERMINALI.has(n?.state ?? 'pending'));

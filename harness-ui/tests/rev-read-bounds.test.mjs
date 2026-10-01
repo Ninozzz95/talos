@@ -71,25 +71,27 @@ function apriContando({ dopoLaPrimaLettura, statFinto, leggiRotto } = {}) {
   return { conto, apriFn };
 }
 
-test('REV-READ-BOUNDS-01 — un file enorme SENZA a capo: si legge al massimo il tetto, e il taglio si dichiara in testa', async (t) => {
+/* LEGGI IBRIDA (owner, 30/09 sera): un file senza a capo è UNA riga troppo lunga. Le garanzie restano: in memoria resta la
+   testa della riga (2000 caratteri), non il file; il taglio si dichiara in TESTA; il resto si legge con byteOffset. */
+test('REV-READ-BOUNDS-01 — un file enorme SENZA a capo: in memoria resta la testa della riga, e il taglio si dichiara in testa', async (t) => {
   const cartella = cartellaDiProva(t);
   const grande = MAX_BYTE_LEGGI * 8;
   writeFileSync(join(cartella, 'enorme.txt'), Buffer.alloc(grande, 0x61));
   const { conto, apriFn } = apriContando();
   const letta = await leggiTestoLimitato(cartella, 'enorme.txt', { apriFn });
   assert.equal(letta.byteSulDisco, grande);
-  assert.equal(letta.troncato, true);
-  assert.equal(letta.testo.length, MAX_BYTE_LEGGI, 'in memoria resta il tetto, non il file');
-  assert.ok(conto.byteLetti <= MAX_BYTE_LEGGI + 1, `letti dal disco ${conto.byteLetti} byte: il tetto più uno, per sapere che c'è altro`);
+  assert.ok(letta.testo.length < 2200, `in memoria resta la testa della riga (2000 caratteri e il marcatore), non il file: ${letta.testo.length}`);
+  assert.ok(conto.byteLetti <= grande, 'si legge al massimo il file, per contare le righe; mai di più');
   assert.equal(conto.chiusure, 1, 'l’handle si chiude');
   const esito = esitoDellaLettura(letta, 'enorme.txt');
-  assert.match(esito, new RegExp(`^\\[TALOS read only the first ${MAX_BYTE_LEGGI} of ${grande} bytes of "enorme\\.txt"`, 'u'));
+  assert.match(esito, /^\[TALOS read lines 1-1 of 1 in "enorme\.txt"; EOF reached; 1 over-long line/u);
+  assert.ok(esito.endsWith(`[… line 1 continues: ${grande - 2000} more bytes; continue inside it with leggi byteOffset=2000]`), esito.slice(-160));
 });
 
-test('REV-READ-BOUNDS-02 — dal kernel vero: il modello legge PRIMA di tutto che il file è stato tagliato', async (t) => {
+test('REV-READ-BOUNDS-02 — dal kernel vero: il modello legge PRIMA di tutto che la riga è stata accorciata', async (t) => {
   const esito = await esitoDiLeggi(t, 'enorme.log', Buffer.alloc(MAX_BYTE_LEGGI * 3, 0x62));
-  assert.match(esito, /^\[TALOS read only the first \d+ of \d+ bytes of "enorme\.log"/u, 'una lettura incompleta non si presenta come completa');
-  assert.match(esito, /the rest was not read/u);
+  assert.match(esito, /^\[TALOS read lines 1-1 of 1 in "enorme\.log"; EOF reached; 1 over-long line/u, 'una lettura incompleta non si presenta come completa');
+  assert.match(esito, /continue inside it with leggi byteOffset=2000\]$/u);
 });
 
 test('REV-READ-BOUNDS-04 — due `leggi` nella stessa risposta (sul desktop la seconda parte in anticipo): il tetto vale per tutte e due', async (t) => {
@@ -101,18 +103,18 @@ test('REV-READ-BOUNDS-04 — due `leggi` nella stessa risposta (sul desktop la s
   await talosLavora({ cartella, task: { consegna: 'leggi' }, modello: 'x', chiave: 'y', fetchDiRete: rete.fetch });
   const [primo, secondo] = rete.chiamate[1].corpo.messages.filter((m) => m.role === 'tool').map((m) => m.content);
   assert.equal(primo, 'piccolo');
-  assert.match(secondo, /^\[TALOS read only the first \d+ of \d+ bytes of "enorme\.log"/u);
+  assert.match(secondo, /^\[TALOS read lines 1-1 of 1 in "enorme\.log"; EOF reached; 1 over-long line/u);
+  assert.ok(secondo.length < 2600, 'anche la lettura partita in anticipo porta solo la testa della riga');
 });
 
-test('REV-READ-BOUNDS-03 — un file cresciuto dopo lo stat: il tetto vale lo stesso, e lo si dice', async (t) => {
+test('REV-READ-BOUNDS-03 — un file cresciuto dopo lo stat: il tetto della pagina vale lo stesso, e lo si dice', async (t) => {
   const cartella = cartellaDiProva(t);
-  writeFileSync(join(cartella, 'cresce.txt'), 'x'.repeat(100));
-  const { conto, apriFn } = apriContando({ statFinto: { size: 10 } });
+  writeFileSync(join(cartella, 'cresce.txt'), 'x\n'.repeat(100));
+  const { apriFn } = apriContando({ statFinto: { size: 10 } });
   const letta = await leggiTestoLimitato(cartella, 'cresce.txt', { apriFn, tetto: 40 });
-  assert.equal(letta.testo, 'x'.repeat(40));
+  assert.equal(letta.testo, 'x\n'.repeat(20), 'la pagina si ferma al tetto anche se il file è più grande dello stat');
   assert.equal(letta.troncato, true);
-  assert.ok(conto.byteLetti <= 41);
-  assert.match(esitoDellaLettura(letta, 'cresce.txt'), /grew while it was read/u);
+  assert.match(esitoDellaLettura(letta, 'cresce.txt'), /lines 1-20 of 100 in "cresce\.txt"; continue with leggi offset=21; page capped/u);
 });
 
 test('REV-READ-BYTES-01 — un PNG: si guarda solo il campione, non si decodifica niente, il peso VERO viene dallo stesso handle', async (t) => {
@@ -145,11 +147,12 @@ test('REV-READ-BYTES-03 — senza il peso del disco nessun numero (P19-LEGGI-03)
 test('REV-READ-UTF8 — un carattere spezzato dal tetto o fra due blocchi non diventa «�»; il BOM non si restituisce più (T-01)', async (t) => {
   const cartella = cartellaDiProva(t);
   writeFileSync(join(cartella, 'accenti.txt'), 'àààà€€€');
-  const tagliata = await leggiTestoLimitato(cartella, 'accenti.txt', { tetto: 5 });
+  // LEGGI IBRIDA: il tetto in byte vive ora nelle pagine dentro la riga (byteOffset); si tiene solo ciò che è intero
+  const tagliata = await leggiTestoLimitato(cartella, 'accenti.txt', { byteOffset: 0, tetto: 5 });
   assert.equal(tagliata.testo, 'àà', 'il tetto cade a metà della terza «à»: si tiene quello che è intero');
-  assert.equal(tagliata.troncato, true);
+  assert.equal(tagliata.nextByteOffset, 4);
   const aBlocchi = await leggiTestoLimitato(cartella, 'accenti.txt', { blocco: 3, campione: 3 });
-  assert.equal(aBlocchi.testo, 'àààà€€€', 'blocchi da 3 byte tagliano ogni carattere: la decodifica a flusso li ricuce');
+  assert.equal(aBlocchi.testo, 'àààà€€€', 'blocchi da 3 byte tagliano ogni carattere: la riga si ricompone prima di decodificarla');
   /* T-01 (28/09/2026, owner): da oggi il BOM NON si restituisce piu' — prima si', ed era il difetto T-01. Il file lo porta ancora. */
   writeFileSync(join(cartella, 'bom.txt'), '\uFEFFciao');
   assert.equal((await leggiTestoLimitato(cartella, 'bom.txt')).testo, 'ciao', 'il BOM non arriva al modello');
@@ -158,12 +161,16 @@ test('REV-READ-UTF8 — un carattere spezzato dal tetto o fra due blocchi non di
   assert.equal((await leggiTestoLimitato(cartella, 'rotto.txt')).testo, rotto.toString('utf8'), 'le sequenze non valide come readFile');
 });
 
-test('REV-READ-EDGE — vuoto, mancante, cartella, percorso assoluto: come prima', async (t) => {
+test('REV-READ-EDGE-READ29-COMPAT — empty result is explicit; missing, directory and absolute paths stay unchanged', async (t) => {
   const cartella = cartellaDiProva(t);
   writeFileSync(join(cartella, 'vuoto.txt'), '');
   const vuoto = await leggiTestoLimitato(cartella, 'vuoto.txt');
   assert.deepEqual([vuoto.testo, vuoto.troncato, vuoto.byteSulDisco], ['', false, 0]);
-  assert.equal(esitoDellaLettura(vuoto, 'vuoto.txt'), '');
+  const esitoVuoto = esitoDellaLettura(vuoto, 'vuoto.txt');
+  assert.match(esitoVuoto, /0 bytes at open/);
+  assert.match(esitoVuoto, /EOF reached without reading content/);
+  assert.match(esitoVuoto, /may change/);
+  assert.doesNotMatch(esitoVuoto, /error:|REFUSED|not found|ENOENT/i);
   await assert.rejects(leggiTestoLimitato(cartella, 'manca.txt'), { code: 'ENOENT' });
   mkdirSync(join(cartella, 'sotto'));
   await assert.rejects(leggiTestoLimitato(cartella, 'sotto'));
@@ -181,15 +188,16 @@ test('REV-READ-PERMESSO — un permesso negato dal sistema esce com’è, e l’
   assert.equal(conto.chiusure, 1);
 });
 
-test('REV-READ-STOP — lo Stop a metà lettura: si ferma, chiude l’handle; una lettura dopo riparte da capo intera', async (t) => {
+test('REV-READ-STOP — lo Stop a metà lettura: si ferma, chiude l’handle; una lettura dopo riparte da capo', async (t) => {
   const cartella = cartellaDiProva(t);
-  writeFileSync(join(cartella, 'lungo.txt'), 'z'.repeat(50_000));
+  writeFileSync(join(cartella, 'lungo.txt'), 'z\n'.repeat(25_000));
   const stop = new AbortController();
   const { conto, apriFn } = apriContando({ dopoLaPrimaLettura: () => stop.abort() });
   await assert.rejects(leggiTestoLimitato(cartella, 'lungo.txt', { apriFn, segnale: stop.signal, blocco: 1_000 }), { name: 'AbortError' });
   assert.equal(conto.chiusure, 1, 'l’handle si chiude anche sullo Stop');
   assert.ok(conto.byteLetti < 50_000, 'e non si è letto fino in fondo');
-  assert.equal((await leggiTestoLimitato(cartella, 'lungo.txt')).testo.length, 50_000, 'la ripresa legge tutto');
+  const ripresa = await leggiTestoLimitato(cartella, 'lungo.txt');
+  assert.deepEqual([ripresa.primaRiga, ripresa.ultimaRiga, ripresa.righeTotali], [1, 2000, 25_000], 'la ripresa riparte dalla prima riga');
 });
 
 test('REV-READ-PARITA — un file di testo normale arriva al modello identico', async (t) => {

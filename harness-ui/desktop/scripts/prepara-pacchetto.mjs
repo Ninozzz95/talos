@@ -7,6 +7,7 @@ import { createRequire } from 'node:module';
 import { spawn } from 'node:child_process';
 import { pipeline } from 'node:stream/promises';
 import { createWriteStream } from 'node:fs';
+import { BINARI_CASA_LINUX, preparaCasaLinux, verificaCasaLinux } from '../../src/casa-linux-binari.mjs';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const staging = join(root, '.staging');
@@ -176,11 +177,23 @@ export async function preparaPacchetto() {
     // CPU obbligatorio anche sul banco privo di driver Vulkan; versione Vulkan controllata nel test installato.
     if (asset.variante === 'cpu') await esegui(join(staging, 'local-runtime/cpu/llama-server.exe'), ['--version'], root);
   }
+  /*
+   * Fase B «casa di esecuzione» (owner 01/10/2026, «dentro l'installatore», impronte fissate): Node e rg per Linux, eseguiti
+   * dentro WSL da qui (niente installato nella distro). Stesso schema di llama: cache, impronta dell'archivio prima di estrarre,
+   * e qui anche quella dei binari estratti contro il loro manifesto. Eseguirli vorrebbe WSL sul banco della build: lo prova il
+   * pacchetto installato (`TALOS_CASA_LINUX`, `GET /api/v1/wsl` → `casaLinux.pronta`).
+   */
+  const casaLinux = join(staging, 'casa-linux', 'linux-x64');
+  await preparaCasaLinux(casaLinux, { cache: join(cache, 'casa-linux') });
+  const casaVerificata = await verificaCasaLinux(casaLinux, { controllaImpronte: true });
+  if (!casaVerificata.pronta) throw new Error(`Binari della casa Linux non pronti: ${casaVerificata.motivo}`);
   await writeFile(join(staging, 'AVVISI.txt'), [
     'TALOS Desktop — pacchetto di prova non firmato. Versione e commit nel manifesto della build.',
     'Electron 44.3.0 (MIT): LICENSE e LICENSES.chromium.html nella radice installata.',
     'llama.cpp b10517 (MIT): https://github.com/ggml-org/llama.cpp/tree/b10517 ; avvisi negli archivi inclusi.',
     'Go 1.27.1 (BSD-3-Clause): il helper upload include la standard library; licenza in harness-ui/native/GO-LICENSE.txt.',
+    'Node.js 24.18.0 per Linux (MIT): eseguito dentro WSL per gli attrezzi dei file; licenza in casa-linux/linux-x64/LICENSE-node.txt.',
+    'ripgrep 15.0.0 per Linux (MIT o Unlicense: https://github.com/BurntSushi/ripgrep), dal pacchetto @vscode/ripgrep-linux-x64 1.18.0 (MIT); licenza del pacchetto in casa-linux/linux-x64/LICENSE-rg.txt.',
     'Dipendenze Node: licenze originali conservate nei rispettivi node_modules.',
     'Licenza del repository: vedere LICENZA-REPOSITORY.txt. Le dipendenze mantengono le proprie licenze.',
     'Nessun modello GGUF, aggiornamento automatico o telemetria aggiunto da R-02.',
@@ -188,7 +201,7 @@ export async function preparaPacchetto() {
   await copyFile(join(root, '../..', 'LICENSE'), join(staging, 'LICENZA-REPOSITORY.txt'));
   const files = await inventario(staging);
   if (files.some(f => /\.gguf$/i.test(f.path))) throw new Error('GGUF trovato nel pacchetto.');
-  const manifest = { schema: 'talos.desktop.package.v1', data: new Date().toISOString(), piattaforma: 'win32-x64', electron: '44.3.0', electronBuilder: '26.16.1', llama: LLAMA, files, totaleByte: files.reduce((n, f) => n + f.bytes, 0) };
+  const manifest = { schema: 'talos.desktop.package.v1', data: new Date().toISOString(), piattaforma: 'win32-x64', electron: '44.3.0', electronBuilder: '26.16.1', llama: LLAMA, casaLinux: BINARI_CASA_LINUX, files, totaleByte: files.reduce((n, f) => n + f.bytes, 0) };
   await writeFile(join(staging, 'MANIFEST.json'), JSON.stringify(manifest, null, 2) + '\n');
   console.log(`Staging verificato: ${files.length} file, ${manifest.totaleByte} byte (manifest escluso).`);
   return manifest;

@@ -17,6 +17,7 @@ import { parseRuntimeOwnerSnapshot } from './runtime-owner-contract.mjs';
 import { risolviDestinazioneModello, separaFonteModello, FONTI_MODELLO, validaFallbackProviders } from './model-destination.mjs';
 import { REGISTRO_FORNITORI, ID_MOTORI_LOCALI_OPENAI, idPerWire } from './provider-registry.mjs';
 import { classificaErroreDiCorsa } from './research-orchestrator.mjs';
+import { leggiAttesaRichiestaDalFornitore, erroreEsitoProviderIncerto, consumoPubblico, marcaRifiutoProvider } from './provider-retry.mjs';
 import { normalizzaUsage, scontoDaCache } from './usage-cache.mjs'; // 12/09, P-B: i nomi della cache sono uno per fornitore, il lettore uno solo
 import { nativeProviderResponse, stripNativeMetadata } from './native-provider-adapter.mjs';
 import { preparaRichiestaCompatibile, OpenAiCompatibleRuntimeError } from './openai-compatible-runtime.mjs'; // P-D (12/09): Z.AI accetta solo alcuni livelli di ragionamento
@@ -62,18 +63,6 @@ class OpenRouterIdleTimeoutError extends Error {
     super(`OpenRouter non ha inviato attività per ${Math.max(1, Math.round(timeoutMs / 1_000))} secondi.`);
     this.name = 'OpenRouterIdleTimeoutError';
     this.code = 'OPENROUTER_IDLE_TIMEOUT';
-  }
-}
-
-class OpenRouterStreamError extends Error {
-  constructor(error) {
-    const message = typeof error?.message === 'string' && error.message.trim()
-      ? error.message.trim()
-      : 'OpenRouter ha interrotto la risposta in corso.';
-    super(message);
-    this.name = 'OpenRouterStreamError';
-    this.code = error?.code ?? error?.metadata?.error_type ?? 'OPENROUTER_STREAM_ERROR';
-    this.providerError = error ?? null;
   }
 }
 
@@ -430,17 +419,6 @@ export function normalizzaReasoningPerModello(reasoning, capability) {
   return result;
 }
 
-function statusPerErroreStream(error) {
-  const numeric = Number(error?.code);
-  if (Number.isInteger(numeric) && numeric >= 400 && numeric <= 599) return numeric;
-  const tipo = String(error?.metadata?.error_type ?? error?.code ?? '').toLowerCase();
-  if (tipo.includes('timeout')) return 408;
-  if (tipo.includes('rate_limit')) return 429;
-  if (tipo.includes('overloaded') || tipo.includes('unavailable') || tipo.includes('server')) return 503;
-  if (tipo.includes('authentication')) return 401;
-  return 502;
-}
-
 function rispostaErrore(status, error) {
   const message = typeof error?.message === 'string' && error.message.trim()
     ? error.message.trim()
@@ -488,7 +466,6 @@ async function preparaRispostaSse(response, { inattivitaMs, controller, userSign
   const encoder = new TextEncoder();
   const pending = [];
   let outputVisibile = false;
-  let earlyError = null;
   let streamController = null;
   let streamError = null;
   let done = false;
@@ -514,15 +491,15 @@ async function preparaRispostaSse(response, { inattivitaMs, controller, userSign
         return;
       }
       if (packet?.error) {
-        if (!outputVisibile) earlyError = packet.error;
-        else streamError = new OpenRouterStreamError(packet.error);
-        return;
+        // HTTP200 already accepted the generation: let the kernel handle its error,
+        // including any subsequent usage, without synthesizing a retryable HTTP status.
+        outputVisibile = true;
       }
       if (eventoConOutput(packet)) outputVisibile = true;
       emetti(`data: ${event.data}\n\n`);
     },
     onError(error) {
-      streamError = error;
+      if (error.type === 'max-buffer-size-exceeded') streamError = error;
     },
   });
 
@@ -533,31 +510,26 @@ async function preparaRispostaSse(response, { inattivitaMs, controller, userSign
     });
     if (result.done) {
       done = true;
-      parser.reset({ consume: true });
+      parser.reset();
       return;
     }
     parser.feed(decoder.decode(result.value, { stream: true }));
   };
 
   try {
-    while (!outputVisibile && !earlyError && !streamError && !done) await leggi();
+    while (!outputVisibile && !streamError && !done) await leggi();
   } catch (error) {
     await reader.cancel(error).catch(() => {});
     if (userSignal?.aborted) throw userSignal.reason ?? error;
     /* ⛔ Il silenzio NON si traveste da risposta HTTP: deve arrivare a `classificaGuasto` col suo
        codice, o diventerebbe un «502» generico e perderebbe la classe `rete` che lo rende ripreso. */
     if (error instanceof SilenzioDelFornitoreError) throw error;
-    if (error instanceof OpenRouterIdleTimeoutError) return rispostaErrore(408, { message: 'OpenRouter è rimasto inattivo oltre il limite configurato.' });
-    return rispostaErrore(502, { message: error instanceof Error ? error.message : String(error) });
+    throw erroreEsitoProviderIncerto(error);
   }
 
-  if (earlyError) {
-    await reader.cancel(new OpenRouterStreamError(earlyError)).catch(() => {});
-    return rispostaErrore(statusPerErroreStream(earlyError), earlyError);
-  }
   if (streamError && !outputVisibile) {
     await reader.cancel(streamError).catch(() => {});
-    return rispostaErrore(502, { message: streamError.message });
+    throw erroreEsitoProviderIncerto(streamError);
   }
 
   const body = new ReadableStream({
@@ -646,6 +618,7 @@ export function creaFetchOpenRouterResiliente(fetchDiRete = fetch, {
       return preparaRispostaSse(response, { inattivitaMs, controller, userSignal });
     } catch (error) {
       if (userSignal?.aborted) throw userSignal.reason ?? error;
+      if (error?.esitoIncerto) throw error;
       if (error instanceof SilenzioDelFornitoreError) throw error;
       if (error instanceof OpenRouterIdleTimeoutError) return rispostaErrore(408, { message: 'OpenRouter è rimasto inattivo oltre il limite configurato.' });
       return rispostaErrore(502, { message: error instanceof Error ? error.message : String(error) });
@@ -783,6 +756,12 @@ function creaFetchInstradata(fetchDiRete = fetch, { risolvi = risolviDestinazion
       : sorvegliaCorpo(risposta, { limiteMs: failsafe, userSignal: opzioni.signal ?? null }));
     const conDispatcher = dispatcherDiRichiesta(failsafe);
 
+    // Recovery provenance belongs to the local journal, never to a provider or ACP.
+    // Keep native provider state here: the native adapter still needs it.
+    if (corpo.messages?.some(m => m.talos_recovery)) {
+      corpo = { ...corpo, messages: corpo.messages.map(({ talos_recovery, ...message }) => message) };
+      opzioni = { ...opzioni, body: JSON.stringify(corpo) };
+    }
     // P-L · il corpo del kernel incontra ACP solo qui; stop e chiusura seguono la risposta.
     if (destinazione.esterno) return rispostaAgenteAcp({ runtime: destinazione.runtime, body: corpo, signal: opzioni.signal });
     // P-L · fine instradamento agente esterno.
@@ -957,12 +936,38 @@ const CONDIZIONI_PRIMA_DELLA_RETE = new Set([
   'PROVIDER_RUNTIME_INVALID', 'MODEL_DESTINATION_INVALID',
 ]);
 
+// OpenRouter's structured pre-provider rejection; messages and hints are untrusted prose.
+function classificaLimiteOpenRouter(testo) {
+  const sconosciuto = { code: 'PROVIDER_PAYMENT_REQUIRED', classe: 'limite-credito', transitorio: false };
+  if (Buffer.byteLength(testo, 'utf8') >= 16_384) return sconosciuto;
+  const oggetto = v => v !== null && typeof v === 'object' && !Array.isArray(v);
+  let corpo;
+  try { corpo = JSON.parse(testo); } catch { return sconosciuto; }
+  if (!oggetto(corpo) || !oggetto(corpo.error) || corpo.error.code !== 402 || !oggetto(corpo.error.metadata)) return sconosciuto;
+  const { limit_source: fonte, reason } = corpo.error.metadata;
+  if (fonte === 'openrouter_in_flight_budget' && reason === 'in_flight_budget_exhausted') {
+    return { code: 'PROVIDER_BUDGET_OCCUPIED', classe: 'budget-occupato', transitorio: true };
+  }
+  if (fonte === 'openrouter_key_limit') return { code: 'PROVIDER_KEY_SPEND_LIMIT', classe: 'limite-chiave', transitorio: false };
+  if (fonte === 'openrouter_credits') return reason === 'weight_exceeds_budget'
+    ? { code: 'PROVIDER_REQUEST_BUDGET', classe: 'richiesta-costosa', transitorio: false }
+    : { code: 'PROVIDER_CREDIT_LIMIT', classe: 'credito', transitorio: false };
+  return sconosciuto;
+}
+
 function erroreFornitorePubblico(classificazione, stato = null) {
   const messaggi = {
     traffico: 'Troppo traffico presso il fornitore.', credenziale: 'Credenziale rifiutata dal fornitore.',
+    accesso: stato === 401
+      ? "L'endpoint richiede autenticazione: verifica indirizzo e accesso configurati."
+      : 'Accesso negato dal fornitore o dal modello: verifica i permessi.',
     credito: 'Credito non disponibile presso il fornitore.', rete: 'Connessione con il fornitore interrotta.',
     'timeout-fornitore': 'Il fornitore ha superato il tempo massimo.', 'guasto-fornitore': 'Il fornitore non risponde.',
     'flusso-interrotto': 'La risposta del fornitore si è interrotta.',
+    'budget-occupato': 'Il budget è temporaneamente occupato da richieste in corso o appena concluse.',
+    'limite-chiave': 'Il limite di spesa della chiave è stato raggiunto.',
+    'richiesta-costosa': 'Il costo stimato della richiesta supera il budget disponibile.',
+    'limite-credito': 'Il servizio ha rifiutato la richiesta per un limite di spesa non specificato.',
   };
   const e = new Error(messaggi[classificazione.classe] ?? 'Il fornitore non ha accettato la richiesta.');
   return Object.assign(e, { code: 'PROVIDER_REQUEST_ERROR', stato, ...classificazione, limitatoDalFornitore: classificazione.classe === 'traffico' });
@@ -1043,18 +1048,6 @@ function classificaGuasto(error, stato = null) {
   return classificaErroreDiCorsa({ messaggio: 'upstream error' });
 }
 
-function consumoPubblico(usage) {
-  if (!usage || typeof usage !== 'object' || Array.isArray(usage)) return null;
-  const risultato = {};
-  const copiaNumeri = (da, campi) => Object.fromEntries(campi.filter(k => typeof da?.[k] === 'number' && Number.isFinite(da[k]) && da[k] >= 0).map(k => [k, da[k]]));
-  Object.assign(risultato, copiaNumeri(usage, ['prompt_tokens','completion_tokens','total_tokens','input_tokens','output_tokens','cost','cache_read_input_tokens','cache_creation_input_tokens','prompt_cache_hit_tokens','prompt_cache_miss_tokens']));
-  for (const [campo, campi] of Object.entries({prompt_tokens_details:['cached_tokens','cache_write_tokens'],completion_tokens_details:['reasoning_tokens']})) {
-    const v = copiaNumeri(usage[campo], campi); if (Object.keys(v).length) risultato[campo] = v;
-  }
-  if (typeof usage.cache_discount === 'number' && Number.isFinite(usage.cache_discount)) risultato.cache_discount = usage.cache_discount;
-  return Object.keys(risultato).length ? risultato : null;
-}
-
 /** P-H: la fetch conosce la chiave; il kernel resta proprietario dei ritentativi.
  * eseguiConFallback avvolge UNA chiamata del kernel, mai il ciclo degli attrezzi.
  * I callback del cambio e del consumo devono essere durabili prima della nuova chiamata.
@@ -1114,11 +1107,37 @@ export function creaFetchMultiProvider(fetchDiRete = fetch, {
       return new Response(contesto.errore.message, { status: contesto.errore.stato });
     }
     contesto.errore = null;
+    contesto.rispostaAccettata = false;
+    contesto.headersRitenta = {};
     contesto.scelta = scelta; contesto.fonte = fonte;
-    const segnala = async (classificazione, headers, stato) => {
+    const segnala = async (classificatoDalTesto, headers, stato) => {
+      /* P2 (ledger Codex 28/09, `SUBENTRO-KERNEL-P2-2026-09-28`; riportata sulla base di RETRY01-09 il 30/09 col sì
+       * dell'owner). Un 401 senza chiave inviata, o un 403 con una chiave FACOLTATIVA, non dicono che una chiave è stata
+       * rifiutata: diventano «accesso», non transitorio, senza avviso di chiave e senza panchina. Fonti rilette il
+       * 30/09/2026: Ollama «The local API at http://localhost:11434 does not require authentication»
+       * (docs.ollama.com/api/authentication); RFC 9110 §15.5.4, un 403 può non dipendere dalle credenziali. */
+      const classificazione = (stato === 401 && !scelta) || (stato === 403 && !record.chiaveObbligatoria)
+        ? { classe: 'accesso', transitorio: false }
+        : classificatoDalTesto;
       contesto.errore = erroreFornitorePubblico(classificazione, stato);
-      if (scelta) providerStore.mettiInPanchina(fonte, scelta.impronta, { classe: classificazione.classe, headers });
-      if (classificazione.classe === 'credenziale' && typeof onAvviso === 'function') {
+      const attesa = leggiAttesaRichiestaDalFornitore(headers); // G02-10: retry-after-ms vince su retry-after
+      if (attesa !== null) {
+        // Only a normalized delay leaves the adapter; never arbitrary provider headers. The milliseconds travel too.
+        const limitata = Math.min(attesa, Number.MAX_SAFE_INTEGER);
+        contesto.headersRitenta = { 'Retry-After': String(Math.ceil(limitata / 1000)), 'Retry-After-Ms': String(Math.round(limitata)) };
+      }
+      // A spending limit does not invalidate a credential. Never rotate keys to bypass it.
+      if (fonte === 'openrouter' && stato === 402) return;
+      const ultimaChiave = stato === 429 && scelta && !providerStore.elencaPool(fonte)
+        .some(v => v.impronta !== scelta.impronta && v.stato === 'disponibile');
+      const guastoHttp = contesto.guastiHttp && headers && (
+        (stato >= 500 && stato <= 599 && classificazione.classe === 'guasto-fornitore')
+        || (stato === 429 && classificazione.classe === 'traffico' && ultimaChiave));
+      if (scelta && guastoHttp) {
+        // The kernel owns the retry budget; suspending its last key would turn retries into local errors.
+        contesto.guastiHttp.set(scelta.impronta, (contesto.guastiHttp.get(scelta.impronta) ?? 0) + 1);
+      } else if (scelta && classificazione.classe !== 'accesso') providerStore.mettiInPanchina(fonte, scelta.impronta, { classe: classificazione.classe, headers });
+      if (scelta && classificazione.classe === 'credenziale' && typeof onAvviso === 'function') {
         await onAvviso(`Una chiave di ${record.etichetta} è stata rifiutata: controlla Fornitori e accessi.`);
       }
     };
@@ -1145,25 +1164,32 @@ export function creaFetchMultiProvider(fetchDiRete = fetch, {
         let response;
         try { response = await fetchDiRete(target, { ...init, signal: scadenza.signal }); }
         finally { scadenza.disarma(); }
-        if (response.ok) return response;
+        if (response.ok) { contesto.rispostaAccettata = true; return response; }
         // Il corpo originale non viene mai restituito al logger/kernel: può contenere la chiave.
         let testo = '';
-        try { testo = (await response.text()).slice(0, 16_384); } catch { /* lo stato resta disponibile */ }
-        const classificazione = classificaGuasto({ message: testo }, response.status);
+        try { testo = await leggiDettaglioRifiuto(response, 16_385); } catch { /* lo stato resta disponibile */ }
+        const classificazione = fonte === 'openrouter' && response.status === 402
+          ? classificaLimiteOpenRouter(testo) : classificaGuasto({ message: testo }, response.status);
         await segnala(classificazione, response.headers, response.status);
-        return new Response(JSON.stringify({ error: { message: contesto.errore.message } }), { status: response.status, headers: { 'Content-Type': 'application/json' } });
+        return new Response(JSON.stringify({ error: { message: contesto.errore.message } }), { status: response.status, headers: { 'Content-Type': 'application/json', ...contesto.headersRitenta } });
       } catch (error) {
         if (opzioni.signal?.aborted && opzioni.signal.reason?.name !== 'TimeoutError') throw opzioni.signal.reason;
+        if (error === contesto.errore) throw error;
         const classificazione = classificaGuasto(error);
-        await segnala(classificazione, null, classificazione.transitorio ? 503 : null);
-        if (!classificazione.transitorio) throw contesto.errore;
-        return new Response(contesto.errore.message, { status: 503 });
+        // No HTTP rejection was received. A POST may already have been processed.
+        contesto.errore = erroreEsitoProviderIncerto(classificazione);
+        throw contesto.errore;
       }
     };
     const instradata = creaFetchInstradata(rete, { risolvi, dipendenze: {
       ...dipendenze, leggiChiave: p => p === fonte && scelta ? scelta.chiave : dipendenze.leggiChiave(p),
     }, onAvviso, instradaOpenRouter: true, inattivitaGenerazioneMs, sorvegliaCorpo, memoriaAttrezzi });
-    try { return await instradata(url, opzioni); }
+    try {
+      const risposta = await instradata(url, opzioni);
+      // Keep Response semantics for direct callers and let local adapters negotiate first.
+      if (contesto.guastiHttp && !risposta.ok && contesto.errore?.transitorio === false) throw contesto.errore;
+      return marcaRifiutoProvider(risposta, contesto.errore?.classe);
+    }
     catch (error) {
       /*
        * ⛔ BC-79.2 — un motore locale che rifiuta la richiesta ANCHE senza attrezzi non è un guasto
@@ -1180,7 +1206,9 @@ export function creaFetchMultiProvider(fetchDiRete = fetch, {
       // P-K — fine
       // Gli SDK nativi lanciano sugli HTTP non riusciti: ricondurli alla stessa
       // risposta permette al kernel di esaurire il proprio budget anche qui.
-      if (contesto.errore?.stato) return new Response(contesto.errore.message, { status: contesto.errore.stato });
+      if (contesto.guastiHttp && contesto.errore?.transitorio === false) throw contesto.errore;
+      if (contesto.errore?.stato) return marcaRifiutoProvider(new Response(contesto.errore.message,
+        { status: contesto.errore.stato, headers: contesto.headersRitenta }), contesto.errore.classe);
       if (contesto.errore) throw contesto.errore;
       throw error;
     }
@@ -1199,7 +1227,7 @@ export function creaFetchMultiProvider(fetchDiRete = fetch, {
       const usaAttrezzi = Boolean(opzioni.attrezzi?.length || opzioni.messaggi?.some(m => m.role === 'tool' || m.tool_calls?.length));
       while (true) {
         opzioni.segnaleStop?.throwIfAborted();
-        const contesto = {};
+        const contesto = { guastiHttp: new Map() };
         let rispostaInterrotta = false;
         const fetchTentativo = (url, init) => invia(url, init, contesto);
         let risultato;
@@ -1253,14 +1281,22 @@ export function creaFetchMultiProvider(fetchDiRete = fetch, {
              c'entra, e mascherato da «richiesta non valida» il kernel non potrebbe più comprimere (`ContestoLocalePienoError`). */
           if (error?.code === 'LOCAL_CONTEXT_EXCEEDED') throw error;
           const classificazione = contesto.errore ?? classificaGuasto(error, error?.stato ?? error?.statusCode);
-          const pulito = erroreFornitorePubblico(classificazione, error?.stato ?? contesto.errore?.stato);
-          /* ⛔ 24/09/2026 sera (decisione owner «continuare, come Hermes»): il testo già arrivato di un flusso rotto a
-             metà viaggia con l'errore pubblico, perché è il kernel a decidere se continuare da lì. Senza questa riga la
-             frase italiana arrivava, e il testo no. */
+          const incerto = error?.esitoIncerto === true || contesto.errore?.esitoIncerto === true
+            || contesto.rispostaAccettata || rispostaInterrotta || Boolean(error?.parziale);
+          const pulito = incerto ? erroreEsitoProviderIncerto({ ...classificazione, code: error?.code, causaDiTrasporto: error?.causaDiTrasporto ?? classificazione.causaDiTrasporto, usage: error?.usage })
+            : erroreFornitorePubblico(classificazione, error?.stato ?? contesto.errore?.stato);
+          // Keep partial text for explicit recovery; changing providers must never replay this request.
           if (error?.parziale) pulito.parziale = error.parziale;
-          if (!contesto.errore && contesto.scelta) providerStore.mettiInPanchina(destinazione.provider, contesto.scelta.impronta, { classe: classificazione.classe });
-          if (typeof onConsumoFornitore === 'function') await onConsumoFornitore({ tipo: 'consumo-fornitore', ...destinazione, usage: null, costoDichiarato: null, esito: classificazione.classe === 'traffico' ? 'traffico' : 'interrotto' });
-          if (!classificazione.transitorio) throw pulito;
+          if (!incerto && ['guasto-fornitore', 'traffico'].includes(classificazione.classe) && contesto.scelta
+            && (contesto.guastiHttp.get(contesto.scelta.impronta) ?? 0) >= 2) {
+            providerStore.mettiInPanchina(destinazione.provider, contesto.scelta.impronta, {
+              classe: classificazione.classe, headers: new Headers(contesto.headersRitenta),
+            });
+          }
+          if (!incerto && !contesto.errore && contesto.scelta) providerStore.mettiInPanchina(destinazione.provider, contesto.scelta.impronta, { classe: classificazione.classe });
+          const usage = consumoPubblico(pulito.usage);
+          if (typeof onConsumoFornitore === 'function') await onConsumoFornitore({ tipo: 'consumo-fornitore', ...destinazione, usage, costoDichiarato: usage?.cost ?? null, esito: classificazione.classe === 'traffico' ? 'traffico' : 'interrotto' });
+          if (incerto || !classificazione.transitorio || (destinazione.provider === 'openrouter' && contesto.errore?.stato === 402)) throw pulito;
           let prossima = null;
           while (++indice < catena.length) {
             const candidata = catena[indice];
@@ -1488,6 +1524,29 @@ export function createOwnerRuntimeAdapter({
       };
     },
     async talosLavora(input) {
+      if (typeof input?.readProcessOutputFn === 'function' && (await carica()).SUPPORTA_LETTURA_OUTPUT_PROCESSI !== 1) {
+        throw new OwnerRuntimeUnavailableError('Il motore di questa installazione non legge ancora gli output conservati.', 'PROCESS_OUTPUT_READ_CONTRACT_REQUIRED');
+      }
+      if (typeof input?.captureProcessFn === 'function') {
+        const runtime = await carica();
+        if (runtime.SUPPORTA_OUTPUT_PROCESSI !== 1 || runtime.SUPPORTA_METADATA_OUTPUT_PROCESSI !== 1) {
+          throw new OwnerRuntimeUnavailableError('Il motore di questa installazione non conserva ancora gli output dei comandi.', 'PROCESS_OUTPUT_CONTRACT_REQUIRED');
+        }
+      }
+      if (typeof input?.ambienteComandiFn === 'function') {
+        const runtime = await carica();
+        if (runtime.SUPPORTA_AMBIENTE_COMANDI !== 1) {
+          throw new OwnerRuntimeUnavailableError('Il motore di questa installazione non applica ancora la scelta dell’ambiente dei comandi.', 'COMMAND_ENVIRONMENT_CONTRACT_REQUIRED');
+        }
+      }
+      /* G02 (dalla lane CLI): chi passa una barriera prima delle modifiche (il checkpoint della CLI) non la perde in silenzio. */
+      if (typeof input?.primaDiMutazioneFn === 'function' && (await carica()).SUPPORTA_BARRIERA_MUTAZIONI !== 1) {
+        throw new OwnerRuntimeUnavailableError('Il motore di questa installazione non applica ancora la barriera prima delle modifiche.', 'PRE_MUTATION_CONTRACT_REQUIRED');
+      }
+      /* G02 (dalla lane CLI): chi porta il suo esecutore per la shell del modello (il broker della CLI) non torna in silenzio sull'host. */
+      if (typeof input?.eseguiComandoSandboxatoFn === 'function' && (await carica()).SUPPORTA_ESECUTORE_COMANDI_OSPITE !== 1) {
+        throw new OwnerRuntimeUnavailableError('Il motore di questa installazione non usa ancora l’esecutore dei comandi dell’ospite.', 'COMMAND_EXECUTOR_CONTRACT_REQUIRED');
+      }
       const fallbackProviders = validaFallbackProviders(input?.fallbackProviders ?? []);
       if (fallbackProviders.length) {
         const runtime = await carica();
@@ -1643,7 +1702,15 @@ export function createOwnerRuntimeAdapter({
       if (typeof choice?.message?.content !== 'string' || typeof choice?.finish_reason !== 'string') fail('CTX_SUMMARY_RESPONSE_INVALID', 'La sintesi non dichiara testo e stato finale.', usage);
       return { text: choice.message.content, finishReason: choice.finish_reason, usage };
     },
-    async eseguiComandoSandboxato(...args) { return richiama('eseguiComandoSandboxato', ...args); },
+    async eseguiComandoSandboxato(...args) {
+      if (typeof args[2]?.onBytes === 'function') {
+        const runtime = await carica();
+        if (runtime.SUPPORTA_OUTPUT_PROCESSI !== 1 || runtime.SUPPORTA_METADATA_OUTPUT_PROCESSI !== 1) {
+          throw new OwnerRuntimeUnavailableError('Il motore di questa installazione non conserva ancora gli output dei comandi.', 'PROCESS_OUTPUT_CONTRACT_REQUIRED');
+        }
+      }
+      return richiama('eseguiComandoSandboxato', ...args);
+    },
     async eseguiFlowForge(...args) {
       if (specifier) return richiama('eseguiFlowForge', ...args);
       return eseguiFlowForgeLocale(...args);

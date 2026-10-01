@@ -77,17 +77,40 @@ function giriFinti() {
 
 // ⛔ a tempo di OROLOGIO: la prima stesura contava i giri, e con una condizione lenta (un rigioco intero del giornale) un
 // «3 secondi» durava ore — è successo con 41 passi.
-async function aspettaChe(condizione, ms = 3_000) {
-  const fine = Date.now() + ms;
-  while (Date.now() < fine) {
+/*
+ * ⛔ 01/10/2026 — e l'orologio da solo misurava il DISCO, non lo scheduler: il 29/09 la CI pubblica (Windows) ha fatto cadere
+ *   WF-FAILURE-LIKE-HERMES dopo 3 s mentre il run scriveva ancora (vedi `banco`, `ritardoScrittureMs`). Con `progresso` la
+ *   scadenza conta il tempo SENZA progresso: si sposta ogni volta che `progresso()` cambia (il giornale cresce, parte una
+ *   sessione). Un run fermo cade dopo `ms` come prima; uno lento ma vivo no. `TETTO_MS` impedisce l'attesa infinita di un run
+ *   che scrive in giro senza mai arrivare. Come le cure dei flake «wall-clock progress deadline» (abi-jey/nagents#12,
+ *   tqbf/selfdrivingwiki#1288, letti il 01/10/2026): legare l'attesa al progresso vero, non allungarla.
+ */
+const TETTO_MS = 60_000;
+async function aspettaChe(condizione, ms = 3_000, progresso = null) {
+  const inizio = Date.now();
+  let fine = inizio + ms;
+  let visto = progresso ? await progresso() : null;
+  let prossimaMisura = Date.now() + 50;
+  while (Date.now() < fine && Date.now() - inizio < TETTO_MS) {
     if (await condizione()) return true;
     await new Promise((r) => setTimeout(r, 5));
+    if (progresso && Date.now() >= prossimaMisura) {
+      prossimaMisura = Date.now() + 50;
+      const ora = await progresso();
+      if (ora !== visto) { visto = ora; fine = Date.now() + ms; }
+    }
   }
   return Boolean(await condizione());
 }
 const calma = () => new Promise((r) => setTimeout(r, 120));
 
-async function banco(t, { draft, sessionModel = CLOUD }) {
+/*
+ * `ritardoScrittureMs`: ogni scrittura del giornale dello store attende tanto prima e dopo (il `failpoint` dello store,
+ * `store.mjs:810/817`). Serve a provare la prova su un disco LENTO: il 29/09/2026 la CI pubblica (run 36576169615, Windows,
+ * disco D:) ha visto WF-FAILURE-LIKE-HERMES cadere alla riga dei due figli dopo 3 s, mentre lo scheduler lavorava — misurato
+ * il 01/10: fra la fine di «Prepara» e la partenza dei figli ci sono ~16 scritture durevoli, e con ~260 ms l'una servono 4,5 s.
+ */
+async function banco(t, { draft, sessionModel = CLOUD, ritardoScrittureMs = 0 }) {
   const cartellaStore = cartellaDiProva('talos-wf-sched-sessioni-');
   const radiceWorkflow = mkdtempSync(join(tmpdir(), 'talos-wf-sched-store-'));
   const giri = giriFinti();
@@ -98,7 +121,8 @@ async function banco(t, { draft, sessionModel = CLOUD }) {
       return { cartella: '/tmp/x', comandoProva: 'npm test', task: { id: taskId, consegna: 'radice' } };
     } });
   const store = await createWorkflowStore({ workflowDataRoot: radiceWorkflow, workspaceRoots: [],
-    resultLimits: { maxItemBytes: 1_048_576, maxRunBytes: 8_388_608 } });
+    resultLimits: { maxItemBytes: 1_048_576, maxRunBytes: 8_388_608 } },
+  ritardoScrittureMs > 0 ? { failpoint: async (nome) => { if (nome.startsWith('store.journal.')) await new Promise((r) => setTimeout(r, ritardoScrittureMs)); } } : {});
   const orologio = { ms: Date.now() + 60_000, avanza(ms) { this.ms += ms; } };
   const nowFn = () => new Date(orologio.ms).toISOString();
   const timer = { attesi: [] };
@@ -133,24 +157,27 @@ async function banco(t, { draft, sessionModel = CLOUD }) {
     const definizione = await readDefinition(store, { workflowId: eventi[0].payload.workflowId, version: eventi[0].payload.definitionVersion });
     return { eventi, stato: workflowReplay({ definition: definizione.core, runId, events: eventi }) };
   };
-  return { ...primo, componi, giri, runId, stato, orologio, timer, store };
+  /* Il progresso: quanti fatti ha il giornale del run e quante sessioni sono partite. */
+  const progresso = async () => `${(await readEvents(store, { runId })).length}/${giri.quanti}`;
+  const aspetta = (condizione, ms) => aspettaChe(condizione, ms, progresso);
+  return { ...primo, componi, giri, runId, stato, orologio, timer, store, aspetta };
 }
 
 test('WF-SCHEDULER-DEPENDENCY-ORDER: the scheduler starts the run, runs the first step alone, then its two children together, then closes the run', async (t) => {
   const b = await banco(t, { draft: bozza(['uno', 'due']) });
   await b.orchestrator.recover();
   await b.scheduler.avvia();
-  assert.ok(await aspettaChe(() => b.giri.quanti === 2), 'the first step starts');
+  assert.ok(await b.aspetta(() => b.giri.quanti === 2), 'the first step starts');
   await calma();
   assert.equal(b.giri.quanti, 2, 'no child before its parent has finished');
   let { eventi } = await b.stato();
   const iniziato = eventi.findIndex((evento) => evento.type === 'run_started');
   assert.ok(iniziato > 0 && iniziato < eventi.findIndex((evento) => evento.type === 'activity_scheduled'), 'run_started comes before any attempt');
   b.giri.rispondi(b.giri.indice('Prepara'));
-  assert.ok(await aspettaChe(() => b.giri.quanti === 4), 'the two children start together');
+  assert.ok(await b.aspetta(() => b.giri.quanti === 4), 'the two children start together');
   b.giri.rispondi(b.giri.indice('Fai uno'));
   b.giri.rispondi(b.giri.indice('Fai due'));
-  assert.ok(await aspettaChe(async () => (await b.stato()).stato.run.status === 'succeeded'), 'the run is closed');
+  assert.ok(await b.aspetta(async () => (await b.stato()).stato.run.status === 'succeeded'), 'the run is closed');
   ({ eventi } = await b.stato());
   assert.equal(eventi.filter((evento) => evento.type === 'capacity_released').length, 3, 'every slot is released');
   const foglie = eventi.filter((evento) => evento.type === 'result_recorded' && ['uno', 'due'].includes(evento.payload.resultRef.nodeId))
@@ -164,43 +191,59 @@ test('WF-FAILURE-LIKE-HERMES: a failed step lets the independent branch finish, 
   const b = await banco(t, { draft: bozza(['uno', 'due'], [{ id: 'dopo', phase: 'f', label: 'Dopo', task: 'Dopo uno.', dependsOn: ['uno'] }]) });
   await b.orchestrator.recover();
   await b.scheduler.avvia();
-  assert.ok(await aspettaChe(() => b.giri.quanti === 2));
+  assert.ok(await b.aspetta(() => b.giri.quanti === 2));
   b.giri.rispondi(b.giri.indice('Prepara'));
-  assert.ok(await aspettaChe(() => b.giri.quanti === 4));
+  assert.ok(await b.aspetta(() => b.giri.quanti === 4));
   b.giri.fallisci(b.giri.indice('Fai uno'), 'credenziale', 'Credenziale rifiutata dal fornitore.');
-  assert.ok(await aspettaChe(async () => (await b.stato()).stato.nodes.get('uno').state === 'failed'));
+  assert.ok(await b.aspetta(async () => (await b.stato()).stato.nodes.get('uno').state === 'failed'));
   await calma();
   let { stato } = await b.stato();
   assert.equal(stato.run.status, 'running', 'the independent branch is still running: no attention yet');
   assert.equal(stato.nodes.get('dopo').state, 'blocked');
   b.giri.rispondi(b.giri.indice('Fai due'));
-  assert.ok(await aspettaChe(async () => (await b.stato()).stato.run.status === 'needs_attention'));
+  assert.ok(await b.aspetta(async () => (await b.stato()).stato.run.status === 'needs_attention'));
   ({ stato } = await b.stato());
   assert.deepEqual(stato.run.needsAttentionReasons, ['node_failed']);
   assert.equal(stato.nodes.get('due').state, 'succeeded');
   assert.equal(stato.nodes.get('dopo').state, 'blocked');
 });
 
+test('WF-WAIT-ON-PROGRESS: on a disk as slow as the CI runner the children still start, and the wait does not give up while the journal grows', async (t) => {
+  /* 30 ms prima e dopo ogni scrittura: ~16 scritture ≈ 1 s per far partire i figli, contro un budget di 300 ms SENZA scritture. */
+  const b = await banco(t, { draft: bozza(['uno', 'due']), ritardoScrittureMs: 30 });
+  await b.orchestrator.recover();
+  await b.scheduler.avvia();
+  assert.ok(await b.aspetta(() => b.giri.quanti === 2, 300));
+  const inizio = Date.now();
+  b.giri.rispondi(b.giri.indice('Prepara'));
+  assert.ok(await b.aspetta(() => b.giri.quanti === 4, 300), `the two children start (waited ${Date.now() - inizio} ms while the journal grew)`);
+  assert.ok(Date.now() - inizio > 300, 'the disk really was slower than the budget: otherwise this proves nothing');
+  /* Al contrario: un run FERMO (i figli aspettano la loro risposta, nessuno scrive) cade dopo il budget, non al tetto. */
+  const fermo = Date.now();
+  assert.equal(await b.aspetta(() => false, 300), false);
+  assert.ok(Date.now() - fermo < 2_000, `a stalled run gives up after its budget (took ${Date.now() - fermo} ms)`);
+});
+
 test('WF-FAILURE-WAITS-FOR-RETRY: a failure does not ask for attention while another branch waits for its retry with no slot held', async (t) => {
   const b = await banco(t, { draft: bozza(['uno', 'due']) });
   await b.orchestrator.recover();
   await b.scheduler.avvia();
-  assert.ok(await aspettaChe(() => b.giri.quanti === 2));
+  assert.ok(await b.aspetta(() => b.giri.quanti === 2));
   b.giri.rispondi(b.giri.indice('Prepara'));
-  assert.ok(await aspettaChe(() => b.giri.quanti === 4));
+  assert.ok(await b.aspetta(() => b.giri.quanti === 4));
   b.giri.fallisci(b.giri.indice('Fai due'), 'traffico', 'Troppo traffico presso il fornitore.');
-  assert.ok(await aspettaChe(async () => (await b.stato()).stato.nodes.get('due').state === 'retry_wait'));
+  assert.ok(await b.aspetta(async () => (await b.stato()).stato.nodes.get('due').state === 'retry_wait'));
   b.giri.fallisci(b.giri.indice('Fai uno'), 'credenziale', 'Credenziale rifiutata dal fornitore.');
-  assert.ok(await aspettaChe(async () => (await b.stato()).stato.nodes.get('uno').state === 'failed'));
+  assert.ok(await b.aspetta(async () => (await b.stato()).stato.nodes.get('uno').state === 'failed'));
   await calma();
   let { stato } = await b.stato();
   assert.equal(stato.run.status, 'running', '«due» will be retried: the run is not stuck yet');
   assert.ok(![...stato.capacityClaims.values()].some((claim) => claim.state === 'active'), 'and no slot is held (the other guard alone would not see it)');
   b.orologio.avanza(1_000);
   b.timer.attesi.at(-1).fn();
-  assert.ok(await aspettaChe(() => b.giri.quanti === 5), 'the retry of «due» starts');
+  assert.ok(await b.aspetta(() => b.giri.quanti === 5), 'the retry of «due» starts');
   b.giri.rispondi(4);
-  assert.ok(await aspettaChe(async () => (await b.stato()).stato.run.status === 'needs_attention'));
+  assert.ok(await b.aspetta(async () => (await b.stato()).stato.run.status === 'needs_attention'));
   ({ stato } = await b.stato());
   assert.equal(stato.nodes.get('due').state, 'succeeded');
 });
@@ -209,22 +252,22 @@ test('WF-ADAPTIVE-CEILING: 4 at once at most; a 429 halves the model limit and n
   const b = await banco(t, { draft: bozza(['c1', 'c2', 'c3', 'c4', 'c5', 'c6']) });
   await b.orchestrator.recover();
   await b.scheduler.avvia();
-  assert.ok(await aspettaChe(() => b.giri.quanti === 2));
+  assert.ok(await b.aspetta(() => b.giri.quanti === 2));
   b.giri.rispondi(b.giri.indice('Prepara'));
-  assert.ok(await aspettaChe(() => b.giri.quanti === 6), 'four children start');
+  assert.ok(await b.aspetta(() => b.giri.quanti === 6), 'four children start');
   await calma();
   assert.equal(b.giri.quanti, 6, 'never more than 4 at once');
   b.giri.fallisci(b.giri.indice('Fai c1'), 'traffico', 'Troppo traffico presso il fornitore.');
-  assert.ok(await aspettaChe(async () => (await b.stato()).stato.nodes.get('c1').state === 'retry_wait'));
+  assert.ok(await b.aspetta(async () => (await b.stato()).stato.nodes.get('c1').state === 'retry_wait'));
   await calma();
   assert.equal(b.capacita.limite('openrouter', CLOUD), 2, 'the 429 halved the limit');
   assert.equal(b.giri.quanti, 6, 'three still in flight, over the new limit of 2: nothing new starts');
   b.giri.rispondi(b.giri.indice('Fai c2'));
-  await aspettaChe(async () => (await b.stato()).stato.nodes.get('c2').state === 'succeeded');
+  await b.aspetta(async () => (await b.stato()).stato.nodes.get('c2').state === 'succeeded');
   await calma();
   assert.equal(b.giri.quanti, 6, 'two in flight = the limit: still nothing new');
   b.giri.rispondi(b.giri.indice('Fai c3'));
-  assert.ok(await aspettaChe(() => b.giri.quanti === 7), 'one in flight: one more starts');
+  assert.ok(await b.aspetta(() => b.giri.quanti === 7), 'one in flight: one more starts');
   await calma();
   assert.equal(b.giri.quanti, 7, 'and only one');
 });
@@ -233,13 +276,13 @@ test('WF-SCHEDULER-RETRY-AFTER-RESTART: a proven retryable failure left undecide
   const b = await banco(t, { draft: bozza(['uno']) });
   await b.orchestrator.recover();
   await b.scheduler.avvia();
-  assert.ok(await aspettaChe(() => b.giri.quanti === 2));
+  assert.ok(await b.aspetta(() => b.giri.quanti === 2));
   b.giri.rispondi(b.giri.indice('Prepara'));
-  assert.ok(await aspettaChe(() => b.giri.quanti === 3));
+  assert.ok(await b.aspetta(() => b.giri.quanti === 3));
   // «riavvio»: il primo scheduler si ferma prima di vedere la fine del passo, che fallisce con un 429
   b.scheduler.ferma();
   b.giri.fallisci(b.giri.indice('Fai uno'), 'traffico', 'Troppo traffico presso il fornitore.');
-  assert.ok(await aspettaChe(async () => (await b.stato()).eventi.some((evento) => evento.type === 'activity_failed')));
+  assert.ok(await b.aspetta(async () => (await b.stato()).eventi.some((evento) => evento.type === 'activity_failed')));
   await calma();
   assert.ok(!(await b.stato()).eventi.some((evento) => ['capacity_released', 'retry_scheduled'].includes(evento.type) && evento.nodeId === 'uno'),
     'a stopped scheduler writes nothing when a step finishes');
@@ -252,9 +295,9 @@ test('WF-SCHEDULER-RETRY-AFTER-RESTART: a proven retryable failure left undecide
   assert.equal(b.timer.attesi.length > 0, true, 'a timer is armed for the retry');
   b.orologio.avanza(1_000);
   b.timer.attesi.at(-1).fn();
-  assert.ok(await aspettaChe(() => b.giri.quanti === 4), 'the second attempt starts');
+  assert.ok(await b.aspetta(() => b.giri.quanti === 4), 'the second attempt starts');
   b.giri.rispondi(3);
-  assert.ok(await aspettaChe(async () => (await b.stato()).stato.run.status === 'succeeded'));
+  assert.ok(await b.aspetta(async () => (await b.stato()).stato.run.status === 'succeeded'));
   dopo.scheduler.ferma();
   ({ stato } = await b.stato());
   assert.equal(stato.nodes.get('uno').attempt, 2);
@@ -271,19 +314,19 @@ test('WF-SCHEDULER-CAPACITY-BACKPRESSURE: 12 steps ready at once keep exactly 4 
   const b = await banco(t, { draft: bozza(figli) });
   await b.orchestrator.recover();
   await b.scheduler.avvia();
-  assert.ok(await aspettaChe(() => b.giri.quanti === 2));
+  assert.ok(await b.aspetta(() => b.giri.quanti === 2));
   b.giri.rispondi(b.giri.indice('Prepara'));
   for (let rimasti = 12; rimasti > 0; rimasti -= 1) {
     const attesi = Math.min(4, rimasti);
-    assert.ok(await aspettaChe(() => b.giri.misura.vivi === attesi, 5_000), `${attesi} in flight with ${rimasti} left, measured ${b.giri.misura.vivi}`);
+    assert.ok(await b.aspetta(() => b.giri.misura.vivi === attesi, 5_000), `${attesi} in flight with ${rimasti} left, measured ${b.giri.misura.vivi}`);
     await calma();
     assert.equal(b.giri.misura.vivi, attesi, `never more than the ceiling: alive ${[...b.giri.misura.viviIndici]} of ${b.giri.quanti}, ${rimasti} left`);
     // si chiude il più vecchio e si aspetta che sia DAVVERO chiuso, prima di contare l'ondata dopo (altrimenti il conto è vecchio)
     const chiuso = Math.min(...b.giri.misura.viviIndici);
     b.giri.rispondi(chiuso);
-    assert.ok(await aspettaChe(() => !b.giri.misura.viviIndici.has(chiuso)));
+    assert.ok(await b.aspetta(() => !b.giri.misura.viviIndici.has(chiuso)));
   }
-  assert.ok(await aspettaChe(async () => (await b.stato()).stato.run.status === 'succeeded', 10_000), 'every step finishes');
+  assert.ok(await b.aspetta(async () => (await b.stato()).stato.run.status === 'succeeded', 10_000), 'every step finishes');
   assert.equal(b.giri.misura.massimo, 4);
   const { eventi } = await b.stato();
   assert.equal(eventi.filter((evento) => evento.type === 'node_succeeded').length, 13);
@@ -317,13 +360,13 @@ test('WF-LOCAL-ALONE: steps on a local model run one at a time', async (t) => {
   const b = await banco(t, { draft: bozza(['uno', 'due']), sessionModel: 'ollama:llama3.2' });
   await b.orchestrator.recover();
   await b.scheduler.avvia();
-  assert.ok(await aspettaChe(() => b.giri.quanti === 2));
+  assert.ok(await b.aspetta(() => b.giri.quanti === 2));
   b.giri.rispondi(b.giri.indice('Prepara'));
-  assert.ok(await aspettaChe(() => b.giri.quanti === 3));
+  assert.ok(await b.aspetta(() => b.giri.quanti === 3));
   await calma();
   assert.equal(b.giri.quanti, 3, 'the second local step waits');
   b.giri.rispondi(2);
-  assert.ok(await aspettaChe(() => b.giri.quanti === 4), 'then it starts');
+  assert.ok(await b.aspetta(() => b.giri.quanti === 4), 'then it starts');
   b.giri.rispondi(3);
-  assert.ok(await aspettaChe(async () => (await b.stato()).stato.run.status === 'succeeded'));
+  assert.ok(await b.aspetta(async () => (await b.stato()).stato.run.status === 'succeeded'));
 });

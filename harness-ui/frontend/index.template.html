@@ -1511,9 +1511,27 @@ export function registraSessione(sessione) {
       -->
       <div class="talos-toolbar talos-toolbar--inset"><span class="talos-eyebrow">Dove girano i comandi</span><span class="talos-muted">Vale per questa sessione · cambiarlo riporta i comandi nella cartella di partenza</span></div>
       <div class="talos-choice-grid" role="radiogroup" aria-label="Dove girano i comandi">
-        <button class="talos-choice" role="radio" aria-checked="false" data-dove-choice=""><span class="talos-choice__title">Automatico</span><span class="talos-badge talos-badge--sm">Come prima</span><span class="talos-choice__sub">Sceglie da sé, e può cambiare da un comando all’altro.</span></button>
-        <button class="talos-choice" role="radio" aria-checked="false" data-dove-choice="wsl2"><span class="talos-choice__title">Linux (WSL2)</span><span class="talos-badge talos-badge--sm">Consigliato</span><span class="talos-choice__sub">Sempre in Linux. Se WSL non c’è, il comando lo dice invece di ripiegare in silenzio.</span></button>
-        <button class="talos-choice" role="radio" aria-checked="false" data-dove-choice="windows"><span class="talos-choice__title">Windows</span><span class="talos-choice__sub">Sempre sul sistema di casa, con i percorsi C:\ che vedi in Esplora file.</span></button>
+        <button class="talos-choice" role="radio" aria-checked="false" data-dove-choice=""><span class="talos-choice__title">Automatico</span><span class="talos-choice__corpo"><span class="talos-badge talos-badge--sm">Come prima</span><span class="talos-choice__sub">Sceglie da sé, e può cambiare da un comando all’altro.</span></span></button>
+        <button class="talos-choice" role="radio" aria-checked="false" data-dove-choice="wsl2"><span class="talos-choice__title">Linux (WSL2)</span><span class="talos-choice__corpo"><span class="talos-badge talos-badge--sm">Consigliato</span><span class="talos-choice__sub">Sempre in Linux. Se WSL non c’è, il comando lo dice invece di ripiegare in silenzio.</span></span></button>
+        <button class="talos-choice" role="radio" aria-checked="false" data-dove-choice="windows"><span class="talos-choice__title">Windows</span><span class="talos-choice__corpo"><span class="talos-choice__sub">Sempre sul sistema di casa, con i percorsi C:\ che vedi in Esplora file.</span></span></button>
+      </div>
+      <!--
+        ⛔⛔ F009 (owner 01/10/2026, «come gli altri, insieme», «esito e foglio della shell», interruttore «nel foglio, sotto la
+        riga») — CON CHE UTENTE GIRANO I COMANDI IN LINUX, e che cosa vale sui dischi di Windows. Misurato quel giorno: Ubuntu
+        esegue come root, /mnt/c è drvfs senza metadata (777 root:root), l'interop è accesa ⇒ nessun isolamento. I testi li
+        scrive `disegnaUtenteWslIn` dai fatti di `GET /api/v1/wsl`; senza WSL il blocco resta nascosto.
+        L'interruttore vale per TUTTE le sessioni (le scelte qui sopra valgono per questa): lo dice la riga stessa.
+      -->
+      <div class="talos-card talos-list" data-c="WslUserList" id="veloPermessiWsl" hidden>
+        <div class="talos-list-row">
+          <span class="talos-list-row__icon"><svg class="i" aria-hidden="true"><use href="#i-user"/></svg></span>
+          <span class="talos-list-row__text"><span class="talos-list-row__title" id="veloPermessiWslChi"></span><span class="talos-list-row__sub" id="veloPermessiWslDischi"></span></span>
+        </div>
+        <label class="talos-list-row" for="veloPermessiWslNormale">
+          <span class="talos-list-row__icon"><svg class="i" aria-hidden="true"><use href="#i-shield"/></svg></span>
+          <span class="talos-list-row__text"><span class="talos-list-row__title">Usa un utente normale se la distro ne ha uno</span><span class="talos-list-row__sub" id="veloPermessiWslNota"></span></span>
+          <span class="talos-list-row__aside"><input type="checkbox" class="talos-switch" role="switch" id="veloPermessiWslNormale" checked></span>
+        </label>
       </div>
       <div class="talos-toolbar talos-toolbar--inset"><span class="talos-eyebrow">Per attrezzo</span><!-- ⛔ 07/9 — qui c'erano due schede, «Tutti e 43» e «Hanno un cancello», e non filtravano niente:
              l'elenco mostra i CINQUE attrezzi che hanno un cancello proprio, mai 43. Una promessa vuota

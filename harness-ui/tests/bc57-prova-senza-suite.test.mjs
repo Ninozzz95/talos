@@ -36,7 +36,7 @@
  */
 import { strict as assert } from 'node:assert'
 import { spawn } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { describe, it } from 'node:test'
@@ -201,7 +201,7 @@ describe('BC-57 — `prova` senza una suite da lanciare', () => {
         assert.ok(esiti[0].includes('scripts.test'), `«bun run X» e' l'alias di sempre per uno script: ${esiti[0]}`)
     })
 
-    it('⛔⛔ IL NUDGE — una prova RIFIUTATA non conta come «provato»: il contatore delle scritture NON si azzera', async (t) => {
+    it('NUDGE03-NO-SUITE — una prova rifiutata resta tale, senza alterare le ricevute delle scritture', async (t) => {
         const cartella = cartellaTemporanea(t)
         const chiamate = [
             chiamata('scrivi', { percorso: 'a.txt', contenuto: 'a' }, 'c1'),
@@ -210,12 +210,17 @@ describe('BC-57 — `prova` senza una suite da lanciare', () => {
             chiamata('prova', {}, 'c4'),
             chiamata('scrivi', { percorso: 'd.txt', contenuto: 'd' }, 'c5'),
         ]
-        const { esiti } = await giro(cartella, chiamate)
+        const { esiti, ricevute } = await giro(cartella, chiamate)
         assert.equal(esiti.length, 5)
-        assert.ok(esiti[2].includes('scritture senza chiamare'), 'alla terza scrittura il promemoria c\'e\' gia\' (soglia 3)')
         assert.ok(esiti[3].includes('nessuna suite trovata'), 'la prova in mezzo e\' stata rifiutata')
-        assert.ok(esiti[4].includes('scritture senza chiamare'), 'e la quarta scrittura lo ripete: una prova mai eseguita non azzera niente')
-        assert.ok(esiti[4].includes('4 scritture'), `il contatore e\' andato avanti, non ripartito: ${esiti[4]}`)
+        assert.match(esiti[3], /^exit 127\n/)
+        const ricevutaProva = ricevute.find(r => r.toolCallId === 'c4')
+        assert.ok(ricevutaProva, 'la prova rifiutata conserva la propria ricevuta')
+        assert.equal(ricevutaProva.status, 'failed')
+        assert.equal(ricevutaProva.evidence.exitCode, 127)
+        assert.deepEqual([esiti[0], esiti[1], esiti[2], esiti[4]],
+            ['written: a.txt', 'written: b.txt', 'written: c.txt', 'written: d.txt'])
+        for (const nome of ['a', 'b', 'c', 'd']) assert.equal(readFileSync(join(cartella, `${nome}.txt`), 'utf8'), nome)
     })
 })
 

@@ -6,6 +6,7 @@
 @import './immagini-chat.css';
 @import './diff-in-chat.css';
 @import './uscita-viva.css';
+@import './process-output.css';
 @import './modalita-shell.css';
 @import './fascia-modo.css'; /* F3-12, 24/09/2026: la fascia del modo Workflow tolto, sopra il composer */
 @import './avviso-piano.css'; /* D4, 24/09/2026: l'avviso «Piano aggiornato» sopra il composer */

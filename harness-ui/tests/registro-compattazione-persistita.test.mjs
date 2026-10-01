@@ -325,6 +325,19 @@ test('CTX-REG-WINDOW-FROM-CATALOG — la finestra del modello arriva al kernel d
   senza.concludi({ type: 'RunFinished' }, { ok: true, esito: { comeFinita: 'concluso', messaggiFinali: [] } });
 });
 
+test('CTX-REG-POLICY — la sessione espone la stessa soglia verificata usata dal giro', () => {
+  const finta = sessioneControllabile();
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta,
+    modello: 'z-ai/glm-5.3-flash', chiave: 'k', finestraTokenFn: () => 1_000_000 });
+  const { sessionId } = registro.avvia('task-vero');
+  assert.equal(finta.ultimoInput.finestraToken, 1_000_000);
+  assert.deepEqual(registro.politicaCompattazione(sessionId), {
+    windowTokens: 1_000_000, triggerTokens: 750_000, warningTokens: 600_000,
+    emergencyTokens: 900_000, source: 'route-minimum', modelId: 'z-ai/glm-5.3-flash', inProgress: false,
+  });
+  finta.concludi({ type: 'RunFinished' }, { ok: true, esito: { comeFinita: 'concluso', messaggiFinali: [] } });
+});
+
 test('CTX-REG-CONTEXT-SESSION-CREATED-AT — leggiSessioneContesto espone createdAt per la politica del trial', () => {
   const finta = sessioneControllabile();
   const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', clock: () => new Date('2026-09-24T12:00:00.000Z') });

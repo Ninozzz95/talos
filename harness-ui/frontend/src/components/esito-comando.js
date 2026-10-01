@@ -54,7 +54,14 @@ export function dovEGirato(livello) {
    *     livello che non conosciamo, invece di inventare un posto.
    */
   const nome = l.split('(')[0].trim();
-  if (nome === 'wsl2') return 'in Linux (WSL), non su Windows';
+  if (nome === 'wsl2') {
+    /* ⛔ F009 (owner 01/10/2026, «esito e foglio della shell») — l'etichetta dice con che utente: si porta a schermo, perché
+       «come root» è proprio ciò che la persona deve sapere. Le etichette di prima (senza utente) restano lette com'erano. */
+    const utente = /\(Linux in WSL come ([a-z_][a-z0-9_-]{0,31}\$?);/iu.exec(l)?.[1];
+    if (utente) return `in Linux (WSL) come ${utente}, non su Windows`;
+    if (/\(Linux in WSL con un utente non verificato;/u.test(l)) return 'in Linux (WSL), con un utente non verificato';
+    return 'in Linux (WSL), non su Windows';
+  }
   if (nome === 'none') return 'su Windows, senza isolamento';
   if (nome === 'adb-shell-on-device') return 'sul telefono collegato';
   return null;
