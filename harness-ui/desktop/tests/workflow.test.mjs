@@ -177,3 +177,29 @@ test('R04-TAG-COMMIT — il ramo CI conserva il commit esatto del tag', { skip: 
   assert.equal(git(['branch', '--show-current']), 'ci-desktop-release');
   assert.equal(git(['rev-parse', 'desktop-v0.1.0^{commit}']), prima);
 });
+
+/*
+ * ⛔ 01/10/2026, PR pubblica #45 (desktop 0.1.20): `desktop-installer` ROSSO per tempo, non per un difetto. Misurato sul runner
+ *   `windows-latest` (ricevute R04-ci-smoke dei giri della PR): installazione **116,2 s** e **113,3 s** nei due giri verdi, oltre i
+ *   120 s nel rosso; per la 0.1.19 era 89 s. Il pacchetto è passato da 158,8 a 188,5 MB (Node e rg per Linux, fase B), il limite
+ *   interno di `ci-smoke.ps1` era rimasto 120 s: ogni giro era un lancio di moneta, e lo stesso controllo gira nel job di RELEASE,
+ *   dove un rosso dopo il tag brucia la versione (0.1.16, 0.1.17). Owner: «Alzo i limiti, poi tag».
+ * ⇒ Il limite d'installazione lascia almeno il DOPPIO del tempo misurato più lungo; e il passo del workflow dura più della somma
+ *   dei limiti interni dello smoke (installazione + Electron + disinstallazione), o scade lui per primo e il limite alzato è finto.
+ */
+test('R04-SMOKE-LIMITI — il limite dell installatore lascia margine sul runner, e il passo dura più dei limiti interni', () => {
+  const smokePs = readFileSync(new URL('../scripts/ci-smoke.ps1', import.meta.url), 'utf8');
+  const attese = [...smokePs.matchAll(/WaitForExit\((\d+)\)/gu)].map(m => Number(m[1]));
+  assert.equal(attese.length, 2, 'due attese nello smoke: installer/disinstallatore e Electron');
+  const [installer, electron] = attese;
+  const PIU_LUNGA_MISURATA_MS = 116_195; // installazioneMs, giro 36878949071 della PR #45
+  assert.ok(installer >= 2 * PIU_LUNGA_MISURATA_MS, `limite installer ${installer} ms: meno del doppio di ${PIU_LUNGA_MISURATA_MS} ms misurati`);
+  assert.match(smokePs, new RegExp(`oltre il limite di ${installer / 1000} secondi`, 'u'), 'il messaggio dice il limite vero');
+  const sommaMs = installer /* installazione */ + electron + installer /* disinstallazione */;
+  const pretag = load(readFileSync(new URL('../../../.github/workflows/desktop-pretag-installer.yml', import.meta.url), 'utf8'));
+  const smokePretag = pretag.jobs['desktop-installer'].steps.find(item => item.name === 'installa, avvia e disinstalla prima del tag');
+  for (const [nome, step] of [['release.yml', passo('smoke')], ['desktop-pretag-installer.yml', smokePretag]]) {
+    assert.ok(step, nome);
+    assert.ok(step['timeout-minutes'] * 60_000 > sommaMs, `${nome}: passo da ${step['timeout-minutes']} min, limiti interni ${sommaMs / 60_000} min`);
+  }
+});

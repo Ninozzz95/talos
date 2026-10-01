@@ -537,7 +537,8 @@ jobs:
 
       - id: smoke
         name: installa, avvia, health con cookie, chiudi e disinstalla
-        timeout-minutes: 8
+        # 01/10/2026: 15 min, piu' della somma dei limiti interni di ci-smoke.ps1 (300 + 180 + 300 s); vedi R04-SMOKE-LIMITI.
+        timeout-minutes: 15
         env:
           INSTALLER: ${{ steps.ambiente.outputs.exe }}
         run: ./harness-ui/desktop/scripts/ci-smoke.ps1 -Installer $env:INSTALLER
