@@ -2,9 +2,10 @@ import assert from 'node:assert/strict';
 import {spawnSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import test from 'node:test';
+import {SALTA_SENZA_WSL} from './aiuto/wsl-reale.mjs';
 
 for (const mode of ['capture', 'legacy', 'wsl']) {
-  test(`OUTPUT17-HEAP-${mode}: 64MiB does not remain in the zero-test classifier`, {skip: mode === 'wsl' && process.platform !== 'win32'}, t => {
+  test(`OUTPUT17-HEAP-${mode}: 64MiB does not remain in the zero-test classifier`, {skip: mode === 'wsl' ? SALTA_SENZA_WSL : false}, t => {
     const result = spawnSync(process.execPath, ['--expose-gc', fileURLToPath(new URL('./fixtures/prova-output-memory-driver.mjs', import.meta.url)), mode],
       {windowsHide: true, encoding: 'utf8', timeout: 30_000, maxBuffer: 1_000_000});
     assert.equal(result.status, 0, result.stderr);

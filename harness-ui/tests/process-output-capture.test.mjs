@@ -8,6 +8,7 @@ import {PassThrough} from 'node:stream';
 import {eseguiComando, eseguiComandoSandboxato} from '../src/kernel/talosHarness.mjs';
 import {createProcessOutputStore} from '../src/process-output-store.mjs';
 import {rimuoviCartellaDiProva} from './aiuto/rimuovi-cartella-di-prova.mjs';
+import {SALTA_SENZA_WSL} from './aiuto/wsl-reale.mjs';
 const helperUrl = new URL('../src/kernel/process-output-capture.mjs', import.meta.url);
 const helper = await import(helperUrl.href).catch(e => {if (e.code === 'ERR_MODULE_NOT_FOUND' && e.url === helperUrl.href) return {}; throw e;});
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -72,7 +73,7 @@ test('OUTPUT13-CWD-FOOTER: raw capture identifies the wrapper footer while the n
   assert.match(Buffer.concat(chunks).toString(), new RegExp(result.outputCapture.controlFooter.marker));
   assert.ok(!result.testo.includes(result.outputCapture.controlFooter.marker));
 });
-test('OUTPUT13-WSL: selected real Bash output is captured before its four-thousand-character view', {skip: process.platform !== 'win32'}, async t => {
+test('OUTPUT13-WSL: selected real Bash output is captured before its four-thousand-character view', {skip: SALTA_SENZA_WSL}, async t => {
   const f = fixture(t, 1), digest = createHash('sha256'); let bytes = 0;
   const result = await eseguiComandoSandboxato('seq 1 300000', f.root, {dove: 'wsl2', onBytes: ({stream, bytes: chunk}) => {if (stream === 'stdout') {digest.update(chunk); bytes += chunk.length;}}});
   const expected = Buffer.from(Array.from({length: 300_000}, (_, i) => `${i + 1}\n`).join(''));

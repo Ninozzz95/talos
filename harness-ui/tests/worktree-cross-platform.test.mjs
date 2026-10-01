@@ -7,9 +7,10 @@ import {spawnSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
 import {eseguiComandoSandboxato,talosLavora} from '../src/kernel/talosHarness.mjs';
 import {rimuoviCartellaDiProva} from './aiuto/rimuovi-cartella-di-prova.mjs';
+import {SALTA_SENZA_WSL} from './aiuto/wsl-reale.mjs';
 
 // Characterization of upstream metadata, not permission to repair a user's repository.
-const options={skip:process.platform!=='win32'?'Windows/WSL integration gate':false};
+const options={skip:SALTA_SENZA_WSL};
 const wslPath=p=>'/mnt/'+p[0].toLowerCase()+p.slice(2).replaceAll('\\','/');
 function fixture(t,{relativePaths=false}={}){
   const root=mkdtempSync(join(tmpdir(),'talos-worktree-cross-')),repo=join(root,'repo'),work=join(root,'lavoro città'),other=join(root,'altro');mkdirSync(repo);

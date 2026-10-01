@@ -10,7 +10,7 @@
  */
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { existsSync, linkSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs'
+import { existsSync, linkSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { talosLavora, uscitaUtile } from '../src/kernel/talosHarness.mjs'
@@ -21,7 +21,10 @@ import { rimuoviCartellaDiProva } from './aiuto/rimuovi-cartella-di-prova.mjs'
 const URL_LUNGA = 'https://esempio.test/pagina-lunga'
 
 function cartella(t, nome = 'talos-naviga-') {
-    const c = mkdtempSync(join(tmpdir(), nome))
+    // ⛔ PR pubblica #45 (01/10/2026): sul runner di GitHub la Temp è `C:\Users\RUNNER~1\…` (nome corto 8.3) e `realpath` la
+    //   espande: `eUnaPaginaSalvata` vedeva due percorsi diversi e chiedeva il permesso (il verso sicuro). La cartella di prova
+    //   è quella canonica, come la cartella dati dell'app installata (sempre un percorso lungo).
+    const c = realpathSync.native(mkdtempSync(join(tmpdir(), nome)))
     t.after(() => rimuoviCartellaDiProva(c))
     return c
 }

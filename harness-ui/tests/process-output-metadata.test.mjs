@@ -14,6 +14,7 @@ import {createOwnerRuntimeAdapter} from '../src/runtime-owner-adapter.mjs';
 import {runWithProcessOutput} from '../src/process-output-session.mjs';
 import {normalizzaMetadatiCattura} from '../src/process-output-contract.mjs';
 import {rimuoviCartellaDiProva} from './aiuto/rimuovi-cartella-di-prova.mjs';
+import {SALTA_SENZA_WSL} from './aiuto/wsl-reale.mjs';
 const marker='__TALOS_CWD_0123456789abcdef__';
 const metadata=(prefixBytes=0)=>({schema:'talos.process-output-metadata.v1',controlFooter:{type:'cwd-marker-v1',stream:'stdout',marker,prefixBytes}});
 function temporary(t,beforeCleanup){
@@ -150,7 +151,7 @@ test('META16-KILLED-WRITER: a real killed process leaves acknowledged metadata r
   const result=spawnSync(process.execPath,[reader],{encoding:'utf8',windowsHide:true,timeout:10000});assert.equal(result.status,0,result.stderr);
   const page=JSON.parse(result.stdout);assert.equal(page.text,'before-crash');assert.equal(page.state,'recording');assert.equal(readFileSync(executions,'utf8'),'x');
 });
-for(const dove of ['windows','wsl2'])test(`META16-SESSION-${dove}: the real wrapped command is stored and read without its technical suffix`,{skip:dove==='wsl2'&&process.platform!=='win32'},async t=>{
+for(const dove of ['windows','wsl2'])test(`META16-SESSION-${dove}: the real wrapped command is stored and read without its technical suffix`,{skip:dove==='wsl2'?SALTA_SENZA_WSL:false},async t=>{
   const f=await fixture(t),script=join(f.root,'producer.cjs');writeFileSync(script,"process.stdout.write('visible\\n');");
   const command=dove==='windows'?`"${process.execPath}" "${script}"`:"printf 'visible\\n'";
   const result=await runWithProcessOutput({store:f.store,sessionId:'real16',runId:'run',toolCallId:'tool',emit:()=>true},sink=>eseguiComandoSandboxato(command,f.root,{dove,tracciaCartella:true,...sink}));

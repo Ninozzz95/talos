@@ -9,6 +9,7 @@ import {createOwnerRuntimeAdapter} from '../src/runtime-owner-adapter.mjs';
 import {createSessionRegistry} from '../src/session-registry.mjs';
 import {registraRiga} from '../src/session-store.mjs';
 import {rimuoviCartellaDiProva} from './aiuto/rimuovi-cartella-di-prova.mjs';
+import {SALTA_SENZA_WSL} from './aiuto/wsl-reale.mjs';
 
 function fixture(t, cleanup = true) {
   const root=mkdtempSync(join(tmpdir(),'talos-agent-environment-'));
@@ -30,7 +31,7 @@ async function run(cartella,{dove='windows',callback,command='echo SHELL07',tool
   });
   return {result,requests,events,output:events.find(e=>e.tipo==='tool-esito')};
 }
-for(const dove of ['windows','wsl2'])test(`SHELL07-${dove.toUpperCase()}: real process follows the selected environment`,{skip:process.platform!=='win32'},async t=>{
+for(const dove of ['windows','wsl2'])test(`SHELL07-${dove.toUpperCase()}: real process follows the selected environment`,{skip:process.platform!=='win32'?true:dove==='wsl2'?SALTA_SENZA_WSL:false},async t=>{
   const original=structuredClone(ATTREZZI_OPENAI);
   const r=await run(fixture(t),{dove});
   assert.match(r.output.content,/SHELL07/);assert.equal(r.output.isError,false);
@@ -40,15 +41,15 @@ for(const dove of ['windows','wsl2'])test(`SHELL07-${dove.toUpperCase()}: real p
   assert.match(description,dove==='windows'?/Selected command environment: Windows.*cmd\.exe/:/Selected command environment: Linux.*WSL2.*Bash/);
   assert.deepEqual(ATTREZZI_OPENAI,original,'global schemas remain immutable');
 });
-test('SHELL07-PROVA: explicit WSL applies to the configured test command', {skip:process.platform!=='win32'}, async t=>{
+test('SHELL07-PROVA: explicit WSL applies to the configured test command', {skip:SALTA_SENZA_WSL}, async t=>{
   const r=await run(fixture(t),{dove:'wsl2',tool:'prova',command:'printf SHELL07'});
   assert.match(r.output.content,/^exit 0 \[sandbox: wsl2 \(Linux in WSL [^\]]+\)\]\nSHELL07/);assert.equal(r.output.isError,false); // F009: la prova in Linux dichiara con che utente
 });
-test('SHELL07-PROVA-ZERO: a zero-suite report is not a pass in WSL', {skip:process.platform!=='win32'}, async t=>{
+test('SHELL07-PROVA-ZERO: a zero-suite report is not a pass in WSL', {skip:SALTA_SENZA_WSL}, async t=>{
   const r=await run(fixture(t),{dove:'wsl2',tool:'prova',command:'printf "# tests 0\\n"'});
   assert.match(r.output.content,/NO tests ran/);assert.equal(r.output.isError,true);
 });
-test('SHELL07-PROVA-EXIT: WSL preserves the real nonzero exit', {skip:process.platform!=='win32'}, async t=>{
+test('SHELL07-PROVA-EXIT: WSL preserves the real nonzero exit', {skip:SALTA_SENZA_WSL}, async t=>{
   const r=await run(fixture(t),{dove:'wsl2',tool:'prova',command:'printf SHELL07; exit 42'});
   assert.match(r.output.content,/^exit 42 \[sandbox: wsl2 \(Linux in WSL [^\]]+\)\]\nSHELL07/);assert.equal(r.output.isError,true); // F009
 });
