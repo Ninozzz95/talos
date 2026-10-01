@@ -76,6 +76,38 @@ test('R01-GUSCIO — finestra reale, cookie, Terminale, temi, riavvio, vassoio, 
       assert.equal(browser.url(), base + '/');
       assert.equal((await altro.get(base + '/api/v1/health')).status(), 200);
     } finally { await altro.dispose(); }
+    /* ⛔ 01/10/2026, owner: «la app desktop non apre il browser per accedere a openrouter». Nella finestra VERA: un
+       `window.open` della pagina d'accesso arriva a `shell.openExternal` anche dopo un'attesa (cioè senza il gesto della
+       persona: il frontend lo chiama dopo la risposta del server); al contrario la finestra vuota e un'altra pagina di
+       openrouter.ai restano negate e non escono. Il browser del sistema si intercetta, come sopra. */
+    await electronApp.evaluate(({ shell }) => {
+      globalThis.orAperti = [];
+      globalThis.orOriginale = shell.openExternal;
+      shell.openExternal = async url => { globalThis.orAperti.push(url); };
+    });
+    const accessoOpenRouter = 'https://openrouter.ai/auth?code_challenge=SFIDA&code_challenge_method=S256&key_label=TALOS';
+    // il ritorno sul server di QUESTA app passa (il guscio conosce `base`); un ritorno estraneo no: quella pagina concede una chiave
+    const conRitorno = r => `https://openrouter.ai/auth?callback_url=${encodeURIComponent(r)}&code_challenge=SFIDA&code_challenge_method=S256`;
+    const accessoNostro = conRitorno(base + '/api/v1/auth/openrouter/ritorno/STATO');
+    const accessoEstraneo = conRitorno('https://evil.example/api/v1/auth/openrouter/ritorno/STATO');
+    const ritorni = await pagina.evaluate(async ([indirizzo, nostro, estraneo]) => {
+      await new Promise(r => setTimeout(r, 300));
+      return {
+        vuota: window.open('', '_blank'),
+        altra: window.open('https://openrouter.ai/settings/keys', '_blank', 'noopener,noreferrer'),
+        estraneo: window.open(estraneo, '_blank', 'noopener,noreferrer'),
+        accesso: window.open(indirizzo, '_blank', 'noopener,noreferrer'),
+        nostro: window.open(nostro, '_blank', 'noopener,noreferrer'),
+      };
+    }, [accessoOpenRouter, accessoNostro, accessoEstraneo]);
+    assert.deepEqual(ritorni, { vuota: null, altra: null, estraneo: null, accesso: null, nostro: null }, 'nessuna finestra nuova dentro la app');
+    const aperti = await finche(async () => {
+      const visti = await electronApp.evaluate(() => globalThis.orAperti);
+      return visti.length >= 2 ? visti : null;
+    }, 5000).catch(() => []);
+    await attendi(300);
+    assert.deepEqual(await electronApp.evaluate(() => globalThis.orAperti), [accessoOpenRouter, accessoNostro], `aperti fuori: ${JSON.stringify(aperti)}`);
+    await electronApp.evaluate(({ shell }) => { shell.openExternal = globalThis.orOriginale; });
     // La UI esistente offre un terminale standalone senza chiamare alcun modello.
     const controlli = []; let uscitaPty = '';
     pagina.on('websocket', ws => ws.on('framereceived', ({ payload }) => {

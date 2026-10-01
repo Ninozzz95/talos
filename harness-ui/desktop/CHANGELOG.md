@@ -61,6 +61,9 @@ large projects, long web pages and command output are also easier for the model 
 
 ### Fixed
 
+- In the desktop app, *Accedi con OpenRouter* did nothing: the window only let github.com addresses reach the system
+  browser. It now opens OpenRouter's sign-in page in the system browser, and only that page, only when the sign-in comes
+  back to this app or shows its code on screen.
 - A command that reaches its time limit now stops together with everything it started. On Windows the program under
   the shell kept running, and the reply waited for it to end by itself.
 - Stopping a command that has already exited no longer targets its process id, which Windows may have given to

@@ -50822,19 +50822,19 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
           const indirizzo = risposta?.indirizzo;
           if (typeof indirizzo !== "string" || !indirizzo) throw new Error("Il server non ha restituito un indirizzo di accesso.");
           if (!finestra) {
+            if (navigator.windowControlsOverlay?.visible === true) {
+              window.open(indirizzo, "_blank", "noopener,noreferrer");
+              mostraLinkAccesso(corrente(), indirizzo, { apertoFuori: true });
+              aspettaRitornoAccesso(provider, corrente);
+              return;
+            }
             mostraLinkAccesso(corrente(), indirizzo);
             return;
           }
           finestra.location.href = indirizzo;
           mostraEsitoProvider(corrente(), "Accesso aperto nel browser. Torna qui quando hai finito: la chiave arriva da sola.");
           corrente()?.querySelector("[data-provider-feedback]")?.scrollIntoView({ block: "nearest" });
-          const alRitorno = async () => {
-            window.removeEventListener("focus", alRitorno);
-            await caricaProviderModelLab();
-            const riga2 = state.modelLab.providers?.find((r) => r.id === provider);
-            if (riga2?.keyConfigured) mostraEsitoProvider(corrente(), "Accesso fatto: la chiave è nel portachiavi del computer.");
-          };
-          window.addEventListener("focus", alRitorno);
+          aspettaRitornoAccesso(provider, corrente);
         } catch (errore) {
           try {
             finestra?.close();
@@ -50844,19 +50844,28 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
           corrente()?.querySelector("[data-provider-feedback]")?.scrollIntoView({ block: "nearest" });
         }
       }
-      function mostraLinkAccesso(card, indirizzo) {
+      function aspettaRitornoAccesso(provider, corrente) {
+        const alRitorno = async () => {
+          window.removeEventListener("focus", alRitorno);
+          await caricaProviderModelLab();
+          const riga2 = state.modelLab.providers?.find((r) => r.id === provider);
+          if (riga2?.keyConfigured) mostraEsitoProvider(corrente(), "Accesso fatto: la chiave è nel portachiavi del computer.");
+        };
+        window.addEventListener("focus", alRitorno);
+      }
+      function mostraLinkAccesso(card, indirizzo, { apertoFuori = false } = {}) {
         const feedback = card?.querySelector("[data-provider-feedback]");
         if (!feedback) return;
         feedback.replaceChildren();
-        feedback.append(document.createTextNode("Il browser ha bloccato la finestra. "));
+        feedback.append(document.createTextNode(apertoFuori ? "Accesso aperto nel browser del computer. Torna qui quando hai finito: la chiave arriva da sola. Se non si è aperto: " : "Il browser ha bloccato la finestra. "));
         const link = document.createElement("a");
         link.href = indirizzo;
         link.target = "_blank";
         link.rel = "noopener noreferrer";
         link.textContent = "Apri l’accesso";
         feedback.append(link);
-        feedback.classList.add("is-error");
-        feedback.setAttribute("role", "alert");
+        feedback.classList.toggle("is-error", !apertoFuori);
+        feedback.setAttribute("role", apertoFuori ? "status" : "alert");
         feedback.hidden = false;
         feedback.scrollIntoView({ block: "nearest" });
       }

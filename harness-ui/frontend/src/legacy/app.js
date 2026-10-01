@@ -3399,7 +3399,25 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       const risposta = await apiPost('/api/v1/auth/' + encodeURIComponent(provider) + '/inizia', {});
       const indirizzo = risposta?.indirizzo;
       if (typeof indirizzo !== 'string' || !indirizzo) throw new Error('Il server non ha restituito un indirizzo di accesso.');
-      if (!finestra) { mostraLinkAccesso(corrente(), indirizzo); return; }
+      if (!finestra) {
+        /*
+         * ⛔ 01/10/2026, owner: «la app desktop non apre il browser per accedere a openrouter». Nell'app desktop la finestra
+         *   nuova si nega SEMPRE (`desktop/main.mjs`, `setWindowOpenHandler`): la vuota qui sopra torna `null`, come col blocco
+         *   dei popup. Lì però l'indirizzo d'accesso VERO va al browser del computer (`desktop/runtime.mjs`,
+         *   `apribileNelBrowserDelSistema`) anche senza il gesto della persona: provato nella finestra vera, R01-GUSCIO.
+         *   L'app si riconosce come fa la barra del titolo (`components/barra-finestra.js`): `windowControlsOverlay.visible`.
+         *   Il link resta lo stesso, se il browser del computer non si aprisse. Nel browser invece un secondo `window.open`
+         *   dopo l'attesa sarebbe bloccato: lì solo il link, come prima. Prova: openrouter-accesso-app.spec.mjs.
+         */
+        if (navigator.windowControlsOverlay?.visible === true) {
+          window.open(indirizzo, '_blank', 'noopener,noreferrer');
+          mostraLinkAccesso(corrente(), indirizzo, { apertoFuori: true });
+          aspettaRitornoAccesso(provider, corrente);
+          return;
+        }
+        mostraLinkAccesso(corrente(), indirizzo);
+        return;
+      }
       finestra.location.href = indirizzo;
       mostraEsitoProvider(corrente(), 'Accesso aperto nel browser. Torna qui quando hai finito: la chiave arriva da sola.');
       /*
@@ -3408,18 +3426,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
        *   niente. Trovato nella foto del 10/09, non dal DOM \u2014 il testo c'era e non si vedeva.
        */
       corrente()?.querySelector('[data-provider-feedback]')?.scrollIntoView({ block: 'nearest' });
-      /*
-       * \u26d4 Il ritorno lo riceve il SERVER, non questa pagina: senza questo risveglio la card
-       *   continuerebbe a dire «Chiave mancante» dopo un accesso RIUSCITO, che \u00e8 indistinguibile da
-       *   uno fallito. Si ricarica quando la finestra torna in primo piano \u2014 una volta sola.
-       */
-      const alRitorno = async () => {
-        window.removeEventListener('focus', alRitorno);
-        await caricaProviderModelLab();
-        const riga = state.modelLab.providers?.find((r) => r.id === provider);
-        if (riga?.keyConfigured) mostraEsitoProvider(corrente(), 'Accesso fatto: la chiave \u00e8 nel portachiavi del computer.');
-      };
-      window.addEventListener('focus', alRitorno);
+      aspettaRitornoAccesso(provider, corrente);
     } catch (errore) {
       /* La finestra vuota gi\u00e0 aperta va chiusa: lasciarla l\u00ec, bianca e senza spiegazione, \u00e8 peggio
          del non averla aperta. */
@@ -3429,25 +3436,45 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     }
   }
 
+  /*
+   * \u26d4 Il ritorno lo riceve il SERVER, non questa pagina: senza questo risveglio la card
+   *   continuerebbe a dire \u00abChiave mancante\u00bb dopo un accesso RIUSCITO, che \u00e8 indistinguibile da
+   *   uno fallito. Si ricarica quando la finestra torna in primo piano \u2014 una volta sola. Vale per le due
+   *   vie: la finestra del browser e il browser del computer aperto dall'app desktop (01/10/2026).
+   */
+  function aspettaRitornoAccesso(provider, corrente) {
+    const alRitorno = async () => {
+      window.removeEventListener('focus', alRitorno);
+      await caricaProviderModelLab();
+      const riga = state.modelLab.providers?.find((r) => r.id === provider);
+      if (riga?.keyConfigured) mostraEsitoProvider(corrente(), 'Accesso fatto: la chiave \u00e8 nel portachiavi del computer.');
+    };
+    window.addEventListener('focus', alRitorno);
+  }
+
   /**
    * Il ripiego quando il browser blocca comunque: un LINK su cui cliccare, non trecento caratteri di
    * indirizzo da copiare a mano \u2014 che \u00e8 quello che si leggeva prima, e non \u00e8 un'istruzione: \u00e8 un muro.
    * \u26d4 `mostraEsitoProvider` scrive TESTO, e deve continuare a farlo: ci passano messaggi del server,
    *   che non vanno mai interpretati come markup. Qui serve un elemento, quindi si costruisce a mano.
+   * \u26d4 01/10/2026: con `apertoFuori` (app desktop) l'accesso \u00c8 partito nel browser del computer: non \u00e8 un errore, e il link
+   *   resta solo come riserva.
    */
-  function mostraLinkAccesso(card, indirizzo) {
+  function mostraLinkAccesso(card, indirizzo, { apertoFuori = false } = {}) {
     const feedback = card?.querySelector('[data-provider-feedback]');
     if (!feedback) return;
     feedback.replaceChildren();
-    feedback.append(document.createTextNode('Il browser ha bloccato la finestra. '));
+    feedback.append(document.createTextNode(apertoFuori
+      ? 'Accesso aperto nel browser del computer. Torna qui quando hai finito: la chiave arriva da sola. Se non si \u00e8 aperto: '
+      : 'Il browser ha bloccato la finestra. '));
     const link = document.createElement('a');
     link.href = indirizzo;
     link.target = '_blank';
     link.rel = 'noopener noreferrer';
     link.textContent = 'Apri l\u2019accesso';
     feedback.append(link);
-    feedback.classList.add('is-error');
-    feedback.setAttribute('role', 'alert');
+    feedback.classList.toggle('is-error', !apertoFuori);
+    feedback.setAttribute('role', apertoFuori ? 'status' : 'alert');
     feedback.hidden = false;
     feedback.scrollIntoView({ block: 'nearest' });
   }
