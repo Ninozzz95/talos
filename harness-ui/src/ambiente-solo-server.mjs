@@ -90,6 +90,10 @@ export const VARIABILI_DEL_SERVER_DICHIARATE_INNOCUE = Object.freeze([
      del kernel caricare (l'hotfix spedito col pacchetto) quando nessuno l'ha scelto. È un percorso dentro l'installazione,
      non una credenziale e non un indirizzo: un programma lanciato dal terminale che lo legga non ci fa niente. */
   'TALOS_OWNER_RUNTIME_MODULE',
+  /* 01/10/2026, fase B «casa di esecuzione» — la cartella dei binari per Linux (Node e rg) che il pacchetto porta
+     (`desktop/runtime.mjs`, `src/casa-linux-binari.mjs`): un percorso dentro l'installazione come quelli del motore locale,
+     non una credenziale. Un TALOS lanciato dal terminale che la erediti troverebbe gli stessi binari, verificati. */
+  'TALOS_CASA_LINUX',
   /*
    * ⛔⛔⛔ B-1 del terzo giro (17/09/2026) — DUE CREDENZIALI CHE RESTANO, DECISE PER NOME.
    *

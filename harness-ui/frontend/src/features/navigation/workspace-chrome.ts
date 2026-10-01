@@ -32,6 +32,19 @@ export function normalizeSessions(raw: unknown): SessionSummary[] {
     found.add(item.sessionId); return true;
   });
 }
+/*
+ * ⛔ 30/09/2026, decisione owner («nascondile»): «Riprendi il lavoro» elenca solo le chat vere. Le conversazioni degli
+ *   aiutanti (sotto-agenti di una delega: `padreId`, o profondità di delega > 0) stanno dentro la chat che le ha create —
+ *   come la barra (`sessioniRadice`, components/session-item.js) e come Hermes, che elenca radici e rami ma mai i
+ *   sotto-agenti (`hermes_state_common.py:208-210`). Sul 4174 ne comparivano 6 come «Sessione senza nome».
+ */
+export function sessioniDaRiprendere(sessions: SessionSummary[], quante = 8): SessionSummary[] {
+  const time = (row: SessionSummary): number => { const n = Date.parse(row.avviataAlle || ''); return Number.isFinite(n) ? n : 0; };
+  return sessions
+    .filter((row) => !row.padreId && !(Number(row.profonditaDelega) > 0))
+    .sort((a, b) => time(b) - time(a))
+    .slice(0, quante);
+}
 export function createWorkspaceChrome(options: WorkspaceChromeOptions) {
   const { document: doc, preferences } = options;
   const scope = createScope(); const requests = createRevision();
@@ -103,7 +116,7 @@ export function createWorkspaceChrome(options: WorkspaceChromeOptions) {
     } else if (failed && !hasLoaded) {
       const p = node('div', 'workspace-empty'); p.setAttribute('role', 'status');
       p.append(icon('i-history'), node('h3', '', 'La cronologia non è disponibile'), node('p', '', 'Il lavoro non è stato cancellato. Riprova a leggere le sessioni.')); recent.append(p);
-    } else if (sessions.length === 0) {
+    } else if (sessioniDaRiprendere(sessions).length === 0) {
       const empty = node('div', 'workspace-empty');
       empty.append(icon('i-folder-open'), node('h3', '', 'Il prossimo lavoro inizia qui'),
         node('p', '', 'Apri un progetto o una conversazione. Le tue sessioni compariranno qui.'),
@@ -112,8 +125,7 @@ export function createWorkspaceChrome(options: WorkspaceChromeOptions) {
     } else {
       if (failed) { const msg = node('p', 'workspace-notice', 'Aggiornamento non riuscito. Stai vedendo l’ultima lettura disponibile.'); msg.setAttribute('role', 'status'); recent.append(msg); }
       const list = node('ul', 'workspace-recents__list');
-      const time = (row: SessionSummary): number => { const n = Date.parse(row.avviataAlle || ''); return Number.isFinite(n) ? n : 0; };
-      for (const row of [...sessions].sort((a, b) => time(b) - time(a)).slice(0, 8)) {
+      for (const row of sessioniDaRiprendere(sessions)) {
         const li = node('li', '');
         const b = button('Sessione senza nome', () => options.openSession(row), 'workspace-recent', 'i-list');
         const sessionLabel = b.querySelector('span');

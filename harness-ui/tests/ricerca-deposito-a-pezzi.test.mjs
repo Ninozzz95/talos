@@ -171,7 +171,7 @@ test('BC49: deposito unico del banco resta byte per byte, anche senza adattatore
   assert.match(r.risposta, /^deposited:/);
 });
 
-test('BC49: inventario e campi TALOS-BANCO invariati, eccetto le esenzioni dichiarate (deposito, paginazione, modifica, Ask, dialogo agenti, Workflow, lotti)', () => {
+test('BC49: inventario e campi TALOS-BANCO invariati, eccetto le esenzioni dichiarate (deposito, paginazione, modifica, Ask, dialogo agenti, Workflow, lotti, lettura byte)', () => {
   /* 27/09/2026 — l'impronta estesa passa da 3b1ec130… a 105dd078… per l'esenzione della prosa di memory_search/update/delete
    * (vedi sotto). ⛔ Non è stata indovinata: la STESSA esenzione applicata all'inventario del commit 93e99fe2a (prima dei sei
    * attrezzi nuovi) dà 105dd078… anche lì — prova misurata che nient'altro è cambiato. La base (38d65a3f…) non si tocca. */
@@ -325,17 +325,57 @@ test('BC49: inventario e campi TALOS-BANCO invariati, eccetto le esenzioni dichi
         assert.deepEqual([...(schema.required ?? [])].sort(), obbligatori, nome);
       }
     }
-    const copia = structuredClone(attrezzi).filter((t) => !['file_edit', 'ask_user_question', 'present_plan', 'workflow_plan_propose', ...Object.keys(runTools), ...Object.keys(dialogueTools), ...Object.keys(lettureSezioni)].includes((t.function ?? t).name));
+    // OUTPUT15: validate the new read contract before exempting this one addition.
+    // Both historic hashes remain unchanged and still protect every previous tool.
+    const processOutput = attrezzi.map(t => t.function ?? t).find(f => f.name === 'process_output');
+    if (attrezzi === ATTREZZI_OPENAI) assert.equal(processOutput, undefined);
+    else {
+      assert.ok(processOutput);
+      /* OEM36 (owner 30/09 sera): `encoding` FACOLTATIVO, elenco chiuso, mai obbligatorio. Si asserisce che cosa è, poi il
+       * resto dello schema deve restare identico a OUTPUT15. */
+      const schemaProcessOutput = structuredClone(processOutput.parameters ?? processOutput.input_schema);
+      assert.deepEqual(schemaProcessOutput.properties.encoding.enum, ['utf-8', 'cp437', 'cp850', 'cp852', 'cp866', 'windows-1251', 'windows-1252']);
+      assert.equal(schemaProcessOutput.properties.encoding.type, 'string');
+      assert.match(schemaProcessOutput.properties.encoding.description, /Never guessed; default UTF-8/);
+      delete schemaProcessOutput.properties.encoding;
+      assert.deepEqual(schemaProcessOutput, {
+        type: 'object', additionalProperties: false,
+        properties: {
+          outputId: {type: 'string'}, stream: {type: 'string', enum: ['stdout', 'stderr']},
+          offset: {type: 'integer', minimum: 0}, limit: {type: 'integer', minimum: 4, maximum: 4096},
+        }, required: ['outputId'],
+      });
+      assert.match(processOutput.description, /Read-only; never reruns the command/);
+      assert.match(processOutput.description, /BYTES; follow nextOffset/);
+    }
+    const copia = structuredClone(attrezzi).filter((t) => !['process_output', 'file_edit', 'ask_user_question', 'present_plan', 'workflow_plan_propose', ...Object.keys(runTools), ...Object.keys(dialogueTools), ...Object.keys(lettureSezioni)].includes((t.function ?? t).name));
     for (const t of copia) {
       const f = t.function ?? t;
       if (f.name === 'cerca') {
         const schema = f.parameters ?? f.input_schema;
-        assert.deepEqual(Object.keys(schema.properties).sort(), ['dentro', 'nome', 'testo']);
+        assert.deepEqual(Object.keys(schema.properties).sort(), ['continua', 'dentro', 'nome', 'offset', 'testo']);
         assert.deepEqual(schema.required, []);
+        /* F001b (01/10/2026), esenzione dichiarata col sì dell'owner dello stesso giorno («Ricerca che continua», «riferimento
+         * esplicito»): `cerca` guadagna `continua`, il riferimento di una ricerca ancora viva. Si asserisce che cosa è
+         * (stringa, facoltativa, e la prosa dice da dove viene), poi si toglie dalla copia come `offset`. */
+        assert.equal(schema.properties.continua.type, 'string');
+        assert.equal(schema.required.includes('continua'), false, 'cerca: continua NON deve essere obbligatorio');
+        assert.match(schema.properties.continua.description, /Reference of a search still running, given by a previous cerca reply/u);
+        assert.match(f.description, /gives a reference to pass as "continua"/u);
+        delete schema.properties.continua;
         assert.equal(schema.properties.dentro.type, 'string');
         assert.match(f.description, /match BOTH are returned \(AND\)/u);
         assert.match(f.description, /Give "dentro" to search inside ONE subfolder/u);
+        /* SEARCH34 (30/09/2026), esenzione dichiarata col sì dell'owner dello stesso giorno: `cerca` guadagna `offset`,
+         * la pagina successiva contata in FILE mostrati. Come per BC-10 e i lotti: prima si asserisce che cosa è
+         * (intero da 0, facoltativo, e la prosa dice che conta file e non byte), poi si toglie dalla copia. */
+        assert.deepEqual(
+          { type: schema.properties.offset.type, minimum: schema.properties.offset.minimum, maximum: schema.properties.offset.maximum },
+          { type: 'integer', minimum: 0, maximum: Number.MAX_SAFE_INTEGER });
+        assert.equal(schema.required.includes('offset'), false, 'cerca: offset NON deve essere obbligatorio');
+        assert.match(f.description, /"offset" skips matching FILES, not bytes or lines/u);
         delete schema.properties.dentro;
+        delete schema.properties.offset;
         f.description = 'Finds files anywhere in the workspace, at any depth. '
           + 'Give "testo" to find files CONTAINING that text (e.g. the name of a failing test), '
           + 'and/or "nome" to match the file path. Returns matching paths, most relevant first.';
@@ -397,6 +437,53 @@ test('BC49: inventario e campi TALOS-BANCO invariati, eccetto le esenzioni dichi
         else assert.match(f.description, /memory_list or memory_search/u, `${f.name}: deve nominare memory_list per l'id`);
         if (f.name === 'memory_delete') delete schema.properties.id.description;
         delete f.description;
+      }
+      if (f.name === 'delega_sottotask') {
+        const schema = f.parameters ?? f.input_schema;
+        assert.deepEqual(Object.keys(schema.properties).sort(), ['cartella', 'modalita', 'task']);
+        assert.deepEqual(schema.required, ['task']);
+        assert.deepEqual(schema.properties.modalita, {
+          type: 'string', enum: ['lettura', 'modifica'],
+          description: 'Defaults to lettura (read-only analysis). Choose modifica only for explicitly requested execution or changes, within parent permissions.',
+        });
+        const suffix = ' The default is read-only: no file creation, edits, shell commands, '
+          + 'external tools or further delegation. Set modalita to modifica only when the task explicitly '
+          + 'requires execution or changes; parent permissions still apply.';
+        assert.ok(f.description.endsWith(suffix));
+        // Exempt only the new capability field and its explanation. The historic
+        // inventory hash still protects every pre-existing delegation field/byte.
+        delete schema.properties.modalita;
+        f.description = f.description.slice(0, -suffix.length);
+      }
+      if (f.name === 'leggi') {
+        const schema = f.parameters ?? f.input_schema;
+        /* LEGGI IBRIDA (owner, 30/09 sera): offset/limit sono RIGHE (in hex restano byte) e `byteOffset` prosegue dentro
+         * una riga troppo lunga. Come READ22: si asserisce CHE COSA sono i campi aggiunti, poi si tolgono dalla copia;
+         * le due impronte storiche continuano a proteggere `percorso` e tutti gli altri attrezzi. */
+        assert.deepEqual(Object.keys(schema.properties).sort(), ['byteOffset', 'format', 'limit', 'offset', 'percorso']);
+        assert.deepEqual(schema.required, ['percorso']);
+        assert.deepEqual(schema.properties.offset, {
+          type: 'integer', minimum: 0,
+          description: 'First line to read, 1-based (default 1). With format:"hex": start byte offset.',
+        });
+        assert.deepEqual(schema.properties.limit, {
+          type: 'integer', minimum: 1,
+          description: 'Number of lines to read (default 2000). With format:"hex": number of bytes, 4..4096.',
+        });
+        assert.equal(schema.properties.byteOffset.type, 'integer');
+        assert.equal(schema.properties.byteOffset.minimum, 0);
+        assert.match(schema.properties.byteOffset.description, /inside a line that was too long/);
+        assert.match(f.description, /Reads LINES: by default the first 2000 lines, at most 100 KB per page/);
+        assert.deepEqual(schema.properties.format, {
+          type: 'string', enum: ['text', 'hex'],
+          description: 'Default text. Explicit hex returns original bytes as hexadecimal, with a default and maximum limit of 4096 bytes.',
+        });
+        assert.match(f.description, /format:"hex".*offset and limit are BYTES \(limit up to 4096\)/);
+        delete schema.properties.offset;
+        delete schema.properties.limit;
+        delete schema.properties.byteOffset;
+        delete schema.properties.format;
+        f.description = 'Reads one file of the workspace. Path is relative, e.g. "src/prezzo.mjs".';
       }
       if (f.name === 'library_delete') {
         const schema = f.parameters ?? f.input_schema;

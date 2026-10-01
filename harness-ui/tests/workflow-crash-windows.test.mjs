@@ -26,6 +26,7 @@ import { createCapacitaAdattiva, createWorkflowScheduler, decidiDopoFallimento, 
 import { createWorkflowStore, readDefinition, readEvents } from '../src/workflow/store.mjs';
 import { cartellaDiProva } from './aiuto/cartelle-di-prova.mjs';
 import { rimuoviCartellaDiProva } from './aiuto/rimuovi-cartella-di-prova.mjs';
+import { creaAttesaAProgresso } from './aiuto/attesa-a-progresso.mjs';
 
 const CLOUD = 'z-ai/glm-5.3-flash';
 const BOZZA = {
@@ -61,14 +62,8 @@ function giriFinti() {
   return api;
 }
 
-async function aspettaChe(condizione, ms = 3_000) {
-  const fine = Date.now() + ms;
-  while (Date.now() < fine) {
-    if (await condizione()) return true;
-    await new Promise((r) => setTimeout(r, 5));
-  }
-  return Boolean(await condizione());
-}
+/* 01/10/2026: l'attesa conta il tempo SENZA progresso delle cartelle dati del banco (tests/aiuto/attesa-a-progresso.mjs). */
+const { aspettaChe, segui } = creaAttesaAProgresso({ ms: 3_000 });
 
 async function svuota(cartellaStore) {
   for (let i = 0; i < 3; i += 1) {
@@ -78,8 +73,8 @@ async function svuota(cartellaStore) {
 }
 
 async function banco(t) {
-  const cartellaStore = cartellaDiProva('talos-wf-crolli-sessioni-');
-  const radiceWorkflow = mkdtempSync(join(tmpdir(), 'talos-wf-crolli-store-'));
+  const cartellaStore = segui(cartellaDiProva('talos-wf-crolli-sessioni-'));
+  const radiceWorkflow = segui(mkdtempSync(join(tmpdir(), 'talos-wf-crolli-store-')));
   const opzioniRegistro = (giri) => ({ guardaWorkspaceFn: () => () => {}, modello: 'm', chiave: 'k', cartellaStore,
     avviaSessioneFn: giri.avviaSessioneFn, cartellaEsisteFn: () => true, workflowPlanProposeFn: async () => ({}),
     preparaEsecuzioneFn: (taskId) => {

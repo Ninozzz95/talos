@@ -38,23 +38,47 @@
  *
  * ⛔ UN VALORE CHE NON CONOSCO NON SI DECORA: si restituisce com'è. Inventare una spiegazione per un
  *   `enforcement` che non ho mai visto sarebbe la stessa bugia, al contrario.
+ *
+ * ⛔⛔ F009, 01/10/2026 — «NAMESPACE LINUX: FILESYSTEM E PROCESSI SEPARATI» ERA FALSO, e prometteva un isolamento
+ *   che non c'è. Misurato quel giorno sulla macchina dell'owner (Ubuntu, WSL 2.7): i comandi girano come root (uid 0);
+ *   `C:` è montato in `/mnt/c` come drvfs SENZA `metadata`, `uid=0;gid=0`, e `/mnt/c/Users/<utente>` risulta `777
+ *   root:root` ⇒ i permessi Linux lì non valgono, e conta solo ciò che il Windows dell'utente di TALOS consente; e
+ *   l'interop è accesa (`cmd.exe /c ver` risponde da dentro WSL). Microsoft: «metadata… disabled by default»
+ *   (https://learn.microsoft.com/en-us/windows/wsl/file-permissions). ⇒ L'etichetta dice con che UTENTE ha girato e
+ *   che cosa è vero del DISCO della cartella (`dettagli` dal kernel, `utente-wsl.mjs`); senza dettagli dice il solo
+ *   fatto generale. Decisioni owner 01/10/2026: «come gli altri, insieme», dichiarato «nell'esito e nel foglio della
+ *   shell».
+ * ⛔ Mai una `]` dentro: i due lettori si fermano alla quadra (vedi sopra). Un nome utente Linux non può contenerla
+ *   (`utente-wsl.mjs`, `NOME_UTENTE`).
  */
 
 /** Le spiegazioni, una per ogni livello che il kernel sa dichiarare. */
 const SPIEGAZIONI = Object.freeze({
     none: 'cmd.exe nativo: stesso utente e stessi privilegi del processo, nessun isolamento',
-    wsl2: 'namespace Linux: filesystem e processi separati',
+    wsl2: 'Linux in WSL; nessun isolamento: i dischi di Windows sono in /mnt con i diritti dell\'utente Windows di TALOS',
     'adb-shell-on-device': 'shell sul dispositivo collegato, fuori da questa macchina',
 });
 
 /**
  * L'etichetta onesta per un livello di `enforcement`.
  * @param {string} enforcement il valore di macchina (`none`, `wsl2`, `adb-shell-on-device`)
+ * @param {{utente?: string|null, disco?: {montaggio: string, metadata: boolean|null}|null}|null} [dettagli] solo per
+ *   `wsl2`: il campo `wsl` dell'esito di `eseguiComandoSandboxato` (F009). Assente = il fatto generale.
  * @returns {string} il valore, con la spiegazione fra parentesi quando la conosco
  */
-export function etichettaSandbox(enforcement) {
+export function etichettaSandbox(enforcement, dettagli = null) {
     const valore = String(enforcement ?? '').trim();
     if (!valore) return 'non dichiarato';
+    if (valore === 'wsl2' && dettagli && typeof dettagli === 'object') return `wsl2 (${spiegazioneWsl(dettagli)})`;
     const spiegazione = SPIEGAZIONI[valore];
     return spiegazione ? `${valore} (${spiegazione})` : valore;
+}
+
+/* F009 — la spiegazione di `wsl2` coi fatti di QUESTO comando: chi ha eseguito, e il disco della cartella. */
+function spiegazioneWsl({ utente = null, disco = null }) {
+    const chi = typeof utente === 'string' && /^[a-z_][a-z0-9_-]{0,31}\$?$/iu.test(utente) ? `come ${utente}` : 'con un utente non verificato';
+    const dove = disco && typeof disco.montaggio === 'string' && /^\/mnt\/[a-z]$/u.test(disco.montaggio)
+        ? `${disco.montaggio} è il disco di Windows con i diritti dell'utente Windows di TALOS${disco.metadata === false ? ', e lì i permessi Linux non valgono' : ''}`
+        : "i dischi di Windows sono in /mnt con i diritti dell'utente Windows di TALOS";
+    return `Linux in WSL ${chi}; nessun isolamento: ${dove}`;
 }

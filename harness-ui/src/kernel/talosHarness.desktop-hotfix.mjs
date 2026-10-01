@@ -46,7 +46,9 @@ const SHELL_EXECUTION_HEADER = /^exit\s+-?\d+\s+\[sandbox:[^\]]+\](?:\r?\n|$)/i;
 const SHELL_ZERO_HEADER = /^exit\s+0\s+\[sandbox:[^\]]+\](?:\r?\n|$)/i;
 const DEFAULT_NPM_TEST = /^npm\s+test\s*$/i;
 const PLACEHOLDER_NPM_TEST = /^\s*echo\s+(?:["']?error:\s*)?no test specified["']?\s*(?:&&|;)\s*exit\s+1\s*$/i;
-const TEST_SENTINEL_MESSAGE = `${NO_TEST_SUITE_CODE}: workspace has no usable npm scripts.test; verification was not run.`;
+/* 01/10/2026 (F017): una virgola, non un punto e virgola — la frase viaggia senza virgolette in un comando che vale in cmd.exe e
+   in bash (vedi `comandoNessunaSuite`), e in bash `;` separerebbe due comandi. Nessuno la confronta per testo: conta il 127. */
+const TEST_SENTINEL_MESSAGE = `${NO_TEST_SUITE_CODE}: workspace has no usable npm scripts.test, verification was not run.`;
 /*
  * ⛔⛔ LO STESSO FATTO DEVE AVERE LO STESSO CODICE — 20/09/2026, BLOCCO 5.
  *   L'adapter usciva **2**, il kernel canonico esce **127** (`USCITA_NESSUNA_SUITE`, il cancello
@@ -190,10 +192,16 @@ export function correggiMessaggiDesktop(messages, { cartella } = {}) {
   return changed ? fixed : messages;
 }
 
-function nodeCommandForNoTests() {
-  const exe = `"${String(process.execPath).replace(/"/g, '""')}"`;
-  const script = `console.error('${TEST_SENTINEL_MESSAGE}'); process.exit(${USCITA_NESSUNA_SUITE_DESKTOP})`;
-  return `${exe} -e "${script}"`;
+/*
+ * ⛔⛔ F017 (01/10/2026) — «prova» senza suite usciva 0 nell'app INSTALLATA. Il comando era `"${process.execPath}" -e "…exit(127)"`:
+ *   dal sorgente execPath è node.exe (127), nel pacchetto è TALOS.exe, e `desktop/child-bootstrap.mjs:19` toglie
+ *   ELECTRON_RUN_AS_NODE prima del server ⇒ TALOS.exe partiva come APP, seconda istanza, uscita 0. Riprodotto sulla build
+ *   Preview: «exit 0» in 82 ms; con la variabile, 127. E nella casa Linux un percorso di Windows non è nemmeno un comando.
+ * ⇒ Nessun eseguibile: `echo` ed `exit` esistono in cmd.exe e in bash. La redirezione IN TESTA e `&&` attaccato alla frase:
+ *   così cmd non stampa uno spazio in coda (misurato: cmd e bash danno 127, la frase su stderr, stdout vuoto).
+ */
+function comandoNessunaSuite() {
+  return `1>&2 echo ${TEST_SENTINEL_MESSAGE}&& exit ${USCITA_NESSUNA_SUITE_DESKTOP}`;
 }
 
 export async function comandoProvaDesktop({ cartella, comandoProva, esplicito = false } = {}) {
@@ -207,7 +215,7 @@ export async function comandoProvaDesktop({ cartella, comandoProva, esplicito = 
   let raw;
   try { raw = await readFile(join(cartella, 'package.json'), 'utf8'); }
   catch (error) {
-    if (error?.code === 'ENOENT') return nodeCommandForNoTests();
+    if (error?.code === 'ENOENT') return comandoNessunaSuite();
     return comandoProva;
   }
 
@@ -217,7 +225,7 @@ export async function comandoProvaDesktop({ cartella, comandoProva, esplicito = 
 
   const test = packageJson?.scripts?.test;
   if (typeof test === 'string' && test.trim() && !PLACEHOLDER_NPM_TEST.test(test)) return comandoProva;
-  return nodeCommandForNoTests();
+  return comandoNessunaSuite();
 }
 
 function usageAdd(target, usage) {
@@ -663,7 +671,7 @@ export async function talosLavora(input = {}) {
    * (`finestraToken`: null oggi — la cabla l'onda 2 dal catalogo; con null vale il solo tetto assoluto).
    */
   const soglie = compattazione.calcolaSoglie({
-    tettoToken: compattazione.leggiTettoToken(process.env),
+    tettoToken: compattazione.leggiTettoEsplicito(process.env),
     finestraToken: input.finestraToken ?? null,
   });
   const records = [];

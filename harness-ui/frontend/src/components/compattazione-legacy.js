@@ -70,13 +70,29 @@ export function sogliaLegacy({ finestraToken = null, tettoToken = TETTO_TOKEN_DE
 }
 
 /** Se avvisare: solo con numeri veri e positivi; mai un avviso costruito su uno zero o su un `undefined`. */
-export function valutaSogliaContesto({ tokenMisurati, soglia } = {}) {
+export function valutaSogliaContesto({ tokenMisurati, soglia, warningTokens = null, source = null } = {}) {
   if (!numero(tokenMisurati) || tokenMisurati <= 0 || !numero(soglia) || soglia <= 0) return { mostra: false, rapporto: null, testo: '' };
   const rapporto = tokenMisurati / soglia;
   const numeri = { n: formattaToken(tokenMisurati), m: formattaToken(soglia) };
   // oltre la soglia «quasi pieno» sarebbe falso: si dice che la soglia è superata (visto nella foto 2-durante: 184.000 su 150.000)
-  const testo = rapporto >= 1 ? t('Il contesto ha superato la soglia ({n} su {m} token).', numeri) : t('Il contesto è quasi pieno ({n} su {m} token).', numeri);
-  return { mostra: rapporto >= FRAZIONE_AVVISO, rapporto, testo };
+  let testo;
+  if (source === 'fallback') {
+    testo = inglese()
+      ? `TALOS precautionary threshold: model window unverified (${numeri.n} of ${numeri.m} tokens).`
+      : `Soglia prudenziale TALOS: finestra del modello non verificata (${numeri.n} su ${numeri.m} token).`;
+  } else if (source === 'route-minimum') {
+    testo = inglese()
+      ? `The route's precautionary compaction threshold ${rapporto >= 1 ? 'was exceeded' : 'is approaching'} (${numeri.n} of ${numeri.m} tokens).`
+      : `La soglia prudenziale della route ${rapporto >= 1 ? 'è stata superata' : 'si avvicina'} (${numeri.n} su ${numeri.m} token).`;
+  } else if (source === 'explicit-cap') {
+    testo = inglese()
+      ? `The configured compaction limit ${rapporto >= 1 ? 'was exceeded' : 'is approaching'} (${numeri.n} of ${numeri.m} tokens).`
+      : `Il limite di compattazione configurato ${rapporto >= 1 ? 'è stato superato' : 'si avvicina'} (${numeri.n} su ${numeri.m} token).`;
+  } else {
+    testo = rapporto >= 1 ? t('Il contesto ha superato la soglia ({n} su {m} token).', numeri) : t('Il contesto è quasi pieno ({n} su {m} token).', numeri);
+  }
+  const warning = numero(warningTokens) && warningTokens > 0 ? warningTokens : Math.floor(soglia * FRAZIONE_AVVISO);
+  return { mostra: tokenMisurati >= warning, rapporto, testo };
 }
 
 /**
@@ -204,7 +220,7 @@ export function montaAvvisoContesto({ document: doc = globalThis.document, rifer
   avviso.id = 'avvisoContesto';
   avviso.dataset.c = 'ContextNearlyFullNotice';
   avviso.setAttribute('role', 'group');
-  avviso.setAttribute('aria-label', t('Contesto quasi pieno'));
+  avviso.setAttribute('aria-label', inglese() ? 'Compaction threshold' : 'Soglia di compattazione');
   avviso.hidden = true;
   const icona = doc.createElement('span'); icona.className = 'talos-avviso-piano__icona'; icona.setAttribute('aria-hidden', 'true'); icona.append(ICONA(doc, 'i-history'));
   const testo = doc.createElement('p'); testo.className = 'talos-avviso-piano__testo'; testo.setAttribute('role', 'status'); testo.dataset.avvisoContestoTesto = '';

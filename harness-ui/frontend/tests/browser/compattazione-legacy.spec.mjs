@@ -27,7 +27,7 @@ test.use({ locale: 'it-IT' });
 const MODELLO = 'z-ai/glm-5.3-flash';
 const HARNESS = fileURLToPath(new URL('../../../', import.meta.url));
 const FOTO = resolve(HARNESS, 'frontend/artifacts/compattazione-legacy');
-const VIEWPORT = [[1024, 800], [1440, 900], [1920, 1080]];
+const VIEWPORT = [[1920, 1080], [2560, 1440]];
 
 const AT = '2026-09-24T07:00:00.000Z';
 const CONFINE = { type: 'CUSTOM', name: 'talos.fine-rigiocata', value: null };
@@ -84,6 +84,15 @@ async function contaPost(page, glob, risposta, { ritardoMs = 300 } = {}) {
   });
   return chiamate;
 }
+/* CTX-WINDOW-01: la soglia arriva da `GET /sessions/:id/compaction-policy`, non dal catalogo. Le fixture legacy
+   rappresentano una finestra da 200.000 con soglia 0,75 (150.000) e avviso a 120.000: la dichiarano invece di
+   lasciare che l'istanza di prova risponda col fallback prudenziale. */
+async function policyFixture(page, glob) {
+  await page.route(glob, (route) => route.fulfill({ json: {
+    ok: true, data: { windowTokens: 200_000, triggerTokens: 150_000, warningTokens: 120_000,
+      emergencyTokens: 180_000, source: 'route-minimum', modelId: MODELLO, inProgress: false }, meta: {},
+  } }));
+}
 /* ⛔ Un errore JavaScript in pagina è un difetto anche quando la prova sembra passare (`nessun-errore-a-runtime`,
    11/09): qui si raccoglie e si pretende vuoto a ogni prova — il flusso SSE inghiotte le eccezioni di `handleRealEvent`. */
 const erroriPagina = [];
@@ -105,13 +114,14 @@ test('CTX-UI-WINDOW-ALWAYS-OPENS — col trial spento il bottone apre la finestr
   const mutazioniTrial = [];
   page.on('request', (r) => { if (/\/context(\/|$)/.test(new URL(r.url()).pathname) && r.method() !== 'GET') mutazioniTrial.push(r.url()); });
   await page.route('**/api/v1/models*', (route) => route.fulfill({ json: { ok: true, data: { modelli: [{ id: MODELLO, nome: 'GLM 5.3 Flash', provider: 'openrouter', contextLength: 200_000 }] }, meta: {} } }));
+  await policyFixture(page, '**/api/v1/sessions/cl-legacy/compaction-policy');
   await apri(page, 'cl-legacy', giro(), { conclusa: true });
   const finestra = page.locator('#veloContesto');
   await page.locator('#compactSessionBtn').click();
   await expect(finestra, 'il bottone apre la finestra').toBeVisible();
   await expect(finestra).toHaveAttribute('data-context-modo', 'legacy');
   await expect(finestra.locator('[data-context-status]')).toContainText('compattare la conversazione a mano');
-  await expect(finestra.locator('[data-context-measurement]'), 'gli stessi numeri dell’avviso').toContainText('52.200 / 200.000 token');
+  await expect(finestra.locator('[data-context-measurement]'), 'gli stessi numeri dell’avviso (solo prompt_tokens dell’ultima richiesta)').toContainText('52.000 / 200.000 token');
   await expect(finestra.locator('[data-context-measurement]')).toContainText('compattazione automatica oltre 150.000');
   await expect(finestra.locator('[data-context-meter]')).toBeVisible();
   await expect(barra(page), 'aprire la finestra non compatta').toHaveCount(0);
@@ -154,8 +164,10 @@ test('CTX-UI-WINDOW-ALWAYS-OPENS — col trial spento il bottone apre la finestr
 /* ⛔ 24/09/2026 sera, foto `01-finestra-*` del giro vero sul 4174: il misuratore usciva VERDE (colore di serie di `<meter>`).
    Si misura il pixel del riempimento contro l'accento risolto del tema, e il verso contrario: non è verde. */
 test('CTX-UI-METER-IN-PALETTE — il misuratore della finestra si riempie con l’accento del tema, non col verde di serie', async ({ page }) => {
+  await page.setViewportSize({ width: 1920, height: 1080 });
   await page.route('**/api/v1/models*', (route) => route.fulfill({ json: { ok: true, data: { modelli: [{ id: MODELLO, nome: 'GLM 5.3 Flash', provider: 'openrouter', contextLength: 200_000 }] }, meta: {} } }));
   const pieno = giro(1, undefined, 130_000);
+  await policyFixture(page, '**/api/v1/sessions/cl-misuratore/compaction-policy');
   await apri(page, 'cl-misuratore', pieno, { conclusa: true });
   await page.locator('#compactSessionBtn').click();
   const meter = page.locator('#veloContesto [data-context-meter]');
@@ -168,8 +180,10 @@ test('CTX-UI-METER-IN-PALETTE — il misuratore della finestra si riempie con l�
     const srgb = c.match(/^color\(srgb\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)/);
     return srgb ? srgb.slice(1, 4).map((v) => Math.round(Number(v) * 255)) : c.match(/[\d.]+/g).slice(0, 3).map(Number);
   });
-  const png = PNG.sync.read(await meter.screenshot());
-  const x = Math.floor(png.width * 0.2), y = Math.floor(png.height / 2), i = (png.width * y + x) * 4;
+  const box = await meter.boundingBox();
+  const png = PNG.sync.read(await page.screenshot());
+  expect([png.width, png.height]).toEqual([1920, 1080]);
+  const x = Math.floor(box.x + box.width * 0.2), y = Math.floor(box.y + box.height / 2), i = (png.width * y + x) * 4;
   const pixel = [png.data[i], png.data[i + 1], png.data[i + 2]];
   const distanza = Math.hypot(pixel[0] - accento[0], pixel[1] - accento[1], pixel[2] - accento[2]);
   expect(distanza, `pixel ${pixel} contro accento ${accento}`).toBeLessThan(30);
@@ -214,16 +228,26 @@ test('CTX-UI-WINDOW-FOLLOWS-SERVER — a finestra aperta, un riassunto partito d
  */
 for (const moto of ['reduce', 'no-preference']) {
   test(`CTX-UI-BAR-CALM-NOT-FROZEN-${moto} — la barra del riassunto si muove (${moto === 'reduce' ? '3,2 s col movimento ridotto' : '1,6 s'}) e si vede muoversi`, async ({ page }) => {
+    await page.setViewportSize({ width: 1920, height: 1080 });
     await page.emulateMedia({ reducedMotion: moto });
     await apri(page, `cl-moto-${moto}`, [...giro(), INIZIO]);
     const progress = barra(page).locator('progress');
     await expect(progress).toBeVisible();
     const animazioni = await progress.evaluate((el) => el.getAnimations().map((a) => ({ stato: a.playState, durata: a.effect?.getTiming?.().duration })));
     expect(animazioni, 'una animazione, in corsa').toEqual([{ stato: 'running', durata: moto === 'reduce' ? 3200 : 1600 }]);
-    const primo = await progress.screenshot({ animations: 'allow' });
+    const box = await progress.boundingBox();
+    const primo = PNG.sync.read(await page.screenshot({ animations: 'allow' }));
     await page.waitForTimeout(500);
-    const secondo = await progress.screenshot({ animations: 'allow' });
-    expect(Buffer.compare(primo, secondo), 'a schermo cambia: il gradiente si vede scorrere').not.toBe(0);
+    const secondo = PNG.sync.read(await page.screenshot({ animations: 'allow' }));
+    expect([primo.width, primo.height, secondo.width, secondo.height]).toEqual([1920, 1080, 1920, 1080]);
+    let differenza = 0;
+    const minX = Math.max(0, Math.floor(box.x)), maxX = Math.min(primo.width, Math.ceil(box.x + box.width));
+    const minY = Math.max(0, Math.floor(box.y)), maxY = Math.min(primo.height, Math.ceil(box.y + box.height));
+    for (let y = minY; y < maxY; y++) for (let x = minX; x < maxX; x++) {
+      const i = (primo.width * y + x) * 4;
+      differenza += Math.abs(primo.data[i] - secondo.data[i]) + Math.abs(primo.data[i + 1] - secondo.data[i + 1]) + Math.abs(primo.data[i + 2] - secondo.data[i + 2]);
+    }
+    expect(differenza, 'a schermo cambia: il gradiente si vede scorrere').toBeGreaterThan(0);
   });
 }
 
@@ -242,17 +266,49 @@ test('CTX-UI-COMPACT-TRIAL-KEEPS-DIALOG (verso contrario) — col trial acceso r
 test('CTX-UI-WARNING-BEFORE-THRESHOLD — sopra 0,8 della soglia compare l’avviso sopra il composer; sotto, niente', async ({ page }) => {
   await page.route('**/api/v1/models*', (route) => route.fulfill({ json: { ok: true, data: { modelli: [{ id: MODELLO, nome: 'GLM 5.3 Flash', provider: 'openrouter', contextLength: 200_000 }] }, meta: {} } }));
   const pieno = giro(1, undefined, 130_000);
+  await policyFixture(page, '**/api/v1/sessions/cl-quasi-pieno/compaction-policy');
+  await policyFixture(page, '**/api/v1/sessions/cl-leggera/compaction-policy');
   await apri(page, 'cl-quasi-pieno', pieno);
   const avviso = page.locator('#avvisoContesto');
   await expect(avviso).toBeVisible();
-  await expect(avviso).toContainText('quasi pieno');
-  await expect(avviso).toContainText('130.200');
+  await expect(avviso).toContainText('soglia prudenziale della route');
+  await expect(avviso).toContainText('130.000');
   await expect(avviso.getByRole('button', { name: 'Compatta ora' })).toHaveCount(1);
   await expect(avviso.getByRole('button'), 'una sola azione più la chiusura').toHaveCount(2);
   await avriChiudi(page);
   // verso contrario: una conversazione piccola non avvisa
   await apri(page, 'cl-leggera', giro());
   await expect(page.locator('#avvisoContesto')).toBeHidden();
+});
+
+test('CTX-WINDOW-UI — la policy verificata del server evita il falso avviso a 164k', async ({ page }) => {
+  await page.route('**/api/v1/sessions/cl-finestra-verificata/compaction-policy', (route) => route.fulfill({ json: {
+    ok: true, data: { windowTokens: 1_000_000, triggerTokens: 750_000, warningTokens: 600_000,
+      emergencyTokens: 900_000, source: 'route-minimum', modelId: MODELLO, inProgress: false }, meta: {},
+  } }));
+  await apri(page, 'cl-finestra-verificata', giro(1, undefined, 163_901));
+  await expect(page.locator('#avvisoContesto')).toBeHidden();
+  await eventi(page, giro(10, undefined, 650_000));
+  await expect(page.locator('#avvisoContesto')).toBeVisible();
+  await expect(page.locator('#avvisoContesto')).toContainText('soglia prudenziale della route');
+  await expect(page.locator('#avvisoContesto')).toContainText('650.000');
+});
+/* 29/09: come Hermes (`turn_context_compaction.py:89-100`) la finestra si rilegge al confine di turno, senza push: dopo il refresh
+   in background dell'adapter la policy passa da `fallback` a `route-minimum` e il RunFinished successivo deve portarla in UI. */
+test('CTX-UI-POLICY-REREAD — dopo il refresh della route il confine di turno rilegge la policy e la soglia cambia', async ({ page }) => {
+  let routeVerificata = false;
+  await page.route('**/api/v1/sessions/cl-rilettura/compaction-policy', (route) => route.fulfill({ json: {
+    ok: true, meta: {}, data: routeVerificata
+      ? { windowTokens: 262_144, triggerTokens: 196_608, warningTokens: 157_286, emergencyTokens: 235_929, source: 'route-minimum', modelId: MODELLO, inProgress: false }
+      : { windowTokens: null, triggerTokens: 200_000, warningTokens: 160_000, emergencyTokens: 240_000, source: 'fallback', modelId: MODELLO, inProgress: false },
+  } }));
+  await apri(page, 'cl-rilettura', giro(1, undefined, 158_000));
+  await expect(page.locator('#avvisoContesto'), '158.000 è sotto l’avviso del fallback (160.000)').toBeHidden();
+  routeVerificata = true;
+  await eventi(page, giro(10, undefined, 158_000));
+  await expect(page.locator('#avvisoContesto'), '158.000 supera l’avviso della route verificata (157.286)').toBeVisible();
+  await expect(page.locator('#avvisoContesto')).toContainText('soglia prudenziale della route');
+  await expect(page.locator('#avvisoContesto')).toContainText('158.000');
 });
 async function avriChiudi(page) { await page.locator('#avvisoContesto [data-avviso-contesto="chiudi"]').click(); await expect(page.locator('#avvisoContesto')).toBeHidden(); }
 
@@ -401,7 +457,7 @@ test('CTX-UI-COMPACTION-FAILED-ROW — una compattazione fallita con «errore: <
 });
 
 for (const modo of ['dark', 'light']) {
-  test(`CTX-UI-FOTO-${modo} — ogni stato nei tre viewport, tema ${modo === 'dark' ? 'scuro' : 'chiaro'}`, async ({ page }) => {
+  test(`CTX-UI-FOTO-${modo} — ogni stato nei viewport almeno 1080p, tema ${modo === 'dark' ? 'scuro' : 'chiaro'}`, async ({ page }) => {
     test.setTimeout(120_000);
     await mkdir(FOTO, { recursive: true });
     /* ⛔ Il copione d'avvio gira in OGNI documento, anche negli iframe con `sandbox="allow-scripts"` senza
@@ -417,6 +473,7 @@ for (const modo of ['dark', 'light']) {
     await contaPost(page, '**/api/v1/sessions/foto-*/compaction/*/undo', { ok: true, data: { annullata: true }, meta: {} }, { ritardoMs: 100 });
     const foto = async (nome) => { for (const [w, h] of VIEWPORT) { await page.setViewportSize({ width: w, height: h }); await page.waitForTimeout(150); await page.screenshot({ path: join(FOTO, `${nome}-${modo}-${w}x${h}.png`), fullPage: false }); } };
     const pieno = giro(1, undefined, 130_000);
+    await policyFixture(page, '**/api/v1/sessions/foto-*/compaction-policy');
     await apri(page, `foto-${modo}-avviso`, pieno);
     await expect(page.locator('#avvisoContesto')).toBeVisible();
     await foto('1-avviso');

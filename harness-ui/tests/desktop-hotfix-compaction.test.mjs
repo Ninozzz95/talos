@@ -25,7 +25,9 @@ const PIANO = 'Modalità Piano attiva';
 
 function cartellaDiProva(t) {
   const dir = mkdtempSync(join(tmpdir(), 'talos-hotfix-compaction-'));
-  writeFileSync(join(dir, 'grande.txt'), 'g'.repeat(4_000));
+  // LEGGI IBRIDA (owner 30/09): stessi 4.000 byte (≈1.000 token per lettura), in righe normali, perché una riga sola
+  // oltre 2000 caratteri ora si accorcia apposta e il contesto non crescerebbe come la prova presuppone
+  writeFileSync(join(dir, 'grande.txt'), `${'g'.repeat(79)}\n`.repeat(50));
   writeFileSync(join(dir, 'uno.txt'), 'x');
   t.after(() => rimuoviCartellaDiProva(dir));
   return dir;

@@ -21,6 +21,7 @@ import { projectWorkflowRunUpdate, RUN_UPDATE_NODE_LIMIT } from '../src/workflow
 import { createCapacitaAdattiva, createWorkflowScheduler } from '../src/workflow/scheduler.mjs';
 import { countRunWatchers, createWorkflowStore, readRunState } from '../src/workflow/store.mjs';
 import { rimuoviCartellaDiProva } from './aiuto/rimuovi-cartella-di-prova.mjs';
+import { creaAttesaAProgresso } from './aiuto/attesa-a-progresso.mjs';
 
 const sessionId = '84000000-0000-4000-8000-000000000001';
 const altraSessione = '84000000-0000-4000-8000-000000000002';
@@ -53,17 +54,11 @@ function adattatoreFinto() {
   };
 }
 
-async function aspettaChe(condizione, ms = 15_000) {
-  const fine = Date.now() + ms;
-  while (Date.now() < fine) {
-    if (await condizione()) return true;
-    await new Promise((r) => setTimeout(r, 5));
-  }
-  return Boolean(await condizione());
-}
+/* 01/10/2026: l'attesa conta il tempo SENZA progresso delle cartelle dati del banco (tests/aiuto/attesa-a-progresso.mjs). */
+const { aspettaChe, segui } = creaAttesaAProgresso({ ms: 15_000 });
 
 async function banco(t, { conStore = true } = {}) {
-  const root = mkdtempSync(join(tmpdir(), 'talos-workflow-http-run-stream-'));
+  const root = segui(mkdtempSync(join(tmpdir(), 'talos-workflow-http-run-stream-')));
   const store = await createWorkflowStore({ workflowDataRoot: root, workspaceRoots: [],
     resultLimits: { maxItemBytes: 1_048_576, maxRunBytes: 8_388_608 } });
   const finto = adattatoreFinto();
@@ -228,7 +223,7 @@ test('WF-STREAM-SCOPE: foreign session, unknown run, bad cursor, extra query, no
   assert.ok(await aspettaChe(() => countRunWatchers(b.store, { runId: vivo }) === 1));
   aperto.controllo.abort();
   // SUBITO, non al battito dei 15 s: il battito libera anche lui un socket morto, ma è la rete di sicurezza, non la strada
-  assert.ok(await aspettaChe(() => countRunWatchers(b.store, { runId: vivo }) === 0, 2_000), 'a client that goes away frees its subscription at once');
+  assert.ok(await aspettaChe(() => countRunWatchers(b.store, { runId: vivo }) === 0, 2_000, { progresso: false }), 'a client that goes away frees its subscription at once');
   b.finto.apri('uno');
   assert.equal((await fetch(`${b.base}/api/v1/sessions/${sessionId}/workflows/${runId}/events`, { method: 'POST', headers: { Cookie: 'talos_token=secret' } })).status, 405);
   const senza = await banco(t, { conStore: false });

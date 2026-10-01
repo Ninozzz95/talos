@@ -242,16 +242,21 @@ describe('VELOCITÀ — una lettura parte appena la sua chiamata è completa nel
       cartella: dir, task: { consegna: 'scrivi e leggi' }, modello: 'x', chiave: 'y', onDelta: () => {},
       fetchDiRete: async () => (n++ === 0
         ? sse([
-          { choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_s', function: { name: 'scrivi', arguments: JSON.stringify({ percorso: 'a.txt', contenuto: 'nuovo\n' }) } }] } }] },
-          { choices: [{ delta: { tool_calls: [{ index: 1, id: 'call_l', function: { name: 'leggi', arguments: '{"percorso":"a.txt"}' } }] } }] },
-          { choices: [{ delta: { tool_calls: [{ index: 2, id: 'call_l2', function: { name: 'leggi', arguments: '{"percorso":"a.txt"}' } }] } }] },
+          // T25/B09 (30/09): il modello legge prima di sostituire; la lettura anticipata vede ancora «vecchio», quelle DOPO la scrittura devono vedere «nuovo»
+          // `offset:1` e non gli stessi argomenti delle due letture dopo: tre chiamate IDENTICHE fermano la risposta (RIPETIZIONI_IDENTICHE_MASSIME)
+          { choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_l0', function: { name: 'leggi', arguments: '{"percorso":"a.txt","offset":1}' } }] } }] },
+          { choices: [{ delta: { tool_calls: [{ index: 1, id: 'call_s', function: { name: 'scrivi', arguments: JSON.stringify({ percorso: 'a.txt', contenuto: 'nuovo\n' }) } }] } }] },
+          { choices: [{ delta: { tool_calls: [{ index: 2, id: 'call_l', function: { name: 'leggi', arguments: '{"percorso":"a.txt"}' } }] } }] },
+          { choices: [{ delta: { tool_calls: [{ index: 3, id: 'call_l2', function: { name: 'leggi', arguments: '{"percorso":"a.txt"}' } }] } }] },
           async () => { await dormi(100) },
         ])
         : finale()),
     })
     assert.equal(readFileSync(join(dir, 'a.txt'), 'utf8'), 'nuovo\n', 'la scrittura è avvenuta')
     const risultati = esitiTool(esito)
-    assert.match(risultati[1].content, /nuovo/u, 'la lettura dopo la scrittura vede il file nuovo')
-    assert.match(risultati[2].content, /nuovo/u, 'anche la seconda')
+    assert.match(risultati[0].content, /vecchio/u, 'T25/B09: la lettura PRIMA della scrittura vede ancora il file vecchio')
+    assert.match(risultati[1].content, /^written: a\.txt/u, 'la sostituzione passa: il file era stato letto per intero')
+    assert.match(risultati[2].content, /nuovo/u, 'la lettura dopo la scrittura vede il file nuovo')
+    assert.match(risultati[3].content, /nuovo/u, 'anche la seconda')
   })
 })

@@ -39,6 +39,17 @@ test('CTX-UI-LEGACY-WARNING: l’avviso scatta da 0,8 della soglia in su, mai co
   impostaLingua('it');
 });
 
+test('CTX-WINDOW-COPY — un limite prudenziale non è descritto come finestra del modello piena', () => {
+  impostaLingua('it');
+  assert.equal(valutaSogliaContesto({ tokenMisurati: 163_901, soglia: 750_000, source: 'route-minimum' }).mostra, false);
+  const route = valutaSogliaContesto({ tokenMisurati: 650_000, soglia: 750_000, source: 'route-minimum' });
+  assert.equal(route.mostra, true);
+  assert.match(route.testo, /soglia prudenziale della route/u);
+  assert.doesNotMatch(route.testo, /quasi pieno/u);
+  const fallback = valutaSogliaContesto({ tokenMisurati: 163_901, soglia: 200_000, source: 'fallback' });
+  assert.match(fallback.testo, /finestra del modello non verificata/u);
+});
+
 /*
  * ⛔ 24/09/2026, 12:35 — IL CONTRATTO F3 È FUSO (`a8cdcc616` sull'integrazione) e ha forme diverse dal brief:
  *   inizio  `{ fase:'inizio', tokenPrima, soglia, motivo, coveredThrough, at }`           (session-registry.mjs:3084, agent-service.mjs:1127-1128)

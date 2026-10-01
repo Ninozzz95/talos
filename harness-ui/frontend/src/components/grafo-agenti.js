@@ -298,7 +298,18 @@ export function montaGrafoAgenti(host, { dati, onApri, onChiudi, onAggiorna, onL
     centra(disegno.nodi.some(n => n.id === id) ? id : disegno.nodi[0].id);
     if (id === corrente.corrente.sessionId) { y = 16; trasforma(); }
   }
-  function centra(id) { const n = disegno?.nodi.find(n => n.id === id); if (!n) return; x = canvas.clientWidth / 2 - n.x * zoom; y = canvas.clientHeight / 2 - n.y * zoom; trasforma(); }
+  function centra(id) {
+    const n = disegno?.nodi.find(n => n.id === id); if (!n) return;
+    // Un layout che entra nel canvas resta interamente visibile anche dopo la selezione.
+    // Centrare solo il nodo portava le altre card sotto la testata, irraggiungibili col mouse.
+    x = disegno.width * zoom <= canvas.clientWidth - 32
+      ? (canvas.clientWidth - disegno.width * zoom) / 2
+      : canvas.clientWidth / 2 - n.x * zoom;
+    y = disegno.height * zoom <= canvas.clientHeight - 32
+      ? 16
+      : canvas.clientHeight / 2 - n.y * zoom;
+    trasforma();
+  }
   function centraAttivo() { const n = disegno?.nodi.find(n => n.stato === 'active' && n.id !== corrente.corrente.sessionId); if (n) centra(n.id); }
   function seleziona(id, centraNodo = true) { opzioni.selezionato = id; for (const n of mondo.querySelectorAll('[data-nodo-id]')) n.dataset.selezionato = String(n.dataset.nodoId === id); salva(); if (centraNodo) centra(id); }
   const nodiDom = new Map(), archiDom = new Map();
@@ -457,7 +468,7 @@ export function montaGrafoAgenti(host, { dati, onApri, onChiudi, onAggiorna, onL
   }); osservatore.observe(canvas);
   if (typeof onLeggiCronologia !== 'function') coverage = 'unavailable';
   ridisegna(); void caricaCronologia();
-  return { elemento: root, seleziona, aggiorna(nuovi) {
+  return { elemento: root, seleziona, adatta, aggiorna(nuovi) {
       vivo = nuovi;
       if (posizione == null) corrente = nuovi;
       ridisegna(); void caricaCronologia();

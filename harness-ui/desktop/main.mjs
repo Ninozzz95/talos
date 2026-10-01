@@ -291,7 +291,7 @@ function avviaGuscio() {
           setImmediate(() => { if (!questa.isDestroyed()) Menu.getApplicationMenu()?.popup({ window: questa, ...dove }); });
           return { action: 'deny' };
         }
-        if (apribileNelBrowserDelSistema(url)) setImmediate(() => { shell.openExternal(url).catch(() => {}); });
+        if (apribileNelBrowserDelSistema(url, { base })) setImmediate(() => { shell.openExternal(url).catch(() => {}); });
         return { action: 'deny' };
       });
       /* F7-1: il colore della striscia arriva dal `<meta name="theme-color">` della pagina; i comandi di Windows lo seguono. */

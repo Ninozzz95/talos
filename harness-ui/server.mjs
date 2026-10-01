@@ -10,6 +10,7 @@ import { createAutomationStore } from './src/automation-store.mjs';
 import { loadConfig, trovaPortaLibera } from './src/config.mjs';
 import { createHttpApp } from './src/http-app.mjs';
 import { createSessionRegistry } from './src/session-registry.mjs';
+import { createProcessOutputStore } from './src/process-output-store.mjs';
 import { impostaPoliticaScritturaSync, modalitaPubblicazioneIntestazione } from './src/session-store.mjs'; // F3 (24/09): il writer sincrono rispetta la coda; 24/09: la modalità dell'intestazione per il Doctor
 import { createWorkflowStore } from './src/workflow/store.mjs';
 import { proposeWorkflowFromTool } from './src/workflow/planning-control.mjs';
@@ -24,8 +25,12 @@ import { diagnosi } from './src/doctor.mjs';
 import { avviaPuliziaScratch, statoScratch } from './src/scratch.mjs';
 import { statoPrimoAvvio } from './src/setup-stato.mjs';
 import { createSearchSourceStore } from './src/search-source-store.mjs';
+import { createPreferenzeWslStore } from './src/preferenze-wsl-store.mjs'; // F009 (owner 01/10/2026): l'utente di WSL
+import { statoWsl } from './src/kernel/talosHarness.mjs';
+import { verificaCasaLinux } from './src/casa-linux-binari.mjs'; // Fase B (owner 01/10/2026): i binari per Linux del pacchetto
 import { ENDPOINT_SENTINELLA_DUCKDUCKGO, creaTrasportoSenzaChiave } from './src/duckduckgo-search.mjs';
 import { createModelCatalog } from './src/model-catalog.mjs';
+import { createCompactionWindowSource } from './src/compaction-window-source.mjs';
 import { createModelsDevCatalog, createProviderModelCatalog } from './src/model-catalog-models-dev.mjs'; // P-E (12/09)
 import { creaRegistroTerminali, MINUTI_PRIMA_DI_CHIUDERE_PTY_ORFANA } from './src/pty-terminal.mjs';
 import { creaRegistroSchedeTerminale } from './src/terminal-registry.mjs'; // ⭐ 05/9, W1-01
@@ -157,6 +162,17 @@ async function startServer() {
     keyring: providerKeyring,
     file: percorsoDatiDesktop('.search-source.json'),
     ignoraSemiAmbiente,
+  });
+  /*
+   * ⛔⛔ Fase B «casa di esecuzione» (owner 01/10/2026) — i binari per Linux (Node e rg) che il pacchetto porta. Pronti ⇒ ogni
+   * sessione ha la sua casa Linux. Mancanti ⇒ si DICE (registro del server e stato di /api/v1/wsl), mai un ripiego muto.
+   */
+  const casaLinux = process.platform === 'win32' ? await verificaCasaLinux() : { pronta: false, motivo: 'la casa Linux esiste solo su Windows con WSL' };
+  if (process.platform === 'win32' && !casaLinux.pronta) console.warn(`[casa-linux] non disponibile: ${casaLinux.motivo}. Shell e attrezzi dei file restano come prima (due case).`);
+  /* F009 (owner 01/10/2026, «come gli altri, insieme») — la preferenza dell'utente di WSL, accanto alla fonte di ricerca. */
+  const preferenzeWslStore = createPreferenzeWslStore({
+    file: percorsoDatiDesktop('.preferenze-wsl.json'),
+    statoFn: async (preferenze) => ({ ...(await statoWsl(preferenze)), casaLinux: casaLinux.pronta ? { pronta: true } : { pronta: false, motivo: casaLinux.motivo } }),
   });
   const trasportoSenzaChiave = creaTrasportoSenzaChiave();
   const ricercaWebFn = () => searchSourceStore.perKernel({ trasportoSenzaChiave, sentinellaDuckDuckGo: ENDPOINT_SENTINELLA_DUCKDUCKGO });
@@ -492,31 +508,13 @@ async function startServer() {
       console.error('Workflow Store non disponibile:', error?.code ?? 'WORKFLOW_STORE_UNAVAILABLE');
     }
   }
-  /*
-   * ⭐ F3, onda 2 di F2 (24/09/2026), decisione 2 — LA FINESTRA DEL MODELLO DAL CATALOGO, in sola lettura e SINCRONA.
-   *   `modelCatalog.ottieni()` è asincrona (rete + cache 10 min): qui si tiene l'ultima copia riuscita e la si rinfresca
-   *   in background quando è più vecchia della cache; il registro legge `contextLength` (`model-catalog.mjs:60`) senza
-   *   mai aspettare — `avviaESegui` è sincrona e `RunStarted` deve stare nel buffer al ritorno. Il nome arriva come lo
-   *   manda il giro (`modelloDiSessionePerRete`): `vendor/nome` per OpenRouter, `provider:nome` altrove — per questi
-   *   ultimi e per il locale il catalogo OpenRouter non risponde e vale il solo tetto (`null`, dichiarato).
-   */
-  const finestraDalCatalogo = (() => {
-    let modelli = null;
-    let aggiornatoAlle = 0;
-    let inCorso = null;
-    const rinfresca = () => {
-      inCorso ??= modelCatalog.ottieni().then((r) => { if (Array.isArray(r?.modelli)) { modelli = r.modelli; aggiornatoAlle = Date.now(); } }).catch(() => {}).finally(() => { inCorso = null; });
-    };
-    rinfresca();
-    return (modello) => {
-      if (Date.now() - aggiornatoAlle > 10 * 60 * 1000) rinfresca();
-      if (!Array.isArray(modelli) || typeof modello !== 'string') return null;
-      const nome = modello.startsWith('openrouter:') ? modello.slice('openrouter:'.length) : modello;
-      if (nome.includes(':')) return null;
-      const voce = modelli.find((m) => m.id === nome) ?? modelli.find((m) => m.id === `~${nome}` || (m.alias && m.id.slice(1) === nome));
-      return Number.isFinite(voce?.contextLength) && voce.contextLength > 0 ? voce.contextLength : null;
-    };
-  })();
+  /* Il catalogo indica il modello; solo il minimo degli endpoint verificati
+   * limita in modo conservativo una route OpenRouter dinamica. La prima lettura
+   * resta sincrona e prudenziale mentre la verifica parte in background. */
+  const compactionWindowSource = createCompactionWindowSource();
+  const finestraDallaRoute = (modello) => compactionWindowSource.get(
+    typeof modello === 'string' && modello.startsWith('openrouter:') ? modello.slice('openrouter:'.length) : modello,
+  );
   /* F3 (24/09): l'oggetto della rotta di spegnimento; gettone e funzione si riempiono dopo che `shutdown` esiste. */
   const spegnimentoPerLaApp = { gettone: null, spegniFn: null };
   /*
@@ -534,9 +532,17 @@ async function startServer() {
       for (const e of r.errori ?? []) console.warn(`[dati-progetto] errore su ${e.percorso}: ${e.codice ?? ''} ${e.messaggio}`);
     },
   });
+  const maxProcessOutputBytes = process.env.TALOS_PROCESS_OUTPUT_MAX_BYTES === undefined
+    ? 67_108_864 : Number(process.env.TALOS_PROCESS_OUTPUT_MAX_BYTES);
+  if (!Number.isSafeInteger(maxProcessOutputBytes) || maxProcessOutputBytes <= 0) throw new Error('TALOS_PROCESS_OUTPUT_MAX_BYTES must be a positive integer.');
+  let processOutputStorePromise;
+  const processOutputStoreFn = () => processOutputStorePromise ??= createProcessOutputStore({
+    databasePath: percorsoDatiDesktop('.process-output/output.sqlite'), maxOutputBytes: maxProcessOutputBytes,
+  });
   const sessionRegistry = resumeDiagnostics.wrapRegistry(createSessionRegistry(resumeDiagnostics.registryOptions({
+    processOutputStoreFn,
     cartellaDatiProgettoFn: cartellaDatiProgetto,
-    finestraTokenFn: finestraDalCatalogo,
+    finestraTokenFn: finestraDallaRoute,
     contextHooksFn: config.contextTrial ? input => contextRuntime.service.createKernelHooks(input) : undefined,
     contextCompactFn: config.contextTrial ? input => contextRuntime.service.compact(input) : undefined,
     /* F3-11c (24/09 notte), decisione owner 42: un passo della bozza può chiedere un altro modello solo fra i disponibili
@@ -596,6 +602,8 @@ async function startServer() {
     taskCatalogProvider,
     ricercaWeb: config.ricercaWeb, // seme dell'ambiente: resta per compatibilità, ma è ricercaWebFn a valere a ogni giro
     ricercaWebFn,
+    preferenzeWslFn: () => preferenzeWslStore.leggi(), // F009: letta a ogni comando, come ricercaWebFn
+    casaLinux: casaLinux.pronta ? { node: casaLinux.node, rg: casaLinux.rg } : null, // Fase B: la casa Linux di ogni sessione
     // ⭐⭐⭐ 29/8 — FASE D, firma Ed25519 delle ricevute. Stesso principio di
     // ricercaWeb: undefined quando non configurata (vedi config.mjs), le
     // ricevute restano non firmate — comportamento di sempre.
@@ -905,6 +913,7 @@ async function startServer() {
     }),
     searchSourceStore,
     provaRicercaWebFn,
+    preferenzeWslStore, // F009: GET/POST /api/v1/wsl
     token: config.token, // ⭐ 04/9, W1-10 — cancello a token per la shell Electron
     spegnimento: spegnimentoPerLaApp, // F3 (24/09): la rotta di spegnimento gentile; gettone e funzione arrivano dopo l'ascolto (oggetto condiviso)
     catalogoModelliFn: (opts) => modelCatalog.ottieni(opts),
@@ -1077,6 +1086,10 @@ async function startServer() {
       console.log(`[session-store] spegnimento: ${esito.scrittureAttese} scritture attese in ${esito.giri} giri${esito.scaduta ? ' — ATTENZIONE: flush scaduto, qualcosa può non essere su disco' : ''}${esito.sintesiInCorso ? ` · ${esito.sintesiInCorso} sintesi in background abbandonate` : ''}`);
     } catch (errore) {
       console.error('[session-store] chiusura del registro fallita:', errore instanceof Error ? errore.message : errore);
+    }
+    if (processOutputStorePromise) {
+      try {await (await processOutputStorePromise).close();}
+      catch {console.error('[process-output] archivio non chiuso regolarmente; le catture incomplete restano incomplete.');}
     }
     server.close(() => process.exit(0));
     /*

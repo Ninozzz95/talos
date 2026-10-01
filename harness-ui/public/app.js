@@ -135,8 +135,8 @@ var init_lifecycle = __esm({
 });
 
 // src/services/commands/registry.ts
-function commandById(id3) {
-  return COMMANDS.find((command) => command.id === id3);
+function commandById(id4) {
+  return COMMANDS.find((command) => command.id === id4);
 }
 function commandDisabledReason(command, context) {
   if (command.requirement && !context.sessionId) return "Apri prima una sessione.";
@@ -216,7 +216,7 @@ var init_registry = __esm({
 
 // src/features/navigation/command-palette.ts
 function createCommandPalette(options) {
-  const { field, list, empty: empty2 } = options;
+  const { field, list, empty: empty3 } = options;
   const doc = field.ownerDocument, scope = createScope(), t3 = options.translate;
   let matches = [], selected = -1;
   const status = doc.createElement("p");
@@ -233,7 +233,7 @@ function createCommandPalette(options) {
   field.spellcheck = false;
   list.setAttribute("role", "listbox");
   const rows = () => [...list.querySelectorAll("[data-command]")];
-  const idOf = (id3) => `${list.id}-command-${id3}`;
+  const idOf = (id4) => `${list.id}-command-${id4}`;
   function setActive(index, scroll = true) {
     selected = index >= 0 && index < matches.length ? index : -1;
     for (const row of rows()) {
@@ -320,9 +320,9 @@ function createCommandPalette(options) {
     list.replaceChildren(fragment);
     const order = rows().map((row) => row.dataset.command);
     matches.sort((a, b) => order.indexOf(a.command.id) - order.indexOf(b.command.id));
-    if (empty2) {
-      empty2.hidden = matches.length > 0;
-      empty2.textContent = t3("Nessun comando trovato. Prova un nome di sezione o cancella la ricerca.");
+    if (empty3) {
+      empty3.hidden = matches.length > 0;
+      empty3.textContent = t3("Nessun comando trovato. Prova un nome di sezione o cancella la ricerca.");
     }
     status.textContent = matches.length ? `${matches.length} ${t3(matches.length === 1 ? "risultato" : "risultati")}` : "";
     const previousIndex = matches.findIndex((item) => item.command.id === former);
@@ -710,6 +710,13 @@ function normalizeSessions(raw) {
     return true;
   });
 }
+function sessioniDaRiprendere(sessions, quante = 8) {
+  const time = (row) => {
+    const n = Date.parse(row.avviataAlle || "");
+    return Number.isFinite(n) ? n : 0;
+  };
+  return sessions.filter((row) => !row.padreId && !(Number(row.profonditaDelega) > 0)).sort((a, b) => time(b) - time(a)).slice(0, quante);
+}
 function createWorkspaceChrome(options) {
   const { document: doc, preferences } = options;
   const scope = createScope();
@@ -812,15 +819,15 @@ function createWorkspaceChrome(options) {
       p.setAttribute("role", "status");
       p.append(icon("i-history"), node2("h3", "", "La cronologia non è disponibile"), node2("p", "", "Il lavoro non è stato cancellato. Riprova a leggere le sessioni."));
       recent.append(p);
-    } else if (sessions.length === 0) {
-      const empty2 = node2("div", "workspace-empty");
-      empty2.append(
+    } else if (sessioniDaRiprendere(sessions).length === 0) {
+      const empty3 = node2("div", "workspace-empty");
+      empty3.append(
         icon("i-folder-open"),
         node2("h3", "", "Il prossimo lavoro inizia qui"),
         node2("p", "", "Apri un progetto o una conversazione. Le tue sessioni compariranno qui."),
         button2("Nuova conversazione", options.openProject, "talos-button talos-button--secondary")
       );
-      recent.append(empty2);
+      recent.append(empty3);
     } else {
       if (failed) {
         const msg = node2("p", "workspace-notice", "Aggiornamento non riuscito. Stai vedendo l’ultima lettura disponibile.");
@@ -828,11 +835,7 @@ function createWorkspaceChrome(options) {
         recent.append(msg);
       }
       const list = node2("ul", "workspace-recents__list");
-      const time = (row) => {
-        const n = Date.parse(row.avviataAlle || "");
-        return Number.isFinite(n) ? n : 0;
-      };
-      for (const row of [...sessions].sort((a, b) => time(b) - time(a)).slice(0, 8)) {
+      for (const row of sessioniDaRiprendere(sessions)) {
         const li = node2("li", "");
         const b = button2("Sessione senza nome", () => options.openSession(row), "workspace-recent", "i-list");
         const sessionLabel = b.querySelector("span");
@@ -1154,8 +1157,8 @@ var init_startup_policy = __esm({
 });
 
 // src/features/settings/schema.ts
-function risolviSezioneImpostazioni(id3) {
-  const chiave = typeof id3 === "string" ? id3 : "";
+function risolviSezioneImpostazioni(id4) {
+  const chiave = typeof id4 === "string" ? id4 : "";
   if (Object.hasOwn(SETTINGS_SECTIONS, chiave)) return { section: chiave, labTab: null };
   const ritirata = Object.hasOwn(SEZIONI_RITIRATE, chiave) ? SEZIONI_RITIRATE[chiave] : void 0;
   return ritirata ? { section: ritirata.section, labTab: ritirata.labTab } : null;
@@ -1168,9 +1171,9 @@ function normalizeSearch(value) {
   return String(value ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("it").trim();
 }
 function buildSettingsIndex(fields, studioIds, language, translate) {
-  const entries = Object.entries(SETTINGS_SECTIONS).map(([id3, section]) => ({
-    id: id3,
-    section: id3,
+  const entries = Object.entries(SETTINGS_SECTIONS).map(([id4, section]) => ({
+    id: id4,
+    section: id4,
     kind: "section",
     studio: false,
     label: localText(section.title, language),
@@ -1411,11 +1414,11 @@ function modelMatchesCatalog(m, raw, { query = "", favorites = [], downloads = [
     return false;
   if (f.capabilities.length && !f.capabilities.every((x) => Array.isArray(m.capabilities) && m.capabilities.includes(x))) return false;
   const p = parameterValue(m, f.basis);
-  if (f.sizes.length && !f.sizes.some((id3) => {
-    const b = SIZE_BANDS.find((x) => x.id === id3);
+  if (f.sizes.length && !f.sizes.some((id4) => {
+    const b = SIZE_BANDS.find((x) => x.id === id4);
     const lo = b.min ?? 0;
     const hi = b.max ?? Infinity;
-    return id3 === "unknown" ? p === null : p !== null && (p > lo || lo === 0 && p === 0) && p <= hi;
+    return id4 === "unknown" ? p === null : p !== null && (p > lo || lo === 0 && p === 0) && p <= hi;
   })) {
     if (!(p === null && f.includeUnknown)) return false;
   }
@@ -1600,11 +1603,11 @@ var init_catalog_engine = __esm({
 function capacitaDelCatalogo(modelli, contesto2 = {}) {
   const sa = (f) => modelli.some(f);
   const noto = (v) => typeof v === "number" && Number.isFinite(v) && v >= 0;
-  const ordinamenti = ["catalog", "name", "context-desc", "price-asc"].filter((id3) => {
-    if (id3 === "context-desc") return sa((m) => noto(m.context));
-    if (id3 === "price-asc") return sa((m) => noto(m.priceInput));
+  const ordinamenti = ["catalog", "name", "context-desc", "price-asc"].filter((id4) => {
+    if (id4 === "context-desc") return sa((m) => noto(m.context));
+    if (id4 === "price-asc") return sa((m) => noto(m.priceInput));
     return true;
-  }).map((id3) => [id3, ETICHETTE_ORDINAMENTO[id3] || (CATALOG_SORTS.find(([x]) => x === id3) || [])[1]]);
+  }).map((id4) => [id4, ETICHETTE_ORDINAMENTO[id4] || (CATALOG_SORTS.find(([x]) => x === id4) || [])[1]]);
   return {
     ordinamenti,
     /** I parametri che il catalogo accetta, in ordine di frequenza: è la faccetta con più valori. */
@@ -1822,7 +1825,7 @@ function creaBarraFaccette({ onCambia, etichetta: etichetta3 = (k, v) => v } = {
     const ordinaSelezionata = filtri.sort || "catalog";
     if (selectOrdina.dataset.firma !== JSON.stringify(capacita.ordinamenti)) {
       selectOrdina.dataset.firma = JSON.stringify(capacita.ordinamenti);
-      selectOrdina.replaceChildren(...capacita.ordinamenti.map(([id3, testo2]) => new Option(testo2, id3, false, id3 === ordinaSelezionata)));
+      selectOrdina.replaceChildren(...capacita.ordinamenti.map(([id4, testo2]) => new Option(testo2, id4, false, id4 === ordinaSelezionata)));
     }
     selectOrdina.value = ordinaSelezionata;
     ambito.replaceChildren();
@@ -1969,9 +1972,9 @@ function el2(tag2, cls, txt) {
   if (txt != null) n.textContent = String(txt);
   return n;
 }
-function kv(k, v, id3) {
+function kv(k, v, id4) {
   const row = el2("div", "talos-kv"), val = el2("span", "talos-kv__v", v);
-  if (id3) val.id = id3;
+  if (id4) val.id = id4;
   row.append(el2("span", "talos-kv__k", k), val);
   return row;
 }
@@ -1985,7 +1988,7 @@ function numeroOsservato(v) {
 }
 function capacitaOsservate(m) {
   const dove = { supportedParameters: new Set(m.supportedParameters || []), inputModalities: new Set(m.inputModalities || []), modalities: /* @__PURE__ */ new Set([...m.inputModalities || [], ...m.outputModalities || []]) };
-  return CAPACITA_OSSERVATE.filter(([, campo2, valore]) => dove[campo2].has(valore)).map(([id3]) => id3);
+  return CAPACITA_OSSERVATE.filter(([, campo2, valore]) => dove[campo2].has(valore)).map(([id4]) => id4);
 }
 function modelloCatalogo(m) {
   const c = numeroOsservato(m.contextLength);
@@ -2037,11 +2040,11 @@ function aggiornaDettaglioCatalogo(mount, m, { fornitori } = {}) {
   }
   const nome = el2("h3", "", m.nome);
   nome.id = "catalogoNome";
-  const id3 = el2("code", "talos-mono", m.id);
-  id3.id = "catalogoId";
+  const id4 = el2("code", "talos-mono", m.id);
+  id4.id = "catalogoId";
   const desc = el2("p", "talos-detail__desc", m.description || "Il fornitore non ha fornito una descrizione.");
   desc.id = "catalogoDescrizione";
-  mount.append(nome, id3, desc, kv("Fornitore", m.provider, "catalogoProvider"), kv("Ingresso", elenco(m.inputModalities), "catalogoIngresso"), kv("Risposta", elenco(m.outputModalities), "catalogoUscita"), kv("Parametri supportati", elenco(m.supportedParameters), "catalogoParametri"), kv("Contesto", contesto(m.contextLength), "catalogoContesto"));
+  mount.append(nome, id4, desc, kv("Fornitore", m.provider, "catalogoProvider"), kv("Ingresso", elenco(m.inputModalities), "catalogoIngresso"), kv("Risposta", elenco(m.outputModalities), "catalogoUscita"), kv("Parametri supportati", elenco(m.supportedParameters), "catalogoParametri"), kv("Contesto", contesto(m.contextLength), "catalogoContesto"));
   const alias = el2("p", "talos-muted", "Alias: può cambiare versione nel tempo.");
   alias.id = "catalogoAlias";
   alias.hidden = !m.alias;
@@ -2305,8 +2308,8 @@ function creaSceltaFallback({ fornitori = [], valore = [], usaAttrezzi = true, o
 function senzaChiave(fonte) {
   return PROVIDER_DIRETTI.some((p) => p.id === fonte && p.senzaChiave === true);
 }
-function nomeFornitore(id3) {
-  const chiave = String(id3 ?? "").trim().toLowerCase();
+function nomeFornitore(id4) {
+  const chiave = String(id4 ?? "").trim().toLowerCase();
   if (chiave === "") return null;
   if (Object.hasOwn(NOMI_FUORI_DAI_DIRETTI, chiave)) return NOMI_FUORI_DAI_DIRETTI[chiave];
   const cercato = PONTE_CATALOGO[chiave] || chiave;
@@ -2868,6 +2871,7 @@ var init_en = __esm({
         "richiesta della modalità Piano": "requesting Plan mode",
         "proposta di workflow": "proposing a workflow",
         "stato del workflow": "workflow status",
+        "Risultato del comando": "Command output",
         "lettura del risultato di un passo": "reading a step result",
         "controllo del workflow": "workflow control",
         "domanda all’agente che l’ha avviato": "asking the parent agent",
@@ -3720,16 +3724,16 @@ var init_lingua = __esm({
 });
 
 // src/components/nomi-attrezzi.js
-function nomeUmanoAttrezzoItaliano(id3, catalogo = null) {
-  const chiave = String(id3 ?? "");
+function nomeUmanoAttrezzoItaliano(id4, catalogo = null) {
+  const chiave = String(id4 ?? "");
   if (catalogo && Object.prototype.hasOwnProperty.call(catalogo, chiave)) return catalogo[chiave];
   return Object.prototype.hasOwnProperty.call(NOMI_UMANI_ATTREZZI, chiave) ? NOMI_UMANI_ATTREZZI[chiave] : null;
 }
-function nomeUmanoAttrezzo(id3, catalogo = null) {
-  return t2(nomeUmanoAttrezzoItaliano(id3, catalogo));
+function nomeUmanoAttrezzo(id4, catalogo = null) {
+  return t2(nomeUmanoAttrezzoItaliano(id4, catalogo));
 }
-function nomeDiRipiegoAttrezzo(id3) {
-  const grezzo = typeof id3 === "string" ? id3.trim() : "";
+function nomeDiRipiegoAttrezzo(id4) {
+  const grezzo = typeof id4 === "string" ? id4.trim() : "";
   if (!grezzo) return "";
   const mcp = /^mcp__([^_](?:.*?[^_])?)__(.+)$/u.exec(grezzo);
   const leggibile = (testo2) => testo2.replace(/[_-]+/gu, " ").replace(/\s+/gu, " ").trim();
@@ -3788,14 +3792,14 @@ function verboAttrezzo(nome) {
   const leggibile = nomeLeggibileAttrezzo(nome);
   return [leggibile, leggibile];
 }
-function corrispondeARicerca(id3, query, catalogo = null) {
+function corrispondeARicerca(id4, query, catalogo = null) {
   const q2 = String(query ?? "").trim().toLowerCase();
   if (q2 === "") return true;
-  const nome = nomeUmanoAttrezzo(id3, catalogo);
-  return String(id3 ?? "").toLowerCase().includes(q2) || nome !== null && nome.toLowerCase().includes(q2);
+  const nome = nomeUmanoAttrezzo(id4, catalogo);
+  return String(id4 ?? "").toLowerCase().includes(q2) || nome !== null && nome.toLowerCase().includes(q2);
 }
-function descrizioneAttrezzo(id3) {
-  const chiave = String(id3 ?? "");
+function descrizioneAttrezzo(id4) {
+  const chiave = String(id4 ?? "");
   return Object.prototype.hasOwnProperty.call(DESCRIZIONI_ATTREZZI, chiave) ? DESCRIZIONI_ATTREZZI[chiave] : null;
 }
 var NOMI_UMANI_ATTREZZI, SPECIE_ATTREZZI, ORDINE_SPECIE, VERBI_ATTREZZI, DESCRIZIONI_ATTREZZI;
@@ -3827,6 +3831,7 @@ var init_nomi_attrezzi = __esm({
       workflow_plan_propose: "proposta di workflow",
       // 25/09/2026: non «piano di lavoro», il nome rifiutato dall'owner il 17/09
       workflow_status: "stato del workflow",
+      process_output: "Risultato del comando",
       workflow_output: "lettura del risultato di un passo",
       workflow_control: "controllo del workflow",
       ask_parent: "domanda all’agente che l’ha avviato",
@@ -3919,6 +3924,7 @@ var init_nomi_attrezzi = __esm({
       request_plan_mode: "Chiede di passare alla modalità Piano dal giro successivo. Il cambio avviene solo dopo la conclusione riuscita e il salvataggio della sessione.",
       workflow_plan_propose: "Propone un workflow a fasi da rivedere e approvare: non lo approva e non lo avvia.",
       workflow_status: "Legge lo stato dei workflow della sessione o il dettaglio di un run, senza modificarli.",
+      process_output: "Legge una parte del risultato conservato di un comando, senza eseguirlo di nuovo.",
       workflow_output: "Legge un risultato testuale di un passo concluso; se i risultati sono più di uno, mostra gli ID da scegliere. Per un file binario mostra solo i metadati.",
       workflow_control: "Chiede di mettere in pausa, riprendere o fermare un workflow della sessione e ne restituisce la ricevuta.",
       ask_parent: "Un sotto-agente chiede un fatto o una decisione all’agente che lo ha avviato, e aspetta la risposta.",
@@ -4995,7 +5001,7 @@ function creaRiga(d, p, scheda, contenitore) {
   card.append(testa, meta2, stallo, dettaglio);
   card.addEventListener("click", () => {
     scheda.selezionato = scheda.selezionato === p.id ? null : p.id;
-    for (const [id3, r] of scheda.righe) r.card.dataset.selezionato = scheda.selezionato === id3 ? "si" : "no";
+    for (const [id4, r] of scheda.righe) r.card.dataset.selezionato = scheda.selezionato === id4 ? "si" : "no";
   });
   card.addEventListener("keydown", (evento) => {
     if (evento.target !== card) return;
@@ -5093,10 +5099,10 @@ function disegnaProcessi(d, contenitore, lista, opzioni = {}) {
     const attuale = scheda.zona.children[i2];
     if (attuale !== riga2.card) scheda.zona.insertBefore(riga2.card, attuale || null);
   }
-  for (const [id3, riga2] of [...scheda.righe]) {
-    if (visti.has(id3)) continue;
+  for (const [id4, riga2] of [...scheda.righe]) {
+    if (visti.has(id4)) continue;
     riga2.card.remove();
-    scheda.righe.delete(id3);
+    scheda.righe.delete(id4);
   }
   const restano = filtrati.length - visibili.length;
   if (restano > 0) {
@@ -5461,7 +5467,10 @@ function aggiornaInspector(inspector, dati = {}, { document: d = globalThis.docu
     riempiCard(d, fileCard, file.length ? file : [["Nessun file scritto finora", "—"]], { classiValore: (r) => r[1].startsWith("+") ? "talos-diff-num--plus" : "" });
   }
   const agenti = inspector.querySelector("#railAgenti");
-  if (agenti && !dati.agentiDelWorkflow && !schedaDaSaltare(inspector, agenti, "agenti")) disegnaAgenti(d, agenti, dati.agenti, dati.azioniAgenti || {});
+  const deleghe = inspector.querySelector("#railDeleghe") || agenti;
+  if (agenti && (!dati.agentiDelWorkflow || deleghe !== agenti) && !schedaDaSaltare(inspector, agenti, "agenti")) {
+    disegnaAgenti(d, deleghe, dati.agenti, dati.azioniAgenti || {});
+  }
   const processi = inspector.querySelector("#railProcessi");
   if (schedaDaSaltare(inspector, processi, "processi")) return;
   if (processi) disegnaProcessi(d, processi, Array.isArray(dati.processi) ? dati.processi : []);
@@ -5876,10 +5885,132 @@ var init_conversazione_dom = __esm({
   }
 });
 
+// src/components/provider-retry.js
+function valoreRetry(evento) {
+  if (evento?.type !== "CUSTOM" || evento.name !== "talos.provider-retry") return null;
+  const v = evento.value;
+  const id4 = (x) => typeof x === "string" && x.length > 0 && x.length <= 256;
+  if (!v || v.schema !== "talos.provider-retry.v1" || ![v.runId, v.threadId, v.requestId].every(id4) || !["attesa", "invio", "fine"].includes(v.fase) || !Number.isSafeInteger(v.tentativo) || v.tentativo < 2 || !Number.isSafeInteger(v.tentativiMassimi) || v.tentativiMassimi < v.tentativo || !Number.isInteger(v.httpStatus) || !(v.httpStatus === 402 && v.motivo === "budget-occupato" || v.httpStatus === 408 || v.httpStatus === 429 || v.httpStatus >= 500 && v.httpStatus <= 599) || !Number.isFinite(v.attesaMs) || v.attesaMs < 0 || v.attesaMs > 2147483647 || v.fase === "attesa" && (!Number.isSafeInteger(v.retryAt) || v.retryAt < 1)) return null;
+  return {
+    requestId: v.requestId,
+    runId: v.runId,
+    threadId: v.threadId,
+    fase: v.fase,
+    tentativo: v.tentativo,
+    tentativiMassimi: v.tentativiMassimi,
+    httpStatus: v.httpStatus,
+    retryAt: v.fase === "attesa" ? v.retryAt : null,
+    ...v.httpStatus === 402 ? { motivo: v.motivo } : {}
+  };
+}
+function riduciRetry(stato2, evento) {
+  const s = stato2 ?? { runId: null, threadId: null, retry: null, lastSequence: -1, closed: true };
+  if (evento?.type === "RunStarted" && evento.runId && evento.runId !== s.runId) {
+    return { runId: evento.runId, threadId: evento.threadId, retry: null, lastSequence: -1, closed: false };
+  }
+  if (["RunFinished", "RunError"].includes(evento?.type) && (!evento.runId || evento.runId === s.runId)) {
+    return { ...s, retry: null, closed: true };
+  }
+  const v = valoreRetry(evento);
+  if (!v || s.closed || v.runId !== s.runId || v.threadId !== s.threadId) return s;
+  const seq = Number.isSafeInteger(evento._sequenza) ? evento._sequenza : s.lastSequence + 1;
+  if (seq <= s.lastSequence) return s;
+  if (v.fase === "fine" && s.retry && v.requestId !== s.retry.requestId) return s;
+  return { ...s, retry: v.fase === "fine" ? null : v, lastSequence: seq };
+}
+function testoRetry(retry, ora5 = Date.now(), en2 = false) {
+  const numero10 = en2 ? `Attempt ${retry.tentativo} of ${retry.tentativiMassimi}` : `Tentativo ${retry.tentativo} di ${retry.tentativiMassimi}`;
+  const motivo = retry.httpStatus === 402 && retry.motivo === "budget-occupato" ? en2 ? "The budget is temporarily occupied by ongoing or recently completed requests" : "Il budget è temporaneamente occupato da richieste in corso o appena concluse" : retry.httpStatus === 429 ? en2 ? "The service is limiting requests" : "Il servizio sta limitando le richieste" : retry.httpStatus === 408 ? en2 ? "The service rejected the request after a timeout" : "Il servizio ha rifiutato la richiesta per timeout" : en2 ? "The service is temporarily unavailable" : "Il servizio è temporaneamente indisponibile";
+  const secondi = Math.max(0, Math.ceil((retry.retryAt - ora5) / 1e3));
+  return {
+    titolo: retry.fase === "attesa" ? en2 ? "Retry scheduled" : "Nuovo tentativo programmato" : numero10,
+    motivo: `${motivo} (HTTP ${retry.httpStatus}).${retry.fase === "attesa" ? ` ${numero10}.` : ""}`,
+    tempo: retry.fase !== "attesa" ? en2 ? "Request in progress" : "Richiesta in corso" : secondi > 0 ? en2 ? `In ${secondi} s` : `Tra ${secondi} s` : en2 ? "Waiting for server confirmation" : "In attesa di conferma del server"
+  };
+}
+function montaProviderRetry({ contenitore, onShow = () => {
+}, document: doc = globalThis.document } = {}) {
+  let stato2 = null, replay = true, vivo = false, nodo13 = null, timer2 = null;
+  const nascondi = () => {
+    if (timer2 !== null) {
+      clearInterval(timer2);
+      timer2 = null;
+    }
+    nodo13?.remove();
+    nodo13 = null;
+  };
+  const disegna2 = () => {
+    const parent = contenitore?.();
+    if (!stato2?.retry || replay || !vivo || !parent) {
+      nascondi();
+      return;
+    }
+    if (!nodo13?.isConnected) {
+      nascondi();
+      onShow();
+      nodo13 = doc.createElement("aside");
+      nodo13.className = "talos-provider-retry";
+      nodo13.dataset.providerRetry = "";
+      const statoEl = doc.createElement("div");
+      statoEl.setAttribute("role", "status");
+      statoEl.setAttribute("aria-atomic", "true");
+      const titolo2 = doc.createElement("strong");
+      titolo2.className = "talos-provider-retry__titolo";
+      const motivo = doc.createElement("p");
+      motivo.className = "talos-provider-retry__motivo";
+      statoEl.append(titolo2, motivo);
+      const tempo2 = doc.createElement("span");
+      tempo2.className = "talos-provider-retry__tempo";
+      tempo2.setAttribute("role", "timer");
+      tempo2.setAttribute("aria-live", "off");
+      nodo13.append(statoEl, tempo2);
+      parent.append(nodo13);
+    }
+    nodo13.dataset.fase = stato2.retry.fase;
+    const testi = testoRetry(stato2.retry, Date.now(), linguaCorrenteDiT() === "en");
+    for (const nome of ["titolo", "motivo", "tempo"]) {
+      const el30 = nodo13.querySelector(`.talos-provider-retry__${nome}`);
+      if (el30.textContent !== testi[nome]) el30.textContent = testi[nome];
+    }
+    const conta = stato2.retry.fase === "attesa" && stato2.retry.retryAt > Date.now();
+    if (conta && timer2 === null) timer2 = setInterval(disegna2, 1e3);
+    if (!conta && timer2 !== null) {
+      clearInterval(timer2);
+      timer2 = null;
+    }
+  };
+  return {
+    evento(evento, { inReplay = false, attivo = false } = {}) {
+      const prossimoReplay = evento?.type === "CUSTOM" && evento.name === "talos.fine-rigiocata" ? false : inReplay;
+      const prossimoStato = riduciRetry(stato2, evento);
+      if (prossimoStato === stato2 && prossimoReplay === replay && attivo === vivo) return;
+      replay = prossimoReplay;
+      vivo = attivo;
+      stato2 = prossimoStato;
+      disegna2();
+    },
+    sospendi() {
+      replay = true;
+      nascondi();
+    },
+    reset() {
+      stato2 = null;
+      replay = true;
+      vivo = false;
+      nascondi();
+    }
+  };
+}
+var init_provider_retry = __esm({
+  "src/components/provider-retry.js"() {
+    init_lingua();
+  }
+});
+
 // src/components/loghi-fornitori.js
 function marchioDiFornitore(row = {}) {
-  const id3 = CONDIVISI[row.id] || row.id;
-  return MARCHI[id3] || null;
+  const id4 = CONDIVISI[row.id] || row.id;
+  return MARCHI[id4] || null;
 }
 function inizialeFornitore(row = {}) {
   const etichetta3 = String(row.label || row.id || "?").toUpperCase();
@@ -6148,9 +6279,9 @@ function leggiCollegamentoProvider(row, card) {
   return {
     endpoint: valore("[data-provider-endpoint]").trim(),
     timeoutSeconds: Number(valore("[data-provider-timeout]") || 60),
-    ...CLOUD_CONFIGURABILI.has(row.id) ? { modelli: righe("[data-provider-modelli]").map((id3) => {
-      const nome = row.modelli?.find((m) => m.id === id3)?.nome;
-      return { id: id3, ...nome ? { nome } : {} };
+    ...CLOUD_CONFIGURABILI.has(row.id) ? { modelli: righe("[data-provider-modelli]").map((id4) => {
+      const nome = row.modelli?.find((m) => m.id === id4)?.nome;
+      return { id: id4, ...nome ? { nome } : {} };
     }) } : {}
   };
 }
@@ -6244,7 +6375,7 @@ function iconaAzione(nome, lato = "16px") {
   }
   return svg2;
 }
-function apriConfigurazioneProvider(card, row) {
+function apriConfigurazioneProvider(card, row, { onSalvaConfigurazione = null, onConfigurazioneSalvata = null } = {}) {
   if (!card || card.querySelector(":scope > .talos-provider__modale")) return null;
   const doc = card.ownerDocument || globalThis.document;
   const corpo = card.querySelector(".talos-provider__body");
@@ -6281,14 +6412,101 @@ function apriConfigurazioneProvider(card, row) {
   annulla.dataset.providerModaleAnnulla = "";
   vesti(annulla, VESTITO.modale.pulsante);
   const salvaRuntime = corpo.querySelector('[data-provider-action="save-runtime"]');
-  const salvaChiave = corpo.querySelector('[data-provider-action="save-key"]');
-  const vero = salvaRuntime || salvaChiave;
-  if (vero) {
-    const primaria = el4("button", "talos-button talos-button--primary talos-button--sm", salvaRuntime ? "Salva configurazione" : vero.textContent || "Salva");
+  const campoChiave = corpo.querySelector("[data-provider-key]");
+  const salvaChiaveInterno = corpo.querySelector("[data-provider-salva-chiave]");
+  const configurazionePropria = row.id === "esterno" || CLOUD_CONFIGURABILI.has(row.id);
+  if (salvaRuntime || campoChiave) {
+    const primaria = el4("button", "talos-button talos-button--primary talos-button--sm", "Salva");
     primaria.type = "button";
-    primaria.dataset.providerModaleSalva = salvaRuntime ? "runtime" : "chiave";
+    primaria.dataset.providerModaleSalva = "";
     vesti(primaria, VESTITO.modale.pulsante);
-    primaria.addEventListener("click", () => vero.click());
+    const nascosti = [];
+    const nascondi = (n) => {
+      if (n && !n.hidden) {
+        n.hidden = true;
+        nascosti.push(n);
+      }
+    };
+    nascondi(salvaChiaveInterno);
+    const altre = corpo.querySelector("[data-provider-altre-azioni]");
+    if (altre?.dataset.providerAltreAzioni === "solo-salva") nascondi(altre);
+    const rigaAzioni = (salvaChiaveInterno || altre)?.parentElement;
+    if (rigaAzioni && [...rigaAzioni.children].every((c) => c.hidden)) nascondi(rigaAzioni);
+    dialogo.addEventListener("close", () => {
+      for (const n of nascosti) n.hidden = false;
+    });
+    const avvisa = (testo2, errore) => {
+      const feedback = corpo.querySelector("[data-provider-feedback]");
+      if (!feedback) return;
+      feedback.textContent = testo2;
+      feedback.classList.toggle("is-error", errore);
+      feedback.setAttribute("role", errore ? "alert" : "status");
+      feedback.hidden = false;
+      feedback.scrollIntoView?.({ block: "nearest" });
+    };
+    const salva = async () => {
+      if (dialogo.dataset.salvataggio === "in-corso") return;
+      const chiave = (campoChiave?.value || "").trim();
+      const letto = salvaRuntime && !configurazionePropria ? leggiCollegamentoProvider(row, corpo) : null;
+      const collegamento = letto && (letto.endpoint !== (row.endpoint || "") || letto.timeoutSeconds !== Number(row.timeoutSeconds ?? 60)) ? { endpoint: letto.endpoint, timeoutSeconds: letto.timeoutSeconds } : null;
+      if (!chiave && !collegamento && !configurazionePropria) {
+        avvisa("Niente da salvare: incolla una chiave o cambia un campo.", false);
+        return;
+      }
+      const controlli = [...dialogo.querySelectorAll("input,textarea,button")], prima = controlli.map((c) => c.disabled);
+      dialogo.dataset.salvataggio = "in-corso";
+      card.dataset.salvataggioCollegamento = "in-corso";
+      dialogo.setAttribute("aria-busy", "true");
+      controlli.forEach((c) => {
+        c.disabled = true;
+      });
+      primaria.textContent = "Salvo…";
+      const salvato = [];
+      try {
+        const chiama = async (dati, fase) => {
+          if (typeof onSalvaConfigurazione !== "function") throw Object.assign(new Error("Questa schermata non sa salvare."), { fase });
+          await onSalvaConfigurazione({ provider: row.id, pool: Boolean(salvaChiaveInterno && !salvaChiaveInterno.dataset.providerAction), chiave: "", collegamento: null, ...dati });
+        };
+        if (chiave) {
+          await chiama({ chiave }, "chiave");
+          salvato.push("chiave");
+          campoChiave.value = "";
+        }
+        if (collegamento) {
+          await chiama({ collegamento }, "collegamento");
+          salvato.push("collegamento");
+        }
+        if (configurazionePropria) {
+          try {
+            await salvaCollegamentoProvider(row, corpo);
+          } catch (e) {
+            throw Object.assign(e, { fase: "collegamento" });
+          }
+          salvato.push("collegamento");
+        }
+      } catch (errore) {
+        const motivo = errore?.message || "Il server locale non ha risposto.";
+        avvisa(errore?.fase === "collegamento" ? salvato.includes("chiave") ? `La chiave è salvata, ma la configurazione no: ${motivo}` : `La configurazione non è stata salvata: ${motivo}` : `La chiave non è stata salvata: ${motivo}`, true);
+        return;
+      } finally {
+        delete dialogo.dataset.salvataggio;
+        delete card.dataset.salvataggioCollegamento;
+        dialogo.setAttribute("aria-busy", "false");
+        controlli.forEach((c, i2) => {
+          c.disabled = prima[i2];
+        });
+        primaria.textContent = "Salva";
+      }
+      chiudiModale2();
+      onConfigurazioneSalvata?.({ provider: row.id, etichetta: row.label || row.id, salvato });
+    };
+    primaria.addEventListener("click", salva);
+    telaio.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && e.target instanceof HTMLInputElement && !e.isComposing) {
+        e.preventDefault();
+        salva();
+      }
+    });
     piede.append(annulla, primaria);
   } else piede.append(annulla);
   const chiudiModale2 = () => {
@@ -6304,13 +6522,14 @@ function apriConfigurazioneProvider(card, row) {
     corpo.hidden = doveStava.hidden;
     corpo.style.removeProperty("padding");
     corpo.style.removeProperty("border-top");
+    corpo.style.removeProperty("grid-template-columns");
     dialogo.remove();
     aggiornaStatoConfigura(card, false);
     if (configura?.isConnected) configura.focus({ preventScroll: true });
   });
   telaio.append(corpo);
   corpo.hidden = false;
-  Object.assign(corpo.style, { padding: "0", borderTop: "0" });
+  Object.assign(corpo.style, { padding: "0", borderTop: "0", gridTemplateColumns: "minmax(0,1fr)" });
   dialogo.append(testa, telaio, piede);
   card.append(dialogo);
   if (typeof dialogo.showModal === "function") dialogo.showModal();
@@ -6513,7 +6732,7 @@ function aggiungiCampiCloud(body, row) {
     }
   });
 }
-function creaProviderCard(row, { aperta: aperta2 = false, prova = null, occupato = false, onMenu = null, onAzionePool = null } = {}) {
+function creaProviderCard(row, { aperta: aperta2 = false, prova = null, occupato = false, onMenu = null, onAzionePool = null, onSalvaConfigurazione = null, onConfigurazioneSalvata = null } = {}) {
   const esterno = row.id === "esterno", configurazionePropria = esterno || CLOUD_CONFIGURABILI.has(row.id);
   const idCorpo = "provider-body-" + row.id;
   const d = statoProvider(row, prova), busy = occupato || d.occupato, card = el4("article", "talos-card talos-provider");
@@ -6636,6 +6855,7 @@ function creaProviderCard(row, { aperta: aperta2 = false, prova = null, occupato
     if (d.tempo && !esterno) body.append(campo("Tempo massimo (secondi)", "number", "providerTimeout", row, String(row.timeoutSeconds ?? 60)));
     const actions = el4("div", "talos-cluster");
     const salva = button("save-key", poolCollegato ? "Aggiungi chiave" : "Salva chiave", "primary");
+    salva.dataset.providerSalvaChiave = "";
     if (poolCollegato) {
       delete salva.dataset.providerAction;
       salva.addEventListener("click", async () => {
@@ -6712,7 +6932,8 @@ function creaProviderCard(row, { aperta: aperta2 = false, prova = null, occupato
       tre.setAttribute("aria-label", "Altre azioni per " + (row.label || row.id));
       tre.setAttribute("aria-haspopup", "menu");
       tre.append(simboloProvider("i-more"));
-      const voci = () => vociMenu.map((v) => ({ chiave: v.chiave, etichetta: v.etichetta, icona: v.icona, pericolo: v.pericolo, separaPrima: v.separaPrima, aziona: () => v.elemento.click() }));
+      const voci = () => vociMenu.filter((v) => !(v.chiave === "save-runtime" && card.querySelector(":scope > .talos-provider__modale[open]"))).map((v) => ({ chiave: v.chiave, etichetta: v.etichetta, icona: v.icona, pericolo: v.pericolo, separaPrima: v.separaPrima, aziona: () => v.elemento.click() }));
+      tre.dataset.providerAltreAzioni = vociMenu.every((v) => v.chiave === "save-runtime") ? "solo-salva" : "";
       tre.addEventListener("click", () => onMenu(voci(), { ancora: tre }));
       card.addEventListener("contextmenu", (e) => {
         e.preventDefault();
@@ -6747,7 +6968,7 @@ function creaProviderCard(row, { aperta: aperta2 = false, prova = null, occupato
     configura.prepend(iconaAzione("configura"));
     configura.addEventListener("click", (e) => {
       e.stopPropagation();
-      apriConfigurazioneProvider(card, row);
+      apriConfigurazioneProvider(card, row, { onSalvaConfigurazione, onConfigurazioneSalvata });
     });
     piede.append(configura);
     if (!esterno) {
@@ -6761,7 +6982,7 @@ function creaProviderCard(row, { aperta: aperta2 = false, prova = null, occupato
   return card;
 }
 function aggiornaProviderList(lista, rows, opzioni = {}) {
-  const { aperte = /* @__PURE__ */ new Set(), prove = /* @__PURE__ */ new Map(), occupati = /* @__PURE__ */ new Set(), caricamento = false, errore = null, onMenu = null, onAzionePool = null } = opzioni;
+  const { aperte = /* @__PURE__ */ new Set(), prove = /* @__PURE__ */ new Map(), occupati = /* @__PURE__ */ new Set(), caricamento = false, errore = null, onMenu = null, onAzionePool = null, onSalvaConfigurazione = null, onConfigurazioneSalvata = null } = opzioni;
   if (!lista) return;
   lista.className = "talos-provider-list";
   lista.setAttribute("aria-busy", String(caricamento));
@@ -6796,7 +7017,7 @@ function aggiornaProviderList(lista, rows, opzioni = {}) {
     const op = { aperta: aperte.has(row.id), prova: prove.get(row.id) || null, occupato: occupati.has(row.id) || caricamento }, signature = JSON.stringify([row, op, typeof onAzionePool === "function"]), precedente = old.get(row.id);
     if (precedente?.dataset.salvataggioCollegamento === "in-corso" || precedente?.dataset.providerSignature === signature && !precedente.dataset.providerReset) return precedente;
     if (precedente?.querySelector?.(":scope > .talos-provider__modale[open]")) daRiaprire.push(row);
-    const card = creaProviderCard(row, { ...op, onMenu, onAzionePool });
+    const card = creaProviderCard(row, { ...op, onMenu, onAzionePool, onSalvaConfigurazione, onConfigurazioneSalvata });
     card.dataset.providerSignature = signature;
     if (precedente && !precedente.dataset.providerReset) {
       for (const input of card.querySelectorAll("input,textarea")) {
@@ -6819,7 +7040,7 @@ function aggiornaProviderList(lista, rows, opzioni = {}) {
     if (focus.isConnected && !focus.disabled) focus.focus({ preventScroll: true });
     else cards.find((n) => n.dataset.providerId === focusId)?.querySelector("[data-provider-toggle]")?.focus({ preventScroll: true });
   }
-  for (const row of daRiaprire) apriConfigurazioneProvider(cards.find((n) => n.dataset.providerId === row.id), row);
+  for (const row of daRiaprire) apriConfigurazioneProvider(cards.find((n) => n.dataset.providerId === row.id), row, { onSalvaConfigurazione, onConfigurazioneSalvata });
 }
 function montaProviderPanel(panel) {
   if (!panel || panel.dataset.providerMontato) return;
@@ -7003,6 +7224,58 @@ var init_politiche = __esm({
   }
 });
 
+// src/components/utente-wsl.js
+function comandoPerCreareUtente(distro) {
+  return `wsl -d ${distro} -u root adduser <nome>`;
+}
+function testiUtenteWsl(dati) {
+  const wsl = dati?.wsl;
+  if (!wsl || wsl.disponibile !== true || typeof wsl.distro !== "string" || wsl.distro === "") return { visibile: false };
+  const distro = wsl.distro;
+  const acceso = dati?.preferenze?.usaUtenteNormale !== false;
+  const chi = typeof wsl.utenteUsato === "string" && wsl.utenteUsato ? `In Linux i comandi girano come ${wsl.utenteUsato} (${distro})` : `In Linux non è stato possibile verificare con che utente girano i comandi (${distro})`;
+  const montaggi = Array.isArray(wsl.montaggi) ? wsl.montaggi.filter((m) => typeof m?.montaggio === "string") : [];
+  let dischi;
+  if (montaggi.length === 0) {
+    dischi = "I dischi di Windows sono in /mnt: nessun isolamento.";
+  } else {
+    const nomi2 = montaggi.map((m) => m.montaggio).join(", ");
+    const soggetto = montaggi.length === 1 ? `${nomi2} è il disco di Windows` : `${nomi2} sono i dischi di Windows`;
+    const senzaPermessi = montaggi.filter((m) => m.metadata === false).map((m) => m.montaggio);
+    const permessi = senzaPermessi.length === 0 ? "" : senzaPermessi.length === montaggi.length ? ", e lì i permessi Linux non valgono" : `; su ${senzaPermessi.join(", ")} i permessi Linux non valgono`;
+    dischi = `${soggetto}: nessun isolamento${permessi}.`;
+  }
+  if (wsl.root !== false) dischi += " Se un comando gira come root senza la tua approvazione, TALOS te lo chiede una volta per sessione.";
+  let nota = "Vale per tutte le sessioni.";
+  let comando = null;
+  if (wsl.predefinitoRoot === false) {
+    nota += ` In ${distro} l’utente predefinito non è root: non cambia niente.`;
+  } else if (typeof wsl.utenteNormale === "string" && wsl.utenteNormale) {
+    nota += acceso ? ` Usa ${wsl.utenteNormale} al posto di root.` : ` Spento: i comandi girano come root anche se c’è ${wsl.utenteNormale}.`;
+  } else if (wsl.predefinitoRoot === true) {
+    nota += ` ${distro} non ne ha uno. Per crearlo, da un terminale di Windows:`;
+    comando = comandoPerCreareUtente(distro);
+  }
+  return { visibile: true, chi, dischi, nota, comando, acceso };
+}
+function testiDoveGiranoIComandi(dati) {
+  const wsl = dati?.wsl;
+  if (!wsl || wsl.disponibile !== true || wsl.casaLinux?.pronta !== true) return null;
+  return {
+    automatico: {
+      badge: "Linux con WSL",
+      sub: "Una casa sola: con WSL comandi e attrezzi dei file lavorano in Linux, senza WSL su Windows."
+    },
+    linux: {
+      sub: "Sempre in Linux, comandi e attrezzi dei file con gli stessi percorsi. Se WSL non c’è, il comando lo dice invece di ripiegare in silenzio."
+    }
+  };
+}
+var init_utente_wsl = __esm({
+  "src/components/utente-wsl.js"() {
+  }
+});
+
 // src/components/avvio-sessione.js
 function statoAvvioSessione({ cartella = null, permesso = "", occupato = false } = {}) {
   if (occupato) {
@@ -7079,9 +7352,9 @@ function etichettaPermessoConEccezioni(permesso, permessiPerAttrezzo) {
   if (regole.length === 0) return base;
   return `${base} · ${regole.length} eccezion${regole.length === 1 ? "e" : "i"}`;
 }
-function nomeModelloUmano(id3) {
-  if (typeof id3 !== "string" || !id3.trim()) return "";
-  const grezzo = id3.trim();
+function nomeModelloUmano(id4) {
+  if (typeof id4 !== "string" || !id4.trim()) return "";
+  const grezzo = id4.trim();
   if (!/^local:/i.test(grezzo)) return grezzo.replace(/^~/u, "").split("/").pop();
   let resto = grezzo.replace(/^local:/i, "").replace(/[-_.]gguf$/i, "");
   const quant = /[-_](IQ\d\w*|Q\d(?:[-_]\d)?(?:[-_][A-Z]+)*)(?=[-_]|$)/i.exec(resto);
@@ -7122,8 +7395,8 @@ function kilo2(n) {
   return `${(v / 1e3).toFixed(1).replace(".", ",")}k`;
 }
 function testoVelocitaLocale(modelloId, velocita) {
-  const id3 = String(modelloId || "");
-  if (!/^local:/i.test(id3)) return "";
+  const id4 = String(modelloId || "");
+  if (!/^local:/i.test(id4)) return "";
   return String(velocita || "").trim();
 }
 function testiUsage(usage, { tettoGiri = null, usageSessione = null } = {}) {
@@ -7693,10 +7966,10 @@ function aggiornaElencoRuntime(list, runtimes = [], { caricamento = false, error
   list.className = "talos-runtime-list";
   list.setAttribute("aria-busy", String(caricamento));
   if (caricamento || errore || !runtimes.length) {
-    const empty2 = el6("p", "talos-muted", caricamento ? "Verifica dei motori in corso…" : errore ? "Lettura non riuscita: " + (errore.message || errore) + ". Riprova con Aggiorna runtime." : "Nessun motore configurato sul server.");
-    empty2.dataset.c = "EmptyState";
-    if (errore) empty2.setAttribute("role", "alert");
-    list.replaceChildren(empty2);
+    const empty3 = el6("p", "talos-muted", caricamento ? "Verifica dei motori in corso…" : errore ? "Lettura non riuscita: " + (errore.message || errore) + ". Riprova con Aggiorna runtime." : "Nessun motore configurato sul server.");
+    empty3.dataset.c = "EmptyState";
+    if (errore) empty3.setAttribute("role", "alert");
+    list.replaceChildren(empty3);
     return;
   }
   list.replaceChildren(...runtimes.map(creaRuntimeModello));
@@ -7938,8 +8211,8 @@ function montaMisuraMemoria(originale, canonico) {
   const statoPrecedente = card.__talosMemoria || null;
   if (!vestita) {
     const nuova = creaMisuraMemoria();
-    for (const [key, id3] of [["refresh", "memoriaRimisura"], ["unload", "memoriaScarica"]]) {
-      const vecchio = primo([colonna, originale, canonico], "#" + id3);
+    for (const [key, id4] of [["refresh", "memoriaRimisura"], ["unload", "memoriaScarica"]]) {
+      const vecchio = primo([colonna, originale, canonico], "#" + id4);
       const slot = nuova.querySelector("[data-memory-action=" + key + "]");
       if (!vecchio || !slot) continue;
       vecchio.className = slot.className;
@@ -7952,8 +8225,8 @@ function montaMisuraMemoria(originale, canonico) {
     card.className = nuova.className;
     for (const [chiave, valore] of Object.entries(nuova.dataset)) card.dataset[chiave] = valore;
   } else {
-    for (const [key, id3] of [["refresh", "memoriaRimisura"], ["unload", "memoriaScarica"]]) {
-      const vecchio = primo([colonna, originale, canonico], "#" + id3);
+    for (const [key, id4] of [["refresh", "memoriaRimisura"], ["unload", "memoriaScarica"]]) {
+      const vecchio = primo([colonna, originale, canonico], "#" + id4);
       const slot = card.querySelector("[data-memory-action=" + key + "]");
       if (!vecchio || !slot) continue;
       vecchio.className = slot.className;
@@ -7963,13 +8236,13 @@ function montaMisuraMemoria(originale, canonico) {
       slot.replaceWith(vecchio);
     }
   }
-  for (const [key, , id3] of CAMPI) if (id3) {
+  for (const [key, , id4] of CAMPI) if (id4) {
     const n = card.querySelector("[data-memory-value=" + key + "]");
-    if (n) n.id = id3;
+    if (n) n.id = id4;
   }
-  for (const [selettore, id3] of [["[data-memory-label]", "memoriaBarraEtichetta"], ["[data-memory-tenuta]", "memoriaTenuta"], ["[data-memory-detail]", "machineCapacityDetail"]]) {
+  for (const [selettore, id4] of [["[data-memory-label]", "memoriaBarraEtichetta"], ["[data-memory-tenuta]", "memoriaTenuta"], ["[data-memory-detail]", "machineCapacityDetail"]]) {
     const n = card.querySelector(selettore);
-    if (n) n.id = id3;
+    if (n) n.id = id4;
   }
   const dentroOriginale = originale === card || originale.contains(card);
   if (colonna && !colonna.contains(card)) {
@@ -8171,7 +8444,7 @@ function aggiornaFonteRicerca(mount, dati, { scegli, salvaChiave, rimuoviChiave,
   d.dataset.searchDetails = "";
   const scelta = s.scelta;
   d.append(nodo("p", "talos-muted", NOTE[s.source]));
-  const campo2 = (titolo2, type, value, id3) => {
+  const campo2 = (titolo2, type, value, id4) => {
     const label = nodo("label", "talos-field");
     label.append(nodo("span", "talos-setting__label", titolo2));
     const input = nodo("input", "talos-field__input");
@@ -8180,7 +8453,7 @@ function aggiornaFonteRicerca(mount, dati, { scegli, salvaChiave, rimuoviChiave,
     input.autocomplete = "off";
     input.spellcheck = false;
     input.setAttribute("aria-label", titolo2);
-    input.id = id3;
+    input.id = id4;
     label.append(input);
     d.append(label);
     return input;
@@ -9290,9 +9563,9 @@ var init_desktop_scenes = __esm({
         const r = v % m;
         return r < 0 ? r + m : r;
       }
-      function sceneHash(id3) {
+      function sceneHash(id4) {
         let h = 2166136261;
-        for (const c of id3) {
+        for (const c of id4) {
           h ^= c.charCodeAt(0);
           h = Math.imul(h, 16777619);
         }
@@ -9308,7 +9581,7 @@ var init_desktop_scenes = __esm({
           return ((r ^ r >>> 14) >>> 0) / 4294967296;
         };
       }
-      const rngFor = (id3, seed, salt = 0) => random((seed ^ sceneHash(id3) ^ Math.imul(salt + 1, 2654435769)) >>> 0);
+      const rngFor = (id4, seed, salt = 0) => random((seed ^ sceneHash(id4) ^ Math.imul(salt + 1, 2654435769)) >>> 0);
       function hash01(a, b, c = 0) {
         let v = (Math.imul(a | 0, 73244475) ^ Math.imul(b | 0, 295559667) ^ Math.imul(c | 0, 3427101)) >>> 0;
         v = Math.imul(v ^ v >>> 16, 73244475);
@@ -9333,9 +9606,9 @@ var init_desktop_scenes = __esm({
         }
         return t3 > 0 ? s / t3 : 0;
       }
-      function makePaletteGeometry(id3, seed, input) {
+      function makePaletteGeometry(id4, seed, input) {
         const a = input.palette[input.colorMode];
-        return Object.freeze({ id: id3, width: input.viewport.width, height: input.viewport.height, mobile: input.viewport.width < 600, accent: a.accent, secondary: a.secondary, border: a.border_strong, surface: a.surface_elevated, background: a.background, focus: a.focus, info: a.info, success: a.success, warning: a.warning, danger: a.danger, parameters: Object.freeze({ ...input.parameters }), quality: input.effectiveQuality.tier, densityScale: input.effectiveQuality.densityScale, seed });
+        return Object.freeze({ id: id4, width: input.viewport.width, height: input.viewport.height, mobile: input.viewport.width < 600, accent: a.accent, secondary: a.secondary, border: a.border_strong, surface: a.surface_elevated, background: a.background, focus: a.focus, info: a.info, success: a.success, warning: a.warning, danger: a.danger, parameters: Object.freeze({ ...input.parameters }), quality: input.effectiveQuality.tier, densityScale: input.effectiveQuality.densityScale, seed });
       }
       const alpha = (g, b) => clamp3(b * (0.32 + g.parameters.intensity / 100 * 0.8) * (0.7 + g.parameters.contrast / 100 * 0.46), 6e-3, 0.94);
       function qCount(g, lo, bal, hi) {
@@ -10431,10 +10704,10 @@ var init_desktop_scenes = __esm({
 // src/components/theme-studio.js
 function nomiTemi(campi = CAMPI_IMPOSTAZIONI) {
   const campo2 = campi.find((c) => c.id === "themePresetSelect");
-  return (campo2?.opzioni || []).map(([id3, nome]) => ({ id: id3, nome }));
+  return (campo2?.opzioni || []).map(([id4, nome]) => ({ id: id4, nome }));
 }
 function conTemiInTesta(temi, teste = TEMI_IN_TESTA) {
-  const inTesta = teste.map((id3) => temi.find((t3) => t3.id === id3)).filter(Boolean);
+  const inTesta = teste.map((id4) => temi.find((t3) => t3.id === id4)).filter(Boolean);
   return [...inTesta, ...temi.filter((t3) => !inTesta.includes(t3))];
 }
 function leggiSemiTemi(doc = globalThis.document) {
@@ -10450,13 +10723,13 @@ function leggiSemiTemi(doc = globalThis.document) {
     for (const regola of regole) {
       const trovato = REGOLA_TEMA.exec(regola.selectorText || "");
       if (!trovato) continue;
-      const id3 = trovato[1].toLowerCase();
+      const id4 = trovato[1].toLowerCase();
       const dichiarato = {};
       for (const [chiave, proprieta] of Object.entries(SEMI)) {
         const valore = regola.style?.getPropertyValue?.(proprieta)?.trim();
         if (valore) dichiarato[chiave] = valore;
       }
-      semi.set(id3, { ...semi.get(id3) || {}, ...dichiarato });
+      semi.set(id4, { ...semi.get(id4) || {}, ...dichiarato });
     }
   }
   return semi;
@@ -10469,11 +10742,11 @@ function fondoDelTema(seme, modo) {
 function temaChiaro(seme) {
   return Boolean(seme?.fondoChiaro);
 }
-function descrizioneTema(id3, semi) {
-  const scheda = DESCRIZIONI_TEMI[id3];
+function descrizioneTema(id4, semi) {
+  const scheda = DESCRIZIONI_TEMI[id4];
   if (scheda) return scheda;
   return {
-    scena: id3,
+    scena: id4,
     materiale: temaChiaro(semi) ? "Tavolozza chiara" : "Tavolozza scura",
     testo: "Questa tavolozza non ha ancora una descrizione scritta. I colori qui sotto sono quelli veri, letti dal foglio dei temi."
   };
@@ -10488,14 +10761,14 @@ function centraNellElenco(contenitore, voce) {
   contenitore.scrollTop = Math.max(0, prima + spostamento);
   return contenitore.scrollTop - prima;
 }
-function campoDi(id3, campi = CAMPI_IMPOSTAZIONI) {
-  return campi.find((c) => c.id === id3) || null;
+function campoDi(id4, campi = CAMPI_IMPOSTAZIONI) {
+  return campi.find((c) => c.id === id4) || null;
 }
-function titoloStudio(id3, campi = CAMPI_IMPOSTAZIONI) {
-  return TITOLI_STUDIO[id3] || campoDi(id3, campi)?.titolo || id3;
+function titoloStudio(id4, campi = CAMPI_IMPOSTAZIONI) {
+  return TITOLI_STUDIO[id4] || campoDi(id4, campi)?.titolo || id4;
 }
-function impostaAspetto(id3, valore, doc = globalThis.document) {
-  const controllo = doc.getElementById(id3) || doc.getElementById(`setting-${id3}`);
+function impostaAspetto(id4, valore, doc = globalThis.document) {
+  const controllo = doc.getElementById(id4) || doc.getElementById(`setting-${id4}`);
   if (!controllo) return false;
   if (controllo.type === "checkbox") controllo.checked = Boolean(valore);
   else controllo.value = String(valore);
@@ -10503,14 +10776,14 @@ function impostaAspetto(id3, valore, doc = globalThis.document) {
   controllo.dispatchEvent(new Event(evento, { bubbles: true }));
   return true;
 }
-function valoreAspetto(id3, doc = globalThis.document) {
-  const controllo = doc.getElementById(id3) || doc.getElementById(`setting-${id3}`);
+function valoreAspetto(id4, doc = globalThis.document) {
+  const controllo = doc.getElementById(id4) || doc.getElementById(`setting-${id4}`);
   if (!controllo) return null;
   return controllo.type === "checkbox" ? Boolean(controllo.checked) : String(controllo.value ?? "");
 }
 function aspettoCorrente(doc = globalThis.document) {
   const radice2 = doc.documentElement;
-  const dalControllo = (id3) => doc.getElementById(id3)?.value || doc.getElementById(`setting-${id3}`)?.value || "";
+  const dalControllo = (id4) => doc.getElementById(id4)?.value || doc.getElementById(`setting-${id4}`)?.value || "";
   return {
     tema: radice2.getAttribute("data-talos-theme") || dalControllo("themePresetSelect") || "forge",
     // tema di serie (owner 24/09/2026 sera: «tema default forge»)
@@ -10518,7 +10791,7 @@ function aspettoCorrente(doc = globalThis.document) {
   };
 }
 function scenaPerAspetto({ tema, scena }, disponibili) {
-  const esiste = (id3) => disponibili ? disponibili.has?.(id3) ?? disponibili.includes?.(id3) : Boolean(id3);
+  const esiste = (id4) => disponibili ? disponibili.has?.(id4) ?? disponibili.includes?.(id4) : Boolean(id4);
   if (scena && scena !== "follow-theme" && esiste(scena)) return scena;
   if (tema && esiste(tema)) return tema;
   return "calm";
@@ -10833,13 +11106,13 @@ function apriStudioTemi({ document: doc = globalThis.document } = {}) {
   const cursori = [];
   const interruttori = [];
   const selettori = [];
-  function rigaControllo(id3, { compatta = false } = {}) {
-    const campo2 = campoDi(id3);
+  function rigaControllo(id4, { compatta = false } = {}) {
+    const campo2 = campoDi(id4);
     if (!campo2) return null;
     const riga2 = nodo3(doc, "div", compatta ? "td-studio-riga td-studio-riga--compatta" : "td-studio-riga");
-    riga2.dataset.studioControllo = id3;
-    const etichetta3 = nodo3(doc, "label", "td-studio-etichetta", titoloStudio(id3));
-    const idLocale = `td-studio-${id3}`;
+    riga2.dataset.studioControllo = id4;
+    const etichetta3 = nodo3(doc, "label", "td-studio-etichetta", titoloStudio(id4));
+    const idLocale = `td-studio-${id4}`;
     etichetta3.htmlFor = idLocale;
     riga2.append(etichetta3);
     if (campo2.tipo === "checkbox") {
@@ -10849,11 +11122,11 @@ function apriStudioTemi({ document: doc = globalThis.document } = {}) {
       box.className = "talos-switch";
       box.setAttribute("role", "switch");
       box.addEventListener("change", () => {
-        impostaAspetto(id3, box.checked, doc);
+        impostaAspetto(id4, box.checked, doc);
         aggiorna();
       });
       riga2.append(box);
-      interruttori.push({ id: id3, elemento: box });
+      interruttori.push({ id: id4, elemento: box });
     } else if (campo2.tipo === "select") {
       const select = doc.createElement("select");
       select.id = idLocale;
@@ -10864,11 +11137,11 @@ function apriStudioTemi({ document: doc = globalThis.document } = {}) {
         select.append(op);
       }
       select.addEventListener("change", () => {
-        impostaAspetto(id3, select.value, doc);
+        impostaAspetto(id4, select.value, doc);
         aggiorna();
       });
       riga2.append(select);
-      selettori.push({ id: id3, elemento: select });
+      selettori.push({ id: id4, elemento: select });
     } else {
       const contenitore = nodo3(doc, "div", "td-studio-cursore");
       const cursore = doc.createElement("input");
@@ -10882,12 +11155,12 @@ function apriStudioTemi({ document: doc = globalThis.document } = {}) {
       cursore.addEventListener("input", () => {
         uscita.value = cursore.value;
         uscita.textContent = cursore.value + (campo2.unita || "");
-        impostaAspetto(id3, cursore.value, doc);
+        impostaAspetto(id4, cursore.value, doc);
         aggiorna({ soloNumeri: true });
       });
       contenitore.append(cursore, uscita);
       riga2.append(contenitore);
-      cursori.push({ id: id3, elemento: cursore, uscita, unita: campo2.unita || "" });
+      cursori.push({ id: id4, elemento: cursore, uscita, unita: campo2.unita || "" });
     }
     return riga2;
   }
@@ -10895,8 +11168,8 @@ function apriStudioTemi({ document: doc = globalThis.document } = {}) {
     const sezione = nodo3(doc, "section", "td-studio-gruppo");
     sezione.append(nodo3(doc, "h4", "", titoloGruppo));
     const righe = nodo3(doc, "div", compatta ? "td-studio-righe td-studio-righe--due" : "td-studio-righe");
-    for (const id3 of ids) {
-      const riga2 = rigaControllo(id3, { compatta });
+    for (const id4 of ids) {
+      const riga2 = rigaControllo(id4, { compatta });
       if (riga2) righe.append(riga2);
     }
     sezione.append(righe);
@@ -10938,27 +11211,27 @@ function apriStudioTemi({ document: doc = globalThis.document } = {}) {
   azioni.append(vaiAImpostazioni);
   destra.append(testa, mensola, controlli, gruppoSfondo, gruppoCursori, dettagli2, nota, approfondimento, azioni);
   studio.append(elenco2, destra);
-  const scelte = temi.map(({ id: id3, nome }) => {
+  const scelte = temi.map(({ id: id4, nome }) => {
     const b = nodo3(doc, "button", "td-theme-choice");
     b.type = "button";
     b.setAttribute("role", "radio");
-    b.dataset.tema = id3;
+    b.dataset.tema = id4;
     const pallino = nodo3(doc, "span", "td-palette-dot");
     pallino.setAttribute("aria-hidden", "true");
-    const seme = semi.get(id3);
+    const seme = semi.get(id4);
     if (seme?.accento) pallino.style.setProperty("--preview-accent", seme.accento);
     const fondo = fondoDelTema(seme, temaChiaro(seme) ? "light" : "dark");
     if (fondo) pallino.style.setProperty("--preview-bg", fondo);
     const segno = nodo3(doc, "span", "td-theme-segno", "");
     b.append(pallino, doc.createTextNode(nome), segno);
     b.addEventListener("click", () => {
-      scelto = id3;
-      impostaAspetto("themePresetSelect", id3, doc);
+      scelto = id4;
+      impostaAspetto("themePresetSelect", id4, doc);
       aggiorna();
       b.focus({ preventScroll: true });
     });
     elenco2.append(b);
-    return { id: id3, nome, bottone: b, segno };
+    return { id: id4, nome, bottone: b, segno };
   });
   elenco2.addEventListener("keydown", (e) => {
     const passo = { ArrowDown: 1, ArrowRight: 1, ArrowUp: -1, ArrowLeft: -1 }[e.key];
@@ -10971,13 +11244,13 @@ function apriStudioTemi({ document: doc = globalThis.document } = {}) {
   let vista = null;
   let scene = /* @__PURE__ */ new Map();
   function leggiDaiControlliVeri() {
-    for (const { id: id3, elemento } of interruttori) elemento.checked = Boolean(valoreAspetto(id3, doc));
-    for (const { id: id3, elemento } of selettori) {
-      const v = valoreAspetto(id3, doc);
+    for (const { id: id4, elemento } of interruttori) elemento.checked = Boolean(valoreAspetto(id4, doc));
+    for (const { id: id4, elemento } of selettori) {
+      const v = valoreAspetto(id4, doc);
       if (v !== null) elemento.value = v;
     }
-    for (const { id: id3, elemento, uscita, unita } of cursori) {
-      const v = valoreAspetto(id3, doc);
+    for (const { id: id4, elemento, uscita, unita } of cursori) {
+      const v = valoreAspetto(id4, doc);
       if (v !== null) elemento.value = v;
       uscita.value = elemento.value;
       uscita.textContent = elemento.value + unita;
@@ -11054,8 +11327,8 @@ function apriStudioTemi({ document: doc = globalThis.document } = {}) {
 function migraRigheImpostazioni(schermo, { document: doc = globalThis.document } = {}) {
   if (!schermo) return 0;
   let migrate = 0;
-  for (const id3 of CONTROLLI_MIGRATI) {
-    const riga2 = schermo.querySelector(`[data-setting-row="${id3}"]`);
+  for (const id4 of CONTROLLI_MIGRATI) {
+    const riga2 = schermo.querySelector(`[data-setting-row="${id4}"]`);
     if (!riga2 || riga2.dataset.tdMigrata === "si") {
       if (riga2) migrate += 1;
       continue;
@@ -11083,7 +11356,7 @@ function montaScorciatoiaTemi(schermo, { document: doc = globalThis.document } =
   const copia3 = nodo3(doc, "div", "td-studio-rimando__copia");
   copia3.append(nodo3(doc, "h3", "", "Temi e atmosfere"));
   copia3.append(nodo3(doc, "p", "", `Le ${nomiTemi().length} atmosfere, il modo chiaro e scuro, lo sfondo animato e i suoi cursori si scelgono guardandoli, in un pannello solo.`));
-  const nomi2 = CONTROLLI_MIGRATI.map((id3) => titoloStudio(id3)).filter(Boolean);
+  const nomi2 = CONTROLLI_MIGRATI.map((id4) => titoloStudio(id4)).filter(Boolean);
   copia3.append(nodo3(doc, "p", "td-studio-rimando__elenco", `Qui dentro: ${nomi2.slice(0, -1).join(", ")} e ${nomi2.at(-1)}.`));
   const apri = nodo3(doc, "button", "td-studio-button primary", "Apri Temi e atmosfere");
   apri.type = "button";
@@ -11274,9 +11547,9 @@ function didascaliaDellaScena({ nome = "", stato: stato2 = "assente" } = {}) {
   const parola2 = TESTO_STATO[stato2] || stato2;
   return nome ? `${parola2} · ${nome}` : parola2;
 }
-function nomeDellaScena(id3) {
-  if (!id3) return "";
-  return DESCRIZIONI_TEMI[id3]?.scena || id3;
+function nomeDellaScena(id4) {
+  if (!id4) return "";
+  return DESCRIZIONI_TEMI[id4]?.scena || id4;
 }
 function scenaDellAspetto(doc = globalThis.document, disponibili = /* @__PURE__ */ new Map()) {
   const dallaRadice = String(doc?.documentElement?.getAttribute?.("data-talos-scene") || "").trim();
@@ -11504,8 +11777,8 @@ function iconaSprite(sprite, className) {
   svg2.append(use);
   return svg2;
 }
-function iconaSezione(id3) {
-  const sprite = SETTINGS_SECTIONS[id3]?.icon ?? "settings";
+function iconaSezione(id4) {
+  const sprite = SETTINGS_SECTIONS[id4]?.icon ?? "settings";
   return iconaSprite(SPRITE_SEZIONE[sprite] ?? sprite, "talos-nav-item__icon");
 }
 function createSettingsView(screen, options) {
@@ -11604,7 +11877,7 @@ function createSettingsView(screen, options) {
   const buttons = /* @__PURE__ */ new Map();
   const groups = [];
   for (const [i2, key] of Object.keys(SETTINGS_SECTIONS).entries()) {
-    const id3 = key;
+    const id4 = key;
     if (i2 === 0 || i2 === 5) {
       const heading2 = node2("span", "settings-nav__group");
       heading2.setAttribute("aria-hidden", "true");
@@ -11613,17 +11886,17 @@ function createSettingsView(screen, options) {
     }
     const button2 = node2("button", "talos-nav-item settings-nav__item");
     button2.type = "button";
-    button2.id = "setting-tab-" + id3;
-    button2.dataset.settingsTab = id3;
+    button2.id = "setting-tab-" + id4;
+    button2.dataset.settingsTab = id4;
     button2.setAttribute("role", "tab");
-    button2.setAttribute("aria-controls", "setting-panel-" + id3);
-    button2.append(iconaSezione(id3), node2("span", "talos-nav-item__label"));
-    buttons.set(id3, button2);
+    button2.setAttribute("aria-controls", "setting-panel-" + id4);
+    button2.append(iconaSezione(id4), node2("span", "talos-nav-item__label"));
+    buttons.set(id4, button2);
     list.append(button2);
     const item = node2("option");
-    item.value = id3;
+    item.value = id4;
     mobile.append(item);
-    button2.addEventListener("click", () => choose(id3), { signal });
+    button2.addEventListener("click", () => choose(id4), { signal });
   }
   const heading = node2("header", "settings-section-heading");
   heading.dataset.settingsChrome = "";
@@ -11674,7 +11947,7 @@ function createSettingsView(screen, options) {
   noResults.append(emptyTitle, emptyHelp);
   results.append(resultTitle, status, resultList, noResults);
   content.prepend(breadcrumb, heading, results);
-  const campoDi2 = (id3) => options.fields.find((field) => field.id === id3);
+  const campoDi2 = (id4) => options.fields.find((field) => field.id === id4);
   const contaGruppo = (gruppo) => options.fields.filter((field) => field.gruppo === gruppo && !options.studioIds.includes(field.id)).length;
   const etichetteTema = campoDi2("themePresetSelect")?.opzioni ?? [];
   function nomeTema() {
@@ -11903,8 +12176,8 @@ function createSettingsView(screen, options) {
       chat.prepend(group);
     }
     group.dataset.settingsCard = "chat-read";
-    for (const id3 of CHAT_FIELDS) {
-      const row = q2('[data-setting-row="' + id3 + '"]');
+    for (const id4 of CHAT_FIELDS) {
+      const row = q2('[data-setting-row="' + id4 + '"]');
       if (row) group.append(row);
     }
   }
@@ -11961,12 +12234,12 @@ function createSettingsView(screen, options) {
     for (const child of [...animation.children]) if (child.hasAttribute("data-setting-row") && child.getAttribute("data-setting-row") !== "motionProfileSelect" || child.id === "resetMotionButton") details.append(child);
     animation.append(details);
   }
-  function choose(id3) {
+  function choose(id4) {
     search.value = "";
-    options.chooseSection(id3);
+    options.chooseSection(id4);
   }
-  function select(id3, preserveSearch = false) {
-    selected = Object.hasOwn(SETTINGS_SECTIONS, id3) ? id3 : "appearance";
+  function select(id4, preserveSearch = false) {
+    selected = Object.hasOwn(SETTINGS_SECTIONS, id4) ? id4 : "appearance";
     screen.dataset.settingsSection = selected;
     if (!preserveSearch) search.value = "";
     render4();
@@ -11974,11 +12247,11 @@ function createSettingsView(screen, options) {
   function render4() {
     localizeSettingsCopy(screen, options.language());
     const searching = Boolean(search.value.trim());
-    for (const [id3, button2] of buttons) {
-      const active = id3 === selected && !searching;
+    for (const [id4, button2] of buttons) {
+      const active = id4 === selected && !searching;
       button2.classList.toggle("active", active);
       button2.setAttribute("aria-selected", String(active));
-      button2.tabIndex = id3 === selected ? 0 : -1;
+      button2.tabIndex = id4 === selected ? 0 : -1;
       if (active) button2.setAttribute("aria-current", "page");
       else button2.removeAttribute("aria-current");
     }
@@ -12039,9 +12312,9 @@ function createSettingsView(screen, options) {
     groups.forEach((g, i2) => {
       g.textContent = tx(i2 === 0 ? "behaviour" : "infrastructure");
     });
-    for (const [id3, button2] of buttons) {
-      button2.querySelector("span").textContent = localText(SETTINGS_SECTIONS[id3].title, options.language());
-      const option = mobile.querySelector('option[value="' + id3 + '"]');
+    for (const [id4, button2] of buttons) {
+      button2.querySelector("span").textContent = localText(SETTINGS_SECTIONS[id4].title, options.language());
+      const option = mobile.querySelector('option[value="' + id4 + '"]');
       if (option) option.textContent = button2.textContent;
     }
     for (const field of options.fields) {
@@ -12361,7 +12634,7 @@ function creaSettingRow(field, value, { controllo, output, prefisso = "setting-"
     help.id = "settingsHelp-" + field.id;
     help.dataset.settingHelp = field.id;
     info.append(help);
-    const previous = (input.getAttribute("aria-describedby") || "").split(/\s+/).filter((id3) => id3 && !id3.startsWith("settingsHelp-"));
+    const previous = (input.getAttribute("aria-describedby") || "").split(/\s+/).filter((id4) => id4 && !id4.startsWith("settingsHelp-"));
     input.setAttribute("aria-describedby", [...previous, help.id].join(" "));
   }
   const controls = node("div", "settings-field-control");
@@ -12538,8 +12811,8 @@ function valida(r) {
 function controlliDoctor(r) {
   valida(r);
   const c = [];
-  const add = (id3, titolo2, gravita, ...righe) => c.push({ id: id3, titolo: titolo2, gravita, righe: righe.flat().filter(Boolean) });
-  const ignoto = (id3, titolo2) => add(id3, titolo2, "info", "Non osservato: questa risposta non include il controllo.");
+  const add = (id4, titolo2, gravita, ...righe) => c.push({ id: id4, titolo: titolo2, gravita, righe: righe.flat().filter(Boolean) });
+  const ignoto = (id4, titolo2) => add(id4, titolo2, "info", "Non osservato: questa risposta non include il controllo.");
   add("chiave", "Chiave API", r.chiaveApi ? "info" : "warning", r.chiaveApi ? "Configurata. La validità presso il fornitore non è verificata da questo controllo." : "Chiave API non configurata. Verifica il fornitore scelto nelle impostazioni.");
   add("shell", "Ambiente dei comandi", r.shell === "none" ? "danger" : r.shell === "wsl2" ? "success" : "info", r.shell === "none" ? "Nessun ambiente disponibile." : r.shell === "wsl2" ? "Comando diagnostico eseguito in WSL2." : "Comando diagnostico eseguito nell’ambiente desktop; questo controllo non attesta l’isolamento WSL2.");
   add("git", "Git", r.git ? "success" : "warning", r.git ? "Il comando git --version è terminato correttamente." : "Git non trovato o controllo del comando fallito.");
@@ -12557,8 +12830,8 @@ function controlliDoctor(r) {
   if (r.labs) add("labs", "Funzioni sperimentali", "info", r.labs.dettaglio || "Attive: " + (r.labs.accesi.join(", ") || "nessuna") + ".");
   else ignoto("labs", "Funzioni sperimentali");
   if (r.sessioniPersistenza) {
-    const s = r.sessioniPersistenza, scarti = s.scartate || [], nonElencate = s.corrotte.filter((id3) => !scarti.some((v) => v.sessionId === id3));
-    add("sessioni", "Ripristino delle sessioni", s.corrotte.length || scarti.some((v) => ["corrotta", "lettura-fallita"].includes(v.motivo)) ? "danger" : scarti.length ? "warning" : "success", s.dettaglio || (s.ultimaLettura ? s.ultimaLettura.ripristinate + " ripristinate su " + s.ultimaLettura.totali + "." : "Numero delle sessioni ripristinate non osservato."), scarti.map((v) => v.sessionId + " · " + v.motivo + (v.dettaglio ? " · " + v.dettaglio : "")), nonElencate.map((id3) => id3 + " · corrotta"));
+    const s = r.sessioniPersistenza, scarti = s.scartate || [], nonElencate = s.corrotte.filter((id4) => !scarti.some((v) => v.sessionId === id4));
+    add("sessioni", "Ripristino delle sessioni", s.corrotte.length || scarti.some((v) => ["corrotta", "lettura-fallita"].includes(v.motivo)) ? "danger" : scarti.length ? "warning" : "success", s.dettaglio || (s.ultimaLettura ? s.ultimaLettura.ripristinate + " ripristinate su " + s.ultimaLettura.totali + "." : "Numero delle sessioni ripristinate non osservato."), scarti.map((v) => v.sessionId + " · " + v.motivo + (v.dettaglio ? " · " + v.dettaglio : "")), nonElencate.map((id4) => id4 + " · corrotta"));
   } else ignoto("sessioni", "Ripristino delle sessioni");
   return c.sort((a, b) => ORDINE[a.gravita] - ORDINE[b.gravita]);
 }
@@ -12702,10 +12975,10 @@ function render(panel, p) {
   panel.querySelector("[data-ext-refresh]").disabled = Boolean(o.caricamento || o.salvataggio);
   const lista = panel.querySelector("[data-ext-list]"), focus = doc.activeElement?.closest("[data-ext-id]")?.dataset.extId;
   lista.setAttribute("role", voci.length ? "listbox" : "group");
-  function scegli(id3, fuoco = false) {
-    p.scelto = id3;
+  function scegli(id4, fuoco = false) {
+    p.scelto = id4;
     render(panel, p);
-    if (fuoco) [...lista.children].find((n) => n.dataset.extId === id3)?.focus();
+    if (fuoco) [...lista.children].find((n) => n.dataset.extId === id4)?.focus();
   }
   lista.replaceChildren(...voci.map((v2, i2) => {
     const r = creaExtensionRow(o.tipo, v2, { document: doc, selezionata: v2.id === p.scelto, onSeleziona: scegli });
@@ -12940,10 +13213,10 @@ function render2(schermo, p) {
   }
   const lista = schermo.querySelector("[data-cap-list]"), focus = doc.activeElement?.closest("[data-tool-name]")?.dataset.toolName;
   lista.setAttribute("role", visibili.length ? "listbox" : "group");
-  function seleziona(id3, f = false) {
-    p.scelto = id3;
+  function seleziona(id4, f = false) {
+    p.scelto = id4;
     render2(schermo, p);
-    if (f) [...lista.querySelectorAll("[data-tool-name]")].find((n) => n.dataset.toolName === id3)?.focus();
+    if (f) [...lista.querySelectorAll("[data-tool-name]")].find((n) => n.dataset.toolName === id4)?.focus();
   }
   lista.replaceChildren(...visibili.map((a2, i2) => {
     const r = creaToolListRow(a2, { document: doc, selezionata: a2.nome === p.scelto, onSeleziona: seleziona, uso: uso.get(a2.nome) });
@@ -13247,12 +13520,12 @@ function creaForgeRow(strumento, { document: doc = globalThis.document, selezion
   const aside = el11(doc, "span", "talos-list-row__aside");
   aside.append(el11(doc, "span", "talos-badge" + (stato2.tono ? " talos-badge--" + stato2.tono : "") + " talos-badge--sm", stato2.testo));
   if (!selezionabile) {
-    const bottone5 = el11(doc, "button", "talos-button talos-button--secondary talos-button--sm", salvataggio && salvataggioId === strumento.id ? "Salvataggio…" : stato2.azione);
-    bottone5.type = "button";
-    bottone5.disabled = salvataggio || stato2.prossimo === null;
-    bottone5.setAttribute("aria-label", stato2.azione + " " + t3.titolo);
-    bottone5.addEventListener("click", () => onAbilita?.(strumento, stato2.prossimo));
-    aside.append(bottone5);
+    const bottone6 = el11(doc, "button", "talos-button talos-button--secondary talos-button--sm", salvataggio && salvataggioId === strumento.id ? "Salvataggio…" : stato2.azione);
+    bottone6.type = "button";
+    bottone6.disabled = salvataggio || stato2.prossimo === null;
+    bottone6.setAttribute("aria-label", stato2.azione + " " + t3.titolo);
+    bottone6.addEventListener("click", () => onAbilita?.(strumento, stato2.prossimo));
+    aside.append(bottone6);
   }
   riga2.append(icona5(doc), testo2, aside);
   return riga2;
@@ -13312,13 +13585,13 @@ function renderOfficina(schermo, pagina) {
   const lista = schermo.querySelector("[data-forge-list]");
   lista.setAttribute("role", visibili.length ? "listbox" : "group");
   const focusId = doc.activeElement?.closest("[data-forge-id]")?.dataset.forgeId;
-  function seleziona(id3, focus = false) {
-    pagina.scelto = id3;
+  function seleziona(id4, focus = false) {
+    pagina.scelto = id4;
     renderOfficina(schermo, pagina);
-    if (focus) [...lista.querySelectorAll("[data-forge-id]")].find((r) => r.dataset.forgeId === id3)?.focus({ preventScroll: true });
+    if (focus) [...lista.querySelectorAll("[data-forge-id]")].find((r) => r.dataset.forgeId === id4)?.focus({ preventScroll: true });
   }
   lista.replaceChildren(...visibili.map((s) => {
-    const riga2 = creaForgeRow(s, { document: doc, selezionata: pagina.scelto === s.id, onSeleziona: (id3) => seleziona(id3) });
+    const riga2 = creaForgeRow(s, { document: doc, selezionata: pagina.scelto === s.id, onSeleziona: (id4) => seleziona(id4) });
     riga2.addEventListener("keydown", (e) => {
       if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(e.key)) return;
       e.preventDefault();
@@ -13341,10 +13614,10 @@ function renderOfficina(schermo, pagina) {
   const badge6 = dettaglio.querySelector("[data-forge-stato-attuale]");
   badge6.className = "talos-badge" + (stato2.tono ? " talos-badge--" + stato2.tono : "") + " talos-badge--sm";
   badge6.textContent = stato2.testo;
-  const bottone5 = dettaglio.querySelector("[data-forge-abilita]");
-  bottone5.textContent = opzioni.salvataggio && opzioni.salvataggioId === scelto.id ? "Salvataggio…" : stato2.azione + " questo attrezzo";
-  bottone5.disabled = Boolean(opzioni.salvataggio) || stato2.prossimo === null;
-  bottone5.setAttribute("aria-label", stato2.azione + " " + t3.titolo);
+  const bottone6 = dettaglio.querySelector("[data-forge-abilita]");
+  bottone6.textContent = opzioni.salvataggio && opzioni.salvataggioId === scelto.id ? "Salvataggio…" : stato2.azione + " questo attrezzo";
+  bottone6.disabled = Boolean(opzioni.salvataggio) || stato2.prossimo === null;
+  bottone6.setAttribute("aria-label", stato2.azione + " " + t3.titolo);
 }
 var ALIAS, PAGINE3;
 var init_officina = __esm({
@@ -14141,8 +14414,8 @@ function vistaAndata(doc, voce, ctx, dettaglio) {
   }
   return pezzi;
 }
-function contenutoVista(doc, id3, voce, lettura, ctx, dettaglio) {
-  switch (id3) {
+function contenutoVista(doc, id4, voce, lettura, ctx, dettaglio) {
+  switch (id4) {
     case "affermazioni":
       return vistaAffermazioni(doc, voce, lettura);
     case "fonti":
@@ -14575,10 +14848,10 @@ function provenienzaVoceLibreria(voce, { nomeSessione } = {}) {
   const sess = voce?.sessione && typeof voce.sessione === "object" && typeof voce.sessione.id === "string" && voce.sessione.id.trim() ? voce.sessione : null;
   let sessione = null;
   if (sess) {
-    const id3 = sess.id.trim();
-    const vivo = typeof nomeSessione === "function" ? nomeSessione(id3) : null;
+    const id4 = sess.id.trim();
+    const vivo = typeof nomeSessione === "function" ? nomeSessione(id4) : null;
     const congelato = typeof sess.nome === "string" && sess.nome.trim() ? sess.nome.trim() : "";
-    sessione = { id: id3, nome: (typeof vivo === "string" && vivo.trim() ? vivo.trim() : congelato) || "" };
+    sessione = { id: id4, nome: (typeof vivo === "string" && vivo.trim() ? vivo.trim() : congelato) || "" };
   }
   return { cartella, cartellaBreve: ultimaCartella(cartella), percorso, creatoDa, sessione };
 }
@@ -14615,7 +14888,7 @@ async function motivoRisposta(r) {
 }
 function azioniLibreria({ sessionId, fetch: rete = globalThis.fetch } = {}) {
   if (!sessionId || typeof rete !== "function") return null;
-  const base = (id3) => "/api/v1/sessions/" + encodeURIComponent(sessionId) + "/library/" + encodeURIComponent(id3);
+  const base = (id4) => "/api/v1/sessions/" + encodeURIComponent(sessionId) + "/library/" + encodeURIComponent(id4);
   const manda = async (url, opzioni) => {
     try {
       const r = await rete(url, opzioni);
@@ -14625,14 +14898,14 @@ function azioniLibreria({ sessionId, fetch: rete = globalThis.fetch } = {}) {
     }
   };
   return {
-    rinomina: (id3, nome) => manda(base(id3), { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ nome }) }),
-    elimina: (id3) => manda(base(id3), { method: "DELETE" }),
-    rivela: (id3) => manda(base(id3) + "/rivela", { method: "POST" }),
+    rinomina: (id4, nome) => manda(base(id4), { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ nome }) }),
+    elimina: (id4) => manda(base(id4), { method: "DELETE" }),
+    rivela: (id4) => manda(base(id4) + "/rivela", { method: "POST" }),
     /* ⛔ 10/09: «Apri» NON è lo scarico. La rotta dei byte manda `attachment`, quindi un'ancora lì
        scaricherebbe il file una seconda volta invece di aprirlo; su Windows «aprire» vuol dire che
        lo apre il programma associato all'estensione — Word per un .docx. Verbo POST come `rivela`,
        e per la stessa ragione: non scrive niente, ma ha un effetto fuori da questa API. */
-    apri: (id3) => manda(base(id3) + "/apri", { method: "POST" })
+    apri: (id4) => manda(base(id4) + "/apri", { method: "POST" })
   };
 }
 function el13(doc, tag2, classe, testo2) {
@@ -14642,11 +14915,11 @@ function el13(doc, tag2, classe, testo2) {
   return n;
 }
 function creaLibraryRow(voce, { document: doc = globalThis.document, aperta: aperta2 = false, onEspandi, sessionId = "", azioni = null, modo = "normale", bozza = null, onModo, onCambiata, onMenu, nomeSessione, copia: copia3 } = {}) {
-  const t3 = testiVoceLibreria(voce), tipo = tipoVoceLibreria(voce?.fileType), origine = origineVoceLibreria(voce?.origine), id3 = voce?.id || "";
+  const t3 = testiVoceLibreria(voce), tipo = tipoVoceLibreria(voce?.fileType), origine = origineVoceLibreria(voce?.origine), id4 = voce?.id || "";
   const prov = provenienzaVoceLibreria(voce, { nomeSessione });
   const riga2 = el13(doc, "div", "talos-list-row");
   riga2.dataset.c = "LibraryRow";
-  riga2.dataset.libraryId = id3;
+  riga2.dataset.libraryId = id4;
   riga2.setAttribute("role", "listitem");
   const icona16 = el13(doc, "span", "talos-list-row__icon"), svg2 = doc.createElementNS("http://www.w3.org/2000/svg", "svg"), use = doc.createElementNS("http://www.w3.org/2000/svg", "use");
   svg2.setAttribute("class", "i");
@@ -14657,7 +14930,7 @@ function creaLibraryRow(voce, { document: doc = globalThis.document, aperta: ape
   const testo2 = el13(doc, "span", "talos-list-row__text"), titolo2 = el13(doc, "span", "talos-list-row__title", t3.nome), sotto = el13(doc, "span", "talos-list-row__sub");
   const aside = el13(doc, "span", "talos-list-row__aside");
   aside.append(el13(doc, "span", "talos-badge" + (voce?.origine === "generated" ? " talos-badge--accent" : ""), origine));
-  const indirizzo = indirizzoFileLibreria(sessionId, id3), servizio = azioni || azioniLibreria({ sessionId });
+  const indirizzo = indirizzoFileLibreria(sessionId, id4), servizio = azioni || azioniLibreria({ sessionId });
   const messaggio = el13(doc, "span", "talos-list-row__messaggio");
   messaggio.hidden = true;
   const bottoni = [];
@@ -14681,7 +14954,7 @@ function creaLibraryRow(voce, { document: doc = globalThis.document, aperta: ape
   gruppo.setAttribute("aria-label", "Azioni su " + t3.nome);
   let rinominaBtn = null, eliminaBtn = null, rivelaBtn = null;
   let apriBtn = null, menuBtn = null;
-  if (servizio && id3) {
+  if (servizio && id4) {
     apriBtn = nuovoBottone("Apri", "Apri " + t3.nome + " con il programma predefinito", "apri");
     rinominaBtn = nuovoBottone("Rinomina", "Rinomina " + t3.nome, "rinomina");
     rivelaBtn = nuovoBottone("Mostra nella cartella", "Mostra " + t3.nome + " nella cartella", "rivela");
@@ -14769,7 +15042,7 @@ function creaLibraryRow(voce, { document: doc = globalThis.document, aperta: ape
   const dettagli2 = el13(doc, "button", "talos-button talos-button--ghost talos-button--sm");
   dettagli2.type = "button";
   dettagli2.dataset.azione = "dettagli";
-  let stato2 = servizio && id3 ? String(modo || "normale") : "normale", occupata = false, avviso = null;
+  let stato2 = servizio && id4 ? String(modo || "normale") : "normale", occupata = false, avviso = null;
   function mostra() {
     riga2.dataset.aperta = String(aperta2);
     riga2.dataset.modo = stato2;
@@ -14820,16 +15093,16 @@ function creaLibraryRow(voce, { document: doc = globalThis.document, aperta: ape
     cambiaModo("rinomina");
   });
   eliminaBtn?.addEventListener("click", () => cambiaModo("conferma"));
-  apriBtn?.addEventListener("click", () => esegui(() => servizio.apri(id3), () => {
+  apriBtn?.addEventListener("click", () => esegui(() => servizio.apri(id4), () => {
     avviso = { tono: "stato", testo: "Aperto con il programma predefinito." };
     mostra();
   }));
-  rivelaBtn?.addEventListener("click", () => esegui(() => servizio.rivela(id3), () => {
+  rivelaBtn?.addEventListener("click", () => esegui(() => servizio.rivela(id4), () => {
     avviso = { tono: "stato", testo: "Mostrato nella cartella." };
     mostra();
   }));
   noElimina.addEventListener("click", () => cambiaModo("normale", "elimina"));
-  siElimina.addEventListener("click", () => esegui(() => servizio.elimina(id3), () => {
+  siElimina.addEventListener("click", () => esegui(() => servizio.elimina(id4), () => {
     stato2 = "eliminata";
     onModo?.("normale", null);
     avviso = { tono: "stato", testo: "File eliminato." };
@@ -14859,7 +15132,7 @@ function creaLibraryRow(voce, { document: doc = globalThis.document, aperta: ape
       cambiaModo("normale", "rinomina");
       return;
     }
-    esegui(() => servizio.rinomina(id3, v.nome), () => {
+    esegui(() => servizio.rinomina(id4, v.nome), () => {
       stato2 = "normale";
       onModo?.("normale", null);
       avviso = { tono: "stato", testo: "Rinominato in " + v.nome + "." };
@@ -15561,12 +15834,12 @@ function nodo8(doc, tag2, classe = "", testo2 = "") {
   if (testo2) el30.textContent = testo2;
   return el30;
 }
-function iconaSprite2(doc, id3, classe = "i") {
+function iconaSprite2(doc, id4, classe = "i") {
   const svg2 = doc.createElementNS("http://www.w3.org/2000/svg", "svg");
   svg2.setAttribute("class", classe);
   svg2.setAttribute("aria-hidden", "true");
   const uso = doc.createElementNS("http://www.w3.org/2000/svg", "use");
-  uso.setAttribute("href", `#${id3}`);
+  uso.setAttribute("href", `#${id4}`);
   svg2.append(uso);
   return svg2;
 }
@@ -16058,8 +16331,8 @@ var init_fonti = __esm({
 function progettoDiSessione(sessione) {
   const task = String(sessione?.taskId || "");
   if (!task.startsWith("libero:")) return null;
-  const id3 = task.slice("libero:".length).trim();
-  return id3 || null;
+  const id4 = task.slice("libero:".length).trim();
+  return id4 || null;
 }
 function quandoUltima(sessioni) {
   let ultima = 0;
@@ -16074,8 +16347,8 @@ function progettiConSessioni(progetti, sessioni) {
   const tutte = Array.isArray(sessioni) ? sessioni : [];
   const per = new Map(elenco2.map((p) => [String(p.id), []]));
   for (const s of tutte) {
-    const id3 = progettoDiSessione(s);
-    if (id3 && per.has(id3)) per.get(id3).push(s);
+    const id4 = progettoDiSessione(s);
+    if (id4 && per.has(id4)) per.get(id4).push(s);
   }
   return elenco2.map((p) => {
     const sue = per.get(String(p.id)) || [];
@@ -16162,7 +16435,7 @@ function sommarioSezione(visibili, totale2, sostantivo, pluraleEsplicito) {
   return `${visibili} di ${plurale(totale2, sostantivo, pluraleEsplicito)}`;
 }
 function selezioneDopoBatch(selezionati, risultato) {
-  const dopo = new Set(Array.from(selezionati || [], (id3) => String(id3)));
+  const dopo = new Set(Array.from(selezionati || [], (id4) => String(id4)));
   for (const esito of Array.isArray(risultato?.esiti) ? risultato.esiti : []) {
     if (esito?.ok === true) dopo.delete(String(esito.id));
   }
@@ -16408,9 +16681,9 @@ function collegaBarra(schermo, doc, stato2) {
   });
   aggiorna.addEventListener("click", () => stato2.config.onAggiorna?.());
   selezionaTutte.addEventListener("change", () => {
-    for (const id3 of stato2.idsVisibili || []) {
-      if (selezionaTutte.checked) stato2.selezionateInBlocco.add(id3);
-      else stato2.selezionateInBlocco.delete(id3);
+    for (const id4 of stato2.idsVisibili || []) {
+      if (selezionaTutte.checked) stato2.selezionateInBlocco.add(id4);
+      else stato2.selezionateInBlocco.delete(id4);
     }
     disegna(schermo, doc, stato2);
   });
@@ -16599,10 +16872,10 @@ function disegnaCrudo(schermo, doc, stato2) {
   const batchAttivo = typeof config.eliminaInBlocco === "function";
   const idsPresenti = new Set(tutte.filter((voce) => !voce?.__bozza).map((voce) => String(config.idDi(voce) ?? "")).filter(Boolean));
   if (!caricamento && !errore) {
-    for (const id3 of stato2.selezionateInBlocco) if (!idsPresenti.has(id3)) stato2.selezionateInBlocco.delete(id3);
+    for (const id4 of stato2.selezionateInBlocco) if (!idsPresenti.has(id4)) stato2.selezionateInBlocco.delete(id4);
   }
   stato2.idsVisibili = visibili.filter((voce) => !voce?.__bozza).map((voce) => String(config.idDi(voce) ?? "")).filter(Boolean);
-  const visibiliSelezionati = stato2.idsVisibili.filter((id3) => stato2.selezionateInBlocco.has(id3)).length;
+  const visibiliSelezionati = stato2.idsVisibili.filter((id4) => stato2.selezionateInBlocco.has(id4)).length;
   blocco.hidden = !batchAttivo || idsPresenti.size === 0;
   selezionaTutte.checked = stato2.idsVisibili.length > 0 && visibiliSelezionati === stato2.idsVisibili.length;
   selezionaTutte.indeterminate = visibiliSelezionati > 0 && visibiliSelezionati < stato2.idsVisibili.length;
@@ -16687,11 +16960,11 @@ function disegnaVuoto(doc, stato2, quanteInTutto) {
 }
 function disegnaScheda(doc, stato2, voce) {
   const config = stato2.config;
-  const id3 = String(config.idDi(voce) ?? "");
+  const id4 = String(config.idDi(voce) ?? "");
   const scheda = nodo9(doc, "article", `td-card ${config.famiglia || ""}`.trim());
-  scheda.dataset.item = id3;
-  scheda.dataset.selected = String(String(stato2.selezione) === id3);
-  scheda.dataset.batchSelected = String(stato2.selezionateInBlocco.has(id3));
+  scheda.dataset.item = id4;
+  scheda.dataset.selected = String(String(stato2.selezione) === id4);
+  scheda.dataset.batchSelected = String(stato2.selezionateInBlocco.has(id4));
   const pezzi = config.scheda(voce, { doc, icona: (n, c) => icona6(doc, n, c), etichetta: (t3, tono) => etichetta(doc, t3, tono), vista: stato2.vista }) || {};
   if (pezzi.dati) for (const [k, v] of Object.entries(pezzi.dati)) scheda.dataset[k] = String(v);
   const apri = nodo9(doc, "button", "td-card-open");
@@ -16705,26 +16978,26 @@ function disegnaScheda(doc, stato2, voce) {
   basso.append(...[pezzi.basso].flat().filter(Boolean));
   apri.append(alto, h3, ...[pezzi.corpo].flat().filter(Boolean), basso);
   apri.addEventListener("click", () => {
-    if (String(stato2.selezione) === id3) {
+    if (String(stato2.selezione) === id4) {
       chiudiDettaglioConUscita(stato2.schermo, doc, stato2, () => {
         stato2.selezione = null;
         stato2.espanso = false;
       });
       return;
     }
-    stato2.selezione = id3;
+    stato2.selezione = id4;
     disegna(stato2.schermo, doc, stato2);
   });
-  if (typeof config.eliminaInBlocco === "function" && !voce?.__bozza && id3) {
+  if (typeof config.eliminaInBlocco === "function" && !voce?.__bozza && id4) {
     scheda.dataset.batchCapable = "true";
     const scegli = nodo9(doc, "input", "td-card-select");
     scegli.type = "checkbox";
-    scegli.checked = stato2.selezionateInBlocco.has(id3);
+    scegli.checked = stato2.selezionateInBlocco.has(id4);
     scegli.disabled = stato2.batchInCorso;
     scegli.setAttribute("aria-label", `Seleziona ${titolo2}`);
     scegli.addEventListener("change", () => {
-      if (scegli.checked) stato2.selezionateInBlocco.add(id3);
-      else stato2.selezionateInBlocco.delete(id3);
+      if (scegli.checked) stato2.selezionateInBlocco.add(id4);
+      else stato2.selezionateInBlocco.delete(id4);
       disegna(stato2.schermo, doc, stato2);
     });
     scheda.append(scegli);
@@ -16752,7 +17025,7 @@ function disegnaDettaglio(schermo, doc, stato2, voce) {
   chiudi.setAttribute("aria-label", "Chiudi il dettaglio");
   chiudi.append(icona6(doc, "x"));
   chiudi.addEventListener("click", () => {
-    const id3 = String(config.idDi(voce) ?? "");
+    const id4 = String(config.idDi(voce) ?? "");
     chiudiDettaglioConUscita(
       schermo,
       doc,
@@ -16763,7 +17036,7 @@ function disegnaDettaglio(schermo, doc, stato2, voce) {
       },
       // Il fuoco torna sulla scheda da cui il dettaglio era partito, non in cima alla pagina.
       // ⛔ DOPO il ridisegno, non prima: la scheda a cui tornare la ricrea `disegna`.
-      () => perId(stato2.nodi.risultati, ".td-card", "item", id3)?.querySelector(".td-card-open")?.focus({ preventScroll: true })
+      () => perId(stato2.nodi.risultati, ".td-card", "item", id4)?.querySelector(".td-card-open")?.focus({ preventScroll: true })
     );
   });
   testa.append(espandi, chiudi);
@@ -17027,17 +17300,17 @@ function paroleErroreRete(codice, schema, { azione = "salvare" } = {}) {
 function servizioVoci({ schema, sessionId, rete } = {}) {
   if (!schema || !sessionId || typeof rete?.post !== "function" || typeof rete?.patch !== "function" || typeof rete?.elimina !== "function") return null;
   const base = `/api/v1/sessions/${encodeURIComponent(sessionId)}/${schema.risorsa}`;
-  const voceUrl = (id3) => `${base}/${encodeURIComponent(String(id3 ?? ""))}`;
+  const voceUrl = (id4) => `${base}/${encodeURIComponent(String(id4 ?? ""))}`;
   return {
     schema,
     crea: (corpo) => rete.post(base, corpo),
-    leggi: typeof rete.leggi === "function" ? (id3) => rete.leggi(voceUrl(id3)) : null,
-    modifica: (id3, corpo) => rete.patch(voceUrl(id3), corpo),
-    elimina: (id3) => rete.elimina(voceUrl(id3)),
+    leggi: typeof rete.leggi === "function" ? (id4) => rete.leggi(voceUrl(id4)) : null,
+    modifica: (id4, corpo) => rete.patch(voceUrl(id4), corpo),
+    elimina: (id4) => rete.elimina(voceUrl(id4)),
     eliminaInBlocco: (ids) => rete.post(`${base}/batch`, { azione: "elimina", ids }),
     /* Lo stato ha la SUA porta: `PATCH {stato}` è un 400 apposta, perché marcare fatta non è
        modificare (contratto §3, e lo stesso confine che ha l'attrezzo del modello). */
-    cambiaStato: (id3, stato2) => rete.post(`${voceUrl(id3)}/stato`, { stato: stato2 })
+    cambiaStato: (id4, stato2) => rete.post(`${voceUrl(id4)}/stato`, { stato: stato2 })
   };
 }
 function nodo10(doc, tag2, classe, testo2) {
@@ -17440,21 +17713,21 @@ function scrittura(schermo, { schema, lista, opzioni, ridisegna: ridisegna2 }) {
   const servizio = opzioni.servizio || servizioVoci({ schema, sessionId: opzioni.sessionId, rete: opzioni.rete });
   const ricarica = () => (opzioni.onCambiata || opzioni.onAggiorna)?.();
   const titoloDi = (v) => String(v?.titolo ?? "").trim() || `${schema.sostantivo.charAt(0).toUpperCase()}${schema.sostantivo.slice(1)} senza titolo`;
-  function letturaDi(id3) {
-    return m.voci.get(String(id3 ?? "")) || null;
+  function letturaDi(id4) {
+    return m.voci.get(String(id4 ?? "")) || null;
   }
   function voceIntera(v) {
     const letta = letturaDi(v?.id)?.voce;
     return letta ? { ...v, ...letta } : v;
   }
   function chiediVoceIntera(v) {
-    const id3 = String(v?.id ?? "");
-    if (!id3 || !servizio?.leggi || m.voci.has(id3)) return;
-    m.voci.set(id3, { stato: "caricando" });
-    Promise.resolve().then(() => servizio.leggi(id3)).then((dati) => {
-      m.voci.set(id3, { stato: "pronto", voce: dati?.[schema.campoRisposta] || null });
+    const id4 = String(v?.id ?? "");
+    if (!id4 || !servizio?.leggi || m.voci.has(id4)) return;
+    m.voci.set(id4, { stato: "caricando" });
+    Promise.resolve().then(() => servizio.leggi(id4)).then((dati) => {
+      m.voci.set(id4, { stato: "pronto", voce: dati?.[schema.campoRisposta] || null });
     }).catch((errore) => {
-      m.voci.set(id3, { stato: "errore", errore: errore?.message || "motivo non registrato" });
+      m.voci.set(id4, { stato: "errore", errore: errore?.message || "motivo non registrato" });
     }).then(() => ridisegna2());
   }
   function apriModulo(modo, voce = null) {
@@ -17677,9 +17950,9 @@ ${testoDi(schema, intera)}`);
     const voci = vociMenu(v);
     if (typeof opzioni.onMenu === "function" && voci.length) opzioni.onMenu(voci, dove);
   }
-  m.contesto = { trovaVoce: (id3) => lista.find((v) => String(v?.id) === String(id3)) || null, apriMenu };
+  m.contesto = { trovaVoce: (id4) => lista.find((v) => String(v?.id) === String(id4)) || null, apriMenu };
   collegaTastoDestro(schermo, {
-    trovaVoce: (id3) => m.contesto.trovaVoce(id3),
+    trovaVoce: (id4) => m.contesto.trovaVoce(id4),
     apriMenu: (voce, dove) => m.contesto.apriMenu(voce, dove)
   });
   const inModulo = (v) => Boolean(m.modulo) && (v?.__bozza === true || String(m.modulo.id) === String(v?.id));
@@ -17923,7 +18196,7 @@ function aggiornaPaginaMemoria(schermo, memorie, opzioni = {}) {
     onAggiorna: opzioni.onAggiorna,
     eliminaInBlocco: scrivi2.servizio?.eliminaInBlocco,
     onBatchCompletato: scrivi2.ricarica,
-    filtri: scrivi2.filtriSenzaBozza(GENERI_FILTRO.map(([id3, etichetta3, genere]) => ({ id: id3, etichetta: etichetta3, quando: genere ? (m) => m?.genere === genere : null }))),
+    filtri: scrivi2.filtriSenzaBozza(GENERI_FILTRO.map(([id4, etichetta3, genere]) => ({ id: id4, etichetta: etichetta3, quando: genere ? (m) => m?.genere === genere : null }))),
     idDi: (m) => m?.id,
     titoloDi: (m) => m?.__bozza ? "Nuovo ricordo" : testiMemoria(m).titolo,
     quandoDi: (m) => m?.aggiornataAlle ?? null,
@@ -18084,13 +18357,13 @@ function aggiornaPaginaLibreria(schermo, voci, opzioni = {}) {
   const leggiFile = typeof opzioni.leggiFile === "function" ? opzioni.leggiFile : lettoreFileLibreria(sessionId);
   const servizio = servizioVero && {
     ...servizioVero,
-    rinomina: async (id3, nome) => {
-      const prima = (Array.isArray(voci) ? voci : []).find((v) => v?.id === id3);
+    rinomina: async (id4, nome) => {
+      const prima = (Array.isArray(voci) ? voci : []).find((v) => v?.id === id4);
       const nomeVecchio = testiVoceLibreria(prima).nome;
-      const esito = await servizioVero.rinomina(id3, nome);
+      const esito = await servizioVero.rinomina(id4, nome);
       if (esito?.ok && nomeVecchio && nomeVecchio !== nome) {
         avvisa("Rinominato", `«${nomeVecchio}» adesso si chiama «${nome}».`, azioneAnnulla(async () => {
-          const indietro = await servizioVero.rinomina(id3, nomeVecchio);
+          const indietro = await servizioVero.rinomina(id4, nomeVecchio);
           if (indietro?.ok) opzioni.onCambiata?.();
         }));
       }
@@ -18336,13 +18609,13 @@ function copiatore(opzioni) {
 function servizioRicerche({ sessionId, rete } = {}) {
   if (!sessionId || typeof rete?.post !== "function" || typeof rete?.elimina !== "function") return null;
   const base = `/api/v1/sessions/${encodeURIComponent(sessionId)}/research`;
-  const voceUrl = (id3) => `${base}/${encodeURIComponent(String(id3 ?? ""))}`;
+  const voceUrl = (id4) => `${base}/${encodeURIComponent(String(id4 ?? ""))}`;
   return {
-    leggi: typeof rete.leggi === "function" ? (id3) => rete.leggi(voceUrl(id3)) : null,
-    pausa: (id3) => rete.post(`${voceUrl(id3)}/pausa`, {}),
-    ripresa: (id3) => rete.post(`${voceUrl(id3)}/ripresa`, {}),
-    riverifica: (id3) => rete.post(`${voceUrl(id3)}/riverifica`, {}),
-    elimina: (id3) => rete.elimina(voceUrl(id3)),
+    leggi: typeof rete.leggi === "function" ? (id4) => rete.leggi(voceUrl(id4)) : null,
+    pausa: (id4) => rete.post(`${voceUrl(id4)}/pausa`, {}),
+    ripresa: (id4) => rete.post(`${voceUrl(id4)}/ripresa`, {}),
+    riverifica: (id4) => rete.post(`${voceUrl(id4)}/riverifica`, {}),
+    elimina: (id4) => rete.elimina(voceUrl(id4)),
     eliminaInBlocco: (ids) => rete.post(`${base}/batch`, { azione: "elimina", ids })
   };
 }
@@ -18352,7 +18625,7 @@ function aggiornaPaginaRicerca(schermo, ricerche, opzioni = {}) {
   const avvisa = notificatore(opzioni);
   const copia3 = copiatore(opzioni);
   const ridisegna2 = () => aggiornaPaginaRicerca(schermo, ricerche, opzioni);
-  const trovaVoce = (id3) => elenco2.find((r) => String(r?.id) === String(id3)) || null;
+  const trovaVoce = (id4) => elenco2.find((r) => String(r?.id) === String(id4)) || null;
   const leggiRapporto = typeof opzioni.leggiRapporto === "function" ? opzioni.leggiRapporto : opzioni.sessionId ? async (voce) => {
     const indirizzo = indirizzoFileLibreria(opzioni.sessionId, voce?.reportLibraryId);
     if (!indirizzo) throw new Error("questa ricerca non ha un rapporto in Libreria");
@@ -18406,18 +18679,18 @@ function aggiornaPaginaRicerca(schermo, ricerche, opzioni = {}) {
     ricarica();
   }
   async function riverifica(voce) {
-    const id3 = String(voce?.id);
-    magazzino.viste.set(id3, "fonti");
-    magazzino.riverifiche.set(id3, { stato: "in-corso" });
+    const id4 = String(voce?.id);
+    magazzino.viste.set(id4, "fonti");
+    magazzino.riverifiche.set(id4, { stato: "in-corso" });
     ridisegna2();
-    const aperta2 = String(statoSezione(schermo)?.selezione ?? "") === id3;
+    const aperta2 = String(statoSezione(schermo)?.selezione ?? "") === id4;
     try {
-      const dati = await servizio.riverifica(id3);
-      magazzino.riverifiche.set(id3, { stato: "pronto", esito: dati?.riverifica || null });
+      const dati = await servizio.riverifica(id4);
+      magazzino.riverifiche.set(id4, { stato: "pronto", esito: dati?.riverifica || null });
       if (!aperta2) avvisa("Fonti rilette", frasiRiverifica(dati?.riverifica));
     } catch (errore) {
       const parole = paroleErroreRicerca(errore?.code, "riverifica");
-      magazzino.riverifiche.set(id3, { stato: "errore", errore: parole });
+      magazzino.riverifiche.set(id4, { stato: "errore", errore: parole });
       if (!aperta2) avvisa("Non riuscito", parole, { tono: "errore" });
     }
     ridisegna2();
@@ -18450,14 +18723,14 @@ function aggiornaPaginaRicerca(schermo, ricerche, opzioni = {}) {
   }
   async function esportazioni(voce) {
     const doc = schermo.ownerDocument || globalThis.document;
-    const id3 = String(voce?.id ?? "");
-    if (id3 && !dettaglioDi(voce) && typeof leggiDettaglio === "function") {
-      magazzino.dettagli.set(id3, { stato: "caricando" });
+    const id4 = String(voce?.id ?? "");
+    if (id4 && !dettaglioDi(voce) && typeof leggiDettaglio === "function") {
+      magazzino.dettagli.set(id4, { stato: "caricando" });
       try {
         const ricerca = await leggiDettaglio(voce);
-        magazzino.dettagli.set(id3, ricerca ? { stato: "pronto", ricerca } : { stato: "errore", errore: "scheda non disponibile" });
+        magazzino.dettagli.set(id4, ricerca ? { stato: "pronto", ricerca } : { stato: "errore", errore: "scheda non disponibile" });
       } catch (errore) {
-        magazzino.dettagli.set(id3, { stato: "errore", errore: errore?.message || "motivo non registrato" });
+        magazzino.dettagli.set(id4, { stato: "errore", errore: errore?.message || "motivo non registrato" });
       }
       ridisegna2();
     }
@@ -19246,19 +19519,19 @@ function el16(d, tag2, classe = "", testo2 = null) {
   if (testo2 !== null) n.textContent = testo2;
   return n;
 }
-function icona7(d, id3) {
+function icona7(d, id4) {
   const svg2 = d.createElementNS("http://www.w3.org/2000/svg", "svg");
   svg2.setAttribute("class", "i");
   svg2.setAttribute("aria-hidden", "true");
   const use = d.createElementNS("http://www.w3.org/2000/svg", "use");
-  use.setAttribute("href", `#${id3}`);
+  use.setAttribute("href", `#${id4}`);
   svg2.appendChild(use);
   return svg2;
 }
 function creaDettaglioAgente(figlia, { document: documento, sezione: sezioneIniziale = "panoramica", eta = () => null, azioni = {} } = {}) {
   const d = documento || globalThis.document;
   let dati = figlia || {};
-  let sezione = SEZIONI_AGENTE.some(([id3]) => id3 === sezioneIniziale) ? sezioneIniziale : "panoramica";
+  let sezione = SEZIONI_AGENTE.some(([id4]) => id4 === sezioneIniziale) ? sezioneIniziale : "panoramica";
   const elemento = el16(d, "div", "talos-agente");
   elemento.dataset.c = "DettaglioAgente";
   if (dati.sessionId) elemento.dataset.sessioneFiglia = String(dati.sessionId);
@@ -19292,20 +19565,20 @@ function creaDettaglioAgente(figlia, { document: documento, sezione: sezioneIniz
   pillole.setAttribute("role", "group");
   pillole.setAttribute("aria-label", "Che cosa guardare di questo agente");
   const bottoni = /* @__PURE__ */ new Map();
-  for (const [id3, testo2] of SEZIONI_AGENTE) {
+  for (const [id4, testo2] of SEZIONI_AGENTE) {
     const b = el16(d, "button", "talos-agente__sezione", testo2);
     b.type = "button";
-    b.dataset.sezione = id3;
-    b.addEventListener("click", () => mostra(id3));
-    bottoni.set(id3, b);
+    b.dataset.sezione = id4;
+    b.addEventListener("click", () => mostra(id4));
+    bottoni.set(id4, b);
     pillole.appendChild(b);
   }
   const corpo = el16(d, "div", "talos-agente__corpo");
-  const pannelli = new Map(SEZIONI_AGENTE.map(([id3]) => {
+  const pannelli = new Map(SEZIONI_AGENTE.map(([id4]) => {
     const p = el16(d, "div", "talos-agente__pannello");
-    p.dataset.pannello = id3;
+    p.dataset.pannello = id4;
     corpo.appendChild(p);
-    return [id3, p];
+    return [id4, p];
   }));
   const slotConversazione = pannelli.get("conversazione");
   elemento.append(cima, chi, pillole, corpo);
@@ -19404,8 +19677,8 @@ function creaDettaglioAgente(figlia, { document: documento, sezione: sezioneIniz
   function mostra(quale) {
     if (!pannelli.has(quale)) return;
     sezione = quale;
-    for (const [id3, b] of bottoni) b.setAttribute("aria-pressed", String(id3 === quale));
-    for (const [id3, p] of pannelli) p.hidden = id3 !== quale;
+    for (const [id4, b] of bottoni) b.setAttribute("aria-pressed", String(id4 === quale));
+    for (const [id4, p] of pannelli) p.hidden = id4 !== quale;
     elemento.dataset.sezione = quale;
   }
   function aggiorna(nuova) {
@@ -21456,17 +21729,17 @@ function modelloGrafoAgenti({ corrente = {}, sessioni = [], figli = [] } = {}, o
   }
   const discendenti = (radici) => {
     const visitati = new Set(radici), coda = [...radici];
-    for (let i2 = 0; i2 < coda.length; i2++) for (const id3 of adiacenze.get(coda[i2]) || []) {
-      if (!visitati.has(id3)) {
-        visitati.add(id3);
-        coda.push(id3);
+    for (let i2 = 0; i2 < coda.length; i2++) for (const id4 of adiacenze.get(coda[i2]) || []) {
+      if (!visitati.has(id4)) {
+        visitati.add(id4);
+        coda.push(id4);
       }
     }
     return visitati;
   };
   const inclusi = opzioni.ambito === "workspace" && corrente.cartella ? new Set([...mappa.values()].filter((a) => a.cartella === corrente.cartella).map((a) => a.sessionId).concat([...discendenti([corrente.sessionId])])) : discendenti([corrente.sessionId]);
   const nascosti = /* @__PURE__ */ new Set();
-  for (const id3 of opzioni.collassati || []) for (const disc of discendenti([id3])) if (disc !== id3) nascosti.add(disc);
+  for (const id4 of opzioni.collassati || []) for (const disc of discendenti([id4])) if (disc !== id4) nascosti.add(disc);
   const query = String(opzioni.query || "").trim().toLocaleLowerCase();
   const isolati = opzioni.isolato ? discendenti([opzioni.isolato]) : null;
   const filtrati = [...mappa.values()].filter((a) => inclusi.has(a.sessionId) && !nascosti.has(a.sessionId) && (!isolati || isolati.has(a.sessionId))).map((a) => ({
@@ -21533,7 +21806,7 @@ function montaGrafoAgenti(host, { dati, onApri, onChiudi, onAggiorna, onLeggiFil
     if (testo2 != null) n.textContent = testo2;
     return n;
   };
-  const bottone5 = (testo2, azione, aria) => {
+  const bottone6 = (testo2, azione, aria) => {
     const b = el30("button", "talos-button talos-button--ghost talos-button--sm", testo2);
     b.type = "button";
     if (aria) b.setAttribute("aria-label", aria);
@@ -21544,14 +21817,14 @@ function montaGrafoAgenti(host, { dati, onApri, onChiudi, onAggiorna, onLeggiFil
   root2.dataset.c = "GrafoAgenti";
   root2.setAttribute("aria-label", "Diagramma della sessione");
   const cima = el30("header", "talos-grafo__cima");
-  cima.append(el30("h2", "", "Diagramma della sessione"), bottone5("Torna alla chat", onChiudi, "Chiudi il diagramma"));
+  cima.append(el30("h2", "", "Diagramma della sessione"), bottone6("Torna alla chat", onChiudi, "Chiudi il diagramma"));
   const barra = el30("div", "talos-grafo__barra");
   const scegli = (nome, valori, valore, cambia) => {
     const s = el30("select", "");
     s.setAttribute("aria-label", nome);
-    for (const [id3, testo2] of Object.entries(valori)) {
+    for (const [id4, testo2] of Object.entries(valori)) {
       const o = el30("option", "", testo2);
-      o.value = id3;
+      o.value = id4;
       s.append(o);
     }
     s.value = valore;
@@ -21578,7 +21851,7 @@ function montaGrafoAgenti(host, { dati, onApri, onChiudi, onAggiorna, onLeggiFil
     ridisegna2();
     adatta();
   });
-  barra.append(ambito, ricerca, filtro, bottone5("Azzera filtri", () => {
+  barra.append(ambito, ricerca, filtro, bottone6("Azzera filtri", () => {
     opzioni.query = "";
     opzioni.stato = "all";
     opzioni.isolato = null;
@@ -21591,32 +21864,32 @@ function montaGrafoAgenti(host, { dati, onApri, onChiudi, onAggiorna, onLeggiFil
   const comandi = el30("div", "talos-grafo__barra talos-grafo__comandi");
   const misura = el30("output", "talos-mono", "100%");
   misura.dataset.zoom = "";
-  const follow = bottone5("Segui attivo", () => {
+  const follow = bottone6("Segui attivo", () => {
     segui = !segui;
     follow.setAttribute("aria-pressed", String(segui));
     if (segui) centraAttivo();
   });
   follow.setAttribute("aria-pressed", "false");
   comandi.append(
-    bottone5("Adatta", adatta),
-    bottone5("Lettura", lettura),
-    bottone5("−", () => scala(zoom / 1.2), "Riduci zoom"),
+    bottone6("Adatta", adatta),
+    bottone6("Lettura", lettura),
+    bottone6("−", () => scala(zoom / 1.2), "Riduci zoom"),
     misura,
-    bottone5("+", () => scala(zoom * 1.2), "Aumenta zoom"),
+    bottone6("+", () => scala(zoom * 1.2), "Aumenta zoom"),
     follow,
-    bottone5("Isola selezionato", () => {
+    bottone6("Isola selezionato", () => {
       if (opzioni.selezionato) {
         opzioni.isolato = opzioni.selezionato;
         ridisegna2();
         adatta();
       }
     }),
-    bottone5("Aggiorna", () => {
+    bottone6("Aggiorna", () => {
       onAggiorna?.();
       void caricaCronologia();
     })
   );
-  const affianca = bottone5("Affianca file", () => mostraFile());
+  const affianca = bottone6("Affianca file", () => mostraFile());
   affianca.setAttribute("aria-pressed", "false");
   comandi.append(affianca);
   const avviso = el30("p", "talos-grafo__stato");
@@ -21638,7 +21911,7 @@ function montaGrafoAgenti(host, { dati, onApri, onChiudi, onAggiorna, onLeggiFil
   anteprima3.hidden = true;
   anteprima3.setAttribute("aria-label", "File affiancato");
   const fileCima = el30("div", "talos-grafo__file-cima"), titoloFile = el30("strong", "", "File dell’agente");
-  const chiudiFile = bottone5("×", () => {
+  const chiudiFile = bottone6("×", () => {
     letturaFile++;
     anteprima3.hidden = true;
     affianca.setAttribute("aria-pressed", "false");
@@ -21699,12 +21972,12 @@ function montaGrafoAgenti(host, { dati, onApri, onChiudi, onAggiorna, onLeggiFil
   cursore.step = "1";
   cursore.setAttribute("aria-label", "Cronologia osservata del diagramma");
   const istanteReplay = el30("span", "talos-mono", "ORA"), descrizioneReplay = el30("span", "talos-grafo__limite", "Caricamento cronologia…");
-  const tornaLive = bottone5("Torna in diretta", () => mostraIstante(null));
+  const tornaLive = bottone6("Torna in diretta", () => mostraIstante(null));
   tornaLive.hidden = true;
   cursore.addEventListener("input", () => mostraIstante(Number(cursore.value)));
-  const eventoPrecedente = bottone5("Evento −", () => mostraIstante(posizione == null ? storico.length - 1 : Math.max(0, posizione - 1)), "Evento precedente");
-  const eventoSuccessivo = bottone5("Evento +", () => mostraIstante(posizione == null ? storico.length - 1 : Math.min(storico.length - 1, posizione + 1)));
-  const riproduci = bottone5("Riproduci", () => {
+  const eventoPrecedente = bottone6("Evento −", () => mostraIstante(posizione == null ? storico.length - 1 : Math.max(0, posizione - 1)), "Evento precedente");
+  const eventoSuccessivo = bottone6("Evento +", () => mostraIstante(posizione == null ? storico.length - 1 : Math.min(storico.length - 1, posizione + 1)));
+  const riproduci = bottone6("Riproduci", () => {
     if (play) {
       fermaPlayer();
       aggiornaTimeline();
@@ -21720,7 +21993,7 @@ function montaGrafoAgenti(host, { dati, onApri, onChiudi, onAggiorna, onLeggiFil
   const speed = scegli("Velocità riproduzione", { 1: "1×", 2: "2×", 4: "4×", 16: "16×" }, "1", (v) => {
     velocita = Number(v);
   });
-  const riprovaCronologia = bottone5("Riprova cronologia", () => caricaCronologia());
+  const riprovaCronologia = bottone6("Riprova cronologia", () => caricaCronologia());
   riprovaCronologia.hidden = true;
   timeline.append(eventoPrecedente, riproduci, eventoSuccessivo, speed, istanteReplay, cursore, tornaLive, descrizioneReplay, riprovaCronologia);
   root2.append(cima, barra, comandi, riepilogo, avviso, area, timeline, recenti, piede);
@@ -21901,29 +22174,29 @@ function montaGrafoAgenti(host, { dati, onApri, onChiudi, onAggiorna, onLeggiFil
     if (!disegno?.nodi.length || !canvas.clientWidth || !canvas.clientHeight) return;
     vistaToccata = true;
     zoom = Math.max(0.8, Math.min(1, (canvas.clientWidth - 32) / disegno.width, (canvas.clientHeight - 32) / disegno.height));
-    const id3 = opzioni.selezionato || corrente.corrente.sessionId;
-    centra(disegno.nodi.some((n) => n.id === id3) ? id3 : disegno.nodi[0].id);
-    if (id3 === corrente.corrente.sessionId) {
+    const id4 = opzioni.selezionato || corrente.corrente.sessionId;
+    centra(disegno.nodi.some((n) => n.id === id4) ? id4 : disegno.nodi[0].id);
+    if (id4 === corrente.corrente.sessionId) {
       y = 16;
       trasforma();
     }
   }
-  function centra(id3) {
-    const n = disegno?.nodi.find((n2) => n2.id === id3);
+  function centra(id4) {
+    const n = disegno?.nodi.find((n2) => n2.id === id4);
     if (!n) return;
-    x = canvas.clientWidth / 2 - n.x * zoom;
-    y = canvas.clientHeight / 2 - n.y * zoom;
+    x = disegno.width * zoom <= canvas.clientWidth - 32 ? (canvas.clientWidth - disegno.width * zoom) / 2 : canvas.clientWidth / 2 - n.x * zoom;
+    y = disegno.height * zoom <= canvas.clientHeight - 32 ? 16 : canvas.clientHeight / 2 - n.y * zoom;
     trasforma();
   }
   function centraAttivo() {
     const n = disegno?.nodi.find((n2) => n2.stato === "active" && n2.id !== corrente.corrente.sessionId);
     if (n) centra(n.id);
   }
-  function seleziona(id3, centraNodo = true) {
-    opzioni.selezionato = id3;
-    for (const n of mondo.querySelectorAll("[data-nodo-id]")) n.dataset.selezionato = String(n.dataset.nodoId === id3);
+  function seleziona(id4, centraNodo = true) {
+    opzioni.selezionato = id4;
+    for (const n of mondo.querySelectorAll("[data-nodo-id]")) n.dataset.selezionato = String(n.dataset.nodoId === id4);
     salva();
-    if (centraNodo) centra(id3);
+    if (centraNodo) centra(id4);
   }
   const nodiDom = /* @__PURE__ */ new Map(), archiDom = /* @__PURE__ */ new Map();
   const svg2 = d.createElementNS("http://www.w3.org/2000/svg", "svg");
@@ -21944,7 +22217,7 @@ function montaGrafoAgenti(host, { dati, onApri, onChiudi, onAggiorna, onLeggiFil
     }
     gruppi.replaceChildren(...ordinati.map((chiave) => {
       const quanti = perStato.get(chiave).length;
-      const card = bottone5("", () => {
+      const card = bottone6("", () => {
         gruppoAperto = chiave;
         paginaGruppo = 0;
         disegnaAggregato(modello);
@@ -21965,7 +22238,7 @@ function montaGrafoAgenti(host, { dati, onApri, onChiudi, onAggiorna, onLeggiFil
     const titolo2 = el30("h3", "", `${stati[gruppoAperto] || "Sessioni"} · ${conteggio(selezionati.length)}`);
     const elenco2 = el30("div", "talos-grafo__gruppo-elenco");
     for (const nodo13 of selezionati.slice(inizio, inizio + 12)) {
-      const apri = bottone5(nodo13.nome, () => {
+      const apri = bottone6(nodo13.nome, () => {
         opzioni.selezionato = nodo13.id;
         salva();
         onApri?.(nodo13.dati);
@@ -21977,11 +22250,11 @@ function montaGrafoAgenti(host, { dati, onApri, onChiudi, onAggiorna, onLeggiFil
     }
     const pagine = el30("nav", "talos-grafo__gruppo-pagine");
     pagine.setAttribute("aria-label", "Pagine del gruppo");
-    const precedente = bottone5("Precedente", () => {
+    const precedente = bottone6("Precedente", () => {
       paginaGruppo--;
       disegnaAggregato(modello);
     }, "Pagina precedente del gruppo");
-    const successiva = bottone5("Successiva", () => {
+    const successiva = bottone6("Successiva", () => {
       paginaGruppo++;
       disegnaAggregato(modello);
     }, "Pagina successiva del gruppo");
@@ -22003,7 +22276,7 @@ function montaGrafoAgenti(host, { dati, onApri, onChiudi, onAggiorna, onLeggiFil
     const t3 = telemetriaGrafoAgenti(intero2);
     root2.dataset.obsoleto = String(Boolean(corrente.errore));
     const statistica = (chiave, numero10, testo2, filtra) => {
-      const n = filtra ? bottone5("", () => {
+      const n = filtra ? bottone6("", () => {
         opzioni.stato = filtra;
         filtro.value = filtra;
         ridisegna2();
@@ -22057,9 +22330,9 @@ function montaGrafoAgenti(host, { dati, onApri, onChiudi, onAggiorna, onLeggiFil
       const dest = disegno.nodi.find((n) => n.id === a.a);
       p.dataset.attivo = String(posizione == null && !corrente.errore && Boolean(dest && attivitaNodoGrafo(dest.dati).operazione));
     }
-    for (const [id3, n] of archiDom) if (!archiVivi.has(id3)) {
+    for (const [id4, n] of archiDom) if (!archiVivi.has(id4)) {
       n.remove();
-      archiDom.delete(id3);
+      archiDom.delete(id4);
     }
     const vivi = /* @__PURE__ */ new Set();
     for (const n of disegno.nodi) {
@@ -22068,7 +22341,7 @@ function montaGrafoAgenti(host, { dati, onApri, onChiudi, onAggiorna, onLeggiFil
       if (!nodo13) {
         nodo13 = el30("article", "talos-grafo__nodo");
         nodo13.dataset.nodoId = n.id;
-        const apri = bottone5("", () => {
+        const apri = bottone6("", () => {
           const fresco = disegno.nodi.find((v) => v.id === n.id);
           if (fresco) {
             seleziona(n.id);
@@ -22081,8 +22354,8 @@ function montaGrafoAgenti(host, { dati, onApri, onChiudi, onAggiorna, onLeggiFil
           apri.click();
         });
         const meta2 = el30("span", "talos-grafo__meta"), operazione = el30("span", "talos-grafo__operazione"), misure = el30("span", "talos-grafo__misure talos-mono"), durata2 = el30("span", "talos-grafo__durata");
-        const collassa = bottone5("", () => {
-          opzioni.collassati = opzioni.collassati.includes(n.id) ? opzioni.collassati.filter((id3) => id3 !== n.id) : [...opzioni.collassati, n.id];
+        const collassa = bottone6("", () => {
+          opzioni.collassati = opzioni.collassati.includes(n.id) ? opzioni.collassati.filter((id4) => id4 !== n.id) : [...opzioni.collassati, n.id];
           ridisegna2();
         });
         const testata = el30("div", "talos-grafo__testata-nodo"), pallino = el30("span", "talos-grafo__pallino");
@@ -22118,9 +22391,9 @@ function montaGrafoAgenti(host, { dati, onApri, onChiudi, onAggiorna, onLeggiFil
       ui.collassa.textContent = `${opzioni.collassati.includes(n.id) ? "Espandi" : "Collassa"} ${n.figli}`;
       ui.collassa.setAttribute("aria-label", `Espandi o collassa ${n.nome}`);
     }
-    for (const [id3, n] of nodiDom) if (!vivi.has(id3)) {
+    for (const [id4, n] of nodiDom) if (!vivi.has(id4)) {
       n.remove();
-      nodiDom.delete(id3);
+      nodiDom.delete(id4);
     }
     vuoto.hidden = Boolean(disegno.nodi.length);
     mondo.style.width = `${disegno.width}px`;
@@ -22128,7 +22401,7 @@ function montaGrafoAgenti(host, { dati, onApri, onChiudi, onAggiorna, onLeggiFil
     const passi = intero2.nodi.flatMap((n) => (n.dati.attivita?.passi || []).filter((p) => istante(p.quando) != null).map((p) => ({ ...p, nodo: n }))).sort((a, b) => istante(b.quando) - istante(a.quando)).slice(0, 8);
     elencoRecenti.replaceChildren(...passi.map((p) => {
       const frase = p.tipo === "attrezzo" ? nomeUmanoAttrezzo(p.attrezzo) : { avvio: "Avviato", fine: "Concluso", errore: "Errore" }[p.tipo] || "Aggiornamento";
-      const b = bottone5(`${new Date(p.quando).toLocaleTimeString("it-IT")} · ${p.nodo.nome} · ${frase}${p.percorso ? ` · ${p.percorso}` : ""}`, () => {
+      const b = bottone6(`${new Date(p.quando).toLocaleTimeString("it-IT")} · ${p.nodo.nome} · ${frase}${p.percorso ? ` · ${p.percorso}` : ""}`, () => {
         seleziona(p.nodo.id);
         onApri?.(p.nodo.dati);
       });
@@ -22222,7 +22495,7 @@ function montaGrafoAgenti(host, { dati, onApri, onChiudi, onAggiorna, onLeggiFil
   if (typeof onLeggiCronologia !== "function") coverage = "unavailable";
   ridisegna2();
   void caricaCronologia();
-  return { elemento: root2, seleziona, aggiorna(nuovi) {
+  return { elemento: root2, seleziona, adatta, aggiorna(nuovi) {
     vivo = nuovi;
     if (posizione == null) corrente = nuovi;
     ridisegna2();
@@ -22442,12 +22715,12 @@ var require_elk_api = __commonJS({
           return _createClass(PromisedWorker2, [{
             key: "postMessage",
             value: function postMessage(msg) {
-              var id3 = this.id || 0;
-              this.id = id3 + 1;
-              msg.id = id3;
+              var id4 = this.id || 0;
+              this.id = id4 + 1;
+              msg.id = id4;
               var self2 = this;
               return new Promise(function(resolve, reject) {
-                self2.resolvers[id3] = function(err, res) {
+                self2.resolvers[id4] = function(err, res) {
                   if (err) {
                     self2.convertGwtStyleError(err);
                     reject(err);
@@ -22686,15 +22959,15 @@ function disegnaCardProposta(section, {
     if (inModifica) {
       for (const campo2 of CAMPI_TETTI) {
         const riga2 = make("div", "talos-workflow-proposal__limit talos-workflow-proposal__limit--edit");
-        const id3 = `talos-wf-tetto-${revisione.workflowId}-${campo2.chiave}`;
+        const id4 = `talos-wf-tetto-${revisione.workflowId}-${campo2.chiave}`;
         const etichetta3 = make("dt", null);
         const label = make("label", null, campo2.etichetta);
-        label.setAttribute("for", id3);
+        label.setAttribute("for", id4);
         etichetta3.append(label);
         const valore = make("dd", "talos-workflow-proposal__limit-field");
         const input = make("input", "talos-workflow-proposal__limit-input");
         input.type = "text";
-        input.id = id3;
+        input.id = id4;
         input.inputMode = campo2.decimale ? "decimal" : "numeric";
         input.autocomplete = "off";
         input.value = bozzaTetti[campo2.chiave] ?? "";
@@ -22702,7 +22975,7 @@ function disegnaCardProposta(section, {
         const unita = make("span", "talos-workflow-proposal__limit-unit", campo2.unita);
         const prima = make("span", "talos-workflow-proposal__limit-before");
         const erroreCampo = make("span", "talos-workflow-proposal__limit-error");
-        erroreCampo.id = `${id3}-errore`;
+        erroreCampo.id = `${id4}-errore`;
         input.setAttribute("aria-describedby", erroreCampo.id);
         input.addEventListener?.("input", () => {
           bozzaTetti[campo2.chiave] = input.value;
@@ -22760,7 +23033,7 @@ function disegnaCardProposta(section, {
     const azioni = make("div", "talos-workflow-proposal__actions");
     azioni.setAttribute("role", "group");
     azioni.setAttribute("aria-label", "Azioni sul workflow");
-    const bottone5 = (testo2, classe, azione, spento) => {
+    const bottone6 = (testo2, classe, azione, spento) => {
       const b = make("button", `talos-button ${classe} talos-button--sm`, testo2);
       b.type = "button";
       b.dataset.azione = azione;
@@ -22769,11 +23042,11 @@ function disegnaCardProposta(section, {
     };
     if (inModifica) {
       const prossima = (revisione.version ?? 1) + 1;
-      salva = bottone5(inVolo === "salva" ? "Salvo…" : `Salva come versione ${prossima}`, "talos-button--primary", "salva-tetti", true);
+      salva = bottone6(inVolo === "salva" ? "Salvo…" : `Salva come versione ${prossima}`, "talos-button--primary", "salva-tetti", true);
       salva.addEventListener?.("click", () => {
         if (esitoBozza?.valida && !esitoBozza.vuota) onSalvaTetti?.(esitoBozza.cambiati);
       });
-      const annulla = bottone5("Annulla", "talos-button--ghost", "annulla-modifica", Boolean(inVolo));
+      const annulla = bottone6("Annulla", "talos-button--ghost", "annulla-modifica", Boolean(inVolo));
       annulla.addEventListener?.("click", () => onAnnullaModifica?.());
       azioni.append(salva, annulla, make(
         "p",
@@ -22783,17 +23056,17 @@ function disegnaCardProposta(section, {
       aggiornaSalva();
     } else if (stato2.chiave === "da-approvare") {
       const bloccata = problemi.length > 0;
-      const approva = bottone5(inVolo === "approva" ? "Approvo…" : "Approva", "talos-button--primary", "approva", bloccata || inVolo || typeof onApprova !== "function");
+      const approva = bottone6(inVolo === "approva" ? "Approvo…" : "Approva", "talos-button--primary", "approva", bloccata || inVolo || typeof onApprova !== "function");
       approva.addEventListener?.("click", () => onApprova?.());
       azioni.append(approva);
       azioni.append(make("p", "talos-workflow-proposal__hint", bloccata ? "Non si può approvare finché il controllo preliminare trova problemi: chiedi al modello di correggerla." : avviabilePrima ? `Approvare fissa questa versione. Finché non la approvi, la versione ${avviabilePrima.version} resta approvata e puoi avviarla.` : "Approvare fissa questa versione. L'avvio è un passo a parte."));
       if (avviabilePrima && typeof onAvviaPrima === "function") {
-        const prima = bottone5(inVolo === "avvia-prima" ? "Avvio…" : `Avvia la versione ${avviabilePrima.version}`, "talos-button--ghost", "avvia-prima", Boolean(inVolo));
+        const prima = bottone6(inVolo === "avvia-prima" ? "Avvio…" : `Avvia la versione ${avviabilePrima.version}`, "talos-button--ghost", "avvia-prima", Boolean(inVolo));
         prima.addEventListener?.("click", () => onAvviaPrima());
         azioni.append(prima);
       }
     } else if (stato2.chiave === "approvato") {
-      const avvia = bottone5(inVolo === "avvia" ? "Avvio…" : "Avvia", "talos-button--primary", "avvia", inVolo || typeof onAvvia !== "function");
+      const avvia = bottone6(inVolo === "avvia" ? "Avvio…" : "Avvia", "talos-button--primary", "avvia", inVolo || typeof onAvvia !== "function");
       avvia.addEventListener?.("click", () => onAvvia?.());
       azioni.append(avvia);
       const quando = ora(revisione.approval?.approvedAt);
@@ -22808,7 +23081,7 @@ function disegnaCardProposta(section, {
       ));
     }
     if (typeof onApriDiagramma === "function" && !inModifica) {
-      const diagramma = bottone5(run?.runId ? "Apri in Board" : "Apri diagramma", "talos-button--ghost", "diagramma", false);
+      const diagramma = bottone6(run?.runId ? "Apri in Board" : "Apri diagramma", "talos-button--ghost", "diagramma", false);
       diagramma.addEventListener?.("click", () => onApriDiagramma());
       azioni.append(diagramma);
     }
@@ -22915,22 +23188,22 @@ function apriConfermaRun(doc, { sopra, titolo: titolo2, testo: testo2, righe = [
       if (t3 != null) n.textContent = t3;
       return n;
     };
-    const id3 = `conferma-run-${Math.random().toString(36).slice(2, 9)}`;
+    const id4 = `conferma-run-${Math.random().toString(36).slice(2, 9)}`;
     const dialogo = el30("dialog", "talos-wfg-conferma");
     dialogo.setAttribute("role", "alertdialog");
-    dialogo.setAttribute("aria-labelledby", `${id3}-titolo`);
-    dialogo.setAttribute("aria-describedby", `${id3}-testo`);
+    dialogo.setAttribute("aria-labelledby", `${id4}-titolo`);
+    dialogo.setAttribute("aria-describedby", `${id4}-testo`);
     const scatola = el30("div", "talos-dialog talos-wfg-conferma__scatola");
     const testa = el30("div", "talos-dialog__header");
     const titoli = el30("div", "talos-grow");
     if (sopra) titoli.append(el30("span", "talos-eyebrow", sopra));
     const h = el30("h2", "talos-dialog__title", titolo2);
-    h.id = `${id3}-titolo`;
+    h.id = `${id4}-titolo`;
     titoli.append(h);
     testa.append(titoli);
     const corpo = el30("div", "talos-dialog__body");
     const p = el30("p", "talos-wfg-conferma__testo", testo2);
-    p.id = `${id3}-testo`;
+    p.id = `${id4}-testo`;
     corpo.append(p);
     if (righe.length) {
       const dl = el30("dl", "talos-wfg-conferma__righe");
@@ -23459,7 +23732,7 @@ function creaRiproduttore(voci, fasi) {
     },
     /** I passi in un certo insieme di stati, adesso (per il percorso: chi ha un problema). */
     passiIn(insieme) {
-      return [...stati2].filter(([, s]) => insieme.has(s)).map(([id3]) => id3);
+      return [...stati2].filter(([, s]) => insieme.has(s)).map(([id4]) => id4);
     }
   };
 }
@@ -23551,7 +23824,7 @@ function creaFonte({ client, sorgente, onCambio = () => {
   }
   async function righeFase(phaseId) {
     await pagina(phaseId, 0, { arricchisci: true });
-    return (f.celle.get(phaseId) ?? []).filter(Boolean).map((id3) => f.righe.get(id3));
+    return (f.celle.get(phaseId) ?? []).filter(Boolean).map((id4) => f.righe.get(id4));
   }
   function chiedi(phaseId, da, a) {
     const celle = f.celle.get(phaseId);
@@ -23643,7 +23916,7 @@ function creaFonte({ client, sorgente, onCambio = () => {
     return derivati().rip.al(t3).conteggi(phaseId);
   }
   const statoDelRunAl = (t3) => derivati().rip.al(t3).statoDelRun();
-  const passiAl = (t3, insieme) => t3 === null ? [...derivati().ultimo].filter(([, s]) => insieme.has(s)).map(([id3]) => id3) : derivati().rip.al(t3).passiIn(insieme);
+  const passiAl = (t3, insieme) => t3 === null ? [...derivati().ultimo].filter(([, s]) => insieme.has(s)).map(([id4]) => id4) : derivati().rip.al(t3).passiIn(insieme);
   function discendenza(nodeId, verso) {
     const chiave = `${nodeId}|${verso}`;
     if (!f.discendenze.has(chiave)) {
@@ -23704,8 +23977,8 @@ function creaFonte({ client, sorgente, onCambio = () => {
     applicaFotogramma,
     riga: (nodeId) => f.righe.get(nodeId) ?? null,
     cella: (phaseId, indice2) => {
-      const id3 = f.celle.get(phaseId)?.[indice2];
-      return id3 ? f.righe.get(id3) ?? null : null;
+      const id4 = f.celle.get(phaseId)?.[indice2];
+      return id4 ? f.righe.get(id4) ?? null : null;
     },
     posto: (nodeId) => f.posto.get(nodeId) ?? null,
     righeCaricate: () => [...f.righe.values()],
@@ -25880,11 +26153,11 @@ var init_src6 = __esm({
 });
 
 // node_modules/d3-transition/src/transition/schedule.js
-function schedule_default(node2, name, id3, index, group, timing) {
+function schedule_default(node2, name, id4, index, group, timing) {
   var schedules = node2.__transition;
   if (!schedules) node2.__transition = {};
-  else if (id3 in schedules) return;
-  create(node2, id3, {
+  else if (id4 in schedules) return;
+  create(node2, id4, {
     name,
     index,
     // For context during callback.
@@ -25900,24 +26173,24 @@ function schedule_default(node2, name, id3, index, group, timing) {
     state: CREATED
   });
 }
-function init(node2, id3) {
-  var schedule2 = get2(node2, id3);
+function init(node2, id4) {
+  var schedule2 = get2(node2, id4);
   if (schedule2.state > CREATED) throw new Error("too late; already scheduled");
   return schedule2;
 }
-function set2(node2, id3) {
-  var schedule2 = get2(node2, id3);
+function set2(node2, id4) {
+  var schedule2 = get2(node2, id4);
   if (schedule2.state > STARTED) throw new Error("too late; already running");
   return schedule2;
 }
-function get2(node2, id3) {
+function get2(node2, id4) {
   var schedule2 = node2.__transition;
-  if (!schedule2 || !(schedule2 = schedule2[id3])) throw new Error("transition not found");
+  if (!schedule2 || !(schedule2 = schedule2[id4])) throw new Error("transition not found");
   return schedule2;
 }
-function create(node2, id3, self2) {
+function create(node2, id4, self2) {
   var schedules = node2.__transition, tween;
-  schedules[id3] = self2;
+  schedules[id4] = self2;
   self2.timer = timer(schedule2, 0, self2.time);
   function schedule2(elapsed) {
     self2.state = SCHEDULED;
@@ -25936,7 +26209,7 @@ function create(node2, id3, self2) {
         o.timer.stop();
         o.on.call("interrupt", node2, node2.__data__, o.index, o.group);
         delete schedules[i2];
-      } else if (+i2 < id3) {
+      } else if (+i2 < id4) {
         o.state = ENDED;
         o.timer.stop();
         o.on.call("cancel", node2, node2.__data__, o.index, o.group);
@@ -25975,7 +26248,7 @@ function create(node2, id3, self2) {
   function stop() {
     self2.state = ENDED;
     self2.timer.stop();
-    delete schedules[id3];
+    delete schedules[id4];
     for (var i2 in schedules) return;
     delete node2.__transition;
   }
@@ -25999,12 +26272,12 @@ var init_schedule = __esm({
 
 // node_modules/d3-transition/src/interrupt.js
 function interrupt_default(node2, name) {
-  var schedules = node2.__transition, schedule2, active, empty2 = true, i2;
+  var schedules = node2.__transition, schedule2, active, empty3 = true, i2;
   if (!schedules) return;
   name = name == null ? null : name + "";
   for (i2 in schedules) {
     if ((schedule2 = schedules[i2]).name !== name) {
-      empty2 = false;
+      empty3 = false;
       continue;
     }
     active = schedule2.state > STARTING && schedule2.state < ENDING;
@@ -26013,7 +26286,7 @@ function interrupt_default(node2, name) {
     schedule2.on.call(active ? "interrupt" : "cancel", node2, node2.__data__, schedule2.index, schedule2.group);
     delete schedules[i2];
   }
-  if (empty2) delete node2.__transition;
+  if (empty3) delete node2.__transition;
 }
 var init_interrupt = __esm({
   "node_modules/d3-transition/src/interrupt.js"() {
@@ -26034,10 +26307,10 @@ var init_interrupt2 = __esm({
 });
 
 // node_modules/d3-transition/src/transition/tween.js
-function tweenRemove(id3, name) {
+function tweenRemove(id4, name) {
   var tween0, tween1;
   return function() {
-    var schedule2 = set2(this, id3), tween = schedule2.tween;
+    var schedule2 = set2(this, id4), tween = schedule2.tween;
     if (tween !== tween0) {
       tween1 = tween0 = tween;
       for (var i2 = 0, n = tween1.length; i2 < n; ++i2) {
@@ -26051,11 +26324,11 @@ function tweenRemove(id3, name) {
     schedule2.tween = tween1;
   };
 }
-function tweenFunction(id3, name, value) {
+function tweenFunction(id4, name, value) {
   var tween0, tween1;
   if (typeof value !== "function") throw new Error();
   return function() {
-    var schedule2 = set2(this, id3), tween = schedule2.tween;
+    var schedule2 = set2(this, id4), tween = schedule2.tween;
     if (tween !== tween0) {
       tween1 = (tween0 = tween).slice();
       for (var t3 = { name, value }, i2 = 0, n = tween1.length; i2 < n; ++i2) {
@@ -26070,10 +26343,10 @@ function tweenFunction(id3, name, value) {
   };
 }
 function tween_default(name, value) {
-  var id3 = this._id;
+  var id4 = this._id;
   name += "";
   if (arguments.length < 2) {
-    var tween = get2(this.node(), id3).tween;
+    var tween = get2(this.node(), id4).tween;
     for (var i2 = 0, n = tween.length, t3; i2 < n; ++i2) {
       if ((t3 = tween[i2]).name === name) {
         return t3.value;
@@ -26081,16 +26354,16 @@ function tween_default(name, value) {
     }
     return null;
   }
-  return this.each((value == null ? tweenRemove : tweenFunction)(id3, name, value));
+  return this.each((value == null ? tweenRemove : tweenFunction)(id4, name, value));
 }
 function tweenValue(transition2, name, value) {
-  var id3 = transition2._id;
+  var id4 = transition2._id;
   transition2.each(function() {
-    var schedule2 = set2(this, id3);
+    var schedule2 = set2(this, id4);
     (schedule2.value || (schedule2.value = {}))[name] = value.apply(this, arguments);
   });
   return function(node2) {
-    return get2(node2, id3).value[name];
+    return get2(node2, id4).value[name];
   };
 }
 var init_tween = __esm({
@@ -26215,19 +26488,19 @@ var init_attrTween = __esm({
 });
 
 // node_modules/d3-transition/src/transition/delay.js
-function delayFunction(id3, value) {
+function delayFunction(id4, value) {
   return function() {
-    init(this, id3).delay = +value.apply(this, arguments);
+    init(this, id4).delay = +value.apply(this, arguments);
   };
 }
-function delayConstant(id3, value) {
+function delayConstant(id4, value) {
   return value = +value, function() {
-    init(this, id3).delay = value;
+    init(this, id4).delay = value;
   };
 }
 function delay_default(value) {
-  var id3 = this._id;
-  return arguments.length ? this.each((typeof value === "function" ? delayFunction : delayConstant)(id3, value)) : get2(this.node(), id3).delay;
+  var id4 = this._id;
+  return arguments.length ? this.each((typeof value === "function" ? delayFunction : delayConstant)(id4, value)) : get2(this.node(), id4).delay;
 }
 var init_delay = __esm({
   "node_modules/d3-transition/src/transition/delay.js"() {
@@ -26236,19 +26509,19 @@ var init_delay = __esm({
 });
 
 // node_modules/d3-transition/src/transition/duration.js
-function durationFunction(id3, value) {
+function durationFunction(id4, value) {
   return function() {
-    set2(this, id3).duration = +value.apply(this, arguments);
+    set2(this, id4).duration = +value.apply(this, arguments);
   };
 }
-function durationConstant(id3, value) {
+function durationConstant(id4, value) {
   return value = +value, function() {
-    set2(this, id3).duration = value;
+    set2(this, id4).duration = value;
   };
 }
 function duration_default(value) {
-  var id3 = this._id;
-  return arguments.length ? this.each((typeof value === "function" ? durationFunction : durationConstant)(id3, value)) : get2(this.node(), id3).duration;
+  var id4 = this._id;
+  return arguments.length ? this.each((typeof value === "function" ? durationFunction : durationConstant)(id4, value)) : get2(this.node(), id4).duration;
 }
 var init_duration = __esm({
   "node_modules/d3-transition/src/transition/duration.js"() {
@@ -26257,15 +26530,15 @@ var init_duration = __esm({
 });
 
 // node_modules/d3-transition/src/transition/ease.js
-function easeConstant(id3, value) {
+function easeConstant(id4, value) {
   if (typeof value !== "function") throw new Error();
   return function() {
-    set2(this, id3).ease = value;
+    set2(this, id4).ease = value;
   };
 }
 function ease_default(value) {
-  var id3 = this._id;
-  return arguments.length ? this.each(easeConstant(id3, value)) : get2(this.node(), id3).ease;
+  var id4 = this._id;
+  return arguments.length ? this.each(easeConstant(id4, value)) : get2(this.node(), id4).ease;
 }
 var init_ease = __esm({
   "node_modules/d3-transition/src/transition/ease.js"() {
@@ -26274,11 +26547,11 @@ var init_ease = __esm({
 });
 
 // node_modules/d3-transition/src/transition/easeVarying.js
-function easeVarying(id3, value) {
+function easeVarying(id4, value) {
   return function() {
     var v = value.apply(this, arguments);
     if (typeof v !== "function") throw new Error();
-    set2(this, id3).ease = v;
+    set2(this, id4).ease = v;
   };
 }
 function easeVarying_default(value) {
@@ -26339,17 +26612,17 @@ function start(name) {
     return !t3 || t3 === "start";
   });
 }
-function onFunction(id3, name, listener) {
+function onFunction(id4, name, listener) {
   var on0, on1, sit = start(name) ? init : set2;
   return function() {
-    var schedule2 = sit(this, id3), on2 = schedule2.on;
+    var schedule2 = sit(this, id4), on2 = schedule2.on;
     if (on2 !== on0) (on1 = (on0 = on2).copy()).on(name, listener);
     schedule2.on = on1;
   };
 }
 function on_default2(name, listener) {
-  var id3 = this._id;
-  return arguments.length < 2 ? get2(this.node(), id3).on.on(name) : this.each(onFunction(id3, name, listener));
+  var id4 = this._id;
+  return arguments.length < 2 ? get2(this.node(), id4).on.on(name) : this.each(onFunction(id4, name, listener));
 }
 var init_on2 = __esm({
   "node_modules/d3-transition/src/transition/on.js"() {
@@ -26358,10 +26631,10 @@ var init_on2 = __esm({
 });
 
 // node_modules/d3-transition/src/transition/remove.js
-function removeFunction(id3) {
+function removeFunction(id4) {
   return function() {
     var parent = this.parentNode;
-    for (var i2 in this.__transition) if (+i2 !== id3) return;
+    for (var i2 in this.__transition) if (+i2 !== id4) return;
     if (parent) parent.removeChild(this);
   };
 }
@@ -26375,18 +26648,18 @@ var init_remove2 = __esm({
 
 // node_modules/d3-transition/src/transition/select.js
 function select_default3(select) {
-  var name = this._name, id3 = this._id;
+  var name = this._name, id4 = this._id;
   if (typeof select !== "function") select = selector_default(select);
   for (var groups = this._groups, m = groups.length, subgroups = new Array(m), j = 0; j < m; ++j) {
     for (var group = groups[j], n = group.length, subgroup = subgroups[j] = new Array(n), node2, subnode, i2 = 0; i2 < n; ++i2) {
       if ((node2 = group[i2]) && (subnode = select.call(node2, node2.__data__, i2, group))) {
         if ("__data__" in node2) subnode.__data__ = node2.__data__;
         subgroup[i2] = subnode;
-        schedule_default(subgroup[i2], name, id3, i2, subgroup, get2(node2, id3));
+        schedule_default(subgroup[i2], name, id4, i2, subgroup, get2(node2, id4));
       }
     }
   }
-  return new Transition(subgroups, this._parents, name, id3);
+  return new Transition(subgroups, this._parents, name, id4);
 }
 var init_select3 = __esm({
   "node_modules/d3-transition/src/transition/select.js"() {
@@ -26398,14 +26671,14 @@ var init_select3 = __esm({
 
 // node_modules/d3-transition/src/transition/selectAll.js
 function selectAll_default2(select) {
-  var name = this._name, id3 = this._id;
+  var name = this._name, id4 = this._id;
   if (typeof select !== "function") select = selectorAll_default(select);
   for (var groups = this._groups, m = groups.length, subgroups = [], parents = [], j = 0; j < m; ++j) {
     for (var group = groups[j], n = group.length, node2, i2 = 0; i2 < n; ++i2) {
       if (node2 = group[i2]) {
-        for (var children2 = select.call(node2, node2.__data__, i2, group), child, inherit2 = get2(node2, id3), k = 0, l = children2.length; k < l; ++k) {
+        for (var children2 = select.call(node2, node2.__data__, i2, group), child, inherit2 = get2(node2, id4), k = 0, l = children2.length; k < l; ++k) {
           if (child = children2[k]) {
-            schedule_default(child, name, id3, k, children2, inherit2);
+            schedule_default(child, name, id4, k, children2, inherit2);
           }
         }
         subgroups.push(children2);
@@ -26413,7 +26686,7 @@ function selectAll_default2(select) {
       }
     }
   }
-  return new Transition(subgroups, parents, name, id3);
+  return new Transition(subgroups, parents, name, id4);
 }
 var init_selectAll2 = __esm({
   "node_modules/d3-transition/src/transition/selectAll.js"() {
@@ -26463,10 +26736,10 @@ function styleFunction2(name, interpolate, value) {
     return string0 === string1 ? null : string0 === string00 && string1 === string10 ? interpolate0 : (string10 = string1, interpolate0 = interpolate(string00 = string0, value1));
   };
 }
-function styleMaybeRemove(id3, name) {
+function styleMaybeRemove(id4, name) {
   var on0, on1, listener0, key = "style." + name, event = "end." + key, remove2;
   return function() {
-    var schedule2 = set2(this, id3), on2 = schedule2.on, listener = schedule2.value[key] == null ? remove2 || (remove2 = styleRemove2(name)) : void 0;
+    var schedule2 = set2(this, id4), on2 = schedule2.on, listener = schedule2.value[key] == null ? remove2 || (remove2 = styleRemove2(name)) : void 0;
     if (on2 !== on0 || listener0 !== listener) (on1 = (on0 = on2).copy()).on(event, listener0 = listener);
     schedule2.on = on1;
   };
@@ -26589,13 +26862,13 @@ var init_transition = __esm({
 
 // node_modules/d3-transition/src/transition/end.js
 function end_default() {
-  var on0, on1, that = this, id3 = that._id, size = that.size();
+  var on0, on1, that = this, id4 = that._id, size = that.size();
   return new Promise(function(resolve, reject) {
     var cancel = { value: reject }, end = { value: function() {
       if (--size === 0) resolve();
     } };
     that.each(function() {
-      var schedule2 = set2(this, id3), on2 = schedule2.on;
+      var schedule2 = set2(this, id4), on2 = schedule2.on;
       if (on2 !== on0) {
         on1 = (on0 = on2).copy();
         on1._.cancel.push(cancel);
@@ -26614,11 +26887,11 @@ var init_end = __esm({
 });
 
 // node_modules/d3-transition/src/transition/index.js
-function Transition(groups, parents, name, id3) {
+function Transition(groups, parents, name, id4) {
   this._groups = groups;
   this._parents = parents;
   this._name = name;
-  this._id = id3;
+  this._id = id4;
 }
 function transition(name) {
   return selection_default().transition(name);
@@ -26704,30 +26977,30 @@ var init_src7 = __esm({
 });
 
 // node_modules/d3-transition/src/selection/transition.js
-function inherit(node2, id3) {
+function inherit(node2, id4) {
   var timing;
-  while (!(timing = node2.__transition) || !(timing = timing[id3])) {
+  while (!(timing = node2.__transition) || !(timing = timing[id4])) {
     if (!(node2 = node2.parentNode)) {
-      throw new Error(`transition ${id3} not found`);
+      throw new Error(`transition ${id4} not found`);
     }
   }
   return timing;
 }
 function transition_default2(name) {
-  var id3, timing;
+  var id4, timing;
   if (name instanceof Transition) {
-    id3 = name._id, name = name._name;
+    id4 = name._id, name = name._name;
   } else {
-    id3 = newId(), (timing = defaultTiming).time = now(), name = name == null ? null : name + "";
+    id4 = newId(), (timing = defaultTiming).time = now(), name = name == null ? null : name + "";
   }
   for (var groups = this._groups, m = groups.length, j = 0; j < m; ++j) {
     for (var group = groups[j], n = group.length, node2, i2 = 0; i2 < n; ++i2) {
       if (node2 = group[i2]) {
-        schedule_default(node2, name, id3, i2, group, timing || inherit(node2, id3));
+        schedule_default(node2, name, id4, i2, group, timing || inherit(node2, id4));
       }
     }
   }
-  return new Transition(groups, this._parents, name, id3);
+  return new Transition(groups, this._parents, name, id4);
 }
 var defaultTiming;
 var init_transition3 = __esm({
@@ -27726,8 +27999,8 @@ function creaTela(host, opzioni) {
   const mondo = el30("div", "gv-mondo");
   const fili = svg2("svg", { class: "gv-fili", "aria-hidden": "true" });
   const defs = svg2("defs");
-  for (const [id3, classe] of [["gv-freccia", "gv-freccia"], ["gv-freccia-fatto", "gv-freccia gv-freccia--fatto"], ["gv-freccia-fronte", "gv-freccia gv-freccia--fronte"], ["gv-freccia-focus", "gv-freccia gv-freccia--focus"]]) {
-    const m = svg2("marker", { id: id3, viewBox: "0 0 8 8", refX: "7", refY: "4", markerWidth: "7", markerHeight: "7", orient: "auto-start-reverse" });
+  for (const [id4, classe] of [["gv-freccia", "gv-freccia"], ["gv-freccia-fatto", "gv-freccia gv-freccia--fatto"], ["gv-freccia-fronte", "gv-freccia gv-freccia--fronte"], ["gv-freccia-focus", "gv-freccia gv-freccia--focus"]]) {
+    const m = svg2("marker", { id: id4, viewBox: "0 0 8 8", refX: "7", refY: "4", markerWidth: "7", markerHeight: "7", orient: "auto-start-reverse" });
     m.append(svg2("path", { d: "M0 0 L8 4 L0 8 z", class: classe }));
     defs.append(m);
   }
@@ -28195,23 +28468,23 @@ function creaTela(host, opzioni) {
       etichette.append(t3);
     }
   }
-  function spentoDa(id3) {
+  function spentoDa(id4) {
     const e = evidenza;
-    if (!id3) return false;
-    if (e.focus && !e.focus.insieme.has(id3)) return true;
-    if (e.query && !dati.corrisponde(id3, e.query)) return true;
+    if (!id4) return false;
+    if (e.focus && !e.focus.insieme.has(id4)) return true;
+    if (e.query && !dati.corrisponde(id4, e.query)) return true;
     if (e.percorso) {
-      const s = dati.statoDi(id3);
-      return !["succeeded", "running", "leased", "waiting_human", "retry_wait", "failed", "uncertain"].includes(s) && !dati.bloccatoDaProblema(id3);
+      const s = dati.statoDi(id4);
+      return !["succeeded", "running", "leased", "waiting_human", "retry_wait", "failed", "uncertain"].includes(s) && !dati.bloccatoDaProblema(id4);
     }
     return false;
   }
-  function segnaEvidenza(carta, id3) {
-    carta.dataset.spento = String(spentoDa(id3));
-    carta.setAttribute("aria-pressed", String(Boolean(id3) && evidenza.selezionato === id3));
-    if (id3 && evidenza.percorso && dati.bloccatoDaProblema(id3)) carta.dataset.bloccato = "true";
+  function segnaEvidenza(carta, id4) {
+    carta.dataset.spento = String(spentoDa(id4));
+    carta.setAttribute("aria-pressed", String(Boolean(id4) && evidenza.selezionato === id4));
+    if (id4 && evidenza.percorso && dati.bloccatoDaProblema(id4)) carta.dataset.bloccato = "true";
     else delete carta.dataset.bloccato;
-    if (id3 && evidenza.focus?.nodeId === id3) carta.dataset.fuoco = "true";
+    if (id4 && evidenza.focus?.nodeId === id4) carta.dataset.fuoco = "true";
     else delete carta.dataset.fuoco;
   }
   function classificaArchi() {
@@ -28428,19 +28701,19 @@ function creaTela(host, opzioni) {
       return zoomAttorno(prossimoZoom(vista.zoom, verso), r.width / 2, r.height / 2);
     },
     /** Porta un passo (o un blocco) nella vista; con `soloSeFuori` non si muove se lo si vede già. */
-    vaiA(id3, { soloSeFuori = false, zoom = null, durata: durata2 = 260 } = {}) {
-      const p = disp?.passi.get(dati?.chiaveDi(id3) ?? id3) ?? disp?.blocchi.find((b) => b.id === id3 || b.phaseId === id3);
+    vaiA(id4, { soloSeFuori = false, zoom = null, durata: durata2 = 260 } = {}) {
+      const p = disp?.passi.get(dati?.chiaveDi(id4) ?? id4) ?? disp?.blocchi.find((b) => b.id === id4 || b.phaseId === id4);
       if (!p) return;
       const r = dimensioniTela();
       const k = zoom ?? Math.max(vista.zoom, 0.8);
       const sx = p.x * vista.zoom + vista.x, sy = p.y * vista.zoom + vista.y;
       if (soloSeFuori && sx > 24 && sy > 24 && sx + p.w * vista.zoom < r.width - 24 && sy + p.h * vista.zoom < r.height - 24) return;
       pz.setViewport({ x: r.width / 2 - (p.x + p.w / 2) * k, y: r.height / 2 - (p.y + Math.min(p.h, 200) / 2) * k, zoom: k }, { duration: movimentoRidotto2() ? 0 : durata2 });
-      annuncio.textContent = dati?.riga(id3)?.label ?? "";
+      annuncio.textContent = dati?.riga(id4)?.label ?? "";
     },
     /** Un blocco in alto a sinistra (o al centro, se è più stretto della vista), a uno zoom leggibile. */
-    mostraInAlto(id3, k = 0.8) {
-      const b = disp?.blocchi.find((q2) => q2.id === id3 || q2.phaseId === id3);
+    mostraInAlto(id4, k = 0.8) {
+      const b = disp?.blocchi.find((q2) => q2.id === id4 || q2.phaseId === id4);
       if (!b) return void 0;
       const r = dimensioniTela();
       const x = b.w * k < r.width - 48 ? (r.width - b.w * k) / 2 - b.x * k : 24 + 64 * k - b.x * k;
@@ -28722,9 +28995,9 @@ function creaTempo(host, { icona: icona16, onSeleziona, onZoom }) {
     const qui = passi.findIndex(([v]) => dati.cella(v.g.phaseId, v.indice).nodeId === dati.selezionato());
     const prossimo = passi[Math.max(0, Math.min(passi.length - 1, qui + (e.key === "ArrowDown" ? 1 : -1)))];
     if (prossimo) {
-      const id3 = dati.cella(prossimo[0].g.phaseId, prossimo[0].indice).nodeId;
-      onSeleziona?.(id3);
-      api.vaiA(id3);
+      const id4 = dati.cella(prossimo[0].g.phaseId, prossimo[0].indice).nodeId;
+      onSeleziona?.(id4);
+      api.vaiA(id4);
     }
   });
   const api = {
@@ -28816,6 +29089,192 @@ var init_tempo = __esm({
   }
 });
 
+// src/components/workflow-results-panel.js
+function montaPannelloRisultati(host, { client, sorgente, onRitorno } = {}) {
+  const d = host.ownerDocument;
+  const el30 = (tag2, classe, testo2) => {
+    const nodo13 = d.createElement(tag2);
+    if (classe) nodo13.className = classe;
+    if (testo2 != null) nodo13.textContent = testo2;
+    return nodo13;
+  };
+  const id4 = `talos-wfg-risultati-${++prossimoId}`;
+  const pannello = el30("aside", "talos-wfg__result-panel");
+  pannello.id = id4;
+  pannello.hidden = true;
+  pannello.setAttribute("aria-label", "Risultati del passo");
+  const testata = el30("header", "talos-wfg__result-head");
+  const titolo2 = el30("h3", null, "Risultati del passo");
+  titolo2.tabIndex = -1;
+  const chiudi = el30("button", "talos-button talos-button--ghost talos-button--sm", "Chiudi risultati");
+  chiudi.type = "button";
+  testata.append(titolo2, chiudi);
+  const sommario = el30("p", "talos-wfg__result-summary");
+  const regione = el30("div", "talos-wfg__result-scroll");
+  regione.setAttribute("role", "region");
+  regione.setAttribute("aria-label", "Elenco dei risultati");
+  regione.tabIndex = 0;
+  const elenco2 = el30("ol", "talos-wfg__outputs");
+  regione.append(elenco2);
+  pannello.append(testata, sommario, regione);
+  host.append(pannello);
+  let dati = null, generazione = 0, morto = false, caricamento = null, errorePagina = "";
+  const full = /* @__PURE__ */ new Map();
+  const dimensione = (ref) => Number.isSafeInteger(ref.bytes) && ref.bytes >= 0 ? `${ref.bytes} byte` : "dimensione sconosciuta";
+  function valido2() {
+    return !morto && !pannello.hidden && dati;
+  }
+  function chiudiPannello2({ restituisciFuoco = true } = {}) {
+    if (pannello.hidden) return;
+    generazione++;
+    pannello.hidden = true;
+    dati = null;
+    caricamento = null;
+    errorePagina = "";
+    full.clear();
+    if (restituisciFuoco) onRitorno?.();
+  }
+  chiudi.addEventListener("click", () => chiudiPannello2());
+  pannello.addEventListener("keydown", (evento) => {
+    if (evento.key !== "Escape") return;
+    evento.preventDefault();
+    evento.stopPropagation();
+    chiudiPannello2();
+  });
+  async function leggiTutto(ref) {
+    if (!valido2() || caricamento || !testoAmmesso(ref.contentType)) return;
+    const token = generazione, nodeId = dati.nodeId;
+    caricamento = `full:${ref.resultId}`;
+    disegna2();
+    let risultato;
+    try {
+      risultato = await client.output(sorgente, nodeId, ref.resultId);
+    } catch (error) {
+      risultato = { error: error?.message || "Lettura non disponibile" };
+    }
+    if (!valido2() || token !== generazione || dati.nodeId !== nodeId) return;
+    full.set(ref.resultId, risultato?.resultId === ref.resultId || risultato?.error ? risultato : { error: "Identità del risultato incoerente" });
+    caricamento = null;
+    disegna2();
+    if (typeof full.get(ref.resultId)?.content === "string") {
+      const pre = [...elenco2.querySelectorAll(".talos-wfg__output")].find((item) => item.dataset.resultId === ref.resultId)?.querySelector(".talos-wfg__output-full");
+      pre?.focus();
+    }
+  }
+  async function altraPagina() {
+    if (!valido2() || caricamento || !Number.isSafeInteger(dati.nextOutputOffset)) return;
+    const token = generazione, nodeId = dati.nodeId, offset = dati.nextOutputOffset;
+    caricamento = "page";
+    errorePagina = "";
+    disegna2();
+    try {
+      const pagina = await client.passo(sorgente, nodeId, { outputOffset: offset });
+      if (!valido2() || token !== generazione || dati.nodeId !== nodeId) return;
+      if (pagina.nodeId && pagina.nodeId !== nodeId) throw Error("Identità del passo incoerente");
+      const esistenti = new Set(dati.outputs.map((ref) => ref.resultId));
+      dati.outputs.push(...(pagina.outputs ?? []).filter((ref) => ref?.resultId && !esistenti.has(ref.resultId)));
+      dati.nextOutputOffset = pagina.nextOutputOffset;
+      dati.totalOutputs = pagina.totalOutputs;
+    } catch (error) {
+      if (!valido2() || token !== generazione || dati.nodeId !== nodeId) return;
+      errorePagina = error?.message || "Pagina non disponibile";
+    }
+    caricamento = null;
+    disegna2();
+  }
+  function disegna2() {
+    if (!valido2()) return;
+    titolo2.textContent = `Risultati del passo · ${dati.label || dati.nodeId}`;
+    sommario.textContent = `${dati.totalOutputs} risultati · ${dati.outputs.length} caricati`;
+    const righe = [];
+    for (const ref of dati.outputs) {
+      if (!ref?.resultId) continue;
+      const item = el30("li", "talos-wfg__output");
+      item.dataset.resultId = ref.resultId;
+      if (ref.isError) item.dataset.errore = "true";
+      item.append(el30("strong", "talos-wfg__output-id", ref.resultId));
+      item.append(el30("p", "talos-wfg__output-meta", [ref.kind || "risultato", ref.contentType || "tipo sconosciuto", dimensione(ref)].join(" · ")));
+      if (ref.isError) item.append(el30("p", "talos-wfg__output-error", "Il tool ha restituito un errore."));
+      const risultato = full.get(ref.resultId);
+      if (typeof risultato?.content === "string") {
+        const completo = el30("pre", "talos-wfg__output-full", risultato.content);
+        completo.tabIndex = -1;
+        item.append(completo);
+      } else if (risultato?.content === null) {
+        item.append(el30("p", "talos-wfg__vuoto", "Contenuto binario: usa Scarica per aprirlo."));
+      } else {
+        if (ref.preview) {
+          item.append(el30("p", "talos-wfg__output-preview-label", ref.truncated ? "Anteprima tagliata" : "Anteprima"));
+          item.append(el30("pre", "talos-wfg__output-preview", ref.preview));
+        } else item.append(el30("p", "talos-wfg__vuoto", "Anteprima non disponibile."));
+        if (risultato?.error) item.append(el30("p", "talos-wfg__output-error", `Lettura fallita: ${risultato.error}`));
+        if (testoAmmesso(ref.contentType)) {
+          const open = el30("button", "talos-wfg__link talos-wfg__output-open", risultato?.error ? "Riprova lettura" : "Mostra tutto");
+          open.type = "button";
+          open.disabled = Boolean(caricamento);
+          open.addEventListener("click", () => void leggiTutto(ref));
+          item.append(open);
+        }
+      }
+      const raw = el30("a", "talos-wfg__link talos-wfg__output-download", "Scarica");
+      raw.href = client.outputRawUrl(sorgente, dati.nodeId, ref.resultId);
+      raw.setAttribute("download", "");
+      item.append(raw);
+      righe.push(item);
+    }
+    if (!righe.length) righe.push(el30("li", "talos-wfg__vuoto", "Nessun risultato disponibile."));
+    if (Number.isSafeInteger(dati.nextOutputOffset)) {
+      const more = el30("button", "talos-wfg__link talos-wfg__output-more", `Mostra altri risultati (${Math.max(0, dati.totalOutputs - dati.outputs.length)} ancora)`);
+      more.type = "button";
+      more.disabled = Boolean(caricamento);
+      more.addEventListener("click", () => void altraPagina());
+      const footer = el30("li", "talos-wfg__output-footer");
+      if (errorePagina) footer.append(el30("p", "talos-wfg__output-error", `Lettura fallita: ${errorePagina}`));
+      footer.append(more);
+      righe.push(footer);
+    }
+    elenco2.replaceChildren(...righe);
+  }
+  return Object.freeze({
+    elemento: pannello,
+    apri(info) {
+      if (morto || !info?.nodeId) return;
+      generazione++;
+      dati = { ...info, outputs: [...info.outputs ?? []], totalOutputs: Number.isSafeInteger(info.totalOutputs) ? info.totalOutputs : info.outputs?.length ?? 0 };
+      full.clear();
+      errorePagina = "";
+      caricamento = null;
+      pannello.hidden = false;
+      disegna2();
+      titolo2.focus();
+    },
+    aggiorna(info) {
+      if (!valido2() || info?.nodeId !== dati.nodeId) return;
+      const esistenti = new Set(dati.outputs.map((ref) => ref.resultId));
+      dati.outputs.push(...(info.outputs ?? []).filter((ref) => ref?.resultId && !esistenti.has(ref.resultId)));
+      dati.totalOutputs = Number.isSafeInteger(info.totalOutputs) ? info.totalOutputs : dati.totalOutputs;
+      disegna2();
+    },
+    apertoPer: () => valido2() ? dati.nodeId : null,
+    chiudi: chiudiPannello2,
+    distruggi() {
+      morto = true;
+      generazione++;
+      pannello.remove();
+    }
+  });
+}
+var prossimoId, testoAmmesso;
+var init_workflow_results_panel = __esm({
+  "src/components/workflow-results-panel.js"() {
+    prossimoId = 0;
+    testoAmmesso = (mime) => {
+      const tipo = String(mime ?? "").split(";", 1)[0].trim().toLowerCase();
+      return tipo.startsWith("text/") || tipo === "application/json" || tipo.endsWith("+json") || tipo === "application/xml" || tipo.endsWith("+xml");
+    };
+  }
+});
+
 // src/components/grafo-workflow.js
 function montaGrafoWorkflow(host, {
   client,
@@ -28852,7 +29311,7 @@ function montaGrafoWorkflow(host, {
     svg2.append(use);
     return svg2;
   };
-  const bottone5 = (testo2, classe, aria) => {
+  const bottone6 = (testo2, classe, aria) => {
     const b = el30("button", classe, testo2);
     b.type = "button";
     if (aria) b.setAttribute("aria-label", aria);
@@ -28871,7 +29330,7 @@ function montaGrafoWorkflow(host, {
     sorgente,
     errore: null,
     carica: true,
-    vista: VISTE2.some(([id3]) => id3 === vistaRicordata) && (run || vistaRicordata !== "tempo") ? vistaRicordata : "dipendenze",
+    vista: VISTE2.some(([id4]) => id4 === vistaRicordata) && (run || vistaRicordata !== "tempo") ? vistaRicordata : "dipendenze",
     aperti: new Set(iniziale?.gruppo ? [iniziale.gruppo] : []),
     apertiScelti: Boolean(iniziale?.gruppo),
     selezionato: iniziale?.passo ?? null,
@@ -28920,14 +29379,14 @@ function montaGrafoWorkflow(host, {
   const statoRun = el30("span", "talos-wfg__stato-run");
   statoRun.setAttribute("role", "status");
   aggiornato.append(aggiornatoTesto, statoRun);
-  const torna = bottone5("Torna alla chat", "talos-button talos-button--secondary talos-button--sm talos-wfg__torna");
+  const torna = bottone6("Torna alla chat", "talos-button talos-button--secondary talos-button--sm talos-wfg__torna");
   torna.addEventListener("click", () => onChiudi?.());
   const comandiRun = el30("div", "talos-wfg__run");
   comandiRun.hidden = true;
-  const principaleRun = bottone5("", "talos-button talos-button--secondary talos-button--sm talos-wfg__run-principale");
+  const principaleRun = bottone6("", "talos-button talos-button--secondary talos-button--sm talos-wfg__run-principale");
   principaleRun.dataset.focusKey = "run:principale";
   const menuRun = el30("div", "talos-wfg__menu-run");
-  const altroRun = bottone5("", "talos-wfg__icona-bottone", "Altri comandi del run");
+  const altroRun = bottone6("", "talos-wfg__icona-bottone", "Altri comandi del run");
   altroRun.append(icona16("i-more"));
   altroRun.setAttribute("aria-haspopup", "menu");
   altroRun.setAttribute("aria-expanded", "false");
@@ -28951,30 +29410,30 @@ function montaGrafoWorkflow(host, {
   const viste = el30("div", "gv-viste");
   viste.setAttribute("role", "radiogroup");
   viste.setAttribute("aria-label", "Vista");
-  const vociVista = new Map(VISTE2.map(([id3, testo2, ic]) => {
-    const b = bottone5("", "gv-vista");
+  const vociVista = new Map(VISTE2.map(([id4, testo2, ic]) => {
+    const b = bottone6("", "gv-vista");
     b.setAttribute("role", "radio");
     b.append(icona16(ic), el30("span", null, testo2));
-    b.dataset.vista = id3;
-    b.dataset.focusKey = `vista:${id3}`;
-    if (id3 === "tempo" && !run) {
+    b.dataset.vista = id4;
+    b.dataset.focusKey = `vista:${id4}`;
+    if (id4 === "tempo" && !run) {
       b.disabled = true;
       b.title = "Un workflow non ancora avviato non ha tempi da mostrare.";
     }
-    b.addEventListener("click", () => scegliVista(id3));
+    b.addEventListener("click", () => scegliVista(id4));
     viste.append(b);
-    return [id3, b];
+    return [id4, b];
   }));
   viste.addEventListener("keydown", (e) => {
     if (!["ArrowRight", "ArrowLeft", "ArrowDown", "ArrowUp"].includes(e.key)) return;
     e.preventDefault();
-    const ammesse = VISTE2.map(([id3]) => id3).filter((id3) => !vociVista.get(id3).disabled);
+    const ammesse = VISTE2.map(([id4]) => id4).filter((id4) => !vociVista.get(id4).disabled);
     const i2 = ammesse.indexOf(stato2.vista);
     const prossima = ammesse[(i2 + (["ArrowRight", "ArrowDown"].includes(e.key) ? 1 : -1) + ammesse.length) % ammesse.length];
     scegliVista(prossima);
     vociVista.get(prossima).focus();
   });
-  const percorso = bottone5("", "talos-wfg__icona-bottone gv-percorso");
+  const percorso = bottone6("", "talos-wfg__icona-bottone gv-percorso");
   percorso.setAttribute("aria-pressed", "false");
   percorso.append(icona16("i-history"), el30("span", null, "Percorso"));
   percorso.title = run ? "Mette in evidenza ciò che è già stato eseguito, il fronte che lavora adesso e ciò che è bloccato da un problema" : "Un workflow non ancora avviato non ha un percorso eseguito.";
@@ -28990,17 +29449,17 @@ function montaGrafoWorkflow(host, {
   campoCerca.placeholder = "Cerca agenti o fasi…";
   campoCerca.setAttribute("aria-label", "Cerca fra agenti e fasi del diagramma");
   campoCerca.hidden = true;
-  const cerca = bottone5("", "talos-wfg__icona-bottone", "Cerca nel diagramma");
+  const cerca = bottone6("", "talos-wfg__icona-bottone", "Cerca nel diagramma");
   cerca.append(icona16("i-search"));
-  const meno = bottone5("", "talos-wfg__icona-bottone", "Riduci lo zoom del 10%");
+  const meno = bottone6("", "talos-wfg__icona-bottone", "Riduci lo zoom del 10%");
   meno.append(icona16("i-minus"));
-  const percento2 = bottone5("100%", "talos-wfg__icona-bottone gv-percento", "Zoom al 100%");
-  const piu = bottone5("", "talos-wfg__icona-bottone", "Aumenta lo zoom del 10%");
+  const percento2 = bottone6("100%", "talos-wfg__icona-bottone gv-percento", "Zoom al 100%");
+  const piu = bottone6("", "talos-wfg__icona-bottone", "Aumenta lo zoom del 10%");
   piu.append(icona16("i-plus"));
-  const adatta = bottone5("", "talos-wfg__icona-bottone", "Adatta il diagramma alla finestra");
+  const adatta = bottone6("", "talos-wfg__icona-bottone", "Adatta il diagramma alla finestra");
   adatta.append(icona16("i-fit"));
   const menuGruppi = el30("div", "talos-wfg__menu-vista");
-  const altroGruppi = bottone5("", "talos-wfg__icona-bottone", "Gruppi");
+  const altroGruppi = bottone6("", "talos-wfg__icona-bottone", "Gruppi");
   altroGruppi.append(icona16("i-layers"));
   altroGruppi.setAttribute("aria-haspopup", "menu");
   altroGruppi.setAttribute("aria-expanded", "false");
@@ -29009,7 +29468,7 @@ function montaGrafoWorkflow(host, {
   vociGruppi.setAttribute("aria-label", "Gruppi");
   vociGruppi.hidden = true;
   const voceGruppi = (testo2, azione) => {
-    const b = bottone5(testo2, "talos-wfg__menu-voce");
+    const b = bottone6(testo2, "talos-wfg__menu-voce");
     b.setAttribute("role", "menuitem");
     b.tabIndex = -1;
     b.addEventListener("click", () => {
@@ -29052,13 +29511,13 @@ function montaGrafoWorkflow(host, {
   rip.setAttribute("aria-label", "Riproduzione del run");
   rip.hidden = !run;
   rip.dataset.pronta = "false";
-  const ripGioca = bottone5("", "gv-rip-gioca", "Riproduci il run dall’inizio");
+  const ripGioca = bottone6("", "gv-rip-gioca", "Riproduci il run dall’inizio");
   ripGioca.append(icona16("i-play"));
   const ripVelocita = el30("div", "gv-rip-velocita");
   ripVelocita.setAttribute("role", "radiogroup");
   ripVelocita.setAttribute("aria-label", "Velocità");
   for (const [v, testo2] of LENTEZZE) {
-    const b = bottone5(testo2, "gv-rip-v");
+    const b = bottone6(testo2, "gv-rip-v");
     b.setAttribute("role", "radio");
     b.setAttribute("aria-checked", String(v === stato2.velocita));
     b.title = v === 60 ? "Un minuto di lavoro al secondo" : `${v} volte più veloce`;
@@ -29077,7 +29536,7 @@ function montaGrafoWorkflow(host, {
   const ripManiglia = el30("div", "gv-rip-maniglia");
   ripBinario.append(ripVuoti, ripPieno, ripManiglia);
   const ripTesto = el30("span", "gv-rip-testo", "Carico la storia del run…");
-  const ripVivo = bottone5("Torna al vivo", "talos-button talos-button--secondary talos-button--sm gv-rip-vivo");
+  const ripVivo = bottone6("Torna al vivo", "talos-button talos-button--secondary talos-button--sm gv-rip-vivo");
   ripVivo.hidden = true;
   const ripNota = el30("span", "gv-rip-nota", "Rigiocata dalla storia degli stati del registro");
   rip.append(ripGioca, ripVelocita, ripBinario, ripTesto, ripVivo, ripNota);
@@ -29090,7 +29549,7 @@ function montaGrafoWorkflow(host, {
   const detCompito = el30("section", "talos-wfg__dettaglio-colonna");
   detCompito.setAttribute("aria-label", "Task corrente");
   const detAltro = el30("div", "talos-wfg__dettaglio-altro");
-  const menuAgente = bottone5("", "talos-wfg__icona-bottone", "Altre azioni sull'agente");
+  const menuAgente = bottone6("", "talos-wfg__icona-bottone", "Altre azioni sull'agente");
   menuAgente.append(icona16("i-more"));
   menuAgente.setAttribute("aria-haspopup", "menu");
   menuAgente.setAttribute("aria-expanded", "false");
@@ -29131,8 +29590,8 @@ function montaGrafoWorkflow(host, {
   host.append(root2);
   const tela = creaTela(area, {
     icona: icona16,
-    onSeleziona: (id3, { apri = false } = {}) => {
-      seleziona(id3);
+    onSeleziona: (id4, { apri = false } = {}) => {
+      seleziona(id4);
       if (apri) dettaglio.querySelector("button")?.focus();
     },
     onGruppo: (phaseId, apri, blocco) => {
@@ -29148,13 +29607,22 @@ function montaGrafoWorkflow(host, {
   });
   const tempo2 = creaTempo(area, {
     icona: icona16,
-    onSeleziona: (id3) => seleziona(id3),
+    onSeleziona: (id4) => seleziona(id4),
     onZoom: (k) => {
       if (stato2.vista === "tempo") percento2.textContent = `${Math.round(k * 100)}%`;
     }
   });
   tempo2.elemento.hidden = true;
   area.append(lettura);
+  const pannelloRisultati = montaPannelloRisultati(area, {
+    client,
+    sorgente,
+    onRitorno: () => {
+      const trigger = dettaglio.querySelector('[data-azione="apri-risultati"]');
+      trigger?.setAttribute("aria-expanded", "false");
+      trigger?.focus();
+    }
+  });
   const ricorda2 = () => {
     try {
       storage?.setItem(chiaveMemoria, JSON.stringify({ vista: stato2.vista }));
@@ -29198,22 +29666,22 @@ function montaGrafoWorkflow(host, {
         return { parola: STATI_RUN2[g] ?? g, tono: TONO_RUN[g] ?? "neutro" };
       },
       conteggi: (phaseId) => fonte.conteggi(phaseId, stato2.t),
-      riga: (id3) => fonte.riga(id3),
+      riga: (id4) => fonte.riga(id4),
       cella: (phaseId, i2) => fonte.cella(phaseId, i2),
-      chiaveDi: (id3) => {
-        const posto = id3 ? fonte.posto(id3) : null;
-        if (!posto) return id3;
-        return formaDelleFasi(fonte.panoramica, stato2.aperti).get(posto.phaseId) === "griglia" ? chiaveCella(posto.phaseId, posto.indice) : id3;
+      chiaveDi: (id4) => {
+        const posto = id4 ? fonte.posto(id4) : null;
+        if (!posto) return id4;
+        return formaDelleFasi(fonte.panoramica, stato2.aperti).get(posto.phaseId) === "griglia" ? chiaveCella(posto.phaseId, posto.indice) : id4;
       },
       statoDi,
       durataDi,
       modelloDi: (riga2) => modelloDelPasso(riga2, sessione.modello),
-      corrisponde: (id3, q2) => {
-        const r = fonte.riga(id3);
+      corrisponde: (id4, q2) => {
+        const r = fonte.riga(id4);
         const n = q2.toLocaleLowerCase("it-IT");
         return Boolean(r) && [r.label, r.taskPreview].some((x) => String(x ?? "").toLocaleLowerCase("it-IT").includes(n));
       },
-      bloccatoDaProblema: (id3) => stato2.bloccati.has(id3) && ["pending", "blocked"].includes(statoDi(id3))
+      bloccatoDaProblema: (id4) => stato2.bloccati.has(id4) && ["pending", "blocked"].includes(statoDi(id4))
     };
   }
   function datiTempo() {
@@ -29224,12 +29692,12 @@ function montaGrafoWorkflow(host, {
       campata: (p) => fonte.campata(p),
       cella: (phaseId, i2) => fonte.cella(phaseId, i2),
       chiedi: (phaseId, da, a) => fonte.chiedi(phaseId, da, a),
-      posto: (id3) => fonte.posto(id3),
+      posto: (id4) => fonte.posto(id4),
       statoDi,
       conteggi: (phaseId) => fonte.conteggi(phaseId, stato2.t),
       selezionato: () => stato2.selezionato,
       tempoCorrente,
-      spento: (id3) => Boolean(stato2.focus && !stato2.focus.insieme.has(id3) || stato2.query && !datiViste().corrisponde(id3, stato2.query))
+      spento: (id4) => Boolean(stato2.focus && !stato2.focus.insieme.has(id4) || stato2.query && !datiViste().corrisponde(id4, stato2.query))
     };
   }
   function apertiDiPartenza() {
@@ -29401,9 +29869,9 @@ function montaGrafoWorkflow(host, {
     avviso.textContent = stato2.carica ? "Carico il workflow dal server…" : stato2.errore ?? "";
     avviso.hidden = !stato2.carica && !stato2.errore;
     root2.dataset.vista = stato2.vista;
-    for (const [id3, b] of vociVista) {
-      b.setAttribute("aria-checked", String(id3 === stato2.vista));
-      b.tabIndex = id3 === stato2.vista ? 0 : -1;
+    for (const [id4, b] of vociVista) {
+      b.setAttribute("aria-checked", String(id4 === stato2.vista));
+      b.tabIndex = id4 === stato2.vista ? 0 : -1;
     }
     const diagramma = stato2.vista !== "lettura";
     for (const b of [meno, percento2, piu, adatta]) b.disabled = !diagramma;
@@ -29427,7 +29895,7 @@ function montaGrafoWorkflow(host, {
       fuocoChip.hidden = false;
       const r = fonte.riga(stato2.focus.nodeId);
       const n = stato2.focus.insieme.size - 1;
-      const via = bottone5("", "gv-fuoco-via", "Togli il focus");
+      const via = bottone6("", "gv-fuoco-via", "Togli il focus");
       via.append(icona16("i-x"));
       via.addEventListener("click", () => togliFocus());
       fuocoChip.replaceChildren(icona16("i-branch"), el30("span", null, `${stato2.focus.verso === "monte" ? "Da cosa dipende" : "Cosa aspetta"} ${r?.label ?? ""}: ${plurale4(n, "agente", "agenti")}`), via);
@@ -29435,6 +29903,7 @@ function montaGrafoWorkflow(host, {
   }
   function seleziona(nodeId, { muovi = true, riga: riga2 = null } = {}) {
     if (!nodeId) return;
+    if (stato2.selezionato && stato2.selezionato !== nodeId) pannelloRisultati.chiudi({ restituisciFuoco: false });
     stato2.selezionato = nodeId;
     stato2.fuocoAlbero = `passo:${nodeId}`;
     stato2.lignaggio = null;
@@ -29486,7 +29955,7 @@ function montaGrafoWorkflow(host, {
       return;
     }
     const problemi = fonte.passiAl(stato2.t, PROBLEMI).slice(0, PROBLEMI_MASSIMI);
-    const insiemi = await Promise.all(problemi.map((id3) => fonte.discendenza(id3, "valle").catch(() => /* @__PURE__ */ new Set())));
+    const insiemi = await Promise.all(problemi.map((id4) => fonte.discendenza(id4, "valle").catch(() => /* @__PURE__ */ new Set())));
     if (morto) return;
     stato2.bloccati = new Set(insiemi.flatMap((s) => [...s]));
     evidenzia();
@@ -29510,6 +29979,7 @@ function montaGrafoWorkflow(host, {
       if (morto || stato2.selezionato !== nodeId) return;
       const primaSessione = stato2.dettaglio?.stepSessionId ?? null;
       stato2.dettaglio = { ...info, nodeId, carica: false };
+      pannelloRisultati.aggiorna(stato2.dettaglio);
       if (info.stepSessionId && info.stepSessionId !== primaSessione) {
         chiudiEvidenze();
         chiudiEvidenze = client.evidenze(info.stepSessionId, (voci) => {
@@ -29558,7 +30028,7 @@ function montaGrafoWorkflow(host, {
     const focus = el30("div", "gv-dettaglio-focus");
     for (const [verso, testo2] of [["monte", "Da cosa dipende"], ["valle", "Cosa aspetta"]]) {
       const n = stato2.lignaggio?.[verso];
-      const b = bottone5(n === void 0 ? testo2 : `${testo2} (${cifra2(n)})`, "talos-wfg__link");
+      const b = bottone6(n === void 0 ? testo2 : `${testo2} (${cifra2(n)})`, "talos-wfg__link");
       b.dataset.focusKey = `focus:${verso}`;
       b.setAttribute("aria-pressed", String(stato2.focus?.nodeId === stato2.selezionato && stato2.focus.verso === verso));
       b.disabled = n === 0;
@@ -29591,70 +30061,24 @@ function montaGrafoWorkflow(host, {
     if (stato2.t !== null && run) elenco2.append(el30("li", "talos-wfg__vuoto", "Sono quelle di adesso: le evidenze non hanno un orario e la riproduzione non le ferma."));
     const outputParts = [provaTesta, elenco2];
     if (run && !info.carica && (info.totalOutputs > 0 || info.outputs?.length > 0)) {
-      const outputTitle = el30("h4", "talos-wfg__dettaglio-titolo", `Risultati (${Number.isSafeInteger(info.totalOutputs) ? info.totalOutputs : 0})`);
-      const outputs = el30("ul", "talos-wfg__outputs");
-      for (const ref of info.outputs ?? []) {
-        if (!ref?.resultId) continue;
-        const item = el30("li", "talos-wfg__output");
-        const facts = [ref.kind || "risultato", ref.contentType || "tipo sconosciuto", Number.isSafeInteger(ref.bytes) ? `${cifra2(ref.bytes)} byte` : "dimensione sconosciuta"];
-        item.append(el30("div", "talos-wfg__output-meta", facts.join(" · ")));
-        const complete = info.fullById?.[ref.resultId];
-        if (ref.preview && (complete?.content === void 0 || complete.content === null)) {
-          item.append(el30("pre", "talos-wfg__output-preview", ref.preview));
-        }
-        if (complete?.content !== void 0 && complete.content !== null) {
-          const full = el30("pre", "talos-wfg__output-full", complete.content);
-          full.tabIndex = -1;
-          item.append(full);
-        } else if (complete?.content === null) {
-          item.append(el30("p", "talos-wfg__vuoto", "Contenuto binario: scarica il file per aprirlo."));
-        } else if (complete?.error) item.append(el30("p", "talos-wfg__vuoto", `Lettura fallita (${complete.error}). Riprova.`));
-        const mediaType = String(ref.contentType ?? "").split(";", 1)[0].trim().toLowerCase();
-        const textEligible = mediaType.startsWith("text/") || mediaType === "application/json" || mediaType.endsWith("+json") || mediaType === "application/xml" || mediaType.endsWith("+xml");
-        if ((!complete || complete.error) && textEligible) {
-          const open = bottone5("Mostra tutto", "talos-wfg__link talos-wfg__output-open");
-          open.addEventListener("click", async () => {
-            open.disabled = true;
-            open.textContent = "Caricamento…";
-            let result;
-            try {
-              result = await client.output(sorgente, info.nodeId, ref.resultId);
-            } catch (error) {
-              result = { error: error?.message ?? "errore sconosciuto" };
-            }
-            if (morto || stato2.selezionato !== info.nodeId || stato2.dettaglio?.nodeId !== info.nodeId) return;
-            stato2.dettaglio.fullById ??= {};
-            stato2.dettaglio.fullById[ref.resultId] = result?.resultId === ref.resultId || result?.error ? result : { error: "risultato incoerente" };
-            disegnaDettaglio2();
-          });
-          item.append(open);
-        }
-        const raw = el30("a", "talos-wfg__link talos-wfg__output-download", "Scarica");
-        raw.href = client.outputRawUrl(sorgente, info.nodeId, ref.resultId);
-        raw.setAttribute("download", "");
-        item.append(raw);
-        outputs.append(item);
-      }
-      if (outputs.children.length === 0) outputs.append(el30("li", "talos-wfg__vuoto", "Nessun risultato disponibile."));
-      outputParts.push(outputTitle, outputs);
-      if (info.nextOutputOffset !== null && Number.isSafeInteger(info.nextOutputOffset)) {
-        const more = bottone5(`Mostra altri risultati (${cifra2(info.totalOutputs - info.outputs.length)} ancora)`, "talos-wfg__link talos-wfg__output-more");
-        more.addEventListener("click", async () => {
-          more.disabled = true;
-          try {
-            const page = await client.passo(sorgente, info.nodeId, { outputOffset: info.nextOutputOffset });
-            if (morto || stato2.selezionato !== info.nodeId || stato2.dettaglio?.nodeId !== info.nodeId) return;
-            const known = new Set(stato2.dettaglio.outputs.map((entry) => entry.resultId));
-            stato2.dettaglio.outputs.push(...(page.outputs ?? []).filter((entry) => !known.has(entry.resultId)));
-            stato2.dettaglio.nextOutputOffset = page.nextOutputOffset;
-            disegnaDettaglio2();
-          } catch {
-            more.disabled = false;
-            more.textContent = "Lettura fallita. Riprova";
-          }
-        });
-        outputParts.push(more);
-      }
+      const total = Number.isSafeInteger(info.totalOutputs) ? info.totalOutputs : info.outputs?.length ?? 0;
+      outputParts.push(el30("h4", "talos-wfg__dettaglio-titolo", `Risultati (${cifra2(total)})`));
+      const tipi = new Set((info.outputs ?? []).map((ref) => ref?.kind).filter(Boolean));
+      outputParts.push(el30("p", "talos-wfg__result-compact", [
+        `${cifra2(total)} risultati`,
+        tipi.size ? [...tipi].join(", ") : "tipo sconosciuto",
+        "Apri il pannello per anteprime, testo integrale e download"
+      ].join(" · ")));
+      const open = bottone6("Apri risultati", "talos-wfg__link talos-wfg__result-trigger");
+      open.dataset.azione = "apri-risultati";
+      open.setAttribute("aria-controls", pannelloRisultati.elemento.id);
+      open.setAttribute("aria-expanded", String(pannelloRisultati.apertoPer() === info.nodeId));
+      open.addEventListener("click", (evento) => {
+        evento.stopPropagation();
+        pannelloRisultati.apri({ ...info, label: riga2.label ?? riga2.nodeId });
+        open.setAttribute("aria-expanded", "true");
+      });
+      outputParts.push(open);
     }
     detProve.replaceChildren(...outputParts);
     const compitoTesta = el30("h4", "talos-wfg__dettaglio-titolo");
@@ -30250,6 +30674,7 @@ function montaGrafoWorkflow(host, {
       for (const aperta2 of d.querySelectorAll?.("dialog.talos-wfg-conferma[open]") ?? []) aperta2.close();
       tela.distruggi();
       tempo2.distruggi();
+      pannelloRisultati.distruggi();
       try {
         elk.terminateWorker?.();
       } catch {
@@ -30269,6 +30694,7 @@ var init_grafo_workflow = __esm({
     init_fonte();
     init_tela();
     init_tempo();
+    init_workflow_results_panel();
     init_comuni();
     init_tela();
     RILETTURA_MINIMA_MS = 1e3;
@@ -30575,7 +31001,7 @@ function montaRailWorkflow(contenitore, {
     svg2.append(use);
     return svg2;
   };
-  const bottone5 = (classe, testo2) => {
+  const bottone6 = (classe, testo2) => {
     const b = el30("button", classe, testo2);
     b.type = "button";
     return b;
@@ -30587,11 +31013,11 @@ function montaRailWorkflow(contenitore, {
   const root2 = el30("section", "talos-wfr");
   root2.dataset.c = "WorkflowRail";
   root2.setAttribute("aria-label", "Agenti del workflow");
-  const porta = bottone5("talos-wfr__link talos-wfr__porta", null);
+  const porta = bottone6("talos-wfr__link talos-wfr__porta", null);
   porta.append(icona16("i-coordina"), el30("span", null, "Apri diagramma"));
   porta.addEventListener("click", () => onApri?.(null));
   const testaAttenzione = el30("div", "talos-wfr__testa");
-  const vediTutto = bottone5("talos-wfr__link", "Vedi tutto");
+  const vediTutto = bottone6("talos-wfr__link", "Vedi tutto");
   testaAttenzione.append(el30("h3", "talos-wfr__titolo", "Richiede attenzione"), vediTutto);
   const attenzione = el30("ul", "talos-wfr__attenzione");
   attenzione.setAttribute("aria-label", "Richiede attenzione");
@@ -30604,20 +31030,20 @@ function montaRailWorkflow(contenitore, {
   const interruttore = el30("div", "talos-wfr__modi");
   interruttore.setAttribute("role", "group");
   interruttore.setAttribute("aria-label", "Mostra per");
-  const modoGruppi = bottone5("talos-wfr__modo", "Gruppi");
+  const modoGruppi = bottone6("talos-wfr__modo", "Gruppi");
   modoGruppi.dataset.modo = "gruppi";
-  const modoAgenti = bottone5("talos-wfr__modo", "Agenti");
+  const modoAgenti = bottone6("talos-wfr__modo", "Agenti");
   modoAgenti.dataset.modo = "agenti";
   interruttore.append(modoGruppi, modoAgenti);
   const testaElenco = el30("div", "talos-wfr__testa talos-wfr__testa--elenco");
   const titoloElenco = el30("h3", "talos-wfr__titolo");
   const contoElenco = el30("span", "talos-wfr__conto");
-  const togliFiltro = bottone5("talos-wfr__togli", null);
+  const togliFiltro = bottone6("talos-wfr__togli", null);
   togliFiltro.append(el30("span", null, "Mostra tutti"), icona16("i-x"));
   togliFiltro.setAttribute("aria-label", "Togli il filtro e mostra tutti gli agenti");
   testaElenco.append(titoloElenco, contoElenco, togliFiltro);
   const elenco2 = el30("ul", "talos-wfr__elenco");
-  const altri = bottone5("talos-wfr__link talos-wfr__altri", "Mostra altri");
+  const altri = bottone6("talos-wfr__link talos-wfr__altri", "Mostra altri");
   const esito = el30("p", "talos-wfr__esito");
   esito.setAttribute("role", "status");
   const totali = el30("section", "talos-wfr__totali");
@@ -30716,7 +31142,7 @@ function montaRailWorkflow(contenitore, {
       voceAttenzione.clear();
       attenzione.replaceChildren(...voci.map((v) => {
         const li = el30("li");
-        const b = bottone5("talos-wfr__voce-attenzione");
+        const b = bottone6("talos-wfr__voce-attenzione");
         b.dataset.chiave = v.chiave;
         b.addEventListener("click", () => scegliFiltro(b.dataset.chiave));
         li.append(b);
@@ -30739,7 +31165,7 @@ function montaRailWorkflow(contenitore, {
   }
   const righeVive = /* @__PURE__ */ new Map();
   function rigaGruppo(gruppo) {
-    const b = bottone5("talos-wfr__gruppo");
+    const b = bottone6("talos-wfr__gruppo");
     b.dataset.phaseId = gruppo.phaseId;
     b.addEventListener("click", () => onApri?.({ gruppo: b.dataset.phaseId }));
     riempiGruppo(b, gruppo);
@@ -30762,7 +31188,7 @@ function montaRailWorkflow(contenitore, {
     b.setAttribute("aria-label", `${gruppo.label}: ${plurale5(gruppo.total, "agente", "agenti")}, ${cento === null ? "non ancora avviato" : `${cifra2(gruppo.terminated)} terminati su ${cifra2(gruppo.total)}`}. Apri nel diagramma`);
   }
   function rigaAgente(riga2) {
-    const b = bottone5("talos-wfr__agente");
+    const b = bottone6("talos-wfr__agente");
     b.dataset.nodoId = riga2.nodeId;
     b.dataset.phaseId = riga2.phaseId;
     b.addEventListener("click", () => onApri?.({ passo: b.dataset.nodoId, gruppo: b.dataset.phaseId }));
@@ -30777,8 +31203,8 @@ function montaRailWorkflow(contenitore, {
   }
   function applicaEvidenza() {
     const e = stato2.evidenza;
-    for (const [id3, b] of righeVive) {
-      const scelta = Boolean(e) && (stato2.modo === "gruppi" ? e.gruppo === id3 : e.passo === id3);
+    for (const [id4, b] of righeVive) {
+      const scelta = Boolean(e) && (stato2.modo === "gruppi" ? e.gruppo === id4 : e.passo === id4);
       if (scelta) b.setAttribute("aria-current", "true");
       else b.removeAttribute("aria-current");
     }
@@ -30985,6 +31411,118 @@ var init_rail_workflow = __esm({
   }
 });
 
+// src/components/grafo-sorgenti.js
+function bottone4(d, testo2) {
+  const nodo13 = d.createElement("button");
+  nodo13.type = "button";
+  nodo13.textContent = testo2;
+  return nodo13;
+}
+function montaSelettoreRail(contenitore, { iniziale = "workflow", onSelezione } = {}) {
+  const d = contenitore.ownerDocument;
+  const id4 = `talos-sorgenti-${++prossimoId2}`;
+  const radice2 = d.createElement("div");
+  radice2.className = "talos-sorgenti";
+  radice2.dataset.c = "SorgentiAgenti";
+  const schede = d.createElement("div");
+  schede.className = "talos-sorgenti__schede";
+  schede.setAttribute("role", "tablist");
+  schede.setAttribute("aria-label", "Tipo di lavoro");
+  const pulsanti = /* @__PURE__ */ new Map();
+  const pannelli = /* @__PURE__ */ new Map();
+  for (const tipo of TIPI2) {
+    const etichetta3 = tipo === "workflow" ? "Workflow" : "Deleghe";
+    const tab = bottone4(d, etichetta3);
+    const pannello = d.createElement("section");
+    tab.id = `${id4}-${tipo}-tab`;
+    tab.className = "talos-sorgenti__scheda";
+    tab.setAttribute("role", "tab");
+    tab.setAttribute("aria-controls", `${id4}-${tipo}-pannello`);
+    pannello.id = `${id4}-${tipo}-pannello`;
+    pannello.className = "talos-sorgenti__pannello";
+    pannello.setAttribute("role", "tabpanel");
+    pannello.setAttribute("aria-labelledby", tab.id);
+    if (tipo === "deleghe") pannello.id = "railDeleghe";
+    tab.setAttribute("aria-controls", pannello.id);
+    tab.addEventListener("click", () => seleziona(tipo, { notifica: true }));
+    schede.append(tab);
+    radice2.append(pannello);
+    pulsanti.set(tipo, tab);
+    pannelli.set(tipo, pannello);
+  }
+  radice2.prepend(schede);
+  contenitore.replaceChildren(radice2);
+  let corrente = null;
+  function seleziona(tipo, { notifica = false } = {}) {
+    if (!TIPI2.includes(tipo)) return;
+    const cambiata = corrente !== tipo;
+    corrente = tipo;
+    for (const voce of TIPI2) {
+      const attiva = voce === tipo;
+      const tab = pulsanti.get(voce);
+      const pannello = pannelli.get(voce);
+      tab.setAttribute("aria-selected", String(attiva));
+      tab.tabIndex = attiva ? 0 : -1;
+      pannello.dataset.attivo = String(attiva);
+      pannello.inert = !attiva;
+      pannello.setAttribute("aria-hidden", String(!attiva));
+    }
+    if (notifica && cambiata) onSelezione?.(tipo);
+  }
+  schede.addEventListener("keydown", (evento) => {
+    const correnteFocus = TIPI2.findIndex((tipo) => pulsanti.get(tipo) === d.activeElement);
+    if (correnteFocus < 0) return;
+    let indice2 = correnteFocus;
+    if (evento.key === "ArrowRight") indice2 = (indice2 + 1) % TIPI2.length;
+    else if (evento.key === "ArrowLeft") indice2 = (indice2 + TIPI2.length - 1) % TIPI2.length;
+    else if (evento.key === "Home") indice2 = 0;
+    else if (evento.key === "End") indice2 = TIPI2.length - 1;
+    else return;
+    evento.preventDefault();
+    pulsanti.get(TIPI2[indice2]).focus();
+  });
+  seleziona(TIPI2.includes(iniziale) ? iniziale : "workflow");
+  return Object.freeze({
+    elemento: radice2,
+    workflowPanel: pannelli.get("workflow"),
+    deleghePanel: pannelli.get("deleghe"),
+    seleziona,
+    corrente: () => corrente,
+    distruggi: () => radice2.remove()
+  });
+}
+function montaSelettoreGrafo(testata, { iniziale, onSelezione } = {}) {
+  const d = testata.ownerDocument;
+  const gruppo = d.createElement("div");
+  gruppo.className = "talos-sorgenti__grafo";
+  gruppo.setAttribute("role", "group");
+  gruppo.setAttribute("aria-label", "Mostra diagramma");
+  const pulsanti = /* @__PURE__ */ new Map();
+  for (const tipo of TIPI2) {
+    const tab = bottone4(d, tipo === "workflow" ? "Workflow" : "Deleghe");
+    tab.className = "talos-sorgenti__scheda";
+    tab.addEventListener("click", () => {
+      if (tipo !== iniziale) onSelezione?.(tipo);
+    });
+    gruppo.append(tab);
+    pulsanti.set(tipo, tab);
+  }
+  function seleziona(tipo) {
+    iniziale = tipo;
+    for (const voce of TIPI2) pulsanti.get(voce).setAttribute("aria-pressed", String(voce === tipo));
+  }
+  seleziona(iniziale);
+  testata.insertBefore(gruppo, testata.lastElementChild);
+  return Object.freeze({ elemento: gruppo, seleziona, distruggi: () => gruppo.remove() });
+}
+var TIPI2, prossimoId2;
+var init_grafo_sorgenti = __esm({
+  "src/components/grafo-sorgenti.js"() {
+    TIPI2 = Object.freeze(["workflow", "deleghe"]);
+    prossimoId2 = 0;
+  }
+});
+
 // src/components/workflow-history.js
 function montaCronologiaWorkflow(contenitore, { fetchFn, sessionId, onApri } = {}) {
   const doc = contenitore.ownerDocument;
@@ -31028,8 +31566,8 @@ function montaCronologiaWorkflow(contenitore, { fetchFn, sessionId, onApri } = {
     const li = element("li", "talos-wfh__row");
     const button2 = element("button", "talos-wfh__open");
     button2.type = "button";
-    const valid = typeof run.runId === "string" && run.runId.length > 0 && typeof run.workflowId === "string" && run.workflowId.length > 0 && Number.isSafeInteger(run.version) && run.version > 0;
-    button2.disabled = !valid;
+    const valid2 = typeof run.runId === "string" && run.runId.length > 0 && typeof run.workflowId === "string" && run.workflowId.length > 0 && Number.isSafeInteger(run.version) && run.version > 0;
+    button2.disabled = !valid2;
     const label = element("span", "talos-wfh__label", typeof run.title === "string" && run.title ? run.title : "Automazione");
     const state = element("span", "talos-wfh__state", STATUS[run.status] ?? "Stato sconosciuto");
     const detail = element("span", "talos-wfh__detail");
@@ -31040,7 +31578,7 @@ function montaCronologiaWorkflow(contenitore, { fetchFn, sessionId, onApri } = {
     if (run.model && run.model !== "unknown") facts.push(run.model === "mixed" ? "Modelli vari" : run.model);
     detail.textContent = facts.join(" · ");
     button2.append(label, state, detail);
-    if (valid) button2.addEventListener("click", () => onApri?.({ runId: run.runId, workflowId: run.workflowId, version: run.version }));
+    if (valid2) button2.addEventListener("click", () => onApri?.({ runId: run.runId, workflowId: run.workflowId, version: run.version }));
     li.append(button2);
     return li;
   }
@@ -31774,6 +32312,268 @@ var init_board = __esm({
   }
 });
 
+// src/components/session-deletion-feedback.js
+function creaAvvisiEliminazione({ storage, mostraToast }) {
+  let receipt = empty2(), revision = 0;
+  try {
+    const raw = storage().getItem(KEY);
+    if (typeof raw === "string" && raw.length <= 256) {
+      const parsed = JSON.parse(raw);
+      if (valid(parsed)) receipt = parsed;
+    }
+  } catch {
+  }
+  const pendente = () => receipt.output || receipt.workflow;
+  return {
+    pendente,
+    registra(result) {
+      const output = result?.outputCleanup?.state === "pending";
+      const workflow = Array.isArray(result?.workflowNonEliminati) && result.workflowNonEliminati.length > 0;
+      if (output || workflow) {
+        receipt = { ...receipt, output: receipt.output || output, workflow: receipt.workflow || workflow };
+        revision++;
+      }
+      if (!pendente()) return { pending: false, persisted: true };
+      try {
+        storage().setItem(KEY, JSON.stringify(receipt));
+        return { pending: true, persisted: true };
+      } catch {
+        return { pending: true, persisted: false };
+      }
+    },
+    mostra({ dopoLettura } = {}) {
+      if (!pendente()) return null;
+      const observedRevision = revision;
+      let read = false;
+      const acknowledge = () => {
+        if (read || observedRevision !== revision) return;
+        read = true;
+        receipt = empty2();
+        try {
+          storage().removeItem(KEY);
+        } catch {
+        }
+        dopoLettura?.();
+      };
+      const message = [
+        "La conversazione è stata eliminata. Al momento della cancellazione, la pulizia non era completa.",
+        receipt.output ? "Alcuni output non sono stati rimossi: TALOS ritenta la pulizia alla prossima apertura dell’app." : "",
+        receipt.workflow ? "La rimozione di alcune automazioni non è stata confermata; non verrà ritentata automaticamente." : ""
+      ].filter(Boolean).join(" ");
+      const element = mostraToast("Eliminazione parziale segnalata", message, {
+        chiave: KEY,
+        tono: "guasto",
+        durata: 0,
+        azione: { etichetta: "Ho letto", esegui: acknowledge }
+      });
+      element?.querySelector("[data-toast-chiudi]")?.addEventListener("click", acknowledge, { once: true });
+      return element;
+    }
+  };
+}
+var KEY, empty2, valid;
+var init_session_deletion_feedback = __esm({
+  "src/components/session-deletion-feedback.js"() {
+    KEY = "talos.session-deletion-feedback.v1";
+    empty2 = () => ({ schema: KEY, output: false, workflow: false });
+    valid = (value) => value && !Array.isArray(value) && value.schema === KEY && typeof value.output === "boolean" && typeof value.workflow === "boolean" && Object.keys(value).length === 3;
+  }
+});
+
+// src/components/process-output.js
+function normalizzaRicevutaOutput(value, expected = {}) {
+  if (!value || value.schema !== "talos.process-output.v1" || !states.has(value.state) || !["sessionId", "runId", "toolCallId"].every((k) => id3(value[k])) || !/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/iu.test(value.outputId) || ["sessionId", "runId", "toolCallId", "outputId"].some((k) => expected[k] !== void 0 && value[k] !== expected[k])) return null;
+  return Object.freeze(Object.fromEntries(["schema", "sessionId", "runId", "toolCallId", "outputId", "state"].map((k) => [k, value[k]])));
+}
+function creaClientOutput({ receipt, fetchFn = globalThis.fetch, API: API2 = (p) => p } = {}) {
+  const identity4 = normalizzaRicevutaOutput(receipt);
+  if (!identity4) invalid();
+  function url({ stream = "stdout", offset = 0, limit = PAGE_BYTES } = {}, format = "text") {
+    if (!["stdout", "stderr"].includes(stream) || !integer(offset) || !integer(limit) || limit < 1 || limit > PAGE_BYTES) invalid();
+    return API2(`/api/v1/sessions/${encodeURIComponent(identity4.sessionId)}/process-outputs/${identity4.outputId}?stream=${stream}&offset=${offset}&limit=${limit}&format=${format}`);
+  }
+  return {
+    rawUrl: (args) => url(args, "raw"),
+    downloadUrl({ stream = "stdout" } = {}) {
+      if (!["stdout", "stderr"].includes(stream)) invalid();
+      return API2(`/api/v1/sessions/${encodeURIComponent(identity4.sessionId)}/process-outputs/${identity4.outputId}?stream=${stream}&format=download`);
+    },
+    async leggi({ stream = "stdout", offset = 0, signal } = {}) {
+      const response = await fetchFn(url({ stream, offset }), { signal, cache: "no-store" });
+      if (!response.ok) throw new Error(response.status === 404 ? "Questo output non è più disponibile." : "Lettura non riuscita. Puoi riprovare senza eseguire di nuovo il comando.");
+      let envelope;
+      try {
+        envelope = await response.json();
+      } catch (error) {
+        if (signal?.aborted) throw error;
+        invalid();
+      }
+      const p = envelope?.data;
+      if (envelope?.ok !== true || !p || p.schema !== "talos.process-output-page.v1" || ["outputId", "runId", "toolCallId"].some((k) => p[k] !== identity4[k]) || p.stream !== stream || p.offset !== offset || !states.has(p.state) || !["bytes", "availableBytes", "storedBytes", "observedBytes"].every((k) => integer(p[k])) || p.bytes > PAGE_BYTES || !integer(offset + p.bytes) || offset + p.bytes > p.availableBytes || p.availableBytes > p.storedBytes || p.storedBytes > p.observedBytes || p.nextOffset !== null && (!integer(p.nextOffset) || p.nextOffset !== offset + p.bytes || p.nextOffset <= offset || p.nextOffset >= p.availableBytes) || p.nextOffset === null && offset + p.bytes !== p.availableBytes || (p.encoding === "utf-8" ? typeof p.text !== "string" || new TextEncoder().encode(p.text).length !== p.bytes : p.encoding !== "binary-or-invalid-utf8" || p.text !== null)) invalid();
+      return p;
+    }
+  };
+}
+function creaLettoreOutput({ receipt, API: API2, fetchFn, signal, document: doc = globalThis.document } = {}) {
+  let current = normalizzaRicevutaOutput(receipt);
+  if (!current) invalid();
+  const client = creaClientOutput({ receipt: current, API: API2, fetchFn });
+  const el30 = (tag2, text2, className) => {
+    const n = doc.createElement(tag2);
+    if (text2) n.textContent = text2;
+    if (className) n.className = className;
+    return n;
+  };
+  const root2 = el30("details", null, "talos-process-output");
+  const summary = el30("summary", "Consulta output conservato");
+  const controls = el30("div", null, "talos-process-output__controls");
+  const label = el30("label", "Flusso "), select = el30("select");
+  select.setAttribute("aria-label", "Flusso dell’output");
+  for (const [value, text2] of [["stdout", "Uscita"], ["stderr", "Diagnostica"]]) {
+    const option = el30("option", text2);
+    option.value = value;
+    select.append(option);
+  }
+  label.append(select);
+  const button2 = (text2) => {
+    const n = el30("button", text2, "talos-button talos-button--secondary");
+    n.type = "button";
+    return n;
+  };
+  const refresh = button2("Aggiorna"), first = button2("Prima pagina"), next = button2("Pagina successiva");
+  const status = el30("p", stateLabel[current.state], "talos-process-output__status");
+  status.setAttribute("role", "status");
+  status.setAttribute("aria-live", "polite");
+  const range = el30("p", "", "talos-process-output__range");
+  const pre = el30("pre"), code = el30("code");
+  pre.append(code);
+  pre.tabIndex = 0;
+  pre.setAttribute("aria-label", "Contenuto della pagina di output");
+  const download = el30("a", "Scarica questa pagina", "talos-button talos-button--secondary");
+  download.setAttribute("download", "");
+  download.hidden = true;
+  const completeDownload = el30("a", "Scarica output conservato", "talos-button talos-button--secondary");
+  completeDownload.setAttribute("download", "");
+  completeDownload.hidden = true;
+  completeDownload.title = "Salva i byte conservati di questo flusso al momento dello scaricamento.";
+  const nav = el30("div", null, "talos-process-output__controls");
+  nav.append(first, next, download, completeDownload);
+  controls.append(label, refresh);
+  root2.append(summary, controls, status, range, pre, nav);
+  let epoch = 0, pending = null, page = null, offset = 0, closed = false;
+  const cancel = () => {
+    epoch++;
+    pending?.abort();
+    pending = null;
+    root2.removeAttribute("aria-busy");
+  };
+  function resetPage() {
+    page = null;
+    code.textContent = "";
+    range.textContent = "";
+    download.hidden = true;
+    download.removeAttribute("href");
+    completeDownload.hidden = true;
+    completeDownload.removeAttribute("href");
+    first.disabled = next.disabled = true;
+  }
+  async function load(at2 = 0) {
+    cancel();
+    resetPage();
+    if (closed || signal?.aborted || !root2.open) return;
+    offset = at2;
+    const version = epoch, controller = new AbortController();
+    pending = controller;
+    root2.setAttribute("aria-busy", "true");
+    status.textContent = "Lettura in corso…";
+    try {
+      const p = await client.leggi({ stream: select.value, offset: at2, signal: controller.signal });
+      if (closed || version !== epoch || signal?.aborted) return;
+      page = p;
+      status.textContent = stateLabel[p.state];
+      if (!["excluded", "absent", "not-applicable"].includes(p.footerStatus)) status.textContent += " La separazione dei dati di controllo non è confermata.";
+      range.textContent = `${p.bytes ? `Byte ${p.offset + 1}–${p.offset + p.bytes}` : "Nessun byte in questa pagina"} su ${p.availableBytes.toLocaleString("it-IT")} disponibili. Conservati ${p.storedBytes.toLocaleString("it-IT")} di ${p.observedBytes.toLocaleString("it-IT")} byte ricevuti nel flusso.`;
+      code.textContent = p.text === null ? "Questa pagina contiene dati binari o testo non UTF-8. Scarica i byte originali per conservarli senza conversioni." : p.text || "Il flusso non contiene testo.";
+      first.disabled = p.offset === 0;
+      next.disabled = p.nextOffset === null;
+      if (p.bytes) download.href = client.rawUrl({ stream: select.value, offset: p.offset, limit: p.bytes });
+      download.hidden = p.bytes === 0;
+      completeDownload.href = client.downloadUrl({ stream: select.value });
+      completeDownload.hidden = false;
+    } catch (error) {
+      if (closed || version !== epoch || signal?.aborted) return;
+      status.textContent = error?.message?.startsWith("La risposta dell’output") || error?.message?.startsWith("Questo output non") ? error.message : "Lettura non riuscita. Premi Aggiorna per riprovare senza eseguire di nuovo il comando.";
+    } finally {
+      if (version === epoch) {
+        pending = null;
+        root2.removeAttribute("aria-busy");
+      }
+    }
+  }
+  root2.addEventListener("toggle", () => {
+    if (root2.open) void load(offset);
+    else {
+      cancel();
+      resetPage();
+    }
+  });
+  select.addEventListener("change", () => {
+    void load(0);
+  });
+  refresh.addEventListener("click", () => {
+    void load(offset);
+  });
+  first.addEventListener("click", () => {
+    void load(0);
+  });
+  next.addEventListener("click", () => {
+    if (page?.nextOffset !== null && page?.nextOffset !== void 0) void load(page.nextOffset);
+  });
+  function dispose() {
+    closed = true;
+    cancel();
+    resetPage();
+    root2.remove();
+    signal?.removeEventListener("abort", dispose);
+  }
+  signal?.addEventListener("abort", dispose, { once: true });
+  if (signal?.aborted) dispose();
+  resetPage();
+  return {
+    element: root2,
+    monta(detail) {
+      if (!closed && detail?.parentNode && detail.nextSibling !== root2) detail.after(root2);
+    },
+    aggiorna(value) {
+      const nextReceipt = normalizzaRicevutaOutput(value, current);
+      if (!nextReceipt) return false;
+      current = nextReceipt;
+      if (!pending) status.textContent = stateLabel[current.state];
+      return true;
+    },
+    dispose
+  };
+}
+var PAGE_BYTES, states, id3, integer, invalid, stateLabel;
+var init_process_output = __esm({
+  "src/components/process-output.js"() {
+    PAGE_BYTES = 4096;
+    states = /* @__PURE__ */ new Set(["recording", "complete", "limited", "failed", "interrupted"]);
+    id3 = (v) => typeof v === "string" && v.trim().length > 0 && v.length <= 256 && !/[\u0000-\u001f\u007f]/u.test(v);
+    integer = (v) => Number.isSafeInteger(v) && v >= 0;
+    invalid = () => {
+      throw new Error("La risposta dell’output non è valida. Riprova la lettura.");
+    };
+    stateLabel = {
+      recording: "Registrazione non ancora conclusa. Aggiorna per verificare i dati disponibili.",
+      complete: "Registrazione conclusa.",
+      limited: "Limite di conservazione raggiunto: una parte dell’output non è stata conservata.",
+      failed: "Registrazione incompleta: i dati disponibili potrebbero non contenere tutto l’output.",
+      interrupted: "Registrazione interrotta: i dati disponibili potrebbero non contenere tutto l’output."
+    };
+  }
+});
+
 // src/components/connessione.js
 function creaSorveglianzaConnessione({
   ping,
@@ -31782,7 +32582,7 @@ function creaSorveglianzaConnessione({
   suRicollegato = () => {
   },
   pianifica = (fn2, ms2) => globalThis.setTimeout(fn2, ms2),
-  annulla = (id3) => globalThis.clearTimeout(id3)
+  annulla = (id4) => globalThis.clearTimeout(id4)
 } = {}) {
   let stato2 = "collegato";
   let tentativi = 0;
@@ -32307,12 +33107,12 @@ function aggiornaDettaglioInstallato(aside, dati, { runtime = {}, azioni = {}, n
   nome.id = "modelloNome";
   const desc = el19(documentObj, "p", "talos-detail__desc", "Modello locale per conversazione e codice.");
   desc.id = "modelloDescrizione";
-  const kv4 = (k, v, id3) => {
+  const kv4 = (k, v, id4) => {
     const r = el19(documentObj, "div", "talos-kv");
     const val = el19(documentObj, "span", "talos-kv__v");
-    if (id3) {
+    if (id4) {
       const s = el19(documentObj, "span", "", v);
-      s.id = id3;
+      s.id = id4;
       val.appendChild(s);
     } else val.textContent = v;
     r.append(el19(documentObj, "span", "talos-kv__k", k), val);
@@ -32566,7 +33366,7 @@ function datiRepoHf(item = {}) {
   const [autore, nome] = String(item.repo || item.id || "").split("/");
   const conversione = Boolean(item.communityConversion) || /gguf$/i.test(autore || "") || /^(bartowski|unsloth|mradermacher|lmstudio-community|TheBloke|QuantFactory)$/i.test(autore || "");
   const fileGguf = Number.isFinite(item.ggufFiles) ? item.ggufFiles : null;
-  const tipo = conversione ? "Conversione della community" : TIPI2[item.pipelineTag] || "Modello";
+  const tipo = conversione ? "Conversione della community" : TIPI3[item.pipelineTag] || "Modello";
   const sub1 = `${tipo}${fileGguf != null ? ` · ${fileGguf === 1 ? "1 file" : `${fileGguf} file`}${conversione ? "" : " compatibili"}` : ""}`;
   const sub2 = item.gated ? "Verifica le condizioni prima del download" : item.license ? `Licenza ${item.license}` : "Licenza non dichiarata";
   return {
@@ -32656,7 +33456,7 @@ function raggruppaRisultatiHf(risultati = []) {
 function datiRigaHf(item = {}) {
   const base = datiRepoHf(item);
   const richiesto = base.gated;
-  const tipoDichiarato = item.pipelineTag ? TIPI2[item.pipelineTag] || item.pipelineTag : null;
+  const tipoDichiarato = item.pipelineTag ? TIPI3[item.pipelineTag] || item.pipelineTag : null;
   const etichette = [tipoDichiarato, parametriLeggibiliHf(item.parameterCount), item.license || null].filter(Boolean);
   const pezziSub1 = String(base.sub1 || "").split(" · ");
   const riga2 = [
@@ -32986,12 +33786,12 @@ function aggiornaDettaglioHf(aside, detail, { stima: stima2 = /* @__PURE__ */ ne
   h.id = "hfNome";
   const p = el20(d, "p", "talos-detail__desc", `Pubblicato da ${autore || "autore non dichiarato"} · formato GGUF`);
   p.id = "hfAutore";
-  const kv4 = (k, v, id3) => {
+  const kv4 = (k, v, id4) => {
     const r = el20(d, "div", "talos-kv");
     const val = el20(d, "span", "talos-kv__v");
-    if (id3) {
+    if (id4) {
       const s = el20(d, "span", "", v);
-      s.id = id3;
+      s.id = id4;
       val.appendChild(s);
     } else val.textContent = v;
     r.append(el20(d, "span", "talos-kv__k", k), val);
@@ -33123,7 +33923,7 @@ function montaHf(originale, canonico) {
   const altri = originale.querySelector("#modelLabHfNextButtonControl") || originale.querySelector("#altriHf");
   if (altri) altri.hidden = true;
 }
-var BIT_PER_PESO, SUFFISSO, PAVIMENTO_CONSIGLIO, GLOSSE, numero7, TIPI2, CAMPI_RICERCA_HF, FACCETTE_NON_COLLEGATE, TIPI_PIPELINE, TIPO_NON_DICHIARATO, BANDE_DOWNLOAD, FACCETTE_HF, BANDE_PARAMETRI, valoreDerivatoHfValido, NOTA_FACCETTE_HF;
+var BIT_PER_PESO, SUFFISSO, PAVIMENTO_CONSIGLIO, GLOSSE, numero7, TIPI3, CAMPI_RICERCA_HF, FACCETTE_NON_COLLEGATE, TIPI_PIPELINE, TIPO_NON_DICHIARATO, BANDE_DOWNLOAD, FACCETTE_HF, BANDE_PARAMETRI, valoreDerivatoHfValido, NOTA_FACCETTE_HF;
 var init_hf_catalogo = __esm({
   "src/components/hf-catalogo.js"() {
     init_modelli_installati();
@@ -33173,7 +33973,7 @@ var init_hf_catalogo = __esm({
       [/^MXFP4$/u, "4 bit a blocchi · formato nuovo"]
     ];
     numero7 = new Intl.NumberFormat("it-IT");
-    TIPI2 = { "text-generation": "Conversazione e codice", "text2text-generation": "Testo", "image-text-to-text": "Immagini e testo", "automatic-speech-recognition": "Voce", "feature-extraction": "Embedding" };
+    TIPI3 = { "text-generation": "Conversazione e codice", "text2text-generation": "Testo", "image-text-to-text": "Immagini e testo", "automatic-speech-recognition": "Voce", "feature-extraction": "Embedding" };
     CAMPI_RICERCA_HF = Object.freeze(["repo", "revision", "downloads", "likes", "gated", "parameterCount", "pipelineTag", "license", "tags"]);
     FACCETTE_NON_COLLEGATE = Object.freeze([
       ["Contesto minimo · token", "il contesto non è in nessuno dei campi normalizzati della ricerca"],
@@ -34336,7 +35136,7 @@ function ripartizioneContesto({ attrezzi = [], finestra = null, istruzioniToken 
     fonteFinestra: descrittore?.fonte ?? null,
     finestraDescritta: descrittore,
     // ⛔ le voci PROMESSE dal cappello della sezione che non si sono potute misurare: si dichiarano.
-    mancanti: ["istruzioni", "memoria"].filter((id3) => !voci.some((v) => v.id === id3)),
+    mancanti: ["istruzioni", "memoria"].filter((id4) => !voci.some((v) => v.id === id4)),
     percentuale: f ? occupato / f * 100 : null,
     libero: f ? Math.max(0, f - occupato) : null,
     attrezziSenzaStima: attr.senzaStima,
@@ -34396,7 +35196,7 @@ function aggiornaContesto(pannello, ripartizione, { document: d = globalThis.doc
     }));
     const mancanti = ripartizione.mancanti || [];
     if (mancanti.length) {
-      const nomi2 = mancanti.map((id3) => id3 === "istruzioni" ? "le istruzioni di sistema" : "i ricordi").join(" e ");
+      const nomi2 = mancanti.map((id4) => id4 === "istruzioni" ? "le istruzioni di sistema" : "i ricordi").join(" e ");
       voci.appendChild(el22(d, "p", "talos-muted talos-contesto-mancanti", `Per ora ${nomi2} non ${mancanti.length > 1 ? "sono" : "è"} misurabil${mancanti.length > 1 ? "i" : "e"} da questa pagina: ${mancanti.length > 1 ? "li conosce" : "lo conosce"} il motore, e non ${mancanti.length > 1 ? "sono" : "è"} nel totale qui sopra.`));
     }
   }
@@ -34539,7 +35339,7 @@ function badge4(d, testo2, tono) {
   b.dataset.c = "Badge";
   return b;
 }
-function bottone4(d, testo2, classe, azione, fn2) {
+function bottone5(d, testo2, classe, azione, fn2) {
   const b = el23(d, "button", classe, testo2);
   b.type = "button";
   b.dataset.c = "Button";
@@ -34562,21 +35362,21 @@ function creaStatoVuotoDownload(radice2, { azioni = {}, document: d = globalThis
        chiamare «di esempio» quello vero di Hugging Face sarebbe una bugia sul prodotto. */
     el23(d, "p", "", "Il prossimo modello può aspettare. Oppure puoi esplorare il catalogo.")
   );
-  const bottone5 = el23(d, "button", "talos-button talos-button--secondary");
-  bottone5.type = "button";
-  bottone5.dataset.c = "Button";
-  bottone5.dataset.action = "esploraCatalogo";
-  bottone5.append(icona11(d, "i-plus"), el23(d, "span", "", "Esplora il catalogo"));
-  if (typeof azioni.esploraCatalogo === "function") bottone5.addEventListener("click", azioni.esploraCatalogo);
+  const bottone6 = el23(d, "button", "talos-button talos-button--secondary");
+  bottone6.type = "button";
+  bottone6.dataset.c = "Button";
+  bottone6.dataset.action = "esploraCatalogo";
+  bottone6.append(icona11(d, "i-plus"), el23(d, "span", "", "Esplora il catalogo"));
+  if (typeof azioni.esploraCatalogo === "function") bottone6.addEventListener("click", azioni.esploraCatalogo);
   else {
     const comando = comandoCatalogo(radice2);
-    if (comando) bottone5.addEventListener("click", () => comandoCatalogo(radice2)?.click());
+    if (comando) bottone6.addEventListener("click", () => comandoCatalogo(radice2)?.click());
     else {
-      bottone5.disabled = true;
-      bottone5.title = "Da questa schermata non c’è un catalogo da aprire.";
+      bottone6.disabled = true;
+      bottone6.title = "Da questa schermata non c’è un catalogo da aprire.";
     }
   }
-  riquadro.append(bottone5);
+  riquadro.append(bottone6);
   return riquadro;
 }
 function leggiStatoAzioni(panel) {
@@ -34599,14 +35399,14 @@ function ridisegna(panel) {
 function conAzione(verdetto, azione) {
   return { ...verdetto, azione };
 }
-async function eseguiEliminazione(panel, id3, azioni, nome) {
+async function eseguiEliminazione(panel, id4, azioni, nome) {
   const prima = leggiStatoAzioni(panel);
   if (prima.inCorso) return;
-  scriviStatoAzioni(panel, { ...prima, inCorso: id3 });
+  scriviStatoAzioni(panel, { ...prima, inCorso: id4 });
   ridisegna(panel);
   let esito;
   try {
-    esito = await azioni.elimina(id3);
+    esito = await azioni.elimina(id4);
   } catch (errore) {
     esito = { ok: false, motivo: errore?.message || "la richiesta non è arrivata al server" };
   }
@@ -34618,13 +35418,13 @@ async function eseguiEliminazione(panel, id3, azioni, nome) {
     /* ⛔ Il pannello resta aperto SOLO se non è andata: lì c'è il comando per riprovare, e la
        persona resta dove ha sbagliato. Riuscita, il pannello si chiude e l'esito va sulla riga. */
     aperto: verdetto.tono === "success" ? null : dopo.aperto,
-    esiti: { ...dopo.esiti, [id3]: verdetto },
+    esiti: { ...dopo.esiti, [id4]: verdetto },
     fuocoDato: ""
   });
   ridisegna(panel);
-  if (verdetto.tono === "success") tornaAlComando(panel, id3, "eliminaModello");
+  if (verdetto.tono === "success") tornaAlComando(panel, id4, "eliminaModello");
 }
-async function eseguiRinomina(panel, id3, nomeGrezzo, azioni) {
+async function eseguiRinomina(panel, id4, nomeGrezzo, azioni) {
   const prima = leggiStatoAzioni(panel);
   if (prima.inCorso) return;
   const nome = String(nomeGrezzo ?? "").trim();
@@ -34633,11 +35433,11 @@ async function eseguiRinomina(panel, id3, nomeGrezzo, azioni) {
     ridisegna(panel);
     return;
   }
-  scriviStatoAzioni(panel, { ...prima, inCorso: id3, erroreCampo: null, aperto: { ...prima.aperto, bozza: nome } });
+  scriviStatoAzioni(panel, { ...prima, inCorso: id4, erroreCampo: null, aperto: { ...prima.aperto, bozza: nome } });
   ridisegna(panel);
   let esito;
   try {
-    esito = await azioni.rinomina(id3, nome);
+    esito = await azioni.rinomina(id4, nome);
   } catch (errore) {
     esito = { ok: false, motivo: errore?.message || "la richiesta non è arrivata al server" };
   }
@@ -34648,15 +35448,15 @@ async function eseguiRinomina(panel, id3, nomeGrezzo, azioni) {
     inCorso: null,
     aperto: verdetto.tono === "success" ? null : dopo.aperto,
     erroreCampo: verdetto.tono === "success" ? null : dopo.erroreCampo,
-    esiti: { ...dopo.esiti, [id3]: verdetto },
+    esiti: { ...dopo.esiti, [id4]: verdetto },
     fuocoDato: ""
   });
   ridisegna(panel);
-  if (verdetto.tono === "success") tornaAlComando(panel, id3, "rinominaModello");
+  if (verdetto.tono === "success") tornaAlComando(panel, id4, "rinominaModello");
 }
-function annotaBozza(panel, id3, nome) {
+function annotaBozza(panel, id4, nome) {
   const stato2 = leggiStatoAzioni(panel);
-  if (stato2.aperto?.id !== id3) return;
+  if (stato2.aperto?.id !== id4) return;
   scriviStatoAzioni(panel, { ...stato2, aperto: { ...stato2.aperto, bozza: nome } });
 }
 function applicaFuoco(panel, stato2) {
@@ -34673,25 +35473,25 @@ function applicaFuoco(panel, stato2) {
   }
   scriviStatoAzioni(panel, { ...stato2, fuocoDato: chiave });
 }
-function apriElimina(panel, id3) {
+function apriElimina(panel, id4) {
   const stato2 = leggiStatoAzioni(panel);
-  scriviStatoAzioni(panel, { ...stato2, aperto: { id: id3, tipo: "elimina", bozza: "" }, erroreCampo: null, fuocoDato: "" });
+  scriviStatoAzioni(panel, { ...stato2, aperto: { id: id4, tipo: "elimina", bozza: "" }, erroreCampo: null, fuocoDato: "" });
   ridisegna(panel);
 }
-function apriRinomina(panel, id3, nomeAttuale) {
+function apriRinomina(panel, id4, nomeAttuale) {
   const stato2 = leggiStatoAzioni(panel);
-  scriviStatoAzioni(panel, { ...stato2, aperto: { id: id3, tipo: "rinomina", bozza: nomeAttuale || "" }, erroreCampo: null, fuocoDato: "" });
+  scriviStatoAzioni(panel, { ...stato2, aperto: { id: id4, tipo: "rinomina", bozza: nomeAttuale || "" }, erroreCampo: null, fuocoDato: "" });
   ridisegna(panel);
 }
-function chiudiPannello(panel, id3) {
+function chiudiPannello(panel, id4) {
   const stato2 = leggiStatoAzioni(panel);
-  if (stato2.aperto?.id !== id3) return;
+  if (stato2.aperto?.id !== id4) return;
   scriviStatoAzioni(panel, { ...stato2, aperto: null, erroreCampo: null, fuocoDato: "" });
   ridisegna(panel);
-  tornaAlComando(panel, id3, stato2.aperto.tipo === "elimina" ? "eliminaModello" : "rinominaModello");
+  tornaAlComando(panel, id4, stato2.aperto.tipo === "elimina" ? "eliminaModello" : "rinominaModello");
 }
-function tornaAlComando(panel, id3, azione) {
-  const riga2 = panel.querySelector(`[data-c="DownloadRow"][data-download-id="${CSS.escape(String(id3))}"]`);
+function tornaAlComando(panel, id4, azione) {
+  const riga2 = panel.querySelector(`[data-c="DownloadRow"][data-download-id="${CSS.escape(String(id4))}"]`);
   const comando = riga2?.querySelector(`[data-action="${azione}"]`) || riga2?.querySelector('[data-c="EsitoModello"]');
   comando?.focus?.();
 }
@@ -34712,7 +35512,7 @@ function creaRigaDownload(dati, { azioni = {}, azioniModello = null, statoAzioni
     const eliminato = esito?.azione === "elimina" && esito.tono === "success";
     const piede2 = el23(d, "div", "talos-toolbar");
     const nota = el23(d, "span", "talos-muted", eliminato ? "Eliminato dal disco: per usarlo di nuovo va scaricato o importato." : "Disponibile nei modelli installati.");
-    const vedi = bottone4(d, "Vedi modello", "talos-button talos-button--secondary talos-button--sm", "vediModello", () => azioni.vediModello?.(dati.id));
+    const vedi = bottone5(d, "Vedi modello", "talos-button talos-button--secondary talos-button--sm", "vediModello", () => azioni.vediModello?.(dati.id));
     if (eliminato) {
       vedi.disabled = true;
       vedi.title = "Questo modello non è più sul disco.";
@@ -34723,8 +35523,8 @@ function creaRigaDownload(dati, { azioni = {}, azioniModello = null, statoAzioni
     if (azioniModello && !eliminato && !apertoQui) {
       const cluster2 = el23(d, "div", "talos-cluster");
       cluster2.append(
-        bottone4(d, "Rinomina", "talos-button talos-button--secondary talos-button--sm", "rinominaModello", () => azioniModello.apriRinomina(dati.id, dati.nome)),
-        bottone4(d, "Elimina dal disco", "talos-button talos-button--secondary talos-button--sm", "eliminaModello", () => azioniModello.apriElimina(dati.id))
+        bottone5(d, "Rinomina", "talos-button talos-button--secondary talos-button--sm", "rinominaModello", () => azioniModello.apriRinomina(dati.id, dati.nome)),
+        bottone5(d, "Elimina dal disco", "talos-button talos-button--secondary talos-button--sm", "eliminaModello", () => azioniModello.apriElimina(dati.id))
       );
       piede2.appendChild(cluster2);
     }
@@ -34748,7 +35548,7 @@ function creaRigaDownload(dati, { azioni = {}, azioniModello = null, statoAzioni
           document: d,
           onBozza: (nome) => azioniModello.annota(dati.id, nome),
           onAnnulla: () => azioniModello.chiudi(dati.id),
-          onSalva: (id3, nome) => azioniModello.eseguiRinomina(id3, nome)
+          onSalva: (id4, nome) => azioniModello.eseguiRinomina(id4, nome)
         }
       ));
     } else if (esito) art.appendChild(creaRigaEsitoModello(esito, { document: d }));
@@ -34760,7 +35560,7 @@ function creaRigaDownload(dati, { azioni = {}, azioniModello = null, statoAzioni
     const corpo = el23(d, "div", "talos-check-card__body");
     corpo.append(el23(d, "b", "", dati.errore.titolo), el23(d, "p", "", dati.errore.testo));
     const az = el23(d, "div", "talos-check-card__actions");
-    const dettagli2 = bottone4(d, "Dettagli", "talos-button talos-button--ghost talos-button--sm", "dettagli", null);
+    const dettagli2 = bottone5(d, "Dettagli", "talos-button talos-button--ghost talos-button--sm", "dettagli", null);
     dettagli2.title = dati.errore.dettagli;
     dettagli2.setAttribute("aria-label", `Dettagli: ${dati.errore.dettagli}`);
     dettagli2.addEventListener("click", () => {
@@ -34773,7 +35573,7 @@ function creaRigaDownload(dati, { azioni = {}, azioniModello = null, statoAzioni
       n.dataset.dettagli = "";
       corpo.insertBefore(n, az);
     });
-    az.append(bottone4(d, "Riprendi", "talos-button talos-button--secondary talos-button--sm", "riprendiDownload", () => azioni.riprendi?.(dati.id)), dettagli2);
+    az.append(bottone5(d, "Riprendi", "talos-button talos-button--secondary talos-button--sm", "riprendiDownload", () => azioni.riprendi?.(dati.id)), dettagli2);
     corpo.appendChild(az);
     card.appendChild(corpo);
     art.appendChild(card);
@@ -34807,10 +35607,10 @@ function creaRigaDownload(dati, { azioni = {}, azioniModello = null, statoAzioni
   } else if (dati.stato === "verifying") misure.append(d.createTextNode(" · verifica dell'impronta in corso"));
   else if (dati.stato === "paused") misure.append(d.createTextNode(" · in pausa"));
   const cluster = el23(d, "div", "talos-cluster");
-  if (["queued", "running"].includes(dati.stato)) cluster.appendChild(bottone4(d, "Pausa", "talos-button talos-button--secondary talos-button--sm", "pausa", () => azioni.pausa?.(dati.id)));
-  if (dati.stato === "paused") cluster.appendChild(bottone4(d, "Riprendi", "talos-button talos-button--secondary talos-button--sm", "riprendi", () => azioni.riprendi?.(dati.id)));
+  if (["queued", "running"].includes(dati.stato)) cluster.appendChild(bottone5(d, "Pausa", "talos-button talos-button--secondary talos-button--sm", "pausa", () => azioni.pausa?.(dati.id)));
+  if (dati.stato === "paused") cluster.appendChild(bottone5(d, "Riprendi", "talos-button talos-button--secondary talos-button--sm", "riprendi", () => azioni.riprendi?.(dati.id)));
   if (!["ready", "failed", "cancelled"].includes(dati.stato)) {
-    const annulla = bottone4(d, "Annulla", "talos-button talos-button--ghost talos-button--sm", "annulla", () => azioni.annulla?.(dati.id));
+    const annulla = bottone5(d, "Annulla", "talos-button talos-button--ghost talos-button--sm", "annulla", () => azioni.annulla?.(dati.id));
     annulla.dataset.apreVelo = "veloAnnullaDownload";
     cluster.appendChild(annulla);
   }
@@ -34849,19 +35649,19 @@ function aggiornaCodaDownload(panel, items = [], opzioni = {}) {
   ultimaResa.set(panel, { items, opzioni });
   const statoAzioni = leggiStatoAzioni(panel);
   const azioniModello = typeof azioni.elimina === "function" || typeof azioni.rinomina === "function" ? {
-    apriElimina: (id3) => apriElimina(panel, id3),
-    apriRinomina: (id3, nome) => apriRinomina(panel, id3, nome),
-    chiudi: (id3) => chiudiPannello(panel, id3),
-    annota: (id3, nome) => annotaBozza(panel, id3, nome),
-    eseguiElimina: (id3, nome) => {
-      if (typeof azioni.elimina === "function") void eseguiEliminazione(panel, id3, azioni, nome);
+    apriElimina: (id4) => apriElimina(panel, id4),
+    apriRinomina: (id4, nome) => apriRinomina(panel, id4, nome),
+    chiudi: (id4) => chiudiPannello(panel, id4),
+    annota: (id4, nome) => annotaBozza(panel, id4, nome),
+    eseguiElimina: (id4, nome) => {
+      if (typeof azioni.elimina === "function") void eseguiEliminazione(panel, id4, azioni, nome);
     },
-    eseguiRinomina: (id3, nome) => {
-      if (typeof azioni.rinomina === "function") void eseguiRinomina(panel, id3, nome, azioni);
+    eseguiRinomina: (id4, nome) => {
+      if (typeof azioni.rinomina === "function") void eseguiRinomina(panel, id4, nome, azioni);
     }
   } : null;
   const presenti = new Set(items.map((i2) => i2.id));
-  const esitiVivi = Object.fromEntries(Object.entries(statoAzioni.esiti).filter(([id3]) => presenti.has(id3)));
+  const esitiVivi = Object.fromEntries(Object.entries(statoAzioni.esiti).filter(([id4]) => presenti.has(id4)));
   const apertoVivo = azioniModello && statoAzioni.aperto && presenti.has(statoAzioni.aperto.id) ? statoAzioni.aperto : null;
   const statoReso = { ...statoAzioni, esiti: esitiVivi, aperto: apertoVivo };
   if (JSON.stringify(statoReso) !== JSON.stringify(statoAzioni)) scriviStatoAzioni(panel, statoReso);
@@ -35008,12 +35808,12 @@ function nomeSchedaValido(nome) {
   const pulito = String(nome ?? "").trim();
   return pulito.length > 0 && pulito.length <= 40;
 }
-function creaMenuContestuale(root2, { id: id3 = "menuSchedaTerminale", etichetta: etichetta3 = "Azioni sulla scheda" } = {}) {
-  let menu = root2.querySelector(`#${id3}`);
+function creaMenuContestuale(root2, { id: id4 = "menuSchedaTerminale", etichetta: etichetta3 = "Azioni sulla scheda" } = {}) {
+  let menu = root2.querySelector(`#${id4}`);
   if (menu) return menu;
   const documento = root2.ownerDocument || globalThis.document;
   menu = documento.createElement("div");
-  menu.id = id3;
+  menu.id = id4;
   menu.className = "talos-card talos-context-menu";
   menu.setAttribute("role", "menu");
   menu.setAttribute("aria-label", t2(etichetta3));
@@ -35122,15 +35922,15 @@ function creaSchede(striscia, {
     }, { passive: false });
   }
   let inVistaInSospeso = null;
-  function portaInVista(bottone5) {
-    if (!scorre || !bottone5) return;
+  function portaInVista(bottone6) {
+    if (!scorre || !bottone6) return;
     if (contenitore.clientWidth === 0) {
-      inVistaInSospeso = bottone5.dataset[chiave] ?? null;
+      inVistaInSospeso = bottone6.dataset[chiave] ?? null;
       return;
     }
     inVistaInSospeso = null;
     if (contenitore.scrollWidth > contenitore.clientWidth) {
-      const r = bottone5.getBoundingClientRect();
+      const r = bottone6.getBoundingClientRect();
       const c = contenitore.getBoundingClientRect();
       if (r.left < c.left) contenitore.scrollLeft -= c.left - r.left + 8;
       else if (r.right > c.right) contenitore.scrollLeft += r.right - c.right + 8;
@@ -35162,23 +35962,23 @@ function creaSchede(striscia, {
       }).observe(contenitore);
     }
   }
-  function bottoneDi(id3) {
-    return contenitore.querySelector(`[role=tab][${attributo}="${CSS.escape(id3)}"]`);
+  function bottoneDi(id4) {
+    return contenitore.querySelector(`[role=tab][${attributo}="${CSS.escape(id4)}"]`);
   }
   function creaLinguetta(voce, indice2) {
     const b = documento.createElement(tag2);
     b.className = classe;
     b.setAttribute("role", "tab");
     if (tag2 === "button") b.type = "button";
-    const id3 = identifica(voce);
-    const scelta = id3 === attiva;
+    const id4 = identifica(voce);
+    const scelta = id4 === attiva;
     b.setAttribute("aria-selected", String(scelta));
     b.tabIndex = scelta ? 0 : -1;
-    b.dataset[chiave] = id3;
+    b.dataset[chiave] = id4;
     const idPannello = controlla?.(voce, indice2, voci) || null;
     if (idPannello) {
       b.setAttribute("aria-controls", idPannello);
-      if (!b.id) b.id = `${idMenu}-tab-${indice2}-${String(id3).replace(/[^\w-]+/g, "-").slice(0, 40)}`;
+      if (!b.id) b.id = `${idMenu}-tab-${indice2}-${String(id4).replace(/[^\w-]+/g, "-").slice(0, 40)}`;
       const pannello = documento.getElementById(idPannello);
       if (pannello) {
         pannello.setAttribute("role", "tabpanel");
@@ -35193,13 +35993,13 @@ function creaSchede(striscia, {
     if (menu) b.setAttribute("aria-haspopup", "menu");
     b.addEventListener("click", (e) => {
       if (suClick?.(voce, e, b)) return;
-      if (chiudibile && (e.ctrlKey || e.metaKey)) azioni.chiudi?.(id3);
-      else azioni.seleziona?.(id3);
+      if (chiudibile && (e.ctrlKey || e.metaKey)) azioni.chiudi?.(id4);
+      else azioni.seleziona?.(id4);
     });
     if (chiudibile) b.addEventListener("auxclick", (e) => {
       if (e.button === 1) {
         e.preventDefault();
-        azioni.chiudi?.(id3);
+        azioni.chiudi?.(id4);
       }
     });
     if (suDoppioClick) b.addEventListener("dblclick", (e) => {
@@ -35216,20 +36016,20 @@ function creaSchede(striscia, {
     const tab = e.target.closest?.(`[role=tab][${attributo}]`);
     if (!tab || azioni.tastieraSospesa?.()) return;
     const ids = voci.map((v) => identifica(v));
-    const id3 = tab.dataset[chiave];
-    const voce = voci.find((v) => identifica(v) === id3);
+    const id4 = tab.dataset[chiave];
+    const voce = voci.find((v) => identifica(v) === id4);
     let prossima = null;
-    if (e.key === "ArrowRight") prossima = cicla(ids, id3, 1);
-    else if (e.key === "ArrowLeft") prossima = cicla(ids, id3, -1);
+    if (e.key === "ArrowRight") prossima = cicla(ids, id4, 1);
+    else if (e.key === "ArrowLeft") prossima = cicla(ids, id4, -1);
     else if (e.key === "Home") prossima = ids[0];
     else if (e.key === "End") prossima = ids[ids.length - 1];
     else if (e.key === "Delete" && chiudibile) {
       e.preventDefault();
-      azioni.chiudi?.(id3);
+      azioni.chiudi?.(id4);
       return;
     } else if (tag2 !== "button" && (e.key === "Enter" || e.key === " ")) {
       e.preventDefault();
-      azioni.seleziona?.(id3);
+      azioni.seleziona?.(id4);
       return;
     } else if (e.key === "F2" && rinominabile) {
       e.preventDefault();
@@ -35242,7 +36042,7 @@ function creaSchede(striscia, {
       return;
     } else return;
     e.preventDefault();
-    if (prossima && prossima !== id3) {
+    if (prossima && prossima !== id4) {
       azioni.seleziona?.(prossima);
       const bersaglio = bottoneDi(prossima);
       bersaglio?.focus();
@@ -35293,17 +36093,17 @@ function creaSchede(striscia, {
       renderizza();
     },
     /** Cambia solo la selezione, senza ridisegnare (nessun nodo buttato, nessun fuoco perso). */
-    seleziona(id3) {
-      attiva = id3;
+    seleziona(id4) {
+      attiva = id4;
       for (const b of contenitore.querySelectorAll(`[role=tab][${attributo}]`)) {
-        const scelta = b.dataset[chiave] === id3;
+        const scelta = b.dataset[chiave] === id4;
         b.setAttribute("aria-selected", String(scelta));
         b.tabIndex = scelta ? 0 : -1;
         const idPannello = b.getAttribute("aria-controls");
         const pannello = idPannello ? documento.getElementById(idPannello) : null;
         if (pannello && scelta && b.id) pannello.setAttribute("aria-labelledby", b.id);
       }
-      portaInVista(bottoneDi(id3));
+      portaInVista(bottoneDi(id4));
     },
     fuocoSullaAttiva() {
       contenitore.querySelector('[role=tab][aria-selected="true"]')?.focus();
@@ -35556,8 +36356,8 @@ function creaSchedeTerminale(pane, { azioni = {}, root: root2 = document.body } 
       [t2(TESTI2.chiudiTutte), () => azioni.chiudiTutte?.(), stato2.schede.length > 0]
     ],
     azioni: {
-      seleziona: (id3) => azioni.seleziona?.(id3),
-      chiudi: (id3) => azioni.chiudi?.(id3),
+      seleziona: (id4) => azioni.seleziona?.(id4),
+      chiudi: (id4) => azioni.chiudi?.(id4),
       tastieraSospesa: () => Boolean(inRinomina)
     }
   });
@@ -35572,11 +36372,11 @@ function creaSchedeTerminale(pane, { azioni = {}, root: root2 = document.body } 
   }
   function chiudiRinomina(salva) {
     const input = tabs.querySelector(".talos-terminal__rinomina");
-    const id3 = inRinomina;
+    const id4 = inRinomina;
     inRinomina = null;
-    if (salva && input && id3 && nomeSchedaValido(input.value)) azioni.rinomina?.(id3, input.value.trim());
+    if (salva && input && id4 && nomeSchedaValido(input.value)) azioni.rinomina?.(id4, input.value.trim());
     renderizza();
-    if (id3) schede.bottoneDi(id3)?.focus();
+    if (id4) schede.bottoneDi(id4)?.focus();
   }
   function disegnaLinguetta(b, voce) {
     const titolo2 = titoloScheda(voce, stato2.schede);
@@ -36134,9 +36934,9 @@ function creaBrowser(schermo, { azioni = {}, modoIniziale = "pagina" } = {}) {
     riaperte: /* @__PURE__ */ new Set(),
     riposate: /* @__PURE__ */ new Set()
   };
-  const modoDi = (id3) => id3 && stato2.modi[id3] || stato2.modoPredefinito;
-  const impostaModo = (id3, m) => {
-    if (id3) stato2.modi[id3] = m;
+  const modoDi = (id4) => id4 && stato2.modi[id4] || stato2.modoPredefinito;
+  const impostaModo = (id4, m) => {
+    if (id4) stato2.modi[id4] = m;
   };
   const modoAttivo = () => modoDi(stato2.attiva);
   const frameAttivo = () => el30.live?.querySelector("iframe") || null;
@@ -36314,8 +37114,8 @@ function creaBrowser(schermo, { azioni = {}, modoIniziale = "pagina" } = {}) {
       }, Boolean(s.url)]
     ],
     azioni: {
-      seleziona: (id3) => azioni.seleziona?.(id3),
-      chiudi: (id3) => azioni.chiudi?.(id3)
+      seleziona: (id4) => azioni.seleziona?.(id4),
+      chiudi: (id4) => azioni.chiudi?.(id4)
     }
   }) : null;
   function riempiLinguettaBrowser(scheda, s, i2) {
@@ -36950,8 +37750,8 @@ function fraseChiEQuando(richiesta, status, esito) {
   return parti.join(" · ");
 }
 function ogniSecondoPredefinito(fn2) {
-  const id3 = setInterval(fn2, 1e3);
-  return () => clearInterval(id3);
+  const id4 = setInterval(fn2, 1e3);
+  return () => clearInterval(id4);
 }
 function mountUserQuestionDock({
   root: root2,
@@ -37097,18 +37897,18 @@ function mountUserQuestionDock({
   }
   for (const [index, prompt] of question.questions.entries()) {
     const fieldset = make("fieldset", "talos-stack talos-question-card__fieldset");
-    const id3 = typeof prompt.id === "string" && prompt.id ? prompt.id : "q" + index;
-    fieldset.dataset.questionId = id3;
+    const id4 = typeof prompt.id === "string" && prompt.id ? prompt.id : "q" + index;
+    fieldset.dataset.questionId = id4;
     fieldset.append(make("legend", "assistant-copy", prompt.question || "Domanda"));
     const perche = typeof prompt.why === "string" ? prompt.why.trim() : "";
     if (perche) fieldset.append(make("p", "talos-question-card__why", "Perché conta: " + perche));
-    const field = { id: id3, prompt, multi: prompt.multiSelect === true, options: [], other: null, textarea: null, fieldset };
+    const field = { id: id4, prompt, multi: prompt.multiSelect === true, options: [], other: null, textarea: null, fieldset };
     if (Array.isArray(prompt.options) && prompt.options.length) {
       for (const [numero10, option] of prompt.options.entries()) {
         const label = make("label", "sheet-toggle-row");
         const input = make("input");
         input.type = field.multi ? "checkbox" : "radio";
-        input.name = "question-" + id3;
+        input.name = "question-" + id4;
         input.value = String(option.label || "");
         const description = make("span", "talos-question-card__option-text");
         const suffisso = "talosAskOpzione" + ++prossimoIdOpzione;
@@ -37540,7 +38340,7 @@ function creaAzioniMessaggio({ ascolta = true } = {}, opzioni = {}) {
   gruppo.setAttribute("role", "group");
   const etichettaGruppo = typeof opzioni.etichetta === "string" && opzioni.etichetta.trim() ? opzioni.etichetta.trim() : TESTI_MESSAGGIO.azioniRisposta;
   gruppo.setAttribute("aria-label", etichettaGruppo);
-  const bottone5 = (nome, titolo2, icona16) => {
+  const bottone6 = (nome, titolo2, icona16) => {
     const b = el25(documentObj, "button", "talos-button talos-button--ghost talos-icon-button talos-button--sm");
     b.type = "button";
     b.title = titolo2;
@@ -37549,15 +38349,15 @@ function creaAzioniMessaggio({ ascolta = true } = {}, opzioni = {}) {
     b.append(simbolo(documentObj, "i i--sm", icona16));
     return b;
   };
-  gruppo.append(bottone5("copy", TESTI_MESSAGGIO.copiaRisposta, "i-copy"));
+  gruppo.append(bottone6("copy", TESTI_MESSAGGIO.copiaRisposta, "i-copy"));
   if (ascolta) {
-    const b = bottone5("listen", TESTI_MESSAGGIO.ascolta, "i-play");
+    const b = bottone6("listen", TESTI_MESSAGGIO.ascolta, "i-play");
     b.setAttribute("aria-pressed", "false");
     b.classList.add("assistant-listen-btn");
     gruppo.append(b);
   }
   if (!vociMenu) return gruppo;
-  const piu = bottone5("piu", TESTI_MESSAGGIO.altreAzioni, "i-more");
+  const piu = bottone6("piu", TESTI_MESSAGGIO.altreAzioni, "i-more");
   piu.setAttribute("aria-haspopup", "menu");
   piu.setAttribute("aria-expanded", "false");
   gruppo.append(piu);
@@ -37708,9 +38508,9 @@ function scriviCodice(parti, testo2, chiuso) {
   }
   pre.scrollLeft = scorrimento;
 }
-function aggiornaBottone(bottone5, chiuso) {
-  bottone5.disabled = !chiuso;
-  bottone5.textContent = chiuso ? "Copia" : "In arrivo…";
+function aggiornaBottone(bottone6, chiuso) {
+  bottone6.disabled = !chiuso;
+  bottone6.textContent = chiuso ? "Copia" : "In arrivo…";
 }
 function creaBloccoCodice({ testo: testo2 = "", linguaggio = "", chiuso = true } = {}, opzioni = {}) {
   const documentObj = opzioni.document || globalThis.document;
@@ -37719,9 +38519,9 @@ function creaBloccoCodice({ testo: testo2 = "", linguaggio = "", chiuso = true }
   blocco.dataset.lingua = chiaveLinguaggio(linguaggio);
   const intestazione = el25(documentObj, "div", "code-block-head");
   const nome = el25(documentObj, "span", "code-block-lang", etichetta3 || "testo");
-  const bottone5 = el25(documentObj, "button", "code-block-copy");
-  bottone5.type = "button";
-  intestazione.append(nome, bottone5);
+  const bottone6 = el25(documentObj, "button", "code-block-copy");
+  bottone6.type = "button";
+  intestazione.append(nome, bottone6);
   const pre = el25(documentObj, "pre");
   pre.setAttribute("tabindex", "0");
   pre.setAttribute("role", "group");
@@ -37731,7 +38531,7 @@ function creaBloccoCodice({ testo: testo2 = "", linguaggio = "", chiuso = true }
   const parti = {
     pre,
     code,
-    bottone: bottone5,
+    bottone: bottone6,
     nome,
     chiave: chiaveLinguaggio(linguaggio),
     evidenzia: opzioni.evidenzia || evidenziaConPrism,
@@ -37740,19 +38540,19 @@ function creaBloccoCodice({ testo: testo2 = "", linguaggio = "", chiuso = true }
     chiuso: Boolean(chiuso)
   };
   PARTI_DEL_BLOCCO.set(blocco, parti);
-  bottone5.addEventListener("click", async () => {
+  bottone6.addEventListener("click", async () => {
     if (!parti.chiuso) return;
     await parti.copia(parti.testo);
-    bottone5.textContent = "Copiato";
-    bottone5.classList.add("is-fatto");
+    bottone6.textContent = "Copiato";
+    bottone6.classList.add("is-fatto");
     const attesa = globalThis.setTimeout?.(() => {
-      aggiornaBottone(bottone5, true);
-      bottone5.classList.remove("is-fatto");
+      aggiornaBottone(bottone6, true);
+      bottone6.classList.remove("is-fatto");
     }, 1800);
     attesa?.unref?.();
   });
   if (!parti.chiuso) blocco.classList.add("code-block-in-arrivo");
-  aggiornaBottone(bottone5, parti.chiuso);
+  aggiornaBottone(bottone6, parti.chiuso);
   scriviCodice(parti, parti.testo, parti.chiuso);
   blocco.append(intestazione, pre);
   return blocco;
@@ -37760,11 +38560,11 @@ function creaBloccoCodice({ testo: testo2 = "", linguaggio = "", chiuso = true }
 function iconaAttrezzo(nome) {
   return ICONA_ATTREZZO[nome] || "i-bolt";
 }
-function creaAttivita({ riassunto = "Attività…", id: id3, aperto = false, tempo: tempo2 = null, token = null } = {}, opzioni = {}) {
+function creaAttivita({ riassunto = "Attività…", id: id4, aperto = false, tempo: tempo2 = null, token = null } = {}, opzioni = {}) {
   const documentObj = opzioni.document || globalThis.document;
   const card = el25(documentObj, "div", "talos-card talos-activity");
   card.setAttribute("data-c", "ActivityBundle");
-  const idCorpo = id3 || `attivita-${Math.random().toString(36).slice(2, 8)}`;
+  const idCorpo = id4 || `attivita-${Math.random().toString(36).slice(2, 8)}`;
   const testa = el25(documentObj, "button", "talos-activity__head");
   testa.type = "button";
   testa.setAttribute("aria-expanded", String(Boolean(aperto)));
@@ -37796,7 +38596,7 @@ function impostaDiffAttivita(testa, aggiunte, rimozioni) {
   piu.textContent = `+${aggiunte}`;
   meno.textContent = `−${rimozioni}`;
 }
-function creaRigaAttrezzo({ attrezzo = "", nome = "", dettaglio = "", esito = null, conDettaglio = false, id: id3 } = {}, opzioni = {}) {
+function creaRigaAttrezzo({ attrezzo = "", nome = "", dettaglio = "", esito = null, conDettaglio = false, id: id4 } = {}, opzioni = {}) {
   const documentObj = opzioni.document || globalThis.document;
   const riga2 = el25(documentObj, "div", "talos-tool-row");
   riga2.setAttribute("data-c", "ToolRow");
@@ -37809,7 +38609,7 @@ function creaRigaAttrezzo({ attrezzo = "", nome = "", dettaglio = "", esito = nu
   impostaEsitoRiga(riga2, esito);
   let corpo = null;
   if (conDettaglio) {
-    const idCorpo = id3 || `riga-${Math.random().toString(36).slice(2, 8)}`;
+    const idCorpo = id4 || `riga-${Math.random().toString(36).slice(2, 8)}`;
     riga2.setAttribute("role", "button");
     riga2.tabIndex = 0;
     riga2.setAttribute("aria-expanded", "false");
@@ -37849,6 +38649,7 @@ function creaNotaErrore({ badge: badge6 = "Errore", titolo: titolo2 = "TALOS · 
   const documentObj = opzioni.document || globalThis.document;
   const nota = el25(documentObj, "div", `talos-system-note talos-system-note--${tono === "danger" ? "errore" : "nota"}`);
   nota.setAttribute("data-c", "SystemNote");
+  nota.setAttribute("data-tone", tono);
   nota.append(el25(documentObj, "span", `talos-badge talos-badge--${tono} talos-badge--sm`, badge6));
   const corpo = el25(documentObj, "div");
   if (titolo2) corpo.append(el25(documentObj, "div", "talos-system-note__title", titolo2));
@@ -37916,15 +38717,15 @@ function creaApprovazione({ badge: badge6 = "Chiede di scrivere", bersaglio = ""
   }
   if (Array.isArray(diff) && diff.length > 0) scheda.append(creaDiff(diff, opzioni));
   const piede = el25(documentObj, "div", "talos-approval__foot sheet-actions");
-  const bottone5 = (classi, testo2, onClick) => {
+  const bottone6 = (classi, testo2, onClick) => {
     const b = el25(documentObj, "button", classi, testo2);
     b.type = "button";
     if (typeof onClick === "function") b.addEventListener("click", onClick);
     return b;
   };
-  const unaVolta = bottone5("talos-button talos-button--primary talos-button--md", "Consenti una volta", onUnaVolta);
-  const sessione = bottone5("talos-button talos-button--secondary", "Per questa sessione", onSessione);
-  const nega = bottone5("talos-button talos-button--ghost talos-button--danger", "Nega", onNega);
+  const unaVolta = bottone6("talos-button talos-button--primary talos-button--md", "Consenti una volta", onUnaVolta);
+  const sessione = bottone6("talos-button talos-button--secondary", "Per questa sessione", onSessione);
+  const nega = bottone6("talos-button talos-button--ghost talos-button--danger", "Nega", onNega);
   piede.append(unaVolta, sessione, nega, el25(documentObj, "span", "talos-grow"), el25(documentObj, "span", "talos-approval__foot-note", nota));
   scheda.append(piede);
   return { scheda, perche: perchéEl, codice: codiceEl, motivo: motivoEl, piede, pulsanti: { unaVolta, sessione, nega } };
@@ -38163,11 +38964,139 @@ var init_conversazione = __esm({
   }
 });
 
+// src/components/artifact-card.js
+function paginaValida(indirizzo) {
+  if (typeof indirizzo !== "string" || !/^\/api\/v1\/pagine\/[A-Za-z0-9_-]{43}\/[^/?#]+$/.test(indirizzo)) return false;
+  try {
+    const nome = decodeURIComponent(indirizzo.split("/").at(-1));
+    return nome !== "." && nome !== ".." && !/[\\/:\x00-\x1f\x7f]/.test(nome);
+  } catch {
+    return false;
+  }
+}
+function creaCardArtefatto({
+  evento,
+  sessionId,
+  API: API2 = (p) => p,
+  fetchFn = (...a) => globalThis.fetch(...a),
+  apriFn = (...a) => globalThis.open(...a),
+  ancoraValida = () => true
+}, opzioni = {}) {
+  let indirizzo = null;
+  let fonte = null;
+  let apertura = Promise.resolve();
+  const viva = () => card.isConnected && ancoraValida();
+  const { card, frame: frame3, apri } = creaArtefatto({
+    titolo: evento.titolo || "Artefatto",
+    onApri: apriPagina
+  }, opzioni);
+  apri.title = "Apri in una nuova scheda";
+  const stato2 = card.ownerDocument.createElement("p");
+  stato2.className = "talos-artifact__status talos-muted";
+  stato2.setAttribute("role", "status");
+  stato2.textContent = "Recupero dell’anteprima dalla Libreria…";
+  card.insertBefore(stato2, frame3);
+  apri.disabled = true;
+  frame3.hidden = true;
+  function erroreVisibile(messaggio) {
+    stato2.hidden = false;
+    stato2.textContent = `Anteprima non disponibile. ${messaggio}. Controlla la voce nella Libreria.`;
+  }
+  function apriPagina() {
+    if (!indirizzo || !viva() || apri.disabled) return;
+    if (!fonte) {
+      apriFn(indirizzo, "_blank", "noopener");
+      return;
+    }
+    apertura = (async () => {
+      let tab;
+      const avevaFocus = card.ownerDocument.activeElement === apri;
+      const chiudi = () => {
+        try {
+          tab?.close();
+        } catch {
+        }
+      };
+      try {
+        tab = apriFn("about:blank", "_blank");
+        if (!tab) {
+          erroreVisibile("Il browser ha bloccato la nuova scheda");
+          return;
+        }
+        tab.opener = null;
+        apri.disabled = true;
+        const pagina = await fonte.creaPagina();
+        if (!paginaValida(pagina)) throw new Error("Il riferimento alla pagina non è valido");
+        if (!viva() || tab.closed) {
+          chiudi();
+          return;
+        }
+        tab.location.replace(API2(pagina));
+        stato2.hidden = true;
+      } catch (errore) {
+        chiudi();
+        if (viva()) erroreVisibile(errore instanceof Error ? errore.message : "Il recupero non è riuscito");
+      } finally {
+        if (viva()) {
+          apri.disabled = false;
+          if (avevaFocus && card.ownerDocument.activeElement === card.ownerDocument.body) apri.focus({ preventScroll: true });
+        }
+      }
+    })();
+  }
+  const pronta = (async () => {
+    await Promise.resolve();
+    try {
+      let pagina;
+      if (Object.hasOwn(evento, "voceLibreriaId")) {
+        if (typeof evento.voceLibreriaId !== "string" || !ID_LIBRERIA.test(evento.voceLibreriaId) || typeof sessionId !== "string" || !sessionId) throw new Error("Il riferimento salvato non è valido");
+        fonte = fonteDaLibreria({
+          sessionId,
+          voce: { id: evento.voceLibreriaId },
+          fetchFn: (percorso, init2) => fetchFn(API2(percorso), init2)
+        });
+        pagina = await fonte.creaPagina();
+        if (!paginaValida(pagina)) throw new Error("Il riferimento alla pagina non è valido");
+        if (!viva()) return;
+        stato2.hidden = true;
+      } else {
+        if (typeof evento.id !== "string" || !evento.id) throw new Error("Il riferimento all’anteprima non è valido");
+        pagina = `/api/v1/artifacts/${encodeURIComponent(evento.id)}`;
+        stato2.textContent = "Anteprima temporanea: potrebbe non essere disponibile dopo il riavvio.";
+      }
+      if (!viva()) return;
+      indirizzo = API2(pagina);
+      frame3.src = indirizzo;
+      frame3.hidden = false;
+      apri.disabled = false;
+    } catch (errore) {
+      if (!viva()) return;
+      erroreVisibile(errore instanceof Error ? errore.message : "Il recupero non è riuscito");
+    }
+  })();
+  return { card, frame: frame3, apri, stato: stato2, pronta, get apertura() {
+    return apertura;
+  } };
+}
+var ID_LIBRERIA;
+var init_artifact_card = __esm({
+  "src/components/artifact-card.js"() {
+    init_conversazione();
+    init_fonti();
+    ID_LIBRERIA = /^lib-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  }
+});
+
 // src/components/esito-comando.js
 function dovEGirato(livello) {
   const l = String(livello ?? "").trim();
   const nome = l.split("(")[0].trim();
-  if (nome === "wsl2") return "in Linux (WSL), non su Windows";
+  if (nome === "wsl2") {
+    const utente = /\(Linux in WSL come ([a-z_][a-z0-9_-]{0,31}\$?);/iu.exec(l)?.[1];
+    if (utente) return `in Linux (WSL) come ${utente}, non su Windows`;
+    if (/\(Linux in WSL con un utente non verificato;/u.test(l)) return "in Linux (WSL), con un utente non verificato";
+    return "in Linux (WSL), non su Windows";
+  }
   if (nome === "none") return "su Windows, senza isolamento";
   if (nome === "adb-shell-on-device") return "sul telefono collegato";
   return null;
@@ -38257,8 +39186,8 @@ function bersaglioAttrezzo(argomenti) {
   }
   return "";
 }
-function nomeAttrezzoAschermo(id3) {
-  return nomeUmanoAttrezzo(id3) ?? "attrezzo non ancora registrato";
+function nomeAttrezzoAschermo(id4) {
+  return nomeUmanoAttrezzo(id4) ?? "attrezzo non ancora registrato";
 }
 function consegnaDaInput(input) {
   if (!input || typeof input !== "object") return { testo: "", meta: "" };
@@ -38311,35 +39240,35 @@ function digerisciEventoFiglia(r, e) {
       break;
     }
     case "TextMessageContent": {
-      const id3 = pezzo(e.messageId) || "senza-id";
-      let blocco = r.perMessaggio.get(id3);
+      const id4 = pezzo(e.messageId) || "senza-id";
+      let blocco = r.perMessaggio.get(id4);
       if (!blocco) {
-        blocco = { tipo: "testo", id: id3, testo: "" };
-        r.perMessaggio.set(id3, blocco);
+        blocco = { tipo: "testo", id: id4, testo: "" };
+        r.perMessaggio.set(id4, blocco);
         turnoCorrente().blocchi.push(blocco);
       }
       blocco.testo += pezzo(e.delta);
       break;
     }
     case "ReasoningMessageContent": {
-      const id3 = pezzo(e.messageId) || "ragionamento-senza-id";
-      let blocco = r.perRagionamento.get(id3);
+      const id4 = pezzo(e.messageId) || "ragionamento-senza-id";
+      let blocco = r.perRagionamento.get(id4);
       if (!blocco) {
-        blocco = { tipo: "ragionamento", id: id3, testo: "" };
-        r.perRagionamento.set(id3, blocco);
+        blocco = { tipo: "ragionamento", id: id4, testo: "" };
+        r.perRagionamento.set(id4, blocco);
         turnoCorrente().blocchi.push(blocco);
       }
       blocco.testo += pezzo(e.delta);
       break;
     }
     case "ToolCallStart": {
-      const id3 = pezzo(e.toolCallId);
-      if (!id3 || r.perAttrezzo.has(id3)) {
+      const id4 = pezzo(e.toolCallId);
+      if (!id4 || r.perAttrezzo.has(id4)) {
         r.scartati += 1;
         break;
       }
-      const blocco = { tipo: "attrezzo", id: id3, attrezzo: pezzo(e.toolCallName), argomenti: "", esito: "running", contenuto: "" };
-      r.perAttrezzo.set(id3, blocco);
+      const blocco = { tipo: "attrezzo", id: id4, attrezzo: pezzo(e.toolCallName), argomenti: "", esito: "running", contenuto: "" };
+      r.perAttrezzo.set(id4, blocco);
       turnoCorrente().blocchi.push(blocco);
       r.attrezzi += 1;
       break;
@@ -39204,7 +40133,7 @@ function creaVistaViva(contenitore, { onGesto, onErrore, documento = globalThis.
   if (!contenitore) throw new Error("creaVistaViva: manca il contenitore");
   const doc = documento;
   const chiediFotogramma = typeof finestra?.requestAnimationFrame === "function" ? (mano) => finestra.requestAnimationFrame(mano) : (mano) => setTimeout(mano, 16);
-  const annullaFotogramma = typeof finestra?.cancelAnimationFrame === "function" ? (id3) => finestra.cancelAnimationFrame(id3) : (id3) => clearTimeout(id3);
+  const annullaFotogramma = typeof finestra?.cancelAnimationFrame === "function" ? (id4) => finestra.cancelAnimationFrame(id4) : (id4) => clearTimeout(id4);
   const senzaMoto = finestra?.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches === true;
   const { decodifica: decodifica2, viaBitmap } = creaDecodificatore(finestra, doc);
   const radice2 = doc.createElement("div");
@@ -39512,15 +40441,15 @@ function montaMiglioraPrompt({
   listaLinguette.setAttribute("role", "tablist");
   listaLinguette.setAttribute("aria-labelledby", "migliora-prompt-quanto");
   const bottoniProfondita = PROFONDITA.map((voce) => {
-    const bottone5 = elemento("button", "talos-tabs__tab", voce.nome);
-    bottone5.type = "button";
-    bottone5.setAttribute("role", "tab");
-    bottone5.dataset.miglioraProfondita = voce.valore;
-    bottone5.addEventListener("click", () => {
+    const bottone6 = elemento("button", "talos-tabs__tab", voce.nome);
+    bottone6.type = "button";
+    bottone6.setAttribute("role", "tab");
+    bottone6.dataset.miglioraProfondita = voce.valore;
+    bottone6.addEventListener("click", () => {
       profondita = voce.valore;
       disegna2();
     });
-    return bottone5;
+    return bottone6;
   });
   listaLinguette.append(...bottoniProfondita);
   linguette.append(listaLinguette);
@@ -39649,9 +40578,9 @@ function montaMiglioraPrompt({
     provenienza.textContent = fraseProvenienza(modello);
     const voce = descriviProfondita(profondita);
     spiegazione.textContent = voce.spiega;
-    for (const bottone5 of bottoniProfondita) {
-      const attiva = bottone5.dataset.miglioraProfondita === profondita;
-      bottone5.setAttribute("aria-selected", String(attiva));
+    for (const bottone6 of bottoniProfondita) {
+      const attiva = bottone6.dataset.miglioraProfondita === profondita;
+      bottone6.setAttribute("aria-selected", String(attiva));
     }
     scelta.hidden = stato2 !== "scelta";
     attesa.hidden = stato2 !== "attesa";
@@ -39713,7 +40642,7 @@ function montaMiglioraPrompt({
     copiaStato.textContent = "";
     radice2.hidden = false;
     disegna2();
-    const scelto = bottoniProfondita.find((bottone5) => bottone5.dataset.miglioraProfondita === profondita);
+    const scelto = bottoniProfondita.find((bottone6) => bottone6.dataset.miglioraProfondita === profondita);
     if (scelto && typeof scelto.focus === "function") scelto.focus();
   }
   function chiudi() {
@@ -39946,7 +40875,7 @@ function creaTerminaleXterm({
   contenitore,
   Terminal,
   FitAddon,
-  id: id3,
+  id: id4,
   tema,
   fontFamily = "Menlo, Consolas, monospace",
   fontSize = 13,
@@ -39960,7 +40889,7 @@ function creaTerminaleXterm({
   if (!contenitore || !Terminal || !FitAddon) return null;
   const mount = documento.createElement("div");
   mount.className = "talos-terminal__mount";
-  mount.dataset.terminaleMount = id3;
+  mount.dataset.terminaleMount = id4;
   contenitore.append(mount);
   const term = new Terminal({
     fontFamily,
@@ -40360,6 +41289,61 @@ var init_errori = __esm({
     });
     FERMO_SU_RICHIESTA = /interrotto su richiesta|operation was aborted|AbortError|aborted by user|fermato dall'utente/i;
     REGOLE = [
+      ...[
+        {
+          codice: "PROVIDER_BUDGET_OCCUPIED",
+          id: "budget-occupato",
+          cosa: "Il budget è temporaneamente occupato da altre richieste.",
+          perche: "Il servizio ha rifiutato questa richiesta prima di inviarla al modello. Le richieste in corso o appena concluse impegnano ancora il budget; il tentativo automatico si è fermato.",
+          rimedi: ["Attendi che le altre richieste si concludano e che i costi vengano contabilizzati, poi scrivi «continua»."]
+        },
+        {
+          codice: "PROVIDER_KEY_SPEND_LIMIT",
+          id: "limite-spesa-chiave",
+          cosa: "Il limite di spesa della chiave è stato raggiunto.",
+          perche: "Il servizio segnala il tetto di spesa configurato per questa chiave. TALOS non l’ha sospesa né sostituita.",
+          rimedi: ["Controlla il limite della chiave sul sito del servizio: puoi modificarlo oppure attendere il ripristino previsto dal tuo account.", "Riprendi la conversazione dopo aver verificato il limite."]
+        },
+        {
+          codice: "PROVIDER_REQUEST_BUDGET",
+          id: "richiesta-costosa",
+          cosa: "La richiesta supera il budget disponibile.",
+          perche: "Il costo stimato di questa singola richiesta supera il budget che il servizio può impegnare. Ripetere la stessa richiesta non risolve il limite.",
+          rimedi: ["Controlla il credito sul sito del servizio, oppure riduci il contesto con Context Manager prima di riprendere.", "TALOS conserva la conversazione e non ha modificato automaticamente la richiesta."]
+        },
+        {
+          codice: "PROVIDER_CREDIT_LIMIT",
+          id: "credito-insufficiente",
+          cosa: "Il credito disponibile non copre questa richiesta.",
+          perche: "Il servizio segnala un limite di credito. La risposta non fornisce un saldo verificato da mostrare.",
+          rimedi: ["Controlla il credito sul sito del servizio e riprendi dopo aver risolto il limite."]
+        },
+        {
+          codice: "PROVIDER_PAYMENT_REQUIRED",
+          id: "limite-spesa-sconosciuto",
+          cosa: "Il servizio ha rifiutato la richiesta per un limite di spesa.",
+          perche: "La risposta non permette di distinguere il credito, il limite della chiave o il budget temporaneamente occupato. TALOS non ha ripetuto la richiesta né sospeso la chiave.",
+          rimedi: ["Controlla credito e limiti sul sito del servizio prima di riprendere."]
+        }
+      ].map(({ codice, id: id4, ...testi }) => ({
+        id: id4,
+        famiglia: "limite-fornitore",
+        riconosce: (_testo, code) => code === codice,
+        spiega: (tecnico) => ({ ...testi, tecnico: tecnico.includes(codice) ? tecnico : `[${codice}]${tecnico ? ` ${tecnico}` : ""}` })
+      })),
+      {
+        // RETRY05: il codice del backend prevale sulle parole del messaggio.
+        // Un esito incerto non dimostra invio mancato, costo nullo o credenziale invalida.
+        id: "esito-fornitore-incerto",
+        famiglia: "esito-fornitore-incerto",
+        riconosce: (_testo, codice) => codice === "PROVIDER_OUTCOME_UNKNOWN",
+        spiega: (tecnico, codice) => ({
+          cosa: "Non è stato possibile completare la risposta del modello.",
+          perche: "TALOS non può confermare l’esito della richiesta e non l’ha reinviata automaticamente. Il testo già ricevuto e il lavoro precedente restano nella conversazione.",
+          rimedi: ["Per riprendere, scrivi «continua» nella stessa sessione. È una nuova richiesta e può comportare un altro costo."],
+          tecnico: tecnico.includes(codice) ? tecnico : `[${codice}]${tecnico ? ` ${tecnico}` : ""}`
+        })
+      },
       {
         /*
          * ⭐⭐⭐ CLI-REQ-03, metà A SCHERMO (17/09/2026) — LA CHIAVE CHE MANCA NON È UN GUASTO.
@@ -40737,8 +41721,8 @@ var init_errori = __esm({
         id: "rete",
         riconosce: (t3) => /ECONNREFUSED|ETIMEDOUT|fetch failed|network error|socket hang up|Connessione con il fornitore interrotta|Il fornitore non risponde|Il fornitore ha superato il tempo massimo/iu.test(t3),
         spiega: () => ({
-          cosa: "La richiesta non è arrivata al modello.",
-          perche: "Il servizio non ha risposto: può essere la rete, il fornitore, o il runtime locale spento.",
+          cosa: "Il collegamento con il modello si è interrotto.",
+          perche: "Il messaggio ricevuto non permette di stabilire la causa o se il modello abbia elaborato la richiesta. Può dipendere dalla connessione, dal fornitore o dal runtime locale.",
           rimedi: ["Controlla la connessione e riprova.", "Se il modello è locale, verifica che il runtime sia acceso nel Laboratorio."]
         })
       },
@@ -40763,6 +41747,8 @@ var init_errori = __esm({
       { prova: /too large|troppo grande/i, detto: "Il contenuto era troppo grande per essere accettato." }
     ];
     VESTIZIONI = {
+      "limite-fornitore": { badge: "Limite del servizio", titolo: "TALOS · richiesta sospesa", tono: "warning" },
+      "esito-fornitore-incerto": { badge: "Risposta interrotta", titolo: "TALOS · ripresa manuale", tono: "warning" },
       fermato: { badge: "Fermato", titolo: "TALOS · fermato", tono: "accent" },
       /*
        * ⛔ 13/09 — un cambio di direzione non è un guasto E non è nemmeno una notizia: il giro riparte
@@ -40967,12 +41953,12 @@ function creaRegolaAdesso({ orologio = () => performance.now() } = {}) {
   let mostrato = "";
   let mostratoAlle = 0;
   let idMostrato = null;
-  const mostra = (testo2, id3, ora5) => {
+  const mostra = (testo2, id4, ora5) => {
     if (testo2 !== mostrato) {
       mostrato = testo2;
       mostratoAlle = ora5;
     }
-    idMostrato = id3;
+    idMostrato = id4;
     return mostrato;
   };
   return {
@@ -40985,9 +41971,9 @@ function creaRegolaAdesso({ orologio = () => performance.now() } = {}) {
       }
       if (inCorso) {
         const testo2 = fraseAdesso(inCorso);
-        const id3 = inCorso.id ?? inCorso;
-        if (id3 === idMostrato && inCorso.tipo !== "reasoning") return mostra(testo2, id3, ora5);
-        if (idMostrato === null || ora5 - mostratoAlle >= PERMANENZA_MINIMA_AZIONE_MS) return mostra(testo2, id3, ora5);
+        const id4 = inCorso.id ?? inCorso;
+        if (id4 === idMostrato && inCorso.tipo !== "reasoning") return mostra(testo2, id4, ora5);
+        if (idMostrato === null || ora5 - mostratoAlle >= PERMANENZA_MINIMA_AZIONE_MS) return mostra(testo2, id4, ora5);
         return mostrato;
       }
       if (!mostrato || idMostrato !== null && ora5 - mostratoAlle >= PAUSA_PROSSIMO_PASSO_MS) return mostra(t2("Prepara il passo successivo…"), null, ora5);
@@ -41261,8 +42247,8 @@ var init_attivita_segmento = __esm({
       /** Il corpo che una riga comanda: il `<pre>` del dettaglio per un attrezzo, il corpo della scheda per un ragionamento. */
       corpoDi(riga2) {
         if (this.eRagionamento(riga2)) return riga2.parentElement.querySelector(":scope > .talos-activity__body");
-        const id3 = riga2.getAttribute("aria-controls");
-        return id3 ? riga2.parentElement?.querySelector(`#${CSS.escape(id3)}`) ?? null : null;
+        const id4 = riga2.getAttribute("aria-controls");
+        return id4 ? riga2.parentElement?.querySelector(`#${CSS.escape(id4)}`) ?? null : null;
       }
       vociNormalizzate() {
         return this.righe().map((riga2) => {
@@ -41766,8 +42752,8 @@ function stimaTokenImmagine(larghezza2, altezza, famiglia = "claude") {
   }
   return Math.min(TETTO_IMMAGINE, Math.ceil(w * h / 750));
 }
-function famigliaModello(id3) {
-  const s = String(id3 || "").toLowerCase();
+function famigliaModello(id4) {
+  const s = String(id4 || "").toLowerCase();
   if (/claude|anthropic/.test(s)) return "claude";
   if (/gpt|openai|o[1-9]-/.test(s)) return "openai";
   if (/gemini|google/.test(s)) return "gemini";
@@ -42106,21 +43092,21 @@ function crea(doc, tag2, classe, testo2) {
   if (testo2 !== void 0 && testo2 !== null) nodo13.textContent = String(testo2);
   return nodo13;
 }
-function icona13(doc, id3) {
+function icona13(doc, id4) {
   const svg2 = doc.createElementNS("http://www.w3.org/2000/svg", "svg");
   svg2.setAttribute("class", "i");
   svg2.setAttribute("aria-hidden", "true");
   const use = doc.createElementNS("http://www.w3.org/2000/svg", "use");
-  use.setAttribute("href", `#${id3}`);
+  use.setAttribute("href", `#${id4}`);
   svg2.append(use);
   return svg2;
 }
-function bottoneIcona(doc, id3, etichetta3, fai) {
+function bottoneIcona(doc, id4, etichetta3, fai) {
   const b = crea(doc, "button", "talos-button talos-button--ghost talos-button--sm talos-icon-button");
   b.type = "button";
   b.setAttribute("aria-label", etichetta3);
   b.title = etichetta3;
-  b.append(icona13(doc, id3));
+  b.append(icona13(doc, id4));
   b.addEventListener("click", fai);
   return b;
 }
@@ -42644,7 +43630,7 @@ function ultimoIndice(elenco2, prova) {
   return -1;
 }
 function righeDelGrafo(commit, { testa = null, remoto = null, base = null } = {}) {
-  const colorePerRif = (id3) => id3 && id3 === testa ? "locale" : id3 && id3 === remoto ? "remoto" : void 0;
+  const colorePerRif = (id4) => id4 && id4 === testa ? "locale" : id4 && id4 === remoto ? "remoto" : void 0;
   let indiceColore = -1;
   const righe = [];
   for (const voce of commit) {
@@ -42765,15 +43751,15 @@ function soloDelRemoto(commit, { testa = null, remoto = null } = {}) {
     const visti = /* @__PURE__ */ new Set();
     const pila = da ? [da] : [];
     while (pila.length) {
-      const id3 = pila.pop();
-      if (visti.has(id3) || !padriDi.has(id3)) continue;
-      visti.add(id3);
-      pila.push(...padriDi.get(id3));
+      const id4 = pila.pop();
+      if (visti.has(id4) || !padriDi.has(id4)) continue;
+      visti.add(id4);
+      pila.push(...padriDi.get(id4));
     }
     return visti;
   };
   const dallaTesta = raggiunti(testa);
-  return new Set([...raggiunti(remoto)].filter((id3) => !dallaTesta.has(id3)));
+  return new Set([...raggiunti(remoto)].filter((id4) => !dallaTesta.has(id4)));
 }
 function disegnoSegnaposto(corsie, altezza) {
   const elenco2 = Array.isArray(corsie) ? corsie : [];
@@ -42918,21 +43904,21 @@ function grafoDellaRiga(doc, disegno, larghezza2) {
   }
   return svg2;
 }
-function icona14(doc, id3) {
+function icona14(doc, id4) {
   const svg2 = doc.createElementNS("http://www.w3.org/2000/svg", "svg");
   svg2.setAttribute("class", "i");
   svg2.setAttribute("aria-hidden", "true");
   const use = doc.createElementNS("http://www.w3.org/2000/svg", "use");
-  use.setAttribute("href", `#${id3}`);
+  use.setAttribute("href", `#${id4}`);
   svg2.append(use);
   return svg2;
 }
-function bottoneIcona2(doc, id3, etichetta3, fai) {
+function bottoneIcona2(doc, id4, etichetta3, fai) {
   const b = el28(doc, "button", "talos-button talos-button--ghost talos-button--sm talos-icon-button");
   b.type = "button";
   b.setAttribute("aria-label", etichetta3);
   b.title = etichetta3;
-  b.append(icona14(doc, id3));
+  b.append(icona14(doc, id4));
   b.addEventListener("click", fai);
   return b;
 }
@@ -43095,12 +44081,12 @@ function creaSchedaGithub({ doc = globalThis.document, radice: radice2, api, con
     });
     carta.append(campo2);
     if (r.errore) {
-      const id3 = "talos-github-richiesta-errore";
+      const id4 = "talos-github-richiesta-errore";
       const errore = el28(doc, "p", "talos-field__error talos-github-richiesta__errore", r.errore);
-      errore.id = id3;
+      errore.id = id4;
       errore.setAttribute("role", "alert");
       campo2.setAttribute("aria-invalid", "true");
-      campo2.setAttribute("aria-describedby", id3);
+      campo2.setAttribute("aria-describedby", id4);
       carta.append(errore);
     }
     const piede = el28(doc, "div", "talos-github-richiesta__piede");
@@ -43481,21 +44467,21 @@ function creaSchedaGithub({ doc = globalThis.document, radice: radice2, api, con
     }
     const azione = azioneSinc(s);
     const inCorso = stato2.inCorso;
-    const bottone5 = el28(doc, "button", "talos-button talos-button--secondary talos-button--sm talos-github-sinc__azione");
-    bottone5.type = "button";
-    bottone5.dataset.azione = inCorso ?? azione;
-    bottone5.dataset.fuoco = "sinc";
-    bottone5.append(icona14(doc, ICONA_SINC[inCorso ?? azione]), el28(doc, "span", "", inCorso ? t2(IN_CORSO[inCorso]) : etichettaSinc(azione, s)));
+    const bottone6 = el28(doc, "button", "talos-button talos-button--secondary talos-button--sm talos-github-sinc__azione");
+    bottone6.type = "button";
+    bottone6.dataset.azione = inCorso ?? azione;
+    bottone6.dataset.fuoco = "sinc";
+    bottone6.append(icona14(doc, ICONA_SINC[inCorso ?? azione]), el28(doc, "span", "", inCorso ? t2(IN_CORSO[inCorso]) : etichettaSinc(azione, s)));
     if (inCorso) {
-      bottone5.disabled = true;
-      bottone5.setAttribute("aria-busy", "true");
+      bottone6.disabled = true;
+      bottone6.setAttribute("aria-busy", "true");
     } else {
-      bottone5.title = azione === "recupera" && remotoPerRecupero(s) ? t2("Recupera da {remoto}", { remoto: remotoPerRecupero(s) }) : azione === "scarica" ? t2("Scarica da {rif}", { rif: s.riferimento.corto }) : azione === "invia" ? t2("Invia a {rif}", { rif: s.riferimento.corto }) : etichettaSinc(azione, s);
-      bottone5.addEventListener("click", () => {
+      bottone6.title = azione === "recupera" && remotoPerRecupero(s) ? t2("Recupera da {remoto}", { remoto: remotoPerRecupero(s) }) : azione === "scarica" ? t2("Scarica da {rif}", { rif: s.riferimento.corto }) : azione === "invia" ? t2("Invia a {rif}", { rif: s.riferimento.corto }) : etichettaSinc(azione, s);
+      bottone6.addEventListener("click", () => {
         void faiSinc(azione);
       });
     }
-    riga2.append(bottone5);
+    riga2.append(bottone6);
     if (inCorso === "recupera") {
       const ferma = bottoneTesto2(doc, t2("Ferma"), () => {
         void fermaRecupero();
@@ -45461,17 +46447,22 @@ var init_context_progress = __esm({
 function formattaToken(n) {
   return new Intl.NumberFormat(inglese() ? "en-US" : "it-IT").format(n);
 }
-function sogliaLegacy({ finestraToken = null, tettoToken = TETTO_TOKEN_DEFAULT } = {}) {
-  const tetto = numero8(tettoToken) && tettoToken > 0 ? tettoToken : TETTO_TOKEN_DEFAULT;
-  if (!numero8(finestraToken) || finestraToken <= 0) return tetto;
-  return Math.min(tetto, Math.floor(finestraToken * FRAZIONE_FINESTRA));
-}
-function valutaSogliaContesto({ tokenMisurati, soglia } = {}) {
+function valutaSogliaContesto({ tokenMisurati, soglia, warningTokens = null, source = null } = {}) {
   if (!numero8(tokenMisurati) || tokenMisurati <= 0 || !numero8(soglia) || soglia <= 0) return { mostra: false, rapporto: null, testo: "" };
   const rapporto = tokenMisurati / soglia;
   const numeri = { n: formattaToken(tokenMisurati), m: formattaToken(soglia) };
-  const testo2 = rapporto >= 1 ? t2("Il contesto ha superato la soglia ({n} su {m} token).", numeri) : t2("Il contesto è quasi pieno ({n} su {m} token).", numeri);
-  return { mostra: rapporto >= FRAZIONE_AVVISO, rapporto, testo: testo2 };
+  let testo2;
+  if (source === "fallback") {
+    testo2 = inglese() ? `TALOS precautionary threshold: model window unverified (${numeri.n} of ${numeri.m} tokens).` : `Soglia prudenziale TALOS: finestra del modello non verificata (${numeri.n} su ${numeri.m} token).`;
+  } else if (source === "route-minimum") {
+    testo2 = inglese() ? `The route's precautionary compaction threshold ${rapporto >= 1 ? "was exceeded" : "is approaching"} (${numeri.n} of ${numeri.m} tokens).` : `La soglia prudenziale della route ${rapporto >= 1 ? "è stata superata" : "si avvicina"} (${numeri.n} su ${numeri.m} token).`;
+  } else if (source === "explicit-cap") {
+    testo2 = inglese() ? `The configured compaction limit ${rapporto >= 1 ? "was exceeded" : "is approaching"} (${numeri.n} of ${numeri.m} tokens).` : `Il limite di compattazione configurato ${rapporto >= 1 ? "è stato superato" : "si avvicina"} (${numeri.n} su ${numeri.m} token).`;
+  } else {
+    testo2 = rapporto >= 1 ? t2("Il contesto ha superato la soglia ({n} su {m} token).", numeri) : t2("Il contesto è quasi pieno ({n} su {m} token).", numeri);
+  }
+  const warning = numero8(warningTokens) && warningTokens > 0 ? warningTokens : Math.floor(soglia * FRAZIONE_AVVISO);
+  return { mostra: tokenMisurati >= warning, rapporto, testo: testo2 };
 }
 function interpretaEventoCompattazione(evento) {
   if (!evento || evento.type !== "CUSTOM" || typeof evento.name !== "string") return null;
@@ -45555,7 +46546,7 @@ function montaAvvisoContesto({ document: doc = globalThis.document, riferimento 
   avviso.id = "avvisoContesto";
   avviso.dataset.c = "ContextNearlyFullNotice";
   avviso.setAttribute("role", "group");
-  avviso.setAttribute("aria-label", t2("Contesto quasi pieno"));
+  avviso.setAttribute("aria-label", inglese() ? "Compaction threshold" : "Soglia di compattazione");
   avviso.hidden = true;
   const icona16 = doc.createElement("span");
   icona16.className = "talos-avviso-piano__icona";
@@ -45695,13 +46686,11 @@ async function annullaCompattazioneLegacy({ fetchFn = globalThis.fetch, base = "
   const dati = await chiamaPost(fetchFn, `${base.replace(/\/$/, "")}/sessions/${encodeURIComponent(sessionId)}/compaction/${encodeURIComponent(at2)}/undo`, signal);
   return dati?.data ?? dati ?? {};
 }
-var TETTO_TOKEN_DEFAULT, FRAZIONE_FINESTRA, FRAZIONE_AVVISO, EVENTO_COMPATTAZIONE, EVENTO_ANNULLATA, EVENTO_JOURNAL_RIPARATO, numero8, inglese, MOTIVI3, ICONA, chiaveRiparazione;
+var FRAZIONE_AVVISO, EVENTO_COMPATTAZIONE, EVENTO_ANNULLATA, EVENTO_JOURNAL_RIPARATO, numero8, inglese, MOTIVI3, ICONA, chiaveRiparazione;
 var init_compattazione_legacy = __esm({
   "src/components/compattazione-legacy.js"() {
     init_lingua();
     init_conversazione();
-    TETTO_TOKEN_DEFAULT = 2e5;
-    FRAZIONE_FINESTRA = 0.75;
     FRAZIONE_AVVISO = 0.8;
     EVENTO_COMPATTAZIONE = "talos.compattazione";
     EVENTO_ANNULLATA = "talos.compattazione-annullata";
@@ -45814,8 +46803,8 @@ var init_stato_vuoto = __esm({
 
 // src/components/lab-cornice-v3.js
 function schedaDiSezione(sezione) {
-  const id3 = SCHEDA_DI_SEZIONE.get(String(sezione ?? "").trim());
-  return id3 ? SCHEDE_LAB.find((scheda) => scheda.id === id3) ?? null : null;
+  const id4 = SCHEDA_DI_SEZIONE.get(String(sezione ?? "").trim());
+  return id4 ? SCHEDE_LAB.find((scheda) => scheda.id === id4) ?? null : null;
 }
 function sezioneCanonica(sezione) {
   return schedaDiSezione(sezione)?.id ?? null;
@@ -45944,22 +46933,22 @@ function sezioneMostrata(card) {
   if (visibile2) return visibile2.dataset.modelLabPanel ?? null;
   return pannelli.find((pannello) => pannello.classList.contains("active"))?.dataset.modelLabPanel ?? null;
 }
-function applicaStato(card, id3) {
+function applicaStato(card, id4) {
   for (const tab of card.querySelectorAll("[data-lab-scheda]")) {
-    const attiva = tab.dataset.labScheda === id3;
+    const attiva = tab.dataset.labScheda === id4;
     if (tab.getAttribute("aria-selected") !== String(attiva)) tab.setAttribute("aria-selected", String(attiva));
     tab.tabIndex = attiva ? 0 : -1;
     tab.classList.toggle("active", attiva);
   }
   for (const gruppo of card.querySelectorAll("[data-lab-pannello]")) {
-    const attivo = gruppo.dataset.labPannello === id3;
+    const attivo = gruppo.dataset.labPannello === id4;
     if (gruppo.hidden !== !attivo) gruppo.hidden = !attivo;
     gruppo.classList.toggle("active", attivo);
   }
-  if (card.dataset.labSchedaAttiva === id3) return false;
-  card.dataset.labSchedaAttiva = id3;
+  if (card.dataset.labSchedaAttiva === id4) return false;
+  card.dataset.labSchedaAttiva = id4;
   const CE = card.ownerDocument?.defaultView?.CustomEvent;
-  if (CE) card.dispatchEvent(new CE("lab:scheda", { detail: { scheda: id3 }, bubbles: true }));
+  if (CE) card.dispatchEvent(new CE("lab:scheda", { detail: { scheda: id4 }, bubbles: true }));
   return true;
 }
 function attivaSezione(card, sezione) {
@@ -45982,15 +46971,15 @@ function sincronizzaGuscioLaboratorio(card) {
     memoria.set(sua.id, mostrata);
     ULTIMA_SEZIONE.set(card, memoria);
   }
-  const id3 = sezioneCanonica(mostrata) ?? schedaAttiva(card) ?? SCHEDE_LAB[0].id;
-  applicaStato(card, id3);
-  return id3;
+  const id4 = sezioneCanonica(mostrata) ?? schedaAttiva(card) ?? SCHEDE_LAB[0].id;
+  applicaStato(card, id4);
+  return id4;
 }
 function comandiLegacy(card) {
   const contenitore = card.querySelector("[data-lab-comandi]") ?? card;
   const mappa = /* @__PURE__ */ new Map();
-  for (const bottone5 of contenitore.querySelectorAll("[data-model-lab-tab]")) {
-    if (!mappa.has(bottone5.dataset.modelLabTab)) mappa.set(bottone5.dataset.modelLabTab, bottone5);
+  for (const bottone6 of contenitore.querySelectorAll("[data-model-lab-tab]")) {
+    if (!mappa.has(bottone6.dataset.modelLabTab)) mappa.set(bottone6.dataset.modelLabTab, bottone6);
   }
   return mappa;
 }
@@ -46325,13 +47314,13 @@ function portaPreferenzeDiSerie(archivio = () => globalThis.localStorage) {
     }
   };
 }
-function bersaglioDi2(id3, repo = null) {
+function bersaglioDi2(id4, repo = null) {
   const esplicito = typeof repo === "string" ? repo.trim() : String(repo?.repo ?? "").trim();
   if (esplicito) {
     const revisione = typeof repo === "object" && repo ? String(repo.revision ?? "").trim() : "";
     return { tipo: "repo", id: `${PREFISSO_REPO}${esplicito}`, repo: esplicito, revisione, chiave: esplicito };
   }
-  const testo2 = String(id3 ?? "").trim();
+  const testo2 = String(id4 ?? "").trim();
   if (testo2.toLowerCase().startsWith(PREFISSO_REPO)) {
     const resto = testo2.slice(PREFISSO_REPO.length);
     const taglio = resto.lastIndexOf("@");
@@ -46386,16 +47375,16 @@ function corpoDownloadHf(detail = {}, gruppo = null) {
   const file = Array.isArray(gruppo?.file) ? gruppo.file : [];
   const primo2 = file[0];
   if (!primo2?.path) return null;
-  const id3 = idDelDownload(detail.repo, detail.revision, primo2.path);
+  const id4 = idDelDownload(detail.repo, detail.revision, primo2.path);
   return {
-    id: id3,
+    id: id4,
     repo: String(detail.repo ?? ""),
     revision: String(detail.revision ?? ""),
     files: file.map((f) => ({ path: String(f.path), bytes: Number(f.sizeBytes), sha256: String(f.sha256 ?? "") })),
     bytes: Number(gruppo.bytes),
     sha256: String(primo2.sha256 ?? ""),
     license: detail.license || "unknown",
-    path: id3
+    path: id4
   };
 }
 function senzaFrontMatter(testo2) {
@@ -46508,21 +47497,21 @@ function indiceDelReadme(frammento, doc, { prefisso = "readme", margine = 12, ca
   const titoli = [...frammento?.querySelectorAll?.("h2, h3, h4") || []];
   return titoli.map((titolo2, i2) => {
     const testo2 = String(titolo2.textContent || "").trim();
-    const id3 = `${prefisso}-${slug(testo2) || "sezione"}-${i2}`;
-    titolo2.id = id3;
+    const id4 = `${prefisso}-${slug(testo2) || "sezione"}-${i2}`;
+    titolo2.id = id4;
     titolo2.tabIndex = -1;
     titolo2.style.scrollMarginTop = `${margine}px`;
     const breve2 = testo2.length > caratteri ? `${testo2.slice(0, caratteri).trimEnd()}…` : testo2;
-    return { id: id3, testo: testo2, breve: breve2, livello: Number(String(titolo2.tagName).slice(1)) || 2 };
+    return { id: id4, testo: testo2, breve: breve2, livello: Number(String(titolo2.tagName).slice(1)) || 2 };
   });
 }
 function percorsoModelli() {
   return "/api/v1/local-models";
 }
-function percorsoFit(id3, { profilo = "agent", contextTokens = null } = {}) {
+function percorsoFit(id4, { profilo = "agent", contextTokens = null } = {}) {
   const parametri = new URLSearchParams({ profile: String(profilo) });
   if (Number.isInteger(contextTokens) && contextTokens > 0) parametri.set("contextTokens", String(contextTokens));
-  return `/api/v1/local-models/${encodeURIComponent(String(id3 ?? ""))}/fit?${parametri.toString()}`;
+  return `/api/v1/local-models/${encodeURIComponent(String(id4 ?? ""))}/fit?${parametri.toString()}`;
 }
 function percorsoRepo(modello) {
   const repo = String(modello?.repo ?? "").trim();
@@ -46596,7 +47585,7 @@ function accorciaMovimento() {
 function montaSchedaModello(contenitore, {
   apiGet,
   apiPost = null,
-  id: id3,
+  id: id4,
   modello = null,
   repo = null,
   preferenze = null,
@@ -46615,7 +47604,7 @@ function montaSchedaModello(contenitore, {
   const doc = documento || contenitore?.ownerDocument || globalThis.document;
   if (!contenitore || !doc) throw new Error("La pagina del modello vuole un contenitore.");
   if (typeof apiGet !== "function") throw new Error("La pagina del modello vuole un lettore (`apiGet`).");
-  const bersaglio = bersaglioDi2(id3, repo);
+  const bersaglio = bersaglioDi2(id4, repo);
   if (!bersaglio.id && bersaglio.tipo !== "repo") throw new Error("La pagina del modello vuole un id.");
   const suffisso = `sm${contatore4 += 1}`;
   const idPannello = `${suffisso}-pannello`;
@@ -46677,8 +47666,8 @@ function montaSchedaModello(contenitore, {
     etichetta: (voce) => voce.etichetta,
     // ⛔ Nessun `title`: ripeterebbe parola per parola ciò che la linguetta già dice a schermo.
     suggerimento: () => "",
-    contenuto: (bottone5, voce) => {
-      bottone5.append(icona6(doc, voce.icona, "i i--sm"), doc.createTextNode(voce.etichetta));
+    contenuto: (bottone6, voce) => {
+      bottone6.append(icona6(doc, voce.icona, "i i--sm"), doc.createTextNode(voce.etichetta));
     },
     controlla: () => idPannello,
     azioni: { seleziona: (scelta) => vaiA(scelta) }
@@ -47613,9 +48602,9 @@ function nomeDaPercorso(percorso) {
 function fornitoreDelModello(modello) {
   if (typeof modello !== "string" || modello.trim() === "") return null;
   if (modello.startsWith("local:")) return "locale";
-  const id3 = modello.replace(/^~/u, "");
-  const barra = id3.indexOf("/");
-  return barra > 0 ? id3.slice(0, barra) : null;
+  const id4 = modello.replace(/^~/u, "");
+  const barra = id4.indexOf("/");
+  return barra > 0 ? id4.slice(0, barra) : null;
 }
 function testiPiede({ cartella, nomeAnteprima, tema, modello } = {}) {
   const titolo2 = nomeDaPercorso(cartella) || typeof nomeAnteprima === "string" && nomeAnteprima.trim() || "Workspace locale";
@@ -47673,8 +48662,10 @@ var init_app = __esm({
     init_fonti_modelli();
     init_invio_durante_il_giro();
     init_conversazione_dom();
+    init_provider_retry();
     init_provider_card();
     init_politiche();
+    init_utente_wsl();
     init_fonti_modelli();
     init_avvio_sessione();
     init_session_item();
@@ -47700,6 +48691,7 @@ var init_app = __esm({
     init_grafo_workflow();
     init_workflow_graph_client();
     init_rail_workflow();
+    init_grafo_sorgenti();
     init_workflow_history();
     init_plan_artifact();
     init_workflow_proposal_card();
@@ -47709,6 +48701,8 @@ var init_app = __esm({
     init_theme_studio();
     init_board();
     init_toast();
+    init_session_deletion_feedback();
+    init_process_output();
     init_connessione();
     init_notifiche();
     init_modelli_installati();
@@ -47729,6 +48723,7 @@ var init_app = __esm({
     init_nav_item();
     init_session_item();
     init_user_question_dock();
+    init_artifact_card();
     init_conversazione_figlia();
     init_esito_comando();
     init_scala_composer();
@@ -48123,6 +49118,7 @@ var init_app = __esm({
       const appShell = $3("#app");
       const views2 = $$(".view-pane");
       const chatConversation = scorrevoleConversazione(colonnaConversazione(ROOT()));
+      const providerRetryUi = montaProviderRetry({ contenitore: () => $3("#conversation"), onShow: () => nascondiAttesaRisposta() });
       const mobileViewButtons = $$("[data-mobile-view]");
       const modeTabs = $$(".mode-tab");
       const backdrop = $3("#overlayBackdrop");
@@ -48186,7 +49182,7 @@ var init_app = __esm({
         pubblicaSegui();
         streamingLastTargetTop = null;
         streamingUserScrollHold = false;
-        fermaFondoRipristino?.();
+        if (!state.realSession.inRigiocata) fermaFondoRipristino?.();
       }
       let fermaFondoRipristino = null;
       const STREAMING_LOG_CAP = 4e3;
@@ -48758,8 +49754,8 @@ var init_app = __esm({
         registroIconeMorte.set(esito.chiesto, viste + 1);
         if (viste === 0) console.error(`[TALOS] icona «${esito.chiesto}»: nessun simbolo con questo nome nello sprite, a schermo resta un vuoto. Disegnalo in mockup/talos-mockup.html e rigenera il template.`);
       }
-      function icon(id3) {
-        const esito = risolviSimboloIcona(id3);
+      function icon(id4) {
+        const esito = risolviSimboloIcona(id4);
         registraIconaMorta(esito);
         if (!esito.nome) return '<svg aria-hidden="true"></svg>';
         return `<svg aria-hidden="true"><use href="#${esito.nome}"/></svg>`;
@@ -48932,9 +49928,9 @@ var init_app = __esm({
       async function caricaPaginaNote() {
         const schermo = $3("#schermoNote");
         if (!schermo) return;
-        const id3 = state.realSession.id;
+        const id4 = state.realSession.id;
         const stato2 = $3("[data-note-stato]", schermo);
-        if (!id3) {
+        if (!id4) {
           noteCaricate = [];
           montaNote(schermo, [], { cerca: "" });
           if (stato2) stato2.textContent = "Apri una sessione per vedere le note.";
@@ -48942,7 +49938,7 @@ var init_app = __esm({
         }
         if (stato2) stato2.textContent = "Leggo le note…";
         try {
-          const dati = await apiGet(`/api/v1/sessions/${encodeURIComponent(id3)}/notes`);
+          const dati = await apiGet(`/api/v1/sessions/${encodeURIComponent(id4)}/notes`);
           noteCaricate = Array.isArray(dati?.note) ? dati.note : [];
         } catch (errore) {
           noteCaricate = [];
@@ -48954,7 +49950,7 @@ var init_app = __esm({
       function disegnaPaginaNote() {
         const schermo = $3("#schermoNote");
         if (!schermo) return;
-        const id3 = state.realSession.id;
+        const id4 = state.realSession.id;
         const cerca = $3("#cercaNota", schermo)?.value || "";
         montaNote(schermo, noteCaricate, {
           cerca,
@@ -48970,7 +49966,7 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
            *   della app e il ricarico dopo una scrittura. `rendiMarkdown` è quella della chat: una
            *   nota Markdown si legge resa, che è l'ordine dell'owner dell'11/09.
            */
-          sessionId: id3,
+          sessionId: id4,
           rete: reteVociDellaPersona(),
           onMenu: apriMenuAzioniLibreria,
           onCambiata: () => {
@@ -49377,6 +50373,9 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
         misuraPilaToast();
         return mostraToast(String(title), message == null ? "" : String(message?.message ?? message), opzioni);
       }
+      const avvisiEliminazione = creaAvvisiEliminazione({ storage: () => window.sessionStorage, mostraToast: toast });
+      avvisiEliminazione.mostra();
+      let outputSessionController = new AbortController();
       const barraStatoChat = $3("#schermoChat .talos-statusbar");
       sorveglianza = creaSorveglianzaConnessione({
         ping: async () => {
@@ -49407,15 +50406,15 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
       window.addEventListener("online", () => sorveglianza.segnalaBrowser(true));
       barraStatoChat?.querySelector("[data-runtime-riprova]")?.addEventListener("click", () => sorveglianza.riprova());
       document.addEventListener("click", (evento) => {
-        const bottone5 = evento.target instanceof Element ? evento.target.closest(".talos-link-conversazione[data-conversazione]") : null;
-        if (!bottone5) return;
+        const bottone6 = evento.target instanceof Element ? evento.target.closest(".talos-link-conversazione[data-conversazione]") : null;
+        if (!bottone6) return;
         evento.preventDefault();
-        void apriConversazioneDalLink(bottone5.dataset.conversazione);
+        void apriConversazioneDalLink(bottone6.dataset.conversazione);
       });
-      async function apriConversazioneDalLink(id3) {
+      async function apriConversazioneDalLink(id4) {
         let sessione = null;
         try {
-          sessione = (senzaPassiWorkflow((await apiGet("/api/v1/sessions")).items) || []).find((voce) => voce?.sessionId === id3) ?? null;
+          sessione = (senzaPassiWorkflow((await apiGet("/api/v1/sessions")).items) || []).find((voce) => voce?.sessionId === id4) ?? null;
         } catch {
           sessione = null;
         }
@@ -49553,13 +50552,13 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
         for (const evento of eventi2 || []) {
           const tipo = evento?.type;
           if (tipo !== "ToolCallStart" && tipo !== "ToolCallArgs" && tipo !== "ToolCallResult") continue;
-          const id3 = evento.toolCallId;
-          if (typeof id3 !== "string" || id3 === "") continue;
-          if (!perId3.has(id3)) {
-            perId3.set(id3, { nome: null, argomenti: "" });
-            ordine.push(id3);
+          const id4 = evento.toolCallId;
+          if (typeof id4 !== "string" || id4 === "") continue;
+          if (!perId3.has(id4)) {
+            perId3.set(id4, { nome: null, argomenti: "" });
+            ordine.push(id4);
           }
-          const voce = perId3.get(id3);
+          const voce = perId3.get(id4);
           if (tipo === "ToolCallStart") voce.nome = typeof evento.toolCallName === "string" ? evento.toolCallName : voce.nome;
           else if (tipo === "ToolCallArgs" && typeof evento.delta === "string") voce.argomenti += evento.delta;
         }
@@ -49567,8 +50566,8 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
         const viste = /* @__PURE__ */ new Set();
         let chiamate = 0;
         let ripetute = 0;
-        for (const id3 of ordine) {
-          const voce = perId3.get(id3);
+        for (const id4 of ordine) {
+          const voce = perId3.get(id4);
           if (!voce.nome) continue;
           chiamate += 1;
           const conto = perAttrezzo.get(voce.nome) || { nome: voce.nome, chiamate: 0, ripetute: 0 };
@@ -49693,6 +50692,36 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
             await apiPost(base + (azione === "aggiungi" ? "/keys" : "/keys/remove"), azione === "aggiungi" ? { key } : { impronta });
             await caricaProviderModelLab();
           },
+          /* Owner 01/10/2026, «Un Salva solo, come Hermes»: il «Salva» della modale «Configura» manda la chiave scritta e poi la
+             configurazione cambiata, e NON ridisegna (la modale si chiude prima: un ridisegno a metà la riaprirebbe sulla card
+             nuova). L'errore porta la sua fase, così la modale dice QUALE delle due non è passata. */
+          onSalvaConfigurazione: async ({ provider, chiave, pool, collegamento }) => {
+            const base = "/api/v1/providers/" + encodeURIComponent(provider);
+            if (chiave) {
+              try {
+                await apiPost(base + (pool ? "/keys" : "/key"), { key: chiave });
+              } catch (error) {
+                throw Object.assign(new Error(messaggioErroreUtente(error, "Il server non ha accettato la chiave.")), { fase: "chiave" });
+              }
+            }
+            if (collegamento) {
+              try {
+                await apiPost(base + "/runtime", collegamento);
+              } catch (error) {
+                throw Object.assign(new Error(messaggioErroreUtente(error, "Il server non ha accettato la configurazione.")), { fase: "collegamento" });
+              }
+            }
+            state.modelLab.provePr?.delete(provider);
+          },
+          /* …e a modale chiusa, l'esito si annuncia (il pulsante dice «Salva», l'avviso dice «salvata») e la lista si rilegge. */
+          onConfigurazioneSalvata: ({ etichetta: etichetta3, salvato }) => {
+            const chiave = salvato.includes("chiave"), configurazione = salvato.includes("collegamento");
+            toast(
+              chiave && configurazione ? "Chiave e configurazione salvate" : chiave ? "Chiave salvata" : "Configurazione salvata",
+              chiave ? `${etichetta3}: la chiave è nel portachiavi del computer.` : `${etichetta3}: configurazione aggiornata.`
+            );
+            void caricaProviderModelLab();
+          },
           aperte: state.modelLab.providerAperti,
           prove: state.modelLab.provePr,
           occupati: state.modelLab.providerOccupati,
@@ -49751,9 +50780,9 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
       function scriviRigaSessioneViva() {
         rigaVivaProgrammata = null;
         ultimaRigaViva = Date.now();
-        const id3 = state.realSession.id;
-        if (!id3) return;
-        const riga2 = $3('.talos-session-item[data-real-session-id="' + id3 + '"]');
+        const id4 = state.realSession.id;
+        if (!id4) return;
+        const riga2 = $3('.talos-session-item[data-real-session-id="' + id4 + '"]');
         if (!riga2) return;
         const giri = Number(usageDellaSessione(state.realSession)?.giri) || null;
         if (state.realSession.approvazioniPendenti?.size > 0) {
@@ -49793,19 +50822,19 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
           const indirizzo = risposta?.indirizzo;
           if (typeof indirizzo !== "string" || !indirizzo) throw new Error("Il server non ha restituito un indirizzo di accesso.");
           if (!finestra) {
+            if (navigator.windowControlsOverlay?.visible === true) {
+              window.open(indirizzo, "_blank", "noopener,noreferrer");
+              mostraLinkAccesso(corrente(), indirizzo, { apertoFuori: true });
+              aspettaRitornoAccesso(provider, corrente);
+              return;
+            }
             mostraLinkAccesso(corrente(), indirizzo);
             return;
           }
           finestra.location.href = indirizzo;
           mostraEsitoProvider(corrente(), "Accesso aperto nel browser. Torna qui quando hai finito: la chiave arriva da sola.");
           corrente()?.querySelector("[data-provider-feedback]")?.scrollIntoView({ block: "nearest" });
-          const alRitorno = async () => {
-            window.removeEventListener("focus", alRitorno);
-            await caricaProviderModelLab();
-            const riga2 = state.modelLab.providers?.find((r) => r.id === provider);
-            if (riga2?.keyConfigured) mostraEsitoProvider(corrente(), "Accesso fatto: la chiave è nel portachiavi del computer.");
-          };
-          window.addEventListener("focus", alRitorno);
+          aspettaRitornoAccesso(provider, corrente);
         } catch (errore) {
           try {
             finestra?.close();
@@ -49815,34 +50844,43 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
           corrente()?.querySelector("[data-provider-feedback]")?.scrollIntoView({ block: "nearest" });
         }
       }
-      function mostraLinkAccesso(card, indirizzo) {
+      function aspettaRitornoAccesso(provider, corrente) {
+        const alRitorno = async () => {
+          window.removeEventListener("focus", alRitorno);
+          await caricaProviderModelLab();
+          const riga2 = state.modelLab.providers?.find((r) => r.id === provider);
+          if (riga2?.keyConfigured) mostraEsitoProvider(corrente(), "Accesso fatto: la chiave è nel portachiavi del computer.");
+        };
+        window.addEventListener("focus", alRitorno);
+      }
+      function mostraLinkAccesso(card, indirizzo, { apertoFuori = false } = {}) {
         const feedback = card?.querySelector("[data-provider-feedback]");
         if (!feedback) return;
         feedback.replaceChildren();
-        feedback.append(document.createTextNode("Il browser ha bloccato la finestra. "));
+        feedback.append(document.createTextNode(apertoFuori ? "Accesso aperto nel browser del computer. Torna qui quando hai finito: la chiave arriva da sola. Se non si è aperto: " : "Il browser ha bloccato la finestra. "));
         const link = document.createElement("a");
         link.href = indirizzo;
         link.target = "_blank";
         link.rel = "noopener noreferrer";
         link.textContent = "Apri l’accesso";
         feedback.append(link);
-        feedback.classList.add("is-error");
-        feedback.setAttribute("role", "alert");
+        feedback.classList.toggle("is-error", !apertoFuori);
+        feedback.setAttribute("role", apertoFuori ? "status" : "alert");
         feedback.hidden = false;
         feedback.scrollIntoView({ block: "nearest" });
       }
-      async function provaTuttiProvider(bottone5) {
-        const prima = bottone5?.textContent;
-        if (bottone5) {
-          bottone5.disabled = true;
-          bottone5.textContent = "Provo tutti…";
+      async function provaTuttiProvider(bottone6) {
+        const prima = bottone6?.textContent;
+        if (bottone6) {
+          bottone6.disabled = true;
+          bottone6.textContent = "Provo tutti…";
         }
         try {
           await Promise.all((state.modelLab.providers || []).map((row) => provaProviderModelLab(row.id)));
         } finally {
-          if (bottone5) {
-            bottone5.disabled = false;
-            bottone5.textContent = prima;
+          if (bottone6) {
+            bottone6.disabled = false;
+            bottone6.textContent = prima;
           }
         }
       }
@@ -50021,20 +51059,20 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
           fit: state.modelLab.fit,
           errore: state.modelLab.installedError,
           caricamento: state.modelLab.loadingInstalled,
-          seleziona: (id3) => {
-            modelloInstallatoScelto = id3;
+          seleziona: (id4) => {
+            modelloInstallatoScelto = id4;
             renderizzaModelliLocaliModelLab();
           },
-          nodoFit: (id3) => nodoVerdettoFit(id3),
+          nodoFit: (id4) => nodoVerdettoFit(id4),
           azioni: {
-            verifica: (id3) => {
-              void verificaCompatibilitaModello(id3);
+            verifica: (id4) => {
+              void verificaCompatibilitaModello(id4);
             },
-            libera: (id3) => {
-              void liberaMemoriaModello(id3);
+            libera: (id4) => {
+              void liberaMemoriaModello(id4);
             },
-            copia: async (id3) => {
-              const m = state.modelLab.installed.find((x) => x.id === id3);
+            copia: async (id4) => {
+              const m = state.modelLab.installed.find((x) => x.id === id4);
               try {
                 await navigator.clipboard?.writeText(m?.path || "");
                 toast("Percorso copiato", m?.path || "");
@@ -50042,48 +51080,48 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
                 toast("Percorso non copiato", "Il browser non ha dato accesso agli appunti.");
               }
             },
-            rinomina: (id3) => apriRinominaModelloLocale(id3),
-            elimina: (id3) => apriEliminaModelloLocale(id3),
-            pagina: (id3) => apriPaginaModello(id3, "card")
+            rinomina: (id4) => apriRinominaModelloLocale(id4),
+            elimina: (id4) => apriEliminaModelloLocale(id4),
+            pagina: (id4) => apriPaginaModello(id4, "card")
             // 18/09: la pagina del modello, con la rotta del mockup
           }
         });
       }
-      function apriRinominaModelloLocale(id3) {
-        const m = state.modelLab.installed.find((x) => x.id === id3);
+      function apriRinominaModelloLocale(id4) {
+        const m = state.modelLab.installed.find((x) => x.id === id4);
         if (!m) return;
         const velo = $3("#veloRinominaModello");
         const campo2 = $3("#nomeModelloLab");
         if (!velo || !campo2) return;
         campo2.value = m.name || m.id;
-        velo.dataset.modelId = id3;
+        velo.dataset.modelId = id4;
         apriVeloMockup("veloRinominaModello");
       }
-      function apriEliminaModelloLocale(id3) {
-        const m = state.modelLab.installed.find((x) => x.id === id3);
+      function apriEliminaModelloLocale(id4) {
+        const m = state.modelLab.installed.find((x) => x.id === id4);
         if (!m) return;
         const velo = $3("#veloEliminaModello");
         if (!velo) return;
-        velo.dataset.modelId = id3;
+        velo.dataset.modelId = id4;
         const testo2 = velo.querySelector(".talos-dialog__body p");
         if (testo2) testo2.textContent = `Rimuove «${m.name || m.id}» (${gb(m.bytes)}) dal disco. Dovrai scaricarlo o importarlo di nuovo per usarlo.`;
         apriVeloMockup("veloEliminaModello");
       }
       async function confermaDialogoModelloLocale(azione) {
         const velo = $3(azione === "rinomina" ? "#veloRinominaModello" : "#veloEliminaModello");
-        const id3 = velo?.dataset.modelId;
-        if (!id3) return;
-        const m = state.modelLab.installed.find((x) => x.id === id3);
+        const id4 = velo?.dataset.modelId;
+        if (!id4) return;
+        const m = state.modelLab.installed.find((x) => x.id === id4);
         try {
           if (azione === "rinomina") {
             const next = $3("#nomeModelloLab")?.value.trim();
             if (!next) return;
-            await apiPost(`/api/v1/local-models/${encodeURIComponent(id3)}/rename`, { name: next });
+            await apiPost(`/api/v1/local-models/${encodeURIComponent(id4)}/rename`, { name: next });
             toast("Modello rinominato", next);
           } else {
-            await apiPost(`/api/v1/local-models/${encodeURIComponent(id3)}/delete`, {});
-            toast("Modello eliminato", `${m?.name || id3} non è più sul disco.`);
-            if (modelloInstallatoScelto === id3) modelloInstallatoScelto = null;
+            await apiPost(`/api/v1/local-models/${encodeURIComponent(id4)}/delete`, {});
+            toast("Modello eliminato", `${m?.name || id4} non è più sul disco.`);
+            if (modelloInstallatoScelto === id4) modelloInstallatoScelto = null;
           }
           chiudiVeloMockup(velo.id);
           await caricaModelliLocaliModelLab();
@@ -50212,7 +51250,7 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
           return;
         }
         const base = file.name.replace(/\.gguf$/iu, "").toLowerCase().replace(/[^a-z0-9]+/giu, "-").replace(/^-+|-+$/gu, "").slice(0, 96) || "modello";
-        const id3 = `${base}-${crypto.randomUUID().slice(0, 8)}`;
+        const id4 = `${base}-${crypto.randomUUID().slice(0, 8)}`;
         const xhr = new XMLHttpRequest();
         state.modelLab.importXhr = xhr;
         state.modelLab.importProgress = 0;
@@ -50228,7 +51266,7 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
         if (status) status.textContent = "Sto copiando il modello nel catalogo locale…";
         xhr.open("POST", "/api/v1/local-models/import");
         xhr.setRequestHeader("Content-Type", "application/octet-stream");
-        xhr.setRequestHeader("X-Talos-Model-Id", id3);
+        xhr.setRequestHeader("X-Talos-Model-Id", id4);
         xhr.setRequestHeader("X-Talos-Model-Filename", file.name);
         xhr.setRequestHeader("X-Talos-Model-Bytes", String(file.size));
         xhr.setRequestHeader("X-Talos-Model-Name", file.name.replace(/\.gguf$/iu, ""));
@@ -50394,7 +51432,7 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
               void avviaDownloadHf(det, g.file, g.bytes);
             },
             tuttiFile: (det) => riempiVeloFileModello(det),
-            scheda: (det, bottone5) => mostraSchedaModelloHf(det, bottone5)
+            scheda: (det, bottone6) => mostraSchedaModelloHf(det, bottone6)
           }
         });
         aggiornaOsservazioneHf();
@@ -50420,9 +51458,9 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
         }
       }
       async function avviaDownloadHf(detail, files, bytes) {
-        const id3 = idDelDownload(detail.repo, detail.revision, files[0].path);
+        const id4 = idDelDownload(detail.repo, detail.revision, files[0].path);
         try {
-          await apiPost("/api/v1/huggingface/download", { id: id3, repo: detail.repo, revision: detail.revision, files: files.map((file) => ({ path: file.path, bytes: file.sizeBytes, sha256: file.sha256 })), bytes, sha256: files[0].sha256, license: detail.license || "unknown", path: id3 });
+          await apiPost("/api/v1/huggingface/download", { id: id4, repo: detail.repo, revision: detail.revision, files: files.map((file) => ({ path: file.path, bytes: file.sizeBytes, sha256: file.sha256 })), bytes, sha256: files[0].sha256, license: detail.license || "unknown", path: id4 });
           toast("Download avviato", `${files[0].path} · ${gb(bytes)}`);
           setModelLabSection("downloads");
           caricaDownloadModelLab();
@@ -50447,12 +51485,12 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
         const piede = velo.querySelector(".talos-dialog__footer-note");
         if (piede) piede.textContent = `${(detail.files || []).length} file nel repository`;
       }
-      function mostraSchedaModelloHf(detail, bottone5) {
+      function mostraSchedaModelloHf(detail, bottone6) {
         const cont = $3("#hfScheda");
         if (!cont) return;
         const aperto = !cont.hidden;
         cont.hidden = aperto;
-        bottone5?.setAttribute("aria-expanded", String(!aperto));
+        bottone6?.setAttribute("aria-expanded", String(!aperto));
         if (!aperto) cont.replaceChildren(renderizzaModelCardReadme(detail));
       }
       function renderizzaHfDetailModelLab() {
@@ -50549,8 +51587,8 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
           button2.disabled = incomplete || missingHash;
           button2.textContent = incomplete ? `Set incompleto · ${files.length}/${expected}` : missingHash ? "Hash non verificato" : "Scarica";
           button2.addEventListener("click", async () => {
-            const id3 = idDelDownload(detail.repo, detail.revision, files[0].path);
-            await apiPost("/api/v1/huggingface/download", { id: id3, repo: detail.repo, revision: detail.revision, files: files.map((file) => ({ path: file.path, bytes: file.sizeBytes, sha256: file.sha256 })), bytes, sha256: files[0].sha256, license: detail.license || "unknown", path: id3 });
+            const id4 = idDelDownload(detail.repo, detail.revision, files[0].path);
+            await apiPost("/api/v1/huggingface/download", { id: id4, repo: detail.repo, revision: detail.revision, files: files.map((file) => ({ path: file.path, bytes: file.sizeBytes, sha256: file.sha256 })), bytes, sha256: files[0].sha256, license: detail.license || "unknown", path: id4 });
             setModelLabSection("downloads");
             caricaDownloadModelLab();
           });
@@ -50578,21 +51616,21 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
         corpo.className = "hf-detail-body";
         const attiva = schede.some((s) => s.id === state.modelLab.hfDetailTab) ? state.modelLab.hfDetailTab : "quantizzazioni";
         for (const scheda of schede) {
-          const bottone5 = document.createElement("button");
-          bottone5.type = "button";
-          bottone5.className = "hf-detail-tab";
-          bottone5.dataset.hfDetailTab = scheda.id;
-          bottone5.setAttribute("role", "tab");
+          const bottone6 = document.createElement("button");
+          bottone6.type = "button";
+          bottone6.className = "hf-detail-tab";
+          bottone6.dataset.hfDetailTab = scheda.id;
+          bottone6.setAttribute("role", "tab");
           const selezionata = scheda.id === attiva;
-          bottone5.setAttribute("aria-selected", String(selezionata));
-          bottone5.classList.toggle("active", selezionata);
-          bottone5.append(textElement("span", "", scheda.etichetta));
-          if (Number.isFinite(scheda.conto)) bottone5.append(textElement("span", "hf-detail-tab-count", String(scheda.conto)));
-          bottone5.addEventListener("click", () => {
+          bottone6.setAttribute("aria-selected", String(selezionata));
+          bottone6.classList.toggle("active", selezionata);
+          bottone6.append(textElement("span", "", scheda.etichetta));
+          if (Number.isFinite(scheda.conto)) bottone6.append(textElement("span", "hf-detail-tab-count", String(scheda.conto)));
+          bottone6.addEventListener("click", () => {
             state.modelLab.hfDetailTab = scheda.id;
             renderizzaHfDetailModelLab();
           });
-          barra.append(bottone5);
+          barra.append(bottone6);
           if (selezionata) corpo.append(scheda.nodo);
         }
         card.append(heading, tags, stats, barra, corpo);
@@ -50818,9 +51856,9 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
           const dati = JSON.parse(testo2);
           if (dati?.version !== 1) return { pagine: [] };
           const pagine = (Array.isArray(dati.pagine) ? dati.pagine : []).slice(-20).filter((p) => typeof p?.id === "string" && p.id.length <= 1024 && /^[a-f0-9]{40,64}$/iu.test(p.revision) && (p.scelta === null || typeof p.scelta === "string" && p.scelta.length <= 2048));
-          const filtri = Object.fromEntries(CAMPI_RICERCA_RIPRESA.map((id3) => [
-            id3,
-            typeof dati.filtri?.[id3] === "string" ? dati.filtri[id3].slice(0, 1024) : ""
+          const filtri = Object.fromEntries(CAMPI_RICERCA_RIPRESA.map((id4) => [
+            id4,
+            typeof dati.filtri?.[id4] === "string" ? dati.filtri[id4].slice(0, 1024) : ""
           ]));
           const faccette = Object.fromEntries(["accesso", "licenza", "parametri", "popolarita", "tipo", "autore"].map((key) => [
             key,
@@ -50837,10 +51875,10 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
         } catch {
         }
       }
-      function salvaSceltaPaginaModello(id3, scelta) {
+      function salvaSceltaPaginaModello(id4, scelta) {
         if (!/^[a-f0-9]{40,64}$/iu.test(scelta?.revision)) return;
         const dati = leggiRipresaModelli();
-        dati.pagine = [...dati.pagine.filter((p) => p.id !== id3), { id: id3, revision: scelta.revision, scelta: scelta.scelta }].slice(-20);
+        dati.pagine = [...dati.pagine.filter((p) => p.id !== id4), { id: id4, revision: scelta.revision, scelta: scelta.scelta }].slice(-20);
         salvaRipresaModelli(dati);
       }
       function apriPaginaHfDallaLista(repo) {
@@ -50848,7 +51886,7 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
         if (!item) return;
         salvaRipresaModelli({
           ...leggiRipresaModelli(),
-          filtri: Object.fromEntries(CAMPI_RICERCA_RIPRESA.map((id3) => [id3, $3("#" + id3)?.value || ""])),
+          filtri: Object.fromEntries(CAMPI_RICERCA_RIPRESA.map((id4) => [id4, $3("#" + id4)?.value || ""])),
           faccette: $3("#modelLabHfPanel")?.__hfFiltri
         });
         state.modelLab.hfSelected = repo;
@@ -50860,9 +51898,9 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
         const dati = leggiRipresaModelli();
         const daRicaricare = !state.modelLab.hfCatalogoIniziale;
         if (daRicaricare && dati.filtri) {
-          for (const id3 of CAMPI_RICERCA_RIPRESA) {
-            const input = $3("#" + id3);
-            if (input && dati.filtri[id3]) input.value = dati.filtri[id3];
+          for (const id4 of CAMPI_RICERCA_RIPRESA) {
+            const input = $3("#" + id4);
+            if (input && dati.filtri[id4]) input.value = dati.filtri[id4];
           }
           state.modelLab.hfCatalogoIniziale = true;
         }
@@ -50874,8 +51912,8 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
           renderizzaHfConMockup();
         }
       }
-      function apriPaginaModello(id3, scheda = "card", { daRotta = false } = {}) {
-        if (!id3) return;
+      function apriPaginaModello(id4, scheda = "card", { daRotta = false } = {}) {
+        if (!id4) return;
         const giaAperta = Boolean($3("#paginaModello:not([hidden])"));
         if (!giaAperta) scorrimentoPrimaDellaPaginaModello = state.view === "settings" ? scorritoreImpostazioni()?.scrollTop ?? null : null;
         setView("settings", { paginaModello: true, dallInizio: !giaAperta });
@@ -50883,24 +51921,24 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
         const pagina = contenitorePaginaModello();
         ospitePaginaModello()?.classList.add("talos-model-page-open");
         if (!giaAperta) scorritoreImpostazioni()?.scrollTo({ top: 0, behavior: "instant" });
-        if (montaggioPaginaModello?.stato.id === id3 && !montaggioPaginaModello.stato.distrutto) {
+        if (montaggioPaginaModello?.stato.id === id4 && !montaggioPaginaModello.stato.distrutto) {
           if (montaggioPaginaModello.stato.scheda !== scheda) montaggioPaginaModello.vaiA(scheda);
           pagina.hidden = false;
-          if (!daRotta) scriviRottaPaginaModello(id3, scheda);
+          if (!daRotta) scriviRottaPaginaModello(id4, scheda);
           return;
         }
         montaggioPaginaModello?.distruggi?.();
         montaggioPaginaModello = montaSchedaModello(pagina, {
           apiGet: (percorso) => apiGet(percorso),
           apiPost: (percorso, corpo) => apiPost(percorso, corpo),
-          id: id3,
+          id: id4,
           scheda,
           runtime: runtimeInstallati(),
           onLiberaMemoria: (modelId) => liberaMemoriaModello(modelId),
-          inizio: leggiRipresaModelli().pagine.find((p) => p.id === id3) || null,
-          onScelta: (scelta) => salvaSceltaPaginaModello(id3, scelta),
+          inizio: leggiRipresaModelli().pagine.find((p) => p.id === id4) || null,
+          onScelta: (scelta) => salvaSceltaPaginaModello(id4, scelta),
           indietro: () => chiudiPaginaModello(),
-          onScheda: (nuova) => scriviRottaPaginaModello(id3, nuova),
+          onScheda: (nuova) => scriviRottaPaginaModello(id4, nuova),
           apriDownload: () => {
             chiudiPaginaModello({ ripristina: false });
             setView("settings");
@@ -50909,7 +51947,7 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
           }
         });
         pagina.hidden = false;
-        if (!daRotta) scriviRottaPaginaModello(id3, scheda);
+        if (!daRotta) scriviRottaPaginaModello(id4, scheda);
       }
       function chiudiPaginaModello({ daRotta = false, ripristina = true } = {}) {
         const tornaHf = ripristina && montaggioPaginaModello?.stato.bersaglio.tipo === "repo";
@@ -50924,8 +51962,8 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
         if (riportaA !== null) scorritoreImpostazioni()?.scrollTo({ top: riportaA, behavior: "instant" });
         if (tornaHf) void ripristinaListaHf();
       }
-      function scriviRottaPaginaModello(id3, scheda) {
-        const nuova = `#/impostazioni/modelli/scheda/${encodeURIComponent(id3)}/${scheda}`;
+      function scriviRottaPaginaModello(id4, scheda) {
+        const nuova = `#/impostazioni/modelli/scheda/${encodeURIComponent(id4)}/${scheda}`;
         if (window.location.hash !== nuova) window.location.hash = nuova;
       }
       window.addEventListener("hashchange", () => {
@@ -51026,8 +52064,8 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
       }
       const SETTINGS_SECTIONS2 = ["appearance", "chat", "tools", "memoria", "privacy", "models", "costi", "workspace", "account"];
       const SETTINGS_SECTION_STORAGE_KEY = "talos.harness.desktop.settings.section.v1";
-      function riempiFatti(id3, coppie) {
-        const dl = $3(`#${id3}`);
+      function riempiFatti(id4, coppie) {
+        const dl = $3(`#${id4}`);
         if (!dl) return;
         dl.replaceChildren(...coppie.map(([k, v]) => {
           const riga2 = document.createElement("div");
@@ -51159,7 +52197,7 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
             if (!salvaImpostazioniDesktop(letto)) throw new Error(t("Salvataggio delle preferenze non riuscito."));
             const documento = leggiImpostazioniDesktop();
             applicaAspettoDesktop(documento.appearance);
-            montaImpostazioni($3("#schermoImpostazioni"), documento.appearance, { recupera: (id3) => $3("#" + id3), cambiaSezione: setSettingsSection, defaultValues: DESKTOP_APPEARANCE_DEFAULTS, ripristinaAspetto: resettaAspettoDesktop });
+            montaImpostazioni($3("#schermoImpostazioni"), documento.appearance, { recupera: (id4) => $3("#" + id4), cambiaSezione: setSettingsSection, defaultValues: DESKTOP_APPEARANCE_DEFAULTS, ripristinaAspetto: resettaAspettoDesktop });
             montaScorciatoiaTemi($3("#schermoImpostazioni"));
             sincronizzaSelettoriDensitaLingua(normalizzaAspettoDesktop(documento.appearance));
             dillo(`Preferenze importate da «${file.name}».`);
@@ -51186,7 +52224,7 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
             window.localStorage.removeItem(DESKTOP_SETTINGS_KEY);
             const documento = leggiImpostazioniDesktop();
             applicaAspettoDesktop(documento.appearance);
-            montaImpostazioni($3("#schermoImpostazioni"), documento.appearance, { recupera: (id3) => $3("#" + id3), cambiaSezione: setSettingsSection, defaultValues: DESKTOP_APPEARANCE_DEFAULTS, ripristinaAspetto: resettaAspettoDesktop });
+            montaImpostazioni($3("#schermoImpostazioni"), documento.appearance, { recupera: (id4) => $3("#" + id4), cambiaSezione: setSettingsSection, defaultValues: DESKTOP_APPEARANCE_DEFAULTS, ripristinaAspetto: resettaAspettoDesktop });
             montaScorciatoiaTemi($3("#schermoImpostazioni"));
             sincronizzaSelettoriDensitaLingua(normalizzaAspettoDesktop(documento.appearance));
             dillo("Preferenze riportate ai valori iniziali. Le conversazioni non sono state toccate.");
@@ -51321,7 +52359,7 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
         }
       }
       function inizializzaSettingsNavigation() {
-        montaImpostazioni($3("#schermoImpostazioni"), leggiImpostazioniDesktop().appearance, { recupera: (id3) => $3("#" + id3), cambiaSezione: setSettingsSection, defaultValues: DESKTOP_APPEARANCE_DEFAULTS, ripristinaAspetto: resettaAspettoDesktop });
+        montaImpostazioni($3("#schermoImpostazioni"), leggiImpostazioniDesktop().appearance, { recupera: (id4) => $3("#" + id4), cambiaSezione: setSettingsSection, defaultValues: DESKTOP_APPEARANCE_DEFAULTS, ripristinaAspetto: resettaAspettoDesktop });
         montaScorciatoiaTemi($3("#schermoImpostazioni"));
         montaTrasferimentoImpostazioni();
         sincronizzaSelettoriDensitaLingua(normalizzaAspettoDesktop(leggiImpostazioniDesktop().appearance));
@@ -51474,8 +52512,8 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
           if (event?.isComposing || testo2.length > 0 && testo2.length < 2) return;
           attesaRicercaHf = setTimeout(() => cercaHuggingFaceModelLab(), 450);
         }
-        for (const id3 of ["modelLabHfSearch", "modelLabHfAuthorControl", "modelLabHfFiltersControl"]) {
-          const campo2 = $3(`#${id3}`);
+        for (const id4 of ["modelLabHfSearch", "modelLabHfAuthorControl", "modelLabHfFiltersControl"]) {
+          const campo2 = $3(`#${id4}`);
           campo2?.addEventListener("input", programmaRicercaHf);
           campo2?.addEventListener("compositionend", programmaRicercaHf);
           campo2?.addEventListener("keydown", (event) => {
@@ -51495,11 +52533,11 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
           renderizzaDownloadConMockup();
         });
         $3('#veloAnnullaDownload [data-lab-dialog-action="annullaDownload"], #veloAnnullaDownload .talos-button--danger')?.addEventListener("click", async () => {
-          const id3 = $3("#veloAnnullaDownload")?.dataset.downloadId;
-          if (!id3) return;
+          const id4 = $3("#veloAnnullaDownload")?.dataset.downloadId;
+          if (!id4) return;
           try {
-            await apiPost(`/api/v1/huggingface/downloads/${encodeURIComponent(id3)}/cancel`, {});
-            toast("Download annullato", id3);
+            await apiPost(`/api/v1/huggingface/downloads/${encodeURIComponent(id4)}/cancel`, {});
+            toast("Download annullato", id4);
           } catch (error) {
             toast("Annullamento non riuscito", error.message);
           }
@@ -51512,8 +52550,8 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
           hfFirmaRicerca = "";
           hfCursoriLetti = /* @__PURE__ */ new Set();
           hfOsservatore?.disconnect();
-          for (const id3 of ["modelLabHfSearch", "modelLabHfAuthorControl", "modelLabHfFiltersControl"]) {
-            const c = $3(`#${id3}`);
+          for (const id4 of ["modelLabHfSearch", "modelLabHfAuthorControl", "modelLabHfFiltersControl"]) {
+            const c = $3(`#${id4}`);
             if (c) c.value = "";
           }
           const ordine = $3("#modelLabHfSortControl");
@@ -51548,9 +52586,9 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
           const toggle = event.target.closest("[data-provider-toggle]");
           if (toggle) {
             state.modelLab.providerAperti ??= /* @__PURE__ */ new Set();
-            const id3 = toggle.dataset.providerToggle;
-            if (state.modelLab.providerAperti.has(id3)) state.modelLab.providerAperti.delete(id3);
-            else state.modelLab.providerAperti.add(id3);
+            const id4 = toggle.dataset.providerToggle;
+            if (state.modelLab.providerAperti.has(id4)) state.modelLab.providerAperti.delete(id4);
+            else state.modelLab.providerAperti.add(id4);
             renderizzaProviderModelLab();
             return;
           }
@@ -51729,24 +52767,24 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
         if (hook.fidato) {
           statoEl = textElement("span", "status-chip success", "attivo");
         } else {
-          const bottone5 = document.createElement("button");
-          bottone5.type = "button";
-          bottone5.className = "secondary-btn";
-          bottone5.textContent = "Fida";
-          bottone5.addEventListener("click", async () => {
-            bottone5.disabled = true;
-            bottone5.textContent = "Fido…";
+          const bottone6 = document.createElement("button");
+          bottone6.type = "button";
+          bottone6.className = "secondary-btn";
+          bottone6.textContent = "Fida";
+          bottone6.addEventListener("click", async () => {
+            bottone6.disabled = true;
+            bottone6.textContent = "Fido…";
             try {
               await apiPost(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/hooks/${encodeURIComponent(hook.id)}/trust`, {});
               toast("Hook fidato", hook.id);
               caricaPannelloHooks();
             } catch (error) {
-              bottone5.disabled = false;
-              bottone5.textContent = "Fida";
+              bottone6.disabled = false;
+              bottone6.textContent = "Fida";
               toast("Non riuscito", error.message);
             }
           });
-          statoEl = bottone5;
+          statoEl = bottone6;
         }
         riga2.append(iconEl, testo2, statoEl);
         return riga2;
@@ -51778,10 +52816,10 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
         });
       }
       async function salvaUscitaComandiCapability(acceso) {
-        const id3 = state.realSession.id;
-        if (!id3 || id3 !== ambitoCapability) return;
+        const id4 = state.realSession.id;
+        if (!id4 || id4 !== ambitoCapability) return;
         try {
-          await apiPost(`/api/v1/sessions/${encodeURIComponent(id3)}/comandi-nella-conversazione`, { acceso });
+          await apiPost(`/api/v1/sessions/${encodeURIComponent(id4)}/comandi-nella-conversazione`, { acceso });
           state.realSession.comandiNellaConversazione = acceso;
           aggiornaModalitaShell?.(composerInput?.value ?? "");
           mostraCapability();
@@ -51791,8 +52829,8 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
         }
       }
       async function salvaPermessoCapability(attrezzo, valore) {
-        const id3 = state.realSession.id, nome = attrezzo.nome;
-        if (scritturaCapability || !id3 || id3 !== ambitoCapability || !attrezzo.permessoConfigurabile || !["", "sempre", "chiedi", "nega"].includes(valore)) return;
+        const id4 = state.realSession.id, nome = attrezzo.nome;
+        if (scritturaCapability || !id4 || id4 !== ambitoCapability || !attrezzo.permessoConfigurabile || !["", "sempre", "chiedi", "nega"].includes(valore)) return;
         const precedente = attrezzo.permesso || void 0;
         const prossimi = { ...state.permessiPerAttrezzo };
         for (const a of datiCapability) if (a.permessoConfigurabile) {
@@ -51806,9 +52844,9 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
         state.permessiPerAttrezzo = prossimi;
         try {
           await sincronizzaImpostazioniSessione({ permessiPerAttrezzo: Object.keys(prossimi).length ? { ...prossimi } : null });
-          if (state.realSession.id === id3) await caricaPannelloAttrezzi({ pagina: true });
+          if (state.realSession.id === id4) await caricaPannelloAttrezzi({ pagina: true });
         } catch (error) {
-          if (state.realSession.id === id3) {
+          if (state.realSession.id === id4) {
             if (state.permessiPerAttrezzo[nome] === (valore || void 0)) {
               if (precedente === void 0) delete state.permessiPerAttrezzo[nome];
               else state.permessiPerAttrezzo[nome] = precedente;
@@ -51823,19 +52861,19 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
       }
       async function caricaPannelloAttrezzi({ pagina = false } = {}) {
         if (pagina) {
-          const id3 = state.realSession.id || null, generazione = ++generazioneCapability;
-          if (ambitoCapability !== id3) datiCapability = [];
-          ambitoCapability = id3;
+          const id4 = state.realSession.id || null, generazione = ++generazioneCapability;
+          if (ambitoCapability !== id4) datiCapability = [];
+          ambitoCapability = id4;
           mostraCapability({ caricamento: true, errore: "", erroreAzione: "" });
           try {
-            const dati2 = await apiGet(id3 ? "/api/v1/sessions/" + encodeURIComponent(id3) + "/tools" : "/api/v1/tools");
-            if (generazione !== generazioneCapability || (state.realSession.id || null) !== id3) return;
+            const dati2 = await apiGet(id4 ? "/api/v1/sessions/" + encodeURIComponent(id4) + "/tools" : "/api/v1/tools");
+            if (generazione !== generazioneCapability || (state.realSession.id || null) !== id4) return;
             if (dati2.errore || !Array.isArray(dati2.attrezzi)) throw new Error(dati2.errore || "Il catalogo degli attrezzi non è osservabile.");
             if (dati2.attrezzi.some((a) => !a || typeof a !== "object" || typeof a.nome !== "string" || !a.nome.trim()) || new Set(dati2.attrezzi.map((a) => a.nome)).size !== dati2.attrezzi.length) throw new Error("Il catalogo contiene voci non valide. Riprova con Aggiorna.");
             datiCapability = dati2.attrezzi;
             mostraCapability({ caricamento: false, errore: "" });
           } catch (error) {
-            if (generazione !== generazioneCapability || (state.realSession.id || null) !== id3) return;
+            if (generazione !== generazioneCapability || (state.realSession.id || null) !== id4) return;
             datiCapability = [];
             mostraCapability({ caricamento: false, errore: error.message });
           }
@@ -52045,11 +53083,11 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
               /* ⭐ BC-38 (12/09) — «da quale sessione»: il nome VIVO, non quello congelato nel meta.
                  `available` è la stessa mappa che disegna la barra, riscritta a ogni giro dell'elenco.
                  Stessa precedenza della riga nella barra: nome scelto → compito della delega → ripiego. */
-              nomeSessione: (id3) => {
-                const s = state.sessionSelection.available?.get?.(id3);
+              nomeSessione: (id4) => {
+                const s = state.sessionSelection.available?.get?.(id4);
                 return s ? s.nome || s.taskDelega || nomeLeggibileSessione(s.taskId) : null;
               },
-              onApriSessione: ({ id: id3 }) => passaASessione(id3),
+              onApriSessione: ({ id: id4 }) => passaASessione(id4),
               copia: (testo2) => copyText(testo2, "Percorso copiato"),
               /* F5 File reader (26/09/2026): il dettaglio legge il file col lettore del rail; qui le tre cose che vivono nella app. */
               lettore: {
@@ -52267,7 +53305,7 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
               notifica: toast,
               copia: (testo2) => copyText(testo2, "Rapporto copiato"),
               onMenu: apriMenuAzioniLibreria,
-              onApriSessione: ({ id: id3 }) => passaASessione(id3),
+              onApriSessione: ({ id: id4 }) => passaASessione(id4),
               rendiMarkdown: renderizzaMarkdownSemplice,
               /* ⭐ 12/09 L5 — le rotte di scrittura della Ricerca approfondita esistono (voce singola,
                  pausa, ripresa, ri-verifica, eliminazione): la sezione riceve le STESSE funzioni di rete
@@ -52347,11 +53385,11 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
         }
         async function abilita(strumento, abilitato) {
           if (!attuale() || scritturaForge || typeof abilitato !== "boolean" || !strumenti.some((s) => s.id === strumento.id && typeof s.abilitato === "boolean")) return;
-          const id3 = strumento.id;
-          scritturaForge = { id: id3 };
+          const id4 = strumento.id;
+          scritturaForge = { id: id4 };
           for (const p of pannelliForgeAttuali()) p.mostraAzione(null);
           try {
-            await apiPost("/api/v1/sessions/" + encodeURIComponent(sessionId) + "/tool-forge/" + encodeURIComponent(id3) + "/enable", { abilitato });
+            await apiPost("/api/v1/sessions/" + encodeURIComponent(sessionId) + "/tool-forge/" + encodeURIComponent(id4) + "/enable", { abilitato });
             scritturaForge = null;
             await Promise.all(pannelliForgeAttuali().map((p) => p.ricarica()));
           } catch (error) {
@@ -52417,24 +53455,24 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
         if (server.fidato) {
           statoEl = textElement("span", "status-chip success", "attivo");
         } else {
-          const bottone5 = document.createElement("button");
-          bottone5.type = "button";
-          bottone5.className = "secondary-btn";
-          bottone5.textContent = "Fida";
-          bottone5.addEventListener("click", async () => {
-            bottone5.disabled = true;
-            bottone5.textContent = "Fido…";
+          const bottone6 = document.createElement("button");
+          bottone6.type = "button";
+          bottone6.className = "secondary-btn";
+          bottone6.textContent = "Fida";
+          bottone6.addEventListener("click", async () => {
+            bottone6.disabled = true;
+            bottone6.textContent = "Fido…";
             try {
               await apiPost(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/mcp/${encodeURIComponent(server.id)}/trust`, {});
               toast("Server MCP fidato", server.id);
               caricaPannelloMcp();
             } catch (error) {
-              bottone5.disabled = false;
-              bottone5.textContent = "Fida";
+              bottone6.disabled = false;
+              bottone6.textContent = "Fida";
               toast("Non riuscito", error.message);
             }
           });
-          statoEl = bottone5;
+          statoEl = bottone6;
         }
         riga2.append(iconEl, testo2, statoEl);
         return riga2;
@@ -52486,24 +53524,24 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
         if (plugin.fidato) {
           statoEl = textElement("span", "status-chip success", "attivo");
         } else {
-          const bottone5 = document.createElement("button");
-          bottone5.type = "button";
-          bottone5.className = "secondary-btn";
-          bottone5.textContent = "Fida";
-          bottone5.addEventListener("click", async () => {
-            bottone5.disabled = true;
-            bottone5.textContent = "Fido…";
+          const bottone6 = document.createElement("button");
+          bottone6.type = "button";
+          bottone6.className = "secondary-btn";
+          bottone6.textContent = "Fida";
+          bottone6.addEventListener("click", async () => {
+            bottone6.disabled = true;
+            bottone6.textContent = "Fido…";
             try {
               await apiPost(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/plugins/${encodeURIComponent(plugin.id)}/trust`, {});
               toast("Plugin fidato", plugin.id);
               caricaPannelloPlugin();
             } catch (error) {
-              bottone5.disabled = false;
-              bottone5.textContent = "Fida";
+              bottone6.disabled = false;
+              bottone6.textContent = "Fida";
               toast("Non riuscito", error.message);
             }
           });
-          statoEl = bottone5;
+          statoEl = bottone6;
         }
         riga2.append(iconEl, testo2, statoEl);
         wrapper.append(riga2);
@@ -52610,32 +53648,32 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
           }
           return [...mappa.entries()].sort((a, b) => a[0].localeCompare(b[0]));
         }
-        function scegliFonte(id3) {
-          if (fonteScelta === id3) return;
-          fonteScelta = id3;
+        function scegliFonte(id4) {
+          if (fonteScelta === id4) return;
+          fonteScelta = id4;
           renderFonti();
           renderLista();
-          if (eFonteDiretta(id3) && !modelliDiretti) caricaDiretti();
+          if (eFonteDiretta(id4) && !modelliDiretti) caricaDiretti();
         }
         function renderFonti() {
           const voci = fontiDelSelettore({ openrouter: modelliCache, locali: modelliLocali, diretti: modelliDiretti });
           if (!voci.some((voce) => voce.id === fonteScelta)) fonteScelta = "openrouter";
           const schede = voci.map((voce) => {
-            const bottone5 = document.createElement("button");
-            bottone5.type = "button";
-            bottone5.className = "model-picker-source";
-            bottone5.dataset.pickerSource = voce.id;
-            bottone5.setAttribute("role", "tab");
-            bottone5.setAttribute("aria-controls", listEl.id);
+            const bottone6 = document.createElement("button");
+            bottone6.type = "button";
+            bottone6.className = "model-picker-source";
+            bottone6.dataset.pickerSource = voce.id;
+            bottone6.setAttribute("role", "tab");
+            bottone6.setAttribute("aria-controls", listEl.id);
             const attiva = voce.id === fonteScelta;
-            bottone5.setAttribute("aria-selected", String(attiva));
-            bottone5.tabIndex = attiva ? 0 : -1;
-            bottone5.classList.toggle("active", attiva);
-            bottone5.append(textElement("span", "", voce.etichetta));
-            if (Number.isFinite(voce.conto)) bottone5.append(textElement("span", "model-picker-source-count", String(voce.conto)));
-            if (!voce.collegato) bottone5.title = `${voce.etichetta}: chiave non collegata`;
-            bottone5.addEventListener("click", () => scegliFonte(voce.id));
-            return bottone5;
+            bottone6.setAttribute("aria-selected", String(attiva));
+            bottone6.tabIndex = attiva ? 0 : -1;
+            bottone6.classList.toggle("active", attiva);
+            bottone6.append(textElement("span", "", voce.etichetta));
+            if (Number.isFinite(voce.conto)) bottone6.append(textElement("span", "model-picker-source-count", String(voce.conto)));
+            if (!voce.collegato) bottone6.title = `${voce.etichetta}: chiave non collegata`;
+            bottone6.addEventListener("click", () => scegliFonte(voce.id));
+            return bottone6;
           });
           fonti.replaceChildren(...schede);
         }
@@ -52650,9 +53688,9 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
           else if (event.key === "End") prossima = schede.at(-1);
           if (!prossima) return;
           event.preventDefault();
-          const id3 = prossima.dataset.pickerSource;
-          scegliFonte(id3);
-          fonti.querySelector(`[data-picker-source="${id3}"]`)?.focus();
+          const id4 = prossima.dataset.pickerSource;
+          scegliFonte(id4);
+          fonti.querySelector(`[data-picker-source="${id4}"]`)?.focus();
         });
         function renderListaLocali() {
           metaSpan.textContent = modelliLocali ? `${modelliLocali.length} modelli · su questo computer` : "Modelli installati";
@@ -52857,22 +53895,22 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
             const elenco2 = dati.items || dati.providers || [];
             const conChiave = new Set(elenco2.filter((p) => p.keyConfigured || senzaChiave(p.id)).map((p) => p.id));
             const perFornitore = {};
-            await Promise.all(PROVIDER_DIRETTI.map(async ({ id: id3, etichetta: etichetta3 }) => {
-              if (!conChiave.has(id3)) {
-                perFornitore[id3] = null;
+            await Promise.all(PROVIDER_DIRETTI.map(async ({ id: id4, etichetta: etichetta3 }) => {
+              if (!conChiave.has(id4)) {
+                perFornitore[id4] = null;
                 return;
               }
               try {
-                perFornitore[id3] = (await apiGet(`/api/v1/providers/${id3}/models`)).modelli || [];
+                perFornitore[id4] = (await apiGet(`/api/v1/providers/${id4}/models`)).modelli || [];
               } catch (e) {
-                perFornitore[id3] = [];
-                erroriDiretti[id3] = `${etichetta3}: ${e.message}`;
+                perFornitore[id4] = [];
+                erroriDiretti[id4] = `${etichetta3}: ${e.message}`;
               }
             }));
             modelliDiretti = perFornitore;
           } catch (e) {
-            modelliDiretti = Object.fromEntries(PROVIDER_DIRETTI.map(({ id: id3 }) => [id3, []]));
-            for (const { id: id3 } of PROVIDER_DIRETTI) erroriDiretti[id3] = e.message;
+            modelliDiretti = Object.fromEntries(PROVIDER_DIRETTI.map(({ id: id4 }) => [id4, []]));
+            for (const { id: id4 } of PROVIDER_DIRETTI) erroriDiretti[id4] = e.message;
           }
           renderFonti();
           if (eFonteDiretta(fonteScelta)) renderLista();
@@ -53167,7 +54205,7 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
           }
           if ((stato2 === "conclusa" || stato2 === "interrotta") && viste[sessione.sessionId] !== stato2) notifiche.push({ sessione, stato: stato2 });
         }
-        for (const id3 of Object.keys(viste)) if (!elenco2.some((s) => s.sessionId === id3)) delete viste[id3];
+        for (const id4 of Object.keys(viste)) if (!elenco2.some((s) => s.sessionId === id4)) delete viste[id4];
         salvaNotificheViste(viste);
         state.notifiche = notifiche;
         const badge6 = $3("#notificationsBadge");
@@ -53175,11 +54213,11 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
           badge6.textContent = String(notifiche.length);
           badge6.hidden = notifiche.length === 0;
         }
-        const bottone5 = $3("#notificationsBtn");
-        if (bottone5) {
+        const bottone6 = $3("#notificationsBtn");
+        if (bottone6) {
           const nome = nomeCampanella(notifiche.length);
-          bottone5.setAttribute("aria-label", nome);
-          bottone5.title = nome;
+          bottone6.setAttribute("aria-label", nome);
+          bottone6.title = nome;
         }
         avvisaFuoriDallaFinestra(notifiche);
       }
@@ -53208,19 +54246,19 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
         }
       }
       function montaConsensoNotifiche() {
-        const bottone5 = $3("#notificheSistema");
+        const bottone6 = $3("#notificheSistema");
         const stato2 = $3("#notificheSistemaStato");
-        if (!bottone5 || !stato2) return;
+        if (!bottone6 || !stato2) return;
         const supportato = typeof Notification !== "undefined";
         const dipingi = () => {
           const s = statoConsensoNotifiche(supportato ? Notification.permission : "default", supportato);
           stato2.textContent = s.testo;
-          bottone5.hidden = !s.chiedibile;
+          bottone6.hidden = !s.chiedibile;
         };
         dipingi();
-        if (bottone5.dataset.consensoMontato) return;
-        bottone5.dataset.consensoMontato = "true";
-        bottone5.addEventListener("click", async () => {
+        if (bottone6.dataset.consensoMontato) return;
+        bottone6.dataset.consensoMontato = "true";
+        bottone6.addEventListener("click", async () => {
           if (!supportato) return;
           try {
             await Notification.requestPermission();
@@ -53390,14 +54428,14 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
         model: "veloModello"
       };
       async function esportaTrascrizioneSessione(formato, sessione = null) {
-        const id3 = sessione?.sessionId || state.realSession.id;
-        if (!id3) return { ok: false, motivo: "Nessuna sessione aperta da esportare." };
+        const id4 = sessione?.sessionId || state.realSession.id;
+        if (!id4) return { ok: false, motivo: "Nessuna sessione aperta da esportare." };
         try {
-          const esportato = await apiGet(`/api/v1/sessions/${encodeURIComponent(id3)}/export`);
+          const esportato = await apiGet(`/api/v1/sessions/${encodeURIComponent(id4)}/export`);
           const markdown = formato === "markdown";
           const testo2 = markdown ? costruisciTrascrizioneMarkdown(esportato) : JSON.stringify(esportato, null, 2);
           if (!testo2 || !testo2.trim()) throw new Error("Esportazione vuota: nessun contenuto da scrivere.");
-          scaricaTesto2(testo2, `talos-sessione-${id3}.${markdown ? "md" : "json"}`, markdown ? "text/markdown" : "application/json");
+          scaricaTesto2(testo2, `talos-sessione-${id4}.${markdown ? "md" : "json"}`, markdown ? "text/markdown" : "application/json");
           toast("Sessione esportata", markdown ? "Trascrizione Markdown pronta." : "JSON pronto.");
           return { ok: true };
         } catch (error) {
@@ -53408,19 +54446,27 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
       async function eliminaSessioneBersaglio() {
         const bersaglio = state.sessioneTarget;
         if (!bersaglio) return { ok: false, motivo: "Nessuna sessione scelta." };
+        let esito;
         try {
-          await apiPost(`/api/v1/sessions/${encodeURIComponent(bersaglio.sessionId)}/delete`, {});
+          esito = await apiPost(`/api/v1/sessions/${encodeURIComponent(bersaglio.sessionId)}/delete`, {});
         } catch (error) {
           toast("Eliminazione non riuscita", messaggioErroreUtente(error));
           return { ok: false, motivo: messaggioErroreUtente(error, "la trascrizione è ancora al suo posto") };
         }
-        toast("Sessione eliminata", bersaglio.nome);
+        const avviso = avvisiEliminazione.registra(esito);
+        if (!avviso.pending) toast("Sessione eliminata", bersaglio.nome);
         if (state.realSession.id === bersaglio.sessionId) {
-          window.location.reload();
+          if (avviso.pending && !avviso.persisted) avvisiEliminazione.mostra({ dopoLettura: () => window.location.reload() });
+          else window.location.reload();
           return { ok: true };
         }
-        await aggiornaElencoSessioniReali();
-        if (state.board.initialized) await refreshSessionsBoard();
+        if (avviso.pending) avvisiEliminazione.mostra();
+        try {
+          await aggiornaElencoSessioniReali();
+          if (state.board.initialized) await refreshSessionsBoard();
+        } catch {
+          toast("Elenco non aggiornato", "La sessione è stata eliminata. Ricarica la pagina per aggiornare l’elenco.", { tono: "avviso" });
+        }
         return { ok: true };
       }
       async function rinominaFileBersaglio(nuovoNome) {
@@ -53505,6 +54551,7 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
         }
         if (tipo === "permissions") {
           disegnaPermessiIn(velo);
+          caricaUtenteWslIn(velo);
           (async () => {
             const sessionId = state.realSession.id;
             if (!sessionId) return;
@@ -53565,15 +54612,15 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
         if (tipo === "export") {
           const nome = $3("#esportaNome", velo);
           if (nome) nome.textContent = state.sessioneTarget?.nome || state.session || "questa sessione";
-          for (const bottone5 of $$("[data-export-choice]", velo)) {
-            if (bottone5.dataset.collegato) continue;
-            bottone5.dataset.collegato = "si";
-            bottone5.addEventListener("click", async () => {
+          for (const bottone6 of $$("[data-export-choice]", velo)) {
+            if (bottone6.dataset.collegato) continue;
+            bottone6.dataset.collegato = "si";
+            bottone6.addEventListener("click", async () => {
               const tutti = $$("[data-export-choice]", velo);
               tutti.forEach((b) => {
                 b.disabled = true;
               });
-              const esito = await esportaTrascrizioneSessione(bottone5.dataset.exportChoice);
+              const esito = await esportaTrascrizioneSessione(bottone6.dataset.exportChoice);
               tutti.forEach((b) => {
                 b.disabled = false;
               });
@@ -54458,15 +55505,15 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
       ]);
       function disegnaPermessiIn(radice2) {
         if (!radice2) return;
-        for (const bottone5 of $$("[data-dove-choice]", radice2)) {
-          const suo = (bottone5.dataset.doveChoice || null) === (state.realSession.doveGiranoIComandi ?? null);
-          bottone5.setAttribute("aria-checked", String(suo));
-          bottone5.classList.toggle("is-attiva", suo);
+        for (const bottone6 of $$("[data-dove-choice]", radice2)) {
+          const suo = (bottone6.dataset.doveChoice || null) === (state.realSession.doveGiranoIComandi ?? null);
+          bottone6.setAttribute("aria-checked", String(suo));
+          bottone6.classList.toggle("is-attiva", suo);
         }
-        for (const bottone5 of $$("[data-permission-choice]", radice2)) {
-          const suo = bottone5.dataset.permissionChoice === state.permissions;
-          bottone5.setAttribute("aria-checked", String(suo));
-          bottone5.classList.toggle("is-attiva", suo);
+        for (const bottone6 of $$("[data-permission-choice]", radice2)) {
+          const suo = bottone6.dataset.permissionChoice === state.permissions;
+          bottone6.setAttribute("aria-checked", String(suo));
+          bottone6.classList.toggle("is-attiva", suo);
         }
         const elenco2 = $3("#veloPermessiAttrezzi", radice2);
         if (elenco2) {
@@ -54515,19 +55562,74 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
           avviso.textContent = "";
           if (testo2) {
             avviso.append(document.createTextNode(`${testo2} `));
-            const bottone5 = document.createElement("button");
-            bottone5.type = "button";
-            bottone5.className = "talos-button talos-button--sm";
-            bottone5.dataset.chiudiPorteLaterali = aperte.join(",");
-            bottone5.textContent = `Chiudi anche ${aperte.length === 1 ? "quella" : "quelle"}`;
-            avviso.append(bottone5);
+            const bottone6 = document.createElement("button");
+            bottone6.type = "button";
+            bottone6.className = "talos-button talos-button--sm";
+            bottone6.dataset.chiudiPorteLaterali = aperte.join(",");
+            bottone6.textContent = `Chiudi anche ${aperte.length === 1 ? "quella" : "quelle"}`;
+            avviso.append(bottone6);
           }
+        }
+      }
+      function disegnaDoveGiranoIn(radice2, dati) {
+        const testi = testiDoveGiranoIComandi(dati);
+        for (const [chiave, scelta] of [["automatico", ""], ["linux", "wsl2"]]) {
+          const bottone6 = $3(`[data-dove-choice="${scelta}"]`, radice2);
+          if (!bottone6) continue;
+          for (const [selettore, campo2] of [[".talos-choice__sub", "sub"], [".talos-badge", "badge"]]) {
+            const elemento = $3(selettore, bottone6);
+            if (!elemento) continue;
+            if (elemento.dataset.testoDiSempre === void 0) elemento.dataset.testoDiSempre = elemento.textContent;
+            elemento.textContent = testi?.[chiave]?.[campo2] ?? elemento.dataset.testoDiSempre;
+          }
+        }
+      }
+      function disegnaUtenteWslIn(radice2, dati) {
+        disegnaDoveGiranoIn(radice2, dati);
+        const blocco = $3("#veloPermessiWsl", radice2);
+        if (!blocco) return;
+        const testi = testiUtenteWsl(dati);
+        blocco.hidden = !testi.visibile;
+        if (!testi.visibile) return;
+        $3("#veloPermessiWslChi", radice2).textContent = testi.chi;
+        $3("#veloPermessiWslDischi", radice2).textContent = testi.dischi;
+        const nota = $3("#veloPermessiWslNota", radice2);
+        nota.textContent = testi.nota;
+        if (testi.comando) {
+          const comando = document.createElement("span");
+          comando.className = "talos-mono";
+          comando.textContent = testi.comando;
+          nota.append(" ", comando);
+        }
+        $3("#veloPermessiWslNormale", radice2).checked = testi.acceso;
+      }
+      async function caricaUtenteWslIn(radice2) {
+        try {
+          disegnaUtenteWslIn(radice2, await apiGet("/api/v1/wsl"));
+        } catch {
+          disegnaUtenteWslIn(radice2, null);
         }
       }
       function collegaAzioniPermessi(radice2, { dopoLaScelta = () => {
       }, ridisegna: ridisegna2 = () => {
       } } = {}) {
         if (!radice2) return;
+        const interruttoreWsl = $3("#veloPermessiWslNormale", radice2);
+        if (interruttoreWsl && !interruttoreWsl.dataset.wslCollegato) {
+          interruttoreWsl.dataset.wslCollegato = "si";
+          interruttoreWsl.addEventListener("change", async () => {
+            const voluto = interruttoreWsl.checked;
+            interruttoreWsl.disabled = true;
+            try {
+              disegnaUtenteWslIn(radice2, await apiPost("/api/v1/wsl", { usaUtenteNormale: voluto }));
+            } catch (errore) {
+              interruttoreWsl.checked = !voluto;
+              toast("Scelta non applicata", messaggioErroreUtente(errore, "Riprova, o guarda Doctor se si ripete."));
+            } finally {
+              interruttoreWsl.disabled = false;
+            }
+          });
+        }
         $$("[data-dove-choice]", radice2).forEach((button2) => {
           if (button2.dataset.doveCollegato) return;
           button2.dataset.doveCollegato = "si";
@@ -54610,9 +55712,9 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
             ridisegna2();
           });
           radice2.addEventListener("click", (evento) => {
-            const bottone5 = evento.target?.closest?.("[data-chiudi-porte-laterali]");
-            if (!bottone5) return;
-            const quali = String(bottone5.dataset.chiudiPorteLaterali || "").split(",").filter(Boolean);
+            const bottone6 = evento.target?.closest?.("[data-chiudi-porte-laterali]");
+            if (!bottone6) return;
+            const quali = String(bottone6.dataset.chiudiPorteLaterali || "").split(",").filter(Boolean);
             if (!quali.length) return;
             const comeScrivi = state.permessiPerAttrezzo.scrivi === "nega" ? "nega" : "chiedi";
             for (const attrezzo of quali) state.permessiPerAttrezzo[attrezzo] = comeScrivi;
@@ -54641,10 +55743,10 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
         if (Number.isFinite(giri) && giri > 0) aside.append(textElement("span", "talos-mono talos-muted", `${giri} gir${giri === 1 ? "o" : "i"}`));
         if (qui) aside.append(textElement("span", "talos-badge talos-badge--accent talos-badge--sm", "Qui"));
         else if (onApri) {
-          const bottone5 = textElement("button", "talos-button talos-button--ghost talos-button--sm", azione || "Apri");
-          bottone5.type = "button";
-          bottone5.addEventListener("click", onApri);
-          aside.append(bottone5);
+          const bottone6 = textElement("button", "talos-button talos-button--ghost talos-button--sm", azione || "Apri");
+          bottone6.type = "button";
+          bottone6.addEventListener("click", onApri);
+          aside.append(bottone6);
         }
         nodo13.append(rail, dot, testo2, aside);
         return nodo13;
@@ -54940,21 +56042,11 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
         if (deleteSessionConfirm) {
           $3("[data-delete-session-cancel]", sheetBody)?.addEventListener("click", () => closeEmbeddedDialog(sheetDialog));
           deleteSessionConfirm.addEventListener("click", async () => {
-            const bersaglio = state.sessioneTarget;
-            if (!bersaglio) return;
-            try {
-              await apiPost(`/api/v1/sessions/${encodeURIComponent(bersaglio.sessionId)}/delete`, {});
-              closeEmbeddedDialog(sheetDialog);
-              toast("Sessione eliminata", bersaglio.nome);
-              if (state.realSession.id === bersaglio.sessionId) {
-                window.location.reload();
-                return;
-              }
-              await aggiornaElencoSessioniReali();
-              if (state.board.initialized) await refreshSessionsBoard();
-            } catch (error) {
-              toast("Eliminazione non riuscita", error.message);
-            }
+            if (deleteSessionConfirm.disabled) return;
+            deleteSessionConfirm.disabled = true;
+            const esito = await eliminaSessioneBersaglio();
+            if (esito.ok) closeEmbeddedDialog(sheetDialog);
+            else deleteSessionConfirm.disabled = false;
           });
         }
         const createFileForm = $3("#createFileForm", sheetBody);
@@ -55096,7 +56188,7 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
       }
       let catalogoRichiesto = false;
       function finestraDelModelloCorrente() {
-        const id3 = state.model || state.realSession.currentRunModel;
+        const id4 = state.model || state.realSession.currentRunModel;
         if (!state.modelLab?.catalogoModelli?.modelli && !catalogoRichiesto) {
           catalogoRichiesto = true;
           void apiGet("/api/v1/models").then((c) => {
@@ -55107,7 +56199,7 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
           }).catch(() => {
           });
         }
-        const m = (state.modelLab?.catalogoModelli?.modelli || []).find((x) => x.id === id3) || null;
+        const m = (state.modelLab?.catalogoModelli?.modelli || []).find((x) => x.id === id4) || null;
         return Number.isFinite(m?.contextLength) ? m.contextLength : null;
       }
       let figliaAperta = null;
@@ -55118,6 +56210,8 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
       let diagrammaInApertura = false;
       let grafoWorkflowChiave = null;
       let railWorkflow = null;
+      let railSorgenti = null;
+      let selettoreGrafo = null;
       let cronologiaWorkflow = null;
       let railWorkflowChiave = null;
       let railWorkflowAttivi = 0;
@@ -55130,30 +56224,66 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
       let figliAggiornati = null;
       const agentiInDiretta = /* @__PURE__ */ new Map();
       const risultatiDelegaMostrati = /* @__PURE__ */ new Set();
+      function appendRisultatoDelega(risultato, meta2) {
+        const nota = creaNotaSistema({ tipo: risultato.errore ? "warning" : "info", badge: "Nota", titolo: meta2, testo: "" });
+        nota.classList.add("real-session-status", "talos-risultato-delega");
+        if (risultato.errore) nota.dataset.tone = "warning";
+        const corpoNota = nota.lastElementChild;
+        corpoNota.classList.add("talos-risultato-delega__contenuto");
+        corpoNota.querySelector(":scope > p")?.remove();
+        const compito = String(risultato.titolo ?? "").trim();
+        if (compito) {
+          const riga2 = document.createElement("div");
+          riga2.className = "talos-risultato-delega__compito";
+          riga2.textContent = compito.split("\n").find((r) => r.trim())?.trim() ?? compito;
+          riga2.title = compito;
+          corpoNota.append(riga2);
+        }
+        const corpo = document.createElement("div");
+        corpo.className = "talos-risultato-delega__corpo assistant-copy";
+        corpo.append(renderizzaMarkdownSemplice(risultato.testo));
+        const bottone6 = document.createElement("button");
+        bottone6.type = "button";
+        bottone6.className = "talos-button talos-button--ghost talos-button--sm talos-risultato-delega__apri";
+        bottone6.textContent = "Mostra tutto";
+        bottone6.setAttribute("aria-expanded", "false");
+        bottone6.hidden = true;
+        bottone6.addEventListener("click", () => {
+          const aperta2 = nota.classList.toggle("is-aperta");
+          bottone6.textContent = aperta2 ? "Mostra meno" : "Mostra tutto";
+          bottone6.setAttribute("aria-expanded", aperta2 ? "true" : "false");
+          aggiornaTaglio();
+        });
+        function aggiornaTaglio() {
+          const tagliata = !nota.classList.contains("is-aperta") && corpo.scrollHeight > corpo.clientHeight + 1;
+          corpo.dataset.tagliata = tagliata ? "si" : "no";
+          bottone6.hidden = !tagliata && !nota.classList.contains("is-aperta");
+        }
+        if (typeof ResizeObserver === "function") new ResizeObserver(aggiornaTaglio).observe(corpo);
+        corpoNota.append(corpo, bottone6);
+        nellaChat(nota);
+        aggiornaTaglio();
+        markMotionEnter(nota);
+        scorriAllaBollaAppesa(nota);
+      }
       function mostraRisultatoDelega(evento) {
         if (evento?.origine !== "delega") return false;
         if (Array.isArray(evento.risultatiDelega)) {
           for (const item of evento.risultatiDelega) {
             if (!item || typeof item.codaId !== "string" || typeof item.childId !== "string" || typeof item.testo !== "string" || risultatiDelegaMostrati.has(item.codaId)) continue;
             const risultato2 = descriviRisultatoDelega(item.testo, item.childId);
-            appendStatusNote(
-              risultato2 ? `${risultato2.titolo}
-${risultato2.testo}` : `Il sotto-agente ${item.childId} ha consegnato un risultato. È disponibile nel suo dettaglio.`,
-              false,
-              { meta: risultato2?.errore ? "Notifica di sistema · sotto-agente non concluso" : "Notifica di sistema · risultato del sotto-agente" }
-            );
+            const meta3 = risultato2?.errore ? "Notifica di sistema · sotto-agente non concluso" : "Notifica di sistema · risultato del sotto-agente";
+            if (risultato2) appendRisultatoDelega(risultato2, meta3);
+            else appendStatusNote(`Il sotto-agente ${item.childId} ha consegnato un risultato. È disponibile nel suo dettaglio.`, false, { meta: meta3 });
             risultatiDelegaMostrati.add(item.codaId);
           }
           return true;
         }
         if (evento.codaId && risultatiDelegaMostrati.has(evento.codaId)) return true;
         const risultato = descriviRisultatoDelega(evento.testo ?? evento.consegna, evento.childId);
-        appendStatusNote(
-          risultato ? `${risultato.titolo}
-${risultato.testo}` : "Un sotto-agente ha consegnato il risultato. È disponibile nel suo dettaglio.",
-          false,
-          { meta: risultato?.errore ? "Risultato del sotto-agente · non concluso" : "Risultato del sotto-agente" }
-        );
+        const meta2 = risultato?.errore ? "Risultato del sotto-agente · non concluso" : "Risultato del sotto-agente";
+        if (risultato) appendRisultatoDelega(risultato, meta2);
+        else appendStatusNote("Un sotto-agente ha consegnato il risultato. È disponibile nel suo dettaglio.", false, { meta: meta2 });
         if (evento.codaId) risultatiDelegaMostrati.add(evento.codaId);
         return true;
       }
@@ -55163,6 +56293,52 @@ ${risultato.testo}` : "Un sotto-agente ha consegnato il risultato. È disponibil
       let giroPianoProposto = false;
       let legacyPlanCard = null;
       const GRAFO_APERTO_KEY = "talos.grafo.aperto.v1";
+      const GRAFO_TIPO_KEY = "talos.grafo.tipo.v1:";
+      function tipoGrafoScelto(id4) {
+        try {
+          const tipo = sessionStorage.getItem(`${GRAFO_TIPO_KEY}${id4}`);
+          return tipo === "deleghe" ? "deleghe" : "workflow";
+        } catch {
+          return "workflow";
+        }
+      }
+      function ricordaTipoGrafo(id4, tipo) {
+        if (tipo !== "workflow" && tipo !== "deleghe") return;
+        try {
+          sessionStorage.setItem(`${GRAFO_TIPO_KEY}${id4}`, tipo);
+        } catch {
+        }
+      }
+      function ricordaGrafoAperto(id4, tipo) {
+        try {
+          sessionStorage.setItem(GRAFO_APERTO_KEY, JSON.stringify({ v: 2, id: id4, tipo }));
+        } catch {
+        }
+      }
+      function grafoDaRiprendere(id4) {
+        try {
+          const valore = sessionStorage.getItem(GRAFO_APERTO_KEY);
+          if (valore === id4) return tipoGrafoScelto(id4);
+          const dato = JSON.parse(valore);
+          return dato?.v === 2 && dato.id === id4 && ["workflow", "deleghe"].includes(dato.tipo) ? dato.tipo : null;
+        } catch {
+          return null;
+        }
+      }
+      function montaSceltaSulGrafo(tipo) {
+        selettoreGrafo?.distruggi();
+        selettoreGrafo = null;
+        if (!railWorkflow) return;
+        const radice2 = (tipo === "workflow" ? grafoWorkflow : grafoAgenti)?.elemento;
+        const testata = radice2?.querySelector(":scope > header");
+        if (testata) selettoreGrafo = montaSelettoreGrafo(testata, {
+          iniziale: tipo,
+          onSelezione: (scelto) => {
+            ricordaTipoGrafo(state.realSession.id, scelto);
+            void apriDiagramma({ tipo: scelto });
+          }
+        });
+      }
       function datiGrafoAgenti() {
         const nota = state.sessionSelection.available.get(state.realSession.id) || {};
         const operazione = [...state.realSession.toolCallNomi.values()].find((a) => a.stato === "running")?.nome || null;
@@ -55170,22 +56346,22 @@ ${risultato.testo}` : "Un sotto-agente ha consegnato il risultato. È disponibil
         const chiamate = new Set(state.realSession.eventiAttrezzi.filter((e) => e.type === "ToolCallStart").map((e) => e.toolCallId)).size;
         return {
           corrente: { ...nota, ultimoEsito: esitoMadre ? esitoMadre.type === "RunError" ? "errore" : esitoMadre.type === "RunFinished" ? "concluso" : null : nota.ultimoEsito, interrotta: esitoMadre ? esitoMadre.type === "RunError" && esitoMadre.code === "fermato" : nota.interrotta, motivoChiusura: esitoMadre ? esitoMadre.code === "fermato" ? "fermata" : null : nota.motivoChiusura, attivita: { chiamate, attrezzoCorrente: operazione, passi: [] }, sessionId: state.realSession.id, nome: state.session || "Sessione corrente", cartella: state.realSession.cartellaAssoluta || nota.cartella, conclusa: !runRealeAttivo(), inAttesaApprovazione: state.realSession.approvazioniPendenti.size, usageSessione: state.realSession.usageSessione || nota.usageSessione },
-          sessioni: [...state.sessionSelection.available.values(), ...agentiInDiretta.values()],
+          sessioni: [...state.sessionSelection.available.values(), ...agentiInDiretta.values()].filter((a) => a?.passoWorkflow == null),
           figli: state.realSession.figli || [],
           errore: figliErrore,
           aggiornato: figliAggiornati
         };
       }
       function agentiPerInspector() {
-        return modelloGrafoAgenti(datiGrafoAgenti()).nodi.filter((n) => n.id !== state.realSession.id).map((n) => ({ ...n.dati, taskCorto: n.dati.taskCorto || n.nome, numeroFigli: n.figli }));
+        return modelloGrafoAgenti(datiGrafoAgenti()).nodi.filter((n) => n.id !== state.realSession.id && n.dati?.passoWorkflow == null).map((n) => ({ ...n.dati, taskCorto: n.dati.taskCorto || n.nome, numeroFigli: n.figli }));
       }
       function applicaEventoAgenti(value) {
-        const id3 = state.realSession.id, agente = value?.agent;
-        if (value?.version !== 1 || (value.sessionId ?? value.parentId) !== id3 || typeof value.childId !== "string" || agente?.sessionId !== value.childId) return;
-        if (typeof agente.padreId !== "string" || agente.padreId !== value.parentId || agente.sessionId === id3) return;
+        const id4 = state.realSession.id, agente = value?.agent;
+        if (value?.version !== 1 || (value.sessionId ?? value.parentId) !== id4 || typeof value.childId !== "string" || agente?.sessionId !== value.childId) return;
+        if (typeof agente.padreId !== "string" || agente.padreId !== value.parentId || agente.sessionId === id4) return;
         figliLettura++;
         agentiInDiretta.set(agente.sessionId, agente);
-        if (agente.padreId === id3) {
+        if (agente.padreId === id4) {
           const indice2 = state.realSession.figli.findIndex((a) => a.sessionId === agente.sessionId);
           if (indice2 < 0) state.realSession.figli.push(agente);
           else state.realSession.figli[indice2] = agente;
@@ -55215,6 +56391,8 @@ ${risultato.testo}` : "Un sotto-agente ha consegnato il risultato. È disponibil
         diagrammaInApertura = false;
         clearInterval(grafoTimer);
         grafoTimer = null;
+        selettoreGrafo?.distruggi();
+        selettoreGrafo = null;
         grafoAgenti?.distruggi();
         grafoAgenti = null;
         grafoWorkflow?.distruggi();
@@ -55230,23 +56408,30 @@ ${risultato.testo}` : "Un sotto-agente ha consegnato il risultato. È disponibil
           }
         }
       }
-      async function apriDiagramma({ figlia = null, preferita = null, iniziale = null } = {}) {
-        const id3 = state.realSession.id;
-        if (!id3) return;
-        if (iniziale && grafoWorkflow && preferita && grafoWorkflowChiave === `${id3}|${preferita.runId ?? ""}|${preferita.workflowId}|${preferita.version}`) {
+      async function apriDiagramma({ figlia = null, preferita = null, iniziale = null, tipo = null } = {}) {
+        const id4 = state.realSession.id;
+        if (!id4) return;
+        const scelto = figlia ? "deleghe" : preferita ? "workflow" : tipo ?? tipoGrafoScelto(id4);
+        if (scelto === "deleghe") {
+          aperturaDiagramma++;
+          diagrammaInApertura = false;
+          apriGrafoAgenti(figlia);
+          return;
+        }
+        if (iniziale && grafoWorkflow && preferita && grafoWorkflowChiave === `${id4}|${preferita.runId ?? ""}|${preferita.workflowId}|${preferita.version}`) {
           grafoWorkflow.vai(iniziale);
           return;
         }
         const mia = ++aperturaDiagramma;
         diagrammaInApertura = true;
-        const client = creaClientGrafo({ fetchFn: (...a) => fetch(...a), API: API2, sessionId: id3 });
+        const client = creaClientGrafo({ fetchFn: (...a) => fetch(...a), API: API2, sessionId: id4 });
         let sorgente = null;
         try {
           sorgente = await client.sorgente(preferita);
         } catch {
           sorgente = null;
         }
-        if (mia !== aperturaDiagramma || state.realSession.id !== id3) return;
+        if (mia !== aperturaDiagramma || state.realSession.id !== id4) return;
         diagrammaInApertura = false;
         if (!sorgente) {
           if (preferita?.runId) {
@@ -55266,11 +56451,13 @@ ${risultato.testo}` : "Un sotto-agente ha consegnato il risultato. È disponibil
         grafoTimer = null;
         grafoAgenti?.distruggi();
         grafoAgenti = null;
+        selettoreGrafo?.distruggi();
+        selettoreGrafo = null;
         grafoWorkflow?.distruggi();
         lettoreFileLasciaLoSchermo();
         host.classList.add("talos-grafo-aperto");
-        const nota = state.sessionSelection.available.get(id3) || {};
-        grafoWorkflowChiave = `${id3}|${sorgente.runId ?? ""}|${sorgente.workflowId}|${sorgente.version}`;
+        const nota = state.sessionSelection.available.get(id4) || {};
+        grafoWorkflowChiave = `${id4}|${sorgente.runId ?? ""}|${sorgente.workflowId}|${sorgente.version}`;
         grafoWorkflow = montaGrafoWorkflow(host, {
           client,
           sorgente,
@@ -55278,7 +56465,7 @@ ${risultato.testo}` : "Un sotto-agente ha consegnato il risultato. È disponibil
           onSelezione: (selezione) => railWorkflow?.evidenzia(selezione),
           gestoreOverlay: () => modalManager,
           // F3-52: la conferma di Annulla e Riprova passa dal gestore degli overlay (fuoco, Esc)
-          sessione: { id: id3, nome: state.session || nota.nome || null, modello: state.model || nota.modello || null },
+          sessione: { id: id4, nome: state.session || nota.nome || null, modello: state.model || nota.modello || null },
           onChiudi: () => {
             chiudiGrafoAgenti();
             $3("#railAgenti button")?.focus();
@@ -55292,10 +56479,10 @@ ${risultato.testo}` : "Un sotto-agente ha consegnato il risultato. È disponibil
             { conclusa: true }
           )
         });
-        try {
-          sessionStorage.setItem(GRAFO_APERTO_KEY, id3);
-        } catch {
-        }
+        ricordaTipoGrafo(id4, "workflow");
+        ricordaGrafoAperto(id4, "workflow");
+        railSorgenti?.seleziona("workflow");
+        montaSceltaSulGrafo("workflow");
         railWorkflow?.diagramma(true);
         if (!iniziale) grafoWorkflow.elemento.querySelector(".talos-wfg__torna")?.focus();
       }
@@ -55306,14 +56493,14 @@ ${risultato.testo}` : "Un sotto-agente ha consegnato il risultato. È disponibil
       function smontaRailWorkflow() {
         cronologiaWorkflow?.distruggi();
         cronologiaWorkflow = null;
-        if (!railWorkflow) {
-          railWorkflowChiave = null;
-          return;
-        }
-        railWorkflow.distruggi();
+        railWorkflow?.distruggi();
         railWorkflow = null;
         railWorkflowChiave = null;
         railWorkflowAttivi = 0;
+        railSorgenti?.distruggi();
+        railSorgenti = null;
+        selettoreGrafo?.distruggi();
+        selettoreGrafo = null;
         aggiornaInspectorDaStato();
       }
       function osservaVisibilitaRail(contenitore) {
@@ -55339,19 +56526,19 @@ ${risultato.testo}` : "Un sotto-agente ha consegnato il risultato. È disponibil
         return railInCorso;
       }
       async function leggiSorgenteRail() {
-        const id3 = state.realSession.id;
+        const id4 = state.realSession.id;
         const mia = ++railLettura;
-        if (railWorkflowChiave && !railWorkflowChiave.startsWith(`${id3}|`)) smontaRailWorkflow();
-        if (!id3) return;
-        const client = creaClientGrafo({ fetchFn: (...a) => fetch(...a), API: API2, sessionId: id3 });
+        if (railWorkflowChiave && !railWorkflowChiave.startsWith(`${id4}|`)) smontaRailWorkflow();
+        if (!id4) return;
+        const client = creaClientGrafo({ fetchFn: (...a) => fetch(...a), API: API2, sessionId: id4 });
         let sorgente = null;
         try {
           sorgente = await client.sorgente();
         } catch {
           sorgente = null;
         }
-        if (mia !== railLettura || state.realSession.id !== id3) return;
-        const chiave = sorgente ? `${id3}|${sorgente.tipo}|${sorgente.runId ?? ""}|${sorgente.workflowId}|${sorgente.version}` : null;
+        if (mia !== railLettura || state.realSession.id !== id4) return;
+        const chiave = sorgente ? `${id4}|${sorgente.tipo}|${sorgente.runId ?? ""}|${sorgente.workflowId}|${sorgente.version}` : null;
         if (chiave && chiave === railWorkflowChiave) {
           railWorkflow?.aggiorna();
           void cronologiaWorkflow?.aggiorna();
@@ -55360,24 +56547,32 @@ ${risultato.testo}` : "Un sotto-agente ha consegnato il risultato. È disponibil
         smontaRailWorkflow();
         const contenitore = $3("#railAgenti");
         if (!chiave || !contenitore) return;
-        contenitore.replaceChildren();
+        railSorgenti = montaSelettoreRail(contenitore, {
+          iniziale: tipoGrafoScelto(id4),
+          onSelezione: (tipo) => {
+            ricordaTipoGrafo(id4, tipo);
+            railWorkflow?.visibilita();
+            if (grafoWorkflow || grafoAgenti) void apriDiagramma({ tipo });
+          }
+        });
         railWorkflowChiave = chiave;
-        railWorkflow = montaRailWorkflow(contenitore, {
+        railWorkflow = montaRailWorkflow(railSorgenti.workflowPanel, {
           client,
           sorgente,
-          visibile: () => railVisibile(contenitore),
+          visibile: () => railVisibile(railSorgenti.workflowPanel),
           onApri: (dove) => apriDiagramma({ preferita: { runId: sorgente.runId, workflowId: sorgente.workflowId, version: sorgente.version }, iniziale: dove }),
           onConteggio: (n) => {
             railWorkflowAttivi = n;
             aggiornaInspectorDaStato();
           }
         });
-        cronologiaWorkflow = montaCronologiaWorkflow(contenitore, {
+        cronologiaWorkflow = montaCronologiaWorkflow(railSorgenti.workflowPanel, {
           fetchFn: (path) => fetch(API2(path)),
-          sessionId: id3,
+          sessionId: id4,
           onApri: (run) => apriDiagramma({ preferita: run })
         });
         osservaVisibilitaRail(contenitore);
+        aggiornaInspectorDaStato();
         railWorkflow.diagramma(Boolean(grafoWorkflow));
         if (grafoWorkflow) {
           const sel = grafoWorkflow.stato();
@@ -55387,6 +56582,12 @@ ${risultato.testo}` : "Un sotto-agente ha consegnato il risultato. È disponibil
       }
       function apriGrafoAgenti(figlia = null) {
         if (!state.realSession.id) return;
+        grafoWorkflow?.distruggi();
+        grafoWorkflow = null;
+        grafoWorkflowChiave = null;
+        selettoreGrafo?.distruggi();
+        selettoreGrafo = null;
+        railWorkflow?.diagramma(false);
         setView("chat");
         closePanels();
         const host = $3('[data-view="chat"]');
@@ -55396,7 +56597,7 @@ ${risultato.testo}` : "Un sotto-agente ha consegnato il risultato. È disponibil
           host.classList.add("talos-grafo-aperto");
           grafoAgenti = montaGrafoAgenti(host, {
             dati: datiGrafoAgenti(),
-            onLeggiCronologia: /* @__PURE__ */ ((id3) => (query) => apiGet(`/api/v1/sessions/${encodeURIComponent(id3)}/agent-timeline?${new URLSearchParams(query)}`))(state.realSession.id),
+            onLeggiCronologia: /* @__PURE__ */ ((id4) => (query) => apiGet(`/api/v1/sessions/${encodeURIComponent(id4)}/agent-timeline?${new URLSearchParams(query)}`))(state.realSession.id),
             onChiudi: () => {
               chiudiGrafoAgenti();
               $3("#railAgenti button")?.focus();
@@ -55407,8 +56608,8 @@ ${risultato.testo}` : "Un sotto-agente ha consegnato il risultato. È disponibil
               return risposta.contenuto ?? risposta.testo ?? null;
             },
             onApri: async (voce) => {
-              const id3 = state.realSession.id, vista = grafoAgenti;
-              if (voce.sessionId === id3) {
+              const id4 = state.realSession.id, vista = grafoAgenti;
+              if (voce.sessionId === id4) {
                 $3('#railTabs [data-rail="contesto"]')?.click();
                 openPanel("inspector");
                 return;
@@ -55418,10 +56619,10 @@ ${risultato.testo}` : "Un sotto-agente ha consegnato il risultato. È disponibil
                 try {
                   dati = (await apiGet(`/api/v1/sessions/${encodeURIComponent(voce.padreId)}/children`))?.figli?.find((a) => a.sessionId === voce.sessionId);
                 } catch (error) {
-                  if (state.realSession.id === id3 && grafoAgenti === vista) toast("Dettaglio non disponibile", error.message);
+                  if (state.realSession.id === id4 && grafoAgenti === vista) toast("Dettaglio non disponibile", error.message);
                   return;
                 }
-                if (state.realSession.id !== id3 || grafoAgenti !== vista) return;
+                if (state.realSession.id !== id4 || grafoAgenti !== vista) return;
               }
               if (!dati) {
                 passaASessione(voce.sessionId, voce.taskId || voce.sessionId, voce.nome, voce.modello, voce);
@@ -55437,10 +56638,10 @@ ${risultato.testo}` : "Un sotto-agente ha consegnato il risultato. È disponibil
           }, 5e3);
         }
         if (figlia?.sessionId) grafoAgenti.seleziona(figlia.sessionId);
-        try {
-          sessionStorage.setItem(GRAFO_APERTO_KEY, state.realSession.id);
-        } catch {
-        }
+        ricordaTipoGrafo(state.realSession.id, "deleghe");
+        ricordaGrafoAperto(state.realSession.id, "deleghe");
+        railSorgenti?.seleziona("deleghe");
+        montaSceltaSulGrafo("deleghe");
         aggiornaGrafoAgenti();
         host.querySelector(".talos-grafo button")?.focus();
       }
@@ -55478,6 +56679,7 @@ ${risultato.testo}` : "Un sotto-agente ha consegnato il risultato. È disponibil
         aperta2.contenitore?.remove();
         const elenco2 = $3("#railAgenti");
         if (elenco2) elenco2.hidden = false;
+        grafoAgenti?.adatta();
         aggiornaInspectorDaStato({ subito: true });
       }
       function apriConversazioneFiglia(figlia) {
@@ -55663,13 +56865,13 @@ ${risultato.testo}` : "Un sotto-agente ha consegnato il risultato. È disponibil
           agenti,
           /* PO-08: la card diventa apribile solo perché qui c'è chi ascolta — senza questa funzione
              `disegnaAgenti` la lascia statica, e non promette niente che non può mantenere. */
-          azioniAgenti: { onApri: apriConversazioneFiglia, onMenu: menuDellaDelega, onGrafo: state.realSession.id ? (figlia) => apriDiagramma({ figlia }) : null, sessionId: state.realSession.id, errore: figliErrore },
+          azioniAgenti: { onApri: apriConversazioneFiglia, onMenu: menuDellaDelega, onGrafo: state.realSession.id ? (figlia) => apriDiagramma({ figlia, tipo: "deleghe" }) : null, sessionId: state.realSession.id, errore: figliErrore },
           agentiDelWorkflow: Boolean(railWorkflow)
           // F3-50: la scheda è del rail v2
         });
         const schede = inspector.querySelector("#railTabs");
         if (schede) {
-          impostaConteggioScheda(schede.querySelector('[data-rail="agenti"]'), railWorkflow ? railWorkflowAttivi : contaAgentiAttivi(agenti));
+          impostaConteggioScheda(schede.querySelector('[data-rail="agenti"]'), railWorkflowAttivi + contaAgentiAttivi(agenti));
           impostaConteggioScheda(schede.querySelector('[data-rail="processi"]'), contaProcessiAttivi(processi));
           tieniInVistaScheda(schede.querySelector('[aria-selected="true"]'));
         }
@@ -55677,9 +56879,9 @@ ${risultato.testo}` : "Un sotto-agente ha consegnato il risultato. È disponibil
       let letturaFigliInCorso = null;
       function caricaFigliSessione() {
         void aggiornaRailWorkflow();
-        const id3 = state.realSession.id, generation = state.realSession.generation;
-        if (letturaFigliInCorso?.id === id3 && letturaFigliInCorso.generation === generation) return letturaFigliInCorso.promise;
-        const richiesta = { id: id3, generation, promise: null };
+        const id4 = state.realSession.id, generation = state.realSession.generation;
+        if (letturaFigliInCorso?.id === id4 && letturaFigliInCorso.generation === generation) return letturaFigliInCorso.promise;
+        const richiesta = { id: id4, generation, promise: null };
         letturaFigliInCorso = richiesta;
         richiesta.promise = leggiFigliSessione().finally(() => {
           if (letturaFigliInCorso === richiesta) letturaFigliInCorso = null;
@@ -55687,19 +56889,19 @@ ${risultato.testo}` : "Un sotto-agente ha consegnato il risultato. È disponibil
         return richiesta.promise;
       }
       async function leggiFigliSessione() {
-        const id3 = state.realSession.id;
+        const id4 = state.realSession.id;
         const lettura = ++figliLettura;
-        if (!id3) {
+        if (!id4) {
           state.realSession.figli = [];
           aggiornaInspectorDaStato();
           return;
         }
         try {
-          const dati = await apiGet(`/api/v1/sessions/${encodeURIComponent(id3)}/children`);
-          if (state.realSession.id !== id3 || lettura !== figliLettura) return;
+          const dati = await apiGet(`/api/v1/sessions/${encodeURIComponent(id4)}/children`);
+          if (state.realSession.id !== id4 || lettura !== figliLettura) return;
           if (!Array.isArray(dati?.figli)) throw new Error("Risposta delle deleghe non valida");
           const conosciuti = [...state.sessionSelection.available.values(), ...agentiInDiretta.values()];
-          const raggiungibili = /* @__PURE__ */ new Set([id3, ...dati.figli.map((a) => a.sessionId)]);
+          const raggiungibili = /* @__PURE__ */ new Set([id4, ...dati.figli.map((a) => a.sessionId)]);
           let aggiunti;
           do {
             aggiunti = false;
@@ -55708,16 +56910,16 @@ ${risultato.testo}` : "Un sotto-agente ha consegnato il risultato. È disponibil
               aggiunti = true;
             }
           } while (aggiunti);
-          const genitori = [...new Set(conosciuti.filter((a) => a.padreId !== id3 && raggiungibili.has(a.padreId)).map((a) => a.padreId))];
+          const genitori = [...new Set(conosciuti.filter((a) => a.padreId !== id4 && raggiungibili.has(a.padreId)).map((a) => a.padreId))];
           const snapshot = [];
           for (const parentId of genitori) {
             const risposta = await apiGet(`/api/v1/sessions/${encodeURIComponent(parentId)}/children`);
-            if (state.realSession.id !== id3 || lettura !== figliLettura) return;
+            if (state.realSession.id !== id4 || lettura !== figliLettura) return;
             if (!Array.isArray(risposta?.figli)) throw new Error("Risposta delle deleghe discendenti non valida");
             snapshot.push({ parentId, figli: risposta.figli });
           }
-          if (state.realSession.id !== id3 || lettura !== figliLettura) return;
-          for (const { parentId, figli } of [{ parentId: id3, figli: dati.figli }, ...snapshot]) {
+          if (state.realSession.id !== id4 || lettura !== figliLettura) return;
+          for (const { parentId, figli } of [{ parentId: id4, figli: dati.figli }, ...snapshot]) {
             for (const [chiave, a] of agentiInDiretta) if (a.padreId === parentId) agentiInDiretta.delete(chiave);
             for (const a of figli) agentiInDiretta.set(a.sessionId, { ...a, padreId: parentId });
           }
@@ -55725,14 +56927,12 @@ ${risultato.testo}` : "Un sotto-agente ha consegnato il risultato. È disponibil
           figliErrore = null;
           figliAggiornati = (/* @__PURE__ */ new Date()).toISOString();
         } catch (error) {
-          if (state.realSession.id !== id3 || lettura !== figliLettura) return;
+          if (state.realSession.id !== id4 || lettura !== figliLettura) return;
           figliErrore = error?.message || "Impossibile leggere le deleghe";
         }
-        if (!grafoAgenti && !grafoWorkflow && !diagrammaInApertura) {
-          try {
-            if (sessionStorage.getItem(GRAFO_APERTO_KEY) === id3 && state.view === "chat") void apriDiagramma();
-          } catch {
-          }
+        if (!grafoAgenti && !grafoWorkflow && !diagrammaInApertura && state.view === "chat") {
+          const tipo = grafoDaRiprendere(id4);
+          if (tipo) void apriDiagramma({ tipo });
         }
         aggiornaGrafoAgenti();
         aggiornaInspectorDaStato();
@@ -56243,7 +57443,7 @@ ${risultato.testo}` : "Un sotto-agente ha consegnato il risultato. È disponibil
         const turnoDaTogliere = nodo13?.closest(".talos-turn") || nodo13?.closest(".talos-message") || nodo13;
         turnoDaTogliere?.remove();
         if (quale === "risposta") {
-          for (const [id3, elemento] of state.realSession.messageElements) if (elemento === nodo13) state.realSession.messageElements.delete(id3);
+          for (const [id4, elemento] of state.realSession.messageElements) if (elemento === nodo13) state.realSession.messageElements.delete(id4);
         }
         const toltoDalModello = esito?.toltoDalModello !== false;
         const cosa = quale === "risposta" ? "Risposta" : "Messaggio";
@@ -56325,9 +57525,9 @@ ${risultato.testo}` : "Un sotto-agente ha consegnato il risultato. È disponibil
         carta.dataset.giro = String(giro);
         nellaChat(carta);
       }
-      function aggiornaMotivoAzioniRisposta(bottone5) {
+      function aggiornaMotivoAzioniRisposta(bottone6) {
         const vivo = runRealeAttivo();
-        bottone5.title = vivo ? TESTI_MESSAGGIO.altreAzioniGiroVivo : TESTI_MESSAGGIO.altreAzioni;
+        bottone6.title = vivo ? TESTI_MESSAGGIO.altreAzioniGiroVivo : TESTI_MESSAGGIO.altreAzioni;
       }
       function ensureAssistantMessageElement(messageId) {
         const existing = state.realSession.messageElements.get(messageId);
@@ -56535,7 +57735,7 @@ ${risultato.testo}` : "Un sotto-agente ha consegnato il risultato. È disponibil
       }
       function chiudiAttrezziInterrotti() {
         let chiuse = 0;
-        for (const [id3, info] of state.realSession.toolCallNomi) {
+        for (const [id4, info] of state.realSession.toolCallNomi) {
           if (info?.stato !== "running") continue;
           const batch = info.batch;
           if (batch) {
@@ -56560,7 +57760,7 @@ ${risultato.testo}` : "Un sotto-agente ha consegnato il risultato. È disponibil
             info.uscitaViva = null;
             info.uscitaVivaTesto = "";
           }
-          state.realSession.toolCallNomi.delete(id3);
+          state.realSession.toolCallNomi.delete(id4);
           if (batch) aggiornaRiassuntoBatch(batch);
           chiuse += 1;
         }
@@ -56861,9 +58061,14 @@ ${risultato.testo}` : "Un sotto-agente ha consegnato il risultato. È disponibil
         for (const voce of state.realSession.ragionamentoBubble.values()) chiudiRagionamento(voce);
         state.realSession.ragionamentoBubble.clear();
       }
-      function appendArtifactCard(titolo2, id3) {
-        const src = API2(`/api/v1/artifacts/${encodeURIComponent(id3)}`);
-        const { card: article, frame: frame3 } = creaArtefatto({ titolo: titolo2 || "Artefatto", src, onApri: () => window.open(src, "_blank", "noopener") });
+      function appendArtifactCard(evento) {
+        const sessionId = state.realSession.id;
+        const { card: article, frame: frame3 } = creaCardArtefatto({
+          evento,
+          sessionId,
+          API: API2,
+          ancoraValida: () => state.realSession.id === sessionId
+        });
         article.classList.add("real-artifact-card");
         nellaChat(article);
         markMotionEnter(article);
@@ -57318,6 +58523,7 @@ ${risultato.testo}` : "Un sotto-agente ha consegnato il risultato. È disponibil
         const politica2 = etichettaPermesso(state.permissions);
         const frasiVere = [];
         if (typeof azione?.segreto?.frase === "string" && azione.segreto.frase.trim()) frasiVere.push(azione.segreto.frase.trim());
+        if (typeof azione?.wslRoot?.frase === "string" && azione.wslRoot.frase.trim()) frasiVere.push(azione.wslRoot.frase.trim());
         const trifecta = typeof azione?.trifecta === "string" ? azione.trifecta.trim() : azione?.trifecta === true ? "Questa chiamata chiude la trifecta: dati privati, contenuto non attendibile e un modo per farli uscire." : "";
         if (trifecta) frasiVere.push(trifecta);
         if (frasiVere.length) return frasiVere.join(" ");
@@ -57419,6 +58625,12 @@ ${risultato.testo}` : "Un sotto-agente ha consegnato il risultato. È disponibil
         const sessioneBtn = scheda.pulsanti.sessione;
         const davantiAUnSegreto = Boolean(azione?.segreto);
         if (davantiAUnSegreto) sessioneBtn.remove();
+        if (azione?.wslRoot && !davantiAUnSegreto) {
+          approvaBtn.textContent = "Consenti per questa sessione";
+          sessioneBtn.remove();
+          const notaPiede = $3(".talos-approval__foot-note", article);
+          if (notaPiede) notaPiede.textContent = "Vale per tutta la sessione";
+        }
         let rispostaDataDaQuestaScheda = false;
         const rispondi = async (approvato, perSessione = false) => {
           negaBtn.disabled = true;
@@ -57548,25 +58760,25 @@ ${risultato.testo}` : "Un sotto-agente ha consegnato il risultato. È disponibil
         } catch {
         }
       }
-      function titoloRicordatoTerminale(id3) {
-        return memoriaSchedeTerminale().nomi?.[id3] || null;
+      function titoloRicordatoTerminale(id4) {
+        return memoriaSchedeTerminale().nomi?.[id4] || null;
       }
-      function ricordaTitoloTerminale(id3, titolo2) {
+      function ricordaTitoloTerminale(id4, titolo2) {
         const m = memoriaSchedeTerminale();
-        m.nomi = { ...m.nomi || {}, [id3]: titolo2 };
+        m.nomi = { ...m.nomi || {}, [id4]: titolo2 };
         salvaMemoriaSchedeTerminale(m);
       }
-      function dimenticaTitoloTerminale(id3) {
+      function dimenticaTitoloTerminale(id4) {
         const m = memoriaSchedeTerminale();
-        if (m.nomi?.[id3]) {
-          delete m.nomi[id3];
+        if (m.nomi?.[id4]) {
+          delete m.nomi[id4];
           salvaMemoriaSchedeTerminale(m);
         }
       }
-      function ricordaAttivaTerminale(sessioneId, id3) {
+      function ricordaAttivaTerminale(sessioneId, id4) {
         if (!sessioneId) return;
         const m = memoriaSchedeTerminale();
-        m.attive = { ...m.attive || {}, [sessioneId]: id3 };
+        m.attive = { ...m.attive || {}, [sessioneId]: id4 };
         salvaMemoriaSchedeTerminale(m);
       }
       function uiSchedeTerminale() {
@@ -57578,24 +58790,24 @@ ${risultato.testo}` : "Un sotto-agente ha consegnato il risultato. È disponibil
         t3.ui = creaSchedeTerminale(pane, {
           root: radice2.body || radice2,
           azioni: {
-            seleziona: (id3) => attivaSchedaTerminale(id3),
+            seleziona: (id4) => attivaSchedaTerminale(id4),
             nuova: () => {
               void nuovaSchedaTerminale();
             },
-            chiudi: (id3) => {
-              void chiudiSchedaTerminale(id3);
+            chiudi: (id4) => {
+              void chiudiSchedaTerminale(id4);
             },
-            chiudiAltre: (id3) => {
-              for (const altra of [...t3.ordine]) if (altra !== id3) void chiudiSchedaTerminale(altra);
+            chiudiAltre: (id4) => {
+              for (const altra of [...t3.ordine]) if (altra !== id4) void chiudiSchedaTerminale(altra);
             },
             chiudiTutte: () => {
-              for (const id3 of [...t3.ordine]) void chiudiSchedaTerminale(id3);
+              for (const id4 of [...t3.ordine]) void chiudiSchedaTerminale(id4);
             },
-            rinomina: (id3, titolo2) => {
-              const v = t3.schede.get(id3);
+            rinomina: (id4, titolo2) => {
+              const v = t3.schede.get(id4);
               if (!v) return;
               v.titolo = titolo2;
-              ricordaTitoloTerminale(id3, titolo2);
+              ricordaTitoloTerminale(id4, titolo2);
               renderizzaSchedeTerminale();
             }
           }
@@ -57612,7 +58824,7 @@ ${risultato.testo}` : "Un sotto-agente ha consegnato il risultato. È disponibil
         if (!ui) return;
         const t3 = statoTerminale();
         const shellNota = [...t3.schede.values()].find((v) => v.shell)?.shell || null;
-        const schede = t3.ordine.map((id3) => t3.schede.get(id3)).filter(Boolean).map((v) => ({ ...v, shell: v.shell || shellNota, stato: v.stato === "connesso" && v.terminalId === t3.attiva ? "live" : v.stato }));
+        const schede = t3.ordine.map((id4) => t3.schede.get(id4)).filter(Boolean).map((v) => ({ ...v, shell: v.shell || shellNota, stato: v.stato === "connesso" && v.terminalId === t3.attiva ? "live" : v.stato }));
         const attiva = t3.schede.get(t3.attiva) || null;
         const conSessione = Boolean(state.realSession.id);
         const cartella = attiva?.cartella || (attiva?.origine === "standalone" ? "" : state.realSession.cartellaAssoluta) || "";
@@ -57783,14 +58995,14 @@ ${risultato.testo}` : "Un sotto-agente ha consegnato il risultato. È disponibil
         const pannello = document.getElementById("pannelloTerminale");
         return Boolean(pannello && !pannello.hidden);
       }
-      function attivaSchedaTerminale(id3) {
+      function attivaSchedaTerminale(id4) {
         const t3 = statoTerminale();
-        const record2 = t3.schede.get(id3);
+        const record2 = t3.schede.get(id4);
         if (!record2) return;
-        const cambiaScheda = t3.attiva !== id3;
+        const cambiaScheda = t3.attiva !== id4;
         const eraGiaMontata = Boolean(record2.term);
-        t3.attiva = id3;
-        ricordaAttivaTerminale(t3.sessioneId, id3);
+        t3.attiva = id4;
+        ricordaAttivaTerminale(t3.sessioneId, id4);
         for (const altra of t3.schede.values()) {
           if (altra === record2) continue;
           if (altra.mount) altra.mount.hidden = true;
@@ -57884,17 +59096,17 @@ ${risultato.testo}` : "Un sotto-agente ha consegnato il risultato. È disponibil
         record2.mount?.remove();
         Object.assign(record2, { term: null, fit: null, mount: null, osservatore: null });
       }
-      async function chiudiSchedaTerminale(id3) {
+      async function chiudiSchedaTerminale(id4) {
         const t3 = statoTerminale();
-        const record2 = t3.schede.get(id3);
+        const record2 = t3.schede.get(id4);
         if (!record2) return;
-        const indice2 = t3.ordine.indexOf(id3);
+        const indice2 = t3.ordine.indexOf(id4);
         const prossima = prossimaAttivaDopoChiusura(t3.ordine, indice2);
         smontaSchedaTerminale(record2);
-        t3.schede.delete(id3);
+        t3.schede.delete(id4);
         t3.ordine.splice(indice2, 1);
-        dimenticaTitoloTerminale(id3);
-        if (t3.attiva === id3) {
+        dimenticaTitoloTerminale(id4);
+        if (t3.attiva === id4) {
           t3.attiva = null;
           if (prossima) attivaSchedaTerminale(prossima);
         }
@@ -57902,7 +59114,7 @@ ${risultato.testo}` : "Un sotto-agente ha consegnato il risultato. È disponibil
         t3.ui?.fuocoSullaAttiva();
         if (t3.sessioneId && record2.origine !== "standalone") {
           try {
-            await apiPost(`/api/v1/sessions/${encodeURIComponent(t3.sessioneId)}/terminals/${encodeURIComponent(id3)}/close`, {});
+            await apiPost(`/api/v1/sessions/${encodeURIComponent(t3.sessioneId)}/terminals/${encodeURIComponent(id4)}/close`, {});
           } catch (error) {
             toast("Shell non chiusa sul server", error.message);
           }
@@ -57971,8 +59183,8 @@ ${risultato.testo}` : "Un sotto-agente ha consegnato il risultato. È disponibil
       }
       function appendBrowserEntry(url, testo2) {
         const pagine = state.realSession.browserPagine;
-        const id3 = `lettura-${state.realSession.browserProssimoId = (state.realSession.browserProssimoId || 0) + 1}`;
-        pagine.push({ id: id3, url, testo: testo2, quando: (/* @__PURE__ */ new Date()).toISOString() });
+        const id4 = `lettura-${state.realSession.browserProssimoId = (state.realSession.browserProssimoId || 0) + 1}`;
+        pagine.push({ id: id4, url, testo: testo2, quando: (/* @__PURE__ */ new Date()).toISOString() });
         mostraPaginaBrowser(pagine.length - 1);
       }
       const CHIAVE_NOTE_BROWSER = "talos-harness-browser-note-v1";
@@ -57985,10 +59197,10 @@ ${risultato.testo}` : "Un sotto-agente ha consegnato il risultato. È disponibil
         return Math.round(Math.random() * tetto);
       }
       const richiesteBrowser = /* @__PURE__ */ new Map();
-      function fermaRichiestaBrowser(id3) {
-        const volo = richiesteBrowser.get(id3);
+      function fermaRichiestaBrowser(id4) {
+        const volo = richiesteBrowser.get(id4);
         if (!volo) return false;
-        richiesteBrowser.delete(id3);
+        richiesteBrowser.delete(id4);
         clearTimeout(volo.attesa);
         try {
           volo.controller?.abort();
@@ -57996,13 +59208,13 @@ ${risultato.testo}` : "Un sotto-agente ha consegnato il risultato. È disponibil
         }
         return true;
       }
-      function iniziaRichiestaBrowser(id3) {
-        fermaRichiestaBrowser(id3);
+      function iniziaRichiestaBrowser(id4) {
+        fermaRichiestaBrowser(id4);
         const volo = { controller: new AbortController(), attesa: null };
-        richiesteBrowser.set(id3, volo);
+        richiesteBrowser.set(id4, volo);
         return volo;
       }
-      const voloCorrente = (id3, volo) => richiesteBrowser.get(id3) === volo;
+      const voloCorrente = (id4, volo) => richiesteBrowser.get(id4) === volo;
       async function apiGetBrowser(pathname, signal) {
         let risposta;
         try {
@@ -58029,49 +59241,49 @@ ${risultato.testo}` : "Un sotto-agente ha consegnato il risultato. È disponibil
         return busta.data;
       }
       async function chiediIncorniciabileConRitentativi(voce, { onStato }) {
-        const id3 = voce.id;
+        const id4 = voce.id;
         voce.tentativi = 0;
         voce.tentativiMassimi = BROWSER_RITENTATIVI + 1;
         for (let tentativo = 1; tentativo <= BROWSER_RITENTATIVI + 1; tentativo += 1) {
-          const volo = iniziaRichiestaBrowser(id3);
+          const volo = iniziaRichiestaBrowser(id4);
           voce.tentativi = tentativo;
           try {
             const esito = await apiGetBrowser(`/api/v1/browser/incorniciabile?url=${encodeURIComponent(voce.url)}`, volo.controller.signal);
-            if (!voloCorrente(id3, volo)) return null;
-            richiesteBrowser.delete(id3);
+            if (!voloCorrente(id4, volo)) return null;
+            richiesteBrowser.delete(id4);
             if (esito?.genere && CLIENT_RITENTA.has(esito.genere) && tentativo <= BROWSER_RITENTATIVI) {
               voce.stato = "ritento";
               voce.motivo = esito.motivo || null;
               voce.genere = esito.genere || null;
               voce.dettagli = esito.dettagli || null;
               onStato?.();
-              if (!await aspettaRitentativo(id3, tentativo)) return null;
+              if (!await aspettaRitentativo(id4, tentativo)) return null;
               continue;
             }
             return esito;
           } catch (errore) {
-            if (errore?.name === "AbortError" || !voloCorrente(id3, volo)) return null;
-            richiesteBrowser.delete(id3);
+            if (errore?.name === "AbortError" || !voloCorrente(id4, volo)) return null;
+            richiesteBrowser.delete(id4);
             if (tentativo > BROWSER_RITENTATIVI) throw errore;
             voce.stato = "ritento";
             voce.motivo = messaggioErroreUtente(errore, "Il server non ha risposto");
             voce.genere = null;
             voce.dettagli = null;
             onStato?.();
-            if (!await aspettaRitentativo(id3, tentativo)) return null;
+            if (!await aspettaRitentativo(id4, tentativo)) return null;
           }
         }
         return null;
       }
       const CLIENT_RITENTA = /* @__PURE__ */ new Set(["timeout", "rete", "rifiuto"]);
       const CLIENT_GUASTI = /* @__PURE__ */ new Set(["timeout", "dns", "rifiuto", "certificato", "rete", "indirizzo"]);
-      function aspettaRitentativo(id3, tentativo) {
+      function aspettaRitentativo(id4, tentativo) {
         return new Promise((risolvi) => {
           const volo = { controller: null, attesa: null };
-          richiesteBrowser.set(id3, volo);
+          richiesteBrowser.set(id4, volo);
           volo.attesa = setTimeout(() => {
-            if (richiesteBrowser.get(id3) === volo) {
-              richiesteBrowser.delete(id3);
+            if (richiesteBrowser.get(id4) === volo) {
+              richiesteBrowser.delete(id4);
               risolvi(true);
             } else risolvi(false);
           }, attesaRitentativo(tentativo));
@@ -58109,7 +59321,7 @@ ${risultato.testo}` : "Un sotto-agente ha consegnato il risultato. È disponibil
         const rs = state.realSession;
         const letture = rs.browserPagine.map((p, i2) => ({ ...p, id: idDiLettura(p, i2), tipo: "lettura", origine: "agente" }));
         const vivi = new Set(letture.map((p) => p.id));
-        for (const id3 of [...rs.browserChiuse]) if (!vivi.has(id3)) rs.browserChiuse.delete(id3);
+        for (const id4 of [...rs.browserChiuse]) if (!vivi.has(id4)) rs.browserChiuse.delete(id4);
         return [...letture.filter((p) => !rs.browserChiuse.has(p.id)), ...rs.browserVive];
       }
       function uiBrowser() {
@@ -58117,11 +59329,11 @@ ${risultato.testo}` : "Un sotto-agente ha consegnato il risultato. È disponibil
         const schermo = $3("#schermoBrowser");
         if (!schermo) return null;
         browserUi = creaBrowser(schermo, { azioni: {
-          seleziona: (id3) => {
-            state.realSession.browserAttiva = id3;
+          seleziona: (id4) => {
+            state.realSession.browserAttiva = id4;
             renderizzaBrowser();
           },
-          chiudi: (id3) => chiudiSchedaBrowser(id3),
+          chiudi: (id4) => chiudiSchedaBrowser(id4),
           /*
            * ⛔ 11/09/2026 — `void` INGHIOTTE. Prima questa riga era `void apriPaginaVivaBrowser(url)`:
            *   qualunque rottura fuori dal `try` interno (un guasto nel disegno, un campo che non c'è)
@@ -58138,8 +59350,8 @@ ${risultato.testo}` : "Un sotto-agente ha consegnato il risultato. È disponibil
               browserUi?.avvisa(messaggioErroreUtente(errore, "Non sono riuscito ad aprire questo indirizzo."));
             });
           },
-          caricata: (id3) => {
-            const v = state.realSession.browserVive.find((x) => x.id === id3);
+          caricata: (id4) => {
+            const v = state.realSession.browserVive.find((x) => x.id === id4);
             if (v && v.stato === "caricamento") {
               v.stato = "pronta";
               renderizzaBrowser();
@@ -58303,16 +59515,16 @@ ${risultato.testo}` : "Un sotto-agente ha consegnato il risultato. È disponibil
         rs.browserAttiva = pagina ? idDiLettura(pagina, indice2) : rs.browserAttiva;
         renderizzaBrowser();
       }
-      function chiudiSchedaBrowser(id3) {
+      function chiudiSchedaBrowser(id4) {
         const rs = state.realSession;
         const lista = schedeBrowser().map((x) => x.id);
-        const prossima = prossimaDopoChiusura(lista, lista.indexOf(id3));
-        const chiusa = schedeBrowser().find((x) => x.id === id3);
-        fermaRichiestaBrowser(id3);
+        const prossima = prossimaDopoChiusura(lista, lista.indexOf(id4));
+        const chiusa = schedeBrowser().find((x) => x.id === id4);
+        fermaRichiestaBrowser(id4);
         if (chiusa?.viaVista === "vivo") smontaVistaViva();
-        if (id3.startsWith("lettura-")) rs.browserChiuse.add(id3);
-        else rs.browserVive = rs.browserVive.filter((x) => x.id !== id3);
-        if (rs.browserAttiva === id3) rs.browserAttiva = prossima;
+        if (id4.startsWith("lettura-")) rs.browserChiuse.add(id4);
+        else rs.browserVive = rs.browserVive.filter((x) => x.id !== id4);
+        if (rs.browserAttiva === id4) rs.browserAttiva = prossima;
         renderizzaBrowser();
         browserUi?.fuocoSullaScheda();
       }
@@ -58911,8 +60123,8 @@ ${f}`;
         aggiornaTestataSessione();
         const nuovi = voci.filter((f) => f.nuovo).length;
         const modificati = voci.length - nuovi;
-        const impostaTesto = (id3, testo2) => {
-          const el30 = $3(`#${id3}`);
+        const impostaTesto = (id4, testo2) => {
+          const el30 = $3(`#${id4}`);
           if (el30) el30.textContent = testo2;
         };
         impostaTesto("reviewSummaryNuovi", String(nuovi));
@@ -59192,8 +60404,8 @@ ${testo2}` : testo2;
           nomeRadice.textContent = nomeRadiceAlberoReale();
           nomeRadice.title = state.realSession.cartellaAssoluta || "";
         }
-        for (const id3 of ["fileTreeAdd", "fileTreeMore", "fileVista", "fileTreeNewFile", "fileTreeNewFolder", "fileTreeRefresh", "fileTreeCollapse"]) {
-          const button2 = $3(`#${id3}`);
+        for (const id4 of ["fileTreeAdd", "fileTreeMore", "fileVista", "fileTreeNewFile", "fileTreeNewFolder", "fileTreeRefresh", "fileTreeCollapse"]) {
+          const button2 = $3(`#${id4}`);
           if (button2) button2.disabled = !enabled;
         }
         const bottoneUp = $3("#fileTreeUp");
@@ -59324,12 +60536,12 @@ ${testo2}` : testo2;
         apriMenuAzioni({
           etichetta: "Quali file mostrare",
           posizionamento: { ancoraEl: ancora },
-          voci: Object.entries(VISTE_FILE).map(([id3, etichetta3]) => ({
-            icona: id3 === scelta ? "i-check" : id3 === "tutti" ? "i-folder" : "i-file",
+          voci: Object.entries(VISTE_FILE).map(([id4, etichetta3]) => ({
+            icona: id4 === scelta ? "i-check" : id4 === "tutti" ? "i-folder" : "i-file",
             etichetta: etichetta3,
             azione: () => {
               const b = $3("#fileVista");
-              if (b) b.dataset.vista = id3;
+              if (b) b.dataset.vista = id4;
               aggiornaVistaFile();
             }
           }))
@@ -59403,17 +60615,17 @@ ${testo2}` : testo2;
         return ultimo || percorso;
       }
       function costruisciRigaAdottaFuoriSessione(percorsoAssoluto, nome) {
-        const bottone5 = document.createElement("button");
-        bottone5.type = "button";
-        bottone5.className = "ft-outside-row-adopt";
-        bottone5.setAttribute("aria-label", `Usa "${nome}" come radice — apre una sessione nuova su questa cartella`);
-        bottone5.title = "Usa come radice (sessione nuova)";
-        bottone5.append(iconaSvgAlbero("i-check"));
-        bottone5.addEventListener("click", (evento) => {
+        const bottone6 = document.createElement("button");
+        bottone6.type = "button";
+        bottone6.className = "ft-outside-row-adopt";
+        bottone6.setAttribute("aria-label", `Usa "${nome}" come radice — apre una sessione nuova su questa cartella`);
+        bottone6.title = "Usa come radice (sessione nuova)";
+        bottone6.append(iconaSvgAlbero("i-check"));
+        bottone6.addEventListener("click", (evento) => {
           evento.stopPropagation();
           usaCartellaFuoriSessioneComeRadice(percorsoAssoluto, nome);
         });
-        return bottone5;
+        return bottone6;
       }
       function costruisciZonaFuoriSessione() {
         const dati = state.realSession.fuoriSessioneDati;
@@ -59849,12 +61061,12 @@ ${testo2}` : testo2;
           motionMessages: "motionMessagesToggle",
           motionFeedback: "motionFeedbackToggle"
         };
-        for (const [key, id3] of Object.entries(ids)) {
-          const input = $3(`#${id3}`);
+        for (const [key, id4] of Object.entries(ids)) {
+          const input = $3(`#${id4}`);
           if (input) input.checked = safe[key];
         }
-        for (const [key, id3] of Object.entries({ motionMode: "motionModeSelect", motionQuality: "motionQualitySelect", motionProfile: "motionProfileSelect", motionEasing: "motionEasingSelect" })) {
-          const input = $3(`#${id3}`);
+        for (const [key, id4] of Object.entries({ motionMode: "motionModeSelect", motionQuality: "motionQualitySelect", motionProfile: "motionProfileSelect", motionEasing: "motionEasingSelect" })) {
+          const input = $3(`#${id4}`);
           if (input) input.value = safe[key];
         }
         const sceneEl = $3("#sceneOverrideSelect");
@@ -59931,8 +61143,8 @@ ${testo2}` : testo2;
         if (chat) chat.value = safe.chatFontScale;
         const scadenzaDomande = $3("#askTimeoutSelect");
         if (scadenzaDomande) scadenzaDomande.value = safe.askTimeout;
-        for (const [key, id3] of Object.entries({ themePreset: "themePresetSelect", colorMode: "colorModeSelect", composerPlus: "composerPlusSelect", messageStyle: "messageStyleSelect", streamingAnimation: "streamingAnimationSelect", windowPresentation: "windowPresentationSelect" })) {
-          const input = $3(`#${id3}`);
+        for (const [key, id4] of Object.entries({ themePreset: "themePresetSelect", colorMode: "colorModeSelect", composerPlus: "composerPlusSelect", messageStyle: "messageStyleSelect", streamingAnimation: "streamingAnimationSelect", windowPresentation: "windowPresentationSelect" })) {
+          const input = $3(`#${id4}`);
           if (input) input.value = safe[key];
         }
         const immersive = $3("#immersiveHeaderToggle");
@@ -59979,7 +61191,7 @@ ${testo2}` : testo2;
         workspacePreferences.update({ density: "compact" });
         applicaAspettoDesktop(documento.appearance);
         const screen = $3("#schermoImpostazioni");
-        montaImpostazioni(screen, documento.appearance, { recupera: (id3) => $3("#" + id3), cambiaSezione: setSettingsSection, defaultValues: DESKTOP_APPEARANCE_DEFAULTS, ripristinaAspetto: resettaAspettoDesktop });
+        montaImpostazioni(screen, documento.appearance, { recupera: (id4) => $3("#" + id4), cambiaSezione: setSettingsSection, defaultValues: DESKTOP_APPEARANCE_DEFAULTS, ripristinaAspetto: resettaAspettoDesktop });
         montaScorciatoiaTemi(screen);
         setSettingsSection("appearance");
         screen.querySelector("[data-reset-appearance]")?.focus({ preventScroll: true });
@@ -60430,11 +61642,11 @@ ${testo2}` : testo2;
         const pannello = $3("#railGithub");
         return Boolean(pannello && !pannello.hidden && pannello.getClientRects().length > 0);
       }
-      function percorsoGitSessione(id3, coda) {
-        return `/api/v1/sessions/${encodeURIComponent(id3)}/git/${coda}`;
+      function percorsoGitSessione(id4, coda) {
+        return `/api/v1/sessions/${encodeURIComponent(id4)}/git/${coda}`;
       }
-      function percorsoGithubSessione(id3, coda) {
-        return `/api/v1/sessions/${encodeURIComponent(id3)}/github/${coda}`;
+      function percorsoGithubSessione(id4, coda) {
+        return `/api/v1/sessions/${encodeURIComponent(id4)}/github/${coda}`;
       }
       function diffGithubASchermoIntero(elemento, attivo) {
         const host = $3('[data-view="chat"]');
@@ -60473,15 +61685,15 @@ ${testo2}` : testo2;
         if (ctx.scheda) return ctx.scheda;
         const radice2 = $3("#railGithub");
         if (!radice2) return null;
-        const id3 = () => state.realSession.id;
+        const id4 = () => state.realSession.id;
         ctx.scheda = creaSchedaGithub({
           radice: radice2,
           api: {
-            diff: (percorso, area) => apiGet(`${percorsoGitSessione(id3(), "diff")}?percorso=${encodeURIComponent(percorso)}&area=${encodeURIComponent(area)}`),
-            prepara: (percorsi) => apiPost(percorsoGitSessione(id3(), "stage"), { percorsi }),
-            togli: (percorsi) => apiPost(percorsoGitSessione(id3(), "unstage"), { percorsi }),
-            annulla: (percorsi) => apiPost(percorsoGitSessione(id3(), "discard"), { percorsi }),
-            committa: (messaggio, impronta) => apiPost(percorsoGitSessione(id3(), "commit-staged"), { messaggio, impronta }),
+            diff: (percorso, area) => apiGet(`${percorsoGitSessione(id4(), "diff")}?percorso=${encodeURIComponent(percorso)}&area=${encodeURIComponent(area)}`),
+            prepara: (percorsi) => apiPost(percorsoGitSessione(id4(), "stage"), { percorsi }),
+            togli: (percorsi) => apiPost(percorsoGitSessione(id4(), "unstage"), { percorsi }),
+            annulla: (percorsi) => apiPost(percorsoGitSessione(id4(), "discard"), { percorsi }),
+            committa: (messaggio, impronta) => apiPost(percorsoGitSessione(id4(), "commit-staged"), { messaggio, impronta }),
             ricarica: () => {
               void caricaSchedaGithub();
             },
@@ -60489,32 +61701,32 @@ ${testo2}` : testo2;
               void apriFileAlbero(percorso, percorso.split("/").pop());
             },
             // ⭐ F6-1 passo 3 (26/09): storia, rami, ultimo commit, messi da parte — le rotte di `http-app.mjs`, nessuna parla col remoto
-            storia: () => apiGet(percorsoGitSessione(id3(), "log")),
+            storia: () => apiGet(percorsoGitSessione(id4(), "log")),
             // ⭐ F6-2 passo 4 (27/09): le modifiche di un commit del grafo — i file (`da` assente = contro il primo genitore) e il diff di uno
-            modifiche: (da, a) => apiGet(`${percorsoGitSessione(id3(), "changes")}?a=${encodeURIComponent(a)}${da ? `&da=${encodeURIComponent(da)}` : ""}`),
-            diffFra: ({ da, a, percorso, prima }) => apiGet(`${percorsoGitSessione(id3(), "changes-diff")}?a=${encodeURIComponent(a)}&percorso=${encodeURIComponent(percorso)}${da ? `&da=${encodeURIComponent(da)}` : ""}${prima ? `&prima=${encodeURIComponent(prima)}` : ""}`),
-            rami: () => apiGet(percorsoGitSessione(id3(), "branches")),
-            cambiaRamo: (ramo) => apiPost(percorsoGitSessione(id3(), "switch"), { ramo }),
-            creaRamo: (ramo) => apiPost(percorsoGitSessione(id3(), "branch-create"), { ramo }),
-            rinominaRamo: (da, a) => apiPost(percorsoGitSessione(id3(), "branch-rename"), { da, a }),
-            eliminaRamo: (ramo, forza) => apiPost(percorsoGitSessione(id3(), "branch-delete"), forza === true ? { ramo, forza: true } : { ramo }),
-            modifica: (messaggio, impronta, commit) => apiPost(percorsoGitSessione(id3(), "amend"), { messaggio, impronta, commit }),
-            annullaCommit: (commit) => apiPost(percorsoGitSessione(id3(), "undo-commit"), { commit }),
-            accantona: (messaggio, conNuovi) => apiPost(percorsoGitSessione(id3(), "stash"), { messaggio, conNuovi: conNuovi === true }),
-            riprendi: (indice2, commit) => apiPost(percorsoGitSessione(id3(), "stash-pop"), { indice: indice2, commit }),
-            scarta: (indice2, commit) => apiPost(percorsoGitSessione(id3(), "stash-drop"), { indice: indice2, commit }),
+            modifiche: (da, a) => apiGet(`${percorsoGitSessione(id4(), "changes")}?a=${encodeURIComponent(a)}${da ? `&da=${encodeURIComponent(da)}` : ""}`),
+            diffFra: ({ da, a, percorso, prima }) => apiGet(`${percorsoGitSessione(id4(), "changes-diff")}?a=${encodeURIComponent(a)}&percorso=${encodeURIComponent(percorso)}${da ? `&da=${encodeURIComponent(da)}` : ""}${prima ? `&prima=${encodeURIComponent(prima)}` : ""}`),
+            rami: () => apiGet(percorsoGitSessione(id4(), "branches")),
+            cambiaRamo: (ramo) => apiPost(percorsoGitSessione(id4(), "switch"), { ramo }),
+            creaRamo: (ramo) => apiPost(percorsoGitSessione(id4(), "branch-create"), { ramo }),
+            rinominaRamo: (da, a) => apiPost(percorsoGitSessione(id4(), "branch-rename"), { da, a }),
+            eliminaRamo: (ramo, forza) => apiPost(percorsoGitSessione(id4(), "branch-delete"), forza === true ? { ramo, forza: true } : { ramo }),
+            modifica: (messaggio, impronta, commit) => apiPost(percorsoGitSessione(id4(), "amend"), { messaggio, impronta, commit }),
+            annullaCommit: (commit) => apiPost(percorsoGitSessione(id4(), "undo-commit"), { commit }),
+            accantona: (messaggio, conNuovi) => apiPost(percorsoGitSessione(id4(), "stash"), { messaggio, conNuovi: conNuovi === true }),
+            riprendi: (indice2, commit) => apiPost(percorsoGitSessione(id4(), "stash-pop"), { indice: indice2, commit }),
+            scarta: (indice2, commit) => apiPost(percorsoGitSessione(id4(), "stash-drop"), { indice: indice2, commit }),
             // ⭐ F6-1 pezzi: l'impronta è quella del diff che la scheda ha mostrato (`GET /git/diff`)
-            pezzo: (percorso, area, indice2, impronta, azione) => apiPost(percorsoGitSessione(id3(), "hunk"), { percorso, area, indice: indice2, impronta, azione }),
+            pezzo: (percorso, area, indice2, impronta, azione) => apiPost(percorsoGitSessione(id4(), "hunk"), { percorso, area, indice: indice2, impronta, azione }),
             // ⭐ F6-1 ✨ e «Affida» (owner 26/09, punti 9 e 10): il modello della sessione; la richiesta nel composer, senza inviarla
-            generaMessaggio: (bozza, lingua) => apiPost(percorsoGitSessione(id3(), "commit-message"), { bozza, lingua }),
+            generaMessaggio: (bozza, lingua) => apiPost(percorsoGitSessione(id4(), "commit-message"), { bozza, lingua }),
             affidaAllAgente: (testo2) => preparaCommentoNelComposer(testo2),
             // ⭐ F6-2 (27/09): il remoto — recupera (fermabile), scarica, invia/pubblica col remoto CONFERMATO nella scheda
-            recupera: (remoto) => apiPost(percorsoGitSessione(id3(), "fetch"), remoto ? { remoto } : {}),
-            fermaRecupero: () => apiPost(percorsoGitSessione(id3(), "fetch-stop"), {}),
-            scarica: () => apiPost(percorsoGitSessione(id3(), "pull"), {}),
-            invia: (remoto) => apiPost(percorsoGitSessione(id3(), "push"), remoto ? { remoto } : {}),
+            recupera: (remoto) => apiPost(percorsoGitSessione(id4(), "fetch"), remoto ? { remoto } : {}),
+            fermaRecupero: () => apiPost(percorsoGitSessione(id4(), "fetch-stop"), {}),
+            scarica: () => apiPost(percorsoGitSessione(id4(), "pull"), {}),
+            invia: (remoto) => apiPost(percorsoGitSessione(id4(), "push"), remoto ? { remoto } : {}),
             // ⭐ 28/09 «Inizializza repository» (come VS Code): `git init` locale; `conferma` solo dopo il sì chiesto dalla scheda
-            inizializza: (conferma) => apiPost(percorsoGitSessione(id3(), "init"), conferma === true ? { conferma: true } : {}),
+            inizializza: (conferma) => apiPost(percorsoGitSessione(id4(), "init"), conferma === true ? { conferma: true } : {}),
             /* ⭐ F6-3 (27/09): le pull request con `gh` — stato, scarica, collega, PR del ramo e aperte, bozza, controlli, crea. «Apri»
                va nel browser del SISTEMA (decisione 28): nel guscio `setWindowOpenHandler` lo passa a `shell.openExternal` (solo
                https://github.com/), nel browser del 4174 è una scheda nuova. */
@@ -60522,10 +61734,10 @@ ${testo2}` : testo2;
             installaGh: () => apiPost("/api/v1/github/install", {}),
             collegaGithub: () => apiPost("/api/v1/github/login", {}),
             annullaCollegamento: () => apiPost("/api/v1/github/login-cancel", {}),
-            pullRequest: () => apiGet(percorsoGithubSessione(id3(), "pulls")),
-            bozzaPr: (base) => apiGet(`${percorsoGithubSessione(id3(), "pull-draft")}${base ? `?base=${encodeURIComponent(base)}` : ""}`),
-            controlliPr: (numero10) => apiGet(percorsoGithubSessione(id3(), `pulls/${Number(numero10)}/checks`)),
-            creaPr: ({ titolo: titolo2, testo: testo2, base, bozza }) => apiPost(percorsoGithubSessione(id3(), "pulls"), { titolo: titolo2, testo: testo2, base, bozza: bozza === true }),
+            pullRequest: () => apiGet(percorsoGithubSessione(id4(), "pulls")),
+            bozzaPr: (base) => apiGet(`${percorsoGithubSessione(id4(), "pull-draft")}${base ? `?base=${encodeURIComponent(base)}` : ""}`),
+            controlliPr: (numero10) => apiGet(percorsoGithubSessione(id4(), `pulls/${Number(numero10)}/checks`)),
+            creaPr: ({ titolo: titolo2, testo: testo2, base, bozza }) => apiPost(percorsoGithubSessione(id4(), "pulls"), { titolo: titolo2, testo: testo2, base, bozza: bozza === true }),
             apriFuori: (url) => {
               window.open(url, "_blank", "noopener,noreferrer");
             }
@@ -60542,13 +61754,13 @@ ${testo2}` : testo2;
         const ctx = githubCtx();
         const scheda = montaSchedaGithub();
         if (!scheda) return;
-        const id3 = state.realSession.id;
+        const id4 = state.realSession.id;
         ctx.sporca = false;
-        if (ctx.sessioneMostrata !== id3) {
-          ctx.sessioneMostrata = id3;
+        if (ctx.sessioneMostrata !== id4) {
+          ctx.sessioneMostrata = id4;
           scheda.cambiaSessione();
         }
-        if (!id3) {
+        if (!id4) {
           scheda.mostraErrore(t2("Apri una sessione per vedere le modifiche della sua cartella."));
           return;
         }
@@ -60559,17 +61771,17 @@ ${testo2}` : testo2;
         ctx.inVolo = true;
         try {
           const [dati, ramo, messiDaParte, sincronizzazione] = await Promise.all([
-            apiGet(percorsoGitSessione(id3, "status")),
-            apiGet(percorsoGitSessione(id3, "branch")).catch(() => null),
-            apiGet(percorsoGitSessione(id3, "stashes")).catch(() => null),
+            apiGet(percorsoGitSessione(id4, "status")),
+            apiGet(percorsoGitSessione(id4, "branch")).catch(() => null),
+            apiGet(percorsoGitSessione(id4, "stashes")).catch(() => null),
             // F6-1 passo 3; se non si legge, resta l'elenco di prima
-            apiGet(percorsoGitSessione(id3, "sync")).catch(() => null)
+            apiGet(percorsoGitSessione(id4, "sync")).catch(() => null)
             // F6-2: remoti, ↓ ↑, ultimo recupero — sola lettura, niente rete
           ]);
-          if (state.realSession.id !== id3) return;
+          if (state.realSession.id !== id4) return;
           scheda.mostraStato({ ...dati, ramo: ramo?.ramo ?? null, staccata: ramo?.staccata === true, ...Array.isArray(messiDaParte?.accantonati) ? { accantonati: messiDaParte.accantonati } : {}, ...sincronizzazione && typeof sincronizzazione === "object" ? { sincronizzazione } : {} });
         } catch (errore) {
-          if (state.realSession.id !== id3) return;
+          if (state.realSession.id !== id4) return;
           if (errore?.code === "GIT_NOT_A_REPOSITORY") scheda.mostraNonRepository();
           else scheda.mostraErrore(errore?.message || t2("Lo stato del repository non si legge."));
         } finally {
@@ -61105,6 +62317,18 @@ ${testo2}` : testo2;
       }
       function handleRealEvent(evento, generation) {
         if (generation !== state.realSession.generation) return;
+        if (evento.type === "CUSTOM" && evento.name === "talos.process-output") {
+          const info = state.realSession.toolCallNomi.get(evento.value?.toolCallId);
+          const receipt = info && normalizzaRicevutaOutput(evento.value, { sessionId: state.realSession.id, toolCallId: evento.value.toolCallId });
+          if (receipt) {
+            disegnaArgomentiSeInAttesa(info);
+            if (info.outputReader) info.outputReader.aggiorna(receipt);
+            else info.outputReader = creaLettoreOutput({ receipt, API: API2, fetchFn: fetchSorvegliata, signal: outputSessionController.signal });
+            info.outputReader.monta(info.detail);
+          }
+          return;
+        }
+        providerRetryUi.evento(evento, { inReplay: state.realSession.inRigiocata, attivo: runRealeAttivo() });
         const compattazione = interpretaEventoCompattazione(evento);
         if (compattazione) {
           applicaEventoCompattazioneLegacy(compattazione, evento);
@@ -61161,7 +62385,7 @@ ${testo2}` : testo2;
           if (!fact) return;
           const existing = [...document.querySelectorAll('#conversation [data-c="PlanArtifact"][data-source="journal"]')].find((node2) => node2.dataset.planId === fact.planId);
           if (fact.status !== "proposed" && fact.status !== "unavailable") {
-            if (existing) applicaDecisionePiano(existing, fact, { document, onApriSessione: (id3) => passaASessione(id3, id3) });
+            if (existing) applicaDecisionePiano(existing, fact, { document, onApriSessione: (id4) => passaASessione(id4, id4) });
             if (!state.realSession.inRigiocata) {
               void aggiornaElencoSessioniReali();
               syncRunComposerState();
@@ -61629,6 +62853,7 @@ ${testo2}` : testo2;
                 }
               }
             }
+            info?.outputReader?.monta(info.detail);
             if (info?.batch && info.stato === "running") {
               const { batch, categoria } = info;
               info.esito = testoEsito;
@@ -61664,6 +62889,9 @@ ${testo2}` : testo2;
           case "StateDelta": {
             const recupero = Array.isArray(evento.delta) ? evento.delta.find((patch) => patch?.path === "/recuperoCronologia") : null;
             if (recupero) {
+              if (recupero.value?.contestoRicostruito === true) {
+                appendStatusNote("Le istruzioni iniziali non erano state salvate. Per riprendere, TALOS le ha ricostruite dalle fonti attuali. I messaggi precedenti sono conservati.", false, { meta: "Contesto ricostruito" });
+              }
               const numero10 = recupero.value?.chiamate;
               if (Number.isSafeInteger(numero10) && numero10 > 0) {
                 appendStatusNote(`${numero10 === 1 ? "1 chiamata incompleta è stata conservata" : `${numero10} chiamate incomplete sono state conservate`} come nota nello storico. I messaggi originali sono intatti. Puoi continuare questa conversazione.`, false, { meta: "Storico recuperato" });
@@ -61686,7 +62914,7 @@ ${testo2}` : testo2;
           }
           case "ArtifactCreated": {
             nascondiAttesaRisposta();
-            appendArtifactCard(evento.titolo, evento.id);
+            appendArtifactCard(evento);
             break;
           }
           case "WorkspaceChanged": {
@@ -61888,6 +63116,7 @@ ${testo2}` : testo2;
         segnaTappaLatenza("sseCollegato");
         source.onopen = () => {
           if (generation === state.realSession.generation) {
+            providerRetryUi.sospendi();
             state.realSession.inRigiocata = true;
             void aggiornaElencoSessioniReali().then(() => {
               if (generation === state.realSession.generation) void caricaFigliSessione();
@@ -61908,6 +63137,7 @@ ${testo2}` : testo2;
         };
         source.onerror = () => {
           if (generation !== state.realSession.generation) return;
+          providerRetryUi.sospendi();
           const figliAttivi = [...state.realSession.figli || [], ...agentiInDiretta.values()].some((a) => a.conclusa === false && !a.interrotta);
           if (state.realSession.eventoTerminaleVisto && !figliAttivi) {
             source.close();
@@ -61921,6 +63151,11 @@ ${testo2}` : testo2;
         };
       }
       function nuovaGenerazioneSessione({ continua = false } = {}) {
+        if (!continua) {
+          outputSessionController.abort();
+          outputSessionController = new AbortController();
+        }
+        providerRetryUi.reset();
         if (!continua) {
           risultatiDelegaMostrati.clear();
           ultimoEventoGrafoMadre = null;
@@ -62259,14 +63494,14 @@ ${testo2}` : testo2;
         const pensiero = Number(u?.completion_tokens_details?.reasoning_tokens);
         const completion = Number.isFinite(pensiero) && pensiero > 0 && pensiero <= uscita ? uscita - pensiero : uscita;
         state.realSession.ultimaRichiesta = { prompt_tokens: prompt, completion_tokens: completion };
-        const id3 = state.realSession.id;
-        const salvata = id3 ? compattazioneLegacy.ultimaMisura.get(id3) : null;
-        if (salvata) compattazioneLegacy.ultimaMisura.set(id3, { ...salvata, tokenMisurati: prompt + completion });
+        const id4 = state.realSession.id;
+        const salvata = id4 ? compattazioneLegacy.ultimaMisura.get(id4) : null;
+        if (salvata) compattazioneLegacy.ultimaMisura.set(id4, { ...salvata, tokenMisurati: prompt });
       }
       function usageDelContesto() {
-        const id3 = state.realSession.id;
-        if (!id3) return null;
-        const salvata = compattazioneLegacy.ultimaMisura.get(id3);
+        const id4 = state.realSession.id;
+        if (!id4) return null;
+        const salvata = compattazioneLegacy.ultimaMisura.get(id4);
         if (salvata) return Number.isFinite(salvata.tokenMisurati) && salvata.tokenMisurati > 0 ? { prompt_tokens: salvata.tokenMisurati, completion_tokens: 0 } : null;
         return state.realSession.ultimaRichiesta;
       }
@@ -62439,29 +63674,33 @@ ${testo2}` : testo2;
         if (c.tipo === "riparato") aggiornaNotaJournalRiparato(colonna, c, { document, inserisci: inserisciRigaCompattazione });
       }
       async function numeriSogliaContesto(sessionId, { serveFinestra = false } = {}) {
-        const salvati = compattazioneLegacy.ultimaMisura.get(sessionId) ?? null;
-        const u = usageDelContesto();
-        const tokenMisurati = u ? Number(u.prompt_tokens) + Number(u.completion_tokens || 0) : null;
-        let finestra = finestraContestoDelModello();
-        if ((!salvati?.soglia || serveFinestra) && finestra == null && state.model && Number.isFinite(tokenMisurati) && tokenMisurati > 0) {
-          try {
-            const catalogo = await apiGet("/api/v1/models");
-            if (catalogo?.modelli) state.modelLab.catalogoModelli = catalogo;
-            finestra = finestraContestoDelModello();
-          } catch {
-          }
-          if (sessionId !== state.realSession.id) return null;
+        void serveFinestra;
+        const modelAtStart = state.model;
+        let policy = null;
+        try {
+          policy = await apiGet(`/api/v1/sessions/${encodeURIComponent(sessionId)}/compaction-policy`);
+        } catch {
         }
-        return { tokenMisurati, soglia: salvati?.soglia ?? sogliaLegacy({ finestraToken: finestra }), finestra };
+        if (sessionId !== state.realSession.id || modelAtStart !== state.model) return null;
+        const valida2 = policy && Number.isSafeInteger(policy.triggerTokens) && policy.triggerTokens > 0 && Number.isSafeInteger(policy.warningTokens) && policy.warningTokens > 0 && ["route-minimum", "explicit-cap", "fallback"].includes(policy.source);
+        const u = usageDelContesto();
+        const tokenMisurati = Number.isFinite(Number(u?.prompt_tokens)) && Number(u?.prompt_tokens) > 0 ? Number(u.prompt_tokens) : null;
+        return {
+          tokenMisurati,
+          soglia: valida2 ? policy.triggerTokens : 2e5,
+          warningTokens: valida2 ? policy.warningTokens : 16e4,
+          finestra: valida2 && Number.isSafeInteger(policy.windowTokens) && policy.windowTokens > 0 ? policy.windowTokens : null,
+          source: valida2 ? policy.source : "fallback"
+        };
       }
       async function aggiornaAvvisoSogliaContesto({ forza = false } = {}) {
         const sessionId = state.realSession.id;
         const avviso = montaAvvisoContesto({ document, riferimento: $3("#avvisoPiano"), onCompatta: () => {
           void compactSession();
         }, onChiudi: () => {
-          const id3 = state.realSession.id;
+          const id4 = state.realSession.id;
           const testo2 = avviso.querySelector("[data-avviso-contesto-testo]")?.textContent || "";
-          if (id3) compattazioneLegacy.avvisoChiusoA.set(id3, testo2);
+          if (id4) compattazioneLegacy.avvisoChiusoA.set(id4, testo2);
           aggiornaAvvisoContesto(avviso, null);
           misuraPilaToast();
         } });
@@ -62512,7 +63751,7 @@ ${testo2}` : testo2;
       function leggiFasceModoRisolte() {
         try {
           const valore = JSON.parse(window.localStorage.getItem(chiaveFasceModoRisolte()) || "[]");
-          return Array.isArray(valore) ? valore.filter((id3) => typeof id3 === "string") : [];
+          return Array.isArray(valore) ? valore.filter((id4) => typeof id4 === "string") : [];
         } catch {
           return [];
         }
@@ -62520,7 +63759,7 @@ ${testo2}` : testo2;
       function risolviFasciaModoRitirato(sessionId) {
         if (!sessionId) return;
         try {
-          const elenco2 = leggiFasceModoRisolte().filter((id3) => id3 !== sessionId);
+          const elenco2 = leggiFasceModoRisolte().filter((id4) => id4 !== sessionId);
           elenco2.push(sessionId);
           window.localStorage.setItem(chiaveFasceModoRisolte(), JSON.stringify(elenco2.slice(-200)));
         } catch {
@@ -62552,11 +63791,11 @@ ${testo2}` : testo2;
         disegnaFasciaModoRitirato();
       }
       function fasciaModoVisibile() {
-        const id3 = state.realSession.id;
+        const id4 = state.realSession.id;
         const stato2 = statoFasciaModo();
-        if (!id3 || stato2.sessionId !== id3 || stato2.risolta) return false;
+        if (!id4 || stato2.sessionId !== id4 || stato2.risolta) return false;
         const usavaWorkflow = stato2.ultimoGiro !== null ? stato2.ultimoGiro === "workflow" : stato2.contratto;
-        return usavaWorkflow && !leggiFasceModoRisolte().includes(id3);
+        return usavaWorkflow && !leggiFasceModoRisolte().includes(id4);
       }
       let osservatoreAvvisoPiano = null;
       function cardPianoInVista(card) {
@@ -62638,16 +63877,16 @@ ${testo2}` : testo2;
         if (testo2) testo2.textContent = visibile2 ? t2("Questa conversazione usava la modalità Workflow, che non c’è più.") : "";
         const nota = fascia.querySelector("[data-fascia-modo-nota]");
         if (nota) nota.textContent = t2("Scegli come continuare: vale per i prossimi messaggi.");
-        for (const bottone5 of fascia.querySelectorAll("[data-fascia-modo-scelta]")) {
-          bottone5.textContent = bottone5.dataset.fasciaModoScelta === "piano" ? t2("Continua in Piano") : t2("Continua in Normale");
-          bottone5.disabled = statoFasciaModo().inVolo;
+        for (const bottone6 of fascia.querySelectorAll("[data-fascia-modo-scelta]")) {
+          bottone6.textContent = bottone6.dataset.fasciaModoScelta === "piano" ? t2("Continua in Piano") : t2("Continua in Normale");
+          bottone6.disabled = statoFasciaModo().inVolo;
         }
         fascia.hidden = !visibile2;
         if (!fascia.dataset.collegata) {
           fascia.dataset.collegata = "si";
           fascia.addEventListener("click", (evento) => {
-            const bottone5 = evento.target?.closest?.("[data-fascia-modo-scelta]");
-            if (bottone5) void scegliModoDallaFascia(bottone5.dataset.fasciaModoScelta);
+            const bottone6 = evento.target?.closest?.("[data-fascia-modo-scelta]");
+            if (bottone6) void scegliModoDallaFascia(bottone6.dataset.fasciaModoScelta);
           });
         }
       }
@@ -62765,7 +64004,7 @@ ${testo2}` : testo2;
         aggiornaStatoRigheSelezione();
       }
       function sessioniSelezionate() {
-        return [...state.sessionSelection.selected].filter((id3) => sessioniRadice([state.sessionSelection.available.get(id3)]).length > 0);
+        return [...state.sessionSelection.selected].filter((id4) => sessioniRadice([state.sessionSelection.available.get(id4)]).length > 0);
       }
       async function esportaSessioniSelezionate() {
         const ids = sessioniSelezionate();
@@ -62775,11 +64014,11 @@ ${testo2}` : testo2;
         }
         const pezzi = [];
         const fallite = [];
-        for (const id3 of ids) {
+        for (const id4 of ids) {
           try {
-            pezzi.push(costruisciTrascrizioneMarkdown(await apiGet(`/api/v1/sessions/${encodeURIComponent(id3)}/export`)));
+            pezzi.push(costruisciTrascrizioneMarkdown(await apiGet(`/api/v1/sessions/${encodeURIComponent(id4)}/export`)));
           } catch {
-            fallite.push(id3);
+            fallite.push(id4);
           }
         }
         if (pezzi.length === 0) {
@@ -62832,7 +64071,7 @@ ${testo2}` : testo2;
         if (ids.length === 0 || state.sessionSelection.deleting) return;
         state.sessionSelection.deleting = true;
         aggiornaToolbarSelezioneSessioni();
-        const risultati = await Promise.allSettled(ids.map((id3) => apiPost(`/api/v1/sessions/${encodeURIComponent(id3)}/delete`, {})));
+        const risultati = await Promise.allSettled(ids.map((id4) => apiPost(`/api/v1/sessions/${encodeURIComponent(id4)}/delete`, {})));
         const fallite = risultati.filter((result) => result.status === "rejected");
         state.sessionSelection.deleting = false;
         state.sessionSelection.selected.clear();
@@ -62845,9 +64084,32 @@ ${testo2}` : testo2;
         await aggiornaElencoSessioniReali();
         if (state.board.initialized) await refreshSessionsBoard();
       }
+      function assicuraCaricamentoCronologia(conversation) {
+        const scorrevole = conversation.parentElement;
+        if (!scorrevole || scorrevole.querySelector(":scope > .talos-caricamento-cronologia")) return;
+        const indicatore = document.createElement("div");
+        indicatore.className = "talos-caricamento-cronologia";
+        indicatore.setAttribute("role", "status");
+        indicatore.setAttribute("aria-live", "polite");
+        const orb = document.createElement("span");
+        orb.className = "talos-orb working";
+        orb.setAttribute("aria-hidden", "true");
+        const logo = document.createElement("span");
+        logo.className = "talos-short-logo";
+        const marchio = document.createElement("span");
+        marchio.className = "talos-short-logo-mark";
+        logo.append(marchio);
+        orb.append(logo);
+        const testo2 = document.createElement("span");
+        testo2.className = "talos-caricamento-cronologia__testo";
+        testo2.textContent = "Apro la cronologia…";
+        indicatore.append(orb, testo2);
+        scorrevole.insertBefore(indicatore, conversation);
+      }
       function mantieniFondoDuranteRipristino(generation) {
         const conversation = $3("#conversation");
         if (!conversation) return;
+        assicuraCaricamentoCronologia(conversation);
         let nostro = false;
         let smesso = false;
         const inFondo = () => {
@@ -62879,10 +64141,17 @@ ${testo2}` : testo2;
         const osservatore = new MutationObserver(chiediFondo);
         osservatore.observe(conversation, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ["class", "style"] });
         const scroller = scrollerConversazione(conversation);
+        let seguiAltezza = null;
+        const seguiCrescita = () => {
+          if (smesso || seguiAltezza || typeof ResizeObserver !== "function") return;
+          seguiAltezza = new ResizeObserver(chiediFondo);
+          seguiAltezza.observe(conversation);
+        };
         const smetti = () => {
           if (smesso) return;
           smesso = true;
           osservatore.disconnect();
+          seguiAltezza?.disconnect();
           window.clearInterval(fermaSeFinito);
           conversation.classList.remove("is-restoring");
           scroller?.removeEventListener("scroll", suScroll);
@@ -62902,13 +64171,14 @@ ${testo2}` : testo2;
             visteUltime = viste;
             ultimoEventoNuovo = performance.now();
           }
-          if (generation !== state.realSession.generation || state.realSession.eventoTerminaleVisto) {
+          if (generation !== state.realSession.generation || !state.realSession.inRigiocata) {
             osservatore.disconnect();
             window.clearInterval(fermaSeFinito);
             if (generation === state.realSession.generation) {
               scopri();
               window.requestAnimationFrame(inFondo);
               window.setTimeout(inFondo, 250);
+              seguiCrescita();
             }
           }
         }, 200);
@@ -62923,6 +64193,7 @@ ${testo2}` : testo2;
             return;
           }
           scopri();
+          seguiCrescita();
         };
         window.setTimeout(reteDiSicurezza, 8e3);
         window.setTimeout(smetti, 3e4);
@@ -63086,20 +64357,20 @@ ${testo2}` : testo2;
             return void 0;
           }
         };
-        const id3 = state.realSession.id || null;
-        const stessa = id3 === contatoriLuoghi.sessione && Date.now() - contatoriLuoghi.quando < 15e3;
+        const id4 = state.realSession.id || null;
+        const stessa = id4 === contatoriLuoghi.sessione && Date.now() - contatoriLuoghi.quando < 15e3;
         if (stessa) return;
-        contatoriLuoghi.sessione = id3;
+        contatoriLuoghi.sessione = id4;
         contatoriLuoghi.quando = Date.now();
         const [capability, automazioni, progetti] = await Promise.all([conta("/api/v1/tools", "attrezzi"), conta("/api/v1/automations", "items"), conta("/api/v1/projects", "items")]);
         aggiornaConteggiNav(radice2, { capability, automazioni, progetti });
-        if (!id3) {
+        if (!id4) {
           aggiornaConteggiNav(radice2, { libreria: null, memoria: null, attivita: null, note: null, ricerca: null, officina: null });
           return;
         }
         const liste = [["libreria", "library", "voci"], ["memoria", "memory", "memorie"], ["attivita", "tasks", "attivita"], ["note", "notes", "note"], ["ricerca", "research", "ricerche"], ["officina", "tool-forge", "strumenti"]];
-        const valori = await Promise.all(liste.map(([, rotta, campo2]) => conta(`/api/v1/sessions/${encodeURIComponent(id3)}/${rotta}`, campo2)));
-        if (state.realSession.id !== id3) return;
+        const valori = await Promise.all(liste.map(([, rotta, campo2]) => conta(`/api/v1/sessions/${encodeURIComponent(id4)}/${rotta}`, campo2)));
+        if (state.realSession.id !== id4) return;
         const conteggi = {};
         liste.forEach(([chiave], i2) => {
           conteggi[chiave] = valori[i2];
@@ -63151,8 +64422,8 @@ ${testo2}` : testo2;
         const radici = sessioniRadice(elenco2);
         const radiciIds = new Set(radici.map((s) => s.sessionId));
         void aggiornaContatoriLuoghi(elenco2.length);
-        for (const id3 of [...state.sessionSelection.selected]) {
-          if (!radiciIds.has(id3)) state.sessionSelection.selected.delete(id3);
+        for (const id4 of [...state.sessionSelection.selected]) {
+          if (!radiciIds.has(id4)) state.sessionSelection.selected.delete(id4);
         }
         if (radici.length === 0) {
           state.sessionSelection.active = false;
@@ -64050,8 +65321,8 @@ ${testo2}` : testo2;
       }
       function leggiWorkspaceLaunchId() {
         const parametri = new URLSearchParams(window.location.hash.replace(/^#/, ""));
-        const id3 = parametri.get("open-workspace");
-        return typeof id3 === "string" && /^[A-Za-z0-9_-]{32}$/.test(id3) ? id3 : null;
+        const id4 = parametri.get("open-workspace");
+        return typeof id4 === "string" && /^[A-Za-z0-9_-]{32}$/.test(id4) ? id4 : null;
       }
       function rimuoviWorkspaceLaunchFragment() {
         if (!window.location.hash) return;
@@ -64850,11 +66121,11 @@ ${blocchi.join("\n\n")}` : testa;
       }
       const sintesiVoceDisponibile = "speechSynthesis" in window;
       let elementoInAscolto = null;
-      function impostaStatoBottoneAscolto(bottone5, inAscolto) {
-        bottone5.classList.toggle("speaking", inAscolto);
-        bottone5.setAttribute("aria-pressed", String(inAscolto));
-        bottone5.setAttribute("aria-label", inAscolto ? "Ferma la lettura" : TESTI_MESSAGGIO.ascolta);
-        const uso = bottone5.querySelector("use");
+      function impostaStatoBottoneAscolto(bottone6, inAscolto) {
+        bottone6.classList.toggle("speaking", inAscolto);
+        bottone6.setAttribute("aria-pressed", String(inAscolto));
+        bottone6.setAttribute("aria-label", inAscolto ? "Ferma la lettura" : TESTI_MESSAGGIO.ascolta);
+        const uso = bottone6.querySelector("use");
         if (uso) uso.setAttribute("href", inAscolto ? "#i-stop" : "#i-play");
       }
       function fermaLetturaVoceAlta() {
@@ -64863,22 +66134,22 @@ ${blocchi.join("\n\n")}` : testa;
         if (elementoInAscolto) impostaStatoBottoneAscolto(elementoInAscolto, false);
         elementoInAscolto = null;
       }
-      function leggiVoceAlta(testo2, bottone5) {
+      function leggiVoceAlta(testo2, bottone6) {
         if (!sintesiVoceDisponibile || !testo2.trim()) return;
-        const giàInAscoltoQui = elementoInAscolto === bottone5;
+        const giàInAscoltoQui = elementoInAscolto === bottone6;
         fermaLetturaVoceAlta();
         if (giàInAscoltoQui) return;
         const utterance = new SpeechSynthesisUtterance(testo2);
         utterance.lang = "it-IT";
         utterance.onend = () => {
-          if (elementoInAscolto === bottone5) {
-            impostaStatoBottoneAscolto(bottone5, false);
+          if (elementoInAscolto === bottone6) {
+            impostaStatoBottoneAscolto(bottone6, false);
             elementoInAscolto = null;
           }
         };
         utterance.onerror = utterance.onend;
-        elementoInAscolto = bottone5;
-        impostaStatoBottoneAscolto(bottone5, true);
+        elementoInAscolto = bottone6;
+        impostaStatoBottoneAscolto(bottone6, true);
         window.speechSynthesis.speak(utterance);
       }
       function radiceComandi() {
@@ -65011,7 +66282,7 @@ ${blocchi.join("\n\n")}` : testa;
         });
       });
       $$("[data-open-sheet]").forEach((button2) => button2.addEventListener("click", () => openSheet(button2.dataset.openSheet)));
-      $$("[data-invito-azione]").forEach((bottone5) => bottone5.addEventListener("click", () => {
+      $$("[data-invito-azione]").forEach((bottone6) => bottone6.addEventListener("click", () => {
         void openRealTaskSheet();
       }));
       $$("[data-session-action]").forEach((button2) => button2.addEventListener("click", () => {
@@ -65077,13 +66348,13 @@ ${testo2}`;
       }
       $3("#miglioraPromptBtn")?.addEventListener("click", (evento) => {
         evento.stopPropagation();
-        const bottone5 = $3("#miglioraPromptBtn");
+        const bottone6 = $3("#miglioraPromptBtn");
         const pannello = pannelloMiglioraPrompt();
-        if (bottone5.getAttribute("aria-expanded") === "true") {
+        if (bottone6.getAttribute("aria-expanded") === "true") {
           pannello.chiudi();
           return;
         }
-        bottone5.setAttribute("aria-expanded", "true");
+        bottone6.setAttribute("aria-expanded", "true");
         pannello.apri();
       });
       ROOT().addEventListener("click", (evento) => {
@@ -65273,13 +66544,13 @@ ${testo2}`;
         toast(...demoActionCopy[button2.dataset.demoAction] || ["Demo UI · non collegato", "Nessuna azione reale eseguita."]);
       }));
       $3("#settingsSvuotaLocali")?.addEventListener("click", (event) => {
-        const bottone5 = event.currentTarget;
-        if (bottone5.dataset.conferma !== "1") {
-          bottone5.dataset.conferma = "1";
-          bottone5.textContent = "Confermi? Tocca di nuovo per svuotare";
+        const bottone6 = event.currentTarget;
+        if (bottone6.dataset.conferma !== "1") {
+          bottone6.dataset.conferma = "1";
+          bottone6.textContent = "Confermi? Tocca di nuovo per svuotare";
           window.setTimeout(() => {
-            bottone5.dataset.conferma = "";
-            bottone5.textContent = "Svuota le preferenze di questo browser";
+            bottone6.dataset.conferma = "";
+            bottone6.textContent = "Svuota le preferenze di questo browser";
           }, 4e3);
           return;
         }
@@ -65460,10 +66731,10 @@ ${testo2}`;
         syncRunComposerState();
       });
       bivioInvio?.addEventListener("click", (event) => {
-        const bottone5 = event.target.closest("[data-bivio]");
-        if (!bottone5) return;
+        const bottone6 = event.target.closest("[data-bivio]");
+        if (!bottone6) return;
         const testo2 = bivioInvio.dataset.testoInSospeso || composerInput.value.trim();
-        const scelta = bottone5.dataset.bivio;
+        const scelta = bottone6.dataset.bivio;
         if (scelta === "annulla") {
           chiudiBivioInvio({ tornaAlComposer: true });
           return;
@@ -65602,8 +66873,8 @@ ${testo2}`;
         "setting-uiLanguageSelect": "uiLanguage"
         // 06/9 B8: righe nate nel mockup, senza un controllo legacy dietro
       };
-      for (const [id3, key] of Object.entries(appearanceControlMap)) {
-        const input = $3(`#${id3}`);
+      for (const [id4, key] of Object.entries(appearanceControlMap)) {
+        const input = $3(`#${id4}`);
         if (!input) continue;
         const eventName = input.type === "range" ? "input" : "change";
         input.addEventListener(eventName, () => {
@@ -66080,12 +67351,12 @@ ${testo2}`;
       });
       montaGruppiBarra();
       let ultimoFuocoVelo = null;
-      function apriVeloMockup(id3) {
-        if (id3 === "veloContesto") {
+      function apriVeloMockup(id4) {
+        if (id4 === "veloContesto") {
           apriContextManager();
           return;
         }
-        const v = $3(`#${id3}`);
+        const v = $3(`#${id4}`);
         if (!v) return;
         const opener = ROOT().activeElement;
         ultimoFuocoVelo = opener;
@@ -66096,15 +67367,15 @@ ${testo2}`;
         const corpo = v.querySelector(".talos-dialog__body");
         const scelto = corpo && corpo.querySelector('[role="radio"][aria-checked="true"]');
         const primo2 = scelto || corpo && corpo.querySelector("input, button, select") || v.querySelector(".talos-dialog__footer button, .talos-dialog__footer input, .talos-dialog__footer select") || v.querySelector("input, button, select");
-        if (modalManager) modalManager.activate(v, { content: v.querySelector(".talos-dialog") || v, opener, initialFocus: primo2, requestClose: () => chiudiVeloMockup(id3) });
+        if (modalManager) modalManager.activate(v, { content: v.querySelector(".talos-dialog") || v, opener, initialFocus: primo2, requestClose: () => chiudiVeloMockup(id4) });
         else primo2?.focus();
       }
-      function chiudiVeloMockup(id3) {
-        if (id3 === "veloContesto" && contextCompactor) {
+      function chiudiVeloMockup(id4) {
+        if (id4 === "veloContesto" && contextCompactor) {
           contextCompactor.close();
           return;
         }
-        const v = $3(`#${id3}`);
+        const v = $3(`#${id4}`);
         if (!v || v.hidden) return;
         v.hidden = true;
         syncBackgroundDialogPause();
@@ -66186,9 +67457,9 @@ ${testo2}`;
           badge6.hidden = active.length === 0;
           badge6.textContent = active.length ? `↓ ${active.length}` : "↓ 0";
         }
-        const chiama = (verbo) => async (id3) => {
+        const chiama = (verbo) => async (id4) => {
           try {
-            await apiPost(`/api/v1/huggingface/downloads/${encodeURIComponent(id3)}/${verbo}`, {});
+            await apiPost(`/api/v1/huggingface/downloads/${encodeURIComponent(id4)}/${verbo}`, {});
           } catch (error) {
             toast("Comando non eseguito", error.message);
           }
@@ -66200,9 +67471,9 @@ ${testo2}`;
           azioni: {
             pausa: chiama("pause"),
             riprendi: chiama("resume"),
-            annulla: (id3) => {
+            annulla: (id4) => {
               const velo = $3("#veloAnnullaDownload");
-              if (velo) velo.dataset.downloadId = id3;
+              if (velo) velo.dataset.downloadId = id4;
             },
             vediModello: () => setModelLabSection("installed"),
             /*
@@ -66234,18 +67505,18 @@ ${testo2}`;
              * <https://github.com/TanStack/query/discussions/10712> ·
              * <https://skillsmp.com/creators/wbunker/skills-repo/optimistic-updates> (lette il 19/09/2026).
              */
-            rinomina: (id3, nome) => apiPost(`/api/v1/local-models/${encodeURIComponent(id3)}/rename`, { name: nome }).then((risposta) => ({ ok: true, nome: risposta?.name ?? nome })).catch((errore) => ({ ok: false, motivo: errore?.message ?? "rinomina non riuscita" })),
-            elimina: async (id3) => {
-              const cEra = state.modelLab.installed.some((modello) => modello.id === id3);
+            rinomina: (id4, nome) => apiPost(`/api/v1/local-models/${encodeURIComponent(id4)}/rename`, { name: nome }).then((risposta) => ({ ok: true, nome: risposta?.name ?? nome })).catch((errore) => ({ ok: false, motivo: errore?.message ?? "rinomina non riuscita" })),
+            elimina: async (id4) => {
+              const cEra = state.modelLab.installed.some((modello) => modello.id === id4);
               try {
-                await apiPost(`/api/v1/local-models/${encodeURIComponent(id3)}/delete`, {});
+                await apiPost(`/api/v1/local-models/${encodeURIComponent(id4)}/delete`, {});
               } catch (errore) {
                 return { ok: false, motivo: errore?.message ?? "eliminazione non riuscita" };
               }
               await caricaModelliLocaliModelLab();
               caricaDownloadModelLab();
               if (!cEra) return { ok: false, motivo: "non risultava fra i modelli installati" };
-              if (state.modelLab.installed.some((modello) => modello.id === id3)) return { ok: false, motivo: "il modello risulta ancora installato" };
+              if (state.modelLab.installed.some((modello) => modello.id === id4)) return { ok: false, motivo: "il modello risulta ancora installato" };
               return { ok: true };
             }
           }
@@ -66537,16 +67808,16 @@ function mountStage(parent, { preview = false } = {}) {
   prepare(stage, true);
   return stage;
 }
-function reviewFrame(id3, width = 640, height = 360, atSeconds = 0, overrides = {}) {
-  const definition = SCENES.get(id3);
-  if (!definition) throw new Error(`Scena sconosciuta: ${id3}`);
+function reviewFrame(id4, width = 640, height = 360, atSeconds = 0, overrides = {}) {
+  const definition = SCENES.get(id4);
+  if (!definition) throw new Error(`Scena sconosciuta: ${id4}`);
   const canvas = document.createElement("canvas");
   canvas.width = width;
   canvas.height = height;
   const context = canvas.getContext("2d");
   const config = currentConfig();
   const stage = { width, height, forcedLow: true };
-  const input = makeInput(stage, { ...config, scene: id3, parameters: { ...config.parameters, ...overrides } });
+  const input = makeInput(stage, { ...config, scene: id4, parameters: { ...config.parameters, ...overrides } });
   const state = definition.createState(SEED);
   const geometry = definition.prepare({ state, input }).geometry;
   for (let i2 = 0; i2 < Math.round(atSeconds * 20); i2 += 1) definition.update({ state, input, stepMs: 50 });
@@ -66561,7 +67832,7 @@ function reviewFrame(id3, width = 640, height = 360, atSeconds = 0, overrides = 
     hash2 = Math.imul(hash2 ^ pixels[p + 2], 16777619);
     hash2 = Math.imul(hash2 ^ pixels[p + 3], 16777619);
   }
-  return { id: id3, nonzero, hash: hash2 >>> 0 };
+  return { id: id4, nonzero, hash: hash2 >>> 0 };
 }
 function initTalosDesktopBackground() {
   if (window.__talosDesktopMotion?.initialized) return window.__talosDesktopMotion;
@@ -66656,10 +67927,10 @@ var animazioni_mockup_exports = {};
 __export(animazioni_mockup_exports, {
   montaAnimazioniMockup: () => montaAnimazioniMockup
 });
-function perId2(doc, id3) {
-  if (!id3) return null;
+function perId2(doc, id4) {
+  if (!id4) return null;
   try {
-    return doc.getElementById(id3);
+    return doc.getElementById(id4);
   } catch {
     return null;
   }
@@ -66840,7 +68111,7 @@ function mountCalmControls(root2 = globalThis.document, { scope = null } = {}) {
   }
   function name(source) {
     if (source.getAttribute("aria-label")) return source.getAttribute("aria-label");
-    const linked = (source.getAttribute("aria-labelledby") || "").split(/\s+/).filter(Boolean).map((id3) => doc.getElementById(id3)?.textContent || "").join(" ").trim();
+    const linked = (source.getAttribute("aria-labelledby") || "").split(/\s+/).filter(Boolean).map((id4) => doc.getElementById(id4)?.textContent || "").join(" ").trim();
     if (linked) return linked;
     const labels = [...source.labels || []].map((label) => {
       const copy = label.cloneNode(true);
@@ -67091,9 +68362,9 @@ function mountCalmControls(root2 = globalThis.document, { scope = null } = {}) {
     wrap.dataset.calmUi = "";
     const control = node2(kind === "range" ? "span" : "button", "calm-" + kind);
     if (control.tagName === "BUTTON") control.type = "button";
-    let id3 = (source.id || "calm-source-" + ++serial) + "--calm";
-    while (doc.getElementById(id3)) id3 += "-" + ++serial;
-    control.id = id3;
+    let id4 = (source.id || "calm-source-" + ++serial) + "--calm";
+    while (doc.getElementById(id4)) id4 += "-" + ++serial;
+    control.id = id4;
     wrap.append(control);
     const r = { source, control, wrap, kind, restore: [], popup: null, items: [], drag: null, listeners: new win.AbortController(), invalid: false };
     const on2 = (el30, event, fn2, extra = {}) => el30.addEventListener(event, fn2, { signal: r.listeners.signal, ...extra });
@@ -67340,8 +68611,8 @@ function uno(root2, selettore) {
   if (!el30) throw new Error(`ponte: manca nel mockup «${selettore}»`);
   return el30;
 }
-function battezza(el30, { id: id3, classi = [], dati = {} }) {
-  if (id3) el30.id = id3;
+function battezza(el30, { id: id4, classi = [], dati = {} }) {
+  if (id4) el30.id = id4;
   for (const c of classi) el30.classList.add(c);
   for (const [k, v] of Object.entries(dati)) el30.setAttribute(`data-${k}`, v);
   return el30;
@@ -67378,9 +68649,9 @@ function montaPonteLegacy(documentObj = document) {
   fissate.dataset.fissate = "vuoto";
   fissate.hidden = true;
   battezza(uno(sidebar, ".talos-resizer--sidebar"), { classi: ["panel-resize-handle"], dati: { resize: "sessions" } });
-  for (const [vista, id3] of Object.entries(VISTA_PER_SCHERMATA)) {
-    if (vista === "home" && !radice2.querySelector(`#${id3}`)) continue;
-    const schermata = uno(radice2, `#${id3}`);
+  for (const [vista, id4] of Object.entries(VISTA_PER_SCHERMATA)) {
+    if (vista === "home" && !radice2.querySelector(`#${id4}`)) continue;
+    const schermata = uno(radice2, `#${id4}`);
     battezza(schermata, { classi: ["view-pane"], dati: { view: vista } });
     if (!schermata.hidden) schermata.classList.add("active");
   }

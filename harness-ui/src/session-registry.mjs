@@ -1,4 +1,6 @@
 import { creaTimelineAgenti } from './agent-timeline.mjs';
+import { creaRegistroLetture } from './letture-prima-di-sovrascrivere.mjs'; // T25/B09
+import { delegaLimitata } from './delegation-contract.mjs';
 import { riassuntoAttivitaSessione } from './attivita-figlia.mjs';
 import { validaFallbackProviders } from './model-destination.mjs';
 import { ContrattoDomandaUtenteError, ESITO_DOMANDA_SENZA_INTERFACCIA, ESITO_DOMANDA_SOSTITUITA, validaDomandeUtente, validaRispostaDomanda } from './user-question-contract.mjs';
@@ -7,6 +9,7 @@ import { AgentDialogueError, validateAgentAnswer, validateAgentQuestion } from '
 import { cacheSessioneDaEventi, giriFermatiDaEventi } from './usage-cache.mjs';
 import { contextUsageFromEvents } from '../../context-engine/src/usage.mjs';
 import { isDeepStrictEqual } from 'node:util';
+import { recuperaCodaInterrotta, leggiRecuperoMessaggio, messaggioDaRecupero } from './session-tail-recovery.mjs';
 
 /**
  * session-registry.mjs — le sessioni Harness UI vive in memoria: chi le ha
@@ -32,6 +35,7 @@ import { isDeepStrictEqual } from 'node:util';
  * l'accumulo è un costo di spazio disco, non un difetto di correttezza.
  */
 import { randomUUID } from 'node:crypto';
+import { canonicalHash } from './workflow/canonical-json.mjs'; // G02-6: la firma di un avvio idempotente (RFC 8785)
 import { realpath } from 'node:fs/promises';
 import { parse as parsePath } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -66,6 +70,9 @@ import {
      chiamato. Nessun comportamento cambia; se ne va perché adesso si vede. */
 } from './agui-events.mjs';
 import { CustomTaskError, preparaEsecuzioneLibera as preparaEsecuzioneLiberaReale } from './custom-task.mjs';
+import { creaRegistroRicerche } from './kernel/ricerche-in-corso.mjs'; // F001b (owner 01/10/2026): le ricerche che continuano
+import { creaCasaLinuxSessione } from './kernel/casa-linux.mjs'; // Fase B (owner 01/10/2026): la casa Linux della sessione
+import { ambienteSenzaCredenziali } from './kernel/talosHarness.mjs'; // Fase B: l'ambiente della casa Linux, mai le chiavi del server
 import { imageMessageContent } from './chat-image-attachments.mjs';
 import { TaskCatalogError, preparaEsecuzione as preparaEsecuzioneReale } from './task-catalog.mjs';
 import { leggiAlberoWorkspace as leggiAlberoWorkspaceReale, WorkspaceTreeError } from './workspace-tree.mjs';
@@ -134,7 +141,12 @@ import {
 import { classificaErroreDiCorsa, creaResearchOrchestrator } from './research-orchestrator.mjs';
 import {
   elencaToolForgiati as elencaToolForgiatiReale, abilitaToolForgiato as abilitaToolForgiatoReale, ToolForgeStoreError,
+  // G02-8 (dalla lane CLI, M10-C): le versioni di uno strumento gestite dalla persona.
+  installaVersioneToolForgiatoOwner as installaVersioneToolForgiatoOwnerReale,
+  elencaVersioniToolForgiatoOwner as elencaVersioniToolForgiatoOwnerReale,
+  ripristinaVersioneToolForgiatoOwner as ripristinaVersioneToolForgiatoOwnerReale,
 } from './tool-forge-store.mjs';
+import { validaManifestForgeLocale } from './forge-contract.mjs'; // G02-8: lo stesso validatore del `tool_create` del modello
 import {
   caricaPlugin as caricaPluginReale,
   fidaPlugin as fidaPluginReale,
@@ -146,6 +158,9 @@ import {
 /* ⛔ C-3: la MEDESIMA regola del kernel, importata e non ricopiata — come già fa `acp-agent.mjs`
    con `eUnaCredenziale`. Due copie divergerebbero al primo ramo nuovo. */
 import { cartellaFinaleValida } from './kernel/talosHarness.mjs';
+import { runWithProcessOutput } from './process-output-session.mjs';
+import { deleteSessionWithOutput, recoverProcessOutputDeletions } from './process-output-lifecycle.mjs';
+import { readProcessOutputPage, formatProcessOutputPage } from './process-output-access.mjs';
 /* ⛔ D3: per dedurre il fornitore dal modello invece di scriverlo a mano. */
 import { separaFonteModello } from './model-destination.mjs';
 /* ⛔ BC-76: la fonte di un motore locale si CHIEDE al registro dei fornitori, non si scrive qui. */
@@ -338,6 +353,8 @@ import {
   attendiScritture as attendiScrittureReale, // F3 (24/09): il flush del negozio per `chiudi()`
   elencaSessioniPersistite as elencaSessioniPersistiteReale,
   eliminaSessionePersistita as eliminaSessionePersistitaReale,
+  esisteSessionePersistita,
+  cartellaPagineWebDi, // politica di taglio di `naviga` (owner 01/10/2026): la cartella delle pagine della sessione
   leggiRegistro as leggiRegistroReale,
   leggiRegistroAStream as leggiRegistroAStreamReale, // F2-bis B (24/09): il replay legge A STREAM, mai l'array intero
   registraRiga as registraRigaReale,
@@ -1213,7 +1230,7 @@ export function eventiSenzaMessaggio(eventi, riferimento) {
  * @returns {{messaggi:Array, tolto:boolean, motivo:string|null}} `motivo` è un nome tecnico: a
  *   schermo va una frase, e la costruisce chi chiama.
  */
-export function messaggiSenzaMessaggio(messaggi, { posizione = -1, ruolo = 'assistant', testo = null } = {}) {
+export function messaggiSenzaMessaggio(messaggi, { posizione = -1, ruolo = 'assistant', testo = null, riferimento = null } = {}) {
   if (!Array.isArray(messaggi)) return { messaggi, tolto: false, motivo: 'nessuna-conversazione' };
   if (!Number.isSafeInteger(posizione) || posizione < 0) return { messaggi, tolto: false, motivo: 'posizione-ignota' };
   const testoDi = (contenuto) => {
@@ -1224,10 +1241,21 @@ export function messaggiSenzaMessaggio(messaggi, { posizione = -1, ruolo = 'assi
   };
   /* ⛔ I `system` non si contano MAI: non sono messaggi della conversazione, sono il preambolo. */
   const candidati = messaggi
-    .map((messaggio, indice) => ({ messaggio, indice }))
+    .flatMap((messaggio, indice) => {
+      const recupero = leggiRecuperoMessaggio(messaggio);
+      return recupero && ruolo === 'assistant'
+        ? recupero.items.filter(item => item.type === 'text').map(item => ({ messaggio, indice, recupero, item }))
+        : [{ messaggio, indice }];
+    })
     .filter(({ messaggio }) => messaggio?.role === ruolo && (ruolo !== 'assistant' || testoDi(messaggio.content).trim() !== ''));
-  const scelto = candidati[posizione];
+  const scelto = (riferimento && candidati.find(c => c.item?.messageId === riferimento)) || candidati[posizione];
   if (!scelto) return { messaggi, tolto: false, motivo: 'posizione-assente' };
+  if (scelto.recupero) {
+    if (scelto.item.messageId !== riferimento) return { messaggi, tolto: false, motivo: 'identita-recupero-non-combacia' };
+    const items = scelto.recupero.items.filter(item => item !== scelto.item);
+    return { messaggi: messaggi.flatMap((m, i) => i === scelto.indice
+      ? (items.length ? [messaggioDaRecupero({ ...scelto.recupero, items })] : []) : [m]), tolto: true, motivo: null };
+  }
   /*
    * ⛔ La conferma è un CONTENIMENTO, non un'uguaglianza: il primo messaggio della persona porta
    *   spesso un preambolo di progetto attorno alla consegna, e un flusso di testo può essere
@@ -2082,7 +2110,19 @@ export function messaggiDopoUnGiroFallito({ primaDelGiro, archiviati }) {
   return primaDelGiro.every((messaggio, indice) => uguale(messaggio, archiviati[indice])) ? archiviati : primaDelGiro;
 }
 
+/*
+ * G02 (dalla lane CLI, f7696afde, M7-C) — AVVIO IDEMPOTENTE. Chi può ripetere un avvio (la CLI dopo una risposta persa)
+ *   passa un `operationId` opaco; la firma dei parametri dell'avvio (JSON canonico RFC 8785, lo stesso `canonicalHash`
+ *   dei Workflow) distingue «lo stesso avvio ripetuto» da «un avvio diverso con lo stesso id». Non concede permessi e
+ *   non cambia il workspace. I campi `undefined` si tolgono come fa JSON.stringify; un valore non canonicalizzabile → null.
+ */
+function firmaOperazioneAvvio(parametri) {
+  try { return canonicalHash(JSON.parse(JSON.stringify(parametri))); } catch { return null; }
+}
+const OPERATION_ID_MASSIMO = 256;
+
 export function createSessionRegistry({
+  processOutputStoreFn,
   avviaSessioneFn = avviaSessioneReale,
   /*
    * P-13 (10/09): qui resta SOLO l'invalidazione. L'elenco lo costruisce `agent-service.mjs`, fra
@@ -2454,6 +2494,10 @@ export function createSessionRegistry({
   cartellaDatiProgettoFn = async (cartellaProgetto) => cartellaProgetto,
   elencaToolForgiatiFn = elencaToolForgiatiReale,
   abilitaToolForgiatoFn = abilitaToolForgiatoReale,
+  installaVersioneToolForgiatoOwnerFn = installaVersioneToolForgiatoOwnerReale,
+  elencaVersioniToolForgiatoOwnerFn = elencaVersioniToolForgiatoOwnerReale,
+  ripristinaVersioneToolForgiatoOwnerFn = ripristinaVersioneToolForgiatoOwnerReale,
+  validaManifestForgeFn = validaManifestForgeLocale,
   modello,
   chiave,
   /** Getter opzionale: consente a Provider settings di aggiornare OpenRouter senza riavviare il server. */
@@ -2500,7 +2544,7 @@ export function createSessionRegistry({
     'memory_list', 'notes_search', 'notes_read', 'tasks_search', 'research_search', 'conversation_search',
     // F-012 (piano 0.1.19 §1.5, 28/09): i TRE attrezzi dei run dei Workflow — di norma, come tutti gli
     // altri: il kernel li filtra da solo (root + runtime presente + Piano senza control). Ai passi no: qui sotto.
-    'workflow_status', 'workflow_output', 'workflow_control',
+    'workflow_status', 'workflow_output', 'workflow_control', 'process_output',
     // Rilievo 3 (piano 0.1.19 §1.7, 28/09): il modello può chiedere il modo Piano (D3: attrezzo + fascia).
     // Il kernel lo offre solo al root in Normale col canale presente.
     'request_plan_mode',
@@ -2528,6 +2572,19 @@ export function createSessionRegistry({
   ricercaWeb,
   // ⭐ 04/9, R-03 — se presente vince su `ricercaWeb`: letta a OGNI giro (come `chiaveFn`), così una fonte cambiata dalle Impostazioni vale dal giro successivo senza riavvio. Restituisce { ricercaWeb, richiediRicercaFn }.
   ricercaWebFn = null,
+  /*
+   * ⛔⛔ F009 (owner 01/10/2026, «come gli altri, insieme») — SINCRONA, `{ usaUtenteNormale }`: la preferenza della persona
+   * per l'utente di WSL (`preferenze-wsl-store.mjs`), letta a ogni comando come `ricercaWebFn`. Assente ⇒ l'utente
+   * predefinito della distro, come prima. Il «sì» a root senza nessuno interpellato vive invece sulla voce
+   * (`voce.consensiSessione`): una volta per sessione, in memoria.
+   */
+  preferenzeWslFn = null,
+  /*
+   * ⛔⛔ Fase B «casa di esecuzione» (owner 01/10/2026) — `{ node, rg }`, i binari per Linux che il pacchetto porta
+   * (`verificaCasaLinux`). Con loro ogni sessione ha la sua casa Linux (`voce.casaLinux`), accesa al primo attrezzo che la
+   * usa e chiusa con la sessione; «Automatico» vale Linux se WSL c'è, anche per i comandi `!`. Assenti ⇒ come prima.
+   */
+  casaLinux = null,
   /*
    * ⭐⭐⭐ 29/8 — FASE H, generate_image. A differenza di `ricercaWeb` sopra:
    * inoltrata SENZA logica propria — la decisione (quale endpoint
@@ -2625,7 +2682,41 @@ export function createSessionRegistry({
    */
   const compattazioniInBackground = new Map();
   let chiuso = false;
+  let recuperoOutputCompletato = false, recuperoOutputInCorso;
+  const eliminazioniOutputInCorso = new Set();
+  /* F009 — la preferenza dell'utente di WSL adesso; `null` senza lettore (come prima), «accesa» se il lettore lancia. */
+  const preferenzeWslAdesso = () => {
+    if (typeof preferenzeWslFn !== 'function') return null;
+    try { return { usaUtenteNormale: preferenzeWslFn()?.usaUtenteNormale !== false }; } catch { return { usaUtenteNormale: true }; }
+  };
+  const processOutputFor = voce => typeof processOutputStoreFn === 'function' ? async ({runId, toolCallId}, execute) => {
+    const assertCurrent = () => {
+      if (chiuso || !cartellaStore || sessioni.get(voce.sessionId) !== voce || voce.eliminata) {
+        throw Object.assign(new Error('Output storage requires an active, persisted session.'), {code: 'OUTPUT_SESSION_UNAVAILABLE'});
+      }
+    };
+    assertCurrent();
+    const store = await processOutputStoreFn();
+    assertCurrent();
+    return runWithProcessOutput({store, sessionId: voce.sessionId, runId, toolCallId,
+      readToolAvailable: strumentiEstesi.includes('process_output'),
+      emit: evento => {assertCurrent(); return broadcast(voce, evento, {durable: true});},
+    }, options => {assertCurrent(); return execute(options);});
+  } : undefined;
   const rifiutoPerChiusura = () => ({ erroreAvvio: 'Il server si sta spegnendo: riprova fra qualche secondo, quando sarà ripartito.', code: 'SERVER_SHUTTING_DOWN' });
+  const readProcessOutputFor = voce => typeof processOutputStoreFn === 'function' ? async (args,options) =>
+    formatProcessOutputPage(await readOutputFor(voce,args,options)) : undefined;
+  async function readOutputFor(voce,args,options) {
+    const assertCurrent=()=>{
+      if (!voce || sessioni.get(voce.sessionId)!==voce || voce.eliminata) throw Object.assign(new Error('Output not found in this session.'),{code:'OUTPUT_NOT_FOUND'});
+      if (chiuso || !cartellaStore || typeof processOutputStoreFn!=='function') throw Object.assign(new Error('Process output storage is unavailable.'),{code:'OUTPUT_SESSION_UNAVAILABLE'});
+    };
+    assertCurrent();
+    if (!args || typeof args!=='object' || Array.isArray(args) || Object.hasOwn(args,'sessionId')) throw Object.assign(new Error('Invalid output page request.'),{code:'OUTPUT_INVALID_INPUT'});
+    const store=await processOutputStoreFn();assertCurrent();
+    const page=await readProcessOutputPage(store,{...args,sessionId:voce.sessionId},options);
+    assertCurrent();return page;
+  }
   /** La finestra del modello dal catalogo, in sola lettura e sincrona; `null` = ignota (vale il solo tetto). */
   const leggiFinestraToken = (modelloPerRete) => {
     if (typeof finestraTokenFn !== 'function' || typeof modelloPerRete !== 'string' || !modelloPerRete) return null;
@@ -2633,6 +2724,14 @@ export function createSessionRegistry({
       const valore = finestraTokenFn(modelloPerRete);
       return Number.isFinite(valore) && valore > 0 ? Math.floor(valore) : null;
     } catch { return null; }
+  };
+  const sogliePerVoce = (voce) => {
+    const modelId = modelloDiSessionePerRete(voce);
+    const windowTokens = modelId === null ? null : leggiFinestraToken(modelId);
+    const cap = compattazione.leggiTettoEsplicito(process.env);
+    const soglie = compattazione.calcolaSoglie({ tettoToken: cap, finestraToken: windowTokens });
+    const source = cap !== null && soglie.soglia === cap ? 'explicit-cap' : windowTokens !== null ? 'route-minimum' : 'fallback';
+    return { ...soglie, modelId, source };
   };
   /* Il record per chi lo chiede (`statoCompattazione`): copia in RAM, riassunto compreso — è ciò che il modello legge al posto della storia, e la persona ha diritto di vederlo. */
   const recordPubblico = (record) => (compattazione.eRecordValido(record) ? structuredClone(record) : null);
@@ -3303,6 +3402,54 @@ export function createSessionRegistry({
     }
   }
 
+  // SHELL06: patch di un solo campo, nella coda durevole gia posseduta dallo store.
+  // Una seconda coda qui lascerebbe scritture invisibili al flush dello store.
+  function persistiImpostazioniComandi(voce, patch, esito) {
+    const applica = () => {
+      if (Object.hasOwn(patch, 'doveGiranoIComandi')) {
+        voce.doveGiranoIComandi = patch.doveGiranoIComandi;
+        voce.revisioneAmbienteComandi = (voce.revisioneAmbienteComandi ?? 0) + 1;
+        voce.cartellaComandi = null;
+      }
+      if (Object.hasOwn(patch, 'comandiNellaConversazione')) {
+        voce.comandiNellaConversazione = patch.comandiNellaConversazione;
+        voce.revisioneRaccontoComandi = (voce.revisioneRaccontoComandi ?? 0) + 1;
+        if (!patch.comandiNellaConversazione) voce.comandiDaRaccontare = [];
+      }
+      return esito;
+    };
+    if (!cartellaStore) return applica();
+    const scrittura = Promise.resolve(registraRigaFn({
+      cartellaStore, sessionId: voce.sessionId, durable: true,
+      record: { tipo: 'impostazioni-comandi', ...patch },
+    })).then(applica);
+    const pendenti = voce.scrittureImpostazioniComandi ??= new Set();
+    pendenti.add(scrittura);
+    scrittura.then(() => pendenti.delete(scrittura), () => pendenti.delete(scrittura));
+    return scrittura;
+  }
+
+  async function attendiImpostazioniComandi(voce) {
+    while (voce?.scrittureImpostazioniComandi?.size) {
+      await Promise.allSettled([...voce.scrittureImpostazioniComandi]);
+    }
+  }
+
+  function leggiImpostazioniComandiSalvate(intestazione, record) {
+    const scelte = { doveGiranoIComandi: null, comandiNellaConversazione: false };
+    for (const riga of [intestazione, ...record.filter(r => r.tipo === 'impostazioni-comandi')]) {
+      if (Object.hasOwn(riga, 'doveGiranoIComandi')) {
+        if (![null, 'windows', 'wsl2'].includes(riga.doveGiranoIComandi)) return null;
+        scelte.doveGiranoIComandi = riga.doveGiranoIComandi;
+      }
+      if (Object.hasOwn(riga, 'comandiNellaConversazione')) {
+        if (typeof riga.comandiNellaConversazione !== 'boolean') return null;
+        scelte.comandiNellaConversazione = riga.comandiNellaConversazione;
+      }
+    }
+    return scelte;
+  }
+
   /*
    * ⭐⭐⭐ BC-07 (11/09/2026) — I TEMPI DI UN GIRO, SU DISCO. Una riga per giro, non un campo per evento.
    *
@@ -3652,8 +3799,8 @@ export function createSessionRegistry({
     if (!Array.isArray(storia) || storia.length === 0) return null;
     const perRete = modelloDiSessionePerRete(voce);
     if (perRete === null) return null;
-    const finestraToken = leggiFinestraToken(perRete);
-    const soglie = compattazione.calcolaSoglie({ tettoToken: compattazione.leggiTettoToken(process.env), finestraToken });
+    const soglie = sogliePerVoce(voce);
+    const finestraToken = soglie.finestraToken;
     const proiettata = compattazione.applicaRecord(storia, voce.recordCompattazione);
     const { token, misura } = compattazione.misuraOccupazione({ messaggi: proiettata, finestraToken });
     const decisione = compattazione.decidiCompattazione({ token, soglia: soglie.soglia, emergenza: soglie.emergenza });
@@ -4689,6 +4836,7 @@ export function createSessionRegistry({
   function avviaESegui({
     sessionId = randomUUID(), taskId, cartella, task, comandoProva, messaggiIniziali,
     forkDa = null, voceEsistente = null, modelloRichiesta = null, reasoningRichiesto = null, mobile = false,
+    operationId = null, operationSignature = null, // G02-6: identità opaca di deduplica (vedi firmaOperazioneAvvio)
     /*
      * ⭐⭐⭐ D-11 (10/09) — DA DOVE È ARRIVATA LA RICHIESTA.
      *
@@ -4719,6 +4867,7 @@ export function createSessionRegistry({
      *   `agent_session_created` non è arrivato al giornale del Workflow — e toglie al passo gli attrezzi che un passo non ha.
      */
     legameWorkflow = null,
+    origineComandiId = null,
     permessiRichiesti = null, permessiPerAttrezzoRichiesti = null,
     modalitaOperativaRichiesta = null,
     /*
@@ -4880,6 +5029,7 @@ export function createSessionRegistry({
      * (piano `procedi-col-generare-un-snoopy-neumann.md`, Fase 3).
      */
     const voceNuova = !voceEsistente;
+    const origineComandi = sessioni.get(forkDa ?? padreId ?? origineComandiId);
     const voce = voceEsistente ?? {
       eventi: [], ascoltatori: new Set(), taskId,
       // ⭐ 03/9 — Full access: `cartella` è quella EFFETTIVA (allargata se il
@@ -4893,12 +5043,16 @@ export function createSessionRegistry({
       origineRichiesta,
       senzaInterfaccia: senzaInterfaccia === true, // decisione owner 30: vedi il parametro
       legameWorkflow: legameWorkflowValido(legameWorkflow), // F3-32: vedi il parametro
+      // G02-6: identità opaca di deduplica. Non concede alcun permesso e non cambia il workspace.
+      operationId, operationSignature,
       task, comandoProva, forkDa,
       nome: nomeDerivatoDalCompito(taskId, task), // 26/09, difetto (4): lo stesso nome che il ripristino le darebbe
       avviataAlle: clock().toISOString(), messaggiFinali: null, modello: modelloEffettivo,
       modelloPlanner: modelloPlannerEffettivo,
       reasoning: reasoningEffettivo, mobile, permessi: permessiEffettivi,
       modalitaOperativa: modalitaOperativaEffettiva,
+      doveGiranoIComandi: origineComandi?.doveGiranoIComandi ?? null,
+      comandiNellaConversazione: origineComandi?.comandiNellaConversazione === true,
       fallbackProviders: validaFallbackProviders(fallbackProviders ?? voceEsistente?.fallbackProviders ?? [], { usaAttrezzi: true }),
       permessiPerAttrezzo: permessiPerAttrezzoEffettivi, approvazionePendente: null, domandaPendente: null,
         reindirizzamentoPendente: null,
@@ -4981,12 +5135,13 @@ export function createSessionRegistry({
       /* ⛔ Si svuota SOLO dopo averli usati: un racconto consegnato due volte è peggio di uno perso. */
       voce.comandiDaRaccontare = [];
     }
-    const messaggiPrimaDelGiro = Array.isArray(messaggiInizialiEffettivi)
+    let messaggiPrimaDelGiro = Array.isArray(messaggiInizialiEffettivi)
       ? messaggiInizialiEffettivi
       : cronologiaDiPartenza;
       voce.controller = controller;
       voce.conclusa = false;
       voce.interrotta = false;
+      voce.codaInterrottaRecuperata = false;
     /*
      * ⭐⭐⭐ FASE L (30/8) — `sessionId` sulla voce stessa (prima viveva
      * solo come chiave della Map): `broadcast()` ne ha bisogno per
@@ -5014,6 +5169,8 @@ export function createSessionRegistry({
             avviataAlle: voce.avviataAlle, modello: voce.modello, modelloPlanner: voce.modelloPlanner,
             reasoning: voce.reasoning, mobile: voce.mobile, permessi: voce.permessi,
             modalitaOperativa: voce.modalitaOperativa,
+            doveGiranoIComandi: voce.doveGiranoIComandi,
+            comandiNellaConversazione: voce.comandiNellaConversazione,
             fallbackProviders: voce.fallbackProviders,
             permessiPerAttrezzo: voce.permessiPerAttrezzo, padreId: voce.padreId, profonditaDelega: voce.profonditaDelega,
             provider: voce.provider, runtimeId: voce.runtimeId, modelId: voce.modelId, fallbackConsent: voce.fallbackConsent,
@@ -5023,6 +5180,7 @@ export function createSessionRegistry({
             ...(voce.origineRichiesta ? { origine: voce.origineRichiesta } : {}),
             ...(voce.senzaInterfaccia ? { senzaInterfaccia: true } : {}), // decisione owner 30: sopravvive al riavvio
             ...(voce.legameWorkflow ? { workflow: voce.legameWorkflow } : {}), // F3-32: il legame del passo, prima di ogni giro
+            ...(voce.operationId ? { operationId: voce.operationId, operationSignature: voce.operationSignature } : {}), // G02-6: sopravvive al riavvio
           },
         });
       } catch (errore) {
@@ -5354,7 +5512,12 @@ export function createSessionRegistry({
     const onRicercaAnnulla = (argomenti) => researchOrchestrator.annulla({ id: argomenti?.id });
     const onRicercaElimina = async (argomenti) => researchOrchestrator.elimina({ cartella: await datiDi(voce), id: argomenti?.id });
 
+    const ricostruisciContestoIniziale = voce.ripristinata === true
+      && Array.isArray(messaggiInizialiEffettivi) && messaggiInizialiEffettivi.length > 0
+      && messaggiInizialiEffettivi[0]?.role !== 'system';
     const cloudOptions = {
+      processOutputFn: processOutputFor(voce),
+      ...(typeof processOutputStoreFn==='function' ? {processOutputReadFn:readProcessOutputFor(voce)} : {}),
       /*
        * ⭐⭐⭐ 03/9 — `voce.cartella`, non il parametro `cartella`: stessa
        * disciplina "letto ADESSO" già documentata due righe sotto per
@@ -5370,6 +5533,27 @@ export function createSessionRegistry({
          comandi `!` lanciati dalla persona da quando il modello ha parlato l'ultima volta. Senza
          racconti in sospeso sono identici ai parametri, bit per bit. */
       cartella: voce.cartella, task: taskEffettivo, modello: modelloEffettivo, chiave: chiaveEffettiva, comandoProva, messaggiIniziali: messaggiInizialiEffettivi,
+      /* G02 (dalla lane CLI, e1f7eb363): la CLI chiave il checkpoint su questa sessione e su come è nata. */
+      checkpointSessionId: sessionId,
+      checkpointOperation: voceNuova && forkDa ? 'fork' : voceEsistente ? 'resume' : 'start',
+      ...(ricostruisciContestoIniziale ? { ricostruisciContestoIniziale: true } : {}),
+      ...(cartellaStore && (ricostruisciContestoIniziale || !(Array.isArray(messaggiInizialiEffettivi) && messaggiInizialiEffettivi.length)) ? {
+        onStoriaIniziale: async messaggi => {
+          const piano = pianificaStoriaDiVoce(voce, messaggi, { versioneGiro, fase: 'ripresa' });
+          try {
+            await scriviRigaSyncOInCoda(voce, piano.record);
+            piano.applica();
+            voce.messaggiPendente = messaggi;
+            messaggiPrimaDelGiro = messaggi;
+            if (ricostruisciContestoIniziale) await broadcast(voce, { type: 'StateDelta', delta: [{
+              op: 'add', path: '/recuperoCronologia', value: { versioneGiro, contestoRicostruito: true },
+            }] }, { durable: true });
+          } catch (error) {
+            piano.fallita();
+            throw error;
+          }
+        },
+      } : {}),
       /*
        * ⛔⛔⛔ 11/09/2026 — DOVE SI DEPOSITA UN FILE GENERATO: `cartellaBase`, non `cartella`.
        *
@@ -5408,8 +5592,14 @@ export function createSessionRegistry({
       modalitaOperativa: voce.modalitaOperativa ?? 'normale',
       segnaleStop: controller.signal,
       mobile: voce.mobile,
+      ambienteComandiFn: () => {
+        if (chiuso) throw Object.assign(new Error('COMMAND_ENVIRONMENT_CLOSED: il registro si sta chiudendo.'), { code: 'COMMAND_ENVIRONMENT_CLOSED' });
+        if (voce.scrittureImpostazioniComandi?.size) throw Object.assign(new Error('COMMAND_ENVIRONMENT_PENDING: attendi il salvataggio della scelta dei comandi.'), { code: 'COMMAND_ENVIRONMENT_PENDING' });
+        return { dove: voce.doveGiranoIComandi ?? null, revisione: voce.revisioneAmbienteComandi ?? 0 };
+      },
       // F3-32: un passo di Workflow non propone workflow, non presenta piani, non delega e non chiede (decisione owner 12).
-      strumentiEstesi: voce.legameWorkflow ? strumentiEstesi.filter((nome) => !ATTREZZI_NEGATI_AI_PASSI.has(nome)) : strumentiEstesi,
+      strumentiEstesi: strumentiEstesi.filter(nome => (nome!=='process_output' || typeof processOutputStoreFn==='function')
+        && (!voce.legameWorkflow || !ATTREZZI_NEGATI_AI_PASSI.has(nome))),
       ...(typeof ricercaWebFn === 'function' ? ricercaWebFn() : { ricercaWeb }), firma, immagine, persistGeneratedImageFn, removeGeneratedImageFn,
       // ⭐⭐⭐ FASE K (29/8) — `?? undefined`: `voce.modelloPlanner` è `null` per una sessione senza planner (mai passato a talosLavoraFn come `null`, che il kernel tratterebbe diversamente da "assente" in un controllo `typeof`).
       modelloPlanner: voce.modelloPlanner ?? undefined,
@@ -5464,8 +5654,22 @@ export function createSessionRegistry({
        * `delega_sottotask` compare solo in Workflow. Togliere il callback qui non rafforza quel
        * cancello; spezza soltanto i chiamanti interni prima che il kernel possa applicarlo.
        */
-      onDelega: (taskFiglio, cartellaFiglio) => subagentOrchestrator.delegaSottoTask({ sessionPadreId: sessionId, task: taskFiglio, cartella: cartellaFiglio }),
+      onDelega: (taskFiglio, cartellaFiglio, { modalita = 'lettura' } = {}) => subagentOrchestrator.delegaSottoTask({ sessionPadreId: sessionId, task: taskFiglio, cartella: cartellaFiglio, modalita }),
       codaMessaggiFn,
+      /* T25/B09 (owner 30/09 notte): le letture valgono per tutta la SESSIONE, non per un giro solo — come Claude Code tiene
+         le letture per tutta la conversazione. In memoria: dopo un riavvio del server il modello rilegge prima di sostituire. */
+      registroLetture: (voce.registroLetture ??= creaRegistroLetture()),
+      /* Politica di taglio di `naviga` (owner 01/10/2026, «per sessione, come Claude Code»): le pagine tagliate si salvano
+         intere nella cartella della sessione, che se ne va con lei. Senza negozio delle sessioni non c'è dove salvarle. */
+      cartellaPagineWeb: cartellaStore ? cartellaPagineWebDi(cartellaStore, sessionId) : null,
+      /* F001b (owner 01/10/2026, «Ricerca che continua», «nella sessione, in memoria»): le ricerche che superano il tempo della
+         risposta vivono qui, una lista per sessione, condivisa dai suoi giri; si fermano con Stop, eliminazione e spegnimento. */
+      ricercheInCorso: (voce.ricercheInCorso ??= creaRegistroRicerche()),
+      /* F009 (owner 01/10/2026, «una volta per sessione»): il «sì» alla shell di WSL come root senza carte resta qui, in
+         memoria, per tutti i giri della sessione; un riavvio del server lo richiede. */
+      preferenzeWslFn,
+      consensiSessione: (voce.consensiSessione ??= {}),
+      casaLinuxSessione: casaLinux ? (voce.casaLinux ??= creaCasaLinuxSessione({ ...casaLinux, env: ambienteSenzaCredenziali() })) : null,
       // ⭐⭐⭐ FASE E (29/8) — sempre passata (stesso principio di cartellaTrustHook per gli hook): agent-service.mjs legge .harness-ui-mcp.json SOLO se il workspace lo dichiara, zero I/O altrimenti (vedi la sua doc su cartellaTrustMcp).
       cartellaTrustMcp,
       // ⭐⭐⭐ FASE G (29/8) — stesso principio di cartellaTrustMcp appena sopra: agent-service.mjs legge .harness-ui-plugins/ SOLO se il workspace lo dichiara, zero I/O altrimenti.
@@ -5982,7 +6186,7 @@ export function createSessionRegistry({
     } catch (errore) {
       return { ok: true, attrezzi: null, errore: errore?.message ?? 'Il runtime agente non ha risposto.' };
     }
-    const offerti = new Set(strumentiEstesi);
+    const offerti = new Set(strumentiEstesi.filter(nome=>nome!=='process_output'||typeof processOutputStoreFn==='function'));
     const scelte = permessiPerAttrezzo && typeof permessiPerAttrezzo === 'object' ? permessiPerAttrezzo : {};
     const riga = (a, categoria) => ({
       nome: a.nome,
@@ -6003,6 +6207,9 @@ export function createSessionRegistry({
   }
 
   registryApi = Object.freeze({
+    async leggiOutputProcesso(sessionId,args,options) {
+      return readOutputFor(sessioni.get(sessionId),args,options);
+    },
     /*
      * ⛔ SOLO PER LE PROVE — mai usato dal prodotto. Stesso precedente di `_terminali` in
      *   `pty-terminal.mjs`, e per la stessa ragione: senza, la funzione che questo registro passa
@@ -6064,6 +6271,14 @@ export function createSessionRegistry({
         sessioniScartate = [];
         return ultimoRipristino;
       } // nessuna persistenza configurata: mai un tentativo di leggere un percorso che non c'è
+      if (!recuperoOutputCompletato && sessioni.size === 0 && eliminazioniOutputInCorso.size === 0 && typeof processOutputStoreFn === 'function') {
+        recuperoOutputInCorso ??= (async () => {
+          const store = await processOutputStoreFn();
+          await recoverProcessOutputDeletions({store, sessionExists: sessionId => esisteSessionePersistita({cartellaStore, sessionId})});
+          recuperoOutputCompletato = true;
+        })();
+        try {await recuperoOutputInCorso;} finally {recuperoOutputInCorso = undefined;}
+      }
       const indice = await elencaSessioniPersistiteFn({ cartellaStore, conDiagnostica: true });
       // La forma array resta accettata per gli adapter/fixture legacy.
       const id = Array.isArray(indice) ? indice : indice.sessionIds;
@@ -6085,7 +6300,7 @@ export function createSessionRegistry({
         motivo: motivo === 'intestazione-pendente-senza-journal' ? motivo : 'intestazione-in-quarantena',
       }));
       for (const sessionId of id) {
-        if (sessioni.has(sessionId)) continue; // già viva in questo processo: mai sovrascrivere
+        if (sessioni.has(sessionId) || sessioniEliminate.has(sessionId)) continue; // never restore a session being deleted
         /*
          * ⭐⭐⭐ F2-bis B (24/09/2026) — IL REPLAY LEGGE A STREAM. Prima: `leggiRegistroFn` (l'array intero: a 1.000 turni 550 MB
          *   di RSS, e col formato di oggi il muro della stringa a ~218 turni — rapporto A §2.6). Ora: `leggiRegistroAStream`
@@ -6113,6 +6328,11 @@ export function createSessionRegistry({
         if (!lettura || lettura.totale === 0) { scartate.push({ sessionId, motivo: 'vuota' }); continue; }
         const intestazione = record.find((r) => r.tipo === 'intestazione');
         if (!intestazione) { scartate.push({ sessionId, motivo: 'senza-intestazione', dettaglio: `${lettura.totale} record, nessuna intestazione` }); continue; } // senza intestazione non c'è abbastanza per una voce onesta
+        const impostazioniComandi = leggiImpostazioniComandiSalvate(intestazione, record);
+        if (!impostazioniComandi) {
+          scartate.push({ sessionId, motivo: 'impostazioni-comandi-non-valide', dettaglio: 'La scelta salvata dei comandi non e valida; il registro originale e conservato.' });
+          continue;
+        }
         /*
          * ⛔ F2-bis B (24/09): un delta che parte OLTRE la storia ricostruita è un BUCO nel journal (una riga di storia persa
          *   dopo l'ultimo checkpoint). Mai una storia inventata — e, owner 26/09/2026 («Tenere fino al buco»), nemmeno una
@@ -6322,19 +6542,20 @@ export function createSessionRegistry({
          *   di due righe.
          */
         const rimozioniNonRiuscite = [];
-        const messaggiFinaliRipristinati = aggiungiConsegneDelegaDurevoli(rimozioni.reduce((lista, riferimento) => {
+        const applicaRimozioni = messaggi => rimozioni.reduce((lista, riferimento) => {
           if (!Array.isArray(lista)) return lista;
           const giro = /^giro:(\d+)$/u.exec(riferimento);
           const posizione = posizioneDelMessaggio(eventiOrdinati, riferimento);
           const avvio = giro ? eventiOrdinati.find((evento) => evento?.type === 'RunStarted' && evento._sequenza === Number(giro[1])) : null;
           const esito = messaggiSenzaMessaggio(lista, giro
             ? { posizione, ruolo: 'user', testo: typeof avvio?.input?.consegna === 'string' ? avvio.input.consegna : avvio?.input?.consegnaCorta ?? null }
-            : { posizione, ruolo: 'assistant', testo: testoDelMessaggioAssistente(eventiOrdinati, riferimento) });
+            : { posizione, riferimento, ruolo: 'assistant', testo: testoDelMessaggioAssistente(eventiOrdinati, riferimento) });
           if (!esito.tolto) rimozioniNonRiuscite.push({ riferimento, motivo: esito.motivo });
           return esito.messaggi;
-        }, messaggiFinaliRecord?.messaggiFinali ?? null), finalePiuRecente?.indice ?? -1);
+        }, messaggi);
+        const messaggiFinaliRipristinati = aggiungiConsegneDelegaDurevoli(applicaRimozioni(messaggiFinaliRecord?.messaggiFinali ?? null), finalePiuRecente?.indice ?? -1);
         const messaggiPendenteRipristinati = aggiungiConsegneDelegaDurevoli(
-          Array.isArray(checkpointRecord?.messaggi) ? checkpointRecord.messaggi : null,
+          applicaRimozioni(Array.isArray(checkpointRecord?.messaggi) ? checkpointRecord.messaggi : null),
           checkpointPiuRecente?.indice ?? -1,
         );
         /*
@@ -6352,6 +6573,8 @@ export function createSessionRegistry({
           cartella: cartellaRipristinata, cartellaBase: intestazione.cartella, cartellaGiaScelta: intestazione.cartellaGiaScelta,
           task: intestazione.task,
           comandoProva: intestazione.comandoProva, forkDa: intestazione.forkDa,
+          operationId: typeof intestazione.operationId === 'string' ? intestazione.operationId : null, // G02-6
+          operationSignature: typeof intestazione.operationSignature === 'string' ? intestazione.operationSignature : null,
           avviataAlle: intestazione.avviataAlle, messaggiFinali: messaggiFinaliRipristinati,
           messaggiPendente: messaggiPendenteRipristinati,
           modello: impostazioni.modello, modelloPlanner: impostazioni.modelloPlanner, reasoning: impostazioni.reasoning,
@@ -6362,6 +6585,7 @@ export function createSessionRegistry({
              resta com'è (Axon Framework, «Event Versioning», letto il 23/09/2026: «the complete event history
              remains intact»). La voce ricorda che la usava, per la fascia dell'interfaccia. */
           mobile: intestazione.mobile, permessi: impostazioni.permessi, modalitaOperativa: impostazioni.modalitaOperativa === 'piano' ? 'piano' : 'normale', permessiPerAttrezzo: impostazioni.permessiPerAttrezzo,
+          ...impostazioniComandi,
           usavaModalitaWorkflow: impostazioni.modalitaOperativa === 'workflow',
           provider: intestazione.provider ?? 'cloud', runtimeId: intestazione.runtimeId ?? null,
           modelId: impostazioni.modelId ?? impostazioni.modello ?? null, fallbackConsent: intestazione.fallbackConsent === true,
@@ -6378,9 +6602,42 @@ export function createSessionRegistry({
           journalRiparazione: riparazione, // F3 (24/09): per dire il vero a chi riprende su una coda ancora incerta
           journal: lettura.journal, // F2-bis B (24/09): ciò che il file sa della storia; su un file vecchio la prima scrittura sarà un checkpoint (migrazione)
         };
+        // RETRY07: a crash can leave durable text/results after the canonical
+        // history. Recover them as explicitly incomplete assistant evidence,
+        // using physical journal indices, never content similarity. The journal
+        // remains unchanged until the existing explicit resume admission.
+        if (!finaleConfermaIlGiroCorrente && !bucoJournal) {
+          const indiciFisici = new Map(record.map((r, i) => [r, lettura.indici[i]]));
+          const storiaBase = checkpointRecord ? checkpointPiuRecente : finalePiuRecente;
+          const eventiConIndice = eventi.filter(e => indiciFisici.has(e))
+            .map(evento => ({ evento, indice: indiciFisici.get(evento) }));
+          try {
+            const coda = recuperaCodaInterrotta({ eventi: eventiConIndice, indiceStoria: storiaBase?.indice ?? -1 });
+            if (coda) {
+              const ultimoAvvio = eventi.findLastIndex(e => e.type === 'RunStarted');
+              let base = voce.messaggiPendente ?? voce.messaggiFinali;
+              if (!Array.isArray(base)) {
+                base = messaggiRipristinabiliDaEventi({ ...voce, eventi: eventi.slice(0, ultimoAvvio) });
+              }
+              // A resumed run normally has its own input checkpoint. For a
+              // legacy journal without it, use the exact announced follow-up.
+              const input = eventi[ultimoAvvio]?.input;
+              if (!checkpointRecord && input?.seguito && typeof input.consegna === 'string') {
+                base = [...base, { role: 'user', content: imageMessageContent(input.consegna, input.immagini) }];
+              }
+              voce.messaggiPendente = [...base, coda];
+              voce.codaInterrottaRecuperata = true;
+            }
+          } catch (error) {
+            if (error?.code !== 'HISTORY_RECOVERY_AMBIGUOUS') throw error;
+            voce.recuperoCodaAmbiguo = true;
+          }
+        }
         // SESSION-RESTORE-LAZY-WATCHER-24 — nessun watcher durante il boot:
         // la cronologia resta leggibile e il primo vero resume lo attiverà.
         voce.fermaWatcher = null;
+        // Reading the journal yields: deletion or another restore may have won meanwhile.
+        if (sessioni.has(sessionId) || sessioniEliminate.has(sessionId)) continue;
         sessioni.set(sessionId, voce);
         /*
          * ⭐ F3 (24/09/2026), decisione 7 — LA RIPARAZIONE SI DICE, mai in silenzio: un evento persistito che F5 mostra
@@ -6787,9 +7044,28 @@ export function createSessionRegistry({
       cartellaId, cartellaLibera, workspaceLaunchId, consegna, comandoProva, immagini = [],
       modello: modelloScelto = null, modelloPlanner: modelloPlannerScelto = null, reasoning: reasoningScelto = null, mobile = false, fallbackProviders = [],
       permessi: permessiScelto = null, permessiPerAttrezzo: permessiPerAttrezzoScelto = null, modalitaOperativa: modalitaOperativaScelta = null,
+      operationId = null,
     },
     origineRichiesta = null) { // ⭐ D-11, argomento a parte: vedi la doc su `avvia`
       if (modalitaOperativaScelta !== null && !MODALITA_OPERATIVE.includes(modalitaOperativaScelta)) return esitoModalitaNonAmmessa(modalitaOperativaScelta);
+      /* G02-6: lo stesso avvio ripetuto restituisce la sessione già partita; lo stesso id con parametri diversi si rifiuta. */
+      if (operationId !== null && (typeof operationId !== 'string' || operationId.length === 0 || operationId.length > OPERATION_ID_MASSIMO)) {
+        return { erroreAvvio: 'Identità operazione non valida', code: 'QUERY_INVALID' };
+      }
+      const operationSignature = operationId === null ? null : firmaOperazioneAvvio({
+        cartellaId, cartellaLibera, workspaceLaunchId, consegna, comandoProva, immagini,
+        modello: modelloScelto, modelloPlanner: modelloPlannerScelto, reasoning: reasoningScelto, mobile, fallbackProviders,
+        permessi: permessiScelto, permessiPerAttrezzo: permessiPerAttrezzoScelto, modalitaOperativa: modalitaOperativaScelta,
+      });
+      if (operationId !== null && operationSignature === null) return { erroreAvvio: 'I parametri dell’avvio non si possono firmare', code: 'QUERY_INVALID' };
+      if (operationId !== null) {
+        const esistente = [...sessioni.entries()].find(([, voce]) => voce.operationId === operationId);
+        if (esistente) {
+          const [sessionIdEsistente, voce] = esistente;
+          if (voce.operationSignature !== operationSignature) return { erroreAvvio: 'La stessa identità operazione è già associata a un avvio diverso', code: 'START_OPERATION_CONFLICT' };
+          return { sessionId: sessionIdEsistente, operationId, duplicate: true };
+        }
+      }
       const scelteWorkspace = [cartellaId, cartellaLibera, workspaceLaunchId].filter((value) => typeof value === 'string' && value.length > 0);
       if (scelteWorkspace.length !== 1) {
         return { erroreAvvio: 'Serve una sola cartella per questa sessione', code: 'QUERY_INVALID' };
@@ -6831,6 +7107,7 @@ export function createSessionRegistry({
         // ⭐⭐⭐ 03/9 — cartellaLibera/workspaceLaunchId: la persona ha scelto ESATTAMENTE questa cartella, mai un invito ad allargarla oltre — cartellaId (allowlist) resta l'unico caso che allarga.
         // ⭐ 12/09 (BC-14): questa riga è ORA l'unico confine dell'ambito, e vale per tutti e quattro i permessi — prima la frase qui sopra diceva «"Full access" è il cancello obbligato per poterla scegliere», cancello che non esiste più.
         cartellaGiaScelta: Boolean(cartellaLibera) || Boolean(workspaceLaunchId),
+        operationId, operationSignature, // G02-6
         origineRichiesta, // ⭐ D-11
       });
       if (workspaceLaunchId && risultato.sessionId && typeof consumeWorkspaceLaunchFn === 'function') {
@@ -6865,6 +7142,7 @@ export function createSessionRegistry({
       if (modello !== null && (typeof modello !== 'string' || modello.length === 0)) return { erroreAvvio: 'Il modello del passo non è valido', code: 'QUERY_INVALID' };
       const radice = typeof rootSessionId === 'string' ? sessioni.get(rootSessionId) : null;
       if (!radice) return { erroreAvvio: 'La sessione che ha proposto il Workflow non esiste più', code: 'WORKFLOW_ROOT_SESSION_NOT_FOUND' };
+      if (radice.scrittureImpostazioniComandi?.size) return { erroreAvvio: 'Le impostazioni dei comandi stanno venendo salvate: riprova fra un momento.', code: 'SESSION_NOT_READY' };
       const cartella = radice.cartellaBase ?? radice.cartella;
       let risolvi;
       let rifiuta;
@@ -6888,7 +7166,7 @@ export function createSessionRegistry({
         task: { consegna, consegnaCorta: titoloCorto },
         modelloRichiesta: modello, reasoningRichiesto: null,
         permessiRichiesti: 'Read only', permessiPerAttrezzoRichiesti: {},
-        modalitaOperativaRichiesta: 'normale', senzaInterfaccia: true, legameWorkflow: legameValido,
+        modalitaOperativaRichiesta: 'normale', senzaInterfaccia: true, legameWorkflow: legameValido, origineComandiId: rootSessionId,
         onConclusioneFn: () => {
           conclusa = true;
           if (sessionId) chiudi(sessionId).then(risolvi, rifiuta);
@@ -6946,6 +7224,7 @@ export function createSessionRegistry({
     forka(sessionIdOrigine) {
       const originale = sessioni.get(sessionIdOrigine);
       if (!originale) return { erroreAvvio: 'Sessione origine non trovata', code: 'NOT_FOUND' };
+      if (originale.scrittureImpostazioniComandi?.size) return { erroreAvvio: 'Le impostazioni dei comandi stanno venendo salvate: riprova fra un momento.', code: 'SESSION_NOT_READY' };
       /* ⛔ REV-SESSION-READY — nella finestra fra l'evento finale e l'assestamento `messaggiFinali` è ancora quella del
          giro PRIMA: un fork da lì perderebbe l'ultimo giro in silenzio. Sincrono, non può aspettare: lo dice, e chi vuole
          aspettare ha `attendiAssestamento(sessionId)`. */
@@ -7052,6 +7331,7 @@ export function createSessionRegistry({
       const voce = sessioni.get(sessionId);
       if (!voce) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
       if (chiuso) return rifiutoPerChiusura(); // F3 (24/09): il fence dello spegnimento, prima di ogni altro controllo
+      if (voce.scrittureImpostazioniComandi?.size) return { erroreAvvio: 'Le impostazioni dei comandi stanno venendo salvate: riprova fra un momento.', code: 'SESSION_NOT_READY' };
       /* ⛔ REV-SESSION-READY — nella finestra fra l'evento finale e l'assestamento `messaggiFinali` è ancora quella del
          giro PRIMA: riprendere da lì perderebbe l'ultimo giro in silenzio. Sincrono, non può aspettare: lo dice, e chi vuole
          aspettare ha `attendiAssestamento(sessionId)`. */
@@ -7076,7 +7356,10 @@ export function createSessionRegistry({
           return { erroreAvvio: 'La notifica di delega non corrisponde alla coda durevole.', code: 'SESSION_NOT_READY' };
         }
       }
-      if (voce.interrotta && !haNuovoMessaggio && !rispostaDomanda) {
+      if (voce.recuperoCodaAmbiguo) {
+        return { erroreAvvio: 'Gli eventi del giro interrotto non possono essere associati con certezza. Nessun dato è stato modificato.', code: 'HISTORY_RECOVERY_AMBIGUOUS' };
+      }
+      if ((voce.interrotta || voce.codaInterrottaRecuperata) && !haNuovoMessaggio && !rispostaDomanda) {
         return {
           erroreAvvio: 'Questa sessione è stata interrotta: scrivi un nuovo messaggio per riprenderla in sicurezza.',
           code: 'SESSION_NOT_READY',
@@ -7186,14 +7469,16 @@ export function createSessionRegistry({
        * ottimista, PRIMA che questo evento arrivi — ma un F5, che
        * ricostruisce la chat SOLO dai RunStarted replayati, mostrava il
        * primo messaggio 3 volte e perdeva i due follow-up per sempre: non
-       * esisteva NESSUN evento che li rappresentasse. `talosLavora` non
-       * legge `task` quando `messaggiIniziali` è già pieno (lo ignora del
-       * tutto) — cambiarlo qui è sicuro, serve SOLO all'annuncio.
+       * esisteva NESSUN evento che li rappresentasse. Il nuovo task aggiorna
+       * l'annuncio senza sostituire la storia già costruita. Il contratto di
+       * delega resta però un limite operativo anche in ripresa: va preservato,
+       * senza riproporre il testo o gli allegati del primo giro.
        * `seguito:true` distingue "questo è un secondo turno" per app.js.
        */
       const taskAnnunciato = nuovoMessaggioUtente
         ? {
             consegna: nuovoMessaggioUtente, progetto: voce.task?.progetto, seguito: true,
+            ...(voce.task && Object.hasOwn(voce.task, 'contrattoDelega') ? { contrattoDelega: voce.task.contrattoDelega } : {}),
             ...(immagini.length ? { immagini } : {}),
             ...(consegnaCoda?.codaId ? { codaId: consegnaCoda.codaId } : {}),
             ...(consegnaCoda?.origine ? { origine: consegnaCoda.origine } : {}),
@@ -7229,6 +7514,14 @@ export function createSessionRegistry({
       const chiavi = patch && typeof patch === 'object' && !Array.isArray(patch) ? Object.keys(patch) : [];
       if (chiavi.length === 0 || chiavi.some((chiave) => !chiaviAmmesse.has(chiave))) {
         return { erroreAvvio: 'Nessuna impostazione valida da aggiornare', code: 'QUERY_INVALID' };
+      }
+      if (delegaLimitata(voce.task)
+        && ((Object.hasOwn(patch, 'permessi') && patch.permessi !== 'Read only')
+          || (Object.hasOwn(patch, 'permessiPerAttrezzo')
+            && (!patch.permessiPerAttrezzo || typeof patch.permessiPerAttrezzo !== 'object'
+              || Array.isArray(patch.permessiPerAttrezzo)
+              || Object.values(patch.permessiPerAttrezzo).some(valore => valore !== 'nega'))))) {
+        return { erroreAvvio: 'Questa delega è di sola lettura. Per eseguire modifiche avvia una nuova delega esplicita dalla sessione padre.', code: 'DELEGATION_READ_ONLY' };
       }
 
       if (Object.hasOwn(patch, 'modalitaOperativa') && !MODALITA_OPERATIVE.includes(patch.modalitaOperativa)) {
@@ -7377,6 +7670,7 @@ export function createSessionRegistry({
     async attendiAssestamento(sessionId) {
       const voce = sessioni.get(sessionId);
       if (voce?.assestamento) await voce.assestamento;
+      await attendiImpostazioniComandi(voce);
     },
 
     /** REV-SESSION-READY v3 — aspetta che la sessione esca dalla finestra di chiusura (assestamento, o un giro che riparte),
@@ -8178,6 +8472,14 @@ export function createSessionRegistry({
       return azioneSuRicerca(sessionId, ricercaId, (cartella, id) => researchOrchestrator.riprendi({ cartella, id }));
     },
     /**
+     * G02 (dalla lane CLI, ba548285a, M10-A) — ANNULLAMENTO dalla persona. Stessa autorità di `research_cancel` del
+     * modello e stessa strada di pausa/ripresa (`azioneSuRicerca`): nessuno stop generico della sessione. Una ricerca già
+     * ferma si annulla per sempre (terminata:'cancelled'); ciò che ha raccolto resta leggibile.
+     */
+    async annullaRicerca(sessionId, ricercaId) {
+      return azioneSuRicerca(sessionId, ricercaId, (cartella, id) => researchOrchestrator.annulla({ cartella, id }));
+    },
+    /**
      * ⭐⭐⭐⭐ L5 §6.8 «+1.1» — «Controlla se le fonti dicono ancora questo».
      * ⛔ A differenza delle altre quattro, questa **esce in rete**: apre le pagine citate, una
      *   alla volta, con il lettore validato del kernel. Per questo il suo «non si può» non è un
@@ -8268,6 +8570,39 @@ export function createSessionRegistry({
       }
       if (!esito) return { erroreAvvio: `Tool forgiato "${id}" non trovato in .tool-forge-store/`, code: 'NOT_FOUND' };
       return { ok: true };
+    },
+
+    /**
+     * G02 (dalla lane CLI, 4296295f9 + 53716a9cf, M10-C) — LE VERSIONI DI UNO STRUMENTO, SOLO DALLA PERSONA.
+     * Il `tool_create` del modello resta solo-creazione e non chiama mai queste strade. Una revisione nuova è sempre
+     * più alta di ogni revisione mai vista (anche dopo un ripristino), ne restano le ultime 10, ogni cambio lascia una
+     * riga di audit e lo strumento resta SPENTO finché la persona non lo riaccende. Uno strumento nato dal modello non
+     * si adotta in silenzio.
+     * ⛔ Adattato: il manifest passa dallo STESSO validatore del modello e capacità/azioni/rischio si prendono DA LUI,
+     *   non da chi chiama — un chiamante non può dichiarare un rischio più basso (lo store si fida del chiamante).
+     */
+    async installaVersioneToolForgiato(sessionId, { revision, manifest, evidence = null } = {}) {
+      if (!sessioni.get(sessionId)) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
+      const validazione = validaManifestForgeFn(manifest);
+      if (!validazione?.ok) return { erroreAvvio: `Il manifest dello strumento non è valido: ${(validazione?.diagnostica ?? []).join('; ') || 'forma non ammessa'}`, code: 'FORGE_INVALID' };
+      try {
+        const strumento = await installaVersioneToolForgiatoOwnerFn({ cartella: cartellaForge, revision, manifest, evidence,
+          capacita: validazione.capacita, azioni: validazione.azioni, rischio: validazione.rischio });
+        return { ok: true, strumento };
+      } catch (errore) {
+        if (errore instanceof ToolForgeStoreError) return { erroreAvvio: errore.message, code: errore.code };
+        throw errore;
+      }
+    },
+    async versioniToolForgiato(sessionId, id) {
+      if (!sessioni.get(sessionId)) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
+      try { return { ok: true, versioni: await elencaVersioniToolForgiatoOwnerFn({ cartella: cartellaForge, id }) }; }
+      catch (errore) { if (errore instanceof ToolForgeStoreError) return { erroreAvvio: errore.message, code: errore.code }; throw errore; }
+    },
+    async ripristinaVersioneToolForgiato(sessionId, id, revision) {
+      if (!sessioni.get(sessionId)) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
+      try { return { ok: true, strumento: await ripristinaVersioneToolForgiatoOwnerFn({ cartella: cartellaForge, id, revision }) }; }
+      catch (errore) { if (errore instanceof ToolForgeStoreError) return { erroreAvvio: errore.message, code: errore.code }; throw errore; }
     },
 
     /**
@@ -8402,15 +8737,14 @@ export function createSessionRegistry({
     doveGiranoIComandi(sessionId, dove) {
       const voce = sessioni.get(sessionId);
       if (!voce) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
+      if (chiuso) return rifiutoPerChiusura();
       if (dove !== null && dove !== 'wsl2' && dove !== 'windows') {
         return { erroreAvvio: 'Scelta non valida: attesi "wsl2", "windows" o null.', code: 'DOVE_NON_VALIDO' };
       }
-      voce.doveGiranoIComandi = dove;
       /* ⛔ La cartella di lavoro NON sopravvive al cambio: `/mnt/c/…` e `C:…` sono due modi di
          dire la stessa cosa che le due shell non si scambiano. Si riparte dalla cartella della
          sessione, che e' vera in tutt'e due. */
-      voce.cartellaComandi = null;
-      return { ok: true, dove };
+      return persistiImpostazioniComandi(voce, { doveGiranoIComandi: dove }, { ok: true, dove });
     },
 
     /**
@@ -8425,14 +8759,13 @@ export function createSessionRegistry({
     comandiNellaConversazione(sessionId, acceso) {
       const voce = sessioni.get(sessionId);
       if (!voce) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
+      if (chiuso) return rifiutoPerChiusura();
       if (typeof acceso !== 'boolean') {
         return { erroreAvvio: 'Scelta non valida: atteso true o false.', code: 'SCELTA_NON_VALIDA' };
       }
-      voce.comandiNellaConversazione = acceso;
       /* ⛔ Spegnendolo si butta anche ciò che era già in attesa: chi spegne non vuole che il giro
          successivo si porti dietro l'ultimo comando raccontato mentre era ancora acceso. */
-      if (!acceso) voce.comandiDaRaccontare = [];
-      return { ok: true, acceso };
+      return persistiImpostazioniComandi(voce, { comandiNellaConversazione: acceso }, { ok: true, acceso });
     },
 
     /**
@@ -8462,6 +8795,7 @@ export function createSessionRegistry({
     shell(sessionId, comando) {
       const voce = sessioni.get(sessionId);
       if (!voce) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
+      if (voce.scrittureImpostazioniComandi?.size) return { erroreAvvio: 'Le impostazioni dei comandi stanno venendo salvate: riprova fra un momento.', code: 'SESSION_NOT_READY' };
       if (!voce.conclusa && voce.interrotta) {
         // ⭐⭐⭐ FASE L (30/8) — "ancora in corso" e "interrotta da un riavvio" non sono lo stesso stato.
         return { erroreAvvio: 'Questa sessione è stata interrotta da un riavvio del server: un comando diretto qui richiederebbe scrivere sopra una cronologia che non concluderà mai. Avvia una sessione nuova.', code: 'SESSION_NOT_READY' };
@@ -8479,10 +8813,17 @@ export function createSessionRegistry({
        *   marcatore, un ramo che non lo supporta): meglio ripartire da un posto noto che da uno
        *   inventato.
        */
+      const revisioneAmbiente = voce.revisioneAmbienteComandi ?? 0;
+      const revisioneRacconto = voce.revisioneRaccontoComandi ?? 0;
+      const condividiComando = voce.comandiNellaConversazione === true;
       eseguiComandoDirettoFn({
+        processOutputFn: processOutputFor(voce),
         cartella: voce.cartellaComandi || voce.cartella, comando, mobile: voce.mobile, onEvento: (evento) => broadcast(voce, evento),
         /* ⛔ D-10F — la scelta della sessione, se c'e'. Assente = ripiego automatico, come prima. */
         dove: voce.doveGiranoIComandi ?? null,
+        /* F009: la stessa preferenza dell'utente di WSL che vale per il modello (un lettore che lancia vale «accesa»). */
+        preferenzeWsl: preferenzeWslAdesso(),
+        automaticoInLinux: Boolean(casaLinux),
       })
         .then((esito) => {
           /*
@@ -8499,7 +8840,7 @@ export function createSessionRegistry({
            *   l'ha già controllata chi ci era dentro.
            */
           const cartellaProposta = cartellaFinaleValida(esito?.cartellaFinale);
-          if (cartellaProposta) voce.cartellaComandi = cartellaProposta;
+          if (cartellaProposta && revisioneAmbiente === (voce.revisioneAmbienteComandi ?? 0)) voce.cartellaComandi = cartellaProposta;
           /*
            * ⭐⭐⭐ D-10S — l'interruttore, e perché il suo default è SPENTO (owner 11/09: «facciamo
            *   entrambi con switch scelto da utente, default off»).
@@ -8514,7 +8855,8 @@ export function createSessionRegistry({
            * ⛔ Lo switch vale al MOMENTO DEL COMANDO, non al momento del giro: accenderlo dopo non
            *   fa comparire a ritroso comandi lanciati mentre era spento. Chi lo accende sa da quando.
            */
-          if (voce.comandiNellaConversazione === true) {
+          if (condividiComando && voce.comandiNellaConversazione === true
+            && revisioneRacconto === (voce.revisioneRaccontoComandi ?? 0)) {
             (voce.comandiDaRaccontare ??= []).push(raccontoDelComando({
               comando, codice: esito?.codice, testo: esito?.testo,
             }));
@@ -9150,10 +9492,14 @@ export function createSessionRegistry({
       const posizione = posizioneDelMessaggio(voce.eventi ?? [], chiave);
       if (cartellaStore) await registraRigaFn({ cartellaStore, sessionId, record: { tipo: 'messaggio-rimosso', riferimento: chiave } });
       voce.eventi = eventiSenzaMessaggio(voce.eventi ?? [], chiave);
-      const esito = messaggiSenzaMessaggio(voce.messaggiFinali, giro
+      const pendente = Array.isArray(voce.messaggiPendente);
+      const esito = messaggiSenzaMessaggio(pendente ? voce.messaggiPendente : voce.messaggiFinali, giro
         ? { posizione, ruolo: 'user', testo: testoUtente }
-        : { posizione, ruolo: 'assistant', testo: testoAssistente });
-      if (Array.isArray(esito.messaggi)) voce.messaggiFinali = esito.messaggi;
+        : { posizione, riferimento: chiave, ruolo: 'assistant', testo: testoAssistente });
+      if (Array.isArray(esito.messaggi)) {
+        if (pendente) voce.messaggiPendente = esito.messaggi;
+        else voce.messaggiFinali = esito.messaggi;
+      }
       return { ok: true, riferimento: chiave, toltoDalModello: esito.tolto, motivo: esito.motivo };
     },
 
@@ -9176,6 +9522,7 @@ export function createSessionRegistry({
       }
       const voce = sessioni.get(sessionId);
       if (!voce) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
+      if (voce.scrittureImpostazioniComandi?.size) return { erroreAvvio: 'Le impostazioni dei comandi stanno venendo salvate: riprova fra un momento.', code: 'SESSION_NOT_READY' };
       const dalVivo = !voce.conclusa && !voce.interrotta;
       if (dalVivo) {
         return { erroreAvvio: 'Sessione ancora in corso — fermala prima di eliminarla', code: 'SESSION_STILL_RUNNING' };
@@ -9187,8 +9534,17 @@ export function createSessionRegistry({
       sessioniEliminate.add(sessionId);
       scrittureInSospeso.set(sessionId, []);
       sessioni.delete(sessionId);
+      voce.ricercheInCorso?.fermaTutte('fermata'); // F001b: le ricerche che continuano se ne vanno con la sessione
+      voce.casaLinux?.chiudi(); // Fase B: la casa Linux della sessione se ne va con lei
+      let outputCleanup;
+      eliminazioniOutputInCorso.add(sessionId);
       try {
-        if (cartellaStore) await eliminaSessionePersistitaFn({ cartellaStore, sessionId });
+        if (cartellaStore && typeof processOutputStoreFn === 'function') {
+          const store = await processOutputStoreFn();
+          outputCleanup = await deleteSessionWithOutput({store, sessionId,
+            deleteJournal: () => eliminaSessionePersistitaFn({cartellaStore, sessionId}),
+          });
+        } else if (cartellaStore) await eliminaSessionePersistitaFn({ cartellaStore, sessionId });
       } catch (errore) {
         /* v8 (Codex v7, punto 1): la sessione è ancora viva, quindi ciò che ha provato a scrivere nell'attesa si scrive ora.
            v10 (Codex v9, punto 1): e si RIAPRE solo dopo. Il cancello resta chiuso per chi arriva adesso (va in fila dietro
@@ -9207,12 +9563,15 @@ export function createSessionRegistry({
           sessioni.set(sessionId, voce);
           ripristiniInCorso.delete(sessionId);
         }
+        if (errore?.code === 'OUTPUT_SESSION_BUSY') return {erroreAvvio: 'Il risultato del comando sta venendo salvato: riprova fra un momento.', code: 'SESSION_NOT_READY'};
         throw errore;
+      } finally {
+        eliminazioniOutputInCorso.delete(sessionId);
       }
       for (const [, lasciaCadere] of scrittureInSospeso.get(sessionId) ?? []) lasciaCadere();
       scrittureInSospeso.delete(sessionId);
       fermaWatcherSessione(voce);
-      return { ok: true };
+      return { ok: true, ...(outputCleanup ? {outputCleanup} : {}) };
     },
 
     /**
@@ -9243,6 +9602,8 @@ export function createSessionRegistry({
         .map(([sessionId, voce]) => ({
           sessionId,
           taskId: voce.taskId,
+          /* G02 (dalla lane CLI, M6-B 515b20b6c + 11cfc27ca): il progetto a cui la sessione appartiene, se il task lo porta. */
+          progetto: typeof voce.task?.progetto === 'string' && voce.task.progetto.trim().length > 0 ? voce.task.progetto : null,
           nome: voce.nome ?? null,
           avviataAlle: voce.avviataAlle,
           /* ⭐ 11/09 — l'ultima volta che il modello ha parlato in questa sessione: è ciò che
@@ -9401,6 +9762,22 @@ export function createSessionRegistry({
       return { record: recordPubblico(voce.recordCompattazione), inCorso: compattazioniInBackground.has(sessionId) };
     },
 
+    /** La policy attuale è una lettura della stessa decisione usata dal kernel. */
+    politicaCompattazione(sessionId) {
+      const voce = sessioni.get(sessionId);
+      if (!voce) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
+      const soglie = sogliePerVoce(voce);
+      return {
+        windowTokens: soglie.finestraToken,
+        triggerTokens: soglie.soglia,
+        warningTokens: soglie.warningTokens,
+        emergencyTokens: soglie.emergenza,
+        source: soglie.source,
+        modelId: soglie.modelId,
+        inProgress: compattazioniInBackground.has(sessionId) || compattazioniInCorso.has(sessionId),
+      };
+    },
+
     /**
      * ⭐ F3 (24/09/2026), decisione 3 — ANNULLA: una lapide `compattazione-annullata` (stesso `at` del record), scritta in
      * coda e confermata sui byte; la proiezione torna GREZZA in RAM e al riavvio (vedi `ripristina`). Solo fra un giro e
@@ -9447,13 +9824,16 @@ export function createSessionRegistry({
      */
     async chiudi({ attesaMassimaMs = 10_000 } = {}) {
       chiuso = true;
+      for (const v of sessioni.values()) v.ricercheInCorso?.fermaTutte('fermata'); // F001b: nessun rg orfano dopo lo spegnimento
+      for (const v of sessioni.values()) v.casaLinux?.chiudi(); // Fase B: nessun Node per Linux orfano dopo lo spegnimento
       const sintesiInCorso = compattazioniInBackground.size;
       if (!cartellaStore) return { scaduta: false, scrittureAttese: 0, giri: 0, sintesiInCorso };
       let scadenza = null;
       const timer = new Promise((resolve) => { scadenza = setTimeout(() => resolve({ scaduta: true }), attesaMassimaMs); });
       try {
         const esito = await Promise.race([
-          attendiScrittureFn({ cartellaStore }).then((r) => ({ scaduta: false, ...r })).catch((errore) => {
+          Promise.all([...sessioni.values()].map(attendiImpostazioniComandi))
+            .then(() => attendiScrittureFn({ cartellaStore })).then((r) => ({ scaduta: false, ...r })).catch((errore) => {
             console.error('[session-store] flush allo spegnimento incompleto:', errore instanceof Error ? errore.message : errore);
             return { scaduta: true, scrittureAttese: 0, giri: 0 };
           }),

@@ -70,7 +70,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Build installer/ZIP fallita.' }
 
       - name: installa, avvia e disinstalla prima del tag
-        timeout-minutes: 8
+        # 01/10/2026: 15 min, piu' della somma dei limiti interni di ci-smoke.ps1 (300 + 180 + 300 s); vedi R04-SMOKE-LIMITI.
+        timeout-minutes: 15
         run: |
           $version = (Get-Content harness-ui/desktop/package.json -Raw | ConvertFrom-Json).version
           $installer = "harness-ui/desktop/dist/TALOS-Setup-$version.exe"

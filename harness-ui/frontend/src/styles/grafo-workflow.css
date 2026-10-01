@@ -339,3 +339,27 @@ dialog.talos-wfg-conferma::backdrop { background: var(--talos-overlay); }
 .talos-wfg__output-full { max-height: min(50vh, 36rem); }
 .talos-wfg__output-open, .talos-wfg__output-download, .talos-wfg__output-more { display: inline-block; margin-inline-end: 10px; font: inherit; }
 .talos-wfg__output-download:focus-visible, .talos-wfg__output-open:focus-visible, .talos-wfg__output-more:focus-visible { outline: 2px solid var(--talos-accent); outline-offset: 2px; }
+.talos-wfg__result-compact { margin: 0; color: var(--talos-muted); font-size: .75rem; line-height: 1.45; overflow-wrap: anywhere; }
+.talos-wfg__result-trigger { justify-self: start; font: inherit; }
+.talos-wfg__result-panel {
+  position: absolute; z-index: 12; inset: 0 0 0 auto; display: flex; flex-direction: column;
+  width: min(760px, calc(100% - 24px)); min-width: 0; min-height: 0;
+  border-inline-start: 1px solid var(--talos-border-strong); background: var(--talos-background);
+  color: var(--talos-text); box-shadow: -18px 0 44px color-mix(in srgb, var(--talos-background) 65%, transparent);
+}
+.talos-wfg__result-head { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 20px 24px 10px; border-bottom: 1px solid var(--talos-border); }
+.talos-wfg__result-head h3 { margin: 0; font-size: 1.0625rem; overflow-wrap: anywhere; }
+.talos-wfg__result-summary { margin: 0; padding: 10px 24px; color: var(--talos-muted); font-size: .75rem; }
+.talos-wfg__result-scroll { flex: 1; min-height: 0; overflow: auto; padding: 0 24px 24px; }
+.talos-wfg__result-panel .talos-wfg__outputs { gap: 12px; }
+.talos-wfg__result-panel .talos-wfg__output { padding: 14px; border-radius: var(--wfg-raggio); background: var(--talos-card); }
+.talos-wfg__output-id { display: block; font: 600 .8125rem var(--talos-font-mono); overflow-wrap: anywhere; }
+.talos-wfg__output-preview-label { margin: 10px 0 0; font-size: .75rem; color: var(--talos-muted); }
+.talos-wfg__output-error { margin: 8px 0; color: var(--talos-danger); font-size: .75rem; overflow-wrap: anywhere; }
+.talos-wfg__result-panel .talos-wfg__output-full { max-height: none; }
+@container talos-wfg (max-width: 640px) {
+  .talos-wfg__result-panel { width: 100%; }
+  .talos-wfg__result-head { padding: 14px 16px 10px; }
+  .talos-wfg__result-summary { padding: 10px 16px; }
+  .talos-wfg__result-scroll { padding: 0 16px 16px; }
+}

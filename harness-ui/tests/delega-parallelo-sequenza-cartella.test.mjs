@@ -121,8 +121,8 @@ test('TRE PROVE — 1/3 · DUE DELEGHE IN PARALLELO: partono entrambe, e nella c
 
     // ⭐ nessun await fra le due: la seconda parte MENTRE la prima è ancora viva. È il caso che
     //   l'owner ha chiesto, e che nessuna prova copriva.
-    const primaRicevuta = madre.onDelega('scrivi la PARTE 1');
-    const secondaRicevuta = madre.onDelega('scrivi la PARTE 2');
+    const primaRicevuta = madre.onDelega('scrivi la PARTE 1', undefined, { modalita: 'modifica' });
+    const secondaRicevuta = madre.onDelega('scrivi la PARTE 2', undefined, { modalita: 'modifica' });
 
     assert.equal(finto.avvii.length, 3, 'madre + due figlie: se sono 2, la seconda delega non è partita');
     const [figliaA, figliaB] = finto.avvii.slice(1);

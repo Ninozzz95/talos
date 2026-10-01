@@ -44,7 +44,7 @@ test('PH-FALLBACK-01 kernel reale: esaurisce quattro tentativi, storia intatta, 
   const ultimo = b.richieste.at(-1); assert.equal(ultimo.body.model, 'glm-4.7-flash');
   assert.deepEqual(ultimo.body.messages, b.richieste[0].body.messages);
   assert.equal(JSON.stringify([b.eventi,b.consumi]).includes('finta-'), false);
-  assert.equal(b.richieste.length, 2, 'una rete per fornitore: la panchina sopprime le altre tre richieste');
+  assert.equal(b.richieste.length, 5, 'quattro richieste reali al primario prima della riserva');
 });
 
 test('PH-FALLBACK-02 classe permanente: niente fallback, credenziale segnalata una volta', async t => {
@@ -52,6 +52,41 @@ test('PH-FALLBACK-02 classe permanente: niente fallback, credenziale segnalata u
   await assert.rejects(esegui(creaFetchMultiProvider(fetch,b.opzioni)));
   assert.equal(b.richieste.length, 1);
   assert.equal(b.eventi.filter(e=>e.tipo==='cambio-fornitore').length, 0);
+});
+
+for (const stato of [401, 403]) test(`P2-KEYLESS-${stato} endpoint locale senza chiave: stato preservato, nessuna chiave inventata o retry`, async t => {
+  const b = await banco(t, (_req, res) => { res.writeHead(stato); res.end('invalid api key'); }, {});
+  const endpoint = b.opzioni.dipendenze.leggiRuntime('deepseek').endpoint.replace(/\/deepseek$/u, '/ollama');
+  b.store.setRuntime('ollama', { endpoint });
+  const f = creaFetchMultiProvider(fetch, b.opzioni);
+  await assert.rejects(esegui(f, { modello: 'ollama:qwen3' }), error => {
+    assert.equal(error.stato, stato);
+    assert.doesNotMatch(error.message, /Credenziale rifiutata|chiave.*rifiutata/iu);
+    assert.match(error.message, stato === 401 ? /autenticazione|indirizzo|endpoint/iu : /accesso|permess/iu);
+    return true;
+  });
+  assert.equal(b.richieste.length, 1);
+  assert.equal(b.richieste[0].chiave, undefined);
+  assert.equal(b.eventi.some(e => typeof e === 'string' && /chiave.*rifiutata/iu.test(e)), false);
+  assert.equal(b.eventi.some(e => e.tipo === 'cambio-fornitore'), false);
+  assert.equal(b.store.elencaPool('ollama').length, 0);
+});
+
+test('P2-OPTIONAL-KEY-403 un divieto di accesso non mette in panchina la chiave facoltativa', async t => {
+  const b = await banco(t, (_req, res) => { res.writeHead(403); res.end('permission denied'); }, {});
+  const endpoint = b.opzioni.dipendenze.leggiRuntime('deepseek').endpoint.replace(/\/deepseek$/u, '/ollama');
+  b.store.setRuntime('ollama', { endpoint });
+  b.store.setKey('ollama', 'finta-ollama');
+  const f = creaFetchMultiProvider(fetch, b.opzioni);
+  await assert.rejects(esegui(f, { modello: 'ollama:qwen3' }), error => {
+    assert.equal(error.stato, 403);
+    assert.match(error.message, /accesso|permess/iu);
+    return true;
+  });
+  assert.equal(b.richieste.length, 1);
+  assert.equal(b.richieste[0].chiave, 'Bearer finta-ollama');
+  assert.equal(b.store.scegliChiave('ollama')?.chiave, 'finta-ollama');
+  assert.equal(b.eventi.some(e => typeof e === 'string' && /chiave.*rifiutata/iu.test(e)), false);
 });
 
 test('PH-FALLBACK-03 esclusione senza chiave e modello senza attrezzi', async t => {
@@ -95,11 +130,11 @@ test('PH-FALLBACK-20 stop DOPO che la richiesta è partita: un consumo «fermato
   assert.equal(fermati[0].costoDichiarato,null);
   assert.equal(fermati[0].provider,'deepseek');
 });
-test('PH-FALLBACK-06 errore di rete: il kernel esaurisce i tentativi prima del cambio',async t=>{
+test('PH-FALLBACK-06 errore di rete incerto: nessun reinvio o cambio',async t=>{
   const b=await banco(t,(_req,res)=>rispondiBene(res));let chiamateKernel=0;
   const f=creaFetchMultiProvider(async(url,init)=>{if(String(url).includes('/deepseek'))throw new TypeError('fetch failed');return fetch(url,init);},b.opzioni);
-  await f.eseguiConFallback(aggiunte=>chiamaConRitenta({...chiamata,...aggiunte,fetchDiRete:(...args)=>{chiamateKernel++;return aggiunte.fetchDiRete(...args);}}),chiamata);
-  assert.equal(chiamateKernel,5);assert.equal(b.eventi.at(-1).classe,'rete');
+  await assert.rejects(f.eseguiConFallback(aggiunte=>chiamaConRitenta({...chiamata,...aggiunte,fetchDiRete:(...args)=>{chiamateKernel++;return aggiunte.fetchDiRete(...args);}}),chiamata), {code:'PROVIDER_OUTCOME_UNKNOWN'});
+  assert.equal(chiamateKernel,1);assert.equal(b.eventi.length,0);
 });
 test('PH-FALLBACK-07 errore dopo il 200: separa la risposta parziale e conserva la storia',async t=>{
   const b=await banco(t,(req,res)=>{
@@ -112,10 +147,10 @@ test('PH-FALLBACK-07 errore dopo il 200: separa la risposta parziale e conserva 
     }
   });
   const delte=[];
-  const r=await esegui(creaFetchMultiProvider(fetch,b.opzioni),{onDelta:d=>delte.push(d)});
-  assert.equal(r.fornitoreEffettivo,'zai');
-  assert.equal(b.eventi.find(e=>e.tipo==='cambio-fornitore').rispostaInterrotta,true);
-  assert.deepEqual(b.richieste[0].body.messages,b.richieste[1].body.messages);
+  await assert.rejects(esegui(creaFetchMultiProvider(fetch,b.opzioni),{onDelta:d=>delte.push(d)}),e=>e.code==='PROVIDER_OUTCOME_UNKNOWN'&&e.parziale?.content==='Testo parziale.');
+  assert.equal(b.richieste.length,1);
+  assert.equal(b.eventi.filter(e=>e.tipo==='cambio-fornitore').length,0);
+  assert.equal(delte.filter(e=>e.tipo==='testo').map(e=>e.delta).join(''),'Testo parziale.');
   assert.equal(b.consumi[0].usage,null);assert.equal(b.consumi[0].costoDichiarato,null);
 });
 test('PH-FALLBACK-08 credito e contesto non diventano transitori per un 429 o 503',async t=>{
@@ -155,6 +190,7 @@ test('PH-FALLBACK-13 SDK nativo: il 503 esaurisce il budget del kernel prima del
   const opzioni={...chiamata,modello:'openai:gpt-5-nano'};
   await f.eseguiConFallback(aggiunte=>chiamaConRitenta({...opzioni,...aggiunte,fetchDiRete:(...args)=>{tentativi++;return aggiunte.fetchDiRete(...args);}}),opzioni);
   assert.equal(tentativi,5);assert.equal(b.richieste[0].url,'/openai/responses');
+  assert.equal(b.richieste.length,5,'SDK maxRetries:0: budget kernel senza tentativi locali fantasma');
 });
 test('PH-FALLBACK-14 OpenRouter: indirizzo configurato e chiave selezionata, mai Authorization precedente',async t=>{
   const b=await banco(t,(req,res)=>{if(req.headers.authorization==='Bearer finta-router'){res.writeHead(429);res.end('rate limit');}else rispondiBene(res);},{OPENROUTER_API_KEY:'finta-router',ZAI_API_KEY:'finta-zai'});
@@ -192,7 +228,8 @@ test('PH-FALLBACK-18 due turni: nessun ritorno silenzioso, URL e refuso restano 
 test('PH-FALLBACK-19 timeout del trasporto classificato da BC-44',async t=>{
   const b=await banco(t,(_req,res)=>rispondiBene(res));
   const f=creaFetchMultiProvider(async(url,init)=>{if(String(url).includes('/deepseek'))throw new DOMException('Tempo massimo','TimeoutError');return fetch(url,init);},b.opzioni);
-  await esegui(f);assert.equal(b.eventi.find(e=>e.tipo==='cambio-fornitore').classe,'timeout-fornitore');
+  await assert.rejects(esegui(f),e=>e.code==='PROVIDER_OUTCOME_UNKNOWN'&&e.classe==='timeout-fornitore');
+  assert.equal(b.eventi.length,0);
 });
 
 /*
@@ -227,7 +264,7 @@ test('PH-FALLBACK-21 chiave mancante: errore PROVIDER_KEY_MISSING col nome umano
  *   VERA del runtime (`eseguiConFallback`, nessuna riserva): l'errore pubblico in italiano deve portare con sé il testo già
  *   arrivato, perché è il kernel a decidere di continuare da lì. Prima della cura arrivava la frase, e il testo no.
  */
-test('PH-FALLBACK-STREAM-BREAK: senza riserva, l\'errore pubblico porta il testo già arrivato e resta transitorio', async t => {
+test('PH-FALLBACK-STREAM-BREAK: senza riserva, testo conservato ed esito incerto non ritentabile', async t => {
   const b = await banco(t, (_req, res) => {
     res.writeHead(200, { 'Content-Type': 'text/event-stream' });
     res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: 'Ecco il riepilogo' } }] })}\n\n`);
@@ -235,8 +272,8 @@ test('PH-FALLBACK-STREAM-BREAK: senza riserva, l\'errore pubblico porta il testo
   });
   const f = creaFetchMultiProvider(fetch, { ...b.opzioni, fallbackProviders: [] });
   await assert.rejects(() => esegui(f, { onDelta: () => {} }), (errore) => {
-    assert.equal(errore.code, 'PROVIDER_REQUEST_ERROR');
-    assert.equal(errore.transitorio, true, 'una connessione caduta è transitoria');
+    assert.equal(errore.code, 'PROVIDER_OUTCOME_UNKNOWN');
+    assert.equal(errore.transitorio, false, 'il guasto di rete non prova che la generazione non sia avvenuta');
     assert.equal(errore.parziale?.content, 'Ecco il riepilogo', 'il testo arrivato viaggia con l\'errore');
     return true;
   });
@@ -357,13 +394,13 @@ test('PH-FALLBACK-EMPTY: una risposta vuota non è un guasto del fornitore, e la
   const b = await banco(t, (_req, res) => {
     res.writeHead(200, { 'Content-Type': 'text/event-stream' });
     res.write(`data: ${JSON.stringify({ choices: [{ delta: { reasoning: 'penso al file intero' } }] })}\n\n`);
-    res.write(`data: ${JSON.stringify({ error: { code: 502, message: 'Provider returned error' }, choices: [{ delta: { content: '' }, finish_reason: 'error', native_finish_reason: 'MALFORMED_FUNCTION_CALL' }] })}\n\n`);
+    res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: '' }, finish_reason: 'stop' }] })}\n\n`);
     res.write(`data: ${JSON.stringify({ choices: [], usage: { prompt_tokens: 50, completion_tokens: 6, cost: 0.001 } })}\n\n`);
     res.end('data: [DONE]\n\n');
   });
   const f = creaFetchMultiProvider(fetch, b.opzioni);
   const risultato = await esegui(f, { onDelta: () => {}, accettaVuota: true });
-  assert.equal(risultato.vuota?.nativeFinishReason, 'MALFORMED_FUNCTION_CALL');
+  assert.equal(risultato.vuota?.finishReason, 'stop');
   assert.equal(b.consumi.length, 1);
   assert.equal(b.consumi[0].esito, 'completato');
   assert.equal(b.consumi[0].costoDichiarato, 0.001, 'il costo della chiamata vuota è nella ricevuta');

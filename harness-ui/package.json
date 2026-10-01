@@ -6,6 +6,7 @@
   "scripts": {
     "build:chat-upload": "node scripts/build-chat-upload-helper.mjs",
     "build:ui": "node scripts/build-ui.mjs",
+    "prepara:casa-linux": "node scripts/prepara-casa-linux.mjs",
     "verify:ui": "node scripts/verify-ui-manifest.mjs",
     "verify:all": "npm run build:chat-upload && node --test tests/*.test.mjs labs/electron-shell/*.test.mjs && node --test src/kernel/talosHarness.test.mjs && node scripts/kernel-controlla.mjs && npm --prefix frontend run verify",
     "aggiorna": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/aggiorna-4174.ps1",
@@ -25,6 +26,7 @@
     "canonicalize": "5.1.0",
     "docx": "9.5.1",
     "eventsource-parser": "4.1.0",
+    "iconv-lite": "0.7.3",
     "jszip": "3.10.1",
     "node-pty": "1.1.0",
     "pdf-lib": "1.17.1",

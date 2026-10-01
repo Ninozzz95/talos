@@ -219,3 +219,26 @@ test('⛔ AL CONTRARIO — cercaMemorie: parole che non ci sono tornano zero, e 
   assert.deepEqual(esito.memorie, []);
   assert.equal(esito.tutte, false);
 });
+
+/*
+ * LAB-T14 (pacchetto LAB v4: «memory_search non è letterale: query multi-token con token verbatim presenti → 0 match»). Era la
+ * ricerca della FRASE intera; dal 27/09 (decisione owner, memoria «come Hermes») la ricerca è per PAROLE (`ricerca-per-parole.mjs`)
+ * e lo schema lo dice al modello («Every word counts on its own»). Qui lo scenario del ticket, con identificatori veri del
+ * laboratorio: più parole presenti ma non attaccate, in qualunque ordine, e chi le ha TUTTE viene prima di chi ne ha una.
+ */
+test('T14-01 — più parole presenti ma separate, in qualunque ordine, trovano la memoria', () => {
+  // la memoria sbagliata PRIMA: senza l'ordine per punteggio vincerebbe lei
+  const memorie = [
+    { id: 'm-altra', titolo: 'Appunto', contenuto: 'Qui c\'è solo la parola token.' },
+    { id: 'm-giusta', titolo: 'Prova del laboratorio', contenuto: 'Il file contiene TOKEN_OK_V4 e, più avanti, la riga LINEA_APPEND_V4.' },
+  ];
+  for (const query of ['TOKEN_OK_V4 LINEA_APPEND_V4', 'LINEA_APPEND_V4 TOKEN_OK_V4', 'linea_append_v4']) {
+    const esito = cercaMemorie(memorie, { query });
+    assert.equal(esito.memorie[0]?.id, 'm-giusta', `«${query}»: la memoria che contiene le parole viene per prima`);
+  }
+});
+
+test('T14-02 — AL CONTRARIO: parole che non ci sono non trovano niente, anche se la query è lunga', () => {
+  const memorie = [{ id: 'm-1', titolo: 'Prova', contenuto: 'TOKEN_OK_V4' }];
+  assert.deepEqual(cercaMemorie(memorie, { query: 'ASSENTE_UNO ASSENTE_DUE' }).memorie, []);
+});

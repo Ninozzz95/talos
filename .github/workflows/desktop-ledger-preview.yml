@@ -105,6 +105,7 @@ jobs:
             harness-ui/desktop/.cache-r02/npm
             harness-ui/desktop/.cache-r02/llama-b10517-bin-win-cpu-x64.zip
             harness-ui/desktop/.cache-r02/llama-b10517-bin-win-vulkan-x64.zip
+            harness-ui/desktop/.cache-r02/casa-linux
           key: desktop-ledger-preview-${{ runner.os }}-${{ hashFiles('harness-ui/package-lock.json', 'harness-ui/desktop/package-lock.json', 'context-engine/package-lock.json') }}
       - name: All locked project dependencies
         run: |

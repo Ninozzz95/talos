@@ -18,8 +18,12 @@ it('NATIVE-06 conserva lo stato firmato soltanto con fine stream completa', asyn
     const frame = `data: ${JSON.stringify({ choices: [{ delta: { content: 'ciao', talos_provider_state: state } }] })}\n\n`
     const complete = await consumaFlussoSSE(new Response(frame + 'data: [DONE]\n\n'))
     assert.deepEqual(complete.scelta.talos_provider_state, state)
-    const partial = await consumaFlussoSSE(new Response(frame))
-    assert.equal(partial.scelta.talos_provider_state, undefined)
+    await assert.rejects(consumaFlussoSSE(new Response(frame)), errore => {
+        assert.equal(errore.code, 'PROVIDER_STREAM_INCOMPLETE')
+        assert.equal(errore.parziale.content, 'ciao')
+        assert.equal(JSON.stringify(errore).includes('talos_provider_state'), false)
+        return true
+    })
 })
 import { fileURLToPath } from 'node:url'
 it('CTX-KERNEL-INFERENCE-LEASE holds the resource through complete SSE consumption', async (t) => {
@@ -96,7 +100,7 @@ it('CTX-KERNEL-NO-HOOKS-8000 without Context Engine a long tool result keeps hea
     const tool = result.messaggiFinali.find(m => m.role === 'tool').content
     assert.ok(tool.startsWith('dato dato '), tool.slice(0, 40))
     assert.ok(tool.endsWith('ULTIMO VALORE'), tool.slice(-40))
-    assert.match(tool, new RegExp(`\\[tolti ${text.length - 8_000} caratteri dal mezzo\\]`))
+    assert.match(tool, new RegExp(`\\[TALOS cut ${text.length - 8_000} characters from the middle of this output\\]`))
     // AL CONTRARIO: un'uscita sotto il tetto arriva intera, senza marcatore.
     let count2 = 0
     const corto = await talosLavora({ cartella, task: { consegna: 'leggi il file e controlla' }, modello: 'x', chiave: 'y', strumentiEstesi: ['document_create'],
@@ -214,7 +218,10 @@ describe('ETICHETTA-SANDBOX — dire dove ha girato, e che cosa è vero lì', ()
     it('dichiara il fatto, non solo il valore: `none` non è una spiegazione', () => {
         assert.match(etichettaSandbox('none'), /^none \(.*stessi privilegi.*\)$/)
         assert.match(etichettaSandbox('none'), /nessun isolamento/)
-        assert.match(etichettaSandbox('wsl2'), /^wsl2 \(.*namespace Linux.*\)$/)
+        /* ⛔ F009 (01/10/2026): «namespace Linux: filesystem e processi separati» era falso — /mnt/c è il disco di Windows,
+           scrivibile, e l'interop lancia programmi Windows. L'etichetta ora dice che NON c'è isolamento. */
+        assert.match(etichettaSandbox('wsl2'), /^wsl2 \(Linux in WSL; nessun isolamento: .*\)$/)
+        assert.doesNotMatch(etichettaSandbox('wsl2'), /namespace|separat/i)
         assert.match(etichettaSandbox('adb-shell-on-device'), /^adb-shell-on-device \(/)
     })
     it('⛔ un valore che non conosco NON si decora: si restituisce com\'è', () => {
@@ -385,7 +392,9 @@ describe('LEVA 5 — la chiamata che ritenta', () => {
  * finto, ma con la forma vera).
  */
 function rispostaStreaming(eventiSSE) {
-    const testo = eventiSSE.map((e) => `data: ${typeof e === 'string' ? e : JSON.stringify(e)}\n\n`).join('')
+    // Successful fixtures use a terminal event. Truncated-stream tests construct their own body.
+    const completi = eventiSSE.includes('[DONE]') ? eventiSSE : [...eventiSSE, '[DONE]']
+    const testo = completi.map((e) => `data: ${typeof e === 'string' ? e : JSON.stringify(e)}\n\n`).join('')
     const bytes = new TextEncoder().encode(testo)
     return {
         ok: true,
@@ -507,11 +516,10 @@ describe('R1 — lo streaming SSE, testo + ragionamento + tool-call', () => {
         assert.deepEqual(usage, { prompt_tokens: 12, completion_tokens: 3 })
     })
 
-    it('⛔ un chunk malformato non fa crashare il flusso — solo quello viene ignorato', async () => {
+    it('⛔ un evento JSON malformato rifiuta il flusso senza inventare successo', async () => {
         const testoGrezzo = 'data: {rotto\n\ndata: ' + JSON.stringify({ choices: [{ delta: { content: 'sopravvive' } }] }) + '\n\n'
         const rispostaMista = { ok: true, status: 200, body: new ReadableStream({ start(c) { c.enqueue(new TextEncoder().encode(testoGrezzo)); c.close() } }) }
-        const { scelta } = await consumaFlussoSSE(rispostaMista, () => {})
-        assert.equal(scelta.content, 'sopravvive')
+        await assert.rejects(consumaFlussoSSE(rispostaMista, () => {}), { code: 'PROVIDER_STREAM_INVALID' })
     })
 
     it('⛔⛔⛔ chiamaConRitenta SENZA onDelta: bit-per-bit lo stesso comportamento di oggi — nessun `stream` nel corpo, r.json() come sempre', async () => {
@@ -564,7 +572,7 @@ describe('R1 — lo streaming SSE, testo + ragionamento + tool-call', () => {
         }
         await assert.rejects(
             chiamaConRitenta({ modello: 'x', chiave: 'y', messaggi: [], attrezzi: [], fetchDiRete: async () => rispostaRotta, onDelta: () => {} }),
-            /senza contenuto/,
+            { code: 'PROVIDER_STREAM_INCOMPLETE' },
         )
     })
 })
@@ -603,7 +611,7 @@ describe('LEVA 4 — l uscita del giudice, dove sta la diagnosi', () => {
         assert.ok(r.endsWith('Z'), 'la coda resta: dice PERCHE')
         // 10/09 (677672a6, «tre bugie del kernel»): il marcatore dichiara QUANTI caratteri ha
         // tolto, non solo che ha tagliato. 10.000 caratteri con budget 4.000 ⇒ 6.000 tolti.
-        const marcatore = r.match(/tolti (\d+) caratteri dal mezzo/)
+        const marcatore = r.match(/TALOS cut (\d+) characters from the middle/)
         assert.ok(marcatore, 'un taglio silenzioso si legge come «era tutto qui»')
         assert.equal(Number(marcatore[1]), 6_000, 'il numero dichiarato è quello vero')
     })
@@ -663,27 +671,9 @@ describe('LEVA 4 — l uscita del giudice, dove sta la diagnosi', () => {
     })
 })
 
-/*
- * ⭐⭐ IL PROMEMORIA "SCRITTURE SENZA PROVA" — nuovo il 23/8, non misurato.
- *
- * Non e' una funzione pura esportata (vive dentro il ciclo di `talosLavora`,
- * come contatore locale): qui si prova solo la regola dichiarata nel commento
- * sopra `SOGLIA_SCRITTURE_SENZA_PROVA` in `talosHarness.mjs`, cioe' che la
- * soglia sia 3 e non blocchi nulla — e' testo aggiunto al risultato di
- * `scrivi`, mai un rifiuto. Un test di integrazione sul ciclo intero
- * servirebbe una rete finta anche per `cerca`/`leggi`/`prova`: non c'era prima
- * di oggi e non lo si inventa qui solo per questo trapianto.
- */
-describe('Il promemoria "scritture senza prova" — verifica di sola lettura', () => {
-    it('la soglia dichiarata e 3, e il messaggio non e un rifiuto', async () => {
-        const testo = await import('node:fs/promises')
-            .then((fs) => fs.readFile(new URL('./talosHarness.mjs', import.meta.url), 'utf8'))
-        assert.match(testo, /SOGLIA_SCRITTURE_SENZA_PROVA = 3/,
-            'se questo numero cambia, va cambiato anche nella doc che lo giustifica')
-        assert.doesNotMatch(testo.match(/scritture senza chiamare "prova"[^}]*/)[0], /REFUSED/,
-            'e un avviso, non un cancello: non deve mai rifiutare la scrittura')
-    })
-})
+// LAB-T09: il promemoria euristico e' ritirato. La protezione ora verifica
+// il loop e i file reali in tests/runtime-message-provenance.test.mjs
+// (NUDGE03-WRITES/EDITS/NO-SUITE), anziche' cercare una stringa nel sorgente.
 
 /*
  * ⭐⭐⭐ STADIO A — LA COMPATTAZIONE. Piano `elegant-spinning-dongarra.md`, 23/8.
@@ -895,7 +885,7 @@ describe('talosLavora — il ciclo intero, con una rete finta', () => {
             { choices: [{ delta: { reasoning_content: 'un attimo.' } }] },
             { choices: [{ delta: { content: 'fatto, nessun attrezzo serve' } }] },
         ]
-        const testo = eventiSSE.map((e) => `data: ${JSON.stringify(e)}\n\n`).join('')
+        const testo = eventiSSE.map((e) => `data: ${JSON.stringify(e)}\n\n`).join('') + 'data: [DONE]\n\n'
         return {
             chiamate,
             fetch: async (url, opzioni) => {
@@ -1021,7 +1011,7 @@ describe('talosLavora — il ciclo intero, con una rete finta', () => {
                 },
             }],
         }
-        const rete = reteDiRisposte(RISCRIVE_UN_FILE_ESISTENTE, CONCLUSO_SUBITO)
+        const rete = reteDiRisposte({ role: 'assistant', content: '', tool_calls: [{ id: 'call_leggi', function: { name: 'leggi', arguments: JSON.stringify({ percorso: 'gia-presente.txt' }) } }] } /* T25/B09 (30/09): il modello legge prima di sostituire */, RISCRIVE_UN_FILE_ESISTENTE, CONCLUSO_SUBITO)
         const scritture = []
 
         const esito = await talosLavora({
@@ -1061,7 +1051,7 @@ describe('talosLavora — il ciclo intero, con una rete finta', () => {
                 function: { name: 'scrivi', arguments: JSON.stringify({ percorso: 'due-versioni.txt', contenuto: 'versione 2' }) },
             }],
         }
-        const rete = reteDiRisposte(PRIMA_SCRITTURA, SECONDA_SCRITTURA, CONCLUSO_SUBITO)
+        const rete = reteDiRisposte({ role: 'assistant', content: '', tool_calls: [{ id: 'call_leggi', function: { name: 'leggi', arguments: JSON.stringify({ percorso: 'due-versioni.txt' }) } }] } /* T25/B09 (30/09): il modello legge prima di sostituire */, PRIMA_SCRITTURA, SECONDA_SCRITTURA, CONCLUSO_SUBITO)
         const scritture = []
 
         const esito = await talosLavora({
@@ -2583,14 +2573,17 @@ describe('talosLavora — web_search, artifact_create, document_create e time_no
         assert.match(messaggioTool.content, /search failed: TALOS_WEB_TIMEOUT/)
     })
 
-    it('⭐⭐⭐ artifact_create SENZA onArtefatto: id locale deterministico da c.id, mai Date.now()/Math.random()', async () => {
+    it('⛔ artifact_create SENZA onArtefatto: canale indisponibile, nessun id o successo inventato', async () => {
         const cartella = cartellaVuota(it)
         const CHIAMA_ARTEFATTO = { role: 'assistant', content: null, tool_calls: [{ id: 'call_xyz', function: { name: 'artifact_create', arguments: '{"titolo":"Prova","html":"<!doctype html><html></html>"}' } }] }
         const rete = reteDiRisposte(CHIAMA_ARTEFATTO, CONCLUSO_SUBITO)
-        const esito = await talosLavora({ cartella, task: TASK, modello: 'x', chiave: 'y', fetchDiRete: rete.fetch, strumentiEstesi: ['artifact_create'] })
+        const eventi = []
+        const esito = await talosLavora({ cartella, task: TASK, modello: 'x', chiave: 'y', fetchDiRete: rete.fetch, strumentiEstesi: ['artifact_create'], onGiro: e => eventi.push(e) })
         assert.equal(esito.comeFinita, 'concluso')
         const messaggioTool = rete.chiamate[1].corpo.messages.find((m) => m.role === 'tool')
-        assert.equal(messaggioTool.content, 'created: "Prova" (id: artefatto-call_xyz)')
+        assert.match(messaggioTool.content, /^ARTIFACT_UNAVAILABLE:/)
+        assert.doesNotMatch(messaggioTool.content, /created:|artefatto-call_xyz/)
+        assert.equal(eventi.find(e => e.tipo === 'tool-esito' && e.toolCallId === 'call_xyz').isError, true)
     })
 
     it('⭐⭐⭐ artifact_create CON onArtefatto: la callback riceve titolo+html VERI, e il suo id vince', async () => {
@@ -3505,7 +3498,7 @@ describe('talosLavora — verificaPermessoScrittura (livelloAccesso/chiediApprov
             chiediApprovazioneFn: async (azione) => { azioniViste.push(azione); return true },
         })
         assert.equal(esito.comeFinita, 'concluso')
-        assert.deepEqual(azioniViste, [{ tipo: 'prova', comando: 'echo segno>marker-prova.txt' }])
+        assert.deepEqual(azioniViste, [{ tipo: 'prova', toolCallId: 'call_1', comando: 'echo segno>marker-prova.txt' }])
         assert.equal(existsSync(join(cartella, 'marker-prova.txt')), true, 'con il consenso, prova gira davvero')
     })
 
@@ -3591,7 +3584,7 @@ describe('talosLavora — verificaPermessoScrittura (livelloAccesso/chiediApprov
             chiediApprovazioneFn: async (azione) => { azioniViste.push(azione); return false },
         })
         assert.equal(esito.comeFinita, 'concluso')
-        assert.deepEqual(azioniViste, [{ tipo: 'scrivi', percorso: 'nuovo.txt', contenutoPrima: null, contenutoProposto: 'ciao' }])
+        assert.deepEqual(azioniViste, [{ tipo: 'scrivi', toolCallId: 'call_1', percorso: 'nuovo.txt', contenutoPrima: null, contenutoProposto: 'ciao' }])
         assert.equal(existsSync(join(cartella, 'nuovo.txt')), false)
         const messaggioTool = rete.chiamate[1].corpo.messages.find((m) => m.role === 'tool')
         assert.match(messaggioTool.content, /non ha approvato/)
@@ -3600,7 +3593,7 @@ describe('talosLavora — verificaPermessoScrittura (livelloAccesso/chiediApprov
     it('⭐⭐⭐ 28/8, ledger permessi §7.A — chiediApprovazioneFn su un file ESISTENTE riceve il contenuto VERO di prima, non null', async () => {
         const cartella = cartellaVuota(it)
         writeFileSync(join(cartella, 'nuovo.txt'), 'era già qui prima\n')
-        const rete = reteDiRisposte(CHIAMA_SCRIVI, CONCLUSO_SUBITO)
+        const rete = reteDiRisposte({ role: 'assistant', content: '', tool_calls: [{ id: 'call_leggi', function: { name: 'leggi', arguments: JSON.stringify({ percorso: 'nuovo.txt' }) } }] } /* T25/B09 (30/09): il modello legge prima di sostituire */, CHIAMA_SCRIVI, CONCLUSO_SUBITO)
         const azioniViste = []
         await talosLavora({
             cartella, task: TASK, modello: 'x', chiave: 'y', fetchDiRete: rete.fetch,
@@ -3609,7 +3602,7 @@ describe('talosLavora — verificaPermessoScrittura (livelloAccesso/chiediApprov
             chiediApprovazioneFn: async (azione) => { azioniViste.push(azione); return true },
         })
         assert.deepEqual(azioniViste, [{
-            tipo: 'scrivi', percorso: 'nuovo.txt',
+            tipo: 'scrivi', toolCallId: 'call_1', percorso: 'nuovo.txt',
             contenutoPrima: 'era già qui prima\n', contenutoProposto: 'ciao',
         }])
     })
@@ -6566,7 +6559,7 @@ describe('⛔⛔⛔ la valanga di chiamate identiche del motore locale — 08/09
             status: 200,
             body: new ReadableStream({
                 pull(controllore) {
-                    if (i >= eventi.length) { controllore.close(); return }
+                    if (i >= eventi.length) { controllore.enqueue(new TextEncoder().encode('data: [DONE]\n\n')); controllore.close(); return }
                     stato.chiesti += 1
                     controllore.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(eventi[i])}\n\n`))
                     i += 1
@@ -6657,7 +6650,7 @@ describe('⛔⛔⛔ la valanga vista da talosLavora, e l argomento troncato che 
                 const indice = chiamate.length
                 chiamate.push({ corpo: JSON.parse(opzioni.body) })
                 const eventi = eventiPerChiamata[Math.min(indice, eventiPerChiamata.length - 1)]
-                const testo = eventi.map((e) => `data: ${JSON.stringify(e)}\n\n`).join('')
+                const testo = eventi.map((e) => `data: ${JSON.stringify(e)}\n\n`).join('') + 'data: [DONE]\n\n'
                 return {
                     ok: true,
                     status: 200,
@@ -6800,7 +6793,7 @@ describe('⛔⛔⛔ lo STOP e immediato — 08/09/2026, owner: «si ferma all is
             status: 200,
             body: new ReadableStream({
                 async pull(c) {
-                    if (mandati >= 3) { c.close(); return }
+                    if (mandati >= 3) { c.enqueue(new TextEncoder().encode('data: [DONE]\n\n')); c.close(); return }
                     await new Promise((ok) => setTimeout(ok, 15))
                     mandati += 1
                     c.enqueue(new TextEncoder().encode(`data: ${JSON.stringify({ choices: [{ delta: { content: `pezzo${mandati} ` } }] })}\n\n`))

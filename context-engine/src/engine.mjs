@@ -128,9 +128,14 @@ export function createContextEngine({ store, model, tokenCounter, retrieval, emb
   function compiled(snapshot, records, { summary = snapshot.activeVersion?.summary, coveredThrough = snapshot.activeVersion?.coveredThrough ?? 0, evidence = [], targetModel } = {}) {
     const systemMessages = records.filter(r => ['system', 'developer'].includes(r.message.role)).map(r => r.message);
     const tailMessages = records.filter(r => r.sequence > coveredThrough && !['system', 'developer'].includes(r.message.role)).map(r => r.message);
+    /* G02 (01/10): a summary that ends INSIDE a turn (compaction-planner.mjs, a long first turn) covers that turn's person's
+       message too; it is shown verbatim before the summary, like Hermes protect_first_n, so the task is never paraphrased. */
+    const pinnedMessages = summary && tailMessages.length && tailMessages[0].role !== 'user'
+      ? records.filter(r => r.sequence <= coveredThrough && r.message.role === 'user').slice(-1).map(r => r.message)
+      : [];
     const messages = !summary && !snapshot.facts.some(f => f.status !== 'removed') && !evidence.length
       ? structuredClone([...systemMessages, ...tailMessages])
-      : composeActiveContext({ systemMessages, summary: summary ?? null, facts: snapshot.facts, tailMessages, evidence });
+      : composeActiveContext({ systemMessages, pinnedMessages, summary: summary ?? null, facts: snapshot.facts, tailMessages, evidence });
     if (!model.prepareContext || !targetModel) return messages;
     const prepared = model.prepareContext({ messages, model: targetModel, reset: Boolean(summary) });
     if (!Array.isArray(prepared?.messages)) fail('CTX_PROVIDER_CONTEXT_INVALID', 'Il modello non ha preparato un contesto valido.');
@@ -311,7 +316,7 @@ export function createContextEngine({ store, model, tokenCounter, retrieval, emb
       for (const id of parsed.assetRefs) if (!await store.readBlob({ sessionId, id })) fail('CTX_ASSET_MISSING', 'Conservare l’allegato prima di archiviare il messaggio.');
       return store.appendOriginalBatch({ sessionId, records: [parsed] });
     },
-    async startCompaction({ sessionId, idempotencyKey, sessionModel, kind = 'compact', tools = [], signal, projection }) {
+    async startCompaction({ sessionId, idempotencyKey, sessionModel, kind = 'compact', tools = [], signal, projection, withinTurn = false }) {
       signal?.throwIfAborted();
       const snapshot = await recoverInterrupted(sessionId, await state(sessionId));
       const existing = snapshot.jobs.find(job => job.idempotencyKey === idempotencyKey);
@@ -321,7 +326,7 @@ export function createContextEngine({ store, model, tokenCounter, retrieval, emb
         return existing;
       }
       const records = await originals(sessionId);
-      const selection = selectClosedPrefix(records, { retainRecentTurns: snapshot.settings.retainRecentTurns, force: true });
+      const selection = selectClosedPrefix(records, { retainRecentTurns: snapshot.settings.retainRecentTurns, force: true, withinTurn });
       if (selection.pendingCalls.length) fail('CTX_PENDING_TOOLS', 'Attendere i risultati degli strumenti.');
       if (!selection.prefix.length) fail('CTX_NOTHING_TO_COMPACT', 'Non ci sono scambi precedenti da compattare mantenendo intero l’ultimo scambio. Nessun messaggio è stato modificato.');
       const profile = await model.resolveModel({ sessionModel, settings: snapshot.settings });
@@ -381,7 +386,9 @@ export function createContextEngine({ store, model, tokenCounter, retrieval, emb
         // falliti prima di questa versione)
         if (!job) compactionCooling = await avvisaPausa(sessionId, snapshot.jobs);
         if (!job && !compactionCooling) {
-          try { job = await api.startCompaction({ sessionId, idempotencyKey: `auto-${snapshot.revision}-${await hash(identity(sessionModel))}`, sessionModel, tools, signal, projection }); }
+          /* G02: inside the current turn only when the context does not fit (compaction-planner.mjs `withinTurn`) */
+          const withinTurn = !budget.fits;
+          try { job = await api.startCompaction({ sessionId, idempotencyKey: `auto-${snapshot.revision}-${await hash(identity(sessionModel))}${withinTurn ? '-turn' : ''}`, sessionModel, tools, signal, projection, withinTurn }); }
           catch (error) { if (error.code !== 'CTX_NOTHING_TO_COMPACT') throw error; }
         }
         if (!budget.fits && job) {

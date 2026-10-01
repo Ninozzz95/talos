@@ -53,8 +53,8 @@ test('PH-UI-BROWSER componenti reali: menu, azioni, tastiera, desktop, mobile e 
     window.ph={creaProviderCard,creaSceltaFallback};
   `,resolveDir:frontend,sourcefile:'ph-banco.js'},tsconfigRaw:{},bundle:true,write:false,format:'iife',logLevel:'silent' });
   const stile = await build({absWorkingDir:tmpdir(),plugins:[sorgenti],entryPoints:[resolve(frontend,'src/styles/main.css')],tsconfigRaw:{},bundle:true,write:false,external:['./fonts/*'],logLevel:'silent'});
-  for(const larghezza of [1440,390]){
-    const page=await browser.newPage({viewport:{width:larghezza,height:1000},reducedMotion:'reduce'});
+  for(const larghezza of [1920,1440,390]){
+    const page=await browser.newPage({viewport:{width:larghezza,height:larghezza===1920?1080:1000},reducedMotion:'reduce'});
     t.after(()=>page.close());
     const errori=[];page.on('pageerror',e=>errori.push(e.message));
     // Tutta la prova è isolata: nessuna richiesta del browser può raggiungere un servizio.
@@ -89,7 +89,7 @@ test('PH-UI-BROWSER componenti reali: menu, azioni, tastiera, desktop, mobile e 
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
     assert.equal(await page.evaluate(()=>matchMedia('(prefers-reduced-motion: reduce)').matches),true);
     await mkdir(prove,{recursive:true});
-    await page.screenshot({path:resolve(prove,`PH-UI-${larghezza}.png`),fullPage:true});
+    if(larghezza===1920)await page.screenshot({path:resolve(prove,`PH-UI-${larghezza}.png`),fullPage:true});
     assert.deepEqual(errori,[]);
   }
 });

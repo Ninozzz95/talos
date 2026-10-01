@@ -108,6 +108,17 @@ test('R02-PERCORSI — binari inclusi nelle risorse e scoperta sorgente conserva
   const p = risolviPercorsi({ appPath, isPackaged: true, resourcesPath: resolve('risorse') });
   assert.deepEqual(p.localRuntime, { cpu: resolve('risorse/local-runtime/cpu/llama-server.exe'), vulkan: resolve('risorse/local-runtime/vulkan/llama-server.exe') });
   assert.equal(risolviPercorsi({ appPath }).localRuntime, undefined);
+  assert.equal(p.casaLinux, resolve('risorse/casa-linux/linux-x64'), 'fase B: i binari per Linux stanno nelle risorse, come llama');
+  assert.equal(risolviPercorsi({ appPath }).casaLinux, undefined);
+  assert.equal(risolviPercorsi({ appPath, isPackaged: true, resourcesPath: resolve('risorse'), harnessDir: resolve('dichiarato') }).casaLinux, undefined);
+});
+
+test('CASA-LINUX-AMBIENTE — installato: il server riceve TALOS_CASA_LINUX; dal sorgente resta quello dell ambiente (o nessuno)', () => {
+  const base = { execPath: resolve('Electron.exe'), port: 49152, token: 'a'.repeat(64), dataDir: resolve('profilo') };
+  const installato = creaAvvioFiglio({ ...base, percorsi: { ...percorsiR03, casaLinux: resolve('risorse/casa-linux/linux-x64') }, env: { TALOS_CASA_LINUX: 'vecchio' } });
+  assert.equal(installato.options.env.TALOS_CASA_LINUX, resolve('risorse/casa-linux/linux-x64'), 'il pacchetto vince su un valore ereditato');
+  assert.equal(creaAvvioFiglio({ ...base, percorsi: percorsiR03, env: {} }).options.env.TALOS_CASA_LINUX, undefined);
+  assert.equal(creaAvvioFiglio({ ...base, percorsi: percorsiR03, env: { TALOS_CASA_LINUX: 'dichiarato' } }).options.env.TALOS_CASA_LINUX, 'dichiarato');
 });
 
 test('R02-MOTORE — Vulkan verificato, ripiego CPU e override esplicito', async () => {
@@ -136,6 +147,46 @@ test('F63-APRI-FUORI: solo https://github.com/… va nel browser del sistema; al
   ]) {
     assert.equal(apribileNelBrowserDelSistema(no), false, String(no));
   }
+});
+
+/*
+ * ⛔ 01/10/2026, owner: «la app desktop non apre il browser per accedere a openrouter». Il guscio mandava fuori solo github.com,
+ *   e `https://openrouter.ai/auth?…` (PO-01, `openrouter-oauth.mjs`) moriva nel `deny`. Passa SOLO la pagina d'accesso, esatta:
+ *   il resto di openrouter.ai, e ogni sosia, resta chiuso come prima.
+ * ⛔ E il RITORNO dev'essere il nostro: quella pagina CONCEDE una chiave. Un link nella chat (un modello manipolato lo può
+ *   scrivere) verso `openrouter.ai/auth` con un `callback_url` altrui farebbe arrivare il codice a un estraneo, che lo
+ *   scambierebbe per una chiave a spese della persona. ⇒ Fuori solo senza ritorno (codice a schermo: lo vede solo la persona)
+ *   o col ritorno sul server locale di QUESTA app (`base`), sulla rotta `/api/v1/auth/openrouter/ritorno`.
+ */
+test('OPENROUTER-ACCESSO: la pagina d accesso di OpenRouter va nel browser del sistema; nient altro di openrouter.ai', async () => {
+  const { apribileNelBrowserDelSistema } = await import('../runtime.mjs');
+  const base = 'http://127.0.0.1:61234';
+  const ritorno = (r) => `https://openrouter.ai/auth?callback_url=${encodeURIComponent(r)}&code_challenge=SFIDA&code_challenge_method=S256`;
+  for (const si of [
+    ritorno(`${base}/api/v1/auth/openrouter/ritorno/ABC`),
+    ritorno(`${base}/api/v1/auth/openrouter/ritorno`),
+    'https://openrouter.ai/auth?code_challenge=SFIDA&code_challenge_method=S256&key_label=TALOS',
+  ]) {
+    assert.equal(apribileNelBrowserDelSistema(si, { base }), true, si);
+  }
+  for (const no of [
+    'https://openrouter.ai/', 'https://openrouter.ai/settings/keys', 'https://openrouter.ai/auth/altro', 'https://openrouter.ai/authx',
+    'http://openrouter.ai/auth', 'https://openrouter.ai:8443/auth', 'https://u:p@openrouter.ai/auth', 'https://www.openrouter.ai/auth',
+    'https://openrouter.ai.evil.example/auth', 'https://evil.example/openrouter.ai/auth', 'https://evil.example/auth?openrouter.ai',
+    // il ritorno non è il nostro
+    ritorno('https://evil.example/api/v1/auth/openrouter/ritorno/ABC'),
+    ritorno('http://127.0.0.1:61235/api/v1/auth/openrouter/ritorno/ABC'),
+    ritorno(`${base}@evil.example/api/v1/auth/openrouter/ritorno/ABC`), // comincia con `base`, ma l'host è evil.example
+    ritorno(`${base}/api/v1/sessions`),
+    ritorno(`${base}/api/v1/auth/openrouter/ritorno/ABC/altro`),
+    ritorno('non un indirizzo'),
+    `${ritorno(`${base}/api/v1/auth/openrouter/ritorno/ABC`)}&callback_url=${encodeURIComponent('https://evil.example/x')}`,
+  ]) {
+    assert.equal(apribileNelBrowserDelSistema(no, { base }), false, no);
+  }
+  // senza `base` (guscio non ancora pronto) un ritorno non si può verificare: resta chiuso; il codice a schermo no
+  assert.equal(apribileNelBrowserDelSistema(ritorno(`${base}/api/v1/auth/openrouter/ritorno/ABC`)), false);
+  assert.equal(apribileNelBrowserDelSistema('https://openrouter.ai/auth?code_challenge=S&code_challenge_method=S256&key_label=TALOS'), true);
 });
 
 test('F5-NAV-CORNICE: una cornice di pagina resa naviga solo dentro il suo lasciapassare; le altre cornici non si toccano', async () => {

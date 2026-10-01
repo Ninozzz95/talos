@@ -211,6 +211,11 @@
    accanto. */
 *::-webkit-scrollbar{width:8px; height:8px}
 *::-webkit-scrollbar-track{background:transparent}
+.talos-provider-retry{display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px 20px; margin-block:12px; padding:12px 16px; border:1px solid var(--talos-border); border-inline-start:3px solid var(--talos-warning); border-radius:var(--talos-radius-card); background:var(--talos-panel-soft); color:var(--talos-text); font-family:var(--talos-font-ui); font-size:.875em; line-height:1.5; min-width:0; max-width:100%; box-sizing:border-box}
+.talos-provider-retry>div{min-width:0; flex:1 1 260px}
+.talos-provider-retry__titolo{font-weight:600}
+.talos-provider-retry__motivo{margin:2px 0 0; color:var(--talos-muted); overflow-wrap:anywhere}
+.talos-provider-retry__tempo{font-variant-numeric:tabular-nums; color:var(--talos-text); overflow-wrap:anywhere; max-width:100%}
 *::-webkit-scrollbar-thumb{background:var(--talos-border-strong); border:2px solid transparent; border-radius:999px; background-clip:padding-box}
 *::-webkit-scrollbar-thumb:hover{background:var(--talos-muted); background-clip:padding-box}
 *::-webkit-scrollbar-corner{background:transparent}
@@ -472,6 +477,22 @@ use[href="#glifo"],.talos-brand__mark .glyph,.talos-empty__mark .glyph,.talos-av
    ⛔ Sta QUI e non in `primitives.css`: quel file NON entra nel pacchetto (`main.css` non lo importa, misurato il 24/09 con
    `grep data-segue public/styles.css` = 0 dopo il build) — la «guardia» `overflow-anchor:auto` del 16/09 là dentro era inerte. */
 .talos-conversation[data-segue="si"]{overflow-anchor:none}
+/* ⛔ 30/09/2026 — LA CRONOLOGIA SI COSTRUISCE NASCOSTA, E SI VEDE CHE STA CARICANDO. Owner 02/09: «quando clicchi su una riga
+   sessione la chat deve trovarsi già in fondo senza animazioni» ⇒ `#conversation.is-restoring` (app.js, `passaASessione`) la
+   nascondeva mentre si costruiva, con «Apro la cronologia…» al centro. Le tre regole stavano nel monolite e sono andate PERSE nel
+   cutover del 06/09 (`24bcc524a`): la classe restava accesa senza effetto, e l'owner il 30/09 vedeva la chat vuota (sembra
+   bloccata) e poi costruirsi a vista. Si ripristinano qui, e al posto della sola scritta c'è l'orb che gira — l'indicatore
+   d'attesa scelto dall'owner il 12/09 e il 24/09 (`segnavia-mobile.css`) — come lo spinner centrato di Hermes
+   (`apps/desktop/src/components/assistant-ui/thread/status.tsx:222`, `CenteredThreadSpinner`, `role="status"`).
+   ⛔ Altezza zero e `sticky`: l'indicatore non cambia lo `scrollHeight` (la conversazione sotto si porta in fondo mentre è
+   nascosta) e resta al centro della vista. ⛔ Compare dopo 250 ms: un'apertura veloce non lampeggia. */
+.talos-conversation:has(> #conversation.is-restoring){scroll-behavior:auto}
+#conversation.is-restoring{visibility:hidden}
+#conversation.is-restoring > *{animation:none !important; transition:none !important}
+.talos-caricamento-cronologia{display:none}
+.talos-conversation:has(> #conversation.is-restoring) > .talos-caricamento-cronologia{position:sticky; top:40%; z-index:1; height:0; overflow:visible; display:flex; flex-direction:column; align-items:center; gap:12px; pointer-events:none; animation:talos-caricamento-ritardo 250ms step-end both}
+.talos-caricamento-cronologia__testo{color:var(--talos-muted); font-size:var(--talos-font-size-sm)}
+@keyframes talos-caricamento-ritardo{from{visibility:hidden}to{visibility:visible}}
 /* ⛔ 11/9 — qui c'era `@media (max-width:1040px){ .talos-conversation{padding-left:0} }`, e sotto
    i 1040 lasciava 0 a sinistra contro 44 a destra. Misurato a 1024x800: la colonna partiva a x=276,
    incollata al bordo della lista sessioni, mentre il COMPOSER partiva a x=320 — 44 px piu' in la',
@@ -739,8 +760,25 @@ button.talos-turn-spine__tick:focus-visible{outline:var(--talos-focus-width) sol
 .talos-tool-failure p{color:var(--talos-assistant-text); font-size:13px; margin-top:3px}
 .talos-tool-failure__actions{display:flex; align-items:center; gap:8px; margin-top:10px; flex-wrap:wrap}
 .talos-system-note{display:flex; gap:12px; align-items:flex-start; margin:10px 0; padding:12px 14px; border-radius:var(--talos-radius-card); border:1px solid var(--talos-border); background:var(--talos-card-subtle); border-left:3px solid var(--talos-info)}
+.talos-system-note[data-tone="warning"]{border-left-color:var(--talos-warning)}
 .talos-system-note__title{font-weight:600}
 .talos-system-note p{color:var(--talos-muted); font-size:13px; margin-top:2px}
+/* ⭐ 30/09/2026 — il RISULTATO DEL SOTTO-AGENTE (owner 28/09 punto 1, confermato il 30/09): stessa nota col bordo `--talos-info`,
+   il compito in UNA riga, il risultato in Markdown vero e accorciato («Mostra tutto», `appendRisultatoDelega` in app.js).
+   ⛔ `.talos-system-note .talos-risultato-delega__corpo p` pesa più di `.talos-system-note p` qui sopra: senza, ogni paragrafo
+   del risultato diventerebbe grigio a 13 px come una didascalia. La misura dei titoli è quella compatta della figlia
+   (`.talos-figlia__corpo`), il testo quello della chat. */
+.talos-risultato-delega__contenuto{flex:1 1 auto; min-width:0}
+.talos-risultato-delega__compito{margin-top:2px; color:var(--talos-muted); font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.talos-system-note .talos-risultato-delega__corpo{margin-top:8px; max-height:18rem; overflow:hidden; color:var(--talos-assistant-text); font-size:14px; line-height:1.55}
+.talos-risultato-delega.is-aperta .talos-risultato-delega__corpo{max-height:none}
+.talos-risultato-delega__corpo[data-tagliata="si"]{-webkit-mask-image:linear-gradient(to bottom, #000 70%, transparent); mask-image:linear-gradient(to bottom, #000 70%, transparent)}
+.talos-system-note .talos-risultato-delega__corpo :is(p,li,td,th,blockquote){color:inherit; font-size:inherit}
+.talos-system-note .talos-risultato-delega__corpo :is(p,ul,ol,blockquote){margin:4px 0}
+.talos-system-note .talos-risultato-delega__corpo :is(ul,ol){padding-left:20px}
+.talos-system-note .talos-risultato-delega__corpo :is(h1,h2,h3,h4){font-size:15px; line-height:1.35; margin:12px 0 4px}
+.talos-system-note .talos-risultato-delega__corpo > :first-child{margin-top:0}
+.talos-risultato-delega__apri{margin-top:6px}
 /*
  * ⛔⛔⛔ D1, 17/09 sera — LA PRIMA LETTERA DELLA FRASE ERA TAGLIATA, e l'ha vista un giro vero.
  *   Nella carta di approvazione la riga del motivo si leggeva «ll comando tocca un file…»: la «I»
@@ -789,6 +827,8 @@ button.talos-turn-spine__tick:focus-visible{outline:var(--talos-focus-width) sol
 .talos-artifact__head{display:flex; align-items:center; gap:10px; padding:8px 8px 8px 14px; border-bottom:1px solid var(--talos-border-subtle)}
 .talos-artifact__title{font-weight:600; font-size:13.5px; color:var(--talos-text)}
 .talos-artifact__frame{display:block; width:100%; height:320px; border:0; background:var(--talos-window-bg)}
+.talos-artifact__frame[hidden]{display:none}
+.talos-artifact__status{margin:0; padding:10px 14px; overflow-wrap:anywhere}
 /* Le impostazioni d'aspetto dell'originale (Impostazioni → Aspetto), applicate dal monolite sulla radice: qui il CSS le onora (05/09, raccordo con B6 di Astra) */
 :root{--talos-ui-font-scale:1}
 .talos-shell{zoom:var(--talos-ui-font-scale, 1)}
@@ -954,7 +994,7 @@ button.talos-turn-spine__tick:focus-visible{outline:var(--talos-focus-width) sol
 .talos-system-note__tecnico > summary::-webkit-details-marker{display:none}
 .talos-system-note__tecnico > summary::before{content:"▸"; display:inline-block; margin-right:6px; transition:transform var(--talos-motion-duration-control,.15s) var(--talos-motion-ease)}
 .talos-system-note__tecnico[open] > summary::before{transform:rotate(90deg)}
-.talos-system-note__grezzo{margin:8px 0 0; padding:10px 12px; border-radius:10px; border:1px solid var(--talos-border); background:var(--talos-code-bg, rgba(0,0,0,.18)); font-family:var(--talos-font-mono); font-size:12px; line-height:1.5; white-space:pre-wrap; overflow-wrap:anywhere; overflow:auto; max-height:12em}
+.talos-system-note__grezzo{margin:8px 0 0; padding:10px 12px; border-radius:10px; border:1px solid var(--talos-border); background:var(--talos-panel-soft); font-family:var(--talos-font-mono); font-size:12px; line-height:1.5; white-space:pre-wrap; overflow-wrap:anywhere; overflow:auto; max-height:12em}
 /* ⛔⛔ PO-05 — IL FILE GENERATO SI SCARICA CON UN CLIC. Owner: «ogni file generato deve avere un
    collegamento diretto… nome, formato, dimensione e disponibilità reali. Un link o una scheda SENZA
    FILE non soddisfa il requisito.» Prima, dopo che il modello generava un documento, in chat si
@@ -1234,8 +1274,8 @@ a.talos-button{text-decoration:none}
       vinceva sempre il ripiego `rgba(0,0,0,.18)` — che su un fondo scuro passa e su uno chiaro è
       una macchia. Ora il fondo è `--talos-panel-soft`, che i due temi definiscono davvero
       (#2b2c30 scuro, #e8e4db chiaro) ed è la superficie «incassata» che il progetto usa già.
-   ⛔ Resta fuori `.talos-system-note__grezzo`, che ha lo stesso identico difetto: non è di questa
-      corsia, ed è segnalato nel rapporto invece di essere corretto di straforo. */
+    Il debito identico di `.talos-system-note__grezzo`, allora lasciato alla sua corsia,
+       è risolto da RETRY05 (29/09): stesso token panel-soft e prova nei due temi. */
 .talos-approval__codice{margin:8px 0 0; padding:10px var(--talos-approval-gutter); border-block:1px solid var(--talos-border); background:var(--talos-panel-soft); color:var(--talos-text); font-family:var(--talos-font-mono); font-size:12.5px; line-height:1.5; white-space:pre-wrap; overflow-wrap:anywhere; overflow-x:auto; overflow-y:auto; max-height:14em}
 /* ⛔ D1 — la riga del motivo prende il rientro della carta, come tutte le altre. È la riga che dice
    PERCHÉ ti si sta chiedendo il permesso: era l'unica a filo del bordo, e con `overflow:hidden`
@@ -2221,10 +2261,22 @@ a.talos-button{text-decoration:none}
 .talos-step[aria-current="step"]{color:var(--talos-accent-hover); font-weight:600}
 .talos-step__n{width:22px; height:22px; border-radius:50%; border:1px solid currentColor; display:grid; place-items:center; font-family:var(--talos-font-mono); font-size:11px}
 .talos-choice-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:10px}
+/* F009 (01/10/2026) — il blocco «con che utente girano i comandi in Linux» sotto le scelte di «Dove girano i comandi»: stesso
+   ritmo della griglia sopra (10 px), e le righe secondarie vanno a capo — misurato: con `nowrap` la frase sui dischi finiva
+   in «…» proprio dove dice che TALOS chiede conferma. */
+#veloPermessiWsl{margin-top:10px}
+#veloPermessiWsl .talos-list-row__sub{white-space:normal; overflow:visible; text-overflow:clip}
 /* ⛔ ATLAS F1 (24/09/2026): la scheda-scelta dell'Atlas (`.well` 16 · raggio 10, titolo in accento quando è scelta).
    Fondo della 0.1.15 (Q-01); il bordo accento della scelta RESTA: è l'indicatore di stato (W3C «Understanding 1.4.11»,
    15/06/2026: lo stato deve distinguersi a 3:1), e il fondo al 14 % da solo non basta. */
 .talos-choice{padding:16px; border:1px solid var(--talos-border); border-radius:10px; background:var(--talos-panel-soft); text-align:left; color:var(--talos-assistant-text)}
+/* ⛔ 01/10/2026, owner «allinea in alto» — un <button> centra in verticale il suo contenuto, e in una riga di schede quelle con
+   meno testo avevano il titolo più in basso (misurato nel velo Permessi: «Accesso pieno» 26 px dal bordo contro 17, «Windows»
+   28 contro 17). `align-content:start` su un pulsante NON lo sposta (misurato); da colonna flex il contenuto parte dall'alto.
+   Il badge resta grande quanto il suo testo; dove badge e frase stanno in riga li tiene insieme `.talos-choice__corpo`. */
+.talos-choice{display:flex; flex-direction:column; justify-content:flex-start; align-items:stretch}
+.talos-choice > .talos-badge{align-self:flex-start}
+.talos-choice__corpo{display:block}
 .talos-choice[aria-checked="true"]{background:var(--talos-accent-soft); border-color:var(--talos-accent-border); color:var(--talos-text)}
 .talos-choice__title{display:block; font-weight:600; font-size:14px; color:var(--talos-text); margin-bottom:6px}
 .talos-choice[aria-checked="true"] .talos-choice__title{color:var(--talos-accent-text)}
@@ -3003,6 +3055,9 @@ a.talos-button{text-decoration:none}
 .talos-provider__body>.talos-cluster,.talos-provider__body>p{grid-column:1/-1;margin:0;overflow-wrap:anywhere}
 .talos-provider__field{min-width:0;gap:var(--talos-space-sm)}
 .talos-provider__field .talos-field__input{width:100%;min-width:0}
+/* Owner 01/10/2026: nella modale «Configura» i campi stavano a sinistra (370 px su 690). I tetti qui sopra sono della card in
+   linea; dentro la modale (`provider-card.js`, corpo a una colonna) ogni campo prende tutta la larghezza, come nel mockup. */
+.talos-provider__modale .talos-provider__field,.talos-provider__modale .talos-provider__field input[type="number"]{max-width:none}
 .talos-provider-panel .provider-heading-actions{display:flex;gap:var(--talos-space-sm);flex-wrap:wrap}
 .talos-provider-panel .talos-page__head h4{margin:0}
 .talos-provider [role=alert]{color:var(--talos-danger)}

@@ -69,7 +69,8 @@ test('RIPRISTINO-01: il MutationObserver MARCA, non legge-e-scrive il layout a o
 
 test('RIPRISTINO-02: il fondo FINALE resta sincrono — la cura non lo affida al fotogramma', () => {
   // ⛔ il verso che conta per l'owner: «cliccando una sessione la chat deve essere già in fondo».
-  const corpo = attorno(NUDO, 'function mantieniFondoDuranteRipristino');
+  // 30/09: 4200 come RIPRISTINO-03 — il custode ora segue anche l'altezza (`seguiCrescita`) e il corpo è più lungo.
+  const corpo = attorno(NUDO, 'function mantieniFondoDuranteRipristino', 4200);
   assert.match(corpo, /const scopri = \(\) => \{[^}]*inFondo\(\);[^}]*classList\.remove\('is-restoring'\);[^}]*inFondo\(\);/);
   assert.match(corpo, /scopri\(\); window\.requestAnimationFrame\(inFondo\); window\.setTimeout\(inFondo, 250\);/);
 });
@@ -165,4 +166,32 @@ test('SPAZIO-CODA-01: lo spazio in coda resta una scrittura sola, con la sua usc
   const corpo = attorno(NUDO, 'function aggiornaSpazioCodaConversazione(', 1400);
   assert.match(corpo, /if \(spazio === spazioCodaConversazioneUltimo\) return;/);
   assert.match(corpo, /setProperty\('--stream-follow-space'/);
+});
+
+/*
+ * ⛔⛔ 30/09/2026 — owner: «le sessioni lunghe, quando uno le seleziona, devono andare alla fine; e per le più pesanti uno
+ *   spinner, che non faccia pensare che si sia bloccato tutto». Misurato sul 4174 (`a214dd29`): la chat si scopriva a 79 ms,
+ *   prima della cronologia, e finiva 787 px sopra il fondo (578 con la rete lenta), a schermo vuoto nel frattempo. Tre cause,
+ *   una guardia ciascuna.
+ */
+test('RIPRISTINO-06: il custode finisce con la RIGIOCATA, non con l evento terminale (vero dal clic per una conclusa)', () => {
+  const corpo = attorno(NUDO, 'function mantieniFondoDuranteRipristino', 4200);
+  assert.match(corpo, /generation !== state\.realSession\.generation \|\| !state\.realSession\.inRigiocata\) \{/);
+  assert.doesNotMatch(corpo, /state\.realSession\.eventoTerminaleVisto\) \{/);
+});
+
+test('RIPRISTINO-07: una bolla RIGIOCATA non spegne il custode — il riarmo lo stacca solo fuori dalla rigiocata', () => {
+  const corpo = attorno(NUDO, 'function riarmaSeguiConversazione', 500);
+  assert.match(corpo, /if \(!state\.realSession\.inRigiocata\) fermaFondoRipristino\?\.\(\);/);
+});
+
+test('RIPRISTINO-08: dopo la comparsa si segue l ALTEZZA, e la cronologia si costruisce nascosta con l indicatore', () => {
+  const corpo = attorno(NUDO, 'function mantieniFondoDuranteRipristino', 4200);
+  assert.match(corpo, /new ResizeObserver\(chiediFondo\)/);
+  assert.match(corpo, /seguiAltezza\?\.disconnect\(\);/, 'chi smette stacca anche il ResizeObserver');
+  assert.match(corpo, /window\.setTimeout\(inFondo, 250\); seguiCrescita\(\);/);
+  const stili = readFileSync(new URL('../../src/styles/index.css', import.meta.url), 'utf8');
+  assert.match(stili, /#conversation\.is-restoring\{visibility:hidden\}/, 'la regola persa nel cutover del 06/09 è di nuovo nel foglio del pacchetto');
+  assert.match(stili, /\.talos-conversation:has\(> #conversation\.is-restoring\) > \.talos-caricamento-cronologia\{/);
+  assert.match(NUDO, /assicuraCaricamentoCronologia\(conversation\);/);
 });

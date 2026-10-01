@@ -13,7 +13,9 @@ export function risolviPercorsi({ appPath, isPackaged = false, resourcesPath, ha
     cpu: join(resourcesPath, 'local-runtime', 'cpu', 'llama-server.exe'),
     vulkan: join(resourcesPath, 'local-runtime', 'vulkan', 'llama-server.exe'),
   }) : undefined;
-  return Object.freeze({ root: resolve(root), server: join(root, 'server.mjs'), bootstrap: join(appPath, 'child-bootstrap.mjs'), localRuntime });
+  /* Fase B «casa di esecuzione» (owner 01/10/2026, «dentro l'installatore»): Node e rg per Linux, come i runtime di llama. */
+  const casaLinux = isPackaged && !harnessDir ? join(resourcesPath, 'casa-linux', 'linux-x64') : undefined;
+  return Object.freeze({ root: resolve(root), server: join(root, 'server.mjs'), bootstrap: join(appPath, 'child-bootstrap.mjs'), localRuntime, casaLinux });
 }
 
 export function scegliMotoreLocale({ percorsi, env = process.env, sonda = spawnSync, preferenza = 'auto' }) {
@@ -81,6 +83,9 @@ export function creaAvvioFiglio({ execPath, percorsi, port, token, reportFile, d
    * sono stati spostati. Assegnazione semplice per nome: la forma che la guardia CLI-REQ-04 (a) sa leggere.
    */
   if (scratchDir) ambiente.TALOS_SCRATCH_DIR = scratchDir;
+  /* Fase B: dove sono i binari per Linux del pacchetto (`cartellaCasaLinux` nel server). Dal sorgente non si passa: il server usa
+     `.casa-linux/` preparata con `npm run prepara:casa-linux`, o la variabile già dichiarata dal sistema. */
+  if (percorsi.casaLinux) ambiente.TALOS_CASA_LINUX = percorsi.casaLinux;
   return { command: execPath, args: ['--import', pathToFileURL(percorsi.bootstrap).href, percorsi.server], options: {
     cwd: percorsi.root, env: ambiente, stdio: ['ignore', 'pipe', 'pipe', 'ipc'], windowsHide: true, shell: false,
   } };
@@ -161,11 +166,32 @@ export function urlIngresso(base, token) {
  * l'accesso a GitHub. La finestra nuova si nega sempre (`setWindowOpenHandler` → `deny`); solo un indirizzo che passa di qui va
  * a `shell.openExternal` (Electron, security.md §14-15: «Do not use shell.openExternal with untrusted content»; letto il 27/09
  * via Context7 `/electron/electron`). ⇒ `https:` esatto, host `github.com` esatto, nessuna credenziale, nessuna porta.
+ * ⛔ 01/10/2026, owner: «la app desktop non apre il browser per accedere a openrouter». L'accesso con OpenRouter (PO-01,
+ *   `src/openrouter-oauth.mjs`) apre `https://openrouter.ai/auth?…`, e qui moriva nel `deny`: nel browser (il 4174) la finestra
+ *   si apriva, nell'app no. ⇒ Passa anche quella pagina, e SOLO quella: host `openrouter.ai` esatto, percorso `/auth` esatto.
+ *   Come Hermes, che nega sempre la finestra e manda fuori solo gli indirizzi di cui si fida
+ *   (`apps/desktop/electron/window-open-policy.ts`, `createWindowOpenHandler`). Il rientro arriva al server locale senza cookie,
+ *   difeso da uno stato monouso (`http-app.mjs`, `rientroOAuth`). Prova: OPENROUTER-ACCESSO.
+ * ⛔⛔ E IL RITORNO DEV'ESSERE IL NOSTRO (review avversaria della stessa cura, 01/10/2026): quella pagina CONCEDE una chiave.
+ *   Un link nella chat — un modello manipolato lo può scrivere, e il clic passa da qui come un `window.open` — verso
+ *   `openrouter.ai/auth` con un `callback_url` altrui consegnerebbe il codice a un estraneo, che lo scambierebbe per una chiave
+ *   a spese della persona. ⇒ Fuori solo SENZA ritorno (codice a schermo: il codice lo vede solo la persona) o con UN ritorno
+ *   sul server locale di questa app (`base`, l'origine del figlio) e sulla rotta `/api/v1/auth/openrouter/ritorno[/<stato>]`.
+ *   Senza `base` un ritorno non si può verificare: resta chiuso.
  */
-export function apribileNelBrowserDelSistema(indirizzo) {
+const RITORNO_OPENROUTER = /^\/api\/v1\/auth\/openrouter\/ritorno(?:\/[^/]+)?$/u;
+export function apribileNelBrowserDelSistema(indirizzo, { base = null } = {}) {
   let u;
   try { u = new URL(String(indirizzo ?? '')); } catch { return false; }
-  return u.protocol === 'https:' && u.hostname === 'github.com' && !u.port && !u.username && !u.password;
+  if (u.protocol !== 'https:' || u.port || u.username || u.password) return false;
+  if (u.hostname === 'github.com') return true;
+  if (u.hostname !== 'openrouter.ai' || u.pathname !== '/auth') return false;
+  const ritorni = u.searchParams.getAll('callback_url');
+  if (ritorni.length === 0) return true;
+  if (ritorni.length > 1 || typeof base !== 'string' || base === '') return false;
+  let r;
+  try { r = new URL(ritorni[0]); } catch { return false; }
+  return r.origin === base && !r.username && !r.password && RITORNO_OPENROUTER.test(r.pathname);
 }
 
 /*

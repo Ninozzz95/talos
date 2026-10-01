@@ -5,7 +5,7 @@ import { createScope, createRevision } from '../../src/app/lifecycle.ts';
 import { decideStartup, normalizeTarget, shouldCommitStartup } from '../../src/app/startup-policy.ts';
 import { SCREEN_BY_VIEW, VIEW_BY_DESTINATION, isView, routeForDestination } from '../../src/domain/navigation.ts';
 import { normalizeWorkspacePreferences, createWorkspacePreferences, WORKSPACE_PREFERENCES_KEY } from '../../src/services/workspace-preferences.ts';
-import { normalizeSessions } from '../../src/features/navigation/workspace-chrome.ts';
+import { normalizeSessions, sessioniDaRiprendere } from '../../src/features/navigation/workspace-chrome.ts';
 const root = new URL('../../', import.meta.url);
 const read = path => readFile(new URL(path, root), 'utf8');
 const memory = () => { const data = new Map(); return { data, getItem: k => data.get(k) ?? null, setItem: (k,v) => data.set(k,v) }; };
@@ -100,4 +100,28 @@ test('D21: historical exporter cannot overwrite owned production sources',async(
 test('DS: semantic foundation and canonical controls are imported by the actual entry',async()=>{
  const text=await read('src/styles/main.css');assert.match(text,/design-system\/foundations\.css/);assert.match(text,/design-system\/controls\.css/);assert.match(text,/design-system\/workspace\.css/);
  assert.doesNotMatch(await read('src/styles/index.css'),/\.talos-button\{min-height/);
+});
+
+/* 30/09/2026, decisione owner («nascondile»): le conversazioni degli AIUTANTI (sotto-agenti di una delega) stanno dentro la chat
+   che le ha create, come nella barra (`sessioniRadice`) e come Hermes (`hermes_state_common.py:208-210`: elencabili = radici
+   + rami/reset, mai i sotto-agenti). Sul 4174 la Home ne mostrava 6 come «Sessione senza nome» in cima a «Riprendi il lavoro». */
+test('HOME-RECENTI-RADICI: «Riprendi il lavoro» mostra solo le chat vere, al massimo 8, dalla più recente', () => {
+  const t = (m) => `2026-09-30T10:${String(m).padStart(2, '0')}:00.000Z`;
+  const sessioni = normalizeSessions({ items: [
+    { sessionId: 'madre', nome: 'Chat vera', avviataAlle: t(1) },
+    { sessionId: 'figlia', taskId: 'delega:madre', padreId: 'madre', profonditaDelega: 1, avviataAlle: t(9) },
+    { sessionId: 'nipote-senza-padre-noto', profonditaDelega: 2, avviataAlle: t(8) },
+    { sessionId: 'ramo', nome: 'Ramo', forkDa: 'madre', avviataAlle: t(7) },
+    ...Array.from({ length: 9 }, (_, i) => ({ sessionId: `altra-${i}`, nome: `Altra ${i}`, avviataAlle: t(20 + i) })),
+  ] });
+  const righe = sessioniDaRiprendere(sessioni);
+  assert.equal(righe.length, 8, 'al massimo otto righe');
+  assert.deepEqual(righe.map((r) => r.sessionId).slice(0, 2), ['altra-8', 'altra-7'], 'dalla più recente');
+  const tutte = sessioniDaRiprendere(sessioni, Infinity).map((r) => r.sessionId);
+  assert.ok(!tutte.includes('figlia'), 'una figlia con padreId non è una chat da riprendere');
+  assert.ok(!tutte.includes('nipote-senza-padre-noto'), 'profondità di delega > 0 basta, anche senza padreId');
+  assert.ok(tutte.includes('madre') && tutte.includes('ramo'), 'radici e rami restano');
+  assert.deepEqual(sessioniDaRiprendere([]), []);
+  // solo aiutanti ⇒ niente da riprendere: la Home mostra lo stato vuoto, non una lista vuota senza spiegazione
+  assert.deepEqual(sessioniDaRiprendere(normalizeSessions({ items: [{ sessionId: 'f', padreId: 'x', profonditaDelega: 1 }] })), []);
 });

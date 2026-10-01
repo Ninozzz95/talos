@@ -219,3 +219,37 @@ test('⛔ F-012-12, AL CONTRARIO — l\'elenco dei run vuoto è onesto', () => {
 test('⭐ F-012-13 — `NODE_OUTPUT_PREVIEW_MAX` è 2000, la costante del piano §1.6 (stessa regola di PLANNED_TASK_PREVIEW_MAX)', () => {
     assert.equal(NODE_OUTPUT_PREVIEW_MAX, 2000)
 })
+
+/*
+ * AUDIT29-RUN-DURATION (retest 29/09): un run BLOCCATO da ~24 ore diceva «716 s so far». `per-il-modello.mjs` misurava dal
+ * primo all'ULTIMO EVENTO e lo chiamava «so far»: per un run fermo è il tempo fino all'ultima attività, non fino ad adesso,
+ * e per un run concluso «so far» è la parola sbagliata. Hermes misura il tempo di un lavoro in corso rispetto al momento
+ * della domanda (`tools/process_registry.py:1950`, `"uptime_seconds": int(time.time() - session.started_at)`). ⇒ Concluso:
+ * inizio, fine, durata. In corso: da quanto è partito E da quanto non succede niente, all'ora della chiamata. Mai un «tempo
+ * attivo» che sommi le pause: non c'è un fatto che lo misuri.
+ */
+test('RUN-DURATION-01 — un run in corso ma fermo da un giorno dice da quanto è fermo, non «so far» sull ultima attività', () => {
+    const testo = dettaglioRunPerIlModello(statoDiProva(), { adesso: '2026-09-29T10:05:00.000Z' })
+    assert.doesNotMatch(testo, /so far/)
+    assert.match(testo, /started 2026-09-28T10:00:00\.000Z \(86700 s ago\)/)
+    assert.match(testo, /last activity 2026-09-28T10:05:00\.000Z \(86400 s ago\)/)
+    assert.match(testo, /as of 2026-09-29T10:05:00\.000Z/)
+})
+
+test('RUN-DURATION-02 — un run concluso dice inizio, fine e durata, e niente «ago»', () => {
+    const input = statoDiProva()
+    input.state.run.status = 'succeeded'
+    input.events.push({ type: 'run_succeeded', at: '2026-09-28T10:12:00.000Z' })
+    const testo = dettaglioRunPerIlModello(input, { adesso: '2026-09-30T00:00:00.000Z' })
+    assert.match(testo, /started 2026-09-28T10:00:00\.000Z, ended 2026-09-28T10:12:00\.000Z \(720 s\)/)
+    assert.doesNotMatch(testo, /so far| ago\)|as of/)
+})
+
+test('RUN-DURATION-03 — un run in pausa conta il tempo da orologio e lo dice come tale, senza sommare nulla', () => {
+    const input = statoDiProva()
+    input.state.run.status = 'paused'
+    const testo = dettaglioRunPerIlModello(input, { adesso: '2026-09-28T11:00:00.000Z' })
+    assert.match(testo, /run 11111111-2222-4333-8444-555555555555 — paused/)
+    assert.match(testo, /started 2026-09-28T10:00:00\.000Z \(3600 s ago\); last activity 2026-09-28T10:05:00\.000Z \(3300 s ago\)/)
+    assert.doesNotMatch(testo, /active|so far/)
+})

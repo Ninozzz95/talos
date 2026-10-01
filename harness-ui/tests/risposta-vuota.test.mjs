@@ -41,6 +41,8 @@ const erroreNelFlusso = {
   choices: [{ index: 0, delta: { content: '' }, finish_reason: 'error', native_finish_reason: 'MALFORMED_FUNCTION_CALL' }],
 };
 const vuotaGemini = () => flussoIntero([ragionamento('Developing Tokenization Visualizations'), erroreNelFlusso, uso(100, 7)]);
+// RETRY04: a successful empty answer is distinct from finish_reason:error.
+const vuotaRagionata = () => flussoIntero([ragionamento('Sto pensando'), fine, uso(100, 7)]);
 /** Il vuoto muto: nessun ragionamento, nessuna uscita (i due «continua» della sessione vera, 4-6 s e niente). */
 const vuotaMuta = () => flussoIntero([{ choices: [{ index: 0, delta: { content: '' }, finish_reason: 'stop' }] }, uso(100, 0)]);
 
@@ -75,9 +77,9 @@ test('EMPTY-SSE-PROVIDER-REASON: il lettore del flusso tiene il motivo che il fo
 
 test('EMPTY-OPT-IN: senza `accettaVuota` una risposta vuota lancia come prima; con, torna marcata e con il suo uso', async () => {
   const opzioni = { modello: 'x', chiave: 'y', messaggi: [{ role: 'user', content: 'ciao' }], attrezzi: [], onDelta: () => {} };
-  await assert.rejects(chiamaConRitenta({ ...opzioni, fetchDiRete: async () => vuotaGemini() }), /flusso SSE senza contenuto ne tool_calls/u);
-  const esito = await chiamaConRitenta({ ...opzioni, fetchDiRete: async () => vuotaGemini(), accettaVuota: true });
-  assert.equal(esito.vuota?.nativeFinishReason, 'MALFORMED_FUNCTION_CALL');
+  await assert.rejects(chiamaConRitenta({ ...opzioni, fetchDiRete: async () => vuotaRagionata() }), /flusso SSE senza contenuto ne tool_calls/u);
+  const esito = await chiamaConRitenta({ ...opzioni, fetchDiRete: async () => vuotaRagionata(), accettaVuota: true });
+  assert.equal(esito.vuota?.finishReason, 'stop');
   assert.equal(esito.vuota?.ragionamento, true);
   assert.equal(esito.usage.completion_tokens, 7);
 });
@@ -85,7 +87,7 @@ test('EMPTY-OPT-IN: senza `accettaVuota` una risposta vuota lancia come prima; c
 test('EMPTY-AFTER-TOOLS-NUDGE: vuota dopo gli attrezzi ⇒ una spinta a continuare, e il giro si chiude col testo', async () => {
   const r = rete(
     () => flussoIntero([chiamaElenca, fineAttrezzi, uso(90, 5)]),
-    vuotaGemini,
+    vuotaRagionata,
     () => flussoIntero([testo('Ecco la cartella.'), fine, uso(110, 4)]),
   );
   const esito = await talosLavora(base({ fetchDiRete: r.fetch }));
@@ -99,8 +101,8 @@ test('EMPTY-AFTER-TOOLS-NUDGE: vuota dopo gli attrezzi ⇒ una spinta a continua
   assert.equal(esito.usage.completion_tokens, 16);
 });
 
-test('EMPTY-CEILING: spinta più due ritentativi, poi un errore ONESTO col motivo del fornitore, e il lavoro resta', async () => {
-  const r = rete(() => flussoIntero([chiamaElenca, fineAttrezzi]), vuotaGemini, vuotaGemini, vuotaGemini, vuotaGemini, () => flussoIntero([testo('mai'), fine]));
+test('EMPTY-CEILING: veri vuoti conclusi, spinta più due ritentativi, poi errore e lavoro preservato', async () => {
+  const r = rete(() => flussoIntero([chiamaElenca, fineAttrezzi]), vuotaRagionata, vuotaRagionata, vuotaRagionata, vuotaRagionata, () => flussoIntero([testo('mai'), fine]));
   const t0 = Date.now();
   const errore = await rifiuto(talosLavora(base({ fetchDiRete: r.fetch })));
   assert.equal(r.corpi.length, 5, 'attrezzo, vuota, dopo la spinta, due ritentativi');
@@ -109,7 +111,6 @@ test('EMPTY-CEILING: spinta più due ritentativi, poi un errore ONESTO col motiv
   assert.equal(errore.classe, 'risposta-vuota');
   assert.equal(errore.transitorio, false);
   assert.match(errore.message, /senza testo né attrezzi/u);
-  assert.match(errore.message, /MALFORMED_FUNCTION_CALL/u);
   assert.doesNotMatch(errore.message, /interrott/u, 'mai «interrotta»: la risposta è arrivata, vuota');
   const storia = errore.messaggiDelGiro;
   assert.ok(Array.isArray(storia), 'il lavoro del giro viaggia con l\'errore');
@@ -130,11 +131,21 @@ test('EMPTY-DETERMINISTIC: due vuoti identici e senza uscita ⇒ il terzo non si
 });
 
 test('EMPTY-THEN-TEXT: un vuoto isolato si ritenta, e se la seconda va bene nessuno se ne accorge', async () => {
-  const r = rete(vuotaGemini, () => flussoIntero([testo('Risposta.'), fine, uso(100, 3)]));
+  const r = rete(vuotaRagionata, () => flussoIntero([testo('Risposta.'), fine, uso(100, 3)]));
   const esito = await talosLavora(base({ fetchDiRete: r.fetch }));
   assert.equal(esito.comeFinita, 'concluso');
   assert.equal(esito.detto, 'Risposta.');
   assert.deepEqual(r.corpi[1].messages, r.corpi[0].messages, 'senza attrezzi prima, nessuna spinta: la stessa richiesta');
+});
+
+test('EMPTY-ERROR-AFTER-TOOLS: errore SSE non entra nella scala dei vuoti, lavoro conservato', async () => {
+  const r = rete(() => flussoIntero([chiamaElenca, fineAttrezzi]), vuotaGemini, vuotaGemini);
+  const errore = await rifiuto(talosLavora(base({ fetchDiRete: r.fetch })));
+  assert.equal(errore.code, 'PROVIDER_OUTCOME_UNKNOWN');
+  assert.equal(errore.causaDiTrasporto, 'PROVIDER_STREAM_ERROR');
+  assert.equal(r.corpi.length, 2);
+  assert.ok(errore.messaggiDelGiro.some(m => m.role === 'tool' && m.tool_call_id === 'call_e'));
+  assert.equal(errore.messaggiDelGiro.some(m => m.content === kernel.NOTA_RISPOSTA_VUOTA), false);
 });
 
 test('WORK-KEPT-ANY-ERROR: un errore qualunque dopo gli attrezzi porta con sé la storia coerente del giro', async () => {

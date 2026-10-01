@@ -1012,6 +1012,33 @@ test('⛔⛔⛔ BC-44, VERSO CONTRARIO — una ricerca CONSEGNATA non riparte, n
   assert.equal(avviati.length, 0);
 });
 
+test('PROVIDER-UNKNOWN-RESEARCH-RECOVERY: esito incerto su disco, nessuna ripresa automatica ma comando esplicito consentito', async (t) => {
+  const cartella = cartellaVera();
+  t.after(() => rimuoviCartellaDiProva(cartella));
+  const sessioni = new Map();
+  let attese = 0;
+  const primo = orchestratoreSuDisco(cartella, sessioni, { dormiFn: async () => { attese += 1; } });
+  const { id } = await primo.orch.avvia({ cartella, question: 'Ricerca da conservare', depth: 'deep' });
+  await ricercaAMetaStrada(cartella, id);
+  sessioni.set(id, voceDopoLaCaduta(cartella, id));
+  await primo.avviati[0].onConclusioneFn(cadutaDelFornitore('Esito incerto: riprendi esplicitamente.', 'PROVIDER_OUTCOME_UNKNOWN'));
+  assert.equal(primo.avviati.length, 1);
+  assert.equal(attese, 0, 'nessun timer automatico');
+  assert.equal((await leggiRicerca({ cartella, id })).motivoErrore.classe, 'esito-incerto');
+  const spesa = talosResearchSpent(talosResearchReplay((await leggiGiornale({ cartella, id })).eventi));
+  const secondo = orchestratoreSuDisco(cartella, sessioni);
+  const riga = (await secondo.orch.elenca({ cartella })).ricerche[0];
+  assert.equal(riga.riprendibile, true, 'il nuovo orchestratore rilegge la possibilità di recupero dal disco');
+  assert.match(riga.motivo, /esplicitamente/u);
+  assert.equal(secondo.avviati.length, 0);
+  assert.equal((await secondo.orch.riprendi({ id })).ok, true);
+  assert.equal(secondo.avviati.length, 1);
+  const { eventi } = await leggiGiornale({ cartella, id });
+  assert.equal(eventi.filter(e => e.kind === 'run_resumed').length, 1);
+  assert.equal(eventi.some(e => e.kind === 'run_resumed' && e.auto), false);
+  assert.deepEqual(talosResearchSpent(talosResearchReplay(eventi)), spesa);
+});
+
 test('⭐⭐⭐⭐ BC-44 — LA RIPRESA AUTOMATICA: una volta sola, dichiarata nel giornale, e mai due', async (t) => {
   const cartella = cartellaVera();
   t.after(() => rimuoviCartellaDiProva(cartella));

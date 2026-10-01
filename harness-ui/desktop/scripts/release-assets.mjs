@@ -46,6 +46,14 @@ export async function preparaRelease({ versione, tag, repository, distDir, smoke
   if (!changelogPath) throw Error('Serve il percorso del CHANGELOG: una release che non dice cosa è cambiato non si pubblica.');
   const cambiamenti = sezioneDelChangelog(await readFile(changelogPath, 'utf8'), tag);
   if (!cambiamenti) throw Error(`Il CHANGELOG non ha una sezione "## ${tag}": scrivila prima di taggare — cosa è nuovo, cosa è stato corretto.`);
+  /*
+   * ⛔ 01/10/2026 — la 0.1.19 è uscita con «This release candidate addresses…» nelle note. Un tag `desktop-vX.Y.Z` senza
+   *   suffisso è una release FINALE (SemVer 2.0.0 §9: una pre-release si scrive col trattino, `1.0.0-rc.1`): le sue note non si
+   *   presentano come candidata. Le note già pubblicate non si riscrivono; la prossima non ci ricade.
+   */
+  if (/\brelease[\s-]+candidates?\b/iu.test(cambiamenti)) {
+    throw Error(`La sezione "## ${tag}" del CHANGELOG si presenta come «release candidate»: un tag finale non è una candidata. Correggi la sezione prima di taggare.`);
+  }
   const artefatti = [];
   for (const nome of [nomi.exe, nomi.zip]) {
     const path = resolve(distDir, nome);
@@ -87,6 +95,7 @@ The GitHub attestation certifies where the build came from; it is not an Authent
 
 An Electron 44.3.0 shell with the Node runtime included, the TALOS backend, the built frontend, the kernel, the context engine, native addons, and llama.cpp b10517 CPU/Vulkan builds with their licences.
 Vulkan needs a compatible driver; the CPU engine is included as the alternative.
+Node.js 24.18.0 and ripgrep 15.0.0 for Linux, with their licences: when WSL is installed and a session runs its commands in Linux, the file tools run there too, with these binaries. Nothing is installed inside the WSL distribution.
 No GGUF model and no credential is bundled. The shell adds no automatic updates and no telemetry.
 Remote providers and model downloads need the network and their own configuration; this installer does not certify that they work.
 

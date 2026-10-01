@@ -1,6 +1,6 @@
 {
   "name": "talos-desktop",
-  "version": "0.1.19",
+  "version": "0.1.20",
   "private": true,
   "description": "Il guscio desktop di TALOS, con il runtime Node incluso in Electron.",
   "license": "AGPL-3.0-only",
@@ -41,6 +41,7 @@
       { "from": ".staging/context-engine", "to": "context-engine" },
       { "from": ".staging/context-engine/node_modules", "to": "context-engine/node_modules" },
       { "from": ".staging/local-runtime", "to": "local-runtime" },
+      { "from": ".staging/casa-linux", "to": "casa-linux" },
       { "from": ".staging/docs", "to": "docs" },
       { "from": ".staging/MANIFEST.json", "to": "MANIFEST.json" },
       { "from": ".staging/AVVISI.txt", "to": "AVVISI.txt" },

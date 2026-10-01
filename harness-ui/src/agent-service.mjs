@@ -26,6 +26,8 @@
  * agui-events.mjs resta provabile senza sapere di talosLavora.
  */
 import { createHash, randomUUID } from 'node:crypto';
+import { createToolOutputPreview } from './kernel/tool-output-preview.mjs';
+import { delegaLimitata } from './delegation-contract.mjs';
 import { join as joinPercorso, relative as percorsoRelativo, sep as separatorePercorso } from 'node:path';
 
 import { createOwnerRuntimeAdapter } from './runtime-owner-adapter.mjs';
@@ -269,7 +271,12 @@ export async function avviaSessione({
    *   passa (i test, il banco).
    */
   cartellaDatiProgettoFn = null,
-  onEvento, segnaleStop, messaggiIniziali, reasoning, contextHooks, mobile = false,
+  onEvento, segnaleStop, messaggiIniziali, reasoning, contextHooks, onStoriaIniziale, ricostruisciContestoIniziale = false, mobile = false,
+  /* G02 (dalla lane CLI, e1f7eb363): l'identità con cui la CLI chiave il suo checkpoint; passata così com'è al motore. */
+  checkpointSessionId = null, checkpointOperation = 'start',
+  ambienteComandiFn,
+  processOutputFn,
+  processOutputReadFn,
   fallbackProviders = [], onCambioFornitore: depositaCambioFornitore,
   /*
    * ⛔⛔⛔ 02/09 — LEDGER-STREAMING-SCROLL-TERMINALE-2026-09-02.md, §6/§7.
@@ -369,6 +376,11 @@ export async function avviaSessione({
    * fase, non un secondo giro.
    */
   codaMessaggiFn,
+  cartellaPagineWeb, // politica di taglio di `naviga` (owner 01/10/2026): la cartella delle pagine della sessione, inoltrata com'è al kernel
+  ricercheInCorso, // F001b (owner 01/10/2026): il registro delle ricerche che continuano della sessione, inoltrato com'è al kernel
+  preferenzeWslFn, consensiSessione, // F009 (owner 01/10/2026): preferenza dell'utente di WSL e «sì» a root della sessione, inoltrati com'è al kernel
+  casaLinuxSessione, // Fase B (owner 01/10/2026): la casa Linux della sessione, inoltrata com'è al kernel
+  registroLetture, // T25/B09: il registro delle letture della SESSIONE, inoltrato com'è al kernel (assente ⇒ il kernel ne crea uno per il giro)
   /*
    * ⭐⭐⭐ FASE N, ottavo sistema (30/8) — Deep Research, "fetta onesta".
    * Stesso principio ESATTO di `hookFn`/`onDelega`/`codaMessaggiFn`
@@ -607,6 +619,7 @@ export async function avviaSessione({
    *   a questa funzione. Senza il parametro è `cartella`: il comportamento di prima, invariato.
    */
   const cartellaPerCreare = cartellaCreazioni || cartella;
+  const solaLetturaDelega = delegaLimitata(task);
   /** PO-26 — la radice di Libreria e Ricerca del progetto (vedi `cartellaDatiProgettoFn` in testa). */
   const cartellaDatiDelProgetto = typeof cartellaDatiProgettoFn === 'function'
     ? () => Promise.resolve().then(() => cartellaDatiProgettoFn())
@@ -704,7 +717,7 @@ export async function avviaSessione({
      *   cosa il modello ha davvero davanti (`preamboloVistoDa`). Una mappa in memoria mentirebbe
      *   dopo un riavvio del server, e la conversazione salvata no.
      */
-    if (Array.isArray(messaggiIniziali) && messaggiIniziali.length > 0 && testoContestoProgetto) {
+    if (!ricostruisciContestoIniziale && Array.isArray(messaggiIniziali) && messaggiIniziali.length > 0 && testoContestoProgetto) {
       const coda = aggiornamentoInCodaFn({ storia: messaggiIniziali, testo: testoContestoProgetto });
       if (coda) messaggiIniziali = [...messaggiIniziali, { role: 'system', content: coda }];
     }
@@ -719,7 +732,7 @@ export async function avviaSessione({
   let toolMcp;
   let chiamaToolMcpFn;
   let chiudiMcp = async () => {};
-  if (cartellaTrustMcp) {
+  if (cartellaTrustMcp && !solaLetturaDelega) {
     const preparato = await preparaToolMcpPerSessioneFn({ cartella, cartellaTrust: cartellaTrustMcp });
     toolMcp = preparato.toolMcp;
     chiamaToolMcpFn = preparato.chiamaToolMcpFn;
@@ -761,7 +774,7 @@ export async function avviaSessione({
   let toolPlugin;
   let eseguiToolPluginFn;
   let hookPlugin = [];
-  if (cartellaTrustPlugin) {
+  if (cartellaTrustPlugin && !solaLetturaDelega) {
     const preparato = await preparaToolPluginPerSessioneFn({ cartella, cartellaTrust: cartellaTrustPlugin });
     toolPlugin = preparato.toolPlugin;
     eseguiToolPluginFn = preparato.eseguiToolPluginFn;
@@ -883,7 +896,7 @@ export async function avviaSessione({
   let toolForge;
   let eseguiToolForgeFn;
   try {
-    const installati = await elencaToolForgiatiFn({ cartella: cartellaForge });
+    const installati = solaLetturaDelega ? [] : await elencaToolForgiatiFn({ cartella: cartellaForge });
     const abilitati = installati.filter((t) => t.abilitato);
     if (abilitati.length > 0) {
       const manifestPerNome = new Map(abilitati.map((t) => [`${FORGE_PREFISSO_NOME_TOOL}${t.id}`, t.manifest]));
@@ -967,7 +980,7 @@ export async function avviaSessione({
    * stesso riferimento, zero wrapping — comportamento bit-per-bit
    * quello di prima di FASE G.
    */
-  const hookFnConPlugin = hookPlugin.length === 0
+  const hookFnConPlugin = solaLetturaDelega ? undefined : hookPlugin.length === 0
     ? hookFn
     : async (evento) => {
       if (hookFn) {
@@ -1074,7 +1087,7 @@ export async function avviaSessione({
      * è mai partito, non un buco.
      */
     if (evento.tipo === 'tool-annullato') {
-      onEvento(eventoPerEsitoTool({ messageId: randomUUID(), toolCallId: evento.toolCallId, content: evento.motivo }));
+      onEvento(eventoPerEsitoTool({ messageId: randomUUID(), toolCallId: evento.toolCallId, content: evento.motivo, isError: true, outcome: 'cancelled' }));
       return;
     }
     /*
@@ -1103,7 +1116,24 @@ export async function avviaSessione({
 
   /* F3 (24/09/2026): il motivo dell'inizio (`soglia`/`emergenza`/`overflow`) si ricorda per giro, per riportarlo nella fine. */
   const motivoCompattazionePerGiro = new Map();
+  /* G02 (dalla lane CLI, b82fa22a2, M4-E): la ricevuta che il kernel emette per un attrezzo, in attesa del suo esito. */
+  const ricevuteToolPerId = new Map();
   const onGiro = (evento) => {
+    if (evento.tipo === 'ricevuta') {
+      const ricevuta = evento.ricevuta;
+      const toolCallId = ricevuta && typeof ricevuta === 'object' && !Array.isArray(ricevuta) && typeof ricevuta.toolCallId === 'string' ? ricevuta.toolCallId : '';
+      if (toolCallId) ricevuteToolPerId.set(toolCallId, ricevuta);
+      return;
+    }
+    if (evento.tipo === 'provider-retry') {
+      return onEvento({ type: 'CUSTOM', name: 'talos.provider-retry', value: {
+        schema: 'talos.provider-retry.v1', threadId, runId,
+        requestId: evento.requestId, giro: evento.giro, fase: evento.fase,
+        modello: evento.modello, tentativo: evento.tentativo, tentativiMassimi: evento.tentativiMassimi,
+        httpStatus: evento.httpStatus, attesaMs: evento.attesaMs, retryAt: evento.retryAt,
+        ...(evento.httpStatus === 402 && evento.motivo === 'budget-occupato' ? { motivo: evento.motivo } : {}),
+      } });
+    }
     if (evento.tipo === 'compattazione-inizio' && evento.motivo) motivoCompattazionePerGiro.set(evento.giro, evento.motivo);
     if (evento.tipo === 'risposta') {
       /*
@@ -1150,9 +1180,14 @@ export async function avviaSessione({
     if (evento.tipo === 'tool-esito') {
       /* ⭐ OSS-1/OSS-2 — `durataMs`, `comando` e `cwd` arrivano dal kernel solo per gli attrezzi che
          li misurano (oggi `prova` e `shell`) e passano di qui invariati. */
+      /* G02-2: la ricevuta si correla per id, si consuma una volta e si inoltra senza interpretarla. */
+      const ricevuta = ricevuteToolPerId.get(evento.toolCallId);
+      if (ricevuta) ricevuteToolPerId.delete(evento.toolCallId);
       onEvento(eventoPerEsitoTool({
         messageId: randomUUID(), toolCallId: evento.toolCallId, content: evento.content,
         durataMs: evento.durataMs, comando: evento.comando, cwd: evento.cwd,
+        isError: evento.isError, exitCode: evento.exitCode,
+        ...(ricevuta ? { receipt: ricevuta } : {}),
       }));
       return;
     }
@@ -1207,24 +1242,26 @@ export async function avviaSessione({
    * testo ("created: ..."), l'HTML vero arriva qui, separato, per diventare
    * un evento AG-UI che il frontend può renderizzare (iframe sandboxato —
    * vedi app.js). Se assente (nessun `talosLavora` la offre mai a
-   * TALOS-BANCO), il kernel usa un id locale deterministico: qui SEMPRE
-   * presente, quindi SEMPRE questo id vince, mai quello di fallback.
+    * TALOS-BANCO), il kernel dichiara il canale indisponibile. Qui il
+    * salvataggio precede sempre l'evento e la conferma al modello.
    */
-  const onArtefatto = async (titolo, html) => {
+  /* ⛔ F-015 (owner 30/09, «Artefatto sì, Libreria no»): il kernel passa `copiaInLibreria:false` in sola lettura (sessione Read
+     only, passo di Workflow). L'artefatto si salva e si mostra lo stesso; salta solo la copia durevole in Libreria. Senza terzo
+     argomento (chiamanti di prima) la copia resta com'era. Prova: tests/rev-artifact-readonly-library.test.mjs. */
+  const onArtefatto = async (titolo, html, { copiaInLibreria = true } = {}) => {
     if (Buffer.byteLength(html, 'utf8') > ARTEFATTO_MAX_BYTE) {
-      // ⛔ Nessun evento, niente salvato: il tool torna comunque un id (il modello non deve credere che nulla sia successo), ma la UI non riceve mai un artefatto troncato/enorme.
-      return { id: `artefatto-rifiutato-troppo-grande-${randomUUID()}` };
+      throw Object.assign(new RangeError(`ARTIFACT_TOO_LARGE: HTML is ${Buffer.byteLength(html, 'utf8')} bytes; the maximum is ${ARTEFATTO_MAX_BYTE}. Nothing was saved.`), { code: 'ARTIFACT_TOO_LARGE' });
     }
     const id = randomUUID();
-    salvaArtefattoFn(id, html);
-    onEvento(artifactCreated({ messageId: randomUUID(), id, titolo }));
+    await salvaArtefattoFn(id, html);
+    let voceLibreriaId;
     /*
      * La copia durevole, in Libreria. ⛔ Non blocca e non fa fallire il giro: se la Libreria non è
      * scrivibile l'artefatto resta comunque a schermo e apribile — meglio un artefatto senza copia
      * che un giro rotto per una scrittura. Il motivo si vede nel log del server, mai in silenzio.
      */
-    try {
-      await salvaVoceLibreriaFn({
+    if (copiaInLibreria !== false) try {
+      const voceSalvata = await salvaVoceLibreriaFn({
         cartella: await cartellaDatiDelProgetto(),
         nome: `${(titolo || 'artefatto').replace(/[\\/:*?"<>|]/g, '-').slice(0, 80)}.html`,
         mediaType: 'text/html',
@@ -1235,9 +1272,14 @@ export async function avviaSessione({
         modello,
         testo: html,
       });
+      if (typeof voceSalvata !== 'string' || !/^lib-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(voceSalvata)) {
+        throw new Error('La Libreria non ha restituito un riferimento valido alla copia');
+      }
+      voceLibreriaId = voceSalvata;
     } catch (errore) {
       console.error('[artefatti] copia in Libreria non riuscita:', errore instanceof Error ? errore.message : errore);
     }
+    onEvento(artifactCreated({ messageId: randomUUID(), id, titolo, voceLibreriaId }));
     return { id };
   };
 
@@ -1998,7 +2040,7 @@ export async function avviaSessione({
      ritardava la prima richiesta della figlia, e FIG-01 — che aspetta proprio quella — cadeva 2 volte su 3 nella suite intera.
      Un negozio illeggibile non ferma il giro: niente blocco, e gli attrezzi lo diranno. */
   const sessioneNuova = !(Array.isArray(messaggiIniziali) && messaggiIniziali.length > 0);
-  const memorieNelPrompt = sessioneNuova && agentRole !== 'child'
+  const memorieNelPrompt = (sessioneNuova || ricostruisciContestoIniziale) && agentRole !== 'child'
     ? await elencaMemorieFn({ cartella: cartellaMemoria }).then(bloccoDelleMemorie, () => null)
     : null;
 
@@ -2042,10 +2084,16 @@ export async function avviaSessione({
   try {
     const esito = await talosLavoraFn({
       cartella, task, modello, chiave, comandoProva, segnaleStop, messaggiIniziali, mobile,
+      ...(checkpointSessionId ? { checkpointSessionId, checkpointOperation } : {}),
+      ambienteComandiFn,
+      ...(processOutputFn ? { captureProcessFn: ({toolCallId}, execute) => processOutputFn({runId, toolCallId}, execute) } : {}),
+      ...(typeof processOutputReadFn === 'function' ? {readProcessOutputFn: processOutputReadFn} : {}),
       // ⭐ P-13 — il kernel lo mette in testa al prompt, subito dopo le istruzioni e PRIMA della
       // consegna: un contenuto stabile messo DOPO uno variabile non viene mai riusato dalla cache.
       contestoDelProgetto: testoContestoProgetto,
       onGiro, onScrittura, onDelta, reasoning, contextHooks,
+      ...(typeof onStoriaIniziale === 'function' ? { onStoriaIniziale } : {}),
+      ...(ricostruisciContestoIniziale === true ? { ricostruisciContestoIniziale: true } : {}),
       fallbackProviders,
       onAvviso: async messaggio => {
         const messageId = randomUUID();
@@ -2057,7 +2105,7 @@ export async function avviaSessione({
         if (typeof depositaCambioFornitore !== 'function') throw new Error('Il cambio non è collegato alla sessione.');
         for (const messageId of messaggiTestoPerGiro.values()) await onEvento(textMessageEnd({ messageId }), { durable: true });
         for (const messageId of messaggiRagionamentoPerGiro.values()) await onEvento(reasoningMessageEnd({ messageId }), { durable: true });
-        for (const ids of toolCallIdStreamatiPerGiro.values()) for (const toolCallId of ids) await onEvento(eventoPerEsitoTool({ messageId: randomUUID(), toolCallId, content: 'Richiesta interrotta prima dell’esecuzione.' }), { durable: true });
+        for (const ids of toolCallIdStreamatiPerGiro.values()) for (const toolCallId of ids) await onEvento(eventoPerEsitoTool({ messageId: randomUUID(), toolCallId, content: 'Richiesta interrotta prima dell’esecuzione.', isError: true }), { durable: true });
         messaggiTestoPerGiro.clear(); messaggiRagionamentoPerGiro.clear(); toolCallIdStreamatiPerGiro.clear();
         const messageId = randomUUID();
         await onEvento(textMessageStart({ messageId, role: 'assistant' }), { durable: true });
@@ -2090,6 +2138,12 @@ export async function avviaSessione({
       componiRapportoRicercaFn,
       cartellaRicerche: cartellaDatiDelProgetto,
       onForgeCrea, toolForge, eseguiToolForgeFn,
+      registroLetture,
+      cartellaPagineWeb,
+      ricercheInCorso,
+      preferenzeWslFn,
+      consensiSessione,
+      casaLinuxSessione,
     });
     onEvento(esitoInEventoFinale({ threadId, runId, esito }));
     return { threadId, runId, ok: esito.comeFinita === 'concluso', esito, erroreInterno: null };
@@ -2275,9 +2329,15 @@ export async function chiediAlModelloUnaVolta({ modello, chiave, prompt, segnale
  */
 export async function eseguiComandoDiretto({
   cartella, comando, onEvento, mobile = false,
+  processOutputFn,
   /* ⛔ D-10F — dove gira questo comando: 'wsl2', 'windows', o null = «come prima» (il ripiego
      automatico). E' una scelta della SESSIONE, non una conseguenza di quale programma hai scritto. */
   dove = null,
+  /* F009 (owner 01/10/2026) — `{ usaUtenteNormale }`, la preferenza della persona per l'utente di WSL. Nessuna conferma di
+     root qui: il comando lo ha scritto la persona stessa. L'esito dichiara comunque con che utente ha girato. */
+  preferenzeWsl = null,
+  /* Fase B (owner 01/10/2026): con la casa Linux della sessione, «Automatico» vale Linux se WSL c'è, anche per i comandi `!`. */
+  automaticoInLinux = false,
   eseguiComandoSandboxatoFn = eseguiComandoSandboxatoReale,
 }) {
   /*
@@ -2306,36 +2366,28 @@ export async function eseguiComandoDiretto({
    * Ricerca 10/09/2026: AG-UI, «a vocabulary of typed events that agents emit to frontends», dove
    * l'avanzamento è distinto dal messaggio finale; Vercel Academy, «Streaming and Tool Rendering».
    */
-  let accumulato = '';
-  let ultimoInvio = 0;
-  let mandati = 0;
-  const TETTO_USCITA_IN_CORSO = 40_000;
-  const svuota = () => {
-    if (!accumulato || mandati >= TETTO_USCITA_IN_CORSO) return;
-    const delta = accumulato.slice(0, TETTO_USCITA_IN_CORSO - mandati);
-    accumulato = '';
-    mandati += delta.length;
-    onEvento(toolCallOutput({ toolCallId, delta }));
-  };
-  const risultato = await eseguiComandoSandboxatoFn(comando, cartella, {
+  const anteprima = createToolOutputPreview({
+    onOutput: (delta) => onEvento(toolCallOutput({ toolCallId, delta })),
+  });
+  const execute = ({onBytes} = {}) => eseguiComandoSandboxatoFn(comando, cartella, {
     mobile,
+    ...(onBytes ? {onBytes} : {}),
     /* ⛔ D-10D-bis: si chiede al kernel di dire DOVE si e' fermato il comando, cosi' il prossimo
        riparte da li'. Chi non lo chiede non vede nessuna differenza. */
     tracciaCartella: true,
     dove,
-    onPezzo: ({ testo }) => {
-      accumulato += testo;
-      const ora = Date.now();
-      if (accumulato.length >= 2_048 || ora - ultimoInvio >= 120) { ultimoInvio = ora; svuota(); }
-    },
+    ...(preferenzeWsl ? { wsl: preferenzeWsl } : {}),
+    ...(automaticoInLinux ? { automaticoInLinux: true } : {}),
+    onPezzo: ({ testo }) => anteprima.append(testo),
   });
-  svuota(); // ⛔ l'ultimo pezzo non resta in mano: sarebbe il difetto di prima, in piccolo
+  const risultato = processOutputFn ? await processOutputFn({runId: comandoId, toolCallId}, execute) : await execute();
+  anteprima.flush(); // Anche l'ultimo pezzo ammesso deve essere consegnato.
   /* ⛔ BLOCCO 6 (B3) — era `[sandbox: ${risultato.enforcement}]`, cioè `[sandbox: none]`: un valore
      che non dice a chi legge che il comando è partito con gli stessi privilegi di TALOS. Qui il
      comando è quello scritto dalla PERSONA (`!`), quindi la dichiarazione serve ancora di più.
      L'etichetta viene da `kernel/etichetta-sandbox.mjs`: una fonte sola per i due punti che
      costruiscono questa riga (l'altro è il kernel). */
-  const content = `exit ${risultato.codice} [sandbox: ${etichettaSandbox(risultato.enforcement)}]\n${risultato.testo}`;
+  const content = `exit ${risultato.codice} [sandbox: ${etichettaSandbox(risultato.enforcement, risultato.wsl)}]\n${risultato.testo}`;
   /* ⛔ BLOCCO 7 (B4) — l'evento porta anche i DUE FLUSSI separati e il codice d'uscita, quando il
      kernel li ha davvero (allega solo i non vuoti: vedi `toolCallResult`). Per un comando scritto
      dalla PERSONA serve ancora di più: `npm` scrive l'avanzamento su stderr e `git` ci mette i
@@ -2344,6 +2396,7 @@ export async function eseguiComandoDiretto({
   onEvento(eventoPerEsitoTool({
     messageId: randomUUID(), toolCallId, content,
     stdout: risultato.fuori, stderr: risultato.errori, exitCode: risultato.codice,
+    ...(processOutputFn ? {isError: risultato.codice !== 0 || risultato.outputStorageFailed === true} : {}),
   }));
   onEvento(comandoUtenteFinito({ comandoId, codice: risultato.codice, enforcement: risultato.enforcement }));
   /*
@@ -2364,5 +2417,6 @@ export async function eseguiComandoDiretto({
     cartellaFinale: risultato.cartellaFinale ?? null,
     comando,
     testo: risultato.testo ?? '',
+    ...(risultato.processOutput ? {processOutput: risultato.processOutput} : {}),
   };
 }

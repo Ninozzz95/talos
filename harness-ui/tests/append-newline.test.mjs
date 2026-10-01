@@ -152,7 +152,8 @@ test('⛔ T-15-06 — una scrittura PIENA non entra in questa cura: il default n
   writeFileSync(join(cartella, 'p.txt'), 'com\'era');
   await talosLavora({
     cartella, task: TASK, modello: 'x', chiave: 'y',
-    fetchDiRete: sportello(chiamaScrivi({ percorso: 'p.txt', contenuto: 'nuovo, sempre senza a-capo' }), FINE),
+    // T25/B09 (30/09): il modello legge il file prima di sostituirlo, come deve
+    fetchDiRete: sportello({ role: 'assistant', content: '', tool_calls: [{ id: 'call_0', function: { name: 'leggi', arguments: JSON.stringify({ percorso: 'p.txt' }) } }] }, chiamaScrivi({ percorso: 'p.txt', contenuto: 'nuovo, sempre senza a-capo' }), FINE),
   });
   assert.equal(readFileSync(join(cartella, 'p.txt'), 'utf8'), 'nuovo, sempre senza a-capo',
     'solo mode:"append" separa: la sostituzione intera resta quella di sempre');

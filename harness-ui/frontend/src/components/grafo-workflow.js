@@ -31,6 +31,7 @@ import { chiaveCella, disponi, formaDelleFasi } from './grafo/disposizione.js';
 import { creaFonte } from './grafo/fonte.js';
 import { creaTela } from './grafo/tela.js';
 import { creaTempo } from './grafo/tempo.js';
+import { montaPannelloRisultati } from './workflow-results-panel.js';
 
 // chi importava gli aiuti da qui (rail, prove) continua a trovarli qui
 export {
@@ -230,7 +231,6 @@ export function montaGrafoWorkflow(host, {
   dettaglio.append(detChi, detProve, detCompito, detAltro);
   root.append(cima, comandi, esitoCerca, avviso, area, rip, dettaglio);
   host.append(root);
-
   /* le tre viste nell'area */
   const tela = creaTela(area, {
     icona,
@@ -246,6 +246,15 @@ export function montaGrafoWorkflow(host, {
   });
   tempo.elemento.hidden = true;
   area.append(lettura);
+  // Il foglio vive nella sola tela: testata, navigazione e dettaglio restano operabili.
+  const pannelloRisultati = montaPannelloRisultati(area, {
+    client, sorgente,
+    onRitorno: () => {
+      const trigger = dettaglio.querySelector('[data-azione="apri-risultati"]');
+      trigger?.setAttribute('aria-expanded', 'false');
+      trigger?.focus();
+    },
+  });
 
   /* ——— i dati per le viste ——— */
   const ricorda = () => { try { storage?.setItem(chiaveMemoria, JSON.stringify({ vista: stato.vista })); } catch { /* storage non disponibile */ } };
@@ -514,6 +523,7 @@ export function montaGrafoWorkflow(host, {
   /* ——— selezione, focus, dettaglio (R4: chi · Evidenze recenti · Task corrente · «…») ——— */
   function seleziona(nodeId, { muovi = true, riga = null } = {}) {
     if (!nodeId) return;
+    if (stato.selezionato && stato.selezionato !== nodeId) pannelloRisultati.chiudi({ restituisciFuoco: false });
     stato.selezionato = nodeId;
     stato.fuocoAlbero = `passo:${nodeId}`;
     stato.lignaggio = null;
@@ -567,6 +577,7 @@ export function montaGrafoWorkflow(host, {
       if (morto || stato.selezionato !== nodeId) return;
       const primaSessione = stato.dettaglio?.stepSessionId ?? null;
       stato.dettaglio = { ...info, nodeId, carica: false };
+      pannelloRisultati.aggiorna(stato.dettaglio);
       if (info.stepSessionId && info.stepSessionId !== primaSessione) {
         chiudiEvidenze();
         chiudiEvidenze = client.evidenze(info.stepSessionId, (voci) => { if (!morto && stato.selezionato === nodeId) { stato.evidenze = voci; disegnaDettaglio(); } });
@@ -641,62 +652,25 @@ export function montaGrafoWorkflow(host, {
     if (stato.t !== null && run) elenco.append(el('li', 'talos-wfg__vuoto', 'Sono quelle di adesso: le evidenze non hanno un orario e la riproduzione non le ferma.'));
     const outputParts = [provaTesta, elenco];
     if (run && !info.carica && (info.totalOutputs > 0 || info.outputs?.length > 0)) {
-      const outputTitle = el('h4', 'talos-wfg__dettaglio-titolo', `Risultati (${Number.isSafeInteger(info.totalOutputs) ? info.totalOutputs : 0})`);
-      const outputs = el('ul', 'talos-wfg__outputs');
-      for (const ref of info.outputs ?? []) {
-        if (!ref?.resultId) continue;
-        const item = el('li', 'talos-wfg__output');
-        const facts = [ref.kind || 'risultato', ref.contentType || 'tipo sconosciuto', Number.isSafeInteger(ref.bytes) ? `${cifra(ref.bytes)} byte` : 'dimensione sconosciuta'];
-        item.append(el('div', 'talos-wfg__output-meta', facts.join(' · ')));
-        const complete = info.fullById?.[ref.resultId];
-        if (ref.preview && (complete?.content === undefined || complete.content === null)) {
-          item.append(el('pre', 'talos-wfg__output-preview', ref.preview));
-        }
-        if (complete?.content !== undefined && complete.content !== null) {
-          const full = el('pre', 'talos-wfg__output-full', complete.content);
-          full.tabIndex = -1; item.append(full);
-        } else if (complete?.content === null) {
-          item.append(el('p', 'talos-wfg__vuoto', 'Contenuto binario: scarica il file per aprirlo.'));
-        } else if (complete?.error) item.append(el('p', 'talos-wfg__vuoto', `Lettura fallita (${complete.error}). Riprova.`));
-        const mediaType = String(ref.contentType ?? '').split(';', 1)[0].trim().toLowerCase();
-        const textEligible = mediaType.startsWith('text/') || mediaType === 'application/json'
-          || mediaType.endsWith('+json') || mediaType === 'application/xml' || mediaType.endsWith('+xml');
-        if ((!complete || complete.error) && textEligible) {
-          const open = bottone('Mostra tutto', 'talos-wfg__link talos-wfg__output-open');
-          open.addEventListener('click', async () => {
-            open.disabled = true; open.textContent = 'Caricamento…';
-            let result;
-            try { result = await client.output(sorgente, info.nodeId, ref.resultId); }
-            catch (error) { result = { error: error?.message ?? 'errore sconosciuto' }; }
-            if (morto || stato.selezionato !== info.nodeId || stato.dettaglio?.nodeId !== info.nodeId) return;
-            stato.dettaglio.fullById ??= {};
-            stato.dettaglio.fullById[ref.resultId] = result?.resultId === ref.resultId || result?.error ? result : { error: 'risultato incoerente' };
-            disegnaDettaglio();
-          });
-          item.append(open);
-        }
-        const raw = el('a', 'talos-wfg__link talos-wfg__output-download', 'Scarica');
-        raw.href = client.outputRawUrl(sorgente, info.nodeId, ref.resultId);
-        raw.setAttribute('download', ''); item.append(raw);
-        outputs.append(item);
-      }
-      if (outputs.children.length === 0) outputs.append(el('li', 'talos-wfg__vuoto', 'Nessun risultato disponibile.'));
-      outputParts.push(outputTitle, outputs);
-      if (info.nextOutputOffset !== null && Number.isSafeInteger(info.nextOutputOffset)) {
-        const more = bottone(`Mostra altri risultati (${cifra(info.totalOutputs - info.outputs.length)} ancora)`, 'talos-wfg__link talos-wfg__output-more');
-        more.addEventListener('click', async () => {
-          more.disabled = true;
-          try {
-            const page = await client.passo(sorgente, info.nodeId, { outputOffset: info.nextOutputOffset });
-            if (morto || stato.selezionato !== info.nodeId || stato.dettaglio?.nodeId !== info.nodeId) return;
-            const known = new Set(stato.dettaglio.outputs.map((entry) => entry.resultId));
-            stato.dettaglio.outputs.push(...(page.outputs ?? []).filter((entry) => !known.has(entry.resultId)));
-            stato.dettaglio.nextOutputOffset = page.nextOutputOffset;
-            disegnaDettaglio();
-          } catch { more.disabled = false; more.textContent = 'Lettura fallita. Riprova'; }
-        });
-        outputParts.push(more);
-      }
+      const total = Number.isSafeInteger(info.totalOutputs) ? info.totalOutputs : (info.outputs?.length ?? 0);
+      outputParts.push(el('h4', 'talos-wfg__dettaglio-titolo', `Risultati (${cifra(total)})`));
+      const tipi = new Set((info.outputs ?? []).map(ref => ref?.kind).filter(Boolean));
+      outputParts.push(el('p', 'talos-wfg__result-compact', [
+        `${cifra(total)} risultati`,
+        tipi.size ? [...tipi].join(', ') : 'tipo sconosciuto',
+        'Apri il pannello per anteprime, testo integrale e download',
+      ].join(' · ')));
+      const open = bottone('Apri risultati', 'talos-wfg__link talos-wfg__result-trigger');
+      open.dataset.azione = 'apri-risultati';
+      open.setAttribute('aria-controls', pannelloRisultati.elemento.id);
+      open.setAttribute('aria-expanded', String(pannelloRisultati.apertoPer() === info.nodeId));
+      open.addEventListener('click', (evento) => {
+        // La app ha un disclosure delegato: questo pulsante gestisce già il proprio pannello.
+        evento.stopPropagation();
+        pannelloRisultati.apri({ ...info, label: riga.label ?? riga.nodeId });
+        open.setAttribute('aria-expanded', 'true');
+      });
+      outputParts.push(open);
     }
     detProve.replaceChildren(...outputParts);
 
@@ -1137,6 +1111,7 @@ export function montaGrafoWorkflow(host, {
       d.removeEventListener('pointerdown', chiudiMenuFuori, true);
       for (const aperta of d.querySelectorAll?.('dialog.talos-wfg-conferma[open]') ?? []) aperta.close();
       tela.distruggi(); tempo.distruggi();
+      pannelloRisultati.distruggi();
       try { elk.terminateWorker?.(); } catch { /* nessun worker */ }
       root.remove();
     },

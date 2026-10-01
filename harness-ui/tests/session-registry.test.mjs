@@ -3627,7 +3627,7 @@ test('AGENTI LIVE: una nipote mantiene parentId reale ma viene notificata anche 
   finta.concludi(0, { type: 'RunError', code: 'fermato', threadId: 't1', runId: 'r1' }, { ok: false, esito: { detto: 'fermata', comeFinita: 'fermato', messaggiFinali: [] } });
 });
 
-test('DELEGA DURABILE: se la madre conclude prima della figlia, il risultato ammette un giro sintetico con ID persistito', async () => {
+test('DELEGA DURABILE: se la madre conclude prima della figlia, il risultato ammette un giro sintetico con ID persistito', async (t) => {
   const cartellaStore = cartellaStoreVera();
   const finta = sessioniControllabili();
   try {
@@ -3638,13 +3638,12 @@ test('DELEGA DURABILE: se la madre conclude prima della figlia, il risultato amm
       ok: true,
       esito: { detto: 'continuo senza attendere', comeFinita: 'concluso', messaggiFinali: [{ role: 'user', content: 'c' }, { role: 'assistant', content: 'continuo senza attendere' }] },
     });
-    await new Promise((resolve) => setImmediate(resolve));
+    await registro.attendiAssestamento(padreId);
     finta.concludi(1, { type: 'RunFinished', threadId: 't2', runId: 'r2' }, {
       ok: true,
       esito: { detto: 'risultato tardivo verificato', comeFinita: 'concluso', messaggiFinali: [] },
     });
-    await new Promise((resolve) => setTimeout(resolve, 80));
-    assert.equal(finta.chiamate, 3, 'la madre riparte una volta dopo la figlia');
+    await t.waitFor(() => assert.equal(finta.chiamate, 3, 'la madre riparte una volta dopo la figlia'));
     assert.equal(finta.run(2).input.messaggiIniziali.at(-1).talosOrigin, 'delegation-notice');
     assert.deepEqual(finta.run(2).input.task.childIds, [avvio.childId]);
     finta.concludi(2, { type: 'RunFinished', threadId: 't3', runId: 'r3' }, {

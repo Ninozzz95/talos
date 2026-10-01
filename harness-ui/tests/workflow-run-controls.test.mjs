@@ -26,6 +26,7 @@ import { createCapacitaAdattiva, createWorkflowScheduler } from '../src/workflow
 import { createWorkflowStore, readDefinition, readEvents } from '../src/workflow/store.mjs';
 import { cartellaDiProva } from './aiuto/cartelle-di-prova.mjs';
 import { rimuoviCartellaDiProva } from './aiuto/rimuovi-cartella-di-prova.mjs';
+import { creaAttesaAProgresso } from './aiuto/attesa-a-progresso.mjs';
 
 const CLOUD = 'z-ai/glm-5.3-flash';
 const BOZZA = {
@@ -78,22 +79,16 @@ function giriFinti() {
   return api;
 }
 
-async function aspettaChe(condizione, ms = 3_000) {
-  const fine = Date.now() + ms;
-  while (Date.now() < fine) {
-    if (await condizione()) return true;
-    await new Promise((r) => setTimeout(r, 5));
-  }
-  return Boolean(await condizione());
-}
+/* 01/10/2026: l'attesa conta il tempo SENZA progresso delle cartelle dati del banco (tests/aiuto/attesa-a-progresso.mjs). */
+const { aspettaChe, segui } = creaAttesaAProgresso({ ms: 3_000 });
 const calma = () => new Promise((r) => setTimeout(r, 120));
 async function svuota(cartellaStore) {
   for (let i = 0; i < 3; i += 1) { try { await attendiScritture({ cartellaStore }); } catch { /* */ } await new Promise((r) => setImmediate(r)); }
 }
 
 async function banco(t) {
-  const cartellaStore = cartellaDiProva('talos-wf-controlli-sessioni-');
-  const radiceWorkflow = mkdtempSync(join(tmpdir(), 'talos-wf-controlli-store-'));
+  const cartellaStore = segui(cartellaDiProva('talos-wf-controlli-sessioni-'));
+  const radiceWorkflow = segui(mkdtempSync(join(tmpdir(), 'talos-wf-controlli-store-')));
   const opzioniRegistro = (giri) => ({ guardaWorkspaceFn: () => () => {}, modello: 'm', chiave: 'k', cartellaStore,
     avviaSessioneFn: giri.avviaSessioneFn, cartellaEsisteFn: () => true, workflowPlanProposeFn: async () => ({}),
     preparaEsecuzioneFn: (taskId) => {
@@ -102,8 +97,13 @@ async function banco(t) {
     } });
   const giri = giriFinti();
   const registro = createSessionRegistry(opzioniRegistro(giri));
+  /* ⛔ 01/10/2026 — la manopola del DISCO LENTO, solo per le prove: ogni scrittura del giornale attende tanto prima e dopo (il
+     `failpoint` dello store, come `banco` di workflow-scheduler-loop.test.mjs). Serve a rifare qui, a comando, il runner Windows
+     della PR #45 dove WF-RUN-PAUSE-DRAINS è caduta (10,8 s). Spenta di serie. */
+  const ritardoScrittureMs = Number(process.env.TALOS_PROVA_RITARDO_SCRITTURE_MS) || 0;
   const store = await createWorkflowStore({ workflowDataRoot: radiceWorkflow, workspaceRoots: [],
-    resultLimits: { maxItemBytes: 1_048_576, maxRunBytes: 8_388_608 } });
+    resultLimits: { maxItemBytes: 1_048_576, maxRunBytes: 8_388_608 } },
+  ritardoScrittureMs > 0 ? { failpoint: async (nome) => { if (nome.startsWith('store.journal.')) await new Promise((r) => setTimeout(r, ritardoScrittureMs)); } } : {});
   const nowFn = () => new Date(Date.now() + 60_000).toISOString();
   const schedulers = [];
   const componi = ({ sessioni = registro, adattatori } = {}) => {

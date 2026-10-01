@@ -90,6 +90,7 @@ export default Object.freeze({
     'richiesta della modalità Piano': 'requesting Plan mode',
     'proposta di workflow': 'proposing a workflow',
     'stato del workflow': 'workflow status',
+    'Risultato del comando': 'Command output',
     'lettura del risultato di un passo': 'reading a step result',
     'controllo del workflow': 'workflow control',
     'domanda all’agente che l’ha avviato': 'asking the parent agent',

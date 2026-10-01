@@ -212,8 +212,10 @@ export function toolCallOutput({ toolCallId, delta }) {
  *   non poteva sapere CHE COSA e' stato eseguito ne' DOVE. Per `shell` `cwd` e' la cartella
  *   EFFETTIVA (quella che il comando ha visto davvero), non quella richiesta.
  */
-export function toolCallResult({ messageId, toolCallId, content, role = 'tool', durataMs, comando, cwd, stdout, stderr, exitCode }) {
+export function toolCallResult({ messageId, toolCallId, content, role = 'tool', durataMs, comando, cwd, stdout, stderr, exitCode, isError, receipt, outcome }) {
     const evento = { type: 'ToolCallResult', messageId, toolCallId, content, role }
+    // Optional TALOS extension, using MCP's boolean semantics. Never infer it from content.
+    if (typeof isError === 'boolean') evento.isError = isError
     if (durataValida(durataMs)) evento.durataMs = Math.round(durataMs)
     if (typeof comando === 'string' && comando !== '') evento.comando = comando
     if (typeof cwd === 'string' && cwd !== '') evento.cwd = cwd
@@ -241,6 +243,11 @@ export function toolCallResult({ messageId, toolCallId, content, role = 'tool', 
     if (typeof stdout === 'string' && stdout !== '') evento.stdout = stdout
     if (typeof stderr === 'string' && stderr !== '') evento.stderr = stderr
     if (Number.isFinite(exitCode)) evento.exitCode = Math.round(exitCode)
+    /* G02 (dalla lane CLI, a7dfe1193, M4-E): la ricevuta del kernel per QUESTO attrezzo, inoltrata senza interpretarla;
+       solo un oggetto. Senza, l'evento resta identico a prima. */
+    if (receipt && typeof receipt === 'object' && !Array.isArray(receipt)) evento.receipt = receipt
+    /* G02 (dalla lane CLI, 6167226e9): un attrezzo annullato prima di partire lo DICE; solo il valore 'cancelled'. */
+    if (outcome === 'cancelled') evento.outcome = outcome
     return evento
 }
 
@@ -261,10 +268,15 @@ export function stateDelta({ delta }) {
  * (vedi artifact-store.mjs) — lo script del modello non partiva mai.
  * La cura è servire l'HTML da una rotta HTTP vera
  * (`GET /api/v1/artifacts/:id`, la sua CSP dedicata), quindi qui basta
- * l'`id`: il frontend punta `iframe.src` lì, il browser fa il resto.
+ * l'`id`. Il riferimento opzionale `voceLibreriaId` identifica invece la
+ * copia durevole: il frontend richiede una nuova pagina autorizzata alla
+ * sessione, anche al replay. Nessun URL di capability nel registro.
  */
-export function artifactCreated({ messageId, id, titolo }) {
-    return { type: 'ArtifactCreated', messageId, id, titolo }
+export function artifactCreated({ messageId, id, titolo, voceLibreriaId }) {
+    // Optional durable reference; old consumers/events keep their exact shape.
+    // Never persist the expiring page capability or HTML in the event journal.
+    return { type: 'ArtifactCreated', messageId, id, titolo,
+        ...(typeof voceLibreriaId === 'string' ? { voceLibreriaId } : {}) }
 }
 
 /**
@@ -434,13 +446,13 @@ export function eventiPerRisposta(risposta, { messageId, parentMessageId, testoG
  * talosLavora mette in `messaggi.push({role:'tool', tool_call_id,
  * content})`, talosHarness.mjs riga ~836) a ToolCallResult.
  */
-export function eventoPerEsitoTool({ messageId, toolCallId, content, durataMs, comando, cwd, stdout, stderr, exitCode }) {
+export function eventoPerEsitoTool({ messageId, toolCallId, content, durataMs, comando, cwd, stdout, stderr, exitCode, isError, receipt, outcome }) {
     /* ⭐ OSS-1/OSS-2 — inoltro puro: la decisione su COSA entra nell'evento sta tutta in
        `toolCallResult` qui sopra, un posto solo. Chi non passa i tre campi ottiene l'oggetto
        identico di prima, byte per byte.
        ⛔ BLOCCO 7 (B4): stessa regola per i due flussi e per il codice d'uscita — l'inoltro non
          decide niente, e la guardia «solo se non vuoti» vive in `toolCallResult`. */
-    return toolCallResult({ messageId, toolCallId, content: String(content), durataMs, comando, cwd, stdout, stderr, exitCode })
+    return toolCallResult({ messageId, toolCallId, content: String(content), durataMs, comando, cwd, stdout, stderr, exitCode, isError, receipt, outcome })
 }
 
 /**

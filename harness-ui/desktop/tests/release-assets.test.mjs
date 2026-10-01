@@ -70,6 +70,8 @@ test('R04-SHA — hash reali, note in inglese col changelog dentro, e nessun art
   assert.equal(await readFile(join(distDir, 'SHA256SUMS.txt'), 'utf8'), `${sha(exe)}  TALOS-Setup-0.1.0.exe\n${sha(zip)}  TALOS-0.1.0-win.zip\n`);
   const note = await readFile(join(distDir, 'NOTE-RELEASE.md'), 'utf8');
   for (const testo of ['Windows 10 1809', 'x64', 'SmartScreen', 'More info', 'Run anyway', 'GGUF', 'telemetry', 'automatic updates', sha(exe), sha(zip), 'Get-FileHash', 'gh attestation verify', '--repo owner/progetto']) assert.ok(note.includes(testo), testo);
+  // Fase B (01/10/2026): il pacchetto porta Node e rg per Linux, e le note lo dicono.
+  assert.ok(note.includes('Node.js 24.18.0 and ripgrep 15.0.0 for Linux'), 'i binari per Linux del pacchetto sono dichiarati');
   // ⛔ Le note pubblicate sono in INGLESE: la sorgente italiana è la trappola che il mobile ha già pagato.
   for (const italiano of ['Ulteriori informazioni', 'Esegui comunque', 'Installazione', 'Contenuto']) assert.ok(!note.includes(italiano), `non deve restare italiano: ${italiano}`);
   // ⛔ E dicono COSA È CAMBIATO, non solo come si installa.
@@ -100,4 +102,21 @@ test('R04-CHANGELOG-CANCELLO — senza sezione (o senza file) non si pubblica: i
     /non ha una sezione "## desktop-v0\.1\.0"/,
     'il tag senza la sua sezione viene rifiutato, e il messaggio dice cosa scrivere',
   );
+});
+
+test('R04-NON-CANDIDATA — un tag finale non si presenta come «release candidate» (la 0.1.19 l aveva nelle note)', async t => {
+  const distDir = await mkdtemp(join(tmpdir(), 'talos-r04-candidata-'));
+  t.after(() => rm(distDir, { recursive: true, force: true }));
+  const exe = Buffer.from('installer di fixture');
+  await writeFile(join(distDir, 'TALOS-Setup-0.1.0.exe'), exe);
+  await writeFile(join(distDir, 'TALOS-0.1.0-win.zip'), Buffer.from('zip di fixture'));
+  const base = { distDir, versione: '0.1.0', tag: 'desktop-v0.1.0', repository: 'owner/progetto', smoke: { completato: true, installerSha256: createHash('sha256').update(exe).digest('hex') } };
+  for (const frase of ['This release candidate addresses workflow results.', 'A Release-Candidate build.', 'release\ncandidates follow']) {
+    const percorso = await conChangelog(distDir, `## desktop-v0.1.0 — 2026-10-01\n\n${frase}\n\n### Fixed\n- una cura\n`);
+    await assert.rejects(preparaRelease({ ...base, changelogPath: percorso }), /si presenta come «release candidate»/, frase);
+  }
+  // Al contrario: la parola «candidate» da sola, o una sezione normale, passano.
+  const sana = await conChangelog(distDir, '## desktop-v0.1.0 — 2026-10-01\n\nThe candidate list of models is read from the provider.\n\n### Fixed\n- una cura\n');
+  const risultato = await preparaRelease({ ...base, changelogPath: sana });
+  assert.equal(risultato.artefatti.length, 2);
 });

@@ -46,11 +46,15 @@ function Registrazioni-Talos {
     }
 }
 
+# 01/10/2026, PR pubblica #45 (desktop 0.1.20), owner «Alzo i limiti, poi tag»: sul runner windows-latest l'installazione durava
+# 116,2 s e 113,3 s nei giri verdi e oltre 120 s nel rosso (89 s per la 0.1.19, prima dei 30 MB di Node e rg per Linux). Il limite
+# di 120 s era un lancio di moneta, anche nel job di release dove un rosso dopo il tag brucia la versione. 300 s: piu' del doppio
+# del tempo misurato piu' lungo. Il passo dei workflow ne concede 15 minuti. Prova: R04-SMOKE-LIMITI (workflow.test.mjs).
 function Esegui-Installer([string]$File, [string]$Argomenti) {
     $p = Start-Process -FilePath $File -ArgumentList $Argomenti -PassThru -WindowStyle Hidden
-    if (-not $p.WaitForExit(120000)) {
+    if (-not $p.WaitForExit(300000)) {
         $p.Kill($true)
-        throw 'Installer/disinstallatore oltre il limite di 120 secondi.'
+        throw 'Installer/disinstallatore oltre il limite di 300 secondi.'
     }
     if ($p.ExitCode -ne 0) { throw "Installer/disinstallatore terminato con codice $($p.ExitCode)." }
 }
