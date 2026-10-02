@@ -56,7 +56,7 @@ test('OVERWRITE-02: letto per intero, si sostituisce, e l esito dice che ha sost
     const dir = cartella(t)
     writeFileSync(join(dir, 'a.txt'), 'CONTENUTO_ORIGINALE\n')
     const esiti = await giro(dir, [['leggi', { percorso: 'a.txt' }], ['scrivi', { percorso: 'a.txt', contenuto: 'nuovo' }]])
-    assert.equal(esiti[1], 'written: a.txt (replaced an existing file of 20 characters)')
+    assert.equal(esiti[1], 'written: a.txt (replaced an existing file of 20 bytes)')
     assert.equal(readFileSync(join(dir, 'a.txt'), 'utf8'), 'nuovo')
 })
 

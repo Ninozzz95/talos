@@ -19,12 +19,18 @@
  */
 import { montaPonteLegacy } from './bridge/legacy-dom.js';
 import { montaBarraFinestra } from './components/barra-finestra.js';
+import { montaAggiornamenti } from './components/aggiornamenti.js';
+import { confermaModale } from './components/modale-td.js';
 
 montaPonteLegacy(document);
 /* F7-1 (27/09/2026): la barra del titolo propria, solo nella finestra dell'app. PRIMA del monolite: c'è dal primo disegno
    (sotto il velo) e i comandi di Windows prendono subito il colore del tema; i cambi di tema li segue da sola. */
 montaBarraFinestra();
 await import('./legacy/app.js');
+/* 01/10/2026: l'aggiornamento automatico a schermo. DOPO il monolite: la scheda va nel pannello «Account, Doctor e backup»,
+   che esiste solo da qui; uno stato arrivato prima dal guscio si ritrova in `window.__talosAggiornamenti`. Nel browser non
+   arriva niente e non nasce niente. */
+montaAggiornamenti({ conferma: confermaModale }); // «Riavvia ora» chiede se una sessione sta lavorando
 
 /*
  * 14/09/2026 — Desktop 0.1.7: il trasporto consegna i delta in tempo reale, ma le modalita

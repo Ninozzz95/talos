@@ -30,6 +30,7 @@
     "jszip": "3.10.1",
     "node-pty": "1.1.0",
     "pdf-lib": "1.17.1",
+    "pdfjs-dist": "6.3.289",
     "pdfmake": "0.3.11",
     "pptxgenjs": "4.0.1",
     "unicode-segmenter": "0.15.0",

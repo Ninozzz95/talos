@@ -6,6 +6,77 @@ Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/). Versions
 
 ## Unreleased
 
+## desktop-v0.1.21 — 2026-10-02
+
+TALOS now updates itself: it looks for a new version in the background, checks our signature, and installs it when you
+close the app. The agent's commands get read-only tabs of their own in the Terminal, MCP servers can ask you for details
+or to open a page, and the model can read Word, Excel, PowerPoint and PDF files.
+
+### Added
+
+- **Automatic updates.** Thirty seconds after start and then every four hours, the app looks for a newer desktop
+  release, downloads it in the background and installs it when you close the app, or right away with *Riavvia ora*.
+  Every update manifest is signed with our Ed25519 key, and the app checks the signature before downloading anything.
+  A band under the title bar says when an update is ready; a card at the top of *Account, Doctor e backup* holds the
+  switch, on by default. If a session is working, *Riavvia ora* asks before restarting. Preview builds are not updated.
+- **The agent's commands in the Terminal.** Each turn of the agent gets a read-only tab, *agente · giro N*, with its
+  commands one under the other: the command, its output and how it ended. The tab appears without taking the one you
+  are using; its dot is green when every command succeeded and red when one failed; it can be closed but not renamed,
+  and it is rebuilt when you reopen the session. The commands you type with `!` stay in the chat and in *Processi*.
+- **MCP servers can ask you.** When a server needs details (a form with text, numbers, yes/no and choices) or wants
+  you to open a page (a sign-in, a payment), the chat shows a card that names the server. The page opens only when you
+  click, and what you type in the form goes to the server without staying on screen.
+- **Office and PDF files can be read.** The model gets the text of docx, xlsx, pptx and pdf files, with Hermes' limits,
+  instead of being told that they are binary.
+- **A Stop for each command.** In *Processi* every running command has its own Stop. The model is told that you
+  stopped it and not to run it again unless you ask, and the chat says *Annullato*, not that it failed. A command
+  waiting for your consent says so and has no Stop; a command you typed is marked *tu*.
+- On a first start with no provider ready, the Home shows *Imposta un provider*, which opens the Provider tab of the
+  model lab. Ollama and LM Studio with a saved address count as ready.
+
+### Changed
+
+- **The floor for commands that cannot be undone is Hermes' in full, and looks behind wrappers.** Deleting the root,
+  formatting a disk, shutting down and the like are refused at every permission level, now also behind `sudo -u`,
+  `timeout`, `nice`, `env`, `eval` and similar wrappers, while the same words inside quotes no longer trigger it. The
+  refusal says what the floor is and what it is not.
+- *Scrive nel progetto* keeps writes inside the session folder, measured on the real path: absolute paths, `../` and
+  junctions included. The path is measured again right before the write.
+- Network paths (`\\server\share`) are never contacted without a yes. Reading, listing and writing ask first, with one
+  card per file; a session folder on a share asks once per session.
+- A delegated sub-agent gets its parent's permissions by default, and never more: under a read-only parent it starts
+  read-only.
+- The delegation graph uses the Workflow graph's controls and movements, and its minimap shows only when the graph does
+  not fit.
+- The default interface size is back to *Predefinita*, and the TALOS mark fills the orb.
+
+### Fixed
+
+- A command now ends when it exits, even if a program it started in the background keeps its output open; before, the
+  reply waited and Stop did not end it.
+- Editing a file that is not UTF-8 no longer damages it: a Windows-1252 file lost its accented letters for good while
+  the reply said the rest was untouched. The edit is now refused and names the first byte that is not UTF-8, and file
+  tools report sizes in bytes.
+- In the Linux home, *Consenti in questa cartella* covers the whole folder, and a file changed by someone else while
+  its approval card was open is not overwritten.
+- On a worktree created by Git for Windows, Linux git's «not a git repository» is explained, with its cause and the fix
+  (`git worktree repair --relative-paths`).
+- A long delegation no longer fills the memory: its timeline is capped and each round costs the same as the first.
+- The loading indicator of a long conversation shows from the click.
+- In the chat, the outcome of a consent card (*Approvato*, *Negato*) and of an MCP card is again a small pill in its
+  colour, and the reason on a consent card is small and muted. The retained-output reader keeps its size and speaks
+  plainly; the command card no longer shows the line about retained output that is meant for the model; and the right
+  side of a command row shows the command instead of repeating its description.
+- Reopening a session no longer says «da un’altra finestra» for an answer given in this window, and no longer shows an
+  invented duration for a command you typed.
+
+### Known limits
+
+- Automatic updates start with this version: from 0.1.20, install 0.1.21 by hand once.
+- The outcome lines of commands are in Italian even when the interface is in English.
+- The limits listed for 0.1.20 still apply, except the one about a background program keeping a command's output open,
+  which is fixed.
+
 ## desktop-v0.1.20 — 2026-10-01
 
 Commands and file tools now work in the same place: with WSL installed, a session's shell and its reads, writes and

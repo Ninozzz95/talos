@@ -7,7 +7,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { schedeAgenteDagliEventi, idSchedaAgente, RIGHE_VIVE_AGENTE } from '../../src/components/terminale-agente.js';
+import { schedeAgenteDagliEventi, idSchedaAgente, RIGHE_VIVE_AGENTE, testoSchedaAgente, rigaEsitoComandoAgente } from '../../src/components/terminale-agente.js';
 
 const avvio = (id, giro, nome = 'shell') => ({ type: 'ToolCallStart', toolCallId: id, toolCallName: nome, giro });
 const argomenti = (id, comando) => ({ type: 'ToolCallArgs', toolCallId: id, delta: JSON.stringify({ comando }) });
@@ -93,4 +93,71 @@ test('TA-08 — un comando che tace da molto (in attesa) tiene la scheda accesa'
   const [scheda] = schedeAgenteDagliEventi(eventi, { adesso: 1_000 + 10 * 60_000 });
   assert.equal(scheda.comandi[0].stato, 'in-attesa');
   assert.equal(scheda.stato, 'live');
+});
+
+test('TA-CONSENSO — 02/10/2026: un comando che aspetta il consenso tiene VIVA la sua scheda (il giro non è finito)', () => {
+  const [scheda] = schedeAgenteDagliEventi([
+    avvio('a', 1), argomenti('a', 'ping -c 60 127.0.0.1'),
+    { type: 'ApprovalRequested', requestId: 'r1', toolCallId: 'a' },
+  ]);
+  assert.equal(scheda.comandi[0].stato, 'in-consenso');
+  assert.equal(scheda.stato, 'live', 'prima del 02/10 la riga diceva «in corso» e la scheda era viva: deve restarlo');
+});
+
+/* ── PO-10 passo 2 (02/10/2026): il cablaggio vuole tre cose in più dal modello ── */
+
+test('TA-09 — i comandi «!» della PERSONA non entrano nelle schede agente (owner 02/10/2026)', () => {
+  const schede = schedeAgenteDagliEventi([
+    { ...avvio('io', 1), chi: 'tu' }, argomenti('io', 'ping -n 3 127.0.0.1'), esito('io', 'exit 0\nok'),
+    avvio('ag', 1), argomenti('ag', 'npm test'), esito('ag', 'exit 0\nverde'),
+  ]);
+  assert.deepEqual(schede.flatMap((s) => s.comandi.map((c) => c.comando)), ['npm test']);
+});
+
+test('TA-10 — l’uscita tenuta FUORI dagli eventi (app.js non conserva il content) vince, e dal vivo se ne tiene la coda', () => {
+  const eventi = [avvio('a', 1), argomenti('a', 'npm run build'), { type: 'ToolCallResult', toolCallId: 'a', uscita: 0 }];
+  const [finita] = schedeAgenteDagliEventi(eventi, { uscite: new Map([['a', { testo: 'exit 0\ncostruito' }]]) });
+  assert.equal(finita.comandi[0].testo, 'exit 0\ncostruito');
+  const lunga = Array.from({ length: RIGHE_VIVE_AGENTE + 5 }, (_, i) => `r${i}`).join('\n');
+  const [viva] = schedeAgenteDagliEventi(eventi.slice(0, 2), { uscite: new Map([['a', { vivo: lunga }]]) });
+  assert.equal(viva.comandi[0].testo, null);
+  assert.equal(viva.comandi[0].vivo.split('\n').length, RIGHE_VIVE_AGENTE);
+});
+
+test('TA-11 — l’esito della scheda: in corso, conclusa, con errori; un annullato non è un errore (come i Processi)', () => {
+  const tre = (u) => [avvio('a', 1), argomenti('a', 'x'), esito('a', `exit ${u}\n`, { uscita: u })];
+  assert.equal(schedeAgenteDagliEventi(tre(0))[0].esito, 'concluso');
+  assert.equal(schedeAgenteDagliEventi(tre(1))[0].esito, 'con-errori');
+  assert.equal(schedeAgenteDagliEventi(tre(130))[0].esito, 'concluso', 'fermato apposta: non è un guasto');
+  assert.equal(schedeAgenteDagliEventi([avvio('a', 1), argomenti('a', 'x')])[0].esito, 'in-corso');
+});
+
+test('TA-12 — il testo per la xterm: $ comando, l’uscita senza le righe per il modello, la riga d’esito; righe CRLF', () => {
+  const testo = testoSchedaAgente({ comandi: [
+    { comando: 'npm test', stato: 'riuscito', durataMs: 1200, testo: 'exit 0 [sandbox: none]\n[TALOS output reference: 849de2b1-d1cf-4099-ab0c-146b601c58f0; retained 5 of 5 bytes.]\nverde\n\n\n' },
+    { comando: 'rm -rf build', stato: 'non-eseguito', testo: 'REFUSED. The person denied it.' },
+    { comando: 'npm run dev', stato: 'in-corso', testo: null, vivo: 'in ascolto su 5173' },
+    { comando: 'ping', stato: 'in-consenso', testo: null, vivo: '' },
+  ] });
+  const righe = testo.split('\r\n');
+  assert.equal(testo.includes('\n') && !/[^\r]\n/u.test(testo), true, 'ogni a capo è \r\n: la xterm non converte da sola');
+  assert.equal(testo.startsWith('\x1b[?25l'), true, 'in sola lettura il cursore si nasconde (DECTCEM), anche dopo un reset');
+  /* le righe vuote in coda all'uscita («verde\n\n\n») non staccano l'esito dal suo comando */
+  assert.deepEqual(righe.map((r) => r.replace(/\x1b\[[?0-9;]*[A-Za-z]/gu, '')), [
+    '$ npm test', 'verde', '— Riuscito · su Windows, senza isolamento · 1.2 s', '',
+    '$ rm -rf build', '— Non eseguito: il comando non è partito', '',
+    '$ npm run dev', 'in ascolto su 5173', '',
+    '$ ping', '— Aspetta il tuo consenso', '',
+  ]);
+  assert.doesNotMatch(testo, /TALOS output reference|REFUSED|exit 0/u, 'niente testo per il modello a schermo');
+  assert.equal(rigaEsitoComandoAgente({ stato: 'in-corso', testo: null }), null, 'mentre gira la riga d’esito non c’è');
+  assert.equal(testoSchedaAgente({ comandi: [] }), '');
+});
+
+test('TA-13 — un’uscita tolta dalla memoria (tetti di app.js) lo dice, e la riga d’esito resta dalla testata', () => {
+  const eventi = [avvio('a', 1), argomenti('a', 'npm test'), { type: 'ToolCallResult', toolCallId: 'a', uscita: 0 }];
+  const [scheda] = schedeAgenteDagliEventi(eventi, { uscite: new Map([['a', { vivo: '', testo: 'exit 0 [sandbox: none]', sfrattato: true }]]) });
+  const testo = testoSchedaAgente(scheda).replace(/\x1b\[[0-9;]*m/gu, '');
+  assert.match(testo, /uscita non più tenuta in questa pagina/u);
+  assert.match(testo, /— Riuscito/u);
 });

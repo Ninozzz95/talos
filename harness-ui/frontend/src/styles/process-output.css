@@ -3,7 +3,9 @@
 .talos-process-output__controls { display: flex; flex-wrap: wrap; align-items: center; gap: var(--ui-space-2); }
 .talos-process-output__controls label { display: flex; align-items: center; gap: var(--ui-space-2); }
 .talos-process-output select { font: inherit; color: var(--talos-text); background: var(--talos-panel); border: 1px solid var(--talos-border); border-radius: var(--ui-radius-control); padding: 6px 10px; min-height: var(--ui-control-small); }
-.talos-process-output__status, .talos-process-output__range { font-size: var(--ui-font-meta); color: var(--talos-muted); overflow-wrap: anywhere; }
+/* ⛔ 02/10/2026, owner («sì, tutti e tre»): il lettore vive dentro `.talos-message`, dove `.talos-message p` (0,1,1) batteva
+   queste due righe (0,1,0) — uscivano a 17 px col colore del testo, più grandi del contenuto che descrivono. 0,2,0. */
+.talos-process-output .talos-process-output__status, .talos-process-output .talos-process-output__range { margin: var(--ui-space-1) 0; font-size: var(--ui-font-meta); color: var(--talos-muted); overflow-wrap: anywhere; }
 .talos-process-output pre { max-height: 20rem; max-width: 100%; overflow: auto; user-select: text; white-space: pre-wrap; overflow-wrap: anywhere; font: var(--ui-font-meta)/1.6 var(--talos-font-mono); padding: var(--ui-space-3); background: var(--talos-panel); border: 1px solid var(--talos-border); border-radius: var(--ui-radius-control); }
 .talos-process-output code { font: inherit; }
 @media(max-width:600px) { .talos-process-output { margin-inline-start: 0; } }

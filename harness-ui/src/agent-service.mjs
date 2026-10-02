@@ -272,6 +272,8 @@ export async function avviaSessione({
    */
   cartellaDatiProgettoFn = null,
   onEvento, segnaleStop, messaggiIniziali, reasoning, contextHooks, onStoriaIniziale, ricostruisciContestoIniziale = false, mobile = false,
+  /* Stop per riga (owner 02/10/2026): `({ toolCallId, ferma }) => sgancia`, passata così com'è al motore. */
+  registraComandoFermabile = null,
   /* G02 (dalla lane CLI, e1f7eb363): l'identità con cui la CLI chiave il suo checkpoint; passata così com'è al motore. */
   checkpointSessionId = null, checkpointOperation = 'start',
   ambienteComandiFn,
@@ -452,6 +454,8 @@ export async function avviaSessione({
    * garanzia gia' data per ogni altro parametro di questa lista.
    */
   cartellaTrustMcp,
+  /* ⛔ 02/10/2026 — elicitation MCP: chi risponde alle richieste dei server (il registro, solo se c'è una persona). */
+  onElicitazioneMcp,
   preparaToolMcpPerSessioneFn = preparaToolMcpPerSessioneReale,
   /*
    * ⭐⭐⭐ 29/8 — FASE F (Skills). Piu' semplice di toolMcp sopra: una
@@ -733,7 +737,7 @@ export async function avviaSessione({
   let chiamaToolMcpFn;
   let chiudiMcp = async () => {};
   if (cartellaTrustMcp && !solaLetturaDelega) {
-    const preparato = await preparaToolMcpPerSessioneFn({ cartella, cartellaTrust: cartellaTrustMcp });
+    const preparato = await preparaToolMcpPerSessioneFn({ cartella, cartellaTrust: cartellaTrustMcp, ...(typeof onElicitazioneMcp === 'function' ? { onElicitazione: onElicitazioneMcp } : {}) });
     toolMcp = preparato.toolMcp;
     chiamaToolMcpFn = preparato.chiamaToolMcpFn;
     chiudiMcp = preparato.chiudiTutti;
@@ -2084,6 +2088,7 @@ export async function avviaSessione({
   try {
     const esito = await talosLavoraFn({
       cartella, task, modello, chiave, comandoProva, segnaleStop, messaggiIniziali, mobile,
+      ...(typeof registraComandoFermabile === 'function' ? { registraComandoFermabile } : {}),
       ...(checkpointSessionId ? { checkpointSessionId, checkpointOperation } : {}),
       ambienteComandiFn,
       ...(processOutputFn ? { captureProcessFn: ({toolCallId}, execute) => processOutputFn({runId, toolCallId}, execute) } : {}),
@@ -2339,6 +2344,9 @@ export async function eseguiComandoDiretto({
   /* Fase B (owner 01/10/2026): con la casa Linux della sessione, «Automatico» vale Linux se WSL c'è, anche per i comandi `!`. */
   automaticoInLinux = false,
   eseguiComandoSandboxatoFn = eseguiComandoSandboxatoReale,
+  /* ⛔ Stop per riga (owner 02/10/2026): `({ toolCallId, ferma }) => sgancia`. Fino a oggi un comando `!` della persona non
+     riceveva NESSUN segnale di stop: si poteva solo aspettare la sua fine o i 120 s. */
+  registraComandoFermabile = null,
 }) {
   /*
    * ⛔⛔⛔ D-10D — questo NON è più un giro del modello: ha il suo vocabolario.
@@ -2369,6 +2377,11 @@ export async function eseguiComandoDiretto({
   const anteprima = createToolOutputPreview({
     onOutput: (delta) => onEvento(toolCallOutput({ toolCallId, delta })),
   });
+  /* Stop per riga: il comando ha il SUO segnale, registrato col suo `toolCallId` finché gira. */
+  const fermaQuesto = new AbortController();
+  const sgancia = typeof registraComandoFermabile === 'function'
+    ? registraComandoFermabile({ toolCallId, ferma: () => fermaQuesto.abort('stop-della-riga') }) // = MOTIVO_STOP_DELLA_RIGA del kernel
+    : null;
   const execute = ({onBytes} = {}) => eseguiComandoSandboxatoFn(comando, cartella, {
     mobile,
     ...(onBytes ? {onBytes} : {}),
@@ -2378,9 +2391,15 @@ export async function eseguiComandoDiretto({
     dove,
     ...(preferenzeWsl ? { wsl: preferenzeWsl } : {}),
     ...(automaticoInLinux ? { automaticoInLinux: true } : {}),
+    segnaleStop: fermaQuesto.signal,
     onPezzo: ({ testo }) => anteprima.append(testo),
   });
-  const risultato = processOutputFn ? await processOutputFn({runId: comandoId, toolCallId}, execute) : await execute();
+  let risultato;
+  try {
+    risultato = processOutputFn ? await processOutputFn({runId: comandoId, toolCallId}, execute) : await execute();
+  } finally {
+    if (typeof sgancia === 'function') sgancia();
+  }
   anteprima.flush(); // Anche l'ultimo pezzo ammesso deve essere consegnato.
   /* ⛔ BLOCCO 6 (B3) — era `[sandbox: ${risultato.enforcement}]`, cioè `[sandbox: none]`: un valore
      che non dice a chi legge che il comando è partito con gli stessi privilegi di TALOS. Qui il

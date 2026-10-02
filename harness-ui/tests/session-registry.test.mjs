@@ -1100,7 +1100,7 @@ test('OPEN-WITH-TALOS-REGISTRY-01 — un launch id server-owned usa Workspace wr
 
   assert.ok(risultato.sessionId);
   assert.equal(finta.ultimoInput.cartella, '/tmp/workspace-da-shell');
-  assert.equal(finta.ultimoInput.livelloAccesso, undefined);
+  assert.equal(finta.ultimoInput.livelloAccesso, 'scrittura-progetto'); // F4-03 (01/10/2026): «Workspace write» ha il suo livello, non l'assenza che scriveva ovunque
   // ⛔ F15 (17/09) — ciò che questa riga protegge è «Workspace write, non Full access», e lo dice
   //   `livelloAccesso` qui sopra. Il canale ora c'è sempre (vedi la doc a :1031): la sua presenza
   //   non concede niente — è solo il modo di CHIEDERE invece di negare.
@@ -1214,13 +1214,13 @@ test('⭐⭐ un resume eredita il modelloPlanner della voce originale, mai perso
  *   canale — e infatti è ciò che questi test asseriscono adesso, insieme al fatto che il canale
  *   c'è. `livelloAccesso` è rimasto identico in tutti e tre i casi: quello è il contratto vero.
  */
-test('⭐ default: senza permessi espliciti, la voce è "Workspace write" — nessun livelloAccesso, e il canale c\'è (F15)', () => {
+test('⭐ default: senza permessi espliciti, la voce è "Workspace write" — livello scrittura-progetto (F4-03), e il canale c\'è (F15)', () => {
   const finta = sessioneControllabile();
   const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaEsisteFn: () => true });
 
   registro.avvia('task-vero');
 
-  assert.equal(finta.ultimoInput.livelloAccesso, undefined);
+  assert.equal(finta.ultimoInput.livelloAccesso, 'scrittura-progetto'); // F4-03 (01/10/2026)
   assert.equal(typeof finta.ultimoInput.chiediApprovazioneFn, 'function', 'il canale esiste sempre: senza, un cancello che deve chiedere nega');
   finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
 });
@@ -1284,12 +1284,12 @@ test('⭐⭐⭐ 06/9 — "On request" dichiara il LIVELLO al kernel, oltre al ca
   finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
 });
 
-test('FULL-ACCESS-REGISTRY-01 Full access arriva esplicito al kernel, Workspace write conserva il contratto precedente', () => {
+test('FULL-ACCESS-REGISTRY-01 Full access arriva esplicito al kernel, Workspace write arriva come scrittura-progetto (F4-03)', () => {
   for (const permessiScelto of ['Workspace write', 'Full access']) {
     const finta = sessioneControllabile();
     const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaEsisteFn: () => true });
     registro.avvia('task-vero', { permessiScelto });
-    assert.equal(finta.ultimoInput.livelloAccesso, permessiScelto === 'Full access' ? 'accesso-pieno' : undefined, permessiScelto);
+    assert.equal(finta.ultimoInput.livelloAccesso, permessiScelto === 'Full access' ? 'accesso-pieno' : 'scrittura-progetto', permessiScelto); // F4-03: prima undefined, che scriveva ovunque
     // ⛔ F15 (17/09) — il contratto che questa riga fissa è il LIVELLO, e resta identico nei due casi.
     //   Il canale c'è sempre (doc a :1031): serve a chiedere, non a permettere.
     assert.equal(typeof finta.ultimoInput.chiediApprovazioneFn, 'function', permessiScelto);
@@ -1342,7 +1342,7 @@ test('⭐⭐⭐ BC-14 — avviaLibero() con cartellaLibera e "Workspace write" P
   assert.ok(risultato.sessionId, 'una cartella scelta a mano non richiede più il permesso più alto per partire');
   assert.equal(finta.chiamate, 1);
   assert.equal(finta.ultimoInput.cartella, '/tmp/qualunque', 'l\'ambito è ESATTAMENTE la cartella scelta: il permesso non la sposta');
-  assert.equal(finta.ultimoInput.livelloAccesso, undefined, '"Workspace write" è il default del kernel: nessun livello speciale, scrive solo dentro la cartella della sessione');
+  assert.equal(finta.ultimoInput.livelloAccesso, 'scrittura-progetto', 'F4-03 (01/10/2026): «nessun livello speciale» lasciava scrivere OVUNQUE; ora dentro scrive da sola e fuori chiede');
   finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
 });
 
@@ -1585,7 +1585,7 @@ test('⭐⭐⭐ "Workspace write" con permessiPerAttrezzo:{shell:\'chiedi\'} COS
 
   registro.avvia('task-vero', { permessiScelto: 'Workspace write', permessiPerAttrezzoScelto: { shell: 'chiedi' } });
 
-  assert.equal(finta.ultimoInput.livelloAccesso, undefined, '"Workspace write" non diventa mai lettura da solo');
+  assert.equal(finta.ultimoInput.livelloAccesso, 'scrittura-progetto', '"Workspace write" non diventa mai lettura da solo (F4-03: il suo livello è scrittura-progetto)');
   assert.equal(typeof finta.ultimoInput.chiediApprovazioneFn, 'function', 'un solo attrezzo su «chiedi» basta a costruire il canale: senza, il kernel NEGA invece di chiedere (misurato dal vivo il 06/9)');
   finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
 });
@@ -1722,6 +1722,88 @@ test('⛔ AL CONTRARIO — rispondiApprovazione su un sessionId inesistente: NOT
   const registro = createSessionRegistry({ preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
   const risultato = registro.rispondiApprovazione('mai-esistito', 'qualunque-id', true);
   assert.equal(risultato.code, 'NOT_FOUND');
+});
+
+/*
+ * ⛔⛔ F4-03 (owner 01/10/2026 sera) — «Consenti in questa cartella per la sessione»: la risposta porta `ambito: 'cartella'`, e il
+ *   registro ricorda la `chiave` che il KERNEL ha messo nella domanda (`fuoriDalProgetto.chiave`, cartella vera) in
+ *   `consensiSessione.cartelleFuori` — lo stesso oggetto che il kernel riceve a ogni giro. Nessun percorso scelto dal client.
+ */
+function sessioneConApprovazioneEIngresso() {
+  let ingresso;
+  return {
+    avviaSessioneFn: async (input) => { ingresso = input; input.onEvento({ type: 'RunStarted', threadId: 't1', runId: 'r1' }); return new Promise(() => {}); },
+    get ingresso() { return ingresso; },
+  };
+}
+const DOMANDA_FUORI = Object.freeze({ tipo: 'scrivi', percorso: 'C:\\altro\\docs\\a.txt', fuoriDalProgetto: { verificato: true, cartella: 'C:\\altro\\docs', chiave: 'locale|C:\\altro\\docs', frase: 'Vuole scrivere fuori dalla cartella della sessione, in C:\\altro\\docs.' } });
+
+test('F4-03 REG-FUORI-01: «Consenti in questa cartella» ricorda la cartella della DOMANDA per la sessione e lo dice nell evento', async () => {
+  const finta = sessioneConApprovazioneEIngresso();
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaEsisteFn: () => true });
+  const { sessionId } = registro.avvia('task-vero');
+  const ricevuti = [];
+  registro.iscriviti(sessionId, (e) => ricevuti.push(e));
+  const promessa = finta.ingresso.chiediApprovazioneFn(DOMANDA_FUORI);
+  await Promise.resolve();
+  const richiesta = ricevuti.find((e) => e.type === 'ApprovalRequested');
+  assert.deepEqual(registro.rispondiApprovazione(sessionId, richiesta.requestId, true, { ambito: 'cartella' }), { ok: true });
+  assert.equal(await promessa, true);
+  assert.deepEqual(finta.ingresso.consensiSessione.cartelleFuori, ['locale|C:\\altro\\docs'], 'lo stesso oggetto che il kernel legge al giro dopo');
+  const risolta = ricevuti.find((e) => e.type === 'ApprovalResolved');
+  assert.equal(risolta.approvato, true);
+  assert.equal(risolta.ambito, 'cartella');
+});
+
+test('F4-03 REG-FUORI-02: AL CONTRARIO — «cartella» su una domanda che non ne offre una, o con un no, si rifiuta e la domanda resta in attesa', async () => {
+  const finta = sessioneConApprovazioneEIngresso();
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaEsisteFn: () => true });
+  const { sessionId } = registro.avvia('task-vero');
+  const ricevuti = [];
+  registro.iscriviti(sessionId, (e) => ricevuti.push(e));
+  for (const azione of [
+    { tipo: 'shell', comando: 'ls' },
+    { tipo: 'scrivi', percorso: 'x', fuoriDalProgetto: { verificato: false, cartella: null, frase: 'Non è stato possibile verificare…' } },
+  ]) {
+    let risolta = false;
+    const promessa = finta.ingresso.chiediApprovazioneFn(azione).then((v) => { risolta = true; return v; });
+    await Promise.resolve();
+    const richiesta = ricevuti.filter((e) => e.type === 'ApprovalRequested').at(-1);
+    assert.equal(registro.rispondiApprovazione(sessionId, richiesta.requestId, true, { ambito: 'cartella' }).code, 'QUERY_INVALID', azione.tipo);
+    await Promise.resolve();
+    assert.equal(risolta, false, 'una risposta rifiutata non sblocca niente');
+    assert.deepEqual(registro.rispondiApprovazione(sessionId, richiesta.requestId, false), { ok: true });
+    assert.equal(await promessa, false);
+  }
+  const promessa = finta.ingresso.chiediApprovazioneFn(DOMANDA_FUORI);
+  await Promise.resolve();
+  const richiesta = ricevuti.filter((e) => e.type === 'ApprovalRequested').at(-1);
+  assert.equal(registro.rispondiApprovazione(sessionId, richiesta.requestId, false, { ambito: 'cartella' }).code, 'QUERY_INVALID', 'un no non consente una cartella');
+  assert.equal(registro.rispondiApprovazione(sessionId, richiesta.requestId, true, { ambito: 'disco' }).code, 'QUERY_INVALID');
+  assert.deepEqual(finta.ingresso.consensiSessione.cartelleFuori ?? [], []);
+  registro.rispondiApprovazione(sessionId, richiesta.requestId, true);
+  assert.equal(await promessa, true);
+  assert.deepEqual(finta.ingresso.consensiSessione.cartelleFuori ?? [], [], '«una volta» non ricorda niente');
+});
+
+test('F4-03 REG-FUORI-03: senza interfaccia (automazioni, passi dei Workflow) la domanda FUORI si chiude subito con un no spiegato; le altre restano come prima', { timeout: 3000 }, async () => {
+  const finta = sessioneConApprovazioneEIngresso();
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaEsisteFn: () => true });
+  const { sessionId } = registro.avvia('task-vero', { senzaInterfaccia: true });
+  const ricevuti = [];
+  registro.iscriviti(sessionId, (e) => ricevuti.push(e));
+  assert.equal(await finta.ingresso.chiediApprovazioneFn(DOMANDA_FUORI), false);
+  const richiesta = ricevuti.find((e) => e.type === 'ApprovalRequested');
+  const risolta = ricevuti.find((e) => e.type === 'ApprovalResolved');
+  assert.ok(richiesta && risolta, 'la domanda e la sua chiusura restano nella cronologia');
+  assert.equal(risolta.requestId, richiesta.requestId);
+  assert.equal(risolta.approvato, false);
+  assert.equal(risolta.motivo, 'nessuna-interfaccia');
+  // Decisione owner: «solo la scrittura fuori ora» — una domanda di altro tipo resta in attesa come oggi.
+  let altraRisolta = false;
+  finta.ingresso.chiediApprovazioneFn({ tipo: 'shell', comando: 'cat .env', segreto: { frase: 'x' } }).then(() => { altraRisolta = true; });
+  await Promise.resolve(); await Promise.resolve();
+  assert.equal(altraRisolta, false);
 });
 
 /*

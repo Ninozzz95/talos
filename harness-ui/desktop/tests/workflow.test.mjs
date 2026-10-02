@@ -121,20 +121,29 @@ test('R04-ASSET — installer R-02, ZIP completo, SHA e note esplicite', () => {
   assert.equal(pacchetto.build.nsis.perMachine, false);
   // F7-2 (owner 27/09/2026, «NSIS assistito + benvenuto in app»): da un clic ad ASSISTITO; /S resta per lo smoke della CI.
   assert.equal(pacchetto.build.nsis.oneClick, false);
-  assert.equal(pacchetto.build.publish, null);
+  /* 01/10/2026 — aggiornamento automatico: un publish GENERICO serve solo perché electron-builder scriva latest.yml; la
+     pubblicazione resta nostra (`distribuisci.mjs` passa publish: 'never', e il passo release la fa con gh). */
+  assert.deepEqual(pacchetto.build.publish, [{ provider: 'generic', url: 'https://github.com/Ninozzz95/talos/releases' }]);
   assert.match(passo('asset').run, /scripts\/release-assets\.mjs/);
   assert.match(passo('smoke').run, /scripts\/ci-smoke\.ps1/);
   const upload = passi.find(p => p.id === 'upload');
-  assert.deepEqual(upload.with.path.trim().split(/\r?\n/), ['${{ steps.asset.outputs.exe }}', '${{ steps.asset.outputs.zip }}', '${{ steps.asset.outputs.sha }}']);
+  assert.deepEqual(upload.with.path.trim().split(/\r?\n/), ['${{ steps.asset.outputs.exe }}', '${{ steps.asset.outputs.zip }}', '${{ steps.asset.outputs.sha }}',
+    '${{ steps.asset.outputs.manifesto }}', '${{ steps.asset.outputs.firma }}']);
   assert.equal(upload.with['if-no-files-found'], 'error');
   assert.equal(upload.with['compression-level'], 0);
   assert.match(passo('release').run, /gh release create/);
-  for (const arg of ['--verify-tag', '--notes-file', '$env:EXE', '$env:ZIP', '$env:SHA']) assert.ok(passo('release').run.includes(arg));
+  for (const arg of ['--verify-tag', '--notes-file', '$env:EXE', '$env:ZIP', '$env:SHA', '$env:MANIFESTO', '$env:FIRMA']) assert.ok(passo('release').run.includes(arg));
   assert.doesNotMatch(passo('release').run, /--generate-notes|\*\.zip/);
 });
 
-test('R04-PORTABILITA — nessun segreto, repository fisso o codice evento nella shell', () => {
-  const text = JSON.stringify(desktop);
+test('R04-PORTABILITA — un solo segreto (la firma degli aggiornamenti, solo nel passo asset), nessun repository fisso o codice evento nella shell', () => {
+  /* 01/10/2026 — owner «Firma Ed25519 fatta da noi»: la chiave privata sta nel segreto TALOS_UPDATE_SIGN_KEY. È l'UNICO segreto
+     del job, solo nell'env del passo che firma, mai in un run. */
+  const segreti = JSON.stringify(desktop).match(/secrets\.[A-Za-z0-9_]+/g) ?? [];
+  assert.deepEqual(segreti, ['secrets.TALOS_UPDATE_SIGN_KEY']);
+  assert.equal(passo('asset').env.TALOS_UPDATE_SIGN_KEY, '${{ secrets.TALOS_UPDATE_SIGN_KEY }}');
+  for (const p of passi.filter(p => p.run)) assert.doesNotMatch(p.run, /secrets\./);
+  const text = JSON.stringify({ ...desktop, steps: desktop.steps.map(p => (p.id === 'asset' ? { ...p, env: undefined } : p)) });
   assert.doesNotMatch(text, /secrets\.|AVM-harness-desktop|Antonino|4174|azure.*sign|attest-build-provenance/i);
   assert.equal(passo('release').env.GH_TOKEN, '${{ github.token }}');
   assert.equal(passo('release').env.GH_REPO, '${{ github.repository }}');

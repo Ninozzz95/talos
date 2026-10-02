@@ -862,7 +862,13 @@ export function montaGrafoWorkflow(host, {
     evidenzia();
   });
   campoCerca.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') { e.preventDefault(); cerca.click(); return; }
+    /* Esc resta nel campo: prima svuota, poi chiude. ⛔ Senza `stopPropagation` risaliva alla catena degli Esc della app
+       (`app.js`, ROOT keydown) e con un giro in corso apriva «Fermo il giro?» (misurato il 02/10; stessa cura del grafo delle deleghe). */
+    if (e.key === 'Escape') {
+      e.preventDefault(); e.stopPropagation();
+      if (campoCerca.value) { campoCerca.value = ''; campoCerca.dispatchEvent(new Event('input')); return; } // la stessa strada di chi cancella a mano
+      cerca.click(); return;
+    }
     if (e.key !== 'Enter' || !stato.query) return;
     const elenco = trovati();
     if (!elenco.length) return;

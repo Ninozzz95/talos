@@ -1,4 +1,5 @@
 import { registeredOverlayManager } from '../design-system/overlays/manager.ts';
+import { t } from './lingua.js';
 /*
  * modale-td.js — la modale del mockup (`modalShow`/`modalClose`, righe 6039-6040), lotto G.
  *
@@ -172,7 +173,7 @@ export function confermaModale({
   const pezzi = [testo];
   if (conseguenza) pezzi.push(nodo(doc, 'p', 'td-subtle', conseguenza));
   const piede = nodo(doc, 'div', 'td-detail-footer');
-  const annulla = nodo(doc, 'button', 'talos-button talos-button--secondary talos-button--sm', 'Annulla');
+  const annulla = nodo(doc, 'button', 'talos-button talos-button--secondary talos-button--sm', t('Annulla')); // 01/10: nell'interfaccia inglese restava «Annulla»
   annulla.type = 'button';
   annulla.addEventListener('click', () => chiudiModale());
   /* `--secondary` prima di `--danger`: senza la variante il bottone resta testo rosso senza

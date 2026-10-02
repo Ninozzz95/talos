@@ -66,7 +66,7 @@ import { aggiornaCosti } from '../components/costi-consumo.js'; // 06/9 D21/D22:
 import { aggiornaContesto, ripartizioneContesto } from '../components/contesto.js'; // 06/9 D26: ripartizione della finestra di contesto
 import { montaHf } from '../components/hf-catalogo.js';
 import { aggiornaCodaDownload, montaCodaDownload, stimaFraLetture } from '../components/download-coda.js'; // 06/9 B6.10: scheda «Download»
-import { aggiornaInspector, contaAgentiAttivi, contaProcessiAttivi, processiDagliEventi, schedaAgentiDaRileggere, titoloMessaggioUtente, titoloRispostaDaTurno, uscitaDaTestoAttrezzo } from '../components/inspector.js'; // 06/9 B2: la colonna dei dettagli dice il vero; CB-03: il titolo del giro è la RISPOSTA, non il ragionamento; 16/09 P0-E: il codice di uscita si legge dal risultato dell'attrezzo
+import { aggiornaInspector, contaAgentiAttivi, contaProcessiAttivi, processiDagliEventi, schedaAgentiDaRileggere, titoloMessaggioUtente, titoloRispostaDaTurno, uscitaDelRisultato } from '../components/inspector.js'; // 06/9 B2: la colonna dei dettagli dice il vero; CB-03: il titolo del giro è la RISPOSTA, non il ragionamento; 16/09 P0-E: il codice di uscita si legge dal risultato dell'attrezzo
 import { contaDiff } from '../components/review.js'; // 06/9 B2: +N −M dei file toccati
 import { nomeUmanoAttrezzo as nomeUmanoAttrezzoCondiviso, nomeDiRipiegoAttrezzo, nomeLeggibileAttrezzo, fraseSpecie, origineAvvisoPlugin } from '../components/nomi-attrezzi.js'; // BC-59 (17/09): la mappa dei nomi umani vive in UN posto solo — qui c'era una copia, e si era fermata al 12/09
 import { collegaRidimensionamentoDialoghi, preparaMisuraDialogo } from '../components/dialoghi.js'; // 06/9 B7: dialoghi ridimensionabili e ricordati
@@ -89,13 +89,15 @@ import { adattaScala, collegaScalaComposer } from '../components/scala-composer.
 import { raggruppaInHunk } from '../components/diff-hunk.js'; // PO-11 (10/09): i pezzi del diff
 import { leggiRisultatiRicerca, creaRisultatiRicerca, creaPillolaFonti, apriModaleFonti } from '../components/risultati-ricerca.js'; // 10/09: la ricerca web si legge come una ricerca
 import { creaDiffInChat, aggiungiGiroAllaSpine, collegaNavigazioneSpina, creaApprovazione, creaNotaErrore, segnaEsitoApprovazione, creaArtefatto, creaAttesa, creaAttivita, creaAzioniMessaggio, creaBloccoCodice, creaFileScaricabile, creaFileToccati, creaMessaggioTalos, creaMessaggioUtente, creaNotaSistema, creaRigaAttrezzo, creaTurno, impostaDiffAttivita, impostaEsitoRiga, impostaTonoUltimoTick, oraMessaggio, TESTI_MESSAGGIO } from '../components/conversazione.js'; // 05/9 Fase 2: Conversazione — i blocchi della chat sono quelli del mockup
+import { creaRichiestaMcp, segnaEsitoRichiestaMcp } from '../components/richiesta-mcp.js'; // 02/10/2026: le richieste dei server MCP
 import { collegaCronologia } from '../components/cronologia.js'; // 06/9: la barra di navigazione della conversazione
 import { fraseCercata } from '../components/frase-cercata.js'; // 07/9 O-60: la query del motore diventa una frase
 import { creaVistaViva } from '../components/browser-vivo.js'; // 07/9: lo schermo del browser pilotato dal server
 import { montaMiglioraPrompt } from '../components/migliora-prompt.js'; // 11/9 BC-15: «Migliora il prompt», il pannello del composer
 import { gestoPerIlServer } from '../components/browser-gesti.js'; // 07/9: la vista e il server parlano due lingue: qui si traducono
 import { montaScorciatoie, normalizzaTastiScritti, riconosci, suApple, etichettaTasto } from '../components/scorciatoie.js'; // 06/9 audit: le scorciatoie scritte a schermo devono funzionare, col modificatore della piattaforma
-import { TIPO_FRAME_CONTROLLO, TIPO_FRAME_DATI, codificaFrameClient, collegaAppunti, creaTerminaleXterm, decodificaFrameServer } from '../components/terminale-xterm.js'; // P0/A 16/09: il corpo del terminale — xterm, appunti e menu — fuori dal monolite
+import { TIPO_FRAME_CONTROLLO, TIPO_FRAME_DATI, codificaFrameClient, collegaAppunti, creaTerminaleXterm, decodificaFrameServer } from '../components/terminale-xterm.js';
+import { schedeAgenteDagliEventi, testoSchedaAgente } from '../components/terminale-agente.js'; // PO-10 passo 2 (02/10/2026): le schede agente del Terminale // P0/A 16/09: il corpo del terminale — xterm, appunti e menu — fuori dal monolite
 import { aggiornaPiedeChat, dettaglioUtile, etichettaPermesso, fondoInVista, nomeModelloUmano } from '../components/chat-foot.js';
 import { progettiConSessioni } from '../components/progetti.js'; // 06/9: la voce «Progetti» aveva un contatore e nessuna pagina (il montaggio è in sezioni-adattatori.js)
 import { collegaTooltip } from '../components/tooltip.js'; // 06/9 O-40: i suggerimenti sono nostri, col tema e con la tastiera
@@ -443,6 +445,9 @@ import { aggiornaWorkspaceFooter, fornitoreDelModello, testiPiede as testiPiedeW
        * `content` può essere enorme, e per contare non serve.
        */
       eventiAttrezzi: [],
+      /* PO-10 passo 2 (02/10/2026) — toolCallId → { vivo, testo } dei comandi dell'AGENTE, per le sue schede del Terminale.
+         `eventiAttrezzi` non tiene il `content` (può essere enorme): qui sì, con un tetto (`registraUscitaAgente`). */
+      usciteAgente: new Map(),
       /**
        * ⭐⭐⭐ O-02 (04/9) — il tetto dei giri che il KERNEL ha dichiarato nel
        * suo messaggio d'errore («24 su 24»). `null` finché nessuno l'ha
@@ -463,6 +468,7 @@ import { aggiornaWorkspaceFooter, fornitoreDelModello, testiPiede as testiPiedeW
        * da un altro client) la svuota. */
       approvazioniPendenti: new Map(),
       domandePendenti: new Map(),
+      richiesteMcpPendenti: new Map(), // 02/10/2026: le richieste dei server MCP che aspettano la persona
       /** ⭐⭐⭐ 28/8 — la radice ASSOLUTA della sessione corrente (da RunStarted→contesto.cartella, la STESSA stringa già mostrata in "Root" nel Context Rail) — serve per calcolare il percorso assoluto di una sottocartella quando l'owner sceglie "Imposta come radice" nel menu dell'albero. `null` finché nessun RunStarted è mai arrivato. */
       cartellaAssoluta: null,
       /**
@@ -1899,7 +1905,7 @@ import { aggiornaWorkspaceFooter, fornitoreDelModello, testiPiede as testiPiedeW
     resetEmbeddedTopbarScroll(view === 'chat' ? chatConversation : target);
     workspaceUI?.update(view);
     window.__talosHarnessHostViewChange?.(view);
-    if (view === 'settings') inizializzaModelLab();
+    if (view === 'settings') { inizializzaModelLab(); mostraLaboratorioInAttesa(); }
     if (view === 'dashboard') ensureSessionsBoard();
     if (view === 'ricerca') caricaPannelloRicerca({ pagina: true }); // 05/9 Fase 2: attiva la sola pagina Ricerca
     if (view === 'doctor') caricaDoctor(); // 05/9 Fase 2: CheckCard
@@ -3370,6 +3376,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   /* 24/09/2026 — il giro aspetta una scelta della persona: una domanda aperta o un piano da approvare (decisioni owner 29, 39). */
   function aspettaLaPersona() {
     return state.realSession.domandePendenti?.size > 0
+      || state.realSession.richiesteMcpPendenti?.size > 0 // 02/10/2026: un server MCP aspetta la persona
       || Boolean(document.querySelector('#conversation [data-c="PlanArtifact"][data-approvabile]'));
   }
 
@@ -4820,7 +4827,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const rinvio = risolviSezioneImpostazioni(section);
     if (rinvio && rinvio.section !== section) {
       setSettingsSection(rinvio.section, { persist: true });
-      if (rinvio.labTab) setModelLabSection(rinvio.labTab);
+      if (rinvio.labTab) { setModelLabSection(rinvio.labTab); portaInVistaIlLaboratorio(); }
       return;
     }
     queueMicrotask(() => { void renderSettingsRiepiloghi(); }); // 02/09 — i riepiloghi si rileggono a ogni cambio sezione
@@ -4874,6 +4881,60 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     setView('settings', { dallInizio: true });
     setSettingsSection('models');
     setModelLabSection('providers');
+    portaInVistaIlLaboratorio();
+  }
+  /*
+   * ⛔ 01/10/2026 — «DALL'INIZIO» NON BASTAVA PIÙ. Il 23/09 la scheda «Provider» stava in cima alla sezione Modelli, e
+   *   ripartire dall'alto della pagina la mostrava. Oggi sopra il Laboratorio c'è altro: misurato sul 4174 a 1280×720, la
+   *   scheda stava a 1175 px dall'alto in una pagina alta 626 (`.talos-page`, contenuto 10.371 px) ⇒ la porta dei fornitori
+   *   (comando, Home, «Collega un modello», e da oggi «Imposta un provider») atterrava sui Modelli senza far VEDERE la
+   *   scheda. Owner, 01/10: «ti piazza direttamente in laboratorio modelli tab provider».
+   * ⇒ Si scorre la sola pagina delle Impostazioni fino alla FILA DELLE SCHEDE del Laboratorio, non al suo inizio: dentro
+   *   la scheda del Laboratorio, sopra le schede, ci sono ~810 px (misurato: col Laboratorio in cima la scheda «Provider»
+   *   stava ancora a 769 px in una finestra di 720). NON `scrollIntoView`: col suo predefinito `container: 'all'` (MDN,
+   *   Element.scrollIntoView, letta il 01/10/2026) scorrerebbero anche gli antenati con `overflow: hidden` (lo sfondo
+   *   animato, 720 px), spostando tutta l'interfaccia. Istantaneo, niente animazione.
+   * ⛔ Una assegnazione sola NON basta, misurato: al primo ingresso il contenuto sopra le schede arriva DOPO (la pagina passa
+   *   da 1.560 a 10.371 px in 50 ms) e le spinge giù; al secondo ingresso le schede finivano 83 px SOPRA il bordo. ⇒ Si
+   *   riallinea a ogni fotogramma finché l'impaginazione si assesta, con i tre freni di `ripristinaScorrimentoVista`
+   *   (sopra): al massimo 1,2 s, si smette se la vista cambia, si smette al primo scorrimento non nostro.
+   * ⛔ Il rinvio della sezione ritirata `providers` (VELO-FORNITORI-B4) avviene all'AVVIO, con le Impostazioni nascoste:
+   *   lì non c'è niente da misurare. Si rimanda all'apertura delle Impostazioni (`setView`), e vale solo se in quel momento
+   *   sono ancora su Modelli → Provider: la voce «Impostazioni» della barra, che apre la prima sezione, non scorre niente.
+   */
+  let laboratorioDaMostrare = false;
+  function portaInVistaIlLaboratorio() {
+    if (state.view !== 'settings') { laboratorioDaMostrare = true; return; }
+    laboratorioDaMostrare = false;
+    const laboratorio = $('#modelLabCard');
+    const schede = laboratorio?.querySelector('.model-lab-tabs') ?? laboratorio;
+    const pagina = laboratorio?.closest('.talos-page');
+    if (!schede || !pagina) return;
+    const allinea = () => {
+      const scarto = schede.getBoundingClientRect().top - pagina.getBoundingClientRect().top - 12;
+      if (Math.abs(scarto) > 4) pagina.scrollTop = Math.max(0, pagina.scrollTop + scarto);
+      return pagina.scrollTop;
+    };
+    let nostro = allinea();
+    const fine = performance.now() + 1200;
+    const passo = () => {
+      if (state.view !== 'settings' || performance.now() > fine) return;
+      if (Math.abs(pagina.scrollTop - nostro) > 4) return; // la persona ha scorso: da qui comanda lei
+      nostro = allinea();
+      requestAnimationFrame(passo);
+    };
+    requestAnimationFrame(passo);
+  }
+  /** Chiamata da `setView` all'apertura delle Impostazioni: il rinvio rimasto in attesa vale solo su Modelli → Provider. */
+  function mostraLaboratorioInAttesa() {
+    if (!laboratorioDaMostrare) return;
+    queueMicrotask(() => {
+      if (!laboratorioDaMostrare) return;
+      laboratorioDaMostrare = false;
+      const suModelli = $('#setting-tab-models')?.getAttribute('aria-selected') === 'true';
+      const suProvider = $('#modelLabCard [data-lab-scheda="providers"]')?.getAttribute('aria-selected') === 'true';
+      if (suModelli && suProvider) portaInVistaIlLaboratorio();
+    });
   }
 
   /*
@@ -5310,6 +5371,21 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   async function inviaDecisionePiano(sessionId, corpo) {
     try {
       await apiPost('/api/v1/sessions/' + encodeURIComponent(sessionId) + '/plan-decision', corpo);
+      return { ok: true };
+    } catch (errore) {
+      return { ok: false, messaggio: errore?.message || 'riprova.' };
+    }
+  }
+
+  /*
+   * ⛔ Stop per riga (owner 02/10/2026) — ferma UN comando dalla scheda «Processi»; il giro continua. La riga si chiude con
+   *   l'esito vero (l'evento del server); qui si riporta solo se la richiesta non è partita, con le parole del server.
+   */
+  async function fermaProcesso(toolCallId) {
+    const sessionId = state.realSession.id;
+    if (!sessionId) return { ok: false, messaggio: 'nessuna sessione aperta.' };
+    try {
+      await apiPost('/api/v1/sessions/' + encodeURIComponent(sessionId) + '/processes/' + encodeURIComponent(toolCallId) + '/stop', {});
       return { ok: true };
     } catch (errore) {
       return { ok: false, messaggio: errore?.message || 'riprova.' };
@@ -10592,6 +10668,8 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       file,
       /* ⛔ Si calcolano UNA VOLTA: servono alla colonna E al numero sulla sua scheda (sotto). */
       processi,
+      /* Stop per riga: senza sessione vera non c'è niente da fermare, e il pulsante non compare. */
+      azioniProcessi: state.realSession.id ? { ferma: fermaProcesso } : null,
       agenti,
       /* PO-08: la card diventa apribile solo perché qui c'è chi ascolta — senza questa funzione
          `disegnaAgenti` la lascia statica, e non promette niente che non può mantenere. */
@@ -12838,6 +12916,18 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     }
   }
 
+  /*
+   * ⛔ 02/10/2026, owner («sì, tutti e tre») — la riga di un comando dell'agente CON descrizione diceva la stessa frase due
+   *   volte: a sinistra il riassunto (la descrizione) e a destra, in monospazio, ancora la descrizione, perché il dettaglio
+   *   usava il bersaglio del SUGGERIMENTO (dove la descrizione è la scelta giusta). A destra va il COMANDO: è ciò che il
+   *   monospazio promette, ed è come fa Hermes (`approval.tsx:289-295` «a real command keeps rendering as the command»;
+   *   la riga del terminale col suo `$ comando`, `fallback-model/index.ts:1559`). Senza comando resta il bersaglio di prima.
+   */
+  function dettaglioRigaAttrezzo(nome, argomenti) {
+    if (nome === 'shell' && typeof argomenti?.comando === 'string' && argomenti.comando.trim()) return tronca(argomenti.comando.trim(), 60);
+    return bersaglioAttrezzoNudo(nome, argomenti);
+  }
+
   /** Da dove viene il testo del suggerimento: il bersaglio dell'ultimo attrezzo del giro appena concluso, non una chiamata al modello inventata apposta (costerebbe un giro intero per un extra facoltativo). */
   function suggerimentoDaUltimoAttrezzo() {
     const ultimo = state.realSession.ultimoBersaglioAttrezzo;
@@ -12976,7 +13066,8 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
        */
       const esito = leggiEsitoComando(testo);
       if (!esito.verdetto) return false; // nessuna intestazione: non è un esito di comando
-      return !esito.riuscito;
+      /* 02/10/2026, owner: un comando FERMATO (130/143 lo Stop, 124/137 il tempo) non è un fallimento — come nei Processi. */
+      return !esito.riuscito && !esito.annullato && !esito.terminato;
     }
     /* 26/09, difetto (11): anche `<attrezzo> failed [CODICE]: …`, la forma di 37 esiti del kernel — vedi `esito-comando.js`. */
     return esitoDichiaraFallimento(nome, testo);
@@ -13184,9 +13275,13 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
      */
     if (azione?.tipo === 'scrivi' && azione.fileDiControllo) return 'Vuole scrivere un file di controllo di TALOS: una regola dell’agente (hook, MCP, istruzioni, memoria), non un file del progetto.';
     if (azione?.tipo === 'scrivi') return 'Vuole scrivere questo file:';
+    /* 02/10/2026 — `file_edit` cadeva nel ripiego generico («un'azione che modifica qualcosa»), visto nella foto della carta di rete. */
+    if (azione?.tipo === 'file_edit') return 'Vuole modificare questo file:';
     /* ⛔ 17/09, F15 — `leggi` arriva davanti a un percorso segreto: senza questo ramo la carta
        cadeva nel ripiego generico proprio nel caso in cui la persona deve capire in fretta. */
     if (azione?.tipo === 'leggi') return 'Vuole leggere questo file:';
+    /* 02/10/2026 — `elenca` chiede solo davanti a una cartella su un computer di rete (`controllaPercorsoDiRete`). */
+    if (azione?.tipo === 'elenca') return 'Vuole vedere i file di questa cartella:';
     if (azione?.tipo === 'shell') return 'Vuole eseguire questo comando nel terminale:';
     if (azione?.tipo === 'document_create') return `Vuole creare un documento (formato ${azione.formato || '?'})`;
     // ⭐⭐⭐ FASE B (28/8) — `prova` è il quarto attrezzo gated da verificaPermessoScrittura (trovato leggendo talosHarness.mjs): senza questo ramo, un permesso per-attrezzo `prova:'chiedi'` mostrava la card col fallback generico invece del comando VERO.
@@ -13270,6 +13365,10 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     if (typeof azione?.segreto?.frase === 'string' && azione.segreto.frase.trim()) frasiVere.push(azione.segreto.frase.trim());
     /* F009 (owner 01/10/2026) — la conferma di root in WSL quando nessuno è interpellato: la frase la scrive il kernel (`confermaRootWsl`). */
     if (typeof azione?.wslRoot?.frase === 'string' && azione.wslRoot.frase.trim()) frasiVere.push(azione.wslRoot.frase.trim());
+    /* F4-03 (owner 01/10/2026 sera) — la scrittura fuori dalla cartella della sessione con «Scrive nel progetto»: la frase la scrive il kernel. */
+    if (typeof azione?.fuoriDalProgetto?.frase === 'string' && azione.fuoriDalProgetto.frase.trim()) frasiVere.push(azione.fuoriDalProgetto.frase.trim());
+    /* 01/10/2026 notte (owner: «chiedo per \\server») — un percorso su un computer di rete: la frase la scrive il kernel (`controllaPercorsoDiRete`). */
+    if (typeof azione?.percorsoDiRete?.frase === 'string' && azione.percorsoDiRete.frase.trim()) frasiVere.push(azione.percorsoDiRete.frase.trim());
     /* ⛔ Se si chiude anche la trifecta sono DUE fatti, non uno: si mostrano tutti e due — una lista
        di motivi si giudica da ciò che manca, e tacere il secondo sarebbe rassicurare a metà. */
     const trifecta = typeof azione?.trifecta === 'string' ? azione.trifecta.trim() : (azione?.trifecta === true ? 'Questa chiamata chiude la trifecta: dati privati, contenuto non attendibile e un modo per farli uscire.' : '');
@@ -13314,6 +13413,9 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       return null;
     }
     let rispostaDataDaQuestaScheda = false;
+    /* L'esito letto dal registro dopo un invio fallito (sotto) è una conseguenza del clic di ADESSO, non della storia che
+       si rigioca: vale come arrivato in diretta anche se `talos.fine-rigiocata` non è ancora passato. */
+    let esitoRiconciliatoQui = false;
     const generation = state.realSession.generation;
     const stessaRisposta = (expected, actual) => {
       if (expected.status !== actual?.status) return false;
@@ -13355,6 +13457,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
                   && ['answered', 'skipped', 'cancelled'].includes(event.status));
                 if (resolved) {
                   rispostaDataDaQuestaScheda = stessaRisposta(body, resolved);
+                  esitoRiconciliatoQui = true;
                   if (state.realSession.id === sessionId && state.realSession.generation === generation) {
                     handleRealEvent(resolved, generation);
                   }
@@ -13371,6 +13474,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const scheda = root.lastElementChild;
     scheda._dockController = controller;
     scheda._rispostaDataQui = () => rispostaDataDaQuestaScheda;
+    scheda._esitoRiconciliatoQui = () => esitoRiconciliatoQui;
     aggiornaTickGiro({ tono: 'warning' });
     /* ⛔ 23/09/2026, riparazione D1 — qui il fuoco andava sul primo radio: chi stava scrivendo nel
        composer spuntava e INVIAVA un'opzione con lo spazio successivo. Il fuoco resta dov'è. */
@@ -13399,7 +13503,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const bersaglio = azione?.percorso || azione?.comando || azione?.question || azione?.title || '';
     /* ⛔ 17/09, F15 — `leggi` ha il suo badge: «Chiede il permesso» davanti a un `.env` non dice
        niente, e la persona deve capire a colpo d'occhio se sta per LEGGERE o per CAMBIARE. */
-    const badge = azione?.tipo === 'scrivi' ? 'Chiede di scrivere' : azione?.tipo === 'leggi' ? 'Chiede di leggere' : (azione?.tipo === 'shell' || azione?.tipo === 'prova') ? 'Chiede di eseguire' : azione?.tipo === 'research_start' ? 'Chiede di cercare' : 'Chiede il permesso';
+    const badge = azione?.tipo === 'scrivi' ? 'Chiede di scrivere' : azione?.tipo === 'file_edit' ? 'Chiede di modificare' :azione?.tipo === 'leggi' ? 'Chiede di leggere' : azione?.tipo === 'elenca' ? 'Chiede di aprire una cartella' : (azione?.tipo === 'shell' || azione?.tipo === 'prova') ? 'Chiede di eseguire' : azione?.tipo === 'research_start' ? 'Chiede di cercare' : 'Chiede il permesso';
     const scheda = creaApprovazione({ badge, bersaglio, perche: descriviAzioneApprovazione(azione), codice: codiceAzioneApprovazione(azione), motivo: motivoRichiestaApprovazione(azione), nota: 'Vale solo per questa richiesta' });
     const article = scheda.scheda;
     article.classList.add('real-approval-card');
@@ -13425,6 +13529,16 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
      */
     const davantiAUnSegreto = Boolean(azione?.segreto);
     if (davantiAUnSegreto) sessioneBtn.remove();
+    /* ⛔ 01/10/2026 notte — stessa ragione per un percorso di rete: il kernel chiede a ogni livello e anche con «sempre»
+       (`controllaPercorsoDiRete`), quindi «Per questa sessione» sarebbe una promessa falsa. Restano «Consenti una volta» e «Nega». */
+    if (azione?.percorsoDiRete) sessioneBtn.remove();
+    /* 02/10/2026 (owner, «Una domanda per sessione»): la cartella della sessione su un computer di rete — il kernel ricorda il sì
+       per tutta la sessione (`consensiSessione.reteCartella`): il pulsante lo dice, come la conferma di root in WSL. */
+    if (azione?.percorsoDiRete?.ambito === 'sessione') {
+      approvaBtn.textContent = 'Consenti per questa sessione';
+      const notaPiede = $('.talos-approval__foot-note', article);
+      if (notaPiede) notaPiede.textContent = 'Vale per tutta la sessione';
+    }
     /*
      * ⛔ F009 (owner 01/10/2026, «una volta per sessione») — la conferma di root in WSL vale per TUTTA la sessione: il kernel
      *   ricorda il sì (`consensiSessione`). «Consenti una volta» sarebbe una promessa falsa, e «Per questa sessione»
@@ -13436,18 +13550,30 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       const notaPiede = $('.talos-approval__foot-note', article);
       if (notaPiede) notaPiede.textContent = 'Vale per tutta la sessione';
     }
+    /*
+     * ⛔⛔ F4-03 (owner 01/10/2026 sera) — FUORI DALLA CARTELLA DELLA SESSIONE con «Scrive nel progetto». «Per questa sessione»
+     *   scriverebbe «scrivi: sempre», e il confine non lo ascolta (decisione dell'owner: il foglio dice SE, la politica dice
+     *   DOVE): la domanda tornerebbe identica. ⇒ Il secondo pulsante diventa «Consenti in questa cartella per la sessione» e
+     *   manda `ambito: 'cartella'`: la cartella la sceglie il kernel (percorso vero, `fuoriDalProgetto.chiave`), sottocartelle
+     *   comprese. Se la cartella non si è potuta verificare non c'è niente da consentire: il pulsante sparisce.
+     */
+    const cartellaConsentibile = Boolean(azione?.fuoriDalProgetto?.verificato === true && azione.fuoriDalProgetto.chiave);
+    if (azione?.fuoriDalProgetto && !davantiAUnSegreto && !azione?.wslRoot) {
+      if (cartellaConsentibile) sessioneBtn.textContent = 'Consenti in questa cartella per la sessione';
+      else sessioneBtn.remove();
+    }
     let rispostaDataDaQuestaScheda = false;
-    const rispondi = async (approvato, perSessione = false) => {
+    const rispondi = async (approvato, perSessione = false, ambito = null) => {
       negaBtn.disabled = true;
       approvaBtn.disabled = true;
       sessioneBtn.disabled = true;
       rispostaDataDaQuestaScheda = true;
       if (state.realSession.browserRichiesta?.requestId === requestId) { state.realSession.browserRichiesta = null; renderizzaBrowser(); } // 06/9 K-I
-      if (approvato && perSessione && azione?.tipo) {
+      if (approvato && perSessione && !ambito && azione?.tipo) {
         try { await sincronizzaImpostazioniSessione({ permessiPerAttrezzo: { ...(state.permessiPerAttrezzo || {}), [azione.tipo]: 'sempre' } }); } catch { /* il permesso resta «chiedi»: la risposta alla richiesta parte comunque */ }
       }
       try {
-        await apiPost(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/approve`, { requestId, approvato });
+        await apiPost(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/approve`, ambito ? { requestId, approvato, ambito } : { requestId, approvato });
         // ⛔ NIENT'ALTRO qui apposta — vedi il commento sopra: il case ApprovalResolved finalizza la card, sempre e solo lui.
       } catch (error) {
         rispostaDataDaQuestaScheda = false;
@@ -13459,7 +13585,53 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     };
     negaBtn.addEventListener('click', () => rispondi(false));
     approvaBtn.addEventListener('click', () => rispondi(true));
-    sessioneBtn.addEventListener('click', () => rispondi(true, true));
+    sessioneBtn.addEventListener('click', () => (cartellaConsentibile ? rispondi(true, false, 'cartella') : rispondi(true, true)));
+    nellaChat(article);
+    aggiornaTickGiro({ tono: 'warning' });
+    article._rispostaDataQui = () => rispostaDataDaQuestaScheda;
+    markMotionEnter(article);
+    scorriAllaBollaAppesa(article);
+    return article;
+  }
+
+  /*
+   * ⛔ 02/10/2026 — LA RICHIESTA DI UN SERVER MCP (owner: «faccio subito scheda e rotta»). Stessa forma della card del
+   *   consenso qui sopra: la risposta parte da qui, ma l'ESITO lo scrive solo `McpElicitationResolved` (uguale in ogni finestra).
+   *   La pagina si apre SOLO col clic, nel browser del sistema (`setWindowOpenHandler` → `shell.openExternal` nel guscio), e
+   *   solo se è https: il contratto lo garantisce già, qui non si allarga.
+   */
+  function appendRichiestaMcpCard(evento) {
+    const requestId = evento.requestId;
+    let rispostaDataDaQuestaScheda = false;
+    let scheda = null;
+    const rispondi = async (corpo) => {
+      scheda.inAttesa(true);
+      scheda.mostraErrore('');
+      rispostaDataDaQuestaScheda = true;
+      try {
+        await apiPost(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/mcp-elicitation`, { requestId, ...corpo });
+      } catch (error) {
+        rispostaDataDaQuestaScheda = false;
+        if (error?.code === 'ELICITATION_NOT_PENDING') {
+          /* il server non aspetta più (risposta da un'altra finestra persa, o un riavvio): la scheda lo dice e si chiude */
+          segnaEsitoRichiestaMcp(scheda.scheda, { action: 'cancel', modo: scheda.scheda.dataset.modo, motivo: 'non-in-attesa' });
+          state.realSession.richiesteMcpPendenti.delete(requestId);
+          aggiornaElencoSessioniReali();
+          return;
+        }
+        scheda.inAttesa(false);
+        scheda.mostraErrore(error?.message || 'La risposta non è partita: riprova.');
+      }
+    };
+    scheda = creaRichiestaMcp(evento, {
+      onInvia: (content) => rispondi({ action: 'accept', content }),
+      onFatto: () => rispondi({ action: 'accept' }),
+      onRifiuta: () => rispondi({ action: 'decline' }),
+      onAnnulla: () => rispondi({ action: 'cancel' }),
+      onApri: (url) => { if (/^https:\/\//iu.test(String(url))) window.open(url, '_blank', 'noopener,noreferrer'); },
+    });
+    const article = scheda.scheda;
+    article.dataset.requestId = requestId;
     nellaChat(article);
     aggiornaTickGiro({ tono: 'warning' });
     article._rispostaDataQui = () => rispostaDataDaQuestaScheda;
@@ -13640,7 +13812,12 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   function contaSchedeTerminale() {
     const t = state.terminal;
     if (!t || !state.realSession.id || t.sessioneId !== state.realSession.id) return null;
-    return t.ordine.length;
+    return contaShellTerminale(t); // PO-10, owner 02/10/2026: il numero conta le shell vere, non le viste dell'agente
+  }
+
+  /** Le schede che sono shell vere (il tetto di 8 vale per loro): le schede agente sono viste, non PTY. */
+  function contaShellTerminale(t = statoTerminale()) {
+    return t.ordine.filter((id) => t.schede.get(id)?.origine !== 'agente').length;
   }
 
   function renderizzaSchedeTerminale() {
@@ -13661,13 +13838,17 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     ui.aggiorna({
       schede,
       attiva: t.attiva,
-      puoAprire: conSessione && t.ordine.length < SCHEDE_MASSIME_TERMINALE,
+      puoAprire: conSessione && contaShellTerminale(t) < SCHEDE_MASSIME_TERMINALE,
       motivoNoNuova: conSessione ? tr(TESTI_TERMINALE.troppeSchede, { n: SCHEDE_MASSIME_TERMINALE }) : tr(TESTI_TERMINALE.nuovaSchedaSenzaSessione),
       badges: [
-        { chiave: 'isolamento', testo: tr('Stessa macchina, senza isolamento'), titolo: tr('La shell gira sul tuo computer, nella cartella della sessione: nessuna sandbox.') },
+        /* PO-10: il badge parla delle TUE shell; dove gira un comando dell'agente lo dice la sua riga d'esito */
+        ...(attiva?.origine === 'agente' ? [] : [{ chiave: 'isolamento', testo: tr('Stessa macchina, senza isolamento'), titolo: tr('La shell gira sul tuo computer, nella cartella della sessione: nessuna sandbox.') }]),
         ...(nomeCartella ? [{ chiave: 'cartella', testo: nomeCartella, titolo: `${cartella} · ${tr('shell sul tuo computer, senza isolamento')}` }] : []),
       ],
-      piede: attiva
+      piede: attiva?.origine === 'agente'
+        /* ⭐ PO-10 passo 2 — il piede dice il vero: «Aperta da te» era una costante, anche per ciò che non avevi aperto */
+        ? { chi: attiva.giro ? tr(TESTI_TERMINALE.lanciataDallAgente, { giro: attiva.giro }) : tr(TESTI_TERMINALE.lanciataDallAgenteSenzaGiro), dettaglio: attiva.cartella || state.realSession.cartellaAssoluta || '', stato: tr(ETICHETTA_STATO_TERMINALE[attiva.stato] ?? attiva.stato), nota: tr(TESTI_TERMINALE.solaLettura) }
+        : attiva
         ? { chi: tr(TESTI_TERMINALE.apertaDaTe), dettaglio: cartella || (attiva.origine === 'standalone' ? tr('cartella predefinita del server') : ''), stato: `${tr(ETICHETTA_STATO_TERMINALE[attiva.stato] ?? attiva.stato)}${attiva.ripreso ? ` · ${tr('shell ripresa')}` : ''}`, /* ⛔ 07/9, visto in una foto: la frase generica («Ogni scheda dichiara chi l'ha aperta e
              dove») restava accanto al percorso e gli rubava lo spazio, proprio mentre il percorso
              era tagliato e perdeva il nome della cartella. Dove c'è un dato vero, lo spazio è suo:
@@ -13688,7 +13869,9 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       term: null, fit: null, webgl: null, ws: null, mount: null, osservatore: null,
     };
     t.schede.set(voce.terminalId, record);
-    t.ordine.push(voce.terminalId);
+    /* PO-10: le tue shell prima, le schede dell'agente dopo, in ordine di giro */
+    const primoAgente = t.ordine.findIndex((id) => t.schede.get(id)?.origine === 'agente');
+    if (primoAgente >= 0) t.ordine.splice(primoAgente, 0, voce.terminalId); else t.ordine.push(voce.terminalId);
     return record;
   }
 
@@ -13848,6 +14031,16 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       spegniWebglTerminale(altra);
     }
     if (record.mount) record.mount.hidden = false;
+    /* ⭐ PO-10 passo 2 — una scheda agente non ha PTY né WebSocket: si monta una xterm in sola lettura e ci si scrive il
+       testo dei comandi del giro. Il fuoco ci va solo se la persona l'ha SCELTA (stessa regola delle shell, qui sotto). */
+    if (record.origine === 'agente') {
+      if (terminaleAschermo() && montaSchedaAgente(record)) {
+        accendiWebglTerminale(record);
+        requestAnimationFrame(() => { record.fit?.fit(); if (cambiaScheda || !eraGiaMontata) record.term?.focus(); });
+      }
+      renderizzaSchedeTerminale();
+      return;
+    }
     /*
      * ⛔⛔⛔ CONTA DOVE SI VEDE, NON DOVE STA. Qui c'era `state.view === 'terminal'`: il terminale
      *   si montava solo se la VISTA corrente era il Terminale. Col pannello in basso (PO-09) la
@@ -13925,7 +14118,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const t = statoTerminale();
     const sessioneId = state.realSession.id;
     if (!sessioneId) { toast(tr('Serve una sessione'), tr(TESTI_TERMINALE.nuovaSchedaSenzaSessione)); return; }
-    if (t.ordine.length >= SCHEDE_MASSIME_TERMINALE) { toast(tr('Troppe schede'), tr(TESTI_TERMINALE.troppeSchede, { n: SCHEDE_MASSIME_TERMINALE })); return; }
+    if (contaShellTerminale(t) >= SCHEDE_MASSIME_TERMINALE) { toast(tr('Troppe schede'), tr(TESTI_TERMINALE.troppeSchede, { n: SCHEDE_MASSIME_TERMINALE })); return; }
     try {
       let voce = await apiPost(`/api/v1/sessions/${encodeURIComponent(sessioneId)}/terminals`, {});
       // col registro vuoto la prima POST restituisce la prima scheda (terminalId === sessionId), che qui esiste già
@@ -13951,6 +14144,18 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const t = statoTerminale();
     const record = t.schede.get(id);
     if (!record) return;
+    /* ⭐ PO-10 — una scheda agente chiusa resta chiusa finché il suo giro non lancia un comando nuovo (decisione 28/09):
+       nasconderlo sarebbe tacere un comando. Nessuna chiamata al server: non c'è una shell dietro. */
+    if (record.origine === 'agente') {
+      const indice = t.ordine.indexOf(id);
+      const prossima = prossimaAttivaDopoChiusura(t.ordine, indice);
+      chiuseAgenteDellaSessione(t).set(id, record.comandi.length);
+      togliSchedaAgente(record, { attivaUnAltra: false });
+      if (t.attiva === null && prossima) attivaSchedaTerminale(prossima);
+      renderizzaSchedeTerminale();
+      t.ui?.fuocoSullaAttiva();
+      return;
+    }
     const indice = t.ordine.indexOf(id);
     const prossima = prossimaAttivaDopoChiusura(t.ordine, indice);
     smontaSchedaTerminale(record);
@@ -13973,7 +14178,161 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     t.ordine = [];
     t.attiva = null;
     t.sessioneId = undefined;
+    t.sessioneAgente = undefined; // PO-10: le schede agente se ne sono andate con le altre, la prossima volta si rifanno
     renderizzaSchedeTerminale();
+  }
+
+  /*
+   * ⭐⭐⭐ PO-10 passo 2 (02/10/2026) — LE SCHEDE AGENTE DEL TERMINALE, in sola lettura.
+   *
+   * Decisioni dell'owner (memoria `decisione-owner-po-10-schede-agente-sola-lettura-28-09`): una scheda per giro,
+   * «agente · giro N», coi comandi del giro in fila ($ comando, uscita, esito); niente tastiera; compare senza rubare il
+   * fuoco; resta finché c'è la sessione e si ricostruisce riaprendola; si chiude a mano e non si rinomina; i «!» della
+   * persona non ci vanno; il pallino finito è verde, o rosso se un comando è «Non riuscito»; «Terminale N» conta le shell.
+   *
+   * Forma presa dal codice di Hermes (`apps/desktop/src/app/right-sidebar/terminal/`): `use-agent-terminal.ts:21-83`
+   * (una xterm SOLO SCRITTURA, `disableStdin`, niente PTY), `agent-terminal-stream.ts:15-30,123-166` (un tetto per
+   * comando e in tutto; se il testo nuovo prolunga quello scritto si manda il resto, se no si riparte da capo),
+   * `terminals.ts:273-291` (la scheda compare UNA volta e non ruba la scheda attiva). Adattata: il nostro kernel esegue i
+   * comandi da sé, quindi la scheda è una VISTA degli eventi della sessione, non un processo in background.
+   */
+  const EVENTI_DELLE_SCHEDE_AGENTE = new Set(['ToolCallStart', 'ToolCallArgs', 'ToolCallOutput', 'ToolCallResult', 'ApprovalRequested', 'ApprovalResolved', 'RunFinished', 'RunError']);
+  const USCITA_AGENTE_MAX_CARATTERI = 256_000; // per comando — Hermes `MAX_BACKLOG`, agent-terminal-stream.ts:15
+  const USCITE_AGENTE_MAX_CARATTERI = 2_000_000; // in tutto — Hermes `MAX_TOTAL_CHARS`, agent-terminal-stream.ts:30
+
+  /** La testata (`exit N [sandbox: …]`) sta in testa: un testo troppo lungo tiene la testa E la coda, mai solo la coda. */
+  function testoConTetto(testo) {
+    if (testo.length <= USCITA_AGENTE_MAX_CARATTERI) return testo;
+    const testa = testo.slice(0, 4_000);
+    return `${testa}\n… (${(testo.length - USCITA_AGENTE_MAX_CARATTERI).toLocaleString('it-IT')} caratteri non tenuti in questa pagina) …\n${testo.slice(-(USCITA_AGENTE_MAX_CARATTERI - 4_000))}`;
+  }
+
+  function registraUscitaAgente(evento) {
+    const info = state.realSession.toolCallNomi.get(evento.toolCallId);
+    if (!info || !['shell', 'prova'].includes(info.nome) || info.comandoDellaPersona) return;
+    const uscite = state.realSession.usciteAgente;
+    const voce = uscite.get(evento.toolCallId) || { vivo: '', testo: null };
+    if (evento.type === 'ToolCallOutput') {
+      if (typeof evento.delta !== 'string' || !evento.delta || voce.testo !== null) return;
+      voce.vivo = (voce.vivo + evento.delta).slice(-USCITA_AGENTE_MAX_CARATTERI);
+    } else {
+      voce.testo = testoConTetto(evento.content == null ? '' : String(evento.content));
+      voce.vivo = '';
+    }
+    uscite.delete(evento.toolCallId);
+    uscite.set(evento.toolCallId, voce); // in coda: l'ordine della mappa è l'età
+    let totale = 0;
+    for (const v of uscite.values()) totale += v.vivo.length + (v.testo?.length ?? 0);
+    /* oltre il tetto se ne vanno le uscite più vecchie; resta la testata, così la riga d'esito dice ancora com'è andata */
+    for (const [id, v] of uscite) {
+      if (totale <= USCITE_AGENTE_MAX_CARATTERI || id === evento.toolCallId) break;
+      totale -= v.vivo.length + (v.testo?.length ?? 0);
+      const testata = typeof v.testo === 'string' ? v.testo.split('\n', 1)[0] : null;
+      uscite.set(id, { vivo: '', testo: testata, sfrattato: true });
+    }
+  }
+
+  let schedeAgenteProgrammate = 0;
+  function programmaSchedeAgente() {
+    if (schedeAgenteProgrammate) return;
+    if (typeof window.requestAnimationFrame !== 'function') { aggiornaSchedeAgente(); return; }
+    schedeAgenteProgrammate = window.requestAnimationFrame(() => { schedeAgenteProgrammate = 0; aggiornaSchedeAgente(); });
+  }
+
+  /** Le schede agente chiuse a mano in QUESTA sessione: id → quanti comandi aveva quando è stata chiusa. */
+  function chiuseAgenteDellaSessione(t = statoTerminale()) {
+    if (!t.chiuseAgente) t.chiuseAgente = new Map();
+    const sessione = state.realSession.id || null;
+    if (!t.chiuseAgente.has(sessione)) t.chiuseAgente.set(sessione, new Map());
+    return t.chiuseAgente.get(sessione);
+  }
+
+  function togliSchedaAgente(record, { attivaUnAltra = true } = {}) {
+    const t = statoTerminale();
+    smontaSchedaTerminale(record);
+    t.schede.delete(record.terminalId);
+    const indice = t.ordine.indexOf(record.terminalId);
+    if (indice >= 0) t.ordine.splice(indice, 1);
+    if (t.attiva === record.terminalId) {
+      t.attiva = null;
+      if (attivaUnAltra && t.ordine[0] && terminaleAschermo()) attivaSchedaTerminale(t.ordine[0]);
+    }
+  }
+
+  function aggiornaSchedeAgente() {
+    const t = statoTerminale();
+    const sessione = state.realSession.id || null;
+    if (t.sessioneAgente !== sessione) {
+      for (const record of [...t.schede.values()]) if (record.origine === 'agente') togliSchedaAgente(record, { attivaUnAltra: false });
+      t.sessioneAgente = sessione;
+    }
+    const schede = sessione
+      ? schedeAgenteDagliEventi(state.realSession.eventiAttrezzi, { chiuse: chiuseAgenteDellaSessione(t), uscite: state.realSession.usciteAgente })
+      : [];
+    const viste = new Set();
+    for (const s of schede) {
+      viste.add(s.terminalId);
+      let record = t.schede.get(s.terminalId);
+      if (!record) {
+        /* ⛔ compare SENZA rubare il fuoco: si aggiunge alla striscia, la scheda attiva resta quella di prima */
+        record = { terminalId: s.terminalId, origine: 'agente', giro: s.giro, titolo: null, cartella: '', shell: null, comando: '', stato: 'live', ripreso: null, comandi: [], scritto: '', term: null, fit: null, webgl: null, ws: null, mount: null, osservatore: null };
+        t.schede.set(s.terminalId, record);
+        t.ordine.push(s.terminalId);
+      }
+      record.comandi = s.comandi;
+      record.stato = s.esito === 'in-corso' ? 'live' : s.esito;
+      record.cartella = [...s.comandi].reverse().find((c) => c.cwd)?.cwd || '';
+      if (record.term) scriviSchedaAgente(record);
+    }
+    for (const record of [...t.schede.values()]) if (record.origine === 'agente' && !viste.has(record.terminalId)) togliSchedaAgente(record);
+    renderizzaSchedeTerminale();
+  }
+
+  /** Si scrive solo la differenza; se il testo nuovo non prolunga quello scritto (l'uscita viva lascia il posto a quella
+      vera) si riparte da capo. Hermes, `syncAgentTerminalSnapshot`, agent-terminal-stream.ts:123-166. */
+  function scriviSchedaAgente(record) {
+    if (!record.term) return;
+    const testo = testoSchedaAgente({ comandi: record.comandi });
+    if (testo === record.scritto) return;
+    if (record.scritto && testo.startsWith(record.scritto)) record.term.write(testo.slice(record.scritto.length));
+    else { record.term.reset(); record.term.write(testo); }
+    record.scritto = testo;
+  }
+
+  function montaSchedaAgente(record) {
+    if (record.term) return true;
+    const corpo = $('#realTerminalMount');
+    if (!corpo || !window.Terminal || !window.FitAddon) {
+      statoTerminale().enforcementColore = 'xterm.js non caricato';
+      return false;
+    }
+    const pezzi = creaTerminaleXterm({
+      documento: document,
+      contenitore: corpo,
+      Terminal: window.Terminal,
+      FitAddon: window.FitAddon,
+      id: record.terminalId,
+      tema: temaTerminaleReale(),
+      fontFamily: getComputedStyle(document.documentElement).getPropertyValue('--talos-font-mono').trim() || 'Menlo, Consolas, monospace',
+      solaLettura: true,
+    });
+    if (!pezzi) {
+      statoTerminale().enforcementColore = 'xterm.js non caricato';
+      return false;
+    }
+    Object.assign(record, { term: pezzi.term, fit: pezzi.fit, mount: pezzi.mount, osservatore: pezzi.osservatore, scritto: '' });
+    pezzi.mount.dataset.origine = 'agente';
+    pezzi.mount.setAttribute('aria-label', tr(TESTI_TERMINALE.schedaAgente));
+    record.scollegaAppunti = collegaAppunti(pezzi.term, {
+      documento: document,
+      ospite: pezzi.mount,
+      radiceMenu: ROOT().body || ROOT(),
+      apple: suApple(),
+      avvisa: (titolo, testo) => toast(tr(titolo), tr(testo)),
+      solaLettura: true,
+    });
+    scriviSchedaAgente(record);
+    return true;
   }
 
   /** Punto d'ingresso unico, chiamato da setView('terminal') e da resettaSuperficiRealiDedicate() quando il tab è già aperto. */
@@ -13986,9 +14345,10 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       else if (t.ordine[0]) attivaSchedaTerminale(t.ordine[0]);
       else renderizzaSchedeTerminale();
     };
-    if (t.sessioneId === sessioneId && t.ordine.length > 0) { avvia(); return; }
+    if (t.sessioneId === sessioneId && contaShellTerminale(t) > 0) { avvia(); return; }
     if (t.sessioneId !== sessioneId) scollegaTerminaleReale();
     t.sessioneId = sessioneId;
+    aggiornaSchedeAgente(); // PO-10: lo scollegamento le ha tolte, si ricostruiscono dagli eventi della sessione
     renderizzaSchedeTerminale();
     void caricaSchedeTerminale().then(() => { if (state.view === 'terminal' && t.sessioneId === sessioneId) avvia(); });
   }
@@ -15112,7 +15472,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
           break;
         }
         case 'ApprovalResolved': {
-          righe.push(`_Approvazione ${evento.approvato ? 'CONCESSA' : 'NEGATA'}._`, '');
+          righe.push(`_Approvazione ${evento.approvato ? 'CONCESSA' : 'NEGATA'}${evento.ambito === 'cartella' ? ' in questa cartella per la sessione' : ''}${evento.motivo === 'nessuna-interfaccia' ? ': nessuno poteva rispondere in questa sessione automatica' : ''}._`, '');
           break;
         }
         case 'RunFinished': {
@@ -16056,7 +16416,10 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     themePresetVersione: 0, sceneOverrideVersione: 0, backgroundMotionVersione: 0,
     themePreset: 'forge', colorMode: 'system', sceneOverride: 'follow-theme', // tema di serie: Forge (owner 24/09/2026 sera: «tema default forge»); una scelta timbrata v2 resta com'è
     uiDensity: 'compatta', uiLanguage: 'sistema', // 06/9 B8: densità delle liste (mockup `data-densita`) e lingua dei menu (H21)
-    uiFontScale: 'large', chatFontScale: 'balanced', composerShape: 'standard',
+    /* ⛔ Owner 02/10/2026: «di default la grandezza dell'interfaccia deve essere su predefinita». Era 'large' dalla candidata
+       0.1.19 (`14086c7b4`), senza una decisione registrata. Il salvataggio è rado (`salvaImpostazioniDesktop`: si scrive solo
+       ciò che differisce dal valore di serie) ⇒ chi non l'ha mai toccata passa da sola a «Predefinita», chi ha scelto la tiene. */
+    uiFontScale: 'default', chatFontScale: 'balanced', composerShape: 'standard',
     composerPlus: 'drawer', messageStyle: 'sections', streamingAnimation: 'fade',
     windowPresentation: 'drawer', immersiveHeader: false, chatFullWidth: false, reducedMotion: false,
     askTimeout: 'none', // 24/09/2026, decisione owner 35: la scadenza delle domande di TALOS, spenta di serie
@@ -18083,7 +18446,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       return;
     }
     if (argomentiParsati && info.summaryText) info.summaryText.textContent = riassuntoAttrezzoInCorso(info.nome, argomentiParsati);
-    if (argomentiParsati && info.dettaglio) info.dettaglio.textContent = bersaglioAttrezzoNudo(info.nome, argomentiParsati); // 05/9 Fase 2: il dettaglio mono della ToolRow
+    if (argomentiParsati && info.dettaglio) info.dettaglio.textContent = dettaglioRigaAttrezzo(info.nome, argomentiParsati); // 05/9 Fase 2: il dettaglio mono della ToolRow
     if (info.detail) renderizzaArgomentiAttrezzo(info.detail, info.argomenti, argomentiParsati);
   }
 
@@ -18101,6 +18464,21 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   /** Il disegno differito si salda PRIMA che qualcun altro scriva dentro `info.detail`. */
   function disegnaArgomentiSeInAttesa(info) {
     if (info && argomentiAttrezzoInAttesa.has(info)) aggiornaVistaArgomentiAttrezzo(info);
+  }
+
+  /*
+   * ⛔ 02/10/2026, owner («sì, tutte e tre») — «da un’altra finestra» si dice SOLO di una risposta arrivata in diretta a una
+   *   card che non l'ha data lei. Riaprendo una sessione la storia si rigioca (`inRigiocata`, fino a `talos.fine-rigiocata`)
+   *   e nessuna card sa più chi ha risposto: la card del consenso diceva «Approvato da un’altra finestra» a chi l'aveva dato
+   *   da qui (misurato sul 4174, sessione 5a552e6b…), e così le domande e la scheda MCP. Meno dettaglio, mai una cosa falsa.
+   * ⛔ Ma l'esito che la card delle domande RICONCILIA dal registro dopo un 409 (`_esitoRiconciliatoQui`) nasce dal clic di
+   *   adesso: è in diretta per costruzione, anche a rigiocata non ancora chiusa. Senza questa eccezione, chi rispondeva prima
+   *   della fine della rigiocata a una domanda già risolta altrove leggeva «Risposta inviata» come se l'avesse data lui
+   *   (R4-ASK-DUPLICATE-409-REPLAY, rosso dal commit c9d605cb1).
+   */
+  function rispostaDaUnAltraFinestra(card) {
+    const inDiretta = !state.realSession.inRigiocata || card?._esitoRiconciliatoQui?.() === true;
+    return inDiretta && card?._rispostaDataQui?.() !== true;
   }
 
   function handleRealEvent(evento, generation) {
@@ -18286,14 +18664,18 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
      *   ⛔ Resta bianca di proposito — il `content` può essere enorme e non si conserva (nota qui
      *   sopra): si aggiungono QUATTRO campi nominati, non si passa l'evento intero.
      */
-    if (evento.type === 'ToolCallStart') state.realSession.eventiAttrezzi.push({ type: 'ToolCallStart', toolCallId: evento.toolCallId, toolCallName: evento.toolCallName, ricevutoA: Date.now(), avviatoA: Number.isFinite(evento.avviatoA) ? evento.avviatoA : null, giro: state.realSession.runCount || null }); // 06/9 B2: ora e giro per «Processi» · 17/09 OSS-1: `avviatoA` è l'orologio del SERVER
+    if (evento.type === 'ToolCallStart') state.realSession.eventiAttrezzi.push({ type: 'ToolCallStart', toolCallId: evento.toolCallId, toolCallName: evento.toolCallName, ricevutoA: Date.now(), avviatoA: Number.isFinite(evento.avviatoA) ? evento.avviatoA : null, giro: state.realSession.runCount || null, chi: state.realSession.giroComandoDiretto && evento.toolCallName === 'shell' ? 'tu' : 'agente' }); // 06/9 B2: ora e giro per «Processi» · 17/09 OSS-1: `avviatoA` è l'orologio del SERVER
     else if (evento.type === 'ToolCallArgs') state.realSession.eventiAttrezzi.push({ type: 'ToolCallArgs', toolCallId: evento.toolCallId, delta: evento.delta });
+    /* ⛔ 02/10/2026 — il consenso, per la scheda «Processi»: un comando che lo aspetta non è «in corso» (decisione owner).
+       Solo i campi che servono a collegarlo alla riga; l'azione intera resta alla card nella chat. */
+    else if (evento.type === 'ApprovalRequested' && typeof evento.azione?.toolCallId === 'string') state.realSession.eventiAttrezzi.push({ type: 'ApprovalRequested', requestId: evento.requestId, toolCallId: evento.azione.toolCallId });
+    else if (evento.type === 'ApprovalResolved') state.realSession.eventiAttrezzi.push({ type: 'ApprovalResolved', requestId: evento.requestId, ricevutoA: Date.now() });
     /*
      * ⭐ 16/09, P0-E punto 9 — si copia ANCHE il codice di uscita, e solo quello. È l'unico posto in
      *   cui esiste: `ToolCallResult` non ha un campo «uscita» (vedi `agui-events.mjs`), e il kernel
      *   lo scrive in testa al contenuto (`talosHarness.mjs:7812`, `exit ${p.codice} [sandbox: …]`).
      *   ⛔ Resta vera la nota qui sopra: il `content` NON si conserva, perché può essere enorme —
-     *   `uscitaDaTestoAttrezzo` ne ricava un intero e butta il resto. Serve a distinguere
+     *   `uscitaDelRisultato` ne ricava un intero (prima il campo `exitCode`, dal 02/10/2026) e butta il resto. Serve a distinguere
      *   «annullato» (130) e «terminato a forza» (124) da «non riuscito», che prima erano la stessa
      *   cosa: un pallino rosso su un comando che qualcuno aveva semplicemente fermato.
      */
@@ -18305,7 +18687,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
        schermo — «non misurato» è un esito, «0» sarebbe una bugia. */
     else if (evento.type === 'ToolCallResult') state.realSession.eventiAttrezzi.push({
       type: 'ToolCallResult', toolCallId: evento.toolCallId, ricevutoA: Date.now(),
-      errore: Boolean(evento.isError || evento.error), uscita: uscitaDaTestoAttrezzo(evento.content),
+      errore: Boolean(evento.isError || evento.error), uscita: uscitaDelRisultato(evento), // 02/10/2026: prima `exitCode`, il testo come ripiego
       durataMs: Number.isFinite(evento.durataMs) ? evento.durataMs : null,
       comando: typeof evento.comando === 'string' ? evento.comando : null,
       cwd: typeof evento.cwd === 'string' ? evento.cwd : null,
@@ -18319,6 +18701,10 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
        */
       rifiutato: typeof evento.content === 'string' && /^\s*REFUSED\b/u.test(evento.content),
     });
+    /* ⭐ PO-10 passo 2 (02/10/2026) — i comandi dell'agente nelle LORO schede del Terminale: stessi eventi del pannello
+       Processi, più il testo dell'uscita. Un fotogramma per volta, mai uno per evento. */
+    if (evento.type === 'ToolCallOutput' || evento.type === 'ToolCallResult') registraUscitaAgente(evento);
+    if (EVENTI_DELLE_SCHEDE_AGENTE.has(evento.type)) programmaSchedeAgente();
     /*
      * ⛔ PO-06 (10/09) — il giro del comando scritto dalla persona finisce qui: da adesso le
      *   righe che arrivano sono di nuovo dell'agente e tornano al comportamento normale (card
@@ -18784,6 +19170,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
              si dichiara per quello che è, non come durata del processo. */
           comandoDellaPersona: rigaDiComandoMio,
           iniziatoA: Date.now(),
+          iniziatoDalVivo: !state.realSession.inRigiocata, // 02/10/2026: un'ora presa durante la rigiocata non misura niente
           stato: 'running',
           ...bubble,
         };
@@ -18888,6 +19275,9 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
            kernel glielo dice). Riga discreta col motivo in parole, pallino neutro; il testo del kernel resta nel dettaglio. */
         const domandaDaCorreggere = info ? motivoDomandaDaCorreggere(info.nome, testoEsito) : null;
         const fallito = info ? esitoAttrezzoFallito(info.nome, testoEsito) : false; // chi la legge decide prima su `domandaDaCorreggere`
+        /* 02/10/2026, owner: un comando FERMATO si dice «interrotto» — pallino neutro, mai contato fra gli errori. */
+        const esitoDelComando = info?.nome === 'shell' ? leggiEsitoComando(testoEsito) : null;
+        const fermatoApposta = Boolean(esitoDelComando?.annullato || esitoDelComando?.terminato);
         /*
          * ⛔⛔ PO-06 (10/09) — per un comando scritto dalla PERSONA la riga porta il VERDETTO, non
          *   il conteggio della card che la contiene. Misurato dal vivo prima della cura: si leggeva
@@ -18901,13 +19291,16 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
           info.summaryText.textContent = domandaDaCorreggere
             ? tr('Il modello ha corretto la domanda: {motivo}', { motivo: tr(domandaDaCorreggere.frase, domandaDaCorreggere.parametri) })
             : esitoUmano
-            ? rigaDiStatoComando(esitoUmano, typeof info.iniziatoA === 'number' ? Date.now() - info.iniziatoA : null)
+            /* ⛔ 02/10/2026, owner («nella storia non scriverla») — riaprendo una sessione la riga diceva «… · 6 ms» per
+               un comando fermato dopo secondi: era il tempo fra due eventi RIGIOCATI, e il giornale non ha una durata
+               per il comando della persona. Una durata si scrive solo se inizio e fine sono stati visti dal vivo. */
+            ? rigaDiStatoComando(esitoUmano, typeof info.iniziatoA === 'number' && info.iniziatoDalVivo && !state.realSession.inRigiocata ? Date.now() - info.iniziatoA : null)
             : riassuntoAttrezzoConcluso(info.nome, info.argomentiParsati, testoEsito, fallito);
         }
         if (info?.article) {
-          impostaEsitoRiga(info.article, domandaDaCorreggere ? 'corretta' : fallito ? 'error' : 'success'); // 05/9 Fase 2: il pallino della ToolRow
+          impostaEsitoRiga(info.article, domandaDaCorreggere ? 'corretta' : fermatoApposta ? 'interrupted' : fallito ? 'error' : 'success'); // 05/9 Fase 2: il pallino della ToolRow
           info.article.setAttribute('aria-busy', 'false');
-          if (info.dettaglio && info.argomentiParsati && !info.comandoDellaPersona) info.dettaglio.textContent = bersaglioAttrezzoNudo(info.nome, info.argomentiParsati);
+          if (info.dettaglio && info.argomentiParsati && !info.comandoDellaPersona) info.dettaglio.textContent = dettaglioRigaAttrezzo(info.nome, info.argomentiParsati);
         }
         // F3-33a (25/09/2026): la proposta di workflow riuscita diventa una card nel transcript (decisione owner D20)
         if (info?.nome === 'workflow_plan_propose' && !fallito) montaCardProposta(evento);
@@ -19149,7 +19542,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
           // Una scrittura riuscita è contata soltanto dal relativo
           // StateDelta add/replace: il testo del tool non prova il disco.
           else if (categoria === 'altro') batch.contatori.altro += 1;
-          info.stato = domandaDaCorreggere ? 'corretta' : fallito ? 'error' : 'complete';
+          info.stato = domandaDaCorreggere ? 'corretta' : fermatoApposta ? 'interrotto' : fallito ? 'error' : 'complete';
           aggiornaRiassuntoBatch(batch);
         }
         // ⭐ 3/9 — item 10: preso ORA, non dopo — fra un attimo l'entry sparisce.
@@ -19387,9 +19780,8 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       case 'UserQuestionResolved': {
         const card = state.realSession.domandePendenti.get(evento.requestId);
         if (card) {
-          const daQuiStessa = card._rispostaDataQui?.() === true;
           // ⛔ 24/09/2026, decisione owner 10: l'esito completo (risposte, chi, quando, perché) va alla ricevuta.
-          finalizzaUserQuestionCard(card, evento.status, !daQuiStessa && evento.da !== 'sistema',
+          finalizzaUserQuestionCard(card, evento.status, rispostaDaUnAltraFinestra(card) && evento.da !== 'sistema',
             { answers: evento.answers, at: evento.at, da: evento.da, motivo: evento.motivo });
           state.realSession.domandePendenti.delete(evento.requestId);
           syncRunComposerState();
@@ -19417,6 +19809,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
          * vedi `ApprovalResolved` qui sotto.
          */
         aggiornaElencoSessioniReali();
+        aggiornaInspectorDaStato(); // 02/10/2026: la riga dei Processi dice «Aspetta il tuo consenso», e perde lo Stop
         break;
       }
       case 'ApprovalResolved': {
@@ -19430,12 +19823,30 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
          */
         const card = state.realSession.approvazioniPendenti.get(evento.requestId);
         if (card) {
-          const daQuiStessa = card._rispostaDataQui?.() === true;
           // 06/9: l'esito non si concatena più alla frase (si leggeva come parte del comando): riga sua, col tono.
-          segnaEsitoApprovazione(card, { approvato: Boolean(evento.approvato), altrove: !daQuiStessa });
+          segnaEsitoApprovazione(card, { approvato: Boolean(evento.approvato), altrove: rispostaDaUnAltraFinestra(card), ambito: evento.ambito, motivo: evento.motivo }); // F4-03: ambito e motivo, se il server li manda
           state.realSession.approvazioniPendenti.delete(evento.requestId);
         }
         aggiornaElencoSessioniReali(); // ⛔ 04/9 — l'altro verso: risolta l'approvazione, la riga deve smettere di dire «in attesa»
+        aggiornaInspectorDaStato(); // 02/10/2026: dato il consenso il comando parte, e la sua riga torna «In corso» con lo Stop
+        break;
+      }
+      case 'McpElicitationRequested': {
+        /* 02/10/2026 — un server MCP chiede dati o di aprire una pagina, dentro la chiamata di un attrezzo: il giro aspetta. */
+        chiudiSegmentoAttivo();
+        nascondiAttesaRisposta();
+        const card = appendRichiestaMcpCard(evento);
+        state.realSession.richiesteMcpPendenti.set(evento.requestId, card);
+        aggiornaElencoSessioniReali();
+        break;
+      }
+      case 'McpElicitationResolved': {
+        const card = state.realSession.richiesteMcpPendenti.get(evento.requestId);
+        if (card) {
+          segnaEsitoRichiestaMcp(card, { action: evento.action, modo: card.dataset.modo, altrove: rispostaDaUnAltraFinestra(card) && evento.da === 'persona', motivo: evento.motivo ?? null });
+          state.realSession.richiesteMcpPendenti.delete(evento.requestId);
+        }
+        aggiornaElencoSessioniReali();
         break;
       }
       case 'RunError': {
@@ -19696,6 +20107,8 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       state.realSession.cachePromptPrecedenti = 0;
       state.realSession.usageEsecuzioniPrecedenti = null;
       state.realSession.eventiAttrezzi = []; // O-02 — la diagnosi dei giri parla della sessione che si sta guardando, mai di quella prima
+      state.realSession.usciteAgente = new Map(); // PO-10: le uscite dei comandi sono della sessione a schermo
+      programmaSchedeAgente(); // PO-10: le schede agente della sessione di prima se ne vanno, quelle di questa si ricostruiscono
       state.realSession.tettoGiriDichiarato = null; // O-02 — il tetto lo dichiara il kernel di QUESTA sessione (il planner ne ha uno diverso), mai ereditato
       state.realSession.approvazioniPendenti = new Map(); // le card sono già sparite con replaceChildren() qui sopra, la mappa le segue
       for (const scheda of state.realSession.domandePendenti?.values() || []) scheda?._dockController?.destroy();
@@ -19705,6 +20118,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         questionDock.hidden = true;
       }
       state.realSession.domandePendenti = new Map();
+      state.realSession.richiesteMcpPendenti = new Map(); // le card sono già sparite con replaceChildren(), la mappa le segue
       state.realSession.cartellaAssoluta = null; // Fase 3 — una sessione nuova non conosce ancora la propria radice finché RunStarted non arriva
       state.realSession.codaMessaggi = []; // FASE D — una sessione nuova non eredita la coda di quella precedente
       state.realSession.codaInPausa = false; // ⭐ 14/09 — né la sua pausa: la vera arriva col flusso degli eventi

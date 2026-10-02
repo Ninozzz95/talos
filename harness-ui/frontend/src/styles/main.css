@@ -119,3 +119,4 @@
 @import './lettore.css'; /* F5 File reader, 26/09/2026: il lettore di file nel rail destro e a schermo intero. */
 @import './rail-workflow.css'; /* F3-50, 25/09/2026: il rail «Agenti» del workflow nella colonna di destra. */
 @import './barra-finestra.css'; /* F7-1 (27/09/2026): la barra del titolo propria della finestra desktop */
+@import './aggiornamenti.css'; /* 01/10/2026: la banda «aggiornamento pronto» e la scheda delle Impostazioni (solo app desktop) */

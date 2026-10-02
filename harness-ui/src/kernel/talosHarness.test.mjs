@@ -1339,12 +1339,13 @@ describe('percorsoMirrorDevice — dove il mirror del task finisce sul telefono'
  * sotto-insieme dichiarato — non pretende difese anti-elusione.
  */
 describe('comandoSenzaRecupero — il floor incondizionato, un pattern per riga dichiarata', () => {
+    // N-02 (02/10/2026): le descrizioni sono quelle di Hermes; i casi completi in tests/rev-pavimento-comandi.test.mjs
     it('⭐ i cinque casi diretti, uno per pattern', () => {
-        assert.match(comandoSenzaRecupero('rm -rf /') ?? '', /cancellazione ricorsiva/)
-        assert.match(comandoSenzaRecupero('mkfs.ext4 /dev/sda1') ?? '', /formattazione/)
-        assert.match(comandoSenzaRecupero('dd if=/dev/zero of=/dev/sda') ?? '', /device a blocchi/)
-        assert.match(comandoSenzaRecupero(':(){ :|:& };:') ?? '', /fork bomb/)
-        assert.match(comandoSenzaRecupero('shutdown -h now') ?? '', /spegnimento/)
+        assert.equal(comandoSenzaRecupero('rm -rf /'), 'recursive delete of root filesystem')
+        assert.equal(comandoSenzaRecupero('mkfs.ext4 /dev/sda1'), 'format filesystem (mkfs)')
+        assert.equal(comandoSenzaRecupero('dd if=/dev/zero of=/dev/sda'), 'dd to raw block device')
+        assert.equal(comandoSenzaRecupero(':(){ :|:& };:'), 'fork bomb')
+        assert.equal(comandoSenzaRecupero('shutdown -h now'), 'system shutdown/reboot')
     })
 
     it('⛔ e AL CONTRARIO: un comando innocuo, o uno che TOCCA solo un sotto-percorso, non è bloccato', () => {
@@ -3334,7 +3335,7 @@ describe('talosLavora — verificaPermessoScrittura (livelloAccesso/chiediApprov
         assert.equal(chiestoApprovazione, false, 'il floor nega PRIMA del cancello normale: non chiede nemmeno')
         const messaggioTool = rete.chiamate[1].corpo.messages.find((m) => m.role === 'tool')
         assert.match(messaggioTool.content, /^REFUSED\./)
-        assert.match(messaggioTool.content, /no recovery path/)
+        assert.match(messaggioTool.content, /no permission level unlocks it\. This floor stops direct cases only; it is not a sandbox/)
     })
 
     // ⭐⭐⭐ FASE D, primo incremento — integrazione VERA: onGiro riceve una ricevuta reale, non solo la funzione pura testata da sola sopra.

@@ -40,6 +40,10 @@ const OPERAZIONI = Object.freeze({
     try { const s = await stat(percorso); return s.isFile() ? { mtimeMs: s.mtimeMs, size: s.size } : null; } catch { return null; }
   },
   pezzoConSeparatore: ({ percorso, pezzo }) => pezzoConSeparatore(percorso, pezzo),
+  /* F4-03: dove finisce davvero una scrittura, coi collegamenti di Linux (il permesso resta deciso dal lato Windows). */
+  posizioneNelProgetto: ({ cartella, percorso }) => kernel.posizioneNelProgetto(cartella, percorso),
+  /* F4-01: i byte del file da modificare (NUL ⇒ binario, UTF-8 rigoroso), senza la decodifica tollerante di `discoLeggi`. */
+  leggiPerModifica: ({ percorso }) => kernel.leggiPerModifica(percorso),
   fermaRicerche: async () => { ricerche.fermaTutte('fermata'); return true; },
 });
 

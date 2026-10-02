@@ -317,3 +317,19 @@ test('WF-UI-D30-LEGACY: a session without runs or proposals keeps the classic de
   await expect(grafo.locator('.talos-grafo__canvas')).toHaveCount(1);
   expect(scritture).toEqual([]);
 });
+
+test('WF-UI-SEARCH-ESC: Esc stays in the search field — it clears, then closes — and never reaches the chat during a run', async ({ page }) => {
+  // ⛔ 02/10/2026, misurato: con un giro in corso Esc nel campo risaliva alla catena degli Esc della app e apriva «Fermo il giro?»
+  const scena = costruisciScena(5, { sessionId: 'wf-ui-5' });
+  const { scritture } = await instradaScena(page, scena);
+  const grafo = await apriDiagrammaDellaScena(page, scena);
+  await page.evaluate(() => { const r = window.__talosHarnessUiRuntime; r.handleRealEvent({ type: 'RunStarted', _sequenza: 99001, input: { consegna: 'prova' }, contesto: {} }, r.realSessionState.generation); });
+  const lente = grafo.getByRole('button', { name: 'Cerca nel diagramma' }), campo = grafo.getByRole('searchbox', { name: 'Cerca fra agenti e fasi del diagramma' });
+  await lente.click(); await expect(campo).toBeFocused();
+  await page.keyboard.type('Agente 02');
+  await page.keyboard.press('Escape'); await expect(campo).toHaveValue(''); await expect(campo).toBeFocused();
+  await page.keyboard.press('Escape'); await expect(campo).toHaveCount(0); await expect(lente).toBeFocused();
+  await page.waitForTimeout(300); // il velo si aprirebbe a fine catena degli Esc
+  await expect(page.getByText('Fermo il giro?').filter({ visible: true })).toHaveCount(0);
+  expect(scritture).toEqual([]);
+});

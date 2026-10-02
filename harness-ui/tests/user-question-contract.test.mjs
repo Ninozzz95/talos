@@ -180,8 +180,10 @@ test('DOMANDA-CAMPI-IN-PIU-AL-MODELLO — alla porta del modello un campo in pi�
     ],
   };
   const [canonica] = validaDomandeUtente([comeGlm], { perche: 'obbligatorio', campiInPiu: 'ignora' });
+  /* 02/10/2026, tappa 3 CLI: `header` (≤ 12) è diventato un campo del contratto — glm-5.3-flash lo mandava già da solo —
+     quindi resta; gli `id` dentro le opzioni restano campi in più, ignorati. */
   assert.deepEqual(canonica, {
-    id: 'features', question: 'Che cosa aggiungo?', why: 'Decide che cosa costruisco per primo.',
+    id: 'features', header: 'Funzioni', question: 'Che cosa aggiungo?', why: 'Decide che cosa costruisco per primo.',
     options: [
       { label: 'Economia', description: 'Un idle-game completo', recommended: true },
       { label: 'Terminale', description: 'Un terminale finto' },

@@ -47,6 +47,39 @@ test('SETUP-STATO-03 — un portachiavi assente o rotto è «non pronto», mai u
   assert.equal(statoPrimoAvvio({ providerStore: rotto }).provider.pronto, false);
 });
 
+/*
+ * ⛔ 01/10/2026 — decisione owner per l'avviso «Imposta un provider» della Home: contano come provider impostato anche un
+ *   indirizzo Ollama o LM Studio SALVATO (provider senza chiave obbligatoria) e un agente esterno configurato. Come Hermes,
+ *   `hermes_cli/auth.py:2079-2083`: `configured = bool(api_key) or actual_local_noauth`. Prima chi usava solo Ollama vedeva
+ *   l'avviso per sempre.
+ */
+test('SETUP-STATO-05 — un indirizzo Ollama o LM Studio salvato e un agente esterno configurato contano come provider pronto', () => {
+  for (const provider of ['ollama', 'lmstudio']) {
+    const store = createProviderCredentialStore({ env: {} });
+    store.setRuntime(provider, { endpoint: 'http://127.0.0.1:11434' });
+    const stato = statoPrimoAvvio({ providerStore: store });
+    assert.equal(stato.provider.pronto, true, `${provider} con indirizzo salvato`);
+    assert.deepEqual([...stato.provider.conIndirizzo], [provider]);
+    assert.deepEqual([...stato.provider.conChiave], []);
+  }
+  const esterno = { listPublic: () => [{ id: 'esterno', requiresKey: false, keyConfigured: false, supportsEndpoint: false, execution: 'configurato' }] };
+  const conEsterno = statoPrimoAvvio({ providerStore: esterno });
+  assert.equal(conEsterno.provider.pronto, true);
+  assert.equal(conEsterno.provider.agenteEsterno, true);
+});
+
+test('SETUP-STATO-06 — AL CONTRARIO: un indirizzo senza la chiave che serve, Ollama mai salvato e un agente da configurare NON bastano', () => {
+  const conIndirizzoSenzaChiave = createProviderCredentialStore({ env: {} });
+  conIndirizzoSenzaChiave.setRuntime('openai', { endpoint: 'https://api.openai.com/v1' });
+  assert.equal(statoPrimoAvvio({ providerStore: conIndirizzoSenzaChiave }).provider.pronto, false, 'OpenAI vuole la chiave');
+  const vergine = statoPrimoAvvio({ providerStore: createProviderCredentialStore({ env: {} }) });
+  assert.equal(vergine.provider.pronto, false, 'Ollama e LM Studio mai salvati');
+  assert.deepEqual([...vergine.provider.conIndirizzo], []);
+  assert.equal(vergine.provider.agenteEsterno, false);
+  const daConfigurare = { listPublic: () => [{ id: 'esterno', requiresKey: false, keyConfigured: false, supportsEndpoint: false, execution: 'da configurare' }] };
+  assert.equal(statoPrimoAvvio({ providerStore: daConfigurare }).provider.pronto, false);
+});
+
 test('SETUP-STATO-04 — TALOS_INTRO=0 è dichiarato come introDisattivato', () => {
   assert.equal(statoPrimoAvvio({ introDisattivato: true }).introDisattivato, true);
   assert.equal(statoPrimoAvvio({ introDisattivato: '0' }).introDisattivato, false); // solo il booleano vero conta

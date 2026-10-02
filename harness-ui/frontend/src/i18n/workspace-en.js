@@ -32,6 +32,8 @@ export default Object.freeze({
   'Cambia modello': 'Change model',
   'Scegli un modello': 'Choose a model',
   'Provider e accessi': 'Providers and access',
+  'Nessun provider impostato. Collega un provider per usare l’agente.': 'No provider is set up. Connect a provider to use the agent.',
+  'Imposta un provider': 'Set up a provider',
   'Organizza il lavoro': 'Organize your work',
   'Nessuna operazione viene avviata automaticamente.': 'No operations are started automatically.',
   'Compatta': 'Compact',

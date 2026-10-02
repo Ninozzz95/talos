@@ -97,7 +97,7 @@ test('⭐⭐⭐ T-15-02 — l\'esito conta il pezzo VERO e dichiara il separator
     ),
   });
   const [detto] = esitiDelTool(esito);
-  assert.match(detto, /\(\+16 characters incl\. 1 newline separator; the file is now 27\)/,
+  assert.match(detto, /\(\+16 bytes incl\. 1 newline separator; the file is now 27 bytes\)/,
     'il conteggio è del pezzo effettivamente scritto (15 + il \\n separatore) e lo dice');
 });
 
@@ -115,7 +115,7 @@ test('⛔ T-15-03 — un file che GIÀ finisce con \\n non prende un secondo a-c
   });
   assert.equal(readFileSync(join(cartella, 'ok.txt'), 'utf8'), 'prima riga\nseconda riga',
     '⛔ un a-capo doppio fra due append sarebbe un file che cresce di una riga vuota a ogni pezzo');
-  assert.match(esitiDelTool(esito)[0], /\(\+12 characters; the file is now 23\)/,
+  assert.match(esitiDelTool(esito)[0], /\(\+12 bytes; the file is now 23 bytes\)/,
     '11 + 12, nessun separatore: e l\'esito non parla di separatori che non ha scritto');
 });
 

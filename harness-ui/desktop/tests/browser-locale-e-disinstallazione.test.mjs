@@ -144,8 +144,18 @@ test('BROWSER-LOCALE-07 — il guscio migra PRIMA di app.setPath(\'sessionData\'
 
 test('BROWSER-LOCALE-08 — ogni modulo che il guscio importa è nell\'elenco dei file del pacchetto', () => {
   const pacchetto = JSON.parse(readFileSync(join(desktop, 'package.json'), 'utf8'));
-  const importati = [...main.matchAll(/from '\.\/([^']+)'/g)].map((m) => m[1]);
+  /* 02/10/2026: anche gli import DEI moduli importati (`aggiornamenti.mjs` → `fonte-aggiornamenti.mjs`): la prima stesura guardava
+     solo `main.mjs`, e un modulo nuovo importato da un altro modulo sarebbe mancato nel pacchetto senza nessun rosso. */
+  const importati = [];
+  const daGuardare = [...main.matchAll(/from '\.\/([^']+)'/g)].map((m) => m[1]);
+  while (daGuardare.length) {
+    const f = daGuardare.shift();
+    if (importati.includes(f)) continue;
+    importati.push(f);
+    daGuardare.push(...[...readFileSync(join(desktop, f), 'utf8').matchAll(/from '\.\/([^']+)'/g)].map((m) => m[1]));
+  }
   assert.ok(importati.includes('migrazione-browser.mjs'));
+  assert.ok(importati.includes('firma-aggiornamenti.mjs'), 'la camminata scende nei moduli importati');
   const mancanti = importati.filter((f) => !pacchetto.build.files.includes(f));
   assert.deepEqual(mancanti, [], `moduli importati da main.mjs e non spediti (l'app installata non partirebbe): ${mancanti.join(', ')}`);
 });

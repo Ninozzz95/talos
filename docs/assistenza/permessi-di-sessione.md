@@ -13,9 +13,30 @@ Le scelte sono quattro, dalla più prudente alla più libera:
 | scelta | cosa vuol dire | rischio |
 |---|---|---|
 | **Solo lettura** | Legge il progetto e lancia comandi che non cambiano niente. Ogni scrittura viene rifiutata. | minimo |
-| **Scrive nel progetto** | Scrive solo dentro la cartella della sessione. Comandi e prove passano dal controllo. | consigliato |
+| **Scrive nel progetto** | Scrive da sola dentro la cartella della sessione; per scrivere fuori ti chiede. Comandi e prove passano dal controllo. | consigliato |
 | **Chiede prima** | Ti chiede conferma prima di ogni azione che lascia traccia: scritture, comandi, rete. | controllato |
 | **Accesso pieno** | File e rete senza i controlli ordinari. Solo se sai già cosa sta per fare. | alto |
+
+## «Scrive nel progetto» e i file fuori dalla cartella
+
+Dentro la cartella della sessione TALOS scrive e modifica i file da solo. Se
+vuole scrivere **fuori** — un percorso completo altrove, un `../`, o un
+collegamento dentro il progetto che porta altrove — si ferma e ti mostra una
+richiesta con la cartella dove finirebbe il file. Anche la cartella temporanea
+del sistema conta come fuori.
+
+- **Consenti una volta**: vale per quel file.
+- **Consenti in questa cartella per la sessione**: le scritture successive in
+  quella cartella, e nelle sue sottocartelle, non chiedono più fino alla fine
+  della sessione. Un riavvio dell'app la richiede.
+- **Nega**: il file non viene scritto, e TALOS lo sa.
+
+Il permesso «Sempre» dato all'attrezzo di scrittura non toglie questa domanda:
+il permesso dell'attrezzo dice *se* può scrivere, quello della sessione dice
+*dove*. Per scrivere ovunque senza domande c'è «Accesso pieno».
+
+In un'automazione o in un passo di un Workflow nessuno può rispondere: la
+scrittura fuori viene rifiutata subito, e la cronologia lo dice.
 
 ## «Accesso pieno», per esteso
 
@@ -97,3 +118,7 @@ cose le fa anche con «Chiede prima» — solo che te le chiede.
 > è `harness-ui/frontend/src/components/intro.js:28-34` (`passoConsentito`, ramo
 > `politica === 'Full access' && !confermaPieno`).
 > ⚠ Resta **non verificato** il caso del cambio di permesso a sessione già viva.
+> Per «Scrive nel progetto» e i file fuori: `harness-ui/src/kernel/talosHarness.mjs` (`posizioneNelProgetto`,
+> livello `scrittura-progetto` in `verificaPermessoScrittura`), `harness-ui/src/session-registry.mjs`
+> (`livelloDaPermessi`, `rispondiApprovazione` con `ambito: 'cartella'`), prove in
+> `harness-ui/tests/scrittura-fuori-dal-progetto.test.mjs`.

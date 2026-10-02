@@ -34,7 +34,7 @@ const DEBITO_DICHIARATO = new Map([
 const RADICE = fileURLToPath(new URL('..', import.meta.url));
 const AIUTO = 'src/scratch.mjs';
 const CARTELLE = ['src', 'scripts', 'desktop'];
-const SALTA = new Set(['node_modules', 'tests', 'dist', 'dist-preview', '.staging', '.prove']);
+const SALTA = new Set(['node_modules', 'tests', 'dist', 'dist-preview', 'dist-prova-aggiornamenti', '.staging', '.prove']); // dist-prova-aggiornamenti: la build di prova degli aggiornamenti (distribuisci.mjs), ignorata da git
 
 function elenca(cartella, fuori = []) {
   for (const voce of readdirSync(cartella, { withFileTypes: true })) {

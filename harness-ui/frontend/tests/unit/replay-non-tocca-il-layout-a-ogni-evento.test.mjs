@@ -195,3 +195,13 @@ test('RIPRISTINO-08: dopo la comparsa si segue l ALTEZZA, e la cronologia si cos
   assert.match(stili, /\.talos-conversation:has\(> #conversation\.is-restoring\) > \.talos-caricamento-cronologia\{/);
   assert.match(NUDO, /assicuraCaricamentoCronologia\(conversation\);/);
 });
+
+/* 01/10/2026 — owner: «schermata vuota e un frame del glifo poco prima che carica, non al click della riga sessione». Il
+   ritardo di 250 ms dell'indicatore lo teneva nascosto per quasi tutta l'attesa (misurato sul 4174: cronologia a ~300 ms). */
+test('RIPRISTINO-09: l indicatore della cronologia si vede dal clic, senza ritardo', () => {
+  const stili = readFileSync(new URL('../../src/styles/index.css', import.meta.url), 'utf8');
+  const regola = stili.match(/\.talos-conversation:has\(> #conversation\.is-restoring\) > \.talos-caricamento-cronologia\{[^}]*\}/u)?.[0] ?? '';
+  assert.notEqual(regola, '', 'la regola che mostra l indicatore esiste');
+  assert.doesNotMatch(regola, /animation|transition-delay|visibility:hidden/, 'nessun ritardo né visibilità nascosta sull indicatore');
+  assert.doesNotMatch(stili, /@keyframes talos-caricamento-ritardo/);
+});

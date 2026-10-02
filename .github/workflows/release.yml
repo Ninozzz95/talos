@@ -584,7 +584,11 @@ jobs:
         run: ./harness-ui/desktop/scripts/ci-smoke.ps1 -Installer $env:INSTALLER
 
       - id: asset
-        name: SHA256, note di release e pesi
+        name: SHA256, note di release, pesi e firma del manifesto degli aggiornamenti
+        # 01/10/2026, owner «Firma Ed25519 fatta da noi»: l'UNICO segreto del job desktop, e solo qui. release-assets.mjs firma
+        # latest.yml e si FERMA se il segreto manca o non è il gemello di harness-ui/desktop/assets/aggiornamenti-pubblica.pem.
+        env:
+          TALOS_UPDATE_SIGN_KEY: ${{ secrets.TALOS_UPDATE_SIGN_KEY }}
         run: |
           node harness-ui/desktop/scripts/release-assets.mjs
           if ($LASTEXITCODE -ne 0) { throw 'Preparazione note e SHA256 fallita.' }
@@ -607,12 +611,14 @@ jobs:
             ${{ steps.asset.outputs.exe }}
             ${{ steps.asset.outputs.zip }}
             ${{ steps.asset.outputs.sha }}
+            ${{ steps.asset.outputs.manifesto }}
+            ${{ steps.asset.outputs.firma }}
           if-no-files-found: error
           compression-level: 0
           retention-days: 14
 
       - id: release
-        name: pubblica la release con tre asset e note scritte
+        name: pubblica la release con cinque asset e note scritte
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
@@ -620,8 +626,10 @@ jobs:
           ZIP: ${{ steps.asset.outputs.zip }}
           SHA: ${{ steps.asset.outputs.sha }}
           NOTE: ${{ steps.asset.outputs.note }}
+          MANIFESTO: ${{ steps.asset.outputs.manifesto }}
+          FIRMA: ${{ steps.asset.outputs.firma }}
         run: |
-          gh release create $env:GITHUB_REF_NAME $env:EXE $env:ZIP $env:SHA --verify-tag --repo $env:GH_REPO --title "TALOS Desktop $env:GITHUB_REF_NAME" --notes-file $env:NOTE
+          gh release create $env:GITHUB_REF_NAME $env:EXE $env:ZIP $env:SHA $env:MANIFESTO $env:FIRMA --verify-tag --repo $env:GH_REPO --title "TALOS Desktop $env:GITHUB_REF_NAME" --notes-file $env:NOTE
           if ($LASTEXITCODE -ne 0) { throw 'Creazione release fallita; verificare se il tag ha già una release.' }
 
       - name: conserva la prova dello smoke anche in caso di errore

@@ -71,6 +71,9 @@ const MESSAGES = Object.freeze({
    */
   RESEARCH_NOT_FOUND: { title: 'Ricerca non trovata', explanation: 'Questa ricerca approfondita non è più nel progetto: può essere stata eliminata.', action: 'Torna all’elenco delle ricerche: mostra quelle che ci sono adesso.' },
   RESEARCH_CONFLICT: { title: 'Azione non possibile adesso', explanation: 'Questa ricerca non è nello stato che l’azione richiede — per esempio è già ferma, o è già finita.', action: 'Riapri la scheda della ricerca: dice come sta in questo momento.' },
+  ELICITATION_NOT_PENDING: { title: 'Richiesta già chiusa', explanation: 'Il server non aspetta più questa risposta: è stata data da un’altra finestra, o la sessione si è fermata.', action: 'Guarda la scheda nella chat: dice com’è finita.' },
+  ELICITATION_ANSWER_INVALID: { title: 'Risposta non valida', explanation: 'Quello che hai scritto non corrisponde a ciò che il server ha chiesto.', action: 'Controlla i campi della scheda e invia di nuovo.' },
+  PROCESS_NOT_RUNNING: { title: 'Comando già finito', explanation: 'Questo comando non è più in corso: è finito da solo, o qualcuno l’ha già fermato.', action: 'Guarda la riga nella scheda Processi: dice come è finito.' },
   RESEARCH_RECHECK_UNAVAILABLE: { title: 'Controllo delle fonti non possibile', explanation: 'Per ricontrollare le fonti serve un rapporto con i passaggi citati, e questa ricerca non ne ha.', action: 'Le ricerche nuove lo portano: questa si può rifare, oppure lasciarla com’è.' },
   RESEARCH_INVALID: { title: 'Richiesta non valida', explanation: 'L’identificativo della ricerca non ha una forma ammessa.', action: 'Apri la ricerca dall’elenco invece di comporre l’indirizzo a mano.' },
   INTERNAL_ERROR: { title: 'Operazione non riuscita', explanation: 'Si è verificato un problema imprevisto durante l’operazione.', action: 'Apri Doctor, copia il riferimento e riprova.' },

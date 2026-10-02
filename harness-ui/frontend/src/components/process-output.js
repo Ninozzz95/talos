@@ -94,7 +94,11 @@ export function creaLettoreOutput({receipt, API, fetchFn, signal, document: doc 
       if (closed || version !== epoch || signal?.aborted) return;
       page = p;
       status.textContent = stateLabel[p.state];
-      if (!['excluded', 'absent', 'not-applicable'].includes(p.footerStatus)) status.textContent += ' La separazione dei dati di controllo non è confermata.';
+      /* ⛔ 02/10/2026, owner («parole comprensibili al posto della frase tecnica»): diceva «La separazione dei dati di controllo
+         non è confermata». Vuol dire che il segno con cui TALOS riconosce la fine del comando (`controlFooter`,
+         `process-output-access.mjs` `visibleEnd`) non è stato trovato e tolto: potrebbe stare in fondo all'output. Su un
+         flusso vuoto non c'è niente da avvisare. */
+      if (p.availableBytes > 0 && !['excluded', 'absent', 'not-applicable'].includes(p.footerStatus)) status.textContent += ' In fondo potrebbe esserci un segno interno di TALOS, che non fa parte dell’output del comando.';
       range.textContent = `${p.bytes ? `Byte ${p.offset + 1}–${p.offset + p.bytes}` : 'Nessun byte in questa pagina'} su ${p.availableBytes.toLocaleString('it-IT')} disponibili. Conservati ${p.storedBytes.toLocaleString('it-IT')} di ${p.observedBytes.toLocaleString('it-IT')} byte ricevuti nel flusso.`;
       code.textContent = p.text === null ? 'Questa pagina contiene dati binari o testo non UTF-8. Scarica i byte originali per conservarli senza conversioni.' : p.text || 'Il flusso non contiene testo.';
       first.disabled = p.offset === 0; next.disabled = p.nextOffset === null;

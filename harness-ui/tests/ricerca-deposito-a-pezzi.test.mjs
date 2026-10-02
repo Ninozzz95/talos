@@ -215,7 +215,9 @@ test('BC49: inventario e campi TALOS-BANCO invariati, eccetto le esenzioni dichi
       // 23/09/2026, decisione owner: 1-4 domande × 2-4 opzioni (era 1-3 × 2-5), come AskUserQuestion di Claude Code.
       assert.equal(domande.maxItems, 4);
       // 24/09/2026, decisione owner 32: «perché conta» obbligatorio (`why`) e al più un'opzione consigliata (`recommended`).
-      assert.deepEqual(Object.keys(domande.items.properties).sort(), ['id', 'multiSelect', 'options', 'question', 'why']);
+      // 02/10/2026, tappa 3 CLI (decisione owner «Estendo il contratto»): titolo breve `header` ≤ 12, facoltativo.
+      assert.deepEqual(Object.keys(domande.items.properties).sort(), ['header', 'id', 'multiSelect', 'options', 'question', 'why']);
+      assert.equal(domande.items.properties.header.maxLength, 12);
       assert.deepEqual([...domande.items.required].sort(), ['id', 'question', 'why']);
       assert.equal(domande.items.properties.why.type, 'string');
       assert.equal(domande.items.properties.why.maxLength, 300);
@@ -225,7 +227,9 @@ test('BC49: inventario e campi TALOS-BANCO invariati, eccetto le esenzioni dichi
       const opzioni = domande.items.properties.options;
       assert.equal(opzioni.minItems, 2);
       assert.equal(opzioni.maxItems, 4);
-      assert.deepEqual(Object.keys(opzioni.items.properties).sort(), ['description', 'label', 'recommended']);
+      // 02/10/2026, tappa 3 CLI: anteprima per opzione, facoltativa, ≤ 2.000 caratteri.
+      assert.deepEqual(Object.keys(opzioni.items.properties).sort(), ['description', 'label', 'preview', 'recommended']);
+      assert.equal(opzioni.items.properties.preview.maxLength, 2000);
       assert.equal(opzioni.items.properties.recommended.type, 'boolean');
       assert.deepEqual([...opzioni.items.required].sort(), ['description', 'label']);
       assert.equal(opzioni.items.properties.label.maxLength, 120);
@@ -444,11 +448,13 @@ test('BC49: inventario e campi TALOS-BANCO invariati, eccetto le esenzioni dichi
         assert.deepEqual(schema.required, ['task']);
         assert.deepEqual(schema.properties.modalita, {
           type: 'string', enum: ['lettura', 'modifica'],
-          description: 'Defaults to lettura (read-only analysis). Choose modifica only for explicitly requested execution or changes, within parent permissions.',
+          description: 'Optional. Omit it to give the child your own permissions (read-only if you are read-only). lettura = read-only analysis. modifica = changes within your permissions; refused if you are read-only.',
         });
-        const suffix = ' The default is read-only: no file creation, edits, shell commands, '
-          + 'external tools or further delegation. Set modalita to modifica only when the task explicitly '
-          + 'requires execution or changes; parent permissions still apply.';
+        // F-022 (owner 01/10/2026): il predefinito è «i permessi del padre», non più la sola lettura
+        const suffix = ' By default the child works with YOUR permissions, never more: it can '
+          + 'do what you can do here. If you are read-only, the child is read-only too. Set modalita to '
+          + 'lettura when the sub-task is pure analysis: the child then gets no file creation, edits, shell '
+          + 'commands, external tools or further delegation.';
         assert.ok(f.description.endsWith(suffix));
         // Exempt only the new capability field and its explanation. The historic
         // inventory hash still protects every pre-existing delegation field/byte.

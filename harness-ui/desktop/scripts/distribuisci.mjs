@@ -2,6 +2,8 @@ import { build, Platform, Arch } from 'electron-builder';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readFile } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
+import { NOME_FONTE_DI_PROVA, configurazioneBuildDiProva } from '../fonte-aggiornamenti.mjs';
 import { spawnSync } from 'node:child_process';
 import { previewBuildConfiguration } from '../profile.mjs';
 import { verificaImpronta } from './prepara-pacchetto.mjs';
@@ -25,8 +27,17 @@ try {
   const icone = spawnSync(process.execPath, [join(root, 'scripts/genera-icone.mjs')], { cwd: root, stdio: 'inherit', windowsHide: true });
   if (icone.error || icone.status !== 0) throw new Error('Generazione icone fallita.');
   const preview = previewBuildConfiguration(process.env.TALOS_BUILD_PROFILE, process.env.TALOS_BUILD_SOURCE_COMMIT);
+  /* Passo 4 dell'aggiornamento automatico (owner 02/10/2026, «File solo nella build di prova»): SOLO il CI chiede la build di prova. */
+  const prova = configurazioneBuildDiProva(process.env.TALOS_BUILD_AGGIORNAMENTI_PROVA, process.env.TALOS_BUILD_VERSIONE);
+  if (prova && preview) throw new Error('Build di prova degli aggiornamenti e build preview insieme: non previsto.');
+  const config = preview ?? prova;
   await build({ projectDir: root, targets: Platform.WINDOWS.createTarget(preview ? ['zip'] : ['nsis', 'zip'], Arch.x64),
-    publish: 'never', ...(preview ? { config: preview } : {}) });
+    publish: 'never', ...(config ? { config } : {}) });
+  /* ⛔ La build VERA non deve mai portare la fonte di prova: l'app degli utenti cercherebbe gli aggiornamenti altrove. */
+  if (!prova) {
+    const risorse = join(root, preview ? 'dist-preview' : 'dist', 'win-unpacked', 'resources', NOME_FONTE_DI_PROVA);
+    if (existsSync(risorse)) throw new Error(`La build vera contiene ${NOME_FONTE_DI_PROVA}: non si distribuisce.`);
+  }
 } catch (e) {
   console.error(`Distribuzione fallita: ${e.message}`);
   // ⛔ Uscita esplicita e immediata (16/09/2026, cura della release 0.1.12 bruciata). Il drain

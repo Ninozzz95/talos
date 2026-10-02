@@ -21,7 +21,7 @@
 
 /** Fonte: ricerca su un progetto open source dello stesso spazio, letto il 28/8. */
 import { existsSync, statSync } from 'node:fs';
-import { riassuntoAttivitaSessione } from './attivita-figlia.mjs';
+import { attivitaDellaVoce } from './attivita-figlia.mjs';
 import { parse as parsePath } from 'node:path';
 import { delegaLimitata, modalitaDelega } from './delegation-contract.mjs';
 
@@ -360,7 +360,7 @@ export function creaSubagentOrchestrator({
            */
           modello: voce.modello ?? null,
           permessi: voce.permessi ?? null,
-          attivita: riassuntoAttivitaSessione(voce.eventi),
+          attivita: attivitaDellaVoce(voce), // 02/10: a incremento, stesso risultato del ricalcolo (attivita-figlia.mjs)
     };
   }
 
@@ -382,19 +382,29 @@ export function creaSubagentOrchestrator({
    * padre scomparso) è un `esito:'rifiutato'` con `motivo`, non
    * un'eccezione: il dispatcher del kernel lo traduce in un REFUSED
    * onesto per il modello, stessa disciplina di ogni altro cancello.
+   *
+   * ⭐ F-022 (decisione owner 01/10/2026, «come Hermes: eredita i permessi del padre»): senza `modalita` la figlia lavora con
+   *   i permessi del padre, mai di più; se il padre è in sola lettura (o è lui stesso una delega limitata) parte in sola
+   *   lettura invece di essere rifiutata. `lettura` esplicita resta; `modifica` esplicita con il padre in sola lettura resta
+   *   rifiutata. Prima il predefinito era `lettura` (DELEGHE01/02, 30/09), senza una decisione dell'owner. Riferimenti:
+   *   Hermes `tools/delegate_tool.py:1-11` + `delegate_tool_toolsets.py:13-22` (il figlio ha gli strumenti del padre meno
+   *   delega, domande, memoria, messaggi, pianificazioni); Claude Code, sotto-agenti: senza `permissionMode` girano nel modo
+   *   del padre, e andare oltre è un difetto (anthropics/claude-code#52557).
    */
-  function delegaSottoTask({ sessionPadreId, task, cartella, modalita = 'lettura' }) {
+  function delegaSottoTask({ sessionPadreId, task, cartella, modalita }) {
     return new Promise((resolve) => {
       const padre = sessioni.get(sessionPadreId);
       if (!padre) {
         resolve({ esito: 'rifiutato', motivo: 'la sessione padre non esiste più' });
         return;
       }
+      const padreInLettura = padre.permessi === 'Read only' || delegaLimitata(padre.task);
+      if (modalita === undefined) modalita = padreInLettura ? 'lettura' : 'modifica';
       if (!['lettura', 'modifica'].includes(modalita)) {
         resolve({ esito: 'rifiutato', motivo: 'La modalità della delega deve essere lettura o modifica.' });
         return;
       }
-      if (modalita === 'modifica' && (padre.permessi === 'Read only' || delegaLimitata(padre.task))) {
+      if (modalita === 'modifica' && padreInLettura) {
         resolve({ esito: 'rifiutato', motivo: 'La sessione padre è limitata alla lettura: non può delegare modifiche.' });
         return;
       }
@@ -580,7 +590,7 @@ export function creaSubagentOrchestrator({
       resolve({
         esito: 'avviato',
         childId: figlioId,
-        riassunto: `Sotto-agente ${figlioId} avviato in background (${modalita === 'lettura' ? 'sola lettura' : 'modifiche entro i permessi del padre'}). Continua il lavoro: il risultato finale verrà consegnato separatamente quando sarà disponibile.`,
+        riassunto: `Sotto-agente ${figlioId} avviato in background (${modalita === 'lettura' ? 'sola lettura' : 'con i permessi del padre'}). Continua il lavoro: il risultato finale verrà consegnato separatamente quando sarà disponibile.`,
       });
     });
   }

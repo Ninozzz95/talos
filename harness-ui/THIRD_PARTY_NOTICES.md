@@ -36,6 +36,11 @@ distribuzione; gli avvisi del monorepo sono in [THIRD_PARTY_NOTICES.md](../THIRD
 | Electron | 44.3.0 | MIT | https://github.com/electron/electron/blob/v44.3.0/LICENSE |
 | Go standard library/runtime, compiled into `talos-chat-upload.exe` | 1.27.1 | BSD-3-Clause | https://go.dev/dl/ ; exact licence in `native/GO-LICENSE.txt` |
 | node-pty | 1.1.0 | MIT | https://github.com/microsoft/node-pty/blob/v1.1.0/LICENSE |
+| electron-updater (aggiornamento automatico del guscio, dal 01/10/2026) | 6.8.9 | MIT | https://github.com/electron-userland/electron-builder/blob/master/LICENSE |
+| builder-util-runtime, fs-extra, jsonfile, universalify, js-yaml, lazy-val, lodash.escaperegexp, lodash.isequal, tiny-typed-emitter, debug, ms (dipendenze di electron-updater) | 9.7.0, 10.1.0, 6.2.1, 2.0.1, 4.3.2, 1.0.5, 4.1.2, 4.5.0, 2.1.0, 4.4.3, 2.1.3 | MIT | testi nei rispettivi `node_modules` del guscio |
+| graceful-fs, semver (dipendenze di electron-updater) | 4.2.11, 7.8.5 | ISC | testi nei rispettivi `node_modules` del guscio |
+| argparse (dipendenza di js-yaml) | 2.0.1 | Python-2.0 | https://github.com/nodeca/argparse/blob/master/LICENSE |
+| sax (dipendenza di electron-updater) | 1.6.1 | BlueOak-1.0.0 | https://github.com/isaacs/sax-js/blob/main/LICENSE.md |
 | llama.cpp, CPU e Vulkan | b10517 (`dc72703fc69698b1ea68ece8d2dd8a96e6a4e1fe`) | MIT | https://github.com/ggml-org/llama.cpp/blob/b10517/LICENSE |
 | png-js | 1.1.0 | MIT (testo incluso nel pacchetto; campo assente nel lock) | https://github.com/foliojs/png.js/blob/master/LICENSE |
 | sqlite-vec, compresi i pacchetti nativi opzionali | 0.1.9 | MIT, alternativa scelta da `MIT OR Apache` | https://github.com/asg017/sqlite-vec/blob/v0.1.9/LICENSE-MIT |

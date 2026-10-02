@@ -1,9 +1,12 @@
 import { spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join, isAbsolute } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { app, BrowserWindow, dialog, Menu, powerMonitor, screen, shell, Tray } from 'electron';
+import { app, BrowserWindow, dialog, Menu, net, powerMonitor, screen, shell, Tray } from 'electron';
+import { creaAggiornatore } from './aggiornamenti.mjs';
+import { leggiFonteDiProva } from './fonte-aggiornamenti.mjs';
+import { azioneAggiornamenti, copioneStato, statoPerLaPagina } from './canale-aggiornamenti.mjs';
 import { creaCicloDiVita } from './lifecycle.mjs';
 import { leggiStatoFinestra, salvaStatoFinestra } from './window-state.mjs';
 import { coloriDellaBarra, puntoDelMenu } from './barra-finestra.mjs';
@@ -102,6 +105,65 @@ function avviaGuscio() {
   let motoreLocalePreferito = leggiStatoFinestra(fileStato).motoreLocale;
   let cambioMotoreInCorso = false;
   const attendi = ms => new Promise(r => setTimeout(r, ms));
+
+  /*
+   * ⭐ 01/10/2026 — L'AGGIORNAMENTO AUTOMATICO (owner: «seamless, automatizzato e user friendly», come Codex, Hermes e Claude).
+   *   Il lavoro sta in `aggiornamenti.mjs` (ricerca della release desktop, manifesto firmato Ed25519, electron-updater) e il
+   *   canale con la pagina in `canale-aggiornamenti.mjs`. Qui solo i fili: SOLO nell'app impacchettata e mai nella preview
+   *   (owner: «solo l'app vera»), electron-updater caricato a richiesta, la rete di Chromium (`net.fetch`, proxy di sistema),
+   *   le impostazioni in `aggiornamenti.json` accanto alle altre del guscio.
+   */
+  const gettoneAggiornamenti = randomBytes(24).toString('hex');
+  const fileAggiornamenti = join(dataDir, 'aggiornamenti.json');
+  const motivoAggiornamentiSpenti = profile.preview ? 'preview' : !app.isPackaged ? 'sviluppo' : null;
+  let aggiornatore = null; let avvisoAggiornamentoNascosto = false;
+  const impostazioniAggiornamenti = {
+    leggi: () => { try { return JSON.parse(readFileSync(fileAggiornamenti, 'utf8')); } catch { return null; } },
+    scrivi: (valore) => {
+      const temporaneo = fileAggiornamenti + '.tmp';
+      writeFileSync(temporaneo, JSON.stringify(valore, null, 2));
+      renameSync(temporaneo, fileAggiornamenti);
+    },
+  };
+  function inviaStatoAggiornamenti() {
+    if (!finestra || finestra.isDestroyed() || !base) return;
+    const dati = statoPerLaPagina(aggiornatore?.stato() ?? { versioneAttuale: app.getVersion() },
+      { attivo: Boolean(aggiornatore), motivoSpento: motivoAggiornamentiSpenti ?? 'non-avviato', gettone: gettoneAggiornamenti, nascosto: avvisoAggiornamentoNascosto });
+    finestra.webContents.executeJavaScript(copioneStato(dati), true).catch(() => { /* pagina non ancora pronta: la rimanda did-finish-load */ });
+  }
+  async function avviaAggiornatore() {
+    if (motivoAggiornamentiSpenti) { registro.scrivi('Aggiornamenti automatici spenti: ' + motivoAggiornamentiSpenti + '.'); return; }
+    try {
+      const { default: pacchetto } = await import('electron-updater');
+      const updater = pacchetto.autoUpdater;
+      updater.logger = {
+        info: (m) => registro.scrivi('[aggiornamenti] ' + m), warn: (m) => registro.scrivi('[aggiornamenti] ' + m),
+        error: (m) => registro.scrivi('[aggiornamenti] ' + m), debug: () => {},
+      };
+      /* Passo 4 (owner 02/10/2026, «File solo nella build di prova»): la build di prova del CI porta nelle risorse la fonte locale e la
+         chiave di prova; la build vera non ce l'ha (`distribuisci.mjs` si ferma se la trova). Un file malformato ferma l'aggiornatore. */
+      const fonteDiProva = leggiFonteDiProva(process.resourcesPath);
+      if (fonteDiProva) registro.scrivi('Aggiornamenti: FONTE DI PROVA ' + fonteDiProva.api + ' (build di prova del CI, mai una release).');
+      aggiornatore = creaAggiornatore({
+        updater, fetch: (indirizzo, opzioni) => net.fetch(indirizzo, opzioni),
+        ...(fonteDiProva ? { fonte: { api: fonteDiProva.api, download: fonteDiProva.download }, repo: fonteDiProva.repo } : {}),
+        chiavePubblica: fonteDiProva?.chiavePubblica ?? readFileSync(join(app.getAppPath(), 'assets', 'aggiornamenti-pubblica.pem'), 'utf8'),
+        versioneAttuale: app.getVersion(), impostazioni: impostazioniAggiornamenti,
+        registra: (dove, errore) => registro.scrivi('Aggiornamenti (' + dove + '): ' + (errore?.message ?? errore)),
+        notifica: () => inviaStatoAggiornamenti(),
+      });
+      aggiornatore.avvia();
+    } catch (errore) { registro.scrivi('Aggiornatore non avviato: ' + (errore?.message ?? errore)); }
+    inviaStatoAggiornamenti();
+  }
+  function eseguiAzioneAggiornamenti(richiesta) {
+    if (richiesta.azione === 'nascondi') avvisoAggiornamentoNascosto = true; // fino al prossimo avvio (owner)
+    else if (!aggiornatore) registro.scrivi('Azione aggiornamenti senza aggiornatore: ' + richiesta.azione + '.');
+    else if (richiesta.azione === 'controlla') void aggiornatore.controlla({ manuale: true });
+    else if (richiesta.azione === 'riavvia') aggiornatore.riavviaOra();
+    else if (richiesta.azione === 'automatici') aggiornatore.impostaAutomatici(richiesta.acceso);
+    inviaStatoAggiornamenti();
+  }
 
   function salva() {
     try {
@@ -281,6 +343,13 @@ function avviaGuscio() {
       /* F6-3 (27/09): la finestra nuova si nega SEMPRE; un indirizzo di github.com (una PR, un controllo) va al browser del
          sistema, come nell'esempio di Electron security.md §14 (`setImmediate` + `shell.openExternal`, poi `deny`) */
       questa.webContents.setWindowOpenHandler(({ url }) => {
+        /* 01/10/2026 — gli aggiornamenti: stessa forma del menu qui sotto; senza il gettone giusto si nega e basta. */
+        const richiestaAggiornamenti = azioneAggiornamenti(url, gettoneAggiornamenti);
+        if (richiestaAggiornamenti) {
+          if (richiestaAggiornamenti.valida) setImmediate(() => eseguiAzioneAggiornamenti(richiestaAggiornamenti));
+          else registro.scrivi('Richiesta degli aggiornamenti negata: gettone o azione non validi.');
+          return { action: 'deny' };
+        }
         /* F7-1 (owner 27/09, «senza ponte»): il pulsante «⋯» della striscia chiede il menu con un indirizzo che qui si nega
            e diventa il menu NATIVO di sempre (lo stesso della riga dei menu, con le sue scorciatoie), nel punto del
            pulsante. Le coordinate arrivano in pixel CSS: il fattore di ingrandimento della pagina le porta in DIP. */
@@ -303,6 +372,8 @@ function avviaGuscio() {
         try { if (new URL(destinazione).origin === base) return; } catch { /* URL non valido */ }
         evento.preventDefault();
       };
+      /* Ogni caricamento (anche un «Ricarica») ritrova lo stato degli aggiornamenti. */
+      questa.webContents.on('did-finish-load', () => inviaStatoAggiornamenti());
       questa.webContents.on('will-navigate', controllaNavigazione);
       questa.webContents.on('will-redirect', controllaNavigazione);
       // F5: una cornice di pagina HTML resa nel lettore non naviga fuori dal suo lasciapassare (runtime.mjs)
@@ -332,7 +403,7 @@ function avviaGuscio() {
     if (uscitaPronta) return;
     evento.preventDefault();
     if (staUscendo) return;
-    staUscendo = true; salva(); ciclo.chiudi();
+    staUscendo = true; salva(); ciclo.chiudi(); aggiornatore?.ferma();
     void (async () => {
       await Promise.all([...figli].map(fermaFiglio));
       if (vassoio && !vassoio.isDestroyed()) vassoio.destroy();
@@ -346,6 +417,7 @@ function avviaGuscio() {
     vassoio.setToolTip(profile.name); vassoio.on('double-click', portaDavanti); creaMenu();
     powerMonitor.on('suspend', () => ciclo.sospendi());
     powerMonitor.on('resume', () => { void ciclo.riprendi(); });
+    void avviaAggiornatore(); // il primo controllo parte 30 s dopo: mai durante l'avvio (Codex `updates.rs:27-50`)
     await ciclo.avvia();
   }).catch(errore => { registro.scrivi('Avvio fallito: ' + errore.message); void mostraErrore(); });
 }

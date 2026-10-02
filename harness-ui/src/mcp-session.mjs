@@ -82,7 +82,7 @@ export function concorrenzaAvvioMcp(env = process.env) {
  * la sessione finisce, altrimenti il processo figlio del server resta
  * vivo (stesso rischio già noto per ogni sottoprocesso spawnato).
  */
-export async function preparaToolMcpPerSessione({ cartella, cartellaTrust }, deps = {}) {
+export async function preparaToolMcpPerSessione({ cartella, cartellaTrust, onElicitazione }, deps = {}) {
   const serverMcpFidatiFn = deps.serverMcpFidatiFn ?? serverMcpFidatiReale;
   const connettiServerMcpFn = deps.connettiServerMcpFn ?? connettiServerMcpReale;
   const elencaToolMcpFn = deps.elencaToolMcpFn ?? elencaToolMcpReale;
@@ -107,7 +107,9 @@ export async function preparaToolMcpPerSessione({ cartella, cartellaTrust }, dep
     let client;
     let chiudi;
     try {
-      ({ client, chiudi } = await connettiServerMcpFn({ comando: server.comando, argomenti: server.argomenti, nome: `talos-harness-${server.id}` }));
+      /* ⛔ 02/10/2026 — elicitation: la richiesta porta il server che chiede (la persona deve sapere CHI chiede, spec MCP). */
+      ({ client, chiudi } = await connettiServerMcpFn({ comando: server.comando, argomenti: server.argomenti, nome: `talos-harness-${server.id}` },
+        typeof onElicitazione === 'function' ? { onElicitazione: (parametri) => onElicitazione({ server: server.id, parametri }) } : {}));
     } catch (errore) {
       // un server che non parte non ferma gli altri, ne' la sessione
       return { server, errore: errore instanceof Error ? errore.message : String(errore) };

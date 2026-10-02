@@ -66,7 +66,20 @@
  *   (`TALOS_CALM_SPECS.orb`); con «riduci le animazioni» l'anello gira a metà velocità (24/09, vedi sotto).
  */
 .talos-orb{ position: relative; width: 2.25rem; height: 2.25rem; flex: none; border: 1px solid var(--talos-accent-soft, color-mix(in srgb, var(--talos-accent) 35%, transparent)); border-radius: 50%; display: grid; place-items: center; color: var(--talos-accent); }
-.talos-orb .talos-short-logo{ width: 1.2rem; height: 1.2rem; }
+/*
+ * ⛔ 02/10/2026, owner: il logo dentro l'orb «più grande» → «2.25 ma centrato alla perfezione, spazi omogenei interni»,
+ *   scelta A (il centro di TUTTO il marchio, esagono tenue compreso). Era 1,2rem: segno visibile ≈ 11 px su 36.
+ *   ⛔ Perché non basta `width: 2.25rem`: (1) una scatola da 36 px dentro un interno da 34 (bordo 1px) SBORDA, e la griglia
+ *      allinea un elemento che sborda all'INIZIO, non al centro: +1 px in basso e a destra (misurato coi rettangoli);
+ *   (2) Chrome arrotonda al pixel CSS intero posizione e misura di un'immagine — maschera o SVG in linea, misurato tutti e
+ *      due in una pagina vuota a DPR 1, 2 e 4 — e il marchio al 92% (33,12 px a 1,44 px dal bordo) finiva 1 px fuori asse.
+ *   ⇒ La scatola È l'interno dell'orb (34 px a 1 px dal bordo) e il marchio la riempie: logo e bordo si arrotondano INSIEME.
+ *   Misurato sui pixel dipinti, col bordo dipinto come riferimento: lati 7 / 7 px; sopra 5,25 · sotto 4,75 px (il quarto di
+ *   pixel è nel disegno: il centro del marchio intero è a 253,2 su 500 nel viewBox). Con una scala dell'interfaccia diversa
+ *   da «Predefinita» le misure diventano frazionarie e l'arrotondamento può lasciare fino a mezzo pixel.
+ */
+.talos-orb .talos-short-logo{ position: absolute; inset: 0; width: auto; height: auto; }
+.talos-orb .talos-short-logo-mark{ width: 100%; height: 100%; }
 .talos-orb.working::after{ content: ''; position: absolute; inset: -3px; border: 1px solid transparent; border-top-color: var(--talos-accent); border-radius: 50%; animation: talos-orb-spin 1500ms linear infinite; }
 .talos-short-logo{ display: inline-flex; width: 3rem; height: 3rem; flex: 0 0 auto; align-items: center; justify-content: center; color: var(--talos-accent); overflow: hidden; }
 .talos-short-logo-mark{ display: block; width: 92%; height: 92%; background: currentColor; mask: url('/talos/brand/logo-short.svg') center / contain no-repeat; -webkit-mask: url('/talos/brand/logo-short.svg') center / contain no-repeat; }

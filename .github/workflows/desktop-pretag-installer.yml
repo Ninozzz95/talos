@@ -6,6 +6,8 @@ on:
       - .github/workflows/desktop-pretag-installer.yml
       - harness-ui/**
       - context-engine/**
+  # 02/10/2026 (owner): anche a mano, per vedere girare la prova di aggiornamento vera prima di una pull request.
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -13,7 +15,8 @@ permissions:
 jobs:
   desktop-installer:
     runs-on: windows-latest
-    timeout-minutes: 45
+    # 02/10/2026: 100 min — alla build, allo smoke e ai loro limiti si aggiunge la prova di aggiornamento vera (due build + due avvii).
+    timeout-minutes: 100
     defaults:
       run:
         shell: pwsh
@@ -82,11 +85,22 @@ jobs:
             throw "Smoke installer incompleto: $reportPath"
           }
 
+      - name: aggiornamento vero da 0.0.1 a 0.0.2, e manifesto manomesso rifiutato
+        # 02/10/2026, passo 4 dell'aggiornamento automatico (owner: «File solo nella build di prova»). Due build di prova con la
+        # fonte locale e una chiave di prova generata qui; il feed lo serve 127.0.0.1. Limiti interni: 180 s + 300 s per l'esito
+        # dell'app, 300 s per l'installazione alla chiusura, 300 s per ogni installer.
+        timeout-minutes: 45
+        run: |
+          node harness-ui/desktop/scripts/ci-aggiornamento-vero.mjs
+          if ($LASTEXITCODE -ne 0) { throw 'Prova di aggiornamento vera fallita: vedere R05-aggiornamento-vero.json.' }
+
       - if: always()
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: desktop-pretag-smoke-${{ github.run_id }}-${{ github.run_attempt }}
-          path: harness-ui/desktop/.prove/R04-ci-smoke.json
+          path: |
+            harness-ui/desktop/.prove/R04-ci-smoke.json
+            harness-ui/desktop/.prove/R05-aggiornamento-vero.json
           if-no-files-found: ignore
           include-hidden-files: true
           retention-days: 7

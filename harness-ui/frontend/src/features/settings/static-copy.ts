@@ -49,7 +49,8 @@ export const SETTINGS_COPY: ReadonlyArray<readonly [string, string, string]> = [
   ['#setting-panel-workspace > .talos-card > p', 'Cartella e dati della sessione corrente.', 'Folder and data for the current session.'],
   ['#setting-panel-workspace [data-open-panel="inspector"]', 'Apri l’albero dei file', 'Open the file tree'],
   ['#settingsNuovaSessioneAltrove', 'Nuova sessione in un’altra cartella', 'New session in another folder'],
-  ['#setting-panel-account > .talos-card > p', 'Controlli e configurazione dell’agente. Il backup non è disponibile da questa pagina.', 'Agent controls and configuration. Backup is not available from this page.'],
+  // 01/10/2026: per chiave, non «la prima carta»: la scheda «Aggiornamenti» ora sta in testa e prendeva questo testo
+  ['#setting-panel-account > [data-settings-card="account-controls"] > p', 'Controlli e configurazione dell’agente. Il backup non è disponibile da questa pagina.', 'Agent controls and configuration. Backup is not available from this page.'],
   ['[data-td-studio-temi] .td-studio-rimando__copia strong', 'Temi e atmosfere', 'Themes and atmospheres'],
   ['[data-td-studio-temi] .td-studio-rimando__copia p', 'Palette, modalità chiara o scura e sfondi animati si regolano nello studio temi, con anteprima.', 'Adjust palettes, light or dark mode and animated backgrounds in the theme studio, with a preview.'],
 ];

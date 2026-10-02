@@ -54,13 +54,36 @@ function orchestrator(parent = {}) {
   return { starts, run: extra => orch.delegaSottoTask({ sessionPadreId: 'parent', task: 'Analizza alpha.txt.', ...extra }) };
 }
 
-test('DELEGHE02-DEFAULT: analysis starts with a durable read-only contract and no inherited allow', async () => {
+test('DELEGHE02-READONLY: an explicit read-only analysis keeps a durable read-only contract and no inherited allow', async () => {
   const { run, starts } = orchestrator();
-  assert.equal((await run()).esito, 'avviato');
+  assert.equal((await run({ modalita: 'lettura' })).esito, 'avviato');
   assert.equal(starts[0].permessiRichiesti, 'Read only');
   assert.deepEqual(starts[0].permessiPerAttrezzoRichiesti, { prova: 'nega' });
   assert.deepEqual(starts[0].task.contrattoDelega, contratto('lettura'));
   assert.equal(starts[0].cartellaGiaScelta, true);
+});
+
+/* ⭐ F-022 (owner 01/10/2026, «come Hermes: eredita i permessi del padre»): senza modalità la figlia ha i permessi del padre,
+   mai di più; con il padre in sola lettura parte in sola lettura invece di essere rifiutata. */
+test('F022-DEFAULT: without a mode the child inherits the parent permissions, never more', async () => {
+  const { run, starts } = orchestrator({ permessi: 'Workspace write' });
+  const esito = await run();
+  assert.equal(esito.esito, 'avviato');
+  assert.match(esito.riassunto, /con i permessi del padre/);
+  assert.equal(starts[0].permessiRichiesti, 'Workspace write');
+  assert.deepEqual(starts[0].permessiPerAttrezzoRichiesti, { scrivi: 'sempre', shell: 'chiedi', prova: 'nega' });
+  assert.deepEqual(starts[0].task.contrattoDelega, contratto('modifica'));
+});
+
+test('F022-PARENT-READONLY: without a mode, a read-only parent starts a read-only child instead of refusing', async () => {
+  for (const parent of [{ permessi: 'Read only' }, { task: taskLettura }]) {
+    const { run, starts } = orchestrator(parent);
+    const esito = await run();
+    assert.equal(esito.esito, 'avviato');
+    assert.match(esito.riassunto, /sola lettura/);
+    assert.equal(starts[0].permessiRichiesti, 'Read only');
+    assert.deepEqual(starts[0].task.contrattoDelega, contratto('lettura'));
+  }
 });
 
 test('DELEGHE02-WRITE: explicit modification preserves parent limits and the workspace', async () => {
@@ -225,7 +248,8 @@ test('DELEGHE02-WIRE: the real tool forwards a typed mode and rejects an invalid
     ['delega_sottotask', { task: 'A.', modalita: {} }],
   ], { strumentiEstesi: ['delega_sottotask'], onDelega: async (...args) => { seen.push(args); return { riassunto: 'avviato' }; } }, { consegna: 'Delega.' });
   assert.equal(seen.length, 2);
-  assert.deepEqual(seen[0][2], { modalita: 'lettura' });
+  // F-022: senza modalità il kernel non sceglie la sola lettura al posto dell'host — decide chi ospita la delega
+  assert.deepEqual(seen[0][2], { modalita: undefined });
   assert.deepEqual(seen[1][2], { modalita: 'modifica' });
   assert.equal(events.filter(e => e.type === 'ToolCallResult').at(-1).isError, true);
 });
@@ -295,4 +319,20 @@ test('DELEGHE02-JOURNAL: read-only verdict and authority survive restart, settin
   const results = outputs.filter(e => e.type === 'ToolCallResult');
   assert.equal(results.length, 2);
   assert.ok(results.every(e => e.isError === true && e.content.includes('DELEGATION_READ_ONLY')));
+});
+
+/* F-022 dal registro vero: la porta che il kernel chiama (`onDelega` senza modalità) arriva all'orchestratore senza che nessuno
+   in mezzo rimetta la sola lettura; la figlia nasce coi permessi del padre. */
+test('F022-REGISTRY: the real registry door forwards no mode, and the child gets the parent permissions', async t => {
+  const cartellaStore = mkdtempSync(join(tmpdir(), 'talos-f022-'));
+  const inputs = [];
+  const registry = createSessionRegistry({ cartellaStore, modello: 'fixture', chiave: 'unused', guardaWorkspaceFn: () => () => {}, cartellaEsisteFn: () => true,
+    preparaEsecuzioneFn: () => ({ cartella: cartellaStore, task: { id: 'task', consegna: 'Dividi il lavoro.' } }),
+    avviaSessioneFn(input) { inputs.push(input); input.onEvento({ type: 'RunStarted' }); return new Promise(() => {}); } });
+  t.after(async () => { await registry.chiudi(); await attendiScritture({ cartellaStore }); rimuoviCartellaDiProva(cartellaStore); });
+  const { sessionId: padre } = registry.avvia('task');
+  const esito = await inputs[0].onDelega('Scrivi A.', undefined, {});
+  assert.equal(esito.esito, 'avviato');
+  const figlia = registry.elencaFigli(padre).figli.find(f => f.sessionId === esito.childId);
+  assert.equal(figlia.permessi, 'Workspace write', 'i permessi di serie del padre, non «Read only»');
 });

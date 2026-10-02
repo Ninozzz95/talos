@@ -237,3 +237,10 @@ test('SIDEBAR-PLAN-WAITS-FOR-YOU: un piano da approvare è «aspetta te», anche
   assert.equal(dopoRiavvio.classe, 'attesa');
   assert.match(dopoRiavvio.aiuto ?? '', /piano/u);
 });
+
+test('statoSessione: 02/10/2026 — un server MCP che aspetta la persona fa «attesa», e la riga dice cosa fare', () => {
+  const s = statoSessione({ inAttesaRichiestaMcp: true, conclusa: false });
+  assert.equal(s.classe, 'attesa');
+  assert.equal(s.aiuto, 'Un server MCP aspetta la tua risposta nella chat: rispondi per far continuare il lavoro.');
+  assert.equal(statoSessione({ inAttesaRichiestaMcp: false, conclusa: false }).classe, 'vivo', 'al contrario: senza richiesta resta viva');
+});

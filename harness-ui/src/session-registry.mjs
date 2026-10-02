@@ -1,7 +1,8 @@
+import { validaRichiestaElicitazione, validaRispostaElicitazione } from './mcp-elicitation-contract.mjs';
 import { creaTimelineAgenti } from './agent-timeline.mjs';
 import { creaRegistroLetture } from './letture-prima-di-sovrascrivere.mjs'; // T25/B09
 import { delegaLimitata } from './delegation-contract.mjs';
-import { riassuntoAttivitaSessione } from './attivita-figlia.mjs';
+import { attivitaDellaVoce, contatoriAttivitaDellaVoce } from './attivita-figlia.mjs';
 import { validaFallbackProviders } from './model-destination.mjs';
 import { ContrattoDomandaUtenteError, ESITO_DOMANDA_SENZA_INTERFACCIA, ESITO_DOMANDA_SOSTITUITA, validaDomandeUtente, validaRispostaDomanda } from './user-question-contract.mjs';
 import { ContrattoPianoError, PERMESSI_DOPO_IL_PIANO, esitoPianoPerIlModello, improntaPiano, validaDecisionePiano, validaPiano } from './plan-contract.mjs';
@@ -59,7 +60,7 @@ import {
   chiediAlModelloUnaVolta as chiediAlModelloUnaVoltaReale,
 } from './agent-service.mjs';
 import {
-  approvalRequested, approvalResolved, userQuestionRequested, userQuestionResolved, hookInvoked, queuedMessageDelivered, workspaceChanged, contextEngineEvent,
+  approvalRequested, approvalResolved, userQuestionRequested, userQuestionResolved, mcpElicitationRequested, mcpElicitationResolved, hookInvoked, queuedMessageDelivered, workspaceChanged, contextEngineEvent,
   runRedirectApplied, runRedirectCancelled, runRedirectFailed, runRedirectRequested,
   /* ⛔ BC-76 (17/09/2026): qui c'erano anche `runStarted`, `runFinished`, i `textMessage*`, i
      `reasoningMessage*`, `toolCallStart` e `toolCallArgs`. Li usava SOLO `eseguiRuntimeLocale`, che
@@ -288,6 +289,19 @@ export function modelloDellaFiglia(padre) {
   return {
     ok: false,
     motivo: 'This session runs on the local engine, but it does not say which local model: a sub-session cannot be started without sending the work to a remote provider, which was not authorised. Reopen the session choosing the local model.',
+  };
+}
+
+/*
+ * ⛔ Stop per riga (owner 02/10/2026): i comandi che girano ADESSO in una sessione, `toolCallId → ferma`, finché girano.
+ *   La mappa nasce pigra: le voci di sessione si creano in più punti (anche ripristinate dal disco). Lo sgancio toglie solo
+ *   la SUA registrazione: un id riusato da un comando successivo non viene cancellato da quello vecchio.
+ */
+export function registraComandoFermabileIn(voce) {
+  return ({ toolCallId, ferma }) => {
+    voce.comandiFermabili ??= new Map();
+    voce.comandiFermabili.set(toolCallId, ferma);
+    return () => { if (voce.comandiFermabili?.get(toolCallId) === ferma) voce.comandiFermabili.delete(toolCallId); };
   };
 }
 
@@ -2121,6 +2135,49 @@ function firmaOperazioneAvvio(parametri) {
 }
 const OPERATION_ID_MASSIMO = 256;
 
+/*
+ * 02/10/2026, tappa 3 della CLI (decisione owner 01/10: in `-p` l'attrezzo delle domande non si offre, come Claude Code):
+ * la lista predefinita è esportata, così chi non ha schermo la passa senza `ask_user_question` invece di copiarla a mano.
+ */
+export const STRUMENTI_ESTESI_PREDEFINITI = Object.freeze([
+  'web_search', 'artifact_create', 'document_create', 'time_now', 'ask_user_question', 'present_plan', 'workflow_plan_propose', 'ask_parent',
+  'answer_child_question', 'ask_child', 'answer_parent_question', 'delega_sottotask', 'generate_image',
+  'library_list', 'library_search', 'library_read', 'library_file_origin',
+  'library_rename', 'library_delete', 'library_export',
+  'library_context_policy_update',
+  'notes_list', 'notes_create', 'notes_update', 'notes_delete',
+  'tasks_list', 'tasks_create', 'tasks_complete', 'tasks_update', 'tasks_delete',
+  'memory_search', 'memory_write', 'memory_update', 'memory_delete',
+  // 27/09/2026, decisione owner (`decisioni-owner-capacita-sezioni-27-09`): le letture nuove delle sezioni
+  'memory_list', 'notes_search', 'notes_read', 'tasks_search', 'research_search', 'conversation_search',
+  // F-012 (piano 0.1.19 §1.5, 28/09): i TRE attrezzi dei run dei Workflow — di norma, come tutti gli
+  // altri: il kernel li filtra da solo (root + runtime presente + Piano senza control). Ai passi no: qui sotto.
+  'workflow_status', 'workflow_output', 'workflow_control', 'process_output',
+  // Rilievo 3 (piano 0.1.19 §1.7, 28/09): il modello può chiedere il modo Piano (D3: attrezzo + fascia).
+  // Il kernel lo offre solo al root in Normale col canale presente.
+  'request_plan_mode',
+  'research_list', 'research_start', 'research_read', 'research_rename',
+  'research_pause', 'research_resume', 'research_cancel', 'research_delete',
+  /*
+   * ⭐⭐⭐ L1 (11/09/2026) — `research_deposit`, il nono di Deep Research. Sta in lista come
+   * tutti gli altri, MA il kernel non lo offre mai a una sessione che non è una ricerca: è
+   * `attrezziNegatiDalLivello` (talosHarness.mjs) a filtrare la lista sul LIVELLO, non
+   * questo elenco. ⛔ Nelle chat normali (`Workspace write`/`Full access`) resta quindi
+   * offerto e innocuo — depositerebbe in una cartella di ricerca che non esiste, e lo dice:
+   * «this session is not one». Toglierlo anche lì vorrebbe un filtro per NOME oltre che per
+   * livello, cioè la seconda lista che diverge.
+   */
+  'research_deposit',
+  'tool_create',
+  /*
+   * ⭐⭐⭐ PO-12 (13/09/2026) — `file_edit`. Senza questo nome l'attrezzo
+   * esiste nel kernel, e' provato, ed e' invisibile: `ATTREZZI_ESTESI`
+   * dichiara, questa lista ACCENDE. La corsia PO-12 non e' consegnata
+   * finche' non e' qui.
+   */
+  'file_edit',
+]);
+
 export function createSessionRegistry({
   processOutputStoreFn,
   avviaSessioneFn = avviaSessioneReale,
@@ -2531,44 +2588,7 @@ export function createSessionRegistry({
   // ⭐ FASE N, quinto sistema (30/8) — diciannovesimo-ventitreesimo: i 5 tool Tasks (ATTREZZI_ESTESI[18..22] nel kernel). Le 4 mutazioni MUTANO davvero, stesso principio.
   // ⭐ FASE N, sesto sistema (30/8) — ventiquattresimo-ventisettesimo: i 4 tool Memory (ATTREZZI_ESTESI[23..26] nel kernel). Le 3 mutazioni MUTANO davvero, stesso principio.
   // ⭐ FASE N, ottavo sistema (30/8) — ventottesimo-trentacinquesimo: gli 8 tool Deep Research (ATTREZZI_ESTESI[27..34] nel kernel). Le 6 mutazioni MUTANO davvero, stesso principio.
-  strumentiEstesi = [
-    'web_search', 'artifact_create', 'document_create', 'time_now', 'ask_user_question', 'present_plan', 'workflow_plan_propose', 'ask_parent',
-    'answer_child_question', 'ask_child', 'answer_parent_question', 'delega_sottotask', 'generate_image',
-    'library_list', 'library_search', 'library_read', 'library_file_origin',
-    'library_rename', 'library_delete', 'library_export',
-    'library_context_policy_update',
-    'notes_list', 'notes_create', 'notes_update', 'notes_delete',
-    'tasks_list', 'tasks_create', 'tasks_complete', 'tasks_update', 'tasks_delete',
-    'memory_search', 'memory_write', 'memory_update', 'memory_delete',
-    // 27/09/2026, decisione owner (`decisioni-owner-capacita-sezioni-27-09`): le letture nuove delle sezioni
-    'memory_list', 'notes_search', 'notes_read', 'tasks_search', 'research_search', 'conversation_search',
-    // F-012 (piano 0.1.19 §1.5, 28/09): i TRE attrezzi dei run dei Workflow — di norma, come tutti gli
-    // altri: il kernel li filtra da solo (root + runtime presente + Piano senza control). Ai passi no: qui sotto.
-    'workflow_status', 'workflow_output', 'workflow_control', 'process_output',
-    // Rilievo 3 (piano 0.1.19 §1.7, 28/09): il modello può chiedere il modo Piano (D3: attrezzo + fascia).
-    // Il kernel lo offre solo al root in Normale col canale presente.
-    'request_plan_mode',
-    'research_list', 'research_start', 'research_read', 'research_rename',
-    'research_pause', 'research_resume', 'research_cancel', 'research_delete',
-    /*
-     * ⭐⭐⭐ L1 (11/09/2026) — `research_deposit`, il nono di Deep Research. Sta in lista come
-     * tutti gli altri, MA il kernel non lo offre mai a una sessione che non è una ricerca: è
-     * `attrezziNegatiDalLivello` (talosHarness.mjs) a filtrare la lista sul LIVELLO, non
-     * questo elenco. ⛔ Nelle chat normali (`Workspace write`/`Full access`) resta quindi
-     * offerto e innocuo — depositerebbe in una cartella di ricerca che non esiste, e lo dice:
-     * «this session is not one». Toglierlo anche lì vorrebbe un filtro per NOME oltre che per
-     * livello, cioè la seconda lista che diverge.
-     */
-    'research_deposit',
-    'tool_create',
-    /*
-     * ⭐⭐⭐ PO-12 (13/09/2026) — `file_edit`. Senza questo nome l'attrezzo
-     * esiste nel kernel, e' provato, ed e' invisibile: `ATTREZZI_ESTESI`
-     * dichiara, questa lista ACCENDE. La corsia PO-12 non e' consegnata
-     * finche' non e' qui.
-     */
-    'file_edit',
-  ],
+  strumentiEstesi = STRUMENTI_ESTESI_PREDEFINITI,
   ricercaWeb,
   // ⭐ 04/9, R-03 — se presente vince su `ricercaWeb`: letta a OGNI giro (come `chiaveFn`), così una fonte cambiata dalle Impostazioni vale dal giro successivo senza riavvio. Restituisce { ricercaWeb, richiediRicercaFn }.
   ricercaWebFn = null,
@@ -2738,7 +2758,9 @@ export function createSessionRegistry({
   const agentDialoguePending = new Map();
   let registryApi;
   const timeline = creaTimelineAgenti({ clock, persistent: Boolean(cartellaStore),
-    write: (sessionId, record) => registraRigaFn({ cartellaStore, sessionId, record, durable: true }) });
+    write: (sessionId, record) => registraRigaFn({ cartellaStore, sessionId, record, durable: true }),
+    // 02/10/2026: oltre gli ultimi 500 record la cronologia si rilegge dal file della radice, a stream e in coda alle scritture
+    leggiDalDisco: (sessionId, perRecord) => leggiRegistroAStreamFn({ cartellaStore, sessionId, perRiga: perRecord }) });
   const contextDeliveries = new WeakMap();
   let ultimoRipristino = { ripristinate: 0, totali: 0 };
   let sessioniCorrotte = [];
@@ -2969,17 +2991,52 @@ export function createSessionRegistry({
     return null;
   }
 
-  function statisticheFiglio(voce) {
+  /*
+   * ⭐ 02/10/2026 — LE STATISTICHE DI UNA VOCE A INCREMENTO. Ogni record della cronologia e ogni rilettura delle figlie
+   *   ricalcolavano da TUTTI gli eventi: l'ultimo evento terminale e l'ultimo con un istante (copiando e rovesciando l'array
+   *   ogni volta), l'operazione corrente (una macchina a stati dall'inizio) e il consumo dei token (riordino + somma). Profilo a
+   *   800 giri: 3,4 s in `statisticheFiglio`, 2,1 s in `operazioneCorrenteDaEventi`, ~3,6 s nel consumo. Ora un memo accanto
+   *   alla voce consuma solo gli eventi NUOVI. Esatto, non approssimato:
+   *   · `voce.eventi` non si modifica sul posto — si aggiunge in coda o si sostituisce l'array — e `at`/`_sequenza` si mettono
+   *     PRIMA dell'inserimento (`consegnaEvento`); un array diverso o più corto fa ripartire il memo da capo;
+   *   · l'operazione corrente è la stessa macchina a stati (`passoOperazione`), passo per passo, nello stesso ordine;
+   *   · il consumo si ricalcola per intero, ma solo quando arriva un evento che lo cambia (RunStarted, StateDelta con `/usage`,
+   *     CUSTOM) o quando un evento senza `_sequenza` cambia l'ordine in cui `eventiInOrdine` lo legge.
+   */
+  const memoStatistiche = new WeakMap();
+  const cambiaIlConsumo = (evento) => evento?.type === 'RunStarted' || evento?.type === 'CUSTOM'
+    || (evento?.type === 'StateDelta' && (!Array.isArray(evento.delta) || evento.delta.some((d) => d?.path === '/usage')));
+  function memoDellaVoce(voce) {
     const eventi = Array.isArray(voce?.eventi) ? voce.eventi : [];
-    const terminale = [...eventi].reverse().find((evento) => evento?.type === 'RunFinished' || evento?.type === 'RunError');
-    const ultimoConIstante = [...eventi].reverse().find((evento) => typeof evento?.at === 'string');
+    let m = memoStatistiche.get(voce);
+    if (!m || m.eventi !== eventi || m.consumati > eventi.length) {
+      m = { eventi, consumati: 0, operazione: { corrente: null, toolCallId: null, messageId: null },
+        terminale: null, ultimoGiro: null, ultimoConIstante: null, tuttiConSequenza: true, consumo: null, consumoDaRifare: true };
+      if (voce && typeof voce === 'object') memoStatistiche.set(voce, m);
+    }
+    for (; m.consumati < eventi.length; m.consumati += 1) {
+      const evento = eventi[m.consumati];
+      passoOperazione(voce, m.operazione, evento);
+      if (evento?.type === 'RunFinished' || evento?.type === 'RunError') m.terminale = evento;
+      // l'ultimo fra terminale e RunStarted decide: è ciò che `ultimoEsitoDaEventi`/`motivoChiusuraDaEventi` trovano all'indietro
+      if (evento?.type === 'RunFinished' || evento?.type === 'RunError' || evento?.type === 'RunStarted') m.ultimoGiro = evento;
+      if (typeof evento?.at === 'string') m.ultimoConIstante = evento;
+      if (m.tuttiConSequenza && !Number.isSafeInteger(evento?._sequenza)) { m.tuttiConSequenza = false; m.consumoDaRifare = true; }
+      if (cambiaIlConsumo(evento)) m.consumoDaRifare = true;
+    }
+    if (m.consumoDaRifare) { m.consumo = usageSessioneDaEventi(eventi); m.consumoDaRifare = false; }
+    return m;
+  }
+
+  function statisticheFiglio(voce) {
+    const m = memoDellaVoce(voce);
     return {
-      conclusaAlle: voce?.conclusaAlle ?? terminale?.at ?? null,
-      ultimaAttivitaAlle: voce?.ultimaAttivitaAlle ?? ultimoConIstante?.at ?? null,
+      conclusaAlle: voce?.conclusaAlle ?? m.terminale?.at ?? null,
+      ultimaAttivitaAlle: voce?.ultimaAttivitaAlle ?? m.ultimoConIstante?.at ?? null,
       approvalPendingCount: voce?.approvazionePendente ? 1 : 0,
-      ultimoEsito: ultimoEsitoDaEventi(eventi),
-      motivoChiusura: motivoChiusuraDaEventi(eventi),
-      usageSessione: usageSessioneDaEventi(eventi),
+      ultimoEsito: m.ultimoGiro ? ultimoEsitoDaEventi([m.ultimoGiro]) : null,
+      motivoChiusura: m.ultimoGiro ? motivoChiusuraDaEventi([m.ultimoGiro]) : null,
+      usageSessione: m.consumo === null ? null : structuredClone(m.consumo),
       operazioneCorrente: operazioneCorrenteDaEventi(voce),
     };
   }
@@ -2991,9 +3048,13 @@ export function createSessionRegistry({
 
   function nomeAttrezzoPerId(voce, toolCallId) {
     if (typeof toolCallId !== 'string') return null;
-    const inizio = [...(voce?.eventi ?? [])].reverse().find((evento) => (
-      evento?.type === 'ToolCallStart' && evento.toolCallId === toolCallId
-    ));
+    // 02/10/2026: all'indietro senza copiare l'array (prima `[...eventi].reverse()` a ogni esito: O(n) anche quando l'inizio
+    // della chiamata è due eventi più su). Stesso risultato: il PRIMO trovato andando all'indietro.
+    const eventi = Array.isArray(voce?.eventi) ? voce.eventi : [...(voce?.eventi ?? [])];
+    let inizio;
+    for (let i = eventi.length - 1; i >= 0; i -= 1) {
+      if (eventi[i]?.type === 'ToolCallStart' && eventi[i].toolCallId === toolCallId) { inizio = eventi[i]; break; }
+    }
     return nomeAttrezzoPubblico(inizio?.toolCallName);
   }
 
@@ -3026,49 +3087,52 @@ export function createSessionRegistry({
     return null;
   }
 
-  /** Stato operativo ricostruibile dagli eventi, senza testo privato del ragionamento o output tool. */
-  function operazioneCorrenteDaEventi(voce) {
-    let corrente = null;
-    let toolCallId = null;
-    let messageId = null;
-    for (const evento of voce?.eventi ?? []) {
-      if (evento?.type === 'RunFinished' || evento?.type === 'RunError') {
-        corrente = null;
-        toolCallId = null;
-        continue;
-      }
-      if (evento?.type === 'ToolCallStart') {
-        corrente = operazioneAgenteDaEvento(voce, evento);
-        toolCallId = evento.toolCallId ?? null;
-        continue;
-      }
-      if (evento?.type === 'ToolCallResult' && (toolCallId === null || evento.toolCallId === toolCallId)) {
-        corrente = null;
-        toolCallId = null;
-        continue;
-      }
-      if (evento?.type === 'ApprovalRequested') {
-        corrente = operazioneAgenteDaEvento(voce, evento);
-        continue;
-      }
-      if (evento?.type === 'ApprovalResolved') {
-        corrente = null;
-        continue;
-      }
-      if (evento?.type === 'ReasoningStart' || evento?.type === 'ReasoningMessageStart' || evento?.type === 'TextMessageStart') {
-        corrente = operazioneAgenteDaEvento(voce, evento);
-        messageId = evento.messageId ?? null;
-        continue;
-      }
-      const fineRagionamento = evento?.type === 'ReasoningEnd' || evento?.type === 'ReasoningMessageEnd';
-      const fineRisposta = evento?.type === 'TextMessageEnd';
-      if (((fineRagionamento && corrente?.kind === 'reasoning') || (fineRisposta && corrente?.kind === 'response'))
-          && (messageId === null || evento.messageId == null || evento.messageId === messageId)) {
-        corrente = null;
-        messageId = null;
-      }
+  /*
+   * Stato operativo ricostruibile dagli eventi, senza testo privato del ragionamento o output tool. Un passo della macchina a
+   * stati per evento (`stato` = { corrente, toolCallId, messageId }); 02/10/2026: il memo della voce la fa avanzare solo sugli
+   * eventi nuovi (`memoDellaVoce`). Le chiamate a `operazioneAgenteDaEvento` qui guardano solo l'evento (mai un esito di
+   * attrezzo, l'unico caso che rilegge la voce), quindi il passo dà lo stesso risultato oggi o a sessione cresciuta.
+   */
+  function passoOperazione(voce, stato, evento) {
+    if (evento?.type === 'RunFinished' || evento?.type === 'RunError') {
+      stato.corrente = null;
+      stato.toolCallId = null;
+      return;
     }
-    return corrente;
+    if (evento?.type === 'ToolCallStart') {
+      stato.corrente = operazioneAgenteDaEvento(voce, evento);
+      stato.toolCallId = evento.toolCallId ?? null;
+      return;
+    }
+    if (evento?.type === 'ToolCallResult' && (stato.toolCallId === null || evento.toolCallId === stato.toolCallId)) {
+      stato.corrente = null;
+      stato.toolCallId = null;
+      return;
+    }
+    if (evento?.type === 'ApprovalRequested') {
+      stato.corrente = operazioneAgenteDaEvento(voce, evento);
+      return;
+    }
+    if (evento?.type === 'ApprovalResolved') {
+      stato.corrente = null;
+      return;
+    }
+    if (evento?.type === 'ReasoningStart' || evento?.type === 'ReasoningMessageStart' || evento?.type === 'TextMessageStart') {
+      stato.corrente = operazioneAgenteDaEvento(voce, evento);
+      stato.messageId = evento.messageId ?? null;
+      return;
+    }
+    const fineRagionamento = evento?.type === 'ReasoningEnd' || evento?.type === 'ReasoningMessageEnd';
+    const fineRisposta = evento?.type === 'TextMessageEnd';
+    if (((fineRagionamento && stato.corrente?.kind === 'reasoning') || (fineRisposta && stato.corrente?.kind === 'response'))
+        && (stato.messageId === null || evento.messageId == null || evento.messageId === stato.messageId)) {
+      stato.corrente = null;
+      stato.messageId = null;
+    }
+  }
+  function operazioneCorrenteDaEventi(voce) {
+    const corrente = memoDellaVoce(voce).operazione.corrente;
+    return corrente === null ? null : { ...corrente }; // un oggetto nuovo a ogni lettura, come prima
   }
 
   function radiceTimeline(voce) {
@@ -3079,7 +3143,13 @@ export function createSessionRegistry({
     return voce;
   }
 
-  function nodoTimeline(voce) {
+  /*
+   * ⭐ 02/10/2026 (decisione owner): un record di ogni attrezzo porta i CONTATORI (chiamate, numero di file, attrezzo in corso,
+   *   ultimo passo); l'elenco intero (fino a 60 file e 40 passi, ~9 KB) solo quando un agente cambia stato — nasce, riprende,
+   *   parte, finisce, si ferma. Prima ogni record lo portava intero, in RAM e nel file della sessione.
+   */
+  const EVENTI_DI_STATO_TIMELINE = new Set(['created', 'resumed', 'baseline', 'recovery-gap', 'delegation-completed', 'RunStarted', 'RunFinished', 'RunError']);
+  function nodoTimeline(voce, { completo = true } = {}) {
     const stats = statisticheFiglio(voce);
     return { sessionId: voce.sessionId, padreId: voce.padreId ?? null,
       taskCorto: String(voce.nome || voce.task?.consegnaCorta || voce.task?.consegna || 'Sessione').slice(0, 160),
@@ -3087,7 +3157,7 @@ export function createSessionRegistry({
       esitoDelega: voce.esitoDelega ?? null, avviataAlle: voce.avviataAlle ?? null,
       ...stats, conclusaAlle: stats.conclusaAlle ?? voce.timelineConclusaAlle ?? null,
       ultimaAttivitaAlle: stats.ultimaAttivitaAlle ?? voce.timelineUltimaAlle ?? null,
-      attivita: riassuntoAttivitaSessione(voce.eventi) };
+      attivita: completo ? attivitaDellaVoce(voce) : contatoriAttivitaDellaVoce(voce) };
   }
 
   function registraTimeline(voce, event, { partial = false, sourceSeq = null } = {}) {
@@ -3099,7 +3169,7 @@ export function createSessionRegistry({
         timeline.registra(root.sessionId, nodoTimeline(member), 'baseline', { partial: true });
       }
     }
-    timeline.registra(root.sessionId, nodoTimeline(voce), event, { complete: !root.ripristinata, partial, sourceSeq });
+    timeline.registra(root.sessionId, nodoTimeline(voce, { completo: EVENTI_DI_STATO_TIMELINE.has(event) }), event, { complete: !root.ripristinata, partial, sourceSeq });
   }
 
   function snapshotAgente(voce) {
@@ -4122,9 +4192,21 @@ export function createSessionRegistry({
    * finché non la ferma con `ferma()`, che chiude comunque il giro).
    */
   function richiediApprovazione(voce, azione) {
+    /*
+     * ⛔⛔ F4-03 (owner 01/10/2026 sera) — una scrittura FUORI dal progetto in una sessione che nessuno segue (automazioni,
+     *   passi dei Workflow: `senzaInterfaccia`) si chiude SUBITO con un no, e la cronologia dice perché (`motivo`). Owner:
+     *   «senza nessuno a cui chiedere viene rifiutato con la spiegazione». ⛔ Solo questa domanda: le altre (segreti, attrezzo su
+     *   «Chiedi», root in WSL) restano come prima — decisione dell'owner, «solo la scrittura fuori ora», con l'aperto registrato.
+     */
+    if (voce.senzaInterfaccia && azione?.fuoriDalProgetto) {
+      const requestId = randomUUID();
+      broadcast(voce, approvalRequested({ requestId, azione }));
+      broadcast(voce, approvalResolved({ requestId, approvato: false, motivo: 'nessuna-interfaccia' }));
+      return Promise.resolve(false);
+    }
     return new Promise((resolve) => {
       const requestId = randomUUID();
-      voce.approvazionePendente = { requestId, resolve };
+      voce.approvazionePendente = { requestId, resolve, azione };
       broadcast(voce, approvalRequested({ requestId, azione }));
     });
   }
@@ -4158,11 +4240,18 @@ export function createSessionRegistry({
    *   riprende dopo un riavvio); Hermes, OpenCode e Codex la tengono solo in memoria (`.claude/RICERCA-ASK-D35-D37-2026-09-24.md`).
    */
   /* Il livello d'accesso che il kernel legge per un permesso (etichette del selettore). Una sola mappa: avvio del giro e piano approvato. */
-  function livelloDaPermessi(permessi) {
+  /* ⛔⛔ F4-03 (owner 01/10/2026 sera): «Workspace write» non è più «nessun livello» — quella era l'assenza che lasciava scrivere
+     ovunque. È `'scrittura-progetto'`: dentro la cartella scrive da sola, fuori chiede (talosHarness.mjs). `undefined` resta
+     soltanto a chi non dichiara una politica (TALOS-BANCO, CLI). Una sessione vecchia ripresa dal disco SENZA il campo è
+     «Workspace write», come la mostra l'interfaccia e come la tratta il resto del registro (`voce.permessi ?? 'Workspace
+     write'`): altrimenti proprio lei scriverebbe ovunque. */
+  function livelloDaPermessi(permessiLetti) {
+    const permessi = permessiLetti ?? 'Workspace write';
     return permessi === 'Read only' ? 'lettura'
       : permessi === 'Research' ? 'ricerca'
         : permessi === 'On request' ? 'su-richiesta'
-          : permessi === 'Full access' ? 'accesso-pieno' : undefined;
+          : permessi === 'Workspace write' ? 'scrittura-progetto'
+            : permessi === 'Full access' ? 'accesso-pieno' : undefined;
   }
 
   /*
@@ -4255,6 +4344,30 @@ export function createSessionRegistry({
   }
 
   /* `motivo` è ciò che la ricevuta mostra; `reason` è ciò che riceve il modello (invariato). */
+  /*
+   * ⛔ 02/10/2026 — ELICITATION MCP (owner: patch del kernel, poi la CLI; registro 12). Una richiesta per volta per
+   * sessione: valida (mcp-elicitation-contract.mjs), evento, attesa della persona; una non valida o una seconda mentre la
+   * prima aspetta tornano `cancel` al server senza arrivare alla persona. Stop e reindirizzamento la chiudono con `cancel`.
+   */
+  function richiediElicitazioneMcp(voce, { server, parametri }) {
+    let richiesta;
+    try { richiesta = validaRichiestaElicitazione(parametri); } catch { return Promise.resolve({ action: 'cancel' }); }
+    if (voce.elicitazionePendente) return Promise.resolve({ action: 'cancel' });
+    const requestId = randomUUID();
+    return new Promise((resolve) => {
+      voce.elicitazionePendente = { requestId, richiesta, resolve };
+      broadcast(voce, mcpElicitationRequested({ requestId, server: typeof server === 'string' ? server : 'mcp', richiesta, at: clock().toISOString() }));
+    });
+  }
+  function annullaElicitazioneMcp(voce, motivo) {
+    const pendente = voce.elicitazionePendente;
+    if (!pendente) return false;
+    voce.elicitazionePendente = null;
+    pendente.resolve({ action: 'cancel' });
+    broadcast(voce, mcpElicitationResolved({ requestId: pendente.requestId, action: 'cancel', at: clock().toISOString(), da: 'sistema', motivo }));
+    return true;
+  }
+
   function annullaDomandaPendente(voce, reason = 'cancelled', motivo = null) {
     const pendente = voce.domandaPendente;
     if (!pendente) return false;
@@ -4294,7 +4407,8 @@ export function createSessionRegistry({
     if (!chiamata || chiamata.function?.name !== 'ask_user_question') return messaggi;
     const esito = risolta.status === ESITO_DOMANDA_SENZA_INTERFACCIA.status ? ESITO_DOMANDA_SENZA_INTERFACCIA
       : risolta.motivo === 'nuovo-messaggio' ? ESITO_DOMANDA_SOSTITUITA
-        : { status: risolta.status, ...(risolta.answers ? { answers: risolta.answers } : {}) };
+        : { status: risolta.status, ...(risolta.answers ? { answers: risolta.answers } : {}),
+          ...(risolta.skipped ? { skipped: risolta.skipped } : {}), ...(risolta.notes ? { notes: risolta.notes } : {}) };
     return conEsitoDellaChiamata(messaggi, ultimaRichiesta.toolCallId, JSON.stringify(esito)) ?? messaggi;
   }
 
@@ -5591,6 +5705,7 @@ export function createSessionRegistry({
       permessi: voce.permessi ?? null,
       modalitaOperativa: voce.modalitaOperativa ?? 'normale',
       segnaleStop: controller.signal,
+      registraComandoFermabile: registraComandoFermabileIn(voce), // Stop per riga (owner 02/10/2026)
       mobile: voce.mobile,
       ambienteComandiFn: () => {
         if (chiuso) throw Object.assign(new Error('COMMAND_ENVIRONMENT_CLOSED: il registro si sta chiudendo.'), { code: 'COMMAND_ENVIRONMENT_CLOSED' });
@@ -5654,7 +5769,8 @@ export function createSessionRegistry({
        * `delega_sottotask` compare solo in Workflow. Togliere il callback qui non rafforza quel
        * cancello; spezza soltanto i chiamanti interni prima che il kernel possa applicarlo.
        */
-      onDelega: (taskFiglio, cartellaFiglio, { modalita = 'lettura' } = {}) => subagentOrchestrator.delegaSottoTask({ sessionPadreId: sessionId, task: taskFiglio, cartella: cartellaFiglio, modalita }),
+      // F-022 (owner 01/10): senza modalità decide l'orchestratore — i permessi del padre, o sola lettura se il padre lo è
+      onDelega: (taskFiglio, cartellaFiglio, { modalita } = {}) => subagentOrchestrator.delegaSottoTask({ sessionPadreId: sessionId, task: taskFiglio, cartella: cartellaFiglio, modalita }),
       codaMessaggiFn,
       /* T25/B09 (owner 30/09 notte): le letture valgono per tutta la SESSIONE, non per un giro solo — come Claude Code tiene
          le letture per tutta la conversazione. In memoria: dopo un riavvio del server il modello rilegge prima di sostituire. */
@@ -5672,6 +5788,8 @@ export function createSessionRegistry({
       casaLinuxSessione: casaLinux ? (voce.casaLinux ??= creaCasaLinuxSessione({ ...casaLinux, env: ambienteSenzaCredenziali() })) : null,
       // ⭐⭐⭐ FASE E (29/8) — sempre passata (stesso principio di cartellaTrustHook per gli hook): agent-service.mjs legge .harness-ui-mcp.json SOLO se il workspace lo dichiara, zero I/O altrimenti (vedi la sua doc su cartellaTrustMcp).
       cartellaTrustMcp,
+      /* ⛔ 02/10/2026 — elicitation MCP: solo con una persona (senza interfaccia la capacità non si dichiara, Gemini #22249) */
+      ...(voce.senzaInterfaccia ? {} : { onElicitazioneMcp: (richiesta) => richiediElicitazioneMcp(voce, richiesta) }),
       // ⭐⭐⭐ FASE G (29/8) — stesso principio di cartellaTrustMcp appena sopra: agent-service.mjs legge .harness-ui-plugins/ SOLO se il workspace lo dichiara, zero I/O altrimenti.
       cartellaTrustPlugin,
       // ⭐⭐⭐ FASE N, quarto sistema (30/8) — sempre passata: GLOBALE, non legata al workspace di questa sessione (vedi la doc in notes-store.mjs).
@@ -8824,6 +8942,7 @@ export function createSessionRegistry({
         /* F009: la stessa preferenza dell'utente di WSL che vale per il modello (un lettore che lancia vale «accesa»). */
         preferenzeWsl: preferenzeWslAdesso(),
         automaticoInLinux: Boolean(casaLinux),
+        registraComandoFermabile: registraComandoFermabileIn(voce), // Stop per riga: anche il `!` della persona
       })
         .then((esito) => {
           /*
@@ -8885,7 +9004,7 @@ export function createSessionRegistry({
      *
      * @returns {{ok:true}|{erroreAvvio:string, code:string}}
      */
-    rispondiApprovazione(sessionId, requestId, approvato) {
+    rispondiApprovazione(sessionId, requestId, approvato, { ambito } = {}) {
       const voce = sessioni.get(sessionId);
       if (!voce) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
       const pendente = voce.approvazionePendente;
@@ -8904,9 +9023,25 @@ export function createSessionRegistry({
       if (!pendente || pendente.requestId !== requestId) {
         return { erroreAvvio: 'Questa richiesta di permesso non è più in attesa', code: 'APPROVAL_NOT_PENDING' };
       }
+      /*
+       * ⛔⛔ F4-03 (owner 01/10/2026 sera) — «Consenti in questa cartella per la sessione». Si ricorda la cartella che il KERNEL
+       *   ha misurato e messo nella domanda (`fuoriDalProgetto.chiave`, percorso vero), mai un percorso mandato dal client; e
+       *   solo con un sì, solo su una domanda che ne offre una. Altrimenti si rifiuta PRIMA di risolvere: la domanda resta in
+       *   attesa e la persona può ancora rispondere. Vale fino a fine sessione, sottocartelle comprese (owner); vive in memoria
+       *   come il sì di F009 (`consensiSessione`): un riavvio del server lo richiede.
+       */
+      const chiaveCartella = pendente.azione?.fuoriDalProgetto?.chiave;
+      if (ambito !== undefined && (ambito !== 'cartella' || approvato !== true || typeof chiaveCartella !== 'string' || !chiaveCartella)) {
+        return { erroreAvvio: 'Questa richiesta non ha una cartella da consentire per la sessione', code: 'QUERY_INVALID' };
+      }
+      if (ambito === 'cartella') {
+        const consensi = (voce.consensiSessione ??= {});
+        const elenco = (consensi.cartelleFuori ??= []);
+        if (!elenco.includes(chiaveCartella)) elenco.push(chiaveCartella);
+      }
       voce.approvazionePendente = null;
       pendente.resolve(Boolean(approvato));
-      broadcast(voce, approvalResolved({ requestId, approvato: Boolean(approvato) }));
+      broadcast(voce, approvalResolved({ requestId, approvato: Boolean(approvato), ...(ambito === 'cartella' ? { ambito } : {}) }));
       return { ok: true };
     },
 
@@ -8939,7 +9074,8 @@ export function createSessionRegistry({
       const voce = sessioni.get(sessionId);
       if (!voce) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
       const nonInAttesa = { erroreAvvio: 'Questa domanda non è più in attesa', code: 'QUESTION_NOT_PENDING' };
-      const impronta = (esito) => JSON.stringify([esito.status, esito.answers ?? null]);
+      /* 02/10/2026, tappa 3 CLI: saltate e note fanno parte della risposta (una nota diversa è una risposta diversa). */
+      const impronta = (esito) => JSON.stringify([esito.status, esito.answers ?? null, esito.skipped ?? null, esito.notes ?? null]);
       const pendente = voce.domandaPendente;
       if (!pendente || pendente.requestId !== requestId) {
         const giaData = voce.risposteDomande?.get(requestId);
@@ -8961,7 +9097,7 @@ export function createSessionRegistry({
       const conferma = (async () => {
         try {
           /* La scadenza la decide l'impostazione della persona, non un gesto nella scheda: la ricevuta la attribuisce al sistema. */
-          await broadcast(voce, userQuestionResolved({ requestId, status: validata.status, answers: validata.answers ?? null, at: clock().toISOString(), da: validata.status === 'expired' ? 'sistema' : 'persona' }), { durable: true });
+          await broadcast(voce, userQuestionResolved({ requestId, status: validata.status, answers: validata.answers ?? null, skipped: validata.skipped ?? null, notes: validata.notes ?? null, at: clock().toISOString(), da: validata.status === 'expired' ? 'sistema' : 'persona' }), { durable: true });
         } catch (errore) {
           console.error(`[session-store] risposta alla domanda non salvata per ${sessionId} (${errore?.code || 'I/O'})`);
           if (pendente.dopoRiavvio) {
@@ -8992,6 +9128,21 @@ export function createSessionRegistry({
       })();
       (voce.risposteDomande ??= new Map()).set(requestId, { questions: pendente.questions, impronta: impronta(validata), esito: conferma });
       return conferma;
+    },
+
+    /* ⛔ 02/10/2026 — la risposta della persona a un server MCP: validata contro la richiesta, poi al server; il contenuto non entra nella cronologia. */
+    async rispondiElicitazioneMcp(sessionId, requestId, risposta) {
+      const voce = sessioni.get(sessionId);
+      if (!voce) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
+      const pendente = voce.elicitazionePendente;
+      if (!pendente || pendente.requestId !== requestId) return { erroreAvvio: 'Questa richiesta non aspetta più una risposta', code: 'ELICITATION_NOT_PENDING' };
+      let validata;
+      try { validata = validaRispostaElicitazione(risposta, pendente.richiesta); }
+      catch (errore) { return { erroreAvvio: errore instanceof Error ? errore.message : String(errore), code: errore?.code ?? 'ELICITATION_ANSWER_INVALID' }; }
+      voce.elicitazionePendente = null;
+      pendente.resolve(validata);
+      broadcast(voce, mcpElicitationResolved({ requestId, action: validata.action, at: clock().toISOString(), da: 'persona' }));
+      return { ok: true };
     },
 
     /*
@@ -9119,6 +9270,7 @@ export function createSessionRegistry({
       }
       negaApprovazionePendente(voce);
       annullaDomandaPendente(voce, 'run-cancelled', 'reindirizzamento');
+      annullaElicitazioneMcp(voce, 'reindirizzamento');
       chiudiPianoPendente(voce, 'run-cancelled', 'reindirizzamento');
       cancelAgentDialogueForSession(sessionId, 'run-cancelled');
       voce.controller.abort();
@@ -9400,6 +9552,7 @@ export function createSessionRegistry({
       }
       negaApprovazionePendente(voce);
       annullaDomandaPendente(voce, 'run-cancelled', 'fermato');
+      annullaElicitazioneMcp(voce, 'fermato');
       chiudiPianoPendente(voce, 'run-cancelled', 'fermato');
       cancelAgentDialogueForSession(sessionId, 'run-cancelled');
       voce.controller.abort();
@@ -9410,6 +9563,21 @@ export function createSessionRegistry({
         annunciaCoda(voce);
       }
       return true;
+    },
+
+    /*
+     * ⛔ Stop per riga (owner 02/10/2026): ferma UN comando della scheda «Processi» — dell'agente, una `prova`, o un `!` della
+     *   persona — e l'agente CONTINUA (il comando finisce «fermato su richiesta», 130, e il modello lo legge). Come Hermes
+     *   (`process.kill`, `tools/process_registry.py:2262`), Codex (`command/exec/terminate`, `app-server/src/command_exec.rs:355`)
+     *   e Claude Code (`TaskStop`). ⇒ 'fermato' | 'sessione-assente' | 'non-in-corso'.
+     */
+    fermaComando(sessionId, toolCallId) {
+      const voce = sessioni.get(sessionId);
+      if (!voce) return 'sessione-assente';
+      const ferma = voce.comandiFermabili?.get(toolCallId);
+      if (typeof ferma !== 'function') return 'non-in-corso';
+      ferma();
+      return 'fermato';
     },
 
     /**
@@ -9622,6 +9790,7 @@ export function createSessionRegistry({
           usavaModalitaWorkflow: voce.usavaModalitaWorkflow === true,
           permessiPerAttrezzo: voce.permessiPerAttrezzo ?? null,
           inAttesaDomanda: Boolean(voce.domandaPendente),
+          inAttesaRichiestaMcp: Boolean(voce.elicitazionePendente), // 02/10/2026: un server MCP aspetta la persona
           inAttesaPiano: Boolean(voce.pianoPendente), // 24/09/2026, decisioni owner 36-39
           provider: voce.provider ?? 'cloud', runtimeId: voce.runtimeId ?? null, modelId: voce.modelId ?? voce.modello ?? null,
           fallbackProvider: voce.fallbackProvider ?? null,
