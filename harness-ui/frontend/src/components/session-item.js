@@ -71,7 +71,8 @@ export function statoSessione(sessione) {
   /* ⛔ 24/09/2026 — anche una DOMANDA aperta chiede qualcosa alla persona, e dopo un riavvio resta rispondibile (decisione
      owner 29): prima la riga diceva «interrotta · scrivi per riprenderla», cioè il contrario di ciò che serve. */
   // 24/09/2026, decisione owner 39: anche un PIANO che aspetta la scelta (e dopo un riavvio resta approvabile).
-  if (sessione.inAttesaApprovazione || sessione.inAttesaDomanda || sessione.inAttesaPiano) classe = 'attesa';
+  // 02/10/2026: anche un server MCP che chiede dati o di aprire una pagina aspetta la persona.
+  if (sessione.inAttesaApprovazione || sessione.inAttesaDomanda || sessione.inAttesaPiano || sessione.inAttesaRichiestaMcp) classe = 'attesa';
   /*
    * ⛔ 06/9, prova T05-D3 — l'ordine era invertito rispetto alla convenzione dichiarata in cima a
    * questo file, e il difetto si vedeva a schermo: quattro sessioni delle 16:02-16:08 dicevano
@@ -110,6 +111,7 @@ export function statoSessione(sessione) {
   if (classe === 'interrotto') aiuto = 'Interrotta dalla morte del processo: nessuno la sta eseguendo. Scrivi un messaggio per riprenderla.';
   else if (classe === 'attesa' && sessione.inAttesaDomanda) aiuto = 'TALOS aspetta la tua risposta a una domanda: rispondi per far continuare il lavoro.';
   else if (classe === 'attesa' && sessione.inAttesaPiano) aiuto = 'TALOS aspetta la tua scelta sul piano: approvalo o chiedi di continuare a pianificare.';
+  else if (classe === 'attesa' && sessione.inAttesaRichiestaMcp) aiuto = 'Un server MCP aspetta la tua risposta nella chat: rispondi per far continuare il lavoro.';
   else if (classe === 'fermata') aiuto = 'L’hai fermata tu: il giro si e chiuso al primo punto sicuro. Scrivi un messaggio per continuare da qui.';
   return { classe, testo, tono: TONI[classe] ?? null, aiuto };
 }

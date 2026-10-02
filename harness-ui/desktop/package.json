@@ -1,6 +1,6 @@
 {
   "name": "talos-desktop",
-  "version": "0.1.20",
+  "version": "0.1.21",
   "private": true,
   "description": "Il guscio desktop di TALOS, con il runtime Node incluso in Electron.",
   "license": "AGPL-3.0-only",
@@ -28,26 +28,92 @@
     "productName": "TALOS",
     "electronVersion": "44.3.0",
     "electronDist": "node_modules/electron/dist",
-    "directories": { "output": "dist", "buildResources": "assets" },
+    "directories": {
+      "output": "dist",
+      "buildResources": "assets"
+    },
     "asar": false,
     "npmRebuild": false,
-    "publish": null,
-    "toolsets": { "nsis": "1.2.1" },
-    "artifactName": "TALOS-Setup-${version}.${ext}",
-    "files": ["main.mjs", "profile.mjs", "migrazione-browser.mjs", "runtime.mjs", "child-bootstrap.mjs", "lifecycle.mjs", "log.mjs", "window-state.mjs", "barra-finestra.mjs", "package.json", "assets/talos.png", "assets/talos-tray.png"],
-    "extraResources": [
-      { "from": ".staging/harness-ui", "to": "harness-ui" },
-      { "from": ".staging/harness-ui/node_modules", "to": "harness-ui/node_modules" },
-      { "from": ".staging/context-engine", "to": "context-engine" },
-      { "from": ".staging/context-engine/node_modules", "to": "context-engine/node_modules" },
-      { "from": ".staging/local-runtime", "to": "local-runtime" },
-      { "from": ".staging/casa-linux", "to": "casa-linux" },
-      { "from": ".staging/docs", "to": "docs" },
-      { "from": ".staging/MANIFEST.json", "to": "MANIFEST.json" },
-      { "from": ".staging/AVVISI.txt", "to": "AVVISI.txt" },
-      { "from": ".staging/LICENZA-REPOSITORY.txt", "to": "LICENZA-REPOSITORY.txt" }
+    "publish": [
+      {
+        "provider": "generic",
+        "url": "https://github.com/Ninozzz95/talos/releases"
+      }
     ],
-    "win": { "target": ["nsis", "zip"], "icon": "assets/talos.ico", "signExecutable": false, "artifactName": "TALOS-${version}-win.${ext}" },
+    "toolsets": {
+      "nsis": "1.2.1"
+    },
+    "artifactName": "TALOS-Setup-${version}.${ext}",
+    "files": [
+      "main.mjs",
+      "profile.mjs",
+      "migrazione-browser.mjs",
+      "runtime.mjs",
+      "child-bootstrap.mjs",
+      "lifecycle.mjs",
+      "log.mjs",
+      "window-state.mjs",
+      "barra-finestra.mjs",
+      "firma-aggiornamenti.mjs",
+      "aggiornamenti.mjs",
+      "canale-aggiornamenti.mjs",
+    "fonte-aggiornamenti.mjs",
+      "package.json",
+      "assets/talos.png",
+      "assets/talos-tray.png",
+      "assets/aggiornamenti-pubblica.pem"
+    ],
+    "extraResources": [
+      {
+        "from": ".staging/harness-ui",
+        "to": "harness-ui"
+      },
+      {
+        "from": ".staging/harness-ui/node_modules",
+        "to": "harness-ui/node_modules"
+      },
+      {
+        "from": ".staging/context-engine",
+        "to": "context-engine"
+      },
+      {
+        "from": ".staging/context-engine/node_modules",
+        "to": "context-engine/node_modules"
+      },
+      {
+        "from": ".staging/local-runtime",
+        "to": "local-runtime"
+      },
+      {
+        "from": ".staging/casa-linux",
+        "to": "casa-linux"
+      },
+      {
+        "from": ".staging/docs",
+        "to": "docs"
+      },
+      {
+        "from": ".staging/MANIFEST.json",
+        "to": "MANIFEST.json"
+      },
+      {
+        "from": ".staging/AVVISI.txt",
+        "to": "AVVISI.txt"
+      },
+      {
+        "from": ".staging/LICENZA-REPOSITORY.txt",
+        "to": "LICENZA-REPOSITORY.txt"
+      }
+    ],
+    "win": {
+      "target": [
+        "nsis",
+        "zip"
+      ],
+      "icon": "assets/talos.ico",
+      "signExecutable": false,
+      "artifactName": "TALOS-${version}-win.${ext}"
+    },
     "nsis": {
       "artifactName": "TALOS-Setup-${version}.${ext}",
       "oneClick": false,
@@ -61,7 +127,9 @@
       "uninstallerSidebar": "assets/installerSidebar.bmp",
       "installerHeader": "assets/installerHeader.bmp",
       "license": "assets/licenza-installer.txt",
-      "installerLanguages": ["it_IT"],
+      "installerLanguages": [
+        "it_IT"
+      ],
       "language": "1040",
       "include": "assets/installer.nsh",
       "deleteAppDataOnUninstall": false,
@@ -72,5 +140,8 @@
       "differentialPackage": false,
       "runAfterFinish": true
     }
+  },
+  "dependencies": {
+    "electron-updater": "6.8.9"
   }
 }

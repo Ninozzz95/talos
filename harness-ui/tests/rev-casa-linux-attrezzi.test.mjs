@@ -123,8 +123,8 @@ test('B2-07 (WSL vero): attraverso un collegamento Linux si legge E si sostituis
         ['shell', { comando: 'cat vero.txt; echo; test -L link.txt && echo ancora-un-collegamento' }],
     ])
     assert.match(esiti[0], /prima/)
-    assert.match(esiti[1], /^written: link\.txt \(replaced an existing file of 6 characters\)/, 'il «prima» viene dalla casa: si sostituisce, e lo si dice')
-    assert.match(esiti[2], /^appended to: link\.txt \(\+5 characters incl\. 1 newline separator/, 'l a capo si decide guardando di là')
+    assert.match(esiti[1], /^written: link\.txt \(replaced an existing file of 6 bytes\)/, 'il «prima» viene dalla casa: si sostituisce, e lo si dice')
+    assert.match(esiti[2], /^appended to: link\.txt \(\+5 bytes incl\. 1 newline separator/, 'l a capo si decide guardando di là')
     assert.match(esiti[3], /^edited: link\.txt \(1 occurrence replaced/)
     assert.match(esiti[4], /\ndopo\nfine\nancora-un-collegamento$/)
     const allaReview = scritture.map((s) => [s.percorso, s.esisteva, s.contenutoPrima])

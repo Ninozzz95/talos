@@ -84,3 +84,33 @@ test('R02-COMPLETEZZA — ogni file di produzione tracciato in src entra nel pac
     .filter((p) => !/\.(test|spec)\.[^.]+$/iu.test(p) && !/(^|\/)(tests?|__tests__|fixtures)\//iu.test(p));
   assert.deepEqual(fuori, [], `file di produzione esclusi dal pacchetto: ${fuori.join(', ')}`);
 });
+
+/* ⛔ F-001 (owner 02/10/2026: «sfoltire a ~5 MB», e una prova che dal pacchetto si estragga ancora il testo di un PDF). */
+test('R02-PDFJS — PDF.js sfoltito a ~5 MB, il canvas nativo fuori, keyring dentro; e dal pacchetto si estrae ancora il testo', async () => {
+  const { cpSync, readdirSync, statSync, existsSync: esiste } = await import('node:fs');
+  const { createRequire } = await import('node:module');
+  const { pathToFileURL } = await import('node:url');
+  const { sfoltisciPdfjs, PDFJS_DA_TENERE } = await import('../scripts/prepara-pacchetto.mjs');
+  const richiedi = createRequire(new URL('../../package.json', import.meta.url));
+  const nodeModules = join(mkdtempSync(join(tmpdir(), 'talos-r02-pdfjs-')), 'node_modules');
+  cpSync(join(richiedi.resolve('pdfjs-dist/package.json'), '..'), join(nodeModules, 'pdfjs-dist'), { recursive: true });
+  for (const d of ['@napi-rs/canvas', '@napi-rs/canvas-win32-x64-msvc', '@napi-rs/keyring']) { mkdirSync(join(nodeModules, d), { recursive: true }); writeFileSync(join(nodeModules, d, 'package.json'), '{}'); }
+  await sfoltisciPdfjs(nodeModules);
+  assert.deepEqual(readdirSync(join(nodeModules, '@napi-rs')), ['keyring'], 'solo il canvas esce: keyring serve ai segreti');
+  const peso = (d) => readdirSync(d, { withFileTypes: true }).reduce((s, e) => s + (e.isDirectory() ? peso(join(d, e.name)) : statSync(join(d, e.name)).size), 0);
+  const pdfjs = join(nodeModules, 'pdfjs-dist');
+  assert.ok(peso(pdfjs) < 6 * 1024 * 1024, `pdfjs-dist sfoltito pesa ${peso(pdfjs)} byte`);
+  for (const f of PDFJS_DA_TENERE) assert.ok(esiste(join(pdfjs, f)), f);
+  for (const f of ['web', 'build', 'legacy/build/pdf.mjs.map', 'legacy/build/pdf.worker.min.mjs', 'types', 'image_decoders']) assert.equal(esiste(join(pdfjs, f)), false, f);
+  const { PDFDocument, StandardFonts } = richiedi('pdf-lib');
+  const doc = await PDFDocument.create(); const font = await doc.embedFont(StandardFonts.Helvetica);
+  doc.addPage().drawText('Testo dal pacchetto, perché', { x: 50, y: 700, size: 12, font });
+  const { getDocument } = await import(pathToFileURL(join(pdfjs, 'legacy/build/pdf.min.mjs')).href);
+  const compito = getDocument({ data: new Uint8Array(await doc.save()), cMapUrl: `${join(pdfjs, 'cmaps')}/`, cMapPacked: true,
+    standardFontDataUrl: `${join(pdfjs, 'standard_fonts')}/`, isEvalSupported: false, disableFontFace: true, useSystemFonts: false, verbosity: 0 });
+  try {
+    const pagina = await (await compito.promise).getPage(1);
+    assert.equal((await pagina.getTextContent()).items.map(i => i.str).join(''), 'Testo dal pacchetto, perché');
+  } finally { await compito.destroy(); }
+  await assert.rejects(sfoltisciPdfjs(join(tmpdir(), 'talos-r02-niente-', 'node_modules')), /pdfjs-dist assente/, 'senza PDF.js il pacchetto si ferma');
+});

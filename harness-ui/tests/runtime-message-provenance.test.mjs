@@ -94,7 +94,7 @@ test('NUDGE03-EDITS: every edit retains its exact result and verified receipt', 
   const { result, events } = await run(canonical, cartella, batches, {
     task: { consegna: 'Modifica edit.txt.' }, messaggiIniziali: history('Modifica edit.txt.'),
   });
-  const expected = 'edited: edit.txt (1 occurrence replaced; the file is now 2 characters). The rest of the file is untouched.';
+  const expected = 'edited: edit.txt (1 occurrence replaced; the file is now 2 bytes). The rest of the file is untouched.';
   assert.deepEqual(result.messaggiFinali.filter(m => m.role === 'tool').map(m => m.content), Array(4).fill(expected));
   assert.equal(events.filter(e => e.tipo === 'ricevuta' && e.ricevuta.status === 'succeeded').length, 4);
   assert.equal(readFileSync(join(cartella, 'edit.txt'), 'utf8'), 'v4');

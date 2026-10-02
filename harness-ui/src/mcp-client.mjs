@@ -42,10 +42,17 @@ import { StdioClientTransport } from '@modelcontextprotocol/client/stdio'
 export async function connettiServerMcp(config, deps = {}) {
     const ClientCls = deps.ClientCls ?? Client
     const TransportCls = deps.TransportCls ?? StdioClientTransport
+    /*
+     * ⛔ 02/10/2026 — ELICITATION (owner: patch del kernel, poi la CLI; registro 12). La capacità si dichiara SOLO se qualcuno
+     * può rispondere (`deps.onElicitazione`): un client che la dichiara senza gestirla fa fallire il server («Method not
+     * found», Gemini CLI #22249) e uno che rifiuta in automatico tradisce la persona (Codex app-server #45621).
+     */
+    const onElicitazione = typeof deps.onElicitazione === 'function' ? deps.onElicitazione : null
     const client = new ClientCls({
         name: config.nome ?? 'talos-harness-desktop',
         version: config.versione ?? '1.0.0',
-    })
+    }, ...(onElicitazione ? [{ capabilities: { elicitation: { form: {}, url: {} } } }] : []))
+    if (onElicitazione) client.setRequestHandler('elicitation/create', async (richiesta) => onElicitazione(richiesta?.params ?? {}))
     const transport = new TransportCls({
         command: config.comando,
         args: config.argomenti ?? [],

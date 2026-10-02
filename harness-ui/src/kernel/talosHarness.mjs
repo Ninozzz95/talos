@@ -58,7 +58,7 @@ import { leggiAttesaRichiestaDalFornitore, erroreEsitoProviderIncerto, leggiRifi
 import { createHash, generateKeyPairSync, randomUUID, sign as firmaCrypto, verify as verificaCrypto } from 'node:crypto'
 import { lookup as risolviDns } from 'node:dns'
 import { existsSync, statSync } from 'node:fs'
-import { open, readFile, stat as statAsync } from 'node:fs/promises'
+import { lstat, open, readFile, readlink, realpath, stat as statAsync } from 'node:fs/promises'
 import { request as richiestaHttp } from 'node:http'
 import { request as richiestaHttps } from 'node:https'
 import { basename, delimiter as separatoreDiPath, dirname, join, posix as percorsiPosix, resolve, sep } from 'node:path'
@@ -100,9 +100,13 @@ import { LIMITI_PIANO, validaPiano, esitoPianoPerIlModello } from '../plan-contr
 import { discoNode, fontiDaDisco, cancelloSemantico, libreriaStandard }
     from './dist/kernelPerIlBanco.js'
 import { pezzoConSeparatore } from './accoda-con-a-capo.mjs' // T-15 28/09: l'append non salda le righe (il modulo documenta fonti e perché)
-import { motivoNamespacePercorso } from './file-namespace-contract.mjs'
+import { classificaPercorsoDiRete, destinazioneDiRete, motivoNamespacePercorso } from './file-namespace-contract.mjs'
 import { TETTO_PAGINA_WEB, paginaTagliataPerIlModello, salvaPaginaIntera, eUnaPaginaSalvata } from './pagina-web-tagliata.mjs' // politica di taglio di `naviga`, owner 01/10/2026 «Come Hermes»
 import { collegamentoLinuxSulPercorso, spiegazioneCollegamentoLinux, erroriDiRipgrep, avvisoCollegamentiDiRipgrep } from './collegamento-linux.mjs' // 5a, owner 01/10/2026: collegamenti Linux su un disco di Windows, errore onesto
+import { worktreeDiWindowsLettoDaLinux, spiegazioneWorktreeWindows } from './worktree-windows.mjs' // F-016, owner 01-02/10/2026: worktree di Windows letto dal git di Linux
+import { formatoEstraibile, estraiTestoDocumento, ErroreEstrazione, MAX_BYTE_DOCUMENTO } from './estrai-documento.mjs' // F-001, owner 01-02/10/2026: leggi estrae il testo di docx/xlsx/pptx/pdf
+import { serveLoStatoDelBersaglio, motivoPerNonScrivereTesto } from './guardia-scrittura-binari.mjs' // F-001, owner 02/10/2026: «tutta la guardia di Hermes»
+import { bloccoDelPavimento, rifiutoDelPavimento } from './pavimento-comandi.mjs' // N-02, owner 02/10/2026: il pavimento di Hermes, parti 1+2+3
 import { vistaWindows, vistaLinux } from './percorsi-casa-linux.mjs' // Fase B, owner 01/10/2026: le due viste dello stesso percorso
 import { SCRIPT_FATTI_WSL, leggiFattiWsl, sceltaUtenteWsl, discoDellaCartella } from './utente-wsl.mjs' // F009, owner 01/10/2026: con che utente girano i comandi Linux
 
@@ -2268,15 +2272,16 @@ const ATTREZZI_ESTESI = [
             + 'summary — none of its intermediate steps enter your context. By default it works in the SAME '
             + 'folder as you; pass a different absolute path only when the sub-task genuinely belongs '
             + 'elsewhere. Use it for a genuinely separable chunk of work, not for something you could do '
-            + 'yourself in one more turn. The default is read-only: no file creation, edits, shell commands, '
-            + 'external tools or further delegation. Set modalita to modifica only when the task explicitly '
-            + 'requires execution or changes; parent permissions still apply.',
+            + 'yourself in one more turn. By default the child works with YOUR permissions, never more: it can '
+            + 'do what you can do here. If you are read-only, the child is read-only too. Set modalita to '
+            + 'lettura when the sub-task is pure analysis: the child then gets no file creation, edits, shell '
+            + 'commands, external tools or further delegation.',
         input_schema: {
             type: 'object',
             properties: {
                 task: { type: 'string', description: 'A complete, self-contained instruction for the child — it starts with NO context beyond this text.' },
                 cartella: { type: 'string', description: 'Optional. Absolute path to the child working folder. Omit it to use the same folder as you, which is the normal case.' },
-                modalita: { type: 'string', enum: ['lettura', 'modifica'], description: 'Defaults to lettura (read-only analysis). Choose modifica only for explicitly requested execution or changes, within parent permissions.' },
+                modalita: { type: 'string', enum: ['lettura', 'modifica'], description: 'Optional. Omit it to give the child your own permissions (read-only if you are read-only). lettura = read-only analysis. modifica = changes within your permissions; refused if you are read-only.' },
             },
             required: ['task'],
         },
@@ -3218,6 +3223,8 @@ const ATTREZZI_ESTESI = [
                         type: 'object',
                         properties: {
                             id: { type: 'string', maxLength: LIMITI_DOMANDA_UTENTE.idMax, pattern: '^[a-z][a-z0-9_]*$', description: 'Stable snake_case identifier for this question.' },
+                            /* 02/10/2026, tappa 3 CLI: titolo breve della scheda e anteprima per opzione, come AskUserQuestion di Claude Code. */
+                            header: { type: 'string', maxLength: LIMITI_DOMANDA_UTENTE.titoloMax, description: 'Optional very short tab label for this question (max 12 characters), e.g. "Auth method".' },
                             question: { type: 'string', maxLength: LIMITI_DOMANDA_UTENTE.domandaMax, description: 'A self-contained single-sentence question.' },
                             why: { type: 'string', maxLength: LIMITI_DOMANDA_UTENTE.percheMax, description: 'One sentence: why the answer matters for the work.' },
                             options: {
@@ -3230,6 +3237,7 @@ const ATTREZZI_ESTESI = [
                                         label: { type: 'string', maxLength: LIMITI_DOMANDA_UTENTE.etichettaMax, description: 'Short user-facing choice label.' },
                                         description: { type: 'string', maxLength: LIMITI_DOMANDA_UTENTE.descrizioneMax, description: 'One short sentence explaining the impact or trade-off.' },
                                         recommended: { type: 'boolean', description: 'True for the single option you recommend; put it first.' },
+                                        preview: { type: 'string', maxLength: LIMITI_DOMANDA_UTENTE.anteprimaMax, description: 'Optional short preview shown next to the option (max 20 lines): a code snippet or a diff with +/- lines.' },
                                     },
                                     required: ['label', 'description'],
                                     additionalProperties: false,
@@ -4286,6 +4294,7 @@ async function tuttiIPercorsi(disco, { filtro = null, dentro: base = '', segnale
         const ordinate = [...voci].sort((a, b) => (a.nome === b.nome ? 0 : a.nome < b.nome ? -1 : 1))
         for (const v of ordinate) {
             if (segnale?.aborted) break
+            if (v.rete) continue // 02/10/2026: un collegamento verso un computer di rete non si legge (vedi `disco.elenca`)
             const p = dentro ? `${dentro}/${v.nome}` : v.nome
             if (v.cartella) {
                 if (SEMPRE_POTATE.has(v.nome)) continue
@@ -4369,6 +4378,28 @@ async function istantaneaDelFile(radice, percorso) {
         const s = await statAsync(percorsoComeDiscoNode(radice, percorso))
         return s.isFile() ? { mtimeMs: s.mtimeMs, size: s.size } : null
     } catch { return null }
+}
+/*
+ * ⛔⛔ F4-01 (audit v4, owner 01/10/2026) — LA LETTURA PER MODIFICARE GUARDA I BYTE. `file_edit` leggeva con `disco.leggi`
+ *   (`readFile(…, "utf8")`): ogni byte che non è UTF-8 diventava «�», e la riscrittura lo rendeva permanente — le virgolette
+ *   curve di un file Windows-1252 (`0x92 0x93 0x94`) diventavano `EF BF BD`, 27 → 36 byte, con l'esito «the rest of the file is
+ *   untouched». Decisione dell'owner: si RIFIUTA, come Codex (`codex-rs/file-system/src/lib.rs:649-659`, `String::from_utf8` →
+ *   `InvalidData`). Hermes fa l'altra scelta (preserva i byte con `surrogateescape`, `tools/file_operations.py:1576-1579`).
+ * ⛔ Un NUL ⇒ binario (è il segnale di `leggi`, `campioneBinarioDelFile`; prende anche UTF-16). Altrimenti il decodificatore
+ *   RIGOROSO (`TextDecoder` con `fatal`, WHATWG Encoding «UTF-8 decoder»: sovralunghe, surrogati e oltre U+10FFFF compresi); se
+ *   rifiuta, l'offset del primo byte rotto lo dà `primoByteNonUtf8`, la STESSA di `leggi` a byte (READ22, `READ_INVALID_UTF8`).
+ * ⛔ Il testo valido si decodifica con `toString('utf8')`, che CONSERVA il BOM come U+FEFF: la riscrittura lo rimette identico.
+ * Gira identica nel servente della casa Linux (`casa-linux-servente.mjs`).
+ */
+export async function leggiPerModifica(assoluto) {
+    const dati = await readFile(assoluto)
+    if (dati.includes(0)) return { stato: 'binario', byte: dati.length }
+    try { new TextDecoder('utf-8', { fatal: true }).decode(dati) }
+    catch {
+        const offset = primoByteNonUtf8(dati)
+        return { stato: 'non-utf8', byte: dati.length, offset, valore: dati[offset] }
+    }
+    return { stato: 'ok', testo: dati.toString('utf8') }
 }
 /*
  * ⛔⛔ REV-READ-BOUNDS (ticket della CLI, 27/09/2026 notte; owner: tetto «1 MiB»). `disco.leggi` (`kernelPerIlBanco.js:39-40`,
@@ -4636,25 +4667,85 @@ async function leggiEsadecimale(handle, byteSulDisco, inizio, limite, { blocco, 
     return { binario: false, testo: pezzi.join(''), byteSulDisco, letti, troncato, offset: inizio, endOffset: inizio + letti,
         nextOffset: troncato ? inizio + letti : null, paginata: true, limite, format: 'hex' }
 }
+/*
+ * ⛔ F-001 (owner 01-02/10/2026): docx, xlsx, pptx e pdf si leggono come il loro TESTO (`estrai-documento.mjs`), e il testo passa
+ *   dalla STESSA paginazione: `leggiRighe`/`leggiDentroRiga` lavorano su un «file» in memoria che porta il testo estratto, così
+ *   righe, tetto, offset e byteOffset si comportano come per un file di testo. Il formato esadecimale resta sui byte veri.
+ *   Il testo di un documento si tiene per i 4 più recenti (percorso + dimensione + data): sfogliare un PDF a pagine non lo
+ *   riconverte a ogni pagina. Se l'estrazione non riesce si legge come prima, e la ragione si dice in testa.
+ */
+const testiDeiDocumenti = new Map()
+const MAX_TESTI_DEI_DOCUMENTI = 4
+async function testoDelDocumento(handle, chiave, formato, byteSulDisco, segnale) {
+    const ricordato = testiDeiDocumenti.get(chiave)
+    if (ricordato) { testiDeiDocumenti.delete(chiave); testiDeiDocumenti.set(chiave, ricordato); return ricordato }
+    if (byteSulDisco > MAX_BYTE_DOCUMENTO) throw new ErroreEstrazione(`the document is too large to convert (${byteSulDisco} bytes; the limit is ${MAX_BYTE_DOCUMENTO})`)
+    const esito = await estraiTestoDocumento(await handle.readFile(), formato, { segnale })
+    testiDeiDocumenti.set(chiave, esito)
+    while (testiDeiDocumenti.size > MAX_TESTI_DEI_DOCUMENTI) testiDeiDocumenti.delete(testiDeiDocumenti.keys().next().value)
+    return esito
+}
+/* Un «file» in memoria con la sola `read` che usano `leggiRighe` e `leggiDentroRiga` (stessa forma di FileHandle.read). */
+const fileInMemoria = (dati) => ({
+    read: async (buffer, inizio, quanti, posizione) => {
+        const n = Math.max(0, Math.min(quanti, dati.length - posizione))
+        dati.copy(buffer, inizio, posizione, posizione + n)
+        return { bytesRead: n }
+    },
+})
 export async function leggiTestoLimitato(radice, percorso, {
     tetto = MAX_BYTE_LEGGI, campione = BYTE_CAMPIONE_BINARIO, blocco = BYTE_PER_BLOCCO_LEGGI, segnale = null, apriFn = open,
     offset, limit, format, byteOffset,
 } = {}) {
     const richiesta = validaLettura({ offset, limit, format, byteOffset })
     segnale?.throwIfAborted()
-    const handle = await apriFn(percorsoComeDiscoNode(radice, percorso), 'r')
+    const percorsoSulDisco = percorsoComeDiscoNode(radice, percorso)
+    const handle = await apriFn(percorsoSulDisco, 'r')
     try {
         const { size: byteSulDisco, mtimeMs } = await handle.stat()
         if (richiesta.modo === 'hex') return await leggiEsadecimale(handle, byteSulDisco, richiesta.inizio, richiesta.limite, { blocco, segnale })
+        let estrattoFallito = null
+        const formato = formatoEstraibile(percorso)
+        if (formato) {
+            try {
+                const estratto = await testoDelDocumento(handle, `${percorsoSulDisco}\0${byteSulDisco}\0${mtimeMs}`, formato, byteSulDisco, segnale)
+                const dati = Buffer.from(estratto.testo, 'utf8'), finto = fileInMemoria(dati)
+                const base = richiesta.modo === 'byte'
+                    ? await leggiDentroRiga(finto, dati.length, richiesta.inizio, { tetto, campione, segnale })
+                    : await leggiRighe(finto, dati.length, richiesta, { tetto, blocco, campione, segnale })
+                return { ...base, mtimeMs, estratto: { formato, byteFile: byteSulDisco, avviso: estratto.avviso } }
+            } catch (errore) {
+                if (!(errore instanceof ErroreEstrazione)) throw errore
+                estrattoFallito = { formato, motivo: errore.message }
+            }
+        }
         // T25/B09: l'istantanea (mtime + dimensione) della lettura, per sapere poi se il file è cambiato dopo
-        if (richiesta.modo === 'byte') return { ...await leggiDentroRiga(handle, byteSulDisco, richiesta.inizio, { tetto, campione, segnale }), mtimeMs }
-        return { ...await leggiRighe(handle, byteSulDisco, richiesta, { tetto, blocco, campione, segnale }), mtimeMs }
+        const base = richiesta.modo === 'byte'
+            ? await leggiDentroRiga(handle, byteSulDisco, richiesta.inizio, { tetto, campione, segnale })
+            : await leggiRighe(handle, byteSulDisco, richiesta, { tetto, blocco, campione, segnale })
+        return { ...base, mtimeMs, ...(estrattoFallito ? { estrattoFallito } : {}) }
     } finally {
         await handle.close()
     }
 }
-/* L'esito di `leggi` per il modello. Un taglio si dichiara in TESTA, dove anche un modello che vede solo l'inizio lo legge. */
+/* L'esito di `leggi` per il modello. Un taglio si dichiara in TESTA, dove anche un modello che vede solo l'inizio lo legge.
+   F-001: un documento estratto lo dice in testa (formato, peso sul disco, «testo e non byte»), con l'avviso di copertura dei
+   PDF; un'estrazione fallita dice perché, e sotto resta la lettura di sempre. */
 export function esitoDellaLettura(letta, percorso) {
+    if (letta?.estratto) {
+        const { formato, byteFile, avviso } = letta.estratto
+        return `[TALOS extracted text: "${percorso}" is a ${formato.toUpperCase()} document, ${byteFile} bytes on disk. Below is its text, `
+            + 'not its bytes: line numbers, offset and byteOffset refer to this extracted text. Use leggi format:"hex" for the raw bytes.]\n'
+            + (avviso ? `[${avviso}]\n` : '') + esitoDellaLetturaDiTesto(letta, percorso)
+    }
+    if (letta?.estrattoFallito) {
+        const { formato, motivo } = letta.estrattoFallito
+        return `[TALOS could not extract the text of "${percorso}" as a ${formato.toUpperCase()} document: ${motivo}. Below is what a plain read gives.]\n`
+            + esitoDellaLetturaDiTesto(letta, percorso)
+    }
+    return esitoDellaLetturaDiTesto(letta, percorso)
+}
+function esitoDellaLetturaDiTesto(letta, percorso) {
     if (letta.binario) return messaggioFileBinario(percorso, letta.byteSulDisco)
     if (letta.format === 'hex') {
         const seguito = letta.nextOffset === null ? 'EOF was reached' : `nextOffset=${letta.nextOffset}; continue with leggi format:"hex" offset=${letta.nextOffset}`
@@ -5292,6 +5383,27 @@ function fermaQuandoArrivaLoStop(processoFiglio, segnaleStop, quandoFermato) {
     return () => { try { segnaleStop.removeEventListener('abort', suStop) } catch { /* segnale finto in un test: nessun danno */ } }
 }
 
+/*
+ * ⛔⛔ F007-B (owner 02/10/2026, «come Hermes: resta vivo, e si dice») — UN COMANDO FINISCE QUANDO ESCE LUI, non quando si
+ *   chiudono i tubi. `close` aspetta anche i tubi EREDITATI da un processo lanciato in background (`start "" /b …` su cmd):
+ *   misurato il 02/10, `echo partito & start "" /b node …` non dava nessun esito entro 8 s, e nemmeno lo Stop lo sbloccava
+ *   (review 0.1.20, `rev-f007-runner.mjs`). Hermes decide sull'USCITA del processo (`proc.poll()`,
+ *   `tools/environments/base.py:491`) e poi drena i tubi al massimo 2 s (`:531-536`).
+ * ⇒ All'`exit` parte un'attesa di 2 s: se i tubi si chiudono prima, è un comando come gli altri; se no, si smette di
+ *   RACCOGLIERE e il comando si conclude, dicendolo. ⛔ A differenza di Hermes (che chiude il suo lato dei tubi, e il processo
+ *   in background muore al primo SIGPIPE) i tubi restano aperti e letti a vuoto: «resta vivo» è vero anche se scrive ancora.
+ * In WSL non serve: `wsl.exe` esce con la shell anche se un `cmd &` resta vivo (misurato: 69 ms), ma l'aiutante vale ovunque.
+ */
+const DRENAGGIO_DOPO_L_USCITA_MS = 2_000
+const NOTA_PROCESSO_IN_BACKGROUND = "⛔ Un processo avviato da questo comando gira ancora in background e tiene aperta l'uscita: ciò che stampa da ora non viene raccolto."
+/** `concludi(codice, { inBackground })` una volta sola: alla chiusura dei tubi, o 2 s dopo l'uscita se i tubi restano aperti. */
+function concludiAllUscitaDelProcesso(p, concludi, { drenaggioMs = DRENAGGIO_DOPO_L_USCITA_MS } = {}) {
+    let fatto = false, attesa = null
+    const una = (codice, inBackground) => { if (fatto) return; fatto = true; clearTimeout(attesa); concludi(codice, { inBackground }) }
+    p.once('exit', (codice) => { attesa = setTimeout(() => una(codice, true), drenaggioMs) })
+    p.once('close', (codice) => una(codice, false))
+}
+
 /** ⛔ 130 = 128 + SIGINT, il codice che una shell usa da sempre per «l'ha interrotto qualcuno», distinto dal 124 di «tempo scaduto». */
 const USCITA_FERMATO_SU_RICHIESTA = 130
 
@@ -5310,6 +5422,24 @@ const MOTIVO_FERMATO_CHIEDENDO = 'fermato su richiesta mentre aspettavo la tua a
  * registro QUALE attrezzo stava girando quando la persona ha premuto «Ferma».
  */
 const MARCA_FERMATO_MENTRE_GIRAVA = '⛔ Fermato su richiesta:'
+/*
+ * ⛔ Stop per riga (owner 02/10/2026) — CHI ha fermato il comando lo dice il MOTIVO dell'abort: la riga dei Processi (e il
+ *   `!` della persona) chiama `abort(MOTIVO_STOP_DELLA_RIGA)`, e `AbortSignal.any` porta al segnale combinato il motivo
+ *   di quello che è scattato. La prova dal vivo sul 4174: con la frase generica il modello ha letto «interrotto
+ *   esternamente» e ha RILANCIATO lo stesso ping per 61 s. Hermes dice chi l'ha terminato («terminated by <fonte>»,
+ *   `tools/process_registry_notifications.py:407`); decisione owner: chi l'ha fermato E di non rilanciarlo.
+ * ⛔ Senza la marca `Fermato su richiesta:` di proposito: quella dice al giro che si è fermato LUI (`puntoDiFermata`), e
+ *   uno Stop della riga non ferma il giro.
+ */
+export const MOTIVO_STOP_DELLA_RIGA = 'stop-della-riga'
+function fraseFermato(segnale, { prova = false } = {}) {
+    if (segnale?.reason === MOTIVO_STOP_DELLA_RIGA) {
+        return prova
+            ? "⛔ L'ha fermata la persona dalla scheda Processi, apposta, mentre girava. Non rilanciarla se non te lo chiede."
+            : "⛔ L'ha fermato la persona dalla scheda Processi, apposta, mentre girava. Non rilanciarlo se non te lo chiede."
+    }
+    return `${MARCA_FERMATO_MENTRE_GIRAVA} ${prova ? 'la prova e stata interrotta' : 'il comando e stato interrotto'} mentre girava.`
+}
 
 /**
  * ⛔⛔⛔ BC-57 — «exit 0» E LA FORMA ESATTA DI «I TEST PASSANO».
@@ -5558,7 +5688,12 @@ async function eseguiProva(comando, cartella, { segnaleStop, dove = null, onByte
         }
         return risultato
     }
-    return new Promise((risolvi) => {
+    return new Promise((risolviGrezzo) => {
+        /* ⛔ F007-B: una prova che lascia un processo in background si conclude alla sua uscita, e lo dice in ogni esito. */
+        let inBackgroundProva = false
+        const risolvi = (esito) => risolviGrezzo(inBackgroundProva
+            ? { ...esito, processoInBackground: true, testo: `${esito.testo}\n\n${NOTA_PROCESSO_IN_BACKGROUND}`.trim() }
+            : esito)
         const p = spawn(comando, { cwd: cartella, shell: true, windowsHide: true, env: ambienteSenzaCredenziali() })
         // No durable sink on this legacy path. Reuse bounded preview/UTF-8
         // decoding without retaining another full copy for zero-test detection.
@@ -5571,13 +5706,14 @@ async function eseguiProva(comando, cartella, { segnaleStop, dove = null, onByte
         /* ⛔ `prova` è il comando più lungo del giro (fino a 120 s): senza questo, premere «Ferma» durante un `npm test` non ferma niente. */
         let fermatoSuRichiesta = false
         const sciogli = fermaQuandoArrivaLoStop(p, segnaleStop, () => { fermatoSuRichiesta = true })
-        p.on('close', async (codice) => {
+        concludiAllUscitaDelProcesso(p, async (codice, { inBackground }) => {
             clearTimeout(timer)
             sciogli()
+            if (inBackground) { inBackgroundProva = true; cattura.stacca() }
             const acquisito = await cattura.settled
             const uscita = formatCapturedOutput(acquisito.combined.text.trim(), acquisito.metadata)
             if (fermatoSuRichiesta) {
-                risolvi({ codice: USCITA_FERMATO_SU_RICHIESTA, fermatoSuRichiesta: true, testo: `${uscita}\n\n${MARCA_FERMATO_MENTRE_GIRAVA} la prova e stata interrotta mentre girava.`.trim() })
+                risolvi({ codice: USCITA_FERMATO_SU_RICHIESTA, fermatoSuRichiesta: true, testo: `${uscita}\n\n${fraseFermato(segnaleStop, { prova: true })}`.trim() })
                 return
             }
             /* ⛔ F-020: una prova uccisa dal tempo non è né un `exit null` muto né una suite mancante — stesso 124 e stessa frase del ramo Windows di `shell`. */
@@ -5726,19 +5862,24 @@ export function eseguiComando(programma, argomenti, { timeoutMs = 8_000, cwd, on
         const timer = setTimeout(() => { fermatoDalTempo = true; uccidiAlberoDelProcesso(p) }, timeoutMs)
         let fermatoSuRichiesta = false
         const sciogli = fermaQuandoArrivaLoStop(p, segnaleStop, () => { fermatoSuRichiesta = true })
-        p.on('close', async (codice) => {
+        /* ⛔ F007-B: si conclude all'uscita del processo (più al massimo 2 s di drenaggio), non alla chiusura dei tubi. */
+        concludiAllUscitaDelProcesso(p, async (codice, { inBackground }) => {
             clearTimeout(timer)
             sciogli()
+            if (inBackground) cattura?.stacca()
             if (finisciFuori) finisciFuori()
             if (finisciErrori) finisciErrori()
             const output = cattura ? await cattura.settled : null
+            /* la nota va dove il chiamante compone il testo (`insieme`, o `fuori`+`errori`), mai in `fuori`: è un fatto, non uscita */
+            const nota = inBackground ? `\n\n${NOTA_PROCESSO_IN_BACKGROUND}` : ''
             risolvi({
                 codice: fermatoSuRichiesta ? USCITA_FERMATO_SU_RICHIESTA : erroreProcesso ? -1 : codice,
                 ...(fermatoSuRichiesta ? { fermatoSuRichiesta: true } : {}),
                 ...(fermatoDalTempo && !fermatoSuRichiesta ? { fermatoDalTempo: true } : {}),
+                ...(inBackground ? { processoInBackground: true } : {}),
                 fuori: output ? output.stdout.text : pezziFuori.join(''),
-                errori: output ? output.stderr.text : pezziErrori.join(''),
-                insieme: output ? output.combined.text : pezziInsieme.join(''),
+                errori: (output ? output.stderr.text : pezziErrori.join('')) + nota,
+                insieme: (output ? output.combined.text : pezziInsieme.join('')) + nota,
                 ...(output ? { outputCapture: output.metadata } : {}),
             })
         })
@@ -6468,9 +6609,11 @@ function eseguiSuWindows(comando, cartella, { onPezzo, onBytes, tracciaCartella 
          */
         let fermatoSuRichiesta = false
         const sciogli = fermaQuandoArrivaLoStop(p, segnaleStop, () => { fermatoSuRichiesta = true })
-        p.on('close', async (codice) => {
+        /* ⛔ F007-B: si conclude all'uscita del processo (più al massimo 2 s di drenaggio), non alla chiusura dei tubi. */
+        concludiAllUscitaDelProcesso(p, async (codice, { inBackground }) => {
             clearTimeout(timer)
             sciogli()
+            if (inBackground) cattura?.stacca()
             if (finisciFuori) finisciFuori()
             if (finisciErrori) finisciErrori()
             const output = cattura ? await cattura.settled : null
@@ -6514,15 +6657,17 @@ function eseguiSuWindows(comando, cartella, { onPezzo, onBytes, tracciaCartella 
             const cartellaSicura = cartellaAccettabile
                 ? cartellaFinaleValida(ripulito.cartella, { esisteCartellaFn: eUnaCartellaLocale })
                 : null
+            const testoDelComando = fermatoSuRichiesta
+                ? `${uscita}\n\n${fraseFermato(segnaleStop)}`.trim()
+                : fermatoDalTempo
+                    ? `${uscita}\n\n⛔ Fermato allo scadere dei 120 secondi: non ha finito da solo.`.trim()
+                    : uscita
             risolvi({
                 codice: codiceFinale, // 124: il codice che `timeout(1)` usa da sempre per «tempo scaduto»
                 fermatoDalTempo,
                 ...(fermatoSuRichiesta ? { fermatoSuRichiesta: true } : {}),
-                testo: fermatoSuRichiesta
-                    ? `${uscita}\n\n${MARCA_FERMATO_MENTRE_GIRAVA} il comando e stato interrotto mentre girava.`.trim()
-                    : fermatoDalTempo
-                        ? `${uscita}\n\n⛔ Fermato allo scadere dei 120 secondi: non ha finito da solo.`.trim()
-                        : uscita,
+                ...(inBackground ? { processoInBackground: true } : {}),
+                testo: inBackground ? `${testoDelComando}\n\n${NOTA_PROCESSO_IN_BACKGROUND}`.trim() : testoDelComando,
                 enforcement: 'none',
                 cartellaFinale: cartellaSicura,
                 /* ⛔⛔ BLOCCO 7 (B4) — I DUE FLUSSI TORNANO SEPARATI, e su questa strada non lo erano.
@@ -6689,15 +6834,19 @@ export async function eseguiComandoSandboxato(comando, cartella, { mobile = fals
         const codice = fermatoDalTempo ? 124 : codiceGrezzo
         /* ⛔ Un comando ucciso dallo stop deve DIRLO anche da qui, non solo dal ramo Windows: stessa marca, stesso lettore. */
         const fuoriSenzaCartella = staccaCartellaFinale(fuori, marcatoreWsl).testo.trim()
+        /* ⛔ F-016 (owner 01-02/10): il git di Linux su un worktree creato da Windows — l'errore di git resta, accanto la causa,
+           il rimedio e il suo costo (`worktree-windows.mjs`). Solo su un comando fallito e dal suo stderr: un `cat` di un log
+           che contiene la frase non è quel caso. */
+        const worktreeWindows = codiceGrezzo !== 0 ? worktreeDiWindowsLettoDaLinux(errori) : null
         return {
             codice,
             ...(fermatoSuRichiesta ? { fermatoSuRichiesta: true } : {}),
             ...(fermatoDalTempo ? { fermatoDalTempo: true } : {}),
             testo: fermatoSuRichiesta
-                ? `${MARCA_FERMATO_MENTRE_GIRAVA} il comando e stato interrotto mentre girava.\n\n${uscitaWsl}`.trim()
+                ? `${fraseFermato(segnaleStop)}\n\n${uscitaWsl}`.trim()
                 : fermatoDalTempo
                     ? `${uscitaWsl}\n\n⛔ Fermato allo scadere dei 120 secondi: non ha finito da solo.`.trim()
-                    : uscitaWsl,
+                    : worktreeWindows ? `${uscitaWsl}\n\n⛔ ${spiegazioneWorktreeWindows(worktreeWindows)}` : uscitaWsl,
             enforcement: 'wsl2',
             /* ⛔ F009 — con che utente ha girato e su che disco: l'etichetta lo dichiara (`etichettaSandbox`). `utente: null` =
                non verificato; `disco: null` = la cartella non è su un disco di Windows. */
@@ -7316,25 +7465,14 @@ async function premessaDellaScrittura(radice, percorso, contenuto, { leggiPrima 
  * richiesta: nessuna delle due vie che sbloccano un permesso normale
  * lo scavalca.
  *
- * ⛔ Dichiarato onestamente (dal ledger, non addolcito qui): 5 pattern
- * sono un punto di partenza proporzionato, non parità con le difese
- * anti-elusione di Hermes (fold degli home path, $IFS, escape
- * backslash). Si scavalcano con la stessa facilità con cui si
- * scavalcherebbero i pattern nudi di Hermes prima della loro
- * normalizzazione — non è "fatto" contro l'offuscamento, è "fatto"
- * contro il caso diretto.
+ * ⛔⛔ N-02 (owner 02/10/2026, «il pavimento di Hermes di oggi, per intero», parti «1 + 2 + 3»): i 5 pattern del 28/8 sono
+ *   sostituiti dal pavimento di Hermes portato per intero in `pavimento-comandi.mjs` — comandi senza recupero col rilevatore
+ *   (normalizzazione, virgolette, inizi di comando veri, payload di `-c`/`--pre`), cancellazione del runtime da cui gira
+ *   TALOS, `sudo -S`. Il rifiuto dice che cos'è e che cosa NON è: ferma i casi diretti, non è un isolamento.
  */
-const COMANDI_SENZA_RECUPERO = [
-    [/\brm\s+(-[^\s]*\s+)*(-r|--recursive).*["']?\/["']?(?:\s|$)/i, 'cancellazione ricorsiva della radice'],
-    [/\bmkfs(\.[a-z0-9]+)?\b/i, 'formattazione filesystem'],
-    [/\bdd\b[^\n]*\bof=\/dev\/(sd|nvme|hd|mmcblk)/i, 'scrittura su device a blocchi grezzo'],
-    [/:\(\)\s*\{\s*:\s*\|\s*:\s*&\s*\}\s*;\s*:/, 'fork bomb'],
-    [/\b(shutdown|reboot|halt|poweroff)\b/i, 'spegnimento/riavvio di sistema'],
-]
-
-export function comandoSenzaRecupero(comando) {
-    for (const [re, motivo] of COMANDI_SENZA_RECUPERO) if (re.test(comando)) return motivo
-    return null
+/** Il motivo del pavimento per questo comando, o null (la forma di sempre, per chi la usa). */
+export function comandoSenzaRecupero(comando, opzioni) {
+    return bloccoDelPavimento(comando, opzioni)?.motivo ?? null
 }
 
 /**
@@ -8115,7 +8253,10 @@ export function creaRicevutaOperazione({
  *   una madre `'lettura'` non può nemmeno avviare una ricerca (provato al contrario nei test):
  *   non esiste un percorso in cui `'ricerca'` sia un'ESCALATION.
  *
- * @typedef {'lettura'|'ricerca'|'scrittura-area'|'su-richiesta'|'accesso-pieno'} LivelloAccessoHarness
+ * @typedef {'lettura'|'ricerca'|'scrittura-area'|'scrittura-progetto'|'su-richiesta'|'accesso-pieno'} LivelloAccessoHarness
+ *   'scrittura-progetto' — F4-03, 01/10/2026: «Scrive nel progetto». Tutto come senza livello, tranne `scrivi`/`file_edit`
+ *                        che finiscono FUORI dalla cartella (percorso vero, collegamenti compresi): lì si chiede, anche
+ *                        con «sempre», salvo una cartella consentita per la sessione (`consensiSessione.cartelleFuori`).
  *   'lettura'         — esiste da prima: nessuna scrittura/comando/documento.
  *   'ricerca'         — NUOVO (L1, 11/09): come `'lettura'` per TUTTO, tranne
  *                        `research_deposit`, e solo se il percorso risolve dentro
@@ -8214,11 +8355,123 @@ export function attrezziNegatiDalLivello({ livelloAccesso, permessiPerAttrezzo }
     return negati
 }
 
+/*
+ * ⛔⛔ F4-03 (audit v4, owner 01/10/2026 sera) — DOVE FINISCE DAVVERO UNA SCRITTURA.
+ *   Il confine di `scrittura-area` confrontava il percorso A PAROLE (`resolve`): un collegamento DENTRO il progetto che porta
+ *   FUORI lo attraversava, e `scrivi`/`file_edit` scrivevano sul file esterno (riprodotto: giunzione `progetto/link` → fuori).
+ *   ⇒ Qui il percorso si misura sul disco: il realpath dell'antenato esistente più vicino, più i pezzi che ancora non esistono
+ *   (un file nuovo non ha un realpath). È il «symlink check» di Claude Code: «Each path also goes through the symlink check, so
+ *   a write that resolves outside that scope isn't auto-approved either» (code.claude.com/docs/en/permission-modes, 01/10/2026).
+ * ⛔ `..` si risolve A PAROLE prima di andare sul disco, ed è giusto: è ciò che fa `discoNode` (`resolve(radice, percorso)`) e
+ *   ciò che fa Windows con ogni percorso (le API Win32 normalizzano `..` senza guardare il disco). Si misura il file che verrà
+ *   scritto, non un altro.
+ * ⛔ Un collegamento PENDENTE (il bersaglio non esiste ancora) si segue col suo bersaglio: `writeFile` lo seguirebbe e creerebbe
+ *   il file là. Al massimo 40 salti, come SYMLOOP_MAX di Linux; oltre è un giro chiuso.
+ * ⛔ Ciò che non si riesce a verificare (permesso negato, un collegamento di Linux che Windows non sa leggere, un giro chiuso)
+ *   NON è «dentro»: `verificato: false`, e chi decide chiede.
+ * ⛔ Limite dichiarato: un HARD link dentro il progetto verso un file fuori ha lo stesso percorso vero del nome che lo chiama, e
+ *   il realpath non lo vede. È il limite che Codex scrive accanto al suo controllo (`codex-rs/core/src/safety.rs:57-59`, «paths in
+ *   the patch are hard links to files outside the writable roots») e che copre col sandbox del sistema: qui non c'è.
+ * Gira identica nel servente della casa Linux (`casa-linux-servente.mjs`), sui percorsi di Linux.
+ */
+const MASSIMO_SALTI_COLLEGAMENTO = 40
+async function percorsoVero(percorso) {
+    let corrente = resolve(percorso)
+    const mancanti = []
+    let salti = 0
+    for (;;) {
+        try {
+            const vero = await realpath(corrente)
+            return mancanti.length ? join(vero, ...mancanti) : vero
+        }
+        catch (errore) {
+            if (errore?.code !== 'ENOENT' && errore?.code !== 'ENOTDIR') return null
+        }
+        let voce = null
+        try { voce = await lstat(corrente) }
+        catch (errore) { if (errore?.code !== 'ENOENT' && errore?.code !== 'ENOTDIR') return null }
+        if (voce?.isSymbolicLink()) {
+            if (++salti > MASSIMO_SALTI_COLLEGAMENTO) return null
+            try { corrente = resolve(dirname(corrente), await readlink(corrente)) }
+            catch { return null }
+            continue
+        }
+        if (voce) return null // c'è, non è un collegamento, e il realpath non lo risolve: non verificabile
+        const su = dirname(corrente)
+        if (su === corrente) return null
+        mancanti.unshift(basename(corrente))
+        corrente = su
+    }
+}
+
+/** `percorso` sta dentro `radice` (o è lei)? `separatore` è quello dei percorsi confrontati: `/` per quelli della casa Linux,
+    anche quando il confronto gira su Windows (revisione Codex 01/10/2026, rilievo 3: col separatore dell'host un consenso Linux
+    non copriva nemmeno la sua cartella).
+    ⛔ Confronto ESATTO, lettera per lettera (rilievo 2, owner «Confronto esatto»): una cartella NTFS può distinguere maiuscole e
+    minuscole (`fsutil file setCaseSensitiveInfo`, e le cartelle che crea WSL con `case=dir`), e lì «Work» e «work» sono due
+    cartelle. I due lati arrivano dal percorso VERO (`realpath` restituisce la forma registrata sul disco), quindi su un disco
+    normale una cartella esistente si riconosce lo stesso; il prezzo è al più una domanda in più su una cartella non ancora nata. */
+function dentroLaCartella(radice, percorso, { separatore = sep } = {}) {
+    return percorso === radice || percorso.startsWith(radice.endsWith(separatore) ? radice : radice + separatore)
+}
+
+/**
+ * Dove finisce una scrittura rispetto al progetto, misurato sul disco.
+ * @returns {Promise<{dentro:boolean, verificato:boolean, vero:string|null, cartella:string|null}>} `cartella` è la cartella
+ *   VERA del file: quella che la persona può consentire per la sessione.
+ */
+export async function posizioneNelProgetto(cartella, percorso) {
+    const radice = cartella ? (await percorsoVero(cartella)) ?? resolve(cartella) : null
+    const vero = cartella ? await percorsoVero(resolve(cartella, percorso ?? '')) : null
+    if (!radice || !vero) return { dentro: false, verificato: false, vero: null, cartella: null }
+    return { dentro: dentroLaCartella(radice, vero), verificato: true, vero, cartella: dirname(vero) }
+}
+
+/* La chiave di un consenso «per questa cartella»: dove (`locale`, o la distro della casa Linux) e quale cartella. */
+const SEPARATORE_CHIAVE_CONSENSO = '|'
+function chiaveConsensoCartella(spazio, cartellaVera) { return `${spazio}${SEPARATORE_CHIAVE_CONSENSO}${cartellaVera}` }
+function consensoCopre(consensiSessione, posizione) {
+    const elenco = Array.isArray(consensiSessione?.cartelleFuori) ? consensiSessione.cartelleFuori : []
+    return elenco.some((chiave) => {
+        if (typeof chiave !== 'string') return false
+        const taglio = chiave.indexOf(SEPARATORE_CHIAVE_CONSENSO)
+        if (taglio < 0 || chiave.slice(0, taglio) !== posizione.spazio) return false
+        return dentroLaCartella(chiave.slice(taglio + 1), posizione.vero, { separatore: posizione.spazio === 'locale' ? sep : '/' })
+    })
+}
+
+/*
+ * ⛔⛔ F4-03 — «Scrive nel progetto» fuori dal progetto. `null` se la scrittura è dentro (o in una cartella che la persona ha
+ *   consentito per la sessione); altrimenti il fatto, con la frase per chi deve rispondere.
+ * `posizioneFn` la passa il giro (nella casa Linux misura di là); da sola, senza giro, misura su questo disco.
+ */
+async function scritturaFuoriDalProgetto(azione, { cartella, posizioneFn, consensiSessione }) {
+    let posizione
+    try {
+        posizione = typeof posizioneFn === 'function'
+            ? await posizioneFn(azione.percorso)
+            : { ...(await posizioneNelProgetto(cartella, azione.percorso)), spazio: 'locale' }
+    }
+    catch { posizione = null }
+    if (posizione?.verificato === true && posizione.dentro === true) return null
+    const verificato = posizione?.verificato === true && typeof posizione.cartella === 'string' && typeof posizione.spazio === 'string'
+    if (verificato && consensoCopre(consensiSessione, posizione)) return null
+    return verificato
+        ? {
+            verificato: true, cartella: posizione.cartella, chiave: chiaveConsensoCartella(posizione.spazio, posizione.cartella),
+            frase: `Vuole scrivere fuori dalla cartella della sessione, in ${posizione.cartella}. Con «Scrive nel progetto» qui serve il tuo sì.`,
+        }
+        : {
+            verificato: false, cartella: null,
+            frase: `Non è stato possibile verificare dove finisce «${azione.percorso}»: potrebbe essere fuori dalla cartella della sessione. Con «Scrive nel progetto» qui serve il tuo sì.`,
+        }
+}
+
 /* ⛔ 23/09/2026 notte, riparazione CTX (mutazione M5b sopravvissuta): esportata SOLO perché un test possa
    provare il ramo Piano qui sotto da solo. Nel giro del kernel è irraggiungibile finché il primo cancello
    (`bloccatoDalPiano`, allowlist al dispatch) regge: è difesa in profondità, e senza questa porta nessuna
    prova poteva accorgersi che fosse sparita. Nessun comportamento cambia. */
-export async function verificaPermessoScrittura(azione, { livelloAccesso, modalitaOperativa = 'normale', chiediApprovazioneFn, permessiPerAttrezzo, cartella, catena = CATENA_VUOTA, segnaleStop } = {}) {
+export async function verificaPermessoScrittura(azione, { livelloAccesso, modalitaOperativa = 'normale', chiediApprovazioneFn, permessiPerAttrezzo, cartella, catena = CATENA_VUOTA, segnaleStop, posizioneFn, consensiSessione, reteConsentita = false } = {}) {
     const override = permessiPerAttrezzo?.[azione.tipo]
     if (modalitaOperativa === 'piano' && azione.tipo !== 'leggi') {
         return {
@@ -8304,7 +8557,25 @@ export async function verificaPermessoScrittura(azione, { livelloAccesso, modali
     if (haOverride && override === 'nega') {
         return { consentito: false, via: 'permesso-per-attrezzo-nega', motivo: `l'attrezzo "${azione.tipo}" è disattivato per questa sessione (permesso per-attrezzo: nega).` }
     }
-    if (haOverride && override === 'sempre' && !trifectaChiude && !sempreDaConfermare && !segretoForzaConferma) {
+    /*
+     * ⛔⛔ F4-03 (owner 01/10/2026 sera) — `'scrittura-progetto'` è «Scrive nel progetto», la politica di serie, che promette
+     *   «Scrive da sola dentro la cartella della sessione; per scrivere fuori ti chiede». Prima arrivava qui SENZA livello e
+     *   passava da `nessun-vincolo`: si scriveva ovunque. Decisioni dell'owner: fuori ⇒ si CHIEDE (come Claude Code
+     *   `acceptEdits` e Codex `workspace-write` con le approvazioni, `codex-rs/core/src/safety.rs:29-80`); TEMP conta come fuori;
+     *   «Scrittura: Sempre» NON scavalca il confine (il foglio dice SE, la politica dice DOVE — come il segreto di F15, qui
+     *   sopra); una cartella consentita «per la sessione» copre anche le sue sottocartelle.
+     * ⛔ Solo `scrivi` e `file_edit`: sono gli attrezzi che portano un percorso verificabile. La shell resta com'era (non ha un
+     *   confine senza un isolamento del sistema), e le letture restano libere (owner: «letture come oggi»).
+     * ⛔ `undefined` (TALOS-BANCO, CLI, mobile) NON entra qui: il banco resta bit per bit quello di prima.
+     */
+    /* ⛔ Owner 02/10/2026, «Una sola carta»: un percorso di rete ha GIÀ avuto il sì della persona per QUESTO file
+       (`controllaPercorsoDiRete`, che dice anche da quale computer): quel sì vale anche come «fuori dal progetto», niente
+       seconda carta. Solo questa domanda: segreti, politica «Chiedi» e il resto restano come sono. */
+    const fuori = !reteConsentita && livelloAccesso === 'scrittura-progetto' && (azione.tipo === 'scrivi' || azione.tipo === 'file_edit')
+        ? await scritturaFuoriDalProgetto(azione, { cartella, posizioneFn, consensiSessione })
+        : null
+    const fuoriForzaConferma = Boolean(fuori)
+    if (haOverride && override === 'sempre' && !trifectaChiude && !sempreDaConfermare && !segretoForzaConferma && !fuoriForzaConferma) {
         return { consentito: true, via: 'permesso-per-attrezzo-sempre' }
     }
     if (!soloSegreto && !haOverride && livelloAccesso === 'lettura') {
@@ -8360,9 +8631,12 @@ export async function verificaPermessoScrittura(azione, { livelloAccesso, modali
         }
         // ⛔ cartella assente non è un "vince tutto": senza una radice da
         // controllare, un percorso non verificabile è negato, non permesso.
-        const radice = cartella ? resolve(cartella) : null
-        const risolto = radice ? resolve(cartella, azione.percorso ?? '') : null
-        const dentro = radice && risolto && (risolto === radice || risolto.startsWith(radice + sep))
+        // ⛔ F4-03 — il percorso VERO, non quello scritto: un collegamento dentro il workspace che porta fuori attraversava il
+        //   confronto a parole (riprodotto con una giunzione, `tests/scrittura-fuori-dal-progetto.test.mjs` FUORI-03).
+        let posizione = null
+        try { posizione = cartella ? (typeof posizioneFn === 'function' ? await posizioneFn(azione.percorso) : await posizioneNelProgetto(cartella, azione.percorso)) : null }
+        catch { posizione = null }
+        const dentro = posizione?.verificato === true && posizione.dentro === true
         if (!dentro) {
             return { consentito: false, via: 'livello-scrittura-area', motivo: `"${azione.percorso}" non risolve dentro il workspace corrente: la sessione è limitata alla scrittura nel workspace.` }
         }
@@ -8391,14 +8665,15 @@ export async function verificaPermessoScrittura(azione, { livelloAccesso, modali
      * ⛔ Il canale che manca resta un errore, non un permesso: il ramo `!chiediApprovazioneFn` qui
      * sotto continua a rifiutare chi avrebbe dovuto chiedere.
      */
-    const vaChiesto = sempreDaConfermare || (haOverride && override === 'chiedi') || trifectaForzaConferma || richiestoDalLivello || segretoForzaConferma
+    const vaChiesto = sempreDaConfermare || (haOverride && override === 'chiedi') || trifectaForzaConferma || richiestoDalLivello || segretoForzaConferma || fuoriForzaConferma
     /*
      * ⛔ F15 — `segreto-forza-conferma` viene PRIMA di «trifecta» e di «per-attrezzo: chiedi»
      * nella scelta della via: quando due meccanismi avrebbero chiesto la stessa cosa, la
      * ricevuta deve nominare quello che dice di più a chi la rilegge. «C'era un segreto in
      * mezzo» è un fatto sul comando; «l'attrezzo era su chiedi» è un fatto sulle impostazioni.
+     * ⛔ F4-03 — `fuori-dal-progetto` subito dopo, per la stessa ragione: è un fatto sul percorso.
      */
-    const viaRichiesta = segretoForzaConferma ? 'segreto-forza-conferma' : sempreDaConfermare ? 'attrezzo-sempre-da-confermare' : trifectaForzaConferma ? 'trifecta-forza-conferma' : richiestoDalLivello ? 'livello-su-richiesta' : 'permesso-per-attrezzo-chiedi'
+    const viaRichiesta = segretoForzaConferma ? 'segreto-forza-conferma' : fuoriForzaConferma ? 'fuori-dal-progetto' : sempreDaConfermare ? 'attrezzo-sempre-da-confermare' : trifectaForzaConferma ? 'trifecta-forza-conferma' : richiestoDalLivello ? 'livello-su-richiesta' : 'permesso-per-attrezzo-chiedi'
     if (!vaChiesto) {
         return { consentito: true, via: 'nessun-vincolo' }
     }
@@ -8408,6 +8683,8 @@ export async function verificaPermessoScrittura(azione, { livelloAccesso, modali
             //   capire cosa riprovare); la frase in lingua naturale è per la PERSONA, e viaggia
             //   in `azione.segreto.frase` qui sotto. Due destinatari, due testi.
             ? `il percorso "${segreto.percorso}" appartiene alla classe dei file riservati (chiavi, credenziali, portachiavi): serve una conferma umana anche con un permesso "sempre"`
+            : fuoriForzaConferma
+            ? `il percorso "${azione.percorso}" ${fuori.verificato ? `finisce fuori dalla cartella della sessione (in "${fuori.cartella}")` : 'non si è potuto verificare, e potrebbe finire fuori dalla cartella della sessione'}: con «Scrive nel progetto» serve un sì umano`
             : sempreDaConfermare
             ? 'questo attrezzo richiede sempre una conferma umana separata, per costruzione — mai un\'eccezione'
             : trifectaForzaConferma
@@ -8455,8 +8732,10 @@ export async function verificaPermessoScrittura(azione, { livelloAccesso, modali
          */
         // ⛔ I due possono valere INSIEME, e allora la scheda deve portarli tutti e due: un `else`
         //   qui avrebbe fatto sparire la trifecta ogni volta che un segreto la precedeva.
-        const azioneDaChiedere = (segretoForzaConferma || trifectaForzaConferma)
-            ? { ...azione, ...(trifectaForzaConferma ? { trifecta: true } : {}), ...(segretoForzaConferma ? { segreto } : {}) }
+        // ⛔ F4-03 — `fuoriDalProgetto` porta la frase per la persona e, se la cartella è verificata, la `chiave` che il registro
+        //   ricorda quando la risposta è «Consenti in questa cartella per la sessione».
+        const azioneDaChiedere = (segretoForzaConferma || trifectaForzaConferma || fuoriForzaConferma)
+            ? { ...azione, ...(trifectaForzaConferma ? { trifecta: true } : {}), ...(segretoForzaConferma ? { segreto } : {}), ...(fuoriForzaConferma ? { fuoriDalProgetto: fuori } : {}) }
             : azione
         const domanda = chiediApprovazioneFn(azioneDaChiedere)
         approvato = gara ? await Promise.race([domanda, gara]) : await domanda
@@ -8469,6 +8748,11 @@ export async function verificaPermessoScrittura(azione, { livelloAccesso, modali
         return { consentito: false, via: 'fermato-su-richiesta', motivo: `${MOTIVO_FERMATO_CHIEDENDO} per "${azione.tipo}".` }
     }
     if (!approvato) {
+        /* F4-03 — «non approvato» qui copre anche la sessione senza nessuno davanti (automazioni, passi dei Workflow): il registro
+           chiude la domanda subito. Al modello si dice cosa fare, non solo che non si può. */
+        if (viaRichiesta === 'fuori-dal-progetto') {
+            return { consentito: false, via: viaRichiesta, motivo: `la scrittura fuori dalla cartella della sessione non è stata confermata${fuori.cartella ? ` ("${fuori.cartella}")` : ''}. Non riprovare fuori: scrivi dentro il progetto, o chiedi alla persona cosa preferisce.` }
+        }
         return { consentito: false, via: viaRichiesta, motivo: 'l\'owner non ha approvato questa azione.' }
     }
     return { consentito: true, via: viaRichiesta }
@@ -8944,6 +9228,9 @@ function confermaEsitoMutazione(risultato, nome) {
 export async function talosLavora({
     cartella, task, modello, chiave, comandoProva = 'npm test',
     messaggiIniziali, onGiro, onScrittura, segnaleStop, fetchDiRete, mobile = false,
+    /* ⛔ Stop per riga (owner 02/10/2026): `({ toolCallId, ferma }) => sgancia`. Ogni `shell` e `prova` ha il SUO segnale,
+       registrato col suo `toolCallId` finché gira: fermarlo chiude quel comando (130, «fermato su richiesta») e il giro continua. */
+    registraComandoFermabile = null,
     ambienteComandiFn,
     captureProcessFn,
     readProcessOutputFn,
@@ -9566,6 +9853,10 @@ export async function talosLavora({
         scrivi: (percorso, testo, modalita) => chiamaCasa('discoScrivi', { radice: casaDelGiro.radice, percorso: linuxDi(percorso), testo, modalita }),
     }
     const discoAttivo = () => (inCasaLinux() ? discoRemoto : disco)
+    /* F4-01: i byte veri del file da modificare, nella casa che lo modificherà (vedi `leggiPerModifica`). */
+    const leggiPerModificaDelGiro = (percorso) => (inCasaLinux()
+        ? chiamaCasa('leggiPerModifica', { percorso: percorsiPosix.resolve(casaDelGiro.radice, linuxDi(percorso)) })
+        : leggiPerModifica(percorsoComeDiscoNode(cartella, percorso)))
     const leggiTestoDelGiro = (percorso, opzioni) => (inCasaLinux()
         ? chiamaCasa('leggiTestoLimitato', { cartella: casaDelGiro.radice, percorso: linuxDi(percorso), opzioni })
         : leggiTestoLimitato(cartella, percorso, { ...opzioni, segnale: segnaleStop }))
@@ -9579,6 +9870,36 @@ export async function talosLavora({
     const istantaneaDelGiro = (percorso) => (inCasaLinux()
         ? chiamaCasa('istantanea', { percorso: percorsiPosix.resolve(casaDelGiro.radice, linuxDi(percorso)) })
         : istantaneaDelFile(cartella, percorso))
+    /*
+     * ⛔ F-001 (owner 02/10/2026, «tutta la guardia di Hermes»): `scrivi` e `file_edit` non mettono testo su un documento o su
+     *   un binario (`guardia-scrittura-binari.mjs`). Se il file esiste lo dice la casa che scriverà (Hermes #122662: mai il
+     *   disco di chi controlla); se la casa Linux non risponde lo stato è ignoto e si rifiuta. Su Windows (non nella casa Linux)
+     *   punti e spazi in coda al nome non contano: Win32 li toglie scrivendo.
+     */
+    const rifiutoTestoSuBinario = async (percorso) => {
+        const windows = !inCasaLinux() && process.platform === 'win32'
+        let stato = null
+        if (serveLoStatoDelBersaglio(percorso, { windows })) {
+            try { stato = (await istantaneaDelGiro(percorso)) ? 'esiste' : 'assente' } catch { stato = 'ignoto' }
+        }
+        return motivoPerNonScrivereTesto(percorso, {
+            mostrato: mostrato(percorso), stato, windows,
+            documentCreate: (strumentiEstesi ?? []).includes('document_create') && !negatiDalLivello.has('document_create'),
+        })
+    }
+    /*
+     * ⛔ Stop per riga (owner 02/10/2026: «l'agente continua»): il segnale di UN comando è lo Stop del giro OPPURE quello della
+     *   sua riga nei Processi. Il secondo ferma solo lui — 130, «fermato su richiesta» — e il giro va avanti; lo sgancio lo
+     *   toglie dal registro appena il comando finisce, così una riga finita non si può più «fermare».
+     */
+    const segnaleDelComando = (toolCallId) => {
+        const ferma = new AbortController()
+        const sgancia = typeof registraComandoFermabile === 'function' ? registraComandoFermabile({ toolCallId, ferma: () => ferma.abort(MOTIVO_STOP_DELLA_RIGA) }) : null
+        return {
+            segnale: segnaleStop ? AbortSignal.any([segnaleStop, ferma.signal]) : ferma.signal,
+            sgancia: () => { if (typeof sgancia === 'function') sgancia() },
+        }
+    }
     /*
      * T25 nella casa Linux: la chiave del registro letture è il percorso di Linux, maiuscole comprese — Linux distingue `A.txt`
      *   da `a.txt`, e la chiave di Windows (`chiaveDelFile`, in minuscolo) li confonderebbe: con istantanee uguali si
@@ -9595,10 +9916,108 @@ export async function talosLavora({
         : pezzoConSeparatore(percorsoComeDiscoNode(cartella, percorso), contenuto))
     /* Lo Stop del giro ferma anche le ricerche che continuano DENTRO la casa Linux (F001b vive di là). */
     if (segnaleStop) segnaleStop.addEventListener('abort', () => { casaDelGiro?.casa.chiama('fermaRicerche').catch(() => {}) }, { once: true })
+    /*
+     * ⛔⛔ F4-03 — dove finisce davvero una scrittura, misurato nella casa che la farà: nella casa Linux lo misura il servente sui
+     *   percorsi di Linux (un collegamento creato da Linux su un disco di Windows, da qui, non si sa leggere); altrimenti questo
+     *   disco. Un servente che non risponde, o un percorso che Linux non raggiunge, è «non verificato»: chi decide chiede.
+     */
+    const posizioneDelGiro = async (percorso) => {
+        if (!inCasaLinux()) return { ...(await posizioneNelProgetto(cartella, percorso)), spazio: 'locale' }
+        try {
+            const misura = await chiamaCasa('posizioneNelProgetto', { cartella: casaDelGiro.radice, percorso: linuxDi(percorso) })
+            return { ...misura, spazio: `linux:${casaDelGiro.distro}` }
+        }
+        catch { return { dentro: false, verificato: false, vero: null, cartella: null, spazio: `linux:${casaDelGiro.distro}` } }
+    }
+    /*
+     * ⛔ Revisione Codex 01/10/2026, rilievo 1 (owner: «Seconda misura prima di scrivere, +1 su Hermes») — fra la misura del
+     *   cancello e la scrittura passa del tempo (una domanda alla persona, la premessa, la barriera dell'ospite): un collegamento
+     *   sostituito in mezzo da un altro processo porterebbe la scrittura altrove. Hermes non rimisura (`agent/file_safety.py:94-99`,
+     *   poi `mktemp` + `mv` in `tools/file_operations.py:536-558`). ⇒ La misura del cancello si ricorda e, SUBITO prima di scrivere,
+     *   si rifà: se il percorso vero o il dentro/fuori sono cambiati, non si scrive. La finestra scende ai millisecondi, non sparisce
+     *   (limite dichiarato: il rimedio vero è l'isolamento del sistema). Senza una prima misura (livelli che non la fanno) non si
+     *   rimisura niente: comportamento di prima.
+     */
+    /*
+     * ⛔⛔ 01/10/2026 notte (owner: «Rifiuto prefissi NT + chiedo per \\server») — PRIMA DI TOCCARE UN PERCORSO DI RETE.
+     *   Su Windows risolvere o aprire `\\server\…` avvia l'autenticazione SMB: l'hash NTLM dell'utente va a quel server, anche se
+     *   poi la lettura fallisce (Hermes `agent/file_safety.py:108-176`; GHSA-v6wh-96g9-6wx3; Horizon3, «NTLM Credential Theft in
+     *   Python Windows Applications»). Qui `leggi`, `scrivi` e `file_edit` lo toccavano prima di ogni permesso (istantanea di T25,
+     *   lettura per la carta, `realpath` di F4-03). ⇒ Si decide sulla STRINGA, prima di tutto: i prefissi NT si rifiutano e basta;
+     *   una condivisione chiede a QUALUNQUE livello e anche con «sempre» (come i segreti di F15: un fatto sul percorso, non sulle
+     *   impostazioni). `null` = si prosegue; altrimenti l'esito da dare al modello.
+     */
+    /*
+     * ⛔⛔ 02/10/2026 (revisione Codex, rilievi critici 1 e 2) — la stringa non basta: `destinazioneDiRete` guarda anche la
+     *   cartella della sessione (un relativo dentro `\\nas\progetto` è già la rete) e i collegamenti lungo il percorso, letti
+     *   SENZA seguirli. Owner: la cartella della sessione su un computer di rete chiede UNA volta per sessione
+     *   (`consensiSessione.reteCartella`); un collegamento verso la rete chiede ogni volta, come un `\\server` scritto.
+     *   Nella casa Linux i percorsi sono di Linux: resta la sola stringa, come prima.
+     */
+    const cartellaPerRete = /^[A-Za-z]:$/u.test(String(cartella ?? '')) ? `${cartella}\\` : cartella
+    const destinazioneDelGiro = (percorso) => (inCasaLinux()
+        ? Promise.resolve((() => { const g = classificaPercorsoDiRete(percorso); return g ? { genere: g, ospite: g === 'rete' ? ospiteDelPercorso(percorso) : null, via: 'stringa' } : null })())
+        : destinazioneDiRete(percorso, { cartella: cartellaPerRete }).catch(() => null))
+    const ospiteDelPercorso = (percorso) => String(percorso).replaceAll('/', '\\').slice(2).split('\\', 1)[0]
+    /* Le chiamate di questo giro la cui rete ha già avuto il sì (owner, «Una sola carta»: niente seconda carta «fuori»). */
+    const reteConsentitaPerChiamata = new Set()
+    const COSA_VUOLE = { leggi: 'leggere un file', scrivi: 'scrivere un file', file_edit: 'modificare un file', elenca: 'vedere i file di una cartella', cerca: 'cercare nei file di una cartella' }
+    const controllaPercorsoDiRete = async (tipo, percorso, toolCallId) => {
+        const dove = await destinazioneDelGiro(percorso)
+        if (!dove) return null
+        const verbo = tipo === 'leggi' ? 'read' : tipo === 'elenca' ? 'listed' : tipo === 'cerca' ? 'searched' : tipo === 'file_edit' ? 'changed' : 'written'
+        if (dove.genere === 'nt') {
+            return dove.via === 'collegamento'
+                ? `REFUSED. Nothing was ${verbo}: "${percorso}" goes through a link (${dove.collegamento}) to a Windows NT/device namespace path. `
+                    + 'Just opening it can make Windows send the user’s credentials (NTLM) to another computer, so it is never opened.'
+                : `REFUSED. Nothing was ${verbo}: "${percorso}" uses a Windows NT/device namespace prefix (\\??\\, \\\\.\\, \\\\?\\UNC\\ or GLOBALROOT). `
+                    + 'Just opening such a path can make Windows send the user’s credentials (NTLM) to another computer, so it is never opened. Use a normal local path.'
+        }
+        const ospite = dove.ospite
+        const perLaSessione = dove.via === 'cartella'
+        if (perLaSessione && consensiSessione?.reteCartella === true) { reteConsentitaPerChiamata.add(toolCallId); return null }
+        if (typeof chiediApprovazioneFn !== 'function') {
+            return `REFUSED. Nothing was ${verbo}: "${percorso}" ${dove.via === 'collegamento' ? `goes through a link (${dove.collegamento}) to` : 'is on'} a network share (${ospite}); opening it sends the user’s Windows credentials to that computer, and this session has no one to confirm it.`
+        }
+        const cosa = COSA_VUOLE[tipo] ?? 'aprire un file'
+        const frase = perLaSessione
+            ? `La cartella della sessione sta su un computer di rete (${ospite}): aprire i suoi file manda a quel computer le credenziali di Windows. Se lo consenti, vale per tutta la sessione.`
+            : dove.via === 'collegamento'
+                ? `Vuole ${cosa} attraverso un collegamento (${dove.collegamento}) che porta a un computer di rete (${ospite}): solo aprirlo manda a quel computer le credenziali di Windows. Serve il tuo sì.`
+                : tipo === 'elenca'
+                    ? `Vuole vedere i file di una cartella su un computer di rete (${ospite}): solo aprirla manda a quel computer le credenziali di Windows. Serve il tuo sì.`
+                    : `Vuole ${cosa} su un computer di rete (${ospite}): solo aprirlo manda a quel computer le credenziali di Windows. Serve il tuo sì.`
+        const FERMATO = Symbol('fermato-mentre-chiedevo')
+        const gara = segnaleStop
+            ? new Promise((risolvi) => { if (segnaleStop.aborted) risolvi(FERMATO); else segnaleStop.addEventListener('abort', () => risolvi(FERMATO), { once: true }) })
+            : null
+        let approvato = false
+        try {
+            const domanda = chiediApprovazioneFn({ tipo, toolCallId, percorso, percorsoDiRete: { ospite, frase, via: dove.via, ...(perLaSessione ? { ambito: 'sessione' } : {}) } })
+            approvato = gara ? await Promise.race([domanda, gara]) : await domanda
+        }
+        catch { approvato = false }
+        if (approvato === FERMATO) return `REFUSED. ${MOTIVO_FERMATO_CHIEDENDO} per "${tipo}".`
+        if (approvato !== true) return `REFUSED. Nothing was ${verbo}: the person did not allow opening the network path "${percorso}".`
+        if (perLaSessione && consensiSessione) consensiSessione.reteCartella = true
+        reteConsentitaPerChiamata.add(toolCallId)
+        return null
+    }
+    const misuraRicordata = () => {
+        let prima = null
+        return {
+            posizioneFn: async (percorso) => { prima = await posizioneDelGiro(percorso); return prima },
+            async cambiata(percorso) {
+                if (!prima) return false
+                const ora = await posizioneDelGiro(percorso)
+                return ora.verificato !== prima.verificato || ora.dentro !== prima.dentro || ora.vero !== prima.vero
+            },
+        }
+    }
     /* G02-9: il permesso, poi la barriera dell'ospite per le sole azioni che modificano (vedi `primaDiMutazioneFn`).
        F009: `conferma` sta FRA i due — è un'approvazione della persona, e la barriera dell'ospite viene dopo quella. */
     const verificaPermessoConBarriera = async (azione, opzioni, { conferma } = {}) => {
-        const permessoBase = await verificaPermessoScrittura(azione, opzioni)
+        const permessoBase = await verificaPermessoScrittura(azione, { posizioneFn: posizioneDelGiro, consensiSessione, ...opzioni })
         const rifiuto = permessoBase.consentito && typeof conferma === 'function' ? await conferma(permessoBase) : null
         const permesso = rifiuto ?? permessoBase
         if (!permesso.consentito || typeof primaDiMutazioneFn !== 'function' || !AZIONI_MOBILE_PER_ATTREZZO[azione?.tipo]) return permesso
@@ -9816,17 +10235,25 @@ export async function talosLavora({
             }, cerca).then((letta) => letta.value)
             : cerca()
     }
+    const RETE_NON_PARTITA = Symbol('rete: la lettura anticipata non è partita')
+    /* La lettura partita in anticipo, oppure — se non c'è, o se si è fermata davanti alla rete — quella fatta adesso. */
+    const anticipataOppure = async (avviate, c, leggiOra) => { const prima = avviate.get(c); const r = prima ? await prima : RETE_NON_PARTITA; return r === RETE_NON_PARTITA ? leggiOra() : r }
     const partenzaDellaLettura = (nome, argomenti) => {
         if (!consenteAttrezzoDelega(task, nome)) return null
         if (!inCasaLinux() && motivoNamespaceDellaChiamata(nome, argomenti)) return null
-        if (nome === 'cerca') return cercaDelGiro(argomenti)
+        /* ⛔ 02/10/2026 (revisione Codex): un percorso che porta in rete — cartella della sessione su una condivisione, o un
+           collegamento lungo la strada — non parte MAI in anticipo. Il controllo è asincrono (legge i collegamenti): se trova la
+           rete la promessa dà `RETE_NON_PARTITA` e il ramo, dopo la sua domanda, legge da sé. */
+        const seLocale = (percorso, leggi) => destinazioneDelGiro(percorso).then((dove) => (dove ? RETE_NON_PARTITA : leggi()))
+        if (nome === 'cerca') return seLocale(String(argomenti.dentro ?? '').trim() || '.', () => cercaDelGiro(argomenti))
         if (nome === 'elenca') {
             const base = percorsoDiFile(argomenti)
-            return RISALITA.test(base) ? null : elencaDelGiro(base, { spiegaErrore: (e) => spiegaCollegamentoLinux('elenca', argomenti, e) })
+            return RISALITA.test(base) || classificaPercorsoDiRete(base) ? null : seLocale(base || '.', () => elencaDelGiro(base, { spiegaErrore: (e) => spiegaCollegamentoLinux('elenca', argomenti, e) }))
         }
         if (nome === 'leggi') {
             const percorso = percorsoDelGiro(percorsoDiFile(argomenti))
-            return percorso === '' || motivoDaChiedere({ tipo: 'leggi', percorso, cartella }) ? null : leggiTestoDelGiro(percorso, { offset: argomenti.offset, limit: argomenti.limit, format: argomenti.format, byteOffset: argomenti.byteOffset })
+            /* Un percorso di rete non parte MAI in anticipo: toccarlo è già il danno (vedi `controllaPercorsoDiRete`). */
+            return percorso === '' || classificaPercorsoDiRete(percorso) || motivoDaChiedere({ tipo: 'leggi', percorso, cartella }) ? null : seLocale(percorso, () => leggiTestoDelGiro(percorso, { offset: argomenti.offset, limit: argomenti.limit, format: argomenti.format, byteOffset: argomenti.byteOffset }))
         }
         if (nome === 'naviga') return apriPaginaWeb(argomenti.url ?? '')
         if (nome === 'web_search') return ricercaWebConfigurata ? cercaSulWeb(argomenti) : null
@@ -10552,9 +10979,11 @@ export async function talosLavora({
                     const base = percorsoDiFile(argomenti)
                     /* Un percorso che risale (`..`) non e' una cartella del progetto: l'attrezzo si
                        chiama «elenca», non «gira per il disco», e chi vuole leggere fuori ha `leggi`. */
+                    /* 02/10/2026 (owner, «Sì, stessa regola»): un percorso di rete si decide PRIMA di aprire la cartella (`controllaPercorsoDiRete`). */
+                    const rifiutoReteElenca = RISALITA.test(base) ? null : await controllaPercorsoDiRete('elenca', base || '.', c.id)
                     esito = RISALITA.test(base)
                         ? `REFUSED. "" climbs out of the workspace with "..". \`elenca\` takes a path INSIDE the workspace, e.g. "src" or "src/kernel".`
-                        : await (lettureAvviate.get(c) ?? elencaDelGiro(base, { spiegaErrore: (e) => spiegaCollegamentoLinux('elenca', argomenti, e) }))
+                        : rifiutoReteElenca ?? await anticipataOppure(lettureAvviate, c, () => elencaDelGiro(base, { spiegaErrore: (e) => spiegaCollegamentoLinux('elenca', argomenti, e) }))
                 }
                 else if (nome === 'cerca') {
                     /*
@@ -10563,7 +10992,10 @@ export async function talosLavora({
                      * potare. Senza, `cerca` ricade sulla lista fissa — che e' il ripiego per il ponte
                      * del telefono e per i test, non il caso normale.
                      */
-                    esito = await (lettureAvviate.get(c) ?? cercaDelGiro(argomenti))
+                    /* 02/10/2026 (revisione Codex): `cerca` apre la cartella `dentro` (o la radice) e, con ripgrep, la percorre: se porta in
+                       rete (cartella della sessione su una condivisione, collegamento lungo `dentro`) si chiede prima, come gli altri. */
+                    const rifiutoReteCerca = argomenti.continua ? null : await controllaPercorsoDiRete('cerca', String(argomenti.dentro ?? '').trim() || '.', c.id)
+                    esito = rifiutoReteCerca ?? await anticipataOppure(lettureAvviate, c, () => cercaDelGiro(argomenti))
                 }
                 else if (nome === 'leggi') {
                     /*
@@ -10597,9 +11029,11 @@ export async function talosLavora({
                      */
                     /* La pagina web che TALOS ha salvato per questa sessione si legge senza chiedere, come i `tool-results` di
                        Claude Code: l'avviso di `naviga` ne dà la chiamata esatta (vedi `eUnaPaginaSalvata` per i controlli). */
-                    const paginaSalvata = Boolean(cartellaPagineWeb) && percorso !== ''
+                    /* 01/10/2026: un percorso di rete si decide PRIMA di qualunque contatto (vedi `controllaPercorsoDiRete`). */
+                    const rifiutoRete = percorso === '' ? null : await controllaPercorsoDiRete('leggi', percorso, c.id)
+                    const paginaSalvata = !rifiutoRete && Boolean(cartellaPagineWeb) && percorso !== ''
                         && await eUnaPaginaSalvata(cartellaPagineWeb, percorsoComeDiscoNode(cartella, percorso))
-                    const daChiedere = percorso === '' || paginaSalvata ? null : motivoDaChiedere({ tipo: 'leggi', percorso, cartella })
+                    const daChiedere = rifiutoRete || percorso === '' || paginaSalvata ? null : motivoDaChiedere({ tipo: 'leggi', percorso, cartella })
                     const permessoLettura = daChiedere
                         ? await verificaPermessoConBarriera(
                             { tipo: 'leggi', toolCallId: c.id, percorso },
@@ -10607,22 +11041,25 @@ export async function talosLavora({
                         )
                         : null
                     let letta = null
-                    if (percorso !== '' && !(permessoLettura && !permessoLettura.consentito)) {
-                        letta = await (lettureAvviate.get(c) ?? leggiTestoDelGiro(percorso, { offset: argomenti.offset, limit: argomenti.limit, format: argomenti.format, byteOffset: argomenti.byteOffset })) /* P19 + REV-READ-BOUNDS + READ22/24 */
-                        /* T25/B09: ciò che il modello ha VISTO di questo file, con l'istantanea del momento (la guardia di `scrivi`) */
-                        if (letta && !letta.binario && Number.isFinite(letta.mtimeMs)) {
+                    if (!rifiutoRete && percorso !== '' && !(permessoLettura && !permessoLettura.consentito)) {
+                        letta = await anticipataOppure(lettureAvviate, c, () => leggiTestoDelGiro(percorso, { offset: argomenti.offset, limit: argomenti.limit, format: argomenti.format, byteOffset: argomenti.byteOffset })) /* P19 + REV-READ-BOUNDS + READ22/24 */
+                        /* T25/B09: ciò che il modello ha VISTO di questo file, con l'istantanea del momento (la guardia di `scrivi`).
+                           ⛔ F-001: il testo ESTRATTO da un docx/pdf non è il file, e non si registra come lettura. Oggi è una
+                           seconda difesa: la sovrascrittura la ferma prima `rifiutoTestoSuBinario` (tutti e quattro i formati estratti
+                           sono nelle sue liste); questa riga tiene onesto il registro se un giorno le liste e i formati divergono. */
+                        if (letta && !letta.binario && !letta.estratto && Number.isFinite(letta.mtimeMs)) {
                             const chiave = chiaveDelGiro(percorso)
                             const istantanea = { mtimeMs: letta.mtimeMs, size: letta.byteSulDisco }
                             if (letta.modo === 'righe') registraLetturaRighe(registroLetture, chiave, { ...istantanea, primaRiga: letta.primaRiga, ultimaRiga: letta.ultimaRiga, righeTotali: letta.righeTotali, righeAccorciate: letta.righeAccorciate })
                             else if (letta.modo === 'byte') registraLetturaDentroRiga(registroLetture, chiave, { ...istantanea, riga: letta.riga, rigaFinita: letta.rigaFinita })
                         }
                     }
-                    esito = percorso === ''
+                    esito = rifiutoRete ?? (percorso === ''
                         ? messaggioArgomentiAssenti('leggi', { troncati: argomentiTroncati.has(c.id) })
                         : permessoLettura && !permessoLettura.consentito
                             ? `REFUSED. ${permessoLettura.motivo} The file was not read.`
-                            : esitoDellaLettura(letta, mostrato(percorso))
-                    erroreTool = percorso === '' || Boolean(permessoLettura && !permessoLettura.consentito)
+                            : esitoDellaLettura(letta, mostrato(percorso)))
+                    erroreTool = Boolean(rifiutoRete) || percorso === '' || Boolean(permessoLettura && !permessoLettura.consentito)
                 }
                 else if (nome === 'process_output') {
                     if (typeof readProcessOutputFn !== 'function') {
@@ -10681,6 +11118,8 @@ export async function talosLavora({
                     const accoda = modalita === 'accoda'
                     const troncati = argomentiTroncati.has(c.id)
                     let rifiutoSovrascrittura = null // T25/B09
+                    let rifiutoRete = null // 01/10/2026: percorsi di rete, decisi prima di qualunque contatto
+                    let rifiutoBinario = null // F-001: testo su un documento o un binario
                     if (percorso === '') {
                         esito = messaggioArgomentiAssenti('scrivi', { troncati })
                     }
@@ -10698,6 +11137,14 @@ export async function talosLavora({
                          */
                         esito = `"${campoConAlias(argomenti, 'mode', 'modalita', 'modality', 'modalità')}" is not a mode, so nothing was written. `
                             + `Use mode:"append" to add \`contenuto\` at the end of "${mostrato(percorso)}", or leave mode out to replace the whole file.`
+                    }
+                    else if ((rifiutoRete = await controllaPercorsoDiRete('scrivi', percorso, c.id))) {
+                        esito = rifiutoRete // prima dell'istantanea di T25 qui sotto: anche un `stat` è un contatto
+                    }
+                    /* F-001: anche in aggiunta (un testo in coda a un docx lo rompe come una sostituzione), e prima di T25 e del
+                       permesso — come Hermes, il guasto certo prima di ogni domanda alla persona. */
+                    else if ((rifiutoBinario = await rifiutoTestoSuBinario(percorso))) {
+                        esito = rifiutoBinario
                     }
                     /*
                      * ⭐ T25/B09 (owner 30/09 notte, «Come Hermes e Claude Code») — PRIMA del permesso e del disco: sostituire un file
@@ -10743,13 +11190,16 @@ export async function talosLavora({
                         ? await pezzoDelGiro(percorso, contenuto)
                         : { pezzo: contenuto, separatore: false }
                     const contenutoProiettato = accoda ? `${contenutoPrimaPerApprovazione ?? ''}${pezzoEffettivo}` : contenuto
+                    const misuraScrivi = misuraRicordata() // rilievo 1 di Codex: la seconda misura prima di scrivere
+                    const reteConsentitaScrivi = reteConsentitaPerChiamata.has(c.id) // arrivati qui, la persona ha detto sì alla rete
+                    if (reteConsentitaScrivi) await misuraScrivi.posizioneFn(percorso).catch(() => null) // senza la carta «fuori» nessuno misurerebbe
                     const permesso = await verificaPermessoConBarriera(
                         {
                             tipo: 'scrivi', toolCallId: c.id, percorso,
                             contenutoPrima: contenutoPrimaPerApprovazione,
                             contenutoProposto: contenutoProiettato,
                         },
-                        { livelloAccesso, modalitaOperativa, chiediApprovazioneFn, permessiPerAttrezzo, cartella, catena, segnaleStop },
+                        { livelloAccesso, modalitaOperativa, chiediApprovazioneFn, permessiPerAttrezzo, cartella, catena, segnaleStop, posizioneFn: misuraScrivi.posizioneFn, reteConsentita: reteConsentitaScrivi },
                     )
                     esitoPermessoPerRicevuta = permesso
                     let contenutoRealmenteScritto = null
@@ -10762,6 +11212,7 @@ export async function talosLavora({
                     // annidato dentro evidence — la casa sbagliata, dichiarata tale
                     // fin da quando è stata scritta la prima volta.
                     let erroreScrivi = null
+                    let percorsoCambiatoScrivi = false
                     if (!permesso.consentito) {
                         esito = `REFUSED. ${permesso.motivo} Nothing was written.`
                     }
@@ -10778,6 +11229,12 @@ export async function talosLavora({
                             esito = `REFUSED. ${p.perche} Nothing was written. `
                                 + `Do not invent it: say plainly that it does not exist.`
                         }
+                        else if (await misuraScrivi.cambiata(percorso)) {
+                            percorsoCambiatoScrivi = true
+                            erroreScrivi = 'the path resolved somewhere else at write time than when it was checked; nothing was written'
+                            esito = `REFUSED. Nothing was written: ${mostrato(percorso)} now leads somewhere else than when it was checked (a link in the path changed). `
+                                + 'Check the path before trying again.'
+                        }
                         else {
                             /*
                              * ⛔ `modalita` arriva fino al disco: `discoNode.scrivi` la traduce nel
@@ -10788,6 +11245,8 @@ export async function talosLavora({
                              * e' la via per un'aggiunta atomica per singola chiamata). Stessa scelta
                              * gia' presa in `workspace-files.mjs` per `document_create`.
                              */
+                            /* F4-04: quanti byte aveva il file sostituito, misurati sul disco (la sua lettura può aver messo «�»). */
+                            const primaSulDisco = !accoda && p.esisteva ? await istantaneaDelGiro(percorso) : null
                             await discoAttivo().scrivi(percorso, accoda ? pezzoEffettivo : contenuto, modalita) // T-15: il pezzo col suo separatore, sempre UNA sola append
                             /*
                              * ⭐⭐⭐ 29/8 — la postcondizione: rilegge DAVVERO il file
@@ -10803,8 +11262,10 @@ export async function talosLavora({
                             const verdetto = await postcondizioneDiScrivi(discoAttivo(), percorso, accoda ? pezzoEffettivo : contenuto, modalita) // T-15: il cancello verifica il pezzo VERO, separatore compreso
                             /* T25/B09: il modello conosce il file che ha appena scritto (intero, se lo ha sostituito); la sua
                                aggiunta non lo rende «cambiato». Solo se la rilettura non smentisce la scrittura. */
+                            let dopoSulDisco = null // F4-04: il file com'è ORA sul disco, per dirne i byte
                             if (verdetto.esito !== 'smentita') {
                                 const dopo = await istantaneaDelGiro(percorso)
+                                dopoSulDisco = dopo
                                 if (dopo) registraScritturaPropria(registroLetture, chiaveDelGiro(percorso), { ...dopo, intera: !accoda })
                             }
                             /*
@@ -10846,9 +11307,11 @@ export async function talosLavora({
                                  * check the write landed»).
                                  */
                                 esito = accoda
-                                    ? `appended to: ${mostrato(percorso)} (+${pezzoEffettivo.length} characters${separatore ? ' incl. 1 newline separator' : ''}; the file is now ${contenutoDopo.length}). `
+                                    /* F4-04 (owner 01/10/2026, «anche in scrivi»): BYTE, e quelli del disco — la parte già scritta
+                                       può non essere UTF-8, e i suoi caratteri letti non dicono quanto pesa. */
+                                    ? `appended to: ${mostrato(percorso)} (+${Buffer.byteLength(pezzoEffettivo, 'utf8')} bytes${separatore ? ' incl. 1 newline separator' : ''}${dopoSulDisco ? `; the file is now ${dopoSulDisco.size} bytes` : ''}). `
                                         + `Call \`scrivi\` again with mode:"append" on this same path for the next part.`
-                                    : `written: ${mostrato(percorso)}${p.esisteva && p.contenutoPrima ? ` (replaced an existing file of ${p.contenutoPrima.length} characters)` : ''}` // T25/B09: una sostituzione si DICE
+                                    : `written: ${mostrato(percorso)}${p.esisteva && p.contenutoPrima ? ` (replaced an existing file of ${primaSulDisco?.size ?? Buffer.byteLength(p.contenutoPrima, 'utf8')} bytes)` : ''}` // T25/B09: una sostituzione si DICE
                             }
                         }
                     }
@@ -10870,6 +11333,7 @@ export async function talosLavora({
                             premessaAssente: premessaFuAssente,
                             postcondizione: postcondizioneScrivi,
                             error: erroreScrivi,
+                            esecuzioneFallita: percorsoCambiatoScrivi, // rilievo 1: permesso dato, scrittura non avvenuta
                             firma, catena,
                         })
                         // ⭐⭐⭐ 29/8 — la catena avanza SOLO su un successo confermato,
@@ -10907,6 +11371,8 @@ export async function talosLavora({
                     const vecchio = testoDaSostituire(argomenti)
                     const nuovo = testoSostitutivo(argomenti)
                     const troncati = argomentiTroncati.has(c.id)
+                    let rifiutoReteModifica = null // 01/10/2026: percorsi di rete, decisi prima di qualunque contatto
+                    let rifiutoBinarioModifica = null // F-001: testo su un documento o un binario
                     if (percorso === '') {
                         esito = messaggioArgomentiAssenti('file_edit', { troncati })
                     }
@@ -10916,13 +11382,37 @@ export async function talosLavora({
                     else if (nuovo === undefined) {
                         esito = messaggioArgomentiAssenti('file_edit', { troncati, campo: 'new_string' })
                     }
+                    else if ((rifiutoReteModifica = await controllaPercorsoDiRete('file_edit', percorso, c.id))) {
+                        esito = rifiutoReteModifica // prima della lettura qui sotto: aprire il file è già il contatto
+                    }
+                    /* F-001: prima della lettura per modificare — il modello ha visto il testo ESTRATTO, e il rifiuto giusto è questo,
+                       non «il file non è UTF-8» (F4-01) che lo farebbe riprovare in un altro modo. */
+                    else if ((rifiutoBinarioModifica = await rifiutoTestoSuBinario(percorso))) {
+                        esito = rifiutoBinarioModifica
+                    }
                     else {
                         let erroreLettura = null
-                        const contenutoPrima = await discoAttivo().leggi(percorso).then((t) => t, (e) => { erroreLettura = e; return null })
+                        /* F4-01: i byte veri, non la decodifica tollerante — un file che non è UTF-8 si rifiuta invece di rovinarlo. */
+                        const letto = await leggiPerModificaDelGiro(percorso).then((r) => r, (e) => { erroreLettura = e; return null })
+                        const contenutoPrima = letto?.stato === 'ok' ? letto.testo : null
                         /* 5a: un collegamento Linux su un disco di Windows non è un file che «non esiste». */
-                        const collegamentoSpiegato = contenutoPrima === null && erroreLettura ? await spiegaCollegamentoLinux('file_edit', argomenti, erroreLettura) : null
+                        const collegamentoSpiegato = letto === null && erroreLettura ? await spiegaCollegamentoLinux('file_edit', argomenti, erroreLettura) : null
                         if (collegamentoSpiegato) {
                             esito = `REFUSED. Nothing was changed: ${collegamentoSpiegato}`
+                        }
+                        else if (letto?.stato === 'binario') {
+                            esito = `REFUSED. Nothing was changed: ${mostrato(percorso)} is a binary file (${letto.byte} bytes, it contains NUL bytes), `
+                                + 'and file_edit only edits UTF-8 text. Inspect it with leggi format:"hex"; do not retry file_edit on it.'
+                        }
+                        else if (letto?.stato === 'non-utf8') {
+                            /*
+                             * ⛔ F4-01 — il motivo vero, il byte e il suo valore: è quello che serve per capire la codifica (0x80-0x9F
+                             *   sono le virgolette e il «€» di Windows-1252) e per guardarlo con `leggi format:"hex"` — lo stesso
+                             *   offset e lo stesso parametro di `READ_INVALID_UTF8`. Cosa farne lo decide la persona.
+                             */
+                            esito = `REFUSED. Nothing was changed: ${mostrato(percorso)} is not valid UTF-8 text (byte ${letto.offset} (0x${letto.valore.toString(16).padStart(2, '0')}) is the first that is not), `
+                                + 'so editing it would replace every such byte with «�» for good. It is probably in a legacy encoding such as Windows-1252. '
+                                + `Inspect it with leggi format:"hex" offset=${letto.offset}; do not retry file_edit on it, and tell the person before converting it to UTF-8.`
                         }
                         else if (contenutoPrima === null) {
                             /*
@@ -10938,21 +11428,40 @@ export async function talosLavora({
                                 esito = messaggioSostituzioneRifiutata(mostrato(percorso), sostituzione)
                             }
                             else {
+                                const misuraModifica = misuraRicordata() // rilievo 1 di Codex: la seconda misura prima di scrivere
+                                const reteConsentitaModifica = reteConsentitaPerChiamata.has(c.id) // arrivati qui, la persona ha detto sì alla rete
+                                if (reteConsentitaModifica) await misuraModifica.posizioneFn(percorso).catch(() => null)
                                 const permesso = await verificaPermessoConBarriera(
                                     {
                                         tipo: 'file_edit', toolCallId: c.id, percorso,
                                         contenutoPrima,
                                         contenutoProposto: sostituzione.testo,
                                     },
-                                    { livelloAccesso, modalitaOperativa, chiediApprovazioneFn, permessiPerAttrezzo, cartella, catena, segnaleStop },
+                                    { livelloAccesso, modalitaOperativa, chiediApprovazioneFn, permessiPerAttrezzo, cartella, catena, segnaleStop, posizioneFn: misuraModifica.posizioneFn, reteConsentita: reteConsentitaModifica },
                                 )
                                 esitoPermessoPerRicevuta = permesso
                                 let contenutoRealmenteScritto = null
                                 let premessaFuAssente = false
                                 let postcondizioneModifica = 'nessuna'
                                 let erroreModifica = null
+                                let percorsoCambiatoModifica = false
+                                /*
+                                 * ⛔ Revisione Codex 01/10/2026, rilievo 4 (verificato): fra la lettura e la scrittura può passare
+                                 *   una domanda alla persona, anche di minuti. Se intanto il file è cambiato, scrivere il testo
+                                 *   calcolato dal file di PRIMA cancellerebbe il nuovo — in silenzio e con «edited». ⇒ Si rileggono
+                                 *   i byte veri subito prima di scrivere: un file diverso (o non più UTF-8) si rifiuta.
+                                 */
+                                const ancoraUguale = permesso.consentito
+                                    ? await leggiPerModificaDelGiro(percorso).then((r) => r?.stato === 'ok' && r.testo === contenutoPrima, () => false)
+                                    : true
                                 if (!permesso.consentito) {
                                     esito = `REFUSED. ${permesso.motivo} Nothing was changed.`
+                                }
+                                else if (!ancoraUguale) {
+                                    /* La ricevuta non deve dire «succeeded»: il permesso c'era, la modifica no (`esecuzioneFallita`). */
+                                    erroreModifica = 'the file changed while waiting for approval; nothing was written'
+                                    esito = `REFUSED. Nothing was changed: ${mostrato(percorso)} changed while waiting for approval, so this edit was computed on old content. `
+                                        + 'Read the file again before editing it.'
                                 }
                                 else {
                                     const premessa = await premessaDellaScrittura(cartella, percorso, sostituzione.testo, { leggiPrima: inCasaLinux() ? discoRemoto.leggi : null })
@@ -10961,6 +11470,12 @@ export async function talosLavora({
                                         premessaFuAssente = true
                                         esito = `REFUSED. ${premessa.perche} Nothing was changed. `
                                             + `Do not invent it: say plainly that it does not exist.`
+                                    }
+                                    else if (await misuraModifica.cambiata(percorso)) {
+                                        percorsoCambiatoModifica = true
+                                        erroreModifica = 'the path resolved somewhere else at write time than when it was checked; nothing was written'
+                                        esito = `REFUSED. Nothing was changed: ${mostrato(percorso)} now leads somewhere else than when it was checked (a link in the path changed). `
+                                            + 'Check the path before trying again.'
                                     }
                                     else {
                                         await discoAttivo().scrivi(percorso, sostituzione.testo)
@@ -10992,7 +11507,8 @@ export async function talosLavora({
                                              *   averne cambiate piu' di quante credeva.
                                              */
                                             esito = `edited: ${mostrato(percorso)} (${sostituzione.occorrenze} occurrence${sostituzione.occorrenze === 1 ? '' : 's'} replaced; `
-                                                + `the file is now ${sostituzione.testo.length} characters). The rest of the file is untouched.`
+                                                // F4-04: i BYTE sul disco (il file è UTF-8 verificato e si scrive in UTF-8: sono esattamente questi)
+                                                + `the file is now ${Buffer.byteLength(sostituzione.testo, 'utf8')} bytes). The rest of the file is untouched.`
                                         }
                                     }
                                 }
@@ -11004,6 +11520,7 @@ export async function talosLavora({
                                         premessaAssente: premessaFuAssente,
                                         postcondizione: postcondizioneModifica,
                                         error: erroreModifica,
+                                        esecuzioneFallita: (permesso.consentito && !ancoraUguale) || percorsoCambiatoModifica,
                                         firma, catena,
                                     })
                                     if (ricevuta.status === 'succeeded') catena = avanzaCatena(catena, SICUREZZA_PER_ATTREZZO.file_edit)
@@ -11051,11 +11568,13 @@ export async function talosLavora({
                             /* ⭐ OSS-1 — `performance.now()` e non `Date.now()`: un orologio monotono non torna indietro se l'ora di sistema cambia a meta' comando. */
                             const primaDiProvare = performance.now()
                             await verificaAmbienteComandi()
+                            const fermabile = segnaleDelComando(c.id) // Stop per riga
                             const esegui = async ({ onBytes } = {}) => {
                                 if (captureProcessFn) await verificaAmbienteComandi()
-                                return eseguiProva(comandoProva, cartella, { segnaleStop, dove: doveDelGiro(), onBytes, wsl: preferenzeWslProva })
+                                return eseguiProva(comandoProva, cartella, { segnaleStop: fermabile.segnale, dove: doveDelGiro(), onBytes, wsl: preferenzeWslProva })
                             }
-                            p = captureProcessFn ? await captureProcessFn({ toolCallId: c.id }, esegui) : await esegui()
+                            try { p = captureProcessFn ? await captureProcessFn({ toolCallId: c.id }, esegui) : await esegui() }
+                            finally { fermabile.sgancia() }
                             processoPerEvento = { durataMs: Math.round(performance.now() - primaDiProvare), comando: comandoProva, cwd: cartella }
                             /* F009: una prova girata in Linux dichiara con che utente, come la shell (owner: «dichiararlo sempre»). */
                             esito = p.enforcement === 'wsl2'
@@ -11088,16 +11607,16 @@ export async function talosLavora({
                      * di permesso più alto che lo sblocca — non esiste un
                      * livello che lo sblocca.
                      */
-                    const motivoFloor = comandoSenzaRecupero(comandoDiShell(argomenti))
+                    // N-02: il pavimento di Hermes (`pavimento-comandi.mjs`); i percorsi relativi si leggono nella cartella della sessione
+                    const bloccoFloor = bloccoDelPavimento(comandoDiShell(argomenti), { cartella })
                     let permessoShell
                     // ⭐⭐⭐ 29/8 — hoisted come in 'prova': `p` nasce due livelli
                     // sotto (dentro l'else dell'else), e `creaRicevutaOperazione`
                     // vuole leggerlo fuori da entrambi.
                     let p = null
-                    if (motivoFloor) {
-                        esito = `REFUSED. This command matches a hardline pattern with no recovery path (${motivoFloor}). `
-                            + `The command was not run, at any permission level.`
-                        permessoShell = { consentito: false, via: 'floor-comando-senza-recupero', motivo: motivoFloor }
+                    if (bloccoFloor) {
+                        esito = rifiutoDelPavimento(bloccoFloor)
+                        permessoShell = { consentito: false, via: 'floor-comando-senza-recupero', motivo: bloccoFloor.motivo }
                     }
                     else {
                         const preferenzeWslShell = await leggiPreferenzeWsl()
@@ -11127,17 +11646,21 @@ export async function talosLavora({
                             /* ⭐ OSS-1 — stessa misura del ramo `prova`, stesso orologio monotono. */
                             const primaDelComando = performance.now()
                             await verificaAmbienteComandi()
+                            const fermabile = segnaleDelComando(c.id) // Stop per riga
                             const esegui = async ({ onBytes } = {}) => {
                                 if (captureProcessFn) await verificaAmbienteComandi()
                                 return eseguiComandoSandboxatoFn(comandoDiShell(argomenti), cartella, {
                                 mobile, dove: doveDelGiro(), wsl: preferenzeWslShell,
                                 onBytes,
-                                segnaleStop, // ⛔ 11/09 — senza questo, «Ferma» premuto durante un comando lungo lo lasciava girare fino in fondo: misurato 46 s di ritardo
+                                // ⛔ 11/09 — senza lo Stop del giro, «Ferma» durante un comando lungo lo lasciava girare fino in fondo
+                                // (misurato 46 s); dal 02/10 il segnale è anche quello della sua riga nei Processi
+                                segnaleStop: fermabile.segnale,
 
                                 onPezzo: ({ testo }) => anteprima.append(testo),
                                 })
                             }
-                            p = captureProcessFn ? await captureProcessFn({ toolCallId: c.id }, esegui) : await esegui()
+                            try { p = captureProcessFn ? await captureProcessFn({ toolCallId: c.id }, esegui) : await esegui() }
+                            finally { fermabile.sgancia() }
                             anteprima.flush() // Anche l'ultimo pezzo ammesso deve essere consegnato.
                             /*
                              * ⭐ OSS-2 — la cartella del processo.
@@ -12745,7 +13268,8 @@ export async function talosLavora({
                             ? argomenti.cartella
                             : cartella
                         try {
-                            const risultato = await onDelega(argomenti.task ?? '', cartellaFiglio, { modalita: argomenti.modalita ?? 'lettura' })
+                            // F-022 (owner 01/10): senza `modalita` decide chi ospita la delega — sul desktop i permessi del padre
+                            const risultato = await onDelega(argomenti.task ?? '', cartellaFiglio, { modalita: argomenti.modalita })
                             if (risultato?.esito === 'rifiutato') {
                                 erroreTool = true
                                 esito = `REFUSED. ${risultato.motivo ?? 'the delegation was refused.'} No child was started.`
@@ -12914,7 +13438,9 @@ export async function talosLavora({
 
             /* ⛔ L'unico posto che produce questa frase e' `verificaPermessoScrittura` quando il segnale vince la gara con la domanda: la costante lega i due capi, non e' una stringa cercata a caso. */
             if (String(esito).includes(MOTIVO_FERMATO_CHIEDENDO)) puntoDiFermata ??= `mentre aspettavo la tua approvazione per "${nome}"`
-            if (String(esito).includes(MARCA_FERMATO_MENTRE_GIRAVA)) puntoDiFermata ??= `mentre "${nome}" era in corso`
+            /* Stop per riga: un comando fermato dalla SUA riga porta la stessa marca, ma il giro continua — il punto di fermata
+               del giro si scrive solo se a fermarsi è il giro. */
+            if (segnaleStop?.aborted && String(esito).includes(MARCA_FERMATO_MENTRE_GIRAVA)) puntoDiFermata ??= `mentre "${nome}" era in corso`
             /* ⛔ 27/09/2026 (era il rattoppo T-03 del pacchetto desktop): senza motore del contesto l'uscita si taglia
                DICHIARANDO quanto manca (testa + coda, `uscitaUtile`), non con uno `slice` muto che si legge «era tutto qui». */
             const contenutoTool = contextHooks ? String(esito) : uscitaUtile(String(esito), 8_000, 0.5)

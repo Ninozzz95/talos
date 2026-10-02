@@ -842,7 +842,11 @@ test('eseguiComandoDiretto passa {mobile:true} a eseguiComandoSandboxatoFn quand
      domani nasce un'altra opzione, questo test la fa vedere invece di lasciarla passare muta. */
   /* ⛔ 11/09: si aggiunge `dove` (D-10F) — dove gira il comando e' una scelta della sessione.
      L'elenco resta CHIUSO apposta: un'opzione nuova la fa vedere invece di lasciarla passare muta. */
-  assert.deepEqual(Object.keys(opzioniCatturate).sort(), ['dove', 'mobile', 'onPezzo', 'tracciaCartella']);
+  /* ⛔ 02/10/2026: si aggiunge `segnaleStop` — lo Stop per riga della scheda Processi (decisione owner): il `!` della
+     persona prima non aveva NESSUN segnale di arresto. Dev'essere un segnale vero e, alla partenza, non ancora fermato. */
+  assert.deepEqual(Object.keys(opzioniCatturate).sort(), ['dove', 'mobile', 'onPezzo', 'segnaleStop', 'tracciaCartella']);
+  assert.ok(opzioniCatturate.segnaleStop instanceof AbortSignal);
+  assert.equal(opzioniCatturate.segnaleStop.aborted, false);
   assert.equal(opzioniCatturate.tracciaCartella, true);
 });
 
@@ -864,7 +868,11 @@ test('⛔ AL CONTRARIO: senza mobile, eseguiComandoSandboxatoFn riceve {mobile:f
      domani nasce un'altra opzione, questo test la fa vedere invece di lasciarla passare muta. */
   /* ⛔ 11/09: si aggiunge `dove` (D-10F) — dove gira il comando e' una scelta della sessione.
      L'elenco resta CHIUSO apposta: un'opzione nuova la fa vedere invece di lasciarla passare muta. */
-  assert.deepEqual(Object.keys(opzioniCatturate).sort(), ['dove', 'mobile', 'onPezzo', 'tracciaCartella']);
+  /* ⛔ 02/10/2026: si aggiunge `segnaleStop` — lo Stop per riga della scheda Processi (decisione owner): il `!` della
+     persona prima non aveva NESSUN segnale di arresto. Dev'essere un segnale vero e, alla partenza, non ancora fermato. */
+  assert.deepEqual(Object.keys(opzioniCatturate).sort(), ['dove', 'mobile', 'onPezzo', 'segnaleStop', 'tracciaCartella']);
+  assert.ok(opzioniCatturate.segnaleStop instanceof AbortSignal);
+  assert.equal(opzioniCatturate.segnaleStop.aborted, false);
   assert.equal(opzioniCatturate.tracciaCartella, true);
 });
 

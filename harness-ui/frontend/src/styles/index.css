@@ -485,14 +485,19 @@ use[href="#glifo"],.talos-brand__mark .glyph,.talos-empty__mark .glyph,.talos-av
    d'attesa scelto dall'owner il 12/09 e il 24/09 (`segnavia-mobile.css`) — come lo spinner centrato di Hermes
    (`apps/desktop/src/components/assistant-ui/thread/status.tsx:222`, `CenteredThreadSpinner`, `role="status"`).
    ⛔ Altezza zero e `sticky`: l'indicatore non cambia lo `scrollHeight` (la conversazione sotto si porta in fondo mentre è
-   nascosta) e resta al centro della vista. ⛔ Compare dopo 250 ms: un'apertura veloce non lampeggia. */
+   nascosta) e resta al centro della vista.
+   ⛔ 01/10/2026 — SI VEDE DAL CLIC, senza ritardo. Qui c'era «compare dopo 250 ms: un'apertura veloce non lampeggia», e
+   l'owner ha visto il contrario: «schermata vuota e un frame del glifo poco prima che carica, non al click della riga
+   sessione». Misurato sul 4174 (1920×1080, movimento normale e ridotto): chat nascosta a 50-67 ms dal clic, cronologia
+   arrivata a 268-330 ms, chat scoperta a 311-354 ms ⇒ l'indicatore, nascosto per 250 ms, non si vedeva mai o per un
+   fotogramma. Hermes mostra lo spinner centrato appena la sessione è in caricamento, senza ritardo
+   (`apps/desktop/src/components/assistant-ui/thread/index.tsx:193`, `{loading === 'session' && <CenteredThreadSpinner />}`). */
 .talos-conversation:has(> #conversation.is-restoring){scroll-behavior:auto}
 #conversation.is-restoring{visibility:hidden}
 #conversation.is-restoring > *{animation:none !important; transition:none !important}
 .talos-caricamento-cronologia{display:none}
-.talos-conversation:has(> #conversation.is-restoring) > .talos-caricamento-cronologia{position:sticky; top:40%; z-index:1; height:0; overflow:visible; display:flex; flex-direction:column; align-items:center; gap:12px; pointer-events:none; animation:talos-caricamento-ritardo 250ms step-end both}
+.talos-conversation:has(> #conversation.is-restoring) > .talos-caricamento-cronologia{position:sticky; top:40%; z-index:1; height:0; overflow:visible; display:flex; flex-direction:column; align-items:center; gap:12px; pointer-events:none}
 .talos-caricamento-cronologia__testo{color:var(--talos-muted); font-size:var(--talos-font-size-sm)}
-@keyframes talos-caricamento-ritardo{from{visibility:hidden}to{visibility:visible}}
 /* ⛔ 11/9 — qui c'era `@media (max-width:1040px){ .talos-conversation{padding-left:0} }`, e sotto
    i 1040 lasciava 0 a sinistra contro 44 a destra. Misurato a 1024x800: la colonna partiva a x=276,
    incollata al bordo della lista sessioni, mentre il COMPOSER partiva a x=320 — 44 px piu' in la',
@@ -1418,6 +1423,42 @@ a.talos-button{text-decoration:none}
 /* i token del tema, quelli VERI: si chiamano `success`, non `ok` — e ci sono gia in entrambi i temi */
 .talos-approval__esito--si{border-color:var(--talos-success-border); background:var(--talos-success-soft); color:var(--talos-success)}
 .talos-approval__esito--no{border-color:var(--talos-danger-border); background:var(--talos-danger-soft); color:var(--talos-danger)}
+/* 02/10/2026 — la scheda delle richieste dei server MCP (`richiesta-mcp.js`): la card del consenso col corpo di un modulo o di una
+   pagina. Il dominio della pagina è la cosa da controllare prima di aprire: è l'unico testo grande. Annullato ha un tono suo, neutro. */
+.talos-mcp-modulo{display:grid; gap:14px; padding:12px var(--talos-approval-gutter); border-bottom:1px solid var(--talos-border)}
+.talos-mcp-campo{min-width:0}
+.talos-mcp-campo__etichetta{font-size:13px; font-weight:600; color:var(--talos-text)}
+.talos-mcp-campo__obbligatorio{font-weight:400; color:var(--talos-muted)}
+.talos-mcp-campo__aiuto{font-size:12px; color:var(--talos-muted)}
+.talos-mcp-campo__scelte{display:grid; gap:6px; margin:0; padding:0; border:0; min-width:0}
+.talos-mcp-campo__scelte > legend{padding:0; margin-bottom:4px}
+.talos-mcp-campo__interruttore{display:flex; align-items:center; gap:10px}
+.talos-mcp-pagina{display:grid; gap:10px; padding-block:12px; border-bottom:1px solid var(--talos-border)}
+.talos-approval.talos-mcp-richiesta [hidden]{display:none} /* 0,3,0: batte anche le regole composte dei bottoni */
+.talos-approval__esito--neutro{border-color:var(--talos-border); background:var(--talos-panel-soft); color:var(--talos-muted)}
+/* ⛔ 02/10/2026 sera, visto nelle foto del 4174: la scheda vive dentro `.talos-message`, e lì `.talos-message p` (0,1,1) e
+   `.talos-message p:last-child` (0,2,1) battevano le regole della scheda (0,1,0). Esito, errore e nota uscivano a 17 px col
+   colore del testo — l'esito perdeva il suo tono, cioè l'unica cosa che distingue un sì da un no (regola del 07/9 qui sopra) —
+   la nota della pagina toccava il bordo e l'esito il fondo della carta. Le regole dei paragrafi della scheda salgono a 0,3,0;
+   gli spazi fra i figli del corpo li dà il `gap`, non i margini dei paragrafi della chat. */
+.talos-approval.talos-mcp-richiesta .talos-approval__why{margin:0}
+.talos-approval.talos-mcp-richiesta .talos-mcp-pagina > *{margin:0}
+.talos-approval.talos-mcp-richiesta .talos-mcp-pagina__dominio{padding-inline:var(--talos-approval-gutter); font-size:17px; font-weight:650; color:var(--talos-text); overflow-wrap:anywhere}
+.talos-approval.talos-mcp-richiesta .talos-approval__motivo{padding-inline:var(--talos-approval-gutter); font-size:12.5px; color:var(--talos-muted)}
+.talos-approval.talos-mcp-richiesta .talos-mcp-modulo > .talos-approval__motivo{margin:0; padding-inline:0} /* il modulo ha già il rientro */
+.talos-approval.talos-mcp-richiesta .talos-mcp-richiesta__errore{margin:0; font-size:12.5px; font-weight:600; color:var(--talos-danger)}
+/* L'esito vale per tutta la famiglia: la card del CONSENSO aveva lo stesso difetto («Approvato»/«Negato» a 17 px col colore
+   del testo, misurato sul 4174) e l'owner l'ha voluto curato uguale (02/10/2026: «sì, come nella MCP»). 0,3,0. */
+.talos-message .talos-approval .talos-approval__esito{margin:10px var(--talos-approval-gutter) 12px; font-size:12px}
+.talos-message .talos-approval .talos-approval__esito--si{color:var(--talos-success)}
+.talos-message .talos-approval .talos-approval__esito--no{color:var(--talos-danger)}
+.talos-message .talos-approval .talos-approval__esito--neutro{color:var(--talos-muted)}
+/* Il motivo della card del consenso (D1: «PERCHÉ ti si sta chiedendo il permesso») ha la stessa malattia: 17 px col colore del
+   testo invece di 12,5 px attenuato (misurato sul 4174, sessione 5a552e6b…). Owner 02/10/2026: «sì, tutti e tre». 0,3,0. */
+.talos-message .talos-approval .talos-approval__motivo{font-size:12.5px; color:var(--talos-muted)}
+/* il pallino della scelta singola è un controllo del sistema: senza `accent-color` Chromium lo dipinge del suo blu, e col suo
+   margine di serie stava 4 px più a destra delle caselle della scelta multipla. Stessa misura delle caselle (controls.css:117). */
+.talos-approval.talos-mcp-richiesta input[type="radio"]{accent-color:var(--talos-accent); width:15px; height:15px; margin:0; flex:none}
 /* ⛔ 07/9 O-41 — gli allegati SOTTO la bolla e fuori da essa: la bolla e riservata alle parole
    della persona. Chip piccoli, allineati come la bolla (a destra, perche il messaggio e suo),
    con genere, fonte e peso. shadcn/ui, «Components for Chat Interfaces» (giugno 2026): gli
@@ -1851,6 +1892,13 @@ a.talos-button{text-decoration:none}
 .talos-process__apri .i{transition:transform var(--talos-motion-duration-control,.14s) var(--talos-motion-ease)}
 .talos-process__apri[aria-expanded="true"] .i{transform:rotate(180deg)}
 @media (prefers-reduced-motion: reduce){ .talos-process__apri .i{transition:none} }
+/* Stop per riga (owner 02/10/2026): stessa misura del «⌄»; il rosso solo quando lo si punta — fermare è un'azione, non un
+   allarme. L'avviso sotto dice che cosa succede dopo il clic, nel tono quieto del testo secondario. */
+.talos-process__ferma{flex:none; padding:2px 6px; min-height:0}
+.talos-process__ferma[hidden]{display:none}
+.talos-process__ferma:not(:disabled):hover, .talos-process__ferma:focus-visible{color:var(--talos-danger)}
+.talos-process__avviso-ferma{margin-top:6px; font-size:12.5px; color:var(--talos-muted)}
+.talos-process__avviso-ferma[hidden]{display:none}
 .talos-process__meta{display:flex; align-items:center; gap:8px; margin-top:6px; font-size:12px; color:var(--talos-muted); flex-wrap:wrap}
 .talos-process__stato{display:inline-flex; align-items:center; gap:4px}
 .talos-process__misura{white-space:nowrap}
@@ -2167,6 +2215,9 @@ a.talos-button{text-decoration:none}
 .talos-terminal__tab, .talos-schede__tab{position:relative; flex:0 0 auto; white-space:nowrap}
 .talos-terminal__tab[data-terminale-id]{flex:0 1 auto; min-width:96px; max-width:200px; padding-right:26px; overflow:hidden; text-overflow:ellipsis; display:block; line-height:32px; text-align:left}
 .talos-terminal__tab[data-terminale-id] .talos-dot{display:inline-block; margin-right:8px; vertical-align:middle}
+/* PO-10 passo 2 (02/10/2026): la scheda dei comandi dell'AGENTE si riconosce prima del titolo — l'icona dello sprite, nel
+   colore d'accento (Hermes, `rail.tsx:144-145`: icona «agent» e testo d'accento sulle sue schede agente) */
+.talos-terminal__tab[data-terminale-id] .talos-terminal__tab-icona{display:inline-block; width:14px; height:14px; margin-right:6px; vertical-align:-2px; color:var(--talos-accent-text)}
 .talos-terminal__tab:disabled, .talos-schede__tab:disabled{opacity:.45; cursor:not-allowed}
 .talos-terminal__tabs .talos-badge{flex:0 6 auto; min-width:44px; max-width:220px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap} /* i badge cedono spazio per primi (taccuino 06/09, terminale-5.png: le schede si troncavano con tre schede sole) */
 .talos-terminal__tab[data-terminale-id]::after{content:"×"; position:absolute; right:6px; top:50%; width:16px; height:16px; margin-top:-8px; border-radius:4px; line-height:16px; text-align:center; font-size:13px; color:var(--talos-muted); opacity:0; transition:opacity 120ms ease}

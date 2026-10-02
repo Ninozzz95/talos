@@ -89,3 +89,19 @@ test('ATTIVITA-07 — i PASSI: avvio, attrezzi col loro file e l’ora, fine; co
   assert.equal(tanti.passiTagliati, 10);
   assert.equal(tanti.passi.at(-1).percorso, 'f49.mjs');
 });
+
+/* ⭐ 02/10/2026 — l'accumulatore: la voce viva consuma solo gli eventi nuovi e deve dire esattamente ciò che direbbe il ricalcolo. */
+test('ATTIVITA-ACCUMULATORE: a incremento come il ricalcolo; un array sostituito riparte da capo; i contatori tornano', async () => {
+  const { attivitaDellaVoce, contatoriAttivitaDellaVoce } = await import('../src/attivita-figlia.mjs');
+  const voce = { eventi: [] };
+  for (let i = 0; i < 80; i++) {
+    voce.eventi.push(...leggi('c' + i, `src/f${i % 70}.mjs`));
+    if (i % 9 === 0) voce.eventi.push({ type: 'StateDelta', delta: [{ op: 'add', path: `/file/src/nuovo${i}.mjs` }] });
+    if (i % 7 === 0) assert.deepEqual(attivitaDellaVoce(voce), riassuntoAttivitaSessione(voce.eventi), `dopo ${i}`);
+  }
+  assert.deepEqual(attivitaDellaVoce(voce), riassuntoAttivitaSessione(voce.eventi));
+  voce.eventi = voce.eventi.slice(0, 30); // togliere un messaggio crea un array nuovo
+  assert.deepEqual(attivitaDellaVoce(voce), riassuntoAttivitaSessione(voce.eventi));
+  const tutto = riassuntoAttivitaSessione(voce.eventi, { massimoFile: 1e6 }), c = contatoriAttivitaDellaVoce(voce);
+  assert.deepEqual([c.compatta, c.chiamate, c.numeroFile, c.attrezzoCorrente, c.passi], [true, tutto.chiamate, tutto.file.length, tutto.attrezzoCorrente, [tutto.passi.at(-1)]]);
+});

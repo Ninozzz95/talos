@@ -60,6 +60,18 @@ export function createWorkspaceChrome(options: WorkspaceChromeOptions) {
   let sessions: SessionSummary[] = [];
   let setup: Record<string, unknown> | null = null;
   let loading = false; let failed = false; let notice = ''; let hasLoaded = false;
+  /*
+   * ⛔ 01/10/2026 — L'AVVISO «IMPOSTA UN PROVIDER» (owner: «nella home al primo avvio fresco se nessun provider è stato
+   *   impostato … un tasto … imposta un provider e ti piazza direttamente in laboratorio modelli tab provider»). Decisioni
+   *   dell'owner: banda sotto le quattro azioni; contano anche Ollama/LM Studio salvati e l'agente esterno
+   *   (`src/setup-stato.mjs`); «Provider e accessi» nascosto finché la banda c'è; si spegne SOLO quando il provider c'è.
+   * ⇒ È una LETTURA dello stato (come PO-27), non un ricordo salvato: vero solo se l'ULTIMA lettura di
+   *   `/api/v1/setup/stato` è riuscita e dice `pronto === false`. Una lettura fallita non accende niente.
+   * ⛔ Si azzera ENTRANDO nella Home (`update`): chi torna dal Laboratorio col provider appena impostato non deve vedere la
+   *   banda della lettura vecchia mentre arriva quella nuova. Come Cline, `providersLoaded && hasConnectedProvider === false`
+   *   (`apps/examples/desktop-app/webview/app/page.tsx:2515-2523`): mai accesa durante il caricamento.
+   */
+  let providerMancante = false;
   let renderScope = createScope();
   let currentView: View = 'home';
   let readController: AbortController | null = null;
@@ -104,6 +116,13 @@ export function createWorkspaceChrome(options: WorkspaceChromeOptions) {
     }
     fragment.append(actions);
     if (notice) { const n = node('p', 'workspace-notice', notice); n.setAttribute('role', 'status'); fragment.append(n); }
+    if (providerMancante) {
+      const avviso = node('div', 'workspace-notice workspace-notice--provider'); avviso.setAttribute('role', 'status');
+      const imposta = button('Imposta un provider', options.openProviders, 'talos-button talos-button--secondary', 'i-shield');
+      imposta.dataset.homeAction = 'provider-setup';
+      avviso.append(node('p', '', 'Nessun provider impostato. Collega un provider per usare l’agente.'), imposta);
+      fragment.append(avviso);
+    }
     const columns = node('div', 'workspace-home__columns');
     const recent = node('section', 'workspace-card workspace-recents'); recent.setAttribute('aria-labelledby', 'homeRecentTitle');
     const titlebar = node('div', 'workspace-card__heading');
@@ -149,8 +168,9 @@ export function createWorkspaceChrome(options: WorkspaceChromeOptions) {
     readiness.append(node('p', 'workspace-muted', model && ready
       ? 'Modello selezionato. Le autorizzazioni vengono richieste quando servono.'
       : 'Puoi esplorare il workspace. Configura un modello quando vuoi usare l’agente.'));
-    readiness.append(button(model ? 'Cambia modello' : 'Scegli un modello', options.openModel, 'talos-button talos-button--secondary', 'i-bolt'),
-      button('Provider e accessi', options.openProviders, 'talos-button talos-button--ghost', 'i-shield'));
+    readiness.append(button(model ? 'Cambia modello' : 'Scegli un modello', options.openModel, 'talos-button talos-button--secondary', 'i-bolt'));
+    // Una porta sola verso lo stesso posto nella stessa schermata: con la banda accesa, la porta è la sua.
+    if (!providerMancante) readiness.append(button('Provider e accessi', options.openProviders, 'talos-button talos-button--ghost', 'i-shield'));
     const shortcuts = node('section', 'workspace-card workspace-links');
     shortcuts.append(node('h2', '', 'Organizza il lavoro'));
     for (const [label, view, symbol] of [['Progetti', 'progetti', 'i-folder'], ['Attività', 'attivita', 'i-check-sq'], ['Note', 'note', 'i-edit'], ['Automazioni', 'automations', 'i-clock']] as const) {
@@ -175,6 +195,8 @@ export function createWorkspaceChrome(options: WorkspaceChromeOptions) {
     loading = false; failed = rows.status === 'rejected' || !isObject(rows.value) || !Array.isArray(rows.value.items);
     if (rows.status === 'fulfilled' && !failed) { sessions = normalizeSessions(rows.value); hasLoaded = true; }
     if (readiness.status === 'fulfilled' && isObject(readiness.value)) setup = readiness.value;
+    const letto = readiness.status === 'fulfilled' && isObject(readiness.value) && isObject(readiness.value.provider) ? readiness.value.provider : null;
+    providerMancante = letto !== null && letto.pronto === false;
     render();
   }
   function syncControls(): void {
@@ -229,7 +251,7 @@ export function createWorkspaceChrome(options: WorkspaceChromeOptions) {
     update(view: View): void {
       const entered = currentView !== view; currentView = view; syncControls();
       if (entered && view !== 'home' && readController) { requests.next(); readController.abort(); loading = false; }
-      if (view === 'home') { if (entered || !hasLoaded) void load(); else render(); }
+      if (view === 'home') { if (entered) providerMancante = false; if (entered || !hasLoaded) void load(); else render(); }
     },
     acceptSessions(items: unknown): void { sessions = normalizeSessions({ items }); hasLoaded = true; if (currentView === 'home' && !loading) render(); },
     showNotice(text: string): void { notice = text; render(); },

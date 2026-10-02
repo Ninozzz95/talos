@@ -96,6 +96,1226 @@ var init_navigation = __esm({
   }
 });
 
+// src/i18n/workspace-en.js
+var workspace_en_default;
+var init_workspace_en = __esm({
+  "src/i18n/workspace-en.js"() {
+    workspace_en_default = Object.freeze({
+      "TALOS / Il tuo spazio di lavoro": "TALOS / Your workspace",
+      "Da dove ripartiamo?": "Where shall we pick up?",
+      "Progetti, conversazioni e strumenti. Il tuo lavoro, in un unico posto.": "Projects, conversations and tools. Your work, in one place.",
+      "Apri un progetto": "Open a project",
+      "Inizia un lavoro": "Start working",
+      "Conversazione": "Conversation",
+      "Scrivi e lavora con l’agente": "Write and work with your agent",
+      "Terminale": "Terminal",
+      "Apri la shell del computer": "Open your computer’s shell",
+      "Documenti": "Documents",
+      "Consulta la tua libreria": "Browse your library",
+      "Ricerca": "Research",
+      "Raccogli e confronta le fonti": "Gather and compare sources",
+      "Riprendi il lavoro": "Pick up your work",
+      "Aggiorna": "Refresh",
+      "Leggo le sessioni…": "Loading sessions…",
+      "La cronologia non è disponibile": "History is unavailable",
+      "Il lavoro non è stato cancellato. Riprova a leggere le sessioni.": "Your work has not been deleted. Try loading the sessions again.",
+      "Il prossimo lavoro inizia qui": "Your next project starts here",
+      "Apri un progetto o una conversazione. Le tue sessioni compariranno qui.": "Open a project or a conversation. Your sessions will appear here.",
+      "Nuova conversazione": "New conversation",
+      "Aggiornamento non riuscito. Stai vedendo l’ultima lettura disponibile.": "Refresh failed. You are seeing the last available results.",
+      "Sessione senza nome": "Untitled session",
+      "Tutte le sessioni": "All sessions",
+      "Prima della prossima richiesta": "Before your next request",
+      "Il tuo agente": "Your agent",
+      "Nessun modello selezionato": "No model selected",
+      "Modello selezionato. Le autorizzazioni vengono richieste quando servono.": "Model selected. Permissions will be requested when needed.",
+      "Puoi esplorare il workspace. Configura un modello quando vuoi usare l’agente.": "You can explore your workspace. Configure a model when you are ready to use the agent.",
+      "Cambia modello": "Change model",
+      "Scegli un modello": "Choose a model",
+      "Provider e accessi": "Providers and access",
+      "Nessun provider impostato. Collega un provider per usare l’agente.": "No provider is set up. Connect a provider to use the agent.",
+      "Imposta un provider": "Set up a provider",
+      "Organizza il lavoro": "Organize your work",
+      "Nessuna operazione viene avviata automaticamente.": "No operations are started automatically.",
+      "Compatta": "Compact",
+      "Confortevole": "Comfortable",
+      "Home": "Home",
+      "Revisione": "Review",
+      "Sessioni": "Sessions",
+      "Impostazioni": "Settings",
+      "Diagnostica": "Diagnostics",
+      "Libreria": "Library",
+      "Progetti": "Projects",
+      "Note": "Notes",
+      "Attività": "Tasks",
+      "Memoria": "Memory",
+      "Automazioni": "Automations",
+      "Browser": "Browser",
+      "Officina": "Tool Forge",
+      "Capacità": "Capabilities",
+      "Sviluppo": "Development",
+      "Concentrazione": "Focus",
+      "Disposizione del workspace": "Workspace layout",
+      "Preferenze temporanee: memoria locale non disponibile.": "Temporary preferences: local storage is unavailable.",
+      "Il workspace precedente non è più disponibile. I tuoi altri lavori restano nella cronologia.": "The previous workspace is no longer available. Your other work remains in history.",
+      "Non riesco a ripristinare il workspace. Puoi riprovare dalla cronologia.": "The workspace could not be restored. You can try again from history.",
+      "Navigazione": "Navigation",
+      "Sessione": "Session",
+      "Configurazione": "Configuration",
+      "Riprendi il lavoro e apri un progetto.": "Pick up your work or open a project.",
+      "Torna ai messaggi della sessione.": "Return to the session messages.",
+      "Revisione delle modifiche": "Review changes",
+      "Esamina i file e le differenze.": "Inspect files and differences.",
+      "Apri terminale": "Open terminal",
+      "Usa la shell reale del computer.": "Use your computer’s actual shell.",
+      "Apri browser": "Open browser",
+      "Consulta pagine e annotazioni.": "Browse pages and annotations.",
+      "Apri la cronologia e lo stato delle sessioni.": "Open session history and status.",
+      "Trova i workspace e le sessioni collegate.": "Find workspaces and related sessions.",
+      "Libreria e documenti": "Library and documents",
+      "Consulta file e artefatti del lavoro.": "Browse the files and artifacts from your work.",
+      "Leggi e organizza i tuoi appunti.": "Read and organize your notes.",
+      "Controlla le attività e i risultati.": "Check tasks and results.",
+      "Consulta ciò che il workspace conserva.": "Review what the workspace remembers.",
+      "Ricerca approfondita": "Deep research",
+      "Apri ricerche, rapporti e fonti.": "Open research, reports and sources.",
+      "Gestisci pianificazioni e cronologia.": "Manage schedules and history.",
+      "Officina strumenti": "Tool Forge",
+      "Consulta e gestisci gli strumenti creati.": "Browse and manage the tools you have created.",
+      "Nuova sessione": "New session",
+      "Scegli un progetto senza avviare operazioni.": "Choose a project without starting operations.",
+      "Rinomina sessione": "Rename session",
+      "Cambia il titolo della sessione corrente.": "Change the current session title.",
+      "Riprendi sessione": "Resume session",
+      "Richiedi un nuovo turno nella sessione corrente.": "Request another turn in the current session.",
+      "Duplica come ramo": "Fork session",
+      "Crea un ramo dalla sessione corrente.": "Create a branch from the current session.",
+      "Gestione del contesto": "Context management",
+      "Consulta misure, memoria protetta e compattazione.": "Review measurements, protected memory and compaction.",
+      "Albero della sessione": "Session tree",
+      "Consulta rami e deleghe.": "Inspect branches and delegated work.",
+      "Esporta sessione": "Export session",
+      "Scegli Markdown o eventi JSON reali.": "Choose Markdown or the actual JSON events.",
+      "Prepara una copia da condividere": "Prepare a copy to share",
+      "Scegli il formato della trascrizione reale.": "Choose a format for the actual transcript.",
+      "Cambia il modello per la prossima richiesta.": "Change the model for your next request.",
+      "Modelli locali e download": "Local models and downloads",
+      "Apri il laboratorio dei modelli.": "Open the model lab.",
+      "Chiavi e indirizzi dei fornitori, nel Laboratorio modelli.": "Provider keys and addresses, in the model lab.",
+      "Permessi": "Permissions",
+      "Controlla le autorizzazioni senza modificarle automaticamente.": "Review permissions without changing them automatically.",
+      "Attrezzi, skill e connettori": "Tools, skills and connectors",
+      "Consulta capacità, MCP ed estensioni.": "Browse capabilities, MCP and extensions.",
+      "Doctor": "Doctor",
+      "Leggi la diagnostica del sistema.": "Read system diagnostics.",
+      "Personalizza il workspace e il comportamento.": "Customize the workspace and its behavior.",
+      "Scorciatoie da tastiera": "Keyboard shortcuts",
+      "Consulta i comandi e le combinazioni disponibili.": "Browse available commands and key combinations.",
+      "Apri prima una sessione.": "Open a session first.",
+      "Attendi la fine dell’esecuzione.": "Wait for the current run to finish.",
+      "Cerca comandi, sezioni o strumenti…": "Search commands, sections or tools…",
+      "Cerca comandi e destinazioni": "Search commands and destinations",
+      "Comandi e destinazioni": "Commands and destinations",
+      "Nessun comando trovato. Prova un nome di sezione o cancella la ricerca.": "No commands found. Try a section name or clear the search.",
+      "risultati": "results",
+      "risultato": "result",
+      "Comandi": "Commands",
+      "Cerca un comando": "Search commands",
+      "Chiudi Comandi": "Close commands",
+      "scegli": "choose",
+      "apri": "open",
+      "chiudi": "close",
+      "Invio": "Enter",
+      "Comando non disponibile": "Command unavailable",
+      "Comando non eseguito": "Command not executed"
+    });
+  }
+});
+
+// src/i18n/en.js
+var en_default;
+var init_en = __esm({
+  "src/i18n/en.js"() {
+    init_workspace_en();
+    en_default = Object.freeze({
+      workspaceV2: workspace_en_default,
+      workspacePreferencesV2: {
+        "Riprendi il workspace all’avvio": "Restore the workspace at startup",
+        "Riapre l’ultima sessione disponibile senza avviare operazioni.": "Reopens the last available session without starting operations.",
+        "Preferenze salvate da una versione più recente: le modifiche restano temporanee.": "Preferences were saved by a newer version: changes remain temporary."
+      },
+      /* i menu: chiavi astratte dal mockup (H21), applicate a [data-t]/[data-ph] */
+      /* 01/10/2026 — l'aggiornamento automatico: la banda sotto la barra del titolo e la scheda in «Account, Doctor e backup». */
+      aggiornamenti: {
+        "Aggiornamenti": "Updates",
+        "Controlla all’avvio e ogni 4 ore; installa quando chiudi l’app.": "Checks at startup and every 4 hours; installs when you close the app.",
+        "Aggiornamenti automatici": "Automatic updates",
+        "Spento, TALOS non controlla da solo e non installa alla chiusura: resta «Controlla ora».": "When off, TALOS does not check on its own or install on close: “Check now” still works.",
+        "Controlla ora": "Check now",
+        "Riavvia ora": "Restart now",
+        "Novità": "What’s new",
+        "Nascondi fino al prossimo avvio": "Hide until next launch",
+        "TALOS {v} è pronto. Si installa quando chiudi l’app.": "TALOS {v} is ready. It installs when you close the app.",
+        "TALOS {v} è pronto. Riavvia per installarlo.": "TALOS {v} is ready. Restart to install it.",
+        "Questa è una copia di prova: non si aggiorna da sola. Installa la versione nuova dal sito delle release.": "This is a preview copy: it does not update on its own. Install the new version from the releases page.",
+        "Questa copia di sviluppo non si aggiorna da sola.": "This development copy does not update on its own.",
+        "L’aggiornamento automatico non è partito: trovi il motivo nel registro (menu ⋯ › Apri il registro).": "Automatic updates did not start: the reason is in the log (⋯ menu › Open the log).",
+        "Controllo in corso…": "Checking…",
+        "Scaricamento dell’aggiornamento in corso…": "Downloading the update…",
+        "Nessun controllo ancora.": "No check yet.",
+        "Ultimo controllo {quando} non riuscito: {errore}": "Last check {quando} failed: {errore}",
+        "Ultimo controllo {quando}: TALOS è aggiornato.": "Last check {quando}: TALOS is up to date.",
+        "Ultimo controllo {quando}.": "Last check {quando}.",
+        "errore sconosciuto": "unknown error",
+        "oggi alle {ora}": "today at {ora}",
+        "ieri alle {ora}": "yesterday at {ora}",
+        "{giorno} alle {ora}": "{giorno} at {ora}",
+        "Riavviare TALOS adesso?": "Restart TALOS now?",
+        "Una sessione sta lavorando: riavviare la interrompe.": "A session is working: restarting will interrupt it.",
+        "{n} sessioni stanno lavorando: riavviare le interrompe.": "{n} sessions are working: restarting will interrupt them.",
+        "Non riesco a sapere se una sessione sta lavorando: se sì, riavviare la interrompe.": "TALOS cannot tell whether a session is working: if one is, restarting will interrupt it.",
+        "Riavvia lo stesso": "Restart anyway"
+      },
+      /* F3-12, 24/09/2026 — la fascia del modo tolto e le scelte del modo di lavoro. */
+      avvisoPiano: {
+        "Il piano è stato aggiornato (revisione {n}).": "The plan has been updated (revision {n}).",
+        "Vai al piano": "Go to the plan",
+        "Chiudi l’avviso": "Dismiss",
+        "Piano aggiornato": "Plan updated"
+      },
+      modoDiLavoro: {
+        "Questa conversazione usava la modalità Workflow, che non c’è più.": "This conversation used Workflow mode, which is no longer available.",
+        "Scegli come continuare: vale per i prossimi messaggi.": "Choose how to continue: it applies to your next messages.",
+        "Continua in Normale": "Continue in Normal",
+        "Continua in Piano": "Continue in Plan",
+        "Modo di lavoro aggiornato": "Work mode updated",
+        "Lavora normalmente": "Work normally",
+        "Prima prepara il piano": "Plan first"
+      },
+      menu: {
+        nuova: "New",
+        luoghi: "Places",
+        altro: "More",
+        fissate: "Pinned",
+        sessioni: "Sessions",
+        cerca: "Search chats…",
+        capability: "Capability",
+        board: "Board",
+        libreria: "Library",
+        memoria: "Memory",
+        attivita: "Tasks",
+        chat: "Chat",
+        terminale: "Terminal",
+        review: "Review",
+        browser: "Browser",
+        comandi: "Commands"
+      },
+      impostazioni: {
+        // sezioni
+        "Aspetto e movimento": "Appearance and motion",
+        "Chat e composer": "Chat and composer",
+        "Laboratorio modelli": "Model Lab",
+        "Provider e accessi": "Providers and access",
+        "Strumenti agente e permessi": "Agent tools and permissions",
+        "Privacy e dati locali": "Privacy and local data",
+        "File e workspace": "Files and workspace",
+        "Account, Doctor e backup": "Account, Doctor and backup",
+        // 06/09, D2/D13/D21/D22/D26 — le tre sezioni nuove delle Impostazioni
+        "Memoria e contesto": "Memory and context",
+        "Sicurezza e privacy": "Security and privacy",
+        "Costi e consumo": "Cost and usage",
+        // titoli delle righe
+        "Animazione risposta": "Reply animation",
+        "Animazioni interfaccia": "Interface animations",
+        "Apertura del pulsante +": "The “+” button opens",
+        "Bagliore": "Glow",
+        "Chat a tutta larghezza": "Full-width chat",
+        "Scadenza delle domande": "Question timeout",
+        "Domande di TALOS": "TALOS questions",
+        "Nessuna": "None",
+        "1 minuto": "1 minute",
+        "5 minuti": "5 minutes",
+        "10 minuti": "10 minutes",
+        "Composer": "Composer",
+        "Contrasto": "Contrast",
+        "Curva": "Easing",
+        "Densità": "Density",
+        "Densità delle liste": "List density",
+        "Dimensione interfaccia": "Interface size",
+        "Durata": "Duration",
+        "Feedback": "Feedback",
+        "Finestre": "Windows",
+        "Intensità": "Intensity",
+        "Intensità UI": "UI intensity",
+        "Intestazione immersiva": "Immersive header",
+        "Lingua dei menu": "Menu language",
+        "Messaggi": "Messages",
+        "Modalità colore": "Color mode",
+        "Navigazione": "Navigation",
+        "Pannelli strumenti": "Tool panels",
+        "Parallasse": "Parallax",
+        "Profilo": "Profile",
+        "Profondità": "Depth",
+        "Qualità": "Quality",
+        "Renderer": "Renderer",
+        "Riduci movimento": "Reduce motion",
+        "Rispetta risparmio dati": "Respect data saver",
+        "Ritardo progressivo": "Stagger",
+        "Scie": "Trails",
+        "Sfondo animato": "Animated background",
+        "Sfondo attivo": "Background on",
+        "Sospendi finestra nascosta": "Pause when hidden",
+        "Stile dei messaggi": "Message style",
+        "Superfici": "Surfaces",
+        "Tema TALOS": "TALOS theme",
+        "Testo chat": "Chat text",
+        "Velocità": "Speed",
+        // opzioni
+        "Adattiva": "Adaptive",
+        "Adattivo": "Adaptive",
+        "Alta": "High",
+        "Atlas": "Atlas",
+        "Aurora": "Aurora",
+        "Basicus": "Basicus",
+        "Bassa": "Low",
+        "Bilanciata": "Balanced",
+        "Bolle": "Bubbles",
+        "Calm": "Calm",
+        "Cassetto": "Drawer",
+        "Chiaro": "Light",
+        "Cinematografica": "Cinematic",
+        "Classica": "Classic",
+        "Claudius": "Claudius",
+        "Comoda": "Comfortable",
+        "Compatta": "Compact",
+        "Complessità alta": "High complexity",
+        "Cursore testo": "Text cursor",
+        "Dissolvenza": "Fade",
+        "Elastica leggera": "Light elastic",
+        "Ember": "Ember",
+        "English": "English",
+        "Espressivo": "Expressive",
+        "Extra grande": "Extra large",
+        "Extra piccola": "Extra small",
+        "Extra piccolo": "Extra small",
+        "Finestra": "Window",
+        "Forge": "Forge",
+        "Glacier": "Glacier",
+        "Grande": "Large",
+        "Italiano": "Italian",
+        "Lineare": "Linear",
+        "Menu": "Menu",
+        "Minimale": "Minimal",
+        "Morbida": "Soft",
+        "Noir": "Noir",
+        "Pannello laterale": "Side panel",
+        "Paper": "Paper",
+        "Personalizzato": "Custom",
+        "Piccola": "Small",
+        "Piccolo": "Small",
+        "Precisa": "Precise",
+        "Predefinita": "Default",
+        "Predefinito": "Default",
+        "Scuro": "Dark",
+        "Segui il sistema": "Follow the system",
+        "Segui il tema": "Follow the theme",
+        "Semplice": "Simple",
+        "Sezioni": "Sections",
+        "Signal": "Signal",
+        "Spento": "Off",
+        "Standard": "Standard",
+        "Statico": "Static",
+        "Telemetry": "Telemetry",
+        "Terminal": "Terminal",
+        "Violet": "Violet",
+        // unità e voci del pannello
+        "%": "%",
+        "ms": "ms",
+        "Segui il sistema ({lingua})": "Follow the system ({lingua})",
+        "italiano": "Italian"
+      },
+      /* i nomi umani degli attrezzi */
+      attrezzi: {
+        "annullamento di una ricerca": "cancelling a research",
+        "apertura di una pagina web": "opening a web page",
+        "avvio di una ricerca approfondita": "starting a deep research",
+        "chiusura di un’attività": "closing a task",
+        "comando nel terminale": "terminal command",
+        "copia di un file di Libreria nel workspace": "copying a Library file into the workspace",
+        "correzione di una memoria": "correcting a memory",
+        "creazione di un artefatto": "creating an artifact",
+        "creazione di un attrezzo nuovo": "creating a new tool",
+        "creazione di un documento": "creating a document",
+        "creazione di un’attività": "creating a task",
+        "data e ora": "date and time",
+        "delega a un sotto-agente": "delegating to a sub-agent",
+        "domanda alla persona": "asking the user a question",
+        "piano da approvare": "plan awaiting approval",
+        // 24/09/2026, decisione owner 36
+        "richiesta della modalità Piano": "requesting Plan mode",
+        "proposta di workflow": "proposing a workflow",
+        "stato del workflow": "workflow status",
+        "Risultato del comando": "Command output",
+        "lettura del risultato di un passo": "reading a step result",
+        "controllo del workflow": "workflow control",
+        "domanda all’agente che l’ha avviato": "asking the parent agent",
+        "risposta all’agente che l’ha avviato": "answering the parent agent",
+        "domanda a un sotto-agente": "asking a sub-agent",
+        "risposta a un sotto-agente": "answering a sub-agent",
+        "elenco della Libreria": "listing the Library",
+        "elenco della cartella": "listing the folder",
+        "elenco delle attività": "listing the tasks",
+        "elenco delle note": "listing the notes",
+        "elenco delle ricerche": "listing the researches",
+        "eliminazione di un file di Libreria": "deleting a Library file",
+        "eliminazione di una memoria": "deleting a memory",
+        "eliminazione di una nota": "deleting a note",
+        "eliminazione di una ricerca": "deleting a research",
+        "consegna del rapporto di ricerca": "delivering the research report",
+        "eliminazione di un’attività": "deleting a task",
+        "esecuzione dei test": "running the tests",
+        "generazione di un’immagine": "generating an image",
+        "lettura del rapporto di ricerca": "reading the research report",
+        "lettura di un file": "reading a file",
+        "lettura di un file di Libreria": "reading a Library file",
+        "modifica di un file": "editing a file",
+        "modifica di una nota": "editing a note",
+        "modifica di un’attività": "editing a task",
+        "origine di un file di Libreria": "origin of a Library file",
+        "pausa di una ricerca": "pausing a research",
+        "regole d’uso della Libreria": "Library usage rules",
+        "ricerca in Libreria": "searching the Library",
+        "ricerca nei file": "searching in files",
+        "ricerca nella memoria": "searching the memory",
+        "elenco della memoria": "listing the memory",
+        "ricerca fra le note": "searching the notes",
+        "lettura di una nota": "reading a note",
+        "ricerca fra le attività": "searching the tasks",
+        "ricerca fra le ricerche": "searching the researches",
+        "ricerca nelle conversazioni": "searching the conversations",
+        "Questa conversazione non c’è più.": "This conversation is no longer there.",
+        "Apri la conversazione": "Open the conversation",
+        "Memorie elencate": "Memories listed",
+        "Cercato fra le note: «{q}»": "Searched the notes: “{q}”",
+        "Note elencate": "Notes listed",
+        "Nota letta": "Note read",
+        "Cercato fra le attività: «{q}»": "Searched the tasks: “{q}”",
+        "Attività elencate": "Tasks listed",
+        "Cercato fra le ricerche: «{q}»": "Searched the researches: “{q}”",
+        "Ricerche elencate": "Researches listed",
+        "Conversazione letta": "Conversation read",
+        "Cercato nelle conversazioni: «{q}»": "Searched the conversations: “{q}”",
+        "Board delle conversazioni": "Board of conversations",
+        "ricerca sul web": "web search",
+        "rinomina di un file di Libreria": "renaming a Library file",
+        "rinomina di una ricerca": "renaming a research",
+        "ripresa di una ricerca": "resuming a research",
+        "scrittura di un file": "writing a file",
+        "scrittura di una nota": "writing a note",
+        "scrittura in memoria": "writing to memory"
+      },
+      /* il Terminale a schede */
+      terminale: {
+        "tu": "you",
+        "Nuovo": "New",
+        "Apri una nuova scheda": "Open a new tab",
+        "Apri una sessione per avere più schede": "Open a session to have more tabs",
+        "Hai già {n} schede aperte: chiudine una": "You already have {n} tabs open: close one",
+        "Chiudi": "Close",
+        "Chiudi le altre": "Close others",
+        "Chiudi tutte": "Close all",
+        "Rinomina": "Rename",
+        "Nessuna scheda aperta": "No tab open",
+        "Ogni scheda dichiara chi l'ha aperta e dove.": "Every tab says who opened it and where.",
+        "Aperta da te": "Opened by you",
+        "Azioni sulla scheda": "Tab actions",
+        "in corso": "running",
+        "connessa": "connected",
+        "connessione in corso": "connecting",
+        "in attesa": "waiting",
+        "disconnessa": "disconnected",
+        "shell chiusa": "shell closed",
+        "shell ripresa": "shell resumed",
+        /* PO-10 passo 2 (02/10/2026): le schede dei comandi dell'agente, in sola lettura */
+        "agente": "agent",
+        "agente · giro {giro}": "agent · turn {giro}",
+        "Lanciata dall'agente al giro {giro}": "Launched by the agent in turn {giro}",
+        "Lanciata dall'agente": "Launched by the agent",
+        "Sola lettura: qui si guardano i comandi dell’agente.": "Read only: this is where you watch the agent’s commands.",
+        "Comandi dell’agente, in sola lettura": "The agent’s commands, read only",
+        "conclusa": "finished",
+        "con errori": "with errors",
+        "Stessa macchina, senza isolamento": "Same machine, no isolation",
+        "La shell gira sul tuo computer, nella cartella della sessione: nessuna sandbox.": "The shell runs on your computer, in the session folder: no sandbox.",
+        "Premi Nuovo per aprire una shell in questa cartella.": "Press New to open a shell in this folder.",
+        "cartella predefinita del server": "server default folder",
+        "Colori limitati ({motivo}).": "Limited colors ({motivo}).",
+        "shell sul tuo computer, senza isolamento": "shell on your computer, no isolation",
+        "Serve una sessione": "A session is needed",
+        "Troppe schede": "Too many tabs",
+        "Scheda non aperta": "Tab not opened",
+        "Shell non chiusa sul server": "Shell not closed on the server"
+      },
+      /* le azioni su un messaggio della chat e l'invito del primo avvio (PO-27, 17/09) */
+      messaggio: {
+        "Azioni sulla risposta": "Actions on the answer",
+        "Azioni sul tuo messaggio": "Actions on your message",
+        "Altre azioni sulla risposta": "More actions on the answer",
+        "Altre azioni sulla risposta — eliminare si può a giro finito": "More actions on the answer — deleting is possible once the run is over",
+        "Copia la risposta": "Copy the answer",
+        "Copia il tuo messaggio": "Copy your message",
+        "Ascolta la risposta": "Listen to the answer",
+        "Riusa nel composer": "Reuse in the composer",
+        "Chiedi di nuovo": "Ask again",
+        "Elimina la risposta": "Delete the answer",
+        "Confermi? Elimina la risposta": "Confirm? Delete the answer",
+        "Elimina il messaggio": "Delete the message",
+        "Confermi? Elimina anche la risposta": "Confirm? This deletes the answer too",
+        "Visualizza le modifiche": "View the changes",
+        "1 file modificato": "1 file changed",
+        "{n} file modificati": "{n} files changed",
+        "Scegli una cartella": "Choose a folder",
+        "Per iniziare scegli una cartella: TALOS legge e scrive solo lì dentro.": "To start, choose a folder: TALOS only reads and writes inside it.",
+        "Il modello si sceglie dalla pillola qui sotto.": "The model is chosen from the pill below.",
+        "Collega un modello": "Connect a model"
+      },
+      /* le linguette dei file della Revisione (BC-63, 17/09: stesso componente del Terminale) */
+      revisione: {
+        "Azioni sul file": "File actions",
+        "Apri il file": "Open the file",
+        "Copia il percorso": "Copy the path",
+        "Copia il diff di questo file": "Copy this file’s diff"
+      },
+      /* il Browser a schede */
+      browser: {
+        "Letture della sessione": "Session readings",
+        "Nessuna pagina ancora": "No pages yet",
+        "Testo acquisito dall’agente · {n} pagina": "Text acquired by the agent · {n} page",
+        "Testo acquisito dall’agente · {n} pagine": "Text acquired by the agent · {n} pages",
+        "{n} lettura dell’agente": "{n} reading by the agent",
+        "{n} letture dell’agente": "{n} readings by the agent",
+        "{n} pagina aperta da te": "{n} page opened by you",
+        "{n} pagine aperte da te": "{n} pages opened by you",
+        "Lettura {i} di {n}": "Reading {i} of {n}",
+        "Pagina aperta da te · viva dentro TALOS": "Opened by you · live inside TALOS",
+        "Pagina aperta da te · non mostrabile qui": "Opened by you · cannot be shown here",
+        "Apertura in corso…": "Opening…",
+        "Le letture dell’agente sono copie testuali; una pagina che apri tu è viva e ci puoi navigare dentro. Le note restano in questo browser.": "Agent readings are text copies; a page you open is live and you can navigate inside it. Notes stay in this browser.",
+        "Le letture sono copie testuali; una pagina che apri tu è viva dentro TALOS — se il sito vieta la cornice, la mostra un browser pilotato sul tuo computer. Le note restano qui.": "Readings are text copies; a page you open is live inside TALOS — if the site refuses to be framed, a browser TALOS drives on your computer shows it. Notes stay here.",
+        "Agente": "Agent",
+        "Tu": "You",
+        "Pagina viva": "Live page",
+        "Chiedi all’agente di leggerla": "Ask the agent to read it",
+        "Nessuna pagina letta": "No page read yet",
+        /* ⭐ 16/09/2026, P0 corsia B — le frasi dei sei stati della scheda (apertura, ritentativo,
+           guasto, annullata, a riposo). Il cancello `tests/unit/i18n-copertura.test.mjs` legge le
+           TESTI di `components/browser.js` e pretende l'inglese per ciascuna: senza queste righe la
+           suite delle unità è rossa. */
+        "Se ci mette troppo puoi annullare: la scheda resta dov’è.": "If it takes too long you can cancel: the tab stays where it is.",
+        "Ogni tentativo aspetta un po’ di più del precedente.": "Each attempt waits a little longer than the one before.",
+        "Non sono riuscito ad aprire questa pagina": "I could not open this page",
+        "Apertura annullata": "Opening cancelled",
+        "Hai chiuso la scheda mentre apriva: non è stato scritto niente.": "You cancelled while it was opening: nothing was written.",
+        "Questa pagina era a riposo: la sto ricaricando": "This page was asleep: I am reloading it",
+        "Restano vive le ultime pagine che hai guardato; le altre si ricaricano quando ci torni.": "The pages you looked at most recently stay alive; the others reload when you come back.",
+        "Questa pagina è in pausa": "This page is paused",
+        "Riprova": "Try again",
+        "Annulla": "Cancel",
+        "{invito}: usa «Rileggi».": "{invito}: use “Reload”.",
+        /* ⛔ 16/09 — questa frase è composta da una FUNZIONE (`TESTI.statoRiprovo`), quindi il cancello
+           i18n, che scansiona solo le stringhe di TESTI, non la vede: mancava, e nella foto del tema
+           scuro il titolo usciva in italiano sopra un sottotitolo inglese. Trovata guardando la foto. */
+        "Non ha risposto: riprovo ({tentativo} di {totale})…": "No answer: trying again ({tentativo} of {totale})…",
+        /* ⛔ 16/09 — i quattro RIMEDI di `rimedioPerIlMotivo` (nati il 07/9) non erano mai stati
+           tradotti: finivano in una riga di avviso e nessuno ci aveva guardato. Adesso stanno nel
+           pannello dello stato, in grande, sotto un titolo inglese: mezza frase per lingua. */
+        "Controlla l’indirizzo.": "Check the address.",
+        "Il sito ha un certificato non valido: aprilo fuori da TALOS se ti fidi.": "The site has an invalid certificate: open it outside TALOS if you trust it.",
+        "Riprova fra un momento.": "Try again in a moment.",
+        "Controlla che il servizio sia acceso.": "Check that the service is running.",
+        "La pagina pilotata è una alla volta: aprendone un’altra questa resta nella sua scheda e si riapre quando ci torni.": "Only one driven page at a time: opening another leaves this one in its tab, and it reopens when you come back.",
+        "Non è un indirizzo: scrivi un sito (es. localhost:5173 o example.org).": "That is not an address: type a site (e.g. localhost:5173 or example.org).",
+        "L’agente chiede di leggere {url}. La scelta vale per questa richiesta.": "The agent asks to read {url}. The choice applies to this request only.",
+        "Nota: {nota}": "Note: {nota}",
+        "{motivo}. {invito}: usa «Rileggi».": "{motivo}. {invito}: use “Reload”.",
+        "Il sito non consente di essere mostrato dentro TALOS": "The site does not allow being shown inside TALOS",
+        "Ricarica la pagina nella cornice": "Reload the page in the frame",
+        "Prepara nel composer la richiesta di rileggere questa pagina": "Prepare in the composer the request to re-read this page",
+        "Azioni sulla scheda": "Tab actions",
+        "{titolo} — {url}": "{titolo} — {url}",
+        "Pagina": "Page",
+        /* ⛔⛔⛔ 16/09/2026, GIRO DI RIPARAZIONE — LE FRASI DEI GUASTI, che prima le scriveva il SERVER.
+           Le foto della consegna precedente mostravano il pannello mezzo inglese e mezzo italiano: il
+           motivo lo componeva `src/browser-frame.mjs` con un numero dentro, e una chiave con un numero
+           dentro non può stare in nessun dizionario. Adesso le frasi nascono in `components/browser.js`
+           con `{secondi}` come SEGNAPOSTO, quindi la chiave è una sola per tutti i numeri e il cancello
+           `tests/unit/i18n-copertura.test.mjs` le vede e ne pretende l'inglese. */
+        "Il sito non ha risposto in tempo ({secondi} secondi)": "The site did not answer in time ({secondi} seconds)",
+        "Questo indirizzo non esiste": "That address does not exist",
+        "Nessuno risponde a questo indirizzo": "Nothing is answering at that address",
+        "Il sito ha un certificato non valido": "The site has an invalid certificate",
+        "Non sono riuscito a raggiungere il sito": "I could not reach the site",
+        "Questo non è un indirizzo che posso aprire": "That is not an address I can open",
+        "Il sito vieta di essere mostrato dentro un altro sito": "The site refuses to be shown inside another site",
+        "Il sito si mostra solo dentro le sue stesse pagine": "The site only shows itself inside its own pages",
+        "Il sito consente la cornice solo ad altri siti, non a TALOS": "The site allows framing only for other sites, not for TALOS",
+        /* le parole dello stato sulla striscia delle linguette: si ascoltano (sr-only) — WCAG 1.4.1,
+           un lettore di schermo non annuncia i colori */
+        "in apertura": "opening",
+        "sto riprovando": "trying again",
+        "non raggiunta": "not reached",
+        "annullata": "cancelled",
+        /* ⛔ 16/09 — il pulsante del pannello: il testo di partenza sta nel modello HTML, che nessuno
+           traduce, e nella foto inglese usciva «Annulla navigazione» sotto un titolo inglese. */
+        "Annulla navigazione": "Cancel navigation",
+        /* ⛔ 16/09 — le etichette della barra del Browser: stesso motivo, stesso posto (il modello HTML
+           le scriveva a mano e nessuno le traduceva). Le scrive il componente, quindi il cancello di
+           copertura le vede e ne pretende l inglese: infatti e stato lui a trovarle mancanti. */
+        "Rileggi": "Reload",
+        "Annota": "Annotate",
+        "Nota locale": "Local note",
+        "Copia testo": "Copy text",
+        "Testo dell’agente": "Agent text",
+        /* ⛔⛔ 16/09/2026, SECONDO GIRO DI RIPARAZIONE — le frasi del Browser che a schermo uscivano in
+           ITALIANO dentro una app inglese. Le prime due erano un pezzo di stringa attaccato a un numero
+           (`${n} caratteri`) e nessun dizionario poteva contenerle: adesso sono frasi con segnaposto.
+           Le altre erano `t(...)` regolari, semplicemente senza la riga inglese — misurate una per una
+           (9 prima della cura, 0 dopo; il comando è nel rapporto della corsia B). */
+        "{n} carattere": "{n} character",
+        "{n} caratteri": "{n} characters",
+        "Sorgente ricevuto dall’agente ({n} caratteri)": "Source received by the agent ({n} characters)",
+        "Sorgente ricevuto dall’agente": "Source received by the agent",
+        "Chiudi {titolo}": "Close {titolo}",
+        "Questo sito non si lascia mostrare dentro TALOS. Qui sotto c’è il testo che ha letto l’agente.": "This site refuses to be shown inside TALOS. Below is the text the agent read.",
+        "Qui sotto c’è il testo che ha letto l’agente.": "Below is the text the agent read.",
+        "di": "of",
+        "La pagina è stata tagliata: l’agente ne ha ricevuta solo una parte. Aprila per vedere quale.": "The page was cut: the agent received only part of it. Open it to see which part.",
+        "Segna gli elementi della pagina da cambiare: i commenti finiscono nel composer": "Mark the parts of the page to change: the comments end up in the composer",
+        "Prepara una bozza nella chat senza inviarla": "Prepare a draft in the chat without sending it"
+      },
+      /* R4 (24/09/2026) — il segmento compatto delle attività: le specie, le voci, il menu «⋯» */
+      attivita: {
+        /* 26/09 — la testa del gruppo attività e l'Indice dei giri (`legacy/app.js`, formattaConteggioAttivita/formattaAttivitaInCorso) */
+        "1 attività non riuscita": "1 step failed",
+        "{n} attività non riuscite": "{n} steps failed",
+        "1 altra azione": "1 other action",
+        "{n} altre azioni": "{n} other actions",
+        "Attività non riuscita": "Step failed",
+        "1 attività interrotta": "1 step interrupted",
+        "{n} attività interrotte": "{n} steps interrupted",
+        "interrotta": "interrupted",
+        "(1 errore)": "(1 error)",
+        "({n} errori)": "({n} errors)",
+        "Attività…": "Activity…",
+        "lettura di 1 file…": "reading 1 file…",
+        "lettura di {n} file…": "reading {n} files…",
+        "1 ricerca in corso…": "1 search running…",
+        "{n} ricerche in corso…": "{n} searches running…",
+        "elenco di 1 cartella…": "listing 1 folder…",
+        "elenco di {n} cartelle…": "listing {n} folders…",
+        "esecuzione di 1 comando…": "running 1 command…",
+        "esecuzione di {n} comandi…": "running {n} commands…",
+        "scrittura di 1 file…": "writing 1 file…",
+        "scrittura di {n} file…": "writing {n} files…",
+        "modifica di 1 file…": "editing 1 file…",
+        "modifica di {n} file…": "editing {n} files…",
+        "ricerca sul web…": "searching the web…",
+        "{n} ricerche sul web…": "{n} web searches…",
+        "apertura di una pagina…": "opening a page…",
+        "apertura di {n} pagine…": "opening {n} pages…",
+        "1 attività in corso…": "1 step running…",
+        "{n} attività in corso…": "{n} steps running…",
+        "file letto": "file read",
+        "file letti": "files read",
+        "letto": "read",
+        "letti": "read",
+        "lettura non riuscita": "read failed",
+        "letture non riuscite": "reads failed",
+        "Letture": "Reads",
+        "ricerca": "search",
+        "ricerche": "searches",
+        "ricerca non riuscita": "search failed",
+        "ricerche non riuscite": "searches failed",
+        "Ricerche": "Searches",
+        "cartella elencata": "folder listed",
+        "cartelle elencate": "folders listed",
+        "elenco": "listing",
+        "elenchi": "listings",
+        "elenco non riuscito": "listing failed",
+        "elenchi non riusciti": "listings failed",
+        "Elenchi": "Listings",
+        "file modificato": "file edited",
+        "file modificati": "files edited",
+        "modifica": "edit",
+        "modifiche": "edits",
+        "modifica non riuscita": "edit failed",
+        "modifiche non riuscite": "edits failed",
+        "Modifiche": "Edits",
+        "file creato": "file created",
+        "file creati": "files created",
+        "nuovo": "new",
+        "nuovi": "new",
+        "creazione non riuscita": "creation failed",
+        "creazioni non riuscite": "creations failed",
+        "Nuovi file": "New files",
+        "file scritto": "file written",
+        "file scritti": "files written",
+        "scritto": "written",
+        "scritti": "written",
+        "scrittura non riuscita": "write failed",
+        "scritture non riuscite": "writes failed",
+        "Scritture": "Writes",
+        "comando": "command",
+        "comandi": "commands",
+        "comando non riuscito": "command failed",
+        "comandi non riusciti": "commands failed",
+        /* «Comandi» è già in workspaceV2 */
+        "giro di test": "test run",
+        "giri di test": "test runs",
+        "test": "tests",
+        "giro di test non riuscito": "test run failed",
+        "giri di test non riusciti": "test runs failed",
+        "Test": "Tests",
+        "ricerche sul web": "web searches",
+        "sul web": "web",
+        /* «ricerca sul web» è già fra gli attrezzi */
+        "ricerca sul web non riuscita": "web search failed",
+        "ricerche sul web non riuscite": "web searches failed",
+        "Web": "Web",
+        "pagina aperta": "page opened",
+        "pagine aperte": "pages opened",
+        "pagina": "page",
+        "pagine": "pages",
+        "pagina non aperta": "page not opened",
+        "pagine non aperte": "pages not opened",
+        "Pagine": "Pages",
+        "delega": "delegation",
+        "deleghe": "delegations",
+        "delega non riuscita": "delegation failed",
+        "deleghe non riuscite": "delegations failed",
+        "Deleghe": "Delegations",
+        "ragionamento": "reasoning",
+        "ragionamenti": "reasonings",
+        "Ragionamenti": "Reasonings",
+        "Tutte": "All",
+        "Non riuscite": "Failed",
+        "non riuscita": "failed",
+        "non riuscito": "failed",
+        "senza codice": "no exit code",
+        "attrezzo": "tool",
+        /* «in corso» è già nel Terminale («running») */
+        "Letto": "Read",
+        "Legge": "Reading",
+        "Cercato": "Searched",
+        "Cerca": "Searching",
+        "Elencato": "Listed",
+        "Elenca": "Listing",
+        "Modificato": "Edited",
+        "Modifica": "Editing",
+        "Scritto": "Wrote",
+        "Scrive": "Writing",
+        "Eseguito": "Ran",
+        "Esegue": "Running",
+        "Test eseguiti": "Tests run",
+        "Esegue i test": "Running the tests",
+        "Cercato sul web": "Searched the web",
+        "Cerca sul web": "Searching the web",
+        "Aperto": "Opened",
+        "Apre": "Opening",
+        "Delegato": "Delegated",
+        "Delega": "Delegating",
+        "radice": "root",
+        "la radice del progetto": "the project root",
+        "Sta ragionando": "Thinking",
+        "Sta ragionando…": "Thinking…",
+        "Prepara il passo successivo…": "Preparing the next step…",
+        "Attività dell’agente": "Agent activity",
+        "Azioni sull’attività": "Activity actions",
+        "Mostra solo": "Show only",
+        "Mostrate {n} voci su {totale}.": "Showing {n} of {totale} entries.",
+        "Apri tutti i ragionamenti": "Open all reasonings",
+        "Apri tutte le voci": "Open all entries",
+        "Chiudi tutte le voci": "Close all entries",
+        "Copia l’attività come testo": "Copy the activity as text",
+        "Apri le modifiche in Review": "Open the changes in Review",
+        "Attività copiata negli appunti.": "Activity copied to the clipboard.",
+        "Copia non riuscita: il browser non ha concesso gli appunti.": "Copy failed: the browser did not grant the clipboard.",
+        "{piu} righe aggiunte, {meno} tolte": "{piu} lines added, {meno} removed",
+        "Non riuscito": "Failed",
+        "Attività conclusa": "Activity finished"
+      },
+      /* F5 (onda 2), 24/09/2026 — la compattazione legacy vista dalla chat: avviso, barra, riga, journal riparato */
+      compattazione: {
+        "Il contesto è quasi pieno ({n} su {m} token).": "The context is almost full ({n} of {m} tokens).",
+        "Il contesto ha superato la soglia ({n} su {m} token).": "The context is over the threshold ({n} of {m} tokens).",
+        "Contesto quasi pieno": "Context almost full",
+        "Compatta ora": "Compact now",
+        "Conversazione riassunta": "Conversation summarized",
+        "token": "tokens",
+        "Riassunto annullato · la conversazione intera torna al modello": "Summary undone · the whole conversation goes back to the model",
+        "Conversazione non riassunta": "Conversation not summarized",
+        "il modello ha risposto con un attrezzo invece del riassunto": "the model answered with a tool instead of the summary",
+        "il riassunto è uscito troncato": "the summary came out truncated",
+        "il modello ha risposto vuoto": "the model answered with nothing",
+        "il fornitore ha risposto con un errore": "the provider answered with an error",
+        "La conversazione non entrava nel modello: la riassumo e riprovo…": "The conversation did not fit the model: summarizing it and retrying…",
+        "Riassumo la conversazione prima di continuare…": "Summarizing the conversation before continuing…",
+        "Riassumo la conversazione…": "Summarizing the conversation…",
+        "Annulla il riassunto": "Undo the summary",
+        "Mostra cosa è stato riassunto": "Show what was summarized",
+        "Azioni sul riassunto": "Actions on the summary",
+        "Il server non ha riassunto la conversazione: resta com’era.": "The server did not summarize the conversation: it stays as it was.",
+        "Riassunto non annullato": "Summary not undone",
+        "Apri una conversazione per riassumerla.": "Open a conversation to summarize it.",
+        "Non c’è un riassunto da annullare.": "There is no summary to undo.",
+        "Connessione al server interrotta. Riprova.": "Connection to the server lost. Try again.",
+        "Operazione non riuscita.": "Operation failed.",
+        "Conversazione recuperata dopo un’interruzione: {n} riga scartata": "Conversation recovered after an interruption: {n} line discarded",
+        "Conversazione recuperata dopo un’interruzione: {n} righe scartate": "Conversation recovered after an interruption: {n} lines discarded",
+        "Conversazione recuperata dopo un’interruzione": "Conversation recovered after an interruption",
+        "Conversazione recuperata fino al giro {g}: quello che veniva dopo non era leggibile.": "Conversation recovered up to turn {g}: what came after could not be read.",
+        "Conversazione recuperata fino all’ultimo punto completo: quello che veniva dopo non era leggibile.": "Conversation recovered up to the last complete point: what came after could not be read.",
+        "Nel salvataggio mancava un pezzo: {n} parte successiva è stata lasciata da parte. Il file originale non è stato modificato.": "A piece of the saved conversation was missing: {n} later part was set aside. The original file was not changed.",
+        "Nel salvataggio mancava un pezzo: {n} parti successive sono state lasciate da parte. Il file originale non è stato modificato.": "A piece of the saved conversation was missing: {n} later parts were set aside. The original file was not changed.",
+        "TALOS · conversazione recuperata": "TALOS · conversation recovered",
+        "Le righe scartate erano in fondo al file e non erano leggibili ({b} byte). Il resto della conversazione è intatto.": "The discarded lines were at the end of the file and could not be read ({b} bytes). The rest of the conversation is intact.",
+        "Il resto della conversazione è intatto.": "The rest of the conversation is intact.",
+        "Dove sta la copia": "Where the copy is",
+        "Copia il percorso": "Copy the path",
+        "Copiato": "Copied",
+        "Copia non riuscita: seleziona il percorso": "Copy failed: select the path",
+        /* 24/09/2026, coordinatore — i motivi e la riparazione fallita del contratto F3 fuso (`session-registry.mjs:3106`, `:3112`, `:5210-5214`) */
+        "la conversazione è andata avanti nel frattempo: il riassunto non vale più": "the conversation moved on in the meantime: the summary no longer applies",
+        "il riassunto non è stato salvato su disco": "the summary was not saved to disk",
+        "il server si è fermato mentre riassumeva: la conversazione resta intera": "the server stopped while summarizing: the conversation stays whole",
+        "TALOS · conversazione non recuperata": "TALOS · conversation not recovered",
+        "La riparazione della conversazione non è riuscita: la coda del file resta incerta.": "Repairing the conversation did not succeed: the end of the file is still uncertain.",
+        "Il sistema ha risposto: {e}. Nessuna riga è stata scartata; riprova a riaprire la conversazione o conserva la diagnosi.": "The system answered: {e}. No line was discarded; try reopening the conversation or keep the diagnostics.",
+        "Nessuna riga è stata scartata; riprova a riaprire la conversazione o conserva la diagnosi.": "No line was discarded; try reopening the conversation or keep the diagnostics."
+      },
+      /* la connessione col server (barra di stato) */
+      connessione: {
+        "Il server non risponde": "The server is not responding",
+        "Collegato di nuovo": "Connected again"
+      },
+      /* F6-1 (26/09/2026): la scheda «GitHub», parte locale (`components/scheda-github.js` e il suo collegamento in `app.js`) */
+      github: {
+        Conflitti: "Conflicts",
+        Preparati: "Staged",
+        Modificati: "Changes",
+        Nuovi: "Untracked",
+        modificato: "modified",
+        aggiunto: "added",
+        eliminato: "deleted",
+        rinominato: "renamed",
+        copiato: "copied",
+        "cambiato di tipo": "type changed",
+        nuovo: "untracked",
+        "in conflitto": "in conflict",
+        "git non è riuscito": "git did not succeed",
+        "Torna com’era": "Goes back as it was",
+        "Tornano com’erano": "Go back as they were",
+        "Si elimina": "Is deleted",
+        "Si eliminano": "Are deleted",
+        "Annullare le modifiche a 1 file?": "Discard the changes to 1 file?",
+        "Annullare le modifiche a {n} file?": "Discard the changes to {n} files?",
+        "Non si può tornare indietro: le modifiche non preparate vanno perse, e i file nuovi si eliminano.": "This cannot be undone: changes that are not staged are lost, and new files are deleted.",
+        "Annulla le modifiche": "Discard changes",
+        "Non c’è niente di preparato": "Nothing is staged",
+        "Preparo 1 file e lo committo?": "Stage 1 file and commit it?",
+        "Preparo tutti i {n} file e li committo?": "Stage all {n} files and commit them?",
+        File: "Files",
+        "Prepara tutto e committa": "Stage all and commit",
+        "Commit fatto": "Committed",
+        Togli: "Unstage",
+        Prepara: "Stage",
+        "Togli tutti": "Unstage all",
+        "Prepara tutti": "Stage all",
+        "Altre azioni su {nome}": "More actions on {nome}",
+        "Confronto con l’ultimo commit {hash} — {soggetto}": "Compared with the last commit {hash} — {soggetto}",
+        "Nessun commit ancora: tutto quello che c’è è nuovo.": "No commit yet: everything here is new.",
+        "Leggo lo stato del repository…": "Reading the repository status…",
+        "HEAD staccata": "Detached HEAD",
+        "Nessun ramo": "No branch",
+        "Altre azioni del repository": "More repository actions",
+        Aggiorna: "Refresh",
+        "C’è 1 file preparato fuori da questa cartella: il commit resta fermo finché non lo togli dall’area preparata.": "There is 1 staged file outside this folder: the commit waits until you unstage it.",
+        "Ci sono {n} file preparati fuori da questa cartella: il commit resta fermo finché non li togli dall’area preparata.": "There are {n} staged files outside this folder: the commit waits until you unstage them.",
+        "Messaggio del commit": "Commit message",
+        "Committa 1 file preparato": "Commit 1 staged file",
+        "Committa {n} file preparati": "Commit {n} staged files",
+        "Niente da committare": "Nothing to commit",
+        "Prima vanno risolti i conflitti.": "Resolve the conflicts first.",
+        "Nessuna modifica rispetto all’ultimo commit.": "No changes since the last commit.",
+        "Differenze di {percorso}": "Changes in {percorso}",
+        Differenze: "Changes",
+        "Torna alle modifiche": "Back to the changes",
+        Preparato: "Staged",
+        "Da preparare": "Not staged",
+        "Esci dallo schermo intero": "Exit full screen",
+        "Schermo intero": "Full screen",
+        "Leggo le differenze…": "Reading the changes…",
+        "È un file binario: le differenze non si mostrano come testo.": "This is a binary file: the changes are not shown as text.",
+        "righe tolte": "lines removed",
+        "riga {n}": "line {n}",
+        "righe {da}-{a}": "lines {da}-{a}",
+        "Nessuna differenza nel testo (è cambiato solo il modo del file).": "No change in the text (only the file mode changed).",
+        "Il diff è troppo lungo: qui ne vedi solo la prima parte.": "The diff is too long: only its first part is shown here.",
+        "Azioni sul file": "File actions",
+        "Apri una sessione per vedere le modifiche della sua cartella.": "Open a session to see the changes in its folder.",
+        /* 28/09: «Inizializza repository», come la vista vuota di VS Code (`extensions/git/package.nls.json:407`) */
+        "Nessun repository git": "No git repository",
+        "La cartella della sessione non ha un repository git. Inizializzalo per tenere traccia delle modifiche, fare commit e usare i rami. Resta sul tuo computer: non serve un account GitHub.": "The session folder does not have a git repository. Initialize one to track changes, commit and use branches. It stays on your computer: no GitHub account needed.",
+        "Inizializza repository": "Initialize Repository",
+        "Inizializzo…": "Initializing…",
+        "Repository inizializzato": "Repository initialized",
+        "Inizializzare un repository qui?": "Initialize a repository here?",
+        "Questa cartella contiene la tua cartella utente: git terrebbe traccia di tutto ciò che c’è dentro.": "This folder contains your user folder: git would track everything inside it.",
+        "Lo stato del repository non si legge.": "The repository status cannot be read.",
+        /* F6-1 passo 3 (26/09): rami, ultimo commit, messi da parte, commit recenti. «Rinomina» sta già fra le schede del Terminale. */
+        "Ramo: {nome}": "Branch: {nome}",
+        Rami: "Branches",
+        "Passa a {nome}": "Switch to {nome}",
+        "Nuovo ramo…": "New branch…",
+        "Nuovo ramo": "New branch",
+        "Nuovo ramo da {nome}": "New branch from {nome}",
+        "Nome del ramo": "Branch name",
+        "Crea il ramo": "Create branch",
+        "Rinomina «{nome}»…": "Rename “{nome}”…",
+        "Rinomina «{nome}»": "Rename “{nome}”",
+        "Nome nuovo": "New name",
+        "Elimina un ramo…": "Delete a branch…",
+        "Elimina un ramo": "Delete a branch",
+        "Ramo eliminato": "Branch deleted",
+        "Eliminare «{nome}» lo stesso?": "Delete “{nome}” anyway?",
+        "Ha commit che non stanno in nessun altro ramo: eliminandolo, quei commit non si vedono più.": "It has commits that are on no other branch: once it is deleted, those commits are no longer visible.",
+        "Elimina lo stesso": "Delete anyway",
+        "Lascia stare": "Cancel",
+        "Azioni sul repository": "Repository actions",
+        "Modifica l’ultimo commit": "Amend last commit",
+        "Annulla l’ultimo commit": "Undo last commit",
+        "L’ultimo commit è già stato inviato": "The last commit has already been pushed",
+        "Riscriverlo cambierebbe la storia di chi l’ha già ricevuto: da qui non si modifica.": "Rewriting it would change the history of whoever already received it: it cannot be changed from here.",
+        "Modifichi il commit {hash}": "Amending commit {hash}",
+        "Modifica il commit": "Amend commit",
+        "Modifica il commit e aggiungi 1 file": "Amend commit and add 1 file",
+        "Modifica il commit e aggiungi {n} file": "Amend commit and add {n} files",
+        "Commit modificato": "Commit amended",
+        "Annullare l’ultimo commit?": "Undo the last commit?",
+        "Il commit sparisce dalla storia; le sue modifiche tornano preparate e il suo messaggio torna nella casella.": "The commit leaves the history; its changes go back to staged and its message goes back into the box.",
+        Commit: "Commit",
+        "Annulla il commit": "Undo commit",
+        "Commit annullato": "Commit undone",
+        "Metti da parte le modifiche": "Stash changes",
+        "Metti da parte con i file nuovi": "Stash changes and new files",
+        "Nota (facoltativa)": "Note (optional)",
+        "Metti da parte": "Stash",
+        "Messe da parte": "Stashed",
+        "Messi da parte": "Stashes",
+        "Senza nota": "No note",
+        "su {ramo}": "on {ramo}",
+        Riprendi: "Restore",
+        Riprese: "Restored",
+        "Altre azioni su questa voce": "More actions on this entry",
+        "Azioni su ciò che è messo da parte": "Stash actions",
+        "Scartare ciò che è messo da parte?": "Drop this stash?",
+        "Non si può tornare indietro: queste modifiche vanno perse.": "This cannot be undone: these changes are lost.",
+        Nota: "Note",
+        Scarta: "Drop",
+        Scartate: "Dropped",
+        "Commit recenti": "Recent commits",
+        "Leggo la storia…": "Reading the history…",
+        "Nessun commit ancora.": "No commits yet.",
+        inviato: "pushed",
+        "solo qui": "local only",
+        "Qui ci sono gli ultimi {n} commit.": "These are the last {n} commits.",
+        /* F6-2 (27/09): la sincronizzazione col remoto */
+        Recupera: "Fetch",
+        "Scarica {n}": "Pull {n}",
+        "Invia {n}": "Push {n}",
+        "Pubblica il ramo": "Publish branch",
+        "Recupero…": "Fetching…",
+        "Scarico…": "Pulling…",
+        "Invio…": "Pushing…",
+        "Pubblico…": "Publishing…",
+        Ferma: "Stop",
+        "Recupera da {remoto}": "Fetch from {remoto}",
+        "Recupera da tutti i remoti": "Fetch from all remotes",
+        "Scarica da {rif}": "Pull from {rif}",
+        "Invia a {rif}": "Push to {rif}",
+        "{giu} da scaricare, {su} da inviare": "{giu} to pull, {su} to push",
+        "Recuperato {quando}": "Fetched {quando}",
+        "Mai recuperato": "Never fetched",
+        "Nessun remoto: questo repository vive solo qui.": "No remote: this repository lives only here.",
+        "HEAD staccata: passa a un ramo per sincronizzare.": "Detached HEAD: switch to a branch to sync.",
+        "Il ramo remoto «{rif}» non esiste più: pubblicalo di nuovo.": "The remote branch “{rif}” no longer exists: publish it again.",
+        "Inviare 1 commit a {remoto}?": "Push 1 commit to {remoto}?",
+        "Inviare {n} commit a {remoto}?": "Push {n} commits to {remoto}?",
+        "Il ramo «{ramo}» va su «{rif}». Un invio non si annulla da qui.": "Branch “{ramo}” goes to “{rif}”. A push cannot be undone from here.",
+        Remoto: "Remote",
+        Ramo: "Branch",
+        "Invia a {remoto}": "Push to {remoto}",
+        Inviato: "Pushed",
+        "Pubblicare il ramo «{ramo}»?": "Publish branch “{ramo}”?",
+        "Il ramo va sul remoto scelto e da lì in poi lo segue: gli invii successivi vanno lì.": "The branch goes to the chosen remote and follows it from then on: later pushes go there.",
+        Pubblica: "Publish",
+        Pubblicato: "Published",
+        "Recupero fermato": "Fetch stopped",
+        "Scaricato": "Pulled",
+        "Già aggiornato": "Already up to date",
+        "Scaricato con conflitti": "Pulled with conflicts",
+        "C’è 1 conflitto: risolvilo nel gruppo Conflitti.": "There is 1 conflict: resolve it in the Conflicts group.",
+        "Ci sono {n} conflitti: risolvili nel gruppo Conflitti.": "There are {n} conflicts: resolve them in the Conflicts group.",
+        "Lo scarico non è partito": "The pull did not start",
+        "Metti da parte e scarica": "Stash and pull",
+        "Prima di scaricare da {rif}": "Before pulling from {rif}",
+        "Le tue modifiche sono in «Messi da parte»": "Your changes are in “Stashes”",
+        "Riprendile da lì quando vuoi.": "Restore them from there whenever you like.",
+        "Riprenderle ora darebbe conflitti: riprendile da lì quando vuoi.": "Restoring them now would conflict: restore them from there whenever you like.",
+        "Le tue modifiche sono tornate al loro posto": "Your changes are back in place",
+        /* F6-2 passo 3: il grafo della storia */
+        "In arrivo": "Incoming",
+        "In uscita": "Outgoing",
+        "da scaricare": "to pull",
+        "1 commit da scaricare da {rif}": "1 commit to pull from {rif}",
+        "{n} commit da scaricare da {rif}": "{n} commits to pull from {rif}",
+        "1 commit da inviare a {rif}": "1 commit to push to {rif}",
+        "{n} commit da inviare a {rif}": "{n} commits to push to {rif}",
+        /* F6-2 passo 4: i file di un commit del grafo */
+        "Leggo i file cambiati…": "Reading the changed files…",
+        "Nessun file cambiato in questa cartella.": "No files changed in this folder.",
+        "Qui ci sono i primi {n} file.": "These are the first {n} files.",
+        "1 file cambiato fuori dalla cartella della sessione.": "1 file changed outside the session folder.",
+        "{n} file cambiati fuori dalla cartella della sessione.": "{n} files changed outside the session folder.",
+        "da {prima}": "from {prima}",
+        "In arrivo · {rif}": "Incoming · {rif}",
+        "In uscita · {rif}": "Outgoing · {rif}",
+        "Confronto fra {da} e {a}": "Comparing {da} and {a}",
+        "Il primo commit: tutto è nuovo.": "The first commit: everything is new.",
+        /* F6-3 (27/09): le pull request (`TESTI_PR` in `components/scheda-github.js`) */
+        "Pull request": "Pull requests",
+        "Leggo le pull request…": "Reading pull requests…",
+        "Aggiorna le pull request": "Refresh pull requests",
+        "Apri le pull request su GitHub": "Open pull requests on GitHub",
+        "Altre azioni sulle pull request": "More pull request actions",
+        "Azioni sulle pull request": "Pull request actions",
+        "Aperte nel progetto": "Open in this project",
+        "Apri su GitHub": "Open on GitHub",
+        "Aperta": "Open",
+        "Bozza": "Draft",
+        "Unita": "Merged",
+        "Chiusa": "Closed",
+        "tua": "yours",
+        "bozza": "draft",
+        "Nessun controllo": "No checks",
+        "Mostra i controlli": "Show the checks",
+        "Controlli finiti": "Checks finished",
+        "Nessuna pull request per questo ramo.": "No pull request for this branch.",
+        "Crea pull request": "Create pull request",
+        "Creo…": "Creating…",
+        "Pull request creata": "Pull request created",
+        "Sei sul ramo predefinito: crea un ramo per aprire una pull request.": "You are on the default branch: create a branch to open a pull request.",
+        "GitHub CLI non c’è": "GitHub CLI is missing",
+        "GitHub CLI è troppo vecchia": "GitHub CLI is too old",
+        "Scarica GitHub CLI": "Download GitHub CLI",
+        "Scarico GitHub CLI…": "Downloading GitHub CLI…",
+        "Le pull request passano da GitHub CLI. TALOS può scaricare la versione ufficiale {versione} (circa 15 MB) nella sua cartella: niente installazione nel sistema, nessuna modifica al PATH.": "Pull requests go through GitHub CLI. TALOS can download the official version {versione} (about 15 MB) into its own folder: nothing is installed system-wide and PATH is not changed.",
+        "Sul sistema c’è la {versione}; a TALOS serve la 2.97 o più nuova. Può scaricare la versione ufficiale {nuova} nella sua cartella, senza toccare quella del sistema.": "The system has {versione}; TALOS needs 2.97 or newer. It can download the official version {nuova} into its own folder, without touching the system one.",
+        "TALOS non sa scaricare GitHub CLI su questo sistema: installala da GitHub e riapri il gruppo.": "TALOS cannot download GitHub CLI on this system: install it from GitHub and open this group again.",
+        "Apri la pagina di GitHub CLI": "Open the GitHub CLI page",
+        "GitHub CLI pronta": "GitHub CLI ready",
+        "GitHub non è collegato": "GitHub is not connected",
+        "Collega il tuo account per vedere e creare le pull request. L’accesso resta a GitHub CLI: TALOS non lo vede.": "Connect your account to see and create pull requests. The sign-in stays with GitHub CLI: TALOS never sees it.",
+        "Collega GitHub": "Connect GitHub",
+        "Incolla questo codice nella pagina di GitHub e conferma: la scheda si aggiorna da sola.": "Paste this code on the GitHub page and confirm: this tab updates by itself.",
+        "Codice di accesso": "Sign-in code",
+        "Copia il codice": "Copy the code",
+        "Codice copiato": "Code copied",
+        "Apri github.com": "Open github.com",
+        "Annulla": "Cancel",
+        "GitHub collegato": "GitHub connected",
+        "Account {account}": "Account {account}",
+        "Il codice è scaduto: ricomincia.": "The code expired: start again.",
+        "Il remoto del ramo non è su github.com: qui non ci sono pull request.": "The branch’s remote is not on github.com: there are no pull requests here.",
+        "Nessun remoto per questo ramo.": "No remote for this branch.",
+        "HEAD staccata: passa a un ramo per vedere le sue pull request.": "Detached HEAD: switch to a branch to see its pull requests.",
+        "Nuova pull request": "New pull request",
+        "Preparo la bozza…": "Preparing the draft…",
+        "Base: {base}": "Base: {base}",
+        "Scegli la base": "Choose the base",
+        "Rami di base": "Base branches",
+        "Il ramo «{base}» non c’è su {remoto}: scegline un altro.": "Branch “{base}” is not on {remoto}: choose another one.",
+        "Titolo della pull request": "Pull request title",
+        "Descrizione (facoltativa)": "Description (optional)",
+        "Apri come bozza": "Open as a draft",
+        "Una bozza non chiede ancora la revisione.": "A draft does not ask for review yet.",
+        "Serve un titolo.": "A title is needed.",
+        "Il ramo non è ancora su GitHub: prima lo pubblichi, con conferma.": "The branch is not on GitHub yet: you publish it first, with a confirmation.",
+        "Il ramo remoto ha commit che qui non ci sono: prima scarica.": "The remote branch has commits that are not here: pull first.",
+        "Il ramo non è ancora su GitHub: la pull request aspetta l’invio.": "The branch is not on GitHub yet: the pull request waits for the push.",
+        "1 fallito": "1 failed",
+        "{n} falliti": "{n} failed",
+        "1 in corso": "1 running",
+        "{n} in corso": "{n} running",
+        "1 annullato": "1 cancelled",
+        "{n} annullati": "{n} cancelled",
+        "1 passato": "1 passed",
+        "{n} passati": "{n} passed",
+        "1 saltato": "1 skipped",
+        "{n} saltati": "{n} skipped",
+        "C’è 1 commit da inviare: prima lo invii, con conferma.": "There is 1 commit to push: you push it first, with a confirmation.",
+        "Ci sono {n} commit da inviare: prima li invii, con conferma.": "There are {n} commits to push: you push them first, with a confirmation.",
+        "1 commit rispetto a {base}": "1 commit compared with {base}",
+        "{n} commit rispetto a {base}": "{n} commits compared with {base}",
+        "{n} commit o più rispetto a {base}": "{n} or more commits compared with {base}",
+        "fallito": "failed",
+        "in corso": "running",
+        "annullato": "cancelled",
+        "passato": "passed",
+        "saltato": "skipped",
+        /* 27/09, decisione owner 47: la domanda del modello respinta per la forma */
+        "Il modello ha corretto la domanda: {motivo}": "The model corrected its question: {motivo}",
+        "mancava il perché": "the why was missing",
+        "servono da {min} a {max} opzioni": "it needs {min} to {max} options",
+        "servono da {min} a {max} domande": "it needs {min} to {max} questions",
+        "c’erano scelte doppie": "some choices were repeated",
+        "c’erano domande doppie": "some questions were repeated",
+        "respinta e riformulata": "rejected and rephrased",
+        "un testo era troppo lungo": "a text was too long",
+        "la forma non era valida": "the form was not valid",
+        /* F6-1 pezzi (26/09) */
+        "Prepara il pezzo": "Stage hunk",
+        "Togli il pezzo": "Unstage hunk",
+        "Annulla il pezzo": "Discard hunk",
+        "Annullare questo pezzo?": "Discard this hunk?",
+        Pezzo: "Hunk",
+        "Azioni sul pezzo": "Hunk actions",
+        "Le sue righe tornano com’erano nella versione preparata. Non si può tornare indietro.": "Its lines go back to the staged version. This cannot be undone.",
+        "Altre azioni sul pezzo: {dove}": "More hunk actions: {dove}",
+        /* F6-1 ✨ e «Affida» (26/09) */
+        "Genera il messaggio": "Generate message",
+        "Scrivo il messaggio…": "Writing the message…",
+        "Affida il commit all’agente": "Hand the commit to the agent",
+        "Guarda le modifiche preparate in questa cartella, scrivi un buon messaggio di commit e fai il commit.": "Look at the staged changes in this folder, write a good commit message and commit.",
+        "Guarda le modifiche di questa cartella, prepara quelle da committare, scrivi un buon messaggio di commit e fai il commit.": "Look at the changes in this folder, stage the ones to commit, write a good commit message and commit."
+      }
+    });
+  }
+});
+
+// src/components/lingua.js
+function risolviLingua(preferenza, lingueBrowser = []) {
+  if (preferenza && preferenza !== "sistema" && DIZIONARIO[preferenza]) return preferenza;
+  const elenco2 = Array.isArray(lingueBrowser) ? lingueBrowser : [lingueBrowser];
+  for (const voce of elenco2) {
+    const codice = String(voce || "").slice(0, 2).toLowerCase();
+    if (DIZIONARIO[codice]) return codice;
+  }
+  return "en";
+}
+function etichettaLinguaRisolta(preferenza, risolta) {
+  const nome = NOMI_LINGUA[risolta] || risolta;
+  return preferenza === "sistema" || !preferenza ? t2("Segui il sistema ({lingua})", { lingua: t2(nome) }) : nome;
+}
+function costruisciIndice(dizionario) {
+  const mappa = /* @__PURE__ */ new Map();
+  for (const [categoria, voci] of Object.entries(dizionario || {})) {
+    if (categoria === "menu") continue;
+    for (const [chiave, valore] of Object.entries(voci)) mappa.set(chiave, valore);
+  }
+  return mappa;
+}
+function impostaLingua(lingua) {
+  linguaCorrente = DIZIONARI[lingua] || lingua === LINGUA_PREDEFINITA ? lingua : LINGUA_PREDEFINITA;
+  indice = linguaCorrente === LINGUA_PREDEFINITA ? /* @__PURE__ */ new Map() : costruisciIndice(DIZIONARI[linguaCorrente]);
+  try {
+    regolePlurale = new Intl.PluralRules(linguaCorrente);
+  } catch {
+    regolePlurale = new Intl.PluralRules(LINGUA_PREDEFINITA);
+  }
+  return linguaCorrente;
+}
+function linguaCorrenteDiT() {
+  return linguaCorrente;
+}
+function interpola(frase, parametri) {
+  if (!parametri) return frase;
+  return String(frase).replace(/\{([a-zA-Z0-9_]+)\}/g, (tutto, nome) => nome in parametri ? String(parametri[nome]) : tutto);
+}
+function t2(frase, parametri) {
+  const tradotta = linguaCorrente === LINGUA_PREDEFINITA ? frase : indice.get(frase) ?? frase;
+  return interpola(tradotta, parametri);
+}
+function tn(uno2, molti, n, parametri) {
+  const forma = regolePlurale.select(Number(n)) === "one" ? uno2 : molti;
+  return t2(forma, { n, ...parametri || {} });
+}
+function primoTesto(el31) {
+  for (const nodo13 of el31.childNodes) if (nodo13.nodeType === 3 && nodo13.data.trim()) return nodo13;
+  return null;
+}
+function applicaLingua(root2, lingua) {
+  const d = DIZIONARIO[lingua] || DIZIONARIO[LINGUA_PREDEFINITA];
+  const radice2 = root2.documentElement || root2;
+  radice2.setAttribute("lang", lingua);
+  const cambiata = impostaLingua(lingua) !== void 0 && lingua !== radice2.dataset?.linguaApplicata;
+  if (radice2.dataset) radice2.dataset.linguaApplicata = lingua;
+  let toccati = 0;
+  for (const el31 of root2.querySelectorAll("[data-t]")) {
+    const valore = d[el31.getAttribute("data-t")];
+    if (!valore) continue;
+    const testo2 = primoTesto(el31);
+    if (testo2) {
+      const codaSpazio = /\s$/.test(testo2.data) ? " " : "";
+      testo2.data = valore + codaSpazio;
+    } else el31.textContent = valore;
+    toccati += 1;
+  }
+  for (const el31 of root2.querySelectorAll("[data-ph]")) {
+    const valore = d[el31.getAttribute("data-ph")];
+    if (!valore) continue;
+    el31.placeholder = valore;
+    toccati += 1;
+  }
+  if (cambiata && typeof radice2.dispatchEvent === "function" && typeof CustomEvent === "function") radice2.dispatchEvent(new CustomEvent(EVENTO_LINGUA, { detail: { lingua } }));
+  return toccati;
+}
+var LINGUE, LINGUA_PREDEFINITA, EVENTO_LINGUA, DIZIONARI, DIZIONARIO, NOMI_LINGUA, linguaCorrente, indice, regolePlurale;
+var init_lingua = __esm({
+  "src/components/lingua.js"() {
+    init_en();
+    LINGUE = Object.freeze(["sistema", "it", "en"]);
+    LINGUA_PREDEFINITA = "it";
+    EVENTO_LINGUA = "talos:lingua";
+    DIZIONARI = Object.freeze({ en: en_default });
+    DIZIONARIO = Object.freeze({
+      it: Object.freeze({
+        nuova: "Nuova",
+        luoghi: "Luoghi",
+        altro: "Altro",
+        fissate: "Fissate",
+        sessioni: "Sessioni",
+        cerca: "Cerca chat…",
+        capability: "Capability",
+        board: "Board",
+        libreria: "Libreria",
+        memoria: "Memoria",
+        attivita: "Attività",
+        chat: "Chat",
+        terminale: "Terminale",
+        review: "Review",
+        browser: "Browser",
+        comandi: "Comandi"
+      }),
+      en: en_default.menu
+    });
+    NOMI_LINGUA = Object.freeze({ it: "italiano", en: "English" });
+    linguaCorrente = LINGUA_PREDEFINITA;
+    indice = /* @__PURE__ */ new Map();
+    regolePlurale = new Intl.PluralRules(LINGUA_PREDEFINITA);
+  }
+});
+
 // src/app/lifecycle.ts
 function createScope() {
   const controller = new AbortController();
@@ -131,6 +1351,474 @@ function createRevision() {
 }
 var init_lifecycle = __esm({
   "src/app/lifecycle.ts"() {
+  }
+});
+
+// src/design-system/overlays/manager.ts
+function modalTabTarget(items, active, backwards) {
+  if (!items.length) return null;
+  if (!items.includes(active)) return backwards ? items.at(-1) : items[0];
+  if (backwards && active === items[0]) return items.at(-1);
+  if (!backwards && active === items.at(-1)) return items[0];
+  return null;
+}
+function registeredOverlayManager(doc) {
+  return managers.get(doc);
+}
+function createOverlayManager(doc) {
+  const existing = managers.get(doc);
+  if (existing) return existing;
+  const scope = createScope();
+  const stack = [];
+  const inertBefore = /* @__PURE__ */ new Map();
+  let observer = null;
+  let restoring = false;
+  const shown = (el31) => el31.isConnected && !el31.hidden && (el31.tagName !== "DIALOG" || el31.hasAttribute("open"));
+  const visible = (el31) => shown(el31) && !el31.closest("[hidden],[inert]") && el31.getClientRects().length > 0 && doc.defaultView?.getComputedStyle(el31).visibility !== "hidden";
+  const top = () => stack.at(-1);
+  const modalBaseZ = () => Number.parseInt(doc.defaultView?.getComputedStyle(doc.documentElement).getPropertyValue("--ui-z-modal") || "200", 10) || 200;
+  function focusable(entry) {
+    return [...entry.content.querySelectorAll(candidates)].filter((el31) => el31.tabIndex >= 0 && !el31.matches(":disabled") && visible(el31));
+  }
+  function foreignNativeModal() {
+    return [...doc.querySelectorAll("dialog[open]")].some((el31) => el31.matches(":modal") && !stack.some((e) => e.layer === el31));
+  }
+  function releaseInert() {
+    for (const [el31, before] of inertBefore) el31.inert = before;
+    inertBefore.clear();
+  }
+  function restoreAttribute(el31, name, value) {
+    if (value === null) el31.removeAttribute(name);
+    else el31.setAttribute(name, value);
+  }
+  function refresh() {
+    const current = top();
+    const wanted = /* @__PURE__ */ new Set();
+    if (current && !foreignNativeModal()) {
+      for (let node2 = current.layer; node2?.parentElement && node2 !== doc.body; node2 = node2.parentElement) {
+        for (const other of node2.parentElement.children) {
+          if (other === node2 || other === current.backdrop?.node || !("inert" in other) || ["SCRIPT", "STYLE", "LINK"].includes(other.tagName)) continue;
+          wanted.add(other);
+        }
+      }
+    }
+    for (const [el31, before] of inertBefore) if (!wanted.has(el31)) {
+      el31.inert = before;
+      inertBefore.delete(el31);
+    }
+    for (const el31 of wanted) if (!inertBefore.has(el31)) {
+      inertBefore.set(el31, el31.inert);
+      el31.inert = true;
+    }
+  }
+  function focusFirst(entry, preferred) {
+    const target = preferred && visible(preferred) ? preferred : focusable(entry)[0];
+    if (target) {
+      target.focus({ preventScroll: true });
+      return;
+    }
+    const heading = entry.content.querySelector("h1,h2,h3");
+    if (heading) {
+      if (!heading.hasAttribute("tabindex")) heading.tabIndex = -1;
+      heading.focus({ preventScroll: true });
+    }
+  }
+  function restoreFocus(entry) {
+    const owner = entry.opener;
+    let target = owner && typeof owner.focus === "function" && visible(owner) ? owner : null;
+    if (!target && entry.openerId) target = doc.getElementById(entry.openerId);
+    if (!target && entry.openerAction) target = [...doc.querySelectorAll("[data-home-action]")].find((el31) => el31.dataset.homeAction === entry.openerAction) || null;
+    const current = top();
+    if (current && (!target || !current.content.contains(target))) {
+      focusFirst(current);
+      return;
+    }
+    if (target && visible(target)) target.focus({ preventScroll: true });
+    else if (!current) doc.querySelector(".talos-sidebar .talos-nav-item, .talos-sidebar button")?.focus({ preventScroll: true });
+  }
+  function deactivate(layer, restore = true) {
+    const index = stack.findIndex((e) => e.layer === layer);
+    if (index < 0) return;
+    const wasTop = index === stack.length - 1;
+    const [entry] = stack.splice(index, 1);
+    if (!entry) return;
+    entry.layer.style.zIndex = entry.zIndex;
+    delete entry.layer.dataset.modalOwned;
+    restoreAttribute(entry.content, "aria-modal", entry.ariaModal);
+    if (entry.backdrop) {
+      restoreAttribute(entry.backdrop.node, "tabindex", entry.backdrop.tab);
+      restoreAttribute(entry.backdrop.node, "aria-hidden", entry.backdrop.hidden);
+      entry.backdrop.node.style.zIndex = entry.backdrop.z;
+    }
+    refresh();
+    if (!stack.length) {
+      observer?.disconnect();
+      observer = null;
+    }
+    if (restore && wasTop && !scope.disposed) {
+      restoring = true;
+      try {
+        restoreFocus(entry);
+      } finally {
+        restoring = false;
+      }
+    }
+  }
+  function prune() {
+    for (const entry of [...stack].reverse()) if (!shown(entry.layer)) deactivate(entry.layer);
+    refresh();
+  }
+  function activate(layer, options) {
+    if (scope.disposed) return;
+    const old = stack.find((e) => e.layer === layer);
+    if (old) {
+      old.close = options.requestClose;
+      refresh();
+      return;
+    }
+    const content = options.content || layer;
+    const opener = options.opener === void 0 ? doc.activeElement : options.opener;
+    const entry = {
+      layer,
+      content,
+      opener,
+      openerId: opener?.id || "",
+      openerAction: opener?.getAttribute("data-home-action") || null,
+      close: options.requestClose,
+      zIndex: layer.style.zIndex,
+      ariaModal: content.getAttribute("aria-modal"),
+      backdrop: options.backdrop ? { node: options.backdrop, tab: options.backdrop.getAttribute("tabindex"), hidden: options.backdrop.getAttribute("aria-hidden"), z: options.backdrop.style.zIndex } : null
+    };
+    stack.push(entry);
+    layer.dataset.modalOwned = "true";
+    const baseZ = modalBaseZ();
+    layer.style.zIndex = String(baseZ + stack.length * 10);
+    if (entry.backdrop) {
+      entry.backdrop.node.tabIndex = -1;
+      entry.backdrop.node.setAttribute("aria-hidden", "true");
+      entry.backdrop.node.style.zIndex = String(baseZ + stack.length * 10 - 1);
+    }
+    content.setAttribute("aria-modal", "true");
+    refresh();
+    const Observer = doc.defaultView?.MutationObserver;
+    if (!observer && Observer && doc.body) {
+      observer = new Observer(prune);
+      observer.observe(doc.body, { subtree: true, childList: true, attributes: true, attributeFilter: ["hidden", "open"] });
+    }
+    focusFirst(entry, options.initialFocus);
+  }
+  function handleKey(event) {
+    const current = top();
+    if (!current || event.defaultPrevented || scope.disposed || foreignNativeModal()) return false;
+    if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      current.close();
+      return true;
+    }
+    if (event.key !== "Tab") return false;
+    const items = focusable(current), target = modalTabTarget(items, doc.activeElement, event.shiftKey);
+    if (target || !items.length) {
+      event.preventDefault();
+      if (target) target.focus({ preventScroll: true });
+      else focusFirst(current);
+      return true;
+    }
+    return false;
+  }
+  doc.addEventListener("focusin", (event) => {
+    const current = top();
+    if (!current || restoring || foreignNativeModal() || current.content.contains(event.target)) return;
+    restoring = true;
+    try {
+      focusFirst(current);
+    } finally {
+      restoring = false;
+    }
+  }, { signal: scope.signal });
+  const api = {
+    activate,
+    deactivate,
+    handleKey,
+    requestCloseTop() {
+      const current = top();
+      if (!current) return false;
+      current.close();
+      return true;
+    },
+    get depth() {
+      return stack.length;
+    },
+    dispose() {
+      if (scope.disposed) return;
+      scope.dispose();
+      observer?.disconnect();
+      observer = null;
+      for (const entry of [...stack].reverse()) deactivate(entry.layer, false);
+      releaseInert();
+      managers.delete(doc);
+    }
+  };
+  managers.set(doc, api);
+  return api;
+}
+var managers, candidates;
+var init_manager = __esm({
+  "src/design-system/overlays/manager.ts"() {
+    init_lifecycle();
+    managers = /* @__PURE__ */ new WeakMap();
+    candidates = 'button,input:not([type="hidden"]),select,textarea,a[href],summary,[tabindex]';
+  }
+});
+
+// src/components/motion-mockup.js
+function rimuovi(animazione) {
+  const info = dettagli.get(animazione);
+  if (!info) return;
+  dettagli.delete(animazione);
+  vive.delete(animazione);
+  if (perElemento.get(info.elemento) === animazione) perElemento.delete(info.elemento);
+  const watcher = osservatori.get(info.doc);
+  if (watcher && --watcher.utenti === 0) {
+    watcher.chiudi();
+    osservatori.delete(info.doc);
+  }
+}
+function annullaAnimazione(animazione) {
+  if (!animazione) return;
+  try {
+    animazione.cancel();
+  } catch {
+  }
+  rimuovi(animazione);
+}
+function osserva(doc) {
+  const presente = osservatori.get(doc);
+  if (presente) {
+    presente.utenti += 1;
+    return;
+  }
+  const win = doc.defaultView || globalThis;
+  const controlla = () => {
+    for (const [a, info] of dettagli) {
+      if (info.doc === doc && (movimentoSpento({ document: doc, leva: info.leva }) || !(millisecondiDelToken(info.token, 180, doc) > 0))) annullaAnimazione(a);
+    }
+  };
+  let media;
+  let observer;
+  try {
+    media = win.matchMedia?.("(prefers-reduced-motion: reduce)");
+  } catch {
+  }
+  if (media?.addEventListener) media.addEventListener("change", controlla);
+  else media?.addListener?.(controlla);
+  if (win.MutationObserver && doc.documentElement) {
+    observer = new win.MutationObserver(controlla);
+    observer.observe(doc.documentElement, { attributes: true, attributeFilter: ["class", "style"] });
+    if (doc.body) observer.observe(doc.body, { attributes: true, attributeFilter: ["class", "style"] });
+  }
+  osservatori.set(doc, { utenti: 1, chiudi() {
+    observer?.disconnect();
+    if (media?.removeEventListener) media.removeEventListener("change", controlla);
+    else media?.removeListener?.(controlla);
+  } });
+}
+function radice(doc) {
+  return (doc || globalThis.document)?.documentElement || null;
+}
+function ridottoDalSistema(finestra = globalThis) {
+  try {
+    return typeof finestra?.matchMedia === "function" && finestra.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  } catch {
+    return false;
+  }
+}
+function movimentoSpento({ document: doc = globalThis.document, leva = "", finestra = doc?.defaultView || globalThis } = {}) {
+  if (ridottoDalSistema(finestra)) return true;
+  const html = radice(doc);
+  if (!html) return true;
+  if (html.classList.contains("interface-motion-off")) return true;
+  if (html.classList.contains("reduce-motion")) return true;
+  if (doc?.body?.classList?.contains("reduce-motion")) return true;
+  if (leva && html.classList.contains(leva)) return true;
+  return false;
+}
+function millisecondiDelToken(nome, ripiego = 180, doc = globalThis.document) {
+  const html = radice(doc);
+  if (!html) return ripiego;
+  let grezzo = "";
+  try {
+    grezzo = (doc.defaultView || globalThis).getComputedStyle(html).getPropertyValue(`--talos-motion-duration-${nome}`).trim();
+  } catch {
+    return ripiego;
+  }
+  if (!grezzo) return ripiego;
+  const n = Number.parseFloat(grezzo);
+  if (!Number.isFinite(n)) return ripiego;
+  return grezzo.endsWith("ms") ? n : n * 1e3;
+}
+function easeDelTema(doc = globalThis.document, variabile = "--talos-motion-ease") {
+  const html = radice(doc);
+  if (!html) return "cubic-bezier(.2,.7,.2,1)";
+  try {
+    const v = (doc.defaultView || globalThis).getComputedStyle(html).getPropertyValue(variabile).trim();
+    return v || (variabile.endsWith("exit") ? "ease-in" : "cubic-bezier(.2,.7,.2,1)");
+  } catch {
+    return "cubic-bezier(.2,.7,.2,1)";
+  }
+}
+function motion(elemento, fotogrammi, {
+  token = "surface-enter",
+  fattore = 1,
+  leva = "",
+  document: doc = globalThis.document,
+  ease = ""
+} = {}) {
+  if (!elemento || typeof elemento.animate !== "function") return null;
+  annullaAnimazione(perElemento.get(elemento));
+  if (movimentoSpento({ document: doc, leva })) return null;
+  const ms2 = millisecondiDelToken(token, 180, doc) * fattore;
+  if (!(ms2 > 0) || !Number.isFinite(ms2)) return null;
+  let animazione = null;
+  try {
+    animazione = elemento.animate(fotogrammi, { duration: ms2, easing: ease || easeDelTema(doc), fill: "none" });
+  } catch {
+    return null;
+  }
+  perElemento.set(elemento, animazione);
+  vive.add(animazione);
+  dettagli.set(animazione, { elemento, doc, leva, token });
+  osserva(doc);
+  const fine = () => rimuovi(animazione);
+  animazione.finished.then(fine, fine);
+  return animazione;
+}
+var vive, perElemento, dettagli, osservatori;
+var init_motion_mockup = __esm({
+  "src/components/motion-mockup.js"() {
+    vive = /* @__PURE__ */ new Set();
+    perElemento = /* @__PURE__ */ new WeakMap();
+    dettagli = /* @__PURE__ */ new Map();
+    osservatori = /* @__PURE__ */ new WeakMap();
+  }
+});
+
+// src/components/modale-td.js
+function nodo(doc, tag2, classe, testo2) {
+  const el31 = doc.createElement(tag2);
+  if (classe) el31.className = classe;
+  if (testo2 !== void 0 && testo2 !== null) el31.textContent = String(testo2);
+  return el31;
+}
+function icona(doc, nome) {
+  const svg2 = doc.createElementNS("http://www.w3.org/2000/svg", "svg");
+  const use = doc.createElementNS("http://www.w3.org/2000/svg", "use");
+  svg2.setAttribute("class", "i");
+  svg2.setAttribute("aria-hidden", "true");
+  use.setAttribute("href", `#i-${nome}`);
+  svg2.append(use);
+  return svg2;
+}
+function apriModale(titolo2, contenuto, { document: doc = globalThis.document, ampia = false, suChiusura = null } = {}) {
+  if (!doc?.body) return null;
+  chiudiModale({ immediata: true });
+  const manager = registeredOverlayManager(doc);
+  const opener = doc.activeElement;
+  const dialogo = nodo(doc, "dialog", "td-modal");
+  if (ampia) dialogo.dataset.ampia = "si";
+  const idTitolo = `td-modal-title-${Math.random().toString(36).slice(2, 8)}`;
+  dialogo.setAttribute("aria-labelledby", idTitolo);
+  const testa = nodo(doc, "div", "td-modal-head");
+  const h2 = nodo(doc, "h2", "", titolo2);
+  h2.id = idTitolo;
+  const chiudiBtn = nodo(doc, "button", "talos-button talos-button--ghost talos-icon-button");
+  chiudiBtn.type = "button";
+  chiudiBtn.setAttribute("aria-label", "Chiudi");
+  chiudiBtn.append(icona(doc, "x"));
+  chiudiBtn.addEventListener("click", () => chiudiModale());
+  testa.append(h2, chiudiBtn);
+  const corpo = nodo(doc, "div", "td-modal-content");
+  for (const pezzo2 of [contenuto].flat().filter(Boolean)) corpo.append(pezzo2);
+  dialogo.append(testa, corpo);
+  dialogo.addEventListener("click", (e) => {
+    if (e.target === dialogo) chiudiModale();
+  });
+  dialogo.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") e.stopPropagation();
+  });
+  dialogo.addEventListener("close", () => {
+    manager?.deactivate(dialogo);
+    if (aperta?.dialogo === dialogo) aperta = null;
+    dialogo.remove();
+    suChiusura?.();
+  });
+  doc.body.append(dialogo);
+  if (typeof dialogo.showModal === "function") dialogo.showModal();
+  else dialogo.setAttribute("open", "");
+  motion(dialogo, [{ opacity: 0, transform: "translateY(12px) scale(.99)" }, { opacity: 1, transform: "none" }], { leva: "motion-surfaces-off", document: doc });
+  aperta = { dialogo, contenuto: corpo, suChiusura, chiudi: () => chiudiModale() };
+  const primo2 = corpo.querySelector("input:not([type=hidden]), textarea, select, button") || chiudiBtn;
+  if (manager) manager.activate(dialogo, { opener, initialFocus: primo2, requestClose: () => chiudiModale() });
+  else primo2.focus?.({ preventScroll: true });
+  return aperta;
+}
+function chiudiModale({ immediata = false } = {}) {
+  const viva = aperta;
+  if (!viva) return false;
+  aperta = null;
+  const { dialogo } = viva;
+  const chiudiDavvero = () => {
+    if (typeof dialogo.close === "function" && dialogo.open) dialogo.close();
+    else {
+      dialogo.remove();
+      viva.suChiusura?.();
+    }
+  };
+  if (immediata) {
+    chiudiDavvero();
+    return true;
+  }
+  const uscita = motion(dialogo, [{ opacity: 1, transform: "none" }, { opacity: 0, transform: "translateY(6px)" }], { token: "surface-exit", leva: "motion-surfaces-off", document: dialogo.ownerDocument || globalThis.document });
+  if (!uscita) {
+    chiudiDavvero();
+    return true;
+  }
+  dialogo.style.pointerEvents = "none";
+  uscita.finished.then(chiudiDavvero, chiudiDavvero);
+  return true;
+}
+function confermaModale({
+  titolo: titolo2 = "Confermi?",
+  domanda,
+  conseguenza = "",
+  etichettaConferma = "Elimina",
+  onConferma,
+  document: doc = globalThis.document
+} = {}) {
+  const testo2 = nodo(doc, "p", "td-prose", domanda);
+  const pezzi = [testo2];
+  if (conseguenza) pezzi.push(nodo(doc, "p", "td-subtle", conseguenza));
+  const piede = nodo(doc, "div", "td-detail-footer");
+  const annulla = nodo(doc, "button", "talos-button talos-button--secondary talos-button--sm", t2("Annulla"));
+  annulla.type = "button";
+  annulla.addEventListener("click", () => chiudiModale());
+  const conferma = nodo(doc, "button", "talos-button talos-button--secondary talos-button--danger talos-button--sm", etichettaConferma);
+  conferma.type = "button";
+  conferma.addEventListener("click", () => {
+    chiudiModale();
+    onConferma?.();
+  });
+  piede.append(annulla, conferma);
+  pezzi.push(piede);
+  return apriModale(titolo2, pezzi, { document: doc });
+}
+var aperta;
+var init_modale_td = __esm({
+  "src/components/modale-td.js"() {
+    init_manager();
+    init_lingua();
+    init_motion_mockup();
+    aperta = null;
   }
 });
 
@@ -395,223 +2083,6 @@ var init_command_palette = __esm({
   }
 });
 
-// src/design-system/overlays/manager.ts
-function modalTabTarget(items, active, backwards) {
-  if (!items.length) return null;
-  if (!items.includes(active)) return backwards ? items.at(-1) : items[0];
-  if (backwards && active === items[0]) return items.at(-1);
-  if (!backwards && active === items.at(-1)) return items[0];
-  return null;
-}
-function registeredOverlayManager(doc) {
-  return managers.get(doc);
-}
-function createOverlayManager(doc) {
-  const existing = managers.get(doc);
-  if (existing) return existing;
-  const scope = createScope();
-  const stack = [];
-  const inertBefore = /* @__PURE__ */ new Map();
-  let observer = null;
-  let restoring = false;
-  const shown = (el30) => el30.isConnected && !el30.hidden && (el30.tagName !== "DIALOG" || el30.hasAttribute("open"));
-  const visible = (el30) => shown(el30) && !el30.closest("[hidden],[inert]") && el30.getClientRects().length > 0 && doc.defaultView?.getComputedStyle(el30).visibility !== "hidden";
-  const top = () => stack.at(-1);
-  const modalBaseZ = () => Number.parseInt(doc.defaultView?.getComputedStyle(doc.documentElement).getPropertyValue("--ui-z-modal") || "200", 10) || 200;
-  function focusable(entry) {
-    return [...entry.content.querySelectorAll(candidates)].filter((el30) => el30.tabIndex >= 0 && !el30.matches(":disabled") && visible(el30));
-  }
-  function foreignNativeModal() {
-    return [...doc.querySelectorAll("dialog[open]")].some((el30) => el30.matches(":modal") && !stack.some((e) => e.layer === el30));
-  }
-  function releaseInert() {
-    for (const [el30, before] of inertBefore) el30.inert = before;
-    inertBefore.clear();
-  }
-  function restoreAttribute(el30, name, value) {
-    if (value === null) el30.removeAttribute(name);
-    else el30.setAttribute(name, value);
-  }
-  function refresh() {
-    const current = top();
-    const wanted = /* @__PURE__ */ new Set();
-    if (current && !foreignNativeModal()) {
-      for (let node2 = current.layer; node2?.parentElement && node2 !== doc.body; node2 = node2.parentElement) {
-        for (const other of node2.parentElement.children) {
-          if (other === node2 || other === current.backdrop?.node || !("inert" in other) || ["SCRIPT", "STYLE", "LINK"].includes(other.tagName)) continue;
-          wanted.add(other);
-        }
-      }
-    }
-    for (const [el30, before] of inertBefore) if (!wanted.has(el30)) {
-      el30.inert = before;
-      inertBefore.delete(el30);
-    }
-    for (const el30 of wanted) if (!inertBefore.has(el30)) {
-      inertBefore.set(el30, el30.inert);
-      el30.inert = true;
-    }
-  }
-  function focusFirst(entry, preferred) {
-    const target = preferred && visible(preferred) ? preferred : focusable(entry)[0];
-    if (target) {
-      target.focus({ preventScroll: true });
-      return;
-    }
-    const heading = entry.content.querySelector("h1,h2,h3");
-    if (heading) {
-      if (!heading.hasAttribute("tabindex")) heading.tabIndex = -1;
-      heading.focus({ preventScroll: true });
-    }
-  }
-  function restoreFocus(entry) {
-    const owner = entry.opener;
-    let target = owner && typeof owner.focus === "function" && visible(owner) ? owner : null;
-    if (!target && entry.openerId) target = doc.getElementById(entry.openerId);
-    if (!target && entry.openerAction) target = [...doc.querySelectorAll("[data-home-action]")].find((el30) => el30.dataset.homeAction === entry.openerAction) || null;
-    const current = top();
-    if (current && (!target || !current.content.contains(target))) {
-      focusFirst(current);
-      return;
-    }
-    if (target && visible(target)) target.focus({ preventScroll: true });
-    else if (!current) doc.querySelector(".talos-sidebar .talos-nav-item, .talos-sidebar button")?.focus({ preventScroll: true });
-  }
-  function deactivate(layer, restore = true) {
-    const index = stack.findIndex((e) => e.layer === layer);
-    if (index < 0) return;
-    const wasTop = index === stack.length - 1;
-    const [entry] = stack.splice(index, 1);
-    if (!entry) return;
-    entry.layer.style.zIndex = entry.zIndex;
-    delete entry.layer.dataset.modalOwned;
-    restoreAttribute(entry.content, "aria-modal", entry.ariaModal);
-    if (entry.backdrop) {
-      restoreAttribute(entry.backdrop.node, "tabindex", entry.backdrop.tab);
-      restoreAttribute(entry.backdrop.node, "aria-hidden", entry.backdrop.hidden);
-      entry.backdrop.node.style.zIndex = entry.backdrop.z;
-    }
-    refresh();
-    if (!stack.length) {
-      observer?.disconnect();
-      observer = null;
-    }
-    if (restore && wasTop && !scope.disposed) {
-      restoring = true;
-      try {
-        restoreFocus(entry);
-      } finally {
-        restoring = false;
-      }
-    }
-  }
-  function prune() {
-    for (const entry of [...stack].reverse()) if (!shown(entry.layer)) deactivate(entry.layer);
-    refresh();
-  }
-  function activate(layer, options) {
-    if (scope.disposed) return;
-    const old = stack.find((e) => e.layer === layer);
-    if (old) {
-      old.close = options.requestClose;
-      refresh();
-      return;
-    }
-    const content = options.content || layer;
-    const opener = options.opener === void 0 ? doc.activeElement : options.opener;
-    const entry = {
-      layer,
-      content,
-      opener,
-      openerId: opener?.id || "",
-      openerAction: opener?.getAttribute("data-home-action") || null,
-      close: options.requestClose,
-      zIndex: layer.style.zIndex,
-      ariaModal: content.getAttribute("aria-modal"),
-      backdrop: options.backdrop ? { node: options.backdrop, tab: options.backdrop.getAttribute("tabindex"), hidden: options.backdrop.getAttribute("aria-hidden"), z: options.backdrop.style.zIndex } : null
-    };
-    stack.push(entry);
-    layer.dataset.modalOwned = "true";
-    const baseZ = modalBaseZ();
-    layer.style.zIndex = String(baseZ + stack.length * 10);
-    if (entry.backdrop) {
-      entry.backdrop.node.tabIndex = -1;
-      entry.backdrop.node.setAttribute("aria-hidden", "true");
-      entry.backdrop.node.style.zIndex = String(baseZ + stack.length * 10 - 1);
-    }
-    content.setAttribute("aria-modal", "true");
-    refresh();
-    const Observer = doc.defaultView?.MutationObserver;
-    if (!observer && Observer && doc.body) {
-      observer = new Observer(prune);
-      observer.observe(doc.body, { subtree: true, childList: true, attributes: true, attributeFilter: ["hidden", "open"] });
-    }
-    focusFirst(entry, options.initialFocus);
-  }
-  function handleKey(event) {
-    const current = top();
-    if (!current || event.defaultPrevented || scope.disposed || foreignNativeModal()) return false;
-    if (event.key === "Escape") {
-      event.preventDefault();
-      event.stopPropagation();
-      current.close();
-      return true;
-    }
-    if (event.key !== "Tab") return false;
-    const items = focusable(current), target = modalTabTarget(items, doc.activeElement, event.shiftKey);
-    if (target || !items.length) {
-      event.preventDefault();
-      if (target) target.focus({ preventScroll: true });
-      else focusFirst(current);
-      return true;
-    }
-    return false;
-  }
-  doc.addEventListener("focusin", (event) => {
-    const current = top();
-    if (!current || restoring || foreignNativeModal() || current.content.contains(event.target)) return;
-    restoring = true;
-    try {
-      focusFirst(current);
-    } finally {
-      restoring = false;
-    }
-  }, { signal: scope.signal });
-  const api = {
-    activate,
-    deactivate,
-    handleKey,
-    requestCloseTop() {
-      const current = top();
-      if (!current) return false;
-      current.close();
-      return true;
-    },
-    get depth() {
-      return stack.length;
-    },
-    dispose() {
-      if (scope.disposed) return;
-      scope.dispose();
-      observer?.disconnect();
-      observer = null;
-      for (const entry of [...stack].reverse()) deactivate(entry.layer, false);
-      releaseInert();
-      managers.delete(doc);
-    }
-  };
-  managers.set(doc, api);
-  return api;
-}
-var managers, candidates;
-var init_manager = __esm({
-  "src/design-system/overlays/manager.ts"() {
-    init_lifecycle();
-    managers = /* @__PURE__ */ new WeakMap();
-    candidates = 'button,input:not([type="hidden"]),select,textarea,a[href],summary,[tabindex]';
-  }
-});
-
 // src/services/api-client.ts
 function isRequestCancelled(error, signal) {
   return signal?.aborted === true || object(error) && error.name === "AbortError";
@@ -730,6 +2201,7 @@ function createWorkspaceChrome(options) {
   let failed = false;
   let notice = "";
   let hasLoaded = false;
+  let providerMancante = false;
   let renderScope = createScope();
   let currentView = "home";
   let readController = null;
@@ -795,6 +2267,14 @@ function createWorkspaceChrome(options) {
       const n = node2("p", "workspace-notice", notice);
       n.setAttribute("role", "status");
       fragment.append(n);
+    }
+    if (providerMancante) {
+      const avviso = node2("div", "workspace-notice workspace-notice--provider");
+      avviso.setAttribute("role", "status");
+      const imposta = button2("Imposta un provider", options.openProviders, "talos-button talos-button--secondary", "i-shield");
+      imposta.dataset.homeAction = "provider-setup";
+      avviso.append(node2("p", "", "Nessun provider impostato. Collega un provider per usare l’agente."), imposta);
+      fragment.append(avviso);
     }
     const columns = node2("div", "workspace-home__columns");
     const recent = node2("section", "workspace-card workspace-recents");
@@ -864,10 +2344,8 @@ function createWorkspaceChrome(options) {
     if (model) modelLabel.textContent = model;
     readiness.append(modelLabel);
     readiness.append(node2("p", "workspace-muted", model && ready ? "Modello selezionato. Le autorizzazioni vengono richieste quando servono." : "Puoi esplorare il workspace. Configura un modello quando vuoi usare l’agente."));
-    readiness.append(
-      button2(model ? "Cambia modello" : "Scegli un modello", options.openModel, "talos-button talos-button--secondary", "i-bolt"),
-      button2("Provider e accessi", options.openProviders, "talos-button talos-button--ghost", "i-shield")
-    );
+    readiness.append(button2(model ? "Cambia modello" : "Scegli un modello", options.openModel, "talos-button talos-button--secondary", "i-bolt"));
+    if (!providerMancante) readiness.append(button2("Provider e accessi", options.openProviders, "talos-button talos-button--ghost", "i-shield"));
     const shortcuts = node2("section", "workspace-card workspace-links");
     shortcuts.append(node2("h2", "", "Organizza il lavoro"));
     for (const [label, view, symbol] of [["Progetti", "progetti", "i-folder"], ["Attività", "attivita", "i-check-sq"], ["Note", "note", "i-edit"], ["Automazioni", "automations", "i-clock"]]) {
@@ -903,6 +2381,8 @@ function createWorkspaceChrome(options) {
       hasLoaded = true;
     }
     if (readiness.status === "fulfilled" && isObject(readiness.value)) setup = readiness.value;
+    const letto = readiness.status === "fulfilled" && isObject(readiness.value) && isObject(readiness.value.provider) ? readiness.value.provider : null;
+    providerMancante = letto !== null && letto.pronto === false;
     render4();
   }
   function syncControls() {
@@ -947,6 +2427,7 @@ function createWorkspaceChrome(options) {
         loading = false;
       }
       if (view === "home") {
+        if (entered) providerMancante = false;
         if (entered || !hasLoaded) void load();
         else render4();
       }
@@ -2545,1184 +4026,6 @@ var init_invio_durante_il_giro = __esm({
   }
 });
 
-// src/i18n/workspace-en.js
-var workspace_en_default;
-var init_workspace_en = __esm({
-  "src/i18n/workspace-en.js"() {
-    workspace_en_default = Object.freeze({
-      "TALOS / Il tuo spazio di lavoro": "TALOS / Your workspace",
-      "Da dove ripartiamo?": "Where shall we pick up?",
-      "Progetti, conversazioni e strumenti. Il tuo lavoro, in un unico posto.": "Projects, conversations and tools. Your work, in one place.",
-      "Apri un progetto": "Open a project",
-      "Inizia un lavoro": "Start working",
-      "Conversazione": "Conversation",
-      "Scrivi e lavora con l’agente": "Write and work with your agent",
-      "Terminale": "Terminal",
-      "Apri la shell del computer": "Open your computer’s shell",
-      "Documenti": "Documents",
-      "Consulta la tua libreria": "Browse your library",
-      "Ricerca": "Research",
-      "Raccogli e confronta le fonti": "Gather and compare sources",
-      "Riprendi il lavoro": "Pick up your work",
-      "Aggiorna": "Refresh",
-      "Leggo le sessioni…": "Loading sessions…",
-      "La cronologia non è disponibile": "History is unavailable",
-      "Il lavoro non è stato cancellato. Riprova a leggere le sessioni.": "Your work has not been deleted. Try loading the sessions again.",
-      "Il prossimo lavoro inizia qui": "Your next project starts here",
-      "Apri un progetto o una conversazione. Le tue sessioni compariranno qui.": "Open a project or a conversation. Your sessions will appear here.",
-      "Nuova conversazione": "New conversation",
-      "Aggiornamento non riuscito. Stai vedendo l’ultima lettura disponibile.": "Refresh failed. You are seeing the last available results.",
-      "Sessione senza nome": "Untitled session",
-      "Tutte le sessioni": "All sessions",
-      "Prima della prossima richiesta": "Before your next request",
-      "Il tuo agente": "Your agent",
-      "Nessun modello selezionato": "No model selected",
-      "Modello selezionato. Le autorizzazioni vengono richieste quando servono.": "Model selected. Permissions will be requested when needed.",
-      "Puoi esplorare il workspace. Configura un modello quando vuoi usare l’agente.": "You can explore your workspace. Configure a model when you are ready to use the agent.",
-      "Cambia modello": "Change model",
-      "Scegli un modello": "Choose a model",
-      "Provider e accessi": "Providers and access",
-      "Organizza il lavoro": "Organize your work",
-      "Nessuna operazione viene avviata automaticamente.": "No operations are started automatically.",
-      "Compatta": "Compact",
-      "Confortevole": "Comfortable",
-      "Home": "Home",
-      "Revisione": "Review",
-      "Sessioni": "Sessions",
-      "Impostazioni": "Settings",
-      "Diagnostica": "Diagnostics",
-      "Libreria": "Library",
-      "Progetti": "Projects",
-      "Note": "Notes",
-      "Attività": "Tasks",
-      "Memoria": "Memory",
-      "Automazioni": "Automations",
-      "Browser": "Browser",
-      "Officina": "Tool Forge",
-      "Capacità": "Capabilities",
-      "Sviluppo": "Development",
-      "Concentrazione": "Focus",
-      "Disposizione del workspace": "Workspace layout",
-      "Preferenze temporanee: memoria locale non disponibile.": "Temporary preferences: local storage is unavailable.",
-      "Il workspace precedente non è più disponibile. I tuoi altri lavori restano nella cronologia.": "The previous workspace is no longer available. Your other work remains in history.",
-      "Non riesco a ripristinare il workspace. Puoi riprovare dalla cronologia.": "The workspace could not be restored. You can try again from history.",
-      "Navigazione": "Navigation",
-      "Sessione": "Session",
-      "Configurazione": "Configuration",
-      "Riprendi il lavoro e apri un progetto.": "Pick up your work or open a project.",
-      "Torna ai messaggi della sessione.": "Return to the session messages.",
-      "Revisione delle modifiche": "Review changes",
-      "Esamina i file e le differenze.": "Inspect files and differences.",
-      "Apri terminale": "Open terminal",
-      "Usa la shell reale del computer.": "Use your computer’s actual shell.",
-      "Apri browser": "Open browser",
-      "Consulta pagine e annotazioni.": "Browse pages and annotations.",
-      "Apri la cronologia e lo stato delle sessioni.": "Open session history and status.",
-      "Trova i workspace e le sessioni collegate.": "Find workspaces and related sessions.",
-      "Libreria e documenti": "Library and documents",
-      "Consulta file e artefatti del lavoro.": "Browse the files and artifacts from your work.",
-      "Leggi e organizza i tuoi appunti.": "Read and organize your notes.",
-      "Controlla le attività e i risultati.": "Check tasks and results.",
-      "Consulta ciò che il workspace conserva.": "Review what the workspace remembers.",
-      "Ricerca approfondita": "Deep research",
-      "Apri ricerche, rapporti e fonti.": "Open research, reports and sources.",
-      "Gestisci pianificazioni e cronologia.": "Manage schedules and history.",
-      "Officina strumenti": "Tool Forge",
-      "Consulta e gestisci gli strumenti creati.": "Browse and manage the tools you have created.",
-      "Nuova sessione": "New session",
-      "Scegli un progetto senza avviare operazioni.": "Choose a project without starting operations.",
-      "Rinomina sessione": "Rename session",
-      "Cambia il titolo della sessione corrente.": "Change the current session title.",
-      "Riprendi sessione": "Resume session",
-      "Richiedi un nuovo turno nella sessione corrente.": "Request another turn in the current session.",
-      "Duplica come ramo": "Fork session",
-      "Crea un ramo dalla sessione corrente.": "Create a branch from the current session.",
-      "Gestione del contesto": "Context management",
-      "Consulta misure, memoria protetta e compattazione.": "Review measurements, protected memory and compaction.",
-      "Albero della sessione": "Session tree",
-      "Consulta rami e deleghe.": "Inspect branches and delegated work.",
-      "Esporta sessione": "Export session",
-      "Scegli Markdown o eventi JSON reali.": "Choose Markdown or the actual JSON events.",
-      "Prepara una copia da condividere": "Prepare a copy to share",
-      "Scegli il formato della trascrizione reale.": "Choose a format for the actual transcript.",
-      "Cambia il modello per la prossima richiesta.": "Change the model for your next request.",
-      "Modelli locali e download": "Local models and downloads",
-      "Apri il laboratorio dei modelli.": "Open the model lab.",
-      "Chiavi e indirizzi dei fornitori, nel Laboratorio modelli.": "Provider keys and addresses, in the model lab.",
-      "Permessi": "Permissions",
-      "Controlla le autorizzazioni senza modificarle automaticamente.": "Review permissions without changing them automatically.",
-      "Attrezzi, skill e connettori": "Tools, skills and connectors",
-      "Consulta capacità, MCP ed estensioni.": "Browse capabilities, MCP and extensions.",
-      "Doctor": "Doctor",
-      "Leggi la diagnostica del sistema.": "Read system diagnostics.",
-      "Personalizza il workspace e il comportamento.": "Customize the workspace and its behavior.",
-      "Scorciatoie da tastiera": "Keyboard shortcuts",
-      "Consulta i comandi e le combinazioni disponibili.": "Browse available commands and key combinations.",
-      "Apri prima una sessione.": "Open a session first.",
-      "Attendi la fine dell’esecuzione.": "Wait for the current run to finish.",
-      "Cerca comandi, sezioni o strumenti…": "Search commands, sections or tools…",
-      "Cerca comandi e destinazioni": "Search commands and destinations",
-      "Comandi e destinazioni": "Commands and destinations",
-      "Nessun comando trovato. Prova un nome di sezione o cancella la ricerca.": "No commands found. Try a section name or clear the search.",
-      "risultati": "results",
-      "risultato": "result",
-      "Comandi": "Commands",
-      "Cerca un comando": "Search commands",
-      "Chiudi Comandi": "Close commands",
-      "scegli": "choose",
-      "apri": "open",
-      "chiudi": "close",
-      "Invio": "Enter",
-      "Comando non disponibile": "Command unavailable",
-      "Comando non eseguito": "Command not executed"
-    });
-  }
-});
-
-// src/i18n/en.js
-var en_default;
-var init_en = __esm({
-  "src/i18n/en.js"() {
-    init_workspace_en();
-    en_default = Object.freeze({
-      workspaceV2: workspace_en_default,
-      workspacePreferencesV2: {
-        "Riprendi il workspace all’avvio": "Restore the workspace at startup",
-        "Riapre l’ultima sessione disponibile senza avviare operazioni.": "Reopens the last available session without starting operations.",
-        "Preferenze salvate da una versione più recente: le modifiche restano temporanee.": "Preferences were saved by a newer version: changes remain temporary."
-      },
-      /* i menu: chiavi astratte dal mockup (H21), applicate a [data-t]/[data-ph] */
-      /* F3-12, 24/09/2026 — la fascia del modo tolto e le scelte del modo di lavoro. */
-      avvisoPiano: {
-        "Il piano è stato aggiornato (revisione {n}).": "The plan has been updated (revision {n}).",
-        "Vai al piano": "Go to the plan",
-        "Chiudi l’avviso": "Dismiss",
-        "Piano aggiornato": "Plan updated"
-      },
-      modoDiLavoro: {
-        "Questa conversazione usava la modalità Workflow, che non c’è più.": "This conversation used Workflow mode, which is no longer available.",
-        "Scegli come continuare: vale per i prossimi messaggi.": "Choose how to continue: it applies to your next messages.",
-        "Continua in Normale": "Continue in Normal",
-        "Continua in Piano": "Continue in Plan",
-        "Modo di lavoro aggiornato": "Work mode updated",
-        "Lavora normalmente": "Work normally",
-        "Prima prepara il piano": "Plan first"
-      },
-      menu: {
-        nuova: "New",
-        luoghi: "Places",
-        altro: "More",
-        fissate: "Pinned",
-        sessioni: "Sessions",
-        cerca: "Search chats…",
-        capability: "Capability",
-        board: "Board",
-        libreria: "Library",
-        memoria: "Memory",
-        attivita: "Tasks",
-        chat: "Chat",
-        terminale: "Terminal",
-        review: "Review",
-        browser: "Browser",
-        comandi: "Commands"
-      },
-      impostazioni: {
-        // sezioni
-        "Aspetto e movimento": "Appearance and motion",
-        "Chat e composer": "Chat and composer",
-        "Laboratorio modelli": "Model Lab",
-        "Provider e accessi": "Providers and access",
-        "Strumenti agente e permessi": "Agent tools and permissions",
-        "Privacy e dati locali": "Privacy and local data",
-        "File e workspace": "Files and workspace",
-        "Account, Doctor e backup": "Account, Doctor and backup",
-        // 06/09, D2/D13/D21/D22/D26 — le tre sezioni nuove delle Impostazioni
-        "Memoria e contesto": "Memory and context",
-        "Sicurezza e privacy": "Security and privacy",
-        "Costi e consumo": "Cost and usage",
-        // titoli delle righe
-        "Animazione risposta": "Reply animation",
-        "Animazioni interfaccia": "Interface animations",
-        "Apertura del pulsante +": "The “+” button opens",
-        "Bagliore": "Glow",
-        "Chat a tutta larghezza": "Full-width chat",
-        "Scadenza delle domande": "Question timeout",
-        "Domande di TALOS": "TALOS questions",
-        "Nessuna": "None",
-        "1 minuto": "1 minute",
-        "5 minuti": "5 minutes",
-        "10 minuti": "10 minutes",
-        "Composer": "Composer",
-        "Contrasto": "Contrast",
-        "Curva": "Easing",
-        "Densità": "Density",
-        "Densità delle liste": "List density",
-        "Dimensione interfaccia": "Interface size",
-        "Durata": "Duration",
-        "Feedback": "Feedback",
-        "Finestre": "Windows",
-        "Intensità": "Intensity",
-        "Intensità UI": "UI intensity",
-        "Intestazione immersiva": "Immersive header",
-        "Lingua dei menu": "Menu language",
-        "Messaggi": "Messages",
-        "Modalità colore": "Color mode",
-        "Navigazione": "Navigation",
-        "Pannelli strumenti": "Tool panels",
-        "Parallasse": "Parallax",
-        "Profilo": "Profile",
-        "Profondità": "Depth",
-        "Qualità": "Quality",
-        "Renderer": "Renderer",
-        "Riduci movimento": "Reduce motion",
-        "Rispetta risparmio dati": "Respect data saver",
-        "Ritardo progressivo": "Stagger",
-        "Scie": "Trails",
-        "Sfondo animato": "Animated background",
-        "Sfondo attivo": "Background on",
-        "Sospendi finestra nascosta": "Pause when hidden",
-        "Stile dei messaggi": "Message style",
-        "Superfici": "Surfaces",
-        "Tema TALOS": "TALOS theme",
-        "Testo chat": "Chat text",
-        "Velocità": "Speed",
-        // opzioni
-        "Adattiva": "Adaptive",
-        "Adattivo": "Adaptive",
-        "Alta": "High",
-        "Atlas": "Atlas",
-        "Aurora": "Aurora",
-        "Basicus": "Basicus",
-        "Bassa": "Low",
-        "Bilanciata": "Balanced",
-        "Bolle": "Bubbles",
-        "Calm": "Calm",
-        "Cassetto": "Drawer",
-        "Chiaro": "Light",
-        "Cinematografica": "Cinematic",
-        "Classica": "Classic",
-        "Claudius": "Claudius",
-        "Comoda": "Comfortable",
-        "Compatta": "Compact",
-        "Complessità alta": "High complexity",
-        "Cursore testo": "Text cursor",
-        "Dissolvenza": "Fade",
-        "Elastica leggera": "Light elastic",
-        "Ember": "Ember",
-        "English": "English",
-        "Espressivo": "Expressive",
-        "Extra grande": "Extra large",
-        "Extra piccola": "Extra small",
-        "Extra piccolo": "Extra small",
-        "Finestra": "Window",
-        "Forge": "Forge",
-        "Glacier": "Glacier",
-        "Grande": "Large",
-        "Italiano": "Italian",
-        "Lineare": "Linear",
-        "Menu": "Menu",
-        "Minimale": "Minimal",
-        "Morbida": "Soft",
-        "Noir": "Noir",
-        "Pannello laterale": "Side panel",
-        "Paper": "Paper",
-        "Personalizzato": "Custom",
-        "Piccola": "Small",
-        "Piccolo": "Small",
-        "Precisa": "Precise",
-        "Predefinita": "Default",
-        "Predefinito": "Default",
-        "Scuro": "Dark",
-        "Segui il sistema": "Follow the system",
-        "Segui il tema": "Follow the theme",
-        "Semplice": "Simple",
-        "Sezioni": "Sections",
-        "Signal": "Signal",
-        "Spento": "Off",
-        "Standard": "Standard",
-        "Statico": "Static",
-        "Telemetry": "Telemetry",
-        "Terminal": "Terminal",
-        "Violet": "Violet",
-        // unità e voci del pannello
-        "%": "%",
-        "ms": "ms",
-        "Segui il sistema ({lingua})": "Follow the system ({lingua})",
-        "italiano": "Italian"
-      },
-      /* i nomi umani degli attrezzi */
-      attrezzi: {
-        "annullamento di una ricerca": "cancelling a research",
-        "apertura di una pagina web": "opening a web page",
-        "avvio di una ricerca approfondita": "starting a deep research",
-        "chiusura di un’attività": "closing a task",
-        "comando nel terminale": "terminal command",
-        "copia di un file di Libreria nel workspace": "copying a Library file into the workspace",
-        "correzione di una memoria": "correcting a memory",
-        "creazione di un artefatto": "creating an artifact",
-        "creazione di un attrezzo nuovo": "creating a new tool",
-        "creazione di un documento": "creating a document",
-        "creazione di un’attività": "creating a task",
-        "data e ora": "date and time",
-        "delega a un sotto-agente": "delegating to a sub-agent",
-        "domanda alla persona": "asking the user a question",
-        "piano da approvare": "plan awaiting approval",
-        // 24/09/2026, decisione owner 36
-        "richiesta della modalità Piano": "requesting Plan mode",
-        "proposta di workflow": "proposing a workflow",
-        "stato del workflow": "workflow status",
-        "Risultato del comando": "Command output",
-        "lettura del risultato di un passo": "reading a step result",
-        "controllo del workflow": "workflow control",
-        "domanda all’agente che l’ha avviato": "asking the parent agent",
-        "risposta all’agente che l’ha avviato": "answering the parent agent",
-        "domanda a un sotto-agente": "asking a sub-agent",
-        "risposta a un sotto-agente": "answering a sub-agent",
-        "elenco della Libreria": "listing the Library",
-        "elenco della cartella": "listing the folder",
-        "elenco delle attività": "listing the tasks",
-        "elenco delle note": "listing the notes",
-        "elenco delle ricerche": "listing the researches",
-        "eliminazione di un file di Libreria": "deleting a Library file",
-        "eliminazione di una memoria": "deleting a memory",
-        "eliminazione di una nota": "deleting a note",
-        "eliminazione di una ricerca": "deleting a research",
-        "consegna del rapporto di ricerca": "delivering the research report",
-        "eliminazione di un’attività": "deleting a task",
-        "esecuzione dei test": "running the tests",
-        "generazione di un’immagine": "generating an image",
-        "lettura del rapporto di ricerca": "reading the research report",
-        "lettura di un file": "reading a file",
-        "lettura di un file di Libreria": "reading a Library file",
-        "modifica di un file": "editing a file",
-        "modifica di una nota": "editing a note",
-        "modifica di un’attività": "editing a task",
-        "origine di un file di Libreria": "origin of a Library file",
-        "pausa di una ricerca": "pausing a research",
-        "regole d’uso della Libreria": "Library usage rules",
-        "ricerca in Libreria": "searching the Library",
-        "ricerca nei file": "searching in files",
-        "ricerca nella memoria": "searching the memory",
-        "elenco della memoria": "listing the memory",
-        "ricerca fra le note": "searching the notes",
-        "lettura di una nota": "reading a note",
-        "ricerca fra le attività": "searching the tasks",
-        "ricerca fra le ricerche": "searching the researches",
-        "ricerca nelle conversazioni": "searching the conversations",
-        "Questa conversazione non c’è più.": "This conversation is no longer there.",
-        "Apri la conversazione": "Open the conversation",
-        "Memorie elencate": "Memories listed",
-        "Cercato fra le note: «{q}»": "Searched the notes: “{q}”",
-        "Note elencate": "Notes listed",
-        "Nota letta": "Note read",
-        "Cercato fra le attività: «{q}»": "Searched the tasks: “{q}”",
-        "Attività elencate": "Tasks listed",
-        "Cercato fra le ricerche: «{q}»": "Searched the researches: “{q}”",
-        "Ricerche elencate": "Researches listed",
-        "Conversazione letta": "Conversation read",
-        "Cercato nelle conversazioni: «{q}»": "Searched the conversations: “{q}”",
-        "Board delle conversazioni": "Board of conversations",
-        "ricerca sul web": "web search",
-        "rinomina di un file di Libreria": "renaming a Library file",
-        "rinomina di una ricerca": "renaming a research",
-        "ripresa di una ricerca": "resuming a research",
-        "scrittura di un file": "writing a file",
-        "scrittura di una nota": "writing a note",
-        "scrittura in memoria": "writing to memory"
-      },
-      /* il Terminale a schede */
-      terminale: {
-        "tu": "you",
-        "Nuovo": "New",
-        "Apri una nuova scheda": "Open a new tab",
-        "Apri una sessione per avere più schede": "Open a session to have more tabs",
-        "Hai già {n} schede aperte: chiudine una": "You already have {n} tabs open: close one",
-        "Chiudi": "Close",
-        "Chiudi le altre": "Close others",
-        "Chiudi tutte": "Close all",
-        "Rinomina": "Rename",
-        "Nessuna scheda aperta": "No tab open",
-        "Ogni scheda dichiara chi l'ha aperta e dove.": "Every tab says who opened it and where.",
-        "Aperta da te": "Opened by you",
-        "Azioni sulla scheda": "Tab actions",
-        "in corso": "running",
-        "connessa": "connected",
-        "connessione in corso": "connecting",
-        "in attesa": "waiting",
-        "disconnessa": "disconnected",
-        "shell chiusa": "shell closed",
-        "shell ripresa": "shell resumed",
-        "Stessa macchina, senza isolamento": "Same machine, no isolation",
-        "La shell gira sul tuo computer, nella cartella della sessione: nessuna sandbox.": "The shell runs on your computer, in the session folder: no sandbox.",
-        "Premi Nuovo per aprire una shell in questa cartella.": "Press New to open a shell in this folder.",
-        "cartella predefinita del server": "server default folder",
-        "Colori limitati ({motivo}).": "Limited colors ({motivo}).",
-        "shell sul tuo computer, senza isolamento": "shell on your computer, no isolation",
-        "Serve una sessione": "A session is needed",
-        "Troppe schede": "Too many tabs",
-        "Scheda non aperta": "Tab not opened",
-        "Shell non chiusa sul server": "Shell not closed on the server"
-      },
-      /* le azioni su un messaggio della chat e l'invito del primo avvio (PO-27, 17/09) */
-      messaggio: {
-        "Azioni sulla risposta": "Actions on the answer",
-        "Azioni sul tuo messaggio": "Actions on your message",
-        "Altre azioni sulla risposta": "More actions on the answer",
-        "Altre azioni sulla risposta — eliminare si può a giro finito": "More actions on the answer — deleting is possible once the run is over",
-        "Copia la risposta": "Copy the answer",
-        "Copia il tuo messaggio": "Copy your message",
-        "Ascolta la risposta": "Listen to the answer",
-        "Riusa nel composer": "Reuse in the composer",
-        "Chiedi di nuovo": "Ask again",
-        "Elimina la risposta": "Delete the answer",
-        "Confermi? Elimina la risposta": "Confirm? Delete the answer",
-        "Elimina il messaggio": "Delete the message",
-        "Confermi? Elimina anche la risposta": "Confirm? This deletes the answer too",
-        "Visualizza le modifiche": "View the changes",
-        "1 file modificato": "1 file changed",
-        "{n} file modificati": "{n} files changed",
-        "Scegli una cartella": "Choose a folder",
-        "Per iniziare scegli una cartella: TALOS legge e scrive solo lì dentro.": "To start, choose a folder: TALOS only reads and writes inside it.",
-        "Il modello si sceglie dalla pillola qui sotto.": "The model is chosen from the pill below.",
-        "Collega un modello": "Connect a model"
-      },
-      /* le linguette dei file della Revisione (BC-63, 17/09: stesso componente del Terminale) */
-      revisione: {
-        "Azioni sul file": "File actions",
-        "Apri il file": "Open the file",
-        "Copia il percorso": "Copy the path",
-        "Copia il diff di questo file": "Copy this file’s diff"
-      },
-      /* il Browser a schede */
-      browser: {
-        "Letture della sessione": "Session readings",
-        "Nessuna pagina ancora": "No pages yet",
-        "Testo acquisito dall’agente · {n} pagina": "Text acquired by the agent · {n} page",
-        "Testo acquisito dall’agente · {n} pagine": "Text acquired by the agent · {n} pages",
-        "{n} lettura dell’agente": "{n} reading by the agent",
-        "{n} letture dell’agente": "{n} readings by the agent",
-        "{n} pagina aperta da te": "{n} page opened by you",
-        "{n} pagine aperte da te": "{n} pages opened by you",
-        "Lettura {i} di {n}": "Reading {i} of {n}",
-        "Pagina aperta da te · viva dentro TALOS": "Opened by you · live inside TALOS",
-        "Pagina aperta da te · non mostrabile qui": "Opened by you · cannot be shown here",
-        "Apertura in corso…": "Opening…",
-        "Le letture dell’agente sono copie testuali; una pagina che apri tu è viva e ci puoi navigare dentro. Le note restano in questo browser.": "Agent readings are text copies; a page you open is live and you can navigate inside it. Notes stay in this browser.",
-        "Le letture sono copie testuali; una pagina che apri tu è viva dentro TALOS — se il sito vieta la cornice, la mostra un browser pilotato sul tuo computer. Le note restano qui.": "Readings are text copies; a page you open is live inside TALOS — if the site refuses to be framed, a browser TALOS drives on your computer shows it. Notes stay here.",
-        "Agente": "Agent",
-        "Tu": "You",
-        "Pagina viva": "Live page",
-        "Chiedi all’agente di leggerla": "Ask the agent to read it",
-        "Nessuna pagina letta": "No page read yet",
-        /* ⭐ 16/09/2026, P0 corsia B — le frasi dei sei stati della scheda (apertura, ritentativo,
-           guasto, annullata, a riposo). Il cancello `tests/unit/i18n-copertura.test.mjs` legge le
-           TESTI di `components/browser.js` e pretende l'inglese per ciascuna: senza queste righe la
-           suite delle unità è rossa. */
-        "Se ci mette troppo puoi annullare: la scheda resta dov’è.": "If it takes too long you can cancel: the tab stays where it is.",
-        "Ogni tentativo aspetta un po’ di più del precedente.": "Each attempt waits a little longer than the one before.",
-        "Non sono riuscito ad aprire questa pagina": "I could not open this page",
-        "Apertura annullata": "Opening cancelled",
-        "Hai chiuso la scheda mentre apriva: non è stato scritto niente.": "You cancelled while it was opening: nothing was written.",
-        "Questa pagina era a riposo: la sto ricaricando": "This page was asleep: I am reloading it",
-        "Restano vive le ultime pagine che hai guardato; le altre si ricaricano quando ci torni.": "The pages you looked at most recently stay alive; the others reload when you come back.",
-        "Questa pagina è in pausa": "This page is paused",
-        "Riprova": "Try again",
-        "Annulla": "Cancel",
-        "{invito}: usa «Rileggi».": "{invito}: use “Reload”.",
-        /* ⛔ 16/09 — questa frase è composta da una FUNZIONE (`TESTI.statoRiprovo`), quindi il cancello
-           i18n, che scansiona solo le stringhe di TESTI, non la vede: mancava, e nella foto del tema
-           scuro il titolo usciva in italiano sopra un sottotitolo inglese. Trovata guardando la foto. */
-        "Non ha risposto: riprovo ({tentativo} di {totale})…": "No answer: trying again ({tentativo} of {totale})…",
-        /* ⛔ 16/09 — i quattro RIMEDI di `rimedioPerIlMotivo` (nati il 07/9) non erano mai stati
-           tradotti: finivano in una riga di avviso e nessuno ci aveva guardato. Adesso stanno nel
-           pannello dello stato, in grande, sotto un titolo inglese: mezza frase per lingua. */
-        "Controlla l’indirizzo.": "Check the address.",
-        "Il sito ha un certificato non valido: aprilo fuori da TALOS se ti fidi.": "The site has an invalid certificate: open it outside TALOS if you trust it.",
-        "Riprova fra un momento.": "Try again in a moment.",
-        "Controlla che il servizio sia acceso.": "Check that the service is running.",
-        "La pagina pilotata è una alla volta: aprendone un’altra questa resta nella sua scheda e si riapre quando ci torni.": "Only one driven page at a time: opening another leaves this one in its tab, and it reopens when you come back.",
-        "Non è un indirizzo: scrivi un sito (es. localhost:5173 o example.org).": "That is not an address: type a site (e.g. localhost:5173 or example.org).",
-        "L’agente chiede di leggere {url}. La scelta vale per questa richiesta.": "The agent asks to read {url}. The choice applies to this request only.",
-        "Nota: {nota}": "Note: {nota}",
-        "{motivo}. {invito}: usa «Rileggi».": "{motivo}. {invito}: use “Reload”.",
-        "Il sito non consente di essere mostrato dentro TALOS": "The site does not allow being shown inside TALOS",
-        "Ricarica la pagina nella cornice": "Reload the page in the frame",
-        "Prepara nel composer la richiesta di rileggere questa pagina": "Prepare in the composer the request to re-read this page",
-        "Azioni sulla scheda": "Tab actions",
-        "{titolo} — {url}": "{titolo} — {url}",
-        "Pagina": "Page",
-        /* ⛔⛔⛔ 16/09/2026, GIRO DI RIPARAZIONE — LE FRASI DEI GUASTI, che prima le scriveva il SERVER.
-           Le foto della consegna precedente mostravano il pannello mezzo inglese e mezzo italiano: il
-           motivo lo componeva `src/browser-frame.mjs` con un numero dentro, e una chiave con un numero
-           dentro non può stare in nessun dizionario. Adesso le frasi nascono in `components/browser.js`
-           con `{secondi}` come SEGNAPOSTO, quindi la chiave è una sola per tutti i numeri e il cancello
-           `tests/unit/i18n-copertura.test.mjs` le vede e ne pretende l'inglese. */
-        "Il sito non ha risposto in tempo ({secondi} secondi)": "The site did not answer in time ({secondi} seconds)",
-        "Questo indirizzo non esiste": "That address does not exist",
-        "Nessuno risponde a questo indirizzo": "Nothing is answering at that address",
-        "Il sito ha un certificato non valido": "The site has an invalid certificate",
-        "Non sono riuscito a raggiungere il sito": "I could not reach the site",
-        "Questo non è un indirizzo che posso aprire": "That is not an address I can open",
-        "Il sito vieta di essere mostrato dentro un altro sito": "The site refuses to be shown inside another site",
-        "Il sito si mostra solo dentro le sue stesse pagine": "The site only shows itself inside its own pages",
-        "Il sito consente la cornice solo ad altri siti, non a TALOS": "The site allows framing only for other sites, not for TALOS",
-        /* le parole dello stato sulla striscia delle linguette: si ascoltano (sr-only) — WCAG 1.4.1,
-           un lettore di schermo non annuncia i colori */
-        "in apertura": "opening",
-        "sto riprovando": "trying again",
-        "non raggiunta": "not reached",
-        "annullata": "cancelled",
-        /* ⛔ 16/09 — il pulsante del pannello: il testo di partenza sta nel modello HTML, che nessuno
-           traduce, e nella foto inglese usciva «Annulla navigazione» sotto un titolo inglese. */
-        "Annulla navigazione": "Cancel navigation",
-        /* ⛔ 16/09 — le etichette della barra del Browser: stesso motivo, stesso posto (il modello HTML
-           le scriveva a mano e nessuno le traduceva). Le scrive il componente, quindi il cancello di
-           copertura le vede e ne pretende l inglese: infatti e stato lui a trovarle mancanti. */
-        "Rileggi": "Reload",
-        "Annota": "Annotate",
-        "Nota locale": "Local note",
-        "Copia testo": "Copy text",
-        "Testo dell’agente": "Agent text",
-        /* ⛔⛔ 16/09/2026, SECONDO GIRO DI RIPARAZIONE — le frasi del Browser che a schermo uscivano in
-           ITALIANO dentro una app inglese. Le prime due erano un pezzo di stringa attaccato a un numero
-           (`${n} caratteri`) e nessun dizionario poteva contenerle: adesso sono frasi con segnaposto.
-           Le altre erano `t(...)` regolari, semplicemente senza la riga inglese — misurate una per una
-           (9 prima della cura, 0 dopo; il comando è nel rapporto della corsia B). */
-        "{n} carattere": "{n} character",
-        "{n} caratteri": "{n} characters",
-        "Sorgente ricevuto dall’agente ({n} caratteri)": "Source received by the agent ({n} characters)",
-        "Sorgente ricevuto dall’agente": "Source received by the agent",
-        "Chiudi {titolo}": "Close {titolo}",
-        "Questo sito non si lascia mostrare dentro TALOS. Qui sotto c’è il testo che ha letto l’agente.": "This site refuses to be shown inside TALOS. Below is the text the agent read.",
-        "Qui sotto c’è il testo che ha letto l’agente.": "Below is the text the agent read.",
-        "di": "of",
-        "La pagina è stata tagliata: l’agente ne ha ricevuta solo una parte. Aprila per vedere quale.": "The page was cut: the agent received only part of it. Open it to see which part.",
-        "Segna gli elementi della pagina da cambiare: i commenti finiscono nel composer": "Mark the parts of the page to change: the comments end up in the composer",
-        "Prepara una bozza nella chat senza inviarla": "Prepare a draft in the chat without sending it"
-      },
-      /* R4 (24/09/2026) — il segmento compatto delle attività: le specie, le voci, il menu «⋯» */
-      attivita: {
-        /* 26/09 — la testa del gruppo attività e l'Indice dei giri (`legacy/app.js`, formattaConteggioAttivita/formattaAttivitaInCorso) */
-        "1 attività non riuscita": "1 step failed",
-        "{n} attività non riuscite": "{n} steps failed",
-        "1 altra azione": "1 other action",
-        "{n} altre azioni": "{n} other actions",
-        "Attività non riuscita": "Step failed",
-        "1 attività interrotta": "1 step interrupted",
-        "{n} attività interrotte": "{n} steps interrupted",
-        "interrotta": "interrupted",
-        "(1 errore)": "(1 error)",
-        "({n} errori)": "({n} errors)",
-        "Attività…": "Activity…",
-        "lettura di 1 file…": "reading 1 file…",
-        "lettura di {n} file…": "reading {n} files…",
-        "1 ricerca in corso…": "1 search running…",
-        "{n} ricerche in corso…": "{n} searches running…",
-        "elenco di 1 cartella…": "listing 1 folder…",
-        "elenco di {n} cartelle…": "listing {n} folders…",
-        "esecuzione di 1 comando…": "running 1 command…",
-        "esecuzione di {n} comandi…": "running {n} commands…",
-        "scrittura di 1 file…": "writing 1 file…",
-        "scrittura di {n} file…": "writing {n} files…",
-        "modifica di 1 file…": "editing 1 file…",
-        "modifica di {n} file…": "editing {n} files…",
-        "ricerca sul web…": "searching the web…",
-        "{n} ricerche sul web…": "{n} web searches…",
-        "apertura di una pagina…": "opening a page…",
-        "apertura di {n} pagine…": "opening {n} pages…",
-        "1 attività in corso…": "1 step running…",
-        "{n} attività in corso…": "{n} steps running…",
-        "file letto": "file read",
-        "file letti": "files read",
-        "letto": "read",
-        "letti": "read",
-        "lettura non riuscita": "read failed",
-        "letture non riuscite": "reads failed",
-        "Letture": "Reads",
-        "ricerca": "search",
-        "ricerche": "searches",
-        "ricerca non riuscita": "search failed",
-        "ricerche non riuscite": "searches failed",
-        "Ricerche": "Searches",
-        "cartella elencata": "folder listed",
-        "cartelle elencate": "folders listed",
-        "elenco": "listing",
-        "elenchi": "listings",
-        "elenco non riuscito": "listing failed",
-        "elenchi non riusciti": "listings failed",
-        "Elenchi": "Listings",
-        "file modificato": "file edited",
-        "file modificati": "files edited",
-        "modifica": "edit",
-        "modifiche": "edits",
-        "modifica non riuscita": "edit failed",
-        "modifiche non riuscite": "edits failed",
-        "Modifiche": "Edits",
-        "file creato": "file created",
-        "file creati": "files created",
-        "nuovo": "new",
-        "nuovi": "new",
-        "creazione non riuscita": "creation failed",
-        "creazioni non riuscite": "creations failed",
-        "Nuovi file": "New files",
-        "file scritto": "file written",
-        "file scritti": "files written",
-        "scritto": "written",
-        "scritti": "written",
-        "scrittura non riuscita": "write failed",
-        "scritture non riuscite": "writes failed",
-        "Scritture": "Writes",
-        "comando": "command",
-        "comandi": "commands",
-        "comando non riuscito": "command failed",
-        "comandi non riusciti": "commands failed",
-        /* «Comandi» è già in workspaceV2 */
-        "giro di test": "test run",
-        "giri di test": "test runs",
-        "test": "tests",
-        "giro di test non riuscito": "test run failed",
-        "giri di test non riusciti": "test runs failed",
-        "Test": "Tests",
-        "ricerche sul web": "web searches",
-        "sul web": "web",
-        /* «ricerca sul web» è già fra gli attrezzi */
-        "ricerca sul web non riuscita": "web search failed",
-        "ricerche sul web non riuscite": "web searches failed",
-        "Web": "Web",
-        "pagina aperta": "page opened",
-        "pagine aperte": "pages opened",
-        "pagina": "page",
-        "pagine": "pages",
-        "pagina non aperta": "page not opened",
-        "pagine non aperte": "pages not opened",
-        "Pagine": "Pages",
-        "delega": "delegation",
-        "deleghe": "delegations",
-        "delega non riuscita": "delegation failed",
-        "deleghe non riuscite": "delegations failed",
-        "Deleghe": "Delegations",
-        "ragionamento": "reasoning",
-        "ragionamenti": "reasonings",
-        "Ragionamenti": "Reasonings",
-        "Tutte": "All",
-        "Non riuscite": "Failed",
-        "non riuscita": "failed",
-        "non riuscito": "failed",
-        "senza codice": "no exit code",
-        "attrezzo": "tool",
-        /* «in corso» è già nel Terminale («running») */
-        "Letto": "Read",
-        "Legge": "Reading",
-        "Cercato": "Searched",
-        "Cerca": "Searching",
-        "Elencato": "Listed",
-        "Elenca": "Listing",
-        "Modificato": "Edited",
-        "Modifica": "Editing",
-        "Scritto": "Wrote",
-        "Scrive": "Writing",
-        "Eseguito": "Ran",
-        "Esegue": "Running",
-        "Test eseguiti": "Tests run",
-        "Esegue i test": "Running the tests",
-        "Cercato sul web": "Searched the web",
-        "Cerca sul web": "Searching the web",
-        "Aperto": "Opened",
-        "Apre": "Opening",
-        "Delegato": "Delegated",
-        "Delega": "Delegating",
-        "radice": "root",
-        "la radice del progetto": "the project root",
-        "Sta ragionando": "Thinking",
-        "Sta ragionando…": "Thinking…",
-        "Prepara il passo successivo…": "Preparing the next step…",
-        "Attività dell’agente": "Agent activity",
-        "Azioni sull’attività": "Activity actions",
-        "Mostra solo": "Show only",
-        "Mostrate {n} voci su {totale}.": "Showing {n} of {totale} entries.",
-        "Apri tutti i ragionamenti": "Open all reasonings",
-        "Apri tutte le voci": "Open all entries",
-        "Chiudi tutte le voci": "Close all entries",
-        "Copia l’attività come testo": "Copy the activity as text",
-        "Apri le modifiche in Review": "Open the changes in Review",
-        "Attività copiata negli appunti.": "Activity copied to the clipboard.",
-        "Copia non riuscita: il browser non ha concesso gli appunti.": "Copy failed: the browser did not grant the clipboard.",
-        "{piu} righe aggiunte, {meno} tolte": "{piu} lines added, {meno} removed",
-        "Non riuscito": "Failed",
-        "Attività conclusa": "Activity finished"
-      },
-      /* F5 (onda 2), 24/09/2026 — la compattazione legacy vista dalla chat: avviso, barra, riga, journal riparato */
-      compattazione: {
-        "Il contesto è quasi pieno ({n} su {m} token).": "The context is almost full ({n} of {m} tokens).",
-        "Il contesto ha superato la soglia ({n} su {m} token).": "The context is over the threshold ({n} of {m} tokens).",
-        "Contesto quasi pieno": "Context almost full",
-        "Compatta ora": "Compact now",
-        "Conversazione riassunta": "Conversation summarized",
-        "token": "tokens",
-        "Riassunto annullato · la conversazione intera torna al modello": "Summary undone · the whole conversation goes back to the model",
-        "Conversazione non riassunta": "Conversation not summarized",
-        "il modello ha risposto con un attrezzo invece del riassunto": "the model answered with a tool instead of the summary",
-        "il riassunto è uscito troncato": "the summary came out truncated",
-        "il modello ha risposto vuoto": "the model answered with nothing",
-        "il fornitore ha risposto con un errore": "the provider answered with an error",
-        "La conversazione non entrava nel modello: la riassumo e riprovo…": "The conversation did not fit the model: summarizing it and retrying…",
-        "Riassumo la conversazione prima di continuare…": "Summarizing the conversation before continuing…",
-        "Riassumo la conversazione…": "Summarizing the conversation…",
-        "Annulla il riassunto": "Undo the summary",
-        "Mostra cosa è stato riassunto": "Show what was summarized",
-        "Azioni sul riassunto": "Actions on the summary",
-        "Il server non ha riassunto la conversazione: resta com’era.": "The server did not summarize the conversation: it stays as it was.",
-        "Riassunto non annullato": "Summary not undone",
-        "Apri una conversazione per riassumerla.": "Open a conversation to summarize it.",
-        "Non c’è un riassunto da annullare.": "There is no summary to undo.",
-        "Connessione al server interrotta. Riprova.": "Connection to the server lost. Try again.",
-        "Operazione non riuscita.": "Operation failed.",
-        "Conversazione recuperata dopo un’interruzione: {n} riga scartata": "Conversation recovered after an interruption: {n} line discarded",
-        "Conversazione recuperata dopo un’interruzione: {n} righe scartate": "Conversation recovered after an interruption: {n} lines discarded",
-        "Conversazione recuperata dopo un’interruzione": "Conversation recovered after an interruption",
-        "Conversazione recuperata fino al giro {g}: quello che veniva dopo non era leggibile.": "Conversation recovered up to turn {g}: what came after could not be read.",
-        "Conversazione recuperata fino all’ultimo punto completo: quello che veniva dopo non era leggibile.": "Conversation recovered up to the last complete point: what came after could not be read.",
-        "Nel salvataggio mancava un pezzo: {n} parte successiva è stata lasciata da parte. Il file originale non è stato modificato.": "A piece of the saved conversation was missing: {n} later part was set aside. The original file was not changed.",
-        "Nel salvataggio mancava un pezzo: {n} parti successive sono state lasciate da parte. Il file originale non è stato modificato.": "A piece of the saved conversation was missing: {n} later parts were set aside. The original file was not changed.",
-        "TALOS · conversazione recuperata": "TALOS · conversation recovered",
-        "Le righe scartate erano in fondo al file e non erano leggibili ({b} byte). Il resto della conversazione è intatto.": "The discarded lines were at the end of the file and could not be read ({b} bytes). The rest of the conversation is intact.",
-        "Il resto della conversazione è intatto.": "The rest of the conversation is intact.",
-        "Dove sta la copia": "Where the copy is",
-        "Copia il percorso": "Copy the path",
-        "Copiato": "Copied",
-        "Copia non riuscita: seleziona il percorso": "Copy failed: select the path",
-        /* 24/09/2026, coordinatore — i motivi e la riparazione fallita del contratto F3 fuso (`session-registry.mjs:3106`, `:3112`, `:5210-5214`) */
-        "la conversazione è andata avanti nel frattempo: il riassunto non vale più": "the conversation moved on in the meantime: the summary no longer applies",
-        "il riassunto non è stato salvato su disco": "the summary was not saved to disk",
-        "il server si è fermato mentre riassumeva: la conversazione resta intera": "the server stopped while summarizing: the conversation stays whole",
-        "TALOS · conversazione non recuperata": "TALOS · conversation not recovered",
-        "La riparazione della conversazione non è riuscita: la coda del file resta incerta.": "Repairing the conversation did not succeed: the end of the file is still uncertain.",
-        "Il sistema ha risposto: {e}. Nessuna riga è stata scartata; riprova a riaprire la conversazione o conserva la diagnosi.": "The system answered: {e}. No line was discarded; try reopening the conversation or keep the diagnostics.",
-        "Nessuna riga è stata scartata; riprova a riaprire la conversazione o conserva la diagnosi.": "No line was discarded; try reopening the conversation or keep the diagnostics."
-      },
-      /* la connessione col server (barra di stato) */
-      connessione: {
-        "Il server non risponde": "The server is not responding",
-        "Collegato di nuovo": "Connected again"
-      },
-      /* F6-1 (26/09/2026): la scheda «GitHub», parte locale (`components/scheda-github.js` e il suo collegamento in `app.js`) */
-      github: {
-        Conflitti: "Conflicts",
-        Preparati: "Staged",
-        Modificati: "Changes",
-        Nuovi: "Untracked",
-        modificato: "modified",
-        aggiunto: "added",
-        eliminato: "deleted",
-        rinominato: "renamed",
-        copiato: "copied",
-        "cambiato di tipo": "type changed",
-        nuovo: "untracked",
-        "in conflitto": "in conflict",
-        "git non è riuscito": "git did not succeed",
-        "Torna com’era": "Goes back as it was",
-        "Tornano com’erano": "Go back as they were",
-        "Si elimina": "Is deleted",
-        "Si eliminano": "Are deleted",
-        "Annullare le modifiche a 1 file?": "Discard the changes to 1 file?",
-        "Annullare le modifiche a {n} file?": "Discard the changes to {n} files?",
-        "Non si può tornare indietro: le modifiche non preparate vanno perse, e i file nuovi si eliminano.": "This cannot be undone: changes that are not staged are lost, and new files are deleted.",
-        "Annulla le modifiche": "Discard changes",
-        "Non c’è niente di preparato": "Nothing is staged",
-        "Preparo 1 file e lo committo?": "Stage 1 file and commit it?",
-        "Preparo tutti i {n} file e li committo?": "Stage all {n} files and commit them?",
-        File: "Files",
-        "Prepara tutto e committa": "Stage all and commit",
-        "Commit fatto": "Committed",
-        Togli: "Unstage",
-        Prepara: "Stage",
-        "Togli tutti": "Unstage all",
-        "Prepara tutti": "Stage all",
-        "Altre azioni su {nome}": "More actions on {nome}",
-        "Confronto con l’ultimo commit {hash} — {soggetto}": "Compared with the last commit {hash} — {soggetto}",
-        "Nessun commit ancora: tutto quello che c’è è nuovo.": "No commit yet: everything here is new.",
-        "Leggo lo stato del repository…": "Reading the repository status…",
-        "HEAD staccata": "Detached HEAD",
-        "Nessun ramo": "No branch",
-        "Altre azioni del repository": "More repository actions",
-        Aggiorna: "Refresh",
-        "C’è 1 file preparato fuori da questa cartella: il commit resta fermo finché non lo togli dall’area preparata.": "There is 1 staged file outside this folder: the commit waits until you unstage it.",
-        "Ci sono {n} file preparati fuori da questa cartella: il commit resta fermo finché non li togli dall’area preparata.": "There are {n} staged files outside this folder: the commit waits until you unstage them.",
-        "Messaggio del commit": "Commit message",
-        "Committa 1 file preparato": "Commit 1 staged file",
-        "Committa {n} file preparati": "Commit {n} staged files",
-        "Niente da committare": "Nothing to commit",
-        "Prima vanno risolti i conflitti.": "Resolve the conflicts first.",
-        "Nessuna modifica rispetto all’ultimo commit.": "No changes since the last commit.",
-        "Differenze di {percorso}": "Changes in {percorso}",
-        Differenze: "Changes",
-        "Torna alle modifiche": "Back to the changes",
-        Preparato: "Staged",
-        "Da preparare": "Not staged",
-        "Esci dallo schermo intero": "Exit full screen",
-        "Schermo intero": "Full screen",
-        "Leggo le differenze…": "Reading the changes…",
-        "È un file binario: le differenze non si mostrano come testo.": "This is a binary file: the changes are not shown as text.",
-        "righe tolte": "lines removed",
-        "riga {n}": "line {n}",
-        "righe {da}-{a}": "lines {da}-{a}",
-        "Nessuna differenza nel testo (è cambiato solo il modo del file).": "No change in the text (only the file mode changed).",
-        "Il diff è troppo lungo: qui ne vedi solo la prima parte.": "The diff is too long: only its first part is shown here.",
-        "Azioni sul file": "File actions",
-        "Apri una sessione per vedere le modifiche della sua cartella.": "Open a session to see the changes in its folder.",
-        /* 28/09: «Inizializza repository», come la vista vuota di VS Code (`extensions/git/package.nls.json:407`) */
-        "Nessun repository git": "No git repository",
-        "La cartella della sessione non ha un repository git. Inizializzalo per tenere traccia delle modifiche, fare commit e usare i rami. Resta sul tuo computer: non serve un account GitHub.": "The session folder does not have a git repository. Initialize one to track changes, commit and use branches. It stays on your computer: no GitHub account needed.",
-        "Inizializza repository": "Initialize Repository",
-        "Inizializzo…": "Initializing…",
-        "Repository inizializzato": "Repository initialized",
-        "Inizializzare un repository qui?": "Initialize a repository here?",
-        "Questa cartella contiene la tua cartella utente: git terrebbe traccia di tutto ciò che c’è dentro.": "This folder contains your user folder: git would track everything inside it.",
-        "Lo stato del repository non si legge.": "The repository status cannot be read.",
-        /* F6-1 passo 3 (26/09): rami, ultimo commit, messi da parte, commit recenti. «Rinomina» sta già fra le schede del Terminale. */
-        "Ramo: {nome}": "Branch: {nome}",
-        Rami: "Branches",
-        "Passa a {nome}": "Switch to {nome}",
-        "Nuovo ramo…": "New branch…",
-        "Nuovo ramo": "New branch",
-        "Nuovo ramo da {nome}": "New branch from {nome}",
-        "Nome del ramo": "Branch name",
-        "Crea il ramo": "Create branch",
-        "Rinomina «{nome}»…": "Rename “{nome}”…",
-        "Rinomina «{nome}»": "Rename “{nome}”",
-        "Nome nuovo": "New name",
-        "Elimina un ramo…": "Delete a branch…",
-        "Elimina un ramo": "Delete a branch",
-        "Ramo eliminato": "Branch deleted",
-        "Eliminare «{nome}» lo stesso?": "Delete “{nome}” anyway?",
-        "Ha commit che non stanno in nessun altro ramo: eliminandolo, quei commit non si vedono più.": "It has commits that are on no other branch: once it is deleted, those commits are no longer visible.",
-        "Elimina lo stesso": "Delete anyway",
-        "Lascia stare": "Cancel",
-        "Azioni sul repository": "Repository actions",
-        "Modifica l’ultimo commit": "Amend last commit",
-        "Annulla l’ultimo commit": "Undo last commit",
-        "L’ultimo commit è già stato inviato": "The last commit has already been pushed",
-        "Riscriverlo cambierebbe la storia di chi l’ha già ricevuto: da qui non si modifica.": "Rewriting it would change the history of whoever already received it: it cannot be changed from here.",
-        "Modifichi il commit {hash}": "Amending commit {hash}",
-        "Modifica il commit": "Amend commit",
-        "Modifica il commit e aggiungi 1 file": "Amend commit and add 1 file",
-        "Modifica il commit e aggiungi {n} file": "Amend commit and add {n} files",
-        "Commit modificato": "Commit amended",
-        "Annullare l’ultimo commit?": "Undo the last commit?",
-        "Il commit sparisce dalla storia; le sue modifiche tornano preparate e il suo messaggio torna nella casella.": "The commit leaves the history; its changes go back to staged and its message goes back into the box.",
-        Commit: "Commit",
-        "Annulla il commit": "Undo commit",
-        "Commit annullato": "Commit undone",
-        "Metti da parte le modifiche": "Stash changes",
-        "Metti da parte con i file nuovi": "Stash changes and new files",
-        "Nota (facoltativa)": "Note (optional)",
-        "Metti da parte": "Stash",
-        "Messe da parte": "Stashed",
-        "Messi da parte": "Stashes",
-        "Senza nota": "No note",
-        "su {ramo}": "on {ramo}",
-        Riprendi: "Restore",
-        Riprese: "Restored",
-        "Altre azioni su questa voce": "More actions on this entry",
-        "Azioni su ciò che è messo da parte": "Stash actions",
-        "Scartare ciò che è messo da parte?": "Drop this stash?",
-        "Non si può tornare indietro: queste modifiche vanno perse.": "This cannot be undone: these changes are lost.",
-        Nota: "Note",
-        Scarta: "Drop",
-        Scartate: "Dropped",
-        "Commit recenti": "Recent commits",
-        "Leggo la storia…": "Reading the history…",
-        "Nessun commit ancora.": "No commits yet.",
-        inviato: "pushed",
-        "solo qui": "local only",
-        "Qui ci sono gli ultimi {n} commit.": "These are the last {n} commits.",
-        /* F6-2 (27/09): la sincronizzazione col remoto */
-        Recupera: "Fetch",
-        "Scarica {n}": "Pull {n}",
-        "Invia {n}": "Push {n}",
-        "Pubblica il ramo": "Publish branch",
-        "Recupero…": "Fetching…",
-        "Scarico…": "Pulling…",
-        "Invio…": "Pushing…",
-        "Pubblico…": "Publishing…",
-        Ferma: "Stop",
-        "Recupera da {remoto}": "Fetch from {remoto}",
-        "Recupera da tutti i remoti": "Fetch from all remotes",
-        "Scarica da {rif}": "Pull from {rif}",
-        "Invia a {rif}": "Push to {rif}",
-        "{giu} da scaricare, {su} da inviare": "{giu} to pull, {su} to push",
-        "Recuperato {quando}": "Fetched {quando}",
-        "Mai recuperato": "Never fetched",
-        "Nessun remoto: questo repository vive solo qui.": "No remote: this repository lives only here.",
-        "HEAD staccata: passa a un ramo per sincronizzare.": "Detached HEAD: switch to a branch to sync.",
-        "Il ramo remoto «{rif}» non esiste più: pubblicalo di nuovo.": "The remote branch “{rif}” no longer exists: publish it again.",
-        "Inviare 1 commit a {remoto}?": "Push 1 commit to {remoto}?",
-        "Inviare {n} commit a {remoto}?": "Push {n} commits to {remoto}?",
-        "Il ramo «{ramo}» va su «{rif}». Un invio non si annulla da qui.": "Branch “{ramo}” goes to “{rif}”. A push cannot be undone from here.",
-        Remoto: "Remote",
-        Ramo: "Branch",
-        "Invia a {remoto}": "Push to {remoto}",
-        Inviato: "Pushed",
-        "Pubblicare il ramo «{ramo}»?": "Publish branch “{ramo}”?",
-        "Il ramo va sul remoto scelto e da lì in poi lo segue: gli invii successivi vanno lì.": "The branch goes to the chosen remote and follows it from then on: later pushes go there.",
-        Pubblica: "Publish",
-        Pubblicato: "Published",
-        "Recupero fermato": "Fetch stopped",
-        "Scaricato": "Pulled",
-        "Già aggiornato": "Already up to date",
-        "Scaricato con conflitti": "Pulled with conflicts",
-        "C’è 1 conflitto: risolvilo nel gruppo Conflitti.": "There is 1 conflict: resolve it in the Conflicts group.",
-        "Ci sono {n} conflitti: risolvili nel gruppo Conflitti.": "There are {n} conflicts: resolve them in the Conflicts group.",
-        "Lo scarico non è partito": "The pull did not start",
-        "Metti da parte e scarica": "Stash and pull",
-        "Prima di scaricare da {rif}": "Before pulling from {rif}",
-        "Le tue modifiche sono in «Messi da parte»": "Your changes are in “Stashes”",
-        "Riprendile da lì quando vuoi.": "Restore them from there whenever you like.",
-        "Riprenderle ora darebbe conflitti: riprendile da lì quando vuoi.": "Restoring them now would conflict: restore them from there whenever you like.",
-        "Le tue modifiche sono tornate al loro posto": "Your changes are back in place",
-        /* F6-2 passo 3: il grafo della storia */
-        "In arrivo": "Incoming",
-        "In uscita": "Outgoing",
-        "da scaricare": "to pull",
-        "1 commit da scaricare da {rif}": "1 commit to pull from {rif}",
-        "{n} commit da scaricare da {rif}": "{n} commits to pull from {rif}",
-        "1 commit da inviare a {rif}": "1 commit to push to {rif}",
-        "{n} commit da inviare a {rif}": "{n} commits to push to {rif}",
-        /* F6-2 passo 4: i file di un commit del grafo */
-        "Leggo i file cambiati…": "Reading the changed files…",
-        "Nessun file cambiato in questa cartella.": "No files changed in this folder.",
-        "Qui ci sono i primi {n} file.": "These are the first {n} files.",
-        "1 file cambiato fuori dalla cartella della sessione.": "1 file changed outside the session folder.",
-        "{n} file cambiati fuori dalla cartella della sessione.": "{n} files changed outside the session folder.",
-        "da {prima}": "from {prima}",
-        "In arrivo · {rif}": "Incoming · {rif}",
-        "In uscita · {rif}": "Outgoing · {rif}",
-        "Confronto fra {da} e {a}": "Comparing {da} and {a}",
-        "Il primo commit: tutto è nuovo.": "The first commit: everything is new.",
-        /* F6-3 (27/09): le pull request (`TESTI_PR` in `components/scheda-github.js`) */
-        "Pull request": "Pull requests",
-        "Leggo le pull request…": "Reading pull requests…",
-        "Aggiorna le pull request": "Refresh pull requests",
-        "Apri le pull request su GitHub": "Open pull requests on GitHub",
-        "Altre azioni sulle pull request": "More pull request actions",
-        "Azioni sulle pull request": "Pull request actions",
-        "Aperte nel progetto": "Open in this project",
-        "Apri su GitHub": "Open on GitHub",
-        "Aperta": "Open",
-        "Bozza": "Draft",
-        "Unita": "Merged",
-        "Chiusa": "Closed",
-        "tua": "yours",
-        "bozza": "draft",
-        "Nessun controllo": "No checks",
-        "Mostra i controlli": "Show the checks",
-        "Controlli finiti": "Checks finished",
-        "Nessuna pull request per questo ramo.": "No pull request for this branch.",
-        "Crea pull request": "Create pull request",
-        "Creo…": "Creating…",
-        "Pull request creata": "Pull request created",
-        "Sei sul ramo predefinito: crea un ramo per aprire una pull request.": "You are on the default branch: create a branch to open a pull request.",
-        "GitHub CLI non c’è": "GitHub CLI is missing",
-        "GitHub CLI è troppo vecchia": "GitHub CLI is too old",
-        "Scarica GitHub CLI": "Download GitHub CLI",
-        "Scarico GitHub CLI…": "Downloading GitHub CLI…",
-        "Le pull request passano da GitHub CLI. TALOS può scaricare la versione ufficiale {versione} (circa 15 MB) nella sua cartella: niente installazione nel sistema, nessuna modifica al PATH.": "Pull requests go through GitHub CLI. TALOS can download the official version {versione} (about 15 MB) into its own folder: nothing is installed system-wide and PATH is not changed.",
-        "Sul sistema c’è la {versione}; a TALOS serve la 2.97 o più nuova. Può scaricare la versione ufficiale {nuova} nella sua cartella, senza toccare quella del sistema.": "The system has {versione}; TALOS needs 2.97 or newer. It can download the official version {nuova} into its own folder, without touching the system one.",
-        "TALOS non sa scaricare GitHub CLI su questo sistema: installala da GitHub e riapri il gruppo.": "TALOS cannot download GitHub CLI on this system: install it from GitHub and open this group again.",
-        "Apri la pagina di GitHub CLI": "Open the GitHub CLI page",
-        "GitHub CLI pronta": "GitHub CLI ready",
-        "GitHub non è collegato": "GitHub is not connected",
-        "Collega il tuo account per vedere e creare le pull request. L’accesso resta a GitHub CLI: TALOS non lo vede.": "Connect your account to see and create pull requests. The sign-in stays with GitHub CLI: TALOS never sees it.",
-        "Collega GitHub": "Connect GitHub",
-        "Incolla questo codice nella pagina di GitHub e conferma: la scheda si aggiorna da sola.": "Paste this code on the GitHub page and confirm: this tab updates by itself.",
-        "Codice di accesso": "Sign-in code",
-        "Copia il codice": "Copy the code",
-        "Codice copiato": "Code copied",
-        "Apri github.com": "Open github.com",
-        "Annulla": "Cancel",
-        "GitHub collegato": "GitHub connected",
-        "Account {account}": "Account {account}",
-        "Il codice è scaduto: ricomincia.": "The code expired: start again.",
-        "Il remoto del ramo non è su github.com: qui non ci sono pull request.": "The branch’s remote is not on github.com: there are no pull requests here.",
-        "Nessun remoto per questo ramo.": "No remote for this branch.",
-        "HEAD staccata: passa a un ramo per vedere le sue pull request.": "Detached HEAD: switch to a branch to see its pull requests.",
-        "Nuova pull request": "New pull request",
-        "Preparo la bozza…": "Preparing the draft…",
-        "Base: {base}": "Base: {base}",
-        "Scegli la base": "Choose the base",
-        "Rami di base": "Base branches",
-        "Il ramo «{base}» non c’è su {remoto}: scegline un altro.": "Branch “{base}” is not on {remoto}: choose another one.",
-        "Titolo della pull request": "Pull request title",
-        "Descrizione (facoltativa)": "Description (optional)",
-        "Apri come bozza": "Open as a draft",
-        "Una bozza non chiede ancora la revisione.": "A draft does not ask for review yet.",
-        "Serve un titolo.": "A title is needed.",
-        "Il ramo non è ancora su GitHub: prima lo pubblichi, con conferma.": "The branch is not on GitHub yet: you publish it first, with a confirmation.",
-        "Il ramo remoto ha commit che qui non ci sono: prima scarica.": "The remote branch has commits that are not here: pull first.",
-        "Il ramo non è ancora su GitHub: la pull request aspetta l’invio.": "The branch is not on GitHub yet: the pull request waits for the push.",
-        "1 fallito": "1 failed",
-        "{n} falliti": "{n} failed",
-        "1 in corso": "1 running",
-        "{n} in corso": "{n} running",
-        "1 annullato": "1 cancelled",
-        "{n} annullati": "{n} cancelled",
-        "1 passato": "1 passed",
-        "{n} passati": "{n} passed",
-        "1 saltato": "1 skipped",
-        "{n} saltati": "{n} skipped",
-        "C’è 1 commit da inviare: prima lo invii, con conferma.": "There is 1 commit to push: you push it first, with a confirmation.",
-        "Ci sono {n} commit da inviare: prima li invii, con conferma.": "There are {n} commits to push: you push them first, with a confirmation.",
-        "1 commit rispetto a {base}": "1 commit compared with {base}",
-        "{n} commit rispetto a {base}": "{n} commits compared with {base}",
-        "{n} commit o più rispetto a {base}": "{n} or more commits compared with {base}",
-        "fallito": "failed",
-        "in corso": "running",
-        "annullato": "cancelled",
-        "passato": "passed",
-        "saltato": "skipped",
-        /* 27/09, decisione owner 47: la domanda del modello respinta per la forma */
-        "Il modello ha corretto la domanda: {motivo}": "The model corrected its question: {motivo}",
-        "mancava il perché": "the why was missing",
-        "servono da {min} a {max} opzioni": "it needs {min} to {max} options",
-        "servono da {min} a {max} domande": "it needs {min} to {max} questions",
-        "c’erano scelte doppie": "some choices were repeated",
-        "c’erano domande doppie": "some questions were repeated",
-        "respinta e riformulata": "rejected and rephrased",
-        "un testo era troppo lungo": "a text was too long",
-        "la forma non era valida": "the form was not valid",
-        /* F6-1 pezzi (26/09) */
-        "Prepara il pezzo": "Stage hunk",
-        "Togli il pezzo": "Unstage hunk",
-        "Annulla il pezzo": "Discard hunk",
-        "Annullare questo pezzo?": "Discard this hunk?",
-        Pezzo: "Hunk",
-        "Azioni sul pezzo": "Hunk actions",
-        "Le sue righe tornano com’erano nella versione preparata. Non si può tornare indietro.": "Its lines go back to the staged version. This cannot be undone.",
-        "Altre azioni sul pezzo: {dove}": "More hunk actions: {dove}",
-        /* F6-1 ✨ e «Affida» (26/09) */
-        "Genera il messaggio": "Generate message",
-        "Scrivo il messaggio…": "Writing the message…",
-        "Affida il commit all’agente": "Hand the commit to the agent",
-        "Guarda le modifiche preparate in questa cartella, scrivi un buon messaggio di commit e fai il commit.": "Look at the staged changes in this folder, write a good commit message and commit.",
-        "Guarda le modifiche di questa cartella, prepara quelle da committare, scrivi un buon messaggio di commit e fai il commit.": "Look at the changes in this folder, stage the ones to commit, write a good commit message and commit."
-      }
-    });
-  }
-});
-
-// src/components/lingua.js
-function risolviLingua(preferenza, lingueBrowser = []) {
-  if (preferenza && preferenza !== "sistema" && DIZIONARIO[preferenza]) return preferenza;
-  const elenco2 = Array.isArray(lingueBrowser) ? lingueBrowser : [lingueBrowser];
-  for (const voce of elenco2) {
-    const codice = String(voce || "").slice(0, 2).toLowerCase();
-    if (DIZIONARIO[codice]) return codice;
-  }
-  return "en";
-}
-function etichettaLinguaRisolta(preferenza, risolta) {
-  const nome = NOMI_LINGUA[risolta] || risolta;
-  return preferenza === "sistema" || !preferenza ? t2("Segui il sistema ({lingua})", { lingua: t2(nome) }) : nome;
-}
-function costruisciIndice(dizionario) {
-  const mappa = /* @__PURE__ */ new Map();
-  for (const [categoria, voci] of Object.entries(dizionario || {})) {
-    if (categoria === "menu") continue;
-    for (const [chiave, valore] of Object.entries(voci)) mappa.set(chiave, valore);
-  }
-  return mappa;
-}
-function impostaLingua(lingua) {
-  linguaCorrente = DIZIONARI[lingua] || lingua === LINGUA_PREDEFINITA ? lingua : LINGUA_PREDEFINITA;
-  indice = linguaCorrente === LINGUA_PREDEFINITA ? /* @__PURE__ */ new Map() : costruisciIndice(DIZIONARI[linguaCorrente]);
-  try {
-    regolePlurale = new Intl.PluralRules(linguaCorrente);
-  } catch {
-    regolePlurale = new Intl.PluralRules(LINGUA_PREDEFINITA);
-  }
-  return linguaCorrente;
-}
-function linguaCorrenteDiT() {
-  return linguaCorrente;
-}
-function interpola(frase, parametri) {
-  if (!parametri) return frase;
-  return String(frase).replace(/\{([a-zA-Z0-9_]+)\}/g, (tutto, nome) => nome in parametri ? String(parametri[nome]) : tutto);
-}
-function t2(frase, parametri) {
-  const tradotta = linguaCorrente === LINGUA_PREDEFINITA ? frase : indice.get(frase) ?? frase;
-  return interpola(tradotta, parametri);
-}
-function tn(uno2, molti, n, parametri) {
-  const forma = regolePlurale.select(Number(n)) === "one" ? uno2 : molti;
-  return t2(forma, { n, ...parametri || {} });
-}
-function primoTesto(el30) {
-  for (const nodo13 of el30.childNodes) if (nodo13.nodeType === 3 && nodo13.data.trim()) return nodo13;
-  return null;
-}
-function applicaLingua(root2, lingua) {
-  const d = DIZIONARIO[lingua] || DIZIONARIO[LINGUA_PREDEFINITA];
-  const radice2 = root2.documentElement || root2;
-  radice2.setAttribute("lang", lingua);
-  const cambiata = impostaLingua(lingua) !== void 0 && lingua !== radice2.dataset?.linguaApplicata;
-  if (radice2.dataset) radice2.dataset.linguaApplicata = lingua;
-  let toccati = 0;
-  for (const el30 of root2.querySelectorAll("[data-t]")) {
-    const valore = d[el30.getAttribute("data-t")];
-    if (!valore) continue;
-    const testo2 = primoTesto(el30);
-    if (testo2) {
-      const codaSpazio = /\s$/.test(testo2.data) ? " " : "";
-      testo2.data = valore + codaSpazio;
-    } else el30.textContent = valore;
-    toccati += 1;
-  }
-  for (const el30 of root2.querySelectorAll("[data-ph]")) {
-    const valore = d[el30.getAttribute("data-ph")];
-    if (!valore) continue;
-    el30.placeholder = valore;
-    toccati += 1;
-  }
-  if (cambiata && typeof radice2.dispatchEvent === "function" && typeof CustomEvent === "function") radice2.dispatchEvent(new CustomEvent(EVENTO_LINGUA, { detail: { lingua } }));
-  return toccati;
-}
-var LINGUE, LINGUA_PREDEFINITA, EVENTO_LINGUA, DIZIONARI, DIZIONARIO, NOMI_LINGUA, linguaCorrente, indice, regolePlurale;
-var init_lingua = __esm({
-  "src/components/lingua.js"() {
-    init_en();
-    LINGUE = Object.freeze(["sistema", "it", "en"]);
-    LINGUA_PREDEFINITA = "it";
-    EVENTO_LINGUA = "talos:lingua";
-    DIZIONARI = Object.freeze({ en: en_default });
-    DIZIONARIO = Object.freeze({
-      it: Object.freeze({
-        nuova: "Nuova",
-        luoghi: "Luoghi",
-        altro: "Altro",
-        fissate: "Fissate",
-        sessioni: "Sessioni",
-        cerca: "Cerca chat…",
-        capability: "Capability",
-        board: "Board",
-        libreria: "Libreria",
-        memoria: "Memoria",
-        attivita: "Attività",
-        chat: "Chat",
-        terminale: "Terminale",
-        review: "Review",
-        browser: "Browser",
-        comandi: "Comandi"
-      }),
-      en: en_default.menu
-    });
-    NOMI_LINGUA = Object.freeze({ it: "italiano", en: "English" });
-    linguaCorrente = LINGUA_PREDEFINITA;
-    indice = /* @__PURE__ */ new Map();
-    regolePlurale = new Intl.PluralRules(LINGUA_PREDEFINITA);
-  }
-});
-
 // src/components/nomi-attrezzi.js
 function nomeUmanoAttrezzoItaliano(id4, catalogo = null) {
   const chiave = String(id4 ?? "");
@@ -4866,6 +5169,9 @@ function uscitaDaTestoAttrezzo(testo2) {
   const m = /^\s*exit\s+(\d+)\b/u.exec(t3);
   return m ? Number(m[1]) : null;
 }
+function uscitaDelRisultato(evento) {
+  return Number.isInteger(evento?.exitCode) ? evento.exitCode : uscitaDaTestoAttrezzo(evento?.content);
+}
 function statoDaUscita(uscita, errore) {
   if (uscita === 130 || uscita === 143) return "annullato";
   if (uscita === 124 || uscita === 137) return "ucciso";
@@ -4963,6 +5269,50 @@ function bottoneApri(d, card, riga2, idRiga) {
   });
   return b;
 }
+function bottoneFerma(d, riga2, scheda, idRiga) {
+  const b = el3(d, "button", "talos-button talos-button--ghost talos-button--sm talos-process__ferma");
+  b.type = "button";
+  b.hidden = true;
+  b.setAttribute("aria-label", "Ferma questo comando");
+  b.title = "Ferma questo comando";
+  const svg2 = d.createElementNS(SVG_NS_INSPECTOR, "svg");
+  svg2.setAttribute("class", "i i--sm");
+  svg2.setAttribute("aria-hidden", "true");
+  const use = d.createElementNS(SVG_NS_INSPECTOR, "use");
+  use.setAttribute("href", "#i-stop");
+  svg2.append(use);
+  b.append(svg2);
+  b.addEventListener("click", async (evento) => {
+    evento.preventDefault?.();
+    evento.stopPropagation?.();
+    const ferma = scheda.azioni?.ferma;
+    if (typeof ferma !== "function" || b.disabled) return;
+    b.disabled = true;
+    avvisoFermata(riga2, "Fermo il comando…");
+    let esito;
+    try {
+      esito = await ferma(idRiga);
+    } catch (errore) {
+      esito = { ok: false, messaggio: errore?.message };
+    }
+    if (esito?.ok === false) {
+      b.disabled = false;
+      avvisoFermata(riga2, `Non fermato: ${esito.messaggio || "riprova."}`);
+      return;
+    }
+    clearTimeout(riga2.timerFermata);
+    riga2.timerFermata = setTimeout(() => {
+      if (!FERMABILE.has(riga2.card.dataset.stato)) return;
+      b.disabled = false;
+      avvisoFermata(riga2, "Non si è fermato: riprova lo Stop.");
+    }, ATTESA_FERMATA_MS);
+  });
+  return b;
+}
+function avvisoFermata(riga2, testo2) {
+  riga2.avvisoFerma.textContent = testo2 || "";
+  riga2.avvisoFerma.hidden = !testo2;
+}
 function creaRiga(d, p, scheda, contenitore) {
   const card = el3(d, "div", "talos-card talos-process");
   card.dataset.c = "ProcessRow";
@@ -4982,7 +5332,8 @@ function creaRiga(d, p, scheda, contenitore) {
   dettaglio.hidden = true;
   const riga2 = { card, cmd, titolo: titolo2, statoEl: null, statoTesto: null, statoUse: null, chiEl: null, oraEl: null, misuraEl: null, stallo: null, dettaglio, icona: icona16, mostrato: null, aperto: false, dettaglioSporco: true, righeDettaglio: p.dettaglio };
   const apri = bottoneApri(d, card, riga2, String(p.id ?? ""));
-  testa.append(icona16, testo2, apri);
+  const ferma = bottoneFerma(d, riga2, scheda, String(p.id ?? ""));
+  testa.append(icona16, testo2, ferma, apri);
   const meta2 = el3(d, "div", "talos-process__meta");
   const statoEl = el3(d, "span", "talos-badge talos-badge--sm talos-process__stato");
   const statoIcona = d.createElementNS(SVG_NS_INSPECTOR, "svg");
@@ -4998,7 +5349,10 @@ function creaRiga(d, p, scheda, contenitore) {
   meta2.append(statoEl, chiEl, oraEl, el3(d, "span", "talos-grow"), misuraEl);
   const stallo = el3(d, "div", "talos-process__stall");
   stallo.hidden = true;
-  card.append(testa, meta2, stallo, dettaglio);
+  const avvisoFerma = el3(d, "div", "talos-process__avviso-ferma");
+  avvisoFerma.setAttribute("role", "status");
+  avvisoFerma.hidden = true;
+  card.append(testa, meta2, stallo, avvisoFerma, dettaglio);
   card.addEventListener("click", () => {
     scheda.selezionato = scheda.selezionato === p.id ? null : p.id;
     for (const [id4, r] of scheda.righe) r.card.dataset.selezionato = scheda.selezionato === id4 ? "si" : "no";
@@ -5009,7 +5363,7 @@ function creaRiga(d, p, scheda, contenitore) {
     evento.preventDefault?.();
     card.lancia ? card.lancia("click") : card.click?.();
   });
-  Object.assign(riga2, { statoEl, statoTesto, statoUse, chiEl, oraEl, misuraEl, stallo });
+  Object.assign(riga2, { statoEl, statoTesto, statoUse, chiEl, oraEl, misuraEl, stallo, ferma, avvisoFerma, timerFermata: null });
   aggiornaRiga(d, riga2, p, scheda);
   void contenitore;
   return riga2;
@@ -5018,6 +5372,13 @@ function aggiornaRiga(d, riga2, p, scheda) {
   const m = riga2.mostrato;
   riga2.card.dataset.stato = p.stato;
   riga2.card.dataset.famiglia = p.famiglia;
+  const fermabile = FERMABILE.has(p.stato) && typeof scheda.azioni?.ferma === "function";
+  riga2.ferma.hidden = !fermabile;
+  if (!fermabile && (riga2.ferma.disabled || !riga2.avvisoFerma.hidden)) {
+    clearTimeout(riga2.timerFermata);
+    riga2.ferma.disabled = false;
+    avvisoFermata(riga2, "");
+  }
   riga2.card.dataset.selezionato = scheda.selezionato === p.id ? "si" : "no";
   const descrizione = typeof p.descrizione === "string" ? p.descrizione.trim() : "";
   if (!m || m.descrizione !== descrizione) {
@@ -5055,6 +5416,7 @@ function aggiornaRiga(d, riga2, p, scheda) {
 function disegnaProcessi(d, contenitore, lista, opzioni = {}) {
   if (!contenitore) return { mostrati: 0, totale: 0 };
   const scheda = schedaDi(contenitore);
+  if (opzioni.azioni) scheda.azioni = opzioni.azioni;
   const grezzi = (Array.isArray(lista) ? lista : []).filter(Boolean);
   scheda.ultima = grezzi;
   if (grezzi.length && !scheda.filtroEl) {
@@ -5473,7 +5835,7 @@ function aggiornaInspector(inspector, dati = {}, { document: d = globalThis.docu
   }
   const processi = inspector.querySelector("#railProcessi");
   if (schedaDaSaltare(inspector, processi, "processi")) return;
-  if (processi) disegnaProcessi(d, processi, Array.isArray(dati.processi) ? dati.processi : []);
+  if (processi) disegnaProcessi(d, processi, Array.isArray(dati.processi) ? dati.processi : [], dati.azioniProcessi ? { azioni: dati.azioniProcessi } : {});
 }
 function comandoDagliArgomenti(testo2 = "") {
   try {
@@ -5494,15 +5856,32 @@ function descrizioneDagliArgomenti(testo2 = "") {
 function processiDagliEventi(eventi2 = [], { adesso = Date.now(), nomiComando = ["shell", "bash", "esegui", "comando", "terminal", "prova"] } = {}) {
   const avviati = /* @__PURE__ */ new Map();
   const argomenti = /* @__PURE__ */ new Map();
+  const richiesteDiConsenso = /* @__PURE__ */ new Map();
   const lista = [];
   for (const e of eventi2) {
+    if (e.type === "ApprovalRequested" && avviati.has(e.toolCallId)) {
+      const p = avviati.get(e.toolCallId);
+      if (typeof e.requestId === "string") richiesteDiConsenso.set(e.requestId, e.toolCallId);
+      if (p.stato === "in-avvio" || p.stato === "in-corso") p.stato = "in-consenso";
+      continue;
+    }
+    if (e.type === "ApprovalResolved" && richiesteDiConsenso.has(e.requestId)) {
+      const p = avviati.get(richiesteDiConsenso.get(e.requestId));
+      if (p?.stato === "in-consenso") {
+        p.stato = "in-corso";
+        if (Number.isFinite(e.ricevutoA)) p.ricevutoA = e.ricevutoA;
+      }
+      continue;
+    }
     if (e.type === "ToolCallStart" && nomiComando.includes(e.toolCallName)) {
       const p = {
+        /* ⛔ 02/10/2026, foto della prova dello Stop: il `!` della persona diceva «agente · giro 1». `chi` arriva dal
+           client, con lo stesso criterio della card in chat (`giroComandoDiretto` + `shell`, PO-06). */
         id: e.toolCallId,
         comando: "",
         descrizione: "",
         stato: "in-avvio",
-        chi: "agente",
+        chi: e.chi === "tu" ? "tu" : "agente",
         giro: e.giro ?? null,
         avviatoA: Number.isFinite(e.avviatoA) ? e.avviatoA : e.ricevutoA ?? null,
         ricevutoA: Number.isFinite(e.ricevutoA) ? e.ricevutoA : null,
@@ -5545,7 +5924,7 @@ function processiDagliEventi(eventi2 = [], { adesso = Date.now(), nomiComando = 
   }
   return lista.reverse();
 }
-var num, numPercento, SELETTORE_RISPOSTA_TURNO, SELETTORE_TESTO_UTENTE, STATI_PROCESSO, TETTO_PROCESSI, SOGLIA_ATTESA_MS, SVG_NS_INSPECTOR, filtriAgenti, CLASSI_DETTAGLIO_PROCESSO, FAMIGLIA_DELL_ATTREZZO, RISOLUZIONE_ARRIVI_MS;
+var num, numPercento, SELETTORE_RISPOSTA_TURNO, SELETTORE_TESTO_UTENTE, STATI_PROCESSO, TETTO_PROCESSI, SOGLIA_ATTESA_MS, ATTESA_FERMATA_MS, FERMABILE, SVG_NS_INSPECTOR, filtriAgenti, CLASSI_DETTAGLIO_PROCESSO, FAMIGLIA_DELL_ATTREZZO, RISOLUZIONE_ARRIVI_MS;
 var init_inspector = __esm({
   "src/components/inspector.js"() {
     init_nomi_attrezzi();
@@ -5562,6 +5941,15 @@ var init_inspector = __esm({
       "in-avvio": { etichetta: "In avvio", tono: "accent", icona: "i-play", vivo: true },
       "in-corso": { etichetta: "In corso", tono: "accent", icona: "i-bolt", vivo: true },
       "in-attesa": { etichetta: "In attesa", tono: "warning", icona: "i-clock", vivo: true },
+      /*
+       * ⛔ 02/10/2026, owner: un comando dell'agente che aspetta il CONSENSO non è «in corso» — non è ancora partito. La prova
+       *   dal vivo sul 4174 lo diceva «In corso», con lo Stop in riga, e lo Stop rispondeva «non è più in corso» (il kernel
+       *   registra il comando solo quando parte). Decisione: la riga dice «Aspetta il tuo consenso» e NON ha lo Stop; Consenti e
+       *   Nega restano nella chat. Come Hermes: il suo registro dei processi (`tools/process_registry.py`) contiene solo
+       *   processi avviati, e l'approvazione resta a parte (`apps/desktop/src/components/assistant-ui/tool/approval.tsx:123`).
+       *   Lo scudo è l'icona dei permessi nella chat («Chiede di scrivere»).
+       */
+      "in-consenso": { etichetta: "Aspetta il tuo consenso", tono: "warning", icona: "i-shield", vivo: true },
       riuscito: { etichetta: "Riuscito", tono: "success", icona: "i-check", vivo: false },
       fallito: { etichetta: "Non riuscito", tono: "danger", icona: "i-x", vivo: false },
       annullato: { etichetta: "Annullato", tono: "", icona: "i-stop", vivo: false },
@@ -5578,6 +5966,8 @@ var init_inspector = __esm({
     });
     TETTO_PROCESSI = 40;
     SOGLIA_ATTESA_MS = 6e4;
+    ATTESA_FERMATA_MS = 8e3;
+    FERMABILE = /* @__PURE__ */ new Set(["in-corso", "in-attesa"]);
     SVG_NS_INSPECTOR = "http://www.w3.org/2000/svg";
     filtriAgenti = /* @__PURE__ */ new WeakMap();
     CLASSI_DETTAGLIO_PROCESSO = (r) => r[2] === "lungo" ? "talos-kv__v--lungo" : "";
@@ -5969,8 +6359,8 @@ function montaProviderRetry({ contenitore, onShow = () => {
     nodo13.dataset.fase = stato2.retry.fase;
     const testi = testoRetry(stato2.retry, Date.now(), linguaCorrenteDiT() === "en");
     for (const nome of ["titolo", "motivo", "tempo"]) {
-      const el30 = nodo13.querySelector(`.talos-provider-retry__${nome}`);
-      if (el30.textContent !== testi[nome]) el30.textContent = testi[nome];
+      const el31 = nodo13.querySelector(`.talos-provider-retry__${nome}`);
+      if (el31.textContent !== testi[nome]) el31.textContent = testi[nome];
     }
     const conta = stato2.retry.fase === "attesa" && stato2.retry.retryAt > Date.now();
     if (conta && timer2 === null) timer2 = setInterval(disegna2, 1e3);
@@ -7201,7 +7591,8 @@ var init_politiche = __esm({
       Object.freeze({
         valore: "Workspace write",
         nome: "Scrive nel progetto",
-        descrizione: "Scrive solo dentro la cartella della sessione. Comandi e test passano dal cancello.",
+        descrizione: "Scrive da sola dentro la cartella della sessione; per scrivere fuori ti chiede. Comandi e test passano dal cancello.",
+        // F4-03, owner 01/10/2026
         nota: "Consigliato",
         rischio: "medio"
       }),
@@ -7319,8 +7710,8 @@ function nomeCartellaScelta(cartella) {
 }
 function motivoQuandoSiPuoPartire({ nome, autorizzata, daEsploraFile, permesso }) {
   const umano = nomeUmanoPolitica(permesso);
-  const coda = autorizzata ? "" : daEsploraFile ? " Arriva da Esplora file." : " Non è fra i progetti già autorizzati: viene verificata all’avvio.";
-  return `${cosaFaraDentro(permesso, nome, umano)}${coda}`;
+  const coda2 = autorizzata ? "" : daEsploraFile ? " Arriva da Esplora file." : " Non è fra i progetti già autorizzati: viene verificata all’avvio.";
+  return `${cosaFaraDentro(permesso, nome, umano)}${coda2}`;
 }
 function cosaFaraDentro(permesso, nome, umano) {
   switch (permesso) {
@@ -7370,11 +7761,11 @@ function nomeModelloUmano(id4) {
   if (quant) parti.push(quant[1].toUpperCase().replace(/-/g, "_"));
   return parti.filter(Boolean).join(" · ");
 }
-function fondoInVista({ scrollHeight = 0, scrollTop = 0, clientHeight = 0, coda = 0, soglia = 4 } = {}) {
+function fondoInVista({ scrollHeight = 0, scrollTop = 0, clientHeight = 0, coda: coda2 = 0, soglia = 4 } = {}) {
   if (Number(scrollHeight) <= Number(clientHeight)) return true;
   const distanza = Number(scrollHeight) - Number(scrollTop) - Number(clientHeight);
   if (!Number.isFinite(distanza)) return true;
-  return distanza <= Math.max(0, Number(coda) || 0) + soglia;
+  return distanza <= Math.max(0, Number(coda2) || 0) + soglia;
 }
 function dettaglioUtile(cosa, dettaglio) {
   const pulisci = (t3) => String(t3 ?? "").replace(/[…\.]+$/u, "").trim().toLowerCase();
@@ -7424,11 +7815,11 @@ function testoLatenza(ms2) {
   if (!Number.isFinite(ms2) || ms2 <= 0) return "";
   return ms2 >= 1e3 ? `primo token ${(ms2 / 1e3).toFixed(1).replace(".", ",")} s` : `primo token ${Math.round(ms2)} ms`;
 }
-function scrivi(el30, testo2) {
-  if (!el30) return;
+function scrivi(el31, testo2) {
+  if (!el31) return;
   const t3 = testo2 || "";
-  if (el30.textContent !== t3) el30.textContent = t3;
-  el30.hidden = t3 === "";
+  if (el31.textContent !== t3) el31.textContent = t3;
+  el31.hidden = t3 === "";
 }
 function statoGiri(giri, tettoGiri) {
   if (!Number.isFinite(Number(giri))) return null;
@@ -7552,7 +7943,7 @@ var init_chat_foot = __esm({
 // src/components/session-item.js
 function statoSessione(sessione) {
   let classe;
-  if (sessione.inAttesaApprovazione || sessione.inAttesaDomanda || sessione.inAttesaPiano) classe = "attesa";
+  if (sessione.inAttesaApprovazione || sessione.inAttesaDomanda || sessione.inAttesaPiano || sessione.inAttesaRichiestaMcp) classe = "attesa";
   else if (sessione.interrotta) classe = "interrotto";
   else if (!sessione.conclusa) classe = "vivo";
   else if (sessione.ultimoEsito === "errore" && sessione.motivoChiusura === "fermata") classe = "fermata";
@@ -7564,6 +7955,7 @@ function statoSessione(sessione) {
   if (classe === "interrotto") aiuto = "Interrotta dalla morte del processo: nessuno la sta eseguendo. Scrivi un messaggio per riprenderla.";
   else if (classe === "attesa" && sessione.inAttesaDomanda) aiuto = "TALOS aspetta la tua risposta a una domanda: rispondi per far continuare il lavoro.";
   else if (classe === "attesa" && sessione.inAttesaPiano) aiuto = "TALOS aspetta la tua scelta sul piano: approvalo o chiedi di continuare a pianificare.";
+  else if (classe === "attesa" && sessione.inAttesaRichiestaMcp) aiuto = "Un server MCP aspetta la tua risposta nella chat: rispondi per far continuare il lavoro.";
   else if (classe === "fermata") aiuto = "L’hai fermata tu: il giro si e chiuso al primo punto sicuro. Scrivi un messaggio per continuare da qui.";
   return { classe, testo: testo2, tono: TONI2[classe] ?? null, aiuto };
 }
@@ -8394,36 +8786,36 @@ function normalizzaProvaRicerca(r) {
   if (!oggetto2(r) || typeof r.fonte !== "string" || !r.fonte.trim() || !Number.isInteger(r.risultati) || r.risultati < 0 || !Array.isArray(r.titoli) || !r.titoli.every((t3) => typeof t3 === "string")) throw Error("La risposta della prova di ricerca non è valida.");
   return { fonte: r.fonte, risultati: r.risultati, titoli: [...r.titoli] };
 }
-function nodo(tag2, classe, testo2) {
+function nodo2(tag2, classe, testo2) {
   const e = document.createElement(tag2);
   if (classe) e.className = classe;
   if (testo2 != null) e.textContent = testo2;
   return e;
 }
-function bottone(testo2, azione, fn2) {
-  const e = nodo("button", "talos-button talos-button--secondary", testo2);
+function bottone2(testo2, azione, fn2) {
+  const e = nodo2("button", "talos-button talos-button--secondary", testo2);
   e.type = "button";
   e.dataset.searchAction = azione;
   e.addEventListener("click", () => fn2?.());
   return e;
 }
 function creaScelteFonte(dati, { scegli } = {}) {
-  const stato2 = normalizzaFonteRicerca(dati), gruppo = nodo("div", "talos-choice-grid");
+  const stato2 = normalizzaFonteRicerca(dati), gruppo = nodo2("div", "talos-choice-grid");
   gruppo.dataset.c = "ChoiceCards";
   gruppo.setAttribute("role", "radiogroup");
   gruppo.setAttribute("aria-label", "Origine della ricerca web");
   const fonti = [...stato2.fonti, { id: "off", label: "Nessuna ricerca web", nota: NOTE.off }];
   for (const fonte of fonti) {
-    const b = nodo("button", "talos-choice");
+    const b = nodo2("button", "talos-choice");
     b.type = "button";
     b.dataset.searchSource = fonte.id;
     b.setAttribute("role", "radio");
     b.setAttribute("aria-checked", String(stato2.source === fonte.id));
     b.tabIndex = stato2.source === fonte.id ? 0 : -1;
-    const title = nodo("span", "talos-choice__title", fonte.label);
+    const title = nodo2("span", "talos-choice__title", fonte.label);
     title.id = "fonte-label-" + fonte.id;
     b.setAttribute("aria-labelledby", title.id);
-    b.append(title, nodo("span", "talos-muted", fonte.id === "off" ? "Spenta" : fonte.needsKey ? fonte.keyConfigured ? "Chiave presente" : "Chiave necessaria" : fonte.needsEndpoint ? "Indirizzo richiesto" : "Senza chiave"));
+    b.append(title, nodo2("span", "talos-muted", fonte.id === "off" ? "Spenta" : fonte.needsKey ? fonte.keyConfigured ? "Chiave presente" : "Chiave necessaria" : fonte.needsEndpoint ? "Indirizzo richiesto" : "Senza chiave"));
     b.addEventListener("click", () => {
       if (fonte.id !== stato2.source) scegli?.(fonte.id);
     });
@@ -8440,14 +8832,14 @@ function creaScelteFonte(dati, { scegli } = {}) {
   return gruppo;
 }
 function aggiornaFonteRicerca(mount, dati, { scegli, salvaChiave, rimuoviChiave, salvaIndirizzo, prova, ricarica, feedback = "", query = "TALOS local-first coding agent", esito } = {}) {
-  const s = normalizzaFonteRicerca(dati), d = nodo("div", "talos-settings__section");
+  const s = normalizzaFonteRicerca(dati), d = nodo2("div", "talos-settings__section");
   d.dataset.searchDetails = "";
   const scelta = s.scelta;
-  d.append(nodo("p", "talos-muted", NOTE[s.source]));
+  d.append(nodo2("p", "talos-muted", NOTE[s.source]));
   const campo2 = (titolo2, type, value, id4) => {
-    const label = nodo("label", "talos-field");
-    label.append(nodo("span", "talos-setting__label", titolo2));
-    const input = nodo("input", "talos-field__input");
+    const label = nodo2("label", "talos-field");
+    label.append(nodo2("span", "talos-setting__label", titolo2));
+    const input = nodo2("input", "talos-field__input");
     input.type = type;
     input.value = value;
     input.autocomplete = "off";
@@ -8463,7 +8855,7 @@ function aggiornaFonteRicerca(mount, dati, { scegli, salvaChiave, rimuoviChiave,
     key.dataset.searchKeyInput = scelta.id;
     key.maxLength = 4096;
     key.placeholder = scelta.keyConfigured ? "Sostituisci la chiave salvata" : scelta.id === "custom" ? "Facoltativa" : "Incolla la chiave";
-    const a = nodo("div", "talos-settings__actions"), save = bottone("Salva chiave", "save-key", () => {
+    const a = nodo2("div", "talos-settings__actions"), save = bottone2("Salva chiave", "save-key", () => {
       if (!key.value.trim()) {
         key.setCustomValidity("Inserisci una chiave.");
         key.reportValidity();
@@ -8480,20 +8872,20 @@ function aggiornaFonteRicerca(mount, dati, { scegli, salvaChiave, rimuoviChiave,
     });
     a.append(save);
     if (LINKS[scelta.id]) {
-      const link = nodo("a", "talos-button talos-button--secondary", "Ottieni una chiave " + scelta.label);
+      const link = nodo2("a", "talos-button talos-button--secondary", "Ottieni una chiave " + scelta.label);
       link.href = LINKS[scelta.id];
       link.target = "_blank";
       link.rel = "noopener noreferrer";
       a.append(link);
     }
-    if (scelta.keyConfigured) a.append(bottone("Dimentica la chiave", "forget-key", () => rimuoviChiave?.(scelta.id)));
+    if (scelta.keyConfigured) a.append(bottone2("Dimentica la chiave", "forget-key", () => rimuoviChiave?.(scelta.id)));
     d.append(a);
   }
   if (scelta?.needsEndpoint) {
     const endpoint = campo2("Indirizzo istanza", "url", s.endpoint, "fonte-indirizzo");
     endpoint.dataset.searchEndpointInput = scelta.id;
     endpoint.placeholder = "https://search.example.org";
-    const salva = bottone("Salva indirizzo", "save-endpoint", () => {
+    const salva = bottone2("Salva indirizzo", "save-endpoint", () => {
       let u;
       try {
         u = new URL(endpoint.value.trim());
@@ -8513,18 +8905,18 @@ function aggiornaFonteRicerca(mount, dati, { scegli, salvaChiave, rimuoviChiave,
         salva.click();
       }
     });
-    const a = nodo("div", "talos-settings__actions");
+    const a = nodo2("div", "talos-settings__actions");
     a.append(salva);
     d.append(a);
   }
-  const readiness = nodo("p", "talos-muted", esito ? "La fonte ha risposto alla prova corrente." : s.messaggio);
+  const readiness = nodo2("p", "talos-muted", esito ? "La fonte ha risposto alla prova corrente." : s.messaggio);
   readiness.dataset.searchReadiness = s.readiness;
   d.append(readiness);
   const q2 = campo2("Testo della prova", "text", query, "fonte-query");
   q2.dataset.searchQuery = "";
   q2.maxLength = 2e3;
   q2.disabled = !s.pronta;
-  const test = bottone("Prova la ricerca", "test", () => {
+  const test = bottone2("Prova la ricerca", "test", () => {
     if (!q2.value.trim()) {
       q2.setCustomValidity("Scrivi cosa cercare.");
       q2.reportValidity();
@@ -8540,26 +8932,26 @@ function aggiornaFonteRicerca(mount, dati, { scegli, salvaChiave, rimuoviChiave,
       test.click();
     }
   });
-  const azioni = nodo("div", "talos-settings__actions");
-  azioni.append(test, bottone("Aggiorna stato", "reload", ricarica));
+  const azioni = nodo2("div", "talos-settings__actions");
+  azioni.append(test, bottone2("Aggiorna stato", "reload", ricarica));
   d.append(azioni);
-  const stato2 = nodo("p", "talos-muted", feedback);
+  const stato2 = nodo2("p", "talos-muted", feedback);
   stato2.dataset.searchFeedback = "";
   stato2.setAttribute("role", "status");
   stato2.hidden = !feedback;
-  const errore = nodo("p", "talos-muted");
+  const errore = nodo2("p", "talos-muted");
   errore.dataset.searchError = "";
   errore.setAttribute("role", "alert");
   errore.hidden = true;
-  const risultato = nodo("div", "talos-settings__section");
+  const risultato = nodo2("div", "talos-settings__section");
   risultato.dataset.searchResult = "";
   risultato.hidden = !esito;
   if (esito) {
     const e = normalizzaProvaRicerca(esito);
-    risultato.append(nodo("h4", "", e.risultati + " risultati · " + e.fonte));
-    const ul = nodo("ul", "");
-    for (const t3 of e.titoli) ul.append(nodo("li", "", t3));
-    risultato.append(ul, nodo("p", "talos-muted", "La prova riguarda questa richiesta. I risultati non attestano la verifica delle pagine."));
+    risultato.append(nodo2("h4", "", e.risultati + " risultati · " + e.fonte));
+    const ul = nodo2("ul", "");
+    for (const t3 of e.titoli) ul.append(nodo2("li", "", t3));
+    risultato.append(ul, nodo2("p", "talos-muted", "La prova riguarda questa richiesta. I risultati non attestano la verifica delle pagine."));
   }
   mount.replaceChildren(creaScelteFonte(dati, { scegli }), d, stato2, errore, risultato);
 }
@@ -9283,256 +9675,6 @@ var init_impostazioni_campi = __esm({
       { "id": "workspace", "titolo": "File e workspace", "gruppo": "infrastruttura" },
       { "id": "account", "titolo": "Account, Doctor e backup", "gruppo": "infrastruttura" }
     ];
-  }
-});
-
-// src/components/motion-mockup.js
-function rimuovi(animazione) {
-  const info = dettagli.get(animazione);
-  if (!info) return;
-  dettagli.delete(animazione);
-  vive.delete(animazione);
-  if (perElemento.get(info.elemento) === animazione) perElemento.delete(info.elemento);
-  const watcher = osservatori.get(info.doc);
-  if (watcher && --watcher.utenti === 0) {
-    watcher.chiudi();
-    osservatori.delete(info.doc);
-  }
-}
-function annullaAnimazione(animazione) {
-  if (!animazione) return;
-  try {
-    animazione.cancel();
-  } catch {
-  }
-  rimuovi(animazione);
-}
-function osserva(doc) {
-  const presente = osservatori.get(doc);
-  if (presente) {
-    presente.utenti += 1;
-    return;
-  }
-  const win = doc.defaultView || globalThis;
-  const controlla = () => {
-    for (const [a, info] of dettagli) {
-      if (info.doc === doc && (movimentoSpento({ document: doc, leva: info.leva }) || !(millisecondiDelToken(info.token, 180, doc) > 0))) annullaAnimazione(a);
-    }
-  };
-  let media;
-  let observer;
-  try {
-    media = win.matchMedia?.("(prefers-reduced-motion: reduce)");
-  } catch {
-  }
-  if (media?.addEventListener) media.addEventListener("change", controlla);
-  else media?.addListener?.(controlla);
-  if (win.MutationObserver && doc.documentElement) {
-    observer = new win.MutationObserver(controlla);
-    observer.observe(doc.documentElement, { attributes: true, attributeFilter: ["class", "style"] });
-    if (doc.body) observer.observe(doc.body, { attributes: true, attributeFilter: ["class", "style"] });
-  }
-  osservatori.set(doc, { utenti: 1, chiudi() {
-    observer?.disconnect();
-    if (media?.removeEventListener) media.removeEventListener("change", controlla);
-    else media?.removeListener?.(controlla);
-  } });
-}
-function radice(doc) {
-  return (doc || globalThis.document)?.documentElement || null;
-}
-function ridottoDalSistema(finestra = globalThis) {
-  try {
-    return typeof finestra?.matchMedia === "function" && finestra.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  } catch {
-    return false;
-  }
-}
-function movimentoSpento({ document: doc = globalThis.document, leva = "", finestra = doc?.defaultView || globalThis } = {}) {
-  if (ridottoDalSistema(finestra)) return true;
-  const html = radice(doc);
-  if (!html) return true;
-  if (html.classList.contains("interface-motion-off")) return true;
-  if (html.classList.contains("reduce-motion")) return true;
-  if (doc?.body?.classList?.contains("reduce-motion")) return true;
-  if (leva && html.classList.contains(leva)) return true;
-  return false;
-}
-function millisecondiDelToken(nome, ripiego = 180, doc = globalThis.document) {
-  const html = radice(doc);
-  if (!html) return ripiego;
-  let grezzo = "";
-  try {
-    grezzo = (doc.defaultView || globalThis).getComputedStyle(html).getPropertyValue(`--talos-motion-duration-${nome}`).trim();
-  } catch {
-    return ripiego;
-  }
-  if (!grezzo) return ripiego;
-  const n = Number.parseFloat(grezzo);
-  if (!Number.isFinite(n)) return ripiego;
-  return grezzo.endsWith("ms") ? n : n * 1e3;
-}
-function easeDelTema(doc = globalThis.document, variabile = "--talos-motion-ease") {
-  const html = radice(doc);
-  if (!html) return "cubic-bezier(.2,.7,.2,1)";
-  try {
-    const v = (doc.defaultView || globalThis).getComputedStyle(html).getPropertyValue(variabile).trim();
-    return v || (variabile.endsWith("exit") ? "ease-in" : "cubic-bezier(.2,.7,.2,1)");
-  } catch {
-    return "cubic-bezier(.2,.7,.2,1)";
-  }
-}
-function motion(elemento, fotogrammi, {
-  token = "surface-enter",
-  fattore = 1,
-  leva = "",
-  document: doc = globalThis.document,
-  ease = ""
-} = {}) {
-  if (!elemento || typeof elemento.animate !== "function") return null;
-  annullaAnimazione(perElemento.get(elemento));
-  if (movimentoSpento({ document: doc, leva })) return null;
-  const ms2 = millisecondiDelToken(token, 180, doc) * fattore;
-  if (!(ms2 > 0) || !Number.isFinite(ms2)) return null;
-  let animazione = null;
-  try {
-    animazione = elemento.animate(fotogrammi, { duration: ms2, easing: ease || easeDelTema(doc), fill: "none" });
-  } catch {
-    return null;
-  }
-  perElemento.set(elemento, animazione);
-  vive.add(animazione);
-  dettagli.set(animazione, { elemento, doc, leva, token });
-  osserva(doc);
-  const fine = () => rimuovi(animazione);
-  animazione.finished.then(fine, fine);
-  return animazione;
-}
-var vive, perElemento, dettagli, osservatori;
-var init_motion_mockup = __esm({
-  "src/components/motion-mockup.js"() {
-    vive = /* @__PURE__ */ new Set();
-    perElemento = /* @__PURE__ */ new WeakMap();
-    dettagli = /* @__PURE__ */ new Map();
-    osservatori = /* @__PURE__ */ new WeakMap();
-  }
-});
-
-// src/components/modale-td.js
-function nodo2(doc, tag2, classe, testo2) {
-  const el30 = doc.createElement(tag2);
-  if (classe) el30.className = classe;
-  if (testo2 !== void 0 && testo2 !== null) el30.textContent = String(testo2);
-  return el30;
-}
-function icona(doc, nome) {
-  const svg2 = doc.createElementNS("http://www.w3.org/2000/svg", "svg");
-  const use = doc.createElementNS("http://www.w3.org/2000/svg", "use");
-  svg2.setAttribute("class", "i");
-  svg2.setAttribute("aria-hidden", "true");
-  use.setAttribute("href", `#i-${nome}`);
-  svg2.append(use);
-  return svg2;
-}
-function apriModale(titolo2, contenuto, { document: doc = globalThis.document, ampia = false, suChiusura = null } = {}) {
-  if (!doc?.body) return null;
-  chiudiModale({ immediata: true });
-  const manager = registeredOverlayManager(doc);
-  const opener = doc.activeElement;
-  const dialogo = nodo2(doc, "dialog", "td-modal");
-  if (ampia) dialogo.dataset.ampia = "si";
-  const idTitolo = `td-modal-title-${Math.random().toString(36).slice(2, 8)}`;
-  dialogo.setAttribute("aria-labelledby", idTitolo);
-  const testa = nodo2(doc, "div", "td-modal-head");
-  const h2 = nodo2(doc, "h2", "", titolo2);
-  h2.id = idTitolo;
-  const chiudiBtn = nodo2(doc, "button", "talos-button talos-button--ghost talos-icon-button");
-  chiudiBtn.type = "button";
-  chiudiBtn.setAttribute("aria-label", "Chiudi");
-  chiudiBtn.append(icona(doc, "x"));
-  chiudiBtn.addEventListener("click", () => chiudiModale());
-  testa.append(h2, chiudiBtn);
-  const corpo = nodo2(doc, "div", "td-modal-content");
-  for (const pezzo2 of [contenuto].flat().filter(Boolean)) corpo.append(pezzo2);
-  dialogo.append(testa, corpo);
-  dialogo.addEventListener("click", (e) => {
-    if (e.target === dialogo) chiudiModale();
-  });
-  dialogo.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") e.stopPropagation();
-  });
-  dialogo.addEventListener("close", () => {
-    manager?.deactivate(dialogo);
-    if (aperta?.dialogo === dialogo) aperta = null;
-    dialogo.remove();
-    suChiusura?.();
-  });
-  doc.body.append(dialogo);
-  if (typeof dialogo.showModal === "function") dialogo.showModal();
-  else dialogo.setAttribute("open", "");
-  motion(dialogo, [{ opacity: 0, transform: "translateY(12px) scale(.99)" }, { opacity: 1, transform: "none" }], { leva: "motion-surfaces-off", document: doc });
-  aperta = { dialogo, contenuto: corpo, suChiusura, chiudi: () => chiudiModale() };
-  const primo2 = corpo.querySelector("input:not([type=hidden]), textarea, select, button") || chiudiBtn;
-  if (manager) manager.activate(dialogo, { opener, initialFocus: primo2, requestClose: () => chiudiModale() });
-  else primo2.focus?.({ preventScroll: true });
-  return aperta;
-}
-function chiudiModale({ immediata = false } = {}) {
-  const viva = aperta;
-  if (!viva) return false;
-  aperta = null;
-  const { dialogo } = viva;
-  const chiudiDavvero = () => {
-    if (typeof dialogo.close === "function" && dialogo.open) dialogo.close();
-    else {
-      dialogo.remove();
-      viva.suChiusura?.();
-    }
-  };
-  if (immediata) {
-    chiudiDavvero();
-    return true;
-  }
-  const uscita = motion(dialogo, [{ opacity: 1, transform: "none" }, { opacity: 0, transform: "translateY(6px)" }], { token: "surface-exit", leva: "motion-surfaces-off", document: dialogo.ownerDocument || globalThis.document });
-  if (!uscita) {
-    chiudiDavvero();
-    return true;
-  }
-  dialogo.style.pointerEvents = "none";
-  uscita.finished.then(chiudiDavvero, chiudiDavvero);
-  return true;
-}
-function confermaModale({
-  titolo: titolo2 = "Confermi?",
-  domanda,
-  conseguenza = "",
-  etichettaConferma = "Elimina",
-  onConferma,
-  document: doc = globalThis.document
-} = {}) {
-  const testo2 = nodo2(doc, "p", "td-prose", domanda);
-  const pezzi = [testo2];
-  if (conseguenza) pezzi.push(nodo2(doc, "p", "td-subtle", conseguenza));
-  const piede = nodo2(doc, "div", "td-detail-footer");
-  const annulla = nodo2(doc, "button", "talos-button talos-button--secondary talos-button--sm", "Annulla");
-  annulla.type = "button";
-  annulla.addEventListener("click", () => chiudiModale());
-  const conferma = nodo2(doc, "button", "talos-button talos-button--secondary talos-button--danger talos-button--sm", etichettaConferma);
-  conferma.type = "button";
-  conferma.addEventListener("click", () => {
-    chiudiModale();
-    onConferma?.();
-  });
-  piede.append(annulla, conferma);
-  pezzi.push(piede);
-  return apriModale(titolo2, pezzi, { document: doc });
-}
-var aperta;
-var init_modale_td = __esm({
-  "src/components/modale-td.js"() {
-    init_manager();
-    init_motion_mockup();
-    aperta = null;
   }
 });
 
@@ -11020,10 +11162,10 @@ function creaAnteprimaScena(contenitore, { document: doc = globalThis.document, 
   };
 }
 function nodo3(doc, tag2, classe, testo2) {
-  const el30 = doc.createElement(tag2);
-  if (classe) el30.className = classe;
-  if (testo2 !== void 0 && testo2 !== null) el30.textContent = String(testo2);
-  return el30;
+  const el31 = doc.createElement(tag2);
+  if (classe) el31.className = classe;
+  if (testo2 !== void 0 && testo2 !== null) el31.textContent = String(testo2);
+  return el31;
 }
 function icona2(doc, nome) {
   const svg2 = doc.createElementNS("http://www.w3.org/2000/svg", "svg");
@@ -11527,7 +11669,8 @@ var init_static_copy = __esm({
       ["#setting-panel-workspace > .talos-card > p", "Cartella e dati della sessione corrente.", "Folder and data for the current session."],
       ['#setting-panel-workspace [data-open-panel="inspector"]', "Apri l’albero dei file", "Open the file tree"],
       ["#settingsNuovaSessioneAltrove", "Nuova sessione in un’altra cartella", "New session in another folder"],
-      ["#setting-panel-account > .talos-card > p", "Controlli e configurazione dell’agente. Il backup non è disponibile da questa pagina.", "Agent controls and configuration. Backup is not available from this page."],
+      // 01/10/2026: per chiave, non «la prima carta»: la scheda «Aggiornamenti» ora sta in testa e prendeva questo testo
+      ['#setting-panel-account > [data-settings-card="account-controls"] > p', "Controlli e configurazione dell’agente. Il backup non è disponibile da questa pagina.", "Agent controls and configuration. Backup is not available from this page."],
       ["[data-td-studio-temi] .td-studio-rimando__copia strong", "Temi e atmosfere", "Themes and atmospheres"],
       ["[data-td-studio-temi] .td-studio-rimando__copia p", "Palette, modalità chiara o scura e sfondi animati si regolano nello studio temi, con anteprima.", "Adjust palettes, light or dark mode and animated backgrounds in the theme studio, with a preview."]
     ];
@@ -11558,10 +11701,10 @@ function scenaDellAspetto(doc = globalThis.document, disponibili = /* @__PURE__ 
   return scenaPerAspetto({ tema, scena: valoreAspetto("sceneOverrideSelect", doc) || "follow-theme" }, disponibili);
 }
 function nodo4(doc, tag2, classe, testo2) {
-  const el30 = doc.createElement(tag2);
-  if (classe) el30.className = classe;
-  if (testo2 !== void 0 && testo2 !== null) el30.textContent = String(testo2);
-  return el30;
+  const el31 = doc.createElement(tag2);
+  if (classe) el31.className = classe;
+  if (testo2 !== void 0 && testo2 !== null) el31.textContent = String(testo2);
+  return el31;
 }
 function icona3(doc, nome, classe = "") {
   const svg2 = doc.createElementNS("http://www.w3.org/2000/svg", "svg");
@@ -11905,18 +12048,18 @@ function createSettingsView(screen, options) {
   const h2 = node2("h2");
   const description = node2("p");
   const scope = node2("span", "settings-scope");
-  const coda = node2("div", "settings-section-heading__aside");
+  const coda2 = node2("div", "settings-section-heading__aside");
   const resetAppearance = node2("button", "talos-button");
   resetAppearance.type = "button";
   resetAppearance.dataset.resetAppearance = "";
   resetAppearance.addEventListener("click", () => options.resetAppearance?.(), { signal });
-  coda.append(resetAppearance);
+  coda2.append(resetAppearance);
   h2.tabIndex = -1;
   h2.dataset.settingsHeading = "";
   eyebrow.dataset.settingsEyebrow = "";
   headingCopy.append(eyebrow, h2, description);
-  coda.append(scope);
-  heading.append(headingCopy, coda);
+  coda2.append(scope);
+  heading.append(headingCopy, coda2);
   const breadcrumb = node2("nav", "settings-breadcrumb");
   breadcrumb.setAttribute("aria-label", "Breadcrumb");
   breadcrumb.dataset.settingsChrome = "";
@@ -11990,7 +12133,7 @@ function createSettingsView(screen, options) {
   aggiungi.dataset.settingsAddModel = "";
   const aggiungiEtichetta = node2("span", "settings-add-model__label");
   aggiungi.append(iconaSprite("plus", "settings-add-model__icon"), aggiungiEtichetta);
-  coda.append(pastiglia, aggiungi);
+  coda2.append(pastiglia, aggiungi);
   const modale = q2("#settingsAddModel");
   if (modale) {
     aggiungi.addEventListener("click", () => {
@@ -12147,9 +12290,9 @@ function createSettingsView(screen, options) {
   nav.insertBefore(cercaBottone, list);
   nav.insertBefore(toolbar, list);
   const scrive = (target) => {
-    const el30 = target;
-    if (!el30 || !el30.tagName) return false;
-    return el30.tagName === "INPUT" || el30.tagName === "TEXTAREA" || el30.tagName === "SELECT" || el30.isContentEditable;
+    const el31 = target;
+    if (!el31 || !el31.tagName) return false;
+    return el31.tagName === "INPUT" || el31.tagName === "TEXTAREA" || el31.tagName === "SELECT" || el31.isContentEditable;
   };
   doc.addEventListener("keydown", (event) => {
     if (!(event.ctrlKey || event.metaKey) || event.altKey || event.key.toLowerCase() !== "k") return;
@@ -13520,12 +13663,12 @@ function creaForgeRow(strumento, { document: doc = globalThis.document, selezion
   const aside = el11(doc, "span", "talos-list-row__aside");
   aside.append(el11(doc, "span", "talos-badge" + (stato2.tono ? " talos-badge--" + stato2.tono : "") + " talos-badge--sm", stato2.testo));
   if (!selezionabile) {
-    const bottone6 = el11(doc, "button", "talos-button talos-button--secondary talos-button--sm", salvataggio && salvataggioId === strumento.id ? "Salvataggio…" : stato2.azione);
-    bottone6.type = "button";
-    bottone6.disabled = salvataggio || stato2.prossimo === null;
-    bottone6.setAttribute("aria-label", stato2.azione + " " + t3.titolo);
-    bottone6.addEventListener("click", () => onAbilita?.(strumento, stato2.prossimo));
-    aside.append(bottone6);
+    const bottone7 = el11(doc, "button", "talos-button talos-button--secondary talos-button--sm", salvataggio && salvataggioId === strumento.id ? "Salvataggio…" : stato2.azione);
+    bottone7.type = "button";
+    bottone7.disabled = salvataggio || stato2.prossimo === null;
+    bottone7.setAttribute("aria-label", stato2.azione + " " + t3.titolo);
+    bottone7.addEventListener("click", () => onAbilita?.(strumento, stato2.prossimo));
+    aside.append(bottone7);
   }
   riga2.append(icona5(doc), testo2, aside);
   return riga2;
@@ -13614,10 +13757,10 @@ function renderOfficina(schermo, pagina) {
   const badge6 = dettaglio.querySelector("[data-forge-stato-attuale]");
   badge6.className = "talos-badge" + (stato2.tono ? " talos-badge--" + stato2.tono : "") + " talos-badge--sm";
   badge6.textContent = stato2.testo;
-  const bottone6 = dettaglio.querySelector("[data-forge-abilita]");
-  bottone6.textContent = opzioni.salvataggio && opzioni.salvataggioId === scelto.id ? "Salvataggio…" : stato2.azione + " questo attrezzo";
-  bottone6.disabled = Boolean(opzioni.salvataggio) || stato2.prossimo === null;
-  bottone6.setAttribute("aria-label", stato2.azione + " " + t3.titolo);
+  const bottone7 = dettaglio.querySelector("[data-forge-abilita]");
+  bottone7.textContent = opzioni.salvataggio && opzioni.salvataggioId === scelto.id ? "Salvataggio…" : stato2.azione + " questo attrezzo";
+  bottone7.disabled = Boolean(opzioni.salvataggio) || stato2.prossimo === null;
+  bottone7.setAttribute("aria-label", stato2.azione + " " + t3.titolo);
 }
 var ALIAS, PAGINE3;
 var init_officina = __esm({
@@ -13969,10 +14112,10 @@ function frasiRiverifica(riverifica) {
   return pezzi.length ? `${testa}: ${pezzi.join(" · ")}` : testa;
 }
 function nodo6(doc, tag2, classe, testo2) {
-  const el30 = doc.createElement(tag2);
-  if (classe) el30.className = classe;
-  if (testo2 !== void 0 && testo2 !== null) el30.textContent = String(testo2);
-  return el30;
+  const el31 = doc.createElement(tag2);
+  if (classe) el31.className = classe;
+  if (testo2 !== void 0 && testo2 !== null) el31.textContent = String(testo2);
+  return el31;
 }
 function iconaSvg(doc, nome) {
   const svg2 = doc.createElementNS("http://www.w3.org/2000/svg", "svg");
@@ -13984,9 +14127,9 @@ function iconaSvg(doc, nome) {
   return svg2;
 }
 function tag(doc, testo2, tono) {
-  const el30 = nodo6(doc, "span", "td-tag", testo2);
-  if (tono) el30.dataset.tone = tono;
-  return el30;
+  const el31 = nodo6(doc, "span", "td-tag", testo2);
+  if (tono) el31.dataset.tone = tono;
+  return el31;
 }
 function prosaInNodi(doc, prosa, rendiMarkdown, titoloGiaDetto = "") {
   const contenitore = nodo6(doc, "div", "td-prosa-rapporto");
@@ -15438,12 +15581,12 @@ function magazzinoFileLibreria(schermo) {
   return magazzino;
 }
 function nodo7(doc, tag2, classe, testo2) {
-  const el30 = doc.createElement(tag2);
-  if (classe) el30.className = classe;
-  if (testo2 !== void 0 && testo2 !== null) el30.textContent = String(testo2);
-  return el30;
+  const el31 = doc.createElement(tag2);
+  if (classe) el31.className = classe;
+  if (testo2 !== void 0 && testo2 !== null) el31.textContent = String(testo2);
+  return el31;
 }
-function bottone2(doc, testo2, esegui, variante = "secondary") {
+function bottone3(doc, testo2, esegui, variante = "secondary") {
   const b = nodo7(doc, "button", `talos-button talos-button--${variante} talos-button--sm`, testo2);
   b.type = "button";
   b.addEventListener("click", esegui);
@@ -15453,7 +15596,7 @@ function cartaEsterna(doc, frase, { voce, opzioni }) {
   const box = nodo7(doc, "div", "td-file-esterno");
   box.append(nodo7(doc, "p", "", frase));
   if (typeof opzioni?.onApri === "function") {
-    box.append(bottone2(doc, "Apri con l’app del sistema", () => opzioni.onApri(voce)));
+    box.append(bottone3(doc, "Apri con l’app del sistema", () => opzioni.onApri(voce)));
   }
   return box;
 }
@@ -15527,7 +15670,7 @@ function tabellaCsv(doc, testo2, { nome, magazzino, chiave, ridisegna: ridisegna
   const dati = Math.max(righe.length - 1, 0);
   const mostrati = Math.max(quante - 1, 0);
   if (dati > mostrati) {
-    const apri = bottone2(doc, `Mostra tutte le ${dati.toLocaleString("it-IT")} righe`, () => {
+    const apri = bottone3(doc, `Mostra tutte le ${dati.toLocaleString("it-IT")} righe`, () => {
       magazzino.tabelleAperte.add(chiave);
       ridisegna2?.();
     });
@@ -15553,7 +15696,7 @@ function contenutoModoFile(doc, modo, contesto2) {
     const riga2 = nodo7(doc, "p", "", `Il file non si è aperto: ${lettura.errore}`);
     riga2.setAttribute("role", "alert");
     box.append(riga2);
-    if (typeof opzioni?.onApri === "function") box.append(bottone2(doc, "Apri con l’app del sistema", () => opzioni.onApri(voce)));
+    if (typeof opzioni?.onApri === "function") box.append(bottone3(doc, "Apri con l’app del sistema", () => opzioni.onApri(voce)));
     return [box];
   }
   const testo2 = lettura.testo || "";
@@ -15829,10 +15972,10 @@ function anteprimaTipografica(testo2) {
   return { titolo: titolo2, righe: quote };
 }
 function nodo8(doc, tag2, classe = "", testo2 = "") {
-  const el30 = doc.createElement(tag2);
-  if (classe) el30.className = classe;
-  if (testo2) el30.textContent = testo2;
-  return el30;
+  const el31 = doc.createElement(tag2);
+  if (classe) el31.className = classe;
+  if (testo2) el31.textContent = testo2;
+  return el31;
 }
 function iconaSprite2(doc, id4, classe = "i") {
   const svg2 = doc.createElementNS("http://www.w3.org/2000/svg", "svg");
@@ -16467,13 +16610,13 @@ function salvaPreferenze(chiave, valori, storage = globalThis.localStorage) {
 }
 function perId(radice2, selettore, campo2, valore) {
   const cercato = String(valore ?? "");
-  return [...radice2.querySelectorAll(selettore)].find((el30) => el30.dataset[campo2] === cercato) || null;
+  return [...radice2.querySelectorAll(selettore)].find((el31) => el31.dataset[campo2] === cercato) || null;
 }
 function nodo9(doc, tag2, classe, testo2) {
-  const el30 = doc.createElement(tag2);
-  if (classe) el30.className = classe;
-  if (testo2 !== void 0 && testo2 !== null) el30.textContent = String(testo2);
-  return el30;
+  const el31 = doc.createElement(tag2);
+  if (classe) el31.className = classe;
+  if (testo2 !== void 0 && testo2 !== null) el31.textContent = String(testo2);
+  return el31;
 }
 function icona6(doc, nome, classe = "i") {
   const svg2 = doc.createElementNS("http://www.w3.org/2000/svg", "svg");
@@ -16485,9 +16628,9 @@ function icona6(doc, nome, classe = "i") {
   return svg2;
 }
 function etichetta(doc, testo2, tono = "") {
-  const el30 = nodo9(doc, "span", "td-tag", testo2);
-  if (tono) el30.dataset.tone = tono;
-  return el30;
+  const el31 = nodo9(doc, "span", "td-tag", testo2);
+  if (tono) el31.dataset.tone = tono;
+  return el31;
 }
 function disegnoVuoto(doc, nomeIcona) {
   const NS = "http://www.w3.org/2000/svg";
@@ -16772,9 +16915,9 @@ function collegaDivisorio(doc, stato2) {
 function fotografaSchede(contenitore) {
   const mappa = /* @__PURE__ */ new Map();
   if (!contenitore?.querySelectorAll) return mappa;
-  for (const el30 of contenitore.querySelectorAll("[data-item]")) {
+  for (const el31 of contenitore.querySelectorAll("[data-item]")) {
     try {
-      mappa.set(el30.dataset.item, el30.getBoundingClientRect());
+      mappa.set(el31.dataset.item, el31.getBoundingClientRect());
     } catch {
     }
   }
@@ -16783,24 +16926,24 @@ function fotografaSchede(contenitore) {
 function flipSchede(doc, contenitore, prima) {
   if (!prima.size || !contenitore?.querySelectorAll) return;
   if (movimentoSpento({ document: doc, leva: LEVA_SUPERFICI })) return;
-  for (const el30 of contenitore.querySelectorAll("[data-item]")) {
+  for (const el31 of contenitore.querySelectorAll("[data-item]")) {
     let dopo;
     try {
-      dopo = el30.getBoundingClientRect();
+      dopo = el31.getBoundingClientRect();
     } catch {
       continue;
     }
-    const a = prima.get(el30.dataset.item);
+    const a = prima.get(el31.dataset.item);
     const invisibile = (r) => !r || r.width === 0 && r.height === 0;
     if (invisibile(dopo) || a && invisibile(a)) continue;
     if (a) {
       const dx = a.x - dopo.x;
       const dy = a.y - dopo.y;
       if (Math.abs(dx) + Math.abs(dy) > 1) {
-        motion(el30, [{ transform: `translate(${dx}px,${dy}px)` }, { transform: "none" }], { fattore: 1.35, leva: LEVA_SUPERFICI, document: doc });
+        motion(el31, [{ transform: `translate(${dx}px,${dy}px)` }, { transform: "none" }], { fattore: 1.35, leva: LEVA_SUPERFICI, document: doc });
       }
     } else {
-      motion(el30, [{ opacity: 0, transform: "translateY(5px)" }, { opacity: 1, transform: "none" }], { leva: LEVA_SUPERFICI, document: doc });
+      motion(el31, [{ opacity: 0, transform: "translateY(5px)" }, { opacity: 1, transform: "none" }], { leva: LEVA_SUPERFICI, document: doc });
     }
   }
 }
@@ -17140,10 +17283,10 @@ function applicaCollocazioneToast(regione, collocazione) {
     else regione.style.removeProperty(nome);
   }
 }
-function creaPilaToast(regione, { animaUscita = (el30, fine) => fine(), entra = () => {
+function creaPilaToast(regione, { animaUscita = (el31, fine) => fine(), entra = () => {
 }, fuocoDiRitorno = () => null } = {}) {
   let progressivo = 0;
-  const vivi = () => [...regione.querySelectorAll(".talos-toast:not([hidden])")].filter((el30) => !el30.dataset.demo);
+  const vivi = () => [...regione.querySelectorAll(".talos-toast:not([hidden])")].filter((el31) => !el31.dataset.demo);
   const rimuovi2 = (scheda) => {
     if (!scheda?.isConnected || scheda.dataset.uscita) return;
     scheda.dataset.uscita = "1";
@@ -17314,10 +17457,10 @@ function servizioVoci({ schema, sessionId, rete } = {}) {
   };
 }
 function nodo10(doc, tag2, classe, testo2) {
-  const el30 = doc.createElement(tag2);
-  if (classe) el30.className = classe;
-  if (testo2 !== void 0 && testo2 !== null) el30.textContent = String(testo2);
-  return el30;
+  const el31 = doc.createElement(tag2);
+  if (classe) el31.className = classe;
+  if (testo2 !== void 0 && testo2 !== null) el31.textContent = String(testo2);
+  return el31;
 }
 function mostraConteggio(lunghezza, massimo) {
   return Number(lunghezza) >= Number(massimo) * 0.9;
@@ -17650,12 +17793,12 @@ function notificatore(opzioni) {
   };
 }
 function nodo11(doc, tag2, classe, testo2) {
-  const el30 = doc.createElement(tag2);
-  if (classe) el30.className = classe;
-  if (testo2 !== void 0 && testo2 !== null) el30.textContent = String(testo2);
-  return el30;
+  const el31 = doc.createElement(tag2);
+  if (classe) el31.className = classe;
+  if (testo2 !== void 0 && testo2 !== null) el31.textContent = String(testo2);
+  return el31;
 }
-function bottone3(doc, testo2, { variante = "secondary", esegui, pericolo = false } = {}) {
+function bottone4(doc, testo2, { variante = "secondary", esegui, pericolo = false } = {}) {
   const b = nodo11(doc, "button", `talos-button talos-button--${variante} talos-button--sm${pericolo ? " talos-button--danger" : ""}`, testo2);
   b.type = "button";
   if (esegui) b.addEventListener("click", esegui);
@@ -17859,9 +18002,9 @@ function scrittura(schermo, { schema, lista, opzioni, ridisegna: ridisegna2 }) {
   }
   function azioniModulo(doc2) {
     const mod = m.modulo;
-    const salvaBtn = bottone3(doc2, mod.inCorso ? "Salvo…" : "Salva", { variante: "primary", esegui: () => salva() });
+    const salvaBtn = bottone4(doc2, mod.inCorso ? "Salvo…" : "Salva", { variante: "primary", esegui: () => salva() });
     salvaBtn.disabled = Boolean(mod.inCorso);
-    const annullaBtn = bottone3(doc2, "Annulla", { variante: contaParoleNelModulo ? "secondary" : "ghost", esegui: () => {
+    const annullaBtn = bottone4(doc2, "Annulla", { variante: contaParoleNelModulo ? "secondary" : "ghost", esegui: () => {
       chiudiModulo();
       ridisegna2();
     } });
@@ -17982,8 +18125,8 @@ ${testoDi(schema, intera)}`);
       return parola2 ? nodo11(doc2, "span", "td-origine", parola2) : null;
     },
     azioniVoce: (v, doc2) => servizio ? [
-      bottone3(doc2, "Modifica", { esegui: () => apriModulo("modifica", v) }),
-      bottone3(doc2, "Tutte le azioni", { esegui: (e) => apriMenu(v, { ancoraEl: e?.currentTarget || null }) })
+      bottone4(doc2, "Modifica", { esegui: () => apriModulo("modifica", v) }),
+      bottone4(doc2, "Tutte le azioni", { esegui: (e) => apriMenu(v, { ancoraEl: e?.currentTarget || null }) })
     ] : [],
     /**
      * Dopo il montaggio: aggancia la selezione al modulo, o chiude il modulo se la selezione è
@@ -18164,8 +18307,8 @@ function montaNote(schermo, note, opzioni = {}) {
       const azioni = scrivi2.azioniVoce(n, doc);
       if (azioni.length) return azioni;
       return [
-        bottone3(doc, "Copia", { esegui: () => onCopia?.(n) }),
-        bottone3(doc, "Esporta", {
+        bottone4(doc, "Copia", { esegui: () => onCopia?.(n) }),
+        bottone4(doc, "Esporta", {
           esegui: () => {
             esportaTesto(doc, `${titoloNota(n).replace(/[\\/:*?"<>|]/g, "-").slice(0, 80)}.md`, `# ${titoloNota(n)}
 
@@ -18235,7 +18378,7 @@ function aggiornaPaginaMemoria(schermo, memorie, opzioni = {}) {
       if (scrivi2.inModulo(m)) return scrivi2.azioniModulo(doc);
       const azioni = scrivi2.azioniVoce(m, doc);
       if (azioni.length) return azioni;
-      return [bottone3(doc, "Copia", {
+      return [bottone4(doc, "Copia", {
         esegui: async () => {
           const t3 = testiMemoria(m);
           try {
@@ -18401,7 +18544,7 @@ function aggiornaPaginaLibreria(schermo, voci, opzioni = {}) {
     const riga2 = sezione?.querySelector(".td-detail .td-riuso-riga > .talos-list-row");
     const voci2 = riga2?.vociMenu?.();
     if (!voci2?.length) return;
-    const siVede = (el30) => Boolean(el30?.isConnected) && el30.getBoundingClientRect().width > 0;
+    const siVede = (el31) => Boolean(el31?.isConnected) && el31.getBoundingClientRect().width > 0;
     const ancoraVisibile = [cardDi()?.querySelector(".td-lib-menu"), sezione?.querySelector('.td-detail .td-riuso-riga [data-azione="menu"]'), ancora?.ancoraEl].find(siVede) ?? null;
     opzioni.onMenu(voci2, (ancora?.ancoraEl || !siVede(cardDi())) && ancoraVisibile ? { ancoraEl: ancoraVisibile } : ancora);
   }
@@ -18939,7 +19082,7 @@ function montaProgetti(schermo, progetti, opzioni = {}) {
       if (!recenti.length) pezzi.push(nodo11(doc, "p", "td-subtle", "Nessuna sessione ancora in questo progetto."));
       for (const s of recenti) {
         const riga2 = nodo11(doc, "div", "td-source");
-        const apri = bottone3(doc, s?.nome || s?.sessionId || "Sessione senza nome", { variante: "ghost", esegui: () => onApriSessione?.(s) });
+        const apri = bottone4(doc, s?.nome || s?.sessionId || "Sessione senza nome", { variante: "ghost", esegui: () => onApriSessione?.(s) });
         riga2.append(apri);
         if (s?.avviataAlle) riga2.append(nodo11(doc, "span", "", `Avviata il ${new Date(s.avviataAlle).toLocaleString("it-IT")}`));
         pezzi.push(riga2);
@@ -21652,6 +21795,156 @@ var init_dagre_esm = __esm({
   }
 });
 
+// src/components/grafo/comuni.js
+function statoDelRun(panoramica, { tipo = "run", revisione = null } = {}) {
+  if (tipo !== "run") return revisione?.status === "approved" ? "approved" : "proposed";
+  const p = panoramica ?? {};
+  if (["succeeded", "failed", "cancelled"].includes(p.status)) return p.status;
+  if (p.cancelRequested === true) return "cancelling";
+  if (p.status === "running" && p.pauseRequested === true) return "pausing";
+  return p.status;
+}
+function conteggiFase(counts = {}) {
+  const esito = {};
+  for (const [chiave, , stati2] of FAMIGLIE2) esito[chiave] = stati2.reduce((somma3, stato2) => somma3 + (counts[stato2] ?? 0), 0);
+  return esito;
+}
+function percentualeFase(gruppo) {
+  return typeof gruppo?.progress === "number" ? Math.floor(gruppo.progress * 100) : null;
+}
+function spostaConteggi(gruppi = [], cambi = []) {
+  for (const { phaseId, da, a } of cambi) {
+    if (!da || !a || da === a) continue;
+    const g = gruppi.find((x) => x.phaseId === phaseId);
+    if (!g?.counts || !((g.counts[da] ?? 0) > 0)) continue;
+    g.counts = { ...g.counts, [da]: g.counts[da] - 1, [a]: (g.counts[a] ?? 0) + 1 };
+    if (g.counts[da] === 0) delete g.counts[da];
+    g.terminated = Object.entries(g.counts).reduce((t3, [st2, n]) => t3 + (STATI_TERMINALI.has(st2) ? n : 0), 0);
+    if (typeof g.progress === "number" && g.total > 0) g.progress = g.terminated / g.total;
+  }
+  return gruppi;
+}
+function tonoFase(gruppo) {
+  const c = conteggiFase(gruppo?.counts);
+  if (percentualeFase(gruppo) === null) return "neutro";
+  if (c.errori > 0) return "errore";
+  if (gruppo.total > 0 && gruppo.terminated === gruppo.total) return c.conclusi === gruppo.total ? "ok" : "neutro";
+  if (c.inCorso > 0) return "corso";
+  return "attesa";
+}
+function iconaDellaFase(gruppo) {
+  const ruolo = piuFrequente(gruppo?.roles, Object.keys(ICONE_RUOLO));
+  if (ruolo) return ICONE_RUOLO[ruolo];
+  const tipo = piuFrequente(gruppo?.kinds, Object.keys(ICONE_TIPO));
+  return tipo ? ICONE_TIPO[tipo] : "i-robot";
+}
+function formattaDurata(ms2) {
+  if (typeof ms2 !== "number" || !Number.isFinite(ms2) || ms2 < 0) return null;
+  const secondi = Math.floor(ms2 / 1e3);
+  if (secondi < 60) return `${secondi} s`;
+  const minuti = Math.floor(secondi / 60);
+  if (minuti < 60) return `${minuti} min`;
+  return `${Math.floor(minuti / 60)} h ${minuti % 60} min`;
+}
+function durataDelPasso(riga2, adesso = Date.now()) {
+  if (typeof riga2?.durationMs === "number") return riga2.durationMs;
+  if (riga2?.startedAt && !riga2.finishedAt && statoPasso(riga2.state).tono === "corso") {
+    const inizio = Date.parse(riga2.startedAt);
+    return Number.isFinite(inizio) ? Math.max(0, adesso - inizio) : null;
+  }
+  return null;
+}
+var SOGLIA_AGENTI, PAGINA_ELENCO, STATI_PASSO, statoPasso, STATI_RUN, TONO_RUN, ICONA_TONO, FAMIGLIE2, STATI_TERMINALI, ICONE_RUOLO, ICONE_TIPO, piuFrequente, iconaDelPasso, modelloDelPasso, livelloPer, NUMERO2, cifra, plurale3, maiuscola, ora;
+var init_comuni = __esm({
+  "src/components/grafo/comuni.js"() {
+    SOGLIA_AGENTI = 25;
+    PAGINA_ELENCO = 20;
+    STATI_PASSO = Object.freeze({
+      planned: { parola: "Pianificato", tono: "neutro" },
+      pending: { parola: "In attesa", tono: "attesa" },
+      /* F3-52, giro VERO sul 4174 (25/09): un passo che aspetta un passo precedente è `blocked` nel riduttore (`run.mjs:134`) e a
+         schermo diceva «Stato sconosciuto»; le fixture usavano solo `pending`. Per chi guarda è la stessa attesa del mockup. */
+      blocked: { parola: "In attesa", tono: "attesa" },
+      ready: { parola: "Pronto", tono: "attesa" },
+      leased: { parola: "In avvio", tono: "corso" },
+      running: { parola: "In esecuzione", tono: "corso" },
+      retry_wait: { parola: "Riprova a breve", tono: "attesa" },
+      waiting_human: { parola: "Aspetta te", tono: "avviso" },
+      reconciling: { parola: "In verifica", tono: "avviso" },
+      uncertain: { parola: "Da verificare", tono: "errore" },
+      succeeded: { parola: "Concluso", tono: "ok" },
+      failed: { parola: "Non riuscito", tono: "errore" },
+      cancelled: { parola: "Annullato", tono: "neutro" },
+      skipped: { parola: "Saltato", tono: "neutro" },
+      superseded: { parola: "Sostituito", tono: "neutro" }
+    });
+    statoPasso = (stato2) => STATI_PASSO[stato2] ?? { parola: "Stato sconosciuto", tono: "neutro" };
+    STATI_RUN = Object.freeze({
+      created: "Creato",
+      running: "In esecuzione",
+      paused: "In pausa",
+      needs_attention: "Serve attenzione",
+      succeeded: "Riuscito",
+      failed: "Non riuscito",
+      cancelled: "Annullato",
+      planned: "Da avviare",
+      proposed: "Da approvare",
+      approved: "Approvato, da avviare",
+      // F3-52: chiesti e non ancora compiuti (i passi in corso stanno finendo o si stanno fermando)
+      pausing: "Pausa in corso",
+      cancelling: "Annullamento in corso"
+    });
+    TONO_RUN = {
+      running: "corso",
+      created: "corso",
+      paused: "attesa",
+      needs_attention: "errore",
+      succeeded: "ok",
+      failed: "errore",
+      cancelled: "neutro",
+      pausing: "attesa",
+      cancelling: "neutro"
+    };
+    ICONA_TONO = { ok: "i-check", corso: "i-play", attesa: "i-clock", avviso: "i-user", errore: "i-x", neutro: null };
+    FAMIGLIE2 = Object.freeze([
+      ["conclusi", "Conclusi", ["succeeded", "skipped"], "ok"],
+      ["inCorso", "In esecuzione", ["leased", "running"], "corso"],
+      ["inAttesa", "In attesa", ["pending", "blocked", "ready", "retry_wait", "waiting_human", "reconciling", "planned"], "attesa"],
+      ["errori", "Errori", ["failed", "uncertain"], "errore"],
+      ["annullati", "Annullati", ["cancelled", "superseded"], "neutro"]
+    ]);
+    STATI_TERMINALI = /* @__PURE__ */ new Set(["succeeded", "failed", "cancelled", "skipped", "superseded"]);
+    ICONE_RUOLO = Object.freeze({
+      coordinator: "i-coordina",
+      researcher: "i-search",
+      implementer: "i-code",
+      reviewer: "i-shield",
+      integrator: "i-layers",
+      tester: "i-flask"
+    });
+    ICONE_TIPO = Object.freeze({ test: "i-flask", verify: "i-shield", judge: "i-shield", merge: "i-layers", reduce: "i-layers", artifact: "i-doc", human: "i-user" });
+    piuFrequente = (conti, ordine) => {
+      let scelta = null, massimo = 0;
+      for (const chiave of ordine) if ((conti?.[chiave] ?? 0) > massimo) {
+        scelta = chiave;
+        massimo = conti[chiave];
+      }
+      return scelta;
+    };
+    iconaDelPasso = (riga2) => ICONE_RUOLO[riga2?.role] ?? ICONE_TIPO[riga2?.kind] ?? "i-robot";
+    modelloDelPasso = (riga2, modelloSessione = null) => riga2?.effectiveModel?.model ?? riga2?.model ?? modelloSessione ?? null;
+    livelloPer = (totale2) => totale2 <= SOGLIA_AGENTI ? "agenti" : "gruppi";
+    NUMERO2 = new Intl.NumberFormat("it-IT", { useGrouping: "always" });
+    cifra = (n) => NUMERO2.format(n);
+    plurale3 = (n, uno2, molti) => `${cifra(n)} ${n === 1 ? uno2 : molti}`;
+    maiuscola = (testo2) => testo2 ? testo2[0].toLocaleUpperCase("it-IT") + testo2.slice(1) : testo2;
+    ora = (iso) => {
+      const t3 = Date.parse(iso ?? "");
+      return Number.isFinite(t3) ? new Date(t3).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" }) : null;
+    };
+  }
+});
+
 // src/components/grafo-agenti.js
 function stato(a) {
   if (a.interrotta === true || a.motivoChiusura === "fermata") return "interrupted";
@@ -21671,6 +21964,7 @@ function attivitaNodoGrafo(a, ora5 = Date.now()) {
     token: input != null && output != null ? input + output : null,
     chiamate: contaValida(att?.chiamate),
     file: Array.isArray(att?.file) ? att.file : null,
+    numeroFile: contaValida(att?.numeroFile),
     parziale: (att?.fileTagliati || 0) > 0,
     ultimo,
     operazione: stato(a) === "active" ? operazione : null,
@@ -21728,11 +22022,11 @@ function modelloGrafoAgenti({ corrente = {}, sessioni = [], figli = [] } = {}, o
     numeroFigli.set(a.da, (numeroFigli.get(a.da) || 0) + 1);
   }
   const discendenti = (radici) => {
-    const visitati = new Set(radici), coda = [...radici];
-    for (let i2 = 0; i2 < coda.length; i2++) for (const id4 of adiacenze.get(coda[i2]) || []) {
+    const visitati = new Set(radici), coda2 = [...radici];
+    for (let i2 = 0; i2 < coda2.length; i2++) for (const id4 of adiacenze.get(coda2[i2]) || []) {
       if (!visitati.has(id4)) {
         visitati.add(id4);
-        coda.push(id4);
+        coda2.push(id4);
       }
     }
     return visitati;
@@ -21766,7 +22060,7 @@ function layoutGrafoAgenti(modello) {
   const g = new ie.Graph({ multigraph: true });
   g.setGraph({ rankdir: "TB", nodesep: 28, ranksep: 56, marginx: 20, marginy: 20 });
   g.setDefaultEdgeLabel(() => ({}));
-  for (const n of modello.nodi) g.setNode(n.id, { width: 258, height: 202 });
+  for (const n of modello.nodi) g.setNode(n.id, { width: 248, height: 138 });
   for (const a of modello.archi) g.setEdge(a.da, a.a, {}, a.tipo);
   if (modello.nodi.length) Oe(g);
   return {
@@ -21800,134 +22094,295 @@ function montaGrafoAgenti(host, { dati, onApri, onChiudi, onAggiorna, onLeggiFil
   };
   let corrente = dati, disegno, zoom = 1, x = 0, y = 0, primo2 = true, segui = false, morto = false;
   let vistaToccata = false, gruppoAperto = null, paginaGruppo = 0;
-  const el30 = (tag2, classe, testo2) => {
+  const el31 = (tag2, classe, testo2) => {
     const n = d.createElement(tag2);
     if (classe) n.className = classe;
     if (testo2 != null) n.textContent = testo2;
     return n;
   };
-  const bottone6 = (testo2, azione, aria) => {
-    const b = el30("button", "talos-button talos-button--ghost talos-button--sm", testo2);
+  const bottone7 = (testo2, azione, aria) => {
+    const b = el31("button", "talos-button talos-button--ghost talos-button--sm", testo2);
     b.type = "button";
     if (aria) b.setAttribute("aria-label", aria);
     b.addEventListener("click", azione);
     return b;
   };
-  const root2 = el30("section", "talos-grafo");
+  const icona16 = (nome, classe = "") => {
+    const svg3 = d.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg3.setAttribute("class", `i ${classe}`.trim());
+    svg3.setAttribute("aria-hidden", "true");
+    const use = d.createElementNS("http://www.w3.org/2000/svg", "use");
+    use.setAttribute("href", `#${nome}`);
+    svg3.append(use);
+    return svg3;
+  };
+  const tasto = (classe, aria, nomeIcona, azione) => {
+    const b = el31("button", classe);
+    b.type = "button";
+    if (aria) b.setAttribute("aria-label", aria);
+    if (nomeIcona) b.append(icona16(nomeIcona));
+    if (azione) b.addEventListener("click", azione);
+    return b;
+  };
+  const root2 = el31("section", "talos-grafo talos-wfg talos-grafo--deleghe");
   root2.dataset.c = "GrafoAgenti";
   root2.setAttribute("aria-label", "Diagramma della sessione");
-  const cima = el30("header", "talos-grafo__cima");
-  cima.append(el30("h2", "", "Diagramma della sessione"), bottone6("Torna alla chat", onChiudi, "Chiudi il diagramma"));
-  const barra = el30("div", "talos-grafo__barra");
-  const scegli = (nome, valori, valore, cambia) => {
-    const s = el30("select", "");
-    s.setAttribute("aria-label", nome);
-    for (const [id4, testo2] of Object.entries(valori)) {
-      const o = el30("option", "", testo2);
-      o.value = id4;
-      s.append(o);
-    }
-    s.value = valore;
-    s.addEventListener("change", () => cambia(s.value));
-    return s;
-  };
-  const ricerca = el30("input", "");
+  const cima = el31("header", "talos-wfg__cima talos-grafo__cima");
+  const titoli = el31("div", "talos-wfg__titoli");
+  const sommario = el31("p", "talos-wfg__sommario"), descrizione = el31("p", "talos-wfg__descrizione", "Le deleghe della sessione, con il loro stato e l’attività registrata. Seleziona un agente per vederne i dettagli.");
+  titoli.append(el31("h2", "talos-wfg__titolo", "Diagramma della sessione"), sommario, descrizione);
+  const lato = el31("div", "talos-wfg__lato"), latoRiga = el31("div", "talos-wfg__lato-riga");
+  const aggiornato = el31("div", "talos-wfg__aggiornato"), aggiornatoOra = el31("span", "talos-wfg__aggiornato-ora");
+  aggiornato.append(aggiornatoOra);
+  const torna = el31("button", "talos-button talos-button--secondary talos-button--sm talos-wfg__torna", "Torna alla chat");
+  torna.type = "button";
+  torna.setAttribute("aria-label", "Chiudi il diagramma");
+  torna.addEventListener("click", () => onChiudi?.());
+  latoRiga.append(aggiornato, torna);
+  lato.append(latoRiga);
+  cima.append(titoli, lato);
+  const comandi = el31("div", "gv-comandi talos-grafo__comandi");
+  comandi.setAttribute("role", "toolbar");
+  comandi.setAttribute("aria-label", "Comandi del diagramma");
+  const viste = el31("div", "gv-viste");
+  viste.setAttribute("role", "radiogroup");
+  viste.setAttribute("aria-label", "Ambito del diagramma");
+  const vociAmbito = new Map([["sessione", "Sessione corrente", "i-branch"], ["workspace", "Cartella corrente", "i-folder"]].map(([id4, testo2, ic]) => {
+    const b = el31("button", "gv-vista");
+    b.type = "button";
+    b.setAttribute("role", "radio");
+    b.dataset.ambito = id4;
+    b.append(icona16(ic), el31("span", null, testo2));
+    b.addEventListener("click", () => {
+      opzioni.ambito = id4;
+      disegnaComandi();
+      ridisegna2();
+      adatta();
+    });
+    viste.append(b);
+    return [id4, b];
+  }));
+  viste.addEventListener("keydown", (e) => {
+    if (!["ArrowRight", "ArrowLeft", "ArrowDown", "ArrowUp"].includes(e.key)) return;
+    e.preventDefault();
+    const prossimo = opzioni.ambito === "sessione" ? "workspace" : "sessione";
+    vociAmbito.get(prossimo).click();
+    vociAmbito.get(prossimo).focus();
+  });
+  const menuStato = el31("div", "talos-wfg__menu-vista");
+  const sceltaStato = el31("button", "talos-wfg__scelta");
+  sceltaStato.type = "button";
+  sceltaStato.setAttribute("aria-haspopup", "menu");
+  sceltaStato.setAttribute("aria-expanded", "false");
+  const sceltaTesto = el31("span");
+  sceltaStato.append(sceltaTesto, icona16("i-chev", "talos-wfg__scelta-freccia"));
+  const vociStato = el31("div", "talos-wfg__menu");
+  vociStato.setAttribute("role", "menu");
+  vociStato.setAttribute("aria-label", "Filtra stato nel diagramma");
+  vociStato.hidden = true;
+  for (const [id4, testo2] of Object.entries(stati)) {
+    const b = el31("button", "talos-wfg__menu-voce", testo2);
+    b.type = "button";
+    b.setAttribute("role", "menuitemradio");
+    b.tabIndex = -1;
+    b.dataset.stato = id4;
+    b.addEventListener("click", () => {
+      chiudiMenu(sceltaStato, vociStato, { fuoco: true });
+      impostaStato(id4);
+    });
+    vociStato.append(b);
+  }
+  sceltaStato.addEventListener("click", () => vociStato.hidden ? apriMenu(sceltaStato, vociStato) : chiudiMenu(sceltaStato, vociStato));
+  menuStato.append(sceltaStato, vociStato);
+  const ricerca = el31("input", "talos-wfg__cerca");
   ricerca.type = "search";
   ricerca.placeholder = "Cerca agente…";
   ricerca.setAttribute("aria-label", "Cerca agente nel diagramma");
   ricerca.value = opzioni.query;
+  ricerca.hidden = !opzioni.query;
   ricerca.addEventListener("input", () => {
     opzioni.query = ricerca.value;
     ridisegna2();
     adatta();
   });
-  const filtro = scegli("Filtra stato nel diagramma", stati, opzioni.stato, (v) => {
-    opzioni.stato = v;
-    ridisegna2();
-    adatta();
+  ricerca.addEventListener("keydown", (e) => {
+    if (e.key !== "Escape") return;
+    e.preventDefault();
+    e.stopPropagation();
+    if (ricerca.value) {
+      ricerca.value = "";
+      opzioni.query = "";
+      ridisegna2();
+      adatta();
+      return;
+    }
+    ricerca.hidden = true;
+    cerca.focus();
   });
-  const ambito = scegli("Ambito del diagramma", { sessione: "Sessione corrente", workspace: "Cartella corrente" }, opzioni.ambito, (v) => {
-    opzioni.ambito = v;
-    ridisegna2();
-    adatta();
+  const cerca = tasto("talos-wfg__icona-bottone", "Cerca nel diagramma", "i-search", () => {
+    ricerca.hidden = ricerca.value ? false : !ricerca.hidden;
+    if (!ricerca.hidden) ricerca.focus();
   });
-  barra.append(ambito, ricerca, filtro, bottone6("Azzera filtri", () => {
+  const meno = tasto("talos-wfg__icona-bottone", "Riduci zoom", "i-minus", () => scala(zoom / 1.2));
+  const misura = tasto("talos-wfg__icona-bottone gv-percento", "Zoom al 100%", null, () => scala(1));
+  misura.textContent = "100%";
+  misura.dataset.zoom = "";
+  const piu = tasto("talos-wfg__icona-bottone", "Aumenta zoom", "i-plus", () => scala(zoom * 1.2));
+  const adattaTasto = tasto("talos-wfg__icona-bottone", "Adatta il diagramma alla finestra", "i-fit", () => adatta());
+  const letturaTasto = tasto("talos-wfg__icona-bottone", "Zoom di lettura", "i-eye", () => lettura());
+  const follow = tasto("talos-wfg__icona-bottone gv-percorso", "Segui l’agente attivo", "i-robot", () => {
+    segui = !segui;
+    follow.setAttribute("aria-pressed", String(segui));
+    if (segui) centraAttivo();
+  });
+  follow.append(el31("span", null, "Segui attivo"));
+  follow.setAttribute("aria-pressed", "false");
+  follow.title = "Tiene al centro l’agente che sta lavorando";
+  const menuAltro = el31("div", "talos-wfg__menu-vista");
+  const altro = tasto("talos-wfg__icona-bottone", "Altri comandi del diagramma", "i-more");
+  altro.setAttribute("aria-haspopup", "menu");
+  altro.setAttribute("aria-expanded", "false");
+  const vociAltro = el31("div", "talos-wfg__menu talos-wfg__menu--destra");
+  vociAltro.setAttribute("role", "menu");
+  vociAltro.setAttribute("aria-label", "Altri comandi del diagramma");
+  vociAltro.hidden = true;
+  const voceAltro = (testo2, azione) => {
+    const b = el31("button", "talos-wfg__menu-voce", testo2);
+    b.type = "button";
+    b.setAttribute("role", "menuitem");
+    b.tabIndex = -1;
+    b.addEventListener("click", () => {
+      chiudiMenu(altro, vociAltro, { fuoco: true });
+      azione();
+    });
+    vociAltro.append(b);
+    return b;
+  };
+  const isola = voceAltro("Isola selezionato", () => {
+    if (opzioni.selezionato) {
+      opzioni.isolato = opzioni.selezionato;
+      ridisegna2();
+      adatta();
+    }
+  });
+  const affianca = voceAltro("Affianca file", () => mostraFile());
+  affianca.setAttribute("aria-pressed", "false");
+  voceAltro("Aggiorna", () => {
+    onAggiorna?.();
+    void caricaCronologia();
+  });
+  voceAltro("Azzera filtri", () => {
     opzioni.query = "";
     opzioni.stato = "all";
     opzioni.isolato = null;
     opzioni.collassati = [];
     ricerca.value = "";
-    filtro.value = "all";
+    ricerca.hidden = true;
+    disegnaComandi();
     ridisegna2();
     adatta();
-  }));
-  const comandi = el30("div", "talos-grafo__barra talos-grafo__comandi");
-  const misura = el30("output", "talos-mono", "100%");
-  misura.dataset.zoom = "";
-  const follow = bottone6("Segui attivo", () => {
-    segui = !segui;
-    follow.setAttribute("aria-pressed", String(segui));
-    if (segui) centraAttivo();
   });
-  follow.setAttribute("aria-pressed", "false");
-  comandi.append(
-    bottone6("Adatta", adatta),
-    bottone6("Lettura", lettura),
-    bottone6("−", () => scala(zoom / 1.2), "Riduci zoom"),
-    misura,
-    bottone6("+", () => scala(zoom * 1.2), "Aumenta zoom"),
-    follow,
-    bottone6("Isola selezionato", () => {
-      if (opzioni.selezionato) {
-        opzioni.isolato = opzioni.selezionato;
-        ridisegna2();
-        adatta();
-      }
-    }),
-    bottone6("Aggiorna", () => {
-      onAggiorna?.();
-      void caricaCronologia();
-    })
-  );
-  const affianca = bottone6("Affianca file", () => mostraFile());
-  affianca.setAttribute("aria-pressed", "false");
-  comandi.append(affianca);
-  const avviso = el30("p", "talos-grafo__stato");
+  altro.addEventListener("click", () => vociAltro.hidden ? apriMenu(altro, vociAltro) : chiudiMenu(altro, vociAltro));
+  menuAltro.append(altro, vociAltro);
+  const sinistra = el31("div", "gv-comandi-gruppo");
+  sinistra.append(viste, menuStato);
+  const destra = el31("div", "gv-comandi-gruppo");
+  destra.append(ricerca, cerca, meno, misura, piu, adattaTasto, letturaTasto, follow, menuAltro);
+  comandi.append(sinistra, destra);
+  const attrezziTela = [meno, misura, piu, adattaTasto, letturaTasto, follow, isola, affianca];
+  function impostaStato(id4) {
+    opzioni.stato = id4;
+    disegnaComandi();
+    ridisegna2();
+    adatta();
+  }
+  function disegnaComandi() {
+    for (const [id4, b] of vociAmbito) b.setAttribute("aria-checked", String(id4 === opzioni.ambito));
+    sceltaTesto.textContent = stati[opzioni.stato];
+    sceltaStato.setAttribute("aria-label", `Filtra stato nel diagramma: ${stati[opzioni.stato]}`);
+    for (const b of vociStato.children) b.setAttribute("aria-checked", String(b.dataset.stato === opzioni.stato));
+    isola.disabled = !opzioni.selezionato;
+  }
+  function apriMenu(chi, menu) {
+    menu.hidden = false;
+    chi.setAttribute("aria-expanded", "true");
+    (menu.querySelector('[aria-checked="true"]:not(:disabled):not([hidden])') ?? menu.querySelector("button:not(:disabled):not([hidden])"))?.focus();
+  }
+  function chiudiMenu(chi, menu, { fuoco = false } = {}) {
+    if (menu.hidden) return;
+    menu.hidden = true;
+    chi.setAttribute("aria-expanded", "false");
+    if (fuoco) chi.focus();
+  }
+  root2.addEventListener("keydown", (e) => {
+    const menu = e.target.closest?.('[role="menu"]');
+    if (!menu) return;
+    const voci = [...menu.querySelectorAll("button:not(:disabled):not([hidden])")], i2 = voci.indexOf(e.target), chi = menu.previousElementSibling;
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      voci[(i2 + 1) % voci.length]?.focus();
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      voci[(i2 - 1 + voci.length) % voci.length]?.focus();
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      e.stopPropagation();
+      chiudiMenu(chi, menu, { fuoco: true });
+    } else if (e.key === "Tab") chiudiMenu(chi, menu);
+  });
+  const chiudiMenuFuori = (e) => {
+    if (!vociStato.hidden && !menuStato.contains(e.target)) chiudiMenu(sceltaStato, vociStato);
+    if (!vociAltro.hidden && !menuAltro.contains(e.target)) chiudiMenu(altro, vociAltro);
+    if (!vociAgente.hidden && !detAltro.contains(e.target)) chiudiMenu(menuAgente, vociAgente);
+  };
+  d.addEventListener("pointerdown", chiudiMenuFuori, true);
+  const avviso = el31("p", "talos-wfg__avviso talos-grafo__stato");
   avviso.setAttribute("role", "status");
-  const riepilogo = el30("div", "talos-grafo__riepilogo");
+  const riepilogo = el31("div", "talos-grafo__riepilogo");
   riepilogo.setAttribute("aria-label", "Riepilogo del lavoro");
-  const recenti = el30("details", "talos-grafo__recenti");
-  recenti.append(el30("summary", "", "Attività recente"));
-  const elencoRecenti = el30("div", "talos-grafo__eventi");
+  const recenti = el31("details", "talos-grafo__recenti");
+  recenti.append(el31("summary", "", "Attività recente"));
+  const elencoRecenti = el31("div", "talos-grafo__eventi");
   recenti.append(elencoRecenti);
-  const canvas = el30("div", "talos-grafo__canvas");
+  const canvas = el31("div", "talos-grafo__canvas");
   canvas.tabIndex = 0;
   canvas.setAttribute("aria-label", "Diagramma: trascina lo sfondo o usa le frecce per spostare");
-  const mondo = el30("div", "talos-grafo__mondo");
+  const mondo = el31("div", "talos-grafo__mondo");
   canvas.append(mondo);
-  const piede = el30("p", "talos-grafo__legenda", "Linea continua: delega · tratteggiata: ramo. Seleziona un agente per aprire il dettaglio.");
-  const area = el30("div", "talos-grafo__area");
-  const anteprima3 = el30("aside", "talos-grafo__anteprima");
+  const piede = el31("p", "talos-grafo__legenda", "Linea continua: delega · tratteggiata: ramo. Seleziona un agente per aprire il dettaglio.");
+  const area = el31("div", "talos-grafo__area");
+  const anteprima3 = el31("aside", "talos-grafo__anteprima");
   anteprima3.hidden = true;
   anteprima3.setAttribute("aria-label", "File affiancato");
-  const fileCima = el30("div", "talos-grafo__file-cima"), titoloFile = el30("strong", "", "File dell’agente");
-  const chiudiFile = bottone6("×", () => {
+  const fileCima = el31("div", "talos-grafo__file-cima"), titoloFile = el31("strong", "", "File dell’agente");
+  const chiudiFile = tasto("talos-wfg__icona-bottone", "Chiudi affiancamento", "i-x", () => {
     letturaFile++;
     anteprima3.hidden = true;
     affianca.setAttribute("aria-pressed", "false");
     adatta();
-  }, "Chiudi affiancamento");
+  });
   fileCima.append(titoloFile, chiudiFile);
-  const fileScelta = el30("select", "");
-  fileScelta.setAttribute("aria-label", "File da affiancare");
-  const fileTesto = el30("pre", "");
-  anteprima3.append(fileCima, fileScelta, fileTesto);
-  fileScelta.addEventListener("change", () => leggiFile(fileScelta._agente, fileScelta.value));
-  const aggregato = el30("section", "talos-grafo__aggregato");
+  const menuFile = el31("div", "talos-wfg__menu-vista talos-grafo__file-scelta");
+  const sceltaFile = el31("button", "talos-wfg__scelta");
+  sceltaFile.type = "button";
+  sceltaFile.setAttribute("aria-haspopup", "menu");
+  sceltaFile.setAttribute("aria-expanded", "false");
+  sceltaFile.setAttribute("aria-label", "File da affiancare");
+  const sceltaFileTesto = el31("span");
+  sceltaFile.append(sceltaFileTesto, icona16("i-chev", "talos-wfg__scelta-freccia"));
+  const vociFile = el31("div", "talos-wfg__menu");
+  vociFile.setAttribute("role", "menu");
+  vociFile.setAttribute("aria-label", "File da affiancare");
+  vociFile.hidden = true;
+  sceltaFile.addEventListener("click", () => vociFile.hidden ? apriMenu(sceltaFile, vociFile) : chiudiMenu(sceltaFile, vociFile));
+  menuFile.append(sceltaFile, vociFile);
+  const fileTesto = el31("pre", "");
+  anteprima3.append(fileCima, menuFile, fileTesto);
+  const aggregato = el31("section", "talos-grafo__aggregato");
   aggregato.hidden = true;
   aggregato.setAttribute("aria-label", "Sessioni raggruppate per stato");
-  const gruppi = el30("div", "talos-grafo__gruppi");
-  const gruppoDettaglio = el30("div", "talos-grafo__gruppo-dettaglio");
+  const gruppi = el31("div", "talos-grafo__gruppi");
+  const gruppoDettaglio = el31("div", "talos-grafo__gruppo-dettaglio");
   aggregato.append(gruppi, gruppoDettaglio);
   area.append(canvas, aggregato, anteprima3);
   const mini = d.createElementNS("http://www.w3.org/2000/svg", "svg");
@@ -21945,7 +22400,7 @@ function montaGrafoAgenti(host, { dati, onApri, onChiudi, onAggiorna, onLeggiFil
     vistaToccata = true;
     x = canvas.clientWidth / 2 - (e.clientX - r.left) / r.width * disegno.width * zoom;
     y = canvas.clientHeight / 2 - (e.clientY - r.top) / r.height * disegno.height * zoom;
-    trasforma();
+    trasforma({ anima: true });
   });
   mini.addEventListener("keydown", (e) => {
     if (!disegno) return;
@@ -21953,7 +22408,7 @@ function montaGrafoAgenti(host, { dati, onApri, onChiudi, onAggiorna, onLeggiFil
       e.preventDefault();
       x = canvas.clientWidth / 2 - disegno.width * zoom / 2;
       y = canvas.clientHeight / 2 - disegno.height * zoom / 2;
-      trasforma();
+      trasforma({ anima: true });
     }
     const delta = { ArrowLeft: [40, 0], ArrowRight: [-40, 0], ArrowUp: [0, 40], ArrowDown: [0, -40] }[e.key];
     if (delta) {
@@ -21964,20 +22419,10 @@ function montaGrafoAgenti(host, { dati, onApri, onChiudi, onAggiorna, onLeggiFil
       trasforma();
     }
   });
-  const timeline = el30("div", "talos-grafo__timeline");
-  const cursore = el30("input", "");
-  cursore.type = "range";
-  cursore.min = "0";
-  cursore.max = "0";
-  cursore.step = "1";
-  cursore.setAttribute("aria-label", "Cronologia osservata del diagramma");
-  const istanteReplay = el30("span", "talos-mono", "ORA"), descrizioneReplay = el30("span", "talos-grafo__limite", "Caricamento cronologia…");
-  const tornaLive = bottone6("Torna in diretta", () => mostraIstante(null));
-  tornaLive.hidden = true;
-  cursore.addEventListener("input", () => mostraIstante(Number(cursore.value)));
-  const eventoPrecedente = bottone6("Evento −", () => mostraIstante(posizione == null ? storico.length - 1 : Math.max(0, posizione - 1)), "Evento precedente");
-  const eventoSuccessivo = bottone6("Evento +", () => mostraIstante(posizione == null ? storico.length - 1 : Math.min(storico.length - 1, posizione + 1)));
-  const riproduci = bottone6("Riproduci", () => {
+  const timeline = el31("div", "gv-rip talos-grafo__timeline");
+  timeline.setAttribute("role", "group");
+  timeline.setAttribute("aria-label", "Riproduzione della cronologia");
+  const riproduci = tasto("gv-rip-gioca", "Riproduci la cronologia", "i-play", () => {
     if (play) {
       fermaPlayer();
       aggiornaTimeline();
@@ -21990,14 +22435,83 @@ function montaGrafoAgenti(host, { dati, onApri, onChiudi, onAggiorna, onLeggiFil
     aggiornaTimeline();
     framePlayer = requestAnimationFrame(tickPlayer);
   });
-  const speed = scegli("Velocità riproduzione", { 1: "1×", 2: "2×", 4: "4×", 16: "16×" }, "1", (v) => {
-    velocita = Number(v);
-  });
-  const riprovaCronologia = bottone6("Riprova cronologia", () => caricaCronologia());
+  const eventoPrecedente = tasto("gv-rip-gioca gv-rip-passo", "Evento precedente", "i-chevron-right", () => mostraIstante(posizione == null ? storico.length - 1 : Math.max(0, posizione - 1)));
+  eventoPrecedente.classList.add("gv-rip-passo--indietro");
+  const eventoSuccessivo = tasto("gv-rip-gioca gv-rip-passo", "Evento successivo", "i-chevron-right", () => mostraIstante(posizione == null ? storico.length - 1 : Math.min(storico.length - 1, posizione + 1)));
+  const ripVelocita = el31("div", "gv-rip-velocita");
+  ripVelocita.setAttribute("role", "radiogroup");
+  ripVelocita.setAttribute("aria-label", "Velocità riproduzione");
+  for (const v of [1, 2, 4, 16]) {
+    const b = el31("button", "gv-rip-v", `${v}×`);
+    b.type = "button";
+    b.setAttribute("role", "radio");
+    b.setAttribute("aria-checked", String(v === velocita));
+    b.title = v === 1 ? "Alla velocità vera" : `${v} volte più veloce`;
+    b.addEventListener("click", () => {
+      velocita = v;
+      for (const x2 of ripVelocita.children) x2.setAttribute("aria-checked", String(x2 === b));
+    });
+    ripVelocita.append(b);
+  }
+  const cursore = el31("input", "gv-rip-cursore");
+  cursore.type = "range";
+  cursore.min = "0";
+  cursore.max = "0";
+  cursore.step = "1";
+  cursore.setAttribute("aria-label", "Cronologia osservata del diagramma");
+  cursore.addEventListener("input", () => mostraIstante(Number(cursore.value)));
+  const istanteReplay = el31("span", "gv-rip-testo", "Dal vivo"), descrizioneReplay = el31("span", "gv-rip-nota talos-grafo__limite", "Caricamento cronologia…");
+  const tornaLive = el31("button", "talos-button talos-button--secondary talos-button--sm gv-rip-vivo", "Torna al vivo");
+  tornaLive.type = "button";
+  tornaLive.hidden = true;
+  tornaLive.addEventListener("click", () => mostraIstante(null));
+  const riprovaCronologia = el31("button", "talos-button talos-button--secondary talos-button--sm", "Riprova cronologia");
+  riprovaCronologia.type = "button";
   riprovaCronologia.hidden = true;
-  timeline.append(eventoPrecedente, riproduci, eventoSuccessivo, speed, istanteReplay, cursore, tornaLive, descrizioneReplay, riprovaCronologia);
-  root2.append(cima, barra, comandi, riepilogo, avviso, area, timeline, recenti, piede);
+  riprovaCronologia.addEventListener("click", () => caricaCronologia());
+  timeline.append(riproduci, eventoPrecedente, eventoSuccessivo, ripVelocita, cursore, istanteReplay, tornaLive, riprovaCronologia, descrizioneReplay);
+  const dettaglio = el31("section", "talos-wfg__dettaglio gv-dettaglio talos-grafo__dettaglio");
+  dettaglio.hidden = true;
+  dettaglio.setAttribute("aria-label", "Dettaglio dell'agente");
+  const detChi = el31("div", "talos-wfg__dettaglio-chi");
+  const detProve = el31("section", "talos-wfg__dettaglio-colonna");
+  detProve.setAttribute("aria-label", "Evidenze recenti");
+  const detCompito = el31("section", "talos-wfg__dettaglio-colonna");
+  detCompito.setAttribute("aria-label", "Task corrente");
+  const detAltro = el31("div", "talos-wfg__dettaglio-altro");
+  const menuAgente = tasto("talos-wfg__icona-bottone", "Altre azioni sull'agente", "i-more");
+  menuAgente.setAttribute("aria-haspopup", "menu");
+  menuAgente.setAttribute("aria-expanded", "false");
+  const vociAgente = el31("div", "talos-wfg__menu talos-wfg__menu--destra");
+  vociAgente.setAttribute("role", "menu");
+  vociAgente.hidden = true;
+  const voceAgente = (testo2, azione) => {
+    const b = el31("button", "talos-wfg__menu-voce", testo2);
+    b.type = "button";
+    b.setAttribute("role", "menuitem");
+    b.tabIndex = -1;
+    b.addEventListener("click", () => {
+      chiudiMenu(menuAgente, vociAgente);
+      azione();
+    });
+    vociAgente.append(b);
+    return b;
+  };
+  voceAgente("Apri il dettaglio dell'agente", () => {
+    const n = disegno?.nodi.find((v) => v.id === opzioni.selezionato);
+    if (n) onApri?.(n.dati);
+  });
+  voceAgente("Chiudi il dettaglio", () => {
+    dettaglioAperto = false;
+    disegnaDettaglio2();
+  });
+  menuAgente.addEventListener("click", () => vociAgente.hidden ? apriMenu(menuAgente, vociAgente) : chiudiMenu(menuAgente, vociAgente));
+  detAltro.append(menuAgente, vociAgente);
+  dettaglio.append(detChi, detProve, detCompito, detAltro);
+  let dettaglioAperto = false;
+  root2.append(cima, comandi, riepilogo, avviso, area, timeline, dettaglio, recenti, piede);
   host.append(root2);
+  disegnaComandi();
   async function leggiFile(agente, percorso) {
     const lettura2 = ++letturaFile;
     fileTesto.textContent = "Lettura del file…";
@@ -22018,16 +22532,26 @@ function montaGrafoAgenti(host, { dati, onApri, onChiudi, onAggiorna, onLeggiFil
     affianca.setAttribute("aria-pressed", "true");
     const agente = disegno.nodi.find((n) => n.id === opzioni.selezionato)?.dati || disegno.nodi.find((n) => n.dati.attivita?.file?.length)?.dati;
     const files = agente?.attivita?.file || [];
-    fileScelta.replaceChildren();
-    fileScelta._agente = agente;
-    for (const f of files) {
-      const o = el30("option", "", f.percorso);
-      o.value = f.percorso;
-      fileScelta.append(o);
-    }
-    fileScelta.hidden = !files.length;
+    const scegliFile = (percorso) => {
+      sceltaFileTesto.textContent = percorso;
+      for (const b of vociFile.children) b.setAttribute("aria-checked", String(b.dataset.percorso === percorso));
+      if (typeof onLeggiFile === "function") void leggiFile(agente, percorso);
+    };
+    vociFile.replaceChildren(...files.map((f) => {
+      const b = el31("button", "talos-wfg__menu-voce", f.percorso);
+      b.type = "button";
+      b.setAttribute("role", "menuitemradio");
+      b.tabIndex = -1;
+      b.dataset.percorso = f.percorso;
+      b.addEventListener("click", () => {
+        chiudiMenu(sceltaFile, vociFile, { fuoco: true });
+        scegliFile(f.percorso);
+      });
+      return b;
+    }));
+    menuFile.hidden = !files.length;
     titoloFile.textContent = "Contenuto attuale del file";
-    if (files.length && typeof onLeggiFile === "function") void leggiFile(agente, files[0].percorso);
+    if (files.length && typeof onLeggiFile === "function") scegliFile(files[0].percorso);
     else fileTesto.textContent = "Nessun file registrato per l’agente selezionato.";
     adatta();
   }
@@ -22040,14 +22564,17 @@ function montaGrafoAgenti(host, { dati, onApri, onChiudi, onAggiorna, onLeggiFil
   function aggiornaTimeline() {
     tornaLive.hidden = posizione == null;
     root2.dataset.replay = String(posizione != null);
-    istanteReplay.textContent = posizione == null ? "ORA" : new Date(clockReplay).toLocaleTimeString("it-IT");
+    istanteReplay.textContent = posizione == null ? "Dal vivo" : new Date(clockReplay).toLocaleTimeString("it-IT");
+    timeline.dataset.attiva = String(posizione != null);
     cursore.max = String(Math.max(0, storico.length - 1));
     cursore.disabled = !storico.length;
     cursore.value = String(posizione ?? Math.max(0, storico.length - 1));
+    cursore.style.setProperty("--gv-pieno", `${storico.length > 1 ? Math.round(Number(cursore.value) / (storico.length - 1) * 100) : 100}%`);
     eventoPrecedente.disabled = !storico.length || posizione === 0;
     eventoSuccessivo.disabled = posizione == null || posizione >= storico.length - 1;
     riproduci.disabled = storico.length < 2;
-    riproduci.textContent = play ? "Pausa" : "Riproduci";
+    riproduci.setAttribute("aria-label", play ? "Metti in pausa la riproduzione" : "Riproduci la cronologia");
+    riproduci.querySelector("use")?.setAttribute("href", play ? "#i-pausa" : "#i-play");
     const nuovi = posizione == null ? 0 : storico.length - 1 - posizione;
     const base = coverage === "loading" ? "Caricamento cronologia…" : coverage === "unavailable" ? "Storico precedente non registrato" : coverage === "partial" || storico.partial ? "Cronologia parziale · intervalli mancanti" : "Dall’avvio";
     descrizioneReplay.textContent = erroreCronologia ? `Cronologia non aggiornata: ${erroreCronologia}` : `${base}${persistita ? "" : " · salvataggio non disponibile"}${storico.length ? ` · ${conteggio(storico.length)} eventi` : ""}${nuovi ? ` · ${conteggio(nuovi)} nuovi` : ""}`;
@@ -22085,7 +22612,10 @@ function montaGrafoAgenti(host, { dati, onApri, onChiudi, onAggiorna, onLeggiFil
     else {
       for (const n of disegno?.nodi ?? []) {
         const ui = nodiDom.get(n.id)?._parti;
-        if (ui) ui.durata.textContent = tempo(attivitaNodoGrafo(n.dati, clockReplay).durataMs);
+        if (ui) {
+          const ms2 = attivitaNodoGrafo(n.dati, clockReplay).durataMs;
+          ui.durata.textContent = ms2 == null ? "—" : tempo(ms2);
+        }
       }
       aggiornaTimeline();
     }
@@ -22128,6 +22658,9 @@ function montaGrafoAgenti(host, { dati, onApri, onChiudi, onAggiorna, onLeggiFil
   }
   function aggiornaMini() {
     if (!disegno?.width || !disegno?.height) return;
+    const entra = x >= -1 && y >= -1 && x + disegno.width * zoom <= canvas.clientWidth + 1 && y + disegno.height * zoom <= canvas.clientHeight + 1;
+    mini.toggleAttribute("hidden", entra);
+    if (entra) return;
     mini.setAttribute("viewBox", `0 0 ${disegno.width} ${disegno.height}`);
     mini.replaceChildren();
     for (const n of disegno.nodi) {
@@ -22148,9 +22681,18 @@ function montaGrafoAgenti(host, { dati, onApri, onChiudi, onAggiorna, onLeggiFil
     } catch {
     }
   }
-  function trasforma() {
+  let finoAnima = null;
+  function trasforma({ anima = false } = {}) {
+    if (anima) {
+      mondo.classList.add("talos-grafo__mondo--anima");
+      clearTimeout(finoAnima);
+      finoAnima = setTimeout(() => mondo.classList.remove("talos-grafo__mondo--anima"), 280);
+    }
     mondo.style.transform = `translate(${x}px,${y}px) scale(${zoom})`;
     misura.textContent = `${Math.round(zoom * 100)}%`;
+    canvas.style.setProperty("--gv-k", String(zoom));
+    canvas.style.setProperty("--gv-x", `${x}px`);
+    canvas.style.setProperty("--gv-y", `${y}px`);
     aggiornaMini();
   }
   function scala(nuovo) {
@@ -22160,7 +22702,7 @@ function montaGrafoAgenti(host, { dati, onApri, onChiudi, onAggiorna, onLeggiFil
     const cx = canvas.clientWidth / 2, cy = canvas.clientHeight / 2;
     x = cx - (cx - x) * zoom / precedente;
     y = cy - (cy - y) * zoom / precedente;
-    trasforma();
+    trasforma({ anima: true });
   }
   function adatta() {
     if (!disegno?.nodi.length || !canvas.clientWidth || !canvas.clientHeight) return;
@@ -22168,7 +22710,7 @@ function montaGrafoAgenti(host, { dati, onApri, onChiudi, onAggiorna, onLeggiFil
     zoom = Math.max(0.15, Math.min(1, (canvas.clientWidth - 32) / disegno.width, (canvas.clientHeight - 32) / disegno.height));
     x = (canvas.clientWidth - disegno.width * zoom) / 2;
     y = 16;
-    trasforma();
+    trasforma({ anima: !primo2 });
   }
   function lettura() {
     if (!disegno?.nodi.length || !canvas.clientWidth || !canvas.clientHeight) return;
@@ -22186,7 +22728,71 @@ function montaGrafoAgenti(host, { dati, onApri, onChiudi, onAggiorna, onLeggiFil
     if (!n) return;
     x = disegno.width * zoom <= canvas.clientWidth - 32 ? (canvas.clientWidth - disegno.width * zoom) / 2 : canvas.clientWidth / 2 - n.x * zoom;
     y = disegno.height * zoom <= canvas.clientHeight - 32 ? 16 : canvas.clientHeight / 2 - n.y * zoom;
-    trasforma();
+    trasforma({ anima: !primo2 });
+  }
+  function disegnaDettaglio2() {
+    const n = dettaglioAperto && opzioni.selezionato ? disegno?.nodi.find((v) => v.id === opzioni.selezionato) : null;
+    if (!n) {
+      dettaglio.hidden = true;
+      chiudiMenu(menuAgente, vociAgente);
+      return;
+    }
+    dettaglio.hidden = false;
+    const a = attivitaNodoGrafo(n.dati, posizione == null ? Date.now() : clockReplay);
+    const tono = TONO_STATO[n.stato] ?? "neutro";
+    const segno = el31("span", "talos-wfg__dettaglio-icona");
+    segno.append(icona16(n.id === corrente.corrente.sessionId ? "i-branch" : "i-robot"));
+    const testi = el31("div", "talos-wfg__dettaglio-testi"), testa = el31("div", "talos-wfg__dettaglio-testa");
+    const pill = el31("span", "talos-wfg__pill");
+    pill.dataset.tono = tono;
+    if (ICONA_TONO[tono]) pill.append(icona16(ICONA_TONO[tono], "talos-wfg__pill-icona"));
+    pill.append(el31("span", null, etichetta2[n.stato]));
+    testa.append(el31("h3", "talos-wfg__dettaglio-nome", n.nome), pill);
+    const avvio = istante(n.dati.avviataAlle);
+    const sotto = [
+      n.dati.modello || (n.id === corrente.corrente.sessionId ? "Sessione principale" : "Sotto-agente"),
+      a.durataMs != null ? tempo(a.durataMs) : null,
+      avvio != null ? `avviata alle ${new Date(avvio).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })}` : null
+    ].filter(Boolean).join(" · ");
+    testi.append(testa, el31("span", "talos-wfg__passo-modello", sotto));
+    detChi.replaceChildren(segno, testi);
+    const provaTesta = el31("h4", "talos-wfg__dettaglio-titolo");
+    provaTesta.append(icona16("i-doc"), el31("span", null, "Evidenze recenti"));
+    const elenco2 = el31("ul", "talos-wfg__evidenze");
+    const passi = (Array.isArray(n.dati.attivita?.passi) ? n.dati.attivita.passi : []).filter((p) => p.tipo === "attrezzo").slice(-4).reverse();
+    const files = (a.file ?? []).slice(0, Math.max(0, 5 - passi.length));
+    for (const p of passi) {
+      const voce = el31("li", "talos-wfg__evidenza");
+      voce.append(icona16(p.esito === false ? "i-x" : "i-check"), el31("span", "talos-wfg__evidenza-nome", nomeUmanoAttrezzo(p.attrezzo)));
+      if (p.percorso) {
+        const o = el31("code", "talos-wfg__evidenza-oggetto", p.percorso);
+        o.title = p.percorso;
+        voce.append(o);
+      }
+      elenco2.append(voce);
+    }
+    for (const f of files) {
+      const voce = el31("li", "talos-wfg__evidenza");
+      voce.append(icona16("i-file"), el31("span", "talos-wfg__evidenza-nome", f.creato ? "Creato" : f.scritto ? "Modificato" : "Letto"));
+      const o = el31("code", "talos-wfg__evidenza-oggetto", f.percorso);
+      o.title = f.percorso;
+      voce.append(o);
+      elenco2.append(voce);
+    }
+    if (!elenco2.children.length) elenco2.append(el31("li", "talos-wfg__vuoto", a.chiamate == null ? "Attività non disponibile per questo agente." : "Nessun attrezzo usato finora."));
+    detProve.replaceChildren(provaTesta, elenco2);
+    const compitoTesta = el31("h4", "talos-wfg__dettaglio-titolo");
+    compitoTesta.append(icona16("i-eye"), el31("span", null, "Task corrente"));
+    const compito = String(n.dati.task ?? n.dati.taskDelega ?? n.dati.taskCorto ?? "").trim();
+    const parti = [compitoTesta];
+    if (compito) {
+      const primo3 = el31("p", "talos-wfg__compito-titolo", compito);
+      primo3.title = compito;
+      parti.push(primo3);
+    } else parti.push(el31("p", "talos-wfg__vuoto", "Il compito di questo agente non è disponibile."));
+    const ora5 = a.operazione || (n.stato === "active" ? "Tra due operazioni" : null);
+    if (ora5) parti.push(el31("p", "talos-wfg__compito-resto", ora5));
+    detCompito.replaceChildren(...parti);
   }
   function centraAttivo() {
     const n = disegno?.nodi.find((n2) => n2.stato === "active" && n2.id !== corrente.corrente.sessionId);
@@ -22194,15 +22800,19 @@ function montaGrafoAgenti(host, { dati, onApri, onChiudi, onAggiorna, onLeggiFil
   }
   function seleziona(id4, centraNodo = true) {
     opzioni.selezionato = id4;
+    dettaglioAperto = true;
     for (const n of mondo.querySelectorAll("[data-nodo-id]")) n.dataset.selezionato = String(n.dataset.nodoId === id4);
     salva();
+    disegnaComandi();
+    disegnaDettaglio2();
     if (centraNodo) centra(id4);
   }
   const nodiDom = /* @__PURE__ */ new Map(), archiDom = /* @__PURE__ */ new Map();
   const svg2 = d.createElementNS("http://www.w3.org/2000/svg", "svg");
   svg2.setAttribute("aria-hidden", "true");
   mondo.append(svg2);
-  const vuoto = el30("p", "talos-grafo__vuoto", "Nessun agente per questi filtri.");
+  const chiaveMarcatori = Math.random().toString(36).slice(2, 8);
+  const vuoto = el31("p", "talos-grafo__vuoto", "Nessun agente per questi filtri.");
   mondo.append(vuoto);
   function disegnaAggregato(modello) {
     const perStato = /* @__PURE__ */ new Map();
@@ -22217,7 +22827,7 @@ function montaGrafoAgenti(host, { dati, onApri, onChiudi, onAggiorna, onLeggiFil
     }
     gruppi.replaceChildren(...ordinati.map((chiave) => {
       const quanti = perStato.get(chiave).length;
-      const card = bottone6("", () => {
+      const card = bottone7("", () => {
         gruppoAperto = chiave;
         paginaGruppo = 0;
         disegnaAggregato(modello);
@@ -22226,19 +22836,19 @@ function montaGrafoAgenti(host, { dati, onApri, onChiudi, onAggiorna, onLeggiFil
       card.dataset.stato = chiave;
       card.setAttribute("aria-pressed", String(gruppoAperto === chiave));
       card.setAttribute("aria-label", `${stati[chiave]}: ${conteggio(quanti)} sessioni, mostra elenco`);
-      card.append(el30("span", "", stati[chiave]), el30("strong", "talos-mono", conteggio(quanti)));
-      const barra2 = el30("span", "talos-grafo__gruppo-barra");
-      barra2.style.width = `${Math.max(3, Math.round(quanti / modello.nodi.length * 100))}%`;
-      card.append(barra2);
+      card.append(el31("span", "", stati[chiave]), el31("strong", "talos-mono", conteggio(quanti)));
+      const barra = el31("span", "talos-grafo__gruppo-barra");
+      barra.style.width = `${Math.max(3, Math.round(quanti / modello.nodi.length * 100))}%`;
+      card.append(barra);
       return card;
     }));
     const selezionati = perStato.get(gruppoAperto) || [];
     paginaGruppo = Math.min(paginaGruppo, Math.max(0, Math.ceil(selezionati.length / 12) - 1));
     const inizio = paginaGruppo * 12;
-    const titolo2 = el30("h3", "", `${stati[gruppoAperto] || "Sessioni"} · ${conteggio(selezionati.length)}`);
-    const elenco2 = el30("div", "talos-grafo__gruppo-elenco");
+    const titolo2 = el31("h3", "", `${stati[gruppoAperto] || "Sessioni"} · ${conteggio(selezionati.length)}`);
+    const elenco2 = el31("div", "talos-grafo__gruppo-elenco");
     for (const nodo13 of selezionati.slice(inizio, inizio + 12)) {
-      const apri = bottone6(nodo13.nome, () => {
+      const apri = bottone7(nodo13.nome, () => {
         opzioni.selezionato = nodo13.id;
         salva();
         onApri?.(nodo13.dati);
@@ -22248,19 +22858,19 @@ function montaGrafoAgenti(host, { dati, onApri, onChiudi, onAggiorna, onLeggiFil
       apri.setAttribute("aria-label", `Apri dettaglio ${nodo13.nome}`);
       elenco2.append(apri);
     }
-    const pagine = el30("nav", "talos-grafo__gruppo-pagine");
+    const pagine = el31("nav", "talos-grafo__gruppo-pagine");
     pagine.setAttribute("aria-label", "Pagine del gruppo");
-    const precedente = bottone6("Precedente", () => {
+    const precedente = bottone7("Precedente", () => {
       paginaGruppo--;
       disegnaAggregato(modello);
     }, "Pagina precedente del gruppo");
-    const successiva = bottone6("Successiva", () => {
+    const successiva = bottone7("Successiva", () => {
       paginaGruppo++;
       disegnaAggregato(modello);
     }, "Pagina successiva del gruppo");
     precedente.disabled = paginaGruppo === 0;
     successiva.disabled = inizio + 12 >= selezionati.length;
-    pagine.append(precedente, el30("span", "talos-mono", `${conteggio(selezionati.length ? inizio + 1 : 0)}–${conteggio(Math.min(inizio + 12, selezionati.length))} di ${conteggio(selezionati.length)}`), successiva);
+    pagine.append(precedente, el31("span", "talos-mono", `${conteggio(selezionati.length ? inizio + 1 : 0)}–${conteggio(Math.min(inizio + 12, selezionati.length))} di ${conteggio(selezionati.length)}`), successiva);
     gruppoDettaglio.replaceChildren(titolo2, elenco2, pagine);
   }
   function ridisegna2() {
@@ -22271,21 +22881,18 @@ function montaGrafoAgenti(host, { dati, onApri, onChiudi, onAggiorna, onLeggiFil
     root2.dataset.density = denso ? "aggregate" : "individual";
     canvas.hidden = denso;
     aggregato.hidden = !denso;
-    comandi.hidden = denso;
+    for (const b of attrezziTela) b.hidden = denso;
     disegno = denso ? { nodi: [], archi: [], width: 0, height: 0 } : layoutGrafoAgenti(filtrato);
     const t3 = telemetriaGrafoAgenti(intero2);
     root2.dataset.obsoleto = String(Boolean(corrente.errore));
+    sommario.replaceChildren(el31("strong", null, `${conteggio(intero2.nodi.length)} ${intero2.nodi.length === 1 ? "sessione" : "sessioni"}`), ` nel diagramma · ${opzioni.ambito === "workspace" ? "cartella corrente" : "sessione corrente e le sue deleghe"}`);
+    aggiornatoOra.textContent = corrente.aggiornato ? `Ultimo aggiornamento ${new Date(corrente.aggiornato).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })}` : "";
     const statistica = (chiave, numero10, testo2, filtra) => {
-      const n = filtra ? bottone6("", () => {
-        opzioni.stato = filtra;
-        filtro.value = filtra;
-        ridisegna2();
-        adatta();
-      }) : el30("div", "");
+      const n = filtra ? bottone7("", () => impostaStato(filtra)) : el31("div", "");
       n.classList.add("talos-grafo__statistica");
       n.dataset.statistica = chiave;
       if (filtra) n.dataset.stato = filtra;
-      n.append(el30("strong", "talos-mono", numero10 == null ? "—" : compatto(numero10)), el30("span", "", testo2));
+      n.append(el31("strong", "talos-mono", numero10 == null ? "—" : compatto(numero10)), el31("span", "", testo2));
       return n;
     };
     riepilogo.replaceChildren(
@@ -22297,7 +22904,7 @@ function montaGrafoAgenti(host, { dati, onApri, onChiudi, onAggiorna, onLeggiFil
       statistica("file", t3.file, "File coinvolti"),
       statistica("token", t3.token, "Token registrati")
     );
-    const copertura = el30("small", "talos-grafo__copertura", `Intero ambito · ${conteggio(t3.totale)} sessioni · strumenti ${conteggio(t3.copertura)}/${conteggio(t3.totale)} · file ${conteggio(t3.coperturaFile)}/${conteggio(t3.totale)} · consumo ${conteggio(t3.coperturaToken)}/${conteggio(t3.totale)}${t3.parziale ? " · conteggi parziali" : ""}${t3.scritti != null ? ` · ${conteggio(t3.scritti)} file scritti` : ""}${t3.interrupted ? ` · ${conteggio(t3.interrupted)} interrotti` : ""}${t3.unknown ? ` · ${conteggio(t3.unknown)} stato non disponibile` : ""}`);
+    const copertura = el31("small", "talos-grafo__copertura", `Intero ambito · ${conteggio(t3.totale)} sessioni · strumenti ${conteggio(t3.copertura)}/${conteggio(t3.totale)} · file ${conteggio(t3.coperturaFile)}/${conteggio(t3.totale)} · consumo ${conteggio(t3.coperturaToken)}/${conteggio(t3.totale)}${t3.parziale ? " · conteggi parziali" : ""}${t3.scritti != null ? ` · ${conteggio(t3.scritti)} file scritti` : ""}${t3.interrupted ? ` · ${conteggio(t3.interrupted)} interrotti` : ""}${t3.unknown ? ` · ${conteggio(t3.unknown)} stato non disponibile` : ""}`);
     riepilogo.append(copertura);
     if (denso) {
       for (const nodo13 of nodiDom.values()) nodo13.remove();
@@ -22315,20 +22922,42 @@ function montaGrafoAgenti(host, { dati, onApri, onChiudi, onAggiorna, onLeggiFil
     piede.textContent = "Linea continua: delega · tratteggiata: ramo. Seleziona un agente per aprire il dettaglio.";
     svg2.setAttribute("width", String(disegno.width));
     svg2.setAttribute("height", String(disegno.height));
+    if (!svg2.querySelector("marker")) {
+      const defs = d.createElementNS(svg2.namespaceURI, "defs");
+      for (const [id4, classe] of [["talos-grafo-freccia", "gv-freccia"], ["talos-grafo-freccia-fronte", "gv-freccia gv-freccia--fronte"], ["talos-grafo-freccia-fatto", "gv-freccia gv-freccia--fatto"]]) {
+        const m = d.createElementNS(svg2.namespaceURI, "marker");
+        for (const [k, v] of Object.entries({ id: `${id4}-${chiaveMarcatori}`, viewBox: "0 0 8 8", refX: "7", refY: "4", markerWidth: "7", markerHeight: "7", orient: "auto" })) m.setAttribute(k, v);
+        const punta = d.createElementNS(svg2.namespaceURI, "path");
+        punta.setAttribute("d", "M0,0 L8,4 L0,8 z");
+        punta.setAttribute("class", classe);
+        m.append(punta);
+        defs.append(m);
+      }
+      svg2.prepend(defs);
+    }
     const archiVivi = /* @__PURE__ */ new Set();
     for (const a of disegno.archi) {
       const key2 = JSON.stringify([a.da, a.a, a.tipo]);
       archiVivi.add(key2);
       let p = archiDom.get(key2);
       if (!p) {
-        p = d.createElementNS(svg2.namespaceURI, "polyline");
+        p = d.createElementNS(svg2.namespaceURI, "path");
         archiDom.set(key2, p);
         svg2.append(p);
       }
+      const sorg = disegno.nodi.find((n) => n.id === a.da), dest = disegno.nodi.find((n) => n.id === a.a);
+      if (sorg && dest) {
+        const sx = sorg.x, sy = sorg.y + sorg.height / 2, tx = dest.x, ty = dest.y - dest.height / 2 - 2, mezzo = (sy + ty) / 2;
+        p.setAttribute("d", `M${sx},${sy} V${mezzo} H${tx} V${ty}`);
+      } else p.setAttribute("d", a.punti.map((q2, i2) => `${i2 ? "L" : "M"}${q2.x},${q2.y}`).join(" "));
+      const attivo = posizione == null && !corrente.errore && Boolean(dest && attivitaNodoGrafo(dest.dati).operazione);
+      const tipo = attivo ? "fronte" : dest?.stato === "done" ? "fatto" : a.tipo === "ramo" ? "futuro" : "";
+      p.setAttribute("class", "gv-arco");
       p.dataset.arco = a.tipo;
-      p.setAttribute("points", a.punti.map((p2) => `${p2.x},${p2.y}`).join(" "));
-      const dest = disegno.nodi.find((n) => n.id === a.a);
-      p.dataset.attivo = String(posizione == null && !corrente.errore && Boolean(dest && attivitaNodoGrafo(dest.dati).operazione));
+      p.dataset.attivo = String(attivo);
+      if (tipo) p.dataset.tipo = tipo;
+      else delete p.dataset.tipo;
+      p.setAttribute("marker-end", `url(#${tipo === "fronte" ? "talos-grafo-freccia-fronte" : tipo === "fatto" ? "talos-grafo-freccia-fatto" : "talos-grafo-freccia"}-${chiaveMarcatori})`);
     }
     for (const [id4, n] of archiDom) if (!archiVivi.has(id4)) {
       n.remove();
@@ -22339,9 +22968,9 @@ function montaGrafoAgenti(host, { dati, onApri, onChiudi, onAggiorna, onLeggiFil
       vivi.add(n.id);
       let nodo13 = nodiDom.get(n.id);
       if (!nodo13) {
-        nodo13 = el30("article", "talos-grafo__nodo");
+        nodo13 = el31("article", "talos-grafo__nodo");
         nodo13.dataset.nodoId = n.id;
-        const apri = bottone6("", () => {
+        const apri = bottone7("", () => {
           const fresco = disegno.nodi.find((v) => v.id === n.id);
           if (fresco) {
             seleziona(n.id);
@@ -22353,20 +22982,21 @@ function montaGrafoAgenti(host, { dati, onApri, onChiudi, onAggiorna, onLeggiFil
           if (event.target.closest('button,a,input,select,textarea,[role="button"]')) return;
           apri.click();
         });
-        const meta2 = el30("span", "talos-grafo__meta"), operazione = el30("span", "talos-grafo__operazione"), misure = el30("span", "talos-grafo__misure talos-mono"), durata2 = el30("span", "talos-grafo__durata");
-        const collassa = bottone6("", () => {
+        const meta2 = el31("span", "talos-grafo__meta"), operazione = el31("span", "talos-grafo__operazione"), misure = el31("span", "talos-grafo__misure"), durata2 = el31("span", "talos-grafo__durata");
+        const collassa = bottone7("", () => {
           opzioni.collassati = opzioni.collassati.includes(n.id) ? opzioni.collassati.filter((id4) => id4 !== n.id) : [...opzioni.collassati, n.id];
           ridisegna2();
         });
-        const testata = el30("div", "talos-grafo__testata-nodo"), pallino = el30("span", "talos-grafo__pallino");
+        collassa.className = "talos-wfg__link talos-grafo__collassa";
+        const testata = el31("div", "talos-grafo__testata-nodo"), pallino = el31("span", "talos-wfg__punto talos-grafo__pallino");
         pallino.setAttribute("aria-hidden", "true");
-        const rigaStato = el30("div", "talos-grafo__riga-stato"), badge6 = el30("span", "talos-grafo__badge-stato");
-        const fondo = el30("div", "talos-grafo__fondo-nodo");
-        testata.append(apri, pallino);
-        rigaStato.append(badge6, durata2);
+        const rigaStato = el31("div", "talos-grafo__riga-stato"), badge6 = el31("span", "talos-wfg__pill talos-grafo__badge-stato");
+        const fondo = el31("div", "talos-grafo__fondo-nodo");
+        testata.append(pallino, apri, durata2);
+        rigaStato.append(badge6, misure);
         fondo.append(operazione, collassa);
-        nodo13.append(testata, meta2, rigaStato, misure, fondo);
-        nodo13._parti = { apri, meta: meta2, operazione, misure, durata: durata2, collassa, badge: badge6 };
+        nodo13.append(testata, meta2, rigaStato, fondo);
+        nodo13._parti = { apri, meta: meta2, operazione, misure, durata: durata2, collassa, badge: badge6, pallino };
         nodiDom.set(n.id, nodo13);
         mondo.append(nodo13);
       }
@@ -22381,12 +23011,17 @@ function montaGrafoAgenti(host, { dati, onApri, onChiudi, onAggiorna, onLeggiFil
       ui.apri.setAttribute("aria-label", `Apri dettaglio ${n.nome}`);
       ui.meta.textContent = n.dati.modello || (n.id === corrente.corrente.sessionId ? "Sessione principale" : "Sotto-agente");
       ui.meta.title = ui.meta.textContent;
-      ui.badge.textContent = etichetta2[n.stato];
-      ui.operazione.textContent = a.operazione || (n.stato === "active" ? "Tra due operazioni" : etichetta2[n.stato]);
+      const tono = TONO_STATO[n.stato] ?? "neutro";
+      ui.pallino.dataset.tono = tono;
+      ui.badge.dataset.tono = tono;
+      ui.badge.replaceChildren();
+      if (ICONA_TONO[tono]) ui.badge.append(icona16(ICONA_TONO[tono], "talos-wfg__pill-icona"));
+      ui.badge.append(el31("span", null, etichetta2[n.stato]));
+      ui.operazione.textContent = a.operazione || (n.stato === "active" ? "Tra due operazioni" : a.ultimo ? `Ultima attività alle ${new Date(a.ultimo.quando).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })}` : "Nessuna attività registrata");
       ui.operazione.title = ui.operazione.textContent;
-      ui.misure.textContent = a.chiamate == null ? "Attività non disponibile" : `${a.chiamate} chiamate · ${a.file?.length ?? "—"} file${a.parziale ? "+" : ""}${a.token != null ? ` · ${compatto(a.token)} token` : ""}`;
-      ui.durata.textContent = tempo(a.durataMs);
-      ui.durata.title = a.ultimo ? `Ultima attività registrata: ${new Date(a.ultimo.quando).toLocaleString("it-IT")}` : "Ultima attività non disponibile";
+      ui.misure.textContent = a.chiamate == null ? "Attività non disponibile" : `${a.chiamate} chiamate · ${a.file?.length ?? a.numeroFile ?? "—"} file${a.parziale ? "+" : ""}${a.token != null ? ` · ${compatto(a.token)} token` : ""}`;
+      ui.durata.textContent = a.durataMs == null ? "—" : tempo(a.durataMs);
+      ui.durata.title = a.durataMs == null ? "Durata non disponibile" : a.ultimo ? `Ultima attività registrata: ${new Date(a.ultimo.quando).toLocaleString("it-IT")}` : "Ultima attività non disponibile";
       ui.collassa.hidden = !n.figli;
       ui.collassa.textContent = `${opzioni.collassati.includes(n.id) ? "Espandi" : "Collassa"} ${n.figli}`;
       ui.collassa.setAttribute("aria-label", `Espandi o collassa ${n.nome}`);
@@ -22401,23 +23036,24 @@ function montaGrafoAgenti(host, { dati, onApri, onChiudi, onAggiorna, onLeggiFil
     const passi = intero2.nodi.flatMap((n) => (n.dati.attivita?.passi || []).filter((p) => istante(p.quando) != null).map((p) => ({ ...p, nodo: n }))).sort((a, b) => istante(b.quando) - istante(a.quando)).slice(0, 8);
     elencoRecenti.replaceChildren(...passi.map((p) => {
       const frase = p.tipo === "attrezzo" ? nomeUmanoAttrezzo(p.attrezzo) : { avvio: "Avviato", fine: "Concluso", errore: "Errore" }[p.tipo] || "Aggiornamento";
-      const b = bottone6(`${new Date(p.quando).toLocaleTimeString("it-IT")} · ${p.nodo.nome} · ${frase}${p.percorso ? ` · ${p.percorso}` : ""}`, () => {
+      const b = bottone7(`${new Date(p.quando).toLocaleTimeString("it-IT")} · ${p.nodo.nome} · ${frase}${p.percorso ? ` · ${p.percorso}` : ""}`, () => {
         seleziona(p.nodo.id);
         onApri?.(p.nodo.dati);
       });
       b.title = b.textContent;
       return b;
     }));
-    if (!passi.length) elencoRecenti.append(el30("p", "", "Nessuna attività con orario registrato."));
+    if (!passi.length) elencoRecenti.append(el31("p", "", "Nessuna attività con orario registrato."));
     avviso.textContent = corrente.errore ? `Dati non aggiornati: ${corrente.errore}. Riprova con Aggiorna.` : `${disegno.nodi.length} nodi visibili · ${disegno.archi.length} collegamenti registrati${corrente.aggiornato ? ` · lettura ${new Date(corrente.aggiornato).toLocaleTimeString("it-IT")}` : ""}`;
     aggiornaTimeline();
     aggiornaMini();
+    disegnaDettaglio2();
     salva();
     if (primo2 && canvas.clientWidth && canvas.clientHeight) {
       primo2 = false;
-      if (canvas.clientWidth < 600) adatta();
+      if ((root2.clientWidth || canvas.clientWidth) < 600) adatta();
       else lettura();
-    } else if (segui) centraAttivo();
+    }
   }
   let focusDaPuntatore = false;
   canvas.addEventListener("pointerdown", () => {
@@ -22503,20 +23139,24 @@ function montaGrafoAgenti(host, { dati, onApri, onChiudi, onAggiorna, onLeggiFil
   }, distruggi() {
     morto = true;
     fermaPlayer();
+    clearTimeout(finoAnima);
     d.removeEventListener("visibilitychange", visibility);
+    d.removeEventListener("pointerdown", chiudiMenuFuori, true);
     osservatore.disconnect();
     root2.remove();
   } };
 }
-var idValido, stati, etichetta2, contaValida, istante, conteggio, compatto, tempo;
+var idValido, stati, TONO_STATO, etichetta2, contaValida, istante, conteggio, compatto, tempo;
 var init_grafo_agenti = __esm({
   "src/components/grafo-agenti.js"() {
     init_cronologia_grafo();
     init_dagre_esm();
     init_nomi_attrezzi();
     init_lingua();
+    init_comuni();
     idValido = (v) => typeof v === "string" && v.length > 0 && v.length <= 2048;
     stati = { all: "Tutti gli stati", active: "In corso", waiting: "Da approvare", done: "Conclusi", interrupted: "Interrotti", error: "Non riusciti", unknown: "Stato non disponibile" };
+    TONO_STATO = { active: "corso", waiting: "avviso", done: "ok", error: "errore", interrupted: "attesa", unknown: "neutro" };
     etichetta2 = { active: "In corso", waiting: "Da approvare", done: "Concluso", interrupted: "Interrotto", error: "Errore", unknown: "Stato non disponibile" };
     contaValida = (n) => Number.isSafeInteger(n) && n >= 0 ? n : null;
     istante = (s) => typeof s === "string" && Number.isFinite(Date.parse(s)) ? Date.parse(s) : null;
@@ -22800,7 +23440,7 @@ function leggiRicevutaProposta(contenuto) {
 function statoCardProposta({ revisione = null, run = null, nonDisponibile = false, carica = false } = {}) {
   if (nonDisponibile) return { chiave: "non-disponibile", etichetta: "Non disponibile" };
   if (carica || !revisione) return { chiave: "carica", etichetta: "Carico la proposta" };
-  if (run) return STATI_RUN[run.status] ?? { chiave: "avviato", etichetta: "Avviato" };
+  if (run) return STATI_RUN2[run.status] ?? { chiave: "avviato", etichetta: "Avviato" };
   if (revisione.status === "approved") return { chiave: "approvato", etichetta: "Approvato, da avviare" };
   if (revisione.status === "proposed") return { chiave: "da-approvare", etichetta: "Da approvare" };
   return { chiave: "non-disponibile", etichetta: "Non disponibile" };
@@ -22849,7 +23489,7 @@ function leggiBozzaTetti(bozza = {}, budgets = {}) {
   }
   return { cambiati, errori, valida: Object.keys(errori).length === 0, vuota: Object.keys(cambiati).length === 0 };
 }
-function ora(at2) {
+function ora2(at2) {
   const data = typeof at2 === "string" ? new Date(at2) : null;
   if (!data || Number.isNaN(data.getTime())) return null;
   return String(data.getHours()).padStart(2, "0") + ":" + String(data.getMinutes()).padStart(2, "0");
@@ -23033,7 +23673,7 @@ function disegnaCardProposta(section, {
     const azioni = make("div", "talos-workflow-proposal__actions");
     azioni.setAttribute("role", "group");
     azioni.setAttribute("aria-label", "Azioni sul workflow");
-    const bottone6 = (testo2, classe, azione, spento) => {
+    const bottone7 = (testo2, classe, azione, spento) => {
       const b = make("button", `talos-button ${classe} talos-button--sm`, testo2);
       b.type = "button";
       b.dataset.azione = azione;
@@ -23042,11 +23682,11 @@ function disegnaCardProposta(section, {
     };
     if (inModifica) {
       const prossima = (revisione.version ?? 1) + 1;
-      salva = bottone6(inVolo === "salva" ? "Salvo…" : `Salva come versione ${prossima}`, "talos-button--primary", "salva-tetti", true);
+      salva = bottone7(inVolo === "salva" ? "Salvo…" : `Salva come versione ${prossima}`, "talos-button--primary", "salva-tetti", true);
       salva.addEventListener?.("click", () => {
         if (esitoBozza?.valida && !esitoBozza.vuota) onSalvaTetti?.(esitoBozza.cambiati);
       });
-      const annulla = bottone6("Annulla", "talos-button--ghost", "annulla-modifica", Boolean(inVolo));
+      const annulla = bottone7("Annulla", "talos-button--ghost", "annulla-modifica", Boolean(inVolo));
       annulla.addEventListener?.("click", () => onAnnullaModifica?.());
       azioni.append(salva, annulla, make(
         "p",
@@ -23056,24 +23696,24 @@ function disegnaCardProposta(section, {
       aggiornaSalva();
     } else if (stato2.chiave === "da-approvare") {
       const bloccata = problemi.length > 0;
-      const approva = bottone6(inVolo === "approva" ? "Approvo…" : "Approva", "talos-button--primary", "approva", bloccata || inVolo || typeof onApprova !== "function");
+      const approva = bottone7(inVolo === "approva" ? "Approvo…" : "Approva", "talos-button--primary", "approva", bloccata || inVolo || typeof onApprova !== "function");
       approva.addEventListener?.("click", () => onApprova?.());
       azioni.append(approva);
       azioni.append(make("p", "talos-workflow-proposal__hint", bloccata ? "Non si può approvare finché il controllo preliminare trova problemi: chiedi al modello di correggerla." : avviabilePrima ? `Approvare fissa questa versione. Finché non la approvi, la versione ${avviabilePrima.version} resta approvata e puoi avviarla.` : "Approvare fissa questa versione. L'avvio è un passo a parte."));
       if (avviabilePrima && typeof onAvviaPrima === "function") {
-        const prima = bottone6(inVolo === "avvia-prima" ? "Avvio…" : `Avvia la versione ${avviabilePrima.version}`, "talos-button--ghost", "avvia-prima", Boolean(inVolo));
+        const prima = bottone7(inVolo === "avvia-prima" ? "Avvio…" : `Avvia la versione ${avviabilePrima.version}`, "talos-button--ghost", "avvia-prima", Boolean(inVolo));
         prima.addEventListener?.("click", () => onAvviaPrima());
         azioni.append(prima);
       }
     } else if (stato2.chiave === "approvato") {
-      const avvia = bottone6(inVolo === "avvia" ? "Avvio…" : "Avvia", "talos-button--primary", "avvia", inVolo || typeof onAvvia !== "function");
+      const avvia = bottone7(inVolo === "avvia" ? "Avvio…" : "Avvia", "talos-button--primary", "avvia", inVolo || typeof onAvvia !== "function");
       avvia.addEventListener?.("click", () => onAvvia?.());
       azioni.append(avvia);
-      const quando = ora(revisione.approval?.approvedAt);
+      const quando = ora2(revisione.approval?.approvedAt);
       const soloLettura = revisione.policy?.capabilityCeiling === "read" ? " I passi leggono e cercano, non scrivono." : "";
       azioni.append(make("p", "talos-workflow-proposal__hint", (quando ? `Approvato alle ${quando}.` : "Approvato.") + soloLettura));
     } else {
-      const quando = ora(run?.createdAt);
+      const quando = ora2(run?.createdAt);
       azioni.append(make(
         "p",
         "talos-workflow-proposal__hint",
@@ -23081,7 +23721,7 @@ function disegnaCardProposta(section, {
       ));
     }
     if (typeof onApriDiagramma === "function" && !inModifica) {
-      const diagramma = bottone6(run?.runId ? "Apri in Board" : "Apri diagramma", "talos-button--ghost", "diagramma", false);
+      const diagramma = bottone7(run?.runId ? "Apri in Board" : "Apri diagramma", "talos-button--ghost", "diagramma", false);
       diagramma.addEventListener?.("click", () => onApriDiagramma());
       azioni.append(diagramma);
     }
@@ -23102,7 +23742,7 @@ function disegnaCardProposta(section, {
   }
   return section;
 }
-var RICEVUTA_PROPOSTA, VISTA_PROPOSTA, IMPRONTA, ID, TESTI_AVVISI, testoAvviso, STATI_RUN, numero5, costo, CAMPI_TETTI, valoreInCampo, bozzaDaiTetti;
+var RICEVUTA_PROPOSTA, VISTA_PROPOSTA, IMPRONTA, ID, TESTI_AVVISI, testoAvviso, STATI_RUN2, numero5, costo, CAMPI_TETTI, valoreInCampo, bozzaDaiTetti;
 var init_workflow_proposal_card = __esm({
   "src/components/workflow-proposal-card.js"() {
     RICEVUTA_PROPOSTA = "talos.workflow-proposal-receipt.v1";
@@ -23113,7 +23753,7 @@ var init_workflow_proposal_card = __esm({
       PREFLIGHT_UNKNOWN_COST: "Il costo non si può stimare in anticipo: resta sconosciuto, non zero."
     });
     testoAvviso = (voce) => TESTI_AVVISI[voce?.code] ?? "Il controllo preliminare ha un avviso su questa proposta.";
-    STATI_RUN = Object.freeze({
+    STATI_RUN2 = Object.freeze({
       created: { chiave: "avviato", etichetta: "Avviato" },
       running: { chiave: "in-esecuzione", etichetta: "In esecuzione" },
       paused: { chiave: "in-pausa", etichetta: "In pausa" },
@@ -23152,7 +23792,7 @@ function azioniDelRun(panoramica) {
   if (!panoramica?.runId || RUN_FINITI.has(panoramica.status)) return vuoto;
   const falliti = somma(panoramica, ["failed"]);
   const annulla = { azione: "cancel", etichetta: "Annulla il run", pericolo: true };
-  const riprova = falliti > 0 ? { azione: "retry", etichetta: `Riprova ${plurale3(falliti, "passo", "passi")}`, falliti } : null;
+  const riprova = falliti > 0 ? { azione: "retry", etichetta: `Riprova ${plurale4(falliti, "passo", "passi")}`, falliti } : null;
   if (panoramica.cancelRequested) return { ...vuoto, nota: "Annullamento in corso: i passi in corso si stanno fermando." };
   if (panoramica.status === "running" && panoramica.pauseRequested) {
     return { principale: null, menu: [annulla], nota: "Pausa chiesta: i passi in corso finiscono, nessuno nuovo parte." };
@@ -23166,8 +23806,8 @@ function conseguenzeAnnulla(panoramica) {
   const inCorso = somma(panoramica, ["leased", "running"]);
   const nonPartiti = somma(panoramica, ["pending", "blocked", "ready", "retry_wait", "waiting_human", "reconciling", "planned"]);
   const frasi = [];
-  if (inCorso > 0) frasi.push(`${inCorso === 1 ? "Il passo in corso si ferma" : `I ${cifra(inCorso)} passi in corso si fermano`} subito.`);
-  if (nonPartiti > 0) frasi.push(`${nonPartiti === 1 ? "Il passo non ancora partito non partirà" : `I ${cifra(nonPartiti)} passi non ancora partiti non partiranno`}.`);
+  if (inCorso > 0) frasi.push(`${inCorso === 1 ? "Il passo in corso si ferma" : `I ${cifra2(inCorso)} passi in corso si fermano`} subito.`);
+  if (nonPartiti > 0) frasi.push(`${nonPartiti === 1 ? "Il passo non ancora partito non partirà" : `I ${cifra2(nonPartiti)} passi non ancora partiti non partiranno`}.`);
   frasi.push("I risultati già registrati restano. Un run annullato non si riprende.");
   return frasi.join(" ");
 }
@@ -23182,54 +23822,54 @@ function righeAumento(ceilingRaise = {}) {
 }
 function apriConfermaRun(doc, { sopra, titolo: titolo2, testo: testo2, righe = [], scelte = null, conferma, pericolo = false, opener = null, gestore = null } = {}) {
   return new Promise((risolvi) => {
-    const el30 = (tag2, classe, t3) => {
+    const el31 = (tag2, classe, t3) => {
       const n = doc.createElement(tag2);
       if (classe) n.className = classe;
       if (t3 != null) n.textContent = t3;
       return n;
     };
     const id4 = `conferma-run-${Math.random().toString(36).slice(2, 9)}`;
-    const dialogo = el30("dialog", "talos-wfg-conferma");
+    const dialogo = el31("dialog", "talos-wfg-conferma");
     dialogo.setAttribute("role", "alertdialog");
     dialogo.setAttribute("aria-labelledby", `${id4}-titolo`);
     dialogo.setAttribute("aria-describedby", `${id4}-testo`);
-    const scatola = el30("div", "talos-dialog talos-wfg-conferma__scatola");
-    const testa = el30("div", "talos-dialog__header");
-    const titoli = el30("div", "talos-grow");
-    if (sopra) titoli.append(el30("span", "talos-eyebrow", sopra));
-    const h = el30("h2", "talos-dialog__title", titolo2);
+    const scatola = el31("div", "talos-dialog talos-wfg-conferma__scatola");
+    const testa = el31("div", "talos-dialog__header");
+    const titoli = el31("div", "talos-grow");
+    if (sopra) titoli.append(el31("span", "talos-eyebrow", sopra));
+    const h = el31("h2", "talos-dialog__title", titolo2);
     h.id = `${id4}-titolo`;
     titoli.append(h);
     testa.append(titoli);
-    const corpo = el30("div", "talos-dialog__body");
-    const p = el30("p", "talos-wfg-conferma__testo", testo2);
+    const corpo = el31("div", "talos-dialog__body");
+    const p = el31("p", "talos-wfg-conferma__testo", testo2);
     p.id = `${id4}-testo`;
     corpo.append(p);
     if (righe.length) {
-      const dl = el30("dl", "talos-wfg-conferma__righe");
+      const dl = el31("dl", "talos-wfg-conferma__righe");
       for (const [chiave, valore] of righe) {
-        const r = el30("div", "talos-wfg-conferma__riga");
-        r.append(el30("dt", null, chiave), el30("dd", null, valore));
+        const r = el31("div", "talos-wfg-conferma__riga");
+        r.append(el31("dt", null, chiave), el31("dd", null, valore));
         dl.append(r);
       }
       corpo.append(dl);
     }
-    const piede = el30("div", "talos-dialog__footer");
-    const no = el30("button", "talos-button talos-button--secondary", "Non ora");
+    const piede = el31("div", "talos-dialog__footer");
+    const no = el31("button", "talos-button talos-button--secondary", "Non ora");
     no.type = "button";
-    const si = el30("button", `talos-button ${pericolo ? "talos-button--secondary talos-button--danger" : "talos-button--primary"}`, conferma);
+    const si = el31("button", `talos-button ${pericolo ? "talos-button--secondary talos-button--danger" : "talos-button--primary"}`, conferma);
     si.type = "button";
     if (scelte && Array.isArray(scelte.voci) && scelte.voci.length) {
-      const gruppo = el30("div", "talos-wfg-conferma__scelte");
+      const gruppo = el31("div", "talos-wfg-conferma__scelte");
       gruppo.setAttribute("role", "radiogroup");
       if (scelte.etichetta) gruppo.setAttribute("aria-label", scelte.etichetta);
       const opzioni = scelte.voci.map((voce) => {
-        const b = el30("button", "talos-wfg-conferma__scelta");
+        const b = el31("button", "talos-wfg-conferma__scelta");
         b.type = "button";
         b.setAttribute("role", "radio");
         b.dataset.valore = voce.valore;
-        b.append(el30("span", "talos-wfg-conferma__scelta-nome", voce.testo ?? voce.valore));
-        if (voce.dettaglio) b.append(el30("span", "talos-wfg-conferma__scelta-dettaglio", voce.dettaglio));
+        b.append(el31("span", "talos-wfg-conferma__scelta-nome", voce.testo ?? voce.valore));
+        if (voce.dettaglio) b.append(el31("span", "talos-wfg-conferma__scelta-dettaglio", voce.dettaglio));
         return b;
       });
       const segna = (valore) => {
@@ -23256,7 +23896,7 @@ function apriConfermaRun(doc, { sopra, titolo: titolo2, testo: testo2, righe = [
       corpo.append(gruppo);
       segna(scelte.voci.some((v) => v.valore === scelte.valore) ? scelte.valore : null);
     }
-    piede.append(el30("span", "talos-grow"), no, si);
+    piede.append(el31("span", "talos-grow"), no, si);
     scatola.append(testa, corpo, piede);
     dialogo.append(scatola);
     const manager = gestore;
@@ -23281,12 +23921,12 @@ function apriConfermaRun(doc, { sopra, titolo: titolo2, testo: testo2, righe = [
     else no.focus();
   });
 }
-var cifra, plurale3, somma, RUN_FINITI, TESTI_ERRORE, testoErroreRun, TESTO_RIUSCITO, testoAmbiguo;
+var cifra2, plurale4, somma, RUN_FINITI, TESTI_ERRORE, testoErroreRun, TESTO_RIUSCITO, testoAmbiguo;
 var init_controlli_run = __esm({
   "src/components/controlli-run.js"() {
     init_workflow_proposal_card();
-    cifra = (n) => new Intl.NumberFormat("it-IT", { useGrouping: "always" }).format(n);
-    plurale3 = (n, uno2, molti) => `${cifra(n)} ${n === 1 ? uno2 : molti}`;
+    cifra2 = (n) => new Intl.NumberFormat("it-IT", { useGrouping: "always" }).format(n);
+    plurale4 = (n, uno2, molti) => `${cifra2(n)} ${n === 1 ? uno2 : molti}`;
     somma = (panoramica, stati2) => (panoramica?.groups ?? []).reduce((tot, g) => tot + stati2.reduce((s, st2) => s + (g.counts?.[st2] ?? 0), 0), 0);
     RUN_FINITI = /* @__PURE__ */ new Set(["succeeded", "failed", "cancelled"]);
     TESTI_ERRORE = Object.freeze({
@@ -23306,156 +23946,6 @@ var init_controlli_run = __esm({
       retry: "Riprova partito: i passi non riusciti ripartono coi tentativi da capo."
     });
     testoAmbiguo = (azione) => azione === "retry" ? "Non si sa se Riprova è arrivato al server: guarda gli stati dei passi prima di ripeterlo." : "Non si sa se il comando è arrivato: il diagramma si è riletto e non lo mostra. Riprova.";
-  }
-});
-
-// src/components/grafo/comuni.js
-function statoDelRun(panoramica, { tipo = "run", revisione = null } = {}) {
-  if (tipo !== "run") return revisione?.status === "approved" ? "approved" : "proposed";
-  const p = panoramica ?? {};
-  if (["succeeded", "failed", "cancelled"].includes(p.status)) return p.status;
-  if (p.cancelRequested === true) return "cancelling";
-  if (p.status === "running" && p.pauseRequested === true) return "pausing";
-  return p.status;
-}
-function conteggiFase(counts = {}) {
-  const esito = {};
-  for (const [chiave, , stati2] of FAMIGLIE2) esito[chiave] = stati2.reduce((somma3, stato2) => somma3 + (counts[stato2] ?? 0), 0);
-  return esito;
-}
-function percentualeFase(gruppo) {
-  return typeof gruppo?.progress === "number" ? Math.floor(gruppo.progress * 100) : null;
-}
-function spostaConteggi(gruppi = [], cambi = []) {
-  for (const { phaseId, da, a } of cambi) {
-    if (!da || !a || da === a) continue;
-    const g = gruppi.find((x) => x.phaseId === phaseId);
-    if (!g?.counts || !((g.counts[da] ?? 0) > 0)) continue;
-    g.counts = { ...g.counts, [da]: g.counts[da] - 1, [a]: (g.counts[a] ?? 0) + 1 };
-    if (g.counts[da] === 0) delete g.counts[da];
-    g.terminated = Object.entries(g.counts).reduce((t3, [st2, n]) => t3 + (STATI_TERMINALI.has(st2) ? n : 0), 0);
-    if (typeof g.progress === "number" && g.total > 0) g.progress = g.terminated / g.total;
-  }
-  return gruppi;
-}
-function tonoFase(gruppo) {
-  const c = conteggiFase(gruppo?.counts);
-  if (percentualeFase(gruppo) === null) return "neutro";
-  if (c.errori > 0) return "errore";
-  if (gruppo.total > 0 && gruppo.terminated === gruppo.total) return c.conclusi === gruppo.total ? "ok" : "neutro";
-  if (c.inCorso > 0) return "corso";
-  return "attesa";
-}
-function iconaDellaFase(gruppo) {
-  const ruolo = piuFrequente(gruppo?.roles, Object.keys(ICONE_RUOLO));
-  if (ruolo) return ICONE_RUOLO[ruolo];
-  const tipo = piuFrequente(gruppo?.kinds, Object.keys(ICONE_TIPO));
-  return tipo ? ICONE_TIPO[tipo] : "i-robot";
-}
-function formattaDurata(ms2) {
-  if (typeof ms2 !== "number" || !Number.isFinite(ms2) || ms2 < 0) return null;
-  const secondi = Math.floor(ms2 / 1e3);
-  if (secondi < 60) return `${secondi} s`;
-  const minuti = Math.floor(secondi / 60);
-  if (minuti < 60) return `${minuti} min`;
-  return `${Math.floor(minuti / 60)} h ${minuti % 60} min`;
-}
-function durataDelPasso(riga2, adesso = Date.now()) {
-  if (typeof riga2?.durationMs === "number") return riga2.durationMs;
-  if (riga2?.startedAt && !riga2.finishedAt && statoPasso(riga2.state).tono === "corso") {
-    const inizio = Date.parse(riga2.startedAt);
-    return Number.isFinite(inizio) ? Math.max(0, adesso - inizio) : null;
-  }
-  return null;
-}
-var SOGLIA_AGENTI, PAGINA_ELENCO, STATI_PASSO, statoPasso, STATI_RUN2, TONO_RUN, ICONA_TONO, FAMIGLIE2, STATI_TERMINALI, ICONE_RUOLO, ICONE_TIPO, piuFrequente, iconaDelPasso, modelloDelPasso, livelloPer, NUMERO2, cifra2, plurale4, maiuscola, ora2;
-var init_comuni = __esm({
-  "src/components/grafo/comuni.js"() {
-    SOGLIA_AGENTI = 25;
-    PAGINA_ELENCO = 20;
-    STATI_PASSO = Object.freeze({
-      planned: { parola: "Pianificato", tono: "neutro" },
-      pending: { parola: "In attesa", tono: "attesa" },
-      /* F3-52, giro VERO sul 4174 (25/09): un passo che aspetta un passo precedente è `blocked` nel riduttore (`run.mjs:134`) e a
-         schermo diceva «Stato sconosciuto»; le fixture usavano solo `pending`. Per chi guarda è la stessa attesa del mockup. */
-      blocked: { parola: "In attesa", tono: "attesa" },
-      ready: { parola: "Pronto", tono: "attesa" },
-      leased: { parola: "In avvio", tono: "corso" },
-      running: { parola: "In esecuzione", tono: "corso" },
-      retry_wait: { parola: "Riprova a breve", tono: "attesa" },
-      waiting_human: { parola: "Aspetta te", tono: "avviso" },
-      reconciling: { parola: "In verifica", tono: "avviso" },
-      uncertain: { parola: "Da verificare", tono: "errore" },
-      succeeded: { parola: "Concluso", tono: "ok" },
-      failed: { parola: "Non riuscito", tono: "errore" },
-      cancelled: { parola: "Annullato", tono: "neutro" },
-      skipped: { parola: "Saltato", tono: "neutro" },
-      superseded: { parola: "Sostituito", tono: "neutro" }
-    });
-    statoPasso = (stato2) => STATI_PASSO[stato2] ?? { parola: "Stato sconosciuto", tono: "neutro" };
-    STATI_RUN2 = Object.freeze({
-      created: "Creato",
-      running: "In esecuzione",
-      paused: "In pausa",
-      needs_attention: "Serve attenzione",
-      succeeded: "Riuscito",
-      failed: "Non riuscito",
-      cancelled: "Annullato",
-      planned: "Da avviare",
-      proposed: "Da approvare",
-      approved: "Approvato, da avviare",
-      // F3-52: chiesti e non ancora compiuti (i passi in corso stanno finendo o si stanno fermando)
-      pausing: "Pausa in corso",
-      cancelling: "Annullamento in corso"
-    });
-    TONO_RUN = {
-      running: "corso",
-      created: "corso",
-      paused: "attesa",
-      needs_attention: "errore",
-      succeeded: "ok",
-      failed: "errore",
-      cancelled: "neutro",
-      pausing: "attesa",
-      cancelling: "neutro"
-    };
-    ICONA_TONO = { ok: "i-check", corso: "i-play", attesa: "i-clock", avviso: "i-user", errore: "i-x", neutro: null };
-    FAMIGLIE2 = Object.freeze([
-      ["conclusi", "Conclusi", ["succeeded", "skipped"], "ok"],
-      ["inCorso", "In esecuzione", ["leased", "running"], "corso"],
-      ["inAttesa", "In attesa", ["pending", "blocked", "ready", "retry_wait", "waiting_human", "reconciling", "planned"], "attesa"],
-      ["errori", "Errori", ["failed", "uncertain"], "errore"],
-      ["annullati", "Annullati", ["cancelled", "superseded"], "neutro"]
-    ]);
-    STATI_TERMINALI = /* @__PURE__ */ new Set(["succeeded", "failed", "cancelled", "skipped", "superseded"]);
-    ICONE_RUOLO = Object.freeze({
-      coordinator: "i-coordina",
-      researcher: "i-search",
-      implementer: "i-code",
-      reviewer: "i-shield",
-      integrator: "i-layers",
-      tester: "i-flask"
-    });
-    ICONE_TIPO = Object.freeze({ test: "i-flask", verify: "i-shield", judge: "i-shield", merge: "i-layers", reduce: "i-layers", artifact: "i-doc", human: "i-user" });
-    piuFrequente = (conti, ordine) => {
-      let scelta = null, massimo = 0;
-      for (const chiave of ordine) if ((conti?.[chiave] ?? 0) > massimo) {
-        scelta = chiave;
-        massimo = conti[chiave];
-      }
-      return scelta;
-    };
-    iconaDelPasso = (riga2) => ICONE_RUOLO[riga2?.role] ?? ICONE_TIPO[riga2?.kind] ?? "i-robot";
-    modelloDelPasso = (riga2, modelloSessione = null) => riga2?.effectiveModel?.model ?? riga2?.model ?? modelloSessione ?? null;
-    livelloPer = (totale2) => totale2 <= SOGLIA_AGENTI ? "agenti" : "gruppi";
-    NUMERO2 = new Intl.NumberFormat("it-IT", { useGrouping: "always" });
-    cifra2 = (n) => NUMERO2.format(n);
-    plurale4 = (n, uno2, molti) => `${cifra2(n)} ${n === 1 ? uno2 : molti}`;
-    maiuscola = (testo2) => testo2 ? testo2[0].toLocaleUpperCase("it-IT") + testo2.slice(1) : testo2;
-    ora2 = (iso) => {
-      const t3 = Date.parse(iso ?? "");
-      return Number.isFinite(t3) ? new Date(t3).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" }) : null;
-    };
   }
 });
 
@@ -23769,7 +24259,7 @@ function creaFonte({ client, sorgente, onCambio = () => {
     storia: { items: [], inCorso: null, versione: 0 },
     discendenze: /* @__PURE__ */ new Map()
   };
-  let coda = [];
+  let coda2 = [];
   let inVolo = 0;
   let cache = { versione: -1 };
   function azzeraStruttura() {
@@ -23826,18 +24316,18 @@ function creaFonte({ client, sorgente, onCambio = () => {
     await pagina(phaseId, 0, { arricchisci: true });
     return (f.celle.get(phaseId) ?? []).filter(Boolean).map((id4) => f.righe.get(id4));
   }
-  function chiedi(phaseId, da, a) {
+  function chiedi2(phaseId, da, a) {
     const celle = f.celle.get(phaseId);
     if (!celle) return;
     for (let n = Math.floor(Math.max(0, da) / PAGINA); n <= Math.floor(Math.min(celle.length - 1, a) / PAGINA); n += 1) {
-      if (f.pagine.has(`${phaseId}:${n}`) || f.pagine.has(`${phaseId}:${n}+`) || coda.some((x) => x.phaseId === phaseId && x.n === n)) continue;
-      coda.push({ phaseId, n });
+      if (f.pagine.has(`${phaseId}:${n}`) || f.pagine.has(`${phaseId}:${n}+`) || coda2.some((x) => x.phaseId === phaseId && x.n === n)) continue;
+      coda2.push({ phaseId, n });
     }
     svuota();
   }
   function svuota() {
-    while (inVolo < CONCORRENZA && coda.length) {
-      const { phaseId, n } = coda.shift();
+    while (inVolo < CONCORRENZA && coda2.length) {
+      const { phaseId, n } = coda2.shift();
       inVolo += 1;
       pagina(phaseId, n).then(() => onCambio("righe"), () => {
       }).finally(() => {
@@ -23847,7 +24337,7 @@ function creaFonte({ client, sorgente, onCambio = () => {
     }
   }
   const dimentica = () => {
-    coda = [];
+    coda2 = [];
   };
   async function archiPer(fasi) {
     const chiave = [...fasi].sort().join("\0");
@@ -23969,7 +24459,7 @@ function creaFonte({ client, sorgente, onCambio = () => {
     caricaPanoramica: panoramica,
     pagina,
     righeFase,
-    chiedi,
+    chiedi: chiedi2,
     dimentica,
     archiPer,
     aggiornaStoria,
@@ -27980,7 +28470,7 @@ function creaTela(host, opzioni) {
   const d = host.ownerDocument;
   const finestra = d.defaultView;
   const { icona: icona16, onSeleziona, onGruppo, onZoom, onDisegnati, onMancano } = opzioni;
-  const el30 = (tag2, classe, testo2) => {
+  const el31 = (tag2, classe, testo2) => {
     const n = d.createElement(tag2);
     if (classe) n.className = classe;
     if (testo2 != null) n.textContent = testo2;
@@ -27991,12 +28481,12 @@ function creaTela(host, opzioni) {
     for (const [k, v] of Object.entries(attributi)) n.setAttribute(k, v);
     return n;
   };
-  const tela = el30("div", "gv-tela");
+  const tela = el31("div", "gv-tela");
   tela.tabIndex = 0;
   tela.setAttribute("role", "group");
   tela.setAttribute("aria-roledescription", "diagramma");
   tela.setAttribute("aria-label", "Diagramma delle dipendenze. Frecce per spostarsi fra gli agenti, Invio per il dettaglio, più e meno per lo zoom, zero per adattare.");
-  const mondo = el30("div", "gv-mondo");
+  const mondo = el31("div", "gv-mondo");
   const fili = svg2("svg", { class: "gv-fili", "aria-hidden": "true" });
   const defs = svg2("defs");
   for (const [id4, classe] of [["gv-freccia", "gv-freccia"], ["gv-freccia-fatto", "gv-freccia gv-freccia--fatto"], ["gv-freccia-fronte", "gv-freccia gv-freccia--fronte"], ["gv-freccia-focus", "gv-freccia gv-freccia--focus"]]) {
@@ -28007,15 +28497,15 @@ function creaTela(host, opzioni) {
   fili.append(defs);
   const gFili = svg2("g");
   fili.append(gFili);
-  const strato = { blocchi: el30("div", "gv-blocchi"), nodi: el30("div", "gv-nodi") };
-  const cartaSessione = el30("div", "gv-sessione");
+  const strato = { blocchi: el31("div", "gv-blocchi"), nodi: el31("div", "gv-nodi") };
+  const cartaSessione = el31("div", "gv-sessione");
   cartaSessione.dataset.coordinatore = "true";
   mondo.append(fili, strato.blocchi, cartaSessione, strato.nodi);
-  const lod = el30("canvas", "gv-lod");
+  const lod = el31("canvas", "gv-lod");
   lod.setAttribute("aria-hidden", "true");
-  const etichette = el30("div", "gv-etichette");
+  const etichette = el31("div", "gv-etichette");
   etichette.setAttribute("aria-hidden", "true");
-  const minimappa = el30("div", "gv-minimappa nowheel");
+  const minimappa = el31("div", "gv-minimappa nowheel");
   minimappa.setAttribute("aria-hidden", "true");
   const miniSvg = svg2("svg", { class: "gv-minimappa-svg" });
   const miniBlocchi = svg2("g");
@@ -28023,7 +28513,7 @@ function creaTela(host, opzioni) {
   const miniCornice = svg2("rect", { class: "gv-minimappa-vista" });
   miniSvg.append(miniBlocchi, miniVista, miniCornice);
   minimappa.append(miniSvg);
-  const annuncio = el30("p", "gv-sr");
+  const annuncio = el31("p", "gv-sr");
   annuncio.setAttribute("role", "status");
   tela.append(mondo, lod, etichette, minimappa, annuncio);
   host.append(tela);
@@ -28118,32 +28608,32 @@ function creaTela(host, opzioni) {
   }
   const movimentoRidotto2 = () => finestra?.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true;
   function segmentata(counts, totale2) {
-    const barra = el30("span", "gv-segmenti");
+    const barra = el31("span", "gv-segmenti");
     barra.setAttribute("role", "img");
     const c = conteggiFase(counts);
     const parti = FAMIGLIE3.map(([chiave, parola2, tono]) => ({ n: c[chiave], parola: parola2, tono })).concat([{ n: c.annullati, parola: "Annullati", tono: "neutro" }]).filter((p) => p.n > 0);
     barra.setAttribute("aria-label", parti.map((p) => `${p.parola} ${conCifre.format(p.n)}`).join(", ") || "nessun passo");
     for (const p of parti) {
-      const s = el30("span", "gv-segmento");
+      const s = el31("span", "gv-segmento");
       s.dataset.tono = p.tono;
       s.style.flexGrow = String(p.n);
       s.style.minWidth = "2px";
       barra.append(s);
     }
-    if (!totale2) barra.append(el30("span", "gv-segmento gv-segmento--vuoto"));
+    if (!totale2) barra.append(el31("span", "gv-segmento gv-segmento--vuoto"));
     return barra;
   }
   const percento2 = (c) => c?.progress === null || c?.progress === void 0 ? "—" : `${Math.floor(c.progress * 100)}%`;
   function riempiTestaFase(testa, g, b) {
     testa.replaceChildren();
     const c = dati.conteggi(g.phaseId) ?? { counts: {}, terminated: 0, attention: 0, total: g.total, progress: null };
-    const riga2 = el30("div", "gv-testa-riga");
-    const ic = el30("span", "gv-testa-icona");
+    const riga2 = el31("div", "gv-testa-riga");
+    const ic = el31("span", "gv-testa-icona");
     ic.append(icona16(iconaDellaFase(g)));
-    const nome = el30("span", "gv-testa-nome talos-wfg__fase-nome", `Fase ${g.order + 1} — ${g.label}`);
+    const nome = el31("span", "gv-testa-nome talos-wfg__fase-nome", `Fase ${g.order + 1} — ${g.label}`);
     nome.title = `Fase ${g.order + 1} — ${g.label}`;
-    const perc = el30("span", "gv-testa-perc", percento2(c));
-    const chiudi = el30("button", "gv-testa-chiudi nopan");
+    const perc = el31("span", "gv-testa-perc", percento2(c));
+    const chiudi = el31("button", "gv-testa-chiudi nopan");
     chiudi.type = "button";
     chiudi.setAttribute("aria-label", `Chiudi il gruppo ${g.label}`);
     chiudi.dataset.focusKey = `chiudi:${g.phaseId}`;
@@ -28153,31 +28643,31 @@ function creaTela(host, opzioni) {
       onGruppo?.(g.phaseId, false, b);
     });
     riga2.append(ic, nome, perc, chiudi);
-    const sotto = el30("div", "gv-testa-sotto");
-    sotto.append(segmentata(c.counts, g.total), el30("span", "gv-testa-conto", `${conCifre.format(c.terminated)} di ${conCifre.format(g.total)} terminati${c.attention ? ` · ${c.attention} da guardare` : ""}`));
+    const sotto = el31("div", "gv-testa-sotto");
+    sotto.append(segmentata(c.counts, g.total), el31("span", "gv-testa-conto", `${conCifre.format(c.terminated)} di ${conCifre.format(g.total)} terminati${c.attention ? ` · ${c.attention} da guardare` : ""}`));
     testa.append(riga2, sotto);
   }
   function riempiCartaGruppo(carta, g) {
     carta.replaceChildren();
     const c = dati.conteggi(g.phaseId) ?? { counts: {}, terminated: 0, attention: 0, total: g.total, progress: null };
     const conti = conteggiFase(c.counts);
-    const ic = el30("span", "talos-wfg__gruppo-icona");
+    const ic = el31("span", "talos-wfg__gruppo-icona");
     ic.append(icona16(iconaDellaFase(g)));
-    const nome = el30("span", "talos-wfg__gruppo-nome", `Fase ${g.order + 1} — ${g.label}`);
-    const conto = el30("span", "talos-wfg__gruppo-conto", `${conCifre.format(g.total)} ${g.total === 1 ? "agente" : "agenti"}`);
-    const barra = el30("span", "gv-gruppo-barra");
-    barra.append(segmentata(c.counts, g.total), el30("span", "talos-wfg__barra-valore", percento2(c)));
-    const dl = el30("dl", "talos-wfg__conti");
+    const nome = el31("span", "talos-wfg__gruppo-nome", `Fase ${g.order + 1} — ${g.label}`);
+    const conto = el31("span", "talos-wfg__gruppo-conto", `${conCifre.format(g.total)} ${g.total === 1 ? "agente" : "agenti"}`);
+    const barra = el31("span", "gv-gruppo-barra");
+    barra.append(segmentata(c.counts, g.total), el31("span", "talos-wfg__barra-valore", percento2(c)));
+    const dl = el31("dl", "talos-wfg__conti");
     for (const [chiave, parola2, tono] of FAMIGLIE3) {
-      const r = el30("div", "talos-wfg__conto");
-      const dt2 = el30("dt");
-      const punto = el30("span", conti[chiave] > 0 ? "talos-wfg__punto" : "talos-wfg__punto talos-wfg__punto--vuoto");
+      const r = el31("div", "talos-wfg__conto");
+      const dt2 = el31("dt");
+      const punto = el31("span", conti[chiave] > 0 ? "talos-wfg__punto" : "talos-wfg__punto talos-wfg__punto--vuoto");
       punto.dataset.tono = conti[chiave] > 0 ? tono : "neutro";
       dt2.append(punto, parola2);
-      r.append(dt2, el30("dd", null, conCifre.format(conti[chiave])));
+      r.append(dt2, el31("dd", null, conCifre.format(conti[chiave])));
       dl.append(r);
     }
-    const apri = el30("span", "gv-gruppo-apri", "Apri qui");
+    const apri = el31("span", "gv-gruppo-apri", "Apri qui");
     carta.append(ic, nome, conto, barra, dl, apri);
     carta.setAttribute("aria-label", `Fase ${g.order + 1}, ${g.label}: ${conCifre.format(g.total)} agenti, ${c.progress === null || c.progress === void 0 ? "" : `${Math.floor(c.progress * 100)}% terminati, `}premi Invio per aprire il gruppo qui`);
     carta.dataset.tono = c.attention > 0 ? "errore" : conti.inCorso > 0 ? "corso" : g.total > 0 && conti.conclusi === g.total ? "ok" : "attesa";
@@ -28188,7 +28678,7 @@ function creaTela(host, opzioni) {
     for (const b of disp.blocchi) {
       const g = dati.panoramica.groups.find((x) => x.phaseId === b.phaseId);
       if (b.tipo === "gruppo") {
-        const carta = el30("button", "talos-wfg__gruppo gv-gruppo nopan");
+        const carta = el31("button", "talos-wfg__gruppo gv-gruppo nopan");
         carta.type = "button";
         carta.dataset.blocco = b.id;
         carta.dataset.phaseId = b.phaseId;
@@ -28199,13 +28689,13 @@ function creaTela(host, opzioni) {
         strato.blocchi.append(carta);
         blocchiVivi.set(b.id, { carta, g, b });
       } else {
-        const corsia = el30("section", "gv-corsia");
+        const corsia = el31("section", "gv-corsia");
         corsia.dataset.forma = b.tipo;
         corsia.dataset.blocco = b.id;
         corsia.dataset.phaseId = b.phaseId;
         corsia.setAttribute("aria-label", `Fase ${g.order + 1}: ${g.label}`);
         posiziona(corsia, b.x, b.y, b.w, b.h);
-        const testa = el30("header", "gv-testa talos-wfg__fase");
+        const testa = el31("header", "gv-testa talos-wfg__fase");
         riempiTestaFase(testa, g, b);
         corsia.append(testa);
         strato.blocchi.append(corsia);
@@ -28219,20 +28709,20 @@ function creaTela(host, opzioni) {
   function riempiSessione() {
     cartaSessione.replaceChildren();
     const sessione = dati.sessione();
-    const ic = el30("span", "talos-wfg__coordinatore-icona");
+    const ic = el31("span", "talos-wfg__coordinatore-icona");
     ic.append(icona16("i-coordina"));
-    const corpo = el30("span", "talos-wfg__coordinatore-corpo");
-    const riga2 = el30("span", "talos-wfg__coordinatore-riga");
+    const corpo = el31("span", "talos-wfg__coordinatore-corpo");
+    const riga2 = el31("span", "talos-wfg__coordinatore-riga");
     const st2 = dati.statoRun();
-    const pill = el30("span", "talos-wfg__pill");
+    const pill = el31("span", "talos-wfg__pill");
     pill.dataset.tono = st2.tono;
     if (ICONA_TONO[st2.tono]) pill.append(icona16(ICONA_TONO[st2.tono], "talos-wfg__pill-icona"));
-    pill.append(el30("span", null, st2.parola));
+    pill.append(el31("span", null, st2.parola));
     riga2.append(pill);
-    if (sessione.durata) riga2.append(el30("span", "talos-wfg__passo-durata", sessione.durata));
-    corpo.append(el30("span", "talos-wfg__coordinatore-nome", sessione.titolo));
+    if (sessione.durata) riga2.append(el31("span", "talos-wfg__passo-durata", sessione.durata));
+    corpo.append(el31("span", "talos-wfg__coordinatore-nome", sessione.titolo));
     corpo.append(riga2);
-    if (sessione.sotto) corpo.append(el30("span", "talos-wfg__passo-modello", sessione.sotto));
+    if (sessione.sotto) corpo.append(el31("span", "talos-wfg__passo-modello", sessione.sotto));
     cartaSessione.append(ic, corpo);
     cartaSessione.setAttribute("aria-label", `Sessione principale: ${sessione.titolo}, coordina il workflow`);
   }
@@ -28303,7 +28793,7 @@ function creaTela(host, opzioni) {
   const rigaDi = (chiave, pos) => pos.forma === "mini" ? dati.cella(pos.phaseId, pos.indice) : dati.riga(chiave);
   function cartaPasso() {
     const carta = pool.pop() ?? (() => {
-      const b = el30("button", "gv-passo nopan");
+      const b = el31("button", "gv-passo nopan");
       b.type = "button";
       b.addEventListener("click", () => {
         if (b.dataset.nodoId) onSeleziona?.(b.dataset.nodoId);
@@ -28323,7 +28813,7 @@ function creaTela(host, opzioni) {
       carta.dataset.forma = pos.forma;
       carta.dataset.carica = "true";
       delete carta.dataset.stato;
-      carta.replaceChildren(el30("span", "gv-passo-scheletro"));
+      carta.replaceChildren(el31("span", "gv-passo-scheletro"));
       carta.setAttribute("aria-label", "Carico questo agente…");
       carta.disabled = true;
       return;
@@ -28342,21 +28832,21 @@ function creaTela(host, opzioni) {
     if (carta.dataset.firma === firma) return;
     carta.dataset.firma = firma;
     carta.replaceChildren();
-    const testa = el30("span", "gv-passo-testa");
-    const punto = el30("span", "talos-wfg__punto");
+    const testa = el31("span", "gv-passo-testa");
+    const punto = el31("span", "talos-wfg__punto");
     punto.dataset.tono = tono;
-    testa.append(punto, el30("span", "gv-passo-nome", riga2.label), el30("span", "gv-passo-durata", durata2 ?? "—"));
-    const pill = el30("span", "talos-wfg__pill gv-passo-pill");
+    testa.append(punto, el31("span", "gv-passo-nome", riga2.label), el31("span", "gv-passo-durata", durata2 ?? "—"));
+    const pill = el31("span", "talos-wfg__pill gv-passo-pill");
     pill.dataset.tono = tono;
     if (ICONA_TONO[tono]) pill.append(icona16(ICONA_TONO[tono], "talos-wfg__pill-icona"));
-    pill.append(el30("span", null, parolaDi(stato2)));
+    pill.append(el31("span", null, parolaDi(stato2)));
     if (pos.forma === "mini") carta.append(testa, pill);
     else {
-      const ruolo = el30("span", "gv-passo-ruolo");
+      const ruolo = el31("span", "gv-passo-ruolo");
       ruolo.append(icona16(iconaDelPasso(riga2)));
       const modello = dati.modelloDi(riga2);
       carta.append(testa);
-      if (modello) carta.append(el30("span", "gv-passo-modello", modello));
+      if (modello) carta.append(el31("span", "gv-passo-modello", modello));
       carta.append(pill, ruolo);
     }
     carta.setAttribute("aria-label", `${riga2.label}, ${parolaDi(stato2)}${durata2 ? `, ${durata2}` : ""}`);
@@ -28409,7 +28899,7 @@ function creaTela(host, opzioni) {
   let tavolozza = null;
   function colori() {
     if (tavolozza) return tavolozza;
-    const prova = el30("span", "gv-sonda");
+    const prova = el31("span", "gv-sonda");
     tela.append(prova);
     tavolozza = {};
     const stile = (n) => finestra.getComputedStyle(n).color;
@@ -28461,7 +28951,7 @@ function creaTela(host, opzioni) {
     for (const b of disp.blocchi) {
       const x = b.x * vista.zoom + vista.x, y = b.y * vista.zoom + vista.y;
       const g = dati.panoramica.groups.find((q2) => q2.phaseId === b.phaseId);
-      const t3 = el30("span", "gv-etichetta", `${g.label} · ${percento2(dati.conteggi(b.phaseId))}`);
+      const t3 = el31("span", "gv-etichetta", `${g.label} · ${percento2(dati.conteggi(b.phaseId))}`);
       t3.title = t3.textContent;
       t3.style.maxWidth = `${Math.max(40, (b.w + 60) * vista.zoom)}px`;
       t3.style.transform = `translate(${Math.max(8, x)}px, ${Math.max(8, y - 24)}px)`;
@@ -28765,24 +29255,24 @@ var init_tela = __esm({
 function creaTempo(host, { icona: icona16, onSeleziona, onZoom }) {
   const d = host.ownerDocument;
   const finestra = d.defaultView;
-  const el30 = (tag2, classe, testo2) => {
+  const el31 = (tag2, classe, testo2) => {
     const n = d.createElement(tag2);
     if (classe) n.className = classe;
     if (testo2 != null) n.textContent = testo2;
     return n;
   };
-  const radice2 = el30("div", "gv-tempo");
-  const testa = el30("div", "gv-tempo-testa");
-  const testaNomi = el30("div", "gv-tempo-testa-nomi", "Agente");
-  const asse = el30("div", "gv-tempo-asse");
+  const radice2 = el31("div", "gv-tempo");
+  const testa = el31("div", "gv-tempo-testa");
+  const testaNomi = el31("div", "gv-tempo-testa-nomi", "Agente");
+  const asse = el31("div", "gv-tempo-asse");
   testa.append(testaNomi, asse);
-  const corpo = el30("div", "gv-tempo-corpo");
+  const corpo = el31("div", "gv-tempo-corpo");
   corpo.tabIndex = 0;
   corpo.setAttribute("role", "list");
   corpo.setAttribute("aria-label", "Passi nel tempo, per fase");
-  const spazio = el30("div", "gv-tempo-spazio");
-  const sfondo = el30("div", "gv-tempo-sfondo");
-  const righeHost = el30("div", "gv-tempo-righe");
+  const spazio = el31("div", "gv-tempo-spazio");
+  const sfondo = el31("div", "gv-tempo-sfondo");
+  const righeHost = el31("div", "gv-tempo-righe");
   spazio.append(sfondo, righeHost);
   corpo.append(spazio);
   radice2.append(testa, corpo);
@@ -28825,41 +29315,41 @@ function creaTempo(host, { icona: icona16, onSeleziona, onZoom }) {
     for (const s of a.segmenti) {
       if (s.compresso) {
         const x0 = s.asseDa * pxMs, x1 = s.asseA * pxMs;
-        const vuoto = el30("div", "gv-tempo-vuoto");
+        const vuoto = el31("div", "gv-tempo-vuoto");
         vuoto.style.transform = `translateX(${x0}px)`;
         vuoto.style.width = `${Math.max(6, x1 - x0)}px`;
         vuoto.title = `${ora3(s.da)} → ${ora3(s.a)}: nessun agente al lavoro. Compresso sull'asse.`;
-        vuoto.append(el30("span", "gv-tempo-vuoto-etichetta", `${formattaDurata(s.a - s.da)} senza attività`));
+        vuoto.append(el31("span", "gv-tempo-vuoto-etichetta", `${formattaDurata(s.a - s.da)} senza attività`));
         asse.append(vuoto);
-        const fascia = el30("div", "gv-tempo-fascia");
+        const fascia = el31("div", "gv-tempo-fascia");
         fascia.style.transform = `translateX(${LARGHEZZA_NOMI + x0}px)`;
         fascia.style.width = `${Math.max(6, x1 - x0)}px`;
         sfondo.append(fascia);
         continue;
       }
       for (let t4 = Math.ceil(s.da / passo) * passo; t4 < s.a; t4 += passo) {
-        const tacca = el30("span", "gv-tempo-tacca", ora3(t4));
+        const tacca = el31("span", "gv-tempo-tacca", ora3(t4));
         tacca.style.transform = `translateX(${a.versoAsse(t4) * pxMs}px)`;
         asse.append(tacca);
-        const linea = el30("div", "gv-tempo-griglia");
+        const linea = el31("div", "gv-tempo-griglia");
         linea.style.transform = `translateX(${LARGHEZZA_NOMI + a.versoAsse(t4) * pxMs}px)`;
         sfondo.append(linea);
       }
     }
-    const adesso = el30("div", "gv-tempo-adesso");
+    const adesso = el31("div", "gv-tempo-adesso");
     adesso.style.transform = `translateX(${x(a.t1)}px)`;
-    adesso.append(el30("span", null, `adesso ${ora3(a.t1)}`));
+    adesso.append(el31("span", null, `adesso ${ora3(a.t1)}`));
     sfondo.append(adesso);
     const t3 = dati.tempoCorrente();
     if (t3 !== null) {
-      const rip = el30("div", "gv-tempo-rip");
+      const rip = el31("div", "gv-tempo-rip");
       rip.style.transform = `translateX(${x(t3)}px)`;
-      rip.append(el30("span", null, ora3(t3)));
+      rip.append(el31("span", null, ora3(t3)));
       sfondo.append(rip);
     }
   }
   function barra(n, da, a, { tono, classe = "", titolo: titolo2, cliccabile = null }) {
-    const b = el30(cliccabile ? "button" : "span", `gv-tempo-barra ${classe}`.trim());
+    const b = el31(cliccabile ? "button" : "span", `gv-tempo-barra ${classe}`.trim());
     if (cliccabile) {
       b.type = "button";
       b.tabIndex = -1;
@@ -28877,19 +29367,19 @@ function creaTempo(host, { icona: icona16, onSeleziona, onZoom }) {
   }
   function riga2(i2) {
     const voce = righe[i2];
-    const n = el30("div", `gv-tempo-riga gv-tempo-riga--${voce.tipo}`);
+    const n = el31("div", `gv-tempo-riga gv-tempo-riga--${voce.tipo}`);
     n.style.transform = `translateY(${i2 * ALTEZZA_RIGA}px)`;
     n.setAttribute("role", "listitem");
     const t3 = dati.tempoCorrente();
     const fine = t3 ?? dati.asse().t1;
     if (voce.tipo === "fase") {
-      const b = el30("button", "gv-tempo-nome gv-tempo-nome--fase");
+      const b = el31("button", "gv-tempo-nome gv-tempo-nome--fase");
       b.type = "button";
       b.dataset.phaseId = voce.g.phaseId;
       b.setAttribute("aria-expanded", String(!chiuse.has(voce.g.phaseId)));
       b.append(icona16("i-chevron", chiuse.has(voce.g.phaseId) ? "gv-gira-giu" : ""), icona16(iconaDellaFase(voce.g)));
       const c = dati.conteggi(voce.g.phaseId) ?? { terminated: 0, attention: 0 };
-      b.append(el30("span", "gv-tempo-nome-testo", voce.g.label), el30("span", "gv-tempo-nome-conto", `${cifre.format(c.terminated)}/${cifre.format(voce.g.total)}`));
+      b.append(el31("span", "gv-tempo-nome-testo", voce.g.label), el31("span", "gv-tempo-nome-conto", `${cifre.format(c.terminated)}/${cifre.format(voce.g.total)}`));
       b.addEventListener("click", () => {
         if (chiuse.has(voce.g.phaseId)) chiuse.delete(voce.g.phaseId);
         else chiuse.add(voce.g.phaseId);
@@ -28899,7 +29389,7 @@ function creaTempo(host, { icona: icona16, onSeleziona, onZoom }) {
       n.append(b);
       const campata = dati.campata(voce.g.phaseId);
       if (campata && campata.da < fine) {
-        const s = el30("span", "gv-tempo-campata");
+        const s = el31("span", "gv-tempo-campata");
         s.dataset.tono = c.attention ? "errore" : c.terminated === voce.g.total ? "ok" : "corso";
         s.style.transform = `translateX(${x(campata.da)}px)`;
         s.style.width = `${Math.max(3, x(Math.min(campata.a ?? dati.asse().t1, fine)) - x(campata.da))}px`;
@@ -28910,20 +29400,20 @@ function creaTempo(host, { icona: icona16, onSeleziona, onZoom }) {
     const r = dati.cella(voce.g.phaseId, voce.indice);
     if (!r) {
       n.dataset.carica = "true";
-      n.append(el30("span", "gv-tempo-nome gv-tempo-nome--carica", "Carico…"));
+      n.append(el31("span", "gv-tempo-nome gv-tempo-nome--carica", "Carico…"));
       return n;
     }
     const stato2 = dati.statoDi(r.nodeId) ?? r.state;
     const tono = tonoDi2(stato2);
-    const nome = el30("button", "gv-tempo-nome");
+    const nome = el31("button", "gv-tempo-nome");
     nome.type = "button";
     nome.dataset.nodoId = r.nodeId;
     nome.setAttribute("aria-pressed", String(dati.selezionato() === r.nodeId));
-    const punto = el30("span", "talos-wfg__punto");
+    const punto = el31("span", "talos-wfg__punto");
     punto.dataset.tono = tono;
-    nome.append(punto, el30("span", "gv-tempo-nome-testo", r.label));
+    nome.append(punto, el31("span", "gv-tempo-nome-testo", r.label));
     const tentativi = (dati.tentativi().get(r.nodeId) ?? []).filter((x0) => x0.da <= fine);
-    if (!tentativi.length) nome.append(el30("span", "gv-tempo-nome-stato", parolaDi2(stato2)));
+    if (!tentativi.length) nome.append(el31("span", "gv-tempo-nome-stato", parolaDi2(stato2)));
     nome.setAttribute("aria-label", `${r.label}, ${parolaDi2(stato2)}`);
     nome.addEventListener("click", () => onSeleziona?.(r.nodeId));
     n.append(nome);
@@ -28944,7 +29434,7 @@ function creaTempo(host, { icona: icona16, onSeleziona, onZoom }) {
       const titolo2 = `${r.label} · ${parolaDi2(stato2)} · ${ora3(tt2.da)} → ${finito ? ora3(tt2.a) : "in corso"} · ${durata2}`;
       const { b, w } = barra(n, tt2.da, a, { tono, titolo: titolo2, cliccabile: r.nodeId });
       b.dataset.stato = stato2;
-      if (w > 64) b.append(el30("span", "gv-tempo-barra-testo", durata2));
+      if (w > 64) b.append(el31("span", "gv-tempo-barra-testo", durata2));
     });
     if (dati.selezionato() === r.nodeId) n.dataset.scelto = "true";
     return n;
@@ -29092,29 +29582,29 @@ var init_tempo = __esm({
 // src/components/workflow-results-panel.js
 function montaPannelloRisultati(host, { client, sorgente, onRitorno } = {}) {
   const d = host.ownerDocument;
-  const el30 = (tag2, classe, testo2) => {
+  const el31 = (tag2, classe, testo2) => {
     const nodo13 = d.createElement(tag2);
     if (classe) nodo13.className = classe;
     if (testo2 != null) nodo13.textContent = testo2;
     return nodo13;
   };
   const id4 = `talos-wfg-risultati-${++prossimoId}`;
-  const pannello = el30("aside", "talos-wfg__result-panel");
+  const pannello = el31("aside", "talos-wfg__result-panel");
   pannello.id = id4;
   pannello.hidden = true;
   pannello.setAttribute("aria-label", "Risultati del passo");
-  const testata = el30("header", "talos-wfg__result-head");
-  const titolo2 = el30("h3", null, "Risultati del passo");
+  const testata = el31("header", "talos-wfg__result-head");
+  const titolo2 = el31("h3", null, "Risultati del passo");
   titolo2.tabIndex = -1;
-  const chiudi = el30("button", "talos-button talos-button--ghost talos-button--sm", "Chiudi risultati");
+  const chiudi = el31("button", "talos-button talos-button--ghost talos-button--sm", "Chiudi risultati");
   chiudi.type = "button";
   testata.append(titolo2, chiudi);
-  const sommario = el30("p", "talos-wfg__result-summary");
-  const regione = el30("div", "talos-wfg__result-scroll");
+  const sommario = el31("p", "talos-wfg__result-summary");
+  const regione = el31("div", "talos-wfg__result-scroll");
   regione.setAttribute("role", "region");
   regione.setAttribute("aria-label", "Elenco dei risultati");
   regione.tabIndex = 0;
-  const elenco2 = el30("ol", "talos-wfg__outputs");
+  const elenco2 = el31("ol", "talos-wfg__outputs");
   regione.append(elenco2);
   pannello.append(testata, sommario, regione);
   host.append(pannello);
@@ -29189,47 +29679,47 @@ function montaPannelloRisultati(host, { client, sorgente, onRitorno } = {}) {
     const righe = [];
     for (const ref of dati.outputs) {
       if (!ref?.resultId) continue;
-      const item = el30("li", "talos-wfg__output");
+      const item = el31("li", "talos-wfg__output");
       item.dataset.resultId = ref.resultId;
       if (ref.isError) item.dataset.errore = "true";
-      item.append(el30("strong", "talos-wfg__output-id", ref.resultId));
-      item.append(el30("p", "talos-wfg__output-meta", [ref.kind || "risultato", ref.contentType || "tipo sconosciuto", dimensione(ref)].join(" · ")));
-      if (ref.isError) item.append(el30("p", "talos-wfg__output-error", "Il tool ha restituito un errore."));
+      item.append(el31("strong", "talos-wfg__output-id", ref.resultId));
+      item.append(el31("p", "talos-wfg__output-meta", [ref.kind || "risultato", ref.contentType || "tipo sconosciuto", dimensione(ref)].join(" · ")));
+      if (ref.isError) item.append(el31("p", "talos-wfg__output-error", "Il tool ha restituito un errore."));
       const risultato = full.get(ref.resultId);
       if (typeof risultato?.content === "string") {
-        const completo = el30("pre", "talos-wfg__output-full", risultato.content);
+        const completo = el31("pre", "talos-wfg__output-full", risultato.content);
         completo.tabIndex = -1;
         item.append(completo);
       } else if (risultato?.content === null) {
-        item.append(el30("p", "talos-wfg__vuoto", "Contenuto binario: usa Scarica per aprirlo."));
+        item.append(el31("p", "talos-wfg__vuoto", "Contenuto binario: usa Scarica per aprirlo."));
       } else {
         if (ref.preview) {
-          item.append(el30("p", "talos-wfg__output-preview-label", ref.truncated ? "Anteprima tagliata" : "Anteprima"));
-          item.append(el30("pre", "talos-wfg__output-preview", ref.preview));
-        } else item.append(el30("p", "talos-wfg__vuoto", "Anteprima non disponibile."));
-        if (risultato?.error) item.append(el30("p", "talos-wfg__output-error", `Lettura fallita: ${risultato.error}`));
+          item.append(el31("p", "talos-wfg__output-preview-label", ref.truncated ? "Anteprima tagliata" : "Anteprima"));
+          item.append(el31("pre", "talos-wfg__output-preview", ref.preview));
+        } else item.append(el31("p", "talos-wfg__vuoto", "Anteprima non disponibile."));
+        if (risultato?.error) item.append(el31("p", "talos-wfg__output-error", `Lettura fallita: ${risultato.error}`));
         if (testoAmmesso(ref.contentType)) {
-          const open = el30("button", "talos-wfg__link talos-wfg__output-open", risultato?.error ? "Riprova lettura" : "Mostra tutto");
+          const open = el31("button", "talos-wfg__link talos-wfg__output-open", risultato?.error ? "Riprova lettura" : "Mostra tutto");
           open.type = "button";
           open.disabled = Boolean(caricamento);
           open.addEventListener("click", () => void leggiTutto(ref));
           item.append(open);
         }
       }
-      const raw = el30("a", "talos-wfg__link talos-wfg__output-download", "Scarica");
+      const raw = el31("a", "talos-wfg__link talos-wfg__output-download", "Scarica");
       raw.href = client.outputRawUrl(sorgente, dati.nodeId, ref.resultId);
       raw.setAttribute("download", "");
       item.append(raw);
       righe.push(item);
     }
-    if (!righe.length) righe.push(el30("li", "talos-wfg__vuoto", "Nessun risultato disponibile."));
+    if (!righe.length) righe.push(el31("li", "talos-wfg__vuoto", "Nessun risultato disponibile."));
     if (Number.isSafeInteger(dati.nextOutputOffset)) {
-      const more = el30("button", "talos-wfg__link talos-wfg__output-more", `Mostra altri risultati (${Math.max(0, dati.totalOutputs - dati.outputs.length)} ancora)`);
+      const more = el31("button", "talos-wfg__link talos-wfg__output-more", `Mostra altri risultati (${Math.max(0, dati.totalOutputs - dati.outputs.length)} ancora)`);
       more.type = "button";
       more.disabled = Boolean(caricamento);
       more.addEventListener("click", () => void altraPagina());
-      const footer = el30("li", "talos-wfg__output-footer");
-      if (errorePagina) footer.append(el30("p", "talos-wfg__output-error", `Lettura fallita: ${errorePagina}`));
+      const footer = el31("li", "talos-wfg__output-footer");
+      if (errorePagina) footer.append(el31("p", "talos-wfg__output-error", `Lettura fallita: ${errorePagina}`));
       footer.append(more);
       righe.push(footer);
     }
@@ -29296,7 +29786,7 @@ function montaGrafoWorkflow(host, {
 } = {}) {
   const d = host.ownerDocument;
   const finestra = d.defaultView;
-  const el30 = (tag2, classe, testo2) => {
+  const el31 = (tag2, classe, testo2) => {
     const n = d.createElement(tag2);
     if (classe) n.className = classe;
     if (testo2 != null) n.textContent = testo2;
@@ -29311,8 +29801,8 @@ function montaGrafoWorkflow(host, {
     svg2.append(use);
     return svg2;
   };
-  const bottone6 = (testo2, classe, aria) => {
-    const b = el30("button", classe, testo2);
+  const bottone7 = (testo2, classe, aria) => {
+    const b = el31("button", classe, testo2);
     b.type = "button";
     if (aria) b.setAttribute("aria-label", aria);
     return b;
@@ -29361,59 +29851,59 @@ function montaGrafoWorkflow(host, {
   let generazione = 0, versioneDisposizione = 0;
   const elk = creaElk();
   const fonte = creaFonte({ client, sorgente, onCambio: () => programmaAggiorna() });
-  const root2 = el30("section", "talos-grafo talos-wfg");
+  const root2 = el31("section", "talos-grafo talos-wfg");
   root2.dataset.c = "GrafoAgenti";
   root2.dataset.sorgente = "workflow";
   root2.setAttribute("aria-label", "Diagramma della sessione");
-  const cima = el30("header", "talos-wfg__cima");
-  const titoli = el30("div", "talos-wfg__titoli");
-  const titolo2 = el30("h2", "talos-wfg__titolo", "Diagramma della sessione");
-  const sommario = el30("p", "talos-wfg__sommario");
-  const descrizione = el30("p", "talos-wfg__descrizione");
-  const fuocoChip = el30("p", "gv-fuoco");
+  const cima = el31("header", "talos-wfg__cima");
+  const titoli = el31("div", "talos-wfg__titoli");
+  const titolo2 = el31("h2", "talos-wfg__titolo", "Diagramma della sessione");
+  const sommario = el31("p", "talos-wfg__sommario");
+  const descrizione = el31("p", "talos-wfg__descrizione");
+  const fuocoChip = el31("p", "gv-fuoco");
   fuocoChip.hidden = true;
   titoli.append(titolo2, sommario, descrizione, fuocoChip);
-  const lato = el30("div", "talos-wfg__lato");
-  const aggiornato = el30("div", "talos-wfg__aggiornato");
-  const aggiornatoTesto = el30("span", "talos-wfg__aggiornato-ora");
-  const statoRun = el30("span", "talos-wfg__stato-run");
+  const lato = el31("div", "talos-wfg__lato");
+  const aggiornato = el31("div", "talos-wfg__aggiornato");
+  const aggiornatoTesto = el31("span", "talos-wfg__aggiornato-ora");
+  const statoRun = el31("span", "talos-wfg__stato-run");
   statoRun.setAttribute("role", "status");
   aggiornato.append(aggiornatoTesto, statoRun);
-  const torna = bottone6("Torna alla chat", "talos-button talos-button--secondary talos-button--sm talos-wfg__torna");
+  const torna = bottone7("Torna alla chat", "talos-button talos-button--secondary talos-button--sm talos-wfg__torna");
   torna.addEventListener("click", () => onChiudi?.());
-  const comandiRun = el30("div", "talos-wfg__run");
+  const comandiRun = el31("div", "talos-wfg__run");
   comandiRun.hidden = true;
-  const principaleRun = bottone6("", "talos-button talos-button--secondary talos-button--sm talos-wfg__run-principale");
+  const principaleRun = bottone7("", "talos-button talos-button--secondary talos-button--sm talos-wfg__run-principale");
   principaleRun.dataset.focusKey = "run:principale";
-  const menuRun = el30("div", "talos-wfg__menu-run");
-  const altroRun = bottone6("", "talos-wfg__icona-bottone", "Altri comandi del run");
+  const menuRun = el31("div", "talos-wfg__menu-run");
+  const altroRun = bottone7("", "talos-wfg__icona-bottone", "Altri comandi del run");
   altroRun.append(icona16("i-more"));
   altroRun.setAttribute("aria-haspopup", "menu");
   altroRun.setAttribute("aria-expanded", "false");
   altroRun.dataset.focusKey = "run:menu";
-  const vociRun = el30("div", "talos-wfg__menu talos-wfg__menu--destra");
+  const vociRun = el31("div", "talos-wfg__menu talos-wfg__menu--destra");
   vociRun.setAttribute("role", "menu");
   vociRun.setAttribute("aria-label", "Comandi del run");
   vociRun.hidden = true;
   menuRun.append(altroRun, vociRun);
   comandiRun.append(principaleRun, menuRun);
-  const esitoRun = el30("p", "talos-wfg__esito-run");
+  const esitoRun = el31("p", "talos-wfg__esito-run");
   esitoRun.setAttribute("role", "status");
   esitoRun.hidden = true;
-  const riga1 = el30("div", "talos-wfg__lato-riga");
+  const riga1 = el31("div", "talos-wfg__lato-riga");
   riga1.append(aggiornato, comandiRun, torna);
   lato.append(riga1, esitoRun);
   cima.append(titoli, lato);
-  const comandi = el30("div", "gv-comandi");
+  const comandi = el31("div", "gv-comandi");
   comandi.setAttribute("role", "toolbar");
   comandi.setAttribute("aria-label", "Comandi del diagramma");
-  const viste = el30("div", "gv-viste");
+  const viste = el31("div", "gv-viste");
   viste.setAttribute("role", "radiogroup");
   viste.setAttribute("aria-label", "Vista");
   const vociVista = new Map(VISTE2.map(([id4, testo2, ic]) => {
-    const b = bottone6("", "gv-vista");
+    const b = bottone7("", "gv-vista");
     b.setAttribute("role", "radio");
-    b.append(icona16(ic), el30("span", null, testo2));
+    b.append(icona16(ic), el31("span", null, testo2));
     b.dataset.vista = id4;
     b.dataset.focusKey = `vista:${id4}`;
     if (id4 === "tempo" && !run) {
@@ -29433,9 +29923,9 @@ function montaGrafoWorkflow(host, {
     scegliVista(prossima);
     vociVista.get(prossima).focus();
   });
-  const percorso = bottone6("", "talos-wfg__icona-bottone gv-percorso");
+  const percorso = bottone7("", "talos-wfg__icona-bottone gv-percorso");
   percorso.setAttribute("aria-pressed", "false");
-  percorso.append(icona16("i-history"), el30("span", null, "Percorso"));
+  percorso.append(icona16("i-history"), el31("span", null, "Percorso"));
   percorso.title = run ? "Mette in evidenza ciò che è già stato eseguito, il fronte che lavora adesso e ciò che è bloccato da un problema" : "Un workflow non ancora avviato non ha un percorso eseguito.";
   percorso.disabled = !run;
   percorso.addEventListener("click", () => {
@@ -29444,31 +29934,31 @@ function montaGrafoWorkflow(host, {
     void calcolaBloccati();
     evidenzia();
   });
-  const campoCerca = el30("input", "talos-wfg__cerca nopan");
+  const campoCerca = el31("input", "talos-wfg__cerca nopan");
   campoCerca.type = "search";
   campoCerca.placeholder = "Cerca agenti o fasi…";
   campoCerca.setAttribute("aria-label", "Cerca fra agenti e fasi del diagramma");
   campoCerca.hidden = true;
-  const cerca = bottone6("", "talos-wfg__icona-bottone", "Cerca nel diagramma");
+  const cerca = bottone7("", "talos-wfg__icona-bottone", "Cerca nel diagramma");
   cerca.append(icona16("i-search"));
-  const meno = bottone6("", "talos-wfg__icona-bottone", "Riduci lo zoom del 10%");
+  const meno = bottone7("", "talos-wfg__icona-bottone", "Riduci lo zoom del 10%");
   meno.append(icona16("i-minus"));
-  const percento2 = bottone6("100%", "talos-wfg__icona-bottone gv-percento", "Zoom al 100%");
-  const piu = bottone6("", "talos-wfg__icona-bottone", "Aumenta lo zoom del 10%");
+  const percento2 = bottone7("100%", "talos-wfg__icona-bottone gv-percento", "Zoom al 100%");
+  const piu = bottone7("", "talos-wfg__icona-bottone", "Aumenta lo zoom del 10%");
   piu.append(icona16("i-plus"));
-  const adatta = bottone6("", "talos-wfg__icona-bottone", "Adatta il diagramma alla finestra");
+  const adatta = bottone7("", "talos-wfg__icona-bottone", "Adatta il diagramma alla finestra");
   adatta.append(icona16("i-fit"));
-  const menuGruppi = el30("div", "talos-wfg__menu-vista");
-  const altroGruppi = bottone6("", "talos-wfg__icona-bottone", "Gruppi");
+  const menuGruppi = el31("div", "talos-wfg__menu-vista");
+  const altroGruppi = bottone7("", "talos-wfg__icona-bottone", "Gruppi");
   altroGruppi.append(icona16("i-layers"));
   altroGruppi.setAttribute("aria-haspopup", "menu");
   altroGruppi.setAttribute("aria-expanded", "false");
-  const vociGruppi = el30("div", "talos-wfg__menu talos-wfg__menu--destra");
+  const vociGruppi = el31("div", "talos-wfg__menu talos-wfg__menu--destra");
   vociGruppi.setAttribute("role", "menu");
   vociGruppi.setAttribute("aria-label", "Gruppi");
   vociGruppi.hidden = true;
   const voceGruppi = (testo2, azione) => {
-    const b = bottone6(testo2, "talos-wfg__menu-voce");
+    const b = bottone7(testo2, "talos-wfg__menu-voce");
     b.setAttribute("role", "menuitem");
     b.tabIndex = -1;
     b.addEventListener("click", () => {
@@ -29494,30 +29984,30 @@ function montaGrafoWorkflow(host, {
   });
   altroGruppi.addEventListener("click", () => vociGruppi.hidden ? apriMenu(altroGruppi, vociGruppi) : chiudiMenu(altroGruppi, vociGruppi));
   menuGruppi.append(altroGruppi, vociGruppi);
-  const comandiSinistra = el30("div", "gv-comandi-gruppo");
+  const comandiSinistra = el31("div", "gv-comandi-gruppo");
   comandiSinistra.append(viste, percorso);
-  const comandiDestra = el30("div", "gv-comandi-gruppo");
+  const comandiDestra = el31("div", "gv-comandi-gruppo");
   comandiDestra.append(campoCerca, cerca, meno, percento2, piu, adatta, menuGruppi);
   comandi.append(comandiSinistra, comandiDestra);
-  const esitoCerca = el30("p", "talos-wfg__esito-cerca");
+  const esitoCerca = el31("p", "talos-wfg__esito-cerca");
   esitoCerca.setAttribute("role", "status");
-  const avviso = el30("p", "talos-wfg__avviso");
+  const avviso = el31("p", "talos-wfg__avviso");
   avviso.setAttribute("role", "status");
-  const area = el30("div", "gv-area");
-  const lettura = el30("div", "talos-wfg__lettura gv-lettura");
+  const area = el31("div", "gv-area");
+  const lettura = el31("div", "talos-wfg__lettura gv-lettura");
   lettura.hidden = true;
-  const rip = el30("div", "gv-rip");
+  const rip = el31("div", "gv-rip");
   rip.setAttribute("role", "group");
   rip.setAttribute("aria-label", "Riproduzione del run");
   rip.hidden = !run;
   rip.dataset.pronta = "false";
-  const ripGioca = bottone6("", "gv-rip-gioca", "Riproduci il run dall’inizio");
+  const ripGioca = bottone7("", "gv-rip-gioca", "Riproduci il run dall’inizio");
   ripGioca.append(icona16("i-play"));
-  const ripVelocita = el30("div", "gv-rip-velocita");
+  const ripVelocita = el31("div", "gv-rip-velocita");
   ripVelocita.setAttribute("role", "radiogroup");
   ripVelocita.setAttribute("aria-label", "Velocità");
   for (const [v, testo2] of LENTEZZE) {
-    const b = bottone6(testo2, "gv-rip-v");
+    const b = bottone7(testo2, "gv-rip-v");
     b.setAttribute("role", "radio");
     b.setAttribute("aria-checked", String(v === stato2.velocita));
     b.title = v === 60 ? "Un minuto di lavoro al secondo" : `${v} volte più veloce`;
@@ -29527,38 +30017,38 @@ function montaGrafoWorkflow(host, {
     });
     ripVelocita.append(b);
   }
-  const ripBinario = el30("div", "gv-rip-binario nopan");
+  const ripBinario = el31("div", "gv-rip-binario nopan");
   ripBinario.tabIndex = 0;
   ripBinario.setAttribute("role", "slider");
   ripBinario.setAttribute("aria-label", "Istante del run");
-  const ripVuoti = el30("div", "gv-rip-vuoti");
-  const ripPieno = el30("div", "gv-rip-pieno");
-  const ripManiglia = el30("div", "gv-rip-maniglia");
+  const ripVuoti = el31("div", "gv-rip-vuoti");
+  const ripPieno = el31("div", "gv-rip-pieno");
+  const ripManiglia = el31("div", "gv-rip-maniglia");
   ripBinario.append(ripVuoti, ripPieno, ripManiglia);
-  const ripTesto = el30("span", "gv-rip-testo", "Carico la storia del run…");
-  const ripVivo = bottone6("Torna al vivo", "talos-button talos-button--secondary talos-button--sm gv-rip-vivo");
+  const ripTesto = el31("span", "gv-rip-testo", "Carico la storia del run…");
+  const ripVivo = bottone7("Torna al vivo", "talos-button talos-button--secondary talos-button--sm gv-rip-vivo");
   ripVivo.hidden = true;
-  const ripNota = el30("span", "gv-rip-nota", "Rigiocata dalla storia degli stati del registro");
+  const ripNota = el31("span", "gv-rip-nota", "Rigiocata dalla storia degli stati del registro");
   rip.append(ripGioca, ripVelocita, ripBinario, ripTesto, ripVivo, ripNota);
-  const dettaglio = el30("section", "talos-wfg__dettaglio gv-dettaglio");
+  const dettaglio = el31("section", "talos-wfg__dettaglio gv-dettaglio");
   dettaglio.hidden = true;
   dettaglio.setAttribute("aria-label", "Dettaglio dell'agente");
-  const detChi = el30("div", "talos-wfg__dettaglio-chi");
-  const detProve = el30("section", "talos-wfg__dettaglio-colonna");
+  const detChi = el31("div", "talos-wfg__dettaglio-chi");
+  const detProve = el31("section", "talos-wfg__dettaglio-colonna");
   detProve.setAttribute("aria-label", "Evidenze recenti");
-  const detCompito = el30("section", "talos-wfg__dettaglio-colonna");
+  const detCompito = el31("section", "talos-wfg__dettaglio-colonna");
   detCompito.setAttribute("aria-label", "Task corrente");
-  const detAltro = el30("div", "talos-wfg__dettaglio-altro");
-  const menuAgente = bottone6("", "talos-wfg__icona-bottone", "Altre azioni sull'agente");
+  const detAltro = el31("div", "talos-wfg__dettaglio-altro");
+  const menuAgente = bottone7("", "talos-wfg__icona-bottone", "Altre azioni sull'agente");
   menuAgente.append(icona16("i-more"));
   menuAgente.setAttribute("aria-haspopup", "menu");
   menuAgente.setAttribute("aria-expanded", "false");
   menuAgente.dataset.focusKey = "dettaglio:menu";
-  const vociAgente = el30("div", "talos-wfg__menu talos-wfg__menu--destra");
+  const vociAgente = el31("div", "talos-wfg__menu talos-wfg__menu--destra");
   vociAgente.setAttribute("role", "menu");
   vociAgente.hidden = true;
   const voceAgente = (testo2, azione) => {
-    const b = el30("button", "talos-wfg__menu-voce", testo2);
+    const b = el31("button", "talos-wfg__menu-voce", testo2);
     b.type = "button";
     b.setAttribute("role", "menuitem");
     b.tabIndex = -1;
@@ -29663,7 +30153,7 @@ function montaGrafoWorkflow(host, {
       sessione: datiSessione,
       statoRun: () => {
         const g = grezzoDelRun();
-        return { parola: STATI_RUN2[g] ?? g, tono: TONO_RUN[g] ?? "neutro" };
+        return { parola: STATI_RUN[g] ?? g, tono: TONO_RUN[g] ?? "neutro" };
       },
       conteggi: (phaseId) => fonte.conteggi(phaseId, stato2.t),
       riga: (id4) => fonte.riga(id4),
@@ -29881,24 +30371,24 @@ function montaGrafoWorkflow(host, {
     campoCerca.hidden = !stato2.cercaAperta;
     if (!p) return;
     root2.dataset.livello = livelloPer(p.total);
-    const forte = (testo2) => el30("strong", null, testo2);
-    sommario.replaceChildren(forte(plurale4(p.total, "agente", "agenti")), " organizzati in ", forte(plurale4(p.groups.length, "fase", "fasi")), ", coordinati dalla sessione principale");
+    const forte = (testo2) => el31("strong", null, testo2);
+    sommario.replaceChildren(forte(plurale3(p.total, "agente", "agenti")), " organizzati in ", forte(plurale3(p.groups.length, "fase", "fasi")), ", coordinati dalla sessione principale");
     descrizione.textContent = run ? "Vista del workflow con stato di avanzamento. Seleziona un agente per esplorare i dettagli." : "Workflow proposto e non ancora avviato: fasi e agenti pianificati, senza stati. Seleziona un agente per leggerne il compito.";
-    const alle = stato2.t === null ? ora2(stato2.aggiornatoAlle) : null;
-    aggiornatoTesto.textContent = stato2.t !== null ? `Riproduzione alle ${ora2(new Date(stato2.t).toISOString())}` : alle ? `Ultimo aggiornamento ${alle}` : "";
+    const alle = stato2.t === null ? ora(stato2.aggiornatoAlle) : null;
+    aggiornatoTesto.textContent = stato2.t !== null ? `Riproduzione alle ${ora(new Date(stato2.t).toISOString())}` : alle ? `Ultimo aggiornamento ${alle}` : "";
     const grezzo = grezzoDelRun();
     const terminati = stato2.t === null ? p.terminated : p.groups.reduce((somma3, g) => somma3 + (fonte.conteggi(g.phaseId, stato2.t)?.terminated ?? 0), 0);
-    const punto = el30("span", "talos-wfg__punto");
+    const punto = el31("span", "talos-wfg__punto");
     punto.dataset.tono = TONO_RUN[grezzo] ?? "neutro";
-    statoRun.replaceChildren(punto, el30("span", null, `${STATI_RUN2[grezzo] ?? grezzo}${run ? ` · ${cifra2(terminati ?? 0)} di ${cifra2(p.total)} terminati` : ""}`));
+    statoRun.replaceChildren(punto, el31("span", null, `${STATI_RUN[grezzo] ?? grezzo}${run ? ` · ${cifra(terminati ?? 0)} di ${cifra(p.total)} terminati` : ""}`));
     if (stato2.focus) {
       fuocoChip.hidden = false;
       const r = fonte.riga(stato2.focus.nodeId);
       const n = stato2.focus.insieme.size - 1;
-      const via = bottone6("", "gv-fuoco-via", "Togli il focus");
+      const via = bottone7("", "gv-fuoco-via", "Togli il focus");
       via.append(icona16("i-x"));
       via.addEventListener("click", () => togliFocus());
-      fuocoChip.replaceChildren(icona16("i-branch"), el30("span", null, `${stato2.focus.verso === "monte" ? "Da cosa dipende" : "Cosa aspetta"} ${r?.label ?? ""}: ${plurale4(n, "agente", "agenti")}`), via);
+      fuocoChip.replaceChildren(icona16("i-branch"), el31("span", null, `${stato2.focus.verso === "monte" ? "Da cosa dipende" : "Cosa aspetta"} ${r?.label ?? ""}: ${plurale3(n, "agente", "agenti")}`), via);
     } else fuocoChip.hidden = true;
   }
   function seleziona(nodeId, { muovi = true, riga: riga2 = null } = {}) {
@@ -29998,10 +30488,10 @@ function montaGrafoWorkflow(host, {
   }
   function pillola(statoGrezzo, classe = "") {
     const { parola: parola2, tono } = statoPasso(statoGrezzo);
-    const p = el30("span", `talos-wfg__pill ${classe}`.trim());
+    const p = el31("span", `talos-wfg__pill ${classe}`.trim());
     p.dataset.tono = tono;
     if (ICONA_TONO[tono]) p.append(icona16(ICONA_TONO[tono], "talos-wfg__pill-icona"));
-    p.append(el30("span", null, parola2));
+    p.append(el31("span", null, parola2));
     return p;
   }
   function disegnaDettaglio2() {
@@ -30014,21 +30504,21 @@ function montaGrafoWorkflow(host, {
     dettaglio.hidden = false;
     const riga2 = { ...fonte.riga(stato2.selezionato) ?? {}, ...info };
     const st2 = statoDi(stato2.selezionato) ?? riga2.state;
-    const segno = el30("span", "talos-wfg__dettaglio-icona");
+    const segno = el31("span", "talos-wfg__dettaglio-icona");
     segno.append(icona16(iconaDelPasso(riga2)));
-    const testi = el30("div", "talos-wfg__dettaglio-testi");
-    const testa = el30("div", "talos-wfg__dettaglio-testa");
-    testa.append(el30("h3", "talos-wfg__dettaglio-nome", riga2.label ?? riga2.nodeId), pillola(st2));
+    const testi = el31("div", "talos-wfg__dettaglio-testi");
+    const testa = el31("div", "talos-wfg__dettaglio-testa");
+    testa.append(el31("h3", "talos-wfg__dettaglio-nome", riga2.label ?? riga2.nodeId), pillola(st2));
     testi.append(testa);
     const tentativo = (fonte.tentativi().get(stato2.selezionato) ?? []).filter((x) => stato2.t === null || x.da <= stato2.t).at(-1);
     const fine = tentativo && tentativo.a !== null && (stato2.t === null || tentativo.a <= stato2.t) ? tentativo.a : null;
-    const quando = !run ? null : tentativo ? `${ora2(new Date(tentativo.da).toISOString())}${fine !== null ? `–${ora2(new Date(fine).toISOString())}` : " → in corso"}` : "non ancora partito";
+    const quando = !run ? null : tentativo ? `${ora(new Date(tentativo.da).toISOString())}${fine !== null ? `–${ora(new Date(fine).toISOString())}` : " → in corso"}` : "non ancora partito";
     const sotto = [modelloDelPasso(riga2, sessione.modello), durataDi(stato2.selezionato, st2), quando].filter(Boolean).join(" · ");
-    if (sotto) testi.append(el30("span", "talos-wfg__passo-modello", sotto));
-    const focus = el30("div", "gv-dettaglio-focus");
+    if (sotto) testi.append(el31("span", "talos-wfg__passo-modello", sotto));
+    const focus = el31("div", "gv-dettaglio-focus");
     for (const [verso, testo2] of [["monte", "Da cosa dipende"], ["valle", "Cosa aspetta"]]) {
       const n = stato2.lignaggio?.[verso];
-      const b = bottone6(n === void 0 ? testo2 : `${testo2} (${cifra2(n)})`, "talos-wfg__link");
+      const b = bottone7(n === void 0 ? testo2 : `${testo2} (${cifra(n)})`, "talos-wfg__link");
       b.dataset.focusKey = `focus:${verso}`;
       b.setAttribute("aria-pressed", String(stato2.focus?.nodeId === stato2.selezionato && stato2.focus.verso === verso));
       b.disabled = n === 0;
@@ -30039,37 +30529,37 @@ function montaGrafoWorkflow(host, {
     }
     testi.append(focus);
     detChi.replaceChildren(segno, testi);
-    const provaTesta = el30("h4", "talos-wfg__dettaglio-titolo");
-    provaTesta.append(icona16("i-doc"), el30("span", null, "Evidenze recenti"));
-    const elenco2 = el30("ul", "talos-wfg__evidenze");
-    if (!run) elenco2.append(el30("li", "talos-wfg__vuoto", "Il passo non è ancora partito."));
-    else if (!riga2.stepSessionId) elenco2.append(el30("li", "talos-wfg__vuoto", "La sessione del passo non è ancora nata."));
-    else if (!stato2.evidenze) elenco2.append(el30("li", "talos-wfg__vuoto", "Leggo gli attrezzi usati…"));
-    else if (stato2.evidenze.length === 0) elenco2.append(el30("li", "talos-wfg__vuoto", "Nessun attrezzo usato finora."));
+    const provaTesta = el31("h4", "talos-wfg__dettaglio-titolo");
+    provaTesta.append(icona16("i-doc"), el31("span", null, "Evidenze recenti"));
+    const elenco2 = el31("ul", "talos-wfg__evidenze");
+    if (!run) elenco2.append(el31("li", "talos-wfg__vuoto", "Il passo non è ancora partito."));
+    else if (!riga2.stepSessionId) elenco2.append(el31("li", "talos-wfg__vuoto", "La sessione del passo non è ancora nata."));
+    else if (!stato2.evidenze) elenco2.append(el31("li", "talos-wfg__vuoto", "Leggo gli attrezzi usati…"));
+    else if (stato2.evidenze.length === 0) elenco2.append(el31("li", "talos-wfg__vuoto", "Nessun attrezzo usato finora."));
     else for (const prova of stato2.evidenze) {
-      const voce = el30("li", "talos-wfg__evidenza");
-      voce.append(icona16(prova.esito ? "i-check" : "i-clock"), el30("span", "talos-wfg__evidenza-nome", maiuscola(nomeUmanoAttrezzo(prova.nome))));
+      const voce = el31("li", "talos-wfg__evidenza");
+      voce.append(icona16(prova.esito ? "i-check" : "i-clock"), el31("span", "talos-wfg__evidenza-nome", maiuscola(nomeUmanoAttrezzo(prova.nome))));
       if (prova.oggetto) {
-        const oggetto4 = el30("code", "talos-wfg__evidenza-oggetto");
+        const oggetto4 = el31("code", "talos-wfg__evidenza-oggetto");
         for (const pezzo2 of prova.oggetto.split(/(?<=[/\\])/u)) oggetto4.append(pezzo2, d.createElement("wbr"));
         oggetto4.title = prova.oggetto;
         voce.append(oggetto4);
       }
-      if (!prova.esito) voce.append(el30("span", "talos-wfg__evidenza-quando", "in corso"));
+      if (!prova.esito) voce.append(el31("span", "talos-wfg__evidenza-quando", "in corso"));
       elenco2.append(voce);
     }
-    if (stato2.t !== null && run) elenco2.append(el30("li", "talos-wfg__vuoto", "Sono quelle di adesso: le evidenze non hanno un orario e la riproduzione non le ferma."));
+    if (stato2.t !== null && run) elenco2.append(el31("li", "talos-wfg__vuoto", "Sono quelle di adesso: le evidenze non hanno un orario e la riproduzione non le ferma."));
     const outputParts = [provaTesta, elenco2];
     if (run && !info.carica && (info.totalOutputs > 0 || info.outputs?.length > 0)) {
       const total = Number.isSafeInteger(info.totalOutputs) ? info.totalOutputs : info.outputs?.length ?? 0;
-      outputParts.push(el30("h4", "talos-wfg__dettaglio-titolo", `Risultati (${cifra2(total)})`));
+      outputParts.push(el31("h4", "talos-wfg__dettaglio-titolo", `Risultati (${cifra(total)})`));
       const tipi = new Set((info.outputs ?? []).map((ref) => ref?.kind).filter(Boolean));
-      outputParts.push(el30("p", "talos-wfg__result-compact", [
-        `${cifra2(total)} risultati`,
+      outputParts.push(el31("p", "talos-wfg__result-compact", [
+        `${cifra(total)} risultati`,
         tipi.size ? [...tipi].join(", ") : "tipo sconosciuto",
         "Apri il pannello per anteprime, testo integrale e download"
       ].join(" · ")));
-      const open = bottone6("Apri risultati", "talos-wfg__link talos-wfg__result-trigger");
+      const open = bottone7("Apri risultati", "talos-wfg__link talos-wfg__result-trigger");
       open.dataset.azione = "apri-risultati";
       open.setAttribute("aria-controls", pannelloRisultati.elemento.id);
       open.setAttribute("aria-expanded", String(pannelloRisultati.apertoPer() === info.nodeId));
@@ -30081,20 +30571,20 @@ function montaGrafoWorkflow(host, {
       outputParts.push(open);
     }
     detProve.replaceChildren(...outputParts);
-    const compitoTesta = el30("h4", "talos-wfg__dettaglio-titolo");
-    compitoTesta.append(icona16("i-eye"), el30("span", null, "Task corrente"));
+    const compitoTesta = el31("h4", "talos-wfg__dettaglio-titolo");
+    compitoTesta.append(icona16("i-eye"), el31("span", null, "Task corrente"));
     const righe = String(info.instructions ?? "").split(/\r?\n/u).map((r) => r.trim()).filter(Boolean);
     const parti = [compitoTesta];
     if (righe.length) {
-      const primo2 = el30("p", "talos-wfg__compito-titolo", righe[0]);
+      const primo2 = el31("p", "talos-wfg__compito-titolo", righe[0]);
       primo2.title = righe[0];
       parti.push(primo2);
       if (righe.length > 1) {
-        const resto = el30("p", "talos-wfg__compito-resto", righe.slice(1).join(" "));
+        const resto = el31("p", "talos-wfg__compito-resto", righe.slice(1).join(" "));
         resto.title = resto.textContent;
         parti.push(resto);
       }
-    } else parti.push(el30("p", "talos-wfg__vuoto", info.carica ? "Leggo il compito…" : "Il compito di questo passo non è disponibile."));
+    } else parti.push(el31("p", "talos-wfg__vuoto", info.carica ? "Leggo il compito…" : "Il compito di questo passo non è disponibile."));
     detCompito.replaceChildren(...parti);
     apriConversazione.disabled = !riga2.stepSessionId || typeof onApriSessione !== "function";
   }
@@ -30117,12 +30607,12 @@ function montaGrafoWorkflow(host, {
   function disegnaLettura() {
     const p = fonte.panoramica;
     if (!p) return;
-    const albero = el30("ul", "talos-wfg__albero-lettura");
+    const albero = el31("ul", "talos-wfg__albero-lettura");
     albero.setAttribute("role", "tree");
     albero.setAttribute("aria-label", "Workflow per fasi e agenti");
     const voci = [];
     p.groups.forEach((gruppo, indice2) => {
-      const fase = el30("li", "talos-wfg__voce talos-wfg__voce--fase");
+      const fase = el31("li", "talos-wfg__voce talos-wfg__voce--fase");
       fase.setAttribute("role", "treeitem");
       const aperta2 = stato2.espansi.has(gruppo.phaseId);
       fase.setAttribute("aria-expanded", String(aperta2));
@@ -30133,10 +30623,10 @@ function montaGrafoWorkflow(host, {
       fase.dataset.chiave = `fase:${gruppo.phaseId}`;
       const c = fonte.conteggi(gruppo.phaseId, stato2.t);
       const cento = c && run ? percentualeFase({ progress: c.progress }) : null;
-      fase.append(el30("span", "talos-wfg__voce-testo", `${gruppo.label} — fase ${indice2 + 1} di ${p.groups.length}: ${plurale4(gruppo.total, "agente", "agenti")}, ${cento === null ? "non ancora avviata" : `${cifra2(c.terminated)} terminati su ${cifra2(gruppo.total)}`}`));
+      fase.append(el31("span", "talos-wfg__voce-testo", `${gruppo.label} — fase ${indice2 + 1} di ${p.groups.length}: ${plurale3(gruppo.total, "agente", "agenti")}, ${cento === null ? "non ancora avviata" : `${cifra(c.terminated)} terminati su ${cifra(gruppo.total)}`}`));
       voci.push(fase);
       if (aperta2) {
-        const gruppoAria = el30("ul", "talos-wfg__voce-figli");
+        const gruppoAria = el31("ul", "talos-wfg__voce-figli");
         gruppoAria.setAttribute("role", "group");
         const quanti = Math.min(gruppo.total, stato2.mostrati.get(gruppo.phaseId) ?? PAGINA_ELENCO);
         for (let i2 = 0; i2 < quanti; i2 += 1) {
@@ -30145,7 +30635,7 @@ function montaGrafoWorkflow(host, {
             fonte.chiedi(gruppo.phaseId, i2, quanti - 1);
             break;
           }
-          const passo = el30("li", "talos-wfg__voce");
+          const passo = el31("li", "talos-wfg__voce");
           passo.setAttribute("role", "treeitem");
           passo.setAttribute("aria-level", "2");
           passo.setAttribute("aria-setsize", String(gruppo.total));
@@ -30161,7 +30651,7 @@ function montaGrafoWorkflow(host, {
         }
         if (quanti < gruppo.total) {
           const resto = gruppo.total - quanti;
-          const altri = el30("li", "talos-wfg__voce talos-wfg__voce--altri", `Mostra altri ${cifra2(Math.min(PAGINA_ELENCO, resto))} agenti (${cifra2(resto)} ancora)`);
+          const altri = el31("li", "talos-wfg__voce talos-wfg__voce--altri", `Mostra altri ${cifra(Math.min(PAGINA_ELENCO, resto))} agenti (${cifra(resto)} ancora)`);
           altri.setAttribute("role", "treeitem");
           altri.setAttribute("aria-level", "2");
           altri.dataset.chiave = `altri:${gruppo.phaseId}`;
@@ -30326,13 +30816,19 @@ function montaGrafoWorkflow(host, {
     if (stato2.query) {
       const nodi = trovati().length;
       const fasi = fonte.panoramica?.groups.filter((g) => corrisponde(g.label)).length ?? 0;
-      esitoCerca.textContent = `${plurale4(nodi, "agente", "agenti")} e ${plurale4(fasi, "fase", "fasi")} corrispondono fra quelli caricati · Invio per andare al prossimo`;
+      esitoCerca.textContent = `${plurale3(nodi, "agente", "agenti")} e ${plurale3(fasi, "fase", "fasi")} corrispondono fra quelli caricati · Invio per andare al prossimo`;
     } else esitoCerca.textContent = "";
     evidenzia();
   });
   campoCerca.addEventListener("keydown", (e) => {
     if (e.key === "Escape") {
       e.preventDefault();
+      e.stopPropagation();
+      if (campoCerca.value) {
+        campoCerca.value = "";
+        campoCerca.dispatchEvent(new Event("input"));
+        return;
+      }
       cerca.click();
       return;
     }
@@ -30351,7 +30847,7 @@ function montaGrafoWorkflow(host, {
     const a = asse();
     const L = Math.max(1, a.lunghezza);
     for (const s of a.vuoti) {
-      const v = el30("span", "gv-rip-vuoto");
+      const v = el31("span", "gv-rip-vuoto");
       v.style.left = `${s.asseDa / L * 100}%`;
       v.style.width = `${Math.max(0.4, (s.asseA - s.asseDa) / L * 100)}%`;
       v.title = `${formattaDurata(s.a - s.da)} senza attività, compressi`;
@@ -30359,10 +30855,10 @@ function montaGrafoWorkflow(host, {
     }
     for (const voce of fonte.storia) {
       if (voce.scope !== "node" || voce.state !== "failed") continue;
-      const m = el30("span", "gv-rip-segno");
+      const m = el31("span", "gv-rip-segno");
       m.dataset.tono = "errore";
       m.style.left = `${a.versoAsse(Date.parse(voce.at)) / L * 100}%`;
-      m.title = `${fonte.riga(voce.nodeId)?.label ?? "Un agente"}: non riuscito alle ${ora2(voce.at)}`;
+      m.title = `${fonte.riga(voce.nodeId)?.label ?? "Un agente"}: non riuscito alle ${ora(voce.at)}`;
       ripVuoti.append(m);
     }
     aggiornaRiproduzione();
@@ -30379,7 +30875,7 @@ function montaGrafoWorkflow(host, {
     const istante2 = stato2.t ?? a.t1;
     const p = fonte.panoramica;
     const terminati = stato2.t === null ? p?.terminated ?? 0 : p?.groups.reduce((somma3, g) => somma3 + (fonte.conteggi(g.phaseId, stato2.t)?.terminated ?? 0), 0) ?? 0;
-    const testo2 = `${ora2(new Date(istante2).toISOString())} · ${cifra2(terminati)} di ${cifra2(p?.total ?? 0)} terminati`;
+    const testo2 = `${ora(new Date(istante2).toISOString())} · ${cifra(terminati)} di ${cifra(p?.total ?? 0)} terminati`;
     ripTesto.textContent = testo2;
     ripBinario.setAttribute("aria-valuemin", "0");
     ripBinario.setAttribute("aria-valuemax", String(Math.round(a.lunghezza / 6e4)));
@@ -30509,11 +31005,11 @@ function montaGrafoWorkflow(host, {
     const voci = [];
     menuRunVoci.forEach((voce, indice2) => {
       if (voce.pericolo && indice2 > 0) {
-        const sep = el30("div", "talos-wfg__menu-separatore");
+        const sep = el31("div", "talos-wfg__menu-separatore");
         sep.setAttribute("role", "separator");
         voci.push(sep);
       }
-      const b = el30("button", `talos-wfg__menu-voce${voce.pericolo ? " talos-wfg__menu-voce--pericolo" : ""}`, voce.etichetta);
+      const b = el31("button", `talos-wfg__menu-voce${voce.pericolo ? " talos-wfg__menu-voce--pericolo" : ""}`, voce.etichetta);
       b.type = "button";
       b.setAttribute("role", "menuitem");
       b.tabIndex = -1;
@@ -30552,8 +31048,8 @@ function montaGrafoWorkflow(host, {
         return;
       }
       const righe = righeAumento(anteprima3.ceilingRaise);
-      const testo2 = `${n === 1 ? "Il passo non riuscito riparte" : `I ${cifra2(n)} passi non riusciti ripartono`} coi tentativi da capo. ${righe.length ? "Il tetto del run sale di:" : "Il tetto del run non cambia."}`;
-      if (!await conferma({ titolo: `Riprovo ${plurale4(n, "passo", "passi")}?`, testo: testo2, righe, conferma: "Riprova" }) || morto) return;
+      const testo2 = `${n === 1 ? "Il passo non riuscito riparte" : `I ${cifra(n)} passi non riusciti ripartono`} coi tentativi da capo. ${righe.length ? "Il tetto del run sale di:" : "Il tetto del run non cambia."}`;
+      if (!await conferma({ titolo: `Riprovo ${plurale3(n, "passo", "passi")}?`, testo: testo2, righe, conferma: "Riprova" }) || morto) return;
     }
     stato2.inVolo = azione;
     disegnaRun();
@@ -30986,7 +31482,7 @@ function montaRailWorkflow(contenitore, {
   pianifica = (f) => (globalThis.requestAnimationFrame ?? setTimeout)(f)
 } = {}) {
   const d = contenitore.ownerDocument;
-  const el30 = (tag2, classe, testo2) => {
+  const el31 = (tag2, classe, testo2) => {
     const n = d.createElement(tag2);
     if (classe) n.className = classe;
     if (testo2 != null) n.textContent = testo2;
@@ -31001,8 +31497,8 @@ function montaRailWorkflow(contenitore, {
     svg2.append(use);
     return svg2;
   };
-  const bottone6 = (classe, testo2) => {
-    const b = el30("button", classe, testo2);
+  const bottone7 = (classe, testo2) => {
+    const b = el31("button", classe, testo2);
     b.type = "button";
     return b;
   };
@@ -31010,43 +31506,43 @@ function montaRailWorkflow(contenitore, {
   const stato2 = { panoramica: null, lista: nuovaLista(), modo: null, filtro: null, query: "", errore: null, carica: true, evidenza: null };
   let morto = false, seguendo = false, chiudiFlusso = () => {
   }, rilettura = null, ultimaRilettura = 0, generazione = 0, visto = null, ultimoConteggio = null;
-  const root2 = el30("section", "talos-wfr");
+  const root2 = el31("section", "talos-wfr");
   root2.dataset.c = "WorkflowRail";
   root2.setAttribute("aria-label", "Agenti del workflow");
-  const porta = bottone6("talos-wfr__link talos-wfr__porta", null);
-  porta.append(icona16("i-coordina"), el30("span", null, "Apri diagramma"));
+  const porta = bottone7("talos-wfr__link talos-wfr__porta", null);
+  porta.append(icona16("i-coordina"), el31("span", null, "Apri diagramma"));
   porta.addEventListener("click", () => onApri?.(null));
-  const testaAttenzione = el30("div", "talos-wfr__testa");
-  const vediTutto = bottone6("talos-wfr__link", "Vedi tutto");
-  testaAttenzione.append(el30("h3", "talos-wfr__titolo", "Richiede attenzione"), vediTutto);
-  const attenzione = el30("ul", "talos-wfr__attenzione");
+  const testaAttenzione = el31("div", "talos-wfr__testa");
+  const vediTutto = bottone7("talos-wfr__link", "Vedi tutto");
+  testaAttenzione.append(el31("h3", "talos-wfr__titolo", "Richiede attenzione"), vediTutto);
+  const attenzione = el31("ul", "talos-wfr__attenzione");
   attenzione.setAttribute("aria-label", "Richiede attenzione");
-  const campo2 = el30("div", "talos-wfr__campo");
-  const cerca = el30("input", "talos-wfr__cerca");
+  const campo2 = el31("div", "talos-wfr__campo");
+  const cerca = el31("input", "talos-wfr__cerca");
   cerca.type = "search";
   cerca.placeholder = "Cerca agenti, gruppi o stato…";
   cerca.setAttribute("aria-label", "Cerca agenti, gruppi o stato");
   campo2.append(icona16("i-search", "talos-wfr__lente"), cerca);
-  const interruttore = el30("div", "talos-wfr__modi");
+  const interruttore = el31("div", "talos-wfr__modi");
   interruttore.setAttribute("role", "group");
   interruttore.setAttribute("aria-label", "Mostra per");
-  const modoGruppi = bottone6("talos-wfr__modo", "Gruppi");
+  const modoGruppi = bottone7("talos-wfr__modo", "Gruppi");
   modoGruppi.dataset.modo = "gruppi";
-  const modoAgenti = bottone6("talos-wfr__modo", "Agenti");
+  const modoAgenti = bottone7("talos-wfr__modo", "Agenti");
   modoAgenti.dataset.modo = "agenti";
   interruttore.append(modoGruppi, modoAgenti);
-  const testaElenco = el30("div", "talos-wfr__testa talos-wfr__testa--elenco");
-  const titoloElenco = el30("h3", "talos-wfr__titolo");
-  const contoElenco = el30("span", "talos-wfr__conto");
-  const togliFiltro = bottone6("talos-wfr__togli", null);
-  togliFiltro.append(el30("span", null, "Mostra tutti"), icona16("i-x"));
+  const testaElenco = el31("div", "talos-wfr__testa talos-wfr__testa--elenco");
+  const titoloElenco = el31("h3", "talos-wfr__titolo");
+  const contoElenco = el31("span", "talos-wfr__conto");
+  const togliFiltro = bottone7("talos-wfr__togli", null);
+  togliFiltro.append(el31("span", null, "Mostra tutti"), icona16("i-x"));
   togliFiltro.setAttribute("aria-label", "Togli il filtro e mostra tutti gli agenti");
   testaElenco.append(titoloElenco, contoElenco, togliFiltro);
-  const elenco2 = el30("ul", "talos-wfr__elenco");
-  const altri = bottone6("talos-wfr__link talos-wfr__altri", "Mostra altri");
-  const esito = el30("p", "talos-wfr__esito");
+  const elenco2 = el31("ul", "talos-wfr__elenco");
+  const altri = bottone7("talos-wfr__link talos-wfr__altri", "Mostra altri");
+  const esito = el31("p", "talos-wfr__esito");
   esito.setAttribute("role", "status");
-  const totali = el30("section", "talos-wfr__totali");
+  const totali = el31("section", "talos-wfr__totali");
   totali.setAttribute("aria-label", "Totali del workflow");
   root2.append(porta, testaAttenzione, attenzione, campo2, interruttore, testaElenco, elenco2, altri, esito, totali);
   contenitore.append(root2);
@@ -31133,7 +31629,7 @@ function montaRailWorkflow(contenitore, {
   const voceAttenzione = /* @__PURE__ */ new Map();
   function disegnaAttenzione() {
     const { voci, daVedere } = vociAttenzione(stato2.panoramica);
-    vediTutto.textContent = `Vedi tutto (${cifra2(daVedere)})`;
+    vediTutto.textContent = `Vedi tutto (${cifra(daVedere)})`;
     vediTutto.hidden = daVedere === 0;
     vediTutto.setAttribute("aria-pressed", String(stato2.filtro === "attenzione"));
     const chiavi = voci.map((v) => v.chiave).join("|");
@@ -31141,8 +31637,8 @@ function montaRailWorkflow(contenitore, {
       attenzione.dataset.chiavi = chiavi;
       voceAttenzione.clear();
       attenzione.replaceChildren(...voci.map((v) => {
-        const li = el30("li");
-        const b = bottone6("talos-wfr__voce-attenzione");
+        const li = el31("li");
+        const b = bottone7("talos-wfr__voce-attenzione");
         b.dataset.chiave = v.chiave;
         b.addEventListener("click", () => scegliFiltro(b.dataset.chiave));
         li.append(b);
@@ -31155,17 +31651,17 @@ function montaRailWorkflow(contenitore, {
       b.dataset.tono = v.tono;
       b.dataset.zero = String(v.titolo.startsWith("0 "));
       b.setAttribute("aria-pressed", String(stato2.filtro === v.chiave));
-      const segno = el30("span", "talos-wfr__segno");
+      const segno = el31("span", "talos-wfr__segno");
       segno.append(icona16(v.icona));
-      const testi = el30("span", "talos-wfr__testi");
-      testi.append(el30("span", "talos-wfr__voce-titolo", v.titolo), el30("span", "talos-wfr__voce-sotto", v.sotto));
+      const testi = el31("span", "talos-wfr__testi");
+      testi.append(el31("span", "talos-wfr__voce-titolo", v.titolo), el31("span", "talos-wfr__voce-sotto", v.sotto));
       b.replaceChildren(segno, testi, icona16("i-chevron-right", "talos-wfr__freccia"));
       b.setAttribute("aria-label", `${v.titolo}: ${v.sotto}. Mostra solo questi nell'elenco`);
     }
   }
   const righeVive = /* @__PURE__ */ new Map();
   function rigaGruppo(gruppo) {
-    const b = bottone6("talos-wfr__gruppo");
+    const b = bottone7("talos-wfr__gruppo");
     b.dataset.phaseId = gruppo.phaseId;
     b.addEventListener("click", () => onApri?.({ gruppo: b.dataset.phaseId }));
     riempiGruppo(b, gruppo);
@@ -31174,21 +31670,21 @@ function montaRailWorkflow(contenitore, {
   function riempiGruppo(b, gruppo) {
     const cento = percentualeFase(gruppo);
     b.dataset.tono = tonoFase(gruppo);
-    const segno = el30("span", "talos-wfr__segno");
+    const segno = el31("span", "talos-wfr__segno");
     segno.append(icona16(iconaDellaFase(gruppo)));
-    const testi = el30("span", "talos-wfr__testi");
-    const barra = el30("span", "talos-wfr__barra");
-    const traccia = el30("span", "talos-wfr__barra-traccia");
-    const pieno = el30("span", "talos-wfr__barra-pieno");
+    const testi = el31("span", "talos-wfr__testi");
+    const barra = el31("span", "talos-wfr__barra");
+    const traccia = el31("span", "talos-wfr__barra-traccia");
+    const pieno = el31("span", "talos-wfr__barra-pieno");
     pieno.style.width = `${cento ?? 0}%`;
     traccia.append(pieno);
-    barra.append(traccia, el30("span", "talos-wfr__barra-valore", cento === null ? "—" : `${cento}%`));
-    testi.append(el30("span", "talos-wfr__voce-titolo", gruppo.label), el30("span", "talos-wfr__voce-sotto", plurale5(gruppo.total, "agente", "agenti")), barra);
+    barra.append(traccia, el31("span", "talos-wfr__barra-valore", cento === null ? "—" : `${cento}%`));
+    testi.append(el31("span", "talos-wfr__voce-titolo", gruppo.label), el31("span", "talos-wfr__voce-sotto", plurale5(gruppo.total, "agente", "agenti")), barra);
     b.replaceChildren(segno, testi, icona16("i-chevron-right", "talos-wfr__freccia"));
-    b.setAttribute("aria-label", `${gruppo.label}: ${plurale5(gruppo.total, "agente", "agenti")}, ${cento === null ? "non ancora avviato" : `${cifra2(gruppo.terminated)} terminati su ${cifra2(gruppo.total)}`}. Apri nel diagramma`);
+    b.setAttribute("aria-label", `${gruppo.label}: ${plurale5(gruppo.total, "agente", "agenti")}, ${cento === null ? "non ancora avviato" : `${cifra(gruppo.terminated)} terminati su ${cifra(gruppo.total)}`}. Apri nel diagramma`);
   }
   function rigaAgente(riga2) {
-    const b = bottone6("talos-wfr__agente");
+    const b = bottone7("talos-wfr__agente");
     b.dataset.nodoId = riga2.nodeId;
     b.dataset.phaseId = riga2.phaseId;
     b.addEventListener("click", () => onApri?.({ passo: b.dataset.nodoId, gruppo: b.dataset.phaseId }));
@@ -31198,7 +31694,7 @@ function montaRailWorkflow(contenitore, {
   function riempiAgente(b, riga2) {
     const { parola: parola2, tono } = statoPasso2(riga2.state);
     b.dataset.tono = tono;
-    b.replaceChildren(el30("span", "talos-wfr__punto"), el30("span", "talos-wfr__nome", riga2.label), el30("span", "talos-wfr__stato", parola2));
+    b.replaceChildren(el31("span", "talos-wfr__punto"), el31("span", "talos-wfr__nome", riga2.label), el31("span", "talos-wfr__stato", parola2));
     b.setAttribute("aria-label", `${riga2.label}: ${parola2}. Apri nel diagramma`);
   }
   function applicaEvidenza() {
@@ -31216,14 +31712,14 @@ function montaRailWorkflow(contenitore, {
     togliFiltro.hidden = !stato2.filtro;
     if (stato2.modo === "gruppi") {
       titoloElenco.textContent = "Gruppi del workflow";
-      contoElenco.textContent = cifra2(p.groups.length);
+      contoElenco.textContent = cifra(p.groups.length);
       const gruppi = p.groups.filter((g) => corrisponde(g.label));
       const firma = `g|${gruppi.map((g) => g.phaseId).join(",")}`;
       if (firma !== firmaElenco) {
         firmaElenco = firma;
         righeVive.clear();
         elenco2.replaceChildren(...gruppi.map((g) => {
-          const li = el30("li");
+          const li = el31("li");
           const b = rigaGruppo(g);
           righeVive.set(g.phaseId, b);
           li.append(b);
@@ -31236,14 +31732,14 @@ function montaRailWorkflow(contenitore, {
       const filtro = stato2.filtro ? FILTRI_RAIL[stato2.filtro] : null;
       const totale2 = filtro ? contaFiltro(p, stato2.filtro) : p.total;
       titoloElenco.textContent = filtro ? filtro.titolo : "Agenti della sessione";
-      contoElenco.textContent = cifra2(totale2);
+      contoElenco.textContent = cifra(totale2);
       const righe = stato2.lista.righe.filter((r) => corrisponde(r.label, statoPasso2(r.state).parola));
       const firma = `a|${stato2.filtro ?? ""}|${righe.map((r) => r.nodeId).join(",")}`;
       if (firma !== firmaElenco) {
         firmaElenco = firma;
         righeVive.clear();
         elenco2.replaceChildren(...righe.map((r) => {
-          const li = el30("li");
+          const li = el31("li");
           const b = rigaAgente(r);
           righeVive.set(r.nodeId, b);
           li.append(b);
@@ -31252,22 +31748,22 @@ function montaRailWorkflow(contenitore, {
       } else for (const r of righe) riempiAgente(righeVive.get(r.nodeId), r);
       const restano = Math.max(0, totale2 - stato2.lista.righe.length);
       altri.hidden = stato2.lista.finite || restano === 0;
-      altri.textContent = `Mostra altri (${cifra2(restano)} ancora)`;
+      altri.textContent = `Mostra altri (${cifra(restano)} ancora)`;
       if (filtro && !stato2.lista.righe.length && stato2.lista.finite) esito.textContent = filtro.vuoto;
-      else esito.textContent = stato2.query ? `${plurale5(righe.length, "agente", "agenti")} fra i ${cifra2(stato2.lista.righe.length)} caricati` : "";
+      else esito.textContent = stato2.query ? `${plurale5(righe.length, "agente", "agenti")} fra i ${cifra(stato2.lista.righe.length)} caricati` : "";
     }
     applicaEvidenza();
   }
   function disegnaTotali() {
     const p = stato2.panoramica;
     const cella = (etichetta3, valore, { icona: nome = null, tono = null } = {}) => {
-      const c = el30("div", "talos-wfr__totale");
+      const c = el31("div", "talos-wfr__totale");
       if (tono) c.dataset.tono = tono;
-      const e = el30("span", "talos-wfr__totale-etichetta");
+      const e = el31("span", "talos-wfr__totale-etichetta");
       if (nome) e.append(icona16(nome));
-      else if (tono) e.append(el30("span", "talos-wfr__punto"));
-      e.append(el30("span", null, etichetta3));
-      c.append(e, el30("strong", "talos-wfr__totale-valore", cifra2(valore)));
+      else if (tono) e.append(el31("span", "talos-wfr__punto"));
+      e.append(el31("span", null, etichetta3));
+      c.append(e, el31("strong", "talos-wfr__totale-valore", cifra(valore)));
       return c;
     };
     const conti = conteggiFase(p.groups.reduce((acc, g) => {
@@ -31400,7 +31896,7 @@ var init_rail_workflow = __esm({
     RILETTURA_MINIMA_MS2 = 1e3;
     RUN_FINITI2 = /* @__PURE__ */ new Set(["succeeded", "failed", "cancelled"]);
     statoPasso2 = (stato2) => STATI_PASSO[stato2] ?? { parola: "Stato sconosciuto", tono: "neutro" };
-    plurale5 = (n, uno2, molti) => `${cifra2(n)} ${n === 1 ? uno2 : molti}`;
+    plurale5 = (n, uno2, molti) => `${cifra(n)} ${n === 1 ? uno2 : molti}`;
     somma2 = (counts, stati2) => stati2.reduce((tot, st2) => tot + (counts?.[st2] ?? 0), 0);
     FILTRI_RAIL = Object.freeze({
       decisioni: Object.freeze({ titolo: "Decisioni in attesa", stati: Object.freeze(["waiting_human"]), vuoto: "Nessuna decisione in attesa." }),
@@ -31412,7 +31908,7 @@ var init_rail_workflow = __esm({
 });
 
 // src/components/grafo-sorgenti.js
-function bottone4(d, testo2) {
+function bottone5(d, testo2) {
   const nodo13 = d.createElement("button");
   nodo13.type = "button";
   nodo13.textContent = testo2;
@@ -31432,7 +31928,7 @@ function montaSelettoreRail(contenitore, { iniziale = "workflow", onSelezione } 
   const pannelli = /* @__PURE__ */ new Map();
   for (const tipo of TIPI2) {
     const etichetta3 = tipo === "workflow" ? "Workflow" : "Deleghe";
-    const tab = bottone4(d, etichetta3);
+    const tab = bottone5(d, etichetta3);
     const pannello = d.createElement("section");
     tab.id = `${id4}-${tipo}-tab`;
     tab.className = "talos-sorgenti__scheda";
@@ -31499,7 +31995,7 @@ function montaSelettoreGrafo(testata, { iniziale, onSelezione } = {}) {
   gruppo.setAttribute("aria-label", "Mostra diagramma");
   const pulsanti = /* @__PURE__ */ new Map();
   for (const tipo of TIPI2) {
-    const tab = bottone4(d, tipo === "workflow" ? "Workflow" : "Deleghe");
+    const tab = bottone5(d, tipo === "workflow" ? "Workflow" : "Deleghe");
     tab.className = "talos-sorgenti__scheda";
     tab.addEventListener("click", () => {
       if (tipo !== iniziale) onSelezione?.(tipo);
@@ -32418,45 +32914,45 @@ function creaLettoreOutput({ receipt, API: API2, fetchFn, signal, document: doc 
   let current = normalizzaRicevutaOutput(receipt);
   if (!current) invalid();
   const client = creaClientOutput({ receipt: current, API: API2, fetchFn });
-  const el30 = (tag2, text2, className) => {
+  const el31 = (tag2, text2, className) => {
     const n = doc.createElement(tag2);
     if (text2) n.textContent = text2;
     if (className) n.className = className;
     return n;
   };
-  const root2 = el30("details", null, "talos-process-output");
-  const summary = el30("summary", "Consulta output conservato");
-  const controls = el30("div", null, "talos-process-output__controls");
-  const label = el30("label", "Flusso "), select = el30("select");
+  const root2 = el31("details", null, "talos-process-output");
+  const summary = el31("summary", "Consulta output conservato");
+  const controls = el31("div", null, "talos-process-output__controls");
+  const label = el31("label", "Flusso "), select = el31("select");
   select.setAttribute("aria-label", "Flusso dell’output");
   for (const [value, text2] of [["stdout", "Uscita"], ["stderr", "Diagnostica"]]) {
-    const option = el30("option", text2);
+    const option = el31("option", text2);
     option.value = value;
     select.append(option);
   }
   label.append(select);
   const button2 = (text2) => {
-    const n = el30("button", text2, "talos-button talos-button--secondary");
+    const n = el31("button", text2, "talos-button talos-button--secondary");
     n.type = "button";
     return n;
   };
   const refresh = button2("Aggiorna"), first = button2("Prima pagina"), next = button2("Pagina successiva");
-  const status = el30("p", stateLabel[current.state], "talos-process-output__status");
+  const status = el31("p", stateLabel[current.state], "talos-process-output__status");
   status.setAttribute("role", "status");
   status.setAttribute("aria-live", "polite");
-  const range = el30("p", "", "talos-process-output__range");
-  const pre = el30("pre"), code = el30("code");
+  const range = el31("p", "", "talos-process-output__range");
+  const pre = el31("pre"), code = el31("code");
   pre.append(code);
   pre.tabIndex = 0;
   pre.setAttribute("aria-label", "Contenuto della pagina di output");
-  const download = el30("a", "Scarica questa pagina", "talos-button talos-button--secondary");
+  const download = el31("a", "Scarica questa pagina", "talos-button talos-button--secondary");
   download.setAttribute("download", "");
   download.hidden = true;
-  const completeDownload = el30("a", "Scarica output conservato", "talos-button talos-button--secondary");
+  const completeDownload = el31("a", "Scarica output conservato", "talos-button talos-button--secondary");
   completeDownload.setAttribute("download", "");
   completeDownload.hidden = true;
   completeDownload.title = "Salva i byte conservati di questo flusso al momento dello scaricamento.";
-  const nav = el30("div", null, "talos-process-output__controls");
+  const nav = el31("div", null, "talos-process-output__controls");
   nav.append(first, next, download, completeDownload);
   controls.append(label, refresh);
   root2.append(summary, controls, status, range, pre, nav);
@@ -32491,7 +32987,7 @@ function creaLettoreOutput({ receipt, API: API2, fetchFn, signal, document: doc 
       if (closed || version !== epoch || signal?.aborted) return;
       page = p;
       status.textContent = stateLabel[p.state];
-      if (!["excluded", "absent", "not-applicable"].includes(p.footerStatus)) status.textContent += " La separazione dei dati di controllo non è confermata.";
+      if (p.availableBytes > 0 && !["excluded", "absent", "not-applicable"].includes(p.footerStatus)) status.textContent += " In fondo potrebbe esserci un segno interno di TALOS, che non fa parte dell’output del comando.";
       range.textContent = `${p.bytes ? `Byte ${p.offset + 1}–${p.offset + p.bytes}` : "Nessun byte in questa pagina"} su ${p.availableBytes.toLocaleString("it-IT")} disponibili. Conservati ${p.storedBytes.toLocaleString("it-IT")} di ${p.observedBytes.toLocaleString("it-IT")} byte ricevuti nel flusso.`;
       code.textContent = p.text === null ? "Questa pagina contiene dati binari o testo non UTF-8. Scarica i byte originali per conservarli senza conversioni." : p.text || "Il flusso non contiene testo.";
       first.disabled = p.offset === 0;
@@ -33585,8 +34081,8 @@ function creaBarraScopertaHf(d = globalThis.document, { onCambia } = {}) {
   conteggio3.setAttribute("role", "status");
   conteggio3.setAttribute("aria-live", "polite");
   const forte = el20(d, "strong", "", "—");
-  const coda = el20(d, "span", "talos-muted", "");
-  conteggio3.append(forte, coda);
+  const coda2 = el20(d, "span", "talos-muted", "");
+  conteggio3.append(forte, coda2);
   const azzera = el20(d, "button", "talos-button talos-button--ghost talos-button--sm", "Azzera i filtri");
   azzera.type = "button";
   azzera.dataset.hfAzzera = "";
@@ -33659,7 +34155,7 @@ function creaBarraScopertaHf(d = globalThis.document, { onCambia } = {}) {
     }
     const formatta = new Intl.NumberFormat("it-IT");
     forte.textContent = `${formatta.format(visibili.length)} ${visibili.length === 1 ? "modello" : "modelli"}`;
-    coda.textContent = stato2.altri ? ` su ${formatta.format(risultati.length)} caricati · altri disponibili` : ` su ${formatta.format(risultati.length)} ${risultati.length === 1 ? "caricato" : "caricati"}`;
+    coda2.textContent = stato2.altri ? ` su ${formatta.format(risultati.length)} caricati · altri disponibili` : ` su ${formatta.format(risultati.length)} ${risultati.length === 1 ? "caricato" : "caricati"}`;
     azzera.hidden = !FACCETTE_HF.some(({ chiave }) => filtri[chiave].length);
     barra.dataset.hfDati = stato2.senzaDati ? "non-misurati" : "misurati";
   }
@@ -35339,7 +35835,7 @@ function badge4(d, testo2, tono) {
   b.dataset.c = "Badge";
   return b;
 }
-function bottone5(d, testo2, classe, azione, fn2) {
+function bottone6(d, testo2, classe, azione, fn2) {
   const b = el23(d, "button", classe, testo2);
   b.type = "button";
   b.dataset.c = "Button";
@@ -35362,21 +35858,21 @@ function creaStatoVuotoDownload(radice2, { azioni = {}, document: d = globalThis
        chiamare «di esempio» quello vero di Hugging Face sarebbe una bugia sul prodotto. */
     el23(d, "p", "", "Il prossimo modello può aspettare. Oppure puoi esplorare il catalogo.")
   );
-  const bottone6 = el23(d, "button", "talos-button talos-button--secondary");
-  bottone6.type = "button";
-  bottone6.dataset.c = "Button";
-  bottone6.dataset.action = "esploraCatalogo";
-  bottone6.append(icona11(d, "i-plus"), el23(d, "span", "", "Esplora il catalogo"));
-  if (typeof azioni.esploraCatalogo === "function") bottone6.addEventListener("click", azioni.esploraCatalogo);
+  const bottone7 = el23(d, "button", "talos-button talos-button--secondary");
+  bottone7.type = "button";
+  bottone7.dataset.c = "Button";
+  bottone7.dataset.action = "esploraCatalogo";
+  bottone7.append(icona11(d, "i-plus"), el23(d, "span", "", "Esplora il catalogo"));
+  if (typeof azioni.esploraCatalogo === "function") bottone7.addEventListener("click", azioni.esploraCatalogo);
   else {
     const comando = comandoCatalogo(radice2);
-    if (comando) bottone6.addEventListener("click", () => comandoCatalogo(radice2)?.click());
+    if (comando) bottone7.addEventListener("click", () => comandoCatalogo(radice2)?.click());
     else {
-      bottone6.disabled = true;
-      bottone6.title = "Da questa schermata non c’è un catalogo da aprire.";
+      bottone7.disabled = true;
+      bottone7.title = "Da questa schermata non c’è un catalogo da aprire.";
     }
   }
-  riquadro.append(bottone6);
+  riquadro.append(bottone7);
   return riquadro;
 }
 function leggiStatoAzioni(panel) {
@@ -35512,7 +36008,7 @@ function creaRigaDownload(dati, { azioni = {}, azioniModello = null, statoAzioni
     const eliminato = esito?.azione === "elimina" && esito.tono === "success";
     const piede2 = el23(d, "div", "talos-toolbar");
     const nota = el23(d, "span", "talos-muted", eliminato ? "Eliminato dal disco: per usarlo di nuovo va scaricato o importato." : "Disponibile nei modelli installati.");
-    const vedi = bottone5(d, "Vedi modello", "talos-button talos-button--secondary talos-button--sm", "vediModello", () => azioni.vediModello?.(dati.id));
+    const vedi = bottone6(d, "Vedi modello", "talos-button talos-button--secondary talos-button--sm", "vediModello", () => azioni.vediModello?.(dati.id));
     if (eliminato) {
       vedi.disabled = true;
       vedi.title = "Questo modello non è più sul disco.";
@@ -35523,8 +36019,8 @@ function creaRigaDownload(dati, { azioni = {}, azioniModello = null, statoAzioni
     if (azioniModello && !eliminato && !apertoQui) {
       const cluster2 = el23(d, "div", "talos-cluster");
       cluster2.append(
-        bottone5(d, "Rinomina", "talos-button talos-button--secondary talos-button--sm", "rinominaModello", () => azioniModello.apriRinomina(dati.id, dati.nome)),
-        bottone5(d, "Elimina dal disco", "talos-button talos-button--secondary talos-button--sm", "eliminaModello", () => azioniModello.apriElimina(dati.id))
+        bottone6(d, "Rinomina", "talos-button talos-button--secondary talos-button--sm", "rinominaModello", () => azioniModello.apriRinomina(dati.id, dati.nome)),
+        bottone6(d, "Elimina dal disco", "talos-button talos-button--secondary talos-button--sm", "eliminaModello", () => azioniModello.apriElimina(dati.id))
       );
       piede2.appendChild(cluster2);
     }
@@ -35560,7 +36056,7 @@ function creaRigaDownload(dati, { azioni = {}, azioniModello = null, statoAzioni
     const corpo = el23(d, "div", "talos-check-card__body");
     corpo.append(el23(d, "b", "", dati.errore.titolo), el23(d, "p", "", dati.errore.testo));
     const az = el23(d, "div", "talos-check-card__actions");
-    const dettagli2 = bottone5(d, "Dettagli", "talos-button talos-button--ghost talos-button--sm", "dettagli", null);
+    const dettagli2 = bottone6(d, "Dettagli", "talos-button talos-button--ghost talos-button--sm", "dettagli", null);
     dettagli2.title = dati.errore.dettagli;
     dettagli2.setAttribute("aria-label", `Dettagli: ${dati.errore.dettagli}`);
     dettagli2.addEventListener("click", () => {
@@ -35573,7 +36069,7 @@ function creaRigaDownload(dati, { azioni = {}, azioniModello = null, statoAzioni
       n.dataset.dettagli = "";
       corpo.insertBefore(n, az);
     });
-    az.append(bottone5(d, "Riprendi", "talos-button talos-button--secondary talos-button--sm", "riprendiDownload", () => azioni.riprendi?.(dati.id)), dettagli2);
+    az.append(bottone6(d, "Riprendi", "talos-button talos-button--secondary talos-button--sm", "riprendiDownload", () => azioni.riprendi?.(dati.id)), dettagli2);
     corpo.appendChild(az);
     card.appendChild(corpo);
     art.appendChild(card);
@@ -35607,10 +36103,10 @@ function creaRigaDownload(dati, { azioni = {}, azioniModello = null, statoAzioni
   } else if (dati.stato === "verifying") misure.append(d.createTextNode(" · verifica dell'impronta in corso"));
   else if (dati.stato === "paused") misure.append(d.createTextNode(" · in pausa"));
   const cluster = el23(d, "div", "talos-cluster");
-  if (["queued", "running"].includes(dati.stato)) cluster.appendChild(bottone5(d, "Pausa", "talos-button talos-button--secondary talos-button--sm", "pausa", () => azioni.pausa?.(dati.id)));
-  if (dati.stato === "paused") cluster.appendChild(bottone5(d, "Riprendi", "talos-button talos-button--secondary talos-button--sm", "riprendi", () => azioni.riprendi?.(dati.id)));
+  if (["queued", "running"].includes(dati.stato)) cluster.appendChild(bottone6(d, "Pausa", "talos-button talos-button--secondary talos-button--sm", "pausa", () => azioni.pausa?.(dati.id)));
+  if (dati.stato === "paused") cluster.appendChild(bottone6(d, "Riprendi", "talos-button talos-button--secondary talos-button--sm", "riprendi", () => azioni.riprendi?.(dati.id)));
   if (!["ready", "failed", "cancelled"].includes(dati.stato)) {
-    const annulla = bottone5(d, "Annulla", "talos-button talos-button--ghost talos-button--sm", "annulla", () => azioni.annulla?.(dati.id));
+    const annulla = bottone6(d, "Annulla", "talos-button talos-button--ghost talos-button--sm", "annulla", () => azioni.annulla?.(dati.id));
     annulla.dataset.apreVelo = "veloAnnullaDownload";
     cluster.appendChild(annulla);
   }
@@ -35638,8 +36134,8 @@ function statoVuotoDelPannello(panel, d, azioni = {}, serve = true) {
   }
   if (presente) return presente;
   const vuoto = creaStatoVuotoDownload(panel, { azioni, document: d });
-  const coda = panel.querySelector('[data-c="DownloadQueue"]');
-  if (coda) coda.after(vuoto);
+  const coda2 = panel.querySelector('[data-c="DownloadQueue"]');
+  if (coda2) coda2.after(vuoto);
   else panel.append(vuoto);
   return vuoto;
 }
@@ -35666,7 +36162,7 @@ function aggiornaCodaDownload(panel, items = [], opzioni = {}) {
   const statoReso = { ...statoAzioni, esiti: esitiVivi, aperto: apertoVivo };
   if (JSON.stringify(statoReso) !== JSON.stringify(statoAzioni)) scriviStatoAzioni(panel, statoReso);
   const conteggi = panel.querySelector(".talos-count");
-  const coda = panel.querySelector('[data-c="DownloadQueue"]');
+  const coda2 = panel.querySelector('[data-c="DownloadQueue"]');
   const c = riepilogoCoda(items);
   const senzaRighe = items.length === 0;
   const visibili = items.filter((i2) => !soloAttivi || (STATI_DOWNLOAD[i2.state]?.attivo ?? true));
@@ -35691,24 +36187,24 @@ function aggiornaCodaDownload(panel, items = [], opzioni = {}) {
       filtro.setAttribute("aria-pressed", String(soloAttivi));
     }
   }
-  if (!coda) return;
+  if (!coda2) return;
   if (errore) {
-    if (coda.hidden) coda.hidden = false;
-    coda.replaceChildren(el23(d, "p", "talos-card--pad talos-muted", `Coda non disponibile: ${errore.message || errore}`));
+    if (coda2.hidden) coda2.hidden = false;
+    coda2.replaceChildren(el23(d, "p", "talos-card--pad talos-muted", `Coda non disponibile: ${errore.message || errore}`));
     statoVuotoDelPannello(panel, d, azioni, false);
     return;
   }
   statoVuotoDelPannello(panel, d, azioni, senzaRighe);
-  if (coda.hidden !== senzaRighe) coda.hidden = senzaRighe;
+  if (coda2.hidden !== senzaRighe) coda2.hidden = senzaRighe;
   if (senzaRighe) {
-    if (coda.childElementCount) coda.replaceChildren();
+    if (coda2.childElementCount) coda2.replaceChildren();
     return;
   }
   if (!visibili.length) {
-    coda.replaceChildren(el23(d, "p", "talos-card--pad talos-muted", "Nessun download attivo. I download finiti restano nella coda: «Mostra tutti» li riporta."));
+    coda2.replaceChildren(el23(d, "p", "talos-card--pad talos-muted", "Nessun download attivo. I download finiti restano nella coda: «Mostra tutti» li riporta."));
     return;
   }
-  coda.replaceChildren(...visibili.flatMap((i2) => [d.createTextNode("\n"), creaRigaDownload(datiDownload(i2, { stima: stime.get?.(i2.id) || null }), {
+  coda2.replaceChildren(...visibili.flatMap((i2) => [d.createTextNode("\n"), creaRigaDownload(datiDownload(i2, { stima: stime.get?.(i2.id) || null }), {
     azioni,
     azioniModello,
     statoAzioni: azioniModello ? statoReso : null,
@@ -35721,10 +36217,10 @@ function montaCodaDownload(originale, canonico) {
   originale.replaceChildren(...canonico.children);
   originale.dataset.downloadMontato = "true";
   canonico.dataset.downloadMontato = "true";
-  const coda = originale.querySelector('[data-c="DownloadQueue"]') || originale.querySelector("#modelLabDownloadsList");
-  if (coda) {
-    coda.id = "modelLabDownloadsList";
-    coda.replaceChildren();
+  const coda2 = originale.querySelector('[data-c="DownloadQueue"]') || originale.querySelector("#modelLabDownloadsList");
+  if (coda2) {
+    coda2.id = "modelLabDownloadsList";
+    coda2.replaceChildren();
   }
 }
 function stimaFraLetture(prima, dopo) {
@@ -35768,17 +36264,17 @@ function accorciaPercorso(percorso, massimo = 46) {
   if (testo2.length <= massimo) return testo2;
   const pezzi = testo2.split(/(?<=[\\/])/);
   const radice2 = pezzi[0] + (pezzi[1] ?? "");
-  let coda = "";
+  let coda2 = "";
   for (let i2 = pezzi.length - 1; i2 > 1; i2 -= 1) {
-    const prova = pezzi[i2] + coda;
+    const prova = pezzi[i2] + coda2;
     if (radice2.length + 1 + prova.length > massimo) break;
-    coda = prova;
+    coda2 = prova;
   }
-  if (!coda) {
+  if (!coda2) {
     const quanti = Math.max(6, massimo - radice2.length - 1);
-    coda = testo2.slice(-quanti);
+    coda2 = testo2.slice(-quanti);
   }
-  return `${radice2}…${coda}`;
+  return `${radice2}…${coda2}`;
 }
 function prossimaAttivaDopoChiusura(lista, indice2) {
   const resto = lista.filter((_, i2) => i2 !== indice2);
@@ -35870,7 +36366,7 @@ function creaSchede(striscia, {
   suClick = null,
   suDoppioClick = null,
   inerte = null,
-  coda = null,
+  coda: coda2 = null,
   tag: tag2 = "button",
   controlla = null,
   scorre = false,
@@ -35922,15 +36418,15 @@ function creaSchede(striscia, {
     }, { passive: false });
   }
   let inVistaInSospeso = null;
-  function portaInVista(bottone6) {
-    if (!scorre || !bottone6) return;
+  function portaInVista(bottone7) {
+    if (!scorre || !bottone7) return;
     if (contenitore.clientWidth === 0) {
-      inVistaInSospeso = bottone6.dataset[chiave] ?? null;
+      inVistaInSospeso = bottone7.dataset[chiave] ?? null;
       return;
     }
     inVistaInSospeso = null;
     if (contenitore.scrollWidth > contenitore.clientWidth) {
-      const r = bottone6.getBoundingClientRect();
+      const r = bottone7.getBoundingClientRect();
       const c = contenitore.getBoundingClientRect();
       if (r.left < c.left) contenitore.scrollLeft -= c.left - r.left + 8;
       else if (r.right > c.right) contenitore.scrollLeft += r.right - c.right + 8;
@@ -36066,7 +36562,7 @@ function creaSchede(striscia, {
     voci.forEach((voce, i2) => {
       contenitore.append("\n", creaLinguetta(voce, i2));
     });
-    for (const nodo13 of coda?.(voci) || []) contenitore.append("\n", nodo13);
+    for (const nodo13 of coda2?.(voci) || []) contenitore.append("\n", nodo13);
     contenitore.append("\n");
     if (avevaIlFuoco != null && fuocoPerduto()) bottoneDi(avevaIlFuoco)?.focus();
     portaInVista(attiva != null ? bottoneDi(attiva) : null);
@@ -36300,7 +36796,7 @@ function nomeShell(enforcement, comando = "") {
 }
 function titoloScheda(voce, tutte = [voce]) {
   if (voce.titolo) return voce.titolo;
-  if (voce.origine === "agente") return voce.giro ? `agente · giro ${voce.giro}` : "agente";
+  if (voce.origine === "agente") return voce.giro ? t2("agente · giro {giro}", { giro: voce.giro }) : t2("agente");
   const shell = nomeShell(voce.shell, voce.comando);
   const omonime = tutte.filter((v) => !v.titolo && v.origine !== "agente" && nomeShell(v.shell, v.comando) === shell);
   const posizione = omonime.indexOf(voce);
@@ -36349,8 +36845,9 @@ function creaSchedeTerminale(pane, { azioni = {}, root: root2 = document.body } 
       return false;
     },
     suDoppioClick: (voce) => avviaRinomina(voce),
+    /* ⛔ PO-10, owner 02/10/2026: una scheda agente si chiude soltanto — «agente · giro N» dice da dove vengono i comandi */
     vociMenu: (voce) => [
-      [t2(TESTI2.rinomina), () => avviaRinomina(voce), true],
+      ...voce.origine === "agente" ? [] : [[t2(TESTI2.rinomina), () => avviaRinomina(voce), true]],
       [t2(TESTI2.chiudi), () => azioni.chiudi?.(voce.terminalId), true],
       [t2(TESTI2.chiudiAltre), () => azioni.chiudiAltre?.(voce.terminalId), stato2.schede.length > 1],
       [t2(TESTI2.chiudiTutte), () => azioni.chiudiTutte?.(), stato2.schede.length > 0]
@@ -36362,6 +36859,7 @@ function creaSchedeTerminale(pane, { azioni = {}, root: root2 = document.body } 
     }
   });
   function avviaRinomina(voce) {
+    if (voce?.origine === "agente") return;
     inRinomina = voce.terminalId;
     renderizza();
     const input = tabs.querySelector(".talos-terminal__rinomina");
@@ -36383,6 +36881,13 @@ function creaSchedeTerminale(pane, { azioni = {}, root: root2 = document.body } 
     const dot = document.createElement("span");
     dot.className = `talos-dot ${PALLINO[voce.stato] ?? ""}`.trim();
     b.append(dot);
+    if (voce.origine === "agente") {
+      b.dataset.origine = "agente";
+      b.append(svgIcona("i-robot", "i i--sm talos-terminal__tab-icona"));
+      b.setAttribute("aria-description", t2(TESTI2.schedaAgente));
+    } else {
+      delete b.dataset.origine;
+    }
     if (inRinomina === voce.terminalId) {
       const input = document.createElement("input");
       input.className = "talos-input talos-terminal__rinomina";
@@ -36455,8 +36960,8 @@ function creaSchedeTerminale(pane, { azioni = {}, root: root2 = document.body } 
         if (p.stato) foot.append(span("·"), span(p.stato));
         const g = document.createElement("span");
         g.className = "talos-grow";
-        const coda = codaDelPiede(p);
-        foot.append(g, ...coda ? [span(coda)] : []);
+        const coda2 = codaDelPiede(p);
+        foot.append(g, ...coda2 ? [span(coda2)] : []);
       }
     }
   }
@@ -36495,7 +37000,12 @@ var init_terminale = __esm({
       rinomina: "Rinomina",
       nessunaScheda: "Nessuna scheda aperta",
       nota: "Ogni scheda dichiara chi l'ha aperta e dove.",
-      apertaDaTe: "Aperta da te"
+      apertaDaTe: "Aperta da te",
+      /* PO-10 passo 2 (02/10/2026): le schede AGENTE, in sola lettura — il piede dice chi le ha lanciate, e che si guardano */
+      lanciataDallAgente: "Lanciata dall'agente al giro {giro}",
+      lanciataDallAgenteSenzaGiro: "Lanciata dall'agente",
+      solaLettura: "Sola lettura: qui si guardano i comandi dell’agente.",
+      schedaAgente: "Comandi dell’agente, in sola lettura"
     });
     PALLINO = Object.freeze({
       live: "talos-dot--live",
@@ -36503,7 +37013,10 @@ var init_terminale = __esm({
       connessione: "talos-dot--warning",
       attesa: "",
       disconnesso: "talos-dot--danger",
-      terminato: "talos-dot--danger"
+      terminato: "talos-dot--danger",
+      /* PO-10, owner 02/10/2026: finito il giro, verde se tutti i comandi sono riusciti, rosso se almeno uno no */
+      concluso: "talos-dot--success",
+      "con-errori": "talos-dot--danger"
     });
     ETICHETTA_STATO = Object.freeze({
       live: "in corso",
@@ -36511,7 +37024,9 @@ var init_terminale = __esm({
       connessione: "connessione in corso",
       attesa: "in attesa",
       disconnesso: "disconnessa",
-      terminato: "shell chiusa"
+      terminato: "shell chiusa",
+      concluso: "conclusa",
+      "con-errori": "con errori"
     });
   }
 });
@@ -36570,14 +37085,14 @@ function impacchetta(pagina, annotazioni, errori = []) {
       indice2 += 1;
     }
   }
-  const coda = [];
+  const coda2 = [];
   if (errori.length) {
-    coda.push(`
+    coda2.push(`
 Errori di console della pagina (${errori.length}):`);
-    for (const e of errori.slice(0, 10)) coda.push(`- [${e.tipo}] ${e.testo}`);
+    for (const e of errori.slice(0, 10)) coda2.push(`- [${e.tipo}] ${e.testo}`);
   }
-  coda.push("\nPer ogni commento: trova il codice che produce quell’elemento, applica la modifica e verifica nella pagina.");
-  return [...testa, ...corpo, ...coda].join("\n");
+  coda2.push("\nPer ogni commento: trova il codice che produce quell’elemento, applica la modifica e verifica nella pagina.");
+  return [...testa, ...corpo, ...coda2].join("\n");
 }
 function renderizzaAnnotazioni(pannello, { annotazioni, attivo, onNota, onTogli, onSvuota, onInvia, onAttiva }) {
   if (!pannello) return;
@@ -36885,7 +37400,7 @@ function prossimaDopoChiusura(lista, indice2) {
   return resto[indice2] ?? resto[indice2 - 1] ?? null;
 }
 function creaBrowser(schermo, { azioni = {}, modoIniziale = "pagina" } = {}) {
-  const el30 = {
+  const el31 = {
     riepilogo: $2(schermo, "#browserRiepilogo"),
     schede: $2(schermo, "#browserSchede"),
     indietro: $2(schermo, '[data-browser-demo="back"], [data-browser-action="back"]'),
@@ -36939,7 +37454,7 @@ function creaBrowser(schermo, { azioni = {}, modoIniziale = "pagina" } = {}) {
     if (id4) stato2.modi[id4] = m;
   };
   const modoAttivo = () => modoDi(stato2.attiva);
-  const frameAttivo = () => el30.live?.querySelector("iframe") || null;
+  const frameAttivo = () => el31.live?.querySelector("iframe") || null;
   const dialogaConOverlay = (messaggio) => {
     try {
       frameAttivo()?.contentWindow?.postMessage({ fonte: "talos-genitore", ...messaggio }, "*");
@@ -36967,37 +37482,37 @@ function creaBrowser(schermo, { azioni = {}, modoIniziale = "pagina" } = {}) {
   });
   const attiva = () => stato2.schede.find((s) => s.id === stato2.attiva) || null;
   const indiceAttiva = () => stato2.schede.findIndex((s) => s.id === stato2.attiva);
-  el30.indietro?.addEventListener("click", () => {
+  el31.indietro?.addEventListener("click", () => {
     const i2 = indiceAttiva();
     if (i2 > 0) azioni.seleziona?.(stato2.schede[i2 - 1].id);
   });
-  el30.avanti?.addEventListener("click", () => {
+  el31.avanti?.addEventListener("click", () => {
     const i2 = indiceAttiva();
     if (i2 >= 0 && i2 < stato2.schede.length - 1) azioni.seleziona?.(stato2.schede[i2 + 1].id);
   });
-  el30.fuori?.addEventListener("click", () => {
+  el31.fuori?.addEventListener("click", () => {
     const s = attiva();
     if (s) azioni.apriFuori?.(s);
   });
-  el30.rileggi?.addEventListener("click", () => {
+  el31.rileggi?.addEventListener("click", () => {
     const s = attiva();
     if (s) azioni.rileggi?.(s);
   });
-  el30.annota?.addEventListener("click", () => {
+  el31.annota?.addEventListener("click", () => {
     const s = attiva();
     if (!s) return;
     if (paginaAnnotabile(s)) azioni.annota?.(s, !stato2.annotaAttivo);
     else azioni.annota?.(s);
   });
-  el30.copia?.addEventListener("click", () => {
+  el31.copia?.addEventListener("click", () => {
     const s = attiva();
     if (s) azioni.copia?.(s);
   });
-  for (const b of el30.modi || []) {
+  for (const b of el31.modi || []) {
     b.addEventListener("click", () => {
       const suo = b.dataset.browserModo === "testo" ? "testo" : "pagina";
       const opposto = suo === "testo" ? "pagina" : "testo";
-      const solo = (el30.modi || []).length < 2;
+      const solo = (el31.modi || []).length < 2;
       const scelto = modoAttivo() === suo ? solo ? opposto : suo : suo;
       const lettura = attiva();
       if (scelto === "pagina" && lettura && lettura.tipo !== "viva" && lettura.incorniciabile === false && lettura.url) {
@@ -37015,78 +37530,78 @@ function creaBrowser(schermo, { azioni = {}, modoIniziale = "pagina" } = {}) {
       renderizza();
     });
   }
-  el30.nota?.addEventListener("click", (e) => {
+  el31.nota?.addEventListener("click", (e) => {
     e.stopPropagation();
-    const aperto = !el30.editorNota.hidden;
-    el30.editorNota.hidden = aperto;
-    el30.nota.setAttribute("aria-expanded", String(!aperto));
+    const aperto = !el31.editorNota.hidden;
+    el31.editorNota.hidden = aperto;
+    el31.nota.setAttribute("aria-expanded", String(!aperto));
     if (!aperto) {
       const s = attiva();
-      el30.notaInput.value = s && stato2.note[s.url] || "";
-      el30.notaInput.focus();
+      el31.notaInput.value = s && stato2.note[s.url] || "";
+      el31.notaInput.focus();
     }
   });
-  el30.conservaNota?.addEventListener("click", () => {
+  el31.conservaNota?.addEventListener("click", () => {
     const s = attiva();
     if (!s) return;
-    azioni.salvaNota?.(s, el30.notaInput.value.trim());
-    el30.editorNota.hidden = true;
-    el30.nota?.setAttribute("aria-expanded", "false");
-    el30.nota?.focus();
+    azioni.salvaNota?.(s, el31.notaInput.value.trim());
+    el31.editorNota.hidden = true;
+    el31.nota?.setAttribute("aria-expanded", "false");
+    el31.nota?.focus();
   });
-  el30.chiudiNota?.addEventListener("click", () => {
-    el30.editorNota.hidden = true;
-    el30.nota?.setAttribute("aria-expanded", "false");
-    el30.nota?.focus();
+  el31.chiudiNota?.addEventListener("click", () => {
+    el31.editorNota.hidden = true;
+    el31.nota?.setAttribute("aria-expanded", "false");
+    el31.nota?.focus();
   });
-  el30.consenti?.addEventListener("click", () => {
+  el31.consenti?.addEventListener("click", () => {
     if (stato2.richiesta) azioni.decidi?.(stato2.richiesta.requestId, true);
   });
-  el30.nega?.addEventListener("click", () => {
+  el31.nega?.addEventListener("click", () => {
     if (stato2.richiesta) azioni.decidi?.(stato2.richiesta.requestId, false);
   });
-  el30.annulla?.addEventListener("click", () => {
+  el31.annulla?.addEventListener("click", () => {
     const s = attiva();
     if (!s) return;
     if (azioni.annullaApertura) azioni.annullaApertura(s);
     else azioni.chiudi?.(s.id);
   });
-  if (el30.url) {
-    el30.url.addEventListener("keydown", (e) => {
+  if (el31.url) {
+    el31.url.addEventListener("keydown", (e) => {
       if (e.key === "Enter") {
         e.preventDefault();
-        const u = urlApribile(el30.url.value);
+        const u = urlApribile(el31.url.value);
         if (u) {
           azioni.apri?.(u);
-          el30.url.blur();
+          el31.url.blur();
         } else {
-          el30.url.setAttribute("aria-invalid", "true");
+          el31.url.setAttribute("aria-invalid", "true");
           mostraAvviso(t2("Non è un indirizzo: scrivi un sito (es. localhost:5173 o example.org)."));
         }
       }
       if (e.key === "Escape") {
         e.preventDefault();
-        el30.url.value = attiva()?.url || "";
-        el30.url.removeAttribute("aria-invalid");
-        el30.url.blur();
+        el31.url.value = attiva()?.url || "";
+        el31.url.removeAttribute("aria-invalid");
+        el31.url.blur();
       }
     });
-    el30.url.addEventListener("focus", () => el30.url.select());
-    el30.url.addEventListener("input", () => el30.url.removeAttribute("aria-invalid"));
+    el31.url.addEventListener("focus", () => el31.url.select());
+    el31.url.addEventListener("input", () => el31.url.removeAttribute("aria-invalid"));
   }
-  el30.nuovaScheda?.addEventListener("click", () => {
-    if (!el30.url) return;
-    el30.url.value = "";
-    el30.url.focus();
-    el30.url.removeAttribute("aria-invalid");
+  el31.nuovaScheda?.addEventListener("click", () => {
+    if (!el31.url) return;
+    el31.url.value = "";
+    el31.url.focus();
+    el31.url.removeAttribute("aria-invalid");
   });
   function mostraAvviso(testo2) {
-    if (!el30.avviso) return;
-    el30.avviso.textContent = testo2 || "";
-    el30.avviso.hidden = !testo2;
+    if (!el31.avviso) return;
+    el31.avviso.textContent = testo2 || "";
+    el31.avviso.hidden = !testo2;
   }
-  const schedeBrowser = el30.schede ? creaSchede(el30.schede.closest(".talos-tabstrip") || el30.schede, {
-    lista: el30.schede,
+  const schedeBrowser = el31.schede ? creaSchede(el31.schede.closest(".talos-tabstrip") || el31.schede, {
+    lista: el31.schede,
     root: schermo.ownerDocument?.body || document.body,
     chiave: "browserId",
     classe: "talos-tabstrip__scheda",
@@ -37170,13 +37685,13 @@ function creaBrowser(schermo, { azioni = {}, modoIniziale = "pagina" } = {}) {
     scheda.dataset.tipLato = "sotto";
   }
   function renderizzaSchede() {
-    if (!el30.schede || !schedeBrowser) return;
-    const cornice = el30.schede.closest(".talos-tabstrip");
+    if (!el31.schede || !schedeBrowser) return;
+    const cornice = el31.schede.closest(".talos-tabstrip");
     if (cornice) cornice.hidden = stato2.schede.length === 0;
     schedeBrowser.aggiorna(stato2.schede, stato2.attiva);
   }
   function scriviTestoAcquisito(grezzo) {
-    const contenitore = el30.testo;
+    const contenitore = el31.testo;
     if (!contenitore) return;
     contenitore.replaceChildren();
     if (!sembraHtml(grezzo)) {
@@ -37198,13 +37713,13 @@ function creaBrowser(schermo, { azioni = {}, modoIniziale = "pagina" } = {}) {
     contenitore.append(pulito, dettaglio);
   }
   function renderizzaCornice(s) {
-    if (!el30.live) return;
+    if (!el31.live) return;
     const vuoleViva = s && s.tipo === "viva" && statoDellaScheda(s) === "loaded" && s.viaVista !== "vivo";
     const vuoleLettura = s && s.tipo !== "viva" && modoDi(s.id) === "pagina" && Boolean(s.url) && /^https?:/i.test(s.url) && s.incorniciabile !== false && s.incorniciabile !== null;
     const vuole = Boolean(vuoleViva || vuoleLettura);
-    const cornici = [...el30.live.querySelectorAll("iframe")];
+    const cornici = [...el31.live.querySelectorAll("iframe")];
     for (const c of cornici) c.hidden = !(vuole && c.dataset.browserId === s.id);
-    el30.live.hidden = !vuole;
+    el31.live.hidden = !vuole;
     if (!vuole) return;
     let frame3 = cornici.find((c) => c.dataset.browserId === s.id) || null;
     if (frame3) {
@@ -37241,7 +37756,7 @@ function creaBrowser(schermo, { azioni = {}, modoIniziale = "pagina" } = {}) {
         renderizza();
       }, 4e3);
     }
-    el30.live.append(frame3);
+    el31.live.append(frame3);
   }
   function corniceDellaLettura(s) {
     if (!s || s.tipo === "viva" || !s.url || !/^https?:/i.test(s.url)) return "";
@@ -37257,8 +37772,8 @@ function creaBrowser(schermo, { azioni = {}, modoIniziale = "pagina" } = {}) {
   let pannelloStato = null;
   function nodoStato() {
     if (pannelloStato?.isConnected) return pannelloStato;
-    if (!el30.live?.parentNode) return null;
-    const doc = el30.live.ownerDocument;
+    if (!el31.live?.parentNode) return null;
+    const doc = el31.live.ownerDocument;
     const box = doc.createElement("div");
     box.id = "browserStatoScheda";
     box.className = "talos-browser__request talos-browser__stato";
@@ -37293,7 +37808,7 @@ function creaBrowser(schermo, { azioni = {}, modoIniziale = "pagina" } = {}) {
     });
     cluster.append(riprova, annulla);
     box.append(titolo2, motivo, rimedio, cluster);
-    el30.live.parentNode.insertBefore(box, el30.live);
+    el31.live.parentNode.insertBefore(box, el31.live);
     pannelloStato = box;
     return box;
   }
@@ -37307,14 +37822,14 @@ function creaBrowser(schermo, { azioni = {}, modoIniziale = "pagina" } = {}) {
     const situazione = statoDellaScheda(s);
     const riposata = Boolean(s && stato2.riposate.has(s.id));
     const lavora = situazione === "loading" || situazione === "retrying";
-    if (el30.caricamento) {
-      el30.caricamento.hidden = !lavora;
-      el30.caricamento.dataset.stato = lavora ? situazione : "";
-      const suoTitolo = el30.caricamento.querySelector(".talos-browser__heading");
+    if (el31.caricamento) {
+      el31.caricamento.hidden = !lavora;
+      el31.caricamento.dataset.stato = lavora ? situazione : "";
+      const suoTitolo = el31.caricamento.querySelector(".talos-browser__heading");
       if (suoTitolo && lavora) suoTitolo.textContent = situazione === "retrying" ? TESTI3.statoRiprovo(Number(s?.tentativi || 0), Number(s?.tentativiMassimi || 0)) : t2(TESTI3.statoApro);
-      const suoSotto = el30.caricamento.querySelector("p.talos-muted");
+      const suoSotto = el31.caricamento.querySelector("p.talos-muted");
       if (suoSotto && lavora) suoSotto.textContent = t2(situazione === "retrying" ? TESTI3.statoRiprovoSotto : TESTI3.statoAproSotto);
-      if (el30.annulla && lavora) el30.annulla.textContent = t2(TESTI3.annullaNavigazione);
+      if (el31.annulla && lavora) el31.annulla.textContent = t2(TESTI3.annullaNavigazione);
     }
     const vivaARiposo = Boolean(s?.vivaARiposo) && situazione === "loaded";
     const parla = !lavora && situazione !== "loaded" || (riposata || vivaARiposo) && !lavora;
@@ -37381,36 +37896,36 @@ function creaBrowser(schermo, { azioni = {}, modoIniziale = "pagina" } = {}) {
     const avvisoCornice = corniceDellaLettura(s);
     const letture = stato2.schede.filter((x) => x.tipo !== "viva").length;
     const vive2 = stato2.schede.length - letture;
-    if (el30.riepilogo) el30.riepilogo.textContent = stato2.schede.length === 0 ? t2(TESTI3.riepilogoVuoto) : vive2 === 0 ? TESTI3.riepilogoLetture(letture) : TESTI3.riepilogoMisto(letture, vive2);
+    if (el31.riepilogo) el31.riepilogo.textContent = stato2.schede.length === 0 ? t2(TESTI3.riepilogoVuoto) : vive2 === 0 ? TESTI3.riepilogoLetture(letture) : TESTI3.riepilogoMisto(letture, vive2);
     renderizzaSchede();
-    if (el30.rileggi) el30.rileggi.textContent = t2(TESTI3.barraRileggi);
-    if (el30.annota) el30.annota.textContent = t2(TESTI3.barraAnnota);
-    if (el30.nota) el30.nota.textContent = t2(TESTI3.barraNota);
-    if (el30.copia) el30.copia.textContent = t2(TESTI3.barraCopia);
-    for (const b of el30.modi) b.textContent = t2(b.dataset.browserModo === "pagina" ? TESTI3.barraModoPagina : TESTI3.barraModoTesto);
+    if (el31.rileggi) el31.rileggi.textContent = t2(TESTI3.barraRileggi);
+    if (el31.annota) el31.annota.textContent = t2(TESTI3.barraAnnota);
+    if (el31.nota) el31.nota.textContent = t2(TESTI3.barraNota);
+    if (el31.copia) el31.copia.textContent = t2(TESTI3.barraCopia);
+    for (const b of el31.modi) b.textContent = t2(b.dataset.browserModo === "pagina" ? TESTI3.barraModoPagina : TESTI3.barraModoTesto);
     const i2 = indiceAttiva();
-    if (el30.indietro) el30.indietro.disabled = i2 <= 0;
-    if (el30.avanti) el30.avanti.disabled = i2 < 0 || i2 >= stato2.schede.length - 1;
-    if (el30.url && document.activeElement !== el30.url) el30.url.value = s?.url || "";
-    if (el30.fuori) el30.fuori.disabled = !s || !/^https?:\/\//i.test(s.url);
-    for (const b of [el30.rileggi, el30.annota, el30.nota, el30.copia]) if (b) b.disabled = !s;
-    if (el30.copia) el30.copia.disabled = !s || s.tipo === "viva";
-    if (el30.rileggi) el30.rileggi.title = t2(s?.tipo === "viva" ? "Ricarica la pagina nella cornice" : "Prepara nel composer la richiesta di rileggere questa pagina");
-    if (el30.posizione) {
+    if (el31.indietro) el31.indietro.disabled = i2 <= 0;
+    if (el31.avanti) el31.avanti.disabled = i2 < 0 || i2 >= stato2.schede.length - 1;
+    if (el31.url && document.activeElement !== el31.url) el31.url.value = s?.url || "";
+    if (el31.fuori) el31.fuori.disabled = !s || !/^https?:\/\//i.test(s.url);
+    for (const b of [el31.rileggi, el31.annota, el31.nota, el31.copia]) if (b) b.disabled = !s;
+    if (el31.copia) el31.copia.disabled = !s || s.tipo === "viva";
+    if (el31.rileggi) el31.rileggi.title = t2(s?.tipo === "viva" ? "Ricarica la pagina nella cornice" : "Prepara nel composer la richiesta di rileggere questa pagina");
+    if (el31.posizione) {
       const qui = statoDellaScheda(s);
-      el30.posizione.textContent = !s ? "" : s.tipo === "viva" ? t2(qui === "loading" || qui === "retrying" ? TESTI3.posizioneCaricamento : qui === "error" || qui === "unreachable" || qui === "cancelled" ? TESTI3.posizioneBloccata : TESTI3.posizioneViva) : TESTI3.posizioneLettura(stato2.schede.filter((x) => x.tipo !== "viva").indexOf(s) + 1, letture);
+      el31.posizione.textContent = !s ? "" : s.tipo === "viva" ? t2(qui === "loading" || qui === "retrying" ? TESTI3.posizioneCaricamento : qui === "error" || qui === "unreachable" || qui === "cancelled" ? TESTI3.posizioneBloccata : TESTI3.posizioneViva) : TESTI3.posizioneLettura(stato2.schede.filter((x) => x.tipo !== "viva").indexOf(s) + 1, letture);
     }
     const richiesta = stato2.richiesta;
-    if (el30.bloccato) {
-      el30.bloccato.hidden = !richiesta;
-      if (richiesta && el30.bloccatoTesto) el30.bloccatoTesto.textContent = t2("L’agente chiede di leggere {url}. La scelta vale per questa richiesta.", { url: richiesta.url });
+    if (el31.bloccato) {
+      el31.bloccato.hidden = !richiesta;
+      if (richiesta && el31.bloccatoTesto) el31.bloccatoTesto.textContent = t2("L’agente chiede di leggere {url}. La scelta vale per questa richiesta.", { url: richiesta.url });
     }
-    if (el30.vuoto) el30.vuoto.hidden = stato2.schede.length > 0;
-    if (el30.articolo) el30.articolo.hidden = !s;
-    const testata = el30.titolo?.closest(".talos-browser__testata");
+    if (el31.vuoto) el31.vuoto.hidden = stato2.schede.length > 0;
+    if (el31.articolo) el31.articolo.hidden = !s;
+    const testata = el31.titolo?.closest(".talos-browser__testata");
     if (testata) testata.hidden = !s || s.tipo === "viva";
     const lettura = Boolean(s) && s.tipo !== "viva";
-    for (const b of el30.modi || []) {
+    for (const b of el31.modi || []) {
       b.hidden = !lettura;
       const suo = b.dataset.browserModo === modoDi(s?.id);
       b.setAttribute("aria-pressed", String(suo));
@@ -37432,34 +37947,34 @@ function creaBrowser(schermo, { azioni = {}, modoIniziale = "pagina" } = {}) {
       }
     }
     const modoQui = modoDi(s?.id);
-    if (el30.testo) el30.testo.hidden = !lettura || modoQui === "pagina";
+    if (el31.testo) el31.testo.hidden = !lettura || modoQui === "pagina";
     if (lettura) {
-      if (el30.titolo) el30.titolo.textContent = titoloDaLettura(s);
-      if (el30.provenienza) el30.provenienza.textContent = formattaProvenienza(s);
-      if (el30.testo && modoQui !== "pagina") scriviTestoAcquisito(s.testo || "");
+      if (el31.titolo) el31.titolo.textContent = titoloDaLettura(s);
+      if (el31.provenienza) el31.provenienza.textContent = formattaProvenienza(s);
+      if (el31.testo && modoQui !== "pagina") scriviTestoAcquisito(s.testo || "");
     }
     const situazione = statoDellaScheda(s);
     mostraAvviso(situazione === "loaded" ? avvisoCornice || "" : "");
     renderizzaStato(s);
     renderizzaCornice(s);
     const nota = s ? stato2.note[s.url] : "";
-    if (el30.notaSalvata) {
-      el30.notaSalvata.hidden = !nota;
-      el30.notaSalvata.textContent = nota ? t2("Nota: {nota}", { nota }) : "";
+    if (el31.notaSalvata) {
+      el31.notaSalvata.hidden = !nota;
+      el31.notaSalvata.textContent = nota ? t2("Nota: {nota}", { nota }) : "";
     }
-    if (!s || el30.editorNota && !el30.editorNota.hidden && el30.editorNota.dataset.browserId !== s.id) {
-      if (el30.editorNota) el30.editorNota.hidden = true;
-      el30.nota?.setAttribute("aria-expanded", "false");
+    if (!s || el31.editorNota && !el31.editorNota.hidden && el31.editorNota.dataset.browserId !== s.id) {
+      if (el31.editorNota) el31.editorNota.hidden = true;
+      el31.nota?.setAttribute("aria-expanded", "false");
     }
-    if (el30.editorNota && s) el30.editorNota.dataset.browserId = s.id;
-    if (el30.limiti) el30.limiti.textContent = t2(vive2 > 0 ? TESTI3.limitiVive : TESTI3.limitiLetture);
+    if (el31.editorNota && s) el31.editorNota.dataset.browserId = s.id;
+    if (el31.limiti) el31.limiti.textContent = t2(vive2 > 0 ? TESTI3.limitiVive : TESTI3.limitiLetture);
     const annotabile = paginaAnnotabile(s);
-    if (el30.annotazioni) {
+    if (el31.annotazioni) {
       const lista = annotabile ? stato2.annotazioni[s.id] || [] : [];
       if (!annotabile) {
-        el30.annotazioni.hidden = true;
+        el31.annotazioni.hidden = true;
       } else {
-        renderizzaAnnotazioni(el30.annotazioni, {
+        renderizzaAnnotazioni(el31.annotazioni, {
           annotazioni: lista,
           attivo: stato2.annotaAttivo,
           onAttiva: (on2) => azioni.annota?.(s, on2),
@@ -37474,12 +37989,12 @@ function creaBrowser(schermo, { azioni = {}, modoIniziale = "pagina" } = {}) {
           },
           onInvia: () => azioni.inviaAnnotazioni?.(s)
         });
-        el30.annotazioni.hidden = lista.length === 0 && !stato2.annotaAttivo;
+        el31.annotazioni.hidden = lista.length === 0 && !stato2.annotaAttivo;
       }
     }
-    if (el30.annota) {
-      el30.annota.setAttribute("aria-pressed", String(annotabile && stato2.annotaAttivo));
-      el30.annota.title = annotabile ? t2("Segna gli elementi della pagina da cambiare: i commenti finiscono nel composer") : t2("Prepara una bozza nella chat senza inviarla");
+    if (el31.annota) {
+      el31.annota.setAttribute("aria-pressed", String(annotabile && stato2.annotaAttivo));
+      el31.annota.title = annotabile ? t2("Segna gli elementi della pagina da cambiare: i commenti finiscono nel composer") : t2("Prepara una bozza nella chat senza inviarla");
     }
     dialogaConOverlay({ tipo: "annota", attivo: annotabile && stato2.annotaAttivo });
   }
@@ -37493,12 +38008,12 @@ function creaBrowser(schermo, { azioni = {}, modoIniziale = "pagina" } = {}) {
       const vivi = new Set(stato2.schede.map((x) => x.id));
       for (const mappa of [stato2.modi, stato2.modiChiesti]) for (const k of Object.keys(mappa)) if (!vivi.has(k)) delete mappa[k];
       for (const insieme of [stato2.riaperte, stato2.riposate]) for (const k of [...insieme]) if (!vivi.has(k)) insieme.delete(k);
-      for (const c of el30.live?.querySelectorAll("iframe") || []) if (!vivi.has(c.dataset.browserId)) c.remove();
+      for (const c of el31.live?.querySelectorAll("iframe") || []) if (!vivi.has(c.dataset.browserId)) c.remove();
       if (stato2.annotaAttivo && stato2.annotazioni && Object.values(stato2.annotazioni).flat().length >= MASSIMO_ANNOTAZIONI) stato2.annotaAttivo = false;
       renderizza();
     },
     fuocoSullaScheda() {
-      el30.schede?.querySelector('[aria-selected="true"]')?.focus();
+      el31.schede?.querySelector('[aria-selected="true"]')?.focus();
     },
     /*
      * ⛔ 11/09/2026 — L'APERTURA VIVE FUORI DA QUI, E PUÒ FALLIRE FUORI DA QUI.
@@ -38340,7 +38855,7 @@ function creaAzioniMessaggio({ ascolta = true } = {}, opzioni = {}) {
   gruppo.setAttribute("role", "group");
   const etichettaGruppo = typeof opzioni.etichetta === "string" && opzioni.etichetta.trim() ? opzioni.etichetta.trim() : TESTI_MESSAGGIO.azioniRisposta;
   gruppo.setAttribute("aria-label", etichettaGruppo);
-  const bottone6 = (nome, titolo2, icona16) => {
+  const bottone7 = (nome, titolo2, icona16) => {
     const b = el25(documentObj, "button", "talos-button talos-button--ghost talos-icon-button talos-button--sm");
     b.type = "button";
     b.title = titolo2;
@@ -38349,15 +38864,15 @@ function creaAzioniMessaggio({ ascolta = true } = {}, opzioni = {}) {
     b.append(simbolo(documentObj, "i i--sm", icona16));
     return b;
   };
-  gruppo.append(bottone6("copy", TESTI_MESSAGGIO.copiaRisposta, "i-copy"));
+  gruppo.append(bottone7("copy", TESTI_MESSAGGIO.copiaRisposta, "i-copy"));
   if (ascolta) {
-    const b = bottone6("listen", TESTI_MESSAGGIO.ascolta, "i-play");
+    const b = bottone7("listen", TESTI_MESSAGGIO.ascolta, "i-play");
     b.setAttribute("aria-pressed", "false");
     b.classList.add("assistant-listen-btn");
     gruppo.append(b);
   }
   if (!vociMenu) return gruppo;
-  const piu = bottone6("piu", TESTI_MESSAGGIO.altreAzioni, "i-more");
+  const piu = bottone7("piu", TESTI_MESSAGGIO.altreAzioni, "i-more");
   piu.setAttribute("aria-haspopup", "menu");
   piu.setAttribute("aria-expanded", "false");
   gruppo.append(piu);
@@ -38508,9 +39023,9 @@ function scriviCodice(parti, testo2, chiuso) {
   }
   pre.scrollLeft = scorrimento;
 }
-function aggiornaBottone(bottone6, chiuso) {
-  bottone6.disabled = !chiuso;
-  bottone6.textContent = chiuso ? "Copia" : "In arrivo…";
+function aggiornaBottone(bottone7, chiuso) {
+  bottone7.disabled = !chiuso;
+  bottone7.textContent = chiuso ? "Copia" : "In arrivo…";
 }
 function creaBloccoCodice({ testo: testo2 = "", linguaggio = "", chiuso = true } = {}, opzioni = {}) {
   const documentObj = opzioni.document || globalThis.document;
@@ -38519,9 +39034,9 @@ function creaBloccoCodice({ testo: testo2 = "", linguaggio = "", chiuso = true }
   blocco.dataset.lingua = chiaveLinguaggio(linguaggio);
   const intestazione = el25(documentObj, "div", "code-block-head");
   const nome = el25(documentObj, "span", "code-block-lang", etichetta3 || "testo");
-  const bottone6 = el25(documentObj, "button", "code-block-copy");
-  bottone6.type = "button";
-  intestazione.append(nome, bottone6);
+  const bottone7 = el25(documentObj, "button", "code-block-copy");
+  bottone7.type = "button";
+  intestazione.append(nome, bottone7);
   const pre = el25(documentObj, "pre");
   pre.setAttribute("tabindex", "0");
   pre.setAttribute("role", "group");
@@ -38531,7 +39046,7 @@ function creaBloccoCodice({ testo: testo2 = "", linguaggio = "", chiuso = true }
   const parti = {
     pre,
     code,
-    bottone: bottone6,
+    bottone: bottone7,
     nome,
     chiave: chiaveLinguaggio(linguaggio),
     evidenzia: opzioni.evidenzia || evidenziaConPrism,
@@ -38540,19 +39055,19 @@ function creaBloccoCodice({ testo: testo2 = "", linguaggio = "", chiuso = true }
     chiuso: Boolean(chiuso)
   };
   PARTI_DEL_BLOCCO.set(blocco, parti);
-  bottone6.addEventListener("click", async () => {
+  bottone7.addEventListener("click", async () => {
     if (!parti.chiuso) return;
     await parti.copia(parti.testo);
-    bottone6.textContent = "Copiato";
-    bottone6.classList.add("is-fatto");
+    bottone7.textContent = "Copiato";
+    bottone7.classList.add("is-fatto");
     const attesa = globalThis.setTimeout?.(() => {
-      aggiornaBottone(bottone6, true);
-      bottone6.classList.remove("is-fatto");
+      aggiornaBottone(bottone7, true);
+      bottone7.classList.remove("is-fatto");
     }, 1800);
     attesa?.unref?.();
   });
   if (!parti.chiuso) blocco.classList.add("code-block-in-arrivo");
-  aggiornaBottone(bottone6, parti.chiuso);
+  aggiornaBottone(bottone7, parti.chiuso);
   scriviCodice(parti, parti.testo, parti.chiuso);
   blocco.append(intestazione, pre);
   return blocco;
@@ -38717,27 +39232,28 @@ function creaApprovazione({ badge: badge6 = "Chiede di scrivere", bersaglio = ""
   }
   if (Array.isArray(diff) && diff.length > 0) scheda.append(creaDiff(diff, opzioni));
   const piede = el25(documentObj, "div", "talos-approval__foot sheet-actions");
-  const bottone6 = (classi, testo2, onClick) => {
+  const bottone7 = (classi, testo2, onClick) => {
     const b = el25(documentObj, "button", classi, testo2);
     b.type = "button";
     if (typeof onClick === "function") b.addEventListener("click", onClick);
     return b;
   };
-  const unaVolta = bottone6("talos-button talos-button--primary talos-button--md", "Consenti una volta", onUnaVolta);
-  const sessione = bottone6("talos-button talos-button--secondary", "Per questa sessione", onSessione);
-  const nega = bottone6("talos-button talos-button--ghost talos-button--danger", "Nega", onNega);
+  const unaVolta = bottone7("talos-button talos-button--primary talos-button--md", "Consenti una volta", onUnaVolta);
+  const sessione = bottone7("talos-button talos-button--secondary", "Per questa sessione", onSessione);
+  const nega = bottone7("talos-button talos-button--ghost talos-button--danger", "Nega", onNega);
   piede.append(unaVolta, sessione, nega, el25(documentObj, "span", "talos-grow"), el25(documentObj, "span", "talos-approval__foot-note", nota));
   scheda.append(piede);
   return { scheda, perche: perchéEl, codice: codiceEl, motivo: motivoEl, piede, pulsanti: { unaVolta, sessione, nega } };
 }
-function segnaEsitoApprovazione(scheda, { approvato = false, altrove = false } = {}, opzioni = {}) {
+function segnaEsitoApprovazione(scheda, { approvato = false, altrove = false, ambito = null, motivo = null } = {}, opzioni = {}) {
   if (!scheda) return null;
   const documentObj = opzioni.document || scheda.ownerDocument || globalThis.document;
   scheda.querySelector(".talos-approval__foot")?.remove();
   scheda.querySelector(".sheet-actions")?.remove();
   const esistente = scheda.querySelector(".talos-approval__esito");
   if (esistente) esistente.remove();
-  const riga2 = el25(documentObj, "p", `talos-approval__esito talos-approval__esito--${approvato ? "si" : "no"}`, `${approvato ? "Approvato" : "Negato"}${altrove ? " da un’altra finestra" : ""}`);
+  const esito = approvato ? ambito === "cartella" ? "Consentito in questa cartella per la sessione" : "Approvato" : motivo === "nessuna-interfaccia" ? "Negato: nessuno poteva rispondere in questa sessione automatica" : "Negato";
+  const riga2 = el25(documentObj, "p", `talos-approval__esito talos-approval__esito--${approvato ? "si" : "no"}`, `${esito}${altrove && motivo !== "nessuna-interfaccia" ? " da un’altra finestra" : ""}`);
   riga2.setAttribute("role", "status");
   scheda.append(riga2);
   return riga2;
@@ -39102,18 +39618,39 @@ function dovEGirato(livello) {
   return null;
 }
 function leggiEsitoComando(grezzo) {
-  const testo2 = String(grezzo ?? "");
+  const { testo: testo2, avvisi } = separaLeRigheDelModello(String(grezzo ?? ""));
   const trovato = INTESTAZIONE.exec(testo2);
   if (!trovato) {
-    return { uscita: null, riuscito: false, fermato: false, dove: null, livello: null, output: testo2, verdetto: "" };
+    return { uscita: null, riuscito: false, fermato: false, annullato: false, terminato: false, dove: null, livello: null, output: String(grezzo ?? ""), verdetto: "" };
   }
   const uscita = trovato[1] === "null" ? null : Number(trovato[1]);
   const livello = trovato[2] ? trovato[2].trim() : null;
-  const output = testo2.slice(trovato[0].length);
+  const output = `${avvisi}${senzaRiferimentoOutput(testo2.slice(trovato[0].length))}`;
   const fermato = uscita === null;
   const riuscito = uscita === 0;
-  const verdetto = fermato ? "Fermato: il comando non ha restituito un codice d'uscita" : riuscito ? "Riuscito" : `Non riuscito · codice ${uscita}`;
-  return { uscita, riuscito, fermato, dove: dovEGirato(livello), livello, output, verdetto };
+  const annullato = uscita === 130 || uscita === 143;
+  const terminato = uscita === 124 || uscita === 137;
+  const verdetto = fermato ? "Fermato: il comando non ha restituito un codice d'uscita" : riuscito ? "Riuscito" : annullato ? `Annullato · codice ${uscita}` : terminato ? `Terminato a forza · codice ${uscita}` : `Non riuscito · codice ${uscita}`;
+  return { uscita, riuscito, fermato, annullato, terminato, dove: dovEGirato(livello), livello, output, verdetto };
+}
+function separaLeRigheDelModello(grezzo) {
+  let testo2 = grezzo;
+  let avvisi = "";
+  for (let giro = 0; giro < 2; giro += 1) {
+    if (testo2.startsWith(AVVISO_CANALE_COMBINATO)) {
+      testo2 = testo2.slice(AVVISO_CANALE_COMBINATO.length);
+      continue;
+    }
+    const powershell = AVVISO_POWERSHELL.exec(testo2);
+    if (powershell) {
+      avvisi += powershell[0];
+      testo2 = testo2.slice(powershell[0].length);
+    }
+  }
+  return { testo: testo2, avvisi };
+}
+function senzaRiferimentoOutput(output) {
+  return output.replace(RIFERIMENTO_OUTPUT, () => "");
 }
 function rigaEsitoDaMostrare(grezzo) {
   const esito = leggiEsitoComando(grezzo);
@@ -39152,10 +39689,13 @@ function motivoDomandaDaCorreggere(nome, testo2) {
   if (/supera il limite/u.test(motivo)) return { frase: "un testo era troppo lungo" };
   return { frase: "la forma non era valida" };
 }
-var INTESTAZIONE, ALIAS_ESITO_FALLITO, INIZIO_FALLITO, escapeRegex;
+var INTESTAZIONE, AVVISO_CANALE_COMBINATO, AVVISO_POWERSHELL, RIFERIMENTO_OUTPUT, ALIAS_ESITO_FALLITO, INIZIO_FALLITO, escapeRegex;
 var init_esito_comando = __esm({
   "src/components/esito-comando.js"() {
     INTESTAZIONE = /^exit (-?\d+|null)(?: \[sandbox: ([^\]]*)\])?\n?/u;
+    AVVISO_CANALE_COMBINATO = "[shell output: stdout and stderr combined in arrival order; stream identity is not preserved]\n";
+    AVVISO_POWERSHELL = /^⚠ SHELL_DIAGNOSTIC_WITH_ZERO_EXIT: [^\n]*\n/u;
+    RIFERIMENTO_OUTPUT = /^\[TALOS output reference: [0-9a-f-]{36}; retained \d+ of \d+ bytes(?:; the retention limit was reached)?\.\](?: Read retained bytes with process_output\(\{"outputId":"[0-9a-f-]{36}"\}\); follow nextOffset, and select stderr separately\.)?(?:\n|$)/u;
     ALIAS_ESITO_FALLITO = Object.freeze({ web_search: ["search"], delega_sottotask: ["delegation"] });
     INIZIO_FALLITO = /^(?:REFUSED\.|ERROR\b|ERRORE\b|FAILED\b|FALLITO\b|NON RIUSCITO\b)/i;
     escapeRegex = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -39168,7 +39708,7 @@ function esitoDaContenuto(attrezzo, contenuto) {
   if (attrezzo === "prova") return /ℹ?\s*fail\s+([1-9]\d*)/i.test(testo2) ? "error" : "success";
   if (attrezzo === "shell") {
     const esito = leggiEsitoComando(testo2);
-    return esito.verdetto && !esito.riuscito ? "error" : "success";
+    return esito.verdetto && !esito.riuscito && !esito.annullato && !esito.terminato ? "error" : "success";
   }
   return esitoDichiaraFallimento(attrezzo, testo2) ? "error" : "success";
 }
@@ -39476,7 +40016,7 @@ function montaConversazioneFiglia(contenitore, {
       else ridotto = istantaneaDaCache;
     }
     badge6.textContent = ETICHETTA_STATO_FIGLIA[ridotto.stato];
-    const tono = TONO_STATO[ridotto.stato];
+    const tono = TONO_STATO2[ridotto.stato];
     badge6.className = `talos-badge talos-badge--sm${tono ? ` talos-badge--${tono}` : ""}`;
     elemento.dataset.stato = ridotto.stato;
     elemento.setAttribute("aria-label", `Conversazione del sotto-agente: ${titolo2.textContent} — ${ETICHETTA_STATO_FIGLIA[ridotto.stato]}`);
@@ -39617,7 +40157,7 @@ function montaConversazioneFiglia(contenitore, {
     }
   };
 }
-var ETICHETTA_STATO_FIGLIA, TONO_STATO, CODICI_FERMATA, ESITI_FERMATA, ESITI_FALLITI, pezzo, SVG_NS3, TETTO_SCORRIMENTI, TETTO_ISTANTANEE, PESO_MASSIMO_ISTANTANEA, SCORRIMENTI, ISTANTANEE;
+var ETICHETTA_STATO_FIGLIA, TONO_STATO2, CODICI_FERMATA, ESITI_FERMATA, ESITI_FALLITI, pezzo, SVG_NS3, TETTO_SCORRIMENTI, TETTO_ISTANTANEE, PESO_MASSIMO_ISTANTANEA, SCORRIMENTI, ISTANTANEE;
 var init_conversazione_figlia = __esm({
   "src/components/conversazione-figlia.js"() {
     init_conversazione();
@@ -39631,7 +40171,7 @@ var init_conversazione_figlia = __esm({
       fallita: "Non riuscita",
       interrotta: "Interrotta"
     });
-    TONO_STATO = Object.freeze({ "in-corso": "accent", conclusa: "success", fallita: "danger", interrotta: null });
+    TONO_STATO2 = Object.freeze({ "in-corso": "accent", conclusa: "success", fallita: "danger", interrotta: null });
     CODICI_FERMATA = /* @__PURE__ */ new Set(["fermato"]);
     ESITI_FERMATA = /* @__PURE__ */ new Set(["fermato"]);
     ESITI_FALLITI = /* @__PURE__ */ new Set(["errore"]);
@@ -39646,10 +40186,10 @@ var init_conversazione_figlia = __esm({
 });
 
 // src/components/scala-composer.js
-function etichettaTagliata(el30, win = globalThis) {
-  if (!el30 || !el30.isConnected || el30.getClientRects().length === 0) return false;
-  if (win.getComputedStyle(el30).position === "absolute") return false;
-  return el30.scrollWidth > el30.clientWidth + 1;
+function etichettaTagliata(el31, win = globalThis) {
+  if (!el31 || !el31.isConnected || el31.getClientRects().length === 0) return false;
+  if (win.getComputedStyle(el31).position === "absolute") return false;
+  return el31.scrollWidth > el31.clientWidth + 1;
 }
 function adattaScala(barra, win = globalThis) {
   if (!barra) return 0;
@@ -40005,6 +40545,242 @@ var init_risultati_ricerca = __esm({
     RIGA_URL = /^\s*url:\s*(\S+)\s*$/i;
     RIGA_DATA = /^\s*published:\s*(.+?)\s*$/i;
     TESTATA = /^\s*(\d+)\s+results?\s+for\s+(.*)$/i;
+  }
+});
+
+// src/components/richiesta-mcp.js
+function el27(documentObj, tag2, className, testo2) {
+  const nodo13 = documentObj.createElement(tag2);
+  if (className) nodo13.className = className;
+  if (testo2 !== void 0 && testo2 !== null) nodo13.textContent = String(testo2);
+  return nodo13;
+}
+function simbolo3(documentObj, classe, nome) {
+  const svg2 = documentObj.createElementNS(SVG_NS4, "svg");
+  svg2.setAttribute("class", classe);
+  const use = documentObj.createElementNS(SVG_NS4, "use");
+  use.setAttribute("href", `#${nome}`);
+  svg2.append(use);
+  return svg2;
+}
+function campoDelModulo(documentObj, nome, schema, obbligatorio) {
+  const id4 = `talosMcpCampo${++prossimoId3}`;
+  const titolo2 = typeof schema.title === "string" && schema.title.trim() ? schema.title.trim() : nome;
+  const contenitore = el27(documentObj, "div", "talos-mcp-campo talos-field--stack");
+  contenitore.dataset.campo = nome;
+  const aiuto = typeof schema.description === "string" && schema.description.trim() ? el27(documentObj, "small", "talos-mcp-campo__aiuto", schema.description.trim()) : null;
+  if (aiuto) aiuto.id = `${id4}-aiuto`;
+  const intestazione = (tag2 = "label") => {
+    const etichetta4 = el27(documentObj, tag2, "talos-mcp-campo__etichetta", titolo2);
+    if (obbligatorio) etichetta4.append(el27(documentObj, "span", "talos-mcp-campo__obbligatorio", " · obbligatorio"));
+    return etichetta4;
+  };
+  const scelte = schema.type === "array" ? schema.items?.enum : schema.type === "string" ? schema.enum : null;
+  if (Array.isArray(scelte)) {
+    const gruppo = el27(documentObj, "fieldset", "talos-mcp-campo__scelte");
+    gruppo.append(intestazione("legend"));
+    if (aiuto) {
+      gruppo.append(aiuto);
+      gruppo.setAttribute("aria-describedby", aiuto.id);
+    }
+    const multi = schema.type === "array";
+    const predefiniti = multi ? Array.isArray(schema.default) ? schema.default : [] : [schema.default];
+    const nomi2 = Array.isArray(schema.enumNames) ? schema.enumNames : [];
+    const caselle = scelte.map((valore3, i2) => {
+      const riga2 = el27(documentObj, "label", "sheet-toggle-row");
+      const casella = el27(documentObj, "input");
+      casella.type = multi ? "checkbox" : "radio";
+      casella.name = id4;
+      casella.value = valore3;
+      casella.checked = predefiniti.includes(valore3);
+      riga2.append(casella, el27(documentObj, "span", "talos-mcp-campo__scelta", nomi2[i2] || valore3));
+      gruppo.append(riga2);
+      return casella;
+    });
+    contenitore.append(gruppo);
+    const valore2 = () => multi ? caselle.filter((c) => c.checked).map((c) => c.value) : caselle.find((c) => c.checked)?.value;
+    return { nome, titolo: titolo2, schema, obbligatorio, contenitore, valore: valore2, vuoto: () => multi ? valore2().length === 0 : valore2() === void 0, fuoco: () => caselle[0]?.focus() };
+  }
+  if (schema.type === "boolean") {
+    const riga2 = el27(documentObj, "label", "talos-mcp-campo__interruttore");
+    const casella = el27(documentObj, "input", "talos-switch");
+    casella.type = "checkbox";
+    casella.setAttribute("role", "switch");
+    casella.id = id4;
+    casella.checked = schema.default === true;
+    if (aiuto) casella.setAttribute("aria-describedby", aiuto.id);
+    riga2.append(casella, intestazione("span"));
+    contenitore.append(riga2);
+    if (aiuto) contenitore.append(aiuto);
+    return { nome, titolo: titolo2, schema, obbligatorio, contenitore, valore: () => casella.checked, vuoto: () => false, fuoco: () => casella.focus() };
+  }
+  const etichetta3 = intestazione("label");
+  etichetta3.htmlFor = id4;
+  const input = el27(documentObj, "input", "talos-field__input");
+  input.id = id4;
+  input.name = nome;
+  if (schema.type === "number" || schema.type === "integer") {
+    input.type = "number";
+    input.step = schema.type === "integer" ? "1" : "any";
+    if (typeof schema.minimum === "number") input.min = String(schema.minimum);
+    if (typeof schema.maximum === "number") input.max = String(schema.maximum);
+    if (typeof schema.default === "number") input.value = String(schema.default);
+  } else {
+    input.type = TIPO_PER_FORMATO[schema.format] || "text";
+    if (Number.isSafeInteger(schema.maxLength)) input.maxLength = schema.maxLength;
+    if (typeof schema.default === "string") input.value = schema.default;
+  }
+  if (obbligatorio) input.required = true;
+  if (aiuto) input.setAttribute("aria-describedby", aiuto.id);
+  const campo2 = el27(documentObj, "div", "talos-field");
+  campo2.append(input);
+  contenitore.append(etichetta3, campo2);
+  if (aiuto) contenitore.append(aiuto);
+  const valore = () => {
+    const grezzo = input.value;
+    if (schema.type === "number" || schema.type === "integer") return grezzo.trim() === "" ? void 0 : Number(grezzo);
+    return grezzo === "" ? void 0 : grezzo;
+  };
+  return { nome, titolo: titolo2, schema, obbligatorio, contenitore, valore, vuoto: () => valore() === void 0, fuoco: () => input.focus() };
+}
+function erroreDelModulo(campi) {
+  for (const c of campi) {
+    if (c.vuoto()) {
+      if (c.obbligatorio) return { campo: c, testo: `Compila «${c.titolo}».` };
+      continue;
+    }
+    const v = c.valore();
+    const s = c.schema;
+    if (s.type === "number" || s.type === "integer") {
+      if (!Number.isFinite(v)) return { campo: c, testo: `«${c.titolo}» deve essere un numero.` };
+      if (s.type === "integer" && !Number.isInteger(v)) return { campo: c, testo: `«${c.titolo}» deve essere un numero intero.` };
+      if (typeof s.minimum === "number" && v < s.minimum) return { campo: c, testo: `«${c.titolo}» deve essere almeno ${s.minimum}.` };
+      if (typeof s.maximum === "number" && v > s.maximum) return { campo: c, testo: `«${c.titolo}» deve essere al massimo ${s.maximum}.` };
+    } else if (s.type === "string" && !Array.isArray(s.enum)) {
+      if (Number.isSafeInteger(s.minLength) && v.length < s.minLength) return { campo: c, testo: `«${c.titolo}» deve avere almeno ${s.minLength} caratteri.` };
+    } else if (s.type === "array") {
+      if (Number.isSafeInteger(s.minItems) && v.length < s.minItems) return { campo: c, testo: `Scegli almeno ${s.minItems} voci in «${c.titolo}».` };
+      if (Number.isSafeInteger(s.maxItems) && v.length > s.maxItems) return { campo: c, testo: `Scegli al massimo ${s.maxItems} voci in «${c.titolo}».` };
+    }
+  }
+  return null;
+}
+function creaRichiestaMcp(richiesta = {}, azioni = {}, opzioni = {}) {
+  const documentObj = opzioni.document || globalThis.document;
+  const pagina = richiesta.mode === "url";
+  const scheda = el27(documentObj, "div", "talos-approval talos-mcp-richiesta");
+  scheda.setAttribute("data-c", "McpRequestCard");
+  scheda.dataset.modo = pagina ? "url" : "form";
+  const testa = el27(documentObj, "div", "talos-approval__head");
+  const etichetta3 = el27(documentObj, "span", "talos-badge talos-badge--accent");
+  etichetta3.append(simbolo3(documentObj, "i i--sm", pagina ? "i-link" : "i-edit"), documentObj.createTextNode(pagina ? "Chiede di aprire una pagina" : "Chiede dei dati"));
+  const server = typeof richiesta.server === "string" && richiesta.server ? richiesta.server : "mcp";
+  const chi = el27(documentObj, "span", "talos-mono talos-measure talos-grow talos-truncate", `server MCP ${server}`);
+  chi.title = `Lo chiede il server MCP «${server}», non TALOS`;
+  testa.append(etichetta3, chi);
+  scheda.append(testa, el27(documentObj, "p", "talos-approval__why assistant-copy", richiesta.message || ""));
+  const corpo = el27(documentObj, "div", pagina ? "talos-mcp-pagina" : "talos-mcp-modulo");
+  corpo.dataset.corpo = "";
+  const errore = el27(documentObj, "p", "talos-mcp-richiesta__errore");
+  errore.setAttribute("role", "alert");
+  errore.hidden = true;
+  corpo.addEventListener("input", () => {
+    if (!errore.hidden) mostraErrore("");
+  });
+  const piede = el27(documentObj, "div", "talos-approval__foot sheet-actions");
+  const bottone7 = (classi, testo2) => {
+    const b = el27(documentObj, "button", classi, testo2);
+    b.type = "button";
+    return b;
+  };
+  const rifiuta = bottone7("talos-button talos-button--ghost talos-button--danger", "Rifiuta");
+  const annulla = bottone7("talos-button talos-button--ghost", "Annulla");
+  const pulsanti = { rifiuta, annulla };
+  let campi = [];
+  if (pagina) {
+    corpo.append(el27(documentObj, "p", "talos-mcp-pagina__dominio", richiesta.dominio || ""));
+    const indirizzo = el27(documentObj, "pre", "talos-approval__codice talos-mcp-pagina__indirizzo", richiesta.url || "");
+    indirizzo.tabIndex = 0;
+    indirizzo.setAttribute("aria-label", "L’indirizzo completo della pagina");
+    corpo.append(indirizzo, el27(documentObj, "p", "talos-approval__motivo", "Si apre nel tuo browser solo se lo chiedi tu. Quando hai finito sulla pagina, torna qui."));
+    const apri = bottone7("talos-button talos-button--primary talos-button--md", "Apri la pagina");
+    const fatto = bottone7("talos-button talos-button--primary talos-button--md", "Ho finito");
+    fatto.hidden = true;
+    apri.addEventListener("click", () => {
+      if (typeof azioni.onApri === "function") azioni.onApri(richiesta.url);
+      apri.hidden = true;
+      fatto.hidden = false;
+      fatto.focus?.();
+    });
+    fatto.addEventListener("click", () => {
+      if (typeof azioni.onFatto === "function") azioni.onFatto();
+    });
+    pulsanti.apri = apri;
+    pulsanti.fatto = fatto;
+    piede.append(apri, fatto, rifiuta, annulla);
+  } else {
+    const schema = richiesta.requestedSchema || {};
+    const richiesti = new Set(Array.isArray(schema.required) ? schema.required : []);
+    campi = Object.entries(schema.properties || {}).map(([nome, s]) => campoDelModulo(documentObj, nome, s || {}, richiesti.has(nome)));
+    for (const c of campi) corpo.append(c.contenitore);
+    if (!campi.length) corpo.append(el27(documentObj, "p", "talos-approval__motivo", "Il server non chiede nessun campo: basta confermare."));
+    const invia = bottone7("talos-button talos-button--primary talos-button--md", "Invia");
+    invia.addEventListener("click", () => {
+      const sbaglio = erroreDelModulo(campi);
+      if (sbaglio) {
+        mostraErrore(sbaglio.testo);
+        sbaglio.campo.fuoco();
+        return;
+      }
+      mostraErrore("");
+      if (typeof azioni.onInvia === "function") azioni.onInvia(valoriDelModulo());
+    });
+    pulsanti.invia = invia;
+    piede.append(invia, rifiuta, annulla);
+  }
+  rifiuta.addEventListener("click", () => {
+    if (typeof azioni.onRifiuta === "function") azioni.onRifiuta();
+  });
+  annulla.addEventListener("click", () => {
+    if (typeof azioni.onAnnulla === "function") azioni.onAnnulla();
+  });
+  piede.append(el27(documentObj, "span", "talos-grow"), el27(documentObj, "span", "talos-approval__foot-note", "Rispondi al server, non a TALOS"));
+  corpo.append(errore);
+  scheda.append(corpo, piede);
+  function valoriDelModulo() {
+    const contenuto = {};
+    for (const c of campi) {
+      if (!c.vuoto()) contenuto[c.nome] = c.valore();
+    }
+    return contenuto;
+  }
+  function mostraErrore(testo2) {
+    errore.textContent = testo2 || "";
+    errore.hidden = !testo2;
+  }
+  function inAttesa(si) {
+    for (const b of [pulsanti.invia, pulsanti.apri, pulsanti.fatto, rifiuta, annulla]) if (b) b.disabled = Boolean(si);
+  }
+  return { scheda, pulsanti, campi, valori: valoriDelModulo, mostraErrore, inAttesa };
+}
+function segnaEsitoRichiestaMcp(scheda, { action, modo = "form", altrove = false, motivo = null } = {}, opzioni = {}) {
+  if (!scheda) return null;
+  const documentObj = opzioni.document || scheda.ownerDocument || globalThis.document;
+  for (const parte of [...scheda.querySelectorAll("[data-corpo], .talos-approval__foot, .sheet-actions, .talos-mcp-richiesta__errore, .talos-approval__esito")]) parte.remove();
+  const testo2 = action === "accept" ? modo === "url" ? "Fatto sulla pagina" : "Inviato al server" : action === "decline" ? "Rifiutato" : motivo === "fermato" ? "Annullato: la sessione si è fermata" : motivo === "reindirizzamento" ? "Annullato: il giro è stato reindirizzato" : motivo === "non-in-attesa" ? "Il server non aspetta più una risposta" : "Annullato";
+  const tono = action === "accept" ? "si" : action === "decline" ? "no" : "neutro";
+  const riga2 = el27(documentObj, "p", `talos-approval__esito talos-approval__esito--${tono}`, `${testo2}${altrove ? " da un’altra finestra" : ""}`);
+  riga2.setAttribute("role", "status");
+  scheda.append(riga2);
+  scheda.dataset.esito = action;
+  return riga2;
+}
+var SVG_NS4, prossimoId3, TIPO_PER_FORMATO;
+var init_richiesta_mcp = __esm({
+  "src/components/richiesta-mcp.js"() {
+    SVG_NS4 = "http://www.w3.org/2000/svg";
+    prossimoId3 = 0;
+    TIPO_PER_FORMATO = Object.freeze({ email: "email", uri: "url", date: "date", "date-time": "datetime-local" });
   }
 });
 
@@ -40370,7 +41146,7 @@ function messaggioErrore(errore) {
   return "La riscrittura non è riuscita. Riprova.";
 }
 function montaMiglioraPrompt({
-  chiedi,
+  chiedi: chiedi2,
   leggiPrompt,
   applica: applica2,
   copiaTesto = async (testo2) => {
@@ -40383,7 +41159,7 @@ function montaMiglioraPrompt({
   },
   document: doc = globalThis.document
 } = {}) {
-  if (typeof chiedi !== "function" || typeof leggiPrompt !== "function" || typeof applica2 !== "function" || typeof copiaTesto !== "function") {
+  if (typeof chiedi2 !== "function" || typeof leggiPrompt !== "function" || typeof applica2 !== "function" || typeof copiaTesto !== "function") {
     throw new TypeError("MiglioraPrompt richiede chiedi, leggiPrompt, applica e copiaTesto.");
   }
   let stato2 = "scelta";
@@ -40441,15 +41217,15 @@ function montaMiglioraPrompt({
   listaLinguette.setAttribute("role", "tablist");
   listaLinguette.setAttribute("aria-labelledby", "migliora-prompt-quanto");
   const bottoniProfondita = PROFONDITA.map((voce) => {
-    const bottone6 = elemento("button", "talos-tabs__tab", voce.nome);
-    bottone6.type = "button";
-    bottone6.setAttribute("role", "tab");
-    bottone6.dataset.miglioraProfondita = voce.valore;
-    bottone6.addEventListener("click", () => {
+    const bottone7 = elemento("button", "talos-tabs__tab", voce.nome);
+    bottone7.type = "button";
+    bottone7.setAttribute("role", "tab");
+    bottone7.dataset.miglioraProfondita = voce.valore;
+    bottone7.addEventListener("click", () => {
       profondita = voce.valore;
       disegna2();
     });
-    return bottone6;
+    return bottone7;
   });
   listaLinguette.append(...bottoniProfondita);
   linguette.append(listaLinguette);
@@ -40578,9 +41354,9 @@ function montaMiglioraPrompt({
     provenienza.textContent = fraseProvenienza(modello);
     const voce = descriviProfondita(profondita);
     spiegazione.textContent = voce.spiega;
-    for (const bottone6 of bottoniProfondita) {
-      const attiva = bottone6.dataset.miglioraProfondita === profondita;
-      bottone6.setAttribute("aria-selected", String(attiva));
+    for (const bottone7 of bottoniProfondita) {
+      const attiva = bottone7.dataset.miglioraProfondita === profondita;
+      bottone7.setAttribute("aria-selected", String(attiva));
     }
     scelta.hidden = stato2 !== "scelta";
     attesa.hidden = stato2 !== "attesa";
@@ -40612,7 +41388,7 @@ function montaMiglioraPrompt({
     stato2 = "attesa";
     disegna2();
     try {
-      const dati = await chiedi({ prompt: testo2, profondita });
+      const dati = await chiedi2({ prompt: testo2, profondita });
       if (distrutto || mio !== giro) return;
       const letto = riassumiEsito(dati);
       if (!letto) {
@@ -40642,7 +41418,7 @@ function montaMiglioraPrompt({
     copiaStato.textContent = "";
     radice2.hidden = false;
     disegna2();
-    const scelto = bottoniProfondita.find((bottone6) => bottone6.dataset.miglioraProfondita === profondita);
+    const scelto = bottoniProfondita.find((bottone7) => bottone7.dataset.miglioraProfondita === profondita);
     if (scelto && typeof scelto.focus === "function") scelto.focus();
   }
   function chiudi() {
@@ -40863,6 +41639,12 @@ function azioneAppunti(evento, { haSelezione = false, apple = false } = {}) {
   return null;
 }
 function vociMenuTerminale(term, { copia: copia3, incolla }) {
+  if (typeof incolla !== "function") {
+    return [
+      [t2(TESTI_APPUNTI.copia), () => copia3(), Boolean(term?.hasSelection?.())],
+      [t2(TESTI_APPUNTI.selezionaTutto), () => term?.selectAll?.(), true]
+    ];
+  }
   return [
     [t2(TESTI_APPUNTI.copia), () => copia3(), Boolean(term?.hasSelection?.())],
     [t2(TESTI_APPUNTI.incolla), () => incolla(), true],
@@ -40884,7 +41666,8 @@ function creaTerminaleXterm({
   },
   suMisura = () => {
   },
-  Osservatore = globalThis.ResizeObserver
+  Osservatore = globalThis.ResizeObserver,
+  solaLettura = false
 } = {}) {
   if (!contenitore || !Terminal || !FitAddon) return null;
   const mount = documento.createElement("div");
@@ -40894,7 +41677,8 @@ function creaTerminaleXterm({
   const term = new Terminal({
     fontFamily,
     fontSize,
-    cursorBlink: true,
+    cursorBlink: !solaLettura,
+    ...solaLettura ? { disableStdin: true, cursorInactiveStyle: "none" } : {},
     scrollback,
     theme: tema,
     /* ⛔ 16/09 — il tasto destro seleziona la parola sotto il cursore (ITerminalOptions):
@@ -40905,7 +41689,7 @@ function creaTerminaleXterm({
   term.loadAddon(fit);
   term.open(mount);
   fit.fit();
-  term.onData((dati) => suDati(dati));
+  if (!solaLettura) term.onData((dati) => suDati(dati));
   const osservatore = new Osservatore(() => {
     if (mount.hidden) return;
     const primaCols = term.cols;
@@ -40937,7 +41721,8 @@ function collegaAppunti(term, {
   apple = false,
   avvisa = () => {
   },
-  finestra = globalThis
+  finestra = globalThis,
+  solaLettura = false
 } = {}) {
   if (!term || !ospite) return () => {
   };
@@ -40968,7 +41753,7 @@ function collegaAppunti(term, {
   }
   term.attachCustomKeyEventHandler((evento) => {
     const azione = azioneAppunti(evento, { haSelezione: Boolean(term.hasSelection?.()), apple });
-    if (!azione) return true;
+    if (!azione || azione === "incolla" && solaLettura) return true;
     evento.preventDefault?.();
     if (azione === "copia") void copia3();
     else void incolla();
@@ -40978,7 +41763,7 @@ function collegaAppunti(term, {
     evento.preventDefault?.();
     apriMenuContestuale(menu, {
       titolo: t2(TESTI_APPUNTI.titoloMenu),
-      voci: vociMenuTerminale(term, { copia: copia3, incolla }),
+      voci: vociMenuTerminale(term, { copia: copia3, incolla: solaLettura ? null : incolla }),
       x: evento.clientX ?? 0,
       y: evento.clientY ?? 0,
       chiudi: chiudiMenu,
@@ -41021,6 +41806,98 @@ var init_terminale_xterm = __esm({
       incollaNegataTitolo: "Non ho potuto incollare",
       incollaNegataTesto: "Gli appunti di sistema non sono raggiungibili da questa finestra: dai il permesso agli appunti, oppure incolla con il tasto destro del sistema."
     });
+  }
+});
+
+// src/components/terminale-agente.js
+function idSchedaAgente(giro) {
+  return giro == null ? "agente" : `agente-giro-${giro}`;
+}
+function coda(testo2, righe) {
+  const parti = testo2.split("\n");
+  const finale = testo2.endsWith("\n");
+  const piene = finale ? parti.slice(0, -1) : parti;
+  if (piene.length <= righe) return testo2;
+  return `${piene.slice(-righe).join("\n")}${finale ? "\n" : ""}`;
+}
+function schedeAgenteDagliEventi(eventi2 = [], { chiuse = /* @__PURE__ */ new Map(), righeVive = RIGHE_VIVE_AGENTE, adesso = Date.now(), uscite = null } = {}) {
+  const processi = processiDagliEventi(eventi2, { adesso }).filter((p) => p.chi !== "tu");
+  const testi = /* @__PURE__ */ new Map();
+  const vivi = /* @__PURE__ */ new Map();
+  for (const e of eventi2) {
+    if (e?.type === "ToolCallOutput" && typeof e.delta === "string" && e.delta) {
+      vivi.set(e.toolCallId, coda(`${vivi.get(e.toolCallId) ?? ""}${e.delta}`, righeVive));
+    } else if (e?.type === "ToolCallResult") {
+      testi.set(e.toolCallId, e.content == null ? "" : String(e.content));
+      vivi.delete(e.toolCallId);
+    }
+  }
+  const posizione = /* @__PURE__ */ new Map();
+  eventi2.forEach((e, i2) => {
+    if (e?.type === "ToolCallStart" && !posizione.has(e.toolCallId)) posizione.set(e.toolCallId, i2);
+  });
+  const inFila = [...processi].sort((x, y) => (posizione.get(x.id) ?? 0) - (posizione.get(y.id) ?? 0));
+  const perGiro = /* @__PURE__ */ new Map();
+  for (const p of inFila) {
+    const id4 = idSchedaAgente(p.giro ?? null);
+    if (!perGiro.has(id4)) perGiro.set(id4, { terminalId: id4, origine: "agente", giro: p.giro ?? null, stato: "terminato", esito: "concluso", comandi: [] });
+    const scheda = perGiro.get(id4);
+    const fuori = uscite?.get?.(p.id);
+    const testo2 = typeof fuori?.testo === "string" ? fuori.testo : testi.has(p.id) ? testi.get(p.id) : null;
+    scheda.comandi.push({
+      id: p.id,
+      comando: p.comando,
+      descrizione: p.descrizione,
+      cwd: p.cwd,
+      stato: p.stato,
+      uscita: p.uscita,
+      durataMs: p.durataMs,
+      avviatoA: p.avviatoA,
+      testo: testo2,
+      sfrattato: fuori?.sfrattato === true,
+      vivo: testo2 === null ? typeof fuori?.vivo === "string" ? coda(fuori.vivo, righeVive) : vivi.get(p.id) ?? "" : ""
+    });
+    if (STATI_VIVI.has(p.stato)) scheda.stato = "live";
+  }
+  for (const s of perGiro.values()) {
+    s.esito = s.stato === "live" ? "in-corso" : s.comandi.some((c) => c.stato === "fallito") ? "con-errori" : "concluso";
+  }
+  const schede = [...perGiro.values()].filter((s) => !(chiuse.has(s.terminalId) && s.comandi.length <= chiuse.get(s.terminalId)));
+  return schede.sort((a, b) => (a.giro ?? -1) - (b.giro ?? -1));
+}
+function rigaEsitoComandoAgente(c = {}) {
+  if (c.stato === "in-consenso") return "Aspetta il tuo consenso";
+  if (typeof c.testo !== "string") return null;
+  const esito = leggiEsitoComando(c.testo);
+  if (!esito.verdetto) return c.stato === "non-eseguito" ? "Non eseguito: il comando non è partito" : null;
+  return rigaDiStatoComando(esito, Number.isFinite(c.durataMs) ? c.durataMs : null);
+}
+function testoSchedaAgente(scheda = {}) {
+  const blocchi = [];
+  for (const c of scheda.comandi || []) {
+    const righe = [`${ANSI.grassetto}$ ${c.comando || c.descrizione || "comando"}${ANSI.fine}`];
+    const letto = typeof c.testo === "string" ? leggiEsitoComando(c.testo) : null;
+    const uscita = letto ? letto.verdetto ? letto.output : "" : c.vivo || "";
+    if (uscita.trim()) righe.push(uscita.replace(/(?:\r?\n[ \t]*)+$/u, ""));
+    if (c.sfrattato) righe.push(`${ANSI.attenuato}(uscita non più tenuta in questa pagina: troppo testo in questa sessione)${ANSI.fine}`);
+    const esito = rigaEsitoComandoAgente(c);
+    if (esito) righe.push(`${ANSI.attenuato}${TONO_DELLO_STATO[c.stato] ?? ""}— ${esito}${ANSI.fine}`);
+    blocchi.push(righe.join("\n"));
+  }
+  return blocchi.length ? `${NASCONDI_CURSORE}${aCapoXterm(`${blocchi.join("\n\n")}
+`)}` : "";
+}
+var RIGHE_VIVE_AGENTE, STATI_VIVI, ANSI, TONO_DELLO_STATO, aCapoXterm, NASCONDI_CURSORE;
+var init_terminale_agente = __esm({
+  "src/components/terminale-agente.js"() {
+    init_inspector();
+    init_esito_comando();
+    RIGHE_VIVE_AGENTE = 40;
+    STATI_VIVI = /* @__PURE__ */ new Set(["in-avvio", "in-corso", "in-attesa", "in-consenso"]);
+    ANSI = Object.freeze({ grassetto: "\x1B[1m", attenuato: "\x1B[2m", rosso: "\x1B[31m", verde: "\x1B[32m", giallo: "\x1B[33m", fine: "\x1B[0m" });
+    TONO_DELLO_STATO = Object.freeze({ riuscito: ANSI.verde, fallito: ANSI.rosso, annullato: ANSI.giallo, ucciso: ANSI.giallo, "in-consenso": ANSI.giallo, "non-eseguito": "" });
+    aCapoXterm = (testo2) => String(testo2).replace(/\r?\n/g, "\r\n");
+    NASCONDI_CURSORE = "\x1B[?25l";
   }
 });
 
@@ -41069,10 +41946,10 @@ function collegaTooltip(documentObj = globalThis.document, { ritardo = RITARDO_M
   let timer2 = null;
   let dentroLaBolla = false;
   let modalita = "pointer";
-  const daTastiera = (el30) => {
+  const daTastiera = (el31) => {
     if (modalita !== "keyboard") return false;
     try {
-      return el30.matches(":focus-visible");
+      return el31.matches(":focus-visible");
     } catch {
       return true;
     }
@@ -42030,17 +42907,17 @@ function normalizzaVoce(elemento, dati) {
     comandoDellaPersona: Boolean(info.comandoDellaPersona)
   };
 }
-function el27(tag2, classe, testo2) {
+function el28(tag2, classe, testo2) {
   const n = document.createElement(tag2);
   if (classe) n.className = classe;
   if (testo2 !== void 0 && testo2 !== null) n.textContent = String(testo2);
   return n;
 }
 function icona12(nome, classe = "i") {
-  const svg2 = document.createElementNS(SVG_NS4, "svg");
+  const svg2 = document.createElementNS(SVG_NS5, "svg");
   svg2.setAttribute("class", classe);
   svg2.setAttribute("aria-hidden", "true");
-  const use = document.createElementNS(SVG_NS4, "use");
+  const use = document.createElementNS(SVG_NS5, "use");
   use.setAttribute("href", `#${nome}`);
   svg2.append(use);
   return svg2;
@@ -42054,7 +42931,7 @@ function nascondiTrovabile(nodo13, nascosto) {
 function annuncia(testo2) {
   let regione = document.getElementById("talosAnnunciAttivita");
   if (!regione) {
-    regione = el27("div", "sr-only");
+    regione = el28("div", "sr-only");
     regione.id = "talosAnnunciAttivita";
     regione.setAttribute("role", "status");
     regione.setAttribute("aria-live", "polite");
@@ -42070,7 +42947,7 @@ function creaVistaSegmento({ azioni, orologio = () => performance.now() } = {}) 
   VISTE4.set(vista.card, vista);
   return vista;
 }
-var SVG_NS4, PERMANENZA_MINIMA_AZIONE_MS, PAUSA_PROSSIMO_PASSO_MS, SOGLIA_FILTRI, LARGHEZZA_MINIMA_BERSAGLI_PX, BATTITO_VIVO_MS, ATTREZZI_CON_VERBO, LUNGHEZZA_BERSAGLIO_VOCE, DATI_VOCE, VISTE4, nomeFile, contatoreId, nuovoId, VistaSegmento;
+var SVG_NS5, PERMANENZA_MINIMA_AZIONE_MS, PAUSA_PROSSIMO_PASSO_MS, SOGLIA_FILTRI, LARGHEZZA_MINIMA_BERSAGLI_PX, BATTITO_VIVO_MS, ATTREZZI_CON_VERBO, LUNGHEZZA_BERSAGLIO_VOCE, DATI_VOCE, VISTE4, nomeFile, contatoreId, nuovoId, VistaSegmento;
 var init_attivita_segmento = __esm({
   "src/components/attivita-segmento.js"() {
     init_markdown();
@@ -42079,7 +42956,7 @@ var init_attivita_segmento = __esm({
     init_ragionamento();
     init_esito_comando();
     init_schede();
-    SVG_NS4 = "http://www.w3.org/2000/svg";
+    SVG_NS5 = "http://www.w3.org/2000/svg";
     PERMANENZA_MINIMA_AZIONE_MS = 700;
     PAUSA_PROSSIMO_PASSO_MS = 2e3;
     SOGLIA_FILTRI = 6;
@@ -42107,50 +42984,50 @@ var init_attivita_segmento = __esm({
         this.timer = null;
         this.ultimo = { vivo: false, misurato: false };
         this.ultimoRiassunto = null;
-        const card = el27("div", "talos-card talos-activity talos-activity--segment");
+        const card = el28("div", "talos-card talos-activity talos-activity--segment");
         card.setAttribute("data-c", "ActivitySegment");
         card.dataset.segmento = "r4";
         this.card = card;
         const idCorpo = nuovoId("segmento-corpo");
-        const testa = el27("button", "talos-activity__head");
+        const testa = el28("button", "talos-activity__head");
         testa.type = "button";
         testa.setAttribute("aria-expanded", "false");
         testa.setAttribute("aria-controls", idCorpo);
         testa.append(icona12("i-chev", "i talos-activity__chev"));
-        this.statoEl = el27("span", "talos-activity__stato");
-        this.summaryText = el27("span", "talos-activity__conteggi");
-        this.bersagliEl = el27("span", "talos-activity__bersagli");
-        this.misureEl = el27("span", "talos-activity__misure");
-        this.diffEl = el27("span", "talos-activity__diff");
-        this.erroreEl = el27("span", "talos-activity__errore");
-        this.tempoEl = el27("span", "talos-activity__tempo");
+        this.statoEl = el28("span", "talos-activity__stato");
+        this.summaryText = el28("span", "talos-activity__conteggi");
+        this.bersagliEl = el28("span", "talos-activity__bersagli");
+        this.misureEl = el28("span", "talos-activity__misure");
+        this.diffEl = el28("span", "talos-activity__diff");
+        this.erroreEl = el28("span", "talos-activity__errore");
+        this.tempoEl = el28("span", "talos-activity__tempo");
         this.tempoEl.setAttribute("aria-hidden", "true");
         this.misureEl.append(this.diffEl, this.erroreEl, this.tempoEl);
-        this.descrizioneEl = el27("span", "sr-only talos-activity__descrizione");
+        this.descrizioneEl = el28("span", "sr-only talos-activity__descrizione");
         this.descrizioneEl.id = nuovoId("segmento-descrizione");
         testa.setAttribute("aria-describedby", this.descrizioneEl.id);
         testa.append(this.statoEl, this.summaryText, this.bersagliEl, this.misureEl);
         this.testa = testa;
-        const altro = el27("button", "talos-activity__altro");
+        const altro = el28("button", "talos-activity__altro");
         altro.type = "button";
         altro.setAttribute("aria-label", t2("Azioni sull’attività"));
         altro.setAttribute("aria-haspopup", "menu");
         altro.setAttribute("aria-expanded", "false");
         altro.append(icona12("i-more"));
         this.altro = altro;
-        this.fissate = el27("div", "talos-activity__fissate");
+        this.fissate = el28("div", "talos-activity__fissate");
         this.fissate.hidden = true;
-        const corpo = el27("div", "talos-activity__body");
+        const corpo = el28("div", "talos-activity__body");
         corpo.id = idCorpo;
         nascondiTrovabile(corpo, true);
-        const interno = el27("div", "talos-activity__interno");
-        this.filtriEl = el27("div", "talos-activity__filtri");
+        const interno = el28("div", "talos-activity__interno");
+        this.filtriEl = el28("div", "talos-activity__filtri");
         this.filtriEl.setAttribute("role", "group");
         this.filtriEl.setAttribute("aria-label", t2("Mostra solo"));
         this.filtriEl.hidden = true;
-        this.notaEl = el27("p", "talos-activity__nota");
+        this.notaEl = el28("p", "talos-activity__nota");
         this.notaEl.hidden = true;
-        this.contenitore = el27("div", "talos-activity__voci tool-batch-items");
+        this.contenitore = el28("div", "talos-activity__voci tool-batch-items");
         interno.append(this.filtriEl, this.notaEl, this.contenitore);
         corpo.append(interno);
         this.corpo = corpo;
@@ -42262,15 +43139,15 @@ var init_attivita_segmento = __esm({
         this.decorati.add(riga2);
         if (voce.tipo === "reasoning") {
           riga2.dataset.voce = "ragionamento";
-          const ic = el27("span", "talos-voce__icona");
+          const ic = el28("span", "talos-voce__icona");
           ic.append(icona12("i-brain"));
           riga2.prepend(ic);
-          const oggetto4 = el27("span", "talos-voce__oggetto");
+          const oggetto4 = el28("span", "talos-voce__oggetto");
           riga2.querySelector(".tool-note-summary-text")?.after(oggetto4);
           return;
         }
         riga2.dataset.voce = "attrezzo";
-        const meta2 = el27("span", "talos-voce__meta");
+        const meta2 = el28("span", "talos-voce__meta");
         const pallino = riga2.querySelector(":scope > .talos-dot");
         if (pallino) pallino.before(meta2);
         else riga2.append(meta2);
@@ -42304,7 +43181,7 @@ var init_attivita_segmento = __esm({
             const atteso = `+${voce.diff.piu} −${voce.diff.meno}`;
             if (meta2.dataset.diff !== atteso) {
               meta2.dataset.diff = atteso;
-              meta2.replaceChildren(el27("span", "talos-activity__piu", `+${voce.diff.piu}`), " ", el27("span", "talos-activity__meno", `−${voce.diff.meno}`));
+              meta2.replaceChildren(el28("span", "talos-activity__piu", `+${voce.diff.piu}`), " ", el28("span", "talos-activity__meno", `−${voce.diff.meno}`));
             }
           } else if (meta2.textContent !== testoMeta) {
             delete meta2.dataset.diff;
@@ -42336,7 +43213,7 @@ var init_attivita_segmento = __esm({
         if (!vivo && this.eraVivo && this.fine === null && misurato) this.fine = this.orologio();
         this.statoEl.replaceChildren();
         if (vivo) {
-          const p = el27("span", "talos-dot talos-dot--live");
+          const p = el28("span", "talos-dot talos-dot--live");
           p.setAttribute("aria-hidden", "true");
           this.statoEl.append(p);
         }
@@ -42350,7 +43227,7 @@ var init_attivita_segmento = __esm({
           const atteso = `+${r.diff.piu} −${r.diff.meno}`;
           if (this.diffEl.dataset.diff !== atteso) {
             this.diffEl.dataset.diff = atteso;
-            this.diffEl.replaceChildren(el27("span", "talos-activity__piu", `+${r.diff.piu}`), " ", el27("span", "talos-activity__meno", `−${r.diff.meno}`));
+            this.diffEl.replaceChildren(el28("span", "talos-activity__piu", `+${r.diff.piu}`), " ", el28("span", "talos-activity__meno", `−${r.diff.meno}`));
             this.diffEl.setAttribute("aria-label", t2("{piu} righe aggiunte, {meno} tolte", { piu: r.diff.piu, meno: r.diff.meno }));
           }
         } else if (this.diffEl.childNodes.length) {
@@ -42404,7 +43281,7 @@ var init_attivita_segmento = __esm({
         if (this.summaryText.dataset.firma === firma) return;
         this.summaryText.dataset.firma = firma;
         this.summaryText.replaceChildren();
-        if (adesso) this.summaryText.append(el27("span", "talos-activity__adesso", adesso), parti.length ? " · " : "");
+        if (adesso) this.summaryText.append(el28("span", "talos-activity__adesso", adesso), parti.length ? " · " : "");
         this.summaryText.append(parti.join(" · ") || (this.vivo ? "" : t2("Attività dell’agente")));
         this.summaryText.dataset.forma = breve2 ? "breve" : "intera";
         this.summaryText.title = breve2 ? r.parti.join(" · ") : "";
@@ -42431,13 +43308,13 @@ var init_attivita_segmento = __esm({
           return;
         }
         this.fissate.replaceChildren(...fallite.map(({ riga: riga2 }) => {
-          const b = el27("button", "talos-activity__fissata");
+          const b = el28("button", "talos-activity__fissata");
           b.type = "button";
           b.append(
             icona12("i-x", "i talos-activity__fissata-icona"),
-            el27("span", "talos-voce__verbo", riga2.querySelector(".tool-note-summary-text")?.textContent ?? ""),
-            el27("span", "talos-voce__oggetto", riga2.querySelector(".talos-tool-row__detail")?.textContent ?? ""),
-            el27("span", "talos-voce__meta", riga2.querySelector(".talos-voce__meta")?.textContent ?? "")
+            el28("span", "talos-voce__verbo", riga2.querySelector(".tool-note-summary-text")?.textContent ?? ""),
+            el28("span", "talos-voce__oggetto", riga2.querySelector(".talos-tool-row__detail")?.textContent ?? ""),
+            el28("span", "talos-voce__meta", riga2.querySelector(".talos-voce__meta")?.textContent ?? "")
           );
           b.addEventListener("click", () => this.apriVoce(riga2, { fuoco: true }));
           return b;
@@ -42478,7 +43355,7 @@ var init_attivita_segmento = __esm({
         if (this.filtriEl.dataset.firma !== firma) {
           this.filtriEl.dataset.firma = firma;
           this.filtriEl.replaceChildren(...chiavi.map((k) => {
-            const b = el27("button", "talos-filtro", `${etichetta3(k)} ${quanti(k)}`);
+            const b = el28("button", "talos-filtro", `${etichetta3(k)} ${quanti(k)}`);
             b.type = "button";
             b.dataset.filtro = k;
             b.setAttribute("aria-pressed", String(k === this.filtro));
@@ -43871,7 +44748,7 @@ function riassuntoControlli(conteggi) {
 function fraseControlli(conteggi) {
   return riassuntoControlli(conteggi).map(({ esito, n }) => tn(FRASE_ESITO[esito][0], FRASE_ESITO[esito][1], n)).join(", ");
 }
-function el28(doc, tag2, classe = "", testo2 = null) {
+function el29(doc, tag2, classe = "", testo2 = null) {
   const n = doc.createElement(tag2);
   if (classe) n.className = classe;
   if (testo2 !== null && testo2 !== void 0) n.textContent = testo2;
@@ -43914,7 +44791,7 @@ function icona14(doc, id4) {
   return svg2;
 }
 function bottoneIcona2(doc, id4, etichetta3, fai) {
-  const b = el28(doc, "button", "talos-button talos-button--ghost talos-button--sm talos-icon-button");
+  const b = el29(doc, "button", "talos-button talos-button--ghost talos-button--sm talos-icon-button");
   b.type = "button";
   b.setAttribute("aria-label", etichetta3);
   b.title = etichetta3;
@@ -43923,7 +44800,7 @@ function bottoneIcona2(doc, id4, etichetta3, fai) {
   return b;
 }
 function bottoneTesto2(doc, testo2, fai, variante = "ghost") {
-  const b = el28(doc, "button", `talos-button talos-button--${variante} talos-button--sm`, testo2);
+  const b = el29(doc, "button", `talos-button talos-button--${variante} talos-button--sm`, testo2);
   b.type = "button";
   b.addEventListener("click", fai);
   return b;
@@ -43931,9 +44808,9 @@ function bottoneTesto2(doc, testo2, fai, variante = "ghost") {
 function creaSchedaGithub({ doc = globalThis.document, radice: radice2, api, conferma, menu, avvisa = () => {
 }, onSchermoIntero = null }) {
   const stato2 = { dati: null, errore: null, nonRepository: false, vista: "elenco", diff: null, messaggio: "", occupato: false, chiusi: /* @__PURE__ */ new Set(["storia", "pr"]), schermoIntero: false, richiesta: null, modifica: null, accantonati: [], storia: null, generando: false, storiaAperte: /* @__PURE__ */ new Map(), pr: null, modulo: null };
-  const elenco2 = el28(doc, "div", "talos-github");
+  const elenco2 = el29(doc, "div", "talos-github");
   elenco2.dataset.c = "SchedaGithub";
-  const vistaDiff = el28(doc, "section", "talos-lettore talos-github-diff");
+  const vistaDiff = el29(doc, "section", "talos-lettore talos-github-diff");
   vistaDiff.hidden = true;
   radice2.replaceChildren(elenco2, vistaDiff);
   const voceDi = (percorso) => stato2.dati?.voci?.find((v) => v.percorso === percorso) ?? null;
@@ -44051,11 +44928,11 @@ function creaSchedaGithub({ doc = globalThis.document, radice: radice2, api, con
   }
   function disegnaRichiesta() {
     const r = stato2.richiesta;
-    const carta = el28(doc, "form", "talos-card talos-inspector-card talos-github-richiesta");
+    const carta = el29(doc, "form", "talos-card talos-inspector-card talos-github-richiesta");
     carta.setAttribute("aria-label", r.titolo);
     carta.noValidate = true;
-    carta.append(el28(doc, "p", "talos-github-richiesta__titolo", r.titolo));
-    const campo2 = el28(doc, "input", "talos-field__input talos-github-richiesta__campo");
+    carta.append(el29(doc, "p", "talos-github-richiesta__titolo", r.titolo));
+    const campo2 = el29(doc, "input", "talos-field__input talos-github-richiesta__campo");
     campo2.type = "text";
     campo2.value = r.valore;
     campo2.placeholder = r.etichetta;
@@ -44063,7 +44940,7 @@ function creaSchedaGithub({ doc = globalThis.document, radice: radice2, api, con
     campo2.spellcheck = false;
     campo2.autocomplete = "off";
     campo2.dataset.fuoco = "richiesta";
-    const si = el28(doc, "button", "talos-button talos-button--primary talos-button--sm", r.verbo);
+    const si = el29(doc, "button", "talos-button talos-button--primary talos-button--sm", r.verbo);
     si.type = "submit";
     const aggiorna = () => {
       si.disabled = !r.facoltativo && r.valore.trim() === "";
@@ -44082,14 +44959,14 @@ function creaSchedaGithub({ doc = globalThis.document, radice: radice2, api, con
     carta.append(campo2);
     if (r.errore) {
       const id4 = "talos-github-richiesta-errore";
-      const errore = el28(doc, "p", "talos-field__error talos-github-richiesta__errore", r.errore);
+      const errore = el29(doc, "p", "talos-field__error talos-github-richiesta__errore", r.errore);
       errore.id = id4;
       errore.setAttribute("role", "alert");
       campo2.setAttribute("aria-invalid", "true");
       campo2.setAttribute("aria-describedby", id4);
       carta.append(errore);
     }
-    const piede = el28(doc, "div", "talos-github-richiesta__piede");
+    const piede = el29(doc, "div", "talos-github-richiesta__piede");
     piede.append(bottoneTesto2(doc, t2("Lascia stare"), () => chiudiRichiesta()), si);
     aggiorna();
     carta.append(piede);
@@ -44455,33 +45332,33 @@ function creaSchedaGithub({ doc = globalThis.document, radice: radice2, api, con
   function disegnaSincronizzazione() {
     const s = stato2.sinc;
     if (!s) return null;
-    const riga2 = el28(doc, "div", "talos-github-sinc");
+    const riga2 = el29(doc, "div", "talos-github-sinc");
     riga2.dataset.c = "SincronizzazioneGithub";
     if (!Array.isArray(s.remoti) || s.remoti.length === 0) {
-      riga2.append(el28(doc, "p", "talos-inspector__hint talos-github-sinc__nota", t2("Nessun remoto: questo repository vive solo qui.")));
+      riga2.append(el29(doc, "p", "talos-inspector__hint talos-github-sinc__nota", t2("Nessun remoto: questo repository vive solo qui.")));
       return riga2;
     }
     if (!s.ramo) {
-      riga2.append(el28(doc, "p", "talos-inspector__hint talos-github-sinc__nota", t2("HEAD staccata: passa a un ramo per sincronizzare.")));
+      riga2.append(el29(doc, "p", "talos-inspector__hint talos-github-sinc__nota", t2("HEAD staccata: passa a un ramo per sincronizzare.")));
       return riga2;
     }
     const azione = azioneSinc(s);
     const inCorso = stato2.inCorso;
-    const bottone6 = el28(doc, "button", "talos-button talos-button--secondary talos-button--sm talos-github-sinc__azione");
-    bottone6.type = "button";
-    bottone6.dataset.azione = inCorso ?? azione;
-    bottone6.dataset.fuoco = "sinc";
-    bottone6.append(icona14(doc, ICONA_SINC[inCorso ?? azione]), el28(doc, "span", "", inCorso ? t2(IN_CORSO[inCorso]) : etichettaSinc(azione, s)));
+    const bottone7 = el29(doc, "button", "talos-button talos-button--secondary talos-button--sm talos-github-sinc__azione");
+    bottone7.type = "button";
+    bottone7.dataset.azione = inCorso ?? azione;
+    bottone7.dataset.fuoco = "sinc";
+    bottone7.append(icona14(doc, ICONA_SINC[inCorso ?? azione]), el29(doc, "span", "", inCorso ? t2(IN_CORSO[inCorso]) : etichettaSinc(azione, s)));
     if (inCorso) {
-      bottone6.disabled = true;
-      bottone6.setAttribute("aria-busy", "true");
+      bottone7.disabled = true;
+      bottone7.setAttribute("aria-busy", "true");
     } else {
-      bottone6.title = azione === "recupera" && remotoPerRecupero(s) ? t2("Recupera da {remoto}", { remoto: remotoPerRecupero(s) }) : azione === "scarica" ? t2("Scarica da {rif}", { rif: s.riferimento.corto }) : azione === "invia" ? t2("Invia a {rif}", { rif: s.riferimento.corto }) : etichettaSinc(azione, s);
-      bottone6.addEventListener("click", () => {
+      bottone7.title = azione === "recupera" && remotoPerRecupero(s) ? t2("Recupera da {remoto}", { remoto: remotoPerRecupero(s) }) : azione === "scarica" ? t2("Scarica da {rif}", { rif: s.riferimento.corto }) : azione === "invia" ? t2("Invia a {rif}", { rif: s.riferimento.corto }) : etichettaSinc(azione, s);
+      bottone7.addEventListener("click", () => {
         void faiSinc(azione);
       });
     }
-    riga2.append(bottone6);
+    riga2.append(bottone7);
     if (inCorso === "recupera") {
       const ferma = bottoneTesto2(doc, t2("Ferma"), () => {
         void fermaRecupero();
@@ -44490,36 +45367,36 @@ function creaSchedaGithub({ doc = globalThis.document, radice: radice2, api, con
       riga2.append(ferma);
     }
     if (s.riferimento && !s.riferimentoSparito && Number.isInteger(s.indietro) && Number.isInteger(s.avanti)) {
-      const conti = el28(doc, "span", "talos-github-sinc__conti");
+      const conti = el29(doc, "span", "talos-github-sinc__conti");
       conti.setAttribute("role", "img");
       conti.setAttribute("aria-label", t2("{giu} da scaricare, {su} da inviare", { giu: s.indietro, su: s.avanti }));
       conti.title = conti.getAttribute("aria-label");
-      conti.append(el28(doc, "span", "talos-github-sinc__conto", `↓${s.indietro}`), el28(doc, "span", "talos-github-sinc__conto", `↑${s.avanti}`));
+      conti.append(el29(doc, "span", "talos-github-sinc__conto", `↓${s.indietro}`), el29(doc, "span", "talos-github-sinc__conto", `↑${s.avanti}`));
       riga2.append(conti);
     }
     const quando = s.ultimoRecupero ? tempoFa(s.ultimoRecupero, linguaCorrenteDiT()) : null;
-    const recupero = el28(doc, "span", "talos-github-sinc__recupero", quando ? t2("Recuperato {quando}", { quando }) : t2("Mai recuperato"));
+    const recupero = el29(doc, "span", "talos-github-sinc__recupero", quando ? t2("Recuperato {quando}", { quando }) : t2("Mai recuperato"));
     if (s.ultimoRecupero) recupero.title = new Date(s.ultimoRecupero).toLocaleString(linguaCorrenteDiT());
     riga2.append(recupero);
     if (s.riferimentoSparito) {
-      riga2.append(el28(doc, "p", "talos-inspector__hint talos-github-sinc__nota", t2("Il ramo remoto «{rif}» non esiste più: pubblicalo di nuovo.", { rif: s.riferimento?.corto ?? "" })));
+      riga2.append(el29(doc, "p", "talos-inspector__hint talos-github-sinc__nota", t2("Il ramo remoto «{rif}» non esiste più: pubblicalo di nuovo.", { rif: s.riferimento?.corto ?? "" })));
     }
     return riga2;
   }
   function disegnaBloccoScarica() {
     const b = stato2.bloccoScarica;
-    const carta = el28(doc, "div", "talos-card talos-inspector-card talos-github-richiesta talos-github-blocco");
+    const carta = el29(doc, "div", "talos-card talos-inspector-card talos-github-richiesta talos-github-blocco");
     carta.setAttribute("role", "group");
     carta.setAttribute("aria-label", t2("Lo scarico non è partito"));
-    carta.append(el28(doc, "p", "talos-github-richiesta__titolo", t2("Lo scarico non è partito")));
-    carta.append(el28(doc, "p", "talos-inspector__hint talos-github-blocco__testo", b.messaggio));
-    const piede = el28(doc, "div", "talos-github-richiesta__piede");
+    carta.append(el29(doc, "p", "talos-github-richiesta__titolo", t2("Lo scarico non è partito")));
+    carta.append(el29(doc, "p", "talos-inspector__hint talos-github-blocco__testo", b.messaggio));
+    const piede = el29(doc, "div", "talos-github-richiesta__piede");
     const lascia = bottoneTesto2(doc, t2("Lascia stare"), () => {
       stato2.bloccoScarica = null;
       ridisegnaElenco();
       elenco2.querySelector('[data-fuoco="sinc"]')?.focus({ preventScroll: true });
     });
-    const si = el28(doc, "button", "talos-button talos-button--primary talos-button--sm", t2("Metti da parte e scarica"));
+    const si = el29(doc, "button", "talos-button talos-button--primary talos-button--sm", t2("Metti da parte e scarica"));
     si.type = "button";
     si.dataset.fuoco = "blocco-scarica";
     si.addEventListener("click", () => {
@@ -44570,22 +45447,22 @@ function creaSchedaGithub({ doc = globalThis.document, radice: radice2, api, con
   }
   function righeDeiFile(aperta2, riga2, larghezza2) {
     const figlia = (contenuto, nota = false) => {
-      const li = el28(doc, "li", `talos-github-riga talos-github-riga--file-commit${nota ? " talos-github-riga--nota" : ""}`);
+      const li = el29(doc, "li", `talos-github-riga talos-github-riga--file-commit${nota ? " talos-github-riga--nota" : ""}`);
       li.dataset.gruppo = "storia";
       const corsie = grafoDellaRiga(doc, disegnoSegnaposto(riga2.uscita, ALTEZZA_RIGA_FILE_STORIA), larghezza2);
       if (nota) corsie.setAttribute("preserveAspectRatio", "none");
       li.append(corsie, contenuto);
       return li;
     };
-    if (aperta2.caricando) return [figlia(el28(doc, "p", "talos-inspector__hint", t2("Leggo i file cambiati…")), true)];
-    if (aperta2.errore) return [figlia(el28(doc, "p", "talos-inspector__hint", aperta2.errore), true)];
+    if (aperta2.caricando) return [figlia(el29(doc, "p", "talos-inspector__hint", t2("Leggo i file cambiati…")), true)];
+    if (aperta2.errore) return [figlia(el29(doc, "p", "talos-inspector__hint", aperta2.errore), true)];
     const righe = aperta2.file.map((f) => {
-      const apri = el28(doc, "button", "talos-github-riga__apri");
+      const apri = el29(doc, "button", "talos-github-riga__apri");
       apri.type = "button";
       apri.dataset.fuoco = `storia-file:${aperta2.a}:${f.percorso}`;
-      const lettera = el28(doc, "span", `talos-github-riga__lettera talos-github-riga__lettera--${f.stato}`, f.stato);
+      const lettera = el29(doc, "span", `talos-github-riga__lettera talos-github-riga__lettera--${f.stato}`, f.stato);
       lettera.title = PAROLA_DI[f.stato] ? t2(PAROLA_DI[f.stato]) : f.stato;
-      apri.append(lettera, el28(doc, "span", "talos-github-riga__nome", nomeDi(f.percorso)), el28(doc, "span", "talos-github-riga__cartella", f.prima ? t2("da {prima}", { prima: f.prima }) : cartellaDi(f.percorso)));
+      apri.append(lettera, el29(doc, "span", "talos-github-riga__nome", nomeDi(f.percorso)), el29(doc, "span", "talos-github-riga__cartella", f.prima ? t2("da {prima}", { prima: f.prima }) : cartellaDi(f.percorso)));
       apri.title = f.prima ? `${f.prima} → ${f.percorso}` : f.percorso;
       apri.addEventListener("click", () => {
         void apriDiff(f.percorso, "commit", { da: aperta2.da, a: aperta2.a, prima: f.prima ?? null, titolo: aperta2.titolo, daVuoto: aperta2.daVuoto });
@@ -44599,7 +45476,7 @@ function creaSchedaGithub({ doc = globalThis.document, radice: radice2, api, con
     if (!aperta2.file.length) note.push(t2("Nessun file cambiato in questa cartella."));
     if (aperta2.altri) note.push(t2("Qui ci sono i primi {n} file.", { n: aperta2.file.length }));
     if (aperta2.fuori > 0) note.push(tn("1 file cambiato fuori dalla cartella della sessione.", "{n} file cambiati fuori dalla cartella della sessione.", aperta2.fuori));
-    for (const n of note) righe.push(figlia(el28(doc, "p", "talos-inspector__hint", n), true));
+    for (const n of note) righe.push(figlia(el29(doc, "p", "talos-inspector__hint", n), true));
     return righe;
   }
   async function caricaStoria() {
@@ -44648,16 +45525,16 @@ function creaSchedaGithub({ doc = globalThis.document, radice: radice2, api, con
     return { etichetta: t2("Prepara"), fai: (voce) => prepara([voce.percorso]) };
   }
   function disegnaRiga(voce, gruppo) {
-    const riga2 = el28(doc, "li", "talos-github-riga");
+    const riga2 = el29(doc, "li", "talos-github-riga");
     riga2.dataset.percorso = voce.percorso;
     riga2.dataset.gruppo = gruppo;
     const { lettera, parola: parola2 } = letteraStato(voce, gruppo);
-    const apri = el28(doc, "button", "talos-github-riga__apri");
+    const apri = el29(doc, "button", "talos-github-riga__apri");
     apri.type = "button";
-    const segno = el28(doc, "span", `talos-github-riga__lettera talos-github-riga__lettera--${lettera === "!" ? "conflitto" : lettera}`, lettera);
+    const segno = el29(doc, "span", `talos-github-riga__lettera talos-github-riga__lettera--${lettera === "!" ? "conflitto" : lettera}`, lettera);
     segno.setAttribute("aria-hidden", "true");
-    const nome = el28(doc, "span", "talos-github-riga__nome", nomeDi(voce.percorso));
-    const dove = el28(doc, "span", "talos-github-riga__cartella", voce.da ? `${cartellaDi(voce.percorso)} ← ${voce.da}`.replace(/^ ← /u, "← ") : cartellaDi(voce.percorso));
+    const nome = el29(doc, "span", "talos-github-riga__nome", nomeDi(voce.percorso));
+    const dove = el29(doc, "span", "talos-github-riga__cartella", voce.da ? `${cartellaDi(voce.percorso)} ← ${voce.da}`.replace(/^ ← /u, "← ") : cartellaDi(voce.percorso));
     apri.append(segno, nome, dove);
     apri.setAttribute("aria-label", `${voce.percorso}, ${t2(parola2)}`);
     apri.title = `${voce.percorso} · ${t2(parola2)}`;
@@ -44679,13 +45556,13 @@ function creaSchedaGithub({ doc = globalThis.document, radice: radice2, api, con
     return riga2;
   }
   function interruttoreGruppo(chiave, titolo2, conto, suApertura = null) {
-    const interruttore = el28(doc, "button", "talos-github-gruppo__titolo");
+    const interruttore = el29(doc, "button", "talos-github-gruppo__titolo");
     interruttore.type = "button";
     interruttore.dataset.fuoco = `gruppo:${chiave}`;
     const aperto = !stato2.chiusi.has(chiave);
     interruttore.setAttribute("aria-expanded", String(aperto));
-    interruttore.append(icona14(doc, "i-chevron"), el28(doc, "span", "", titolo2));
-    if (conto !== null) interruttore.append(el28(doc, "span", "talos-github-gruppo__conto", conto));
+    interruttore.append(icona14(doc, "i-chevron"), el29(doc, "span", "", titolo2));
+    if (conto !== null) interruttore.append(el29(doc, "span", "talos-github-gruppo__conto", conto));
     interruttore.addEventListener("click", () => {
       const apre = stato2.chiusi.has(chiave);
       if (apre) stato2.chiusi.delete(chiave);
@@ -44696,9 +45573,9 @@ function creaSchedaGithub({ doc = globalThis.document, radice: radice2, api, con
     return interruttore;
   }
   function disegnaGruppo(chiave, titolo2, voci) {
-    const sezione = el28(doc, "section", "talos-github-gruppo");
+    const sezione = el29(doc, "section", "talos-github-gruppo");
     sezione.dataset.gruppo = chiave;
-    const testa = el28(doc, "div", "talos-github-gruppo__testa");
+    const testa = el29(doc, "div", "talos-github-gruppo__testa");
     const aperto = !stato2.chiusi.has(chiave);
     testa.append(interruttoreGruppo(chiave, t2(titolo2), String(voci.length)));
     const percorsi = voci.map((v) => v.percorso);
@@ -44706,7 +45583,7 @@ function creaSchedaGithub({ doc = globalThis.document, radice: radice2, api, con
     else if (chiave !== "conflitti") testa.append(bottoneTesto2(doc, t2("Prepara tutti"), () => prepara(percorsi)));
     sezione.append(testa);
     if (aperto) {
-      const lista = el28(doc, "ul", "talos-github-gruppo__righe");
+      const lista = el29(doc, "ul", "talos-github-gruppo__righe");
       for (const v of voci) lista.append(disegnaRiga(v, chiave));
       sezione.append(lista);
     }
@@ -44714,25 +45591,25 @@ function creaSchedaGithub({ doc = globalThis.document, radice: radice2, api, con
   }
   function disegnaAccantonati() {
     const voci = stato2.accantonati;
-    const sezione = el28(doc, "section", "talos-github-gruppo");
+    const sezione = el29(doc, "section", "talos-github-gruppo");
     sezione.dataset.gruppo = "accantonati";
-    const testa = el28(doc, "div", "talos-github-gruppo__testa");
+    const testa = el29(doc, "div", "talos-github-gruppo__testa");
     testa.append(interruttoreGruppo("accantonati", t2("Messi da parte"), String(voci.length)));
     sezione.append(testa);
     if (stato2.chiusi.has("accantonati")) return sezione;
     const lingua = linguaCorrenteDiT();
-    const lista = el28(doc, "ul", "talos-github-gruppo__righe");
+    const lista = el29(doc, "ul", "talos-github-gruppo__righe");
     for (const v of voci) {
       const { ramo, nota, automatica } = leggiAccantonato(v.messaggio);
-      const riga2 = el28(doc, "li", "talos-github-riga");
+      const riga2 = el29(doc, "li", "talos-github-riga");
       riga2.dataset.gruppo = "accantonati";
       riga2.dataset.commit = v.commit;
-      const corpo = el28(doc, "div", "talos-github-riga__apri talos-github-riga__apri--fermo");
-      const segno = el28(doc, "span", "talos-github-riga__lettera");
+      const corpo = el29(doc, "div", "talos-github-riga__apri talos-github-riga__apri--fermo");
+      const segno = el29(doc, "span", "talos-github-riga__lettera");
       segno.append(icona14(doc, "i-layers"));
-      const nome = el28(doc, "span", "talos-github-riga__nome", automatica ? t2("Senza nota") : nota);
-      const dove = el28(doc, "span", "talos-github-riga__cartella", [ramo ? t2("su {ramo}", { ramo }) : null, tempoFa(v.data, lingua)].filter(Boolean).join(" · "));
-      const testi = el28(doc, "span", "talos-github-riga__testi");
+      const nome = el29(doc, "span", "talos-github-riga__nome", automatica ? t2("Senza nota") : nota);
+      const dove = el29(doc, "span", "talos-github-riga__cartella", [ramo ? t2("su {ramo}", { ramo }) : null, tempoFa(v.data, lingua)].filter(Boolean).join(" · "));
+      const testi = el29(doc, "span", "talos-github-riga__testi");
       testi.append(nome, dove);
       corpo.append(segno, testi);
       corpo.title = v.messaggio;
@@ -44756,9 +45633,9 @@ function creaSchedaGithub({ doc = globalThis.document, radice: radice2, api, con
   }
   function disegnaStoria() {
     const s = stato2.storia;
-    const sezione = el28(doc, "section", "talos-github-gruppo");
+    const sezione = el29(doc, "section", "talos-github-gruppo");
     sezione.dataset.gruppo = "storia";
-    const testa = el28(doc, "div", "talos-github-gruppo__testa");
+    const testa = el29(doc, "div", "talos-github-gruppo__testa");
     const conto = s && !s.caricando && !s.errore ? `${s.commit.length}${s.altri ? "+" : ""}` : null;
     testa.append(interruttoreGruppo("storia", t2("Commit recenti"), conto, () => {
       void caricaStoria();
@@ -44766,15 +45643,15 @@ function creaSchedaGithub({ doc = globalThis.document, radice: radice2, api, con
     sezione.append(testa);
     if (stato2.chiusi.has("storia")) return sezione;
     if (!s || s.caricando) {
-      sezione.append(el28(doc, "p", "talos-inspector__hint", t2("Leggo la storia…")));
+      sezione.append(el29(doc, "p", "talos-inspector__hint", t2("Leggo la storia…")));
       return sezione;
     }
     if (s.errore) {
-      sezione.append(el28(doc, "p", "talos-inspector__hint", s.errore));
+      sezione.append(el29(doc, "p", "talos-inspector__hint", s.errore));
       return sezione;
     }
     if (!s.commit.length) {
-      sezione.append(el28(doc, "p", "talos-inspector__hint", t2("Nessun commit ancora.")));
+      sezione.append(el29(doc, "p", "talos-inspector__hint", t2("Nessun commit ancora.")));
       return sezione;
     }
     const lingua = linguaCorrenteDiT();
@@ -44788,12 +45665,12 @@ function creaSchedaGithub({ doc = globalThis.document, radice: radice2, api, con
     };
     const disegni = righe.map((r) => disegnoDellaRiga(r, ALTEZZA_RIGA_STORIA));
     const larghezzaGrafo = Math.max(...disegni.map((d) => d.larghezza));
-    const lista = el28(doc, "ul", "talos-github-gruppo__righe talos-github-storia");
+    const lista = el29(doc, "ul", "talos-github-gruppo__righe talos-github-storia");
     for (const [i2, r] of righe.entries()) {
-      const riga2 = el28(doc, "li", "talos-github-riga talos-github-riga--commit");
+      const riga2 = el29(doc, "li", "talos-github-riga talos-github-riga--commit");
       riga2.dataset.gruppo = "storia";
       riga2.dataset.tipo = r.tipo;
-      const corpo = el28(doc, "button", "talos-github-riga__apri talos-github-riga__apri--due-righe");
+      const corpo = el29(doc, "button", "talos-github-riga__apri talos-github-riga__apri--due-righe");
       corpo.type = "button";
       const chiave = r.tipo === "in-arrivo" || r.tipo === "in-uscita" ? r.tipo : r.id;
       const confronto = r.tipo === "in-arrivo" ? { da: s.baseComune, a: s.remoto, titolo: t2("In arrivo · {rif}", { rif }) } : r.tipo === "in-uscita" ? { da: s.baseComune, a: s.testa, titolo: t2("In uscita · {rif}", { rif }) } : { da: null, a: r.id, titolo: `${r.voce.breve} · ${r.voce.soggetto}` };
@@ -44806,8 +45683,8 @@ function creaSchedaGithub({ doc = globalThis.document, radice: radice2, api, con
       if (r.tipo === "in-arrivo" || r.tipo === "in-uscita") {
         const n = quanti(r.tipo);
         corpo.append(
-          el28(doc, "span", "talos-github-riga__nome", r.tipo === "in-arrivo" ? t2("In arrivo") : t2("In uscita")),
-          el28(doc, "span", "talos-github-riga__cartella", r.tipo === "in-arrivo" ? tn("1 commit da scaricare da {rif}", "{n} commit da scaricare da {rif}", n, { rif }) : tn("1 commit da inviare a {rif}", "{n} commit da inviare a {rif}", n, { rif }))
+          el29(doc, "span", "talos-github-riga__nome", r.tipo === "in-arrivo" ? t2("In arrivo") : t2("In uscita")),
+          el29(doc, "span", "talos-github-riga__cartella", r.tipo === "in-arrivo" ? tn("1 commit da scaricare da {rif}", "{n} commit da scaricare da {rif}", n, { rif }) : tn("1 commit da inviare a {rif}", "{n} commit da inviare a {rif}", n, { rif }))
         );
       } else {
         const c = r.voce;
@@ -44817,8 +45694,8 @@ function creaSchedaGithub({ doc = globalThis.document, radice: radice2, api, con
         if (remoto) riga2.dataset.lato = "in-arrivo";
         if (r.tipo === "testa") riga2.setAttribute("aria-current", "true");
         corpo.append(
-          el28(doc, "span", "talos-github-riga__nome", c.soggetto),
-          el28(doc, "span", "talos-github-riga__cartella", [c.breve, c.autore, tempoFa(c.data, lingua), remoto ? t2("da scaricare") : c.inviato ? t2("inviato") : t2("solo qui")].filter(Boolean).join(" · "))
+          el29(doc, "span", "talos-github-riga__nome", c.soggetto),
+          el29(doc, "span", "talos-github-riga__cartella", [c.breve, c.autore, tempoFa(c.data, lingua), remoto ? t2("da scaricare") : c.inviato ? t2("inviato") : t2("solo qui")].filter(Boolean).join(" · "))
         );
         corpo.title = `${c.breve} · ${c.soggetto}`;
       }
@@ -44827,7 +45704,7 @@ function creaSchedaGithub({ doc = globalThis.document, radice: radice2, api, con
       if (aperta2) lista.append(...righeDeiFile(aperta2, r, larghezzaGrafo));
     }
     sezione.append(lista);
-    if (s.altri) sezione.append(el28(doc, "p", "talos-inspector__hint", t2("Qui ci sono gli ultimi {n} commit.", { n: s.commit.length })));
+    if (s.altri) sezione.append(el29(doc, "p", "talos-inspector__hint", t2("Qui ci sono gli ultimi {n} commit.", { n: s.commit.length })));
     return sezione;
   }
   function testoBase(base) {
@@ -44855,13 +45732,13 @@ function creaSchedaGithub({ doc = globalThis.document, radice: radice2, api, con
     }
   }
   function disegnaNonRepository() {
-    const c = el28(doc, "div", "talos-card talos-inspector-card talos-github-richiesta talos-github-init");
+    const c = el29(doc, "div", "talos-card talos-inspector-card talos-github-richiesta talos-github-init");
     c.dataset.c = "InizializzaRepository";
     c.setAttribute("role", "group");
     c.setAttribute("aria-label", t2("Nessun repository git"));
     c.append(
-      el28(doc, "p", "talos-github-richiesta__titolo", t2("Nessun repository git")),
-      el28(doc, "p", "talos-inspector__hint talos-github-blocco__testo", t2("La cartella della sessione non ha un repository git. Inizializzalo per tenere traccia delle modifiche, fare commit e usare i rami. Resta sul tuo computer: non serve un account GitHub."))
+      el29(doc, "p", "talos-github-richiesta__titolo", t2("Nessun repository git")),
+      el29(doc, "p", "talos-inspector__hint talos-github-blocco__testo", t2("La cartella della sessione non ha un repository git. Inizializzalo per tenere traccia delle modifiche, fare commit e usare i rami. Resta sul tuo computer: non serve un account GitHub."))
     );
     const inCorso = stato2.inCorso === "inizializza";
     const fai = bottoneTesto2(doc, inCorso ? t2("Inizializzo…") : t2("Inizializza repository"), () => {
@@ -44870,7 +45747,7 @@ function creaSchedaGithub({ doc = globalThis.document, radice: radice2, api, con
     fai.dataset.fuoco = "inizializza";
     fai.disabled = inCorso || stato2.occupato;
     if (inCorso) c.setAttribute("aria-busy", "true");
-    const piede = el28(doc, "div", "talos-github-richiesta__piede");
+    const piede = el29(doc, "div", "talos-github-richiesta__piede");
     piede.append(fai);
     c.append(piede);
     return c;
@@ -44883,18 +45760,18 @@ function creaSchedaGithub({ doc = globalThis.document, radice: radice2, api, con
     api.ricarica?.();
   };
   async function inizializza() {
-    let chiedi = false;
+    let chiedi2 = false;
     await inRete("inizializza", () => api.inizializza(false), {
       dopo: dopoInizializza,
       gestisci: (errore) => {
         if (errore?.code === "GIT_INIT_NEEDS_CONFIRM") {
-          chiedi = true;
+          chiedi2 = true;
           return true;
         }
         return false;
       }
     });
-    if (!chiedi) return;
+    if (!chiedi2) return;
     const si = await conferma({
       titolo: t2("Inizializzare un repository qui?"),
       testo: t2("Questa cartella contiene la tua cartella utente: git terrebbe traccia di tutto ciò che c’è dentro."),
@@ -44909,26 +45786,26 @@ function creaSchedaGithub({ doc = globalThis.document, radice: radice2, api, con
       return;
     }
     if (stato2.errore) {
-      const carta2 = el28(doc, "div", "talos-card talos-inspector-card");
-      carta2.append(el28(doc, "p", "talos-inspector__hint", stato2.errore));
+      const carta2 = el29(doc, "div", "talos-card talos-inspector-card");
+      carta2.append(el29(doc, "p", "talos-inspector__hint", stato2.errore));
       elenco2.append(carta2);
       return;
     }
     if (!dati) {
-      elenco2.append(el28(doc, "p", "talos-inspector__hint", t2("Leggo lo stato del repository…")));
+      elenco2.append(el29(doc, "p", "talos-inspector__hint", t2("Leggo lo stato del repository…")));
       return;
     }
     const g = raggruppaVoci(dati.voci);
     const quanteModifiche = g.conflitti.length + g.preparati.length + g.modificati.length + g.nuovi.length;
-    const testa = el28(doc, "div", "talos-file-head talos-github__testa");
+    const testa = el29(doc, "div", "talos-file-head talos-github__testa");
     const nomeRamo = dati.ramo ?? (dati.staccata ? t2("HEAD staccata") : t2("Nessun ramo"));
-    const ramo = el28(doc, "button", "talos-github__ramo");
+    const ramo = el29(doc, "button", "talos-github__ramo");
     ramo.type = "button";
     ramo.dataset.fuoco = "ramo";
     ramo.setAttribute("aria-haspopup", "menu");
     ramo.setAttribute("aria-label", t2("Ramo: {nome}", { nome: nomeRamo }));
     ramo.title = t2("Ramo: {nome}", { nome: nomeRamo });
-    ramo.append(icona14(doc, "i-branch"), el28(doc, "b", "talos-file-head__nome", nomeRamo), icona14(doc, "i-chevron"));
+    ramo.append(icona14(doc, "i-branch"), el29(doc, "b", "talos-file-head__nome", nomeRamo), icona14(doc, "i-chevron"));
     ramo.addEventListener("click", (e) => {
       void apriMenuRami(e.currentTarget);
     });
@@ -44955,10 +45832,10 @@ function creaSchedaGithub({ doc = globalThis.document, radice: radice2, api, con
     const sinc = disegnaSincronizzazione();
     if (sinc) elenco2.append(sinc);
     if (stato2.bloccoScarica) elenco2.append(disegnaBloccoScarica());
-    elenco2.append(el28(doc, "p", "talos-inspector__hint talos-github__base", testoBase(dati.base)));
+    elenco2.append(el29(doc, "p", "talos-inspector__hint talos-github__base", testoBase(dati.base)));
     if (stato2.richiesta) elenco2.append(disegnaRichiesta());
     if (dati.preparatiFuori > 0) {
-      const avviso = el28(doc, "div", "talos-callout talos-github__fuori", tn(
+      const avviso = el29(doc, "div", "talos-callout talos-github__fuori", tn(
         "C’è 1 file preparato fuori da questa cartella: il commit resta fermo finché non lo togli dall’area preparata.",
         "Ci sono {n} file preparati fuori da questa cartella: il commit resta fermo finché non li togli dall’area preparata.",
         dati.preparatiFuori
@@ -44967,20 +45844,20 @@ function creaSchedaGithub({ doc = globalThis.document, radice: radice2, api, con
       avviso.setAttribute("role", "status");
       elenco2.append(avviso);
     }
-    const carta = el28(doc, "div", "talos-card talos-inspector-card talos-github-commit");
+    const carta = el29(doc, "div", "talos-card talos-inspector-card talos-github-commit");
     if (stato2.modifica) {
-      const modo = el28(doc, "div", "talos-github-commit__modo");
+      const modo = el29(doc, "div", "talos-github-commit__modo");
       modo.setAttribute("role", "status");
-      modo.append(el28(doc, "span", "", t2("Modifichi il commit {hash}", { hash: stato2.modifica.breve })), bottoneTesto2(doc, t2("Lascia stare"), () => lasciaStareModifica()));
+      modo.append(el29(doc, "span", "", t2("Modifichi il commit {hash}", { hash: stato2.modifica.breve })), bottoneTesto2(doc, t2("Lascia stare"), () => lasciaStareModifica()));
       carta.append(modo);
     }
-    const campo2 = el28(doc, "textarea", "talos-textarea talos-github-commit__messaggio");
+    const campo2 = el29(doc, "textarea", "talos-textarea talos-github-commit__messaggio");
     campo2.dataset.fuoco = "messaggio";
     campo2.rows = 3;
     campo2.placeholder = t2("Messaggio del commit");
     campo2.setAttribute("aria-label", t2("Messaggio del commit"));
     campo2.value = stato2.messaggio;
-    const pulsante = el28(doc, "button", "talos-button talos-button--primary talos-button--sm talos-github-commit__fai");
+    const pulsante = el29(doc, "button", "talos-button talos-button--primary talos-button--sm talos-github-commit__fai");
     pulsante.type = "button";
     const aggiornaPulsante = () => {
       let testo2;
@@ -45009,7 +45886,7 @@ function creaSchedaGithub({ doc = globalThis.document, radice: radice2, api, con
       void committa();
     });
     aggiornaPulsante();
-    const campoBox = el28(doc, "div", "talos-github-commit__campo");
+    const campoBox = el29(doc, "div", "talos-github-commit__campo");
     campoBox.append(campo2);
     if (typeof api.generaMessaggio === "function") {
       const genera = bottoneIcona2(doc, "i-sparkles", stato2.generando ? t2("Scrivo il messaggio…") : t2("Genera il messaggio"), () => {
@@ -45022,9 +45899,9 @@ function creaSchedaGithub({ doc = globalThis.document, radice: radice2, api, con
       campoBox.append(genera);
     }
     carta.append(campoBox, pulsante);
-    if (g.conflitti.length > 0) carta.append(el28(doc, "p", "talos-inspector__hint", t2("Prima vanno risolti i conflitti.")));
+    if (g.conflitti.length > 0) carta.append(el29(doc, "p", "talos-inspector__hint", t2("Prima vanno risolti i conflitti.")));
     elenco2.append(carta);
-    if (quanteModifiche === 0) elenco2.append(el28(doc, "p", "talos-inspector__hint talos-github__vuoto", t2("Nessuna modifica rispetto all’ultimo commit.")));
+    if (quanteModifiche === 0) elenco2.append(el29(doc, "p", "talos-inspector__hint talos-github__vuoto", t2("Nessuna modifica rispetto all’ultimo commit.")));
     for (const { chiave, titolo: titolo2 } of GRUPPI2) {
       if (g[chiave].length) elenco2.append(disegnaGruppo(chiave, titolo2, g[chiave]));
     }
@@ -45276,15 +46153,15 @@ function creaSchedaGithub({ doc = globalThis.document, radice: radice2, api, con
     return errore?.message || t2("Non riuscito");
   }
   function esitiInCifre(conteggi) {
-    const esiti = el28(doc, "span", "talos-github-pr__esiti");
+    const esiti = el29(doc, "span", "talos-github-pr__esiti");
     const frase = fraseControlli(conteggi);
     esiti.setAttribute("role", "img");
     esiti.setAttribute("aria-label", frase || t2(TESTI_PR.nessunControllo));
     esiti.title = esiti.getAttribute("aria-label");
     for (const { esito, n } of riassuntoControlli(conteggi)) {
-      const voce = el28(doc, "span", "talos-github-pr__esito");
+      const voce = el29(doc, "span", "talos-github-pr__esito");
       voce.dataset.esito = esito;
-      voce.append(icona14(doc, ICONA_ESITO[esito]), el28(doc, "span", "", String(n)));
+      voce.append(icona14(doc, ICONA_ESITO[esito]), el29(doc, "span", "", String(n)));
       esiti.append(voce);
     }
     return esiti;
@@ -45295,22 +46172,22 @@ function creaSchedaGithub({ doc = globalThis.document, radice: radice2, api, con
     return pr2.bozza ? t2(TESTI_PR.bozza) : t2(TESTI_PR.aperta);
   }
   function rigaPrDelRamo(pr2) {
-    const riga2 = el28(doc, "li", "talos-github-riga talos-github-riga--pr");
+    const riga2 = el29(doc, "li", "talos-github-riga talos-github-riga--pr");
     riga2.dataset.gruppo = "pr";
     riga2.dataset.numero = String(pr2.numero);
     riga2.dataset.stato = pr2.stato;
     riga2.dataset.bozza = String(pr2.bozza === true);
     const conControlli = (pr2.controlli?.totale ?? 0) > 0;
-    const corpo = el28(doc, "button", "talos-github-riga__apri");
+    const corpo = el29(doc, "button", "talos-github-riga__apri");
     corpo.type = "button";
     corpo.dataset.fuoco = "pr-ramo";
-    const segno = el28(doc, "span", "talos-github-riga__lettera");
+    const segno = el29(doc, "span", "talos-github-riga__lettera");
     segno.append(icona14(doc, "i-git"));
-    const testi = el28(doc, "span", "talos-github-riga__testi");
-    const seconda = el28(doc, "span", "talos-github-riga__cartella talos-github-pr__seconda");
-    seconda.append(el28(doc, "span", "", parolaStatoPr(pr2)));
+    const testi = el29(doc, "span", "talos-github-riga__testi");
+    const seconda = el29(doc, "span", "talos-github-riga__cartella talos-github-pr__seconda");
+    seconda.append(el29(doc, "span", "", parolaStatoPr(pr2)));
     if (conControlli) seconda.append(esitiInCifre(pr2.controlli.conteggi));
-    testi.append(el28(doc, "span", "talos-github-riga__nome", `#${pr2.numero} ${pr2.titolo}`), seconda);
+    testi.append(el29(doc, "span", "talos-github-riga__nome", `#${pr2.numero} ${pr2.titolo}`), seconda);
     corpo.append(segno, testi);
     corpo.title = `#${pr2.numero} · ${pr2.titolo}`;
     if (conControlli) {
@@ -45331,15 +46208,15 @@ function creaSchedaGithub({ doc = globalThis.document, radice: radice2, api, con
   }
   function righeControlli(pr2) {
     return pr2.controlli.voci.map((c) => {
-      const riga2 = el28(doc, "li", "talos-github-riga talos-github-riga--controllo");
+      const riga2 = el29(doc, "li", "talos-github-riga talos-github-riga--controllo");
       riga2.dataset.gruppo = "pr";
       riga2.dataset.esito = c.stato;
-      const corpo = el28(doc, "button", "talos-github-riga__apri");
+      const corpo = el29(doc, "button", "talos-github-riga__apri");
       corpo.type = "button";
-      const segno = el28(doc, "span", "talos-github-riga__lettera");
+      const segno = el29(doc, "span", "talos-github-riga__lettera");
       segno.dataset.esito = c.stato;
       segno.append(icona14(doc, ICONA_ESITO[c.stato] ?? "i-ignoto"));
-      corpo.append(segno, el28(doc, "span", "talos-github-riga__nome", c.nome), el28(doc, "span", "talos-github-riga__cartella", [t2(PAROLA_ESITO[c.stato] ?? c.stato), c.flusso].filter(Boolean).join(" · ")));
+      corpo.append(segno, el29(doc, "span", "talos-github-riga__nome", c.nome), el29(doc, "span", "talos-github-riga__cartella", [t2(PAROLA_ESITO[c.stato] ?? c.stato), c.flusso].filter(Boolean).join(" · ")));
       corpo.setAttribute("aria-label", `${c.nome}: ${t2(PAROLA_ESITO[c.stato] ?? c.stato)}${c.flusso ? ` · ${c.flusso}` : ""}`);
       if (c.indirizzo) {
         corpo.addEventListener("click", () => apriFuori(c.indirizzo));
@@ -45350,16 +46227,16 @@ function creaSchedaGithub({ doc = globalThis.document, radice: radice2, api, con
     });
   }
   function rigaPrAperta(pr2, account) {
-    const riga2 = el28(doc, "li", "talos-github-riga talos-github-riga--pr-aperta");
+    const riga2 = el29(doc, "li", "talos-github-riga talos-github-riga--pr-aperta");
     riga2.dataset.gruppo = "pr";
     riga2.dataset.numero = String(pr2.numero);
-    const corpo = el28(doc, "button", "talos-github-riga__apri talos-github-riga__apri--due-righe");
+    const corpo = el29(doc, "button", "talos-github-riga__apri talos-github-riga__apri--due-righe");
     corpo.type = "button";
     corpo.dataset.fuoco = `pr:${pr2.numero}`;
     const quando = tempoFa(pr2.aggiornata, linguaCorrenteDiT());
     corpo.append(
-      el28(doc, "span", "talos-github-riga__nome", `#${pr2.numero} ${pr2.titolo}`),
-      el28(doc, "span", "talos-github-riga__cartella", [`${pr2.ramo} → ${pr2.base}`, pr2.autore && pr2.autore === account ? t2(TESTI_PR.tua) : pr2.autore, pr2.bozza ? t2(TESTI_PR.inBozza) : null, quando].filter(Boolean).join(" · "))
+      el29(doc, "span", "talos-github-riga__nome", `#${pr2.numero} ${pr2.titolo}`),
+      el29(doc, "span", "talos-github-riga__cartella", [`${pr2.ramo} → ${pr2.base}`, pr2.autore && pr2.autore === account ? t2(TESTI_PR.tua) : pr2.autore, pr2.bozza ? t2(TESTI_PR.inBozza) : null, quando].filter(Boolean).join(" · "))
     );
     corpo.title = `#${pr2.numero} · ${pr2.titolo} — ${t2(TESTI_PR.apri)}`;
     corpo.addEventListener("click", () => apriFuori(pr2.url));
@@ -45369,15 +46246,15 @@ function creaSchedaGithub({ doc = globalThis.document, radice: radice2, api, con
   function cartaStatoGh(p) {
     const gh = p.gh;
     const carta = (titolo2, testo2) => {
-      const c = el28(doc, "div", "talos-card talos-inspector-card talos-github-richiesta talos-github-pr__stato");
+      const c = el29(doc, "div", "talos-card talos-inspector-card talos-github-richiesta talos-github-pr__stato");
       c.setAttribute("role", "group");
       c.setAttribute("aria-label", titolo2);
-      c.append(el28(doc, "p", "talos-github-richiesta__titolo", titolo2));
-      if (testo2) c.append(el28(doc, "p", "talos-inspector__hint talos-github-blocco__testo", testo2));
+      c.append(el29(doc, "p", "talos-github-richiesta__titolo", titolo2));
+      if (testo2) c.append(el29(doc, "p", "talos-inspector__hint talos-github-blocco__testo", testo2));
       return c;
     };
     const piede = (...bottoni) => {
-      const d = el28(doc, "div", "talos-github-richiesta__piede");
+      const d = el29(doc, "div", "talos-github-richiesta__piede");
       d.append(...bottoni);
       return d;
     };
@@ -45388,8 +46265,8 @@ function creaSchedaGithub({ doc = globalThis.document, radice: radice2, api, con
     }
     if (p.collegamento?.codice) {
       const c = carta(t2(TESTI_PR.collega), t2(TESTI_PR.collegaCodice));
-      const riga2 = el28(doc, "div", "talos-github-pr__codice-riga");
-      const codice = el28(doc, "output", "talos-github-pr__codice", p.collegamento.codice);
+      const riga2 = el29(doc, "div", "talos-github-pr__codice-riga");
+      const codice = el29(doc, "output", "talos-github-pr__codice", p.collegamento.codice);
       codice.setAttribute("aria-label", `${t2(TESTI_PR.codice)}: ${p.collegamento.codice.split("").join(" ")}`);
       const copia3 = bottoneIcona2(doc, "i-copy", t2(TESTI_PR.copiaCodice), () => {
         void copiaCodice(p.collegamento.codice);
@@ -45406,7 +46283,7 @@ function creaSchedaGithub({ doc = globalThis.document, radice: radice2, api, con
     if (!gh?.gh?.trovato) {
       const vecchia = gh?.gh?.sistemaTroppoVecchio;
       const c = carta(t2(vecchia ? TESTI_PR.ghVecchia : TESTI_PR.ghAssente), gh?.installabile === false ? t2(TESTI_PR.ghNonInstallabile) : vecchia ? t2(TESTI_PR.ghVecchiaSpiega, { versione: vecchia, nuova: gh?.versioneTalos ?? "" }) : t2(TESTI_PR.ghSpiega, { versione: gh?.versioneTalos ?? "" }));
-      if (gh?.installazione?.errore) c.append(el28(doc, "p", "talos-github-richiesta__errore", gh.installazione.errore));
+      if (gh?.installazione?.errore) c.append(el29(doc, "p", "talos-github-richiesta__errore", gh.installazione.errore));
       const azione = gh?.installabile === false ? bottoneTesto2(doc, t2(TESTI_PR.ghPagina), () => apriFuori("https://github.com/cli/cli#installation"), "primary") : bottoneTesto2(doc, t2(TESTI_PR.ghScarica), () => {
         void installaGh();
       }, "primary");
@@ -45427,10 +46304,10 @@ function creaSchedaGithub({ doc = globalThis.document, radice: radice2, api, con
   }
   function disegnaModuloPr() {
     const m = stato2.modulo;
-    const carta = el28(doc, "form", "talos-card talos-inspector-card talos-github-richiesta talos-github-pr__modulo");
+    const carta = el29(doc, "form", "talos-card talos-inspector-card talos-github-richiesta talos-github-pr__modulo");
     carta.setAttribute("aria-label", t2(TESTI_PR.nuova));
     carta.noValidate = true;
-    carta.append(el28(doc, "p", "talos-github-richiesta__titolo", t2(TESTI_PR.nuova)));
+    carta.append(el29(doc, "p", "talos-github-richiesta__titolo", t2(TESTI_PR.nuova)));
     const esc = (e) => {
       if (e.key === "Escape") {
         e.preventDefault();
@@ -45438,37 +46315,37 @@ function creaSchedaGithub({ doc = globalThis.document, radice: radice2, api, con
         chiudiModuloPr();
       }
     };
-    const piede = el28(doc, "div", "talos-github-richiesta__piede");
+    const piede = el29(doc, "div", "talos-github-richiesta__piede");
     const lasciaStare = bottoneTesto2(doc, t2(TESTI_PR.annulla), () => chiudiModuloPr());
     if (m.caricando && !m.ramo) {
-      carta.append(el28(doc, "p", "talos-inspector__hint", t2(TESTI_PR.preparoBozza)));
+      carta.append(el29(doc, "p", "talos-inspector__hint", t2(TESTI_PR.preparoBozza)));
       piede.append(lasciaStare);
       carta.append(piede);
       return carta;
     }
     if (!m.ramo) {
-      carta.append(el28(doc, "p", "talos-github-richiesta__errore", m.errore || t2("Non riuscito")));
+      carta.append(el29(doc, "p", "talos-github-richiesta__errore", m.errore || t2("Non riuscito")));
       piede.append(lasciaStare);
       carta.append(piede);
       return carta;
     }
-    const rami = el28(doc, "div", "talos-github-pr__rami");
-    const base = el28(doc, "button", "talos-github__ramo talos-github-pr__base");
+    const rami = el29(doc, "div", "talos-github-pr__rami");
+    const base = el29(doc, "button", "talos-github__ramo talos-github-pr__base");
     base.type = "button";
     base.dataset.fuoco = "pr-base";
     base.setAttribute("aria-haspopup", "menu");
     base.setAttribute("aria-label", `${t2(TESTI_PR.base, { base: m.base ?? "—" })}. ${t2(TESTI_PR.scegliBase)}`);
     base.title = t2(TESTI_PR.scegliBase);
-    base.append(icona14(doc, "i-branch"), el28(doc, "b", "talos-file-head__nome", m.base ?? "—"), icona14(doc, "i-chevron"));
+    base.append(icona14(doc, "i-branch"), el29(doc, "b", "talos-file-head__nome", m.base ?? "—"), icona14(doc, "i-chevron"));
     base.addEventListener("click", (e) => scegliBase(e.currentTarget));
-    const ramo = el28(doc, "span", "talos-github-pr__ramo", m.ramo);
+    const ramo = el29(doc, "span", "talos-github-pr__ramo", m.ramo);
     ramo.title = m.ramo;
-    rami.append(ramo, el28(doc, "span", "talos-github-pr__freccia", "→"), base);
+    rami.append(ramo, el29(doc, "span", "talos-github-pr__freccia", "→"), base);
     carta.append(rami);
-    if (m.caricando) carta.append(el28(doc, "p", "talos-inspector__hint", t2(TESTI_PR.preparoBozza)));
-    else if (!m.baseTrovata) carta.append(el28(doc, "p", "talos-inspector__hint", t2(TESTI_PR.baseAssente, { base: m.base ?? "—", remoto: m.remoto ?? "" })));
-    else carta.append(el28(doc, "p", "talos-inspector__hint", m.commitOltre ? t2(TESTI_PR.oltreCommit, { n: m.commit, base: m.base }) : tn(TESTI_PR.unCommit, TESTI_PR.piuCommit, m.commit, { base: m.base })));
-    const titolo2 = el28(doc, "input", "talos-field__input talos-github-richiesta__campo");
+    if (m.caricando) carta.append(el29(doc, "p", "talos-inspector__hint", t2(TESTI_PR.preparoBozza)));
+    else if (!m.baseTrovata) carta.append(el29(doc, "p", "talos-inspector__hint", t2(TESTI_PR.baseAssente, { base: m.base ?? "—", remoto: m.remoto ?? "" })));
+    else carta.append(el29(doc, "p", "talos-inspector__hint", m.commitOltre ? t2(TESTI_PR.oltreCommit, { n: m.commit, base: m.base }) : tn(TESTI_PR.unCommit, TESTI_PR.piuCommit, m.commit, { base: m.base })));
+    const titolo2 = el29(doc, "input", "talos-field__input talos-github-richiesta__campo");
     titolo2.type = "text";
     titolo2.value = m.titolo ?? "";
     titolo2.placeholder = t2(TESTI_PR.titolo);
@@ -45476,36 +46353,36 @@ function creaSchedaGithub({ doc = globalThis.document, radice: radice2, api, con
     titolo2.maxLength = 256;
     titolo2.autocomplete = "off";
     titolo2.dataset.fuoco = "pr-titolo";
-    const testo2 = el28(doc, "textarea", "talos-textarea talos-github-pr__testo");
+    const testo2 = el29(doc, "textarea", "talos-textarea talos-github-pr__testo");
     testo2.rows = 5;
     testo2.value = m.testo ?? "";
     testo2.placeholder = t2(TESTI_PR.testo);
     testo2.setAttribute("aria-label", t2(TESTI_PR.testo));
     testo2.dataset.fuoco = "pr-testo";
-    const casella = el28(doc, "label", "talos-github-pr__bozza");
-    const spunta = el28(doc, "input", "talos-checkbox");
+    const casella = el29(doc, "label", "talos-github-pr__bozza");
+    const spunta = el29(doc, "input", "talos-checkbox");
     spunta.type = "checkbox";
     spunta.checked = m.bozza === true;
     spunta.dataset.fuoco = "pr-bozza";
     spunta.addEventListener("change", () => {
       m.bozza = spunta.checked;
     });
-    const parole = el28(doc, "span", "talos-github-pr__bozza-testi");
-    parole.append(el28(doc, "span", "", t2(TESTI_PR.bozzaCasella)), el28(doc, "span", "talos-github-riga__cartella", t2(TESTI_PR.bozzaSpiega)));
+    const parole = el29(doc, "span", "talos-github-pr__bozza-testi");
+    parole.append(el29(doc, "span", "", t2(TESTI_PR.bozzaCasella)), el29(doc, "span", "talos-github-riga__cartella", t2(TESTI_PR.bozzaSpiega)));
     casella.append(spunta, parole);
     carta.append(titolo2, testo2, casella);
     const azione = azioneSinc(stato2.sinc);
-    if (azione === "pubblica") carta.append(el28(doc, "p", "talos-inspector__hint", t2(TESTI_PR.pubblicaPrima)));
-    else if (azione === "invia") carta.append(el28(doc, "p", "talos-inspector__hint", tn(TESTI_PR.unDaInviare, TESTI_PR.piuDaInviare, stato2.sinc.avanti)));
+    if (azione === "pubblica") carta.append(el29(doc, "p", "talos-inspector__hint", t2(TESTI_PR.pubblicaPrima)));
+    else if (azione === "invia") carta.append(el29(doc, "p", "talos-inspector__hint", tn(TESTI_PR.unDaInviare, TESTI_PR.piuDaInviare, stato2.sinc.avanti)));
     if (m.errore) {
-      const errore = el28(doc, "p", "talos-field__error talos-github-richiesta__errore", m.errore);
+      const errore = el29(doc, "p", "talos-field__error talos-github-richiesta__errore", m.errore);
       errore.id = "talos-github-pr-errore";
       errore.setAttribute("role", "alert");
       titolo2.setAttribute("aria-describedby", errore.id);
       if (!String(m.titolo ?? "").trim()) titolo2.setAttribute("aria-invalid", "true");
       carta.append(errore);
     }
-    const crea2 = el28(doc, "button", "talos-button talos-button--primary talos-button--sm", m.creando ? t2(TESTI_PR.creo) : t2(TESTI_PR.crea));
+    const crea2 = el29(doc, "button", "talos-button talos-button--primary talos-button--sm", m.creando ? t2(TESTI_PR.creo) : t2(TESTI_PR.crea));
     crea2.type = "submit";
     crea2.dataset.fuoco = "pr-invia";
     const aggiorna = () => {
@@ -45534,9 +46411,9 @@ function creaSchedaGithub({ doc = globalThis.document, radice: radice2, api, con
   }
   function disegnaPr() {
     const p = stato2.pr;
-    const sezione = el28(doc, "section", "talos-github-gruppo talos-github-pr");
+    const sezione = el29(doc, "section", "talos-github-gruppo talos-github-pr");
     sezione.dataset.gruppo = "pr";
-    const testa = el28(doc, "div", "talos-github-gruppo__testa");
+    const testa = el29(doc, "div", "talos-github-gruppo__testa");
     testa.append(interruttoreGruppo("pr", t2(TESTI_PR.gruppo), p?.dati ? String(p.dati.aperte.length) : null, () => {
       void caricaPr();
     }));
@@ -45563,7 +46440,7 @@ function creaSchedaGithub({ doc = globalThis.document, radice: radice2, api, con
       return sezione;
     }
     if (!p || p.caricando && !p.gh && !p.errore) {
-      sezione.append(el28(doc, "p", "talos-inspector__hint", t2(TESTI_PR.leggo)));
+      sezione.append(el29(doc, "p", "talos-inspector__hint", t2(TESTI_PR.leggo)));
       return sezione;
     }
     if (p.gh || p.installando || p.collegamento) {
@@ -45574,36 +46451,36 @@ function creaSchedaGithub({ doc = globalThis.document, radice: radice2, api, con
       }
     }
     if (p.errore) {
-      sezione.append(el28(doc, "p", "talos-inspector__hint", testoErrorePr(p.errore)));
+      sezione.append(el29(doc, "p", "talos-inspector__hint", testoErrorePr(p.errore)));
       return sezione;
     }
     if (!p.dati) {
-      sezione.append(el28(doc, "p", "talos-inspector__hint", t2(TESTI_PR.leggo)));
+      sezione.append(el29(doc, "p", "talos-inspector__hint", t2(TESTI_PR.leggo)));
       return sezione;
     }
     const d = p.dati;
     if (d.prDelRamo) {
-      const lista = el28(doc, "ul", "talos-github-gruppo__righe talos-github-pr__righe");
+      const lista = el29(doc, "ul", "talos-github-gruppo__righe talos-github-pr__righe");
       lista.append(rigaPrDelRamo(d.prDelRamo));
       if (stato2.pr.controlliAperti && (d.prDelRamo.controlli?.totale ?? 0) > 0) lista.append(...righeControlli(d.prDelRamo));
       sezione.append(lista);
     } else if (stato2.modulo) {
       sezione.append(disegnaModuloPr());
     } else if (d.ramoPredefinito && d.ramo === d.ramoPredefinito) {
-      sezione.append(el28(doc, "p", "talos-inspector__hint", t2(TESTI_PR.ramoPrincipale)));
+      sezione.append(el29(doc, "p", "talos-inspector__hint", t2(TESTI_PR.ramoPrincipale)));
     } else {
-      const vuota = el28(doc, "div", "talos-github-pr__vuota");
+      const vuota = el29(doc, "div", "talos-github-pr__vuota");
       const crea2 = bottoneTesto2(doc, t2(TESTI_PR.crea), () => {
         void apriModuloPr();
       }, "secondary");
       crea2.dataset.fuoco = "pr-crea";
-      vuota.append(el28(doc, "p", "talos-inspector__hint", t2(TESTI_PR.nessunaPr)), crea2);
+      vuota.append(el29(doc, "p", "talos-inspector__hint", t2(TESTI_PR.nessunaPr)), crea2);
       sezione.append(vuota);
     }
     const altre = d.aperte.filter((x) => x.numero !== d.prDelRamo?.numero);
     if (altre.length) {
-      sezione.append(el28(doc, "p", "talos-inspector__hint talos-github-pr__sotto", t2(TESTI_PR.aperteNelProgetto)));
-      const lista = el28(doc, "ul", "talos-github-gruppo__righe talos-github-pr__aperte");
+      sezione.append(el29(doc, "p", "talos-inspector__hint talos-github-pr__sotto", t2(TESTI_PR.aperteNelProgetto)));
+      const lista = el29(doc, "ul", "talos-github-gruppo__righe talos-github-pr__aperte");
       for (const x of altre) lista.append(rigaPrAperta(x, d.account));
       sezione.append(lista);
     }
@@ -45630,7 +46507,7 @@ function creaSchedaGithub({ doc = globalThis.document, radice: radice2, api, con
     });
   }
   function comandiPezzo(indice2, dove) {
-    const comandi = el28(doc, "span", "talos-github-pezzo__comandi");
+    const comandi = el29(doc, "span", "talos-github-pezzo__comandi");
     const area = stato2.diff.area;
     const principale = area === "preparato" ? bottoneTesto2(doc, t2("Togli il pezzo"), () => {
       void azionePezzo(indice2, "togli", dove);
@@ -45659,16 +46536,16 @@ function creaSchedaGithub({ doc = globalThis.document, radice: radice2, api, con
     const diCommit = area === "commit";
     vistaDiff.replaceChildren();
     vistaDiff.setAttribute("aria-label", t2("Differenze di {percorso}", { percorso }));
-    const testata = el28(doc, "header", "talos-lettore__testata");
+    const testata = el29(doc, "header", "talos-lettore__testata");
     const indietro = bottoneIcona2(doc, "i-chevron", t2("Torna alle modifiche"), () => chiudiDiff());
     indietro.classList.add("talos-github-diff__indietro");
-    const titoli = el28(doc, "div", "talos-lettore__titoli");
-    const nome = el28(doc, "h3", "talos-lettore__nome", nomeDi(percorso));
+    const titoli = el29(doc, "div", "talos-lettore__titoli");
+    const nome = el29(doc, "h3", "talos-lettore__nome", nomeDi(percorso));
     nome.title = percorso;
     nome.tabIndex = -1;
-    const meta2 = el28(doc, "p", "talos-lettore__meta", [diCommit ? confronto?.titolo : area === "preparato" ? t2("Preparato") : t2("Da preparare"), cartellaDi(percorso)].filter(Boolean).join(" · "));
+    const meta2 = el29(doc, "p", "talos-lettore__meta", [diCommit ? confronto?.titolo : area === "preparato" ? t2("Preparato") : t2("Da preparare"), cartellaDi(percorso)].filter(Boolean).join(" · "));
     titoli.append(nome, meta2);
-    const comandi = el28(doc, "div", "talos-lettore__comandi");
+    const comandi = el29(doc, "div", "talos-lettore__comandi");
     if (typeof onSchermoIntero === "function") {
       const schermo = bottoneIcona2(doc, "i-layout", stato2.schermoIntero ? t2("Esci dallo schermo intero") : t2("Schermo intero"), () => {
         stato2.schermoIntero = !stato2.schermoIntero;
@@ -45690,39 +46567,39 @@ function creaSchedaGithub({ doc = globalThis.document, radice: radice2, api, con
       comandi.append(altro);
     }
     testata.append(indietro, titoli, comandi);
-    const corpo = el28(doc, "div", "talos-lettore__corpo talos-github-diff__corpo");
+    const corpo = el29(doc, "div", "talos-lettore__corpo talos-github-diff__corpo");
     corpo.setAttribute("role", "region");
     corpo.setAttribute("aria-label", t2("Differenze di {percorso}", { percorso }));
     corpo.tabIndex = 0;
-    if (caricando) corpo.append(el28(doc, "p", "talos-inspector__hint", t2("Leggo le differenze…")));
-    else if (errore) corpo.append(el28(doc, "p", "talos-inspector__hint", errore));
+    if (caricando) corpo.append(el29(doc, "p", "talos-inspector__hint", t2("Leggo le differenze…")));
+    else if (errore) corpo.append(el29(doc, "p", "talos-inspector__hint", errore));
     else if (dati) {
-      corpo.append(el28(doc, "p", "talos-inspector__hint talos-github__base", diCommit ? dati.daVuoto ? t2("Il primo commit: tutto è nuovo.") : t2("Confronto fra {da} e {a}", { da: String(dati.da ?? "").slice(0, 7), a: String(dati.a ?? "").slice(0, 7) }) : testoBase(dati.base)));
-      if (dati.binario) corpo.append(el28(doc, "p", "talos-inspector__hint", t2("È un file binario: le differenze non si mostrano come testo.")));
+      corpo.append(el29(doc, "p", "talos-inspector__hint talos-github__base", diCommit ? dati.daVuoto ? t2("Il primo commit: tutto è nuovo.") : t2("Confronto fra {da} e {a}", { da: String(dati.da ?? "").slice(0, 7), a: String(dati.a ?? "").slice(0, 7) }) : testoBase(dati.base)));
+      if (dati.binario) corpo.append(el29(doc, "p", "talos-inspector__hint", t2("È un file binario: le differenze non si mostrano come testo.")));
       else {
         const { pezzi, aggiunte, rimozioni } = analizzaDiffUnificato(dati.testo);
-        const blocco = el28(doc, "div", "talos-diff-chat talos-github-diff__pezzi");
-        const conti = el28(doc, "div", "talos-diff-chat__pezzo");
-        conti.append(el28(doc, "span", "talos-diff-num talos-diff-num--plus", `+${aggiunte}`), el28(doc, "span", "talos-diff-num talos-diff-num--minus", `−${rimozioni}`));
+        const blocco = el29(doc, "div", "talos-diff-chat talos-github-diff__pezzi");
+        const conti = el29(doc, "div", "talos-diff-chat__pezzo");
+        conti.append(el29(doc, "span", "talos-diff-num talos-diff-num--plus", `+${aggiunte}`), el29(doc, "span", "talos-diff-num talos-diff-num--minus", `−${rimozioni}`));
         blocco.append(conti);
         const conPezzi = typeof dati.impronta === "string" && !dati.troncato && voce && voce.tipo !== "nonTracciato" && !voce.conflitto;
         pezzi.forEach((pezzo2, indice2) => {
-          const testaPezzo = el28(doc, "div", "talos-diff-chat__pezzo");
+          const testaPezzo = el29(doc, "div", "talos-diff-chat__pezzo");
           const dove = pezzo2.daRiga === null ? t2("righe tolte") : pezzo2.daRiga === pezzo2.aRiga ? t2("riga {n}", { n: pezzo2.daRiga }) : t2("righe {da}-{a}", { da: pezzo2.daRiga, a: pezzo2.aRiga });
-          testaPezzo.append(el28(doc, "span", "talos-diff-chat__righe", dove));
+          testaPezzo.append(el29(doc, "span", "talos-diff-chat__righe", dove));
           if (conPezzi) testaPezzo.append(comandiPezzo(indice2, dove));
-          const righe = el28(doc, "div", "talos-diff");
+          const righe = el29(doc, "div", "talos-diff");
           righe.dataset.c = "DiffView";
           for (const r of pezzo2.righe) {
-            const riga2 = el28(doc, "div", `talos-diff__line talos-diff__line--${r.tipo}`);
-            riga2.append(el28(doc, "span", "talos-diff-chat__num", String(r.numero)), el28(doc, "span", "talos-diff-chat__segno", r.tipo === "add" ? "+" : r.tipo === "del" ? "−" : " "));
+            const riga2 = el29(doc, "div", `talos-diff__line talos-diff__line--${r.tipo}`);
+            riga2.append(el29(doc, "span", "talos-diff-chat__num", String(r.numero)), el29(doc, "span", "talos-diff-chat__segno", r.tipo === "add" ? "+" : r.tipo === "del" ? "−" : " "));
             riga2.append(doc.createTextNode(r.testo));
             righe.append(riga2);
           }
           blocco.append(testaPezzo, righe);
         });
-        if (!pezzi.length) blocco.append(el28(doc, "div", "talos-diff-chat__resto", t2("Nessuna differenza nel testo (è cambiato solo il modo del file).")));
-        if (dati.troncato) blocco.append(el28(doc, "div", "talos-diff-chat__resto", t2("Il diff è troppo lungo: qui ne vedi solo la prima parte.")));
+        if (!pezzi.length) blocco.append(el29(doc, "div", "talos-diff-chat__resto", t2("Nessuna differenza nel testo (è cambiato solo il modo del file).")));
+        if (dati.troncato) blocco.append(el29(doc, "div", "talos-diff-chat__resto", t2("Il diff è troppo lungo: qui ne vedi solo la prima parte.")));
         corpo.append(blocco);
       }
     }
@@ -46721,16 +47598,16 @@ var init_compattazione_legacy = __esm({
 });
 
 // src/components/stato-vuoto.js
-function el29(documentObj, tag2, className, testo2) {
+function el30(documentObj, tag2, className, testo2) {
   const nodo13 = documentObj.createElement(tag2);
   if (className) nodo13.className = className;
   if (testo2 !== void 0 && testo2 !== null) nodo13.textContent = String(testo2);
   return nodo13;
 }
-function simbolo3(documentObj, classe, nome) {
-  const svg2 = documentObj.createElementNS(SVG_NS5, "svg");
+function simbolo4(documentObj, classe, nome) {
+  const svg2 = documentObj.createElementNS(SVG_NS6, "svg");
   svg2.setAttribute("class", classe);
-  const use = documentObj.createElementNS(SVG_NS5, "use");
+  const use = documentObj.createElementNS(SVG_NS6, "use");
   use.setAttribute("href", `#${nome}`);
   svg2.append(use);
   return svg2;
@@ -46753,51 +47630,51 @@ function suggerimentiDallaCartella({ voci = [], packageJson = null, totaleTest =
 }
 function creaStatoVuoto(dati = {}, opzioni = {}) {
   const documentObj = opzioni.document || globalThis.document;
-  const colonna = el29(documentObj, "div", "talos-conversation__column talos-empty");
-  const marchio = el29(documentObj, "span", "talos-brand__mark talos-empty__mark");
+  const colonna = el30(documentObj, "div", "talos-conversation__column talos-empty");
+  const marchio = el30(documentObj, "span", "talos-brand__mark talos-empty__mark");
   marchio.setAttribute("aria-hidden", "true");
-  marchio.append(simbolo3(documentObj, "glyph", "glifo"));
-  const titolo2 = el29(documentObj, "h2", "talos-empty__title");
-  titolo2.append(documentObj.createTextNode("Cosa costruiamo in "), el29(documentObj, "span", "talos-empty__project", dati.progetto || "questa cartella"), documentObj.createTextNode("?"));
-  const lead = el29(documentObj, "p", "talos-empty__lead", dati.lead || "TALOS legge, scrive ed esegue nella cartella che gli apri. Ogni azione lascia una ricevuta firmata, e niente esce da questa macchina se non lo chiedi tu.");
-  const nome = el29(documentObj, "span", "talos-empty__marchio talos-orbitron-brand", "TALOS");
+  marchio.append(simbolo4(documentObj, "glyph", "glifo"));
+  const titolo2 = el30(documentObj, "h2", "talos-empty__title");
+  titolo2.append(documentObj.createTextNode("Cosa costruiamo in "), el30(documentObj, "span", "talos-empty__project", dati.progetto || "questa cartella"), documentObj.createTextNode("?"));
+  const lead = el30(documentObj, "p", "talos-empty__lead", dati.lead || "TALOS legge, scrive ed esegue nella cartella che gli apri. Ogni azione lascia una ricevuta firmata, e niente esce da questa macchina se non lo chiedi tu.");
+  const nome = el30(documentObj, "span", "talos-empty__marchio talos-orbitron-brand", "TALOS");
   nome.setAttribute("aria-hidden", "true");
   colonna.append(marchio, nome, titolo2, lead);
   const suggerimenti = Array.isArray(dati.suggerimenti) ? dati.suggerimenti : [];
   if (suggerimenti.length > 0) {
-    const lista = el29(documentObj, "div", "talos-card talos-list");
+    const lista = el30(documentObj, "div", "talos-card talos-list");
     lista.setAttribute("data-c", "SuggestionList");
     for (const s of suggerimenti) {
-      const riga2 = el29(documentObj, "button", "talos-list-row");
+      const riga2 = el30(documentObj, "button", "talos-list-row");
       riga2.type = "button";
       riga2.setAttribute("data-c", "ListRow");
-      const icona16 = el29(documentObj, "span", "talos-list-row__icon");
-      icona16.append(simbolo3(documentObj, "i", s.icona || "i-bolt"));
-      const testo2 = el29(documentObj, "span", "talos-list-row__text");
-      testo2.append(el29(documentObj, "span", "talos-list-row__title", s.titolo), el29(documentObj, "span", "talos-list-row__sub", s.sub || ""));
-      riga2.append(icona16, testo2, el29(documentObj, "span", "talos-kbd", "↵"));
+      const icona16 = el30(documentObj, "span", "talos-list-row__icon");
+      icona16.append(simbolo4(documentObj, "i", s.icona || "i-bolt"));
+      const testo2 = el30(documentObj, "span", "talos-list-row__text");
+      testo2.append(el30(documentObj, "span", "talos-list-row__title", s.titolo), el30(documentObj, "span", "talos-list-row__sub", s.sub || ""));
+      riga2.append(icona16, testo2, el30(documentObj, "span", "talos-kbd", "↵"));
       if (typeof opzioni.onSuggerimento === "function") riga2.addEventListener("click", () => opzioni.onSuggerimento(s));
       lista.append(riga2);
     }
     colonna.append(lista);
   }
-  const piede = el29(documentObj, "div", "talos-cluster talos-empty__foot");
+  const piede = el30(documentObj, "div", "talos-cluster talos-empty__foot");
   if (dati.ultimaSessione) {
-    const riapri = el29(documentObj, "button", "talos-button talos-button--secondary talos-button--sm");
+    const riapri = el30(documentObj, "button", "talos-button talos-button--secondary talos-button--sm");
     riapri.type = "button";
-    riapri.append(simbolo3(documentObj, "i i--sm", "i-clock"), documentObj.createTextNode("Riapri l'ultima sessione"));
+    riapri.append(simbolo4(documentObj, "i i--sm", "i-clock"), documentObj.createTextNode("Riapri l'ultima sessione"));
     riapri.title = dati.ultimaSessione.nome || "";
     if (typeof opzioni.onRiapri === "function") riapri.addEventListener("click", opzioni.onRiapri);
     piede.append(riapri);
   }
-  piede.append(el29(documentObj, "span", "talos-muted talos-empty__hint", dati.hint || (suggerimenti.length > 0 ? "Gli esempi nascono da cosa c'è nella cartella." : "Scrivi qui sotto cosa deve fare TALOS per iniziare.")));
+  piede.append(el30(documentObj, "span", "talos-muted talos-empty__hint", dati.hint || (suggerimenti.length > 0 ? "Gli esempi nascono da cosa c'è nella cartella." : "Scrivi qui sotto cosa deve fare TALOS per iniziare.")));
   colonna.append(piede);
   return colonna;
 }
-var SVG_NS5;
+var SVG_NS6;
 var init_stato_vuoto = __esm({
   "src/components/stato-vuoto.js"() {
-    SVG_NS5 = "http://www.w3.org/2000/svg";
+    SVG_NS6 = "http://www.w3.org/2000/svg";
   }
 });
 
@@ -46978,8 +47855,8 @@ function sincronizzaGuscioLaboratorio(card) {
 function comandiLegacy(card) {
   const contenitore = card.querySelector("[data-lab-comandi]") ?? card;
   const mappa = /* @__PURE__ */ new Map();
-  for (const bottone6 of contenitore.querySelectorAll("[data-model-lab-tab]")) {
-    if (!mappa.has(bottone6.dataset.modelLabTab)) mappa.set(bottone6.dataset.modelLabTab, bottone6);
+  for (const bottone7 of contenitore.querySelectorAll("[data-model-lab-tab]")) {
+    if (!mappa.has(bottone7.dataset.modelLabTab)) mappa.set(bottone7.dataset.modelLabTab, bottone7);
   }
   return mappa;
 }
@@ -47666,8 +48543,8 @@ function montaSchedaModello(contenitore, {
     etichetta: (voce) => voce.etichetta,
     // ⛔ Nessun `title`: ripeterebbe parola per parola ciò che la linguetta già dice a schermo.
     suggerimento: () => "",
-    contenuto: (bottone6, voce) => {
-      bottone6.append(icona6(doc, voce.icona, "i i--sm"), doc.createTextNode(voce.etichetta));
+    contenuto: (bottone7, voce) => {
+      bottone7.append(icona6(doc, voce.icona, "i i--sm"), doc.createTextNode(voce.etichetta));
     },
     controlla: () => idPannello,
     azioni: { seleziona: (scelta) => vaiA(scelta) }
@@ -48730,6 +49607,7 @@ var init_app = __esm({
     init_diff_hunk();
     init_risultati_ricerca();
     init_conversazione();
+    init_richiesta_mcp();
     init_cronologia();
     init_frase_cercata();
     init_browser_vivo();
@@ -48737,6 +49615,7 @@ var init_app = __esm({
     init_browser_gesti();
     init_scorciatoie();
     init_terminale_xterm();
+    init_terminale_agente();
     init_chat_foot();
     init_progetti();
     init_tooltip();
@@ -49070,6 +49949,9 @@ var init_app = __esm({
            * `content` può essere enorme, e per contare non serve.
            */
           eventiAttrezzi: [],
+          /* PO-10 passo 2 (02/10/2026) — toolCallId → { vivo, testo } dei comandi dell'AGENTE, per le sue schede del Terminale.
+             `eventiAttrezzi` non tiene il `content` (può essere enorme): qui sì, con un tetto (`registraUscitaAgente`). */
+          usciteAgente: /* @__PURE__ */ new Map(),
           /**
            * ⭐⭐⭐ O-02 (04/9) — il tetto dei giri che il KERNEL ha dichiarato nel
            * suo messaggio d'errore («24 su 24»). `null` finché nessuno l'ha
@@ -49090,6 +49972,8 @@ var init_app = __esm({
            * da un altro client) la svuota. */
           approvazioniPendenti: /* @__PURE__ */ new Map(),
           domandePendenti: /* @__PURE__ */ new Map(),
+          richiesteMcpPendenti: /* @__PURE__ */ new Map(),
+          // 02/10/2026: le richieste dei server MCP che aspettano la persona
           /** ⭐⭐⭐ 28/8 — la radice ASSOLUTA della sessione corrente (da RunStarted→contesto.cartella, la STESSA stringa già mostrata in "Root" nel Context Rail) — serve per calcolare il percorso assoluto di una sottocartella quando l'owner sceglie "Imposta come radice" nel menu dell'albero. `null` finché nessun RunStarted è mai arrivato. */
           cartellaAssoluta: null,
           /**
@@ -49882,7 +50766,10 @@ var init_app = __esm({
         resetEmbeddedTopbarScroll(view === "chat" ? chatConversation : target);
         workspaceUI?.update(view);
         window.__talosHarnessHostViewChange?.(view);
-        if (view === "settings") inizializzaModelLab();
+        if (view === "settings") {
+          inizializzaModelLab();
+          mostraLaboratorioInAttesa();
+        }
         if (view === "dashboard") ensureSessionsBoard();
         if (view === "ricerca") caricaPannelloRicerca({ pagina: true });
         if (view === "doctor") caricaDoctor();
@@ -50306,11 +51193,11 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
         return true;
       }
       const mostraToast = creaPilaToast(toastRegion, {
-        animaUscita: (el30, fine) => animateExit(el30, {}, fine),
-        entra: (el30) => markMotionEnter(el30),
+        animaUscita: (el31, fine) => animateExit(el31, {}, fine),
+        entra: (el31) => markMotionEnter(el31),
         fuocoDiRitorno: () => $3("#campanella") || $3("#composerInput")
       });
-      const visibileDavvero = (el30) => Boolean(el30 && !el30.hidden && el30.getClientRects().length > 0);
+      const visibileDavvero = (el31) => Boolean(el31 && !el31.hidden && el31.getClientRects().length > 0);
       function misuraPilaToast() {
         const barraDestra = [...document.querySelectorAll(".talos-inspector")].find(visibileDavvero);
         if (barraDestra) {
@@ -50406,10 +51293,10 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
       window.addEventListener("online", () => sorveglianza.segnalaBrowser(true));
       barraStatoChat?.querySelector("[data-runtime-riprova]")?.addEventListener("click", () => sorveglianza.riprova());
       document.addEventListener("click", (evento) => {
-        const bottone6 = evento.target instanceof Element ? evento.target.closest(".talos-link-conversazione[data-conversazione]") : null;
-        if (!bottone6) return;
+        const bottone7 = evento.target instanceof Element ? evento.target.closest(".talos-link-conversazione[data-conversazione]") : null;
+        if (!bottone7) return;
         evento.preventDefault();
-        void apriConversazioneDalLink(bottone6.dataset.conversazione);
+        void apriConversazioneDalLink(bottone7.dataset.conversazione);
       });
       async function apriConversazioneDalLink(id4) {
         let sessione = null;
@@ -50493,9 +51380,9 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
             statoRender.prefisso = stabile;
           }
         }
-        const coda = renderizzaMarkdownSemplice(testo2.slice(confine));
-        statoRender.nodiCoda = [...coda.childNodes];
-        contenitore.appendChild(coda);
+        const coda2 = renderizzaMarkdownSemplice(testo2.slice(confine));
+        statoRender.nodiCoda = [...coda2.childNodes];
+        contenitore.appendChild(coda2);
       }
       function boardErrorMessage(error) {
         return messaggioErroreUtente(error, "Il server locale non risponde. Apri Codice sul PC e riprova.");
@@ -50589,10 +51476,10 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
       function testoDiagnosiGiri(riassunto) {
         if (!riassunto || !riassunto.registrato) return "Attrezzi non registrati per questa sessione: la sua cronologia non porta nessun evento di attrezzo.";
         const primi = riassunto.perAttrezzo.slice(0, 3).map((a) => `${nomeUmanoAttrezzo2(a.nome)} ${a.chiamate}`).join(", ");
-        const coda = riassunto.perAttrezzo.length > 3 ? `, e altri ${riassunto.perAttrezzo.length - 3} attrezzi` : "";
+        const coda2 = riassunto.perAttrezzo.length > 3 ? `, e altri ${riassunto.perAttrezzo.length - 3} attrezzi` : "";
         const conRipetizioni = riassunto.perAttrezzo.filter((a) => a.ripetute > 0).sort((a, b) => b.ripetute - a.ripetute || a.nome.localeCompare(b.nome));
         const ripetizioni = riassunto.ripetute > 0 ? `${riassunto.ripetute} identiche a una precedente (${conRipetizioni.slice(0, 3).map((a) => `${nomeUmanoAttrezzo2(a.nome)} ${a.ripetute}`).join(", ")})` : "nessuna identica a una precedente";
-        return `${riassunto.chiamate} chiamate ad attrezzi: ${primi}${coda} · ${ripetizioni}`;
+        return `${riassunto.chiamate} chiamate ad attrezzi: ${primi}${coda2} · ${ripetizioni}`;
       }
       function consiglioDaRiassunto(riassunto) {
         if (!riassunto || !riassunto.registrato) return "Nel prossimo messaggio chiedi un passo solo: il tetto vale per giro, non per sessione.";
@@ -50797,7 +51684,7 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
         aggiornaSessionItem(riga2, { stato: { classe: "vivo", testo: "in corso", tono: "live" }, giri });
       }
       function aspettaLaPersona() {
-        return state.realSession.domandePendenti?.size > 0 || Boolean(document.querySelector('#conversation [data-c="PlanArtifact"][data-approvabile]'));
+        return state.realSession.domandePendenti?.size > 0 || state.realSession.richiesteMcpPendenti?.size > 0 || Boolean(document.querySelector('#conversation [data-c="PlanArtifact"][data-approvabile]'));
       }
       function segnalaRigaSessioneViva() {
         if (rigaVivaProgrammata) return;
@@ -50869,18 +51756,18 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
         feedback.hidden = false;
         feedback.scrollIntoView({ block: "nearest" });
       }
-      async function provaTuttiProvider(bottone6) {
-        const prima = bottone6?.textContent;
-        if (bottone6) {
-          bottone6.disabled = true;
-          bottone6.textContent = "Provo tutti…";
+      async function provaTuttiProvider(bottone7) {
+        const prima = bottone7?.textContent;
+        if (bottone7) {
+          bottone7.disabled = true;
+          bottone7.textContent = "Provo tutti…";
         }
         try {
           await Promise.all((state.modelLab.providers || []).map((row) => provaProviderModelLab(row.id)));
         } finally {
-          if (bottone6) {
-            bottone6.disabled = false;
-            bottone6.textContent = prima;
+          if (bottone7) {
+            bottone7.disabled = false;
+            bottone7.textContent = prima;
           }
         }
       }
@@ -51432,7 +52319,7 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
               void avviaDownloadHf(det, g.file, g.bytes);
             },
             tuttiFile: (det) => riempiVeloFileModello(det),
-            scheda: (det, bottone6) => mostraSchedaModelloHf(det, bottone6)
+            scheda: (det, bottone7) => mostraSchedaModelloHf(det, bottone7)
           }
         });
         aggiornaOsservazioneHf();
@@ -51485,12 +52372,12 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
         const piede = velo.querySelector(".talos-dialog__footer-note");
         if (piede) piede.textContent = `${(detail.files || []).length} file nel repository`;
       }
-      function mostraSchedaModelloHf(detail, bottone6) {
+      function mostraSchedaModelloHf(detail, bottone7) {
         const cont = $3("#hfScheda");
         if (!cont) return;
         const aperto = !cont.hidden;
         cont.hidden = aperto;
-        bottone6?.setAttribute("aria-expanded", String(!aperto));
+        bottone7?.setAttribute("aria-expanded", String(!aperto));
         if (!aperto) cont.replaceChildren(renderizzaModelCardReadme(detail));
       }
       function renderizzaHfDetailModelLab() {
@@ -51616,21 +52503,21 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
         corpo.className = "hf-detail-body";
         const attiva = schede.some((s) => s.id === state.modelLab.hfDetailTab) ? state.modelLab.hfDetailTab : "quantizzazioni";
         for (const scheda of schede) {
-          const bottone6 = document.createElement("button");
-          bottone6.type = "button";
-          bottone6.className = "hf-detail-tab";
-          bottone6.dataset.hfDetailTab = scheda.id;
-          bottone6.setAttribute("role", "tab");
+          const bottone7 = document.createElement("button");
+          bottone7.type = "button";
+          bottone7.className = "hf-detail-tab";
+          bottone7.dataset.hfDetailTab = scheda.id;
+          bottone7.setAttribute("role", "tab");
           const selezionata = scheda.id === attiva;
-          bottone6.setAttribute("aria-selected", String(selezionata));
-          bottone6.classList.toggle("active", selezionata);
-          bottone6.append(textElement("span", "", scheda.etichetta));
-          if (Number.isFinite(scheda.conto)) bottone6.append(textElement("span", "hf-detail-tab-count", String(scheda.conto)));
-          bottone6.addEventListener("click", () => {
+          bottone7.setAttribute("aria-selected", String(selezionata));
+          bottone7.classList.toggle("active", selezionata);
+          bottone7.append(textElement("span", "", scheda.etichetta));
+          if (Number.isFinite(scheda.conto)) bottone7.append(textElement("span", "hf-detail-tab-count", String(scheda.conto)));
+          bottone7.addEventListener("click", () => {
             state.modelLab.hfDetailTab = scheda.id;
             renderizzaHfDetailModelLab();
           });
-          barra.append(bottone6);
+          barra.append(bottone7);
           if (selezionata) corpo.append(scheda.nodo);
         }
         card.append(heading, tags, stats, barra, corpo);
@@ -52121,7 +53008,10 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
         const rinvio = risolviSezioneImpostazioni(section);
         if (rinvio && rinvio.section !== section) {
           setSettingsSection(rinvio.section, { persist: true });
-          if (rinvio.labTab) setModelLabSection(rinvio.labTab);
+          if (rinvio.labTab) {
+            setModelLabSection(rinvio.labTab);
+            portaInVistaIlLaboratorio();
+          }
           return;
         }
         queueMicrotask(() => {
@@ -52159,6 +53049,43 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
         setView("settings", { dallInizio: true });
         setSettingsSection("models");
         setModelLabSection("providers");
+        portaInVistaIlLaboratorio();
+      }
+      let laboratorioDaMostrare = false;
+      function portaInVistaIlLaboratorio() {
+        if (state.view !== "settings") {
+          laboratorioDaMostrare = true;
+          return;
+        }
+        laboratorioDaMostrare = false;
+        const laboratorio = $3("#modelLabCard");
+        const schede = laboratorio?.querySelector(".model-lab-tabs") ?? laboratorio;
+        const pagina = laboratorio?.closest(".talos-page");
+        if (!schede || !pagina) return;
+        const allinea = () => {
+          const scarto = schede.getBoundingClientRect().top - pagina.getBoundingClientRect().top - 12;
+          if (Math.abs(scarto) > 4) pagina.scrollTop = Math.max(0, pagina.scrollTop + scarto);
+          return pagina.scrollTop;
+        };
+        let nostro = allinea();
+        const fine = performance.now() + 1200;
+        const passo = () => {
+          if (state.view !== "settings" || performance.now() > fine) return;
+          if (Math.abs(pagina.scrollTop - nostro) > 4) return;
+          nostro = allinea();
+          requestAnimationFrame(passo);
+        };
+        requestAnimationFrame(passo);
+      }
+      function mostraLaboratorioInAttesa() {
+        if (!laboratorioDaMostrare) return;
+        queueMicrotask(() => {
+          if (!laboratorioDaMostrare) return;
+          laboratorioDaMostrare = false;
+          const suModelli = $3("#setting-tab-models")?.getAttribute("aria-selected") === "true";
+          const suProvider = $3('#modelLabCard [data-lab-scheda="providers"]')?.getAttribute("aria-selected") === "true";
+          if (suModelli && suProvider) portaInVistaIlLaboratorio();
+        });
       }
       function montaTrasferimentoImpostazioni() {
         const esito = $3("#settingsTrasferimentoEsito");
@@ -52276,15 +53203,15 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
       let statoFonteRicerca = null;
       let ricercaWebInCorso = false;
       function messaggioFonteRicerca(mount, testo2, errore = false) {
-        let el30 = mount.querySelector(errore ? "[data-search-error]" : "[data-search-feedback]");
-        if (!el30) {
-          el30 = textElement("p", "talos-muted", "");
-          el30.dataset[errore ? "searchError" : "searchFeedback"] = "";
-          el30.setAttribute("role", errore ? "alert" : "status");
-          mount.append(el30);
+        let el31 = mount.querySelector(errore ? "[data-search-error]" : "[data-search-feedback]");
+        if (!el31) {
+          el31 = textElement("p", "talos-muted", "");
+          el31.dataset[errore ? "searchError" : "searchFeedback"] = "";
+          el31.setAttribute("role", errore ? "alert" : "status");
+          mount.append(el31);
         }
-        el30.textContent = testo2;
-        el30.hidden = !testo2;
+        el31.textContent = testo2;
+        el31.hidden = !testo2;
       }
       async function caricaPannelloRicercaWeb() {
         const mount = $3("#searchSourceMount");
@@ -52313,9 +53240,9 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
         ricercaWebInCorso = true;
         const origine = document.activeElement;
         const focus = mount.contains(origine) ? { source: origine.dataset.searchSource, action: origine.dataset.searchAction, id: origine.id } : null;
-        const disabilitati = [...mount.querySelectorAll("button,input")].map((el30) => [el30, el30.disabled]);
+        const disabilitati = [...mount.querySelectorAll("button,input")].map((el31) => [el31, el31.disabled]);
         mount.setAttribute("aria-busy", "true");
-        for (const [el30] of disabilitati) el30.disabled = true;
+        for (const [el31] of disabilitati) el31.disabled = true;
         messaggioFonteRicerca(mount, "", true);
         messaggioFonteRicerca(mount, prova ? "Ricerca in corso…" : "Aggiornamento in corso…");
         const precedente = mount.querySelector("[data-search-result]");
@@ -52348,7 +53275,7 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
             riprova.addEventListener("click", caricaPannelloRicercaWeb);
             mount.append(riprova);
           }
-          for (const [el30, prima] of disabilitati) if (el30.isConnected) el30.disabled = prima;
+          for (const [el31, prima] of disabilitati) if (el31.isConnected) el31.disabled = prima;
           if (focus && (document.activeElement === document.body || document.activeElement === origine) && origine.isConnected && mount.getClientRects().length) {
             origine.focus({ preventScroll: true });
             mount.querySelector("[data-search-error]")?.scrollIntoView({ block: "nearest", behavior: "instant" });
@@ -52615,6 +53542,16 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
           return { ok: false, messaggio: errore?.message || "riprova." };
         }
       }
+      async function fermaProcesso(toolCallId) {
+        const sessionId = state.realSession.id;
+        if (!sessionId) return { ok: false, messaggio: "nessuna sessione aperta." };
+        try {
+          await apiPost("/api/v1/sessions/" + encodeURIComponent(sessionId) + "/processes/" + encodeURIComponent(toolCallId) + "/stop", {});
+          return { ok: true };
+        } catch (errore) {
+          return { ok: false, messaggio: errore?.message || "riprova." };
+        }
+      }
       function apiScrivi(metodo, pathname, body, options) {
         return apiCentrale().request(metodo, pathname, body, options);
       }
@@ -52767,24 +53704,24 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
         if (hook.fidato) {
           statoEl = textElement("span", "status-chip success", "attivo");
         } else {
-          const bottone6 = document.createElement("button");
-          bottone6.type = "button";
-          bottone6.className = "secondary-btn";
-          bottone6.textContent = "Fida";
-          bottone6.addEventListener("click", async () => {
-            bottone6.disabled = true;
-            bottone6.textContent = "Fido…";
+          const bottone7 = document.createElement("button");
+          bottone7.type = "button";
+          bottone7.className = "secondary-btn";
+          bottone7.textContent = "Fida";
+          bottone7.addEventListener("click", async () => {
+            bottone7.disabled = true;
+            bottone7.textContent = "Fido…";
             try {
               await apiPost(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/hooks/${encodeURIComponent(hook.id)}/trust`, {});
               toast("Hook fidato", hook.id);
               caricaPannelloHooks();
             } catch (error) {
-              bottone6.disabled = false;
-              bottone6.textContent = "Fida";
+              bottone7.disabled = false;
+              bottone7.textContent = "Fida";
               toast("Non riuscito", error.message);
             }
           });
-          statoEl = bottone6;
+          statoEl = bottone7;
         }
         riga2.append(iconEl, testo2, statoEl);
         return riga2;
@@ -53455,24 +54392,24 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
         if (server.fidato) {
           statoEl = textElement("span", "status-chip success", "attivo");
         } else {
-          const bottone6 = document.createElement("button");
-          bottone6.type = "button";
-          bottone6.className = "secondary-btn";
-          bottone6.textContent = "Fida";
-          bottone6.addEventListener("click", async () => {
-            bottone6.disabled = true;
-            bottone6.textContent = "Fido…";
+          const bottone7 = document.createElement("button");
+          bottone7.type = "button";
+          bottone7.className = "secondary-btn";
+          bottone7.textContent = "Fida";
+          bottone7.addEventListener("click", async () => {
+            bottone7.disabled = true;
+            bottone7.textContent = "Fido…";
             try {
               await apiPost(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/mcp/${encodeURIComponent(server.id)}/trust`, {});
               toast("Server MCP fidato", server.id);
               caricaPannelloMcp();
             } catch (error) {
-              bottone6.disabled = false;
-              bottone6.textContent = "Fida";
+              bottone7.disabled = false;
+              bottone7.textContent = "Fida";
               toast("Non riuscito", error.message);
             }
           });
-          statoEl = bottone6;
+          statoEl = bottone7;
         }
         riga2.append(iconEl, testo2, statoEl);
         return riga2;
@@ -53524,24 +54461,24 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
         if (plugin.fidato) {
           statoEl = textElement("span", "status-chip success", "attivo");
         } else {
-          const bottone6 = document.createElement("button");
-          bottone6.type = "button";
-          bottone6.className = "secondary-btn";
-          bottone6.textContent = "Fida";
-          bottone6.addEventListener("click", async () => {
-            bottone6.disabled = true;
-            bottone6.textContent = "Fido…";
+          const bottone7 = document.createElement("button");
+          bottone7.type = "button";
+          bottone7.className = "secondary-btn";
+          bottone7.textContent = "Fida";
+          bottone7.addEventListener("click", async () => {
+            bottone7.disabled = true;
+            bottone7.textContent = "Fido…";
             try {
               await apiPost(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/plugins/${encodeURIComponent(plugin.id)}/trust`, {});
               toast("Plugin fidato", plugin.id);
               caricaPannelloPlugin();
             } catch (error) {
-              bottone6.disabled = false;
-              bottone6.textContent = "Fida";
+              bottone7.disabled = false;
+              bottone7.textContent = "Fida";
               toast("Non riuscito", error.message);
             }
           });
-          statoEl = bottone6;
+          statoEl = bottone7;
         }
         riga2.append(iconEl, testo2, statoEl);
         wrapper.append(riga2);
@@ -53659,21 +54596,21 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
           const voci = fontiDelSelettore({ openrouter: modelliCache, locali: modelliLocali, diretti: modelliDiretti });
           if (!voci.some((voce) => voce.id === fonteScelta)) fonteScelta = "openrouter";
           const schede = voci.map((voce) => {
-            const bottone6 = document.createElement("button");
-            bottone6.type = "button";
-            bottone6.className = "model-picker-source";
-            bottone6.dataset.pickerSource = voce.id;
-            bottone6.setAttribute("role", "tab");
-            bottone6.setAttribute("aria-controls", listEl.id);
+            const bottone7 = document.createElement("button");
+            bottone7.type = "button";
+            bottone7.className = "model-picker-source";
+            bottone7.dataset.pickerSource = voce.id;
+            bottone7.setAttribute("role", "tab");
+            bottone7.setAttribute("aria-controls", listEl.id);
             const attiva = voce.id === fonteScelta;
-            bottone6.setAttribute("aria-selected", String(attiva));
-            bottone6.tabIndex = attiva ? 0 : -1;
-            bottone6.classList.toggle("active", attiva);
-            bottone6.append(textElement("span", "", voce.etichetta));
-            if (Number.isFinite(voce.conto)) bottone6.append(textElement("span", "model-picker-source-count", String(voce.conto)));
-            if (!voce.collegato) bottone6.title = `${voce.etichetta}: chiave non collegata`;
-            bottone6.addEventListener("click", () => scegliFonte(voce.id));
-            return bottone6;
+            bottone7.setAttribute("aria-selected", String(attiva));
+            bottone7.tabIndex = attiva ? 0 : -1;
+            bottone7.classList.toggle("active", attiva);
+            bottone7.append(textElement("span", "", voce.etichetta));
+            if (Number.isFinite(voce.conto)) bottone7.append(textElement("span", "model-picker-source-count", String(voce.conto)));
+            if (!voce.collegato) bottone7.title = `${voce.etichetta}: chiave non collegata`;
+            bottone7.addEventListener("click", () => scegliFonte(voce.id));
+            return bottone7;
           });
           fonti.replaceChildren(...schede);
         }
@@ -54022,10 +54959,10 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
         const labelsRow = document.createElement("div");
         labelsRow.className = "effort-picker-labels";
         const labelEls = LIVELLI_RAGIONAMENTO.map((l, i2) => {
-          const el30 = textElement("span", "effort-picker-tick", l.etichetta);
-          el30.style.left = `${i2 / (LIVELLI_RAGIONAMENTO.length - 1) * 100}%`;
-          labelsRow.appendChild(el30);
-          return el30;
+          const el31 = textElement("span", "effort-picker-tick", l.etichetta);
+          el31.style.left = `${i2 / (LIVELLI_RAGIONAMENTO.length - 1) * 100}%`;
+          labelsRow.appendChild(el31);
+          return el31;
         });
         wrap.append(head, range, labelsRow);
         let indice2 = LIVELLI_RAGIONAMENTO.findIndex((l) => l.valore === valoreIniziale);
@@ -54034,7 +54971,7 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
         function aggiorna() {
           range.value = String(indice2);
           selected.textContent = toccato ? LIVELLI_RAGIONAMENTO[indice2].etichetta : "Automatico";
-          labelEls.forEach((el30, i2) => el30.classList.toggle("effort-picker-tick-selected", i2 === indice2));
+          labelEls.forEach((el31, i2) => el31.classList.toggle("effort-picker-tick-selected", i2 === indice2));
         }
         aggiorna();
         range.addEventListener("input", () => {
@@ -54213,11 +55150,11 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
           badge6.textContent = String(notifiche.length);
           badge6.hidden = notifiche.length === 0;
         }
-        const bottone6 = $3("#notificationsBtn");
-        if (bottone6) {
+        const bottone7 = $3("#notificationsBtn");
+        if (bottone7) {
           const nome = nomeCampanella(notifiche.length);
-          bottone6.setAttribute("aria-label", nome);
-          bottone6.title = nome;
+          bottone7.setAttribute("aria-label", nome);
+          bottone7.title = nome;
         }
         avvisaFuoriDallaFinestra(notifiche);
       }
@@ -54246,19 +55183,19 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
         }
       }
       function montaConsensoNotifiche() {
-        const bottone6 = $3("#notificheSistema");
+        const bottone7 = $3("#notificheSistema");
         const stato2 = $3("#notificheSistemaStato");
-        if (!bottone6 || !stato2) return;
+        if (!bottone7 || !stato2) return;
         const supportato = typeof Notification !== "undefined";
         const dipingi = () => {
           const s = statoConsensoNotifiche(supportato ? Notification.permission : "default", supportato);
           stato2.textContent = s.testo;
-          bottone6.hidden = !s.chiedibile;
+          bottone7.hidden = !s.chiedibile;
         };
         dipingi();
-        if (bottone6.dataset.consensoMontato) return;
-        bottone6.dataset.consensoMontato = "true";
-        bottone6.addEventListener("click", async () => {
+        if (bottone7.dataset.consensoMontato) return;
+        bottone7.dataset.consensoMontato = "true";
+        bottone7.addEventListener("click", async () => {
           if (!supportato) return;
           try {
             await Notification.requestPermission();
@@ -54612,15 +55549,15 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
         if (tipo === "export") {
           const nome = $3("#esportaNome", velo);
           if (nome) nome.textContent = state.sessioneTarget?.nome || state.session || "questa sessione";
-          for (const bottone6 of $$("[data-export-choice]", velo)) {
-            if (bottone6.dataset.collegato) continue;
-            bottone6.dataset.collegato = "si";
-            bottone6.addEventListener("click", async () => {
+          for (const bottone7 of $$("[data-export-choice]", velo)) {
+            if (bottone7.dataset.collegato) continue;
+            bottone7.dataset.collegato = "si";
+            bottone7.addEventListener("click", async () => {
               const tutti = $$("[data-export-choice]", velo);
               tutti.forEach((b) => {
                 b.disabled = true;
               });
-              const esito = await esportaTrascrizioneSessione(bottone6.dataset.exportChoice);
+              const esito = await esportaTrascrizioneSessione(bottone7.dataset.exportChoice);
               tutti.forEach((b) => {
                 b.disabled = false;
               });
@@ -55505,15 +56442,15 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
       ]);
       function disegnaPermessiIn(radice2) {
         if (!radice2) return;
-        for (const bottone6 of $$("[data-dove-choice]", radice2)) {
-          const suo = (bottone6.dataset.doveChoice || null) === (state.realSession.doveGiranoIComandi ?? null);
-          bottone6.setAttribute("aria-checked", String(suo));
-          bottone6.classList.toggle("is-attiva", suo);
+        for (const bottone7 of $$("[data-dove-choice]", radice2)) {
+          const suo = (bottone7.dataset.doveChoice || null) === (state.realSession.doveGiranoIComandi ?? null);
+          bottone7.setAttribute("aria-checked", String(suo));
+          bottone7.classList.toggle("is-attiva", suo);
         }
-        for (const bottone6 of $$("[data-permission-choice]", radice2)) {
-          const suo = bottone6.dataset.permissionChoice === state.permissions;
-          bottone6.setAttribute("aria-checked", String(suo));
-          bottone6.classList.toggle("is-attiva", suo);
+        for (const bottone7 of $$("[data-permission-choice]", radice2)) {
+          const suo = bottone7.dataset.permissionChoice === state.permissions;
+          bottone7.setAttribute("aria-checked", String(suo));
+          bottone7.classList.toggle("is-attiva", suo);
         }
         const elenco2 = $3("#veloPermessiAttrezzi", radice2);
         if (elenco2) {
@@ -55562,22 +56499,22 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
           avviso.textContent = "";
           if (testo2) {
             avviso.append(document.createTextNode(`${testo2} `));
-            const bottone6 = document.createElement("button");
-            bottone6.type = "button";
-            bottone6.className = "talos-button talos-button--sm";
-            bottone6.dataset.chiudiPorteLaterali = aperte.join(",");
-            bottone6.textContent = `Chiudi anche ${aperte.length === 1 ? "quella" : "quelle"}`;
-            avviso.append(bottone6);
+            const bottone7 = document.createElement("button");
+            bottone7.type = "button";
+            bottone7.className = "talos-button talos-button--sm";
+            bottone7.dataset.chiudiPorteLaterali = aperte.join(",");
+            bottone7.textContent = `Chiudi anche ${aperte.length === 1 ? "quella" : "quelle"}`;
+            avviso.append(bottone7);
           }
         }
       }
       function disegnaDoveGiranoIn(radice2, dati) {
         const testi = testiDoveGiranoIComandi(dati);
         for (const [chiave, scelta] of [["automatico", ""], ["linux", "wsl2"]]) {
-          const bottone6 = $3(`[data-dove-choice="${scelta}"]`, radice2);
-          if (!bottone6) continue;
+          const bottone7 = $3(`[data-dove-choice="${scelta}"]`, radice2);
+          if (!bottone7) continue;
           for (const [selettore, campo2] of [[".talos-choice__sub", "sub"], [".talos-badge", "badge"]]) {
-            const elemento = $3(selettore, bottone6);
+            const elemento = $3(selettore, bottone7);
             if (!elemento) continue;
             if (elemento.dataset.testoDiSempre === void 0) elemento.dataset.testoDiSempre = elemento.textContent;
             elemento.textContent = testi?.[chiave]?.[campo2] ?? elemento.dataset.testoDiSempre;
@@ -55712,9 +56649,9 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
             ridisegna2();
           });
           radice2.addEventListener("click", (evento) => {
-            const bottone6 = evento.target?.closest?.("[data-chiudi-porte-laterali]");
-            if (!bottone6) return;
-            const quali = String(bottone6.dataset.chiudiPorteLaterali || "").split(",").filter(Boolean);
+            const bottone7 = evento.target?.closest?.("[data-chiudi-porte-laterali]");
+            if (!bottone7) return;
+            const quali = String(bottone7.dataset.chiudiPorteLaterali || "").split(",").filter(Boolean);
             if (!quali.length) return;
             const comeScrivi = state.permessiPerAttrezzo.scrivi === "nega" ? "nega" : "chiedi";
             for (const attrezzo of quali) state.permessiPerAttrezzo[attrezzo] = comeScrivi;
@@ -55743,10 +56680,10 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
         if (Number.isFinite(giri) && giri > 0) aside.append(textElement("span", "talos-mono talos-muted", `${giri} gir${giri === 1 ? "o" : "i"}`));
         if (qui) aside.append(textElement("span", "talos-badge talos-badge--accent talos-badge--sm", "Qui"));
         else if (onApri) {
-          const bottone6 = textElement("button", "talos-button talos-button--ghost talos-button--sm", azione || "Apri");
-          bottone6.type = "button";
-          bottone6.addEventListener("click", onApri);
-          aside.append(bottone6);
+          const bottone7 = textElement("button", "talos-button talos-button--ghost talos-button--sm", azione || "Apri");
+          bottone7.type = "button";
+          bottone7.addEventListener("click", onApri);
+          aside.append(bottone7);
         }
         nodo13.append(rail, dot, testo2, aside);
         return nodo13;
@@ -56117,8 +57054,8 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
         const c = scrollerConversazione();
         if (!c) return true;
         const colonna = $3("#conversation");
-        const coda = colonna ? parseFloat(getComputedStyle(colonna).paddingBottom) || 0 : 0;
-        const valore = fondoInVista({ scrollHeight: c.scrollHeight, scrollTop: c.scrollTop, clientHeight: c.clientHeight, coda });
+        const coda2 = colonna ? parseFloat(getComputedStyle(colonna).paddingBottom) || 0 : 0;
+        const valore = fondoInVista({ scrollHeight: c.scrollHeight, scrollTop: c.scrollTop, clientHeight: c.clientHeight, coda: coda2 });
         fondoInVistaRicordato = valore;
         fondoInVistaRicordatoA = performance.now();
         window.requestAnimationFrame(() => {
@@ -56242,25 +57179,25 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
         const corpo = document.createElement("div");
         corpo.className = "talos-risultato-delega__corpo assistant-copy";
         corpo.append(renderizzaMarkdownSemplice(risultato.testo));
-        const bottone6 = document.createElement("button");
-        bottone6.type = "button";
-        bottone6.className = "talos-button talos-button--ghost talos-button--sm talos-risultato-delega__apri";
-        bottone6.textContent = "Mostra tutto";
-        bottone6.setAttribute("aria-expanded", "false");
-        bottone6.hidden = true;
-        bottone6.addEventListener("click", () => {
+        const bottone7 = document.createElement("button");
+        bottone7.type = "button";
+        bottone7.className = "talos-button talos-button--ghost talos-button--sm talos-risultato-delega__apri";
+        bottone7.textContent = "Mostra tutto";
+        bottone7.setAttribute("aria-expanded", "false");
+        bottone7.hidden = true;
+        bottone7.addEventListener("click", () => {
           const aperta2 = nota.classList.toggle("is-aperta");
-          bottone6.textContent = aperta2 ? "Mostra meno" : "Mostra tutto";
-          bottone6.setAttribute("aria-expanded", aperta2 ? "true" : "false");
+          bottone7.textContent = aperta2 ? "Mostra meno" : "Mostra tutto";
+          bottone7.setAttribute("aria-expanded", aperta2 ? "true" : "false");
           aggiornaTaglio();
         });
         function aggiornaTaglio() {
           const tagliata = !nota.classList.contains("is-aperta") && corpo.scrollHeight > corpo.clientHeight + 1;
           corpo.dataset.tagliata = tagliata ? "si" : "no";
-          bottone6.hidden = !tagliata && !nota.classList.contains("is-aperta");
+          bottone7.hidden = !tagliata && !nota.classList.contains("is-aperta");
         }
         if (typeof ResizeObserver === "function") new ResizeObserver(aggiornaTaglio).observe(corpo);
-        corpoNota.append(corpo, bottone6);
+        corpoNota.append(corpo, bottone7);
         nellaChat(nota);
         aggiornaTaglio();
         markMotionEnter(nota);
@@ -56862,6 +57799,8 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
           file,
           /* ⛔ Si calcolano UNA VOLTA: servono alla colonna E al numero sulla sua scheda (sotto). */
           processi,
+          /* Stop per riga: senza sessione vera non c'è niente da fermare, e il pulsante non compare. */
+          azioniProcessi: state.realSession.id ? { ferma: fermaProcesso } : null,
           agenti,
           /* PO-08: la card diventa apribile solo perché qui c'è chi ascolta — senza questa funzione
              `disegnaAgenti` la lascia statica, e non promette niente che non può mantenere. */
@@ -57525,9 +58464,9 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
         carta.dataset.giro = String(giro);
         nellaChat(carta);
       }
-      function aggiornaMotivoAzioniRisposta(bottone6) {
+      function aggiornaMotivoAzioniRisposta(bottone7) {
         const vivo = runRealeAttivo();
-        bottone6.title = vivo ? TESTI_MESSAGGIO.altreAzioniGiroVivo : TESTI_MESSAGGIO.altreAzioni;
+        bottone7.title = vivo ? TESTI_MESSAGGIO.altreAzioniGiroVivo : TESTI_MESSAGGIO.altreAzioni;
       }
       function ensureAssistantMessageElement(messageId) {
         const existing = state.realSession.messageElements.get(messageId);
@@ -58253,6 +59192,10 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
             return "";
         }
       }
+      function dettaglioRigaAttrezzo(nome, argomenti) {
+        if (nome === "shell" && typeof argomenti?.comando === "string" && argomenti.comando.trim()) return tronca2(argomenti.comando.trim(), 60);
+        return bersaglioAttrezzoNudo(nome, argomenti);
+      }
       function suggerimentoDaUltimoAttrezzo() {
         const ultimo = state.realSession.ultimoBersaglioAttrezzo;
         if (!ultimo || !ultimo.nome) return null;
@@ -58409,7 +59352,7 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
         if (nome === "shell") {
           const esito = leggiEsitoComando(testo2);
           if (!esito.verdetto) return false;
-          return !esito.riuscito;
+          return !esito.riuscito && !esito.annullato && !esito.terminato;
         }
         return esitoDichiaraFallimento(nome, testo2);
       }
@@ -58504,7 +59447,9 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
       function descriviAzioneApprovazione(azione) {
         if (azione?.tipo === "scrivi" && azione.fileDiControllo) return "Vuole scrivere un file di controllo di TALOS: una regola dell’agente (hook, MCP, istruzioni, memoria), non un file del progetto.";
         if (azione?.tipo === "scrivi") return "Vuole scrivere questo file:";
+        if (azione?.tipo === "file_edit") return "Vuole modificare questo file:";
         if (azione?.tipo === "leggi") return "Vuole leggere questo file:";
+        if (azione?.tipo === "elenca") return "Vuole vedere i file di questa cartella:";
         if (azione?.tipo === "shell") return "Vuole eseguire questo comando nel terminale:";
         if (azione?.tipo === "document_create") return `Vuole creare un documento (formato ${azione.formato || "?"})`;
         if (azione?.tipo === "prova") return "Vuole eseguire la suite di test:";
@@ -58524,6 +59469,8 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
         const frasiVere = [];
         if (typeof azione?.segreto?.frase === "string" && azione.segreto.frase.trim()) frasiVere.push(azione.segreto.frase.trim());
         if (typeof azione?.wslRoot?.frase === "string" && azione.wslRoot.frase.trim()) frasiVere.push(azione.wslRoot.frase.trim());
+        if (typeof azione?.fuoriDalProgetto?.frase === "string" && azione.fuoriDalProgetto.frase.trim()) frasiVere.push(azione.fuoriDalProgetto.frase.trim());
+        if (typeof azione?.percorsoDiRete?.frase === "string" && azione.percorsoDiRete.frase.trim()) frasiVere.push(azione.percorsoDiRete.frase.trim());
         const trifecta = typeof azione?.trifecta === "string" ? azione.trifecta.trim() : azione?.trifecta === true ? "Questa chiamata chiude la trifecta: dati privati, contenuto non attendibile e un modo per farli uscire." : "";
         if (trifecta) frasiVere.push(trifecta);
         if (frasiVere.length) return frasiVere.join(" ");
@@ -58544,6 +59491,7 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
           return null;
         }
         let rispostaDataDaQuestaScheda = false;
+        let esitoRiconciliatoQui = false;
         const generation = state.realSession.generation;
         const stessaRisposta = (expected, actual) => {
           if (expected.status !== actual?.status) return false;
@@ -58578,6 +59526,7 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
                     const resolved = [...exportato.eventi].reverse().find((event) => event?.type === "UserQuestionResolved" && event.requestId === body.requestId && ["answered", "skipped", "cancelled"].includes(event.status));
                     if (resolved) {
                       rispostaDataDaQuestaScheda = stessaRisposta(body, resolved);
+                      esitoRiconciliatoQui = true;
                       if (state.realSession.id === sessionId && state.realSession.generation === generation) {
                         handleRealEvent(resolved, generation);
                       }
@@ -58595,6 +59544,7 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
         const scheda = root2.lastElementChild;
         scheda._dockController = controller;
         scheda._rispostaDataQui = () => rispostaDataDaQuestaScheda;
+        scheda._esitoRiconciliatoQui = () => esitoRiconciliatoQui;
         aggiornaTickGiro({ tono: "warning" });
         return scheda;
       }
@@ -58609,7 +59559,7 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
       }
       function appendApprovalCard(requestId, azione) {
         const bersaglio = azione?.percorso || azione?.comando || azione?.question || azione?.title || "";
-        const badge6 = azione?.tipo === "scrivi" ? "Chiede di scrivere" : azione?.tipo === "leggi" ? "Chiede di leggere" : azione?.tipo === "shell" || azione?.tipo === "prova" ? "Chiede di eseguire" : azione?.tipo === "research_start" ? "Chiede di cercare" : "Chiede il permesso";
+        const badge6 = azione?.tipo === "scrivi" ? "Chiede di scrivere" : azione?.tipo === "file_edit" ? "Chiede di modificare" : azione?.tipo === "leggi" ? "Chiede di leggere" : azione?.tipo === "elenca" ? "Chiede di aprire una cartella" : azione?.tipo === "shell" || azione?.tipo === "prova" ? "Chiede di eseguire" : azione?.tipo === "research_start" ? "Chiede di cercare" : "Chiede il permesso";
         const scheda = creaApprovazione({ badge: badge6, bersaglio, perche: descriviAzioneApprovazione(azione), codice: codiceAzioneApprovazione(azione), motivo: motivoRichiestaApprovazione(azione), nota: "Vale solo per questa richiesta" });
         const article = scheda.scheda;
         article.classList.add("real-approval-card");
@@ -58625,14 +59575,25 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
         const sessioneBtn = scheda.pulsanti.sessione;
         const davantiAUnSegreto = Boolean(azione?.segreto);
         if (davantiAUnSegreto) sessioneBtn.remove();
+        if (azione?.percorsoDiRete) sessioneBtn.remove();
+        if (azione?.percorsoDiRete?.ambito === "sessione") {
+          approvaBtn.textContent = "Consenti per questa sessione";
+          const notaPiede = $3(".talos-approval__foot-note", article);
+          if (notaPiede) notaPiede.textContent = "Vale per tutta la sessione";
+        }
         if (azione?.wslRoot && !davantiAUnSegreto) {
           approvaBtn.textContent = "Consenti per questa sessione";
           sessioneBtn.remove();
           const notaPiede = $3(".talos-approval__foot-note", article);
           if (notaPiede) notaPiede.textContent = "Vale per tutta la sessione";
         }
+        const cartellaConsentibile = Boolean(azione?.fuoriDalProgetto?.verificato === true && azione.fuoriDalProgetto.chiave);
+        if (azione?.fuoriDalProgetto && !davantiAUnSegreto && !azione?.wslRoot) {
+          if (cartellaConsentibile) sessioneBtn.textContent = "Consenti in questa cartella per la sessione";
+          else sessioneBtn.remove();
+        }
         let rispostaDataDaQuestaScheda = false;
-        const rispondi = async (approvato, perSessione = false) => {
+        const rispondi = async (approvato, perSessione = false, ambito = null) => {
           negaBtn.disabled = true;
           approvaBtn.disabled = true;
           sessioneBtn.disabled = true;
@@ -58641,14 +59602,14 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
             state.realSession.browserRichiesta = null;
             renderizzaBrowser();
           }
-          if (approvato && perSessione && azione?.tipo) {
+          if (approvato && perSessione && !ambito && azione?.tipo) {
             try {
               await sincronizzaImpostazioniSessione({ permessiPerAttrezzo: { ...state.permessiPerAttrezzo || {}, [azione.tipo]: "sempre" } });
             } catch {
             }
           }
           try {
-            await apiPost(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/approve`, { requestId, approvato });
+            await apiPost(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/approve`, ambito ? { requestId, approvato, ambito } : { requestId, approvato });
           } catch (error) {
             rispostaDataDaQuestaScheda = false;
             negaBtn.disabled = false;
@@ -58659,7 +59620,47 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
         };
         negaBtn.addEventListener("click", () => rispondi(false));
         approvaBtn.addEventListener("click", () => rispondi(true));
-        sessioneBtn.addEventListener("click", () => rispondi(true, true));
+        sessioneBtn.addEventListener("click", () => cartellaConsentibile ? rispondi(true, false, "cartella") : rispondi(true, true));
+        nellaChat(article);
+        aggiornaTickGiro({ tono: "warning" });
+        article._rispostaDataQui = () => rispostaDataDaQuestaScheda;
+        markMotionEnter(article);
+        scorriAllaBollaAppesa(article);
+        return article;
+      }
+      function appendRichiestaMcpCard(evento) {
+        const requestId = evento.requestId;
+        let rispostaDataDaQuestaScheda = false;
+        let scheda = null;
+        const rispondi = async (corpo) => {
+          scheda.inAttesa(true);
+          scheda.mostraErrore("");
+          rispostaDataDaQuestaScheda = true;
+          try {
+            await apiPost(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/mcp-elicitation`, { requestId, ...corpo });
+          } catch (error) {
+            rispostaDataDaQuestaScheda = false;
+            if (error?.code === "ELICITATION_NOT_PENDING") {
+              segnaEsitoRichiestaMcp(scheda.scheda, { action: "cancel", modo: scheda.scheda.dataset.modo, motivo: "non-in-attesa" });
+              state.realSession.richiesteMcpPendenti.delete(requestId);
+              aggiornaElencoSessioniReali();
+              return;
+            }
+            scheda.inAttesa(false);
+            scheda.mostraErrore(error?.message || "La risposta non è partita: riprova.");
+          }
+        };
+        scheda = creaRichiestaMcp(evento, {
+          onInvia: (content) => rispondi({ action: "accept", content }),
+          onFatto: () => rispondi({ action: "accept" }),
+          onRifiuta: () => rispondi({ action: "decline" }),
+          onAnnulla: () => rispondi({ action: "cancel" }),
+          onApri: (url) => {
+            if (/^https:\/\//iu.test(String(url))) window.open(url, "_blank", "noopener,noreferrer");
+          }
+        });
+        const article = scheda.scheda;
+        article.dataset.requestId = requestId;
         nellaChat(article);
         aggiornaTickGiro({ tono: "warning" });
         article._rispostaDataQui = () => rispostaDataDaQuestaScheda;
@@ -58817,7 +59818,10 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
       function contaSchedeTerminale() {
         const t3 = state.terminal;
         if (!t3 || !state.realSession.id || t3.sessioneId !== state.realSession.id) return null;
-        return t3.ordine.length;
+        return contaShellTerminale(t3);
+      }
+      function contaShellTerminale(t3 = statoTerminale()) {
+        return t3.ordine.filter((id4) => t3.schede.get(id4)?.origine !== "agente").length;
       }
       function renderizzaSchedeTerminale() {
         const ui = uiSchedeTerminale();
@@ -58834,13 +59838,14 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
         ui.aggiorna({
           schede,
           attiva: t3.attiva,
-          puoAprire: conSessione && t3.ordine.length < SCHEDE_MASSIME,
+          puoAprire: conSessione && contaShellTerminale(t3) < SCHEDE_MASSIME,
           motivoNoNuova: conSessione ? t2(TESTI2.troppeSchede, { n: SCHEDE_MASSIME }) : t2(TESTI2.nuovaSchedaSenzaSessione),
           badges: [
-            { chiave: "isolamento", testo: t2("Stessa macchina, senza isolamento"), titolo: t2("La shell gira sul tuo computer, nella cartella della sessione: nessuna sandbox.") },
+            /* PO-10: il badge parla delle TUE shell; dove gira un comando dell'agente lo dice la sua riga d'esito */
+            ...attiva?.origine === "agente" ? [] : [{ chiave: "isolamento", testo: t2("Stessa macchina, senza isolamento"), titolo: t2("La shell gira sul tuo computer, nella cartella della sessione: nessuna sandbox.") }],
             ...nomeCartella2 ? [{ chiave: "cartella", testo: nomeCartella2, titolo: `${cartella} · ${t2("shell sul tuo computer, senza isolamento")}` }] : []
           ],
-          piede: attiva ? {
+          piede: attiva?.origine === "agente" ? { chi: attiva.giro ? t2(TESTI2.lanciataDallAgente, { giro: attiva.giro }) : t2(TESTI2.lanciataDallAgenteSenzaGiro), dettaglio: attiva.cartella || state.realSession.cartellaAssoluta || "", stato: t2(ETICHETTA_STATO[attiva.stato] ?? attiva.stato), nota: t2(TESTI2.solaLettura) } : attiva ? {
             chi: t2(TESTI2.apertaDaTe),
             dettaglio: cartella || (attiva.origine === "standalone" ? t2("cartella predefinita del server") : ""),
             stato: `${t2(ETICHETTA_STATO[attiva.stato] ?? attiva.stato)}${attiva.ripreso ? ` · ${t2("shell ripresa")}` : ""}`,
@@ -58874,7 +59879,9 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
           osservatore: null
         };
         t3.schede.set(voce.terminalId, record2);
-        t3.ordine.push(voce.terminalId);
+        const primoAgente = t3.ordine.findIndex((id4) => t3.schede.get(id4)?.origine === "agente");
+        if (primoAgente >= 0) t3.ordine.splice(primoAgente, 0, voce.terminalId);
+        else t3.ordine.push(voce.terminalId);
         return record2;
       }
       function inviaResizeTerminale(record2) {
@@ -59009,6 +60016,17 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
           spegniWebglTerminale(altra);
         }
         if (record2.mount) record2.mount.hidden = false;
+        if (record2.origine === "agente") {
+          if (terminaleAschermo() && montaSchedaAgente(record2)) {
+            accendiWebglTerminale(record2);
+            requestAnimationFrame(() => {
+              record2.fit?.fit();
+              if (cambiaScheda || !eraGiaMontata) record2.term?.focus();
+            });
+          }
+          renderizzaSchedeTerminale();
+          return;
+        }
         if (terminaleAschermo() && montaSchedaTerminale(record2)) {
           accendiWebglTerminale(record2);
           collegaWsScheda(record2);
@@ -59067,7 +60085,7 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
           toast(t2("Serve una sessione"), t2(TESTI2.nuovaSchedaSenzaSessione));
           return;
         }
-        if (t3.ordine.length >= SCHEDE_MASSIME) {
+        if (contaShellTerminale(t3) >= SCHEDE_MASSIME) {
           toast(t2("Troppe schede"), t2(TESTI2.troppeSchede, { n: SCHEDE_MASSIME }));
           return;
         }
@@ -59100,6 +60118,16 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
         const t3 = statoTerminale();
         const record2 = t3.schede.get(id4);
         if (!record2) return;
+        if (record2.origine === "agente") {
+          const indice3 = t3.ordine.indexOf(id4);
+          const prossima2 = prossimaAttivaDopoChiusura(t3.ordine, indice3);
+          chiuseAgenteDellaSessione(t3).set(id4, record2.comandi.length);
+          togliSchedaAgente(record2, { attivaUnAltra: false });
+          if (t3.attiva === null && prossima2) attivaSchedaTerminale(prossima2);
+          renderizzaSchedeTerminale();
+          t3.ui?.fuocoSullaAttiva();
+          return;
+        }
         const indice2 = t3.ordine.indexOf(id4);
         const prossima = prossimaAttivaDopoChiusura(t3.ordine, indice2);
         smontaSchedaTerminale(record2);
@@ -59127,7 +60155,141 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
         t3.ordine = [];
         t3.attiva = null;
         t3.sessioneId = void 0;
+        t3.sessioneAgente = void 0;
         renderizzaSchedeTerminale();
+      }
+      const EVENTI_DELLE_SCHEDE_AGENTE = /* @__PURE__ */ new Set(["ToolCallStart", "ToolCallArgs", "ToolCallOutput", "ToolCallResult", "ApprovalRequested", "ApprovalResolved", "RunFinished", "RunError"]);
+      const USCITA_AGENTE_MAX_CARATTERI = 256e3;
+      const USCITE_AGENTE_MAX_CARATTERI = 2e6;
+      function testoConTetto(testo2) {
+        if (testo2.length <= USCITA_AGENTE_MAX_CARATTERI) return testo2;
+        const testa = testo2.slice(0, 4e3);
+        return `${testa}
+… (${(testo2.length - USCITA_AGENTE_MAX_CARATTERI).toLocaleString("it-IT")} caratteri non tenuti in questa pagina) …
+${testo2.slice(-(USCITA_AGENTE_MAX_CARATTERI - 4e3))}`;
+      }
+      function registraUscitaAgente(evento) {
+        const info = state.realSession.toolCallNomi.get(evento.toolCallId);
+        if (!info || !["shell", "prova"].includes(info.nome) || info.comandoDellaPersona) return;
+        const uscite = state.realSession.usciteAgente;
+        const voce = uscite.get(evento.toolCallId) || { vivo: "", testo: null };
+        if (evento.type === "ToolCallOutput") {
+          if (typeof evento.delta !== "string" || !evento.delta || voce.testo !== null) return;
+          voce.vivo = (voce.vivo + evento.delta).slice(-USCITA_AGENTE_MAX_CARATTERI);
+        } else {
+          voce.testo = testoConTetto(evento.content == null ? "" : String(evento.content));
+          voce.vivo = "";
+        }
+        uscite.delete(evento.toolCallId);
+        uscite.set(evento.toolCallId, voce);
+        let totale2 = 0;
+        for (const v of uscite.values()) totale2 += v.vivo.length + (v.testo?.length ?? 0);
+        for (const [id4, v] of uscite) {
+          if (totale2 <= USCITE_AGENTE_MAX_CARATTERI || id4 === evento.toolCallId) break;
+          totale2 -= v.vivo.length + (v.testo?.length ?? 0);
+          const testata = typeof v.testo === "string" ? v.testo.split("\n", 1)[0] : null;
+          uscite.set(id4, { vivo: "", testo: testata, sfrattato: true });
+        }
+      }
+      let schedeAgenteProgrammate = 0;
+      function programmaSchedeAgente() {
+        if (schedeAgenteProgrammate) return;
+        if (typeof window.requestAnimationFrame !== "function") {
+          aggiornaSchedeAgente();
+          return;
+        }
+        schedeAgenteProgrammate = window.requestAnimationFrame(() => {
+          schedeAgenteProgrammate = 0;
+          aggiornaSchedeAgente();
+        });
+      }
+      function chiuseAgenteDellaSessione(t3 = statoTerminale()) {
+        if (!t3.chiuseAgente) t3.chiuseAgente = /* @__PURE__ */ new Map();
+        const sessione = state.realSession.id || null;
+        if (!t3.chiuseAgente.has(sessione)) t3.chiuseAgente.set(sessione, /* @__PURE__ */ new Map());
+        return t3.chiuseAgente.get(sessione);
+      }
+      function togliSchedaAgente(record2, { attivaUnAltra = true } = {}) {
+        const t3 = statoTerminale();
+        smontaSchedaTerminale(record2);
+        t3.schede.delete(record2.terminalId);
+        const indice2 = t3.ordine.indexOf(record2.terminalId);
+        if (indice2 >= 0) t3.ordine.splice(indice2, 1);
+        if (t3.attiva === record2.terminalId) {
+          t3.attiva = null;
+          if (attivaUnAltra && t3.ordine[0] && terminaleAschermo()) attivaSchedaTerminale(t3.ordine[0]);
+        }
+      }
+      function aggiornaSchedeAgente() {
+        const t3 = statoTerminale();
+        const sessione = state.realSession.id || null;
+        if (t3.sessioneAgente !== sessione) {
+          for (const record2 of [...t3.schede.values()]) if (record2.origine === "agente") togliSchedaAgente(record2, { attivaUnAltra: false });
+          t3.sessioneAgente = sessione;
+        }
+        const schede = sessione ? schedeAgenteDagliEventi(state.realSession.eventiAttrezzi, { chiuse: chiuseAgenteDellaSessione(t3), uscite: state.realSession.usciteAgente }) : [];
+        const viste = /* @__PURE__ */ new Set();
+        for (const s of schede) {
+          viste.add(s.terminalId);
+          let record2 = t3.schede.get(s.terminalId);
+          if (!record2) {
+            record2 = { terminalId: s.terminalId, origine: "agente", giro: s.giro, titolo: null, cartella: "", shell: null, comando: "", stato: "live", ripreso: null, comandi: [], scritto: "", term: null, fit: null, webgl: null, ws: null, mount: null, osservatore: null };
+            t3.schede.set(s.terminalId, record2);
+            t3.ordine.push(s.terminalId);
+          }
+          record2.comandi = s.comandi;
+          record2.stato = s.esito === "in-corso" ? "live" : s.esito;
+          record2.cartella = [...s.comandi].reverse().find((c) => c.cwd)?.cwd || "";
+          if (record2.term) scriviSchedaAgente(record2);
+        }
+        for (const record2 of [...t3.schede.values()]) if (record2.origine === "agente" && !viste.has(record2.terminalId)) togliSchedaAgente(record2);
+        renderizzaSchedeTerminale();
+      }
+      function scriviSchedaAgente(record2) {
+        if (!record2.term) return;
+        const testo2 = testoSchedaAgente({ comandi: record2.comandi });
+        if (testo2 === record2.scritto) return;
+        if (record2.scritto && testo2.startsWith(record2.scritto)) record2.term.write(testo2.slice(record2.scritto.length));
+        else {
+          record2.term.reset();
+          record2.term.write(testo2);
+        }
+        record2.scritto = testo2;
+      }
+      function montaSchedaAgente(record2) {
+        if (record2.term) return true;
+        const corpo = $3("#realTerminalMount");
+        if (!corpo || !window.Terminal || !window.FitAddon) {
+          statoTerminale().enforcementColore = "xterm.js non caricato";
+          return false;
+        }
+        const pezzi = creaTerminaleXterm({
+          documento: document,
+          contenitore: corpo,
+          Terminal: window.Terminal,
+          FitAddon: window.FitAddon,
+          id: record2.terminalId,
+          tema: temaTerminaleReale(),
+          fontFamily: getComputedStyle(document.documentElement).getPropertyValue("--talos-font-mono").trim() || "Menlo, Consolas, monospace",
+          solaLettura: true
+        });
+        if (!pezzi) {
+          statoTerminale().enforcementColore = "xterm.js non caricato";
+          return false;
+        }
+        Object.assign(record2, { term: pezzi.term, fit: pezzi.fit, mount: pezzi.mount, osservatore: pezzi.osservatore, scritto: "" });
+        pezzi.mount.dataset.origine = "agente";
+        pezzi.mount.setAttribute("aria-label", t2(TESTI2.schedaAgente));
+        record2.scollegaAppunti = collegaAppunti(pezzi.term, {
+          documento: document,
+          ospite: pezzi.mount,
+          radiceMenu: ROOT().body || ROOT(),
+          apple: suApple(),
+          avvisa: (titolo2, testo2) => toast(t2(titolo2), t2(testo2)),
+          solaLettura: true
+        });
+        scriviSchedaAgente(record2);
+        return true;
       }
       function apriVistaTerminaleReale() {
         const t3 = statoTerminale();
@@ -59142,12 +60304,13 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
           else if (t3.ordine[0]) attivaSchedaTerminale(t3.ordine[0]);
           else renderizzaSchedeTerminale();
         };
-        if (t3.sessioneId === sessioneId && t3.ordine.length > 0) {
+        if (t3.sessioneId === sessioneId && contaShellTerminale(t3) > 0) {
           avvia();
           return;
         }
         if (t3.sessioneId !== sessioneId) scollegaTerminaleReale();
         t3.sessioneId = sessioneId;
+        aggiornaSchedeAgente();
         renderizzaSchedeTerminale();
         void caricaSchedeTerminale().then(() => {
           if (state.view === "terminal" && t3.sessioneId === sessioneId) avvia();
@@ -60025,7 +61188,7 @@ ${f}`;
               break;
             }
             case "ApprovalResolved": {
-              righe.push(`_Approvazione ${evento.approvato ? "CONCESSA" : "NEGATA"}._`, "");
+              righe.push(`_Approvazione ${evento.approvato ? "CONCESSA" : "NEGATA"}${evento.ambito === "cartella" ? " in questa cartella per la sessione" : ""}${evento.motivo === "nessuna-interfaccia" ? ": nessuno poteva rispondere in questa sessione automatica" : ""}._`, "");
               break;
             }
             case "RunFinished": {
@@ -60124,8 +61287,8 @@ ${f}`;
         const nuovi = voci.filter((f) => f.nuovo).length;
         const modificati = voci.length - nuovi;
         const impostaTesto = (id4, testo2) => {
-          const el30 = $3(`#${id4}`);
-          if (el30) el30.textContent = testo2;
+          const el31 = $3(`#${id4}`);
+          if (el31) el31.textContent = testo2;
         };
         impostaTesto("reviewSummaryNuovi", String(nuovi));
         impostaTesto("reviewSummaryModificati", String(modificati));
@@ -60615,17 +61778,17 @@ ${testo2}` : testo2;
         return ultimo || percorso;
       }
       function costruisciRigaAdottaFuoriSessione(percorsoAssoluto, nome) {
-        const bottone6 = document.createElement("button");
-        bottone6.type = "button";
-        bottone6.className = "ft-outside-row-adopt";
-        bottone6.setAttribute("aria-label", `Usa "${nome}" come radice — apre una sessione nuova su questa cartella`);
-        bottone6.title = "Usa come radice (sessione nuova)";
-        bottone6.append(iconaSvgAlbero("i-check"));
-        bottone6.addEventListener("click", (evento) => {
+        const bottone7 = document.createElement("button");
+        bottone7.type = "button";
+        bottone7.className = "ft-outside-row-adopt";
+        bottone7.setAttribute("aria-label", `Usa "${nome}" come radice — apre una sessione nuova su questa cartella`);
+        bottone7.title = "Usa come radice (sessione nuova)";
+        bottone7.append(iconaSvgAlbero("i-check"));
+        bottone7.addEventListener("click", (evento) => {
           evento.stopPropagation();
           usaCartellaFuoriSessioneComeRadice(percorsoAssoluto, nome);
         });
-        return bottone6;
+        return bottone7;
       }
       function costruisciZonaFuoriSessione() {
         const dati = state.realSession.fuoriSessioneDati;
@@ -60703,7 +61866,10 @@ ${testo2}` : testo2;
         uiDensity: "compatta",
         uiLanguage: "sistema",
         // 06/9 B8: densità delle liste (mockup `data-densita`) e lingua dei menu (H21)
-        uiFontScale: "large",
+        /* ⛔ Owner 02/10/2026: «di default la grandezza dell'interfaccia deve essere su predefinita». Era 'large' dalla candidata
+           0.1.19 (`14086c7b4`), senza una decisione registrata. Il salvataggio è rado (`salvaImpostazioniDesktop`: si scrive solo
+           ciò che differisce dal valore di serie) ⇒ chi non l'ha mai toccata passa da sola a «Predefinita», chi ha scelto la tiene. */
+        uiFontScale: "default",
         chatFontScale: "balanced",
         composerShape: "standard",
         composerPlus: "drawer",
@@ -61642,11 +62808,11 @@ ${testo2}` : testo2;
         const pannello = $3("#railGithub");
         return Boolean(pannello && !pannello.hidden && pannello.getClientRects().length > 0);
       }
-      function percorsoGitSessione(id4, coda) {
-        return `/api/v1/sessions/${encodeURIComponent(id4)}/git/${coda}`;
+      function percorsoGitSessione(id4, coda2) {
+        return `/api/v1/sessions/${encodeURIComponent(id4)}/git/${coda2}`;
       }
-      function percorsoGithubSessione(id4, coda) {
-        return `/api/v1/sessions/${encodeURIComponent(id4)}/github/${coda}`;
+      function percorsoGithubSessione(id4, coda2) {
+        return `/api/v1/sessions/${encodeURIComponent(id4)}/github/${coda2}`;
       }
       function diffGithubASchermoIntero(elemento, attivo) {
         const host = $3('[data-view="chat"]');
@@ -62214,10 +63380,10 @@ ${testo2}` : testo2;
       }
       async function aggiornaSchedaCapability() {
         const scrivi2 = (chiave, testo2, titolo2 = "") => {
-          const el30 = $3(`[data-capability-row="${chiave}"]`);
-          if (!el30) return;
-          el30.textContent = testo2;
-          el30.title = titolo2;
+          const el31 = $3(`[data-capability-row="${chiave}"]`);
+          if (!el31) return;
+          el31.textContent = testo2;
+          el31.title = titolo2;
         };
         aggiornaRigaBrowserCapability();
         const sessione = state.realSession.id;
@@ -62252,16 +63418,16 @@ ${testo2}` : testo2;
         }
       }
       function aggiornaRigaBrowserCapability() {
-        const el30 = $3('[data-capability-row="browser"]');
-        if (!el30) return;
+        const el31 = $3('[data-capability-row="browser"]');
+        if (!el31) return;
         const pagine = state.realSession.browserPagine?.length ?? 0;
         if (!state.realSession.id) {
-          el30.textContent = "Non osservato";
-          el30.title = "Nessuna sessione aperta: le pagine lette appartengono a una sessione.";
+          el31.textContent = "Non osservato";
+          el31.title = "Nessuna sessione aperta: le pagine lette appartengono a una sessione.";
           return;
         }
-        el30.textContent = pagine === 0 ? "nessuna pagina letta" : `${pagine} pagin${pagine === 1 ? "a letta" : "e lette"}`;
-        el30.title = "TALOS legge il testo delle pagine con l'attrezzo naviga; compaiono nella vista Browser.";
+        el31.textContent = pagine === 0 ? "nessuna pagina letta" : `${pagine} pagin${pagine === 1 ? "a letta" : "e lette"}`;
+        el31.title = "TALOS legge il testo delle pagine con l'attrezzo naviga; compaiono nella vista Browser.";
       }
       function aggiornaUsageSessione() {
         const chat = sommaUsage(state.realSession.usageEsecuzioniPrecedenti, state.realSession.usage);
@@ -62296,7 +63462,7 @@ ${testo2}` : testo2;
           return;
         }
         if (argomentiParsati && info.summaryText) info.summaryText.textContent = riassuntoAttrezzoInCorso(info.nome, argomentiParsati);
-        if (argomentiParsati && info.dettaglio) info.dettaglio.textContent = bersaglioAttrezzoNudo(info.nome, argomentiParsati);
+        if (argomentiParsati && info.dettaglio) info.dettaglio.textContent = dettaglioRigaAttrezzo(info.nome, argomentiParsati);
         if (info.detail) renderizzaArgomentiAttrezzo(info.detail, info.argomenti, argomentiParsati);
       }
       function chiediDisegnoArgomentiAttrezzo(info) {
@@ -62314,6 +63480,10 @@ ${testo2}` : testo2;
       }
       function disegnaArgomentiSeInAttesa(info) {
         if (info && argomentiAttrezzoInAttesa.has(info)) aggiornaVistaArgomentiAttrezzo(info);
+      }
+      function rispostaDaUnAltraFinestra(card) {
+        const inDiretta = !state.realSession.inRigiocata || card?._esitoRiconciliatoQui?.() === true;
+        return inDiretta && card?._rispostaDataQui?.() !== true;
       }
       function handleRealEvent(evento, generation) {
         if (generation !== state.realSession.generation) return;
@@ -62442,14 +63612,17 @@ ${testo2}` : testo2;
         }
         if (evento.type === "CUSTOM" && evento.name === "consumo-fornitore") registraUltimaRichiesta(evento.value);
         if (evento.type === "CUSTOM" && evento.name === "consumo-fornitore" || ["RunStarted", "RunFinished", "RunError"].includes(evento.type)) caricaCacheSessioneDalRegistro();
-        if (evento.type === "ToolCallStart") state.realSession.eventiAttrezzi.push({ type: "ToolCallStart", toolCallId: evento.toolCallId, toolCallName: evento.toolCallName, ricevutoA: Date.now(), avviatoA: Number.isFinite(evento.avviatoA) ? evento.avviatoA : null, giro: state.realSession.runCount || null });
+        if (evento.type === "ToolCallStart") state.realSession.eventiAttrezzi.push({ type: "ToolCallStart", toolCallId: evento.toolCallId, toolCallName: evento.toolCallName, ricevutoA: Date.now(), avviatoA: Number.isFinite(evento.avviatoA) ? evento.avviatoA : null, giro: state.realSession.runCount || null, chi: state.realSession.giroComandoDiretto && evento.toolCallName === "shell" ? "tu" : "agente" });
         else if (evento.type === "ToolCallArgs") state.realSession.eventiAttrezzi.push({ type: "ToolCallArgs", toolCallId: evento.toolCallId, delta: evento.delta });
+        else if (evento.type === "ApprovalRequested" && typeof evento.azione?.toolCallId === "string") state.realSession.eventiAttrezzi.push({ type: "ApprovalRequested", requestId: evento.requestId, toolCallId: evento.azione.toolCallId });
+        else if (evento.type === "ApprovalResolved") state.realSession.eventiAttrezzi.push({ type: "ApprovalResolved", requestId: evento.requestId, ricevutoA: Date.now() });
         else if (evento.type === "ToolCallResult") state.realSession.eventiAttrezzi.push({
           type: "ToolCallResult",
           toolCallId: evento.toolCallId,
           ricevutoA: Date.now(),
           errore: Boolean(evento.isError || evento.error),
-          uscita: uscitaDaTestoAttrezzo(evento.content),
+          uscita: uscitaDelRisultato(evento),
+          // 02/10/2026: prima `exitCode`, il testo come ripiego
           durataMs: Number.isFinite(evento.durataMs) ? evento.durataMs : null,
           comando: typeof evento.comando === "string" ? evento.comando : null,
           cwd: typeof evento.cwd === "string" ? evento.cwd : null,
@@ -62463,6 +63636,8 @@ ${testo2}` : testo2;
            */
           rifiutato: typeof evento.content === "string" && /^\s*REFUSED\b/u.test(evento.content)
         });
+        if (evento.type === "ToolCallOutput" || evento.type === "ToolCallResult") registraUscitaAgente(evento);
+        if (EVENTI_DELLE_SCHEDE_AGENTE.has(evento.type)) programmaSchedeAgente();
         if (evento.type === "RunFinished" || evento.type === "RunError" || evento.type === "ComandoUtenteFinito") state.realSession.giroComandoDiretto = false;
         segnalaRigaSessioneViva();
         switch (evento.type) {
@@ -62697,6 +63872,8 @@ ${testo2}` : testo2;
                  si dichiara per quello che è, non come durata del processo. */
               comandoDellaPersona: rigaDiComandoMio,
               iniziatoA: Date.now(),
+              iniziatoDalVivo: !state.realSession.inRigiocata,
+              // 02/10/2026: un'ora presa durante la rigiocata non misura niente
               stato: "running",
               ...bubble
             };
@@ -62780,14 +63957,16 @@ ${testo2}` : testo2;
             const testoEsito = String(evento.content).slice(0, 4e3);
             const domandaDaCorreggere = info ? motivoDomandaDaCorreggere(info.nome, testoEsito) : null;
             const fallito = info ? esitoAttrezzoFallito(info.nome, testoEsito) : false;
+            const esitoDelComando = info?.nome === "shell" ? leggiEsitoComando(testoEsito) : null;
+            const fermatoApposta = Boolean(esitoDelComando?.annullato || esitoDelComando?.terminato);
             const esitoUmano = info?.comandoDellaPersona ? leggiEsitoComando(testoEsito) : null;
             if (info?.summaryText) {
-              info.summaryText.textContent = domandaDaCorreggere ? t2("Il modello ha corretto la domanda: {motivo}", { motivo: t2(domandaDaCorreggere.frase, domandaDaCorreggere.parametri) }) : esitoUmano ? rigaDiStatoComando(esitoUmano, typeof info.iniziatoA === "number" ? Date.now() - info.iniziatoA : null) : riassuntoAttrezzoConcluso(info.nome, info.argomentiParsati, testoEsito, fallito);
+              info.summaryText.textContent = domandaDaCorreggere ? t2("Il modello ha corretto la domanda: {motivo}", { motivo: t2(domandaDaCorreggere.frase, domandaDaCorreggere.parametri) }) : esitoUmano ? rigaDiStatoComando(esitoUmano, typeof info.iniziatoA === "number" && info.iniziatoDalVivo && !state.realSession.inRigiocata ? Date.now() - info.iniziatoA : null) : riassuntoAttrezzoConcluso(info.nome, info.argomentiParsati, testoEsito, fallito);
             }
             if (info?.article) {
-              impostaEsitoRiga(info.article, domandaDaCorreggere ? "corretta" : fallito ? "error" : "success");
+              impostaEsitoRiga(info.article, domandaDaCorreggere ? "corretta" : fermatoApposta ? "interrupted" : fallito ? "error" : "success");
               info.article.setAttribute("aria-busy", "false");
-              if (info.dettaglio && info.argomentiParsati && !info.comandoDellaPersona) info.dettaglio.textContent = bersaglioAttrezzoNudo(info.nome, info.argomentiParsati);
+              if (info.dettaglio && info.argomentiParsati && !info.comandoDellaPersona) info.dettaglio.textContent = dettaglioRigaAttrezzo(info.nome, info.argomentiParsati);
             }
             if (info?.nome === "workflow_plan_propose" && !fallito) montaCardProposta(evento);
             if (info?.detail) {
@@ -62878,7 +64057,7 @@ ${testo2}` : testo2;
               else if (categoria === "ricerca-web") batch.contatori.ricercheWeb += 1;
               else if (categoria === "pagina") batch.contatori.pagine += 1;
               else if (categoria === "altro") batch.contatori.altro += 1;
-              info.stato = domandaDaCorreggere ? "corretta" : fallito ? "error" : "complete";
+              info.stato = domandaDaCorreggere ? "corretta" : fermatoApposta ? "interrotto" : fallito ? "error" : "complete";
               aggiornaRiassuntoBatch(batch);
             }
             if (info?.nome) state.realSession.ultimoBersaglioAttrezzo = { nome: info.nome, argomenti: info.argomentiParsati };
@@ -63020,11 +64199,10 @@ ${testo2}` : testo2;
           case "UserQuestionResolved": {
             const card = state.realSession.domandePendenti.get(evento.requestId);
             if (card) {
-              const daQuiStessa = card._rispostaDataQui?.() === true;
               finalizzaUserQuestionCard(
                 card,
                 evento.status,
-                !daQuiStessa && evento.da !== "sistema",
+                rispostaDaUnAltraFinestra(card) && evento.da !== "sistema",
                 { answers: evento.answers, at: evento.at, da: evento.da, motivo: evento.motivo }
               );
               state.realSession.domandePendenti.delete(evento.requestId);
@@ -63039,14 +64217,32 @@ ${testo2}` : testo2;
             const card = appendApprovalCard(evento.requestId, evento.azione);
             state.realSession.approvazioniPendenti.set(evento.requestId, card);
             aggiornaElencoSessioniReali();
+            aggiornaInspectorDaStato();
             break;
           }
           case "ApprovalResolved": {
             const card = state.realSession.approvazioniPendenti.get(evento.requestId);
             if (card) {
-              const daQuiStessa = card._rispostaDataQui?.() === true;
-              segnaEsitoApprovazione(card, { approvato: Boolean(evento.approvato), altrove: !daQuiStessa });
+              segnaEsitoApprovazione(card, { approvato: Boolean(evento.approvato), altrove: rispostaDaUnAltraFinestra(card), ambito: evento.ambito, motivo: evento.motivo });
               state.realSession.approvazioniPendenti.delete(evento.requestId);
+            }
+            aggiornaElencoSessioniReali();
+            aggiornaInspectorDaStato();
+            break;
+          }
+          case "McpElicitationRequested": {
+            chiudiSegmentoAttivo();
+            nascondiAttesaRisposta();
+            const card = appendRichiestaMcpCard(evento);
+            state.realSession.richiesteMcpPendenti.set(evento.requestId, card);
+            aggiornaElencoSessioniReali();
+            break;
+          }
+          case "McpElicitationResolved": {
+            const card = state.realSession.richiesteMcpPendenti.get(evento.requestId);
+            if (card) {
+              segnaEsitoRichiestaMcp(card, { action: evento.action, modo: card.dataset.modo, altrove: rispostaDaUnAltraFinestra(card) && evento.da === "persona", motivo: evento.motivo ?? null });
+              state.realSession.richiesteMcpPendenti.delete(evento.requestId);
             }
             aggiornaElencoSessioniReali();
             break;
@@ -63227,6 +64423,8 @@ ${testo2}` : testo2;
           state.realSession.cachePromptPrecedenti = 0;
           state.realSession.usageEsecuzioniPrecedenti = null;
           state.realSession.eventiAttrezzi = [];
+          state.realSession.usciteAgente = /* @__PURE__ */ new Map();
+          programmaSchedeAgente();
           state.realSession.tettoGiriDichiarato = null;
           state.realSession.approvazioniPendenti = /* @__PURE__ */ new Map();
           for (const scheda of state.realSession.domandePendenti?.values() || []) scheda?._dockController?.destroy();
@@ -63236,6 +64434,7 @@ ${testo2}` : testo2;
             questionDock.hidden = true;
           }
           state.realSession.domandePendenti = /* @__PURE__ */ new Map();
+          state.realSession.richiesteMcpPendenti = /* @__PURE__ */ new Map();
           state.realSession.cartellaAssoluta = null;
           state.realSession.codaMessaggi = [];
           state.realSession.codaInPausa = false;
@@ -63877,16 +65076,16 @@ ${testo2}` : testo2;
         if (testo2) testo2.textContent = visibile2 ? t2("Questa conversazione usava la modalità Workflow, che non c’è più.") : "";
         const nota = fascia.querySelector("[data-fascia-modo-nota]");
         if (nota) nota.textContent = t2("Scegli come continuare: vale per i prossimi messaggi.");
-        for (const bottone6 of fascia.querySelectorAll("[data-fascia-modo-scelta]")) {
-          bottone6.textContent = bottone6.dataset.fasciaModoScelta === "piano" ? t2("Continua in Piano") : t2("Continua in Normale");
-          bottone6.disabled = statoFasciaModo().inVolo;
+        for (const bottone7 of fascia.querySelectorAll("[data-fascia-modo-scelta]")) {
+          bottone7.textContent = bottone7.dataset.fasciaModoScelta === "piano" ? t2("Continua in Piano") : t2("Continua in Normale");
+          bottone7.disabled = statoFasciaModo().inVolo;
         }
         fascia.hidden = !visibile2;
         if (!fascia.dataset.collegata) {
           fascia.dataset.collegata = "si";
           fascia.addEventListener("click", (evento) => {
-            const bottone6 = evento.target?.closest?.("[data-fascia-modo-scelta]");
-            if (bottone6) void scegliModoDallaFascia(bottone6.dataset.fasciaModoScelta);
+            const bottone7 = evento.target?.closest?.("[data-fascia-modo-scelta]");
+            if (bottone7) void scegliModoDallaFascia(bottone7.dataset.fasciaModoScelta);
           });
         }
       }
@@ -64484,8 +65683,8 @@ ${testo2}` : testo2;
           }
           pezzi.push(riga2);
         }
-        const righe = pezzi.flatMap((el30) => el30.classList.contains("talos-session-item") ? [el30] : [...el30.querySelectorAll(".talos-session-item")]);
-        const fermata = righe.find((el30) => el30.getAttribute("aria-current") === "true") || righe[0];
+        const righe = pezzi.flatMap((el31) => el31.classList.contains("talos-session-item") ? [el31] : [...el31.querySelectorAll(".talos-session-item")]);
+        const fermata = righe.find((el31) => el31.getAttribute("aria-current") === "true") || righe[0];
         const fermataRiga = (riga2, attiva) => {
           riga2.tabIndex = attiva ? 0 : -1;
           const menu = riga2.parentElement?.querySelector?.(":scope > .td-session-menu");
@@ -66121,11 +67320,11 @@ ${blocchi.join("\n\n")}` : testa;
       }
       const sintesiVoceDisponibile = "speechSynthesis" in window;
       let elementoInAscolto = null;
-      function impostaStatoBottoneAscolto(bottone6, inAscolto) {
-        bottone6.classList.toggle("speaking", inAscolto);
-        bottone6.setAttribute("aria-pressed", String(inAscolto));
-        bottone6.setAttribute("aria-label", inAscolto ? "Ferma la lettura" : TESTI_MESSAGGIO.ascolta);
-        const uso = bottone6.querySelector("use");
+      function impostaStatoBottoneAscolto(bottone7, inAscolto) {
+        bottone7.classList.toggle("speaking", inAscolto);
+        bottone7.setAttribute("aria-pressed", String(inAscolto));
+        bottone7.setAttribute("aria-label", inAscolto ? "Ferma la lettura" : TESTI_MESSAGGIO.ascolta);
+        const uso = bottone7.querySelector("use");
         if (uso) uso.setAttribute("href", inAscolto ? "#i-stop" : "#i-play");
       }
       function fermaLetturaVoceAlta() {
@@ -66134,22 +67333,22 @@ ${blocchi.join("\n\n")}` : testa;
         if (elementoInAscolto) impostaStatoBottoneAscolto(elementoInAscolto, false);
         elementoInAscolto = null;
       }
-      function leggiVoceAlta(testo2, bottone6) {
+      function leggiVoceAlta(testo2, bottone7) {
         if (!sintesiVoceDisponibile || !testo2.trim()) return;
-        const giàInAscoltoQui = elementoInAscolto === bottone6;
+        const giàInAscoltoQui = elementoInAscolto === bottone7;
         fermaLetturaVoceAlta();
         if (giàInAscoltoQui) return;
         const utterance = new SpeechSynthesisUtterance(testo2);
         utterance.lang = "it-IT";
         utterance.onend = () => {
-          if (elementoInAscolto === bottone6) {
-            impostaStatoBottoneAscolto(bottone6, false);
+          if (elementoInAscolto === bottone7) {
+            impostaStatoBottoneAscolto(bottone7, false);
             elementoInAscolto = null;
           }
         };
         utterance.onerror = utterance.onend;
-        elementoInAscolto = bottone6;
-        impostaStatoBottoneAscolto(bottone6, true);
+        elementoInAscolto = bottone7;
+        impostaStatoBottoneAscolto(bottone7, true);
         window.speechSynthesis.speak(utterance);
       }
       function radiceComandi() {
@@ -66282,7 +67481,7 @@ ${blocchi.join("\n\n")}` : testa;
         });
       });
       $$("[data-open-sheet]").forEach((button2) => button2.addEventListener("click", () => openSheet(button2.dataset.openSheet)));
-      $$("[data-invito-azione]").forEach((bottone6) => bottone6.addEventListener("click", () => {
+      $$("[data-invito-azione]").forEach((bottone7) => bottone7.addEventListener("click", () => {
         void openRealTaskSheet();
       }));
       $$("[data-session-action]").forEach((button2) => button2.addEventListener("click", () => {
@@ -66335,26 +67534,26 @@ ${testo2}`;
             $3("#miglioraPromptBtn")?.setAttribute("aria-expanded", "false");
           }
         });
-        const el30 = miglioraPrompt.elemento;
-        el30.id = "miglioraPromptPannello";
-        el30.style.position = "absolute";
-        el30.style.left = "0";
-        el30.style.bottom = "calc(100% + var(--talos-space-sm))";
-        el30.style.maxWidth = "100%";
-        el30.style.zIndex = "var(--talos-z-menu)";
-        el30.style.boxShadow = "var(--talos-shadow-floating)";
-        $3("#composerForm")?.append(el30);
+        const el31 = miglioraPrompt.elemento;
+        el31.id = "miglioraPromptPannello";
+        el31.style.position = "absolute";
+        el31.style.left = "0";
+        el31.style.bottom = "calc(100% + var(--talos-space-sm))";
+        el31.style.maxWidth = "100%";
+        el31.style.zIndex = "var(--talos-z-menu)";
+        el31.style.boxShadow = "var(--talos-shadow-floating)";
+        $3("#composerForm")?.append(el31);
         return miglioraPrompt;
       }
       $3("#miglioraPromptBtn")?.addEventListener("click", (evento) => {
         evento.stopPropagation();
-        const bottone6 = $3("#miglioraPromptBtn");
+        const bottone7 = $3("#miglioraPromptBtn");
         const pannello = pannelloMiglioraPrompt();
-        if (bottone6.getAttribute("aria-expanded") === "true") {
+        if (bottone7.getAttribute("aria-expanded") === "true") {
           pannello.chiudi();
           return;
         }
-        bottone6.setAttribute("aria-expanded", "true");
+        bottone7.setAttribute("aria-expanded", "true");
         pannello.apri();
       });
       ROOT().addEventListener("click", (evento) => {
@@ -66544,13 +67743,13 @@ ${testo2}`;
         toast(...demoActionCopy[button2.dataset.demoAction] || ["Demo UI · non collegato", "Nessuna azione reale eseguita."]);
       }));
       $3("#settingsSvuotaLocali")?.addEventListener("click", (event) => {
-        const bottone6 = event.currentTarget;
-        if (bottone6.dataset.conferma !== "1") {
-          bottone6.dataset.conferma = "1";
-          bottone6.textContent = "Confermi? Tocca di nuovo per svuotare";
+        const bottone7 = event.currentTarget;
+        if (bottone7.dataset.conferma !== "1") {
+          bottone7.dataset.conferma = "1";
+          bottone7.textContent = "Confermi? Tocca di nuovo per svuotare";
           window.setTimeout(() => {
-            bottone6.dataset.conferma = "";
-            bottone6.textContent = "Svuota le preferenze di questo browser";
+            bottone7.dataset.conferma = "";
+            bottone7.textContent = "Svuota le preferenze di questo browser";
           }, 4e3);
           return;
         }
@@ -66731,10 +67930,10 @@ ${testo2}`;
         syncRunComposerState();
       });
       bivioInvio?.addEventListener("click", (event) => {
-        const bottone6 = event.target.closest("[data-bivio]");
-        if (!bottone6) return;
+        const bottone7 = event.target.closest("[data-bivio]");
+        if (!bottone7) return;
         const testo2 = bivioInvio.dataset.testoInSospeso || composerInput.value.trim();
-        const scelta = bottone6.dataset.bivio;
+        const scelta = bottone7.dataset.bivio;
         if (scelta === "annulla") {
           chiudiBivioInvio({ tornaAlComposer: true });
           return;
@@ -67935,15 +69134,15 @@ function perId2(doc, id4) {
     return null;
   }
 }
-function giaInMovimento(el30) {
+function giaInMovimento(el31) {
   try {
-    return typeof el30.getAnimations === "function" && el30.getAnimations().length > 0;
+    return typeof el31.getAnimations === "function" && el31.getAnimations().length > 0;
   } catch {
     return false;
   }
 }
-function visibile(el30) {
-  return Boolean(el30) && !el30.hidden && el30.offsetParent !== null;
+function visibile(el31) {
+  return Boolean(el31) && !el31.hidden && el31.offsetParent !== null;
 }
 function montaAnimazioniMockup(doc = globalThis.document) {
   if (!doc?.addEventListener) return () => {
@@ -68085,18 +69284,18 @@ function mountCalmControls(root2 = globalThis.document, { scope = null } = {}) {
   let serial = 0, openRecord = null, scheduled = false, disposed = false, positionFrame = 0;
   const sources = 'select:not([multiple]),input[type="checkbox"],input[type="range"]';
   const node2 = (tag2, cls) => {
-    const el30 = doc.createElement(tag2);
-    if (cls) el30.className = cls;
-    return el30;
+    const el31 = doc.createElement(tag2);
+    if (cls) el31.className = cls;
+    return el31;
   };
-  const attr = (el30, key, value) => {
+  const attr = (el31, key, value) => {
     const text3 = String(value);
-    if (el30.getAttribute(key) !== text3) el30.setAttribute(key, text3);
+    if (el31.getAttribute(key) !== text3) el31.setAttribute(key, text3);
   };
-  const text2 = (el30, value) => {
-    if (el30.textContent !== value) el30.textContent = value;
+  const text2 = (el31, value) => {
+    if (el31.textContent !== value) el31.textContent = value;
   };
-  const listen = (el30, event, fn2, extra = {}) => el30.addEventListener(event, fn2, { signal, ...extra });
+  const listen = (el31, event, fn2, extra = {}) => el31.addEventListener(event, fn2, { signal, ...extra });
   const eligible = (source) => !scope || Boolean(source.closest(scope));
   const hidden = (source) => source.hidden || source.style.display === "none" || source.style.visibility === "hidden";
   let live = null;
@@ -68367,7 +69566,7 @@ function mountCalmControls(root2 = globalThis.document, { scope = null } = {}) {
     control.id = id4;
     wrap.append(control);
     const r = { source, control, wrap, kind, restore: [], popup: null, items: [], drag: null, listeners: new win.AbortController(), invalid: false };
-    const on2 = (el30, event, fn2, extra = {}) => el30.addEventListener(event, fn2, { signal: r.listeners.signal, ...extra });
+    const on2 = (el31, event, fn2, extra = {}) => el31.addEventListener(event, fn2, { signal: r.listeners.signal, ...extra });
     records.set(source, r);
     const tab = source.getAttribute("tabindex"), aria = source.getAttribute("aria-hidden");
     source.dataset.calmSource = "";
@@ -68607,15 +69806,15 @@ var frammenti_default = '<!-- Pannello impostazioni + Model Lab del monolite: tu
 var VISTA_PER_SCHERMATA = SCREEN_BY_VIEW;
 var VISTA_PER_VAIA = VIEW_BY_DESTINATION;
 function uno(root2, selettore) {
-  const el30 = root2.querySelector(selettore);
-  if (!el30) throw new Error(`ponte: manca nel mockup «${selettore}»`);
-  return el30;
+  const el31 = root2.querySelector(selettore);
+  if (!el31) throw new Error(`ponte: manca nel mockup «${selettore}»`);
+  return el31;
 }
-function battezza(el30, { id: id4, classi = [], dati = {} }) {
-  if (id4) el30.id = id4;
-  for (const c of classi) el30.classList.add(c);
-  for (const [k, v] of Object.entries(dati)) el30.setAttribute(`data-${k}`, v);
-  return el30;
+function battezza(el31, { id: id4, classi = [], dati = {} }) {
+  if (id4) el31.id = id4;
+  for (const c of classi) el31.classList.add(c);
+  for (const [k, v] of Object.entries(dati)) el31.setAttribute(`data-${k}`, v);
+  return el31;
 }
 function montaPonteLegacy(documentObj = document) {
   const radice2 = documentObj.querySelector(".talos-shell");
@@ -68665,12 +69864,12 @@ function montaPonteLegacy(documentObj = document) {
   for (const turno of chat.querySelectorAll(".talos-conversation__column > .talos-turn")) turno.remove();
   const piede = uno(chat, ".talos-chat-foot");
   battezza(uno(piede, ".talos-status-strip"), { classi: ["run-strip"] });
-  const coda = uno(piede, ".talos-queue");
-  battezza(coda, { id: "queuedMessage", classi: ["queued-message"] });
-  battezza(uno(coda, ".talos-queue__text"), { id: "queuedMessageText" });
-  battezza(uno(coda, "[data-coda-togli]"), { id: "cancelQueued" });
-  battezza(uno(coda, "[data-coda-invia]"), { id: "inviaQueued" });
-  coda.hidden = true;
+  const coda2 = uno(piede, ".talos-queue");
+  battezza(coda2, { id: "queuedMessage", classi: ["queued-message"] });
+  battezza(uno(coda2, ".talos-queue__text"), { id: "queuedMessageText" });
+  battezza(uno(coda2, "[data-coda-togli]"), { id: "cancelQueued" });
+  battezza(uno(coda2, "[data-coda-invia]"), { id: "inviaQueued" });
+  coda2.hidden = true;
   const compositore = uno(piede, "#composerForm");
   battezza(uno(compositore, ".talos-send"), { classi: ["send-btn"] });
   battezza(uno(compositore, ".talos-composer__mic"), { classi: ["composer-mic"] });
@@ -68815,10 +70014,235 @@ function montaBarraFinestra({ documento = globalThis.document, finestra = global
   };
 }
 
+// src/components/aggiornamenti.js
+init_lingua();
+var EVENTO_AGGIORNAMENTI = "talos:aggiornamenti";
+var INDIRIZZO = "talos-desktop://aggiornamenti";
+function chiedi(finestra, stato2, azione, extra = {}) {
+  const q2 = new URLSearchParams({ azione, ...extra, gettone: stato2?.gettone ?? "" });
+  finestra.open(`${INDIRIZZO}?${q2}`, "_blank");
+}
+function quandoLeggibile(iso, adesso = /* @__PURE__ */ new Date()) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  const locale = linguaCorrenteDiT() === "en" ? "en-GB" : "it-IT";
+  const ora5 = d.toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" });
+  const giorno = (x) => `${x.getFullYear()}-${x.getMonth()}-${x.getDate()}`;
+  const ieri = new Date(adesso);
+  ieri.setDate(adesso.getDate() - 1);
+  if (giorno(d) === giorno(adesso)) return t2("oggi alle {ora}", { ora: ora5 });
+  if (giorno(d) === giorno(ieri)) return t2("ieri alle {ora}", { ora: ora5 });
+  return t2("{giorno} alle {ora}", { giorno: d.toLocaleDateString(locale, { day: "2-digit", month: "2-digit" }), ora: ora5 });
+}
+function fraseBanda(stato2) {
+  const v = stato2?.pronto?.versione;
+  if (!v) return null;
+  return stato2.automatici !== false ? t2("TALOS {v} è pronto. Si installa quando chiudi l’app.", { v }) : t2("TALOS {v} è pronto. Riavvia per installarlo.", { v });
+}
+function fraseStato(stato2, adesso = /* @__PURE__ */ new Date()) {
+  if (!stato2?.attivo) {
+    return stato2?.motivoSpento === "preview" ? t2("Questa è una copia di prova: non si aggiorna da sola. Installa la versione nuova dal sito delle release.") : stato2?.motivoSpento === "sviluppo" ? t2("Questa copia di sviluppo non si aggiorna da sola.") : t2("L’aggiornamento automatico non è partito: trovi il motivo nel registro (menu ⋯ › Apri il registro).");
+  }
+  if (stato2.stato === "controllo") return t2("Controllo in corso…");
+  if (stato2.stato === "scaricamento") return t2("Scaricamento dell’aggiornamento in corso…");
+  if (stato2.pronto) return fraseBanda(stato2);
+  const ultimo = stato2.ultimoControllo;
+  const quando = ultimo?.quando ? quandoLeggibile(ultimo.quando, adesso) : null;
+  if (!quando) return t2("Nessun controllo ancora.");
+  if (ultimo.esito === "errore") return t2("Ultimo controllo {quando} non riuscito: {errore}", { quando, errore: ultimo.errore ?? t2("errore sconosciuto") });
+  if (ultimo.esito === "aggiornato") return t2("Ultimo controllo {quando}: TALOS è aggiornato.", { quando });
+  return t2("Ultimo controllo {quando}.", { quando });
+}
+async function contaGiriInCorso(finestra) {
+  try {
+    const risposta = await finestra.fetch("/api/v1/sessions", { headers: { accept: "application/json" } });
+    if (!risposta.ok) return null;
+    const corpo = await risposta.json();
+    const voci = corpo?.data?.items ?? corpo?.items;
+    if (!Array.isArray(voci)) return null;
+    return voci.filter((s) => s && s.conclusa === false && s.interrotta !== true).length;
+  } catch {
+    return null;
+  }
+}
+function fraseConfermaRiavvio(n) {
+  if (n === null) return t2("Non riesco a sapere se una sessione sta lavorando: se sì, riavviare la interrompe.");
+  return n === 1 ? t2("Una sessione sta lavorando: riavviare la interrompe.") : t2("{n} sessioni stanno lavorando: riavviare le interrompe.", { n });
+}
+var LIBERO_DOPO_MS = 1e4;
+async function riavviaChiedendo({ finestra, conferma, prendiStato, riavvio, ridisegna: ridisegna2 }) {
+  if (riavvio.stato !== "libero") return;
+  const invia = () => {
+    if (riavvio.stato === "inviato") return;
+    riavvio.stato = "inviato";
+    ridisegna2();
+    chiedi(finestra, prendiStato(), "riavvia");
+    finestra.setTimeout?.(() => {
+      riavvio.stato = "libero";
+      ridisegna2();
+    }, LIBERO_DOPO_MS);
+  };
+  riavvio.stato = "conta";
+  ridisegna2();
+  const n = await contaGiriInCorso(finestra);
+  if (n === 0) {
+    riavvio.stato = "libero";
+    invia();
+    return;
+  }
+  riavvio.stato = "libero";
+  ridisegna2();
+  conferma({
+    titolo: t2("Riavviare TALOS adesso?"),
+    domanda: fraseConfermaRiavvio(n),
+    etichettaConferma: t2("Riavvia lo stesso"),
+    onConferma: invia
+  });
+}
+function bottone(documento, classi) {
+  const b = documento.createElement("button");
+  b.type = "button";
+  b.className = classi;
+  return b;
+}
+function creaBanda(documento) {
+  const banda = documento.createElement("div");
+  banda.id = "talosBandaAggiornamento";
+  banda.className = "talos-banda-aggiornamento";
+  banda.dataset.c = "BandaAggiornamento";
+  banda.setAttribute("role", "status");
+  banda.hidden = true;
+  const testo2 = documento.createElement("p");
+  testo2.className = "talos-banda-aggiornamento__testo";
+  const novita = bottone(documento, "talos-button talos-button--ghost talos-button--sm");
+  const riavvia = bottone(documento, "talos-button talos-button--primary talos-button--sm");
+  const chiudi = bottone(documento, "talos-button talos-button--ghost talos-icon-button talos-banda-aggiornamento__chiudi");
+  chiudi.innerHTML = '<svg class="i" aria-hidden="true"><use href="#i-x"/></svg>';
+  banda.append(testo2, novita, riavvia, chiudi);
+  return { banda, testo: testo2, novita, riavvia, chiudi };
+}
+function creaScheda(documento) {
+  const scheda = documento.createElement("div");
+  scheda.className = "talos-card talos-settings__section talos-aggiornamenti";
+  scheda.dataset.c = "SettingsSection";
+  scheda.dataset.settingsCard = "account-aggiornamenti";
+  scheda.setAttribute("role", "group");
+  scheda.setAttribute("aria-labelledby", "settings-group-account-aggiornamenti");
+  scheda.innerHTML = '<div class="settings-group__head" data-settings-group-head><h3 class="settings-group__title" id="settings-group-account-aggiornamenti" data-settings-group-title="account-aggiornamenti"></h3><span class="settings-group__count" data-settings-group-count hidden></span></div><p data-aggiornamenti-descrizione></p><div class="talos-setting" data-c="SettingRow" data-setting-row="aggiornamentiStato"><div><span class="talos-setting__label" data-aggiornamenti-versione></span><p class="talos-setting__help" data-aggiornamenti-stato role="status"></p></div><div class="talos-setting__control" data-aggiornamenti-azioni></div></div><div class="talos-setting" data-c="SettingRow" data-setting-row="aggiornamentiAutomatici"><div><label class="talos-setting__label" for="setting-aggiornamentiAutomatici" data-aggiornamenti-etichetta></label><p class="talos-setting__help" data-aggiornamenti-aiuto></p></div><input id="setting-aggiornamentiAutomatici" type="checkbox" class="talos-switch" data-c="Switch" role="switch"></div>';
+  const controlla = bottone(documento, "talos-button talos-button--secondary talos-button--sm");
+  const riavvia = bottone(documento, "talos-button talos-button--primary talos-button--sm");
+  scheda.querySelector("[data-aggiornamenti-azioni]").append(controlla, riavvia);
+  const q2 = (s) => scheda.querySelector(s);
+  return {
+    scheda,
+    controlla,
+    riavvia,
+    interruttore: q2("#setting-aggiornamentiAutomatici"),
+    titolo: q2(".settings-group__title"),
+    descrizione: q2("[data-aggiornamenti-descrizione]"),
+    versione: q2("[data-aggiornamenti-versione]"),
+    stato: q2("[data-aggiornamenti-stato]"),
+    etichetta: q2("[data-aggiornamenti-etichetta]"),
+    aiuto: q2("[data-aggiornamenti-aiuto]"),
+    rigaAutomatici: q2('[data-setting-row="aggiornamentiAutomatici"]')
+  };
+}
+function montaAggiornamenti({ documento = globalThis.document, finestra = globalThis.window, adesso = () => /* @__PURE__ */ new Date(), conferma = () => {
+} } = {}) {
+  if (!documento || !finestra) return null;
+  let stato2 = null;
+  let banda = null;
+  let scheda = null;
+  const riavvio = { stato: "libero" };
+  const prendiStato = () => stato2;
+  function disegnaBanda() {
+    if (!banda) {
+      banda = creaBanda(documento);
+      banda.novita.addEventListener("click", () => {
+        const p = prendiStato()?.pronto?.pagina;
+        if (p) finestra.open(p, "_blank");
+      });
+      banda.riavvia.addEventListener("click", () => riavviaChiedendo({ finestra, conferma, prendiStato, riavvio, ridisegna: disegna2 }));
+      banda.chiudi.addEventListener("click", () => {
+        stato2 = { ...stato2, nascosto: true };
+        disegna2();
+        chiedi(finestra, stato2, "nascondi");
+      });
+      const barra = documento.getElementById("talosBarraFinestra");
+      const guscio = documento.querySelector(".talos-shell");
+      if (barra) barra.after(banda.banda);
+      else if (guscio) guscio.before(banda.banda);
+      else documento.body.prepend(banda.banda);
+    }
+    const frase = fraseBanda(stato2);
+    banda.banda.hidden = !(stato2.attivo && frase && !stato2.nascosto);
+    banda.testo.textContent = frase ?? "";
+    banda.testo.title = frase ?? "";
+    banda.novita.textContent = t2("Novità");
+    banda.novita.hidden = !stato2.pronto?.pagina;
+    banda.riavvia.textContent = t2("Riavvia ora");
+    banda.riavvia.disabled = riavvio.stato !== "libero";
+    const nascondi = t2("Nascondi fino al prossimo avvio");
+    banda.chiudi.setAttribute("aria-label", nascondi);
+    banda.chiudi.title = nascondi;
+    documento.documentElement.toggleAttribute("data-talos-banda-aggiornamento", !banda.banda.hidden);
+  }
+  function disegnaScheda2() {
+    const pannello = documento.getElementById("setting-panel-account");
+    if (pannello && (!scheda || !scheda.scheda.isConnected)) {
+      scheda = creaScheda(documento);
+      scheda.controlla.addEventListener("click", () => {
+        scheda.controlla.disabled = true;
+        chiedi(finestra, prendiStato(), "controlla");
+      });
+      scheda.riavvia.addEventListener("click", () => riavviaChiedendo({ finestra, conferma, prendiStato, riavvio, ridisegna: disegna2 }));
+      scheda.interruttore.addEventListener("change", () => chiedi(finestra, prendiStato(), "automatici", { acceso: scheda.interruttore.checked ? "1" : "0" }));
+      pannello.prepend(scheda.scheda);
+    }
+    if (!scheda) return;
+    scheda.titolo.textContent = t2("Aggiornamenti");
+    scheda.descrizione.textContent = t2("Controlla all’avvio e ogni 4 ore; installa quando chiudi l’app.");
+    scheda.versione.textContent = stato2.versioneAttuale ? `TALOS ${stato2.versioneAttuale}` : "TALOS";
+    scheda.stato.textContent = fraseStato(stato2, adesso());
+    scheda.etichetta.textContent = t2("Aggiornamenti automatici");
+    scheda.aiuto.textContent = t2("Spento, TALOS non controlla da solo e non installa alla chiusura: resta «Controlla ora».");
+    scheda.controlla.textContent = t2("Controlla ora");
+    scheda.riavvia.textContent = t2("Riavvia ora");
+    const lavora = stato2.stato === "controllo" || stato2.stato === "scaricamento";
+    scheda.controlla.hidden = !stato2.attivo || Boolean(stato2.pronto);
+    scheda.controlla.disabled = lavora;
+    scheda.riavvia.hidden = !stato2.attivo || !stato2.pronto;
+    scheda.riavvia.disabled = riavvio.stato !== "libero";
+    scheda.rigaAutomatici.hidden = !stato2.attivo;
+    scheda.interruttore.checked = stato2.automatici !== false;
+  }
+  function disegna2() {
+    if (!stato2) return;
+    disegnaBanda();
+    disegnaScheda2();
+  }
+  const suStato = (evento) => {
+    stato2 = evento.detail ?? null;
+    disegna2();
+  };
+  finestra.addEventListener(EVENTO_AGGIORNAMENTI, suStato);
+  documento.documentElement.addEventListener(EVENTO_LINGUA, disegna2);
+  if (finestra.__talosAggiornamenti) {
+    stato2 = finestra.__talosAggiornamenti;
+    disegna2();
+  }
+  return { disegna: disegna2, distruggi() {
+    finestra.removeEventListener(EVENTO_AGGIORNAMENTI, suStato);
+    documento.documentElement.removeEventListener(EVENTO_LINGUA, disegna2);
+  } };
+}
+
 // src/main.js
+init_modale_td();
 montaPonteLegacy(document);
 montaBarraFinestra();
 await Promise.resolve().then(() => (init_app(), app_exports));
+montaAggiornamenti({ conferma: confermaModale });
 if (!window.__talosHarnessHost) {
   document.documentElement.dataset.talosStreamingAnimation = "none";
 }

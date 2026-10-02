@@ -93,3 +93,18 @@ test('RIPRESA-GRAFO-OPERAZIONE — fase reale tipizzata senza testo esterno',()=
  assert.equal(attivitaNodoGrafo({conclusa:true,operazioneCorrente:{kind:'response',status:'running'}}).operazione,null);
  assert.equal(attivitaNodoGrafo({conclusa:false,operazioneCorrente:{kind:'response',status:'completed'}}).operazione,null);
 });
+
+/* 02/10/2026 — un record di attrezzo della cronologia porta i soli contatori: il nodo dice quanti file, la sintesi lo dichiara parziale. */
+test('GRAFO-NODO-COMPATTO: contatori senza elenco ⇒ numero di file nel nodo, sintesi dei file parziale', () => {
+  const compatto = { sessionId: 'figlia', avviataAlle: '2026-10-02T08:00:00Z', attivita: { compatta: true, chiamate: 70, numeroFile: 70, attrezzoCorrente: null,
+    passi: [{ tipo: 'attrezzo', attrezzo: 'leggi', percorso: 'src/f69.mjs', quando: '2026-10-02T08:05:00Z' }], passiTagliati: 140 } };
+  const a = attivitaNodoGrafo(compatto, Date.parse('2026-10-02T08:06:00Z'));
+  assert.equal(a.file, null);
+  assert.equal(a.numeroFile, 70);
+  assert.equal(a.chiamate, 70);
+  assert.equal(a.ultimo.percorso, 'src/f69.mjs');
+  const t = telemetriaGrafoAgenti({ nodi: [{ stato: 'active', dati: compatto }] });
+  assert.equal(t.chiamate, 70);
+  assert.equal(t.file, null, 'senza elenchi la sintesi non inventa un conteggio di file unici');
+  assert.equal(t.parziale, true);
+});

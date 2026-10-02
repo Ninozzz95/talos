@@ -75,16 +75,16 @@ export function dovEGirato(livello) {
  *            livello:string|null, output:string, verdetto:string}}
  */
 export function leggiEsitoComando(grezzo) {
-  const testo = String(grezzo ?? '');
+  const { testo, avvisi } = separaLeRigheDelModello(String(grezzo ?? ''));
   const trovato = INTESTAZIONE.exec(testo);
   if (!trovato) {
     /* Nessuna intestazione: non è un esito di comando — si restituisce tutto come output, mai un
        verdetto inventato su un testo che non abbiamo capito. */
-    return { uscita: null, riuscito: false, fermato: false, dove: null, livello: null, output: testo, verdetto: '' };
+    return { uscita: null, riuscito: false, fermato: false, annullato: false, terminato: false, dove: null, livello: null, output: String(grezzo ?? ''), verdetto: '' };
   }
   const uscita = trovato[1] === 'null' ? null : Number(trovato[1]);
   const livello = trovato[2] ? trovato[2].trim() : null;
-  const output = testo.slice(trovato[0].length);
+  const output = `${avvisi}${senzaRiferimentoOutput(testo.slice(trovato[0].length))}`;
   /*
    * ⛔ `exit null` = fermato allo scadere del tempo massimo (misurato il 10/09: `sleep 300` torna
    *   dopo 120.082 ms con codice `null` e testo vuoto). Il kernel lo annuncia come RIUSCITO: è la
@@ -107,10 +107,59 @@ export function leggiEsitoComando(grezzo) {
    *     non si può distinguere. Se un domani il kernel dichiarerà la causa nel testo, si tornerà a
    *     nominarla: `TALOS` la sa, questa funzione no.
    */
+  /*
+   * ⛔ 02/10/2026, owner («sì, come i Processi») — un comando FERMATO non è un comando NON RIUSCITO. Il kernel normalizza
+   *   i suoi esiti (`talosHarness.mjs`, `codiceFinale = fermatoSuRichiesta ? USCITA_FERMATO_SU_RICHIESTA : fermatoDalTempo ?
+   *   124 : codice`): 130 = fermato su richiesta (lo Stop della riga o del giro), 124 = fermato dal tempo; 143 e 137 sono
+   *   SIGTERM e SIGKILL. Sono gli stessi codici e le stesse parole della scheda Processi (`inspector.js`, `statoDaUscita`):
+   *   la chat diceva «Non riuscito · codice 130» col pallino rosso per un comando che la persona aveva fermato apposta.
+   */
+  const annullato = uscita === 130 || uscita === 143;
+  const terminato = uscita === 124 || uscita === 137;
   const verdetto = fermato
     ? 'Fermato: il comando non ha restituito un codice d\'uscita'
-    : riuscito ? 'Riuscito' : `Non riuscito · codice ${uscita}`;
-  return { uscita, riuscito, fermato, dove: dovEGirato(livello), livello, output, verdetto };
+    : riuscito ? 'Riuscito'
+      : annullato ? `Annullato · codice ${uscita}`
+        : terminato ? `Terminato a forza · codice ${uscita}`
+          : `Non riuscito · codice ${uscita}`;
+  return { uscita, riuscito, fermato, annullato, terminato, dove: dovEGirato(livello), livello, output, verdetto };
+}
+
+/*
+ * ⛔ 02/10/2026 — le righe che l'adattatore desktop mette DAVANTI all'intestazione, per il MODELLO
+ *   (`talosHarness.desktop-hotfix.mjs:41-43`, e `shellExecutionBase` righe 121-125 le toglie allo stesso modo per leggere
+ *   l'esito). Dal 17/09 (`c03886702`) ogni comando ESEGUITO dall'agente comincia con `[shell output: …]`, e `INTESTAZIONE`,
+ *   ancorata all'inizio, non trovava più `exit N`: niente verdetto, e un comando dell'agente che falliva non si diceva
+ *   fallito. Trovato nella prova dal vivo dello Stop sul 4174 (la riga del comando fermato diceva «uscita 1», inventata).
+ * ⇒ L'avviso del canale combinato si toglie: parla al modello, in inglese, e alla persona non dice niente. L'avviso di
+ *   PowerShell («NOT VERIFIED») invece si TIENE nell'output: è un'informazione vera sul comando, non rumore.
+ */
+const AVVISO_CANALE_COMBINATO = '[shell output: stdout and stderr combined in arrival order; stream identity is not preserved]\n';
+const AVVISO_POWERSHELL = /^⚠ SHELL_DIAGNOSTIC_WITH_ZERO_EXIT: [^\n]*\n/u;
+function separaLeRigheDelModello(grezzo) {
+  let testo = grezzo;
+  let avvisi = '';
+  for (let giro = 0; giro < 2; giro += 1) {
+    if (testo.startsWith(AVVISO_CANALE_COMBINATO)) { testo = testo.slice(AVVISO_CANALE_COMBINATO.length); continue; }
+    const powershell = AVVISO_POWERSHELL.exec(testo);
+    if (powershell) { avvisi += powershell[0]; testo = testo.slice(powershell[0].length); }
+  }
+  return { testo, avvisi };
+}
+
+/*
+ * ⛔ 02/10/2026, owner («sì, toglila dalla card») — la riga che il server mette subito DOPO l'intestazione quando conserva
+ *   l'output (`src/process-output-session.mjs:52-55`): «[TALOS output reference: <id>; retained N of M bytes.] Read retained
+ *   bytes with process_output({…}); follow nextOffset, and select stderr separately.» Parla al MODELLO, in inglese e con
+ *   un identificativo: alla persona la stessa cosa la dà «Consulta output conservato», che legge la ricevuta TIPATA
+ *   (`process-output.js:7`, mai un riferimento letto dal testo). Resta nel testo che riceve il modello. Come Hermes: nella
+ *   vista normale l'output, il grezzo dietro «Tool payload» (`apps/desktop/src/components/assistant-ui/tool/fallback.tsx:119-150`).
+ * ⛔ Si toglie SOLO la forma esatta e solo in testa all'output: un output che parlasse di «TALOS output reference» più
+ *   sotto resta com'è. La riga della conservazione FALLITA («[TALOS output retention failed …]») resta: dice una cosa vera.
+ */
+const RIFERIMENTO_OUTPUT = /^\[TALOS output reference: [0-9a-f-]{36}; retained \d+ of \d+ bytes(?:; the retention limit was reached)?\.\](?: Read retained bytes with process_output\(\{"outputId":"[0-9a-f-]{36}"\}\); follow nextOffset, and select stderr separately\.)?(?:\n|$)/u;
+function senzaRiferimentoOutput(output) {
+  return output.replace(RIFERIMENTO_OUTPUT, () => '');
 }
 
 /**

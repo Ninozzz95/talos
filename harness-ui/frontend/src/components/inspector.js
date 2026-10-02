@@ -213,6 +213,15 @@ export const STATI_PROCESSO = Object.freeze({
   'in-avvio': { etichetta: 'In avvio', tono: 'accent', icona: 'i-play', vivo: true },
   'in-corso': { etichetta: 'In corso', tono: 'accent', icona: 'i-bolt', vivo: true },
   'in-attesa': { etichetta: 'In attesa', tono: 'warning', icona: 'i-clock', vivo: true },
+  /*
+   * ⛔ 02/10/2026, owner: un comando dell'agente che aspetta il CONSENSO non è «in corso» — non è ancora partito. La prova
+   *   dal vivo sul 4174 lo diceva «In corso», con lo Stop in riga, e lo Stop rispondeva «non è più in corso» (il kernel
+   *   registra il comando solo quando parte). Decisione: la riga dice «Aspetta il tuo consenso» e NON ha lo Stop; Consenti e
+   *   Nega restano nella chat. Come Hermes: il suo registro dei processi (`tools/process_registry.py`) contiene solo
+   *   processi avviati, e l'approvazione resta a parte (`apps/desktop/src/components/assistant-ui/tool/approval.tsx:123`).
+   *   Lo scudo è l'icona dei permessi nella chat («Chiede di scrivere»).
+   */
+  'in-consenso': { etichetta: 'Aspetta il tuo consenso', tono: 'warning', icona: 'i-shield', vivo: true },
   riuscito: { etichetta: 'Riuscito', tono: 'success', icona: 'i-check', vivo: false },
   fallito: { etichetta: 'Non riuscito', tono: 'danger', icona: 'i-x', vivo: false },
   annullato: { etichetta: 'Annullato', tono: '', icona: 'i-stop', vivo: false },
@@ -260,6 +269,19 @@ export function uscitaDaTestoAttrezzo(testo) {
   const t = typeof testo === 'string' ? testo : '';
   const m = /^\s*exit\s+(\d+)\b/u.exec(t);
   return m ? Number(m[1]) : null;
+}
+
+/**
+ * Il codice di uscita di un `ToolCallResult`: PRIMA il campo `exitCode`, il testo solo come ripiego.
+ *
+ * ⛔ 02/10/2026, prova dal vivo dello Stop sul 4174 — la nota qui sopra («`ToolCallResult` non ha un campo uscita») è
+ *   invecchiata: dal 20/09 (`9c8b11fe2`) il server manda `exitCode` (`agent-service.mjs:1191` per l'agente, `:2415` per
+ *   il `!` della persona). E il testo ha cambiato forma: comincia con `[shell output: stdout and stderr combined…]`, e
+ *   `exit 130` scivola alla SECONDA riga — la lettura «solo a inizio testo» dava `null`, e un comando FERMATO dalla persona
+ *   diventava «Non riuscito» col pallino rosso. Il testo resta il ripiego per le sessioni salvate prima del campo.
+ */
+export function uscitaDelRisultato(evento) {
+  return Number.isInteger(evento?.exitCode) ? evento.exitCode : uscitaDaTestoAttrezzo(evento?.content);
 }
 
 /**
@@ -466,6 +488,57 @@ function bottoneApri(d, card, riga, idRiga) {
   return b;
 }
 
+/*
+ * ⛔ Stop per riga (owner 02/10/2026: «icona in riga, solo mentre gira», senza conferma; l'agente continua). L'icona è quella
+ *   dello Stop del compositore (`#i-stop`): lo stesso gesto, riconoscibile. Al clic la riga dice che cosa sta succedendo; se il
+ *   comando non si ferma entro `ATTESA_FERMATA_MS` lo dice e il pulsante torna — come Hermes, che toglie la riga solo a
+ *   uccisione confermata e altrimenti la lascia «perché la persona possa riprovare» (`apps/desktop/src/store/composer-status.ts:458-462`).
+ * ⛔ Compare solo «in corso» e «in attesa»: «in avvio» è un comando che non esiste ancora (gli argomenti arrivano a pezzi), e il
+ *   server non avrebbe niente da fermare.
+ */
+const ATTESA_FERMATA_MS = 8_000;
+const FERMABILE = new Set(['in-corso', 'in-attesa']);
+function bottoneFerma(d, riga, scheda, idRiga) {
+  const b = el(d, 'button', 'talos-button talos-button--ghost talos-button--sm talos-process__ferma');
+  b.type = 'button';
+  b.hidden = true;
+  b.setAttribute('aria-label', 'Ferma questo comando');
+  b.title = 'Ferma questo comando';
+  const svg = d.createElementNS(SVG_NS_INSPECTOR, 'svg');
+  svg.setAttribute('class', 'i i--sm');
+  svg.setAttribute('aria-hidden', 'true');
+  const use = d.createElementNS(SVG_NS_INSPECTOR, 'use');
+  use.setAttribute('href', '#i-stop');
+  svg.append(use);
+  b.append(svg);
+  b.addEventListener('click', async (evento) => {
+    evento.preventDefault?.();
+    evento.stopPropagation?.(); // la card intera seleziona: fermare non è selezionare
+    const ferma = scheda.azioni?.ferma;
+    if (typeof ferma !== 'function' || b.disabled) return;
+    b.disabled = true;
+    avvisoFermata(riga, 'Fermo il comando…');
+    let esito;
+    try { esito = await ferma(idRiga); } catch (errore) { esito = { ok: false, messaggio: errore?.message }; }
+    if (esito?.ok === false) {
+      b.disabled = false;
+      avvisoFermata(riga, `Non fermato: ${esito.messaggio || 'riprova.'}`);
+      return;
+    }
+    clearTimeout(riga.timerFermata);
+    riga.timerFermata = setTimeout(() => {
+      if (!FERMABILE.has(riga.card.dataset.stato)) return;
+      b.disabled = false;
+      avvisoFermata(riga, 'Non si è fermato: riprova lo Stop.');
+    }, ATTESA_FERMATA_MS);
+  });
+  return b;
+}
+function avvisoFermata(riga, testo) {
+  riga.avvisoFerma.textContent = testo || '';
+  riga.avvisoFerma.hidden = !testo;
+}
+
 function creaRiga(d, p, scheda, contenitore) {
   const card = el(d, 'div', 'talos-card talos-process');
   card.dataset.c = 'ProcessRow';
@@ -503,7 +576,8 @@ function creaRiga(d, p, scheda, contenitore) {
   dettaglio.hidden = true;
   const riga = { card, cmd, titolo, statoEl: null, statoTesto: null, statoUse: null, chiEl: null, oraEl: null, misuraEl: null, stallo: null, dettaglio, icona, mostrato: null, aperto: false, dettaglioSporco: true, righeDettaglio: p.dettaglio };
   const apri = bottoneApri(d, card, riga, String(p.id ?? ''));
-  testa.append(icona, testo, apri);
+  const ferma = bottoneFerma(d, riga, scheda, String(p.id ?? '')); // Stop per riga: prima del «⌄», che resta l'ultimo
+  testa.append(icona, testo, ferma, apri);
 
   const meta = el(d, 'div', 'talos-process__meta');
   const statoEl = el(d, 'span', 'talos-badge talos-badge--sm talos-process__stato');
@@ -524,8 +598,13 @@ function creaRiga(d, p, scheda, contenitore) {
 
   const stallo = el(d, 'div', 'talos-process__stall');
   stallo.hidden = true;
+  /* Stop per riga: che cosa sta succedendo dopo il clic. Un elemento suo e non lo `stallo`, che `aggiornaRiga` riscrive a ogni
+     evento; `role="status"` perché chi usa un lettore di schermo sappia che la richiesta è partita o non è riuscita. */
+  const avvisoFerma = el(d, 'div', 'talos-process__avviso-ferma');
+  avvisoFerma.setAttribute('role', 'status');
+  avvisoFerma.hidden = true;
 
-  card.append(testa, meta, stallo, dettaglio);
+  card.append(testa, meta, stallo, avvisoFerma, dettaglio);
 
   card.addEventListener('click', () => {
     scheda.selezionato = scheda.selezionato === p.id ? null : p.id;
@@ -538,7 +617,7 @@ function creaRiga(d, p, scheda, contenitore) {
     card.lancia ? card.lancia('click') : card.click?.();
   });
 
-  Object.assign(riga, { statoEl, statoTesto, statoUse, chiEl, oraEl, misuraEl, stallo });
+  Object.assign(riga, { statoEl, statoTesto, statoUse, chiEl, oraEl, misuraEl, stallo, ferma, avvisoFerma, timerFermata: null });
   aggiornaRiga(d, riga, p, scheda);
   void contenitore;
   return riga;
@@ -548,6 +627,15 @@ function aggiornaRiga(d, riga, p, scheda) {
   const m = riga.mostrato;
   riga.card.dataset.stato = p.stato;
   riga.card.dataset.famiglia = p.famiglia;
+  /* Stop per riga: solo mentre gira, e solo se chi disegna sa fermare. Quando il comando finisce l'avviso se ne va: l'esito
+     della riga dice già come è finito. */
+  const fermabile = FERMABILE.has(p.stato) && typeof scheda.azioni?.ferma === 'function';
+  riga.ferma.hidden = !fermabile;
+  if (!fermabile && (riga.ferma.disabled || !riga.avvisoFerma.hidden)) {
+    clearTimeout(riga.timerFermata);
+    riga.ferma.disabled = false;
+    avvisoFermata(riga, '');
+  }
   riga.card.dataset.selezionato = scheda.selezionato === p.id ? 'si' : 'no';
   /* ⛔ IL TITOLO, che è la descrizione scritta dal modello (BLOCCO 4, vedi `creaRiga`). Si riscrive
      solo se è cambiata, come tutto il resto di questa riga. */
@@ -618,6 +706,9 @@ function aggiornaRiga(d, riga, p, scheda) {
 export function disegnaProcessi(d, contenitore, lista, opzioni = {}) {
   if (!contenitore) return { mostrati: 0, totale: 0 };
   const scheda = schedaDi(contenitore);
+  /* Stop per riga: `{ ferma(toolCallId) → {ok, messaggio?} }` da chi disegna; i ridisegni interni (filtro, «carica altri») non
+     la passano e si tiene l'ultima. */
+  if (opzioni.azioni) scheda.azioni = opzioni.azioni;
   /*
    * ⛔⛔ IL PRIMO TENTATIVO ERA PIÙ LENTO DEL DIFETTO, e l'ho visto solo perché il banco misura
    *   DUE cose e non una. Preparando tutti i processi (`datiProcesso`, che parsa la riga di comando)
@@ -1259,7 +1350,7 @@ export function aggiornaInspector(inspector, dati = {}, { document: d = globalTh
    *   inserisce le righe nuove, aggiorna in loco quelle che cambiano e toglie quelle sparite.
    *   Selezione, filtro, dettaglio aperto e scorrimento sopravvivono a un evento nuovo.
    */
-  if (processi) disegnaProcessi(d, processi, Array.isArray(dati.processi) ? dati.processi : []);
+  if (processi) disegnaProcessi(d, processi, Array.isArray(dati.processi) ? dati.processi : [], dati.azioniProcessi ? { azioni: dati.azioniProcessi } : {});
 }
 
 /** I processi dagli eventi degli attrezzi del monolite (`eventiAttrezzi`), con i tempi misurati alla ricezione. */
@@ -1310,8 +1401,30 @@ const RISOLUZIONE_ARRIVI_MS = 100;
 export function processiDagliEventi(eventi = [], { adesso = Date.now(), nomiComando = ['shell', 'bash', 'esegui', 'comando', 'terminal', 'prova'] } = {}) {
   const avviati = new Map();
   const argomenti = new Map();
+  const richiesteDiConsenso = new Map(); // requestId → toolCallId: `ApprovalResolved` porta solo il primo
   const lista = [];
   for (const e of eventi) {
+    /*
+     * ⛔ 02/10/2026 — il consenso. `ApprovalRequested` nomina la chiamata (`azione.toolCallId`, G02); la risposta no, solo
+     *   `requestId`. Finché aspetta, la riga dice «Aspetta il tuo consenso» e non è fermabile. Dato il consenso il comando
+     *   PARTE: torna «in corso», e il silenzio si conta da lì (`ricevutoA` della risposta) — altrimenti un consenso dato
+     *   dopo un minuto farebbe dire «In attesa» a un comando appena partito. Se il consenso è negato arriva il risultato
+     *   `REFUSED`, che la porta a «Non eseguito» come prima.
+     */
+    if (e.type === 'ApprovalRequested' && avviati.has(e.toolCallId)) {
+      const p = avviati.get(e.toolCallId);
+      if (typeof e.requestId === 'string') richiesteDiConsenso.set(e.requestId, e.toolCallId);
+      if (p.stato === 'in-avvio' || p.stato === 'in-corso') p.stato = 'in-consenso';
+      continue;
+    }
+    if (e.type === 'ApprovalResolved' && richiesteDiConsenso.has(e.requestId)) {
+      const p = avviati.get(richiesteDiConsenso.get(e.requestId));
+      if (p?.stato === 'in-consenso') {
+        p.stato = 'in-corso';
+        if (Number.isFinite(e.ricevutoA)) p.ricevutoA = e.ricevutoA;
+      }
+      continue;
+    }
     if (e.type === 'ToolCallStart' && nomiComando.includes(e.toolCallName)) {
       /*
        * ⛔ 16/09 — lo stato di partenza è `in-avvio`, non `in-corso`: fra il `ToolCallStart` e
@@ -1330,7 +1443,9 @@ export function processiDagliEventi(eventi = [], { adesso = Date.now(), nomiComa
        *   silenzio di un processo ancora aperto, che è una domanda su NOI, non su di lui.
        */
       const p = {
-        id: e.toolCallId, comando: '', descrizione: '', stato: 'in-avvio', chi: 'agente', giro: e.giro ?? null,
+        /* ⛔ 02/10/2026, foto della prova dello Stop: il `!` della persona diceva «agente · giro 1». `chi` arriva dal
+           client, con lo stesso criterio della card in chat (`giroComandoDiretto` + `shell`, PO-06). */
+        id: e.toolCallId, comando: '', descrizione: '', stato: 'in-avvio', chi: e.chi === 'tu' ? 'tu' : 'agente', giro: e.giro ?? null,
         avviatoA: Number.isFinite(e.avviatoA) ? e.avviatoA : (e.ricevutoA ?? null),
         ricevutoA: Number.isFinite(e.ricevutoA) ? e.ricevutoA : null,
         famiglia: FAMIGLIA_DELL_ATTREZZO[e.toolCallName] || null,

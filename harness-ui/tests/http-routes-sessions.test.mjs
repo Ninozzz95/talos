@@ -355,8 +355,8 @@ function registroFinto() {
       return { sessionId };
     },
     ultimaRispostaApprovazione: null,
-    rispondiApprovazione(sessionId, requestId, approvato) {
-      this.ultimaRispostaApprovazione = { sessionId, requestId, approvato };
+    rispondiApprovazione(sessionId, requestId, approvato, opzioni) {
+      this.ultimaRispostaApprovazione = { sessionId, requestId, approvato, ...(opzioni?.ambito !== undefined ? { ambito: opzioni.ambito } : {}) };
       if (!sessioni.has(sessionId)) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
       // ⛔ 07/9, O-49: il finto registro rispecchia quello vero — una richiesta decaduta non è una query sbagliata.
       if (requestId !== 'richiesta-vera') return { erroreAvvio: 'Questa richiesta di permesso non è più in attesa', code: 'APPROVAL_NOT_PENDING' };
@@ -1096,6 +1096,28 @@ test('⛔⛔ AL CONTRARIO — POST .../approve con un corpo malformato (approvat
     });
     assert.equal(risposta.status, 400, JSON.stringify(corpo));
     assert.equal((await risposta.json()).error.code, 'QUERY_INVALID', JSON.stringify(corpo));
+  }
+});
+
+/* F4-03 (owner 01/10/2026 sera) — «Consenti in questa cartella per la sessione»: `ambito: 'cartella'`, e solo con un sì. */
+test('F4-03 HTTP-FUORI-01: POST .../approve con ambito «cartella» arriva al registro; con un no, un altro ambito o una chiave in più è 400', async (t) => {
+  const { base, sessionRegistry } = await listen(t);
+  const { sessionId } = sessionRegistry.avvia('sconto-a-scaglioni');
+  const invia = (corpo) => fetch(`${base}/api/v1/sessions/${sessionId}/approve`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(corpo) });
+  const ok = await invia({ requestId: 'richiesta-vera', approvato: true, ambito: 'cartella' });
+  assert.equal(ok.status, 200);
+  assert.deepEqual(sessionRegistry.ultimaRispostaApprovazione, { sessionId, requestId: 'richiesta-vera', approvato: true, ambito: 'cartella' });
+  sessionRegistry.ultimaRispostaApprovazione = null;
+  for (const corpo of [
+    { requestId: 'richiesta-vera', approvato: false, ambito: 'cartella' },
+    { requestId: 'richiesta-vera', approvato: true, ambito: 'disco' },
+    { requestId: 'richiesta-vera', approvato: true, ambito: '' },
+    { requestId: 'richiesta-vera', approvato: true, ambito: 'cartella', percorso: 'C:\\' },
+  ]) {
+    const risposta = await invia(corpo);
+    assert.equal(risposta.status, 400, JSON.stringify(corpo));
+    assert.equal((await risposta.json()).error.code, 'QUERY_INVALID', JSON.stringify(corpo));
+    assert.equal(sessionRegistry.ultimaRispostaApprovazione, null, `non arriva al registro: ${JSON.stringify(corpo)}`);
   }
 });
 

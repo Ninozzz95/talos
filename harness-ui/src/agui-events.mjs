@@ -338,8 +338,10 @@ export function queuedMessageDelivered({ testo }) {
  * risposto, così un secondo tab/client con la stessa sessione aperta
  * smette di mostrare il prompt invece di restare bloccato per sempre.
  */
-export function approvalResolved({ requestId, approvato }) {
-    return { type: 'ApprovalResolved', requestId, approvato }
+/* F4-03 (01/10/2026): `ambito: 'cartella'` quando il sì vale per la cartella fino a fine sessione; `motivo: 'nessuna-interfaccia'`
+   quando nessuno poteva rispondere e il registro ha chiuso da sé. Facoltativi: senza, l'evento è quello di prima, identico. */
+export function approvalResolved({ requestId, approvato, ambito, motivo }) {
+    return { type: 'ApprovalResolved', requestId, approvato, ...(ambito ? { ambito } : {}), ...(motivo ? { motivo } : {}) }
 }
 
 /*
@@ -357,9 +359,25 @@ export function userQuestionRequested({ requestId, questions, at, toolCallId, or
     }
 }
 
-export function userQuestionResolved({ requestId, status, answers = null, at, da, motivo }) {
+/* 02/10/2026, tappa 3 della CLI: le domande saltate e le note della persona viaggiano nella ricevuta, separate dalle risposte. */
+/*
+ * ⛔ 02/10/2026 — ELICITATION MCP (mcp-elicitation-contract.mjs). Un server chiede alla persona un modulo o di aprire una
+ * pagina; la richiesta e la sua chiusura sono eventi della sessione, come le domande. Il contenuto del modulo va al server,
+ * MAI nella cronologia (può contenere dati personali).
+ */
+export function mcpElicitationRequested({ requestId, server, richiesta, at }) {
+    return { type: 'McpElicitationRequested', requestId, server, mode: richiesta.mode, message: richiesta.message,
+        ...(richiesta.mode === 'form' ? { requestedSchema: richiesta.requestedSchema } : { url: richiesta.url, dominio: richiesta.dominio, elicitationId: richiesta.elicitationId }),
+        ...(at ? { at } : {}) }
+}
+export function mcpElicitationResolved({ requestId, action, at, da, motivo }) {
+    return { type: 'McpElicitationResolved', requestId, action, ...(at ? { at } : {}), ...(da ? { da } : {}), ...(motivo ? { motivo } : {}) }
+}
+
+export function userQuestionResolved({ requestId, status, answers = null, skipped = null, notes = null, at, da, motivo }) {
     return {
         type: 'UserQuestionResolved', requestId, status, ...(answers ? { answers } : {}),
+        ...(skipped?.length ? { skipped } : {}), ...(notes && Object.keys(notes).length ? { notes } : {}),
         ...(at ? { at } : {}), ...(da ? { da } : {}), ...(motivo ? { motivo } : {}),
     }
 }

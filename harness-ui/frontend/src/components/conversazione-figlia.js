@@ -149,7 +149,7 @@ export function esitoDaContenuto(attrezzo, contenuto) {
      *   ⇒ Una regola sola: `leggiEsitoComando`, la stessa che usa la chat.
      */
     const esito = leggiEsitoComando(testo);
-    return esito.verdetto && !esito.riuscito ? 'error' : 'success';
+    return esito.verdetto && !esito.riuscito && !esito.annullato && !esito.terminato ? 'error' : 'success'; // 02/10/2026: fermato ≠ fallito
   }
   /* 26/09, difetto (11): la regola generica vive in `esito-comando.js`, la stessa della chat — anche `<attrezzo> failed …`. */
   return esitoDichiaraFallimento(attrezzo, testo) ? 'error' : 'success';

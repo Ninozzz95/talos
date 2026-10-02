@@ -124,6 +124,15 @@ export function azioneAppunti(evento, { haSelezione = false, apple = false } = {
  * @returns {Array<[string, Function, boolean]>} come le vuole `apriMenuContestuale`
  */
 export function vociMenuTerminale(term, { copia, incolla }) {
+  /* PO-10 passo 2 (02/10/2026) — una scheda in SOLA LETTURA (`incolla` nullo) non ha dove incollare, e «Pulisci» le
+     cancellerebbe lo schermo senza toccare i comandi da cui è scritto: restano Copia e Seleziona tutto. Come Hermes,
+     `use-agent-terminal.ts:91-108` («No paste path: this terminal has no PTY to paste into»). */
+  if (typeof incolla !== 'function') {
+    return [
+      [t(TESTI_APPUNTI.copia), () => copia(), Boolean(term?.hasSelection?.())],
+      [t(TESTI_APPUNTI.selezionaTutto), () => term?.selectAll?.(), true],
+    ];
+  }
   return [
     [t(TESTI_APPUNTI.copia), () => copia(), Boolean(term?.hasSelection?.())],
     [t(TESTI_APPUNTI.incolla), () => incolla(), true],
@@ -158,6 +167,7 @@ export function creaTerminaleXterm({
   suDati = () => {},
   suMisura = () => {},
   Osservatore = globalThis.ResizeObserver,
+  solaLettura = false,
 } = {}) {
   if (!contenitore || !Terminal || !FitAddon) return null;
 
@@ -166,10 +176,14 @@ export function creaTerminaleXterm({
   mount.dataset.terminaleMount = id;
   contenitore.append(mount);
 
+  /* ⛔ PO-10 passo 2 (02/10/2026) — `solaLettura`: la scheda dei comandi dell'AGENTE. Nessuna tastiera arriva a niente
+     (`disableStdin`, e `onData` non si collega), e il cursore non lampeggia né si vede fuori fuoco: non c'è un prompt che
+     aspetta. Come Hermes, `use-agent-terminal.ts:67-83` («a write-only xterm (no PTY, no input)»). */
   const term = new Terminal({
     fontFamily,
     fontSize,
-    cursorBlink: true,
+    cursorBlink: !solaLettura,
+    ...(solaLettura ? { disableStdin: true, cursorInactiveStyle: 'none' } : {}),
     scrollback,
     theme: tema,
     /* ⛔ 16/09 — il tasto destro seleziona la parola sotto il cursore (ITerminalOptions):
@@ -180,7 +194,7 @@ export function creaTerminaleXterm({
   term.loadAddon(fit);
   term.open(mount);
   fit.fit();
-  term.onData((dati) => suDati(dati));
+  if (!solaLettura) term.onData((dati) => suDati(dati));
 
   const osservatore = new Osservatore(() => {
     if (mount.hidden) return;
@@ -225,6 +239,7 @@ export function collegaAppunti(term, {
   apple = false,
   avvisa = () => {},
   finestra = globalThis,
+  solaLettura = false,
 } = {}) {
   if (!term || !ospite) return () => {};
   const menu = creaMenuContestuale(radiceMenu, { id: 'menuTerminale', etichetta: TESTI_APPUNTI.titoloMenu });
@@ -259,7 +274,7 @@ export function collegaAppunti(term, {
   /* I tasti: la decisione è pura, qui si esegue soltanto. `false` = «questo tasto è mio». */
   term.attachCustomKeyEventHandler((evento) => {
     const azione = azioneAppunti(evento, { haSelezione: Boolean(term.hasSelection?.()), apple });
-    if (!azione) return true;
+    if (!azione || (azione === 'incolla' && solaLettura)) return true;
     evento.preventDefault?.();
     if (azione === 'copia') void copia(); else void incolla();
     return false;
@@ -269,7 +284,7 @@ export function collegaAppunti(term, {
     evento.preventDefault?.();
     apriMenuContestuale(menu, {
       titolo: t(TESTI_APPUNTI.titoloMenu),
-      voci: vociMenuTerminale(term, { copia, incolla }),
+      voci: vociMenuTerminale(term, { copia, incolla: solaLettura ? null : incolla }),
       x: evento.clientX ?? 0,
       y: evento.clientY ?? 0,
       chiudi: chiudiMenu,

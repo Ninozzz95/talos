@@ -64,6 +64,35 @@ export async function inventario(dir) {
   return files;
 }
 
+/*
+ * ⛔ F-001 (owner 02/10/2026: «sfoltire a ~5 MB») — `leggi` estrae il testo dei PDF con `pdfjs-dist`, che porta 35 MB (viewer,
+ *   build moderna, mappe, sandbox, tipi) e una dipendenza OPZIONALE nativa, `@napi-rs/canvas` (37 MB), che serve a DISEGNARE le
+ *   pagine e non a estrarne il testo. Si tiene solo ciò che usa `src/kernel/estrai-documento.mjs`: la build legacy ridotta, il
+ *   worker che lei importa (`pdf.worker.mjs`, misurato: `pdf.min.mjs` cerca quello e non il `.min`), `cmaps` (testo CJK) e
+ *   `standard_fonts`. Misurato il 02/10: così estrae il testo anche senza il canvas accanto (avvisa solo che non può disegnare).
+ *   `@napi-rs/keyring` e gli altri pacchetti `@napi-rs/*` restano: si tolgono solo quelli del canvas.
+ */
+export const PDFJS_DA_TENERE = Object.freeze(['package.json', 'LICENSE', 'legacy/build/pdf.min.mjs', 'legacy/build/pdf.worker.mjs', 'cmaps', 'standard_fonts']);
+export async function sfoltisciPdfjs(nodeModules) {
+  const napi = join(nodeModules, '@napi-rs');
+  if (existsSync(napi)) {
+    for (const voce of await readdir(napi)) if (voce === 'canvas' || voce.startsWith('canvas-')) await rm(join(napi, voce), { recursive: true, force: true });
+  }
+  const pdfjs = join(nodeModules, 'pdfjs-dist');
+  if (!existsSync(pdfjs)) throw new Error('pdfjs-dist assente dalle dipendenze del server: `leggi` non estrarrebbe il testo dei PDF.');
+  const tenere = new Set(PDFJS_DA_TENERE);
+  const visita = async (relativa) => {
+    for (const voce of await readdir(join(pdfjs, relativa), { withFileTypes: true })) {
+      const percorso = relativa ? `${relativa}/${voce.name}` : voce.name;
+      if (tenere.has(percorso)) continue;
+      if (voce.isDirectory() && PDFJS_DA_TENERE.some(t => t.startsWith(`${percorso}/`))) { await visita(percorso); continue; }
+      await rm(join(pdfjs, percorso), { recursive: true, force: true });
+    }
+  };
+  await visita('');
+  for (const f of PDFJS_DA_TENERE) if (!existsSync(join(pdfjs, f))) throw new Error(`pdfjs-dist sfoltito senza ${f}`);
+}
+
 async function copiaAlberoProduzione(sorgente, destinazione) {
   if (lstatSync(sorgente).isSymbolicLink()) throw new Error(`Radice sorgente collegata non ammessa: ${sorgente}`);
   for (const nome of await elenco(sorgente)) {
@@ -163,6 +192,7 @@ export async function preparaPacchetto() {
   await copiaAlberoProduzione(join(root, '../..', 'context-engine/src'), join(contesto, 'src'));
   await copiaAssistenza({ sorgente: join(root, '../..', 'docs/assistenza'), destinazione: join(staging, 'docs/assistenza') });
   await dipendenzeProduzione(backend);
+  await sfoltisciPdfjs(join(backend, 'node_modules')); // F-001: ~5 MB invece di ~72 (owner 02/10)
   await dipendenzeProduzione(contesto);
   // Segnaposto VCS ignorato anche da electron-builder: non è un file di runtime.
   await rm(join(backend, 'node_modules/undici/lib/llhttp/.gitkeep'), { force: true });

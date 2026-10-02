@@ -118,3 +118,59 @@ test('PO-06: un codice d’uscita negativo non si perde per strada', () => {
   assert.equal(e.uscita, -1);
   assert.equal(e.verdetto, 'Non riuscito · codice -1');
 });
+
+/*
+ * ⛔ 02/10/2026, owner («sì, come i Processi») — un comando FERMATO non è un comando NON RIUSCITO; e le righe che
+ *   l'adattatore desktop mette davanti all'intestazione per il modello non devono togliere il verdetto.
+ */
+test('ESITO-FERMATO: 130/143 «Annullato», 124/137 «Terminato a forza» — come la scheda Processi; gli altri restano «Non riuscito»', () => {
+  for (const [codice, verdetto, annullato, terminato] of [
+    [130, 'Annullato · codice 130', true, false], [143, 'Annullato · codice 143', true, false],
+    [124, 'Terminato a forza · codice 124', false, true], [137, 'Terminato a forza · codice 137', false, true],
+    [1, 'Non riuscito · codice 1', false, false], [2, 'Non riuscito · codice 2', false, false],
+  ]) {
+    const e = leggiEsitoComando(`exit ${codice} [sandbox: none]\nx`);
+    assert.equal(e.verdetto, verdetto);
+    assert.equal(e.annullato, annullato, `annullato per ${codice}`);
+    assert.equal(e.terminato, terminato, `terminato per ${codice}`);
+    assert.equal(e.riuscito, false);
+  }
+});
+
+test('ESITO-PREAMBOLO: il testo VERO del 4174 (avviso del canale combinato in testa) ha di nuovo il suo verdetto', () => {
+  // il contenuto della prova dal vivo dello Stop (sessione 26d2c9e3…), con la frase nuova
+  const vero = "[shell output: stdout and stderr combined in arrival order; stream identity is not preserved]\nexit 130 [sandbox: wsl2 (Linux in WSL come root; nessun isolamento: /mnt/c è il disco di Windows con i diritti dell'utente Windows di TALOS, e lì i permessi Linux non valgono)]\n⛔ L'ha fermato la persona dalla scheda Processi, apposta, mentre girava. Non rilanciarlo se non te lo chiede.";
+  const e = leggiEsitoComando(vero);
+  assert.equal(e.uscita, 130);
+  assert.equal(e.verdetto, 'Annullato · codice 130');
+  assert.equal(e.dove, 'in Linux (WSL) come root, non su Windows');
+  assert.equal(e.output.startsWith('⛔ L\'ha fermato la persona'), true, 'l’avviso per il modello, in inglese, non va a schermo');
+  const fallito = leggiEsitoComando('[shell output: stdout and stderr combined in arrival order; stream identity is not preserved]\nexit 1 [sandbox: wsl2]\nerrore vero');
+  assert.equal(fallito.verdetto, 'Non riuscito · codice 1', 'prima di oggi qui non c’era NESSUN verdetto: un fallimento dell’agente non si diceva');
+  const powershell = leggiEsitoComando('⚠ SHELL_DIAGNOSTIC_WITH_ZERO_EXIT: PowerShell emitted a structured error.\n[shell output: stdout and stderr combined in arrival order; stream identity is not preserved]\nexit 0 [sandbox: none]\nout');
+  assert.equal(powershell.uscita, 0);
+  assert.match(powershell.output, /^⚠ SHELL_DIAGNOSTIC_WITH_ZERO_EXIT/u, 'l’avviso di PowerShell è un fatto sul comando: resta');
+  const nonEsito = '[shell output: stdout and stderr combined in arrival order; stream identity is not preserved]\nnessuna intestazione';
+  assert.equal(leggiEsitoComando(nonEsito).verdetto, '');
+  assert.equal(leggiEsitoComando(nonEsito).output, nonEsito, 'senza intestazione il testo resta INTATTO, avviso compreso');
+});
+
+test('ESITO-RIFERIMENTO: la riga «[TALOS output reference…]» del server non va nella card; il resto dell’output sì', async () => {
+  const { senzaIntestazione } = await import('../../src/components/esito-comando.js');
+  // il contenuto VERO del giornale del 4174 (sessione 26d2c9e3…, 02/10/2026), testata e riferimento come li scrive il server
+  const vero = "exit 0 [sandbox: wsl2 (Linux in WSL come root; nessun isolamento)]\n[TALOS output reference: 8e43f812-0d81-4ef5-b325-c3d21da089c9; retained 23 of 23 bytes.] Read retained bytes with process_output({\"outputId\":\"8e43f812-0d81-4ef5-b325-c3d21da089c9\"}); follow nextOffset, and select stderr separately.\nEXIT_CODE=0 DURATA=61s";
+  const e = leggiEsitoComando(vero);
+  assert.equal(e.verdetto, 'Riuscito');
+  assert.equal(e.output, 'EXIT_CODE=0 DURATA=61s');
+  assert.equal(senzaIntestazione(vero), 'EXIT_CODE=0 DURATA=61s', 'la card dell’agente usa senzaIntestazione');
+  const fermato = leggiEsitoComando("[shell output: stdout and stderr combined in arrival order; stream identity is not preserved]\nexit 130 [sandbox: wsl2]\n[TALOS output reference: 849de2b1-d1cf-4099-ab0c-146b601c58f0; retained 0 of 0 bytes.] Read retained bytes with process_output({\"outputId\":\"849de2b1-d1cf-4099-ab0c-146b601c58f0\"}); follow nextOffset, and select stderr separately.\n⛔ Fermato su richiesta.");
+  assert.equal(fermato.output, '⛔ Fermato su richiesta.');
+  const pieno = leggiEsitoComando('exit 0\n[TALOS output reference: 849de2b1-d1cf-4099-ab0c-146b601c58f0; retained 1048576 of 9000000 bytes; the retention limit was reached.]\nriga');
+  assert.equal(pieno.output, 'riga', 'anche senza la frase di recupero e col tetto raggiunto');
+  // AL CONTRARIO: la riga della conservazione fallita dice una cosa vera e resta; un riferimento più sotto è output del comando
+  const fallito = 'exit 0\n[TALOS output retention failed (OUTPUT_STORE_IO); the command already ran; do not rerun automatically. Output reference: 849de2b1-d1cf-4099-ab0c-146b601c58f0.]\nout';
+  assert.equal(leggiEsitoComando(fallito).output.startsWith('[TALOS output retention failed'), true);
+  const sotto = 'exit 0\nprima riga\n[TALOS output reference: 849de2b1-d1cf-4099-ab0c-146b601c58f0; retained 1 of 1 bytes.]\n';
+  assert.equal(leggiEsitoComando(sotto).output, 'prima riga\n[TALOS output reference: 849de2b1-d1cf-4099-ab0c-146b601c58f0; retained 1 of 1 bytes.]\n');
+  assert.equal(leggiEsitoComando('[TALOS output reference: 849de2b1-d1cf-4099-ab0c-146b601c58f0; retained 1 of 1 bytes.]\nnon è un esito').verdetto, '', 'senza testata non si tocca niente');
+});

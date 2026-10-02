@@ -1,0 +1,650 @@
+{
+ "_fonte": "NousResearch/hermes-agent 65ad529 (23/09/2026), tests/tools/*.py: liste estratte con ast.literal_eval, senza ritocchi (scratchpad estrai-casi-hermes.py). Usate da tests/rev-pavimento-comandi.test.mjs.",
+ "test_hardline_blocklist.py": {
+  "costanti": {
+   "_HARDLINE_BLOCK": [
+    "rm -rf /",
+    "rm -rf /*",
+    "rm -rf //",
+    "rm -rf /.",
+    "rm -rf /./",
+    "rm -rf /..",
+    "rm -rf //*",
+    "rm -fr /./",
+    "ls && rm -rf //",
+    "rm -rf /home",
+    "rm -rf /home/*",
+    "rm -rf /etc",
+    "rm -rf /usr",
+    "rm -rf /var",
+    "rm -rf /boot",
+    "rm -rf /bin",
+    "rm --recursive --force /",
+    "rm -fr /",
+    "sudo rm -rf /",
+    "rm -rf ~",
+    "rm -rf ~/",
+    "rm -rf ~/*",
+    "rm -rf $HOME",
+    "rm -rf \"/\"",
+    "rm -rf '/'",
+    "rm -rf \"/*\"",
+    "rm -rf \"/etc\"",
+    "rm -rf '/etc'",
+    "rm -rf \"/home\"",
+    "rm -rf \"/usr\"",
+    "rm -rf \"$HOME\"",
+    "rm -rf '$HOME'",
+    "rm -rf \"$HOME/\"",
+    "rm -rf \"~\"",
+    "sudo rm -rf \"/\"",
+    "rm -rf \"/\" && echo done",
+    "rm -rf ${HOME}",
+    "rm -rf \"${HOME}\"",
+    "rm -fr ${HOME}",
+    "mkfs.ext4 /dev/sda1",
+    "mkfs /dev/sdb",
+    "mkfs.xfs /dev/nvme0n1",
+    "true && mkfs.ext4 /dev/sda1",
+    "sudo mkfs.ext4 /dev/sda1",
+    "nohup mkfs /dev/sdb",
+    "dd if=/dev/zero of=/dev/sda bs=1M",
+    "dd if=/dev/urandom of=/dev/nvme0n1",
+    "dd if=anything of=/dev/hda",
+    "echo bad > /dev/sda",
+    "cat /dev/urandom > /dev/sdb",
+    ":(){ :|:& };:",
+    "kill -9 -1",
+    "kill -1",
+    "shutdown -h now",
+    "shutdown -r now",
+    "sudo shutdown now",
+    "reboot",
+    "sudo reboot",
+    "halt",
+    "poweroff",
+    "init 0",
+    "init 6",
+    "telinit 0",
+    "systemctl poweroff",
+    "systemctl reboot",
+    "systemctl halt",
+    "ls; reboot",
+    "echo done && shutdown -h now",
+    "false || halt",
+    "$(reboot)",
+    "`shutdown now`",
+    "sudo -E shutdown now",
+    "env FOO=1 reboot",
+    "exec shutdown",
+    "nohup reboot",
+    "setsid poweroff",
+    "(reboot)",
+    "( reboot )",
+    "(shutdown -h now)",
+    "(poweroff)",
+    "(halt)",
+    "(init 0)",
+    "(systemctl reboot)",
+    "(sudo reboot)",
+    "{ reboot; }",
+    "{ shutdown -h now; }",
+    "{ poweroff; }",
+    "true && (reboot)",
+    "echo hi; { reboot; }"
+   ],
+   "_HARDLINE_ALLOW": [
+    "rm -rf /tmp/foo",
+    "rm -rf /tmp/*",
+    "rm -rf ./build",
+    "rm -rf node_modules",
+    "rm -rf /home/user/scratch",
+    "rm -rf ~/Downloads/old",
+    "rm -rf $HOME/tmp",
+    "rm foo.txt",
+    "rm -rf some/path",
+    "rm -rf /...",
+    "rm -rf /....",
+    "rm -rf /.foo",
+    "rm -rf /.config/foo",
+    "git commit -m \"rm -rf /\"",
+    "git commit -m \"wipe with rm -rf /etc\"",
+    "dd if=/dev/zero of=./image.bin",
+    "dd if=./data of=./backup.bin",
+    "echo done > /tmp/flag",
+    "echo test > /dev/null",
+    "ls /dev/sda",
+    "cat /dev/urandom | head -c 10",
+    "grep 'shutdown' logs.txt",
+    "echo reboot",
+    "echo '# init 0 in comment'",
+    "cat rebooting.log",
+    "echo 'halt and catch fire'",
+    "python3 -c 'print(\"shutdown\")'",
+    "find . -name '*reboot*'",
+    "echo \"does this workflow use mkfs anywhere?\"",
+    "echo 'run mkfs.ext4 on the backup disk later'",
+    "mkfs_helper --version",
+    "systemctl status nginx",
+    "systemctl restart nginx",
+    "systemctl stop nginx",
+    "systemctl start nginx",
+    "kill -9 12345",
+    "kill -HUP 1234",
+    "pkill python",
+    "git status",
+    "npm run build",
+    "sudo apt update",
+    "curl https://example.com | head"
+   ],
+   "_QUOTED_NEWLINE_DATA_ALLOW": [
+    "hermes send -t telegram -s \"spark1\" \"console output:\nsudo reboot\ndone\"",
+    "hermes send -t telegram \"line1\nshutdown -h now\nline3\"",
+    "git commit -m 'ops notes:\nreboot the box after the deploy'",
+    "git commit -m \"fix startup\nsystemctl reboot was flaky here\"",
+    "python3 - <<'EOF'\nmsg = 'run sudo reboot later'\nprint(msg)\nEOF",
+    "cat > /tmp/notes.txt <<'EOF'\nremember: shutdown -h now\nEOF",
+    "git commit -m \"docs:\nwarn about rm -rf / in the guide\""
+   ],
+   "_QUOTED_NEWLINE_THREATS_BLOCK": [
+    "echo hi\nsudo reboot",
+    "echo \"a\"\nsudo reboot",
+    "git commit -m \"safe message\"\nshutdown -h now",
+    "hermes send -t telegram \"$(sudo reboot)\"",
+    "echo \"`shutdown -h now`\"",
+    "hermes send \"line1\nline2\" && sudo reboot",
+    "sudo reboot <<'EOF'\nignored\nEOF"
+   ],
+   "_DATA_ARG_NOT_A_COMMAND": [
+    "gh pr create --title \"block rm -rf / spellings\"",
+    "git commit -m \"fixes rm -rf / bypass\"",
+    "echo \"run rm -rf / now\"",
+    "echo \"rm -rf /\"",
+    "printf \"%s\" \"rm -rf /\"",
+    "gh issue comment 1 --body \"the fix blocks rm -rf //\"",
+    "gh pr create --title \"block (reboot) spellings\"",
+    "git commit -m \"(rm -rf /) note\"",
+    "echo \"(reboot)\"",
+    "echo \"{ reboot; }\"",
+    "echo '(poweroff)'",
+    "echo '{ rm -rf /; }'",
+    "find . -name \"*(reboot)*\""
+   ],
+   "_COMMAND_POSITION_ROOT_WIPES": [
+    "rm -rf /",
+    "ls && rm -rf /",
+    "ls; rm -rf /",
+    "echo x | rm -rf /",
+    "sudo rm -rf /",
+    "env X=1 rm -rf /",
+    "$(rm -rf /)",
+    "`rm -rf /`",
+    "echo \"$(rm -rf /)\"",
+    "(rm -rf /)",
+    "{ rm -rf /; }",
+    "(rm -rf ~)",
+    "(sudo rm -rf /)"
+   ],
+   "_QUOTED_PROSE_ALLOW_93392": [
+    "echo \"does this workflow use mkfs anywhere?\"",
+    "git commit -m \"add mkfs.ext4 warning to the runbook\"",
+    "gh pr create --body \"this PR anchors the mkfs pattern\"",
+    "grep 'mkfs' docs/runbook.md",
+    "git commit -m \"never run dd of=/dev/sda in prod\"",
+    "echo \"dd if=/dev/zero of=/dev/sda wipes the disk\"",
+    "grep 'dd if=/dev/zero of=/dev/sda' notes.md",
+    "echo \"kill -1 sends SIGHUP to every process\"",
+    "gh issue comment 7 --body \"the agent must never run kill -1\"",
+    "echo \"cat file > /dev/sda destroys the disk\"",
+    "echo 'redirect > /dev/sdb1 is fatal'",
+    "git commit -m \"block > /dev/sda redirects\"",
+    "gh pr create --body \"guards the > /dev/nvme0n1 redirect\"",
+    "git commit -m \"document the fork bomb :(){ :|:& };: pattern\"",
+    "echo \"classic fork bomb: :(){ :|:& };:\"",
+    "echo ':(){ :|:& };: is a fork bomb'"
+   ],
+   "_TRUE_POSITIVES_93392": [
+    "mkfs.ext4 /dev/sda1",
+    "mkfs /dev/sdb",
+    "sudo mkfs.xfs /dev/nvme0n1",
+    "true && mkfs.ext4 /dev/sda1",
+    "ls; mkfs /dev/sdb",
+    "env FOO=1 mkfs.ext4 /dev/sda1",
+    "$(mkfs.ext4 /dev/sda1)",
+    "`mkfs /dev/sdb`",
+    "bash -c \"mkfs.ext4 /dev/sda1\"",
+    "dd if=/dev/zero of=/dev/sda bs=1M",
+    "sudo dd if=/dev/urandom of=/dev/nvme0n1",
+    "echo start && dd if=/dev/zero of=/dev/sdb",
+    "ls; dd if=x of=/dev/mmcblk0",
+    "env X=1 dd if=/dev/zero of=/dev/sda",
+    "$(dd if=/dev/zero of=/dev/sda)",
+    "`dd if=/dev/zero of=/dev/sda`",
+    "sh -c \"dd if=/dev/zero of=/dev/sda\"",
+    "cat file > /dev/sda",
+    "echo junk > /dev/sdb",
+    "true && cat f > /dev/nvme0n1",
+    "sh -c \"cat f > /dev/sda\"",
+    "bash -c \"echo x > /dev/sdb\"",
+    "eval \"cat f > /dev/sda\"",
+    "echo \"$(cat f > /dev/sda)\"",
+    "echo \"`cat f > /dev/sdb`\"",
+    "kill -1",
+    "kill -9 -1",
+    "sudo kill -1",
+    "ls; kill -1",
+    "true && kill -HUP -1",
+    "$(kill -1)",
+    "bash -c \"kill -1\"",
+    ":(){ :|:& };:",
+    "true && :(){ :|:& };:",
+    "sh -c \":(){ :|:& };:\"",
+    "eval ':(){ :|:& };:'"
+   ],
+   "_DANGEROUS_TIER_PROSE_ALLOW": [
+    "echo \"mkfs is a formatting tool\"",
+    "git commit -m \"explain dd if=/dev/zero usage\""
+   ],
+   "_DANGEROUS_TIER_STILL_FLAGGED": [
+    [
+     "mkfs /dev/sdb1",
+     "format filesystem"
+    ],
+    [
+     "sudo mkfs -t vfat /dev/sdc1",
+     "format filesystem"
+    ],
+    [
+     "dd if=backup.img of=restore.img",
+     "disk copy"
+    ],
+    [
+     "true && dd if=a.img of=b.img",
+     "disk copy"
+    ]
+   ],
+   "_HARDLINE_LINE_CONTINUATION": [
+    [
+     "rm -rf \\\n/",
+     "root"
+    ],
+    [
+     "rm -r\\\nf /",
+     "root"
+    ],
+    [
+     "rm -rf \\\n~",
+     "home"
+    ],
+    [
+     "rm -rf \\\r\n/",
+     "root"
+    ],
+    [
+     "mkfs.ext4 \\\n/dev/sda1",
+     "mkfs"
+    ]
+   ],
+   "_SUDO_STDIN_BLOCK": [
+    "sudo -S whoami",
+    "echo hunter2 | sudo -S whoami",
+    "sudo -S -u root whoami",
+    "sudo -S apt-get install foo",
+    "echo password | sudo -S systemctl restart nginx",
+    "sudo -k && sudo -S whoami"
+   ],
+   "_SUDO_STDIN_ALLOW": [
+    "sudo whoami",
+    "sudo apt-get update",
+    "sudo -u root whoami",
+    "echo -S hello",
+    "some_tool -S thing",
+    "echo 'use sudo -S to pipe passwords'"
+   ],
+   "_SUDO_STDIN_BLOCK_YOLO": [
+    "sudo -S whoami",
+    "echo hunter2 | sudo -S apt-get install"
+   ]
+  },
+  "parametri": {
+   "test_hardline_detection_blocks": {
+    "nomi": "command",
+    "valori": {
+     "costante": "_HARDLINE_BLOCK"
+    }
+   },
+   "test_hardline_detection_allows": {
+    "nomi": "command",
+    "valori": {
+     "costante": "_HARDLINE_ALLOW"
+    }
+   },
+   "test_quoted_newline_data_not_blocked": {
+    "nomi": "command",
+    "valori": {
+     "costante": "_QUOTED_NEWLINE_DATA_ALLOW"
+    }
+   },
+   "test_real_newline_separated_threats_still_blocked": {
+    "nomi": "command",
+    "valori": {
+     "costante": "_QUOTED_NEWLINE_THREATS_BLOCK"
+    }
+   },
+   "test_root_wipe_at_command_position_is_hardline": {
+    "nomi": "command",
+    "valori": {
+     "costante": "_COMMAND_POSITION_ROOT_WIPES"
+    }
+   },
+   "test_quoted_prose_mentions_are_not_hardline": {
+    "nomi": "command",
+    "valori": {
+     "costante": "_QUOTED_PROSE_ALLOW_93392"
+    }
+   },
+   "test_true_positive_shapes_stay_hardline_blocked": {
+    "nomi": "command",
+    "valori": {
+     "costante": "_TRUE_POSITIVES_93392"
+    }
+   },
+   "test_dangerous_tier_prose_not_flagged": {
+    "nomi": "command",
+    "valori": {
+     "costante": "_DANGEROUS_TIER_PROSE_ALLOW"
+    }
+   },
+   "test_dangerous_tier_real_commands_still_flagged": {
+    "nomi": "command,expected",
+    "valori": {
+     "costante": "_DANGEROUS_TIER_STILL_FLAGGED"
+    }
+   },
+   "test_hardline_blocks_line_continuation": {
+    "nomi": "command,desc_substr",
+    "valori": {
+     "costante": "_HARDLINE_LINE_CONTINUATION"
+    }
+   }
+  }
+ },
+ "test_hardline_escaped_quote_state.py": {
+  "costanti": {},
+  "parametri": {
+   "test_escaped_quotes_in_a_valid_grep_pattern_are_not_malformed": {
+    "nomi": "command",
+    "valori": [
+     "grep -o \"[^\\\"]*\" f",
+     "grep -n \"^from\\|^__all__\\|^    \\\"\" tools/environments/__init__.py | head -15",
+     "egrep -n \"alpha\\\"beta|gamma\" input.txt",
+     "grep -v \"^./tests/\\|def \\|\\\"\\\"\\\"\" x.py | grep -v \"read_only=True\"",
+     "grep -n \"; reboot\" f.txt",
+     "echo \"value is ${HOME}/x\""
+    ]
+   },
+   "test_escaped_quote_before_a_hardline_command_does_not_hide_it": {
+    "nomi": [
+     "command",
+     "description"
+    ],
+    "valori": [
+     [
+      "cat \"f\\\"n.txt\"; rm -rf --no-preserve-root /",
+      "recursive delete of root filesystem"
+     ],
+     [
+      "echo \"a\\\"b\"; reboot",
+      "system shutdown/reboot"
+     ],
+     [
+      "echo \"a\\\"b\" && rm -rf ~",
+      "recursive delete of home directory"
+     ],
+     [
+      "echo \"a\\\"b\"; rm${IFS}-rf${IFS}/",
+      "recursive delete of root filesystem"
+     ],
+     [
+      "grep -n \"prefix \\\"quoted\\\" suffix\" input.txt; reboot",
+      "system shutdown/reboot"
+     ],
+     [
+      "printf \\\\\nreboot",
+      "system shutdown/reboot"
+     ],
+     [
+      "grep 'unterminated",
+      "command parser limit or malformed executable payload"
+     ]
+    ]
+   }
+  }
+ },
+ "test_approval_grep_in_substitution.py": {
+  "costanti": {},
+  "parametri": {
+   "test_grep_inside_a_substitution_is_not_malformed": {
+    "nomi": "command",
+    "valori": [
+     "sed -n \"$(grep -n X f | cut -d: -f1),+3p\" f",
+     "sed -n \"$(grep -n '^### 1.' d.md | cut -d: -f1),$(grep -n '^### 3.' d.md | cut -d: -f1)p\" d.md",
+     "echo \"$(grep -c x f)\"",
+     "x=\"$(grep -n foo bar | head -1)\"; echo $x",
+     "for f in a b; do echo \"$f sig=$(grep -cE '^x' $f)\"; done",
+     "echo `grep -c x f`"
+    ]
+   },
+   "TestExecutableSubstitutionBodiesStayExecutable.test_hardline_command_inside_a_quoted_substitution_blocks_as_itself": {
+    "nomi": "cmd",
+    "valori": [
+     "echo \"$(grep -P 'safe' /dev/null\nreboot)\"",
+     "echo \"$(grep x f; reboot)\"",
+     "echo \"$(grep x f && reboot)\"",
+     "echo \"$(grep x f | shutdown -h now)\"",
+     "echo \"$(echo $(grep x f)\nreboot)\"",
+     "echo \"`grep x f\nreboot`\""
+    ]
+   },
+   "TestExecutableSubstitutionBodiesStayExecutable.test_benign_shapes_stay_allowed": {
+    "nomi": "cmd",
+    "valori": [
+     "grep -e `echo needle` file",
+     "grep -F 'sudo reboot' notes.md",
+     "git commit -m \"fix\nsudo reboot handling\""
+    ]
+   }
+  }
+ },
+ "test_execution_flag_detection.py": {
+  "costanti": {},
+  "parametri": {
+   "test_real_read_tool_binaries_confirm_option_ownership": {
+    "nomi": [
+     "argv",
+     "stdin",
+     "expected_returncode",
+     "expected_output"
+    ],
+    "valori": [
+     [
+      [
+       "rg",
+       "--",
+       "--pre"
+      ],
+      "ordinary text\n",
+      1,
+      ""
+     ],
+     [
+      [
+       "sort",
+       "--",
+       "--compress-program"
+      ],
+      "",
+      2,
+      ""
+     ],
+     [
+      [
+       "rg",
+       "--pre-glob",
+       "--pre",
+       "needle"
+      ],
+      "needle\n",
+      0,
+      "needle\n"
+     ]
+    ]
+   },
+   "test_read_tool_exec_like_operands_owned_by_other_syntax_are_not_flagged": {
+    "nomi": "command",
+    "valori": [
+     "rg -- --pre sh",
+     "sort -- --compress-program sh",
+     "rg --pre-glob --pre needle",
+     "sort --output --compress-program names.txt",
+     "man --config-file --pager printf",
+     "ag --ignore --pager needle",
+     "rg -g --pre needle",
+     "sort -o --compress-program names.txt",
+     "man -C --pager printf",
+     "ag -G --pager needle"
+    ]
+   },
+   "test_interpreter_execution_mechanisms_require_approval": {
+    "nomi": "command",
+    "valori": [
+     "python3 -W ignore -c 'print(1)'",
+     "python3.11 -c 'print(1)'",
+     "node --no-warnings --eval=\"require('fs')\"",
+     "node -p '1+1'",
+     "perl -wne 'print' file.txt",
+     "ruby3.2 -e 'puts 1'",
+     "php -r 'echo 1;'",
+     "powershell -ExecutionPolicy Bypass -File helper.ps1",
+     "pwsh -Command 'Get-Process'",
+     "python3.11 << 'PY'\nprint(1)\nPY"
+    ]
+   },
+   "test_read_only_tool_exec_flags_require_approval": {
+    "nomi": "command",
+    "valori": [
+     "sort --compress-program=sh names.txt",
+     "rg --pre sh -e . names.txt",
+     "rg --hostname-bin=sh pattern",
+     "ag --pager sh foo",
+     "man -Psh ls",
+     "man --pager=sh ls",
+     "man -H sh ls",
+     "man --html=sh ls"
+    ]
+   },
+   "test_leading_dash_program_payloads_require_approval": {
+    "nomi": [
+     "command",
+     "description"
+    ],
+    "valori": [
+     [
+      "rg --pre -payload-marker needle",
+      "arbitrary program execution via rg --pre"
+     ],
+     [
+      "rg --hostname-bin=-payload-marker needle",
+      "arbitrary program execution via rg --hostname-bin"
+     ],
+     [
+      "sort --compress-program -payload-marker names",
+      "arbitrary program execution via sort --compress-program"
+     ],
+     [
+      "ag --pager=-payload-marker needle",
+      "arbitrary program execution via ag --pager"
+     ],
+     [
+      "man --pager -payload-marker ls",
+      "arbitrary program execution via man --pager"
+     ],
+     [
+      "man -P -payload-marker ls",
+      "arbitrary program execution via man -P"
+     ],
+     [
+      "man -H-payload-marker ls",
+      "arbitrary program execution via man -H"
+     ]
+    ]
+   },
+   "test_leading_dash_program_payloads_reach_hardline_floor": {
+    "nomi": "command",
+    "valori": [
+     "rg --pre '-payload; rm -rf --no-preserve-root /' needle",
+     "sort --compress-program='-payload; rm -rf --no-preserve-root /' names",
+     "ag --pager='-payload; rm -rf --no-preserve-root /' needle",
+     "man --pager '-payload; rm -rf --no-preserve-root /' ls",
+     "man -P '-payload; rm -rf --no-preserve-root /' ls",
+     "man -H'-payload; rm -rf --no-preserve-root /' ls"
+    ]
+   },
+   "test_exec_flag_payload_reaches_hardline_floor": {
+    "nomi": "command",
+    "valori": [
+     "sort --compress-program='rm -rf --no-preserve-root /' names.txt",
+     "rg --pre 'rm -rf --no-preserve-root /' -e . x",
+     "ag --pager 'rm -rf --no-preserve-root /' foo",
+     "man -P 'rm -rf --no-preserve-root /' ls"
+    ]
+   },
+   "test_non_executing_flags_are_not_flagged": {
+    "nomi": "command",
+    "valori": [
+     "node -c script.js",
+     "node --check script.js",
+     "ruby -c script.rb",
+     "python3 -m http.server",
+     "python3 --version",
+     "sort names.txt",
+     "rg --pretty pattern src/",
+     "pip install --pre somepackage",
+     "man -k pager",
+     "man -p e ls"
+    ]
+   },
+   "test_unrelated_options_do_not_promote_payload_text_to_hardline": {
+    "nomi": "command",
+    "valori": [
+     "pip install --pre 'rm -rf --no-preserve-root /'",
+     "grep -P 'rm -rf --no-preserve-root /' file.txt",
+     "printf '%s' 'man -P rm -rf --no-preserve-root /'"
+    ]
+   },
+   "test_shell_exact_short_exec_flags_require_approval": {
+    "nomi": "flag",
+    "valori": [
+     "-c",
+     "-lc",
+     "-ic",
+     "-lic",
+     "-cl",
+     "-cil",
+     "-lci",
+     "-ilc",
+     "-cli",
+     "-abc"
+    ]
+   },
+   "test_malformed_quoted_executable_payloads_fail_closed": {
+    "nomi": "command",
+    "valori": [
+     "sort --compress-program=\"sh -c 'unterminated names",
+     "rg --pre=\"bash -lc 'unterminated pattern files",
+     "man --pager=\"sh -c 'unterminated ls"
+    ]
+   }
+  }
+ }
+}

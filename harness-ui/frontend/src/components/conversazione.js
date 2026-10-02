@@ -950,14 +950,19 @@ export function creaApprovazione({ badge = 'Chiede di scrivere', bersaglio = '',
  * L'esito di una richiesta di approvazione: toglie i pulsanti e mette una riga sua, col tono giusto.
  * Prima l'esito veniva concatenato in coda alla frase del perché — si leggeva come parte del comando.
  */
-export function segnaEsitoApprovazione(scheda, { approvato = false, altrove = false } = {}, opzioni = {}) {
+export function segnaEsitoApprovazione(scheda, { approvato = false, altrove = false, ambito = null, motivo = null } = {}, opzioni = {}) {
   if (!scheda) return null;
   const documentObj = opzioni.document || scheda.ownerDocument || globalThis.document;
   scheda.querySelector('.talos-approval__foot')?.remove();
   scheda.querySelector('.sheet-actions')?.remove();
   const esistente = scheda.querySelector('.talos-approval__esito');
   if (esistente) esistente.remove();
-  const riga = el(documentObj, 'p', `talos-approval__esito talos-approval__esito--${approvato ? 'si' : 'no'}`, `${approvato ? 'Approvato' : 'Negato'}${altrove ? ' da un’altra finestra' : ''}`);
+  /* F4-03 (01/10/2026): il sì che vale per la cartella fino a fine sessione, e il no chiuso dal server perché nessuno poteva
+     rispondere (automazioni, passi dei Workflow) — si dicono per quello che sono, non come un «Negato» qualunque. */
+  const esito = approvato
+    ? (ambito === 'cartella' ? 'Consentito in questa cartella per la sessione' : 'Approvato')
+    : (motivo === 'nessuna-interfaccia' ? 'Negato: nessuno poteva rispondere in questa sessione automatica' : 'Negato');
+  const riga = el(documentObj, 'p', `talos-approval__esito talos-approval__esito--${approvato ? 'si' : 'no'}`, `${esito}${altrove && motivo !== 'nessuna-interfaccia' ? ' da un’altra finestra' : ''}`);
   riga.setAttribute('role', 'status');
   scheda.append(riga);
   return riga;

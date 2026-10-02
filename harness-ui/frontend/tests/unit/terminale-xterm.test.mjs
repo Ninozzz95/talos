@@ -322,3 +322,36 @@ test('P0A3-SCOLLEGA: il menu si smonta e il contextmenu non resta appeso', () =>
   banco.scollega();
   assert.equal(banco.mount.ascoltatori.get('contextmenu').length, 0);
 });
+
+/* ── PO-10 passo 2 (02/10/2026): la scheda dei comandi dell'AGENTE, in sola lettura (Hermes `use-agent-terminal.ts`) ── */
+
+test('PO10-SOLA-LETTURA: nessuna tastiera arriva a niente, il cursore non lampeggia; il resto del montaggio è lo stesso', () => {
+  const documento = documentoFinto();
+  const dati = [];
+  const pezzi = creaTerminaleXterm({ documento, contenitore: nodoFinto('div'), Terminal: TerminalFinto, FitAddon: FitFinto, id: 'agente-giro-1', suDati: (d) => dati.push(d), Osservatore: osservatoreFinto().Finto, solaLettura: true });
+  assert.equal(pezzi.term.opzioni.disableStdin, true);
+  assert.equal(pezzi.term.opzioni.cursorBlink, false);
+  assert.equal(pezzi.term.opzioni.cursorInactiveStyle, 'none');
+  assert.equal(pezzi.term.suDati, undefined, 'onData non si collega: niente parte verso nessuno');
+  assert.deepEqual(dati, []);
+  // AL CONTRARIO: una shell vera resta com'era
+  const shell = creaTerminaleXterm({ documento, contenitore: nodoFinto('div'), Terminal: TerminalFinto, FitAddon: FitFinto, id: 's', suDati: (d) => dati.push(d), Osservatore: osservatoreFinto().Finto });
+  assert.equal(shell.term.opzioni.disableStdin, undefined);
+  assert.equal(shell.term.opzioni.cursorBlink, true);
+  shell.term.suDati('ls');
+  assert.deepEqual(dati, ['ls']);
+});
+
+test('PO10-MENU-SOLA-LETTURA: Copia e Seleziona tutto; niente Incolla né Pulisci, e Ctrl+V non incolla', async () => {
+  const term = new TerminalFinto({});
+  const voci = vociMenuTerminale(term, { copia: () => {}, incolla: null }).map(([nome]) => nome);
+  assert.equal(voci.length, 2);
+  assert.doesNotMatch(voci.join(' '), /Incolla|Pulisci/u);
+  const documento = documentoFinto();
+  const pezzi = creaTerminaleXterm({ documento, contenitore: nodoFinto('div'), Terminal: TerminalFinto, FitAddon: FitFinto, id: 'agente-giro-1', Osservatore: osservatoreFinto().Finto, solaLettura: true });
+  const radice = nodoFinto('div'); radice.ownerDocument = documento;
+  collegaAppunti(pezzi.term, { documento, ospite: pezzi.mount, radiceMenu: radice, appunti: { readText: async () => 'rm -rf /', writeText: async () => {} }, solaLettura: true, finestra: { innerWidth: 1440, innerHeight: 900 } });
+  assert.equal(pezzi.term.gestoreTasti(tasto({ ctrlKey: true, key: 'v' })), true, 'il tasto torna alla xterm, che senza stdin non fa niente');
+  await new Promise((r) => setImmediate(r));
+  assert.deepEqual(pezzi.term.incollate, []);
+});

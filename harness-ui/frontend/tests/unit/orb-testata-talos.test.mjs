@@ -47,3 +47,24 @@ test('ORB-TESTATA-02 al contrario — senza `working` (storia rigiocata, giro fi
   const orb = m.children.find((c) => /talos-message__head/.test(c.className)).children[0];
   assert.match(orb.className, /^talos-orb$/, 'niente anello che gira su un messaggio già scritto');
 });
+
+/*
+ * ⛔ 02/10/2026, owner: il logo dentro l'orb «2.25 ma centrato alla perfezione, spazi omogenei interni» (scelta A). La
+ *   centratura vera si misura sui pixel dipinti (sonda sul 4174: lati 7 / 7 px); qui si fissa la FORMA che la rende
+ *   possibile, perché le due strade ovvie la rompono in silenzio: una misura in rem (scatola da 36 px che sborda dall'interno
+ *   da 34 e la griglia la allinea all'inizio: +1 px) e il marchio al 92% (33,12 px, che Chrome arrotonda di traverso).
+ */
+test('ORB-LOGO-01 — il logo occupa ESATTAMENTE l’interno dell’orb e il marchio lo riempie (niente rem, niente 92%)', async () => {
+  const { readFileSync } = await import('node:fs');
+  const css = readFileSync(new URL('../../src/styles/segnavia-mobile.css', import.meta.url), 'utf8');
+  // le regole di questo foglio stanno su una riga: «selettore{ corpo }»
+  const regole = [...css.matchAll(/(?:^|\n)([^{}\n]+?)\s*\{([^}]*)\}/g)].map((m) => [m[1].trim(), m[2]]);
+  const regola = (selettore) => {
+    const trovate = regole.filter(([s]) => s === selettore).map(([, corpo]) => corpo);
+    assert.equal(trovate.length, 1, `una sola regola per ${selettore}`);
+    return Object.fromEntries(trovate[0].split(';').map((d) => d.split(':').map((x) => x.trim())).filter(([k]) => k));
+  };
+  assert.deepEqual(regola('.talos-orb .talos-short-logo'), { position: 'absolute', inset: '0', width: 'auto', height: 'auto' });
+  assert.deepEqual(regola('.talos-orb .talos-short-logo-mark'), { width: '100%', height: '100%' });
+  assert.equal(regola('.talos-orb').position, 'relative', 'la scatola si ancora all’orb');
+});

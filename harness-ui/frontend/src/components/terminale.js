@@ -51,6 +51,11 @@ export const TESTI = Object.freeze({
   nessunaScheda: 'Nessuna scheda aperta',
   nota: "Ogni scheda dichiara chi l'ha aperta e dove.",
   apertaDaTe: 'Aperta da te',
+  /* PO-10 passo 2 (02/10/2026): le schede AGENTE, in sola lettura — il piede dice chi le ha lanciate, e che si guardano */
+  lanciataDallAgente: "Lanciata dall'agente al giro {giro}",
+  lanciataDallAgenteSenzaGiro: "Lanciata dall'agente",
+  solaLettura: 'Sola lettura: qui si guardano i comandi dell’agente.',
+  schedaAgente: 'Comandi dell’agente, in sola lettura',
 });
 
 /** Lo stato di una scheda → il pallino del mockup. */
@@ -61,6 +66,9 @@ export const PALLINO = Object.freeze({
   attesa: '',
   disconnesso: 'talos-dot--danger',
   terminato: 'talos-dot--danger',
+  /* PO-10, owner 02/10/2026: finito il giro, verde se tutti i comandi sono riusciti, rosso se almeno uno no */
+  concluso: 'talos-dot--success',
+  'con-errori': 'talos-dot--danger',
 });
 
 export const ETICHETTA_STATO = Object.freeze({
@@ -70,6 +78,8 @@ export const ETICHETTA_STATO = Object.freeze({
   attesa: 'in attesa',
   disconnesso: 'disconnessa',
   terminato: 'shell chiusa',
+  concluso: 'conclusa',
+  'con-errori': 'con errori',
 });
 
 /** Il nome umano della shell che il server dichiara (`enforcement` di `sceltaShell`). */
@@ -87,7 +97,7 @@ export function nomeShell(enforcement, comando = '') {
  */
 export function titoloScheda(voce, tutte = [voce]) {
   if (voce.titolo) return voce.titolo;
-  if (voce.origine === 'agente') return voce.giro ? `agente · giro ${voce.giro}` : 'agente';
+  if (voce.origine === 'agente') return voce.giro ? t('agente · giro {giro}', { giro: voce.giro }) : t('agente');
   const shell = nomeShell(voce.shell, voce.comando);
   const omonime = tutte.filter((v) => !v.titolo && v.origine !== 'agente' && nomeShell(v.shell, v.comando) === shell);
   const posizione = omonime.indexOf(voce);
@@ -157,8 +167,9 @@ export function creaSchedeTerminale(pane, { azioni = {}, root = document.body } 
       return false;
     },
     suDoppioClick: (voce) => avviaRinomina(voce),
+    /* ⛔ PO-10, owner 02/10/2026: una scheda agente si chiude soltanto — «agente · giro N» dice da dove vengono i comandi */
     vociMenu: (voce) => [
-      [t(TESTI.rinomina), () => avviaRinomina(voce), true],
+      ...(voce.origine === 'agente' ? [] : [[t(TESTI.rinomina), () => avviaRinomina(voce), true]]),
       [t(TESTI.chiudi), () => azioni.chiudi?.(voce.terminalId), true],
       [t(TESTI.chiudiAltre), () => azioni.chiudiAltre?.(voce.terminalId), stato.schede.length > 1],
       [t(TESTI.chiudiTutte), () => azioni.chiudiTutte?.(), stato.schede.length > 0],
@@ -171,6 +182,7 @@ export function creaSchedeTerminale(pane, { azioni = {}, root = document.body } 
   });
 
   function avviaRinomina(voce) {
+    if (voce?.origine === 'agente') return; // doppio clic e F2 passano da qui: la scheda agente non si rinomina
     inRinomina = voce.terminalId;
     renderizza();
     const input = tabs.querySelector('.talos-terminal__rinomina');
@@ -190,6 +202,15 @@ export function creaSchedeTerminale(pane, { azioni = {}, root = document.body } 
     const dot = document.createElement('span');
     dot.className = `talos-dot ${PALLINO[voce.stato] ?? ''}`.trim();
     b.append(dot);
+    /* PO-10: la scheda agente si riconosce prima di leggerne il titolo — l'icona dello sprite, come Hermes distingue le
+       sue (`right-sidebar/terminal/rail.tsx:144-145`, icona «agent» sulle schede `kind === 'agent'`) */
+    if (voce.origine === 'agente') {
+      b.dataset.origine = 'agente';
+      b.append(svgIcona('i-robot', 'i i--sm talos-terminal__tab-icona'));
+      b.setAttribute('aria-description', t(TESTI.schedaAgente));
+    } else {
+      delete b.dataset.origine;
+    }
     if (inRinomina === voce.terminalId) {
       const input = document.createElement('input');
       input.className = 'talos-input talos-terminal__rinomina';

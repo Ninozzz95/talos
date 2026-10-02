@@ -58,6 +58,12 @@ export function captureProcessOutput(child, {onBytes, onText, metadata = {schema
     try {validatori[stream].decode(bytes, bytes ? {stream: true} : undefined);} catch {utf8Valido[stream] = false;}
   };
   let deliveredBytes = 0, errorCode, serial = Promise.resolve();
+  /* F007-B (owner 02/10/2026, «come Hermes»): il processo è uscito ma un processo che ha lanciato in background tiene i tubi.
+     `stacca()` smette di RACCOGLIERE — ciò che è arrivato resta, `settled` si conclude «delivered» — e lascia i tubi aperti e
+     letti a vuoto, così il processo in background non riceve un errore di scrittura e continua a vivere. */
+  let staccata = false;
+  const stacchi = [];
+  const stacca = () => {if (staccata) return; staccata = true; for (const s of stacchi) s();};
   const fail = error => {
     if (errorCode) return;
     const code = error?.code;
@@ -97,15 +103,20 @@ export function captureProcessOutput(child, {onBytes, onText, metadata = {schema
     sink.on('error', error => {fail(error); resolve();});
     if (!source) {sink.end(); return;}
     const incomplete = error => {
-      fail(error ?? {code: 'OUTPUT_PIPE_CLOSED'});
+      if (!staccata) fail(error ?? {code: 'OUTPUT_PIPE_CLOSED'});
       source.unpipe(sink);
-      sink.end();
+      if (!sink.writableEnded) sink.end();
     };
     source.once('error', incomplete);
     source.once('close', () => {if (!source.readableEnded) incomplete();});
     source.pipe(sink);
+    stacchi.push(() => {
+      source.unpipe(sink);
+      if (!sink.writableEnded) sink.end();
+      source.on('data', () => {}); // letto a vuoto: chi scrive dall'altra parte non riceve un errore
+    });
   }));
-  return {settled: Promise.all(pumps).then(() => ({
+  return {stacca, settled: Promise.all(pumps).then(() => ({
     stdout: stdout.snapshot(), stderr: stderr.snapshot(), combined: combined.snapshot(),
     metadata: {
       captureMetadata,

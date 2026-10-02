@@ -1,0 +1,47 @@
+/*
+ * 01/10/2026 — l'aggiornamento automatico a schermo (`components/aggiornamenti.js`). Solo nell'app desktop.
+ * La banda è una BUONA notizia, non un avviso: tono accento (come `talos-badge--accent`), non quello di warning.
+ * Altezza fissa su una riga, così i pannelli che misurano la finestra (`--talos-workspace-bar-h`, `.talos-detail` in
+ * index.css) la tolgono con un numero esatto e niente esce dallo schermo.
+ */
+:root { --talos-banda-aggiornamento-h: 40px; }
+
+.talos-banda-aggiornamento {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: var(--talos-space-sm, 8px);
+  height: var(--talos-banda-aggiornamento-h);
+  padding-inline: var(--talos-space-md, 12px) var(--talos-space-sm, 8px);
+  background: var(--talos-accent-soft);
+  border-bottom: 1px solid var(--talos-accent-border);
+  color: var(--talos-text);
+}
+.talos-banda-aggiornamento[hidden] { display: none; }
+
+.talos-banda-aggiornamento__testo {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  font-size: .8125rem;
+  line-height: 1.4;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.talos-banda-aggiornamento .talos-button { flex: none; }
+.talos-banda-aggiornamento__chiudi { width: 28px; min-width: 28px; height: 28px; min-height: 28px; }
+
+/* I pannelli che misurano l'altezza della finestra tolgono anche la banda, quando c'è. */
+:root[data-talos-banda-aggiornamento] {
+  --talos-workspace-bar-h: calc(env(titlebar-area-height, 33px) + 1px + var(--talos-banda-aggiornamento-h));
+}
+:root:not([data-talos-finestra="app"])[data-talos-banda-aggiornamento] {
+  --talos-workspace-bar-h: var(--talos-banda-aggiornamento-h);
+}
+
+/* La scheda: i due pulsanti stanno in fila a destra della riga di stato (al più uno dei due è visibile alla volta). */
+.talos-aggiornamenti [data-aggiornamenti-azioni] { display: flex; gap: var(--talos-space-sm, 8px); flex: none; }
+.talos-aggiornamenti [data-aggiornamenti-azioni] [hidden] { display: none; }
+.talos-aggiornamenti .talos-setting[hidden] { display: none; }

@@ -41,7 +41,20 @@ const CHIAVE_SEZIONE = 'talos.harness.desktop.settings.section.v1';
 const FOTO = resolve(process.cwd(), 'artifacts', 'provider-unica-superficie-2026-09-23');
 
 /** Apre l'app coi fornitori finti. `sezioneSalvata` simula chi aveva lasciato aperta una sezione. */
-async function avvia(page, { sezioneSalvata = null, colorMode = 'dark' } = {}) {
+/*
+ * ⛔ 01/10/2026 — lo stato del primo avvio, copiato dalla risposta VERA della rotta (`GET /api/v1/setup/stato` di
+ *   `src/http-app.mjs` con `statoPrimoAvvio` e un archivio vuoto, generata il 01/10): prima la Home lo leggeva dal server
+ *   su cui girava la prova, e da oggi decide se la banda «Imposta un provider» c'è e se «Provider e accessi» si vede.
+ */
+const statoSetup = (provider) => ({ ok: true, data: { introDisattivato: false, provider: { pronto: false, conChiave: [], conIndirizzo: [], agenteEsterno: false,
+  localeConfigurato: false, ...provider }, cartelleProgetto: 0 }, meta: { schema: 'talos.harness-ui.api.v1', generatedAt: '2026-10-01T17:00:07.911Z' } });
+const PRONTO = { pronto: true, conChiave: ['openrouter'] };
+const NON_PRONTO = { pronto: false };
+const rispondiSetup = (provider) => (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(statoSetup(provider)) });
+
+/** Apre l'app coi fornitori finti. `sezioneSalvata` simula chi aveva lasciato aperta una sezione; `setup` è lo stato del
+    primo avvio (un oggetto `provider`, o un gestore di rotta per le prove sul caricamento). */
+async function avvia(page, { sezioneSalvata = null, colorMode = 'dark', setup = PRONTO } = {}) {
   const tentate = [];
   /* PRIMA il blocco, POI le eccezioni: Playwright prova i gestori in ordine inverso. */
   await page.route('**/*', (route) => {
@@ -55,6 +68,7 @@ async function avvia(page, { sezioneSalvata = null, colorMode = 'dark' } = {}) {
     contentType: 'application/json',
     body: JSON.stringify({ ok: true, data: { items: FORNITORI }, meta: { schema: 'talos.harness-ui.api.v1' } }),
   }));
+  await page.route('**/api/v1/setup/stato', typeof setup === 'function' ? setup : rispondiSetup(setup));
   await page.addInitScript(([chiave, sezione, modo]) => {
     /* Solo al PRIMO caricamento: un `addInitScript` rigira a ogni navigazione, e riscriverebbe la
        chiave che l'app ha appena migrato — la prova misurerebbe sé stessa. */
@@ -163,6 +177,115 @@ test('VELO-FORNITORI-B2 — «Provider e accessi» della Home (openProviders) po
   await bottone.click();
   await atterraSuProvider(page, 'azione della Home');
   expect(tentate).toEqual([]);
+});
+
+/*
+ * ============================================================================
+ * L'AVVISO «IMPOSTA UN PROVIDER» DELLA HOME — owner, 01/10/2026
+ * ============================================================================
+ * «nella home al primo avvio fresco se nessun provider è stato impostato … un tasto coerente con il resto dei tasti con
+ * scritto imposta un provider e ti piazza direttamente in laboratorio modelli tab provider». Decisioni dell'owner: banda
+ * sotto le quattro azioni; «Provider e accessi» nascosto finché la banda c'è; si spegne SOLO quando il provider c'è, mai
+ * accesa durante il caricamento. Come Cline (`welcome-setup-notice.tsx`, acceso solo a provider letti e nessuno collegato)
+ * e Zed (`thread_view.rs:11367-11412`, il pulsante apre le impostazioni esattamente sui provider).
+ */
+const bandaProvider = (page) => page.locator('#schermoHome .workspace-notice--provider');
+const FOTO_AVVISO = resolve(process.cwd(), 'artifacts', 'avviso-provider-home-2026-10-01');
+
+test('HOME-PROVIDER-01 — senza provider la Home mostra la banda, e «Imposta un provider» porta al Laboratorio modelli → Provider', async ({ page }) => {
+  const tentate = await avvia(page, { setup: NON_PRONTO });
+  const banda = bandaProvider(page);
+  await expect(banda).toBeVisible();
+  await expect(banda).toHaveAttribute('role', 'status');
+  await expect(banda).toContainText('Nessun provider impostato. Collega un provider per usare l’agente.');
+  /* La banda sta SOTTO le quattro azioni e SOPRA le colonne, come deciso. */
+  const ordine = await page.evaluate(() => {
+    const figli = [...document.querySelectorAll('#schermoHome > *')].map((n) => n.className);
+    return { azioni: figli.findIndex((c) => /workspace-home__actions/.test(c)), banda: figli.findIndex((c) => /workspace-notice--provider/.test(c)),
+      colonne: figli.findIndex((c) => /workspace-home__columns/.test(c)) };
+  });
+  expect(ordine.azioni).toBeGreaterThanOrEqual(0);
+  expect(ordine.banda).toBe(ordine.azioni + 1);
+  expect(ordine.colonne).toBe(ordine.banda + 1);
+  /* Una porta sola verso lo stesso posto: «Provider e accessi» non c'è finché c'è la banda. */
+  await expect(page.locator('#schermoHome').getByRole('button', { name: 'Provider e accessi', exact: true })).toHaveCount(0);
+  const imposta = banda.getByRole('button', { name: 'Imposta un provider', exact: true });
+  await expect(imposta).toHaveCount(1);
+  await expect(imposta).toHaveClass(/talos-button/);
+  await imposta.click();
+  await atterraSuProvider(page, '«Imposta un provider» della Home');
+  expect(tentate).toEqual([]);
+});
+
+test('HOME-PROVIDER-02 — AL CONTRARIO: con un provider pronto niente banda, e «Provider e accessi» torna nella scheda', async ({ page }) => {
+  const tentate = await avvia(page, { setup: PRONTO });
+  await expect(page.locator('#schermoHome').getByRole('button', { name: 'Provider e accessi', exact: true })).toBeVisible();
+  await expect(bandaProvider(page)).toHaveCount(0);
+  await expect(page.locator('#schermoHome').getByRole('button', { name: 'Imposta un provider', exact: true })).toHaveCount(0);
+  expect(tentate).toEqual([]);
+});
+
+test('HOME-PROVIDER-03 — mai accesa mentre lo stato si legge, né dopo una lettura fallita', async ({ page }) => {
+  let chieste = 0;
+  let rilascia;
+  const cancello = new Promise((r) => { rilascia = r; });
+  const tentate = await avvia(page, { setup: async (route) => { chieste += 1; await cancello; await rispondiSetup(NON_PRONTO)(route); } });
+  await expect.poll(() => chieste).toBeGreaterThan(0);
+  await expect(page.locator('#schermoHome .workspace-home__actions')).toBeVisible();
+  await page.waitForTimeout(300);
+  await expect(bandaProvider(page), 'la banda non si accende prima che lo stato arrivi').toHaveCount(0);
+  rilascia();
+  await expect(bandaProvider(page)).toBeVisible();
+
+  const fallita = await page.context().newPage();
+  const tentateFallita = await avvia(fallita, { setup: (route) => route.fulfill({ status: 500, contentType: 'application/json',
+    body: JSON.stringify({ ok: false, error: { code: 'REPORT_UNAVAILABLE', message: 'Stato del primo avvio non configurato' } }) }) });
+  await expect(fallita.locator('#schermoHome').getByRole('button', { name: 'Provider e accessi', exact: true })).toBeVisible();
+  await expect(bandaProvider(fallita), 'una lettura fallita non dice «non pronto»').toHaveCount(0);
+  await fallita.close();
+  expect(tentate).toEqual([]);
+  expect(tentateFallita).toEqual([]);
+});
+
+test('HOME-PROVIDER-04 — tornando dal Laboratorio col provider impostato la banda non riappare, nemmeno per un attimo', async ({ page }) => {
+  let pronto = false;
+  let rilascia = () => {};
+  let cancello = Promise.resolve();
+  const tentate = await avvia(page, { setup: async (route) => { await cancello; await rispondiSetup(pronto ? PRONTO : NON_PRONTO)(route); } });
+  await expect(bandaProvider(page)).toBeVisible();
+  await bandaProvider(page).getByRole('button', { name: 'Imposta un provider', exact: true }).click();
+  await atterraSuProvider(page, 'andata');
+  /* Il provider ora c'è; la prossima lettura arriva solo quando la si rilascia. */
+  pronto = true;
+  cancello = new Promise((r) => { rilascia = r; });
+  await page.locator('.talos-sidebar [data-vaia="home"]').click();
+  await expect(page.locator('#schermoHome .workspace-home__actions')).toBeVisible();
+  await page.waitForTimeout(300);
+  await expect(bandaProvider(page), 'la lettura VECCHIA non deve riaccendere la banda').toHaveCount(0);
+  rilascia();
+  await expect(page.locator('#schermoHome').getByRole('button', { name: 'Provider e accessi', exact: true })).toBeVisible();
+  await expect(bandaProvider(page)).toHaveCount(0);
+  expect(tentate).toEqual([]);
+});
+
+test('HOME-PROVIDER-FOTO — la Home con la banda, nei due temi, a 1920×1080', async ({ page }) => {
+  test.setTimeout(120_000);
+  for (const modo of ['dark', 'light']) {
+    const nuova = await page.context().newPage();
+    await nuova.setViewportSize({ width: 1920, height: 1080 });
+    const tentate = await avvia(nuova, { colorMode: modo, setup: NON_PRONTO });
+    await expect(bandaProvider(nuova)).toBeVisible();
+    await nuova.waitForTimeout(400);
+    await mkdir(FOTO_AVVISO, { recursive: true });
+    await nuova.screenshot({ path: resolve(FOTO_AVVISO, `home-senza-provider-${modo}-1920x1080.png`), fullPage: false, animations: 'disabled', caret: 'hide' });
+    /* E dove porta: la scheda «Provider» del Laboratorio, in vista, senza scorrere a mano. */
+    await bandaProvider(nuova).getByRole('button', { name: 'Imposta un provider', exact: true }).click();
+    await atterraSuProvider(nuova, `foto atterraggio ${modo}`);
+    await nuova.waitForTimeout(1400);
+    await nuova.screenshot({ path: resolve(FOTO_AVVISO, `laboratorio-provider-${modo}-1920x1080.png`), fullPage: false, animations: 'disabled', caret: 'hide' });
+    expect(tentate).toEqual([]);
+    await nuova.close();
+  }
 });
 
 test('VELO-FORNITORI-B3 — «Collega un modello» sulla chiave mancante porta al Laboratorio modelli → Provider', async ({ page }) => {

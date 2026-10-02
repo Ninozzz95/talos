@@ -92,9 +92,10 @@ test('RIPRESA-GRAFO-FILTRI — ricerca lista conservata al refresh, filtri grafo
   await expect(ricerca).toHaveValue('registro');
   await page.locator('#railAgenti').getByRole('button', { name: 'Apri visuale diagramma' }).click();
   const grafo = page.locator('[data-c="GrafoAgenti"]');
+  await grafo.getByRole('button', { name: 'Cerca nel diagramma' }).click();
   await grafo.getByRole('searchbox', { name: 'Cerca agente nel diagramma' }).fill('controlla');
   await expect(grafo.locator('[data-nodo-id]')).toHaveCount(1);
-  await grafo.getByRole('button', { name: 'Azzera filtri' }).click();
+  await grafo.getByRole('button', { name: 'Altri comandi del diagramma' }).click(); await grafo.getByRole('menuitem', { name: 'Azzera filtri', exact: true }).click();
   await expect(grafo.locator('[data-nodo-id]')).toHaveCount(3);
   await grafo.getByRole('button', { name: 'Aumenta zoom' }).focus();
   await page.keyboard.press('Enter');
@@ -105,12 +106,17 @@ test('RIPRESA-GRAFO-ERRORE — una rilettura fallita conserva nodi e filtro, poi
   await scena(page);
   await page.locator('#railAgenti').getByRole('button', { name: 'Apri visuale diagramma' }).click();
   const grafo = page.locator('[data-c="GrafoAgenti"]');
+  // la rilettura automatica ogni 5 s (`app.js`, grafoTimer) salta a scheda nascosta: così il rosso e il recupero li porta SOLO «Aggiorna»
+  await page.evaluate(() => Object.defineProperty(document, 'hidden', { configurable: true, get: () => true }));
+  // e lo stream degli eventi, che nella scena si chiude e si riapre ogni ~3 s rileggendo le deleghe a ogni `onopen`, aspetta 10 minuti (campo SSE `retry`)
+  await page.route('**/api/v1/sessions/po30d-*/events*', (r) => r.fulfill({ contentType: 'text/event-stream', body: 'retry: 600000\n\n' }));
+  await page.waitForTimeout(3500);
   await page.route('**/api/v1/sessions/po30d-uno/children', r => r.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ ok: false, error: { message: 'Banco temporaneamente offline' } }) }));
-  await grafo.getByRole('button', { name: 'Aggiorna', exact: true }).click();
+  await grafo.getByRole('button', { name: 'Altri comandi del diagramma' }).click(); await grafo.getByRole('menuitem', { name: 'Aggiorna', exact: true }).click();
   await expect(grafo.locator('.talos-grafo__stato')).toContainText('Dati non aggiornati');
   await expect(grafo.locator('[data-nodo-id]')).toHaveCount(3);
   await page.route('**/api/v1/sessions/po30d-uno/children', r => r.fulfill({ json: { ok: true, data: { figli: FIGLIE.map(a => ({ ...a, conclusa: true })) } } }));
-  await grafo.getByRole('button', { name: 'Aggiorna', exact: true }).click();
+  await grafo.getByRole('button', { name: 'Altri comandi del diagramma' }).click(); await grafo.getByRole('menuitem', { name: 'Aggiorna', exact: true }).click();
   await expect(grafo.locator('.talos-grafo__stato')).not.toContainText('Dati non aggiornati');
   await expect(grafo.locator('[data-nodo-id="po30d-figlia-a"]')).toHaveAttribute('data-stato', 'done');
 });
@@ -119,6 +125,7 @@ test('RIPRESA-GRAFO-NAVIGAZIONE — ricarica ricorda la ricerca, un’altra sess
   await scena(page);
   await page.locator('#railAgenti').getByRole('button', { name: 'Apri visuale diagramma' }).click();
   const grafo = page.locator('[data-c="GrafoAgenti"]');
+  await grafo.getByRole('button', { name: 'Cerca nel diagramma' }).click();
   await grafo.getByRole('searchbox').fill('controlla');
   // Nuovo documento con lo stesso setup HTTP e la stessa sessione, senza ricreare il browser context.
   await scena(page);
@@ -240,7 +247,9 @@ test('RIPRESA-GRAFO-MOVIMENTO — tracking reale, pixel animati, identità e mov
   await a.evaluate(n=>{window.__nodoPrima=n;});
   const arco=g.locator('[data-attivo="true"]').first();
   await expect(arco).toBeVisible();
-  await expect(g.locator('[data-arco="delega"][data-attivo="true"]').first()).toHaveCSS('stroke-dasharray', 'none');
+  // come il fronte del Workflow: tratteggio che scorre (`grafo-tela.css`, `.gv-arco[data-tipo="fronte"]`)
+  await expect(g.locator('[data-arco="delega"][data-attivo="true"]').first()).toHaveCSS('stroke-dasharray', '7px, 5px');
+  await expect(arco).toHaveCSS('animation-name', 'gv-scorre');
   await expect.poll(()=>arco.evaluate(n=>n.getAnimations().filter(a=>a.playState==='running').length)).toBe(1);
   // Stessa area dipinta, durante due fasi reali dell'animazione.
   const box=await arco.boundingBox(); const clip={x:Math.max(0,box.x-3),y:Math.max(0,box.y-3),width:Math.max(8,box.width+6),height:Math.max(8,box.height+6)};
@@ -250,11 +259,11 @@ test('RIPRESA-GRAFO-MOVIMENTO — tracking reale, pixel animati, identità e mov
   let diff=0;for(let i=0;i<prima.data.length;i+=4)if(prima.data[i]!==dopo.data[i]||prima.data[i+1]!==dopo.data[i+1]||prima.data[i+2]!==dopo.data[i+2])diff++;
   expect(diff).toBeGreaterThan(3);
   await g.getByRole('button',{name:'Aumenta zoom'}).click(); const zoom=await g.locator('[data-zoom]').textContent();
-  await g.getByRole('button',{name:'Aggiorna',exact:true}).click();
+  await g.getByRole('button',{name:'Altri comandi del diagramma'}).click();await g.getByRole('menuitem',{name:'Aggiorna',exact:true}).click();
   await expect.poll(()=>a.evaluate(n=>n===window.__nodoPrima)).toBe(true);
   await expect(g.locator('[data-zoom]')).toHaveText(zoom);
   await page.emulateMedia({reducedMotion:'reduce'});
-  await expect(arco).toHaveCSS('animation-name','none');
+  await expect(arco).toHaveCSS('animation-name','gv-scorre');await expect(arco).toHaveCSS('animation-duration','6s');
   await expect(a).toHaveCSS('transition-duration','0s');
   await g.locator('summary').click(); await expect(g.locator('.talos-grafo__eventi button').first()).toBeVisible();
 });
@@ -279,7 +288,8 @@ test('RIPRESA-AGENTI-CONFINI — nipote conserva padre e un evento estraneo non 
  await expect(page.locator('#railAgenti [data-c="AgentRow"]')).toHaveCount(3);
  await manda({version:1,sessionId:'estranea',parentId:'po30d-uno',childId:'intruso',reason:'created',agent:{...agent,sessionId:'intruso',padreId:'po30d-uno'}});
  await expect(page.locator('[data-nodo-id="intruso"]')).toHaveCount(0);
- await page.locator('[data-nodo-id="po30d-figlia-a"]').getByRole('button',{name:/Espandi o collassa/}).click();
+ // da tastiera: a 1440×900 con le due colonne aperte la minimappa copre questo pulsante (misurato il 02/10)
+ const collassa=page.locator('[data-nodo-id="po30d-figlia-a"]').getByRole('button',{name:/Espandi o collassa/});await collassa.focus();await collassa.press('Enter');
  await expect(page.locator('[data-nodo-id="po30d-nipote"]')).toHaveCount(0);
 });
 
@@ -315,14 +325,18 @@ test('RIPRESA-GRAFO-INDICATORI — stato visibile, animato e accessibile nei nod
  await scena(page);await page.locator('#railAgenti').getByRole('button',{name:'Apri visuale diagramma'}).click();
  const nodo=page.locator('[data-nodo-id="po30d-figlia-a"]'),pallino=nodo.locator('.talos-grafo__pallino');
  await expect(pallino).toBeVisible();await expect(nodo.locator('.talos-grafo__badge-stato')).toHaveText('In corso');
- expect(await pallino.evaluate(n=>getComputedStyle(n).animationName)).not.toBe('none');
+ // chi lavora ha il bordo che gira, come il passo «running» del Workflow; col movimento ridotto rallenta, non si ferma
+ expect(await nodo.evaluate(n=>getComputedStyle(n,'::before').animationName)).toBe('gv-gira');
+ await page.emulateMedia({reducedMotion:'reduce'});expect(await nodo.evaluate(n=>getComputedStyle(n,'::before').animationDuration)).toBe('7s');
+ await page.emulateMedia({reducedMotion:'no-preference'});
  const colori=[await pallino.evaluate(n=>getComputedStyle(n).backgroundColor)];
  for(const [ultimoEsito,testo,stato] of [['ok','Concluso','done'],['errore','Errore','error']]){
   await page.evaluate(({agent,ultimoEsito})=>{const r=window.__talosHarnessUiRuntime;r.handleRealEvent({type:'CUSTOM',name:'talos.agenti',value:{version:1,sessionId:'po30d-uno',parentId:'po30d-uno',childId:agent.sessionId,reason:'updated',agent:{...agent,padreId:'po30d-uno',conclusa:true,ultimoEsito}}},r.realSessionState.generation)},{agent:FIGLIE[0],ultimoEsito});
   await expect(nodo).toHaveAttribute('data-stato',stato);await expect(nodo.locator('.talos-grafo__badge-stato')).toHaveText(testo);colori.push(await pallino.evaluate(n=>getComputedStyle(n).backgroundColor));
  }
  expect(new Set(colori).size).toBe(3);
- await page.emulateMedia({reducedMotion:'reduce'});expect(await pallino.evaluate(n=>getComputedStyle(n).animationName)).toBe('none');
+ // al contrario: un agente fermo (qui in errore) non gira
+ expect(await nodo.evaluate(n=>getComputedStyle(n,'::before').animationName)).toBe('none');
 });
 
 test('RIPRESA-GRAFO-MOCKUP — minimappa, file affiancato e cronologia osservata reali',async({page})=>{
@@ -330,16 +344,19 @@ test('RIPRESA-GRAFO-MOCKUP — minimappa, file affiancato e cronologia osservata
  await page.route('**/api/v1/sessions/po30d-uno/agent-timeline*',r=>{const after=Number(new URL(r.request().url()).searchParams.get('after')||0);return r.fulfill({json:{ok:true,data:{schema:'talos.agent-timeline.v1',rootId:'po30d-uno',through:2,next:null,coverage:'complete',persisted:true,items:records.filter(e=>e.seq>after)}}});});
  await scena(page);await page.route('**/api/v1/sessions/po30d-figlia-a/tree/file?*',r=>r.fulfill({json:{ok:true,data:{contenuto:'export const verifica = 42;'}}}));
  await page.locator('#railAgenti').getByRole('button',{name:'Apri visuale diagramma'}).click();
- const g=page.locator('[data-c="GrafoAgenti"]');await expect(g.getByRole('button',{name:'Panoramica del diagramma'})).toBeVisible();
+ const g=page.locator('[data-c="GrafoAgenti"]');
+ // la minimappa c'è solo quando serve: con tutto il grafo in vista no, appena una parte esce sì (decisione owner 02/10)
+ await g.getByRole('button',{name:'Adatta il diagramma alla finestra'}).click();await expect(g.getByRole('button',{name:'Panoramica del diagramma'})).toHaveCount(0);
+ const piu=g.getByRole('button',{name:'Aumenta zoom'});await piu.click();await piu.click();await expect(g.getByRole('button',{name:'Panoramica del diagramma'})).toBeVisible();
  expect(await g.locator('.talos-grafo__mini [data-mini-nodo]').count()).toBe(3);
  await g.getByRole('button',{name:'Apri dettaglio leggi il registro e correggi la guardia',exact:true}).click();
- await g.getByRole('button',{name:'Affianca file',exact:true}).click();await expect(g.locator('.talos-grafo__anteprima pre')).toHaveText('export const verifica = 42;');
+ await g.getByRole('button', { name: 'Altri comandi del diagramma' }).click(); await g.getByRole('menuitem', { name: 'Affianca file', exact: true }).click();await expect(g.locator('.talos-grafo__anteprima pre')).toHaveText('export const verifica = 42;');
  await g.getByRole('button',{name:'Chiudi affiancamento'}).click();
  await page.evaluate(agent=>{const r=window.__talosHarnessUiRuntime;r.handleRealEvent({type:'CUSTOM',name:'talos.agenti',value:{version:1,sessionId:'po30d-uno',parentId:'po30d-uno',childId:agent.sessionId,reason:'completed',agent:{...agent,padreId:'po30d-uno',conclusa:true,ultimoEsito:'ok'}}},r.realSessionState.generation)},FIGLIE[0]);
  await expect(g.locator('[data-nodo-id="po30d-figlia-a"]')).toHaveAttribute('data-stato','done');
  const cursore=g.getByRole('slider',{name:'Cronologia osservata del diagramma'});await expect(cursore).toHaveAttribute('max','1');await cursore.fill('1');
  await expect(g.locator('[data-nodo-id="po30d-figlia-a"]')).toHaveAttribute('data-stato','active');await expect(g).toHaveAttribute('data-replay','true');
- await g.getByRole('button',{name:'Torna in diretta',exact:true}).click();await expect(g.locator('[data-nodo-id="po30d-figlia-a"]')).toHaveAttribute('data-stato','done');
+ await g.getByRole('button',{name:'Torna al vivo',exact:true}).click();await expect(g.locator('[data-nodo-id="po30d-figlia-a"]')).toHaveAttribute('data-stato','done');
 });
 
 test('RIPRESA-GRAFO-MADRE-ERRORE — errore e stop del padre non diventano successo',async({page})=>{
@@ -449,7 +466,7 @@ for (const larghezza of [1024, 1440]) for (const tema of ['dark', 'light']) {
   await dettaglio(page).getByRole('button',{name:'Tutti gli agenti',exact:true}).click();
   await rail.getByRole('button',{name:'Apri visuale diagramma'}).click();
   await page.route('**/api/v1/sessions/po30d-padre-0/children',r=>r.fulfill({status:503,json:{ok:false,error:{message:'Lettura nipote temporaneamente offline'}}}));
-  await grafo.getByRole('button',{name:'Aggiorna',exact:true}).click();await expect(grafo.locator('.talos-grafo__stato')).toContainText('Dati non aggiornati');
+  await grafo.getByRole('button',{name:'Altri comandi del diagramma'}).click();await grafo.getByRole('menuitem',{name:'Aggiorna',exact:true}).click();await expect(grafo.locator('.talos-grafo__stato')).toContainText('Dati non aggiornati');
   await page.evaluate(agent=>{const r=window.__talosHarnessUiRuntime;r.handleRealEvent({type:'CUSTOM',name:'talos.agenti',value:{version:1,sessionId:'po30d-uno',parentId:agent.padreId,childId:agent.sessionId,reason:'updated',agent}},r.realSessionState.generation)},figli[1]);
   await expect(grafo.locator('.talos-grafo__stato')).toContainText('Dati non aggiornati');
   const nodoNipote=grafo.getByRole('button',{name:'Apri dettaglio Verifica 0',exact:true});await nodoNipote.focus();await page.keyboard.press('Enter');
@@ -465,10 +482,10 @@ test('RIPRESA-GRAFO-DENSITA — quattordici nodi leggibili, panoramica e ritorno
  await scena(page,{figlie:figli});await page.locator('#railAgenti').getByRole('button',{name:'Apri visuale diagramma'}).click();
  const g=page.locator('[data-c="GrafoAgenti"]');await expect(g.locator('[data-nodo-id]')).toHaveCount(14);
  const zoom=()=>g.locator('[data-zoom]').innerText().then(s=>parseInt(s));expect(await zoom()).toBeGreaterThanOrEqual(80);
- await g.getByRole('button',{name:'Adatta',exact:true}).click();expect(await zoom()).toBeLessThan(80);
- await g.getByRole('button',{name:'Lettura',exact:true}).click();expect(await zoom()).toBeGreaterThanOrEqual(80);
+ await g.getByRole('button',{name:'Adatta il diagramma alla finestra',exact:true}).click();expect(await zoom()).toBeLessThan(80);
+ await g.getByRole('button',{name:'Zoom di lettura',exact:true}).click();expect(await zoom()).toBeGreaterThanOrEqual(80);
  const nodo=g.locator('[data-nodo-id="po30d-denso-12"]');await nodo.getByRole('button',{name:'Apri dettaglio Agente 12',exact:true}).focus();
- expect(await nodo.evaluate(n=>{const r=n.getBoundingClientRect(),c=n.closest('.talos-grafo__canvas').getBoundingClientRect();return r.left>=c.left&&r.right<=c.right&&r.top>=c.top&&r.bottom<=c.bottom})).toBe(true);
+ await expect.poll(()=>nodo.evaluate(n=>{const r=n.getBoundingClientRect(),c=n.closest('.talos-grafo__canvas').getBoundingClientRect();return r.left>=c.left&&r.right<=c.right&&r.top>=c.top&&r.bottom<=c.bottom})).toBe(true);
  await page.setViewportSize({width:1024,height:800});
  await expect.poll(()=>nodo.evaluate(n=>{const r=n.getBoundingClientRect(),c=n.closest('.talos-grafo__canvas').getBoundingClientRect();return r.left>=c.left&&r.right<=c.right&&r.top>=c.top&&r.bottom<=c.bottom})).toBe(true);
  await page.keyboard.press('Enter');await expect(dettaglio(page).locator('.talos-agente__nome')).toHaveText('Agente 12');
@@ -490,8 +507,8 @@ test('RIPRESA-AGENTI-LETTURA-LENTA — refresh sovrapposti non invalidano lo sna
  await page.route('**/api/v1/sessions/po30d-uno/children',async r=>{richieste++;await gate;await r.fulfill({json:{ok:true,data:{figli:FIGLIE.map(a=>({...a,conclusa:true}))}}})});
  const g=page.locator('[data-c="GrafoAgenti"]');
  try {
-  await g.getByRole('button',{name:'Aggiorna',exact:true}).click();await expect.poll(()=>richieste).toBe(1);
-  await g.getByRole('button',{name:'Aggiorna',exact:true}).click();await g.getByRole('button',{name:'Aggiorna',exact:true}).click();
+  await g.getByRole('button',{name:'Altri comandi del diagramma'}).click();await g.getByRole('menuitem',{name:'Aggiorna',exact:true}).click();await expect.poll(()=>richieste).toBe(1);
+  await g.getByRole('button',{name:'Altri comandi del diagramma'}).click();await g.getByRole('menuitem',{name:'Aggiorna',exact:true}).click();await g.getByRole('button',{name:'Altri comandi del diagramma'}).click();await g.getByRole('menuitem',{name:'Aggiorna',exact:true}).click();
   await page.waitForTimeout(5300);expect(richieste).toBe(1);release();
   await expect(g.locator('[data-nodo-id="po30d-figlia-a"]')).toHaveAttribute('data-stato','done');
  } finally {release();}
@@ -512,6 +529,50 @@ test('RIPRESA-AGENTI-ANNUNCI — refresh invariato non riannuncia il conteggio',
 test('RIPRESA-GRAFO-SNAPSHOT-INIZIALE — nessun passo fantasma prima di cambi reali',async({page})=>{
  await scena(page);await page.locator('#railAgenti').getByRole('button',{name:'Apri visuale diagramma'}).click();
  const g=page.locator('[data-c="GrafoAgenti"]');await expect(g.locator('.talos-grafo__timeline input')).toBeDisabled();
- const mini=g.getByRole('button',{name:'Panoramica del diagramma'});await mini.focus();const prima=await g.locator('[data-zoom]').innerText();
+ const piu=g.getByRole('button',{name:'Aumenta zoom'});await piu.click();await piu.click();const mini=g.getByRole('button',{name:'Panoramica del diagramma'});await mini.focus();const prima=await g.locator('[data-zoom]').innerText();
  await page.keyboard.press('Enter');await expect(g.locator('[data-zoom]')).toHaveText(prima);
+});
+
+/*
+ * ⭐ 02/10/2026 — il grafo delle deleghe con la grammatica del Workflow (owner: «gli stessi movimenti … i tasti e pulsanti»).
+ * Ciò che le prove sopra non toccavano: il dettaglio in basso (chi · Evidenze recenti · Task corrente · «⋯»), i menu da
+ * tastiera (frecce, Esc che restituisce il fuoco), la lente che apre e richiude il campo, il filtro per stato e la velocità.
+ */
+test('RIPRESA-GRAFO-GRAMMATICA — dettaglio, menu da tastiera, lente, stato e velocità come il Workflow',async({page})=>{
+ await scena(page);await page.locator('#railAgenti').getByRole('button',{name:'Apri visuale diagramma'}).click();
+ const g=page.locator('[data-c="GrafoAgenti"]'),det=g.locator('.talos-grafo__dettaglio');
+ await expect(g.locator('[data-nodo-id]')).toHaveCount(3);await expect(det).toBeHidden();
+ // il dettaglio: si apre scegliendo un agente, coi fatti veri della delega
+ const nodo=g.getByRole('button',{name:'Apri dettaglio leggi il registro e correggi la guardia',exact:true});await nodo.focus();await nodo.press('Enter');
+ await expect(det).toBeVisible();
+ await expect(det.locator('.talos-wfg__dettaglio-nome')).toHaveText('leggi il registro e correggi la guardia');
+ await expect(det.locator('.talos-wfg__pill')).toHaveAttribute('data-tono','corso');await expect(det.locator('.talos-wfg__pill')).toHaveText('In corso');
+ await expect(det.getByRole('region',{name:'Evidenze recenti'})).toContainText('src/registro.mjs');
+ await expect(det.getByRole('region',{name:'Task corrente'})).toContainText('correggi la guardia di stallo');
+ await det.getByRole('button',{name:'Altre azioni sull\'agente'}).click();await det.getByRole('menuitem',{name:'Chiudi il dettaglio'}).click();
+ await expect(det).toBeHidden();
+ // il «⋯» del diagramma: le frecce scorrono le voci, Esc chiude e rende il fuoco al pulsante
+ const altro=g.getByRole('button',{name:'Altri comandi del diagramma'});await altro.click();
+ await expect(altro).toHaveAttribute('aria-expanded','true');const voci=g.getByRole('menuitem');
+ await expect(voci.first()).toBeFocused();await page.keyboard.press('ArrowDown');await expect(voci.nth(1)).toBeFocused();
+ await page.keyboard.press('ArrowUp');await page.keyboard.press('ArrowUp');await expect(voci.last()).toBeFocused();
+ await page.keyboard.press('Escape');await expect(altro).toHaveAttribute('aria-expanded','false');await expect(altro).toBeFocused();
+ await expect(g.getByRole('menuitem')).toHaveCount(0);
+ await page.waitForTimeout(300);await expect(page.getByText('Fermo il giro?').filter({visible:true})).toHaveCount(0); // Esc è del menu, non della chat
+ // la lente: apre il campo col fuoco dentro; Esc a campo vuoto lo richiude e torna alla lente
+ const lente=g.getByRole('button',{name:'Cerca nel diagramma'});await expect(g.getByRole('searchbox')).toHaveCount(0);
+ await lente.click();await expect(g.getByRole('searchbox',{name:'Cerca agente nel diagramma'})).toBeFocused();
+ // con un giro in corso Esc NON deve arrivare alla chat («Fermo il giro?»): col testo svuota, a vuoto chiude
+ await page.keyboard.type('controlla');await expect(g.locator('[data-nodo-id]')).toHaveCount(1);
+ await page.keyboard.press('Escape');await expect(g.getByRole('searchbox')).toHaveValue('');await expect(g.locator('[data-nodo-id]')).toHaveCount(3);
+ await page.keyboard.press('Escape');await expect(g.getByRole('searchbox')).toHaveCount(0);await expect(lente).toBeFocused();
+ await page.waitForTimeout(300);await expect(page.getByText('Fermo il giro?').filter({visible:true})).toHaveCount(0);
+ // il filtro per stato: una scelta, non un <select> nativo; l'etichetta dice lo stato scelto
+ await expect(g.locator('select')).toHaveCount(0);
+ await g.getByRole('button',{name:/^Filtra stato nel diagramma/}).click();await g.getByRole('menuitemradio',{name:'Conclusi'}).click();
+ await expect(g.getByRole('button',{name:'Filtra stato nel diagramma: Conclusi'})).toBeVisible();
+ await expect(g.locator('[data-nodo-id="po30d-figlia-b"]')).toHaveCount(1);await expect(g.locator('[data-nodo-id="po30d-figlia-a"]')).toHaveCount(0);
+ // la velocità della riproduzione: un gruppo di scelte, una sola accesa
+ const vel=g.getByRole('radiogroup',{name:'Velocità riproduzione'});await vel.getByRole('radio',{name:'4×'}).click();
+ await expect(vel.getByRole('radio',{checked:true})).toHaveCount(1);await expect(vel.getByRole('radio',{name:'4×'})).toHaveAttribute('aria-checked','true');
 });

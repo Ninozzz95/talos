@@ -46,19 +46,19 @@ for(const width of [1024,1440])for(const theme of ['dark','light'])test(`RIPRESA
  await slider.fill('1');await expect(g.locator('[data-nodo-id="replay-child"]')).toHaveAttribute('data-stato','active');
  await expect(g.locator('[data-nodo-id="replay-child"] .talos-grafo__durata')).toHaveText('1 s');
  control.records.push({...control.records[2],seq:4,at:new Date(start+3000).toISOString(),node:{...control.records[2].node,taskCorto:'Nome futuro'}});
- await g.getByRole('button',{name:'Aggiorna',exact:true}).click();
+ await g.getByRole('button',{name:'Altri comandi del diagramma'}).click();await g.getByRole('menuitem',{name:'Aggiorna',exact:true}).click();
  await expect(slider).toHaveAttribute('max','3');await expect(slider).toHaveValue('1');
  await expect(g).not.toContainText('Nome futuro');await expect(g).toContainText('2 nuovi');
  await slider.fill('3');await expect(g).toHaveAttribute('data-replay','true');
- await slider.fill('0');await g.getByRole('button',{name:'Riproduci',exact:true}).click();
+ await slider.fill('0');await g.getByRole('button',{name:'Riproduci la cronologia',exact:true}).click();
  await expect(g.locator('[data-nodo-id="replay-child"]')).toBeVisible({timeout:5000});
- await g.getByRole('button',{name:'Pausa',exact:true}).click();
+ await g.getByRole('button',{name:'Metti in pausa la riproduzione',exact:true}).click();
  const paused=await slider.inputValue();await page.waitForTimeout(1100);await expect(slider).toHaveValue(paused);
  await slider.fill('1');
  for(const close of await page.locator('#regioneToast button').all()) if(await close.isVisible()) await close.click();
  await page.screenshot({path:info.outputPath(`replay-${width}-${theme}.png`),fullPage:true});
  const geometry=await g.locator('.talos-grafo__timeline').evaluate(e=>({width:e.scrollWidth,client:e.clientWidth}));expect(geometry.width).toBeLessThanOrEqual(geometry.client+1);
- await g.getByRole('button',{name:'Torna in diretta'}).click();await expect(g).toHaveAttribute('data-replay','false');
+ await g.getByRole('button',{name:'Torna al vivo'}).click();await expect(g).toHaveAttribute('data-replay','false');
  await page.reload();await page.waitForFunction(()=>window.__talosHarnessUiRuntime);await open();
  await expect(slider).toHaveAttribute('max','3');await slider.fill('0');await expect(g.locator('[data-nodo-id]')).toHaveCount(1);
 });
@@ -91,8 +91,8 @@ test('RIPRESA-REPLAY-HTTP-UI: registro reale, apertura tardiva e riavvio senza f
   runs[1].input.onEvento({type:'ToolCallResult',toolCallId:'read',content:'ok'});
   await expect(graph).toContainText('1 nuovi',{timeout:10000});await expect(slider).toHaveValue(pos);
   for(const run of runs){run.input.onEvento({type:'RunFinished'});run.resolve({ok:true,esito:{detto:'Fine',comeFinita:'concluso',messaggiFinali:[]}});}
-  await expect(graph.getByRole('button',{name:'Torna in diretta'})).toBeVisible();
-  await graph.getByRole('button',{name:'Torna in diretta'}).click();
+  await expect(graph.getByRole('button',{name:'Torna al vivo'})).toBeVisible();
+  await graph.getByRole('button',{name:'Torna al vivo'}).click();
   await expect(graph.locator(`[data-nodo-id="${child.childId}"]`)).toHaveAttribute('data-stato','done');
   const complete=await registry.timelineAgenti(root,{limit:500});
   await page.goto('about:blank');await close();
@@ -120,7 +120,7 @@ test('RIPRESA-REPLAY-HTTP-UI: registro reale, apertura tardiva e riavvio senza f
 test('RIPRESA-REPLAY-ERRORE: storico conservato, errore visibile e riprova',async({page})=>{
  const {control}=await scene(page);const g=page.locator('[data-c="GrafoAgenti"]');const slider=g.getByRole('slider');
  await expect(slider).toHaveAttribute('max','2');await slider.fill('1');control.fail=true;
- await g.getByRole('button',{name:'Aggiorna',exact:true}).click();await expect(g).toContainText('Cronologia non aggiornata');
+ await g.getByRole('button',{name:'Altri comandi del diagramma'}).click();await g.getByRole('menuitem',{name:'Aggiorna',exact:true}).click();await expect(g).toContainText('Cronologia non aggiornata');
  await expect(slider).toHaveValue('1');control.fail=false;await g.getByRole('button',{name:'Riprova cronologia'}).click();
  await expect(g).not.toContainText('Cronologia non aggiornata');await expect(slider).toHaveValue('1');
 });

@@ -372,6 +372,16 @@ test('R4-GRAPH-5000-BOUNDED: five thousand logical sessions do not mount five th
   await chiudiToastAperti(page); // decisione owner 23/09: il toast può coprire il grafo, si chiude come farebbe una persona
   await graph.getByRole('button', { name: 'Pagina successiva del gruppo' }).click();
   await expect(graph.locator('.talos-grafo__gruppo-riga').first()).not.toHaveText(firstAgent);
+  // vista densa: restano ambito, stato, lente e «⋯»; spariscono solo gli attrezzi della tela (zoom, Adatta, Segui)
+  await expect(graph.getByRole('radiogroup', { name: 'Ambito del diagramma' })).toBeVisible();
+  await expect(graph.getByRole('button', { name: 'Aumenta zoom' })).toHaveCount(0);await expect(graph.getByRole('button', { name: 'Segui l’agente attivo' })).toHaveCount(0);
+  // il «⋯» in vista densa scorre solo le voci visibili (Isola e Affianca sono della tela)
+  await graph.getByRole('button', { name: 'Altri comandi del diagramma' }).click();
+  await expect(graph.getByRole('menuitem', { name: 'Aggiorna', exact: true })).toBeFocused();
+  await page.keyboard.press('ArrowDown'); await expect(graph.getByRole('menuitem', { name: 'Azzera filtri' })).toBeFocused();
+  await page.keyboard.press('ArrowDown'); await expect(graph.getByRole('menuitem', { name: 'Aggiorna', exact: true })).toBeFocused();
+  await page.keyboard.press('Escape');
+  await graph.getByRole('button', { name: 'Cerca nel diagramma' }).click(); // 02/10: il campo si apre dalla lente, come nel Workflow
   await graph.getByRole('searchbox', { name: 'Cerca agente nel diagramma' }).fill('Agente 4999');
   await expect(graph.locator('[data-nodo-id]')).toHaveCount(1);
   await expect(graph.locator('[data-nodo-id]')).toContainText('Agente 4999');

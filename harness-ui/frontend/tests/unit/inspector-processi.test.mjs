@@ -146,8 +146,10 @@ const FINE = (id, { uscita = 0, errore = false, a = 2_000 } = {}) => ({ type: 'T
 
 // ⛔ 17/09, OSS-2: NOVE — è entrato «non eseguito» (uscita 127 = command not found nella shell
 //    POSIX). Dire «Non riuscito» di un comando che non è partito è un'accusa, non un esito.
-test('PROC-STATI: nove stati, ognuno con etichetta E icona — mai il solo colore', () => {
-  const attesi = ['in-coda', 'in-avvio', 'in-corso', 'in-attesa', 'riuscito', 'fallito', 'annullato', 'ucciso', 'non-eseguito'];
+// ⛔ 02/10/2026: DIECI — è entrato «Aspetta il tuo consenso» (decisione owner): un comando che aspetta la persona non è
+//    «in corso», e non si ferma dalla riga perché non è ancora partito.
+test('PROC-STATI: dieci stati, ognuno con etichetta E icona — mai il solo colore', () => {
+  const attesi = ['in-coda', 'in-avvio', 'in-corso', 'in-attesa', 'in-consenso', 'riuscito', 'fallito', 'annullato', 'ucciso', 'non-eseguito'];
   assert.deepEqual(Object.keys(STATI_PROCESSO), attesi);
   for (const s of attesi) {
     assert.ok(STATI_PROCESSO[s].etichetta.length > 2, `${s} ha una parola sua`);
@@ -456,4 +458,155 @@ test('PROC-DESCRIZIONE-VUOTA: una descrizione di soli spazi si tratta come assen
   disegnaProcessi(d, rr, [datiProcesso({ id: 'c', comando: 'pwd', stato: 'riuscito', descrizione: '   ' })]);
   const card = carte(rr)[0];
   assert.equal(conClasse(card, 'talos-process__titolo')[0].hidden, true, 'spazi non sono una descrizione');
+});
+
+/* ═══════════════════════════════════ Stop per riga (owner 02/10/2026) ═══ */
+/*
+ * Decisioni owner del 02/10/2026: «icona in riga, solo mentre gira», senza conferma; l'agente continua; se l'uccisione non
+ * riesce la riga resta «in corso» e lo dice (come Hermes, `apps/desktop/src/store/composer-status.ts:458-462`).
+ */
+const fermaDi = (card) => conClasse(card, 'talos-process__ferma')[0];
+const avvisoDi = (card) => conClasse(card, 'talos-process__avviso-ferma')[0];
+const aspetta = () => new Promise((fatto) => setImmediate(fatto));
+
+test('PROC-STOP-01: lo Stop compare solo sulle righe in corso o in attesa, e solo se chi disegna sa fermare', () => {
+  const d = documentoFinto(); const rr = d.createElement('div');
+  const azioni = { ferma: async () => ({ ok: true }) };
+  const lista = [
+    datiProcesso({ id: 'a', comando: 'npm test', stato: 'in-corso' }), datiProcesso({ id: 'b', comando: 'sleep 9', stato: 'in-attesa' }),
+    datiProcesso({ id: 'c', comando: 'ls', stato: 'in-avvio' }), datiProcesso({ id: 'e', comando: 'pwd', stato: 'riuscito' }),
+  ];
+  disegnaProcessi(d, rr, lista, { azioni });
+  const per = Object.fromEntries(carte(rr).map((c) => [c.dataset.processo, fermaDi(c)]));
+  assert.equal(per.a.hidden, false); assert.equal(per.b.hidden, false);
+  assert.equal(per.c.hidden, true, '«in avvio»: il comando non esiste ancora');
+  assert.equal(per.e.hidden, true, 'una riga finita non si ferma');
+  assert.equal(per.a.getAttribute('aria-label'), 'Ferma questo comando');
+  const uso = tutti(per.a).find((n) => n.tag === 'use');
+  assert.equal(uso.getAttribute('href'), '#i-stop', 'la stessa icona dello Stop del compositore');
+  const d2 = documentoFinto(); const r2 = d2.createElement('div');
+  disegnaProcessi(d2, r2, [datiProcesso({ id: 'a', comando: 'npm test', stato: 'in-corso' })]);
+  assert.equal(fermaDi(carte(r2)[0]).hidden, true, 'senza azioni nessun pulsante che non può mantenere');
+});
+
+test('PROC-STOP-02: il clic ferma QUEL comando, la riga lo dice, e l esito vero chiude la riga', async () => {
+  const d = documentoFinto(); const rr = d.createElement('div');
+  const chiesti = [];
+  const azioni = { ferma: async (id) => { chiesti.push(id); return { ok: true } } };
+  disegnaProcessi(d, rr, [datiProcesso({ id: 'a', comando: 'npm test', stato: 'in-corso' }), datiProcesso({ id: 'b', comando: 'sleep 9', stato: 'in-corso' })], { azioni });
+  const card = carte(rr).find((c) => c.dataset.processo === 'b');
+  const evento = fermaDi(card).lancia('click');
+  assert.equal(evento.defaultPrevented, true);
+  assert.equal(fermaDi(card).disabled, true, 'un secondo clic non riparte');
+  assert.equal(avvisoDi(card).hidden, false);
+  assert.equal(avvisoDi(card).textContent, 'Fermo il comando…');
+  await aspetta();
+  assert.deepEqual(chiesti, ['b'], 'solo la riga cliccata');
+  // l'esito vero arriva dal server: la riga diventa «Annullato» e l'avviso se ne va
+  disegnaProcessi(d, rr, [datiProcesso({ id: 'a', comando: 'npm test', stato: 'in-corso' }), datiProcesso({ id: 'b', comando: 'sleep 9', stato: 'annullato' })]);
+  assert.equal(fermaDi(card).hidden, true);
+  assert.equal(avvisoDi(card).hidden, true);
+  assert.equal(fermaDi(card).disabled, false);
+});
+
+test('PROC-STOP-03: se la richiesta non parte la riga lo dice con le parole del server, e il pulsante torna', async () => {
+  const d = documentoFinto(); const rr = d.createElement('div');
+  const azioni = { ferma: async () => ({ ok: false, messaggio: 'Questo comando non è più in corso' }) };
+  disegnaProcessi(d, rr, [datiProcesso({ id: 'a', comando: 'npm test', stato: 'in-corso' })], { azioni });
+  const card = carte(rr)[0];
+  fermaDi(card).lancia('click');
+  await aspetta();
+  assert.equal(avvisoDi(card).textContent, 'Non fermato: Questo comando non è più in corso');
+  assert.equal(fermaDi(card).disabled, false, 'si può riprovare');
+  assert.equal(fermaDi(card).hidden, false, 'la riga è ancora in corso: lo Stop resta');
+});
+
+test('PROC-STOP-04: se dopo 8 s la riga è ancora in corso, dice che non si è fermato e il pulsante torna', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const d = documentoFinto(); const rr = d.createElement('div');
+  disegnaProcessi(d, rr, [datiProcesso({ id: 'a', comando: 'npm test', stato: 'in-corso' })], { azioni: { ferma: async () => ({ ok: true }) } });
+  const card = carte(rr)[0];
+  fermaDi(card).lancia('click');
+  await aspetta();
+  t.mock.timers.tick(7_999);
+  assert.equal(avvisoDi(card).textContent, 'Fermo il comando…');
+  t.mock.timers.tick(1);
+  assert.equal(avvisoDi(card).textContent, 'Non si è fermato: riprova lo Stop.');
+  assert.equal(fermaDi(card).disabled, false);
+});
+
+/* ═════════════════════════════════ Il consenso (owner 02/10/2026) ═══ */
+/*
+ * Prova dal vivo sul 4174: un comando dell'agente che aspettava il consenso stava «In corso» con lo Stop, e lo Stop
+ * rispondeva «non è più in corso». Decisione owner: la riga dice «Aspetta il tuo consenso» e non ha lo Stop.
+ */
+const eventiConConsenso = (extra = []) => [
+  { type: 'ToolCallStart', toolCallId: 'c1', toolCallName: 'shell', ricevutoA: 1_000 },
+  { type: 'ToolCallArgs', toolCallId: 'c1', delta: '{"comando":"ping -c 60 127.0.0.1"}' },
+  { type: 'ApprovalRequested', requestId: 'r1', toolCallId: 'c1' },
+  ...extra,
+];
+
+test('PROC-CONSENSO-01: un comando che aspetta il consenso dice «Aspetta il tuo consenso» e non ha lo Stop', () => {
+  const [p] = processiDagliEventi(eventiConConsenso(), { adesso: 1_000 + 10 * 60_000 });
+  assert.equal(p.stato, 'in-consenso', 'e non «in attesa» anche dopo dieci minuti: aspettare TE non è un processo fermo');
+  assert.equal(STATI_PROCESSO['in-consenso'].etichetta, 'Aspetta il tuo consenso');
+  assert.equal(STATI_PROCESSO['in-consenso'].vivo, true, 'conta fra i vivi: la riga non è chiusa');
+  const d = documentoFinto(); const rr = d.createElement('div');
+  disegnaProcessi(d, rr, [p], { azioni: { ferma: async () => ({ ok: true }) } });
+  const card = carte(rr)[0];
+  assert.equal(fermaDi(card).hidden, true, 'niente Stop: il comando non è ancora partito');
+  assert.ok(tutti(card).some((n) => n.textContent === 'Aspetta il tuo consenso'), 'la parola si legge in riga');
+});
+
+test('PROC-CONSENSO-02: dato il consenso il comando parte, torna «In corso» e lo Stop ricompare; il silenzio si conta da lì', () => {
+  const eventi = eventiConConsenso([{ type: 'ApprovalResolved', requestId: 'r1', ricevutoA: 1_000 + 5 * 60_000 }]);
+  const [p] = processiDagliEventi(eventi, { adesso: 1_000 + 5 * 60_000 + 1_000 });
+  assert.equal(p.stato, 'in-corso', 'un consenso dato dopo cinque minuti non fa dire «In attesa» a un comando appena partito');
+  const d = documentoFinto(); const rr = d.createElement('div');
+  disegnaProcessi(d, rr, [p], { azioni: { ferma: async () => ({ ok: true }) } });
+  assert.equal(fermaDi(carte(rr)[0]).hidden, false);
+});
+
+test('PROC-CONSENSO-03 al contrario: consenso negato → «Non eseguito»; un consenso di un altro comando non tocca la riga', () => {
+  const negato = processiDagliEventi(eventiConConsenso([
+    { type: 'ApprovalResolved', requestId: 'r1', ricevutoA: 2_000 },
+    { type: 'ToolCallResult', toolCallId: 'c1', ricevutoA: 2_001, errore: true, uscita: null, rifiutato: true },
+  ]), { adesso: 3_000 })[0];
+  assert.equal(negato.stato, 'non-eseguito');
+  const altro = processiDagliEventi([
+    { type: 'ToolCallStart', toolCallId: 'c1', toolCallName: 'shell', ricevutoA: 1_000 },
+    { type: 'ToolCallArgs', toolCallId: 'c1', delta: '{"comando":"ls"}' },
+    { type: 'ApprovalRequested', requestId: 'r9', toolCallId: 'scrivi-7' },
+  ], { adesso: 1_500 })[0];
+  assert.equal(altro.stato, 'in-corso', 'il consenso chiesto per un altro attrezzo non è di questa riga');
+});
+
+test('PROC-CHI-TU — 02/10/2026: il comando `!` della persona dice «tu · terminale», non «agente · giro N»', () => {
+  const [mio, suo] = processiDagliEventi([
+    { type: 'ToolCallStart', toolCallId: 'a', toolCallName: 'shell', ricevutoA: 1_000, giro: 1, chi: 'agente' },
+    { type: 'ToolCallArgs', toolCallId: 'a', delta: '{"comando":"ls"}' },
+    { type: 'ToolCallStart', toolCallId: 'p', toolCallName: 'shell', ricevutoA: 2_000, giro: 1, chi: 'tu' },
+    { type: 'ToolCallArgs', toolCallId: 'p', delta: '{"comando":"ping -n 45 127.0.0.1"}' },
+  ], { adesso: 2_100 });
+  assert.equal(mio.chi, 'tu');
+  assert.equal(datiProcesso(mio).chi, 'tu · terminale');
+  assert.equal(suo.chi, 'agente', 'senza il campo resta «agente», come prima');
+  assert.match(datiProcesso(suo).chi, /^agente · giro 1$/u);
+});
+
+test('PROC-USCITA-CAMPO — 02/10/2026: il codice si legge da `exitCode`; col testo nuovo un comando FERMATO resta «Annullato»', async () => {
+  const { uscitaDelRisultato } = await import('../../src/components/inspector.js');
+  // il contenuto VERO della prova dal vivo sul 4174 (sessione 26d2c9e3…, comando fermato dalla sua riga)
+  const content = '[shell output: stdout and stderr combined in arrival order; stream identity is not preserved]\nexit 130 [sandbox: wsl2]\n⛔ Fermato su richiesta: il comando e stato interrotto mentre girava.';
+  assert.equal(uscitaDaTestoAttrezzo(content), null, 'la lettura a inizio testo non lo trova più: è il difetto');
+  assert.equal(uscitaDelRisultato({ exitCode: 130, content }), 130);
+  assert.equal(uscitaDelRisultato({ content: 'exit 3 [sandbox: wsl2]\nboom' }), 3, 'una sessione salvata prima del campo si legge ancora dal testo');
+  assert.equal(uscitaDelRisultato({ exitCode: 1.5, content: 'exit 2' }), 2, 'un campo storto non diventa un numero a schermo');
+  const [p] = processiDagliEventi([
+    { type: 'ToolCallStart', toolCallId: 'c', toolCallName: 'shell', ricevutoA: 1_000 },
+    { type: 'ToolCallArgs', toolCallId: 'c', delta: '{"comando":"ping -c 60 127.0.0.1"}' },
+    { type: 'ToolCallResult', toolCallId: 'c', ricevutoA: 1_700, errore: true, uscita: uscitaDelRisultato({ exitCode: 130, content }) },
+  ], { adesso: 2_000 });
+  assert.equal(p.stato, 'annullato', 'fermato apposta: «Annullato», mai «Non riuscito»');
 });

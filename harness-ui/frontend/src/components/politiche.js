@@ -30,7 +30,7 @@ export const POLITICHE = Object.freeze([
   Object.freeze({
     valore: 'Workspace write',
     nome: 'Scrive nel progetto',
-    descrizione: 'Scrive solo dentro la cartella della sessione. Comandi e test passano dal cancello.',
+    descrizione: 'Scrive da sola dentro la cartella della sessione; per scrivere fuori ti chiede. Comandi e test passano dal cancello.', // F4-03, owner 01/10/2026
     nota: 'Consigliato',
     rischio: 'medio',
   }),

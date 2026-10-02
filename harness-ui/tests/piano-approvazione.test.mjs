@@ -89,7 +89,8 @@ test('PLAN-APPROVE-EXACT-HASH: un\'impronta diversa è rifiutata; «accettando l
   assert.equal(scelta.decisione, 'procedi-accetta-modifiche');
   assert.equal(scelta.revision, 1);
   assert.equal(scelta.hash, hash);
-  assert.equal(Object.hasOwn(scelta, 'livelloAccesso') && scelta.livelloAccesso === undefined, true, 'Workspace write: nessun livello speciale');
+  // F4-03 (01/10/2026): «Workspace write» porta il suo livello — dentro la cartella scrive senza chiedere, fuori chiede.
+  assert.equal(scelta.livelloAccesso, 'scrittura-progetto', 'Workspace write: scrittura nel progetto');
   const s = sommario(registro, sessionId);
   assert.equal(s.modalitaOperativa, 'normale');
   assert.equal(s.permessi, 'Workspace write');

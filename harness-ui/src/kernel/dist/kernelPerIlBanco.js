@@ -1,5 +1,6 @@
 import { mkdir, writeFile, readFile, readdir, stat } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
+import { collegamentoVersoLaRete } from "../file-namespace-contract.mjs";
 function discoNode(o) {
   /*
    * ⛔ 08/09/2026 — MISURATO, non dedotto: su Windows `"C:"` non è la radice del disco, è il
@@ -24,6 +25,10 @@ function discoNode(o) {
     async elenca(cartella) {
       const voci = await readdir(dentro(cartella), { withFileTypes: true });
       return Promise.all(voci.map(async (v) => {
+        /* ⛔ 02/10/2026 (revisione Codex, rilievo 2; owner «Li seguo senza aprirli»): un collegamento che porta a un computer di
+           rete non si attraversa — niente `stat` (lo seguirebbe, e su Windows aprirlo manda le credenziali NTLM). Si legge solo
+           il collegamento (`readlink`, locale) e la voce esce marcata `rete: true`: chi cammina la salta. */
+        if (v.isSymbolicLink() && await collegamentoVersoLaRete(join(dentro(cartella), v.name))) return { nome: v.name, cartella: false, byte: 0, rete: true };
         const cartellaVera = v.isDirectory();
         let byte = 0;
         if (!cartellaVera) {
@@ -294,6 +299,7 @@ function fontiDaDisco(disco, opzioni = {}) {
         }
         for (const voce of voci) {
           if (elenco !== "completo") return;
+          if (voce.rete) continue; // 02/10/2026: un collegamento verso un computer di rete non si legge (vedi `disco.elenca`)
           const percorso = cartella ? `${cartella}/${voce.nome}` : voce.nome;
           if (voce.cartella) {
             if (salta.has(voce.nome)) continue;

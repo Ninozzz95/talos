@@ -171,6 +171,9 @@ const API_ERROR_CODES = new Set([
   'RESEARCH_NOT_FOUND',
   'RESEARCH_CONFLICT',
   'RESEARCH_RECHECK_UNAVAILABLE',
+  'PROCESS_NOT_RUNNING', // Stop per riga (owner 02/10/2026): il comando ha già finito
+  'ELICITATION_NOT_PENDING', 'ELICITATION_ANSWER_INVALID', // richieste dei server MCP (02/10/2026)
+
   'LIBRARY_NOT_FOUND',
   'LIBRARY_NAME_EMPTY',
   'LIBRARY_TOO_LARGE',
@@ -491,6 +494,9 @@ const STATUS_BY_CODE = Object.freeze({
   RESEARCH_NOT_FOUND: 404,
   RESEARCH_CONFLICT: 409,
   RESEARCH_RECHECK_UNAVAILABLE: 409,
+  PROCESS_NOT_RUNNING: 409,
+  ELICITATION_NOT_PENDING: 409,
+  ELICITATION_ANSWER_INVALID: 400,
   /** ⭐ 10/9 — 404 come FILE_NOT_FOUND, ma DISTINTO da NOT_FOUND: «la sessione non c'è» e «la voce non c'è» sono due assenze diverse, e una risposta che non le distingue manda a cercare nel posto sbagliato. */
   LIBRARY_NOT_FOUND: 404,
   /** ⭐ 10/9 — 400: il nome l'ha mandato il chiamante e, tolti i caratteri di percorso, non resta niente. */
@@ -759,6 +765,9 @@ const MESSAGE_BY_CODE = Object.freeze({
   RESEARCH_NOT_FOUND: 'Questa ricerca non esiste più',
   RESEARCH_CONFLICT: 'Questa ricerca non è nello stato giusto per questa azione',
   RESEARCH_RECHECK_UNAVAILABLE: 'Non si può ancora ricontrollare questa ricerca',
+  PROCESS_NOT_RUNNING: 'Questo comando non è più in corso',
+  ELICITATION_NOT_PENDING: 'Questa richiesta non aspetta più una risposta',
+  ELICITATION_ANSWER_INVALID: 'La risposta non corrisponde a ciò che il server ha chiesto',
   LIBRARY_NOT_FOUND: 'Questo file della Libreria non esiste più',
   LIBRARY_NAME_EMPTY: 'Serve un nome con almeno una lettera o un numero',
   LIBRARY_TOO_LARGE: 'File troppo grande da scaricare',
@@ -1724,6 +1733,8 @@ const ROTTE_API = Object.freeze([
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/tree\/copy$/, metodi: ['POST'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/tree\/create$/, metodi: ['POST'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/stop$/, metodi: ['POST'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/processes\/([^/]+)\/stop$/, metodi: ['POST'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/mcp-elicitation$/, metodi: ['POST'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/redirect$/, metodi: ['POST'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/fork$/, metodi: ['POST'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/resume$/, metodi: ['POST'] },
@@ -2364,19 +2375,23 @@ function requireComandoBody(body) {
  * "all'ultima richiesta pendente", vedi la doc di
  * session-registry.rispondiApprovazione sul perché.
  */
+/* F4-03 (owner 01/10/2026 sera): `ambito: 'cartella'` = «Consenti in questa cartella per la sessione» — facoltativo, e solo con
+   un sì. Quale cartella NON lo dice il client: il registro prende quella che il kernel ha messo nella domanda. */
 function requireApprovaBody(body) {
   const chiavi = Object.keys(body ?? {});
-  const AMMESSE = ['requestId', 'approvato'];
+  const AMMESSE = ['requestId', 'approvato', 'ambito'];
+  const conAmbito = chiavi.includes('ambito');
   if (
-    chiavi.length !== 2 || !chiavi.every((k) => AMMESSE.includes(k))
+    chiavi.length !== (conAmbito ? 3 : 2) || !chiavi.every((k) => AMMESSE.includes(k))
     || typeof body.requestId !== 'string' || body.requestId.length === 0
     || typeof body.approvato !== 'boolean'
+    || (conAmbito && (body.ambito !== 'cartella' || body.approvato !== true))
   ) {
-    const errore = new Error('Corpo non valido: atteso {requestId, approvato}');
+    const errore = new Error('Corpo non valido: atteso {requestId, approvato} o {requestId, approvato: true, ambito: "cartella"}');
     errore.code = 'QUERY_INVALID';
     throw errore;
   }
-  return { requestId: body.requestId, approvato: body.approvato };
+  return { requestId: body.requestId, approvato: body.approvato, ...(conAmbito ? { ambito: body.ambito } : {}) };
 }
 
 /*
@@ -5991,6 +6006,42 @@ export function createHttpApp({
       return;
     }
 
+    /*
+     * ⛔ Stop per riga (owner 02/10/2026): ferma UN comando della scheda «Processi»; il giro continua. 200 se il segnale è
+     *   partito (la riga si chiude col suo esito, «fermato su richiesta»), 404 se la sessione non c'è, 409 se il comando non è
+     *   più in corso. Nessun corpo: il comando lo dice l'indirizzo.
+     */
+    const stopProcessoMatch = method === 'POST' && sessionRegistry
+      && /^\/api\/v1\/sessions\/([^/]+)\/processes\/([^/]+)\/stop$/.exec(url.pathname);
+    if (stopProcessoMatch) {
+      try {
+        requireNoQuery(url);
+        let sessionId, toolCallId;
+        try {
+          sessionId = decodeURIComponent(stopProcessoMatch[1]);
+          toolCallId = decodeURIComponent(stopProcessoMatch[2]);
+        } catch {
+          sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method);
+          return;
+        }
+        const esito = sessionRegistry.fermaComando(sessionId, toolCallId);
+        if (esito === 'sessione-assente') {
+          sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method);
+          return;
+        }
+        if (esito !== 'fermato') {
+          sendJson(res, 409, errorEnvelope('PROCESS_NOT_RUNNING', clock), method);
+          return;
+        }
+        if (req.aborted || res.destroyed) return;
+        sendJson(res, 200, successEnvelope({ stopped: true }, clock), method);
+      } catch (error) {
+        const normalized = normalizeError(error);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
+      }
+      return;
+    }
+
     const stopMatch = method === 'POST' && sessionRegistry
       && /^\/api\/v1\/sessions\/([^/]+)\/stop$/.exec(url.pathname);
     if (stopMatch) {
@@ -6467,6 +6518,36 @@ export function createHttpApp({
       return;
     }
 
+    /*
+     * ⛔ 02/10/2026 — ELICITATION MCP (owner: «faccio subito scheda e rotta»): la risposta della persona a un server MCP che
+     *   chiede dati (modulo) o di aprire una pagina. Qui solo la FORMA del corpo; il contenuto lo valida il contratto
+     *   (`mcp-elicitation-contract.mjs`) dentro il registro, contro la richiesta pendente. Il contenuto del modulo non torna
+     *   nella risposta e non entra nei log: va al server MCP e basta.
+     */
+    const elicitazioneMatch = method === 'POST' && sessionRegistry
+      && /^\/api\/v1\/sessions\/([^/]+)\/mcp-elicitation$/.exec(url.pathname);
+    if (elicitazioneMatch) {
+      try {
+        requireNoQuery(url);
+        let sessionId;
+        try { sessionId = decodeURIComponent(elicitazioneMatch[1]); } catch { sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method); return; }
+        const corpo = await leggiCorpoJson(req);
+        if (!corpo || typeof corpo !== 'object' || Array.isArray(corpo) || typeof corpo.requestId !== 'string' || !corpo.requestId
+          || Object.keys(corpo).some((chiave) => !['requestId', 'action', 'content'].includes(chiave))) {
+          const errore = new Error('Corpo non valido'); errore.code = 'QUERY_INVALID'; throw errore;
+        }
+        const { requestId, ...risposta } = corpo;
+        const esito = await sessionRegistry.rispondiElicitazioneMcp(sessionId, requestId, risposta);
+        if ('erroreAvvio' in esito) { const errore = new Error(esito.erroreAvvio); errore.code = esito.code; throw errore; }
+        if (req.aborted || res.destroyed) return;
+        sendJson(res, 200, successEnvelope({ ok: true }, clock), method);
+      } catch (error) {
+        const normalized = normalizeError(error);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
+      }
+      return;
+    }
+
     const shellMatch = method === 'POST' && sessionRegistry
       && /^\/api\/v1\/sessions\/([^/]+)\/shell$/.exec(url.pathname);
     if (shellMatch) {
@@ -6584,8 +6665,10 @@ export function createHttpApp({
           return;
         }
         const corpo = await leggiCorpoJson(req);
-        const { requestId, approvato } = requireApprovaBody(corpo);
-        const esito = sessionRegistry.rispondiApprovazione(sessionId, requestId, approvato);
+        const { requestId, approvato, ambito } = requireApprovaBody(corpo);
+        const esito = ambito === undefined
+          ? sessionRegistry.rispondiApprovazione(sessionId, requestId, approvato)
+          : sessionRegistry.rispondiApprovazione(sessionId, requestId, approvato, { ambito });
         if ('erroreAvvio' in esito) {
           const errore = new Error(esito.erroreAvvio);
           errore.code = esito.code;

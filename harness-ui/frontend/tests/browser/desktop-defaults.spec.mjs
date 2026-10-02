@@ -2,7 +2,8 @@ import { expect, test } from '@playwright/test';
 
 test('UI-DEFAULTS-FRESH: a clean profile shows the requested UI, chat and list defaults', async ({ page }) => {
   await page.goto('/');
-  await expect(page.locator('#uiFontScaleSelect')).toHaveValue('large');
+  // owner 02/10/2026: la grandezza dell'interfaccia di serie è «Predefinita» (prima 'large')
+  await expect(page.locator('#uiFontScaleSelect')).toHaveValue('default');
   await expect(page.locator('#chatFontScaleSelect')).toHaveValue('balanced');
   await expect(page.locator('#setting-uiDensitySelect')).toHaveValue('compatta');
   await expect(page.locator('html')).toHaveAttribute('data-density', 'compact');
