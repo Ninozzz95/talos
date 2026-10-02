@@ -161,6 +161,18 @@ describe('the one capacity verdict used by every list', () => {
 })
 
 describe('the KV cache, which is where the surprises live', () => {
+    /*
+     * ⭐ FIT-KV-01 — misurato sul Pad il 02/10/2026 (Spark-X2.5-4B, NPU): la RAM libera col contesto aperto a 2048 e a
+     * 8192 differisce di 0,904 GB, cioè ~147.100 byte a token. La forma dichiarata dal file (36 strati, 4 teste KV,
+     * key_length 256, f16) dà 147.456: la formula regge sulla misura. Con headDim 160 (n_embd / n_head) ne darebbe 92.160.
+     */
+    it('FIT-KV-01 matches the cache measured on the Pad for Spark-X2.5-4B (6144 tokens ≈ 0.904 GB)', () => {
+        const spark = { layers: 36, kvHeads: 4, headDim: 256, trainedContext: 1_048_576, weightBytes: 2_594_836_480, kvBytesPerElement: 2 }
+        expect(talosKvCacheBytes(spark, 1)).toBe(147_456)
+        expect(talosKvCacheBytes(spark, 6144)).toBe(905_969_664)
+        expect(Math.abs(talosKvCacheBytes(spark, 6144) - 904_000_000) / 904_000_000).toBeLessThan(0.01)
+    })
+
     /**
      * Per LAYER, not a fraction of the model — the reason a 7B at long context
      * can need more cache than weights, which is the single fact that makes

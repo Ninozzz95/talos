@@ -60,6 +60,8 @@ defineProps<{
     canOpenMedia?: boolean
     /** What the active chat would take from the Library, for the delete dialog. */
     cleanupPlan?: TalosSessionCleanupPlan
+    /** ⭐⭐ P4-ter passo 2 — la chat ha qualcosa da riassumere («Compatta ora» nel menu). */
+    canCompact?: boolean
     /**
      * Fase 5 Calm (owner 12/09): sul tablet, con una conversazione aperta, il
      * mockup mette «‹ Indietro» in testa alla chat (topbar r. 2455) — senza
@@ -81,6 +83,8 @@ const emit = defineEmits<{
     export: []
     /** Owner 2026-07-26: this chat's media gallery. */
     media: []
+    /** ⭐⭐ P4-ter passo 2 — «Compatta ora», già confermato nel menu. */
+    compact: []
 }>()
 </script>
 
@@ -196,6 +200,8 @@ const emit = defineEmits<{
                     :can-open-media="canOpenMedia"
                     @export="emit('export')"
                     @media="emit('media')"
+                    :can-compact="canCompact"
+                    @compact="emit('compact')"
                 />
                 <span v-if="hideAppActions && hideChatOptions" aria-hidden="true" />
                 </div>

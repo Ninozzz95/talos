@@ -11,7 +11,7 @@ import { computed, nextTick, onMounted, ref, unref } from 'vue'
 import { useRouter } from 'vue-router'
 import TalosRowActions, { type TalosRowAction } from '@/components/talos/ui/TalosRowActions.vue'
 import { useTalosI18n } from '@/i18n'
-import { Check, ChevronDown, FileText, LoaderCircle, MessageSquarePlus, Paperclip, Plus, Search, SlidersHorizontal, Trash2, X } from '@lucide/vue'
+import { Archive, ArchiveRestore, Check, CheckSquare, ChevronDown, FileText, LoaderCircle, MessageSquarePlus, Paperclip, Plus, Search, SlidersHorizontal, Trash2, X } from '@lucide/vue'
 import TalosMobileNovitaChat from '@/components/chat/TalosMobileNovitaChat.vue'
 import TalosMobileProviderIcon from '@/components/models/TalosMobileProviderIcon.vue'
 import { talosCaricaNovita, talosChatNuova } from '@/stores/chatNovita'
@@ -54,7 +54,7 @@ import type { TalosStatoChat } from '@/lib/chat/statoChat'
 import type { TalosLocalChatSession } from '@/repositories/chatRepository'
 import { useChatController } from '@/stores/chatController'
 import { talosDaIntitolare } from '@/stores/chat'
-import { archivedChatSessions, orderChatSessions } from '@/lib/chatListGestures'
+import { archivedChatSessions, isArchivedChatSession, orderChatSessions } from '@/lib/chatListGestures'
 import { talosRelativeTime } from '@/lib/relativeTime'
 import { talosChatDateBuckets } from '@/lib/chat/chatDateBuckets'
 import { chatRowBucketTitle, chatRowWhenInBucket } from '@/lib/chat/chatRowTime'
@@ -585,6 +585,68 @@ async function confirmBulkDelete(): Promise<void> {
     }
 }
 
+/*
+ * ⭐⭐ P4-bis (owner 02/10/2026: «Archivia/Ripristina, Elimina») — l'archiviazione IN BLOCCO.
+ * Ripristina quando TUTTE le scelte sono archiviate; con una selezione mista si archiviano solo quelle che non lo
+ * sono (la terna delle app di chat AI: Open WebUI, LibreChat, Callboard #444, Codex #46587). Una scrittura per chat con
+ * la stessa `setSessionArchived` della riga; «Annulla» riporta indietro SOLO quelle cambiate davvero; chi fallisce
+ * resta selezionata e l'errore dice quante (come l'eliminazione in blocco qui sotto).
+ */
+const scelteArchiviate = computed(() => {
+    const scelte = new Set(bulk.ids.value)
+    return controller.chat.history.filter((session) => scelte.has(session.id) && isArchivedChatSession(session))
+})
+const tutteArchiviate = computed(() => bulk.count.value > 0 && scelteArchiviate.value.length === bulk.count.value)
+
+async function archiviaSelezionate(): Promise<void> {
+    if (actionBusy.value || bulk.count.value === 0) return
+    const valore = !tutteArchiviate.value
+    const scelte = new Set(bulk.ids.value)
+    const daCambiare = controller.chat.history
+        .filter((session) => scelte.has(session.id) && isArchivedChatSession(session) !== valore)
+        .map((session) => session.id)
+    actionBusy.value = true
+    const cambiate: string[] = []
+    const fallite: string[] = []
+    try {
+        for (const id of daCambiare) {
+            try {
+                await controller.chat.setSessionArchived(id, valore)
+                cambiate.push(id)
+            } catch {
+                fallite.push(id)
+            }
+        }
+    } finally {
+        actionBusy.value = false
+    }
+    if (cambiate.length > 0) {
+        toasts.push({
+            message: t(valore ? 'chats.bulkArchivedToast' : 'chats.bulkUnarchivedToast', { count: cambiate.length }),
+            durationMs: 8000,
+            action: {
+                label: t('common.undo'),
+                run: () => {
+                    for (const id of cambiate) {
+                        void controller.chat.setSessionArchived(id, !valore).catch((error: unknown) => {
+                            toasts.push({ message: t('chats.unarchiveFailed', { detail: actionErrorText(error) }), durationMs: 6000 })
+                        })
+                    }
+                },
+            },
+        })
+        void talosLightImpact()
+    }
+    if (fallite.length > 0) {
+        actionError.value = t(valore ? 'chats.bulkArchiveFailed' : 'chats.bulkUnarchiveFailed', { count: fallite.length })
+        // Restano scelte solo quelle che non sono riuscite: la persona riprova su quelle, non su tutto.
+        bulk.reconcile(fallite)
+    } else {
+        actionError.value = null
+        bulk.exit()
+    }
+}
+
 async function archiveSession(session: { id: string; title: string }, value: boolean): Promise<void> {
     if (actionBusy.value) return
     actionBusy.value = true
@@ -865,6 +927,19 @@ function act(
             :class="props.embedded ? 'px-5' : 'px-[var(--talos-space-page)]'"
         >
             <span role="status" aria-live="polite" data-testid="talos-chats-count">{{ countLabel }}</span>
+            <!-- ⭐ P4-bis (owner 02/10, «Riga del conteggio, icona»): come «Ricerca approfondita»
+                 (`ResearchScreen.vue:792-808`). Nella riga del conteggio e non nella testata: lì l'icona era stata
+                 tolta il 22/08 perché costava spazio. Sparisce mentre la selezione è accesa: la barra ha già l'uscita. -->
+            <button
+                v-if="!bulk.active.value && selectableIds.length > 0"
+                type="button"
+                data-testid="talos-chats-select-header"
+                :aria-label="t('chats.selectChats')"
+                class="talos-pressable ml-auto inline-flex size-11 shrink-0 items-center justify-center rounded-full text-[var(--talos-muted)]"
+                @click="bulk.enter()"
+            >
+                <CheckSquare class="size-4" aria-hidden="true" />
+            </button>
         </div>
         <p v-if="contenutoNonLetto" role="alert" data-testid="talos-chats-content-failed" class="px-5 pb-2 text-xs leading-5 text-[var(--talos-danger,#dc5b5b)]">
             {{ t('chats.contentReadFailed') }}
@@ -891,23 +966,53 @@ function act(
         <div
             v-if="bulk.active.value"
             data-testid="talos-chats-selection-bar"
-            class="mx-5 mt-2 flex items-center gap-1 rounded-full border border-[var(--talos-border)] bg-[var(--talos-panel)] py-1 pl-1 pr-2"
+            class="talos-chats-selection-bar sticky top-2 z-20 mx-5 mt-2 flex items-center gap-1 rounded-full border border-[var(--talos-border)] bg-[var(--talos-panel)] py-1 pl-1 pr-2"
         >
+            <!-- ⭐ P4-bis (owner 02/10, «Fissa in alto mentre scorri», dalla prova sul Pad): selezionate le archiviate in
+                 fondo, la barra non si vedeva più. Ricerca: la barra contestuale resta visibile mentre si scorre
+                 (eleken.co «Bulk action UX», NN/g, Material/Gmail). Fondo pieno e livello sopra la lista.
+                 ⛔ `top-2` e basta: `sticky` conta già l'imbottitura dello scorritore (misurato sul Pad: foglio del
+                 telefono 92 px, tablet 80 px). Una distanza in più la sommava due volte: 192 px sul telefono. -->
             <Button type="button" size="icon" variant="ghost" class="min-h-touch min-w-touch rounded-full" :aria-label="t('chats.cancelSelection')" @click="bulk.exit()"><X class="size-4" aria-hidden="true" /></Button>
-            <span class="text-sm font-medium">{{ bulk.count.value === 1 ? t('chats.selectedOne') : t('chats.selected', { count: bulk.count.value }) }}</span>
-            <Button type="button" variant="ghost" size="sm" class="ml-auto" @click="bulk.selectAll(selectableIds)">
-                {{ bulk.allSelected(selectableIds) ? t('common.none') : t('library.all') }}
-            </Button>
-            <Button
-                type="button"
-                size="icon"
-                variant="ghost"
-                class="min-h-touch min-w-touch rounded-full text-[var(--talos-danger,#dc5b5b)]"
-                data-testid="talos-chats-bulk-delete"
-                :aria-label="t('chats.deleteSelected')"
-                :disabled="bulk.count.value === 0 || actionBusy"
-                @click="bulkDeleteOpen = true"
-            ><Trash2 class="size-4" aria-hidden="true" /></Button>
+            <!-- ⭐ P4-bis (owner 02/10, «Tutte accanto al conteggio»): conteggio e «Tutte» sono UN gruppo a sinistra, così
+                 a destra restano solo due azioni affiancate (regola owner: mai più di due). -->
+            <span class="flex min-w-0 items-center gap-1 text-sm font-medium">
+                <span class="truncate">{{ bulk.count.value === 1 ? t('chats.selectedOne') : t('chats.selected', { count: bulk.count.value }) }}</span>
+                <span aria-hidden="true" class="text-[var(--talos-muted)]">·</span>
+                <button
+                    type="button"
+                    data-testid="talos-chats-select-all"
+                    class="talos-pressable inline-flex min-h-touch shrink-0 items-center rounded-[var(--talos-radius-control)] px-1 font-normal text-[var(--talos-accent)]"
+                    @click="bulk.selectAll(selectableIds)"
+                >
+                    {{ bulk.allSelected(selectableIds) ? t('chats.selectNone') : t('chats.selectAll') }}
+                </button>
+            </span>
+            <div data-testid="talos-chats-bulk-actions" class="ml-auto flex shrink-0 items-center">
+                <Button
+                    type="button"
+                    size="icon"
+                    variant="ghost"
+                    class="min-h-touch min-w-touch rounded-full"
+                    data-testid="talos-chats-bulk-archive"
+                    :aria-label="tutteArchiviate ? t('chats.unarchiveSelected') : t('chats.archiveSelected')"
+                    :disabled="bulk.count.value === 0 || actionBusy"
+                    @click="archiviaSelezionate"
+                >
+                    <ArchiveRestore v-if="tutteArchiviate" class="size-4" aria-hidden="true" />
+                    <Archive v-else class="size-4" aria-hidden="true" />
+                </Button>
+                <Button
+                    type="button"
+                    size="icon"
+                    variant="ghost"
+                    class="min-h-touch min-w-touch rounded-full text-[var(--talos-danger,#dc5b5b)]"
+                    data-testid="talos-chats-bulk-delete"
+                    :aria-label="t('chats.deleteSelected')"
+                    :disabled="bulk.count.value === 0 || actionBusy"
+                    @click="bulkDeleteOpen = true"
+                ><Trash2 class="size-4" aria-hidden="true" /></Button>
+            </div>
         </div>
         <p v-else-if="props.embedded" class="px-5 pt-2 text-2xs text-[var(--talos-muted)]">{{ t('chats.holdForActions') }}</p>
 
@@ -1192,3 +1297,23 @@ function act(
         </TalosMobileConfirmDialog>
     </div>
 </template>
+
+<style>
+/*
+ * ⭐ P4-bis — owner 02/10/2026, dopo la foto del telefono: «la barra in telefono deve stare accanto al pulsante menu».
+ * Sul telefono la stazione vive nel foglio (`TalosMobileToolSheet.vue`, `data-under-controls="true"`): la barra della
+ * selezione sale nella riga dei comandi, accanto al pulsante del menu, come la barra contestuale di Material/Gmail che
+ * prende il posto della barra in alto. Misure della riga: margine 0.75rem, pulsante 3rem a `max(0.5rem, safe-area)`
+ * dall'alto (Pad: 40-88 px); la barra è alta ~58 px ⇒ centrata sul pulsante con −5 px, e parte dopo il pulsante più
+ * 0.5rem (4.25rem). Sopra i comandi del foglio (`z-20`), così copre anche il titolo che compare scorrendo.
+ * Sul tablet (niente foglio) resta `sticky` in cima alla lista.
+ */
+.talos-sheet-body[data-under-controls="true"] .talos-chats-selection-bar {
+    position: fixed;
+    top: calc(max(0.5rem, env(safe-area-inset-top)) - 5px);
+    left: 4.25rem;
+    right: 0.75rem;
+    margin: 0;
+    z-index: 30;
+}
+</style>

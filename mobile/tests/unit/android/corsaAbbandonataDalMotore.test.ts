@@ -110,8 +110,14 @@ describe('MOTORE CHE MOLLA — non e una prova, e un guasto', () => {
      * diventerebbe permanente, e quel motore non verrebbe piu' provato su
      * questo telefono. Non conclusiva = si ritenta, che e' cio' che e'.
      */
+    // ⭐ 01/10/2026 (ledger A3): la regola si è spostata in
+    // `TalosLlamaProbe.isConclusive`, dove la JVM la esegue (PROB-03); qui si
+    // controlla che il plugin la usi con l'abbandono e che lì valga ancora.
     it('ABB-05 una corsa abbandonata non e conclusiva — non e una sconfitta', () => {
-        expect(plugin).toContain('if (run.abortitaDalMotore) conclusive = false')
+        const probe = readFileSync(resolve(
+            process.cwd(), 'android/app/src/main/java/ai/talos/TalosLlamaProbe.java'), 'utf8')
+        expect(plugin).toContain('TalosLlamaProbe.isConclusive(measured, run.ttftMs, run.abortitaDalMotore)')
+        expect(probe).toContain('if (aborted || ttftMs <= 0) return false;')
         expect(plugin).not.toContain('if (run.abortitaDalMotore) answerCorrect = false')
     })
 

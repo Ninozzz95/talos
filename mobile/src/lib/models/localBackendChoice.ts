@@ -221,8 +221,16 @@ export interface TalosLocalBackendDevice {
  * qualcuno non lo misura. Un elenco chiuso di cio' che e' AMMESSO fallisce
  * verso il lato sicuro; una regola dedotta dal nome fallirebbe verso quello
  * sbagliato.
+ *
+ * ## ⭐ 01/10/2026: Q4_K_M entra, col motore b11312
+ *
+ * llama.cpp b11312 porta le K-quant sull'NPU (PR #28994). Stesso Pad, stesso
+ * Qwen3-4B Q4_K_M: lettura **1.062,6 t/s** (contro 46,4 del motore
+ * precedente), scrittura 18,1, perplessità +0,1 % sulla CPU. Owner: «Q4_K_M
+ * ora, gli altri dopo misura» — gli altri K restano fuori finché non sono
+ * misurati. Stesso elenco di `TalosBackendChoice.npuAcceptsFileType`.
  */
-const TALOS_FORMATI_PER_NPU: ReadonlySet<string> = new Set(['Q4_0', 'Q8_0', 'MXFP4'])
+const TALOS_FORMATI_PER_NPU: ReadonlySet<string> = new Set(['Q4_0', 'Q8_0', 'MXFP4', 'Q4_K_M'])
 
 /**
  * Se l'NPU sa mangiare questo formato di pesi.
@@ -297,15 +305,20 @@ export type TalosLocalBackendReason =
     | 'unavailable'
     /** L'ha vinto una misura reale su questo dispositivo. */
     | 'fastest'
-    /** Nessuna misura esiste ancora: si resta sul pavimento, e lo si dice. */
+    /** Nessuna misura e nessun acceleratore da suggerire: si resta sul pavimento, e lo si dice. */
     | 'unmeasured'
+    /**
+     * ⭐ D10 (owner, 01/10/2026): nessuna misura ancora, ma un acceleratore
+     * c'è: si usa quello suggerito dal formato mentre la prova breve gira.
+     */
+    | 'suggested'
 
 export interface TalosLocalBackendDecision {
     /** Che cosa verrà chiesto al motore. */
     kind: TalosLocalBackendKind
     /** Che cosa aveva chiesto la persona. `null` se non aveva chiesto niente. */
     requested: TalosLocalBackendKind | null
-    source: 'user' | 'measured' | 'floor'
+    source: 'user' | 'measured' | 'format' | 'floor'
     reason: TalosLocalBackendReason
 }
 
@@ -318,11 +331,16 @@ export interface TalosLocalBackendDecision {
  *    `requested` + `unavailable`, perché «ho scelto Hexagon e giro su CPU
  *    senza saperlo» è precisamente il difetto che stiamo battendo.
  * 2. **Nessuna scelta** → vince la misura, fra i backend DISPONIBILI.
- * 3. **Nessuna misura** → CPU, e lo si dice: `unmeasured`.
+ * 3. **Nessuna misura** → l'acceleratore suggerito dal formato (`suggested`):
+ *    NPU se il formato è suo, altrimenti la scheda grafica — mai uno che ha
+ *    FALLITO la prova su questo modello. Senza acceleratori: CPU,
+ *    `unmeasured`.
  *
- * ⛔ Il caso 3 non è un predefinito prudente travestito da scelta: è un buco
- * dichiarato. Su questo progetto un buco dichiarato vale più di un default
- * silenzioso — e la cura non è indovinare qui, è far girare la misura.
+ * ⛔ Fino al 30/09 il caso 3 era sempre la CPU, «un buco dichiarato». Sul Pad
+ * il 01/10 quel buco costava 116 s alla prima parola (NPU: 3,4 s), e la misura
+ * che doveva chiuderlo non partiva da sola. Owner, 01/10 (D10): mentre la prova
+ * breve gira, si usa il motore suggerito dal formato — e lo si DICE, con
+ * `source: 'format'`, non lo si traveste da misura.
  *
  * @param expectedOutputTokens quanto ci si aspetta di generare: la formula
  *     di `talosSelectBestProfile` pesa il costo di transizione contro il
@@ -361,6 +379,16 @@ export function talosDecideLocalBackend(input: {
             requested: null,
             source: 'measured',
             reason: 'fastest',
+        }
+    }
+    // D10 — l'NPU è disponibile qui solo se il formato è suo
+    // (`talosLocalBackendOptions`), quindi l'ordine basta a scegliere.
+    const bocciato = (kind: TalosLocalBackendKind): boolean => input.profiles.some(
+        (profile) => profile.outcome === 'FAILED' && talosBackendKindOfRegistry(profile.backendRegistry) === kind,
+    )
+    for (const kind of ['hexagon', 'gpu'] as const) {
+        if (disponibile(kind) && !bocciato(kind)) {
+            return { kind, requested: null, source: 'format', reason: 'suggested' }
         }
     }
     return { kind: 'cpu', requested: null, source: 'floor', reason: 'unmeasured' }

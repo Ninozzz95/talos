@@ -45,6 +45,7 @@
     More: 'Altro',
     Running: 'In corso',
     Stopped: 'Fermato',
+    Finished: 'Concluso',
     'Open or start a real session first.': 'Prima apri o avvia una sessione reale.',
     'Not available in Code yet.': 'Non ancora disponibile nel Codice.',
     'Nothing to export yet': 'Ancora niente da esportare',
@@ -76,7 +77,6 @@
     // KPI-PLURALE-01 (25/09/2026): singolare e plurale, scelti col numero (`aggiornaRunKpis`).
     step: 'passo',
     steps: 'passi',
-    ctx: 'contesto',
     errors: 'errori',
     /*
      * ⭐ 24/09/2026 — misurato sul Pad dal DOM vivo, 12 superfici (ledger `.claude/codice-italiano/`): il resto del
@@ -277,6 +277,21 @@
     'Follow-up': 'Continuazione',
     'TALOS is working on the answer…': 'TALOS sta preparando la risposta…',
     'Summarising the conversation so far…': 'Riassumo la conversazione fin qui…',
+    // ⭐ P4-ter (02/10/2026): la compattazione che si vede — conferma, separatore, Annulla.
+    'Compact the conversation': 'Compatta la conversazione',
+    'TALOS summarises the older part of this conversation to make room. The full history stays saved, and you can undo it from the conversation.': 'TALOS riassume la parte più vecchia di questa conversazione per fare spazio. La cronologia intera resta salvata e puoi annullare dalla conversazione.',
+    Cancel: 'Annulla',
+    'Compact now': 'Compatta ora',
+    // ⭐ Le parole del desktop (owner 02/10, «Quelle del desktop»; `AVM-integrazione-r4` @ 3ecf7651d, app.js:46930-46935).
+    'Conversation summarized': 'Conversazione riassunta',
+    tokens: 'token',
+    Undo: 'Annulla',
+    'Summary undone · the whole conversation goes back to the model': 'Riassunto annullato · la conversazione intera torna al modello',
+    'Undo failed': 'Annullamento non riuscito',
+    'Compaction skipped': 'Compattazione saltata',
+    'No summary came back: the conversation stays whole.': 'Non è arrivato nessun riassunto: la conversazione resta intera.',
+    'Nothing to compact yet': 'Niente da compattare',
+    'The conversation is still short: it stays as it is.': 'La conversazione è ancora corta: resta così com’è.',
     'Not readable.': 'Non leggibile.',
     'Not readable': 'Non leggibile',
     'Tree not available.': 'Albero dei file non disponibile.',
@@ -385,6 +400,88 @@
     'Requests that start on their own, at intervals': 'Richieste che partono da sole, a intervalli',
     'They only run while the Code server is on: it starts when you open the Code and stops if you restart the phone. New automations start paused.':
       'Partono solo mentre il server del Codice è acceso: si accende quando apri il Codice e si spegne se riavvii il telefono. Nascono in pausa.',
+    // ⛔ ERRCOD (30/09/2026): la scheda d'errore. Titoli e «Azione successiva» con le parole della chat (`it.ts`, chiavi chat.*).
+    'Provider failure': 'Errore del provider',
+    'Network failure': 'Errore di rete',
+    'Policy denial': 'Negato dalla policy',
+    'Execution failure': 'Errore di esecuzione',
+    'Worker failure': 'Errore del worker',
+    'Validation fault': 'Errore di validazione',
+    'Next action': 'Azione successiva',
+    'Retry available': 'Riprova disponibile',
+    'Manual action required': 'Richiesta azione manuale',
+    'Try again': 'Riprova',
+    Continue: 'Continua',
+    'Open provider keys': 'Apri le chiavi dei fornitori',
+    'Pick another model': 'Scegli un altro modello',
+    'Start a new session': 'Apri una sessione nuova',
+    'Continue from where you stopped.': 'Continua da dove ti eri fermato.',
+    'This action is only available inside the TALOS app.': 'Questa azione si può fare solo dentro l’app TALOS.',
+    'The reply above may be incomplete.': 'La risposta sopra può essere incompleta.',
+    'Stopped by you.': 'Fermato da te.',
+    'TALOS · stopped': 'TALOS · fermato',
+    'The model service did not accept the key saved for this provider.': 'Il servizio del modello non ha accettato la chiave salvata per questo fornitore.',
+    'Open the provider keys, check or replace the key, then try again.': 'Apri le chiavi dei fornitori, controlla o sostituisci la chiave, poi riprova.',
+    'No key is saved for the provider of this model.': 'Per il fornitore di questo modello non c’è nessuna chiave salvata.',
+    'The provider account has no credit left, or a spending limit was reached.': 'Sul conto del fornitore è finito il credito, oppure è stato raggiunto un limite di spesa.',
+    'Top up the credit or raise the limit on the provider site, then send the message again.': 'Ricarica il credito o alza il limite sul sito del fornitore, poi rimanda il messaggio.',
+    'The provider did not allow this request with this model.': 'Il fornitore non ha permesso questa richiesta con questo modello.',
+    'Pick another model and try again.': 'Scegli un altro modello e riprova.',
+    'The provider safety filter stopped this request.': 'Il filtro di sicurezza del fornitore ha fermato questa richiesta.',
+    'Rephrase the message, or remove the part that may have triggered the filter.': 'Riformula il messaggio, oppure togli la parte che può aver fatto scattare il filtro.',
+    'This model is not available at the provider any more.': 'Questo modello non è più disponibile presso il fornitore.',
+    'The conversation has grown too long for this model to read.': 'La conversazione è diventata troppo lunga perché questo modello la legga.',
+    'Start a new session, or pick a model with a larger context.': 'Apri una sessione nuova, oppure scegli un modello con un contesto più ampio.',
+    'The reply stopped because it reached the length limit of the model.': 'La risposta si è fermata perché ha raggiunto il limite di lunghezza del modello.',
+    'Ask it to continue from where it stopped.': 'Chiedigli di continuare da dove si è fermato.',
+    'This request is too large for the provider to accept.': 'Questa richiesta è troppo grande perché il fornitore la accetti.',
+    'Start a new session, or send less text or smaller files.': 'Apri una sessione nuova, oppure manda meno testo o file più piccoli.',
+    'The provider could not read an image in this request.': 'Il fornitore non è riuscito a leggere un’immagine di questa richiesta.',
+    'Try a smaller image, as PNG or JPEG.': 'Prova con un’immagine più piccola, in PNG o JPEG.',
+    'The provider rejected this request as not valid for this model.': 'Il fornitore ha rifiutato questa richiesta come non valida per questo modello.',
+    'The provider is receiving too many requests right now.': 'Il fornitore sta ricevendo troppe richieste in questo momento.',
+    'Wait a minute, then try again.': 'Aspetta un minuto, poi riprova.',
+    'The model is overloaded at the moment.': 'Il modello in questo momento è sovraccarico.',
+    'Try again in a few minutes.': 'Riprova tra qualche minuto.',
+    'The model did not answer: the provider serving it is down or sent nothing usable.': 'Il modello non ha risposto: il fornitore che lo serve è giù o non ha mandato niente di utilizzabile.',
+    'Pick another model, or try again later.': 'Scegli un altro modello, oppure riprova più tardi.',
+    'The model service took too long to answer.': 'Il servizio del modello ci ha messo troppo a rispondere.',
+    'Try again.': 'Riprova.',
+    'The model service had an internal error.': 'Il servizio del modello ha avuto un errore interno.',
+    'Try again in a moment.': 'Riprova tra un momento.',
+    'The model answered with nothing.': 'Il modello ha risposto senza dire niente.',
+    'The phone cannot reach the model service: it looks offline.': 'Il telefono non raggiunge il servizio del modello: sembra senza connessione.',
+    'Check Wi-Fi or mobile data, then try again.': 'Controlla il Wi-Fi o i dati mobili, poi riprova.',
+    'The secure connection to the model service could not be verified.': 'Non è stato possibile verificare la connessione sicura con il servizio del modello.',
+    'Check the date and time of the phone, and any VPN or proxy in use.': 'Controlla data e ora del telefono, ed eventuali VPN o proxy attivi.',
+    'The connection to the model service closed before the answer.': 'La connessione con il servizio del modello si è chiusa prima della risposta.',
+    'The model service did not respond in time.': 'Il servizio del modello non ha risposto in tempo.',
+    'Try again; if it keeps happening, check the connection.': 'Riprova; se succede ancora, controlla la connessione.',
+    'The agent used all its steps for this request without finishing.': 'L’agente ha usato tutti i passi a disposizione per questa richiesta senza finire.',
+    'Ask it to continue: it starts again from where it stopped.': 'Chiedigli di continuare: riparte da dove si è fermato.',
+    'The agent stopped without giving an answer.': 'L’agente si è fermato senza dare una risposta.',
+    'This session cannot take a new message.': 'Questa sessione non può ricevere un nuovo messaggio.',
+    'Start a new session.': 'Apri una sessione nuova.',
+    'This session no longer exists on the Code server.': 'Questa sessione non esiste più sul server del Codice.',
+    'The Code server did not accept this request.': 'Il server del Codice non ha accettato questa richiesta.',
+    'Check the text and try again.': 'Controlla il testo e riprova.',
+    'The Code server on this phone is not answering.': 'Il server del Codice su questo telefono non risponde.',
+    'The Code server on this phone took too long to answer.': 'Il server del Codice su questo telefono ci ha messo troppo a rispondere.',
+    'Try again; if it keeps happening, close the Code and open it again.': 'Riprova; se succede ancora, chiudi il Codice e riaprilo.',
+    // ⛔ 70-A (30/09/2026): il server del Codice non ha riconosciuto il segreto nemmeno dopo averlo riletto.
+    'The Code server on this phone did not recognise TALOS.': 'Il server del Codice su questo telefono non ha riconosciuto TALOS.',
+    'Close the Code and open it again.': 'Chiudi il Codice e riaprilo.',
+    // ⛔ 70-B (30/09/2026): la scheda dell'artefatto, con le parole della scheda della chat (it.ts, chat.card*).
+    'Interactive visual': 'Visualizzazione interattiva',
+    'Save to Library': 'Salva nella Libreria',
+    'Saved to Library': 'Salvato nella Libreria',
+    'It would not open': 'Non si è aperta',
+    'Could not save': 'Non è stato possibile salvarlo',
+    'This visual is no longer on the Code server.': 'Questa visualizzazione non è più sul server del Codice.',
+    'The live connection to this session was lost.': 'Il collegamento in diretta con questa sessione si è interrotto.',
+    'Open the session again from the list to see how it ended.': 'Riapri la sessione dall’elenco per vedere com’è finita.',
+    'Something unexpected happened.': 'È successo qualcosa di imprevisto.',
+    'Start a new session. The details below say what went wrong.': 'Apri una sessione nuova. I dettagli qui sotto dicono cosa è andato storto.',
   };
   /** In italiano la voce del dizionario, altrimenti il testo com'è. `hasOwn`: «toString» o «constructor» non sono voci. */
   function t(testoInglese) {
@@ -1452,26 +1549,50 @@
    * temuto. 12s: generoso per un server che si sta ancora avviando su
    * un telefono, ma un tetto vero, non "mai".
    */
-  async function apiGet(pathname, { timeoutMs = 12000 } = {}) {
-    const controller = new AbortController();
-    const timer = window.setTimeout(() => controller.abort(), timeoutMs);
-    let response;
+  /*
+   * ⛔⛔ 70-A (30/09/2026, contratto desktop 70) — il server del Codice vuole `Authorization: Bearer <segreto>` su tutta
+   * l'API (misurato il 30/09: prima qualunque pagina o app del telefono avviava una sessione). Il segreto lo crea il
+   * server e lo legge l'app ospite: qui arriva dal ponte `window.__talosHarnessIntestazioni` (HarnessSessionScreen.vue,
+   * `harnessUiSegreto.ts`). Senza ponte (file aperto da solo, prove) non si aggiunge niente. Un 401 vuol dire che il
+   * server è ripartito con un segreto nuovo: si rilegge UNA volta; se il rifiuto resta, lo dice la scheda d'errore
+   * (`SERVER_AUTH_FAILED`). Ledger `.claude/ragionamento/LEDGER-70A-SERVER-CODICE-PROTETTO-2026-09-30.md`.
+   */
+  async function intestazioniServer(tentativo = 0) {
+    const ponte = window.__talosHarnessIntestazioni;
+    if (typeof ponte !== 'function') return {};
     try {
-      response = await fetch(API(pathname), {
-        method: 'GET',
-        headers: { Accept: 'application/json' },
-        cache: 'no-store',
-        signal: controller.signal,
-      });
-    } catch (error) {
-      if (error?.name === 'AbortError') {
-        const timeoutError = new Error(`No answer from the server within ${Math.round(timeoutMs / 1000)}s`);
-        timeoutError.code = 'TIMEOUT';
-        throw timeoutError;
+      return (await (tentativo > 0 ? ponte({ rinnova: true }) : ponte())) ?? {};
+    } catch {
+      return {};
+    }
+  }
+  function daRitentareColSegretoNuovo(response, tentativo) {
+    return response.status === 401 && tentativo === 0 && typeof window.__talosHarnessIntestazioni === 'function';
+  }
+
+  async function apiGet(pathname, { timeoutMs = 12000 } = {}) {
+    let response;
+    for (let tentativo = 0; ; tentativo += 1) {
+      const controller = new AbortController();
+      const timer = window.setTimeout(() => controller.abort(), timeoutMs);
+      try {
+        response = await fetch(API(pathname), {
+          method: 'GET',
+          headers: { Accept: 'application/json', ...await intestazioniServer(tentativo) },
+          cache: 'no-store',
+          signal: controller.signal,
+        });
+      } catch (error) {
+        if (error?.name === 'AbortError') {
+          const timeoutError = new Error(`No answer from the server within ${Math.round(timeoutMs / 1000)}s`);
+          timeoutError.code = 'TIMEOUT';
+          throw timeoutError;
+        }
+        throw error;
+      } finally {
+        window.clearTimeout(timer);
       }
-      throw error;
-    } finally {
-      window.clearTimeout(timer);
+      if (!daRitentareColSegretoNuovo(response, tentativo)) break;
     }
     let envelope;
     try {
@@ -1484,6 +1605,7 @@
     if (!response.ok || !envelope?.ok) {
       const error = new Error(envelope?.error?.message || 'Local request failed');
       error.code = envelope?.error?.code || 'INTERNAL_ERROR';
+      if (envelope?.error?.errore && typeof envelope.error.errore === 'object') error.errore = envelope.error.errore; // ⛔ ERRCOD-E2: il descrittore del server per la scheda d'errore
       throw error;
     }
     return envelope.data;
@@ -1491,11 +1613,16 @@
 
   /** ⭐ 26/8, riconciliazione desktop→mobile — stesso contratto envelope di apiGet, per POST /api/v1/sessions/*. */
   async function apiPost(pathname, body) {
-    const response = await fetch(API(pathname), {
-      method: 'POST',
-      headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
+    let response;
+    for (let tentativo = 0; ; tentativo += 1) {
+      // ⛔ 70-A: ripetere il POST dopo un 401 è sicuro — il server lo rifiuta al cancello, prima di leggerne il corpo.
+      response = await fetch(API(pathname), {
+        method: 'POST',
+        headers: { Accept: 'application/json', 'Content-Type': 'application/json', ...await intestazioniServer(tentativo) },
+        body: JSON.stringify(body),
+      });
+      if (!daRitentareColSegretoNuovo(response, tentativo)) break;
+    }
     let envelope;
     try {
       envelope = await response.json();
@@ -1507,6 +1634,7 @@
     if (!response.ok || !envelope?.ok) {
       const error = new Error(envelope?.error?.message || 'Local request failed');
       error.code = envelope?.error?.code || 'INTERNAL_ERROR';
+      if (envelope?.error?.errore && typeof envelope.error.errore === 'object') error.errore = envelope.error.errore; // ⛔ ERRCOD-E2: il descrittore del server per la scheda d'errore
       throw error;
     }
     return envelope.data;
@@ -2663,7 +2791,7 @@
    * per davvero (porta precedente, stessa sessione), quindi il badge
    * demo lì sarebbe un falso allarme.
    */
-  const TIPI_FOGLIO_INTERAMENTE_ONESTI = new Set(['model', 'capabilities', 'control', 'fileViewer', 'renameFile', 'deleteFile', 'createFile', 'export', 'sessionTree']);
+  const TIPI_FOGLIO_INTERAMENTE_ONESTI = new Set(['model', 'capabilities', 'control', 'fileViewer', 'renameFile', 'deleteFile', 'createFile', 'export', 'sessionTree', 'compactSession']);
   function openSheet(type) {
     const content = sheetTemplates[type];
     if (!content) return;
@@ -3001,6 +3129,22 @@
         </div>`,
     },
     /**
+     * ⛔ P4-ter (02/10/2026; owner, desktop 24/09 notte: «guardare non compatta mai, "Compatta ora" chiede conferma»).
+     * Il pulsante e il comando della palette aprono QUESTO foglio; la chiamata parte solo da «Compatta ora».
+     */
+    compactSession: {
+      eyebrow: 'Context',
+      title: 'Compact the conversation',
+      html: () => `
+        <div class="sheet-section">
+          <p class="sheet-copy">TALOS summarises the older part of this conversation to make room. The full history stays saved, and you can undo it from the conversation.</p>
+          <div class="sheet-actions">
+            <button type="button" class="secondary-btn" data-compact-cancel>Cancel</button>
+            <button type="button" class="primary-btn" id="compactConfirm">Compact now</button>
+          </div>
+        </div>`,
+    },
+    /**
      * ⭐⭐⭐ 28/8, owner: "e comandi crud in generale" — "Nuovo file"/"Nuova
      * cartella", stesso foglio per entrambi (`state.alberoFileTarget.tipo`
      * decide titolo/etichetta ed è preimpostato da chi apre il foglio,
@@ -3272,6 +3416,15 @@
       });
     }
 
+    const compactConfirm = $('#compactConfirm', sheetBody);
+    if (compactConfirm) {
+      $('[data-compact-cancel]', sheetBody)?.addEventListener('click', () => closeEmbeddedDialog(sheetDialog));
+      compactConfirm.addEventListener('click', () => {
+        closeEmbeddedDialog(sheetDialog);
+        eseguiCompattazione();
+      });
+    }
+
     const createFileForm = $('#createFileForm', sheetBody);
     if (createFileForm) {
       const input = $('#createFileInput', createFileForm);
@@ -3325,12 +3478,13 @@
     if (announce) toast(state.queueMode ? 'Steering queue attiva' : 'Steering queue disattivata');
   }
 
-  function setRunState(running) {
+  function setRunState(running, esito) {
     state.running = Boolean(running);
     runStrip?.classList.toggle('is-stopped', !state.running);
     const label = $('strong', runStateToggle);
     const timer = runStateToggle?.querySelector('span:last-child');
-    if (label) label.textContent = state.running ? t('Running') : t('Stopped');
+    // ⭐ P4-sexies #3: un giro concluso NORMALMENTE non si legge come uno Stop (`esito === 'finished'`).
+    if (label) label.textContent = state.running ? t('Running') : t(esito === 'finished' ? 'Finished' : 'Stopped');
     /*
      * ⛔ TOPO-03 (voce «titolo della struttura della sessione», 25/09/2026): come il desktop (`legacy/app.js`, riga di
      * «sessione corrente · in corso/conclusa»), accanto a «sessione corrente» lo stato; il titolo sta su una riga coi
@@ -3669,7 +3823,13 @@
     article.className = 'message assistant-message compact-message real-compaction-note';
     article.setAttribute('role', 'status');
     article.setAttribute('aria-live', 'polite');
-    article.textContent = t('Summarising the conversation so far…');
+    article.appendChild(textElement('span', 'compaction-note-text', t('Summarising the conversation so far…')));
+    // ⭐ P4-ter: la barra indeterminata (decisione del desktop 17/09, «barra durante»); ferma col movimento ridotto.
+    const barra = document.createElement('span');
+    barra.className = 'compaction-bar';
+    barra.setAttribute('aria-hidden', 'true');
+    barra.appendChild(document.createElement('span'));
+    article.appendChild(barra);
     conversation.appendChild(article);
     state.realSession.compattazioneBubble = article;
     markMotionEnter(article);
@@ -3680,6 +3840,62 @@
     if (!state.realSession.compattazioneBubble) return;
     state.realSession.compattazioneBubble.remove();
     state.realSession.compattazioneBubble = null;
+  }
+
+  /*
+   * ⭐⭐ P4-ter (02/10/2026; owner, desktop 24/09 n.6: «riga X → Y token con Annulla»; 17/09: «il separatore resta
+   * alla riapertura»). Un separatore fisso nella conversazione per ogni compattazione riuscita, nel punto in cui è
+   * avvenuta: nasce dall'evento CompactionEnd, quindi rinasce da solo quando la riapertura rigioca gli eventi. Uno per
+   * `at`: lo stesso esito che arriva sia dalla risposta di «Compatta ora» sia dall'evento non si raddoppia.
+   */
+  function separatoreCompattazione(at) {
+    return $$('#conversation .compaction-separator').find((el) => el.dataset.at === at) ?? null;
+  }
+
+  function formattaToken(valore) {
+    return Number(valore).toLocaleString(window.__talosHarnessLocale === 'it' ? 'it-IT' : 'en-GB');
+  }
+
+  function mostraSeparatoreCompattazione({ tokenPrima, tokenDopo, at }) {
+    if (typeof at !== 'string' || !at || separatoreCompattazione(at)) return;
+    chiudiGruppoToolCorrente(); // gli attrezzi dopo la compattazione non finiscono nel gruppo sopra il separatore
+    const separatore = document.createElement('div');
+    separatore.className = 'compaction-separator';
+    separatore.dataset.at = at;
+    // ⛔ Non role="separator": i suoi figli sono presentazionali e il lettore di schermo perderebbe «Annulla».
+    separatore.setAttribute('role', 'group');
+    const numeri = Number.isFinite(tokenPrima) && Number.isFinite(tokenDopo)
+      ? ` · ${formattaToken(tokenPrima)} → ${formattaToken(tokenDopo)} ${t('tokens')}`
+      : '';
+    const etichetta = textElement('span', 'compaction-separator-label', `${t('Conversation summarized')}${numeri}`);
+    etichetta.id = `compaction-${Math.random().toString(36).slice(2, 10)}`;
+    separatore.setAttribute('aria-labelledby', etichetta.id);
+    const annulla = textElement('button', 'text-btn compaction-undo', t('Undo'));
+    annulla.type = 'button';
+    annulla.addEventListener('click', () => annullaCompattazione(at, annulla));
+    separatore.append(etichetta, annulla);
+    $('#conversation').appendChild(separatore);
+  }
+
+  function segnaCompattazioneAnnullata(at) {
+    const separatore = separatoreCompattazione(at);
+    if (!separatore) return;
+    separatore.classList.add('is-undone');
+    $('.compaction-separator-label', separatore).textContent = t('Summary undone · the whole conversation goes back to the model');
+    $('.compaction-undo', separatore)?.remove();
+  }
+
+  async function annullaCompattazione(at, bottone) {
+    const sessionId = state.realSession.id;
+    if (!sessionId) return;
+    bottone.disabled = true;
+    try {
+      await apiPost(`/api/v1/sessions/${encodeURIComponent(sessionId)}/compaction/undo`, { at });
+      segnaCompattazioneAnnullata(at); // l'evento CompactionUndone arriva anche dal flusso: la seconda volta non fa nulla
+    } catch (error) {
+      bottone.disabled = false;
+      toast('Undo failed', error.message);
+    }
   }
 
   function ensureAssistantMessageElement(messageId) {
@@ -3873,6 +4089,79 @@
     return gruppo;
   }
 
+  /*
+   * ⛔ ERRCOD-E3 (30/09/2026, visto sul Pad) — «Modificato un file — non riuscito: notes_delete failed:
+   * TALOS_NOTE_NOT_FOUND»: una nota non è un file, e il motivo era il testo tecnico. Owner: «Motivo in parole, grezzo nel
+   * dettaglio». Per ogni attrezzo dei dati del telefono l'azione in parole (singolare e plurale, inglese e italiano);
+   * il motivo viene dall'`errorCode` del kernel. Il testo grezzo resta nella riga aperta del foglio (`esitoRaw`).
+   */
+  const FRASI_ATTREZZO = {
+    notes_create: ['saved a note', 'saved {n} notes', 'salvata una nota', 'salvate {n} note'],
+    notes_update: ['updated a note', 'updated {n} notes', 'aggiornata una nota', 'aggiornate {n} note'],
+    notes_delete: ['deleted a note', 'deleted {n} notes', 'cancellata una nota', 'cancellate {n} note'],
+    notes_list: ['looked at the notes', 'looked at the notes', 'guardate le note', 'guardate le note'],
+    tasks_create: ['saved a task', 'saved {n} tasks', 'salvata un’attività', 'salvate {n} attività'],
+    tasks_update: ['updated a task', 'updated {n} tasks', 'aggiornata un’attività', 'aggiornate {n} attività'],
+    tasks_complete: ['marked a task', 'marked {n} tasks', 'segnata un’attività', 'segnate {n} attività'],
+    tasks_delete: ['deleted a task', 'deleted {n} tasks', 'cancellata un’attività', 'cancellate {n} attività'],
+    tasks_list: ['looked at the tasks', 'looked at the tasks', 'guardate le attività', 'guardate le attività'],
+    memory_write: ['remembered something', 'remembered {n} things', 'memorizzata una cosa', 'memorizzate {n} cose'],
+    memory_update: ['updated a memory', 'updated {n} memories', 'aggiornato un ricordo', 'aggiornati {n} ricordi'],
+    memory_delete: ['forgot a memory', 'forgot {n} memories', 'dimenticato un ricordo', 'dimenticati {n} ricordi'],
+    memory_search: ['searched the memory', 'searched the memory {n} times', 'cercato nella memoria', 'cercato nella memoria {n} volte'],
+    library_list: ['looked at the Library', 'looked at the Library', 'guardata la Libreria', 'guardata la Libreria'],
+    library_read: ['read a Library file', 'read {n} Library files', 'letto un file della Libreria', 'letti {n} file della Libreria'],
+    library_rename: ['renamed a Library file', 'renamed {n} Library files', 'rinominato un file della Libreria', 'rinominati {n} file della Libreria'],
+    library_delete: ['deleted a Library file', 'deleted {n} Library files', 'cancellato un file della Libreria', 'cancellati {n} file della Libreria'],
+    library_search: ['searched the Library', 'searched the Library {n} times', 'cercato nella Libreria', 'cercato nella Libreria {n} volte'],
+    library_file_origin: ['checked where a file comes from', 'checked where {n} files come from', 'controllato da dove viene un file', 'controllato da dove vengono {n} file'],
+    research_list: ['looked at the deep research', 'looked at the deep research', 'guardate le ricerche approfondite', 'guardate le ricerche approfondite'],
+    research_read: ['read a research report', 'read {n} research reports', 'letto un rapporto di ricerca', 'letti {n} rapporti di ricerca'],
+    generate_image: ['generated an image', 'generated {n} images', 'generata un’immagine', 'generate {n} immagini'],
+    document_create: ['created a document', 'created {n} documents', 'creato un documento', 'creati {n} documenti'],
+    time_now: ['checked the time', 'checked the time', 'guardata l’ora', 'guardata l’ora'],
+    web_search: ['searched the web', 'searched the web {n} times', 'cercato sul web', 'cercato sul web {n} volte'],
+    // ⛔ OSS-70B-2 (30/09/2026 notte, visto sul Pad): tornato col 70-B, diceva «Eseguito un comando».
+    artifact_create: ['created a visual', 'created {n} visuals', 'creata una visualizzazione', 'create {n} visualizzazioni'],
+  };
+
+  function fraseAzioneAttrezzo(nome, n, italiano) {
+    const [enUno, enMolti, itUno, itMolti] = FRASI_ATTREZZO[nome];
+    const frase = italiano ? (n === 1 ? itUno : itMolti) : (n === 1 ? enUno : enMolti);
+    return frase.replace('{n}', String(n));
+  }
+
+  function maiuscolaIniziale(testo) {
+    return testo ? testo.charAt(0).toUpperCase() + testo.slice(1) : testo;
+  }
+
+  /** «Non trovato» detto dell'oggetto giusto, per famiglia di attrezzo. */
+  const NON_TROVATO_PER_FAMIGLIA = {
+    notes: ['the note does not exist', 'la nota non esiste'],
+    tasks: ['the task does not exist', 'l’attività non esiste'],
+    memory: ['there is no such memory', 'quel ricordo non esiste'],
+    library: ['the file is not in the Library', 'il file non è nella Libreria'],
+    research: ['the report does not exist', 'il rapporto non esiste'],
+  };
+  const MOTIVI_ERRORE_ATTREZZO = {
+    NOT_CONFIGURED: ['not available here: phone data is not connected', 'non disponibile qui: i dati del telefono non sono collegati'],
+    DENIED: ['not allowed by the current permissions', 'non permesso dai permessi attuali'],
+    INVALID_RESULT: ['the result could not be confirmed', 'il risultato non si è potuto confermare'],
+    FAILED: ['the app reported an error', 'l’app ha segnalato un errore'],
+    FILE_NOT_FOUND: ['the file does not exist', 'il file non esiste'],
+    FILE_DENIED: ['no permission on the file', 'nessun permesso sul file'],
+  };
+
+  /** Il motivo in parole per un `errorCode` del kernel; `null` se il codice non è noto (resta il testo di sempre). */
+  function motivoInParole(nome, codice) {
+    const italiano = window.__talosHarnessLocale === 'it' ? 1 : 0;
+    if (codice === 'NOT_FOUND') {
+      const famiglia = String(nome ?? '').split('_')[0];
+      return (NON_TROVATO_PER_FAMIGLIA[famiglia] ?? ['it does not exist', 'non esiste'])[italiano];
+    }
+    return MOTIVI_ERRORE_ATTREZZO[codice]?.[italiano] ?? null;
+  }
+
   /**
    * Riassunto aggregato — le categorie nell'ORDINE in cui sono comparse
    * la prima volta nel gruppo, non un ordine fisso: "Eseguiti 3 comandi,
@@ -3886,8 +4175,10 @@
     const conteggi = new Map();
     const ordine = [];
     for (const item of gruppo.items) {
-      if (!conteggi.has(item.categoria)) { conteggi.set(item.categoria, 0); ordine.push(item.categoria); }
-      conteggi.set(item.categoria, conteggi.get(item.categoria) + 1);
+      // ⛔ ERRCOD-E3: gli attrezzi dei dati del telefono si contano per AZIONE («cancellata una nota»), non come file.
+      const chiave = Object.hasOwn(FRASI_ATTREZZO, item.nome) ? `azione:${item.nome}` : item.categoria;
+      if (!conteggi.has(chiave)) { conteggi.set(chiave, 0); ordine.push(chiave); }
+      conteggi.set(chiave, conteggi.get(chiave) + 1);
     }
     const unicoNuovo = () => gruppo.items.find((i) => i.categoria === 'modificato')?.nuovo;
     const VERBI = {
@@ -3909,7 +4200,9 @@
     };
     const italiano = window.__talosHarnessLocale === 'it';
     const verbi = italiano ? VERBI_IT : VERBI;
-    const testo = ordine.map((cat) => verbi[cat](conteggi.get(cat))).join(', ');
+    const testo = ordine.map((chiave) => (chiave.startsWith('azione:')
+      ? fraseAzioneAttrezzo(chiave.slice('azione:'.length), conteggi.get(chiave), italiano)
+      : verbi[chiave](conteggi.get(chiave)))).join(', ');
     const base = testo ? testo.charAt(0).toUpperCase() + testo.slice(1) : t('Working…');
     /*
      * ⭐⭐⭐ 3/9 — avm-03, dal vivo: «Un ⚠️ giallo accompagna "Read 9
@@ -3967,7 +4260,11 @@
       riga.className = 'tool-group-sheet-row';
       riga.setAttribute('aria-expanded', 'false');
       riga.append(nuovaIconaSvg(ICONA_PER_CATEGORIA[item.categoria]));
-      riga.append(textElement('strong', '', t(ETICHETTA_CATEGORIA[item.categoria])));
+      // ⛔ ERRCOD-E3: per i dati del telefono l'azione vera («Cancellata una nota»), non «Modified».
+      const etichettaRiga = Object.hasOwn(FRASI_ATTREZZO, item.nome)
+        ? maiuscolaIniziale(fraseAzioneAttrezzo(item.nome, 1, window.__talosHarnessLocale === 'it'))
+        : t(ETICHETTA_CATEGORIA[item.categoria]);
+      riga.append(textElement('strong', '', etichettaRiga));
       riga.append(textElement('span', 'tool-group-sheet-target', item.bersaglio || ''));
       if (item.diffDisponibile && (item.diffAggiunte > 0 || item.diffRimozioni > 0)) {
         const diff = document.createElement('span');
@@ -4036,27 +4333,102 @@
    * `allow-top-navigation`/`allow-popups`/`allow-forms` resta invariato:
    * script permessi, ogni via di fuga negata — il confine vero.
    */
-  function appendArtifactCard(titolo, id) {
+  /*
+   * ⛔⛔ 70-B (30/09/2026 notte, owner «Riuso della chat» e «Sì, come la chat») — qui c'era un iframe su
+   * `/api/v1/artifacts/<id>` dentro la WebView di TALOS: bloccato dal suo `frame-src 'none'` e comunque non isolato (il
+   * ponte Capacitor si vede da ogni frame, `TalosArtifactActivity.kt`). Ora la scheda è quella della chat
+   * (`TalosMobileSchedaAzione.vue`): un pulsante col titolo che apre la finestra isolata dell'app, e una riga SEPARATA
+   * «Save to Library» — due azioni diverse non condividono un tocco. Il lavoro vero lo fa l'app
+   * (`window.__talosHarnessArtefatto`, `harnessUiArtefatti.ts`); aperto da solo, fuori dall'app, lo si dice.
+   */
+  const FRASI_ARTEFATTO = Object.freeze({
+    OPEN_FAILED: 'It would not open',
+    READ_FAILED: 'It would not open',
+    NOT_FOUND: 'This visual is no longer on the Code server.',
+    SAVE_FAILED: 'Could not save',
+  });
+
+  function appendArtifactCard(titolo, id, modello) {
     const conversation = $('#conversation');
     const article = document.createElement('article');
     article.className = 'message assistant-message compact-message real-artifact-card';
-    const header = document.createElement('div');
-    header.className = 'artifact-card-header';
-    const glyph = document.createElement('span');
-    glyph.className = 'talos-glyph';
-    glyph.textContent = '🧩';
-    header.append(glyph, textElement('span', 'artifact-card-title', titolo || 'Artefatto'));
-    const frame = document.createElement('iframe');
-    frame.className = 'artifact-card-frame';
-    frame.setAttribute('sandbox', 'allow-scripts');
-    frame.setAttribute('referrerpolicy', 'no-referrer');
-    frame.setAttribute('title', titolo || 'Artefatto');
-    frame.src = API(`/api/v1/artifacts/${encodeURIComponent(id)}`);
-    article.append(header, frame);
+    const nome = titolo || t('Interactive visual');
+
+    const apri = document.createElement('button');
+    apri.type = 'button';
+    apri.className = 'artifact-card-open';
+    const testoApri = document.createElement('span');
+    testoApri.className = 'artifact-card-text';
+    const statoApri = textElement('span', 'artifact-card-status', '');
+    statoApri.setAttribute('aria-live', 'polite');
+    testoApri.append(textElement('span', 'artifact-card-title', nome), statoApri);
+    const freccia = textElement('span', 'artifact-card-arrow', '›');
+    freccia.setAttribute('aria-hidden', 'true');
+    apri.append(testoApri, freccia);
+
+    const salva = document.createElement('button');
+    salva.type = 'button';
+    salva.className = 'artifact-card-save';
+    const etichettaSalva = textElement('span', 'artifact-card-save-label', t('Save to Library'));
+    const statoSalva = textElement('span', 'artifact-card-status', '');
+    statoSalva.setAttribute('aria-live', 'polite');
+    salva.append(etichettaSalva, statoSalva);
+
+    const ponte = () => window.__talosHarnessArtefatto;
+    apri.addEventListener('click', async () => {
+      if (apri.getAttribute('aria-busy') === 'true') return;
+      if (!ponte()) { statoApri.textContent = t('This action is only available inside the TALOS app.'); return; }
+      apri.setAttribute('aria-busy', 'true');
+      statoApri.textContent = '';
+      try {
+        const esito = await ponte().apri(id, nome);
+        statoApri.textContent = esito?.ok ? '' : t(FRASI_ARTEFATTO[esito?.motivo] ?? FRASI_ARTEFATTO.OPEN_FAILED);
+      } catch {
+        statoApri.textContent = t(FRASI_ARTEFATTO.OPEN_FAILED);
+      } finally {
+        apri.removeAttribute('aria-busy');
+      }
+    });
+    salva.addEventListener('click', async () => {
+      if (salva.disabled) return;
+      if (!ponte()) { statoSalva.textContent = t('This action is only available inside the TALOS app.'); return; }
+      salva.disabled = true;
+      salva.setAttribute('aria-busy', 'true');
+      statoSalva.textContent = '';
+      try {
+        // ⛔ OSS-70B-1 (30/09/2026): la sessione del server, così l'app dice in Libreria da quale sessione del Codice viene.
+        const esito = await ponte().salva(id, nome, { sessioneServer: state.realSession.id ?? null, ...(typeof modello === 'string' && modello ? { modello } : {}) });
+        if (esito?.ok) {
+          etichettaSalva.textContent = t('Saved to Library');
+          return;
+        }
+        statoSalva.textContent = t(FRASI_ARTEFATTO[esito?.motivo] ?? FRASI_ARTEFATTO.SAVE_FAILED);
+        salva.disabled = false;
+      } catch {
+        statoSalva.textContent = t(FRASI_ARTEFATTO.SAVE_FAILED);
+        salva.disabled = false;
+      } finally {
+        salva.removeAttribute('aria-busy');
+      }
+    });
+
+    /*
+     * ⛔ OSS-70B-3 (30/09/2026 notte, owner «Riconoscere la stessa pagina»): «Salvato» viveva solo a schermo e una
+     * ricarica lo perdeva, invitando a un doppione. La scheda chiede all'app se la stessa pagina è già nella Libreria.
+     */
+    if (typeof ponte()?.stato === 'function') {
+      Promise.resolve(ponte().stato(id)).then((esito) => {
+        if (!esito?.salvato || salva.getAttribute('aria-busy') === 'true') return;
+        etichettaSalva.textContent = t('Saved to Library');
+        salva.disabled = true;
+      }).catch(() => {});
+    }
+
+    article.append(apri, salva);
     conversation.appendChild(article);
     markMotionEnter(article);
     window.setTimeout(() => article.scrollIntoView({ behavior: document.body.classList.contains('reduce-motion') ? 'auto' : 'smooth', block: 'end' }), 40);
-    return { frame };
+    return { apri, salva };
   }
 
   /*
@@ -4117,7 +4489,7 @@
     }
   }
 
-  function appendStatusNote(text, isError = false) {
+  function appendStatusNote(text, isError = false, fermato = false) {
     const conversation = $('#conversation');
     const article = document.createElement('article');
     article.className = `message assistant-message compact-message real-session-status${isError ? ' real-session-error' : ''}`;
@@ -4125,12 +4497,154 @@
     meta.className = 'assistant-meta';
     const glyph = document.createElement('span');
     glyph.className = 'talos-glyph';
-    glyph.textContent = isError ? '!' : '✓';
-    meta.append(glyph, document.createTextNode(isError ? 'TALOS · errore' : 'TALOS · concluso'));
+    glyph.textContent = isError ? '!' : fermato ? '■' : '✓';
+    meta.append(glyph, document.createTextNode(isError ? 'TALOS · errore' : fermato ? t('TALOS · stopped') : 'TALOS · concluso'));
     const copy = document.createElement('div');
     copy.className = 'assistant-copy';
     copy.textContent = text;
     article.append(meta, copy);
+    conversation.appendChild(article);
+    markMotionEnter(article);
+    window.setTimeout(() => article.scrollIntoView({ behavior: document.body.classList.contains('reduce-motion') ? 'auto' : 'smooth', block: 'end' }), 40);
+  }
+
+  /*
+   * ⛔ ERRCOD (30/09/2026) — la scheda d'errore del Codice. Owner: errori «formattati allo stato dell'arte con una sezione
+   * formattata e stilisticamente coerente con le grammatiche di Talos». È la scheda della chat
+   * (`mobile/src/components/chat/TalosMobileStatusMessage.vue`) nel DOM del Codice: titolo del livello, una frase in
+   * parole, «Azione successiva», UN solo pulsante (regola dell'owner: azioni mai affiancate), e in piccolo la
+   * diagnostica col codice e i dettagli grezzi. Il descrittore lo decide il server (`error-surface.mjs`); qui si disegna.
+   * Inglese come sorgente, italiano da `DIZIONARIO_IT`, come il resto di questo file. Ledger
+   * `.claude/ragionamento/LEDGER-ERRORI-CODICE-2026-09-30.md`.
+   */
+  const TITOLI_LIVELLO_ERRORE = {
+    provider: 'Provider failure', network: 'Network failure', policy: 'Policy denial',
+    system: 'Execution failure', worker: 'Worker failure', validator: 'Validation fault',
+  };
+  const FRASI_ERRORE = {
+    PROVIDER_AUTH: ['The model service did not accept the key saved for this provider.', 'Open the provider keys, check or replace the key, then try again.'],
+    PROVIDER_KEY_MISSING: ['No key is saved for the provider of this model.', 'Open the provider keys, check or replace the key, then try again.'],
+    PROVIDER_BILLING: ['The provider account has no credit left, or a spending limit was reached.', 'Top up the credit or raise the limit on the provider site, then send the message again.'],
+    PROVIDER_FORBIDDEN: ['The provider did not allow this request with this model.', 'Pick another model and try again.'],
+    PROVIDER_CONTENT_POLICY: ['The provider safety filter stopped this request.', 'Rephrase the message, or remove the part that may have triggered the filter.'],
+    PROVIDER_MODEL_NOT_FOUND: ['This model is not available at the provider any more.', 'Pick another model and try again.'],
+    PROVIDER_CONTEXT_TOO_LONG: ['The conversation has grown too long for this model to read.', 'Start a new session, or pick a model with a larger context.'],
+    PROVIDER_OUTPUT_LIMIT: ['The reply stopped because it reached the length limit of the model.', 'Ask it to continue from where it stopped.'],
+    PROVIDER_PAYLOAD_TOO_LARGE: ['This request is too large for the provider to accept.', 'Start a new session, or send less text or smaller files.'],
+    PROVIDER_IMAGE: ['The provider could not read an image in this request.', 'Try a smaller image, as PNG or JPEG.'],
+    PROVIDER_BAD_REQUEST: ['The provider rejected this request as not valid for this model.', 'Pick another model and try again.'],
+    PROVIDER_RATE_LIMIT: ['The provider is receiving too many requests right now.', 'Wait a minute, then try again.'],
+    PROVIDER_OVERLOADED: ['The model is overloaded at the moment.', 'Try again in a few minutes.'],
+    PROVIDER_UNAVAILABLE: ['The model did not answer: the provider serving it is down or sent nothing usable.', 'Pick another model, or try again later.'],
+    PROVIDER_TIMEOUT: ['The model service took too long to answer.', 'Try again.'],
+    PROVIDER_SERVER: ['The model service had an internal error.', 'Try again in a moment.'],
+    PROVIDER_EMPTY: ['The model answered with nothing.', 'Try again.'],
+    NETWORK_OFFLINE: ['The phone cannot reach the model service: it looks offline.', 'Check Wi-Fi or mobile data, then try again.'],
+    NETWORK_TLS: ['The secure connection to the model service could not be verified.', 'Check the date and time of the phone, and any VPN or proxy in use.'],
+    NETWORK_REFUSED: ['The connection to the model service closed before the answer.', 'Try again.'],
+    NETWORK_TIMEOUT: ['The model service did not respond in time.', 'Try again; if it keeps happening, check the connection.'],
+    RUN_STEP_LIMIT: ['The agent used all its steps for this request without finishing.', 'Ask it to continue: it starts again from where it stopped.'],
+    RUN_NO_ANSWER: ['The agent stopped without giving an answer.', 'Try again.'],
+    SESSION_NOT_READY: ['This session cannot take a new message.', 'Start a new session.'],
+    SESSION_NOT_FOUND: ['This session no longer exists on the Code server.', 'Start a new session.'],
+    REQUEST_INVALID: ['The Code server did not accept this request.', 'Check the text and try again.'],
+    SERVER_UNREACHABLE: ['The Code server on this phone is not answering.', 'Try again; if it keeps happening, close the Code and open it again.'],
+    SERVER_TIMEOUT: ['The Code server on this phone took too long to answer.', 'Try again; if it keeps happening, close the Code and open it again.'],
+    SERVER_AUTH_FAILED: ['The Code server on this phone did not recognise TALOS.', 'Close the Code and open it again.'],
+    EVENTS_LOST: ['The live connection to this session was lost.', 'Open the session again from the list to see how it ended.'],
+    UNKNOWN: ['Something unexpected happened.', 'Start a new session. The details below say what went wrong.'],
+  };
+  const ETICHETTE_AZIONE_ERRORE = {
+    retry: 'Try again', continue: 'Continue', 'provider-keys': 'Open provider keys',
+    'pick-model': 'Pick another model', 'new-session': 'Start a new session',
+  };
+
+  /** Il descrittore del server, o — per un server più vecchio che non lo manda — un «errore imprevisto» col testo grezzo. */
+  function descrittoreDaRunError(evento) {
+    const errore = evento?.errore;
+    if (errore && typeof errore === 'object' && typeof errore.code === 'string') return errore;
+    return { layer: 'system', code: 'UNKNOWN', retryable: null, action: 'new-session', detail: String(evento?.message ?? '') };
+  }
+
+  /**
+   * ⛔ ERRCOD-E2 — da un'eccezione di `apiGet`/`apiPost` al descrittore. Di norma lo porta l'envelope del server
+   * (`error.errore`); qui si classifica SOLO ciò che il server non può dire perché non ha risposto: `fetch` che
+   * lancia (server spento o ponte staccato) e il tempo scaduto di `apiGet`.
+   */
+  function descrittoreDaErroreLocale(error) {
+    if (error?.errore && typeof error.errore === 'object' && typeof error.errore.code === 'string') return error.errore;
+    const detail = String(error?.message ?? error ?? '');
+    if (error?.code === 'TIMEOUT') return { layer: 'system', code: 'SERVER_TIMEOUT', retryable: true, action: 'retry', detail };
+    if (error instanceof TypeError) return { layer: 'system', code: 'SERVER_UNREACHABLE', retryable: true, action: 'retry', detail };
+    return { layer: 'system', code: 'UNKNOWN', retryable: null, action: 'new-session', detail };
+  }
+
+  /** L'unica azione della scheda. Ciò che vive fuori dal Codice (Impostazioni, selettore, sessione nuova) passa dall'app. */
+  function eseguiAzioneErrore(azione, nota) {
+    if (azione === 'retry') { void resumeSession(); return; }
+    if (azione === 'continue') { void resumeSession(t('Continue from where you stopped.')); return; }
+    const apri = window.__talosHarnessHostOpen;
+    if (typeof apri === 'function') { apri(azione); return; }
+    // ⛔ Mai un pulsante che si spegne e basta (stessa regola di TalosMobileSchedaAzione.vue, `apriImpostazioni`).
+    nota.textContent = t('This action is only available inside the TALOS app.');
+    nota.hidden = false;
+  }
+
+  function appendErrorCard(descrittore) {
+    const conversation = $('#conversation');
+    const [frase, prossima] = FRASI_ERRORE[descrittore.code] ?? FRASI_ERRORE.UNKNOWN;
+    const article = document.createElement('article');
+    article.className = 'message assistant-message compact-message error-card';
+    article.setAttribute('role', 'alert');
+    article.dataset.errorCode = descrittore.code;
+    article.dataset.errorLayer = descrittore.layer;
+
+    const testa = document.createElement('div');
+    testa.className = 'error-card-head';
+    const icona = textElement('span', 'error-card-icon', descrittore.layer === 'policy' ? '⛨' : '!');
+    icona.setAttribute('aria-hidden', 'true');
+    testa.append(icona, textElement('strong', 'error-card-title', t(TITOLI_LIVELLO_ERRORE[descrittore.layer] ?? 'Execution failure')));
+
+    // Claude Code, Error reference: «Server error mid-response. The response above may be incomplete.»
+    const messaggio = descrittore.midStream ? `${t(frase)} ${t('The reply above may be incomplete.')}` : t(frase);
+    const corpo = document.createElement('div');
+    corpo.className = 'error-card-body';
+    corpo.append(textElement('p', 'error-card-message', messaggio));
+
+    const prossimo = document.createElement('div');
+    prossimo.className = 'error-card-next-block';
+    prossimo.append(textElement('div', 'error-card-next-label', t('Next action')), textElement('p', 'error-card-next', t(prossima)));
+    const etichetta = ETICHETTE_AZIONE_ERRORE[descrittore.action];
+    const nota = textElement('p', 'error-card-action-note', '');
+    nota.hidden = true;
+    if (etichetta) {
+      const pulsante = textElement('button', 'talos-button talos-button--secondary talos-button--sm error-card-action', t(etichetta));
+      pulsante.type = 'button';
+      pulsante.addEventListener('click', () => eseguiAzioneErrore(descrittore.action, nota));
+      prossimo.append(pulsante);
+    }
+    prossimo.append(nota);
+    corpo.append(prossimo);
+
+    const diagnostica = document.createElement('div');
+    diagnostica.className = 'error-card-diagnostic';
+    const identita = [descrittore.provider, descrittore.model].filter(Boolean).join(' / ');
+    if (identita) diagnostica.append(textElement('span', '', identita));
+    if (Number.isInteger(descrittore.status)) diagnostica.append(textElement('span', '', `HTTP ${descrittore.status}`));
+    diagnostica.append(textElement('span', 'error-card-code', descrittore.code));
+    if (descrittore.retryable !== null && descrittore.retryable !== undefined) {
+      diagnostica.append(textElement('span', 'error-card-retry', t(descrittore.retryable ? 'Retry available' : 'Manual action required')));
+    }
+    corpo.append(diagnostica);
+
+    if (descrittore.detail) {
+      const dettagli = document.createElement('details');
+      dettagli.className = 'error-card-details';
+      dettagli.append(textElement('summary', '', t('Details')), textElement('pre', '', descrittore.detail));
+      corpo.append(dettagli);
+    }
+
+    article.append(testa, corpo);
     conversation.appendChild(article);
     markMotionEnter(article);
     window.setTimeout(() => article.scrollIntoView({ behavior: document.body.classList.contains('reduce-motion') ? 'auto' : 'smooth', block: 'end' }), 40);
@@ -4144,6 +4658,9 @@
    * campo giusto è già lì.
    */
   function descriviAzioneApprovazione(azione) {
+    // ⛔ P4-quater (02/10/2026): la frase la scrive il kernel (fuori dalla cartella, `~/.ssh/config`), sul percorso vero.
+    const frase = azione?.fuoriDalProgetto?.frase ?? azione?.suDomanda?.frase;
+    if (typeof frase === 'string' && frase.trim()) return frase.trim();
     if (azione?.tipo === 'scrivi') return `Wants to write the file: ${azione.percorso}`;
     if (azione?.tipo === 'shell') return `Wants to run the command: ${azione.comando}`;
     if (azione?.tipo === 'document_create') return `Vuole creare un documento (formato ${azione.formato || '?'})`;
@@ -4206,24 +4723,55 @@
      * l'evento arriva davvero, un SOLO punto che scrive, mai due.
      */
     let rispostaDataDaQuestaScheda = false;
-    const rispondi = async (approvato) => {
-      negaBtn.disabled = true;
-      approvaBtn.disabled = true;
+    /*
+     * ⛔⛔ P4-quater (owner 02/10/2026, «Elenco di risposte») — la scrittura fuori dalla cartella della sessione ha TRE
+     *   risposte: una sola volta, la cartella per la sessione (sottocartelle comprese: la sceglie il kernel, `ambito:
+     *   'cartella'`), no. Tre azioni non vanno in fila (regola dell'owner del 10/09) ⇒ un elenco di risposte a tutta
+     *   larghezza, una sotto l'altra, come Codex (`codex-rs/tui/src/bottom_pane/approval_overlay.rs:837-900`). Se la
+     *   cartella non è verificata non c'è niente da consentire: due righe. Le altre domande restano «Nega / Approva».
+     */
+    const fuori = azione?.fuoriDalProgetto;
+    const scelte = [];
+    const rispondi = async (approvato, ambito = null) => {
+      for (const b of [negaBtn, approvaBtn, ...scelte]) b.disabled = true;
       rispostaDataDaQuestaScheda = true;
       try {
-        await apiPost(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/approve`, { requestId, approvato });
+        await apiPost(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/approve`, ambito ? { requestId, approvato, ambito } : { requestId, approvato });
         // ⛔ NIENT'ALTRO qui apposta — vedi il commento sopra: il case ApprovalResolved finalizza la card, sempre e solo lui.
       } catch (error) {
         rispostaDataDaQuestaScheda = false;
-        negaBtn.disabled = false;
-        approvaBtn.disabled = false;
+        for (const b of [negaBtn, approvaBtn, ...scelte]) b.disabled = false;
         toast('Reply failed', error.message);
       }
     };
-    negaBtn.addEventListener('click', () => rispondi(false));
-    approvaBtn.addEventListener('click', () => rispondi(true));
-    azioniRiga.append(negaBtn, approvaBtn);
-    article.append(meta, copy, azioniRiga);
+    if (fuori) {
+      const elenco = document.createElement('div');
+      elenco.className = 'approval-choices';
+      elenco.setAttribute('role', 'group');
+      elenco.setAttribute('aria-label', 'Rispondi alla richiesta');
+      const scelta = (etichetta, nota, primaria, azioneClick) => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = primaria ? 'approval-choice approval-choice--primary' : 'approval-choice';
+        b.append(textElement('span', 'approval-choice-label', etichetta));
+        if (nota) b.append(textElement('span', 'approval-choice-note', nota));
+        b.addEventListener('click', azioneClick);
+        scelte.push(b);
+        elenco.append(b);
+      };
+      scelta('Consenti questa volta', null, true, () => rispondi(true));
+      if (fuori.verificato === true && typeof fuori.chiave === 'string' && fuori.chiave) {
+        scelta('Consenti in questa cartella per la sessione', 'anche le sottocartelle', false, () => rispondi(true, 'cartella'));
+      }
+      scelta('Nega', null, false, () => rispondi(false));
+      article.append(meta, copy, elenco);
+    }
+    else {
+      negaBtn.addEventListener('click', () => rispondi(false));
+      approvaBtn.addEventListener('click', () => rispondi(true));
+      azioniRiga.append(negaBtn, approvaBtn);
+      article.append(meta, copy, azioniRiga);
+    }
     conversation.appendChild(article);
     // ⭐ letto dal case 'ApprovalResolved' per distinguere "ho risposto io da questa scheda" da "ha risposto un altro client" — mai un secondo testo duplicato, mai una wording sbagliata.
     article._rispostaDataQui = () => rispostaDataDaQuestaScheda;
@@ -4578,7 +5126,7 @@
           break;
         }
         case 'ApprovalResolved': {
-          righe.push(`_Approvazione ${evento.approvato ? 'CONCESSA' : 'NEGATA'}._`, '');
+          righe.push(`_Approvazione ${evento.approvato ? 'CONCESSA' : 'NEGATA'}${evento.ambito === 'cartella' ? ' in questa cartella per la sessione' : ''}${evento.motivo === 'nessuna-interfaccia' ? ': nessuno poteva rispondere in questa sessione automatica' : ''}._`, '');
           break;
         }
         case 'RunFinished': {
@@ -5485,6 +6033,12 @@
       }
       case 'CompactionEnd': {
         nascondiCompattazioneInCorso();
+        // ⭐ P4-ter: solo una compattazione riuscita lascia il separatore; una saltata o fallita non lascia traccia.
+        if (evento.compattato === true) mostraSeparatoreCompattazione(evento);
+        break;
+      }
+      case 'CompactionUndone': {
+        segnaCompattazioneAnnullata(evento.at);
         break;
       }
       case 'TextMessageContent': {
@@ -5580,7 +6134,8 @@
         if (info) {
           info.item.bersaglio = riassuntoEsitoAttrezzo(info.nome, info.item.bersaglio, testoEsito);
           info.item.esitoRaw = testoEsito;
-          info.item.problema = pareFallito(testoEsito);
+          // ⛔ ESITO65 (30/09/2026): vince `isError` del server, deciso dal ramo del kernel che conosce l'esito; `pareFallito` resta per gli eventi senza il campo (sessioni salvate prima).
+          info.item.problema = typeof evento.isError === 'boolean' ? evento.isError : pareFallito(testoEsito);
           if (info.item.problema) {
             info.gruppo.haProblema = true;
             /*
@@ -5590,7 +6145,8 @@
              * `erroriStrumento` è il kpi "errors" del run-strip, azzerato a
              * ogni RunStarted — vedi quel case per il perché.
              */
-            info.item.motivoFallimento = estraiMotivoFallimento(testoEsito);
+            // ⛔ ERRCOD-E3: il motivo in parole quando il kernel dice il perché (errorCode); altrimenti il testo di sempre.
+            info.item.motivoFallimento = motivoInParole(info.nome, evento.errorCode) ?? estraiMotivoFallimento(testoEsito);
             state.realSession.erroriStrumento += 1;
             aggiornaRunKpis();
           }
@@ -5707,7 +6263,7 @@
       case 'ArtifactCreated': {
         nascondiAttesaRisposta();
         chiudiGruppoToolCorrente(); // ⭐ 30/8 — una card artefatto è "un'altra cosa" nella chat, come un messaggio di testo: chiude il gruppo tool-call corrente
-        appendArtifactCard(evento.titolo, evento.id);
+        appendArtifactCard(evento.titolo, evento.id, evento.modello); // ⛔ E7 (01/10/2026): il modello che ha fatto il giro
         break;
       }
       case 'WorkspaceChanged': {
@@ -5748,7 +6304,7 @@
         break;
       }
       case 'RunFinished': {
-        setRunState(false); // ⭐ 29/8 — ledger §10, stesso motivo di RunStarted sopra
+        setRunState(false, 'finished'); // ⭐ 29/8 — ledger §10, stesso motivo di RunStarted sopra
         // ⭐ B1-11 (23/09): gli attrezzi che il kernel ha DAVVERO offerto al modello, per il Capability hub.
         if (Array.isArray(evento.result?.attrezziOfferti)) {
           state.realSession.attrezziOfferti = { sessionId: state.realSession.id, nomi: evento.result.attrezziOfferti.map(String) };
@@ -5815,12 +6371,25 @@
         const card = state.realSession.approvazioniPendenti.get(evento.requestId);
         if (card) {
           const daQuiStessa = card._rispostaDataQui?.() === true;
-          const azioniRiga = card.querySelector('.sheet-actions');
-          if (azioniRiga) azioniRiga.remove();
+          card.querySelector('.sheet-actions')?.remove();
+          card.querySelector('.approval-choices')?.remove(); // ⛔ P4-quater: l'elenco di risposte della scrittura fuori
+          /* ⭐ P4-sexies #2: dopo la risposta l'intestazione non resta «in attesa di approvazione» (si leggeva come una domanda
+             ancora aperta): dice l'esito, con lo stesso glifo della scheda. */
+          const intestazione = card.querySelector('.assistant-meta');
+          if (intestazione?.lastChild) {
+            const segno = intestazione.querySelector('.talos-glyph');
+            if (segno) segno.textContent = evento.approvato ? '✓' : '✕';
+            intestazione.lastChild.textContent = evento.approvato ? 'TALOS · approvazione concessa' : 'TALOS · approvazione negata';
+          }
           const copy = card.querySelector('.assistant-copy');
           if (copy) {
-            const esito = evento.approvato ? 'Approvato' : 'Negato';
-            copy.textContent += daQuiStessa ? ` — ${esito}.` : ` — ${esito} (da un altro client).`;
+            /* ⛔ P4-quater (come il desktop, `75108d7ee`): il sì per la cartella e il no chiuso dal server perché nessuno poteva
+               rispondere (automazioni) si dicono per quello che sono, non come un «Approvato»/«Negato» qualunque. */
+            const automatico = evento.motivo === 'nessuna-interfaccia';
+            const esito = evento.approvato
+              ? (evento.ambito === 'cartella' ? 'Consentito in questa cartella per la sessione' : 'Approvato')
+              : (automatico ? 'Negato: nessuno poteva rispondere in questa sessione automatica' : 'Negato');
+            copy.textContent += daQuiStessa || automatico ? ` — ${esito}.` : ` — ${esito} (da un altro client).`;
           }
           state.realSession.approvazioniPendenti.delete(evento.requestId);
         }
@@ -5869,7 +6438,10 @@
       case 'RunError': {
         setRunState(false); // ⭐ 29/8 — ledger §10, stesso motivo di RunStarted sopra
         nascondiAttesaRisposta();
-        appendStatusNote(`${evento.code ? `[${evento.code}] ` : ''}${evento.message}`, true);
+        // ⛔ ERRCOD (30/09/2026): la scheda al posto di «[internal-error] HTTP 401 dopo 4 tentativi: {json}»; lo Stop della persona è una nota neutra.
+        const descrittoreErrore = descrittoreDaRunError(evento);
+        if (descrittoreErrore.code === 'RUN_STOPPED') appendStatusNote(t('Stopped by you.'), false, true);
+        else appendErrorCard(descrittoreErrore);
         state.realSession.eventoTerminaleVisto = true;
         aggiornaComposerTerminale(); // ⭐ 4/9 — LEDGER §76.2, gemello del caso RunFinished sopra
         break;
@@ -5926,7 +6498,12 @@
     const demoBadgeChat = $$('.demo-surface-badge', $('.chat-view'))
       .find((badge) => badge.closest('[data-demo-surface]')?.dataset.demoSurface === 'chat');
     if (demoBadgeChat) demoBadgeChat.hidden = true;
-    const source = new EventSource(API(`/api/v1/sessions/${encodeURIComponent(sessionId)}/events`));
+    // ⛔ 70-A (30/09/2026): EventSource del browser non manda il segreto; il ponte dell'app apre il flusso con la
+    // libreria `eventsource` (stessa interfaccia). Senza ponte (file aperto da solo, prove) resta EventSource.
+    const urlEventi = API(`/api/v1/sessions/${encodeURIComponent(sessionId)}/events`);
+    const source = typeof window.__talosHarnessApriEventi === 'function'
+      ? window.__talosHarnessApriEventi(urlEventi)
+      : new EventSource(urlEventi);
     state.realSession.eventSource = source;
     source.onmessage = (message) => {
       let evento;
@@ -5969,7 +6546,8 @@
         return;
       }
       if (source.readyState === EventSource.CLOSED) {
-        appendStatusNote('Event connection lost.', true);
+        // ⛔ ERRCOD-E2: la scheda al posto di «Event connection lost.».
+        appendErrorCard({ layer: 'system', code: 'EVENTS_LOST', retryable: null, action: 'none', detail: '' });
       }
     };
   }
@@ -6052,7 +6630,7 @@
     } catch (error) {
       if (generation !== state.realSession.generation) return;
       nascondiAttesaRisposta();
-      appendStatusNote(`Avvio non riuscito: ${error.message}`, true);
+      appendErrorCard(descrittoreDaErroreLocale(error)); // ⛔ ERRCOD-E2: era «Avvio non riuscito: …»
       toast('Start failed', error.message);
       return;
     }
@@ -6187,8 +6765,9 @@
       aggiornaElencoSessioniReali();
       if (!messaggioFollowUp) toast('Session resumed', 'Un nuovo giro è iniziato sulla stessa conversazione.');
     } catch (error) {
-      if (messaggioFollowUp) appendStatusNote(`Invio non riuscito: ${error.message}`, true); // il bubble utente resta — l'ha scritto davvero, solo non e' arrivato
-      toast(messaggioFollowUp ? 'Invio non riuscito' : 'Resume non riuscito', error.message);
+      // ⛔ ERRCOD-E2: era la riga «Invio non riuscito: …» più un toast col testo grezzo. Ora una scheda sola — anche per
+      // «Riprova» senza testo, che prima diceva solo un toast. Il bubble utente resta: l'ha scritto davvero, solo non è arrivato.
+      appendErrorCard(descrittoreDaErroreLocale(error));
     }
   }
 
@@ -6217,24 +6796,35 @@
 
   /**
    * ⭐ "Compatta ora" reale quando c'è una sessione reale CONCLUSA attiva.
-   * Non avvia nessun giro nuovo: sostituisce ciò che una PROSSIMA
-   * resume/fork erediterebbe — la conversazione già mostrata non cambia.
+   * Non avvia nessun giro nuovo: scrive un record che la PROSSIMA
+   * resume/fork usa — la conversazione già mostrata non cambia.
+   * ⛔ P4-ter (02/10/2026): il pulsante e la palette aprono la conferma (owner, desktop 24/09 notte); la chiamata vera
+   * è eseguiCompattazione(), dal solo «Compatta ora» del foglio.
    */
-  async function compactSession() {
+  function compactSession() {
     // ⛔ B1 (23/09): senza una sessione reale non c'è niente da compattare —
     // qui prima c'era un toast con «18.7k -> 9.3k» scritto a mano. Il
     // pulsante è spento col motivo (aggiornaControlliSessione), e il clic
     // su un controllo aria-disabled non fa nulla.
     if (!state.realSession.id) return;
+    openSheet('compactSession');
+  }
+
+  async function eseguiCompattazione() {
+    const sessionId = state.realSession.id;
+    if (!sessionId) return;
+    // La riga di avanzamento subito: il flusso degli eventi può essere chiuso su una sessione conclusa.
+    mostraCompattazioneInCorso();
     try {
-      const dati = await apiPost(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/compact`, {});
-      toast(
-        dati.compattato ? 'Context compacted' : 'Compattazione saltata',
-        dati.compattato
-          ? 'The next resume or fork restarts from the summary.'
-          : 'Il modello non ha risposto: la conversazione resta quella intera.',
-      );
+      const dati = await apiPost(`/api/v1/sessions/${encodeURIComponent(sessionId)}/compact`, {});
+      if (state.realSession.id !== sessionId) return; // nel frattempo si è passati a un'altra sessione
+      nascondiCompattazioneInCorso();
+      if (dati.compattato) mostraSeparatoreCompattazione(dati);
+      // ⛔ COMP-UI-05 (trovato sul Pad, 02/10): su una conversazione corta il riassuntore non viene nemmeno chiamato.
+      else if (dati.motivo === 'niente-da-compattare') toast('Nothing to compact yet', 'The conversation is still short: it stays as it is.');
+      else toast('Compaction skipped', 'No summary came back: the conversation stays whole.');
     } catch (error) {
+      if (state.realSession.id === sessionId) nascondiCompattazioneInCorso();
       toast('Compaction failed', error.message);
     }
   }
@@ -6856,7 +7446,7 @@
     } catch (error) {
       if (generation !== state.realSession.generation) return;
       nascondiAttesaRisposta();
-      appendStatusNote(`Avvio non riuscito: ${error.message}`, true);
+      appendErrorCard(descrittoreDaErroreLocale(error)); // ⛔ ERRCOD-E2: era «Avvio non riuscito: …»
       toast('Start failed', error.message);
       state.session = 'No session';
       mostraTitoloOvunque(state.session);

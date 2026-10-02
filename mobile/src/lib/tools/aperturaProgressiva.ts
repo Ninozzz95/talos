@@ -72,6 +72,17 @@ export const TALOS_ATTREZZI_SEMPRE_IN_VISTA: readonly string[] = Object.freeze([
 ])
 
 /**
+ * ⭐ Punto 4 (owner 01/10/2026, «Pochi + cerca») — i sempre-in-vista dei modelli LOCALI, che non hanno più l'indice:
+ * tutto il resto si trova con `tool_search` (`cercaAttrezzi.ts`).
+ *
+ * Scelta sul banco (D3: 12 frasi naturali × 3 giri, Qwen3-4B e Spark-X2.5-4B, 02/10/2026,
+ * `LEDGER-PUNTO4-ATTREZZI-LOCALI-2026-10-01.md`): con `memory_search` e `library_search` sempre visibili i modelli
+ * piccoli li usavano al posto dell'attrezzo giusto — `memory_search` per «cosa avevo scritto nelle note», «quanta
+ * batteria mi resta» e «ricordati che…». Owner: «Solo ora e web». Il resto passa dalla ricerca.
+ */
+export const TALOS_ATTREZZI_SEMPRE_IN_VISTA_LOCALI: readonly string[] = Object.freeze(['time_now', 'web_search'])
+
+/**
  * Quanti byte pesa oggi la superficie degli attrezzi.
  *
  * ⛔ Si misura la forma che si spedisce davvero, non una stima: `description` e

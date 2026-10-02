@@ -32,7 +32,10 @@
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <cmath>    // std::sqrt — passo 2, la scala della flash attention di riscaldamento
+#include <set>
 #include <string>
+#include <tuple>
 #include <thread>
 #include <unistd.h>
 #include <vector>
@@ -1136,6 +1139,13 @@ void talos_init_once(const std::string & library_dir, const std::string & opencl
         const size_t registered = ggml_backend_reg_count();
         TALOS_LOGI("backend registrati: %zu (da %s)", registered,
                    library_dir.empty() ? "(percorsi predefiniti)" : library_dir.c_str());
+        // ⛔ Punto 2 (01/10/2026): la patch 0001 era sparita dal motore spedito in silenzio. Si dice a ogni avvio
+        // se ogni backend sa fermarsi a metà grafo (lo Stop durante una lettura lunga del prompt).
+        for (size_t indice = 0; indice < registered; ++indice) {
+            ggml_backend_reg_t reg = ggml_backend_reg_get(indice);
+            TALOS_LOGI("stop a metà grafo: %s = %s", ggml_backend_reg_name(reg),
+                       ggml_backend_reg_get_proc_address(reg, "ggml_backend_set_abort_callback") != nullptr ? "sì" : "no");
+        }
         if (registered == 0) {
             // Un motore senza backend non è un motore lento: non carica nulla.
             // Detto qui, dove la causa è ancora visibile, invece che più tardi
@@ -1568,6 +1578,30 @@ Java_ai_talos_TalosLlamaNative_nativeInit(JNIEnv * env, jclass, jstring libraryD
 }
 
 /**
+ * ⛔ PKLA Qualcomm 2.1 b (owner, 01/10/2026) — carica UN modulo backend per
+ * percorso, dopo l'avvio. Serve all'NPU: il suo modulo ha un nome che
+ * `ggml_backend_load_all_from_path` ignora, e entra nel registro solo quando
+ * il lato Java ha verificato che le condizioni Qualcomm sono accettate
+ * (`TalosNpuTerms`). `ggml_backend_load` è l'API pubblica di upstream, la
+ * stessa usata dalla diagnosi `nativeProbeBackendLoad`.
+ */
+JNIEXPORT jboolean JNICALL
+Java_ai_talos_TalosLlamaNative_nativeLoadBackendModule(JNIEnv * env, jclass, jstring pathJ) {
+    std::lock_guard<std::mutex> serratura(g_motore);
+    const std::string percorso = jstring_to_utf8(env, pathJ);
+    if (percorso.empty()) return JNI_FALSE;
+    const size_t prima = ggml_backend_reg_count();
+    ggml_backend_reg_t reg = ggml_backend_load(percorso.c_str());
+    if (reg == nullptr) {
+        TALOS_LOGE("modulo NPU non caricato: %s", percorso.c_str());
+        return JNI_FALSE;
+    }
+    TALOS_LOGI("modulo NPU caricato: %s (%s), backend registrati %zu -> %zu",
+               percorso.c_str(), ggml_backend_reg_name(reg), prima, ggml_backend_reg_count());
+    return JNI_TRUE;
+}
+
+/**
  * ⛔ SOLO RICERCA — il trace HIT/MISS/SAVE della cache di P0-1, a richiesta.
  *
  * `GGML_OPENCL_KERNEL_CACHE_DEBUG=1` fa scrivere a `cl-program-cache.cpp` una
@@ -1631,6 +1665,193 @@ JNIEXPORT jstring JNICALL
 Java_ai_talos_TalosLlamaNative_nativeEngineBuild(JNIEnv * env, jclass) {
     const char * info = llama_build_info();
     return env->NewStringUTF(info == nullptr ? "" : info);
+}
+
+/**
+ * ⭐ Punto 2 (01/10/2026) — compila i programmi OpenCL SENZA un modello.
+ *
+ * Il backend OpenCL compila tutti i suoi programmi (185 `build_program_from_source`) al primo `alloc_buffer`
+ * sul suo tipo di buffer (`ggml-opencl.cpp:12789-12795`, `load_cl_kernels`), salvando ogni binario nella cache
+ * su disco. Un buffer da un byte basta a farlo: sul Pad sono i ~16 s (41-69 nella build debuggable) che la prima apertura GPU dopo un
+ * aggiornamento pagava davanti alla persona. `load_cl_kernels` gira una volta per processo (`kernels_loaded`):
+ * dopo questa chiamata, un'apertura nello stesso processo non compila né legge niente.
+ *
+ * ⭐ Passo 2 (01/10/2026): con le patch 0003 e 0004 i programmi di un formato di peso e le varianti della flash
+ * attention si compilano al primo uso, e finiscono nella cache su disco. Per non pagarli al primo messaggio, qui
+ * si «riscaldano» i modelli installati SENZA caricarne i pesi: dai soli metadati del GGUF si ricavano i formati dei
+ * tensori e le forme dell'attenzione, e sul backend OpenCL si calcola un grafo minuscolo con quelle forme:
+ *  - un tensore 256×16 per formato, scritto con `set_tensor`: la 0003 carica lì il gruppo del formato
+ *    (stesse forme di `test-backend-ops` MUL_MAT, 1009/1009 sul Pad);
+ *  - FLASH_ATTN_EXT con q f32, k/v f16 e q8_0 (i due tipi di cache KV che la chat apre), maschera f16,
+ *    per n_q 1 (decodifica) e 8 (lettura del prompt). Le varianti si scelgono per (tipo, dk, dv), non per n_kv
+ *    né per il rapporto GQA (`ggml_opencl_ensure_fa_variant`): sono le stesse dell'inferenza vera.
+ * Un nodo che il backend non regge (`supports_op`) non si calcola: llama.cpp lo manderebbe alla CPU.
+ *
+ * ⛔ Chi chiama la serializza con le aperture (la coda `worker`, e la prova che aspetta): il codice upstream non
+ * protegge `load_cl_kernels` da due thread.
+ *
+ * @return i millisecondi spesi, o -1 se non c'è un dispositivo OpenCL (o non si lascia allocare).
+ */
+static int64_t talos_gguf_intero(const gguf_context * gguf, const std::string & chiave);
+static int64_t talos_gguf_elemento(const gguf_context * gguf, int64_t indice, size_t j);
+
+/** Un intero che può essere scritto per strato (array): il più grande. 0 se manca. */
+static int64_t talos_gguf_intero_o_massimo(const gguf_context * gguf, const std::string & chiave) {
+    const int64_t indice = gguf_find_key(gguf, chiave.c_str());
+    if (indice < 0) return 0;
+    if (gguf_get_kv_type(gguf, indice) != GGUF_TYPE_ARRAY) return talos_gguf_intero(gguf, chiave);
+    int64_t massimo = 0;
+    for (size_t j = 0; j < gguf_get_arr_n(gguf, indice); ++j) {
+        massimo = std::max(massimo, talos_gguf_elemento(gguf, indice, j));
+    }
+    return massimo;
+}
+
+/** La forma dell'attenzione che il riscaldamento deve imitare. */
+struct talos_forma_fa {
+    int64_t dk = 0, dv = 0, teste = 0, teste_kv = 0;
+    bool operator<(const talos_forma_fa & o) const {
+        return std::tie(dk, dv, teste, teste_kv) < std::tie(o.dk, o.dv, o.teste, o.teste_kv);
+    }
+};
+
+/** Formati dei pesi e forme dell'attenzione di un GGUF, dai soli metadati. Falso se il file non si legge. */
+static bool talos_riscaldo_dal_gguf(const std::string & percorso, std::set<ggml_type> & formati,
+                                    std::set<talos_forma_fa> & forme) {
+    gguf_init_params params = { /*.no_alloc =*/ true, /*.ctx =*/ nullptr };
+    gguf_context * gguf = gguf_init_from_file(percorso.c_str(), params);
+    if (gguf == nullptr) return false;
+    for (int64_t t = 0; t < gguf_get_n_tensors(gguf); ++t) formati.insert(gguf_get_tensor_type(gguf, t));
+
+    std::string arch;
+    const int64_t chiave = gguf_find_key(gguf, "general.architecture");
+    if (chiave >= 0) arch = gguf_get_val_str(gguf, chiave);
+    const int64_t embd     = talos_gguf_intero(gguf, arch + ".embedding_length");
+    const int64_t teste    = talos_gguf_intero_o_massimo(gguf, arch + ".attention.head_count");
+    int64_t       teste_kv = talos_gguf_intero_o_massimo(gguf, arch + ".attention.head_count_kv");
+    if (teste_kv <= 0 || teste <= 0 || teste % teste_kv != 0) teste_kv = teste;
+    if (teste > 0) {
+        talos_forma_fa forma;
+        forma.teste    = teste;
+        forma.teste_kv = teste_kv;
+        forma.dk = talos_gguf_intero(gguf, arch + ".attention.key_length");
+        if (forma.dk <= 0 && embd > 0) forma.dk = embd / teste;
+        forma.dv = talos_gguf_intero(gguf, arch + ".attention.value_length");
+        if (forma.dv <= 0) forma.dv = forma.dk;
+        if (forma.dk > 0) forme.insert(forma);
+        // Gli strati a finestra (Gemma, …) possono avere un'altra testa.
+        talos_forma_fa swa = forma;
+        swa.dk = talos_gguf_intero(gguf, arch + ".attention.key_length_swa");
+        swa.dv = talos_gguf_intero(gguf, arch + ".attention.value_length_swa");
+        if (swa.dk > 0) { if (swa.dv <= 0) swa.dv = swa.dk; forme.insert(swa); }
+    }
+    gguf_free(gguf);
+    return true;
+}
+
+/** Il riscaldamento dei formati e della flash attention. Restituisce quanti nodi FA ha calcolato. */
+static int talos_riscalda_sulla_gpu(ggml_backend_dev_t gpu, const std::set<ggml_type> & formati,
+                                    const std::set<talos_forma_fa> & forme, std::string & fatto) {
+    // I formati che la 0003 carica pigri (`talos_load_cl_kernels_for_type`).
+    static const ggml_type PIGRI[] = {
+        GGML_TYPE_Q4_0, GGML_TYPE_Q4_1, GGML_TYPE_Q5_0, GGML_TYPE_Q5_1, GGML_TYPE_Q8_0, GGML_TYPE_Q1_0,
+        GGML_TYPE_IQ4_NL, GGML_TYPE_MXFP4, GGML_TYPE_Q4_K, GGML_TYPE_Q5_K, GGML_TYPE_Q6_K,
+    };
+    ggml_backend_t backend = ggml_backend_dev_init(gpu, nullptr);
+    if (backend == nullptr) return 0;
+
+    // 1) i formati: un set_tensor ciascuno.
+    {
+        ggml_init_params ip = { ggml_tensor_overhead() * 16, nullptr, /*.no_alloc =*/ true };
+        ggml_context * ctx = ggml_init(ip);
+        std::vector<ggml_tensor *> pesi;
+        for (ggml_type tipo : PIGRI) {
+            if (formati.count(tipo) == 0 || 256 % ggml_blck_size(tipo) != 0) continue;
+            pesi.push_back(ggml_new_tensor_2d(ctx, tipo, 256, 16));
+            fatto += std::string(fatto.empty() ? "" : ",") + ggml_type_name(tipo);
+        }
+        if (!pesi.empty()) {
+            ggml_backend_buffer_t buffer = ggml_backend_alloc_ctx_tensors(ctx, backend);
+            if (buffer != nullptr) {
+                for (ggml_tensor * t : pesi) {
+                    std::vector<uint8_t> zeri(ggml_nbytes(t), 0);
+                    ggml_backend_tensor_set(t, zeri.data(), 0, zeri.size());
+                }
+                ggml_backend_buffer_free(buffer);
+            }
+        }
+        ggml_free(ctx);
+    }
+
+    // 2) la flash attention, con i due tipi di cache KV dell'app: la chat apre in f16 se ci sta, altrimenti in
+    //    q8_0 (`localAdapter.ts`, la scelta della cache); f32_f16 e q8_0 sono famiglie di varianti diverse.
+    int calcolati = 0;
+    for (const talos_forma_fa & forma : forme) {
+        for (ggml_type tipo_kv : { GGML_TYPE_F16, GGML_TYPE_Q8_0 })
+        for (int64_t n_q : { (int64_t) 1, (int64_t) 8 }) {
+            const int64_t n_kv = 256;
+            ggml_init_params ip = { ggml_tensor_overhead() * 8 + ggml_graph_overhead(), nullptr, /*.no_alloc =*/ true };
+            ggml_context * ctx = ggml_init(ip);
+            ggml_tensor * q    = ggml_new_tensor_3d(ctx, GGML_TYPE_F32,  forma.dk, n_q,  forma.teste);
+            ggml_tensor * k    = ggml_new_tensor_3d(ctx, tipo_kv, forma.dk, n_kv, forma.teste_kv);
+            ggml_tensor * v    = ggml_new_tensor_3d(ctx, tipo_kv, forma.dv, n_kv, forma.teste_kv);
+            ggml_tensor * mask = ggml_new_tensor_2d(ctx, GGML_TYPE_F16,  n_kv, n_q);
+            ggml_tensor * fa   = ggml_flash_attn_ext(ctx, q, k, v, mask, 1.0f / std::sqrt((float) forma.dk), 0.0f, 0.0f);
+            ggml_prec_set_acc(fa, GGML_PREC_F32);
+            if (ggml_backend_supports_op(backend, fa)) {
+                ggml_cgraph * grafo = ggml_new_graph(ctx);
+                ggml_build_forward_expand(grafo, fa);
+                ggml_backend_buffer_t buffer = ggml_backend_alloc_ctx_tensors(ctx, backend);
+                if (buffer != nullptr) {
+                    ggml_backend_buffer_clear(buffer, 0);
+                    if (ggml_backend_graph_compute(backend, grafo) == GGML_STATUS_SUCCESS) calcolati++;
+                    ggml_backend_buffer_free(buffer);
+                }
+            }
+            ggml_free(ctx);
+        }
+        fatto += " fa" + std::to_string(forma.dk) + "/" + std::to_string(forma.dv);
+    }
+    ggml_backend_free(backend);
+    return calcolati;
+}
+
+JNIEXPORT jlong JNICALL
+Java_ai_talos_TalosLlamaNative_nativePrepareOpenClPrograms(JNIEnv * env, jclass, jobjectArray modelPaths) {
+    ggml_backend_dev_t gpu = nullptr;
+    for (size_t indice = 0; indice < ggml_backend_dev_count(); ++indice) {
+        ggml_backend_dev_t dispositivo = ggml_backend_dev_get(indice);
+        ggml_backend_reg_t reg = ggml_backend_dev_backend_reg(dispositivo);
+        const char * nome = reg == nullptr ? nullptr : ggml_backend_reg_name(reg);
+        if (nome != nullptr && std::strcmp(nome, "OpenCL") == 0) { gpu = dispositivo; break; }
+    }
+    if (gpu == nullptr) return -1;
+    ggml_backend_buffer_type_t tipo = ggml_backend_dev_buffer_type(gpu);
+    if (tipo == nullptr) return -1;
+    const auto inizio = std::chrono::steady_clock::now();
+    ggml_backend_buffer_t buffer = ggml_backend_buft_alloc_buffer(tipo, 1);
+    if (buffer == nullptr) return -1;
+    ggml_backend_buffer_free(buffer);
+    const long long comuni = std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now() - inizio).count();
+
+    std::set<ggml_type> formati;
+    std::set<talos_forma_fa> forme;
+    int letti = 0;
+    const jsize quanti = modelPaths == nullptr ? 0 : env->GetArrayLength(modelPaths);
+    for (jsize i = 0; i < quanti; ++i) {
+        auto * percorso = (jstring) env->GetObjectArrayElement(modelPaths, i);
+        if (percorso == nullptr) continue;
+        if (talos_riscaldo_dal_gguf(jstring_to_utf8(env, percorso), formati, forme)) letti++;
+        env->DeleteLocalRef(percorso);
+    }
+    std::string fatto;
+    const int nodi = letti == 0 ? 0 : talos_riscalda_sulla_gpu(gpu, formati, forme, fatto);
+    const long long ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now() - inizio).count();
+    TALOS_LOGI("GPU preparata: programmi comuni in %lld ms; %d modelli su %d riscaldati (%s, %d nodi FA) in %lld ms",
+               comuni, letti, (int) quanti, fatto.c_str(), nodi, ms - comuni);
+    return (jlong) ms;
 }
 
 JNIEXPORT jstring JNICALL
@@ -1781,6 +2002,9 @@ Java_ai_talos_TalosLlamaNative_nativeBackendInventory(JNIEnv * env, jclass) {
         nlohmann::ordered_json entry;
         const char * reg_name = ggml_backend_reg_name(reg);
         entry["name"] = reg_name == nullptr ? "" : reg_name;
+        // ⛔ Punto 2 (01/10/2026): la patch 0001 (Stop su GPU 1,4 s → 32 ms) era sparita dal motore spedito senza
+        // che nessuno se ne accorgesse. Qui si legge dal binario vero se il backend sa interrompersi a metà grafo.
+        entry["abortCallback"] = ggml_backend_reg_get_proc_address(reg, "ggml_backend_set_abort_callback") != nullptr;
 
         nlohmann::ordered_json devices = nlohmann::ordered_json::array();
         for (size_t dev_index = 0; dev_index < ggml_backend_reg_dev_count(reg); dev_index += 1) {
@@ -4313,6 +4537,25 @@ Java_ai_talos_TalosLlamaNative_nativeRuntimeSnapshot(JNIEnv * env, jclass, jlong
 }
 
 /**
+ * Un metadato del modello APERTO come testo, con l'API pubblica di llama.cpp
+ * (`llama_model_meta_val_str`, `include/llama.h:627`). Vuoto = «non dichiarato».
+ */
+static std::string talos_meta_testo(const llama_model * model, const char * chiave) {
+    char valore[256] = {0};
+    const int32_t n = llama_model_meta_val_str(model, chiave, valore, sizeof(valore));
+    return n > 0 ? std::string(valore) : std::string();
+}
+
+/** Un metadato intero del modello APERTO; 0 = «non dichiarato» o non leggibile come intero positivo. */
+static int64_t talos_meta_intero(const llama_model * model, const std::string & chiave) {
+    char valore[64] = {0};
+    if (llama_model_meta_val_str(model, chiave.c_str(), valore, sizeof(valore)) <= 0) return 0;
+    char * fine = nullptr;
+    const long long letto = std::strtoll(valore, &fine, 10);
+    return (fine != valore && letto > 0) ? (int64_t) letto : 0;
+}
+
+/**
  * La FORMA del modello che è in memoria, dichiarata da lui stesso.
  *
  * ## Perché esiste
@@ -4372,12 +4615,16 @@ Java_ai_talos_TalosLlamaNative_nativeRuntimeSnapshot(JNIEnv * env, jclass, jlong
  * della sottrazione «file meno intestazione» che fa il lettore GGUF, e giusto
  * anche per un modello diviso in più file.
  *
- * `headDim` si ricava da `n_embd / n_head`, la stessa relazione che il lettore
- * GGUF usa quando il file non dichiara `attention.key_length`. Per le
- * architetture che quel campo lo dichiarano diverso l'API pubblica di llama.cpp
- * non lo espone; il risultato resta dalla parte prudente perché sotto-stimare la
- * cache alzerebbe il tetto, quindi chi chiama tratta un `n_head` non valido come
- * «non lo so» invece di dividere per zero.
+ * ⛔⛔ `headDim` è `<architettura>.attention.key_length` DICHIARATO dal file, letto
+ * dal modello aperto con l'API pubblica (`llama_model_meta_val_str`), come fa il
+ * lettore GGUF della pianificazione; `n_embd / n_head` è solo il ripiego per i
+ * file che non lo dichiarano. Prima era sempre `n_embd / n_head`, con un
+ * commento che lo diceva «dalla parte prudente»: misurato sul Pad il 02/10/2026
+ * era il contrario. Spark-X2.5-4B dichiara 256 e la divisione dà 160; la RAM
+ * libera col contesto aperto a 2048 e a 8192 dà ~147.100 byte a token =
+ * 2 × 36 × 4 × 256 × 2. Con 160 la cache era sotto-stimata del 37,5% e il tetto
+ * saliva oltre il vero (REG-COMP-12, `formaDelModelloAperto.test.ts`). Un
+ * `n_head` non valido resta «non lo so» (zero), mai una divisione per zero.
  *
  * Restituisce `nullptr` quando non c'è nessun modello aperto: «non lo so», che
  * non è «zero» e non deve mai diventarlo.
@@ -4389,12 +4636,19 @@ Java_ai_talos_TalosLlamaNative_nativeModelShape(JNIEnv * env, jclass, jlong hand
     if (session == nullptr || session->model == nullptr) return nullptr;
 
     const llama_model * model = session->model;
-    const int32_t embedding = llama_model_n_embd(model);
-    const int32_t heads     = llama_model_n_head(model);
-    // Non un caso da aggiustare con un valore di comodo: senza teste la
-    // divisione non ha senso, e uno zero qui diventerebbe una divisione per zero
-    // a valle. Passa come zero e chi legge lo riconosce come «non misurabile».
-    const jlong headDim = heads > 0 ? (jlong) (embedding / heads) : 0;
+    const std::string architettura = talos_meta_testo(model, "general.architecture");
+    jlong headDim = architettura.empty()
+        ? 0
+        : (jlong) talos_meta_intero(model, architettura + ".attention.key_length");
+    if (headDim <= 0) {
+        const int32_t embedding = llama_model_n_embd(model);
+        const int32_t heads     = llama_model_n_head(model);
+        // Non un caso da aggiustare con un valore di comodo: senza teste la
+        // divisione non ha senso, e uno zero qui diventerebbe una divisione per
+        // zero a valle. Passa come zero e chi legge lo riconosce come «non
+        // misurabile».
+        headDim = heads > 0 ? (jlong) (embedding / heads) : 0;
+    }
 
     // Misurata all'apertura leggendo l'array per-strato del GGUF; zero vuol
     // dire «non misurata», e solo allora si ripiega sull'API pubblica — che su
@@ -4517,7 +4771,11 @@ static void talos_genera_speculativo(talos_session * session, int limit, bool st
 
     common_speculative_begin(spec, seq_id, session->cached);
 
-    llama_batch     batch_tgt = llama_batch_init((int32_t) llama_n_batch(session->ctx), 0, 1);
+    // b11312 (01/10/2026): `common_batch_clear/add` e `llama_batch` per la
+    // speculativa sono stati tolti a monte; `common_speculative_process` vuole
+    // un `common_batch`. Stessa forma di `examples/speculative-simple` di b11312
+    // (righe 152, 222-236): `common_batch` + `llama_process(…DECODE…)`.
+    common_batch    batch_tgt(session->ctx);
     llama_tokens    draft;
     char            piece[256];
     bool            fine = false;
@@ -4532,7 +4790,7 @@ static void talos_genera_speculativo(talos_session * session, int limit, bool st
         common_speculative_get_draft_params(spec, seq_id) = {
             /* .drafting = */ true,
             /* .n_max    = */ n_draft_max,
-            /* .n_past   = */ n_past,
+            /* .pos0     = */ n_past,
             /* .id_last  = */ id_last,
             /* .prompt   = */ &session->cached,
             /* .result   = */ &draft,
@@ -4544,13 +4802,13 @@ static void talos_genera_speculativo(talos_session * session, int limit, bool st
         // upstream, senza il loro trucco del post-incremento su `n_past`:
         // qui resta esplicito, `n_past` non cambia finché non lo dice la
         // riga dedicata più sotto.
-        common_batch_clear(batch_tgt);
-        common_batch_add(batch_tgt, id_last, n_past, { seq_id }, true);
+        batch_tgt.clear();
+        batch_tgt.add(id_last, n_past, seq_id, true);
         for (size_t i = 0; i < draft.size(); ++i) {
-            common_batch_add(batch_tgt, draft[i], n_past + 1 + (int) i, { seq_id }, true);
+            batch_tgt.add(draft[i], n_past + 1 + (int) i, seq_id, true);
         }
 
-        if (llama_decode(session->ctx, batch_tgt) != 0) {
+        if (llama_process(session->ctx, LLAMA_PROCESS_TYPE_DECODE, batch_tgt.get()) != 0) {
             // Stessa cura del ramo ordinario: la KV va riportata su ciò che
             // `cached` dice, mai lasciata a metà di un batch mai confermato.
             if (!llama_memory_seq_rm(memoria, seq_id, (llama_pos) session->cached.size(), -1)) {
@@ -4573,8 +4831,14 @@ static void talos_genera_speculativo(talos_session * session, int limit, bool st
         // ripetizione lo conterebbero due volte per uno. Torna SEMPRE almeno
         // un token: quello che il campionatore vero avrebbe prodotto
         // comunque, bozza accettata o no.
-        std::vector<llama_token> ids = common_sampler_sample_and_accept_n(
-                session->sampler, session->ctx, draft);
+        // GRAM-01: stessa grammatica, stessa eccezione possibile (solo ricerca: qui si chiude la speculazione).
+        std::vector<llama_token> ids;
+        try {
+            ids = common_sampler_sample_and_accept_n(session->sampler, session->ctx, draft);
+        } catch (const std::exception & grammatica) {
+            TALOS_LOGE("speculazione fermata dalla grammatica: %s", grammatica.what());
+            break;
+        }
         common_speculative_accept(spec, seq_id, (uint16_t) (ids.size() - 1));
 
         /*
@@ -4622,7 +4886,6 @@ static void talos_genera_speculativo(talos_session * session, int limit, bool st
     // lo aspetta lì, o il prefisso comune lo perderebbe.
     session->cached.push_back(id_last);
 
-    llama_batch_free(batch_tgt);
     if (tempo_primo_token < 0) tempo_primo_token = talos_da(avvio);
 }
 
@@ -4941,13 +5204,27 @@ Java_ai_talos_TalosLlamaNative_nativeGenerate(JNIEnv * env, jclass, jlong handle
     for (int produced = 0; produced < limit; ) {
         if (session->cancelled.load(std::memory_order_relaxed)) break;
 
-        sampled = common_sampler_sample(session->sampler, session->ctx, -1);
-        if (tempo_primo_token < 0) tempo_primo_token = talos_da(avvio);
-        // Il token va DICHIARATO al campionatore, non solo campionato: le
-        // penalità di ripetizione e la grammatica tengono uno stato, e senza
-        // questa riga non vedono mai ciò che è stato prodotto — cioè sono
-        // presenti nella catena e inerti.
-        common_sampler_accept(session->sampler, sampled, true);
+        /*
+         * ⛔ GRAM-01 (Pad, 02/10/2026, Spark-X2.5-4B): la grammatica delle chiamate agli attrezzi può lanciare
+         * `std::runtime_error("Unexpected empty grammar stack after accepting piece: …")` da
+         * `llama_grammar_accept_token`. Non catturata, attraversa tutto e l'app muore (SIGABRT). A monte non si
+         * corregge (ggml-org/llama.cpp#29715, «not planned»; gemelle #27619, #26737, #13690). Qui diventa
+         * un'eccezione Java: il plugin la porta a TALOS_LLAMA_GENERATION_FAILED, cioè un errore con «Riprendi».
+         */
+        try {
+            sampled = common_sampler_sample(session->sampler, session->ctx, -1);
+            if (tempo_primo_token < 0) tempo_primo_token = talos_da(avvio);
+            // Il token va DICHIARATO al campionatore, non solo campionato: le
+            // penalità di ripetizione e la grammatica tengono uno stato, e senza
+            // questa riga non vedono mai ciò che è stato prodotto — cioè sono
+            // presenti nella catena e inerti.
+            common_sampler_accept(session->sampler, sampled, true);
+        } catch (const std::exception & grammatica) {
+            TALOS_LOGE("campionatore fermato dalla grammatica dopo %d token: %s", produced, grammatica.what());
+            jclass errore = env->FindClass("java/lang/IllegalStateException");
+            if (errore != nullptr) env->ThrowNew(errore, "TALOS_LLAMA_GRAMMAR_FAILED");
+            return nullptr;
+        }
         // Durante una MISURA la fine-generazione non ferma niente, e non è una
         // scorciatoia: un modello piccolo decide di tacere dopo un secondo, e un
         // benchmark che finisce quando il modello ha finito misura la sua

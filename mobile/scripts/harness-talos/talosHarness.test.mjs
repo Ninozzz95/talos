@@ -15,8 +15,7 @@ import { describe, it } from 'node:test'
 import {
     siRitenta, attesaDelTentativo, chiamaConRitenta, consumaFlussoSSE,
     comeSonoFinitiIGiri, uscitaUtile,
-    stimaToken, stimaTokenConversazione, serveCompattare, compattaConversazione,
-    GIRI_PRIMA_DI_COMPATTARE, TOKEN_MINIMI_PER_COMPATTARE,
+    stimaToken, stimaTokenConversazione,
     serveRiflettere, GIRI_PRIMA_DI_RIFLETTERE,
     primoProgramma, convertiPercorsoWsl,
     indirizzoPubblico, validaUrlNaviga, leggiPaginaSicura,
@@ -432,7 +431,7 @@ describe('Il promemoria "scritture senza prova" — verifica di sola lettura', (
  * per parola — se lo riscrivesse, un riassunto impreciso cambierebbe il task
  * a meta' corsa, ed e' esattamente il guasto che questa cura non deve fare.
  */
-describe('STADIO A — la compattazione della conversazione', () => {
+describe('la stima dei token (usata dalla compattazione P4-ter)', () => {
 
     it('la stima dei token e allineata a circa 4 caratteri per token', () => {
         assert.equal(stimaToken('a'.repeat(40)), 10)
@@ -446,70 +445,6 @@ describe('STADIO A — la compattazione della conversazione', () => {
             { role: 'assistant', tool_calls: [{ function: { arguments: 'b'.repeat(20) } }] },
         ]
         assert.equal(stimaTokenConversazione(messaggi), 10 + 5)
-    })
-
-    it('⛔ non compatta MAI al giro 0, anche con una conversazione enorme', () => {
-        const messaggi = [{ role: 'user', content: 'x'.repeat(TOKEN_MINIMI_PER_COMPATTARE * 10) }]
-        assert.equal(serveCompattare(0, messaggi), false)
-    })
-
-    it('⛔ non compatta fuori dai checkpoint, anche se la conversazione e grande', () => {
-        const messaggi = [{ role: 'user', content: 'x'.repeat(TOKEN_MINIMI_PER_COMPATTARE * 10) }]
-        assert.equal(serveCompattare(GIRI_PRIMA_DI_COMPATTARE - 1, messaggi), false,
-            'un giro qualunque, non multiplo del checkpoint, non deve mai scattare')
-    })
-
-    it('⛔ su un checkpoint, ma con un task corto: NON compatta — non c e niente da riassumere', () => {
-        const messaggi = [{ role: 'user', content: 'poca roba' }]
-        assert.equal(serveCompattare(GIRI_PRIMA_DI_COMPATTARE, messaggi), false)
-    })
-
-    it('⭐ su un checkpoint E una conversazione grande: compatta', () => {
-        const messaggi = [{ role: 'user', content: 'x'.repeat(TOKEN_MINIMI_PER_COMPATTARE * 5) }]
-        assert.equal(serveCompattare(GIRI_PRIMA_DI_COMPATTARE, messaggi), true)
-        assert.equal(serveCompattare(GIRI_PRIMA_DI_COMPATTARE * 2, messaggi), true,
-            'ogni multiplo del checkpoint, non solo il primo')
-    })
-
-    const SISTEMA = { role: 'system', content: 'istruzioni' }
-    const COMPITO = { role: 'user', content: 'il compito vero, parola per parola' }
-
-    it('⭐⭐⭐ il riassunto sostituisce la storia, ma il COMPITO resta intatto', async () => {
-        const storiaLunga = [SISTEMA, COMPITO,
-            { role: 'assistant', content: 'ho provato X' },
-            { role: 'tool', content: 'X non ha funzionato' }]
-        const chiamaModello = async () => ({
-            scelta: { content: 'ho provato X, non ha funzionato; i file sono a posto' },
-            usage: { prompt_tokens: 500, completion_tokens: 50 },
-        })
-        const r = await compattaConversazione(storiaLunga, chiamaModello)
-
-        assert.equal(r.compattato, true)
-        assert.equal(r.messaggi.length, 3, 'sistema + compito + riassunto, non di piu')
-        assert.deepEqual(r.messaggi[0], SISTEMA, 'il sistema non cambia MAI')
-        assert.deepEqual(r.messaggi[1], COMPITO,
-            'il compito resta PAROLA PER PAROLA — un riassunto impreciso non deve poter cambiare cosa si sta chiedendo')
-        assert.match(r.messaggi[2].content, /ho provato X, non ha funzionato/,
-            'il riassunto vero e in quel messaggio')
-        assert.equal(r.usage.prompt_tokens, 500, 'il costo della chiamata di riassunto si conta')
-    })
-
-    it('⛔ un riassunto vuoto non compatta — meglio niente che un buco', async () => {
-        const messaggi = [SISTEMA, COMPITO]
-        const chiamaModello = async () => ({ scelta: { content: '   ' }, usage: null })
-        const r = await compattaConversazione(messaggi, chiamaModello)
-        assert.equal(r.compattato, false)
-        assert.deepEqual(r.messaggi, messaggi, 'niente cambia se il riassunto e vuoto')
-    })
-
-    it('⛔ e AL CONTRARIO: una chiamata che lancia non deve fermare il task', async () => {
-        const messaggi = [SISTEMA, COMPITO, { role: 'assistant', content: 'lavoro in corso' }]
-        const chiamaModello = async () => { throw new Error('rete giu') }
-        const r = await compattaConversazione(messaggi, chiamaModello)
-        assert.equal(r.compattato, false)
-        assert.equal(r.usage, null)
-        assert.deepEqual(r.messaggi, messaggi,
-            'un riassunto fallito lascia la conversazione com era: si riprovera al prossimo checkpoint')
     })
 })
 
@@ -535,10 +470,6 @@ describe('STADIO A — la riflessione (zero chiamate in piu)', () => {
         assert.equal(serveRiflettere(GIRI_PRIMA_DI_RIFLETTERE * 3), true)
     })
 
-    it('⭐⭐ la cadenza non coincide sempre con quella della compattazione', () => {
-        assert.notEqual(GIRI_PRIMA_DI_RIFLETTERE, GIRI_PRIMA_DI_COMPATTARE,
-            'due checkpoint identici sprecherebbero il vantaggio di averne due')
-    })
 })
 
 /*
@@ -751,45 +682,6 @@ describe('talosLavora — il ciclo intero, con una rete finta', () => {
      * davvero — non un valore finto, la stessa soglia che governa la
      * produzione.
      */
-    it('⭐⭐⭐ onGiro porta compattazione-inizio/fine quando Stadio A scatta per davvero', async () => {
-        const cartella = cartellaVuota(it)
-        const girataConToolIgnoto = (indice) => ({
-            role: 'assistant',
-            content: 'x'.repeat(1200),
-            tool_calls: [{ id: `call_${indice}`, type: 'function', function: { name: 'attrezzo_inesistente_per_la_prova', arguments: '{}' } }],
-        })
-        const RIASSUNTO_FINTO = { role: 'assistant', content: 'Riassunto: otto tentativi con un attrezzo sconosciuto, tutti rifiutati onestamente; nessun file toccato; prossimo passo: nessuno, era solo per superare la soglia.', tool_calls: [] }
-        const rete = reteDiRisposte(
-            ...Array.from({ length: GIRI_PRIMA_DI_COMPATTARE }, (_, i) => girataConToolIgnoto(i)),
-            RIASSUNTO_FINTO,
-            CONCLUSO_SUBITO,
-        )
-        const eventi = []
-
-        const esito = await talosLavora({
-            cartella, task: TASK, modello: 'x', chiave: 'y', fetchDiRete: rete.fetch,
-            onGiro: (e) => eventi.push(e),
-        })
-
-        assert.equal(esito.comeFinita, 'concluso')
-        assert.equal(esito.compattazioni, 1, 'una sola compattazione: il task conclude al giro 9, prima del prossimo checkpoint')
-
-        const inizio = eventi.filter((e) => e.tipo === 'compattazione-inizio')
-        const fine = eventi.filter((e) => e.tipo === 'compattazione-fine')
-        assert.equal(inizio.length, 1, 'un solo evento di inizio compattazione')
-        assert.equal(fine.length, 1, 'un solo evento di fine compattazione')
-        assert.equal(inizio[0].giro, GIRI_PRIMA_DI_COMPATTARE, 'scatta esattamente al giro previsto da Stadio A')
-        assert.equal(fine[0].giro, GIRI_PRIMA_DI_COMPATTARE)
-        assert.equal(fine[0].compattato, true, 'il riassunto finto è stato accettato: compattato deve dirlo')
-
-        // AL CONTRARIO — ordine: l'evento di inizio precede quello di fine, che precede la ripresa del lavoro normale.
-        const indiceInizio = eventi.indexOf(inizio[0])
-        const indiceFine = eventi.indexOf(fine[0])
-        assert.ok(indiceInizio < indiceFine, 'inizio prima di fine, mai il contrario')
-        const primoEventoDopo = eventi[indiceFine + 1]
-        assert.ok(primoEventoDopo, 'il lavoro riprende dopo la compattazione, non si ferma lì')
-        assert.notEqual(primoEventoDopo.tipo, 'compattazione-inizio', 'una sola compattazione in questa prova, non due di fila')
-    })
 
     /**
      * ⛔ AL CONTRARIO — un task che non arriva mai al checkpoint (conclude
@@ -2499,5 +2391,374 @@ describe('RAG-COD — il ragionamento dei modelli obbligatori, scelto dal catalo
         } finally {
             rmSync(radice, { recursive: true, force: true })
         }
+    })
+})
+
+/*
+ * ⛔ ESITO65 (30/09/2026) — consegna desktop 65 (RECEIPT25), ledger
+ * `.claude/ragionamento/LEDGER-65-ESITO-ATTREZZI-2026-09-30.md`. Un attrezzo che fallisce deve dirlo con un flag
+ * (`isError` sull'evento `tool-esito`), deciso dal ramo che conosce l'esito, non indovinato dal testo: MCP 2025-11-25
+ * «Tool Execution Errors… isError: true», Anthropic `is_error`, Codex `DynamicToolCallResponse.success`. Il testo che il
+ * modello legge NON cambia (decisione owner 30/09), tranne l'artefatto troppo grande che oggi mente (ESITO65-ART).
+ */
+describe('ESITO65 — il fallimento di un attrezzo è un flag, non un prefisso indovinato', () => {
+    function cartellaVuota(t) {
+        const radice = mkdtempSync(join(tmpdir(), 'talos-esito65-'))
+        t.after(() => rmSync(radice, { recursive: true, force: true }))
+        return radice
+    }
+
+    function reteDiRisposte(...risposte) {
+        const chiamate = []
+        return {
+            chiamate,
+            fetch: async (url, opzioni) => {
+                const indice = chiamate.length
+                chiamate.push({ url, opzioni, corpo: JSON.parse(opzioni.body) })
+                const scelta = risposte[Math.min(indice, risposte.length - 1)]
+                return {
+                    ok: true, status: 200,
+                    json: async () => ({ choices: [{ message: scelta }], usage: { prompt_tokens: 10, completion_tokens: 5 } }),
+                    text: async () => '',
+                }
+            },
+        }
+    }
+
+    const TASK = { consegna: 'un compito qualunque, per la prova' }
+    const CONCLUSO_SUBITO = { role: 'assistant', content: 'fatto', tool_calls: [] }
+    const chiamata = (nome, argomenti, id = 'c1') => ({ id, type: 'function', function: { name: nome, arguments: JSON.stringify(argomenti) } })
+
+    /** Un giro con UNA chiamata; torna l'evento `tool-esito` e il testo che il modello ha letto. */
+    async function unAttrezzo(t, nome, argomenti, opzioni = {}) {
+        const rete = reteDiRisposte({ role: 'assistant', content: null, tool_calls: [chiamata(nome, argomenti)] }, CONCLUSO_SUBITO)
+        const eventi = []
+        await talosLavora({
+            cartella: cartellaVuota(t), task: TASK, modello: 'x', chiave: 'y', fetchDiRete: rete.fetch,
+            strumentiEstesi: [nome], onGiro: (e) => eventi.push(e), ...opzioni,
+        })
+        const esito = eventi.find((e) => e.tipo === 'tool-esito')
+        const letto = rete.chiamate[1].corpo.messages.find((m) => m.role === 'tool').content
+        return { esito, letto }
+    }
+
+    const rotta = async () => { throw new Error('TALOS_PROVA_ROTTA') }
+
+    /** Le 12 mutazioni del ponte verso il telefono: callback, argomenti, e il testo che il kernel scrive OGGI senza ponte. */
+    const NOTE_ASSENTI = 'notes are not configured on this harness: no bridge to the device was set.'
+    const TASK_ASSENTI = 'tasks are not configured on this harness: no bridge to the device was set.'
+    const MEMORIA_ASSENTE = 'memory is not configured on this harness: no bridge to the device was set.'
+    const LIBRERIA_ASSENTE = 'the Library is not configured on this harness: no bridge to the device was set.'
+    const MUTAZIONI_PONTE = [
+        { nome: 'notes_create', fn: 'creaNotaFn', argomenti: { title: 't', content: 'c' }, assente: NOTE_ASSENTI },
+        { nome: 'notes_update', fn: 'aggiornaNotaFn', argomenti: { id: 'x', title: 't' }, assente: NOTE_ASSENTI },
+        { nome: 'notes_delete', fn: 'eliminaNotaFn', argomenti: { id: 'x' }, assente: NOTE_ASSENTI },
+        { nome: 'tasks_create', fn: 'creaTaskFn', argomenti: { title: 't' }, assente: TASK_ASSENTI },
+        { nome: 'tasks_complete', fn: 'completaTaskFn', argomenti: { id: 'x', status: 'done' }, assente: TASK_ASSENTI },
+        { nome: 'tasks_update', fn: 'aggiornaTaskFn', argomenti: { id: 'x', title: 't' }, assente: TASK_ASSENTI },
+        { nome: 'tasks_delete', fn: 'eliminaTaskFn', argomenti: { id: 'x' }, assente: TASK_ASSENTI },
+        { nome: 'memory_write', fn: 'creaMemoriaFn', argomenti: { title: 't', content: 'c' }, assente: MEMORIA_ASSENTE },
+        { nome: 'memory_update', fn: 'aggiornaMemoriaFn', argomenti: { title: 't', newTitle: 't2' }, assente: MEMORIA_ASSENTE },
+        { nome: 'memory_delete', fn: 'eliminaMemoriaFn', argomenti: { title: 't' }, assente: MEMORIA_ASSENTE },
+        { nome: 'library_rename', fn: 'rinominaLibreriaFn', argomenti: { id: 'x', name: 'n' }, assente: LIBRERIA_ASSENTE },
+        { nome: 'library_delete', fn: 'eliminaLibreriaFn', argomenti: { id: 'x' }, assente: LIBRERIA_ASSENTE },
+    ]
+
+    for (const caso of MUTAZIONI_PONTE) {
+        it(`ESITO65-THROW-${caso.nome}: la callback lancia ⇒ isError vero, testo al modello invariato`, async (t) => {
+            const { esito, letto } = await unAttrezzo(t, caso.nome, caso.argomenti, { [caso.fn]: rotta })
+            assert.equal(letto, `${caso.nome} failed: TALOS_PROVA_ROTTA`)
+            assert.equal(esito.content, letto)
+            assert.equal(esito.isError, true)
+        })
+
+        it(`ESITO65-MISSING-${caso.nome}: il ponte non c'è ⇒ isError vero, testo al modello invariato`, async (t) => {
+            const { esito, letto } = await unAttrezzo(t, caso.nome, caso.argomenti)
+            assert.equal(letto, caso.assente)
+            assert.equal(esito.isError, true)
+        })
+    }
+
+    it('ESITO65-THROW-document_create e generate_image: la callback lancia ⇒ isError vero, testo invariato', async (t) => {
+        const doc = await unAttrezzo(t, 'document_create', { format: 'md', title: 'T', body: 'b' }, { onDocumento: rotta })
+        assert.equal(doc.letto, 'document creation failed: TALOS_PROVA_ROTTA')
+        assert.equal(doc.esito.isError, true)
+        const img = await unAttrezzo(t, 'generate_image', { prompt: 'p' }, { onImmagine: rotta })
+        assert.equal(img.letto, 'image generation failed: TALOS_PROVA_ROTTA')
+        assert.equal(img.esito.isError, true)
+    })
+
+    it('ESITO65-MISSING-generate_image: nessun generatore ⇒ isError vero, testo invariato', async (t) => {
+        const { esito, letto } = await unAttrezzo(t, 'generate_image', { prompt: 'p' })
+        assert.equal(letto, 'image generation is not configured on this harness: no generator/saver was set.')
+        assert.equal(esito.isError, true)
+    })
+
+    const NON_TROVATI = [
+        { nome: 'memory_update', argomenti: { title: 't', newTitle: 't2' }, opzioni: { aggiornaMemoriaFn: async () => null }, letto: 'no memory has the title "t". Use memory_search to find the right one.' },
+        { nome: 'memory_delete', argomenti: { title: 't' }, opzioni: { eliminaMemoriaFn: async () => false }, letto: 'no memory has the title "t". It may already be gone.' },
+        { nome: 'library_rename', argomenti: { id: 'x', name: 'n' }, opzioni: { rinominaLibreriaFn: async () => null }, letto: 'no Library file has the id "x".' },
+        { nome: 'library_delete', argomenti: { id: 'x' }, opzioni: { eliminaLibreriaFn: async () => false }, letto: 'no Library file has the id "x". It may already be gone.' },
+    ]
+    for (const caso of NON_TROVATI) {
+        it(`ESITO65-NOTFOUND-${caso.nome}: niente da cambiare ⇒ isError vero, testo invariato`, async (t) => {
+            const { esito, letto } = await unAttrezzo(t, caso.nome, caso.argomenti, caso.opzioni)
+            assert.equal(letto, caso.letto)
+            assert.equal(esito.isError, true)
+        })
+    }
+
+    it('ESITO65-OKFALSE: onDocumento e onImmagine con ok:false ⇒ isError vero, il loro messaggio arriva intatto', async (t) => {
+        const doc = await unAttrezzo(t, 'document_create', { format: 'md', title: 'T', body: 'b' }, {
+            onDocumento: async () => ({ ok: false, esito: 'The document was not created: TALOS_DOCUMENT_EMPTY' }),
+        })
+        assert.equal(doc.letto, 'The document was not created: TALOS_DOCUMENT_EMPTY')
+        assert.equal(doc.esito.isError, true)
+        const img = await unAttrezzo(t, 'generate_image', { prompt: 'p' }, {
+            onImmagine: async () => ({ ok: false, esito: 'The image was not generated: TALOS_IMAGE_EMPTY' }),
+        })
+        assert.equal(img.letto, 'The image was not generated: TALOS_IMAGE_EMPTY')
+        assert.equal(img.esito.isError, true)
+    })
+
+    it('ESITO65-INVALID: una risposta senza ok:true non conferma niente ⇒ isError vero', async (t) => {
+        for (const risposta of [undefined, {}, { ok: 'true' }]) {
+            const doc = await unAttrezzo(t, 'document_create', { format: 'md', title: 'T', body: 'b' }, { onDocumento: async () => risposta })
+            assert.equal(doc.esito.isError, true, `onDocumento → ${JSON.stringify(risposta)}`)
+        }
+    })
+
+    it('ESITO65-SUCCESS: un successo resta un successo, anche se il suo testo comincia con «error:»', async (t) => {
+        const nota = await unAttrezzo(t, 'notes_create', { title: 'Spesa', content: 'latte' }, {
+            creaNotaFn: async (input) => ({ id: 'n1', title: input.title, content: input.content }),
+        })
+        assert.equal(nota.letto, 'saved: "Spesa" (id: n1)')
+        assert.equal(nota.esito.isError, false)
+        const doc = await unAttrezzo(t, 'document_create', { format: 'md', title: 'T', body: 'b' }, {
+            onDocumento: async () => ({ ok: true, esito: 'error: this line is what the saver chose to say, and it succeeded' }),
+        })
+        assert.equal(doc.esito.isError, false)
+    })
+
+    it('ESITO65-DENIED: il permesso negato resta un fallimento (REFUSED.)', async (t) => {
+        const { esito, letto } = await unAttrezzo(t, 'notes_delete', { id: 'x' }, {
+            livelloAccesso: 'lettura', eliminaNotaFn: async () => undefined,
+        })
+        assert.match(letto, /^REFUSED\./)
+        assert.equal(esito.isError, true)
+    })
+
+    it('ESITO65-MIXED: un fallito e un riuscito nello stesso giro non si mescolano, e il giro dopo ri-pianifica', async (t) => {
+        const rete = reteDiRisposte(
+            { role: 'assistant', content: null, tool_calls: [chiamata('notes_delete', { id: 'x' }, 'a'), chiamata('notes_create', { title: 't', content: 'c' }, 'b')] },
+            CONCLUSO_SUBITO,
+        )
+        const eventi = []
+        await talosLavora({
+            cartella: cartellaVuota(t), task: TASK, modello: 'costoso-x', modelloEsecutore: 'economico-y', chiave: 'y',
+            fetchDiRete: rete.fetch, strumentiEstesi: ['notes_delete', 'notes_create'], onGiro: (e) => eventi.push(e),
+            eliminaNotaFn: rotta, creaNotaFn: async (input) => ({ id: 'n1', title: input.title }),
+        })
+        const esiti = eventi.filter((e) => e.tipo === 'tool-esito')
+        assert.deepEqual(esiti.map((e) => [e.toolCallId, e.isError]), [['a', true], ['b', false]])
+        assert.deepEqual(rete.chiamate.map((c) => c.corpo.model), ['costoso-x', 'costoso-x'],
+            'un attrezzo fallito nel giro 0 fa tornare il giro 1 sul modello che pianifica')
+    })
+
+    it('ESITO65-ART-01: onArtefatto che rifiuta ⇒ il modello legge il rifiuto, non «created»', async (t) => {
+        const rifiuto = 'artifact_create failed: the page is larger than the limit (512 KB): nothing was created.'
+        const { esito, letto } = await unAttrezzo(t, 'artifact_create', { titolo: 'Pagina', html: '<p>x</p>' }, {
+            onArtefatto: async () => ({ ok: false, esito: rifiuto }),
+        })
+        assert.equal(letto, rifiuto)
+        assert.equal(esito.isError, true)
+    })
+
+    it('ESITO65-ART-03: un artefatto salvato resta «created» con il suo id', async (t) => {
+        const { esito, letto } = await unAttrezzo(t, 'artifact_create', { titolo: 'Pagina', html: '<p>x</p>' }, {
+            onArtefatto: async () => ({ id: 'a1' }),
+        })
+        assert.equal(letto, 'created: "Pagina" (id: a1)')
+        assert.equal(esito.isError, false)
+    })
+
+    // ⛔ OSS-70B-1 / E7 (01/10/2026, owner «Dall'evento dell'artefatto»): il modello che ha fatto QUEL giro arriva al
+    // server insieme alla pagina, così la Libreria può dire «Fatto da <modello>».
+    it('OSS70B-KERNEL-01: onArtefatto riceve il modello del giro', async (t) => {
+        const ricevuti = []
+        await unAttrezzo(t, 'artifact_create', { titolo: 'Pagina', html: '<p>x</p>' }, {
+            onArtefatto: async (titolo, html, info) => { ricevuti.push(info); return { id: 'a1' } },
+        })
+        assert.deepEqual(ricevuti, [{ modello: 'x' }])
+    })
+})
+
+/*
+ * ⛔ ERRCOD-E1 (30/09/2026) — ledger `.claude/ragionamento/LEDGER-ERRORI-CODICE-2026-09-30.md`. L'errore del fornitore
+ * deve arrivare al server con la sua STRUTTURA (stato, corpo, `error` di OpenRouter, fase), perché il classificatore lo
+ * riconosca senza leggere il testo. E un errore dentro lo stream SSE (OpenRouter, HTTP 200 con `error` e
+ * `finish_reason:'error'`, https://openrouter.ai/docs/api-reference/errors, letta il 30/09) non si perde più.
+ */
+describe('ERRCOD-E1 — gli errori del fornitore escono con la loro struttura', () => {
+    const MESSAGGI = [{ role: 'user', content: 'ciao' }]
+    const senzaAttesa = async () => {}
+
+    it('ERRCOD-E1-HTTP: un 401 porta stato, corpo, errore del fornitore e fase; il messaggio resta quello di sempre', async () => {
+        const corpo = JSON.stringify({ error: { message: 'User not found.', code: 401 } })
+        const fetchDiRete = async () => ({ ok: false, status: 401, text: async () => corpo, json: async () => JSON.parse(corpo) })
+        const errore = await chiamaConRitenta({ modello: 'x', chiave: 'y', messaggi: MESSAGGI, attrezzi: [], fetchDiRete, dormi: senzaAttesa })
+            .then(() => null, (e) => e)
+        assert.ok(errore instanceof Error)
+        assert.equal(errore.message, `HTTP 401 dopo 4 tentativi: ${corpo}`)
+        assert.equal(errore.stato, 401)
+        assert.equal(errore.fase, 'http')
+        assert.equal(errore.corpo, corpo)
+        assert.deepEqual(errore.erroreFornitore, { message: 'User not found.', code: 401 })
+    })
+
+    it('ERRCOD-E1-HTTP-TIPO: il tipo di OpenRouter (metadata.error_type) arriva intatto', async () => {
+        const corpo = JSON.stringify({ error: { message: 'This model\'s maximum context length is 131072 tokens', code: 400, metadata: { error_type: 'context_length_exceeded' } } })
+        const fetchDiRete = async () => ({ ok: false, status: 400, text: async () => corpo })
+        const errore = await chiamaConRitenta({ modello: 'x', chiave: 'y', messaggi: MESSAGGI, attrezzi: [], fetchDiRete, dormi: senzaAttesa })
+            .then(() => null, (e) => e)
+        assert.equal(errore.erroreFornitore?.metadata?.error_type, 'context_length_exceeded')
+    })
+
+    it('ERRCOD-E1-HTTP-NONJSON: un corpo che non è JSON non rompe niente: erroreFornitore è null, il corpo resta', async () => {
+        const fetchDiRete = async () => ({ ok: false, status: 502, text: async () => '<html>Bad gateway</html>' })
+        const errore = await chiamaConRitenta({ modello: 'x', chiave: 'y', messaggi: MESSAGGI, attrezzi: [], fetchDiRete, dormi: senzaAttesa, tentativiMassimi: 1 })
+            .then(() => null, (e) => e)
+        assert.equal(errore.stato, 502)
+        assert.equal(errore.erroreFornitore, null)
+        assert.equal(errore.corpo, '<html>Bad gateway</html>')
+    })
+
+    it('ERRCOD-E1-RETE: se la rete non risponde, l\'eccezione di fetch esce con fase «rete» e la sua causa', async () => {
+        const fetchDiRete = async () => { throw Object.assign(new TypeError('fetch failed'), { cause: Object.assign(new Error('getaddrinfo ENOTFOUND openrouter.ai'), { code: 'ENOTFOUND' }) }) }
+        const errore = await chiamaConRitenta({ modello: 'x', chiave: 'y', messaggi: MESSAGGI, attrezzi: [], fetchDiRete, dormi: senzaAttesa })
+            .then(() => null, (e) => e)
+        assert.equal(errore.message, 'fetch failed')
+        assert.equal(errore.fase, 'rete')
+        assert.equal(errore.cause?.code, 'ENOTFOUND')
+    })
+
+    it('ERRCOD-E1-FLUSSO: un errore dentro lo stream SSE lancia con fase «flusso» e l\'errore del fornitore', async () => {
+        const pacchetto = { id: 'g1', object: 'chat.completion.chunk', error: { code: 502, message: 'Provider returned error', metadata: { error_type: 'provider_unavailable' } }, choices: [{ index: 0, delta: {}, finish_reason: 'error' }] }
+        const fetchDiRete = async () => new Response(`data: ${JSON.stringify(pacchetto)}\n\n`, { status: 200 })
+        const errore = await chiamaConRitenta({ modello: 'x', chiave: 'y', messaggi: MESSAGGI, attrezzi: [], fetchDiRete, dormi: senzaAttesa, onDelta: () => {} })
+            .then(() => null, (e) => e)
+        assert.ok(errore instanceof Error)
+        assert.equal(errore.fase, 'flusso')
+        assert.equal(errore.stato, 502)
+        assert.equal(errore.erroreFornitore?.metadata?.error_type, 'provider_unavailable')
+    })
+
+    it('ERRCOD-E1-FLUSSO-PARZIALE: il testo arrivato prima dell\'errore nello stream si conserva sull\'errore', async () => {
+        const testo = { choices: [{ index: 0, delta: { content: 'Sto per' } }] }
+        const guasto = { error: { code: 500, message: 'boom' }, choices: [{ index: 0, delta: {}, finish_reason: 'error' }] }
+        const fetchDiRete = async () => new Response(`data: ${JSON.stringify(testo)}\n\ndata: ${JSON.stringify(guasto)}\n\n`, { status: 200 })
+        const errore = await chiamaConRitenta({ modello: 'x', chiave: 'y', messaggi: MESSAGGI, attrezzi: [], fetchDiRete, dormi: senzaAttesa, onDelta: () => {} })
+            .then(() => null, (e) => e)
+        assert.equal(errore.fase, 'flusso')
+        assert.equal(errore.testoParziale, 'Sto per')
+    })
+
+    it('ERRCOD-E1-VUOTO: uno stream senza contenuto né chiamate lancia con fase «vuoto»', async () => {
+        const fetchDiRete = async () => new Response('data: [DONE]\n\n', { status: 200 })
+        const errore = await chiamaConRitenta({ modello: 'x', chiave: 'y', messaggi: MESSAGGI, attrezzi: [], fetchDiRete, dormi: senzaAttesa, onDelta: () => {} })
+            .then(() => null, (e) => e)
+        assert.equal(errore.fase, 'vuoto')
+    })
+})
+
+/*
+ * ⛔ ERRCOD-RIPRESA (30/09/2026, trovato sul Pad): dopo un errore del fornitore la sessione non si poteva più
+ * riprendere («Sessione non pronta per questa azione»), perché l'esito era `null` e la conversazione andava persa.
+ * Hermes la conserva («Your request was not processed. Send it again», agent/turn_failure_copy.py). Il kernel attacca
+ * all'errore la conversazione com'era quando il modello non ha risposto: il server la salva, e «Riprova» riparte da lì.
+ */
+describe('ERRCOD-RIPRESA — un errore del modello non butta via la conversazione', () => {
+    it('ERRCOD-RIPRESA-01: l\'errore lanciato da talosLavora porta messaggiFinali, che finisce con la richiesta della persona', async () => {
+        const radice = mkdtempSync(join(tmpdir(), 'talos-ripresa-'))
+        try {
+            const corpo = JSON.stringify({ error: { message: 'User not found.', code: 401 } })
+            const errore = await talosLavora({
+                cartella: radice, task: { consegna: 'ciao, riassumi il README' }, modello: 'x', chiave: 'y',
+                fetchDiRete: async () => ({ ok: false, status: 401, text: async () => corpo }),
+            }).then(() => null, (e) => e)
+            assert.ok(errore instanceof Error)
+            assert.ok(Array.isArray(errore.messaggiFinali), 'la conversazione viaggia sull\'errore')
+            const ultimo = errore.messaggiFinali.at(-1)
+            assert.equal(ultimo.role, 'user')
+            assert.match(String(ultimo.content), /riassumi il README/)
+        } finally {
+            rmSync(radice, { recursive: true, force: true })
+        }
+    })
+})
+
+/*
+ * ⛔ ERRCOD-E3 (30/09/2026) — il motivo del fallimento di un attrezzo, in un codice che la UI traduce in parole
+ * (owner: «Motivo in parole, grezzo nel dettaglio»). Deciso nel ramo che lo conosce; i codici del repository del
+ * telefono (`TALOS_NOTE_NOT_FOUND`, `TALOS_TASK_NOT_FOUND`) si riconoscono per uguaglianza esatta, mai con una regex.
+ */
+describe('ERRCOD-E3 — il perché di un attrezzo fallito viaggia come codice', () => {
+    function cartellaVuota(t) {
+        const radice = mkdtempSync(join(tmpdir(), 'talos-errcod-e3-'))
+        t.after(() => rmSync(radice, { recursive: true, force: true }))
+        return radice
+    }
+    function reteDiRisposte(...risposte) {
+        let indice = 0
+        return async (url, opzioni) => {
+            const scelta = risposte[Math.min(indice, risposte.length - 1)]
+            indice += 1
+            return { ok: true, status: 200, json: async () => ({ choices: [{ message: scelta }], usage: { prompt_tokens: 1, completion_tokens: 1 } }), text: async () => '' }
+        }
+    }
+    async function codiceDi(t, nome, argomenti, opzioni = {}) {
+        const eventi = []
+        await talosLavora({
+            cartella: cartellaVuota(t), task: { consegna: 'prova' }, modello: 'x', chiave: 'y',
+            fetchDiRete: reteDiRisposte({ role: 'assistant', content: null, tool_calls: [{ id: 'c1', type: 'function', function: { name: nome, arguments: JSON.stringify(argomenti) } }] }, { role: 'assistant', content: 'fatto', tool_calls: [] }),
+            strumentiEstesi: [nome], onGiro: (e) => eventi.push(e), ...opzioni,
+        })
+        return eventi.find((e) => e.tipo === 'tool-esito')
+    }
+
+    it('ERRCOD-E3-01 ponte assente → NOT_CONFIGURED', async (t) => {
+        assert.equal((await codiceDi(t, 'notes_create', { title: 't', content: 'c' })).errorCode, 'NOT_CONFIGURED')
+    })
+    it('ERRCOD-E3-02 il repository dice TALOS_NOTE_NOT_FOUND → NOT_FOUND', async (t) => {
+        const esito = await codiceDi(t, 'notes_delete', { id: 'x' }, { eliminaNotaFn: async () => { throw new Error('TALOS_NOTE_NOT_FOUND') } })
+        assert.equal(esito.errorCode, 'NOT_FOUND')
+    })
+    it('ERRCOD-E3-03 il repository dice TALOS_TASK_NOT_FOUND → NOT_FOUND', async (t) => {
+        const esito = await codiceDi(t, 'tasks_delete', { id: 'x' }, { eliminaTaskFn: async () => { throw new Error('TALOS_TASK_NOT_FOUND') } })
+        assert.equal(esito.errorCode, 'NOT_FOUND')
+    })
+    it('ERRCOD-E3-04 il ponte risponde null o false → NOT_FOUND', async (t) => {
+        assert.equal((await codiceDi(t, 'memory_update', { title: 't', newTitle: 'u' }, { aggiornaMemoriaFn: async () => null })).errorCode, 'NOT_FOUND')
+        assert.equal((await codiceDi(t, 'library_delete', { id: 'x' }, { eliminaLibreriaFn: async () => false })).errorCode, 'NOT_FOUND')
+    })
+    it('ERRCOD-E3-05 un\'altra eccezione del ponte → FAILED', async (t) => {
+        const esito = await codiceDi(t, 'notes_create', { title: 't', content: 'c' }, { creaNotaFn: async () => { throw new Error('SQLITE_BUSY: database is locked') } })
+        assert.equal(esito.errorCode, 'FAILED')
+    })
+    it('ERRCOD-E3-06 permesso negato → DENIED', async (t) => {
+        const esito = await codiceDi(t, 'notes_delete', { id: 'x' }, { livelloAccesso: 'lettura', eliminaNotaFn: async () => undefined })
+        assert.equal(esito.errorCode, 'DENIED')
+    })
+    it('ERRCOD-E3-07 documento con una risposta di forma sbagliata → INVALID_RESULT; con ok:false → FAILED', async (t) => {
+        assert.equal((await codiceDi(t, 'document_create', { format: 'md', title: 'T', body: 'b' }, { onDocumento: async () => undefined })).errorCode, 'INVALID_RESULT')
+        assert.equal((await codiceDi(t, 'document_create', { format: 'md', title: 'T', body: 'b' }, { onDocumento: async () => ({ ok: false, esito: 'no' }) })).errorCode, 'FAILED')
+    })
+    it('ERRCOD-E3-08 un file che non esiste → FILE_NOT_FOUND', async (t) => {
+        assert.equal((await codiceDi(t, 'leggi', { percorso: 'non-esiste.txt' })).errorCode, 'FILE_NOT_FOUND')
+    })
+    it('ERRCOD-E3-09 un attrezzo riuscito non ha errorCode', async (t) => {
+        const esito = await codiceDi(t, 'notes_create', { title: 't', content: 'c' }, { creaNotaFn: async (input) => ({ id: 'n1', title: input.title }) })
+        assert.equal(esito.isError, false)
+        assert.equal(esito.errorCode, undefined)
     })
 })

@@ -736,3 +736,168 @@ describe('ChatsScreen — la grammatica delle stazioni (A3-84)', () => {
         wrapper.unmount()
     })
 })
+
+/*
+ * ⭐⭐ P4-bis — selezione multipla delle chat (owner 01/10 sera: «la lista chat non ha il modo per selezionare più chat
+ * e operare su di esse massivamente»). Decisioni 02/10: icona «Seleziona» nella RIGA DEL CONTEGGIO come «Ricerca
+ * approfondita» (la testata non cambia: tolta il 22/08); in blocco Archivia/Ripristina ed Elimina; barra
+ * «✕ · N selezionate · Tutte» a sinistra e SOLO due azioni a destra (regola owner: mai più di due affiancate).
+ * Ledger: `.claude/ragionamento/LEDGER-P4BIS-SELEZIONE-MULTIPLA-2026-10-02.md`.
+ */
+describe('P4-bis — selezionare più chat e agire in blocco', () => {
+    type Controller = ReturnType<typeof makeController>
+    const controllerDi = () => mockState.controller as Controller
+    const barra = () => document.querySelector('[data-testid="talos-chats-selection-bar"]') as HTMLElement | null
+
+    async function selezionaDallaRiga(wrapper: ReturnType<typeof mountScreen>) {
+        await wrapper.get('[data-testid="talos-chats-select-header"]').trigger('click')
+        await flushPromises()
+    }
+    async function tocca(wrapper: ReturnType<typeof mountScreen>, selettore: string, indice: number, apri = 'talos-chats-open') {
+        await wrapper.findAll(`${selettore} [data-testid="${apri}"]`)[indice]!.trigger('click')
+        await flushPromises()
+    }
+
+    it('SEL-01 l\'icona «Seleziona» sta nella riga del conteggio, apre la selezione e sparisce mentre è accesa', async () => {
+        const wrapper = mountScreen()
+        const pulsante = wrapper.get('[data-testid="talos-chats-select-header"]')
+        expect(pulsante.attributes('aria-label')).toBe('Select chats')
+        // Nella riga del conteggio, non nella testata (owner 22/08: la testata non regge un'icona in più).
+        expect(wrapper.get('[data-testid="talos-chats-count"]').element.parentElement!.contains(pulsante.element)).toBe(true)
+        await selezionaDallaRiga(wrapper)
+        expect(barra()).not.toBeNull()
+        expect(wrapper.find('[data-testid="talos-chats-select-header"]').exists()).toBe(false)
+        wrapper.unmount()
+    })
+
+    it('SEL-02 senza chat da scegliere l\'icona non c\'è', () => {
+        controllerDi().chat.sessions.splice(0)
+        const wrapper = mountScreen()
+        expect(wrapper.find('[data-testid="talos-chats-select-header"]').exists()).toBe(false)
+        wrapper.unmount()
+    })
+
+    it('SEL-03 la barra: conteggio e «Tutte» a sinistra, ESATTAMENTE due azioni a destra', async () => {
+        const wrapper = mountScreen()
+        await selezionaDallaRiga(wrapper)
+        const azioni = barra()!.querySelector('[data-testid="talos-chats-bulk-actions"]')!
+        expect([...azioni.querySelectorAll('button')].map((b) => b.dataset.testid)).toEqual(['talos-chats-bulk-archive', 'talos-chats-bulk-delete'])
+        const tutte = barra()!.querySelector('[data-testid="talos-chats-select-all"]')!
+        expect(azioni.contains(tutte)).toBe(false)
+        wrapper.unmount()
+    })
+
+    it('SEL-04 Archivia due chat: due scritture, selezione chiusa, Annulla le riporta indietro', async () => {
+        const wrapper = mountScreen()
+        await selezionaDallaRiga(wrapper)
+        await tocca(wrapper, '[data-testid="talos-chats-row"]', 0)
+        await tocca(wrapper, '[data-testid="talos-chats-row"]', 1)
+        const archivia = wrapper.get('[data-testid="talos-chats-bulk-archive"]')
+        expect(archivia.attributes('aria-label')).toBe('Archive selected')
+        await archivia.trigger('click')
+        await flushPromises()
+        const scritture = controllerDi().chat.setSessionArchived.mock.calls
+        expect(scritture).toHaveLength(2)
+        expect(scritture.every(([, valore]) => valore === true)).toBe(true)
+        expect(barra()).toBeNull()
+        const avvisi = useTalosMobileToasts()
+        const avviso = avvisi.items.value.at(-1)!
+        expect(avviso.message).toBe('2 chats archived')
+        avvisi.act(avviso.id)
+        await flushPromises()
+        const ripristini = controllerDi().chat.setSessionArchived.mock.calls.slice(2)
+        expect(ripristini).toHaveLength(2)
+        expect(ripristini.every(([, valore]) => valore === false)).toBe(true)
+        wrapper.unmount()
+    })
+
+    it('SEL-05 tutte archiviate: l\'azione è Ripristina', async () => {
+        for (const sessione of controllerDi().chat.sessions) sessione.metadata = { archived: true }
+        const wrapper = mountScreen()
+        await wrapper.get('[data-testid="talos-chats-archived-toggle"]').trigger('click')
+        await selezionaDallaRiga(wrapper)
+        await tocca(wrapper, '[data-testid="talos-chats-archived-row"]', 0, 'talos-chats-archived-open')
+        const ripristina = wrapper.get('[data-testid="talos-chats-bulk-archive"]')
+        expect(ripristina.attributes('aria-label')).toBe('Unarchive selected')
+        await ripristina.trigger('click')
+        await flushPromises()
+        expect(controllerDi().chat.setSessionArchived.mock.calls).toEqual([[expect.any(String), false]])
+        wrapper.unmount()
+    })
+
+    it('SEL-06 selezione mista: si archiviano solo quelle non archiviate', async () => {
+        controllerDi().chat.sessions[0]!.metadata = { archived: true }
+        const wrapper = mountScreen()
+        await wrapper.get('[data-testid="talos-chats-archived-toggle"]').trigger('click')
+        await selezionaDallaRiga(wrapper)
+        await wrapper.get('[data-testid="talos-chats-select-all"]').trigger('click')
+        await flushPromises()
+        await wrapper.get('[data-testid="talos-chats-bulk-archive"]').trigger('click')
+        await flushPromises()
+        expect(controllerDi().chat.setSessionArchived.mock.calls).toEqual([['s2', true]])
+        wrapper.unmount()
+    })
+
+    it('SEL-07 una scrittura fallisce: errore col numero, la fallita resta selezionata', async () => {
+        const controller = controllerDi()
+        controller.chat.setSessionArchived.mockImplementation(async (id: string) => {
+            if (id === 's1') throw new Error('disco pieno')
+        })
+        const wrapper = mountScreen()
+        await selezionaDallaRiga(wrapper)
+        await wrapper.get('[data-testid="talos-chats-select-all"]').trigger('click')
+        await flushPromises()
+        await wrapper.get('[data-testid="talos-chats-bulk-archive"]').trigger('click')
+        await flushPromises()
+        expect(wrapper.text()).toContain('1 chat could not be archived')
+        expect(barra()?.textContent).toContain('1 chat selected')
+        wrapper.unmount()
+    })
+})
+
+describe('P4-bis — dalla prova sul Pad (02/10): barra fissa e parole della stazione Chat', () => {
+    it('SEL-08 la barra della selezione resta incollata in alto mentre si scorre', async () => {
+        const wrapper = mountScreen()
+        await wrapper.get('[data-testid="talos-chats-select-header"]').trigger('click')
+        await flushPromises()
+        const barra = wrapper.get('[data-testid="talos-chats-selection-bar"]')
+        expect(barra.classes()).toContain('sticky')
+        // ⛔ Mezzo rem e basta: `sticky` conta già l'imbottitura dello scorritore (Pad: telefono 92 px, tablet 80 px);
+        // una distanza in più la sommava due volte (192 px misurati sul telefono, 02/10).
+        expect(barra.classes()).toContain('top-2')
+        // ⭐ Owner 02/10: sul telefono (foglio con i comandi) la barra sta ACCANTO al pulsante del menu, nella sua riga.
+        expect(barra.classes()).toContain('talos-chats-selection-bar')
+        const sorgente = (await import('node:fs')).readFileSync(
+            (await import('node:path')).resolve(process.cwd(), 'src/screens/ChatsScreen.vue'), 'utf8')
+        const regola = /\.talos-sheet-body\[data-under-controls="true"\] \.talos-chats-selection-bar \{([^}]*)\}/.exec(sorgente)
+        expect(regola).not.toBeNull()
+        expect(regola![1]).toContain('position: fixed;')
+        expect(regola![1]).toContain('left: 4.25rem;')
+        expect(regola![1]).toContain('top: calc(max(0.5rem, env(safe-area-inset-top)) - 5px);')
+        // Sopra la lista: senza un fondo e un livello la lista ci passerebbe sotto in trasparenza.
+        expect(barra.classes().some((classe) => classe.startsWith('z-'))).toBe(true)
+        wrapper.unmount()
+    })
+
+    // ⛔ In inglese «All»/«None» andava già bene: il difetto visto sul Pad è italiano («3 selezionate · Tutti», chiave
+    // della Libreria al maschile). Si prova sulle parole italiane e sull'uso delle chiavi della stazione Chat.
+    it('SEL-09 «Tutte»/«Nessuna»: parole della stazione Chat, al femminile come «selezionate»', async () => {
+        const { TALOS_IT_MESSAGES } = await import('@/i18n/locales/it')
+        const chats = (TALOS_IT_MESSAGES as unknown as { chats: Record<string, string> }).chats
+        expect(chats.selectAll).toBe('Tutte')
+        expect(chats.selectNone).toBe('Nessuna')
+        const wrapper = mountScreen()
+        await wrapper.get('[data-testid="talos-chats-select-header"]').trigger('click')
+        await flushPromises()
+        // In inglese «All»/«None» coincidono con le chiavi vecchie: la stazione deve usare le SUE (mutante B9).
+        const sorgente = (await import('node:fs')).readFileSync(
+            (await import('node:path')).resolve(process.cwd(), 'src/screens/ChatsScreen.vue'), 'utf8')
+        expect(sorgente).toContain("t('chats.selectNone') : t('chats.selectAll')")
+        const tutte = wrapper.get('[data-testid="talos-chats-select-all"]')
+        expect(tutte.text()).toBe('All')
+        await tutte.trigger('click')
+        await flushPromises()
+        expect(wrapper.get('[data-testid="talos-chats-select-all"]').text()).toBe('None')
+        wrapper.unmount()
+    })
+})

@@ -19,6 +19,7 @@ import {
     TALOS_METADATA_AZIONI,
     TALOS_METADATA_CHIAMATE,
     TALOS_METADATA_SCHEDE,
+    TALOS_METADATA_AZIONE_NON_ESEGUITA,
     TALOS_METADATA_TRONCATA,
     talosAzioniEseguite,
     talosFermataDallaLunghezza,
@@ -97,8 +98,13 @@ import {
     type ChatCompletionResult,
     type ChatStore,
     type ChatTurn,
+    type TalosFinestraCompattazione,
+    type TalosRiassumiInput,
+    type TalosMisuraRichiesta,
+    type TalosRiassuntoEsito,
     type TalosStreamHandlers,
 } from '@/stores/chat'
+import type { TalosUltimoGiroChat } from '@/lib/chat/compattazioneChat'
 import { TALOS_TONE_PRESETS, buildTalosSystemPrompt, extractToneSuggestion, talosVisibleWhileStreaming, type TalosToneId } from '@/lib/tone'
 import {
     extractLibrarySaveBlocks,
@@ -883,7 +889,13 @@ export interface ChatController {
     readonly promptEnhancementError: Readonly<Ref<string | null>>
     readonly attachments: TalosMobileAttachmentsController
     /** ⛔ Owner 2026-08-27 — salva un artefatto HTML nella Libreria; vedi la definizione per il perché. */
-    saveArtifactToLibrary(id: string, titolo: string): Promise<{ ok: true, fileId: string } | { ok: false, reason: string }>
+    saveArtifactToLibrary(
+        id: string,
+        titolo: string,
+        opzioni?: { codice?: { sessionId: string, title: string }, model?: string | null },
+    ): Promise<{ ok: true, fileId: string } | { ok: false, reason: string }>
+    /** ⛔ OSS-70B-3 (30/09/2026): il file della Libreria con la stessa impronta di questa pagina, se c'è. */
+    libraryFileWithSameContent(html: string): Promise<string | null>
     readonly chat: ChatStore<unknown>
     readonly secrets: Readonly<Record<string, boolean>>
     init(): Promise<void>
@@ -907,33 +919,12 @@ export interface ChatController {
     saveManualModel(model: TalosMobileManualModel): Promise<void>
     removeManualModel(id: string): Promise<void>
     setProviderTimeout(provider: TalosMobileProviderId, seconds: number): Promise<void>
+    /**
+     * ⭐ 01/10/2026 (owner D7): scegliere un modello locale fa partire da sola
+     * la prova breve dei motori (tranne per chi l'aveva rifiutata, D11) — la
+     * modale del consenso del §1-bis non esiste più.
+     */
     selectModel(id: string): Promise<void>
-    /**
-     * §1-bis della consegna 0.1.18: la modale del sondaggio GPU, quando c'è.
-     *
-     * Il percorso automatico — la PRIMA volta che una persona sceglie
-     * esplicitamente un modello locale col consenso ancora `unset` — mette
-     * qui il percorso del GGUF scelto; `null` quando non c'è niente da
-     * chiedere. `selectModel` è l'UNICA porta che la valorizza: vedi
-     * `il-difetto-e-che-non-li-chiamano` — una guardia scritta e mai
-     * collegata al suo innesco vale come non scritta.
-     */
-    readonly pendingLocalEngineProbeConsent: Readonly<Ref<{ path: string } | null>>
-    /**
-     * Chiude la modale automatica con uno dei tre esiti reali:
-     *   - `'granted'`    — scrive il consenso, fa partire il sondaggio in
-     *                      background, SENZA attendere: la chat non deve
-     *                      fermarsi per una misura che nessuno ha chiesto di
-     *                      aspettare.
-     *   - `'declined'`   — «non mostrare più»: scrive il consenso, NON fa
-     *                      partire niente. Per sempre finché non si tocca il
-     *                      comando manuale — mai un «no» mascherato, vedi
-     *                      `spegnere-non-e-dimenticare`.
-     *   - `'dismissed'`  — «non ora»: NON scrive niente. Il consenso resta
-     *                      `unset` e la modale tornerà alla prossima scelta
-     *                      esplicita di un modello locale.
-     */
-    decideLocalEngineProbeConsent(decision: 'granted' | 'declined' | 'dismissed'): Promise<void>
     selectEffort(level: TalosMobileEffortLevel): Promise<void>
     setThinking(enabled: boolean): Promise<void>
     setAgentToolsEnabled(enabled: boolean): void
@@ -1287,8 +1278,6 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
     const toolAuthorizationRecoveries = ref<TalosToolAuthorizationRecoveryView[]>([])
     const toolAuthorizationPromptVisible = ref(false)
     const recoveringToolAuthorizations = new Set<string>()
-    /** §1-bis: null quando non c'è niente da chiedere. Vedi `selectModel`. */
-    const pendingLocalEngineProbeConsent = ref<{ path: string } | null>(null)
     const libraryPolicyTurnStates = new Map<string, TalosLibraryContextPolicySnapshot>()
     let authorizationCoordinator: ReturnType<typeof createTalosToolAuthorizationCoordinator>
 
@@ -1400,6 +1389,12 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
         // Il prossimo in coda torna visibile da se': `sync` non riaccende la
         // tendina, la riaccende chi sa che c'e' ancora qualcosa da chiedere.
         showToolAuthorization()
+        /*
+         * ⛔ A3-OSS-1 (01/10/2026) — lo schermo qui sopra è già aggiornato: `decide` non aspetta più la risposta
+         * ripresa (37 s sul Pad di «in attesa» dopo un «no»). Chi attende QUESTA promessa vuole però il lavoro finito,
+         * come prima: la si risolve quando la continuazione è arrivata. Il tocco (`void` in App.vue e nella barra) no.
+         */
+        await authorizationCoordinator.settled()
         return decided
     }
 
@@ -1623,6 +1618,55 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
             (model) => model.provider === profile.provider && model.id === profile.model,
         ) ?? null
     })
+
+    /*
+     * ⭐⭐ P4-ter passo 2 (02/10/2026) — i parametri dell'ultimo giro di ogni chat, solo in memoria e mai la chiave: il
+     * riassunto IN CODA del modello locale deve partire con lo stesso sistema e gli stessi attrezzi, o il prefisso cambia
+     * dal primo token e la cache del motore non serve (decisione owner 02/10, Gallery `SummarizationContextCompactor.kt`).
+     */
+    const ultimoGiroPerChat = new Map<string, TalosUltimoGiroChat>()
+    /*
+     * ⛔ CTRL-COMP-02: il ciclo degli attrezzi consuma lo `usage` di ogni giro (`runMeter`) e alla risposta finale non
+     * arriva: senza questa memoria la soglia di un fornitore remoto si decideva sulla sola stima dei caratteri.
+     */
+    const tokenUltimoGiroPerChat = new Map<string, number>()
+    /** ⭐⭐ Owner 02/10 «Token veri»: per chat, il rapporto fra i token veri dell'ultima richiesta e la sua stima. */
+    const taraturaPerChat = new Map<string, number>()
+
+    /*
+     * ⭐⭐ P4-ter passo 2 — finestra e chiamata del riassunto vivono in `chatControllerCompattazione.ts`, caricato al primo
+     * uso (il cancello `verify-initial-chunk.mjs` pesa l'avvio al byte). Qui le memorie e gli involucri.
+     */
+    type TalosCompattazioneDelController = ReturnType<typeof import('./chatControllerCompattazione').creaCompattazioneDelController>
+    let compattazioneDelController: Promise<TalosCompattazioneDelController> | null = null
+    function compattazioneController(): Promise<TalosCompattazioneDelController> {
+        compattazioneDelController ??= import('./chatControllerCompattazione').then(({ creaCompattazioneDelController }) => creaCompattazioneDelController({
+            modelloDelProfilo: (modelProfileId) => {
+                const profile = profiles.value.find((candidate) => candidate.id === modelProfileId) ?? null
+                const model = profile
+                    ? availableProviderModels.value.find((candidate) => candidate.provider === profile.provider && candidate.id === profile.model) ?? null
+                    : null
+                return profile && model ? { provider: profile.provider, model } : null
+            },
+            ultimoGiro: (sessionId) => ultimoGiroPerChat.get(sessionId) ?? null,
+            tokenUltimoGiro: (sessionId) => tokenUltimoGiroPerChat.get(sessionId) ?? null,
+            taratura: (sessionId) => taraturaPerChat.get(sessionId) ?? null,
+            getKey: (provider) => deps.getKey(provider),
+            getEndpoint: (provider) => deps.getEndpoint(provider),
+            transport: deps.transport,
+            locale: () => localization.state.locale,
+        }))
+        return compattazioneDelController
+    }
+    async function finestraDellaChat(sessionId: string, modelProfileId: string | null): Promise<TalosFinestraCompattazione | null> {
+        return (await compattazioneController()).finestraDellaChat(sessionId, modelProfileId)
+    }
+    async function riassumiConversazione(input: TalosRiassumiInput): Promise<TalosRiassuntoEsito> {
+        return (await compattazioneController()).riassumiConversazione(input)
+    }
+    async function misuraRichiesta(input: { sessionId: string, modelProfileId: string | null, turni: readonly ChatTurn[] }): Promise<TalosMisuraRichiesta | null> {
+        return (await compattazioneController()).misuraRichiesta(input)
+    }
     // RAG-OBB (24/09/2026): i modelli che ragionano per forza non hanno «off» (catalogo OpenRouter).
     const effortLadder = computed(() => mobileEffortLadderFor(selectedProfile.value))
 
@@ -1683,9 +1727,34 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
      * l'aveva generato — trovato dall'owner guardando i puntini in alto
      * a destra della chat, mai nella libreria di quella chat.
      */
+    /*
+     * ⛔ OSS-70B-3 (30/09/2026 notte, owner «Riconoscere la stessa pagina»): ogni «Salva» creava una copia nuova, anche
+     * della stessa pagina. Ora l'impronta (la stessa `sha256` che il vault scrive, `talosSha256Hex`) è la chiave: se
+     * nella Libreria c'è già un file disponibile con quell'impronta, si usa quello. Stato dell'arte: «the same bytes
+     * always produce the same hash, making that hash a natural idempotency key» (dossier
+     * `.claude/ricerche/2026-09-30-oss70b-origine-e-doppioni.md`).
+     */
+    async function libraryFileWithSameContent(html: string): Promise<string | null> {
+        // Caricata al bisogno: un import statico portava il vault nel pacchetto iniziale e sforava il suo tetto
+        // (TALOS_INITIAL_CHUNK_BUDGET_EXCEEDED, 657.190 contro 651.600 byte, 01/10/2026).
+        const { talosSha256Hex } = await import('@/services/talosVaultService')
+        const impronta = await talosSha256Hex(new TextEncoder().encode(html))
+        await attachments.refreshVault()
+        // Solo un file GENERATO (owner: «un file generato con la stessa impronta»): una pagina che la persona ha portato
+        // da sé resta un'altra cosa, anche se ha gli stessi byte.
+        const trovato = attachments.vaultFiles.find((file) => file.status === 'available' && file.sha256 === impronta
+            && (file.metadata as { origin?: unknown } | null)?.origin === 'generated')
+        return trovato?.id ?? null
+    }
+
     async function saveArtifactToLibrary(
         id: string,
         titolo: string,
+        /*
+         * ⛔ OSS-70B-1 (30/09/2026 notte, owner «Codice · titolo della sessione»): dal Codice il file NON si lega alla
+         * chat aperta nell'app (lì non c'entra): nessuna chat, e la provenienza dice la sessione del Codice e il modello.
+         */
+        opzioni: { codice?: { sessionId: string, title: string }, model?: string | null } = {},
     ): Promise<{ ok: true, fileId: string } | { ok: false, reason: string }> {
         let html: string
         try {
@@ -1696,10 +1765,15 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
             return { ok: false, reason: /^TALOS_[A-Z0-9_]+$/.test(detail) ? detail : 'TALOS_ARTIFACT_READ_FAILED' }
         }
         try {
+            const giaSalvato = await libraryFileWithSameContent(html)
+            if (giaSalvato) return { ok: true, fileId: giaSalvato }
+            const origine = opzioni.codice
+                ? { sessionId: null, model: opzioni.model ?? null, provider: null, toolName: 'artifact_create', codice: opzioni.codice }
+                : generatedOrigin(chat.activeSession.value?.id ?? null, null, { toolName: 'artifact_create' })
             const saved = await attachments.saveGeneratedBinary(
                 { name: `${titolo}.html`, mediaType: 'text/html', bytes: new TextEncoder().encode(html) },
                 false,
-                generatedOrigin(chat.activeSession.value?.id ?? null, null, { toolName: 'artifact_create' }),
+                origine,
             )
             return { ok: true, fileId: saved.id }
         } catch {
@@ -3837,17 +3911,23 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
              * Anthropic no) non pagano mai il giro. La ragione, con la
              * misura, sta in `catalogoCompatto.ts`.
              */
+            // ⭐ Punto 4 (owner 01/10): ai locali pochi attrezzi in vista e `tool_search` al posto dell'indice.
+            const profiloLocale = profile?.provider === 'local'
             const svelati = catalogo
-                ? catalogo.talosSvelatiInConSempreVisibili(sendIdentity.sessionId, offeredTools as never)
+                ? catalogo.talosSvelatiInConSempreVisibili(sendIdentity.sessionId, offeredTools as never, profiloLocale)
                 : new Set<string>()
             const dettagliStrumento = catalogo
-                ? catalogo.talosStrumentoDettagli(
+                ? (profiloLocale ? catalogo.talosStrumentoCercaAttrezzi : catalogo.talosStrumentoDettagli)(
                     offeredTools as never,
                     async (tool) => {
                         const { talosToolsForLocalEngine } = await import('@/lib/tools/registry')
                         return talosToolsForLocalEngine([tool] as never)[0]
                     },
                     (nomi) => { for (const nome of nomi) svelati.add(nome) },
+                    // CA-12 (02/10): i locali cercano anche nella lingua della persona — i titoli della scheda di permesso.
+                    (nome: string) => [`agentTools.tools.${nome}.title`, `agentTools.tools.${nome}.description`]
+                        .map((chiave) => { const testo = deps.translate(chiave); return testo === chiave ? '' : testo })
+                        .join(' '),
                 )
                 : null
             /**
@@ -3894,7 +3974,9 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
              * duemila righe di controller, dove nessuno la rileggerebbe.
              */
             const indiceNelPrompt = catalogo && !senzaTool
-                ? catalogo.talosIstruzioneCatalogo(offeredTools as never)
+                ? profiloLocale
+                    ? catalogo.talosIstruzioneCatalogoLocale(offeredTools as never)
+                    : catalogo.talosIstruzioneCatalogo(offeredTools as never)
                 : ''
 
             /*
@@ -4007,6 +4089,10 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                 + exportInstruction
                 + noToolsInstruction
                 + directAnswerInstruction
+            // ⭐⭐ P4-ter passo 2: calcolato una volta, così l'ultimo giro ricordato porta LO STESSO sistema mandato al modello.
+            const sistemaDelGiro = (sendIdentity.surface === 'browse'
+                ? tonePrompt + TALOS_BROWSE_APPENDIX
+                : tonePrompt) + indiceNelPrompt + senzaMotoreDiRicerca
             const completeOnce = buildChatCompletion(
                 () => ({
                     profile,
@@ -4025,9 +4111,7 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                      * ricalcolare a ogni giro, e il risparmio si mangerebbe da
                      * sé.
                      */
-                    system: (sendIdentity.surface === 'browse'
-                        ? tonePrompt + TALOS_BROWSE_APPENDIX
-                        : tonePrompt) + indiceNelPrompt + senzaMotoreDiRicerca,
+                    system: sistemaDelGiro,
                     /*
                      * ⛔ LO STESSO locale che nomina la lingua nel prompt di
                      * sistema poco sopra. Lì è la prima cosa che il modello
@@ -4159,7 +4243,7 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                  * interruttori — quindi non può svelare niente che la persona
                  * abbia spento. C'è una riga di test che lo tiene fermo.
                  */
-                name === 'tool_details'
+                name === 'tool_details' || name === 'tool_search'
                 /*
                  * ⛔⛔⛔ Owner 2026-08-27, Fase 8 — trovato SUL DISPOSITIVO, non
                  * nel codice a tavolino: un tool forgiato ABILITATO dalla
@@ -4272,7 +4356,23 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                         handlers.onReasoning?.(text)
                     },
                 }
-                const result = await completeOnce(roundTurns, timed ?? handlers, toolsDisabledByPerson ? [] : tools)
+                const attrezziDelGiro = toolsDisabledByPerson ? [] : tools
+                // ⭐⭐ P4-ter passo 2: i parametri di QUESTO giro, per il riassunto in coda del locale (mai la chiave).
+                ultimoGiroPerChat.set(sendIdentity.sessionId, {
+                    system: sistemaDelGiro,
+                    tools: attrezziDelGiro,
+                    effort: sendRuntime.effort,
+                    thinking: sendRuntime.thinking,
+                    locale: localization.state.locale,
+                })
+                const result = await completeOnce(roundTurns, timed ?? handlers, attrezziDelGiro)
+                const { stimaRichiesta, tokenDellaRichiesta, tokenDellaRisposta } = await import('@/lib/chat/compattazioneChat')
+                const tokenDelGiro = tokenDellaRisposta(result.usage)
+                if (tokenDelGiro !== null) tokenUltimoGiroPerChat.set(sendIdentity.sessionId, tokenDelGiro)
+                // ⭐⭐ «Token veri»: quanto la stima di QUESTA richiesta si discosta dal numero vero del fornitore.
+                const veri = tokenDellaRichiesta(result.usage)
+                const stimati = stimaRichiesta({ turni: roundTurns, system: sistemaDelGiro, tools: attrezziDelGiro })
+                if (veri !== null && stimati > 0) taraturaPerChat.set(sendIdentity.sessionId, veri / stimati)
                 round.open?.cache?.(result.usage)
                 runMeter.add(result.usage, result.callId)
                 // Anche una chiamata inattesa dal provider non arriva a preflight/consenso.
@@ -4532,9 +4632,14 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                         const letti = dettagliStrumento.input.safeParse(grezzi)
                         if (!letti.success) {
                             timing?.finish(false, 0, 'TALOS_TOOL_INPUT_INVALID')
-                            return { ok: false, content: 'Give `names` as a list of tool names.' }
+                            return {
+                                ok: false,
+                                content: profiloLocale
+                                    ? 'Give `query`: what you want to do, in English.'
+                                    : 'Give `names` as a list of tool names.',
+                            }
                         }
-                        const esito = await dettagliStrumento.run(letti.data, {} as never)
+                        const esito = await dettagliStrumento.run(letti.data as never, {} as never)
                         timing?.finish(esito.ok, 0, null)
                         return { ok: esito.ok, content: esito.content }
                     }
@@ -5243,6 +5348,14 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                 ...(talosFermataDallaLunghezza(completion.finishReason)
                     ? { [TALOS_METADATA_TRONCATA]: true }
                     : {}),
+                /*
+                 * ⭐⭐ P4-quinquies (owner 02/10/2026, «Riprova, poi avviso»): la risposta ha detto «fatto», nel turno
+                 * non è partito nessuno strumento, nemmeno dopo il sollecito del ciclo. Il fatto viaggia coi metadati e
+                 * la vista lo dice sotto la risposta; la frase del modello non si tocca.
+                 */
+                ...(completion.azioneNonEseguita
+                    ? { [TALOS_METADATA_AZIONE_NON_ESEGUITA]: true }
+                    : {}),
             }
             /**
              * La risposta e' arrivata: se non stai guardando, te lo diciamo.
@@ -5393,6 +5506,14 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
             }
             syncToolAuthorizations()
         },
+        // A3-OSS-1 — la continuazione non ha più un chiamante che aspetta: il suo errore si traccia qui, col solo codice.
+        onReadyFailed: (checkpoint, error) => {
+            const codice = error instanceof Error && /^[A-Z0-9_]{4,64}$/.test(error.message)
+                ? error.message
+                : 'TALOS_TOOL_AUTHORIZATION_CONTINUATION_FAILED'
+            talosTracciaFuori(`continuazione dopo il permesso fallita: ${checkpoint.id} ${codice}`)
+            syncToolAuthorizations()
+        },
     })
     const chat = createChatStore<TalosChatControllerSendRuntime>(complete, {
         repository: deps.chatRepository,
@@ -5403,6 +5524,10 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
         // ⭐ B3 — la coda consegna dalla stessa strada di un invio; mai con un permesso d'attrezzo ancora aperto.
         deliverQueued: (sessionId, voce) => inviaVoceDellaCoda(sessionId, voce),
         permissionPendingFor: (sessionId) => pendingToolAuthorizations.value.some((p) => p.session_id === sessionId),
+        // ⭐⭐ P4-ter passo 2 — la compattazione della chat: lo store decide e salva, qui solo modello e finestra.
+        riassumiConversazione,
+        misuraRichiesta,
+        finestraPerCompattazione: (modelProfileId, sessionId) => finestraDellaChat(sessionId, modelProfileId),
     })
     const browseMode = computed(() => chat.activeSession.value?.surface === 'browse')
     // Solo memoria del controller, distinta dalle preferenze globali dei singoli strumenti.
@@ -5949,9 +6074,15 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
         // collegata vale come non scritta — vedi `il-difetto-e-che-non-li-chiamano`.
         const profiloScelto = profiles.value.find((candidate) => candidate.id === id)
         if (profiloScelto?.provider === 'local') {
-            if (deps.settings.state.local_engine_probe.consent === 'unset') {
-                pendingLocalEngineProbeConsent.value = { path: profiloScelto.model }
-            }
+            /*
+             * ⭐ D7 (owner, 01/10/2026): la prova dei motori parte DA SOLA, non
+             * con una domanda. Sul Pad, chi rispondeva «Non ora» restava sulla
+             * CPU: 116 s alla prima parola, contro 3,4 s dell'NPU. D11: chi
+             * aveva risposto «Non chiedermelo più» (`declined`) non la riceve.
+             * SENZA await, come prima: la chat non aspetta la misura. Se il
+             * modello è già misurato il ponte risponde subito e non si vede
+             * niente (`talosRunAutomaticProbe`).
+             */
             // P3-1 — nasconde la latenza di apertura (2,9-3,6 s misurati sul
             // Pad, campagna C0) dietro QUESTA scelta esplicita, mai dietro il
             // lancio dell'app (§20.7 — e la guida Android Developers "Don't
@@ -5962,54 +6093,41 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
             // nessuno ha chiesto di aspettare. Import dinamico: il corpo
             // vive in `lib/models/localWarmSelectedModel.ts`, non qui — vedi
             // il commento in testa a quel file sul perché.
-            void import('@/lib/models/localWarmSelectedModel').then(
+            /*
+             * ⛔ D13 (owner, 01/10/2026): «una copia sola». Con la prova il
+             * modello si apre DOPO di lei, mai accanto (sul Pad due copie =
+             * OOM KILL); se la persona ha scritto e l'ha interrotta, il
+             * modello lo sta aprendo la chat e qui non si apre niente.
+             */
+            const apriInAnticipo = (): Promise<void> => import('@/lib/models/localWarmSelectedModel').then(
                 ({ talosWarmSelectedLocalModel }) => talosWarmSelectedLocalModel(profiloScelto.model),
             )
+            // ⛔ PKLA Qualcomm 2.1 b (owner, 01/10): prima le condizioni NPU, una volta sola.
+            const condizioniNpu = import('@/lib/models/npuTermsPrompt')
+                .then(({ talosNpuTermsBeforeProbe }) => talosNpuTermsBeforeProbe())
+            if (deps.settings.state.local_engine_probe.consent !== 'declined') {
+                void condizioniNpu
+                    .then(() => talosLocalEngineLazy())
+                    .then(({ talosRunAutomaticProbe }) => talosRunAutomaticProbe(profiloScelto.model))
+                    .then((esito) => (esito === 'cancelled' ? undefined : apriInAnticipo()))
+            } else {
+                void condizioniNpu.then(() => apriInAnticipo())
+            }
         }
         const operations: Promise<unknown>[] = [persistComposerDefaults()]
         if (chat.activeSession.value) operations.push(chat.setActiveModelProfile(id))
         await Promise.all(operations)
     }
 
-    /**
-     * Chiude la modale automatica con uno dei tre esiti reali:
-     *   - `'granted'`    — scrive il consenso, fa partire il sondaggio in
-     *                      background, SENZA attendere: la chat non deve
-     *                      fermarsi per una misura che nessuno ha chiesto di
-     *                      aspettare.
-     *   - `'declined'`   — «non mostrare più»: scrive il consenso, NON fa
-     *                      partire niente. Per sempre finché non si tocca il
-     *                      comando manuale — mai un «no» mascherato, vedi
-     *                      `spegnere-non-e-dimenticare`.
-     *   - `'dismissed'`  — «non ora»: NON scrive niente. Il consenso resta
-     *                      `unset` e la modale tornerà alla prossima scelta
-     *                      esplicita di un modello locale.
-     *
-     * ⛔ Il comando MANUALE — «sempre», per chi ha detto no o ha cambiato
-     * idea — non vive qui: è `talosRunLocalEngineProbeAndEnsureGranted` in
-     * `lib/localEngineProbeRun.ts`, chiamato direttamente dallo schermo (già
-     * pigro) delle impostazioni. Esporlo anche da qui costava un nome in più
-     * nel grafo d'avvio per una funzione che l'avvio non usa mai.
+    /*
+     * ⛔ 01/10/2026 (owner D7): la modale del consenso e la sua
+     * `decideLocalEngineProbeConsent` non esistono più — la prova parte da sola
+     * in `selectModel`. Il comando MANUALE resta nelle Impostazioni
+     * (`talosRunLocalEngineProbeAndEnsureGranted`, `lib/localEngineProbeRun.ts`).
+     * ⛔⛔ `talosLocalEngineLazy()`, non un `import()` diretto: due `import()`
+     * indipendenti dello stesso modulo in volo insieme sono un deadlock
+     * riprodotto — vedi `services/localEngineLazy.ts`.
      */
-    async function decideLocalEngineProbeConsent(
-        decision: 'granted' | 'declined' | 'dismissed',
-    ): Promise<void> {
-        const pending = pendingLocalEngineProbeConsent.value
-        pendingLocalEngineProbeConsent.value = null
-        if (decision === 'dismissed') return
-        await deps.settings.setLocalEngineProbeConsent({ consent: decision })
-        if (decision === 'granted' && pending) {
-            // ⛔ SENZA await — §1-bis: «non blocca la chat». Il primo
-            // messaggio parte come sempre, il sondaggio corre per conto suo.
-            // ⛔⛔ `talosLocalEngineLazy()` (`services/localEngineLazy.ts`),
-            // non un `import()` diretto: due `import()` indipendenti dello
-            // stesso modulo mockato, in volo insieme (questo e il warm-load
-            // di P3-1 sotto), sono un deadlock riprodotto, non un'ipotesi —
-            // vedi il commento nel suo file.
-            void talosLocalEngineLazy()
-                .then(({ talosRunProbe }) => talosRunProbe(pending.path))
-        }
-    }
 
     async function selectEffort(level: TalosMobileEffortLevel): Promise<void> {
         effort.value = clampMobileEffortFor(selectedProfile.value, level)
@@ -7581,8 +7699,6 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
         pendingToolAuthorizations,
         toolAuthorizationRecoveries,
         toolAuthorizationPromptVisible,
-        pendingLocalEngineProbeConsent,
-        decideLocalEngineProbeConsent,
         decideToolAuthorization,
         dismissToolAuthorization,
         showToolAuthorization,
@@ -7618,6 +7734,7 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
         promptEnhancementError: readonly(promptEnhancementError),
         attachments,
         saveArtifactToLibrary,
+        libraryFileWithSameContent,
         chat,
         secrets: readonly(secrets),
         init,

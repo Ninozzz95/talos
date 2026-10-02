@@ -672,7 +672,7 @@ export const TALOS_IT_MESSAGES = {
         localEngineProbe: {
             backendLabels: {"cpu":"il processore principale","opencl":"il processore grafico","vulkan":"il processore grafico nella modalità alternativa","hexagon":"l’acceleratore dedicato","unknown":"l’opzione disponibile"},
             title: 'Quale motore è più veloce qui',
-            purpose: "Una breve prova con i modelli presenti sul telefono per scoprire quale opzione risponde più in fretta. Consuma batteria e produce un po’ di calore. Ricorda il risultato e parte solo quando lo chiedi.",
+            purpose: "Una breve prova con i modelli presenti sul telefono per scoprire quale opzione risponde più in fretta. Parte da sola la prima volta che scegli un modello locale, ricorda il risultato e puoi rifarla da qui. Consuma un po’ di batteria e di calore.",
             states: {
                 unset: 'Non ancora chiesto',
                 granted: 'Consentito',
@@ -684,17 +684,11 @@ export const TALOS_IT_MESSAGES = {
             noModel: 'Scarica prima un modello locale — non c\'è ancora niente da verificare.',
             resultRan: 'Fatto. Su questo telefono i modelli locali vanno più veloci con {backend}.',
             resultInconclusive: 'Quella corsa non è stata abbastanza stabile per fidarsene — puoi riprovare.',
+            resultNothingMeasured: 'Non sono riuscito a misurare nessun motore questa volta — puoi riprovare da Impostazioni → Privacy e permessi.',
+            autoRunning: 'Sto scegliendo il motore più veloce per questo telefono',
             resultNotRun: {
                 hot: 'Saltato — il telefono è troppo caldo adesso. Riprova quando si è raffreddato.',
                 alreadyProven: 'Niente da verificare — già misurato su questo telefono.',
-            },
-            modal: {
-                title: 'Provare i motori di questo telefono?',
-                body: 'TALOS può far girare una breve generazione vera con le diverse opzioni di calcolo di questo telefono per vedere con quale i modelli locali rispondono più in fretta. Costa batteria e un po\' di calore, e succede una volta sola — la risposta resta. Da qui in poi non parte mai più da sola.',
-                yes: 'Sì, verifica ora',
-                no: 'Non ora',
-                dontAskAgain: 'Non chiedermelo più',
-                dontAskAgainHint: 'Puoi comunque farlo girare quando vuoi da Impostazioni → Privacy e permessi.',
             },
         },
     },
@@ -841,6 +835,25 @@ export const TALOS_IT_MESSAGES = {
         deleteMessage: 'Elimina messaggio',
         exportChat: 'Esporta chat',
         renameChat: 'Rinomina chat',
+        // ⭐⭐ P4-ter passo 2 (02/10/2026): la compattazione della chat, con le parole del desktop (`AVM-integrazione-r4`
+        // @ 3ecf7651d, app.js:46930-46935 e dizionario `:843-854`).
+        compaction: {
+            inProgress: 'Riassumo la conversazione…',
+            summarized: 'Conversazione riassunta',
+            tokens: 'token',
+            summarizedRow: 'Conversazione riassunta · {before} → {after} token',
+            undoneRow: 'Riassunto annullato · la conversazione intera torna al modello',
+            undo: 'Annulla',
+            undoFailed: 'Annullamento non riuscito: riprova.',
+            menuItem: 'Compatta ora',
+            confirmTitle: 'Compatta la conversazione',
+            confirmBody: 'TALOS riassume la parte più vecchia di questa conversazione per fare spazio. La cronologia intera resta salvata e puoi annullare dalla conversazione.',
+            confirmAction: 'Compatta ora',
+            nothingToCompact: 'Niente da compattare: la conversazione è ancora corta.',
+            nothingToGain: 'Niente da guadagnare: riassumendo, la richiesta non scenderebbe di almeno il 30%.',
+            failed: 'Il riassunto non è riuscito: la conversazione resta intera.',
+            busy: 'Aspetta che TALOS finisca la risposta, poi compatta.',
+        },
         deleteChat: 'Elimina chat',
         emptyTitle: 'Come posso aiutarti?',
         emptyBody: 'Inizia una conversazione oppure allega un file dal telefono.',
@@ -915,6 +928,7 @@ export const TALOS_IT_MESSAGES = {
          */
         localLoadingModel: 'Sto aprendo il modello sul telefono… {percent}%',
         localLoadingModelStarting: 'Sto aprendo il modello sul telefono…',
+        localPreparingGpu: 'Preparo la GPU per la prima volta…',
         localLoadingCancel: 'Annulla',
         localLoadingCancelling: 'Sto fermando…',
         removeFailedFiles: 'Rimuovi i file che non è stato possibile aggiungere prima dell’invio',
@@ -1070,6 +1084,8 @@ export const TALOS_IT_MESSAGES = {
          * l'effetto nel telefono invece di raccontarlo.
          */
         cardProofRead: 'Verificato sul telefono',
+        // ⭐⭐ P4-quinquies (02/10/2026): il rovescio della prova — la risposta ha detto «fatto», nessuno strumento è partito.
+        actionNotRun: 'Nessuno strumento è partito: niente è stato fatto.',
         cardSwitchOff: 'Spento',
         /*
          * ⛔ Una DOMANDA, non un titolo: «App disponibili» descriverebbe un
@@ -1391,6 +1407,11 @@ export const TALOS_IT_MESSAGES = {
             // Visto sul Pad (12/09/2026): senza questa chiave la lista mostrava
             // «HARNESS.GROUPS.LAST30» — il nome della chiave, non la parola.
             last30: 'Ultimi 30 giorni',
+            // ⭐ P4-sexies #1 (02/10/2026): `HarnessScreen.vue:170` traduce `harness.groups.${bucket}` con TUTTI i bucket di
+            // `chatDateBuckets.ts`; mancavano questi tre (visto sul Pad: «HARNESS.GROUPS.LAST7»).
+            last7: 'Ultimi 7 giorni',
+            older: 'Più vecchie',
+            undated: 'Senza data',
         },
         newSession: 'Nuova',
         newSessionAria: 'Nuova sessione Codice',
@@ -2455,6 +2476,9 @@ export const TALOS_IT_MESSAGES = {
         originMadeOn: 'il',
         originVersion: 'versione',
         originFromChat: 'nella chat',
+        // ⛔ OSS-70B-1 (30/09/2026): una pagina salvata dal Codice.
+        originFromCodice: 'nel Codice',
+        codiceLabel: 'Codice',
         originSource: 'da',
         originNoDetail: 'Nessun altro dettaglio registrato.',
         originOpenChat: 'Apri la chat di origine',
@@ -2885,6 +2909,14 @@ export const TALOS_IT_MESSAGES = {
          * 1.126 t/s sull'NPU in Q4_0 e a 55,7 in Q4_K_M.
          */
         backendWrongFormat: 'non per questo formato',
+        // ⛔ PKLA Qualcomm 2.1 b: l'NPU c'è ma si accende solo dopo le condizioni.
+        backendNpuTerms: 'accetta le condizioni',
+        npuTermsAcceptedOn: 'Condizioni Qualcomm accettate il {date}.',
+        npuTermsRead: 'Leggi le condizioni',
+        npuTermsWithdraw: 'Ritira il consenso',
+        npuTermsWithdrawn: 'Consenso ritirato: l’NPU resta spenta.',
+        npuTermsSaveFailed: 'Non è stato possibile registrare l’accettazione. Riprova.',
+        npuTermsClose: 'Chiudi le condizioni',
         backendInUse: 'adesso gira su {backend}',
         backendInUseOn: 'adesso gira su {backend} · {device}',
         backendSaveFailed: 'La scelta non è stata salvata: riprova.',
@@ -3200,6 +3232,16 @@ export const TALOS_IT_MESSAGES = {
         selectedOne: '1 chat selezionata',
         selected: '{count} selezionate',
         deleteSelected: 'Elimina chat selezionate',
+        // ⭐ P4-bis (owner 02/10/2026): l'ingresso visibile nella selezione e l'archiviazione in blocco.
+        selectAll: 'Tutte',
+        selectNone: 'Nessuna',
+        selectChats: 'Seleziona chat',
+        archiveSelected: 'Archivia selezionate',
+        unarchiveSelected: 'Ripristina selezionate',
+        bulkArchivedToast: '{count} chat archiviate',
+        bulkUnarchivedToast: '{count} chat ripristinate',
+        bulkArchiveFailed: '{count} chat non archiviate: restano selezionate, riprova.',
+        bulkUnarchiveFailed: '{count} chat non ripristinate: restano selezionate, riprova.',
         // ⛔ Le fasce della barra laterale. La convenzione è quella di tutti i
         // prodotti di chat, e vale la pena rispettarla: chi arriva da un altro
         // le cerca dove le ha sempre trovate.
@@ -3298,6 +3340,22 @@ export const TALOS_IT_MESSAGES = {
         messagesFailed: 'Non è stato possibile cercare nei messaggi. Cambia la ricerca per riprovare.',
         openFailed: 'Non è stato possibile aprire questo risultato. Riprova.',
     },
+    // ⛔ PKLA Qualcomm 3.8 e note legali complete (owner, 01/10/2026).
+    legal: {
+        title: 'Note legali',
+        qualcommTitle: 'Software Qualcomm (NPU)',
+        qualcommBody: 'TALOS contiene software di Qualcomm Technologies International, Ltd., usato in licenza per l’accelerazione NPU. Il software Qualcomm resta di Qualcomm e dei suoi licenziatari ed è soggetto alle condizioni Qualcomm, che si accettano prima di accendere l’NPU.',
+        readTerms: 'Leggi le condizioni Qualcomm',
+        hideTerms: 'Nascondi le condizioni',
+        nativeTitle: 'Componenti nativi e modelli',
+        androidTitle: 'Librerie Android',
+        npmTitle: 'Librerie dell’interfaccia',
+        showText: 'Mostra la licenza',
+        hideText: 'Nascondi la licenza',
+        noText: 'Il pacchetto non include il testo della licenza.',
+        loading: 'Carico l’elenco…',
+        count: '{count} componenti',
+    },
     settingsCenter: {
         allSettings: "Tutte le impostazioni",
         phoneDescription: "Collegamento al telefono, assistente e scorciatoie",
@@ -3334,6 +3392,7 @@ export const TALOS_IT_MESSAGES = {
             backup: {"label":"Backup e ripristino","description":"Esporta e ripristina i dati con un file cifrato"},
             account: {"label":"Account","description":"Spazio personale e blocco app"},
             agent_tools: {"label":"Strumenti agente","description":"Autonomia, capacità e autorizzazioni"},
+            legal: {"label":"Note legali","description":"Licenze del software incluso e condizioni Qualcomm"},
             system: {"label":"Sistema","description":"Regole e registro delle operazioni non disponibili qui","gate":"La gestione delle regole e il registro delle operazioni non sono ancora disponibili qui. I controlli del dispositivo sono in Doctor."},
         },
     },

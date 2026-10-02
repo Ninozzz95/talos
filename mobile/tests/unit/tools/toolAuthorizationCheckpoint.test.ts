@@ -805,3 +805,99 @@ describe('6.4 — registraDecisioneReale, il contatore di frizione opzionale', (
         expect(spia).toHaveBeenCalledWith('document_create', 'deny', '2026-07-29T12:01:00.000Z')
     })
 })
+
+/*
+ * ⛔⛔ A3-OSS-1 (Pad, 01/10/2026) — dopo «Non consentire» la scheda restava «in attesa», con «(1)» e «aspetta te»,
+ * per TUTTA la risposta ripresa: `decide` aspettava `onReady`, cioè la continuazione intera (apertura del modello,
+ * prefill, generazione). Come Hermes (`tools/approval.py:163-172`) e opencode (`permission/index.ts:109-121`):
+ * la risposta è il salvataggio; la continuazione parte da sola e non tiene fermo chi ha risposto.
+ */
+describe('A3-OSS-1 — la risposta non aspetta la continuazione', () => {
+    function inSospeso() {
+        let rilascia!: () => void
+        const promessa = new Promise<void>((resolve) => { rilascia = resolve })
+        return { promessa, rilascia }
+    }
+
+    async function entroUnAttimo<T>(promessa: Promise<T>): Promise<T | 'bloccato'> {
+        return Promise.race([
+            promessa,
+            new Promise<'bloccato'>((resolve) => setTimeout(() => resolve('bloccato'), 200)),
+        ])
+    }
+
+    it('OSS1-01 decide() torna mentre la continuazione è ancora in corso, e la richiesta non è più in attesa', async () => {
+        const continuazione = inSospeso()
+        const onReady = vi.fn(() => continuazione.promessa)
+        const gate = coordinator(onReady)
+        await gate.suspend(await makeCheckpoint())
+
+        await expect(entroUnAttimo(gate.decide('request-1', 'deny'))).resolves.toBe(true)
+        expect(onReady).toHaveBeenCalledTimes(1)
+        expect(gate.pending()).toEqual([])
+        continuazione.rilascia()
+    })
+
+    it('OSS1-02 un secondo «no» su un\'altra richiesta non resta in fila dietro la prima risposta', async () => {
+        const continuazione = inSospeso()
+        const onReady = vi.fn(() => continuazione.promessa)
+        const gate = coordinator(onReady)
+        await gate.suspend(await makeCheckpoint())
+        await gate.suspend(await makeCheckpoint(
+            [await makeRequest({ id: 'request-2', checkpoint_id: 'checkpoint-2', send_id: 'send-2' })],
+            {
+                id: 'checkpoint-2',
+                send_identity: {
+                    sendId: 'send-2',
+                    sessionId: 'session-1',
+                    sessionTitle: 'Q2 plan',
+                    surface: 'chat',
+                    modelProfileId: 'anthropic:claude-live',
+                    acceptedAt: NOW,
+                },
+            },
+        ))
+
+        await entroUnAttimo(gate.decide('request-1', 'deny'))
+        await expect(entroUnAttimo(gate.decide('request-2', 'deny'))).resolves.toBe(true)
+        expect(onReady).toHaveBeenCalledTimes(2)
+        expect(gate.pending()).toEqual([])
+        continuazione.rilascia()
+    })
+
+    it('OSS1-03 una continuazione che fallisce non rompe la decisione e arriva a onReadyFailed', async () => {
+        const errore = new Error('TALOS_TEST_CONTINUATION_FAILED')
+        const onReadyFailed = vi.fn()
+        const gate = createTalosToolAuthorizationCoordinator({
+            repository,
+            now: () => '2026-07-29T12:01:00.000Z',
+            authorizations: () => grants,
+            async grant() {},
+            async onReady() { throw errore },
+            onReadyFailed,
+        })
+        await gate.suspend(await makeCheckpoint())
+
+        await expect(gate.decide('request-1', 'deny')).resolves.toBe(true)
+        await vi.waitFor(() => expect(onReadyFailed).toHaveBeenCalledTimes(1))
+        expect(onReadyFailed).toHaveBeenCalledWith(expect.objectContaining({ id: 'checkpoint-1' }), errore)
+        expect(gate.pending()).toEqual([])
+    })
+
+    it('OSS1-05 settled() aspetta la continuazione partita da decide, e non rifiuta se è fallita', async () => {
+        const continuazione = inSospeso()
+        let finita = false
+        const gate = coordinator(vi.fn(async () => {
+            await continuazione.promessa
+            finita = true
+            throw new Error('TALOS_TEST_CONTINUATION_FAILED')
+        }))
+        await gate.suspend(await makeCheckpoint())
+        await gate.decide('request-1', 'deny')
+
+        await expect(entroUnAttimo(gate.settled())).resolves.toBe('bloccato')
+        continuazione.rilascia()
+        await expect(gate.settled()).resolves.toBeUndefined()
+        expect(finita).toBe(true)
+    })
+})

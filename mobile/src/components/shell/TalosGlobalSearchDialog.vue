@@ -3,7 +3,7 @@ import { computed, nextTick, onMounted, ref, useId, watch, type Component, type 
 import { NavigationFailureType, isNavigationFailure, useRouter, type RouteLocationRaw } from 'vue-router'
 import {
     Bell, BookMarked, BookOpen, Bot, BrainCircuit, CheckSquare, ChevronRight, DatabaseBackup,
-    Globe2, Languages, Mail, MessageSquareText, Palette, Search, Settings, Shield, ShieldCheck,
+    Globe2, Languages, Mail, MessageSquareText, Palette, Scale, Search, Settings, Shield, ShieldCheck,
     Smartphone, StickyNote, User, Volume2, Wrench,
 } from '@lucide/vue'
 import TalosMobileComposerSheet from '@/components/chat/TalosMobileComposerSheet.vue'
@@ -37,7 +37,7 @@ const messages = useTalosMessageSearch(query, (term, options) => controller.sear
 const settingIcons: Record<TalosMobileSettingsTabId, Component> = {
     models: Bot, ai_defaults: BrainCircuit, search: Search, browser: Globe2, integrations: Wrench,
     email: Mail, reminders: Bell, appearance: Palette, voice: Volume2, language: Languages,
-    privacy: ShieldCheck, backup: DatabaseBackup, account: User, agent_tools: Shield, system: Settings,
+    privacy: ShieldCheck, backup: DatabaseBackup, account: User, agent_tools: Shield, legal: Scale, system: Settings,
 }
 interface SearchEntry {
     id: string

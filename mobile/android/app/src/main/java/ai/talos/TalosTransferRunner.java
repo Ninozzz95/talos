@@ -48,6 +48,13 @@ public final class TalosTransferRunner {
 
         /** True once the user or the system has asked this to stop. */
         boolean stopRequested();
+
+        /**
+         * ⭐ The file is whole, and this is its SHA-256 — computed while it
+         * downloaded, so sealing it costs nothing ({@link TalosModelSeal}).
+         * Called before {@link #onFinished(String)} with a null reason.
+         */
+        default void onVerified(java.io.File finished, String sha256) {}
     }
 
     public static final class Resolved {
@@ -287,6 +294,7 @@ public final class TalosTransferRunner {
             return;
         }
         slot.finish(totalBytes);
+        host.onVerified(slot.finished, digest.hex());
         host.onProgress(totalBytes, totalBytes);
         host.onFinished(null);
     }

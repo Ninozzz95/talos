@@ -46,6 +46,11 @@ export interface TalosFileProvenance {
     perceptualHash: string | null
     /** What a C2PA seal said, when the file carried one. Null means none. */
     seal: 'valid' | 'broken' | null
+    /**
+     * ⛔ OSS-70B-1 (30/09/2026, owner «Codice · titolo della sessione»): the Code session a file was saved from. Absent
+     * for everything else, so records written before it read exactly as they did. Never exported (D-02), like the chat.
+     */
+    codice?: { sessionId: string, title: string }
 }
 
 const ORIGINS: readonly string[] = ['uploaded', 'generated', 'downloaded']
@@ -76,6 +81,12 @@ export function parseTalosFileProvenance(value: unknown): TalosFileProvenance | 
     const seal = typeof record.seal === 'string' && SEALS.includes(record.seal)
         ? record.seal as 'valid' | 'broken'
         : null
+    // A half-filled Code record is no record: a session without its title (or the reverse) would be guessed history.
+    const codiceGrezzo = record.codice && typeof record.codice === 'object' && !Array.isArray(record.codice)
+        ? record.codice as Record<string, unknown>
+        : null
+    const codiceSessione = codiceGrezzo ? text(codiceGrezzo.sessionId) : null
+    const codiceTitolo = codiceGrezzo ? text(codiceGrezzo.title) : null
     return {
         schema: 1,
         origin: record.origin as TalosFileOrigin,
@@ -89,6 +100,7 @@ export function parseTalosFileProvenance(value: unknown): TalosFileProvenance | 
         sourceUrl: text(record.sourceUrl),
         perceptualHash: text(record.perceptualHash),
         seal,
+        ...(codiceSessione && codiceTitolo ? { codice: { sessionId: codiceSessione, title: codiceTitolo } } : {}),
     }
 }
 

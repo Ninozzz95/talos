@@ -9,6 +9,13 @@ import { talosLocalBackendPlan } from '@/lib/models/localBackendPlan'
 import { talosStoredLocalBackendPreference } from '@/lib/models/localBackendPreferenceStore'
 import { talosT } from '@/i18n'
 import { useTalosMobileToasts } from '@/stores/toasts'
+import { talosLocalEngineProbeMessage as talosLocalEngineProbeMessageFor } from '@/lib/localEngineProbeRun'
+import {
+    TALOS_NPU_TERMS_VERSION,
+    talosNpuTermsLocale,
+    talosNpuTermsSha256,
+    talosNpuTermsText,
+} from '@/lib/models/npuTerms'
 
 /**
  * The on-device engine, from JavaScript's side of the bridge.
@@ -57,6 +64,13 @@ export interface TalosLocalEngineStatus {
      * vecchia che non sa rispondere.
      */
     kvCacheType: string | null
+    /**
+     * ⭐⭐ Il contesto APERTO adesso, in token — o `null` (nessun modello, ponte più vecchio).
+     *
+     * Serve al tetto (REG-COMP-11, P4-ter passo 2-bis, 02/10/2026): col modello aperto la RAM libera ha già tolto la
+     * sua cache, e il tetto deve rimetterla come rimette i pesi, se no scende mentre la conversazione cresce.
+     */
+    contextTokens: number | null
     /**
      * La build di llama.cpp, tipo `b10218-<commit>`, o `null` su una build
      * nativa più vecchia.
@@ -191,6 +205,8 @@ interface TalosLlamaPlugin {
         shape?: Record<string, unknown>
         /** La cache creata DAVVERO, non quella chiesta. */
         kvCacheType?: string
+        /** Il contesto APERTO adesso, in token (assente senza modello o su un ponte più vecchio). */
+        contextTokens?: number
         /** La build di llama.cpp: cio' che invalida un prefisso congelato. */
         engineBuild?: string
         /**
@@ -416,9 +432,21 @@ interface TalosLlamaPlugin {
      * A che punto e' il caricamento del modello. `loading: false` = non sta
      * caricando niente, e in quel caso `permille` vale -1.
      */
-    loadProgress(): Promise<{ permille: number, loading: boolean }>
+    loadProgress(): Promise<{ permille: number, loading: boolean, gpuPreparing?: boolean }>
+    /** Punto 2 (01/10/2026): compila i programmi della GPU senza modello. Vedi `talosPrepareGpuInBackground`. */
+    prepareGpu(options: { models: string[] }): Promise<{ state: 'ready' | 'prepared' | 'unavailable', ms?: number }>
     /** Ferma il caricamento in corso. Vedi `talosCancelLocalModelLoad`. */
     cancelLoad(): Promise<{ ok: boolean }>
+    /** D13 (01/10/2026): ferma la prova dei motori in corso. Vedi `talosCancelAutomaticProbe`. */
+    cancelQualification(): Promise<{ ok: boolean }>
+    /** PKLA Qualcomm 2.1 b: registra l'accettazione e carica il modulo NPU. */
+    acceptNpuTerms(options: { version: string, textSha256: string, locale: string }): Promise<{
+        accepted: boolean
+        loaded: boolean
+        acceptedAtMs?: number
+    }>
+    withdrawNpuTerms(): Promise<{ withdrawn: boolean }>
+    declineNpuTermsPrompt(): Promise<{ declined: boolean }>
     /** Il fabbisogno e la forma, letti senza caricare i pesi. */
     planPrompt(options: {
         path: string
@@ -778,6 +806,7 @@ export async function talosLocalEngineStatus(): Promise<TalosLocalEngineStatus> 
             loadedPath: status.loadedPath,
             shape: talosModelShapeOf(status.shape, status.kvCacheType),
             kvCacheType: typeof status.kvCacheType === 'string' ? status.kvCacheType : null,
+            contextTokens: integerOf(status.contextTokens),
             engineBuild: typeof status.engineBuild === 'string' && status.engineBuild !== ''
                 ? status.engineBuild
                 : null,
@@ -785,7 +814,7 @@ export async function talosLocalEngineStatus(): Promise<TalosLocalEngineStatus> 
     } catch {
         return {
             available: false, backends: '', loadedPath: null,
-            shape: null, kvCacheType: null, engineBuild: null,
+            shape: null, kvCacheType: null, contextTokens: null, engineBuild: null,
         }
     }
 }
@@ -803,6 +832,12 @@ export interface TalosLocalBackendQualification {
     npuInconclusive: boolean
     decisionBackend: string | null
     decisionReason: string | null
+    /**
+     * ⛔ D13 (01/10/2026): la persona ha scritto durante la prova e la prova si
+     * è fermata. Nessun esito da annunciare, nessun vincente da aprire.
+     * Facoltativo: un ponte più vecchio non lo manda, e vale «no».
+     */
+    cancelled?: boolean
 }
 
 const TALOS_LOCAL_BACKEND_QUALIFICATION_UNAVAILABLE: TalosLocalBackendQualification = Object.freeze({
@@ -834,6 +869,8 @@ export async function talosQualifyLocalBackend(path: string): Promise<TalosLocal
             npuInconclusive: result.npuInconclusive === true,
             decisionBackend: typeof result.decisionBackend === 'string' ? result.decisionBackend : null,
             decisionReason: typeof result.decisionReason === 'string' ? result.decisionReason : null,
+            // Solo quando è vero: la forma dell'esito resta quella di sempre.
+            ...((result as { cancelled?: unknown }).cancelled === true ? { cancelled: true } : {}),
         }
     } catch {
         return TALOS_LOCAL_BACKEND_QUALIFICATION_UNAVAILABLE
@@ -867,22 +904,101 @@ export async function talosRunProbe(path: string, running?: number): Promise<voi
     const runningId = running ?? toasts.push({ message: talosT('privacyPermissions.localEngineProbe.running') })
     try {
         const result = await talosQualifyLocalBackend(path)
-        const backend = result.decisionBackend === 'opencl' ? 'GPU'
-            : result.decisionBackend === 'cpu' ? 'CPU' : null
-        const message = result.ran && backend
-            ? talosT('privacyPermissions.localEngineProbe.resultRan', { backend })
-            : result.reason === 'hot'
-                ? talosT('privacyPermissions.localEngineProbe.resultNotRun.hot')
-                : result.reason === 'already-proven'
-                    ? talosT('privacyPermissions.localEngineProbe.resultNotRun.alreadyProven')
-                    : talosT('privacyPermissions.localEngineProbe.resultInconclusive')
-        toasts.push({ message, durationMs: 10000 })
+        toasts.push({ message: talosLocalEngineProbeMessage(result), durationMs: 10000 })
     } catch {
         toasts.push({ message: talosT('rejectGeneric'), durationMs: 10000 })
     } finally {
         toasts.dismiss(runningId)
     }
 }
+
+/** La frase dell'esito vive in `lib/localEngineProbeRun.ts`, condivisa con le Impostazioni. */
+function talosLocalEngineProbeMessage(result: TalosLocalBackendQualification): string {
+    return talosLocalEngineProbeMessageFor(result, (key, params) => talosT(key, params))
+}
+
+/** Oltre questo tempo la prova automatica dice cosa sta facendo; sotto, tace. */
+const TALOS_AUTOMATIC_PROBE_NOTICE_MS = 500
+
+/**
+ * ⭐ D7 (owner, 01/10/2026) — la prova breve che parte da sola alla scelta di
+ * un modello locale. Non chiede niente; se c'è da misurare lo dice con
+ * «Sto scegliendo il motore più veloce per questo telefono».
+ *
+ * ⛔ Se non c'è niente da misurare (`already-proven`) la risposta del ponte
+ * arriva subito: nessun avviso, nessun esito — scegliere un modello già
+ * misurato non deve far lampeggiare niente. Per questo l'avviso aspetta
+ * {@link TALOS_AUTOMATIC_PROBE_NOTICE_MS} invece di comparire subito.
+ */
+/**
+ * Come è andata la prova automatica, per chi deve poi aprire il modello:
+ * `cancelled` = la persona ha scritto e la chat sta aprendo il suo modello;
+ * `skipped` = c'era una risposta in corso, la prova non è partita;
+ * `finished` = la prova è finita (anche senza niente da misurare, o col ponte
+ *   in errore: `talosQualifyLocalBackend` lo rende «non disponibile»).
+ */
+export type TalosAutomaticProbeOutcome = 'finished' | 'cancelled' | 'skipped'
+
+export async function talosRunAutomaticProbe(path: string): Promise<TalosAutomaticProbeOutcome> {
+    if (talosWarmInFlight) await talosWarmInFlight.catch(() => undefined)
+    /*
+     * ⛔ D13 (owner, 01/10/2026) — «una copia sola». Sul Pad la prova apriva la
+     * sua copia del modello mentre quella della chat era in memoria, e Android
+     * ha chiuso l'app (LOW_MEMORY, OOM KILL). Con una risposta in corso la
+     * prova non parte (si riprova alla prossima scelta); con un modello aperto
+     * e fermo, prima lo si chiude.
+     */
+    if (talosGenerationsInFlight > 0) return 'skipped'
+    const stato = await talosLocalEngineStatus()
+    if (stato.loadedPath !== null) await talosLocalEngineClose()
+    const corsa = talosRunAutomaticProbeOnce(path)
+    talosAutomaticProbeInFlight = corsa
+    try {
+        return await corsa
+    } finally {
+        if (talosAutomaticProbeInFlight === corsa) talosAutomaticProbeInFlight = null
+    }
+}
+
+async function talosRunAutomaticProbeOnce(path: string): Promise<TalosAutomaticProbeOutcome> {
+    const toasts = useTalosMobileToasts()
+    let avvisoId: number | null = null
+    const timer = setTimeout(() => {
+        avvisoId = toasts.push({ message: talosT('privacyPermissions.localEngineProbe.autoRunning') })
+    }, TALOS_AUTOMATIC_PROBE_NOTICE_MS)
+    let result: TalosLocalBackendQualification
+    try {
+        result = await talosQualifyLocalBackend(path)
+    } finally {
+        clearTimeout(timer)
+        if (avvisoId !== null) toasts.dismiss(avvisoId)
+    }
+    // Interrotta: la persona ha scritto e la chat sta aprendo il SUO modello —
+    // nessun esito da annunciare.
+    if (result.cancelled === true) return 'cancelled'
+    if (result.ran) toasts.push({ message: talosLocalEngineProbeMessage(result), durationMs: 10000 })
+    // D13: il modello lo apre poi chi ha chiamato (`chatController.selectModel`),
+    // con le regole di sempre dell'apertura anticipata — col vincente appena misurato.
+    return 'finished'
+}
+
+/**
+ * ⛔ D13 — la persona ha scritto mentre la prova girava: la prova si ferma, e
+ * questa funzione torna solo quando ha liberato la memoria, così la chat apre
+ * il suo modello senza una seconda copia accanto. Senza prova in corso non fa
+ * niente.
+ */
+export async function talosCancelAutomaticProbe(): Promise<void> {
+    const corsa = talosAutomaticProbeInFlight
+    if (!corsa) return
+    await plugin.cancelQualification().catch(() => undefined)
+    await corsa.catch(() => undefined)
+}
+
+/** D13: la prova automatica in corso, se c'è. */
+let talosAutomaticProbeInFlight: Promise<TalosAutomaticProbeOutcome> | null = null
+/** D13: quante generazioni sono in corso adesso; la prova non parte sopra una risposta. */
+let talosGenerationsInFlight = 0
 
 function templateCapabilitiesOf(raw: unknown): TalosLocalTemplateCapabilities | null {
     if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null
@@ -1485,19 +1601,25 @@ export async function talosLocalEngineGenerate(
     onDelta: (delta: string) => void,
     options: { maxTokens?: number, stopAtEndOfGeneration?: boolean } = {},
 ): Promise<TalosLocalEngineGeneration> {
-    const subscription = await plugin.addListener('token', (payload) => {
-        if (typeof payload?.delta === 'string' && payload.delta !== '') {
-            onDelta(payload.delta)
-        }
-    })
+    // D13: contata, così la prova automatica non parte sopra una risposta.
+    talosGenerationsInFlight += 1
     try {
+        const subscription = await plugin.addListener('token', (payload) => {
+            if (typeof payload?.delta === 'string' && payload.delta !== '') {
+                onDelta(payload.delta)
+            }
+        })
         try {
-            return await plugin.generate({ prompt, ...options })
-        } catch (error) {
-            throw generationErrorOf(error)
+            try {
+                return await plugin.generate({ prompt, ...options })
+            } catch (error) {
+                throw generationErrorOf(error)
+            }
+        } finally {
+            await subscription.remove()
         }
     } finally {
-        await subscription.remove()
+        talosGenerationsInFlight -= 1
     }
 }
 
@@ -1782,6 +1904,46 @@ export async function talosLocalModelLoadProgress(): Promise<number | null> {
 }
 
 /**
+ * ⭐ Punto 2 (01/10/2026) — lo stato del caricamento per la barra: la frazione (le stesse regole di
+ * `talosLocalModelLoadProgress`) e se la GPU sta compilando i suoi programmi. Owner 01/10: riga onesta solo in quel
+ * caso — sul Pad ~16 s nell’app di release (41-69 s nella build debuggable) di «sto avviando il modello» alla prima apertura dopo ogni aggiornamento. Un nativo
+ * che non conosce il campo vale «non compila».
+ */
+export async function talosLocalModelLoadState(): Promise<{ fraction: number | null, preparingGpu: boolean }> {
+    try {
+        const esito = await plugin.loadProgress()
+        const permille = Number(esito.permille)
+        const fraction = esito.loading && Number.isFinite(permille) && permille >= 0
+            ? Math.min(1, permille / 1000)
+            : null
+        return { fraction, preparingGpu: esito.gpuPreparing === true }
+    } catch {
+        return { fraction: null, preparingGpu: false }
+    }
+}
+
+/**
+ * ⭐ Punto 2 (01/10/2026) — compila i programmi della GPU in sottofondo, alla partenza dell'app.
+ *
+ * Owner 01/10: «Alla prima partenza», solo se c'è almeno un modello locale. Il nativo decide se serve davvero (un
+ * timbro per llama.cpp e sistema: dopo un aggiornamento dell'app con lo stesso motore non ricompila) e lo fa sulla
+ * coda dell'apertura, quindi una chat aperta nel frattempo aspetta solo il resto. Non lancia mai: è un di più.
+ */
+export async function talosPrepareGpuInBackground(): Promise<'no-local-models' | 'ready' | 'prepared' | 'unavailable' | 'error'> {
+    try {
+        const { models } = await talosLocalInstalledModels()
+        if (models.length === 0) return 'no-local-models'
+        // Passo 2 (01/10/2026): il motore riscalda i programmi di QUESTI modelli (formati dei pesi, forme
+        // dell'attenzione), letti dai loro GGUF — come MNN prepara i programmi del grafo prima di usarlo.
+        const gguf = models.map((modello) => modello.path).filter((percorso) => /\.gguf$/i.test(percorso))
+        const { state } = await plugin.prepareGpu({ models: gguf })
+        return state
+    } catch {
+        return 'error'
+    }
+}
+
+/**
  * Ferma il caricamento in corso.
  *
  * ⛔ Chi stava aprendo riceve lo stesso `0` di un errore qualunque: la
@@ -1793,6 +1955,71 @@ export async function talosLocalModelLoadProgress(): Promise<number | null> {
  * ⛔ Premerlo quando non sta caricando niente non fa danni: il flag si azzera
  * all'inizio di ogni apertura, quindi non puo' uccidere quella successiva.
  */
+/**
+ * ⛔ PKLA Qualcomm 2.1 b (owner, 01/10/2026) — lo stato dell'NPU rispetto alle
+ * condizioni Qualcomm. Il blocco vero è nel nativo (`TalosNpuTerms`): senza
+ * accettazione il modulo NPU non è nemmeno caricato. Nel dubbio, «spenta».
+ */
+export interface TalosNpuState {
+    /** Il modulo NPU è nell'APK. */
+    installed: boolean
+    /** Le condizioni in vigore sono accettate su questo dispositivo. */
+    accepted: boolean
+    /** «Non ora» già detto alla proposta automatica. */
+    promptDeclined: boolean
+    acceptedAtMs: number | null
+}
+
+export async function talosNpuState(): Promise<TalosNpuState> {
+    try {
+        const stato = await plugin.available() as { npu?: Record<string, unknown> }
+        const npu = stato.npu ?? {}
+        return {
+            installed: npu.installed === true,
+            accepted: npu.accepted === true,
+            promptDeclined: npu.promptDeclined === true,
+            acceptedAtMs: typeof npu.acceptedAtMs === 'number' ? npu.acceptedAtMs : null,
+        }
+    } catch {
+        return { installed: false, accepted: false, promptDeclined: false, acceptedAtMs: null }
+    }
+}
+
+/**
+ * Accetta le condizioni NEL TESTO MOSTRATO: manda al nativo la versione e
+ * l'impronta di ciò che la persona ha letto, nella sua lingua. Un rifiuto del
+ * nativo resta un rifiuto.
+ */
+export async function talosAcceptNpuTerms(locale: string): Promise<{ accepted: boolean, loaded: boolean }> {
+    try {
+        const testo = talosNpuTermsText(locale)
+        const esito = await plugin.acceptNpuTerms({
+            version: TALOS_NPU_TERMS_VERSION,
+            textSha256: await talosNpuTermsSha256(testo),
+            locale: talosNpuTermsLocale(locale),
+        })
+        return { accepted: esito.accepted === true, loaded: esito.loaded === true }
+    } catch {
+        return { accepted: false, loaded: false }
+    }
+}
+
+export async function talosWithdrawNpuTerms(): Promise<boolean> {
+    try {
+        return (await plugin.withdrawNpuTerms()).withdrawn === true
+    } catch {
+        return false
+    }
+}
+
+export async function talosDeclineNpuTermsPrompt(): Promise<boolean> {
+    try {
+        return (await plugin.declineNpuTermsPrompt()).declined === true
+    } catch {
+        return false
+    }
+}
+
 export async function talosCancelLocalModelLoad(): Promise<boolean> {
     try {
         const esito = await plugin.cancelLoad()

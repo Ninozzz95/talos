@@ -76,9 +76,21 @@ describe('talosLocalBackendPlan — cosa si chiede al motore, e perché', () => 
      * niente: `gpuLayers: 0` sarebbe un default silenzioso, e spegnerebbe
      * l'arbitro nativo che legge l'evidenza del sondaggio.
      */
-    it('senza scelta e senza misura: `unmeasured`, e NESSUNA opzione', () => {
+    // ⭐ CAMBIATO APPOSTA il 01/10/2026 (owner D10): con un acceleratore a
+    // bordo e nessuna misura, il piano chiede il motore suggerito e lo NOMINA;
+    // il buco senza opzioni resta solo quando c'è soltanto la CPU.
+    it('SUG-PLAN-01 senza scelta e senza misura: il suggerito, e il bersaglio NOMINATO', () => {
         const piano = talosLocalBackendPlan({
             preference: AUTO, backends: 'CPU,OpenCL', offloadDevices: null,
+            profiles: [], activeRegistry: null,
+        })
+        expect(piano.decision).toMatchObject({ kind: 'gpu', reason: 'suggested', source: 'format' })
+        expect(piano.options).toEqual({ gpuLayers: -1, backend: 'OpenCL' })
+    })
+
+    it('senza scelta, senza misura e senza acceleratori: `unmeasured`, e NESSUNA opzione', () => {
+        const piano = talosLocalBackendPlan({
+            preference: AUTO, backends: 'CPU', offloadDevices: null,
             profiles: [], activeRegistry: null,
         })
         expect(piano.decision.reason).toBe('unmeasured')
@@ -187,12 +199,14 @@ describe('talosLocalBackendPlan — cosa si chiede al motore, e perché', () => 
      * 'hexagon'` con `reason: 'unavailable'`, che e' la regola gia' scritta
      * per «ho scelto una cosa e ne gira un'altra».
      */
-    it('AL CONTRARIO — su Q4_K_M la stessa scelta NON accende l’NPU', () => {
+    // ⭐ 01/10/2026: l'esempio passa da Q4_K_M (ammessa col motore b11312,
+    // owner «Q4_K_M ora, gli altri dopo misura») a Q4_K_S, non ancora misurata.
+    it('AL CONTRARIO — su un formato non misurato (Q4_K_S) la stessa scelta NON accende l’NPU', () => {
         const piano = talosLocalBackendPlan({
             preference: { mode: 'manual', manual: 'hexagon' },
             backends: 'CPU,OpenCL,HTP', offloadDevices: null,
             profiles: [], activeRegistry: null,
-            quantisation: 'Q4_K_M',
+            quantisation: 'Q4_K_S',
         })
         expect(piano.decision.kind).not.toBe('hexagon')
         expect(piano.decision).toMatchObject({ requested: 'hexagon', reason: 'unavailable' })

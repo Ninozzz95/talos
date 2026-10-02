@@ -313,6 +313,17 @@ kbd { font-family: var(--font-mono); font-size: 10px; padding: 3px 6px; border: 
 .secondary-btn { min-height: 40px; padding: 0 14px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface-2); color: var(--text-2); }
 .secondary-btn:hover { border-color: var(--line-strong); background: var(--surface-3); }
 .secondary-btn.full { width: 100%; margin-top: 10px; }
+/* ⛔ P4-quater (owner 02/10/2026, «Elenco di risposte»): la scrittura fuori dalla cartella della sessione. Tre risposte una sotto
+   l'altra, mai in fila (regola dell'owner del 10/09); un solo accento, sulla risposta primaria. Solo token esistenti. */
+.approval-choices { display: flex; flex-direction: column; margin-top: 10px; border: 1px solid var(--line); border-radius: var(--radius-card); overflow: hidden; background: var(--surface-2); }
+.approval-choice { display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 2px; width: 100%; min-height: var(--touch); padding: 10px 14px; border: 0; border-top: 1px solid var(--line-soft); background: transparent; color: var(--text-2); font: inherit; font-size: 14px; text-align: left; cursor: pointer; }
+.approval-choice:first-child { border-top: 0; }
+.approval-choice:hover:not(:disabled) { background: var(--surface-3); color: var(--text); }
+.approval-choice:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+.approval-choice:disabled { cursor: default; opacity: .55; }
+.approval-choice--primary { background: var(--accent-soft); color: var(--text); font-weight: 650; }
+.approval-choice--primary:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 22%, transparent); }
+.approval-choice-note { color: var(--muted); font-size: 12.5px; font-weight: 400; }
 .text-btn { background: transparent; color: var(--accent-2); padding: 6px 0; font-size: 13px; font-weight: 650; }
 .sidebar-caption { color: var(--muted-2); font-size: 11px; padding: 0 16px 8px; }
 
@@ -522,6 +533,26 @@ kbd { font-family: var(--font-mono); font-size: 10px; padding: 3px 6px; border: 
 body.reduce-motion .talos-line-loader-sweep { animation: none; stroke-dashoffset: 0; }
 body.reduce-motion .talos-line-loader-node { animation: none; fill: var(--accent); opacity: .7; }
 .compact-message { margin-bottom: 0; }
+
+/*
+ * ⭐ P4-ter (02/10/2026) — la compattazione nella conversazione: durante una riga che dice cosa succede con una barra
+ * sottile senza percentuale (la durata non si conosce), dopo un separatore fisso fra due filetti con i numeri e un solo
+ * «Annulla». Colori del tema (--muted, --line, --accent), niente di nuovo.
+ */
+.real-compaction-note { display: grid; gap: 8px; color: var(--muted); font-size: 13px; }
+.compaction-bar { position: relative; display: block; width: min(240px, 100%); height: 2px; border-radius: 2px; background: var(--line); overflow: hidden; }
+.compaction-bar > span { position: absolute; top: 0; bottom: 0; left: 0; width: 36%; border-radius: inherit; background: var(--accent); animation: talosCompactionSlide 1.4s ease-in-out infinite; }
+@keyframes talosCompactionSlide { from { transform: translateX(-100%); } to { transform: translateX(280%); } }
+/* ⛔ Col movimento ridotto la regola cieca fermerebbe la barra sull'ultimo fotogramma, FUORI dal binario: piena e ferma. */
+body.reduce-motion .compaction-bar > span, :host-context(body.reduce-motion) .compaction-bar > span { animation: none; transform: none; width: 100%; opacity: .55; }
+@media (prefers-reduced-motion: reduce) { .compaction-bar > span { animation: none; transform: none; width: 100%; opacity: .55; } }
+.compaction-separator { display: flex; align-items: center; gap: 10px; margin: 18px 0; color: var(--muted); font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.compaction-separator::before, .compaction-separator::after { content: ""; flex: 1 1 16px; height: 1px; background: var(--line); }
+.compaction-separator-label { min-width: 0; text-align: center; overflow-wrap: anywhere; }
+.compaction-undo { flex: none; min-height: 44px; padding: 0 6px; }
+.compaction-undo:disabled { opacity: .5; cursor: default; }
+.compaction-undo:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 6px; }
+.sheet-copy { margin: 0; color: var(--text-2); font-size: 14px; line-height: 1.5; }
 
 .activity-bundle { overflow: hidden; margin: 26px 0; }
 .bundle-header { width: 100%; min-height: 60px; border: 0; background: var(--surface-highlight-faint); display: flex; justify-content: space-between; gap: 16px; align-items: center; padding: 10px 14px; cursor: pointer; text-align: left; }
@@ -1872,3 +1903,44 @@ button:disabled { cursor: not-allowed; opacity: .48; }
  */
 button[aria-disabled="true"],
 button[aria-disabled="true"]:hover { opacity: .45; cursor: not-allowed; box-shadow: none; }
+
+/*
+ * ERRCOD (30/09/2026) — la scheda d'errore del Codice. Le stesse proporzioni e gli stessi token della scheda della chat
+ * (`mobile/src/components/chat/TalosMobileStatusMessage.vue`: rounded-md, p-3, danger-soft/danger-border, titolo 14px
+ * semibold, frase 14px/24px, «Azione successiva» sopra un filetto, diagnostica 11px muted). Nessun colore nuovo:
+ * `--danger` si legge solo sopra `--danger-soft` (nota qui sopra, 24/09).
+ */
+.error-card { max-width: 100%; min-width: 0; padding: 12px; border: 1px solid var(--talos-danger-border, color-mix(in srgb, var(--danger) 45%, transparent)); border-radius: 6px; background: var(--danger-soft); color: var(--text); }
+.error-card-head { display: flex; align-items: flex-start; gap: 10px; }
+.error-card-icon { display: inline-flex; flex: 0 0 auto; align-items: center; justify-content: center; width: 16px; height: 16px; margin-top: 2px; border: 1.5px solid var(--danger); border-radius: 50%; color: var(--danger); font: 700 10px/1 var(--font-mono); }
+.error-card-title { font-size: 14px; font-weight: 600; line-height: 20px; }
+.error-card-body { min-width: 0; padding-left: 26px; }
+.error-card-message { margin: 8px 0 0; font-size: 14px; line-height: 24px; overflow-wrap: anywhere; }
+.error-card-next-block { margin-top: 12px; padding-top: 8px; border-top: 1px solid var(--talos-danger-border, color-mix(in srgb, var(--danger) 45%, transparent)); }
+.error-card-next-label { color: var(--danger); font-size: 11px; font-weight: 600; letter-spacing: .02em; text-transform: uppercase; }
+.error-card-next { margin: 4px 0 0; font-size: 12px; line-height: 20px; overflow-wrap: anywhere; }
+.error-card-action { margin-top: 10px; }
+.error-card-action-note { margin: 8px 0 0; color: var(--muted); font-size: 12px; line-height: 18px; }
+.error-card-diagnostic { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 12px; color: var(--muted); font-size: 11px; line-height: 16px; }
+.error-card-code { font-family: var(--font-mono); word-break: break-all; }
+.error-card-retry { padding: 1px 6px; border: 1px solid var(--line); border-radius: 4px; }
+.error-card-details { margin-top: 8px; color: var(--muted); font-size: 11px; }
+.error-card-details summary { width: fit-content; cursor: pointer; }
+.error-card-details summary:focus-visible, .error-card-action:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.error-card-details pre { max-height: 180px; margin: 6px 0 0; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font: 11px/16px var(--font-mono); }
+
+/* ⛔⛔ 70-B (30/09/2026 notte, owner «Riuso della chat») — la scheda dell'artefatto del Codice, come quella della chat
+   (TalosMobileSchedaAzione.vue): una riga col titolo e «›» che apre la finestra isolata dell'app, sotto una riga
+   separata «Save to Library». Nessun iframe: il contenuto del modello non entra mai nella WebView di TALOS. */
+.real-artifact-card { display: flex; flex-direction: column; max-width: min(100%, 560px); min-width: 0; padding: 0; border: 1px solid var(--line-soft); border-radius: 8px; background: var(--surface-2); overflow: hidden; }
+.artifact-card-open, .artifact-card-save { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 44px; margin: 0; padding: 10px 12px; border: 0; background: transparent; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+.artifact-card-open:hover, .artifact-card-save:hover:not(:disabled) { background: var(--surface-highlight-subtle); }
+.artifact-card-open:focus-visible, .artifact-card-save:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+.artifact-card-open[aria-busy="true"], .artifact-card-save[aria-busy="true"] { cursor: progress; }
+.artifact-card-text { display: flex; flex: 1; flex-direction: column; min-width: 0; }
+.artifact-card-title { overflow: hidden; font-size: 14px; font-weight: 600; line-height: 20px; text-overflow: ellipsis; white-space: nowrap; }
+.artifact-card-arrow { flex: 0 0 auto; color: var(--muted); font-size: 18px; line-height: 1; }
+.artifact-card-save { flex-direction: column; align-items: flex-start; gap: 0; min-height: 40px; border-top: 1px solid var(--line-soft); color: var(--muted); font-size: 13px; }
+.artifact-card-save:disabled { cursor: default; }
+.artifact-card-status { color: var(--muted); font-size: 12px; line-height: 18px; overflow-wrap: anywhere; }
+.artifact-card-status:empty { display: none; }

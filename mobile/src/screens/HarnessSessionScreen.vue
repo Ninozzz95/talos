@@ -118,6 +118,10 @@ import {
 import type { TalosMobileProviderModel } from '@/lib/chat/providerContracts'
 import { TALOS_PROMPT_ENHANCER_DEFAULT_DEPTH } from '@/lib/chat/promptEnhancerDepth'
 import { talosHarnessUiApiBase } from '@/lib/harness/harnessUiApiBase'
+import { apriEventiServerCodice, intestazioniServerCodice } from '@/lib/harness/harnessUiSegreto'
+import {
+    apriArtefattoCodice, salvaArtefattoCodice, statoArtefattoCodice, type ContestoArtefattoCodice,
+} from '@/lib/harness/harnessUiArtefatti'
 import { avvisaSePonteStaccato, leggiStatoPonteCodice } from '@/lib/harness/avvisoPonteCodice'
 import { useTalosMobileToasts } from '@/stores/toasts'
 /**
@@ -148,6 +152,19 @@ function harnessUiAssetUrl(fileName: 'index.html' | 'styles.css' | 'app.js'): st
 
 const route = useRoute()
 const router = useRouter()
+/** ⛔ ERRCOD (30/09/2026): serve a `__talosHarnessHostOpen('pick-model')` — la scheda d'errore apre il selettore dei modelli. */
+const codeComposer = ref<{ openModelPicker(): void } | null>(null)
+
+/**
+ * ⛔ ERRCOD (30/09/2026) — l'UNICO pulsante della scheda d'errore del Codice, quando il rimedio sta fuori dal Codice.
+ * Le rotte sono quelle che l'app usa già: `settings-models-providers` (`mobileRoutes.ts`), la sessione nuova come il
+ * pulsante «Nuova» di `HarnessScreen.vue`. Un bersaglio sconosciuto non fa niente: la scheda non ne manda.
+ */
+function apriDallaSchedaErrore(bersaglio: string): void {
+    if (bersaglio === 'provider-keys') void router.push({ name: 'settings-models-providers' })
+    else if (bersaglio === 'new-session') void router.push({ name: 'harness-session', params: { id: 'new' } })
+    else if (bersaglio === 'pick-model') codeComposer.value?.openModelPicker()
+}
 const { t, locale } = useTalosI18n()
 const settings = useSettingsStore()
 const toasts = useTalosMobileToasts()
@@ -751,7 +768,11 @@ function teardown(): void {
     delete (window as unknown as { __talosHarnessHostBack?: unknown }).__talosHarnessHostBack
     delete (window as unknown as { __talosHarnessHostViewChange?: unknown }).__talosHarnessHostViewChange
     delete (window as unknown as { __talosHarnessHostPermissionChange?: unknown }).__talosHarnessHostPermissionChange
+    delete (window as unknown as { __talosHarnessHostOpen?: unknown }).__talosHarnessHostOpen
     delete (window as unknown as { __talosHarnessApiBase?: unknown }).__talosHarnessApiBase
+    delete (window as unknown as { __talosHarnessIntestazioni?: unknown }).__talosHarnessIntestazioni
+    delete (window as unknown as { __talosHarnessApriEventi?: unknown }).__talosHarnessApriEventi
+    delete (window as unknown as { __talosHarnessArtefatto?: unknown }).__talosHarnessArtefatto
     delete (window as unknown as { __talosHarnessRichiediDato?: unknown }).__talosHarnessRichiediDato
     delete (window as unknown as { __talosHarnessLocale?: unknown }).__talosHarnessLocale
     scriptEl?.remove()
@@ -776,10 +797,18 @@ function teardown(): void {
  * ledger FASE-5-EXECUTION-PLANE).
  */
 async function attendiServerHarnessPronto(tentativiMassimi = 15, intervalloMs = 300): Promise<boolean> {
+    /*
+     * ⛔⛔ SEC70-REG-01 (30/09/2026, regressione del 70-A vista sul Pad): il server vuole il suo segreto anche qui, e
+     * senza rispondeva 401 a tutti i 15 tentativi — il toast «non è riuscito ad avviare il suo terminale» con il
+     * server acceso. Il server appena (ri)avviato ha un segreto nuovo: si rilegge subito (`rinnova`), aspettando il
+     * file quanto l'attesa intera, e di nuovo su un 401 (il file di prima c'era ancora).
+     */
+    let intestazioni = await intestazioniServerCodice({ rinnova: true, attesaMs: tentativiMassimi * intervalloMs })
     for (let tentativo = 0; tentativo < tentativiMassimi; tentativo += 1) {
         try {
-            const risposta = await fetch(`${talosHarnessUiApiBase()}/api/v1/health`, { cache: 'no-store' })
+            const risposta = await fetch(`${talosHarnessUiApiBase()}/api/v1/health`, { cache: 'no-store', headers: intestazioni })
             if (risposta.ok) return true
+            if (risposta.status === 401) intestazioni = await intestazioniServerCodice({ rinnova: true, attesaMs: 0 })
         } catch {
             // Non ancora in ascolto — si riprova, non si registra un errore
             // per un tentativo che ci si aspetta possa fallire.
@@ -999,7 +1028,34 @@ async function mountMockup(): Promise<void> {
             .__talosHarnessHostViewChange = (view) => { codeView.value = view }
         ;(window as unknown as { __talosHarnessHostPermissionChange?: (permission: string) => void })
             .__talosHarnessHostPermissionChange = (permission) => { codePermission.value = permission }
+        // ⛔ ERRCOD (30/09/2026): i rimedi della scheda d'errore che vivono fuori dal Codice (app.js, `eseguiAzioneErrore`).
+        ;(window as unknown as { __talosHarnessHostOpen?: (bersaglio: string) => void })
+            .__talosHarnessHostOpen = apriDallaSchedaErrore
         ;(window as unknown as { __talosHarnessApiBase?: string }).__talosHarnessApiBase = talosHarnessUiApiBase()
+        // ⛔⛔ 70-A (30/09/2026): il segreto del server del Codice (lo crea il server, lo legge il ponte adb) e il flusso
+        // degli eventi con la libreria `eventsource`, che manda l'intestazione. Vedi harnessUiSegreto.ts.
+        ;(window as unknown as { __talosHarnessIntestazioni?: typeof intestazioniServerCodice })
+            .__talosHarnessIntestazioni = (opzioni) => intestazioniServerCodice(opzioni)
+        ;(window as unknown as { __talosHarnessApriEventi?: typeof apriEventiServerCodice })
+            .__talosHarnessApriEventi = (url) => apriEventiServerCodice(url)
+        // ⛔⛔ 70-B (30/09/2026 notte, owner «Riuso della chat»): la scheda dell'artefatto apre la finestra isolata della
+        // chat e salva nella Libreria con la via della chat. Vedi harnessUiArtefatti.ts.
+        // ⛔ OSS-70B-1/3 (30/09/2026 notte): `salva` aggiunge la sessione aperta (id e titolo come nell'elenco) alla
+        // sessione del server che arriva da app.js; `stato` dice se la stessa pagina è già nella Libreria.
+        ;(window as unknown as { __talosHarnessArtefatto?: {
+            apri: typeof apriArtefattoCodice
+            salva: (id: string, titolo: string, contesto?: ContestoArtefattoCodice) => ReturnType<typeof salvaArtefattoCodice>
+            stato: typeof statoArtefattoCodice
+        } }).__talosHarnessArtefatto = {
+            apri: (id, titolo) => apriArtefattoCodice(id, titolo),
+            salva: (id, titolo, contesto) => salvaArtefattoCodice(id, titolo, {
+                sessioneServer: contesto?.sessioneServer ?? null,
+                // ⛔ E7 (01/10/2026): il modello del giro, dall'evento dell'artefatto.
+                modello: contesto?.modello ?? null,
+                sessione: loadedSession.value ? { id: loadedSession.value.id, titolo: loadedSession.value.title } : null,
+            }),
+            stato: (id) => statoArtefattoCodice(id),
+        }
         ;(window as unknown as { __talosHarnessRichiediDato?: (tipo: string, args: unknown) => Promise<unknown> })
             .__talosHarnessRichiediDato = talosHarnessRichiediDato
         // ⭐ 4/9 — LEDGER §79, owner: la lingua di Codice deve seguire quella
@@ -1196,6 +1252,7 @@ onBeforeUnmount(() => {
                     {{ codeDictation.error.value }}
                 </div>
                 <TalosMobileComposer
+                    ref="codeComposer"
                     :prompt="codePrompt"
                     :model-profiles="codeModelProfiles"
                     :selected-model-profile-id="codeModelProfileId"

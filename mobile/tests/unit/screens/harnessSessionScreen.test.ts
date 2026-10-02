@@ -93,6 +93,21 @@ const terminalePonteMock = vi.hoisted(() => ({
 }))
 vi.mock('@/lib/harness/terminalePonte', () => terminalePonteMock)
 
+/** ⛔⛔ 70-A (30/09/2026): il segreto del server del Codice ha i suoi test (harnessUiSegreto.test.ts); qui solo i ponti. */
+const segretoMock = vi.hoisted(() => ({
+    intestazioniServerCodice: vi.fn(async () => ({ Authorization: `Bearer ${'5'.repeat(64)}` })),
+    apriEventiServerCodice: vi.fn((url: string) => ({ url })),
+}))
+vi.mock('@/lib/harness/harnessUiSegreto', () => segretoMock)
+
+/** ⛔⛔ 70-B (30/09/2026 notte): gli artefatti del Codice hanno i loro test (harnessUiArtefatti.test.ts); qui solo il ponte. */
+const artefattiMock = vi.hoisted(() => ({
+    apriArtefattoCodice: vi.fn(async () => ({ ok: true })),
+    salvaArtefattoCodice: vi.fn(async () => ({ ok: true })),
+    statoArtefattoCodice: vi.fn(async () => ({ salvato: true })),
+}))
+vi.mock('@/lib/harness/harnessUiArtefatti', () => artefattiMock)
+
 /**
  * ⭐⭐⭐ 28/8, "procedi in ordine" punto 4 — mockato allo stesso modo: il
  * catalogo reale ha i suoi test propri (codiceModelProfiles.test.ts).
@@ -517,6 +532,46 @@ describe('HarnessSessionScreen (28/8) — real sessions + a DRAFT state, shadow 
     })
 
     /**
+     * ⛔⛔ SEC70-REG-01 (30/09/2026, regressione del 70-A vista sul Pad) — dopo la cura il server risponde 401 a ogni
+     * `/api/v1/health` senza il segreto. `attendiServerHarnessPronto` non lo mandava: 15 tentativi a vuoto e il toast
+     * «Codice non è riuscito ad avviare il suo terminale», con il server acceso. I test qui sopra non lo vedevano
+     * perché il loro `health` finto rispondeva 200 a chiunque. Questo `health` fa come il server vero: 401 senza il
+     * segreto. Il server appena (ri)avviato ha un segreto nuovo, quindi l'attesa lo rilegge (`rinnova`).
+     */
+    it('SEC70-REG-01 l’attesa del server manda il segreto riletto, e il server è pronto al primo colpo', async () => {
+        vi.useFakeTimers()
+        try {
+            vi.spyOn(Capacitor, 'isPluginAvailable').mockReturnValue(true)
+            terminalePonteMock.talosTerminaleDisponibile.mockReturnValue(true)
+            segretoMock.intestazioniServerCodice.mockClear()
+            let chiamateHealth = 0
+            vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+                const url = new URL(String(input), 'https://localhost')
+                if (url.pathname === '/harness-ui/index.html') return new Response(FAKE_MOCKUP_HTML, { status: 200 })
+                if (url.pathname === '/api/v1/health') {
+                    chiamateHealth += 1
+                    const autorizzato = new Headers(init?.headers).get('Authorization') === `Bearer ${'5'.repeat(64)}`
+                    return new Response('', { status: autorizzato ? 200 : 401 })
+                }
+                return new Response('', { status: 404 })
+            }))
+            const w = mount(HarnessSessionScreen)
+            const host = w.get('[data-testid="talos-harness-session-host"]').element as HTMLElement
+            await vi.advanceTimersByTimeAsync(0)
+            host.shadowRoot?.querySelector('script')?.dispatchEvent(new Event('load'))
+            ;(window as unknown as {
+                __talosHarnessUiRuntime?: { selectSession(selection: { id: string, title: string }): void }
+            }).__talosHarnessUiRuntime ??= { selectSession: vi.fn(() => true) }
+            await vi.advanceTimersByTimeAsync(6000)
+
+            expect(chiamateHealth).toBe(1)
+            expect(segretoMock.intestazioniServerCodice).toHaveBeenCalledWith(expect.objectContaining({ rinnova: true }))
+        } finally {
+            vi.useRealTimers()
+        }
+    })
+
+    /**
      * AL CONTRARIO: in release (o comunque senza il plugin di debug) non si
      * chiama mai — `talosTerminaleDisponibile()` è la stessa domanda già
      * usata da `terminalePonte.ts`, non una seconda convenzione.
@@ -783,6 +838,114 @@ describe('HarnessSessionScreen (28/8) — real sessions + a DRAFT state, shadow 
 
         expect(submitPrompt).toHaveBeenCalledWith('Local Code prompt')
         expect((composer.get('textarea').element as HTMLTextAreaElement).value).toBe('')
+    })
+
+    /*
+     * ⛔ ERRCOD-HOST (30/09/2026) — la scheda d'errore del Codice ha UN pulsante, e tre dei suoi rimedi vivono fuori dal
+     * Codice: le chiavi dei fornitori, il selettore dei modelli, una sessione nuova. Ledger
+     * `.claude/ragionamento/LEDGER-ERRORI-CODICE-2026-09-30.md`.
+     */
+    it('ERRCOD-HOST-01 «Open provider keys» porta alle chiavi dei fornitori nelle Impostazioni', async () => {
+        vi.spyOn(Capacitor, 'isPluginAvailable').mockReturnValue(true)
+        ;(window as unknown as { __talosHarnessUiRuntime?: { selectSession(): void } }).__talosHarnessUiRuntime = { selectSession: vi.fn(() => true) }
+        const w = mount(HarnessSessionScreen)
+        await resolveScriptLoad(w.get('[data-testid="talos-harness-session-host"]').element as HTMLElement)
+        ;(window as unknown as { __talosHarnessHostOpen?: (bersaglio: string) => void }).__talosHarnessHostOpen?.('provider-keys')
+        expect(mockState.routerPush).toHaveBeenCalledWith({ name: 'settings-models-providers' })
+    })
+
+    it('ERRCOD-HOST-02 «Start a new session» apre una sessione nuova del Codice', async () => {
+        vi.spyOn(Capacitor, 'isPluginAvailable').mockReturnValue(true)
+        ;(window as unknown as { __talosHarnessUiRuntime?: { selectSession(): void } }).__talosHarnessUiRuntime = { selectSession: vi.fn(() => true) }
+        const w = mount(HarnessSessionScreen)
+        await resolveScriptLoad(w.get('[data-testid="talos-harness-session-host"]').element as HTMLElement)
+        ;(window as unknown as { __talosHarnessHostOpen?: (bersaglio: string) => void }).__talosHarnessHostOpen?.('new-session')
+        expect(mockState.routerPush).toHaveBeenCalledWith({ name: 'harness-session', params: { id: 'new' } })
+    })
+
+    it('ERRCOD-HOST-03 «Pick another model» apre il selettore dei modelli del composer del Codice', async () => {
+        vi.spyOn(Capacitor, 'isPluginAvailable').mockReturnValue(true)
+        ;(window as unknown as { __talosHarnessUiRuntime?: { selectSession(): void } }).__talosHarnessUiRuntime = { selectSession: vi.fn(() => true) }
+        const w = mount(HarnessSessionScreen)
+        await resolveScriptLoad(w.get('[data-testid="talos-harness-session-host"]').element as HTMLElement)
+        // Senza toccare il composer prima: la scheda d'errore sta nella conversazione, il composer può essere chiuso.
+        const drawer = () => w.findComponent({ name: 'TalosMobileModelEffortDrawer' })
+        expect(drawer().exists()).toBe(false)
+        ;(window as unknown as { __talosHarnessHostOpen?: (bersaglio: string) => void }).__talosHarnessHostOpen?.('pick-model')
+        // Il pannello dei modelli è un componente asincrono (`defineAsyncComponent` nel composer): si aspetta il suo import.
+        await vi.dynamicImportSettled()
+        await flushPromises()
+        expect(drawer().exists()).toBe(true)
+    })
+
+    it('ERRCOD-HOST-04 allo smontaggio l’aggancio se ne va, come gli altri', async () => {
+        vi.spyOn(Capacitor, 'isPluginAvailable').mockReturnValue(true)
+        ;(window as unknown as { __talosHarnessUiRuntime?: { selectSession(): void } }).__talosHarnessUiRuntime = { selectSession: vi.fn(() => true) }
+        const w = mount(HarnessSessionScreen)
+        await resolveScriptLoad(w.get('[data-testid="talos-harness-session-host"]').element as HTMLElement)
+        expect(typeof (window as unknown as { __talosHarnessHostOpen?: unknown }).__talosHarnessHostOpen).toBe('function')
+        w.unmount()
+        expect((window as unknown as { __talosHarnessHostOpen?: unknown }).__talosHarnessHostOpen).toBeUndefined()
+    })
+
+    // ⛔⛔ 70-A (30/09/2026): app.js chiede il segreto del server e apre il flusso degli eventi dai due ponti dell'app.
+    type PontiSegreto = {
+        __talosHarnessIntestazioni?: (opzioni?: { rinnova?: boolean }) => Promise<Record<string, string>>
+        __talosHarnessApriEventi?: (url: string) => unknown
+    }
+    it('SEC70-HOST-01 i due ponti del segreto passano dal modulo harnessUiSegreto', async () => {
+        vi.spyOn(Capacitor, 'isPluginAvailable').mockReturnValue(true)
+        ;(window as unknown as { __talosHarnessUiRuntime?: { selectSession(): void } }).__talosHarnessUiRuntime = { selectSession: vi.fn(() => true) }
+        const w = mount(HarnessSessionScreen)
+        await resolveScriptLoad(w.get('[data-testid="talos-harness-session-host"]').element as HTMLElement)
+        const ponti = window as unknown as PontiSegreto
+        expect(await ponti.__talosHarnessIntestazioni?.({ rinnova: true })).toEqual({ Authorization: `Bearer ${'5'.repeat(64)}` })
+        expect(segretoMock.intestazioniServerCodice).toHaveBeenCalledWith({ rinnova: true })
+        expect(ponti.__talosHarnessApriEventi?.('http://localhost:4174/api/v1/sessions/s/events')).toEqual({ url: 'http://localhost:4174/api/v1/sessions/s/events' })
+        w.unmount()
+    })
+
+    it('SEC70-HOST-02 allo smontaggio i ponti del segreto se ne vanno', async () => {
+        vi.spyOn(Capacitor, 'isPluginAvailable').mockReturnValue(true)
+        ;(window as unknown as { __talosHarnessUiRuntime?: { selectSession(): void } }).__talosHarnessUiRuntime = { selectSession: vi.fn(() => true) }
+        const w = mount(HarnessSessionScreen)
+        await resolveScriptLoad(w.get('[data-testid="talos-harness-session-host"]').element as HTMLElement)
+        w.unmount()
+        expect((window as unknown as PontiSegreto).__talosHarnessIntestazioni).toBeUndefined()
+        expect((window as unknown as PontiSegreto).__talosHarnessApriEventi).toBeUndefined()
+    })
+
+    // ⛔⛔ 70-B (30/09/2026 notte, owner «Riuso della chat»): la scheda dell'artefatto chiede all'app di aprire e salvare.
+    type PonteArtefatto = { __talosHarnessArtefatto?: { apri(id: string, titolo: string): Promise<unknown>, salva(id: string, titolo: string): Promise<unknown> } }
+    it('ART70-HOST-01 il ponte degli artefatti passa dal modulo harnessUiArtefatti, e se ne va allo smontaggio', async () => {
+        vi.spyOn(Capacitor, 'isPluginAvailable').mockReturnValue(true)
+        ;(window as unknown as { __talosHarnessUiRuntime?: { selectSession(): void } }).__talosHarnessUiRuntime = { selectSession: vi.fn(() => true) }
+        const w = mount(HarnessSessionScreen)
+        await resolveScriptLoad(w.get('[data-testid="talos-harness-session-host"]').element as HTMLElement)
+        const ponte = (window as unknown as PonteArtefatto).__talosHarnessArtefatto
+        expect(await ponte?.apri('id-1', 'Vendite')).toEqual({ ok: true })
+        expect(artefattiMock.apriArtefattoCodice).toHaveBeenCalledWith('id-1', 'Vendite')
+        expect(await ponte?.salva('id-1', 'Vendite')).toEqual({ ok: true })
+        // ⛔ OSS-70B-1 (30/09/2026 notte): `salva` porta anche la sessione aperta (cambio voluto dall'owner).
+        expect(artefattiMock.salvaArtefattoCodice).toHaveBeenCalledWith('id-1', 'Vendite', expect.objectContaining({ sessione: expect.anything() }))
+        w.unmount()
+        expect((window as unknown as PonteArtefatto).__talosHarnessArtefatto).toBeUndefined()
+    })
+
+    // ⛔ OSS-70B-1 e OSS-70B-3 (30/09/2026 notte): la sessione aperta arriva al salvataggio; lo stato passa dal modulo.
+    it('OSS70B-HOST-01 salva porta id e titolo della sessione aperta e la sessione del server; stato passa dal modulo', async () => {
+        vi.spyOn(Capacitor, 'isPluginAvailable').mockReturnValue(true)
+        ;(window as unknown as { __talosHarnessUiRuntime?: { selectSession(): void } }).__talosHarnessUiRuntime = { selectSession: vi.fn(() => true) }
+        const w = mount(HarnessSessionScreen)
+        await resolveScriptLoad(w.get('[data-testid="talos-harness-session-host"]').element as HTMLElement)
+        const ponte = (window as unknown as { __talosHarnessArtefatto?: { salva(id: string, titolo: string, contesto?: unknown): Promise<unknown>, stato(id: string): Promise<unknown> } }).__talosHarnessArtefatto
+        await ponte?.salva('id-1', 'Vendite', { sessioneServer: 'srv-1', modello: 'z-ai/glm-5.3-flash' })
+        expect(artefattiMock.salvaArtefattoCodice).toHaveBeenLastCalledWith('id-1', 'Vendite', {
+            sessioneServer: 'srv-1', modello: 'z-ai/glm-5.3-flash', sessione: { id: 'refactor-auth-flow', titolo: 'Refactor auth flow' },
+        })
+        expect(await ponte?.stato('id-1')).toEqual({ salvato: true })
+        expect(artefattiMock.statoArtefattoCodice).toHaveBeenCalledWith('id-1')
+        w.unmount()
     })
 
     /**

@@ -138,9 +138,28 @@ function toolCallTranscript(
  */
 const TALOS_NOME_DETTAGLI_STRUMENTO = 'tool_details'
 
+/**
+ * Il «cerca attrezzi» dei modelli locali (punto 4, 01/10/2026): COPIA deliberata di `TALOS_CERCA_ATTREZZI`
+ * (`@/lib/tools/cercaAttrezzi`), per la stessa ragione di quella sopra — `cercaAttrezzi` porta MiniSearch e si
+ * carica a richiesta. Esportata perché `prefissoStabile.test.ts` pretenda che le due restino la stessa stringa.
+ */
+export const TALOS_NOME_CERCA_ATTREZZI_DEL_PROTOCOLLO = 'tool_search'
+
 function nomeDiUnAttrezzoDiFilo(tool: unknown): string | null {
     const funzione = (tool as { function?: { name?: unknown } } | null)?.function
     return typeof funzione?.name === 'string' ? funzione.name : null
+}
+
+/**
+ * I nomi svelati da un risultato di `tool_search`: il contenuto comincia con l'array JSON degli schemi trovati,
+ * seguito da una riga vuota e dall'avvertenza. Un risultato senza schemi (nessun attrezzo trovato) non svela niente.
+ */
+function nomiDaRisultatoDiRicerca(contenuto: string | undefined): readonly string[] {
+    if (!contenuto) return []
+    const fine = contenuto.indexOf('\n\n')
+    const schemi = jsonValue(fine >= 0 ? contenuto.slice(0, fine) : contenuto)
+    if (!Array.isArray(schemi)) return []
+    return schemi.map(nomeDiUnAttrezzoDiFilo).filter((nome): nome is string => nome !== null)
 }
 
 /** I nomi che il modello ha già chiesto, nell'ordine in cui li ha chiesti. */
@@ -148,8 +167,19 @@ function nomiSvelatiNellaStoria(
     turns: ReadonlyArray<TalosLocalEngineTurn>,
 ): readonly string[] {
     const ordine: string[] = []
+    const ricerche = new Set<string>()
     for (const turn of turns) {
+        // Punto 4: il risultato di una `tool_search` porta i nomi svelati, nell'ordine dato.
+        if (turn.role === 'tool' && turn.tool_call_id && ricerche.has(turn.tool_call_id)) {
+            for (const nome of nomiDaRisultatoDiRicerca(turn.content)) {
+                if (!ordine.includes(nome)) ordine.push(nome)
+            }
+            continue
+        }
         if (turn.role !== 'assistant' || !turn.tool_calls?.length) continue
+        for (const call of turn.tool_calls) {
+            if (call.function.name === TALOS_NOME_CERCA_ATTREZZI_DEL_PROTOCOLLO && call.id) ricerche.add(call.id)
+        }
         for (const call of turn.tool_calls) {
             if (call.function.name !== TALOS_NOME_DETTAGLI_STRUMENTO) continue
             const argomenti = jsonValue(call.function.arguments)

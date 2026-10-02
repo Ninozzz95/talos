@@ -47,12 +47,13 @@
 import { spawn, spawnSync } from 'node:child_process'
 import { lookup as risolviDns } from 'node:dns'
 import { existsSync } from 'node:fs'
-import { readFile } from 'node:fs/promises'
+import { lstat, readFile, readlink, realpath } from 'node:fs/promises'
 import { request as richiestaHttp } from 'node:http'
 import { request as richiestaHttps } from 'node:https'
-import { dirname, join } from 'node:path'
+import { homedir } from 'node:os'
+import { basename, delimiter, dirname, join, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { discoNode, fontiDaDisco, cancelloSemantico, libreriaStandard }
+import { discoNode, fontiDaDisco, cancelloSemantico, libreriaStandard, compattazione }
     from './dist/kernelPerIlBanco.js'
 
 /**
@@ -94,38 +95,226 @@ export { discoNode }
  */
 const GIRI_MASSIMI = 24
 
-/* ═══════════════ STADIO A · la compattazione — attacca "giri esauriti" ═════
+/* ═══════════════ LA COMPATTAZIONE DEL CONTESTO — P4-ter (02/10/2026) ═════
  *
- * ⭐⭐⭐ Piano `elegant-spinning-dongarra.md`, 2026-08-23, owner: "Solo Stadio A
- * per ora". Misurato il 22/8 su `storia-07f0799`: 328.793 token dentro, SOMMA
- * sui giri — la conversazione ricresce intera a ogni giro, quindi il costo e'
- * quadratico nel numero di giri (vedi [[talos-esaurisce-i-giri-non-le-capacita]]).
- * Alzare GIRI_MASSIMI moltiplica quel costo; la ricerca (Zylos 2026,
- * arXiv:2601.07190, arXiv:2604.16529 — tutte in elegant-spinning-dongarra.md)
- * dice la cura diversa: compattare la storia in un riassunto strutturato a
- * intervalli, cosi' il costo per giro torna piatto invece di crescere, e piu'
- * giri VERI entrano nello stesso budget.
- *
- * ⛔ Il trigger e' sul GIRO, non su una percentuale di finestra di contesto:
- * quella soglia (70-75%) e' calibrata contro l'overflow della finestra, un
- * guasto diverso da quello misurato qui. Il nostro guasto e' il tetto dei
- * GIRI, quindi il trigger e' lo stesso numero che si sta esaurendo.
- *
- * ⛔ Il costo dichiarato, non taciuto: la compattazione rompe UNA VOLTA il
- * prefisso condiviso (il testo cambia, la cache no) — lo stesso motivo per
- * cui non si compatta ad ogni giro. Un giro in piu' speso a riassumere, contro
- * la crescita quadratica evitata sui giri restanti: e' lo scambio che questa
- * cura fa, e va misurato contro il numero congelato sopra, non contro
- * un'impressione.
+ * ⛔⛔ Qui c'era lo «Stadio A» del 23/08: un riassunto ogni `GIRI_PRIMA_DI_COMPATTARE = 8` giri del TURNO, sopra 2.000 token
+ *   stimati. Aveva i difetti che il desktop ha misurato e curato il 24/09 (K1-K4 della sua ricognizione): contava i giri e
+ *   non i token (in un turno corto non scattava mai, in uno lungo ogni 8 giri anche col 9% della finestra usato); passava
+ *   gli ATTREZZI al riassuntore; SOSTITUIVA `messaggi` sul posto (la storia grezza spariva, contro la decisione dell'owner
+ *   «la storia grezza si conserva»); e la proiezione moriva col turno.
+ * ⇒ Owner 01-02/10: «Portare quello del desktop», «Nucleo unico», «Desktop + finestra utile di Hermes». Il nucleo è
+ *   `src/lib/kernel/compattazione.ts` (importato da `./dist/kernelPerIlBanco.js`, lo stesso che usa la chat); qui resta
+ *   solo il CHIAMANTE nel giro, forma del desktop (`talosHarness.desktop-hotfix.mjs:403-654` @ `e027390ba`):
+ *   - `messaggi` resta GREZZO; al modello va `applicaRecord(messaggi, record)`;
+ *   - soglia/emergenza misurate con l'ancora del fornitore (`usage.prompt_tokens`), dalla PRIMA richiesta del turno;
+ *   - il riassuntore NON ha attrezzi, ha `max_tokens` e il ragionamento abbassato; un ritentativo, poi si va avanti senza;
+ *   - l'efficacia si giudica sul numero VERO della richiesta dopo (Hermes `_apply_real_prompt_verdict`); due inefficaci
+ *     davanti al pavimento e per il turno si smette, con la rete di 6 (owner 26/09);
+ *   - il fornitore che dice «contesto pieno» vale UN ritentativo con la storia compattata;
+ *   - ogni compattazione produce un record `talos.compattazione.v1` (sul risultato, `recordDiCompattazione`): il registro lo
+ *     salva e lo ripassa come `recordCompattazioneIniziale`, così il turno dopo parte già proiettato.
+ * ⛔ Il riassunto NON consuma un giro di lavoro (lo Stadio A faceva `continue`).
  */
-export const GIRI_PRIMA_DI_COMPATTARE = 8
+const INEFFICACI_TOTALI_MASSIME = 6
 
-/** Stima grezza: ~4 caratteri per token, la stessa euristica della ricerca citata sopra. Non e' un conteggio esatto — serve solo a decidere SE vale la pena compattare, non a fatturare. */
+/** Ciò che costa una chiamata, sommato al conto del turno (stessa lettura dei campi di cache del resto del file). */
+function sommaAlConto(conto, usage) {
+    if (!usage) return
+    conto.prompt_tokens += Number(usage.prompt_tokens ?? 0) || 0
+    conto.completion_tokens += Number(usage.completion_tokens ?? 0) || 0
+    conto.cached_tokens += Number(usage.prompt_tokens_details?.cached_tokens
+        ?? usage.cache_read_input_tokens
+        ?? usage.prompt_cache_hit_tokens
+        ?? 0) || 0
+    conto.giri += 1
+}
+
+/**
+ * Il compattatore di UN turno: tiene il record, l'ancora del fornitore e i contatori anti-ciclo. Nessuno stato fra un turno
+ * e l'altro oltre al record, che il chiamante ripassa.
+ */
+export function creaCompattatoreDelTurno({
+    modello, chiave, fetchDiRete, politicaRagionamento, reasoning, soglie, recordIniziale = null, onGiro, segnaleStop, conto,
+}) {
+    const C = compattazione
+    let record = C.eRecordValido(recordIniziale) ? recordIniziale : null
+    const records = []
+    let compattazioni = 0
+    let ancora = null
+    let ultimaRichiesta = null
+    let tentativiFalliti = 0
+    let inefficaci = 0
+    let inefficaciTotali = 0
+    let attendeVerdetto = false
+    let codaAlMinimo = false
+    let pavimentoStimato = 0
+    let proiezioneStimata = 0
+    let overflowRitentato = false
+    const reasoningRiassunto = C.reasoningPerRiassunto(reasoning)
+
+    const chiediRiassunto = async (richiesta) => {
+        const esito = await chiamaConRitenta({
+            modello, chiave, messaggi: richiesta, attrezzi: [], maxOutputTokens: C.MAX_TOKEN_RIASSUNTO,
+            ...(reasoningRiassunto ? { reasoning: reasoningRiassunto } : {}),
+            ...(fetchDiRete ? { fetchDiRete } : {}),
+            ...(politicaRagionamento ? { politicaRagionamento } : {}),
+        })
+        sommaAlConto(conto, esito.usage)
+        return C.valutaRispostaDiRiassunto({ scelta: esito.scelta, finishReason: esito.finishReason })
+    }
+
+    const registra = (grezzi, proiezione, { token, misura, indice, giro, soloCoda = false }) => {
+        record = C.creaRecord({
+            coveredThrough: grezzi.length, riassunto: proiezione, tokenPrima: token,
+            tokenDopo: C.stimaTokenMessaggi(proiezione), misura, modello, indice,
+        })
+        records.push(record)
+        compattazioni += 1
+        proiezioneStimata = record.tokenDopo ?? 0
+        ancora = null
+        attendeVerdetto = true
+        onGiro?.({ giro, tipo: 'compattazione-fine', compattato: true, record, ...(soloCoda ? { soloCoda: true } : {}) })
+        return proiezione
+    }
+
+    /** Una compattazione intera sulla storia GREZZA: la proiezione nuova, o `null` (niente da fare o riassuntore fallito). */
+    const compattaOra = async (grezzi, giro, { motivo, token, misura, soglia }) => {
+        const proiettati = C.applicaRecord(grezzi, record)
+        const divise = C.dividiPerCompattazione(proiettati)
+        // Owner 26/09 «come Hermes»: la coda letterale sotto pressione si accorcia PRIMA di giudicare la proiezione.
+        const pressione = C.riduciCodaSottoPressione(divise.coda, { budgetToken: C.budgetCoda(soglie.soglia) })
+        const parti = { ...divise, coda: [...pressione.coda] }
+        codaAlMinimo = pressione.alMinimo
+        pavimentoStimato = C.stimaTokenMessaggi([...parti.testa, ...parti.richiesteLetterali, ...parti.coda])
+        if (!parti.tagliabile) {
+            if (pressione.ridotti === 0) return null
+            // Niente da riassumere ma la coda si è accorciata: proiezione deterministica, senza riassuntore (Hermes).
+            onGiro?.({ giro, tipo: 'compattazione-inizio', tokenMisurati: token, soglia, motivo })
+            return registra(grezzi, [...parti.testa, ...parti.mezzo, ...parti.coda], { token, misura, indice: record?.indice ?? null, giro, soloCoda: true })
+        }
+        onGiro?.({ giro, tipo: 'compattazione-inizio', tokenMisurati: token, soglia, motivo })
+        const richiesta = C.costruisciRichiestaDiRiassunto(parti)
+        let esito = { ok: false, riassunto: '', motivo: 'errore' }
+        for (let tentativo = 0; tentativo < 2 && !esito.ok; tentativo += 1) {
+            try { esito = await chiediRiassunto(richiesta) }
+            catch (errore) {
+                if (segnaleStop?.aborted) throw errore
+                esito = { ok: false, riassunto: '', motivo: 'errore' }
+            }
+        }
+        if (!esito.ok) {
+            tentativiFalliti += 1
+            onGiro?.({ giro, tipo: 'compattazione-fine', compattato: false, motivo: esito.motivo })
+            return null
+        }
+        const indice = C.indiceMeccanico(parti.mezzo, { precedente: record?.indice ?? null })
+        const proiezione = C.costruisciProiezione({
+            testa: parti.testa, richiesteLetterali: parti.richiesteLetterali, riassunto: esito.riassunto, indice: indice.testo, coda: parti.coda,
+        })
+        return registra(grezzi, proiezione, { token, misura, indice, giro })
+    }
+
+    const ricordaInvio = (inviati) => { ultimaRichiesta = { lunghezza: inviati.length, stima: C.stimaTokenMessaggi(inviati) } }
+
+    return {
+        /** Ciò che parte verso il modello in questo giro: la proiezione, compattata se serve. */
+        async prepara(grezzi, giro) {
+            const proiettati = C.applicaRecord(grezzi, record)
+            const { token, misura } = C.misuraOccupazione({ ancora, messaggi: proiettati, finestraToken: soglie.finestraToken })
+            const esauriti = inefficaci >= 2 || inefficaciTotali >= INEFFICACI_TOTALI_MASSIME
+            const decisione = C.decidiCompattazione({
+                token, soglia: soglie.soglia, emergenza: soglie.emergenza,
+                tentativiEsauriti: tentativiFalliti >= 1 || esauriti,
+                emergenzaEsaurita: tentativiFalliti >= 2 || esauriti,
+            })
+            let inviati = proiettati
+            if (decisione.scatta) {
+                inviati = (await compattaOra(grezzi, giro, {
+                    motivo: decisione.motivo, token, misura, soglia: decisione.motivo === 'emergenza' ? soglie.emergenza : soglie.soglia,
+                })) ?? proiettati
+            }
+            ricordaInvio(inviati)
+            return inviati
+        },
+        /** Il fornitore ha detto «contesto pieno»: UNA compattazione forzata per turno; `null` se non c'è niente da fare. */
+        async perOverflow(grezzi, giro) {
+            if (overflowRitentato) return null
+            overflowRitentato = true
+            const proiettati = C.applicaRecord(grezzi, record)
+            const { token, misura } = C.misuraOccupazione({ ancora, messaggi: proiettati, finestraToken: soglie.finestraToken })
+            const nuova = await compattaOra(grezzi, giro, { motivo: 'overflow', token, misura, soglia: soglie.soglia })
+            if (nuova) ricordaInvio(nuova)
+            return nuova
+        },
+        /** Il numero vero del fornitore diventa l'ancora; e giudica l'ultima compattazione (Hermes, verdetto sul reale). */
+        aggiornaAncora(usage) {
+            const promptTokens = Number(usage?.prompt_tokens)
+            if (!Number.isFinite(promptTokens) || promptTokens <= 0 || !ultimaRichiesta) return
+            ancora = { promptTokens, lunghezza: ultimaRichiesta.lunghezza, stima: ultimaRichiesta.stima }
+            if (!attendeVerdetto) return
+            attendeVerdetto = false
+            if (promptTokens < soglie.soglia) return
+            inefficaciTotali += 1
+            // «Inefficace» conta solo davanti al pavimento vero (owner 26/09): coda al minimo, o pavimento + scarto + riassunto ≥ soglia.
+            const scarto = Math.max(0, promptTokens - proiezioneStimata)
+            if (codaAlMinimo || pavimentoStimato + scarto + C.MAX_TOKEN_RIASSUNTO >= soglie.soglia) inefficaci += 1
+        },
+        /** Una compattazione chiesta da FUORI dal giro (il «Compatta ora», la fine del giro in background): niente soglia. */
+        async forza(grezzi, { motivo = 'manuale' } = {}) {
+            const proiettati = C.applicaRecord(grezzi, record)
+            const { token, misura } = C.misuraOccupazione({ messaggi: proiettati, finestraToken: soglie.finestraToken })
+            const nuova = await compattaOra(grezzi, null, { motivo, token, misura, soglia: soglie.soglia })
+            return nuova ? record : null
+        },
+        get records() { return [...records] },
+        get compattazioni() { return compattazioni },
+    }
+}
+
+/**
+ * ⭐ P4-ter — la compattazione FUORI dal giro, per il server: il «Compatta ora» della persona e quella in background a fine
+ * giro (desktop `session-registry.mjs:3845-3906`). Stessa catena del giro; la storia grezza resta com'è: torna un RECORD
+ * (o `null` col motivo: niente da riassumere, riassuntore fallito). Non lancia mai.
+ */
+export async function compattaFuoriDalGiro({
+    messaggiFinali, recordCorrente = null, modello, chiave, fetchDiRete, politicaRagionamento, reasoning,
+    finestraToken = null, riservaUscita = null, tettoToken = null, motivo = 'manuale',
+}) {
+    const conto = { prompt_tokens: 0, completion_tokens: 0, cached_tokens: 0, giri: 0 }
+    let motivoFallimento = null
+    const compattatore = creaCompattatoreDelTurno({
+        modello, chiave, fetchDiRete, politicaRagionamento, reasoning, conto,
+        soglie: compattazione.calcolaSoglie({ tettoToken, finestraToken, riservaUscita }),
+        recordIniziale: recordCorrente,
+        onGiro: (e) => { if (e.tipo === 'compattazione-fine' && !e.compattato) motivoFallimento = e.motivo ?? 'non-riuscita' },
+    })
+    try {
+        const record = await compattatore.forza(Array.isArray(messaggiFinali) ? messaggiFinali : [], { motivo })
+        return { record, motivo: record ? null : (motivoFallimento ?? 'niente-da-compattare'), usage: conto.giri > 0 ? conto : null }
+    }
+    catch (errore) {
+        // ⛔ P4-ter (REG-COMP-09): il messaggio può portare ciò che il fornitore ha rimandato; esce già oscurato (il server
+        // lo scrive solo nel suo log e fuori manda «errore»).
+        const messaggio = compattazione.oscuraPerRiassunto(errore instanceof Error ? errore.message : String(errore))
+        return { record: null, motivo: `errore: ${messaggio}`, usage: conto.giri > 0 ? conto : null }
+    }
+}
+
+/** ⭐ P4-ter — la storia di una sessione conclusa supera la soglia? (Per il background a fine giro: sotto soglia, niente.) */
+export function serveCompattareFuoriDalGiro({ messaggiFinali, recordCorrente = null, finestraToken = null, riservaUscita = null, tettoToken = null }) {
+    const soglie = compattazione.calcolaSoglie({ tettoToken, finestraToken, riservaUscita })
+    const proiettati = compattazione.applicaRecord(Array.isArray(messaggiFinali) ? messaggiFinali : [], recordCorrente)
+    const { token } = compattazione.misuraOccupazione({ messaggi: proiettati, finestraToken: soglie.finestraToken })
+    const decisione = compattazione.decidiCompattazione({ token, soglia: soglie.soglia, emergenza: soglie.emergenza })
+    return { scatta: decisione.scatta && compattazione.dividiPerCompattazione(proiettati).tagliabile, token, soglia: soglie.soglia }
+}
+
+/** Stima grezza: ~4 caratteri per token. Non e' un conteggio esatto — serve a decidere, non a fatturare. */
 export function stimaToken(testo) {
     return Math.ceil(String(testo ?? '').length / 4)
 }
 
-/** Quanti token stima l'intera conversazione fin qui, sommando ogni messaggio. */
+/** Quanti token stima l'intera conversazione fin qui, sommando ogni messaggio (la stessa formula del nucleo). */
 export function stimaTokenConversazione(messaggi) {
     let somma = 0
     for (const m of messaggi) {
@@ -133,80 +322,6 @@ export function stimaTokenConversazione(messaggi) {
         for (const c of m.tool_calls ?? []) somma += stimaToken(c.function?.arguments ?? '')
     }
     return somma
-}
-
-/**
- * ⛔ Il giro giusto per compattare: ogni `GIRI_PRIMA_DI_COMPATTARE`, ma MAI
- * sotto una soglia minima di token — un task che si chiude in 3 giri non ha
- * niente da riassumere, e compattare comunque sprecherebbe un giro vero.
- */
-export const TOKEN_MINIMI_PER_COMPATTARE = 2_000
-
-export function serveCompattare(giro, messaggi) {
-    if (giro === 0 || giro % GIRI_PRIMA_DI_COMPATTARE !== 0) return false
-    return stimaTokenConversazione(messaggi) >= TOKEN_MINIMI_PER_COMPATTARE
-}
-
-/**
- * ⭐ Il riassunto sostituisce la storia, non la cancella e basta: il compito
- * originale resta parola per parola (e' la prova che il task non e' cambiato
- * mentre veniva riassunto), e il riassunto lo scrive il MODELLO — e' lui che
- * sa cosa ha provato, cosa ha funzionato e dove sono arrivati i file, non una
- * troncatura meccanica che potrebbe buttare via proprio il pezzo che serve.
- */
-const RICHIESTA_DI_RIASSUNTO = [
-    'Before continuing, summarize your progress on this task so far, so the',
-    'conversation can be compacted. Be concrete and complete: this summary',
-    'REPLACES the history above — anything you do not mention is lost.',
-    '',
-    'Cover, in this order:',
-    '1. What you tried, and what you learned from each attempt (including',
-    '   dead ends: knowing what does NOT work is as useful as what does).',
-    '2. What is currently true about the files you touched (their real',
-    '   content as you last saw it, not what you intended to write).',
-    '3. What "prova" last told you, if you called it.',
-    '4. The single next step you were about to take.',
-    '',
-    'Reply with ONLY the summary. Do not call any tool in this turn.',
-].join('\n')
-
-/**
- * Compatta la conversazione: chiede al modello un riassunto (consuma un giro
- * vero — e' il costo dichiarato sopra), poi sostituisce tutto tranne il
- * sistema e il compito originale con quel riassunto.
- *
- * ⛔ Ritorna i messaggi INVARIATI se la chiamata fallisce: un riassunto
- * fallito non deve interrompere il task, deve solo mancare la compattazione
- * di questo giro e riprovare al prossimo checkpoint.
- */
-export async function compattaConversazione(messaggi, chiamaModello) {
-    const richiesta = [...messaggi, { role: 'user', content: RICHIESTA_DI_RIASSUNTO }]
-    let risposta
-    let usage = null
-    try {
-        ; ({ scelta: risposta, usage } = await chiamaModello(richiesta))
-    }
-    catch {
-        return { messaggi, compattato: false, usage: null }
-    }
-    const riassunto = String(risposta?.content ?? '').trim()
-    if (!riassunto) return { messaggi, compattato: false, usage }
-
-    const sistema = messaggi[0]
-    const compito = messaggi[1]
-    return {
-        messaggi: [
-            sistema,
-            compito,
-            {
-                role: 'user',
-                content: `[conversazione compattata al giro ${GIRI_PRIMA_DI_COMPATTARE}: `
-                    + `quanto segue e' un riassunto, non la cronologia originale]\n\n${riassunto}`,
-            },
-        ],
-        compattato: true,
-        usage,
-    }
 }
 
 /* ═══════════════ STADIO A · la riflessione — adattata, non copiata ═════════
@@ -322,6 +437,20 @@ export async function consumaFlussoSSE(response, onDelta) {
             if (dati === '[DONE]') continue
             let pacchetto = null
             try { pacchetto = JSON.parse(dati) } catch { continue /* chunk incompleto o rumore, mai un crash su un pezzo malformato */ }
+            /*
+             * ⛔ ERRCOD-E1 (30/09/2026): dopo gli header lo stato HTTP è già 200, quindi un guasto del fornitore arriva QUI,
+             * come pacchetto con `error` e `finish_reason:'error'`, e lo stream finisce (OpenRouter, «Mid-Stream Errors»,
+             * https://openrouter.ai/docs/api-reference/errors, letta il 30/09). Prima si saltava e diventava «flusso SSE
+             * senza contenuto»: ora esce con la sua struttura, e il testo già arrivato resta sull'errore.
+             */
+            if (pacchetto?.error && typeof pacchetto.error === 'object') {
+                const guasto = new Error(`errore del fornitore nel flusso: ${String(pacchetto.error.message ?? '').slice(0, 300)}`)
+                guasto.fase = 'flusso'
+                guasto.stato = Number.isInteger(pacchetto.error.code) ? pacchetto.error.code : null
+                guasto.erroreFornitore = pacchetto.error
+                guasto.testoParziale = content
+                throw guasto
+            }
             if (pacchetto.usage) usage = pacchetto.usage
             const delta = pacchetto?.choices?.[0]?.delta
             if (!delta) continue
@@ -431,7 +560,14 @@ export async function chiamaConRitenta({
     onDelta,
     reasoning: reasoningRichiesto,
     politicaRagionamento,
+    /*
+     * ⭐ P4-ter (02/10/2026), opzionale: il tetto d'uscita del riassunto (`max_tokens`). Assente: corpo come prima.
+     * ⛔ E una lista di attrezzi VUOTA toglie anche `tool_choice`: il riassuntore non deve ricevere attrezzi (K4 del desktop),
+     *   e `tool_choice:'auto'` senza `tools` è un 400 da alcuni fornitori. Nessun chiamante di prima passa una lista vuota.
+     */
+    maxOutputTokens,
 }) {
+    const senzaAttrezzi = Array.isArray(attrezzi) && attrezzi.length === 0
     const politica = politicaRagionamento
         ? await Promise.resolve().then(() => politicaRagionamento(modello)).catch(() => null)
         : null
@@ -439,33 +575,40 @@ export async function chiamaConRitenta({
     const inStreaming = Boolean(onDelta)
     let ultimoStato = null
     let ultimoTesto = ''
+    let ultimoCorpo = ''
     for (let tentativo = 0; tentativo < tentativiMassimi; tentativo += 1) {
-        const r = await fetchDiRete('https://openrouter.ai/api/v1/chat/completions', {
+        // ⛔ ERRCOD-E1: la rete che non risponde esce com'è (messaggio e `cause` di fetch), con la fase per il classificatore.
+        const r = await Promise.resolve().then(() => fetchDiRete('https://openrouter.ai/api/v1/chat/completions', {
             method: 'POST',
             headers: { Authorization: `Bearer ${chiave}`, 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 model: modello,
                 messages: messaggi,
-                tools: attrezzi,
-                tool_choice: 'auto',
+                ...(senzaAttrezzi ? {} : { tools: attrezzi, tool_choice: 'auto' }),
+                ...(Number.isInteger(maxOutputTokens) && maxOutputTokens > 0 ? { max_tokens: maxOutputTokens } : {}),
                 ...(inStreaming ? { stream: true, stream_options: { include_usage: true } } : {}),
                 ...(reasoning ? { reasoning } : {}),
             }),
             signal: AbortSignal.timeout(180_000),
+        })).catch((rotta) => {
+            if (rotta && typeof rotta === 'object') rotta.fase = 'rete'
+            throw rotta
         })
         if (r.ok) {
             if (inStreaming) {
                 const { scelta, usage } = await consumaFlussoSSE(r, onDelta)
-                if (!scelta.content && !scelta.tool_calls) throw new Error('flusso SSE senza contenuto ne tool_calls')
+                if (!scelta.content && !scelta.tool_calls) throw Object.assign(new Error('flusso SSE senza contenuto ne tool_calls'), { fase: 'vuoto' })
                 return { scelta, usage, tentativi: tentativo + 1 }
             }
             const j = await r.json()
             const scelta = j?.choices?.[0]?.message
-            if (!scelta) throw new Error('risposta senza messaggio: ' + JSON.stringify(j).slice(0, 300))
-            return { scelta, usage: j?.usage ?? null, tentativi: tentativo + 1 }
+            if (!scelta) throw Object.assign(new Error('risposta senza messaggio: ' + JSON.stringify(j).slice(0, 300)), { fase: 'vuoto' })
+            // ⭐ P4-ter: `finishReason` additivo — un riassunto troncato da `max_tokens` non vale (`valutaRispostaDiRiassunto`).
+            return { scelta, usage: j?.usage ?? null, tentativi: tentativo + 1, finishReason: j?.choices?.[0]?.finish_reason ?? null }
         }
         ultimoStato = r.status
-        ultimoTesto = String(await r.text()).slice(0, 300)
+        ultimoCorpo = String(await r.text()).slice(0, 2000)
+        ultimoTesto = ultimoCorpo.slice(0, 300)
         /* ⛔ Un 401 o un 400 non migliorano ritentando: si lancia subito. */
         if (!siRitenta(r.status)) break
         if (tentativo < tentativiMassimi - 1) await dormi(attesaDelTentativo(tentativo, caso))
@@ -473,7 +616,22 @@ export async function chiamaConRitenta({
     const e = new Error(`HTTP ${ultimoStato} dopo ${tentativiMassimi} tentativi: ${ultimoTesto}`)
     e.stato = ultimoStato
     e.limitatoDalFornitore = siRitenta(ultimoStato)
+    // ⛔ ERRCOD-E1 (30/09/2026): la struttura per il classificatore del server — il messaggio sopra resta identico per il banco.
+    e.fase = 'http'
+    e.corpo = ultimoCorpo
+    e.erroreFornitore = erroreDelFornitore(ultimoCorpo)
     throw e
+}
+
+/** L'oggetto `error` di un corpo JSON in stile OpenAI/OpenRouter (`{error:{code,message,metadata}}`), o `null`. Mai un throw. */
+function erroreDelFornitore(corpo) {
+    try {
+        const errore = JSON.parse(corpo)?.error
+        return errore && typeof errore === 'object' ? errore : null
+    }
+    catch {
+        return null
+    }
 }
 
 /* ═══════════════ LEVA 3 · i giri che finiscono, e lo DICONO ════════════════
@@ -1280,7 +1438,7 @@ async function tuttiIPercorsi(disco, dentro = '', raccolti = []) {
  * cio' che sta in fondo non esiste. Un tetto silenzioso e' un taglio silenzioso:
  * quando morde, la risposta lo DICE.
  */
-export async function cercaNelProgetto(disco, { testo, nome }) {
+export async function cercaNelProgetto(disco, { testo, nome }, { saltaFn } = {}) {
     const chiaveTesto = String(testo ?? '').trim().toLowerCase()
     const chiaveNome = String(nome ?? '').trim().toLowerCase()
     if (!chiaveTesto && !chiaveNome) return 'give at least one of "testo" or "nome".'
@@ -1288,6 +1446,8 @@ export async function cercaNelProgetto(disco, { testo, nome }) {
     const percorsi = await tuttiIPercorsi(disco)
     const perNome = []
     const perTesto = []
+    // ⛔ P4-quater: i file che i confini non lasciano leggere (area di TALOS, credenziali, segreti) non si aprono, e si contano.
+    let saltati = 0
 
     for (const p of percorsi) {
         const basso = p.toLowerCase()
@@ -1297,6 +1457,7 @@ export async function cercaNelProgetto(disco, { testo, nome }) {
         const punto = p.lastIndexOf('.')
         if (punto < 0 || !ESTENSIONI.has(p.slice(punto).toLowerCase())) continue
         if (perNome.length + perTesto.length >= MAX_RISULTATI * 3) break
+        if (saltaFn && await saltaFn(p)) { saltati++; continue }
         try {
             const contenuto = String(await disco.leggi(p)).slice(0, MAX_BYTE_LETTI)
             if (contenuto.toLowerCase().includes(chiaveTesto)) perTesto.push(p)
@@ -1305,15 +1466,16 @@ export async function cercaNelProgetto(disco, { testo, nome }) {
     }
 
     const trovati = [...perNome, ...perTesto]
+    const notaSaltati = saltati > 0 ? `\n(${saltati} protected files were not read: TALOS area, credentials or secrets.)` : ''
     if (trovati.length === 0) {
         return `no file matches. Scanned ${percorsi.length} files.`
-            + (chiaveTesto ? ' Try a shorter or different "testo".' : '')
+            + (chiaveTesto ? ' Try a shorter or different "testo".' : '') + notaSaltati
     }
     const mostrati = trovati.slice(0, MAX_RISULTATI)
     const tagliati = trovati.length - mostrati.length
     return mostrati.join('\n')
         // ⛔ Il taglio si DICHIARA: senza, «40 risultati» si legge come «sono 40».
-        + (tagliati > 0 ? `\n… and ${tagliati} more matches not shown — narrow the search.` : '')
+        + (tagliati > 0 ? `\n… and ${tagliati} more matches not shown — narrow the search.` : '') + notaSaltati
 }
 
 /**
@@ -1325,7 +1487,10 @@ export async function cercaNelProgetto(disco, { testo, nome }) {
  */
 function eseguiProva(comando, cartella) {
     return new Promise((risolvi) => {
-        const p = spawn(comando, { cwd: cartella, shell: true, windowsHide: true })
+        // ⛔ P4-quater: i test li scrive il modello ⇒ girano senza le chiavi del server, come la shell (`ambienteShellPulito`).
+        // ⛔ ENV-04 (Pad, 02/10): `shell: true` sul telefono cercava `/data/data/com.termux/.../sh` (ENOENT), lo stesso
+        // difetto curato il 3/9 in `eseguiInLoco` qui sotto: stessa cura, `/bin/sh` fuori da Windows.
+        const p = spawn(comando, { cwd: cartella, shell: process.platform === 'win32' ? true : '/bin/sh', windowsHide: true, env: ambienteShellPulito(process.env) })
         let fuori = ''
         let errori = ''
         p.stdout?.on('data', (d) => { fuori += d })
@@ -1518,6 +1683,8 @@ function eseguiInLoco(comando, cartella, enforcement) {
             cwd: cartella,
             shell: process.platform === 'win32' ? true : '/bin/sh',
             windowsHide: true,
+            // ⛔ P4-quater (owner 02/10, «+1 su Hermes»): mai le chiavi del server nell'ambiente di un comando del modello.
+            env: ambienteShellPulito(process.env),
         })
         let fuori = ''
         let errori = ''
@@ -2109,6 +2276,310 @@ async function premessaDellaScrittura(radice, percorso, contenuto) {
     }
 }
 
+/*
+ * ⛔⛔ P4-quater (02/10/2026) — DOVE FINISCE DAVVERO UNA SCRITTURA. Adattato dalla cura desktop `75108d7ee`
+ *   (`harness-ui/src/kernel/talosHarness.mjs`, `percorsoVero`/`posizioneNelProgetto`), che a sua volta segue il «symlink
+ *   check» di Claude Code (code.claude.com/docs/en/permission-modes) e Codex `codex-rs/core/src/safety.rs:29-80`.
+ * ⛔ Una differenza col desktop, misurata: `discoNode` qui fa `join(radice, percorso)`, non `resolve` ⇒ «/etc/x» finisce in
+ *   «<cartella>/etc/x». Si misura il file che verrà scritto davvero: stesso `join`, poi il disco.
+ * ⛔ Il percorso si misura sul disco: realpath dell'antenato esistente più vicino, più i pezzi che non esistono ancora. Un
+ *   collegamento pendente si segue (writeFile lo seguirebbe), al massimo 40 salti come SYMLOOP_MAX di Linux.
+ * ⛔ Ciò che non si riesce a verificare NON è «dentro»: `verificato: false`, e chi decide chiede (o rifiuta).
+ * ⛔ Limite dichiarato: un hard link dentro la cartella verso un file fuori è invisibile al realpath (lo dice anche Codex,
+ *   `safety.rs:57-59`).
+ */
+const MASSIMO_SALTI_COLLEGAMENTO = 40
+async function percorsoVero(percorso) {
+    let corrente = resolve(percorso)
+    const mancanti = []
+    let salti = 0
+    for (;;) {
+        try {
+            const vero = await realpath(corrente)
+            return mancanti.length ? join(vero, ...mancanti) : vero
+        }
+        catch (errore) {
+            if (errore?.code !== 'ENOENT' && errore?.code !== 'ENOTDIR') return null
+        }
+        let voce = null
+        try { voce = await lstat(corrente) }
+        catch (errore) { if (errore?.code !== 'ENOENT' && errore?.code !== 'ENOTDIR') return null }
+        if (voce?.isSymbolicLink()) {
+            if (++salti > MASSIMO_SALTI_COLLEGAMENTO) return null
+            try { corrente = resolve(dirname(corrente), await readlink(corrente)) }
+            catch { return null }
+            continue
+        }
+        if (voce) return null // c'è, non è un collegamento, e il realpath non lo risolve: non verificabile
+        const su = dirname(corrente)
+        if (su === corrente) return null
+        mancanti.unshift(basename(corrente))
+        corrente = su
+    }
+}
+
+/** `percorso` sta dentro `radice` (o è lei)? Su Windows le maiuscole non contano, come per NTFS (i test girano anche lì). */
+function dentroLaCartella(radice, percorso, { maiuscoleUguali = process.platform === 'win32' } = {}) {
+    const r = maiuscoleUguali ? radice.toLowerCase() : radice
+    const p = maiuscoleUguali ? percorso.toLowerCase() : percorso
+    return p === r || p.startsWith(r.endsWith(sep) ? r : r + sep)
+}
+
+/** Il file che `discoNode({ radice: cartella })` toccherebbe per `percorso` (stessa pulizia della radice, stesso `join`). */
+function percorsoComeDiscoNode(cartella, percorso) {
+    const radice = cartella.replace(/[\\/]+$/, '')
+    return percorso ? join(radice, percorso) : radice
+}
+
+/**
+ * Dove finisce una scrittura rispetto alla cartella della sessione, misurato sul disco.
+ * @returns {Promise<{dentro:boolean, verificato:boolean, vero:string|null, cartella:string|null}>} `cartella` è la cartella
+ *   VERA del file: quella che la persona può consentire per la sessione.
+ */
+export async function posizioneNelProgetto(cartella, percorso) {
+    const radice = cartella ? (await percorsoVero(cartella)) ?? resolve(cartella) : null
+    const vero = cartella ? await percorsoVero(percorsoComeDiscoNode(cartella, percorso ?? '')) : null
+    if (!radice || !vero) return { dentro: false, verificato: false, vero: null, cartella: null }
+    return { dentro: dentroLaCartella(radice, vero), verificato: true, vero, cartella: dirname(vero) }
+}
+
+/* La chiave di un consenso «per questa cartella»: la stessa forma del desktop (`spazio|cartella`); qui lo spazio è uno solo. */
+const SPAZIO_LOCALE = 'locale'
+const SEPARATORE_CHIAVE_CONSENSO = '|'
+function consensoCopre(consensiSessione, vero) {
+    const elenco = Array.isArray(consensiSessione?.cartelleFuori) ? consensiSessione.cartelleFuori : []
+    return elenco.some((chiave) => {
+        if (typeof chiave !== 'string') return false
+        const taglio = chiave.indexOf(SEPARATORE_CHIAVE_CONSENSO)
+        return taglio >= 0 && chiave.slice(0, taglio) === SPAZIO_LOCALE && dentroLaCartella(chiave.slice(taglio + 1), vero)
+    })
+}
+
+/*
+ * `null` se la scrittura resta dentro (o in una cartella consentita per la sessione, sottocartelle comprese); altrimenti il
+ * fatto, con la frase per chi deve rispondere. Il nome del livello è quello che la persona vede nel Codice
+ * (`mobile-public/app.js`: 'Workspace write' → «Scrittura nella cartella di lavoro»).
+ */
+async function scritturaFuoriDalProgetto(azione, { cartella, consensiSessione }) {
+    let posizione = null
+    try { posizione = await posizioneNelProgetto(cartella, azione.percorso) }
+    catch { posizione = null }
+    if (posizione?.verificato === true && posizione.dentro === true) return null
+    const verificato = posizione?.verificato === true && typeof posizione.cartella === 'string'
+    if (verificato && consensoCopre(consensiSessione, posizione.vero)) return null
+    return verificato
+        ? {
+            verificato: true, cartella: posizione.cartella,
+            chiave: `${SPAZIO_LOCALE}${SEPARATORE_CHIAVE_CONSENSO}${posizione.cartella}`,
+            frase: `Vuole scrivere fuori dalla cartella della sessione, in ${posizione.cartella}. Con «Scrittura nella cartella di lavoro» qui serve il tuo sì.`,
+        }
+        : {
+            verificato: false, cartella: null, chiave: null,
+            frase: `Non è stato possibile verificare dove finisce «${azione.percorso}»: potrebbe essere fuori dalla cartella della sessione. Con «Scrittura nella cartella di lavoro» qui serve il tuo sì.`,
+        }
+}
+
+/*
+ * ⛔⛔⛔ P4-quater — I CONFINI CHE NESSUN PERMESSO APRE. Owner 02/10/2026: «mai scrivibili né leggibili» per le cose di TALOS,
+ *   poi «voglio il +1 su Hermes, sia per ambizione e potenzialità che per sicurezza, non negoziabile». Decisioni:
+ *   1. TUTTA l'area di TALOS (sul Pad `/data/local/tmp/talos`: stato col gettone, server, kernel, `node`, le sue librerie,
+ *      `talos-exec.js`, pid, log) tranne le cartelle di lavoro: né lettura né scrittura. Hermes protegge un elenco di nomi
+ *      dentro la sua casa (`agent/file_safety.py:246`, `bfc7152687` del 02/10); qui l'area intera, anche ciò che verrà dopo.
+ *   2. Credenziali: l'elenco di Hermes in scrittura (`:176-216`, `~/.ssh/config` su domanda `:228-236`), i `.env*` mai letti
+ *      ovunque (`:332-334`, `:406-410`, `.env.example` sì), e IN PIÙ di Hermes le chiavi private in lettura (`~/.ssh/id_*`
+ *      tranne `.pub`, `~/.gnupg/`, `~/.aws/credentials`, `.netrc` e `.git-credentials` ovunque).
+ *   3. I percorsi dello spazio NT di Windows si rifiutano sul TESTO, prima di toccare il disco (`:144-173`): risolverli basta
+ *      a far partire un'autenticazione SMB verso fuori.
+ *   4. La shell: una guardia sul testo del comando (`guardiaShell`) e un ambiente senza chiavi (`ambienteShellPulito`, Hermes
+ *      `tools/environments/local_env_policy.py:20-46`). La gabbia vera del sistema è dopo la release (owner).
+ * ⛔ Come dice Hermes (`file_safety.py:3-5`), la guardia della shell è difesa in profondità, non un confine: un comando
+ *   costruito ad arte la aggira. Le regole sui file (`leggi`/`scrivi`/`cerca`) invece misurano il percorso vero.
+ * ⛔ Valgono con OGNI livello, anche «Full access» e il banco: non sono domande, sono no (tranne `~/.ssh/config`).
+ */
+const NOMI_SEGRETI_OVUNQUE = new Set([
+    '.env', '.env.local', '.env.development', '.env.production', '.env.test', '.env.staging', '.envrc',
+    '.netrc', '.git-credentials',
+])
+const CREDENZIALI_DI_CASA_FILE = [
+    ['.ssh', 'authorized_keys'], ['.ssh', 'id_rsa'], ['.ssh', 'id_ed25519'],
+    ['.netrc'], ['.pgpass'], ['.npmrc'], ['.pypirc'], ['.git-credentials'],
+]
+const CREDENZIALI_DI_CASA_CARTELLE = [
+    ['.ssh'], ['.aws'], ['.gnupg'], ['.kube'], ['.docker'], ['.azure'], ['.config', 'gh'], ['.config', 'gcloud'],
+]
+const CREDENZIALI_DI_SISTEMA_FILE = ['/etc/sudoers', '/etc/passwd', '/etc/shadow']
+const CREDENZIALI_DI_SISTEMA_CARTELLE = ['/etc/sudoers.d', '/etc/systemd']
+const SCRITTURA_SU_DOMANDA_DI_CASA = [['.ssh', 'config']]
+/* Nomi che appartengono solo all'area di TALOS: la guardia della shell li rifiuta ovunque compaiano nel comando. */
+const NOMI_DELL_AREA = ['server-token', 'talos-exec.js', 'avm-harness', 'sessions-store', 'hooks-trust', 'harness-ui.pid']
+
+const MOTIVO_AREA_TALOS = 'questo percorso è nell\'area di TALOS (stato, codice del server, motore, programma): non si legge né si scrive, con nessun permesso. Lavora dentro la cartella della sessione.'
+const MOTIVO_NAMESPACE_NT = 'il percorso usa lo spazio di nomi NT o di dispositivo di Windows (namespace \\??\\, \\\\.\\, \\\\?\\UNC\\, GLOBALROOT): basta risolverlo per far partire un\'autenticazione verso l\'esterno. Usa un percorso normale.'
+const MOTIVO_NON_VERIFICABILE = 'non si è potuto verificare dove porta questo percorso: per prudenza non si tocca.'
+
+/** Hermes `is_nt_namespace_path` (`file_safety.py:144-160`): solo il testo, mai il disco. */
+function percorsoNtGrezzo(percorso) {
+    const s = String(percorso ?? '').replace(/\//g, '\\')
+    if (s.startsWith('\\??\\') || s.startsWith('\\\\.\\')) return true
+    if (s.startsWith('\\\\?\\')) {
+        const resto = s.slice(4).toUpperCase()
+        return resto.startsWith('UNC\\') || resto.startsWith('GLOBALROOT\\')
+    }
+    return false
+}
+
+/*
+ * Le radici dei confini di UN giro, misurate una volta sul disco. Senza un elenco di `cartelleConsentite` (banco, test) la
+ * `cartella` del giro è consentita da sola. ⛔ Con l'elenco (il server) valgono SOLO quelle: una cartella libera scelta
+ * DENTRO l'area (es. `state/` con «Full access») non riapre l'area — owner: «mai scrivibili né leggibili» (kernel AREA-04).
+ * `caseUtente` esiste per i test; di serie sono tutte le case che un processo può avere (Hermes `_guard_homes`,
+ * `file_safety.py:72-94`): sul Pad `HOME` è «/».
+ */
+async function preparaConfini({ cartella, cartelleProtette, cartelleConsentite, caseUtente }) {
+    const radici = async (elenco) => {
+        const valide = (Array.isArray(elenco) ? elenco : []).filter((p) => typeof p === 'string' && p.length > 0)
+        const vere = await Promise.all(valide.map(async (p) => {
+            try { return (await percorsoVero(p)) ?? resolve(p) }
+            catch { return resolve(p) }
+        }))
+        return [...new Set(vere)]
+    }
+    return {
+        cartella,
+        protette: await radici(cartelleProtette),
+        consentite: await radici(Array.isArray(cartelleConsentite) ? cartelleConsentite : [cartella]),
+        case: await radici(Array.isArray(caseUtente) ? caseUtente : [homedir(), process.env.HOME, process.env.USERPROFILE]),
+    }
+}
+
+function sottoUnaDi(vero, radici) { return radici.some((radice) => dentroLaCartella(radice, vero)) }
+
+/**
+ * Il verdetto su un percorso VERO. `null` = nessun confine lo tocca.
+ * @returns {null | {codice:'area-talos'|'credenziale'|'segreto'|'su-domanda', motivo:string}}
+ */
+function classificaPercorso(vero, verbo, confini) {
+    if (sottoUnaDi(vero, confini.protette) && !sottoUnaDi(vero, confini.consentite)) {
+        return { codice: 'area-talos', motivo: MOTIVO_AREA_TALOS }
+    }
+    const uguale = (a, b) => (process.platform === 'win32' ? a.toLowerCase() === b.toLowerCase() : a === b)
+    const nome = basename(vero).toLowerCase()
+    if (verbo === 'scrivi') {
+        // Hermes `_classify_resolved_write_denial` (`:277-301`): la domanda prima, così il prefisso `.ssh/` non la inghiotte.
+        if (confini.case.some((casa) => SCRITTURA_SU_DOMANDA_DI_CASA.some((pezzi) => uguale(vero, join(casa, ...pezzi))))) {
+            return { codice: 'su-domanda', motivo: 'è la configurazione di SSH (può avviare comandi): si scrive solo col sì della persona.' }
+        }
+        const credenziale = confini.case.some((casa) =>
+            CREDENZIALI_DI_CASA_FILE.some((pezzi) => uguale(vero, join(casa, ...pezzi)))
+            || CREDENZIALI_DI_CASA_CARTELLE.some((pezzi) => dentroLaCartella(join(casa, ...pezzi), vero)))
+            || CREDENZIALI_DI_SISTEMA_FILE.some((p) => uguale(vero, p))
+            || CREDENZIALI_DI_SISTEMA_CARTELLE.some((p) => dentroLaCartella(p, vero))
+        return credenziale
+            ? { codice: 'credenziale', motivo: 'è un file di chiavi o di credenziali: non si scrive, con nessun permesso.' }
+            : null
+    }
+    if (NOMI_SEGRETI_OVUNQUE.has(nome)) {
+        return { codice: 'segreto', motivo: 'è un file di segreti (.env, .netrc, .git-credentials): non si legge. Per vederne la forma leggi .env.example.' }
+    }
+    const chiavePrivata = confini.case.some((casa) =>
+        (dentroLaCartella(join(casa, '.ssh'), vero) && nome.startsWith('id_') && !nome.endsWith('.pub'))
+        || dentroLaCartella(join(casa, '.gnupg'), vero)
+        || uguale(vero, join(casa, '.aws', 'credentials')))
+    return chiavePrivata
+        ? { codice: 'credenziale', motivo: 'è una chiave privata o un file di credenziali: non si legge, con nessun permesso.' }
+        : null
+}
+
+/**
+ * Il controllo di `leggi`/`scrivi`/`cerca` su un percorso come lo scrive il modello. `assoluto` lo passa chi ha già risolto
+ * il percorso a modo suo (la shell); altrimenti si misura come `discoNode`.
+ */
+async function controllaPercorso(grezzo, verbo, confini, { assoluto } = {}) {
+    if (percorsoNtGrezzo(grezzo)) return { codice: 'namespace-nt', motivo: MOTIVO_NAMESPACE_NT }
+    let vero = null
+    try { vero = await percorsoVero(assoluto ?? percorsoComeDiscoNode(confini.cartella, grezzo ?? '')) }
+    catch { vero = null }
+    if (!vero) return { codice: 'non-verificabile', motivo: MOTIVO_NON_VERIFICABILE }
+    return classificaPercorso(vero, verbo, confini)
+}
+
+/*
+ * ⛔⛔ La guardia della shell (owner 02/10: «Guardia ora + gabbia vera poi»). Rifiuta, senza domanda e con qualunque livello,
+ *   un comando che nomina l'area di TALOS o un segreto: per nome (`NOMI_DELL_AREA`) o per percorso (ogni pezzo che sembra un
+ *   percorso, risolto come lo risolverebbe la shell dalla cartella della sessione, con `~` e `$HOME` espansi). Un pezzo che
+ *   non si riesce a verificare non si rifiuta: la shell lì non potrebbe leggere comunque.
+ */
+async function guardiaShell(comando, confini) {
+    const testo = String(comando ?? '')
+    const basso = testo.toLowerCase()
+    const nome = NOMI_DELL_AREA.find((n) => basso.includes(n))
+    if (nome) return `il comando nomina «${nome}», che appartiene all'area di TALOS: ${MOTIVO_AREA_TALOS}`
+    const casa = confini.case[0] ?? homedir()
+    for (const pezzo of testo.split(/[\s;|&<>()`'"=,]+/)) {
+        if (!pezzo) continue
+        if (percorsoNtGrezzo(pezzo)) return MOTIVO_NAMESPACE_NT
+        const espanso = pezzo.replace(/^(~|\$\{HOME\}|\$HOME|%USERPROFILE%|\$env:USERPROFILE)(?=$|[\\/])/i, casa)
+        if (!(/[\\/]/.test(espanso) || espanso.startsWith('.'))) continue
+        const assoluto = resolve(confini.cartella, espanso)
+        for (const verbo of ['leggi', 'scrivi']) {
+            const esito = await controllaPercorso(espanso, verbo, confini, { assoluto })
+            if (esito && esito.codice !== 'non-verificabile' && esito.codice !== 'su-domanda') {
+                return `il comando tocca «${pezzo}»: ${esito.motivo}`
+            }
+        }
+    }
+    return null
+}
+
+/*
+ * ⛔⛔ L'ambiente della shell e di `prova` (owner 02/10, «+1 su Hermes»): sul Pad il server porta in ambiente le chiavi dei
+ *   fornitori (`config.mjs`, le cinque `*_API_KEY`) e la sua cartella di stato; un `env` del modello le leggeva tutte.
+ *   Si tolgono come Hermes (`local_env_policy.py:20-46`, i nomi dei fornitori) e in più ogni nome con forma di segreto e le
+ *   variabili del server (`TALOS_HARNESS_UI_*`, `TALOS_BANCO_DIR`, `OLLAMA_ENDPOINT`). Resta ciò che serve per lavorare
+ *   (`PATH`, `HOME`, `LD_LIBRARY_PATH` per `node` sul Pad, `TALOS_KERNEL_SUL_TELEFONO`…).
+ */
+const AMBIENTE_NOMI_TOLTI = new Set([
+    'OPENAI_BASE_URL', 'OPENAI_API_BASE', 'OPENAI_ORG_ID', 'OPENAI_ORGANIZATION', 'ANTHROPIC_BASE_URL', 'ANTHROPIC_TOKEN',
+    'LLM_MODEL', 'VERTEX_CREDENTIALS_PATH', 'GOOGLE_APPLICATION_CREDENTIALS', 'FIRECRAWL_API_URL', 'HASS_URL',
+    'GITHUB_APP_ID', 'GITHUB_APP_PRIVATE_KEY_PATH', 'GITHUB_APP_INSTALLATION_ID', 'OLLAMA_ENDPOINT', 'TALOS_BANCO_DIR',
+])
+const AMBIENTE_FORME_DI_SEGRETO = /(_API_KEY|_KEY|_TOKEN|_SECRET|_PASSWORD|_PASSWD|_CREDENTIALS?)$/
+export function ambienteShellPulito(ambiente = process.env) {
+    const pulito = {}
+    for (const [nome, valore] of Object.entries(ambiente ?? {})) {
+        const alto = nome.toUpperCase()
+        if (AMBIENTE_NOMI_TOLTI.has(alto) || AMBIENTE_FORME_DI_SEGRETO.test(alto) || alto.startsWith('TALOS_HARNESS_UI_')) continue
+        pulito[nome] = valore
+    }
+    /*
+     * ⭐ ENV-03 (Pad, 02/10; owner «Sì, come Hermes», `tools/environments/local.py:632-660` @ `4e7403130e`): la cartella del
+     * node che fa girare il server in testa al PATH dei comandi. Sul Pad è `/data/local/tmp/talos`, le cui librerie sono già
+     * in LD_LIBRARY_PATH: senza, «lancia i test con node» finiva in `exit 127`. Una volta sola; su Windows la chiave è `Path`.
+     */
+    const cartellaNode = dirname(process.execPath)
+    const chiavePath = Object.keys(pulito).find((nome) => nome.toUpperCase() === 'PATH') ?? 'PATH'
+    const voci = String(pulito[chiavePath] ?? '').split(delimiter).filter(Boolean)
+    pulito[chiavePath] = (voci.includes(cartellaNode) ? voci : [cartellaNode, ...voci]).join(delimiter)
+    return pulito
+}
+
+/*
+ * La domanda che nessun livello scavalca (oggi solo `~/.ssh/config`, Hermes `build_write_approval_paths`): «Full access» e il
+ * banco chiedono lo stesso; senza nessuno a cui chiedere è un no (Hermes: «non-interactive callers… fail closed»).
+ */
+async function domandaSenzaEccezioni(azione, motivo, { livelloAccesso, chiediApprovazioneFn }) {
+    if (livelloAccesso === 'lettura') {
+        return { consentito: false, motivo: 'la sessione è in sola lettura: nessuna scrittura, comando o documento è permesso in questo momento.' }
+    }
+    if (!chiediApprovazioneFn) {
+        return { consentito: false, motivo: `${motivo} In questa sessione nessuno può confermarlo.` }
+    }
+    let approvato = false
+    try { approvato = await chiediApprovazioneFn(azione) }
+    catch { approvato = false }
+    return approvato ? { consentito: true } : { consentito: false, motivo: 'la persona non ha approvato questa scrittura.' }
+}
+
 /**
  * ⭐⭐⭐ 28/8 — il cancello della PILLOLA PERMESSI (piano
  * elegant-spinning-dongarra.md, owner: "read only/workspace write/on
@@ -2132,9 +2603,30 @@ async function premessaDellaScrittura(radice, percorso, contenuto) {
  * meccanismo di approvazione (es. TALOS-BANCO, headless, nessun owner da
  * interrompere).
  */
-async function verificaPermessoScrittura(azione, { livelloAccesso, chiediApprovazioneFn } = {}) {
+async function verificaPermessoScrittura(azione, { livelloAccesso, chiediApprovazioneFn, cartella, consensiSessione } = {}) {
     if (livelloAccesso === 'lettura') {
         return { consentito: false, motivo: 'la sessione è in sola lettura: nessuna scrittura, comando o documento è permesso in questo momento.' }
+    }
+    /*
+     * ⛔⛔ P4-quater (02/10/2026) — «Scrittura nella cartella di lavoro» (`Workspace write`, il predefinito e quello delle
+     *   automazioni). Prima arrivava qui SENZA livello e scriveva ovunque. Owner, «come il desktop» (`75108d7ee`): solo una
+     *   `scrivi` che finisce FUORI dalla cartella (percorso vero) chiede; tutto il resto passa come prima, anche se ora il
+     *   registro offre il canale delle domande. Senza canale (nessuno a cui chiedere) è un no spiegato, mai un sì in silenzio.
+     */
+    if (livelloAccesso === 'scrittura-progetto') {
+        const fuori = azione.tipo === 'scrivi' ? await scritturaFuoriDalProgetto(azione, { cartella, consensiSessione }) : null
+        if (!fuori) return { consentito: true }
+        const dove = fuori.cartella ? ` ("${fuori.cartella}")` : ''
+        if (!chiediApprovazioneFn) {
+            return { consentito: false, motivo: `"${azione.percorso}" finisce fuori dalla cartella della sessione${dove} e in questa sessione nessuno può confermarlo. Non riprovare fuori: scrivi dentro la cartella della sessione.` }
+        }
+        let approvato = false
+        try { approvato = await chiediApprovazioneFn({ ...azione, fuoriDalProgetto: fuori }) }
+        catch { approvato = false }
+        if (!approvato) {
+            return { consentito: false, motivo: `la scrittura fuori dalla cartella della sessione non è stata confermata${dove}. Non riprovare fuori: scrivi dentro la cartella della sessione, o chiedi alla persona cosa preferisce.` }
+        }
+        return { consentito: true }
     }
     if (chiediApprovazioneFn) {
         let approvato = false
@@ -2294,6 +2786,20 @@ export function pareFallito(esito) {
 }
 
 /**
+ * ⛔ ERRCOD-E3 (30/09/2026) — il perché di un'eccezione dentro un attrezzo, per la riga «non riuscito: …» della UI.
+ * Codici ESATTI, mai una regex sul testo: i due del repository del telefono (`sqliteChatRepository.ts`, lanciati come
+ * messaggio e inoltrati dal ponte `rispondiDato`) e i `code` di Node sul file system.
+ */
+export function codiceDaEccezione(errore) {
+    const messaggio = errore instanceof Error ? errore.message : String(errore)
+    if (messaggio === 'TALOS_NOTE_NOT_FOUND' || messaggio === 'TALOS_TASK_NOT_FOUND') return 'NOT_FOUND'
+    const codice = errore && typeof errore === 'object' ? errore.code : undefined
+    if (codice === 'ENOENT') return 'FILE_NOT_FOUND'
+    if (codice === 'EACCES' || codice === 'EPERM') return 'FILE_DENIED'
+    return 'FAILED'
+}
+
+/**
  * ⭐⭐⭐ Piano `elegant-spinning-dongarra.md`, §1.2 — quattro parametri NUOVI,
  * TUTTI opzionali, aggiunti perché Harness UI (FASE 1) possa esporre questa
  * stessa funzione come servizio, senza duplicarla:
@@ -2443,7 +2949,25 @@ export async function talosLavora({
      * di decidere, non dopo.
      */
     livelloAccesso, chiediApprovazioneFn,
+    /*
+     * ⛔⛔ P4-quater (02/10/2026), entrambi opzionali: assenti (TALOS-BANCO), comportamento invariato.
+     * `consensiSessione?: { cartelleFuori?: string[] }` — l'oggetto VIVO della sessione nel registro: una cartella consentita
+     *   «per la sessione» (chiave `locale|<cartella vera>`) vale anche per le domande successive dello stesso giro.
+     * `cartelleProtette?: string[]` — l'area di TALOS: `leggi`/`scrivi`/`cerca`/`shell` lì dentro sono REFUSED con qualunque
+     *   livello, tranne `cartelleConsentite` (le cartelle di lavoro che stanno DENTRO l'area) e la `cartella` del giro.
+     * `caseUtente?: string[]` — solo per i test: di serie le case vere del processo (vedi `preparaConfini`).
+     */
+    consensiSessione, cartelleProtette, cartelleConsentite, caseUtente,
+    /*
+     * ⭐⭐⭐ P4-ter (02/10/2026), tutti opzionali — vedi «LA COMPATTAZIONE DEL CONTESTO» in testa al file.
+     * `finestraToken` la finestra del modello (catalogo), `riservaUscita` i token chiesti per la risposta (finestra utile di
+     * Hermes), `tettoToken` il tetto esplicito (`TALOS_COMPACTION_TOKEN_CAP`, lo legge il server), `recordCompattazioneIniziale`
+     * l'ultimo record salvato: il turno parte già proiettato. Assenti: vale il solo tetto di 200K del desktop.
+     */
+    finestraToken = null, riservaUscita = null, tettoToken = null, recordCompattazioneIniziale = null,
 }) {
+    // ⛔ P4-quater: le radici dei confini si misurano una volta per giro (vedi «I CONFINI CHE NESSUN PERMESSO APRE»).
+    const confiniDelGiro = preparaConfini({ cartella, cartelleProtette, cartelleConsentite, caseUtente })
     // ⛔ B1-11: web_search/document_create solo se configurati — vedi `attrezziOpenAIOfferti`.
     const attrezziOpenAI = attrezziOpenAIOfferti({ strumentiEstesi, ricercaWeb, onDocumento })
     const disco = discoNode({ radice: cartella })
@@ -2460,8 +2984,6 @@ export async function talosLavora({
     let ultimoAvevaContenuto = false
     /** ⭐ vedi comeFinita più sotto: un fermo su richiesta non è mai 'concluso'. */
     let fermatoSuRichiesta = false
-    /** ⭐ Stadio A: quante volte questo task ha compattato la conversazione. */
-    let compattazioni = 0
     /**
      * ⭐ 6.1 — il giro PRECEDENTE ha avuto un esito che `pareFallito`? Letto
      * solo per scegliere il modello del giro corrente (mai sticky: si
@@ -2516,6 +3038,12 @@ export async function talosLavora({
      * di Anthropic ne' di DeepSeek: si somma quello che c'e', senza inventare.
      */
     const conto = { prompt_tokens: 0, completion_tokens: 0, cached_tokens: 0, giri: 0 }
+    // ⭐ P4-ter: la compattazione del turno (vedi «LA COMPATTAZIONE DEL CONTESTO» in testa al file).
+    const compattatore = creaCompattatoreDelTurno({
+        modello, chiave, fetchDiRete, politicaRagionamento, reasoning, onGiro, segnaleStop, conto,
+        soglie: compattazione.calcolaSoglie({ tettoToken, finestraToken, riservaUscita }),
+        recordIniziale: recordCompattazioneIniziale,
+    })
 
     for (let giro = 0; giro < GIRI_MASSIMI; giro++) {
         /*
@@ -2529,57 +3057,6 @@ export async function talosLavora({
         }
         turniUsati = giro + 1
 
-        /*
-         * ⭐⭐⭐ STADIO A: LA COMPATTAZIONE. Vedi la doc sopra `GIRI_PRIMA_DI_COMPATTARE`.
-         * Consuma un giro vero (e' una chiamata al modello come le altre, e va
-         * contata nel conto) — per questo il controllo viene prima della
-         * chiamata normale del giro, non dopo: o si compatta, o si lavora,
-         * mai le due cose nello stesso giro.
-         */
-        if (serveCompattare(giro, messaggi)) {
-            /*
-             * ⭐⭐⭐ 2/9 — chiude il buco dichiarato sopra la firma di
-             * talosLavora ("non copre ancora il giro di compattazione...
-             * la UI non vedrà 'sto riassumendo' in questa prima fase").
-             * Stesso principio di ogni altro parametro opzionale qui:
-             * `onGiro` assente (TALOS-BANCO non lo passa, verificato alla
-             * fonte in harness.mjs/stadioB.mjs) ⇒ `?.()` è un no-op,
-             * zero impatto sul banco — non serve una ri-misura per
-             * questo, è telemetria pura, mai una chiamata o un ramo in
-             * più. Con `onGiro` presente (Harness UI), la persona vede
-             * PRIMA che il turno normale riprenda che il giro appena
-             * passato non è stato lavoro sul task ma manutenzione.
-             */
-            onGiro?.({ giro, tipo: 'compattazione-inizio' })
-            const esito = await compattaConversazione(
-                messaggi,
-                (richiesta) => chiamaConRitenta({
-                    modello, chiave, messaggi: richiesta, attrezzi: attrezziOpenAI,
-                    ...(fetchDiRete ? { fetchDiRete } : {}),
-                    // RAG-COD: anche il riassunto passa dalla regola — un ragionamento trapelato lì finirebbe nella
-                    // memoria della conversazione.
-                    ...(politicaRagionamento ? { politicaRagionamento } : {}),
-                }),
-            )
-            onGiro?.({ giro, tipo: 'compattazione-fine', compattato: esito.compattato })
-            if (esito.usage) {
-                conto.prompt_tokens += Number(esito.usage.prompt_tokens ?? 0) || 0
-                conto.completion_tokens += Number(esito.usage.completion_tokens ?? 0) || 0
-                conto.cached_tokens += Number(esito.usage.prompt_tokens_details?.cached_tokens
-                    ?? esito.usage.cache_read_input_tokens
-                    ?? esito.usage.prompt_cache_hit_tokens
-                    ?? 0) || 0
-                conto.giri += 1
-            }
-            if (esito.compattato) {
-                messaggi = esito.messaggi
-                compattazioni += 1
-            }
-            /* ⛔ Un riassunto fallito (esito.compattato === false) non ferma il
-             * task: si continua col giro normale qui sotto, sugli stessi
-             * messaggi di prima — si riprovera' al prossimo checkpoint. */
-            continue
-        }
 
         /*
          * ⛔⛔ LEVA 5: RITENTA invece di lanciare al primo `!r.ok`. Chi esaurisce
@@ -2598,20 +3075,31 @@ export async function talosLavora({
         const modelloDelGiro = (!modelloEsecutore || giro === 0 || ultimoGiroFallito)
             ? modello
             : modelloEsecutore
-        const { scelta: risposta, usage } = await chiamaIlModelloConRitenta(
-            modelloDelGiro, chiave, messaggi, fetchDiRete,
+        /*
+         * ⭐ P4-ter: al modello va la PROIEZIONE (compattata se serve); `messaggi` resta grezzo. Se il fornitore dice
+         * «contesto pieno» si compatta UNA volta e si ritenta (desktop K8, `classificaErroreFornitore`).
+         */
+        const chiamaIlModello = (lista) => chiamaIlModelloConRitenta(
+            modelloDelGiro, chiave, lista, fetchDiRete,
             onDelta ? (e) => onDelta({ giro, ...e }) : undefined,
             reasoning, attrezziOpenAI, politicaRagionamento,
         )
-        if (usage) {
-            conto.prompt_tokens += Number(usage.prompt_tokens ?? 0) || 0
-            conto.completion_tokens += Number(usage.completion_tokens ?? 0) || 0
-            conto.cached_tokens += Number(usage.prompt_tokens_details?.cached_tokens
-                ?? usage.cache_read_input_tokens
-                ?? usage.prompt_cache_hit_tokens
-                ?? 0) || 0
-            conto.giri += 1
-        }
+        const { scelta: risposta, usage } = await chiamaIlModello(await compattatore.prepara(messaggi, giro)).catch(async (rotta) => {
+            if (segnaleStop?.aborted || compattazione.classificaErroreFornitore(rotta) !== 'contesto-pieno') throw rotta
+            const compattata = await compattatore.perOverflow(messaggi, giro).catch(() => null)
+            if (!compattata) throw rotta
+            return chiamaIlModello(compattata)
+        }).catch((rotta) => {
+            /*
+             * ⛔ ERRCOD-RIPRESA (30/09/2026, trovato sul Pad): il modello non ha risposto, ma la conversazione fin qui
+             * (richiesta della persona ed esiti degli attrezzi già eseguiti) è valida. Viaggia sull'errore, così il
+             * server la conserva e «Riprova» riparte da qui invece di dire «Sessione non pronta».
+             */
+            if (rotta && typeof rotta === 'object') rotta.messaggiFinali = messaggi
+            throw rotta
+        })
+        sommaAlConto(conto, usage)
+        compattatore.aggiornaAncora(usage)
         ultimoAvevaContenuto = Boolean(risposta.content)
         if (risposta.content) ultimoTesto = String(risposta.content)
         messaggi.push(risposta)
@@ -2648,6 +3136,17 @@ export async function talosLavora({
             let argomenti = {}
             try { argomenti = JSON.parse(c.function?.arguments || '{}') } catch { /* vuoto */ }
             let esito
+            /*
+             * ⛔ ESITO65 (30/09/2026, consegna desktop 65) — tre stati: `null` = questo ramo non conosce l'esito e decide
+             * `pareFallito` sul testo, come prima; `true`/`false` = il ramo lo SA (callback che lancia, ponte assente,
+             * «non trovato», `ok` diverso da `true`) e vince lui. Viaggia come `isError` sull'evento `tool-esito`, mai
+             * dentro il testo che il modello legge: MCP 2025-11-25 «Tool Execution Errors… isError: true», Codex
+             * `DynamicToolCallResponse.success`, Hermes `tool.completed … is_error` (ledger
+             * `.claude/ragionamento/LEDGER-65-ESITO-ATTREZZI-2026-09-30.md`).
+             */
+            let fallito = null
+            // ⛔ ERRCOD-E3 (30/09/2026): il PERCHÉ di un fallimento, deciso nello stesso ramo — la UI lo dice in parole.
+            let codiceErrore = null
 
             try {
                 if (nome === 'elenca') {
@@ -2658,10 +3157,20 @@ export async function talosLavora({
                     esito = [...voci.filter((v) => !v.cartella).map((v) => v.nome), ...dentro.flat()].join('\n')
                 }
                 else if (nome === 'cerca') {
-                    esito = await cercaNelProgetto(disco, argomenti)
+                    // ⛔ P4-quater: `cerca` non apre (né usa come oracolo) un file dell'area, una credenziale o un segreto.
+                    const confini = await confiniDelGiro
+                    esito = await cercaNelProgetto(disco, argomenti, {
+                        saltaFn: async (relativo) => Boolean(await controllaPercorso(relativo, 'leggi', confini)),
+                    })
                 }
                 else if (nome === 'leggi') {
-                    esito = await disco.leggi(argomenti.percorso)
+                    // ⛔ P4-quater: area di TALOS, credenziali, segreti e percorsi NT non si leggono, con nessun livello.
+                    const confine = await controllaPercorso(argomenti.percorso, 'leggi', await confiniDelGiro)
+                    if (confine) {
+                        esito = `REFUSED. ${confine.motivo} Nothing was read.`
+                        codiceErrore = 'DENIED'
+                    }
+                    else esito = await disco.leggi(argomenti.percorso)
                 }
                 else if (nome === 'scrivi') {
                     /*
@@ -2669,13 +3178,24 @@ export async function talosLavora({
                      * diverse (vedi doc su verificaPermessoScrittura), e non ha
                      * senso spendere il secondo cancello (che legge il disco,
                      * costruisce prima/dopo) se il primo rifiuta già.
+                     * ⛔ P4-quater: e i confini prima di tutti e due — non sono domande, sono no; tranne `~/.ssh/config`,
+                     *   che chiede SEMPRE (Hermes `file_safety.py:228-236`) e, se la persona dice sì, non chiede due volte.
                      */
-                    const permesso = await verificaPermessoScrittura(
-                        { tipo: 'scrivi', percorso: argomenti.percorso },
-                        { livelloAccesso, chiediApprovazioneFn },
-                    )
+                    const confine = await controllaPercorso(argomenti.percorso, 'scrivi', await confiniDelGiro)
+                    const permesso = confine?.codice === 'su-domanda'
+                        ? await domandaSenzaEccezioni(
+                            { tipo: 'scrivi', percorso: argomenti.percorso, suDomanda: { frase: `Vuole scrivere ${argomenti.percorso}: ${confine.motivo}` } },
+                            confine.motivo, { livelloAccesso, chiediApprovazioneFn },
+                        )
+                        : confine
+                        ? { consentito: false, motivo: confine.motivo }
+                        : await verificaPermessoScrittura(
+                            { tipo: 'scrivi', percorso: argomenti.percorso },
+                            { livelloAccesso, chiediApprovazioneFn, cartella, consensiSessione },
+                        )
                     if (!permesso.consentito) {
                         esito = `REFUSED. ${permesso.motivo} Nothing was written.`
+                        codiceErrore = 'DENIED'
                     }
                     else {
                         /*
@@ -2711,12 +3231,17 @@ export async function talosLavora({
                     esito = `exit ${p.codice}\n${p.testo}`
                 }
                 else if (nome === 'shell') {
-                    const permesso = await verificaPermessoScrittura(
-                        { tipo: 'shell', comando: argomenti.comando },
-                        { livelloAccesso, chiediApprovazioneFn },
-                    )
+                    // ⛔ P4-quater: la guardia prima del permesso — un comando sull'area o su un segreto è un no, senza domanda.
+                    const guardia = await guardiaShell(argomenti.comando, await confiniDelGiro)
+                    const permesso = guardia
+                        ? { consentito: false, motivo: guardia }
+                        : await verificaPermessoScrittura(
+                            { tipo: 'shell', comando: argomenti.comando },
+                            { livelloAccesso, chiediApprovazioneFn },
+                        )
                     if (!permesso.consentito) {
                         esito = `REFUSED. ${permesso.motivo} The command was not run.`
+                        codiceErrore = 'DENIED'
                     }
                     else {
                         const p = await eseguiComandoSandboxato(argomenti.comando ?? '', cartella, { mobile })
@@ -2765,6 +3290,7 @@ export async function talosLavora({
                     )
                     if (!permesso.consentito) {
                         esito = `REFUSED. ${permesso.motivo} Nothing was created.`
+                        codiceErrore = 'DENIED'
                     }
                     else {
                         const titolo = String(argomenti.titolo ?? '').trim().slice(0, 120) || 'Artefatto'
@@ -2774,8 +3300,18 @@ export async function talosLavora({
                         }
                         else {
                             // ⛔ Nessuna callback (es. TALOS-BANCO, che non offre mai questo attrezzo): id locale deterministico, mai Date.now()/Math.random() — c.id è già unico per chiamata.
-                            const risultato = onArtefatto ? await onArtefatto(titolo, html) : { id: `artefatto-${c.id}` }
-                            esito = `created: "${titolo}" (id: ${risultato.id})`
+                            // ⛔ OSS-70B-1 / E7 (01/10/2026): il modello di QUESTO giro (pianificatore o esecutore), per la Libreria.
+                            const risultato = onArtefatto ? await onArtefatto(titolo, html, { modello: modelloDelGiro }) : { id: `artefatto-${c.id}` }
+                            // ⛔ ESITO65-ART: senza un id vero la pagina non esiste — mai «created» (prima: «(id: undefined)», o l'id-rifiuto del server scritto come un successo).
+                            if (risultato?.ok === false || typeof risultato?.id !== 'string') {
+                                esito = String(risultato?.esito ?? 'artifact_create failed: the page was not saved.')
+                                fallito = true
+                                codiceErrore = 'FAILED'
+                            }
+                            else {
+                                esito = `created: "${titolo}" (id: ${risultato.id})`
+                                fallito = false
+                            }
                         }
                     }
                 }
@@ -2786,18 +3322,26 @@ export async function talosLavora({
                     )
                     if (!permesso.consentito) {
                         esito = `REFUSED. ${permesso.motivo} Nothing was created.`
+                        codiceErrore = 'DENIED'
                     }
                     // ⛔ Onesto come `web_search` senza provider: senza callback questo kernel non può generare né salvare NIENTE — mai un tentativo silenzioso.
                     else if (!onDocumento) {
                         esito = 'document creation is not configured on this harness: no generator/saver was set.'
+                        fallito = true
+                        codiceErrore = 'NOT_CONFIGURED'
                     }
                     else {
                         try {
                             const risultato = await onDocumento(argomenti)
                             esito = String(risultato?.esito ?? (risultato?.ok ? 'created' : 'failed'))
+                            // Solo `ok === true` conferma l'effetto: una forma diversa non dice che il documento c'è.
+                            fallito = risultato?.ok !== true
+                            if (fallito) codiceErrore = risultato?.ok === false ? 'FAILED' : 'INVALID_RESULT'
                         }
                         catch (rotto) {
                             esito = `document creation failed: ${rotto instanceof Error ? rotto.message : String(rotto)}`
+                            fallito = true
+                            codiceErrore = codiceDaEccezione(rotto)
                         }
                     }
                 }
@@ -2808,14 +3352,19 @@ export async function talosLavora({
                     // ⛔ Onesto come document_create senza callback: senza elencaNoteFn questo kernel non ha modo di raggiungere le note del telefono — mai un elenco vuoto che si legge come "non hai note".
                     if (!elencaNoteFn) {
                         esito = 'notes are not configured on this harness: no bridge to the device was set.'
+                        fallito = true
+                        codiceErrore = 'NOT_CONFIGURED'
                     }
                     else {
                         try {
                             const note = await elencaNoteFn()
                             esito = note.length === 0 ? 'no notes saved on this device.' : JSON.stringify(note)
+                            fallito = false
                         }
                         catch (rotto) {
                             esito = `notes_list failed: ${rotto instanceof Error ? rotto.message : String(rotto)}`
+                            fallito = true
+                            codiceErrore = codiceDaEccezione(rotto)
                         }
                     }
                 }
@@ -2833,19 +3382,25 @@ export async function talosLavora({
                 else if (nome === 'notes_create') {
                     if (!creaNotaFn) {
                         esito = 'notes are not configured on this harness: no bridge to the device was set.'
+                        fallito = true
+                        codiceErrore = 'NOT_CONFIGURED'
                     }
                     else {
                         const permesso = await verificaPermessoScrittura({ tipo: 'notes_create', titolo: argomenti.title }, { livelloAccesso, chiediApprovazioneFn })
                         if (!permesso.consentito) {
                             esito = `REFUSED. ${permesso.motivo} Nothing was created.`
+                            codiceErrore = 'DENIED'
                         }
                         else {
                             try {
                                 const nota = await creaNotaFn({ title: String(argomenti.title ?? ''), content: String(argomenti.content ?? '') })
                                 esito = `saved: "${nota.title}" (id: ${nota.id})`
+                                fallito = false
                             }
                             catch (rotto) {
                                 esito = `notes_create failed: ${rotto instanceof Error ? rotto.message : String(rotto)}`
+                                fallito = true
+                                codiceErrore = codiceDaEccezione(rotto)
                             }
                         }
                     }
@@ -2853,6 +3408,8 @@ export async function talosLavora({
                 else if (nome === 'notes_update') {
                     if (!aggiornaNotaFn) {
                         esito = 'notes are not configured on this harness: no bridge to the device was set.'
+                        fallito = true
+                        codiceErrore = 'NOT_CONFIGURED'
                     }
                     else if (argomenti.title === undefined && argomenti.content === undefined) {
                         esito = 'REFUSED. Nothing to change: send a title, a content, or both.'
@@ -2861,6 +3418,7 @@ export async function talosLavora({
                         const permesso = await verificaPermessoScrittura({ tipo: 'notes_update', id: argomenti.id }, { livelloAccesso, chiediApprovazioneFn })
                         if (!permesso.consentito) {
                             esito = `REFUSED. ${permesso.motivo} Nothing was changed.`
+                            codiceErrore = 'DENIED'
                         }
                         else {
                             try {
@@ -2869,9 +3427,12 @@ export async function talosLavora({
                                     ...(argomenti.content === undefined ? {} : { content: String(argomenti.content) }),
                                 })
                                 esito = `updated: "${nota.title}" (id: ${nota.id})`
+                                fallito = false
                             }
                             catch (rotto) {
                                 esito = `notes_update failed: ${rotto instanceof Error ? rotto.message : String(rotto)}`
+                                fallito = true
+                                codiceErrore = codiceDaEccezione(rotto)
                             }
                         }
                     }
@@ -2879,19 +3440,25 @@ export async function talosLavora({
                 else if (nome === 'notes_delete') {
                     if (!eliminaNotaFn) {
                         esito = 'notes are not configured on this harness: no bridge to the device was set.'
+                        fallito = true
+                        codiceErrore = 'NOT_CONFIGURED'
                     }
                     else {
                         const permesso = await verificaPermessoScrittura({ tipo: 'notes_delete', id: argomenti.id }, { livelloAccesso, chiediApprovazioneFn })
                         if (!permesso.consentito) {
                             esito = `REFUSED. ${permesso.motivo} Nothing was deleted.`
+                            codiceErrore = 'DENIED'
                         }
                         else {
                             try {
                                 await eliminaNotaFn(String(argomenti.id ?? ''))
                                 esito = 'deleted.'
+                                fallito = false
                             }
                             catch (rotto) {
                                 esito = `notes_delete failed: ${rotto instanceof Error ? rotto.message : String(rotto)}`
+                                fallito = true
+                                codiceErrore = codiceDaEccezione(rotto)
                             }
                         }
                     }
@@ -2899,25 +3466,33 @@ export async function talosLavora({
                 else if (nome === 'tasks_list') {
                     if (!elencaTaskFn) {
                         esito = 'tasks are not configured on this harness: no bridge to the device was set.'
+                        fallito = true
+                        codiceErrore = 'NOT_CONFIGURED'
                     }
                     else {
                         try {
                             const task = await elencaTaskFn()
                             esito = task.length === 0 ? 'no tasks saved on this device.' : JSON.stringify(task)
+                            fallito = false
                         }
                         catch (rotto) {
                             esito = `tasks_list failed: ${rotto instanceof Error ? rotto.message : String(rotto)}`
+                            fallito = true
+                            codiceErrore = codiceDaEccezione(rotto)
                         }
                     }
                 }
                 else if (nome === 'tasks_create') {
                     if (!creaTaskFn) {
                         esito = 'tasks are not configured on this harness: no bridge to the device was set.'
+                        fallito = true
+                        codiceErrore = 'NOT_CONFIGURED'
                     }
                     else {
                         const permesso = await verificaPermessoScrittura({ tipo: 'tasks_create', titolo: argomenti.title }, { livelloAccesso, chiediApprovazioneFn })
                         if (!permesso.consentito) {
                             esito = `REFUSED. ${permesso.motivo} Nothing was created.`
+                            codiceErrore = 'DENIED'
                         }
                         else {
                             try {
@@ -2927,9 +3502,12 @@ export async function talosLavora({
                                     priority: argomenti.priority ?? 'normal',
                                 })
                                 esito = `saved: "${task.title}" (id: ${task.id})`
+                                fallito = false
                             }
                             catch (rotto) {
                                 esito = `tasks_create failed: ${rotto instanceof Error ? rotto.message : String(rotto)}`
+                                fallito = true
+                                codiceErrore = codiceDaEccezione(rotto)
                             }
                         }
                     }
@@ -2937,19 +3515,25 @@ export async function talosLavora({
                 else if (nome === 'tasks_complete') {
                     if (!completaTaskFn) {
                         esito = 'tasks are not configured on this harness: no bridge to the device was set.'
+                        fallito = true
+                        codiceErrore = 'NOT_CONFIGURED'
                     }
                     else {
                         const permesso = await verificaPermessoScrittura({ tipo: 'tasks_complete', id: argomenti.id, status: argomenti.status }, { livelloAccesso, chiediApprovazioneFn })
                         if (!permesso.consentito) {
                             esito = `REFUSED. ${permesso.motivo} Nothing was changed.`
+                            codiceErrore = 'DENIED'
                         }
                         else {
                             try {
                                 const task = await completaTaskFn(String(argomenti.id ?? ''), argomenti.status ?? 'done')
                                 esito = `"${task.title}" is now ${task.status}.`
+                                fallito = false
                             }
                             catch (rotto) {
                                 esito = `tasks_complete failed: ${rotto instanceof Error ? rotto.message : String(rotto)}`
+                                fallito = true
+                                codiceErrore = codiceDaEccezione(rotto)
                             }
                         }
                     }
@@ -2957,6 +3541,8 @@ export async function talosLavora({
                 else if (nome === 'tasks_update') {
                     if (!aggiornaTaskFn) {
                         esito = 'tasks are not configured on this harness: no bridge to the device was set.'
+                        fallito = true
+                        codiceErrore = 'NOT_CONFIGURED'
                     }
                     else if (argomenti.title === undefined && argomenti.description === undefined && argomenti.priority === undefined) {
                         esito = 'REFUSED. Nothing to change: send a title, a description, a priority, or a mix. To mark done/started, use tasks_complete.'
@@ -2965,6 +3551,7 @@ export async function talosLavora({
                         const permesso = await verificaPermessoScrittura({ tipo: 'tasks_update', id: argomenti.id }, { livelloAccesso, chiediApprovazioneFn })
                         if (!permesso.consentito) {
                             esito = `REFUSED. ${permesso.motivo} Nothing was changed.`
+                            codiceErrore = 'DENIED'
                         }
                         else {
                             try {
@@ -2974,9 +3561,12 @@ export async function talosLavora({
                                     ...(argomenti.priority === undefined ? {} : { priority: argomenti.priority }),
                                 })
                                 esito = `updated: "${task.title}" (id: ${task.id})`
+                                fallito = false
                             }
                             catch (rotto) {
                                 esito = `tasks_update failed: ${rotto instanceof Error ? rotto.message : String(rotto)}`
+                                fallito = true
+                                codiceErrore = codiceDaEccezione(rotto)
                             }
                         }
                     }
@@ -2984,19 +3574,25 @@ export async function talosLavora({
                 else if (nome === 'tasks_delete') {
                     if (!eliminaTaskFn) {
                         esito = 'tasks are not configured on this harness: no bridge to the device was set.'
+                        fallito = true
+                        codiceErrore = 'NOT_CONFIGURED'
                     }
                     else {
                         const permesso = await verificaPermessoScrittura({ tipo: 'tasks_delete', id: argomenti.id }, { livelloAccesso, chiediApprovazioneFn })
                         if (!permesso.consentito) {
                             esito = `REFUSED. ${permesso.motivo} Nothing was deleted.`
+                            codiceErrore = 'DENIED'
                         }
                         else {
                             try {
                                 await eliminaTaskFn(String(argomenti.id ?? ''))
                                 esito = 'deleted.'
+                                fallito = false
                             }
                             catch (rotto) {
                                 esito = `tasks_delete failed: ${rotto instanceof Error ? rotto.message : String(rotto)}`
+                                fallito = true
+                                codiceErrore = codiceDaEccezione(rotto)
                             }
                         }
                     }
@@ -3004,33 +3600,44 @@ export async function talosLavora({
                 else if (nome === 'memory_search') {
                     if (!cercaMemoriaFn) {
                         esito = 'memory is not configured on this harness: no bridge to the device was set.'
+                        fallito = true
+                        codiceErrore = 'NOT_CONFIGURED'
                     }
                     else {
                         try {
                             const memorie = await cercaMemoriaFn(String(argomenti.query ?? ''))
                             esito = memorie.length === 0 ? 'no memory matches that search.' : JSON.stringify(memorie)
+                            fallito = false
                         }
                         catch (rotto) {
                             esito = `memory_search failed: ${rotto instanceof Error ? rotto.message : String(rotto)}`
+                            fallito = true
+                            codiceErrore = codiceDaEccezione(rotto)
                         }
                     }
                 }
                 else if (nome === 'memory_write') {
                     if (!creaMemoriaFn) {
                         esito = 'memory is not configured on this harness: no bridge to the device was set.'
+                        fallito = true
+                        codiceErrore = 'NOT_CONFIGURED'
                     }
                     else {
                         const permesso = await verificaPermessoScrittura({ tipo: 'memory_write', titolo: argomenti.title }, { livelloAccesso, chiediApprovazioneFn })
                         if (!permesso.consentito) {
                             esito = `REFUSED. ${permesso.motivo} Nothing was remembered.`
+                            codiceErrore = 'DENIED'
                         }
                         else {
                             try {
                                 const memoria = await creaMemoriaFn({ title: String(argomenti.title ?? ''), content: String(argomenti.content ?? '') })
                                 esito = `remembered as: "${memoria.title}"`
+                                fallito = false
                             }
                             catch (rotto) {
                                 esito = `memory_write failed: ${rotto instanceof Error ? rotto.message : String(rotto)}`
+                                fallito = true
+                                codiceErrore = codiceDaEccezione(rotto)
                             }
                         }
                     }
@@ -3038,6 +3645,8 @@ export async function talosLavora({
                 else if (nome === 'memory_update') {
                     if (!aggiornaMemoriaFn) {
                         esito = 'memory is not configured on this harness: no bridge to the device was set.'
+                        fallito = true
+                        codiceErrore = 'NOT_CONFIGURED'
                     }
                     else if (argomenti.newTitle === undefined && argomenti.content === undefined) {
                         esito = 'REFUSED. Nothing to change: send a newTitle, a content, or both.'
@@ -3046,6 +3655,7 @@ export async function talosLavora({
                         const permesso = await verificaPermessoScrittura({ tipo: 'memory_update', titolo: argomenti.title }, { livelloAccesso, chiediApprovazioneFn })
                         if (!permesso.consentito) {
                             esito = `REFUSED. ${permesso.motivo} Nothing was changed.`
+                            codiceErrore = 'DENIED'
                         }
                         else {
                             try {
@@ -3054,9 +3664,13 @@ export async function talosLavora({
                                     ...(argomenti.content === undefined ? {} : { content: String(argomenti.content) }),
                                 })
                                 esito = esitoAgg ? `updated: "${esitoAgg.title}"` : `no memory has the title "${argomenti.title}". Use memory_search to find the right one.`
+                                fallito = !esitoAgg
+                                if (fallito) codiceErrore = 'NOT_FOUND'
                             }
                             catch (rotto) {
                                 esito = `memory_update failed: ${rotto instanceof Error ? rotto.message : String(rotto)}`
+                                fallito = true
+                                codiceErrore = codiceDaEccezione(rotto)
                             }
                         }
                     }
@@ -3064,19 +3678,26 @@ export async function talosLavora({
                 else if (nome === 'memory_delete') {
                     if (!eliminaMemoriaFn) {
                         esito = 'memory is not configured on this harness: no bridge to the device was set.'
+                        fallito = true
+                        codiceErrore = 'NOT_CONFIGURED'
                     }
                     else {
                         const permesso = await verificaPermessoScrittura({ tipo: 'memory_delete', titolo: argomenti.title }, { livelloAccesso, chiediApprovazioneFn })
                         if (!permesso.consentito) {
                             esito = `REFUSED. ${permesso.motivo} Nothing was forgotten.`
+                            codiceErrore = 'DENIED'
                         }
                         else {
                             try {
                                 const rimossa = await eliminaMemoriaFn(String(argomenti.title ?? ''))
                                 esito = rimossa ? 'forgotten.' : `no memory has the title "${argomenti.title}". It may already be gone.`
+                                fallito = !rimossa
+                                if (fallito) codiceErrore = 'NOT_FOUND'
                             }
                             catch (rotto) {
                                 esito = `memory_delete failed: ${rotto instanceof Error ? rotto.message : String(rotto)}`
+                                fallito = true
+                                codiceErrore = codiceDaEccezione(rotto)
                             }
                         }
                     }
@@ -3084,47 +3705,65 @@ export async function talosLavora({
                 else if (nome === 'library_list') {
                     if (!elencaLibreriaFn) {
                         esito = 'the Library is not configured on this harness: no bridge to the device was set.'
+                        fallito = true
+                        codiceErrore = 'NOT_CONFIGURED'
                     }
                     else {
                         try {
                             const file = await elencaLibreriaFn()
                             esito = file.length === 0 ? 'the Library is empty, or nothing is shared with this chat.' : JSON.stringify(file)
+                            fallito = false
                         }
                         catch (rotto) {
                             esito = `library_list failed: ${rotto instanceof Error ? rotto.message : String(rotto)}`
+                            fallito = true
+                            codiceErrore = codiceDaEccezione(rotto)
                         }
                     }
                 }
                 else if (nome === 'library_read') {
                     if (!leggiLibreriaFn) {
                         esito = 'the Library is not configured on this harness: no bridge to the device was set.'
+                        fallito = true
+                        codiceErrore = 'NOT_CONFIGURED'
                     }
                     else {
                         try {
                             const doc = await leggiLibreriaFn(String(argomenti.id ?? ''))
                             esito = doc ? `name: ${doc.name}\n\n${doc.text}` : `no Library file has the id "${argomenti.id}".`
+                            fallito = !doc
+                            if (fallito) codiceErrore = 'NOT_FOUND'
                         }
                         catch (rotto) {
                             esito = `library_read failed: ${rotto instanceof Error ? rotto.message : String(rotto)}`
+                            fallito = true
+                            codiceErrore = codiceDaEccezione(rotto)
                         }
                     }
                 }
                 else if (nome === 'library_rename') {
                     if (!rinominaLibreriaFn) {
                         esito = 'the Library is not configured on this harness: no bridge to the device was set.'
+                        fallito = true
+                        codiceErrore = 'NOT_CONFIGURED'
                     }
                     else {
                         const permesso = await verificaPermessoScrittura({ tipo: 'library_rename', id: argomenti.id }, { livelloAccesso, chiediApprovazioneFn })
                         if (!permesso.consentito) {
                             esito = `REFUSED. ${permesso.motivo} Nothing was renamed.`
+                            codiceErrore = 'DENIED'
                         }
                         else {
                             try {
                                 const dopo = await rinominaLibreriaFn(String(argomenti.id ?? ''), String(argomenti.name ?? ''))
                                 esito = dopo ? `renamed to: "${dopo.name}"` : `no Library file has the id "${argomenti.id}".`
+                                fallito = !dopo
+                                if (fallito) codiceErrore = 'NOT_FOUND'
                             }
                             catch (rotto) {
                                 esito = `library_rename failed: ${rotto instanceof Error ? rotto.message : String(rotto)}`
+                                fallito = true
+                                codiceErrore = codiceDaEccezione(rotto)
                             }
                         }
                     }
@@ -3132,19 +3771,26 @@ export async function talosLavora({
                 else if (nome === 'library_delete') {
                     if (!eliminaLibreriaFn) {
                         esito = 'the Library is not configured on this harness: no bridge to the device was set.'
+                        fallito = true
+                        codiceErrore = 'NOT_CONFIGURED'
                     }
                     else {
                         const permesso = await verificaPermessoScrittura({ tipo: 'library_delete', id: argomenti.id }, { livelloAccesso, chiediApprovazioneFn })
                         if (!permesso.consentito) {
                             esito = `REFUSED. ${permesso.motivo} Nothing was deleted.`
+                            codiceErrore = 'DENIED'
                         }
                         else {
                             try {
                                 const rimosso = await eliminaLibreriaFn(String(argomenti.id ?? ''))
                                 esito = rimosso ? 'deleted.' : `no Library file has the id "${argomenti.id}". It may already be gone.`
+                                fallito = !rimosso
+                                if (fallito) codiceErrore = 'NOT_FOUND'
                             }
                             catch (rotto) {
                                 esito = `library_delete failed: ${rotto instanceof Error ? rotto.message : String(rotto)}`
+                                fallito = true
+                                codiceErrore = codiceDaEccezione(rotto)
                             }
                         }
                     }
@@ -3152,28 +3798,39 @@ export async function talosLavora({
                 else if (nome === 'library_search') {
                     if (!cercaLibreriaFn) {
                         esito = 'the Library is not configured on this harness: no bridge to the device was set.'
+                        fallito = true
+                        codiceErrore = 'NOT_CONFIGURED'
                     }
                     else {
                         try {
                             const trovati = await cercaLibreriaFn(String(argomenti.query ?? ''), argomenti.limit)
                             esito = trovati.length === 0 ? 'no Library file matched that.' : JSON.stringify(trovati)
+                            fallito = false
                         }
                         catch (rotto) {
                             esito = `library_search failed: ${rotto instanceof Error ? rotto.message : String(rotto)}`
+                            fallito = true
+                            codiceErrore = codiceDaEccezione(rotto)
                         }
                     }
                 }
                 else if (nome === 'library_file_origin') {
                     if (!origineLibreriaFn) {
                         esito = 'the Library is not configured on this harness: no bridge to the device was set.'
+                        fallito = true
+                        codiceErrore = 'NOT_CONFIGURED'
                     }
                     else {
                         try {
                             const record = await origineLibreriaFn(String(argomenti.id ?? ''))
                             esito = record ? JSON.stringify(record) : `no Library file has the id "${argomenti.id}".`
+                            fallito = !record
+                            if (fallito) codiceErrore = 'NOT_FOUND'
                         }
                         catch (rotto) {
                             esito = `library_file_origin failed: ${rotto instanceof Error ? rotto.message : String(rotto)}`
+                            fallito = true
+                            codiceErrore = codiceDaEccezione(rotto)
                         }
                     }
                 }
@@ -3187,20 +3844,27 @@ export async function talosLavora({
                 else if (nome === 'research_list') {
                     if (!elencaRicercaFn) {
                         esito = 'deep research is not configured on this harness: no bridge to the device was set.'
+                        fallito = true
+                        codiceErrore = 'NOT_CONFIGURED'
                     }
                     else {
                         try {
                             const ricerche = await elencaRicercaFn()
                             esito = ricerche.length === 0 ? 'no deep research has been run on this device yet.' : JSON.stringify(ricerche)
+                            fallito = false
                         }
                         catch (rotto) {
                             esito = `research_list failed: ${rotto instanceof Error ? rotto.message : String(rotto)}`
+                            fallito = true
+                            codiceErrore = codiceDaEccezione(rotto)
                         }
                     }
                 }
                 else if (nome === 'research_read') {
                     if (!leggiRicercaFn) {
                         esito = 'deep research is not configured on this harness: no bridge to the device was set.'
+                        fallito = true
+                        codiceErrore = 'NOT_CONFIGURED'
                     }
                     else {
                         try {
@@ -3209,6 +3873,8 @@ export async function talosLavora({
                         }
                         catch (rotto) {
                             esito = `research_read failed: ${rotto instanceof Error ? rotto.message : String(rotto)}`
+                            fallito = true
+                            codiceErrore = codiceDaEccezione(rotto)
                         }
                     }
                 }
@@ -3227,17 +3893,24 @@ export async function talosLavora({
                     )
                     if (!permesso.consentito) {
                         esito = `REFUSED. ${permesso.motivo} Nothing was generated.`
+                        codiceErrore = 'DENIED'
                     }
                     else if (!onImmagine) {
                         esito = 'image generation is not configured on this harness: no generator/saver was set.'
+                        fallito = true
+                        codiceErrore = 'NOT_CONFIGURED'
                     }
                     else {
                         try {
                             const risultato = await onImmagine(argomenti)
                             esito = String(risultato?.esito ?? (risultato?.ok ? 'generated' : 'failed'))
+                            fallito = risultato?.ok !== true
+                            if (fallito) codiceErrore = risultato?.ok === false ? 'FAILED' : 'INVALID_RESULT'
                         }
                         catch (rotto) {
                             esito = `image generation failed: ${rotto instanceof Error ? rotto.message : String(rotto)}`
+                            fallito = true
+                            codiceErrore = codiceDaEccezione(rotto)
                         }
                     }
                 }
@@ -3247,21 +3920,25 @@ export async function talosLavora({
             }
             catch (rotta) {
                 esito = `error: ${rotta instanceof Error ? rotta.message : String(rotta)}`
+                fallito = true
+                codiceErrore = codiceDaEccezione(rotta)
             }
-            return esito
+            return { esito, fallito, codiceErrore }
         }
 
         // ⭐ 6.1 — ricalcolato da zero a questo giro; vedi la doc su `ultimoGiroFallito`.
         let girofallitoQuesto = false
-        await eseguiChiamateRispettandoContratto(chiamate, eseguiUnAttrezzo, (c, esito) => {
+        await eseguiChiamateRispettandoContratto(chiamate, eseguiUnAttrezzo, (c, { esito, fallito, codiceErrore }) => {
             const contenutoTool = String(esito).slice(0, 8_000)
-            if (pareFallito(esito)) girofallitoQuesto = true
+            // ⛔ ESITO65 — vince il ramo che conosce l'esito; `pareFallito` resta per i rami che non lo sanno (shell, file, REFUSED.).
+            const isError = typeof fallito === 'boolean' ? fallito : pareFallito(esito)
+            if (isError) girofallitoQuesto = true
             messaggi.push({
                 role: 'tool',
                 tool_call_id: c.id,
                 content: contenutoTool,
             })
-            onGiro?.({ giro, tipo: 'tool-esito', toolCallId: c.id, content: contenutoTool })
+            onGiro?.({ giro, tipo: 'tool-esito', toolCallId: c.id, content: contenutoTool, isError, ...(isError && codiceErrore ? { errorCode: codiceErrore } : {}) })
         })
         ultimoGiroFallito = girofallitoQuesto
 
@@ -3365,9 +4042,10 @@ export async function talosLavora({
         premesseNegate,
         /* ⭐ 'concluso' · 'giri-esauriti' · 'fermato' — vedi `comeSonoFinitiIGiri`. */
         comeFinita: comeFinita.esito,
-        /* ⭐ Stadio A: quante volte la conversazione e' stata compattata — 0 su
-         * un task breve e' l'esito atteso, non un guasto. */
-        compattazioni,
+        /* ⭐ P4-ter: quante volte la conversazione e' stata compattata in questo turno — 0 su un task breve e' l'esito
+         * atteso, non un guasto. E i record (campo NUOVO, additivo): il registro salva l'ultimo e lo ripassa al turno dopo. */
+        compattazioni: compattatore.compattazioni,
+        recordDiCompattazione: compattatore.records,
         /* ⭐ B1-11: i nomi degli attrezzi DAVVERO offerti al modello, nell'ordine
          * della richiesta — stessa fonte di `attrezziOfferti()` esportata sopra. */
         attrezziOfferti: attrezziOpenAI.map((a) => a.function.name),

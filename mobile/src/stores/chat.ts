@@ -34,6 +34,7 @@ import type { TalosToolDefinition } from '@/lib/tools/registry'
 import { newTalosMobileId } from '@/lib/mobileIds'
 import type { TalosCodaRifiuto, TalosCodaStato, TalosCodaVoce } from '@/lib/chat/codaDelGiro'
 import type { TalosCodaDelloStore } from './chatQueue'
+import type { TalosPartiCompattazione } from '@/lib/kernel/compattazione'
 
 /** La coda vuota condivisa dello store (la stessa forma di `CODA_VUOTA`, senza tirare il modulo nell'avvio). */
 const CODA_VUOTA_DELLO_STORE: TalosCodaStato = Object.freeze({ voci: Object.freeze([]) as readonly TalosCodaVoce[], inPausa: false })
@@ -303,6 +304,8 @@ export interface ChatState {
     hasOlderMessages: boolean
     loadingOlderMessages: boolean
     lastError: string | null
+    /** ⭐⭐ P4-ter passo 2 — la chat che sta riassumendo adesso (riga «Riassumo la conversazione…» con la barra). */
+    compattazioneInCorso: string | null
     persistenceStatus: ChatPersistenceStatus
     persistenceError: string | null
     /**
@@ -322,6 +325,40 @@ export type TalosTurnOutcome = 'concluso' | 'errore' | 'fermato'
 export type TalosEnqueueResult =
     | { ok: true; voce: TalosCodaVoce }
     | { ok: false; rifiuto: TalosCodaRifiuto | 'nessuna-chat' }
+
+/*
+ * ⭐⭐ P4-ter passo 2 (02/10/2026) — la compattazione della chat (ledger `LEDGER-P4TER-COMPATTATORE-2026-10-02.md`).
+ * Lo store decide QUANDO e salva la riga nella storia; il controller fa solo la chiamata al modello.
+ */
+export type TalosMotivoCompattazioneChat = 'soglia' | 'emergenza' | 'manuale' | 'overflow'
+export interface TalosRiassumiInput {
+    sessionId: string
+    modelProfileId: string | null
+    motivo: TalosMotivoCompattazioneChat
+    /** I turni che il modello vede adesso (già proiettati da una compattazione precedente). */
+    turni: readonly ChatTurn[]
+    /** Le parti del nucleo: per i fornitori remoti la richiesta separata e oscurata si costruisce dal `mezzo`. */
+    parti: TalosPartiCompattazione
+    signal?: AbortSignal
+}
+export type TalosRiassuntoEsito = { ok: true, testo: string } | { ok: false, motivo: string }
+export interface TalosFinestraCompattazione {
+    finestraToken: number | null
+    riservaUscita: number | null
+    tettoToken: number | null
+    /** Il numero vero dell'ultima richiesta, quando il fornitore (o il motore locale) l'ha detto. */
+    promptTokens: number | null
+}
+/** ⭐⭐ Owner 02/10 «Token veri»: la misura della richiesta intera (sistema, attrezzi, turni) che partirebbe con questi turni. */
+export interface TalosMisuraRichiesta {
+    token: number
+    /** `motore`: contata dal tokenizzatore del modello locale; `fornitore`: tarata sul numero vero dell'ultima richiesta. */
+    misura: 'motore' | 'fornitore'
+}
+export type TalosEsitoCompattazioneChat =
+    | { ok: true, compattato: true, at: string, tokenPrima: number, tokenDopo: number }
+    | { ok: true, compattato: false, motivo: string }
+    | { ok: false, motivo: string }
 
 export interface ChatStoreOptions<Runtime = undefined> {
     repository: TalosChatRepository
@@ -348,6 +385,15 @@ export interface ChatStoreOptions<Runtime = undefined> {
     deliverQueued?: (sessionId: string, voce: TalosCodaVoce) => Promise<boolean>
     /** ⭐ B3 — una chat con un permesso d'attrezzo in attesa non riceve la coda: la domanda aperta viene prima. */
     permissionPendingFor?: (sessionId: string) => boolean
+    /**
+     * ⭐⭐ P4-ter passo 2 — la chiamata al modello per il riassunto: richiesta separata e oscurata per i fornitori remoti,
+     * in coda alla conversazione viva per il locale (decisione owner 02/10). Assente = la chat non compatta.
+     */
+    riassumiConversazione?: (input: TalosRiassumiInput) => Promise<TalosRiassuntoEsito>
+    /** ⭐⭐ P4-ter passo 2 — finestra, riserva e numero vero per il modello di questa chat; `null` = non si sa (niente automatico). */
+    /** ⭐⭐ Owner 02/10 «Token veri»: i token veri della richiesta con questi turni; `null` = non si sa (si ripiega sulla stima). */
+    misuraRichiesta?: (input: { sessionId: string, modelProfileId: string | null, turni: readonly ChatTurn[] }) => Promise<TalosMisuraRichiesta | null>
+    finestraPerCompattazione?: (modelProfileId: string | null, sessionId: string) => TalosFinestraCompattazione | null | Promise<TalosFinestraCompattazione | null>
 }
 
 declare const TALOS_CHAT_STORE_RUNTIME: unique symbol
@@ -444,6 +490,10 @@ export interface ChatStore<Runtime = undefined> {
     consumeSafePointRequest(sessionId: string): boolean
     /** ⭐ B3 — «Riprendi»: rifà la risposta all'ultimo messaggio della persona su una chat interrotta. */
     resumeTurn(modelProfileId?: string | null, turnPolicy?: TalosLibraryTurnOverride | null): Promise<boolean>
+    /** ⭐⭐ P4-ter passo 2 — «Compatta ora» (dopo la conferma dell'interfaccia): una riga nella storia, nessun messaggio toccato. */
+    compattaOra(sessionId: string): Promise<TalosEsitoCompattazioneChat>
+    /** ⭐⭐ P4-ter passo 2 — «Annulla» sul separatore: una riga che spegne la compattazione `at`. */
+    annullaCompattazione(sessionId: string, at: string): Promise<void>
 }
 
 function toBrowserActivityView(activity: TalosLocalToolActivity): TalosMobileBrowserActivityView | null {
@@ -673,6 +723,7 @@ export function createChatStore<Runtime = undefined>(
         persistenceError: null,
         queues: {},
         turnOutcomes: {},
+        compattazioneInCorso: null,
     })
     let initialization: Promise<void> | null = null
     let navigationRevision = 0
@@ -1839,6 +1890,51 @@ export function createChatStore<Runtime = undefined>(
         })
     }
 
+    /*
+     * ⭐⭐ P4-ter passo 2 — la compattazione vive in `chatCompattazione.ts`, caricato al primo uso: il cancello
+     * `verify-initial-chunk.mjs` pesa l'avvio al byte (con quel codice qui: 661.609 contro 652.700). Qui gli involucri.
+     */
+    type TalosCompattazioneDelloStore = ReturnType<typeof import('./chatCompattazione').creaCompattazioneDelloStore>
+    let compattazioneDelloStore: Promise<TalosCompattazioneDelloStore> | null = null
+    function compattazione(): Promise<TalosCompattazioneDelloStore> {
+        compattazioneDelloStore ??= import('./chatCompattazione').then(({ creaCompattazioneDelloStore }) => creaCompattazioneDelloStore({
+            repository,
+            options,
+            state,
+            appendDurable: (sessionId, role, content, messageState, modelProfileId, metadata) =>
+                appendDurable(sessionId, role, content, messageState, modelProfileId, metadata),
+            translate,
+            now,
+            modelloScelto: (sessionId) => desiredModelProfileBySession.get(sessionId),
+            chatEsiste: (sessionId) => sessions.some((candidata) => candidata.id === sessionId) || activeSession.value?.id === sessionId,
+        }))
+        return compattazioneDelloStore
+    }
+    async function eseguiCompattazione(
+        sessionId: string,
+        modelProfileId: string | null,
+        motivo: TalosMotivoCompattazioneChat,
+        signal?: AbortSignal,
+    ): Promise<TalosEsitoCompattazioneChat> {
+        return (await compattazione()).eseguiCompattazione(sessionId, modelProfileId, motivo, signal)
+    }
+    async function compattaOra(sessionId: string): Promise<TalosEsitoCompattazioneChat> {
+        return (await compattazione()).compattaOra(sessionId)
+    }
+    async function annullaCompattazione(sessionId: string, at: string): Promise<void> {
+        return (await compattazione()).annullaCompattazione(sessionId, at)
+    }
+    async function compattaDopoLaRisposta(
+        sessionId: string,
+        modelProfileId: string | null,
+        reply: ChatCompletionResult,
+        signal: AbortSignal,
+    ): Promise<void> {
+        // Senza compattazione configurata il modulo non si carica nemmeno.
+        if (!options.riassumiConversazione || !options.finestraPerCompattazione || signal.aborted) return
+        return (await compattazione()).compattaDopoLaRisposta(sessionId, modelProfileId, reply, signal)
+    }
+
     async function send(
         text: string,
         modelProfileId: string | null = null,
@@ -1977,7 +2073,7 @@ export function createChatStore<Runtime = undefined>(
         onPersisted?.()
 
         let turns: ChatTurn[]
-        try {
+        const costruisciTurni = async (): Promise<ChatTurn[]> => {
             // Defect #4 follow-up (found while re-reviewing the six changes
             // together): the view is PAGED now, so building turns from it would
             // have silently truncated the model's memory to the last page on
@@ -1998,11 +2094,17 @@ export function createChatStore<Runtime = undefined>(
              * allo stesso modo: il chunk arriva prima che serva.
              */
             const { talosTurniDallaStoria } = await import('@/lib/chat/storiaConLeChiamate')
-            turns = await talosTurniDallaStoria({
+            let turns = await talosTurniDallaStoria({
                 messaggi: history,
                 conAllegati: withAttachments,
                 pezziDelMessaggio: options.resolveMessageParts,
             })
+            /*
+             * ⭐⭐ P4-ter passo 2: con una compattazione valida al modello va la PROIEZIONE (riassunto + turni nuovi alla
+             * lettera); la storia su disco resta intera. Prima dello schermo, che va sull'ultimo turno della persona.
+             */
+            const compattazione = await import('@/lib/chat/compattazioneChat')
+            turns = compattazione.applicaCompattazioneChat(turns, compattazione.compattazioneAttiva(history))
             /*
              * ⭐⭐ E QUI lo schermo rientra: sull'ULTIMO turno dell'utente, solo
              * per questa richiesta.
@@ -2019,6 +2121,10 @@ export function createChatStore<Runtime = undefined>(
                     break
                 }
             }
+            return turns
+        }
+        try {
+            turns = await costruisciTurni()
         } catch (error) {
             state.lastError = errorMessage(error, translate)
             try {
@@ -2063,9 +2169,28 @@ export function createChatStore<Runtime = undefined>(
                 },
                 signal: abort.signal,
             }
-            const reply = options.captureSendRuntime || options.prepareSend
-                ? await complete(turns, handlers, undefined, invocation)
-                : await complete(turns, handlers)
+            const chiama = (conTurni: ChatTurn[]) => (options.captureSendRuntime || options.prepareSend
+                ? complete(conTurni, handlers, undefined, invocation)
+                : complete(conTurni, handlers))
+            let reply: ChatCompletionResult
+            try {
+                reply = await chiama(turns)
+            } catch (error) {
+                /*
+                 * ⭐⭐ P4-ter passo 2 — «contesto pieno» (fornitore o motore locale, `TALOS_LOCAL_PROMPT_TOO_LONG`): UNA
+                 * compattazione e UN ritentativo, come il Codice. Niente da riassumere o riassunto fallito ⇒ l'errore vero.
+                 */
+                const { classificaErroreFornitore } = await import('@/lib/kernel/compattazione')
+                if (abort.signal.aborted || !options.riassumiConversazione || classificaErroreFornitore(error) !== 'contesto-pieno') throw error
+                const compattata = await eseguiCompattazione(session.id, modelProfileId, 'overflow', abort.signal)
+                if (!(compattata.ok && compattata.compattato)) throw error
+                streamed = ''
+                reasoned = ''
+                state.streamingText = null
+                state.streamingReasoning = null
+                turns = await costruisciTurni()
+                reply = await chiama(turns)
+            }
             // Debt A1: the loop dispatches on finishReason. No tool is registered
             // yet, so 'tool_calls' cannot occur — but the turn is persisted with its
             // calls so the round-trip is durable the moment tools land, instead of
@@ -2098,6 +2223,7 @@ export function createChatStore<Runtime = undefined>(
                 Object.keys(assistantMetadata).length ? assistantMetadata : undefined,
                 reply.attachments,
             )
+            await compattaDopoLaRisposta(session.id, modelProfileId, reply, abort.signal)
         } catch (error) {
             const aborted = error instanceof Error && error.name === 'AbortError'
             esitoGiro = aborted ? 'fermato' : 'errore'
@@ -2193,5 +2319,7 @@ export function createChatStore<Runtime = undefined>(
         steerQueued,
         consumeSafePointRequest,
         resumeTurn,
+        compattaOra,
+        annullaCompattazione,
     }
 }

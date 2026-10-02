@@ -173,9 +173,16 @@ function fermaSonda(): void {
     if (sondaRitardo !== null) { clearTimeout(sondaRitardo); sondaRitardo = null }
 }
 
+/**
+ * ⭐ Punto 2 (01/10/2026) — la GPU sta compilando i suoi programmi (prima apertura a cache vuota, ~16 s sul Pad in release, 41-69 s nella build debuggable).
+ * Owner: «Sì» alla riga onesta, solo in quel caso.
+ */
+const gpuInPreparazione = ref(false)
+
 async function guardaIlCarico(): Promise<void> {
-    const { talosLocalModelLoadProgress } = await import('@/services/localEngine')
-    const frazione = await talosLocalModelLoadProgress()
+    const { talosLocalModelLoadState } = await import('@/services/localEngine')
+    const { fraction: frazione, preparingGpu } = await talosLocalModelLoadState()
+    gpuInPreparazione.value = preparingGpu
     // ⛔ Solo un valore VERO sovrascrive: vedi il cappello sul `null`.
     if (frazione !== null) caricoFrazione.value = frazione
     else if (caricoFrazione.value !== null) caricoFrazione.value = null
@@ -185,6 +192,7 @@ watch(sending, (adesso) => {
     fermaSonda()
     if (!adesso) {
         caricoFrazione.value = null
+        gpuInPreparazione.value = false
         annullamentoChiesto.value = false
         return
     }
@@ -538,6 +546,12 @@ onBeforeUnmount(() => {
             («mai piu' di due azioni affiancate») non chiede un menu qui, chiede
             di non affiancarne tre.
         -->
+        <!-- ⭐ Punto 2 (01/10/2026): la GPU compila i suoi programmi, una volta per llama.cpp e sistema. -->
+        <p
+            v-if="gpuInPreparazione"
+            data-testid="talos-local-gpu-preparing"
+            class="mt-1.5 font-mono text-2xs text-[var(--talos-muted)]"
+        >{{ $t('chat.localPreparingGpu') }}</p>
         <div
             v-if="caricoPercento !== null"
             data-testid="talos-local-load-progress"

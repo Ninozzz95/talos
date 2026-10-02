@@ -59,6 +59,110 @@ public class TalosLlamaPlugin extends Plugin {
 
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
 
+    /*
+     * ⭐ Punto 2 (01/10/2026) — i programmi della GPU pronti prima del primo uso ({@link TalosGpuPreparation}).
+     *
+     * `gpuInPreparazione`: vero mentre la GPU compila (precompilazione, o prima apertura a cache vuota); lo legge
+     * `loadProgress` per la riga onesta. `gpuProntaNelProcesso`: i programmi sono già in memoria in QUESTO processo
+     * (`load_cl_kernels` gira una volta), quindi nessuna compilazione possibile. `compilazioneGpu`: upstream non
+     * protegge la compilazione da due thread, e la prova gira su un'altra coda — chi compila la prende.
+     */
+    private volatile boolean gpuInPreparazione = false;
+    private volatile boolean gpuProntaNelProcesso = false;
+    private final java.util.concurrent.locks.ReentrantLock compilazioneGpu =
+            new java.util.concurrent.locks.ReentrantLock();
+
+    private String timbroGpu() {
+        return TalosGpuPreparation.stamp(TalosLlamaNative.nativeEngineBuild(), android.os.Build.FINGERPRINT);
+    }
+
+    /** Vero se aprire sulla GPU adesso costerebbe la compilazione dei programmi. */
+    private boolean gpuDaPreparare() {
+        return !gpuProntaNelProcesso
+                && !TalosGpuPreparation.isReady(TalosGpuPreparation.cacheDir(getContext()), timbroGpu());
+    }
+
+    private void gpuPronta() {
+        gpuProntaNelProcesso = true;
+        TalosGpuPreparation.markReady(TalosGpuPreparation.cacheDir(getContext()), timbroGpu());
+    }
+
+    private void aspettaLaPreparazioneGpu() {
+        compilazioneGpu.lock();
+    }
+
+    private void liberaLaGpu() {
+        if (compilazioneGpu.isHeldByCurrentThread()) compilazioneGpu.unlock();
+    }
+
+    /**
+     * ⭐ Punto 2 — compila i programmi della GPU in sottofondo, senza modello, se non sono già pronti per questo
+     * llama.cpp e questo sistema. Owner 01/10: «Alla prima partenza», se c'è almeno un modello locale (lo decide chi
+     * chiama), sulla stessa coda dell'apertura: se la persona scrive prima che finisca, la chat aspetta solo il resto.
+     *
+     * Passo 2 (01/10/2026): chi chiama passa i modelli GGUF installati (`models`). Quelli non ancora «riscaldati» il
+     * nativo li legge (formati dei pesi, forme dell'attenzione) e ne compila i programmi con un grafo minuscolo, senza
+     * caricarne i pesi — come MNN prepara i programmi del grafo prima di usarlo.
+     */
+    @PluginMethod
+    public void prepareGpu(PluginCall call) {
+        if (!TalosLlamaNative.AVAILABLE) {
+            call.resolve(new JSObject().put("state", "unavailable"));
+            return;
+        }
+        java.util.List<String> chiesti = new java.util.ArrayList<>();
+        try {
+            com.getcapacitor.JSArray modelli = call.getArray("models");
+            if (modelli != null) for (Object percorso : modelli.toList()) chiesti.add(String.valueOf(percorso));
+        } catch (org.json.JSONException ignored) {
+            // Nessun modello leggibile: si preparano solo i programmi comuni.
+        }
+        worker.execute(() -> {
+            TalosLlamaNative.ensureReady(getContext());
+            java.io.File cartella = TalosGpuPreparation.cacheDir(getContext());
+            java.util.Set<String> giaRiscaldati = TalosGpuPreparation.warmedModels(cartella);
+            java.util.List<String> daRiscaldare = new java.util.ArrayList<>();
+            java.util.List<String> chiavi = new java.util.ArrayList<>();
+            for (String percorso : chiesti) {
+                java.io.File modello = new java.io.File(percorso);
+                if (!modello.isFile()) continue;
+                String chiave = TalosGpuPreparation.modelKey(modello);
+                if (giaRiscaldati.contains(chiave)) continue;
+                daRiscaldare.add(percorso);
+                chiavi.add(chiave);
+            }
+            // Un riscaldamento precedente ha fatto cadere l'app: non si riprova (lo rifà solo un llama.cpp nuovo).
+            if (!daRiscaldare.isEmpty() && !TalosGpuPreparation.beginWarming(cartella)) {
+                android.util.Log.w("TalosLlama", "riscaldamento dei modelli saltato: il precedente non è finito");
+                daRiscaldare.clear();
+                chiavi.clear();
+            }
+            if (!gpuDaPreparare() && daRiscaldare.isEmpty()) {
+                call.resolve(new JSObject().put("state", "ready"));
+                return;
+            }
+            aspettaLaPreparazioneGpu();
+            long ms;
+            gpuInPreparazione = true;
+            try {
+                ms = TalosLlamaNative.nativePrepareOpenClPrograms(daRiscaldare.toArray(new String[0]));
+            } finally {
+                gpuInPreparazione = false;
+                liberaLaGpu();
+                // Arriva qui solo se il nativo è tornato: una caduta nel driver lascia il segno sul disco.
+                if (!daRiscaldare.isEmpty()) TalosGpuPreparation.endWarming(cartella);
+            }
+            if (ms < 0) {
+                call.resolve(new JSObject().put("state", "unavailable"));
+                return;
+            }
+            gpuPronta();
+            TalosGpuPreparation.markModelsWarmed(cartella, chiavi);
+            android.util.Log.i("TalosLlama", "GPU pronta in sottofondo: " + ms + " ms");
+            call.resolve(new JSObject().put("state", "prepared").put("ms", ms));
+        });
+    }
+
     /**
      * ⛔ Quanto si aspetta la chiusura pulita prima di procedere comunque.
      *
@@ -69,6 +173,14 @@ public class TalosLlamaPlugin extends Plugin {
      */
     private static final long CHIUSURA_MAX_MS = 1500L;
     private final AtomicReference<TalosLlamaEngine> openEngine = new AtomicReference<>(null);
+    /**
+     * ⛔ D13 (owner, 01/10/2026): «una copia sola». La prova dei motori si
+     * interrompe quando la persona scrive (`cancelQualification`), e il motore
+     * che sta misurando si ferma subito. Sul Pad la seconda copia del modello ha
+     * fatto chiudere l'app per memoria (LOW_MEMORY, OOM KILL, 11:13:13).
+     */
+    private final AtomicBoolean qualificationCancelled = new AtomicBoolean(false);
+    private final AtomicReference<TalosLlamaEngine> probeEngine = new AtomicReference<>(null);
     private final AtomicReference<String> openPath = new AtomicReference<>(null);
 
     /**
@@ -155,6 +267,65 @@ public class TalosLlamaPlugin extends Plugin {
         });
     }
 
+    /**
+     * ⛔ PKLA Qualcomm 2.1 b (owner, 01/10/2026) — registra l'accettazione delle
+     * condizioni del software Qualcomm e carica subito il modulo NPU, senza
+     * riavviare l'app. Accetta SOLO la versione in vigore: un testo diverso da
+     * quello approvato non accende niente.
+     */
+    @PluginMethod
+    public void acceptNpuTerms(PluginCall call) {
+        String version = call.getString("version", "");
+        String textSha256 = call.getString("textSha256", "");
+        String locale = call.getString("locale", "");
+        if (!TalosNpuTerms.VERSION.equals(version) || textSha256 == null || textSha256.isEmpty()) {
+            call.reject("TALOS_NPU_TERMS_VERSION_MISMATCH");
+            return;
+        }
+        android.content.Context context = getContext();
+        String appVersion = "";
+        try {
+            appVersion = context.getPackageManager().getPackageInfo(context.getPackageName(), 0).versionName;
+        } catch (Exception ignota) {
+            // Il registro resta valido: la versione dell'app è un dettaglio, non la prova.
+        }
+        TalosNpuTerms.Record record = new TalosNpuTerms.Record(
+                version, textSha256, locale, appVersion == null ? "" : appVersion, System.currentTimeMillis());
+        if (!TalosNpuTerms.accept(context, record)) {
+            call.reject("TALOS_NPU_TERMS_NOT_SAVED");
+            return;
+        }
+        worker.execute(() -> {
+            TalosLlamaNative.ensureReady(context);
+            boolean caricato = TalosLlamaNative.loadNpuModule(context.getApplicationInfo().nativeLibraryDir);
+            JSObject result = new JSObject();
+            result.put("accepted", true);
+            result.put("loaded", caricato);
+            result.put("acceptedAtMs", record.acceptedAtMs);
+            call.resolve(result);
+        });
+    }
+
+    /**
+     * Ritira il consenso. Da qui l'NPU non si apre e non si prova più; il modulo
+     * già caricato esce dal registro al prossimo avvio (ggml non scarica).
+     */
+    @PluginMethod
+    public void withdrawNpuTerms(PluginCall call) {
+        boolean ok = TalosNpuTerms.withdraw(getContext());
+        JSObject result = new JSObject();
+        result.put("withdrawn", ok);
+        call.resolve(result);
+    }
+
+    /** «Non ora» sulla proposta automatica delle condizioni NPU: non ricomparirà da sola. */
+    @PluginMethod
+    public void declineNpuTermsPrompt(PluginCall call) {
+        JSObject result = new JSObject();
+        result.put("declined", TalosNpuTerms.declinePrompt(getContext()));
+        call.resolve(result);
+    }
+
     /** Builds the availability snapshot on the executor that owns the engine. */
     private void availableOnActor(PluginCall call) {
         JSObject result = new JSObject();
@@ -162,6 +333,19 @@ public class TalosLlamaPlugin extends Plugin {
         // The registered ggml backends, verbatim. The interface may show them;
         // nothing here concludes anything from them — that is the arbiter's job.
         result.put("backends", TalosLlamaEngine.backends(getContext()));
+        // ⛔ PKLA Qualcomm 2.1 b: l'NPU c'è nell'APK ma resta fuori dal registro
+        // finché le condizioni non sono accettate. L'interfaccia deve poter dire
+        // «accetta le condizioni», non «qui non c'è».
+        JSObject npu = new JSObject();
+        npu.put("installed", TalosLlamaNative.npuModuleInstalled(getContext()));
+        npu.put("accepted", TalosNpuTerms.accepted(getContext()));
+        npu.put("termsVersion", TalosNpuTerms.VERSION);
+        npu.put("promptDeclined", TalosNpuTerms.promptDeclined(getContext()));
+        TalosNpuTerms.Record registrata = TalosNpuTerms.load(getContext());
+        if (registrata != null && TalosNpuTerms.allowsNpu(registrata, TalosNpuTerms.VERSION)) {
+            npu.put("acceptedAtMs", registrata.acceptedAtMs);
+        }
+        result.put("npu", npu);
         // La build del MOTORE: e' cio' che invalida un prefisso congelato, e
         // non cambia quando cambia l'app.
         if (TalosLlamaNative.AVAILABLE) {
@@ -427,6 +611,16 @@ public class TalosLlamaPlugin extends Plugin {
                 : (call.getData().has("gpuLayers")
                         ? "" : TalosBackendChoice.registryOf(arbitro));
         final String deviceName = call.getString("device", "");
+        /*
+         * ⛔ PKLA Qualcomm 2.1 b (owner, 01/10/2026): l'NPU si apre solo con le
+         * condizioni accettate. Il modulo, senza, non è nemmeno caricato; questo
+         * rifiuto dà a chi chiama un motivo preciso invece di un'apertura fallita.
+         */
+        if ((backendName.equalsIgnoreCase("HTP") || deviceName.toUpperCase(java.util.Locale.ROOT).startsWith("HTP"))
+                && !TalosNpuTerms.accepted(getContext())) {
+            call.reject("TALOS_NPU_TERMS_REQUIRED");
+            return;
+        }
         final String loadMode = call.getString("loadMode", "default");
         final Boolean repackChiesto = call.getBoolean("weightRepack", null);
         // Tri-stato: assente NON è «acceso». Solo così il predefinito resta
@@ -509,11 +703,27 @@ public class TalosLlamaPlugin extends Plugin {
                 // usare. Si chiude e si riapre tutto, sotto.
             }
             closeOpenModel();
-            TalosLlamaEngine.OpenAttempt attempt = TalosLlamaEngine.tryOpen(
-                    getContext(), path, threads, contextTokens, gpuLayers, deterministic,
-                    threadsBatch, microBatch, kvType, loadMode, weightRepack,
-                    backendName, deviceName);
+            // ⭐ Punto 2 — a cache vuota questa apertura compila i programmi della GPU: si dice, e una sola volta.
+            final boolean sullaGpu = "OpenCL".equals(backendName);
+            final boolean compilaQui = sullaGpu && gpuDaPreparare();
+            if (compilaQui) {
+                aspettaLaPreparazioneGpu();
+                gpuInPreparazione = true;
+            }
+            TalosLlamaEngine.OpenAttempt attempt;
+            try {
+                attempt = TalosLlamaEngine.tryOpen(
+                        getContext(), path, threads, contextTokens, gpuLayers, deterministic,
+                        threadsBatch, microBatch, kvType, loadMode, weightRepack,
+                        backendName, deviceName);
+            } finally {
+                if (compilaQui) {
+                    gpuInPreparazione = false;
+                    liberaLaGpu();
+                }
+            }
             TalosLlamaEngine engine = attempt.engine();
+            if (engine != null && sullaGpu) gpuPronta();
             if (engine == null) {
                 JSObject failure = new JSObject();
                 failure.put("stage", attempt.failureStage().wireValue());
@@ -613,7 +823,32 @@ public class TalosLlamaPlugin extends Plugin {
         }
         worker.execute(() -> {
             long inizio = System.nanoTime();
-            int token = engine.loadState(path);
+            /*
+             * ⛔ A3-REG-06 — su GPU OpenCL con cache q8_0 llama.cpp perde le
+             * scritture del ripristino e la risposta esce a vuoto: qui non si
+             * rilegge, si ricalcola (`TalosBackendChoice.prefixRestoreLosesWrites`).
+             * Si chiede al motore cosa ha DAVVERO aperto, non cosa era stato chiesto.
+             */
+            String dispositivo = null;
+            String cache = null;
+            String snapshotJson = engine.runtimeSnapshot();
+            if (snapshotJson != null) {
+                try {
+                    JSONObject snapshot = new JSONObject(snapshotJson);
+                    dispositivo = snapshot.isNull("backendDevice") ? null : snapshot.optString("backendDevice", null);
+                    cache = snapshot.optString("kvCacheType", null);
+                } catch (JSONException ignored) {
+                    // Snapshot illeggibile: si rilegge come sempre.
+                }
+            }
+            int token;
+            if (TalosBackendChoice.prefixRestoreLosesWrites(dispositivo, cache)) {
+                android.util.Log.i("TalosLlama", "prefisso congelato: NON ripristinato su " + dispositivo
+                        + " con cache " + cache + " (A3-REG-06: llama.cpp perde le scritture), si ricalcola");
+                token = 0;
+            } else {
+                token = engine.loadState(path);
+            }
             if (token > 0) {
                 /*
                  * ⛔ La data diventa quella di ULTIMO USO.
@@ -765,6 +1000,8 @@ public class TalosLlamaPlugin extends Plugin {
         JSObject result = new JSObject();
         result.put("permille", permille);
         result.put("loading", permille >= 0);
+        // ⭐ Punto 2 — la GPU sta compilando i suoi programmi (owner 01/10: riga onesta solo in quel caso).
+        result.put("gpuPreparing", gpuInPreparazione);
         call.resolve(result);
     }
 
@@ -1516,7 +1753,24 @@ public class TalosLlamaPlugin extends Plugin {
             call.reject("TALOS_LLAMA_UNAVAILABLE");
             return;
         }
+        // ⛔ Azzerato QUI, sul filo di chi chiama, e non dentro il lavoro: una
+        // richiesta di interruzione che arriva mentre la prova è ancora in coda
+        // non deve essere cancellata dalla partenza della prova stessa.
+        qualificationCancelled.set(false);
         qualificationWorker.execute(() -> call.resolve(runQualification(path)));
+    }
+
+    /**
+     * ⛔ D13 — la persona ha scritto: la prova si ferma, e la chat apre il suo
+     * modello senza una seconda copia in memoria. Risponde subito; chi chiama
+     * aspetta la fine di `qualifyBackend`, che a quel punto arriva presto.
+     */
+    @PluginMethod
+    public void cancelQualification(PluginCall call) {
+        qualificationCancelled.set(true);
+        TalosLlamaEngine engine = probeEngine.get();
+        if (engine != null) engine.cancel();
+        call.resolve(new JSObject().put("ok", true));
     }
 
     /**
@@ -1540,9 +1794,17 @@ public class TalosLlamaPlugin extends Plugin {
         }
         qualificationWorker.execute(() -> {
             android.content.Context context = getContext();
-            String modelSha256 = sha256Del(path);
+            /*
+             * ⭐ IL SIGILLO (01/10/2026): qui si apriva una chat e si rileggeva
+             * tutto il GGUF — 24-29 s sul Pad — solo per riconoscerlo. Adesso si
+             * confronta il sigillo ({@link TalosModelSeal}); se manca, NON si
+             * calcola sul momento: si risponde senza profili (si apre col motore
+             * suggerito dal formato) e il sigillo si fa in sottofondo, una volta.
+             */
+            String modelSha256 = TalosModelSeal.sealedSha256(context, new File(path));
             if (modelSha256 == null) {
-                call.resolve(new JSObject().put("profiles", new JSArray()));
+                sigillaInSottofondo(path);
+                call.resolve(new JSObject().put("profiles", new JSArray()).put("sealing", true));
                 return;
             }
             TalosLocalProfileIdentity identita =
@@ -1765,6 +2027,16 @@ public class TalosLlamaPlugin extends Plugin {
     }
 
     private JSObject runQualification(String path) {
+        // ⭐ Punto 2 — la prova compila anche lei i programmi della GPU: mai insieme alla precompilazione.
+        aspettaLaPreparazioneGpu();
+        try {
+            return runQualificationSottoSerratura(path);
+        } finally {
+            liberaLaGpu();
+        }
+    }
+
+    private JSObject runQualificationSottoSerratura(String path) {
         android.content.Context context = getContext();
         String driver = android.os.Build.FINGERPRINT;
         String thermal = TalosThermal.read(context);
@@ -1879,6 +2151,9 @@ public class TalosLlamaPlugin extends Plugin {
             // motori che hanno senso per lui, non solo sui due di prima.
             npuWanted = hexagonCompiled && formatoPerNpu(path);
         }
+        // ⛔ PKLA Qualcomm 2.1 b: senza condizioni accettate l'NPU non si prova.
+        boolean npuConsentita = TalosNpuTerms.accepted(getContext());
+        npuWanted = npuWanted && npuConsentita;
 
         // P0-2: UNA sola lettura del file per l'intera qualificazione — CPU e
         // GPU condividono lo stesso modello, e ricalcolare l'hash due volte
@@ -1887,7 +2162,7 @@ public class TalosLlamaPlugin extends Plugin {
         // qualificazione classica (TalosBackendEvidenceStore) non dipende da
         // questo e continua comunque.
         TalosLocalProfileIdentity identitaCorrente = null;
-        String modelSha256 = sha256Del(path);
+        String modelSha256 = impronta(path);
         if (modelSha256 != null) {
             identitaCorrente = TalosLocalProfileIdentity.current(modelSha256, new File(path).length());
         }
@@ -1907,7 +2182,7 @@ public class TalosLlamaPlugin extends Plugin {
         String cpuText = null;
         boolean cpuRecorded = false;
         boolean cpuInconclusive = false;
-        for (int attempt = 0; attempt < MAX_PROBE_ATTEMPTS && !cpuRecorded; attempt += 1) {
+        for (int attempt = 0; attempt < MAX_PROBE_ATTEMPTS && !cpuRecorded && !qualificationCancelled.get(); attempt += 1) {
             cpuRun = runOne(path, 0);
             if (cpuRun == null) break;
             cpuText = cpuRun.text;
@@ -1935,13 +2210,19 @@ public class TalosLlamaPlugin extends Plugin {
          * lascia scegliere llama.cpp») e nominava `HTP`. La stessa frase valeva
          * per la GPU, e nessuno l'aveva riletta guardando in su.
          */
+        /*
+         * ⛔ A3 (01/10/2026, owner D9): la GPU non aspetta più la CPU. Prima
+         * entrava solo con `cpuRecorded && referenceIsUsable(cpuText)`, e su
+         * Qwen3-4B Q4_K_M la CPU scadeva prima del primo token: GPU e NPU non
+         * venivano mai provate. Ora ognuno si giudica sul compito (contare).
+         */
         boolean gpuRecorded = false;
         boolean gpuInconclusive = false;
-        if (gpuWanted && cpuRecorded && TalosLlamaProbe.referenceIsUsable(cpuText)) {
-            for (int attempt = 0; attempt < MAX_PROBE_ATTEMPTS && !gpuRecorded; attempt += 1) {
+        if (gpuWanted) {
+            for (int attempt = 0; attempt < MAX_PROBE_ATTEMPTS && !gpuRecorded && !qualificationCancelled.get(); attempt += 1) {
                 ProbeRun gpuRun = runOneTargeted(path, "OpenCL");
                 if (gpuRun == null) break;
-                boolean gpuOk = TalosLlamaProbe.agreesWithReference(cpuText, gpuRun.text);
+                boolean gpuOk = TalosLlamaProbe.answerIsCorrect(gpuRun.text);
                 gpuRecorded = recordIfConclusive(
                         context, TalosBackendChoice.OPENCL, driver, gpuRun, gpuOk, identitaCorrente);
                 gpuInconclusive = !gpuRecorded;
@@ -1963,11 +2244,11 @@ public class TalosLlamaPlugin extends Plugin {
          */
         boolean npuRecorded = false;
         boolean npuInconclusive = false;
-        if (npuWanted && cpuRecorded && TalosLlamaProbe.referenceIsUsable(cpuText)) {
-            for (int attempt = 0; attempt < MAX_PROBE_ATTEMPTS && !npuRecorded; attempt += 1) {
+        if (npuWanted) {
+            for (int attempt = 0; attempt < MAX_PROBE_ATTEMPTS && !npuRecorded && !qualificationCancelled.get(); attempt += 1) {
                 ProbeRun npuRun = runOneTargeted(path, "HTP");
                 if (npuRun == null) break;
-                boolean npuOk = TalosLlamaProbe.agreesWithReference(cpuText, npuRun.text);
+                boolean npuOk = TalosLlamaProbe.answerIsCorrect(npuRun.text);
                 npuRecorded = recordIfConclusive(
                         context, TalosBackendChoice.HEXAGON, driver, npuRun, npuOk, identitaCorrente);
                 npuInconclusive = !npuRecorded;
@@ -1979,6 +2260,9 @@ public class TalosLlamaPlugin extends Plugin {
         TalosBackendChoice.Decision decision = TalosBackendChoice.choose(
                 driver, thermal, TalosBackendEvidenceStore.load(context),
                 formatoPerNpu(path));
+        // D13: interrotta dalla persona che scrive — chi chiama non annuncia
+        // un esito e non apre il vincente, la chat sta già aprendo il suo.
+        result.put("cancelled", qualificationCancelled.get());
         return result.put("ran", true)
                 .put("decisionBackend", decision.backend)
                 .put("decisionReason", decision.reason);
@@ -1995,20 +2279,14 @@ public class TalosLlamaPlugin extends Plugin {
     private static boolean profiloAssentePerQuestoModello(
             android.content.Context context, String path) {
         long dimensione = path == null ? 0L : new java.io.File(path).length();
-        if (dimensione <= 0L) return false;
-        for (TalosLocalProfile profilo : TalosLocalProfileStore.load(context)) {
-            if (profilo.identity == null || profilo.identity.modelBytes != dimensione) continue;
-            /*
-             * D-53 — un profilo SENZA la velocita' di lettura non basta piu'.
-             * Il selettore decide con tre termini (apertura + lettura +
-             * scrittura); un profilo scritto prima dell'11/09/2026 ne ha uno
-             * solo, e con quello sceglierebbe come prima. Non si cancella —
-             * vale ancora come prova di correttezza — ma conta come «manca»,
-             * cosi' il sondaggio lo rifa' e lo completa.
-             */
-            if (profilo.prefillTokPerSec > 0) return false;
-        }
-        return true;
+        /*
+         * D-53 — un profilo SENZA la velocita' di lettura non basta piu' (conta
+         * come «manca», cosi' il sondaggio lo rifa'). A3-REG-04 (01/10/2026):
+         * nemmeno quello lasciato da un tempo scaduto. La regola vive in
+         * `TalosLlamaProbe.profileMissingFor`, dove la JVM la prova.
+         */
+        return TalosLlamaProbe.profileMissingFor(
+                java.util.Arrays.asList(TalosLocalProfileStore.load(context)), dimensione);
     }
 
     /** Vero solo se QUESTA build ha davvero un dispositivo GPU registrato — mai dedotto dal nome del pacchetto. */
@@ -2069,8 +2347,9 @@ public class TalosLlamaPlugin extends Plugin {
      * </pre>
      *
      * ⛔ I numeri sono i valori di {@code general.file_type} nel GGUF, non
-     * nomi: 2 = Q4_0, 7 = Q8_0, 39 = MXFP4. Leggerli come numeri evita di
-     * dipendere da una tabella di stringhe che vive da un'altra parte.
+     * nomi; l'elenco vive in {@link TalosBackendChoice#npuAcceptsFileType}
+     * (01/10/2026: con llama.cpp b11312 anche Q4_K_M, e 38 = MXFP4 al posto
+     * del 39, che è NVFP4).
      *
      * ⛔ In dubbio, NO: un file che non dichiara il formato, un'intestazione
      * illeggibile, un motore assente — tutti no. Sbagliare in un verso spende
@@ -2084,7 +2363,7 @@ public class TalosLlamaPlugin extends Plugin {
             String json = TalosLlamaNative.nativeArchitectureOf(path);
             if (json == null) return false;
             int ftype = new JSONObject(json).optInt("fileType", -1);
-            return ftype == 2 || ftype == 7 || ftype == 39;
+            return TalosBackendChoice.npuAcceptsFileType(ftype);
         } catch (JSONException illeggibile) {
             return false;
         }
@@ -2107,7 +2386,11 @@ public class TalosLlamaPlugin extends Plugin {
         final long openMs = (System.nanoTime() - inizioApertura) / 1_000_000L;
         TalosLlamaEngine engine = attempt.engine();
         if (engine == null) return null;
+        // D13: interrompibile dal ponte; se l'interruzione è arrivata durante
+        // l'apertura, il motore si chiude subito invece di misurare.
+        probeEngine.set(engine);
         try {
+            if (qualificationCancelled.get()) return null;
             TalosLlamaEngine.Run run = engine.run(
                     TalosLlamaProbe.PROMPT, TalosLlamaProbe.TOKENS,
                     () -> TalosThermal.read(getContext()), TalosLlamaEngine.Mode.BENCHMARK);
@@ -2119,6 +2402,7 @@ public class TalosLlamaPlugin extends Plugin {
             Thread.currentThread().interrupt();
             return null;
         } finally {
+            probeEngine.compareAndSet(engine, null);
             engine.close();
         }
     }
@@ -2152,6 +2436,9 @@ public class TalosLlamaPlugin extends Plugin {
     private boolean recordIfConclusive(
             android.content.Context context, String backend, String driver,
             ProbeRun run, boolean answerCorrect, TalosLocalProfileIdentity identitaCorrente) {
+        // ⛔ D13: una corsa fermata perché la persona ha scritto non dice niente
+        // del motore — né buona né cattiva. Non si registra.
+        if (qualificationCancelled.get()) return false;
         TalosBenchmarkHarness.Result measured =
                 TalosBenchmarkHarness.judge(run.samples, answerCorrect, run.ttftMs);
         /*
@@ -2171,9 +2458,8 @@ public class TalosLlamaPlugin extends Plugin {
          * permanente. Si tratta come una corsa INSTABILE — non conclusiva, si
          * ritenta — che e' esattamente cio' che e'.
          */
-        boolean conclusive = measured.verdict == TalosBenchmarkHarness.Verdict.VALID
-                || measured.verdict == TalosBenchmarkHarness.Verdict.WRONG_ANSWER;
-        if (run.abortitaDalMotore) conclusive = false;
+        // ⛔ A3-REG-01 (01/10/2026): anche senza il primo token non è una prova.
+        boolean conclusive = TalosLlamaProbe.isConclusive(measured, run.ttftMs, run.abortitaDalMotore);
         // ⛔ Il dump di OGNI campione va in logcat SOLO quando il verdetto non
         // è duraturo: è la corsa strumentata il 21/8 che ha trovato il divario
         // di tempo zero in TalosLlamaEngine — sul percorso felice (VALID sul
@@ -2224,6 +2510,33 @@ public class TalosLlamaPlugin extends Plugin {
      * l'esadecimale minuscolo che produce è la stessa forma con cui
      * HuggingFace pubblica `lfs.oid`.
      */
+    /** Un solo calcolo pieno alla volta, fuori dalle code dell'apertura e della prova. */
+    private final ExecutorService sealWorker = Executors.newSingleThreadExecutor();
+    private final java.util.Set<String> sigilliInCorso = java.util.concurrent.ConcurrentHashMap.newKeySet();
+
+    /** L'impronta del modello: dal sigillo se vale, altrimenti calcolata ORA e sigillata. */
+    private String impronta(String path) {
+        android.content.Context context = getContext();
+        File file = new File(path);
+        String sigillata = TalosModelSeal.sealedSha256(context, file);
+        if (sigillata != null) return sigillata;
+        String calcolata = sha256Del(path);
+        if (calcolata != null) TalosModelSeal.seal(context, file, calcolata, "computed");
+        return calcolata;
+    }
+
+    /** Calcola e sigilla in sottofondo; un file alla volta, e mai due volte insieme. */
+    private void sigillaInSottofondo(String path) {
+        if (!sigilliInCorso.add(path)) return;
+        sealWorker.execute(() -> {
+            try {
+                impronta(path);
+            } finally {
+                sigilliInCorso.remove(path);
+            }
+        });
+    }
+
     private static String sha256Del(String path) {
         TalosResumableSha256 digest = new TalosResumableSha256();
         byte[] buffer = new byte[64 * 1024];
@@ -2276,7 +2589,10 @@ public class TalosLlamaPlugin extends Plugin {
         final long openMs = (System.nanoTime() - inizioApertura) / 1_000_000L;
         TalosLlamaEngine engine = attempt.engine();
         if (engine == null) return null;
+        // D13: interrompibile dal ponte (vedi `runOneTargeted`).
+        probeEngine.set(engine);
         try {
+            if (qualificationCancelled.get()) return null;
             TalosLlamaEngine.Run run = engine.run(
                     TalosLlamaProbe.PROMPT, TalosLlamaProbe.TOKENS,
                     () -> TalosThermal.read(getContext()), TalosLlamaEngine.Mode.BENCHMARK);
@@ -2291,6 +2607,7 @@ public class TalosLlamaPlugin extends Plugin {
             Thread.currentThread().interrupt();
             return null;
         } finally {
+            probeEngine.compareAndSet(engine, null);
             engine.close();
         }
     }

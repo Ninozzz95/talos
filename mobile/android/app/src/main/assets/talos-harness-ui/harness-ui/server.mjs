@@ -5,7 +5,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createAutomationScheduler } from './src/automation-scheduler.mjs';
 import { createAutomationStore } from './src/automation-store.mjs';
 import { createCampaignService } from './src/campaign-service.mjs';
-import { loadConfig } from './src/config.mjs';
+import { cartelleDiTalos, loadConfig } from './src/config.mjs';
 import { readCampaignCosts } from './src/cost-reader.mjs';
 import { elencaCartelleProgetto } from './src/custom-task.mjs';
 import { diagnosi } from './src/doctor.mjs';
@@ -15,6 +15,8 @@ import { createModelCatalog } from './src/model-catalog.mjs';
 import { createPathPolicy } from './src/path-policy.mjs';
 import { createReportSource } from './src/report-source.mjs';
 import { createSessionRegistry } from './src/session-registry.mjs';
+import { creaSegretoServer } from './src/server-secret.mjs';
+import { creaArchivioArtefatti } from './src/artifact-store.mjs';
 import { creaSpegnimento } from './src/spegnimento.mjs';
 import { createStaticHandler } from './src/static-files.mjs';
 import { listaTaskDisponibili } from './src/task-catalog.mjs';
@@ -34,9 +36,23 @@ async function startServer() {
    * per-richiesta con CONFIG_INVALID, dichiarato al chiamante, non un
    * server che non parte per chi vuole solo guardare le campagne.
    */
+  /*
+   * ⛔⛔ 70-B (30/09/2026 notte, owner «Riuso della chat»): gli artefatti su disco nella cartella di stato, fuori
+   * dall'albero rispinto a ogni avvio (stesso motivo di `sessions-store`); fuori dal ponte, accanto a questo file.
+   */
+  const archivioArtefatti = creaArchivioArtefatti({
+    cartella: join(config.cartellaStato ?? fileURLToPath(new URL('.', import.meta.url)), 'artifacts'),
+  });
+  // ⭐ CATALOGO-MODELLI (owner 25/09/2026, «Portare la rotta dal desktop»): il catalogo vero per il selettore del modello del Codice.
+  // ⭐ P4-ter (02/10/2026): creato PRIMA del registro, che ne legge la finestra di ogni modello per la compattazione.
+  const catalogoModelli = createModelCatalog();
   const sessionRegistry = createSessionRegistry({
+    salvaArtefattoFn: archivioArtefatti.salva,
     modello: config.modello,
     chiave: config.chiaveApi,
+    // ⭐ P4-ter: la finestra dal catalogo (null finché la copia non c'è: vale il tetto) e il tetto esplicito dall'ambiente.
+    finestraTokenFn: (idModello) => catalogoModelli.finestraDi(idModello),
+    tettoToken: config.tettoCompattazione,
     /*
      * ⭐⭐⭐ 03/9 — model-destination.mjs: le funzioni sono costruite QUI (non
      * dentro config.mjs, che resta dati puri) leggendo `config.chiaviProvider`/
@@ -50,6 +66,17 @@ async function startServer() {
       leggiRuntime: (fonte) => ({ endpoint: fonte === 'ollama' ? config.endpointOllama : null }),
     },
     cartelleProgetto: config.cartelleProgetto,
+    /*
+     * ⛔⛔ P4-quater (owner 02/10/2026, «+1 su Hermes»): l'area che il Codice non legge né scrive. La radice del server è
+     * la cartella sopra `harness-ui/` (sul Pad `/data/local/tmp/talos/AVM`), quella del kernel la sua sorella `AVM-harness`
+     * (lo stesso `../../../AVM-harness/` che `agent-service.mjs` importa), più lo stato e la cartella di node.
+     */
+    cartelleProtette: cartelleDiTalos({
+      cartellaStato: config.cartellaStato,
+      radiceServer: fileURLToPath(new URL('../', import.meta.url)),
+      radiceKernel: fileURLToPath(new URL('../../AVM-harness/', import.meta.url)),
+      eseguibile: process.execPath,
+    }),
     // ⭐ 30/8, Fase C (2/7) — SEMPRE presente (config.mjs, parseImmagine non torna mai undefined), stesso principio di modello/chiave qui sopra.
     immagine: config.immagine,
     /*
@@ -110,8 +137,15 @@ async function startServer() {
     store: automationStore,
     sessionRegistry,
   });
-  // ⭐ CATALOGO-MODELLI (owner 25/09/2026, «Portare la rotta dal desktop»): il catalogo vero per il selettore del modello del Codice.
-  const catalogoModelli = createModelCatalog();
+  /*
+   * ⛔⛔ 70-A (30/09/2026, owner: «Lo crea il server») — il segreto nasce qui a ogni avvio, nella cartella di stato che
+   * il ponte Android passa (`TALOS_HARNESS_UI_STATE_DIR`, fuori dall'albero rispinto) e dove `TalosTerminalPlugin`
+   * lo legge (`FILE_SEGRETO_REMOTO`). Fuori dal ponte (dev locale) resta accanto a questo file, come gli altri dati.
+   * Se non si può scrivere, il server non parte: senza segreto l'API rifiuterebbe comunque tutto. Mai stampato.
+   */
+  const segreto = creaSegretoServer({
+    cartella: config.cartellaStato ?? fileURLToPath(new URL('.', import.meta.url)),
+  });
   const app = createHttpApp({
     campaignService,
     staticHandler: createStaticHandler(config.publicDir),
@@ -122,6 +156,8 @@ async function startServer() {
     automationStore,
     cartelleFrequentiFn: cartelleFrequenti,
     catalogoModelliFn: (opzioni) => catalogoModelli.ottieni(opzioni),
+    segreto,
+    leggiArtefattoFn: archivioArtefatti.leggi,
   });
   const server = createServer(app);
 

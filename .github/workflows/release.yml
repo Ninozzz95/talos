@@ -254,12 +254,43 @@ jobs:
             echo "keyPassword=$KEY_PASSWORD"
           } > keystore.properties
 
+      # ⛔⛔ L'NPU QUALCOMM, dal file cifrato — owner 01/10 «NPU nella release adesso», 02/10 «File segreto della CI».
+      #
+      # Il registro di conformità (PKLA 8.2) dice «nessun file dell'SDK nel repository; i binari solo dentro l'APK»: qui
+      # non c'è nessun binario, c'è il file CIFRATO (`android/npu-hexagon.tar.gz.gpg`) e l'elenco delle impronte
+      # (`android/npu-hexagon.sha256`). La passphrase è un segreto di GitHub (un segreto non può superare 48 KB, i binari
+      # sono 8,7 MB: è il modo che GitHub stesso documenta per i file grandi).
+      #
+      # ⛔ SE IL SEGRETO MANCA LA RELEASE SI FERMA. Spedire in silenzio un APK senza NPU sarebbe il contrario della
+      # decisione dell'owner, e un tag non si sposta.
+      - id: npu
+        name: l'NPU Qualcomm — decifra i binari e controlla le impronte
+        working-directory: ${{ steps.dove.outputs.dir }}
+        env:
+          NPU_PASSPHRASE: ${{ secrets.TALOS_NPU_PASSPHRASE }}
+        run: |
+          set -euo pipefail
+          if [ -z "$NPU_PASSPHRASE" ]; then
+            echo "::error::manca il segreto TALOS_NPU_PASSPHRASE: senza, la release uscirebbe senza NPU. Impostalo (gh secret set TALOS_NPU_PASSPHRASE) e rilancia."
+            exit 1
+          fi
+          destinazione="$RUNNER_TEMP/npu-hexagon"
+          mkdir -p "$destinazione"
+          umask 077
+          printf '%s' "$NPU_PASSPHRASE" > "$RUNNER_TEMP/npu-passphrase"
+          gpg --batch --pinentry-mode loopback --passphrase-file "$RUNNER_TEMP/npu-passphrase" \
+            --decrypt android/npu-hexagon.tar.gz.gpg | tar -xz -C "$destinazione"
+          rm -f "$RUNNER_TEMP/npu-passphrase"
+          (cd "$destinazione" && sha256sum -c "$GITHUB_WORKSPACE/${{ steps.dove.outputs.dir }}/android/npu-hexagon.sha256")
+          echo "dir=$destinazione" >> "$GITHUB_OUTPUT"
+
       - name: costruisci l'APK firmato
         working-directory: ${{ steps.dove.outputs.dir }}/android
         run: |
           ./gradlew assembleRelease --console=plain \
             -PtalosVersionName=${{ steps.versione.outputs.nome }} \
-            -PtalosVersionCode=${{ steps.versione.outputs.codice }}
+            -PtalosVersionCode=${{ steps.versione.outputs.codice }} \
+            -PtalosHexagonDir=${{ steps.npu.outputs.dir }}
 
       # ⛔ «Success» non basta: si guarda DENTRO l'APK. Un build che riesce con
       # la firma disattivata produce un artefatto che sembra buono e non lo è —
@@ -310,6 +341,15 @@ jobs:
           node scripts/verify-local-backend-artifact.mjs \
             "$GITHUB_WORKSPACE/${{ steps.apk.outputs.nome }}" \
             cpu,opencl
+
+      # ⛔ PKLA 3.9: i file dell'NPU escono dall'APK FIRMATO byte per byte come li ha prodotti l'SDK, e il modulo ARM esce
+      # col nome che ggml non carica da solo (`libtalos-npu-hexagon.so`), cioè solo dopo l'accettazione delle condizioni.
+      - name: ⛔ l'NPU è nell'APK, intatta e col nome giusto
+        working-directory: ${{ steps.dove.outputs.dir }}
+        run: |
+          node scripts/verify-npu-unmodified.mjs \
+            "$GITHUB_WORKSPACE/${{ steps.apk.outputs.nome }}" \
+            "${{ steps.npu.outputs.dir }}"
 
       # ⛔⛔⛔ CODICE (harness UI + terminale) NON SPARISCE DI NUOVO — 3/9,
       # dopo la v0.1.24: quelle due classi vivono in `main/` da oggi, ma

@@ -1,0 +1,2021 @@
+diff --git a/ggml/src/ggml-opencl/ggml-opencl.cpp b/ggml/src/ggml-opencl/ggml-opencl.cpp
+index 65e4555..b944ad7 100644
+--- a/ggml/src/ggml-opencl/ggml-opencl.cpp
++++ b/ggml/src/ggml-opencl/ggml-opencl.cpp
+@@ -642,6 +642,11 @@ struct ggml_backend_opencl_context {
+     bool kernels_loaded_argsort = false;
+     // rest of the kernels are currently always loaded in alloc_buffer.
+     bool kernels_loaded = false;
++    // TALOS 0002: kernels that only some architectures use (MoE, Qwen3-Next
++    // gated delta net, Mamba SSM) are compiled on first use, like argsort.
++    bool kernels_loaded_moe = false;
++    bool kernels_loaded_gdn = false;
++    bool kernels_loaded_ssm = false;
+ 
+     // checked between graph nodes so a caller can stop a run in progress,
+     // mirroring what the Metal backend already does between command buffers.
+@@ -1515,39 +1520,6 @@ static void load_cl_kernels(ggml_backend_opencl_context *backend_ctx) {
+         GGML_LOG_CONT(".");
+     }
+ 
+-    // add_id
+-    {
+-#ifdef GGML_OPENCL_EMBED_KERNELS
+-        const std::string kernel_src {
+-            #include "add_id.cl.h"
+-        };
+-#else
+-        const std::string kernel_src = read_file("add_id.cl");
+-#endif
+-        backend_ctx->program_add_id =
+-            build_program_from_source(backend_ctx, kernel_src.c_str(), compile_opts);
+-
+-        CL_CHECK((backend_ctx->kernel_add_id = clCreateKernel(backend_ctx->program_add_id, "kernel_add_id", &err), err));
+-        GGML_LOG_CONT(".");
+-    }
+-
+-    // moe_add_id_glu
+-    {
+-#ifdef GGML_OPENCL_EMBED_KERNELS
+-        const std::string kernel_src {
+-            #include "moe_add_id_glu.cl.h"
+-        };
+-#else
+-        const std::string kernel_src = read_file("moe_add_id_glu.cl");
+-#endif
+-        backend_ctx->program_moe_add_id_glu =
+-            build_program_from_source(backend_ctx, kernel_src.c_str(), compile_opts);
+-
+-        CL_CHECK((backend_ctx->kernel_add_id_add_id_swiglu_oai =
+-            clCreateKernel(backend_ctx->program_moe_add_id_glu, "kernel_add_id_add_id_swiglu_oai", &err), err));
+-        GGML_LOG_CONT(".");
+-    }
+-
+     // tri
+     {
+ #ifdef GGML_OPENCL_EMBED_KERNELS
+@@ -3465,352 +3437,112 @@ static void load_cl_kernels(ggml_backend_opencl_context *backend_ctx) {
+                 }
+     }
+ 
+-    // ssm_conv
++    // Adreno kernels
++#ifdef GGML_OPENCL_USE_ADRENO_KERNELS
++    // transpose
+     {
+ #ifdef GGML_OPENCL_EMBED_KERNELS
+         const std::string kernel_src {
+-            #include "ssm_conv.cl.h"
++            #include "transpose.cl.h"
+         };
+ #else
+-        const std::string kernel_src = read_file("ssm_conv.cl");
++        const std::string kernel_src = read_file("transpose.cl");
+ #endif
+-        cl_program prog =
++        backend_ctx->program_transpose =
+             build_program_from_source(backend_ctx, kernel_src.c_str(), compile_opts);
+ 
+-        CL_CHECK((backend_ctx->kernel_ssm_conv_f32_f32   = clCreateKernel(prog, "kernel_ssm_conv_f32_f32", &err), err));
+-        CL_CHECK((backend_ctx->kernel_ssm_conv_f32_f32_4 = clCreateKernel(prog, "kernel_ssm_conv_f32_f32_4", &err), err));
+-        CL_CHECK(clReleaseProgram(prog));
++        CL_CHECK((backend_ctx->kernel_transpose_32_16 = clCreateKernel(backend_ctx->program_transpose, "kernel_transpose_32_16", &err), err));
++        CL_CHECK((backend_ctx->kernel_transpose_32    = clCreateKernel(backend_ctx->program_transpose, "kernel_transpose_32", &err), err));
++        CL_CHECK((backend_ctx->kernel_transpose_16    = clCreateKernel(backend_ctx->program_transpose, "kernel_transpose_16", &err), err));
++        CL_CHECK((backend_ctx->kernel_transpose_8_buf  = clCreateKernel(backend_ctx->program_transpose, "kernel_transpose_8_buf", &err), err));
++        CL_CHECK((backend_ctx->kernel_transpose_16_buf = clCreateKernel(backend_ctx->program_transpose, "kernel_transpose_16_buf", &err), err));
++        CL_CHECK((backend_ctx->kernel_transpose_32_buf = clCreateKernel(backend_ctx->program_transpose, "kernel_transpose_32_buf", &err), err));
++        CL_CHECK((backend_ctx->kernel_transpose_16_4x1 = clCreateKernel(backend_ctx->program_transpose, "kernel_transpose_16_4x1", &err), err));
+         GGML_LOG_CONT(".");
+     }
+ 
+-    // ssm_scan
++    // gemm_noshuffle_q1_0_f32
+     {
+ #ifdef GGML_OPENCL_EMBED_KERNELS
+         const std::string kernel_src {
+-            #include "ssm_scan.cl.h"
++            #include "gemm_noshuffle_q1_0_f32.cl.h"
+         };
+ #else
+-        const std::string kernel_src = read_file("ssm_scan.cl");
+-#endif
+-        cl_program prog =
+-            build_program_from_source(backend_ctx, kernel_src.c_str(), compile_opts);
+-
+-        CL_CHECK((backend_ctx->kernel_ssm_scan_f32 = clCreateKernel(prog, "kernel_ssm_scan_f32", &err), err));
+-        CL_CHECK((backend_ctx->kernel_ssm_scan_f32_mamba2_d128 = clCreateKernel(prog, "kernel_ssm_scan_f32_mamba2_d128", &err), err));
+-        CL_CHECK((backend_ctx->kernel_ssm_scan_f32_mamba2_d256 = clCreateKernel(prog, "kernel_ssm_scan_f32_mamba2_d256", &err), err));
+-
+-        cl_kernel * kernels[] = {
+-            &backend_ctx->kernel_ssm_scan_f32_mamba2_d128,
+-            &backend_ctx->kernel_ssm_scan_f32_mamba2_d256
+-        };
+-
+-        // specialized kernels use subgroups and assume subgroup size is 64,
+-        // if device does not support subgroups or subgroup size is not 64,
+-        // release these kernels
+-        for (int i = 0; i < 2; ++i) {
+-            size_t subgroup_size = 0;
+-#if CL_TARGET_OPENCL_VERSION >= 210
+-            const size_t local_work_size[] = { 64, 1 };
+-            const cl_int subgroup_err = clGetKernelSubGroupInfo(*kernels[i], backend_ctx->device, CL_KERNEL_MAX_SUB_GROUP_SIZE_FOR_NDRANGE,
+-                    sizeof(local_work_size), local_work_size, sizeof(subgroup_size), &subgroup_size, nullptr);
+-            if (subgroup_err != CL_SUCCESS) {
+-                subgroup_size = 0;
+-            }
++        const std::string kernel_src = read_file("gemm_noshuffle_q1_0_f32.cl");
+ #endif
+-            // The specialized kernels reduce over one 64-lane subgroup.
+-            if (subgroup_size != 64) {
+-                CL_CHECK(clReleaseKernel(*kernels[i]));
+-                *kernels[i] = nullptr;
+-            }
+-        }
++        cl_program prog = build_program_from_source(backend_ctx, kernel_src.c_str(), compile_opts);
++        CL_CHECK((backend_ctx->kernel_gemm_noshuffle_q1_0_f32 = clCreateKernel(prog, "kernel_gemm_noshuffle_q1_0_f32", &err), err));
+         CL_CHECK(clReleaseProgram(prog));
+         GGML_LOG_CONT(".");
+     }
+ 
+-    // gated_delta_net: one kernel per (S_V, KDA, tgpp) triple.
+-    {
+-    #ifdef GGML_OPENCL_EMBED_KERNELS
+-        const std::string kernel_src {
+-            #include "gated_delta_net.cl.h"
+-        };
+-    #else
+-        const std::string kernel_src = read_file("gated_delta_net.cl");
+-    #endif
+-
+-        const int gdn_sizes[4] = { 16, 32, 64, 128 };
+-        const int sg_size = backend_ctx->gpu_family == GPU_FAMILY::ADRENO ? 64 : backend_ctx->gpu_family == GPU_FAMILY::INTEL ? 32 : -1;
+-        if (sg_size < 0) {
+-            GGML_LOG_ERROR("Unsupported GPU Family: only Adreno and Intel are supported.\n");
+-            exit(1);
+-        }
+-
+-        for (int si = 0; si < 4; si++) {
+-            const int S_V = gdn_sizes[si];
+-
+-            // MUST match the dispatcher heuristic in ggml_cl_gated_delta_net exactly.
+-            int lanes_per_column;
+-            if (S_V >= 128) {
+-                lanes_per_column = 8;
+-            } else {
+-                lanes_per_column = std::min(S_V, sg_size);
+-            }
+-
+-            // Round LANES_PER_COLUMN down until it is:
+-            //  * power-of-two
+-            //  * divides both S_V and sg_size
+-            while (lanes_per_column > 1 &&
+-                    (((lanes_per_column & (lanes_per_column - 1)) != 0) ||
+-                    (S_V % lanes_per_column) != 0 ||
+-                    (sg_size % lanes_per_column) != 0)) {
+-                lanes_per_column >>= 1;
+-            }
+-
+-            GGML_ASSERT(lanes_per_column >= 1);
+-            GGML_ASSERT(((lanes_per_column & (lanes_per_column - 1)) == 0));
+-            GGML_ASSERT((S_V % lanes_per_column) == 0);
+-            GGML_ASSERT((sg_size % lanes_per_column) == 0);
+-
+-            const bool is_partial_reduce = (lanes_per_column != 1) && (lanes_per_column < sg_size);
+-            int use_qcom_shuffle = 0;
+-            if (is_partial_reduce) {
+-                if (backend_ctx->has_qcom_subgroup_shuffle) {
+-                    use_qcom_shuffle = 1;
+-                }
+-            }
+-            for (int kda = 0; kda < 2; kda++) {
+-                for (int tgpp = 0; tgpp < 2; tgpp++) {
+-                    const int cpl = (tgpp == 0) ? 1 : 4;
+-                    const int spw  = (tgpp == 0) ? 1 : 1;
+-
+-                    std::string opts = compile_opts;
+-                    opts += " -DS_V=" + std::to_string(S_V);
+-                    opts += " -DKDA=" + std::to_string(kda);
+-                    opts += " -DSUBGROUP_SIZE=" + std::to_string(sg_size);
+-                    opts += " -DLANES_PER_COLUMN=" + std::to_string(lanes_per_column);
+-                    opts += " -DCOLS_PER_LANE_GROUP=" + std::to_string(cpl);
+-                    opts += " -DUSE_QCOM_SUBGROUP_SHUFFLE=" + std::to_string(use_qcom_shuffle);
+-
+-                    // Since spw=1 is found to be optimal, SUBGROUPS_PER_WG > 1 code in
+-                    // the kernel is removed. If you want to experiment with spw > 1,
+-                    // Please remember to implement code to handle it.
+-                    opts += " -DSUBGROUPS_PER_WG=" + std::to_string(spw);
+-
+-                    cl_program prog = build_program_from_source(backend_ctx, kernel_src.c_str(), opts);
+-
+-                    CL_CHECK((backend_ctx->kernel_gated_delta_net_f32[si][kda][tgpp] =
+-                                clCreateKernel(prog, "kernel_gated_delta_net", &err), err));
+-                    CL_CHECK(clReleaseProgram(prog));
+-                }
+-            }
+-        }
+-        GGML_LOG_CONT(".");
+-    }
+-
+-    // moe_combine (fused router-weight mul + cross-expert sum)
++    // gemv_noshuffle_q1_0_f32
+     {
+-    #ifdef GGML_OPENCL_EMBED_KERNELS
+-        const std::string kernel_src {
+-            #include "moe_combine.cl.h"
+-        };
+-    #else
+-        const std::string kernel_src = read_file("moe_combine.cl");
+-    #endif
+-        cl_program prog = build_program_from_source(
+-            backend_ctx, kernel_src.c_str(), compile_opts);
+-        CL_CHECK((backend_ctx->kernel_moe_combine_f32 =
+-                    clCreateKernel(prog, "kernel_moe_combine_f32", &err), err));
+-        CL_CHECK((backend_ctx->kernel_moe_combine_bias_f32 =
+-                    clCreateKernel(prog, "kernel_moe_combine_bias_f32", &err), err));
+-        CL_CHECK(clReleaseProgram(prog));
+-        GGML_LOG_CONT(".");
+-    }
++        std::string CL_gemv_compile_opts = std::string("-cl-std=") + opencl_c_std +
++                                       " -cl-mad-enable "
++                                       " -DSIMDGROUP_WIDTH=" +
++                                       std::to_string(backend_ctx->adreno_wave_size);
+ 
+-    // mul_mv_id_q4_0_f32_8x_flat
+-    {
+ #ifdef GGML_OPENCL_EMBED_KERNELS
+-        const std::string kernel_src {
+-            #include "mul_mv_id_q4_0_f32_8x_flat.cl.h"
++        const std::string kernel_src_CL_gemv_general {
++            #include "gemv_noshuffle_q1_0_f32.cl.h"
+         };
+ #else
+-        const std::string kernel_src = read_file("mul_mv_id_q4_0_f32_8x_flat.cl");
++        const std::string kernel_src_CL_gemv_general = read_file("gemv_noshuffle_q1_0_f32.cl");
+ #endif
+-        backend_ctx->program_mul_mv_id_q4_0_f32_8x_flat =
+-            build_program_from_source(backend_ctx, kernel_src.c_str(), compile_opts);
+ 
+-        CL_CHECK((backend_ctx->kernel_mul_mv_id_q4_0_f32_8x_flat = clCreateKernel(backend_ctx->program_mul_mv_id_q4_0_f32_8x_flat, "kernel_mul_mv_id_q4_0_f32_8x_flat", &err), err));
++        cl_program prog = build_program_from_source(backend_ctx, kernel_src_CL_gemv_general.c_str(), CL_gemv_compile_opts);
++
++        CL_CHECK((backend_ctx->kernel_gemv_noshuffle_q1_0_f32 = clCreateKernel(prog, "kernel_gemv_noshuffle_q1_0_f32", &err), err));
++        CL_CHECK(clReleaseProgram(prog));
+         GGML_LOG_CONT(".");
+     }
+ 
+-    // mul_mv_id_q8_0_f32
++    // gemv_noshuffle_general
+     {
++        std::string CL_gemv_compile_opts = std::string("-cl-std=") + opencl_c_std +
++                                       " -cl-mad-enable "
++                                       " -DSIMDGROUP_WIDTH=" +
++                                       std::to_string(backend_ctx->adreno_wave_size);
++        if (backend_ctx->has_vector_subgroup_broadcast) {
++            CL_gemv_compile_opts += " -DVECTOR_SUB_GROUP_BROADCAST ";
++        }
++
+ #ifdef GGML_OPENCL_EMBED_KERNELS
+-        const std::string kernel_src {
+-            #include "mul_mv_id_q8_0_f32.cl.h"
++        const std::string kernel_src_CL_gemv_general {
++            #include "gemv_noshuffle_q4_0_f32.cl.h"
+         };
+ #else
+-        const std::string kernel_src = read_file("mul_mv_id_q8_0_f32.cl");
++        const std::string kernel_src_CL_gemv_general = read_file("gemv_noshuffle_q4_0_f32.cl");
+ #endif
+-        backend_ctx->program_mul_mv_id_q8_0_f32 =
+-            build_program_from_source(backend_ctx, kernel_src.c_str(), compile_opts);
+ 
+-        CL_CHECK((backend_ctx->kernel_mul_mv_id_q8_0_f32 = clCreateKernel(backend_ctx->program_mul_mv_id_q8_0_f32, "kernel_mul_mv_id_q8_0_f32", &err), err));
++        cl_program prog = build_program_from_source(backend_ctx, kernel_src_CL_gemv_general.c_str(), CL_gemv_compile_opts);
++
++        CL_CHECK((backend_ctx->kernel_gemv_noshuffle_q4_0_f32 = clCreateKernel(prog, "kernel_gemv_noshuffle_q4_0_f32", &err), err));
++        CL_CHECK((backend_ctx->kernel_gemv_noshuffle_q4_0_f32_mc3 = clCreateKernel(prog, "kernel_gemv_noshuffle_q4_0_f32_mc3", &err), err));
++        CL_CHECK(clReleaseProgram(prog));
+         GGML_LOG_CONT(".");
+     }
+ 
+-    // mul_mv_id_q8_0_f32_flat
++    // gemv_noshuffle
+     {
++        // Gemv 2048, 16384
++        std::string CL_gemv_compile_opts = std::string("-cl-std=") + opencl_c_std +
++            " -cl-mad-enable "
++            " -DLINE_STRIDE_A=2048 "
++            " -DBLOCK_STRIDE_A=16384 "
++            " -DSIMDGROUP_WIDTH=" +
++            std::to_string(backend_ctx->adreno_wave_size);
++        if (backend_ctx->has_vector_subgroup_broadcast) {
++            CL_gemv_compile_opts += " -DVECTOR_SUB_GROUP_BROADCAST ";
++        }
++
+ #ifdef GGML_OPENCL_EMBED_KERNELS
+-        const std::string kernel_src {
+-            #include "mul_mv_id_q8_0_f32_flat.cl.h"
++        const std::string kernel_src_CL_gemv {
++            #include "gemv_noshuffle_q4_0_f32_spec.cl.h"
+         };
+ #else
+-        const std::string kernel_src = read_file("mul_mv_id_q8_0_f32_flat.cl");
+-#endif
+-        backend_ctx->program_mul_mv_id_q8_0_f32_flat =
+-            build_program_from_source(backend_ctx, kernel_src.c_str(), compile_opts);
+-
+-        CL_CHECK((backend_ctx->kernel_mul_mv_id_q8_0_f32_flat = clCreateKernel(backend_ctx->program_mul_mv_id_q8_0_f32_flat, "kernel_mul_mv_id_q8_0_f32_flat", &err), err));
+-        GGML_LOG_CONT(".");
+-    }
+-
+-    // mul_mv_id_mxfp4_f32
+-    {
+-#ifdef GGML_OPENCL_EMBED_KERNELS
+-        const std::string kernel_src {
+-            #include "mul_mv_id_mxfp4_f32.cl.h"
+-        };
+-#else
+-        const std::string kernel_src = read_file("mul_mv_id_mxfp4_f32.cl");
+-#endif
+-        backend_ctx->program_mul_mv_id_mxfp4_f32 =
+-            build_program_from_source(backend_ctx, kernel_src.c_str(), compile_opts);
+-
+-        CL_CHECK((backend_ctx->kernel_mul_mv_id_mxfp4_f32 = clCreateKernel(backend_ctx->program_mul_mv_id_mxfp4_f32, "kernel_mul_mv_id_mxfp4_f32", &err), err));
+-        GGML_LOG_CONT(".");
+-    }
+-
+-    // mul_mv_id_mxfp4_f32_flat
+-    {
+-#ifdef GGML_OPENCL_EMBED_KERNELS
+-        const std::string kernel_src {
+-            #include "mul_mv_id_mxfp4_f32_flat.cl.h"
+-        };
+-#else
+-        const std::string kernel_src = read_file("mul_mv_id_mxfp4_f32_flat.cl");
+-#endif
+-        backend_ctx->program_mul_mv_id_mxfp4_f32_flat =
+-            build_program_from_source(backend_ctx, kernel_src.c_str(), compile_opts);
+-
+-        CL_CHECK((backend_ctx->kernel_mul_mv_id_mxfp4_f32_flat = clCreateKernel(backend_ctx->program_mul_mv_id_mxfp4_f32_flat, "kernel_mul_mv_id_mxfp4_f32_flat", &err), err));
+-        GGML_LOG_CONT(".");
+-    }
+-
+-    // Adreno kernels
+-#ifdef GGML_OPENCL_USE_ADRENO_KERNELS
+-    // transpose
+-    {
+-#ifdef GGML_OPENCL_EMBED_KERNELS
+-        const std::string kernel_src {
+-            #include "transpose.cl.h"
+-        };
+-#else
+-        const std::string kernel_src = read_file("transpose.cl");
+-#endif
+-        backend_ctx->program_transpose =
+-            build_program_from_source(backend_ctx, kernel_src.c_str(), compile_opts);
+-
+-        CL_CHECK((backend_ctx->kernel_transpose_32_16 = clCreateKernel(backend_ctx->program_transpose, "kernel_transpose_32_16", &err), err));
+-        CL_CHECK((backend_ctx->kernel_transpose_32    = clCreateKernel(backend_ctx->program_transpose, "kernel_transpose_32", &err), err));
+-        CL_CHECK((backend_ctx->kernel_transpose_16    = clCreateKernel(backend_ctx->program_transpose, "kernel_transpose_16", &err), err));
+-        CL_CHECK((backend_ctx->kernel_transpose_8_buf  = clCreateKernel(backend_ctx->program_transpose, "kernel_transpose_8_buf", &err), err));
+-        CL_CHECK((backend_ctx->kernel_transpose_16_buf = clCreateKernel(backend_ctx->program_transpose, "kernel_transpose_16_buf", &err), err));
+-        CL_CHECK((backend_ctx->kernel_transpose_32_buf = clCreateKernel(backend_ctx->program_transpose, "kernel_transpose_32_buf", &err), err));
+-        CL_CHECK((backend_ctx->kernel_transpose_16_4x1 = clCreateKernel(backend_ctx->program_transpose, "kernel_transpose_16_4x1", &err), err));
+-        GGML_LOG_CONT(".");
+-    }
+-
+-    // gemm_noshuffle_q1_0_f32
+-    {
+-#ifdef GGML_OPENCL_EMBED_KERNELS
+-        const std::string kernel_src {
+-            #include "gemm_noshuffle_q1_0_f32.cl.h"
+-        };
+-#else
+-        const std::string kernel_src = read_file("gemm_noshuffle_q1_0_f32.cl");
+-#endif
+-        cl_program prog = build_program_from_source(backend_ctx, kernel_src.c_str(), compile_opts);
+-        CL_CHECK((backend_ctx->kernel_gemm_noshuffle_q1_0_f32 = clCreateKernel(prog, "kernel_gemm_noshuffle_q1_0_f32", &err), err));
+-        CL_CHECK(clReleaseProgram(prog));
+-        GGML_LOG_CONT(".");
+-    }
+-
+-    // gemv_noshuffle_q1_0_f32
+-    {
+-        std::string CL_gemv_compile_opts = std::string("-cl-std=") + opencl_c_std +
+-                                       " -cl-mad-enable "
+-                                       " -DSIMDGROUP_WIDTH=" +
+-                                       std::to_string(backend_ctx->adreno_wave_size);
+-
+-#ifdef GGML_OPENCL_EMBED_KERNELS
+-        const std::string kernel_src_CL_gemv_general {
+-            #include "gemv_noshuffle_q1_0_f32.cl.h"
+-        };
+-#else
+-        const std::string kernel_src_CL_gemv_general = read_file("gemv_noshuffle_q1_0_f32.cl");
+-#endif
+-
+-        cl_program prog = build_program_from_source(backend_ctx, kernel_src_CL_gemv_general.c_str(), CL_gemv_compile_opts);
+-
+-        CL_CHECK((backend_ctx->kernel_gemv_noshuffle_q1_0_f32 = clCreateKernel(prog, "kernel_gemv_noshuffle_q1_0_f32", &err), err));
+-        CL_CHECK(clReleaseProgram(prog));
+-        GGML_LOG_CONT(".");
+-    }
+-
+-    // gemv_noshuffle_general
+-    {
+-        std::string CL_gemv_compile_opts = std::string("-cl-std=") + opencl_c_std +
+-                                       " -cl-mad-enable "
+-                                       " -DSIMDGROUP_WIDTH=" +
+-                                       std::to_string(backend_ctx->adreno_wave_size);
+-        if (backend_ctx->has_vector_subgroup_broadcast) {
+-            CL_gemv_compile_opts += " -DVECTOR_SUB_GROUP_BROADCAST ";
+-        }
+-
+-#ifdef GGML_OPENCL_EMBED_KERNELS
+-        const std::string kernel_src_CL_gemv_general {
+-            #include "gemv_noshuffle_q4_0_f32.cl.h"
+-        };
+-#else
+-        const std::string kernel_src_CL_gemv_general = read_file("gemv_noshuffle_q4_0_f32.cl");
+-#endif
+-
+-        cl_program prog = build_program_from_source(backend_ctx, kernel_src_CL_gemv_general.c_str(), CL_gemv_compile_opts);
+-
+-        CL_CHECK((backend_ctx->kernel_gemv_noshuffle_q4_0_f32 = clCreateKernel(prog, "kernel_gemv_noshuffle_q4_0_f32", &err), err));
+-        CL_CHECK((backend_ctx->kernel_gemv_noshuffle_q4_0_f32_mc3 = clCreateKernel(prog, "kernel_gemv_noshuffle_q4_0_f32_mc3", &err), err));
+-        CL_CHECK(clReleaseProgram(prog));
+-        GGML_LOG_CONT(".");
+-    }
+-
+-    // gemv_noshuffle
+-    {
+-        // Gemv 2048, 16384
+-        std::string CL_gemv_compile_opts = std::string("-cl-std=") + opencl_c_std +
+-            " -cl-mad-enable "
+-            " -DLINE_STRIDE_A=2048 "
+-            " -DBLOCK_STRIDE_A=16384 "
+-            " -DSIMDGROUP_WIDTH=" +
+-            std::to_string(backend_ctx->adreno_wave_size);
+-        if (backend_ctx->has_vector_subgroup_broadcast) {
+-            CL_gemv_compile_opts += " -DVECTOR_SUB_GROUP_BROADCAST ";
+-        }
+-
+-#ifdef GGML_OPENCL_EMBED_KERNELS
+-        const std::string kernel_src_CL_gemv {
+-            #include "gemv_noshuffle_q4_0_f32_spec.cl.h"
+-        };
+-#else
+-        const std::string kernel_src_CL_gemv = read_file("gemv_noshuffle_q4_0_f32_spec.cl");
++        const std::string kernel_src_CL_gemv = read_file("gemv_noshuffle_q4_0_f32_spec.cl");
+ #endif
+ 
+         cl_program prog = build_program_from_source(backend_ctx, kernel_src_CL_gemv.c_str(), CL_gemv_compile_opts);
+@@ -4534,808 +4266,1128 @@ static void load_cl_kernels(ggml_backend_opencl_context *backend_ctx) {
+             " -cl-mad-enable "
+             " -cl-fast-relaxed-math";
+ 
+-    // gemv_moe_q4_1_f32_ns
++    // gemv_noshuffle_q6_k_f32
+     {
+ #ifdef GGML_OPENCL_EMBED_KERNELS
+         const std::string kernel_src {
+-            #include "gemv_moe_q4_1_f32_ns.cl.h"
++            #include "gemv_noshuffle_q6_k_f32.cl.h"
+         };
+ #else
+-        const std::string kernel_src = read_file("gemv_moe_q4_1_f32_ns.cl");
++        const std::string kernel_src = read_file("gemv_noshuffle_q6_k_f32.cl");
+ #endif
+-        cl_program prog = build_program_from_source(backend_ctx, kernel_src.c_str(), CL_moe_compile_opts);
+ 
+-        CL_CHECK((backend_ctx->kernel_gemv_moe_q4_1_f32_ns = clCreateKernel(prog, "kernel_gemv_moe_q4_1_f32_ns", &err), err));
+-        CL_CHECK(clReleaseProgram(prog));
++        std::string CL_gemv_compile_opts = std::string("-cl-std=") + opencl_c_std +
++                                       " -cl-mad-enable ";
++        if (backend_ctx->has_vector_subgroup_broadcast) {
++            CL_gemv_compile_opts += " -DVECTOR_SUB_GROUP_BROADCAT ";
++        }
++
++        cl_program prog =
++            build_program_from_source(backend_ctx, kernel_src.c_str(), CL_gemv_compile_opts);
++
++        CL_CHECK((backend_ctx->kernel_gemv_noshuffle_q6_K_f32 = clCreateKernel(prog, "kernel_gemv_noshuffle_q6_K_f32", &err), err));
++        CL_CHECK((backend_ctx->kernel_gemv_noshuffle_q6_K_f32_mc3 = clCreateKernel(prog, "kernel_gemv_noshuffle_q6_K_f32_mc3", &err), err));
++        if (getenv("GGML_OPENCL_MC3_PROBE")) {
++            cl_ulong pm6 = 0, pm4 = 0; size_t wg6 = 0, wg4 = 0, mult = 0;
++            clGetKernelWorkGroupInfo(backend_ctx->kernel_gemv_noshuffle_q6_K_f32_mc3, backend_ctx->device, CL_KERNEL_PRIVATE_MEM_SIZE, sizeof(pm6), &pm6, NULL);
++            clGetKernelWorkGroupInfo(backend_ctx->kernel_gemv_noshuffle_q6_K_f32_mc3, backend_ctx->device, CL_KERNEL_WORK_GROUP_SIZE, sizeof(wg6), &wg6, NULL);
++            clGetKernelWorkGroupInfo(backend_ctx->kernel_gemv_noshuffle_q4_k_f32_mc3, backend_ctx->device, CL_KERNEL_PRIVATE_MEM_SIZE, sizeof(pm4), &pm4, NULL);
++            clGetKernelWorkGroupInfo(backend_ctx->kernel_gemv_noshuffle_q4_k_f32_mc3, backend_ctx->device, CL_KERNEL_WORK_GROUP_SIZE, sizeof(wg4), &wg4, NULL);
++            clGetKernelWorkGroupInfo(backend_ctx->kernel_gemv_noshuffle_q6_K_f32_mc3, backend_ctx->device, CL_KERNEL_PREFERRED_WORK_GROUP_SIZE_MULTIPLE, sizeof(mult), &mult, NULL);
++            fprintf(stderr, "[MC3-PROBE] q4K_mc3 private=%llu wg_cap=%zu | q6K_mc3 private=%llu wg_cap=%zu | pref_mult=%zu\n",
++                          (unsigned long long)pm4, wg4, (unsigned long long)pm6, wg6, mult);
++            fflush(stderr);
++        }
+         GGML_LOG_CONT(".");
+     }
+ 
+-    // gemm_moe_q4_1_f32_ns
++    // gemv_noshuffle_q6_k_f32_o4 — 4-output-per-WI variant, opt-in via
++    // GGML_OPENCL_Q6K_GEMV_O4=1 (~3x fewer dispatches on long-vocab lm_head).
+     {
+ #ifdef GGML_OPENCL_EMBED_KERNELS
+         const std::string kernel_src {
+-            #include "gemm_moe_q4_1_f32_ns.cl.h"
++            #include "gemv_noshuffle_q6_k_f32_o4.cl.h"
+         };
+ #else
+-        const std::string kernel_src = read_file("gemm_moe_q4_1_f32_ns.cl");
++        const std::string kernel_src = read_file("gemv_noshuffle_q6_k_f32_o4.cl");
+ #endif
+-        cl_program prog = build_program_from_source(backend_ctx, kernel_src.c_str(), CL_moe_compile_opts);
+ 
+-        CL_CHECK((backend_ctx->kernel_gemm_moe_q4_1_f32_ns = clCreateKernel(prog, "kernel_gemm_moe_q4_1_f32_ns", &err), err));
+-        CL_CHECK(clReleaseProgram(prog));
+-        GGML_LOG_CONT(".");
+-    }
++        std::string CL_gemv_compile_opts = std::string("-cl-std=") + opencl_c_std +
++                                       " -cl-mad-enable ";
++        if (backend_ctx->has_vector_subgroup_broadcast) {
++            CL_gemv_compile_opts += " -DVECTOR_SUB_GROUP_BROADCAT ";
++        }
+ 
+-    // gemm_moe_q4_1_f32_ns_bin
+-    {
+-        size_t bin_size = 0;
+-        backend_ctx->kernel_gemm_moe_q4_1_f32_ns_bin = nullptr;
++        cl_program prog =
++            build_program_from_source(backend_ctx, kernel_src.c_str(), CL_gemv_compile_opts);
+ 
+-        if (use_adreno_bin_kernels(backend_ctx)) {
+-            const char * kernel_bin = (const char *)backend_ctx->get_adreno_bin_kernel("gemm_moe_q4_1_f32_ns_ila", &bin_size);
+-            if (kernel_bin && bin_size > 0) {
+-                cl_program prog =
+-                    build_program_from_binary(backend_ctx->context, backend_ctx->device, kernel_bin, CL_moe_compile_opts, bin_size);
++        CL_CHECK((backend_ctx->kernel_gemv_noshuffle_q6_K_f32_o4 = clCreateKernel(prog, "kernel_gemv_noshuffle_q6_K_f32_o4", &err), err));
++        CL_CHECK(clReleaseProgram(prog));
+ 
+-                CL_CHECK((backend_ctx->kernel_gemm_moe_q4_1_f32_ns_bin = clCreateKernel(prog, "kernel_gemm_moe_q4_1_f32_ns_ila", &err), err));
+-                CL_CHECK(clReleaseProgram(prog));
+-                GGML_LOG_CONT(".");
+-            }
+-        }
++        // Global-read variant: weights read from __global coalesced instead of
++        // image1d_buffer (the texture cache caps the streaming lm_head read
++        // bandwidth). Opt-in via GGML_OPENCL_Q6K_GEMV_O4_GLOBAL.
++        cl_program prog_g = build_program_from_source(backend_ctx, kernel_src.c_str(), CL_gemv_compile_opts + " -DQ6K_O4_GLOBAL");
++        CL_CHECK((backend_ctx->kernel_gemv_noshuffle_q6_K_f32_o4_global =
++            clCreateKernel(prog_g, "kernel_gemv_noshuffle_q6_K_f32_o4_global", &err), err));
++        CL_CHECK(clReleaseProgram(prog_g));
++        GGML_LOG_CONT(".");
+     }
+ 
+-    // gemv_moe_mxfp4_f32
++    // gemv_noshuffle_q6_k_f32_tiled — tiled-wide canonical layout, default ON
++    // (opt out: GGML_OPENCL_Q6K_GEMV_TILED=0; separate convert + GEMV; weights via __global).
+     {
+ #ifdef GGML_OPENCL_EMBED_KERNELS
+         const std::string kernel_src {
+-            #include "gemv_moe_mxfp4_f32.cl.h"
++            #include "gemv_noshuffle_q6_k_f32_tiled.cl.h"
+         };
+ #else
+-        const std::string kernel_src = read_file("gemv_moe_mxfp4_f32.cl");
++        const std::string kernel_src = read_file("gemv_noshuffle_q6_k_f32_tiled.cl");
+ #endif
+-        backend_ctx->program_gemv_moe_mxfp4_f32 =
+-            build_program_from_source(backend_ctx, kernel_src.c_str(), CL_moe_compile_opts);
+-
+-        CL_CHECK((backend_ctx->kernel_gemv_moe_mxfp4_f32 = clCreateKernel(backend_ctx->program_gemv_moe_mxfp4_f32, "kernel_gemv_moe_mxfp4_f32", &err), err));
++        std::string compile_opts = std::string("-cl-std=") + opencl_c_std + " -cl-mad-enable ";
++        cl_program prog =
++            build_program_from_source(backend_ctx, kernel_src.c_str(), compile_opts);
++        CL_CHECK((backend_ctx->kernel_gemv_noshuffle_q6_K_f32_tiled =
++            clCreateKernel(prog, "kernel_gemv_noshuffle_q6_K_f32_tiled", &err), err));
++        CL_CHECK((backend_ctx->kernel_gemv_noshuffle_q6_K_f32_tiled_mc3 =
++            clCreateKernel(prog, "kernel_gemv_noshuffle_q6_K_f32_tiled_mc3", &err), err));
++        CL_CHECK(clReleaseProgram(prog));
+         GGML_LOG_CONT(".");
+     }
+ 
+-    // gemm_moe_mxfp4_f32
++    // gemm_noshuffle_q6_k_f32_tiled — batched (N>1) GEMM over the same tiled-wide
++    // canonical layout, so batched lm_head/embed stays correct + on GPU.
+     {
+ #ifdef GGML_OPENCL_EMBED_KERNELS
+         const std::string kernel_src {
+-            #include "gemm_moe_mxfp4_f32.cl.h"
++            #include "gemm_noshuffle_q6_k_f32_tiled.cl.h"
+         };
+ #else
+-        const std::string kernel_src = read_file("gemm_moe_mxfp4_f32.cl");
++        const std::string kernel_src = read_file("gemm_noshuffle_q6_k_f32_tiled.cl");
+ #endif
+-        backend_ctx->program_gemm_moe_mxfp4_f32 =
+-            build_program_from_source(backend_ctx, kernel_src.c_str(), CL_moe_compile_opts);
+-
+-        CL_CHECK((backend_ctx->kernel_gemm_moe_mxfp4_f32 = clCreateKernel(backend_ctx->program_gemm_moe_mxfp4_f32, "kernel_gemm_moe_mxfp4_f32", &err), err));
++        std::string compile_opts = std::string("-cl-std=") + opencl_c_std + " -cl-mad-enable ";
++        cl_program prog =
++            build_program_from_source(backend_ctx, kernel_src.c_str(), compile_opts);
++        CL_CHECK((backend_ctx->kernel_gemm_noshuffle_q6_K_f32_tiled =
++            clCreateKernel(prog, "kernel_gemm_noshuffle_q6_K_f32_tiled", &err), err));
++        CL_CHECK(clReleaseProgram(prog));
+         GGML_LOG_CONT(".");
+     }
+ 
+-    // gemv_moe_q4_0_f32_ns
++    // gemm_noshuffle_q6_k_f32
+     {
+ #ifdef GGML_OPENCL_EMBED_KERNELS
+         const std::string kernel_src {
+-            #include "gemv_moe_q4_0_f32_ns.cl.h"
++            #include "gemm_noshuffle_q6_k_f32.cl.h"
+         };
+ #else
+-        const std::string kernel_src = read_file("gemv_moe_q4_0_f32_ns.cl");
++        const std::string kernel_src = read_file("gemm_noshuffle_q6_k_f32.cl");
+ #endif
+         cl_program prog =
+             build_program_from_source(backend_ctx, kernel_src.c_str(), CL_moe_compile_opts);
+ 
+-        CL_CHECK((backend_ctx->kernel_gemv_moe_q4_0_f32_ns = clCreateKernel(prog, "kernel_gemv_moe_q4_0_f32_ns", &err), err));
++        CL_CHECK((backend_ctx->kernel_gemm_noshuffle_q6_K_f32 = clCreateKernel(prog, "kernel_gemm_noshuffle_q6_K_f32", &err), err));
++        CL_CHECK((backend_ctx->kernel_gemm_noshuffle_q6_K_f32_cok = clCreateKernel(prog, "kernel_gemm_noshuffle_q6_K_f32_cok", &err), err));
++        GGML_LOG_CONT(".");
++    }
++
++    // gemv_noshuffle_q5_k_f32
++    {
++        std::string CL_gemv_compile_opts = std::string("-cl-std=") + opencl_c_std +
++                                       " -cl-mad-enable ";
++        if (backend_ctx->has_vector_subgroup_broadcast) {
++            CL_gemv_compile_opts += " -DVECTOR_SUB_GROUP_BROADCAST ";
++        }
++
++#ifdef GGML_OPENCL_EMBED_KERNELS
++        const std::string kernel_src {
++            #include "gemv_noshuffle_q5_k_f32.cl.h"
++        };
++#else
++        const std::string kernel_src = read_file("gemv_noshuffle_q5_k_f32.cl");
++#endif
++
++        cl_program prog = build_program_from_source(backend_ctx, kernel_src.c_str(), CL_gemv_compile_opts);
++
++        CL_CHECK((backend_ctx->kernel_gemv_noshuffle_q5_k_f32 = clCreateKernel(prog, "kernel_gemv_noshuffle_q5_k_f32", &err), err));
++        CL_CHECK((backend_ctx->kernel_gemv_noshuffle_q5_k_f32_mc3 = clCreateKernel(prog, "kernel_gemv_noshuffle_q5_k_f32_mc3", &err), err));
+         CL_CHECK(clReleaseProgram(prog));
+         GGML_LOG_CONT(".");
+     }
+ 
+-    // gemm_moe_q4_0_f32_ns
++    // gemm_noshuffle_q5_k_f32
+     {
+ #ifdef GGML_OPENCL_EMBED_KERNELS
+         const std::string kernel_src {
+-            #include "gemm_moe_q4_0_f32_ns.cl.h"
++            #include "gemm_noshuffle_q5_k_f32.cl.h"
+         };
+ #else
+-        const std::string kernel_src = read_file("gemm_moe_q4_0_f32_ns.cl");
++        const std::string kernel_src = read_file("gemm_noshuffle_q5_k_f32.cl");
++#endif
++        cl_program prog = build_program_from_source(backend_ctx, kernel_src.c_str(), compile_opts);
++        CL_CHECK((backend_ctx->kernel_gemm_noshuffle_q5_k_f32 = clCreateKernel(prog, "kernel_gemm_noshuffle_q5_k_f32", &err), err));
++        CL_CHECK(clReleaseProgram(prog));
++        GGML_LOG_CONT(".");
++    }
++
++    // repack
++    {
++#ifdef GGML_OPENCL_EMBED_KERNELS
++        const std::string kernel_src {
++            #include "flash_attn_repack.cl.h"
++        };
++#else
++        const std::string kernel_src = read_file("flash_attn_repack.cl");
+ #endif
+         cl_program prog =
+-            build_program_from_source(backend_ctx, kernel_src.c_str(), CL_moe_compile_opts);
++            build_program_from_source(backend_ctx, kernel_src.c_str(), compile_opts);
+ 
+-        CL_CHECK((backend_ctx->kernel_gemm_moe_q4_0_f32_ns = clCreateKernel(prog, "kernel_gemm_moe_q4_0_f32_ns", &err), err));
+-        CL_CHECK(clReleaseProgram(prog));
++        CL_CHECK((backend_ctx->fa.kernel_repack_q_for_wmm = clCreateKernel(prog, "kernel_repack_q_for_wmm", &err), err));
++        CL_CHECK((backend_ctx->fa.kernel_repack_k_for_wmm = clCreateKernel(prog, "kernel_repack_k_for_wmm", &err), err));
++        CL_CHECK((backend_ctx->fa.kernel_repack_v_for_wmm = clCreateKernel(prog, "kernel_repack_v_for_wmm", &err), err));
++        CL_CHECK((backend_ctx->fa.kernel_repack_mask_for_wmm = clCreateKernel(prog, "kernel_repack_mask_for_wmm", &err), err));
+         GGML_LOG_CONT(".");
+     }
+ 
+-    // gemm_moe_q4_0_f32_ns_bin
++    // kernel_flash_attn_f32_f16_bin
+     {
+         size_t bin_size = 0;
+-        backend_ctx->kernel_gemm_moe_q4_0_f32_ns_bin = nullptr;
++        backend_ctx->fa.kernel_flash_attn_f32_f16_bin = nullptr;
+ 
+         if (use_adreno_bin_kernels(backend_ctx)) {
+-            const char * kernel_bin = (const char *)backend_ctx->get_adreno_bin_kernel("gemm_moe_q4_0_f32_ns_ila", &bin_size);
++            const char * kernel_bin = (const char *)backend_ctx->get_adreno_bin_kernel("flash_attn_f32_f16_wmm", &bin_size);
+             if (kernel_bin && bin_size > 0) {
+                 cl_program prog =
+                     build_program_from_binary(backend_ctx->context, backend_ctx->device, kernel_bin, CL_moe_compile_opts, bin_size);
+ 
+-                CL_CHECK((backend_ctx->kernel_gemm_moe_q4_0_f32_ns_bin = clCreateKernel(prog, "kernel_gemm_moe_q4_0_f32_ns_ila", &err), err));
++                CL_CHECK((backend_ctx->fa.kernel_flash_attn_f32_f16_bin = clCreateKernel(prog, "flash_attn_f32_f16", &err), err));
+                 CL_CHECK(clReleaseProgram(prog));
+                 GGML_LOG_CONT(".");
+             }
+         }
+     }
++#endif // GGML_OPENCL_USE_ADRENO_KERNELS
++    GGML_LOG_CONT("\n");
++    backend_ctx->kernels_loaded = true;
++}
+ 
+-    // gemm_moe_q8_0_f32_ns
++// TALOS 0002 (01/10/2026): load_cl_kernels compiled every program at the first
++// buffer allocation, ~53% of them for architectures the model may not have
++// (measured on Adreno 830 with a dense Q4_K_M model). These groups are
++// compiled on first use instead, following load_cl_kernels_argsort.
++
++static void load_cl_kernels_moe(ggml_backend_opencl_context *backend_ctx) {
++    if (backend_ctx->kernels_loaded_moe) {
++        return;
++    }
++    cl_int err;
++    const std::string compile_opts = backend_ctx->kernel_compile_opts;
++    auto opencl_c_std =
++        std::string("CL") + std::to_string(backend_ctx->opencl_c_version.major) + "." + std::to_string(backend_ctx->opencl_c_version.minor);
++    GGML_UNUSED(opencl_c_std);
++    // add_id
+     {
+ #ifdef GGML_OPENCL_EMBED_KERNELS
+         const std::string kernel_src {
+-            #include "gemm_moe_q8_0_f32_ns.cl.h"
++            #include "add_id.cl.h"
+         };
+ #else
+-        const std::string kernel_src = read_file("gemm_moe_q8_0_f32_ns.cl");
++        const std::string kernel_src = read_file("add_id.cl");
+ #endif
+-        cl_program prog =
+-            build_program_from_source(backend_ctx, kernel_src.c_str(), CL_moe_compile_opts);
++        backend_ctx->program_add_id =
++            build_program_from_source(backend_ctx, kernel_src.c_str(), compile_opts);
+ 
+-        CL_CHECK((backend_ctx->kernel_gemm_moe_q8_0_f32_ns = clCreateKernel(prog, "kernel_gemm_moe_q8_0_f32_ns", &err), err));
+-        CL_CHECK(clReleaseProgram(prog));
++        CL_CHECK((backend_ctx->kernel_add_id = clCreateKernel(backend_ctx->program_add_id, "kernel_add_id", &err), err));
+         GGML_LOG_CONT(".");
+     }
+ 
+-    // gemv_moe_q5_0_f32_ns
++    // moe_add_id_glu
+     {
+ #ifdef GGML_OPENCL_EMBED_KERNELS
+         const std::string kernel_src {
+-            #include "gemv_moe_q5_0_f32_ns.cl.h"
++            #include "moe_add_id_glu.cl.h"
+         };
+ #else
+-        const std::string kernel_src = read_file("gemv_moe_q5_0_f32_ns.cl");
++        const std::string kernel_src = read_file("moe_add_id_glu.cl");
+ #endif
+-        cl_program prog =
+-            build_program_from_source(backend_ctx, kernel_src.c_str(), CL_moe_compile_opts);
++        backend_ctx->program_moe_add_id_glu =
++            build_program_from_source(backend_ctx, kernel_src.c_str(), compile_opts);
+ 
+-        CL_CHECK((backend_ctx->kernel_gemv_moe_q5_0_f32_ns = clCreateKernel(prog, "kernel_gemv_moe_q5_0_f32_ns", &err), err));
++        CL_CHECK((backend_ctx->kernel_add_id_add_id_swiglu_oai =
++            clCreateKernel(backend_ctx->program_moe_add_id_glu, "kernel_add_id_add_id_swiglu_oai", &err), err));
++        GGML_LOG_CONT(".");
++    }
++
++    // moe_combine (fused router-weight mul + cross-expert sum)
++    {
++    #ifdef GGML_OPENCL_EMBED_KERNELS
++        const std::string kernel_src {
++            #include "moe_combine.cl.h"
++        };
++    #else
++        const std::string kernel_src = read_file("moe_combine.cl");
++    #endif
++        cl_program prog = build_program_from_source(
++            backend_ctx, kernel_src.c_str(), compile_opts);
++        CL_CHECK((backend_ctx->kernel_moe_combine_f32 =
++                    clCreateKernel(prog, "kernel_moe_combine_f32", &err), err));
++        CL_CHECK((backend_ctx->kernel_moe_combine_bias_f32 =
++                    clCreateKernel(prog, "kernel_moe_combine_bias_f32", &err), err));
+         CL_CHECK(clReleaseProgram(prog));
+         GGML_LOG_CONT(".");
+     }
+ 
+-    // gemm_moe_q5_0_f32_ns
++    // mul_mv_id_q4_0_f32_8x_flat
+     {
+ #ifdef GGML_OPENCL_EMBED_KERNELS
+         const std::string kernel_src {
+-            #include "gemm_moe_q5_0_f32_ns.cl.h"
++            #include "mul_mv_id_q4_0_f32_8x_flat.cl.h"
+         };
+ #else
+-        const std::string kernel_src = read_file("gemm_moe_q5_0_f32_ns.cl");
++        const std::string kernel_src = read_file("mul_mv_id_q4_0_f32_8x_flat.cl");
+ #endif
+-        cl_program prog =
+-            build_program_from_source(backend_ctx, kernel_src.c_str(), CL_moe_compile_opts);
++        backend_ctx->program_mul_mv_id_q4_0_f32_8x_flat =
++            build_program_from_source(backend_ctx, kernel_src.c_str(), compile_opts);
+ 
+-        CL_CHECK((backend_ctx->kernel_gemm_moe_q5_0_f32_ns = clCreateKernel(prog, "kernel_gemm_moe_q5_0_f32_ns", &err), err));
+-        CL_CHECK(clReleaseProgram(prog));
++        CL_CHECK((backend_ctx->kernel_mul_mv_id_q4_0_f32_8x_flat = clCreateKernel(backend_ctx->program_mul_mv_id_q4_0_f32_8x_flat, "kernel_mul_mv_id_q4_0_f32_8x_flat", &err), err));
+         GGML_LOG_CONT(".");
+     }
+ 
+-    // gemv_moe_q5_1_f32_ns
++    // mul_mv_id_q8_0_f32
+     {
+ #ifdef GGML_OPENCL_EMBED_KERNELS
+         const std::string kernel_src {
+-            #include "gemv_moe_q5_1_f32_ns.cl.h"
++            #include "mul_mv_id_q8_0_f32.cl.h"
+         };
+ #else
+-        const std::string kernel_src = read_file("gemv_moe_q5_1_f32_ns.cl");
++        const std::string kernel_src = read_file("mul_mv_id_q8_0_f32.cl");
+ #endif
+-        cl_program prog =
+-            build_program_from_source(backend_ctx, kernel_src.c_str(), CL_moe_compile_opts);
++        backend_ctx->program_mul_mv_id_q8_0_f32 =
++            build_program_from_source(backend_ctx, kernel_src.c_str(), compile_opts);
+ 
+-        CL_CHECK((backend_ctx->kernel_gemv_moe_q5_1_f32_ns = clCreateKernel(prog, "kernel_gemv_moe_q5_1_f32_ns", &err), err));
+-        CL_CHECK(clReleaseProgram(prog));
++        CL_CHECK((backend_ctx->kernel_mul_mv_id_q8_0_f32 = clCreateKernel(backend_ctx->program_mul_mv_id_q8_0_f32, "kernel_mul_mv_id_q8_0_f32", &err), err));
+         GGML_LOG_CONT(".");
+     }
+ 
+-    // gemm_moe_q5_1_f32_ns
++    // mul_mv_id_q8_0_f32_flat
+     {
+ #ifdef GGML_OPENCL_EMBED_KERNELS
+         const std::string kernel_src {
+-            #include "gemm_moe_q5_1_f32_ns.cl.h"
++            #include "mul_mv_id_q8_0_f32_flat.cl.h"
+         };
+ #else
+-        const std::string kernel_src = read_file("gemm_moe_q5_1_f32_ns.cl");
++        const std::string kernel_src = read_file("mul_mv_id_q8_0_f32_flat.cl");
+ #endif
+-        cl_program prog =
+-            build_program_from_source(backend_ctx, kernel_src.c_str(), CL_moe_compile_opts);
++        backend_ctx->program_mul_mv_id_q8_0_f32_flat =
++            build_program_from_source(backend_ctx, kernel_src.c_str(), compile_opts);
+ 
+-        CL_CHECK((backend_ctx->kernel_gemm_moe_q5_1_f32_ns = clCreateKernel(prog, "kernel_gemm_moe_q5_1_f32_ns", &err), err));
+-        CL_CHECK(clReleaseProgram(prog));
++        CL_CHECK((backend_ctx->kernel_mul_mv_id_q8_0_f32_flat = clCreateKernel(backend_ctx->program_mul_mv_id_q8_0_f32_flat, "kernel_mul_mv_id_q8_0_f32_flat", &err), err));
+         GGML_LOG_CONT(".");
+     }
+ 
+-    // gemv_moe_q4_k_f32_ns
++    // mul_mv_id_mxfp4_f32
+     {
+ #ifdef GGML_OPENCL_EMBED_KERNELS
+         const std::string kernel_src {
+-            #include "gemv_moe_q4_k_f32_ns.cl.h"
++            #include "mul_mv_id_mxfp4_f32.cl.h"
+         };
+ #else
+-        const std::string kernel_src = read_file("gemv_moe_q4_k_f32_ns.cl");
++        const std::string kernel_src = read_file("mul_mv_id_mxfp4_f32.cl");
+ #endif
+-        cl_program prog =
+-            build_program_from_source(backend_ctx, kernel_src.c_str(), CL_moe_compile_opts);
++        backend_ctx->program_mul_mv_id_mxfp4_f32 =
++            build_program_from_source(backend_ctx, kernel_src.c_str(), compile_opts);
+ 
+-        CL_CHECK((backend_ctx->kernel_gemv_moe_q4_k_f32_ns = clCreateKernel(prog, "kernel_gemv_moe_q4_k_f32_ns", &err), err));
+-        CL_CHECK((backend_ctx->kernel_gemv_moe_q4_k_f32_ns_wimg = clCreateKernel(prog, "kernel_gemv_moe_q4_k_f32_ns_wimg", &err), err));
+-        CL_CHECK(clReleaseProgram(prog));
++        CL_CHECK((backend_ctx->kernel_mul_mv_id_mxfp4_f32 = clCreateKernel(backend_ctx->program_mul_mv_id_mxfp4_f32, "kernel_mul_mv_id_mxfp4_f32", &err), err));
+         GGML_LOG_CONT(".");
+     }
+ 
+-    // gemm_moe_q4_k_f32_ns
++    // mul_mv_id_mxfp4_f32_flat
+     {
+ #ifdef GGML_OPENCL_EMBED_KERNELS
+         const std::string kernel_src {
+-            #include "gemm_moe_q4_k_f32_ns.cl.h"
++            #include "mul_mv_id_mxfp4_f32_flat.cl.h"
+         };
+ #else
+-        const std::string kernel_src = read_file("gemm_moe_q4_k_f32_ns.cl");
++        const std::string kernel_src = read_file("mul_mv_id_mxfp4_f32_flat.cl");
+ #endif
+-        cl_program prog =
+-            build_program_from_source(backend_ctx, kernel_src.c_str(), CL_moe_compile_opts);
++        backend_ctx->program_mul_mv_id_mxfp4_f32_flat =
++            build_program_from_source(backend_ctx, kernel_src.c_str(), compile_opts);
+ 
+-        CL_CHECK((backend_ctx->kernel_gemm_moe_q4_k_f32_ns = clCreateKernel(prog, "kernel_gemm_moe_q4_k_f32_ns", &err), err));
+-        CL_CHECK(clReleaseProgram(prog));
++        CL_CHECK((backend_ctx->kernel_mul_mv_id_mxfp4_f32_flat = clCreateKernel(backend_ctx->program_mul_mv_id_mxfp4_f32_flat, "kernel_mul_mv_id_mxfp4_f32_flat", &err), err));
+         GGML_LOG_CONT(".");
+     }
+ 
+-    // gemm_moe_q4_k_f32_ns_bin
+-    {
+-        size_t bin_size = 0;
+-        backend_ctx->kernel_gemm_moe_q4_k_f32_ns_bin = nullptr;
+-
+-        if (use_adreno_bin_kernels(backend_ctx)) {
+-            const char * kernel_bin = (const char *)backend_ctx->get_adreno_bin_kernel("gemm_moe_q4_k_f32_ns_ila", &bin_size);
+-            if (kernel_bin && bin_size > 0) {
+-                cl_program prog =
+-                    build_program_from_binary(backend_ctx->context, backend_ctx->device, kernel_bin, CL_moe_compile_opts, bin_size);
+-
+-                CL_CHECK((backend_ctx->kernel_gemm_moe_q4_k_f32_ns_bin = clCreateKernel(prog, "kernel_gemm_moe_q4_k_f32_ns_ila", &err), err));
+-                CL_CHECK(clReleaseProgram(prog));
+-                GGML_LOG_CONT(".");
+-            }
+-        }
+-    }
++#ifdef GGML_OPENCL_USE_ADRENO_KERNELS
++    std::string CL_moe_compile_opts = std::string("-cl-std=") + opencl_c_std +
++            " -cl-mad-enable "
++            " -cl-fast-relaxed-math";
+ 
+-    // gemm_moe_q4_k_q8_1_dp4a (dp4a prefill GEMM)
+-    if (backend_ctx->has_integer_dot) {
++    // gemv_moe_q4_1_f32_ns
++    {
+ #ifdef GGML_OPENCL_EMBED_KERNELS
+         const std::string kernel_src {
+-            #include "gemm_moe_q4_k_q8_1_dp4a.cl.h"
++            #include "gemv_moe_q4_1_f32_ns.cl.h"
+         };
+ #else
+-        const std::string kernel_src = read_file("gemm_moe_q4_k_q8_1_dp4a.cl");
++        const std::string kernel_src = read_file("gemv_moe_q4_1_f32_ns.cl");
+ #endif
+-        cl_program prog =
+-            build_program_from_source(backend_ctx, kernel_src.c_str(), CL_moe_compile_opts);
++        cl_program prog = build_program_from_source(backend_ctx, kernel_src.c_str(), CL_moe_compile_opts);
+ 
+-        CL_CHECK((backend_ctx->kernel_gemm_moe_q4_k_q8_1_dp4a = clCreateKernel(prog, "kernel_gemm_moe_q4_k_q8_1_dp4a", &err), err));
++        CL_CHECK((backend_ctx->kernel_gemv_moe_q4_1_f32_ns = clCreateKernel(prog, "kernel_gemv_moe_q4_1_f32_ns", &err), err));
+         CL_CHECK(clReleaseProgram(prog));
+         GGML_LOG_CONT(".");
+     }
+ 
+-    // gemm_moe_mxfp4_q8_1_dp4a (dp4a prefill GEMM)
+-    if (backend_ctx->has_integer_dot) {
++    // gemm_moe_q4_1_f32_ns
++    {
+ #ifdef GGML_OPENCL_EMBED_KERNELS
+         const std::string kernel_src {
+-            #include "gemm_moe_mxfp4_q8_1_dp4a.cl.h"
++            #include "gemm_moe_q4_1_f32_ns.cl.h"
+         };
+ #else
+-        const std::string kernel_src = read_file("gemm_moe_mxfp4_q8_1_dp4a.cl");
++        const std::string kernel_src = read_file("gemm_moe_q4_1_f32_ns.cl");
+ #endif
+-        cl_program prog =
+-            build_program_from_source(backend_ctx, kernel_src.c_str(), CL_moe_compile_opts);
++        cl_program prog = build_program_from_source(backend_ctx, kernel_src.c_str(), CL_moe_compile_opts);
+ 
+-        CL_CHECK((backend_ctx->kernel_gemm_moe_mxfp4_q8_1_dp4a = clCreateKernel(prog, "kernel_gemm_moe_mxfp4_q8_1_dp4a", &err), err));
++        CL_CHECK((backend_ctx->kernel_gemm_moe_q4_1_f32_ns = clCreateKernel(prog, "kernel_gemm_moe_q4_1_f32_ns", &err), err));
+         CL_CHECK(clReleaseProgram(prog));
+         GGML_LOG_CONT(".");
+     }
+ 
+-    // gemm_moe_mxfp4_q8_1_dp4a_bin (dp4a prefill GEMM)
+-    if (backend_ctx->has_integer_dot) {
++    // gemm_moe_q4_1_f32_ns_bin
++    {
+         size_t bin_size = 0;
+-        backend_ctx->kernel_gemm_moe_mxfp4_q8_1_dp4a_bin = nullptr;
++        backend_ctx->kernel_gemm_moe_q4_1_f32_ns_bin = nullptr;
+ 
+         if (use_adreno_bin_kernels(backend_ctx)) {
+-            const char * kernel_bin = (const char *)backend_ctx->get_adreno_bin_kernel("gemm_moe_mxfp4_q8_1_dp4a_ila", &bin_size);
++            const char * kernel_bin = (const char *)backend_ctx->get_adreno_bin_kernel("gemm_moe_q4_1_f32_ns_ila", &bin_size);
+             if (kernel_bin && bin_size > 0) {
+                 cl_program prog =
+                     build_program_from_binary(backend_ctx->context, backend_ctx->device, kernel_bin, CL_moe_compile_opts, bin_size);
+ 
+-                CL_CHECK((backend_ctx->kernel_gemm_moe_mxfp4_q8_1_dp4a_bin = clCreateKernel(prog, "kernel_gemm_moe_mxfp4_q8_1_dp4a_ila", &err), err));
++                CL_CHECK((backend_ctx->kernel_gemm_moe_q4_1_f32_ns_bin = clCreateKernel(prog, "kernel_gemm_moe_q4_1_f32_ns_ila", &err), err));
+                 CL_CHECK(clReleaseProgram(prog));
+                 GGML_LOG_CONT(".");
+             }
+         }
+     }
+ 
+-    // gemm_moe_q4_0_q8_1_dp4a (dp4a prefill GEMM)
+-    if (backend_ctx->has_integer_dot) {
++    // gemv_moe_mxfp4_f32
++    {
+ #ifdef GGML_OPENCL_EMBED_KERNELS
+         const std::string kernel_src {
+-            #include "gemm_moe_q4_0_q8_1_dp4a.cl.h"
++            #include "gemv_moe_mxfp4_f32.cl.h"
+         };
+ #else
+-        const std::string kernel_src = read_file("gemm_moe_q4_0_q8_1_dp4a.cl");
++        const std::string kernel_src = read_file("gemv_moe_mxfp4_f32.cl");
+ #endif
+-        cl_program prog =
++        backend_ctx->program_gemv_moe_mxfp4_f32 =
+             build_program_from_source(backend_ctx, kernel_src.c_str(), CL_moe_compile_opts);
+ 
+-        CL_CHECK((backend_ctx->kernel_gemm_moe_q4_0_q8_1_dp4a = clCreateKernel(prog, "kernel_gemm_moe_q4_0_q8_1_dp4a", &err), err));
+-        CL_CHECK(clReleaseProgram(prog));
++        CL_CHECK((backend_ctx->kernel_gemv_moe_mxfp4_f32 = clCreateKernel(backend_ctx->program_gemv_moe_mxfp4_f32, "kernel_gemv_moe_mxfp4_f32", &err), err));
+         GGML_LOG_CONT(".");
+     }
+ 
+-    // gemm_moe_q4_0_q8_1_dp4a_bin (dp4a prefill GEMM)
+-    if (backend_ctx->has_integer_dot) {
++    // gemm_moe_mxfp4_f32
++    {
++#ifdef GGML_OPENCL_EMBED_KERNELS
++        const std::string kernel_src {
++            #include "gemm_moe_mxfp4_f32.cl.h"
++        };
++#else
++        const std::string kernel_src = read_file("gemm_moe_mxfp4_f32.cl");
++#endif
++        backend_ctx->program_gemm_moe_mxfp4_f32 =
++            build_program_from_source(backend_ctx, kernel_src.c_str(), CL_moe_compile_opts);
++
++        CL_CHECK((backend_ctx->kernel_gemm_moe_mxfp4_f32 = clCreateKernel(backend_ctx->program_gemm_moe_mxfp4_f32, "kernel_gemm_moe_mxfp4_f32", &err), err));
++        GGML_LOG_CONT(".");
++    }
++
++    // gemv_moe_q4_0_f32_ns
++    {
++#ifdef GGML_OPENCL_EMBED_KERNELS
++        const std::string kernel_src {
++            #include "gemv_moe_q4_0_f32_ns.cl.h"
++        };
++#else
++        const std::string kernel_src = read_file("gemv_moe_q4_0_f32_ns.cl");
++#endif
++        cl_program prog =
++            build_program_from_source(backend_ctx, kernel_src.c_str(), CL_moe_compile_opts);
++
++        CL_CHECK((backend_ctx->kernel_gemv_moe_q4_0_f32_ns = clCreateKernel(prog, "kernel_gemv_moe_q4_0_f32_ns", &err), err));
++        CL_CHECK(clReleaseProgram(prog));
++        GGML_LOG_CONT(".");
++    }
++
++    // gemm_moe_q4_0_f32_ns
++    {
++#ifdef GGML_OPENCL_EMBED_KERNELS
++        const std::string kernel_src {
++            #include "gemm_moe_q4_0_f32_ns.cl.h"
++        };
++#else
++        const std::string kernel_src = read_file("gemm_moe_q4_0_f32_ns.cl");
++#endif
++        cl_program prog =
++            build_program_from_source(backend_ctx, kernel_src.c_str(), CL_moe_compile_opts);
++
++        CL_CHECK((backend_ctx->kernel_gemm_moe_q4_0_f32_ns = clCreateKernel(prog, "kernel_gemm_moe_q4_0_f32_ns", &err), err));
++        CL_CHECK(clReleaseProgram(prog));
++        GGML_LOG_CONT(".");
++    }
++
++    // gemm_moe_q4_0_f32_ns_bin
++    {
+         size_t bin_size = 0;
+-        backend_ctx->kernel_gemm_moe_q4_0_q8_1_dp4a_bin = nullptr;
++        backend_ctx->kernel_gemm_moe_q4_0_f32_ns_bin = nullptr;
+ 
+         if (use_adreno_bin_kernels(backend_ctx)) {
+-            const char * kernel_bin = (const char *)backend_ctx->get_adreno_bin_kernel("gemm_moe_q4_0_q8_1_dp4a_ila", &bin_size);
++            const char * kernel_bin = (const char *)backend_ctx->get_adreno_bin_kernel("gemm_moe_q4_0_f32_ns_ila", &bin_size);
+             if (kernel_bin && bin_size > 0) {
+                 cl_program prog =
+                     build_program_from_binary(backend_ctx->context, backend_ctx->device, kernel_bin, CL_moe_compile_opts, bin_size);
+ 
+-                CL_CHECK((backend_ctx->kernel_gemm_moe_q4_0_q8_1_dp4a_bin = clCreateKernel(prog, "kernel_gemm_moe_q4_0_q8_1_dp4a_ila", &err), err));
++                CL_CHECK((backend_ctx->kernel_gemm_moe_q4_0_f32_ns_bin = clCreateKernel(prog, "kernel_gemm_moe_q4_0_f32_ns_ila", &err), err));
+                 CL_CHECK(clReleaseProgram(prog));
+                 GGML_LOG_CONT(".");
+             }
+         }
+     }
+ 
+-    // gemm_moe_q8_1_dp4a (generic dp4a MoE GEMM; MOE_QT=80 -> q8_0 expert variant)
+-    if (backend_ctx->has_integer_dot) {
++    // gemm_moe_q8_0_f32_ns
++    {
+ #ifdef GGML_OPENCL_EMBED_KERNELS
+         const std::string kernel_src {
+-            #include "gemm_moe_q8_1_dp4a.cl.h"
++            #include "gemm_moe_q8_0_f32_ns.cl.h"
+         };
+ #else
+-        const std::string kernel_src = read_file("gemm_moe_q8_1_dp4a.cl");
++        const std::string kernel_src = read_file("gemm_moe_q8_0_f32_ns.cl");
+ #endif
+-        const std::string opts80 = CL_moe_compile_opts + " -DMOE_QT=80";
+         cl_program prog =
+-            build_program_from_source(backend_ctx, kernel_src.c_str(), opts80.c_str());
+-        CL_CHECK((backend_ctx->kernel_gemm_moe_q8_1_dp4a_q80 = clCreateKernel(prog, "kernel_gemm_moe_q8_1_dp4a", &err), err));
++            build_program_from_source(backend_ctx, kernel_src.c_str(), CL_moe_compile_opts);
++
++        CL_CHECK((backend_ctx->kernel_gemm_moe_q8_0_f32_ns = clCreateKernel(prog, "kernel_gemm_moe_q8_0_f32_ns", &err), err));
+         CL_CHECK(clReleaseProgram(prog));
++        GGML_LOG_CONT(".");
++    }
+ 
+-        const std::string opts50 = CL_moe_compile_opts + " -DMOE_QT=50";
+-        cl_program prog50 =
+-            build_program_from_source(backend_ctx, kernel_src.c_str(), opts50.c_str());
+-        CL_CHECK((backend_ctx->kernel_gemm_moe_q8_1_dp4a_q50 = clCreateKernel(prog50, "kernel_gemm_moe_q8_1_dp4a", &err), err));
+-        CL_CHECK(clReleaseProgram(prog50));
++    // gemv_moe_q5_0_f32_ns
++    {
++#ifdef GGML_OPENCL_EMBED_KERNELS
++        const std::string kernel_src {
++            #include "gemv_moe_q5_0_f32_ns.cl.h"
++        };
++#else
++        const std::string kernel_src = read_file("gemv_moe_q5_0_f32_ns.cl");
++#endif
++        cl_program prog =
++            build_program_from_source(backend_ctx, kernel_src.c_str(), CL_moe_compile_opts);
+ 
+-        const std::string opts5 = CL_moe_compile_opts + " -DMOE_QT=5";
+-        cl_program prog5 =
+-            build_program_from_source(backend_ctx, kernel_src.c_str(), opts5.c_str());
+-        CL_CHECK((backend_ctx->kernel_gemm_moe_q8_1_dp4a_q5k = clCreateKernel(prog5, "kernel_gemm_moe_q8_1_dp4a", &err), err));
+-        CL_CHECK(clReleaseProgram(prog5));
++        CL_CHECK((backend_ctx->kernel_gemv_moe_q5_0_f32_ns = clCreateKernel(prog, "kernel_gemv_moe_q5_0_f32_ns", &err), err));
++        CL_CHECK(clReleaseProgram(prog));
+         GGML_LOG_CONT(".");
+     }
+ 
+-    // moe_reorder_quant_a_q8_1 (fused reorder + q8_1 quant)
++    // gemm_moe_q5_0_f32_ns
+     {
+ #ifdef GGML_OPENCL_EMBED_KERNELS
+         const std::string kernel_src {
+-            #include "moe_reorder_quant_a_q8_1.cl.h"
++            #include "gemm_moe_q5_0_f32_ns.cl.h"
+         };
+ #else
+-        const std::string kernel_src = read_file("moe_reorder_quant_a_q8_1.cl");
++        const std::string kernel_src = read_file("gemm_moe_q5_0_f32_ns.cl");
+ #endif
+         cl_program prog =
+             build_program_from_source(backend_ctx, kernel_src.c_str(), CL_moe_compile_opts);
+ 
+-        CL_CHECK((backend_ctx->kernel_moe_reorder_quant_a_q8_1 = clCreateKernel(prog, "kernel_moe_reorder_quant_a_q8_1", &err), err));
++        CL_CHECK((backend_ctx->kernel_gemm_moe_q5_0_f32_ns = clCreateKernel(prog, "kernel_gemm_moe_q5_0_f32_ns", &err), err));
+         CL_CHECK(clReleaseProgram(prog));
+         GGML_LOG_CONT(".");
+     }
+ 
+-    // gemv_moe_q5_k_f32_ns
++    // gemv_moe_q5_1_f32_ns
+     {
+ #ifdef GGML_OPENCL_EMBED_KERNELS
+         const std::string kernel_src {
+-            #include "gemv_moe_q5_k_f32_ns.cl.h"
++            #include "gemv_moe_q5_1_f32_ns.cl.h"
+         };
+ #else
+-        const std::string kernel_src = read_file("gemv_moe_q5_k_f32_ns.cl");
++        const std::string kernel_src = read_file("gemv_moe_q5_1_f32_ns.cl");
+ #endif
+         cl_program prog =
+             build_program_from_source(backend_ctx, kernel_src.c_str(), CL_moe_compile_opts);
+ 
+-        CL_CHECK((backend_ctx->kernel_gemv_moe_q5_k_f32_ns = clCreateKernel(prog, "kernel_gemv_moe_q5_k_f32_ns", &err), err));
++        CL_CHECK((backend_ctx->kernel_gemv_moe_q5_1_f32_ns = clCreateKernel(prog, "kernel_gemv_moe_q5_1_f32_ns", &err), err));
+         CL_CHECK(clReleaseProgram(prog));
+         GGML_LOG_CONT(".");
+     }
+ 
+-    // gemm_moe_q5_k_f32_ns
++    // gemm_moe_q5_1_f32_ns
+     {
+ #ifdef GGML_OPENCL_EMBED_KERNELS
+         const std::string kernel_src {
+-            #include "gemm_moe_q5_k_f32_ns.cl.h"
++            #include "gemm_moe_q5_1_f32_ns.cl.h"
+         };
+ #else
+-        const std::string kernel_src = read_file("gemm_moe_q5_k_f32_ns.cl");
++        const std::string kernel_src = read_file("gemm_moe_q5_1_f32_ns.cl");
+ #endif
+         cl_program prog =
+             build_program_from_source(backend_ctx, kernel_src.c_str(), CL_moe_compile_opts);
+ 
+-        CL_CHECK((backend_ctx->kernel_gemm_moe_q5_k_f32_ns = clCreateKernel(prog, "kernel_gemm_moe_q5_k_f32_ns", &err), err));
++        CL_CHECK((backend_ctx->kernel_gemm_moe_q5_1_f32_ns = clCreateKernel(prog, "kernel_gemm_moe_q5_1_f32_ns", &err), err));
+         CL_CHECK(clReleaseProgram(prog));
+         GGML_LOG_CONT(".");
+     }
+ 
+-    // gemv_moe_q6_k_f32_ns
++    // gemv_moe_q4_k_f32_ns
+     {
+ #ifdef GGML_OPENCL_EMBED_KERNELS
+         const std::string kernel_src {
+-            #include "gemv_moe_q6_k_f32_ns.cl.h"
++            #include "gemv_moe_q4_k_f32_ns.cl.h"
+         };
+ #else
+-        const std::string kernel_src = read_file("gemv_moe_q6_k_f32_ns.cl");
++        const std::string kernel_src = read_file("gemv_moe_q4_k_f32_ns.cl");
+ #endif
+         cl_program prog =
+             build_program_from_source(backend_ctx, kernel_src.c_str(), CL_moe_compile_opts);
+ 
+-        CL_CHECK((backend_ctx->kernel_gemv_moe_q6_k_f32_ns = clCreateKernel(prog, "kernel_gemv_moe_q6_k_f32_ns", &err), err));
++        CL_CHECK((backend_ctx->kernel_gemv_moe_q4_k_f32_ns = clCreateKernel(prog, "kernel_gemv_moe_q4_k_f32_ns", &err), err));
++        CL_CHECK((backend_ctx->kernel_gemv_moe_q4_k_f32_ns_wimg = clCreateKernel(prog, "kernel_gemv_moe_q4_k_f32_ns_wimg", &err), err));
+         CL_CHECK(clReleaseProgram(prog));
+         GGML_LOG_CONT(".");
+     }
+ 
+-    // gemm_moe_q6_k_f32_ns
++    // gemm_moe_q4_k_f32_ns
+     {
+ #ifdef GGML_OPENCL_EMBED_KERNELS
+         const std::string kernel_src {
+-            #include "gemm_moe_q6_k_f32_ns.cl.h"
++            #include "gemm_moe_q4_k_f32_ns.cl.h"
+         };
+ #else
+-        const std::string kernel_src = read_file("gemm_moe_q6_k_f32_ns.cl");
++        const std::string kernel_src = read_file("gemm_moe_q4_k_f32_ns.cl");
+ #endif
+         cl_program prog =
+             build_program_from_source(backend_ctx, kernel_src.c_str(), CL_moe_compile_opts);
+ 
+-        CL_CHECK((backend_ctx->kernel_gemm_moe_q6_k_f32_ns = clCreateKernel(prog, "kernel_gemm_moe_q6_k_f32_ns", &err), err));
++        CL_CHECK((backend_ctx->kernel_gemm_moe_q4_k_f32_ns = clCreateKernel(prog, "kernel_gemm_moe_q4_k_f32_ns", &err), err));
+         CL_CHECK(clReleaseProgram(prog));
+         GGML_LOG_CONT(".");
+     }
+ 
+-    // gemm_moe_q6_k_f32_ns_bin
++    // gemm_moe_q4_k_f32_ns_bin
+     {
+         size_t bin_size = 0;
+-        backend_ctx->kernel_gemm_moe_q6_k_f32_ns_bin = nullptr;
++        backend_ctx->kernel_gemm_moe_q4_k_f32_ns_bin = nullptr;
+ 
+         if (use_adreno_bin_kernels(backend_ctx)) {
+-            const char * kernel_bin = (const char *)backend_ctx->get_adreno_bin_kernel("gemm_moe_q6_k_f32_ns_ila", &bin_size);
++            const char * kernel_bin = (const char *)backend_ctx->get_adreno_bin_kernel("gemm_moe_q4_k_f32_ns_ila", &bin_size);
+             if (kernel_bin && bin_size > 0) {
+                 cl_program prog =
+                     build_program_from_binary(backend_ctx->context, backend_ctx->device, kernel_bin, CL_moe_compile_opts, bin_size);
+ 
+-                CL_CHECK((backend_ctx->kernel_gemm_moe_q6_k_f32_ns_bin = clCreateKernel(prog, "kernel_gemm_moe_q6_k_f32_ns_ila", &err), err));
++                CL_CHECK((backend_ctx->kernel_gemm_moe_q4_k_f32_ns_bin = clCreateKernel(prog, "kernel_gemm_moe_q4_k_f32_ns_ila", &err), err));
+                 CL_CHECK(clReleaseProgram(prog));
+                 GGML_LOG_CONT(".");
+             }
+         }
+     }
+ 
+-    // gemm_moe_q6_k_q8_1_dp4a (dp4a q6_K MoE prefill GEMM)
++    // gemm_moe_q4_k_q8_1_dp4a (dp4a prefill GEMM)
+     if (backend_ctx->has_integer_dot) {
+ #ifdef GGML_OPENCL_EMBED_KERNELS
+         const std::string kernel_src {
+-            #include "gemm_moe_q6_k_q8_1_dp4a.cl.h"
++            #include "gemm_moe_q4_k_q8_1_dp4a.cl.h"
+         };
+ #else
+-        const std::string kernel_src = read_file("gemm_moe_q6_k_q8_1_dp4a.cl");
++        const std::string kernel_src = read_file("gemm_moe_q4_k_q8_1_dp4a.cl");
+ #endif
+         cl_program prog =
+             build_program_from_source(backend_ctx, kernel_src.c_str(), CL_moe_compile_opts);
+ 
+-        CL_CHECK((backend_ctx->kernel_gemm_moe_q6_k_q8_1_dp4a = clCreateKernel(prog, "kernel_gemm_moe_q6_k_q8_1_dp4a", &err), err));
++        CL_CHECK((backend_ctx->kernel_gemm_moe_q4_k_q8_1_dp4a = clCreateKernel(prog, "kernel_gemm_moe_q4_k_q8_1_dp4a", &err), err));
+         CL_CHECK(clReleaseProgram(prog));
+         GGML_LOG_CONT(".");
+     }
+ 
+-    // gemv_moe_mxfp4_f32_ns
+-    {
++    // gemm_moe_mxfp4_q8_1_dp4a (dp4a prefill GEMM)
++    if (backend_ctx->has_integer_dot) {
+ #ifdef GGML_OPENCL_EMBED_KERNELS
+         const std::string kernel_src {
+-            #include "gemv_moe_mxfp4_f32_ns.cl.h"
++            #include "gemm_moe_mxfp4_q8_1_dp4a.cl.h"
+         };
+ #else
+-        const std::string kernel_src = read_file("gemv_moe_mxfp4_f32_ns.cl");
++        const std::string kernel_src = read_file("gemm_moe_mxfp4_q8_1_dp4a.cl");
+ #endif
+         cl_program prog =
+             build_program_from_source(backend_ctx, kernel_src.c_str(), CL_moe_compile_opts);
+ 
+-        CL_CHECK((backend_ctx->kernel_gemv_moe_mxfp4_f32_ns = clCreateKernel(prog, "kernel_gemv_moe_mxfp4_f32_ns", &err), err));
+-        CL_CHECK((backend_ctx->kernel_gemv_moe_mxfp4_f32_ns_wimg = clCreateKernel(prog, "kernel_gemv_moe_mxfp4_f32_ns_wimg", &err), err));
++        CL_CHECK((backend_ctx->kernel_gemm_moe_mxfp4_q8_1_dp4a = clCreateKernel(prog, "kernel_gemm_moe_mxfp4_q8_1_dp4a", &err), err));
+         CL_CHECK(clReleaseProgram(prog));
+         GGML_LOG_CONT(".");
+     }
+ 
+-    // gemm_moe_mxfp4_f32_ns
+-    {
++    // gemm_moe_mxfp4_q8_1_dp4a_bin (dp4a prefill GEMM)
++    if (backend_ctx->has_integer_dot) {
++        size_t bin_size = 0;
++        backend_ctx->kernel_gemm_moe_mxfp4_q8_1_dp4a_bin = nullptr;
++
++        if (use_adreno_bin_kernels(backend_ctx)) {
++            const char * kernel_bin = (const char *)backend_ctx->get_adreno_bin_kernel("gemm_moe_mxfp4_q8_1_dp4a_ila", &bin_size);
++            if (kernel_bin && bin_size > 0) {
++                cl_program prog =
++                    build_program_from_binary(backend_ctx->context, backend_ctx->device, kernel_bin, CL_moe_compile_opts, bin_size);
++
++                CL_CHECK((backend_ctx->kernel_gemm_moe_mxfp4_q8_1_dp4a_bin = clCreateKernel(prog, "kernel_gemm_moe_mxfp4_q8_1_dp4a_ila", &err), err));
++                CL_CHECK(clReleaseProgram(prog));
++                GGML_LOG_CONT(".");
++            }
++        }
++    }
++
++    // gemm_moe_q4_0_q8_1_dp4a (dp4a prefill GEMM)
++    if (backend_ctx->has_integer_dot) {
+ #ifdef GGML_OPENCL_EMBED_KERNELS
+         const std::string kernel_src {
+-            #include "gemm_moe_mxfp4_f32_ns.cl.h"
++            #include "gemm_moe_q4_0_q8_1_dp4a.cl.h"
+         };
+ #else
+-        const std::string kernel_src = read_file("gemm_moe_mxfp4_f32_ns.cl");
++        const std::string kernel_src = read_file("gemm_moe_q4_0_q8_1_dp4a.cl");
+ #endif
+         cl_program prog =
+             build_program_from_source(backend_ctx, kernel_src.c_str(), CL_moe_compile_opts);
+ 
+-            CL_CHECK((backend_ctx->kernel_gemm_moe_mxfp4_f32_ns = clCreateKernel(prog, "kernel_gemm_moe_mxfp4_f32_ns", &err), err));
+-            CL_CHECK(clReleaseProgram(prog));
+-            GGML_LOG_CONT(".");
++        CL_CHECK((backend_ctx->kernel_gemm_moe_q4_0_q8_1_dp4a = clCreateKernel(prog, "kernel_gemm_moe_q4_0_q8_1_dp4a", &err), err));
++        CL_CHECK(clReleaseProgram(prog));
++        GGML_LOG_CONT(".");
+     }
+ 
+-    // gemm_moe_mxfp4_f32_ns_bin
+-    {
++    // gemm_moe_q4_0_q8_1_dp4a_bin (dp4a prefill GEMM)
++    if (backend_ctx->has_integer_dot) {
+         size_t bin_size = 0;
+-        backend_ctx->kernel_gemm_moe_mxfp4_f32_ns_bin = nullptr;
++        backend_ctx->kernel_gemm_moe_q4_0_q8_1_dp4a_bin = nullptr;
+ 
+         if (use_adreno_bin_kernels(backend_ctx)) {
+-            const char * kernel_bin = (const char *)backend_ctx->get_adreno_bin_kernel("gemm_moe_mxfp4_f32_ns_ila", &bin_size);
++            const char * kernel_bin = (const char *)backend_ctx->get_adreno_bin_kernel("gemm_moe_q4_0_q8_1_dp4a_ila", &bin_size);
+             if (kernel_bin && bin_size > 0) {
+                 cl_program prog =
+                     build_program_from_binary(backend_ctx->context, backend_ctx->device, kernel_bin, CL_moe_compile_opts, bin_size);
+ 
+-                CL_CHECK((backend_ctx->kernel_gemm_moe_mxfp4_f32_ns_bin = clCreateKernel(prog, "kernel_gemm_moe_mxfp4_f32_ns_ila", &err), err));
++                CL_CHECK((backend_ctx->kernel_gemm_moe_q4_0_q8_1_dp4a_bin = clCreateKernel(prog, "kernel_gemm_moe_q4_0_q8_1_dp4a_ila", &err), err));
+                 CL_CHECK(clReleaseProgram(prog));
+                 GGML_LOG_CONT(".");
+             }
+         }
+     }
+ 
+-    // moe_reorder_b
+-    {
++    // gemm_moe_q8_1_dp4a (generic dp4a MoE GEMM; MOE_QT=80 -> q8_0 expert variant)
++    if (backend_ctx->has_integer_dot) {
+ #ifdef GGML_OPENCL_EMBED_KERNELS
+         const std::string kernel_src {
+-            #include "moe_reorder_b.cl.h"
++            #include "gemm_moe_q8_1_dp4a.cl.h"
+         };
+ #else
+-        const std::string kernel_src = read_file("moe_reorder_b.cl");
++        const std::string kernel_src = read_file("gemm_moe_q8_1_dp4a.cl");
+ #endif
++        const std::string opts80 = CL_moe_compile_opts + " -DMOE_QT=80";
+         cl_program prog =
+-            build_program_from_source(backend_ctx, kernel_src.c_str(), CL_moe_compile_opts);
+-
+-        CL_CHECK((backend_ctx->kernel_moe_reorder_b = clCreateKernel(prog, "kernel_moe_reorder_b", &err), err));
++            build_program_from_source(backend_ctx, kernel_src.c_str(), opts80.c_str());
++        CL_CHECK((backend_ctx->kernel_gemm_moe_q8_1_dp4a_q80 = clCreateKernel(prog, "kernel_gemm_moe_q8_1_dp4a", &err), err));
+         CL_CHECK(clReleaseProgram(prog));
++
++        const std::string opts50 = CL_moe_compile_opts + " -DMOE_QT=50";
++        cl_program prog50 =
++            build_program_from_source(backend_ctx, kernel_src.c_str(), opts50.c_str());
++        CL_CHECK((backend_ctx->kernel_gemm_moe_q8_1_dp4a_q50 = clCreateKernel(prog50, "kernel_gemm_moe_q8_1_dp4a", &err), err));
++        CL_CHECK(clReleaseProgram(prog50));
++
++        const std::string opts5 = CL_moe_compile_opts + " -DMOE_QT=5";
++        cl_program prog5 =
++            build_program_from_source(backend_ctx, kernel_src.c_str(), opts5.c_str());
++        CL_CHECK((backend_ctx->kernel_gemm_moe_q8_1_dp4a_q5k = clCreateKernel(prog5, "kernel_gemm_moe_q8_1_dp4a", &err), err));
++        CL_CHECK(clReleaseProgram(prog5));
+         GGML_LOG_CONT(".");
+     }
+ 
+-    // moe_sort_by_expert
++    // moe_reorder_quant_a_q8_1 (fused reorder + q8_1 quant)
+     {
+ #ifdef GGML_OPENCL_EMBED_KERNELS
+         const std::string kernel_src {
+-            #include "moe_sort_by_expert.cl.h"
++            #include "moe_reorder_quant_a_q8_1.cl.h"
+         };
+ #else
+-        const std::string kernel_src = read_file("moe_sort_by_expert.cl");
++        const std::string kernel_src = read_file("moe_reorder_quant_a_q8_1.cl");
+ #endif
+         cl_program prog =
+             build_program_from_source(backend_ctx, kernel_src.c_str(), CL_moe_compile_opts);
+ 
+-        CL_CHECK((backend_ctx->kernel_moe_histogram = clCreateKernel(prog, "kernel_moe_histogram", &err), err));
+-        CL_CHECK((backend_ctx->kernel_moe_scan = clCreateKernel(prog, "kernel_moe_scan", &err), err));
+-        CL_CHECK((backend_ctx->kernel_moe_fill = clCreateKernel(prog, "kernel_moe_fill", &err), err));
+-        CL_CHECK((backend_ctx->kernel_moe_scatter = clCreateKernel(prog, "kernel_moe_scatter", &err), err));
+-        CL_CHECK((backend_ctx->kernel_moe_scatter_stable = clCreateKernel(prog, "kernel_moe_scatter_stable", &err), err));
++        CL_CHECK((backend_ctx->kernel_moe_reorder_quant_a_q8_1 = clCreateKernel(prog, "kernel_moe_reorder_quant_a_q8_1", &err), err));
+         CL_CHECK(clReleaseProgram(prog));
+         GGML_LOG_CONT(".");
+     }
+ 
+-    // gemv_noshuffle_q6_k_f32
++    // gemv_moe_q5_k_f32_ns
+     {
+ #ifdef GGML_OPENCL_EMBED_KERNELS
+         const std::string kernel_src {
+-            #include "gemv_noshuffle_q6_k_f32.cl.h"
++            #include "gemv_moe_q5_k_f32_ns.cl.h"
+         };
+ #else
+-        const std::string kernel_src = read_file("gemv_noshuffle_q6_k_f32.cl");
++        const std::string kernel_src = read_file("gemv_moe_q5_k_f32_ns.cl");
+ #endif
++        cl_program prog =
++            build_program_from_source(backend_ctx, kernel_src.c_str(), CL_moe_compile_opts);
+ 
+-        std::string CL_gemv_compile_opts = std::string("-cl-std=") + opencl_c_std +
+-                                       " -cl-mad-enable ";
+-        if (backend_ctx->has_vector_subgroup_broadcast) {
+-            CL_gemv_compile_opts += " -DVECTOR_SUB_GROUP_BROADCAT ";
+-        }
++        CL_CHECK((backend_ctx->kernel_gemv_moe_q5_k_f32_ns = clCreateKernel(prog, "kernel_gemv_moe_q5_k_f32_ns", &err), err));
++        CL_CHECK(clReleaseProgram(prog));
++        GGML_LOG_CONT(".");
++    }
+ 
++    // gemm_moe_q5_k_f32_ns
++    {
++#ifdef GGML_OPENCL_EMBED_KERNELS
++        const std::string kernel_src {
++            #include "gemm_moe_q5_k_f32_ns.cl.h"
++        };
++#else
++        const std::string kernel_src = read_file("gemm_moe_q5_k_f32_ns.cl");
++#endif
+         cl_program prog =
+-            build_program_from_source(backend_ctx, kernel_src.c_str(), CL_gemv_compile_opts);
++            build_program_from_source(backend_ctx, kernel_src.c_str(), CL_moe_compile_opts);
+ 
+-        CL_CHECK((backend_ctx->kernel_gemv_noshuffle_q6_K_f32 = clCreateKernel(prog, "kernel_gemv_noshuffle_q6_K_f32", &err), err));
+-        CL_CHECK((backend_ctx->kernel_gemv_noshuffle_q6_K_f32_mc3 = clCreateKernel(prog, "kernel_gemv_noshuffle_q6_K_f32_mc3", &err), err));
+-        if (getenv("GGML_OPENCL_MC3_PROBE")) {
+-            cl_ulong pm6 = 0, pm4 = 0; size_t wg6 = 0, wg4 = 0, mult = 0;
+-            clGetKernelWorkGroupInfo(backend_ctx->kernel_gemv_noshuffle_q6_K_f32_mc3, backend_ctx->device, CL_KERNEL_PRIVATE_MEM_SIZE, sizeof(pm6), &pm6, NULL);
+-            clGetKernelWorkGroupInfo(backend_ctx->kernel_gemv_noshuffle_q6_K_f32_mc3, backend_ctx->device, CL_KERNEL_WORK_GROUP_SIZE, sizeof(wg6), &wg6, NULL);
+-            clGetKernelWorkGroupInfo(backend_ctx->kernel_gemv_noshuffle_q4_k_f32_mc3, backend_ctx->device, CL_KERNEL_PRIVATE_MEM_SIZE, sizeof(pm4), &pm4, NULL);
+-            clGetKernelWorkGroupInfo(backend_ctx->kernel_gemv_noshuffle_q4_k_f32_mc3, backend_ctx->device, CL_KERNEL_WORK_GROUP_SIZE, sizeof(wg4), &wg4, NULL);
+-            clGetKernelWorkGroupInfo(backend_ctx->kernel_gemv_noshuffle_q6_K_f32_mc3, backend_ctx->device, CL_KERNEL_PREFERRED_WORK_GROUP_SIZE_MULTIPLE, sizeof(mult), &mult, NULL);
+-            fprintf(stderr, "[MC3-PROBE] q4K_mc3 private=%llu wg_cap=%zu | q6K_mc3 private=%llu wg_cap=%zu | pref_mult=%zu\n",
+-                          (unsigned long long)pm4, wg4, (unsigned long long)pm6, wg6, mult);
+-            fflush(stderr);
+-        }
++        CL_CHECK((backend_ctx->kernel_gemm_moe_q5_k_f32_ns = clCreateKernel(prog, "kernel_gemm_moe_q5_k_f32_ns", &err), err));
++        CL_CHECK(clReleaseProgram(prog));
+         GGML_LOG_CONT(".");
+     }
+ 
+-    // gemv_noshuffle_q6_k_f32_o4 — 4-output-per-WI variant, opt-in via
+-    // GGML_OPENCL_Q6K_GEMV_O4=1 (~3x fewer dispatches on long-vocab lm_head).
++    // gemv_moe_q6_k_f32_ns
+     {
+ #ifdef GGML_OPENCL_EMBED_KERNELS
+         const std::string kernel_src {
+-            #include "gemv_noshuffle_q6_k_f32_o4.cl.h"
++            #include "gemv_moe_q6_k_f32_ns.cl.h"
+         };
+ #else
+-        const std::string kernel_src = read_file("gemv_noshuffle_q6_k_f32_o4.cl");
++        const std::string kernel_src = read_file("gemv_moe_q6_k_f32_ns.cl");
+ #endif
++        cl_program prog =
++            build_program_from_source(backend_ctx, kernel_src.c_str(), CL_moe_compile_opts);
+ 
+-        std::string CL_gemv_compile_opts = std::string("-cl-std=") + opencl_c_std +
+-                                       " -cl-mad-enable ";
+-        if (backend_ctx->has_vector_subgroup_broadcast) {
+-            CL_gemv_compile_opts += " -DVECTOR_SUB_GROUP_BROADCAT ";
+-        }
++        CL_CHECK((backend_ctx->kernel_gemv_moe_q6_k_f32_ns = clCreateKernel(prog, "kernel_gemv_moe_q6_k_f32_ns", &err), err));
++        CL_CHECK(clReleaseProgram(prog));
++        GGML_LOG_CONT(".");
++    }
+ 
++    // gemm_moe_q6_k_f32_ns
++    {
++#ifdef GGML_OPENCL_EMBED_KERNELS
++        const std::string kernel_src {
++            #include "gemm_moe_q6_k_f32_ns.cl.h"
++        };
++#else
++        const std::string kernel_src = read_file("gemm_moe_q6_k_f32_ns.cl");
++#endif
+         cl_program prog =
+-            build_program_from_source(backend_ctx, kernel_src.c_str(), CL_gemv_compile_opts);
++            build_program_from_source(backend_ctx, kernel_src.c_str(), CL_moe_compile_opts);
+ 
+-        CL_CHECK((backend_ctx->kernel_gemv_noshuffle_q6_K_f32_o4 = clCreateKernel(prog, "kernel_gemv_noshuffle_q6_K_f32_o4", &err), err));
++        CL_CHECK((backend_ctx->kernel_gemm_moe_q6_k_f32_ns = clCreateKernel(prog, "kernel_gemm_moe_q6_k_f32_ns", &err), err));
+         CL_CHECK(clReleaseProgram(prog));
+-
+-        // Global-read variant: weights read from __global coalesced instead of
+-        // image1d_buffer (the texture cache caps the streaming lm_head read
+-        // bandwidth). Opt-in via GGML_OPENCL_Q6K_GEMV_O4_GLOBAL.
+-        cl_program prog_g = build_program_from_source(backend_ctx, kernel_src.c_str(), CL_gemv_compile_opts + " -DQ6K_O4_GLOBAL");
+-        CL_CHECK((backend_ctx->kernel_gemv_noshuffle_q6_K_f32_o4_global =
+-            clCreateKernel(prog_g, "kernel_gemv_noshuffle_q6_K_f32_o4_global", &err), err));
+-        CL_CHECK(clReleaseProgram(prog_g));
+         GGML_LOG_CONT(".");
+     }
+ 
+-    // gemv_noshuffle_q6_k_f32_tiled — tiled-wide canonical layout, default ON
+-    // (opt out: GGML_OPENCL_Q6K_GEMV_TILED=0; separate convert + GEMV; weights via __global).
++    // gemm_moe_q6_k_f32_ns_bin
+     {
++        size_t bin_size = 0;
++        backend_ctx->kernel_gemm_moe_q6_k_f32_ns_bin = nullptr;
++
++        if (use_adreno_bin_kernels(backend_ctx)) {
++            const char * kernel_bin = (const char *)backend_ctx->get_adreno_bin_kernel("gemm_moe_q6_k_f32_ns_ila", &bin_size);
++            if (kernel_bin && bin_size > 0) {
++                cl_program prog =
++                    build_program_from_binary(backend_ctx->context, backend_ctx->device, kernel_bin, CL_moe_compile_opts, bin_size);
++
++                CL_CHECK((backend_ctx->kernel_gemm_moe_q6_k_f32_ns_bin = clCreateKernel(prog, "kernel_gemm_moe_q6_k_f32_ns_ila", &err), err));
++                CL_CHECK(clReleaseProgram(prog));
++                GGML_LOG_CONT(".");
++            }
++        }
++    }
++
++    // gemm_moe_q6_k_q8_1_dp4a (dp4a q6_K MoE prefill GEMM)
++    if (backend_ctx->has_integer_dot) {
+ #ifdef GGML_OPENCL_EMBED_KERNELS
+         const std::string kernel_src {
+-            #include "gemv_noshuffle_q6_k_f32_tiled.cl.h"
++            #include "gemm_moe_q6_k_q8_1_dp4a.cl.h"
+         };
+ #else
+-        const std::string kernel_src = read_file("gemv_noshuffle_q6_k_f32_tiled.cl");
++        const std::string kernel_src = read_file("gemm_moe_q6_k_q8_1_dp4a.cl");
+ #endif
+-        std::string compile_opts = std::string("-cl-std=") + opencl_c_std + " -cl-mad-enable ";
+         cl_program prog =
+-            build_program_from_source(backend_ctx, kernel_src.c_str(), compile_opts);
+-        CL_CHECK((backend_ctx->kernel_gemv_noshuffle_q6_K_f32_tiled =
+-            clCreateKernel(prog, "kernel_gemv_noshuffle_q6_K_f32_tiled", &err), err));
+-        CL_CHECK((backend_ctx->kernel_gemv_noshuffle_q6_K_f32_tiled_mc3 =
+-            clCreateKernel(prog, "kernel_gemv_noshuffle_q6_K_f32_tiled_mc3", &err), err));
++            build_program_from_source(backend_ctx, kernel_src.c_str(), CL_moe_compile_opts);
++
++        CL_CHECK((backend_ctx->kernel_gemm_moe_q6_k_q8_1_dp4a = clCreateKernel(prog, "kernel_gemm_moe_q6_k_q8_1_dp4a", &err), err));
+         CL_CHECK(clReleaseProgram(prog));
+         GGML_LOG_CONT(".");
+     }
+ 
+-    // gemm_noshuffle_q6_k_f32_tiled — batched (N>1) GEMM over the same tiled-wide
+-    // canonical layout, so batched lm_head/embed stays correct + on GPU.
++    // gemv_moe_mxfp4_f32_ns
+     {
+ #ifdef GGML_OPENCL_EMBED_KERNELS
+         const std::string kernel_src {
+-            #include "gemm_noshuffle_q6_k_f32_tiled.cl.h"
++            #include "gemv_moe_mxfp4_f32_ns.cl.h"
+         };
+ #else
+-        const std::string kernel_src = read_file("gemm_noshuffle_q6_k_f32_tiled.cl");
++        const std::string kernel_src = read_file("gemv_moe_mxfp4_f32_ns.cl");
+ #endif
+-        std::string compile_opts = std::string("-cl-std=") + opencl_c_std + " -cl-mad-enable ";
+         cl_program prog =
+-            build_program_from_source(backend_ctx, kernel_src.c_str(), compile_opts);
+-        CL_CHECK((backend_ctx->kernel_gemm_noshuffle_q6_K_f32_tiled =
+-            clCreateKernel(prog, "kernel_gemm_noshuffle_q6_K_f32_tiled", &err), err));
++            build_program_from_source(backend_ctx, kernel_src.c_str(), CL_moe_compile_opts);
++
++        CL_CHECK((backend_ctx->kernel_gemv_moe_mxfp4_f32_ns = clCreateKernel(prog, "kernel_gemv_moe_mxfp4_f32_ns", &err), err));
++        CL_CHECK((backend_ctx->kernel_gemv_moe_mxfp4_f32_ns_wimg = clCreateKernel(prog, "kernel_gemv_moe_mxfp4_f32_ns_wimg", &err), err));
+         CL_CHECK(clReleaseProgram(prog));
+         GGML_LOG_CONT(".");
+     }
+ 
+-    // gemm_noshuffle_q6_k_f32
++    // gemm_moe_mxfp4_f32_ns
+     {
+ #ifdef GGML_OPENCL_EMBED_KERNELS
+         const std::string kernel_src {
+-            #include "gemm_noshuffle_q6_k_f32.cl.h"
++            #include "gemm_moe_mxfp4_f32_ns.cl.h"
+         };
+ #else
+-        const std::string kernel_src = read_file("gemm_noshuffle_q6_k_f32.cl");
++        const std::string kernel_src = read_file("gemm_moe_mxfp4_f32_ns.cl");
+ #endif
+         cl_program prog =
+             build_program_from_source(backend_ctx, kernel_src.c_str(), CL_moe_compile_opts);
+ 
+-        CL_CHECK((backend_ctx->kernel_gemm_noshuffle_q6_K_f32 = clCreateKernel(prog, "kernel_gemm_noshuffle_q6_K_f32", &err), err));
+-        CL_CHECK((backend_ctx->kernel_gemm_noshuffle_q6_K_f32_cok = clCreateKernel(prog, "kernel_gemm_noshuffle_q6_K_f32_cok", &err), err));
+-        GGML_LOG_CONT(".");
++            CL_CHECK((backend_ctx->kernel_gemm_moe_mxfp4_f32_ns = clCreateKernel(prog, "kernel_gemm_moe_mxfp4_f32_ns", &err), err));
++            CL_CHECK(clReleaseProgram(prog));
++            GGML_LOG_CONT(".");
+     }
+ 
+-    // gemv_noshuffle_q5_k_f32
++    // gemm_moe_mxfp4_f32_ns_bin
+     {
+-        std::string CL_gemv_compile_opts = std::string("-cl-std=") + opencl_c_std +
+-                                       " -cl-mad-enable ";
+-        if (backend_ctx->has_vector_subgroup_broadcast) {
+-            CL_gemv_compile_opts += " -DVECTOR_SUB_GROUP_BROADCAST ";
++        size_t bin_size = 0;
++        backend_ctx->kernel_gemm_moe_mxfp4_f32_ns_bin = nullptr;
++
++        if (use_adreno_bin_kernels(backend_ctx)) {
++            const char * kernel_bin = (const char *)backend_ctx->get_adreno_bin_kernel("gemm_moe_mxfp4_f32_ns_ila", &bin_size);
++            if (kernel_bin && bin_size > 0) {
++                cl_program prog =
++                    build_program_from_binary(backend_ctx->context, backend_ctx->device, kernel_bin, CL_moe_compile_opts, bin_size);
++
++                CL_CHECK((backend_ctx->kernel_gemm_moe_mxfp4_f32_ns_bin = clCreateKernel(prog, "kernel_gemm_moe_mxfp4_f32_ns_ila", &err), err));
++                CL_CHECK(clReleaseProgram(prog));
++                GGML_LOG_CONT(".");
++            }
+         }
++    }
+ 
++    // moe_reorder_b
++    {
+ #ifdef GGML_OPENCL_EMBED_KERNELS
+         const std::string kernel_src {
+-            #include "gemv_noshuffle_q5_k_f32.cl.h"
++            #include "moe_reorder_b.cl.h"
+         };
+ #else
+-        const std::string kernel_src = read_file("gemv_noshuffle_q5_k_f32.cl");
++        const std::string kernel_src = read_file("moe_reorder_b.cl");
+ #endif
++        cl_program prog =
++            build_program_from_source(backend_ctx, kernel_src.c_str(), CL_moe_compile_opts);
+ 
+-        cl_program prog = build_program_from_source(backend_ctx, kernel_src.c_str(), CL_gemv_compile_opts);
+-
+-        CL_CHECK((backend_ctx->kernel_gemv_noshuffle_q5_k_f32 = clCreateKernel(prog, "kernel_gemv_noshuffle_q5_k_f32", &err), err));
+-        CL_CHECK((backend_ctx->kernel_gemv_noshuffle_q5_k_f32_mc3 = clCreateKernel(prog, "kernel_gemv_noshuffle_q5_k_f32_mc3", &err), err));
++        CL_CHECK((backend_ctx->kernel_moe_reorder_b = clCreateKernel(prog, "kernel_moe_reorder_b", &err), err));
+         CL_CHECK(clReleaseProgram(prog));
+         GGML_LOG_CONT(".");
+     }
+ 
+-    // gemm_noshuffle_q5_k_f32
++    // moe_sort_by_expert
+     {
+ #ifdef GGML_OPENCL_EMBED_KERNELS
+         const std::string kernel_src {
+-            #include "gemm_noshuffle_q5_k_f32.cl.h"
++            #include "moe_sort_by_expert.cl.h"
+         };
+ #else
+-        const std::string kernel_src = read_file("gemm_noshuffle_q5_k_f32.cl");
++        const std::string kernel_src = read_file("moe_sort_by_expert.cl");
+ #endif
+-        cl_program prog = build_program_from_source(backend_ctx, kernel_src.c_str(), compile_opts);
+-        CL_CHECK((backend_ctx->kernel_gemm_noshuffle_q5_k_f32 = clCreateKernel(prog, "kernel_gemm_noshuffle_q5_k_f32", &err), err));
++        cl_program prog =
++            build_program_from_source(backend_ctx, kernel_src.c_str(), CL_moe_compile_opts);
++
++        CL_CHECK((backend_ctx->kernel_moe_histogram = clCreateKernel(prog, "kernel_moe_histogram", &err), err));
++        CL_CHECK((backend_ctx->kernel_moe_scan = clCreateKernel(prog, "kernel_moe_scan", &err), err));
++        CL_CHECK((backend_ctx->kernel_moe_fill = clCreateKernel(prog, "kernel_moe_fill", &err), err));
++        CL_CHECK((backend_ctx->kernel_moe_scatter = clCreateKernel(prog, "kernel_moe_scatter", &err), err));
++        CL_CHECK((backend_ctx->kernel_moe_scatter_stable = clCreateKernel(prog, "kernel_moe_scatter_stable", &err), err));
+         CL_CHECK(clReleaseProgram(prog));
+         GGML_LOG_CONT(".");
+     }
+ 
+-    // repack
++#endif // GGML_OPENCL_USE_ADRENO_KERNELS
++    backend_ctx->kernels_loaded_moe = true;
++}
++
++static void load_cl_kernels_gdn(ggml_backend_opencl_context *backend_ctx) {
++    if (backend_ctx->kernels_loaded_gdn) {
++        return;
++    }
++    cl_int err;
++    const std::string compile_opts = backend_ctx->kernel_compile_opts;
++    auto opencl_c_std =
++        std::string("CL") + std::to_string(backend_ctx->opencl_c_version.major) + "." + std::to_string(backend_ctx->opencl_c_version.minor);
++    GGML_UNUSED(opencl_c_std);
++    // gated_delta_net: one kernel per (S_V, KDA, tgpp) triple.
++    {
++    #ifdef GGML_OPENCL_EMBED_KERNELS
++        const std::string kernel_src {
++            #include "gated_delta_net.cl.h"
++        };
++    #else
++        const std::string kernel_src = read_file("gated_delta_net.cl");
++    #endif
++
++        const int gdn_sizes[4] = { 16, 32, 64, 128 };
++        const int sg_size = backend_ctx->gpu_family == GPU_FAMILY::ADRENO ? 64 : backend_ctx->gpu_family == GPU_FAMILY::INTEL ? 32 : -1;
++        if (sg_size < 0) {
++            GGML_LOG_ERROR("Unsupported GPU Family: only Adreno and Intel are supported.\n");
++            exit(1);
++        }
++
++        for (int si = 0; si < 4; si++) {
++            const int S_V = gdn_sizes[si];
++
++            // MUST match the dispatcher heuristic in ggml_cl_gated_delta_net exactly.
++            int lanes_per_column;
++            if (S_V >= 128) {
++                lanes_per_column = 8;
++            } else {
++                lanes_per_column = std::min(S_V, sg_size);
++            }
++
++            // Round LANES_PER_COLUMN down until it is:
++            //  * power-of-two
++            //  * divides both S_V and sg_size
++            while (lanes_per_column > 1 &&
++                    (((lanes_per_column & (lanes_per_column - 1)) != 0) ||
++                    (S_V % lanes_per_column) != 0 ||
++                    (sg_size % lanes_per_column) != 0)) {
++                lanes_per_column >>= 1;
++            }
++
++            GGML_ASSERT(lanes_per_column >= 1);
++            GGML_ASSERT(((lanes_per_column & (lanes_per_column - 1)) == 0));
++            GGML_ASSERT((S_V % lanes_per_column) == 0);
++            GGML_ASSERT((sg_size % lanes_per_column) == 0);
++
++            const bool is_partial_reduce = (lanes_per_column != 1) && (lanes_per_column < sg_size);
++            int use_qcom_shuffle = 0;
++            if (is_partial_reduce) {
++                if (backend_ctx->has_qcom_subgroup_shuffle) {
++                    use_qcom_shuffle = 1;
++                }
++            }
++            for (int kda = 0; kda < 2; kda++) {
++                for (int tgpp = 0; tgpp < 2; tgpp++) {
++                    const int cpl = (tgpp == 0) ? 1 : 4;
++                    const int spw  = (tgpp == 0) ? 1 : 1;
++
++                    std::string opts = compile_opts;
++                    opts += " -DS_V=" + std::to_string(S_V);
++                    opts += " -DKDA=" + std::to_string(kda);
++                    opts += " -DSUBGROUP_SIZE=" + std::to_string(sg_size);
++                    opts += " -DLANES_PER_COLUMN=" + std::to_string(lanes_per_column);
++                    opts += " -DCOLS_PER_LANE_GROUP=" + std::to_string(cpl);
++                    opts += " -DUSE_QCOM_SUBGROUP_SHUFFLE=" + std::to_string(use_qcom_shuffle);
++
++                    // Since spw=1 is found to be optimal, SUBGROUPS_PER_WG > 1 code in
++                    // the kernel is removed. If you want to experiment with spw > 1,
++                    // Please remember to implement code to handle it.
++                    opts += " -DSUBGROUPS_PER_WG=" + std::to_string(spw);
++
++                    cl_program prog = build_program_from_source(backend_ctx, kernel_src.c_str(), opts);
++
++                    CL_CHECK((backend_ctx->kernel_gated_delta_net_f32[si][kda][tgpp] =
++                                clCreateKernel(prog, "kernel_gated_delta_net", &err), err));
++                    CL_CHECK(clReleaseProgram(prog));
++                }
++            }
++        }
++        GGML_LOG_CONT(".");
++    }
++
++    backend_ctx->kernels_loaded_gdn = true;
++}
++
++static void load_cl_kernels_ssm(ggml_backend_opencl_context *backend_ctx) {
++    if (backend_ctx->kernels_loaded_ssm) {
++        return;
++    }
++    cl_int err;
++    const std::string compile_opts = backend_ctx->kernel_compile_opts;
++    auto opencl_c_std =
++        std::string("CL") + std::to_string(backend_ctx->opencl_c_version.major) + "." + std::to_string(backend_ctx->opencl_c_version.minor);
++    GGML_UNUSED(opencl_c_std);
++    // ssm_conv
+     {
+ #ifdef GGML_OPENCL_EMBED_KERNELS
+         const std::string kernel_src {
+-            #include "flash_attn_repack.cl.h"
++            #include "ssm_conv.cl.h"
+         };
+ #else
+-        const std::string kernel_src = read_file("flash_attn_repack.cl");
++        const std::string kernel_src = read_file("ssm_conv.cl");
+ #endif
+         cl_program prog =
+             build_program_from_source(backend_ctx, kernel_src.c_str(), compile_opts);
+ 
+-        CL_CHECK((backend_ctx->fa.kernel_repack_q_for_wmm = clCreateKernel(prog, "kernel_repack_q_for_wmm", &err), err));
+-        CL_CHECK((backend_ctx->fa.kernel_repack_k_for_wmm = clCreateKernel(prog, "kernel_repack_k_for_wmm", &err), err));
+-        CL_CHECK((backend_ctx->fa.kernel_repack_v_for_wmm = clCreateKernel(prog, "kernel_repack_v_for_wmm", &err), err));
+-        CL_CHECK((backend_ctx->fa.kernel_repack_mask_for_wmm = clCreateKernel(prog, "kernel_repack_mask_for_wmm", &err), err));
++        CL_CHECK((backend_ctx->kernel_ssm_conv_f32_f32   = clCreateKernel(prog, "kernel_ssm_conv_f32_f32", &err), err));
++        CL_CHECK((backend_ctx->kernel_ssm_conv_f32_f32_4 = clCreateKernel(prog, "kernel_ssm_conv_f32_f32_4", &err), err));
++        CL_CHECK(clReleaseProgram(prog));
+         GGML_LOG_CONT(".");
+     }
+ 
+-    // kernel_flash_attn_f32_f16_bin
++    // ssm_scan
+     {
+-        size_t bin_size = 0;
+-        backend_ctx->fa.kernel_flash_attn_f32_f16_bin = nullptr;
++#ifdef GGML_OPENCL_EMBED_KERNELS
++        const std::string kernel_src {
++            #include "ssm_scan.cl.h"
++        };
++#else
++        const std::string kernel_src = read_file("ssm_scan.cl");
++#endif
++        cl_program prog =
++            build_program_from_source(backend_ctx, kernel_src.c_str(), compile_opts);
+ 
+-        if (use_adreno_bin_kernels(backend_ctx)) {
+-            const char * kernel_bin = (const char *)backend_ctx->get_adreno_bin_kernel("flash_attn_f32_f16_wmm", &bin_size);
+-            if (kernel_bin && bin_size > 0) {
+-                cl_program prog =
+-                    build_program_from_binary(backend_ctx->context, backend_ctx->device, kernel_bin, CL_moe_compile_opts, bin_size);
++        CL_CHECK((backend_ctx->kernel_ssm_scan_f32 = clCreateKernel(prog, "kernel_ssm_scan_f32", &err), err));
++        CL_CHECK((backend_ctx->kernel_ssm_scan_f32_mamba2_d128 = clCreateKernel(prog, "kernel_ssm_scan_f32_mamba2_d128", &err), err));
++        CL_CHECK((backend_ctx->kernel_ssm_scan_f32_mamba2_d256 = clCreateKernel(prog, "kernel_ssm_scan_f32_mamba2_d256", &err), err));
+ 
+-                CL_CHECK((backend_ctx->fa.kernel_flash_attn_f32_f16_bin = clCreateKernel(prog, "flash_attn_f32_f16", &err), err));
+-                CL_CHECK(clReleaseProgram(prog));
+-                GGML_LOG_CONT(".");
++        cl_kernel * kernels[] = {
++            &backend_ctx->kernel_ssm_scan_f32_mamba2_d128,
++            &backend_ctx->kernel_ssm_scan_f32_mamba2_d256
++        };
++
++        // specialized kernels use subgroups and assume subgroup size is 64,
++        // if device does not support subgroups or subgroup size is not 64,
++        // release these kernels
++        for (int i = 0; i < 2; ++i) {
++            size_t subgroup_size = 0;
++#if CL_TARGET_OPENCL_VERSION >= 210
++            const size_t local_work_size[] = { 64, 1 };
++            const cl_int subgroup_err = clGetKernelSubGroupInfo(*kernels[i], backend_ctx->device, CL_KERNEL_MAX_SUB_GROUP_SIZE_FOR_NDRANGE,
++                    sizeof(local_work_size), local_work_size, sizeof(subgroup_size), &subgroup_size, nullptr);
++            if (subgroup_err != CL_SUCCESS) {
++                subgroup_size = 0;
++            }
++#endif
++            // The specialized kernels reduce over one 64-lane subgroup.
++            if (subgroup_size != 64) {
++                CL_CHECK(clReleaseKernel(*kernels[i]));
++                *kernels[i] = nullptr;
+             }
+         }
++        CL_CHECK(clReleaseProgram(prog));
++        GGML_LOG_CONT(".");
+     }
+-#endif // GGML_OPENCL_USE_ADRENO_KERNELS
+-    GGML_LOG_CONT("\n");
+-    backend_ctx->kernels_loaded = true;
++
++    backend_ctx->kernels_loaded_ssm = true;
+ }
+ 
+ static ggml_backend_opencl_context * ggml_cl_init(ggml_backend_dev_t dev);
+@@ -7920,6 +7972,7 @@ static bool ggml_opencl_can_fuse_moe_bias_combine(const struct ggml_cgraph * cgr
+ static void ggml_cl_moe_bias_combine_fused(ggml_backend_t backend, const ggml_tensor * add,
+                                            const ggml_tensor * mul, const ggml_tensor * dst) {
+     ggml_backend_opencl_context * backend_ctx = (ggml_backend_opencl_context *)backend->context;
++    load_cl_kernels_moe(backend_ctx); // TALOS 0002
+ 
+     const ggml_tensor * experts = add->src[0];   // raw matmul output, bias not yet applied
+     const ggml_tensor * bias    = add->src[1];
+@@ -7986,6 +8039,7 @@ static void ggml_cl_moe_bias_combine_fused(ggml_backend_t backend, const ggml_te
+ 
+ static void ggml_cl_moe_combine_fused(ggml_backend_t backend, const ggml_tensor * mul, const ggml_tensor * dst) {
+     ggml_backend_opencl_context * backend_ctx = (ggml_backend_opencl_context *)backend->context;
++    load_cl_kernels_moe(backend_ctx); // TALOS 0002
+     const ggml_tensor * experts = mul->src[0];
+     const ggml_tensor * weights = mul->src[1];
+ 
+@@ -10390,6 +10444,7 @@ static void ggml_backend_opencl_buffer_set_tensor(ggml_backend_buffer_t buffer,
+                     size_t mn_elems = (size_t)ne02 * ne01 * nb32;
+                     extra->scale = clCreateBuffer(context, CL_MEM_READ_WRITE, sc_elems * sizeof(cl_half), NULL, &err); CL_CHECK(err);
+                     extra->min   = clCreateBuffer(context, CL_MEM_READ_WRITE, mn_elems * sizeof(cl_half), NULL, &err); CL_CHECK(err);
++                    load_cl_kernels_moe(backend_ctx); // TALOS 0002
+                     cl_kernel ek = backend_ctx->kernel_moe_expand_scale_q5_0;
+                     CL_CHECK(clSetKernelArg(ek, 0, sizeof(cl_mem), &extra->d));
+                     CL_CHECK(clSetKernelArg(ek, 1, sizeof(cl_mem), &extra->scale));
+@@ -10785,6 +10840,7 @@ static void ggml_backend_opencl_buffer_set_tensor(ggml_backend_buffer_t buffer,
+                 size_t scale_elems = (size_t)ne02 * ne01 * nb32 * 2;   // 2 per-16-seg scales / 32-block
+                 extra->scale = clCreateBuffer(context, CL_MEM_READ_WRITE, scale_elems * sizeof(cl_half), NULL, &err);
+                 CL_CHECK(err);
++                load_cl_kernels_moe(backend_ctx); // TALOS 0002
+                 cl_kernel ek = backend_ctx->kernel_moe_expand_scale_q8_0;
+                 CL_CHECK(clSetKernelArg(ek, 0, sizeof(cl_mem), &extra->d));
+                 CL_CHECK(clSetKernelArg(ek, 1, sizeof(cl_mem), &extra->scale));
+@@ -11206,6 +11262,7 @@ static void ggml_backend_opencl_buffer_set_tensor(ggml_backend_buffer_t buffer,
+                     size_t mn_elems = (size_t)ne02 * ne01 * nb32;
+                     extra->scale = clCreateBuffer(context, CL_MEM_READ_WRITE, sc_elems * sizeof(cl_half), NULL, &err); CL_CHECK(err);
+                     extra->min   = clCreateBuffer(context, CL_MEM_READ_WRITE, mn_elems * sizeof(cl_half), NULL, &err); CL_CHECK(err);
++                    load_cl_kernels_moe(backend_ctx); // TALOS 0002
+                     cl_kernel ek = backend_ctx->kernel_moe_expand_scale_q5_K;
+                     CL_CHECK(clSetKernelArg(ek, 0, sizeof(cl_mem), &extra->s));
+                     CL_CHECK(clSetKernelArg(ek, 1, sizeof(cl_mem), &extra->d));
+@@ -13856,6 +13913,7 @@ static void ggml_cl_add_id(ggml_backend_t backend, const ggml_tensor * src0, con
+     const int ne1 = dst->ne[1];
+ 
+     ggml_backend_opencl_context *backend_ctx = (ggml_backend_opencl_context *)backend->context;
++    load_cl_kernels_moe(backend_ctx); // TALOS 0002
+ 
+     ggml_tensor_extra_cl * extra0 = (ggml_tensor_extra_cl *)src0->extra;
+     ggml_tensor_extra_cl * extra1 = (ggml_tensor_extra_cl *)src1->extra;
+@@ -14448,6 +14506,7 @@ static void ggml_cl_ssm_scan(ggml_backend_t backend, ggml_tensor * dst) {
+     GGML_ASSERT(dst->src[6]->extra);
+ 
+     ggml_backend_opencl_context * backend_ctx = (ggml_backend_opencl_context *) backend->context;
++    load_cl_kernels_ssm(backend_ctx); // TALOS 0002
+ 
+     ggml_tensor_extra_cl * extra0 = (ggml_tensor_extra_cl *) dst->src[0]->extra;
+     ggml_tensor_extra_cl * extra1 = (ggml_tensor_extra_cl *) dst->src[1]->extra;
+@@ -14578,6 +14637,7 @@ static void ggml_cl_ssm_conv(ggml_backend_t backend, const ggml_tensor * src0, c
+     GGML_ASSERT(dst->extra);
+ 
+     ggml_backend_opencl_context *backend_ctx = (ggml_backend_opencl_context *)backend->context;
++    load_cl_kernels_ssm(backend_ctx); // TALOS 0002
+ 
+     ggml_tensor_extra_cl * extra0 = (ggml_tensor_extra_cl *)src0->extra;
+     ggml_tensor_extra_cl * extra1 = (ggml_tensor_extra_cl *)src1->extra;
+@@ -25685,6 +25745,7 @@ static void ggml_cl_mul_mat(ggml_backend_t backend, const ggml_tensor * src0, co
+ static void moe_router_reoerder(ggml_backend_t backend, const ggml_tensor * src, int ne20) {
+     cl_int err;
+     ggml_backend_opencl_context *backend_ctx = (ggml_backend_opencl_context *)backend->context;
++    load_cl_kernels_moe(backend_ctx); // TALOS 0002
+ 
+     ggml_tensor_extra_cl * extra = (ggml_tensor_extra_cl *)src->extra;
+     cl_ulong offset = extra->offset + src->view_offs;
+@@ -25848,6 +25909,7 @@ static void ggml_cl_mul_mat_id(ggml_backend_t backend, const ggml_tensor * src0,
+     GGML_ASSERT(src2->extra);
+ 
+     ggml_backend_opencl_context *backend_ctx = (ggml_backend_opencl_context *)backend->context;
++    load_cl_kernels_moe(backend_ctx); // TALOS 0002
+ 
+     ggml_tensor_extra_cl * extra0 = (ggml_tensor_extra_cl *)src0->extra;
+     ggml_tensor_extra_cl * extra1 = (ggml_tensor_extra_cl *)src1->extra;
+@@ -29475,6 +29537,7 @@ static void ggml_cl_gated_delta_net(ggml_backend_t backend, ggml_tensor * dst) {
+     GGML_ASSERT(src_state && src_state->extra);
+ 
+     ggml_backend_opencl_context * backend_ctx = (ggml_backend_opencl_context *) backend->context;
++    load_cl_kernels_gdn(backend_ctx); // TALOS 0002
+ 
+     const cl_uint S_v      = (cl_uint) src_v->ne[0];
+     const cl_uint H_v      = (cl_uint) src_v->ne[1];

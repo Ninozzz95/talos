@@ -1,6 +1,10 @@
 import { z } from 'zod'
 import { defineTalosTool, type TalosToolDefinition } from '@/lib/tools/registry'
-import { TALOS_ATTREZZI_SEMPRE_IN_VISTA } from '@/lib/tools/aperturaProgressiva'
+import { TALOS_ATTREZZI_SEMPRE_IN_VISTA, TALOS_ATTREZZI_SEMPRE_IN_VISTA_LOCALI } from '@/lib/tools/aperturaProgressiva'
+import { TALOS_CERCA_ATTREZZI, talosMappaFamiglie } from '@/lib/tools/cercaAttrezzi'
+
+// Punto 4: il «cerca attrezzi» dei locali viaggia in questo pezzo caricato a richiesta, con MiniSearch.
+export { talosStrumentoCercaAttrezzi } from '@/lib/tools/cercaAttrezzi'
 
 /**
  * ⭐⭐ IL CATALOGO COMPATTO: tutti i tool nominati, gli schemi a richiesta.
@@ -160,9 +164,12 @@ export function talosDimenticaSvelati(sessione: string | null): void {
  */
 export function talosPreVelatiSempreVisibili(
     tools: ReadonlyArray<TalosToolDefinition<never>>,
+    locale = false,
 ): readonly string[] {
     const offerti = new Set(tools.map((tool) => tool.name))
-    return TALOS_ATTREZZI_SEMPRE_IN_VISTA.filter((nome) => offerti.has(nome))
+    // Punto 4: i modelli locali hanno la loro lista (`aperturaProgressiva.ts`), gli altri quella di sempre.
+    const lista = locale ? TALOS_ATTREZZI_SEMPRE_IN_VISTA_LOCALI : TALOS_ATTREZZI_SEMPRE_IN_VISTA
+    return lista.filter((nome) => offerti.has(nome))
 }
 
 /**
@@ -174,9 +181,10 @@ export function talosPreVelatiSempreVisibili(
 export function talosSvelatiInConSempreVisibili(
     sessione: string | null,
     tools: ReadonlyArray<TalosToolDefinition<never>>,
+    locale = false,
 ): Set<string> {
     const svelati = talosSvelatiIn(sessione)
-    for (const nome of talosPreVelatiSempreVisibili(tools)) svelati.add(nome)
+    for (const nome of talosPreVelatiSempreVisibili(tools, locale)) svelati.add(nome)
     return svelati
 }
 
@@ -223,6 +231,7 @@ export function talosToolDelCatalogoEseguibile(
     nelCatalogo?: ReadonlySet<string>,
 ): boolean {
     return nome === TALOS_DETTAGLI_STRUMENTO
+        || nome === TALOS_CERCA_ATTREZZI
         || svelati.has(nome)
         || nelCatalogo?.has(nome) === true
 }
@@ -563,6 +572,46 @@ export function talosIstruzioneCatalogo(
         'call, do not show code, do not explain which tools you considered.',
         '',
         indice,
+        '',
+        '',
+    ].join('\n')
+}
+
+/**
+ * ⭐ Punto 4 (owner 01/10/2026, «Pochi + cerca») — l'istruzione dei modelli LOCALI, senza l'indice di 65 righe.
+ *
+ * Tiene le regole che il catalogo ha dovuto imparare sul Pad (niente attrezzi per la conversazione, mai una chiamata
+ * scritta come testo, mai «non posso» prima di aver cercato, una frase sola dopo l'esito) e al posto dell'elenco dice
+ * come trovare il resto. La mappa delle famiglie orienta la domanda: è la stessa riga della descrizione di
+ * `tool_search`, scritta qui anche per chi legge il prompt prima degli schemi.
+ */
+export function talosIstruzioneCatalogoLocale(
+    tools: ReadonlyArray<TalosToolDefinition<never>>,
+): string {
+    if (!tools.length) return ''
+    return [
+        '',
+        '',
+        '# Tools available',
+        '',
+        'A few tools are ready below. Many more exist on this device and work.',
+        `To use one that is not below: FIRST call ${TALOS_CERCA_ATTREZZI} with what you want`,
+        'to do, in English (for example "turn on the torch"). It returns the matching tools',
+        'with their schemas. THEN call the one that fits.',
+        talosMappaFamiglie(tools),
+        '',
+        'Do not call any tool for plain conversation, exact text, greetings, or',
+        'explanations. Use a tool only when the user explicitly asks you to',
+        'retrieve data, change something, or perform an action.',
+        '',
+        `⛔ Never reply that you "cannot do this" before calling ${TALOS_CERCA_ATTREZZI} for it.`,
+        '',
+        '⛔ Never write a tool call as text, in prose or in a code block. Make',
+        'the call. Text that describes a call does nothing at all.',
+        '',
+        'Once a tool has returned, reply to the user in ONE short sentence, in',
+        'the language they wrote in, saying what happened. Do not restate the',
+        'call, do not show code, do not explain which tools you considered.',
         '',
         '',
     ].join('\n')

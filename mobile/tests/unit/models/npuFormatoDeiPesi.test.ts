@@ -1,9 +1,19 @@
+import { existsSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 import {
     talosNpuAcceptsQuantisation,
     talosLocalBackendOptions,
 } from '@/lib/models/localBackendChoice'
+
+/**
+ * ⛔ Il job `test` di ci.yml non scarica il sottomodulo (stessa lezione di
+ * ABB-07, 12/09/2026): senza `llama.h` FMT-14 si salta e lo dice, invece di
+ * uscire rosso su «non ho potuto guardare». La prova vera resta in locale e
+ * nel job `android`, che il sottomodulo lo scarica.
+ */
+const LLAMA_H = resolve(process.cwd(), 'third_party/llama.cpp/include/llama.h')
 
 /**
  * ⭐⭐⭐ IL FORMATO DEI PESI DECIDE SE L'NPU HA SENSO — misurato, non dedotto.
@@ -52,11 +62,14 @@ describe('NPU — i formati che sa mangiare', () => {
     })
 
     /**
-     * ⛔ IL TEST CHE MORDE, e porta il numero con se': su questo formato
-     * l'NPU ha misurato 55,7 t/s contro i 206 della GPU.
+     * ⭐ CAMBIATO APPOSTA il 01/10/2026 (owner: «Q4_K_M ora, gli altri dopo
+     * misura»). L'11/09, col pin vecchio, l'NPU su Q4_K_M faceva 55,7 t/s
+     * contro 206 della GPU. Con llama.cpp b11312 (PR #28994), stesso Pad e
+     * stesso modello: lettura 1.062,6 t/s, scrittura 18,1, perplessità +0,1 %
+     * rispetto alla CPU (ledger corsia A).
      */
-    it('FMT-02 Q4_K_M NON passa — e questo e il caso di due modelli su tre', () => {
-        expect(talosNpuAcceptsQuantisation('Q4_K_M')).toBe(false)
+    it('FMT-02 Q4_K_M passa con il motore b11312 — misurata il 01/10', () => {
+        expect(talosNpuAcceptsQuantisation('Q4_K_M')).toBe(true)
     })
 
     it('FMT-03 nemmeno gli altri K, che sono la stessa famiglia', () => {
@@ -88,6 +101,29 @@ describe('NPU — i formati che sa mangiare', () => {
     it('FMT-06 il confronto non e case-sensitive: q4_0 e Q4_0', () => {
         expect(talosNpuAcceptsQuantisation('q4_0')).toBe(true)
     })
+
+    /**
+     * ⛔ FMT-14 — A2-REG-01. La tabella `general.file_type` si legge dal
+     * `llama.h` vendorizzato: si fermava a 32, e 38 (MXFP4) e 39 (NVFP4)
+     * diventavano «non letto». Ogni voce del sorgente che la tabella nomina
+     * deve avere lo stesso numero.
+     */
+    it.skipIf(!existsSync(LLAMA_H))('FMT-14 la tabella dei formati combacia con il llama.h vendorizzato', async () => {
+        const { readFileSync } = await import('node:fs')
+        const { talosQuantisationOfFileType } = await import('@/lib/models/gguf')
+        const sorgente = readFileSync(LLAMA_H, 'utf8')
+        const numeroDi = (nome: string) => {
+            const trovato = new RegExp(`LLAMA_FTYPE_MOSTLY_${nome}\\s*=\\s*(\\d+)`).exec(sorgente)
+            expect(trovato, `manca LLAMA_FTYPE_MOSTLY_${nome}`).not.toBeNull()
+            return Number(trovato![1])
+        }
+        expect(talosQuantisationOfFileType(numeroDi('Q4_K_M'))).toBe('Q4_K_M')
+        expect(talosQuantisationOfFileType(numeroDi('MXFP4_MOE'))).toBe('MXFP4')
+        expect(talosQuantisationOfFileType(numeroDi('NVFP4'))).toBe('NVFP4')
+        expect(talosQuantisationOfFileType(numeroDi('TQ1_0'))).toBe('TQ1_0')
+        expect(talosQuantisationOfFileType(numeroDi('Q2_0'))).toBe('Q2_0')
+        expect(talosNpuAcceptsQuantisation(talosQuantisationOfFileType(numeroDi('NVFP4')))).toBe(false)
+    })
 })
 
 describe('SCELTA — l’NPU sparisce dalle opzioni quando il formato non e il suo', () => {
@@ -95,8 +131,10 @@ describe('SCELTA — l’NPU sparisce dalle opzioni quando il formato non e il s
         expect(hexagonDi('Q4_0')?.available).toBe(true)
     })
 
-    it('FMT-08 su Q4_K_M NON e disponibile, pur essendo nel telefono', () => {
-        expect(hexagonDi('Q4_K_M')?.available).toBe(false)
+    // ⭐ 01/10: l'esempio passa da Q4_K_M (ora ammessa) a Q4_K_S (non ancora misurata).
+    it('FMT-08 su un formato non misurato NON e disponibile, pur essendo nel telefono', () => {
+        expect(hexagonDi('Q4_K_S')?.available).toBe(false)
+        expect(hexagonDi('Q4_K_M')?.available).toBe(true)
     })
 
     /**
@@ -110,7 +148,7 @@ describe('SCELTA — l’NPU sparisce dalle opzioni quando il formato non e il s
      * schermo direbbe la frase sbagliata e questa prova cade.
      */
     it('FMT-09 i due «non disponibile» restano DISTINGUIBILI', () => {
-        const formatoSbagliato = hexagonDi('Q4_K_M')
+        const formatoSbagliato = hexagonDi('Q4_K_S')
         const assenteDalTelefono = talosLocalBackendOptions([GPU], 'Q4_0')
             .find((opzione) => opzione.kind === 'hexagon')
 

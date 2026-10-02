@@ -532,6 +532,39 @@ inventoried `npx cap sync android` gate is complete.
   `0xC0000135` prima di enumerare dispositivi, quindi install e launch non sono
   ancora dichiarati verdi.
 
+## llama.cpp — motore locale (aggiornato 2026-10-01)
+
+- **ADOPT DIRECTLY** `ggml-org/llama.cpp` come sottomodulo
+  `mobile/third_party/llama.cpp`, licenza MIT. Pin: tag `b11312`, commit
+  `0c1e57098` (2026-10-01). Precedente: `451b89bae` (b10903 + un commit di
+  sola CI, 2026-09-11); nessuna patch locale (merge-base = pin).
+- Motivo dell'aggiornamento: K-quant sull'NPU Hexagon
+  ([#28994](https://github.com/ggml-org/llama.cpp/pull/28994), 2026-09-16;
+  Q5_K [#29123](https://github.com/ggml-org/llama.cpp/pull/29123)). Misura sul
+  Pad (Snapdragon 8 Elite, Qwen3-4B Q4_K_M): lettura NPU 1.062,6 t/s contro
+  46,4 del pin precedente; perplessità +0,1 % rispetto alla CPU.
+- Adattamento: `talos_genera_speculativo` (solo ricerca) passa a
+  `common_batch` + `llama_process`, come `examples/speculative-simple` di
+  b11312; `common_batch_clear/add` non esistono più a monte.
+- **Binari NPU — nella release (decisione dell'owner, 2026-10-01).** Compilati
+  da noi con l'Hexagon SDK **6.6.0.0** ufficiale, scaricato dal Qualcomm
+  Software Center dopo l'accettazione del PKLA (Product Kit License Agreement,
+  Qualcomm Technologies International, Ltd.), dalla stessa b11312: lato ARM
+  `libggml-hexagon.so` (spedito come `libtalos-npu-hexagon.so`) e skel
+  `libggml-htp-v73/75/79/81.so` (Hexagon Clang 19.0.07, qaic 01.00.51).
+  Impronte: `481e5683…a874`, `e5261db8…cdaa`, `bfc86e26…2c18`,
+  `e02c451c…f307`, `a1aa2cba…8a71`. Prestazioni sul Pad uguali ai binari
+  pubblicati da llama.cpp (prima parola 1,0 s, 16 t/s).
+- **Conformità al PKLA**: il modulo NPU si carica solo dopo che l'utente ha
+  accettato in app le condizioni del software Qualcomm (`TalosNpuTerms`,
+  versione `npu-qualcomm-v1`, PKLA 2.1 b); i file escono dall'APK senza
+  modifiche (`keepDebugSymbols`, verificato da
+  `scripts/verify-npu-unmodified.mjs`, PKLA 3.9); la build si ferma su
+  licenze GPL/LGPL/AGPL o non note (AboutLibraries `strictMode FAIL` per
+  Android, `scripts/verify-licenses.mjs` per npm, PKLA 3.6); avviso Qualcomm e
+  licenze complete in Impostazioni → Note legali (PKLA 3.8).
+- Rollback: riportare il gitlink a `451b89bae` insieme al JNI (stesso commit).
+
 ## Rollback
 
 - Ogni pin e revocabile restituendo la riga in questo file e rimuovendo la

@@ -1206,6 +1206,31 @@ describe('ContextScreen Library gallery', () => {
     })
 
     /**
+     * ⛔ OSS-70B-1 (30/09/2026 notte, owner «Codice · titolo della sessione»): sul Pad una pagina salvata dal Codice
+     * diceva di venire dalla chat aperta nell'app. Un file del Codice non ha chat: la riga dice «Code · <sessione>».
+     */
+    it('OSS70B-LIB-01 a page saved from the Code says «Code · session title», not a chat', async () => {
+        const controller = makeController()
+        controller.chat.sessions.push({ id: 'session-gas', title: 'Bollette' } as never)
+        controller.attachments.vaultFiles[0]!.metadata = {
+            origin: 'generated', origin_session_id: null,
+            provenance: {
+                schema: 1, origin: 'generated', createdAt: '2026-09-30T21:24:00.000Z', model: 'z-ai/glm-5.3-flash',
+                provider: null, modelVersion: null, originSessionId: null, promptMessageId: null, toolName: 'artifact_create',
+                sourceUrl: null, perceptualHash: null, seal: null, codice: { sessionId: 'cod-1', title: 'mi disegni un grafico' },
+            },
+        } as never
+        mockState.controller = controller
+        const settings = useSettingsStore()
+        await settings.setShell({ library_group_by_chat: true, library_view: 'grid' })
+        const wrapper = mount(ContextScreen)
+        await flushPromises()
+        const card = wrapper.get('[data-vault-file-id="vault-ready"]')
+        expect(card.text()).toContain('Code · mi disegni un grafico')
+        expect(card.text()).not.toContain('Bollette')
+    })
+
+    /**
      * Owner 14/09/2026: a `.md` opened from the Library reads FORMATTED, with the
      * chat's own renderer, and «Text» is one tap away. A plain text file has
      * nothing to format, so it gets no switch.

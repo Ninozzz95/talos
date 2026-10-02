@@ -123,5 +123,19 @@ export function createModelCatalog({
     }
   }
 
-  return Object.freeze({ ottieni });
+  /*
+   * ⭐ P4-ter (02/10/2026) — la finestra di un modello, SUBITO (la compattazione la chiede all'avvio del giro, sincrona):
+   * dalla copia se c'è; senza copia `null` (la compattazione usa allora il solo tetto, come il desktop) e la lettura parte
+   * una volta in background, così il giro dopo la trova. Un errore di rete resta silenzioso qui: lo dirà il selettore.
+   */
+  let preparazione = null;
+  function finestraDi(modelloId) {
+    if (!cache && !preparazione) {
+      preparazione = ottieni().catch(() => null).finally(() => { preparazione = null; });
+    }
+    const voce = cache?.modelli.find((m) => m.id === modelloId);
+    return Number.isFinite(voce?.contextLength) && voce.contextLength > 0 ? voce.contextLength : null;
+  }
+
+  return Object.freeze({ ottieni, finestraDi });
 }

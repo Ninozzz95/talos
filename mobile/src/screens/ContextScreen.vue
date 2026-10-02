@@ -52,6 +52,7 @@ import {
 } from '@/lib/vaultLibrary'
 import { useTalosMobileToasts } from '@/stores/toasts'
 import TalosThemedFilter from '@/components/talos/ui/TalosThemedFilter.vue'
+import { parseTalosFileProvenance } from '@/lib/files/provenance'
 
 const controller = useChatController()
 const router = useRouter()
@@ -194,8 +195,14 @@ async function openOriginChat(sessionId: string): Promise<void> {
 
 // Provenance: resolve the origin chat title for grouping + the per-file subtitle.
 function originChat(file: TalosLocalVaultFile): string | null {
-    const id = (file.metadata as { origin_session_id?: string | null }).origin_session_id ?? null
-    if (!id) return null
+    const metadata = file.metadata as { origin_session_id?: string | null, provenance?: unknown }
+    const id = metadata.origin_session_id ?? null
+    if (!id) {
+        // ⛔ OSS-70B-1 (30/09/2026, owner «Codice · titolo della sessione»): a page saved from the Code has no chat — it
+        // says where it came from instead, on the card and as its group.
+        const codice = parseTalosFileProvenance(metadata.provenance)?.codice
+        return codice ? `${t('library.codiceLabel')} · ${codice.title}` : null
+    }
     return controller.chat.sessions.find((session) => session.id === id)?.title ?? null
 }
 

@@ -93,18 +93,20 @@ pubblicato da Google in Apache-2.0.
 | --- | --- | --- |
 | `parola/melspectrogram.onnx` | 1087958 | `ba2b0e0f8b7b875369a2c89cb13360ff53bac436f2895cced9f479fa65eb176f` |
 | `parola/embedding_model.onnx` | 1326578 | `70d164290c1d095d1d4ee149bc5e00543250a7316b59f31d056cff7bd3075c1f` |
-| `parola/hey_jarvis.onnx` | 1271370 | `94a13cfe60075b132f6a472e7e462e8123ee70861bc3fb58434a73712ee0d2cb` |
 
-⛔ `hey_jarvis.onnx` resta scaricato e verificato anche se non è più la parola in
-servizio: è il **banco di prova** con cui si distingue «il montaggio è rotto» da
-«il nostro modello non sente». Toglierlo vuol dire perdere quel confronto il
-giorno in cui servirà.
+⛔ `hey_jarvis.onnx` è USCITO dall'APK il 01/10/2026 (owner): è un modello
+pre-addestrato di openWakeWord, e il README di openWakeWord (sezione License,
+letto il 01/10/2026) dice che i modelli pre-addestrati inclusi sono **CC BY-NC-SA
+4.0** — non commerciale. L'app non lo apriva mai: era il banco di prova con cui si
+distingue «il montaggio è rotto» da «il nostro modello non sente». Per quel
+confronto si scarica a mano, solo sul PC: `hey_jarvis_v0.1.onnx` dalla base qui
+sotto, 1.271.370 byte, sha256
+`94a13cfe60075b132f6a472e7e462e8123ee70861bc3fb58434a73712ee0d2cb`.
 
 Base: `https://github.com/dscripka/openWakeWord/releases/download/v0.5.1/`
 
 | nome nell'APK | nome nel rilascio |
 | --- | --- |
-| `parola/hey_jarvis.onnx` | `hey_jarvis_v0.1.onnx` |
 
 ## ⭐⭐⭐ IL NOSTRO: `talos.onnx`, addestrato il 2026-08-15
 
@@ -234,6 +236,10 @@ funzione litigano, si tiene la funzione e si alza il tetto.
 
 ## Licenza
 
-openWakeWord è Apache-2.0 (David Scripka). `speech_embedding` è Apache-2.0
-(Google). Il classificatore della nostra parola lo addestriamo noi con
+Il **codice** di openWakeWord è Apache-2.0 (David Scripka); `speech_embedding`
+di Google è Apache-2.0. ⛔ Ma il README di openWakeWord (letto il 01/10/2026)
+dice che **tutti i modelli pre-addestrati inclusi** sono CC BY-NC-SA 4.0: per
+`melspectrogram.onnx` ed `embedding_model.onnx` la licenza è quindi da chiarire.
+Decisione dell'owner (01/10/2026): dopo la release si rifanno dalla fonte Google
+Apache-2.0, con provenienza nostra. Il classificatore della nostra parola lo addestriamo noi con
 [`livekit-wakeword`](https://github.com/livekit/livekit-wakeword), Apache-2.0.

@@ -21,9 +21,16 @@ const profilo = readFileSync(resolve(process.cwd(), 'android/app/src/main/java/a
 const store = readFileSync(resolve(process.cwd(), 'android/app/src/main/java/ai/talos/TalosLocalProfileStore.java'), 'utf8')
 
 describe('D-53 — il profilo senza velocita di lettura si rimisura', () => {
+    // ⭐ 01/10/2026 (ledger A3): la regola si è spostata in
+    // `TalosLlamaProbe.profileMissingFor`, eseguita dalla JVM (PROB-04); il
+    // plugin la deve usare, e la regola D-53 deve esserci ancora.
     it('PSL-01 un profilo conta come presente SOLO se ha la velocita di lettura', () => {
+        const probe = readFileSync(resolve(
+            process.cwd(), 'android/app/src/main/java/ai/talos/TalosLlamaProbe.java'), 'utf8')
         const corpo = plugin.slice(plugin.indexOf('private static boolean profiloAssentePerQuestoModello'))
-        expect(corpo).toContain('if (profilo.prefillTokPerSec > 0) return false;')
+        expect(corpo).toContain('TalosLlamaProbe.profileMissingFor(')
+        expect(probe.slice(probe.indexOf('static boolean profileMissingFor')))
+            .toContain('if (profilo.prefillTokPerSec > 0) return false;')
     })
 
     /** ⛔ AL CONTRARIO: -1 vuol dire «non misurato», e non e mai zero. */

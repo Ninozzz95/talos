@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
@@ -637,6 +637,122 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
         expect(document.querySelector('#conversation')?.textContent ?? '').not.toContain('Sto riassumendo')
     })
 
+    // Il Pad parla italiano: le parole che l'owner vede (il dizionario di app.js), tolte alla fine di ogni prova.
+    const chiamateCompatta = (spia: { mock: { calls: unknown[][] } }) => spia.mock.calls.filter(([url]) => String(url).endsWith('/compact'))
+    const usaItaliano = () => {
+        ;(window as unknown as { __talosHarnessLocale?: string }).__talosHarnessLocale = 'it'
+        onTestFinished(() => { delete (window as unknown as { __talosHarnessLocale?: string }).__talosHarnessLocale })
+    }
+
+    /*
+     * ⭐⭐⭐ P4-ter (02/10/2026) — la compattazione si vede (decisioni dell'owner del desktop: 17/09 «barra + separatore come
+     * Claude Code», 24/09 n.6 «stato durante + riga X → Y token con Annulla», 24/09 notte «guardare non compatta mai,
+     * Compatta ora chiede conferma»).
+     */
+    it('COMP-UI-01 durante: una riga di stato con la barra; dopo: un separatore fisso coi numeri e un solo «Annulla»', async () => {
+        usaItaliano()
+        mockFetch([
+            { metodo: 'POST', percorso: '/api/v1/sessions', corpo: { sessionId: 'sess-comp-ui' } },
+            { metodo: 'GET', percorso: '/api/v1/sessions', corpo: { items: [] } },
+        ])
+        await runtime().startRealSession({ id: 'storia-comp-ui' })
+        const generation = runtime().realSessionState.generation
+        runtime().handleRealEvent({ type: 'CompactionStart', tokenPrima: 90_000, motivo: 'soglia' }, generation)
+        const nota = document.querySelector('.real-compaction-note')!
+        expect(nota.getAttribute('role')).toBe('status')
+        expect(nota.querySelector('.compaction-bar')).not.toBeNull()
+        runtime().handleRealEvent({ type: 'CompactionEnd', compattato: true, tokenPrima: 90_000, tokenDopo: 12_000, at: '2026-10-02T11:00:00.000Z', coveredThrough: 40 }, generation)
+        expect(document.querySelector('.real-compaction-note')).toBeNull()
+        const separatore = document.querySelector('.compaction-separator')!
+        expect(separatore).not.toBeNull()
+        // ⛔ Non role="separator": i suoi figli sono presentazionali e il lettore di schermo perderebbe «Annulla».
+        expect(separatore.getAttribute('role')).toBe('group')
+        expect(separatore.textContent).toContain('Conversazione riassunta')
+        expect(separatore.textContent).toContain('Conversazione riassunta · 90.000 → 12.000 token') // parole del desktop (owner 02/10), `app.js:46930-46935` @ 3ecf7651d
+        const bottoni = separatore.querySelectorAll('button')
+        expect(Array.from(bottoni).map((b) => b.textContent)).toEqual(['Annulla'])
+        const fetchMock = mockFetch([{ metodo: 'POST', percorso: '/api/v1/sessions/sess-comp-ui/compaction/undo', corpo: { ok: true, annullata: true } }])
+        bottoni[0]!.click()
+        await new Promise((r) => setTimeout(r, 0))
+        expect(fetchMock).toHaveBeenCalledWith('/api/v1/sessions/sess-comp-ui/compaction/undo',
+            expect.objectContaining({ method: 'POST', body: JSON.stringify({ at: '2026-10-02T11:00:00.000Z' }) }))
+    })
+
+    it('COMP-UI-02 dopo «Annulla» il separatore lo dice e l\'azione sparisce; una compattazione fallita non lascia separatori', async () => {
+        usaItaliano()
+        mockFetch([
+            { metodo: 'POST', percorso: '/api/v1/sessions', corpo: { sessionId: 'sess-comp-ui-2' } },
+            { metodo: 'GET', percorso: '/api/v1/sessions', corpo: { items: [] } },
+        ])
+        await runtime().startRealSession({ id: 'storia-comp-ui-2' })
+        const generation = runtime().realSessionState.generation
+        runtime().handleRealEvent({ type: 'CompactionEnd', compattato: true, tokenPrima: 9_000, tokenDopo: 1_200, at: 'a1' }, generation)
+        runtime().handleRealEvent({ type: 'CompactionUndone', at: 'a1' }, generation)
+        const separatore = document.querySelector('.compaction-separator')!
+        expect(separatore.textContent).toContain('Riassunto annullato · la conversazione intera torna al modello')
+        expect(separatore.querySelectorAll('button')).toHaveLength(0)
+        runtime().handleRealEvent({ type: 'CompactionStart' }, generation)
+        runtime().handleRealEvent({ type: 'CompactionEnd', compattato: false, motivo: 'vuoto' }, generation)
+        expect(document.querySelectorAll('.compaction-separator')).toHaveLength(1)
+        expect(document.querySelector('.real-compaction-note')).toBeNull()
+    })
+
+    it('COMP-UI-03 «Compatta» apre la conferma: nessuna chiamata finché non si sceglie «Compatta ora»', async () => {
+        usaItaliano()
+        mockFetch([
+            { metodo: 'POST', percorso: '/api/v1/sessions', corpo: { sessionId: 'sess-comp-conferma' } },
+            { metodo: 'GET', percorso: '/api/v1/sessions', corpo: { items: [] } },
+        ])
+        await runtime().startRealSession({ id: 'storia-comp-conferma' })
+        const fetchMock = mockFetch([{ metodo: 'POST', percorso: '/api/v1/sessions/sess-comp-conferma/compact', corpo: { compattato: true, tokenPrima: 9_000, tokenDopo: 1_200, at: 'b1' } }])
+        document.querySelector<HTMLButtonElement>('#compactSessionBtn')!.click()
+        await new Promise((r) => setTimeout(r, 0))
+        expect(chiamateCompatta(fetchMock)).toHaveLength(0)
+        const conferma = document.querySelector<HTMLButtonElement>('#compactConfirm')!
+        expect(conferma.textContent).toBe('Compatta ora')
+        conferma.click()
+        await new Promise((r) => setTimeout(r, 0))
+        expect(fetchMock).toHaveBeenCalledWith('/api/v1/sessions/sess-comp-conferma/compact', expect.objectContaining({ method: 'POST' }))
+    })
+
+    /*
+     * ⛔ Trovato sul Pad il 02/10 (P4-ter): su una conversazione corta il server risponde «niente-da-compattare» (non c'è
+     * niente di abbastanza vecchio da riassumere, il riassuntore non è nemmeno stato chiamato), ma l'avviso diceva «Non è
+     * arrivato nessun riassunto»: colpa a un riassunto mai chiesto. Il motivo vero decide la frase.
+     */
+    it('COMP-UI-05 conversazione corta: l\'avviso dice che non c\'è niente da compattare, non che il riassunto è mancato', async () => {
+        usaItaliano()
+        mockFetch([
+            { metodo: 'POST', percorso: '/api/v1/sessions', corpo: { sessionId: 'sess-comp-corta' } },
+            { metodo: 'GET', percorso: '/api/v1/sessions', corpo: { items: [] } },
+        ])
+        await runtime().startRealSession({ id: 'storia-comp-corta' })
+        mockFetch([{ metodo: 'POST', percorso: '/api/v1/sessions/sess-comp-corta/compact', corpo: { ok: true, compattato: false, motivo: 'niente-da-compattare' } }])
+        document.querySelector<HTMLButtonElement>('#compactSessionBtn')!.click()
+        await new Promise((r) => setTimeout(r, 0))
+        document.querySelector<HTMLButtonElement>('#compactConfirm')!.click()
+        await new Promise((r) => setTimeout(r, 0))
+        const avviso = document.querySelector('#toastRegion')?.textContent ?? ''
+        expect(avviso).toContain('Niente da compattare')
+        expect(avviso).not.toContain('riassunto')
+        expect(document.querySelector('.real-compaction-note')).toBeNull()
+        expect(document.querySelector('.compaction-separator')).toBeNull()
+    })
+
+    /*
+     * ⛔ Regressione mia del 02/10: la modifica di styles.css non era stata applicata e nessun test se ne accorgeva (il DOM
+     * c'era, la barra e il separatore no). Le regole che la UI usa devono esserci, compresa la barra ferma col movimento
+     * ridotto (altrimenti la regola cieca la lascia sull'ultimo fotogramma, fuori dal binario).
+     */
+    it('COMP-UI-04 il foglio di stile disegna barra, separatore e azione; col movimento ridotto la barra è piena e ferma', () => {
+        const css = asset('styles.css')
+        for (const selettore of ['.real-compaction-note', '.compaction-bar', '.compaction-separator', '.compaction-separator-label', '.compaction-undo', '.sheet-copy']) {
+            expect(css, selettore).toContain(`${selettore} {`)
+        }
+        expect(css).toMatch(/:host-context\(body\.reduce-motion\) \.compaction-bar > span \{ animation: none; transform: none; width: 100%/)
+        expect(css).toMatch(/@media \(prefers-reduced-motion: reduce\) \{ \.compaction-bar > span \{ animation: none;/)
+    })
+
     it('REAL-SESSION-REVIEW-01 StateDelta popola state.realSession.reviewFiles con chiave "real:<percorso>"', () => {
         const generation = runtime().realSessionState.generation
         runtime().handleRealEvent({
@@ -1133,6 +1249,66 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
         )
     })
 
+    /*
+     * ⭐⭐ P4-sexies #3 (02/10/2026, prova P4-quater sul Pad): un giro concluso NORMALMENTE mostrava «Fermato» nella
+     * testata — `setRunState` aveva due soli stati e `RunFinished` ricadeva nel «non in corso», che si legge come un
+     * arresto fatto dalla persona. Un giro concluso dice «Concluso»; «Fermato» resta per lo Stop e per l'errore.
+     */
+    it('SEXIES-03 RunFinished dice «Finished» (concluso), mai «Stopped»; RunError e lo stato di partenza restano «Stopped»', async () => {
+        mockFetch([
+            { metodo: 'POST', percorso: '/api/v1/sessions', corpo: { sessionId: 'sess-sexies-3' } },
+            { metodo: 'GET', percorso: '/api/v1/sessions', corpo: { items: [] } },
+        ])
+        await runtime().startRealSession({ id: 'storia-sexies-3' })
+        const generation = runtime().realSessionState.generation
+        const label = () => document.querySelector('#runStateToggle strong')?.textContent
+
+        runtime().handleRealEvent({ type: 'RunStarted', input: { consegna: 'x' } }, generation)
+        expect(label()).toBe('Running')
+        runtime().handleRealEvent({ type: 'RunFinished', result: { detto: 'Fatto.' } }, generation)
+        expect(label()).toBe('Finished')
+        expect(document.querySelector('.run-strip')?.classList.contains('is-stopped')).toBe(true)
+
+        runtime().handleRealEvent({ type: 'RunStarted', input: { consegna: 'y' } }, generation)
+        runtime().handleRealEvent({ type: 'RunError', code: 'INTERNAL_ERROR', message: 'boom' }, generation)
+        expect(label()).toBe('Stopped')
+    })
+
+    /*
+     * ⭐⭐ P4-sexies #2: dopo la risposta la scheda di approvazione restava «TALOS · in attesa di approvazione» (cambiava il
+     * testo del corpo, non l'intestazione): si leggeva ancora come una domanda aperta. Ora l'intestazione dice l'esito.
+     */
+    it.each([[true, 'approvazione concessa'], [false, 'approvazione negata']])('SEXIES-04 ApprovalResolved(approvato=%s): l\'intestazione non dice più «in attesa» ma «%s»', async (approvato, frase) => {
+        mockFetch([
+            { metodo: 'POST', percorso: '/api/v1/sessions', corpo: { sessionId: 'sess-sexies-4' } },
+            { metodo: 'GET', percorso: '/api/v1/sessions', corpo: { items: [] } },
+        ])
+        await runtime().startRealSession({ id: 'storia-sexies-4' })
+        const generation = runtime().realSessionState.generation
+        runtime().handleRealEvent({ type: 'ApprovalRequested', requestId: 'req-s4', azione: { tipo: 'scrivi', percorso: 'nuovo.txt' } }, generation)
+        const card = document.querySelector('.real-approval-card')!
+        expect(card.querySelector('.assistant-meta')!.textContent).toContain('in attesa di approvazione')
+
+        runtime().handleRealEvent({ type: 'ApprovalResolved', requestId: 'req-s4', approvato }, generation)
+        const intestazione = card.querySelector('.assistant-meta')!.textContent!
+        expect(intestazione).not.toContain('in attesa')
+        expect(intestazione).toContain(frase)
+    })
+
+    /*
+     * ⭐⭐ P4-sexies #4 (owner 02/10: «Chiamarla «token»»): la striscia diceva «54.6k contesto» ma somma i token mandati in
+     * TUTTI i passi del turno, mentre il separatore della compattazione misura la sola storia. La parola «contesto» sulla
+     * somma di più passi si confondeva col separatore: la striscia dice «token».
+     */
+    it('SEXIES-05 la striscia chiama «token» la somma dei passi, non «contesto» (né «ctx»)', async () => {
+        const kpi = document.querySelector('[data-run-kpi="ctx"]')!
+        expect(kpi.textContent).toMatch(/token/i)
+        expect(kpi.textContent).not.toMatch(/ctx|contesto|context/i)
+        const app = readFileSync(resolve(process.cwd(), 'public/harness-ui/app.js'), 'utf8')
+        expect(app).toContain("tokens: 'token'")
+        expect(app).not.toContain("ctx: 'contesto'")
+    })
+
     it('REAL-SESSION-RUNSTATE-01 RunStarted/RunFinished/RunError accendono e spengono DAVVERO la striscia "In esecuzione"', async () => {
         // ⭐ 29/8 — ledger §10: nessuno di questi tre case chiamava mai setRunState — la striscia non ha MAI riflesso un giro vero, solo il default statico del modulo.
         mockFetch([
@@ -1151,7 +1327,8 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
 
         runtime().handleRealEvent({ type: 'RunFinished', result: { detto: 'Fatto.' } }, generation)
         expect(strip()?.classList.contains('is-stopped')).toBe(true)
-        expect(label()).toBe('Stopped')
+        // ⭐ P4-sexies #3 (02/10): un giro concluso dice «Finished»; «Stopped» resta per l'errore e per lo Stop.
+        expect(label()).toBe('Finished')
 
         runtime().handleRealEvent({ type: 'RunStarted', input: { consegna: 'y' } }, generation)
         expect(strip()?.classList.contains('is-stopped')).toBe(false)
@@ -1285,7 +1462,8 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
 
         source?.onerror?.()
 
-        expect(document.querySelector('#conversation')?.textContent).toContain('Event connection lost.') // ⭐ 3/9 — testo tradotto in inglese
+        // ⛔ ERRCOD-E2 (30/09/2026, richiesta dell'owner): l'avviso resta, ma è la scheda d'errore del Codice, non più la riga «Event connection lost.».
+        expect(document.querySelector<HTMLElement>('#conversation .error-card')?.dataset.errorCode).toBe('EVENTS_LOST')
     })
 
     it('REAL-SESSION-LIST-01 aggiornaElencoSessioniReali popola #sessionList con un blocco "Sessioni reali"', async () => {
@@ -1664,6 +1842,10 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
             { metodo: 'POST', percorso: '/api/v1/sessions/sess-compatta/compact', corpo: { compattato: true } },
         ])
         await runtime().compactSession()
+        // ⛔ P4-ter: compactSession() apre la conferma; la chiamata parte solo da «Compatta ora».
+        expect(chiamateCompatta(fetchMock)).toHaveLength(0)
+        document.querySelector<HTMLButtonElement>('#compactConfirm')!.click()
+        await new Promise((r) => setTimeout(r, 0))
 
         expect(fetchMock).toHaveBeenCalledWith('/api/v1/sessions/sess-compatta/compact', expect.objectContaining({ method: 'POST' }))
         expect(FakeEventSource.instances).toHaveLength(1) // nessun giro nuovo avviato
@@ -1689,6 +1871,10 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
             { metodo: 'POST', percorso: '/api/v1/sessions/sess-palette-compatta/compact', corpo: { compattato: true } },
         ])
         runtime().executeCommand('compact')
+        await new Promise((r) => setTimeout(r, 0))
+        // ⛔ P4-ter (owner, desktop 24/09 notte): il comando apre la conferma; la chiamata parte solo con «Compatta ora».
+        expect(chiamateCompatta(fetchMock)).toHaveLength(0)
+        document.querySelector<HTMLButtonElement>('#compactConfirm')!.click()
         await new Promise((r) => setTimeout(r, 0))
 
         expect(fetchMock).toHaveBeenCalledWith('/api/v1/sessions/sess-palette-compatta/compact', expect.objectContaining({ method: 'POST' }))
@@ -1751,6 +1937,10 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
             { metodo: 'POST', percorso: '/api/v1/sessions/sess-topbar-compatta/compact', corpo: { compattato: true } },
         ])
         ;(document.querySelector('#compactSessionBtn') as HTMLButtonElement).click()
+        await new Promise((r) => setTimeout(r, 0))
+        // ⛔ P4-ter: il bottone apre la conferma; la chiamata parte solo da «Compatta ora».
+        expect(chiamateCompatta(fetchMock)).toHaveLength(0)
+        document.querySelector<HTMLButtonElement>('#compactConfirm')!.click()
         await new Promise((r) => setTimeout(r, 0))
 
         expect(fetchMock).toHaveBeenCalledWith('/api/v1/sessions/sess-topbar-compatta/compact', expect.objectContaining({ method: 'POST' }))
@@ -2219,6 +2409,10 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
             { metodo: 'POST', percorso: '/api/v1/sessions/sess-compatta-bottone/compact', corpo: { compattato: true } },
         ])
         ;(document.querySelector('[data-command="compact"]') as HTMLButtonElement).click()
+        await new Promise((r) => setTimeout(r, 0))
+        // ⛔ P4-ter: il comando apre la conferma; la chiamata parte solo da «Compatta ora».
+        expect(fetchMock.mock.calls.filter(([url]) => String(url).endsWith('/compact'))).toHaveLength(0)
+        document.querySelector<HTMLButtonElement>('#compactConfirm')!.click()
         await new Promise((r) => setTimeout(r, 0))
 
         expect(fetchMock).toHaveBeenCalledWith(
@@ -2732,6 +2926,75 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
         runtime().handleRealEvent({ type: 'ApprovalResolved', requestId: 'req-2', approvato: false }, generation)
         expect(card.textContent).toContain('Negato')
         expect(card.textContent).not.toContain('Approvato')
+    })
+
+    /*
+     * ⛔⛔ P4-quater (owner 02/10/2026) — la scrittura fuori dalla cartella della sessione. Il kernel manda la frase
+     * (`fuoriDalProgetto.frase`) e, se la cartella è verificata, la chiave che il registro ricorda. Owner: «Elenco di
+     * risposte» — tre righe a tutta larghezza una sotto l'altra, come Codex (`approval_overlay.rs:837-900`), mai tre pulsanti
+     * in fila (regola dell'owner del 10/09). Se la cartella non è verificata non c'è niente da consentire: due righe.
+     */
+    const FUORI_VERIFICATO = {
+        verificato: true, cartella: '/sdcard/Documenti', chiave: 'locale|/sdcard/Documenti',
+        frase: 'Vuole scrivere fuori dalla cartella della sessione, in /sdcard/Documenti. Con «Scrittura nella cartella di lavoro» qui serve il tuo sì.',
+    }
+    async function schedaFuori(sessionId: string, fuoriDalProgetto: Record<string, unknown>) {
+        mockFetch([
+            { metodo: 'POST', percorso: '/api/v1/sessions', corpo: { sessionId } },
+            { metodo: 'GET', percorso: '/api/v1/sessions', corpo: { items: [] } },
+        ])
+        await runtime().startRealSession({ id: `storia-${sessionId}` })
+        const generation = runtime().realSessionState.generation
+        runtime().handleRealEvent({ type: 'ApprovalRequested', requestId: 'req-f', azione: { tipo: 'scrivi', percorso: '../Documenti/a.txt', fuoriDalProgetto } }, generation)
+        const card = document.querySelector<HTMLElement>('.real-approval-card')!
+        const scelte = Array.from(card.querySelectorAll<HTMLButtonElement>('.approval-choice'))
+        return { card, scelte, generation }
+    }
+
+    it('FUORI-UI-01 la scheda dice la frase del kernel e offre tre risposte in colonna, la prima è «Consenti questa volta»', async () => {
+        const { card, scelte } = await schedaFuori('sess-fuori-1', FUORI_VERIFICATO)
+        expect(card.textContent).toContain('fuori dalla cartella della sessione, in /sdcard/Documenti')
+        expect(scelte.map((b) => b.querySelector('.approval-choice-label')?.textContent)).toEqual([
+            'Consenti questa volta', 'Consenti in questa cartella per la sessione', 'Nega',
+        ])
+        expect(scelte[1].textContent).toContain('anche le sottocartelle')
+        expect(card.querySelector('.approval-choices')?.getAttribute('role')).toBe('group')
+        // Niente pulsanti in fila: la vecchia riga Nega/Approva non c'è.
+        expect(card.querySelector('.sheet-actions')).toBeNull()
+    })
+
+    it('FUORI-UI-02 «Consenti in questa cartella per la sessione» manda ambito: cartella; l\'esito lo dice con le stesse parole', async () => {
+        const { card, scelte, generation } = await schedaFuori('sess-fuori-2', FUORI_VERIFICATO)
+        const fetchMock = mockFetch([{ metodo: 'POST', percorso: '/api/v1/sessions/sess-fuori-2/approve', corpo: { ok: true } }])
+        scelte[1].click()
+        await new Promise((r) => setTimeout(r, 0))
+        expect(fetchMock).toHaveBeenCalledWith('/api/v1/sessions/sess-fuori-2/approve',
+            expect.objectContaining({ body: JSON.stringify({ requestId: 'req-f', approvato: true, ambito: 'cartella' }) }))
+        expect(scelte.every((b) => b.disabled)).toBe(true)
+        runtime().handleRealEvent({ type: 'ApprovalResolved', requestId: 'req-f', approvato: true, ambito: 'cartella' }, generation)
+        expect(card.querySelector('.approval-choices')).toBeNull()
+        expect(card.textContent).toContain('Consentito in questa cartella per la sessione')
+    })
+
+    it('FUORI-UI-03 «Consenti questa volta» e «Nega» mandano il sì e il no semplici', async () => {
+        const { scelte } = await schedaFuori('sess-fuori-3', FUORI_VERIFICATO)
+        const fetchMock = mockFetch([{ metodo: 'POST', percorso: '/api/v1/sessions/sess-fuori-3/approve', corpo: { ok: true } }])
+        scelte[0].click()
+        await new Promise((r) => setTimeout(r, 0))
+        expect(fetchMock).toHaveBeenCalledWith('/api/v1/sessions/sess-fuori-3/approve',
+            expect.objectContaining({ body: JSON.stringify({ requestId: 'req-f', approvato: true }) }))
+    })
+
+    it('FUORI-UI-04 cartella non verificata: solo «Consenti questa volta» e «Nega»', async () => {
+        const { scelte } = await schedaFuori('sess-fuori-4', { verificato: false, cartella: null, chiave: null, frase: 'Non è stato possibile verificare dove finisce «../x»: potrebbe essere fuori dalla cartella della sessione.' })
+        expect(scelte.map((b) => b.querySelector('.approval-choice-label')?.textContent)).toEqual(['Consenti questa volta', 'Nega'])
+    })
+
+    it('FUORI-UI-05 un\'automazione chiusa dal server lo dice: nessuno poteva rispondere', async () => {
+        const { card, generation } = await schedaFuori('sess-fuori-5', FUORI_VERIFICATO)
+        runtime().handleRealEvent({ type: 'ApprovalResolved', requestId: 'req-f', approvato: false, motivo: 'nessuna-interfaccia' }, generation)
+        expect(card.textContent).toContain('Negato: nessuno poteva rispondere in questa sessione automatica')
+        expect(card.textContent).not.toContain('altro client')
     })
 
     it('⛔⛔ APPROVAL-02-BIS AL CONTRARIO: un fallimento della POST riabilita i bottoni, mai una card bloccata per sempre', async () => {
@@ -3440,6 +3703,28 @@ describe('Harness UI — gruppo di tool-call collassato, con diff per-file (owne
         const generation = runtime().realSessionState.generation
         runtime().handleRealEvent({ type: 'ToolCallStart', toolCallId: 't1', toolCallName: 'shell' }, generation)
         runtime().handleRealEvent({ type: 'ToolCallResult', toolCallId: 't1', content: 'exit 0 [sandbox: none]\ntutto ok' }, generation)
+
+        expect(document.querySelector('.tool-group-warn')?.hasAttribute('hidden')).toBe(true)
+    })
+
+    /*
+     * ⛔ ESITO65 (30/09/2026, consegna desktop 65) — il server manda `isError` su ToolCallResult, deciso dal ramo del
+     * kernel che conosce l'esito. Prima la UI indovinava dal testo (`pareFallito`), e «notes_delete failed: …» non
+     * accendeva niente. Ledger `.claude/ragionamento/LEDGER-65-ESITO-ATTREZZI-2026-09-30.md`.
+     */
+    it('ESITO65-UI-01 isError:true accende l’avviso e il motivo anche quando il testo non ha un prefisso noto', () => {
+        const generation = runtime().realSessionState.generation
+        runtime().handleRealEvent({ type: 'ToolCallStart', toolCallId: 't1', toolCallName: 'notes_delete' }, generation)
+        runtime().handleRealEvent({ type: 'ToolCallResult', toolCallId: 't1', content: 'notes_delete failed: TALOS_NOTE_NOT_FOUND', isError: true }, generation)
+
+        expect(document.querySelector('.tool-group-warn')?.hasAttribute('hidden')).toBe(false)
+        expect(document.querySelector('.tool-note-summary-text')?.textContent).toContain('failed: notes_delete failed: TALOS_NOTE_NOT_FOUND')
+    })
+
+    it('ESITO65-UI-02 isError:false vince sul testo: un successo che comincia con «error:» non accende l’avviso', () => {
+        const generation = runtime().realSessionState.generation
+        runtime().handleRealEvent({ type: 'ToolCallStart', toolCallId: 't1', toolCallName: 'document_create' }, generation)
+        runtime().handleRealEvent({ type: 'ToolCallResult', toolCallId: 't1', content: 'error: this line is what the saver chose to say, and it succeeded', isError: false }, generation)
 
         expect(document.querySelector('.tool-group-warn')?.hasAttribute('hidden')).toBe(true)
     })
@@ -4177,5 +4462,576 @@ describe('Harness UI — le catene di retry di caricaCronologiaSessione muoiono 
 
         expect(fetchMock.mock.calls.length).toBe(chiamateDopoIlBoot) // ZERO fetch nuove al risveglio
         expect(FakeEventSource.instances).toHaveLength(0) // e nessuna EventSource fantasma sul mount nuovo
+    })
+})
+
+/*
+ * ⛔ ERRCOD-UI (30/09/2026) — ledger `.claude/ragionamento/LEDGER-ERRORI-CODICE-2026-09-30.md`. Owner: errori «formattati
+ * allo stato dell'arte con una sezione formattata e stilisticamente coerente con le grammatiche di Talos». La scheda del
+ * Codice ripete quella della chat (`TalosMobileStatusMessage.vue`): titolo del livello, frase umana senza codici,
+ * «Azione successiva», UN solo pulsante giusto, diagnostica in piccolo col codice e i dettagli grezzi. Sul Pad c'era
+ * «[internal-error] HTTP 401 dopo 4 tentativi: {"error":{"message":"User not found.","code":401}}».
+ */
+describe('ERRCOD-UI — la scheda d’errore del Codice', () => {
+    type Host = { __talosHarnessHostOpen?: (bersaglio: string) => void, __talosHarnessLocale?: string }
+    const descrittore = (code: string, extra: Record<string, unknown> = {}) => ({
+        schema: 'talos.codice-errore.v1', layer: 'provider', code, retryable: false, action: 'none', detail: 'grezzo', ...extra,
+    })
+
+    beforeEach(() => {
+        document.body.className = ''
+        FakeEventSource.instances = []
+        vi.stubGlobal('EventSource', FakeEventSource)
+        mountStaticRuntime()
+    })
+
+    afterEach(() => {
+        ;(window as unknown as { __talosHarnessDestroy?: () => void }).__talosHarnessDestroy?.()
+        delete (window as unknown as { __talosHarnessRoot?: unknown }).__talosHarnessRoot
+        delete (window as unknown as { __talosHarnessHost?: unknown }).__talosHarnessHost
+        delete (window as unknown as Host).__talosHarnessHostOpen
+        delete (window as unknown as Host).__talosHarnessLocale
+        document.body.replaceChildren()
+        document.body.className = ''
+        vi.unstubAllGlobals()
+        vi.restoreAllMocks()
+    })
+
+    function errore401() {
+        return {
+            type: 'RunError', code: 'internal-error',
+            message: 'HTTP 401 dopo 4 tentativi: {"error":{"message":"User not found.","code":401}}',
+            errore: descrittore('PROVIDER_AUTH', { action: 'provider-keys', status: 401, model: 'z-ai/glm-5.3-flash', detail: '{"error":{"message":"User not found.","code":401}}' }),
+        }
+    }
+
+    it('ERRCOD-UI-01 un 401 diventa una scheda: titolo, frase senza codici, azione, un pulsante, diagnostica col codice', () => {
+        const aperti: string[] = []
+        ;(window as unknown as Host).__talosHarnessHostOpen = (bersaglio) => { aperti.push(bersaglio) }
+        runtime().handleRealEvent(errore401(), runtime().realSessionState.generation)
+
+        const scheda = document.querySelector<HTMLElement>('.error-card')
+        expect(scheda).not.toBeNull()
+        expect(scheda?.getAttribute('role')).toBe('alert')
+        expect(scheda?.dataset.errorCode).toBe('PROVIDER_AUTH')
+        expect(scheda?.querySelector('.error-card-title')?.textContent).toBe('Provider failure')
+        const frase = scheda?.querySelector('.error-card-message')?.textContent ?? ''
+        expect(frase).toBe('The model service did not accept the key saved for this provider.')
+        expect(frase).not.toMatch(/PROVIDER_|HTTP|401|User not found|internal-error/)
+        expect(scheda?.querySelector('.error-card-next')?.textContent).toBe('Open the provider keys, check or replace the key, then try again.')
+        const pulsanti = scheda?.querySelectorAll('button') ?? []
+        expect(pulsanti).toHaveLength(1)
+        expect(pulsanti[0]?.textContent).toBe('Open provider keys')
+        const diagnostica = scheda?.querySelector('.error-card-diagnostic')?.textContent ?? ''
+        expect(diagnostica).toContain('z-ai/glm-5.3-flash')
+        expect(diagnostica).toContain('HTTP 401')
+        expect(diagnostica).toContain('PROVIDER_AUTH')
+        expect(diagnostica).toContain('Manual action required')
+        expect(scheda?.querySelector('.error-card-details pre')?.textContent).toContain('User not found.')
+
+        pulsanti[0]?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+        expect(aperti).toEqual(['provider-keys'])
+    })
+
+    it('ERRCOD-UI-02 in italiano la scheda parla italiano', () => {
+        ;(window as unknown as Host).__talosHarnessLocale = 'it'
+        runtime().handleRealEvent(errore401(), runtime().realSessionState.generation)
+        const scheda = document.querySelector('.error-card')
+        expect(scheda?.querySelector('.error-card-title')?.textContent).toBe('Errore del provider')
+        expect(scheda?.querySelector('.error-card-message')?.textContent).toBe('Il servizio del modello non ha accettato la chiave salvata per questo fornitore.')
+        expect(scheda?.querySelector('button')?.textContent).toBe('Apri le chiavi dei fornitori')
+        expect(scheda?.querySelector('.error-card-diagnostic')?.textContent).toContain('Richiesta azione manuale')
+    })
+
+    it('ERRCOD-UI-03 un errore senza rimedio in un tocco non ha pulsanti', () => {
+        runtime().handleRealEvent({ type: 'RunError', code: 'internal-error', message: 'x', errore: descrittore('PROVIDER_BILLING', { status: 402 }) }, runtime().realSessionState.generation)
+        expect(document.querySelector('.error-card')?.querySelectorAll('button')).toHaveLength(0)
+    })
+
+    it('ERRCOD-UI-04 lo Stop della persona è una nota neutra, non una scheda rossa', () => {
+        runtime().handleRealEvent({ type: 'RunError', code: 'fermato', message: '⛔ interrotto su richiesta', errore: descrittore('RUN_STOPPED', { layer: 'none', retryable: null }) }, runtime().realSessionState.generation)
+        expect(document.querySelector('.error-card')).toBeNull()
+        const note = Array.from(document.querySelectorAll('.real-session-status')).map((n) => n.textContent ?? '')
+        expect(note.some((testo) => testo.includes('Stopped by you.'))).toBe(true)
+        expect(document.querySelector('.real-session-error')).toBeNull()
+    })
+
+    it('ERRCOD-UI-05 un RunError di un server vecchio (senza descrittore) diventa «errore imprevisto», col testo grezzo nei dettagli', () => {
+        runtime().handleRealEvent({ type: 'RunError', code: 'internal-error', message: 'qualcosa di strano' }, runtime().realSessionState.generation)
+        const scheda = document.querySelector('.error-card')
+        expect(scheda?.querySelector('.error-card-message')?.textContent).toBe('Something unexpected happened.')
+        expect(scheda?.querySelector('.error-card-details pre')?.textContent).toContain('qualcosa di strano')
+    })
+
+    it('ERRCOD-UI-06 un errore a metà risposta avvisa che la risposta sopra può essere incompleta', () => {
+        runtime().handleRealEvent({ type: 'RunError', code: 'internal-error', message: 'x', errore: descrittore('PROVIDER_OVERLOADED', { midStream: true, retryable: true, action: 'retry' }) }, runtime().realSessionState.generation)
+        expect(document.querySelector('.error-card-message')?.textContent).toBe('The model is overloaded at the moment. The reply above may be incomplete.')
+    })
+
+    it('ERRCOD-UI-07 «Try again» riprende la stessa sessione', async () => {
+        const spia = mockFetch([
+            { metodo: 'POST', percorso: '/api/v1/sessions', corpo: { sessionId: 'sess-riprova' } },
+            { metodo: 'GET', percorso: '/api/v1/sessions', corpo: { items: [] } },
+            { metodo: 'POST', percorso: '/api/v1/sessions/sess-riprova/resume', corpo: { sessionId: 'sess-riprova' } },
+        ])
+        await runtime().startRealSession({ id: 'storia-x' })
+        runtime().handleRealEvent({ type: 'RunError', code: 'internal-error', message: 'x', errore: descrittore('PROVIDER_RATE_LIMIT', { retryable: true, action: 'retry', status: 429 }) }, runtime().realSessionState.generation)
+        const pulsante = document.querySelector<HTMLButtonElement>('.error-card button')
+        expect(pulsante?.textContent).toBe('Try again')
+        pulsante?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+        await new Promise((ok) => setTimeout(ok, 0))
+        expect(spia.mock.calls.some(([url, init]) => String(url).endsWith('/api/v1/sessions/sess-riprova/resume') && (init?.method ?? '').toUpperCase() === 'POST')).toBe(true)
+    })
+
+    it('ERRCOD-UI-08 fuori dall’app (nessun aggancio) il pulsante lo dice invece di non fare niente', () => {
+        runtime().handleRealEvent(errore401(), runtime().realSessionState.generation)
+        document.querySelector<HTMLButtonElement>('.error-card button')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+        expect(document.querySelector('.error-card-action-note')?.textContent).toBe('This action is only available inside the TALOS app.')
+    })
+})
+
+/*
+ * ⛔ ERRCOD-E2 (30/09/2026) — avvio, invio e collegamento. Sul Pad c'era «Invio non riuscito: Sessione non pronta per
+ * questa azione». Il descrittore arriva nell'envelope del server; solo ciò che il server non può dire (non risponde,
+ * la connessione degli eventi si chiude) si classifica qui.
+ */
+describe('ERRCOD-UI-E2 — avvio, invio e collegamento passano dalla stessa scheda', () => {
+    beforeEach(() => {
+        document.body.className = ''
+        FakeEventSource.instances = []
+        vi.stubGlobal('EventSource', FakeEventSource)
+        mountStaticRuntime()
+    })
+
+    afterEach(() => {
+        ;(window as unknown as { __talosHarnessDestroy?: () => void }).__talosHarnessDestroy?.()
+        delete (window as unknown as { __talosHarnessRoot?: unknown }).__talosHarnessRoot
+        delete (window as unknown as { __talosHarnessHost?: unknown }).__talosHarnessHost
+        document.body.replaceChildren()
+        document.body.className = ''
+        vi.unstubAllGlobals()
+        vi.restoreAllMocks()
+    })
+
+    const nonPronta = {
+        code: 'SESSION_NOT_READY', message: 'Sessione non pronta per questa azione',
+        errore: { schema: 'talos.codice-errore.v1', layer: 'system', code: 'SESSION_NOT_READY', retryable: false, action: 'new-session', detail: '' },
+    }
+    const attesa = () => new Promise((ok) => setTimeout(ok, 0))
+
+    async function sessioneConclusa() {
+        await runtime().startRealSession({ id: 'storia-x' })
+        runtime().handleRealEvent({ type: 'RunFinished', result: {} }, runtime().realSessionState.generation)
+    }
+
+    it('ERRCOD-UI-E2-01 un seguito che il server rifiuta diventa una scheda, non «Invio non riuscito: …»', async () => {
+        mockFetch([
+            { metodo: 'POST', percorso: '/api/v1/sessions', corpo: { sessionId: 'sess-e2' } },
+            { metodo: 'GET', percorso: '/api/v1/sessions', corpo: { items: [] } },
+            { metodo: 'POST', percorso: '/api/v1/sessions/sess-e2/resume', ok: false, status: 409, corpo: nonPronta },
+        ])
+        await sessioneConclusa()
+        runtime().submitPrompt('ciao di nuovo')
+        await attesa(); await attesa()
+        const scheda = document.querySelector<HTMLElement>('.error-card')
+        expect(scheda?.dataset.errorCode).toBe('SESSION_NOT_READY')
+        expect(scheda?.querySelector('button')?.textContent).toBe('Start a new session')
+        expect(document.body.textContent).not.toContain('Invio non riuscito')
+    })
+
+    it('ERRCOD-UI-E2-02 se il server del Codice non risponde, la scheda lo dice e offre «Try again»', async () => {
+        vi.spyOn(window, 'fetch').mockImplementation(async (input, init) => {
+            const url = String(input)
+            const metodo = (init?.method ?? 'GET').toUpperCase()
+            if (metodo === 'POST' && url.endsWith('/api/v1/sessions')) return new Response(JSON.stringify({ ok: true, data: { sessionId: 'sess-giu' } }))
+            if (metodo === 'GET' && url.split('?')[0].endsWith('/api/v1/sessions')) return new Response(JSON.stringify({ ok: true, data: { items: [] } }))
+            throw new TypeError('Failed to fetch')
+        })
+        await sessioneConclusa()
+        runtime().submitPrompt('ci sei?')
+        await attesa(); await attesa()
+        const scheda = document.querySelector<HTMLElement>('.error-card')
+        expect(scheda?.dataset.errorCode).toBe('SERVER_UNREACHABLE')
+        expect(scheda?.querySelector('.error-card-message')?.textContent).toBe('The Code server on this phone is not answering.')
+        expect(scheda?.querySelector('button')?.textContent).toBe('Try again')
+    })
+
+    it('ERRCOD-UI-E2-03 la connessione degli eventi persa a metà diventa una scheda', async () => {
+        mockFetch([
+            { metodo: 'POST', percorso: '/api/v1/sessions', corpo: { sessionId: 'sess-ev' } },
+            { metodo: 'GET', percorso: '/api/v1/sessions', corpo: { items: [] } },
+        ])
+        await runtime().startRealSession({ id: 'storia-x' })
+        const sorgente = FakeEventSource.instances.at(-1)!
+        sorgente.readyState = FakeEventSource.CLOSED
+        sorgente.onerror?.()
+        const scheda = document.querySelector<HTMLElement>('.error-card')
+        expect(scheda?.dataset.errorCode).toBe('EVENTS_LOST')
+        expect(document.body.textContent).not.toContain('Event connection lost.')
+    })
+
+    it('ERRCOD-UI-E2-04 un avvio senza chiave del fornitore porta alle chiavi', async () => {
+        mockFetch([
+            { metodo: 'POST', percorso: '/api/v1/sessions', ok: false, status: 400, corpo: {
+                code: 'CONFIG_INVALID', message: 'Configurazione non valida',
+                errore: { schema: 'talos.codice-errore.v1', layer: 'provider', code: 'PROVIDER_KEY_MISSING', retryable: false, action: 'provider-keys', detail: '' },
+            } },
+            { metodo: 'GET', percorso: '/api/v1/sessions', corpo: { items: [] } },
+        ])
+        await runtime().startRealSession({ id: 'storia-x' })
+        await attesa()
+        const scheda = document.querySelector<HTMLElement>('.error-card')
+        expect(scheda?.dataset.errorCode).toBe('PROVIDER_KEY_MISSING')
+        expect(scheda?.querySelector('button')?.textContent).toBe('Open provider keys')
+        expect(document.body.textContent).not.toContain('Avvio non riuscito')
+    })
+})
+
+/*
+ * ⛔ ERRCOD-E3 (30/09/2026, visto sul Pad) — «Modificato un file — non riuscito: notes_delete failed:
+ * TALOS_NOTE_NOT_FOUND»: una nota non è un file, e il motivo era il testo tecnico. Owner: «Motivo in parole, grezzo nel
+ * dettaglio». Il motivo arriva come `errorCode` dal kernel; il testo grezzo resta nella riga aperta del foglio.
+ */
+describe('ERRCOD-UI-E3 — le righe degli attrezzi dicono cosa hanno fatto, e perché non è riuscito', () => {
+    type Host = { __talosHarnessLocale?: string }
+    beforeEach(() => {
+        document.body.className = ''
+        FakeEventSource.instances = []
+        vi.stubGlobal('EventSource', FakeEventSource)
+        mountStaticRuntime()
+    })
+    afterEach(() => {
+        ;(window as unknown as { __talosHarnessDestroy?: () => void }).__talosHarnessDestroy?.()
+        delete (window as unknown as { __talosHarnessRoot?: unknown }).__talosHarnessRoot
+        delete (window as unknown as { __talosHarnessHost?: unknown }).__talosHarnessHost
+        delete (window as unknown as Host).__talosHarnessLocale
+        document.body.replaceChildren()
+        document.body.className = ''
+        vi.unstubAllGlobals()
+        vi.restoreAllMocks()
+    })
+    const riassunto = () => document.querySelector('.tool-note-summary-text')?.textContent
+    function attrezzo(id: string, nome: string, risultato?: Record<string, unknown>) {
+        const generation = runtime().realSessionState.generation
+        runtime().handleRealEvent({ type: 'ToolCallStart', toolCallId: id, toolCallName: nome }, generation)
+        if (risultato) runtime().handleRealEvent({ type: 'ToolCallResult', toolCallId: id, ...risultato }, generation)
+    }
+
+    it('ERRCOD-UI-E3-01 una nota che non esiste: «Deleted a note — failed: the note does not exist»', () => {
+        attrezzo('t1', 'notes_delete', { content: 'notes_delete failed: TALOS_NOTE_NOT_FOUND', isError: true, errorCode: 'NOT_FOUND' })
+        expect(riassunto()).toBe('Deleted a note — failed: the note does not exist')
+    })
+    it('ERRCOD-UI-E3-02 in italiano: «Cancellata una nota — non riuscito: la nota non esiste»', () => {
+        ;(window as unknown as Host).__talosHarnessLocale = 'it'
+        attrezzo('t1', 'notes_delete', { content: 'notes_delete failed: TALOS_NOTE_NOT_FOUND', isError: true, errorCode: 'NOT_FOUND' })
+        expect(riassunto()).toBe('Cancellata una nota — non riuscito: la nota non esiste')
+    })
+    it('ERRCOD-UI-E3-03 guardare le note non è «leggere un file»', () => {
+        attrezzo('t1', 'notes_list', { content: '[]', isError: false })
+        expect(riassunto()).toBe('Looked at the notes')
+    })
+    it('ERRCOD-UI-E3-04 due note salvate: «Saved 2 notes»', () => {
+        attrezzo('t1', 'notes_create', { content: 'saved', isError: false })
+        attrezzo('t2', 'notes_create', { content: 'saved', isError: false })
+        expect(riassunto()).toBe('Saved 2 notes')
+    })
+    it('ERRCOD-UI-E3-05 un permesso negato si dice in parole', () => {
+        attrezzo('t1', 'tasks_delete', { content: 'REFUSED. Read only. Nothing was deleted.', isError: true, errorCode: 'DENIED' })
+        expect(riassunto()).toBe('Deleted a task — failed: not allowed by the current permissions')
+    })
+    it('ERRCOD-UI-E3-06 i file restano com’erano: «Read a file»', () => {
+        attrezzo('t1', 'leggi', { content: 'contenuto', isError: false })
+        expect(riassunto()).toBe('Read a file')
+    })
+    it('ERRCOD-UI-E3-07 senza errorCode (sessioni salvate prima) il motivo resta quello di sempre', () => {
+        attrezzo('t1', 'notes_delete', { content: 'notes_delete failed: TALOS_NOTE_NOT_FOUND', isError: true })
+        expect(riassunto()).toBe('Deleted a note — failed: notes_delete failed: TALOS_NOTE_NOT_FOUND')
+    })
+})
+
+/*
+ * ⛔⛔ 70-A (30/09/2026, contratto desktop 70) — il server del Codice vuole il suo segreto su tutta l'API. `app.js` lo
+ * chiede all'app ospite (`window.__talosHarnessIntestazioni`, piantato da HarnessSessionScreen.vue), apre il flusso
+ * degli eventi dal ponte `window.__talosHarnessApriEventi` (libreria `eventsource`, owner 30/09), e su un 401 rilegge
+ * il segreto una volta. Ledger `.claude/ragionamento/LEDGER-70A-SERVER-CODICE-PROTETTO-2026-09-30.md`.
+ */
+describe('SEC70-UI — app.js manda il segreto del server del Codice', () => {
+    type Ponti = {
+        __talosHarnessIntestazioni?: (opzioni?: { rinnova?: boolean }) => Promise<Record<string, string>>
+        __talosHarnessApriEventi?: (url: string) => unknown
+    }
+    beforeEach(() => {
+        document.body.className = ''
+        FakeEventSource.instances = []
+        vi.stubGlobal('EventSource', FakeEventSource)
+        mountStaticRuntime()
+    })
+
+    afterEach(() => {
+        ;(window as unknown as { __talosHarnessDestroy?: () => void }).__talosHarnessDestroy?.()
+        delete (window as unknown as { __talosHarnessRoot?: unknown }).__talosHarnessRoot
+        delete (window as unknown as { __talosHarnessHost?: unknown }).__talosHarnessHost
+        delete (window as unknown as Ponti).__talosHarnessIntestazioni
+        delete (window as unknown as Ponti).__talosHarnessApriEventi
+        document.body.replaceChildren()
+        document.body.className = ''
+        vi.unstubAllGlobals()
+        vi.restoreAllMocks()
+    })
+
+    const rifiuto = {
+        code: 'AUTH_REQUIRED', message: 'Richiesta senza il segreto del server',
+        errore: { schema: 'talos.codice-errore.v1', layer: 'system', code: 'SERVER_AUTH_FAILED', retryable: false, action: 'none', detail: '' },
+    }
+    const intestazioniDi = (spia: ReturnType<typeof vi.spyOn>, indice: number) =>
+        new Headers((spia.mock.calls[indice]?.[1] as RequestInit | undefined)?.headers).get('Authorization')
+
+    it('SEC70-UI-01 ogni richiesta porta Authorization dal ponte dell’app', async () => {
+        const ponte = vi.fn(async () => ({ Authorization: `Bearer ${'1'.repeat(64)}` }))
+        ;(window as unknown as Ponti).__talosHarnessIntestazioni = ponte
+        const spia = mockFetch([
+            { metodo: 'POST', percorso: '/api/v1/sessions', corpo: { sessionId: 'sess-s1' } },
+            { metodo: 'GET', percorso: '/api/v1/sessions', corpo: { items: [] } },
+        ])
+        await runtime().startRealSession({ id: 'storia-x' })
+        expect(spia.mock.calls.length).toBeGreaterThan(0)
+        spia.mock.calls.forEach((_, indice) => expect(intestazioniDi(spia, indice)).toBe(`Bearer ${'1'.repeat(64)}`))
+        const post = spia.mock.calls.find(([, init]) => (init?.method ?? 'GET') === 'POST')
+        expect(new Headers(post?.[1]?.headers).get('Content-Type')).toBe('application/json')
+    })
+
+    it('SEC70-UI-02 un 401 fa rileggere il segreto una volta, e la richiesta riparte', async () => {
+        const ponte = vi.fn(async (opzioni?: { rinnova?: boolean }) => ({ Authorization: `Bearer ${(opzioni?.rinnova ? '2' : '1').repeat(64)}` }))
+        ;(window as unknown as Ponti).__talosHarnessIntestazioni = ponte
+        const spia = vi.spyOn(window, 'fetch').mockImplementation(async (input, init) => {
+            const url = String(input)
+            const metodo = (init?.method ?? 'GET').toUpperCase()
+            const autorizzato = new Headers(init?.headers).get('Authorization') === `Bearer ${'2'.repeat(64)}`
+            if (!autorizzato) return new Response(JSON.stringify({ ok: false, error: rifiuto }), { status: 401 })
+            if (metodo === 'POST' && url.endsWith('/api/v1/sessions')) return new Response(JSON.stringify({ ok: true, data: { sessionId: 'sess-s2' } }))
+            return new Response(JSON.stringify({ ok: true, data: { items: [] } }))
+        })
+        await runtime().startRealSession({ id: 'storia-x' })
+        expect(runtime().realSessionState.id).toBe('sess-s2')
+        expect(ponte).toHaveBeenCalledWith({ rinnova: true })
+        expect(spia.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(2)
+        expect(document.querySelector('.error-card')).toBeNull()
+    })
+
+    it('SEC70-UI-03 se anche il segreto riletto viene rifiutato, la scheda lo dice in parole', async () => {
+        ;(window as unknown as Ponti).__talosHarnessIntestazioni = vi.fn(async () => ({ Authorization: `Bearer ${'1'.repeat(64)}` }))
+        vi.spyOn(window, 'fetch').mockImplementation(async () => new Response(JSON.stringify({ ok: false, error: rifiuto }), { status: 401 }))
+        await runtime().startRealSession({ id: 'storia-x' })
+        const scheda = document.querySelector<HTMLElement>('.error-card')
+        expect(scheda?.dataset.errorCode).toBe('SERVER_AUTH_FAILED')
+        expect(scheda?.querySelector('.error-card-message')?.textContent).toBe('The Code server on this phone did not recognise TALOS.')
+        expect(scheda?.querySelector('button')).toBeNull()
+    })
+
+    it('SEC70-UI-04 il flusso degli eventi si apre dal ponte quando c’è; senza ponte resta EventSource', async () => {
+        const aperti: string[] = []
+        ;(window as unknown as Ponti).__talosHarnessApriEventi = (url: string) => { aperti.push(url); return new FakeEventSource(url) }
+        mockFetch([
+            { metodo: 'POST', percorso: '/api/v1/sessions', corpo: { sessionId: 'sess-s4' } },
+            { metodo: 'GET', percorso: '/api/v1/sessions', corpo: { items: [] } },
+        ])
+        await runtime().startRealSession({ id: 'storia-x' })
+        expect(aperti).toEqual(['/api/v1/sessions/sess-s4/events'])
+        FakeEventSource.instances.at(-1)!.emit({ type: 'RunStarted', threadId: 'sess-s4', runId: 'r1' })
+        expect(runtime().realSessionState.id).toBe('sess-s4')
+    })
+})
+
+/*
+ * ⛔⛔ 70-B (30/09/2026 notte, owner «Riuso della chat» e «Sì, come la chat») — la scheda di un artefatto del Codice non
+ * apre più un iframe dentro TALOS (bloccato da `frame-src 'none'` e non isolato dal ponte Capacitor): «Apri» chiede
+ * all'app la finestra isolata della chat, e c'è anche «Save to Library» come nella scheda della chat.
+ * Ledger `.claude/ragionamento/LEDGER-70B-ARTEFATTI-CODICE-2026-09-30.md`.
+ */
+describe('ART70-UI — la scheda di un artefatto del Codice', () => {
+    type Esito = { ok: true } | { ok: false, motivo: string }
+    type Ponti = { __talosHarnessArtefatto?: { apri(id: string, titolo: string): Promise<Esito>, salva(id: string, titolo: string): Promise<Esito> }, __talosHarnessLocale?: string }
+    const ID = '3f2b8c1e-9a4d-4e7b-8c21-5d6f7a8b9c0d'
+    beforeEach(() => {
+        document.body.className = ''
+        FakeEventSource.instances = []
+        vi.stubGlobal('EventSource', FakeEventSource)
+        mountStaticRuntime()
+    })
+    afterEach(() => {
+        ;(window as unknown as { __talosHarnessDestroy?: () => void }).__talosHarnessDestroy?.()
+        delete (window as unknown as { __talosHarnessRoot?: unknown }).__talosHarnessRoot
+        delete (window as unknown as { __talosHarnessHost?: unknown }).__talosHarnessHost
+        delete (window as unknown as Ponti).__talosHarnessArtefatto
+        delete (window as unknown as Ponti).__talosHarnessLocale
+        document.body.replaceChildren()
+        document.body.className = ''
+        vi.unstubAllGlobals()
+        vi.restoreAllMocks()
+    })
+    const attesa = () => new Promise((ok) => setTimeout(ok, 0))
+    function artefatto() {
+        runtime().handleRealEvent({ type: 'ArtifactCreated', messageId: 'm1', id: ID, titolo: 'Vendite della settimana' }, runtime().realSessionState.generation)
+        return document.querySelector<HTMLElement>('.real-artifact-card')!
+    }
+
+    it('ART70-UI-01 niente iframe: un pulsante col titolo che apre, e una riga separata «Save to Library»', () => {
+        const scheda = artefatto()
+        expect(scheda.querySelector('iframe')).toBeNull()
+        expect(scheda.querySelector('.artifact-card-open')?.textContent).toContain('Vendite della settimana')
+        expect(scheda.querySelector('.artifact-card-save')?.textContent).toContain('Save to Library')
+    })
+
+    it('ART70-UI-02 «Apri» chiede all’app la finestra isolata; se non si apre lo dice, e se il server non l’ha più anche', async () => {
+        const apri = vi.fn(async (): Promise<Esito> => ({ ok: true }))
+        ;(window as unknown as Ponti).__talosHarnessArtefatto = { apri, salva: vi.fn() }
+        const scheda = artefatto()
+        scheda.querySelector<HTMLButtonElement>('.artifact-card-open')!.click()
+        await attesa()
+        expect(apri).toHaveBeenCalledWith(ID, 'Vendite della settimana')
+        expect(scheda.querySelector('.artifact-card-open .artifact-card-status')?.textContent).toBe('')
+        apri.mockResolvedValueOnce({ ok: false, motivo: 'OPEN_FAILED' })
+        scheda.querySelector<HTMLButtonElement>('.artifact-card-open')!.click()
+        await attesa()
+        expect(scheda.querySelector('.artifact-card-open .artifact-card-status')?.textContent).toBe('It would not open')
+        apri.mockResolvedValueOnce({ ok: false, motivo: 'NOT_FOUND' })
+        scheda.querySelector<HTMLButtonElement>('.artifact-card-open')!.click()
+        await attesa()
+        expect(scheda.querySelector('.artifact-card-open .artifact-card-status')?.textContent).toBe('This visual is no longer on the Code server.')
+    })
+
+    it('ART70-UI-03 «Save to Library» diventa «Saved to Library» e non si ripete; un fallimento lo dice', async () => {
+        const salva = vi.fn(async (): Promise<Esito> => ({ ok: true }))
+        ;(window as unknown as Ponti).__talosHarnessArtefatto = { apri: vi.fn(), salva }
+        const scheda = artefatto()
+        const pulsante = scheda.querySelector<HTMLButtonElement>('.artifact-card-save')!
+        pulsante.click()
+        await attesa()
+        // ⛔ OSS-70B-1 (30/09/2026 notte): `salva` porta anche la sessione del server (cambio voluto dall'owner).
+        expect(salva).toHaveBeenCalledWith(ID, 'Vendite della settimana', { sessioneServer: null })
+        expect(pulsante.textContent).toContain('Saved to Library')
+        expect(pulsante.disabled).toBe(true)
+        pulsante.click()
+        await attesa()
+        expect(salva).toHaveBeenCalledTimes(1)
+
+        const altra = (() => {
+            runtime().handleRealEvent({ type: 'ArtifactCreated', messageId: 'm2', id: '00000000-0000-4000-8000-000000000000', titolo: 'Altro' }, runtime().realSessionState.generation)
+            return Array.from(document.querySelectorAll<HTMLElement>('.real-artifact-card')).at(-1)!
+        })()
+        salva.mockResolvedValueOnce({ ok: false, motivo: 'SAVE_FAILED' })
+        altra.querySelector<HTMLButtonElement>('.artifact-card-save')!.click()
+        await attesa()
+        expect(altra.querySelector('.artifact-card-save .artifact-card-status')?.textContent).toBe('Could not save')
+        expect(altra.querySelector<HTMLButtonElement>('.artifact-card-save')!.disabled).toBe(false)
+    })
+
+    it('ART70-UI-04 aperto da solo, fuori dall’app, dice che l’azione c’è solo dentro TALOS', async () => {
+        const scheda = artefatto()
+        scheda.querySelector<HTMLButtonElement>('.artifact-card-open')!.click()
+        await attesa()
+        expect(scheda.querySelector('.artifact-card-open .artifact-card-status')?.textContent).toBe('This action is only available inside the TALOS app.')
+    })
+
+    it('ART70-UI-05 in italiano usa le parole della scheda della chat', async () => {
+        ;(window as unknown as Ponti).__talosHarnessLocale = 'it'
+        const salva = vi.fn(async (): Promise<Esito> => ({ ok: true }))
+        const apri = vi.fn(async (): Promise<Esito> => ({ ok: false, motivo: 'OPEN_FAILED' }))
+        ;(window as unknown as Ponti).__talosHarnessArtefatto = { apri, salva }
+        const scheda = artefatto()
+        expect(scheda.querySelector('.artifact-card-save')?.textContent).toContain('Salva nella Libreria')
+        scheda.querySelector<HTMLButtonElement>('.artifact-card-open')!.click()
+        scheda.querySelector<HTMLButtonElement>('.artifact-card-save')!.click()
+        await attesa()
+        expect(scheda.querySelector('.artifact-card-open .artifact-card-status')?.textContent).toBe('Non si è aperta')
+        expect(scheda.querySelector('.artifact-card-save')?.textContent).toContain('Salvato nella Libreria')
+    })
+})
+
+/*
+ * ⛔ OSS-70B-2 (30/09/2026 notte, visto sul Pad; owner «Curo la riga ora») — dopo il ritorno di `artifact_create` la sua
+ * riga diceva «Eseguito un comando»: mancava nella tabella delle frasi (ERRCOD-E3).
+ */
+describe('OSS-70B-2 — la riga di artifact_create dice cosa è successo', () => {
+    type Host = { __talosHarnessLocale?: string }
+    beforeEach(() => {
+        document.body.className = ''
+        FakeEventSource.instances = []
+        vi.stubGlobal('EventSource', FakeEventSource)
+        mountStaticRuntime()
+    })
+    afterEach(() => {
+        ;(window as unknown as { __talosHarnessDestroy?: () => void }).__talosHarnessDestroy?.()
+        delete (window as unknown as { __talosHarnessRoot?: unknown }).__talosHarnessRoot
+        delete (window as unknown as { __talosHarnessHost?: unknown }).__talosHarnessHost
+        delete (window as unknown as Host).__talosHarnessLocale
+        document.body.replaceChildren()
+        document.body.className = ''
+        vi.unstubAllGlobals()
+        vi.restoreAllMocks()
+    })
+    function attrezzo(id: string) {
+        const generation = runtime().realSessionState.generation
+        runtime().handleRealEvent({ type: 'ToolCallStart', toolCallId: id, toolCallName: 'artifact_create' }, generation)
+        runtime().handleRealEvent({ type: 'ToolCallResult', toolCallId: id, content: 'created: "Vendite"', isError: false }, generation)
+    }
+    const riassunto = () => document.querySelector('.tool-note-summary-text')?.textContent
+
+    it('OSS-70B-2-01 in inglese: «Created a visual»', () => {
+        attrezzo('t1')
+        expect(riassunto()).toBe('Created a visual')
+    })
+    it('OSS-70B-2-02 in italiano', () => {
+        ;(window as unknown as Host).__talosHarnessLocale = 'it'
+        attrezzo('t1')
+        expect(riassunto()).toBe('Creata una visualizzazione')
+    })
+})
+
+/*
+ * ⛔ OSS-70B-1 e OSS-70B-3 (30/09/2026 notte). La scheda chiede all'app, quando nasce, se la pagina è già nella
+ * Libreria; e «Save to Library» passa la sessione del server, così l'app sa da quale sessione del Codice viene.
+ */
+describe('OSS70B-UI — la scheda ricorda «salvato» e dice da dove viene', () => {
+    type Ponte = { __talosHarnessArtefatto?: Record<string, unknown> }
+    const ID = '3f2b8c1e-9a4d-4e7b-8c21-5d6f7a8b9c0d'
+    beforeEach(() => {
+        document.body.className = ''
+        FakeEventSource.instances = []
+        vi.stubGlobal('EventSource', FakeEventSource)
+        mountStaticRuntime()
+    })
+    afterEach(() => {
+        ;(window as unknown as { __talosHarnessDestroy?: () => void }).__talosHarnessDestroy?.()
+        delete (window as unknown as { __talosHarnessRoot?: unknown }).__talosHarnessRoot
+        delete (window as unknown as { __talosHarnessHost?: unknown }).__talosHarnessHost
+        delete (window as unknown as Ponte).__talosHarnessArtefatto
+        document.body.replaceChildren()
+        document.body.className = ''
+        vi.unstubAllGlobals()
+        vi.restoreAllMocks()
+    })
+    const attesa = () => new Promise((ok) => setTimeout(ok, 0))
+
+    it('OSS70B-UI-01 se l’app dice che la pagina è già salvata, la scheda nasce «Saved to Library» e disattivata', async () => {
+        const stato = vi.fn(async () => ({ salvato: true }))
+        ;(window as unknown as Ponte).__talosHarnessArtefatto = { apri: vi.fn(), salva: vi.fn(), stato }
+        runtime().handleRealEvent({ type: 'ArtifactCreated', messageId: 'm1', id: ID, titolo: 'Vendite' }, runtime().realSessionState.generation)
+        await attesa()
+        const pulsante = document.querySelector<HTMLButtonElement>('.artifact-card-save')!
+        expect(stato).toHaveBeenCalledWith(ID)
+        expect(pulsante.textContent).toContain('Saved to Library')
+        expect(pulsante.disabled).toBe(true)
+    })
+
+    it('OSS70B-UI-02 «Save to Library» passa la sessione del server e il modello dell’evento', async () => {
+        const salva = vi.fn(async () => ({ ok: true }))
+        ;(window as unknown as Ponte).__talosHarnessArtefatto = { apri: vi.fn(), salva, stato: vi.fn(async () => ({ salvato: false })) }
+        runtime().realSessionState.id = 'srv-7'
+        runtime().handleRealEvent({ type: 'ArtifactCreated', messageId: 'm1', id: ID, titolo: 'Vendite', modello: 'z-ai/glm-5.3-flash' }, runtime().realSessionState.generation)
+        await attesa()
+        document.querySelector<HTMLButtonElement>('.artifact-card-save')!.click()
+        await attesa()
+        expect(salva).toHaveBeenCalledWith(ID, 'Vendite', { sessioneServer: 'srv-7', modello: 'z-ai/glm-5.3-flash' })
     })
 })

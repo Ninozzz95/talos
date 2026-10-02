@@ -4,7 +4,7 @@ import {
   realpathSync,
   statSync,
 } from 'node:fs';
-import { isAbsolute, resolve } from 'node:path';
+import { dirname, isAbsolute, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 export const DEFAULT_HOST = '127.0.0.1';
@@ -49,6 +49,19 @@ const IMMAGINE_MODELLO_DEDICATO_DEFAULT = 'bytedance-seed/seedream-4.5';
  * esplicitamente.
  */
 const PERMESSI_AMMESSI = new Set(['Read only', 'Workspace write', 'On request', 'Full access']);
+
+/*
+ * ⛔⛔ P4-quater (owner 02/10/2026: «mai scrivibili né leggibili», poi «+1 su Hermes») — l'area di TALOS che il kernel del
+ *   Codice non lascia né leggere né scrivere. Quattro radici: lo stato (gettone del server, sessioni, automazioni), la radice
+ *   del server, la radice del kernel e la cartella dell'eseguibile di node. Sul Pad (`TalosTerminalPlugin.kt`: `AREA_REMOTA`,
+ *   `BINARIO_REMOTO`) la cartella di node È `/data/local/tmp/talos`, cioè l'area intera con librerie, `talos-exec.js`, pid e
+ *   log; `workspace/` resta aperta perché è una cartella di progetto (session-registry.mjs, `cartelleConsentite`).
+ *   Pura, nessun throw: i percorsi tornano come sono scritti (nessun `resolve` che li legherebbe al disco di chi la chiama).
+ */
+export function cartelleDiTalos({ cartellaStato, radiceServer, radiceKernel, eseguibile } = {}) {
+  const radici = [cartellaStato, radiceServer, radiceKernel, typeof eseguibile === 'string' && eseguibile ? dirname(eseguibile) : null];
+  return [...new Set(radici.filter((p) => typeof p === 'string' && p.length > 0))];
+}
 
 /** Pura, nessun throw. */
 export function permessiRichiestaValido(raw) {
@@ -267,6 +280,10 @@ export function loadConfig(
     modello: parseModello(env.TALOS_HARNESS_UI_MODEL),
     cartelleProgetto: parseCartelleProgetto(env.TALOS_HARNESS_UI_PROJECT_DIRS),
     cartellaStato,
+    /* ⭐ P4-ter (02/10/2026): il tetto esplicito della compattazione — solo un intero positivo scritto apposta (come il desktop,
+       `leggiTettoEsplicito`); altrimenti null e vale il default del nucleo (200K) o la finestra. */
+    tettoCompattazione: /^\d+$/.test(String(env.TALOS_COMPACTION_TOKEN_CAP ?? '').trim()) && Number(String(env.TALOS_COMPACTION_TOKEN_CAP).trim()) > 0
+      ? Number(String(env.TALOS_COMPACTION_TOKEN_CAP).trim()) : null,
     /*
      * ⛔ Nessun fail() se manca: Harness UI resta usabile in sola lettura
      * (campagne, elenco task) anche senza una chiave configurata — è

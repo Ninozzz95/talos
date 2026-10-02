@@ -19,6 +19,13 @@
  * "disattiva" deleted a key it should only have hidden a switch, and that
  * cost a session to find. This tri-state exists so `declined` can never mean
  * that again.
+ *
+ * ⛔ SUPERSEDED on 2026-10-01 by the owner (D7, ledger A3): the short probe
+ * now starts ON ITS OWN when a local model is picked — on the Pad, people who
+ * answered «Non ora» stayed on the CPU (116 s to the first word, 3.4 s on the
+ * NPU). D11: `declined` (an earlier «Non chiedermelo più») still means no
+ * automatic run; the manual command in settings works as before. `unset` and
+ * `granted` both allow the automatic run.
  */
 export type TalosLocalEngineProbeConsent = 'unset' | 'granted' | 'declined'
 

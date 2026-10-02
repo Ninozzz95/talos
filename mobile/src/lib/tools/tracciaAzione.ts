@@ -543,6 +543,12 @@ export const TALOS_METADATA_SCHERMO = 'screen_context'
 export const TALOS_METADATA_TRONCATA = 'stopped_at_limit'
 
 /**
+ * ⭐⭐ P4-quinquies (owner 02/10/2026, «Riprova, poi avviso»): la risposta ha dichiarato un'azione fatta e nel turno non
+ * è partito nessuno strumento, nemmeno dopo il sollecito del ciclo. Solo `true` conta; la vista mette la riga onesta.
+ */
+export const TALOS_METADATA_AZIONE_NON_ESEGUITA = 'talos_azione_dichiarata_non_eseguita'
+
+/**
  * CONT (25/09/2026): lo stesso fatto ha tre nomi — `length` (OpenAI, OpenRouter, Ollama), `max_tokens` (Anthropic),
  * `MAX_TOKENS` (Gemini). Il controller guardava solo il primo: una risposta di Claude o Gemini tagliata non lo diceva.
  * Fonti: OpenRouter API overview (finish_reason normalizzato), Anthropic «Handling stop reasons», lette il 25/09/2026.

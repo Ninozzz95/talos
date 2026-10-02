@@ -192,3 +192,13 @@ describe('the origin strings take no parameters', () => {
         expect(offenders).toEqual([])
     })
 })
+
+// ⛔ OSS-70B-1 (30/09/2026 notte, owner «Codice · titolo della sessione»): il foglio dice da quale sessione del Codice.
+describe('OSS70B-CARD — il foglio «Da dove viene» per una pagina del Codice', () => {
+    it('OSS70B-CARD-01 nomina il modello e la sessione del Codice, senza una chat', () => {
+        const card = CARD({ ...GENERATED, originSessionId: null, codice: { sessionId: 'cod-1', title: 'mi disegni un grafico' } })
+        expect(card.title).toContain('kimi-k3')
+        expect(card.lines).toContain('in the Code “mi disegni un grafico”')
+        expect(card.originSessionId).toBeNull()
+    })
+})
