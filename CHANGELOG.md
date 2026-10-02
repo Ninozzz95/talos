@@ -6,6 +6,21 @@ signed APK under [Releases](../../releases).
 
 Numbers in this file are measured on a device, not estimated.
 
+## v0.1.40
+
+Signing in to OpenRouter no longer fights itself.
+
+### Providers
+
+- "Sign in with OpenRouter" now spends the authorization code exactly once. Coming back from the browser, the app
+  could exchange the same code a second time, which OpenRouter refuses ("Invalid code or code_verifier"): the sign-in
+  showed an error even when it had worked, or failed when the second exchange won the race. Measured on the OnePlus Pad 3
+  with a made-up code: two exchanges before, one after. A finished, failed or abandoned sign-in now leaves nothing behind
+  to be exchanged again, and the diagnostics report says whether a failed exchange came from the live sign-in or from
+  resuming one after the app was recreated.
+- If OpenRouter rejects the saved key ("User not found."), the error card is unchanged: it tells you to renew the key in
+  Settings. Signing in again, or pasting a new key, replaces it.
+
 ## v0.1.39
 
 Long conversations keep going on the phone's own model, the Qualcomm NPU ships, and chats can be
