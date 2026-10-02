@@ -1053,6 +1053,17 @@ async function runMessageAction(action: () => Promise<void>): Promise<void> {
  * composer; vale per ogni fornitore (il prefill nella stessa bolla non lo accettano tutti). Solo al tocco: nessuna
  * continuazione automatica («Solo col pulsante»). La bozza nel composer non si tocca.
  */
+/** ⭐⭐ P4-ter passo 2 — «Annulla» sul separatore: una riga che spegne QUELLA compattazione; il modello torna alla storia intera. */
+async function annullaCompattazione(at: string): Promise<void> {
+    const sessionId = chat.activeSession.value?.id
+    if (!sessionId) return
+    try {
+        await chat.annullaCompattazione(sessionId, at)
+    } catch {
+        toasts.push({ message: t('chat.compaction.undoFailed'), durationMs: 6000 })
+    }
+}
+
 async function continuaDopoIlLimite(): Promise<void> {
     rejoinLiveEdge()
     await controller.send(t('chat.continueAfterLimit'), null, false)
@@ -1614,6 +1625,8 @@ onBeforeUnmount(() => {
                             :library-source-count="librarySelectedSourceCount"
                             :library-turn-override="libraryTurnOverride"
                             :library-files="libraryTurnFiles"
+                            :tool-review-count="controller.pendingToolAuthorizations.value.length + controller.toolAuthorizationRecoveries.value.length"
+                            @review-tools="controller.showToolAuthorization()"
                             @update:prompt="draft.updatePrompt($event)"
                             @send="onSend"
                             @queue="(text) => void onQueue(text)"
@@ -1754,6 +1767,8 @@ onBeforeUnmount(() => {
                     @delete="deleteMessageTurn"
                     @review-authorization="controller.showToolAuthorization()"
                     @continue-after-limit="continuaDopoIlLimite"
+                    :compattazione-in-corso="chat.state.compattazioneInCorso !== null && chat.state.compattazioneInCorso === chat.activeSession.value?.id"
+                    @undo-compaction="annullaCompattazione"
                 />
                 <!--
                     ⭐ B3 «Riprendi» (D-B3-03): in fondo alla conversazione, SOLO quando l'ultimo tuo messaggio non ha una

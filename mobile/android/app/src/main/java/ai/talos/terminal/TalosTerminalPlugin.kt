@@ -204,6 +204,9 @@ class TalosTerminalPlugin : Plugin() {
          * rispinge.
          */
         private const val AREA_STATO_REMOTO = "$AREA_REMOTA/state"
+        // ⛔⛔ 70-A (30/09/2026): lo scrive il server a ogni avvio (`server-secret.mjs`, NOME_FILE_SEGRETO — stesso nome,
+        // lo verifica SEC70-NOME-01).
+        private const val FILE_SEGRETO_REMOTO = "$AREA_STATO_REMOTO/server-token"
         private const val LOG_SERVER_REMOTO = "$AREA_REMOTA/harness-ui.log"
         private const val PID_FILE_REMOTO = "$AREA_REMOTA/harness-ui.pid"
         private const val PORTA_SERVER = 4174
@@ -936,6 +939,32 @@ class TalosTerminalPlugin : Plugin() {
         }
         val res = esito.toJs("stdout")
         res.put("giaAttivo", false)
+        call.resolve(res)
+    }
+
+    /**
+     * ⛔⛔ 70-A (30/09/2026, contratto desktop 70) — il segreto del server del Codice, letto dal file che il server
+     * scrive a ogni avvio (`server-secret.mjs`, modo 0600, utente `shell`: nessun'altra app lo legge). Owner, 30/09
+     * sera: «Lo crea il server». Lo stesso ponte adb che fa partire il server, quindi lo stesso utente.
+     *
+     * Torna `{ ok, segreto, motivo }`: `segreto` è null se il file non c'è ancora (server in partenza) o non ha il
+     * formato atteso (`TalosSegretoServer.valido`). ⛔ Mai in `Log`, mai nel `motivo`.
+     */
+    @PluginMethod
+    fun leggiSegretoServer(call: PluginCall) {
+        val lettura = TalosPonteAdb.esegui(context, listOf("shell", "cat", FILE_SEGRETO_REMOTO))
+        val segreto = if (lettura.ok) TalosSegretoServer.valido(lettura.uscita) else null
+        val res = JSObject()
+        res.put("ok", segreto != null)
+        res.put("segreto", segreto ?: JSObject.NULL)
+        res.put(
+            "motivo",
+            when {
+                segreto != null -> JSObject.NULL
+                !lettura.ok -> lettura.motivo ?: "lettura non riuscita"
+                else -> "segreto assente o non valido"
+            },
+        )
         call.resolve(res)
     }
 }

@@ -167,13 +167,18 @@ describe('⛔ la scheda di provenienza e il codice dicono la stessa cosa', () =>
          *
          * ⛔ L'eccezione è UNA e si chiama per nome: un secondo file dichiarato
          * e mai aperto fa fallire questo test, che è il punto.
+         *
+         * ⭐ CAMBIATO APPOSTA il 01/10/2026 (owner): `hey_jarvis.onnx` esce
+         * dall'APK. È un modello pre-addestrato di openWakeWord, licenza
+         * CC BY-NC-SA 4.0 (non commerciale, README di openWakeWord), e l'app
+         * non lo apriva mai. Per il banco di prova si scarica a mano sul PC
+         * (vedi PROVENIENZA-PAROLA.md). Torna l'uguaglianza secca.
          */
         const dichiaratiMaiAperti = dichiarati.filter((f) => !aperti.includes(f))
         expect(
             dichiaratiMaiAperti,
-            'un modello dichiarato e mai aperto è peso morto nell\'APK: '
-            + 'l\'unico ammesso è hey_jarvis.onnx, il banco di prova',
-        ).toEqual(['hey_jarvis.onnx'])
+            'un modello dichiarato e mai aperto è peso morto nell\'APK',
+        ).toEqual([])
     })
 
     it('⛔ di sherpa non è rimasto niente da caricare', () => {

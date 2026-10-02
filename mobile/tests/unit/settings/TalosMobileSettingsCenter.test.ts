@@ -85,8 +85,8 @@ describe('TalosMobileSettingsCenter — on the phone, it is navigation', () => {
         expect(rail.element.tagName).toBe('NAV')
         expect(rail.attributes('aria-label')).toBe('TALOS settings categories')
         // 2026-08-10: quattordici — la Voce e' uscita da «Aspetto» ed e' una
-        // stazione sua. Vedi settingsTabs.test.ts per il perche'.
-        expect(wrapper.findAll('[data-settings-tab]')).toHaveLength(14)
+        // stazione sua; 2026-10-01 quindici — le Note legali (CAMBIATO APPOSTA). Vedi settingsTabs.test.ts.
+        expect(wrapper.findAll('[data-settings-tab]')).toHaveLength(15)
         expect(wrapper.findAll('[data-testid="settings-model-lab-link"]')).toHaveLength(1)
         expect(wrapper.get('[data-testid="settings-model-lab-link"]').text()).toContain('Models')
 
@@ -174,8 +174,8 @@ describe('TalosMobileSettingsCenter — on the tablet, it remains navigation', (
         const wrapper = mountCenter()
 
         // 2026-08-10: quattordici — la Voce e' uscita da «Aspetto» ed e' una
-        // stazione sua. Vedi settingsTabs.test.ts per il perche'.
-        expect(wrapper.findAll('[data-settings-tab]')).toHaveLength(14)
+        // stazione sua; 2026-10-01 quindici — le Note legali (CAMBIATO APPOSTA). Vedi settingsTabs.test.ts.
+        expect(wrapper.findAll('[data-settings-tab]')).toHaveLength(15)
         expect(wrapper.findAll('[data-settings-tab]').every((row) => row.attributes('tabindex') === undefined))
             .toBe(true)
         wrapper.unmount()

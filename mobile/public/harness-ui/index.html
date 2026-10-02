@@ -125,7 +125,7 @@
         <!-- ⛔⛔⛔ 3/9 — verificato dal vivo: aggiornaRunKpis() (app.js) cercava questi tre valori con $('[data-run-kpi="…"] b'), ma il markup non aveva MAI portato quell'attributo — sempre null, sempre "—" a schermo nonostante state.realSession.usage/erroriStrumento fossero corretti (giri:4, erroriStrumento:1, verificato via CDP sullo stato interno). Trovato SOLO dal dispositivo, non dai test (jsdom non distingue "selettore che non trova mai" da "selettore mai eseguito" se il test non controlla anche lo stato interno). -->
         <div class="run-kpis">
           <span data-run-kpi="step"><b>—</b> steps</span>
-          <span data-run-kpi="ctx"><b>—</b> ctx</span>
+          <span data-run-kpi="ctx"><b>—</b> tokens</span>
           <span data-run-kpi="errors"><b>—</b> errors</span>
         </div>
         <button class="icon-btn stop-run" aria-label="Stop the run"><svg><use href="#i-stop"/></svg></button>

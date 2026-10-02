@@ -1,3 +1,4 @@
+import { TALOS_SOLLECITO_AZIONE_DICHIARATA, talosAzioneDichiarata, talosHaAgito } from '@/lib/tools/azioneDichiarata'
 import type { ChatTurn, TalosToolCall } from '@/stores/chat'
 import type {
     TalosMobileImageInputPart,
@@ -228,6 +229,11 @@ export interface TalosAgentLoopOutcome extends TalosAgentCompletion {
     messageAttachments: AppendChatAttachmentInput[]
     /** ⭐ B3 — il ciclo si è chiuso al punto sicuro perché la persona ha indirizzato il giro. */
     chiusoPerIndirizzo?: boolean
+    /**
+     * ⭐⭐ P4-quinquies (owner 02/10/2026, «Riprova, poi avviso»): la risposta ha dichiarato un'azione fatta, nel turno
+     * non è partito nessuno strumento, e nemmeno dopo il sollecito. La vista lo dice sotto la risposta.
+     */
+    azioneNonEseguita?: boolean
     /** Present when the loop yielded instead of parking a Promise in memory. */
     suspension?: {
         checkpoint: TalosAgentLoopCheckpointV1
@@ -238,6 +244,11 @@ export interface TalosAgentLoopOutcome extends TalosAgentCompletion {
 export interface TalosAgentLoopCheckpointV1 {
     schema_version: 1
     stage: 'before_tools' | 'before_model'
+    /**
+     * ⭐ P4-quinquies: il sollecito «hai detto fatto ma non hai chiamato niente» è già partito in questo turno.
+     * OPZIONALE: un checkpoint salvato prima non ce l'ha, e assente vale «no».
+     */
+    riprovaAzioneDichiarata?: boolean
     turns: ChatTurn[]
     /** The exact provider completion to resume; null once results are durable. */
     completion: TalosAgentCompletion | null
@@ -323,6 +334,9 @@ interface MutableAgentLoopState {
      * ⇒ Si accumulano, nell'ordine in cui sono arrivati, come `executed`.
      */
     blocchiDelFornitore: unknown[]
+    /** ⭐ P4-quinquies: UN solo sollecito per turno, mai un secondo. */
+    riprovaAzioneDichiarata: boolean
+    azioneNonEseguita: boolean
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -395,6 +409,7 @@ function assertCheckpoint(
         || !Number.isSafeInteger(record.rounds)
         || (record.rounds as number) < 0
         || typeof record.stoppedByLimit !== 'boolean'
+        || (record.riprovaAzioneDichiarata !== undefined && typeof record.riprovaAzioneDichiarata !== 'boolean')
         || !Array.isArray(record.messageAttachments)
         || !record.messageAttachments.every(isAttachment)
         || (record.stage === 'before_tools'
@@ -425,6 +440,7 @@ function checkpointOf(
         ...(state.blocchiDelFornitore.length
             ? { blocchiDelFornitore: [...state.blocchiDelFornitore] }
             : {}),
+        ...(state.riprovaAzioneDichiarata ? { riprovaAzioneDichiarata: true } : {}),
     }
 }
 
@@ -517,6 +533,7 @@ function outcomeOf(
         rounds: state.rounds,
         stoppedByLimit: state.stoppedByLimit,
         messageAttachments: state.messageAttachments,
+        ...(state.azioneNonEseguita ? { azioneNonEseguita: true } : {}),
         ...(suspension ? { suspension } : {}),
     }
 }
@@ -674,6 +691,29 @@ async function continueTalosAgentLoop(
 
         if (!completion.toolCalls?.length) {
             say(completion.text)
+            /*
+             * ⭐⭐ P4-quinquies — owner 02/10/2026: «Riprova, poi avviso», per TUTTI i modelli. Caso del Pad: Spark,
+             * «salvami una nota…» ⇒ «Salvato la nota ✅» senza nessuna chiamata. Solo se nel turno non è partito
+             * NESSUNO strumento che agisce (`talosHaAgito`): un turno che ha fatto qualcosa può raccontarlo. Il testo già
+             * visto resta (regola qui sotto: «il preambolo si tiene»); l'esito vero segue.
+             */
+            if (!talosHaAgito(state.executed) && talosAzioneDichiarata(completion.text).dichiarata) {
+                if (!state.riprovaAzioneDichiarata) {
+                    state.riprovaAzioneDichiarata = true
+                    state.turns = [
+                        ...state.turns,
+                        { role: 'assistant', content: completion.text },
+                        { role: 'user', content: TALOS_SOLLECITO_AZIONE_DICHIARATA },
+                    ]
+                    state.completion = null
+                    await persistBeforeModel(state, deps)
+                    // CON gli strumenti: il secondo giro deve poter FARE l'azione (per i locali passando dalla ricerca).
+                    state.completion = await deps.complete(state.turns)
+                    raccogliIBlocchi(state)
+                    continue
+                }
+                state.azioneNonEseguita = true
+            }
             return outcomeOf(state, completion)
         }
 
@@ -957,6 +997,8 @@ export async function runTalosAgentLoop(
         // Il primo giro può già portarne: la ricerca lato server è come il
         // modello scopre quale strumento gli serve, quindi accade subito.
         blocchiDelFornitore: [...(completion.providerBlocks ?? [])],
+        riprovaAzioneDichiarata: false,
+        azioneNonEseguita: false,
     }, deps, false)
 }
 
@@ -983,6 +1025,8 @@ export async function resumeTalosAgentLoop(
         // Assente su un checkpoint vecchio: vale «nessuno», che per quelli è
         // anche vero — sono nati prima che la ricerca lato server esistesse.
         blocchiDelFornitore: [...(checkpoint.blocchiDelFornitore ?? [])],
+        riprovaAzioneDichiarata: checkpoint.riprovaAzioneDichiarata === true,
+        azioneNonEseguita: false,
     }
     if (checkpoint.stage === 'before_model') {
         state.completion = await deps.complete(state.turns)

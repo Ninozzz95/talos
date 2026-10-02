@@ -86,3 +86,23 @@ describe('fetchTalosHarnessSessionsStatus (§16.1)', () => {
         )
     })
 })
+
+// ⛔⛔ 70-A (30/09/2026): anche lo stato dell'elenco passa dal cancello del server del Codice, col segreto.
+const segretoStato = vi.hoisted(() => ({ intestazioniServerCodice: vi.fn(async () => ({ Authorization: `Bearer ${'8'.repeat(64)}` })) }))
+vi.mock('@/lib/harness/harnessUiSegreto', () => segretoStato)
+
+describe('SEC70-STATO — lo stato delle sessioni manda il segreto', () => {
+    beforeEach(() => {
+        vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(envelope([])), { status: 200 })))
+    })
+    afterEach(() => {
+        vi.unstubAllGlobals()
+    })
+
+    it('SEC70-STATO-01 la richiesta porta Authorization: Bearer', async () => {
+        await fetchTalosHarnessSessionsStatus()
+        const init = vi.mocked(fetch).mock.calls[0]?.[1] as RequestInit
+        expect(new Headers(init.headers).get('Authorization')).toBe(`Bearer ${'8'.repeat(64)}`)
+        expect(new Headers(init.headers).get('Accept')).toBe('application/json')
+    })
+})

@@ -96,6 +96,19 @@ describe('CATALOGO-MODELLI: il catalogo OpenRouter nel server del Codice', () =>
         expect(esito).toMatchObject({ daCache: true, fallbackRete: true })
         expect(esito.modelli).toHaveLength(3)
     })
+
+    it('CAT-MOD-07 (P4-ter): la finestra di un modello si legge subito dalla copia; senza copia è ignota e la copia si prepara', async () => {
+        const { fn, chiamate } = fetchContato(async () => rispostaFinta({ data: GREZZI }))
+        const catalogo = createModelCatalog({ fetchFn: fn }) as Catalogo & { finestraDi(id: string): number | null }
+        // Senza copia: ignota (vale il tetto della compattazione), e la lettura parte da sola, una volta.
+        expect(catalogo.finestraDi('z-ai/glm-5.3-flash')).toBeNull()
+        expect(catalogo.finestraDi('z-ai/glm-5.3-flash')).toBeNull()
+        await new Promise((ok) => setTimeout(ok, 0))
+        expect(chiamate).toHaveLength(1)
+        expect(catalogo.finestraDi('z-ai/glm-5.3-flash')).toBe(200_000)
+        expect(catalogo.finestraDi('anthropic/claude-opus-5-5')).toBeNull()
+        expect(catalogo.finestraDi('modello/che-non-esiste')).toBeNull()
+    })
 })
 
 /** Una richiesta e una risposta finte, abbastanza per `createHttpApp`. */
@@ -108,15 +121,19 @@ async function chiama(app: (req: unknown, res: unknown) => Promise<void>, url: s
         writeHead(status: number) { risposta.status = status },
         end(payload?: Buffer) { risposta.corpo = payload ? payload.toString('utf8') : ''; risposta.writableEnded = true },
     }
-    await app({ method: 'GET', url, headers: {}, aborted: false }, res)
+    // ⛔ 70-A (30/09/2026): la richiesta arriva come dal WebView di TALOS, col segreto del server (vedi codiceServerProtetto.test.ts).
+    await app({ method: 'GET', url, headers: { host: 'localhost:4174', authorization: `Bearer ${SEGRETO_DI_PROVA}` }, aborted: false }, res)
     return { status: risposta.status, json: JSON.parse(risposta.corpo) as Record<string, any> }
 }
+
+const SEGRETO_DI_PROVA = 'c'.repeat(64)
 
 function app(catalogoModelliFn: unknown) {
     return createHttpApp({
         campaignService: { listCampaigns: async () => [] },
         staticHandler: async () => undefined,
         catalogoModelliFn,
+        segreto: SEGRETO_DI_PROVA,
     })
 }
 

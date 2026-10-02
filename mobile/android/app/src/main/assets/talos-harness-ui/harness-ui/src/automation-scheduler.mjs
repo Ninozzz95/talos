@@ -42,7 +42,8 @@ export function createAutomationScheduler({
         await eseguiRichiesta(voce);
         continue;
       }
-      const esito = sessionRegistry.avvia(voce.taskId);
+      // ⛔ P4-quater (02/10/2026): nessuno segue un'automazione ⇒ ogni domanda si chiude subito con un no spiegato.
+      const esito = sessionRegistry.avvia(voce.taskId, { senzaInterfaccia: true });
       await store.registraEsecuzione(voce.id);
       onEsecuzione({ automazione: voce, esito });
     }
@@ -63,6 +64,8 @@ export function createAutomationScheduler({
       esito = await sessionRegistry.avviaLibero({
         cartellaId: voce.cartellaId, consegna: voce.consegna, modello: voce.modello ?? null,
         mobile: true, permessi: 'Workspace write',
+        // ⛔ P4-quater (owner 02/10/2026, «come il desktop»): una scrittura fuori dalla cartella riceve subito un no spiegato.
+        senzaInterfaccia: true,
         // AUTO-LIVELLO (25/09/2026, owner «Salvato alla creazione»): il livello salvato; assente = il predefinito del catalogo (RAG-COD).
         ...(voce.reasoning ? { reasoning: voce.reasoning } : {}),
       });

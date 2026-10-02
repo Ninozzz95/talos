@@ -53,6 +53,13 @@ vi.mock('@/services/launcherIcon', () => ({
     }),
 }))
 
+// ⭐ Punto 2 (01/10/2026) — la precompilazione della GPU all'avvio, spiata; il resto del motore resta vero.
+const gpuSpy = vi.hoisted(() => ({ prepare: vi.fn(async () => 'ready' as const) }))
+vi.mock('@/services/localEngine', async (originale) => ({
+    ...(await originale<typeof import('@/services/localEngine')>()),
+    talosPrepareGpuInBackground: gpuSpy.prepare,
+}))
+
 import App from '@/App.vue'
 import Sidebar from '@/components/shell/TalosMobileSidebar.vue'
 import { __resetToastsForTests, useTalosMobileToasts } from '@/stores/toasts'
@@ -97,8 +104,6 @@ function makeController() {
         toolAuthorizationRecoveries: ref([]),
         toolAuthorizationPromptVisible: ref(false),
         // §1-bis: null vuol dire «niente da chiedere», lo stato normale.
-        pendingLocalEngineProbeConsent: ref(null),
-        decideLocalEngineProbeConsent: vi.fn(),
         // B2 — il piano: assente vuol dire «nessun piano in attesa», ed è lo
         // stato normale. La scheda ha la precedenza su quella del singolo
         // tool, quindi senza questa riga la finta si comporta come se ce ne
@@ -559,6 +564,44 @@ describe('App shell (header/sidebar + chat base + station sheets)', () => {
         await riapri.trigger('click')
         await flushPromises()
         expect(controller.showToolAuthorization).toHaveBeenCalled()
+        wrapper.unmount()
+    })
+
+    /*
+     * ⛔⛔ A3-OSS-2 (Pad, 01/10/2026): il pulsante fisso in basso a destra copriva «Interrompi risposta» della chat.
+     * Owner 01/10: «pillola accanto alla pill selettore modello» ⇒ sulla CHAT il richiamo sta nel compositore e il
+     * pulsante fisso non si disegna; nelle altre schermate (niente compositore) resta dov'era.
+     */
+    it('OSS2-04 sulla chat il richiamo fisso non c’è (sta nel compositore); altrove resta', async () => {
+        const controller = mockState.controller as ReturnType<typeof makeController>
+        controller.pendingToolAuthorizations.value = [{
+            request_id: 'request-pending',
+            checkpoint_id: 'checkpoint-pending',
+        }]
+        controller.toolAuthorizationPromptVisible.value = false
+
+        const router = makeRouter()
+        router.push('/')
+        await router.isReady()
+        const wrapper = mount(App, { global: { plugins: [router] } })
+        await flushPromises()
+        expect(wrapper.find('[data-testid="talos-tool-authorization-reopen"]').exists()).toBe(false)
+
+        await router.push('/tasks')
+        await flushPromises()
+        expect(wrapper.find('[data-testid="talos-tool-authorization-reopen"]').exists()).toBe(true)
+        wrapper.unmount()
+    })
+
+    /* ⭐ Punto 2 (01/10/2026) — owner: «Alla prima partenza». Se serve davvero lo decide il motore (timbro). */
+    it('GPU-10 all’avvio l’app chiede di preparare la GPU in sottofondo', async () => {
+        gpuSpy.prepare.mockClear()
+        const router = makeRouter()
+        router.push('/')
+        await router.isReady()
+        const wrapper = mount(App, { global: { plugins: [router] } })
+        await flushPromises()
+        await vi.waitFor(() => expect(gpuSpy.prepare).toHaveBeenCalledTimes(1))
         wrapper.unmount()
     })
 

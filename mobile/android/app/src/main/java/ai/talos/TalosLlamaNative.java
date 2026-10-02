@@ -46,23 +46,73 @@ final class TalosLlamaNative {
      * cercare la causa altrove.
      *
      * ⛔ P0-1 — passa giù ANCHE una cartella per la cache dei binari OpenCL
-     * compilati. `getCodeCacheDir()`, non `getCacheDir()`: la documentazione
-     * Android la descrive esplicitamente per "codice compilato/ottimizzato
-     * generato a runtime" — esattamente cosa sono questi `.clbin` — e viene
-     * ripulita da sola ad ogni aggiornamento di app o piattaforma, il momento
-     * in cui un pin diverso di llama.cpp potrebbe cambiare i kernel sorgente e
-     * lasciare orfani i vecchi binari. Il nativo la crea se manca
-     * (`cl-program-cache.cpp`, upstream); qui basta il percorso.
+     * compilati. Il nativo la crea se manca (`cl-program-cache.cpp`,
+     * upstream); qui basta il percorso.
+     *
+     * ⭐ Punto 2 (01/10/2026): la cartella era la cache del codice, che Android
+     * svuota a ogni aggiornamento — e ogni aggiornamento costava ~16 s (41-69 nella build debuggable) di
+     * ricompilazione alla prima apertura GPU (misurato sul Pad). Ora è
+     * persistente ({@link TalosGpuPreparation#cacheDir}); gli orfani di un pin
+     * llama.cpp vecchio si tolgono qui, prima che il processo la usi.
      */
     static synchronized void ensureReady(android.content.Context context) {
         if (prepared || !AVAILABLE) return;
         String directory = context == null ? "" : context.getApplicationInfo().nativeLibraryDir;
-        String openClCacheDir = context == null ? ""
-                : new java.io.File(context.getCodeCacheDir(), "ggml-opencl-cache").getAbsolutePath();
+        String openClCacheDir = "";
+        if (context != null) {
+            java.io.File cache = TalosGpuPreparation.cacheDir(context);
+            TalosGpuPreparation.forgetOtherPins(cache, nativeEngineBuild());
+            openClCacheDir = cache.getAbsolutePath();
+        }
         preparaHexagon(directory);
         nativeInit(directory == null ? "" : directory, openClCacheDir);
         prepared = true;
+        /*
+         * ⛔ PKLA Qualcomm 2.1 b (owner, 01/10/2026): il modulo NPU si carica
+         * SOLO con le condizioni accettate. Ha un nome che il caricamento
+         * automatico di ggml non riconosce, quindi `nativeInit` non l'ha
+         * toccato: senza accettazione l'NPU non viene nemmeno aperta.
+         */
+        if (TalosNpuTerms.allowsNpu(TalosNpuTerms.load(context), TalosNpuTerms.VERSION)) {
+            loadNpuModule(directory);
+        }
     }
+
+    /**
+     * Il nostro {@code libggml-hexagon.so}, impacchettato con questo nome: stessi
+     * byte, ma {@code ggml_backend_load_all_from_path} cerca {@code libggml-hexagon*}
+     * e quindi lo ignora. Lo carica solo {@link #loadNpuModule}.
+     */
+    static final String NPU_MODULE = "libtalos-npu-hexagon.so";
+
+    private static boolean npuLoaded;
+
+    /**
+     * Carica il modulo NPU nel registro di ggml. Va chiamata solo con le
+     * condizioni accettate (chi chiama lo verifica con {@link TalosNpuTerms}).
+     * Una volta sola per processo: ggml non scarica un backend caricato.
+     *
+     * @return se il modulo è nel registro.
+     */
+    static synchronized boolean loadNpuModule(String nativeLibraryDir) {
+        if (!AVAILABLE || !prepared) return false;
+        if (npuLoaded) return true;
+        if (nativeLibraryDir == null || nativeLibraryDir.isEmpty()) return false;
+        java.io.File modulo = new java.io.File(nativeLibraryDir, NPU_MODULE);
+        if (!modulo.isFile()) return false;
+        npuLoaded = nativeLoadBackendModule(modulo.getAbsolutePath());
+        return npuLoaded;
+    }
+
+    /** Se il modulo NPU è nell'APK (indipendentemente dalle condizioni). */
+    static boolean npuModuleInstalled(android.content.Context context) {
+        if (context == null) return false;
+        String directory = context.getApplicationInfo().nativeLibraryDir;
+        return directory != null && new java.io.File(directory, NPU_MODULE).isFile();
+    }
+
+    /** {@code ggml_backend_load(path)}: vero se il backend è entrato nel registro. */
+    private static native boolean nativeLoadBackendModule(String path);
 
     /**
      * ⭐⭐⭐ DOVE IL DSP CERCA I SUOI SKEL — la riga senza cui l'NPU non parte.
@@ -80,10 +130,10 @@ final class TalosLlamaNative {
      * albero la impostano tutti ({@code scripts/snapdragon/adb/run-*.sh});
      * dentro un'app Android non la imposta nessuno.
      *
-     * ⛔ QUI e non dopo: si scrive **prima** di {@code nativeInit}, che e' il
-     * punto in cui {@code ggml_backend_load_all_from_path} apre
-     * {@code libggml-hexagon.so} e con lui, a catena, {@code libcdsprpc.so}.
-     * Scriverla dopo vorrebbe dire scriverla per il caricamento successivo.
+     * ⛔ QUI e non dopo: si scrive **prima** di caricare il modulo NPU
+     * ({@link #loadNpuModule}, solo con le condizioni Qualcomm accettate), che
+     * apre a catena {@code libcdsprpc.so}. Scriverla dopo vorrebbe dire
+     * scriverla per il caricamento successivo.
      *
      * ⛔ La cartella e' la STESSA gia' passata a ggml
      * ({@code ApplicationInfo.nativeLibraryDir}): con
@@ -261,6 +311,20 @@ final class TalosLlamaNative {
      * dell'app buttava via un gigabyte di lavoro a ogni aggiornamento.
      */
     static native String nativeEngineBuild();
+
+    /**
+     * ⭐ Punto 2 — compila i programmi OpenCL senza caricare un modello: i
+     * comuni (un buffer da un byte sul dispositivo GPU) e, passo 2, quelli dei
+     * modelli indicati — formati dei pesi e varianti flash attention delle loro
+     * forme, letti dai GGUF e fatti girare in un grafo minuscolo. Tutto finisce
+     * nella cache persistente.
+     *
+     * @param modelPaths i GGUF da riscaldare (anche vuoto).
+     * @return i millisecondi spesi, o -1 se il telefono non ha un dispositivo
+     *     OpenCL. ⛔ Va chiamata sulla coda delle aperture: upstream non
+     *     protegge la compilazione da due thread.
+     */
+    static native long nativePrepareOpenClPrograms(String[] modelPaths);
 
     /**
      * @param gpuLayers quanti strati spingere sulla GPU. 0 = tutto su CPU, che

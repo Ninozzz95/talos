@@ -138,3 +138,23 @@ describe('a file the model made', () => {
         })
     })
 })
+
+// ⛔ OSS-70B-1 (30/09/2026 notte, owner «Codice · titolo della sessione»): una pagina salvata dal Codice.
+describe('OSS70B-VAULT — a page saved from the Code', () => {
+    it('OSS70B-VAULT-01 carries the Code session and no chat', async () => {
+        const { vault, written } = service()
+        await vault.createGeneratedBinary({ name: 'Grafico.html', mediaType: 'text/html', bytes: new Uint8Array([60]) }, {
+            sessionId: null,
+            model: 'z-ai/glm-5.3-flash',
+            provider: null,
+            toolName: 'artifact_create',
+            codice: { sessionId: 'cod-1', title: 'mi disegni un grafico' },
+        } as never)
+        const metadata = written.at(-1) ?? {}
+        expect(metadata.origin_session_id).toBeNull()
+        expect(parseTalosFileProvenance(metadata.provenance)).toMatchObject({
+            model: 'z-ai/glm-5.3-flash', originSessionId: null, toolName: 'artifact_create',
+            codice: { sessionId: 'cod-1', title: 'mi disegni un grafico' },
+        })
+    })
+})

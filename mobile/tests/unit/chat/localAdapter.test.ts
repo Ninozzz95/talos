@@ -29,6 +29,8 @@ const localEngine = vi.hoisted(() => {
         talosLocalEngineStatus: vi.fn(),
         talosLocalEngineOpen: vi.fn(),
         talosLocalEngineOpenWithFallback: vi.fn(),
+        // D13 (01/10/2026): l'apertura per la chat interrompe la prova dei motori.
+        talosCancelAutomaticProbe: vi.fn(async () => undefined),
         talosLocalEngineChatPlan: vi.fn(),
         talosLocalEnginePlanPrompt: vi.fn(),
         talosLocalEngineTemplateCapabilities: vi.fn(),
@@ -111,7 +113,7 @@ const SMALL_PHONE = {
     abiSupported: true,
 }
 
-const { localAdapter, prefissoResoDi, prefissoResoDiProiettato } = await import('@/lib/chat/providers/localAdapter')
+const { localAdapter, prefissoResoDi, prefissoResoDiProiettato, talosLocalFinestraPerCompattazione, talosLocalTokenDellaRichiesta } = await import('@/lib/chat/providers/localAdapter')
 // ⛔ La chiave si importa, non si riscrive: due stringhe uguali a mano sono
 // due stringhe che possono divergere, e il test smetterebbe di parlare del
 // codice vero senza diventare rosso.
@@ -632,6 +634,33 @@ describe('LOCAL-CONTEXT-PARITY-01 local chat open', () => {
         expect(localEngine.talosLocalEngineGenerate).toHaveBeenCalled()
     })
 
+    /*
+     * ⭐⭐ P4-ter passo 2 (02/10/2026) — la compattazione della chat col modello locale ha bisogno della finestra VERA: non
+     * il predefinito con cui si apre, ma il tetto del dispositivo fin dove il contesto può salire (`pianoDiApertura`), e il
+     * numero vero dei token dell'ultima richiesta. Il motore li conosceva a ogni chiamata e non li diceva a nessuno.
+     */
+    it('LOCAL-COMP-01 dopo una risposta il motore dice il tetto del dispositivo e i token veri dell\'ultima richiesta', async () => {
+        expect(talosLocalFinestraPerCompattazione('/models/mai-aperto.gguf')).toBeNull()
+        localEngine.talosLocalEngineStatus.mockResolvedValue({ available: true, backends: 'CPU', loadedPath: null, shape: LLAMA_3B_SHAPE })
+        deviceCapacity.talosMeasureDevice.mockResolvedValue({
+            totalRamBytes: Math.round(11.2 * GIB), availableRamBytes: Math.round(4.47 * GIB), lowMemoryThresholdBytes: Math.round(0.5 * GIB),
+            freeStorageBytes: 46 * GIB, memoryBandwidthBytesPerSecond: null, thermal: 'none', abiSupported: true,
+        })
+        localEngine.talosLocalEngineOpenWithFallback.mockResolvedValue({ contextTokens: 4096 })
+        localEngine.talosLocalEngineOpen.mockResolvedValue({ contextTokens: 16384 })
+        localEngine.talosLocalEngineChatPlan
+            .mockResolvedValueOnce({ prompt: 'big-4096', promptTokens: 8000, contextTokens: 4096 })
+            .mockResolvedValueOnce({ prompt: 'big-16384', promptTokens: 8000, contextTokens: 16384 })
+        await localAdapter.complete(input() as never, { apiKey: null, endpoint: null }, (() => { throw new Error('local must not use transport') }) as never)
+        const finestra = talosLocalFinestraPerCompattazione('/models/qwen.gguf')
+        expect(finestra).not.toBeNull()
+        expect(finestra!.promptTokens).toBe(8000)
+        expect(finestra!.riservaUscita).toBeGreaterThan(0)
+        // Il tetto è quello del dispositivo (ci sta la richiesta più la risposta), non il predefinito 4.096.
+        expect(finestra!.finestraToken).toBeGreaterThanOrEqual(8000 + finestra!.riservaUscita)
+        expect(talosLocalFinestraPerCompattazione('/models/altro.gguf')).toBeNull()
+    })
+
     /**
      * Quando non c'è misura, l'ultima parola resta al motore.
      *
@@ -656,6 +685,102 @@ describe('LOCAL-CONTEXT-PARITY-01 local chat open', () => {
             expect.objectContaining({ kvCacheType: 'f16' }),
         )
         reggeSenzaSprecare(contestoAperto(localEngine.talosLocalEngineOpen as never), 8000)
+    })
+
+    /*
+     * ⛔ LOCAL-COMP-02 — trovato sul Pad il 02/10 (P4-ter passo 2, Spark-X2.5-4B): senza un tetto misurato la finestra
+     * registrata era il contesto APERTO per quella chiamata (poco più del bisogno), e la chat si compattava dopo ogni
+     * risposta (soglia ~0,75 × quel contesto, superata sempre). Senza misura il limite vero non si sa: niente finestra,
+     * e la compattazione parte solo quando il motore dice «contesto pieno».
+     */
+    /*
+     * ⭐⭐ LOCAL-COMP-03 — owner 02/10 «estremamente precisa» ⇒ «Token veri»: il motore conta la richiesta col suo
+     * tokenizzatore SENZA generare, con gli stessi turni e attrezzi che manderebbe una risposta vera.
+     */
+    it('LOCAL-COMP-03 conta i token veri della richiesta senza generare, con gli stessi argomenti di una risposta vera', async () => {
+        localEngine.talosLocalEnginePlanPrompt.mockResolvedValue({ promptTokens: 1234, shape: null })
+        const contati = await talosLocalTokenDellaRichiesta(input() as never)
+        expect(contati).toBe(1234)
+        expect(localEngine.talosLocalEngineGenerate).not.toHaveBeenCalled()
+        expect(localEngine.talosLocalEngineOpen).not.toHaveBeenCalled()
+        const argomentiContati = localEngine.talosLocalEnginePlanPrompt.mock.calls.at(-1)
+        localEngine.talosLocalEnginePlanPrompt.mockClear()
+        localEngine.talosLocalEngineOpenWithFallback.mockResolvedValue({ contextTokens: 4096 })
+        localEngine.talosLocalEngineChatPlan.mockResolvedValue({ prompt: 'p', promptTokens: 1234, contextTokens: 4096 })
+        await localAdapter.complete(input() as never, { apiKey: null, endpoint: null }, (() => { throw new Error('local must not use transport') }) as never)
+        expect(localEngine.talosLocalEnginePlanPrompt.mock.calls[0]).toEqual(argomentiContati)
+        localEngine.talosLocalEnginePlanPrompt.mockResolvedValue(null)
+        expect(await talosLocalTokenDellaRichiesta(input() as never)).toBeNull()
+    })
+
+    /*
+     * ⭐⭐ LOCAL-COMP-04 — owner 02/10 «Trovare il tetto vero»: sul Pad lo stato del motore dopo il caricamento non porta la
+     * forma (b165), la pianificazione sì. La finestra della compattazione è il tetto calcolato da quella forma.
+     */
+    it('LOCAL-COMP-04 senza forma nello stato ma con la forma della pianificazione: il tetto vero del dispositivo', async () => {
+        localEngine.talosLocalEngineStatus.mockResolvedValue({ available: true, backends: 'CPU', loadedPath: null, shape: null })
+        localEngine.talosLocalEnginePlanPrompt.mockResolvedValue({ promptTokens: 8000, shape: LLAMA_3B_SHAPE })
+        deviceCapacity.talosMeasureDevice.mockResolvedValue({
+            totalRamBytes: Math.round(11.2 * GIB), availableRamBytes: Math.round(4.47 * GIB), lowMemoryThresholdBytes: Math.round(0.5 * GIB),
+            freeStorageBytes: 46 * GIB, memoryBandwidthBytesPerSecond: null, thermal: 'none', abiSupported: true,
+        })
+        localEngine.talosLocalEngineOpenWithFallback.mockResolvedValue({ contextTokens: 16384 })
+        localEngine.talosLocalEngineOpen.mockResolvedValue({ contextTokens: 16384 })
+        localEngine.talosLocalEngineChatPlan.mockResolvedValue({ prompt: 'p', promptTokens: 8000, contextTokens: 16384 })
+        await localAdapter.complete(input('/models/forma-dal-piano.gguf') as never, { apiKey: null, endpoint: null }, (() => { throw new Error('local must not use transport') }) as never)
+        const finestra = talosLocalFinestraPerCompattazione('/models/forma-dal-piano.gguf')
+        expect(finestra?.finestraToken).not.toBeNull()
+        expect(finestra!.finestraToken!).toBeGreaterThanOrEqual(8000 + finestra!.riservaUscita)
+    })
+
+    /*
+     * ⭐⭐ REG-COMP-11 — il tetto che scendeva mentre il contesto cresceva (P4-ter passo 2-bis, 02/10/2026, numeri del Pad).
+     * Spark-X2.5-4B aperto a 6144 (f16): RAM libera 1.633.353.728 su 11.998.535.680, soglia 679.477.248. La RAM libera
+     * ha già tolto pesi E cache aperta; il tetto rimetteva solo i pesi ⇒ 1792 token e «chiedono 6313, può darne 1792».
+     * Owner «Pesi e cache aperta»: + 6144 × 147.456 = 905.969.664 byte ⇒ 8061 → 7936 (multiplo di 256). I margini fissi
+     * del motore restano sottratti (lato prudente).
+     */
+    const SPARK_SHAPE = { layers: 36, kvHeads: 4, headDim: 256, trainedContext: 1_048_576, weightBytes: 2_594_836_480, kvBytesPerElement: 2 }
+    const PAD_APERTO = {
+        totalRamBytes: 11_998_535_680, availableRamBytes: 1_633_353_728, lowMemoryThresholdBytes: 679_477_248,
+        freeStorageBytes: 46 * GIB, memoryBandwidthBytesPerSecond: null, thermal: 'none', abiSupported: true,
+    }
+    function sparkApertoA6144(path: string) {
+        localEngine.talosLocalEngineStatus.mockResolvedValue({
+            available: true, backends: 'CPU', loadedPath: path, shape: SPARK_SHAPE, contextTokens: 6144, kvCacheType: 'f16',
+        })
+        deviceCapacity.talosMeasureDevice.mockResolvedValue(PAD_APERTO)
+        localEngine.talosLocalEngineOpen.mockResolvedValue({ contextTokens: 7936 })
+        localEngine.talosLocalEngineChatPlan
+            .mockResolvedValueOnce({ prompt: 'p-6144', promptTokens: 5288, contextTokens: 6144 })
+            .mockResolvedValueOnce({ prompt: 'p-7936', promptTokens: 5288, contextTokens: 7936 })
+    }
+
+    it('LOCAL-CEIL-01 col contesto già aperto la cache aperta torna nel conto: la conversazione cresce invece di essere rifiutata', async () => {
+        sparkApertoA6144('/models/spark.gguf')
+        await localAdapter.complete(input('/models/spark.gguf') as never, { apiKey: null, endpoint: null }, (() => { throw new Error('local must not use transport') }) as never)
+        const aperture = (localEngine.talosLocalEngineOpen as unknown as { mock: { calls: Array<[string, { contextTokens: number }]> } }).mock.calls
+        expect(aperture.length).toBeGreaterThan(0)
+        expect(aperture.at(-1)![1].contextTokens).toBeGreaterThanOrEqual(5288 + 1024 + 1)
+        expect(aperture.at(-1)![1].contextTokens).toBeLessThanOrEqual(7936)
+    })
+
+    it('LOCAL-COMP-05 la finestra della compattazione è il tetto con la cache aperta rimessa (7936, non 1792)', async () => {
+        sparkApertoA6144('/models/spark-finestra.gguf')
+        await localAdapter.complete(input('/models/spark-finestra.gguf') as never, { apiKey: null, endpoint: null }, (() => { throw new Error('local must not use transport') }) as never)
+        expect(talosLocalFinestraPerCompattazione('/models/spark-finestra.gguf')?.finestraToken).toBe(7936)
+    })
+
+    it('LOCAL-COMP-02 senza un tetto misurato la finestra resta ignota (mai il contesto appena aperto)', async () => {
+        localEngine.talosLocalEngineOpenWithFallback.mockResolvedValue({ contextTokens: 4096 })
+        localEngine.talosLocalEngineOpen.mockResolvedValue({ contextTokens: 16384 })
+        localEngine.talosLocalEngineChatPlan
+            .mockResolvedValueOnce({ prompt: 'p-4096', promptTokens: 8000, contextTokens: 4096 })
+            .mockResolvedValueOnce({ prompt: 'p-16384', promptTokens: 8000, contextTokens: 16384 })
+        await localAdapter.complete(input('/models/senza-misura.gguf') as never, { apiKey: null, endpoint: null }, (() => { throw new Error('local must not use transport') }) as never)
+        const finestra = talosLocalFinestraPerCompattazione('/models/senza-misura.gguf')
+        expect(finestra?.finestraToken).toBeNull()
+        expect(finestra?.promptTokens).toBe(8000)
     })
 })
 
@@ -1784,7 +1909,40 @@ describe('la scelta del backend attraversa l apertura, non resta un modulo', () 
      * legge l'evidenza del sondaggio. L'apertura resta identica a quella di
      * ieri: contesto e cache, nient'altro.
      */
-    it('AL CONTRARIO — nessuna scelta e nessuna misura: l apertura non chiede DOVE', async () => {
+    // ⭐ CAMBIATO APPOSTA il 01/10/2026 (owner D10): con la GPU a bordo e
+    // nessuna misura l'apertura chiede il motore SUGGERITO e lo nomina — sul
+    // Pad la CPU dava 116 s alla prima parola. Senza acceleratori resta il
+    // vecchio «non chiedere niente» (caso sotto).
+    it('D10 — nessuna scelta e nessuna misura: l apertura chiede il suggerito, NOMINATO', async () => {
+        await invia()
+
+        expect(localEngine.talosLocalEngineOpenWithFallback).toHaveBeenCalledWith(
+            '/models/qwen.gguf',
+            { contextTokens: 4096, kvCacheType: 'f16', gpuLayers: -1, backend: 'OpenCL' },
+        )
+    })
+
+    /**
+     * ⭐ CANC-01 — D13 (owner, 01/10/2026): «una copia sola». Se la prova dei
+     * motori sta girando quando la persona scrive, l'apertura la interrompe e
+     * ASPETTA che abbia liberato la memoria prima di aprire il modello della
+     * chat. Sul Pad due copie insieme hanno fatto chiudere l'app (OOM KILL).
+     */
+    it('CANC-01 prima di aprire il modello della chat interrompe la prova in corso', async () => {
+        await invia()
+
+        const interrompi = localEngine.talosCancelAutomaticProbe.mock.invocationCallOrder[0]
+        const apri = localEngine.talosLocalEngineOpenWithFallback.mock.invocationCallOrder[0]
+        expect(interrompi).toBeDefined()
+        expect(apri).toBeDefined()
+        expect(interrompi!).toBeLessThan(apri!)
+    })
+
+    it('AL CONTRARIO — nessuna scelta, nessuna misura e sola CPU: l apertura non chiede DOVE', async () => {
+        localEngine.talosLocalEngineStatus.mockResolvedValue({
+            available: true, backends: 'CPU', loadedPath: null, shape: null,
+        })
+
         await invia()
 
         expect(localEngine.talosLocalEngineOpenWithFallback).toHaveBeenCalledWith(

@@ -53,6 +53,8 @@ export interface TalosProvenanceInput {
     modelVersion?: string | null
     promptMessageId?: string | null
     toolName?: string | null
+    /** ⛔ OSS-70B-1 (30/09/2026): the Code session a page was saved from (`TalosFileProvenance.codice`). */
+    codice?: { sessionId: string, title: string } | null
 }
 
 /**
@@ -158,6 +160,12 @@ async function sha256Hex(bytes: Uint8Array): Promise<string> {
     const digest = await crypto.subtle.digest('SHA-256', bytes as unknown as ArrayBuffer)
     return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('')
 }
+
+/**
+ * ⛔ OSS-70B-3 (30/09/2026, owner «Riconoscere la stessa pagina»): the SAME fingerprint the vault stores, so a caller
+ * can ask «is this already in the Library?» before writing a second copy. One function, not a lookalike.
+ */
+export const talosSha256Hex = sha256Hex
 
 function extensionOf(name: string): string {
     return name.split('.').at(-1)?.trim().toLowerCase() ?? ''
@@ -318,6 +326,7 @@ export function createTalosVaultService(options: TalosVaultServiceOptions): Talo
                     sourceUrl,
                     perceptualHash: null,
                     seal: null,
+                    ...(provenance.codice ? { codice: { ...provenance.codice } } : {}),
                 } }),
                 ...(sourceUrl ? { source_url: sourceUrl } : {}),
                 ...(sourceLinks.length

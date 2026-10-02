@@ -95,6 +95,8 @@ export function talosFileOriginCard(input: {
     if (input.originSessionTitle) {
         lines.push(`${t('library.originFromChat')} “${input.originSessionTitle}”`)
     }
+    // ⛔ OSS-70B-1 (30/09/2026, owner «Codice · titolo della sessione»): saved from a Code session, not from a chat.
+    if (record.codice) lines.push(`${t('library.originFromCodice')} “${record.codice.title}”`)
     // Never empty: a section with a heading and nothing under it reads as broken.
     if (lines.length === 0) lines.push(t('library.originNoDetail'))
 

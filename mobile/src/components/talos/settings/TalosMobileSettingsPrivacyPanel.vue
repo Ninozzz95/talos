@@ -241,13 +241,15 @@ async function setContentPreference(key: typeof contentPreferences[number], valu
 const localEngineProbeConsent = computed(() => settings.state.local_engine_probe?.consent ?? 'unset')
 const localEngineProbeRunning = ref(false)
 const localEngineProbeResult = ref<TalosLocalBackendQualification | null>(null)
+/**
+ * ⭐ A3 (01/10/2026): la frase dell'esito è la stessa dell'avviso automatico
+ * (`talosLocalEngineProbeMessage`), calcolata quando l'esito arriva. Prima qui
+ * «Fatto. … vanno più veloci con …» compariva anche senza nessun motore
+ * misurato (A3-REG-03).
+ */
+const localEngineProbeMessage = ref<string | null>(null)
 /** Vero solo dopo un tentativo reale che non ha trovato NESSUN modello sul disco. */
 const localEngineProbeNoModel = ref(false)
-// Explain the result without leaking internal backend identifiers into the UI.
-function backendLabel(backend: string | null | undefined): string {
-    const key = backend && ['cpu', 'opencl', 'vulkan', 'hexagon'].includes(backend) ? backend : 'unknown'
-    return t(`privacyPermissions.localEngineProbe.backendLabels.${key}`)
-}
 
 /**
  * Il percorso da sondare: il modello locale scelto ADESSO se c'è, altrimenti
@@ -266,6 +268,7 @@ async function runLocalEngineProbeFromSettings(): Promise<void> {
     if (localEngineProbeRunning.value) return
     localEngineProbeRunning.value = true
     localEngineProbeResult.value = null
+    localEngineProbeMessage.value = null
     try {
         const path = await resolveLocalEngineProbePath()
         if (!path) {
@@ -273,15 +276,20 @@ async function runLocalEngineProbeFromSettings(): Promise<void> {
             return
         }
         localEngineProbeNoModel.value = false
-        const [{ talosQualifyLocalBackend }, { talosRunLocalEngineProbeAndEnsureGranted }] = await Promise.all([
+        const [
+            { talosQualifyLocalBackend },
+            { talosRunLocalEngineProbeAndEnsureGranted, talosLocalEngineProbeMessage },
+        ] = await Promise.all([
             import('@/services/localEngine'),
             import('@/lib/localEngineProbeRun'),
         ])
-        localEngineProbeResult.value = await talosRunLocalEngineProbeAndEnsureGranted(path, {
+        const esito = await talosRunLocalEngineProbeAndEnsureGranted(path, {
             qualify: talosQualifyLocalBackend,
             getConsent: () => localEngineProbeConsent.value,
             setConsent: (consent) => settings.setLocalEngineProbeConsent({ consent }),
         })
+        localEngineProbeMessage.value = talosLocalEngineProbeMessage(esito, (key, params) => t(key, params))
+        localEngineProbeResult.value = esito
     } catch {
         toasts.push({ message: t('rejectGeneric'), durationMs: 10000 })
     } finally {
@@ -449,27 +457,20 @@ async function runLocalEngineProbeFromSettings(): Promise<void> {
                 data-testid="talos-local-engine-probe-no-model"
                 class="mt-2 text-2xs leading-4 text-[var(--talos-muted)]"
             >{{ t('privacyPermissions.localEngineProbe.noModel') }}</p>
-            <template v-else-if="localEngineProbeResult">
+            <template v-else-if="localEngineProbeResult && localEngineProbeMessage">
                 <p
-                    v-if="!localEngineProbeResult.ran"
                     data-testid="talos-local-engine-probe-result"
                     class="mt-2 text-2xs leading-4 text-[var(--talos-muted)]"
-                >{{ t(`privacyPermissions.localEngineProbe.resultNotRun.${
-                    localEngineProbeResult.reason === 'hot' ? 'hot' : 'alreadyProven'}`) }}</p>
-                <template v-else>
-                    <p
-                        data-testid="talos-local-engine-probe-result"
-                        class="mt-2 text-2xs leading-4 text-[var(--talos-muted)]"
-                    >{{ t('privacyPermissions.localEngineProbe.resultRan', {
-                        backend: backendLabel(localEngineProbeResult.decisionBackend),
-                    }) }}</p>
-                    <p
-                        v-if="localEngineProbeResult.cpuInconclusive
+                >{{ localEngineProbeMessage }}</p>
+                <p
+                    v-if="localEngineProbeResult.ran
+                        && (localEngineProbeResult.probedCpu || localEngineProbeResult.probedGpu
+                            || localEngineProbeResult.probedNpu)
+                        && (localEngineProbeResult.cpuInconclusive
                             || localEngineProbeResult.gpuInconclusive
-                            || localEngineProbeResult.npuInconclusive"
-                        class="mt-1 text-2xs leading-4 text-[var(--talos-muted)]"
-                    >{{ t('privacyPermissions.localEngineProbe.resultInconclusive') }}</p>
-                </template>
+                            || localEngineProbeResult.npuInconclusive)"
+                    class="mt-1 text-2xs leading-4 text-[var(--talos-muted)]"
+                >{{ t('privacyPermissions.localEngineProbe.resultInconclusive') }}</p>
             </template>
 
             <Button

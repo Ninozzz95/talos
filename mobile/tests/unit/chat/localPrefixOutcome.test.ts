@@ -32,6 +32,7 @@ const localEngine = vi.hoisted(() => {
         talosLocalEngineStatus: vi.fn(),
         talosLocalEngineOpen: vi.fn(),
         talosLocalEngineOpenWithFallback: vi.fn(),
+        talosCancelAutomaticProbe: vi.fn(async () => undefined),
         talosLocalEngineChatPlan: vi.fn(),
         talosLocalEnginePlanPrompt: vi.fn(async () => null),
         talosLocalEngineTemplateCapabilities: vi.fn(),

@@ -52,6 +52,7 @@ import { setTalosScreenSecure } from '@/services/privacyScreen'
 import { talosHarnessUiAvailable } from '@/services/harnessUi'
 import { applyTalosFontScale } from '@/lib/talosFontScale'
 import { useTalosMobileToasts } from '@/stores/toasts'
+import { talosAnswerNpuTerms, talosNpuTermsPromptOpen } from '@/stores/npuTermsPrompt'
 import { useTalosTabletLayout } from '@/composables/useTalosTabletLayout'
 import { useTalosSheetNav } from '@/composables/useTalosSheetNav'
 import { TALOS_TABLET_CHAT_SIDEBAR_DEFAULT, TALOS_TABLET_CHAT_SIDEBAR_MIN, TALOS_TABLET_SIDEBAR_MAX, clampTalosTabletChatSidebarWidth, clampTalosTabletSidebarWidth, talosTabletLeavesChatsRoute, talosTabletLeavesHarnessListRoute, talosTabletSidebarEffectiveWidth } from '@/lib/tabletLayout'
@@ -438,6 +439,25 @@ const activeSessionLibraryContextPolicy = computed(() =>
         chatController.chat.activeSession.value?.metadata.library_context_policy,
     ))
 
+/*
+ * ⭐⭐ P4-ter passo 2 (02/10/2026) — «Compatta ora» dal menu della chat, già confermato. Riuscita = il separatore nella
+ * conversazione (nessun avviso in più); altrimenti un avviso che dice il motivo vero.
+ */
+async function compattaChatAttiva(): Promise<void> {
+    const sessionId = chatController.chat.activeSession.value?.id
+    if (!sessionId) return
+    const esito = await chatController.chat.compattaOra(sessionId)
+    if (esito.ok && esito.compattato) return
+    const chiave = !esito.ok && esito.motivo === 'occupato'
+        ? 'chat.compaction.busy'
+        : esito.ok && esito.motivo === 'niente-da-compattare'
+            ? 'chat.compaction.nothingToCompact'
+            : esito.ok && esito.motivo === 'niente-da-guadagnare'
+                ? 'chat.compaction.nothingToGain'
+                : 'chat.compaction.failed'
+    toastsStore.push({ message: t(chiave), durationMs: 6000 })
+}
+
 async function openChatMedia(): Promise<void> {
     const sessionId = chatController.chat.activeSession.value?.id
     if (!sessionId) return
@@ -477,19 +497,12 @@ const TalosMobileToolConsentSheet = defineAsyncComponent(
 const TalosMobileToolAuthorizationRecoveryCard = defineAsyncComponent(
     () => import('@/components/chat/TalosMobileToolAuthorizationRecoveryCard.vue'),
 )
-/**
- * ⛔⛔ MISURATO sul Pad il 21/8: montata invece dentro `TalosBarraRoot.vue`
- * (il ruolo assistente separato, avviato da `lib/barra/avvia.ts` — non
- * questa app), `pendingLocalEngineProbeConsent` si valorizzava per davvero
- * ma NESSUN componente la leggeva mai, perché quell'albero Vue non è mai
- * montato durante l'uso normale della chat. `composer_model` cambiava,
- * `local_engine_probe.consent` restava `unset` per sempre, e la modale non
- * compariva in nessuna schermata reale. La sede giusta è qui — la stessa di
- * `TalosMobileToolConsentSheet`, l'altra modale di consenso che l'app
- * mostra davvero durante la chat.
- */
-const TalosLocalEngineProbeConsentSheet = defineAsyncComponent(
-    () => import('@/components/shell/TalosLocalEngineProbeConsentSheet.vue'),
+// ⛔ 01/10/2026 (owner D7): la modale «Provare i motori di questo telefono?»
+// non esiste più — la prova parte da sola in `chatController.selectModel`.
+// ⛔ PKLA Qualcomm 2.1 b (owner, 01/10/2026): le condizioni NPU, proposte UNA
+// volta alla scelta di un modello locale (`lib/models/npuTermsPrompt.ts`).
+const TalosNpuTermsSheet = defineAsyncComponent(
+    () => import('@/components/talos/models/TalosNpuTermsSheet.vue'),
 )
 const activeToolAuthorization = computed(() =>
     chatController.pendingToolAuthorizations.value[0] ?? null)
@@ -523,6 +536,13 @@ const consentSheetShown = computed(() =>
     && !planSheetShown.value
     && activeToolAuthorization.value !== null
     && chatController.toolAuthorizationPromptVisible.value)
+/**
+ * ⛔ A3-OSS-2 (Pad, 01/10/2026): fisso in basso a destra, il pulsante copriva «Interrompi risposta». Owner 01/10:
+ * «pillola accanto alla pill selettore modello» ⇒ sulla chat il richiamo lo disegna il compositore. Il foglio del
+ * piano però copre il compositore: lì resta il pulsante fisso in alto (vedi la condizione sopra).
+ */
+const reviewInComposer = computed(() =>
+    activeRoute.value === 'chat' && !planSheetShown.value)
 const toolAuthorizationRecoveryBusy = ref<string | null>(null)
 
 async function retryToolAuthorizationRecovery(checkpointId: string): Promise<void> {
@@ -1074,6 +1094,9 @@ onMounted(async () => {
     // first paint. Synchronize only this restoration decision so a lazy initial
     // deep link is no longer mistaken for the temporary START_LOCATION/chat.
     await router.isReady()
+    // ⭐ Punto 2 (01/10/2026), owner: «Alla prima partenza» — i programmi della GPU si compilano in sottofondo (~16 s
+    // nell’app di release sul Pad, 41-69 s nella build di sviluppo debuggable) prima della prima chat; il motore decide se serve davvero.
+    void import('@/services/localEngine').then((motore) => motore.talosPrepareGpuInBackground()).catch(() => undefined)
     const lastRoute = preferences.state.last_route
     // A remembered station is a convenience only for the neutral launcher
     // address. A copied/deep-linked URL is an explicit user request and must
@@ -1366,14 +1389,6 @@ onBeforeUnmount(async () => {
                 @later="chatController.dismissToolAuthorization()"
             />
 
-            <!-- §1-bis: la modale del sondaggio GPU, alla prima scelta esplicita
-                 di un modello locale. Indipendente dalla catena qui sopra, come
-                 il consenso sulle immagini — due domande diverse non condividono
-                 una coda. -->
-            <TalosLocalEngineProbeConsentSheet
-                v-if="chatController.pendingLocalEngineProbeConsent.value"
-                @decide="chatController.decideLocalEngineProbeConsent"
-            />
             <!--
                 ⛔⭐⭐ Questo pulsante è l'UNICA via verso un permesso in
                 sospeso, e stava in fondo a una catena di `v-else-if` insieme
@@ -1393,7 +1408,7 @@ onBeforeUnmount(async () => {
                 per rispondergli non può essere il ramo di scarto di qualcos'altro.
             -->
             <button
-                v-if="toolAuthorizationReviewCount > 0 && !recoveryCardShown && !consentSheetShown"
+                v-if="toolAuthorizationReviewCount > 0 && !recoveryCardShown && !consentSheetShown && !reviewInComposer"
                 type="button"
                 data-testid="talos-tool-authorization-reopen"
                 class="talos-pressable pointer-events-auto fixed right-3 min-h-touch rounded-full border border-[var(--talos-border)] bg-[var(--talos-panel)] px-4 text-xs font-medium text-[var(--talos-text)] shadow-lg"
@@ -1509,6 +1524,8 @@ onBeforeUnmount(async () => {
                         @export="exportSheetOpen = true"
                         :can-open-media="canOpenChatMedia"
                         @media="openChatMedia"
+                        :can-compact="!activeChatIsEmpty"
+                        @compact="compattaChatAttiva"
                     />
                     <TalosMobileImmersiveChrome
                         v-else
@@ -1530,6 +1547,8 @@ onBeforeUnmount(async () => {
                         @export="exportSheetOpen = true"
                         :can-open-media="canOpenChatMedia"
                         @media="openChatMedia"
+                        :can-compact="!activeChatIsEmpty"
+                        @compact="compattaChatAttiva"
                     />
 
                     <main class="relative flex-1 overflow-hidden">
@@ -1560,6 +1579,7 @@ onBeforeUnmount(async () => {
 
             <TalosMobileToastRegion />
 
+            <TalosNpuTermsSheet v-if="talosNpuTermsPromptOpen" @decide="talosAnswerNpuTerms" />
             <TalosLauncherIconDialog v-if="launcherIcon.state.pending" />
 
             <Transition name="station">

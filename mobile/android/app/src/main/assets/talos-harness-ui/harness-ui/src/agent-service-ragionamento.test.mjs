@@ -54,13 +54,21 @@ test('RAG-COD-10 compattaSessione applica la regola anche al riassunto', async (
             text: async () => '',
         }
     }
-    await compattaSessione({
-        messaggiFinali: [], modello: 'z-ai/glm-5.3-flash', chiave: 'k', fetchDiRete,
+    // P4-ter (02/10/2026): «Compatta ora» passa dalla catena del giro (kernel `compattaFuoriDalGiro`): una storia con
+    // qualcosa da riassumere, e la regola del catalogo vale anche per il riassuntore.
+    const storia = [
+        { role: 'system', content: 's' },
+        ...Array.from({ length: 4 }, (_, i) => [
+            { role: 'user', content: `richiesta ${i}` },
+            { role: 'assistant', content: null, tool_calls: [{ id: `c${i}`, type: 'function', function: { name: 'leggi', arguments: '{"percorso":"a"}' } }] },
+            { role: 'tool', tool_call_id: `c${i}`, content: 'contenuto' },
+            { role: 'assistant', content: `fatto ${i}` },
+        ]).flat(),
+    ]
+    const esito = await compattaSessione({
+        messaggiFinali: storia, modello: 'z-ai/glm-5.3-flash', chiave: 'k', fetchDiRete,
         politicaRagionamentoFn: async () => GLM,
-        compattaConversazioneFn: async (messaggi, chiamaModello) => {
-            await chiamaModello([{ role: 'user', content: 'riassumi' }])
-            return { compattato: true, messaggi, usage: null }
-        },
     })
     assert.deepEqual(corpi[0].reasoning, { effort: 'max' })
+    assert.ok(esito.record, 'torna un record, la storia non si tocca')
 })

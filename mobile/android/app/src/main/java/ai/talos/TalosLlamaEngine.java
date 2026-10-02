@@ -707,10 +707,15 @@ public final class TalosLlamaEngine implements AutoCloseable {
                    Mode mode) throws InterruptedException {
         vivo("run");
         AtomicReference<String> produced = new AtomicReference<>(null);
-        Thread worker = new Thread(
-                () -> produced.set(TalosLlamaNative.nativeGenerate(
-                        handle, prompt, maxTokens, mode.stopAtEndOfGeneration, mode.reusePrefix)),
-                "talos-llama-run");
+        Thread worker = new Thread(() -> {
+            try {
+                produced.set(TalosLlamaNative.nativeGenerate(
+                        handle, prompt, maxTokens, mode.stopAtEndOfGeneration, mode.reusePrefix));
+            } catch (IllegalStateException grammatica) {
+                // GRAM-01: in un thread proprio un'eccezione non catturata chiuderebbe l'app. Qui vale «niente testo».
+                produced.set(null);
+            }
+        }, "talos-llama-run");
         worker.start();
 
         List<TalosBenchmarkHarness.Sample> samples = new ArrayList<>();

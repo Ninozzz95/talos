@@ -59,7 +59,18 @@ const props = defineProps<{
      * sull'NPU in Q4_0 e a **55,7** in Q4_K_M. Assente = non letto = NPU fuori.
      */
     quantisation?: string | null
+    /**
+     * ⛔ PKLA Qualcomm 2.1 b (owner, 01/10/2026): l'NPU nell'APK resta FUORI
+     * dal motore finché le condizioni non sono accettate. Allora la riga non
+     * dice «qui non c'è» (sarebbe falso): chiede di accettarle.
+     */
+    npu?: { installed: boolean, accepted: boolean } | null
 }>()
+
+const emit = defineEmits<{ openNpuTerms: [] }>()
+
+/** L'NPU c'è ma aspetta l'accettazione delle condizioni Qualcomm. */
+const npuBloccata = computed(() => props.npu?.installed === true && props.npu.accepted !== true)
 
 const { t } = useTalosI18n()
 
@@ -106,6 +117,7 @@ function opzioneDi(kind: TalosLocalBackendKind): TalosLocalBackendOption | undef
  */
 function motivoDi(kind: TalosLocalBackendKind): string | null {
     if (kind === 'auto' as TalosLocalBackendKind) return null
+    if (kind === 'hexagon' && npuBloccata.value) return t('localModels.backendNpuTerms')
     const opzione = opzioneDi(kind)
     if (opzione === undefined) return null
     if (opzione.available) {
@@ -136,6 +148,12 @@ const scelto = computed<'auto' | TalosLocalBackendKind>(
 )
 
 async function scegli(valore: 'auto' | TalosLocalBackendKind): Promise<void> {
+    // ⛔ Prima le condizioni: scegliere l'NPU senza averle accettate aprirebbe
+    // un motore che il nativo rifiuta (`TALOS_NPU_TERMS_REQUIRED`).
+    if (valore === 'hexagon' && npuBloccata.value) {
+        emit('openNpuTerms')
+        return
+    }
     scelteDallaPersona.value = true
     const nuova: TalosLocalBackendPreference = valore === 'auto'
         // ⛔ `manual` NON si azzera tornando ad automatico: spegnere non è
@@ -152,7 +170,7 @@ const righe = computed<Array<{ valore: 'auto' | TalosLocalBackendKind, disponibi
     { valore: 'auto', disponibile: true },
     ...TALOS_LOCAL_BACKEND_KINDS.map((kind) => ({
         valore: kind,
-        disponibile: opzioneDi(kind)?.available === true,
+        disponibile: opzioneDi(kind)?.available === true || (kind === 'hexagon' && npuBloccata.value),
     })),
 ])
 </script>

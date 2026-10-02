@@ -101,6 +101,8 @@ describe('le automazioni come richiesta scritta (server del Codice)', () => {
 
         expect(registro.partenze).toEqual([{
             cartellaId: 'workspace', consegna: 'Controlla la cartella', modello: 'm-1', mobile: true, permessi: 'Workspace write',
+            // ⛔ P4-quater (02/10/2026): nessuno la segue ⇒ le domande (scrittura fuori dalla cartella) si chiudono subito con un no.
+            senzaInterfaccia: true,
         }])
         const dopo = await store.leggi(voce.id)
         expect(dopo).toMatchObject({ ultimaSessioneId: 's-7', eseguiteOggi: 1, attiva: true, ultimoErrore: null })

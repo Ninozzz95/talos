@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, ref, watch, type Component } from 'vue'
+import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, ref, watch, type Component } from 'vue'
 import { useTalosI18n } from '@/i18n'
-import { Bell, Bot, BrainCircuit, ChevronRight, Globe2, Languages, Mail, Palette, Search, Settings, Shield, ShieldCheck, Smartphone, DatabaseBackup, User, Volume2, Wrench } from '@lucide/vue'
+import { Bell, Bot, BrainCircuit, ChevronRight, Globe2, Languages, Mail, Palette, Scale, Search, Settings, Shield, ShieldCheck, Smartphone, DatabaseBackup, User, Volume2, Wrench } from '@lucide/vue'
 import { useTalosSheetNav } from '@/composables/useTalosSheetNav'
 import { useTalosMediaQuery } from '@/composables/useTalosMediaQuery'
 import { useTalosAccountStore } from '@/stores/account'
@@ -182,6 +182,7 @@ const ICONS: Record<TalosMobileSettingsTabId, Component> = {
     backup: DatabaseBackup,
     account: User,
     agent_tools: Shield,
+    legal: Scale,
     system: Settings,
 }
 
@@ -216,6 +217,8 @@ const LOCAL_PANELS: Partial<Record<TalosMobileSettingsTabId, Component>> = {
     backup: TalosMobileSettingsBackupPanel,
     account: TalosMobileSettingsAccountPanel,
     agent_tools: TalosMobileSettingsAgentToolsPanel,
+    // Pigro: porta con sé gli elenchi generati delle licenze (centinaia di KB).
+    legal: defineAsyncComponent(() => import('./TalosMobileSettingsLegalPanel.vue')),
 }
 
 </script>

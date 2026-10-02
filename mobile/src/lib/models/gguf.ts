@@ -117,6 +117,15 @@ const FILE_TYPES: Record<number, string> = {
     30: 'IQ4_XS',
     31: 'IQ1_M',
     32: 'BF16',
+    // 01/10/2026 (A2-REG-01): la tabella si fermava a 32. Numeri da `llama.h`
+    // di b11312 (righe 154-159); 38 è `MXFP4_MOE`, chiamato MXFP4 come nel
+    // vocabolario dei formati che l'app già usa.
+    36: 'TQ1_0',
+    37: 'TQ2_0',
+    38: 'MXFP4',
+    39: 'NVFP4',
+    40: 'Q1_0',
+    41: 'Q2_0',
 }
 
 /**

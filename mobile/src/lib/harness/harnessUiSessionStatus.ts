@@ -1,4 +1,5 @@
 import { talosHarnessUiApiBase } from '@/lib/harness/harnessUiApiBase'
+import { intestazioniServerCodice } from '@/lib/harness/harnessUiSegreto'
 
 /**
  * ⭐⭐⭐ 2/9 — piano §16.1 (owner: "stato vivo nella lista sessioni, come
@@ -58,9 +59,12 @@ export async function fetchTalosHarnessSessionsStatus(): Promise<Map<string, Tal
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), TALOS_HARNESS_STATUS_TIMEOUT_MS)
     try {
+        // ⛔⛔ 70-A (30/09/2026): il server del Codice vuole il suo segreto. Una sola lettura (`attesaMs: 0`): qui c'è
+        // una finestra di 2,5 s, e un server che non ha ancora scritto il segreto vale come spento.
+        const segreto = await intestazioniServerCodice({ attesaMs: 0 })
         const response = await fetch(`${talosHarnessUiApiBase()}/api/v1/sessions`, {
             method: 'GET',
-            headers: { Accept: 'application/json' },
+            headers: { Accept: 'application/json', ...segreto },
             cache: 'no-store',
             signal: controller.signal,
         })

@@ -40,9 +40,14 @@ export function runFinished({ threadId, runId, outcome, result }) {
     return evento
 }
 
-export function runError({ message, code }) {
+/**
+ * ⛔ ERRCOD (30/09/2026): `errore` è il descrittore di `error-surface.mjs` (`talos.codice-errore.v1`) — un'estensione
+ * nostra accanto a `message`/`code` dell'AG-UI, che restano per chi legge l'evento grezzo. Presente solo se passato.
+ */
+export function runError({ message, code, errore }) {
     const evento = { type: 'RunError', message }
     if (code !== undefined) evento.code = code
+    if (errore && typeof errore === 'object') evento.errore = errore
     return evento
 }
 
@@ -91,8 +96,17 @@ export function toolCallArgs({ toolCallId, delta }) {
     return { type: 'ToolCallArgs', toolCallId, delta }
 }
 
-export function toolCallResult({ messageId, toolCallId, content, role = 'tool' }) {
-    return { type: 'ToolCallResult', messageId, toolCallId, content, role }
+/**
+ * ⛔ ESITO65 (30/09/2026) — `isError` è un'estensione nostra: AG-UI non ha un campo di errore su ToolCallResult nel
+ * verso agente→client (docs.ag-ui.com/concepts/events; ag-ui#2226). Nome e significato sono quelli di MCP 2025-11-25
+ * («Tool Execution Errors… isError: true»). Presente solo se è un booleano: chi non lo passa ottiene l'evento di sempre.
+ */
+export function toolCallResult({ messageId, toolCallId, content, role = 'tool', isError, errorCode }) {
+    const evento = { type: 'ToolCallResult', messageId, toolCallId, content, role }
+    if (typeof isError === 'boolean') evento.isError = isError
+    // ⛔ ERRCOD-E3 (30/09/2026): il perché del fallimento (NOT_FOUND, DENIED…), deciso dal kernel; la UI lo dice in parole.
+    if (typeof errorCode === 'string' && errorCode) evento.errorCode = errorCode
+    return evento
 }
 
 export function stateDelta({ delta }) {
@@ -121,12 +135,19 @@ export function stateDelta({ delta }) {
  * hanno oggi un equivalente — non c'era niente da portare, il design è
  * nuovo per entrambi.
  */
-export function compactionStart({ giro }) {
-    return { type: 'CompactionStart', giro }
+/*
+ * ⭐ P4-ter (02/10/2026): campi ADDITIVI per la barra e il separatore «X → Y token» (decisione 6 dell'owner, desktop 24/09):
+ * `tokenPrima`/`soglia`/`motivo` all'inizio; `tokenPrima`/`tokenDopo`/`at`/`coveredThrough`/`motivo` alla fine. Solo quelli
+ * che ci sono: un client vecchio vede lo stesso evento di prima.
+ */
+const conIValori = (campi) => Object.fromEntries(Object.entries(campi).filter(([, v]) => v !== undefined && v !== null))
+
+export function compactionStart({ giro, tokenPrima, soglia, motivo }) {
+    return { type: 'CompactionStart', giro, ...conIValori({ tokenPrima, soglia, motivo }) }
 }
 
-export function compactionEnd({ giro, compattato }) {
-    return { type: 'CompactionEnd', giro, compattato }
+export function compactionEnd({ giro, compattato, motivo, tokenPrima, tokenDopo, at, coveredThrough }) {
+    return { type: 'CompactionEnd', giro, compattato, ...conIValori({ motivo, tokenPrima, tokenDopo, at, coveredThrough }) }
 }
 
 /**
@@ -182,8 +203,8 @@ export function eventiPerRisposta(risposta, { messageId, parentMessageId, testoG
  * talosLavora mette in `messaggi.push({role:'tool', tool_call_id,
  * content})`, talosHarness.mjs riga ~836) a ToolCallResult.
  */
-export function eventoPerEsitoTool({ messageId, toolCallId, content }) {
-    return toolCallResult({ messageId, toolCallId, content: String(content) })
+export function eventoPerEsitoTool({ messageId, toolCallId, content, isError, errorCode }) {
+    return toolCallResult({ messageId, toolCallId, content: String(content), isError, errorCode })
 }
 
 /**
@@ -230,8 +251,9 @@ export function queuedMessageDelivered({ testo }) {
 }
 
 /** ⭐ 29/8 — porta canonico (ledger §17, FASE G.2): l'attrezzo `artifact_create` (talosHarness.mjs) torna un id al modello; l'HTML vero arriva qui, separato, per diventare un evento che il frontend può renderizzare (iframe sandboxato, mai srcdoc — vedi artifact-store.mjs). */
-export function artifactCreated({ messageId, id, titolo }) {
-    return { type: 'ArtifactCreated', messageId, id, titolo }
+export function artifactCreated({ messageId, id, titolo, modello }) {
+    // ⛔ OSS-70B-1 / E7 (01/10/2026): il modello che ha fatto il giro, solo quando è un testo (eventi vecchi: assente).
+    return { type: 'ArtifactCreated', messageId, id, titolo, ...(typeof modello === 'string' && modello ? { modello } : {}) }
 }
 
 /**
@@ -246,8 +268,15 @@ export function approvalRequested({ requestId, azione }) {
     return { type: 'ApprovalRequested', requestId, azione }
 }
 
-export function approvalResolved({ requestId, approvato }) {
-    return { type: 'ApprovalResolved', requestId, approvato }
+/*
+ * ⛔ P4-quater (02/10/2026): `motivo` ('nessuna-interfaccia': un'automazione, nessuno a cui chiedere) e `ambito`
+ * ('cartella': «Consenti in questa cartella per la sessione») ci sono solo quando servono, come sul desktop.
+ */
+export function approvalResolved({ requestId, approvato, motivo, ambito }) {
+    return {
+        type: 'ApprovalResolved', requestId, approvato,
+        ...(motivo ? { motivo } : {}), ...(ambito ? { ambito } : {}),
+    }
 }
 
 /**

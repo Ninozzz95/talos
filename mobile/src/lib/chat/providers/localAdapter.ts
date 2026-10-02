@@ -9,6 +9,7 @@ import type {
     TalosProviderStreamHandlers,
 } from '@/lib/chat/providerContracts'
 import {
+    talosCancelAutomaticProbe,
     TalosLocalEngineGenerationError,
     TalosLocalEngineOpenError,
     type TalosLocalEngineStatus,
@@ -46,7 +47,7 @@ import {
     type TalosPrefixOutcome,
 } from '@/lib/models/prefixCache'
 import { talosMeasureDevice } from '@/services/deviceCapacity'
-import { type TalosModelShape, talosMaxContextFor } from '@/lib/models/fit'
+import { type TalosModelShape, talosKvCacheBytes, talosMaxContextFor } from '@/lib/models/fit'
 import { talosKvBytesPerTokenOf } from '@/lib/models/engineDiagnostics'
 import { talosEngineTuning } from '@/lib/models/engineTuning'
 import type { TalosTuningKey } from '@/lib/models/tuningProfile'
@@ -1078,6 +1079,28 @@ export function talosScordaStatoPrefissi(): void {
     SCRITTURE_FALLITE.clear()
 }
 
+/*
+ * ⭐⭐ P4-ter passo 2 (02/10/2026) — la finestra VERA per la compattazione della chat: il tetto del dispositivo fin dove il
+ * contesto può salire (non il predefinito con cui si apre, `pianoDiApertura`), i token veri dell'ultima richiesta e la
+ * riserva della risposta. Il motore li calcola a ogni chiamata (`run`, dopo `localContextCeiling`); qui si ricordano per
+ * modello, solo in memoria. `null` finché il modello non ha risposto almeno una volta.
+ */
+export interface TalosLocalFinestraPerCompattazione {
+    /**
+     * Il tetto MISURATO del dispositivo; `null` se non c'è misura (forma del modello o dispositivo sconosciuti). ⛔ Mai il
+     * contesto aperto per una chiamata: è poco più del bisogno e farebbe compattare dopo ogni risposta (LOCAL-COMP-02).
+     */
+    finestraToken: number | null
+    promptTokens: number
+    riservaUscita: number
+}
+const FINESTRE_PER_COMPATTAZIONE = new Map<string, TalosLocalFinestraPerCompattazione>()
+
+export function talosLocalFinestraPerCompattazione(modelId: string): TalosLocalFinestraPerCompattazione | null {
+    const finestra = FINESTRE_PER_COMPATTAZIONE.get(modelId)
+    return finestra ? { ...finestra } : null
+}
+
 async function ensureLoaded(
     path: string,
     piano: TalosPianoDiApertura = {
@@ -1090,6 +1113,13 @@ async function ensureLoaded(
     const status = await talosLocalEngineStatus()
     if (!status.available) throw new Error('TALOS_LOCAL_ENGINE_UNAVAILABLE')
     if (status.loadedPath === path) return status
+    /*
+     * D13 (owner, 01/10/2026): «una copia sola». Se la prova dei motori sta
+     * girando, la persona ha scritto: la prova si interrompe e libera la
+     * memoria PRIMA che si apra il modello della chat (sul Pad due copie
+     * insieme = OOM KILL). La prova si ripete la prossima volta.
+     */
+    await talosCancelAutomaticProbe()
     const pianoBackend = await backendDiApertura(path, status.backends, traceId, lavoro)
     try {
         await talosLocalEngineOpenWithFallback(path, {
@@ -1138,7 +1168,7 @@ async function ensureLoaded(
  */
 async function localContextCeiling(
     shape: TalosModelShape | null,
-    opzioni: { inMemoria: boolean } = { inMemoria: true },
+    opzioni: { inMemoria: boolean, contestoAperto?: number | null } = { inMemoria: true },
 ): Promise<number | null> {
     if (!shape) return null
     const device = await talosMeasureDevice()
@@ -1190,10 +1220,21 @@ async function localContextCeiling(
      * sommarlo regalerebbe un tetto che il dispositivo non può onorare. È lo
      * stesso errore di segno di prima, guardato dall'altro lato.
      */
+    /*
+     * ⛔⛔ E con i pesi si rimette la cache del contesto GIÀ APERTO (REG-COMP-11, owner 02/10/2026 «Pesi e cache
+     * aperta»). Misurato sul Pad (Spark-X2.5-4B, NPU): la RAM libera era 1,63 GB col contesto aperto a 6144 e 5,93 GB a
+     * modello chiuso; fra 2048 e 8192 aperti la differenza è 0,904 GB = 6144 × ~147.100 byte. Rimettendo solo i pesi,
+     * la cache aperta restava tolta e il tetto SCENDEVA mentre la conversazione cresceva: 3584, poi 2560, poi il
+     * rifiuto «chiedono 6312, può darne 3584». I margini fissi del motore restano sottratti: i buffer veri (~0,15 GB
+     * misurati) sono già fuori, quindi si resta dalla parte prudente.
+     */
+    const cacheAperta = opzioni.inMemoria && opzioni.contestoAperto && opzioni.contestoAperto > 0
+        ? talosKvCacheBytes(shape, opzioni.contestoAperto)
+        : 0
     return talosMaxContextFor(shape, {
         ...device,
         availableRamBytes: opzioni.inMemoria
-            ? device.availableRamBytes + shape.weightBytes
+            ? device.availableRamBytes + shape.weightBytes + cacheAperta
             : device.availableRamBytes,
     })
 }
@@ -1410,35 +1451,12 @@ async function run(
     }
 }
 
-async function runBody(
-    input: TalosMobileCompletionInput,
-    onChunk: ((text: string) => void) | undefined,
-    onReasoning: ((text: string) => void) | undefined,
-    traceId: string,
-): Promise<TalosMobileCompletionResult> {
-    /**
-     * B1 — un id che lega tutti gli eventi di QUESTA generazione, dal primo
-     * istante in cui l'adattatore la prende in carico. Prima di questo
-     * blocco: zero id di correlazione in tutto il repo (grep esaustivo).
-     * `adapter_start` è l'evento più vicino a "la persona ha premuto
-     * invio" che questo file può misurare da sé - il tempo PRIMA di qui
-     * (dalla battitura al submit) appartiene a `chatController`, non
-     * ancora tracciato: dichiarato, non nascosto.
-     */
-    talosLocalTrace(traceId, 'adapter_start')
-
-    /**
-     * I tool, nella STESSA forma che ricevono i provider di rete.
-     *
-     * Owner 2026-08-03: «i locali devono avere le stesse possibilità dei key».
-     * `talosToolsForOpenAi` è la funzione che serve già gli altri adattatori —
-     * riusarla vuol dire che un tool non ha due descrizioni a seconda di chi lo
-     * esegue, e la guardia `anthropicAcceptsEveryTool` continua a valere per
-     * tutti.
-     *
-     * Il filtro sulle capacità del modello resta al suo posto: è lì che si
-     * decide se questo modello può chiamare qualcosa, e non qui.
-     */
+/**
+ * ⭐⭐ P4-ter passo 2 (02/10/2026) — la preparazione della richiesta locale (trasporto degli attrezzi, attrezzi offerti,
+ * conversazione, proiezione del template), estratta TALE E QUALE da `runBody`: la stessa funzione serve la risposta e
+ * il conteggio dei token veri della compattazione (`talosLocalTokenDellaRichiesta`), così i due non possono divergere.
+ */
+async function progettaRichiestaLocale(input: TalosMobileCompletionInput, traceId: string) {
     talosLocalTrace(traceId, 'template_project_start')
     /*
      * ⛔⛔⛔ SENZA GRAMMATICA NON SI DANNO ATTREZZI — owner 11/09, «approvo».
@@ -1565,6 +1583,50 @@ async function runBody(
      * pagarlo dove nessuno l'ha chiesto.
      */
     const pensa = input.thinking !== false
+    return { template, offered, conversazione, wireTools, projection, turns, tools, pensa }
+}
+
+/**
+ * ⭐⭐ P4-ter passo 2 (owner 02/10: «Token veri») — i token VERI della richiesta che partirebbe con questo input, contati
+ * dal motore col suo tokenizzatore SENZA generare (`planPrompt`, la stessa pianificazione che `runBody` fa prima di
+ * aprire). `null` se il motore non sa contare (modello non apribile, ponte vecchio): chi chiama ripiega sulla stima.
+ */
+export async function talosLocalTokenDellaRichiesta(input: TalosMobileCompletionInput): Promise<number | null> {
+    const { turns, tools, pensa } = await progettaRichiestaLocale(input, `conta-${Date.now().toString(36)}`)
+    const anticipo = await talosLocalEnginePlanPrompt(input.model.id, turns, tools, pensa)
+    return anticipo?.promptTokens ?? null
+}
+async function runBody(
+    input: TalosMobileCompletionInput,
+    onChunk: ((text: string) => void) | undefined,
+    onReasoning: ((text: string) => void) | undefined,
+    traceId: string,
+): Promise<TalosMobileCompletionResult> {
+    /**
+     * B1 — un id che lega tutti gli eventi di QUESTA generazione, dal primo
+     * istante in cui l'adattatore la prende in carico. Prima di questo
+     * blocco: zero id di correlazione in tutto il repo (grep esaustivo).
+     * `adapter_start` è l'evento più vicino a "la persona ha premuto
+     * invio" che questo file può misurare da sé - il tempo PRIMA di qui
+     * (dalla battitura al submit) appartiene a `chatController`, non
+     * ancora tracciato: dichiarato, non nascosto.
+     */
+    talosLocalTrace(traceId, 'adapter_start')
+
+    /**
+     * I tool, nella STESSA forma che ricevono i provider di rete.
+     *
+     * Owner 2026-08-03: «i locali devono avere le stesse possibilità dei key».
+     * `talosToolsForOpenAi` è la funzione che serve già gli altri adattatori —
+     * riusarla vuol dire che un tool non ha due descrizioni a seconda di chi lo
+     * esegue, e la guardia `anthropicAcceptsEveryTool` continua a valere per
+     * tutti.
+     *
+     * Il filtro sulle capacità del modello resta al suo posto: è lì che si
+     * decide se questo modello può chiamare qualcosa, e non qui.
+     */
+    // ⭐⭐ P4-ter passo 2: la preparazione sta in `progettaRichiestaLocale`, la stessa che usa il conteggio dei token veri.
+    const { template, offered, wireTools, turns, tools, pensa } = await progettaRichiestaLocale(input, traceId)
     const anticipo = await talosLocalEnginePlanPrompt(input.model.id, turns, tools, pensa)
     /*
      * D-53 — cosa sta per essere chiesto al motore, in due numeri: i token da
@@ -1590,7 +1652,7 @@ async function runBody(
     // fra i due eventi è quella che DICE che non ha ricaricato niente,
     // invece di lasciarlo indovinare a chi legge il log.
     talosLocalTrace(traceId, 'native_open_done')
-    const ceiling = await localContextCeiling(status.shape)
+    const ceiling = await localContextCeiling(status.shape, { inMemoria: true, contestoAperto: status.contextTokens })
     let plan = await talosLocalEngineChatPlan(turns, tools, pensa)
     const targetContext = talosLocalEscalatedContextTokens(
         plan.contextTokens,
@@ -1598,6 +1660,21 @@ async function runBody(
         MAX_TOKENS,
         ceiling,
     )
+    /*
+     * ⭐⭐ P4-ter passo 2: anche quando si rifiuta — la compattazione dopo l'overflow decide su questi numeri.
+     * ⛔ Owner 02/10 «Trovare il tetto vero»: sul Pad (motore b165) lo stato dopo il caricamento NON porta la forma del
+     * modello (`available()`: available, backends, npu, engineBuild, opensSinceStart, contextRebuilds), quindi `ceiling`
+     * qui sopra è sempre `null`; la PIANIFICAZIONE (`anticipo`, `planPrompt`) la porta intera (Spark-X2.5-4B: 36 strati,
+     * 4 teste KV, headDim 256, contesto addestrato 1.048.576, 2,6 GB). Per la compattazione si usa quella. Il rifiuto
+     * del motore sopra il tetto (C45) resta com'era: accenderlo cambia il motore oltre questo lavoro (fase «Motore locale»).
+     */
+    const tettoPerCompattazione = ceiling
+        ?? (anticipo?.shape ? await localContextCeiling(anticipo.shape, { inMemoria: true, contestoAperto: status.contextTokens }) : null)
+    FINESTRE_PER_COMPATTAZIONE.set(input.model.id, {
+        finestraToken: tettoPerCompattazione,
+        promptTokens: plan.promptTokens,
+        riservaUscita: MAX_TOKENS,
+    })
     if (targetContext === null) {
         // Il fabbisogno è prompt + risposta + un posto per il token finale: la
         // stessa aritmetica del tetto, detta a chi legge invece che tenuta per sé.

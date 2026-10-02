@@ -162,10 +162,26 @@ describe('la decisione: la persona vince sempre', () => {
 describe('la decisione automatica viene da una misura, mai da una costante', () => {
     const opzioni = talosLocalBackendOptions([CPU, ADRENO])
 
-    it('senza nessuna misura resta il pavimento, e lo DICE', () => {
+    // ⭐ CAMBIATO APPOSTA il 01/10/2026 (owner D10): senza misura non si resta
+    // sulla CPU (116 s alla prima parola sul Pad) ma si usa il motore suggerito
+    // dal formato, e lo si DICE. Il pavimento resta solo senza acceleratori.
+    it('senza nessuna misura usa l’acceleratore suggerito, e lo DICE', () => {
         const decisione = talosDecideLocalBackend({
             preference: TALOS_DEFAULT_LOCAL_BACKEND_PREFERENCE,
             options: opzioni,
+            profiles: [],
+            activeRegistry: null,
+            expectedOutputTokens: 256,
+        })
+        expect(decisione).toEqual({
+            kind: 'gpu', requested: null, source: 'format', reason: 'suggested',
+        })
+    })
+
+    it('senza misura e senza acceleratori resta il pavimento, e lo DICE', () => {
+        const decisione = talosDecideLocalBackend({
+            preference: TALOS_DEFAULT_LOCAL_BACKEND_PREFERENCE,
+            options: talosLocalBackendOptions([CPU]),
             profiles: [],
             activeRegistry: null,
             expectedOutputTokens: 256,
@@ -202,8 +218,10 @@ describe('la decisione automatica viene da una misura, mai da una costante', () 
             activeRegistry: null,
             expectedOutputTokens: 256,
         })
-        expect(decisione.kind).toBe('cpu')
-        expect(decisione.reason).toBe('unmeasured')
+        // 01/10 (D10): il profilo Hexagon resta ignorato; senza misure valide
+        // si usa il suggerito, che qui è la GPU — mai l'Hexagon che non c'è.
+        expect(decisione.kind).toBe('gpu')
+        expect(decisione.reason).toBe('suggested')
     })
 
     it('un profilo FALLITO non è un candidato per quanto veloce sia stato a sbagliare', () => {
@@ -214,7 +232,63 @@ describe('la decisione automatica viene da una misura, mai da una costante', () 
             activeRegistry: null,
             expectedOutputTokens: 256,
         })
+        // 01/10 (D10): e un motore che ha FALLITO la prova non viene nemmeno
+        // suggerito: si resta sul pavimento.
+        expect(decisione.kind).toBe('cpu')
         expect(decisione.reason).toBe('unmeasured')
+    })
+})
+
+/**
+ * ⭐ D10 (owner, 01/10/2026) — mentre la prova breve gira, la chat usa il
+ * motore suggerito dal formato: NPU se il formato è ammesso, altrimenti la
+ * scheda grafica. Sul Pad: NPU 3,4 s alla prima parola, CPU 116 s.
+ */
+describe('SUG — senza misure, il motore suggerito dal formato', () => {
+    it('SUG-01 formato ammesso all’NPU e Hexagon presente: NPU', () => {
+        const decisione = talosDecideLocalBackend({
+            preference: TALOS_DEFAULT_LOCAL_BACKEND_PREFERENCE,
+            options: talosLocalBackendOptions([CPU, ADRENO, HEXAGON], 'Q4_K_M'),
+            profiles: [],
+            activeRegistry: null,
+            expectedOutputTokens: 256,
+        })
+        expect(decisione).toEqual({ kind: 'hexagon', requested: null, source: 'format', reason: 'suggested' })
+    })
+
+    it('SUG-02 formato non ammesso all’NPU: la scheda grafica', () => {
+        const decisione = talosDecideLocalBackend({
+            preference: TALOS_DEFAULT_LOCAL_BACKEND_PREFERENCE,
+            options: talosLocalBackendOptions([CPU, ADRENO, HEXAGON], 'Q4_K_S'),
+            profiles: [],
+            activeRegistry: null,
+            expectedOutputTokens: 256,
+        })
+        expect(decisione.kind).toBe('gpu')
+        expect(decisione.reason).toBe('suggested')
+    })
+
+    it('SUG-03 l’NPU che ha fallito la prova non si suggerisce: si passa alla GPU', () => {
+        const decisione = talosDecideLocalBackend({
+            preference: TALOS_DEFAULT_LOCAL_BACKEND_PREFERENCE,
+            options: talosLocalBackendOptions([CPU, ADRENO, HEXAGON], 'Q4_K_M'),
+            profiles: [profilo({ backendRegistry: 'HTP', outcome: 'FAILED', ttftMs: 900 })],
+            activeRegistry: null,
+            expectedOutputTokens: 256,
+        })
+        expect(decisione.kind).toBe('gpu')
+        expect(decisione.reason).toBe('suggested')
+    })
+
+    it('SUG-04 la misura vera vince sempre sul suggerimento', () => {
+        const decisione = talosDecideLocalBackend({
+            preference: TALOS_DEFAULT_LOCAL_BACKEND_PREFERENCE,
+            options: talosLocalBackendOptions([CPU, ADRENO, HEXAGON], 'Q4_K_M'),
+            profiles: [profilo({ backendRegistry: 'CPU', ttftMs: 900, decodeTokPerSec: 20 })],
+            activeRegistry: null,
+            expectedOutputTokens: 256,
+        })
+        expect(decisione.source).toBe('measured')
     })
 })
 

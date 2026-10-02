@@ -5,6 +5,9 @@ buildscript {
     repositories {
         google()
         mavenCentral()
+        // ⛔ Solo per il plugin AboutLibraries (PKLA Qualcomm 3.6, owner 01/10/2026):
+        // pubblicato sul Gradle Plugin Portal, non su Maven Central.
+        gradlePluginPortal()
     }
     dependencies {
         classpath 'com.android.tools.build:gradle:8.13.2'
@@ -19,6 +22,11 @@ buildscript {
         // non al telefono mentre esegue.
         classpath 'org.apache.commons:commons-compress:1.27.1'
         classpath 'org.tukaani:xz:1.10'
+
+        // ⛔ PKLA Qualcomm 3.6 (owner, 01/10/2026): niente GPL/LGPL accanto ai
+        // binari NPU. AboutLibraries, modalità rigorosa: la build si FERMA se una
+        // dipendenza Android ha una licenza non ammessa (github.com/mikepenz/AboutLibraries).
+        classpath 'com.mikepenz.aboutlibraries.plugin:aboutlibraries-plugin:15.2.0'
 
         // NOTE: Do not place your application dependencies here; they belong
         // in the individual module build.gradle files

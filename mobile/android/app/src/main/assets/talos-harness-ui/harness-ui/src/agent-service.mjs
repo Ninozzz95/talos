@@ -18,9 +18,9 @@
 import { randomUUID } from 'node:crypto';
 
 import {
-  chiamaConRitenta,
-  compattaConversazione as compattaConversazioneReale,
+  compattaFuoriDalGiro as compattaFuoriDalGiroReale,
   eseguiComandoSandboxato as eseguiComandoSandboxatoReale,
+  serveCompattareFuoriDalGiro as serveCompattareFuoriDalGiroReale,
   talosLavora as talosLavoraReale,
 } from '../../../AVM-harness/mobile/scripts/harness-talos/talosHarness.mjs';
 import { salvaArtefatto as salvaArtefattoReale } from './artifact-store.mjs';
@@ -31,7 +31,10 @@ import { creaFileWorkspace as creaFileWorkspaceReale, WorkspaceFileError } from 
 // ⭐⭐⭐ 03/9 — collega i provider di rete già configurati (owner: "colleghiamo i 5, poi pensiamo ai locali"), vedi model-destination.mjs per il perché sta qui e non nel kernel.
 import { creaFetchMultiProvider } from './model-destination.mjs';
 import { politicaRagionamentoReale } from './reasoning-policy.mjs';
+import { descriviErrore, descrittorePerFineGiro } from './error-surface.mjs';
 import {
+  // ⛔ 70-B (30/09/2026): mancava dal 03/09 — ogni `artifact_create` finiva in «artifactCreated is not defined» (ART-ROTTO).
+  artifactCreated,
   compactionEnd,
   compactionStart,
   eventiPerRisposta,
@@ -58,7 +61,7 @@ import {
  * leggere lo standard AG-UI. `code` porta la stringa originale — chi vuole
  * distinguerli può farlo senza che questo file decida per lui.
  */
-function esitoInEventoFinale({ threadId, runId, esito }) {
+function esitoInEventoFinale({ threadId, runId, esito, fermatoDallaPersona = false }) {
   if (esito.comeFinita === 'concluso') {
     return runFinished({
       threadId,
@@ -80,7 +83,7 @@ function esitoInEventoFinale({ threadId, runId, esito }) {
       result: { detto: esito.detto, compattazioni: esito.compattazioni, premesseNegate: esito.premesseNegate, usage: esito.usage ?? null, attrezziOfferti: esito.attrezziOfferti ?? null },
     });
   }
-  return runError({ message: esito.detto, code: esito.comeFinita });
+  return runError({ message: esito.detto, code: esito.comeFinita, errore: descrittorePerFineGiro({ comeFinita: esito.comeFinita, fermatoDallaPersona }) ?? undefined });
 }
 
 /**
@@ -148,6 +151,10 @@ export async function avviaSessione({
   modelloEsecutore,
   strumentiEstesi, ricercaWeb, firma,
   livelloAccesso, chiediApprovazioneFn, permessiPerAttrezzo,
+  // ⛔ P4-quater (02/10/2026): il confine del Codice, inoltrato senza logica propria (vedi «I CONFINI…» in talosHarness.mjs).
+  consensiSessione, cartelleProtette, cartelleConsentite,
+  // ⭐ P4-ter (02/10/2026): la compattazione del turno — finestra del catalogo, tetto, record del turno prima (kernel, «LA COMPATTAZIONE DEL CONTESTO»).
+  finestraToken, tettoToken, recordCompattazioneIniziale,
   // ⭐⭐⭐ 30/8 — il ponte verso Note/Attività/Memoria/Libreria del telefono, stesso principio di chiediApprovazioneFn: inoltrato SENZA logica propria, la decisione COSA fare col dato vive nel kernel.
   elencaNoteFn, creaNotaFn, aggiornaNotaFn, eliminaNotaFn,
   elencaTaskFn, creaTaskFn, completaTaskFn, aggiornaTaskFn, eliminaTaskFn,
@@ -258,7 +265,7 @@ export async function avviaSessione({
       return;
     }
     if (evento.tipo === 'tool-esito') {
-      onEvento(eventoPerEsitoTool({ messageId: randomUUID(), toolCallId: evento.toolCallId, content: evento.content }));
+      onEvento(eventoPerEsitoTool({ messageId: randomUUID(), toolCallId: evento.toolCallId, content: evento.content, isError: evento.isError, errorCode: evento.errorCode }));
       return;
     }
     /*
@@ -268,12 +275,16 @@ export async function avviaSessione({
      * CompactionEnd (agui-events.mjs, nomi concordati con la lane
      * desktop in vista dell'unificazione dei kernel).
      */
+    /* ⭐ P4-ter: con i numeri, per la barra e il separatore «X → Y token» (decisione 6 dell'owner, desktop 24/09). */
     if (evento.tipo === 'compattazione-inizio') {
-      onEvento(compactionStart({ giro: evento.giro }));
+      onEvento(compactionStart({ giro: evento.giro, tokenPrima: evento.tokenMisurati, soglia: evento.soglia, motivo: evento.motivo }));
       return;
     }
     if (evento.tipo === 'compattazione-fine') {
-      onEvento(compactionEnd({ giro: evento.giro, compattato: evento.compattato }));
+      onEvento(compactionEnd({
+        giro: evento.giro, compattato: evento.compattato, motivo: evento.motivo,
+        ...(evento.record ? { tokenPrima: evento.record.tokenPrima, tokenDopo: evento.record.tokenDopo, at: evento.record.at, coveredThrough: evento.record.coveredThrough } : {}),
+      }));
     }
   };
 
@@ -300,13 +311,15 @@ export async function avviaSessione({
    * separato, per diventare un evento AG-UI (iframe sandboxato lato
    * client, FASE H — non ancora portato: dichiarato, non nascosto).
    */
-  const onArtefatto = async (titolo, html) => {
+  const onArtefatto = async (titolo, html, info = {}) => {
+    // ⛔ ESITO65-ART (owner 30/09, «Curo anche questo»): prima tornava un id-rifiuto che il kernel scriveva al modello come «created» — la pagina non esisteva.
     if (Buffer.byteLength(html, 'utf8') > ARTEFATTO_MAX_BYTE) {
-      return { id: `artefatto-rifiutato-troppo-grande-${randomUUID()}` };
+      return { ok: false, esito: `artifact_create failed: the page is larger than the limit (${Math.round(ARTEFATTO_MAX_BYTE / 1000)} KB): nothing was created.` };
     }
     const id = randomUUID();
     salvaArtefattoFn(id, html);
-    onEvento(artifactCreated({ messageId: randomUUID(), id, titolo }));
+    // ⛔ OSS-70B-1 / E7 (01/10/2026, owner «Dall'evento dell'artefatto»): il modello del giro, dal kernel, per la Libreria.
+    onEvento(artifactCreated({ messageId: randomUUID(), id, titolo, modello: info?.modello }));
     return { id };
   };
 
@@ -375,6 +388,8 @@ export async function avviaSessione({
       onGiro, onScrittura, onDelta, reasoning, politicaRagionamento: politicaRagionamentoFn,
       strumentiEstesi, ricercaWeb, onArtefatto, onImmagine,
       livelloAccesso, chiediApprovazioneFn, hookFn, permessiPerAttrezzo, onDelega, codaMessaggiFn,
+      consensiSessione, cartelleProtette, cartelleConsentite,
+      finestraToken, tettoToken, recordCompattazioneIniziale,
       elencaNoteFn, creaNotaFn, aggiornaNotaFn, eliminaNotaFn,
       elencaTaskFn, creaTaskFn, completaTaskFn, aggiornaTaskFn, eliminaTaskFn,
       cercaMemoriaFn, creaMemoriaFn, aggiornaMemoriaFn, eliminaMemoriaFn,
@@ -383,7 +398,7 @@ export async function avviaSessione({
       elencaRicercaFn, leggiRicercaFn,
       firma,
     });
-    onEvento(esitoInEventoFinale({ threadId, runId, esito }));
+    onEvento(esitoInEventoFinale({ threadId, runId, esito, fermatoDallaPersona: Boolean(segnaleStop?.aborted) }));
     return { threadId, runId, ok: esito.comeFinita === 'concluso', esito, erroreInterno: null };
   } catch (errore) {
     /*
@@ -395,48 +410,40 @@ export async function avviaSessione({
      * 'giri-esauriti'/'fermato'.
      */
     const messaggio = errore instanceof Error ? errore.message : String(errore);
-    onEvento(runError({ message: messaggio, code: 'internal-error' }));
-    return { threadId, runId, ok: false, esito: null, erroreInterno: messaggio };
+    // ⛔ ERRCOD (30/09/2026): il descrittore dice alla UI COSA è successo e l'unica azione che lo rimedia (error-surface.mjs).
+    onEvento(runError({ message: messaggio, code: 'internal-error', errore: descriviErrore(errore, { model: modello }) }));
+    // ⛔ ERRCOD-RIPRESA (30/09/2026): la conversazione com'era quando il modello non ha risposto (kernel, `messaggiFinali`
+    // sull'errore) torna al registro, che la conserva: «Riprova» riparte da lì invece di «Sessione non pronta».
+    const messaggiFinali = Array.isArray(errore?.messaggiFinali) ? errore.messaggiFinali : null;
+    return { threadId, runId, ok: false, esito: null, erroreInterno: messaggio, messaggiFinali };
   }
 }
 
 /**
- * "Compatta ora" (piano §1.4) — chiede al modello un riassunto della
- * conversazione FINALE di una sessione già conclusa. Riusa
- * `compattaConversazione` di talosHarness.mjs, la STESSA funzione che Stadio A
- * chiama dentro il ciclo di `talosLavora` (mai duplicata: un secondo
- * riassuntore divergerebbe in silenzio, stesso motivo per cui questo intero
- * file importa il kernel invece di copiarlo) — qui semplicemente invocata
- * FUORI dal ciclo, su richiesta esplicita invece che al checkpoint automatico.
+ * ⭐⭐⭐ P4-ter (02/10/2026) — la compattazione FUORI dal giro: il «Compatta ora» della persona (dopo la conferma) e quella
+ * in background a fine giro. La STESSA catena del giro (kernel `compattaFuoriDalGiro`, nucleo unico): mai un secondo
+ * riassuntore che diverge in silenzio. ⛔ Prima (Stadio A) tornava una storia SOSTITUITA, e il registro la scriveva al posto
+ * di `messaggiFinali`: la storia grezza si perdeva. Ora torna un RECORD (`talos.compattazione.v1`) e la storia resta com'è
+ * (decisione 3 dell'owner, desktop 24/09). Costa una vera chiamata al modello. Non lancia mai.
  *
- * ⛔ Costa una vera chiamata al modello — dichiarato nella doc di
- * compattaConversazione stessa, non un'operazione gratuita solo perché è un
- * pulsante nella UI.
- *
- * ⛔ Non lancia mai: compattaConversazione stessa intercetta un fallimento di
- * chiamaModello (rete giù, 429 oltre i ritentativi) e torna
- * `compattato:false` invece di propagare — qui basta restituire quel valore,
- * nessun try/catch in più da aggiungere.
- *
- * @param {object} input
- * @param {Array<object>} input.messaggiFinali — la conversazione da compattare
- * @param {string} input.modello
- * @param {string} input.chiave
- * @param {typeof fetch} [input.fetchDiRete] — SOLO per test
- * @param {typeof compattaConversazioneReale} [input.compattaConversazioneFn] — SOLO per test
- * @returns {Promise<{compattato:boolean, messaggi:Array<object>, usage:object|null}>}
+ * @returns {Promise<{record:object|null, motivo:string|null, usage:object|null}>}
  */
 export async function compattaSessione({
-  messaggiFinali, modello, chiave, fetchDiRete = fetch,
-  compattaConversazioneFn = compattaConversazioneReale,
+  messaggiFinali, recordCorrente = null, modello, chiave, fetchDiRete = fetch, reasoning = null,
+  finestraToken = null, tettoToken = null, motivo = 'manuale',
   // RAG-COD (24/09/2026): anche il riassunto chiesto a mano passa dalla regola del catalogo.
   politicaRagionamentoFn = politicaRagionamentoReale,
+  compattaFuoriDalGiroFn = compattaFuoriDalGiroReale,
 }) {
-  const chiamaModello = (richiesta) => chiamaConRitenta({
-    modello, chiave, messaggi: richiesta, attrezzi: [], fetchDiRete,
-    politicaRagionamento: politicaRagionamentoFn,
+  return compattaFuoriDalGiroFn({
+    messaggiFinali, recordCorrente, modello, chiave, fetchDiRete, reasoning: reasoning ?? undefined,
+    finestraToken, tettoToken, motivo, politicaRagionamento: politicaRagionamentoFn,
   });
-  return compattaConversazioneFn(messaggiFinali, chiamaModello);
+}
+
+/** ⭐ P4-ter — la decisione del background a fine giro (sotto soglia: niente chiamate, niente righe, niente eventi). */
+export function serveCompattareSessione({ messaggiFinali, recordCorrente = null, finestraToken = null, tettoToken = null }) {
+  return serveCompattareFuoriDalGiroReale({ messaggiFinali, recordCorrente, finestraToken, tettoToken });
 }
 
 /**

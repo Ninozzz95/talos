@@ -37,3 +37,9 @@ export type { TalosLibreriaStandard } from '@/lib/kernel/semantica'
  */
 export { libreriaStandard } from '@/lib/kernel/libreriaStandard'
 export { dichiaratiIn, ESTENSIONI_SORGENTE } from '@/lib/kernel/simboli'
+
+/*
+ * ⭐⭐⭐ P4-ter (02/10/2026, owner «Nucleo unico»): la compattazione del contesto è UNA, in `src/lib/kernel/compattazione.ts`;
+ * la chat la importa dall'app, il Codice da qui. Stessa ragione del resto del file: due copie divergono in silenzio.
+ */
+export * as compattazione from '@/lib/kernel/compattazione'

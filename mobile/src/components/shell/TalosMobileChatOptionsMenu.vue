@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { nextTick, ref } from 'vue'
-import { Check, Download, EllipsisVertical, Eye, EyeOff, Images, MessageSquarePlus, Pencil, Trash2, X } from '@lucide/vue'
+import { Check, Download, EllipsisVertical, Eye, EyeOff, FoldVertical, Images, MessageSquarePlus, Pencil, Trash2, X } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
 import TalosMobileConfirmDialog from '@/components/shell/TalosMobileConfirmDialog.vue'
 import TalosMobileDeleteChatDialog from '@/components/shell/TalosMobileDeleteChatDialog.vue'
@@ -41,7 +41,10 @@ const props = withDefaults(defineProps<{
     canOpenMedia?: boolean
     /** What this chat would take from the Library (owner 2026-07-26). */
     cleanupPlan?: TalosSessionCleanupPlan
+    /** ⭐⭐ P4-ter passo 2 — la chat ha una conversazione da riassumere: solo allora «Compatta ora». */
+    canCompact?: boolean
 }>(), {
+    canCompact: false,
     incognito: false,
     pill: false,
     canOpenMedia: true,
@@ -59,11 +62,19 @@ const emit = defineEmits<{
     export: []
     /** Owner 2026-07-26: this chat's media gallery. */
     media: []
+    /** ⭐⭐ P4-ter passo 2 — «Compatta ora», solo DOPO la conferma (owner: guardare non compatta mai). */
+    compact: []
 }>()
 
 const optionsOpen = ref(false)
 const renameOpen = ref(false)
 const deleteOpen = ref(false)
+const compactOpen = ref(false)
+
+function confirmCompact(): void {
+    compactOpen.value = false
+    emit('compact')
+}
 /**
  * WHICH exit is waiting on the question — because more than one destroys the
  * conversation. Found by an adversarial review 2026-07-31: the guard covered
@@ -218,6 +229,9 @@ function confirmDelete(choice: { deleteMedia: boolean }): void {
                 <button type="button" role="menuitem" class="talos-pressable flex min-h-touch w-full items-center gap-2 rounded-lg px-2 text-left text-sm text-[var(--talos-text)] hover:bg-[var(--talos-active)]" @click="openRename">
                     <Pencil class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> {{ $t('chat.renameChat') }}
                 </button>
+                <button v-if="props.canCompact" type="button" role="menuitem" data-testid="talos-chat-options-compact" :disabled="props.busy" class="talos-pressable flex min-h-touch w-full items-center gap-2 rounded-lg px-2 text-left text-sm text-[var(--talos-text)] hover:bg-[var(--talos-active)] disabled:opacity-50" @click="optionsOpen = false; compactOpen = true">
+                    <FoldVertical class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> {{ $t('chat.compaction.menuItem') }}
+                </button>
                 <!-- Owner 2026-07-26: reachable from the menu in BOTH header
                      modes. Tapping the title only works in the solid header —
                      the immersive chrome renders no title at all, and it is the
@@ -275,6 +289,22 @@ function confirmDelete(choice: { deleteMedia: boolean }): void {
                     @click="confirmExit"
                 >
                     <Eye class="size-4" aria-hidden="true" /> {{ $t('chat.leaveIncognitoConfirm') }}
+                </Button>
+            </template>
+        </TalosMobileConfirmDialog>
+
+        <TalosMobileConfirmDialog
+            v-if="compactOpen"
+            :title="$t('chat.compaction.confirmTitle')"
+            :description="$t('chat.compaction.confirmBody')"
+            @close="compactOpen = false"
+        >
+            <template #footer>
+                <Button type="button" variant="ghost" class="min-h-12" @click="compactOpen = false">
+                    <X class="size-4" aria-hidden="true" /> {{ $t('common.cancel') }}
+                </Button>
+                <Button type="button" data-testid="talos-compact-confirm" class="min-h-12" :disabled="props.busy" @click="confirmCompact">
+                    <FoldVertical class="size-4" aria-hidden="true" /> {{ $t('chat.compaction.confirmAction') }}
                 </Button>
             </template>
         </TalosMobileConfirmDialog>

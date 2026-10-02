@@ -284,8 +284,10 @@ describe('nessun\'altra inizializzazione aggregata lascia indietro un membro', (
         // perdere, quindi il censimento la deve vedere — ma non viene MAI
         // inizializzata a graffe (si dichiara e si assegna per intero), come
         // la prova qui sotto verifica da sé.
+        // ⛔ `talos_forma_fa` aggiunta il 2026-10-01 (punto 2, riscaldamento della
+        // GPU): stessa situazione, si dichiara (`talos_forma_fa forma;`) o si copia.
         expect([...conDefault].sort()).toEqual([
-            'talos_core_cpu', 'talos_cronometro', 'talos_forma_gguf',
+            'talos_core_cpu', 'talos_cronometro', 'talos_forma_fa', 'talos_forma_gguf',
             'talos_geometria_kv', 'talos_session',
         ])
     })

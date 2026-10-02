@@ -421,6 +421,11 @@ export interface TalosToolAuthorizationCoordinator {
     complete(checkpointId: string): Promise<void>
     cancel(checkpointId: string): Promise<void>
     retryRecovery(checkpointId: string): Promise<boolean>
+    /**
+     * ⛔ A3-OSS-1 — si risolve quando sono finite le continuazioni partite da `decide` (anche fallite: non rifiuta
+     * mai). Per chi vuole sapere che il lavoro è finito; la risposta non lo aspetta più.
+     */
+    settled(): Promise<void>
 }
 
 export function createTalosToolAuthorizationCoordinator(deps: {
@@ -429,6 +434,11 @@ export function createTalosToolAuthorizationCoordinator(deps: {
     authorizations(): TalosToolAuthorizationGrantsV1
     grant(tool: string, actions: readonly TalosToolAction[]): Promise<void>
     onReady(checkpoint: TalosToolAuthorizationCheckpointV1): Promise<void> | void
+    /**
+     * ⛔ A3-OSS-1 — la continuazione dopo una decisione parte da sola, senza che `decide` la aspetti: un suo errore
+     * non ha più un chiamante a cui risalire, e arriva qui. Assente ⇒ inghiottito (mai un rifiuto non gestito).
+     */
+    onReadyFailed?: (checkpoint: TalosToolAuthorizationCheckpointV1, error: unknown) => void
     /**
      * ⭐⭐⭐ 6.4 — ASSENTE: comportamento invariato, nessuna chiamata. Presente
      * (in produzione: `contaDecisioneReale` di `toolAuthorizationFriction.ts`):
@@ -447,6 +457,8 @@ export function createTalosToolAuthorizationCoordinator(deps: {
         activity: TalosLocalToolActivity
         checkpoint: TalosToolAuthorizationCheckpointV1
     }>()
+    /** A3-OSS-1 — le continuazioni partite da `decide` e non ancora finite; non rifiutano mai (vedi `settled`). */
+    const continuazioni = new Set<Promise<void>>()
     /**
      * ⛔⭐⭐ I checkpoint SCARTATI — visti tre volte in una notte come «una
      * richiesta in attesa» a cui non si poteva rispondere.
@@ -715,6 +727,7 @@ export function createTalosToolAuthorizationCoordinator(deps: {
         },
         async decide(requestId, decision) {
             let result = false
+            let pronto: TalosToolAuthorizationCheckpointV1 | null = null
             const operation = mutationTail.then(async () => {
                 const owner = [...open.values()].find(({ checkpoint }) =>
                     checkpoint.requests.some((request) =>
@@ -773,11 +786,35 @@ export function createTalosToolAuthorizationCoordinator(deps: {
                 // mai un `await`, mai un errore che risale a questa decisione.
                 void deps.registraDecisioneReale?.(target.tool, decision, decidedAt)
                     .catch(() => { /* diagnostica: non deve mai rompere una decisione vera */ })
-                await announceReady(checkpoint)
+                pronto = checkpoint
             })
             mutationTail = operation.then(() => undefined, () => undefined)
             await operation
+            /*
+             * ⛔⛔ A3-OSS-1 (Pad, 01/10/2026): qui c'era `await announceReady(checkpoint)` DENTRO la coda. La risposta
+             * aspettava così tutta la continuazione — apertura del modello, prefill, generazione — e solo dopo il
+             * controller toglieva «(1)» e «aspetta te» e la scheda diceva «Permesso negato»: 37 s sul Pad, «per
+             * sempre» mentre la prova del motore teneva il modello. E un secondo «no» restava in fila dietro.
+             * Come Hermes (`tools/approval.py:163-172`) e opencode (`permission/index.ts:109-121`): rispondere è
+             * salvare; la continuazione parte da sola, fuori dalla coda delle decisioni.
+             */
+            if (pronto) {
+                const daAnnunciare: TalosToolAuthorizationCheckpointV1 = pronto
+                const corsa = announceReady(daAnnunciare).catch((error: unknown) => {
+                    try {
+                        deps.onReadyFailed?.(daAnnunciare, error)
+                    } catch {
+                        // Chi riceve l'errore non deve poterne creare un altro senza padrone.
+                    }
+                })
+                continuazioni.add(corsa)
+                void corsa.then(() => { continuazioni.delete(corsa) })
+            }
             return result
+        },
+        async settled() {
+            // In un ciclo: una continuazione può finire mentre un'altra decisione ne fa partire una nuova.
+            while (continuazioni.size > 0) await Promise.all([...continuazioni])
         },
         async markRunningTools(checkpointId) {
             const owner = open.get(checkpointId)

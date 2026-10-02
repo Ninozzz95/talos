@@ -95,3 +95,9 @@ keystore.properties
 .sessions-store/
 .hooks-trust/
 .automations/
+# ⛔ 70-A (30/09/2026): il segreto del server del Codice, scritto a ogni avvio accanto a server.mjs quando manca la
+# cartella di stato (dev locale). Mai nel repository.
+server-token
+server-token.*.tmp
+# ⛔ 70-B (30/09/2026): gli artefatti del Codice su disco, accanto a server.mjs quando manca la cartella di stato (dev).
+/android/app/src/main/assets/talos-harness-ui/harness-ui/artifacts/

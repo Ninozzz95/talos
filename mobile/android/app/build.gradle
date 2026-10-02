@@ -2,6 +2,53 @@
 apply plugin: 'com.android.application'
 // C0 (fase 9): il codice nuovo nasce in Kotlin, i plugin Java restano Java.
 apply plugin: 'kotlin-android'
+apply plugin: 'com.mikepenz.aboutlibraries.plugin.android'
+
+/*
+ * ⛔ PKLA Qualcomm 3.6 (owner, 01/10/2026): nessun codice GPL/LGPL accanto ai
+ * binari dell'NPU. La build si ferma se una dipendenza Android porta una
+ * licenza fuori elenco; l'elenco completo finisce nelle Note legali.
+ * `offlineMode`: niente rete durante la build, il risultato non cambia da solo.
+ */
+aboutLibraries {
+    offlineMode = true
+    export {
+        outputFile = file("${rootDir}/../src/generated/androidLicenses.json")
+        excludeFields.addAll('developers', 'funding', 'scm')
+        prettyPrint = true
+    }
+    license {
+        strictMode = com.mikepenz.aboutlibraries.plugin.StrictMode.FAIL
+        // Licenze permissive ammesse ovunque (nessun obbligo di sorgente).
+        allowedLicenses.addAll('Apache-2.0', 'MIT', 'BSD-3-Clause', 'ASDKL')
+        /*
+         * Licenze senza identificatore standard: ammesse SOLO per la libreria
+         * che le porta, verificate a mano il 01/10/2026. La chiave è l'impronta
+         * del testo: se il testo cambia, cambia la chiave e la build si ferma.
+         */
+        allowedLicensesMap = [
+            // libyuv dentro CameraX: BSD (README.chromium).
+            '44d1a25c593283261968a15c8cc213cd': ['androidx.camera:camera-core'],
+            // Librerie Ionic/OutSystems: MIT (licenza del repository GitHub).
+            '1b1d67650d6e3ccbf9c84584ba784a75': ['io.ionic.libs:ioncamera-android'],
+            'e9dc079177dba0f173e0aa487fd1017f': ['io.ionic.libs:ionfilesystem-android'],
+            'eef2cf3e5e856327421f1b82bbc36d8f': ['io.ionic.libs:iongeolocation-android'],
+            '60f5592b436b0e17f4252b8b602854fe': ['io.ionic.libs:ioninappbrowser-android'],
+            // SQLCipher Community Edition: licenza in stile BSD di Zetetic.
+            '45546b23f3f1354cdc022f8f8e4a7bb1': ['net.zetetic:sqlcipher-android'],
+        ]
+    }
+}
+
+/*
+ * ⛔ `io.ionic.libs:ioncamera-android:1.0.2` dichiara `junit` (EPL-1.0, una
+ * libreria di TEST) come dipendenza vera, e la trascinava nell'app. Non serve a
+ * niente nell'APK e non deve stare accanto ai binari NPU (PKLA 3.6): fuori.
+ */
+configurations.matching { it.name in ['debugRuntimeClasspath', 'releaseRuntimeClasspath'] }.configureEach {
+    exclude group: 'junit', module: 'junit'
+    exclude group: 'org.hamcrest', module: 'hamcrest-core'
+}
 
 /**
  * ⛔ La firma di rilascio, letta da FUORI il repository.
@@ -703,6 +750,15 @@ android {
             useLegacyPackaging = true
 
             /*
+             * ⛔ PKLA Qualcomm 3.9 (owner, 01/10/2026): i file dell'NPU non si
+             * modificano. AGP «strippa» le `.so` per difetto, anche in debug:
+             * misurato il 01/10, libggml-htp-v79.so da 881.576 a 853.836 byte.
+             * Qui escono byte per byte come li ha prodotti l'SDK ufficiale;
+             * `scripts/verify-npu-unmodified.mjs` lo verifica sull'APK.
+             */
+            keepDebugSymbols += ['**/libtalos-npu-hexagon.so', '**/libggml-htp-*.so']
+
+            /*
              * ⛔⛔ LA `libOpenCL.so` DEL TELEFONO NON SI SPEDISCE — e non è una
              * questione di licenza soltanto: non funzionerebbe.
              *
@@ -951,11 +1007,38 @@ tasks.register('costruisciOpenclIcdLoader') {
     }
 }
 
+/*
+ * ⛔⛔ Le patch locali di llama.cpp (`third_party/patches`), applicate DALLA BUILD e mai a mano.
+ *
+ * Scoperto il 01/10/2026: la patch 0001 (Stop su GPU 1,4 s → 32 ms) si applicava a mano; dopo un aggiornamento
+ * del pin non entrava più e il motore spedito l'aveva persa senza che nessuno se ne accorgesse. Owner 01/10:
+ * «Automatiche con cancello». Una patch già presente si salta, una nuova si applica, una che non entra FERMA la
+ * build col suo nome (`scripts/apply-llama-patches.mjs`, test `apply-llama-patches.test.mjs`).
+ */
+tasks.register('applicaPatchLlama') {
+    description = 'Applica le patch locali sopra il pin di llama.cpp, e si ferma se una non entra'
+    def script = file('../../scripts/apply-llama-patches.mjs')
+    inputs.dir file('../../third_party/patches')
+    // Mai «aggiornato»: lo stato vero sta nel checkout del submodule, e lo script lo legge ogni volta.
+    outputs.upToDateWhen { false }
+    doLast {
+        def esito = providers.exec {
+            commandLine 'node', script.path
+            ignoreExitValue = true
+        }
+        def uscita = esito.standardOutput.asText.get() + esito.standardError.asText.get()
+        if (esito.result.get().exitValue != 0) {
+            throw new GradleException(uscita.trim())
+        }
+        logger.lifecycle(uscita.trim())
+    }
+}
+
 // Deve finire PRIMA che CMake configuri la release: gli argomenti qui sotto
 // le puntano dritto all'artefatto di questo task.
 // Anche la PROVA (14/09): senza, l'APK di debug misurava un motore solo processore.
 tasks.matching { it.name.startsWith('configureCMakeRelease') || it.name.startsWith('configureCMakeDebug') }.configureEach {
-    dependsOn 'costruisciOpenclIcdLoader'
+    dependsOn 'costruisciOpenclIcdLoader', 'applicaPatchLlama'
 }
 
 tasks.register('preparaPonteAdb') {
@@ -1001,6 +1084,8 @@ tasks.register('preparaPonteAdb') {
         }
 
         cache.mkdirs()
+        // Svuotata prima: un file tolto dalla scheda non deve restare nelle build incrementali (visto il 01/10/2026).
+        fuori.deleteDir()
         fuori.mkdirs()
         def scritti = [] as Set
 
@@ -1175,6 +1260,8 @@ tasks.register('preparaOrecchioParola') {
         }
 
         cache.mkdirs()
+        // Svuotata prima: hey_jarvis.onnx, tolto dalla scheda il 01/10/2026, restava nell'APK delle build incrementali.
+        fuori.deleteDir()
         fuori.mkdirs()
 
         attesi.each { apk, dati ->
@@ -1347,7 +1434,14 @@ tasks.register('preparaHexagon') {
                 sbagliati << "${nome}: macchina ELF 0x${Integer.toHexString(macchina)}, " +
                         "attesa 0x${Integer.toHexString(atteso[0])} — ${atteso[1]}"
             } else {
-                def destinazione = new File(fuori, nome)
+                /*
+                 * ⛔ PKLA Qualcomm 2.1 b (owner, 01/10/2026): il nostro modulo NPU
+                 * entra con un nome che il caricamento automatico di ggml non
+                 * riconosce (stessi byte). Lo carica `TalosLlamaNative` solo
+                 * dopo l'accettazione delle condizioni Qualcomm.
+                 */
+                def destinazione = new File(fuori,
+                        nome == 'libggml-hexagon.so' ? 'libtalos-npu-hexagon.so' : nome)
                 destinazione.bytes = f.bytes
                 entrati << "${nome} ${f.length()} B"
             }

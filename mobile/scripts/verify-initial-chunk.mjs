@@ -776,7 +776,37 @@ import { resolve } from 'node:path'
  *
  * ⇒ 651.600 sulla misura del cancello (651.082): 518 byte di margine, come l'ultima volta.
  */
-const DEFAULT_MAXIMUM_BYTES = 651_600
+/*
+ * ⛔ JS 651.600 → 652.700, il 01/10/2026 (A3-OSS-2, `.claude/ragionamento/LEDGER-PUNTO5-DIFETTI-VISIBILI-2026-10-01.md`):
+ * «Controlla azioni degli strumenti (1)», fisso in basso a destra, copriva «Interrompi risposta» sul Pad; owner 01/10:
+ * «pillola accanto alla pill selettore modello», e la riga del selettore visibile a riposo finché c'è da rispondere.
+ *
+ * Misurato con due build dello stesso albero (i tre file di OSS-2 riportati a HEAD e poi ripristinati, `cmp`): senza
+ * OSS-2 **651.549** — 51 byte di margine, già consumati dai lavori dopo il 24/09 —, con OSS-2 **652.181** (+632): la
+ * pillola e la condizione «compatto» nel compositore, il collegamento in `ChatScreen`, la condizione di rotta in `App`.
+ * L'ordine della regola del 14/08: 1. forme più snelle — il testo direttamente nel pulsante, senza `<span>` (−20);
+ * 2. il compositore è la prima schermata: la pillola non può stare in un pezzo a richiesta; 3. nessun contratto
+ * accorciato; 4. il tetto.
+ *
+ * ⇒ 652.700 sulla misura (652.181): 519 byte di margine, come le ultime volte.
+ */
+/*
+ * ⛔ JS 652.700 → 658.500, il 02/10/2026 (P4-ter passo 2, compattazione della chat; owner 02/10 «Alzare a 658.500»,
+ * `.claude/ragionamento/LEDGER-P4TER-COMPATTATORE-2026-10-02.md`). Misurato **657.908** con la logica già fuori
+ * dall'avvio: nucleo, richiesta di riassunto e decisioni stanno in `chatCompattazione.ts`/`chatControllerCompattazione.ts`
+ * e nei due componenti asincroni (prima di spostarli: 661.609). All'avvio restano i collegamenti: involucri dello store e
+ * del controller, riconoscimento delle righe nella lista, voce del menu, barra, `compattazioneChiavi.ts`.
+ * ⇒ 658.500 sulla misura: 592 byte di margine, come le ultime volte.
+ */
+/*
+ * ⛔ JS 658.500 → 658.800, il 02/10/2026 (P4-quinquies, azione dichiarata ma non eseguita; owner 02/10 «Alzare a 658.800»,
+ * `.claude/ragionamento/LEDGER-P4QUINQUIES-AZIONE-DICHIARATA-2026-10-02.md`). Misurato **658.624** con il rilevatore e il
+ * secondo giro nel ciclo (`agentLoop.ts`, già a richiesta) e la riga sotto la risposta in un componente asincrono
+ * (`TalosMobileAzioneNonEseguita.vue`). All'avvio restano: la chiave del metadato, il controllo nella lista, la scrittura
+ * del metadato nel controller e le due frasi (it/en).
+ * ⇒ 658.800 sulla misura: 176 byte di margine.
+ */
+const DEFAULT_MAXIMUM_BYTES = 658_800
 /*
  * ⛔ CSS 220.000 → 222.000, il 2026-09-11, sezione 1 del refactor UI (U-1).
  *

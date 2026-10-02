@@ -82,8 +82,23 @@ public final class TalosLlamaProbe {
      * risposta attesa: quello che conta è che il prefill sia **vero e uguale**.
      * Righe numerate sono deterministiche, non degenerano come una frase
      * ripetuta identica, e la loro lunghezza si conta.
+     *
+     * ## ⛔⛔ 01/10/2026 — da 90 righe a 16, e perché il «mille» qui sopra era falso
+     *
+     * Contate col tokenizzatore di Qwen3 (`llama-tokenize`, b11312): 90 righe
+     * erano **3.002 token**, non mille. Sul Pad, Qwen3-4B Q4_K_M sulla CPU a 4
+     * thread li leggeva a ~21 t/s: ~140 s, oltre {@link TalosLlamaEngine#RUN_TIMEOUT_MS}.
+     * La prova scadeva prima del primo token e la CPU finiva FAILED per sempre,
+     * con GPU e NPU mai provate (ledger A3, A3-REG-01).
+     *
+     * 16 righe sono **532 token**: il valore di lettura dei banchi di PocketPal
+     * (`BenchmarkScreen.tsx:29`), SmolChat, MNN e di `llama-bench -p 512`
+     * (owner, 01/10: «512 token»). Il difetto di settembre (dodici token, la
+     * GPU perdeva per costruzione) non torna: 532 sono ~44 volte quei dodici, e
+     * dall'11/09 la scelta usa la velocità di lettura misurata (D-53), non il
+     * solo tempo alla prima parola.
      */
-    static final int PREFILL_LINES = 90;
+    static final int PREFILL_LINES = 16;
 
     /**
      * Il prompt della prova.
@@ -136,7 +151,8 @@ public final class TalosLlamaProbe {
      * ⇒ Questa stringa e' il posto dove si dichiara un cambio di taratura che
      * il prompt non racconta. Si cambia quando cambia **come** si misura.
      */
-    private static final String TARATURA = "bersaglio-nominato+abbandono-visto-2026-09-11";
+    private static final String TARATURA =
+            "bersaglio-nominato+abbandono-visto-2026-09-11+risposta-attesa+senza-primo-token-2026-10-01";
 
     public static String metroId() {
         long impronta = 1125899906842597L;
@@ -365,7 +381,56 @@ public final class TalosLlamaProbe {
      * un'app che non fa niente.
      */
     public static boolean referenceIsUsable(String reference) {
-        return reference != null && !reference.trim().isEmpty();
+        return answerIsCorrect(reference);
+    }
+
+    /**
+     * ⭐ A3 (01/10/2026, owner D9) — ogni motore, CPU compresa, si giudica sul
+     * COMPITO: contare da 1 in su. Prima la CPU passava se diceva «qualcosa»,
+     * e GPU e NPU aspettavano il suo testo come riferimento: se la CPU non
+     * finiva in tempo, nessuno degli altri veniva mai provato.
+     */
+    public static boolean answerIsCorrect(String text) {
+        return text != null && haContatoInOrdine(text);
+    }
+
+    /**
+     * ⛔ A3-REG-01 — una corsa senza il primo token NON è una prova.
+     *
+     * {@link TalosBenchmarkHarness#judge} controlla prima la correttezza: un
+     * testo vuoto perché il tempo è scaduto durante la lettura diventava
+     * {@code WRONG_ANSWER}, e quindi FAILED per sempre. Il commento di
+     * {@link TalosLlamaEngine} (righe 792-795) diceva il contrario — «judge
+     * respinge questa corsa per pochi token» — e nessuno l'aveva provato.
+     *
+     * @param ttftMs 0 = nessun token arrivato prima della fine della corsa.
+     */
+    public static boolean isConclusive(TalosBenchmarkHarness.Result measured, long ttftMs, boolean aborted) {
+        if (aborted || ttftMs <= 0) return false;
+        return measured.verdict == TalosBenchmarkHarness.Verdict.VALID
+                || measured.verdict == TalosBenchmarkHarness.Verdict.WRONG_ANSWER;
+    }
+
+    /**
+     * ⛔ A3-REG-04 — se per QUESTO file manca una misura, la prova deve ripartire.
+     *
+     * Un profilo lasciato da un tempo scaduto (FAILED, nessun primo token,
+     * scrittura zero) non dice niente del motore: prima del 01/10 contava come
+     * «già misurato» e la prova non ripartiva più. Un profilo senza velocità di
+     * lettura (scritto prima dell'11/09, D-53) conta come mancante, come prima.
+     *
+     * ⛔ Dimensione ignota (0): nel dubbio non si riparte, come prima.
+     */
+    static boolean profileMissingFor(java.util.List<TalosLocalProfile> profiles, long modelBytes) {
+        if (modelBytes <= 0L) return false;
+        for (TalosLocalProfile profilo : profiles) {
+            if (profilo.identity == null || profilo.identity.modelBytes != modelBytes) continue;
+            boolean lasciatoDaUnTempoScaduto = profilo.outcome == TalosBackendChoice.Outcome.FAILED
+                    && profilo.ttftMs <= 0 && profilo.decodeTokPerSec <= 0;
+            if (lasciatoDaUnTempoScaduto) continue;
+            if (profilo.prefillTokPerSec > 0) return false;
+        }
+        return true;
     }
 
     /** Il verdetto dell'harness, tradotto nella prova che la scelta consuma. */

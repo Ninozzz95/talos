@@ -8,6 +8,7 @@ import { BookMarked, CheckCheck, ChevronRight, FileText, Mic, ShieldCheck, Shiel
 import { talosShortModelLabel } from '@/lib/models/modelLabel'
 import {
     TALOS_METADATA_AZIONI,
+    TALOS_METADATA_AZIONE_NON_ESEGUITA,
     TALOS_METADATA_TRONCATA,
     talosHaAzioniDaMostrare,
 } from '@/lib/tools/tracciaAzione'
@@ -18,6 +19,8 @@ import type { TalosMobileMessageView } from '@/components/chat/mobileChatTypes'
 const TalosMobileMessageActions = defineAsyncComponent(() => import('./TalosMobileMessageActions.vue'))
 // CONT (25/09/2026): la riga «Si è fermata qui» e «Continua», a richiesta — una risposta tagliata è rara.
 const TalosMobileFermataAlLimite = defineAsyncComponent(() => import('./TalosMobileFermataAlLimite.vue'))
+// ⭐⭐ P4-quinquies: rara come la fermata al limite ⇒ a richiesta, fuori dal pezzo d'avvio.
+const TalosMobileAzioneNonEseguita = defineAsyncComponent(() => import('./TalosMobileAzioneNonEseguita.vue'))
 import {
     talosAggiornaMisureDeiMessaggi,
     talosMisureDelMessaggio,
@@ -72,6 +75,7 @@ const TalosMobileLocalMetricsRow = defineAsyncComponent(
     () => import('@/components/chat/TalosMobileLocalMetricsRow.vue'),
 )
 import TalosMobileStatusMessage from '@/components/chat/TalosMobileStatusMessage.vue'
+import { TALOS_METADATA_COMPATTAZIONE, TALOS_METADATA_COMPATTAZIONE_ANNULLATA } from '@/lib/chat/compattazioneChiavi'
 import TalosMobileReasoningBlock from '@/components/chat/TalosMobileReasoningBlock.vue'
 import TalosMobileSourcesChip from '@/components/chat/TalosMobileSourcesChip.vue'
 import { writeTalosClipboardText } from '@/services/clipboard'
@@ -111,6 +115,8 @@ const props = defineProps<{
      * millisecondi). Quelli sono la NOSTRA prova, non la sua lingua.
      */
     diagnostica?: boolean
+    /** ⭐⭐ P4-ter passo 2 — questa chat sta riassumendo adesso: in fondo, la riga «Riassumo la conversazione…» con la barra. */
+    compattazioneInCorso?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -125,6 +131,8 @@ const emit = defineEmits<{
     reviewAuthorization: []
     /** CONT (25/09/2026): «Continua» sotto la risposta fermata dal limite; l'id è quello della risposta. */
     continueAfterLimit: [messageId: string]
+    /** ⭐⭐ P4-ter passo 2 — «Annulla» sul separatore: QUALE compattazione (il suo `at`). */
+    undoCompaction: [at: string]
 }>()
 
 /**
@@ -174,6 +182,28 @@ function sospesaVuotaRisolta(message: TalosMobileMessageView | undefined): boole
     return Boolean(message && message.role === 'assistant' && !message.content.trim() && checkpointDi(message)
         && !attesaViva(message) && message.authorizationOutcome?.length)
 }
+/*
+ * ⭐⭐ P4-ter passo 2 (02/10/2026) — le righe di compattazione salvate nella storia (decisione owner «Una riga nella
+ * storia»): quella col record diventa il separatore; quella «annullata» non si disegna e spegne il separatore che nomina.
+ */
+interface TalosCompattazioneVista { at: string, tokenPrima: number | null, tokenDopo: number | null }
+function compattazioneDi(message: TalosMobileMessageView): TalosCompattazioneVista | null {
+    if (message.role !== 'system') return null
+    const record = (message.metadata?.[TALOS_METADATA_COMPATTAZIONE] as { record?: { at?: unknown, tokenPrima?: unknown, tokenDopo?: unknown } } | undefined)?.record
+    if (!record || typeof record.at !== 'string') return null
+    const numero = (valore: unknown) => (typeof valore === 'number' && Number.isFinite(valore) ? valore : null)
+    return { at: record.at, tokenPrima: numero(record.tokenPrima), tokenDopo: numero(record.tokenDopo) }
+}
+function annullamentoDi(message: TalosMobileMessageView): string | null {
+    if (message.role !== 'system') return null
+    const at = (message.metadata?.[TALOS_METADATA_COMPATTAZIONE_ANNULLATA] as { at?: unknown } | undefined)?.at
+    return typeof at === 'string' && at ? at : null
+}
+// ⛔ Nel `v-memo` di ogni riga: il separatore cambia per una riga che arriva DOPO di lui.
+const compattazioniAnnullate = computed(() => new Set(props.messages.map(annullamentoDi).filter((at): at is string => at !== null)))
+const TalosMobileCompactionRow = defineAsyncComponent(() => import('@/components/chat/TalosMobileCompactionRow.vue'))
+const TalosMobileCompactionProgress = defineAsyncComponent(() => import('@/components/chat/TalosMobileCompactionProgress.vue'))
+
 function assorbitaDallaSeguente(index: number): boolean {
     return sospesaVuotaRisolta(props.messages[index]) && props.messages[index + 1]?.role === 'assistant'
 }
@@ -245,6 +275,10 @@ function azioniFatte(metadata: unknown): string[] {
  * Solo `true` conta: una chiave assente vuol dire «finita normalmente», e un
  * avviso su ogni risposta insegnerebbe a dubitare anche di quelle intere.
  */
+/** ⭐⭐ P4-quinquies: solo `true` conta, come per la fermata al limite. */
+function azioneNonEseguita(metadata: unknown): boolean {
+    return (metadata as Record<string, unknown> | null)?.[TALOS_METADATA_AZIONE_NON_ESEGUITA] === true
+}
 function siEFermataAlLimite(metadata: unknown): boolean {
     return (metadata as Record<string, unknown> | null)?.[TALOS_METADATA_TRONCATA] === true
 }
@@ -478,20 +512,28 @@ function messageStateLabel(state: string): string {
             v-for="(message, index) in messages"
             :key="message.id"
             v-message-entrance="message.state"
-            v-memo="[message, messages[index - 1]?.role, messages[index - 1]?.authorizationOutcome, messages[index - 1]?.reasoning, messages[index + 1]?.role, sending, modelLabels, messageStyle, textScale, hasOlderMessages, pendingAuthorizationIds, diagnostica, firstMemoryDisclosureMessageId, now]"
+            v-memo="[message, messages[index - 1]?.role, messages[index - 1]?.authorizationOutcome, messages[index - 1]?.reasoning, messages[index + 1]?.role, sending, modelLabels, messageStyle, textScale, hasOlderMessages, pendingAuthorizationIds, diagnostica, firstMemoryDisclosureMessageId, now, compattazioniAnnullate.size]"
             :data-message-id="message.id"
             :data-message-kind="message.role"
             :data-state="message.state"
             :data-grouped="isGrouped(index) ? 'true' : undefined"
             class="chat-message talos-chat-message flex min-w-0 max-w-full flex-col"
-            :class="[message.role === 'user' ? 'user-message items-end' : 'assistant-message items-start', assorbitaDallaSeguente(index) ? 'hidden' : '']"
+            :class="[message.role === 'user' ? 'user-message items-end' : 'assistant-message items-start', assorbitaDallaSeguente(index) || annullamentoDi(message) ? 'hidden' : '']"
             @pointerdown="message.role !== 'system' && onMessagePointerDown($event)"
             @pointermove="onMessagePointerMove($event)"
             @pointerup="clearMessageHold()"
             @pointercancel="clearMessageHold()"
             @click.capture="onMessageClickCapture($event)"
         >
-            <TalosMobileStatusMessage v-if="message.role === 'system'" :message="message" />
+            <TalosMobileCompactionRow
+                v-if="compattazioneDi(message)"
+                :token-prima="compattazioneDi(message)!.tokenPrima"
+                :token-dopo="compattazioneDi(message)!.tokenDopo"
+                :annullata="compattazioniAnnullate.has(compattazioneDi(message)!.at)"
+                @annulla="emit('undoCompaction', compattazioneDi(message)!.at)"
+            />
+            <template v-else-if="annullamentoDi(message)" />
+            <TalosMobileStatusMessage v-else-if="message.role === 'system'" :message="message" />
             <template v-else>
                 <TalosMobileAssistantHeader v-if="message.role === 'assistant'">
                     <span v-if="modelLabel(message)">{{ modelLabel(message) }} · </span>
@@ -708,6 +750,8 @@ function messageStateLabel(state: string): string {
                         <span>{{ $t('chat.actionsDone') }}</span>
                         <span class="opacity-80">{{ azioniFatte(message.metadata).join(' · ') }}</span>
                     </div>
+                    <!-- ⭐⭐ P4-quinquies: «nessuno strumento è partito» — vedi TalosMobileAzioneNonEseguita.vue. -->
+                    <TalosMobileAzioneNonEseguita v-if="azioneNonEseguita(message.metadata)" />
                     <!-- ⛔⛔ SI È FERMATA A METÀ (rilievo #16b) e «Continua» (CONT, 25/09): vedi TalosMobileFermataAlLimite.vue. -->
                     <TalosMobileFermataAlLimite
                         v-if="siEFermataAlLimite(message.metadata)"
@@ -821,6 +865,7 @@ function messageStateLabel(state: string): string {
         <!-- R1-5: the streaming tail subscribes to the store on its own — a
              token burst re-renders only that subtree, never this list. -->
         <TalosMobileStreamingReply />
+        <TalosMobileCompactionProgress v-if="compattazioneInCorso" />
         <TalosMobileMessageEdit v-if="editTarget" v-bind="editTarget" @close="editTarget = null" />
         <span data-testid="talos-mobile-message-action-status" class="sr-only" role="status" aria-live="polite">{{ copyStatus }}</span>
     </div>

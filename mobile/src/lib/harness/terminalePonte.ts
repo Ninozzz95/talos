@@ -57,6 +57,8 @@ interface TalosTerminalePlugin {
         exitCode: number
         motivo: string | null
     }>
+    // ⛔⛔ 70-A (30/09/2026): il segreto che il server del Codice scrive a ogni avvio (`TalosTerminalPlugin.leggiSegretoServer`).
+    leggiSegretoServer(): Promise<{ ok: boolean, segreto: string | null, motivo: string | null }>
 }
 
 let pluginCache: TalosTerminalePlugin | null = null
@@ -145,4 +147,12 @@ export async function avviaServerHarnessConChiaveProvider(): Promise<ReturnType<
     })
     if (indirizzoOllama) ambiente.OLLAMA_ENDPOINT = indirizzoOllama
     return plugin().avviaServerHarness({ ambiente })
+}
+
+/**
+ * ⛔⛔ 70-A (30/09/2026, contratto desktop 70) — il segreto del server del Codice, letto dal file che il server scrive
+ * a ogni avvio (owner, 30/09 sera: «Lo crea il server»). Chi lo usa è `harnessUiSegreto.ts`; mai nei log.
+ */
+export function leggiSegretoServerDalPonte(): ReturnType<TalosTerminalePlugin['leggiSegretoServer']> {
+    return plugin().leggiSegretoServer()
 }

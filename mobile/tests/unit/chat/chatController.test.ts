@@ -96,6 +96,12 @@ const localEngine = vi.hoisted(() => ({
         ran: true, reason: null, probedCpu: true, cpuInconclusive: false,
         probedGpu: false, gpuInconclusive: false, decisionBackend: 'cpu', decisionReason: 'unproven',
     })),
+    // D7 (01/10/2026): la prova che parte da sola. Qui conta solo CHI la chiama;
+    // avvisi ed esiti sono provati in `localEngine.test.ts` (RUN-01..04).
+    talosRunAutomaticProbe: vi.fn(async (_path: string): Promise<'finished' | 'cancelled' | 'skipped'> => 'finished'),
+    // PKLA Qualcomm 2.1 b (01/10/2026): prima della prova, le condizioni NPU (una volta).
+    talosNpuState: vi.fn(async () => ({ installed: false, accepted: false, promptDeclined: false, acceptedAtMs: null })),
+    talosDeclineNpuTermsPrompt: vi.fn(async () => true),
     talosRunProbe: vi.fn(async (_path: string, running?: number) => {
         const toasts = useTalosMobileToasts()
         const runningId = running ?? toasts.push({ message: 'Running…' })
@@ -655,6 +661,82 @@ describe('chatController', () => {
         expect(providerRound).toBe(2)
         expect(controller.pendingToolAuthorizations.value).toEqual([])
     }, 15_000)
+
+    /*
+     * ⛔⛔ A3-OSS-1 (Pad, 01/10/2026): dopo «Non consentire» la scheda diceva ancora «in attesa», con «(1)» e
+     * «aspetta te», per tutta la risposta ripresa (37 s; «per sempre» mentre la prova del motore teneva il modello).
+     * Qui la risposta ripresa resta BLOCCATA: lo schermo deve essersi già aggiornato lo stesso.
+     */
+    it('OSS1-04 dopo un «no» lo schermo si aggiorna subito, anche se la risposta ripresa non è ancora arrivata', async () => {
+        const { deps, store, request } = makeDeps()
+        deps.translate = talosTestT('it')
+        store.set('anthropic', 'sk-ant')
+        let providerRound = 0
+        let sbloccaSecondoGiro!: () => void
+        const secondoGiro = new Promise<void>((resolve) => { sbloccaSecondoGiro = resolve })
+        request.mockImplementation(async ({ url }: { url: string }) => {
+            if (url.includes('anthropic.com/v1/models')) {
+                return {
+                    status: 200,
+                    data: { data: [{ id: 'claude-live', display_name: 'Claude Live' }], has_more: false },
+                }
+            }
+            if (url.includes('anthropic.com/v1/messages')) {
+                providerRound += 1
+                if (providerRound === 1) {
+                    return {
+                        status: 200,
+                        data: {
+                            model: 'claude-live',
+                            stop_reason: 'tool_use',
+                            content: [{
+                                type: 'tool_use',
+                                id: 'toolu-oss1',
+                                name: 'document_create',
+                                input: { format: 'md', title: 'Spesa', body: 'Comprare le uova domani.' },
+                            }],
+                        },
+                    }
+                }
+                await secondoGiro
+                return {
+                    status: 200,
+                    data: {
+                        model: 'claude-live',
+                        stop_reason: 'end_turn',
+                        content: [{ type: 'text', text: 'Va bene, non ho creato niente.' }],
+                    },
+                }
+            }
+            return { status: 500, data: { error: { message: 'unexpected test request' } } }
+        })
+
+        const controller = createChatController(deps)
+        await controller.init()
+        await controller.send('salvami una nota: comprare le uova domani')
+        await vi.waitFor(
+            () => expect(controller.pendingToolAuthorizations.value).toHaveLength(1),
+            { timeout: 10_000, interval: 20 },
+        )
+
+        const deciding = controller.decideToolAuthorization(
+            controller.pendingToolAuthorizations.value[0]!.request_id,
+            'deny',
+        )
+
+        await vi.waitFor(() => expect(providerRound).toBe(2), { timeout: 5_000, interval: 10 })
+        // La risposta ripresa è ferma al secondo giro: la domanda deve essere già sparita, e la scheda dire com'è andata.
+        await vi.waitFor(() => {
+            expect(controller.pendingToolAuthorizations.value).toEqual([])
+            expect(controller.chat.messages.some((messaggio) =>
+                messaggio.authorizationOutcome?.some((esito) => esito.concesso === false))).toBe(true)
+        }, { timeout: 2_000, interval: 10 })
+
+        sbloccaSecondoGiro()
+        await expect(deciding).resolves.toBe(true)
+        expect(controller.chat.messages.some((messaggio) => messaggio.content === 'Va bene, non ho creato niente.'))
+            .toBe(true)
+    }, 20_000)
 
     it('TOOL-AUTH-24 generated save markers use the durable nonblocking authorization path', async () => {
         const { deps, store, settings, request, chatRepository } = makeDeps()
@@ -2910,6 +2992,26 @@ describe('chatController', () => {
         expect(controller.chat.messages.at(-1)?.metadata).toMatchObject({ stopped_at_limit: true })
     })
 
+    /*
+     * ⭐⭐ AZD-CTRL-01 — P4-quinquies (owner 02/10/2026, «Riprova, poi avviso»): il modello dice «Salvato la nota ✅» senza
+     * chiamare niente, sia al primo giro sia dopo il sollecito ⇒ UN secondo giro (mai un terzo) e il fatto viaggia nei
+     * metadati, da dove la vista mette la riga «Nessuno strumento è partito».
+     */
+    it('AZD-CTRL-01 a claimed action with no tool call is nudged once, then marked in the metadata', async () => {
+        const { deps, store, request } = makeDeps()
+        const originale = request.getMockImplementation()!
+        request.mockImplementation(async (call: { url: string }) => call.url.includes('anthropic.com/v1/messages')
+            ? { status: 200, data: { model: 'claude-live', content: [{ type: 'text', text: 'Salvato la nota ✅' }], stop_reason: 'end_turn' } }
+            : originale(call as never))
+        store.set('anthropic', 'sk-ant')
+        const controller = createChatController(deps)
+        await controller.init()
+        await controller.send('salvami una nota: comprare il pane domani')
+        expect(request.mock.calls.filter(([call]) => call.url.includes('anthropic.com/v1/messages'))).toHaveLength(2)
+        expect(controller.chat.messages.at(-1)?.metadata).toMatchObject({ talos_azione_dichiarata_non_eseguita: true })
+        // Un messaggio che non dichiara niente non porta il fatto (vedi gli altri test: nessun metadato in più).
+    })
+
     it('P1-CTX-ISO-03 R8-A-SEND-01 rejects a second send while the first Library preflight is pending', async () => {
         const { deps, store, settings, request, chatRepository } = makeDeps()
         store.set('anthropic', 'sk-ant')
@@ -5014,27 +5116,37 @@ describe('il sondaggio GPU della 0.1.17, agganciato alla PRIMA scelta locale', (
         return { deps, controller }
     }
 
-    it('offre la modale alla prima scelta esplicita, col percorso vero del GGUF', async () => {
+    /*
+     * ⭐ RISCRITTO APPOSTA il 01/10/2026 (owner D7/D11): la prova non si offre
+     * più con una domanda — parte da sola alla scelta esplicita di un modello
+     * locale, tranne per chi l'aveva rifiutata («Non chiedermelo più»). Avvisi
+     * ed esiti della prova sono provati in `localEngine.test.ts` (RUN-01..04).
+     */
+    it('AUTO-01 parte da sola alla prima scelta esplicita, col percorso vero del GGUF', async () => {
         const { controller } = await withLocalModelDiscovered()
-        expect(controller.pendingLocalEngineProbeConsent.value).toBeNull()
+        localEngine.talosRunAutomaticProbe.mockClear()
 
         await controller.selectModel('local:/models/local-test/smollm2-135m.gguf')
 
-        expect(controller.pendingLocalEngineProbeConsent.value)
-            .toEqual({ path: '/models/local-test/smollm2-135m.gguf' })
+        await vi.waitFor(() => expect(localEngine.talosRunAutomaticProbe)
+            .toHaveBeenCalledWith('/models/local-test/smollm2-135m.gguf'))
     })
 
-    it('non la offre una seconda volta: il consenso non è più `unset` dopo la prima', async () => {
+    it('AUTO-02 per chi l’aveva rifiutata NON parte (D11)', async () => {
         const { deps, controller } = await withLocalModelDiscovered()
-        await controller.selectModel('local:/models/local-test/smollm2-135m.gguf')
-        await controller.decideLocalEngineProbeConsent('dismissed')
-        // `dismissed` non scrive: il consenso resta `unset` di proposito.
-        expect(deps.settings.state.local_engine_probe.consent).toBe('unset')
+        await deps.settings.setLocalEngineProbeConsent({ consent: 'declined' })
+        localEngine.talosRunAutomaticProbe.mockClear()
 
         await controller.selectModel('local:/models/local-test/smollm2-135m.gguf')
+        await new Promise((resolve) => setTimeout(resolve, 0))
 
-        expect(controller.pendingLocalEngineProbeConsent.value)
-            .toEqual({ path: '/models/local-test/smollm2-135m.gguf' })
+        expect(localEngine.talosRunAutomaticProbe).not.toHaveBeenCalled()
+    })
+
+    it('AUTO-04 nessuna domanda: il controller non espone più la modale', async () => {
+        const { controller } = await withLocalModelDiscovered()
+        expect('pendingLocalEngineProbeConsent' in controller).toBe(false)
+        expect('decideLocalEngineProbeConsent' in controller).toBe(false)
     })
 
     /**
@@ -5052,14 +5164,103 @@ describe('il sondaggio GPU della 0.1.17, agganciato alla PRIMA scelta locale', (
      * ROSSO. Senza, sarebbe tornato fra un mese senza che nessuno lo vedesse —
      * ed è precisamente il difetto che stiamo curando, non un di più.
      */
+    // ⭐ CAMBIATO APPOSTA il 01/10/2026 (D13): l'apertura anticipata diretta
+    // resta per chi ha rifiutato la prova; con la prova vale AUTO-05.
     it('⛔ apre il modello IN ANTICIPO alla scelta esplicita, col percorso vero', async () => {
-        const { controller } = await withLocalModelDiscovered()
+        const { deps, controller } = await withLocalModelDiscovered()
+        await deps.settings.setLocalEngineProbeConsent({ consent: 'declined' })
         localEngine.talosWarmLocalModel.mockClear()
 
         await controller.selectModel('local:/models/local-test/smollm2-135m.gguf')
 
         await vi.waitFor(() => expect(localEngine.talosWarmLocalModel)
             .toHaveBeenCalledWith('/models/local-test/smollm2-135m.gguf'))
+    })
+
+    /*
+     * ⭐ AUTO-05/06 — D13 (owner, 01/10/2026): «una copia sola, la prova prima,
+     * poi la chat». Con la prova automatica il controller NON apre il modello
+     * in parallelo (sul Pad: due copie = OOM KILL): lo apre DOPO, con le
+     * stesse regole di sempre (`talosWarmSelectedLocalModel`). Se la persona
+     * ha scritto durante la prova, il modello lo apre la chat: niente apertura.
+     */
+    it('AUTO-05 con la prova automatica il modello si apre solo DOPO la prova', async () => {
+        const { controller } = await withLocalModelDiscovered()
+        let finisciProva!: (esito: 'finished') => void
+        localEngine.talosRunAutomaticProbe.mockImplementationOnce(
+            () => new Promise((resolve) => { finisciProva = resolve }),
+        )
+        localEngine.talosWarmLocalModel.mockClear()
+
+        await controller.selectModel('local:/models/local-test/smollm2-135m.gguf')
+        await vi.waitFor(() => expect(localEngine.talosRunAutomaticProbe).toHaveBeenCalled())
+        await new Promise((resolve) => setTimeout(resolve, 0))
+        expect(localEngine.talosWarmLocalModel).not.toHaveBeenCalled()
+
+        finisciProva('finished')
+        await vi.waitFor(() => expect(localEngine.talosWarmLocalModel)
+            .toHaveBeenCalledWith('/models/local-test/smollm2-135m.gguf'))
+    })
+
+    it('AUTO-06 se la prova è stata interrotta dalla chat, il controller non apre niente', async () => {
+        const { controller } = await withLocalModelDiscovered()
+        localEngine.talosRunAutomaticProbe.mockResolvedValueOnce('cancelled')
+        localEngine.talosWarmLocalModel.mockClear()
+
+        await controller.selectModel('local:/models/local-test/smollm2-135m.gguf')
+        await vi.waitFor(() => expect(localEngine.talosRunAutomaticProbe).toHaveBeenCalled())
+        await new Promise((resolve) => setTimeout(resolve, 10))
+
+        expect(localEngine.talosWarmLocalModel).not.toHaveBeenCalled()
+    })
+
+    /*
+     * ⭐ NPU-P-01..03 — PKLA Qualcomm 2.1 b (owner, 01/10/2026): le condizioni
+     * NPU si propongono UNA volta, alla scelta di un modello locale, su un
+     * telefono con l'NPU nell'app; la prova dei motori aspetta la risposta
+     * (con l'NPU accettata la misura anche lei). «Non ora» non riappare.
+     */
+    it('NPU-P-01 NPU nell’app, condizioni mai viste: il foglio si apre e la prova aspetta la risposta', async () => {
+        const { talosNpuTermsPromptOpen, talosAnswerNpuTerms } = await import('@/stores/npuTermsPrompt')
+        const { controller } = await withLocalModelDiscovered()
+        localEngine.talosNpuState.mockResolvedValue({ installed: true, accepted: false, promptDeclined: false, acceptedAtMs: null })
+        localEngine.talosRunAutomaticProbe.mockClear()
+        localEngine.talosDeclineNpuTermsPrompt.mockClear()
+
+        await controller.selectModel('local:/models/local-test/smollm2-135m.gguf')
+        await vi.waitFor(() => expect(talosNpuTermsPromptOpen.value).toBe(true))
+        expect(localEngine.talosRunAutomaticProbe).not.toHaveBeenCalled()
+
+        talosAnswerNpuTerms('later')
+        await vi.waitFor(() => expect(localEngine.talosRunAutomaticProbe).toHaveBeenCalled())
+        expect(talosNpuTermsPromptOpen.value).toBe(false)
+        expect(localEngine.talosDeclineNpuTermsPrompt).toHaveBeenCalledTimes(1)
+    })
+
+    it('NPU-P-02 chi ha già detto «Non ora» non rivede il foglio', async () => {
+        const { talosNpuTermsPromptOpen } = await import('@/stores/npuTermsPrompt')
+        const { controller } = await withLocalModelDiscovered()
+        localEngine.talosNpuState.mockResolvedValue({ installed: true, accepted: false, promptDeclined: true, acceptedAtMs: null })
+        localEngine.talosRunAutomaticProbe.mockClear()
+
+        await controller.selectModel('local:/models/local-test/smollm2-135m.gguf')
+        await vi.waitFor(() => expect(localEngine.talosRunAutomaticProbe).toHaveBeenCalled())
+        expect(talosNpuTermsPromptOpen.value).toBe(false)
+    })
+
+    it('NPU-P-03 senza NPU nell’app, o già accettata, nessun foglio', async () => {
+        const { talosNpuTermsPromptOpen } = await import('@/stores/npuTermsPrompt')
+        const { controller } = await withLocalModelDiscovered()
+        for (const stato of [
+            { installed: false, accepted: false, promptDeclined: false, acceptedAtMs: null },
+            { installed: true, accepted: true, promptDeclined: false, acceptedAtMs: 1 },
+        ]) {
+            localEngine.talosNpuState.mockResolvedValue(stato)
+            localEngine.talosRunAutomaticProbe.mockClear()
+            await controller.selectModel('local:/models/local-test/smollm2-135m.gguf')
+            await vi.waitFor(() => expect(localEngine.talosRunAutomaticProbe).toHaveBeenCalled())
+            expect(talosNpuTermsPromptOpen.value).toBe(false)
+        }
     })
 
     it('AL CONTRARIO — non apre niente in anticipo per un modello di rete', async () => {
@@ -5074,94 +5275,22 @@ describe('il sondaggio GPU della 0.1.17, agganciato alla PRIMA scelta locale', (
         expect(localEngine.talosWarmLocalModel).not.toHaveBeenCalled()
     })
 
-    it('non la offre affatto per un modello remoto', async () => {
+    it('AUTO-03 per un modello remoto NON parte', async () => {
         const { deps, controller } = await withLocalModelDiscovered()
         await deps.setKey('anthropic', 'sk-ant')
         await controller.refreshProvider('anthropic')
+        localEngine.talosRunAutomaticProbe.mockClear()
 
         await controller.selectModel('anthropic:claude-live')
+        await new Promise((resolve) => setTimeout(resolve, 0))
 
-        expect(controller.pendingLocalEngineProbeConsent.value).toBeNull()
-    })
-
-    it("'granted' scrive il consenso e fa partire il sondaggio, senza farlo attendere", async () => {
-        const { deps, controller } = await withLocalModelDiscovered()
-        await controller.selectModel('local:/models/local-test/smollm2-135m.gguf')
-
-        const decisione = controller.decideLocalEngineProbeConsent('granted')
-
-        // ⛔ La chiusura della modale è SINCRONA rispetto al sondaggio: non si
-        // aspetta il suo esito per richiudersi. È esattamente «non blocca la
-        // chat» del §1-bis, verificato sull'ordine reale delle promesse.
-        expect(controller.pendingLocalEngineProbeConsent.value).toBeNull()
-        await decisione
-        expect(deps.settings.state.local_engine_probe.consent).toBe('granted')
-        // Il sondaggio parte da un `import()` dinamico — un giro di microtask
-        // oltre `decisione`, non nello stesso tick — quindi si attende il suo
-        // avvio invece di assumerlo già avvenuto.
-        await vi.waitFor(() => expect(localEngine.talosQualifyLocalBackend)
-            .toHaveBeenCalledWith('/models/local-test/smollm2-135m.gguf'))
-    })
-
-    it("mantiene visibile il caricamento e pubblica l'esito della verifica", async () => {
-        __resetToastsForTests()
-        const probe = deferred<{
-            ran: boolean
-            reason: null
-            probedCpu: boolean
-            cpuInconclusive: boolean
-            probedGpu: boolean
-            gpuInconclusive: boolean
-            decisionBackend: string
-            decisionReason: string
-        }>()
-        localEngine.talosQualifyLocalBackend.mockImplementationOnce(() => probe.promise)
-        const { controller } = await withLocalModelDiscovered()
-        await controller.selectModel('local:/models/local-test/smollm2-135m.gguf')
-
-        await controller.decideLocalEngineProbeConsent('granted')
-        const toasts = useTalosMobileToasts()
-        await vi.waitFor(() => expect(toasts.items.value.map((toast) => toast.message)).toContain('Running…'))
-
-        probe.resolve({
-            ran: true, reason: null, probedCpu: true, cpuInconclusive: false,
-            probedGpu: false, gpuInconclusive: false, decisionBackend: 'cpu', decisionReason: 'unproven',
-        })
-        await vi.waitFor(() => expect(toasts.items.value.map((toast) => toast.message))
-            .toContain('Done. This phone answers local models fastest on the CPU.'))
-        expect(toasts.items.value.map((toast) => toast.message)).not.toContain('Running…')
-        __resetToastsForTests()
-    })
-
-    it('rende visibile un rifiuto del ponte invece di una Promise silenziosa', async () => {
-        __resetToastsForTests()
-        localEngine.talosQualifyLocalBackend.mockRejectedValueOnce(new Error('TALOS_LLAMA_UNAVAILABLE'))
-        const { controller } = await withLocalModelDiscovered()
-        await controller.selectModel('local:/models/local-test/smollm2-135m.gguf')
-
-        await controller.decideLocalEngineProbeConsent('granted')
-        const toasts = useTalosMobileToasts()
-        await vi.waitFor(() => expect(toasts.items.value.map((toast) => toast.message))
-            .toContain("That didn't work, try again"))
-        __resetToastsForTests()
-    })
-
-    it("'declined' scrive il consenso e NON fa partire niente", async () => {
-        const { deps, controller } = await withLocalModelDiscovered()
-        await controller.selectModel('local:/models/local-test/smollm2-135m.gguf')
-        localEngine.talosQualifyLocalBackend.mockClear()
-
-        await controller.decideLocalEngineProbeConsent('declined')
-
-        expect(deps.settings.state.local_engine_probe.consent).toBe('declined')
-        expect(localEngine.talosQualifyLocalBackend).not.toHaveBeenCalled()
+        expect(localEngine.talosRunAutomaticProbe).not.toHaveBeenCalled()
     })
 
     // Il comando MANUALE — «sempre», compreso il caso in cui riaccende il
-    // consenso da `declined` — non vive più sul controller: è
+    // consenso da `declined` — vive nelle Impostazioni:
     // `talosRunLocalEngineProbeAndEnsureGranted`, provato per conto suo in
-    // `tests/unit/lib/localEngineProbeRun.test.ts`. Vedi il commento su
-    // `decideLocalEngineProbeConsent` in `chatController.ts`.
+    // `tests/unit/lib/localEngineProbeRun.test.ts`.
 })
 
 /*

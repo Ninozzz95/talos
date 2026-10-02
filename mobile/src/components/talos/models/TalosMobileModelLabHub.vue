@@ -37,6 +37,43 @@ const backendInUseDevice = ref<string | null>(null)
  */
 const backendQuantisation = ref<string | null>(null)
 
+/**
+ * ⛔ PKLA Qualcomm 2.1 b (owner, 01/10/2026): lo stato dell'NPU rispetto alle
+ * condizioni Qualcomm, dal nativo. Il foglio si apre dalla riga Hexagon.
+ */
+const TalosNpuTermsSheet = defineAsyncComponent(() => import('./TalosNpuTermsSheet.vue'))
+const npuStato = ref<{ installed: boolean, accepted: boolean, acceptedAtMs: number | null } | null>(null)
+const foglioNpu = ref(false)
+const npuRitirato = ref(false)
+
+async function leggiLaNpu(): Promise<void> {
+    const { talosNpuState } = await import('@/services/localEngine')
+    npuStato.value = await talosNpuState()
+}
+
+async function decisioneNpu(esito: 'accepted' | 'later'): Promise<void> {
+    foglioNpu.value = false
+    if (esito !== 'accepted') return
+    npuRitirato.value = false
+    // Il nativo ha appena caricato il modulo NPU: si rileggono i motori.
+    await Promise.all([leggiLaNpu(), leggiIDispositivi()])
+}
+
+async function ritiraNpu(): Promise<void> {
+    const { talosWithdrawNpuTerms } = await import('@/services/localEngine')
+    npuRitirato.value = await talosWithdrawNpuTerms()
+    await leggiLaNpu()
+}
+
+const npuAccettataIl = computed(() => {
+    const ms = npuStato.value?.acceptedAtMs
+    // Per esteso («1 ottobre 2026»): la data passa da un parametro di i18n, che
+    // trasforma le «/» in entità HTML (visto sul Pad: «01&#x2F;10&#x2F;2026»).
+    return ms
+        ? new Date(ms).toLocaleDateString(String(locale.value ?? 'it'), { day: 'numeric', month: 'long', year: 'numeric' })
+        : null
+})
+
 async function leggiIDispositivi(): Promise<void> {
     try {
         const [{ talosLocalEngineStatus, talosLocalEngineBackendFacts },
@@ -126,7 +163,7 @@ async function leggiIDispositivi(): Promise<void> {
     }
 }
 
-const { t } = useTalosI18n()
+const { t, locale } = useTalosI18n()
 // Fase 4A: il titolo grande sta nella pagina e si ripiega nella barra scorrendo.
 useTalosSheetTitle(() => t('models.labTitle'))
 const controller = useChatController()
@@ -199,6 +236,7 @@ onMounted(async () => {
         talosRefreshHuggingFaceToken().catch(() => undefined),
         contaModelliLocali(),
         leggiIDispositivi(),
+        leggiLaNpu().catch(() => undefined),
     ])
 })
 </script>
@@ -217,7 +255,25 @@ onMounted(async () => {
             :in-use="backendInUse"
             :in-use-device="backendInUseDevice"
             :quantisation="backendQuantisation"
+            :npu="npuStato"
+            @open-npu-terms="foglioNpu = true"
         />
+        <div
+            v-if="npuStato?.accepted || npuRitirato"
+            data-testid="talos-npu-terms-status"
+            class="flex flex-col items-start gap-[var(--talos-space-inline)] text-2xs leading-4 text-[var(--talos-muted)]"
+        >
+            <p v-if="npuStato?.accepted && npuAccettataIl">{{ t('localModels.npuTermsAcceptedOn', { date: npuAccettataIl }) }}</p>
+            <button
+                v-if="npuStato?.accepted"
+                type="button"
+                data-testid="talos-npu-terms-withdraw"
+                class="talos-pressable min-h-touch font-medium text-[var(--talos-accent)] underline-offset-2 hover:underline"
+                @click="ritiraNpu"
+            >{{ t('localModels.npuTermsWithdraw') }}</button>
+            <p v-if="npuRitirato" role="status">{{ t('localModels.npuTermsWithdrawn') }}</p>
+        </div>
+        <TalosNpuTermsSheet v-if="foglioNpu" @decide="decisioneNpu" />
 
         <nav :aria-label="t('models.labDestinations')" class="flex flex-col gap-[var(--talos-space-inline)]">
             <RouterLink

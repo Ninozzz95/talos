@@ -1,5 +1,5 @@
 diff --git a/ggml/include/ggml-opencl.h b/ggml/include/ggml-opencl.h
-index 6b61771..9dc1746 100644
+index 6b6177135..9dc174650 100644
 --- a/ggml/include/ggml-opencl.h
 +++ b/ggml/include/ggml-opencl.h
 @@ -13,6 +13,7 @@ extern "C" {
@@ -11,10 +11,10 @@ index 6b61771..9dc1746 100644
  GGML_BACKEND_API ggml_backend_buffer_type_t ggml_backend_opencl_buffer_type(void);
  GGML_BACKEND_API ggml_backend_buffer_type_t ggml_backend_opencl_host_buffer_type(void);
 diff --git a/ggml/src/ggml-opencl/ggml-opencl.cpp b/ggml/src/ggml-opencl/ggml-opencl.cpp
-index 733fab1..1711443 100644
+index 74bddd703..65e4555c2 100644
 --- a/ggml/src/ggml-opencl/ggml-opencl.cpp
 +++ b/ggml/src/ggml-opencl/ggml-opencl.cpp
-@@ -553,6 +553,11 @@ struct ggml_backend_opencl_context {
+@@ -643,6 +643,11 @@ struct ggml_backend_opencl_context {
      // rest of the kernels are currently always loaded in alloc_buffer.
      bool kernels_loaded = false;
  
@@ -26,9 +26,9 @@ index 733fab1..1711443 100644
      std::string driver_version;
  
      GPU_FAMILY gpu_family;
-@@ -6962,10 +6967,36 @@ static void ggml_opencl_op_rms_norm_fused(ggml_backend_t backend, ggml_tensor *
- static void ggml_opencl_op_norm_fused(ggml_backend_t backend, ggml_tensor * norm_tensor, ggml_tensor * mul_tensor, ggml_tensor * add_tensor);
- static void ggml_opencl_op_group_norm_fused(ggml_backend_t backend, ggml_tensor * gn_tensor, ggml_tensor * mul_tensor, ggml_tensor * add_tensor);
+@@ -8414,10 +8419,36 @@ static void ggml_opencl_op_rms_norm_mul_add_fused(ggml_backend_t backend, ggml_t
+     backend_ctx->enqueue_ndrange_kernel(kernel, 3, global_work_size, local_work_size, dst);
+ }
  
 +// Abort checkpoints drain the queue early on purpose (see the comment at the
 +// call site below), and that drain is not free, so it is only taken out for
@@ -63,7 +63,7 @@ index 733fab1..1711443 100644
          ggml_tensor * node = cgraph->nodes[i];
  
          // NOTE: this may oversynchronize by synchronizing with
-@@ -7558,6 +7589,14 @@ bool ggml_backend_is_opencl(ggml_backend_t backend) {
+@@ -9340,6 +9371,14 @@ bool ggml_backend_is_opencl(ggml_backend_t backend) {
      return backend && backend->iface.get_name == ggml_backend_opencl_name;
  }
  
@@ -78,7 +78,7 @@ index 733fab1..1711443 100644
  //
  // buffer
  //
-@@ -10921,11 +10960,20 @@ static ggml_backend_dev_t ggml_backend_opencl_reg_device_get(ggml_backend_reg_t
+@@ -13041,11 +13080,20 @@ static ggml_backend_dev_t ggml_backend_opencl_reg_device_get(ggml_backend_reg_t
      GGML_UNUSED(index);
  }
  

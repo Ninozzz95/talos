@@ -6,6 +6,58 @@ signed APK under [Releases](../../releases).
 
 Numbers in this file are measured on a device, not estimated.
 
+## v0.1.39
+
+Long conversations keep going on the phone's own model, the Qualcomm NPU ships, and chats can be
+selected, archived and restored in bulk.
+
+### On-device models
+
+- The Qualcomm NPU ships in the app, built with Qualcomm's official SDK. It turns on only after you accept
+  Qualcomm's software terms in the app, once, when you pick a local model; they stay available in Models. On
+  the OnePlus Pad 3 the first word arrives in about 1.0 s on the NPU instead of about 9.5 s on the GPU.
+- llama.cpp b11312, with Q4_K_M models running on the NPU.
+- GPU programs are prepared for each installed model before you first use it, instead of compiling
+  for about 80 seconds on the first message after every update.
+- A model is fingerprinted once when it arrives, instead of being re-read on every open (24–29 s
+  each time before).
+- On-device models find the tools they need by search instead of reading a 65-line index.
+- The context the phone can give a model is now measured correctly while the model is open: the
+  memory already holding the open conversation is counted back, so long chats are no longer refused
+  as they grow (before: "needs 6312 tokens, the device can give 3584"). The model's head size is read
+  from the file as declared (256 for Spark-X2.5-4B instead of 160), measured on the device at about
+  147,000 bytes of cache per token.
+
+### Chats
+
+- Conversations are summarized automatically when they fill the context, right after a reply; a
+  message you send meanwhile waits. A line in the chat says "Conversation summarized · X → Y tokens"
+  with Undo, and "Compact now" in the chat menu asks first. The numbers are real tokens: the phone's
+  model counts them itself, and hosted models use the provider's count. A summary is kept only if the
+  next request gets at least 30% lighter. Measured on the Pad with Spark-X2.5-4B on a coding task:
+  8,427 → 4,264 tokens after seven turns, and the conversation went on.
+- Chats can be selected from a button next to the count, then archived, restored or deleted together.
+  The selection bar stays at the top while you scroll, and Undo brings archived chats back.
+- The TALOS logo fills three quarters of the assistant's circle.
+- When a reply says an action is done ("Saved the note ✅") but no tool ran, TALOS asks the model once to
+  really do it, and if it still does nothing it says so under the reply: "No tool ran: nothing was done."
+  Seen with Spark-X2.5-4B saving a note.
+
+### Codice
+
+- The Codice summarizes long sessions the same way, keeps the full history, and can undo.
+- The Codice stays inside its folder: it can no longer write into TALOS's own files or outside the
+  session folder without asking.
+- Every failure is explained in words with one next action; interactive visuals are back.
+- The session list no longer shows raw keys such as HARNESS.GROUPS.LAST7 as group titles; a finished run says
+  "Finished" instead of "Stopped"; the approval card says "approved" or "denied" instead of staying "waiting";
+  the strip counts "tokens" instead of calling the sum of every step "context".
+
+### Permissions and safety
+
+- Tool permissions are answered at once, and the Stop button is never covered.
+- The non-commercial "hey jarvis" wake-word model is no longer shipped.
+
 ## v0.1.38
 
 The chat list works like the other stations, replies keep their reasoning and their line breaks, and

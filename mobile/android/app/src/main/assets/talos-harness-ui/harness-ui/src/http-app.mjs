@@ -1,4 +1,7 @@
+import { timingSafeEqual } from 'node:crypto';
+
 import { reasoningRichiestaValido } from './config.mjs';
+import { descriviErrore } from './error-surface.mjs';
 
 export const API_SCHEMA = 'talos.harness-ui.api.v1';
 
@@ -42,6 +45,14 @@ const API_ERROR_CODES = new Set([
   /* ⭐ CATALOGO-MODELLI (owner 25/09/2026, «Portare la rotta dal desktop»): gli errori di model-catalog.mjs, come nel desktop. */
   'CATALOG_UNREACHABLE',
   'CATALOG_UPSTREAM_ERROR',
+  /* ⛔⛔ 70-A (30/09/2026): il cancello d'ingresso, vedi `guardiaIngresso`. */
+  'AUTH_REQUIRED',
+  'ORIGIN_FORBIDDEN',
+  'HOST_FORBIDDEN',
+  'CONTENT_TYPE_UNSUPPORTED',
+  /* ⭐ P4-ter (02/10/2026): l'Annulla della compattazione (session-registry.annullaCompattazione). */
+  'COMPACTION_NOT_FOUND',
+  'SESSION_STORE_WRITE_FAILED',
 ]);
 
 const STATUS_BY_CODE = Object.freeze({
@@ -69,6 +80,12 @@ const STATUS_BY_CODE = Object.freeze({
   PLATFORM_UNSUPPORTED: 501,
   CATALOG_UNREACHABLE: 503,
   CATALOG_UPSTREAM_ERROR: 503,
+  AUTH_REQUIRED: 401,
+  ORIGIN_FORBIDDEN: 403,
+  HOST_FORBIDDEN: 403,
+  CONTENT_TYPE_UNSUPPORTED: 415,
+  COMPACTION_NOT_FOUND: 404,
+  SESSION_STORE_WRITE_FAILED: 500,
 });
 
 const MESSAGE_BY_CODE = Object.freeze({
@@ -93,6 +110,12 @@ const MESSAGE_BY_CODE = Object.freeze({
   PLATFORM_UNSUPPORTED: 'Non disponibile su questa piattaforma',
   CATALOG_UNREACHABLE: 'Catalogo modelli non raggiungibile',
   CATALOG_UPSTREAM_ERROR: 'Catalogo modelli: risposta non valida da OpenRouter',
+  AUTH_REQUIRED: 'Richiesta senza il segreto del server',
+  ORIGIN_FORBIDDEN: 'Origine non ammessa',
+  HOST_FORBIDDEN: 'Host non ammesso',
+  CONTENT_TYPE_UNSUPPORTED: 'Il corpo deve essere JSON',
+  COMPACTION_NOT_FOUND: 'Nessuna compattazione da annullare con questo identificativo',
+  SESSION_STORE_WRITE_FAILED: 'Il salvataggio su disco non è riuscito',
 });
 
 const SECURITY_HEADERS = Object.freeze({
@@ -129,7 +152,8 @@ function successEnvelope(data, clock) {
 function errorEnvelope(code, clock) {
   return {
     ok: false,
-    error: { code, message: MESSAGE_BY_CODE[code] },
+    // ⛔ ERRCOD-E2 (30/09/2026): `errore` è il descrittore della scheda d'errore del Codice (error-surface.mjs); code e message restano.
+    error: { code, message: MESSAGE_BY_CODE[code], errore: descriviErrore({ code }) },
     meta: { schema: API_SCHEMA, generatedAt: generatedAt(clock) },
   };
 }
@@ -547,19 +571,25 @@ function requireComandoBody(body) {
  * — mai un endpoint che risponde "all'ultima richiesta pendente", vedi
  * la doc di session-registry.rispondiApprovazione sul perché.
  */
-function requireApprovaBody(body) {
+/*
+ * ⛔ P4-quater (02/10/2026, «come il desktop»): `ambito: 'cartella'` («Consenti in questa cartella per la sessione») è
+ * ammesso SOLO con `approvato: true`; la cartella la sceglie il kernel, mai il client (session-registry.rispondiApprovazione).
+ */
+export function requireApprovaBody(body) {
   const chiavi = Object.keys(body ?? {});
-  const AMMESSE = ['requestId', 'approvato'];
+  const AMMESSE = ['requestId', 'approvato', 'ambito'];
+  const conAmbito = Object.hasOwn(body ?? {}, 'ambito');
   if (
-    chiavi.length !== 2 || !chiavi.every((k) => AMMESSE.includes(k))
+    chiavi.length !== (conAmbito ? 3 : 2) || !chiavi.every((k) => AMMESSE.includes(k))
     || typeof body.requestId !== 'string' || body.requestId.length === 0
     || typeof body.approvato !== 'boolean'
+    || (conAmbito && (body.ambito !== 'cartella' || body.approvato !== true))
   ) {
-    const errore = new Error('Corpo non valido: atteso {requestId, approvato}');
+    const errore = new Error('Corpo non valido: atteso {requestId, approvato, ambito?}');
     errore.code = 'QUERY_INVALID';
     throw errore;
   }
-  return { requestId: body.requestId, approvato: body.approvato };
+  return { requestId: body.requestId, approvato: body.approvato, ...(conAmbito ? { ambito: body.ambito } : {}) };
 }
 
 /**
@@ -607,6 +637,61 @@ function scriviEventoSse(res, evento) {
   return true;
 }
 
+/*
+ * ⛔⛔ 70-A (30/09/2026, contratto desktop 70 «MobileOriginCapacitor OPEN») — il cancello d'ingresso.
+ *
+ * Misurato con la sonda del 30/09: un POST `text/plain` da qualunque pagina o app del telefono avviava una sessione, e
+ * il server rifletteva qualunque `Origin`. Owner, 30/09: segreto in ogni richiesta, solo `https://localhost`, solo
+ * JSON, Host di loopback. Difesa a strati come la sicurezza dei trasporti MCP 2025-11-25 («MUST validate the Origin…
+ * respond with HTTP 403», «SHOULD implement proper authentication») e Hermes (`gateway/platforms/api_server.py`,
+ * Bearer e 401). Ledger `.claude/ragionamento/LEDGER-70A-SERVER-CODICE-PROTETTO-2026-09-30.md`.
+ *
+ * ⛔ Fetch Metadata NON è un cancello qui: misurato sul Pad, anche TALOS manda `Sec-Fetch-Site: cross-site`
+ * (`https://localhost` → `http://localhost:4174`). Decide l'allowlist dell'origine.
+ */
+/** L'origine vera del WebView di TALOS, misurata sul Pad il 30/09 (`androidScheme: 'https'` in capacitor.config.ts). */
+const ORIGINI_AMMESSE = new Set(['https://localhost']);
+/** Il server ascolta solo sul loopback (`config.mjs`): un altro nome nell'Host è DNS rebinding. */
+const HOST_AMMESSI = new Set(['localhost', '127.0.0.1', '[::1]']);
+
+function nomeHost(intestazione) {
+  if (typeof intestazione !== 'string' || intestazione.length === 0) return null;
+  try {
+    return new URL(`http://${intestazione}`).hostname;
+  } catch {
+    return null;
+  }
+}
+
+function segretoCombacia(req, segreto) {
+  if (typeof segreto !== 'string' || segreto.length === 0) return false;
+  const intestazione = req.headers.authorization;
+  if (typeof intestazione !== 'string' || !intestazione.startsWith('Bearer ')) return false;
+  const dato = Buffer.from(intestazione.slice('Bearer '.length), 'utf8');
+  const atteso = Buffer.from(segreto, 'utf8');
+  // timingSafeEqual vuole lunghezze uguali: la lunghezza del segreto è pubblica (64), il contenuto no.
+  return dato.length === atteso.length && timingSafeEqual(dato, atteso);
+}
+
+/** Host e Origin: valgono per ogni richiesta, file statici compresi. Torna il codice del rifiuto o null. */
+function rifiutoDiProvenienza(req) {
+  if (!HOST_AMMESSI.has(nomeHost(req.headers.host))) return 'HOST_FORBIDDEN';
+  const origine = req.headers.origin;
+  if (origine !== undefined && !ORIGINI_AMMESSE.has(origine)) return 'ORIGIN_FORBIDDEN';
+  return null;
+}
+
+/** Segreto e JSON: solo per l'API. Torna il codice del rifiuto o null. */
+function rifiutoDellApi(req, method, url, segreto) {
+  if (url.pathname !== '/api' && !url.pathname.startsWith('/api/')) return null;
+  if (!segretoCombacia(req, segreto)) return 'AUTH_REQUIRED';
+  if (method === 'POST') {
+    const tipo = String(req.headers['content-type'] ?? '').split(';')[0].trim().toLowerCase();
+    if (tipo !== 'application/json') return 'CONTENT_TYPE_UNSUPPORTED';
+  }
+  return null;
+}
+
 /**
  * @param {object} deps
  * @param {object} deps.campaignService
@@ -624,6 +709,10 @@ export function createHttpApp({
   campaignService, staticHandler, sessionRegistry = null, listaTaskDisponibili = async () => [], clock = () => new Date(),
   diagnosiFn = null, elencaCartelleProgetto = () => [], automationStore = null, cartelleFrequentiFn = () => [],
   catalogoModelliFn = null,
+  // ⛔⛔ 70-A (30/09/2026): il segreto creato da `server-secret.mjs` all'avvio. Assente → l'API rifiuta tutto (fail-closed).
+  segreto = null,
+  // ⛔⛔ 70-B (30/09/2026 notte): la lettura dall'archivio su disco degli artefatti (`creaArchivioArtefatti`).
+  leggiArtefattoFn = null,
   // ⛔⛔⛔ 30/8, porta canonico (432eec09) — iniettabili SOLO per il test del battito SSE sotto: mai un setInterval reale nei test unitari, stesso principio di ogni altra dipendenza di questo file.
   impostaIntervalloFn = setInterval, cancellaIntervalloFn = clearInterval,
 }) {
@@ -631,20 +720,22 @@ export function createHttpApp({
     if (req.aborted || res.destroyed) return;
     const method = req.method || 'GET';
 
+    // ⛔⛔ 70-A: Host e Origin prima di tutto, prima ancora del CORS (vedi `rifiutoDiProvenienza`).
+    const rifiutoProvenienza = rifiutoDiProvenienza(req);
+    if (rifiutoProvenienza) {
+      sendJson(res, STATUS_BY_CODE[rifiutoProvenienza], errorEnvelope(rifiutoProvenienza, clock), method);
+      return;
+    }
+
     /*
      * ⛔ CORS — piano `procedi-col-generare-un-snoopy-neumann.md`, Fase 3.
-     * Desktop (Chrome che carica la pagina DA questo stesso server) non ne
-     * ha bisogno: stessa origine, `Origin` assente o già coincidente,
-     * questa intestazione non cambia nulla. Mobile (`app.js` montato dentro
-     * il documento TALOS, origine Capacitor — `http://localhost` su
-     * Android) è cross-origin per davvero: senza questa intestazione il
-     * browser bloccherebbe la LETTURA della risposta anche col tunnel
-     * `adb reverse` attivo, per `fetch` e per `EventSource` allo stesso
-     * modo. Riflette `Origin` invece di un `*` fisso o di indovinare lo
-     * schema Capacitor: il perimetro di sicurezza resta "raggiungibile solo
-     * via loopback/tunnel già posseduto dall'owner" (`README.md`), riflettere
-     * l'origine non lo allarga — chi non può già raggiungere `127.0.0.1:4174`
-     * non può nemmeno mandare la richiesta che leggerebbe questa intestazione.
+     * `app.js` montato dentro il documento TALOS è cross-origin per davvero: senza questa intestazione il WebView
+     * bloccherebbe la LETTURA della risposta, per `fetch` e per il flusso degli eventi allo stesso modo.
+     *
+     * ⛔⛔ 70-A (30/09/2026): qui si rifletteva QUALUNQUE `Origin`, con l'idea che solo chi raggiunge già il loopback
+     * potesse chiedere — ma sul telefono lo raggiungono tutte le pagine e tutte le app (sonda del 30/09). Ora
+     * l'intestazione esce solo per l'origine vera di TALOS, misurata sul Pad: `https://localhost` (il commento di
+     * prima diceva `http://localhost`, sbagliato: `androidScheme: 'https'`). Le altre sono già state rifiutate sopra.
      */
     const requestOrigin = req.headers.origin;
     if (requestOrigin) {
@@ -654,7 +745,8 @@ export function createHttpApp({
     if (method === 'OPTIONS') {
       res.writeHead(204, {
         'Access-Control-Allow-Methods': 'GET, HEAD, POST',
-        'Access-Control-Allow-Headers': 'Content-Type',
+        // ⛔ 70-A: `Authorization` porta il segreto; `Last-Event-ID` lo manda la libreria `eventsource` quando si ricollega.
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization, Last-Event-ID',
         'Access-Control-Max-Age': '600',
       });
       res.end();
@@ -672,6 +764,16 @@ export function createHttpApp({
       url = new URL(requestTarget, 'http://127.0.0.1');
     } catch {
       sendJson(res, 400, errorEnvelope('QUERY_INVALID', clock), method);
+      return;
+    }
+
+    // ⛔⛔ 70-A: il segreto e il solo JSON per l'API (vedi `rifiutoDellApi`); i file statici restano liberi.
+    const rifiutoApi = rifiutoDellApi(req, method, url, segreto);
+    if (rifiutoApi) {
+      sendJson(
+        res, STATUS_BY_CODE[rifiutoApi], errorEnvelope(rifiutoApi, clock), method,
+        rifiutoApi === 'AUTH_REQUIRED' ? { 'WWW-Authenticate': 'Bearer' } : undefined,
+      );
       return;
     }
 
@@ -1284,7 +1386,54 @@ export function createHttpApp({
           throw errore;
         }
         if (req.aborted || res.destroyed) return;
-        sendJson(res, 200, successEnvelope({ compattato: esito.compattato }, clock), method);
+        // ⭐ P4-ter: i numeri per la riga «X → Y token» e l'`at` per l'Annulla; il motivo quando non è riuscita.
+        const { ok: _ok, ...dati } = esito;
+        sendJson(res, 200, successEnvelope(dati, clock), method);
+      } catch (error) {
+        const normalized = normalizeError(error);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock), method);
+      }
+      return;
+    }
+
+    /*
+     * ⭐⭐ P4-ter (02/10/2026) — lo stato della compattazione (per il separatore e chi riapre la pagina) e il suo ANNULLA
+     * (decisione 3 dell'owner, desktop 24/09). Il corpo dell'annulla è solo `{at}`: l'identificativo del record da annullare.
+     */
+    const statoCompMatch = method === 'GET' && sessionRegistry
+      && /^\/api\/v1\/sessions\/([^/]+)\/compaction$/.exec(url.pathname);
+    const annullaCompMatch = method === 'POST' && sessionRegistry
+      && /^\/api\/v1\/sessions\/([^/]+)\/compaction\/undo$/.exec(url.pathname);
+    if (statoCompMatch || annullaCompMatch) {
+      try {
+        requireNoQuery(url);
+        let sessionId;
+        try {
+          sessionId = decodeURIComponent((statoCompMatch || annullaCompMatch)[1]);
+        } catch {
+          sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method);
+          return;
+        }
+        let esito;
+        if (statoCompMatch) {
+          esito = sessionRegistry.statoCompattazione(sessionId);
+        } else {
+          const corpo = await leggiCorpoJson(req);
+          const chiavi = Object.keys(corpo ?? {});
+          if (chiavi.length !== 1 || chiavi[0] !== 'at' || typeof corpo.at !== 'string' || corpo.at.length === 0 || corpo.at.length > 64) {
+            const errore = new Error('Corpo non valido: atteso {at}');
+            errore.code = 'QUERY_INVALID';
+            throw errore;
+          }
+          esito = await sessionRegistry.annullaCompattazione(sessionId, corpo.at);
+        }
+        if ('erroreAvvio' in esito) {
+          const errore = new Error(esito.erroreAvvio);
+          errore.code = esito.code;
+          throw errore;
+        }
+        if (req.aborted || res.destroyed) return;
+        sendJson(res, 200, successEnvelope(esito, clock), method);
       } catch (error) {
         const normalized = normalizeError(error);
         sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock), method);
@@ -1342,8 +1491,8 @@ export function createHttpApp({
           return;
         }
         const corpo = await leggiCorpoJson(req);
-        const { requestId, approvato } = requireApprovaBody(corpo);
-        const esito = sessionRegistry.rispondiApprovazione(sessionId, requestId, approvato);
+        const { requestId, approvato, ambito } = requireApprovaBody(corpo);
+        const esito = sessionRegistry.rispondiApprovazione(sessionId, requestId, approvato, ambito ? { ambito } : undefined);
         if ('erroreAvvio' in esito) {
           const errore = new Error(esito.erroreAvvio);
           errore.code = esito.code;
@@ -1402,9 +1551,35 @@ export function createHttpApp({
 
     try {
       let data;
+      const artefattoMatch = /^\/api\/v1\/artifacts\/([^/]+)$/.exec(url.pathname);
       if (url.pathname === '/api/v1/health') {
         requireNoQuery(url);
         data = { status: 'ok' };
+      } else if (artefattoMatch) {
+        /*
+         * ⛔⛔ 70-B (30/09/2026 notte, owner «Riuso della chat»): l'HTML di un artefatto, per l'app che lo apre nella
+         * finestra isolata della chat. JSON e mai `text/html`: questa risposta non diventa mai una pagina del server.
+         * Dietro il cancello del 70-A (segreto, origine, Host) come tutta l'API.
+         */
+        requireNoQuery(url);
+        let id;
+        try {
+          id = decodeURIComponent(artefattoMatch[1]);
+        } catch {
+          id = '';
+        }
+        if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(id)) {
+          const errore = new Error('Id artefatto non valido');
+          errore.code = 'QUERY_INVALID';
+          throw errore;
+        }
+        const html = leggiArtefattoFn ? leggiArtefattoFn(id) : null;
+        if (typeof html !== 'string') {
+          const errore = new Error('Artefatto non trovato');
+          errore.code = 'NOT_FOUND';
+          throw errore;
+        }
+        data = { html };
       } else if (url.pathname === '/api/v1/campaigns') {
         requireNoQuery(url);
         data = await campaignService.listCampaigns();

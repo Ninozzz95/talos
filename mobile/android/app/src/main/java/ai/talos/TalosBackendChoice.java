@@ -262,6 +262,47 @@ public final class TalosBackendChoice {
     }
 
     /**
+     * ⭐ Se l'NPU mangia un modello con questo {@code general.file_type}.
+     *
+     * Numeri dell'enum {@code llama_ftype} del {@code llama.h} vendorizzato
+     * (b11312, righe 120-159), NON di {@code ggml_type}: 38 è MXFP4 (MoE), 39
+     * è NVFP4. Fino al 01/10/2026 qui c'era 39 creduto MXFP4 (A2-REG-01).
+     *
+     * Q4_K_M (15) entra il 01/10/2026 con b11312 (PR #28994): sul Pad
+     * lettura 1.062,6 t/s contro 46,4 del motore precedente, perplessità +0,1 %
+     * sulla CPU. Gli altri K entrano solo dopo la loro misura (owner, 01/10).
+     * Tutto ciò che non è misurato vale no.
+     */
+    public static boolean npuAcceptsFileType(int fileType) {
+        return fileType == 2      // Q4_0
+                || fileType == 7  // Q8_0
+                || fileType == 15 // Q4_K_M
+                || fileType == 38; // MXFP4 (MoE)
+    }
+
+    /**
+     * ⛔ A3-REG-06 — se rileggere un prefisso congelato su questo contesto
+     * PERDE le scritture, e quindi va rifiutato.
+     *
+     * Su OpenCL con cache {@code q8_0} llama.cpp scarta in silenzio la
+     * scrittura sulle viste q8_0 ({@code ggml-opencl.cpp} b11312, ramo Q8_0
+     * di {@code ggml_backend_opencl_buffer_set_tensor}: «Views share the
+     * parent's buffer» → {@code return}), e il ripristino passa proprio da
+     * quelle viste ({@code llama-kv-cache.cpp:243-244}). Il motore crede di
+     * avere il prefisso in cache e risponde a vuoto. Sul Pad (01/10/2026)
+     * CPU, NPU e GPU con cache f16 rileggono bene lo stesso file: si rifiuta
+     * solo questa combinazione, e si ricalcola.
+     *
+     * Dispositivo o tipo sconosciuti valgono no: lì il ripristino è quello di
+     * sempre. PREG-04 cade quando il motore a monte sarà corretto.
+     */
+    public static boolean prefixRestoreLosesWrites(String backendDevice, String kvCacheType) {
+        return backendDevice != null
+                && backendDevice.startsWith("GPUOpenCL")
+                && "q8_0".equals(kvCacheType);
+    }
+
+    /**
      * Whether this backend is worth proving on this device.
      *
      * A backend that failed here is not tried again: the user whose phone froze

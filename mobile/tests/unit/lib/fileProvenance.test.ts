@@ -116,3 +116,25 @@ describe('what leaves inside an exported file', () => {
             .not.toHaveProperty('Iptc4xmpExt:AISystemVersionUsed')
     })
 })
+
+/*
+ * ⛔ OSS-70B-1 (30/09/2026 notte, owner «Codice · titolo della sessione») — una pagina salvata dal Codice diceva di
+ * venire dalla chat aperta nell'app. Il record ora sa dire «Codice», con la sessione.
+ */
+describe('OSS70B-PROV — il record sa dire «Codice»', () => {
+    const DAL_CODICE = { ...GENERATED, originSessionId: null, promptMessageId: null, toolName: 'artifact_create', codice: { sessionId: 'cod-1', title: 'mi disegni un grafico' } }
+
+    it('OSS70B-PROV-01 tiene la sessione del Codice', () => {
+        expect(parseTalosFileProvenance(DAL_CODICE)?.codice).toEqual({ sessionId: 'cod-1', title: 'mi disegni un grafico' })
+    })
+    it('OSS70B-PROV-02 un codice malformato non diventa una storia inventata; i record vecchi restano come sono', () => {
+        expect(parseTalosFileProvenance({ ...DAL_CODICE, codice: { sessionId: 'cod-1' } })?.codice).toBeUndefined()
+        expect(parseTalosFileProvenance({ ...DAL_CODICE, codice: 'cod-1' })?.codice).toBeUndefined()
+        expect(parseTalosFileProvenance(GENERATED)).toEqual(GENERATED)
+    })
+    it('OSS70B-PROV-03 il Codice non esce nei file esportati, come la chat (D-02)', () => {
+        const record = parseTalosFileProvenance(DAL_CODICE)!
+        expect(JSON.stringify(talosProvenanceForExport(record))).not.toContain('cod-1')
+        expect(JSON.stringify(talosProvenanceForExport(record))).not.toContain('grafico')
+    })
+})

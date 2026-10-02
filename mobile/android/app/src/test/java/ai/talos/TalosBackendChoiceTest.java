@@ -370,4 +370,115 @@ public class TalosBackendChoiceTest {
                             vecchia,
                         }, true).backend);
     }
+
+    /**
+     * ⭐ NPU-FT-01 — i formati che l'NPU può mangiare, per numero di
+     * `general.file_type`. Q4_K_M entra il 01/10/2026 con llama.cpp b11312
+     * (PR #28994): sul Pad lettura 1.062,6 t/s contro 46,4 del pin vecchio,
+     * perplessità +0,1 % sulla CPU. Gli altri K restano fuori finché non
+     * sono misurati (owner, 01/10).
+     */
+    @Test
+    public void npuFt01IFormatiAmmessiSonoQuelliMisurati() {
+        assertTrue("Q4_0", TalosBackendChoice.npuAcceptsFileType(2));
+        assertTrue("Q8_0", TalosBackendChoice.npuAcceptsFileType(7));
+        assertTrue("MXFP4", TalosBackendChoice.npuAcceptsFileType(38));
+        assertTrue("Q4_K_M", TalosBackendChoice.npuAcceptsFileType(15));
+        for (int nonMisurato : new int[] { 3, 14, 16, 17, 18, 25, -1, 1024 }) {
+            assertFalse("non misurato: " + nonMisurato,
+                    TalosBackendChoice.npuAcceptsFileType(nonMisurato));
+        }
+    }
+
+    /**
+     * ⛔ NPU-FT-02 — A2-REG-01: il 39 di `general.file_type` è NVFP4, non
+     * MXFP4. Il 39 = MXFP4 è dell'enum `ggml_type`, un altro vocabolario.
+     */
+    @Test
+    public void npuFt02IlTrentanoveENvfp4ENonPassa() {
+        assertFalse(TalosBackendChoice.npuAcceptsFileType(39));
+    }
+
+    /**
+     * ⛔ NPU-FT-03 — i numeri si leggono dal `llama.h` vendorizzato, non da
+     * una costante ricopiata: se un aggiornamento del motore li spostasse,
+     * questa prova cade invece di lasciar passare il formato sbagliato.
+     */
+    @Test
+    public void npuFt03INumeriCombacianoConIlLlamaHVendorizzato() throws java.io.IOException {
+        java.io.File llamaH = new java.io.File("../../third_party/llama.cpp/include/llama.h");
+        assertTrue("llama.h vendorizzato non trovato da " + new java.io.File(".").getAbsolutePath(),
+                llamaH.isFile());
+        String sorgente = new String(java.nio.file.Files.readAllBytes(llamaH.toPath()),
+                java.nio.charset.StandardCharsets.UTF_8);
+        java.util.Map<String, Integer> attesi = new java.util.LinkedHashMap<>();
+        attesi.put("Q4_0", 2);
+        attesi.put("Q8_0", 7);
+        attesi.put("Q4_K_M", 15);
+        attesi.put("MXFP4_MOE", 38);
+        attesi.put("NVFP4", 39);
+        for (java.util.Map.Entry<String, Integer> voce : attesi.entrySet()) {
+            java.util.regex.Matcher m = java.util.regex.Pattern
+                    .compile("LLAMA_FTYPE_MOSTLY_" + voce.getKey() + "\\s*=\\s*(\\d+)")
+                    .matcher(sorgente);
+            assertTrue("manca LLAMA_FTYPE_MOSTLY_" + voce.getKey(), m.find());
+            assertEquals(voce.getKey(), (int) voce.getValue(), Integer.parseInt(m.group(1)));
+        }
+    }
+
+    /*
+     * ⛔ A3-REG-06 (01/10/2026) — sulla GPU OpenCL con cache q8_0 il prefisso
+     * congelato si rilegge VUOTO: llama.cpp scarta in silenzio la scrittura
+     * sulle viste q8_0 (`ggml-opencl.cpp` `set_tensor`), il motore crede di
+     * avere 2.779 token in cache e la risposta esce come «</think>» ripetuti.
+     * Sul Pad: CPU, NPU e GPU f16 rileggono bene lo stesso file.
+     */
+
+    /** PREG-01 — GPU OpenCL con cache q8_0: il ripristino da file si rifiuta. */
+    @Test
+    public void preg01SullaGpuOpenClConCacheQ8IlPrefissoNonSiRilegge() {
+        assertTrue(TalosBackendChoice.prefixRestoreLosesWrites("GPUOpenCL", "q8_0"));
+    }
+
+    /** PREG-02 — ovunque altrove il ripristino resta: lì è stato provato giusto. */
+    @Test
+    public void preg02AltroveIlPrefissoSiRileggeComePrima() {
+        assertFalse("GPU f16", TalosBackendChoice.prefixRestoreLosesWrites("GPUOpenCL", "f16"));
+        assertFalse("CPU q8_0", TalosBackendChoice.prefixRestoreLosesWrites(null, "q8_0"));
+        assertFalse("NPU q8_0", TalosBackendChoice.prefixRestoreLosesWrites("HTP0", "q8_0"));
+        assertFalse("tipo ignoto", TalosBackendChoice.prefixRestoreLosesWrites("GPUOpenCL", null));
+    }
+
+    /** PREG-03 — il ponte consulta la regola PRIMA di chiedere al motore di rileggere. */
+    @Test
+    public void preg03IlPonteGuardaLaRegolaPrimaDiRileggere() throws java.io.IOException {
+        String sorgente = new String(java.nio.file.Files.readAllBytes(
+                new java.io.File("src/main/java/ai/talos/TalosLlamaPlugin.java").toPath()),
+                java.nio.charset.StandardCharsets.UTF_8);
+        int metodo = sorgente.indexOf("public void loadState(PluginCall call)");
+        assertTrue(metodo > 0);
+        int regola = sorgente.indexOf("TalosBackendChoice.prefixRestoreLosesWrites(", metodo);
+        int rilettura = sorgente.indexOf("engine.loadState(path)", metodo);
+        assertTrue("la regola manca in loadState", regola > 0);
+        assertTrue("la regola arriva dopo la rilettura", regola < rilettura);
+    }
+
+    /**
+     * PREG-04 — il difetto è ancora nel motore vendorizzato. Quando un
+     * aggiornamento di llama.cpp lo correggerà, questa prova cade: è il segnale
+     * per togliere l'aggiramento, non per correggere la prova.
+     */
+    @Test
+    public void preg04IlDifettoEAncoraNelMotoreVendorizzato() throws java.io.IOException {
+        java.io.File opencl = new java.io.File(
+                "../../third_party/llama.cpp/ggml/src/ggml-opencl/ggml-opencl.cpp");
+        org.junit.Assume.assumeTrue("sottomodulo assente", opencl.isFile());
+        String sorgente = new String(java.nio.file.Files.readAllBytes(opencl.toPath()),
+                java.nio.charset.StandardCharsets.UTF_8);
+        int ramo = sorgente.indexOf("// Views share the parent's buffer; parent owns SoA conversion.");
+        assertTrue("il ramo Q8_0 di set_tensor è cambiato: riverificare A3-REG-06", ramo > 0);
+        String dopo = sorgente.substring(ramo, Math.min(sorgente.length(), ramo + 200));
+        assertTrue(dopo.contains("tensor->view_src != nullptr"));
+        assertTrue(dopo.contains("return;"));
+    }
 }

@@ -1,0 +1,1078 @@
+{
+    "libraries": [
+        {
+            "uniqueId": "androidx.activity:activity",
+            "artifactVersion": "1.11.0",
+            "description": "Provides the base Activity subclass and the relevant hooks to build a composable structure on top.",
+            "name": "Activity",
+            "website": "https://developer.android.com/jetpack/androidx/releases/activity#1.11.0",
+            "licenses": [
+                "Apache-2.0"
+            ],
+            "organization": {
+                "name": "The Android Open Source Project"
+            }
+        },
+        {
+            "uniqueId": "androidx.activity:activity-ktx",
+            "artifactVersion": "1.11.0",
+            "description": "Kotlin extensions for 'activity' artifact",
+            "name": "Activity Kotlin Extensions",
+            "website": "https://developer.android.com/jetpack/androidx/releases/activity#1.11.0",
+            "licenses": [
+                "Apache-2.0"
+            ],
+            "organization": {
+                "name": "The Android Open Source Project"
+            }
+        },
+        {
+            "uniqueId": "androidx.annotation:annotation",
+            "artifactVersion": "1.10.0",
+            "description": "Provides source annotations for tooling and readability.",
+            "name": "Annotation",
+            "website": "https://developer.android.com/jetpack/androidx/releases/annotation#1.10.0",
+            "licenses": [
+                "Apache-2.0"
+            ],
+            "organization": {
+                "name": "The Android Open Source Project"
+            }
+        },
+        {
+            "uniqueId": "androidx.annotation:annotation-experimental",
+            "artifactVersion": "1.4.1",
+            "description": "Java annotation for use on unstable Android API surfaces. When used in conjunction with the Experimental annotation lint checks, this annotation provides functional parity with Kotlin's Experimental annotation.",
+            "name": "Experimental annotation",
+            "website": "https://developer.android.com/jetpack/androidx/releases/annotation#1.4.1",
+            "licenses": [
+                "Apache-2.0"
+            ],
+            "organization": {
+                "name": "The Android Open Source Project"
+            }
+        },
+        {
+            "uniqueId": "androidx.appcompat:appcompat",
+            "artifactVersion": "1.7.1",
+            "description": "Provides backwards-compatible implementations of UI-related Android SDK functionality, including dark mode and Material theming.",
+            "name": "AppCompat",
+            "website": "https://developer.android.com/jetpack/androidx/releases/appcompat#1.7.1",
+            "licenses": [
+                "Apache-2.0"
+            ],
+            "organization": {
+                "name": "The Android Open Source Project"
+            }
+        },
+        {
+            "uniqueId": "androidx.appcompat:appcompat-resources",
+            "artifactVersion": "1.7.1",
+            "description": "Provides backward-compatible implementations of resource-related Android SDKfunctionality, including color state list theming.",
+            "name": "AppCompat Resources",
+            "website": "https://developer.android.com/jetpack/androidx/releases/appcompat#1.7.1",
+            "licenses": [
+                "Apache-2.0"
+            ],
+            "organization": {
+                "name": "The Android Open Source Project"
+            }
+        },
+        {
+            "uniqueId": "androidx.arch.core:core-common",
+            "artifactVersion": "2.2.0",
+            "description": "Android Arch-Common",
+            "name": "Android Arch-Common",
+            "website": "https://developer.android.com/jetpack/androidx/releases/arch-core#2.2.0",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.arch.core:core-runtime",
+            "artifactVersion": "2.2.0",
+            "description": "Android Arch-Runtime",
+            "name": "Android Arch-Runtime",
+            "website": "https://developer.android.com/jetpack/androidx/releases/arch-core#2.2.0",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.biometric:biometric",
+            "artifactVersion": "1.1.0",
+            "description": "The Biometric library is a static library that you can add to your Android application. It invokes BiometricPrompt on devices running P and greater, and on older devices will show a compat dialog. Compatible on devices running API 14 or later.",
+            "name": "Biometric",
+            "website": "https://developer.android.com/jetpack/androidx/releases/biometric#1.1.0",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.browser:browser",
+            "artifactVersion": "1.9.0",
+            "description": "Provides support for embedding Custom Tabs in an app.",
+            "name": "Browser",
+            "website": "https://developer.android.com/jetpack/androidx/releases/browser#1.9.0",
+            "licenses": [
+                "Apache-2.0"
+            ],
+            "organization": {
+                "name": "The Android Open Source Project"
+            }
+        },
+        {
+            "uniqueId": "androidx.camera:camera-core",
+            "artifactVersion": "1.4.2",
+            "description": "Core components for the Jetpack Camera Library, a library providing a consistent and reliable camera foundation that enables great camera driven experiences across all of Android.",
+            "name": "Camera Core",
+            "website": "https://developer.android.com/jetpack/androidx/releases/camera#1.4.2",
+            "licenses": [
+                "Apache-2.0",
+                "44d1a25c593283261968a15c8cc213cd"
+            ],
+            "organization": {
+                "name": "The Android Open Source Project"
+            }
+        },
+        {
+            "uniqueId": "androidx.cardview:cardview",
+            "artifactVersion": "1.0.0",
+            "description": "Android Support CardView v7",
+            "name": "Support CardView v7",
+            "website": "http://developer.android.com/tools/extras/support-library.html",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.collection:collection",
+            "artifactVersion": "1.4.2",
+            "description": "Standalone efficient collections.",
+            "name": "collections",
+            "website": "https://developer.android.com/jetpack/androidx/releases/collection#1.4.2",
+            "licenses": [
+                "Apache-2.0"
+            ],
+            "organization": {
+                "name": "The Android Open Source Project"
+            }
+        },
+        {
+            "uniqueId": "androidx.concurrent:concurrent-futures",
+            "artifactVersion": "1.1.0",
+            "description": "Androidx implementation of Guava's ListenableFuture",
+            "name": "AndroidX Futures",
+            "website": "https://developer.android.com/topic/libraries/architecture/index.html",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.concurrent:concurrent-futures-ktx",
+            "artifactVersion": "1.1.0",
+            "description": "Kotlin Extensions for Androidx implementation of Guava's ListenableFuture",
+            "name": "AndroidX Futures Kotlin Extensions",
+            "website": "https://developer.android.com/topic/libraries/architecture/index.html",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.constraintlayout:constraintlayout",
+            "artifactVersion": "2.2.1",
+            "description": "This library offers a flexible and adaptable way to position and animate widgets",
+            "name": "ConstraintLayout",
+            "website": "https://developer.android.com/jetpack/androidx/releases/constraintlayout#2.2.1",
+            "licenses": [
+                "Apache-2.0"
+            ],
+            "organization": {
+                "name": "The Android Open Source Project"
+            }
+        },
+        {
+            "uniqueId": "androidx.constraintlayout:constraintlayout-core",
+            "artifactVersion": "1.1.1",
+            "description": "This library contains engines and algorithms for constraint based layout and complex animations (it is used by the ConstraintLayout library)",
+            "name": "ConstraintLayout Core",
+            "website": "https://developer.android.com/jetpack/androidx/releases/constraintlayout#1.1.1",
+            "licenses": [
+                "Apache-2.0"
+            ],
+            "organization": {
+                "name": "The Android Open Source Project"
+            }
+        },
+        {
+            "uniqueId": "androidx.coordinatorlayout:coordinatorlayout",
+            "artifactVersion": "1.3.0",
+            "description": "The Support Library is a static library that you can add to your Android application in order to use APIs that are either not available for older platform versions or utility APIs that aren't a part of the framework APIs. Compatible on devices running API 14 or later.",
+            "name": "Coordinator Layout",
+            "website": "https://developer.android.com/jetpack/androidx/releases/coordinatorlayout#1.3.0",
+            "licenses": [
+                "Apache-2.0"
+            ],
+            "organization": {
+                "name": "The Android Open Source Project"
+            }
+        },
+        {
+            "uniqueId": "androidx.core:core",
+            "artifactVersion": "1.17.0",
+            "description": "Provides backward-compatible implementations of Android platform APIs and features.",
+            "name": "Core",
+            "website": "https://developer.android.com/jetpack/androidx/releases/core#1.17.0",
+            "licenses": [
+                "Apache-2.0"
+            ],
+            "organization": {
+                "name": "The Android Open Source Project"
+            }
+        },
+        {
+            "uniqueId": "androidx.core:core-ktx",
+            "artifactVersion": "1.17.0",
+            "description": "Kotlin extensions for 'core' artifact",
+            "name": "Core Kotlin Extensions",
+            "website": "https://developer.android.com/jetpack/androidx/releases/core#1.17.0",
+            "licenses": [
+                "Apache-2.0"
+            ],
+            "organization": {
+                "name": "The Android Open Source Project"
+            }
+        },
+        {
+            "uniqueId": "androidx.core:core-splashscreen",
+            "artifactVersion": "1.2.0",
+            "description": "This library provides the compatibility APIs for SplashScreen and helper method to enable a splashscreen on devices prior Android 12",
+            "name": "SplashScreen",
+            "website": "https://developer.android.com/jetpack/androidx/releases/core#1.2.0",
+            "licenses": [
+                "Apache-2.0"
+            ],
+            "organization": {
+                "name": "The Android Open Source Project"
+            }
+        },
+        {
+            "uniqueId": "androidx.core:core-viewtree",
+            "artifactVersion": "1.0.0",
+            "description": "Provides ViewTree extensions packaged for use by other core androidx libraries",
+            "name": "androidx.core:core-viewtree",
+            "website": "https://developer.android.com/jetpack/androidx/releases/core#1.0.0",
+            "licenses": [
+                "Apache-2.0"
+            ],
+            "organization": {
+                "name": "The Android Open Source Project"
+            }
+        },
+        {
+            "uniqueId": "androidx.cursoradapter:cursoradapter",
+            "artifactVersion": "1.0.0",
+            "description": "The Support Library is a static library that you can add to your Android application in order to use APIs that are either not available for older platform versions or utility APIs that aren't a part of the framework APIs. Compatible on devices running API 14 or later.",
+            "name": "Support Cursor Adapter",
+            "website": "http://developer.android.com/tools/extras/support-library.html",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.customview:customview",
+            "artifactVersion": "1.1.0",
+            "description": "The Support Library is a static library that you can add to your Android application in order to use APIs that are either not available for older platform versions or utility APIs that aren't a part of the framework APIs. Compatible on devices running API 14 or later.",
+            "name": "Support Custom View",
+            "website": "https://developer.android.com/jetpack/androidx",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.drawerlayout:drawerlayout",
+            "artifactVersion": "1.1.1",
+            "description": "The Support Library is a static library that you can add to your Android application in order to use APIs that are either not available for older platform versions or utility APIs that aren't a part of the framework APIs. Compatible on devices running API 14 or later.",
+            "name": "Support Drawer Layout",
+            "website": "https://developer.android.com/jetpack/androidx",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.dynamicanimation:dynamicanimation",
+            "artifactVersion": "1.1.0",
+            "description": "Physics-based animation in support library, where the animations are driven by physics force. You can use this Animation library to create smooth and realistic animations.",
+            "name": "DynamicAnimation",
+            "website": "https://developer.android.com/jetpack/androidx/releases/dynamicanimation#1.1.0",
+            "licenses": [
+                "Apache-2.0"
+            ],
+            "organization": {
+                "name": "The Android Open Source Project"
+            }
+        },
+        {
+            "uniqueId": "androidx.emoji2:emoji2",
+            "artifactVersion": "1.3.0",
+            "description": "Core library to enable emoji compatibility in Kitkat and newer devices to avoid the empty emoji characters.",
+            "name": "Android Emoji2 Compat",
+            "website": "https://developer.android.com/jetpack/androidx/releases/emoji2#1.3.0",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.emoji2:emoji2-views-helper",
+            "artifactVersion": "1.3.0",
+            "description": "View helpers for Emoji2",
+            "name": "Android Emoji2 Compat view helpers",
+            "website": "https://developer.android.com/jetpack/androidx/releases/emoji2#1.3.0",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.exifinterface:exifinterface",
+            "artifactVersion": "1.4.1",
+            "description": "Android Support ExifInterface",
+            "name": "ExifInterface",
+            "website": "https://developer.android.com/jetpack/androidx/releases/exifinterface#1.4.1",
+            "licenses": [
+                "Apache-2.0"
+            ],
+            "organization": {
+                "name": "The Android Open Source Project"
+            }
+        },
+        {
+            "uniqueId": "androidx.fragment:fragment",
+            "artifactVersion": "1.8.9",
+            "description": "The Support Library is a static library that you can add to your Android application in order to use APIs that are either not available for older platform versions or utility APIs that aren't a part of the framework APIs. Compatible on devices running API 14 or later.",
+            "name": "fragment",
+            "website": "https://developer.android.com/jetpack/androidx/releases/fragment#1.8.9",
+            "licenses": [
+                "Apache-2.0"
+            ],
+            "organization": {
+                "name": "The Android Open Source Project"
+            }
+        },
+        {
+            "uniqueId": "androidx.graphics:graphics-shapes",
+            "artifactVersion": "1.0.1",
+            "description": "create and render rounded polygonal shapes",
+            "name": "Graphics Shapes",
+            "website": "https://developer.android.com/jetpack/androidx/releases/graphics#1.0.1",
+            "licenses": [
+                "Apache-2.0"
+            ],
+            "organization": {
+                "name": "The Android Open Source Project"
+            }
+        },
+        {
+            "uniqueId": "androidx.interpolator:interpolator",
+            "artifactVersion": "1.0.0",
+            "description": "The Support Library is a static library that you can add to your Android application in order to use APIs that are either not available for older platform versions or utility APIs that aren't a part of the framework APIs. Compatible on devices running API 14 or later.",
+            "name": "Support Interpolators",
+            "website": "http://developer.android.com/tools/extras/support-library.html",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.lifecycle:lifecycle-common",
+            "artifactVersion": "2.8.7",
+            "description": "Android Lifecycle-Common",
+            "name": "Lifecycle-Common",
+            "website": "https://developer.android.com/jetpack/androidx/releases/lifecycle#2.8.7",
+            "licenses": [
+                "Apache-2.0"
+            ],
+            "organization": {
+                "name": "The Android Open Source Project"
+            }
+        },
+        {
+            "uniqueId": "androidx.lifecycle:lifecycle-livedata",
+            "artifactVersion": "2.8.7",
+            "description": "Android Lifecycle LiveData",
+            "name": "Lifecycle LiveData",
+            "website": "https://developer.android.com/jetpack/androidx/releases/lifecycle#2.8.7",
+            "licenses": [
+                "Apache-2.0"
+            ],
+            "organization": {
+                "name": "The Android Open Source Project"
+            }
+        },
+        {
+            "uniqueId": "androidx.lifecycle:lifecycle-livedata-core",
+            "artifactVersion": "2.8.7",
+            "description": "Android Lifecycle LiveData Core",
+            "name": "Lifecycle LiveData Core",
+            "website": "https://developer.android.com/jetpack/androidx/releases/lifecycle#2.8.7",
+            "licenses": [
+                "Apache-2.0"
+            ],
+            "organization": {
+                "name": "The Android Open Source Project"
+            }
+        },
+        {
+            "uniqueId": "androidx.lifecycle:lifecycle-livedata-core-ktx",
+            "artifactVersion": "2.8.7",
+            "description": "Kotlin extensions for 'livedata-core' artifact",
+            "name": "LiveData Core Kotlin Extensions",
+            "website": "https://developer.android.com/jetpack/androidx/releases/lifecycle#2.8.7",
+            "licenses": [
+                "Apache-2.0"
+            ],
+            "organization": {
+                "name": "The Android Open Source Project"
+            }
+        },
+        {
+            "uniqueId": "androidx.lifecycle:lifecycle-process",
+            "artifactVersion": "2.8.7",
+            "description": "Android Lifecycle Process",
+            "name": "Lifecycle Process",
+            "website": "https://developer.android.com/jetpack/androidx/releases/lifecycle#2.8.7",
+            "licenses": [
+                "Apache-2.0"
+            ],
+            "organization": {
+                "name": "The Android Open Source Project"
+            }
+        },
+        {
+            "uniqueId": "androidx.lifecycle:lifecycle-runtime",
+            "artifactVersion": "2.8.7",
+            "description": "Android Lifecycle Runtime",
+            "name": "Lifecycle Runtime",
+            "website": "https://developer.android.com/jetpack/androidx/releases/lifecycle#2.8.7",
+            "licenses": [
+                "Apache-2.0"
+            ],
+            "organization": {
+                "name": "The Android Open Source Project"
+            }
+        },
+        {
+            "uniqueId": "androidx.lifecycle:lifecycle-runtime-ktx",
+            "artifactVersion": "2.8.7",
+            "description": "Kotlin extensions for 'lifecycle' artifact",
+            "name": "Lifecycle Kotlin Extensions",
+            "website": "https://developer.android.com/jetpack/androidx/releases/lifecycle#2.8.7",
+            "licenses": [
+                "Apache-2.0"
+            ],
+            "organization": {
+                "name": "The Android Open Source Project"
+            }
+        },
+        {
+            "uniqueId": "androidx.lifecycle:lifecycle-viewmodel",
+            "artifactVersion": "2.8.7",
+            "description": "Android Lifecycle ViewModel",
+            "name": "Lifecycle ViewModel",
+            "website": "https://developer.android.com/jetpack/androidx/releases/lifecycle#2.8.7",
+            "licenses": [
+                "Apache-2.0"
+            ],
+            "organization": {
+                "name": "The Android Open Source Project"
+            }
+        },
+        {
+            "uniqueId": "androidx.lifecycle:lifecycle-viewmodel-ktx",
+            "artifactVersion": "2.8.7",
+            "description": "Kotlin extensions for 'viewmodel' artifact",
+            "name": "Lifecycle ViewModel Kotlin Extensions",
+            "website": "https://developer.android.com/jetpack/androidx/releases/lifecycle#2.8.7",
+            "licenses": [
+                "Apache-2.0"
+            ],
+            "organization": {
+                "name": "The Android Open Source Project"
+            }
+        },
+        {
+            "uniqueId": "androidx.lifecycle:lifecycle-viewmodel-savedstate",
+            "artifactVersion": "2.8.7",
+            "description": "Android Lifecycle ViewModel",
+            "name": "Lifecycle ViewModel with SavedState",
+            "website": "https://developer.android.com/jetpack/androidx/releases/lifecycle#2.8.7",
+            "licenses": [
+                "Apache-2.0"
+            ],
+            "organization": {
+                "name": "The Android Open Source Project"
+            }
+        },
+        {
+            "uniqueId": "androidx.loader:loader",
+            "artifactVersion": "1.0.0",
+            "description": "The Support Library is a static library that you can add to your Android application in order to use APIs that are either not available for older platform versions or utility APIs that aren't a part of the framework APIs. Compatible on devices running API 14 or later.",
+            "name": "Support loader",
+            "website": "http://developer.android.com/tools/extras/support-library.html",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.profileinstaller:profileinstaller",
+            "artifactVersion": "1.4.0",
+            "description": "Allows libraries to prepopulate ahead of time compilation traces to be read by ART",
+            "name": "Profile Installer",
+            "website": "https://developer.android.com/jetpack/androidx/releases/profileinstaller#1.4.0",
+            "licenses": [
+                "Apache-2.0"
+            ],
+            "organization": {
+                "name": "The Android Open Source Project"
+            }
+        },
+        {
+            "uniqueId": "androidx.recyclerview:recyclerview",
+            "artifactVersion": "1.2.1",
+            "description": "Android Support RecyclerView",
+            "name": "Support RecyclerView",
+            "website": "https://developer.android.com/jetpack/androidx/releases/recyclerview#1.2.1",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.resourceinspection:resourceinspection-annotation",
+            "artifactVersion": "1.0.1",
+            "description": "Annotation processors for Android resource and layout inspection",
+            "name": "Android Resource Inspection - Annotations",
+            "website": "https://developer.android.com/jetpack/androidx/releases/resourceinspection#1.0.1",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.room:room-common",
+            "artifactVersion": "2.6.1",
+            "description": "Android Room-Common",
+            "name": "Room-Common",
+            "website": "https://developer.android.com/jetpack/androidx/releases/room#2.6.1",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.room:room-runtime",
+            "artifactVersion": "2.6.1",
+            "description": "Android Room-Runtime",
+            "name": "Room-Runtime",
+            "website": "https://developer.android.com/jetpack/androidx/releases/room#2.6.1",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.savedstate:savedstate",
+            "artifactVersion": "1.2.1",
+            "description": "Android Lifecycle Saved State",
+            "name": "Saved State",
+            "website": "https://developer.android.com/jetpack/androidx/releases/savedstate#1.2.1",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.savedstate:savedstate-ktx",
+            "artifactVersion": "1.2.1",
+            "description": "Kotlin extensions for 'savedstate' artifact",
+            "name": "SavedState Kotlin Extensions",
+            "website": "https://developer.android.com/jetpack/androidx/releases/savedstate#1.2.1",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.security:security-crypto",
+            "artifactVersion": "1.1.0-alpha06",
+            "description": "AndroidX Security",
+            "name": "AndroidX Security",
+            "website": "https://developer.android.com/jetpack/androidx/releases/security#1.1.0-alpha06",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.sqlite:sqlite",
+            "artifactVersion": "2.4.0",
+            "description": "Android DB",
+            "name": "SQLite",
+            "website": "https://developer.android.com/jetpack/androidx/releases/sqlite#2.4.0",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.sqlite:sqlite-framework",
+            "artifactVersion": "2.4.0",
+            "description": "The implementation of Support SQLite library using the framework code.",
+            "name": "SQLite Framework Integration",
+            "website": "https://developer.android.com/jetpack/androidx/releases/sqlite#2.4.0",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.startup:startup-runtime",
+            "artifactVersion": "1.2.0",
+            "description": "Android App Startup Runtime",
+            "name": "Startup Runtime",
+            "website": "https://developer.android.com/jetpack/androidx/releases/startup#1.2.0",
+            "licenses": [
+                "Apache-2.0"
+            ],
+            "organization": {
+                "name": "The Android Open Source Project"
+            }
+        },
+        {
+            "uniqueId": "androidx.tracing:tracing",
+            "artifactVersion": "1.2.0",
+            "description": "Android Tracing",
+            "name": "Android Tracing",
+            "website": "https://developer.android.com/jetpack/androidx/releases/tracing#1.2.0",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.transition:transition",
+            "artifactVersion": "1.5.0",
+            "description": "Android Transition Support Library",
+            "name": "Transition",
+            "website": "https://developer.android.com/jetpack/androidx/releases/transition#1.5.0",
+            "licenses": [
+                "Apache-2.0"
+            ],
+            "organization": {
+                "name": "The Android Open Source Project"
+            }
+        },
+        {
+            "uniqueId": "androidx.vectordrawable:vectordrawable",
+            "artifactVersion": "1.1.0",
+            "description": "Android Support VectorDrawable",
+            "name": "Support VectorDrawable",
+            "website": "https://developer.android.com/jetpack/androidx",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.vectordrawable:vectordrawable-animated",
+            "artifactVersion": "1.1.0",
+            "description": "Android Support AnimatedVectorDrawable",
+            "name": "Support AnimatedVectorDrawable",
+            "website": "https://developer.android.com/jetpack/androidx",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.versionedparcelable:versionedparcelable",
+            "artifactVersion": "1.1.1",
+            "description": "Provides a stable but relatively compact binary serialization format that can be passed across processes or persisted safely.",
+            "name": "VersionedParcelable",
+            "website": "http://developer.android.com/tools/extras/support-library.html",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.viewpager2:viewpager2",
+            "artifactVersion": "1.0.0",
+            "description": "AndroidX Widget ViewPager2",
+            "name": "AndroidX Widget ViewPager2",
+            "website": "https://developer.android.com/jetpack/androidx",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.viewpager:viewpager",
+            "artifactVersion": "1.0.0",
+            "description": "The Support Library is a static library that you can add to your Android application in order to use APIs that are either not available for older platform versions or utility APIs that aren't a part of the framework APIs. Compatible on devices running API 14 or later.",
+            "name": "Support View Pager",
+            "website": "http://developer.android.com/tools/extras/support-library.html",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "androidx.webkit:webkit",
+            "artifactVersion": "1.14.0",
+            "description": "The WebKit Support Library is a static library you can add to your Android application in order to use android.webkit APIs that are not available for older platform versions.",
+            "name": "WebKit",
+            "website": "https://developer.android.com/jetpack/androidx/releases/webkit#1.14.0",
+            "licenses": [
+                "Apache-2.0"
+            ],
+            "organization": {
+                "name": "The Android Open Source Project"
+            }
+        },
+        {
+            "uniqueId": "com.google.android.gms:play-services-base",
+            "artifactVersion": "18.5.0",
+            "description": "",
+            "name": "play-services-base",
+            "licenses": [
+                "ASDKL"
+            ]
+        },
+        {
+            "uniqueId": "com.google.android.gms:play-services-basement",
+            "artifactVersion": "18.4.0",
+            "description": "",
+            "name": "play-services-basement",
+            "licenses": [
+                "ASDKL"
+            ]
+        },
+        {
+            "uniqueId": "com.google.android.gms:play-services-location",
+            "artifactVersion": "21.3.0",
+            "description": "",
+            "name": "play-services-location",
+            "licenses": [
+                "ASDKL"
+            ]
+        },
+        {
+            "uniqueId": "com.google.android.gms:play-services-tasks",
+            "artifactVersion": "18.2.0",
+            "description": "",
+            "name": "play-services-tasks",
+            "licenses": [
+                "ASDKL"
+            ]
+        },
+        {
+            "uniqueId": "com.google.android.material:material",
+            "artifactVersion": "1.13.0",
+            "description": "Material Components for Android is a static library that you can add to your Android application in order to use APIs that provide implementations of the Material Design specification. Compatible on devices running API 21 or later.",
+            "name": "Material Components for Android",
+            "website": "https://github.com/material-components/material-components-android",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "com.google.auto.value:auto-value-annotations",
+            "artifactVersion": "1.6.3",
+            "description": "Immutable value-type code generation for Java 1.6+.",
+            "name": "AutoValue Annotations",
+            "website": "https://github.com/google/auto/auto-value-parent/auto-value-annotations",
+            "licenses": [
+                "Apache-2.0"
+            ],
+            "organization": {
+                "url": "http://www.google.com",
+                "name": "Google, Inc."
+            }
+        },
+        {
+            "uniqueId": "com.google.code.gson:gson",
+            "artifactVersion": "2.13.2",
+            "description": "Gson JSON library",
+            "name": "Gson",
+            "website": "https://github.com/google/gson",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "com.google.crypto.tink:tink-android",
+            "artifactVersion": "1.8.0",
+            "description": "Tink is a small cryptographic library that provides a safe, simple, agile and fast way to accomplish some common cryptographic tasks.",
+            "name": "Tink Cryptography API for Android",
+            "website": "http://github.com/tink-crypto/tink-java",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "com.google.errorprone:error_prone_annotations",
+            "artifactVersion": "2.41.0",
+            "description": "Error Prone is a static analysis tool for Java that catches common programming mistakes at compile-time.",
+            "name": "error-prone annotations",
+            "website": "https://errorprone.info/error_prone_annotations",
+            "licenses": [
+                "Apache-2.0"
+            ],
+            "organization": {
+                "url": "https://www.google.com",
+                "name": "Google LLC"
+            }
+        },
+        {
+            "uniqueId": "com.google.guava:listenablefuture",
+            "artifactVersion": "1.0",
+            "description": "Contains Guava's com.google.common.util.concurrent.ListenableFuture class,\n    without any of its other classes -- but is also available in a second\n    \"version\" that omits the class to avoid conflicts with the copy in Guava\n    itself. The idea is:\n\n    - If users want only ListenableFuture, they depend on listenablefuture-1.0.\n\n    - If users want all of Guava, they depend on guava, which, as of Guava\n    27.0, depends on\n    listenablefuture-9999.0-empty-to-avoid-conflict-with-guava. The 9999.0-...\n    version number is enough for some build systems (notably, Gradle) to select\n    that empty artifact over the \"real\" listenablefuture-1.0 -- avoiding a\n    conflict with the copy of ListenableFuture in guava itself. If users are\n    using an older version of Guava or a build system other than Gradle, they\n    may see class conflicts. If so, they can solve them by manually excluding\n    the listenablefuture artifact or manually forcing their build systems to\n    use 9999.0-....",
+            "name": "Guava ListenableFuture only",
+            "website": "https://github.com/google/guava/listenablefuture",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "com.microsoft.onnxruntime:onnxruntime-android",
+            "artifactVersion": "1.29.0",
+            "description": "ONNX Runtime is a performance-focused inference engine for ONNX (Open Neural Network Exchange) models. This package contains the Android (aar) build of ONNX Runtime. It includes support for all types and operators, for ONNX format models. All standard ONNX models can be executed with this package.",
+            "name": "onnx-runtime",
+            "website": "https://microsoft.github.io/onnxruntime/",
+            "licenses": [
+                "MIT"
+            ],
+            "organization": {
+                "url": "http://www.microsoft.com",
+                "name": "Microsoft"
+            }
+        },
+        {
+            "uniqueId": "com.squareup.okhttp3:okhttp",
+            "artifactVersion": "5.4.0",
+            "description": "Square\u2019s meticulous HTTP client for Java and Kotlin.",
+            "name": "okhttp",
+            "website": "https://square.github.io/okhttp/",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "com.squareup.okio:okio",
+            "artifactVersion": "3.17.0",
+            "description": "A modern I/O library for Android, Java, and Kotlin Multiplatform.",
+            "name": "okio",
+            "website": "https://github.com/square/okio/",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "io.ionic.libs:ioncamera-android",
+            "artifactVersion": "1.0.2",
+            "description": "Camera Android Lib",
+            "name": "ioncamera-android",
+            "website": "https://github.com/ionic-team/ion-android-camera",
+            "licenses": [
+                "1b1d67650d6e3ccbf9c84584ba784a75"
+            ]
+        },
+        {
+            "uniqueId": "io.ionic.libs:ionfilesystem-android",
+            "artifactVersion": "1.1.0",
+            "description": "File system Android Lib",
+            "name": "ionfilesystem-android",
+            "website": "https://github.com/ionic-team/ion-android-filesystem",
+            "licenses": [
+                "e9dc079177dba0f173e0aa487fd1017f"
+            ]
+        },
+        {
+            "uniqueId": "io.ionic.libs:iongeolocation-android",
+            "artifactVersion": "2.2.2",
+            "description": "Geolocation Android Lib",
+            "name": "iongeolocation-android",
+            "website": "https://github.com/ionic-team/IONGeolocationLib-Android",
+            "licenses": [
+                "eef2cf3e5e856327421f1b82bbc36d8f"
+            ]
+        },
+        {
+            "uniqueId": "io.ionic.libs:ioninappbrowser-android",
+            "artifactVersion": "2.0.1",
+            "description": "InAppBrowser Android Lib",
+            "name": "ioninappbrowser-android",
+            "website": "https://github.com/OutSystems/OSInAppBrowserLib-Android",
+            "licenses": [
+                "60f5592b436b0e17f4252b8b602854fe"
+            ]
+        },
+        {
+            "uniqueId": "net.zetetic:sqlcipher-android",
+            "artifactVersion": "4.10.0",
+            "description": "SQLCipher for Android a library that provides full database encryption.",
+            "name": "sqlcipher-android",
+            "website": "https://www.zetetic.net/sqlcipher",
+            "licenses": [
+                "45546b23f3f1354cdc022f8f8e4a7bb1"
+            ]
+        },
+        {
+            "uniqueId": "org.apache.cordova:framework",
+            "artifactVersion": "14.0.1",
+            "description": "A library to build Cordova-based projects for the Android platform.",
+            "name": "Cordova",
+            "website": "https://cordova.apache.org",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "org.jetbrains.kotlin:kotlin-bom",
+            "artifactVersion": "1.8.22",
+            "description": "Kotlin is a statically typed programming language that compiles to JVM byte codes and JavaScript",
+            "name": "Kotlin Libraries bill-of-materials",
+            "website": "https://kotlinlang.org/",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "org.jetbrains.kotlin:kotlin-stdlib",
+            "artifactVersion": "2.3.21",
+            "description": "Kotlin Standard Library",
+            "name": "Kotlin Stdlib",
+            "website": "https://kotlinlang.org/",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "org.jetbrains.kotlin:kotlin-stdlib-jdk7",
+            "artifactVersion": "1.8.22",
+            "description": "Kotlin Standard Library JDK 7 extension",
+            "name": "Kotlin Stdlib Jdk7",
+            "website": "https://kotlinlang.org/",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "org.jetbrains.kotlin:kotlin-stdlib-jdk8",
+            "artifactVersion": "1.8.22",
+            "description": "Kotlin Standard Library JDK 8 extension",
+            "name": "Kotlin Stdlib Jdk8",
+            "website": "https://kotlinlang.org/",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "org.jetbrains.kotlinx:kotlinx-coroutines-android",
+            "artifactVersion": "1.10.2",
+            "description": "Coroutines support libraries for Kotlin",
+            "name": "kotlinx-coroutines-android",
+            "website": "https://github.com/Kotlin/kotlinx.coroutines",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "org.jetbrains.kotlinx:kotlinx-coroutines-bom",
+            "artifactVersion": "1.10.2",
+            "description": "Coroutines support libraries for Kotlin",
+            "name": "kotlinx-coroutines-bom",
+            "website": "https://github.com/Kotlin/kotlinx.coroutines",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "org.jetbrains.kotlinx:kotlinx-coroutines-core",
+            "artifactVersion": "1.10.2",
+            "description": "Coroutines support libraries for Kotlin",
+            "name": "kotlinx-coroutines-core",
+            "website": "https://github.com/Kotlin/kotlinx.coroutines",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "org.jetbrains.kotlinx:kotlinx-coroutines-play-services",
+            "artifactVersion": "1.10.2",
+            "description": "Coroutines support libraries for Kotlin",
+            "name": "kotlinx-coroutines-play-services",
+            "website": "https://github.com/Kotlin/kotlinx.coroutines",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "org.jetbrains:annotations",
+            "artifactVersion": "23.0.0",
+            "description": "A set of annotations used for code inspection support and code documentation.",
+            "name": "JetBrains Java Annotations",
+            "website": "https://github.com/JetBrains/java-annotations",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "org.jspecify:jspecify",
+            "artifactVersion": "1.0.0",
+            "description": "An artifact of well-named and well-specified annotations to power static analysis checks",
+            "name": "JSpecify annotations",
+            "website": "http://jspecify.org/",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        }
+    ],
+    "licenses": {
+        "1b1d67650d6e3ccbf9c84584ba784a75": {
+            "hash": "1b1d67650d6e3ccbf9c84584ba784a75",
+            "url": "https://github.com/ionic-team/ion-android-camera/blob/main/docs/LICENSE",
+            "name": "License"
+        },
+        "44d1a25c593283261968a15c8cc213cd": {
+            "hash": "44d1a25c593283261968a15c8cc213cd",
+            "url": "https://chromium.googlesource.com/libyuv/libyuv/+/refs/heads/main/README.chromium",
+            "name": "BSD License"
+        },
+        "45546b23f3f1354cdc022f8f8e4a7bb1": {
+            "hash": "45546b23f3f1354cdc022f8f8e4a7bb1",
+            "url": "https://www.zetetic.net/sqlcipher/license/",
+            "name": ""
+        },
+        "60f5592b436b0e17f4252b8b602854fe": {
+            "hash": "60f5592b436b0e17f4252b8b602854fe",
+            "url": "https://github.com/OutSystems/OSInAppBrowserLib-Android/blob/main/LICENSE",
+            "name": "License"
+        },
+        "ASDKL": {
+            "hash": "ASDKL",
+            "internalHash": "ASDKL",
+            "url": "https://developer.android.com/studio/terms.html",
+            "spdxId": "ASDKL",
+            "name": "Android Software Development Kit License"
+        },
+        "Apache-2.0": {
+            "hash": "Apache-2.0",
+            "internalHash": "Apache-2.0",
+            "url": "http://www.apache.org/licenses/LICENSE-2.0.txt",
+            "spdxId": "Apache-2.0",
+            "name": "The Apache License, Version 2.0"
+        },
+        "MIT": {
+            "hash": "MIT",
+            "internalHash": "MIT",
+            "url": "https://opensource.org/licenses/MIT",
+            "spdxId": "MIT",
+            "name": "MIT License"
+        },
+        "e9dc079177dba0f173e0aa487fd1017f": {
+            "hash": "e9dc079177dba0f173e0aa487fd1017f",
+            "url": "https://github.com/ionic-team/ion-android-filesystem/blob/main/LICENSE",
+            "name": "License"
+        },
+        "eef2cf3e5e856327421f1b82bbc36d8f": {
+            "hash": "eef2cf3e5e856327421f1b82bbc36d8f",
+            "url": "https://github.com/ionic-team/IONGeolocationLib-Android/blob/main/LICENSE",
+            "name": "License"
+        }
+    }
+}

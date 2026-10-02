@@ -37,6 +37,7 @@ import {
   avviaSessione as avviaSessioneReale,
   compattaSessione as compattaSessioneReale,
   eseguiComandoDiretto as eseguiComandoDirettoReale,
+  serveCompattareSessione as serveCompattareSessioneReale,
 } from './agent-service.mjs';
 import { CustomTaskError, preparaEsecuzioneLibera as preparaEsecuzioneLiberaReale } from './custom-task.mjs';
 import { permessiRichiestaValido } from './config.mjs';
@@ -47,7 +48,7 @@ import {
   registraRiga as registraRigaReale,
   registraRigaSync as registraRigaSyncReale,
 } from './session-store.mjs';
-import { approvalRequested, approvalResolved, dataProvided, dataRequested, hookInvoked, queuedMessageDelivered } from './agui-events.mjs';
+import { approvalRequested, approvalResolved, compactionEnd, compactionStart, dataProvided, dataRequested, hookInvoked, queuedMessageDelivered } from './agui-events.mjs';
 import { creaSubagentOrchestrator } from './subagent-orchestrator.mjs';
 import {
   caricaHooks as caricaHooksReale,
@@ -143,6 +144,9 @@ function ultimoEsitoDaEventi(eventi) {
 
 export function createSessionRegistry({
   avviaSessioneFn = avviaSessioneReale,
+  // ⛔ 70-B (30/09/2026 notte): l'archivio su disco degli artefatti (`creaArchivioArtefatti`, server.mjs). Assente →
+  // resta il default di agent-service.mjs (in memoria), come prima.
+  salvaArtefattoFn = undefined,
   preparaEsecuzioneFn = preparaEsecuzioneReale,
   compattaSessioneFn = compattaSessioneReale,
   eseguiComandoDirettoFn = eseguiComandoDirettoReale,
@@ -156,6 +160,21 @@ export function createSessionRegistry({
   creaVoceWorkspaceFn = creaVoceWorkspaceReale,
   preparaEsecuzioneLiberaFn = preparaEsecuzioneLiberaReale,
   cartelleProgetto = [],
+  /*
+   * ⛔⛔ P4-quater (owner 02/10/2026, «+1 su Hermes»): l'area di TALOS (stato, server, kernel, la cartella di `node` — sul Pad
+   * l'area intera), che il kernel non lascia né leggere né scrivere con nessun permesso. La calcola `server.mjs`
+   * (`cartelleDiTalos`, config.mjs). Le cartelle di progetto e la radice delle sessioni reali restano consentite dentro.
+   */
+  cartelleProtette = [],
+  /*
+   * ⭐⭐⭐ P4-ter (02/10/2026) — la compattazione del contesto (nucleo unico, kernel «LA COMPATTAZIONE DEL CONTESTO»).
+   * `finestraTokenFn(modello)` la finestra dal catalogo del fornitore (`model-catalog.mjs`, `contextLength`), `tettoToken` il
+   * tetto esplicito (`TALOS_COMPACTION_TOKEN_CAP`, lo legge `server.mjs`), `serveCompattareFn` la decisione del background a
+   * fine giro (sotto soglia: niente). Assenti: vale il solo tetto di 200K del desktop.
+   */
+  finestraTokenFn = null,
+  tettoToken = null,
+  serveCompattareFn = serveCompattareSessioneReale,
   /**
    * ⭐ 29/8 — porta canonico (LEDGER-MOBILE-PAREGGIO-DESKTOP-CODICE.md
    * §13): FUORI dal workspace di ogni progetto, stesso pattern di
@@ -196,9 +215,14 @@ export function createSessionRegistry({
    * `window.__talosHarnessRichiediDato` DIRETTAMENTE via CDP (il ponte
    * dati), mai attraverso un giro reale dell'agente che ne provasse
    * l'OFFERTA. Corretto qui: tutti e 18 aggiunti.
+   *
+   * ⛔ ART-ROTTO (30/09/2026, owner «Tolgo ora, completo nella 70»): `artifact_create` era stato tolto — falliva
+   * sempre (`artifactCreated` non importato dal 03/09) e la scheda apriva un iframe su una rotta che non c'era.
+   * ⛔⛔ 70-B (30/09/2026 notte, owner «Riuso della chat»): torna. L'HTML va su disco (`salvaArtefattoFn`, sotto), la
+   * rotta `GET /api/v1/artifacts/<id>` sta dietro il segreto del 70-A, e «Apri» usa la finestra isolata della chat.
    */
   strumentiEstesi = [
-    'web_search', 'artifact_create', 'document_create', 'time_now', 'delega_sottotask',
+    'web_search', 'document_create', 'time_now', 'delega_sottotask', 'artifact_create',
     'notes_list', 'notes_create', 'notes_update', 'notes_delete',
     'tasks_list', 'tasks_create', 'tasks_complete', 'tasks_update', 'tasks_delete',
     'memory_search', 'memory_write', 'memory_update', 'memory_delete',
@@ -372,11 +396,119 @@ export function createSessionRegistry({
    * finché non la ferma con `ferma()`, che chiude comunque il giro).
    */
   function richiediApprovazione(voce, azione) {
+    /*
+     * ⛔⛔ P4-quater (owner 02/10/2026: «come il desktop», `75108d7ee`) — una sessione che nessuno segue (le automazioni:
+     *   `senzaInterfaccia`) chiude SUBITO la domanda con un no, e la cronologia dice perché (`motivo`). Qui vale per OGNI
+     *   domanda, non solo per la scrittura fuori come sul desktop: prima di P4-quater le automazioni («Workspace write») non
+     *   ricevevano mai un canale di domande, e una domanda appesa le fermerebbe per sempre.
+     */
+    if (voce.senzaInterfaccia) {
+      const requestId = randomUUID();
+      broadcast(voce, approvalRequested({ requestId, azione }));
+      broadcast(voce, approvalResolved({ requestId, approvato: false, motivo: 'nessuna-interfaccia' }));
+      return Promise.resolve(false);
+    }
     return new Promise((resolve) => {
       const requestId = randomUUID();
-      voce.approvazionePendente = { requestId, resolve };
+      voce.approvazionePendente = { requestId, resolve, azione };
       broadcast(voce, approvalRequested({ requestId, azione }));
     });
+  }
+
+  /*
+   * ⛔⛔ P4-quater (owner 02/10/2026) — «Workspace write» non è più «nessun livello»: quell'assenza lasciava scrivere ovunque.
+   *   È `'scrittura-progetto'`: dentro la cartella scrive da sola, fuori chiede (talosHarness.mjs). Una sessione ripresa dal
+   *   disco SENZA il campo è «Workspace write», come la mostra l'interfaccia (`?? 'Workspace write'` in avviaESegui).
+   */
+  function livelloDaPermessi(permessiLetti) {
+    const permessi = permessiLetti ?? 'Workspace write';
+    return permessi === 'Read only' ? 'lettura'
+      : permessi === 'Workspace write' ? 'scrittura-progetto' : undefined;
+  }
+
+  /* ═══════════════ P4-ter (02/10/2026) — la compattazione, porta del desktop (`session-registry.mjs:3813-3906`) ═══════════════
+   * Il record (`talos.compattazione.v1`) vive in `voce.recordCompattazione`, si salva come riga `tipo:'compattazione'`, si
+   * ripassa al turno dopo come `recordCompattazioneIniziale`; la storia (`messaggiFinali`) resta GREZZA (decisione 3 dell'owner).
+   * Annulla = una lapide `compattazione-annullata` con lo stesso `at`. */
+  const compattazioniInBackground = new Map();
+
+  function finestraPerVoce(voce, modelloFallback) {
+    if (typeof finestraTokenFn !== 'function') return null;
+    try {
+      const valore = finestraTokenFn(voce.modello ?? modelloFallback);
+      return Number.isFinite(valore) && valore > 0 ? valore : null;
+    } catch { return null; }
+  }
+
+  /*
+   * ⛔ P4-ter (REG-COMP-09): il kernel rende `motivo: "errore: <messaggio>"` (`talosHarness.mjs` `compattaFuoriDalGiro`),
+   * e il messaggio può portare ciò che il fornitore ha rimandato. Fuori dal server (risposta HTTP, eventi salvati) esce solo
+   * «errore»; il dettaglio resta nel log del server, come per gli altri errori della compattazione.
+   */
+  function motivoPubblico(sessionId, motivo) {
+    const testo = String(motivo ?? 'non-riuscita');
+    if (!testo.startsWith('errore')) return testo;
+    if (testo !== 'errore') console.error(`[session-store] compattazione non riuscita per ${sessionId}: ${testo}`);
+    return 'errore';
+  }
+
+  /** Il record più recente vince; uno che copre MENO di quello che c'è già non lo rimpiazza (desktop). */
+  function persistiRecordCompattazione(voce, record) {
+    if (!record || record.schema !== 'talos.compattazione.v1' || !voce.sessionId) return false;
+    const corrente = voce.recordCompattazione;
+    if (corrente && corrente.coveredThrough > record.coveredThrough) return false;
+    voce.recordCompattazione = record;
+    if (cartellaStore) {
+      registraRigaFn({ cartellaStore, sessionId: voce.sessionId, record: { tipo: 'compattazione', record } })
+        .catch((errore) => { console.error(`[session-store] record di compattazione non scritto per ${voce.sessionId}:`, errore instanceof Error ? errore.message : errore); });
+    }
+    return true;
+  }
+
+  /*
+   * ⭐ LA COMPATTAZIONE IN BACKGROUND A FINE GIRO (decisione 5 dell'owner, desktop 24/09): sopra soglia, a sessione conclusa,
+   * senza bloccare la persona. Marca d'acqua = la storia al via: il record si applica solo se il prefisso coperto è ancora
+   * intatto (un turno partito nel frattempo riceve la storia grezza e non aspetta — Hermes `hermes_state_messages.py:208-227`).
+   * Gli eventi (`CompactionStart/End`, motivo 'background') restano nella cronologia: il separatore sopravvive alla ricarica.
+   */
+  function avviaCompattazioneInBackground(voce) {
+    const { sessionId } = voce;
+    if (!sessionId || compattazioniInBackground.has(sessionId)) return null;
+    const storia = voce.messaggiFinali;
+    if (!Array.isArray(storia) || storia.length === 0) return null;
+    const finestraToken = finestraPerVoce(voce, modello);
+    let decisione;
+    try { decisione = serveCompattareFn({ messaggiFinali: storia, recordCorrente: voce.recordCompattazione ?? null, finestraToken, tettoToken }); }
+    catch { return null; }
+    if (!decisione?.scatta) return null;
+    const coveredThrough = storia.length;
+    broadcast(voce, compactionStart({ giro: null, tokenPrima: decisione.token, soglia: decisione.soglia, motivo: 'background' }));
+    const lavoro = (async () => {
+      const esito = await compattaSessioneFn({
+        messaggiFinali: storia, recordCorrente: voce.recordCompattazione ?? null, modello: voce.modello ?? modello, chiave,
+        reasoning: voce.reasoning ?? null, finestraToken, tettoToken, motivo: 'background',
+      });
+      const attuale = voce.messaggiFinali;
+      const prefissoIntatto = Array.isArray(attuale) && attuale.length >= coveredThrough
+        && storia.every((m, i) => attuale[i] === m || JSON.stringify(attuale[i]) === JSON.stringify(m));
+      if (!esito?.record || sessioni.get(sessionId) !== voce || !prefissoIntatto) {
+        broadcast(voce, compactionEnd({ giro: null, compattato: false, motivo: esito?.record ? 'superata' : motivoPubblico(sessionId, esito?.motivo) }));
+        return false;
+      }
+      persistiRecordCompattazione(voce, esito.record);
+      broadcast(voce, compactionEnd({
+        giro: null, compattato: true, motivo: 'background', tokenPrima: esito.record.tokenPrima, tokenDopo: esito.record.tokenDopo,
+        at: esito.record.at, coveredThrough: esito.record.coveredThrough,
+      }));
+      return true;
+    })().catch((errore) => {
+      console.error(`[session-store] compattazione in background fallita per ${sessionId}:`, errore instanceof Error ? errore.message : errore);
+      // ⛔ REG-COMP-08: senza questa fine, la riapertura rigiocava lo Start e la riga di avanzamento restava per sempre.
+      broadcast(voce, compactionEnd({ giro: null, compattato: false, motivo: 'errore' }));
+      return false;
+    }).finally(() => { if (compattazioniInBackground.get(sessionId) === lavoro) compattazioniInBackground.delete(sessionId); });
+    compattazioniInBackground.set(sessionId, lavoro);
+    return lavoro;
   }
 
   /**
@@ -455,6 +587,8 @@ export function createSessionRegistry({
      * figlia ha finito, senza un secondo meccanismo di attesa.
      */
     padreId = null, profonditaDelega = 0, onConclusioneFn,
+    // ⛔ P4-quater: la passa SOLO il pianificatore delle automazioni — nessuno può rispondere a una domanda (vedi richiediApprovazione).
+    senzaInterfaccia = false,
   }) {
     if (typeof chiave !== 'string' || chiave.length === 0) {
       return { erroreAvvio: 'Chiave API non configurata sul server (OPENROUTER_API_KEY)', code: 'CONFIG_INVALID' };
@@ -505,6 +639,10 @@ export function createSessionRegistry({
       approvazionePendente: null,
       // ⭐⭐⭐ 30/8 — lo slot di richiediDato/rispondiDato sopra/sotto — null finché nessuna richiesta verso Note/Attività/Memoria/Libreria è in sospeso.
       datoPendente: null,
+      // ⛔ P4-quater: le cartelle fuori consentite «per la sessione» (`rispondiApprovazione`, ambito 'cartella'). Lo STESSO oggetto
+      // va al kernel: un consenso vale già per la prossima scrittura del giro in corso. Solo in memoria, come sul desktop.
+      consensiSessione: {},
+      senzaInterfaccia: senzaInterfaccia === true,
     };
     // ⭐⭐⭐ 30/8 — porta canonico (3e03f9d3, FASE L): distingue "questa voce l'ho appena creata io" da "sto riusando quella di un resume" — solo la prima scrive un'intestazione su disco (un resume riusa la STESSA voce/intestazione già scritta all'avvio originale).
     const voceNuova = !voceEsistente;
@@ -534,6 +672,8 @@ export function createSessionRegistry({
             modelloEsecutore: voce.modelloEsecutore,
             permessi: voce.permessi, permessiPerAttrezzo: voce.permessiPerAttrezzo,
             padreId: voce.padreId, profonditaDelega: voce.profonditaDelega,
+            // ⛔ P4-quater: un'automazione ripresa dopo un riavvio resta senza interfaccia.
+            ...(voce.senzaInterfaccia ? { senzaInterfaccia: true } : {}),
           },
         });
       } catch (errore) {
@@ -557,10 +697,15 @@ export function createSessionRegistry({
      * esattamente il buco che `chiediApprovazioneFn`, due righe sotto,
      * ora chiude.
      */
-    const livelloAccesso = voce.permessi === 'Read only' ? 'lettura' : undefined;
-    const chiediApprovazioneFn = voce.permessi === 'On request'
+    /*
+     * ⛔⛔ P4-quater (02/10/2026): «Workspace write» ⇒ `'scrittura-progetto'` E il canale delle domande — il kernel lo usa
+     *   SOLO per una scrittura fuori dalla cartella (e per `~/.ssh/config`); tutto il resto passa come prima (kernel FUORI-08).
+     */
+    const livelloAccesso = livelloDaPermessi(voce.permessi);
+    const chiediApprovazioneFn = (voce.permessi === 'On request' || livelloAccesso === 'scrittura-progetto')
       ? (azione) => richiediApprovazione(voce, azione)
       : undefined;
+    voce.consensiSessione ??= {};
     const hookFn = costruisciHookFn(voce);
     /*
      * ⭐⭐⭐ 30/8 — sempre costruita (stesso principio di chiediApprovazioneFn
@@ -629,8 +774,14 @@ export function createSessionRegistry({
       reasoning: reasoningEffettivo ?? undefined,
       segnaleStop: controller.signal,
       mobile: voce.mobile,
-      strumentiEstesi, ricercaWeb, firma, immagine,
+      strumentiEstesi, ricercaWeb, firma, immagine, salvaArtefattoFn,
       livelloAccesso, hookFn, chiediApprovazioneFn,
+      // ⛔ P4-quater: il confine (vedi `cartelleProtette` in testa al registro e «I CONFINI…» nel kernel).
+      consensiSessione: voce.consensiSessione, cartelleProtette,
+      cartelleConsentite: [...cartelleProgetto.map((c) => c?.percorso).filter((p) => typeof p === 'string'), radiceSessioniReali],
+      // ⭐ P4-ter: la compattazione del turno — finestra dal catalogo, tetto del server, il turno parte già proiettato.
+      finestraToken: finestraPerVoce(voce, modelloOverride ?? modello), tettoToken,
+      ...(voce.recordCompattazione ? { recordCompattazioneIniziale: voce.recordCompattazione } : {}),
       elencaNoteFn, creaNotaFn, aggiornaNotaFn, eliminaNotaFn,
       elencaTaskFn, creaTaskFn, completaTaskFn, aggiornaTaskFn, eliminaTaskFn,
       cercaMemoriaFn, creaMemoriaFn, aggiornaMemoriaFn, eliminaMemoriaFn,
@@ -649,7 +800,8 @@ export function createSessionRegistry({
        * gestire qui), resta null: riprendere questa sessione dirà
        * onestamente che non c'è niente da ereditare, invece di lanciare.
        */
-      voce.messaggiFinali = risultato?.esito?.messaggiFinali ?? null;
+      // ⛔ ERRCOD-RIPRESA (30/09/2026): anche quando il modello non ha risposto, la conversazione arrivata fin lì (agent-service, `messaggiFinali`) si tiene, così la sessione si riprende.
+      voce.messaggiFinali = risultato?.esito?.messaggiFinali ?? risultato?.messaggiFinali ?? null;
       /*
        * ⭐⭐⭐ 30/8 — porta canonico (3e03f9d3, FASE L) — SOLO quando c'è
        * davvero qualcosa da salvare: senza questa riga su disco, un
@@ -664,6 +816,11 @@ export function createSessionRegistry({
         registraRigaFn({ cartellaStore, sessionId: voce.sessionId, record: { tipo: 'messaggi-finali', messaggiFinali: voce.messaggiFinali } })
           .catch((errore) => { console.error(`[session-store] messaggiFinali non scritti per ${voce.sessionId}:`, errore instanceof Error ? errore.message : errore); });
       }
+      // ⭐ P4-ter: l'ultimo record del turno (il kernel ne restituisce uno per compattazione) si salva; poi, a sessione
+      // conclusa, la compattazione in background se la storia è sopra soglia.
+      const recordDelTurno = Array.isArray(risultato?.esito?.recordDiCompattazione) ? risultato.esito.recordDiCompattazione.at(-1) : null;
+      if (recordDelTurno) persistiRecordCompattazione(voce, recordDelTurno);
+      if (voce.conclusa && voce.messaggiFinali) avviaCompattazioneInBackground(voce);
       // ⭐ 29/8 — porta canonico (ledger §18, FASE G.4): lo stato reale di OGNI sessione che conclude, non solo delle figlie (inerte/ignorato per una sessione senza padre).
       voce.esitoDelega = risultato?.esito?.comeFinita ?? (risultato?.ok === false ? 'fallito' : null);
       // ⭐ 29/8 — se questa sessione è una figlia in delega, sblocca la Promise che il dispatcher del kernel del PADRE sta aspettando. Va DOPO gli aggiornamenti sopra: onConclusioneFn potrebbe (in una fase futura) leggere voce.esitoDelega.
@@ -743,7 +900,17 @@ export function createSessionRegistry({
         // un file scritto fuori ordine rimescolava la risposta al replay. Serve anche a `prossimaSequenza` qui sotto: con
         // l'ultima riga non più alta, i nuovi eventi riusavano numeri già visti e il frontend li scartava come doppioni.
         const eventi = inOrdineDiSequenza(record.filter((r) => typeof r.type === 'string'));
-        const messaggiFinaliRecord = record.find((r) => r.tipo === 'messaggi-finali');
+        /*
+         * ⛔ P4-ter (02/10/2026, difetto trovato qui): le righe si ACCODANO (`session-store.mjs`, `appendFile`), una
+         * `messaggi-finali` per turno — `find` prendeva la PRIMA, e dopo un riavvio una sessione di più turni ripartiva dalla
+         * storia del primo. Vince l'ULTIMA, come per `impostazioni-sessione` qui sotto.
+         */
+        const messaggiFinaliRecord = record.findLast((r) => r.tipo === 'messaggi-finali');
+        /* ⭐ P4-ter: l'ultimo record di compattazione, salvo una lapide successiva col suo stesso `at` (Annulla). */
+        const ultimaRigaCompattazione = record.findLast((r) => r.tipo === 'compattazione' && r.record?.schema === 'talos.compattazione.v1');
+        const annullata = ultimaRigaCompattazione
+          && record.slice(record.lastIndexOf(ultimaRigaCompattazione)).some((r) => r.tipo === 'compattazione-annullata' && r.at === ultimaRigaCompattazione.record.at);
+        const recordCompattazione = ultimaRigaCompattazione && !annullata ? ultimaRigaCompattazione.record : null;
         const ultimoEvento = eventi.at(-1);
         const conclusa = Boolean(messaggiFinaliRecord) || ultimoEvento?.type === 'RunFinished' || ultimoEvento?.type === 'RunError';
         /*
@@ -766,6 +933,9 @@ export function createSessionRegistry({
           permessi: ultimeImpostazioni?.permessi ?? intestazione.permessi,
           permessiPerAttrezzo: ultimeImpostazioni?.permessiPerAttrezzo ?? intestazione.permessiPerAttrezzo,
           approvazionePendente: null, datoPendente: null, padreId: intestazione.padreId, profonditaDelega: intestazione.profonditaDelega,
+          // ⛔ P4-quater: i consensi «per la sessione» vivono in memoria (un riavvio li richiede); l'automazione resta tale.
+          consensiSessione: {}, senzaInterfaccia: intestazione.senzaInterfaccia === true,
+          recordCompattazione,
           esitoDelega: null, codaMessaggi: [], sessionId, controller: new AbortController(),
           conclusa, ripristinata: true, interrotta: !conclusa,
           prossimaSequenza: ultimoEvento?._sequenza ?? 0,
@@ -788,7 +958,7 @@ export function createSessionRegistry({
      * (il suo `.then()` interno non era mai stato l'attesa di questa
      * funzione): solo il PREPARARE la cartella del task è diventato async.
      */
-    async avvia(taskId, { mobile = false, permessiScelto = null } = {}) {
+    async avvia(taskId, { mobile = false, permessiScelto = null, senzaInterfaccia = false } = {}) {
       let preparato;
       try {
         preparato = await preparaEsecuzioneFn(taskId);
@@ -806,7 +976,7 @@ export function createSessionRegistry({
        */
       return avviaESegui({
         taskId, cartella: preparato.cartella, task: preparato.task, comandoProva: preparato.comandoProva, mobile,
-        permessiRichiesti: permessiScelto,
+        permessiRichiesti: permessiScelto, senzaInterfaccia,
       });
     },
 
@@ -882,6 +1052,8 @@ export function createSessionRegistry({
       modelloEsecutore: modelloEsecutoreScelto = null,
       // REG-RAG-COD-13 (24/09/2026): il livello di ragionamento scelto nel composer, validato in http-app.mjs.
       reasoning: reasoningScelto = null,
+      // ⛔ P4-quater: solo il pianificatore delle automazioni (mai il corpo HTTP: `requireCustomTaskBody` non lo ammette).
+      senzaInterfaccia = false,
     }) {
       if (cartellaLibera && permessiScelto !== 'Full access') {
         return { erroreAvvio: 'cartellaLibera richiede il permesso "Full access" per questa sessione', code: 'QUERY_INVALID' };
@@ -909,7 +1081,7 @@ export function createSessionRegistry({
         taskId: cartellaLibera ? 'libero:full-access' : `libero:${cartellaId}`, cartella: preparato.cartella, task: preparato.task,
         comandoProva: preparato.comandoProva, modelloOverride: modelloScelto, mobile,
         permessiRichiesti: permessiScelto, modelloEsecutoreOverride: modelloEsecutoreScelto,
-        reasoningRichiesto: reasoningScelto,
+        reasoningRichiesto: reasoningScelto, senzaInterfaccia,
       });
     },
 
@@ -1095,16 +1267,32 @@ export function createSessionRegistry({
      *
      * @returns {{ok:true}|{erroreAvvio:string, code:string}}
      */
-    rispondiApprovazione(sessionId, requestId, approvato) {
+    rispondiApprovazione(sessionId, requestId, approvato, { ambito } = {}) {
       const voce = sessioni.get(sessionId);
       if (!voce) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
       const pendente = voce.approvazionePendente;
       if (!pendente || pendente.requestId !== requestId) {
         return { erroreAvvio: 'Nessuna approvazione in attesa con questo id', code: 'QUERY_INVALID' };
       }
+      /*
+       * ⛔⛔ P4-quater (owner 02/10/2026, «come il desktop» `75108d7ee`) — «Consenti in questa cartella per la sessione». Si
+       *   ricorda la cartella che il KERNEL ha misurato e messo nella domanda (`fuoriDalProgetto.chiave`, percorso vero), mai un
+       *   percorso mandato dal client; solo con un sì, solo su una domanda che ne offre una. Altrimenti si rifiuta PRIMA di
+       *   risolvere: la domanda resta in attesa e la persona può ancora rispondere. Vale fino a fine sessione, sottocartelle
+       *   comprese; vive in memoria (un riavvio lo richiede).
+       */
+      const chiaveCartella = pendente.azione?.fuoriDalProgetto?.chiave;
+      if (ambito !== undefined && (ambito !== 'cartella' || approvato !== true || typeof chiaveCartella !== 'string' || !chiaveCartella)) {
+        return { erroreAvvio: 'Questa richiesta non ha una cartella da consentire per la sessione', code: 'QUERY_INVALID' };
+      }
+      if (ambito === 'cartella') {
+        const consensi = (voce.consensiSessione ??= {});
+        const elenco = (consensi.cartelleFuori ??= []);
+        if (!elenco.includes(chiaveCartella)) elenco.push(chiaveCartella);
+      }
       voce.approvazionePendente = null;
       pendente.resolve(Boolean(approvato));
-      broadcast(voce, approvalResolved({ requestId, approvato: Boolean(approvato) }));
+      broadcast(voce, approvalResolved({ requestId, approvato: Boolean(approvato), ...(ambito === 'cartella' ? { ambito } : {}) }));
       return { ok: true };
     },
 
@@ -1319,9 +1507,74 @@ export function createSessionRegistry({
           code: 'SESSION_NOT_READY',
         };
       }
-      const risultato = await compattaSessioneFn({ messaggiFinali: voce.messaggiFinali, modello, chiave });
-      if (risultato.compattato) voce.messaggiFinali = risultato.messaggi;
-      return { ok: true, compattato: risultato.compattato };
+      /*
+       * ⛔⛔ P4-ter (02/10/2026): prima `voce.messaggiFinali = risultato.messaggi` — la storia sostituita dal riassunto e mai
+       * salvata. Ora la stessa catena del giro produce un RECORD; la storia resta com'è; Annulla la riporta (decisione 3).
+       * ⛔ La conferma («Compatta ora») la chiede l'interfaccia: guardare non compatta mai (owner, desktop 24/09 notte).
+       */
+      if (compattazioniInBackground.has(sessionId)) {
+        return { erroreAvvio: 'Una compattazione è già in corso per questa sessione', code: 'SESSION_NOT_READY' };
+      }
+      /*
+       * ⛔ P4-ter: gli eventi si rigiocano alla riapertura — ogni inizio ha la sua fine, anche quando il riassuntore lancia
+       * (REG-COMP-08). Il messaggio dell'errore resta nel log del server: può contenere ciò che il fornitore ha rimandato.
+       */
+      broadcast(voce, compactionStart({ giro: null, tokenPrima: null, soglia: null, motivo: 'manuale' }));
+      let risultato;
+      try {
+        risultato = await compattaSessioneFn({
+          messaggiFinali: voce.messaggiFinali, recordCorrente: voce.recordCompattazione ?? null, modello: voce.modello ?? modello, chiave,
+          reasoning: voce.reasoning ?? null, finestraToken: finestraPerVoce(voce, modello), tettoToken, motivo: 'manuale',
+        });
+      } catch (errore) {
+        console.error(`[session-store] compattazione a mano fallita per ${sessionId}:`, errore instanceof Error ? errore.message : errore);
+        risultato = { record: null, motivo: 'errore' };
+      }
+      if (!risultato?.record) {
+        const motivo = motivoPubblico(sessionId, risultato?.motivo);
+        broadcast(voce, compactionEnd({ giro: null, compattato: false, motivo }));
+        return { ok: true, compattato: false, motivo };
+      }
+      persistiRecordCompattazione(voce, risultato.record);
+      broadcast(voce, compactionEnd({
+        giro: null, compattato: true, motivo: 'manuale', tokenPrima: risultato.record.tokenPrima, tokenDopo: risultato.record.tokenDopo,
+        at: risultato.record.at, coveredThrough: risultato.record.coveredThrough,
+      }));
+      return { ok: true, compattato: true, tokenPrima: risultato.record.tokenPrima, tokenDopo: risultato.record.tokenDopo, at: risultato.record.at };
+    },
+
+    /** ⭐ P4-ter — lo stato per la UI e per chi riapre la pagina: il record pubblico (senza il riassunto) e se ne gira uno. */
+    statoCompattazione(sessionId) {
+      const voce = sessioni.get(sessionId);
+      if (!voce) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
+      const r = voce.recordCompattazione;
+      return {
+        record: r ? { at: r.at, coveredThrough: r.coveredThrough, tokenPrima: r.tokenPrima, tokenDopo: r.tokenDopo, misura: r.misura, modello: r.modello } : null,
+        inCorso: compattazioniInBackground.has(sessionId),
+      };
+    },
+
+    /**
+     * ⭐ P4-ter — ANNULLA (decisione 3 dell'owner, desktop `:9873-9899`): una lapide `compattazione-annullata` con lo stesso
+     * `at`; la proiezione torna GREZZA in memoria e al riavvio. Solo fra un giro e l'altro.
+     */
+    async annullaCompattazione(sessionId, at) {
+      const voce = sessioni.get(sessionId);
+      if (!voce) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
+      const record = voce.recordCompattazione;
+      if (!record || typeof at !== 'string' || record.at !== at) {
+        return { erroreAvvio: 'Nessuna compattazione con questo identificativo da annullare', code: 'COMPACTION_NOT_FOUND' };
+      }
+      if (!voce.conclusa && !voce.interrotta) {
+        return { erroreAvvio: 'La sessione è ancora in corso: la compattazione si annulla fra un giro e l’altro', code: 'SESSION_NOT_READY' };
+      }
+      if (cartellaStore) {
+        try { await registraRigaFn({ cartellaStore, sessionId, record: { tipo: 'compattazione-annullata', at } }); }
+        catch { return { erroreAvvio: 'L’annullamento non è stato salvato su disco: la compattazione resta attiva.', code: 'SESSION_STORE_WRITE_FAILED' }; }
+      }
+      voce.recordCompattazione = null;
+      broadcast(voce, { type: 'CompactionUndone', at, coveredThrough: record.coveredThrough });
+      return { ok: true, annullata: true };
     },
 
     /**

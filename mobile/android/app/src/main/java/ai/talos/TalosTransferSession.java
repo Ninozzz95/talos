@@ -629,6 +629,16 @@ public final class TalosTransferSession {
                             failure[0] = reason;
                         }
 
+                        /*
+                         * ⭐ Il sigillo (01/10/2026): l'impronta calcolata mentre
+                         * scaricava resta col file, e nessuna apertura dovrà più
+                         * rileggerlo per riconoscerlo.
+                         */
+                        @Override
+                        public void onVerified(java.io.File finished, String sha256) {
+                            TalosModelSeal.seal(context, finished, sha256, "download");
+                        }
+
                         @Override
                         public boolean stopRequested() {
                             return TalosTransferSession.stopRequested(id);

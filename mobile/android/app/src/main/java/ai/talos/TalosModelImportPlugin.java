@@ -116,6 +116,9 @@ public class TalosModelImportPlugin extends Plugin {
         }
 
         File partial = new File(root, name + ".part");
+        // ⭐ Il sigillo (01/10/2026): l'impronta si calcola mentre si copia, così
+        // nessuna apertura dovrà rileggere i gigabyte per riconoscere il modello.
+        TalosResumableSha256 impronta = new TalosResumableSha256();
         try (InputStream in = resolver.openInputStream(source);
              OutputStream out = new FileOutputStream(partial)) {
             if (in == null) {
@@ -134,6 +137,7 @@ public class TalosModelImportPlugin extends Plugin {
                 return;
             }
             out.write(head, 0, 4);
+            impronta.update(head, 0, 4);
 
             byte[] buffer = new byte[1 << 20];
             long copied = 4;
@@ -141,6 +145,7 @@ public class TalosModelImportPlugin extends Plugin {
             int n;
             while ((n = in.read(buffer)) > 0) {
                 out.write(buffer, 0, n);
+                impronta.update(buffer, 0, n);
                 copied += n;
                 // Once a second at most. A per-chunk event for three gigabytes
                 // is thousands of messages nobody can read.
@@ -168,6 +173,8 @@ public class TalosModelImportPlugin extends Plugin {
             call.reject("TALOS_MODEL_IMPORT_FAILED");
             return;
         }
+
+        TalosModelSeal.seal(getContext(), target, impronta.hex(), "import");
 
         JSObject response = new JSObject();
         response.put("imported", true);

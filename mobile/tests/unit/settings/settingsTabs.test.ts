@@ -33,7 +33,8 @@ describe('TALOS mobile settings registry', () => {
         const desktopIds = TALOS_MOBILE_SETTINGS_TABS
             .map((tab) => tab.id)
             .filter((id) => !(id in MOBILE_ONLY))
-        expect(desktopIds).toHaveLength(13)
+        // ⭐ CAMBIATO APPOSTA il 01/10/2026: entrano le Note legali (14).
+        expect(desktopIds).toHaveLength(14)
         for (const id of Object.keys(MOBILE_ONLY)) {
             expect(TALOS_MOBILE_SETTINGS_TABS.some((tab) => tab.id === id)).toBe(true)
         }
@@ -62,7 +63,13 @@ describe('TALOS mobile settings registry', () => {
      * aveva **473** ed era fermo sulla generica. Un pannello nascosto dentro
      * un altro e' un pannello che nessuno apre.
      */
-    it('exposes the exact thirteen desktop settings categories in order (F4-#25: no Shortcuts on a phone)', () => {
+    /**
+     * ⛔ 2026-10-01: entra `legal`, e come `backup` e `voice` sta QUI e non fra
+     * i mobile-only. Le note legali il desktop le può avere e le deve avere:
+     * questa riga È il ticket. Owner: NPU Qualcomm nella release, PKLA 3.8
+     * (avviso dei diritti Qualcomm) e note complete di ciò che è spedito.
+     */
+    it('exposes the exact desktop settings categories in order (F4-#25: no Shortcuts on a phone)', () => {
         expect(TALOS_MOBILE_SETTINGS_TABS
             .map((tab) => tab.id)
             .filter((id) => !(id in MOBILE_ONLY))).toEqual([
@@ -77,6 +84,7 @@ describe('TALOS mobile settings registry', () => {
             'voice',
             'backup',
             'account',
+            'legal',
             'agent_tools',
             'system',
         ])
@@ -94,6 +102,7 @@ describe('TALOS mobile settings registry', () => {
             'Voice',
             'Backup and restore',
             'Account',
+            'Legal notices',
             'Agent Tools',
             'System',
         ])
@@ -115,6 +124,7 @@ describe('TALOS mobile settings registry', () => {
             // losing the chats, the Library, the memories and the keys.
             // 2026-08-10: Voice joined them, ed e' un pannello locale vero —
             // legge le voci del motore del telefono e ne applica una.
-            .toEqual(['models', 'ai_defaults', 'search', 'browser', 'appearance', 'voice', 'language', 'privacy', 'backup', 'account', 'agent_tools'])
+            // 2026-10-01: Legal notices, pannello locale vero (elenchi generati + condizioni Qualcomm).
+            .toEqual(['models', 'ai_defaults', 'search', 'browser', 'appearance', 'voice', 'language', 'privacy', 'backup', 'account', 'legal', 'agent_tools'])
     })
 })

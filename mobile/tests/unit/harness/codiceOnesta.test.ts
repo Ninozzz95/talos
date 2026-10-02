@@ -218,7 +218,8 @@ describe('B1 — onestà del Codice: comportamento', () => {
         expect(etichetta()).toMatch(/Running/)
         expect(avviso().hidden, 'in corso: avviso visibile').toBe(false)
         rt().handleRealEvent({ type: 'RunFinished', result: { detto: 'ok' } }, rt().realSessionState.generation)
-        expect(etichetta()).toMatch(/Stopped/)
+        // ⭐ P4-sexies #3 (02/10/2026): un giro CONCLUSO dice «Finished», non «Stopped» (si leggeva come uno Stop della persona).
+        expect(etichetta()).toMatch(/Finished/)
         expect(avviso().hidden, 'concluso: avviso nascosto').toBe(true)
     })
 

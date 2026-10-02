@@ -150,6 +150,12 @@ const props = withDefaults(defineProps<{
     librarySourceCount?: number
     libraryTurnOverride?: TalosLibraryTurnOverride | null
     libraryFiles?: readonly TalosLocalVaultFile[]
+    /**
+     * ⛔ A3-OSS-2 (Pad, 01/10/2026) — richieste di permesso e recuperi da controllare. Owner 01/10: «pillola accanto
+     * alla pill selettore modello» (prima era fissa in basso a destra e copriva «Interrompi risposta»); e finché ce
+     * n'è una, la riga resta visibile anche a riposo: un permesso in attesa non sparisce dalla vista.
+     */
+    toolReviewCount?: number
 }>(), {
     agentToolsEnabled: true,
     docked: false,
@@ -190,6 +196,7 @@ const props = withDefaults(defineProps<{
     librarySourceCount: 0,
     libraryTurnOverride: null,
     libraryFiles: () => [],
+    toolReviewCount: 0,
 })
 
 const TalosMobileDictationBar = defineAsyncComponent(
@@ -220,6 +227,8 @@ const emit = defineEmits<{
     removeAttachment: [itemId: string]
     dismissAttachmentError: []
     openContext: []
+    /** A3-OSS-2 — riapre la richiesta di permesso (o il recupero) in attesa. */
+    reviewTools: []
     openModelLab: []
     refreshModels: []
     selectExecutorModelProfile: [profileId: string | null]
@@ -269,6 +278,8 @@ const composerCompact = computed(() => (
     && !composerFocused.value
     && !props.prompt.trim()
     && (props.attachments?.length ?? 0) === 0
+    // A3-OSS-2, owner 01/10: «Riga visibile se c'è da rispondere».
+    && props.toolReviewCount === 0
 ))
 const libraryChip = ref<HTMLElement | null>(null)
 const librarySheetOpen = ref(false)
@@ -750,7 +761,12 @@ function focusPrompt(atEnd = false): boolean {
 // `openPlus` esce per le chip di prompt della home (Fase 2 Calm, 12/09):
 // «Analizza un file» e «Altro» aprono il foglio «Aggiungi alla chat» — lo
 // stesso del «+», non un secondo.
-defineExpose({ focusPrompt, openPlus })
+/** ⛔ ERRCOD (30/09/2026): la scheda d'errore del Codice apre il selettore dei modelli («Pick another model»). */
+function openModelPicker(): void {
+    modelPickerOpen.value = true
+}
+
+defineExpose({ focusPrompt, openPlus, openModelPicker })
 
 watch(() => [props.prompt, props.docked, dictating.value], () => {
     slashActiveIndex.value = 0
@@ -920,6 +936,13 @@ watch(() => [props.prompt, props.docked, dictating.value], () => {
                      doppiava la chip «Ragiona» accesa. Resta per chi ascolta lo schermo. -->
                 <span v-if="reasoningWordsActive" data-testid="talos-composer-reasoning-label" class="sr-only">{{ reasoningLabel }}</span>
             </button>
+            <!-- ⛔ A3-OSS-2 (Pad, 01/10/2026): fissa in basso a destra copriva «Interrompi risposta». Owner 01/10:
+                 «pillola accanto alla pill selettore modello». -->
+            <button
+                v-if="toolReviewCount > 0" type="button" data-testid="talos-composer-tool-review"
+                class="talos-pressable talos-model-chip min-h-touch"
+                @pointerdown.prevent @click="emit('reviewTools')"
+            >{{ $t('chat.reviewToolActions', { count: toolReviewCount }) }}</button>
             <!-- Owner 2026-09-13, dal Pad: la pillola del contesto e' sola
                  icona, accanto a quella del modello. Le parole restano nel nome
                  accessibile e in sr-only: chi ascolta lo schermo sente modo e

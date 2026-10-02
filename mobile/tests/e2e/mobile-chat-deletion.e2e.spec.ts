@@ -222,3 +222,57 @@ test('leaving the selection mode restores the ordinary row actions', async ({ pa
     await holdRow(page, 0)
     await expect(page.locator('[data-testid="talos-chats-row"]')).toHaveCount(1)
 })
+
+/*
+ * ⭐⭐ P4-bis (owner 01/10 sera, decisioni 02/10) — nel browser vero, il percorso intero: l'icona «Seleziona» della riga
+ * del conteggio (non il tieni-premuto: era il gesto che nessuno trovava), «All» accanto al conteggio, «Archive selected»
+ * con due chat, l'avviso con «Undo» che le riporta indietro. Le due prove `fixme` qui sopra restano il debito del 18/08;
+ * questa entra dal pulsante, cioè dalla strada che il debito non copriva.
+ */
+/*
+ * ⛔ Perché non `sendMessage` due volte: dopo «New chat» la schermata vuota mostra già «Understood.» nella scheda
+ * «Riprendi da qui» della prima chat, quindi `getByText('Understood.').first()` passava SUBITO e la seconda frase
+ * veniva scritta mentre la chat nuova si montava (vista nella foto del fallimento: «Seconda conversazione» mai
+ * mandata). Qui si aspetta la chat nuova vuota, poi il PROPRIO messaggio nella conversazione e la sua risposta.
+ */
+async function nuovaChatConMessaggio(page: Page, testo: string): Promise<void> {
+    await page.locator('[aria-label="Chat options"]').click()
+    await page.getByRole('menuitem', { name: 'New chat' }).click()
+    // La chat nuova è vuota: c'è il sottotitolo della schermata iniziale e nessuna domanda nella conversazione.
+    await expect(page.getByTestId('talos-home-subtitle')).toBeVisible()
+    await expect(page.locator('.user-bubble')).toHaveCount(0)
+    const composer = page.getByLabel('Message TALOS')
+    await expect(composer).toBeEditable()
+    await composer.fill(testo)
+    await composer.press('Enter')
+    await expect(page.locator('.user-bubble', { hasText: testo })).toBeVisible()
+    await expect(page.locator('.assistant-text', { hasText: 'Understood.' })).toHaveCount(1)
+}
+
+test('P4-bis: select from the count row, archive two chats, undo', async ({ page }) => {
+    await mockProvider(page)
+    await page.goto('/')
+    await sendMessage(page, 'Prima conversazione')
+    await nuovaChatConMessaggio(page, 'Seconda conversazione')
+
+    await openChatsPage(page)
+    const rows = page.locator('[data-testid="talos-chats-row"]')
+    await expect(rows).toHaveCount(2)
+
+    await page.getByTestId('talos-chats-select-header').click()
+    const bar = page.getByTestId('talos-chats-selection-bar')
+    await expect(bar).toBeVisible()
+    await expect(page.getByTestId('talos-chats-select-header')).toHaveCount(0)
+    await page.getByTestId('talos-chats-select-all').click()
+    await expect(bar).toContainText('2 selected')
+    // Due azioni affiancate, non tre.
+    await expect(page.getByTestId('talos-chats-bulk-actions').locator('button')).toHaveCount(2)
+
+    await page.getByRole('button', { name: 'Archive selected' }).click()
+    await expect(rows).toHaveCount(0)
+    await expect(bar).toHaveCount(0)
+    await expect(page.getByText('2 chats archived', { exact: true })).toBeVisible()
+
+    await page.getByRole('button', { name: 'Undo' }).click()
+    await expect(rows).toHaveCount(2)
+})

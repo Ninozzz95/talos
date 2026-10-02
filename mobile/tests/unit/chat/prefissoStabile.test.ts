@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import {
+    TALOS_NOME_CERCA_ATTREZZI_DEL_PROTOCOLLO,
     talosAttrezziInOrdineDiRivelazione,
     talosProjectLocalToolConversation,
 } from '@/lib/chat/localToolPromptProtocol'
 import { TALOS_DETTAGLI_STRUMENTO } from '@/lib/tools/catalogoCompatto'
+import { TALOS_CERCA_ATTREZZI } from '@/lib/tools/cercaAttrezzi'
 import type { TalosLocalEngineTurn } from '@/services/localEngine'
 
 /**
@@ -244,5 +246,51 @@ describe('PREFISSO-STABILE-02 gli attrezzi svelati si accodano', () => {
             [SISTEMA, chiamataDettagli(['a'])],
         )
         expect(nomiDi(conIlNomeVero)).toEqual([TALOS_DETTAGLI_STRUMENTO, 'b', 'a'])
+    })
+
+    /*
+     * ⭐ Punto 4 (01/10/2026): con `tool_search` i nomi svelati non stanno negli ARGOMENTI (il modello scrive una
+     * domanda) ma nel RISULTATO, che comincia con lo schema JSON dei trovati. L'ordine resta quello della
+     * conversazione: nessuno stato di sessione da tenere allineato.
+     */
+    it('PS-04 dopo tool_search accoda i nomi letti dal RISULTATO, nell\'ordine dato', () => {
+        const CERCA = { type: 'function', function: { name: TALOS_CERCA_ATTREZZI, parameters: {} } }
+        const offerti = [CERCA, attrezzo('a'), attrezzo('b'), attrezzo('c'), attrezzo('d')]
+        const schemi = [attrezzo('c'), attrezzo('b')]
+        const storia: TalosLocalEngineTurn[] = [
+            SISTEMA,
+            { role: 'user', content: 'x' },
+            {
+                role: 'assistant',
+                content: '',
+                tool_calls: [{
+                    id: 'call_s',
+                    type: 'function',
+                    function: { name: TALOS_CERCA_ATTREZZI, arguments: JSON.stringify({ query: 'x' }) },
+                }],
+            },
+            { role: 'tool', tool_call_id: 'call_s', content: `${JSON.stringify(schemi)}\n\nThese are SCHEMAS ONLY.` },
+        ]
+        expect(nomiDi(talosAttrezziInOrdineDiRivelazione(offerti, storia)))
+            .toEqual([TALOS_CERCA_ATTREZZI, 'a', 'd', 'c', 'b'])
+    })
+
+    it('PS-05 un risultato di tool_search illeggibile non tocca l\'ordine', () => {
+        const CERCA = { type: 'function', function: { name: TALOS_CERCA_ATTREZZI, parameters: {} } }
+        const offerti = [CERCA, attrezzo('a'), attrezzo('b')]
+        const storia: TalosLocalEngineTurn[] = [
+            SISTEMA,
+            {
+                role: 'assistant',
+                content: '',
+                tool_calls: [{ id: 'call_s', type: 'function', function: { name: TALOS_CERCA_ATTREZZI, arguments: '{}' } }],
+            },
+            { role: 'tool', tool_call_id: 'call_s', content: 'No tool matched "zz". These are all the tools…' },
+        ]
+        expect(talosAttrezziInOrdineDiRivelazione(offerti, storia)).toBe(offerti)
+    })
+
+    it('⛔ il nome di tool_search qui dentro è lo stesso di cercaAttrezzi', () => {
+        expect(TALOS_NOME_CERCA_ATTREZZI_DEL_PROTOCOLLO).toBe(TALOS_CERCA_ATTREZZI)
     })
 })

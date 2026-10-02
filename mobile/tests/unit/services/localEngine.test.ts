@@ -12,6 +12,10 @@ const bridge = vi.hoisted(() => ({
     // I profili misurati da `qualifyBackend`: è da qui che esce il predefinito
     // «il più veloce» quando la persona non ha ancora scelto.
     localPerformanceProfiles: vi.fn(),
+    // D13 (01/10/2026): «una copia sola» — la prova si interrompe, e il modello
+    // della chat si chiude prima della prova.
+    cancelQualification: vi.fn(),
+    close: vi.fn(),
 }))
 
 vi.mock('@capacitor/core', () => ({
@@ -44,9 +48,13 @@ const {
     talosLocalEngineOpenWithFallback,
     talosLocalPerformanceSignals,
     talosQualifyLocalBackend,
+    talosCancelAutomaticProbe,
+    talosRunAutomaticProbe,
     talosRunProbe,
     talosWarmLocalModel,
 } = await import('@/services/localEngine')
+const { talosT } = await import('@/i18n')
+const { useTalosMobileToasts, __resetToastsForTests } = await import('@/stores/toasts')
 
 function nativeFailure(stage: string, code = 'TALOS_LLAMA_OPEN_FAILED'): Error {
     return Object.assign(new Error(code), { code, data: { stage } })
@@ -392,6 +400,175 @@ describe('⛔ il sondaggio GPU si mette IN FILA dietro il riscaldamento, mai dav
 })
 
 /**
+ * ⭐ A3 (01/10/2026) — l'esito della prova detto onestamente, e la prova
+ * automatica (D7) che non disturba quando non c'è niente da misurare.
+ */
+describe('RUN — l’esito della prova dei motori', () => {
+    const ESITO = {
+        ran: true, reason: null, probedCpu: false, cpuInconclusive: false,
+        probedGpu: false, gpuInconclusive: false, probedNpu: false, npuInconclusive: false,
+        decisionBackend: 'cpu', decisionReason: 'unproven',
+    }
+    const messaggi = () => useTalosMobileToasts().items.value.map((toast) => toast.message)
+
+    beforeEach(() => {
+        __resetToastsForTests()
+        bridge.qualifyBackend.mockReset()
+        bridge.open.mockReset()
+        bridge.available.mockReset()
+        bridge.localPerformanceProfiles.mockReset()
+        bridge.localPerformanceProfiles.mockResolvedValue({ profiles: [] })
+        bridge.available.mockResolvedValue({ available: true, backends: 'CPU', loadedPath: null })
+    })
+
+    it('RUN-01 quando vince l’NPU il messaggio lo dice (A3-REG-02)', async () => {
+        bridge.qualifyBackend.mockResolvedValue({
+            ...ESITO, probedCpu: true, probedNpu: true, decisionBackend: 'hexagon', decisionReason: 'faster',
+        })
+        await talosRunProbe('/m.gguf')
+        expect(messaggi()).toContain(talosT('privacyPermissions.localEngineProbe.resultRan', {
+            backend: talosT('privacyPermissions.localEngineProbe.backendLabels.hexagon'),
+        }))
+    })
+
+    it('RUN-02 se nessun motore è stato misurato non dice «Fatto» (A3-REG-03)', async () => {
+        bridge.qualifyBackend.mockResolvedValue(ESITO)
+        await talosRunProbe('/m.gguf')
+        expect(messaggi()).toContain(talosT('privacyPermissions.localEngineProbe.resultNothingMeasured'))
+        expect(messaggi().some((m) => m.startsWith('Fatto'))).toBe(false)
+    })
+
+    it('RUN-03 automatica: niente da misurare, nessun avviso', async () => {
+        bridge.qualifyBackend.mockResolvedValue({ ...ESITO, ran: false, reason: 'already-proven' })
+        await talosRunAutomaticProbe('/m.gguf')
+        expect(messaggi()).toEqual([])
+    })
+
+    it('RUN-04 automatica: se la prova dura, l’avviso dice cosa sta succedendo', async () => {
+        vi.useFakeTimers()
+        try {
+            let finisci!: (valore: typeof ESITO) => void
+            bridge.qualifyBackend.mockImplementation(() => new Promise((resolve) => { finisci = resolve }))
+            const prova = talosRunAutomaticProbe('/m.gguf')
+            await vi.advanceTimersByTimeAsync(600)
+            expect(messaggi()).toContain(talosT('privacyPermissions.localEngineProbe.autoRunning'))
+            finisci({ ...ESITO, probedCpu: true, probedGpu: true, decisionBackend: 'opencl', decisionReason: 'faster' })
+            await prova
+            expect(messaggi()).not.toContain(talosT('privacyPermissions.localEngineProbe.autoRunning'))
+        } finally {
+            vi.useRealTimers()
+        }
+    })
+})
+
+/**
+ * ⭐ D13 (owner, 01/10/2026) — «una copia sola». Sul Pad la prova apriva una
+ * seconda copia del modello mentre quella della chat era in memoria: Android
+ * ha chiuso l'app (LOW_MEMORY, OOM KILL, 11:13:13).
+ */
+describe('MEM — la prova automatica non tiene mai due copie del modello', () => {
+    const ESITO = {
+        ran: true, reason: null, probedCpu: true, cpuInconclusive: false,
+        probedGpu: true, gpuInconclusive: false, probedNpu: false, npuInconclusive: false,
+        decisionBackend: 'opencl', decisionReason: 'faster',
+    }
+
+    beforeEach(() => {
+        __resetToastsForTests()
+        for (const fn of [bridge.qualifyBackend, bridge.open, bridge.available, bridge.close,
+            bridge.cancelQualification, bridge.localPerformanceProfiles, bridge.generate, bridge.addListener]) {
+            fn.mockReset()
+        }
+        bridge.localPerformanceProfiles.mockResolvedValue({ profiles: [] })
+        bridge.open.mockResolvedValue({ contextTokens: 4096 })
+        bridge.close.mockResolvedValue(undefined)
+        bridge.cancelQualification.mockResolvedValue({ ok: true })
+        bridge.addListener.mockResolvedValue({ remove: vi.fn(async () => undefined) })
+    })
+
+    it('MEM-01 con un modello aperto e fermo, prima lo chiude e poi prova', async () => {
+        const ordine: string[] = []
+        bridge.available.mockResolvedValue({ available: true, backends: 'CPU,OpenCL', loadedPath: '/m.gguf' })
+        bridge.close.mockImplementation(async () => { ordine.push('close') })
+        bridge.qualifyBackend.mockImplementation(async () => { ordine.push('qualify'); return ESITO })
+
+        await talosRunAutomaticProbe('/m.gguf')
+
+        expect(ordine.slice(0, 2)).toEqual(['close', 'qualify'])
+    })
+
+    it('MEM-02 con una risposta in corso NON parte: si riprova la volta dopo', async () => {
+        bridge.available.mockResolvedValue({ available: true, backends: 'CPU,OpenCL', loadedPath: '/m.gguf' })
+        let finisciGenerazione!: (v: unknown) => void
+        bridge.generate.mockImplementation(() => new Promise((resolve) => { finisciGenerazione = resolve }))
+        const { talosLocalEngineGenerate } = await import('@/services/localEngine')
+        const generazione = talosLocalEngineGenerate('ciao', () => undefined)
+        await new Promise((resolve) => setTimeout(resolve, 0))
+
+        expect(await talosRunAutomaticProbe('/m.gguf')).toBe('skipped')
+
+        expect(bridge.qualifyBackend).not.toHaveBeenCalled()
+        expect(bridge.close).not.toHaveBeenCalled()
+        finisciGenerazione({ text: 'ok', tokens: 1 })
+        await generazione
+    })
+
+    // ⭐ CAMBIATO APPOSTA il 01/10/2026: la prova non apre più il modello da
+    // sola (saltava le regole dell'apertura anticipata: batteria, calore,
+    // memoria). Dice com'è andata; lo apre il controller — AUTO-05.
+    it('MEM-03 finita la prova, lo dice e lascia l’apertura al controller', async () => {
+        bridge.available.mockResolvedValue({ available: true, backends: 'CPU,OpenCL', loadedPath: null })
+        bridge.qualifyBackend.mockResolvedValue(ESITO)
+
+        expect(await talosRunAutomaticProbe('/m.gguf')).toBe('finished')
+
+        expect(bridge.open).not.toHaveBeenCalled()
+    })
+
+    it('MEM-07 un errore del ponte non rompe la scelta del modello', async () => {
+        bridge.available.mockResolvedValue({ available: true, backends: 'CPU,OpenCL', loadedPath: null })
+        bridge.qualifyBackend.mockRejectedValue(new Error('bridge down'))
+
+        expect(await talosRunAutomaticProbe('/m.gguf')).toBe('finished')
+        expect(useTalosMobileToasts().items.value).toEqual([])
+    })
+
+    it('MEM-04 l’interruzione chiama il ponte e aspetta che la prova abbia liberato la memoria', async () => {
+        bridge.available.mockResolvedValue({ available: true, backends: 'CPU,OpenCL', loadedPath: null })
+        let finisci!: (v: typeof ESITO & { cancelled: boolean }) => void
+        bridge.qualifyBackend.mockImplementation(() => new Promise((resolve) => { finisci = resolve }))
+        const prova = talosRunAutomaticProbe('/m.gguf')
+        await new Promise((resolve) => setTimeout(resolve, 0))
+
+        let interrotta = false
+        const interruzione = talosCancelAutomaticProbe().then(() => { interrotta = true })
+        await new Promise((resolve) => setTimeout(resolve, 0))
+        expect(bridge.cancelQualification).toHaveBeenCalledTimes(1)
+        expect(interrotta).toBe(false)
+
+        finisci({ ...ESITO, cancelled: true })
+        await interruzione
+        await prova
+        expect(interrotta).toBe(true)
+    })
+
+    it('MEM-05 una prova interrotta non annuncia esiti e non apre il modello', async () => {
+        bridge.available.mockResolvedValue({ available: true, backends: 'CPU,OpenCL', loadedPath: null })
+        bridge.qualifyBackend.mockResolvedValue({ ...ESITO, cancelled: true })
+
+        expect(await talosRunAutomaticProbe('/m.gguf')).toBe('cancelled')
+
+        expect(bridge.open).not.toHaveBeenCalled()
+        expect(useTalosMobileToasts().items.value).toEqual([])
+    })
+
+    it('MEM-06 senza prova in corso l’interruzione non tocca il ponte', async () => {
+        await talosCancelAutomaticProbe()
+        expect(bridge.cancelQualification).not.toHaveBeenCalled()
+    })
+})
+
+/**
  * P3-1 — apertura anticipata. Solo l'ESECUZIONE: la decisione ambientale
  * (termico, memoria) è in `localWarmTrigger.ts`, testata lì da sola.
  */
@@ -521,13 +698,28 @@ describe('talosWarmLocalModel — l\'apertura anticipata, silenziosa', () => {
     })
 
     /**
-     * ⛔ AL CONTRARIO — senza misure non si chiede niente: né un bersaglio né
-     * `gpuLayers: 0`, che sarebbe un default silenzioso e spegnerebbe
-     * l'arbitro nativo che legge l'evidenza del sondaggio.
+     * ⭐ CAMBIATO APPOSTA il 01/10/2026 (owner D10): senza misure, con la scheda
+     * grafica a bordo, il riscaldamento apre sul motore SUGGERITO e lo nomina —
+     * la chat deve partire lì, non sulla CPU (116 s alla prima parola sul Pad).
      */
-    it('AL CONTRARIO — senza misure il riscaldamento non chiede DOVE', async () => {
+    it('senza misure il riscaldamento chiede il motore suggerito, e lo NOMINA', async () => {
         bridge.available.mockResolvedValue({
             available: true, backends: 'CPU,OpenCL', loadedPath: null,
+        })
+        bridge.open.mockResolvedValue({ contextTokens: 4096 })
+
+        await talosWarmLocalModel('/m.gguf')
+
+        expect(bridge.open.mock.calls[0]![0]).toMatchObject({ gpuLayers: -1, backend: 'OpenCL' })
+    })
+
+    /**
+     * ⛔ AL CONTRARIO — senza misure e senza acceleratori non si chiede niente:
+     * né un bersaglio né `gpuLayers: 0`, che sarebbe un default silenzioso.
+     */
+    it('AL CONTRARIO — senza misure e con la sola CPU il riscaldamento non chiede DOVE', async () => {
+        bridge.available.mockResolvedValue({
+            available: true, backends: 'CPU', loadedPath: null,
         })
         bridge.open.mockResolvedValue({ contextTokens: 4096 })
 
@@ -567,5 +759,22 @@ describe('talosLocalPerformanceSignals — P2-3, passa attraverso senza toccare'
         expect(segnali.thermalHeadroom).toBeNull()
         expect(segnali.thermalForecast).toBeNull()
         expect(segnali.thermalStatus).toBeNull()
+    })
+})
+
+/*
+ * ⭐⭐ REG-COMP-11 (P4-ter passo 2-bis, 02/10/2026): lo stato porta il contesto APERTO. Il ponte lo dichiarava già
+ * (`TalosLlama.available().contextTokens`, letto sul Pad: 6144), ma il tipo e la traduzione lo buttavano via, e il
+ * tetto non poteva rimettere la cache aperta nel conto della RAM libera.
+ */
+describe('REG-COMP-11 — lo stato del motore porta il contesto aperto', () => {
+    it('STATO-CTX-01 il contesto aperto passa com\'è; assente o non intero diventa null', async () => {
+        const { talosLocalEngineStatus } = await import('@/services/localEngine')
+        bridge.available.mockReset().mockResolvedValueOnce({ available: true, backends: 'CPU', loadedPath: '/m.gguf', contextTokens: 6144 })
+        await expect(talosLocalEngineStatus()).resolves.toMatchObject({ contextTokens: 6144 })
+        bridge.available.mockResolvedValueOnce({ available: true, backends: 'CPU', loadedPath: null })
+        await expect(talosLocalEngineStatus()).resolves.toMatchObject({ contextTokens: null })
+        bridge.available.mockRejectedValueOnce(new Error('nessun ponte'))
+        await expect(talosLocalEngineStatus()).resolves.toMatchObject({ contextTokens: null })
     })
 })
