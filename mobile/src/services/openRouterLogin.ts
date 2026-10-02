@@ -76,6 +76,36 @@ async function dimenticaVerificatore(): Promise<void> {
 }
 
 /**
+ * ⛔⛔ UN CODICE VALE UN USO — N14, owner 2026-10-02 («OpenRouter finicky»).
+ *
+ * Misurato con i diagnostici dell'owner: `TALOS_OPENROUTER_EXCHANGE` 403
+ * «Invalid code or code_verifier» ×2. Per OpenRouter un 403 sullo scambio vuol dire
+ * codice non valido, GIÀ USATO o più vecchio di 10 minuti (Hermes,
+ * `auth_openrouter.py:37-40`).
+ *
+ * Il plugin nativo tiene da parte il codice anche quando lo consegna dal vivo
+ * (`TalosOAuthLoopbackPlugin.awaitCallback`: non può sapere se di là c'è ancora
+ * qualcuno). Il flusso vivo lo scambiava e lo lasciava lì, insieme al verificatore
+ * ricordato: appena la pagina tornava visibile, la ripresa ritirava lo STESSO
+ * codice e lo scambiava una seconda volta.
+ *
+ * Due difese, che si tengono a vicenda:
+ *  - `accessiVivi`: finché in QUESTO contesto JavaScript un accesso è in corso, la
+ *    ripresa non tocca niente (è il caso dell'attività ricreata che la ripresa serve:
+ *    lì il contesto è nuovo e il contatore è a zero). Un contatore e non un flag: due
+ *    tocchi di fila su «Accedi» non devono spegnere la difesa del primo;
+ *  - `consumaCodiceRimasto`: chi ha ritirato il codice dal vivo svuota anche la copia
+ *    del nativo e il verificatore, PRIMA di spenderlo e (se è l'ultimo accesso) alla fine.
+ */
+let accessiVivi = 0
+
+async function consumaCodiceRimasto(loopback: TalosOAuthLoopbackPlugin): Promise<void> {
+    // Difensivo: un nativo che non ha il metodo (o che fallisce) non deve fermare l'accesso.
+    await loopback.pendingCallback?.().catch(() => {})
+    await dimenticaVerificatore().catch(() => {})
+}
+
+/**
  * ⭐ Riprende un accesso interrotto dalla ricreazione dell'app.
  *
  * Si chiama quando il pannello dei provider torna a schermo: se c'e' un codice
@@ -88,6 +118,8 @@ async function dimenticaVerificatore(): Promise<void> {
 export async function talosRiprendiAccessoOpenRouter(
     deps: TalosOpenRouterLoginDeps = defaultDeps(),
 ): Promise<TalosOpenRouterLoginResult | null> {
+    // Un accesso vivo ha già in mano il suo codice: non si ruba e non si scambia due volte.
+    if (accessiVivi > 0) return null
     let target = ''
     try {
         target = (await deps.loopback.pendingCallback()).target
@@ -109,7 +141,7 @@ export async function talosRiprendiAccessoOpenRouter(
     try {
         return { ok: true, key: await deps.exchange({ code, verifier }) }
     } catch (errore) {
-        talosLogDeviceIssue('TALOS_OPENROUTER_EXCHANGE', String(errore))
+        talosLogDeviceIssue('TALOS_OPENROUTER_EXCHANGE', `ripresa: ${String(errore)}`)
         return { ok: false, reason: 'exchange' }
     }
 }
@@ -145,6 +177,18 @@ export type TalosOpenRouterLoginResult =
 export async function talosLoginWithOpenRouter(
     deps: TalosOpenRouterLoginDeps = defaultDeps(),
 ): Promise<TalosOpenRouterLoginResult> {
+    accessiVivi += 1
+    try {
+        return await accediDalVivo(deps)
+    } finally {
+        accessiVivi -= 1
+        // L'ultimo accesso a finire lascia pulito: né codice da parte nel nativo né
+        // verificatore ricordato (anche dopo un annullamento o un browser che non parte).
+        if (accessiVivi === 0) await consumaCodiceRimasto(deps.loopback)
+    }
+}
+
+async function accediDalVivo(deps: TalosOpenRouterLoginDeps): Promise<TalosOpenRouterLoginResult> {
     const { verifier, challenge } = await talosCreatePkcePair()
 
     let port: number
@@ -185,13 +229,18 @@ export async function talosLoginWithOpenRouter(
     // pagina. Non è un guasto e non merita un errore rosso.
     if (code === null) return { ok: false, reason: 'cancelled' }
 
+    // ⛔ PRIMA di spendere il codice (N14): se l'attività venisse ricreata durante lo
+    // scambio, un contesto nuovo non deve trovare lo stesso codice e rifarlo.
+    await consumaCodiceRimasto(deps.loopback)
+
     try {
         return { ok: true, key: await deps.exchange({ code, verifier }) }
     } catch (errore) {
         // ⛔ Il motivo va ALMENO in logcat: senza, l'unica diagnosi possibile e'
         // riprovare e sperare — che e' esattamente cio' che abbiamo dovuto fare
-        // il 2026-08-10, bruciando un codice a ogni tentativo.
-        talosLogDeviceIssue('TALOS_OPENROUTER_EXCHANGE', String(errore))
+        // il 2026-08-10, bruciando un codice a ogni tentativo. L'origine dice
+        // quale dei due percorsi (vivo o ripresa) ha fallito.
+        talosLogDeviceIssue('TALOS_OPENROUTER_EXCHANGE', `vivo: ${String(errore)}`)
         return { ok: false, reason: 'exchange' }
     }
 }
