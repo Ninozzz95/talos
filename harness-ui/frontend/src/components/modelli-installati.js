@@ -1,3 +1,6 @@
+import { t, tn, linguaCorrenteDiT } from './lingua.js';
+/* Numeri e date nella lingua dell'interfaccia (come fanno gli altri componenti): italiano → it-IT, inglese → en-US. */
+const localeUI = () => (linguaCorrenteDiT() === 'en' ? 'en-US' : 'it-IT');
 /*
  * Modelli installati — la scheda «Installati» del Model Lab nel linguaggio del
  * mockup (`#panel-installati`): riga per modello (`ListRow`), dettaglio
@@ -15,7 +18,7 @@
  */
 
 const GB = 1024 ** 3;
-const numero = new Intl.NumberFormat('it-IT', { maximumFractionDigits: 1 });
+const numero = { format: (valore) => new Intl.NumberFormat(localeUI(), { maximumFractionDigits: 1 }).format(valore) };
 /** «5,2 GB» come nel mockup (GB decimali di 1024³, una cifra). */
 export function gb(bytes) {
   const n = Number(bytes);
@@ -25,32 +28,34 @@ export function gb(bytes) {
 export function contestoK(token) {
   const n = Number(token);
   if (!Number.isFinite(n) || n <= 0) return null;
-  return n >= 1_000_000 ? `${numero.format(n / 1_000_000)}M token` : `${Math.round(n / 1024)}k token`;
+  return n >= 1_000_000
+    ? tn('modelli.installed.millionTokensOne', 'modelli.installed.millionTokens', numero.format(n / 1_000_000))
+    : tn('modelli.installed.thousandTokensOne', 'modelli.installed.thousandTokens', Math.round(n / 1024));
 }
 
 export const STATI_INSTALLATO = Object.freeze({
-  caricato: { etichetta: 'Caricato', tono: 'accent' },
-  disco: { etichetta: 'Sul disco', tono: '' },
-  incompleto: { etichetta: 'Incompleto', tono: 'warning' },
-  guasto: { etichetta: 'Non riuscito', tono: 'danger' },
+  caricato: { get etichetta() { return t('modelli.installed.loaded'); }, tono: 'accent' },
+  disco: { get etichetta() { return t('modelli.installed.onDisk'); }, tono: '' },
+  incompleto: { get etichetta() { return t('modelli.installed.incomplete'); }, tono: 'warning' },
+  guasto: { get etichetta() { return t('modelli.installed.failed'); }, tono: 'danger' },
 });
 
 /** Il verdetto «Entra», dall'esito del server. `null` se non ancora verificato. */
 export function verdettoEntra(fit, runtime = {}) {
   const esito = fit?.esito;
-  if (fit?.inCorso) return { chiave: 'attesa', etichetta: 'Verifica in corso…', tono: '', dettaglio: '' };
-  if (fit?.errore) return { chiave: 'errore', etichetta: 'Verifica non riuscita', tono: 'danger', dettaglio: String(fit.errore) };
+  if (fit?.inCorso) return { chiave: 'attesa', etichetta: t('modelli.installed.checking'), tono: '', dettaglio: '' };
+  if (fit?.errore) return { chiave: 'errore', etichetta: t('modelli.installed.checkFailed'), tono: 'danger', dettaglio: String(fit.errore) };
   if (!esito) return null;
   const richiesti = esito.memory?.requiredBytes;
   const disponibili = Number.isFinite(esito.memory?.availableBytes) ? esito.memory.availableBytes : runtime.allocabiliBytes;
   const ok = esito.state === 'compatible';
   if (ok && Number.isFinite(richiesti) && Number.isFinite(disponibili) && richiesti / disponibili >= 0.9) {
-    return { chiave: 'stretto', etichetta: 'Entra stretto', tono: 'warning', dettaglio: `~${gb(richiesti)} richiesti su ${gb(disponibili)} allocabili` };
+    return { chiave: 'stretto', etichetta: t('modelli.installed.tightFit'), tono: 'warning', dettaglio: t('modelli.installed.requiredAllocatable', { required: gb(richiesti), available: gb(disponibili) }) };
   }
-  if (ok) return { chiave: 'entra', etichetta: 'Entra', tono: 'success', dettaglio: Number.isFinite(richiesti) ? `~${gb(richiesti)} di memoria con contesto ${contestoK(runtime.contestoStimaToken || 8192)}` : '' };
-  if (esito.state === 'unknown') return { chiave: 'ignoto', etichetta: 'Non verificato', tono: '', dettaglio: 'Il server non ha potuto stimare la memoria.' };
-  const mancano = Number.isFinite(richiesti) && Number.isFinite(disponibili) && richiesti > disponibili ? `: mancano ~${gb(richiesti - disponibili)}` : '';
-  return { chiave: 'non-entra', etichetta: 'Non entra', tono: 'danger', dettaglio: Number.isFinite(richiesti) ? `~${gb(richiesti)} richiesti${mancano}` : '' };
+  if (ok) return { chiave: 'entra', etichetta: t('modelli.installed.fits'), tono: 'success', dettaglio: Number.isFinite(richiesti) ? t('modelli.installed.memoryContext', { memory: gb(richiesti), context: contestoK(runtime.contestoStimaToken || 8192) }) : '' };
+  if (esito.state === 'unknown') return { chiave: 'ignoto', etichetta: t('modelli.installed.unchecked'), tono: '', dettaglio: t('modelli.installed.memoryNotEstimated') };
+  const mancano = Number.isFinite(richiesti) && Number.isFinite(disponibili) && richiesti > disponibili ? t('modelli.installed.missingMemory', { memory: gb(richiesti - disponibili) }) : '';
+  return { chiave: 'non-entra', etichetta: t('modelli.installed.doesNotFit'), tono: 'danger', dettaglio: Number.isFinite(richiesti) ? t('modelli.installed.requiredMemory', { memory: gb(richiesti), missing: mancano }) : '' };
 }
 
 function quantizzazione(percorso = '') {
@@ -67,16 +72,16 @@ export function datiModelloInstallato(modello = {}, { runtime = {}, fit = null }
   const q = quantizzazione(modello.files?.[0]?.path) || quantizzazione(modello.path); // il nome del FILE porta la quantizzazione; `path` può essere la cartella
   return {
     id: modello.id,
-    nome: modello.name || modello.id || 'Modello',
+    nome: modello.name || modello.id || t('modelli.installed.model'),
     match: `${modello.name || ''} ${modello.id || ''} ${modello.repo || ''}`.toLowerCase().trim(),
     stato, etichettaStato: STATI_INSTALLATO[stato].etichetta, tonoStato: STATI_INSTALLATO[stato].tono,
-    sotto: `${gb(modello.bytes)} sul disco${contesto ? ` · contesto massimo ${contesto}` : ''}`,
+    sotto: t('modelli.installed.diskSummary', { size: gb(modello.bytes), context: contesto ? t('modelli.installed.maximumContext', { context: contesto }) : '' }),
     sottoDue: verdetto?.dettaglio || '',
     verdetto,
     formato: q ? `GGUF · ${q}` : 'GGUF',
     dimensione: gb(modello.bytes),
-    origine: modello.repo === 'local-upload' ? 'Importato dal computer' : 'Hugging Face',
-    licenza: modello.license || 'Licenza non dichiarata',
+    origine: modello.repo === 'local-upload' ? t('modelli.installed.importedFromComputer') : 'Hugging Face',
+    licenza: modello.license || t('modelli.installed.licenseUndeclared'),
     percorso: modello.path || '',
     caricato: Boolean(caricato),
   };
@@ -206,26 +211,26 @@ export const NOME_MODELLO_MAX = 160;
  * @returns {{tono: 'success'|'danger'|'warning', etichetta: string, testo: string}}
  */
 export function verdettoAzioneModello(esito, { azione = 'elimina', nome = '' } = {}) {
-  const chi = nome ? `«${nome}»` : 'Il modello';
+  const chi = nome ? t('modelli.installed.quotedName', { name: nome }) : t('modelli.installed.unnamedModel');
   const rinominato = azione === 'rinomina';
   if (esito && esito.ok === true) {
     return rinominato
-      ? { tono: 'success', etichetta: 'Nome salvato', testo: `${chi} ora si chiama ${esito.nome ? `«${esito.nome}»` : 'come hai scritto'}.` }
-      : { tono: 'success', etichetta: 'Eliminato dal disco', testo: `${chi} non è più su questo computer.` };
+      ? { tono: 'success', etichetta: t('modelli.installed.nameSaved'), testo: t('modelli.installed.renamedResult', { model: chi, name: esito.nome ? t('modelli.installed.quotedResultName', { name: esito.nome }) : t('modelli.installed.asEntered') }) }
+      : { tono: 'success', etichetta: t('modelli.installed.deletedFromDisk'), testo: t('modelli.installed.deletedResult', { model: chi }) };
   }
   if (esito && esito.ok === false) {
-    const motivo = esito.motivo || esito.messaggio || esito.message || 'il comando non è andato a buon fine';
+    const motivo = esito.motivo || esito.messaggio || esito.message || t('modelli.installed.commandFailed');
     return {
       tono: 'danger',
-      etichetta: rinominato ? 'Nome non salvato' : 'Non eliminato',
-      testo: `${chi} è ancora come prima: ${motivo}.`,
+      etichetta: rinominato ? t('modelli.installed.nameNotSaved') : t('modelli.installed.notDeleted'),
+      testo: t('modelli.installed.unchangedResult', { model: chi, reason: motivo }),
     };
   }
   /* Un esito senza verdetto: si dice quel che si sa e quel che NON si sa. */
   return {
     tono: 'warning',
-    etichetta: 'Esito non confermato',
-    testo: `Il comando è partito, ma non ho potuto controllare se ${chi} è cambiato davvero: rileggi l'elenco per esserne sicuro.`,
+    etichetta: t('modelli.installed.unconfirmedResult'),
+    testo: t('modelli.installed.unconfirmedExplanation', { model: chi }),
   };
 }
 
@@ -250,11 +255,11 @@ export function creaConfermaEliminazione(dati, { inCorso = false, verdetto = nul
   card.appendChild(el(d, 'span', 'talos-check-card__stripe'));
   const corpo = el(d, 'div', 'talos-check-card__body');
   corpo.append(
-    el(d, 'b', 'talos-check-card__title', `Eliminare «${dati.nome}»?`),
-    el(d, 'p', '', `Spariscono i file del modello${dati.dimensione ? ` (${dati.dimensione})` : ''} e la sua scheda: fra i modelli installati non ci sarà più. Dal sito d'origine resta scaricabile, ma qui va scaricato o importato da capo.`),
+    el(d, 'b', 'talos-check-card__title', t('modelli.installed.deleteQuestion', { name: dati.nome })),
+    el(d, 'p', '', t('modelli.installed.deleteExplanation', { size: dati.dimensione ? ` (${dati.dimensione})` : '' })),
   );
   const az = el(d, 'div', 'talos-check-card__actions');
-  const annulla = el(d, 'button', 'talos-button talos-button--secondary talos-button--sm', 'Annulla');
+  const annulla = el(d, 'button', 'talos-button talos-button--secondary talos-button--sm', t('modelli.installed.cancel'));
   annulla.type = 'button'; annulla.dataset.c = 'Button'; annulla.dataset.action = 'annullaEliminaModello';
   annulla.disabled = inCorso;
   if (onAnnulla) annulla.addEventListener('click', () => onAnnulla(dati.id));
@@ -262,7 +267,7 @@ export function creaConfermaEliminazione(dati, { inCorso = false, verdetto = nul
      e il comando che esegue dice «Elimina dal disco» — è la lezione di «Riprendi» della FASE 4, due
      nomi per un'azione sola mandano a cercare un pulsante che non esiste. La differenza fra i due
      passi la porta il TITOLO del pannello, che nomina l'oggetto e fa la domanda. */
-  const esegui = el(d, 'button', 'talos-button talos-button--danger talos-button--sm', inCorso ? 'Elimino…' : 'Elimina dal disco');
+  const esegui = el(d, 'button', 'talos-button talos-button--danger talos-button--sm', inCorso ? t('modelli.installed.deleting') : t('modelli.installed.deleteFromDisk'));
   esegui.type = 'button'; esegui.dataset.c = 'Button'; esegui.dataset.action = 'eseguiEliminaModello';
   esegui.disabled = inCorso;
   if (onEsegui) esegui.addEventListener('click', () => onEsegui(dati.id));
@@ -291,7 +296,7 @@ export function creaCampoRinomina(dati, { bozza = '', inCorso = false, errore = 
   card.appendChild(el(d, 'span', 'talos-check-card__stripe'));
   const corpo = el(d, 'div', 'talos-check-card__body');
   const idCampo = `nomeModello-${String(dati.id).replace(/[^a-z0-9_-]/giu, '-')}`;
-  const etichetta = el(d, 'label', 'talos-stack', 'Nome mostrato');
+  const etichetta = el(d, 'label', 'talos-stack', t('modelli.installed.displayName'));
   etichetta.htmlFor = idCampo;
   const campo = el(d, 'input', 'talos-field__input');
   campo.type = 'text'; campo.id = idCampo; campo.value = bozza; campo.autocomplete = 'off';
@@ -299,7 +304,7 @@ export function creaCampoRinomina(dati, { bozza = '', inCorso = false, errore = 
   campo.dataset.campo = 'nomeModello';
   campo.disabled = inCorso;
   etichetta.appendChild(campo);
-  const aiuto = el(d, 'p', 'talos-muted', `Cambia solo il nome con cui il modello compare qui e nella sua pagina: il file e la cartella sul disco non si toccano. Al massimo ${NOME_MODELLO_MAX} caratteri.`);
+  const aiuto = el(d, 'p', 'talos-muted', t('modelli.installed.renameHelp', { n: NOME_MODELLO_MAX }));
   aiuto.id = `${idCampo}-aiuto`;
   corpo.append(etichetta, aiuto);
   if (errore) {
@@ -312,11 +317,11 @@ export function creaCampoRinomina(dati, { bozza = '', inCorso = false, errore = 
     corpo.appendChild(allarme);
   } else campo.setAttribute('aria-describedby', aiuto.id);
   const az = el(d, 'div', 'talos-check-card__actions');
-  const annulla = el(d, 'button', 'talos-button talos-button--secondary talos-button--sm', 'Annulla');
+  const annulla = el(d, 'button', 'talos-button talos-button--secondary talos-button--sm', t('modelli.installed.cancel'));
   annulla.type = 'button'; annulla.dataset.c = 'Button'; annulla.dataset.action = 'annullaRinominaModello';
   annulla.disabled = inCorso;
   if (onAnnulla) annulla.addEventListener('click', () => onAnnulla(dati.id));
-  const salva = el(d, 'button', 'talos-button talos-button--primary talos-button--sm', inCorso ? 'Salvo…' : 'Salva nome');
+  const salva = el(d, 'button', 'talos-button talos-button--primary talos-button--sm', inCorso ? t('modelli.installed.saving') : t('modelli.installed.saveName'));
   salva.type = 'button'; salva.dataset.c = 'Button'; salva.dataset.action = 'salvaNomeModello';
   /* ⛔ IL COMANDO NON SI SPEGNE SUL NOME VUOTO, e la ragione è una lezione di casa: «un bottone che
      non porta da nessuna parte lo DICE, invece di inghiottire il clic». Spento, il comando non
@@ -385,32 +390,32 @@ export function aggiornaDettaglioInstallato(aside, dati, { runtime = {}, azioni 
   if (!dati) { aside.hidden = true; return; }
   aside.hidden = false;
   const stato = el(documentObj, 'span'); stato.id = 'modelloStato';
-  stato.appendChild(badge(documentObj, dati.caricato ? 'In uso nella chat' : dati.etichettaStato, dati.caricato ? 'accent' : dati.tonoStato));
+  stato.appendChild(badge(documentObj, dati.caricato ? t('modelli.installed.usedInChat') : dati.etichettaStato, dati.caricato ? 'accent' : dati.tonoStato));
   const nome = el(documentObj, 'h3', '', dati.nome); nome.id = 'modelloNome';
-  const desc = el(documentObj, 'p', 'talos-detail__desc', 'Modello locale per conversazione e codice.'); desc.id = 'modelloDescrizione';
+  const desc = el(documentObj, 'p', 'talos-detail__desc', t('modelli.installed.localModelDescription')); desc.id = 'modelloDescrizione';
   const kv = (k, v, id) => { const r = el(documentObj, 'div', 'talos-kv'); const val = el(documentObj, 'span', 'talos-kv__v'); if (id) { const s = el(documentObj, 'span', '', v); s.id = id; val.appendChild(s); } else val.textContent = v; r.append(el(documentObj, 'span', 'talos-kv__k', k), val); return r; };
-  aside.append(stato, nome, desc, kv('Formato', dati.formato), kv('File sul disco', dati.dimensione, 'modelloDimensione'), kv('Origine', dati.origine), kv('Licenza', dati.licenza, 'modelloLicenza'), el(documentObj, 'hr', 'talos-lab__rule'));
-  aside.append(kv('Contesto della stima', contestoK(runtime.contestoStimaToken || 8192) || '8k token'), el(documentObj, 'p', 'talos-muted talos-lab__space', 'Stima con le impostazioni del motore attuale.'));
+  aside.append(stato, nome, desc, kv(t('modelli.installed.format'), dati.formato), kv(t('modelli.installed.diskFile'), dati.dimensione, 'modelloDimensione'), kv(t('modelli.installed.origin'), dati.origine), kv(t('modelli.installed.license'), dati.licenza, 'modelloLicenza'), el(documentObj, 'hr', 'talos-lab__rule'));
+  aside.append(kv(t('modelli.installed.estimateContext'), contestoK(runtime.contestoStimaToken || 8192) || t('modelli.installed.defaultContext')), el(documentObj, 'p', 'talos-muted talos-lab__space', t('modelli.installed.estimateSettings')));
   const stima = el(documentObj, 'div', 'talos-lab__space');
   if (dati.verdetto) {
     stima.appendChild(badge(documentObj, dati.verdetto.etichetta, dati.verdetto.tono));
     stima.appendChild(documentObj.createTextNode(' '));
     const s = el(documentObj, 'span'); s.id = 'modelloStima';
     const richiesti = dati.verdetto.dettaglio.match(/~([\d.,]+ GB)/)?.[1];
-    if (richiesti) { const m = el(documentObj, 'span', 'talos-measure talos-measure--estimate', richiesti); m.dataset.c = 'Measure'; s.append(m, documentObj.createTextNode(' richiesti')); } else s.textContent = dati.verdetto.dettaglio;
+    if (richiesti) { const m = el(documentObj, 'span', 'talos-measure talos-measure--estimate', richiesti); m.dataset.c = 'Measure'; s.append(m, documentObj.createTextNode(t('modelli.installed.requiredSuffix'))); } else s.textContent = dati.verdetto.dettaglio;
     stima.appendChild(s);
   } else {
-    stima.appendChild(el(documentObj, 'span', 'talos-muted', 'Non ancora verificato su questa macchina.'));
+    stima.appendChild(el(documentObj, 'span', 'talos-muted', t('modelli.installed.notCheckedOnMachine')));
   }
   aside.appendChild(stima);
   const azione = el(documentObj, 'button', 'talos-button talos-button--secondary talos-button--block'); azione.id = 'azioneModello'; azione.type = 'button';
-  if (dati.caricato) { azione.dataset.action = 'memoria'; azione.textContent = runtime.unloading ? 'Liberazione…' : 'Libera memoria'; azione.disabled = Boolean(runtime.unloading || runtime.loading || runtime.error); if (azioni.libera) azione.addEventListener('click', () => azioni.libera(dati.id)); }
-  else { azione.dataset.action = 'verifica'; azione.dataset.verifyFit = dati.id; azione.textContent = 'Verifica compatibilità'; if (azioni.verifica) azione.addEventListener('click', () => azioni.verifica(dati.id)); }
+  if (dati.caricato) { azione.dataset.action = 'memoria'; azione.textContent = runtime.unloading ? t('modelli.installed.releasing') : t('modelli.installed.releaseMemory'); azione.disabled = Boolean(runtime.unloading || runtime.loading || runtime.error); if (azioni.libera) azione.addEventListener('click', () => azioni.libera(dati.id)); }
+  else { azione.dataset.action = 'verifica'; azione.dataset.verifyFit = dati.id; azione.textContent = t('modelli.installed.checkCompatibility'); if (azioni.verifica) azione.addEventListener('click', () => azioni.verifica(dati.id)); }
   aside.appendChild(azione);
   const effetto = el(documentObj, 'p', 'talos-muted talos-lab__space'); effetto.id = 'modelloEffetto';
   effetto.textContent = dati.caricato && Number.isFinite(runtime.usatiDalModelloBytes)
-    ? `Libera ${gb(runtime.usatiDalModelloBytes)}. Conserva il file da ${dati.dimensione} sul disco.`
-    : `Il file da ${dati.dimensione} resta sul disco finché non lo elimini.`;
+    ? t('modelli.installed.releaseEffect', { memory: gb(runtime.usatiDalModelloBytes), size: dati.dimensione })
+    : t('modelli.installed.fileStays', { size: dati.dimensione });
   aside.appendChild(effetto);
   if (nodoFit) aside.appendChild(nodoFit);
   const cluster = el(documentObj, 'div', 'talos-cluster talos-lab__space');
@@ -419,10 +424,10 @@ export function aggiornaDettaglioInstallato(aside, dati, { runtime = {}, azioni 
     /* ⭐ 18/09/2026 — «Apri la pagina» in TESTA: è l'azione principale su un modello (la pagina
        con la scheda Hugging Face, i file e la compatibilità), e la rotta è quella del mockup.
        Prima dell'elenco c'erano solo azioni di manutenzione: rinominare, copiare, cancellare. */
-    pulsante('Apri la pagina', 'talos-button talos-button--ghost talos-button--sm', 'pagina', azioni.pagina),
-    pulsante('Rinomina', 'talos-button talos-button--ghost talos-button--sm', 'rinomina', azioni.rinomina),
-    pulsante('Copia percorso', 'talos-button talos-button--ghost talos-button--sm', 'copia', azioni.copia),
-    pulsante('Elimina dal disco', 'talos-button talos-button--danger talos-button--sm', 'elimina', azioni.elimina),
+    pulsante(t('modelli.installed.openPage'), 'talos-button talos-button--ghost talos-button--sm', 'pagina', azioni.pagina),
+    pulsante(t('modelli.installed.rename'), 'talos-button talos-button--ghost talos-button--sm', 'rinomina', azioni.rinomina),
+    pulsante(t('modelli.installed.copyPath'), 'talos-button talos-button--ghost talos-button--sm', 'copia', azioni.copia),
+    pulsante(t('modelli.installed.deleteFromDisk'), 'talos-button talos-button--danger talos-button--sm', 'elimina', azioni.elimina),
   );
   aside.appendChild(cluster);
 }
@@ -439,17 +444,17 @@ export function aggiornaInstallati(panel, modelli = [], opzioni = {}) {
   const dettaglio = panel.querySelector('[data-c="DetailPanel"]');
   const cerca = panel.querySelector('input[type="search"]');
   const memoria = panel.querySelector('[data-installati-memoria]') || panel.querySelector('.talos-toolbar strong')?.parentElement;
-  if (cerca) cerca.placeholder = `Cerca nei ${modelli.length} modelli installati…`;
+  if (cerca) cerca.placeholder = tn('modelli.installed.searchModel', 'modelli.installed.searchModels', modelli.length);
   if (memoria) {
     const testi = memoria.querySelectorAll('strong, span:not(.talos-grow)');
-    if (testi[0]) testi[0].textContent = Number.isFinite(runtime.ramTotaleBytes) ? `Questo computer · ${Math.round(runtime.ramTotaleBytes / GB)} GB di RAM` : 'Questo computer · RAM non misurata';
-    if (testi[1]) testi[1].textContent = Number.isFinite(runtime.usatiDalModelloBytes) && runtime.caricato ? `${gb(runtime.usatiDalModelloBytes)} usati dal modello` : runtime.caricato ? 'Modello in memoria · uso RAM non misurato' : runtime.loading || runtime.error ? 'Stato memoria non disponibile' : 'Nessun modello in memoria';
-    if (testi[2]) testi[2].textContent = Number.isFinite(runtime.liberiBytes) ? `${gb(runtime.liberiBytes)} liberi` : 'RAM libera non misurata';
+    if (testi[0]) testi[0].textContent = Number.isFinite(runtime.ramTotaleBytes) ? t('modelli.installed.computerRam', { ram: Math.round(runtime.ramTotaleBytes / GB) }) : t('modelli.installed.ramNotMeasured');
+    if (testi[1]) testi[1].textContent = Number.isFinite(runtime.usatiDalModelloBytes) && runtime.caricato ? t('modelli.installed.modelRamUsed', { memory: gb(runtime.usatiDalModelloBytes) }) : runtime.caricato ? t('modelli.installed.modelMemoryNotMeasured') : runtime.loading || runtime.error ? t('modelli.installed.memoryStateUnavailable') : t('modelli.installed.noModelInMemory');
+    if (testi[2]) testi[2].textContent = Number.isFinite(runtime.liberiBytes) ? t('modelli.installed.freeMemory', { memory: gb(runtime.liberiBytes) }) : t('modelli.installed.freeRamNotMeasured');
   }
   panel.setAttribute('aria-busy', String(Boolean(caricamento)));
   if (!lista) return null;
   if (errore) {
-    lista.replaceChildren(el(documentObj, 'p', 'talos-card--pad talos-muted', `Modelli locali non disponibili: ${errore.message || errore}`));
+    lista.replaceChildren(el(documentObj, 'p', 'talos-card--pad talos-muted', t('modelli.installed.modelsUnavailable', { error: errore.message || errore })));
     if (vuoto) vuoto.hidden = true;
     aggiornaDettaglioInstallato(dettaglio, null, { document: documentObj });
     return null;
@@ -459,8 +464,8 @@ export function aggiornaInstallati(panel, modelli = [], opzioni = {}) {
   // gli a-capo fra le righe sono quelli del sorgente del mockup: le PAROLE del cancello li vedono come spazi
   lista.replaceChildren(...visibili.flatMap((m) => [documentObj.createTextNode('\n'), creaRigaInstallata(datiModelloInstallato(m, { runtime, fit: fit.get?.(m.id) || null }), { selezionato: scelto?.id === m.id, seleziona, document: documentObj })]), documentObj.createTextNode('\n'));
   if (visibili.length === 0) {
-    if (caricamento) lista.replaceChildren(el(documentObj, 'p', 'talos-card--pad talos-muted', 'Lettura dei modelli sul disco…'));
-    else if (modelli.length === 0) lista.replaceChildren(el(documentObj, 'p', 'talos-card--pad talos-muted', 'Nessun modello sul computer: importa un .gguf o scaricane uno da Hugging Face.'));
+    if (caricamento) lista.replaceChildren(el(documentObj, 'p', 'talos-card--pad talos-muted', t('modelli.installed.readingDiskModels')));
+    else if (modelli.length === 0) lista.replaceChildren(el(documentObj, 'p', 'talos-card--pad talos-muted', t('modelli.installed.noComputerModels')));
     if (vuoto) vuoto.hidden = !(modelli.length > 0 && !caricamento);
   } else if (vuoto) vuoto.hidden = true;
   aggiornaDettaglioInstallato(dettaglio, scelto ? datiModelloInstallato(scelto, { runtime, fit: fit.get?.(scelto.id) || null }) : null, { runtime, azioni, nodoFit: scelto && nodoFit ? nodoFit(scelto.id) : null, document: documentObj });
@@ -503,7 +508,7 @@ export function montaInstallati(originale, canonico, { document: documentObj = g
   const esito = originale.querySelector('#modelLabImportStatus') || originale.querySelector('#esitoImportazione');
   if (esito && !originale.querySelector('#modelLabImportProgress')) {
     const progress = documentObj.createElement('progress'); progress.id = 'modelLabImportProgress'; progress.max = 100; progress.value = 0; progress.hidden = true; progress.className = 'talos-lab__meter';
-    const annulla = el(documentObj, 'button', 'talos-button talos-button--ghost talos-button--sm', 'Annulla'); annulla.type = 'button'; annulla.id = 'modelLabImportCancelButton'; annulla.hidden = true;
+    const annulla = el(documentObj, 'button', 'talos-button talos-button--ghost talos-button--sm', t('modelli.installed.cancel')); annulla.type = 'button'; annulla.id = 'modelLabImportCancelButton'; annulla.hidden = true;
     esito.after(progress, annulla);
   }
   aggiornaDettaglioInstallato(originale.querySelector('[data-c="DetailPanel"]') || originale.querySelector('#dettaglioInstallato'), null, { document: documentObj });

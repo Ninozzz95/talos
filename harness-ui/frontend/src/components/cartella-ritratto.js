@@ -13,6 +13,7 @@
  */
 
 /** I numeri all'italiana, senza dipendere dai dati locali compilati nel runtime. */
+import { linguaCorrenteDiT, t, tn } from './lingua.js';
 export function numeroItaliano(n) {
   const v = Number(n);
   if (!Number.isFinite(v)) return '0';
@@ -20,21 +21,26 @@ export function numeroItaliano(n) {
 }
 
 /** La riga di fatti: quello che c'è, in ordine di importanza per chi sta per premere «Continua». */
+/** Il separatore delle migliaia della lingua corrente, con la stessa disciplina di `numeroItaliano` (niente dati locali del runtime). */
+const numero = (n) => (linguaCorrenteDiT() === 'en' ? numeroItaliano(n).replaceAll('.', ',') : numeroItaliano(n));
+
+/* 03/10/2026, seconda ondata della lingua: ogni pezzo è una voce del dizionario (`varie.folderPortrait.*`, inglese prima); il
+   singolare e il plurale li sceglie `tn`. I pezzi restano separati da « · », come prima. */
 export function frasiRitratto(ritratto) {
   if (!ritratto || ritratto.leggibile !== true) return '';
   const pezzi = [];
   pezzi.push(ritratto.oltreIlTetto
-    ? `più di ${numeroItaliano(ritratto.tetto)} file`
-    : `${numeroItaliano(ritratto.file)} file`);
-  if (Number(ritratto.cartelle) > 0) pezzi.push(`${numeroItaliano(ritratto.cartelle)} cartelle`);
-  if (ritratto.git?.ramo) pezzi.push(`ramo ${ritratto.git.ramo}`);
+    ? t('varie.folderPortrait.moreThanFiles', { n: numero(ritratto.tetto) })
+    : tn('varie.folderPortrait.filesOne', 'varie.folderPortrait.files', Number(ritratto.file) || 0, { n: numero(ritratto.file) }));
+  if (Number(ritratto.cartelle) > 0) pezzi.push(tn('varie.folderPortrait.foldersOne', 'varie.folderPortrait.folders', Number(ritratto.cartelle), { n: numero(ritratto.cartelle) }));
+  if (ritratto.git?.ramo) pezzi.push(t('varie.folderPortrait.branch', { name: ritratto.git.ramo }));
   if (Number.isFinite(Number(ritratto.git?.nonSalvate))) {
     const n = Number(ritratto.git.nonSalvate);
-    pezzi.push(n === 0 ? 'niente da salvare' : `${numeroItaliano(n)} modifiche non salvate`);
+    pezzi.push(n === 0 ? t('varie.folderPortrait.nothingToSave') : tn('varie.folderPortrait.unsavedOne', 'varie.folderPortrait.unsaved', n, { n: numero(n) }));
   }
   const annidati = ritratto.git?.repoAnnidati?.length || 0;
-  if (annidati > 0) pezzi.push(annidati === 1 ? '1 repo annidato' : `${numeroItaliano(annidati)} repo annidati`);
-  if (ritratto.istruzioni?.length) pezzi.push(`istruzioni: ${ritratto.istruzioni.join(', ')}`);
+  if (annidati > 0) pezzi.push(tn('varie.folderPortrait.nestedOne', 'varie.folderPortrait.nested', annidati, { n: numero(annidati) }));
+  if (ritratto.istruzioni?.length) pezzi.push(t('varie.folderPortrait.instructions', { list: ritratto.istruzioni.join(', ') }));
   return pezzi.join(' · ');
 }
 
@@ -44,11 +50,7 @@ export function frasiRitratto(ritratto) {
  */
 export function avvisoRitratto(ritratto) {
   if (!ritratto || ritratto.leggibile !== true) return '';
-  if (ritratto.radice === true) {
-    return 'Questa è una cartella radice: l’agente vedrebbe tutto quello che c’è sotto. Scegli il progetto, non il disco.';
-  }
-  if (ritratto.oltreIlTetto === true) {
-    return `Qui ci sono più di ${numeroItaliano(ritratto.tetto)} file: l’albero pesa a ogni giro. Se puoi, scegli una sottocartella.`;
-  }
+  if (ritratto.radice === true) return t('varie.folderPortrait.rootWarning');
+  if (ritratto.oltreIlTetto === true) return t('varie.folderPortrait.tooManyWarning', { n: numero(ritratto.tetto) });
   return '';
 }

@@ -22,11 +22,18 @@
  */
 
 /** Le quattro vie del «+», nell'ordine in cui si usano (B6). */
+/* 03/10/2026, seconda ondata della lingua: etichetta e aiuto si leggono dal dizionario (`chat.attachments.via.*`), nella lingua
+   corrente; `id` e `icona` sono dati di logica. */
+import { t } from './lingua.js';
+const via = (id, icona) => Object.freeze(Object.defineProperties({ id, icona }, {
+  etichetta: { enumerable: true, get: () => t(`chat.attachments.via.${id}.label`) },
+  aiuto: { enumerable: true, get: () => t(`chat.attachments.via.${id}.help`) },
+}));
 export const VIE_ALLEGATO = Object.freeze([
-  { id: 'workspace', etichetta: 'File del progetto', aiuto: 'Scegli fra i file della cartella di questa sessione', icona: 'i-folder' },
-  { id: 'disco', etichetta: 'File dal disco', aiuto: 'Un file qualunque del computer', icona: 'i-file' },
-  { id: 'immagine', etichetta: 'Immagine', aiuto: 'Una foto o uno schema da guardare', icona: 'i-image' },
-  { id: 'schermata', etichetta: 'Ultima schermata', aiuto: 'L’ultimo screenshot che hai scattato', icona: 'i-camera' },
+  via('workspace', 'i-folder'),
+  via('disco', 'i-file'),
+  via('immagine', 'i-image'),
+  via('schermata', 'i-camera'),
 ]);
 
 /*
@@ -41,7 +48,7 @@ export const TETTI_ALLEGATI = Object.freeze({
 
 /** La frase che dichiara i tetti, quella che si legge PRIMA di sbatterci. */
 export function frasiTetti() {
-  return `Fino a ${TETTI_ALLEGATI.quanti} allegati per messaggio · oltre ${Math.round(TETTI_ALLEGATI.caratteriPerAllegato / 1000)}k caratteri un file da solo pesa quanto mezza conversazione`;
+  return t('chat.attachments.limits', { count: TETTI_ALLEGATI.quanti, k: Math.round(TETTI_ALLEGATI.caratteriPerAllegato / 1000) });
 }
 
 /** Vero quando un allegato supera il tetto per file: non si rifiuta, si avvisa. */

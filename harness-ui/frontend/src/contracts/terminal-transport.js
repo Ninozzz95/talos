@@ -1,7 +1,7 @@
 import { CONTROL_FRAME, DATA_FRAME, decodeTerminalFrame, encodeTerminalFrame } from './terminal-protocol.js';
 
 export function createTerminalTransportFactory({ WebSocketImpl = globalThis.WebSocket, endpoint } = {}) {
-  if (typeof WebSocketImpl !== 'function' || typeof endpoint !== 'function') throw new TypeError('WebSocket ed endpoint sono obbligatori');
+  if (typeof WebSocketImpl !== 'function' || typeof endpoint !== 'function') throw new TypeError('WebSocket and endpoint are required');
   return Object.freeze({
     open({ terminalId, onData = () => {}, onExit = () => {}, onError = () => {}, onState = () => {}, onAttach = () => {} }) {
       if (!terminalId) throw new TypeError('Identificativo terminale obbligatorio');

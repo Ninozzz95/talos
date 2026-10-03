@@ -143,10 +143,15 @@ test('CONTESTO-PROMESSA: quello che la sezione promette e non misura lo DICHIARA
 //   (`workflow_plan_propose`, `ask_parent`, `answer_parent_question`, `ask_child`, `answer_child_question`).
 // 24/09/2026, decisione owner 36: 52 — `present_plan`, il piano da approvare (fetta F3-30).
 // 28/09/2026, 0.1.19: 62 — `request_plan_mode` e i tre tool di lettura/controllo workflow.
-test('C10-DESCRIZIONI: 62 attrezzi storici e lettura output, in italiano senza markdown a schermo', async () => {
+test('C10-DESCRIZIONI: 64 attrezzi storici e lettura output, in italiano senza markdown a schermo', async () => {
   const m = await import('../../src/components/nomi-attrezzi.js');
   const ids = Object.keys(m.DESCRIZIONI_ATTREZZI);
-  assert.equal(ids.filter(id => id !== 'process_output').length, 62);
+  assert.equal(ids.filter(id => id !== 'process_output').length, 64); // 03/10/2026: + list_children, stop_child (F-020/F-014)
+  for (const nuovo of ['list_children', 'stop_child']) {
+    assert.ok(ids.includes(nuovo), `manca la descrizione di ${nuovo}`);
+    assert.ok(m.NOMI_UMANI_ATTREZZI[nuovo], `manca il nome umano di ${nuovo}`);
+    assert.ok(!/_/u.test(m.nomeLeggibileAttrezzo(nuovo)), `nome tecnico a schermo per ${nuovo}`);
+  }
   // 27/09/2026, decisione owner (capacità delle sezioni): le sei letture nuove hanno la loro descrizione e il loro nome umano
   for (const nuovo of ['memory_list', 'notes_search', 'notes_read', 'tasks_search', 'research_search', 'conversation_search', 'process_output']) {
     assert.ok(ids.includes(nuovo), `manca la descrizione di ${nuovo}`);

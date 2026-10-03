@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { TESTI } from '../../src/i18n/testi/index.js'; // corsia A della lingua (03/10/2026): le frasi stanno nel dizionario, il sorgente porta la chiave
 
 /*
  * I DUE DIFETTI DELL'ALBERO DEI FILE (11/09/2026), owner dal vivo sulla foto dell'inspector:
@@ -89,7 +90,7 @@ test('APRI 1 — il menu della RADICE offre «Apri in Esplora File», e in testa
   assert.ok(corpo, 'apriMenuAzioniFile deve esistere');
   const soloCreazione = /const voci = soloCreazione \? \[([\s\S]*?)\] : cartella \? \[/.exec(corpo);
   assert.ok(soloCreazione, 'il ramo della radice deve esistere');
-  const etichette = [...soloCreazione[1].matchAll(/etichetta: '([^']+)'/g)].map((m) => m[1]);
+  const etichette = [...soloCreazione[1].matchAll(/etichetta: (?:'([^']+)'|tr\('([^']+)'\))/g)].map((m) => m[1] ?? TESTI.it[m[2]]);
   assert.deepEqual(etichette, ['Apri in Esplora File', 'Nuovo file', 'Nuova cartella'], 'la voce chiesta dall\'owner c\'e\', ed e\' la prima: e\' l\'unica che non crea niente');
 });
 
@@ -97,7 +98,7 @@ test('APRI 2 — anche le CARTELLE hanno «Apri», con l\'etichetta IDENTICA a q
   const corpo = corpoFunzione(APP, 'apriMenuAzioniFile');
   const cartelle = /\] : cartella \? \[([\s\S]*?)\] : \[/.exec(corpo);
   assert.ok(cartelle, 'il ramo delle cartelle deve esistere');
-  const etichette = [...cartelle[1].matchAll(/etichetta: '([^']+)'/g)].map((m) => m[1]);
+  const etichette = [...cartelle[1].matchAll(/etichetta: (?:'([^']+)'|tr\('([^']+)'\))/g)].map((m) => m[1] ?? TESTI.it[m[2]]);
   assert.ok(etichette.includes('Apri in Esplora File'), 'una cartella si deve poter aprire come la radice');
   assert.ok(etichette.includes('Rivela in Esplora File'), '«apri» e «rivela» restano due voci: sono due cose diverse su Windows');
   assert.ok(etichette.indexOf('Apri in Esplora File') === etichette.indexOf('Rivela in Esplora File') - 1, 'le due azioni Windows stanno vicine, nell\'ordine apri → rivela');

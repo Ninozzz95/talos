@@ -6,6 +6,8 @@ import test from 'node:test';
 
 import { ePercorsoDiControllo, esceDalWorkspaceVersoUnNascosto, FILE_DI_CONTROLLO, motivoDaChiedere, nominaUnSegreto, PathPolicyError, PERCORSI_SEGRETI, isPathInside, openContainedFile, resolveContainedRealPath } from '../src/path-policy.mjs';
 import { rimuoviCartellaDiProvaAttesa } from './aiuto/rimuovi-cartella-di-prova.mjs';
+// K4b (03/10/2026): la frase per la persona si confronta anche con la voce italiana del dizionario dell'interfaccia.
+import { TESTI } from '../frontend/src/i18n/testi/index.js';
 
 /*
  * ⛔⛔⛔ 30/8 — questo file testava `createPathPolicy()` (5 test, tutti su
@@ -343,14 +345,24 @@ test('F15 — il CONFINE vuole DUE condizioni: fuori dal workspace E nascosto', 
 });
 
 test('F15 — la COPIA per la persona: lingua naturale, nomina il file, nessun nome tecnico', () => {
+  /* K4b (03/10/2026): la frase del server è INGLESE con la sua chiave e i suoi valori; l'italiano di prima sta nel dizionario,
+     identico parola per parola. Si controllano tutti e due, più la chiave. */
+  const italiano = (segnalazione) => TESTI.it[segnalazione.fraseChiave].replace('{percorso}', () => segnalazione.fraseParams?.percorso ?? '');
   const comando = daChiedere('cat ~/.ssh/id_rsa');
-  assert.equal(comando.frase, 'Il comando tocca un file che può contenere chiavi o password (~/.ssh/id_rsa): vuoi che lo esegua?');
+  assert.equal(comando.frase, 'The command touches a file that may contain keys or passwords (~/.ssh/id_rsa): do you want me to run it?');
+  assert.equal(comando.fraseChiave, 'server.approval.command.secret');
+  assert.equal(italiano(comando), 'Il comando tocca un file che può contenere chiavi o password (~/.ssh/id_rsa): vuoi che lo esegua?');
   const lettura = motivoDaChiedere({ tipo: 'leggi', percorso: '~/.aws/credentials', cartella: LAVORO_DI_PROVA, home: HOME_DI_PROVA });
-  assert.equal(lettura.frase, 'Questa lettura apre un file che può contenere chiavi o password (~/.aws/credentials): vuoi che la faccia?');
+  assert.equal(lettura.frase, 'This read opens a file that may contain keys or passwords (~/.aws/credentials): do you want me to do it?');
+  assert.equal(italiano(lettura), 'Questa lettura apre un file che può contenere chiavi o password (~/.aws/credentials): vuoi che la faccia?');
   const portachiavi = daChiedere('cmdkey /list');
-  assert.equal(portachiavi.frase, 'Il comando apre il portachiavi del sistema, dove sono custodite le password: vuoi che lo esegua?');
+  assert.equal(portachiavi.frase, 'The command opens the system keychain, where passwords are kept: do you want me to run it?');
+  assert.equal(italiano(portachiavi), 'Il comando apre il portachiavi del sistema, dove sono custodite le password: vuoi che lo esegua?');
   const confine = daChiedere('cat ../.config/appunti.txt');
-  assert.equal(confine.frase, 'Il comando tocca una cartella nascosta fuori dalla cartella di lavoro (../.config/appunti.txt): vuoi che lo esegua?');
+  assert.equal(confine.frase, 'The command touches a hidden folder outside the working folder (../.config/appunti.txt): do you want me to run it?');
+  assert.equal(italiano(confine), 'Il comando tocca una cartella nascosta fuori dalla cartella di lavoro (../.config/appunti.txt): vuoi che lo esegua?');
+  const conDollaro = motivoDaChiedere({ tipo: 'leggi', percorso: '../fuori/$&.txt', cartella: LAVORO_DI_PROVA, home: HOME_DI_PROVA });
+  assert.match(conDollaro.frase, /\(\.\.\/fuori\/\$&\.txt\)/u, 'un percorso con `$&` resta com\'è nella frase');
   for (const frase of [comando.frase, lettura.frase, portachiavi.frase, confine.frase]) {
     for (const tecnico of ['shell', 'leggi', 'workspace', 'PERCORSI_SEGRETI', 'permessiPerAttrezzo', 'null']) {
       assert.ok(!frase.includes(tecnico), `nessun nome tecnico nella copia: «${tecnico}» in «${frase}»`);

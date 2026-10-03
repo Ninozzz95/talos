@@ -1,10 +1,11 @@
+import { t, tn } from './lingua.js';
 // R06: riuso dei blocchi del mockup senza sostituire ID, controlli o rotte native.
 export function etichettaRuntimeLaboratorio(runtimes = [], {caricamento = false, errore = null} = {}) {
-  if (caricamento) return 'Verifica in corso…';
-  if (errore) return 'Verifica non riuscita';
+  if (caricamento) return t('modelli.frame.checking');
+  if (errore) return t('modelli.frame.checkFailed');
   const osservati = runtimes.filter(runtime => runtime?.state === 'observed');
   const pronti = osservati.filter(runtime => Array.isArray(runtime.models) && runtime.models.length > 0).length;
-  return pronti ? pronti + (pronti === 1 ? ' runtime disponibile' : ' runtime disponibili') : osservati.length ? 'Nessun modello disponibile' : 'Nessun runtime raggiunto';
+  return pronti ? tn('modelli.frame.oneRuntimeAvailable', 'modelli.frame.manyRuntimesAvailable', pronti) : osservati.length ? t('modelli.frame.noModels') : t('modelli.frame.noReachedRuntime');
 }
 export function aggiornaStatoCorniceModelLab(card, runtimes, opzioni) {
   const badge = card?.querySelector('#modelLabRuntimeBadge');
@@ -74,7 +75,7 @@ export function montaCorniceModelLab(card) {
   libera.id = 'modelLabLiberaMemoria';
   libera.type = 'button';
   libera.className = 'talos-button talos-button--secondary talos-button--sm';
-  libera.textContent = 'Libera memoria';
+  libera.textContent = t('modelli.frame.freeMemory');
   libera.disabled = true;
   striscia.append(libera);
   const tabs = [...list.querySelectorAll('[data-model-lab-tab]')];

@@ -78,5 +78,5 @@ test('ASK-TAIL-WITH-PLAN: in Piano le due note arrivano insieme, Ask prima e Pia
   await talosLavora(opzioni({ fetchDiRete: r.fetch, messaggiIniziali: RIPRESA_VECCHIA, modalitaOperativa: 'piano' }));
   const coda = r.corpi[0].messages.slice(-2);
   assert.match(coda[0].content, new RegExp(FRASE_ASK, 'u'));
-  assert.match(coda[1].content, /^Modalità Piano attiva/u);
+  assert.match(coda[1].content, /^Plan mode is on/u);
 });

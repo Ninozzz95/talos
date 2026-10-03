@@ -35,6 +35,8 @@
  *     il consumo della conversazione.
  */
 
+import { linguaCorrenteDiT, t, tn } from './lingua.js';
+const localeUI = () => (linguaCorrenteDiT() === 'en' ? 'en-US' : 'it-IT');
 const numero = (valore) => (Number.isFinite(Number(valore)) ? Number(valore) : null);
 
 /**
@@ -90,7 +92,7 @@ export function giriDellaSessione(sessione) {
 /** Il titolo che spiega perché i token non contano i giri fermati — le stesse parole ovunque compaia il numero. */
 export function spiegaGiriFermati(fermati) {
   if (!Number.isSafeInteger(fermati) || fermati <= 0) return '';
-  return `${fermati === 1 ? '1 giro fermato' : `${fermati} giri fermati`} prima che il fornitore dichiarasse il consumo: nei token non ci sono.`;
+  return tn('varie.usage.stoppedTurnsOne', 'varie.usage.stoppedTurnsMany', fermati);
 }
 
 /** Quanti INVII ci sono dietro un totale di sessione (`null` quando non è dichiarato). */
@@ -102,7 +104,7 @@ export function esecuzioniDellaSessione(sessione) {
 /** BC-48 C — stessa misura e stesse parole nell'inspector e nei costi. Mai null → 0. */
 export function testoRiusoCache(misura) {
   const p = misura?.percentuale; const giri = misura?.giriMisurati;
-  if (!Number.isFinite(p) || p < 0 || p > 100 || !Number.isSafeInteger(giri) || giri <= 0) return 'non misurato';
-  const numero = new Intl.NumberFormat('it-IT', { maximumFractionDigits: 0 });
-  return `${numero.format(p)} % · su ${numero.format(giri)} ${giri === 1 ? 'giro' : 'giri'}`;
+  if (!Number.isFinite(p) || p < 0 || p > 100 || !Number.isSafeInteger(giri) || giri <= 0) return t('varie.usage.notMeasured');
+  const numero = new Intl.NumberFormat(localeUI(), { maximumFractionDigits: 0 }); // 03/10/2026: il formato della lingua corrente, non «it-IT» fisso
+  return tn('varie.usage.cacheReuseOne', 'varie.usage.cacheReuseMany', giri, { percent: numero.format(p), n: numero.format(giri) });
 }

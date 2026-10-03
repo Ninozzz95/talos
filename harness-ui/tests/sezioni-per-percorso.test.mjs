@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { togliConfiniDati } from '../src/kernel/confine-dati.mjs';
 import test from 'node:test';
 import { mkdtemp, mkdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -186,7 +187,7 @@ test('BC48-A-KERNEL-REALE: lettura vera, due turni, storico accodato e nessuna r
   const input = { cartella: cwd, task: { consegna: 'Leggi src/a.txt' }, modello: 'prova', chiave: 'finta', contextHooks: hooks, fetchDiRete: reteFinta };
   const primo = await adapter.talosLavora(input);
   assert.equal(richieste.length, 2);
-  assert.ok(primo.messaggiFinali.some(m => m.role === 'tool' && m.content === 'Contenuto vero dal disco.'));
+  assert.ok(primo.messaggiFinali.some(m => m.role === 'tool' && togliConfiniDati(m.content) === 'Contenuto vero dal disco.'));
   const marche = messages => messages.filter(m => typeof m.content === 'string' && m.content.startsWith('Sezione di `'));
   assert.equal(marche(richieste[0].messages).length, 0);
   assert.equal(marche(richieste[1].messages).length, 2);

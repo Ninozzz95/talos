@@ -58,7 +58,10 @@ test('LINK-CONVERSAZIONE-UI-AL-CONTRARIO — una conversazione che non c’è pi
 });
 
 /* 27/09/2026 — le righe delle letture nuove hanno una frase loro: col ripiego `nome umano…` resterebbero coi puntini anche a
- * giro concluso (difetto registrato, `app.js` `riassuntoAttrezzo`, `default`). La prova gira in inglese (en.js). */
+ * giro concluso (difetto registrato, `app.js` `riassuntoAttrezzo`, `default`). La prova gira in inglese (en.js).
+ * ⛔ 03/10/2026: la suite ora è fissata all'italiano (playwright.config.mjs); questa guarda le frasi INGLESI, quindi l'inglese
+ *   si chiede qui, dichiarato, invece di arrivare per caso dal locale di Chromium. */
+test.describe('in inglese', () => { test.use({ locale: 'en-US' });
 test('RIGHE-SEZIONI — le letture nuove si leggono a giro concluso, senza puntini e senza nomi tecnici', async ({ page }) => {
   const { scritture } = await apri(page, 'conv-righe', [ALTRA]);
   const attrezzo = async (id, nome, argomenti, esito, n) => {
@@ -76,6 +79,7 @@ test('RIGHE-SEZIONI — le letture nuove si leggono a giro concluso, senza punti
   }
   expect(testi.filter((t) => /…$|_/u.test(t))).toEqual([]);
   expect(scritture).toEqual([]);
+});
 });
 
 /* Difetto 1 del 27/09 (owner, stessa notte: «1, 2 e 5 ora»): un attrezzo SENZA frase sua (qui `memory_delete`, com'era stato

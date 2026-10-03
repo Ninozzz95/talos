@@ -159,7 +159,7 @@ test('PKLB-CATALOG-02: Bedrock aggiunge configurati senza duplicati, non copre e
 
 test('PKLB-CATALOG-03: esterno configurato/non configurato senza avviare processi', async t => {
   const f = banco(t), store = createProviderCredentialStore({ env: {} }), p = sonda(store);
-  await assert.rejects(p.elencaModelli('esterno'), e => e.code === 'CATALOG_CONFIGURATION_REQUIRED' && e.message === "Configura l'agente esterno in Fornitori e accessi");
+  await assert.rejects(p.elencaModelli('esterno'), e => e.code === 'CATALOG_CONFIGURATION_REQUIRED' && e.message === 'Set up the external agent in Providers and access');
   store.setRuntime('esterno', { agente: f.agente });
   const c = await p.elencaModelli('esterno');
   assert.equal(c.modelli.length, 1); assert.equal(c.modelli[0].id, 'esterno:predefinito');

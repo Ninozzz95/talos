@@ -5,6 +5,7 @@
  * nome, tipo e peso, mai un byte nullo; un file di testo passa identico.
  */
 import assert from 'node:assert/strict';
+import { togliConfiniDati } from '../src/kernel/confine-dati.mjs';
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -36,7 +37,7 @@ async function esitoDiLeggi(t, nome, contenuto) {
   writeFileSync(join(cartella, nome), contenuto);
   const rete = reteDiRisposte(leggi(nome), FINE);
   await talosLavora({ cartella, task: { consegna: `leggi ${nome}` }, modello: 'x', chiave: 'y', fetchDiRete: rete.fetch });
-  return rete.chiamate[1].corpo.messages.find((m) => m.role === 'tool').content;
+  return togliConfiniDati(rete.chiamate[1].corpo.messages.find((m) => m.role === 'tool').content);
 }
 
 test('P19-LEGGI-01 — leggi su un PNG vero: il modello riceve nome, tipo e peso VERO sul disco, nessun byte del file', async (t) => {

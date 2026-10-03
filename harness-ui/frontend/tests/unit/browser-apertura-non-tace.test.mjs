@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { TESTI } from '../../src/i18n/testi/index.js';
 
 /*
  * ⭐⭐⭐ 11/09/2026 — «IL CAMPO URL DEL BROWSER NON APRE NESSUNA SCHEDA».
@@ -47,7 +48,11 @@ const APP_NUDO = senzaCommenti(APP);
 test('INVIO: il campo indirizzo chiede l’apertura, e un testo che non è un indirizzo viene detto', () => {
   assert.match(BROWSER_NUDO, /e\.key === 'Enter'[\s\S]{0,200}urlApribile\(el\.url\.value\)/);
   assert.match(BROWSER_NUDO, /azioni\.apri\?\.\(u\)/);
-  assert.match(BROWSER_NUDO, /mostraAvviso\(t\('Non è un indirizzo/);
+  /* 03/10/2026 (corsia E della lingua): l'avviso è una chiave stabile; si controlla che la chiamata la usi e che la voce dica
+     ancora la stessa cosa, in italiano e in inglese. */
+  assert.match(BROWSER_NUDO, /mostraAvviso\(t\(["']varie\.browser\.address\.notAnAddress["']\)\)/);
+  assert.match(TESTI.it['varie.browser.address.notAnAddress'], /^Non è un indirizzo/);
+  assert.match(TESTI.en['varie.browser.address.notAnAddress'], /^That is not an address/);
 });
 
 test('AVVISA: il componente offre a chi apre un posto dove dire perché la scheda non è nata', () => {

@@ -4,6 +4,7 @@ import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
+import { AREE } from '../frontend/src/i18n/testi/index.js';
 
 import { API_SCHEMA, createHttpApp } from '../src/http-app.mjs';
 // ⭐⭐⭐ 04/9 — W0-08: SOLO per il test "la rotta HTTP provata davvero" più
@@ -258,6 +259,12 @@ function registroFinto() {
       return { sessionId };
     },
     ultimeImpostazioniSessione: null,
+    ultimaLinguaInterfaccia: null,
+    impostaLinguaInterfaccia(sessionId, lingua) { // K3b: come il registro vero
+      if (!sessioni.has(sessionId)) return { erroreAvvio: 'Session not found', code: 'NOT_FOUND', reason: 'session-not-found' };
+      this.ultimaLinguaInterfaccia = { sessionId, lingua };
+      return { aggiornata: true };
+    },
     async aggiornaImpostazioni(sessionId, patch) {
       this.ultimeImpostazioniSessione = { sessionId, patch };
       const voce = sessioni.get(sessionId);
@@ -757,11 +764,11 @@ test('⛔⛔ AL CONTRARIO — POST /api/v1/sessions con modelloPlanner malformat
 test('⛔⛔⛔ POST /api/v1/sessions/custom: modello, ragionamento e permessi non validi dicono il motivo vero, e l avvio non parte', async (t) => {
   const { base, sessionRegistry } = await listen(t);
   const casi = [
-    [{ modello: 'senza slash e spazi' }, 'MODEL_ID_INVALID', /modello/iu],
-    [{ reasoning: { effort: 'enorme' } }, 'REASONING_INVALID', /ragionamento/iu],
-    [{ permessi: 'Super Admin' }, 'PERMISSIONS_INVALID', /permess/iu],
+    [{ modello: 'senza slash e spazi' }, 'MODEL_ID_INVALID', /model/iu, /modello/iu],
+    [{ reasoning: { effort: 'enorme' } }, 'REASONING_INVALID', /reasoning/iu, /ragionamento/iu],
+    [{ permessi: 'Super Admin' }, 'PERMISSIONS_INVALID', /permissions/iu, /permess/iu],
   ];
-  for (const [campo, codice, parola] of casi) {
+  for (const [campo, codice, parola, parolaItaliana] of casi) {
     const risposta = await fetch(`${base}/api/v1/sessions/custom`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ cartellaId: '0', consegna: 'ciao', ...campo }),
@@ -769,8 +776,10 @@ test('⛔⛔⛔ POST /api/v1/sessions/custom: modello, ragionamento e permessi n
     assert.equal(risposta.status, 400);
     const { error } = await risposta.json();
     assert.equal(error.code, codice, JSON.stringify(campo));
-    assert.match(error.message, parola, 'la frase nomina ciò che va scelto di nuovo');
-    assert.doesNotMatch(error.message, /OpenRouter|vendor|effort|Query non valida|\{/u, 'nessun gergo e nessuna forma del corpo');
+    assert.match(error.message, parola, 'la frase (inglese: è il server) nomina ciò che va scelto di nuovo');
+    assert.match(AREE.errori.it[`${codice}.message`], parolaItaliana, 'e in italiano la voce del dizionario nomina la stessa cosa');
+    assert.doesNotMatch(error.message, /OpenRouter|vendor|effort|Invalid query|\{/u, 'nessun gergo e nessuna forma del corpo');
+    assert.doesNotMatch(AREE.errori.it[`${codice}.message`], /OpenRouter|vendor|effort|Query non valida|\{/u);
   }
   assert.equal(sessionRegistry.ultimeOpzioniAvvio, null, 'nessun avvio con un corpo rifiutato');
 });
@@ -1074,8 +1083,10 @@ test('⛔⛔ AL CONTRARIO — POST .../approve con un requestId non più in atte
   const busta = await risposta.json();
   assert.equal(busta.error.code, 'APPROVAL_NOT_PENDING');
   // ⛔ È questa stringa che finisce nel fumetto rosso: se torna «Query non valida», O-49 è tornato.
-  assert.equal(busta.error.message, 'Questa richiesta di permesso non è più in attesa: la sessione è andata avanti');
-  assert.equal(busta.error.title, 'Richiesta di permesso scaduta');
+  assert.equal(busta.error.message, 'This permission request is no longer pending: the session has moved on');
+  assert.equal(busta.error.title, 'Permission request expired');
+  assert.equal(AREE.errori.it['APPROVAL_NOT_PENDING.message'], 'Questa richiesta di permesso non è più in attesa: la sessione è andata avanti');
+  assert.equal(AREE.errori.it['APPROVAL_NOT_PENDING.title'], 'Richiesta di permesso scaduta');
 });
 
 test('⛔ AL CONTRARIO — POST .../approve su una sessione inesistente: 404 NOT_FOUND', async (t) => {
@@ -2647,7 +2658,7 @@ test('⭐⭐⭐ W1-03 — GET /api/v1/sessions/:id/metrics torna cache, tempo al
   assert.equal(corpo.data.primoToken.inCorsoDaMs, 19_000);
 
   assert.equal(corpo.data.chiusura.motivo, null, 'il giro è ancora aperto: nessun motivo di chiusura inventato');
-  assert.ok(corpo.data.chiusura.motivoAssente.includes('ancora in corso'));
+  assert.ok(corpo.data.chiusura.motivoAssente.includes('still running'));
   /*
    * ⛔⛔ 13/09 notte — CAMBIATA DOPO IL GIRO VERO. Qui c'era «`g1` è partito ma non è finito: nessuna durata». Ma a 6.000
    *   parte il testo, e nello store vero dopo il primo testo non arriva più un solo pezzo di ragionamento: la sua fine
@@ -2717,7 +2728,7 @@ test('⛔⛔ AL CONTRARIO — GET .../metrics su un giro CONCLUSO male porta il 
   assert.equal(corpo.data.chiusura.codice, 'giri-esauriti', '⛔ il codice grezzo non si butta via: la mappatura fra vocabolari «cannot be defaulted»');
   assert.equal(corpo.data.primoToken.inCorsoDaMs, null, 'un giro chiuso non è «in corso da»');
   assert.equal(corpo.data.cache.frazione, null, 'questa sessione non ha mai riportato un consumo: null, mai 0%');
-  assert.ok(corpo.data.cache.motivoAssente.includes('MISURATO'));
+  assert.ok(corpo.data.cache.motivoAssente.includes('NOT MEASURED'));
 });
 
 test('⛔ AL CONTRARIO — GET .../metrics su una sessione inesistente: 404 NOT_FOUND', async (t) => {
@@ -3067,8 +3078,10 @@ test('MODE-TWO-VALUES-ONLY-HTTP — sessione, sessione libera e impostazioni rif
     assert.equal(risposta.status, 400, path);
     const { error } = await risposta.json();
     assert.equal(error.code, 'MODE_WORKFLOW_RETIRED', path);
-    assert.notEqual(error.title, 'Operazione non riuscita', `${path}: serve una copia pubblica sua, non quella dell'errore interno`);
-    assert.match(`${error.title} ${error.explanation} ${error.action}`, /Normale|Piano/, path);
+    assert.notEqual(error.title, 'Operation failed', `${path}: serve una copia pubblica sua, non quella dell'errore interno`);
+    assert.match(`${error.title} ${error.explanation} ${error.action}`, /Normal|Plan/, path);
+    const italiano = ['title', 'explanation', 'action'].map((parte) => AREE.errori.it[`MODE_WORKFLOW_RETIRED.${parte}`]).join(' ');
+    assert.match(italiano, /Normale|Piano/, `${path}: e in italiano la dice il dizionario`);
   }
   assert.equal(sessionRegistry.ultimeOpzioniAvvio, null, 'il registro non è stato chiamato');
   assert.equal(sessionRegistry.ultimeOpzioniAvvioLibero ?? null, null);
@@ -3103,7 +3116,8 @@ test('EXFAT-HTTP-FS-UNSUPPORTED — un disco non adatto arriva alla persona col 
   assert.equal(response.status, 500);
   const result = await response.json();
   assert.equal(result.error.code, 'SESSION_STORE_FS_UNSUPPORTED');
-  assert.equal(result.error.title, 'Disco non adatto alle sessioni', 'la copia deve essere quella del disco, non INTERNAL_ERROR');
+  assert.equal(result.error.title, 'Disk not suitable for sessions', 'la copia deve essere quella del disco, non INTERNAL_ERROR');
+  assert.equal(AREE.errori.it['SESSION_STORE_FS_UNSUPPORTED.title'], 'Disco non adatto alle sessioni', 'e in italiano la dice il dizionario, dal codice');
   assert.equal(chiamateModello, 0, 'nessun modello parte senza intestazione');
 });
 
@@ -3173,4 +3187,66 @@ test('REV-SESSION-READY-HTTP — POST queue aspetta l’assestamento del giro in
      concluso, rifiuta con «usa resume»: la rotta lo deve girare così com'è, con un 409. */
   assert.equal(risposta.status, 409, testo);
   assert.match(testo, /usa resume/u);
+});
+
+test('K3B-HTTP-01 — la lingua dell\'interfaccia arriva da sola, anche durante un giro, e non tocca le preferenze della conversazione', async (t) => {
+  const { base, sessionRegistry } = await listen(t);
+  const creata = await fetch(`${base}/api/v1/sessions`, {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ taskId: 'sconto-a-scaglioni', linguaInterfaccia: 'en' }),
+  });
+  assert.equal(creata.status, 200);
+  assert.equal(sessionRegistry.ultimeOpzioniAvvio.linguaInterfaccia, 'en');
+  const sessionId = (await creata.json()).data.sessionId;
+  const risposta = await fetch(`${base}/api/v1/sessions/${sessionId}/settings`, {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ linguaInterfaccia: 'it' }),
+  });
+  assert.equal(risposta.status, 200);
+  assert.deepEqual(sessionRegistry.ultimaLinguaInterfaccia, { sessionId, lingua: 'it' });
+  assert.equal(sessionRegistry.ultimeImpostazioniSessione, null, 'la sola lingua non è una preferenza della conversazione');
+  const insieme = await fetch(`${base}/api/v1/sessions/${sessionId}/settings`, {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ linguaInterfaccia: 'en', permessi: 'Read only' }),
+  });
+  assert.equal(insieme.status, 200);
+  assert.deepEqual(sessionRegistry.ultimaLinguaInterfaccia, { sessionId, lingua: 'en' });
+  assert.deepEqual(sessionRegistry.ultimeImpostazioniSessione, { sessionId, patch: { permessi: 'Read only' } });
+});
+
+test('K3B-HTTP-02 — una lingua che non è «it» o «en» si ferma al parser (avvio e impostazioni), una sessione assente è 404', async (t) => {
+  const { base, sessionRegistry } = await listen(t);
+  for (const cattiva of ['fr', 'EN', '', null, 1]) {
+    const avvio = await fetch(`${base}/api/v1/sessions`, {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ taskId: 'sconto-a-scaglioni', linguaInterfaccia: cattiva }),
+    });
+    assert.equal(avvio.status, 400, `avvio con ${JSON.stringify(cattiva)}`);
+  }
+  const { sessionId } = sessionRegistry.avvia('sconto-a-scaglioni');
+  for (const cattiva of ['fr', 'EN', '', null, 1]) {
+    const risposta = await fetch(`${base}/api/v1/sessions/${sessionId}/settings`, {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ linguaInterfaccia: cattiva }),
+    });
+    assert.equal(risposta.status, 400, `impostazioni con ${JSON.stringify(cattiva)}`);
+  }
+  assert.equal(sessionRegistry.ultimaLinguaInterfaccia, null);
+  const assente = await fetch(`${base}/api/v1/sessions/sessione-assente/settings`, {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ linguaInterfaccia: 'en' }),
+  });
+  assert.equal(assente.status, 404);
+});
+
+test('K3B-HTTP-03 — la sessione libera (/sessions/custom) porta la lingua al registro, e una lingua sbagliata è 400', async (t) => {
+  const { base, sessionRegistry } = await listen(t);
+  const buona = await fetch(`${base}/api/v1/sessions/custom`, {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ cartellaLibera: 'C:/workspace', consegna: 'prova', linguaInterfaccia: 'en' }),
+  });
+  assert.equal(buona.status, 200);
+  assert.equal(sessionRegistry.ultimeOpzioniAvvioLibero.linguaInterfaccia, 'en');
+  const senza = await fetch(`${base}/api/v1/sessions/custom`, {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ cartellaLibera: 'C:/workspace', consegna: 'prova' }),
+  });
+  assert.equal(senza.status, 200);
+  assert.equal('linguaInterfaccia' in sessionRegistry.ultimeOpzioniAvvioLibero, false);
+  const cattiva = await fetch(`${base}/api/v1/sessions/custom`, {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ cartellaLibera: 'C:/workspace', consegna: 'prova', linguaInterfaccia: 'de' }),
+  });
+  assert.equal(cattiva.status, 400);
 });

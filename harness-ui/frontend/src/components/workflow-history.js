@@ -1,7 +1,12 @@
+import { linguaCorrenteDiT, t } from './lingua.js';
+
+/* Le chiavi dei testi di stato: la lingua si risolve al momento dell'uso, non al caricamento del modulo. */
 const STATUS = Object.freeze({
-  created: 'Creato', running: 'In corso', paused: 'In pausa', needs_attention: 'Richiede attenzione',
-  succeeded: 'Riuscito', failed: 'Fallito', cancelled: 'Annullato',
+  created: 'agenti.history.status.created', running: 'agenti.history.status.running', paused: 'agenti.history.status.paused',
+  needs_attention: 'agenti.history.status.needsAttention', succeeded: 'agenti.history.status.succeeded',
+  failed: 'agenti.history.status.failed', cancelled: 'agenti.history.status.cancelled',
 });
+const localeUI = () => (linguaCorrenteDiT() === 'en' ? 'en-US' : 'it-IT');
 
 /** Cronologia dei run della sola sessione corrente; l'ID esatto viene passato alla Board. */
 export function montaCronologiaWorkflow(contenitore, { fetchFn, sessionId, onApri } = {}) {
@@ -13,18 +18,18 @@ export function montaCronologiaWorkflow(contenitore, { fetchFn, sessionId, onApr
     return node;
   };
   const root = element('section', 'talos-wfh');
-  root.setAttribute('aria-label', 'Cronologia automazioni');
-  const title = element('h3', 'talos-wfh__title', 'Cronologia automazioni');
+  root.setAttribute('aria-label', t('agenti.history.title'));
+  const title = element('h3', 'talos-wfh__title', t('agenti.history.title'));
   const controls = element('div', 'talos-wfh__controls');
   const search = element('input', 'talos-wfh__search');
-  search.type = 'search'; search.placeholder = 'Cerca automazione'; search.setAttribute('aria-label', 'Cerca automazione');
-  const status = element('select', 'talos-wfh__status'); status.setAttribute('aria-label', 'Filtra per stato');
-  for (const [value, label] of [['', 'Tutti gli stati'], ...Object.entries(STATUS)]) {
-    const option = element('option', null, label); option.value = value; status.append(option);
+  search.type = 'search'; search.placeholder = t('agenti.history.searchPlaceholder'); search.setAttribute('aria-label', t('agenti.history.searchPlaceholder'));
+  const status = element('select', 'talos-wfh__status'); status.setAttribute('aria-label', t('agenti.history.statusFilter'));
+  for (const [value, chiave] of [['', 'agenti.history.allStatuses'], ...Object.entries(STATUS)]) {
+    const option = element('option', null, t(chiave)); option.value = value; status.append(option);
   }
   controls.append(search, status);
   const list = element('ul', 'talos-wfh__list');
-  const more = element('button', 'talos-wfh__more', 'Mostra altri'); more.type = 'button'; more.hidden = true;
+  const more = element('button', 'talos-wfh__more', t('agenti.history.showMore')); more.type = 'button'; more.hidden = true;
   const message = element('p', 'talos-wfh__message'); message.setAttribute('role', 'status');
   root.append(title, controls, list, more, message);
   contenitore.append(root);
@@ -38,14 +43,14 @@ export function montaCronologiaWorkflow(contenitore, { fetchFn, sessionId, onApr
       && typeof run.workflowId === 'string' && run.workflowId.length > 0
       && Number.isSafeInteger(run.version) && run.version > 0;
     button.disabled = !valid;
-    const label = element('span', 'talos-wfh__label', typeof run.title === 'string' && run.title ? run.title : 'Automazione');
-    const state = element('span', 'talos-wfh__state', STATUS[run.status] ?? 'Stato sconosciuto');
+    const label = element('span', 'talos-wfh__label', typeof run.title === 'string' && run.title ? run.title : t('agenti.history.untitled'));
+    const state = element('span', 'talos-wfh__state', t(STATUS[run.status] ?? 'agenti.history.status.unknown'));
     const detail = element('span', 'talos-wfh__detail');
     const facts = [run.runId];
-    if (run.createdAt) facts.push(new Date(run.createdAt).toLocaleString('it-IT'));
+    if (run.createdAt) facts.push(new Date(run.createdAt).toLocaleString(localeUI()));
     if (Number.isFinite(run.durationMs) && run.durationMs >= 0) facts.push(`${Math.round(run.durationMs / 1000)} s`);
-    if (Number.isSafeInteger(run.steps?.total)) facts.push(`${run.steps.terminal ?? 0}/${run.steps.total} passi`);
-    if (run.model && run.model !== 'unknown') facts.push(run.model === 'mixed' ? 'Modelli vari' : run.model);
+    if (Number.isSafeInteger(run.steps?.total)) facts.push(t('agenti.history.stepsProgress', { fatti: run.steps.terminal ?? 0, totale: run.steps.total }));
+    if (run.model && run.model !== 'unknown') facts.push(run.model === 'mixed' ? t('agenti.history.mixedModels') : run.model);
     detail.textContent = facts.join(' · ');
     button.append(label, state, detail);
     if (valid) button.addEventListener('click', () => onApri?.({ runId: run.runId, workflowId: run.workflowId, version: run.version }));
@@ -58,7 +63,7 @@ export function montaCronologiaWorkflow(contenitore, { fetchFn, sessionId, onApr
     const current = ++generation;
     if (!append) { offset = 0; nextOffset = null; list.replaceChildren(); }
     more.hidden = true;
-    message.textContent = 'Caricamento…';
+    message.textContent = t('agenti.history.loading');
     try {
       const params = new URLSearchParams({ offset: String(offset), limit: String(limit) });
       if (status.value) params.set('stato', status.value);
@@ -72,10 +77,10 @@ export function montaCronologiaWorkflow(contenitore, { fetchFn, sessionId, onApr
       list.append(...page.items.map(row));
       nextOffset = Number.isSafeInteger(page.nextOffset) && page.nextOffset > offset ? page.nextOffset : null;
       more.hidden = nextOffset === null;
-      message.textContent = list.children.length === 0 ? 'Nessuna automazione per questa ricerca.' : '';
+      message.textContent = list.children.length === 0 ? t('agenti.history.noMatches') : '';
     } catch {
       if (!dead && current === generation) {
-        message.textContent = 'Impossibile caricare la cronologia. Riprova.';
+        message.textContent = t('agenti.history.loadFailed');
         more.hidden = nextOffset === null;
       }
     } finally { if (current === generation) busy = false; }

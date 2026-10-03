@@ -5,24 +5,27 @@
  *   secondo POST automatico (R4-WF-APPROVE-EXACT-HASH, come la domanda: Stripe, «Idempotent requests», e la bozza IETF
  *   `draft-ietf-httpapi-idempotency-key-header`, lette per F3-51c il 25/09/2026).
  */
-const TESTI_ERRORE = Object.freeze({
-  WORKFLOW_DEFINITION_NOT_APPROVED: 'Il workflow non risulta approvato: ricarica la card.',
-  WORKFLOW_RUNTIME_NOT_READY: 'L\'avvio non è disponibile su questo server in questo momento.',
-  WORKFLOW_START_UNSUPPORTED: 'Questo server non sa eseguire uno dei passi del workflow.',
-  WORKFLOW_COMMAND_ORIGIN_FORBIDDEN: 'Il comando è stato rifiutato: arriva da una finestra che non è questa app.',
-  WORKFLOW_COMMAND_CONFLICT: 'Il workflow è cambiato nel frattempo: ricarica la card.',
-  WORKFLOW_DEFINITION_HASH_MISMATCH: 'La proposta è cambiata nel frattempo: ricarica la card.',
-  WORKFLOW_APPROVAL_CONFLICT: 'Questa versione risulta già decisa in un altro modo: ricarica la card.',
-  WORKFLOW_STORE_NEEDS_ATTENTION: 'Il registro dei workflow ha bisogno di attenzione: il comando non è partito.',
-  // F3-33b (25/09/2026): «Modifica» i tetti
-  WORKFLOW_REVISION_INVALID: 'Ogni tetto dev\'essere un numero maggiore di zero; il costo può restare vuoto.',
-  WORKFLOW_REVISION_EMPTY: 'Nessun tetto è cambiato: non c\'è una versione nuova da salvare.',
-  WORKFLOW_VERSION_NOT_LATEST: 'Nel frattempo è nata una versione più nuova: la card si è riletta.',
-  WORKFLOW_ALREADY_STARTED: 'Questa versione è già partita: i suoi tetti non si cambiano più.',
-  WORKFLOW_VERSION_SUPERSEDED: 'Una versione più nuova è già approvata: si avvia quella.',
-  WORKFLOW_DEFINITION_INVALID: 'Con questi tetti il workflow non supera il controllo preliminare.',
-});
-export const testoErroreComando = (code) => TESTI_ERRORE[code] ?? 'Il comando non è riuscito. Riprova tra poco.';
+import { t } from './lingua.js';
+
+/* 03/10/2026, seconda ondata della lingua: le frasi stanno nel dizionario (`agenti.workflow.command.*`, inglese prima) e si
+   leggono quando si mostrano. I codici sono quelli del server (F3-33a/b). */
+const CODICI_ERRORE = new Set([
+  'WORKFLOW_DEFINITION_NOT_APPROVED',
+  'WORKFLOW_RUNTIME_NOT_READY',
+  'WORKFLOW_START_UNSUPPORTED',
+  'WORKFLOW_COMMAND_ORIGIN_FORBIDDEN',
+  'WORKFLOW_COMMAND_CONFLICT',
+  'WORKFLOW_DEFINITION_HASH_MISMATCH',
+  'WORKFLOW_APPROVAL_CONFLICT',
+  'WORKFLOW_STORE_NEEDS_ATTENTION',
+  'WORKFLOW_REVISION_INVALID',
+  'WORKFLOW_REVISION_EMPTY',
+  'WORKFLOW_VERSION_NOT_LATEST',
+  'WORKFLOW_ALREADY_STARTED',
+  'WORKFLOW_VERSION_SUPERSEDED',
+  'WORKFLOW_DEFINITION_INVALID',
+]);
+export const testoErroreComando = (code) => t(CODICI_ERRORE.has(code) ? `agenti.workflow.command.error.${code}` : 'agenti.workflow.command.failed');
 
 export function creaClientProposta({ fetchFn = globalThis.fetch, API = (p) => p, sessionId, uuid = () => globalThis.crypto.randomUUID() } = {}) {
   const leggiJson = async (percorso) => {
@@ -45,7 +48,7 @@ export function creaClientProposta({ fetchFn = globalThis.fetch, API = (p) => p,
     const ultima = Math.max(version, ...versioni.map((voce) => voce.version));
     const rev = await leggiJson(`/api/v1/workflows/${enc(workflowId)}/versions/${ultima}`);
     if (rev.status === 404) return { nonDisponibile: true };
-    if (rev.status !== 200 || !rev.corpo?.data) throw Object.assign(new Error('revisione non leggibile'), { status: rev.status });
+    if (rev.status !== 200 || !rev.corpo?.data) throw Object.assign(new Error('revision not readable'), { status: rev.status }); // per chi sviluppa: non arriva a schermo
     const leggiRuns = async () => {
       if (!runId) return leggiJson(`/api/v1/sessions/${enc(sessionId)}/workflows`);
       let offset = 0;
@@ -118,4 +121,5 @@ export function creaClientProposta({ fetchFn = globalThis.fetch, API = (p) => p,
   return Object.freeze({ leggi, approva, avvia, rivedi });
 }
 
-export const TESTO_AMBIGUO = 'Non si sa se il comando è arrivato: la card si è riletta e non lo mostra. Riprova.';
+/** L'esito ambiguo, nella lingua corrente (una costante si leggerebbe una volta sola, all'avvio). */
+export const testoAmbiguo = () => t('agenti.workflow.command.ambiguous');

@@ -10,7 +10,7 @@
  *   niente: stesso DOM di prima.
  * ⛔ Le risposte tornano al guscio con `window.open('talos-desktop://aggiornamenti?…')` e il gettone ricevuto con lo stato,
  *   la stessa forma del menu della barra (`barra-finestra.js`). Il guscio nega la finestra e esegue l'azione.
- * ⛔ Le frasi passano da `t()` (chiave = la frase italiana, `components/lingua.js`) e si riscrivono a ogni disegno: un cambio di
+ * ⛔ Le frasi passano da `t()` (chiavi stabili `varie.updates.*`, `components/lingua.js`) e si riscrivono a ogni disegno: un cambio di
  *   lingua le segue (prima foto del 01/10: banda e scheda in italiano dentro un'interfaccia in inglese).
  */
 import { EVENTO_LINGUA, linguaCorrenteDiT, t } from './lingua.js';
@@ -31,9 +31,9 @@ export function quandoLeggibile(iso, adesso = new Date()) {
   const ora = d.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
   const giorno = (x) => `${x.getFullYear()}-${x.getMonth()}-${x.getDate()}`;
   const ieri = new Date(adesso); ieri.setDate(adesso.getDate() - 1);
-  if (giorno(d) === giorno(adesso)) return t('oggi alle {ora}', { ora });
-  if (giorno(d) === giorno(ieri)) return t('ieri alle {ora}', { ora });
-  return t('{giorno} alle {ora}', { giorno: d.toLocaleDateString(locale, { day: '2-digit', month: '2-digit' }), ora });
+  if (giorno(d) === giorno(adesso)) return t("varie.updates.when.today", { time: ora });
+  if (giorno(d) === giorno(ieri)) return t("varie.updates.when.yesterday", { time: ora });
+  return t("varie.updates.when.dateAtTime", { date: d.toLocaleDateString(locale, { day: '2-digit', month: '2-digit' }), time: ora });
 }
 
 /** La frase della banda: dice la verità sull'installazione (con l'interruttore spento NON si installa da solo). */
@@ -41,26 +41,26 @@ export function fraseBanda(stato) {
   const v = stato?.pronto?.versione;
   if (!v) return null;
   return stato.automatici !== false
-    ? t('TALOS {v} è pronto. Si installa quando chiudi l’app.', { v })
-    : t('TALOS {v} è pronto. Riavvia per installarlo.', { v });
+    ? t("varie.updates.band.readyInstallOnClose", { version: v })
+    : t("varie.updates.band.readyRestart", { version: v });
 }
 
 /** La riga di stato della scheda. */
 export function fraseStato(stato, adesso = new Date()) {
   if (!stato?.attivo) {
-    return stato?.motivoSpento === 'preview' ? t('Questa è una copia di prova: non si aggiorna da sola. Installa la versione nuova dal sito delle release.')
-      : stato?.motivoSpento === 'sviluppo' ? t('Questa copia di sviluppo non si aggiorna da sola.')
-        : t('L’aggiornamento automatico non è partito: trovi il motivo nel registro (menu ⋯ › Apri il registro).');
+    return stato?.motivoSpento === 'preview' ? t("varie.updates.reason.preview")
+      : stato?.motivoSpento === 'sviluppo' ? t("varie.updates.reason.development")
+        : t("varie.updates.reason.notStarted");
   }
-  if (stato.stato === 'controllo') return t('Controllo in corso…');
-  if (stato.stato === 'scaricamento') return t('Scaricamento dell’aggiornamento in corso…');
+  if (stato.stato === 'controllo') return t("varie.updates.checking");
+  if (stato.stato === 'scaricamento') return t("varie.updates.downloading");
   if (stato.pronto) return fraseBanda(stato);
   const ultimo = stato.ultimoControllo;
   const quando = ultimo?.quando ? quandoLeggibile(ultimo.quando, adesso) : null;
-  if (!quando) return t('Nessun controllo ancora.');
-  if (ultimo.esito === 'errore') return t('Ultimo controllo {quando} non riuscito: {errore}', { quando, errore: ultimo.errore ?? t('errore sconosciuto') });
-  if (ultimo.esito === 'aggiornato') return t('Ultimo controllo {quando}: TALOS è aggiornato.', { quando });
-  return t('Ultimo controllo {quando}.', { quando });
+  if (!quando) return t("varie.updates.lastCheck.none");
+  if (ultimo.esito === 'errore') return t("varie.updates.lastCheck.failed", { when: quando, error: ultimo.errore ?? t("varie.updates.unknownError") });
+  if (ultimo.esito === 'aggiornato') return t("varie.updates.lastCheck.upToDate", { when: quando });
+  return t("varie.updates.lastCheck.done", { when: quando });
 }
 
 /**
@@ -85,8 +85,8 @@ export async function contaGiriInCorso(finestra) {
  *   riesce a saperlo, si chiede prima; altrimenti si riavvia subito, come prima.
  */
 export function fraseConfermaRiavvio(n) {
-  if (n === null) return t('Non riesco a sapere se una sessione sta lavorando: se sì, riavviare la interrompe.');
-  return n === 1 ? t('Una sessione sta lavorando: riavviare la interrompe.') : t('{n} sessioni stanno lavorando: riavviare le interrompe.', { n });
+  if (n === null) return t("varie.updates.restart.unknownCount");
+  return n === 1 ? t("varie.updates.restart.oneRunning") : t("varie.updates.restart.manyRunning", { n });
 }
 
 /*
@@ -109,9 +109,9 @@ async function riavviaChiedendo({ finestra, conferma, prendiStato, riavvio, ridi
   if (n === 0) { riavvio.stato = 'libero'; invia(); return; }
   riavvio.stato = 'libero'; ridisegna(); // la finestra di conferma copre la pagina: i pulsanti dietro non si raggiungono
   conferma({
-    titolo: t('Riavviare TALOS adesso?'),
+    titolo: t("varie.updates.restart.confirmTitle"),
     domanda: fraseConfermaRiavvio(n),
-    etichettaConferma: t('Riavvia lo stesso'),
+    etichettaConferma: t("varie.updates.restart.confirm"),
     onConferma: invia,
   });
 }
@@ -192,11 +192,11 @@ export function montaAggiornamenti({ documento = globalThis.document, finestra =
     banda.banda.hidden = !(stato.attivo && frase && !stato.nascosto);
     banda.testo.textContent = frase ?? '';
     banda.testo.title = frase ?? '';
-    banda.novita.textContent = t('Novità');
+    banda.novita.textContent = t("varie.updates.band.whatsNew");
     banda.novita.hidden = !stato.pronto?.pagina;
-    banda.riavvia.textContent = t('Riavvia ora');
+    banda.riavvia.textContent = t("varie.updates.restartNow");
     banda.riavvia.disabled = riavvio.stato !== 'libero';
-    const nascondi = t('Nascondi fino al prossimo avvio');
+    const nascondi = t("varie.updates.band.hide");
     banda.chiudi.setAttribute('aria-label', nascondi); banda.chiudi.title = nascondi;
     documento.documentElement.toggleAttribute('data-talos-banda-aggiornamento', !banda.banda.hidden);
   }
@@ -211,14 +211,14 @@ export function montaAggiornamenti({ documento = globalThis.document, finestra =
       pannello.prepend(scheda.scheda);
     }
     if (!scheda) return;
-    scheda.titolo.textContent = t('Aggiornamenti');
-    scheda.descrizione.textContent = t('Controlla all’avvio e ogni 4 ore; installa quando chiudi l’app.');
+    scheda.titolo.textContent = t("varie.updates.card.title");
+    scheda.descrizione.textContent = t("varie.updates.card.description");
     scheda.versione.textContent = stato.versioneAttuale ? `TALOS ${stato.versioneAttuale}` : 'TALOS';
     scheda.stato.textContent = fraseStato(stato, adesso());
-    scheda.etichetta.textContent = t('Aggiornamenti automatici');
-    scheda.aiuto.textContent = t('Spento, TALOS non controlla da solo e non installa alla chiusura: resta «Controlla ora».');
-    scheda.controlla.textContent = t('Controlla ora');
-    scheda.riavvia.textContent = t('Riavvia ora');
+    scheda.etichetta.textContent = t("varie.updates.card.autoLabel");
+    scheda.aiuto.textContent = t("varie.updates.card.autoHelp");
+    scheda.controlla.textContent = t("varie.updates.checkNow");
+    scheda.riavvia.textContent = t("varie.updates.restartNow");
     const lavora = stato.stato === 'controllo' || stato.stato === 'scaricamento';
     scheda.controlla.hidden = !stato.attivo || Boolean(stato.pronto);
     scheda.controlla.disabled = lavora;

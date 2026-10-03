@@ -9,7 +9,11 @@
  * ⛔ Tetti dichiarati: al più 1.000 righe e 100 colonne per foglio (`sheetRows` ferma la lettura; `!fullref` dice quante
  *   erano davvero), e lo si scrive sotto la tabella.
  */
+import { t as traduci, elenco, linguaCorrenteDiT } from '../../lingua.js';
 import * as XLSX from 'xlsx';
+
+/* I numeri seguono la lingua dell'interfaccia (italiano → it-IT, inglese → en-US), letta a ogni uso. */
+const localeUI = () => (linguaCorrenteDiT() === 'en' ? 'en-US' : 'it-IT');
 
 export const MASSIMO_RIGHE = 1000;
 export const MASSIMO_COLONNE = 100;
@@ -66,9 +70,9 @@ export function nomeColonna(indice, libreria = XLSX) {
 /** Le frasi sotto una tabella tagliata. */
 export function notaTaglio(foglio) {
   const pezzi = [];
-  if (foglio.righeTotali > foglio.righe.length && foglio.righe.length >= MASSIMO_RIGHE) pezzi.push(`le prime ${MASSIMO_RIGHE.toLocaleString('it-IT')} righe di ${foglio.righeTotali.toLocaleString('it-IT')}`);
-  if (foglio.colonneTotali > MASSIMO_COLONNE) pezzi.push(`le prime ${MASSIMO_COLONNE} colonne di ${foglio.colonneTotali.toLocaleString('it-IT')}`);
-  return pezzi.length ? `Mostrate ${pezzi.join(' e ')}. Il file intero si apre con l’app del sistema.` : '';
+  if (foglio.righeTotali > foglio.righe.length && foglio.righe.length >= MASSIMO_RIGHE) pezzi.push(traduci('varie.reader.sheet.firstRows', { shown: MASSIMO_RIGHE.toLocaleString(localeUI()), total: foglio.righeTotali.toLocaleString(localeUI()) }));
+  if (foglio.colonneTotali > MASSIMO_COLONNE) pezzi.push(traduci('varie.reader.sheet.firstColumns', { shown: MASSIMO_COLONNE.toLocaleString(localeUI()), total: foglio.colonneTotali.toLocaleString(localeUI()) }));
+  return pezzi.length ? traduci('varie.reader.sheet.cutNote', { parts: elenco(pezzi) }) : '';
 }
 
 function crea(doc, tag, classe, testo) {
@@ -83,7 +87,7 @@ function tabella(doc, foglio) {
   const scorre = crea(doc, 'div', 'td-file-tabella-scorre talos-lettore__tabella talos-lettore__griglia');
   scorre.tabIndex = 0;
   scorre.setAttribute('role', 'region');
-  scorre.setAttribute('aria-label', `Foglio ${foglio.nome}`);
+  scorre.setAttribute('aria-label', traduci("varie.reader.sheet.regionLabel", { name: foglio.nome }));
   const t = crea(doc, 'table', 'td-file-tabella');
   const testa = crea(doc, 'thead');
   const tr = crea(doc, 'tr');
@@ -113,7 +117,7 @@ export async function rendi({ doc, byte }) {
   const fogli = modelloCartella(byte);
   const radice = crea(doc, 'div', 'talos-lettore__foglio');
   if (!fogli.length) {
-    radice.append(crea(doc, 'p', 'talos-muted talos-lettore__attesa', 'La cartella non ha fogli.'));
+    radice.append(crea(doc, 'p', 'talos-muted talos-lettore__attesa', traduci('varie.reader.sheet.noSheets')));
     return radice;
   }
   const pannello = crea(doc, 'div', 'talos-lettore__foglio-pannello');
@@ -121,9 +125,9 @@ export async function rendi({ doc, byte }) {
   let scelto = Math.max(0, fogli.findIndex((f) => !f.nascosto));
   const linguette = crea(doc, 'div', 'td-segment talos-lettore__fogli');
   linguette.setAttribute('role', 'tablist');
-  linguette.setAttribute('aria-label', 'Fogli');
+  linguette.setAttribute('aria-label', traduci("varie.reader.sheet.tabsLabel"));
   const bottoni = fogli.map((foglio, i) => {
-    const b = crea(doc, 'button', '', foglio.nascosto ? `${foglio.nome} (nascosto)` : foglio.nome);
+    const b = crea(doc, 'button', '', foglio.nascosto ? traduci('varie.reader.sheet.hiddenName', { name: foglio.nome }) : foglio.nome);
     b.type = 'button';
     b.setAttribute('role', 'tab');
     b.dataset.indice = String(i);
@@ -134,7 +138,7 @@ export async function rendi({ doc, byte }) {
     scelto = i;
     bottoni.forEach((b, j) => { b.setAttribute('aria-selected', String(j === i)); b.tabIndex = j === i ? 0 : -1; if (j === i && fuoco) b.focus(); });
     const foglio = fogli[i];
-    const pezzi = foglio.righe.length ? [tabella(doc, foglio)] : [crea(doc, 'p', 'talos-muted talos-lettore__attesa', 'Il foglio è vuoto.')];
+    const pezzi = foglio.righe.length ? [tabella(doc, foglio)] : [crea(doc, 'p', 'talos-muted talos-lettore__attesa', traduci('varie.reader.sheet.empty'))];
     const nota = notaTaglio(foglio);
     if (nota) pezzi.push(crea(doc, 'p', 'talos-lettore__nota', nota));
     pannello.replaceChildren(...pezzi);

@@ -108,7 +108,7 @@ test('PI-03 — server HTTP finto per tutti: 200, 401, 404, dati malformati e ca
         if (id === 'qwen') assert.deepEqual(c.modelli.map(m => m.id), ['qwen:qwen-flash', 'qwen:qwen3.8-flash']);
       } else {
         await assert.rejects(probe.elencaModelli(id), e => e.code === 'CATALOG_UPSTREAM_ERROR' && !e.message.includes(CHIAVE));
-        if (stato === 404) assert.match(r.motivo, /non è verificata/u);
+        if (stato === 404) assert.match(r.motivo, /does not verify that the key is valid/u);
       }
     }
     stato = 200; malformata = true;

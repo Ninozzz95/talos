@@ -1,4 +1,5 @@
 import test from 'node:test';
+import { togliConfiniDati, ISTRUZIONE_CONFINE_DATI } from '../src/kernel/confine-dati.mjs';
 import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -9,7 +10,8 @@ import { rimuoviCartellaDiProva } from './aiuto/rimuovi-cartella-di-prova.mjs';
 
 const PROMPT = 'Leggi il documento e riferisci. Non creare note o altri file.';
 const CONTENT = 'Documento\r\nCittà 🐇 e simboli <>&\nUltima riga.';
-const history = prompt => [{ role: 'system', content: 'Rispetta la richiesta e i permessi.' }, { role: 'user', content: prompt }];
+// F-027, estensione (03/10/2026): una sessione nata col confine; quella vecchia, che riceve la frase in coda, la prova F027E-SESSIONE-VECCHIA
+const history = prompt => [{ role: 'system', content: `Rispetta la richiesta e i permessi.\n\n${ISTRUZIONE_CONFINE_DATI}` }, { role: 'user', content: prompt }];
 const call = (id, name, args) => ({ id, type: 'function', function: { name, arguments: JSON.stringify(args) } });
 const reads = n => Array.from({ length: n }, (_, i) => [call(`r${i}`, 'leggi', { percorso: 'documento.txt' })]);
 function fixture(t) {
@@ -45,7 +47,7 @@ async function run(runtime, cartella, batches, options = {}) {
 function assertReads(messages, count) {
   const tools = messages.filter(m => m.role === 'tool');
   assert.equal(tools.length, count);
-  for (const tool of tools) assert.equal(tool.content, CONTENT, `original bytes of ${tool.tool_call_id}`);
+  for (const tool of tools) assert.equal(togliConfiniDati(tool.content), CONTENT, `original bytes of ${tool.tool_call_id}`);
   assert.deepEqual(messages.filter(m => m.role === 'user').map(m => m.content), [PROMPT], 'only the actual user prompt');
 }
 
@@ -67,7 +69,7 @@ for (const [label, runtime, withContext] of [
     assertReads(result.messaggiFinali, count);
     for (const request of requests) assert.deepEqual(request.messages.filter(m => m.role === 'user').map(m => m.content), [PROMPT]);
     for (const snapshot of captures) assertReads(snapshot, snapshot.filter(m => m.role === 'tool').length);
-    for (const event of events.filter(e => e.tipo === 'tool-esito')) assert.equal(event.content, CONTENT);
+    for (const event of events.filter(e => e.tipo === 'tool-esito')) assert.equal(togliConfiniDati(event.content), CONTENT);
     assert.deepEqual(readdirSync(cartella), ['documento.txt']);
     assert.equal(readFileSync(join(cartella, 'documento.txt'), 'utf8'), CONTENT);
   });
@@ -147,7 +149,7 @@ test('NUDGE03-LITERAL: matching words in old user or tool data are never scrubbe
   const { requests, result } = await run(desktop, cartella, reads(1), { messaggiIniziali: structuredClone(initial) });
   assert.deepEqual(requests[0].messages, initial);
   assert.deepEqual(result.messaggiFinali.slice(0, initial.length), initial);
-  assert.equal(result.messaggiFinali.find(m => m.tool_call_id === 'r0').content, literal);
+  assert.equal(togliConfiniDati(result.messaggiFinali.find(m => m.tool_call_id === 'r0').content), literal);
   assert.equal(readFileSync(join(cartella, 'documento.txt'), 'utf8'), literal);
 });
 

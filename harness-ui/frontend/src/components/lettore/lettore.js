@@ -21,10 +21,14 @@
  *   · tetti dichiarati a schermo: il testo oltre 512 kB chiede «Mostra comunque» (come Hermes e come `/tree/file`),
  *     qualunque file oltre 50 MB si apre con l'app del sistema (Codex ne ha 10 fissi, e gli utenti lo contestano).
  */
+import { t as traduci, linguaCorrenteDiT } from '../lingua.js';
 import { renderizzaMarkdown } from '../markdown.js';
 import { dimensioneLeggibile, righeCsv, separatoreDi } from '../libreria-anteprima.js';
 import { apriMenuContestuale, creaMenuContestuale } from '../schede.js';
 import { tipoDaNome, tipoDelFile } from './tipo-file.js';
+
+/* I numeri seguono la lingua dell'interfaccia (italiano → it-IT, inglese → en-US), letta a ogni uso. */
+const localeUI = () => (linguaCorrenteDiT() === 'en' ? 'en-US' : 'it-IT');
 
 export const TETTO_TESTO = 512 * 1024;
 export const TETTO_FILE = 50 * 1024 * 1024;
@@ -39,13 +43,19 @@ export function modiDelTipo(tipo, estensione = '') {
   return ['resa'];
 }
 // le parole che l'owner conosce già dalla Libreria (11/09: «sia renderizzato che in versione testuale»)
-export const PAROLE_MODO = Object.freeze({ resa: 'Anteprima', sorgente: 'Testo' });
+// ⛔ Le voci sono getter: si leggono a ogni uso e seguono il cambio di lingua.
+export const PAROLE_MODO = Object.freeze({
+  get resa() { return traduci('varie.reader.mode.preview'); },
+  get sorgente() { return traduci('varie.reader.mode.text'); },
+});
 
+// le etichette si risolvono all'uso (funzioni), così seguono il cambio di lingua
 const ETICHETTE = new Map([
-  ['markdown', 'Markdown'], ['tabella', 'Tabella CSV'], ['testo', 'Testo'], ['html', 'Pagina HTML'], ['immagine', 'Immagine'],
-  ['pdf', 'PDF'], ['documento', 'Documento Word'], ['foglio', 'Foglio di calcolo'], ['presentazione', 'Presentazione'],
+  ['markdown', () => traduci('varie.reader.kind.markdown')], ['tabella', () => traduci('varie.reader.kind.table')], ['testo', () => traduci('varie.reader.kind.text')],
+  ['html', () => traduci('varie.reader.kind.html')], ['immagine', () => traduci('varie.reader.kind.image')], ['pdf', () => traduci('varie.reader.kind.pdf')],
+  ['documento', () => traduci('varie.reader.kind.document')], ['foglio', () => traduci('varie.reader.kind.spreadsheet')], ['presentazione', () => traduci('varie.reader.kind.presentation')],
 ]);
-export const etichettaTipo = (tipo) => ETICHETTE.get(tipo) ?? 'File';
+export const etichettaTipo = (tipo) => (ETICHETTE.get(tipo) ?? (() => traduci('varie.reader.kind.file')))();
 const ICONE = new Map([
   ['markdown', 'i-doc'], ['tabella', 'i-grid'], ['testo', 'i-code'], ['html', 'i-globe'], ['immagine', 'i-image'], ['pdf', 'i-doc'],
   ['documento', 'i-doc'], ['foglio', 'i-grid'], ['presentazione', 'i-layout'],
@@ -163,7 +173,7 @@ export function creaLettore({ doc = globalThis.document, finestra = globalThis, 
   const stato = { fase: 'caricando', tipo: stimato.tipo, estensione: stimato.estensione, avviso: null, modo: null, byte: null, testo: null, forzato: false, zoom: 'adatta', tuttaLaTabella: false, errore: null };
 
   const radice = crea(doc, 'section', 'talos-lettore');
-  radice.setAttribute('aria-label', `Lettore: ${nome}`);
+  radice.setAttribute('aria-label', traduci("varie.reader.label", { name: nome }));
   radice.dataset.stato = 'caricando';
 
   /* ---- la testata ---- */
@@ -172,32 +182,32 @@ export function creaLettore({ doc = globalThis.document, finestra = globalThis, 
   const nomeNodo = crea(doc, 'h3', 'talos-lettore__nome', nome);
   nomeNodo.title = fonte?.percorso || nome;
   nomeNodo.tabIndex = -1; // chi apre il lettore ci porta il fuoco (un lettore di schermo annuncia il file); non entra nel Tab
-  const meta = crea(doc, 'p', 'talos-lettore__meta', 'Leggo il file…');
+  const meta = crea(doc, 'p', 'talos-lettore__meta', traduci("varie.reader.loading"));
   const titoli = crea(doc, 'div', 'talos-lettore__titoli');
   titoli.append(nomeNodo, meta);
   const comandi = crea(doc, 'div', 'talos-lettore__comandi');
   const modi = crea(doc, 'div', 'td-segment talos-lettore__modi');
   modi.setAttribute('role', 'tablist');
-  modi.setAttribute('aria-label', `Come guardare ${nome}`);
+  modi.setAttribute('aria-label', traduci("varie.reader.viewModesLabel", { name: nome }));
   modi.hidden = true;
   const zoom = crea(doc, 'div', 'talos-lettore__zoom');
   zoom.setAttribute('role', 'group');
-  zoom.setAttribute('aria-label', 'Ingrandimento');
+  zoom.setAttribute('aria-label', traduci("varie.reader.zoom.group"));
   zoom.hidden = true;
   const percentuale = crea(doc, 'span', 'talos-lettore__percentuale');
   percentuale.setAttribute('aria-live', 'polite');
   zoom.append(
-    bottoneIcona(doc, 'i-minus', 'Riduci', () => cambiaZoom(-1)),
+    bottoneIcona(doc, 'i-minus', traduci('varie.reader.zoom.out'), () => cambiaZoom(-1)),
     percentuale,
-    bottoneIcona(doc, 'i-plus', 'Ingrandisci', () => cambiaZoom(1)),
-    bottoneIcona(doc, 'i-fit', 'Adatta alla finestra', () => { stato.zoom = 'adatta'; applicaZoom(); }),
+    bottoneIcona(doc, 'i-plus', traduci('varie.reader.zoom.in'), () => cambiaZoom(1)),
+    bottoneIcona(doc, 'i-fit', traduci('varie.reader.zoom.fitWindow'), () => { stato.zoom = 'adatta'; applicaZoom(); }),
   );
-  const schermo = bottoneIcona(doc, 'i-layout', opzioni.schermoIntero ? 'Esci dallo schermo intero' : 'Schermo intero', () => opzioni.onSchermoIntero?.());
+  const schermo = bottoneIcona(doc, 'i-layout', opzioni.schermoIntero ? traduci("varie.reader.exitFullScreen") : traduci("varie.reader.fullScreen"), () => opzioni.onSchermoIntero?.());
   schermo.setAttribute('aria-pressed', String(Boolean(opzioni.schermoIntero)));
   if (typeof opzioni.onSchermoIntero !== 'function') schermo.hidden = true;
-  const altro = bottoneIcona(doc, 'i-more', 'Altre azioni sul file', (e) => apriMenu(e.currentTarget));
+  const altro = bottoneIcona(doc, 'i-more', traduci('varie.reader.moreActions'), (e) => apriMenu(e.currentTarget));
   altro.setAttribute('aria-haspopup', 'menu');
-  const chiudi = bottoneIcona(doc, 'i-x', 'Chiudi il lettore', () => opzioni.onChiudi?.());
+  const chiudi = bottoneIcona(doc, 'i-x', traduci('varie.reader.close'), () => opzioni.onChiudi?.());
   if (typeof opzioni.onChiudi !== 'function') chiudi.hidden = true;
   comandi.append(zoom, schermo, altro, chiudi);
   testata.append(iconaTipoNodo, titoli, comandi);
@@ -210,13 +220,13 @@ export function creaLettore({ doc = globalThis.document, finestra = globalThis, 
   const corpo = crea(doc, 'div', 'talos-lettore__corpo');
   corpo.id = `${radiceId}-corpo`;
   corpo.setAttribute('role', 'region');
-  corpo.setAttribute('aria-label', `Contenuto di ${nome}`);
+  corpo.setAttribute('aria-label', traduci("varie.reader.contentLabel", { name: nome }));
   corpo.tabIndex = 0;
   radice.append(testata, riga, avviso, corpo);
-  corpo.append(crea(doc, 'p', 'talos-muted talos-lettore__attesa', 'Leggo il file…'));
+  corpo.append(crea(doc, 'p', 'talos-muted talos-lettore__attesa', traduci("varie.reader.loading")));
 
   /* ---- il menu «⋯» e il tasto destro ---- */
-  const menu = creaMenuContestuale(doc.body ?? radice, { id: `${radiceId}-menu`, etichetta: `Azioni su ${nome}` });
+  const menu = creaMenuContestuale(doc.body ?? radice, { id: `${radiceId}-menu`, etichetta: traduci("varie.reader.menuLabel", { name: nome }) });
   let chiusuraMenu = null;
   function chiudiMenu() {
     menu.hidden = true;
@@ -225,7 +235,7 @@ export function creaLettore({ doc = globalThis.document, finestra = globalThis, 
   }
   function vociMenu() {
     const voci = [];
-    if (typeof stato.testo === 'string') voci.push(['Copia il testo', () => opzioni.copia?.(stato.testo), typeof opzioni.copia === 'function' && stato.testo.length > 0]);
+    if (typeof stato.testo === 'string') voci.push([traduci('varie.reader.menu.copyText'), () => opzioni.copia?.(stato.testo), typeof opzioni.copia === 'function' && stato.testo.length > 0]);
     for (const voce of opzioni.azioni?.(leggiStato()) ?? []) voci.push(voce);
     return voci;
   }
@@ -254,7 +264,7 @@ export function creaLettore({ doc = globalThis.document, finestra = globalThis, 
     const adatta = stato.zoom === 'adatta';
     corpo.dataset.zoom = adatta ? 'adatta' : 'libero';
     immagine.style.width = adatta || !immagine.naturalWidth ? '' : `${Math.round(immagine.naturalWidth * stato.zoom)}px`;
-    percentuale.textContent = adatta ? 'Adatta' : `${Math.round(stato.zoom * 100)}%`;
+    percentuale.textContent = adatta ? traduci("varie.reader.zoom.fit") : `${Math.round(stato.zoom * 100)}%`;
   }
 
   /* ---- le viste ---- */
@@ -315,7 +325,7 @@ export function creaLettore({ doc = globalThis.document, finestra = globalThis, 
     return new Promise((risolvi, rifiuta) => {
       const lettore = new finestra.FileReader();
       lettore.onload = () => risolvi(String(lettore.result));
-      lettore.onerror = () => rifiuta(lettore.error ?? new Error('immagine illeggibile'));
+      lettore.onerror = () => rifiuta(lettore.error ?? new Error(traduci('varie.reader.error.imageUnreadable')));
       lettore.readAsDataURL(new finestra.Blob([byte], { type: tipo }));
     });
   }
@@ -324,15 +334,19 @@ export function creaLettore({ doc = globalThis.document, finestra = globalThis, 
     const p = crea(doc, 'p', '', frase);
     if (dettaglio) p.title = dettaglio; // il testo tecnico resta per chi lo cerca (passandoci sopra), non a schermo
     box.append(p);
-    if (typeof opzioni.apriFuori === 'function') box.append(bottoneTesto(doc, 'Apri con l’app del sistema', () => opzioni.apriFuori()));
+    if (typeof opzioni.apriFuori === 'function') box.append(bottoneTesto(doc, traduci('varie.reader.openWithSystem'), () => opzioni.apriFuori()));
     return box;
   }
   /* ⛔ Una resa che fallisce si dice con parole da persona (foto 26/09 sul 4174: «Cannot read properties of null (reading
      'find')» a schermo per uno ZIP chiamato .docx). Il messaggio della libreria resta nel `title`, non nella frase. */
-  const PAROLE_RESA = { documento: 'Questo documento Word', foglio: 'Questo foglio di calcolo', presentazione: 'Questa presentazione' };
+  const FRASI_RESA_FALLITA = {
+    documento: () => traduci('varie.reader.error.cantOpen.document'),
+    foglio: () => traduci('varie.reader.error.cantOpen.spreadsheet'),
+    presentazione: () => traduci('varie.reader.error.cantOpen.presentation'),
+  };
   function cartaResaFallita(tipo, dettaglio) {
-    const soggetto = PAROLE_RESA[tipo] ?? 'Questo file';
-    return cartaFuori(`${soggetto} non si apre qui: il file è rotto o non è nel formato che il nome promette.`, dettaglio || null);
+    const frase = (FRASI_RESA_FALLITA[tipo] ?? (() => traduci('varie.reader.error.cantOpen.file')))();
+    return cartaFuori(frase, dettaglio || null);
   }
   function testoMostrato() {
     const t = stato.testo ?? '';
@@ -340,7 +354,7 @@ export function creaLettore({ doc = globalThis.document, finestra = globalThis, 
   }
   function notaTaglio(pezzi) {
     const t = stato.testo ?? '';
-    if (t.length > CARATTERI_MOSTRATI) pezzi.push(crea(doc, 'p', 'talos-lettore__nota', `Mostrati i primi ${CARATTERI_MOSTRATI.toLocaleString('it-IT')} caratteri di ${t.length.toLocaleString('it-IT')}.`));
+    if (t.length > CARATTERI_MOSTRATI) pezzi.push(crea(doc, 'p', 'talos-lettore__nota', traduci('varie.reader.note.truncated', { shown: CARATTERI_MOSTRATI.toLocaleString(localeUI()), total: t.length.toLocaleString(localeUI()) })));
   }
   function sorgente() {
     const testo = testoMostrato();
@@ -354,7 +368,7 @@ export function creaLettore({ doc = globalThis.document, finestra = globalThis, 
   }
   function tabella() {
     const righe = righeCsv(testoMostrato(), separatoreDi(nome));
-    if (!righe.length) return [crea(doc, 'p', 'talos-muted', 'Il file non ha righe.')];
+    if (!righe.length) return [crea(doc, 'p', 'talos-muted', traduci('varie.reader.table.empty'))];
     const quante = stato.tuttaLaTabella ? righe.length : Math.min(righe.length, RIGHE_TABELLA + 1);
     const scorre = crea(doc, 'div', 'td-file-tabella-scorre talos-lettore__tabella');
     const t = crea(doc, 'table', 'td-file-tabella');
@@ -372,7 +386,7 @@ export function creaLettore({ doc = globalThis.document, finestra = globalThis, 
     scorre.append(t);
     const pezzi = [scorre];
     const dati = righe.length - 1;
-    if (dati > quante - 1) pezzi.push(bottoneTesto(doc, `Mostra tutte le ${dati.toLocaleString('it-IT')} righe`, () => { stato.tuttaLaTabella = true; void disegna(); }));
+    if (dati > quante - 1) pezzi.push(bottoneTesto(doc, traduci('varie.reader.table.showAll', { n: dati.toLocaleString(localeUI()) }), () => { stato.tuttaLaTabella = true; void disegna(); }));
     return pezzi;
   }
 
@@ -392,22 +406,22 @@ export function creaLettore({ doc = globalThis.document, finestra = globalThis, 
     const { tipo, modo } = stato;
     try {
       if (stato.fase === 'fuori') {
-        pezzi.push(cartaFuori(`Il file pesa ${dimensioneLeggibile(stato.byte ?? fonte.dimensione)}: oltre ${dimensioneLeggibile(TETTO_FILE)} non si mostra qui.`));
+        pezzi.push(cartaFuori(traduci('varie.reader.tooBigOutside', { size: dimensioneLeggibile(stato.byte ?? fonte.dimensione), limit: dimensioneLeggibile(TETTO_FILE) })));
       } else if (stato.fase === 'errore') {
         const box = crea(doc, 'div', 'talos-lettore__fuori');
-        const frase = crea(doc, 'p', '', `Il file non si è aperto: ${stato.errore}`);
+        const frase = crea(doc, 'p', '', traduci('varie.reader.error.notOpened', { reason: stato.errore }));
         frase.setAttribute('role', 'alert');
-        box.append(frase, bottoneTesto(doc, 'Riprova', () => { void carica(); }));
+        box.append(frase, bottoneTesto(doc, traduci('varie.reader.retry'), () => { void carica(); }));
         pezzi.push(box);
       } else if (stato.fase === 'grande') {
         const box = crea(doc, 'div', 'talos-lettore__fuori');
-        box.append(crea(doc, 'p', '', `Il file pesa ${dimensioneLeggibile(stato.byte)}: oltre ${dimensioneLeggibile(TETTO_TESTO)} l’anteprima si ferma per non rallentare la finestra.`),
-          bottoneTesto(doc, 'Mostra comunque', () => { stato.forzato = true; void interpreta(stato.byteGrezzi); }));
+        box.append(crea(doc, 'p', '', traduci('varie.reader.tooBigPreview', { size: dimensioneLeggibile(stato.byte), limit: dimensioneLeggibile(TETTO_TESTO) })),
+          bottoneTesto(doc, traduci('varie.reader.showAnyway'), () => { stato.forzato = true; void interpreta(stato.byteGrezzi); }));
         pezzi.push(box);
       } else if (tipo === 'binario') {
-        pezzi.push(cartaFuori(stato.avviso ? 'Questo file non si mostra qui.' : 'Questo formato non si mostra qui: si apre con l’app del sistema.'));
+        pezzi.push(cartaFuori(stato.avviso ? traduci('varie.reader.binary.withNotice') : traduci('varie.reader.binary.withoutNotice')));
       } else if (stato.testo === '') {
-        pezzi.push(crea(doc, 'p', 'talos-muted talos-lettore__attesa', 'Il file è vuoto.')); // un esito, non un guasto: lo si dice invece di un riquadro muto
+        pezzi.push(crea(doc, 'p', 'talos-muted talos-lettore__attesa', traduci('varie.reader.empty'))); // un esito, non un guasto: lo si dice invece di un riquadro muto
       } else if (modo === 'sorgente') {
         pezzi.push(sorgente());
         notaTaglio(pezzi);
@@ -428,18 +442,18 @@ export function creaLettore({ doc = globalThis.document, finestra = globalThis, 
         pezzi.push(img);
       } else if (tipo === 'pdf') {
         if (!fonte.indirizzoPdf) {
-          pezzi.push(cartaFuori('Questo PDF si apre con l’app del sistema.'));
+          pezzi.push(cartaFuori(traduci('varie.reader.pdf.openOutside')));
         } else {
           // niente `sandbox` qui: lo mette la risposta stessa (CSP `sandbox allow-scripts`), e il lettore di Chromium vuole i suoi script
           const cornice = crea(doc, 'iframe', 'talos-lettore__cornice talos-lettore__cornice--pdf');
-          cornice.title = `PDF: ${nome}`;
+          cornice.title = traduci('varie.reader.pdf.frameTitle', { name: nome });
           cornice.setAttribute('referrerpolicy', 'no-referrer');
           cornice.src = fonte.indirizzoPdf;
           pezzi.push(cornice);
         }
       } else if (tipo === 'html') {
         if (typeof fonte.creaPagina !== 'function') {
-          pezzi.push(cartaFuori('Questa pagina non si può rendere da qui: guarda la vista Sorgente.'));
+          pezzi.push(cartaFuori(traduci('varie.reader.html.cantRender')));
         } else {
           // un lasciapassare NUOVO a ogni resa: scade dopo 30 minuti senza uso, e tornare alla vista dopo un'ora non deve dare un 404
           const indirizzo = await fonte.creaPagina();
@@ -447,7 +461,7 @@ export function creaLettore({ doc = globalThis.document, finestra = globalThis, 
           const assoluto = new finestra.URL(indirizzo, finestra.location?.href ?? 'http://127.0.0.1/');
           const cartella = `${assoluto.origin}${assoluto.pathname.slice(0, assoluto.pathname.lastIndexOf('/') + 1)}`;
           const cornice = crea(doc, 'iframe', 'talos-lettore__cornice');
-          cornice.title = `Pagina: ${nome}`;
+          cornice.title = traduci("varie.reader.html.frameTitle", { name: nome });
           cornice.setAttribute('sandbox', 'allow-scripts');
           cornice.setAttribute('csp', politicaCornice(cartella));
           cornice.setAttribute('referrerpolicy', 'no-referrer');
@@ -457,9 +471,9 @@ export function creaLettore({ doc = globalThis.document, finestra = globalThis, 
         }
       } else if (['documento', 'foglio', 'presentazione'].includes(tipo)) {
         if (typeof opzioni.lettoreOffice !== 'function') {
-          pezzi.push(cartaFuori('Questo formato si apre con l’app del sistema.'));
+          pezzi.push(cartaFuori(traduci('varie.reader.office.openOutside')));
         } else {
-          pezzi.push(crea(doc, 'p', 'talos-muted talos-lettore__attesa', 'Preparo il documento…'));
+          pezzi.push(crea(doc, 'p', 'talos-muted talos-lettore__attesa', traduci('varie.reader.office.preparing')));
           corpo.replaceChildren(...pezzi);
           const lettoreOffice = await opzioni.lettoreOffice(tipo);
           if (mio !== disegnoCorrente) return;
@@ -490,8 +504,8 @@ export function creaLettore({ doc = globalThis.document, finestra = globalThis, 
   async function carica() {
     fase('caricando');
     stato.errore = null;
-    corpo.replaceChildren(crea(doc, 'p', 'talos-muted talos-lettore__attesa', 'Leggo il file…'));
-    meta.textContent = 'Leggo il file…';
+    corpo.replaceChildren(crea(doc, 'p', 'talos-muted talos-lettore__attesa', traduci("varie.reader.loading")));
+    meta.textContent = traduci("varie.reader.loading");
     if (decidiLettura(fonte.dimensione) === 'fuori') {
       stato.byte = fonte.dimensione;
       fase('fuori');
@@ -501,7 +515,7 @@ export function creaLettore({ doc = globalThis.document, finestra = globalThis, 
     try {
       buffer = await fonte.leggiByte();
     } catch (errore) {
-      stato.errore = errore?.message || 'motivo non registrato';
+      stato.errore = errore?.message || traduci('varie.reader.error.noReason');
       fase('errore');
       return disegna();
     }
@@ -517,7 +531,7 @@ export function creaLettore({ doc = globalThis.document, finestra = globalThis, 
     const esito = tipoDelFile({ nome, byte: byte.subarray(0, 8192) });
     stato.tipo = esito.tipo;
     stato.estensione = esito.estensione;
-    stato.avviso = esito.avviso ?? (esito.macro ? 'Il file contiene macro: qui si mostra solo il contenuto, le macro non si eseguono.' : null);
+    stato.avviso = esito.avviso ?? (esito.macro ? traduci('varie.reader.note.macros') : null);
     if (byte.byteLength > TETTO_FILE) { fase('fuori'); return disegna(); }
     const testuale = ['markdown', 'tabella', 'testo', 'html'].includes(stato.tipo) || (stato.tipo === 'immagine' && stato.estensione === 'svg');
     if (testuale) {
@@ -540,8 +554,8 @@ export function creaLettore({ doc = globalThis.document, finestra = globalThis, 
     /** Il lettore passa dal rail allo schermo intero (o torna): cambia il comando, non il contenuto. */
     impostaSchermoIntero(attivo) {
       schermo.setAttribute('aria-pressed', String(Boolean(attivo)));
-      schermo.setAttribute('aria-label', attivo ? 'Esci dallo schermo intero' : 'Schermo intero');
-      schermo.title = attivo ? 'Esci dallo schermo intero' : 'Schermo intero';
+      schermo.setAttribute('aria-label', attivo ? traduci("varie.reader.exitFullScreen") : traduci("varie.reader.fullScreen"));
+      schermo.title = attivo ? traduci("varie.reader.exitFullScreen") : traduci("varie.reader.fullScreen");
       radice.dataset.schermoIntero = attivo ? 'si' : 'no';
     },
     distruggi() {

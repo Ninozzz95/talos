@@ -17,6 +17,7 @@
  */
 
 /** Gli attrezzi che possono scrivere su disco anche quando `scrivi` è chiuso. */
+import { elenco, t } from './lingua.js';
 export const SCRIVONO_LO_STESSO = Object.freeze({
   /*
    * ⛔ BC-59 (17/09) — `file_edit` è entrato nel kernel il 16/09 e cambia i file del progetto con un
@@ -25,10 +26,10 @@ export const SCRIVONO_LO_STESSO = Object.freeze({
    *   ⛔ Sta per PRIMO perché è la via più vicina a quella che la persona crede di aver chiuso:
    *   `shell` almeno è un altro mestiere, questo scrive file e basta.
    */
-  file_edit: 'la modifica di una parte di un file',
-  shell: 'un comando nel terminale',
-  document_create: 'la creazione di un documento',
-  generate_image: 'la generazione di un’immagine',
+  file_edit: 'varie.permissions.sideDoor.file_edit',
+  shell: 'varie.permissions.sideDoor.shell',
+  document_create: 'varie.permissions.sideDoor.document_create',
+  generate_image: 'varie.permissions.sideDoor.generate_image',
 });
 
 /** Le politiche di sessione sotto cui una scrittura passa senza che nessuno te la chieda. */
@@ -62,11 +63,11 @@ export function porteLateraliAperte(permessiPerAttrezzo = {}, policySessione = '
   const aperte = Object.keys(SCRIVONO_LO_STESSO)
     .filter((attrezzo) => passaInSilenzio(permessiPerAttrezzo?.[attrezzo], policySessione));
   if (aperte.length === 0) return { aperte: [], avviso: '' };
-  const nomi = aperte.map((a) => SCRIVONO_LO_STESSO[a]);
-  const elenco = nomi.length === 1 ? nomi[0] : `${nomi.slice(0, -1).join(', ')} e ${nomi.at(-1)}`;
-  const verbo = aperte.length === 1 ? 'resta una via' : 'restano vie';
+  /* 03/10/2026: i nomi delle porte sono chiavi del dizionario; l'elenco «a, b e c» lo compone `elenco()` nella lingua corrente
+     (Intl.ListFormat), e la frase è intera per una porta e per più porte. */
+  const vie = elenco(aperte.map((a) => t(SCRIVONO_LO_STESSO[a])));
   return {
     aperte,
-    avviso: `Hai chiuso «Scrivi un file», ma ${verbo} per scrivere lo stesso: ${elenco}. Sono attrezzi diversi, ognuno col suo cancello.`,
+    avviso: t(aperte.length === 1 ? 'varie.permissions.sideDoor.warningOne' : 'varie.permissions.sideDoor.warningMany', { ways: vie }),
   };
 }

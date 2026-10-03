@@ -21,75 +21,80 @@
  * se ne accorga. Restituire l'id sarebbe comodo e romperebbe la regola in
  * silenzio, proprio nel caso in cui serve saperlo.
  */
-import { t } from './lingua.js';
+import { t, tn } from './lingua.js';
 
+/* ⛔ Le voci di queste due tabelle sono CHIAVI del dizionario (`varie.tools.name.*`, `varie.tools.description.*`), non frasi:
+   le chiavi della mappa (l'id dell'attrezzo) sono il contratto col kernel e NON si toccano; il testo lo dà `t()` nella lingua
+   corrente, a ogni uso. Un test di copertura legge questo blocco come testo, perciò restano due tabelle di stringhe. */
 export const NOMI_UMANI_ATTREZZI = Object.freeze({
-  elenca: 'elenco della cartella',
-  cerca: 'ricerca nei file',
-  leggi: 'lettura di un file',
-  scrivi: 'scrittura di un file',
+  elenca: 'varie.tools.name.list',
+  cerca: 'varie.tools.name.search',
+  leggi: 'varie.tools.name.read',
+  scrivi: 'varie.tools.name.write',
   // ⛔ BC-59 (owner 17/09): nella riga attività si leggeva «file_edit…». L'attrezzo esiste nel kernel
   //    dal 16/09 (`talosHarness.mjs:2768`) e non era mai entrato qui: un nome tecnico a schermo.
-  file_edit: 'modifica di un file',
-  prova: 'esecuzione dei test',
-  shell: 'comando nel terminale',
-  naviga: 'apertura di una pagina web',
-  web_search: 'ricerca sul web',
-  artifact_create: 'creazione di un artefatto',
-  document_create: 'creazione di un documento',
-  generate_image: 'generazione di un’immagine',
-  delega_sottotask: 'delega a un sotto-agente',
-  time_now: 'data e ora',
-  ask_user_question: 'domanda alla persona',
-  present_plan: 'piano da approvare', // 24/09/2026, decisione owner 36
-  request_plan_mode: 'richiesta della modalità Piano',
+  file_edit: 'varie.tools.name.fileEdit',
+  prova: 'varie.tools.name.runTests',
+  shell: 'varie.tools.name.shell',
+  naviga: 'varie.tools.name.browse',
+  web_search: 'varie.tools.name.webSearch',
+  artifact_create: 'varie.tools.name.artifactCreate',
+  document_create: 'varie.tools.name.documentCreate',
+  generate_image: 'varie.tools.name.generateImage',
+  delega_sottotask: 'varie.tools.name.delegateSubtask',
+  time_now: 'varie.tools.name.timeNow',
+  ask_user_question: 'varie.tools.name.askUserQuestion',
+  present_plan: 'varie.tools.name.presentPlan', // 24/09/2026, decisione owner 36
+  request_plan_mode: 'varie.tools.name.requestPlanMode',
   /* Integrazione 23/09: gli attrezzi di piano e di dialogo fra agenti arrivati col ramo Workflow. */
-  workflow_plan_propose: 'proposta di workflow', // 25/09/2026: non «piano di lavoro», il nome rifiutato dall'owner il 17/09
-  workflow_status: 'stato del workflow',
-  process_output: 'Risultato del comando',
-  workflow_output: 'lettura del risultato di un passo',
-  workflow_control: 'controllo del workflow',
-  ask_parent: 'domanda all’agente che l’ha avviato',
-  answer_parent_question: 'risposta all’agente che l’ha avviato',
-  ask_child: 'domanda a un sotto-agente',
-  answer_child_question: 'risposta a un sotto-agente',
-  tool_create: 'creazione di un attrezzo nuovo',
-  library_list: 'elenco della Libreria',
-  library_search: 'ricerca in Libreria',
-  library_read: 'lettura di un file di Libreria',
-  library_file_origin: 'origine di un file di Libreria',
-  library_rename: 'rinomina di un file di Libreria',
-  library_delete: 'eliminazione di un file di Libreria',
-  library_export: 'copia di un file di Libreria nel workspace',
-  library_context_policy_update: 'regole d’uso della Libreria',
-  notes_list: 'elenco delle note',
-  notes_search: 'ricerca fra le note',
-  notes_read: 'lettura di una nota',
-  notes_create: 'scrittura di una nota',
-  notes_update: 'modifica di una nota',
-  notes_delete: 'eliminazione di una nota',
-  tasks_list: 'elenco delle attività',
-  tasks_search: 'ricerca fra le attività',
-  tasks_create: 'creazione di un’attività',
-  tasks_complete: 'chiusura di un’attività',
-  tasks_update: 'modifica di un’attività',
-  tasks_delete: 'eliminazione di un’attività',
-  memory_list: 'elenco della memoria', // 27/09/2026, decisione owner: le letture delle sezioni
-  memory_search: 'ricerca nella memoria',
-  memory_write: 'scrittura in memoria',
-  memory_update: 'correzione di una memoria',
-  memory_delete: 'eliminazione di una memoria',
-  research_list: 'elenco delle ricerche',
-  research_search: 'ricerca fra le ricerche',
-  conversation_search: 'ricerca nelle conversazioni',
-  research_start: 'avvio di una ricerca approfondita',
-  research_read: 'lettura del rapporto di ricerca',
-  research_rename: 'rinomina di una ricerca',
-  research_pause: 'pausa di una ricerca',
-  research_resume: 'ripresa di una ricerca',
-  research_cancel: 'annullamento di una ricerca',
-  research_delete: 'eliminazione di una ricerca',
-  research_deposit: 'consegna del rapporto di ricerca', // 12/09: visto «research_deposit…» a schermo nel giro L8 — un nome tecnico in UI viola la regola del 04/09
+  workflow_plan_propose: 'varie.tools.name.workflowPlanPropose', // 25/09/2026: non «piano di lavoro», il nome rifiutato dall'owner il 17/09
+  workflow_status: 'varie.tools.name.workflowStatus',
+  process_output: 'varie.tools.name.processOutput',
+  workflow_output: 'varie.tools.name.workflowOutput',
+  workflow_control: 'varie.tools.name.workflowControl',
+  ask_parent: 'varie.tools.name.askParent',
+  answer_parent_question: 'varie.tools.name.answerParentQuestion',
+  ask_child: 'varie.tools.name.askChild',
+  list_children: 'varie.tools.name.listChildren',
+  stop_child: 'varie.tools.name.stopChild',
+  answer_child_question: 'varie.tools.name.answerChildQuestion',
+  tool_create: 'varie.tools.name.toolCreate',
+  library_list: 'varie.tools.name.libraryList',
+  library_search: 'varie.tools.name.librarySearch',
+  library_read: 'varie.tools.name.libraryRead',
+  library_file_origin: 'varie.tools.name.libraryFileOrigin',
+  library_rename: 'varie.tools.name.libraryRename',
+  library_delete: 'varie.tools.name.libraryDelete',
+  library_export: 'varie.tools.name.libraryExport',
+  library_context_policy_update: 'varie.tools.name.libraryContextPolicyUpdate',
+  notes_list: 'varie.tools.name.notesList',
+  notes_search: 'varie.tools.name.notesSearch',
+  notes_read: 'varie.tools.name.notesRead',
+  notes_create: 'varie.tools.name.notesCreate',
+  notes_update: 'varie.tools.name.notesUpdate',
+  notes_delete: 'varie.tools.name.notesDelete',
+  tasks_list: 'varie.tools.name.tasksList',
+  tasks_search: 'varie.tools.name.tasksSearch',
+  tasks_create: 'varie.tools.name.tasksCreate',
+  tasks_complete: 'varie.tools.name.tasksComplete',
+  tasks_update: 'varie.tools.name.tasksUpdate',
+  tasks_delete: 'varie.tools.name.tasksDelete',
+  memory_list: 'varie.tools.name.memoryList', // 27/09/2026, decisione owner: le letture delle sezioni
+  memory_search: 'varie.tools.name.memorySearch',
+  memory_write: 'varie.tools.name.memoryWrite',
+  memory_update: 'varie.tools.name.memoryUpdate',
+  memory_delete: 'varie.tools.name.memoryDelete',
+  research_list: 'varie.tools.name.researchList',
+  research_search: 'varie.tools.name.researchSearch',
+  conversation_search: 'varie.tools.name.conversationSearch',
+  research_start: 'varie.tools.name.researchStart',
+  research_read: 'varie.tools.name.researchRead',
+  research_rename: 'varie.tools.name.researchRename',
+  research_pause: 'varie.tools.name.researchPause',
+  research_resume: 'varie.tools.name.researchResume',
+  research_cancel: 'varie.tools.name.researchCancel',
+  research_delete: 'varie.tools.name.researchDelete',
+  research_deposit: 'varie.tools.name.researchDeposit', // 12/09: visto «research_deposit…» a schermo nel giro L8 — un nome tecnico in UI viola la regola del 04/09
 });
 
 /**
@@ -98,15 +103,11 @@ export const NOMI_UMANI_ATTREZZI = Object.freeze({
  * @param {Record<string,string>} [catalogo] traduzioni per la lingua corrente,
  *   con le stesse chiavi: la mappa resta una, cambiano i valori (decisione H21)
  */
-function nomeUmanoAttrezzoItaliano(id, catalogo = null) {
+/** Il nome umano nella lingua corrente: la tabella dice la VOCE di dizionario, il testo lo dà t(). `null` se l'id non è in tabella. */
+export function nomeUmanoAttrezzo(id, catalogo = null) {
   const chiave = String(id ?? '');
   if (catalogo && Object.prototype.hasOwnProperty.call(catalogo, chiave)) return catalogo[chiave];
-  return Object.prototype.hasOwnProperty.call(NOMI_UMANI_ATTREZZI, chiave) ? NOMI_UMANI_ATTREZZI[chiave] : null;
-}
-
-/** Il nome umano nella lingua dei menu (P-i18n 06/09): la tabella resta italiana, la traduzione la dà t(). */
-export function nomeUmanoAttrezzo(id, catalogo = null) {
-  return t(nomeUmanoAttrezzoItaliano(id, catalogo));
+  return Object.prototype.hasOwnProperty.call(NOMI_UMANI_ATTREZZI, chiave) ? t(NOMI_UMANI_ATTREZZI[chiave]) : null;
 }
 
 /**
@@ -151,7 +152,7 @@ export function origineAvvisoPlugin(origine) {
   const nome = diviso[1] === 'tool'
     ? (nomeUmanoAttrezzo(diviso[2]) || nomeDiRipiegoAttrezzo(diviso[2]))
     : nomeDiRipiegoAttrezzo(diviso[2]);
-  return `${t(diviso[1] === 'tool' ? 'attrezzo' : 'gancio')} ${nome}`;
+  return t(diviso[1] === 'tool' ? 'varie.tools.plugin.originTool' : 'varie.tools.plugin.originHook', { name: nome });
 }
 
 /*
@@ -176,20 +177,21 @@ export function origineAvvisoPlugin(origine) {
  *   il difetto da non ripetere.
  * ⛔ Un attrezzo che non sta in tabella non diventa «altro»: si chiama col suo nome umano
  *   (`nomeUmanoAttrezzo`) o col ripiego onesto (`nomeDiRipiegoAttrezzo`) — mai l'id tecnico.
- * ⛔ Le parole restano italiane qui e passano da `t()` dove si leggono, come i nomi umani.
+ * ⛔ Le parole stanno nel dizionario (`varie.tools.kind.*`): ogni voce è una frase INTERA col suo `{n}`, perché l'ordine delle parole
+ *   lo decide la lingua; qui si tiene solo la chiave.
  */
 export const SPECIE_ATTREZZI = Object.freeze({
-  lettura: Object.freeze({ icona: 'i-eye', uno: 'file letto', molti: 'file letti', breve: ['letto', 'letti'], fallitoUno: 'lettura non riuscita', fallitoMolti: 'letture non riuscite', filtro: 'Letture' }),
-  ricerca: Object.freeze({ icona: 'i-search', uno: 'ricerca', molti: 'ricerche', breve: ['ricerca', 'ricerche'], fallitoUno: 'ricerca non riuscita', fallitoMolti: 'ricerche non riuscite', filtro: 'Ricerche' }),
-  elenco: Object.freeze({ icona: 'i-folder', uno: 'cartella elencata', molti: 'cartelle elencate', breve: ['elenco', 'elenchi'], fallitoUno: 'elenco non riuscito', fallitoMolti: 'elenchi non riusciti', filtro: 'Elenchi' }),
-  modifica: Object.freeze({ icona: 'i-edit', uno: 'file modificato', molti: 'file modificati', breve: ['modifica', 'modifiche'], fallitoUno: 'modifica non riuscita', fallitoMolti: 'modifiche non riuscite', filtro: 'Modifiche' }),
-  creazione: Object.freeze({ icona: 'i-code', uno: 'file creato', molti: 'file creati', breve: ['nuovo', 'nuovi'], fallitoUno: 'creazione non riuscita', fallitoMolti: 'creazioni non riuscite', filtro: 'Nuovi file' }),
-  scrittura: Object.freeze({ icona: 'i-code', uno: 'file scritto', molti: 'file scritti', breve: ['scritto', 'scritti'], fallitoUno: 'scrittura non riuscita', fallitoMolti: 'scritture non riuscite', filtro: 'Scritture' }),
-  comando: Object.freeze({ icona: 'i-terminal', uno: 'comando', molti: 'comandi', breve: ['comando', 'comandi'], fallitoUno: 'comando non riuscito', fallitoMolti: 'comandi non riusciti', filtro: 'Comandi' }),
-  test: Object.freeze({ icona: 'i-check-sq', uno: 'giro di test', molti: 'giri di test', breve: ['test', 'test'], fallitoUno: 'giro di test non riuscito', fallitoMolti: 'giri di test non riusciti', filtro: 'Test' }),
-  'ricerca-web': Object.freeze({ icona: 'i-globe', uno: 'ricerca sul web', molti: 'ricerche sul web', breve: ['sul web', 'sul web'], fallitoUno: 'ricerca sul web non riuscita', fallitoMolti: 'ricerche sul web non riuscite', filtro: 'Web' }),
-  pagina: Object.freeze({ icona: 'i-web', uno: 'pagina aperta', molti: 'pagine aperte', breve: ['pagina', 'pagine'], fallitoUno: 'pagina non aperta', fallitoMolti: 'pagine non aperte', filtro: 'Pagine' }),
-  delega: Object.freeze({ icona: 'i-user', uno: 'delega', molti: 'deleghe', breve: ['delega', 'deleghe'], fallitoUno: 'delega non riuscita', fallitoMolti: 'deleghe non riuscite', filtro: 'Deleghe' }),
+  lettura: Object.freeze({ icona: 'i-eye', uno: 'varie.tools.kind.reading.one', molti: 'varie.tools.kind.reading.many', breve: ['varie.tools.kind.reading.shortOne', 'varie.tools.kind.reading.shortMany'], fallitoUno: 'varie.tools.kind.reading.failedOne', fallitoMolti: 'varie.tools.kind.reading.failedMany', filtro: 'varie.tools.kind.reading.filter' }),
+  ricerca: Object.freeze({ icona: 'i-search', uno: 'varie.tools.kind.search.one', molti: 'varie.tools.kind.search.many', breve: ['varie.tools.kind.search.shortOne', 'varie.tools.kind.search.shortMany'], fallitoUno: 'varie.tools.kind.search.failedOne', fallitoMolti: 'varie.tools.kind.search.failedMany', filtro: 'varie.tools.kind.search.filter' }),
+  elenco: Object.freeze({ icona: 'i-folder', uno: 'varie.tools.kind.listing.one', molti: 'varie.tools.kind.listing.many', breve: ['varie.tools.kind.listing.shortOne', 'varie.tools.kind.listing.shortMany'], fallitoUno: 'varie.tools.kind.listing.failedOne', fallitoMolti: 'varie.tools.kind.listing.failedMany', filtro: 'varie.tools.kind.listing.filter' }),
+  modifica: Object.freeze({ icona: 'i-edit', uno: 'varie.tools.kind.edit.one', molti: 'varie.tools.kind.edit.many', breve: ['varie.tools.kind.edit.shortOne', 'varie.tools.kind.edit.shortMany'], fallitoUno: 'varie.tools.kind.edit.failedOne', fallitoMolti: 'varie.tools.kind.edit.failedMany', filtro: 'varie.tools.kind.edit.filter' }),
+  creazione: Object.freeze({ icona: 'i-code', uno: 'varie.tools.kind.creation.one', molti: 'varie.tools.kind.creation.many', breve: ['varie.tools.kind.creation.shortOne', 'varie.tools.kind.creation.shortMany'], fallitoUno: 'varie.tools.kind.creation.failedOne', fallitoMolti: 'varie.tools.kind.creation.failedMany', filtro: 'varie.tools.kind.creation.filter' }),
+  scrittura: Object.freeze({ icona: 'i-code', uno: 'varie.tools.kind.writing.one', molti: 'varie.tools.kind.writing.many', breve: ['varie.tools.kind.writing.shortOne', 'varie.tools.kind.writing.shortMany'], fallitoUno: 'varie.tools.kind.writing.failedOne', fallitoMolti: 'varie.tools.kind.writing.failedMany', filtro: 'varie.tools.kind.writing.filter' }),
+  comando: Object.freeze({ icona: 'i-terminal', uno: 'varie.tools.kind.command.one', molti: 'varie.tools.kind.command.many', breve: ['varie.tools.kind.command.shortOne', 'varie.tools.kind.command.shortMany'], fallitoUno: 'varie.tools.kind.command.failedOne', fallitoMolti: 'varie.tools.kind.command.failedMany', filtro: 'varie.tools.kind.command.filter' }),
+  test: Object.freeze({ icona: 'i-check-sq', uno: 'varie.tools.kind.test.one', molti: 'varie.tools.kind.test.many', breve: ['varie.tools.kind.test.shortOne', 'varie.tools.kind.test.shortMany'], fallitoUno: 'varie.tools.kind.test.failedOne', fallitoMolti: 'varie.tools.kind.test.failedMany', filtro: 'varie.tools.kind.test.filter' }),
+  'ricerca-web': Object.freeze({ icona: 'i-globe', uno: 'varie.tools.kind.webSearch.one', molti: 'varie.tools.kind.webSearch.many', breve: ['varie.tools.kind.webSearch.shortOne', 'varie.tools.kind.webSearch.shortMany'], fallitoUno: 'varie.tools.kind.webSearch.failedOne', fallitoMolti: 'varie.tools.kind.webSearch.failedMany', filtro: 'varie.tools.kind.webSearch.filter' }),
+  pagina: Object.freeze({ icona: 'i-web', uno: 'varie.tools.kind.page.one', molti: 'varie.tools.kind.page.many', breve: ['varie.tools.kind.page.shortOne', 'varie.tools.kind.page.shortMany'], fallitoUno: 'varie.tools.kind.page.failedOne', fallitoMolti: 'varie.tools.kind.page.failedMany', filtro: 'varie.tools.kind.page.filter' }),
+  delega: Object.freeze({ icona: 'i-user', uno: 'varie.tools.kind.delegation.one', molti: 'varie.tools.kind.delegation.many', breve: ['varie.tools.kind.delegation.shortOne', 'varie.tools.kind.delegation.shortMany'], fallitoUno: 'varie.tools.kind.delegation.failedOne', fallitoMolti: 'varie.tools.kind.delegation.failedMany', filtro: 'varie.tools.kind.delegation.filter' }),
 });
 
 /** L'ordine fisso delle specie nella riga: chi legge trova sempre le stesse cose nello stesso posto. */
@@ -197,10 +199,16 @@ export const ORDINE_SPECIE = Object.freeze(Object.keys(SPECIE_ATTREZZI));
 
 /** Il verbo della voce: al passato (fatto) e al presente (in corso, frase viva del segmento — D11). */
 export const VERBI_ATTREZZI = Object.freeze({
-  leggi: ['Letto', 'Legge'], cerca: ['Cercato', 'Cerca'], elenca: ['Elencato', 'Elenca'],
-  file_edit: ['Modificato', 'Modifica'], scrivi: ['Scritto', 'Scrive'], shell: ['Eseguito', 'Esegue'],
-  prova: ['Test eseguiti', 'Esegue i test'], web_search: ['Cercato sul web', 'Cerca sul web'], naviga: ['Aperto', 'Apre'],
-  delega_sottotask: ['Delegato', 'Delega'],
+  leggi: ['varie.tools.verb.read.past', 'varie.tools.verb.read.present'],
+  cerca: ['varie.tools.verb.search.past', 'varie.tools.verb.search.present'],
+  elenca: ['varie.tools.verb.list.past', 'varie.tools.verb.list.present'],
+  file_edit: ['varie.tools.verb.fileEdit.past', 'varie.tools.verb.fileEdit.present'],
+  scrivi: ['varie.tools.verb.write.past', 'varie.tools.verb.write.present'],
+  shell: ['varie.tools.verb.shell.past', 'varie.tools.verb.shell.present'],
+  prova: ['varie.tools.verb.runTests.past', 'varie.tools.verb.runTests.present'],
+  web_search: ['varie.tools.verb.webSearch.past', 'varie.tools.verb.webSearch.present'],
+  naviga: ['varie.tools.verb.browse.past', 'varie.tools.verb.browse.present'],
+  delega_sottotask: ['varie.tools.verb.delegateSubtask.past', 'varie.tools.verb.delegateSubtask.present'],
 });
 
 /**
@@ -228,7 +236,7 @@ export function specieAttrezzo(nome, operazione) {
 
 /** Il nome per una persona di un attrezzo, senza mai cadere sull'id: nome umano, poi ripiego leggibile. */
 export function nomeLeggibileAttrezzo(nome) {
-  return nomeUmanoAttrezzo(nome) || nomeDiRipiegoAttrezzo(nome) || t('attrezzo');
+  return nomeUmanoAttrezzo(nome) || nomeDiRipiegoAttrezzo(nome) || t('varie.tools.fallbackName');
 }
 
 /**
@@ -241,12 +249,13 @@ export function nomeLeggibileAttrezzo(nome) {
 export function fraseSpecie(specie, n, { fallito = false, breve = false } = {}) {
   const s = SPECIE_ATTREZZI[specie];
   if (s) {
-    const parola = fallito ? (n === 1 ? s.fallitoUno : s.fallitoMolti) : breve ? s.breve[n === 1 ? 0 : 1] : (n === 1 ? s.uno : s.molti);
-    return `${n} ${t(parola)}`;
+    // le frasi sono intere e portano il numero (`{n}`): la forma la sceglie il plurale della lingua
+    if (fallito) return tn(s.fallitoUno, s.fallitoMolti, n);
+    return breve ? tn(s.breve[0], s.breve[1], n) : tn(s.uno, s.molti, n);
   }
   const nome = nomeLeggibileAttrezzo(String(specie).replace(/^altro:/, ''));
-  const molti = n > 1 ? ` ×${n}` : '';
-  return fallito ? `${nome} ${t('non riuscita')}${molti}` : `${nome}${molti}`;
+  if (fallito) return n > 1 ? t('varie.tools.other.failedMany', { name: nome, n }) : t('varie.tools.other.failedOne', { name: nome });
+  return n > 1 ? t('varie.tools.other.many', { name: nome, n }) : nome;
 }
 
 /** L'icona di una specie nello sprite; `i-bolt` per ciò che non ha una specie sua. */
@@ -284,7 +293,7 @@ export function corrispondeARicerca(id, query, catalogo = null) {
 
 /*
  * ─────────────────────────────────────────────────────────────────────────────
- * C10 — LA DESCRIZIONE NOSTRA, IN ITALIANO.
+ * C10 — LA DESCRIZIONE NOSTRA, NELLA LINGUA DELL'INTERFACCIA (italiano e inglese).
  *
  * Owner, decisione C10: «Descrizione **nostra in italiano**; quella del kernel
  * resta visibile come "testo inviato al modello"». L'audit del 06/09: ❌ «Le
@@ -304,71 +313,73 @@ export function corrispondeARicerca(id, query, catalogo = null) {
  * mostra l'inglese del kernel dicendo che è quello: mai una frase inventata.
  */
 export const DESCRIZIONI_ATTREZZI = Object.freeze({
-  elenca: 'Guarda quali file ci sono nella cartella del progetto, ai primi livelli.',
-  cerca: 'Trova file in tutto il progetto, anche in fondo, per nome o per il testo che contengono.',
-  leggi: 'Legge un file del progetto.',
-  scrivi: 'Riscrive un file del progetto per intero. È una modifica al tuo disco.',
+  elenca: 'varie.tools.description.list',
+  cerca: 'varie.tools.description.search',
+  leggi: 'varie.tools.description.read',
+  scrivi: 'varie.tools.description.write',
   // ⛔ BC-59 — la differenza con `scrivi` è la sola cosa che conta per chi legge: questo cambia un
   //    pezzo e lascia il resto com'è. Se il pezzo non si trova, o si trova due volte, non scrive niente.
-  file_edit: 'Cambia una parte di un file che esiste già e lascia il resto com’è. Se il testo da sostituire non si trova, o compare più di una volta, non scrive niente e lo dice.',
-  prova: 'Lancia la suite di test del progetto ed è il giudice: il compito è finito quando passa.',
-  shell: 'Esegue un comando nel terminale, dentro la cartella del progetto. È l’attrezzo che può fare qualunque cosa: installare, spostare, cancellare.',
-  naviga: 'Apre una pagina web pubblica e ne legge il contenuto. Solo lettura, solo http e https.',
-  web_search: 'Cerca sul web e riporta le pagine trovate con titolo, indirizzo e data dichiarata dalla fonte.',
-  artifact_create: 'Costruisce una paginetta interattiva e la mostra dentro la chat.',
-  document_create: 'Crea un documento vero (PDF, Word, foglio di calcolo, presentazione) e lo salva nel progetto.',
-  time_now: 'Chiede che ora e che giorno è su questo computer, invece di indovinarlo.',
-  ask_user_question: 'Mette in pausa il giro e chiede alla persona una decisione che non si può ricavare dai file o dal sistema.',
-  present_plan: 'In modalità Piano, presenta il piano finito e aspetta la tua scelta: procedere (chiedendo conferma, accettando le modifiche o in una conversazione nuova) o continuare a pianificare.',
-  request_plan_mode: 'Chiede di passare alla modalità Piano dal giro successivo. Il cambio avviene solo dopo la conclusione riuscita e il salvataggio della sessione.',
-  workflow_plan_propose: 'Propone un workflow a fasi da rivedere e approvare: non lo approva e non lo avvia.',
-  workflow_status: 'Legge lo stato dei workflow della sessione o il dettaglio di un run, senza modificarli.',
-  process_output: 'Legge una parte del risultato conservato di un comando, senza eseguirlo di nuovo.',
-  workflow_output: 'Legge un risultato testuale di un passo concluso; se i risultati sono più di uno, mostra gli ID da scegliere. Per un file binario mostra solo i metadati.',
-  workflow_control: 'Chiede di mettere in pausa, riprendere o fermare un workflow della sessione e ne restituisce la ricevuta.',
-  ask_parent: 'Un sotto-agente chiede un fatto o una decisione all’agente che lo ha avviato, e aspetta la risposta.',
-  answer_parent_question: 'Un sotto-agente risponde a una domanda dell’agente che lo ha avviato.',
-  ask_child: 'Manda una domanda a un sotto-agente; la risposta arriva dopo, senza fermare il giro.',
-  answer_child_question: 'Risponde a una domanda arrivata da un sotto-agente.',
-  delega_sottotask: 'Affida un pezzo di lavoro a una sessione figlia, che lavora in una cartella sua e riporta solo il risultato.',
-  generate_image: 'Genera un’immagine da una descrizione e la salva nel progetto come file vero.',
-  library_list: 'Elenca i file della Libreria del progetto.',
-  library_search: 'Cerca fra i file della Libreria e riporta i pezzi che corrispondono.',
-  library_read: 'Legge un file della Libreria.',
-  library_file_origin: 'Dice da dove viene un file della Libreria: se è stato generato o portato dentro, da quale modello e quando.',
-  library_rename: 'Cambia il nome a un file della Libreria.',
-  library_delete: 'Toglie un file dalla Libreria. Non si torna indietro.',
-  library_export: 'Salva una copia di un file della Libreria dentro il progetto, come file visibile.',
-  library_context_policy_update: 'Cambia quanto della Libreria può entrare nelle conversazioni.',
-  notes_list: 'Elenca le tue note, dalla più aggiornata.',
-  notes_search: 'Cerca fra le tue note per parole.', // 27/09/2026, decisione owner: le letture delle sezioni
-  notes_read: 'Legge per intero una delle tue note.',
-  notes_create: 'Scrive una nota per te.',
-  notes_update: 'Cambia il titolo o il testo di una nota che esiste già.',
-  notes_delete: 'Cancella una tua nota, per sempre.',
-  tasks_list: 'Elenca le tue attività, con stato e priorità.',
-  tasks_search: 'Cerca fra le tue attività per parole.',
-  tasks_create: 'Aggiunge un’attività alla tua lista.',
-  tasks_complete: 'Segna un’attività come fatta, o la rimette in corso.',
-  tasks_update: 'Cambia titolo, dettaglio o priorità di un’attività che esiste già.',
-  tasks_delete: 'Cancella un’attività, per sempre.',
-  memory_list: 'Elenca tutto ciò che hai chiesto a TALOS di ricordare.',
-  memory_search: 'Cerca fra le cose che hai chiesto a TALOS di ricordare.',
-  memory_write: 'Salva una cosa che hai chiesto tu di ricordare per le prossime conversazioni.',
-  memory_update: 'Corregge un ricordo che esiste già, invece di aggiungerne un secondo che dice il contrario.',
-  memory_delete: 'Fa dimenticare un ricordo, così non viene più usato.',
-  research_list: 'Elenca le ricerche approfondite fatte su questo progetto e com’è finita ognuna.',
-  research_search: 'Cerca fra le ricerche approfondite di questo progetto per parole.',
-  conversation_search: 'Guarda la Board, cerca nelle altre conversazioni e le legge.',
-  research_start: 'Avvia una ricerca approfondita: cerca sul web, legge le fonti e scrive un rapporto. Dura minuti e consuma credito vero.',
-  research_read: 'Legge il rapporto scritto da una ricerca finita.',
-  research_rename: 'Cambia solo l’etichetta di una ricerca: non rifà niente.',
-  research_pause: 'Ferma una ricerca in corso tenendo quello che ha già raccolto.',
-  research_resume: 'Riprende una ricerca in pausa da dove si era fermata.',
-  research_cancel: 'Ferma una ricerca per sempre. Quello che ha raccolto resta leggibile.',
-  research_delete: 'Cancella una ricerca e il suo rapporto, per sempre.',
-  research_deposit: 'Deposita il rapporto della ricerca, con le affermazioni e le fonti, nel posto della ricerca.',
-  tool_create: 'Costruisce un attrezzo nuovo, descritto a parole, che TALOS potrà chiamare da qui in avanti.',
+  file_edit: 'varie.tools.description.fileEdit',
+  prova: 'varie.tools.description.runTests',
+  shell: 'varie.tools.description.shell',
+  naviga: 'varie.tools.description.browse',
+  web_search: 'varie.tools.description.webSearch',
+  artifact_create: 'varie.tools.description.artifactCreate',
+  document_create: 'varie.tools.description.documentCreate',
+  time_now: 'varie.tools.description.timeNow',
+  ask_user_question: 'varie.tools.description.askUserQuestion',
+  present_plan: 'varie.tools.description.presentPlan',
+  request_plan_mode: 'varie.tools.description.requestPlanMode',
+  workflow_plan_propose: 'varie.tools.description.workflowPlanPropose',
+  workflow_status: 'varie.tools.description.workflowStatus',
+  process_output: 'varie.tools.description.processOutput',
+  workflow_output: 'varie.tools.description.workflowOutput',
+  workflow_control: 'varie.tools.description.workflowControl',
+  ask_parent: 'varie.tools.description.askParent',
+  answer_parent_question: 'varie.tools.description.answerParentQuestion',
+  ask_child: 'varie.tools.description.askChild',
+  list_children: 'varie.tools.description.listChildren',
+  stop_child: 'varie.tools.description.stopChild',
+  answer_child_question: 'varie.tools.description.answerChildQuestion',
+  delega_sottotask: 'varie.tools.description.delegateSubtask',
+  generate_image: 'varie.tools.description.generateImage',
+  library_list: 'varie.tools.description.libraryList',
+  library_search: 'varie.tools.description.librarySearch',
+  library_read: 'varie.tools.description.libraryRead',
+  library_file_origin: 'varie.tools.description.libraryFileOrigin',
+  library_rename: 'varie.tools.description.libraryRename',
+  library_delete: 'varie.tools.description.libraryDelete',
+  library_export: 'varie.tools.description.libraryExport',
+  library_context_policy_update: 'varie.tools.description.libraryContextPolicyUpdate',
+  notes_list: 'varie.tools.description.notesList',
+  notes_search: 'varie.tools.description.notesSearch', // 27/09/2026, decisione owner: le letture delle sezioni
+  notes_read: 'varie.tools.description.notesRead',
+  notes_create: 'varie.tools.description.notesCreate',
+  notes_update: 'varie.tools.description.notesUpdate',
+  notes_delete: 'varie.tools.description.notesDelete',
+  tasks_list: 'varie.tools.description.tasksList',
+  tasks_search: 'varie.tools.description.tasksSearch',
+  tasks_create: 'varie.tools.description.tasksCreate',
+  tasks_complete: 'varie.tools.description.tasksComplete',
+  tasks_update: 'varie.tools.description.tasksUpdate',
+  tasks_delete: 'varie.tools.description.tasksDelete',
+  memory_list: 'varie.tools.description.memoryList',
+  memory_search: 'varie.tools.description.memorySearch',
+  memory_write: 'varie.tools.description.memoryWrite',
+  memory_update: 'varie.tools.description.memoryUpdate',
+  memory_delete: 'varie.tools.description.memoryDelete',
+  research_list: 'varie.tools.description.researchList',
+  research_search: 'varie.tools.description.researchSearch',
+  conversation_search: 'varie.tools.description.conversationSearch',
+  research_start: 'varie.tools.description.researchStart',
+  research_read: 'varie.tools.description.researchRead',
+  research_rename: 'varie.tools.description.researchRename',
+  research_pause: 'varie.tools.description.researchPause',
+  research_resume: 'varie.tools.description.researchResume',
+  research_cancel: 'varie.tools.description.researchCancel',
+  research_delete: 'varie.tools.description.researchDelete',
+  research_deposit: 'varie.tools.description.researchDeposit',
+  tool_create: 'varie.tools.description.toolCreate',
 });
 
 /**
@@ -378,7 +389,7 @@ export const DESCRIZIONI_ATTREZZI = Object.freeze({
  */
 export function descrizioneAttrezzo(id) {
   const chiave = String(id ?? '');
-  return Object.prototype.hasOwnProperty.call(DESCRIZIONI_ATTREZZI, chiave) ? DESCRIZIONI_ATTREZZI[chiave] : null;
+  return Object.prototype.hasOwnProperty.call(DESCRIZIONI_ATTREZZI, chiave) ? t(DESCRIZIONI_ATTREZZI[chiave]) : null;
 }
 
 /** Gli id senza una descrizione nostra: il debito di C10, misurato invece che dichiarato chiuso. */

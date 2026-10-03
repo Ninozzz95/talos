@@ -53,7 +53,8 @@ import {
   creaAnteprimaScena, caricaScene, scenaPerAspetto, aspettoCorrente, valoreAspetto,
   DESCRIZIONI_TEMI, TESTO_STATO,
 } from './theme-studio.js';
-import { t } from './lingua.js';
+import { LINGUA_PSEUDO, t } from './lingua.js';
+import { TESTI } from '../i18n/testi/index.js';
 
 /**
  * La prosa della colonna — la copia editoriale del mockup, non un'invenzione di questo modulo.
@@ -65,44 +66,20 @@ import { t } from './lingua.js';
  *   che e' il comportamento dichiarato di `lingua.js` per qualunque frase non tradotta — non un
  *   buco che apro io. Se un giorno si traducono, si traducono nel dizionario.
  */
-export const TESTI_ANTEPRIMA = Object.freeze({
-  it: Object.freeze({
-    occhiello: 'ANTEPRIMA DEL TEMA',
-    etichetta: 'Anteprima dal vivo',
-    marchio: 'TALOS',
-    data: 'IL TUO PROSSIMO PROGETTO',
-    titolo: 'Spazio alle idee.',
-    sottotitolo: 'Meno rumore. Più attenzione al tuo lavoro.',
-    messaggio: 'Da dove cominciamo?',
-    risposta: ['Una cosa alla volta.', 'Con tutto il contesto che serve.'],
-    composer: 'Scrivi un messaggio…',
-    nota: 'Palette dal foglio temi del prodotto.',
-    /* Il comando di WCAG 2.2.2 (owner 18/09/2026): la scena si muove da sola, e chi la guarda
-       deve poterla fermare — e riprendere, perché un comando che spegne per sempre è una porta
-       che si chiude, non una pausa. */
-    ferma: 'Ferma anteprima',
-    riprendi: 'Riprendi anteprima',
-  }),
-  en: Object.freeze({
-    /* ⛔ QUESTE TRE ERANO IN ITALIANO nella lingua inglese — corrette il 18/09/2026.
-       `occhiello`, `etichetta` e `nota` erano le stringhe italiane copiate: chi usa l'app in
-       inglese leggeva «ANTEPRIMA DEL TEMA», «Anteprima dal vivo» e «Palette dal foglio temi del
-       prodotto.» in mezzo all'inglese. Ed è la stessa forma di difetto che il prodotto dichiara
-       di voler evitare — una stringa condivisa che si rilegge dove compare. */
-    occhiello: 'THEME PREVIEW',
-    etichetta: 'Live preview',
-    marchio: 'TALOS',
-    data: 'YOUR NEXT PROJECT',
-    titolo: 'Room for ideas.',
-    sottotitolo: 'Your space, your pace.',
-    messaggio: 'Where do we start?',
-    risposta: ['One thing at a time.', 'With the context you need.'],
-    composer: 'Write a message…',
-    nota: 'Palette from the product’s theme sheet.',
-    ferma: 'Stop preview',
-    riprendi: 'Resume preview',
-  }),
-});
+/*
+ * 03/10/2026, seconda ondata della lingua: le parole delle due tavole stanno nel dizionario (`varie.themePreview.*`, inglese
+ *   prima). La forma resta quella di prima — `TESTI_ANTEPRIMA.it.titolo`, `.en.risposta` — perché la leggono lo studio temi e
+ *   le prove; ogni campo si legge dal dizionario quando lo si chiede. In pseudo-lingua i campi passano da `t()`, che li marca.
+ */
+const CAMPI_ANTEPRIMA = Object.freeze(['occhiello', 'etichetta', 'data', 'titolo', 'sottotitolo', 'messaggio', 'composer', 'nota', 'ferma', 'riprendi']);
+function testiDi(lingua) {
+  const voce = (campo) => (lingua === LINGUA_PSEUDO ? t(`varie.themePreview.${campo}`) : TESTI[lingua][`varie.themePreview.${campo}`]);
+  const testi = { marchio: 'TALOS' };
+  for (const campo of CAMPI_ANTEPRIMA) Object.defineProperty(testi, campo, { enumerable: true, get: () => voce(campo) });
+  Object.defineProperty(testi, 'risposta', { enumerable: true, get: () => [voce('risposta1'), voce('risposta2')] });
+  return Object.freeze(testi);
+}
+export const TESTI_ANTEPRIMA = Object.freeze({ it: testiDi('it'), en: testiDi('en'), [LINGUA_PSEUDO]: testiDi(LINGUA_PSEUDO) });
 
 export const LINGUE_ANTEPRIMA = Object.freeze(['it', 'en']);
 const LINGUA_DI_RIPIEGO = 'it';
@@ -111,6 +88,7 @@ const LINGUA_DI_RIPIEGO = 'it';
 export function linguaDellaRadice(doc = globalThis.document) {
   const grezza = doc?.documentElement?.dataset?.linguaApplicata
     || doc?.documentElement?.getAttribute?.('lang') || '';
+  if (String(grezza).toLowerCase() === LINGUA_PSEUDO) return LINGUA_PSEUDO; // strato 3 del cancello: anche l'anteprima si marca
   const codice = String(grezza).slice(0, 2).toLowerCase();
   return LINGUE_ANTEPRIMA.includes(codice) ? codice : LINGUA_DI_RIPIEGO;
 }

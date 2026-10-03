@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { titoloScheda, nomeShell, prossimaAttivaDopoChiusura, cicla, nomeSchedaValido, SCHEDE_MASSIME, accorciaPercorso, codaDelPiede, TESTI } from '../../src/components/terminale.js';
+import { t } from '../../src/components/lingua.js'; // corsia C della lingua: TESTI porta chiavi, il piede mostra la frase
 
 // 06/09 B1 — le schede del Terminale: nomi, fuoco alla chiusura, ciclo, tetto.
 
@@ -75,9 +76,10 @@ test('AL CONTRARIO — un percorso che ci sta non si tocca', () => {
  */
 test('PIEDE-CODA: dove c’è un percorso, la frase generica NON si aggiunge', () => {
   assert.equal(codaDelPiede({ dettaglio: String.raw`C:\progetti\AVM` }), '');
-  assert.equal(codaDelPiede({ dettaglio: '' }), TESTI.nota, 'senza percorso la spiegazione ha senso e resta');
-  assert.equal(codaDelPiede({}), TESTI.nota);
-  assert.equal(codaDelPiede(), TESTI.nota);
+  assert.equal(codaDelPiede({ dettaglio: '' }), t(TESTI.nota), 'senza percorso la spiegazione ha senso e resta');
+  assert.equal(codaDelPiede({}), t(TESTI.nota));
+  assert.equal(codaDelPiede(), t(TESTI.nota));
+  assert.notEqual(t(TESTI.nota), TESTI.nota, 'la chiave si risolve in una frase, mai a schermo grezza');
 });
 
 test('PIEDE-CODA al contrario: una nota esplicita comanda, anche vuota', () => {

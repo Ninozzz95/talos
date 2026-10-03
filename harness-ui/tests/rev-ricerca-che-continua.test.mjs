@@ -121,14 +121,14 @@ test('RC-07: finita da più del tempo di conservazione, «continua» rifiuta e d
     await cerca({ testo: 'needle' }, { ricerche })
     await dormi(700)
     const esito = await cerca({ continua: 'r1' }, { ricerche })
-    assert.match(esito, /^REFUSED\. There is no search "r1" in this session/u)
+    assert.match(esito, /^NOT FOUND\. There is no search "r1" in this session/u) // H-05
     assert.match(esito, /run the search again/u)
 })
 
 test('RC-08: «continua» senza registro rifiuta con il perché', async (t) => {
     const { cerca } = await banco(t, [LENTO])
     const esito = await cerca({ continua: 'r1' })
-    assert.match(esito, /^REFUSED\. Searches do not continue in the background here/u)
+    assert.match(esito, /^NOT FOUND\. Searches do not continue in the background here/u) // H-05
 })
 
 test('RC-09: se ripgrep fallisce per EAGAIN si ritenta su un solo thread (-j 1), come Claude Code', async (t) => {

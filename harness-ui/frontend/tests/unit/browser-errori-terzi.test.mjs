@@ -27,13 +27,13 @@ test('OSS-3 · con una cornice di un’altra origine viva, l’errore del sandbo
 test('OSS-3 · AL CONTRARIO: senza cornici estranee la stessa frase resta NOSTRA', () => {
   const r = erroreDiUnaPaginaTerza(MESSAGGIO, [NOSTRA + '/', NOSTRA + '/api/v1/artifacts/a1'], NOSTRA);
   assert.equal(r.terzo, false, 'un artefatto sandboxato è roba nostra: quell’errore lo dobbiamo vedere');
-  assert.match(r.perche, /nessuna cornice/u);
+  assert.match(r.perche, /no frame from another origin/u);
 });
 
 test('OSS-3 · AL CONTRARIO: un errore NOSTRO non viene scartato solo perché c’è una pagina ospitata', () => {
   const r = erroreDiUnaPaginaTerza('fermaMotore is not defined', [NOSTRA + '/', 'https://terza-parte.example/'], NOSTRA);
   assert.equal(r.terzo, false, 'il filtro è stretto sui messaggi del sandbox, non su tutto ciò che passa');
-  assert.match(r.perche, /non è un errore del sandbox/u);
+  assert.match(r.perche, /not a sandbox error/u);
 });
 
 test('OSS-3 · `about:blank` e una cornice senza indirizzo non contano come «altra origine»', () => {
@@ -61,7 +61,7 @@ test('OSS-3/N1 · un NOSTRO errore che nomina «localStorage» resta nostro, anc
     [NOSTRA + '/', 'https://terza-parte.example/doc'], NOSTRA,
   );
   assert.equal(r.terzo, false, 'una parola in comune non fa di un nostro guasto un guasto altrui');
-  assert.match(r.perche, /non è un errore del sandbox/u);
+  assert.match(r.perche, /not a sandbox error/u);
 });
 
 test('OSS-3/N1 · un NOSTRO `SecurityError` che NON parla del sandbox resta nostro', () => {
@@ -76,7 +76,7 @@ test('OSS-3/N2 · senza la nostra origine il cancello NEGA invece di lasciar pas
   for (const origine of ['', '   ', null, undefined, 42]) {
     const r = erroreDiUnaPaginaTerza(MESSAGGIO, ['https://terza-parte.example/'], origine);
     assert.equal(r.terzo, false, `con origine ${JSON.stringify(origine)} il filtro deve negare`);
-    assert.match(r.perche, /origine della app non dichiarata/u);
+    assert.match(r.perche, /app origin not declared/u);
   }
 });
 

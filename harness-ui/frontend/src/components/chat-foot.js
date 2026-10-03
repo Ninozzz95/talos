@@ -1,3 +1,5 @@
+import { t, tn, linguaCorrenteDiT } from './lingua.js';
+
 /*
  * ChatFooter — il piede della chat, come nel mockup: la striscia di stato del
  * giro in corso, la coda, il composer con i suoi chip, la barra di stato.
@@ -30,10 +32,13 @@
  * modi di chiamare quattro cose. Ora è una VISTA dell'unica mappa (`politiche.js`).
  */
 import { POLITICHE } from './politiche.js';
-export const NOME_PERMESSO = Object.freeze(Object.fromEntries(POLITICHE.map((p) => [p.valore, p.nome])));
+/** Il separatore dei decimali nella lingua corrente: virgola in italiano, punto in inglese (il numero resta quello di `toFixed`). */
+const conSeparatoreDecimale = (testo) => (linguaCorrenteDiT() === 'en' ? testo : testo.replace('.', ','));
+const CHIAVI_PERMESSO = {"Read only":"chat.foot.permission.readOnly","Workspace write":"chat.foot.permission.workspaceWrite","On request":"chat.foot.permission.onRequest","Full access":"chat.foot.permission.fullAccess"};
+export const NOME_PERMESSO = Object.freeze(Object.defineProperties({}, Object.fromEntries(POLITICHE.map((p) => [p.valore, { enumerable: true, get: () => t(CHIAVI_PERMESSO[p.valore]) }]))));
 
 export function etichettaPermesso(permesso) {
-  return NOME_PERMESSO[permesso] || (typeof permesso === 'string' && permesso.trim() ? permesso : 'Permesso non scelto');
+  return NOME_PERMESSO[permesso] || (typeof permesso === 'string' && permesso.trim() ? permesso : t('chat.foot.permission.notSelected'));
 }
 
 /*
@@ -49,7 +54,7 @@ export function etichettaPermessoConEccezioni(permesso, permessiPerAttrezzo) {
   const base = etichettaPermesso(permesso);
   const regole = permessiPerAttrezzo && typeof permessiPerAttrezzo === 'object' ? Object.values(permessiPerAttrezzo).filter(Boolean) : [];
   if (regole.length === 0) return base;
-  return `${base} · ${regole.length} eccezion${regole.length === 1 ? 'e' : 'i'}`;
+  return tn('chat.foot.permission.exceptionsOne', 'chat.foot.permission.exceptionsMany', regole.length, { base });
 }
 
 /*
@@ -79,7 +84,7 @@ export function nomeModelloUmano(id) {
   // un secondo prefisso di fabbrica (nvidia_Nemotron…) sparisce solo se si ripete dentro al nome
   const pulito = pezzi.join(' ').replace(/\s+/g, ' ').trim();
   const parti = [pulito || resto];
-  if (parametri) parti.push(parametri[2] ? `${parametri[1]} (${parametri[2].replace(/^A/i, '')} attivi)` : parametri[1]);
+  if (parametri) parti.push(parametri[2] ? t('chat.foot.activeOf', { totali: parametri[1], attivi: parametri[2].replace(/^A/i, '') }) : parametri[1]);
   if (quant) parti.push(quant[1].toUpperCase().replace(/-/g, '_'));
   return parti.filter(Boolean).join(' · ');
 }
@@ -149,7 +154,7 @@ export function tonoPermesso(permesso) {
 export function kilo(n) {
   const v = Number(n) || 0;
   if (v < 1000) return String(Math.round(v));
-  return `${(v / 1000).toFixed(1).replace('.', ',')}k`;
+  return `${conSeparatoreDecimale((v / 1000).toFixed(1))}k`;
 }
 
 /**
@@ -195,7 +200,7 @@ export function testiUsage(usage, { tettoGiri = null, usageSessione = null } = {
   const totale = prompt + completion;
   const parti = [];
   if (totale > 0) parti.push(`${kilo(totale)} token`);
-  if (giriSessione !== null) parti.push(`${giriSessione} gir${giriSessione === 1 ? 'o' : 'i'}${Number.isFinite(tettoGiri) && tettoGiri > 0 && sessione === usage ? ` su ${tettoGiri}` : ''}`);
+  if (giriSessione !== null) parti.push(tn('chat.foot.turnsOne', 'chat.foot.turnsMany', giriSessione, { tetto: Number.isFinite(tettoGiri) && tettoGiri > 0 && sessione === usage ? t('chat.foot.turnsOf', { tetto: tettoGiri }) : '' }));
   const throughput = Number(usage?.tokens_per_second ?? usage?.tokensPerSecond ?? sessione?.tokens_per_second ?? sessione?.tokensPerSecond);
   return {
     tokenGiri: parti.join(' · '),
@@ -208,7 +213,7 @@ export function testiUsage(usage, { tettoGiri = null, usageSessione = null } = {
 /** «1,4 s» o «850 ms» dal tempo al primo token. */
 export function testoLatenza(ms) {
   if (!Number.isFinite(ms) || ms <= 0) return '';
-  return ms >= 1000 ? `primo token ${(ms / 1000).toFixed(1).replace('.', ',')} s` : `primo token ${Math.round(ms)} ms`;
+  return ms >= 1000 ? t('chat.foot.firstTokenSeconds', { tempo: conSeparatoreDecimale((ms / 1000).toFixed(1)) }) : t('chat.foot.firstTokenMillis', { tempo: Math.round(ms) });
 }
 
 function scrivi(el, testo) {
@@ -331,7 +336,7 @@ export function aggiornaPiedeChat(piede, dati = {}) {
     if (!striscia.dataset.portaInFondo) {
       striscia.dataset.portaInFondo = '1';
       striscia.style.cursor = 'pointer';
-      striscia.setAttribute('title', 'Torna dove sta scrivendo');
+      striscia.setAttribute('title', t('chat.foot.status.returnToWriting'));
       striscia.addEventListener('click', (evento) => {
         if (evento.target.closest('button')) return;
         striscia.dispatchEvent(new CustomEvent('talos-vai-in-fondo', { bubbles: true }));
@@ -340,7 +345,7 @@ export function aggiornaPiedeChat(piede, dati = {}) {
     const cosa = striscia.querySelector('[data-run-what]');
     if (cosa) {
       cosa.replaceChildren();
-      cosa.append(documentObj.createTextNode(contattoPerso ? 'Contatto col server perso' : (dati.cosa || 'TALOS sta lavorando')));
+      cosa.append(documentObj.createTextNode(contattoPerso ? t('chat.foot.status.connectionLost') : (dati.cosa || t('chat.foot.status.working'))));
       if (dati.dettaglio && !contattoPerso) {
         cosa.append(documentObj.createTextNode(' · '));
         const mono = documentObj.createElement('span');
@@ -351,7 +356,7 @@ export function aggiornaPiedeChat(piede, dati = {}) {
     }
     const meta = striscia.querySelector('[data-run-meta]');
     const pezzi = [];
-    if (Number.isFinite(dati.giro)) pezzi.push(`giro ${dati.giro}`);
+    if (Number.isFinite(dati.giro)) pezzi.push(t('chat.foot.status.turn', { n: dati.giro }));
     if (Number.isFinite(dati.secondi)) pezzi.push(`${Math.max(0, Math.round(dati.secondi))} s`);
     /*
      * ⛔ Senza contatto NON si dice «il giro è fallito» (sul server può benissimo star
@@ -359,29 +364,29 @@ export function aggiornaPiedeChat(piede, dati = {}) {
      *    E i secondi si smettono di contare: un contatore che avanza senza notizie è una
      *    misura inventata, uno fermo sembra un blocco. Si toglie.
      */
-    scrivi(meta, contattoPerso ? 'non so se il giro sta ancora andando' : pezzi.join(' · '));
+    scrivi(meta, contattoPerso ? t('chat.foot.status.unknownRunning') : pezzi.join(' · '));
     const ferma = striscia.querySelector('.stop-run');
     if (ferma) {
       // ⛔ «Ferma» manda una POST al server: col server irraggiungibile non arriverebbe.
       //    Un pulsante che non può fare la sua cosa lo DICE, invece di fingere.
       ferma.disabled = contattoPerso;
-      ferma.title = contattoPerso ? 'Il server non risponde: la richiesta di fermare non arriverebbe.' : '';
+      ferma.title = contattoPerso ? t('chat.foot.status.stopUnreachable') : '';
     }
   }
   // chip del modello e del permesso
   const modello = piede.querySelector('[data-open-sheet="model"] .talos-chip__label');
-  if (modello) modello.textContent = dati.modello || 'Scegli il modello';
+  if (modello) modello.textContent = dati.modello || t('chat.foot.model.choose');
   // l'identificatore intero resta raggiungibile: a schermo il nome, nel suggerimento la targa
   const pillolaModello = piede.querySelector('[data-open-sheet="model"]');
-  if (pillolaModello) pillolaModello.title = dati.modelloId ? `Cambia modello · ${dati.modelloId}` : 'Cambia modello';
+  if (pillolaModello) pillolaModello.title = dati.modelloId ? t('chat.foot.model.changeNamed', { modello: dati.modelloId }) : t('chat.foot.model.change');
   const permesso = piede.querySelector('[data-open-sheet="permissions"]');
   if (permesso) {
     const label = permesso.querySelector('.talos-chip__label');
     if (label) label.textContent = etichettaPermessoConEccezioni(dati.permesso, dati.permessiPerAttrezzo);
     const regole = dati.permessiPerAttrezzo && typeof dati.permessiPerAttrezzo === 'object' ? Object.entries(dati.permessiPerAttrezzo).filter(([, v]) => v) : [];
     permesso.title = regole.length
-      ? `Cambia il permesso · eccezioni per attrezzo: ${regole.map(([k, v]) => `${k} → ${v}`).join(', ')}`
-      : 'Cambia il permesso';
+      ? t('chat.foot.permission.changeWithExceptions', { eccezioni: regole.map(([k, v]) => `${k} → ${v}`).join(', ') })
+      : t('chat.foot.permission.change');
     permesso.classList.remove('talos-badge--warning', 'talos-badge--danger');
     const tono = tonoPermesso(dati.permesso);
     if (tono) permesso.classList.add(`talos-badge--${tono}`);
@@ -407,8 +412,8 @@ export function aggiornaPiedeChat(piede, dati = {}) {
      *    ai token è di TUTTA la conversazione. Chi guarda deve poterlo sapere senza indovinare.
      */
     giriChip.title = Number.isFinite(Number(dati.tettoGiri)) && Number(dati.tettoGiri) > 0
-      ? `Giri del modello in questo invio, sul tetto di ${dati.tettoGiri} dichiarato dal kernel. Il numero accanto ai token conta invece tutta la sessione.`
-      : 'Giri del modello in questo invio. Il numero accanto ai token conta invece tutta la sessione.';
+      ? t('chat.foot.turnsHintWithLimit', { n: dati.tettoGiri })
+      : t('chat.foot.turnsHint');
   }
   const costoChip = piede.querySelector('[data-runtime-costo]');
   if (costoChip) {

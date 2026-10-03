@@ -60,6 +60,7 @@
  */
 
 import { SELETTORE_RISPOSTA_TURNO, SELETTORE_TESTO_UTENTE } from './inspector.js';
+import { t } from './lingua.js';
 
 /** Le larghezze della lente, dalla voce attiva verso l'esterno. Oltre, resta la misura di riposo. */
 export const LENTE = Object.freeze([26, 20, 14, 10, 6]);
@@ -82,7 +83,7 @@ export function larghezzaLente(indice, fuoco) {
 /** Le prime parole di un messaggio, per il fumetto. Niente a capo, niente code infinite. */
 export function anteprima(testo, massimo = 140) {
   const s = String(testo || '').replace(/\s+/g, ' ').trim();
-  if (!s) return 'Messaggio senza testo';
+  if (!s) return t('chat.timeline.messageWithoutText');
   return s.length > massimo ? `${s.slice(0, massimo - 1)}…` : s;
 }
 
@@ -149,7 +150,7 @@ export function vociDaTurni(turni = []) {
     if (v.tono === 'current' && i !== tenute.length - 1) v.tono = null;
     /* ⛔ il testo del vuoto si decide DOPO il tono, non prima: altrimenti un turno a metà conversazione
        resterebbe «Sta rispondendo…» pur avendo appena perso il suo «in corso». */
-    if (!v.testo) v.testo = v.diUtente ? 'Messaggio senza testo' : (v.tono === 'current' ? 'Sta rispondendo…' : 'Risposta senza testo');
+    if (!v.testo) v.testo = t(v.diUtente ? 'chat.timeline.messageWithoutText' : v.tono === 'current' ? 'chat.timeline.replying' : 'chat.timeline.replyWithoutText');
   });
   return tenute;
 }
@@ -176,17 +177,17 @@ export function vociDaConversazione(conversazione) {
 /** Il capo del fumetto: chi parla, e per TALOS anche i giri, l'esito e quanti attrezzi. */
 export function capoFumetto(voce) {
   if (!voce) return '';
-  if (voce.diUtente) return 'Tu';
+  if (voce.diUtente) return t('chat.timeline.you');
   const parti = ['TALOS'];
   if (Number.isFinite(voce.numero)) {
     parti.push(Number.isFinite(voce.numeroUltimo) && voce.numeroUltimo !== voce.numero
-      ? `giri ${voce.numero}-${voce.numeroUltimo}`
-      : `giro ${voce.numero}`);
+      ? t('chat.timeline.turns', { from: voce.numero, to: voce.numeroUltimo })
+      : t('chat.timeline.turn', { n: voce.numero }));
   }
-  if (voce.tono === 'danger') parti.push('errore');
-  else if (voce.tono === 'warning') parti.push('avviso');
-  else if (voce.tono === 'current') parti.push('in corso');
-  if (voce.attrezzi > 1) parti.push(`${voce.attrezzi} attrezzi`);
+  if (voce.tono === 'danger') parti.push(t('chat.timeline.error'));
+  else if (voce.tono === 'warning') parti.push(t('chat.timeline.warning'));
+  else if (voce.tono === 'current') parti.push(t('chat.timeline.running'));
+  if (voce.attrezzi > 1) parti.push(t('chat.timeline.tools', { n: voce.attrezzi }));
   return parti.join(' · ');
 }
 
@@ -201,7 +202,7 @@ ${voce.testo}` : voce.testo;
 /** Come si chiama una voce per chi naviga da tastiera o con lo screen reader. */
 export function etichettaVoce(voce, posizione) {
   if (!voce) return '';
-  return voce.diUtente ? `Vai al tuo messaggio ${posizione}` : `Vai alla risposta di TALOS ${posizione}`;
+  return t(voce.diUtente ? 'chat.timeline.goToYourMessage' : 'chat.timeline.goToTalosReply', { position: posizione });
 }
 
 /**

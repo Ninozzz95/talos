@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { TESTI } from '../../src/i18n/testi/index.js'; // corsia A della lingua (03/10/2026): le frasi stanno nel dizionario, il sorgente porta la chiave
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
@@ -121,8 +122,10 @@ test('BC-59 · «file_edit» ha nome, descrizione, icona propria nelle DUE mappe
 });
 
 test('BC-59 · la riga attività dice il percorso, e il nome tecnico non compare più nel ripiego', () => {
-  assert.match(app, /case 'file_edit': return a\.percorso \? `Modifica di \$\{a\.percorso\}…`/u);
-  assert.match(app, /case 'file_edit': return a\.percorso \? `Modificato \$\{a\.percorso\}`/u);
+  assert.match(app, /case 'file_edit': return a\.percorso \? tr\('app\.toolLine\.editingPath', \{ percorso: a\.percorso \}\)/u);
+  assert.match(app, /case 'file_edit': return a\.percorso \? tr\('app\.toolLine\.edited', \{ percorso: a\.percorso \}\)/u);
+  assert.equal(TESTI.it['app.toolLine.editingPath'], 'Modifica di {percorso}…');
+  assert.equal(TESTI.it['app.toolLine.edited'], 'Modificato {percorso}');
   /* ⛔ AL CONTRARIO: il ripiego di un attrezzo sconosciuto non deve più essere il suo id. */
   assert.equal(/String\(nome \?\? ''\)/u.test(app.slice(app.indexOf('function nomeUmanoAttrezzo(nome) {'), app.indexOf('function chiaveStabile'))), false);
 });

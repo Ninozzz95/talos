@@ -6,6 +6,7 @@
  */
 /** Decisione 6: fino a qui ogni passo ha la sua card (mockup 14); oltre, le fasi diventano card di gruppo (mockup 200).
  *  Il numero è misurato — ledger F3-42, «La soglia»: la prova R4 limita a 25 le card visibili nei livelli raggruppati. */
+import { t } from '../lingua.js';
 export const SOGLIA_AGENTI = 25;
 /** Il dettaglio per agente si può chiedere a mano fino a qui (una bozza del modello ha al più 50 passi, `DRAFT_POLICY`). */
 export const MASSIMO_DETTAGLIO = 50;
@@ -13,34 +14,41 @@ export const RIGHE_CAMPIONE = 4;
 export const PAGINA_ELENCO = 20;
 
 /* Stato di un passo IN PAROLE, e il tono che lo accompagna (mai solo il colore: WCAG 1.4.1, ogni tono ha anche un'icona). */
+/* 03/10/2026, seconda ondata della lingua: la `parola` è un getter sul dizionario (`agenti.stepState.*`, le stesse chiavi di
+   `grafo/tempo.js`), letta nella lingua corrente; il `tono` resta qui. Prima erano parole italiane scritte a mano. */
+const passo = (chiave, tono) => Object.freeze(Object.defineProperties({ tono }, {
+  parola: { enumerable: true, get: () => t(`agenti.stepState.${chiave}`) },
+}));
 export const STATI_PASSO = Object.freeze({
-  planned: { parola: 'Pianificato', tono: 'neutro' },
-  pending: { parola: 'In attesa', tono: 'attesa' },
+  planned: passo('planned', 'neutro'),
+  pending: passo('waiting', 'attesa'),
   /* F3-52, giro VERO sul 4174 (25/09): un passo che aspetta un passo precedente è `blocked` nel riduttore (`run.mjs:134`) e a
      schermo diceva «Stato sconosciuto»; le fixture usavano solo `pending`. Per chi guarda è la stessa attesa del mockup. */
-  blocked: { parola: 'In attesa', tono: 'attesa' },
-  ready: { parola: 'Pronto', tono: 'attesa' },
-  leased: { parola: 'In avvio', tono: 'corso' },
-  running: { parola: 'In esecuzione', tono: 'corso' },
-  retry_wait: { parola: 'Riprova a breve', tono: 'attesa' },
-  waiting_human: { parola: 'Aspetta te', tono: 'avviso' },
-  reconciling: { parola: 'In verifica', tono: 'avviso' },
-  uncertain: { parola: 'Da verificare', tono: 'errore' },
-  succeeded: { parola: 'Concluso', tono: 'ok' },
-  failed: { parola: 'Non riuscito', tono: 'errore' },
-  cancelled: { parola: 'Annullato', tono: 'neutro' },
-  skipped: { parola: 'Saltato', tono: 'neutro' },
-  superseded: { parola: 'Sostituito', tono: 'neutro' },
+  blocked: passo('waiting', 'attesa'),
+  ready: passo('ready', 'attesa'),
+  leased: passo('starting', 'corso'),
+  running: passo('running', 'corso'),
+  retry_wait: passo('retryWait', 'attesa'),
+  waiting_human: passo('waitingForYou', 'avviso'),
+  reconciling: passo('verifying', 'avviso'),
+  uncertain: passo('toVerify', 'errore'),
+  succeeded: passo('done', 'ok'),
+  failed: passo('failed', 'errore'),
+  cancelled: passo('cancelled', 'neutro'),
+  skipped: passo('skipped', 'neutro'),
+  superseded: passo('superseded', 'neutro'),
 });
-export const statoPasso = (stato) => STATI_PASSO[stato] ?? { parola: 'Stato sconosciuto', tono: 'neutro' };
+export const statoPasso = (stato) => STATI_PASSO[stato] ?? passo('unknown', 'neutro');
 
-export const STATI_RUN = Object.freeze({
-  created: 'Creato', running: 'In esecuzione', paused: 'In pausa', needs_attention: 'Serve attenzione',
-  succeeded: 'Riuscito', failed: 'Non riuscito', cancelled: 'Annullato', planned: 'Da avviare',
-  proposed: 'Da approvare', approved: 'Approvato, da avviare',
+/* 03/10/2026: la parola dello stato del run dal dizionario (`agenti.workflow.runState.*`, le chiavi di `grafo-workflow.js`). */
+const CHIAVI_RUN = Object.freeze({
+  created: 'created', running: 'running', paused: 'paused', needs_attention: 'needsAttention', succeeded: 'succeeded', failed: 'failed',
+  cancelled: 'cancelled', planned: 'planned', proposed: 'proposed', approved: 'approved',
   // F3-52: chiesti e non ancora compiuti (i passi in corso stanno finendo o si stanno fermando)
-  pausing: 'Pausa in corso', cancelling: 'Annullamento in corso',
+  pausing: 'pausing', cancelling: 'cancelling',
 });
+export const STATI_RUN = Object.freeze(Object.defineProperties({}, Object.fromEntries(Object.entries(CHIAVI_RUN)
+  .map(([stato, chiave]) => [stato, { enumerable: true, get: () => t(`agenti.workflow.runState.${chiave}`) }]))));
 /*
  * F3-52 (25/09/2026): la parola dello stato del run. Una pausa o un annullamento CHIESTI valgono solo finché il run non è
  * finito: il registro tiene `cancelRequested: true` anche dopo «Annullato» (misurato sul 4174 il 25/09, run `81d33e4f`: la

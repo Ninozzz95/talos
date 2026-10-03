@@ -1,3 +1,6 @@
+import { t, tn, linguaCorrenteDiT } from './lingua.js';
+/* Numeri e date nella lingua dell'interfaccia (come fanno gli altri componenti): italiano → it-IT, inglese → en-US. */
+const localeUI = () => (linguaCorrenteDiT() === 'en' ? 'en-US' : 'it-IT');
 /*
  * Barra a faccette del catalogo modelli — corsia 1, 18/09/2026.
  * Porta la STRUTTURA di `prototypes/calm-lab/src/catalog-controls.mjs` (ordinamento, chip di
@@ -50,14 +53,14 @@ export const SOGLIE_CONTESTO = Object.freeze([8192, 16384, 32768, 65536, 131072,
  * portano: i prezzi di questo catalogo sono osservati da OpenRouter, non finti.
  */
 const ETICHETTE_ORDINAMENTO = Object.freeze({
-  catalog: 'Ordine del catalogo',
-  name: 'Nome A–Z',
-  'context-desc': 'Contesto: maggiore',
-  'price-asc': 'Costo input: crescente',
+  get catalog(){return t('modelli.facets.catalogOrder');},
+  get name(){return t('modelli.facets.nameAscending');},
+  get 'context-desc'(){return t('modelli.facets.largestContext');},
+  get 'price-asc'(){return t('modelli.facets.inputPriceAscending');},
 });
 
 const el = (tag, cls, txt) => { const n = document.createElement(tag); if (cls) n.className = cls; if (txt != null) n.textContent = String(txt); return n; };
-const numero = (n) => new Intl.NumberFormat('it-IT').format(n);
+const numero = (n) => new Intl.NumberFormat(localeUI()).format(n);
 
 /*
  * ⛔ Una faccetta si offre quando c'è DAVVERO il dato che le serve, e non si offre quando non c'è:
@@ -133,8 +136,8 @@ function rigaValore(gruppo, valore, testo, conteggio, acceso) {
   if (contato && !conteggio && !acceso) { casella.disabled = true; riga.dataset.facetZero = ''; }
   const conto = el('small', 'talos-muted', contato ? numero(conteggio) : '—');
   conto.setAttribute('aria-label', contato
-    ? conteggio + ' corrispondenze con gli altri filtri'
-    : 'conteggio non disponibile: il catalogo non è arrivato');
+    ? tn('modelli.facets.oneMatchOtherFilters', 'modelli.facets.manyMatchesOtherFilters', conteggio)
+    : t('modelli.facets.countUnavailable'));
   riga.append(casella, el('span', 'talos-grow', testo), conto);
   return riga;
 }
@@ -161,7 +164,7 @@ function gruppoValori(chiave, titolo, nota) {
      l'altra. Sono annotate nel referto, non silenziose. */
   righe.id = 'modelLabFacetsRows-' + chiave;
   g.append(righe);
-  const altri = el('button', 'talos-button talos-button--ghost talos-button--sm', 'Vedi altri');
+  const altri = el('button', 'talos-button talos-button--ghost talos-button--sm', t('modelli.facets.seeMore'));
   altri.type = 'button'; altri.dataset.facetMore = chiave; altri.hidden = true;
   altri.setAttribute('aria-expanded', 'false'); altri.setAttribute('aria-controls', righe.id);
   g.append(altri);
@@ -177,7 +180,7 @@ function gruppoNumero(chiave, titolo, coppie, nota) {
     const l = el('label', 'talos-field talos-field--sm');
     l.append(el('span', 'talos-muted', etichetta));
     const i = el('input', 'talos-field__input');
-    i.type = 'number'; i.min = '0'; i.step = 'any'; i.placeholder = 'Nessun limite'; i.dataset.facetNumber = campo;
+    i.type = 'number'; i.min = '0'; i.step = 'any'; i.placeholder = t('modelli.facets.noLimit'); i.dataset.facetNumber = campo;
     i.setAttribute('aria-label', etichetta);
     l.append(i, el('span', 'talos-muted', unita));
     riga.append(l);
@@ -196,23 +199,23 @@ export function creaBarraFaccette({ onCambia, etichetta = (k, v) => v } = {}) {
   const barra = el('section', 'talos-stack');
   barra.id = 'modelLabFacets';
   barra.dataset.catalogFacets = '';
-  barra.setAttribute('aria-label', 'Ricerca e filtri del catalogo');
+  barra.setAttribute('aria-label', t('modelli.facets.catalogSearchFilters'));
 
   const strumenti = el('div', 'talos-cluster');
   const ordina = el('label', 'talos-field talos-field--sm');
-  ordina.append(el('span', 'talos-muted', 'Ordina'));
+  ordina.append(el('span', 'talos-muted', t('modelli.facets.sort')));
   const selectOrdina = el('select', 'talos-select talos-select--sm');
   selectOrdina.id = 'modelLabSort';
-  selectOrdina.setAttribute('aria-label', 'Ordina i modelli');
+  selectOrdina.setAttribute('aria-label', t('modelli.facets.sortModels'));
   ordina.append(selectOrdina);
   strumenti.append(ordina);
 
   const ambito = el('div', 'talos-cluster');
-  ambito.setAttribute('role', 'group'); ambito.setAttribute('aria-label', 'Destinazione e raccolta');
+  ambito.setAttribute('role', 'group'); ambito.setAttribute('aria-label', t('modelli.facets.destinationCollection'));
   ambito.dataset.facetScope = '';
   strumenti.append(ambito);
 
-  const apri = el('button', 'talos-button talos-button--secondary talos-button--sm', 'Tutti i filtri');
+  const apri = el('button', 'talos-button talos-button--secondary talos-button--sm', t('modelli.facets.allFilters'));
   apri.type = 'button'; apri.dataset.facetToggle = '';
   apri.setAttribute('aria-expanded', 'false'); apri.setAttribute('aria-controls', 'modelLabFacetsAdvanced');
   const insegna = el('span', 'talos-badge talos-badge--sm', '0'); insegna.dataset.facetTotal = ''; insegna.hidden = true;
@@ -225,38 +228,38 @@ export function creaBarraFaccette({ onCambia, etichetta = (k, v) => v } = {}) {
 
   const gContesto = el('fieldset', 'talos-lab__space');
   gContesto.dataset.facetGroup = 'contesto';
-  gContesto.append(el('legend', 'talos-lab__heading', 'Contesto minimo'));
+  gContesto.append(el('legend', 'talos-lab__heading', t('modelli.facets.minimumContext')));
   const lContesto = el('label', 'talos-field talos-field--sm');
-  lContesto.append(el('span', 'talos-muted', 'Il modello deve reggere almeno'));
+  lContesto.append(el('span', 'talos-muted', t('modelli.facets.contextRequirement')));
   const selContesto = el('select', 'talos-select talos-select--sm');
   selContesto.id = 'modelLabMinContext'; selContesto.dataset.facetSelect = 'minContext';
-  selContesto.setAttribute('aria-label', 'Contesto minimo in token');
-  lContesto.append(selContesto, el('span', 'talos-muted', 'token'));
+  selContesto.setAttribute('aria-label', t('modelli.facets.minimumContextTokens'));
+  lContesto.append(selContesto, el('span', 'talos-muted', t('modelli.facets.tokens')));
   gContesto.append(lContesto);
   avanzati.append(gContesto);
 
-  const gParametri = gruppoValori('capabilities', 'Parametri accettati',
-    'Sono richiesti TUTTI quelli scelti: sono dichiarazioni del fornitore, non una prova del runtime.');
+  const gParametri = gruppoValori('capabilities', t('modelli.facets.acceptedParameters'),
+    t('modelli.facets.acceptedParametersNote'));
   avanzati.append(gParametri);
 
-  const gCosto = gruppoNumero('prezzo', 'Costo dichiarato', [['maxInput', 'Ingresso massimo', 'USD/M'], ['maxOutput', 'Uscita massima', 'USD/M']],
-    'USD per milione di token, come in scheda. Un prezzo mancante non è un prezzo pari a zero.');
+  const gCosto = gruppoNumero('prezzo', t('modelli.facets.declaredCost'), [['maxInput', t('modelli.facets.maximumInput'), 'USD/M'], ['maxOutput', t('modelli.facets.maximumOutput'), 'USD/M']],
+    t('modelli.facets.costNote'));
   avanzati.append(gCosto);
 
   const gNonNoti = el('fieldset', 'talos-lab__space');
   gNonNoti.dataset.facetGroup = 'nonnoti';
-  gNonNoti.append(el('legend', 'talos-lab__heading', 'Dati non dichiarati'));
+  gNonNoti.append(el('legend', 'talos-lab__heading', t('modelli.facets.unknownData')));
   const rigaNonNoti = el('label', 'talos-cluster');
   const casellaNonNoti = el('input', 'talos-checkbox');
   casellaNonNoti.type = 'checkbox'; casellaNonNoti.dataset.facetBool = 'includeUnknown';
-  rigaNonNoti.append(casellaNonNoti, el('span', 'talos-grow', 'Tieni dentro anche i modelli senza il dato'));
-  gNonNoti.append(rigaNonNoti, el('p', 'talos-muted', 'Un prezzo mancante non è un prezzo basso.'));
+  rigaNonNoti.append(casellaNonNoti, el('span', 'talos-grow', t('modelli.facets.includeUnknownModels')));
+  gNonNoti.append(rigaNonNoti, el('p', 'talos-muted', t('modelli.facets.missingPriceNote')));
   avanzati.append(gNonNoti);
 
   barra.append(avanzati);
 
   const attivi = el('div', 'talos-cluster');
-  attivi.setAttribute('role', 'group'); attivi.setAttribute('aria-label', 'Filtri applicati');
+  attivi.setAttribute('role', 'group'); attivi.setAttribute('aria-label', t('modelli.facets.appliedFilters'));
   attivi.dataset.facetActive = '';
   barra.append(attivi);
 
@@ -287,7 +290,7 @@ export function creaBarraFaccette({ onCambia, etichetta = (k, v) => v } = {}) {
     const aperto = apri.getAttribute('aria-expanded') === 'true';
     apri.setAttribute('aria-expanded', String(!aperto));
     avanzati.hidden = aperto;
-    apri.firstChild.textContent = aperto ? 'Tutti i filtri' : 'Meno filtri';
+    apri.firstChild.textContent = aperto ? t('modelli.facets.allFilters') : t('modelli.facets.fewerFilters');
   });
   selectOrdina.addEventListener('change', () => cambia({ ...filtri, sort: selectOrdina.value }));
   selContesto.addEventListener('change', () => cambia({ ...filtri, minContext: selContesto.value }));
@@ -356,13 +359,13 @@ export function creaBarraFaccette({ onCambia, etichetta = (k, v) => v } = {}) {
 
     ambito.replaceChildren();
     const totale = senzaDati ? null : selectCatalog(modelli, { ...filtri, destination: [] }, contesto).length;
-    ambito.append(chip('Tutti', 'all', { premuto: !filtri.destination.length, conteggio: totale }));
+    ambito.append(chip(t('modelli.facets.all'), 'all', { premuto: !filtri.destination.length, conteggio: totale }));
     for (const [valore, testo] of FACET_OPTIONS.destination) {
       const n = conta('destination', valore);
       const spento = n === 0 && !filtri.destination.includes(valore);
-      ambito.append(chip(testo, valore, {
+      ambito.append(chip(etichettaFaccettaTradotta('destination', valore, testo), valore, {
         premuto: filtri.destination.includes(valore), conteggio: n, disabilitato: spento,
-        titolo: spento ? 'Nessun modello in questo catalogo' : null,
+        titolo: spento ? t('modelli.facets.noModels') : null,
       }));
     }
 
@@ -373,7 +376,7 @@ export function creaBarraFaccette({ onCambia, etichetta = (k, v) => v } = {}) {
     gContesto.hidden = !contestoMostrato;
     if (contestoMostrato) {
       selContesto.replaceChildren();
-      selContesto.append(new Option('Qualsiasi', '', false, filtri.minContext === ''));
+      selContesto.append(new Option(t('modelli.facets.any'), '', false, filtri.minContext === ''));
       for (const s of SOGLIE_CONTESTO) {
         const n = conta('minContext', String(s));
         selContesto.append(new Option(n === null ? numero(s) : `${numero(s)} (${numero(n)})`, String(s), false, filtri.minContext === String(s)));
@@ -398,8 +401,8 @@ export function creaBarraFaccette({ onCambia, etichetta = (k, v) => v } = {}) {
       altri.hidden = !resto && !apertoOra;
       altri.setAttribute('aria-expanded', String(apertoOra));
       if (!altri.hidden) {
-        altri.textContent = apertoOra ? 'Vedi meno parametri' : `Vedi altri ${numero(resto)} parametri`;
-        altri.setAttribute('aria-label', apertoOra ? 'Chiudi l’elenco dei parametri' : `Mostra altri ${numero(resto)} parametri accettati`);
+        altri.textContent = apertoOra ? t('modelli.facets.fewerParameters') : tn('modelli.facets.oneMoreParameter', 'modelli.facets.manyMoreParameters', resto, { n: numero(resto) });
+        altri.setAttribute('aria-label', apertoOra ? t('modelli.facets.closeParameters') : tn('modelli.facets.showOneMoreParameter', 'modelli.facets.showManyMoreParameters', resto, { n: numero(resto) }));
       }
     }
 
@@ -418,7 +421,7 @@ export function creaBarraFaccette({ onCambia, etichetta = (k, v) => v } = {}) {
     if (ricerca) attivi.append(chipRicerca(ricerca));
     for (const c of chips) attivi.append(chipFiltro(c));
     if (chips.length || ricerca) {
-      const azzera = el('button', 'talos-button talos-button--ghost talos-button--sm', 'Azzera tutto');
+      const azzera = el('button', 'talos-button talos-button--ghost talos-button--sm', t('modelli.facets.resetAll'));
       azzera.type = 'button'; azzera.dataset.facetRemove = '__azzera';
       attivi.append(azzera);
     }
@@ -438,7 +441,7 @@ export function creaBarraFaccette({ onCambia, etichetta = (k, v) => v } = {}) {
     if (!avanzatiOffribili) {
       avanzati.hidden = true;
       apri.setAttribute('aria-expanded', 'false');
-      apri.firstChild.textContent = 'Tutti i filtri';
+      apri.firstChild.textContent = t('modelli.facets.allFilters');
     }
     /* Lo stato dei dati, leggibile da una prova e dal taccuino della QA: `non-misurati` vuol
        dire «nessun numero in questa barra è stato contato», e non è la stessa cosa di «zero». */
@@ -446,16 +449,16 @@ export function creaBarraFaccette({ onCambia, etichetta = (k, v) => v } = {}) {
   }
 
   function chipFiltro(c) {
-    const b = el('button', 'talos-button talos-button--secondary talos-button--sm', c.label);
+    const b = el('button', 'talos-button talos-button--secondary talos-button--sm', etichettaChip(c));
     b.type = 'button'; b.dataset.facetRemove = ''; b.dataset.facetKey = c.key;
     if (typeof c.value === 'string') b.dataset.facetValue = c.value;
-    b.setAttribute('aria-label', 'Rimuovi ' + c.label);
+    b.setAttribute('aria-label', t('modelli.facets.removeFilter', { filter: etichettaChip(c) }));
     return b;
   }
   function chipRicerca(q) {
-    const b = el('button', 'talos-button talos-button--secondary talos-button--sm', 'Ricerca: ' + q);
+    const b = el('button', 'talos-button talos-button--secondary talos-button--sm', t('modelli.facets.searchValue', { query: q }));
     b.type = 'button'; b.dataset.facetRemoveSearch = '';
-    b.setAttribute('aria-label', 'Rimuovi ricerca ' + q);
+    b.setAttribute('aria-label', t('modelli.facets.removeSearch', { query: q }));
     b.addEventListener('click', () => {
       const campo = barra.closest('#modelLabCatalogPanel')?.querySelector('input[type="search"]');
       if (!campo) return;
@@ -468,3 +471,13 @@ export function creaBarraFaccette({ onCambia, etichetta = (k, v) => v } = {}) {
 }
 
 export function aggiornaBarraFaccette(barra, stato) { barra.aggiorna(stato); }
+
+const CHIAVI_FACCETTE = {"destination":{"local":"modelli.facets.localModels","cloud":"modelli.facets.cloudModels"},"capabilities":{"tools":"modelli.facets.functionCalling","vision":"modelli.facets.imageInput","reasoning":"modelli.facets.reasoning","json":"modelli.facets.jsonOutput","audio":"modelli.facets.audio"}};
+function etichettaFaccettaTradotta(group, value, fallback = value) { const key = CHIAVI_FACCETTE[group]?.[value]; return key ? t(key) : fallback; }
+
+const CHIAVI_CHIP = {"destination":"modelli.facets.active.destination","capabilities":"modelli.facets.active.capabilities","providers":"modelli.facets.active.provider","minContext":"modelli.facets.active.minimumContext","maxInput":"modelli.facets.active.maximumInput","maxOutput":"modelli.facets.active.maximumOutput"};
+function etichettaChip(chip) {
+  if (chip.key === 'includeUnknown') return t('modelli.facets.active.includeUnknown');
+  const key = CHIAVI_CHIP[chip.key];
+  return key ? t(key, { value: etichettaFaccettaTradotta(chip.key, chip.value) }) : chip.label;
+}

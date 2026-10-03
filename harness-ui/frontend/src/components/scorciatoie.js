@@ -17,6 +17,7 @@
  */
 
 /** Vero su Mac. `userAgentData.platform` è la via nuova, `navigator.platform` il ripiego. */
+import { t } from './lingua.js';
 export function suApple(nav = globalThis.navigator) {
   const p = String(nav?.userAgentData?.platform || nav?.platform || '').toLowerCase();
   return p.includes('mac') || p.includes('ios') || p.includes('iphone') || p.includes('ipad');
@@ -59,14 +60,20 @@ export function normalizzaTastiScritti(radice = globalThis.document, { apple = s
  * Il registro delle scorciatoie globali. `azioni` è una mappa id → funzione: chi non la passa
  * non collega quella riga (così una scorciatoia esiste solo se ha davvero qualcosa dietro).
  */
+/* 03/10/2026, seconda ondata della lingua: `nome` e `area` si leggono dal dizionario (`comandi.shortcut.*`), nella lingua corrente;
+   `id` e `combo` sono logica. Prima arrivavano a schermo in italiano anche con l'interfaccia in inglese. */
+const scorciatoia = (id, combo, area) => Object.freeze(Object.defineProperties({ id, combo }, {
+  nome: { enumerable: true, get: () => t(`comandi.shortcut.${id}`) },
+  area: { enumerable: true, get: () => t(`comandi.shortcutArea.${area}`) },
+}));
 export const SCORCIATOIE = Object.freeze([
-  { id: 'comandi', combo: 'mod K', area: 'Ovunque', nome: 'Apri i comandi' },
-  { id: 'nuova', combo: 'mod N', area: 'Ovunque', nome: 'Nuova sessione' },
-  { id: 'modello', combo: 'mod ⇧ M', area: 'Chat', nome: 'Cambia il modello' },
-  { id: 'impostazioni', combo: 'mod ,', area: 'Ovunque', nome: 'Apri le impostazioni' },
-  { id: 'scorciatoie', combo: 'mod /', area: 'Ovunque', nome: 'Mostra le scorciatoie' },
-  { id: 'terminale', combo: 'mod `', area: 'Sessione', nome: 'Mostra o nascondi il terminale' },
-  { id: 'terminaleNuovo', combo: 'mod ⇧ `', area: 'Sessione', nome: 'Nuova scheda del terminale' },
+  scorciatoia('comandi', 'mod K', 'ovunque'),
+  scorciatoia('nuova', 'mod N', 'ovunque'),
+  scorciatoia('modello', 'mod ⇧ M', 'chat'),
+  scorciatoia('impostazioni', 'mod ,', 'ovunque'),
+  scorciatoia('scorciatoie', 'mod /', 'ovunque'),
+  scorciatoia('terminale', 'mod `', 'sessione'),
+  scorciatoia('terminaleNuovo', 'mod ⇧ `', 'sessione'),
 ]);
 
 /*
@@ -100,7 +107,7 @@ export const COMBO_RISERVATE_AL_BROWSER = Object.freeze(['mod T', 'mod W', 'mod 
  * Ogni riga porta il suo perché: senza motivo è un'eccezione che nasconde un difetto.
  */
 export const COMBO_GESTITE_ALTROVE = Object.freeze({
-  'mod ↵': 'il composer, non il registro globale: accoda il messaggio invece di inviarlo (legacy/invio-durante-il-giro.js, decidiInvio)',
+  'mod ↵': 'the composer, not the global registry: it queues the message instead of sending it (legacy/invio-durante-il-giro.js, decidiInvio)',
 });
 
 /**

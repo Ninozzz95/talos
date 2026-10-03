@@ -73,8 +73,10 @@
  *   in colonna a sinistra con l'intestazione staccata a destra, e il testo veniva tagliato a metà.
  *   Provato tre volte prima di trovarla: la forma che funziona è quella di «Per attrezzo», cioè
  *   due fratelli diretti, non un involucro in più.
+ *   03/10/2026, corsia S1: il selettore non legge più l'`aria-label` (cambia con la lingua: in inglese la regola smetteva di valere) ma la
+ *   chiave stabile del `data-t-attr`, che non cambia.
  */
-#veloPermessi .talos-choice-grid[aria-label="Dove girano i comandi"]{
+#veloPermessi .talos-choice-grid[data-t-attr*="]modello.permissions.whereCommandsRun"]{
   grid-column: 1 / -1;
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));

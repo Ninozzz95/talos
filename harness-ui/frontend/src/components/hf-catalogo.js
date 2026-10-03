@@ -1,3 +1,6 @@
+import { t, tn, linguaCorrenteDiT } from './lingua.js';
+/* Numeri e date nella lingua dell'interfaccia (come fanno gli altri componenti): italiano → it-IT, inglese → en-US. */
+const localeUI = () => (linguaCorrenteDiT() === 'en' ? 'en-US' : 'it-IT');
 /*
  * Catalogo Hugging Face — la scheda «Hugging Face» del Model Lab nel linguaggio
  * del mockup (`#panel-hf`): righe dei repository (`ListRow`), dettaglio
@@ -139,31 +142,32 @@ export function eSenzaQuantizzazione(quant) {
  * nome del file resta (è il nome del file che si scarica) ma non viaggia solo.
  */
 const GLOSSE = [
-  [/^F32$/u, 'pesi pieni · per convertire, non per usare'],
-  [/^(F16|BF16)$/u, 'pesi pieni a metà precisione · per convertire'],
-  [/^Q8/u, '8 bit · quasi identico all’originale, pesante'],
-  [/^Q6/u, '6 bit · differenza non percepibile, se ci sta'],
-  [/^Q5/u, '5 bit · margine di sicurezza su codice e ragionamento'],
-  [/^Q4_K/u, '4 bit · il compromesso più usato'],
-  [/^Q4/u, '4 bit · metodo vecchio, meglio Q4_K'],
-  [/^IQ4/u, '4 bit compressi · più piccolo di Q4, un filo più lento'],
-  [/^(Q3|IQ3)/u, '3 bit · si sente, ma entra dove Q4 non entra'],
-  [/^(Q2|IQ2|TQ2)/u, '2 bit · ultima spiaggia, qualità in calo netto'],
-  [/^(IQ1|TQ1)/u, '1 bit · sperimentale, spesso inservibile'],
-  [/^MXFP4$/u, '4 bit a blocchi · formato nuovo'],
+  [/^F32$/u, "modelli.hf.fullWeights"],
+  [/^(F16|BF16)$/u, "modelli.hf.halfPrecisionWeights"],
+  [/^Q8/u, "modelli.hf.eightBit"],
+  [/^Q6/u, "modelli.hf.sixBit"],
+  [/^Q5/u, "modelli.hf.fiveBit"],
+  [/^Q4_K/u, "modelli.hf.fourBitCommon"],
+  [/^Q4/u, "modelli.hf.fourBitLegacy"],
+  [/^IQ4/u, "modelli.hf.fourBitCompressed"],
+  [/^(Q3|IQ3)/u, "modelli.hf.threeBit"],
+  [/^(Q2|IQ2|TQ2)/u, "modelli.hf.twoBit"],
+  [/^(IQ1|TQ1)/u, "modelli.hf.oneBit"],
+  [/^MXFP4$/u, "modelli.hf.fourBitBlocks"],
 ];
 export function glossaQuant(quant) {
   const nome = String(quant || '').toUpperCase();
-  for (const [re, testo] of GLOSSE) if (re.test(nome)) return testo;
+  for (const [re, testo] of GLOSSE) if (re.test(nome)) return t(testo);
   return null;
 }
 
-const numero = new Intl.NumberFormat('it-IT');
+const numero = { format: (valore) => new Intl.NumberFormat(localeUI()).format(valore) };
 export function conteggio(n) {
   const v = Number(n);
   if (!Number.isFinite(v) || v < 0) return null;
-  if (v >= 1_000_000) return `${new Intl.NumberFormat('it-IT', { maximumFractionDigits: 1 }).format(v / 1_000_000)} M`;
-  if (v >= 1_000) return `${new Intl.NumberFormat('it-IT', { maximumFractionDigits: 1 }).format(v / 1_000)} k`;
+  const spazio = linguaCorrenteDiT() === 'en' ? '' : ' '; // «412 k» in italiano, «412k» in inglese
+  if (v >= 1_000_000) return `${new Intl.NumberFormat(localeUI(), { maximumFractionDigits: 1 }).format(v / 1_000_000)}${spazio}M`;
+  if (v >= 1_000) return `${new Intl.NumberFormat(localeUI(), { maximumFractionDigits: 1 }).format(v / 1_000)}${spazio}k`;
   return numero.format(v);
 }
 
@@ -267,40 +271,40 @@ export function varianteConsigliata(gruppi = [], stima = new Map()) {
 
 /** La stima di una variante in parole del mockup: «~8,1 GB di memoria · entra». */
 export function descriviStima(stima, bytes) {
-  if (!stima) return { testo: bytes ? `${gb(bytes)} da scaricare · non ancora misurato` : 'non ancora misurato', tono: '' };
-  if (stima.inCorso) return { testo: 'Misuro su questo PC…', tono: '' };
+  if (!stima) return { testo: bytes ? t('modelli.hf.downloadNotMeasured', { size: gb(bytes) }) : t('modelli.hf.notMeasuredYet'), tono: '' };
+  if (stima.inCorso) return { testo: t('modelli.hf.measuring'), tono: '' };
   const richiesti = Number.isFinite(stima.memory?.requiredBytes) ? stima.memory.requiredBytes : bytes;
   const liberi = stima.memory?.availableBytes;
-  if (stima.state === 'compatible') return { testo: `~${gb(richiesti)} di memoria · entra`, tono: 'success' };
-  if (stima.state === 'tight') return { testo: `~${gb(richiesti)} di memoria · al limite`, tono: 'warning' };
-  if (stima.state === 'blocked' && stima.reason === 'storage') return { testo: `${gb(bytes)} · non c'è spazio sul disco`, tono: 'danger' };
-  if (stima.state === 'blocked') return { testo: `~${gb(richiesti)} · oltre la memoria allocabile`, tono: 'danger', liberi };
+  if (stima.state === 'compatible') return { testo: t('modelli.hf.memoryFits', { size: gb(richiesti) }), tono: 'success' };
+  if (stima.state === 'tight') return { testo: t('modelli.hf.memoryTight', { size: gb(richiesti) }), tono: 'warning' };
+  if (stima.state === 'blocked' && stima.reason === 'storage') return { testo: t('modelli.hf.diskFull', { size: gb(bytes) }), tono: 'danger' };
+  if (stima.state === 'blocked') return { testo: t('modelli.hf.memoryExceeded', { size: gb(richiesti) }), tono: 'danger', liberi };
   /*
    * ⛔ `unknown`: la macchina non si è potuta misurare. Il PERCHÉ lo dice il
    * callout in cima, una volta sola; ripeterlo su ognuna delle ventisette
    * righe (visto in una foto del 06/09) riempie la colonna di rumore e
    * cancella l'unico dato che resta vero — quanto pesa il file da scaricare.
    */
-  return { testo: bytes ? `${gb(bytes)} da scaricare · memoria non misurata` : 'memoria non misurata', tono: '' };
+  return { testo: bytes ? t('modelli.hf.downloadMemoryUnknown', { size: gb(bytes) }) : t('modelli.hf.memoryNotMeasured'), tono: '' };
 }
 
-const TIPI = { 'text-generation': 'Conversazione e codice', 'text2text-generation': 'Testo', 'image-text-to-text': 'Immagini e testo', 'automatic-speech-recognition': 'Voce', 'feature-extraction': 'Embedding' };
+const TIPI = { get 'text-generation'(){return t('modelli.hf.conversationAndCode');}, get 'text2text-generation'(){return t('modelli.hf.text');}, get 'image-text-to-text'(){return t('modelli.hf.imagesAndText');}, get 'automatic-speech-recognition'(){return t('modelli.hf.voice');}, get 'feature-extraction'(){return t('modelli.hf.embedding');} };
 
 /** Cosa dice una riga di risultato. */
 export function datiRepoHf(item = {}) {
   const [autore, nome] = String(item.repo || item.id || '').split('/');
   const conversione = Boolean(item.communityConversion) || /gguf$/i.test(autore || '') || /^(bartowski|unsloth|mradermacher|lmstudio-community|TheBloke|QuantFactory)$/i.test(autore || '');
   const fileGguf = Number.isFinite(item.ggufFiles) ? item.ggufFiles : null;
-  const tipo = conversione ? 'Conversione della community' : (TIPI[item.pipelineTag] || 'Modello'); // chi ha convertito conta più del tipo: la licenza e la responsabilità sono sue
-  const sub1 = `${tipo}${fileGguf != null ? ` · ${fileGguf === 1 ? '1 file' : `${fileGguf} file`}${conversione ? '' : ' compatibili'}` : ''}`;
-  const sub2 = item.gated ? 'Verifica le condizioni prima del download' : (item.license ? `Licenza ${item.license}` : 'Licenza non dichiarata');
+  const tipo = conversione ? t('modelli.hf.communityConversion') : (TIPI[item.pipelineTag] || t('modelli.hf.model')); // chi ha convertito conta più del tipo: la licenza e la responsabilità sono sue
+  const sub1 = fileGguf != null ? t('modelli.hf.repositoryFileSummary', { type: tipo, files: conversione ? tn('modelli.hf.oneFile', 'modelli.hf.manyFiles', fileGguf) : tn('modelli.hf.oneCompatibleFile', 'modelli.hf.manyCompatibleFiles', fileGguf) }) : tipo;
+  const sub2 = item.gated ? t('modelli.hf.checkDownloadTerms') : (item.license ? t('modelli.hf.namedLicense', { license: item.license }) : t('modelli.hf.licenseNotDeclared'));
   return {
     id: item.repo || item.id, titolo: `${autore} / ${nome || ''}`.trim(), autore, match: String(item.repo || '').toLowerCase(),
     /* `conversione` esce da qui dal 19/09/2026 perché serve anche ai GRUPPI della lista
        (`raggruppaRisultatiHf`): era calcolata e poi usata solo per comporre `sub1`. */
     conversione,
     sub1, sub2,
-    badge: item.gated ? { testo: 'Accesso richiesto', tono: 'warning' } : (conversione ? null : { testo: 'Autore del modello', tono: 'info' }),
+    badge: item.gated ? { testo: t('modelli.hf.accessRequired'), tono: 'warning' } : (conversione ? null : { testo: t('modelli.hf.modelAuthor'), tono: 'info' }),
     download: conteggio(item.downloads), likes: conteggio(item.likes), gated: Boolean(item.gated),
   };
 }
@@ -387,13 +391,22 @@ export const CAMPI_RICERCA_HF = Object.freeze(['repo', 'revision', 'downloads', 
  *     peggio di un controllo assente.
  */
 export const FACCETTE_NON_COLLEGATE = Object.freeze([
-  ['Contesto minimo · token', 'il contesto non è in nessuno dei campi normalizzati della ricerca'],
-  ['Formato del file', 'il server filtra sempre `gguf`: la faccetta avrebbe un valore solo'],
-  ['Compatibilità RAM', 'il verdetto si misura sui file, che si conoscono solo dal dettaglio'],
-  ['Locali · Cloud · Installati · Preferiti', 'la ricerca restituisce repository, non modelli installati'],
-  ['Viste salvate · + Salva vista', 'il prodotto non ha una memoria delle viste'],
-  ['Stella dei preferiti · casella di confronto', 'non esistono un archivio dei preferiti né una modalità confronto'],
+  coppiaTradotta('modelli.hf.unconnected.minimumContext', 'modelli.hf.unconnected.minimumContextReason'),
+  coppiaTradotta('modelli.hf.unconnected.fileFormat', 'modelli.hf.unconnected.fileFormatReason'),
+  coppiaTradotta('modelli.hf.unconnected.ramCompatibility', 'modelli.hf.unconnected.ramCompatibilityReason'),
+  coppiaTradotta('modelli.hf.unconnected.destinationCollection', 'modelli.hf.unconnected.destinationCollectionReason'),
+  coppiaTradotta('modelli.hf.unconnected.savedViews', 'modelli.hf.unconnected.savedViewsReason'),
+  coppiaTradotta('modelli.hf.unconnected.favoritesCompare', 'modelli.hf.unconnected.favoritesCompareReason'),
 ]);
+/** Una coppia [etichetta, motivo] i cui testi si risolvono nella lingua corrente a OGNI lettura, non quando il modulo si carica. */
+function coppiaTradotta(chiaveEtichetta, chiaveMotivo) {
+  const coppia = [null, null];
+  Object.defineProperties(coppia, {
+    0: { enumerable: true, get: () => t(chiaveEtichetta) },
+    1: { enumerable: true, get: () => t(chiaveMotivo) },
+  });
+  return Object.freeze(coppia);
+}
 
 /*
  * I TIPI DI PIPELINE — le etichette umane dei valori che `pipelineTag` può portare.
@@ -409,59 +422,59 @@ export const FACCETTE_NON_COLLEGATE = Object.freeze([
  *   quando si sa come si chiama).
  */
 const TIPI_PIPELINE = Object.freeze({
-  'text-generation': 'Conversazione e codice',
-  'text2text-generation': 'Testo in testo',
-  'text-classification': 'Classificazione del testo',
-  'token-classification': 'Etichettatura del testo',
-  'question-answering': 'Domande su un testo',
-  'table-question-answering': 'Domande su una tabella',
-  'zero-shot-classification': 'Classificazione senza esempi',
-  translation: 'Traduzione',
-  summarization: 'Riassunto',
-  'feature-extraction': 'Vettori di testo',
-  'fill-mask': 'Parole mancanti',
-  'sentence-similarity': 'Somiglianza fra frasi',
-  'text-ranking': 'Ordinamento del testo',
-  'text-to-speech': 'Voce sintetica',
-  'text-to-audio': 'Audio da testo',
-  'automatic-speech-recognition': 'Trascrizione della voce',
-  'audio-to-audio': 'Trasformazione audio',
-  'audio-classification': 'Classificazione audio',
-  'depth-estimation': 'Profondità da immagine',
-  'image-classification': 'Classificazione di immagini',
-  'object-detection': 'Riconoscimento di oggetti',
-  'image-segmentation': 'Segmentazione di immagini',
-  'text-to-image': 'Immagini da testo',
-  'image-to-text': 'Testo da immagine',
-  'image-to-image': 'Trasformazione di immagini',
-  'image-to-video': 'Video da immagine',
-  'unconditional-image-generation': 'Generazione di immagini',
-  'video-classification': 'Classificazione video',
-  'text-to-video': 'Video da testo',
-  'zero-shot-image-classification': 'Immagini senza esempi',
-  'zero-shot-object-detection': 'Oggetti senza esempi',
-  'mask-generation': 'Maschere da immagine',
-  'image-feature-extraction': 'Vettori di immagine',
-  'image-text-to-text': 'Immagini e testo',
-  'image-text-to-image': 'Immagini da immagini e testo',
-  'image-text-to-video': 'Video da immagini e testo',
-  'visual-question-answering': 'Domande su un’immagine',
-  'document-question-answering': 'Domande su un documento',
-  'video-text-to-text': 'Video e testo',
-  'any-to-any': 'Qualsiasi formato',
-  'audio-text-to-text': 'Voce e testo',
-  'reinforcement-learning': 'Apprendimento per rinforzo',
-  robotics: 'Robotica',
-  'tabular-classification': 'Classificazione tabellare',
-  'tabular-regression': 'Regressione tabellare',
-  'time-series-forecasting': 'Previsione di serie',
-  'graph-ml': 'Grafi',
-  other: 'Altro',
+  get 'text-generation'(){return t('modelli.hf.conversationAndCode');},
+  get 'text2text-generation'(){return t('modelli.hf.textToText');},
+  get 'text-classification'(){return t('modelli.hf.textClassification');},
+  get 'token-classification'(){return t('modelli.hf.tokenClassification');},
+  get 'question-answering'(){return t('modelli.hf.textQuestions');},
+  get 'table-question-answering'(){return t('modelli.hf.tableQuestions');},
+  get 'zero-shot-classification'(){return t('modelli.hf.zeroShotClassification');},
+  get translation(){return t('modelli.hf.translation');},
+  get summarization(){return t('modelli.hf.summarization');},
+  get 'feature-extraction'(){return t('modelli.hf.textVectors');},
+  get 'fill-mask'(){return t('modelli.hf.missingWords');},
+  get 'sentence-similarity'(){return t('modelli.hf.sentenceSimilarity');},
+  get 'text-ranking'(){return t('modelli.hf.textRanking');},
+  get 'text-to-speech'(){return t('modelli.hf.syntheticSpeech');},
+  get 'text-to-audio'(){return t('modelli.hf.textToAudio');},
+  get 'automatic-speech-recognition'(){return t('modelli.hf.speechTranscription');},
+  get 'audio-to-audio'(){return t('modelli.hf.audioTransformation');},
+  get 'audio-classification'(){return t('modelli.hf.audioClassification');},
+  get 'depth-estimation'(){return t('modelli.hf.imageDepth');},
+  get 'image-classification'(){return t('modelli.hf.imageClassification');},
+  get 'object-detection'(){return t('modelli.hf.objectDetection');},
+  get 'image-segmentation'(){return t('modelli.hf.imageSegmentation');},
+  get 'text-to-image'(){return t('modelli.hf.textToImage');},
+  get 'image-to-text'(){return t('modelli.hf.imageToText');},
+  get 'image-to-image'(){return t('modelli.hf.imageTransformation');},
+  get 'image-to-video'(){return t('modelli.hf.imageToVideo');},
+  get 'unconditional-image-generation'(){return t('modelli.hf.imageGeneration');},
+  get 'video-classification'(){return t('modelli.hf.videoClassification');},
+  get 'text-to-video'(){return t('modelli.hf.textToVideo');},
+  get 'zero-shot-image-classification'(){return t('modelli.hf.zeroShotImages');},
+  get 'zero-shot-object-detection'(){return t('modelli.hf.zeroShotObjects');},
+  get 'mask-generation'(){return t('modelli.hf.imageMasks');},
+  get 'image-feature-extraction'(){return t('modelli.hf.imageVectors');},
+  get 'image-text-to-text'(){return t('modelli.hf.imagesAndText');},
+  get 'image-text-to-image'(){return t('modelli.hf.imagesFromImagesAndText');},
+  get 'image-text-to-video'(){return t('modelli.hf.videoFromImagesAndText');},
+  get 'visual-question-answering'(){return t('modelli.hf.imageQuestions');},
+  get 'document-question-answering'(){return t('modelli.hf.documentQuestions');},
+  get 'video-text-to-text'(){return t('modelli.hf.videoAndText');},
+  get 'any-to-any'(){return t('modelli.hf.anyFormat');},
+  get 'audio-text-to-text'(){return t('modelli.hf.speechAndText');},
+  get 'reinforcement-learning'(){return t('modelli.hf.reinforcementLearning');},
+  get robotics(){return t('modelli.hf.robotics');},
+  get 'tabular-classification'(){return t('modelli.hf.tabularClassification');},
+  get 'tabular-regression'(){return t('modelli.hf.tabularRegression');},
+  get 'time-series-forecasting'(){return t('modelli.hf.seriesForecasting');},
+  get 'graph-ml'(){return t('modelli.hf.graphs');},
+  get other(){return t('modelli.hf.other');},
 });
 /** `null` = «nessun tipo dichiarato»: un valore VERO, e diverso da «tipo sconosciuto». */
 export const TIPO_NON_DICHIARATO = '__non-dichiarato';
 export function etichettaTipoHf(valore) {
-  if (valore === TIPO_NON_DICHIARATO) return 'Tipo non dichiarato';
+  if (valore === TIPO_NON_DICHIARATO) return t('modelli.hf.typeNotDeclared');
   return TIPI_PIPELINE[valore] || String(valore);
 }
 
@@ -472,12 +485,12 @@ export function etichettaTipoHf(valore) {
  * quello dei download, ed è già quello con cui il prodotto ordina (`#modelLabHfSortControl`).
  */
 export const BANDE_DOWNLOAD = Object.freeze([
-  ['oltre-100k', 'Oltre 100.000', (n) => n > 100_000],
-  ['10k-100k', 'Da 100.000 a 10.000', (n) => n > 10_000],
-  ['1k-10k', 'Da 10.000 a 1.000', (n) => n > 1_000],
-  ['fino-1k', 'Fino a 1.000', (n) => n >= 0],
-  ['non-dichiarati', 'Download non dichiarati', () => false],
-]);
+  ['oltre-100k', "modelli.hf.downloadsOverHundredThousand", (n) => n > 100_000],
+  ['10k-100k', "modelli.hf.downloadsTenToHundredThousand", (n) => n > 10_000],
+  ['1k-10k', "modelli.hf.downloadsOneToTenThousand", (n) => n > 1_000],
+  ['fino-1k', "modelli.hf.downloadsUpToThousand", (n) => n >= 0],
+  ['non-dichiarati', "modelli.hf.downloadsNotDeclared", () => false],
+].map(([value, key, condition]) => Object.defineProperty([value, null, condition], 1, { enumerable: true, get: () => t(key) })));
 export function bandaDownload(n) {
   if (n === null || n === undefined || typeof n !== 'number') return 'non-dichiarati';
   const v = Number(n);
@@ -487,19 +500,19 @@ export function bandaDownload(n) {
 
 /** Le sei faccette che i dati veri sostengono: due a chip (l'ambito) e quattro a select. */
 export const FACCETTE_HF = Object.freeze([
-  { chiave: 'accesso', titolo: 'Accesso', forma: 'chip' },
-  { chiave: 'licenza', titolo: 'Licenza', forma: 'chip' },
-  { chiave: 'parametri', titolo: 'Parametri totali · miliardi', forma: 'select' },
-  { chiave: 'popolarita', titolo: 'Popolarità · download', forma: 'select' },
-  { chiave: 'tipo', titolo: 'Tipo · pipeline', forma: 'select' },
-  { chiave: 'autore', titolo: 'Autore · organizzazione', forma: 'select' },
+  { chiave: 'accesso', get titolo(){return t('modelli.hf.access');}, forma: 'chip' },
+  { chiave: 'licenza', get titolo(){return t('modelli.hf.license');}, forma: 'chip' },
+  { chiave: 'parametri', get titolo(){return t('modelli.hf.totalParametersBillions');}, forma: 'select' },
+  { chiave: 'popolarita', get titolo(){return t('modelli.hf.popularityDownloads');}, forma: 'select' },
+  { chiave: 'tipo', get titolo(){return t('modelli.hf.typePipeline');}, forma: 'select' },
+  { chiave: 'autore', get titolo(){return t('modelli.hf.authorOrganization');}, forma: 'select' },
 ]);
 const BANDE_PARAMETRI = Object.freeze([
-  ['fino-1b', 'Fino a 1B', 1e9], ['1-3b', 'Oltre 1B fino a 3B', 3e9],
-  ['3-8b', 'Oltre 3B fino a 8B', 8e9], ['8-15b', 'Oltre 8B fino a 15B', 15e9],
-  ['15-35b', 'Oltre 15B fino a 35B', 35e9], ['35-70b', 'Oltre 35B fino a 70B', 70e9],
-  ['oltre-70b', 'Oltre 70B', Infinity], ['non-dichiarati', 'Parametri non dichiarati', null],
-]);
+  ['fino-1b', "modelli.hf.parametersUpToOneBillion", 1e9], ['1-3b', "modelli.hf.parametersOneToThreeBillion", 3e9],
+  ['3-8b', "modelli.hf.parametersThreeToEightBillion", 8e9], ['8-15b', "modelli.hf.parametersEightToFifteenBillion", 15e9],
+  ['15-35b', "modelli.hf.parametersFifteenToThirtyFiveBillion", 35e9], ['35-70b', "modelli.hf.parametersThirtyFiveToSeventyBillion", 70e9],
+  ['oltre-70b', "modelli.hf.parametersOverSeventyBillion", Infinity], ['non-dichiarati', "modelli.hf.parametersNotDeclared", null],
+].map(([value, key, condition]) => Object.defineProperty([value, null, condition], 1, { enumerable: true, get: () => t(key) })));
 
 /**
  * Il valore di UNA faccetta per UN risultato. Sempre una sola stringa: è la regola che rende il
@@ -524,9 +537,9 @@ export function valoreFaccettaHf(item = {}, chiave) {
  *    elencare un autore che non c'è: il vocabolario non esiste a priori.
  */
 export function vociFaccettaHf(risultati = [], chiave, selezionati = []) {
-  if (chiave === 'accesso') return [['aperto', 'Accesso aperto'], ['richiesto', 'Accesso richiesto'], ['non-dichiarato', 'Accesso non dichiarato']];
+  if (chiave === 'accesso') return [['aperto', t('modelli.hf.openAccess')], ['richiesto', t('modelli.hf.accessRequired')], ['non-dichiarato', t('modelli.hf.accessNotDeclared')]];
   if (chiave === 'parametri') return BANDE_PARAMETRI.map(([value, label]) => [value, label]);
-  if (chiave === 'licenza') return [['dichiarata', 'Con licenza'], ['non-dichiarata', 'Senza licenza']];
+  if (chiave === 'licenza') return [['dichiarata', t('modelli.hf.licensed')], ['non-dichiarata', t('modelli.hf.unlicensed')]];
   if (chiave === 'popolarita') return BANDE_DOWNLOAD.map(([valore, testo]) => [valore, testo]);
   if (chiave !== 'tipo' && chiave !== 'autore') return [];
   const conteggi = new Map();
@@ -680,7 +693,7 @@ export function datiRigaHf(item = {}) {
      download e preferiti. `sub1` resta com'è: il suo contratto è provato da `tests/unit/hf-catalogo.test.mjs`. */
   const pezziSub1 = String(base.sub1 || '').split(' · ');
   const riga = [...(base.conversione ? pezziSub1 : pezziSub1.slice(1)),
-    base.download ? `${base.download} download` : null, base.likes ? `♥ ${base.likes}` : null].filter(Boolean).join(' · ');
+    base.download ? t('modelli.hf.downloadCount', { count: base.download }) : null, base.likes ? `♥ ${base.likes}` : null].filter(Boolean).join(' · ');
   return {
     ...base,
     etichette,
@@ -699,10 +712,10 @@ export function datiRigaHf(item = {}) {
      *   aperto invece la licenza resta: è corta e non c'era altrove.
      */
     /* ATLAS F4: la licenza sta nell'etichetta, la riga dello stato dice solo lo stato (owner: «via i doppioni»). */
-    stato: { testo: richiesto ? 'Accesso richiesto' : item.gated === false ? 'Accesso aperto' : 'Accesso non dichiarato', tono: richiesto ? 'warning' : item.gated === false ? 'success' : 'muted', nota: null },
+    stato: { testo: richiesto ? t('modelli.hf.accessRequired') : item.gated === false ? t('modelli.hf.openAccess') : t('modelli.hf.accessNotDeclared'), tono: richiesto ? 'warning' : item.gated === false ? 'success' : 'muted', nota: null },
     /* `.row-capacity` del mockup: un numero grande, la sua etichetta, e sotto un secondo fatto.
        I due numeri veri che la ricerca porta sono i download e i preferiti. */
-    capacita: { misura: base.download, etichetta: 'download', nota: base.likes ? `♥ ${base.likes} preferiti` : null },
+    capacita: { misura: base.download, etichetta: t('modelli.hf.downloadLabel'), nota: base.likes ? t('modelli.hf.favoriteCount', { count: base.likes }) : null },
     revisione: item.revision || null,
   };
 }
@@ -711,11 +724,11 @@ export function datiRigaHf(item = {}) {
 export function parametriLeggibiliHf(n) {
   if (!Number.isSafeInteger(n) || n <= 0) return null;
   const [valore, unita] = n >= 1e9 ? [n / 1e9, 'B'] : n >= 1e6 ? [n / 1e6, 'M'] : [n / 1e3, 'K'];
-  return `${new Intl.NumberFormat('it-IT', { maximumFractionDigits: 1 }).format(valore)}${unita} parametri`;
+  return t('modelli.hf.parameterCount', { count: new Intl.NumberFormat(localeUI(), { maximumFractionDigits: 1 }).format(valore), unit: unita });
 }
 
 /** La nota sotto le faccette distingue il totale dichiarato da contesto, memoria e parametri attivi. */
-export const NOTA_FACCETTE_HF = 'I filtri si applicano ai risultati caricati; scorrendo ne arrivano altri. 1B = un miliardo di parametri totali dichiarati, non attivi né memoria richiesta. I valori mancanti restano “non dichiarati”. La memoria si misura nel dettaglio, file per file.';
+export function notaFaccetteHf() { return t('modelli.hf.filtersNote'); }
 
 function el(d, tag, classe, testo) { const n = d.createElement(tag); if (classe) n.className = classe; if (testo != null) n.textContent = testo; return n; }
 function icona(d, nome, classe = 'i') { const svg = d.createElementNS('http://www.w3.org/2000/svg', 'svg'); svg.setAttribute('class', classe); svg.setAttribute('aria-hidden', 'true'); const use = d.createElementNS('http://www.w3.org/2000/svg', 'use'); use.setAttribute('href', `#${nome}`); svg.appendChild(use); return svg; }
@@ -743,7 +756,7 @@ export function creaRigaHf(dati, { selezionato = false, seleziona, document: d =
   if (dati.revisione) b.dataset.hfRevisione = dati.revisione;
   b.setAttribute('aria-pressed', String(Boolean(selezionato)));
   const nome = String(dati.titolo || '').replace(/\s*\/\s*/u, ' / ');
-  b.setAttribute('aria-label', `${nome}. ${dati.stato.testo}.${dati.capacita.misura ? ` ${dati.capacita.misura} download.` : ''}`);
+  b.setAttribute('aria-label', dati.capacita.misura ? t('modelli.hf.repositoryDownloadLabel', { name: nome, status: dati.stato.testo, count: dati.capacita.misura }) : t('modelli.hf.repositoryLabel', { name: nome, status: dati.stato.testo }));
   const ic = el(d, 'span', 'talos-list-row__icon'); ic.dataset.c = 'Glyph'; ic.appendChild(icona(d, 'i-files'));
   const testo = el(d, 'span', 'talos-list-row__text');
   const titolo = el(d, 'span', 'talos-list-row__title', nome);
@@ -791,7 +804,7 @@ export function creaGruppoHf(gruppo, { document: d = globalThis.document } = {})
   const testa = el(d, 'div', 'talos-cluster'); testa.dataset.hfGruppo = gruppo.chiave;
   const etichetta = el(d, 'span', 'talos-eyebrow', gruppo.etichetta);
   etichetta.setAttribute('role', 'heading'); etichetta.setAttribute('aria-level', '3');
-  testa.append(etichetta, el(d, 'span', 'talos-grow', ''), el(d, 'span', 'talos-muted talos-mono--xs', new Intl.NumberFormat('it-IT').format(gruppo.righe.length)));
+  testa.append(etichetta, el(d, 'span', 'talos-grow', ''), el(d, 'span', 'talos-muted talos-mono--xs', new Intl.NumberFormat(localeUI()).format(gruppo.righe.length)));
   return testa;
 }
 
@@ -809,7 +822,7 @@ export function creaBarraScopertaHf(d = globalThis.document, { onCambia } = {}) 
   const barra = el(d, 'section', 'talos-stack');
   barra.id = 'modelLabHfScoperta';
   barra.dataset.hfScoperta = '';
-  barra.setAttribute('aria-label', 'Scoperta e filtri del catalogo Hugging Face');
+  barra.setAttribute('aria-label', t('modelli.hf.discoveryFilters'));
 
   /* L'AMBITO, a chip: è la partizione che il mockup mette nei chip (`scope-options`) — accesso e
      licenza — con `role="group"` per ogni partizione, come il mockup. */
@@ -831,7 +844,7 @@ export function creaBarraScopertaHf(d = globalThis.document, { onCambia } = {}) 
     faccette.append(campo);
     gruppi.set(chiave, sel);
   }
-  const nota = el(d, 'p', 'talos-muted', NOTA_FACCETTE_HF);
+  const nota = el(d, 'p', 'talos-muted', notaFaccetteHf());
   /* La testa dei risultati: `role="status"` + `aria-live` — senza, chi non vede lo schermo tocca una
      faccetta e non sa che i risultati sono cambiati (fonti del 19/09/2026, cappello del file).
      ⛔ IL CONTEGGIO È UN NODO SUO, e il pulsante di uscita sta FUORI da quella regione viva: dentro,
@@ -853,7 +866,7 @@ export function creaBarraScopertaHf(d = globalThis.document, { onCambia } = {}) 
    *   Compare SOLO quando c'è qualcosa da azzerare: un pulsante sempre presente che non fa niente
    *   quando i filtri sono già vuoti è la specie di controllo che questo progetto chiama difetto.
    */
-  const azzera = el(d, 'button', 'talos-button talos-button--ghost talos-button--sm', 'Azzera i filtri');
+  const azzera = el(d, 'button', 'talos-button talos-button--ghost talos-button--sm', t('modelli.hf.resetFilters'));
   azzera.type = 'button'; azzera.dataset.hfAzzera = ''; azzera.hidden = true;
   azzera.addEventListener('click', () => { filtri = filtriHfVuoti(); onCambia?.(filtri); });
   testa.append(conteggio, azzera);
@@ -894,7 +907,7 @@ export function creaBarraScopertaHf(d = globalThis.document, { onCambia } = {}) 
       /* «Tutti» apre la fila e sta solo sul primo gruppo, come `quick-all` nel mockup: è lo stato in
          cui l'ambito non restringe niente. Senza risultati non si scrive nessun numero: «0» vorrebbe
          dire «contati: nessuno» mentre non è stato contato niente. */
-      if (chiave === 'accesso') gruppoChip.appendChild(chip(d, 'Tutti', chiave, '', { premuto: !filtri[chiave].length, conteggio: stato.senzaDati ? null : [...conteggi.values()].reduce((a,b) => a+b, 0) }));
+      if (chiave === 'accesso') gruppoChip.appendChild(chip(d, t('modelli.hf.all'), chiave, '', { premuto: !filtri[chiave].length, conteggio: stato.senzaDati ? null : [...conteggi.values()].reduce((a,b) => a+b, 0) }));
       for (const [valore, testo] of voci) {
         const n = stato.senzaDati ? null : (conteggi.get(valore) || 0);
         const acceso = filtri[chiave].includes(valore);
@@ -902,7 +915,7 @@ export function creaBarraScopertaHf(d = globalThis.document, { onCambia } = {}) 
            non porta a un vicolo cieco. Se è già acceso resta spegnibile. */
         gruppoChip.appendChild(chip(d, testo, chiave, valore, {
           premuto: acceso, conteggio: n, disabilitato: n === 0 && !acceso,
-          titolo: n === 0 && !acceso ? 'Nessun repository con questo valore fra quelli caricati' : null,
+          titolo: n === 0 && !acceso ? t('modelli.hf.noLoadedRepositoryValue') : null,
         }));
       }
       ambito.append(gruppoChip);
@@ -917,10 +930,10 @@ export function creaBarraScopertaHf(d = globalThis.document, { onCambia } = {}) 
         /* «Qualsiasi» è la prima voce, come nel mockup (`.facet-select`): l'etichetta sopra il select
            dice già che cosa si sta scegliendo, e ripeterlo dentro l'opzione sarebbe la stessa parola
            due volte a due centimetri. */
-        sel.replaceChildren(new Option('Qualsiasi', '', false, scelto === ''));
+        sel.replaceChildren(new Option(t('modelli.hf.any'), '', false, scelto === ''));
         for (const [valore, testo] of voci) {
           const n = conteggi.get(valore) || 0;
-          const opzione = new Option(n ? `${testo} (${new Intl.NumberFormat('it-IT').format(n)})` : testo, valore, false, scelto === valore);
+          const opzione = new Option(n ? `${testo} (${new Intl.NumberFormat(localeUI()).format(n)})` : testo, valore, false, scelto === valore);
           opzione.disabled = !n && scelto !== valore;
           sel.appendChild(opzione);
         }
@@ -928,11 +941,11 @@ export function creaBarraScopertaHf(d = globalThis.document, { onCambia } = {}) 
         if (sel.selectedIndex < 0) sel.selectedIndex = 0;
       }
     }
-    const formatta = new Intl.NumberFormat('it-IT');
-    forte.textContent = `${formatta.format(visibili.length)} ${visibili.length === 1 ? 'modello' : 'modelli'}`;
+    const formatta = new Intl.NumberFormat(localeUI());
+    forte.textContent = tn('modelli.hf.oneModel', 'modelli.hf.manyModels', visibili.length, { count: formatta.format(visibili.length) });
     coda.textContent = stato.altri
-      ? ` su ${formatta.format(risultati.length)} caricati · altri disponibili`
-      : ` su ${formatta.format(risultati.length)} ${risultati.length === 1 ? 'caricato' : 'caricati'}`;
+      ? t('modelli.hf.moreAvailable', { count: formatta.format(risultati.length) })
+      : tn('modelli.hf.oneLoaded', 'modelli.hf.manyLoaded', risultati.length, { count: formatta.format(risultati.length) });
     azzera.hidden = !FACCETTE_HF.some(({ chiave }) => filtri[chiave].length);
     /* Lo stato dei dati, leggibile da una prova e dal taccuino della QA: `non-misurati` vuol dire
        «nessun numero in questa barra è stato contato», e non è la stessa cosa di «zero». */
@@ -954,7 +967,7 @@ function chip(d, etichetta, chiave, valore, { premuto = false, conteggio = null,
   b.setAttribute('aria-pressed', String(premuto));
   if (disabilitato) b.disabled = true;
   if (titolo) b.title = titolo;
-  if (conteggio !== null && conteggio !== undefined) b.append(el(d, 'span', 'talos-badge talos-badge--sm', new Intl.NumberFormat('it-IT').format(conteggio)));
+  if (conteggio !== null && conteggio !== undefined) b.append(el(d, 'span', 'talos-badge talos-badge--sm', new Intl.NumberFormat(localeUI()).format(conteggio)));
   return b;
 }
 
@@ -1006,11 +1019,11 @@ export function montaSceltaFileHf(contenitore, detail, { stima = new Map(), scel
      * una cosa da premere. Un controllo deve dichiararsi tale senza bisogno
      * che ci passi sopra il mouse.
      */
-    const misura = el(d, 'button', 'talos-button talos-button--secondary talos-button--sm', inMisura ? 'Misuro su questo PC…' : misurato ? 'Rimisura su questo PC' : 'Misura su questo PC');
+    const misura = el(d, 'button', 'talos-button talos-button--secondary talos-button--sm', inMisura ? t('modelli.hf.measuring') : misurato ? t('modelli.hf.remeasure') : t('modelli.hf.measure'));
     misura.type = 'button'; misura.dataset.c = 'Button'; misura.dataset.azione = 'misura'; misura.disabled = inMisura;
     if (azioni.misura) misura.addEventListener('click', () => azioni.misura(gruppi));
     barra.appendChild(misura);
-    if (misurato && !inMisura) barra.appendChild(el(d, 'span', 'talos-muted talos-hf-misura__quando', 'misurato adesso'));
+    if (misurato && !inMisura) barra.appendChild(el(d, 'span', 'talos-muted talos-hf-misura__quando', t('modelli.hf.measuredNow')));
     contenitore.appendChild(barra);
     /*
      * ⛔ Il caso «niente servizio locale» si DICE una volta sola e in cima,
@@ -1022,26 +1035,26 @@ export function montaSceltaFileHf(contenitore, detail, { stima = new Map(), scel
     if (nonMisurabile) {
       const avviso = el(d, 'div', 'talos-callout'); avviso.dataset.c = 'Callout';
       const testo = el(d, 'div');
-      testo.append(el(d, 'b', '', 'La memoria di questo PC non è misurabile'), el(d, 'p', '', 'Manca un servizio locale che risponda. I consigli qui sotto valgono di norma, non su questa macchina: controlla tu che il file scelto ci stia.'));
+      testo.append(el(d, 'b', '', t('modelli.hf.memoryUnavailable')), el(d, 'p', '', t('modelli.hf.memoryUnavailableNote')));
       avviso.appendChild(testo);
       contenitore.appendChild(avviso);
     }
   }
-  const radio = el(d, 'div', 'talos-stack'); radio.id = idDi('fileChoices'); radio.dataset.hfFileChoices = ''; radio.setAttribute('role', 'radiogroup'); radio.setAttribute('aria-label', 'File da scaricare');
+  const radio = el(d, 'div', 'talos-stack'); radio.id = idDi('fileChoices'); radio.dataset.hfFileChoices = ''; radio.setAttribute('role', 'radiogroup'); radio.setAttribute('aria-label', t('modelli.hf.filesToDownload'));
   gruppi.forEach((g, i) => {
     const b = el(d, 'button', 'talos-choice'); b.type = 'button'; b.setAttribute('role', 'radio'); b.setAttribute('aria-checked', String(g === scelto)); b.dataset.hfFile = String(i); b.dataset.variante = g.chiave;
     const st = descriviStima(stima.get?.(g.chiave), g.bytes);
-    const titolo = el(d, 'span', 'talos-choice__title', `${g.quant} · ${gb(g.bytes)}${g.incompleto ? ` · set incompleto ${g.file.length}/${g.attesi}` : ''}`);
+    const titolo = el(d, 'span', 'talos-choice__title', g.incompleto ? t('modelli.hf.incompleteVariant', { quantization: g.quant, size: gb(g.bytes), files: g.file.length, expected: g.attesi }) : t('modelli.hf.variant', { quantization: g.quant, size: gb(g.bytes) }));
     // Il consiglio si vede sulla riga, non solo nella preselezione: chi scorre deve poterlo ritrovare.
-    if (consiglio && consiglio.gruppo === g) titolo.appendChild(badge(d, consiglio.motivo === 'convenzione' ? 'Consigliato di norma' : 'Consigliato', 'accent'));
+    if (consiglio && consiglio.gruppo === g) titolo.appendChild(badge(d, consiglio.motivo === 'convenzione' ? t('modelli.hf.usuallyRecommended') : t('modelli.hf.recommended'), 'accent'));
     b.appendChild(titolo);
     const glossa = glossaQuant(g.quant);
     if (glossa) b.appendChild(el(d, 'span', 'talos-muted talos-choice__glossa', glossa));
-    b.appendChild(el(d, 'span', 'talos-muted', g.senzaHash ? 'impronta sha256 assente: non si scarica' : st.testo));
+    b.appendChild(el(d, 'span', 'talos-muted', g.senzaHash ? t('modelli.hf.missingHash') : st.testo));
     if (azioni.scegli) b.addEventListener('click', () => azioni.scegli(g.chiave));
     radio.appendChild(b);
   });
-  if (!gruppi.length) radio.appendChild(el(d, 'p', 'talos-muted', 'Nessun file GGUF in questo repository.'));
+  if (!gruppi.length) radio.appendChild(el(d, 'p', 'talos-muted', t('modelli.hf.noGgufFiles')));
   contenitore.appendChild(radio);
   /*
    * ⛔ La variante scelta si porta SOTTO GLI OCCHI.
@@ -1070,23 +1083,23 @@ export function montaSceltaFileHf(contenitore, detail, { stima = new Map(), scel
    * muto: misurate tutte e nessuna che ci sta è un'informazione, non un vuoto.
    */
   if (misurato && !consiglio && gruppi.length) {
-    contenitore.appendChild(el(d, 'p', 'talos-muted talos-hf-nessuno', 'Nessuna variante consigliabile su questa macchina: quelle che ci starebbero scendono sotto i 4 bit per peso, dove la qualità cala troppo.'));
+    contenitore.appendChild(el(d, 'p', 'talos-muted talos-hf-nessuno', t('modelli.hf.noRecommendedVariant')));
   }
   if (conAccesso) {
     const callout = el(d, 'div', 'talos-callout'); callout.id = idDi('accesso'); callout.dataset.c = 'Callout'; callout.hidden = !detail.gated;
-    const cb = el(d, 'div'); cb.append(el(d, 'b', '', "Serve l'accesso al repository"), el(d, 'p', '', 'Apri la pagina del modello, verifica le condizioni e richiedi accesso con il tuo account.')); callout.appendChild(cb);
+    const cb = el(d, 'div'); cb.append(el(d, 'b', '', t('modelli.hf.repositoryAccessRequired')), el(d, 'p', '', t('modelli.hf.requestAccessNote'))); callout.appendChild(cb);
     contenitore.appendChild(callout);
   }
   const stimaP = el(d, 'p', 'talos-muted talos-lab__space'); stimaP.id = idDi('stima');
   const voce = scelto ? stima.get?.(scelto.chiave) : null;
   if (scelto && voce && !voce.inCorso && Number.isFinite(voce.memory?.requiredBytes)) {
     const m = el(d, 'span', 'talos-measure talos-measure--estimate', gb(voce.memory.requiredBytes)); m.dataset.c = 'Measure';
-    stimaP.append(m, d.createTextNode(` necessari${Number.isFinite(voce.memory?.availableBytes) ? ` · ${gb(voce.memory.availableBytes)} allocabili liberando il modello attuale.` : '.'}`));
-  } else stimaP.textContent = scelto ? (voce?.inCorso ? 'Misuro su questo PC…' : 'La misura pesa i file contro memoria e disco liberi adesso; la cache del contesto si somma dopo lo scaricamento.') : '';
+    stimaP.append(m, d.createTextNode(Number.isFinite(voce.memory?.availableBytes) ? t('modelli.hf.requiredWithAvailable', { size: gb(voce.memory.availableBytes) }) : t('modelli.hf.required')));
+  } else stimaP.textContent = scelto ? (voce?.inCorso ? t('modelli.hf.measuring') : t('modelli.hf.measurementNote')) : '';
   contenitore.appendChild(stimaP);
   // ⛔ Il pulsante «Misura» NON si ripete qui: dal 06/09 sta sopra la lista (`talos-hf-misura`).
   const scarica = el(d, 'button', 'talos-button talos-button--primary talos-button--block'); scarica.id = idDi('scarica'); scarica.type = 'button'; scarica.dataset.action = 'download';
-  scarica.textContent = scelto ? `Scarica sul computer · ${gb(scelto.bytes)}` : 'Scegli un file da scaricare';
+  scarica.textContent = scelto ? t('modelli.hf.downloadToComputer', { size: gb(scelto.bytes) }) : t('modelli.hf.chooseDownloadFile');
   scarica.disabled = !scelto || scelto.incompleto || scelto.senzaHash || Boolean(detail.gated);
   if (azioni.scarica) scarica.addEventListener('click', () => scelto && azioni.scarica(scelto, detail));
   contenitore.appendChild(scarica);
@@ -1114,17 +1127,17 @@ export function aggiornaDettaglioHf(aside, detail, { stima = new Map(), scelta =
   aside.hidden = false;
   const [autore, nome] = String(detail.repo || '').split('/');
   const h = el(d, 'h3', '', (nome || detail.repo || '').replace(/-GGUF$/i, '').replace(/-/g, ' ')); h.id = 'hfNome';
-  const p = el(d, 'p', 'talos-detail__desc', `Pubblicato da ${autore || 'autore non dichiarato'} · formato GGUF`); p.id = 'hfAutore';
+  const p = el(d, 'p', 'talos-detail__desc', t('modelli.hf.publishedBy', { author: autore || t('modelli.hf.unknownAuthor') })); p.id = 'hfAutore';
   const kv = (k, v, id) => { const r = el(d, 'div', 'talos-kv'); const val = el(d, 'span', 'talos-kv__v'); if (id) { const s = el(d, 'span', '', v); s.id = id; val.appendChild(s); } else val.textContent = v; r.append(el(d, 'span', 'talos-kv__k', k), val); return r; };
-  const revisione = detail.revision ? `${String(detail.revision).slice(0, 12)} · verificata` : 'Da verificare prima del download';
-  aside.append(h, p, kv('Licenza', detail.license || 'Non dichiarata', 'hfLicenza'), kv('Revisione', revisione), el(d, 'hr', 'talos-lab__rule'));
-  const tutti = el(d, 'button', 'talos-button talos-button--secondary', 'Tutti i file'); tutti.id = 'hfTuttiFile'; tutti.type = 'button'; tutti.dataset.apreVelo = 'veloFileModello';
+  const revisione = detail.revision ? t('modelli.hf.verifiedRevision', { revision: String(detail.revision).slice(0, 12) }) : t('modelli.hf.verifyBeforeDownload');
+  aside.append(h, p, kv(t('modelli.hf.license'), detail.license || t('modelli.hf.notDeclared'), 'hfLicenza'), kv(t('modelli.hf.revision'), revisione), el(d, 'hr', 'talos-lab__rule'));
+  const tutti = el(d, 'button', 'talos-button talos-button--secondary', t('modelli.hf.allFiles')); tutti.id = 'hfTuttiFile'; tutti.type = 'button'; tutti.dataset.apreVelo = 'veloFileModello';
   if (azioni.tuttiFile) tutti.addEventListener('click', () => azioni.tuttiFile(detail));
-  aside.append(tutti, el(d, 'h3', '', 'Scegli il file'));
+  aside.append(tutti, el(d, 'h3', '', t('modelli.hf.chooseFile')));
   const scelto = montaSceltaFileHf(aside, detail, { stima, scelta, azioni, prefissoId: 'hf', conAccesso: true, document: d });
   /* La scheda del README: nella PAGINA del modello è la sua prima linguetta («Scheda Hugging
      Face»); qui resta il disclosure di sempre, perché il pannello non ha linguette. */
-  const scheda = el(d, 'button', 'talos-button talos-button--ghost talos-button--sm', 'Leggi la scheda del modello'); scheda.type = 'button'; scheda.dataset.c = 'Button'; scheda.dataset.azione = 'scheda'; scheda.setAttribute('aria-expanded', 'false'); scheda.setAttribute('aria-controls', 'hfScheda');
+  const scheda = el(d, 'button', 'talos-button talos-button--ghost talos-button--sm', t('modelli.hf.readModelCard')); scheda.type = 'button'; scheda.dataset.c = 'Button'; scheda.dataset.azione = 'scheda'; scheda.setAttribute('aria-expanded', 'false'); scheda.setAttribute('aria-controls', 'hfScheda');
   // stopPropagation: il pulsante ha aria-controls e la regia dei disclosure lo commuterebbe una seconda volta nello stesso clic
   if (azioni.scheda) scheda.addEventListener('click', (event) => { event.stopPropagation(); azioni.scheda(detail, scheda); });
   aside.appendChild(scheda);
@@ -1193,16 +1206,16 @@ export function aggiornaHf(panel, risultati = [], { selezionato = null, detail =
   });
   barra.aggiorna({ risultati, visibili, filtri, senzaDati, altri });
   if (errore) {
-    lista.replaceChildren(el(d, 'p', 'talos-card--pad talos-muted', `Ricerca non disponibile: ${errore.message || errore}`)); if (vuoto) vuoto.hidden = true;
+    lista.replaceChildren(el(d, 'p', 'talos-card--pad talos-muted', t('modelli.hf.searchUnavailable', { reason: errore.message || errore }))); if (vuoto) vuoto.hidden = true;
   } else if (caricamento && !risultati.length) {
-    lista.replaceChildren(el(d, 'p', 'talos-card--pad talos-muted', 'Ricerca in corso…')); if (vuoto) vuoto.hidden = true;
+    lista.replaceChildren(el(d, 'p', 'talos-card--pad talos-muted', t('modelli.hf.searching'))); if (vuoto) vuoto.hidden = true;
   } else if (!risultati.length) {
     lista.replaceChildren(); if (vuoto) vuoto.hidden = false;
   } else if (!visibili.length) {
     /* I filtri hanno svuotato la lista: non è il vuoto dell'app (nessuna ricerca ancora fatta), è
        una lista che c'è e non contiene niente. Due stati diversi, due frasi diverse — e la via
        d'uscita si dice, invece di lasciare una schermata muta. */
-    lista.replaceChildren(el(d, 'p', 'talos-card--pad talos-muted', 'Nessun repository corrisponde ai filtri scelti. Togli un filtro per rivedere gli altri.'));
+    lista.replaceChildren(el(d, 'p', 'talos-card--pad talos-muted', t('modelli.hf.noMatchingRepository')));
     if (vuoto) vuoto.hidden = true;
   } else {
     const nodi = [];
@@ -1217,11 +1230,11 @@ export function aggiornaHf(panel, risultati = [], { selezionato = null, detail =
   if (bottoneAltri) {
     bottoneAltri.hidden = !altri;
     bottoneAltri.disabled = caricamento;
-    bottoneAltri.textContent = errorePagina ? 'Riprova caricamento' : caricamento ? 'Caricamento…' : 'Carica altri modelli';
+    bottoneAltri.textContent = errorePagina ? t('modelli.hf.retryLoading') : caricamento ? t('modelli.hf.loading') : t('modelli.hf.loadMoreModels');
     let messaggio = panel.querySelector('[data-hf-errore-pagina]');
     if (!messaggio) { messaggio = el(d, 'p', 'talos-muted'); messaggio.dataset.hfErrorePagina = ''; messaggio.setAttribute('role', 'status'); bottoneAltri.before(messaggio); }
     messaggio.hidden = !errorePagina;
-    messaggio.textContent = errorePagina ? `I modelli già caricati restano disponibili. ${errorePagina.message || 'La pagina successiva non è disponibile.'}` : '';
+    messaggio.textContent = errorePagina ? t('modelli.hf.loadedModelsRemain', { reason: errorePagina.message || t('modelli.hf.nextPageUnavailable') }) : '';
   }
   // senza risultati non resta un dettaglio di un repository che non è più in lista
   aggiornaDettaglioHf(aside, risultati.length ? detail : null, { stima, scelta, azioni, document: d });

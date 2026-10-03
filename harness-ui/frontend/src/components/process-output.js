@@ -1,8 +1,13 @@
+import { linguaCorrenteDiT, t as tr } from './lingua.js';
+
 const PAGE_BYTES = 4096;
 const states = new Set(['recording', 'complete', 'limited', 'failed', 'interrupted']);
 const id = v => typeof v === 'string' && v.trim().length > 0 && v.length <= 256 && !/[\u0000-\u001f\u007f]/u.test(v);
 const integer = v => Number.isSafeInteger(v) && v >= 0;
-const invalid = () => {throw new Error('La risposta dell’output non è valida. Riprova la lettura.');};
+/* Un errore nostro, col testo nella lingua corrente: `mostra` dice se la persona lo legge così com'è (un'altra eccezione si dice col testo generico). */
+const errore = (chiave, mostra) => Object.assign(new Error(tr(chiave)), {mostraAllaPersona: mostra});
+const invalid = () => {throw errore('processi.output.invalidResponse', true);};
+const localeNumeri = () => (linguaCorrenteDiT() === 'en' ? 'en-US' : 'it-IT');
 
 /** Only a typed backend receipt can offer access; never parse references from model text. */
 export function normalizzaRicevutaOutput(value, expected = {}) {
@@ -28,7 +33,7 @@ export function creaClientOutput({receipt, fetchFn = globalThis.fetch, API = p =
     },
     async leggi({stream = 'stdout', offset = 0, signal} = {}) {
       const response = await fetchFn(url({stream, offset}), {signal, cache: 'no-store'});
-      if (!response.ok) throw new Error(response.status === 404 ? 'Questo output non è più disponibile.' : 'Lettura non riuscita. Puoi riprovare senza eseguire di nuovo il comando.');
+      if (!response.ok) throw response.status === 404 ? errore('processi.output.noLongerAvailable', true) : errore('processi.output.readFailedCanRetry', false);
       let envelope;
       try {envelope = await response.json();} catch (error) {if (signal?.aborted) throw error; invalid();}
       const p = envelope?.data;
@@ -47,13 +52,15 @@ export function creaClientOutput({receipt, fetchFn = globalThis.fetch, API = p =
   };
 }
 
-const stateLabel = {
-  recording: 'Registrazione non ancora conclusa. Aggiorna per verificare i dati disponibili.',
-  complete: 'Registrazione conclusa.',
-  limited: 'Limite di conservazione raggiunto: una parte dell’output non è stata conservata.',
-  failed: 'Registrazione incompleta: i dati disponibili potrebbero non contenere tutto l’output.',
-  interrupted: 'Registrazione interrotta: i dati disponibili potrebbero non contenere tutto l’output.',
+/* Le CHIAVI dei testi di stato: il testo si risolve quando si disegna, nella lingua di quel momento. */
+const CHIAVI_STATO = {
+  recording: 'processi.output.stateRecording',
+  complete: 'processi.output.stateComplete',
+  limited: 'processi.output.stateLimited',
+  failed: 'processi.output.stateFailed',
+  interrupted: 'processi.output.stateInterrupted',
 };
+const stateLabel = (stato) => tr(CHIAVI_STATO[stato]);
 
 /** One retained page per reader. Session disposal and disclosure closure invalidate late responses. */
 export function creaLettoreOutput({receipt, API, fetchFn, signal, document: doc = globalThis.document} = {}) {
@@ -62,23 +69,23 @@ export function creaLettoreOutput({receipt, API, fetchFn, signal, document: doc 
   const client = creaClientOutput({receipt: current, API, fetchFn});
   const el = (tag, text, className) => {const n = doc.createElement(tag); if (text) n.textContent = text; if (className) n.className = className; return n;};
   const root = el('details', null, 'talos-process-output');
-  const summary = el('summary', 'Consulta output conservato');
+  const summary = el('summary', tr('processi.output.summary'));
   const controls = el('div', null, 'talos-process-output__controls');
-  const label = el('label', 'Flusso '), select = el('select');
-  select.setAttribute('aria-label', 'Flusso dell’output');
-  for (const [value, text] of [['stdout', 'Uscita'], ['stderr', 'Diagnostica']]) {const option = el('option', text); option.value = value; select.append(option);}
+  const label = el('label', `${tr('processi.output.stream')} `), select = el('select');
+  select.setAttribute('aria-label', tr('processi.output.streamLabel'));
+  for (const [value, text] of [['stdout', tr('processi.output.streamStdout')], ['stderr', tr('processi.output.streamStderr')]]) {const option = el('option', text); option.value = value; select.append(option);}
   label.append(select);
   const button = text => {const n = el('button', text, 'talos-button talos-button--secondary'); n.type = 'button'; return n;};
-  const refresh = button('Aggiorna'), first = button('Prima pagina'), next = button('Pagina successiva');
-  const status = el('p', stateLabel[current.state], 'talos-process-output__status');
+  const refresh = button(tr('processi.output.refresh')), first = button(tr('processi.output.firstPage')), next = button(tr('processi.output.nextPage'));
+  const status = el('p', stateLabel(current.state), 'talos-process-output__status');
   status.setAttribute('role', 'status'); status.setAttribute('aria-live', 'polite');
   const range = el('p', '', 'talos-process-output__range');
-  const pre = el('pre'), code = el('code'); pre.append(code); pre.tabIndex = 0; pre.setAttribute('aria-label', 'Contenuto della pagina di output');
-  const download = el('a', 'Scarica questa pagina', 'talos-button talos-button--secondary');
+  const pre = el('pre'), code = el('code'); pre.append(code); pre.tabIndex = 0; pre.setAttribute('aria-label', tr('processi.output.pageContentLabel'));
+  const download = el('a', tr('processi.output.downloadPage'), 'talos-button talos-button--secondary');
   download.setAttribute('download', ''); download.hidden = true;
-  const completeDownload = el('a', 'Scarica output conservato', 'talos-button talos-button--secondary');
+  const completeDownload = el('a', tr('processi.output.downloadStored'), 'talos-button talos-button--secondary');
   completeDownload.setAttribute('download',''); completeDownload.hidden=true;
-  completeDownload.title='Salva i byte conservati di questo flusso al momento dello scaricamento.';
+  completeDownload.title=tr('processi.output.downloadStoredHint');
   const nav = el('div', null, 'talos-process-output__controls'); nav.append(first, next, download, completeDownload);
   controls.append(label, refresh); root.append(summary, controls, status, range, pre, nav);
   let epoch = 0, pending = null, page = null, offset = 0, closed = false;
@@ -88,26 +95,27 @@ export function creaLettoreOutput({receipt, API, fetchFn, signal, document: doc 
     cancel(); resetPage(); if (closed || signal?.aborted || !root.open) return;
     offset = at;
     const version = epoch, controller = new AbortController(); pending = controller;
-    root.setAttribute('aria-busy', 'true'); status.textContent = 'Lettura in corso…';
+    root.setAttribute('aria-busy', 'true'); status.textContent = tr('processi.output.reading');
     try {
       const p = await client.leggi({stream: select.value, offset: at, signal: controller.signal});
       if (closed || version !== epoch || signal?.aborted) return;
       page = p;
-      status.textContent = stateLabel[p.state];
+      status.textContent = stateLabel(p.state);
       /* ⛔ 02/10/2026, owner («parole comprensibili al posto della frase tecnica»): diceva «La separazione dei dati di controllo
          non è confermata». Vuol dire che il segno con cui TALOS riconosce la fine del comando (`controlFooter`,
          `process-output-access.mjs` `visibleEnd`) non è stato trovato e tolto: potrebbe stare in fondo all'output. Su un
          flusso vuoto non c'è niente da avvisare. */
-      if (p.availableBytes > 0 && !['excluded', 'absent', 'not-applicable'].includes(p.footerStatus)) status.textContent += ' In fondo potrebbe esserci un segno interno di TALOS, che non fa parte dell’output del comando.';
-      range.textContent = `${p.bytes ? `Byte ${p.offset + 1}–${p.offset + p.bytes}` : 'Nessun byte in questa pagina'} su ${p.availableBytes.toLocaleString('it-IT')} disponibili. Conservati ${p.storedBytes.toLocaleString('it-IT')} di ${p.observedBytes.toLocaleString('it-IT')} byte ricevuti nel flusso.`;
-      code.textContent = p.text === null ? 'Questa pagina contiene dati binari o testo non UTF-8. Scarica i byte originali per conservarli senza conversioni.' : p.text || 'Il flusso non contiene testo.';
+      if (p.availableBytes > 0 && !['excluded', 'absent', 'not-applicable'].includes(p.footerStatus)) status.textContent += ` ${tr('processi.output.footerMarker')}`;
+      const cifreDellaPagina = {disponibili: p.availableBytes.toLocaleString(localeNumeri()), conservati: p.storedBytes.toLocaleString(localeNumeri()), osservati: p.observedBytes.toLocaleString(localeNumeri())};
+      range.textContent = p.bytes ? tr('processi.output.rangeWithBytes', {da: p.offset + 1, a: p.offset + p.bytes, ...cifreDellaPagina}) : tr('processi.output.rangeNoBytes', cifreDellaPagina);
+      code.textContent = p.text === null ? tr('processi.output.pageBinary') : p.text || tr('processi.output.streamEmpty');
       first.disabled = p.offset === 0; next.disabled = p.nextOffset === null;
       if (p.bytes) download.href = client.rawUrl({stream: select.value, offset: p.offset, limit: p.bytes});
       download.hidden = p.bytes === 0;
       completeDownload.href=client.downloadUrl({stream:select.value});completeDownload.hidden=false;
     } catch (error) {
       if (closed || version !== epoch || signal?.aborted) return;
-      status.textContent = error?.message?.startsWith('La risposta dell’output') || error?.message?.startsWith('Questo output non') ? error.message : 'Lettura non riuscita. Premi Aggiorna per riprovare senza eseguire di nuovo il comando.';
+      status.textContent = error?.mostraAllaPersona === true ? error.message : tr('processi.output.readFailedPressRefresh');
     } finally {if (version === epoch) {pending = null; root.removeAttribute('aria-busy');}}
   }
   root.addEventListener('toggle', () => {if (root.open) void load(offset); else {cancel(); resetPage();}});
@@ -122,7 +130,7 @@ export function creaLettoreOutput({receipt, API, fetchFn, signal, document: doc 
   return {
     element: root,
     monta(detail) {if (!closed && detail?.parentNode && detail.nextSibling !== root) detail.after(root);},
-    aggiorna(value) {const nextReceipt = normalizzaRicevutaOutput(value, current); if (!nextReceipt) return false; current = nextReceipt; if (!pending) status.textContent = stateLabel[current.state]; return true;},
+    aggiorna(value) {const nextReceipt = normalizzaRicevutaOutput(value, current); if (!nextReceipt) return false; current = nextReceipt; if (!pending) status.textContent = stateLabel(current.state); return true;},
     dispose,
   };
 }

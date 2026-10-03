@@ -98,12 +98,12 @@ export const CLASSE = 'talos-vistaviva';
  */
 export function testoStato(nome) {
   switch (nome) {
-    case 'apro': return t('Apro il browser…');
-    case 'carico': return t('Carico la pagina…');
-    case 'pronto': return t('Pagina viva');
-    case 'fermo': return t('Trasmissione ferma');
-    case 'errore': return t('Il browser non risponde');
-    default: return t('Stato sconosciuto');
+    case 'apro': return t("varie.liveBrowser.status.opening");
+    case 'carico': return t("varie.liveBrowser.status.loading");
+    case 'pronto': return t("varie.liveBrowser.status.ready");
+    case 'fermo': return t("varie.liveBrowser.status.stopped");
+    case 'errore': return t("varie.liveBrowser.status.notResponding");
+    default: return t("varie.liveBrowser.status.unknown");
   }
 }
 
@@ -254,7 +254,7 @@ export function creaDecodificatore(finestra, documento) {
         const immagine = documento.createElement('img');
         immagine.decoding = 'async';
         immagine.onload = () => risolvi(immagine);
-        immagine.onerror = () => rifiuta(new Error('fotogramma non decodificabile'));
+        immagine.onerror = () => rifiuta(new Error('frame could not be decoded'));
         immagine.src = `data:image/jpeg;base64,${base64}`;
       });
     },
@@ -269,7 +269,7 @@ export function creaDecodificatore(finestra, documento) {
  * che si può montare su un documento finto è una vista che si può misurare.
  */
 export function creaVistaViva(contenitore, { onGesto, onErrore, documento = globalThis.document, finestra = globalThis } = {}) {
-  if (!contenitore) throw new Error('creaVistaViva: manca il contenitore');
+  if (!contenitore) throw new Error('creaVistaViva: the container is missing');
   const doc = documento;
   const chiediFotogramma = typeof finestra?.requestAnimationFrame === 'function'
     ? (mano) => finestra.requestAnimationFrame(mano)
@@ -293,7 +293,7 @@ export function creaVistaViva(contenitore, { onGesto, onErrore, documento = glob
   // Escape e Tab non si prendono mai (vedi `tastoInoltrabile`).
   tela.setAttribute('tabindex', '0');
   tela.setAttribute('role', 'application');
-  tela.setAttribute('aria-label', t('Pagina viva'));
+  tela.setAttribute('aria-label', t("varie.liveBrowser.status.ready"));
 
   const velo = doc.createElement('div');
   velo.className = `${CLASSE}__velo`;
@@ -337,7 +337,7 @@ export function creaVistaViva(contenitore, { onGesto, onErrore, documento = glob
     etichetta.textContent = testo;
     velo.textContent = vero === 'pronto' ? '' : testo;
     velo.hidden = vero === 'pronto';
-    tela.setAttribute('aria-label', `${t('Pagina viva')} — ${testo}`);
+    tela.setAttribute('aria-label', `${t("varie.liveBrowser.status.ready")} — ${testo}`);
     return corrente;
   }
 
@@ -371,7 +371,7 @@ export function creaVistaViva(contenitore, { onGesto, onErrore, documento = glob
     try {
       immagine = await decodifica(fotogramma.dati);
     } catch (errore) {
-      applicaStato('errore', t('fotogramma illeggibile'));
+      applicaStato('errore', t("varie.liveBrowser.status.unreadableFrame"));
       segnala('decodifica', errore);
       return;
     }

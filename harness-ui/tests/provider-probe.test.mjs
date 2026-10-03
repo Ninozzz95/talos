@@ -86,7 +86,7 @@ test('PROVIDER-PROBE-01 — una credenziale accettata riporta quanti modelli ved
   const esito = await probe.prova('openai');
   assert.equal(esito.esito, 'collegato');
   assert.equal(esito.modelli, 2);
-  assert.match(esito.motivo, /2 modelli visibili/u);
+  assert.match(esito.motivo, /2 models visible/u);
   assert.ok(Number.isFinite(esito.millisecondi));
 });
 
@@ -160,7 +160,7 @@ test('P2-PROBE-OPTIONAL-KEY-403 conserva la chiave come non giudicata', async ()
   assert.equal(esito.esito, 'non-autorizzato');
   assert.equal(esito.httpStatus, 403);
   assert.equal(esito.credenzialeVerificata, null);
-  assert.match(esito.motivo, /accesso|permess/iu);
+  assert.match(esito.motivo, /access denied|permissions/iu);
   assert.equal(chiamate[0].headers.Authorization, undefined, 'la sonda Ollama non invia la chiave facoltativa');
 });
 
@@ -175,7 +175,7 @@ test('PROVIDER-PROBE-07 — il timeout scaduto lo dice con i secondi veri impost
   const { probe } = sonda({ timeoutSeconds: 12, lancia: Object.assign(new Error('t'), { name: 'TimeoutError' }) });
   const esito = await probe.prova('openai');
   assert.equal(esito.esito, 'irraggiungibile');
-  assert.match(esito.motivo, /entro 12 secondi/u);
+  assert.match(esito.motivo, /within 12 seconds/u);
 });
 
 test('PROVIDER-PROBE-08 — AL CONTRARIO: un provider sconosciuto viene rifiutato, non provato', async () => {

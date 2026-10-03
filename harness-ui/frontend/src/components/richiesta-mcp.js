@@ -1,3 +1,4 @@
+import { t } from './lingua.js';
 /*
  * ⛔ 02/10/2026 — LA SCHEDA DELLE RICHIESTE DEI SERVER MCP (elicitation). Owner: «faccio subito scheda e rotta».
  *
@@ -51,7 +52,7 @@ function campoDelModulo(documentObj, nome, schema, obbligatorio) {
   if (aiuto) aiuto.id = `${id}-aiuto`;
   const intestazione = (tag = 'label') => {
     const etichetta = el(documentObj, tag, 'talos-mcp-campo__etichetta', titolo);
-    if (obbligatorio) etichetta.append(el(documentObj, 'span', 'talos-mcp-campo__obbligatorio', ' · obbligatorio'));
+    if (obbligatorio) etichetta.append(el(documentObj, 'span', 'talos-mcp-campo__obbligatorio', t('chat.mcp.field.required')));
     return etichetta;
   };
   const scelte = schema.type === 'array' ? schema.items?.enum : schema.type === 'string' ? schema.enum : null;
@@ -125,19 +126,19 @@ function campoDelModulo(documentObj, nome, schema, obbligatorio) {
 /** Il primo errore del modulo detto con il nome che la persona vede, o null. Il server rivalida comunque (contratto). */
 export function erroreDelModulo(campi) {
   for (const c of campi) {
-    if (c.vuoto()) { if (c.obbligatorio) return { campo: c, testo: `Compila «${c.titolo}».` }; continue; }
+    if (c.vuoto()) { if (c.obbligatorio) return { campo: c, testo: t('chat.mcp.validation.fillIn', { titolo: c.titolo }) }; continue; }
     const v = c.valore();
     const s = c.schema;
     if (s.type === 'number' || s.type === 'integer') {
-      if (!Number.isFinite(v)) return { campo: c, testo: `«${c.titolo}» deve essere un numero.` };
-      if (s.type === 'integer' && !Number.isInteger(v)) return { campo: c, testo: `«${c.titolo}» deve essere un numero intero.` };
-      if (typeof s.minimum === 'number' && v < s.minimum) return { campo: c, testo: `«${c.titolo}» deve essere almeno ${s.minimum}.` };
-      if (typeof s.maximum === 'number' && v > s.maximum) return { campo: c, testo: `«${c.titolo}» deve essere al massimo ${s.maximum}.` };
+      if (!Number.isFinite(v)) return { campo: c, testo: t('chat.mcp.validation.number', { titolo: c.titolo }) };
+      if (s.type === 'integer' && !Number.isInteger(v)) return { campo: c, testo: t('chat.mcp.validation.wholeNumber', { titolo: c.titolo }) };
+      if (typeof s.minimum === 'number' && v < s.minimum) return { campo: c, testo: t('chat.mcp.validation.atLeast', { titolo: c.titolo, minimo: s.minimum }) };
+      if (typeof s.maximum === 'number' && v > s.maximum) return { campo: c, testo: t('chat.mcp.validation.atMost', { titolo: c.titolo, massimo: s.maximum }) };
     } else if (s.type === 'string' && !Array.isArray(s.enum)) {
-      if (Number.isSafeInteger(s.minLength) && v.length < s.minLength) return { campo: c, testo: `«${c.titolo}» deve avere almeno ${s.minLength} caratteri.` };
+      if (Number.isSafeInteger(s.minLength) && v.length < s.minLength) return { campo: c, testo: t('chat.mcp.validation.minLength', { titolo: c.titolo, n: s.minLength }) };
     } else if (s.type === 'array') {
-      if (Number.isSafeInteger(s.minItems) && v.length < s.minItems) return { campo: c, testo: `Scegli almeno ${s.minItems} voci in «${c.titolo}».` };
-      if (Number.isSafeInteger(s.maxItems) && v.length > s.maxItems) return { campo: c, testo: `Scegli al massimo ${s.maxItems} voci in «${c.titolo}».` };
+      if (Number.isSafeInteger(s.minItems) && v.length < s.minItems) return { campo: c, testo: t('chat.mcp.validation.minItems', { titolo: c.titolo, n: s.minItems }) };
+      if (Number.isSafeInteger(s.maxItems) && v.length > s.maxItems) return { campo: c, testo: t('chat.mcp.validation.maxItems', { titolo: c.titolo, n: s.maxItems }) };
     }
   }
   return null;
@@ -156,10 +157,10 @@ export function creaRichiestaMcp(richiesta = {}, azioni = {}, opzioni = {}) {
   scheda.dataset.modo = pagina ? 'url' : 'form';
   const testa = el(documentObj, 'div', 'talos-approval__head');
   const etichetta = el(documentObj, 'span', 'talos-badge talos-badge--accent');
-  etichetta.append(simbolo(documentObj, 'i i--sm', pagina ? 'i-link' : 'i-edit'), documentObj.createTextNode(pagina ? 'Chiede di aprire una pagina' : 'Chiede dei dati'));
+  etichetta.append(simbolo(documentObj, 'i i--sm', pagina ? 'i-link' : 'i-edit'), documentObj.createTextNode(pagina ? t('chat.mcp.badge.page') : t('chat.mcp.badge.data')));
   const server = typeof richiesta.server === 'string' && richiesta.server ? richiesta.server : 'mcp';
-  const chi = el(documentObj, 'span', 'talos-mono talos-measure talos-grow talos-truncate', `server MCP ${server}`);
-  chi.title = `Lo chiede il server MCP «${server}», non TALOS`;
+  const chi = el(documentObj, 'span', 'talos-mono talos-measure talos-grow talos-truncate', t('chat.mcp.server', { server }));
+  chi.title = t('chat.mcp.serverTooltip', { server });
   testa.append(etichetta, chi);
   scheda.append(testa, el(documentObj, 'p', 'talos-approval__why assistant-copy', richiesta.message || ''));
 
@@ -176,8 +177,8 @@ export function creaRichiestaMcp(richiesta = {}, azioni = {}, opzioni = {}) {
   corpo.addEventListener('input', () => { if (!errore.hidden) mostraErrore(''); });
   const piede = el(documentObj, 'div', 'talos-approval__foot sheet-actions');
   const bottone = (classi, testo) => { const b = el(documentObj, 'button', classi, testo); b.type = 'button'; return b; };
-  const rifiuta = bottone('talos-button talos-button--ghost talos-button--danger', 'Rifiuta');
-  const annulla = bottone('talos-button talos-button--ghost', 'Annulla');
+  const rifiuta = bottone('talos-button talos-button--ghost talos-button--danger', t('chat.mcp.decline'));
+  const annulla = bottone('talos-button talos-button--ghost', t('chat.common.cancel'));
   const pulsanti = { rifiuta, annulla };
   let campi = [];
 
@@ -186,10 +187,10 @@ export function creaRichiestaMcp(richiesta = {}, azioni = {}, opzioni = {}) {
     corpo.append(el(documentObj, 'p', 'talos-mcp-pagina__dominio', richiesta.dominio || ''));
     const indirizzo = el(documentObj, 'pre', 'talos-approval__codice talos-mcp-pagina__indirizzo', richiesta.url || '');
     indirizzo.tabIndex = 0;
-    indirizzo.setAttribute('aria-label', 'L’indirizzo completo della pagina');
-    corpo.append(indirizzo, el(documentObj, 'p', 'talos-approval__motivo', 'Si apre nel tuo browser solo se lo chiedi tu. Quando hai finito sulla pagina, torna qui.'));
-    const apri = bottone('talos-button talos-button--primary talos-button--md', 'Apri la pagina');
-    const fatto = bottone('talos-button talos-button--primary talos-button--md', 'Ho finito');
+    indirizzo.setAttribute('aria-label', t('chat.mcp.page.addressLabel'));
+    corpo.append(indirizzo, el(documentObj, 'p', 'talos-approval__motivo', t('chat.mcp.page.hint')));
+    const apri = bottone('talos-button talos-button--primary talos-button--md', t('chat.mcp.page.open'));
+    const fatto = bottone('talos-button talos-button--primary talos-button--md', t('chat.mcp.page.done'));
     fatto.hidden = true;
     apri.addEventListener('click', () => {
       if (typeof azioni.onApri === 'function') azioni.onApri(richiesta.url);
@@ -206,8 +207,8 @@ export function creaRichiestaMcp(richiesta = {}, azioni = {}, opzioni = {}) {
     const richiesti = new Set(Array.isArray(schema.required) ? schema.required : []);
     campi = Object.entries(schema.properties || {}).map(([nome, s]) => campoDelModulo(documentObj, nome, s || {}, richiesti.has(nome)));
     for (const c of campi) corpo.append(c.contenitore);
-    if (!campi.length) corpo.append(el(documentObj, 'p', 'talos-approval__motivo', 'Il server non chiede nessun campo: basta confermare.'));
-    const invia = bottone('talos-button talos-button--primary talos-button--md', 'Invia');
+    if (!campi.length) corpo.append(el(documentObj, 'p', 'talos-approval__motivo', t('chat.mcp.noFields')));
+    const invia = bottone('talos-button talos-button--primary talos-button--md', t('chat.common.send'));
     invia.addEventListener('click', () => {
       const sbaglio = erroreDelModulo(campi);
       if (sbaglio) { mostraErrore(sbaglio.testo); sbaglio.campo.fuoco(); return; }
@@ -219,7 +220,7 @@ export function creaRichiestaMcp(richiesta = {}, azioni = {}, opzioni = {}) {
   }
   rifiuta.addEventListener('click', () => { if (typeof azioni.onRifiuta === 'function') azioni.onRifiuta(); });
   annulla.addEventListener('click', () => { if (typeof azioni.onAnnulla === 'function') azioni.onAnnulla(); });
-  piede.append(el(documentObj, 'span', 'talos-grow'), el(documentObj, 'span', 'talos-approval__foot-note', 'Rispondi al server, non a TALOS'));
+  piede.append(el(documentObj, 'span', 'talos-grow'), el(documentObj, 'span', 'talos-approval__foot-note', t('chat.mcp.footNote')));
   corpo.append(errore);
   scheda.append(corpo, piede);
 
@@ -241,14 +242,14 @@ export function segnaEsitoRichiestaMcp(scheda, { action, modo = 'form', altrove 
   if (!scheda) return null;
   const documentObj = opzioni.document || scheda.ownerDocument || globalThis.document;
   for (const parte of [...scheda.querySelectorAll('[data-corpo], .talos-approval__foot, .sheet-actions, .talos-mcp-richiesta__errore, .talos-approval__esito')]) parte.remove();
-  const testo = action === 'accept' ? (modo === 'url' ? 'Fatto sulla pagina' : 'Inviato al server')
-    : action === 'decline' ? 'Rifiutato'
-      : motivo === 'fermato' ? 'Annullato: la sessione si è fermata'
-        : motivo === 'reindirizzamento' ? 'Annullato: il giro è stato reindirizzato'
-          : motivo === 'non-in-attesa' ? 'Il server non aspetta più una risposta'
-            : 'Annullato';
+  const testo = action === 'accept' ? (modo === 'url' ? t('chat.mcp.outcome.doneOnPage') : t('chat.mcp.outcome.sent'))
+    : action === 'decline' ? t('chat.mcp.outcome.declined')
+      : motivo === 'fermato' ? t('chat.mcp.outcome.sessionStopped')
+        : motivo === 'reindirizzamento' ? t('chat.mcp.outcome.redirected')
+          : motivo === 'non-in-attesa' ? t('chat.mcp.outcome.notWaiting')
+            : t('chat.common.cancelled');
   const tono = action === 'accept' ? 'si' : action === 'decline' ? 'no' : 'neutro';
-  const riga = el(documentObj, 'p', `talos-approval__esito talos-approval__esito--${tono}`, `${testo}${altrove ? ' da un’altra finestra' : ''}`);
+  const riga = el(documentObj, 'p', `talos-approval__esito talos-approval__esito--${tono}`, t('chat.mcp.outcome.withOrigin', { testo, altrove: altrove ? t('chat.common.fromAnotherWindow') : '' }));
   riga.setAttribute('role', 'status');
   scheda.append(riga);
   scheda.dataset.esito = action;

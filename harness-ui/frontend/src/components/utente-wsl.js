@@ -10,9 +10,11 @@
  * blocco non si mostra, e un utente che la sonda non ha saputo dire si dichiara «non verificato».
  */
 
+import { t, tn } from './lingua.js';
+
 /** Il comando che crea un utente normale nella distro, da un terminale di Windows (Microsoft Learn, «Basic commands for WSL»). */
 export function comandoPerCreareUtente(distro) {
-  return `wsl -d ${distro} -u root adduser <nome>`;
+  return `wsl -d ${distro} -u root adduser ${t('varie.wsl.user.placeholder')}`; // il segnaposto da sostituire si legge nella lingua della persona
 }
 
 /**
@@ -25,34 +27,33 @@ export function testiUtenteWsl(dati) {
   const distro = wsl.distro;
   const acceso = dati?.preferenze?.usaUtenteNormale !== false;
   const chi = typeof wsl.utenteUsato === 'string' && wsl.utenteUsato
-    ? `In Linux i comandi girano come ${wsl.utenteUsato} (${distro})`
-    : `In Linux non è stato possibile verificare con che utente girano i comandi (${distro})`;
+    ? t('varie.wsl.user.runsAs', { user: wsl.utenteUsato, distro })
+    : t('varie.wsl.user.unverified', { distro });
 
   const montaggi = Array.isArray(wsl.montaggi) ? wsl.montaggi.filter((m) => typeof m?.montaggio === 'string') : [];
   let dischi;
+  /* 03/10/2026: frasi intere per ogni caso (una frase a pezzi non regge in un'altra lingua); il numero dei dischi lo sceglie `tn`. */
   if (montaggi.length === 0) {
-    dischi = 'I dischi di Windows sono in /mnt: nessun isolamento.';
+    dischi = t('varie.wsl.disks.default');
   } else {
     const nomi = montaggi.map((m) => m.montaggio).join(', ');
-    const soggetto = montaggi.length === 1 ? `${nomi} è il disco di Windows` : `${nomi} sono i dischi di Windows`;
     const senzaPermessi = montaggi.filter((m) => m.metadata === false).map((m) => m.montaggio);
-    const permessi = senzaPermessi.length === 0 ? ''
-      : senzaPermessi.length === montaggi.length ? ', e lì i permessi Linux non valgono'
-        : `; su ${senzaPermessi.join(', ')} i permessi Linux non valgono`;
-    dischi = `${soggetto}: nessun isolamento${permessi}.`;
+    dischi = senzaPermessi.length === 0 ? tn('varie.wsl.disks.one', 'varie.wsl.disks.many', montaggi.length, { disks: nomi })
+      : senzaPermessi.length === montaggi.length ? tn('varie.wsl.disks.oneNoPermissions', 'varie.wsl.disks.manyNoPermissions', montaggi.length, { disks: nomi })
+        : t('varie.wsl.disks.someNoPermissions', { disks: nomi, without: senzaPermessi.join(', ') });
   }
   /* Con root, l'altra metà della decisione: un comando che nessuno approva chiede conferma una volta per sessione. Detta qui perché la
      carta che la chiede non arrivi come una sorpresa. Se l'utente non è verificato vale lo stesso (il kernel chiede). */
-  if (wsl.root !== false) dischi += ' Se un comando gira come root senza la tua approvazione, TALOS te lo chiede una volta per sessione.';
+  if (wsl.root !== false) dischi += ` ${t('varie.wsl.disks.rootAsks')}`;
 
-  let nota = 'Vale per tutte le sessioni.';
+  let nota = t('varie.wsl.note.allSessions');
   let comando = null;
   if (wsl.predefinitoRoot === false) {
-    nota += ` In ${distro} l’utente predefinito non è root: non cambia niente.`;
+    nota += ` ${t('varie.wsl.note.defaultNotRoot', { distro })}`;
   } else if (typeof wsl.utenteNormale === 'string' && wsl.utenteNormale) {
-    nota += acceso ? ` Usa ${wsl.utenteNormale} al posto di root.` : ` Spento: i comandi girano come root anche se c’è ${wsl.utenteNormale}.`;
+    nota += ` ${acceso ? t('varie.wsl.note.useUser', { user: wsl.utenteNormale }) : t('varie.wsl.note.offRoot', { user: wsl.utenteNormale })}`;
   } else if (wsl.predefinitoRoot === true) {
-    nota += ` ${distro} non ne ha uno. Per crearlo, da un terminale di Windows:`;
+    nota += ` ${t('varie.wsl.note.noUser', { distro })}`;
     comando = comandoPerCreareUtente(distro);
   }
   return { visibile: true, chi, dischi, nota, comando, acceso };
@@ -71,11 +72,11 @@ export function testiDoveGiranoIComandi(dati) {
   if (!wsl || wsl.disponibile !== true || wsl.casaLinux?.pronta !== true) return null;
   return {
     automatico: {
-      badge: 'Linux con WSL',
-      sub: 'Una casa sola: con WSL comandi e attrezzi dei file lavorano in Linux, senza WSL su Windows.',
+      badge: t('varie.wsl.home.automaticBadge'),
+      sub: t('varie.wsl.home.automaticSub'),
     },
     linux: {
-      sub: 'Sempre in Linux, comandi e attrezzi dei file con gli stessi percorsi. Se WSL non c’è, il comando lo dice invece di ripiegare in silenzio.',
+      sub: t('varie.wsl.home.linuxSub'),
     },
   };
 }

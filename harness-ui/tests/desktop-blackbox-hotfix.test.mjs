@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
+import { togliConfiniDati } from '../src/kernel/confine-dati.mjs';
 import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { spawnSync } from 'node:child_process';
 import test from 'node:test';
 
 import { creaAvvioFiglio } from '../desktop/runtime.mjs';
@@ -13,7 +13,7 @@ import {
   DESKTOP_BLACKBOX_HOTFIX_VERSION,
   NO_TEST_SUITE_CODE,
   STALL_DIAGNOSTIC_EVENT,
-  comandoProvaDesktop,
+  motivoProvaSenzaSuiteDesktop,
   correggiEsitoToolDesktop,
   correggiMessaggiDesktop,
   creaTelemetriaStallo,
@@ -112,56 +112,50 @@ test('T-08: elenca distinguishes a file from a missing path and fails closed on 
   assert.doesNotMatch(absolute, /is a FILE/);
 });
 
-test('T-07: default npm test is replaced by an explicit no-suite diagnostic when scripts.test is absent', async (t) => {
-  const dir = tempDir(t);
-  writeFileSync(join(dir, 'package.json'), JSON.stringify({ name: 'fixture', scripts: {} }));
-  const command = await comandoProvaDesktop({ cartella: dir, comandoProva: 'npm test' });
-  assert.match(command, new RegExp(NO_TEST_SUITE_CODE));
+test('T-07: without scripts.test the desktop tells the kernel why the default suite is missing — no command is built', async (t) => {
   /*
-   * ⛔⛔ ERA `process.exit(2)` FINO AL 20/09/2026 — e il 2 era la cosa sbagliata.
-   *   Il canonico, per lo stesso fatto, esce **127** (`USCITA_NESSUNA_SUITE`, il cancello
-   *   `suiteMancante`): due codici per una condizione sola. E la riga dei Processi li distingue —
-   *   `statoDaUscita(2)` → «Non riuscito» col pallino **rosso**, `statoDaUscita(127)` →
-   *   «Non eseguito». Sul desktop una suite che non esiste veniva dipinta come un fallimento,
-   *   mentre il vero è che **non è partita**. Ora i due lati dicono lo stesso numero.
-   */
-  assert.match(command, /exit 127$/, 'lo stesso codice della suite mancante del canonico');
-  assert.doesNotMatch(command, /exit\(?\s*2\)?$/, 'un 2 qui ridipinge come FALLIMENTO una prova che non e partita');
-});
-
-test('T-07 F017: the no-suite command launches no executable — 127 with its sentence in cmd and in bash, whatever runs the server', async (t) => {
-  /*
-   * ⛔⛔ F017 (01/10/2026) — riprodotto sulla build Preview: «prova» senza suite usciva 0 nell'app installata. Il comando era
-   *   `"${process.execPath}" -e "…exit(127)"`: nel pacchetto execPath è TALOS.exe, e `child-bootstrap.mjs:19` toglie
-   *   ELECTRON_RUN_AS_NODE prima del server ⇒ TALOS.exe partiva come APP (seconda istanza, uscita 0). Dal sorgente execPath è
-   *   node.exe e dava 127: per questo nessuna prova lo vedeva.
+   * ⛔⛔ H-04 (owner 02/10/2026, «Voglio il +1»): fino a ieri qui si costruiva `1>&2 echo NO_TEST_SUITE_CONFIGURED…&& exit 127`,
+   *   lanciato davvero perché la riga dei Processi dicesse «Non eseguito» (BLOCCO 5, 20/09). Ma 127 è «comando non trovato» e il
+   *   numero era fabbricato. Ora il desktop consegna il MOTIVO al kernel, che risponde NOT RUN senza nessun processo
+   *   (`h04-prova-non-eseguita.test.mjs` prova il giro intero).
    */
   const dir = tempDir(t);
   writeFileSync(join(dir, 'package.json'), JSON.stringify({ name: 'fixture', scripts: {} }));
-  const command = await comandoProvaDesktop({ cartella: dir, comandoProva: 'npm test' });
-  assert.ok(!command.includes(process.execPath), `nessun eseguibile del processo nel comando: ${command}`);
-  assert.doesNotMatch(command, /\s-e\s/, 'nessun programma lanciato con uno script');
-  const atteso = /^NO_TEST_SUITE_CONFIGURED: workspace has no usable npm scripts\.test, verification was not run\.\r?\n$/;
-  const cmd = spawnSync(command, { cwd: dir, shell: true, encoding: 'utf8', windowsHide: true, env: { PATH: process.env.PATH, SystemRoot: process.env.SystemRoot ?? '', ComSpec: process.env.ComSpec ?? '' } });
-  assert.equal(cmd.status, 127, `${process.platform === 'win32' ? 'cmd.exe' : 'sh'}: ${cmd.stderr}`);
-  assert.match(cmd.stderr, atteso);
-  assert.equal(cmd.stdout, '');
-  const wsl = process.platform === 'win32' ? spawnSync('wsl.exe', ['--exec', 'sh', '-c', 'echo ok'], { encoding: 'utf8', timeout: 15_000, windowsHide: true }) : null;
-  if (wsl?.status === 0) {
-    const bash = spawnSync('wsl.exe', ['--exec', 'bash', '-c', command], { encoding: 'utf8', windowsHide: true, timeout: 60_000 });
-    assert.equal(bash.status, 127, `bash in WSL (la casa Linux): ${bash.stderr}`);
-    assert.match(bash.stderr, atteso);
-  }
+  assert.equal(await motivoProvaSenzaSuiteDesktop({ cartella: dir, comandoProva: 'npm test' }), 'package.json has no scripts.test');
+  writeFileSync(join(dir, 'package.json'), JSON.stringify({ name: 'fixture', scripts: { test: 'echo "Error: no test specified" && exit 1' } }));
+  assert.match(await motivoProvaSenzaSuiteDesktop({ cartella: dir, comandoProva: 'npm test' }), /npm init placeholder/);
+  assert.equal(NO_TEST_SUITE_CODE, canonical.CODICE_NESSUNA_SUITE, 'una sola parola per lo stesso fatto, nel desktop e nel kernel');
 });
 
-test('T-07 contrary cases: a real test or malformed package.json keeps npm test and its truthful diagnostic', async (t) => {
+test('T-07 F017: the no-suite path launches nothing at all — not an executable, not even a shell builtin', async (t) => {
+  /*
+   * ⛔⛔ F017 (01/10/2026) — riprodotto sulla build Preview: «prova» senza suite usciva 0 nell'app installata, perché il comando
+   *   lanciava `process.execPath` (TALOS.exe nel pacchetto). H-04 chiude la famiglia: nessun processo, quindi nessun eseguibile
+   *   che possa partire come app, in cmd o in bash.
+   */
+  const dir = tempDir(t);
+  writeFileSync(join(dir, 'package.json'), JSON.stringify({ name: 'fixture', scripts: {} }));
+  let n = 0;
+  const risultato = await talosLavora({
+    cartella: dir, task: { consegna: 'verifica' }, modello: 'x', chiave: 'y', livelloAccesso: 'accesso-pieno',
+    fetchDiRete: async () => okJson(n++ === 0
+      ? { role: 'assistant', content: null, tool_calls: [{ id: 'p1', type: 'function', function: { name: 'prova', arguments: '{}' } }] }
+      : { role: 'assistant', content: 'fatto' }),
+  });
+  const esito = risultato.messaggiFinali.find((m) => m.role === 'tool')?.content ?? '';
+  assert.match(esito, /^NOT RUN: NO_TEST_SUITE_CONFIGURED — no test suite found in .*: package\.json has no scripts\.test\./);
+  assert.doesNotMatch(esito, /^exit |\[sandbox/m, 'nessuna testata di processo: non è partito niente');
+  assert.doesNotMatch(esito, /127/);
+});
+
+test('T-07 contrary cases: a real test, a malformed package.json, an explicit command or a missing folder are not «no suite»', async (t) => {
   const dir = tempDir(t);
   writeFileSync(join(dir, 'package.json'), JSON.stringify({ name: 'fixture', scripts: { test: 'node --test' } }));
-  assert.equal(await comandoProvaDesktop({ cartella: dir, comandoProva: 'npm test' }), 'npm test');
+  assert.equal(await motivoProvaSenzaSuiteDesktop({ cartella: dir, comandoProva: 'npm test' }), null);
   writeFileSync(join(dir, 'package.json'), '{ broken json');
-  assert.equal(await comandoProvaDesktop({ cartella: dir, comandoProva: 'npm test' }), 'npm test');
-  assert.equal(await comandoProvaDesktop({ cartella: dir, comandoProva: 'npm test -- --runInBand' }), 'npm test -- --runInBand');
-  assert.equal(await comandoProvaDesktop({ cartella: join(dir, 'gone'), comandoProva: 'npm test' }), 'npm test');
+  assert.equal(await motivoProvaSenzaSuiteDesktop({ cartella: dir, comandoProva: 'npm test' }), null);
+  assert.equal(await motivoProvaSenzaSuiteDesktop({ cartella: dir, comandoProva: 'npm test -- --runInBand' }), null);
+  assert.equal(await motivoProvaSenzaSuiteDesktop({ cartella: join(dir, 'gone'), comandoProva: 'npm test' }), null);
 });
 
 test('T-04: stall telemetry is stage-specific and emits once per uninterrupted inactivity window', () => {
@@ -278,7 +272,7 @@ test('T-03: tool results longer than 8k reach the next model turn intact when Co
   assert.equal(requests.length, 2);
   const tool = requests[1].messages.find((message) => message.role === 'tool' && message.tool_call_id === 'read-large');
   assert.ok(tool, 'the second request must contain the tool result');
-  assert.equal(tool.content, payload);
+  assert.equal(togliConfiniDati(tool.content), payload);
   assert.ok(tool.content.length > 8_000);
 });
 
@@ -311,7 +305,7 @@ test('T-09: repeated tool use preserves results without adding an unsolicited us
   assert.deepEqual(checkpointRequest.messages.filter((message) => message.role === 'user').map((message) => message.content),
     ['Read the file repeatedly for the checkpoint test.'], 'only the actual user prompt may appear');
   const previousTool = [...checkpointRequest.messages].reverse().find((message) => message.role === 'tool');
-  assert.equal(previousTool.content, 'SMALL-CONTENT', 'the tool result must remain byte-identical');
+  assert.equal(togliConfiniDati(previousTool.content), 'SMALL-CONTENT', 'the tool result must remain byte-identical');
 });
 
 test('desktop launchers select the hotfix adapter by default without overriding an explicit runtime', () => {

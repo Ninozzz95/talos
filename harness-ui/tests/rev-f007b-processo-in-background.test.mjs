@@ -13,7 +13,7 @@ import { eseguiComandoSandboxato, eseguiComando, talosLavora } from '../src/kern
 import { rimuoviCartellaDiProvaAttesa } from './aiuto/rimuovi-cartella-di-prova.mjs'
 
 const soloWindows = { skip: process.platform === 'win32' ? false : 'cmd e `start /b` esistono solo su Windows', timeout: 40_000 }
-const NOTA = /⛔ Un processo avviato da questo comando gira ancora in background e tiene aperta l'uscita: ciò che stampa da ora non viene raccolto\.$/u
+const NOTA = /⛔ A process started by this command is still running in the background and keeps the output open: whatever it prints from now on is not collected\.$/u
 const vivo = (pid) => { try { process.kill(pid, 0); return true } catch { return false } }
 
 /*
@@ -167,6 +167,6 @@ test('F007B-05 (porta vera): anche `prova` si conclude all uscita del suo comand
         onGiro: (e) => { if (e.tipo === 'tool-esito') esiti.push(String(e.content)) },
     })
     assert.match(esiti[0] ?? '', /prova/u)
-    assert.match(esiti[0] ?? '', /⛔ Un processo avviato da questo comando gira ancora in background/u)
+    assert.match(esiti[0] ?? '', /⛔ A process started by this command is still running in the background/u)
     assert.ok(vivo(await leggiPid()))
 })

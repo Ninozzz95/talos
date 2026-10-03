@@ -37,7 +37,7 @@ export const LIMITE_FIGLI_CONCORRENTI = 10;
  */
 export const LIMITE_PROFONDITA_DELEGA = 2;
 
-const TOOL_ERRORE_ESPLICITO = /^(?:\s*(?:error\b|exit\s+[1-9]\d*\b)|.*\b(?:ENOENT|no such file or directory|could not|unable to|failed to|not accessible|no file matches|non riesco|problema di configurazione)\b)/i;
+const TOOL_ERRORE_ESPLICITO = /^(?:\s*(?:error\b|exit\s+[1-9]\d*\b)|.*\b(?:ENOENT|no such file or directory|could not|unable to|failed to|not accessible|no file matches|non riesco|problema di configurazione|this tool did not run|I cannot tell it from a loop)\b)/i;
 // Compatibility heuristic for old journals, never an authorization mechanism.
 const VERBO_SCRITTURA = '(?:scriv\\w*|modific\\w*|aggiorn\\w*|crea(?:re|te|to|ta|ti)?|aggiung\\w*|elimin\\w*|rinomin\\w*|implement\\w*|writ(?:e|es|ing)|modify(?:ing)?|modifying|updat(?:e|es|ing)|creat(?:e|es|ing)|add(?:ing)?|delet(?:e|es|ing)|renam(?:e|es|ing))';
 const TASK_SCRITTURA_ESPLICITA = new RegExp(`\\b${VERBO_SCRITTURA}\\b`, 'i');
@@ -564,6 +564,7 @@ export function creaSubagentOrchestrator({
            prefisso della sua fonte, cioè l'unico che tiene la figlia sul motore di casa. */
         modelloRichiesta: modelloScelto.modello,
         reasoningRichiesto: padre.reasoning ?? null,
+        linguaInterfaccia: padre.linguaInterfaccia ?? null, // K3b: la figlia descrive i comandi nella lingua di chi guarda
         permessiRichiesti: modalita === 'lettura' ? 'Read only' : padre.permessi ?? null,
         permessiPerAttrezzoRichiesti: modalita === 'lettura'
           ? Object.fromEntries(Object.entries(padre.permessiPerAttrezzo ?? {}).filter(([, valore]) => valore === 'nega'))

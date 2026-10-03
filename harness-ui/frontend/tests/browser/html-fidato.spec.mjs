@@ -1,3 +1,4 @@
+import { serviIlDizionario } from './aiuto-dizionario.mjs'; // corsia D della lingua: i componenti importano il dizionario
 import { expect, test } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
@@ -31,6 +32,7 @@ import { resolve } from 'node:path';
 const COMPONENTI = resolve(process.cwd(), 'src', 'components');
 
 async function serviIModuli(page) {
+  await serviIlDizionario(page);
   await page.route('**/__htmlfidato/*.js', async (route) => {
     const nome = new URL(route.request().url()).pathname.split('/').pop();
     try {

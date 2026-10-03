@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
+import { TESTI } from '../frontend/src/i18n/testi/index.js'; // corsia A della lingua (03/10/2026): il sorgente porta le chiavi, le frasi stanno nel dizionario
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const source = (file) => readFile(join(root, file), 'utf8');
@@ -44,8 +45,9 @@ test('MODEL-FIT-UI-13 — «non come agente» solo quando lo SAPPIAMO, mai su un
    * distinzione su cui è costruito tutto questo pannello.
    */
   const app = await source('frontend/src/legacy/app.js');
-  assert.match(app, /voce\.esito\?\.state === 'unknown'\s*\?\s*'Va bene per la chat; come agente non verificabile ora'/);
-  assert.match(app, /:\s*'Va bene per la chat, non come agente'/);
+  assert.match(app, /voce\.esito\?\.state === 'unknown'\s*\?\s*tr\('app\.modelLab\.fit\.chatOkAgentUnknown'\)\s*:\s*tr\('app\.modelLab\.fit\.chatOkNotAgent'\)/);
+  assert.equal(TESTI.it['app.modelLab.fit.chatOkAgentUnknown'], 'Va bene per la chat; come agente non verificabile ora');
+  assert.equal(TESTI.it['app.modelLab.fit.chatOkNotAgent'], 'Va bene per la chat, non come agente');
 });
 
 /* ═══ 03/9 — i quattro fix del Laboratorio modelli + le azioni sui messaggi ═══ */
@@ -70,7 +72,7 @@ test('MODEL-LAB-HF-02 — AL CONTRARIO: il catalogo non sovrascrive una ricerca 
 test('MODEL-LAB-HF-03 — il dettaglio ha tre schede e le QUANTIZZAZIONI per prime', async () => {
   // ⛔ Come il mobile (TalosMobileLocalRepoDetail.vue), che ha risolto per primo.
   const app = await source('frontend/src/legacy/app.js');
-  const schede = app.match(/\{ id: '(quantizzazioni|scheda|file)', etichetta: '[^']+'/gu) || [];
+  const schede = app.match(/\{ id: '(quantizzazioni|scheda|file)', etichetta: (?:'[^']+'|tr\('[^']+'\))/gu) || [];
   assert.deepEqual(schede.map((s) => s.match(/id: '([a-z]+)'/u)[1]), ['quantizzazioni', 'scheda', 'file']);
   assert.match(app, /hfDetailTab: 'quantizzazioni'/);
 });
@@ -83,7 +85,8 @@ test('MODEL-LAB-HF-04 — la stima dichiara SEMPRE di cosa è fatta', async () =
    * parte.
    */
   const app = await source('frontend/src/legacy/app.js');
-  assert.match(app, /se già i pesi non ci stanno, non ci sta/);
+  assert.match(app, /tr\('app\.modelLab\.hf\.measureNote'\)/);
+  assert.match(TESTI.it['app.modelLab.hf.measureNote'], /se già i pesi non ci stanno, non ci sta/);
   assert.match(app, /fit-estimate\?bytes=/);
 });
 
@@ -91,7 +94,9 @@ test('MODEL-LAB-HF-05 — la stima porta l\'ORA della misura, non solo il verdet
   // ⛔ La memoria libera cambia mentre si lavora: un badge senza data diventa
   // una bugia silenziosa dopo un minuto.
   const app = await source('frontend/src/legacy/app.js');
-  assert.match(app, /misurato alle \$\{stima\.misurataAlle\.toLocaleTimeString\('it-IT'\)\}/);
+  /* l'ora nella lingua dell'interfaccia (`localeUI()`), non più un 'it-IT' fisso */
+  assert.match(app, /tr\('app\.modelLab\.hf\.measuredAt', \{ ora: stima\.misurataAlle\.toLocaleTimeString\(localeUI\(\)\) \}\)/);
+  assert.equal(TESTI.it['app.modelLab.hf.measuredAt'], 'misurato alle {ora}');
   assert.match(app, /state\.modelLab\.hfStima = null;/, 'cambiando repository la stima va azzerata');
 });
 
@@ -110,7 +115,8 @@ test('MODEL-PICKER-01 — il selettore ha le FONTI come schede, e i locali si di
    * più vero, e la nota è stata sostituita — vedi MODEL-PICKER-03, che
    * presidia quella nuova e vieta il ritorno di quella vecchia.
    */
-  assert.match(app, /Girano su questo computer, senza rete e senza costo\./);
+  assert.match(app, /tr\('app\.modelPicker\.localNote'\)/);
+  assert.match(TESTI.it['app.modelPicker.localNote'], /Girano su questo computer, senza rete e senza costo\./);
 });
 
 test('MODEL-PICKER-02 — i modelli locali SI SCELGONO, col prefisso di fonte', async () => {
@@ -155,9 +161,11 @@ test('MODEL-PICKER-03 — AL CONTRARIO: la nota non promette un\'attesa che il c
    * sopra nello stesso file.
    */
   const app = await source('frontend/src/legacy/app.js');
-  assert.doesNotMatch(app, /Il motore va acceso dal Laboratorio modelli prima di usarli\./u);
-  assert.match(app, /Si accendono da soli alla prima richiesta\./u);
-  assert.doesNotMatch(app, /La chat parla solo con OpenRouter/u);
+  /* Le frasi stanno nel dizionario: si guarda il sorgente E le voci, in tutte e due le lingue. */
+  const tutto = [app, ...Object.values(TESTI.it), ...Object.values(TESTI.en)].join('\n');
+  assert.doesNotMatch(tutto, /Il motore va acceso dal Laboratorio modelli prima di usarli\./u);
+  assert.match(TESTI.it['app.modelPicker.localNote'], /Si accendono da soli alla prima richiesta\./u);
+  assert.doesNotMatch(tutto, /La chat parla solo con OpenRouter/u);
 });
 
 test('MODEL-PICKER-04 — scegliere un modello locale a META\' CHAT lo scrive sul server, non solo sullo schermo', async () => {

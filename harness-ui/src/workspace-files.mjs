@@ -55,22 +55,22 @@ const DIMENSIONE_MASSIMA_ANTEPRIMA = 512 * 1024;
 function risolviPercorsoEsistente(cartella, percorso, { realpathSyncFn = realpathSync } = {}, ammettiRadice = false) {
   const vuoto = percorso === '';
   if (typeof percorso !== 'string' || percorso.includes('\0') || isAbsolute(percorso) || (vuoto && !ammettiRadice)) {
-    throw new WorkspaceFileError('Percorso non valido');
+    throw new WorkspaceFileError('Invalid path');
   }
   const radiceReale = realpathSyncFn(cartella);
   let reale;
   try {
     reale = vuoto ? radiceReale : realpathSyncFn(join(cartella, percorso));
   } catch {
-    throw new WorkspaceFileError('File non trovato', 'FILE_NOT_FOUND');
+    throw new WorkspaceFileError('File not found', 'FILE_NOT_FOUND');
   }
   // ⛔ `isPathInside` dice `true` anche quando i due percorsi COINCIDONO (`relative()` torna ''): il confine vale comunque, ed è il controllo sotto a decidere se la radice stessa è ammessa.
   if (!isPathInside(radiceReale, reale)) {
-    throw new WorkspaceFileError('Percorso fuori dalla cartella della sessione');
+    throw new WorkspaceFileError('Path outside the session folder');
   }
   if (reale === radiceReale && !ammettiRadice) {
     // ⛔ nessuna delle azioni che passano di qui con `ammettiRadice=false` ha senso sulla RADICE della sessione stessa (rinominarla/eliminarla è un disastro diverso, fuori scope qui)
-    throw new WorkspaceFileError('Percorso fuori dalla cartella della sessione, o è la radice stessa');
+    throw new WorkspaceFileError('Path outside the session folder, or it is the root itself');
   }
   return { radiceReale, reale };
 }
@@ -84,9 +84,9 @@ function risolviPercorsoEsistente(cartella, percorso, { realpathSyncFn = realpat
 export async function leggiContenutoFile({ cartella, percorso }, deps = {}) {
   const { reale } = risolviPercorsoEsistente(cartella, percorso, deps);
   const stat = await (deps.statFn ?? fsp.stat)(reale);
-  if (!stat.isFile()) throw new WorkspaceFileError('Non è un file — apri una cartella dall\'albero, non da qui');
+  if (!stat.isFile()) throw new WorkspaceFileError('Not a file — open a folder from the tree, not from here');
   if (stat.size > DIMENSIONE_MASSIMA_ANTEPRIMA) {
-    throw new WorkspaceFileError(`File troppo grande per l'anteprima (${Math.round(stat.size / 1024)} KB, tetto ${DIMENSIONE_MASSIMA_ANTEPRIMA / 1024} KB)`, 'FILE_TOO_LARGE');
+    throw new WorkspaceFileError(`File too large for the preview (${Math.round(stat.size / 1024)} KB, limit ${DIMENSIONE_MASSIMA_ANTEPRIMA / 1024} KB)`, 'FILE_TOO_LARGE');
   }
   const contenuto = await (deps.readFileFn ?? fsp.readFile)(reale, 'utf8');
   return { contenuto, dimensione: stat.size };
@@ -146,7 +146,7 @@ export function nomiPerContentDisposition(nome) {
 export async function leggiFilePerScarico({ cartella, percorso }, deps = {}) {
   const { reale } = risolviPercorsoEsistente(cartella, percorso, deps);
   const stat = await (deps.statFn ?? fsp.stat)(reale);
-  if (!stat.isFile()) throw new WorkspaceFileError('Non è un file: una cartella non si scarica');
+  if (!stat.isFile()) throw new WorkspaceFileError('Not a file: a folder cannot be downloaded');
   if (stat.size > DIMENSIONE_MASSIMA_SCARICO) {
     throw new WorkspaceFileError(
       `File troppo grande da scaricare (${Math.round(stat.size / 1024 / 1024)} MB, tetto ${DIMENSIONE_MASSIMA_SCARICO / 1024 / 1024} MB)`,
@@ -171,13 +171,13 @@ export async function leggiFilePerScarico({ cartella, percorso }, deps = {}) {
  * @returns {Promise<{bytes:Buffer, dimensione:number, nome:string}>}
  */
 export async function leggiFilePagina({ cartella, segmenti }, deps = {}) {
-  if (!Array.isArray(segmenti)) throw new WorkspaceFileError('Percorso non valido');
+  if (!Array.isArray(segmenti)) throw new WorkspaceFileError('Invalid path');
   const pezzi = [...segmenti];
   const cartellaChiesta = pezzi.length === 0 || pezzi[pezzi.length - 1] === '';
   if (cartellaChiesta) pezzi.pop();
   for (const pezzo of pezzi) {
     if (typeof pezzo !== 'string' || pezzo === '' || pezzo === '.' || pezzo === '..' || /[\\/:\0]/u.test(pezzo)) {
-      throw new WorkspaceFileError('Percorso non valido');
+      throw new WorkspaceFileError('Invalid path');
     }
   }
   const percorso = pezzi.join('/');
@@ -190,9 +190,9 @@ export async function leggiFilePagina({ cartella, segmenti }, deps = {}) {
     ({ reale: file } = risolviPercorsoEsistente(cartella, percorso ? `${percorso}/index.html` : 'index.html', deps));
     stat = await statFn(file);
   } else if (cartellaChiesta) {
-    throw new WorkspaceFileError('File non trovato', 'FILE_NOT_FOUND'); // `pagina.html/` non è una cartella
+    throw new WorkspaceFileError('File not found', 'FILE_NOT_FOUND'); // `pagina.html/` non è una cartella
   }
-  if (!stat.isFile()) throw new WorkspaceFileError('File non trovato', 'FILE_NOT_FOUND');
+  if (!stat.isFile()) throw new WorkspaceFileError('File not found', 'FILE_NOT_FOUND');
   if (stat.size > DIMENSIONE_MASSIMA_SCARICO) {
     throw new WorkspaceFileError(
       `File troppo grande da mostrare (${Math.round(stat.size / 1024 / 1024)} MB, tetto ${DIMENSIONE_MASSIMA_SCARICO / 1024 / 1024} MB)`,
@@ -215,13 +215,13 @@ export async function rinominaFile({ cartella, percorso, nuovoNome }, deps = {})
     || nuovoNome.includes('/') || nuovoNome.includes('\\') || nuovoNome.includes('\0')
     || nuovoNome === '.' || nuovoNome === '..'
   ) {
-    throw new WorkspaceFileError('Nuovo nome non valido — un nome di file, non un percorso');
+    throw new WorkspaceFileError('Invalid new name — a file name, not a path');
   }
   const destinazione = join(dirname(reale), nuovoNome);
-  if (!isPathInside(radiceReale, destinazione)) throw new WorkspaceFileError('Destinazione fuori dalla cartella della sessione');
+  if (!isPathInside(radiceReale, destinazione)) throw new WorkspaceFileError('Destination outside the session folder');
   const accessFn = deps.accessFn ?? fsp.access;
   const esisteGia = await accessFn(destinazione).then(() => true, () => false);
-  if (esisteGia) throw new WorkspaceFileError('Esiste già un file con questo nome', 'FILE_EXISTS');
+  if (esisteGia) throw new WorkspaceFileError('A file with this name already exists', 'FILE_EXISTS');
   await (deps.renameFn ?? fsp.rename)(reale, destinazione);
   const nuovoPercorso = relative(radiceReale, destinazione).split(sep).join('/');
   return { nuovoPercorso };
@@ -324,16 +324,16 @@ export const PROFONDITA_MASSIMA_SOTTOCARTELLA = 8;
 
 export function normalizzaSottocartella(valore) {
   if (valore === undefined || valore === null || valore === '') return '';
-  if (typeof valore !== 'string') throw new WorkspaceFileError('Cartella non valida', 'FOLDER_INVALID');
+  if (typeof valore !== 'string') throw new WorkspaceFileError('Invalid folder', 'FOLDER_INVALID');
   if (/^[a-zA-Z]:/u.test(valore) || /^[\\/]/u.test(valore)) {
-    throw new WorkspaceFileError('La cartella deve essere relativa allo spazio di lavoro, non un percorso assoluto', 'FOLDER_INVALID');
+    throw new WorkspaceFileError('The folder must be relative to the workspace, not an absolute path', 'FOLDER_INVALID');
   }
   const pezzi = valore.split(/[\\/]+/u).filter((p) => p !== '' && p !== '.');
   if (pezzi.some((p) => p === '..')) throw new WorkspaceFileError('Una cartella non può uscire dallo spazio di lavoro («..»)', 'FOLDER_INVALID');
   if (pezzi.length > PROFONDITA_MASSIMA_SOTTOCARTELLA) throw new WorkspaceFileError(`Troppe cartelle annidate (al massimo ${PROFONDITA_MASSIMA_SOTTOCARTELLA})`, 'FOLDER_INVALID');
   for (const p of pezzi) {
     if (CARATTERI_VIETATI_IN_CARTELLA.test(p) || NOMI_DI_PERIFERICA.test(p) || /[. ]$/u.test(p) || p.length > 255) {
-      throw new WorkspaceFileError(`Nome di cartella non valido: «${p}»`, 'FOLDER_INVALID');
+      throw new WorkspaceFileError(`Invalid folder name: “${p}”`, 'FOLDER_INVALID');
     }
   }
   return pezzi.join('/');
@@ -341,14 +341,14 @@ export function normalizzaSottocartella(valore) {
 
 export async function creaFileWorkspace({ cartella, nome, bytes, modalita = 'nuovo', sottocartella = '' }, deps = {}) {
   if (modalita !== 'nuovo' && modalita !== 'accoda') {
-    throw new WorkspaceFileError('Modalità non valida: "nuovo" (rifiuta un nome già preso) o "accoda" (aggiunge in coda)');
+    throw new WorkspaceFileError('Invalid mode: "nuovo" (rejects a name already taken) or "accoda" (appends at the end)');
   }
   if (
     typeof nome !== 'string' || nome.length === 0 || nome.length > 255
     || nome.includes('/') || nome.includes('\\') || nome.includes('\0')
     || nome === '.' || nome === '..'
   ) {
-    throw new WorkspaceFileError('Nome file non valido — un nome, non un percorso');
+    throw new WorkspaceFileError('Invalid file name — a name, not a path');
   }
   /*
    * ⛔ BC-11 — il TIPO prima del tetto, e detto a parole. Senza questo controllo `fsp.writeFile`
@@ -358,16 +358,16 @@ export async function creaFileWorkspace({ cartella, nome, bytes, modalita = 'nuo
   const byteValidi = typeof bytes === 'string' || ArrayBuffer.isView(bytes) || bytes instanceof ArrayBuffer;
   if (!byteValidi) {
     throw new WorkspaceFileError(
-      'Contenuto mancante o non valido: servono byte o testo, e ne è arrivato '
-      + `${bytes === undefined ? 'nessuno' : typeof bytes}. Rimanda la chiamata con il contenuto.`,
+      'Missing or invalid content: bytes or text are required, and what arrived was '
+      + `${bytes === undefined ? 'nothing' : typeof bytes}. Send the call again with the content.`,
       'CONTENT_INVALID',
     );
   }
   const dimensione = typeof bytes === 'string' ? Buffer.byteLength(bytes, 'utf8') : bytes.byteLength;
   if (dimensione > DIMENSIONE_MASSIMA_CREAZIONE) {
     throw new WorkspaceFileError(
-      `Contenuto troppo grande (${Math.round(dimensione / 1024 / 1024)} MB, tetto `
-      + `${DIMENSIONE_MASSIMA_CREAZIONE / 1024 / 1024} MB). Scrivilo in più pezzi, aggiungendo ogni pezzo in coda.`,
+      `Content too large (${Math.round(dimensione / 1024 / 1024)} MB, limit `
+      + `${DIMENSIONE_MASSIMA_CREAZIONE / 1024 / 1024} MB). Write it in several pieces, appending each piece at the end.`,
       'CONTENT_TOO_LARGE',
     );
   }
@@ -376,21 +376,21 @@ export async function creaFileWorkspace({ cartella, nome, bytes, modalita = 'nuo
   let cartellaDestinazione = radiceReale;
   if (sotto) {
     const voluta = join(radiceReale, ...sotto.split('/'));
-    if (!isPathInside(radiceReale, voluta)) throw new WorkspaceFileError('Destinazione fuori dalla cartella del workspace');
+    if (!isPathInside(radiceReale, voluta)) throw new WorkspaceFileError('Destination outside the workspace folder');
     await (deps.mkdirFn ?? fsp.mkdir)(voluta, { recursive: true });
     /* ⛔ Il controllo lessicale non basta: una cartella che esisteva già può essere una GIUNZIONE che porta fuori
      *   (la lezione di robocopy del 17/09). Si guarda dove finisce DAVVERO, dopo averla creata. */
     cartellaDestinazione = (deps.realpathSyncFn ?? realpathSync)(voluta);
     if (!isPathInside(radiceReale, cartellaDestinazione)) {
-      throw new WorkspaceFileError('La cartella esiste ma porta fuori dallo spazio di lavoro (collegamento o giunzione)', 'FOLDER_INVALID');
+      throw new WorkspaceFileError('The folder exists but leads outside the workspace (link or junction)', 'FOLDER_INVALID');
     }
   }
   const destinazione = join(cartellaDestinazione, nome);
-  if (!isPathInside(radiceReale, destinazione)) throw new WorkspaceFileError('Destinazione fuori dalla cartella del workspace');
+  if (!isPathInside(radiceReale, destinazione)) throw new WorkspaceFileError('Destination outside the workspace folder');
   const percorsoRelativo = sotto ? `${sotto}/${nome}` : nome;
   const accessFn = deps.accessFn ?? fsp.access;
   const esisteGia = await accessFn(destinazione).then(() => true, () => false);
-  if (esisteGia && modalita === 'nuovo') throw new WorkspaceFileError('Esiste già un file con questo nome', 'FILE_EXISTS');
+  if (esisteGia && modalita === 'nuovo') throw new WorkspaceFileError('A file with this name already exists', 'FILE_EXISTS');
   if (esisteGia) {
     /*
      * ⛔ La domanda «è un file?» si fa PRIMA di aprire: `appendFile` su una cartella darebbe
@@ -398,10 +398,10 @@ export async function creaFileWorkspace({ cartella, nome, bytes, modalita = 'nuo
      *   sessione `8dde6bff` e che nessuno poteva leggere.
      */
     const stat = await (deps.statFn ?? fsp.stat)(destinazione);
-    if (!stat.isFile()) throw new WorkspaceFileError('Esiste già una cartella con questo nome: non ci si può accodare', 'NOT_A_FILE');
+    if (!stat.isFile()) throw new WorkspaceFileError('A folder with this name already exists: you cannot append to it', 'NOT_A_FILE');
     if (stat.size + dimensione > DIMENSIONE_MASSIMA_CREAZIONE) {
       throw new WorkspaceFileError(
-        `Il file arriverebbe a ${Math.round((stat.size + dimensione) / 1024 / 1024)} MB, oltre il tetto di `
+        `The file would reach ${Math.round((stat.size + dimensione) / 1024 / 1024)} MB, over the limit of `
         + `${DIMENSIONE_MASSIMA_CREAZIONE / 1024 / 1024} MB.`,
         'CONTENT_TOO_LARGE',
       );
@@ -449,29 +449,29 @@ export async function spostaFile({ cartella, percorso, cartellaDestinazione }, d
     destinazioneCartellaReale = radiceReale;
   } else {
     if (typeof cartellaDestinazione !== 'string' || isAbsolute(cartellaDestinazione)) {
-      throw new WorkspaceFileError('Cartella di destinazione non valida');
+      throw new WorkspaceFileError('Invalid destination folder');
     }
     try {
       destinazioneCartellaReale = realpathSyncFn(join(cartella, cartellaDestinazione));
     } catch {
-      throw new WorkspaceFileError('Cartella di destinazione non trovata', 'FILE_NOT_FOUND');
+      throw new WorkspaceFileError('Destination folder not found', 'FILE_NOT_FOUND');
     }
     if (!isPathInside(radiceReale, destinazioneCartellaReale)) {
-      throw new WorkspaceFileError('Destinazione fuori dalla cartella della sessione');
+      throw new WorkspaceFileError('Destination outside the session folder');
     }
   }
   const statDestinazione = await (deps.statFn ?? fsp.stat)(destinazioneCartellaReale).catch(() => null);
   if (!statDestinazione || !statDestinazione.isDirectory()) {
-    throw new WorkspaceFileError('La destinazione non è una cartella');
+    throw new WorkspaceFileError('The destination is not a folder');
   }
   if (isPathInside(reale, destinazioneCartellaReale)) {
-    throw new WorkspaceFileError('Non puoi spostare un elemento dentro se stesso o un suo discendente');
+    throw new WorkspaceFileError('You cannot move an item into itself or one of its descendants');
   }
   const nome = reale.split(sep).pop();
   const destinazione = join(destinazioneCartellaReale, nome);
   const accessFn = deps.accessFn ?? fsp.access;
   const esisteGia = await accessFn(destinazione).then(() => true, () => false);
-  if (esisteGia) throw new WorkspaceFileError('Esiste già un elemento con questo nome nella destinazione', 'FILE_EXISTS');
+  if (esisteGia) throw new WorkspaceFileError('An item with this name already exists in the destination', 'FILE_EXISTS');
   await (deps.renameFn ?? fsp.rename)(reale, destinazione);
   const nuovoPercorso = relative(radiceReale, destinazione).split(sep).join('/');
   return { nuovoPercorso };
@@ -505,7 +505,7 @@ export async function copiaFile({ cartella, percorso }, deps = {}) {
     const esisteGia = await accessFn(candidato).then(() => true, () => false);
     if (!esisteGia) { destinazione = candidato; break; }
   }
-  if (!destinazione) throw new WorkspaceFileError('Troppe copie già esistenti con questo nome');
+  if (!destinazione) throw new WorkspaceFileError('Too many existing copies with this name');
 
   await (deps.cpFn ?? fsp.cp)(reale, destinazione, { recursive: true, errorOnExist: true });
   const radiceReale = realpathSync(cartella);
@@ -523,38 +523,38 @@ export async function copiaFile({ cartella, percorso }, deps = {}) {
  */
 export async function creaVoceWorkspace({ cartella, percorsoBase, nome, tipo }, deps = {}) {
   if (tipo !== 'file' && tipo !== 'cartella') {
-    throw new WorkspaceFileError('Tipo non valido: "file" o "cartella"');
+    throw new WorkspaceFileError('Invalid type: "file" or "cartella"');
   }
   if (
     typeof nome !== 'string' || nome.length === 0 || nome.length > 255
     || nome.includes('/') || nome.includes('\\') || nome.includes('\0')
     || nome === '.' || nome === '..'
   ) {
-    throw new WorkspaceFileError('Nome non valido — un nome, non un percorso');
+    throw new WorkspaceFileError('Invalid name — a name, not a path');
   }
   const realpathSyncFn = deps.realpathSyncFn ?? realpathSync;
   const radiceReale = realpathSyncFn(cartella);
   let cartellaBaseReale = radiceReale;
   if (percorsoBase) {
     if (typeof percorsoBase !== 'string' || isAbsolute(percorsoBase)) {
-      throw new WorkspaceFileError('Cartella base non valida');
+      throw new WorkspaceFileError('Invalid base folder');
     }
     try {
       cartellaBaseReale = realpathSyncFn(join(cartella, percorsoBase));
     } catch {
-      throw new WorkspaceFileError('Cartella base non trovata', 'FILE_NOT_FOUND');
+      throw new WorkspaceFileError('Base folder not found', 'FILE_NOT_FOUND');
     }
     if (!isPathInside(radiceReale, cartellaBaseReale)) {
-      throw new WorkspaceFileError('Cartella base fuori dal workspace della sessione');
+      throw new WorkspaceFileError('Base folder outside the session workspace');
     }
     const statBase = await (deps.statFn ?? fsp.stat)(cartellaBaseReale).catch(() => null);
-    if (!statBase || !statBase.isDirectory()) throw new WorkspaceFileError('La cartella base non è una cartella');
+    if (!statBase || !statBase.isDirectory()) throw new WorkspaceFileError('The base folder is not a folder');
   }
   const destinazione = join(cartellaBaseReale, nome);
-  if (!isPathInside(radiceReale, destinazione)) throw new WorkspaceFileError('Destinazione fuori dal workspace della sessione');
+  if (!isPathInside(radiceReale, destinazione)) throw new WorkspaceFileError('Destination outside the session workspace');
   const accessFn = deps.accessFn ?? fsp.access;
   const esisteGia = await accessFn(destinazione).then(() => true, () => false);
-  if (esisteGia) throw new WorkspaceFileError('Esiste già un elemento con questo nome', 'FILE_EXISTS');
+  if (esisteGia) throw new WorkspaceFileError('An item with this name already exists', 'FILE_EXISTS');
   if (tipo === 'cartella') await (deps.mkdirFn ?? fsp.mkdir)(destinazione);
   else await (deps.writeFileFn ?? fsp.writeFile)(destinazione, '');
   const percorso = relative(radiceReale, destinazione).split(sep).join('/');
@@ -650,7 +650,7 @@ function lanciaExplorer(argomenti, cartella, deps) {
 export async function apriInEsploraFile({ cartella, percorso }, deps = {}) {
   const { reale } = risolviPercorsoEsistente(cartella, percorso, deps, true);
   if ((deps.platform ?? process.platform) !== 'win32') {
-    throw new WorkspaceFileError('Disponibile solo su Windows', 'PLATFORM_UNSUPPORTED');
+    throw new WorkspaceFileError('Available only on Windows', 'PLATFORM_UNSUPPORTED');
   }
   await lanciaExplorer([reale], cartella, deps);
   return { aperto: true };
@@ -659,11 +659,11 @@ export async function apriInEsploraFile({ cartella, percorso }, deps = {}) {
 export async function apriFileConProgrammaPredefinito({ cartella, percorso }, deps = {}) {
   const { reale } = risolviPercorsoEsistente(cartella, percorso, deps);
   if ((deps.platform ?? process.platform) !== 'win32') {
-    throw new WorkspaceFileError('Disponibile solo su Windows', 'PLATFORM_UNSUPPORTED');
+    throw new WorkspaceFileError('Available only on Windows', 'PLATFORM_UNSUPPORTED');
   }
   const stat = await (deps.statFn ?? fsp.stat)(reale);
   /* ⛔ Una cartella si «rivela», non si «apre col programma»: due azioni diverse, due bottoni diversi. */
-  if (!stat.isFile()) throw new WorkspaceFileError('Non è un file: usa «Mostra nella cartella»');
+  if (!stat.isFile()) throw new WorkspaceFileError('Not a file: use “Show in folder”');
   /*
    * ⛔⛔ 10/09/2026 — QUESTA RIGA NON HA MAI FUNZIONATO CON LA POLITICA VERA, e nessun test se n'era
    *   accorto. Il wrapper dichiarava `(comando, argomenti, opzioni, callback)` ma qui sotto veniva
@@ -684,7 +684,7 @@ export async function apriFileConProgrammaPredefinito({ cartella, percorso }, de
 export async function rivelaInEsploraFile({ cartella, percorso }, deps = {}) {
   const { reale } = risolviPercorsoEsistente(cartella, percorso, deps);
   if ((deps.platform ?? process.platform) !== 'win32') {
-    throw new WorkspaceFileError('Disponibile solo su Windows', 'PLATFORM_UNSUPPORTED');
+    throw new WorkspaceFileError('Available only on Windows', 'PLATFORM_UNSUPPORTED');
   }
   /* ⛔ Stessa porta della sorella qui sopra (`lanciaExplorer`), e per lo stesso motivo: chiamato con
      tre argomenti il richiamo finiva nel posto delle opzioni e la promessa non si risolveva mai.

@@ -69,7 +69,7 @@ test('PG-01 — undici percorsi chat P-G, ventinove record unici dopo P-I, P-J, 
     assert.equal(PROVIDER_DIRETTI.find(p => p.id === id)?.etichetta, nome);
     assert.equal(modelloRichiestaValido(`${id}:${modelloPer(id)}`), true);
     assert.equal(r.modelloAusiliario, null);
-    assert.match(r.motivoAusiliario, /qualificat/u);
+    assert.match(r.motivoAusiliario, /qualified/u);
     assert.ok(Object.isFrozen(r));
   }
 });
@@ -118,9 +118,9 @@ test('PG-03 — sonda di ogni fornitore: 200 valido, 401, 404 e corpo malformato
       assert.equal(JSON.stringify(risultato).includes(CHIAVE_FINTA), false);
       if (esito === 'collegato' && PUBBLICI.includes(id)) {
         assert.equal(risultato.credenzialeVerificata, false);
-        assert.match(risultato.motivo, /pubblico.*chiave non verificata/iu);
+        assert.match(risultato.motivo, /public.*key not verified/iu);
       }
-      if (status === 404) assert.match(risultato.motivo, /non è verificata/u);
+      if (status === 404) assert.match(risultato.motivo, /does not verify that the key is valid/u);
     }
   }
 });

@@ -9,6 +9,7 @@
  * sessione «Tool result files are allowed for reading» (eseguibile 2.1.283).
  */
 import test from 'node:test'
+import { togliConfiniDati } from '../src/kernel/confine-dati.mjs'
 import assert from 'node:assert/strict'
 import { existsSync, linkSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -59,7 +60,7 @@ async function giro({ workspace, pagine, corpo, prossima, onPaginaLetta }) {
         cartella: workspace, task: { consegna: 'leggi la pagina' }, modello: 'f', chiave: 'k', giriMassimi: 6,
         cacheWeb: { around: async (d) => ({ value: { stato: 200, url: d.url, corpo }, fromCache: false }) },
         fetchDiRete: fornitore(prossima, esiti),
-        onGiro: (e) => { if (e.tipo === 'tool-esito') esiti.push(String(e.content)) },
+        onGiro: (e) => { if (e.tipo === 'tool-esito') esiti.push(togliConfiniDati(String(e.content))) },
         chiediApprovazioneFn: async (a) => { chieste.push(a); return false },
         ...(pagine === undefined ? {} : { cartellaPagineWeb: pagine }),
         ...(onPaginaLetta ? { onPaginaLetta } : {}),

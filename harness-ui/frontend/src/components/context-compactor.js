@@ -1,36 +1,29 @@
 import { preparaMisuraDialogo, collegaRidimensionamentoDialoghi } from './dialoghi.js';
 import { t, linguaCorrenteDiT, EVENTO_LINGUA } from './lingua.js';
+import { TESTI } from '../i18n/testi/index.js';
 
 const ACTIVE = new Set(['queued', 'preparing', 'summarizing', 'validating', 'ready', 'paused']);
-const JOB_LABELS = { queued: 'In attesa', preparing: 'Preparazione', summarizing: 'Compattazione contesto in corso', validating: 'Verifica della sintesi', ready: 'Pubblicazione in corso', committed: 'Contesto aggiornato', paused: 'Compattazione in pausa', cancelled: 'Compattazione annullata', failed: 'Compattazione non riuscita' };
-const EN = {
-  'Apri una conversazione per gestirne il contesto.': 'Open a conversation to manage its context.',
-  'Context Manager non è ancora attivo per questa conversazione. Nessun messaggio è stato modificato.': 'Context Manager is not enabled for this conversation yet. No messages have been changed.',
-  'Contesto della chat': 'Chat context', 'Solo questa chat. Gli originali restano disponibili.': 'This chat only. Original messages remain available.',
-  'Chiudi': 'Close', 'Aggiorna': 'Refresh', 'Gestisci automaticamente': 'Manage automatically', 'TALOS prepara una sintesi quando il contesto si riempie.': 'TALOS prepares a summary as the context fills up.',
-  'Misura non ancora disponibile.': 'Measurement is not available yet.', 'misurata alle': 'measured at', 'il contesto è cambiato dopo la misura': 'the context changed after this measurement', 'Token in ingresso': 'Input tokens', 'Finestra del modello': 'Model context window', 'Riservati alla risposta': 'Reserved for the response', 'Non disponibile': 'Not available',
-  'Conteggio del motore': 'Runtime count', 'Conteggio del fornitore': 'Provider count', 'Stima euristica': 'Heuristic estimate', 'esatto': 'exact', 'stima': 'estimate',
-  'In attesa': 'Queued', 'Preparazione': 'Preparing', 'Compattazione contesto in corso': 'Context compaction in progress', 'Verifica della sintesi': 'Validating summary', 'Pubblicazione in corso': 'Publishing', 'Contesto aggiornato': 'Context updated', 'Compattazione in pausa': 'Compaction paused', 'Compattazione annullata': 'Compaction cancelled', 'Compattazione non riuscita': 'Compaction failed',
-  'Nessuna compattazione in corso.': 'No compaction in progress.', 'Caricamento del contesto…': 'Loading context…', 'Annulla compattazione': 'Cancel compaction', 'Riprendi compattazione': 'Resume compaction', 'Compatta ora': 'Compact now', 'Rigenera sintesi': 'Regenerate summary',
-  'Da non dimenticare': 'Keep in mind', 'Questi fatti restano separati dalla sintesi.': 'These facts remain separate from the summary.', 'Nessun fatto protetto. Aggiungi ciò che TALOS deve conservare.': 'No protected facts. Add what TALOS must retain.', 'Aggiungi un fatto': 'Add a fact', 'Salva fatto': 'Save fact', 'Annulla modifica': 'Cancel edit', 'Modifica': 'Edit', 'Rimuovi': 'Remove', 'Proposta da verificare': 'Proposal to review', 'Accetta proposta': 'Accept proposal', 'Mantieni il fatto': 'Keep the fact',
-  'Versioni': 'Versions', 'Nessuna versione salvata.': 'No saved versions.', 'Versione attiva': 'Active version', 'Ripristina': 'Restore', 'Ripristinare questa versione? I messaggi successivi restano nella chat.': 'Restore this version? Later messages stay in the chat.', 'Conferma ripristino': 'Confirm restore', 'Annulla': 'Cancel', 'Fonti': 'Sources', 'Apri fonte': 'Open source', 'Nessuna fonte nella sintesi attiva.': 'No sources in the active summary.', 'Fonte originale': 'Original source',
-  'Impostazioni avanzate': 'Advanced settings', 'Modello per la sintesi': 'Summary model', 'Segui il modello della chat': 'Follow the chat model', 'Scegli un modello': 'Choose a model', 'Fornitore': 'Provider', 'Modello': 'Model', 'Avvia automaticamente al (%)': 'Start automatically at (%)', 'Obiettivo dopo la sintesi (%)': 'Target after summary (%)', 'Scambi recenti da conservare': 'Recent turns to retain', 'Istruzioni per la sintesi': 'Summary instructions', 'Ricerca semantica locale': 'Local semantic search', 'Compattazione nativa qualificata': 'Qualified native compaction', 'Non qualificata per questo modello.': 'Not qualified for this model.', 'Salva impostazioni': 'Save settings', 'L’obiettivo deve essere inferiore alla soglia di avvio.': 'The target must be below the start threshold.',
-  'Il contesto è cambiato. I dati sono aggiornati: verifica e ripeti la modifica.': 'The context changed. Data is refreshed: review and repeat your change.', 'Contesto non disponibile. Usa Aggiorna per riprovare.': 'Context unavailable. Use Refresh to retry.', 'Operazione non riuscita. Usa Aggiorna per verificare lo stato prima di riprovare.': 'Operation failed. Use Refresh to check the state before trying again.', 'Impostazioni salvate.': 'Settings saved.', 'Fatto salvato.': 'Fact saved.', 'Ricerca semantica non disponibile. La ricerca testuale resta attiva.': 'Semantic search unavailable. Text search remains active.', 'Ricerca semantica disponibile.': 'Semantic search available.', 'Completati': 'Completed', 'di': 'of',
-};
-EN['Non ci sono scambi precedenti da compattare mantenendo intero l’ultimo scambio. Nessun messaggio è stato modificato.'] = 'There are no earlier exchanges to compact while keeping the latest exchange intact. No messages were changed.';
-Object.assign(EN, {
-  'Qui puoi compattare la conversazione a mano. Fatti da non dimenticare, versioni e impostazioni avanzate non sono attivi per questa conversazione.': 'You can compact this conversation by hand here. Facts to keep, versions and advanced settings are not enabled for this conversation.',
-  'misurati all’ultima richiesta al modello': 'measured at the last request to the model', 'compattazione automatica oltre': 'automatic compaction above',
-  'Nessuna compattazione in corso.': 'No compaction in progress.', 'Riassumo la conversazione…': 'Summarizing the conversation…', 'Riassunto della conversazione in corso': 'Conversation summary in progress',
-  'Conversazione riassunta. La misura si aggiorna alla prossima risposta.': 'Conversation summarized. The measurement updates with the next response.',
-  'Il server non ha riassunto la conversazione: resta com’era.': 'The server did not summarize the conversation: it stays as it was.', 'Conversazione non riassunta.': 'Conversation not summarized.',
-  'Compattare adesso la conversazione? Il modello vedrà un riassunto al posto dei messaggi più vecchi; nella chat i messaggi restano visibili.': 'Compact the conversation now? The model will see a summary instead of the older messages; the messages stay visible in the chat.',
-  'Sì, compatta': 'Yes, compact', 'Operazione non riuscita.': 'Operation failed.',
-});
-function translateDefault(text) { return linguaCorrenteDiT() === 'en' ? (EN[text] ?? t(text)) : t(text); }
+const JOB_LABELS = { get queued() { return t('chat.context.job.queued'); }, get preparing() { return t('chat.context.job.preparing'); }, get summarizing() { return t('chat.context.job.compacting'); }, get validating() { return t('chat.context.job.validating'); }, get ready() { return t('chat.context.job.publishing'); }, get committed() { return t('chat.context.job.updated'); }, get paused() { return t('chat.context.job.paused'); }, get cancelled() { return t('chat.context.job.cancelled'); }, get failed() { return t('chat.context.job.failed'); } };
+/*
+ * Le etichette del modello HTML (`data-context-label`, in `index.template.html`) sono scritte in italiano nel template e il
+ * template non è di questo file: si riconoscono dal loro testo e si dicono nella lingua corrente. L'italiano NON è riscritto
+ * qui — si legge dal dizionario, così una frase vive in un posto solo. Se un giorno il template porterà le chiavi, questa
+ * tabella sparisce.
+ */
+const ETICHETTE_DEL_MODELLO = new Map([
+  'chat.context.label.title', 'chat.context.label.scope', 'chat.common.close', 'chat.context.label.refresh', 'chat.context.label.auto',
+  'chat.context.label.autoHint', 'chat.context.label.inputTokens', 'chat.context.label.window', 'chat.context.label.reserve',
+  'chat.context.label.cancel', 'chat.context.label.resume', 'chat.context.compactNow', 'chat.context.label.regenerate', 'chat.context.label.facts',
+  'chat.context.label.factsHint', 'chat.context.label.addFact', 'chat.context.label.saveFact', 'chat.context.label.cancelEdit', 'chat.context.label.versions', 'chat.context.label.sources',
+  'chat.context.label.originalSource', 'chat.context.label.advanced', 'chat.context.label.summaryModel', 'chat.context.label.followChatModel', 'chat.context.label.chooseModel', 'chat.context.label.provider',
+  'chat.common.model', 'chat.context.label.startAt', 'chat.context.label.target', 'chat.context.label.recentTurns', 'chat.context.label.instructions',
+  'chat.context.label.semanticSearch', 'chat.context.label.nativeCompaction', 'chat.context.label.nativeHelp', 'chat.context.label.saveSettings',
+].map((chiave) => [TESTI.it[chiave], chiave]));
+/** Un'etichetta del template (italiana) nella lingua corrente; ciò che non è un'etichetta del template passa da `t()` com'è. */
+function translateDefault(text) { const chiave = ETICHETTE_DEL_MODELLO.get(text); return chiave ? t(chiave) : t(text); }
 const number = v => typeof v === 'number' && Number.isFinite(v) && v >= 0;
 
-export function descriviContextCompactor(state, { translate = translateDefault } = {}) {
+export function descriviContextCompactor(state) {
   // 09/09 — la misura arriva dallo stato come {revision, measuredAt, tokens}: i numeri stanno in `tokens`,
   //   e la revisione dice se il contesto è cambiato DOPO la misura. Una misura vecchia non si spaccia per viva.
   const meta = state?.measurement && typeof state.measurement === 'object' ? state.measurement : null;
@@ -43,14 +36,14 @@ export function descriviContextCompactor(state, { translate = translateDefault }
   const oraMisura = known && typeof meta?.measuredAt === 'string' && !Number.isNaN(Date.parse(meta.measuredAt))
     ? new Date(meta.measuredAt).toLocaleTimeString(linguaCorrenteDiT() === 'en' ? 'en-GB' : 'it-IT', { hour: '2-digit', minute: '2-digit' }) : null;
   const exact = m?.exact === true && m?.method !== 'heuristic';
-  const method = m?.method === 'runtime' ? 'Conteggio del motore' : m?.method === 'provider' ? 'Conteggio del fornitore' : m?.method === 'heuristic' ? 'Stima euristica' : 'Non disponibile';
+  const method = m?.method === 'runtime' ? t('chat.context.measure.runtime') : m?.method === 'provider' ? t('chat.context.measure.provider') : m?.method === 'heuristic' ? t('chat.context.measure.heuristic') : t('chat.common.notAvailable');
   const jobs = Array.isArray(state?.jobs) ? state.jobs : [];
   const job = jobs.find(j => ACTIVE.has(j.state)) ?? [...jobs].sort((a, b) => String(b.updatedAt ?? b.createdAt).localeCompare(String(a.updatedAt ?? a.createdAt)))[0] ?? null;
   return {
     measurement: { known, inputTokens: number(m?.inputTokens) ? m.inputTokens : null, windowTokens: number(m?.windowTokens) ? m.windowTokens : null, responseReserve: number(m?.responseReserve) ? m.responseReserve : null,
       ratio: known ? m.inputTokens / m.windowTokens : null, exact, current, measuredAt: meta?.measuredAt ?? null,
-      methodLabel: `${translate(method)}${known && m?.method !== 'heuristic' ? ` (${translate(exact ? 'esatto' : 'stima')})` : ''}${oraMisura ? ` · ${translate('misurata alle')} ${oraMisura}` : ''}${known && dichiaraFreschezza && !current ? ` · ${translate('il contesto è cambiato dopo la misura')}` : ''}` },
-    job, jobLabel: translate(job ? JOB_LABELS[job.state] ?? 'Non disponibile' : 'Nessuna compattazione in corso.'),
+      methodLabel: `${method}${known && m?.method !== 'heuristic' ? ` (${exact ? t('chat.context.measure.exact') : t('chat.context.measure.estimate')})` : ''}${oraMisura ? ` · ${t('chat.context.measure.measuredAt')} ${oraMisura}` : ''}${known && dichiaraFreschezza && !current ? ` · ${t('chat.context.measure.stale')}` : ''}` },
+    job, jobLabel: job ? JOB_LABELS[job.state] ?? t('chat.common.notAvailable') : t('chat.context.noCompaction'),
     auto: state?.settings?.auto !== false, canCompact: Boolean(state) && state?.capabilities?.compact !== false && !ACTIVE.has(job?.state),
   };
 }
@@ -89,9 +82,9 @@ export function montaContextCompactor(root, { client, sessionId, state = null, d
   const inertBefore = new Map();
   // modo semplice (trial spento, host con `legacy`): misura dell'ultima richiesta, conferma aperta, esito dell'ultima compattazione
   let modoLegacy = false, confermaLegacy = false, esitoLegacy = null, misuraLegacy = null;
-  const num = value => number(value) ? new Intl.NumberFormat(linguaCorrenteDiT() === 'en' ? 'en-US' : 'it-IT').format(value) : translate('Non disponibile');
+  const num = value => number(value) ? new Intl.NumberFormat(linguaCorrenteDiT() === 'en' ? 'en-US' : 'it-IT').format(value) : t('chat.common.notAvailable');
   function element(tag, text, className) { const node = doc.createElement(tag); if (text != null) node.textContent = text; if (className) node.className = className; return node; }
-  function button(text, action) { const node = element('button', translate(text), 'talos-button talos-button--ghost talos-button--sm'); node.type = 'button'; node.dataset.contextMutation = ''; node.disabled = busy || !snapshot; node.addEventListener('click', action); return node; }
+  function button(text, action) { const node = element('button', text, 'talos-button talos-button--ghost talos-button--sm'); node.type = 'button'; node.dataset.contextMutation = ''; node.disabled = busy || !snapshot; node.addEventListener('click', action); return node; }
   function say(message, error = false) { statusText = message; const node = q('status'); node.textContent = message; node.setAttribute('role', error ? 'alert' : 'status'); }
   function requestOptions(extra = {}) { return { sessionId, expectedRevision: snapshot?.revision, signal: requestController?.signal, ...extra }; }
   function resetEditor() { editingId = null; editingSources = []; q('fact-text').value = ''; q('fact-cancel').hidden = true; }
@@ -107,18 +100,18 @@ export function montaContextCompactor(root, { client, sessionId, state = null, d
   }
   function showSource(ref) {
     const current = epoch;
-    q('source-detail').hidden = false; q('source-text').textContent = translate('Caricamento del contesto…');
+    q('source-detail').hidden = false; q('source-text').textContent = t('chat.context.loading');
     client.readContextSource(requestOptions({ sourceId: ref.recordId })).then(({ source }) => {
       if (current !== epoch || destroyed) return;
       const content = source?.message?.content;
       q('source-text').textContent = typeof content === 'string' ? content : JSON.stringify(content, null, 2);
       q('source-id').textContent = source?.id ?? ref.recordId;
-    }).catch(error => { if (current === epoch && !destroyed && error.name !== 'AbortError') q('source-text').textContent = translate('Contesto non disponibile. Usa Aggiorna per riprovare.'); });
+    }).catch(error => { if (current === epoch && !destroyed && error.name !== 'AbortError') q('source-text').textContent = t('chat.context.unavailable'); });
   }
   function sourceLinks(parent, refs = []) {
     for (const ref of refs) {
       const row = element('div', null, 'talos-context__source');
-      const quote = element('blockquote', ref.quote); const open = button('Apri fonte', () => showSource(ref)); delete open.dataset.contextMutation; open.disabled = false;
+      const quote = element('blockquote', ref.quote); const open = button(t('chat.context.source.open'), () => showSource(ref)); delete open.dataset.contextMutation; open.disabled = false;
       row.append(quote, open); parent.append(row);
     }
   }
@@ -126,17 +119,17 @@ export function montaContextCompactor(root, { client, sessionId, state = null, d
     const facts = (snapshot?.facts ?? []).filter(f => f.status !== 'removed');
     const key = JSON.stringify(facts); if (key === factsKey) return; factsKey = key;
     const list = q('facts'); list.replaceChildren();
-    if (!facts.length) list.append(element('p', translate('Nessun fatto protetto. Aggiungi ciò che TALOS deve conservare.'), 'talos-muted'));
+    if (!facts.length) list.append(element('p', t('chat.context.facts.empty'), 'talos-muted'));
     for (const fact of facts) {
       const row = element('article', null, 'talos-context__fact'); row.dataset.contextFactId = fact.id;
       row.append(element('p', fact.text));
       const actions = element('div', null, 'talos-context__actions');
-      actions.append(button('Modifica', () => { editingId = fact.id; editingSources = structuredClone(fact.sources ?? []); q('fact-text').value = fact.text; q('fact-cancel').hidden = false; q('fact-text').focus(); }), button('Rimuovi', () => mutate(() => client.removeProtectedFact(requestOptions({ factId: fact.id })))));
+      actions.append(button(t('chat.common.edit'), () => { editingId = fact.id; editingSources = structuredClone(fact.sources ?? []); q('fact-text').value = fact.text; q('fact-cancel').hidden = false; q('fact-text').focus(); }), button(t('chat.context.facts.remove'), () => mutate(() => client.removeProtectedFact(requestOptions({ factId: fact.id })))));
       row.append(actions); sourceLinks(row, fact.sources);
       if (fact.status === 'conflict' && fact.conflict) {
-        const conflict = element('div', null, 'talos-context__conflict'); conflict.append(element('strong', translate('Proposta da verificare')), element('p', fact.conflict.proposedText));
+        const conflict = element('div', null, 'talos-context__conflict'); conflict.append(element('strong', t('chat.context.facts.proposal')), element('p', fact.conflict.proposedText));
         sourceLinks(conflict, fact.conflict.sources);
-        conflict.append(button('Accetta proposta', () => mutate(() => client.resolveFactConflict(requestOptions({ factId: fact.id, accept: true })))), button('Mantieni il fatto', () => mutate(() => client.resolveFactConflict(requestOptions({ factId: fact.id, accept: false })))));
+        conflict.append(button(t('chat.context.facts.accept'), () => mutate(() => client.resolveFactConflict(requestOptions({ factId: fact.id, accept: true })))), button(t('chat.context.facts.keep'), () => mutate(() => client.resolveFactConflict(requestOptions({ factId: fact.id, accept: false })))));
         row.append(conflict);
       }
       list.append(row);
@@ -145,16 +138,16 @@ export function montaContextCompactor(root, { client, sessionId, state = null, d
   function renderVersions() {
     const key = JSON.stringify([versions, snapshot?.activeVersion?.id]); if (key === versionsKey) return; versionsKey = key;
     q('versions').replaceChildren();
-    if (!versions.length) q('versions').append(element('p', translate('Nessuna versione salvata.'), 'talos-muted'));
+    if (!versions.length) q('versions').append(element('p', t('chat.context.versions.empty'), 'talos-muted'));
     for (const version of versions) {
       const row = element('article', null, 'talos-context__version'); row.dataset.contextVersionId = version.id;
       const date = new Date(version.createdAt); row.append(element('strong', Number.isFinite(date.getTime()) ? date.toLocaleString(linguaCorrenteDiT() === 'en' ? 'en-US' : 'it-IT') : version.id));
       row.append(element('p', version.summary?.text ?? ''));
-      if (snapshot?.activeVersion?.id === version.id) row.append(element('span', translate('Versione attiva'), 'talos-badge'));
-      else row.append(button('Ripristina', () => {
-        const confirm = element('div', null, 'talos-context__conflict'); confirm.append(element('p', translate('Ripristinare questa versione? I messaggi successivi restano nella chat.')));
-        const yes = button('Conferma ripristino', () => mutate(() => client.restoreContextVersion(requestOptions({ versionId: version.id }))));
-        confirm.append(yes, button('Annulla', () => { confirm.remove(); row.querySelector('button')?.focus(); }));
+      if (snapshot?.activeVersion?.id === version.id) row.append(element('span', t('chat.context.versions.active'), 'talos-badge'));
+      else row.append(button(t('chat.context.versions.restore'), () => {
+        const confirm = element('div', null, 'talos-context__conflict'); confirm.append(element('p', t('chat.context.versions.restoreConfirm')));
+        const yes = button(t('chat.context.versions.confirm'), () => mutate(() => client.restoreContextVersion(requestOptions({ versionId: version.id }))));
+        confirm.append(yes, button(t('chat.common.cancel'), () => { confirm.remove(); row.querySelector('button')?.focus(); }));
         row.querySelector('.talos-context__conflict')?.remove(); row.append(confirm); yes.focus();
       }));
       q('versions').append(row);
@@ -162,14 +155,14 @@ export function montaContextCompactor(root, { client, sessionId, state = null, d
   }
   function render() {
     if (destroyed) return;
-    const view = descriviContextCompactor(snapshot, { translate }); const m = view.measurement;
+    const view = descriviContextCompactor(snapshot); const m = view.measurement;
     for (const node of root.querySelectorAll('[data-context-label]')) node.textContent = translate(node.dataset.contextLabel);
     if (!busy) q('auto').checked = view.auto;
     q('meter').hidden = !m.known; if (m.known) { q('meter').value = Math.min(m.inputTokens, m.windowTokens); q('meter').max = m.windowTokens; q('meter').setAttribute('aria-valuetext', `${num(m.inputTokens)} / ${num(m.windowTokens)}`); }
-    q('measurement').textContent = m.known ? `${num(m.inputTokens)} / ${num(m.windowTokens)} token — ${m.methodLabel}` : translate('Misura non ancora disponibile.');
+    q('measurement').textContent = m.known ? t('chat.context.measure.tokensWithMethod', { token: num(m.inputTokens), finestra: num(m.windowTokens), metodo: m.methodLabel }) : t('chat.context.measure.unavailable');
     q('input').textContent = num(m.inputTokens); q('window').textContent = num(m.windowTokens); q('reserve').textContent = num(m.responseReserve);
     q('job').textContent = view.jobLabel;
-    const p = view.job?.progress; q('progress').textContent = number(p?.completed) && number(p?.total) && p.total > 0 && p.completed <= p.total ? `${translate('Completati')} ${num(p.completed)} ${translate('di')} ${num(p.total)}` : '';
+    const p = view.job?.progress; q('progress').textContent = number(p?.completed) && number(p?.total) && p.total > 0 && p.completed <= p.total ? t('chat.context.progress.completedOf', { n: num(p.completed), totale: num(p.total) }) : '';
     const progress = q('progress-bar');
     progress.hidden = !ACTIVE.has(view.job?.state);
     progress.setAttribute('aria-label', view.jobLabel);
@@ -178,8 +171,8 @@ export function montaContextCompactor(root, { client, sessionId, state = null, d
     q('job-error').textContent = view.job?.error?.message ?? ''; q('job-error').hidden = !view.job?.error;
     renderSettings(); renderFacts(); renderVersions();
     const refs = snapshot?.activeVersion?.summary?.sources ?? []; const key = JSON.stringify(refs);
-    if (key !== sourcesKey) { sourcesKey = key; q('sources').replaceChildren(); if (!refs.length) q('sources').append(element('p', translate('Nessuna fonte nella sintesi attiva.'), 'talos-muted')); else sourceLinks(q('sources'), refs); }
-    q('semantic-status').textContent = translate(snapshot?.semanticStatus === 'ready' || snapshot?.semanticStatus?.available === true ? 'Ricerca semantica disponibile.' : 'Ricerca semantica non disponibile. La ricerca testuale resta attiva.');
+    if (key !== sourcesKey) { sourcesKey = key; q('sources').replaceChildren(); if (!refs.length) q('sources').append(element('p', t('chat.context.source.empty'), 'talos-muted')); else sourceLinks(q('sources'), refs); }
+    q('semantic-status').textContent = snapshot?.semanticStatus === 'ready' || snapshot?.semanticStatus?.available === true ? t('chat.context.semantic.available') : t('chat.context.semantic.unavailable');
     const focused = doc.activeElement;
     for (const node of root.querySelectorAll('[data-context-mutation]')) node.disabled = busy || !available;
     q('start').disabled = busy || !available || !view.canCompact; q('regenerate').disabled = busy || !available || !view.canCompact || !snapshot?.activeVersion;
@@ -187,7 +180,7 @@ export function montaContextCompactor(root, { client, sessionId, state = null, d
     q('native').disabled = busy || !available || snapshot?.capabilities?.nativeCompaction !== true;
     q('native-help').hidden = snapshot?.capabilities?.nativeCompaction === true;
     root.setAttribute('aria-busy', String(busy));
-    root.querySelector('[data-context-close]').setAttribute('aria-label', translate('Chiudi'));
+    root.querySelector('[data-context-close]').setAttribute('aria-label', t('chat.common.close'));
     if (modoLegacy) renderLegacy(); else { delete root.dataset.contextModo; root.querySelector('[data-context-conferma-legacy]')?.remove(); }
     // `doc.activeElement === focused`: se il render ha già spostato il fuoco (la conferma lo porta su «Sì, compatta»), non si ruba
     if (opened && focused?.disabled && root.contains(focused) && doc.activeElement === focused) q('title').focus({ preventScroll: true });
@@ -202,29 +195,29 @@ export function montaContextCompactor(root, { client, sessionId, state = null, d
     const known = input != null && finestra != null;
     q('meter').hidden = !known;
     if (known) { q('meter').max = finestra; q('meter').value = Math.min(input, finestra); q('meter').setAttribute('aria-valuetext', `${num(input)} / ${num(finestra)}`); }
-    const soglia = number(m?.soglia) && m.soglia > 0 ? ` · ${translate('compattazione automatica oltre')} ${num(m.soglia)}` : '';
-    q('measurement').textContent = input == null ? translate('Misura non ancora disponibile.')
-      : `${known ? `${num(input)} / ${num(finestra)}` : num(input)} token — ${translate('misurati all’ultima richiesta al modello')}${soglia}`;
+    const soglia = number(m?.soglia) && m.soglia > 0 ? ` · ${t('chat.context.measure.autoAbove')} ${num(m.soglia)}` : '';
+    q('measurement').textContent = input == null ? t('chat.context.measure.unavailable')
+      : t('chat.context.measure.tokensLegacy', { token: known ? `${num(input)} / ${num(finestra)}` : num(input), misura: t('chat.context.measure.lastRequest'), soglia });
     q('input').textContent = num(input); q('window').textContent = num(finestra);
     const inCorso = Boolean(legacy?.inCorso?.(sessionId));
     const errore = !inCorso && esitoLegacy?.stato === 'errore';
-    q('job').textContent = translate(inCorso ? 'Riassumo la conversazione…'
-      : esitoLegacy?.stato === 'riassunta' ? 'Conversazione riassunta. La misura si aggiorna alla prossima risposta.'
-        : esitoLegacy?.stato === 'invariata' ? 'Il server non ha riassunto la conversazione: resta com’era.'
-          : errore ? 'Conversazione non riassunta.' : 'Nessuna compattazione in corso.');
+    q('job').textContent = inCorso ? t('chat.context.summarizing')
+      : esitoLegacy?.stato === 'riassunta' ? t('chat.context.legacy.summarizedWithUpdate')
+        : esitoLegacy?.stato === 'invariata' ? t('chat.context.legacy.unchanged')
+          : errore ? t('chat.context.legacy.notSummarized') : t('chat.context.noCompaction');
     q('progress').textContent = '';
-    const bar = q('progress-bar'); bar.hidden = !inCorso; bar.removeAttribute('value'); bar.setAttribute('aria-label', translate('Riassunto della conversazione in corso'));
-    q('job-error').hidden = !errore; q('job-error').textContent = errore ? (esitoLegacy.messaggio || translate('Operazione non riuscita.')) : '';
+    const bar = q('progress-bar'); bar.hidden = !inCorso; bar.removeAttribute('value'); bar.setAttribute('aria-label', t('chat.context.summaryInProgress'));
+    q('job-error').hidden = !errore; q('job-error').textContent = errore ? (esitoLegacy.messaggio || t('chat.common.operationFailed')) : '';
     q('start').disabled = busy || inCorso || confermaLegacy || !sessionId;
     let blocco = root.querySelector('[data-context-conferma-legacy]');
     if (!confermaLegacy || inCorso) { blocco?.remove(); return; }
     if (blocco) return;
     blocco = element('div', null, 'talos-context__conflict'); blocco.dataset.contextConfermaLegacy = '';
-    blocco.setAttribute('role', 'group'); blocco.setAttribute('aria-label', translate('Compatta ora'));
-    const testo = element('p', translate('Compattare adesso la conversazione? Il modello vedrà un riassunto al posto dei messaggi più vecchi; nella chat i messaggi restano visibili.'));
+    blocco.setAttribute('role', 'group'); blocco.setAttribute('aria-label', t('chat.context.compactNow'));
+    const testo = element('p', t('chat.context.legacy.confirm'));
     const azioni = element('div', null, 'talos-context__actions');
-    const si = element('button', translate('Sì, compatta'), 'talos-button talos-button--primary'); si.type = 'button'; si.dataset.contextConfermaSi = '';
-    const no = element('button', translate('Annulla'), 'talos-button talos-button--ghost'); no.type = 'button'; no.dataset.contextConfermaNo = '';
+    const si = element('button', t('chat.context.legacy.confirmYes'), 'talos-button talos-button--primary'); si.type = 'button'; si.dataset.contextConfermaSi = '';
+    const no = element('button', t('chat.common.cancel'), 'talos-button talos-button--ghost'); no.type = 'button'; no.dataset.contextConfermaNo = '';
     si.addEventListener('click', () => { void confermaCompattazioneLegacy(); });
     no.addEventListener('click', () => { confermaLegacy = false; render(); q('start').focus({ preventScroll: true }); });
     azioni.append(si, no); blocco.append(testo, azioni);
@@ -253,9 +246,9 @@ export function montaContextCompactor(root, { client, sessionId, state = null, d
   function schedule() { clearTimeout(timer); if (opened && !destroyed && ACTIVE.has(descriviContextCompactor(snapshot).job?.state)) timer = setTimeout(() => refresh(), 1200); }
   async function refresh({ quiet = false } = {}) {
     if (destroyed || busy) return null;
-    if (!sessionId) { available = false; render(); say(translate('Apri una conversazione per gestirne il contesto.')); return null; }
+    if (!sessionId) { available = false; render(); say(t('chat.context.openConversationFirst')); return null; }
     const current = epoch, ticket = ++sequence;
-    if (!quiet) say(translate('Caricamento del contesto…'));
+    if (!quiet) say(t('chat.context.loading'));
     try {
       const [next, history] = await Promise.all([client.getContextState(requestOptions()), client.listContextVersions(requestOptions())]);
       if (current !== epoch || ticket !== sequence || destroyed) return null;
@@ -266,10 +259,10 @@ export function montaContextCompactor(root, { client, sessionId, state = null, d
       if (current !== epoch || ticket !== sequence || destroyed || error.name === 'AbortError') return null;
       if (error.code === 'CTX_NOT_ENABLED' && legacy) {
         available = false; modoLegacy = true; render(); clearTimeout(timer);
-        say(translate('Qui puoi compattare la conversazione a mano. Fatti da non dimenticare, versioni e impostazioni avanzate non sono attivi per questa conversazione.'));
+        say(t('chat.context.legacy.simpleMode'));
         void aggiornaMisuraLegacy(current); return null;
       }
-      modoLegacy = false; available = false; render(); say(translate(error.code === 'CTX_NOT_ENABLED' ? 'Context Manager non è ancora attivo per questa conversazione. Nessun messaggio è stato modificato.' : 'Contesto non disponibile. Usa Aggiorna per riprovare.'), error.code !== 'CTX_NOT_ENABLED'); clearTimeout(timer); return null;
+      modoLegacy = false; available = false; render(); say(error.code === 'CTX_NOT_ENABLED' ? t('chat.context.notEnabled') : t('chat.context.unavailable'), error.code !== 'CTX_NOT_ENABLED'); clearTimeout(timer); return null;
     }
   }
   async function mutate(action, success) {
@@ -283,9 +276,9 @@ export function montaContextCompactor(root, { client, sessionId, state = null, d
       if (current !== epoch || destroyed) return;
       busy = false;
       if (error.name !== 'AbortError') {
-        if (error.code === 'CTX_NOTHING_TO_COMPACT') say(translate('Non ci sono scambi precedenti da compattare mantenendo intero l’ultimo scambio. Nessun messaggio è stato modificato.'));
-        else if (error.code === 'CTX_STALE_REVISION') { await refresh({ quiet: true }); say(translate('Il contesto è cambiato. I dati sono aggiornati: verifica e ripeti la modifica.'), true); }
-        else say(translate('Operazione non riuscita. Usa Aggiorna per verificare lo stato prima di riprovare.'), true);
+        if (error.code === 'CTX_NOTHING_TO_COMPACT') say(t('chat.context.nothingToCompact'));
+        else if (error.code === 'CTX_STALE_REVISION') { await refresh({ quiet: true }); say(t('chat.context.staleRevision'), true); }
+        else say(t('chat.context.operationFailedRefresh'), true);
       }
       render();
     }
@@ -299,18 +292,18 @@ export function montaContextCompactor(root, { client, sessionId, state = null, d
   listen(q('regenerate'), 'click', () => mutate(() => client.startCompaction(requestOptions({ kind: 'regenerate' }))));
   listen(q('cancel'), 'click', () => mutate(() => client.cancelCompaction(requestOptions({ jobId: descriviContextCompactor(snapshot).job.id }))));
   listen(q('resume'), 'click', () => mutate(() => client.resumeCompaction(requestOptions({ jobId: descriviContextCompactor(snapshot).job.id }))));
-  listen(q('fact-form'), 'submit', event => { event.preventDefault(); const text = q('fact-text').value.trim(); if (!text) return; mutate(() => client.upsertProtectedFact(requestOptions({ fact: { ...(editingId ? { id: editingId } : {}), text, sources: editingSources } })), () => { resetEditor(); say(translate('Fatto salvato.')); }); });
+  listen(q('fact-form'), 'submit', event => { event.preventDefault(); const text = q('fact-text').value.trim(); if (!text) return; mutate(() => client.upsertProtectedFact(requestOptions({ fact: { ...(editingId ? { id: editingId } : {}), text, sources: editingSources } })), () => { resetEditor(); say(t('chat.context.facts.saved')); }); });
   listen(q('fact-cancel'), 'click', resetEditor);
   listen(q('settings'), 'input', () => { settingsDirty = true; });
   listen(q('model-mode'), 'change', () => { settingsDirty = true; q('explicit-model').hidden = q('model-mode').value !== 'explicit'; });
   listen(q('settings'), 'submit', event => {
     event.preventDefault();
     const triggerRatio = Number(q('trigger').value) / 100, targetRatio = Number(q('target').value) / 100;
-    if (!(targetRatio > 0 && targetRatio < triggerRatio && triggerRatio < 1)) { say(translate('L’obiettivo deve essere inferiore alla soglia di avvio.'), true); return; }
+    if (!(targetRatio > 0 && targetRatio < triggerRatio && triggerRatio < 1)) { say(t('chat.context.settings.targetBelowStart'), true); return; }
     const model = q('model-mode').value === 'explicit' ? { mode: 'explicit', provider: q('provider').value.trim(), model: q('model').value.trim() } : { mode: 'follow-session' };
     if (model.mode === 'explicit' && (!model.provider || !model.model)) { q(!model.provider ? 'provider' : 'model').focus(); return; }
     const patch = { model, triggerRatio, targetRatio, retainRecentTurns: Number(q('recent').value), focus: q('focus').value, semanticSearch: q('semantic').checked, nativeMode: q('native').checked ? 'qualified' : 'off' };
-    mutate(() => client.updateContextSettings(requestOptions({ patch })), () => { settingsDirty = false; say(translate('Impostazioni salvate.')); });
+    mutate(() => client.updateContextSettings(requestOptions({ patch })), () => { settingsDirty = false; say(t('chat.context.settings.saved')); });
   });
   function close() {
     if (!opened) return;

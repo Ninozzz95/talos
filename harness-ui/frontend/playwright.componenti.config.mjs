@@ -64,7 +64,7 @@ export default defineConfig({
   reporter: [['list'], ['json', { outputFile: 'artifacts/parita-componenti.json' }]],
   // Le fixture temporali sono istanti UTC; il mockup documenta il formato locale italiano.
   // Fissare la zona rende la parita identica su workstation Windows e runner Linux.
-  use: { channel: 'chrome', headless: true, trace: 'retain-on-failure', timezoneId: 'Europe/Rome' },
+  use: { channel: 'chrome', headless: true, trace: 'retain-on-failure', timezoneId: 'Europe/Rome', locale: 'it-IT' }, // 03/10: la lingua delle prove, vedi playwright.config.mjs
   projects: viewports.map(([name, viewport]) => ({ name, use: { viewport } })),
   webServer: [
     {

@@ -22,6 +22,7 @@
  *   e il titolo ripeteva lo stesso testo tagliato — il messaggio intero non si leggeva da nessuna parte. La riga si accorcia da
  *   sola (ellissi del foglio di stile) alla larghezza che ha; qui restano solo due tetti contro un messaggio lunghissimo nel DOM.
  */
+import { t } from './lingua.js';
 const LUNGHEZZA_ANTEPRIMA = 200;
 const LUNGHEZZA_TITOLO = 1000;
 
@@ -63,7 +64,7 @@ export function descriviCoda(stato, { giroVivo = false } = {}) {
   if (voci.length === 0) return null;
   const delega = voci[0].origine === 'delega';
   const risultato = delega ? descriviRisultatoDelega(voci[0].testo, voci[0].childId) : null;
-  const origine = delega ? 'Risultato di un agente · ' : '';
+  const origine = delega ? t('chat.queue.agentResultPrefix') : '';
   const testo = risultato ? `${risultato.titolo}: ${risultato.testo}` : voci[0].testo;
   const anteprima = `${origine}«${accorcia(testo, LUNGHEZZA_ANTEPRIMA)}»`;
   const intero = `${origine}«${accorcia(testo, LUNGHEZZA_TITOLO)}»`;
@@ -75,14 +76,14 @@ export function descriviCoda(stato, { giroVivo = false } = {}) {
    *   del 02/09/2026, letto il 14/09/2026).
    */
   const azione = giroVivo
-    ? { azione: 'Indirizza ora', titoloAzione: 'Lo porta dentro il giro in corso, come correzione' }
-    : { azione: 'Invia ora', titoloAzione: 'Riprende la conversazione con questo messaggio' };
+    ? { azione: t('chat.queue.steerNow'), titoloAzione: t('chat.queue.steerNowTitle') }
+    : { azione: t('chat.queue.sendNow'), titoloAzione: t('chat.queue.sendNowTitle') };
   if (inPausa) {
-    const spiegazione = 'In pausa dallo stop: parte solo se lo invii tu';
-    return { conteggio: `${voci.length} in pausa`, tono: 'attenzione', testo: anteprima, spiegazione, titoloTesto: `${intero} — ${spiegazione}`, ...azione };
+    const spiegazione = t('chat.queue.pausedExplanation');
+    return { conteggio: t('chat.queue.pausedCount', { n: voci.length }), tono: 'attenzione', testo: anteprima, spiegazione, titoloTesto: `${intero} — ${spiegazione}`, ...azione };
   }
-  const spiegazione = 'Parte quando TALOS finisce di rispondere';
-  return { conteggio: `${voci.length} in coda`, tono: 'neutro', testo: anteprima, spiegazione, titoloTesto: `${intero} — ${spiegazione}`, ...azione };
+  const spiegazione = t('chat.queue.queuedExplanation');
+  return { conteggio: t('chat.queue.queuedCount', { n: voci.length }), tono: 'neutro', testo: anteprima, spiegazione, titoloTesto: `${intero} — ${spiegazione}`, ...azione };
 }
 
 /** Presentazione del contratto emesso dal registro: mai istruzioni e mai HTML. */
@@ -90,7 +91,7 @@ export function descriviRisultatoDelega(testo, childId) {
   if (typeof testo !== 'string' || testo.length > 1000000 || typeof childId !== 'string') return null;
   try {
     const p = JSON.parse(testo.slice(testo.indexOf('\n') + 1));
-    if (p?.schema !== 'talos.subagent-result.v1' || p.childId !== childId || !['concluso','non concluso'].includes(p.stato) || typeof p.risultatoNonFidato !== 'string') return null;
-    return { titolo: typeof p.compito === 'string' && p.compito.trim() ? p.compito : 'Sotto-agente', testo: p.risultatoNonFidato, errore: p.stato !== 'concluso' };
+    if (p?.schema !== 'talos.subagent-result.v1' || p.childId !== childId || !['concluso', /* lingua: valore del protocollo del kernel (talos.subagent-result.v1), mai a schermo */ 'non concluso'].includes(p.stato) || typeof p.risultatoNonFidato !== 'string') return null;
+    return { titolo: typeof p.compito === 'string' && p.compito.trim() ? p.compito : t('chat.queue.subAgent'), testo: p.risultatoNonFidato, errore: p.stato !== 'concluso' };
   } catch { return null; }
 }

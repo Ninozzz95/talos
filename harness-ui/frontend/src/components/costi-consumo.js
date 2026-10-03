@@ -30,6 +30,7 @@
  * sessioni, e questa pagina non deve rifare lo stesso errore.
  */
 // H22: il nome umano del modello vive in UN posto solo, quello che usa già la Board.
+import { t as traduci, tn, linguaCorrenteDiT } from './lingua.js';
 import { nomeModello } from './session-item.js';
 /*
  * ⛔⛔⛔ 06/9, CB-04 — questa pagina sommava `usage`, che è il consumo del SOLO
@@ -41,14 +42,16 @@ import { nomeModello } from './session-item.js';
  */
 import { usageDellaSessione, testoRiusoCache, giriDellaSessione } from './consumo-sessione.js';
 
-const NUM = new Intl.NumberFormat('it-IT');
+/* Numeri e date nella lingua dell'interfaccia (italiano → it-IT, inglese → en-US), letti a ogni uso. */
+const localeUI = () => (linguaCorrenteDiT() === 'en' ? 'en-US' : 'it-IT');
+const NUM = { format: (n) => new Intl.NumberFormat(localeUI()).format(n) };
 
-/** Compatto: 12.345 → «12,3 k». Le cifre lunghe non si leggono in una tabella. */
+/** Compatto: 12.345 → «12,3 k» (inglese «12.3 k»). Le cifre lunghe non si leggono in una tabella. */
 export function compatto(n) {
   const v = Number(n);
   if (!Number.isFinite(v) || v < 0) return '—';
-  if (v >= 1_000_000) return `${new Intl.NumberFormat('it-IT', { maximumFractionDigits: 1 }).format(v / 1_000_000)} M`;
-  if (v >= 1_000) return `${new Intl.NumberFormat('it-IT', { maximumFractionDigits: 1 }).format(v / 1_000)} k`;
+  if (v >= 1_000_000) return `${new Intl.NumberFormat(localeUI(), { maximumFractionDigits: 1 }).format(v / 1_000_000)} M`;
+  if (v >= 1_000) return `${new Intl.NumberFormat(localeUI(), { maximumFractionDigits: 1 }).format(v / 1_000)} k`;
   return NUM.format(v);
 }
 
@@ -137,23 +140,23 @@ function el(d, tag, classe, testo) { const n = d.createElement(tag); if (classe)
 
 function badge(d, testo, tono) { const b = el(d, 'span', `talos-badge talos-badge--sm${tono ? ` talos-badge--${tono}` : ''}`, testo); b.dataset.c = 'Badge'; return b; }
 
-/** Una data `AAAA-MM-GG` in parole italiane brevi: «6 set». */
+/** Una data `AAAA-MM-GG` in parole brevi nella lingua corrente: «6 set» / «Sep 6». */
 export function giornoUmano(chiave, oggi = new Date()) {
   const [a, m, g] = String(chiave).split('-').map(Number);
   if (!a || !m || !g) return String(chiave);
   const d = new Date(a, m - 1, g);
   const stesso = (x, y) => x.getFullYear() === y.getFullYear() && x.getMonth() === y.getMonth() && x.getDate() === y.getDate();
   const ieri = new Date(oggi); ieri.setDate(ieri.getDate() - 1);
-  if (stesso(d, oggi)) return 'oggi';
-  if (stesso(d, ieri)) return 'ieri';
-  return d.toLocaleDateString('it-IT', { day: 'numeric', month: 'short' });
+  if (stesso(d, oggi)) return traduci('varie.costs.day.today');
+  if (stesso(d, ieri)) return traduci('varie.costs.day.yesterday');
+  return d.toLocaleDateString(localeUI(), { day: 'numeric', month: 'short' });
 }
 
 function riempiTabella(tabella, righe, etichettaDi, { document: d = globalThis.document } = {}) {
   const corpo = tabella?.querySelector('tbody');
   if (!corpo) return;
   if (!righe.length) {
-    const tr = d.createElement('tr'); const td = el(d, 'td', 'talos-muted', 'Nessuna sessione registrata su questo computer.');
+    const tr = d.createElement('tr'); const td = el(d, 'td', 'talos-muted', traduci("varie.costs.table.empty"));
     td.colSpan = 5; tr.appendChild(td); corpo.replaceChildren(tr); return;
   }
   corpo.replaceChildren(...righe.map((r) => {
@@ -174,22 +177,22 @@ export function aggiornaCosti(pannello, sessioni = [], { document: d = globalThi
   const riepilogo = pannello.querySelector('#costiRiepilogo');
   if (riepilogo) {
     const voci = [
-      badge(d, `${NUM.format(tot.sessioni)} ${tot.sessioni === 1 ? 'sessione' : 'sessioni'}`, 'accent'),
-      badge(d, `${NUM.format(tot.giri)} ${tot.giri === 1 ? 'giro' : 'giri'}`),
-      badge(d, `${compatto(tot.token)} token`),
-      badge(d, `${compatto(tot.cache)} in cache`),
+      badge(d, tn('varie.costs.badge.sessionsOne', 'varie.costs.badge.sessionsMany', tot.sessioni, { n: NUM.format(tot.sessioni) }), 'accent'),
+      badge(d, tn('varie.costs.badge.turnsOne', 'varie.costs.badge.turnsMany', tot.giri, { n: NUM.format(tot.giri) })),
+      badge(d, traduci('varie.costs.badge.tokens', { n: compatto(tot.token) })),
+      badge(d, traduci('varie.costs.badge.inCache', { n: compatto(tot.cache) })),
     ];
     /*
      * ⛔ La riga che dice CHI MANCA. Senza, un totale che ignora venti sessioni
      * mute si legge come il totale di tutte.
      */
-    if (tot.senzaToken) voci.push(badge(d, `${NUM.format(tot.senzaToken)} senza token registrati`, 'warning'));
-    if (tot.giriFermati) voci.push(badge(d, `${NUM.format(tot.giriFermati)} ${tot.giriFermati === 1 ? 'giro fermato' : 'giri fermati'} senza token`, 'warning'));
-    if (tot.senzaModello) voci.push(badge(d, `${NUM.format(tot.senzaModello)} senza modello`, 'warning'));
-    if (tot.senzaData) voci.push(badge(d, `${NUM.format(tot.senzaData)} senza data`, 'warning'));
+    if (tot.senzaToken) voci.push(badge(d, traduci('varie.costs.badge.noTokens', { n: NUM.format(tot.senzaToken) }), 'warning'));
+    if (tot.giriFermati) voci.push(badge(d, tn('varie.costs.badge.stoppedTurnsOne', 'varie.costs.badge.stoppedTurnsMany', tot.giriFermati, { n: NUM.format(tot.giriFermati) }), 'warning'));
+    if (tot.senzaModello) voci.push(badge(d, traduci('varie.costs.badge.noModel', { n: NUM.format(tot.senzaModello) }), 'warning'));
+    if (tot.senzaData) voci.push(badge(d, traduci('varie.costs.badge.noDate', { n: NUM.format(tot.senzaData) }), 'warning'));
     // La sessione è scelta dalla chat, mai indovinata dalla data o dall'ordine dell'elenco.
     const aperta = sessioneId ? sessioni.find(s => s.sessionId === sessioneId) : null;
-    const cache = el(d, 'p', 'talos-muted', `Sessione aperta · Riusato dalla cache · ${testoRiusoCache(aperta?.cacheSessione)}`);
+    const cache = el(d, 'p', 'talos-muted', traduci("varie.costs.cacheReuse", { text: testoRiusoCache(aperta?.cacheSessione) }));
     cache.dataset.cacheSessione = '';
     voci.push(cache);
     riepilogo.replaceChildren(...voci);

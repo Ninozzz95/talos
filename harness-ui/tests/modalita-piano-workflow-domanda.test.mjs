@@ -823,7 +823,7 @@ test('D1-CHILD-MODE-READ-AT-EACH-CALL — il modo del padre cambia A METÀ del g
   assert.match(esiti[1], /Plan mode is active/);
   // Il cancello cambia, il prompt no: lista e messaggio di sistema restano quelli d'avvio (la cache per prefisso regge).
   assert.equal(giri, 3);
-  assert.equal(JSON.stringify(ultimoCorpo.messages).includes('Modalità Piano attiva'), false);
+  assert.equal(JSON.stringify(ultimoCorpo.messages).includes('Plan mode is on'), false);
   registro.ferma(childId); registro.ferma(parentId);
 });
 
@@ -1121,7 +1121,7 @@ test('PLAN-APPROVE-CONTINUES-TURN: dopo «procedi accettando le modifiche» lo S
   const esitoPiano = risultato.messaggiFinali.find((m) => m.role === 'tool' && m.tool_call_id === 'call_piano');
   assert.match(esitoPiano.content, /approved/u);
   assert.match(esitoPiano.content, /revision 1/u);
-  const secondaChiamata = risultato.messaggiFinali.find((m) => m.role === 'system' && /Modalità Piano attiva/u.test(m.content ?? ''));
+  const secondaChiamata = risultato.messaggiFinali.find((m) => m.role === 'system' && /Plan mode is on/u.test(m.content ?? ''));
   assert.equal(secondaChiamata, undefined, 'l’istruzione del Piano non resta nella storia');
 });
 

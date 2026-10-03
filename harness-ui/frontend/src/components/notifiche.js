@@ -15,25 +15,27 @@
  * il fuoco va alla prima riga (o alla chiusura se non ce ne sono).
  */
 
+import { t as traduci } from './lingua.js';
+/* ⛔ Le etichette si leggono a ogni uso (getter), non alla creazione del modulo: seguono il cambio di lingua. */
 export const ETICHETTE_NOTIFICA = Object.freeze({
-  approvazione: 'aspetta la tua approvazione',
-  conclusa: 'ha finito',
-  interrotta: 'si è interrotta',
+  get approvazione() { return traduci('sezioni.notifications.state.approval'); },
+  get conclusa() { return traduci('sezioni.notifications.state.finished'); },
+  get interrotta() { return traduci('sezioni.notifications.state.interrupted'); },
 });
 export const GLIFI_NOTIFICA = Object.freeze({ approvazione: 'i-shield', conclusa: 'i-check', interrotta: 'i-stop' });
 
 export function titoloNotifiche(quante) {
-  return quante > 0 ? 'Aspetta te' : 'Notifiche';
+  return quante > 0 ? traduci('sezioni.notifications.title.waiting') : traduci('sezioni.notifications.title.none');
 }
 export function sommarioNotifiche(quante) {
-  if (quante === 0) return 'Nessuna notifica: nessun\'altra sessione chiede attenzione.';
-  if (quante === 1) return 'Una richiesta da decidere.';
-  return `${quante} cose aspettano te.`;
+  if (quante === 0) return traduci('sezioni.notifications.summary.none');
+  if (quante === 1) return traduci('sezioni.notifications.summary.one');
+  return traduci('sezioni.notifications.summary.many', { n: quante });
 }
 /** Il nome accessibile del campanello: dice QUANTE, come nel mockup («Notifiche: 1 cosa aspetta te»). */
 export function nomeCampanella(quante) {
-  if (quante === 0) return 'Notifiche: nessuna';
-  return `Notifiche: ${quante === 1 ? '1 cosa aspetta' : `${quante} cose aspettano`} te`;
+  if (quante === 0) return traduci('sezioni.notifications.bell.none');
+  return quante === 1 ? traduci('sezioni.notifications.bell.one') : traduci('sezioni.notifications.bell.many', { n: quante });
 }
 
 function el(documentObj, tag, classe, testo) {
@@ -78,7 +80,7 @@ export function aggiornaPannelloNotifiche(pannello, notifiche = [], { ora = () =
     const ic = el(documentObj, 'span', 'talos-list-row__icon'); ic.appendChild(icona(documentObj, GLIFI_NOTIFICA[stato] || 'i-bell'));
     const testo = el(documentObj, 'span', 'talos-list-row__text');
     testo.append(
-      el(documentObj, 'span', 'talos-list-row__title', sessione?.nome || sessione?.taskId || 'Sessione'),
+      el(documentObj, 'span', 'talos-list-row__title', sessione?.nome || sessione?.taskId || traduci("sezioni.notifications.sessionFallback")),
       el(documentObj, 'span', 'talos-list-row__sub', [ETICHETTE_NOTIFICA[stato] || stato, ora(sessione)].filter(Boolean).join(' · ')),
     );
     b.append(ic, testo);
@@ -89,7 +91,7 @@ export function aggiornaPannelloNotifiche(pannello, notifiche = [], { ora = () =
   if (notifiche.length > 0) {
     tutte = el(documentObj, 'button', 'talos-button talos-button--ghost talos-button--sm');
     tutte.type = 'button'; tutte.dataset.azione = 'segna-tutte';
-    tutte.append(icona(documentObj, 'i-check'), documentObj.createTextNode(' Segna tutte come viste'));
+    tutte.append(icona(documentObj, 'i-check'), documentObj.createTextNode(` ${traduci('sezioni.notifications.markAllSeen')}`));
     pannello.appendChild(tutte);
   }
   // il piede del consenso resta l'ULTIMA cosa del pannello, sotto le righe e sotto «Segna tutte»
@@ -160,15 +162,15 @@ export function deveAvvisareFuoriDallaFinestra({ permesso, visibile, notifiche =
 
 /** Il testo di una notifica di sistema: titolo corto, corpo che dice cosa aspetta. */
 export function testoNotificaSistema(notifica) {
-  const nome = notifica?.sessione?.nome || notifica?.sessione?.taskId || 'Una sessione';
-  const cosa = ETICHETTE_NOTIFICA?.[notifica?.stato] || 'chiede attenzione';
-  return { titolo: 'TALOS · aspetta te', corpo: `${nome} — ${cosa}`, tag: `${notifica?.sessione?.sessionId}:${notifica?.stato}` };
+  const nome = notifica?.sessione?.nome || notifica?.sessione?.taskId || traduci('sezioni.notifications.system.aSession');
+  const cosa = ETICHETTE_NOTIFICA?.[notifica?.stato] || traduci('sezioni.notifications.system.needsAttention');
+  return { titolo: traduci('sezioni.notifications.system.title'), corpo: `${nome} — ${cosa}`, tag: `${notifica?.sessione?.sessionId}:${notifica?.stato}` };
 }
 
 /** Cosa scrivere sotto il pulsante, secondo lo stato del permesso. */
 export function statoConsensoNotifiche(permesso, supportato = true) {
-  if (!supportato) return { testo: 'Questo browser non manda notifiche di sistema.', chiedibile: false };
-  if (permesso === 'granted') return { testo: 'Attive: TALOS avvisa solo quando non è in primo piano.', chiedibile: false };
-  if (permesso === 'denied') return { testo: 'Negate nelle impostazioni del browser. Si riattivano da lì, non da qui.', chiedibile: false };
-  return { testo: 'Solo quando TALOS non è in primo piano.', chiedibile: true };
+  if (!supportato) return { testo: traduci('sezioni.notifications.consent.unsupported'), chiedibile: false };
+  if (permesso === 'granted') return { testo: traduci('sezioni.notifications.consent.granted'), chiedibile: false };
+  if (permesso === 'denied') return { testo: traduci('sezioni.notifications.consent.denied'), chiedibile: false };
+  return { testo: traduci('sezioni.notifications.consent.askable'), chiedibile: true };
 }

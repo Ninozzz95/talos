@@ -143,7 +143,9 @@ describe('F15 — la shell chiede davanti a un segreto, anche con «sempre»', (
     it('⭐⭐ Il portachiavi del sistema è nella classe — `cmdkey /list` chiede', async (t) => {
         const { domande } = await giroShell(t, 'cmdkey /list')
         assert.equal(domande.length, 1)
-        assert.ok(/portachiavi/i.test(domande[0].segreto?.frase ?? ''), 'la frase nomina il portachiavi, non un percorso')
+        /* K4b (03/10/2026): la frase arriva INGLESE con la sua chiave (l'italiano lo dice il dizionario dell'interfaccia) */
+        assert.ok(/keychain/i.test(domande[0].segreto?.frase ?? ''), 'la frase nomina il portachiavi, non un percorso')
+        assert.equal(domande[0].segreto?.fraseChiave, 'server.approval.command.keychain')
     })
 
     // ─────────────────────────────── 2. IL CONFINE STRETTO ───────────────────────────────

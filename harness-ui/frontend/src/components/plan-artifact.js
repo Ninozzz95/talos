@@ -1,3 +1,4 @@
+import { t } from './lingua.js';
 import { renderizzaMarkdown } from './markdown.js';
 
 /**
@@ -74,27 +75,27 @@ export function createPlanArtifact({
   section.dataset.source = source;
   if (planId) section.dataset.planId = planId;
   if (Number.isSafeInteger(revision)) section.dataset.revision = String(revision);
-  section.setAttribute('aria-label', status === 'proposed' ? 'Piano proposto' : 'Piano non disponibile');
+  section.setAttribute('aria-label', status === 'proposed' ? t('chat.plan.proposed') : t('chat.plan.unavailable'));
 
   const heading = document.createElement('div');
   heading.className = 'talos-plan-artifact__heading';
   const title = document.createElement('h3');
-  title.textContent = status === 'proposed' ? 'Piano proposto' : 'Piano non disponibile';
+  title.textContent = status === 'proposed' ? t('chat.plan.proposed') : t('chat.plan.unavailable');
   const state = document.createElement('span');
   state.className = 'talos-plan-artifact__state';
-  state.textContent = status !== 'proposed' ? 'Contenuto troppo lungo'
-    : approvabile ? 'Aspetta la tua scelta' + (Number.isSafeInteger(revision) ? ' · rev. ' + revision : '')
-      : 'Da rivedere';
+  state.textContent = status !== 'proposed' ? t('chat.plan.tooLong')
+    : approvabile ? t('chat.plan.waitingForChoice', { revisione: Number.isSafeInteger(revision) ? t('chat.plan.revision', { n: revision }) : '' })
+      : t('chat.plan.needsReview');
   heading.append(title, state);
 
   const body = document.createElement('div');
   body.className = 'talos-plan-artifact__body';
   body.tabIndex = 0;
-  body.setAttribute('aria-label', 'Contenuto del piano');
+  body.setAttribute('aria-label', t('chat.plan.content'));
   if (status === 'proposed') body.append(renderPlanText(text, { document }));
   else {
     const message = document.createElement('p');
-    message.textContent = 'Il piano supera il limite del servizio. Chiedi una versione più breve nella chat.';
+    message.textContent = t('chat.plan.tooLongHint');
     body.append(message);
   }
 
@@ -108,22 +109,22 @@ export function createPlanArtifact({
   const footer = document.createElement('p');
   footer.className = 'talos-plan-artifact__footer';
   footer.textContent = status === 'proposed'
-    ? 'Puoi chiedere modifiche nella chat. Questo piano non si approva da qui.'
-    : 'Nessun contenuto parziale viene mostrato come piano.';
+    ? t('chat.plan.cannotApproveHere')
+    : t('chat.plan.noPartialContent');
   section.append(heading, body, footer);
   return section;
 }
 
 /* Le quattro scelte (decisioni owner 3 e 37), nell'ordine dell'owner; ogni riga dice che cosa succede, in parole. */
 export const SCELTE_PIANO = Object.freeze([
-  Object.freeze({ decisione: 'procedi-con-conferma', titolo: 'Procedi chiedendo conferma',
-    descrizione: 'TALOS esce dal Piano e ti chiede il permesso prima di ogni scrittura.' }),
-  Object.freeze({ decisione: 'procedi-accetta-modifiche', titolo: 'Procedi accettando le modifiche',
-    descrizione: 'TALOS esce dal Piano e scrive nel progetto senza chiedere.' }),
-  Object.freeze({ decisione: 'conversazione-pulita', titolo: 'Procedi in una conversazione pulita',
-    descrizione: 'Una conversazione nuova parte dal solo piano e scrive nel progetto senza chiedere.' }),
-  Object.freeze({ decisione: 'continua-a-pianificare', titolo: 'Continua a pianificare',
-    descrizione: 'TALOS resta in Piano e rivede il piano con la tua correzione.' }),
+  Object.freeze({ decisione: 'procedi-con-conferma', get titolo() { return t('chat.plan.choice.askFirst.title'); },
+    get descrizione() { return t('chat.plan.choice.askFirst.description'); } }),
+  Object.freeze({ decisione: 'procedi-accetta-modifiche', get titolo() { return t('chat.plan.choice.acceptChanges.title'); },
+    get descrizione() { return t('chat.plan.choice.acceptChanges.description'); } }),
+  Object.freeze({ decisione: 'conversazione-pulita', get titolo() { return t('chat.plan.choice.freshConversation.title'); },
+    get descrizione() { return t('chat.plan.choice.freshConversation.description'); } }),
+  Object.freeze({ decisione: 'continua-a-pianificare', get titolo() { return t('chat.plan.choice.keepPlanning.title'); },
+    get descrizione() { return t('chat.plan.choice.keepPlanning.description'); } }),
 ]);
 
 function creaScelte({ document, requestId, hash, onDecisione, section }) {
@@ -135,8 +136,8 @@ function creaScelte({ document, requestId, hash, onDecisione, section }) {
   };
   const blocco = make('div', 'talos-plan-artifact__choices');
   blocco.setAttribute('role', 'group');
-  blocco.setAttribute('aria-label', 'Come vuoi procedere con il piano');
-  const domanda = make('p', 'talos-plan-artifact__ask', 'Come vuoi procedere?');
+  blocco.setAttribute('aria-label', t('chat.plan.proceedLabel'));
+  const domanda = make('p', 'talos-plan-artifact__ask', t('chat.plan.proceedQuestion'));
   const elenco = make('div', 'talos-plan-artifact__choice-list');
   const errore = make('p', 'talos-plan-artifact__error');
   errore.setAttribute('role', 'alert');
@@ -160,7 +161,7 @@ function creaScelte({ document, requestId, hash, onDecisione, section }) {
     catch (rotto) { esito = { ok: false, messaggio: rotto instanceof Error ? rotto.message : String(rotto) }; }
     delete section.dataset.inVolo;
     if (esito?.ok === false) {
-      errore.textContent = 'La scelta non è arrivata: ' + (esito.messaggio || 'riprova.');
+      errore.textContent = t('chat.plan.choiceFailed', { messaggio: esito.messaggio || t('chat.plan.tryAgain') });
       errore.hidden = false;
       abilita(true);
     }
@@ -189,17 +190,17 @@ function creaScelte({ document, requestId, hash, onDecisione, section }) {
        `[aria-expanded][aria-controls]` come una disclosure e la ribalta sullo stesso clic (app.js, «i `[aria-expanded][aria-controls]`
        sono disclosure»): due ribaltamenti = il campo non si apriva. `aria-expanded` da solo basta a un pulsante che apre un
        riquadro (WAI-ARIA APG, Disclosure pattern: `aria-controls` è facoltativo). */
-    const etichetta = make('label', 'talos-plan-artifact__feedback-label', 'Che cosa cambiare nel piano');
+    const etichetta = make('label', 'talos-plan-artifact__feedback-label', t('chat.plan.feedback.label'));
     etichetta.setAttribute('for', idCampo);
     const textarea = make('textarea', 'talos-textarea'); // l'area di testo del sistema (index.css), non la riga singola con icona
     textarea.id = idCampo;
     textarea.rows = 3;
     textarea.maxLength = 4_000;
-    textarea.placeholder = 'Per esempio: aggiungi i test prima di scrivere il file';
+    textarea.placeholder = t('chat.plan.feedback.placeholder');
     const azioni = make('div', 'talos-plan-artifact__feedback-actions');
-    const annulla = make('button', 'talos-button talos-button--ghost talos-button--sm', 'Annulla');
+    const annulla = make('button', 'talos-button talos-button--ghost talos-button--sm', t('chat.common.cancel'));
     annulla.type = 'button';
-    const inviaCorrezione = make('button', 'talos-button talos-button--primary talos-button--sm', 'Invia la correzione');
+    const inviaCorrezione = make('button', 'talos-button talos-button--primary talos-button--sm', t('chat.plan.feedback.send'));
     inviaCorrezione.type = 'button';
     azioni.append(annulla, inviaCorrezione);
     riquadro.append(etichetta, textarea, azioni);
@@ -227,16 +228,16 @@ function oraDi(at) {
 /* La frase della ricevuta: una per scelta, e per la chiusura senza scelta una per motivo. Mai «approvato» per ciò che non lo è. */
 function fraseDecisione(fact) {
   if (fact.status === 'approved') {
-    if (fact.decisione === 'procedi-con-conferma') return 'Hai approvato il piano: TALOS lo esegue chiedendo il permesso prima di ogni scrittura.';
-    if (fact.decisione === 'procedi-accetta-modifiche') return 'Hai approvato il piano: TALOS lo esegue e scrive nel progetto senza chiedere.';
-    return 'Hai approvato il piano: lo esegue una conversazione nuova, che parte dal solo piano.';
+    if (fact.decisione === 'procedi-con-conferma') return t('chat.plan.fact.approvedAskFirst');
+    if (fact.decisione === 'procedi-accetta-modifiche') return t('chat.plan.fact.approvedAcceptChanges');
+    return t('chat.plan.fact.approvedFresh');
   }
-  if (fact.status === 'changes-requested') return 'Hai chiesto di continuare a pianificare: TALOS rivede il piano.';
-  if (fact.motivo === 'fermato') return 'Chiuso senza scelta: hai fermato il giro.';
-  if (fact.motivo === 'reindirizzamento') return 'Chiuso senza scelta: hai dato una nuova indicazione mentre aspettava.';
-  if (fact.motivo === 'nuovo-messaggio') return 'Chiuso senza scelta: hai scritto un altro messaggio.';
-  if (fact.motivo === 'interrotta') return 'Chiuso senza scelta: il server si è riavviato e il piano non si poteva più riprendere.';
-  return 'Chiuso senza scelta.';
+  if (fact.status === 'changes-requested') return t('chat.plan.fact.keepPlanning');
+  if (fact.motivo === 'fermato') return t('chat.plan.fact.closed.stopped');
+  if (fact.motivo === 'reindirizzamento') return t('chat.plan.fact.closed.redirected');
+  if (fact.motivo === 'nuovo-messaggio') return t('chat.plan.fact.closed.newMessage');
+  if (fact.motivo === 'interrotta') return t('chat.plan.fact.closed.interrupted');
+  return t('chat.plan.fact.closed.generic');
 }
 
 /*
@@ -255,15 +256,15 @@ export function applicaDecisionePiano(section, fact, { document = globalThis.doc
   };
   section.dataset.status = fact.status;
   delete section.dataset.approvabile;
-  const rev = Number.isSafeInteger(fact.revision) ? ' · rev. ' + fact.revision : '';
-  const etichetta = fact.status === 'approved' ? 'Approvato' + rev
-    : fact.status === 'changes-requested' ? 'Da rivedere' + rev : 'Chiuso senza scelta';
+  const rev = Number.isSafeInteger(fact.revision) ? t('chat.plan.revision', { n: fact.revision }) : '';
+  const etichetta = fact.status === 'approved' ? t('chat.common.approved') + rev
+    : fact.status === 'changes-requested' ? t('chat.plan.needsReview') + rev : t('chat.plan.closedWithoutChoice');
   const stato = section.querySelector?.('.talos-plan-artifact__state');
   if (stato) stato.textContent = etichetta;
   // 24/09/2026, visto nella foto del giro vero: dopo la scelta il titolo diceva ancora «Piano proposto» accanto ad «Approvato».
   const titolo = section.querySelector?.('.talos-plan-artifact__heading')?.children?.[0] ?? null;
-  if (titolo) titolo.textContent = fact.status === 'approved' ? 'Piano approvato' : fact.status === 'changes-requested' ? 'Piano da rivedere' : 'Piano chiuso';
-  section.setAttribute('aria-label', 'Piano: ' + etichetta);
+  if (titolo) titolo.textContent = fact.status === 'approved' ? t('chat.plan.title.approved') : fact.status === 'changes-requested' ? t('chat.plan.title.needsReview') : t('chat.plan.title.closed');
+  section.setAttribute('aria-label', t('chat.plan.ariaLabel', { stato: etichetta }));
   const ricevuta = make('div', 'talos-plan-artifact__receipt');
   ricevuta.setAttribute('role', 'status');
   ricevuta.append(make('p', 'talos-plan-artifact__receipt-line', fraseDecisione(fact)));
@@ -271,12 +272,12 @@ export function applicaDecisionePiano(section, fact, { document = globalThis.doc
     ricevuta.append(make('p', 'talos-plan-artifact__receipt-feedback', '«' + fact.feedback + '»'));
   }
   const meta = [];
-  if (fact.status === 'approved' && typeof fact.hash === 'string') meta.push('Impronta ' + fact.hash.slice(7, 19));
+  if (fact.status === 'approved' && typeof fact.hash === 'string') meta.push(t('chat.plan.hash', { hash: fact.hash.slice(7, 19) }));
   const quando = oraDi(fact.at);
-  if (quando) meta.push((fact.da === 'sistema' ? 'Chiuso dal sistema alle ' : fact.status === 'cancelled' ? 'Alle ' : 'Scelto alle ') + quando);
+  if (quando) meta.push(t('chat.plan.meta.timeLine', { azione: fact.da === 'sistema' ? t('chat.plan.meta.closedBySystemAt') : fact.status === 'cancelled' ? t('chat.plan.meta.cancelledAt') : t('chat.plan.meta.chosenAt'), ora: quando }));
   if (meta.length) ricevuta.append(make('p', 'talos-plan-artifact__receipt-meta', meta.join(' · ')));
   if (fact.status === 'approved' && fact.nuovaSessionId && typeof onApriSessione === 'function') {
-    const apri = make('button', 'talos-button talos-button--secondary talos-button--sm', 'Apri la conversazione nuova');
+    const apri = make('button', 'talos-button talos-button--secondary talos-button--sm', t('chat.plan.openNewConversation'));
     apri.type = 'button';
     apri.dataset.sessionId = fact.nuovaSessionId;
     apri.addEventListener('click', () => onApriSessione(fact.nuovaSessionId));

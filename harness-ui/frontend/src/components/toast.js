@@ -1,3 +1,4 @@
+import { t } from './lingua.js';
 /*
  * Toast — il messaggio breve in basso a destra, nel linguaggio del mockup
  * (`.talos-card.talos-toast`, `data-c="Toast"`, dentro `#regioneToast`).
@@ -41,9 +42,11 @@ export const MASSIMO_IN_PILA = 3;
  */
 export function tonoDaTitolo(titolo = '') {
   const t = String(titolo).toLowerCase();
-  if (/non riuscit|non eseguit|non liberat|errore|guasto|fallit|interrott|negat/.test(t)) return 'guasto';
-  if (/attenzione|avviso|scad|limite/.test(t)) return 'avviso';
-  if (/riuscit|copiat|salvat|creat|inviat|pronto|pronta|aggiornat|eliminat|rinominat|esportat|spostat|liberat|fatto/.test(t)) return 'riuscito';
+  /* ⛔ Il titolo è nella lingua della persona: le stesse tre famiglie in italiano e in inglese (le parole inglesi con i confini, perché
+     «sent» dentro «consent» non è un invio). In italiano il risultato è quello di sempre: provato su tutte le 980 voci di `en.js`. */
+  if (/non riuscit|non eseguit|non liberat|errore|guasto|fallit|interrott|negat|\b(?:failed|errors?|fault|interrupted|denied|unable|couldn[’']t|not (?:run|released|saved|executed))\b/.test(t)) return 'guasto';
+  if (/attenzione|avviso|scad|limite|\b(?:attention|warning|notice|expires?|expired|limit)\b/.test(t)) return 'avviso';
+  if (/riuscit|copiat|salvat|creat|inviat|pronto|pronta|aggiornat|eliminat|rinominat|esportat|spostat|liberat|fatto|\b(?:succeeded|successful|copied|saved|created|sent|ready|updated|deleted|renamed|exported|moved|released|done|pushed|committed)\b/.test(t)) return 'riuscito';
   return 'nota';
 }
 
@@ -55,11 +58,11 @@ export function messaggioUmano(messaggio) {
   const m = messaggio == null ? '' : String(messaggio.message ?? messaggio).trim();
   if (!m) return '';
   if (/failed to fetch|networkerror|load failed|err_connection|network request failed|fetch failed/i.test(m)) {
-    return 'Il server non risponde. Controlla che TALOS sia avviato e riprova.';
+    return t('chat.toast.serverUnreachable');
   }
-  if (/aborterror|the operation was aborted|abortato/i.test(m)) return 'Operazione annullata.';
+  if (/aborterror|the operation was aborted|abortato/i.test(m)) return t('chat.toast.operationCancelled');
   if (/^(typeerror|error|referenceerror|rangeerror):\s*/i.test(m)) return m.replace(/^\w+error:\s*/i, '');
-  if (/^\d{3}\s*$/.test(m)) return `Il server ha risposto con l'errore ${m}.`;
+  if (/^\d{3}\s*$/.test(m)) return t('chat.toast.serverError', { codice: m });
   return m;
 }
 
@@ -85,7 +88,7 @@ export function messaggioUmano(messaggio) {
  * @param {{etichetta?:string, durata?:number}} [opzioni]
  */
 export const DURATA_CON_ANNULLA = 11_000;
-export function azioneAnnulla(esegui, { etichetta = 'Annulla', durata = DURATA_CON_ANNULLA } = {}) {
+export function azioneAnnulla(esegui, { etichetta = t('chat.common.cancel'), durata = DURATA_CON_ANNULLA } = {}) {
   return { tono: 'riuscito', durata, azione: { etichetta, dati: 'annulla', esegui } };
 }
 
@@ -97,7 +100,7 @@ export function azioneAnnulla(esegui, { etichetta = 'Annulla', durata = DURATA_C
  */
 export function creaToast(dati) {
   const tono = TONI[dati.tono] ? dati.tono : tonoDaTitolo(dati.titolo);
-  const t = TONI[tono];
+  const configurazione = TONI[tono];
   const scheda = document.createElement('div');
   scheda.className = 'talos-card talos-toast toast'; // `toast` = gancio del monolite, invisibile al cancello
   scheda.dataset.c = 'Toast';
@@ -105,10 +108,10 @@ export function creaToast(dati) {
   scheda.id = `toast-${dati.id}`;
 
   const vivo = document.createElement('div');
-  vivo.setAttribute('role', t.ruolo);
+  vivo.setAttribute('role', configurazione.ruolo);
   vivo.setAttribute('aria-atomic', 'true');
   const badge = document.createElement('span');
-  badge.className = `talos-badge talos-badge--sm talos-badge--${t.badge}`;
+  badge.className = `talos-badge talos-badge--sm talos-badge--${configurazione.badge}`;
   badge.textContent = String(dati.titolo || '');
   const testo = document.createElement('p');
   testo.textContent = messaggioUmano(dati.messaggio) || String(dati.titolo || '');
@@ -131,13 +134,13 @@ export function creaToast(dati) {
   chiudi.type = 'button';
   chiudi.className = 'talos-button talos-button--ghost talos-icon-button';
   chiudi.dataset.toastChiudi = String(dati.id);
-  chiudi.setAttribute('aria-label', `Chiudi messaggio ${String(dati.titolo || '').toLowerCase()}`);
+  chiudi.setAttribute('aria-label', t('chat.toast.close', { titolo: String(dati.titolo || '').toLowerCase() }));
   chiudi.innerHTML = '<svg class="i" aria-hidden="true"><use href="#i-x"/></svg>';
   barra.append(cresci, chiudi);
 
   if (!azione) scheda.classList.add('talos-toast--breve'); // senza azione la chiusura sta in alto a destra, la scheda resta bassa
   scheda.append(vivo, barra);
-  return { scheda, chiudi, azione, testo, tono, durata: t.durata };
+  return { scheda, chiudi, azione, testo, tono, durata: configurazione.durata };
 }
 
 /*

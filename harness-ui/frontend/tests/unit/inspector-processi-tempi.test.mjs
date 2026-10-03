@@ -287,3 +287,41 @@ test('D3 · AL CONTRARIO: l’uscita 127 della `prova` senza suite È un dato de
   assert.equal(d.etichetta, 'Non eseguito');
   assert.equal(d.misura, 'uscita 127');
 });
+
+test('H-04: una `prova` senza suite (NOT RUN dal kernel) è «Non eseguito», col motivo in parole e nessun numero', () => {
+  /* Owner 02/10/2026, «Voglio il +1»: il kernel non inventa più `exit 127` per una suite che non c'è. L'evento porta
+     `senzaSuite` (calcolato da `provaSenzaSuite` sul testo) e la riga dice il motivo, come per un rifiuto. */
+  const t = 1_700_000_000_000;
+  const [p] = processiDagliEventi([
+    { type: 'ToolCallStart', toolCallId: 'n3', toolCallName: 'prova', ricevutoA: t },
+    { type: 'ToolCallArgs', toolCallId: 'n3', delta: '{}' },
+    { type: 'ToolCallResult', toolCallId: 'n3', ricevutoA: t + 1_500, errore: true, uscita: null, senzaSuite: true, comando: 'npm test' },
+  ], { adesso: t + 1_500 });
+  const d = datiProcesso(p);
+  assert.equal(p.stato, 'non-eseguito', 'senza la cura il ripiego `errore ? 1 : 0` lo dipingeva come fallito');
+  assert.equal(d.etichetta, 'Non eseguito');
+  assert.equal(d.misura, 'nessuna suite di test');
+  assert.equal(p.uscita, null);
+  assert.equal(p.durataMs, null, 'non è girato niente: nessuna durata dal delta degli arrivi');
+});
+
+test('NO_TESTS_RAN (owner 03/10/2026): una `prova` che parte e non esegue nessun test è «Non eseguito», con le sue parole e la durata vera', async () => {
+  const { impostaLingua } = await import('../../src/components/lingua.js');
+  const t = 1_700_000_000_000;
+  const eventi = [
+    { type: 'ToolCallStart', toolCallId: 'z1', toolCallName: 'prova', ricevutoA: t },
+    { type: 'ToolCallArgs', toolCallId: 'z1', delta: '{}' },
+    { type: 'ToolCallResult', toolCallId: 'z1', ricevutoA: t + 1_500, errore: true, uscita: null, senzaSuite: true, nessunTest: true, durataMs: 1_200, comando: 'npm test' },
+  ];
+  impostaLingua('it');
+  const [p] = processiDagliEventi(eventi, { adesso: t + 1_500 });
+  const d = datiProcesso(p);
+  assert.equal(p.stato, 'non-eseguito');
+  assert.equal(d.etichetta, 'Non eseguito');
+  assert.match(d.misura, /^nessun test eseguito · /u, 'il motivo giusto, non «nessuna suite di test»');
+  assert.equal(p.uscita, null, 'nessun codice d\'uscita a schermo: uno 0 si leggerebbe «passato»');
+  assert.equal(p.durataMs, 1_200, 'il comando è partito davvero: la sua durata è un fatto');
+  impostaLingua('en');
+  assert.match(datiProcesso(processiDagliEventi(eventi, { adesso: t + 1_500 })[0]).misura, /^no tests ran · /u);
+  impostaLingua('it');
+});

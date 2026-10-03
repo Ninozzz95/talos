@@ -1,4 +1,5 @@
 import test from 'node:test';
+import { togliConfiniDati } from '../src/kernel/confine-dati.mjs';
 import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -65,6 +66,6 @@ test('FULL-ACCESS-03 leggi e scrivi risolvono il file assoluto esterno corretto'
   // T25/B09 (30/09): prima di sostituire un file esistente il modello lo legge
   const {result}=await run(workspace,[call('pre','leggi',{percorso:target}),call('write','scrivi',{percorso:target,contenuto:'aggiornato'}),call('read','leggi',{percorso:target})]);
   assert.equal(readFileSync(target,'utf8'),'aggiornato');
-  assert.equal(result.messaggiFinali.find(m=>m.tool_call_id==='read').content,'aggiornato');
+  assert.equal(togliConfiniDati(result.messaggiFinali.find(m=>m.tool_call_id==='read').content),'aggiornato');
   assert.equal(existsSync(join(workspace,'outside.txt')),false);
 });

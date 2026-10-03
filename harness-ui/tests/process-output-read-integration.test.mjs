@@ -1,4 +1,5 @@
 import test from 'node:test';
+import { togliConfiniDati } from '../src/kernel/confine-dati.mjs';
 import assert from 'node:assert/strict';
 import {tmpdir} from 'node:os';
 import {mkdtempSync,writeFileSync,readFileSync} from 'node:fs';
@@ -71,7 +72,7 @@ test('OUTPUT15-REAL: real session/process -> reference -> tool read -> HTTP -> r
       assert.ok(request.tools.some(t=>t.function.name==='process_output'));
       tool={name:'process_output',arguments:JSON.stringify({outputId:retainedId,offset:100000,limit:middle.length})};
     }
-    if(calls===2)readContent=request.messages.filter(m=>m.role==='tool').at(-1).content;
+    if(calls===2)readContent=togliConfiniDati(request.messages.filter(m=>m.role==='tool').at(-1).content);
     calls++;const message=tool?{role:'assistant',content:'',tool_calls:[{id:`call15-${calls}`,type:'function',function:tool}]}:{role:'assistant',content:'Ho letto la pagina conservata.'};
     return Response.json({choices:[{message,finish_reason:tool?'tool_calls':'stop'}]});
   };

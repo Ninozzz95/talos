@@ -27,5 +27,5 @@ test('PHASE2-EVENT-CONTRACT-DRIFT-19 conserva i 28 eventi correnti e normalizza 
   assert.deepEqual(normalizeSessionEvent({ type: 'TextMessageContent', messageId: 'm-1', delta: 'ciao', _sequenza: 12 }), {
     type: 'TextMessageContent', messageId: 'm-1', delta: 'ciao', sequence: 12,
   });
-  assert.throws(() => normalizeSessionEvent({ type: 'InventedEvent' }), /non supportato/u);
+  assert.throws(() => normalizeSessionEvent({ type: 'InventedEvent' }), /Unsupported session event/u);
 });

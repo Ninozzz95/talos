@@ -1,3 +1,6 @@
+import { t, tn, linguaCorrenteDiT } from './lingua.js';
+/* Numeri e date nella lingua dell'interfaccia (come fanno gli altri componenti): italiano → it-IT, inglese → en-US. */
+const localeUI = () => (linguaCorrenteDiT() === 'en' ? 'en-US' : 'it-IT');
 /*
  * ============================================================================
  * IL GUSCIO DEL LABORATORIO MODELLI — QUATTRO SCHEDE
@@ -123,7 +126,6 @@
  */
 
 import { STATI_DOWNLOAD } from './download-coda.js';
-import { plurale } from './plurale.js';
 import { avvolgiStrisciaSchede } from './cornice-model-lab.js';
 /*
  * ⛔ PERCHÉ NON SI IMPORTA `fornitoreDelModello` DA `workspace-footer.js`, che
@@ -194,12 +196,12 @@ export const SCHEDE_LAB = Object.freeze([
    * ⛔ L'ORDINE conta: aprendo una scheda l'app accende la sua PRIMA sezione.
    */
   Object.freeze({ id: 'models', etichetta: 'Hugging Face', icona: 'i-brain', sezioni: Object.freeze(['huggingface', 'installed']) }),
-  Object.freeze({ id: 'providers', etichetta: 'Provider', icona: 'i-link', sezioni: Object.freeze(['providers', 'catalog']),
-    frase: Object.freeze({ titolo: 'Collegamenti, non scatole nere.', nota: 'Credenziale, configurazione e raggiungibilità sono tre fatti diversi.' }) }),
-  Object.freeze({ id: 'downloads', etichetta: 'Download', icona: 'i-download', sezioni: Object.freeze(['downloads']),
-    frase: Object.freeze({ titolo: 'Ogni download, al suo posto.', nota: 'Avanzamento, pause e recupero senza perdere il contesto.' }) }),
-  Object.freeze({ id: 'system', etichetta: 'Sistema', icona: 'i-command', sezioni: Object.freeze(['overview']),
-    frase: Object.freeze({ titolo: 'Il dispositivo, senza supposizioni.', nota: 'Distinguì ciò che è misurato, stimato o ancora sconosciuto.' }) }),
+  Object.freeze({ id: 'providers', get etichetta() { return t('modelli.lab.providerTab'); }, icona: 'i-link', sezioni: Object.freeze(['providers', 'catalog']),
+    frase: Object.freeze({ get titolo() { return t('modelli.lab.providersHeading'); }, get nota() { return t('modelli.lab.providersNote'); } }) }),
+  Object.freeze({ id: 'downloads', get etichetta() { return t('modelli.lab.downloadTab'); }, icona: 'i-download', sezioni: Object.freeze(['downloads']),
+    frase: Object.freeze({ get titolo() { return t('modelli.lab.downloadsHeading'); }, get nota() { return t('modelli.lab.downloadsNote'); } }) }),
+  Object.freeze({ id: 'system', get etichetta() { return t('modelli.lab.systemTab'); }, icona: 'i-command', sezioni: Object.freeze(['overview']),
+    frase: Object.freeze({ get titolo() { return t('modelli.lab.systemHeading'); }, get nota() { return t('modelli.lab.systemNote'); } }) }),
 ]);
 
 const SCHEDA_DI_SEZIONE = new Map();
@@ -279,7 +281,7 @@ export function aggiornaConteggiScheda(card, conteggi = {}) {
       detto.dataset.labConteggioDetto = '';
       tab.append(detto);
     }
-    const frase = plurale(dovuto, 'attivo', 'attivi');
+    const frase = tn('modelli.lab.oneActiveDownload', 'modelli.lab.manyActiveDownloads', dovuto, { n: new Intl.NumberFormat(localeUI()).format(dovuto) });
     if (detto.textContent !== frase) detto.textContent = frase;
   }
   return quanti;
@@ -364,7 +366,7 @@ export const BUDGET_DEMO_GIB = 18.6;
  *   senza freccia: l'assenza è dichiarata al coordinatore.
  */
 export const POLITICA_CLOUD = Object.freeze({
-  frase: 'Al cloud solo con un consenso esplicito.',
+  get frase() { return t('modelli.lab.cloudApproval'); },
   icona: 'i-shield',
 });
 
@@ -376,7 +378,8 @@ function testoDi(radice, selettore) {
 
 /*
  * Solo GiB — una misura in MiB non è un rapporto con una in GiB — **e solo nella
- * NOSTRA forma**: virgola per i decimali, punto per le migliaia.
+ * NOSTRA forma**, che dipende dalla lingua: in italiano virgola per i decimali e punto per le
+ * migliaia, in inglese il contrario (la stessa forma con cui `misura-memoria.js` scrive il numero).
  *
  * ⛔ LA CURA DEL 19/09/2026, e la ragione per cui la forma si pretende invece di
  *   indovinarla. La versione precedente toglieva i punti PRIMA di convertire la
@@ -393,15 +396,19 @@ function testoDi(radice, selettore) {
  *     col codice vecchio** prima che questa cura esistesse.
  */
 function gib(testo) {
-  const trovato = /^(\d{1,3}(?:\.\d{3})*|\d+)(?:,(\d+))?\s*GiB$/i.exec(String(testo ?? '').trim());
+  const inglese = linguaCorrenteDiT() === 'en';
+  const forma = inglese
+    ? /^(\d{1,3}(?:,\d{3})*|\d+)(?:\.(\d+))?\s*GiB$/i
+    : /^(\d{1,3}(?:\.\d{3})*|\d+)(?:,(\d+))?\s*GiB$/i;
+  const trovato = forma.exec(String(testo ?? '').trim());
   if (!trovato) return null;
-  const numero = Number(`${trovato[1].replace(/\./g, '')}${trovato[2] ? `.${trovato[2]}` : ''}`);
+  const numero = Number(`${trovato[1].replace(inglese ? /,/g : /\./g, '')}${trovato[2] ? `.${trovato[2]}` : ''}`);
   return Number.isFinite(numero) && numero > 0 ? numero : null;
 }
 
 /** Il numero del budget, scritto come lo scrive il resto dell'app (`it-IT`, una cifra). */
 function numeroBudget(gib) {
-  return new Intl.NumberFormat('it-IT', { maximumFractionDigits: 1, minimumFractionDigits: 1 }).format(gib);
+  return new Intl.NumberFormat(localeUI(), { maximumFractionDigits: 1, minimumFractionDigits: 1 }).format(gib);
 }
 
 /*
@@ -421,7 +428,7 @@ function numeroBudget(gib) {
  *   questi due valori. Non è una casella «tutto il resto è Cloud»: il vuoto
  *   (nessuna scelta) NON è una destinazione, ed è il terzo stato.
  */
-const PAROLA_DESTINAZIONE = Object.freeze({ locale: 'Locale', cloud: 'Cloud' });
+const PAROLA_DESTINAZIONE = Object.freeze({ get locale() { return t('modelli.lab.localDestination'); }, get cloud() { return t('modelli.lab.cloudDestination'); } });
 
 function destinazioneDelModello(destinazione) {
   return PAROLA_DESTINAZIONE[String(destinazione ?? '').trim()] ?? null;
@@ -456,14 +463,14 @@ export function aggiornaBandaLaboratorio(card) {
     } else {
       if (badge.textContent !== destinazione) { badge.textContent = destinazione; scritto = true; }
       if (badge.hidden) { badge.hidden = false; scritto = true; }
-      badge.classList.toggle('talos-badge--success', destinazione === 'Locale');
-      badge.classList.toggle('talos-badge--accent', destinazione === 'Cloud');
+      badge.classList.toggle('talos-badge--success', nodoModello?.dataset?.modelloDestinazione?.trim() === 'locale');
+      badge.classList.toggle('talos-badge--accent', nodoModello?.dataset?.modelloDestinazione?.trim() === 'cloud');
     }
   }
   const nota = banda.querySelector('[data-lab-banda-nota]');
   scrivi(nota, destinazione
-    ? 'Le chat già aperte non cambiano.'
-    : 'Esplora il laboratorio, anche senza configurare un provider.');
+    ? t('modelli.lab.existingChatsUnchanged')
+    : t('modelli.lab.exploreWithoutProvider'));
 
   /* --- 2. IL BUDGET, E IL DENOMINATORE VERO ------------------------------ */
   const totale = testoDi(card, NODO.totale);
@@ -481,7 +488,7 @@ export function aggiornaBandaLaboratorio(card) {
    */
   const massimo = gib(totale);
   const frazione = banda.querySelector('[data-lab-banda-frazione]');
-  scrivi(frazione, massimo === null ? '' : `su ${totale}`);
+  scrivi(frazione, massimo === null ? '' : t('modelli.lab.budgetOutOf', { total: totale }));
   const barra = banda.querySelector('[data-lab-banda-track]');
   if (barra) {
     const riempimento = barra.querySelector('[data-lab-banda-fill]');
@@ -714,7 +721,7 @@ export function montaGuscioLaboratorio(card, { onCambio = null } = {}) {
   // (1) LA GUARDIA — nessuna sezione si perde, e non si monta a metà.
   const orfani = pannelli.filter(pannello => schedaDiSezione(pannello.dataset.modelLabPanel) === null);
   if (orfani.length > 0) {
-    const nomi = orfani.map(pannello => pannello.dataset.modelLabPanel || '(senza nome)').join(', ');
+    const nomi = orfani.map(pannello => pannello.dataset.modelLabPanel || '(unnamed)').join(', ');
     card.dataset.labGuscioNegato = nomi;
     console.warn(`[lab-guscio-v3] guscio NON montato: nessuna scheda contiene ${nomi}`);
     return false;
@@ -840,7 +847,7 @@ export function montaGuscioLaboratorio(card, { onCambio = null } = {}) {
   const banda = doc.createElement('section');
   banda.className = 'talos-lab__banda';
   banda.dataset.labBanda = '';
-  banda.setAttribute('aria-label', 'Configurazione del laboratorio');
+  banda.setAttribute('aria-label', t('modelli.lab.configurationLabel'));
 
   // 1 — il modello per le nuove chat
   const corrente = doc.createElement('div');
@@ -853,12 +860,12 @@ export function montaGuscioLaboratorio(card, { onCambio = null } = {}) {
   testoCorrente.className = 'talos-lab__banda-testo';
   const soprattitolo = doc.createElement('span');
   soprattitolo.className = 'talos-lab__banda-sopra';
-  soprattitolo.textContent = 'Modello per le nuove chat';
+  soprattitolo.textContent = t('modelli.lab.newChatModel');
   const rigaNome = doc.createElement('div');
   rigaNome.className = 'talos-lab__banda-nome';
   const modello = doc.createElement('strong');
   modello.id = 'modelLabActiveModel';
-  modello.textContent = 'Nessun modello selezionato';
+  modello.textContent = t('modelli.lab.noSelectedModel');
   const pastiglia = doc.createElement('span');
   pastiglia.className = 'talos-badge talos-badge--sm';
   pastiglia.dataset.labBandaBadge = '';
@@ -896,14 +903,14 @@ export function montaGuscioLaboratorio(card, { onCambio = null } = {}) {
   budget.className = 'talos-lab__banda-budget';
   const sopraBudget = doc.createElement('span');
   sopraBudget.className = 'talos-lab__banda-sopra';
-  sopraBudget.textContent = 'Budget RAM · scenario demo';
+  sopraBudget.textContent = t('modelli.lab.demoRamBudget');
   const numero = doc.createElement('div');
   numero.className = 'talos-lab__banda-numero';
   const valore = doc.createElement('span');
   valore.dataset.labBandaValore = '';
   const unita = doc.createElement('span');
   unita.className = 'talos-lab__banda-unita';
-  unita.textContent = 'GiB';
+  unita.textContent = t('modelli.lab.gibUnit');
   const frazione = doc.createElement('small');
   frazione.className = 'talos-lab__banda-frazione';
   frazione.dataset.labBandaFrazione = '';

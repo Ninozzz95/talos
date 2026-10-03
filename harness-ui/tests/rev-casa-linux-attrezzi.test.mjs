@@ -5,6 +5,7 @@
  *   Il difetto che chiude (AUDITV2-F01, NAMESPACE26): ciò che la shell creava in /tmp, `leggi` lo cercava in C:\tmp.
  */
 import test from 'node:test'
+import { togliConfiniDati } from '../src/kernel/confine-dati.mjs'
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
@@ -46,7 +47,7 @@ async function giro({ cartella, sessione }, chiamate, extra = {}) {
             const message = c ? { role: 'assistant', content: null, tool_calls: [{ id: `c${n}`, type: 'function', function: { name: c[0], arguments: JSON.stringify(c[1]) } }] } : { role: 'assistant', content: 'fatto' }
             return new Response(JSON.stringify({ choices: [{ message, finish_reason: c ? 'tool_calls' : 'stop' }] }), { headers: { 'Content-Type': 'application/json' } })
         },
-        onGiro: (e) => { if (e.tipo === 'tool-esito') esiti.push(String(e.content)); if (e.tipo === 'ricevuta') ricevute.push(e.ricevuta) },
+        onGiro: (e) => { if (e.tipo === 'tool-esito') esiti.push(togliConfiniDati(String(e.content))); if (e.tipo === 'ricevuta') ricevute.push(e.ricevuta) },
         /* Ciò che arriva alla Review: che cosa c'era PRIMA della scrittura. */
         onScrittura: (percorso, contenuto, esisteva, contenutoPrima) => scritture.push({ percorso, contenuto, esisteva, contenutoPrima }),
         ...extra,
@@ -108,7 +109,7 @@ test('B2-04 (WSL vero): nella casa Linux i collegamenti si seguono, elenca e cer
     assert.doesNotMatch(esiti[2], /symbolic link created by Linux|os error 1920/, 'cerca gira di là, con l rg per Linux')
     assert.match(esiti[3], /altro\.txt:1:altro pagliaio/, '`dentro` relativo cerca di là')
     assert.doesNotMatch(esiti[3], /vero\.txt/)
-    assert.match(esiti[4], new RegExp(`^REFUSED\\. "${p.cartella.split('\\').join('\\\\')}" is not a subfolder of this workspace`), 'un assoluto si rifiuta come su Windows (T-13), con le parole del modello')
+    assert.match(esiti[4], new RegExp(`^INVALID\\. "${p.cartella.split('\\').join('\\\\')}" is not a subfolder of this workspace`), 'un assoluto si rifiuta come su Windows (T-13), con le parole del modello')
 })
 
 test('B2-07 (WSL vero): attraverso un collegamento Linux si legge E si sostituisce — disco e istantanea sono quelli della casa', vero, async (t) => {

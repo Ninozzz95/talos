@@ -24,13 +24,14 @@ import ELK from 'elkjs/lib/elk-api.js';
 import { nomeUmanoAttrezzo } from './nomi-attrezzi.js';
 import { apriConfermaRun, azioniDelRun, conseguenzeAnnulla, righeAumento, testoAmbiguo, testoErroreRun, TESTO_RIUSCITO } from './controlli-run.js'; // F3-52
 import {
-  cifra, durataDelPasso, formattaDurata, ICONA_TONO, iconaDelPasso, livelloPer, maiuscola, modelloDelPasso, ora, PAGINA_ELENCO, percentualeFase,
-  plurale, STATI_RUN, statoDelRun, statoPasso, TONO_RUN,
+  durataDelPasso, formattaDurata, ICONA_TONO, iconaDelPasso, livelloPer, maiuscola, modelloDelPasso, PAGINA_ELENCO, percentualeFase,
+  statoDelRun, statoPasso, TONO_RUN,
 } from './grafo/comuni.js';
 import { chiaveCella, disponi, formaDelleFasi } from './grafo/disposizione.js';
 import { creaFonte } from './grafo/fonte.js';
 import { creaTela } from './grafo/tela.js';
-import { creaTempo } from './grafo/tempo.js';
+import { cifra as cifraLingua, creaTempo, oraBreve, parolaDelPasso } from './grafo/tempo.js';
+import { t as tr, tn } from './lingua.js';
 import { montaPannelloRisultati } from './workflow-results-panel.js';
 
 // chi importava gli aiuti da qui (rail, prove) continua a trovarli qui
@@ -43,7 +44,23 @@ export { prossimoZoom } from './grafo/tela.js';
 const RILETTURA_MINIMA_MS = 1_000;
 const PROBLEMI = new Set(['failed', 'uncertain', 'waiting_human']);
 const PROBLEMI_MASSIMI = 50; // le discendenze che si chiedono per il Percorso: oltre, i bloccati si dicono solo di questi
-const VISTE = Object.freeze([['dipendenze', 'Dipendenze', 'i-branch'], ['tempo', 'Tempo', 'i-clock'], ['lettura', 'Lettura', 'i-list']]);
+/* Il testo di ogni vista è una CHIAVE del dizionario: si risolve quando si disegna, mai al caricamento del modulo. */
+const VISTE = Object.freeze([['dipendenze', 'agenti.workflow.viewDependencies', 'i-branch'], ['tempo', 'agenti.workflow.viewTime', 'i-clock'], ['lettura', 'agenti.workflow.viewReading', 'i-list']]);
+/* La parola dello stato del run, nella lingua corrente (le chiavi sono quelle di `STATI_RUN` in `grafo/comuni.js`, che resta la fonte dei toni). */
+const CHIAVI_STATO_RUN = Object.freeze({
+  created: 'agenti.workflow.runState.created', running: 'agenti.workflow.runState.running', paused: 'agenti.workflow.runState.paused', needs_attention: 'agenti.workflow.runState.needsAttention',
+  succeeded: 'agenti.workflow.runState.succeeded', failed: 'agenti.workflow.runState.failed', cancelled: 'agenti.workflow.runState.cancelled', planned: 'agenti.workflow.runState.planned',
+  proposed: 'agenti.workflow.runState.proposed', approved: 'agenti.workflow.runState.approved', pausing: 'agenti.workflow.runState.pausing', cancelling: 'agenti.workflow.runState.cancelling',
+});
+const parolaDelRun = (grezzo) => (CHIAVI_STATO_RUN[grezzo] ? tr(CHIAVI_STATO_RUN[grezzo]) : grezzo);
+/* «3 agenti» / «3 agents»: il numero col raggruppamento della lingua, la parola dal dizionario. */
+const plurale = (n, uno, molti) => tn(uno, molti, n, { n: cifraLingua(n) });
+const AGENTE = ['agenti.graph.agentOne', 'agenti.graph.agentMany'], FASE = ['agenti.workflow.phaseOne', 'agenti.workflow.phaseMany'];
+/** Una frase con dei segnaposto che diventano nodi (un `<strong>` per i conteggi): l'ORDINE lo decide la traduzione, non il codice. */
+function fraseConNodi(chiave, nodi) {
+  const modello = tr(chiave, Object.fromEntries(Object.keys(nodi).map((k) => [k, `{${k}}`])));
+  return modello.split(/(\{[a-z]+\})/u).filter(Boolean).map((pezzo) => nodi[pezzo.slice(1, -1)] ?? pezzo);
+}
 const LENTEZZE = Object.freeze([[10, '×10'], [60, '×60'], [300, '×300']]);
 const operaio = () => new URL('vendor/elk/elk-worker.min.js', globalThis.document?.baseURI ?? 'http://localhost/').href;
 
@@ -96,10 +113,10 @@ export function montaGrafoWorkflow(host, {
   /* ——— la struttura fissa: testata R4, riga dei comandi, area delle viste, riproduzione, dettaglio ——— */
   const root = el('section', 'talos-grafo talos-wfg');
   root.dataset.c = 'GrafoAgenti'; root.dataset.sorgente = 'workflow';
-  root.setAttribute('aria-label', 'Diagramma della sessione');
+  root.setAttribute('aria-label', tr('agenti.delegations.title'));
   const cima = el('header', 'talos-wfg__cima');
   const titoli = el('div', 'talos-wfg__titoli');
-  const titolo = el('h2', 'talos-wfg__titolo', 'Diagramma della sessione');
+  const titolo = el('h2', 'talos-wfg__titolo', tr('agenti.delegations.title'));
   const sommario = el('p', 'talos-wfg__sommario');
   const descrizione = el('p', 'talos-wfg__descrizione');
   const fuocoChip = el('p', 'gv-fuoco'); fuocoChip.hidden = true;
@@ -109,7 +126,7 @@ export function montaGrafoWorkflow(host, {
   const aggiornatoTesto = el('span', 'talos-wfg__aggiornato-ora');
   const statoRun = el('span', 'talos-wfg__stato-run'); statoRun.setAttribute('role', 'status');
   aggiornato.append(aggiornatoTesto, statoRun);
-  const torna = bottone('Torna alla chat', 'talos-button talos-button--secondary talos-button--sm talos-wfg__torna');
+  const torna = bottone(tr('agenti.delegations.backToChat'), 'talos-button talos-button--secondary talos-button--sm talos-wfg__torna');
   torna.addEventListener('click', () => onChiudi?.());
   /* F3-52, decisione owner 21: i comandi del run accanto a «Torna alla chat» — un pulsante secondo lo stato e un «…» con gli
      altri (anche col tasto destro sulla card della sessione), Annulla in fondo e separato (NN/g, «Dangerous UX»). */
@@ -117,9 +134,9 @@ export function montaGrafoWorkflow(host, {
   const principaleRun = bottone('', 'talos-button talos-button--secondary talos-button--sm talos-wfg__run-principale');
   principaleRun.dataset.focusKey = 'run:principale';
   const menuRun = el('div', 'talos-wfg__menu-run');
-  const altroRun = bottone('', 'talos-wfg__icona-bottone', 'Altri comandi del run'); altroRun.append(icona('i-more'));
+  const altroRun = bottone('', 'talos-wfg__icona-bottone', tr('agenti.workflow.runCommandsMore')); altroRun.append(icona('i-more'));
   altroRun.setAttribute('aria-haspopup', 'menu'); altroRun.setAttribute('aria-expanded', 'false'); altroRun.dataset.focusKey = 'run:menu';
-  const vociRun = el('div', 'talos-wfg__menu talos-wfg__menu--destra'); vociRun.setAttribute('role', 'menu'); vociRun.setAttribute('aria-label', 'Comandi del run'); vociRun.hidden = true;
+  const vociRun = el('div', 'talos-wfg__menu talos-wfg__menu--destra'); vociRun.setAttribute('role', 'menu'); vociRun.setAttribute('aria-label', tr('agenti.workflow.runCommands')); vociRun.hidden = true;
   menuRun.append(altroRun, vociRun);
   comandiRun.append(principaleRun, menuRun);
   const esitoRun = el('p', 'talos-wfg__esito-run'); esitoRun.setAttribute('role', 'status'); esitoRun.hidden = true;
@@ -130,12 +147,12 @@ export function montaGrafoWorkflow(host, {
   /* ⛔ foto del 26/09 a 1440 nella colonna dell'app: con i comandi accanto al titolo, il titolo finiva in una colonna di una
      parola per riga. I comandi del diagramma stanno su una riga loro, intera: a sinistra CHE COSA si guarda (vista, percorso),
      a destra COME (cerca, zoom, adatta, gruppi) — decisione owner 12: la riga dei comandi c'è a ogni scala. */
-  const comandi = el('div', 'gv-comandi'); comandi.setAttribute('role', 'toolbar'); comandi.setAttribute('aria-label', 'Comandi del diagramma');
-  const viste = el('div', 'gv-viste'); viste.setAttribute('role', 'radiogroup'); viste.setAttribute('aria-label', 'Vista');
-  const vociVista = new Map(VISTE.map(([id, testo, ic]) => {
-    const b = bottone('', 'gv-vista'); b.setAttribute('role', 'radio'); b.append(icona(ic), el('span', null, testo));
+  const comandi = el('div', 'gv-comandi'); comandi.setAttribute('role', 'toolbar'); comandi.setAttribute('aria-label', tr('agenti.delegations.controlsLabel'));
+  const viste = el('div', 'gv-viste'); viste.setAttribute('role', 'radiogroup'); viste.setAttribute('aria-label', tr('agenti.workflow.view'));
+  const vociVista = new Map(VISTE.map(([id, chiave, ic]) => {
+    const b = bottone('', 'gv-vista'); b.setAttribute('role', 'radio'); b.append(icona(ic), el('span', null, tr(chiave)));
     b.dataset.vista = id; b.dataset.focusKey = `vista:${id}`;
-    if (id === 'tempo' && !run) { b.disabled = true; b.title = 'Un workflow non ancora avviato non ha tempi da mostrare.'; }
+    if (id === 'tempo' && !run) { b.disabled = true; b.title = tr('agenti.workflow.timeNotStarted'); }
     b.addEventListener('click', () => scegliVista(id));
     viste.append(b);
     return [id, b];
@@ -149,30 +166,30 @@ export function montaGrafoWorkflow(host, {
     scegliVista(prossima); vociVista.get(prossima).focus();
   });
   const percorso = bottone('', 'talos-wfg__icona-bottone gv-percorso'); percorso.setAttribute('aria-pressed', 'false');
-  percorso.append(icona('i-history'), el('span', null, 'Percorso'));
-  percorso.title = run ? 'Mette in evidenza ciò che è già stato eseguito, il fronte che lavora adesso e ciò che è bloccato da un problema'
-    : 'Un workflow non ancora avviato non ha un percorso eseguito.';
+  percorso.append(icona('i-history'), el('span', null, tr('agenti.workflow.path')));
+  percorso.title = run ? tr('agenti.workflow.pathHint')
+    : tr('agenti.workflow.pathNotStarted');
   percorso.disabled = !run;
   percorso.addEventListener('click', () => { stato.percorso = !stato.percorso; percorso.setAttribute('aria-pressed', String(stato.percorso)); void calcolaBloccati(); evidenzia(); });
-  const campoCerca = el('input', 'talos-wfg__cerca nopan'); campoCerca.type = 'search'; campoCerca.placeholder = 'Cerca agenti o fasi…';
-  campoCerca.setAttribute('aria-label', 'Cerca fra agenti e fasi del diagramma'); campoCerca.hidden = true;
-  const cerca = bottone('', 'talos-wfg__icona-bottone', 'Cerca nel diagramma'); cerca.append(icona('i-search'));
-  const meno = bottone('', 'talos-wfg__icona-bottone', 'Riduci lo zoom del 10%'); meno.append(icona('i-minus'));
-  const percento = bottone('100%', 'talos-wfg__icona-bottone gv-percento', 'Zoom al 100%');
-  const piu = bottone('', 'talos-wfg__icona-bottone', 'Aumenta lo zoom del 10%'); piu.append(icona('i-plus'));
-  const adatta = bottone('', 'talos-wfg__icona-bottone', 'Adatta il diagramma alla finestra'); adatta.append(icona('i-fit'));
+  const campoCerca = el('input', 'talos-wfg__cerca nopan'); campoCerca.type = 'search'; campoCerca.placeholder = tr('agenti.workflow.searchPlaceholder');
+  campoCerca.setAttribute('aria-label', tr('agenti.workflow.searchLabel')); campoCerca.hidden = true;
+  const cerca = bottone('', 'talos-wfg__icona-bottone', tr('agenti.delegations.searchButton')); cerca.append(icona('i-search'));
+  const meno = bottone('', 'talos-wfg__icona-bottone', tr('agenti.workflow.zoomOut10')); meno.append(icona('i-minus'));
+  const percento = bottone('100%', 'talos-wfg__icona-bottone gv-percento', tr('agenti.delegations.zoomReset'));
+  const piu = bottone('', 'talos-wfg__icona-bottone', tr('agenti.workflow.zoomIn10')); piu.append(icona('i-plus'));
+  const adatta = bottone('', 'talos-wfg__icona-bottone', tr('agenti.delegations.fit')); adatta.append(icona('i-fit'));
   const menuGruppi = el('div', 'talos-wfg__menu-vista');
-  const altroGruppi = bottone('', 'talos-wfg__icona-bottone', 'Gruppi'); altroGruppi.append(icona('i-layers'));
+  const altroGruppi = bottone('', 'talos-wfg__icona-bottone', tr('agenti.workflow.groups')); altroGruppi.append(icona('i-layers'));
   altroGruppi.setAttribute('aria-haspopup', 'menu'); altroGruppi.setAttribute('aria-expanded', 'false');
-  const vociGruppi = el('div', 'talos-wfg__menu talos-wfg__menu--destra'); vociGruppi.setAttribute('role', 'menu'); vociGruppi.setAttribute('aria-label', 'Gruppi'); vociGruppi.hidden = true;
+  const vociGruppi = el('div', 'talos-wfg__menu talos-wfg__menu--destra'); vociGruppi.setAttribute('role', 'menu'); vociGruppi.setAttribute('aria-label', tr('agenti.workflow.groups')); vociGruppi.hidden = true;
   const voceGruppi = (testo, azione) => {
     const b = bottone(testo, 'talos-wfg__menu-voce'); b.setAttribute('role', 'menuitem'); b.tabIndex = -1;
     b.addEventListener('click', () => { chiudiMenu(altroGruppi, vociGruppi, { fuoco: true }); azione(); });
     vociGruppi.append(b);
   };
-  voceGruppi('Apri tutti i gruppi qui', () => { stato.aperti = new Set(fonte.panoramica.groups.map((g) => g.phaseId)); stato.apertiScelti = true; void ridisponi(); });
-  voceGruppi('Chiudi tutti i gruppi', () => { stato.aperti = new Set(); stato.apertiScelti = true; void ridisponi(); });
-  voceGruppi('Apri solo dove si lavora', () => { stato.aperti = apertiDiPartenza(); stato.apertiScelti = true; void ridisponi(); });
+  voceGruppi(tr('agenti.workflow.openAllGroups'), () => { stato.aperti = new Set(fonte.panoramica.groups.map((g) => g.phaseId)); stato.apertiScelti = true; void ridisponi(); });
+  voceGruppi(tr('agenti.workflow.closeAllGroups'), () => { stato.aperti = new Set(); stato.apertiScelti = true; void ridisponi(); });
+  voceGruppi(tr('agenti.workflow.openWhereWorking'), () => { stato.aperti = apertiDiPartenza(); stato.apertiScelti = true; void ridisponi(); });
   altroGruppi.addEventListener('click', () => (vociGruppi.hidden ? apriMenu(altroGruppi, vociGruppi) : chiudiMenu(altroGruppi, vociGruppi)));
   menuGruppi.append(altroGruppi, vociGruppi);
   const comandiSinistra = el('div', 'gv-comandi-gruppo'); comandiSinistra.append(viste, percorso);
@@ -185,34 +202,34 @@ export function montaGrafoWorkflow(host, {
   const lettura = el('div', 'talos-wfg__lettura gv-lettura'); lettura.hidden = true;
 
   /* la riproduzione (solo per un run): sullo stesso asse compresso della vista Tempo, dalla storia degli stati */
-  const rip = el('div', 'gv-rip'); rip.setAttribute('role', 'group'); rip.setAttribute('aria-label', 'Riproduzione del run'); rip.hidden = !run;
+  const rip = el('div', 'gv-rip'); rip.setAttribute('role', 'group'); rip.setAttribute('aria-label', tr('agenti.workflow.playbackLabel')); rip.hidden = !run;
   rip.dataset.pronta = 'false';
-  const ripGioca = bottone('', 'gv-rip-gioca', 'Riproduci il run dall’inizio'); ripGioca.append(icona('i-play'));
-  const ripVelocita = el('div', 'gv-rip-velocita'); ripVelocita.setAttribute('role', 'radiogroup'); ripVelocita.setAttribute('aria-label', 'Velocità');
+  const ripGioca = bottone('', 'gv-rip-gioca', tr('agenti.workflow.playRun')); ripGioca.append(icona('i-play'));
+  const ripVelocita = el('div', 'gv-rip-velocita'); ripVelocita.setAttribute('role', 'radiogroup'); ripVelocita.setAttribute('aria-label', tr('agenti.workflow.speedLabel'));
   for (const [v, testo] of LENTEZZE) {
     const b = bottone(testo, 'gv-rip-v'); b.setAttribute('role', 'radio'); b.setAttribute('aria-checked', String(v === stato.velocita));
-    b.title = v === 60 ? 'Un minuto di lavoro al secondo' : `${v} volte più veloce`;
+    b.title = v === 60 ? tr('agenti.workflow.speedMinute') : tr('agenti.delegations.speedFaster', { v });
     b.addEventListener('click', () => { stato.velocita = v; for (const x of ripVelocita.children) x.setAttribute('aria-checked', String(x === b)); });
     ripVelocita.append(b);
   }
   const ripBinario = el('div', 'gv-rip-binario nopan');
-  ripBinario.tabIndex = 0; ripBinario.setAttribute('role', 'slider'); ripBinario.setAttribute('aria-label', 'Istante del run');
+  ripBinario.tabIndex = 0; ripBinario.setAttribute('role', 'slider'); ripBinario.setAttribute('aria-label', tr('agenti.workflow.sliderLabel'));
   const ripVuoti = el('div', 'gv-rip-vuoti');
   const ripPieno = el('div', 'gv-rip-pieno');
   const ripManiglia = el('div', 'gv-rip-maniglia');
   ripBinario.append(ripVuoti, ripPieno, ripManiglia);
-  const ripTesto = el('span', 'gv-rip-testo', 'Carico la storia del run…');
-  const ripVivo = bottone('Torna al vivo', 'talos-button talos-button--secondary talos-button--sm gv-rip-vivo'); ripVivo.hidden = true;
-  const ripNota = el('span', 'gv-rip-nota', 'Rigiocata dalla storia degli stati del registro');
+  const ripTesto = el('span', 'gv-rip-testo', tr('agenti.workflow.loadingHistory'));
+  const ripVivo = bottone(tr('agenti.delegations.backToLive'), 'talos-button talos-button--secondary talos-button--sm gv-rip-vivo'); ripVivo.hidden = true;
+  const ripNota = el('span', 'gv-rip-nota', tr('agenti.workflow.replayNote'));
   rip.append(ripGioca, ripVelocita, ripBinario, ripTesto, ripVivo, ripNota);
 
   /* il dettaglio in basso (R4): chi · Evidenze recenti · Task corrente · «…» */
-  const dettaglio = el('section', 'talos-wfg__dettaglio gv-dettaglio'); dettaglio.hidden = true; dettaglio.setAttribute('aria-label', 'Dettaglio dell\'agente');
+  const dettaglio = el('section', 'talos-wfg__dettaglio gv-dettaglio'); dettaglio.hidden = true; dettaglio.setAttribute('aria-label', tr('agenti.delegations.detailLabel'));
   const detChi = el('div', 'talos-wfg__dettaglio-chi');
-  const detProve = el('section', 'talos-wfg__dettaglio-colonna'); detProve.setAttribute('aria-label', 'Evidenze recenti');
-  const detCompito = el('section', 'talos-wfg__dettaglio-colonna'); detCompito.setAttribute('aria-label', 'Task corrente');
+  const detProve = el('section', 'talos-wfg__dettaglio-colonna'); detProve.setAttribute('aria-label', tr('agenti.delegations.recentEvidence'));
+  const detCompito = el('section', 'talos-wfg__dettaglio-colonna'); detCompito.setAttribute('aria-label', tr('agenti.delegations.currentTask'));
   const detAltro = el('div', 'talos-wfg__dettaglio-altro');
-  const menuAgente = bottone('', 'talos-wfg__icona-bottone', 'Altre azioni sull\'agente'); menuAgente.append(icona('i-more'));
+  const menuAgente = bottone('', 'talos-wfg__icona-bottone', tr('agenti.delegations.agentActions')); menuAgente.append(icona('i-more'));
   menuAgente.setAttribute('aria-haspopup', 'menu'); menuAgente.setAttribute('aria-expanded', 'false'); menuAgente.dataset.focusKey = 'dettaglio:menu';
   const vociAgente = el('div', 'talos-wfg__menu talos-wfg__menu--destra'); vociAgente.setAttribute('role', 'menu'); vociAgente.hidden = true;
   const voceAgente = (testo, azione) => {
@@ -221,11 +238,11 @@ export function montaGrafoWorkflow(host, {
     vociAgente.append(b);
     return b;
   };
-  const apriConversazione = voceAgente('Apri la conversazione dell\'agente', () => {
+  const apriConversazione = voceAgente(tr('agenti.workflow.openConversation'), () => {
     const riga = { ...(fonte.riga(stato.selezionato) ?? {}), ...(stato.dettaglio ?? {}) };
     if (riga.stepSessionId) onApriSessione?.(riga.stepSessionId, riga);
   });
-  voceAgente('Chiudi il dettaglio', () => { stato.selezionato = null; stato.dettaglio = null; chiudiEvidenze(); chiudiEvidenze = () => {}; evidenzia(); disegnaDettaglio(); avvisaSelezione(); });
+  voceAgente(tr('agenti.delegations.closeDetail'), () => { stato.selezionato = null; stato.dettaglio = null; chiudiEvidenze(); chiudiEvidenze = () => {}; evidenzia(); disegnaDettaglio(); avvisaSelezione(); });
   menuAgente.addEventListener('click', () => (vociAgente.hidden ? apriMenu(menuAgente, vociAgente) : chiudiMenu(menuAgente, vociAgente)));
   detAltro.append(menuAgente, vociAgente);
   dettaglio.append(detChi, detProve, detCompito, detAltro);
@@ -285,14 +302,14 @@ export function montaGrafoWorkflow(host, {
       const fine = stato.t ?? (['succeeded', 'failed', 'cancelled'].includes(p?.status) ? Date.parse(fonte.meta?.generatedAt ?? '') : adesso());
       durata = Number.isFinite(inizio) && Number.isFinite(fine) ? formattaDurata(Math.max(0, fine - inizio)) : null;
     }
-    const titoloSessione = fonte.revisione?.title || sessione.nome || 'Sessione principale';
-    return { titolo: titoloSessione, durata, sotto: sessione.modello ? `Sessione principale · ${sessione.modello}` : 'Sessione principale' };
+    const titoloSessione = fonte.revisione?.title || sessione.nome || tr('agenti.delegations.mainSession');
+    return { titolo: titoloSessione, durata, sotto: sessione.modello ? tr('agenti.workflow.mainSessionWithModel', { modello: sessione.modello }) : tr('agenti.delegations.mainSession') };
   }
   function datiViste() {
     return {
       panoramica: fonte.panoramica,
       sessione: datiSessione,
-      statoRun: () => { const g = grezzoDelRun(); return { parola: STATI_RUN[g] ?? g, tono: TONO_RUN[g] ?? 'neutro' }; },
+      statoRun: () => { const g = grezzoDelRun(); return { parola: parolaDelRun(g), tono: TONO_RUN[g] ?? 'neutro' }; },
       conteggi: (phaseId) => fonte.conteggi(phaseId, stato.t),
       riga: (id) => fonte.riga(id),
       cella: (phaseId, i) => fonte.cella(phaseId, i),
@@ -359,7 +376,7 @@ export function montaGrafoWorkflow(host, {
     } catch (errore) {
       if (morto || mia !== generazione) return;
       stato.carica = false;
-      stato.errore = errore?.status === 404 ? 'Questo workflow non si trova più sul server.' : 'Non riesco a leggere il workflow dal server. Riprova tra poco.';
+      stato.errore = errore?.status === 404 ? tr('agenti.workflow.errorNotFound') : tr('agenti.workflow.errorRead');
       disegnaTesta();
     }
   }
@@ -412,7 +429,7 @@ export function montaGrafoWorkflow(host, {
       evidenzia();
     } catch (errore) {
       if (morto || mia !== versioneDisposizione) return;
-      stato.errore = errore?.status === 404 ? 'Questo workflow non si trova più sul server.' : 'Non riesco a disporre il diagramma. Riprova tra poco.';
+      stato.errore = errore?.status === 404 ? tr('agenti.workflow.errorNotFound') : tr('agenti.workflow.errorLayout');
       disegnaTesta();
     }
   }
@@ -486,7 +503,7 @@ export function montaGrafoWorkflow(host, {
   /* ——— testata ——— */
   function disegnaTesta() {
     const p = fonte.panoramica;
-    avviso.textContent = stato.carica ? 'Carico il workflow dal server…' : stato.errore ?? '';
+    avviso.textContent = stato.carica ? tr('agenti.workflow.loading') : stato.errore ?? '';
     avviso.hidden = !stato.carica && !stato.errore;
     root.dataset.vista = stato.vista;
     for (const [id, b] of vociVista) { b.setAttribute('aria-checked', String(id === stato.vista)); b.tabIndex = id === stato.vista ? 0 : -1; }
@@ -500,23 +517,23 @@ export function montaGrafoWorkflow(host, {
     // il livello di partenza (F3-42, decisione 6): fino a 25 passi tutto aperto, «agenti»; oltre, per gruppi
     root.dataset.livello = livelloPer(p.total);
     const forte = (testo) => el('strong', null, testo);
-    sommario.replaceChildren(forte(plurale(p.total, 'agente', 'agenti')), ' organizzati in ', forte(plurale(p.groups.length, 'fase', 'fasi')), ', coordinati dalla sessione principale');
+    sommario.replaceChildren(...fraseConNodi('agenti.workflow.summary', { agenti: forte(plurale(p.total, ...AGENTE)), fasi: forte(plurale(p.groups.length, ...FASE)) }));
     descrizione.textContent = run
-      ? 'Vista del workflow con stato di avanzamento. Seleziona un agente per esplorare i dettagli.'
-      : 'Workflow proposto e non ancora avviato: fasi e agenti pianificati, senza stati. Seleziona un agente per leggerne il compito.';
-    const alle = stato.t === null ? ora(stato.aggiornatoAlle) : null;
-    aggiornatoTesto.textContent = stato.t !== null ? `Riproduzione alle ${ora(new Date(stato.t).toISOString())}` : alle ? `Ultimo aggiornamento ${alle}` : '';
+      ? tr('agenti.workflow.descriptionRun')
+      : tr('agenti.workflow.descriptionProposal');
+    const alle = stato.t === null ? oraBreve(stato.aggiornatoAlle) : null;
+    aggiornatoTesto.textContent = stato.t !== null ? tr('agenti.workflow.replayAt', { ora: oraBreve(stato.t) }) : alle ? tr('agenti.delegations.lastUpdate', { ora: alle }) : '';
     const grezzo = grezzoDelRun();
     const terminati = stato.t === null ? p.terminated : p.groups.reduce((somma, g) => somma + (fonte.conteggi(g.phaseId, stato.t)?.terminated ?? 0), 0);
     const punto = el('span', 'talos-wfg__punto'); punto.dataset.tono = TONO_RUN[grezzo] ?? 'neutro';
-    statoRun.replaceChildren(punto, el('span', null, `${STATI_RUN[grezzo] ?? grezzo}${run ? ` · ${cifra(terminati ?? 0)} di ${cifra(p.total)} terminati` : ''}`));
+    statoRun.replaceChildren(punto, el('span', null, `${parolaDelRun(grezzo)}${run ? ` · ${tr('agenti.graph.finishedOf', { fatti: cifraLingua(terminati ?? 0), totale: cifraLingua(p.total) })}` : ''}`));
     if (stato.focus) {
       fuocoChip.hidden = false;
       const r = fonte.riga(stato.focus.nodeId);
       const n = stato.focus.insieme.size - 1;
-      const via = bottone('', 'gv-fuoco-via', 'Togli il focus'); via.append(icona('i-x'));
+      const via = bottone('', 'gv-fuoco-via', tr('agenti.workflow.removeFocus')); via.append(icona('i-x'));
       via.addEventListener('click', () => togliFocus());
-      fuocoChip.replaceChildren(icona('i-branch'), el('span', null, `${stato.focus.verso === 'monte' ? 'Da cosa dipende' : 'Cosa aspetta'} ${r?.label ?? ''}: ${plurale(n, 'agente', 'agenti')}`), via);
+      fuocoChip.replaceChildren(icona('i-branch'), el('span', null, tr(stato.focus.verso === 'monte' ? 'agenti.workflow.focusUpstream' : 'agenti.workflow.focusDownstream', { nome: r?.label ?? '', agenti: plurale(n, ...AGENTE) })), via);
     } else fuocoChip.hidden = true;
   }
 
@@ -553,7 +570,7 @@ export function montaGrafoWorkflow(host, {
       insieme.add(nodeId);
       stato.focus = { nodeId, verso, insieme };
       evidenzia(); disegnaTesta(); disegnaDettaglio();
-    } catch { dillo('Non riesco a leggere le dipendenze di questo agente. Riprova tra poco.', true); }
+    } catch { dillo(tr('agenti.workflow.errorDependencies'), true); }
   }
   function togliFocus() { stato.focus = null; evidenzia(); disegnaTesta(); disegnaDettaglio(); }
   /** Percorso: chi è bloccato da un problema = a valle di un passo non riuscito, da verificare o che aspetta te, e non partito. */
@@ -590,7 +607,8 @@ export function montaGrafoWorkflow(host, {
     }
   }
   function pillola(statoGrezzo, classe = '') {
-    const { parola, tono } = statoPasso(statoGrezzo);
+    const { tono } = statoPasso(statoGrezzo);
+    const parola = parolaDelPasso(statoGrezzo);
     const p = el('span', `talos-wfg__pill ${classe}`.trim()); p.dataset.tono = tono;
     if (ICONA_TONO[tono]) p.append(icona(ICONA_TONO[tono], 'talos-wfg__pill-icona'));
     p.append(el('span', null, parola));
@@ -610,14 +628,14 @@ export function montaGrafoWorkflow(host, {
     // chi, con che modello, quanto, e QUANDO (dai tentativi della storia: inizio, fine o «in corso»)
     const tentativo = (fonte.tentativi().get(stato.selezionato) ?? []).filter((x) => stato.t === null || x.da <= stato.t).at(-1);
     const fine = tentativo && tentativo.a !== null && (stato.t === null || tentativo.a <= stato.t) ? tentativo.a : null;
-    const quando = !run ? null : tentativo ? `${ora(new Date(tentativo.da).toISOString())}${fine !== null ? `–${ora(new Date(fine).toISOString())}` : ' → in corso'}` : 'non ancora partito';
+    const quando = !run ? null : tentativo ? `${oraBreve(tentativo.da)}${fine !== null ? `–${oraBreve(fine)}` : ` → ${tr('agenti.timeline.stillRunning')}`}` : tr('agenti.workflow.notStartedYet');
     const sotto = [modelloDelPasso(riga, sessione.modello), durataDi(stato.selezionato, st), quando].filter(Boolean).join(' · ');
     if (sotto) testi.append(el('span', 'talos-wfg__passo-modello', sotto));
     // il focus a monte e a valle (decisione owner 24), coi conti della discendenza letta dal server
     const focus = el('div', 'gv-dettaglio-focus');
-    for (const [verso, testo] of [['monte', 'Da cosa dipende'], ['valle', 'Cosa aspetta']]) {
+    for (const [verso, testo] of [['monte', tr('agenti.workflow.dependsOn')], ['valle', tr('agenti.workflow.waitsForIt')]]) {
       const n = stato.lignaggio?.[verso];
-      const b = bottone(n === undefined ? testo : `${testo} (${cifra(n)})`, 'talos-wfg__link');
+      const b = bottone(n === undefined ? testo : `${testo} (${cifraLingua(n)})`, 'talos-wfg__link');
       b.dataset.focusKey = `focus:${verso}`;
       b.setAttribute('aria-pressed', String(stato.focus?.nodeId === stato.selezionato && stato.focus.verso === verso));
       b.disabled = n === 0;
@@ -628,12 +646,12 @@ export function montaGrafoWorkflow(host, {
     // ⛔ niente anteprima del compito qui: il compito sta nella colonna «Task corrente» (foto sul 4174, 25/09: era scritto due volte)
     detChi.replaceChildren(segno, testi);
 
-    const provaTesta = el('h4', 'talos-wfg__dettaglio-titolo'); provaTesta.append(icona('i-doc'), el('span', null, 'Evidenze recenti'));
+    const provaTesta = el('h4', 'talos-wfg__dettaglio-titolo'); provaTesta.append(icona('i-doc'), el('span', null, tr('agenti.delegations.recentEvidence')));
     const elenco = el('ul', 'talos-wfg__evidenze');
-    if (!run) elenco.append(el('li', 'talos-wfg__vuoto', 'Il passo non è ancora partito.'));
-    else if (!riga.stepSessionId) elenco.append(el('li', 'talos-wfg__vuoto', 'La sessione del passo non è ancora nata.'));
-    else if (!stato.evidenze) elenco.append(el('li', 'talos-wfg__vuoto', 'Leggo gli attrezzi usati…'));
-    else if (stato.evidenze.length === 0) elenco.append(el('li', 'talos-wfg__vuoto', 'Nessun attrezzo usato finora.'));
+    if (!run) elenco.append(el('li', 'talos-wfg__vuoto', tr('agenti.workflow.evidenceNotStarted')));
+    else if (!riga.stepSessionId) elenco.append(el('li', 'talos-wfg__vuoto', tr('agenti.workflow.evidenceNoSession')));
+    else if (!stato.evidenze) elenco.append(el('li', 'talos-wfg__vuoto', tr('agenti.workflow.evidenceReading')));
+    else if (stato.evidenze.length === 0) elenco.append(el('li', 'talos-wfg__vuoto', tr('agenti.delegations.noToolsYet')));
     else for (const prova of stato.evidenze) {
       const voce = el('li', 'talos-wfg__evidenza');
       voce.append(icona(prova.esito ? 'i-check' : 'i-clock'), el('span', 'talos-wfg__evidenza-nome', maiuscola(nomeUmanoAttrezzo(prova.nome))));
@@ -644,23 +662,23 @@ export function montaGrafoWorkflow(host, {
         for (const pezzo of prova.oggetto.split(/(?<=[/\\])/u)) oggetto.append(pezzo, d.createElement('wbr'));
         oggetto.title = prova.oggetto; voce.append(oggetto);
       }
-      if (!prova.esito) voce.append(el('span', 'talos-wfg__evidenza-quando', 'in corso'));
+      if (!prova.esito) voce.append(el('span', 'talos-wfg__evidenza-quando', tr('agenti.timeline.stillRunning')));
       elenco.append(voce);
     }
     // ⛔ in riproduzione le evidenze restano quelle del vivo: gli eventi persistiti della sessione non hanno un orario
     //   (`session-registry.mjs:1605`), quindi non si possono fermare all'istante rigiocato — si dice, non si finge
-    if (stato.t !== null && run) elenco.append(el('li', 'talos-wfg__vuoto', 'Sono quelle di adesso: le evidenze non hanno un orario e la riproduzione non le ferma.'));
+    if (stato.t !== null && run) elenco.append(el('li', 'talos-wfg__vuoto', tr('agenti.workflow.evidenceReplayNote')));
     const outputParts = [provaTesta, elenco];
     if (run && !info.carica && (info.totalOutputs > 0 || info.outputs?.length > 0)) {
       const total = Number.isSafeInteger(info.totalOutputs) ? info.totalOutputs : (info.outputs?.length ?? 0);
-      outputParts.push(el('h4', 'talos-wfg__dettaglio-titolo', `Risultati (${cifra(total)})`));
+      outputParts.push(el('h4', 'talos-wfg__dettaglio-titolo', tr('agenti.workflow.resultsTitle', { n: cifraLingua(total) })));
       const tipi = new Set((info.outputs ?? []).map(ref => ref?.kind).filter(Boolean));
       outputParts.push(el('p', 'talos-wfg__result-compact', [
-        `${cifra(total)} risultati`,
-        tipi.size ? [...tipi].join(', ') : 'tipo sconosciuto',
-        'Apri il pannello per anteprime, testo integrale e download',
+        tn('agenti.workflow.resultsCountOne', 'agenti.workflow.resultsCountMany', total, { n: cifraLingua(total) }),
+        tipi.size ? [...tipi].join(', ') : tr('agenti.results.typeUnknown'),
+        tr('agenti.workflow.resultsHint'),
       ].join(' · ')));
-      const open = bottone('Apri risultati', 'talos-wfg__link talos-wfg__result-trigger');
+      const open = bottone(tr('agenti.workflow.openResults'), 'talos-wfg__link talos-wfg__result-trigger');
       open.dataset.azione = 'apri-risultati';
       open.setAttribute('aria-controls', pannelloRisultati.elemento.id);
       open.setAttribute('aria-expanded', String(pannelloRisultati.apertoPer() === info.nodeId));
@@ -674,14 +692,14 @@ export function montaGrafoWorkflow(host, {
     }
     detProve.replaceChildren(...outputParts);
 
-    const compitoTesta = el('h4', 'talos-wfg__dettaglio-titolo'); compitoTesta.append(icona('i-eye'), el('span', null, 'Task corrente'));
+    const compitoTesta = el('h4', 'talos-wfg__dettaglio-titolo'); compitoTesta.append(icona('i-eye'), el('span', null, tr('agenti.delegations.currentTask')));
     const righe = String(info.instructions ?? '').split(/\r?\n/u).map((r) => r.trim()).filter(Boolean);
     const parti = [compitoTesta];
     if (righe.length) {
       const primo = el('p', 'talos-wfg__compito-titolo', righe[0]); primo.title = righe[0];
       parti.push(primo);
       if (righe.length > 1) { const resto = el('p', 'talos-wfg__compito-resto', righe.slice(1).join(' ')); resto.title = resto.textContent; parti.push(resto); }
-    } else parti.push(el('p', 'talos-wfg__vuoto', info.carica ? 'Leggo il compito…' : 'Il compito di questo passo non è disponibile.'));
+    } else parti.push(el('p', 'talos-wfg__vuoto', info.carica ? tr('agenti.workflow.taskReading') : tr('agenti.workflow.taskUnavailable')));
     detCompito.replaceChildren(...parti);
     apriConversazione.disabled = !riga.stepSessionId || typeof onApriSessione !== 'function';
   }
@@ -710,7 +728,7 @@ export function montaGrafoWorkflow(host, {
   function disegnaLettura() {
     const p = fonte.panoramica;
     if (!p) return;
-    const albero = el('ul', 'talos-wfg__albero-lettura'); albero.setAttribute('role', 'tree'); albero.setAttribute('aria-label', 'Workflow per fasi e agenti');
+    const albero = el('ul', 'talos-wfg__albero-lettura'); albero.setAttribute('role', 'tree'); albero.setAttribute('aria-label', tr('agenti.workflow.readingTreeLabel'));
     const voci = [];
     p.groups.forEach((gruppo, indice) => {
       const fase = el('li', 'talos-wfg__voce talos-wfg__voce--fase'); fase.setAttribute('role', 'treeitem');
@@ -721,7 +739,10 @@ export function montaGrafoWorkflow(host, {
       const c = fonte.conteggi(gruppo.phaseId, stato.t);
       const cento = c && run ? percentualeFase({ progress: c.progress }) : null;
       // il NOME della fase viene per primo: la ricerca per iniziale (APG) confronta l'inizio del testo, e «Fase N» è uguale per tutte
-      fase.append(el('span', 'talos-wfg__voce-testo', `${gruppo.label} — fase ${indice + 1} di ${p.groups.length}: ${plurale(gruppo.total, 'agente', 'agenti')}, ${cento === null ? 'non ancora avviata' : `${cifra(c.terminated)} terminati su ${cifra(gruppo.total)}`}`));
+      const agentiDellaFase = plurale(gruppo.total, ...AGENTE);
+      fase.append(el('span', 'talos-wfg__voce-testo', cento === null
+        ? tr('agenti.workflow.readingPhaseNotStarted', { nome: gruppo.label, i: indice + 1, n: p.groups.length, agenti: agentiDellaFase })
+        : tr('agenti.workflow.readingPhaseProgress', { nome: gruppo.label, i: indice + 1, n: p.groups.length, agenti: agentiDellaFase, fatti: cifraLingua(c.terminated), totale: cifraLingua(gruppo.total) })));
       voci.push(fase);
       if (aperta) {
         const gruppoAria = el('ul', 'talos-wfg__voce-figli'); gruppoAria.setAttribute('role', 'group');
@@ -734,12 +755,12 @@ export function montaGrafoWorkflow(host, {
           passo.dataset.nodoId = riga.nodeId; passo.dataset.chiave = `passo:${riga.nodeId}`; passo.dataset.padre = `fase:${gruppo.phaseId}`;
           passo.setAttribute('aria-selected', String(stato.selezionato === riga.nodeId));
           const st = statoDi(riga.nodeId) ?? riga.state;
-          passo.textContent = [riga.label, statoPasso(st).parola, modelloDelPasso(riga, sessione.modello), durataDi(riga.nodeId, st)].filter(Boolean).join(' · ');
+          passo.textContent = [riga.label, parolaDelPasso(st), modelloDelPasso(riga, sessione.modello), durataDi(riga.nodeId, st)].filter(Boolean).join(' · ');
           gruppoAria.append(passo); voci.push(passo);
         }
         if (quanti < gruppo.total) {
           const resto = gruppo.total - quanti;
-          const altri = el('li', 'talos-wfg__voce talos-wfg__voce--altri', `Mostra altri ${cifra(Math.min(PAGINA_ELENCO, resto))} agenti (${cifra(resto)} ancora)`);
+          const altri = el('li', 'talos-wfg__voce talos-wfg__voce--altri', tr('agenti.workflow.readingShowMore', { n: cifraLingua(Math.min(PAGINA_ELENCO, resto)), resto: cifraLingua(resto) }));
           altri.setAttribute('role', 'treeitem'); altri.setAttribute('aria-level', '2'); altri.dataset.chiave = `altri:${gruppo.phaseId}`; altri.dataset.padre = `fase:${gruppo.phaseId}`;
           altri.dataset.altri = gruppo.phaseId;
           gruppoAria.append(altri); voci.push(altri);
@@ -857,7 +878,7 @@ export function montaGrafoWorkflow(host, {
     if (stato.query) {
       const nodi = trovati().length;
       const fasi = fonte.panoramica?.groups.filter((g) => corrisponde(g.label)).length ?? 0;
-      esitoCerca.textContent = `${plurale(nodi, 'agente', 'agenti')} e ${plurale(fasi, 'fase', 'fasi')} corrispondono fra quelli caricati · Invio per andare al prossimo`;
+      esitoCerca.textContent = tr('agenti.workflow.searchResult', { agenti: plurale(nodi, ...AGENTE), fasi: plurale(fasi, ...FASE) });
     } else esitoCerca.textContent = '';
     evidenzia();
   });
@@ -887,7 +908,7 @@ export function montaGrafoWorkflow(host, {
     const L = Math.max(1, a.lunghezza);
     for (const s of a.vuoti) {
       const v = el('span', 'gv-rip-vuoto'); v.style.left = `${(s.asseDa / L) * 100}%`; v.style.width = `${Math.max(0.4, ((s.asseA - s.asseDa) / L) * 100)}%`;
-      v.title = `${formattaDurata(s.a - s.da)} senza attività, compressi`;
+      v.title = tr('agenti.workflow.idleCompressed', { durata: formattaDurata(s.a - s.da) });
       ripVuoti.append(v);
     }
     // i segni degli errori: quando un passo è finito «non riuscito» (dalla storia, non dalle righe)
@@ -895,7 +916,7 @@ export function montaGrafoWorkflow(host, {
       if (voce.scope !== 'node' || voce.state !== 'failed') continue;
       const m = el('span', 'gv-rip-segno'); m.dataset.tono = 'errore';
       m.style.left = `${(a.versoAsse(Date.parse(voce.at)) / L) * 100}%`;
-      m.title = `${fonte.riga(voce.nodeId)?.label ?? 'Un agente'}: non riuscito alle ${ora(voce.at)}`;
+      m.title = tr('agenti.workflow.failedAt', { nome: fonte.riga(voce.nodeId)?.label ?? tr('agenti.workflow.anAgent'), ora: oraBreve(voce.at) });
       ripVuoti.append(m);
     }
     aggiornaRiproduzione();
@@ -912,12 +933,12 @@ export function montaGrafoWorkflow(host, {
     const istante = stato.t ?? a.t1;
     const p = fonte.panoramica;
     const terminati = stato.t === null ? p?.terminated ?? 0 : p?.groups.reduce((somma, g) => somma + (fonte.conteggi(g.phaseId, stato.t)?.terminated ?? 0), 0) ?? 0;
-    const testo = `${ora(new Date(istante).toISOString())} · ${cifra(terminati)} di ${cifra(p?.total ?? 0)} terminati`;
+    const testo = `${oraBreve(istante)} · ${tr('agenti.graph.finishedOf', { fatti: cifraLingua(terminati), totale: cifraLingua(p?.total ?? 0) })}`;
     ripTesto.textContent = testo;
     ripBinario.setAttribute('aria-valuemin', '0'); ripBinario.setAttribute('aria-valuemax', String(Math.round(a.lunghezza / 60000)));
     ripBinario.setAttribute('aria-valuenow', String(Math.round(posizione() / 60000))); ripBinario.setAttribute('aria-valuetext', testo);
     ripGioca.replaceChildren(icona(stato.riproduce ? 'i-pausa' : 'i-play'));
-    ripGioca.setAttribute('aria-label', stato.riproduce ? 'Metti in pausa la riproduzione' : 'Riproduci il run dall’inizio');
+    ripGioca.setAttribute('aria-label', stato.riproduce ? tr('agenti.delegations.pause') : tr('agenti.workflow.playRun'));
     ripVivo.hidden = stato.t === null;
     rip.dataset.attiva = String(stato.t !== null);
   }
@@ -1009,10 +1030,10 @@ export function montaGrafoWorkflow(host, {
   }
   async function esegui(azione, opener) {
     if (!azione || stato.inVolo || !run || morto) return;
-    const conferma = (opzioni) => apriConfermaRun(d, { sopra: 'Run del workflow', opener, gestore: gestoreOverlay?.() ?? null, ...opzioni });
+    const conferma = (opzioni) => apriConfermaRun(d, { sopra: tr('agenti.workflow.confirmAbove'), opener, gestore: gestoreOverlay?.() ?? null, ...opzioni });
     if (azione === 'cancel') {
       // decisione owner 22: la conferma dice le conseguenze, dai conteggi veri
-      if (!(await conferma({ titolo: 'Annullo il run?', testo: conseguenzeAnnulla(fonte.panoramica), conferma: 'Annulla il run', pericolo: true })) || morto) return;
+      if (!(await conferma({ titolo: tr('agenti.workflow.cancelTitle'), testo: conseguenzeAnnulla(fonte.panoramica), conferma: tr('agenti.workflow.cancelConfirm'), pericolo: true })) || morto) return;
     }
     if (azione === 'retry') {
       // decisione owner 23: prima il CONTO (anteprima del server, lo stesso numero che il comando applicherà), poi la conferma
@@ -1020,12 +1041,12 @@ export function montaGrafoWorkflow(host, {
       const anteprima = await client.anteprimaRiprova(sorgente).catch(() => null);
       stato.inVolo = null; disegnaRun();
       if (morto) return;
-      if (!anteprima) { dillo('Non riesco a leggere di quanto salirebbe il tetto: Riprova non parte senza dirlo prima.', true); return; }
+      if (!anteprima) { dillo(tr('agenti.workflow.retryCeilingUnknown'), true); return; }
       const n = anteprima.nodeIds?.length ?? 0;
-      if (!n) { dillo('Adesso non ci sono passi non riusciti da riprovare.', false); ultimaRilettura = 0; programmaRilettura(); return; }
+      if (!n) { dillo(tr('agenti.workflow.retryNothing'), false); ultimaRilettura = 0; programmaRilettura(); return; }
       const righe = righeAumento(anteprima.ceilingRaise);
-      const testo = `${n === 1 ? 'Il passo non riuscito riparte' : `I ${cifra(n)} passi non riusciti ripartono`} coi tentativi da capo. ${righe.length ? 'Il tetto del run sale di:' : 'Il tetto del run non cambia.'}`;
-      if (!(await conferma({ titolo: `Riprovo ${plurale(n, 'passo', 'passi')}?`, testo, righe, conferma: 'Riprova' })) || morto) return;
+      const testo = `${tn('agenti.workflow.retryIntroOne', 'agenti.workflow.retryIntroMany', n, { n: cifraLingua(n) })} ${righe.length ? tr('agenti.workflow.ceilingRises') : tr('agenti.workflow.ceilingSame')}`;
+      if (!(await conferma({ titolo: tn('agenti.workflow.retryTitleOne', 'agenti.workflow.retryTitleMany', n, { n: cifraLingua(n) }), testo, righe, conferma: tr('agenti.workflow.retryConfirm') })) || morto) return;
     }
     stato.inVolo = azione; disegnaRun();
     const esito = await client.comando(sorgente, azione, uuid ? { uuid } : {});

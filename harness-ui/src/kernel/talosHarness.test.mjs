@@ -157,6 +157,8 @@ import {
     provaSenzaTest,
     eseguiComandoSandboxato,
     leggiLibreriaStandardTs,
+    togliConfiniDati, // F-027: il contenuto esterno arriva dentro il confine — queste prove guardano il contenuto
+    ISTRUZIONE_CONFINE_DATI, // F-027, estensione: una sessione ripresa SENZA la frase del confine la riceve in coda
 } from './talosHarness.mjs'
 import { etichettaSandbox } from './etichetta-sandbox.mjs'
 
@@ -354,7 +356,7 @@ describe('LEVA 5 — la chiamata che ritenta', () => {
                 assert.equal(e.stato, 429, 'lo stato viaggia con l errore')
                 assert.equal(e.limitatoDalFornitore, true,
                     'il banco distingue «prova mai fatta» da «fallito» leggendo questo')
-                assert.match(e.message, /4 tentativi/)
+                assert.match(e.message, /4 attempts/)
                 return true
             })
         assert.equal(rete.chiamate.length, 4, 'quattro tentativi, non uno e non otto')
@@ -582,8 +584,8 @@ describe('LEVA 3 — i giri che finiscono, e lo dicono', () => {
     it('⛔ esaurire i giri e un esito SUO, non un fallimento', () => {
         const r = comeSonoFinitiIGiri({ giroRaggiunto: 24, giriMassimi: 24, haRisposto: false })
         assert.equal(r.esito, 'giri-esauriti')
-        assert.match(r.detto, /giri esauriti/)
-        assert.match(r.detto, /non e un fallimento del ragionamento/i)
+        assert.match(r.detto, /turns exhausted/)
+        assert.match(r.detto, /not a reasoning failure/i)
     })
 
     it('⭐ chi chiude prima e «concluso», e non dice niente', () => {
@@ -949,14 +951,14 @@ describe('talosLavora — il ciclo intero, con una rete finta', () => {
         assert.equal(esito.comeFinita, 'fermato')
         assert.equal(rete.chiamate.length, 0,
             'il controllo è PRIMA della chiamata: zero traffico dopo lo stop')
-        assert.match(esito.detto, /interrotto su richiesta/)
+        assert.match(esito.detto, /stopped on request/)
     })
 
     it('⭐⭐⭐ messaggiIniziali sostituisce [sistema, compito]: la PRIMA richiesta alla rete lo dimostra', async () => {
         const cartella = cartellaVuota(it)
         const rete = reteDiRisposte(CONCLUSO_SUBITO)
         const storiaDiRipresa = [
-            { role: 'system', content: 'istruzioni' },
+            { role: 'system', content: `istruzioni\n\n${ISTRUZIONE_CONFINE_DATI}` }, // F-027: una sessione nata col confine
             { role: 'user', content: 'il compito originale' },
             { role: 'assistant', content: 'riassunto di una sessione precedente' },
         ]
@@ -1153,7 +1155,7 @@ describe('talosLavora — il ciclo intero, con una rete finta', () => {
         const cartella = cartellaVuota(it)
         const rete = reteDiRisposte(CONCLUSO_SUBITO)
         const storiaDiRipresa = [
-            { role: 'system', content: 'istruzioni' },
+            { role: 'system', content: `istruzioni\n\n${ISTRUZIONE_CONFINE_DATI}` }, // F-027: una sessione nata col confine
             { role: 'user', content: 'il compito originale' },
             { role: 'assistant', content: 'riassunto di una sessione precedente' },
         ]
@@ -2614,7 +2616,7 @@ describe('talosLavora — web_search, artifact_create, document_create e time_no
         assert.equal(esito.comeFinita, 'concluso')
         assert.equal(chiamata, false)
         const messaggioTool = rete.chiamate[1].corpo.messages.find((m) => m.role === 'tool')
-        assert.match(messaggioTool.content, /^REFUSED/)
+        assert.match(messaggioTool.content, /^INVALID\./) // H-05: un argomento sbagliato non è un rifiuto
     })
 
     it('⭐⭐⭐ time_now: offerto solo se richiesto, e il modello riceve giorno della settimana + fuso + ISO, mai un timestamp nudo', async () => {
@@ -2798,7 +2800,9 @@ describe('talosLavora — web_search, artifact_create, document_create e time_no
         assert.equal(esito.comeFinita, 'concluso')
         assert.deepEqual(ricevuti, [{ task: 'scrivi un modulo di test', cartellaFiglio: '/tmp/figlio-isolato' }])
         const messaggioTool = rete.chiamate[1].corpo.messages.find((m) => m.role === 'tool')
-        assert.equal(messaggioTool.content, 'Fatto: modulo scritto e testato.')
+        // F-027, estensione (03/10/2026): il riassunto che la figlia restituisce subito è contenuto di fuori, nel confine
+        assert.match(messaggioTool.content, /^<<<TALOS_DATA id=[0-9a-f]{12} from="delega">>>\n/u)
+        assert.equal(togliConfiniDati(messaggioTool.content), 'Fatto: modulo scritto e testato.')
     })
 
     it('⭐⭐⭐ 06/9 — delega_sottotask con cartella ASSENTE: parte nella cartella del PADRE', async () => {
@@ -2823,7 +2827,7 @@ describe('talosLavora — web_search, artifact_create, document_create e time_no
         assert.equal(esito.comeFinita, 'concluso')
         assert.deepEqual(vista, { task: 'fai qualcosa', dove: cartella }, 'senza cartella il figlio lavora dove lavora il padre')
         const messaggioTool = rete.chiamate[1].corpo.messages.find((m) => m.role === 'tool')
-        assert.equal(messaggioTool.content, 'figlio concluso')
+        assert.equal(togliConfiniDati(messaggioTool.content), 'figlio concluso') // F-027: nel confine `from="delega"`
     })
 
     it('⭐⭐⭐ 06/9 — delega_sottotask con cartella UGUALE al padre: parte, non è più un rifiuto', async () => {
@@ -2851,7 +2855,7 @@ describe('talosLavora — web_search, artifact_create, document_create e time_no
         assert.equal(esito.comeFinita, 'concluso')
         assert.equal(chiamata, false)
         const messaggioTool = rete.chiamate[1].corpo.messages.find((m) => m.role === 'tool')
-        assert.match(messaggioTool.content, /^REFUSED\./)
+        assert.match(messaggioTool.content, /^INVALID\./) // H-05: un argomento sbagliato non è un rifiuto
         assert.match(messaggioTool.content, /must be a string/)
     })
 
@@ -2957,16 +2961,96 @@ describe('talosLavora — codaMessaggiFn (FASE D, coda su una sessione in corso)
         assert.equal(chiamate, 2, 'la coda è stata interpellata due volte: una che consegna, una che la trova vuota')
     })
 
-    it('⛔⛔ AL CONTRARIO — codaMessaggiFn NON è MAI chiamata mentre il modello sta ancora facendo tool-call', async () => {
+    it('⛔⛔ K5 (03/10) — codaMessaggiFn è interpellata DOPO i risultati degli strumenti e alla conclusione, mai mentre lo strumento gira', async () => {
+        /* Contratto cambiato dall'owner (03/10, «Come Claude Code, completo»): prima la coda si guardava solo alla conclusione. */
         const cartella = cartellaVuota(it)
         const rete = reteDiRisposte(CHIAMA_SCRIVI, CONCLUSO_SUBITO)
-        let chiamateAllaCoda = 0
+        const momenti = []
         const esito = await talosLavora({
             cartella, task: TASK, modello: 'x', chiave: 'y', fetchDiRete: rete.fetch,
-            codaMessaggiFn: () => { chiamateAllaCoda += 1; return null },
+            codaMessaggiFn: () => { momenti.push(existsSync(join(cartella, 'nuovo.txt')) ? 'dopo-lo-strumento' : 'prima'); return null },
         })
         assert.equal(esito.comeFinita, 'concluso')
-        assert.equal(chiamateAllaCoda, 1, 'interpellata una volta sola — al giro CONCLUSO_SUBITO, mai al giro con la tool-call scrivi')
+        assert.deepEqual(momenti, ['dopo-lo-strumento', 'dopo-lo-strumento'], 'una volta dopo «scrivi» (il file c’è già), una alla conclusione')
+    })
+
+    it('⭐⭐⭐ K5 — un messaggio accodato mentre gli strumenti girano entra SUBITO dopo i loro risultati, nello stesso giro', async () => {
+        const cartella = cartellaVuota(it)
+        const rete = reteDiRisposte(CHIAMA_SCRIVI, CONCLUSO_SUBITO)
+        const coda = ['controlla anche il README']
+        const esito = await talosLavora({
+            cartella, task: TASK, modello: 'x', chiave: 'y', fetchDiRete: rete.fetch,
+            codaMessaggiFn: () => coda.shift() ?? null,
+        })
+        assert.equal(esito.comeFinita, 'concluso')
+        assert.equal(rete.chiamate.length, 2, 'nessuna chiamata in più: il messaggio viaggia con i risultati degli strumenti')
+        const mandati = rete.chiamate[1].corpo.messages
+        assert.deepEqual(mandati.at(-1), { role: 'user', content: 'controlla anche il README' })
+        assert.equal(mandati.at(-2).role, 'tool', 'subito dopo il risultato dello strumento')
+    })
+
+    it('⭐⭐ K5 — due messaggi in coda dopo gli strumenti entrano TUTTI e due, in ordine, nella stessa chiamata', async () => {
+        const cartella = cartellaVuota(it)
+        const rete = reteDiRisposte(CHIAMA_SCRIVI, CONCLUSO_SUBITO)
+        const coda = ['primo', 'secondo']
+        const esito = await talosLavora({
+            cartella, task: TASK, modello: 'x', chiave: 'y', fetchDiRete: rete.fetch,
+            codaMessaggiFn: () => coda.shift() ?? null,
+        })
+        assert.equal(esito.comeFinita, 'concluso')
+        assert.equal(rete.chiamate.length, 2)
+        assert.deepEqual(rete.chiamate[1].corpo.messages.slice(-3).map((m) => [m.role, m.content ?? null]).slice(1), [['user', 'primo'], ['user', 'secondo']])
+        assert.equal(rete.chiamate[1].corpo.messages.at(-3).role, 'tool')
+    })
+
+    it('⛔⛔ K5 AL CONTRARIO — una coda in pausa (la funzione risponde null) non consegna niente dopo gli strumenti', async () => {
+        const cartella = cartellaVuota(it)
+        const rete = reteDiRisposte(CHIAMA_SCRIVI, CONCLUSO_SUBITO)
+        const inPausa = ['aspetta la persona']
+        let chieste = 0
+        const esito = await talosLavora({
+            cartella, task: TASK, modello: 'x', chiave: 'y', fetchDiRete: rete.fetch,
+            codaMessaggiFn: () => { chieste += 1; return null },
+        })
+        assert.equal(esito.comeFinita, 'concluso')
+        assert.equal(inPausa.length, 1, 'la voce in pausa resta dov’è')
+        assert.equal(chieste, 2)
+        assert.ok(!rete.chiamate[1].corpo.messages.some((m) => m.role === 'user' && m.content === 'aspetta la persona'))
+        assert.equal(rete.chiamate[1].corpo.messages.at(-1).role, 'tool', 'la chiamata dopo gli strumenti finisce col loro risultato')
+    })
+
+    it('⛔⛔⛔ K5 AL CONTRARIO — uno Stop arrivato mentre lo strumento gira: la coda NON si consuma', async () => {
+        const cartella = cartellaVuota(it)
+        const rete = reteDiRisposte(CHIAMA_SCRIVI, CONCLUSO_SUBITO)
+        const stop = new AbortController()
+        const coda = ['non consumarmi']
+        const esito = await talosLavora({
+            cartella, task: TASK, modello: 'x', chiave: 'y', fetchDiRete: rete.fetch, segnaleStop: stop.signal,
+            onGiro: (e) => { if (e?.tipo === 'tool-esito') stop.abort() },
+            codaMessaggiFn: () => coda.shift() ?? null,
+        })
+        assert.equal(esito.comeFinita, 'fermato')
+        assert.deepEqual(coda, ['non consumarmi'], 'il messaggio resta in coda per la persona')
+        assert.equal(rete.chiamate.length, 1, 'nessuna chiamata dopo lo Stop')
+    })
+
+    it('⛔⛔ K5 CONFINE — un messaggio accodato mentre il modello scrive solo testo esce dal blocco di fine turno, una volta sola, come prima', async () => {
+        /* Desktop 03/10: il confine fra i due punti di consegna. Un mutante che svuota la coda in entrambi diventa rosso. */
+        const cartella = cartellaVuota(it)
+        const rete = reteDiRisposte(CONCLUSO_SUBITO, CONCLUSO_SUBITO)
+        const coda = ['ancora una cosa']
+        let chieste = 0
+        const esito = await talosLavora({
+            cartella, task: TASK, modello: 'x', chiave: 'y', fetchDiRete: rete.fetch,
+            codaMessaggiFn: () => { chieste += 1; return coda.shift() ?? null },
+        })
+        assert.equal(esito.comeFinita, 'concluso')
+        assert.equal(rete.chiamate.length, 2)
+        const mandati = rete.chiamate[1].corpo.messages
+        assert.deepEqual([mandati.at(-2).role, mandati.at(-2).content], ['assistant', 'fatto'], 'dopo la risposta del modello, come prima')
+        assert.deepEqual(mandati.at(-1), { role: 'user', content: 'ancora una cosa' })
+        assert.equal(mandati.filter((m) => m.role === 'user' && m.content === 'ancora una cosa').length, 1, 'mai due volte')
+        assert.equal(chieste, 2, 'una consegna alla conclusione e una che la trova vuota: nessuna domanda in più')
     })
 
     it('⭐⭐ AL CONTRARIO — una coda che drena a più riprese consegna OGNI messaggio, uno per punto di conclusione', async () => {
@@ -3078,14 +3162,15 @@ describe('talosLavora — verificaPermessoScrittura (livelloAccesso/chiediApprov
      *   Verificato col grep il 20/09/2026: `suiteMancante` non compariva in nessun test del kernel.
      *   Una cura senza prova è una cura che nessuno sa se morde: qui si prova nei DUE versi.
      */
-    it('⛔⛔⛔ FALLA 1 — senza nessun `package.json` il cancello rifiuta, col motivo e col 127', async () => {
+    it('⛔⛔⛔ FALLA 1 — senza nessun `package.json` il cancello rifiuta, col motivo e SENZA un codice d\'uscita (H-04)', async () => {
         const cartella = cartellaVuota(it)   // in %TEMP%, e sopra non c'è nessun package.json fino a C:\ (verificato)
         const rete = reteDiRisposte(CHIAMA_PROVA, CONCLUSO_SUBITO)
         await talosLavora({ cartella, task: TASK, modello: 'x', chiave: 'y', fetchDiRete: rete.fetch })
         const messaggioTool = rete.chiamate[1].corpo.messages.find((m) => m.role === 'tool')
-        assert.match(messaggioTool.content, /nessuna suite trovata in /, 'il cancello non ha parlato')
-        assert.match(messaggioTool.content, /nessun package\.json da qui fino alla radice del disco/, 'manca il MOTIVO: senza, il rifiuto non si puo capire')
-        assert.match(messaggioTool.content, /exit 127/, 'stesso codice della suite a zero test: non e partita, non e fallita')
+        assert.match(messaggioTool.content, /^NOT RUN: NO_TEST_SUITE_CONFIGURED — no test suite found in /, 'il cancello non ha parlato')
+        assert.match(messaggioTool.content, /there is no package\.json from this folder up to the root of the disk/, 'manca il MOTIVO: senza, il rifiuto non si puo capire')
+        assert.match(messaggioTool.content, /No command was run, so there is no exit code; this is not a pass\./, 'non e partita, non e fallita — e non ha un codice (H-04: il 127 diceva «comando non trovato»)')
+        assert.doesNotMatch(messaggioTool.content, /127/)
         assert.doesNotMatch(messaggioTool.content, /^exit 0/m, 'un cancello che rifiuta NON puo produrre un exit 0')
     })
 
@@ -3095,21 +3180,28 @@ describe('talosLavora — verificaPermessoScrittura (livelloAccesso/chiediApprov
         const rete = reteDiRisposte(CHIAMA_PROVA, CONCLUSO_SUBITO)
         await talosLavora({ cartella, task: TASK, modello: 'x', chiave: 'y', fetchDiRete: rete.fetch })
         const messaggioTool = rete.chiamate[1].corpo.messages.find((m) => m.role === 'tool')
-        assert.doesNotMatch(messaggioTool.content, /nessuna suite trovata/, 'una suite che ESISTE non deve essere rifiutata')
+        assert.doesNotMatch(messaggioTool.content, /no test suite found/, 'una suite che ESISTE non deve essere rifiutata')
         assert.match(messaggioTool.content, /suite girata davvero/, 'la prova non e girata: manca la sua uscita')
         assert.match(messaggioTool.content, /exit 0/)
     })
 
-    it('⛔⛔⛔ il COLLEGAMENTO: una dichiarazione di zero test diventa loud, col messaggio del piano (uscita 127)', async () => {
+    it('⛔⛔⛔ il COLLEGAMENTO: una dichiarazione di zero test diventa loud — NOT RUN: NO_TESTS_RAN, col codice vero del runner (owner 03/10)', async () => {
         const cartella = cartellaVuota(it)
         writeFileSync(join(cartella, 'package.json'), JSON.stringify({
             name: 'senza-test', version: '1.0.0',
             scripts: { test: `node -e "console.log('ℹ tests 0'); console.log('ℹ fail 0')"` },
         }))
         const rete = reteDiRisposte(CHIAMA_PROVA, CONCLUSO_SUBITO)
-        const esito = await talosLavora({ cartella, task: TASK, modello: 'x', chiave: 'y', fetchDiRete: rete.fetch })
+        const giri = []
+        const esito = await talosLavora({ cartella, task: TASK, modello: 'x', chiave: 'y', fetchDiRete: rete.fetch, onGiro: (e) => giri.push(e) })
         assert.equal(esito.comeFinita, 'concluso')
         const messaggioTool = rete.chiamate[1].corpo.messages.find((m) => m.role === 'tool')
+        /* 03/10: la testa è di TALOS e sta FUORI dal confine; la riga del runner e l'uscita stanno DENTRO */
+        const testaNotRun = 'NOT RUN: NO_TESTS_RAN — the test command ran and exited 0, but no tests ran: this is not a pass. Create the suite or point the command at the folder that has one.\n'
+        assert.ok(messaggioTool.content.startsWith(testaNotRun), messaggioTool.content.slice(0, 300))
+        assert.match(messaggioTool.content.slice(testaNotRun.length), /^<<<TALOS_DATA id=[0-9a-f]{12} from="prova">>>\nThe runner said: ℹ tests 0\n/u)
+        /* e nessun codice d'uscita nell'evento della scheda: uno 0 o un 127 sarebbero numeri fuorvianti o inventati */
+        assert.equal(giri.find((e) => e.tipo === 'tool-esito')?.exitCode, undefined)
         /*
          * ⛔ F-017 residuo (piano 0.1.19 §1.4, 28/09): il messaggio è quello del piano, parola per
          *   parola — «exit 0 but NO tests ran (…): this is not a pass. Create the suite or point
@@ -3117,19 +3209,19 @@ describe('talosLavora — verificaPermessoScrittura (livelloAccesso/chiediApprov
          *   citata. Il ramo è DIVERSO dal cancello statico: quello parla del manifesto mancante,
          *   questo di test che non sono stati eseguiti — i due messaggi non si confondono.
          */
-        assert.match(messaggioTool.content, /NO tests ran/, 'il modello deve leggere che NIENTE e stato verificato')
-        assert.match(messaggioTool.content, /this is not a pass/, 'e CHE COSA vuol dire: non lascia indovinare')
-        assert.match(messaggioTool.content, /Create the suite or point the command at the folder that has one/, 'e dice la strada per uscirne')
-        assert.match(messaggioTool.content, /ℹ tests 0/, 'la riga dichiarata dal runner si CITA, non si parafrasa')
-        assert.doesNotMatch(messaggioTool.content, /nessuna suite trovata/, 'questo ramo non è il cancello statico: qui il manifesto c\'era, i test non erano')
-        assert.match(messaggioTool.content, /exit 127/, 'lo stesso codice della suite mancante: non e partita, non e fallita')
+        /* ⛔ 03/10/2026 (owner, «Sì, NOT RUN anche lì»): niente più `exit 127` inventato. La testa è di TALOS e sta fuori dal confine,
+           col codice VERO del runner detto in parole; la riga del runner e l'uscita stanno dentro. */
+        assert.ok(messaggioTool.content.startsWith('NOT RUN: NO_TESTS_RAN — the test command ran and exited 0, but no tests ran: this is not a pass. Create the suite or point the command at the folder that has one.\n'), messaggioTool.content.slice(0, 200))
+        assert.match(togliConfiniDati(messaggioTool.content), /\nThe runner said: ℹ tests 0\n/, 'la riga dichiarata dal runner si CITA, non si parafrasa')
+        assert.doesNotMatch(messaggioTool.content, /no test suite found/, 'questo ramo non è il cancello statico: qui il manifesto c\'era, i test non erano')
+        assert.doesNotMatch(messaggioTool.content, /exit 127|exit 0 but/, 'nessun codice inventato, nessuna testa «exit»')
         /*
          * ⛔ UNA VOLTA SOLA — 20/09/2026, quarto referto avversario. `eseguiProva` scriveva la testata
          *   dentro il proprio `testo` E il chiamante la riscriveva avvolgendolo: due `exit 127`, e lo
          *   strip della chat ne toglie una ⇒ una riga tecnica restava a schermo. Il codice viaggia in
          *   `codice`; la testata la mette chi avvolge, come per ogni altro esito.
          */
-        assert.equal((messaggioTool.content.match(/exit 127/g) || []).length, 1, 'la testata si scrive UNA volta: era doppia')
+        assert.equal((messaggioTool.content.match(/NOT RUN: NO_TESTS_RAN/g) || []).length, 1, 'la testata si scrive UNA volta: era doppia')
     })
 
     it('⛔ E IL VERSO CONTRARIO: una prova che ESEGUE qualcosa non viene accusata di niente', async () => {
@@ -3141,7 +3233,7 @@ describe('talosLavora — verificaPermessoScrittura (livelloAccesso/chiediApprov
         const rete = reteDiRisposte(CHIAMA_PROVA, CONCLUSO_SUBITO)
         await talosLavora({ cartella, task: TASK, modello: 'x', chiave: 'y', fetchDiRete: rete.fetch })
         const messaggioTool = rete.chiamate[1].corpo.messages.find((m) => m.role === 'tool')
-        assert.doesNotMatch(messaggioTool.content, /nessuna suite trovata/, 'una prova che gira NON deve essere accusata di non esistere')
+        assert.doesNotMatch(messaggioTool.content, /no test suite found/, 'una prova che gira NON deve essere accusata di non esistere')
         assert.match(messaggioTool.content, /exit 0/)
         assert.match(messaggioTool.content, /pass 1/)
     })
@@ -3165,7 +3257,7 @@ describe('talosLavora — verificaPermessoScrittura (livelloAccesso/chiediApprov
         assert.equal(esito.comeFinita, 'concluso')
         const messaggioTool = rete.chiamate[1].corpo.messages.find((m) => m.role === 'tool')
         assert.match(messaggioTool.content, /^REFUSED\./)
-        assert.match(messaggioTool.content, /sola lettura/)
+        assert.match(messaggioTool.content, /read-only/)
         assert.equal(existsSync(join(cartella, 'nuovo.txt')), false, 'la sessione è read-only: nessun file nuovo sul disco')
     })
 
@@ -3237,7 +3329,7 @@ describe('talosLavora — verificaPermessoScrittura (livelloAccesso/chiediApprov
         assert.equal(esito.comeFinita, 'concluso')
         const messaggioTool = rete.chiamate[1].corpo.messages.find((m) => m.role === 'tool')
         assert.match(messaggioTool.content, /^REFUSED\./)
-        assert.match(messaggioTool.content, /non risolve dentro il workspace/)
+        assert.match(messaggioTool.content, /does not resolve inside the current workspace/)
         assert.equal(existsSync(join(dirname(cartella), 'fuori.txt')), false, 'niente deve finire fuori dal workspace')
     })
 
@@ -3259,8 +3351,8 @@ describe('talosLavora — verificaPermessoScrittura (livelloAccesso/chiediApprov
         assert.equal(esito.comeFinita, 'concluso')
         const messaggioTool = rete.chiamate[1].corpo.messages.find((m) => m.role === 'tool')
         assert.match(messaggioTool.content, /^REFUSED\./)
-        assert.match(messaggioTool.content, /livello di accesso: su-richiesta/)
-        assert.match(messaggioTool.content, /non ha un canale di approvazione attivo/)
+        assert.match(messaggioTool.content, /access level: on-request/)
+        assert.match(messaggioTool.content, /no active approval channel/)
         assert.equal(existsSync(join(cartella, 'nuovo.txt')), false)
     })
 
@@ -3571,7 +3663,7 @@ describe('talosLavora — verificaPermessoScrittura (livelloAccesso/chiediApprov
         const esito = await talosLavora({ cartella, task: TASK, modello: 'x', chiave: 'y', fetchDiRete: rete.fetch, livelloAccesso: 'lettura' })
         assert.equal(esito.comeFinita, 'concluso')
         const messaggioTool = rete.chiamate[1].corpo.messages.find((m) => m.role === 'tool')
-        assert.equal(messaggioTool.content, 'contenuto vero', 'sola lettura non vuol dire nessuna capacità: leggi resta vera')
+        assert.equal(togliConfiniDati(messaggioTool.content), 'contenuto vero', 'sola lettura non vuol dire nessuna capacità: leggi resta vera')
     })
 
     it('⭐⭐⭐ chiediApprovazioneFn(false) rifiuta scrivi con l\'azione VERA — {tipo,percorso} — e il file non esiste', async () => {
@@ -3588,7 +3680,7 @@ describe('talosLavora — verificaPermessoScrittura (livelloAccesso/chiediApprov
         assert.deepEqual(azioniViste, [{ tipo: 'scrivi', toolCallId: 'call_1', percorso: 'nuovo.txt', contenutoPrima: null, contenutoProposto: 'ciao' }])
         assert.equal(existsSync(join(cartella, 'nuovo.txt')), false)
         const messaggioTool = rete.chiamate[1].corpo.messages.find((m) => m.role === 'tool')
-        assert.match(messaggioTool.content, /non ha approvato/)
+        assert.match(messaggioTool.content, /did not approve/)
     })
 
     it('⭐⭐⭐ 28/8, ledger permessi §7.A — chiediApprovazioneFn su un file ESISTENTE riceve il contenuto VERO di prima, non null', async () => {
@@ -3712,7 +3804,7 @@ describe('talosLavora — permessiPerAttrezzo (FASE B, override per-attrezzo)', 
         assert.equal(esito.comeFinita, 'concluso')
         const messaggioTool = rete.chiamate[1].corpo.messages.find((m) => m.role === 'tool')
         assert.match(messaggioTool.content, /^REFUSED\./)
-        assert.match(messaggioTool.content, /permesso per-attrezzo/)
+        assert.match(messaggioTool.content, /per-tool permission/)
         assert.equal(existsSync(join(cartella, 'nuovo.txt')), false)
     })
 
@@ -3753,7 +3845,7 @@ describe('talosLavora — permessiPerAttrezzo (FASE B, override per-attrezzo)', 
         assert.equal(esito.comeFinita, 'concluso')
         const messaggioTool = rete.chiamate[1].corpo.messages.find((m) => m.role === 'tool')
         assert.match(messaggioTool.content, /^REFUSED\./)
-        assert.match(messaggioTool.content, /non ha un canale di approvazione attivo/)
+        assert.match(messaggioTool.content, /no active approval channel/)
         assert.equal(existsSync(join(cartella, 'nuovo.txt')), false)
     })
 
@@ -3779,7 +3871,7 @@ describe('talosLavora — permessiPerAttrezzo (FASE B, override per-attrezzo)', 
         assert.equal(esito.comeFinita, 'concluso')
         const messaggioTool = rete.chiamate[1].corpo.messages.find((m) => m.role === 'tool')
         assert.match(messaggioTool.content, /^REFUSED\./)
-        assert.match(messaggioTool.content, /sola lettura/, 'un valore non riconosciuto deve cadere sul cancello di livelloAccesso, mai su un consenso implicito')
+        assert.match(messaggioTool.content, /read-only/, 'un valore non riconosciuto deve cadere sul cancello di livelloAccesso, mai su un consenso implicito')
         assert.equal(existsSync(join(cartella, 'nuovo.txt')), false)
     })
 
@@ -4017,7 +4109,7 @@ describe('talosLavora — hookFn (pre_tool_call/post_tool_call/session_start/ses
         })
         assert.equal(esito.comeFinita, 'concluso')
         const messaggioTool = rete.chiamate[1].corpo.messages.find((m) => m.role === 'tool')
-        assert.equal(messaggioTool.content, 'contenuto vero', 'una lettura non è mai bloccabile da un hook: fuori scope per costruzione')
+        assert.equal(togliConfiniDati(messaggioTool.content), 'contenuto vero', 'una lettura non è mai bloccabile da un hook: fuori scope per costruzione')
         assert.ok(eventiVisti.some((e) => e.tipo === 'pre_tool_call' && e.azione === 'leggi'), 'il pre_tool_call VIENE comunque chiamato anche su una lettura — "universale" come Hermes, solo il suo rifiuto è ignorato')
     })
 
@@ -4057,7 +4149,7 @@ describe('talosLavora — hookFn (pre_tool_call/post_tool_call/session_start/ses
         })
         assert.equal(esito.comeFinita, 'concluso')
         const messaggioTool = rete.chiamate[1].corpo.messages.find((m) => m.role === 'tool')
-        assert.equal(messaggioTool.content, 'contenuto vero')
+        assert.equal(togliConfiniDati(messaggioTool.content), 'contenuto vero')
     })
 
     it('⭐⭐⭐ session_start/session_end chiamati esattamente una volta, con comeFinita coerente con l\'esito reale', async () => {
@@ -4193,7 +4285,7 @@ describe('talosLavora - tool MCP (FASE E, dispatch verso mcp-client.mjs)', () =>
         assert.equal(esito.comeFinita, 'concluso')
         assert.deepEqual(ricevuti, [{ nome: 'read_file', argomenti: { path: '/tmp/ciao.txt' } }])
         const messaggioTool = rete.chiamate[1].corpo.messages.find((m) => m.role === 'tool')
-        assert.equal(messaggioTool.content, 'contenuto vero, non un mock')
+        assert.equal(togliConfiniDati(messaggioTool.content), 'contenuto vero, non un mock')
     })
 
     it('AL CONTRARIO - un isError:true del tool MCP NON lancia: esito onesto, non un successo inventato', async () => {
@@ -4206,8 +4298,8 @@ describe('talosLavora - tool MCP (FASE E, dispatch verso mcp-client.mjs)', () =>
         })
         assert.equal(esito.comeFinita, 'concluso')
         const messaggioTool = rete.chiamate[1].corpo.messages.find((m) => m.role === 'tool')
-        assert.match(messaggioTool.content, /^MCP tool error:/)
-        assert.match(messaggioTool.content, /ENOENT: file non trovato/)
+        assert.match(togliConfiniDati(messaggioTool.content), /^MCP tool error:/)
+        assert.match(togliConfiniDati(messaggioTool.content), /ENOENT: file non trovato/)
     })
 
     it('AL CONTRARIO - chiamaToolMcpFn che LANCIA: errore onesto, mai un successo inventato', async () => {
@@ -4259,7 +4351,7 @@ describe('formattaEsitoMcp - pura, traduce {content,isError} del protocollo MCP 
 
     it('AL CONTRARIO - un blocco non testuale non sparisce: diventa una riga onesta, mai un vuoto silenzioso', () => {
         const testo = formattaEsitoMcp({ content: [{ type: 'image', data: 'base64...', mimeType: 'image/png' }] })
-        assert.equal(testo, '[image non testuale omesso]')
+        assert.equal(testo, '[image non-text content omitted]')
     })
 
     it('AL CONTRARIO - isError:true antepone un prefisso onesto, mai un successo travestito', () => {
@@ -4367,7 +4459,7 @@ describe('talosLavora - skills (FASE F, dispatch verso skill-registry.mjs)', () 
         assert.equal(esito.comeFinita, 'concluso')
         assert.equal(chiamata, false)
         const messaggioTool = rete.chiamate[1].corpo.messages.find((m) => m.role === 'tool')
-        assert.match(messaggioTool.content, /^REFUSED\./)
+        assert.match(messaggioTool.content, /^NOT FOUND\./) // H-05: ciò che non c'è non è un rifiuto
         assert.match(messaggioTool.content, /skill-che-non-esiste/)
         assert.match(messaggioTool.content, /code-review/, 'il messaggio deve elencare le skill VERE disponibili')
     })
@@ -4485,7 +4577,7 @@ describe('talosLavora - plugin tools (FASE G, dispatch verso plugin-session.mjs)
         assert.equal(esito.comeFinita, 'concluso')
         assert.deepEqual(ricevuti, [{ nome: 'conta_righe', argomenti: { percorso: 'a.txt' } }])
         const messaggioTool = rete.chiamate[1].corpo.messages.find((m) => m.role === 'tool')
-        assert.equal(messaggioTool.content, '42 righe')
+        assert.equal(togliConfiniDati(messaggioTool.content), '42 righe')
     })
 
     it('AL CONTRARIO - eseguiToolPluginFn che LANCIA: errore onesto, mai un successo inventato', async () => {
@@ -4844,7 +4936,7 @@ describe('formattaListaLibreria/formattaRicercaLibreria/formattaLetturaLibreria/
     })
 
     it('formattaLetturaLibreria: un id inesistente (null) è REFUSED, mai un\'eccezione', () => {
-        assert.match(formattaLetturaLibreria(null), /^REFUSED\. That Library id does not exist\./)
+        assert.match(formattaLetturaLibreria(null), /^NOT FOUND\. That Library id does not exist\./) // H-05: ciò che non c'è non è un rifiuto
     })
 
     it('formattaLetturaLibreria: un documento porta nome+testo per intero', () => {
@@ -4867,7 +4959,7 @@ describe('formattaListaLibreria/formattaRicercaLibreria/formattaLetturaLibreria/
     })
 
     it('formattaOrigineLibreria: un id inesistente (null) è REFUSED', () => {
-        assert.equal(formattaOrigineLibreria(null), 'REFUSED. That Library id does not exist.')
+        assert.equal(formattaOrigineLibreria(null), 'NOT FOUND. That Library id does not exist.') // H-05
     })
 
     it('formattaOrigineLibreria: "generated" con modello/provider noti', () => {
@@ -5131,7 +5223,7 @@ describe('talosLavora - Libreria, mutazioni (FASE N seconda fetta, dispatch vers
         assert.equal(chiamataPolitica, false)
         const messaggioTool = rete.chiamate[1].corpo.messages.find((m) => m.role === 'tool')
         assert.match(messaggioTool.content, /^REFUSED\./)
-        assert.match(messaggioTool.content, /richiede sempre una conferma umana separata/)
+        assert.match(messaggioTool.content, /always requires a separate human confirmation/)
     })
 
     it('⛔ AL CONTRARIO — un "sempre" esplicito su un ALTRO attrezzo (document_create) resta bypassato come sempre: il nuovo meccanismo non regredisce gli altri', async () => {
@@ -5859,7 +5951,7 @@ describe('talosLavora - Deep Research (FASE N, ottavo sistema, "fetta onesta")',
         assert.equal(esito.comeFinita, 'concluso')
         assert.deepEqual(ricevuti, [{ id: 'sess-1' }])
         const messaggioTool = rete.chiamate[1].corpo.messages.find((m) => m.role === 'tool')
-        assert.equal(messaggioTool.content, 'Il rapporto completo, verbatim.')
+        assert.equal(togliConfiniDati(messaggioTool.content), 'Il rapporto completo, verbatim.')
     })
 
     it('research_read CON onRicercaLeggi: id inesistente — "no research with that id", mai un\'invenzione', async () => {
@@ -6482,7 +6574,7 @@ describe('talosLavora - Tool Forge (FASE N, nono e ultimo sistema, "fetta onesta
         assert.equal(esito.comeFinita, 'concluso')
         assert.deepEqual(ricevuti, [{ nome: 'forge_log-water-intake', argomenti: { title: 'Bevi acqua' } }])
         const messaggioTool = rete.chiamate[1].corpo.messages.find((m) => m.role === 'tool')
-        assert.equal(messaggioTool.content, 'Nota creata.')
+        assert.equal(togliConfiniDati(messaggioTool.content), 'Nota creata.')
     })
 
     it('AL CONTRARIO - tool forgiato: un eseguiToolForgeFn che LANCIA produce un "failed:" onesto', async () => {
@@ -6494,7 +6586,7 @@ describe('talosLavora - Tool Forge (FASE N, nono e ultimo sistema, "fetta onesta
         })
         assert.equal(esito.comeFinita, 'concluso')
         const messaggioTool = rete.chiamate[1].corpo.messages.find((m) => m.role === 'tool')
-        assert.match(messaggioTool.content, /^forged tool call failed: interprete rotto$/)
+        assert.match(togliConfiniDati(messaggioTool.content), /^forged tool call failed: interprete rotto$/)
     })
 
     it('un tool forgiato che l\'interprete segnala "failed": formattaEsitoForge produce codice+messaggio, non un successo', async () => {
@@ -6506,7 +6598,7 @@ describe('talosLavora - Tool Forge (FASE N, nono e ultimo sistema, "fetta onesta
         })
         assert.equal(esito.comeFinita, 'concluso')
         const messaggioTool = rete.chiamate[1].corpo.messages.find((m) => m.role === 'tool')
-        assert.equal(messaggioTool.content, 'TALOS_FORGE_CAPABILITY_FAILED: notes.create fallita')
+        assert.equal(togliConfiniDati(messaggioTool.content), 'TALOS_FORGE_CAPABILITY_FAILED: notes.create fallita')
     })
 
     it('⛔⛔⛔ AL CONTRARIO — PARITÀ: senza toolForge, zero tool dinamici forgiati offerti', async () => {
@@ -6679,9 +6771,9 @@ describe('⛔⛔⛔ la valanga vista da talosLavora, e l argomento troncato che 
         })
 
         assert.equal(esito.comeFinita, 'ripetizione', 'ne «concluso» ne «giri-esauriti»: e un guasto suo, con un nome suo')
-        assert.match(esito.detto, /stessa identica cosa/)
+        assert.match(esito.detto, /very same thing/)
         assert.match(esito.detto, /elenca/)
-        assert.match(esito.detto, /Non e un limite sul numero di attrezzi/)
+        assert.match(esito.detto, /not a limit on the number of tools/)
         assert.equal(rete.chiamate.length, 1, 'niente secondo giro: il contesto non si riempie di copie identiche')
 
         const assistente = esito.messaggiFinali.filter((m) => m.role === 'assistant' && m.tool_calls)
@@ -6842,9 +6934,9 @@ describe('⛔⛔⛔ lo STOP e immediato — 08/09/2026, owner: «si ferma all is
         assert.equal(chiamateAlModello, 1, 'nessun altro giro dopo lo stop')
         const risposteAttrezzo = esito.messaggiFinali.filter((m) => m.role === 'tool')
         assert.equal(risposteAttrezzo.length, 3, 'ogni tool_call annunciata deve avere il suo esito, anche quella mai eseguita')
-        assert.match(risposteAttrezzo[1].content, /non e stato eseguito/)
-        assert.match(risposteAttrezzo[2].content, /non e stato eseguito/)
-        assert.equal(risposteAttrezzo[0].content.includes('non e stato eseguito'), false, 'la prima era gia partita: il suo esito e quello vero')
+        assert.match(risposteAttrezzo[1].content, /This tool did not run/)
+        assert.match(risposteAttrezzo[2].content, /This tool did not run/)
+        assert.equal(risposteAttrezzo[0].content.includes('This tool did not run'), false, 'la prima era gia partita: il suo esito e quello vero')
     })
 })
 
@@ -7507,7 +7599,7 @@ describe('PO-12 — il modello puo\' MODIFICARE un file invece di riscriverlo', 
             const esito = await giro(cartella, { percorso: 'prezioso.txt', old_string: 'non c\'e\' mai stato', new_string: 'x' },
                 { onGiro: (e) => { if (e.tipo === 'ricevuta') ricevute.push(e.ricevuta) } })
             const [detto] = dettoAlModello(esito)
-            assert.match(detto, /^REFUSED\. Nothing was changed/)
+            assert.match(detto, /^NOT FOUND\. Nothing was changed/) // H-05: un testo che non c'è non è un rifiuto di sicurezza
             assert.match(detto, /not even once/)
             assert.equal(readFileSync(join(cartella, 'prezioso.txt'), 'utf8'), prima)
             assert.equal(ricevute.length, 0, '⛔ nessun permesso chiesto, niente tentato: una ricevuta sarebbe il record di un\'operazione mai avvenuta')
@@ -7566,7 +7658,7 @@ describe('PO-12 — il modello puo\' MODIFICARE un file invece di riscriverlo', 
             const esito = await giro(cartella, { percorso: 'f.txt', old_string: 'originale', new_string: 'manomesso' },
                 { livelloAccesso: 'lettura' })
             assert.match(dettoAlModello(esito)[0], /^REFUSED\./)
-            assert.match(dettoAlModello(esito)[0], /sola lettura/)
+            assert.match(dettoAlModello(esito)[0], /read-only/)
             assert.equal(readFileSync(join(cartella, 'f.txt'), 'utf8'), 'originale\n')
         }
         finally { pulisci(cartella) }

@@ -151,7 +151,7 @@ test('BC49: kernel conferma la parte senza rapporto incompleto; assenza adattato
   await assert.rejects(readFile(percorsoRapporto(b.cartella, id)), { code: 'ENOENT' });
   for (const fn of [undefined, async () => { throw new Error('disco pieno'); }]) {
     const rifiuto = await giroKernel(b.cartella, parti[1], fn);
-    assert.match(rifiuto.risposta, /REFUSED/);
+    assert.match(rifiuto.risposta, /^FAILED\./); // H-05 (owner 02/10/2026): un guasto nostro, non un rifiuto di sicurezza
     await assert.rejects(readFile(percorsoRapporto(b.cartella, id)), { code: 'ENOENT' });
   }
 });
@@ -243,6 +243,10 @@ test('BC49: inventario e campi TALOS-BANCO invariati, eccetto le esenzioni dichi
       answer_child_question: ['childId', 'requestId', 'answer'],
       ask_child: ['childId', 'question'],
       answer_parent_question: ['requestId', 'answer'],
+      /* K3 (F-014, 03/10/2026): elenco e stop dei figli diretti, estesi e nuovi come i quattro sopra — forma fissata qui,
+         poi esclusi dall'impronta STORICA, che continua a provare che nessun attrezzo precedente è cambiato. */
+      list_children: [],
+      stop_child: ['childId'],
     };
     for (const [name, fields] of Object.entries(dialogueTools)) {
       const tool = attrezzi.map((entry) => entry.function ?? entry).find((entry) => entry.name === name);
@@ -472,13 +476,17 @@ test('BC49: inventario e campi TALOS-BANCO invariati, eccetto le esenzioni dichi
           type: 'integer', minimum: 0,
           description: 'First line to read, 1-based (default 1). With format:"hex": start byte offset.',
         });
+        /* F-026 (owner 02/10/2026, «Voglio il +1»): `limit` vale anche con `byteOffset`, in byte (4..102400). Esenzione
+         * dichiarata come le altre: prima si asserisce la frase esatta, poi il campo si toglie dalla copia. */
         assert.deepEqual(schema.properties.limit, {
           type: 'integer', minimum: 1,
-          description: 'Number of lines to read (default 2000). With format:"hex": number of bytes, 4..4096.',
+          description: 'Number of lines to read (default 2000). With format:"hex": number of bytes, 4..4096. With byteOffset: bytes to read inside the line, 4..102400 (default 102400).',
         });
         assert.equal(schema.properties.byteOffset.type, 'integer');
         assert.equal(schema.properties.byteOffset.minimum, 0);
         assert.match(schema.properties.byteOffset.description, /inside a line that was too long/);
+        assert.match(schema.properties.byteOffset.description, /Not with offset or hex\.$/);
+        assert.match(f.description, /up to 100 KB per call \(add limit to take fewer bytes\)/);
         assert.match(f.description, /Reads LINES: by default the first 2000 lines, at most 100 KB per page/);
         assert.deepEqual(schema.properties.format, {
           type: 'string', enum: ['text', 'hex'],
@@ -507,7 +515,7 @@ test('BC49: inventario e campi TALOS-BANCO invariati, eccetto le esenzioni dichi
 test('BC49: adattatore precedente che ignora parte non pubblica una sezione isolata', async t => {
   const b = await banco(t);
   const r = await giroKernel(b.cartella, parti[0], componiRapportoRicerca);
-  assert.match(r.risposta, /REFUSED/);
+  assert.match(r.risposta, /^FAILED\./); // H-05: il compositore non supporta le parti — un limite nostro
   await assert.rejects(readFile(percorsoRapporto(b.cartella, id)), { code: 'ENOENT' });
 });
 

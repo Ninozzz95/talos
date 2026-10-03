@@ -21,7 +21,7 @@ import { rimuoviCartellaDiProva } from './aiuto/rimuovi-cartella-di-prova.mjs';
 
 const CONSEGNA = 'CONSEGNA-ORIGINALE-MARKER: leggi grande.txt più volte e riferisci.';
 const PREAMBOLO = 'PREAMBOLO-PROGETTO ' + 'x'.repeat(12_000);
-const PIANO = 'Modalità Piano attiva';
+const PIANO = 'Plan mode is on';
 
 function cartellaDiProva(t) {
   const dir = mkdtempSync(join(tmpdir(), 'talos-hotfix-compaction-'));
@@ -79,8 +79,11 @@ function fintoFornitore({ chiamateTool = 10, attrezzo = 'leggi', argomenti = '{"
     const usage = { prompt_tokens: promptTokens, completion_tokens: 5 };
     if (eRichiestaDiRiassunto(body)) {
       riassunti += 1;
-      const scelta = riassunto?.(riassunti) ?? { role: 'assistant', content: `RIASSUNTO ${riassunti}: ho letto grande.txt più volte.` };
-      return Response.json({ choices: [{ message: scelta, finish_reason: scelta.tool_calls ? 'tool_calls' : 'stop' }], usage });
+      /* `riassunto(n)` può dare il messaggio, oppure `{ message, finish_reason }` per un riassunto fermato dal tetto. */
+      const dato = riassunto?.(riassunti);
+      const scelta = dato?.message ?? dato ?? { role: 'assistant', content: `RIASSUNTO ${riassunti}: ho letto grande.txt più volte.` };
+      const fine = dato?.finish_reason ?? (scelta.tool_calls ? 'tool_calls' : 'stop');
+      return Response.json({ choices: [{ message: scelta, finish_reason: fine }], usage });
     }
     lavoro += 1;
     const errore = errorePerRichiesta?.(lavoro, body);
@@ -169,9 +172,43 @@ test('CTX-HOTFIX-SUMMARY-NO-TOOLS — il riassuntore non riceve attrezzi e ha ma
   assert.ok(riassunti.length >= 1);
   for (const body of riassunti) {
     assert.deepEqual(body.tools ?? [], [], 'nessun attrezzo al riassuntore');
-    assert.equal(body.max_tokens, MAX_TOKEN_RIASSUNTO);
+    /* 02/10/2026: il tetto non è più fisso (`MAX_TOKEN_RIASSUNTO`), è il budget di Hermes — qui il mezzo è piccolo e
+     * vale il pavimento di 2.000; il prompt dichiara le parole di QUEL budget. */
+    assert.ok(body.max_tokens >= 2_000 && body.max_tokens <= 10_000, `max_tokens ${body.max_tokens}`);
+    assert.ok(testoDi(body.messages.at(-1)).includes(`at most ${Math.floor((body.max_tokens * 1_200) / 2_048)} words`), 'le parole seguono il budget');
     assert.ok(!body.messages.some((m) => testoDi(m).startsWith(PIANO)), 'nessun effimero nel riassunto');
   }
+  assert.ok(MAX_TOKEN_RIASSUNTO > 0, 'la costante storica resta esportata');
+});
+
+test('CTX-HOTFIX-SUMMARY-TRUNCATED-NO-IDENTICAL-RETRY — un riassunto fermato dal tetto NON si richiede uguale una seconda volta', async (t) => {
+  conTetto(t, 8_000);
+  const cartella = cartellaDiProva(t);
+  const fornitore = fintoFornitore({
+    chiamateTool: 10,
+    riassunto: () => ({ message: { role: 'assistant', content: '## Objective\nparziale, il tetto lo ha fermato a met' }, finish_reason: 'length' }),
+  });
+  const { esito, eventi } = await giro(t, { cartella, fornitore });
+  assert.equal(esito.comeFinita, 'concluso');
+  const inizi = eventi.filter((e) => e.tipo === 'compattazione-inizio').length;
+  const fini = eventi.filter((e) => e.tipo === 'compattazione-fine');
+  assert.ok(inizi >= 1, 'almeno una compattazione tentata');
+  assert.ok(fini.every((f) => f.compattato === false && f.motivo === 'troncato'), JSON.stringify(fini));
+  assert.equal(fornitore.riassuntiChiesti().length, inizi, 'una sola richiesta di riassunto per compattazione, non due identiche');
+});
+
+test('CTX-HOTFIX-SUMMARY-BUDGET-SCALES — una conversazione grande riceve più di 2.048 token per il riassunto (sessione b1e7382a)', async (t) => {
+  conTetto(t, 80_000);
+  const cartella = cartellaDiProva(t);
+  const fornitore = fintoFornitore({ chiamateTool: 90 });
+  const { esito } = await giro(t, { cartella, fornitore });
+  assert.equal(esito.comeFinita, 'concluso');
+  const riassunti = fornitore.riassuntiChiesti();
+  assert.ok(riassunti.length >= 1, 'la conversazione ha superato la soglia');
+  const primo = riassunti[0];
+  assert.ok(primo.max_tokens > 2_048, `il riassunto di una conversazione grande ha più dei 2.048 storici: ${primo.max_tokens}`);
+  assert.ok(primo.max_tokens <= 10_000, `mai oltre il tetto di Hermes: ${primo.max_tokens}`);
+  assert.ok(testoDi(primo.messages.at(-1)).includes(`at most ${Math.floor((primo.max_tokens * 1_200) / 2_048)} words`));
 });
 
 test('CTX-HOTFIX-SUMMARY-RETRIES-ONCE — un riassunto con attrezzo o vuoto si ritenta UNA volta, poi si va avanti', async (t) => {

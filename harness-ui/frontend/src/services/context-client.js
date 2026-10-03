@@ -1,9 +1,10 @@
 /** Fetch is the transport; the session-scoped TCEC v1 JSON contract stays intact.
  * W3C Fetch / MDN Using Fetch, verified 2026-09-09. No implicit write retries.
  */
+import { t } from '../components/lingua.js'; // 03/10/2026: questi messaggi arrivano a schermo nel Context Manager
 function fault(code, message, status) { return Object.assign(new Error(message), { code, status }); }
 function segment(value) {
-  if (typeof value !== 'string' || !value.trim() || value.length > 256 || value === '.' || value === '..') throw fault('CTX_INVALID_ARGUMENT', 'Identificatore del contesto non valido.');
+  if (typeof value !== 'string' || !value.trim() || value.length > 256 || value === '.' || value === '..') throw fault('CTX_INVALID_ARGUMENT', t('chat.context.client.invalidId'));
   return encodeURIComponent(value);
 }
 
@@ -17,12 +18,12 @@ export function createContextClient({ fetchFn = globalThis.fetch, baseURL = '/ap
         ...(payload ? { body: JSON.stringify(payload) } : {}) });
     } catch (error) {
       if (error?.name === 'AbortError') throw error;
-      throw fault('CTX_NETWORK_ERROR', 'Connessione al contesto interrotta. Riprova con Aggiorna.');
+      throw fault('CTX_NETWORK_ERROR', t('chat.context.client.networkError'));
     }
     let data;
-    try { data = await response.json(); } catch { throw fault('CTX_INVALID_RESPONSE', 'Il server non ha restituito un contesto leggibile.', response.status); }
-    if (!response.ok || data?.error) throw fault(data?.error?.code || 'CTX_HTTP_ERROR', data?.error?.message || 'Operazione sul contesto non riuscita.', response.status);
-    if (!data || typeof data !== 'object' || Array.isArray(data)) throw fault('CTX_INVALID_RESPONSE', 'Risposta del contesto non valida.', response.status);
+    try { data = await response.json(); } catch { throw fault('CTX_INVALID_RESPONSE', t('chat.context.client.unreadable'), response.status); }
+    if (!response.ok || data?.error) throw fault(data?.error?.code || 'CTX_HTTP_ERROR', data?.error?.message || t('chat.context.client.failed'), response.status);
+    if (!data || typeof data !== 'object' || Array.isArray(data)) throw fault('CTX_INVALID_RESPONSE', t('chat.context.client.invalidResponse'), response.status);
     return data;
   }
   const mutation = (o, body = {}) => ({ ...body, expectedRevision: o.expectedRevision, idempotencyKey: o.idempotencyKey ?? globalThis.crypto.randomUUID() });

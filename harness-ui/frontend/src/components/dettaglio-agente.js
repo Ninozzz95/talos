@@ -14,38 +14,40 @@
  */
 import { nomeUmanoAttrezzo } from './nomi-attrezzi.js';
 import { renderizzaMarkdown } from './markdown.js';
+import { linguaCorrenteDiT, t as tr, tn } from './lingua.js';
 
-export const SEZIONI_AGENTE = Object.freeze([['panoramica', 'Panoramica'], ['file', 'File'], ['eventi', 'Eventi'], ['conversazione', 'Conversazione']]);
-export const ETICHETTE_PERMESSI = Object.freeze({ 'read-only': 'Solo lettura', 'workspace-write': 'Scrive nel progetto', 'full-access': 'Accesso pieno' });
+/* Le sezioni e i permessi sono CHIAVI del dizionario: il testo si risolve quando si disegna, non al caricamento del modulo. */
+export const SEZIONI_AGENTE = Object.freeze([['panoramica', 'agenti.agent.sectionOverview'], ['file', 'agenti.agent.sectionFiles'], ['eventi', 'agenti.agent.sectionEvents'], ['conversazione', 'agenti.agent.sectionConversation']]);
+export const CHIAVI_PERMESSI = Object.freeze({ 'read-only': 'agenti.agent.permissionReadOnly', 'workspace-write': 'agenti.agent.permissionWritesToProject', 'full-access': 'agenti.agent.permissionFullAccess' });
 
 /** Lo stato in parole, dalla sola verità che abbiamo: conclusa, interrotta, esito della delega. */
 export function statoAgente(figlia = {}) {
-  if (figlia.interrotta === true) return { testo: 'Interrotto', tono: 'warning' };
-  if (figlia.conclusa !== true) return { testo: 'In corso', tono: 'accent' };
-  if (figlia.esitoDelega && /fall|error|rifiut/i.test(String(figlia.esitoDelega))) return { testo: 'Non riuscito', tono: 'danger' };
-  return { testo: 'Concluso', tono: 'success' };
+  if (figlia.interrotta === true) return { testo: tr('agenti.agent.statusStopped'), tono: 'warning' };
+  if (figlia.conclusa !== true) return { testo: tr('agenti.agent.statusRunning'), tono: 'accent' };
+  if (figlia.esitoDelega && /fall|error|rifiut/i.test(String(figlia.esitoDelega))) return { testo: tr('agenti.agent.statusFailed'), tono: 'danger' };
+  return { testo: tr('agenti.agent.statusDone'), tono: 'success' };
 }
 
 /** «Letto», «Modificato», «Creato»: che cosa ha fatto l'agente a quel file, in una parola. */
 export function segnoFileAgente(voce = {}) {
-  if (voce.creato) return 'Creato';
-  if (voce.scritto) return 'Modificato';
-  return 'Letto';
+  if (voce.creato) return tr('agenti.agent.fileCreated');
+  if (voce.scritto) return tr('agenti.agent.fileEdited');
+  return tr('agenti.agent.fileRead');
 }
 
 /** Un passo della linea del tempo, in una frase umana. `null` = passo che non si sa dire: non si disegna. */
 export function frasePasso(passo = {}) {
-  if (passo.tipo === 'avvio') return 'Compito assegnato';
-  if (passo.tipo === 'fine') return 'Giro concluso';
-  if (passo.tipo === 'errore') return 'Giro interrotto da un errore';
+  if (passo.tipo === 'avvio') return tr('agenti.agent.stepTaskAssigned');
+  if (passo.tipo === 'fine') return tr('agenti.agent.stepTurnDone');
+  if (passo.tipo === 'errore') return tr('agenti.agent.stepTurnError');
   if (passo.tipo !== 'attrezzo' || !passo.attrezzo) return null;
   const nome = nomeUmanoAttrezzo(passo.attrezzo);
   return passo.percorso ? `${nome} · ${passo.percorso}` : nome;
 }
 
 export function oraBreve(iso) {
-  const t = Date.parse(iso);
-  return Number.isFinite(t) ? new Date(t).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '';
+  const istante = Date.parse(iso);
+  return Number.isFinite(istante) ? new Date(istante).toLocaleTimeString(linguaCorrenteDiT() === 'en' ? 'en-GB' : 'it-IT', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '';
 }
 
 function el(d, tag, classe = '', testo = null) {
@@ -84,14 +86,14 @@ export function creaDettaglioAgente(figlia, { document: documento, sezione: sezi
   const indietro = el(d, 'button', 'talos-button talos-button--ghost talos-button--sm talos-agente__indietro');
   indietro.type = 'button';
   indietro.dataset.azione = 'tutti-gli-agenti';
-  indietro.append(icona(d, 'i-arrow-left'), d.createTextNode('Tutti gli agenti'));
+  indietro.append(icona(d, 'i-arrow-left'), d.createTextNode(tr('agenti.agent.backToAll')));
   indietro.addEventListener('click', () => azioni.indietro?.());
   cima.appendChild(indietro);
   if (typeof azioni.apriGrafo === 'function') {
     const grafo = el(d, 'button', 'talos-button talos-button--ghost talos-button--sm');
     grafo.type = 'button';
-    grafo.setAttribute('aria-label', 'Apri questo agente nel diagramma');
-    grafo.title = 'Apri questo agente nel diagramma';
+    grafo.setAttribute('aria-label', tr('agenti.agent.openInDiagram'));
+    grafo.title = tr('agenti.agent.openInDiagram');
     grafo.append(icona(d, 'i-branch'));
     grafo.addEventListener('click', () => azioni.apriGrafo(dati));
     cima.append(grafo);
@@ -111,10 +113,10 @@ export function creaDettaglioAgente(figlia, { document: documento, sezione: sezi
   /* ---- le sezioni: pillole come nel laboratorio (`aria-pressed`), non un secondo tablist dentro il tablist della colonna ---- */
   const pillole = el(d, 'div', 'talos-agente__sezioni');
   pillole.setAttribute('role', 'group');
-  pillole.setAttribute('aria-label', 'Che cosa guardare di questo agente');
+  pillole.setAttribute('aria-label', tr('agenti.agent.sectionsLabel'));
   const bottoni = new Map();
-  for (const [id, testo] of SEZIONI_AGENTE) {
-    const b = el(d, 'button', 'talos-agente__sezione', testo);
+  for (const [id, chiave] of SEZIONI_AGENTE) {
+    const b = el(d, 'button', 'talos-agente__sezione', tr(chiave));
     b.type = 'button';
     b.dataset.sezione = id;
     b.addEventListener('click', () => mostra(id));
@@ -133,7 +135,7 @@ export function creaDettaglioAgente(figlia, { document: documento, sezione: sezi
     b.dataset.percorso = voce.percorso;
     const nomeFile = voce.percorso.includes('/') ? voce.percorso.slice(voce.percorso.lastIndexOf('/') + 1) : voce.percorso;
     b.append(icona(d, 'i-file'), el(d, 'span', 'talos-agente__file-nome', nomeFile), el(d, 'span', 'talos-agente__file-segno talos-muted', segnoFileAgente(voce)));
-    b.title = `${voce.percorso} — mostralo nella scheda File`;
+    b.title = tr('agenti.agent.showInFilesTab', { percorso: voce.percorso });
     b.addEventListener('click', () => azioni.apriFile?.(voce.percorso));
     return b;
   }
@@ -147,38 +149,38 @@ export function creaDettaglioAgente(figlia, { document: documento, sezione: sezi
     const p = pannelli.get('panoramica');
     const attivita = dati.attivita || {};
     const pezzi = [];
-    pezzi.push(el(d, 'p', 'talos-agente__etichetta talos-muted', 'Compito'));
+    pezzi.push(el(d, 'p', 'talos-agente__etichetta talos-muted', tr('agenti.agent.task')));
     const compito = el(d, 'div', 'talos-agente__compito');
-    compito.append(renderizzaMarkdown(dati.task || dati.taskCorto || 'Delega senza compito registrato', { document: d, linkMarkdown: true }));
+    compito.append(renderizzaMarkdown(dati.task || dati.taskCorto || tr('agenti.agent.noTaskRecorded'), { document: d, linkMarkdown: true }));
     pezzi.push(compito);
     const fatti = el(d, 'div', 'talos-agente__fatti');
-    if (dati.modello) fatti.appendChild(riga('Modello', String(dati.modello)));
+    if (dati.modello) fatti.appendChild(riga(tr('agenti.agent.model'), String(dati.modello)));
     const quanto = dati.avviataAlle ? eta(dati.avviataAlle) : null;
-    if (quanto) fatti.appendChild(riga('Partito', `${quanto} fa`));
-    if (attivita.attrezzoCorrente && dati.conclusa !== true) fatti.appendChild(riga('Sta usando', nomeUmanoAttrezzo(attivita.attrezzoCorrente)));
-    if (Number.isFinite(attivita.chiamate) && attivita.chiamate > 0) fatti.appendChild(riga('Attrezzi usati', String(attivita.chiamate)));
-    if (dati.permessi && ETICHETTE_PERMESSI[dati.permessi]) fatti.appendChild(riga('Permessi', ETICHETTE_PERMESSI[dati.permessi]));
+    if (quanto) fatti.appendChild(riga(tr('agenti.agent.started'), tr('agenti.agent.startedAgo', { eta: quanto })));
+    if (attivita.attrezzoCorrente && dati.conclusa !== true) fatti.appendChild(riga(tr('agenti.agent.usingNow'), nomeUmanoAttrezzo(attivita.attrezzoCorrente)));
+    if (Number.isFinite(attivita.chiamate) && attivita.chiamate > 0) fatti.appendChild(riga(tr('agenti.agent.toolsUsed'), String(attivita.chiamate)));
+    if (dati.permessi && CHIAVI_PERMESSI[dati.permessi]) fatti.appendChild(riga(tr('agenti.agent.permissions'), tr(CHIAVI_PERMESSI[dati.permessi])));
     if (fatti.childElementCount > 0) pezzi.push(fatti);
     const collisioni = Array.isArray(dati.collisioni) ? dati.collisioni : [];
     if (collisioni.length > 0) {
-      pezzi.push(el(d, 'div', 'talos-callout talos-agente__avviso', `Ha scritto ${collisioni.length === 1 ? 'un file' : `${collisioni.length} file`} che anche un altro agente ha toccato: ${collisioni.map((c) => c.percorso).join(', ')}.`));
+      pezzi.push(el(d, 'div', 'talos-callout talos-agente__avviso', tn('agenti.agent.collisionOne', 'agenti.agent.collisionMany', collisioni.length, { elenco: collisioni.map((c) => c.percorso).join(', ') })));
     }
     /* Un'azione si disegna solo se chi monta il dettaglio la sa fare: un pulsante che non fa niente è un pulsante che mente. */
     if (typeof azioni.apriSessione === 'function') {
-      const apri = el(d, 'button', 'talos-button talos-button--secondary talos-button--sm', 'Apri come sessione');
+      const apri = el(d, 'button', 'talos-button talos-button--secondary talos-button--sm', tr('agenti.agent.openAsSession'));
       apri.type = 'button';
       apri.dataset.azione = 'apri-sessione';
       apri.addEventListener('click', () => azioni.apriSessione());
       pezzi.push(apri);
     }
     const file = Array.isArray(attivita.file) ? attivita.file : [];
-    pezzi.push(el(d, 'b', 'talos-agente__titoletto', 'File coinvolti'));
-    if (file.length === 0) pezzi.push(el(d, 'p', 'talos-muted talos-agente__vuoto', dati.conclusa === true ? 'Non ha letto né scritto file.' : 'Non ha ancora letto né scritto file.'));
+    pezzi.push(el(d, 'b', 'talos-agente__titoletto', tr('agenti.agent.filesInvolved')));
+    if (file.length === 0) pezzi.push(el(d, 'p', 'talos-muted talos-agente__vuoto', dati.conclusa === true ? tr('agenti.agent.noFilesDone') : tr('agenti.agent.noFilesYet')));
     else pezzi.push(...file.slice(0, 5).map(collegamentoFile));
-    if (file.length > 5) { const altri = el(d, 'button', 'talos-button talos-button--ghost talos-button--sm', `Vedi tutti i ${file.length + (attivita.fileTagliati || 0)} file`); altri.type = 'button'; altri.addEventListener('click', () => mostra('file')); pezzi.push(altri); }
+    if (file.length > 5) { const altri = el(d, 'button', 'talos-button talos-button--ghost talos-button--sm', tr('agenti.agent.seeAllFiles', { n: file.length + (attivita.fileTagliati || 0) })); altri.type = 'button'; altri.addEventListener('click', () => mostra('file')); pezzi.push(altri); }
     if (dati.esitoDelega) {
       const sintesi = el(d, 'div', 'talos-agente__compito');
-      sintesi.append(el(d, 'b', 'talos-agente__etichetta', 'Che cosa ha riportato'), renderizzaMarkdown(String(dati.esitoDelega), { document: d, linkMarkdown: true }));
+      sintesi.append(el(d, 'b', 'talos-agente__etichetta', tr('agenti.agent.reported')), renderizzaMarkdown(String(dati.esitoDelega), { document: d, linkMarkdown: true }));
       pezzi.push(sintesi);
     }
     p.replaceChildren(...pezzi);
@@ -187,19 +189,19 @@ export function creaDettaglioAgente(figlia, { document: documento, sezione: sezi
     const p = pannelli.get('file');
     const attivita = dati.attivita || {};
     const file = Array.isArray(attivita.file) ? attivita.file : [];
-    const pezzi = [el(d, 'b', 'talos-agente__titoletto', 'File letti e modificati')];
-    if (file.length === 0) pezzi.push(el(d, 'p', 'talos-muted talos-agente__vuoto', 'Nessun file, per ora.'));
+    const pezzi = [el(d, 'b', 'talos-agente__titoletto', tr('agenti.agent.filesReadAndEdited'))];
+    if (file.length === 0) pezzi.push(el(d, 'p', 'talos-muted talos-agente__vuoto', tr('agenti.agent.noFilesForNow')));
     else pezzi.push(...file.map(collegamentoFile));
-    if (attivita.fileTagliati > 0) pezzi.push(el(d, 'p', 'talos-muted talos-agente__nota', `E altri ${attivita.fileTagliati} file, i più vecchi: qui stanno i più recenti.`));
+    if (attivita.fileTagliati > 0) pezzi.push(el(d, 'p', 'talos-muted talos-agente__nota', tr('agenti.agent.olderFiles', { n: attivita.fileTagliati })));
     p.replaceChildren(...pezzi);
   }
   function disegnaEventi() {
     const p = pannelli.get('eventi');
     const attivita = dati.attivita || {};
     const passi = (Array.isArray(attivita.passi) ? attivita.passi : []).map((passo) => ({ passo, frase: frasePasso(passo) })).filter((x) => x.frase);
-    const pezzi = [el(d, 'b', 'talos-agente__titoletto', 'Che cosa ha fatto, in ordine')];
-    if (attivita.passiTagliati > 0) pezzi.push(el(d, 'p', 'talos-muted talos-agente__nota', `Prima di questi ci sono altri ${attivita.passiTagliati} passi: li trovi nella Conversazione.`));
-    if (passi.length === 0) pezzi.push(el(d, 'p', 'talos-muted talos-agente__vuoto', 'Ancora nessun passo.'));
+    const pezzi = [el(d, 'b', 'talos-agente__titoletto', tr('agenti.agent.whatItDid'))];
+    if (attivita.passiTagliati > 0) pezzi.push(el(d, 'p', 'talos-muted talos-agente__nota', tr('agenti.agent.olderSteps', { n: attivita.passiTagliati })));
+    if (passi.length === 0) pezzi.push(el(d, 'p', 'talos-muted talos-agente__vuoto', tr('agenti.agent.noStepsYet')));
     for (const { passo, frase } of passi) {
       const r = el(d, 'div', 'talos-agente__passo');
       r.dataset.tipo = passo.tipo;
@@ -210,9 +212,9 @@ export function creaDettaglioAgente(figlia, { document: documento, sezione: sezi
   }
 
   function disegnaTestata() {
-    nome.textContent = dati.taskCorto || dati.task || 'Agente';
+    nome.textContent = dati.taskCorto || dati.task || tr('agenti.agent.defaultName');
     nome.title = dati.task || '';
-    ruolo.textContent = 'Sotto-agente di questa sessione';
+    ruolo.textContent = tr('agenti.agent.subAgentOfSession');
     const s = statoAgente(dati);
     stato.textContent = s.testo;
     stato.className = `talos-badge talos-badge--sm talos-badge--${s.tono}`;

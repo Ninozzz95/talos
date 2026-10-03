@@ -23,20 +23,24 @@
  *   · Gli elementi cliccabili sono stabili e i figli non prendono il puntatore (la lezione di F3-42: un fotogramma fra
  *     pressione e rilascio mangiava il clic).
  */
-import { SOGLIA_AGENTI, STATI_PASSO, cifra, conteggiFase, iconaDellaFase, percentualeFase, tonoFase } from './grafo-workflow.js';
+import { SOGLIA_AGENTI, STATI_PASSO, conteggiFase, iconaDellaFase, percentualeFase, tonoFase } from './grafo-workflow.js';
+import { cifra, parolaDelPasso } from './grafo/tempo.js';
+import { t as tr, tn } from './lingua.js';
 
 export const PAGINA_RAIL = 25;
 const RILETTURA_MINIMA_MS = 1_000;
 const RUN_FINITI = new Set(['succeeded', 'failed', 'cancelled']);
-const statoPasso = (stato) => STATI_PASSO[stato] ?? { parola: 'Stato sconosciuto', tono: 'neutro' };
-const plurale = (n, uno, molti) => `${cifra(n)} ${n === 1 ? uno : molti}`;
+/* Il tono di un passo viene da `STATI_PASSO`; la PAROLA no: si dice nella lingua corrente (`parolaDelPasso`). */
+const tonoDelPasso = (stato) => (STATI_PASSO[stato] ?? { tono: 'neutro' }).tono;
+/* «3 agenti» / «3 agents»: il numero col raggruppamento della lingua, la parola dal dizionario. */
+const plurale = (n, uno, molti) => tn(uno, molti, n, { n: cifra(n) });
 const somma = (counts, stati) => stati.reduce((tot, st) => tot + (counts?.[st] ?? 0), 0);
 
-/** I filtri dell'elenco (decisione owner 18): dalle card di «Richiede attenzione» e da «Vedi tutto». */
+/** I filtri dell'elenco (decisione owner 18): dalle card di «Richiede attenzione» e da «Vedi tutto». `titolo` e `vuoto` sono CHIAVI del dizionario. */
 export const FILTRI_RAIL = Object.freeze({
-  decisioni: Object.freeze({ titolo: 'Decisioni in attesa', stati: Object.freeze(['waiting_human']), vuoto: 'Nessuna decisione in attesa.' }),
-  errori: Object.freeze({ titolo: 'Errori', stati: Object.freeze(['failed', 'uncertain']), vuoto: 'Nessun errore attivo.' }),
-  attenzione: Object.freeze({ titolo: 'Richiede attenzione', stati: Object.freeze(['failed', 'uncertain', 'waiting_human']), vuoto: 'Niente richiede attenzione adesso.' }),
+  decisioni: Object.freeze({ titolo: 'agenti.rail.filterDecisions', stati: Object.freeze(['waiting_human']), vuoto: 'agenti.rail.emptyDecisions' }),
+  errori: Object.freeze({ titolo: 'agenti.rail.filterErrors', stati: Object.freeze(['failed', 'uncertain']), vuoto: 'agenti.rail.emptyErrors' }),
+  attenzione: Object.freeze({ titolo: 'agenti.rail.filterAttention', stati: Object.freeze(['failed', 'uncertain', 'waiting_human']), vuoto: 'agenti.rail.emptyAttention' }),
 });
 /*
  * In una pagina di fase ordinata «per stato» (read-model F3-42, `PESO_DELLO_STATO`) questi stati stanno IN TESTA, a classi:
@@ -59,8 +63,8 @@ export function vociAttenzione(panoramica) {
   const decisioni = contaFiltro(panoramica, 'decisioni');
   const errori = contaFiltro(panoramica, 'errori');
   const voci = [];
-  if (decisioni > 0) voci.push({ chiave: 'decisioni', tono: 'avviso', icona: 'i-alert', titolo: plurale(decisioni, 'decisione in attesa', 'decisioni in attesa'), sotto: 'Attende una decisione' });
-  voci.push({ chiave: 'errori', tono: 'errore', icona: 'i-x', titolo: plurale(errori, 'errore', 'errori'), sotto: errori > 0 ? 'Richiede intervento' : 'Nessun errore attivo' });
+  if (decisioni > 0) voci.push({ chiave: 'decisioni', tono: 'avviso', icona: 'i-alert', titolo: plurale(decisioni, 'agenti.rail.decisionOne', 'agenti.rail.decisionMany'), sotto: tr('agenti.rail.decisionSub') });
+  voci.push({ chiave: 'errori', tono: 'errore', icona: 'i-x', titolo: plurale(errori, 'agenti.rail.errorOne', 'agenti.rail.errorMany'), sotto: errori > 0 ? tr('agenti.rail.errorSubAction') : tr('agenti.rail.errorSubNone') });
   return { voci, daVedere: decisioni + errori };
 }
 
@@ -93,32 +97,32 @@ export function montaRailWorkflow(contenitore, {
   let morto = false, seguendo = false, chiudiFlusso = () => {}, rilettura = null, ultimaRilettura = 0, generazione = 0, visto = null, ultimoConteggio = null;
 
   /* ——— struttura fissa ——— */
-  const root = el('section', 'talos-wfr'); root.dataset.c = 'WorkflowRail'; root.setAttribute('aria-label', 'Agenti del workflow');
+  const root = el('section', 'talos-wfr'); root.dataset.c = 'WorkflowRail'; root.setAttribute('aria-label', tr('agenti.rail.regionLabel'));
   const porta = bottone('talos-wfr__link talos-wfr__porta', null);
-  porta.append(icona('i-coordina'), el('span', null, 'Apri diagramma'));
+  porta.append(icona('i-coordina'), el('span', null, tr('agenti.rail.openDiagram')));
   porta.addEventListener('click', () => onApri?.(null));
   const testaAttenzione = el('div', 'talos-wfr__testa');
-  const vediTutto = bottone('talos-wfr__link', 'Vedi tutto');
-  testaAttenzione.append(el('h3', 'talos-wfr__titolo', 'Richiede attenzione'), vediTutto);
-  const attenzione = el('ul', 'talos-wfr__attenzione'); attenzione.setAttribute('aria-label', 'Richiede attenzione');
+  const vediTutto = bottone('talos-wfr__link', tr('agenti.rail.seeAll'));
+  testaAttenzione.append(el('h3', 'talos-wfr__titolo', tr('agenti.rail.filterAttention')), vediTutto);
+  const attenzione = el('ul', 'talos-wfr__attenzione'); attenzione.setAttribute('aria-label', tr('agenti.rail.filterAttention'));
   const campo = el('div', 'talos-wfr__campo');
-  const cerca = el('input', 'talos-wfr__cerca'); cerca.type = 'search'; cerca.placeholder = 'Cerca agenti, gruppi o stato…';
-  cerca.setAttribute('aria-label', 'Cerca agenti, gruppi o stato');
+  const cerca = el('input', 'talos-wfr__cerca'); cerca.type = 'search'; cerca.placeholder = tr('agenti.rail.searchPlaceholder');
+  cerca.setAttribute('aria-label', tr('agenti.rail.searchLabel'));
   campo.append(icona('i-search', 'talos-wfr__lente'), cerca);
-  const interruttore = el('div', 'talos-wfr__modi'); interruttore.setAttribute('role', 'group'); interruttore.setAttribute('aria-label', 'Mostra per');
-  const modoGruppi = bottone('talos-wfr__modo', 'Gruppi'); modoGruppi.dataset.modo = 'gruppi';
-  const modoAgenti = bottone('talos-wfr__modo', 'Agenti'); modoAgenti.dataset.modo = 'agenti';
+  const interruttore = el('div', 'talos-wfr__modi'); interruttore.setAttribute('role', 'group'); interruttore.setAttribute('aria-label', tr('agenti.rail.showBy'));
+  const modoGruppi = bottone('talos-wfr__modo', tr('agenti.rail.modeGroups')); modoGruppi.dataset.modo = 'gruppi';
+  const modoAgenti = bottone('talos-wfr__modo', tr('agenti.rail.modeAgents')); modoAgenti.dataset.modo = 'agenti';
   interruttore.append(modoGruppi, modoAgenti);
   const testaElenco = el('div', 'talos-wfr__testa talos-wfr__testa--elenco');
   const titoloElenco = el('h3', 'talos-wfr__titolo');
   const contoElenco = el('span', 'talos-wfr__conto');
-  const togliFiltro = bottone('talos-wfr__togli', null); togliFiltro.append(el('span', null, 'Mostra tutti'), icona('i-x'));
-  togliFiltro.setAttribute('aria-label', 'Togli il filtro e mostra tutti gli agenti');
+  const togliFiltro = bottone('talos-wfr__togli', null); togliFiltro.append(el('span', null, tr('agenti.rail.showAll')), icona('i-x'));
+  togliFiltro.setAttribute('aria-label', tr('agenti.rail.clearFilter'));
   testaElenco.append(titoloElenco, contoElenco, togliFiltro);
   const elenco = el('ul', 'talos-wfr__elenco');
-  const altri = bottone('talos-wfr__link talos-wfr__altri', 'Mostra altri');
+  const altri = bottone('talos-wfr__link talos-wfr__altri', tr('agenti.rail.showMore'));
   const esito = el('p', 'talos-wfr__esito'); esito.setAttribute('role', 'status');
-  const totali = el('section', 'talos-wfr__totali'); totali.setAttribute('aria-label', 'Totali del workflow');
+  const totali = el('section', 'talos-wfr__totali'); totali.setAttribute('aria-label', tr('agenti.rail.totalsLabel'));
   root.append(porta, testaAttenzione, attenzione, campo, interruttore, testaElenco, elenco, altri, esito, totali);
   contenitore.append(root);
 
@@ -170,7 +174,7 @@ export function montaRailWorkflow(contenitore, {
     } catch {
       if (morto || mia !== generazione) return;
       stato.carica = false;
-      stato.errore = 'Non riesco a leggere gli agenti del workflow. Riprovo al prossimo aggiornamento.';
+      stato.errore = tr('agenti.rail.readFailed');
     }
     disegna();
   }
@@ -195,7 +199,7 @@ export function montaRailWorkflow(contenitore, {
   const voceAttenzione = new Map();
   function disegnaAttenzione() {
     const { voci, daVedere } = vociAttenzione(stato.panoramica);
-    vediTutto.textContent = `Vedi tutto (${cifra(daVedere)})`;
+    vediTutto.textContent = tr('agenti.rail.seeAllCount', { n: cifra(daVedere) });
     vediTutto.hidden = daVedere === 0;
     vediTutto.setAttribute('aria-pressed', String(stato.filtro === 'attenzione'));
     const chiavi = voci.map((v) => v.chiave).join('|');
@@ -216,7 +220,7 @@ export function montaRailWorkflow(contenitore, {
       const segno = el('span', 'talos-wfr__segno'); segno.append(icona(v.icona));
       const testi = el('span', 'talos-wfr__testi'); testi.append(el('span', 'talos-wfr__voce-titolo', v.titolo), el('span', 'talos-wfr__voce-sotto', v.sotto));
       b.replaceChildren(segno, testi, icona('i-chevron-right', 'talos-wfr__freccia'));
-      b.setAttribute('aria-label', `${v.titolo}: ${v.sotto}. Mostra solo questi nell'elenco`);
+      b.setAttribute('aria-label', tr('agenti.rail.attentionAria', { titolo: v.titolo, sotto: v.sotto }));
     }
   }
   // righe stabili per id: si rifanno solo quando cambia QUALI righe ci sono; lo stato si riempie in loco
@@ -235,9 +239,12 @@ export function montaRailWorkflow(contenitore, {
     const barra = el('span', 'talos-wfr__barra');
     const traccia = el('span', 'talos-wfr__barra-traccia'); const pieno = el('span', 'talos-wfr__barra-pieno'); pieno.style.width = `${cento ?? 0}%`;
     traccia.append(pieno); barra.append(traccia, el('span', 'talos-wfr__barra-valore', cento === null ? '—' : `${cento}%`));
-    testi.append(el('span', 'talos-wfr__voce-titolo', gruppo.label), el('span', 'talos-wfr__voce-sotto', plurale(gruppo.total, 'agente', 'agenti')), barra);
+    testi.append(el('span', 'talos-wfr__voce-titolo', gruppo.label), el('span', 'talos-wfr__voce-sotto', plurale(gruppo.total, 'agenti.graph.agentOne', 'agenti.graph.agentMany')), barra);
     b.replaceChildren(segno, testi, icona('i-chevron-right', 'talos-wfr__freccia'));
-    b.setAttribute('aria-label', `${gruppo.label}: ${plurale(gruppo.total, 'agente', 'agenti')}, ${cento === null ? 'non ancora avviato' : `${cifra(gruppo.terminated)} terminati su ${cifra(gruppo.total)}`}. Apri nel diagramma`);
+    const agenti = plurale(gruppo.total, 'agenti.graph.agentOne', 'agenti.graph.agentMany');
+    b.setAttribute('aria-label', cento === null
+      ? tr('agenti.rail.groupAriaNotStarted', { nome: gruppo.label, agenti })
+      : tr('agenti.rail.groupAriaProgress', { nome: gruppo.label, agenti, fatti: cifra(gruppo.terminated), totale: cifra(gruppo.total) }));
   }
   function rigaAgente(riga) {
     const b = bottone('talos-wfr__agente'); b.dataset.nodoId = riga.nodeId; b.dataset.phaseId = riga.phaseId;
@@ -246,10 +253,10 @@ export function montaRailWorkflow(contenitore, {
     return b;
   }
   function riempiAgente(b, riga) {
-    const { parola, tono } = statoPasso(riga.state);
-    b.dataset.tono = tono;
+    const parola = parolaDelPasso(riga.state);
+    b.dataset.tono = tonoDelPasso(riga.state);
     b.replaceChildren(el('span', 'talos-wfr__punto'), el('span', 'talos-wfr__nome', riga.label), el('span', 'talos-wfr__stato', parola));
-    b.setAttribute('aria-label', `${riga.label}: ${parola}. Apri nel diagramma`);
+    b.setAttribute('aria-label', tr('agenti.rail.agentAria', { nome: riga.label, stato: parola }));
   }
   function applicaEvidenza() {
     const e = stato.evidenza;
@@ -264,7 +271,7 @@ export function montaRailWorkflow(contenitore, {
     for (const b of [modoGruppi, modoAgenti]) b.setAttribute('aria-pressed', String(b.dataset.modo === stato.modo));
     togliFiltro.hidden = !stato.filtro;
     if (stato.modo === 'gruppi') {
-      titoloElenco.textContent = 'Gruppi del workflow';
+      titoloElenco.textContent = tr('agenti.rail.groupsTitle');
       contoElenco.textContent = cifra(p.groups.length);
       const gruppi = p.groups.filter((g) => corrisponde(g.label));
       const firma = `g|${gruppi.map((g) => g.phaseId).join(',')}`;
@@ -273,13 +280,13 @@ export function montaRailWorkflow(contenitore, {
         elenco.replaceChildren(...gruppi.map((g) => { const li = el('li'); const b = rigaGruppo(g); righeVive.set(g.phaseId, b); li.append(b); return li; }));
       } else for (const g of gruppi) riempiGruppo(righeVive.get(g.phaseId), g);
       altri.hidden = true;
-      esito.textContent = stato.query && !gruppi.length ? 'Nessun gruppo per questa ricerca.' : '';
+      esito.textContent = stato.query && !gruppi.length ? tr('agenti.rail.noGroupsMatch') : '';
     } else {
       const filtro = stato.filtro ? FILTRI_RAIL[stato.filtro] : null;
       const totale = filtro ? contaFiltro(p, stato.filtro) : p.total;
-      titoloElenco.textContent = filtro ? filtro.titolo : 'Agenti della sessione';
+      titoloElenco.textContent = filtro ? tr(filtro.titolo) : tr('agenti.rail.agentsTitle');
       contoElenco.textContent = cifra(totale);
-      const righe = stato.lista.righe.filter((r) => corrisponde(r.label, statoPasso(r.state).parola));
+      const righe = stato.lista.righe.filter((r) => corrisponde(r.label, parolaDelPasso(r.state)));
       const firma = `a|${stato.filtro ?? ''}|${righe.map((r) => r.nodeId).join(',')}`;
       if (firma !== firmaElenco) {
         firmaElenco = firma; righeVive.clear();
@@ -287,9 +294,9 @@ export function montaRailWorkflow(contenitore, {
       } else for (const r of righe) riempiAgente(righeVive.get(r.nodeId), r);
       const restano = Math.max(0, totale - stato.lista.righe.length);
       altri.hidden = stato.lista.finite || restano === 0;
-      altri.textContent = `Mostra altri (${cifra(restano)} ancora)`;
-      if (filtro && !stato.lista.righe.length && stato.lista.finite) esito.textContent = filtro.vuoto;
-      else esito.textContent = stato.query ? `${plurale(righe.length, 'agente', 'agenti')} fra i ${cifra(stato.lista.righe.length)} caricati` : '';
+      altri.textContent = tr('agenti.rail.showMoreLeft', { n: cifra(restano) });
+      if (filtro && !stato.lista.righe.length && stato.lista.finite) esito.textContent = tr(filtro.vuoto);
+      else esito.textContent = stato.query ? tr('agenti.rail.queryMatches', { agenti: plurale(righe.length, 'agenti.graph.agentOne', 'agenti.graph.agentMany'), caricati: cifra(stato.lista.righe.length) }) : '';
     }
     applicaEvidenza();
   }
@@ -307,9 +314,9 @@ export function montaRailWorkflow(contenitore, {
     const conti = conteggiFase(p.groups.reduce((acc, g) => { for (const [k, v] of Object.entries(g.counts ?? {})) acc[k] = (acc[k] ?? 0) + v; return acc; }, {}));
     totali.dataset.livello = p.total <= SOGLIA_AGENTI ? 'agenti' : 'gruppi';
     totali.replaceChildren(...(p.total <= SOGLIA_AGENTI
-      ? [cella('Totale agenti', p.total, { icona: 'i-robot' }), cella('In esecuzione', conti.inCorso, { tono: 'corso' }),
-        cella('Completati', conti.conclusi, { tono: 'ok' }), cella('In attesa', conti.inAttesa, { tono: 'attesa' })]
-      : [cella('Totale agenti logici', p.total, { icona: 'i-robot' }), cella('Gruppi visibili', p.groups.length, { icona: 'i-layers' })]));
+      ? [cella(tr('agenti.rail.totalAgents'), p.total, { icona: 'i-robot' }), cella(tr('agenti.family.running'), conti.inCorso, { tono: 'corso' }),
+        cella(tr('agenti.rail.completed'), conti.conclusi, { tono: 'ok' }), cella(tr('agenti.family.waiting'), conti.inAttesa, { tono: 'attesa' })]
+      : [cella(tr('agenti.rail.totalLogicalAgents'), p.total, { icona: 'i-robot' }), cella(tr('agenti.rail.visibleGroups'), p.groups.length, { icona: 'i-layers' })]));
   }
   function disegna() {
     if (morto) return;
@@ -318,7 +325,7 @@ export function montaRailWorkflow(contenitore, {
     if (!stato.panoramica) {
       attenzione.replaceChildren(); attenzione.dataset.chiavi = ''; elenco.replaceChildren(); firmaElenco = null; righeVive.clear();
       totali.replaceChildren(); altri.hidden = true; vediTutto.hidden = true; togliFiltro.hidden = true;
-      esito.textContent = stato.carica ? 'Carico gli agenti del workflow…' : stato.errore ?? '';
+      esito.textContent = stato.carica ? tr('agenti.rail.loading') : stato.errore ?? '';
       return;
     }
     disegnaAttenzione(); disegnaElenco(); disegnaTotali();
@@ -339,7 +346,7 @@ export function montaRailWorkflow(contenitore, {
       if (morto || mia !== generazione) return;
       // ciò che è arrivato è del filtro nuovo: meglio poche righe giuste che le vecchie sotto il titolo nuovo
       stato.lista = lista;
-      stato.errore = 'Non riesco a leggere gli agenti del workflow. Riprovo al prossimo aggiornamento.';
+      stato.errore = tr('agenti.rail.readFailed');
     }
     firmaElenco = null;
     disegna();

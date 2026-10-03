@@ -8,6 +8,7 @@
  *   indirizzoPdf  — per il PDF: la rotta IN LINEA (`/file/anteprima` o `/library/:voceId/anteprima`), perché la CSP della
  *                   pagina di TALOS non ammette `blob:` in `frame-src` (misurato il 26/09).
  */
+import { t } from '../lingua.js';
 import { FORMATI_OSPITE, corniceOspite } from './office/cornice-ospite.js';
 
 const API = '/api/v1';
@@ -16,7 +17,7 @@ const enc = encodeURIComponent;
 async function erroreDa(risposta) {
   let corpo = null;
   try { corpo = await risposta.json(); } catch { /* il corpo non è JSON */ }
-  const motivo = corpo?.error?.message || `il server ha risposto HTTP ${risposta.status}`;
+  const motivo = corpo?.error?.message || t('varie.reader.source.httpStatus', { status: risposta.status });
   const errore = new Error(motivo);
   errore.code = corpo?.error?.code ?? null;
   errore.status = risposta.status;
@@ -35,7 +36,7 @@ async function paginaDa(fetchFn, sessionId, corpo) {
   });
   if (!risposta.ok) throw await erroreDa(risposta);
   const dati = await risposta.json();
-  if (typeof dati?.data?.indirizzo !== 'string' || !dati.data.indirizzo.startsWith(`${API}/pagine/`)) throw new Error('il server non ha dato un indirizzo per la pagina');
+  if (typeof dati?.data?.indirizzo !== 'string' || !dati.data.indirizzo.startsWith(`${API}/pagine/`)) throw new Error(t('varie.reader.source.noPageAddress'));
   return dati.data.indirizzo;
 }
 
@@ -81,7 +82,7 @@ export function caricatoreOffice(importa = (indirizzo) => import(indirizzo)) {
   return (tipo) => {
     if (FORMATI_OSPITE.includes(tipo)) return Promise.resolve(RESA_IN_CORNICE);
     const indirizzo = RESE_OFFICE[tipo];
-    if (!indirizzo) return Promise.reject(new Error(`nessuna resa per «${tipo}»`));
+    if (!indirizzo) return Promise.reject(new Error(t('varie.reader.source.noRenderer', { type: tipo })));
     if (!inVolo.has(tipo)) inVolo.set(tipo, importa(indirizzo).catch((errore) => { inVolo.delete(tipo); throw errore; }));
     return inVolo.get(tipo);
   };

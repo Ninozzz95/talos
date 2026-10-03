@@ -1,3 +1,6 @@
+import { t, tn, linguaCorrenteDiT } from './lingua.js';
+/* Numeri e date nella lingua dell'interfaccia (come fanno gli altri componenti): italiano → it-IT, inglese → en-US. */
+const localeUI = () => (linguaCorrenteDiT() === 'en' ? 'en-US' : 'it-IT');
 /*
  * Coda dei download — la scheda «Download» del Model Lab nel linguaggio del mockup
  * (`#panel-download`): conteggi per stato, «Mostra solo attivi», una `DownloadRow` per
@@ -107,25 +110,25 @@
 import { gb, creaConfermaEliminazione, creaCampoRinomina, creaRigaEsitoModello, verdettoAzioneModello } from './modelli-installati.js';
 
 export const STATI_DOWNLOAD = Object.freeze({
-  queued: { etichetta: 'In coda', tono: '', attivo: true },
-  running: { etichetta: 'In corso', tono: 'accent', attivo: true },
-  verifying: { etichetta: 'Verifica del file', tono: 'accent', attivo: true },
-  paused: { etichetta: 'In pausa', tono: 'warning', attivo: true },
-  failed: { etichetta: 'Fallito', tono: 'danger', attivo: true },
-  ready: { etichetta: 'Completato', tono: 'success', attivo: false },
-  cancelled: { etichetta: 'Annullato', tono: '', attivo: false },
+  queued: { get etichetta() { return t('modelli.download.queued'); }, tono: '', attivo: true },
+  running: { get etichetta() { return t('modelli.download.running'); }, tono: 'accent', attivo: true },
+  verifying: { get etichetta() { return t('modelli.download.verifying'); }, tono: 'accent', attivo: true },
+  paused: { get etichetta() { return t('modelli.download.paused'); }, tono: 'warning', attivo: true },
+  failed: { get etichetta() { return t('modelli.download.failed'); }, tono: 'danger', attivo: true },
+  ready: { get etichetta() { return t('modelli.download.ready'); }, tono: 'success', attivo: false },
+  cancelled: { get etichetta() { return t('modelli.download.cancelled'); }, tono: '', attivo: false },
 });
 
 const MOTIVI = Object.freeze({
-  PAUSED_BY_OWNER: 'Messo in pausa da te',
-  NETWORK: 'La connessione si è interrotta',
-  HASH_MISMATCH: "L'impronta del file non corrisponde",
-  DISK_FULL: 'Spazio sul disco esaurito',
-  HTTP_ERROR: 'Il server di Hugging Face ha risposto con un errore',
-  CANCELLED: 'Annullato',
+  get PAUSED_BY_OWNER() { return t('modelli.download.pausedByOwner'); },
+  get NETWORK() { return t('modelli.download.connectionLost'); },
+  get HASH_MISMATCH() { return t('modelli.download.hashMismatch'); },
+  get DISK_FULL() { return t('modelli.download.diskFull'); },
+  get HTTP_ERROR() { return t('modelli.download.httpError'); },
+  get CANCELLED() { return t('modelli.download.cancelled'); },
 });
 export function motivoUmano(reason) {
-  if (!reason) return 'La connessione si è interrotta';
+  if (!reason) return t('modelli.download.connectionLost');
   const chiave = String(reason).toUpperCase().replace(/[^A-Z_]/g, '_');
   for (const [k, v] of Object.entries(MOTIVI)) if (chiave.includes(k)) return v;
   return String(reason);
@@ -135,18 +138,18 @@ export function mbs(bytesAlSecondo) {
   const v = Number(bytesAlSecondo);
   if (!Number.isFinite(v) || v <= 0) return null;
   const mb = v / (1024 * 1024);
-  return `${new Intl.NumberFormat('it-IT', { maximumFractionDigits: mb < 10 ? 1 : 0 }).format(mb)} MB/s`;
+  return `${new Intl.NumberFormat(localeUI(), { maximumFractionDigits: mb < 10 ? 1 : 0 }).format(mb)} MB/s`;
 }
 export function rimanente(secondi) {
   const s = Number(secondi);
   if (!Number.isFinite(s) || s < 0) return null;
-  if (s < 60) return 'meno di 1 min';
+  if (s < 60) return t('modelli.download.underMinute');
   if (s < 3600) return `${Math.round(s / 60)} min`;
   return `${Math.floor(s / 3600)} h ${Math.round((s % 3600) / 60)} min`;
 }
 export function oraBreve(iso) {
   const d = new Date(iso);
-  return Number.isFinite(d.getTime()) ? d.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }) : '';
+  return Number.isFinite(d.getTime()) ? d.toLocaleTimeString(localeUI(), { hour: '2-digit', minute: '2-digit' }) : '';
 }
 
 /**
@@ -155,7 +158,7 @@ export function oraBreve(iso) {
  * un `0` scritto al posto di un dato che manca è una bugia, e la riga lo disegna indeterminato.
  */
 export function datiDownload(item = {}, { stima = null } = {}) {
-  const stato = STATI_DOWNLOAD[item.state] || { etichetta: String(item.state || 'sconosciuto'), tono: '', attivo: true };
+  const stato = STATI_DOWNLOAD[item.state] || { etichetta: String(item.state || t('modelli.download.unknown')), tono: '', attivo: true };
   const file = item.request?.files?.[0]?.path || item.file || item.id;
   const nomeFile = String(file).split('/').pop();
   const repo = item.request?.repo || item.repo || '';
@@ -174,10 +177,10 @@ export function datiDownload(item = {}, { stima = null } = {}) {
   return {
     id: item.id, nomeFile, nome: item.name || item.request?.name || nomeFile, stato: item.state, etichettaStato: stato.etichetta, tono: stato.tono, attivo: stato.attivo,
     sotto: item.state === 'ready'
-      ? `${gb(totale)} · completato${item.finishedAt ? ` alle ${oraBreve(item.finishedAt)}` : ''} · verifica del file riuscita`
+      ? t('modelli.download.completedSummary', { size: gb(totale), time: item.finishedAt ? t('modelli.download.finishedAt', { time: oraBreve(item.finishedAt) }) : '' })
       : `${repo ? `${repo.replace('/', ' / ')} · ` : ''}${item.state === 'failed' ? gb(totale) : 'Hugging Face'}`,
     percento, misurabile: percento !== null, ricevuti: gb(ricevuti), totale: gb(totale), velocita, resto,
-    errore: item.state === 'failed' ? { titolo: motivoUmano(item.reason), testo: `Ricevuti ${gb(ricevuti)}. Il modello non è ancora disponibile. Puoi riprovare dal punto salvato.`, dettagli: [item.reason, item.startedAt ? `avviato alle ${oraBreve(item.startedAt)}` : '', `ultimo blocco salvato: ${gb(ricevuti)}`].filter(Boolean).join(' · ') } : null,
+    errore: item.state === 'failed' ? { titolo: motivoUmano(item.reason), testo: t('modelli.download.failedExplanation', { size: gb(ricevuti) }), dettagli: [item.reason, item.startedAt ? t('modelli.download.startedAt', { time: oraBreve(item.startedAt) }) : '', t('modelli.download.lastSavedChunk', { size: gb(ricevuti) })].filter(Boolean).join(' · ') } : null,
   };
 }
 
@@ -244,14 +247,14 @@ export function creaStatoVuotoDownload(radice, { azioni = {}, document: d = glob
   riquadro.dataset.codaVuota = '';
   riquadro.append(
     icona(d, 'i-download'),
-    el(d, 'h3', '', 'Nessun download in coda.'),
+    el(d, 'h3', '', t('modelli.download.emptyQueue')),
     /* ⛔ Il mockup dice «il catalogo di esempio»: qui il catalogo degli esempi non esiste, e
        chiamare «di esempio» quello vero di Hugging Face sarebbe una bugia sul prodotto. */
-    el(d, 'p', '', 'Il prossimo modello può aspettare. Oppure puoi esplorare il catalogo.'),
+    el(d, 'p', '', t('modelli.download.emptyQueueDescription')),
   );
   const bottone = el(d, 'button', 'talos-button talos-button--secondary');
   bottone.type = 'button'; bottone.dataset.c = 'Button'; bottone.dataset.action = 'esploraCatalogo';
-  bottone.append(icona(d, 'i-plus'), el(d, 'span', '', 'Esplora il catalogo'));
+  bottone.append(icona(d, 'i-plus'), el(d, 'span', '', t('modelli.download.exploreCatalog')));
   if (typeof azioni.esploraCatalogo === 'function') bottone.addEventListener('click', azioni.esploraCatalogo);
   else {
     const comando = comandoCatalogo(radice);
@@ -262,7 +265,7 @@ export function creaStatoVuotoDownload(radice, { azioni = {}, document: d = glob
     /* ⛔ Un bottone che non porta da nessuna parte è peggio di un bottone assente: se il
        catalogo non è raggiungibile da qui, il controllo lo DICE invece di inghiottire il clic
        (la lezione del guscio: «un bottone senza listener inghiotte il clic in silenzio»). */
-    else { bottone.disabled = true; bottone.title = 'Da questa schermata non c’è un catalogo da aprire.'; }
+    else { bottone.disabled = true; bottone.title = t('modelli.download.catalogUnavailable'); }
   }
   riquadro.append(bottone);
   return riquadro;
@@ -318,7 +321,7 @@ async function eseguiEliminazione(panel, id, azioni, nome) {
   scriviStatoAzioni(panel, { ...prima, inCorso: id });
   ridisegna(panel);
   let esito;
-  try { esito = await azioni.elimina(id); } catch (errore) { esito = { ok: false, motivo: errore?.message || 'la richiesta non è arrivata al server' }; }
+  try { esito = await azioni.elimina(id); } catch (errore) { esito = { ok: false, motivo: errore?.message || t('modelli.download.requestNotReceived') }; }
   const verdetto = conAzione(verdettoAzioneModello(esito, { azione: 'elimina', nome }), 'elimina');
   const dopo = leggiStatoAzioni(panel);
   scriviStatoAzioni(panel, {
@@ -344,14 +347,14 @@ async function eseguiRinomina(panel, id, nomeGrezzo, azioni) {
   if (prima.inCorso) return;
   const nome = String(nomeGrezzo ?? '').trim();
   if (!nome) {
-    scriviStatoAzioni(panel, { ...prima, erroreCampo: 'Scrivi un nome: senza nome il modello resta quello di prima.' });
+    scriviStatoAzioni(panel, { ...prima, erroreCampo: t('modelli.download.nameRequired') });
     ridisegna(panel);
     return;
   }
   scriviStatoAzioni(panel, { ...prima, inCorso: id, erroreCampo: null, aperto: { ...prima.aperto, bozza: nome } });
   ridisegna(panel);
   let esito;
-  try { esito = await azioni.rinomina(id, nome); } catch (errore) { esito = { ok: false, motivo: errore?.message || 'la richiesta non è arrivata al server' }; }
+  try { esito = await azioni.rinomina(id, nome); } catch (errore) { esito = { ok: false, motivo: errore?.message || t('modelli.download.requestNotReceived') }; }
   const verdetto = conAzione(verdettoAzioneModello(esito, { azione: 'rinomina', nome }), 'rinomina');
   const dopo = leggiStatoAzioni(panel);
   scriviStatoAzioni(panel, {
@@ -459,12 +462,12 @@ export function creaRigaDownload(dati, { azioni = {}, azioniModello = null, stat
     const eliminato = esito?.azione === 'elimina' && esito.tono === 'success';
     const piede = el(d, 'div', 'talos-toolbar');
     const nota = el(d, 'span', 'talos-muted', eliminato
-      ? 'Eliminato dal disco: per usarlo di nuovo va scaricato o importato.'
-      : 'Disponibile nei modelli installati.');
-    const vedi = bottone(d, 'Vedi modello', 'talos-button talos-button--secondary talos-button--sm', 'vediModello', () => azioni.vediModello?.(dati.id));
+      ? t('modelli.download.deletedNote')
+      : t('modelli.download.availableInstalled'));
+    const vedi = bottone(d, t('modelli.download.viewModel'), 'talos-button talos-button--secondary talos-button--sm', 'vediModello', () => azioni.vediModello?.(dati.id));
     /* «Vedi modello» porta agli installati, dove quel modello non c'è più: un comando che promette
        una cosa e ne apre un'altra si spegne, e DICE perché. */
-    if (eliminato) { vedi.disabled = true; vedi.title = 'Questo modello non è più sul disco.'; }
+    if (eliminato) { vedi.disabled = true; vedi.title = t('modelli.download.modelNoLongerOnDisk'); }
     piede.append(nota, vedi);
     art.appendChild(piede);
     const apertoQui = statoAzioni?.aperto && statoAzioni.aperto.id === dati.id ? statoAzioni.aperto : null;
@@ -475,8 +478,8 @@ export function creaRigaDownload(dati, { azioni = {}, azioniModello = null, stat
     if (azioniModello && !eliminato && !apertoQui) {
       const cluster = el(d, 'div', 'talos-cluster');
       cluster.append(
-        bottone(d, 'Rinomina', 'talos-button talos-button--secondary talos-button--sm', 'rinominaModello', () => azioniModello.apriRinomina(dati.id, dati.nome)),
-        bottone(d, 'Elimina dal disco', 'talos-button talos-button--secondary talos-button--sm', 'eliminaModello', () => azioniModello.apriElimina(dati.id)),
+        bottone(d, t('modelli.download.rename'), 'talos-button talos-button--secondary talos-button--sm', 'rinominaModello', () => azioniModello.apriRinomina(dati.id, dati.nome)),
+        bottone(d, t('modelli.download.deleteFromDisk'), 'talos-button talos-button--secondary talos-button--sm', 'eliminaModello', () => azioniModello.apriElimina(dati.id)),
       );
       piede.appendChild(cluster);
     }
@@ -500,14 +503,14 @@ export function creaRigaDownload(dati, { azioni = {}, azioniModello = null, stat
     const corpo = el(d, 'div', 'talos-check-card__body');
     corpo.append(el(d, 'b', '', dati.errore.titolo), el(d, 'p', '', dati.errore.testo));
     const az = el(d, 'div', 'talos-check-card__actions');
-    const dettagli = bottone(d, 'Dettagli', 'talos-button talos-button--ghost talos-button--sm', 'dettagli', null); dettagli.title = dati.errore.dettagli; dettagli.setAttribute('aria-label', `Dettagli: ${dati.errore.dettagli}`);
+    const dettagli = bottone(d, t('modelli.download.details'), 'talos-button talos-button--ghost talos-button--sm', 'dettagli', null); dettagli.title = dati.errore.dettagli; dettagli.setAttribute('aria-label', t('modelli.download.detailsLabel', { details: dati.errore.dettagli }));
     dettagli.addEventListener('click', () => { const p = corpo.querySelector('[data-dettagli]'); if (p) { p.hidden = !p.hidden; return; } const n = el(d, 'p', 'talos-muted', dati.errore.dettagli); n.dataset.dettagli = ''; corpo.insertBefore(n, az); });
     /* ⛔ «Riprendi» e non «Riprova»: il trasporto RIPRENDE questo trasferimento dal punto
        salvato (`hf-direct-transfer.mjs:91`), non ne apre uno nuovo — ed è la stessa azione
        che la riga in pausa chiama «Riprendi» e che il mockup interattivo chiama «Riprendi»
        anche sull'errore. Un'etichetta che dice un lavoro nuovo quando il lavoro è lo stesso
        è la forma di bugia che questa fase cura. */
-    az.append(bottone(d, 'Riprendi', 'talos-button talos-button--secondary talos-button--sm', 'riprendiDownload', () => azioni.riprendi?.(dati.id)), dettagli);
+    az.append(bottone(d, t('modelli.download.resume'), 'talos-button talos-button--secondary talos-button--sm', 'riprendiDownload', () => azioni.riprendi?.(dati.id)), dettagli);
     /* ⛔ «Annulla» NON si disegna qui: `hf-direct-transfer.mjs:95` rifiuta `cancel` su un
        trasferimento `failed` — il comando aprirebbe la conferma e poi non farebbe niente. Il
        riferimento del mockup, su questa scheda, ha le stesse due azioni. */
@@ -515,36 +518,36 @@ export function creaRigaDownload(dati, { azioni = {}, azioniModello = null, stat
     return art;
   }
   if (dati.misurabile) {
-    const barra = el(d, 'progress', 'talos-lab__meter', `${dati.percento}%`); barra.max = 100; barra.value = dati.percento; barra.setAttribute('aria-label', `Download ${dati.nomeFile} · ${dati.percento} per cento`);
+    const barra = el(d, 'progress', 'talos-lab__meter', `${dati.percento}%`); barra.max = 100; barra.value = dati.percento; barra.setAttribute('aria-label', t('modelli.download.progressLabel', { file: dati.nomeFile, percent: dati.percento }));
     art.appendChild(barra);
   } else {
     /* ⛔ Niente `value`: è l'unico modo di dire «indeterminato» (MDN, `<progress>`). Scrivere
        `value="0"` direbbe invece «fermo a zero», che il server non ha detto. */
-    const barra = el(d, 'progress', 'talos-lab__meter', 'Avanzamento non misurabile'); barra.max = 100;
-    barra.setAttribute('aria-label', `Download ${dati.nomeFile} · avanzamento non misurabile: il totale non è dichiarato`);
+    const barra = el(d, 'progress', 'talos-lab__meter', t('modelli.download.progressUnknown')); barra.max = 100;
+    barra.setAttribute('aria-label', t('modelli.download.unknownProgressLabel', { file: dati.nomeFile }));
     art.appendChild(barra);
   }
   const piede = el(d, 'div', 'talos-toolbar');
   const misure = el(d, 'span', 'talos-muted');
   if (dati.misurabile) {
-    misure.append(el(d, 'strong', '', `${dati.percento}%`), d.createTextNode(` · ${dati.ricevuti.replace(' GB', '')} di ${dati.totale}`));
+    misure.append(el(d, 'strong', '', `${dati.percento}%`), d.createTextNode(t('modelli.download.receivedOfTotal', { received: dati.ricevuti.replace(' GB', ''), total: dati.totale })));
   } else {
     /* Si dice quel che si SA — i byte ricevuti — e che il resto non è noto. */
-    misure.append(d.createTextNode(`${dati.ricevuti} ricevuti · totale non dichiarato dal server`));
+    misure.append(d.createTextNode(t('modelli.download.receivedUnknownTotal', { received: dati.ricevuti })));
   }
   if (dati.velocita) misure.append(d.createTextNode(` · ${dati.velocita}`));
-  if (dati.resto) { misure.append(d.createTextNode(' · ')); const m = el(d, 'span', 'talos-measure talos-measure--estimate', dati.resto); m.dataset.c = 'Measure'; misure.append(m, d.createTextNode(' rimasti')); }
-  else if (dati.stato === 'verifying') misure.append(d.createTextNode(' · verifica dell\'impronta in corso'));
-  else if (dati.stato === 'paused') misure.append(d.createTextNode(' · in pausa'));
+  if (dati.resto) { misure.append(d.createTextNode(' · ')); const m = el(d, 'span', 'talos-measure talos-measure--estimate', dati.resto); m.dataset.c = 'Measure'; misure.append(m, d.createTextNode(t('modelli.download.remainingSuffix'))); }
+  else if (dati.stato === 'verifying') misure.append(d.createTextNode(t('modelli.download.checkingSuffix')));
+  else if (dati.stato === 'paused') misure.append(d.createTextNode(t('modelli.download.pausedSuffix')));
   const cluster = el(d, 'div', 'talos-cluster');
-  if (['queued', 'running'].includes(dati.stato)) cluster.appendChild(bottone(d, 'Pausa', 'talos-button talos-button--secondary talos-button--sm', 'pausa', () => azioni.pausa?.(dati.id)));
-  if (dati.stato === 'paused') cluster.appendChild(bottone(d, 'Riprendi', 'talos-button talos-button--secondary talos-button--sm', 'riprendi', () => azioni.riprendi?.(dati.id)));
+  if (['queued', 'running'].includes(dati.stato)) cluster.appendChild(bottone(d, t('modelli.download.pause'), 'talos-button talos-button--secondary talos-button--sm', 'pausa', () => azioni.pausa?.(dati.id)));
+  if (dati.stato === 'paused') cluster.appendChild(bottone(d, t('modelli.download.resume'), 'talos-button talos-button--secondary talos-button--sm', 'riprendi', () => azioni.riprendi?.(dati.id)));
   /* ⛔ IL COMANDO DI STOP SI DISEGNA SOLO DOVE IL TRASPORTO LO ACCETTA, e si vede SEMPRE (non al
      passaggio del mouse): `hf-direct-transfer.mjs:95` rifiuta `cancel` su `ready | failed |
      cancelled`. Trovato GUARDANDO la foto della coda lunga: la riga «Annullato» offriva «Annulla»,
      che avrebbe aperto la conferma e poi non avrebbe fatto niente. */
   if (!['ready', 'failed', 'cancelled'].includes(dati.stato)) {
-    const annulla = bottone(d, 'Annulla', 'talos-button talos-button--ghost talos-button--sm', 'annulla', () => azioni.annulla?.(dati.id)); annulla.dataset.apreVelo = 'veloAnnullaDownload';
+    const annulla = bottone(d, t('modelli.download.cancel'), 'talos-button talos-button--ghost talos-button--sm', 'annulla', () => azioni.annulla?.(dati.id)); annulla.dataset.apreVelo = 'veloAnnullaDownload';
     cluster.appendChild(annulla);
   }
   piede.append(misure, cluster); art.appendChild(piede);
@@ -617,29 +620,29 @@ export function aggiornaCodaDownload(panel, items = [], opzioni = {}) {
     for (const b of conteggi.querySelectorAll('[data-c="Badge"]')) b.remove();
     const primo = conteggi.firstChild;
     const badges = [];
-    if (c.inCorso) badges.push(badge(d, `${c.inCorso} in corso`, 'accent'));
-    if (c.inPausa) badges.push(badge(d, `${c.inPausa} in pausa`, 'warning'));
-    if (c.falliti) badges.push(badge(d, `${c.falliti} ${c.falliti === 1 ? 'fallito' : 'falliti'}`, 'danger'));
-    if (c.completati) badges.push(badge(d, `${c.completati} ${c.completati === 1 ? 'completato' : 'completati'}`, 'success'));
+    if (c.inCorso) badges.push(badge(d, t('modelli.download.runningCount', { n: c.inCorso }), 'accent'));
+    if (c.inPausa) badges.push(badge(d, t('modelli.download.pausedCount', { n: c.inPausa }), 'warning'));
+    if (c.falliti) badges.push(badge(d, tn('modelli.download.failedCountOne', 'modelli.download.failedCount', c.falliti), 'danger'));
+    if (c.completati) badges.push(badge(d, tn('modelli.download.completedCountOne', 'modelli.download.completedCount', c.completati), 'success'));
     /* La categoria che mancava: senza di lei i download ANNULLATI erano righe che nessun
        contatore nominava (e la somma dei badge non tornava col numero delle righe). */
-    if (c.annullati) badges.push(badge(d, `${c.annullati} ${c.annullati === 1 ? 'annullato' : 'annullati'}`, ''));
+    if (c.annullati) badges.push(badge(d, tn('modelli.download.cancelledCountOne', 'modelli.download.cancelledCount', c.annullati), ''));
     for (const b of badges) conteggi.insertBefore(b, primo);
     const nascosti = items.length - visibili.length;
     const nota = notaDelFiltro(conteggi, d);
-    const frase = nascosti > 0 ? `Mostrati ${visibili.length} di ${items.length}` : '';
+    const frase = nascosti > 0 ? t('modelli.download.shownCount', { shown: visibili.length, total: items.length }) : '';
     if (nota.textContent !== frase) nota.textContent = frase;
     /* ⛔ Con la coda VUOTA la riga dei conteggi non si disegna: il disegno del mockup, in quello
        stato, è il motto e lo stato vuoto. I nodi restano montati — è `hidden`, non rimozione, e
        il listener di `app.js:4764` vive sul bottone, che così non si perde. */
     if (conteggi.hidden !== senzaRighe) conteggi.hidden = senzaRighe;
     const filtro = conteggi.querySelector('[data-action="soloAttivi"]');
-    if (filtro) { filtro.textContent = soloAttivi ? 'Mostra tutti' : 'Mostra solo attivi'; filtro.setAttribute('aria-pressed', String(soloAttivi)); }
+    if (filtro) { filtro.textContent = soloAttivi ? t('modelli.download.showAll') : t('modelli.download.showActive'); filtro.setAttribute('aria-pressed', String(soloAttivi)); }
   }
   if (!coda) return;
   if (errore) {
     if (coda.hidden) coda.hidden = false;
-    coda.replaceChildren(el(d, 'p', 'talos-card--pad talos-muted', `Coda non disponibile: ${errore.message || errore}`));
+    coda.replaceChildren(el(d, 'p', 'talos-card--pad talos-muted', t('modelli.download.queueUnavailable', { error: errore.message || errore })));
     statoVuotoDelPannello(panel, d, azioni, false); // una coda che non si legge non è una coda vuota
     return;
   }
@@ -648,7 +651,7 @@ export function aggiornaCodaDownload(panel, items = [], opzioni = {}) {
   if (coda.hidden !== senzaRighe) coda.hidden = senzaRighe;
   if (senzaRighe) { if (coda.childElementCount) coda.replaceChildren(); return; }
   if (!visibili.length) {
-    coda.replaceChildren(el(d, 'p', 'talos-card--pad talos-muted', 'Nessun download attivo. I download finiti restano nella coda: «Mostra tutti» li riporta.'));
+    coda.replaceChildren(el(d, 'p', 'talos-card--pad talos-muted', t('modelli.download.noActiveDownloads')));
     return;
   }
   coda.replaceChildren(...visibili.flatMap((i) => [d.createTextNode('\n'), creaRigaDownload(datiDownload(i, { stima: stime.get?.(i.id) || null }), {

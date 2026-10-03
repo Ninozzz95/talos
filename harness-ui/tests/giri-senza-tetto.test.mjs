@@ -116,7 +116,7 @@ test('⛔⛔ e la sua diagnosi non compare più nel testo consegnato: era la fra
   });
 
   const detto = String(esito.messaggiFinali?.at(-1)?.content ?? '') + String(esito.detto ?? '');
-  assert.ok(!/giri esauriti/i.test(detto), `⛔ la frase «giri esauriti» è tornata nel testo: ${detto.slice(0, 200)}`);
+  assert.ok(!/turns exhausted/i.test(detto), `⛔ la frase «turns exhausted» è tornata nel testo: ${detto.slice(0, 200)}`);
 });
 
 /*
@@ -128,7 +128,7 @@ test('⛔⛔ e la sua diagnosi non compare più nel testo consegnato: era la fra
 test('⛔⛔⛔ AL CONTRARIO — dove un tetto viene fissato APPOSTA, «giri esauriti» resta la diagnosi', () => {
   const finito = comeSonoFinitiIGiri({ giroRaggiunto: 8, giriMassimi: 8, haRisposto: false });
   assert.equal(finito.esito, 'giri-esauriti');
-  assert.match(finito.detto, /giri esauriti: 8 su 8/);
+  assert.match(finito.detto, /turns exhausted: 8 of 8/);
 });
 
 test('⛔ e con il tetto tolto nessun numero di giri, per grande che sia, produce «giri esauriti»', () => {

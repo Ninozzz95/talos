@@ -33,6 +33,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { TESTI } from '../frontend/src/i18n/testi/index.js'; // corsia A della lingua (03/10/2026): il sorgente porta le chiavi, le frasi stanno nel dizionario
 
 import {
   AZIONE_ACCODA, AZIONE_BIVIO, AZIONE_COMANDO, AZIONE_INVIA,
@@ -283,9 +284,20 @@ test('⛔ nessun segnaposto del composer promette che l Invio REINDIRIZZI', () =
    *   vista è l'asserzione «ho trovato almeno un segnaposto», che qui vale quanto la guardia.
    * ⇒ Niente regex: si taglia per testo, e il cancello dichiara quanti segnaposto ha in mano.
    */
-  const segnaposto = MONOLITE.split('composerInput.placeholder')
+  /* Corsia A della lingua (03/10/2026): il sorgente porta le chiavi `tr('…')`; il cancello legge la frase italiana che la
+     persona vede al loro posto. Anche qui per testo, senza regex. */
+  const chiaviIn = (pezzo) => pezzo.split("tr('").slice(1).map((parte) => parte.slice(0, parte.indexOf("')")));
+  const conLeFrasi = (pezzo) => pezzo.split("tr('").map((parte, i) => {
+    if (i === 0) return parte;
+    const fine = parte.indexOf("')");
+    return `'${TESTI.it[parte.slice(0, fine)]}'${parte.slice(fine + 2)}`;
+  }).join('');
+  const sorgenti = MONOLITE.split('composerInput.placeholder')
     .slice(1)
     .map((pezzo) => pezzo.slice(0, pezzo.indexOf(';')));
+  const chiavi = sorgenti.flatMap(chiaviIn);
+  assert.ok(chiavi.every((k) => typeof TESTI.it[k] === 'string' && typeof TESTI.en[k] === 'string'), 'ogni segnaposto ha la sua frase in italiano e in inglese');
+  const segnaposto = sorgenti.map(conLeFrasi);
   assert.ok(segnaposto.length >= 1, 'nessun segnaposto trovato: il cancello starebbe guardando il vuoto');
   assert.ok(segnaposto.some((r) => r.includes('Scrivi')), 'il cancello non ha in mano i segnaposto veri del composer');
   /*
@@ -308,5 +320,9 @@ test('⛔ nessun segnaposto del composer promette che l Invio REINDIRIZZI', () =
   for (const riga of segnaposto) {
     const fuoriDalRamoAsk = compatta(riga).replace(RAMO_ASK, '');
     assert.ok(!fuoriDalRamoAsk.includes('Invio indirizza'), `un segnaposto promette che l'Invio reindirizza: ${riga.trim()}`);
+  }
+  /* E in inglese: fuori dal ramo Ask nessun segnaposto dice «redirects». */
+  for (const k of chiavi.filter((k) => !RAMO_ASK.includes(TESTI.it[k]))) {
+    assert.ok(!TESTI.en[k].includes('redirect'), `in inglese un segnaposto promette che l'Invio reindirizza: ${TESTI.en[k]}`);
   }
 });

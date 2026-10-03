@@ -38,13 +38,15 @@ import {
 } from './generation-idle.mjs';
 
 const ENDPOINT_OPENROUTER = 'https://openrouter.ai/api/v1/chat/completions';
-const RICHIESTA_DI_RIASSUNTO = 'Riassumi la conversazione mantenendo decisioni, file e risultati utili al lavoro.';
+const RICHIESTA_DI_RIASSUNTO = 'Summarize the conversation, keeping the decisions, files and results that matter for the work.';
 const GIRI_PRIMA_DI_COMPATTARE = 12;
 const OPENROUTER_IDLE_MS_PREDEFINITO = 60_000;
 const SSE_BUFFER_MASSIMO = 1_048_576;
 const SCHEMA_DESCRIZIONE_COMANDO = Object.freeze({
   type: 'string',
-  description: 'Breve descrizione in italiano, al presente e comprensibile all’utente, dell’obiettivo di questo comando. Non copiare il comando tecnico.',
+  /* Revisione K3 (03/10/2026): la descrizione resta IN ITALIANO come prima (la lingua del testo a schermo è una decisione
+     dell'owner, chiesta a parte); cambia solo la lingua dell'istruzione, che è per il modello. */
+  description: 'Short description of the goal of this command, in Italian, in the present tense and understandable to the user. Do not copy the technical command.',
   minLength: 3,
   maxLength: 120,
 });
@@ -60,7 +62,7 @@ export class OwnerRuntimeUnavailableError extends Error {
 
 class OpenRouterIdleTimeoutError extends Error {
   constructor(timeoutMs) {
-    super(`OpenRouter non ha inviato attività per ${Math.max(1, Math.round(timeoutMs / 1_000))} secondi.`);
+    super(`OpenRouter sent no activity for ${Math.max(1, Math.round(timeoutMs / 1_000))} seconds.`);
     this.name = 'OpenRouterIdleTimeoutError';
     this.code = 'OPENROUTER_IDLE_TIMEOUT';
   }
@@ -126,7 +128,7 @@ const AVVISO_MOTORE_SENZA_ATTREZZI = 'Questo modello non usa gli attrezzi: qui r
  */
 class MotoreLocaleRifiutaError extends Error {
   constructor(stato, dettaglio, tentativi = [{ stato, dettaglio }]) {
-    super('Il motore locale non ha accettato questa richiesta, nemmeno senza gli attrezzi.');
+    super('The local engine did not accept this request, not even as a plain chat.');
     this.name = 'MotoreLocaleRifiutaError';
     this.code = 'LOCAL_ENGINE_REJECTED_REQUEST';
     this.stato = stato;
@@ -151,8 +153,8 @@ class MotoreLocaleRifiutaError extends Error {
  */
 class ContestoLocalePienoError extends Error {
   constructor(promptToken, finestraToken, dettaglio) {
-    const quanti = (n) => (Number.isSafeInteger(n) && n > 0 ? ` (${n} token)` : '');
-    super(`La conversazione${quanti(promptToken)} non entra nella finestra del modello locale${quanti(finestraToken)}.`);
+    const quanti = (n) => (Number.isSafeInteger(n) && n > 0 ? ` (${n} tokens)` : '');
+    super(`The conversation${quanti(promptToken)} does not fit in the local model’s window${quanti(finestraToken)}.`);
     this.name = 'ContestoLocalePienoError';
     this.code = 'LOCAL_CONTEXT_EXCEEDED';
     this.stato = 400;
@@ -226,7 +228,7 @@ export async function chiamaConRitentaLocale({
     if (risposta.ok) {
       const corpo = await risposta.json();
       const scelta = corpo?.choices?.[0]?.message;
-      if (!scelta) throw new Error('Il fornitore non ha restituito una risposta utilizzabile.');
+      if (!scelta) throw new Error('The provider did not return a usable response.');
       return { scelta, usage: corpo?.usage ?? null, tentativi: tentativo + 1 };
     }
     ultimoStato = risposta.status;
@@ -234,7 +236,7 @@ export async function chiamaConRitentaLocale({
     if (!rispostaRitentabile(risposta.status)) break;
     if (tentativo < tentativiMassimi - 1) await dormi(attesaEsponenziale(tentativo));
   }
-  const errore = new Error(`Il fornitore non risponde (stato ${ultimoStato ?? 'sconosciuto'}). ${ultimoTesto}`.trim());
+  const errore = new Error(`The provider is not responding (status ${ultimoStato ?? 'unknown'}). ${ultimoTesto}`.trim());
   errore.stato = ultimoStato;
   errore.limitatoDalFornitore = rispostaRitentabile(ultimoStato);
   throw errore;
@@ -254,7 +256,7 @@ export async function compattaConversazioneLocale(messaggi, chiamaModello) {
     messaggi: [
       messaggi[0],
       messaggi[1],
-      { role: 'user', content: `[conversazione compattata al giro ${GIRI_PRIMA_DI_COMPATTARE}: quanto segue è un riassunto, non la cronologia originale]\n\n${riassunto}` },
+      { role: 'user', content: `[conversation compacted at turn ${GIRI_PRIMA_DI_COMPATTARE}: what follows is a summary, not the original history]\n\n${riassunto}` },
     ],
     compattato: true,
     usage,
@@ -264,7 +266,7 @@ export async function compattaConversazioneLocale(messaggi, chiamaModello) {
 function normalizzaModuloPath(modulePath) {
   if (modulePath === null || modulePath === undefined || modulePath === '') return null;
   if (typeof modulePath !== 'string' || !isAbsolute(modulePath) || modulePath.includes('\0')) {
-    throw new OwnerRuntimeUnavailableError('Il modulo runtime deve essere un percorso assoluto.', 'OWNER_RUNTIME_PATH_INVALID');
+    throw new OwnerRuntimeUnavailableError('The runtime module must be an absolute path.', 'OWNER_RUNTIME_PATH_INVALID');
   }
   return pathToFileURL(modulePath).href;
 }
@@ -279,7 +281,19 @@ function normalizzaModuloPath(modulePath) {
  * @param {unknown} body
  * @returns {unknown}
  */
-export function adattaRichiestaConDescrizioneComando(body) {
+/*
+ * ⭐ K3b (03/10/2026), decisione owner «Lingua dell'interfaccia»: la descrizione che il modello scrive sotto ogni comando è
+ *   nella lingua dell'INTERFACCIA. `lingua` arriva dal giro (`input.linguaInterfaccia`); senza, resta l'italiano di prima.
+ */
+const SCHEMA_DESCRIZIONE_COMANDO_EN = Object.freeze({
+  ...SCHEMA_DESCRIZIONE_COMANDO,
+  description: 'Short description of the goal of this command, in English, in the present tense and understandable to the user. Do not copy the technical command.',
+});
+export function schemaDescrizioneComando(lingua) {
+  return lingua === 'en' ? SCHEMA_DESCRIZIONE_COMANDO_EN : SCHEMA_DESCRIZIONE_COMANDO;
+}
+
+export function adattaRichiestaConDescrizioneComando(body, { lingua } = {}) {
   if (!body || typeof body !== 'object' || !Array.isArray(body.tools)) return body;
   let modificata = false;
   const tools = body.tools.map((tool) => {
@@ -288,7 +302,7 @@ export function adattaRichiestaConDescrizioneComando(body) {
     if (!parametri || typeof parametri !== 'object' || parametri.type !== 'object') return tool;
     const proprieta = parametri.properties && typeof parametri.properties === 'object' ? parametri.properties : {};
     const richiesti = Array.isArray(parametri.required) ? parametri.required : [];
-    const descrizione = proprieta.descrizione ?? SCHEMA_DESCRIZIONE_COMANDO;
+    const descrizione = proprieta.descrizione ?? schemaDescrizioneComando(lingua);
     const required = richiesti.includes('descrizione') ? richiesti : [...richiesti, 'descrizione'];
     if (proprieta.descrizione === descrizione && required === richiesti) return tool;
     modificata = true;
@@ -314,13 +328,13 @@ export function adattaRichiestaConDescrizioneComando(body) {
  * @param {typeof fetch} fetchDiRete
  * @returns {typeof fetch}
  */
-export function creaFetchConDescrizioneComando(fetchDiRete = fetch) {
-  if (typeof fetchDiRete !== 'function') throw new TypeError('fetchDiRete deve essere una funzione.');
+export function creaFetchConDescrizioneComando(fetchDiRete = fetch, { lingua } = {}) {
+  if (typeof fetchDiRete !== 'function') throw new TypeError('fetchDiRete must be a function.');
   return async (url, init = undefined) => {
     if (typeof init?.body !== 'string') return fetchDiRete(url, init);
     let body;
     try { body = JSON.parse(init.body); } catch { return fetchDiRete(url, init); }
-    const adattato = adattaRichiestaConDescrizioneComando(body);
+    const adattato = adattaRichiestaConDescrizioneComando(body, { lingua });
     if (adattato === body) return fetchDiRete(url, init);
     return fetchDiRete(url, { ...init, body: JSON.stringify(adattato) });
   };
@@ -422,7 +436,7 @@ export function normalizzaReasoningPerModello(reasoning, capability) {
 function rispostaErrore(status, error) {
   const message = typeof error?.message === 'string' && error.message.trim()
     ? error.message.trim()
-    : 'Il fornitore non ha completato la risposta.';
+    : 'The provider did not complete the response.';
   return new Response(JSON.stringify({ error: { code: status, message } }), {
     status,
     headers: { 'content-type': 'application/json; charset=utf-8' },
@@ -582,7 +596,7 @@ export function creaFetchOpenRouterResiliente(fetchDiRete = fetch, {
   modelCapabilityFn = async () => null,
   userSignal = null,
 } = {}) {
-  if (typeof fetchDiRete !== 'function') throw new TypeError('fetchDiRete deve essere una funzione.');
+  if (typeof fetchDiRete !== 'function') throw new TypeError('fetchDiRete must be a function.');
   return async (url, init = undefined) => {
     if (!urlOpenRouterChat(url)) return fetchDiRete(url, init);
     const timeoutCandidate = Number(await timeoutMsFn());
@@ -620,7 +634,7 @@ export function creaFetchOpenRouterResiliente(fetchDiRete = fetch, {
       if (userSignal?.aborted) throw userSignal.reason ?? error;
       if (error?.esitoIncerto) throw error;
       if (error instanceof SilenzioDelFornitoreError) throw error;
-      if (error instanceof OpenRouterIdleTimeoutError) return rispostaErrore(408, { message: 'OpenRouter è rimasto inattivo oltre il limite configurato.' });
+      if (error instanceof OpenRouterIdleTimeoutError) return rispostaErrore(408, { message: 'OpenRouter stayed idle past the configured limit.' });
       return rispostaErrore(502, { message: error instanceof Error ? error.message : String(error) });
     }
   };
@@ -811,7 +825,7 @@ function creaFetchInstradata(fetchDiRete = fetch, { risolvi = risolviDestinazion
     const spedisci = async (corpo) => {
       if (destinazione.locale) {
         if (typeof dipendenze.chiamaLocale !== 'function') {
-          const errore = new Error('Il motore locale non è collegato a questo server.');
+          const errore = new Error('The local engine is not connected to this server.');
           errore.code = 'LOCAL_RUNTIME_NOT_READY';
           throw errore;
         }
@@ -898,19 +912,19 @@ async function inviaCloudProtetta(rete, url, opzioni) {
   try { risposta = await rete(url, opzioni); }
   catch {
     if (opzioni.signal?.aborted) {
-      const errore = new Error('La richiesta al fornitore è stata interrotta.');
+      const errore = new Error('The request to the provider was interrupted.');
       errore.name = opzioni.signal.reason?.name === 'TimeoutError' ? 'TimeoutError' : 'AbortError';
       throw errore;
     }
-    throw Object.assign(new Error('Non è stato possibile raggiungere il fornitore.'), { code: 'PROVIDER_NETWORK_ERROR' });
+    throw Object.assign(new Error('The provider could not be reached.'), { code: 'PROVIDER_NETWORK_ERROR' });
   }
   if (risposta.ok) return risposta;
   await risposta.body?.cancel().catch(() => {});
   const stato = risposta.status;
-  const message = stato === 401 ? 'Credenziale non accettata dal fornitore.'
-    : stato === 403 ? 'Accesso negato: controlla i permessi della credenziale e del modello.'
-    : stato === 404 ? 'Modello o indirizzo non trovato: controlla la configurazione del fornitore.'
-    : `Il fornitore ha risposto HTTP ${stato}.`;
+  const message = stato === 401 ? 'Credential not accepted by the provider.'
+    : stato === 403 ? 'Access denied: check the permissions of the credential and of the model.'
+    : stato === 404 ? 'Model or address not found: check the provider configuration.'
+    : `The provider answered HTTP ${stato}.`;
   return new Response(JSON.stringify({ error: { message } }), { status: stato, headers: { 'Content-Type': 'application/json' } });
 }
 // P-K — fine
@@ -957,19 +971,19 @@ function classificaLimiteOpenRouter(testo) {
 
 function erroreFornitorePubblico(classificazione, stato = null) {
   const messaggi = {
-    traffico: 'Troppo traffico presso il fornitore.', credenziale: 'Credenziale rifiutata dal fornitore.',
+    traffico: 'Too much traffic at the provider.', credenziale: 'Credential rejected by the provider.',
     accesso: stato === 401
-      ? "L'endpoint richiede autenticazione: verifica indirizzo e accesso configurati."
-      : 'Accesso negato dal fornitore o dal modello: verifica i permessi.',
-    credito: 'Credito non disponibile presso il fornitore.', rete: 'Connessione con il fornitore interrotta.',
-    'timeout-fornitore': 'Il fornitore ha superato il tempo massimo.', 'guasto-fornitore': 'Il fornitore non risponde.',
-    'flusso-interrotto': 'La risposta del fornitore si è interrotta.',
-    'budget-occupato': 'Il budget è temporaneamente occupato da richieste in corso o appena concluse.',
-    'limite-chiave': 'Il limite di spesa della chiave è stato raggiunto.',
-    'richiesta-costosa': 'Il costo stimato della richiesta supera il budget disponibile.',
-    'limite-credito': 'Il servizio ha rifiutato la richiesta per un limite di spesa non specificato.',
+      ? 'The endpoint requires you to sign in: check the configured address and access.'
+      : 'Access denied by the provider or the model: check the permissions.',
+    credito: 'Credit not available at the provider.', rete: 'Connection with the provider interrupted.',
+    'timeout-fornitore': 'The provider exceeded the maximum time.', 'guasto-fornitore': 'The provider is not responding.',
+    'flusso-interrotto': 'The provider response was cut off.',
+    'budget-occupato': 'The budget is temporarily taken by requests in progress or just finished.',
+    'limite-chiave': 'The spending limit of the key has been reached.',
+    'richiesta-costosa': 'The estimated cost of the request exceeds the available budget.',
+    'limite-credito': 'The service rejected the request because of an unspecified spending limit.',
   };
-  const e = new Error(messaggi[classificazione.classe] ?? 'Il fornitore non ha accettato la richiesta.');
+  const e = new Error(messaggi[classificazione.classe] ?? 'The provider did not accept the request.');
   return Object.assign(e, { code: 'PROVIDER_REQUEST_ERROR', stato, ...classificazione, limitatoDalFornitore: classificazione.classe === 'traffico' });
 }
 
@@ -994,7 +1008,7 @@ function scadenzaPrimaRisposta(timeoutSeconds, segnaleUtente) {
   if (!ms) return { signal: segnaleUtente, disarma: () => {} };
   const controllore = new AbortController();
   const timer = setTimeout(() => controllore.abort(Object.assign(
-    new Error(`Il fornitore non ha risposto entro ${Math.round(ms / 1_000)} secondi.`),
+    new Error(`The provider did not respond within ${Math.round(ms / 1_000)} seconds.`),
     { name: 'TimeoutError', code: 'PROVIDER_FIRST_RESPONSE_TIMEOUT' },
   )), ms);
   timer.unref?.();
@@ -1073,7 +1087,7 @@ export function creaFetchMultiProvider(fetchDiRete = fetch, {
   const memoriaAttrezzi = { rifiutati: false };
   if (!providerStore && !catena.length) return creaFetchInstradata(fetchDiRete, { risolvi, dipendenze, onAvviso, inattivitaGenerazioneMs, sorvegliaCorpo, memoriaAttrezzi });
   if (!dipendenze || (catena.length && (!providerStore || typeof onCambioFornitore !== 'function' || typeof onConsumoFornitore !== 'function'))) {
-    throw new OwnerRuntimeUnavailableError('Per continuare con un altro fornitore occorrono accessi, avvisi in chat e registrazione dei consumi.', 'PROVIDER_FALLBACK_NOT_CONNECTED');
+    throw new OwnerRuntimeUnavailableError('To continue with another provider, access, chat notices and usage recording are needed.', 'PROVIDER_FALLBACK_NOT_CONNECTED');
   }
   let effettivo = null, indice = -1, occupato = false;
 
@@ -1097,7 +1111,7 @@ export function creaFetchMultiProvider(fetchDiRete = fetch, {
        */
       if (!providerStore.hasKey(fonte)) {
         throw Object.assign(
-          new OwnerRuntimeUnavailableError(`Manca la chiave per ${record.etichetta}.`, 'PROVIDER_KEY_MISSING'),
+          new OwnerRuntimeUnavailableError(`The key for ${record.etichetta} is missing.`, 'PROVIDER_KEY_MISSING'),
           { fornitore: fonte, etichettaFornitore: record.etichetta },
         );
       }
@@ -1219,7 +1233,7 @@ export function creaFetchMultiProvider(fetchDiRete = fetch, {
     if (modelloSessione && JSON.stringify(separaFonteModello(opzioni.modello)) !== JSON.stringify(separaFonteModello(modelloSessione))) {
       return chiama({ fetchDiRete: fetchMultiProvider });
     }
-    if (occupato) throw new OwnerRuntimeUnavailableError('Una chiamata di questa sessione è già in corso.', 'PROVIDER_FALLBACK_BUSY');
+    if (occupato) throw new OwnerRuntimeUnavailableError('A call of this session is already in progress.', 'PROVIDER_FALLBACK_BUSY');
     occupato = true;
     try {
       const iniziale = separaFonteModello(opzioni.modello);
@@ -1418,11 +1432,11 @@ export function createOwnerRuntimeAdapter({
   const specifier = normalizzaModuloPath(modulePath);
   let moduloPromise = null;
   const carica = async () => {
-    if (!specifier) throw new OwnerRuntimeUnavailableError('Il runtime agente non è configurato per questa installazione.');
+    if (!specifier) throw new OwnerRuntimeUnavailableError('The agent runtime is not configured for this installation.');
     if (!moduloPromise) {
       moduloPromise = Promise.resolve(importFn(specifier)).catch((error) => {
         moduloPromise = null;
-        throw new OwnerRuntimeUnavailableError('Il runtime agente non è disponibile. Controlla la configurazione del server.', 'OWNER_RUNTIME_LOAD_FAILED', { cause: error });
+        throw new OwnerRuntimeUnavailableError('The agent runtime is not available. Check the server configuration.', 'OWNER_RUNTIME_LOAD_FAILED', { cause: error });
       });
     }
     return moduloPromise;
@@ -1430,7 +1444,7 @@ export function createOwnerRuntimeAdapter({
   const richiama = async (nome, ...argomenti) => {
     const runtime = await carica();
     if (typeof runtime[nome] !== 'function') {
-      throw new OwnerRuntimeUnavailableError(`Il runtime agente non espone l’operazione richiesta (${nome}).`, 'OWNER_RUNTIME_CONTRACT_INVALID');
+      throw new OwnerRuntimeUnavailableError(`The agent runtime does not expose the requested operation (${nome}).`, 'OWNER_RUNTIME_CONTRACT_INVALID');
     }
     return runtime[nome](...argomenti);
   };
@@ -1451,7 +1465,7 @@ export function createOwnerRuntimeAdapter({
     async leggiPagina(url) {
       const runtime = await carica();
       if (typeof runtime.leggiPaginaSicura !== 'function') {
-        throw new OwnerRuntimeUnavailableError('Il runtime agente non espone la lettura di una pagina.', 'OWNER_RUNTIME_CONTRACT_INVALID');
+        throw new OwnerRuntimeUnavailableError('The agent runtime does not expose page reading.', 'OWNER_RUNTIME_CONTRACT_INVALID');
       }
       const pagina = await runtime.leggiPaginaSicura(String(url ?? ''));
       return { url: String(pagina?.url ?? url ?? ''), stato: Number(pagina?.stato ?? 0) || 0, corpo: String(pagina?.corpo ?? '') };
@@ -1468,7 +1482,7 @@ export function createOwnerRuntimeAdapter({
       if (!specifier) return null;
       const runtime = await carica();
       if (typeof runtime.listaTaskDisponibili !== 'function' || typeof runtime.preparaEsecuzione !== 'function') {
-        throw new OwnerRuntimeUnavailableError('Il runtime agente non espone il catalogo task richiesto.', 'OWNER_RUNTIME_CONTRACT_INVALID');
+        throw new OwnerRuntimeUnavailableError('The agent runtime does not expose the requested task catalog.', 'OWNER_RUNTIME_CONTRACT_INVALID');
       }
       return Object.freeze({
         list: () => runtime.listaTaskDisponibili(),
@@ -1506,7 +1520,7 @@ export function createOwnerRuntimeAdapter({
       const runtime = await carica();
       const leggi = (elenco, dove) => {
         if (!Array.isArray(elenco)) {
-          throw new OwnerRuntimeUnavailableError(`Il runtime agente non espone l’elenco degli attrezzi (${dove}).`, 'OWNER_RUNTIME_CONTRACT_INVALID');
+          throw new OwnerRuntimeUnavailableError(`The agent runtime does not expose the tool list (${dove}).`, 'OWNER_RUNTIME_CONTRACT_INVALID');
         }
         return elenco.map((voce) => {
           const f = voce?.function ?? voce ?? {};
@@ -1525,37 +1539,37 @@ export function createOwnerRuntimeAdapter({
     },
     async talosLavora(input) {
       if (typeof input?.readProcessOutputFn === 'function' && (await carica()).SUPPORTA_LETTURA_OUTPUT_PROCESSI !== 1) {
-        throw new OwnerRuntimeUnavailableError('Il motore di questa installazione non legge ancora gli output conservati.', 'PROCESS_OUTPUT_READ_CONTRACT_REQUIRED');
+        throw new OwnerRuntimeUnavailableError('The engine of this installation does not read retained outputs yet.', 'PROCESS_OUTPUT_READ_CONTRACT_REQUIRED');
       }
       if (typeof input?.captureProcessFn === 'function') {
         const runtime = await carica();
         if (runtime.SUPPORTA_OUTPUT_PROCESSI !== 1 || runtime.SUPPORTA_METADATA_OUTPUT_PROCESSI !== 1) {
-          throw new OwnerRuntimeUnavailableError('Il motore di questa installazione non conserva ancora gli output dei comandi.', 'PROCESS_OUTPUT_CONTRACT_REQUIRED');
+          throw new OwnerRuntimeUnavailableError('The engine of this installation does not retain command outputs yet.', 'PROCESS_OUTPUT_CONTRACT_REQUIRED');
         }
       }
       if (typeof input?.ambienteComandiFn === 'function') {
         const runtime = await carica();
         if (runtime.SUPPORTA_AMBIENTE_COMANDI !== 1) {
-          throw new OwnerRuntimeUnavailableError('Il motore di questa installazione non applica ancora la scelta dell’ambiente dei comandi.', 'COMMAND_ENVIRONMENT_CONTRACT_REQUIRED');
+          throw new OwnerRuntimeUnavailableError('The engine of this installation does not apply the command environment choice yet.', 'COMMAND_ENVIRONMENT_CONTRACT_REQUIRED');
         }
       }
       /* G02 (dalla lane CLI): chi passa una barriera prima delle modifiche (il checkpoint della CLI) non la perde in silenzio. */
       if (typeof input?.primaDiMutazioneFn === 'function' && (await carica()).SUPPORTA_BARRIERA_MUTAZIONI !== 1) {
-        throw new OwnerRuntimeUnavailableError('Il motore di questa installazione non applica ancora la barriera prima delle modifiche.', 'PRE_MUTATION_CONTRACT_REQUIRED');
+        throw new OwnerRuntimeUnavailableError('The engine of this installation does not apply the barrier before changes yet.', 'PRE_MUTATION_CONTRACT_REQUIRED');
       }
       /* G02 (dalla lane CLI): chi porta il suo esecutore per la shell del modello (il broker della CLI) non torna in silenzio sull'host. */
       if (typeof input?.eseguiComandoSandboxatoFn === 'function' && (await carica()).SUPPORTA_ESECUTORE_COMANDI_OSPITE !== 1) {
-        throw new OwnerRuntimeUnavailableError('Il motore di questa installazione non usa ancora l’esecutore dei comandi dell’ospite.', 'COMMAND_EXECUTOR_CONTRACT_REQUIRED');
+        throw new OwnerRuntimeUnavailableError('The engine of this installation does not use the host command executor yet.', 'COMMAND_EXECUTOR_CONTRACT_REQUIRED');
       }
       const fallbackProviders = validaFallbackProviders(input?.fallbackProviders ?? []);
       if (fallbackProviders.length) {
         const runtime = await carica();
         if (runtime.SUPPORTA_FALLBACK_FORNITORI !== 1) {
-          throw new OwnerRuntimeUnavailableError('Il motore di questa installazione non collega ancora il cambio di fornitore alla conversazione.', 'PROVIDER_FALLBACK_CONTRACT_REQUIRED');
+          throw new OwnerRuntimeUnavailableError('The engine of this installation does not connect the provider change to the conversation yet.', 'PROVIDER_FALLBACK_CONTRACT_REQUIRED');
         }
       }
       const fetchOriginale = typeof input?.fetchDiRete === 'function' ? input.fetchDiRete : fetch;
-      const fetchConDescrizione = creaFetchConDescrizioneComando(fetchOriginale);
+      const fetchConDescrizione = creaFetchConDescrizioneComando(fetchOriginale, { lingua: input?.linguaInterfaccia }); // K3b
       const fetchResiliente = creaFetchOpenRouterResiliente(fetchConDescrizione, {
         timeoutMsFn: async () => {
           const runtime = await Promise.resolve(openRouterRuntimeFn()).catch(() => null);
@@ -1617,7 +1631,7 @@ export function createOwnerRuntimeAdapter({
         if (hasImages) {
           const capability = await Promise.resolve(modelCapabilityFn(body.model)).catch(() => null);
           if (capability?.inputModalities?.length && !capability.inputModalities.includes('image')) {
-            throw new OwnerRuntimeUnavailableError('Il modello selezionato non accetta immagini. Scegli un modello con visione.', 'MODEL_IMAGE_NOT_SUPPORTED');
+            throw new OwnerRuntimeUnavailableError('The selected model does not accept images. Choose a model with vision.', 'MODEL_IMAGE_NOT_SUPPORTED');
           }
         }
         const messages = await resolveImagesFn(body.messages);
@@ -1644,12 +1658,12 @@ export function createOwnerRuntimeAdapter({
     /** One bounded summary request through the same provider adapters as chat. */
     async callContextModel({ provider, model, messages, maxOutputTokens, signal, fetchDiRete = fetch }) {
       const fail = (code, message, usage) => { throw Object.assign(new Error(message), { code, ...(usage !== undefined ? { usage } : {}) }); };
-      if (!FONTI_MODELLO.includes(provider) || typeof model !== 'string' || !model.trim() || !Array.isArray(messages) || !Number.isSafeInteger(maxOutputTokens) || maxOutputTokens < 1) fail('CTX_MODEL_INVALID', 'Richiesta di sintesi non valida.');
-      if (!destinazioneModelloDeps) fail('CTX_TRANSPORT_UNAVAILABLE', 'Il trasporto del modello non è collegato al compattatore.');
+      if (!FONTI_MODELLO.includes(provider) || typeof model !== 'string' || !model.trim() || !Array.isArray(messages) || !Number.isSafeInteger(maxOutputTokens) || maxOutputTokens < 1) fail('CTX_MODEL_INVALID', 'Invalid summary request.');
+      if (!destinazioneModelloDeps) fail('CTX_TRANSPORT_UNAVAILABLE', 'The model transport is not connected to the compactor.');
       signal?.throwIfAborted();
       const routed = creaFetchMultiProvider(fetchDiRete, { dipendenze: destinazioneModelloDeps });
       const key = provider === 'openrouter' ? destinazioneModelloDeps.leggiChiave?.('openrouter') : null;
-      if (provider === 'openrouter' && !key) fail('CTX_TOKEN_AUTH', 'La chiave del provider selezionato non è disponibile.');
+      if (provider === 'openrouter' && !key) fail('CTX_TOKEN_AUTH', 'The key of the selected provider is not available.');
       /*
        * ⛔ 09/09/2026 — trovato dal giro vero D1 (z-ai/glm-5.3-flash via OpenRouter): la sintesi tornava
        *   SENZA testo, perché il modello ragiona per difetto e il ragionamento si mangiava il budget della
@@ -1686,27 +1700,27 @@ export function createOwnerRuntimeAdapter({
       });
       if (!response.ok) {
         await response.body?.cancel();
-        fail('CTX_SUMMARY_HTTP', `Il modello di sintesi ha risposto con HTTP ${response.status}.`);
+        fail('CTX_SUMMARY_HTTP', `The summary model answered with HTTP ${response.status}.`);
       }
       let result;
-      try { result = await response.json(); } catch { fail('CTX_SUMMARY_RESPONSE_INVALID', 'Risposta di sintesi non leggibile.'); }
+      try { result = await response.json(); } catch { fail('CTX_SUMMARY_RESPONSE_INVALID', 'Unreadable summary response.'); }
       const choice = result?.choices?.[0];
       const usage = result?.usage;
-      if (choice?.message?.tool_calls?.length) fail('CTX_SUMMARY_TOOLS', 'La sintesi non può eseguire strumenti.', usage);
+      if (choice?.message?.tool_calls?.length) fail('CTX_SUMMARY_TOOLS', 'The summary cannot run tools.', usage);
       // 09/09 — il caso visto dal vivo: niente testo ma token di ragionamento spesi. Non è una risposta
       //   «invalida» da guardare nel codice: è un budget finito nel pensiero, e va detto in quelle parole.
       const reasoningTokens = usage?.completion_tokens_details?.reasoning_tokens;
       if (typeof choice?.message?.content !== 'string' && Number.isSafeInteger(reasoningTokens) && reasoningTokens > 0) {
-        fail('CTX_TRUNCATED_SUMMARY', `Il modello ha speso ${reasoningTokens} token nel ragionamento e non ha lasciato spazio alla sintesi.`, usage);
+        fail('CTX_TRUNCATED_SUMMARY', `The model spent ${reasoningTokens} tokens on reasoning and left no room for the summary.`, usage);
       }
-      if (typeof choice?.message?.content !== 'string' || typeof choice?.finish_reason !== 'string') fail('CTX_SUMMARY_RESPONSE_INVALID', 'La sintesi non dichiara testo e stato finale.', usage);
+      if (typeof choice?.message?.content !== 'string' || typeof choice?.finish_reason !== 'string') fail('CTX_SUMMARY_RESPONSE_INVALID', 'The summary does not declare text and final state.', usage);
       return { text: choice.message.content, finishReason: choice.finish_reason, usage };
     },
     async eseguiComandoSandboxato(...args) {
       if (typeof args[2]?.onBytes === 'function') {
         const runtime = await carica();
         if (runtime.SUPPORTA_OUTPUT_PROCESSI !== 1 || runtime.SUPPORTA_METADATA_OUTPUT_PROCESSI !== 1) {
-          throw new OwnerRuntimeUnavailableError('Il motore di questa installazione non conserva ancora gli output dei comandi.', 'PROCESS_OUTPUT_CONTRACT_REQUIRED');
+          throw new OwnerRuntimeUnavailableError('The engine of this installation does not retain command outputs yet.', 'PROCESS_OUTPUT_CONTRACT_REQUIRED');
         }
       }
       return richiama('eseguiComandoSandboxato', ...args);

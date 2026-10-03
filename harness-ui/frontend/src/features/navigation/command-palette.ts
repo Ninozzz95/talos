@@ -40,18 +40,18 @@ export function createCommandPalette(options: CommandPaletteOptions) {
     if (scope.disposed) return;
     const former = matches[selected]?.command.id;
     matches = findCommands(query, options.context(), t);
-    field.placeholder = t('Cerca comandi, sezioni o strumenti…');
-    field.setAttribute('aria-label', t('Cerca comandi e destinazioni'));
-    list.setAttribute('aria-label', t('Comandi e destinazioni'));
+    field.placeholder = t('comandi.palette.searchPlaceholder');
+    field.setAttribute('aria-label', t('comandi.palette.searchLabel'));
+    list.setAttribute('aria-label', t('comandi.palette.listLabel'));
     const layer = field.closest('.overlay-layer, dialog');
     const heading = layer?.querySelector<HTMLElement>('.talos-dialog__title');
-    if (heading) heading.textContent = t('Comandi');
+    if (heading) heading.textContent = t('comandi.palette.title');
     const close = layer?.querySelector<HTMLElement>('[data-chiudi], #closeCommand');
-    close?.setAttribute('aria-label', t('Chiudi Comandi'));
+    close?.setAttribute('aria-label', t('comandi.palette.closeLabel'));
     const hint = layer?.querySelector<HTMLElement>('.talos-dialog__footer-note');
     if (hint) {
       const parts: Node[] = [];
-      for (const [keys, label] of [['↑ ↓', 'scegli'], ['Invio', 'apri'], ['Esc', 'chiudi']]) {
+      for (const [keys, label] of [['↑ ↓', 'comandi.palette.hint.choose'], ['comandi.palette.key.enter', 'comandi.palette.hint.open'], ['Esc', 'comandi.palette.hint.close']]) {
         if (parts.length) parts.push(doc.createTextNode(' · '));
         const key = doc.createElement('kbd'); key.className = 'talos-kbd'; key.textContent = t(keys!);
         parts.push(key, doc.createTextNode(' ' + t(label!)));
@@ -86,7 +86,7 @@ export function createCommandPalette(options: CommandPaletteOptions) {
     // Keyboard order must match the grouped DOM order, not the ranking across separate groups.
     const order = rows().map(row => row.dataset.command);
     matches.sort((a, b) => order.indexOf(a.command.id) - order.indexOf(b.command.id));
-    if (empty) { empty.hidden = matches.length > 0; empty.textContent = t('Nessun comando trovato. Prova un nome di sezione o cancella la ricerca.'); }
+    if (empty) { empty.hidden = matches.length > 0; empty.textContent = t('comandi.palette.empty'); }
     status.textContent = matches.length ? `${matches.length} ${t(matches.length === 1 ? 'risultato' : 'risultati')}` : '';
     const previousIndex = matches.findIndex(item => item.command.id === former);
     const firstEnabled = matches.findIndex(item => !item.disabledReason);

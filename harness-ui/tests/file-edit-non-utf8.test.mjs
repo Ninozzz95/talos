@@ -70,7 +70,20 @@ test('UTF8-02: anche un file col NUL e un UTF-16 si rifiutano, senza toccarli', 
   assert.deepEqual(readFileSync(join(c, 'b3.raw')), CON_NUL);
   assert.deepEqual(readFileSync(join(c, 'utf16.txt')), UTF16);
   assert.match(esito('b'), /^REFUSED\. Nothing was changed: b3\.raw is a binary file/);
-  assert.match(esito('u'), /^REFUSED\. Nothing was changed: utf16\.txt is a binary file/);
+  /* F-025 (owner 02/10/2026): `leggi` ora mostra un UTF-16 col BOM come TESTO, quindi «binary file» qui sarebbe falso: si dice
+     cos'è davvero e perché file_edit non lo tocca (riscriverlo ne cambierebbe la codifica). */
+  assert.match(esito('u'), /^REFUSED\. Nothing was changed: utf16\.txt is UTF-16LE text \(byte order mark FF FE\), and file_edit only edits UTF-8 text/);
+  assert.doesNotMatch(esito('u'), /binary/);
+});
+
+test('UTF8-02b: un UTF-16 di soli ideogrammi (nessun NUL) si rifiuta come UTF-16, non come «Windows-1252 al byte 0»', async (t) => {
+  const c = cartella(t);
+  const cinese = Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from('中文字', 'utf16le')]);
+  writeFileSync(join(c, 'zh.txt'), cinese);
+  const { esito } = await giro(c, [chiama('u', 'file_edit', { percorso: 'zh.txt', old_string: '中', new_string: '文' })]);
+  assert.deepEqual(readFileSync(join(c, 'zh.txt')), cinese);
+  assert.match(esito('u'), /^REFUSED\. Nothing was changed: zh\.txt is UTF-16LE text \(byte order mark FF FE\)/);
+  assert.doesNotMatch(esito('u'), /Windows-1252/);
 });
 
 test('UTF8-03: AL CONTRARIO — un UTF-8 valido con accenti, emoji e BOM si modifica, il BOM resta, e l esito dice i BYTE sul disco', async (t) => {

@@ -46,6 +46,9 @@ test('R4-ASK-AMBIGUOUS-REPLAY: lost POST response reconciles exact persisted ans
   });
   await page.locator('[data-request-id="req-ambiguous"]').getByRole('radio').first().check();
   await expect(page.locator('#conversation [data-request-id="req-ambiguous"]')).toContainText('Risposta inviata');
+  /* Codex 02/10/2026, rilievo 4: «Risposta inviata» è anche dentro «Risposta inviata da un’altra finestra», quindi da
+   * sola non distingue. Qui la risposta registrata è la STESSA data da questa scheda: niente attribuzione remota. */
+  await expect(page.locator('#conversation [data-request-id="req-ambiguous"]')).not.toContainText('da un’altra finestra');
   expect(posts).toBe(1);
   expect(exports).toBe(1);
   await expect(page.locator('#userQuestionDock')).toBeHidden();
@@ -96,6 +99,53 @@ test('R4-ASK-DUPLICATE-409-REPLAY: a conflict reads the same requestId and prese
   await expect(resolved).toContainText('da un’altra finestra');
   expect(posts).toBe(1);
   expect(exports).toBe(1);
+});
+
+/*
+ * Codex 02/10/2026, rilievo 1 (bloccante): la risoluzione arriva dal FLUSSO mentre la lettura del registro dopo il 409
+ * è ancora sospesa. La scheda si chiude allora con l'attribuzione di quel momento (risposta tentata qui, rigiocata
+ * aperta ⇒ niente «da un’altra finestra») e quando il registro arriva lo stesso evento si scarta per `_sequenza`:
+ * l'attribuzione sbagliata resta congelata. Il registro è la prova più informata e deve vincere.
+ */
+test('R4-ASK-409-STREAM-DURING-EXPORT: the stream resolves the card while the journal read is pending, the journal still sets the attribution', async ({ page }) => {
+  let exports = 0;
+  let rilasciaExport;
+  const exportSospeso = new Promise((resolve) => { rilasciaExport = resolve; });
+  const risolta = { type: 'UserQuestionResolved', _sequenza: 7303, requestId: 'req-race', status: 'answered', answers: { scelta: 'B' } };
+  await page.route('**/api/v1/sessions/q-race/events*', (route) => route.fulfill({ contentType: 'text/event-stream', body: '' }));
+  await page.route('**/api/v1/sessions/q-race/children', (route) => route.fulfill({ json: { ok: true, data: { figli: [] } } }));
+  await page.route('**/api/v1/sessions/q-race/tree*', (route) => route.fulfill({ json: { ok: true, data: { voci: [] } } }));
+  await page.route('**/api/v1/sessions/q-race/question', (route) => route.fulfill({ status: 409, json: {
+    error: { code: 'QUESTION_NOT_PENDING', message: 'Domanda non più attiva' },
+  } }));
+  await page.route('**/api/v1/sessions/q-race/export', async (route) => {
+    exports += 1;
+    await exportSospeso;
+    return route.fulfill({ json: { ok: true, data: { sessionId: 'q-race', eventi: [risolta] } } });
+  });
+  await page.goto('/');
+  await page.locator('#talosAvvio').waitFor({ state: 'detached', timeout: 8_000 });
+  await page.waitForFunction(() => window.__talosHarnessUiRuntime);
+  await page.evaluate(() => {
+    const runtime = window.__talosHarnessUiRuntime;
+    runtime.passaASessione('q-race', 'workspace', 'Ask race', 'z-ai/glm-5.3-flash', { conclusa: false });
+    const generation = runtime.realSessionState.generation;
+    runtime.handleRealEvent({ type: 'RunStarted', _sequenza: 7301, input: { consegna: 'Chiarisci la scelta' }, contesto: {} }, generation);
+    runtime.handleRealEvent({ type: 'UserQuestionRequested', _sequenza: 7302, requestId: 'req-race', questions: [{ id: 'scelta', question: 'Quale?',
+      options: [{ label: 'A', description: 'Prima' }, { label: 'B', description: 'Seconda' }] }] }, generation);
+  });
+  await page.locator('[data-request-id="req-race"]').getByRole('radio').first().check();
+  await expect.poll(() => exports).toBe(1);
+  // il flusso (rigiocata ancora aperta) consegna la risoluzione B mentre il registro è sospeso
+  await page.evaluate((evento) => {
+    const runtime = window.__talosHarnessUiRuntime;
+    runtime.handleRealEvent(evento, runtime.realSessionState.generation);
+  }, risolta);
+  const card = page.locator('#conversation [data-request-id="req-race"]');
+  await expect(card).toContainText('Risposta inviata');
+  rilasciaExport();
+  await expect(card).toContainText('da un’altra finestra');
+  await expect(card).toHaveCount(1);
 });
 
 /*

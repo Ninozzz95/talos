@@ -1,6 +1,6 @@
 import { montaAnteprimaTema } from '../../components/anteprima-tema.js';
 import { localizeSettingsCopy } from './static-copy.ts';
-import { SETTINGS_SECTIONS, CHAT_FIELDS, FIELD_HELP, buildSettingsIndex, searchSettings, localText } from './schema.ts';
+import { SETTINGS_SECTIONS, CHAT_FIELDS, FIELD_HELP, buildSettingsIndex, searchSettings, localText, localTextKey } from './schema.ts';
 import type { LegacySettingField, SettingsLanguage, SettingsSection } from './schema.ts';
 
 interface SettingsViewOptions {
@@ -38,78 +38,78 @@ function iconaSezione(id: SettingsSection): SVGElement {
 }
 
 const words = {
-  title: { it: 'Impostazioni', en: 'Settings' },
-  subtitle: { it: 'Un posto per configurare il tuo modo di lavorare.', en: 'One place to configure the way you work.' },
-  search: { it: 'Cerca un’impostazione', en: 'Search settings' },
+  title: localTextKey('impostazioni.view.words.title'),
+  subtitle: localTextKey('impostazioni.view.words.subtitle'),
+  search: localTextKey('impostazioni.view.words.search'),
   /* ⛔ 18/09/2026 — MISURATO, NON SCELTO A OCCHIO. Con la barra dentro la colonna il campo ha
      **181 px utili**: il segnaposto di prima ne voleva **252** e usciva tagliato a metà parola
      («Cerca per nome, funzione o», visto nella foto del 4174). Questi due ne misurano **136** e
      **113** (misurati nella font vera del campo, non stimati). Il significato pieno resta
      nell'etichetta accessibile `search` — «Cerca un'impostazione» — che non ha limiti di riga. */
-  placeholder: { it: 'Nome o parola chiave…', en: 'Name or keyword…' },
-  clear: { it: 'Cancella ricerca', en: 'Clear search' },
-  sections: { it: 'Sezioni delle impostazioni', en: 'Settings sections' },
-  mobile: { it: 'Sezione impostazioni', en: 'Settings section' },
-  behaviour: { it: 'Comportamento', en: 'Behaviour' },
-  infrastructure: { it: 'Infrastruttura', en: 'Infrastructure' },
-  results: { it: 'Risultati della ricerca', en: 'Search results' },
-  empty: { it: 'Nessuna impostazione trovata', en: 'No settings found' },
-  emptyHelp: { it: 'Prova un termine più generale, come “tema”, “permessi” o “provider”.', en: 'Try a broader term such as “theme”, “permissions” or “provider”.' },
-  studio: { it: 'Apri nello studio temi', en: 'Open in theme studio' },
-  resetAppearance: { it: 'Ripristina tutto l’aspetto', en: 'Reset all appearance' },
-  appearanceAuto: { it: 'Le preferenze di aspetto si applicano subito.', en: 'Appearance preferences apply immediately.' },
-  saved: { it: 'Preferenza salvata in questo profilo.', en: 'Preference saved in this profile.' },
-  unsaved: { it: 'Salvataggio non riuscito. La modifica potrebbe durare solo fino alla chiusura: libera spazio o verifica lo storage del profilo.', en: 'Could not save. This change may last only until you close the app: free space or check profile storage.' },
-  chatGroup: { it: 'Lettura e scrittura', en: 'Reading and writing' },
-  chatHelp: { it: 'Preferenze visuali della conversazione. Non cambiano il modello o i permessi.', en: 'Conversation appearance. These settings do not change the model or permissions.' },
-  advanced: { it: 'Regolazioni avanzate del movimento', en: 'Advanced motion controls' },
-  advancedHelp: { it: 'Durata, curva e famiglie di transizioni', en: 'Duration, easing and transition families' },
-  currentSession: { it: 'Sessione corrente', en: 'Current session' },
-  currentSessionHelp: { it: 'Modello e preferenze operative della conversazione attiva.', en: 'Model and operational preferences of the active conversation.' },
-  appearanceLink: { it: 'Temi e movimento', en: 'Themes and motion' },
+  placeholder: localTextKey('impostazioni.view.words.placeholder'),
+  clear: localTextKey('impostazioni.view.words.clear'),
+  sections: localTextKey('impostazioni.view.words.sections'),
+  mobile: localTextKey('impostazioni.view.words.mobile'),
+  behaviour: localTextKey('impostazioni.view.words.behaviour'),
+  infrastructure: localTextKey('impostazioni.view.words.infrastructure'),
+  results: localTextKey('impostazioni.view.words.results'),
+  empty: localTextKey('impostazioni.view.words.empty'),
+  emptyHelp: localTextKey('impostazioni.view.words.emptyHelp'),
+  studio: localTextKey('impostazioni.view.words.studio'),
+  resetAppearance: localTextKey('impostazioni.view.words.resetAppearance'),
+  appearanceAuto: localTextKey('impostazioni.view.words.appearanceAuto'),
+  saved: localTextKey('impostazioni.view.words.saved'),
+  unsaved: localTextKey('impostazioni.view.words.unsaved'),
+  chatGroup: localTextKey('impostazioni.view.words.chatGroup'),
+  chatHelp: localTextKey('impostazioni.view.words.chatHelp'),
+  advanced: localTextKey('impostazioni.view.words.advanced'),
+  advancedHelp: localTextKey('impostazioni.view.words.advancedHelp'),
+  currentSession: localTextKey('impostazioni.view.words.currentSession'),
+  currentSessionHelp: localTextKey('impostazioni.view.words.currentSessionHelp'),
+  appearanceLink: localTextKey('impostazioni.view.words.appearanceLink'),
   /* ⭐ 18/09/2026 — IL CERCATORE DEL MOCKUP (FASE 1b). Il mockup lo ha in SIDEBAR, con la
      scorciatoia e i risultati in una modale; l'app lo aveva solo come campo in alto. */
-  openSearch: { it: 'Cerca impostazioni', en: 'Search settings' },
-  paletteTitle: { it: 'Trova un’impostazione', en: 'Find a setting' },
-  palettePlaceholder: { it: 'Tema, API key, memoria, animazioni…', en: 'Theme, API key, memory, animations…' },
-  paletteClose: { it: 'Chiudi la ricerca', en: 'Close search' },
-  shortcut: { it: 'Ctrl K', en: 'Ctrl K' },
+  openSearch: localTextKey('impostazioni.view.words.openSearch'),
+  paletteTitle: localTextKey('impostazioni.view.words.paletteTitle'),
+  palettePlaceholder: localTextKey('impostazioni.view.words.palettePlaceholder'),
+  paletteClose: localTextKey('impostazioni.view.words.paletteClose'),
+  shortcut: localTextKey('impostazioni.view.words.shortcut'),
   /* Il glifo della scorciatoia non si annuncia: «Ctrl K» letto da uno screen reader è
      «Control K», e va detto a parole invece che lasciato al caso. */
-  shortcutSpoken: { it: 'Scorciatoia Control K', en: 'Control K shortcut' },
+  shortcutSpoken: localTextKey('impostazioni.view.words.shortcutSpoken'),
   /* ⭐⭐ 18/09/2026 — LA STRUTTURA DEL MOCKUP NELLA SEZIONE ASPETTO (i cinque gruppi, la banda
      del tema, la pastiglia contata, «Aggiungi modello»). */
-  bandEyebrow: { it: 'Il tuo tema', en: 'Your theme' },
-  bandHelp: { it: 'Palette, modalità colore, scene e tutte le regolazioni dello sfondo.', en: 'Palette, colour mode, scenes and every background adjustment.' },
-  bandOpen: { it: 'Temi e atmosfere', en: 'Themes and atmospheres' },
+  bandEyebrow: localTextKey('impostazioni.view.words.bandEyebrow'),
+  bandHelp: localTextKey('impostazioni.view.words.bandHelp'),
+  bandOpen: localTextKey('impostazioni.view.words.bandOpen'),
   /* ⛔ IL MAIUSCOLO È NEL TESTO, NON IN CSS: nel mockup la didascalia del gruppo è la stringa
      «9 CONTROLLI» scritta così (`${list.length} CONTROLLI` in `settings.mjs`), e il suo stile
      misura `text-transform: none`. Il numero è contato, la parola è questa. */
-  groupCount: { it: 'CONTROLLI', en: 'CONTROLS' },
+  groupCount: localTextKey('impostazioni.view.words.groupCount'),
   /* ⛔ E IL SINGOLARE È UNA MIA CORREZIONE DICHIARATA: il mockup scriverebbe «1 CONTROLLI», che in
      italiano è sbagliato. Il numero resta identico; cambia la desinenza. */
-  groupCountOne: { it: 'CONTROLLO', en: 'CONTROL' },
-  badgeControls: { it: 'controlli', en: 'controls' },
-  badgeThemes: { it: 'temi', en: 'themes' },
-  addModel: { it: 'Aggiungi modello', en: 'Add model' },
+  groupCountOne: localTextKey('impostazioni.view.words.groupCountOne'),
+  badgeControls: localTextKey('impostazioni.view.words.badgeControls'),
+  badgeThemes: localTextKey('impostazioni.view.words.badgeThemes'),
+  addModel: localTextKey('impostazioni.view.words.addModel'),
   /* ⛔ IL TITOLO È QUELLO DEL MOCKUP, preso dal suo `<h2 id="dialog-title">` (misurato il
      18/09/2026), non un mio riassunto: «Aggiungi al tuo laboratorio». */
-  addModelTitle: { it: 'Aggiungi al tuo laboratorio', en: 'Add to your laboratory' },
+  addModelTitle: localTextKey('impostazioni.view.words.addModelTitle'),
   /* ⛔ L'INTRODUZIONE INVECE NON SI PUÒ COPIARE: il mockup dice «In questa anteprima ogni
      operazione è simulata», e qui sarebbe FALSO — le due strade sono vere e toccano il disco.
      Deviazione dichiarata, con le sue parole vere al posto di quelle finte. */
-  addModelIntro: { it: 'Un catalogo, due destinazioni. Qui però non c’è nessuna simulazione: un file che hai già su questo computer, o la ricerca vera nel catalogo Hugging Face.', en: 'One catalogue, two destinations. Here nothing is simulated: a file you already have on this computer, or a real search in the Hugging Face catalogue.' },
-  addModelFile: { it: 'Importa un file .gguf', en: 'Import a .gguf file' },
-  addModelFileHelp: { it: 'Scegli un file dal disco: TALOS lo copia nel catalogo locale e lo rende caricabile.', en: 'Pick a file from disk: TALOS copies it into the local catalogue and makes it loadable.' },
-  addModelFileGo: { it: 'Scegli il file', en: 'Choose the file' },
-  addModelHf: { it: 'Cerca nel catalogo Hugging Face', en: 'Search the Hugging Face catalogue' },
-  addModelHfHelp: { it: 'Apre la scheda Hugging Face del laboratorio, dove la ricerca è vera e i modelli si scaricano.', en: 'Opens the lab’s Hugging Face tab, where the search is real and models can be downloaded.' },
-  addModelHfGo: { it: 'Cerca modelli', en: 'Search models' },
-  addModelClose: { it: 'Chiudi finestra', en: 'Close window' },
+  addModelIntro: localTextKey('impostazioni.view.words.addModelIntro'),
+  addModelFile: localTextKey('impostazioni.view.words.addModelFile'),
+  addModelFileHelp: localTextKey('impostazioni.view.words.addModelFileHelp'),
+  addModelFileGo: localTextKey('impostazioni.view.words.addModelFileGo'),
+  addModelHf: localTextKey('impostazioni.view.words.addModelHf'),
+  addModelHfHelp: localTextKey('impostazioni.view.words.addModelHfHelp'),
+  addModelHfGo: localTextKey('impostazioni.view.words.addModelHfGo'),
+  addModelClose: localTextKey('impostazioni.view.words.addModelClose'),
   /* ⛔ Qui NON c'è il nome del controllo di «Spazio di lettura»: quello arriva dal CONTRATTO
      (`chatFullWidthToggle`, titolo e aiuto), così com'è, invece di essere riscritto. Resta solo
      la parola della porta. */
-  readSpaceGo: { it: 'Apri Chat e composer', en: 'Open Chat and composer' },
+  readSpaceGo: localTextKey('impostazioni.view.words.readSpaceGo'),
   /* ⭐⭐ 18/09/2026 — LE OTTO SEZIONI NON DI QUESTA FASE: i titoli delle loro carte.
      Il mockup queste otto non le disegna (sono attenuate, `disabled title="Fuori dal lotto
      dimostrativo"` — misurato il 18/09/2026 su `TALOS-Calm-Lab-04.html:2346`), quindi qui non si
@@ -123,13 +123,13 @@ const words = {
   /* ⛔ 23/09/2026 — `cartaAccessi` («Stato degli accessi») è ritirata con la sezione «Provider e
      accessi» (decisione owner): la sua carta non esiste più, e lo stato degli accessi lo dicono le
      card della scheda «Provider» del laboratorio, fornitore per fornitore. */
-  cartaPolicy: { it: 'Policy della sessione', en: 'Session policy' },
-  cartaFonte: { it: 'Origine della ricerca web', en: 'Web search source' },
-  cartaContesto: { it: 'Ripartizione del contesto', en: 'Context breakdown' },
-  cartaConsumo: { it: 'Consumo registrato', en: 'Recorded usage' },
-  cartaLocali: { it: 'Dati locali del browser', en: 'Local browser data' },
-  cartaTrasferimento: { it: 'Trasferisci le preferenze', en: 'Transfer preferences' },
-  cartaDiagnostica: { it: 'Configurazione e diagnostica', en: 'Configuration and diagnostics' },
+  cartaPolicy: localTextKey('impostazioni.view.words.cartaPolicy'),
+  cartaFonte: localTextKey('impostazioni.view.words.cartaFonte'),
+  cartaContesto: localTextKey('impostazioni.view.words.cartaContesto'),
+  cartaConsumo: localTextKey('impostazioni.view.words.cartaConsumo'),
+  cartaLocali: localTextKey('impostazioni.view.words.cartaLocali'),
+  cartaTrasferimento: localTextKey('impostazioni.view.words.cartaTrasferimento'),
+  cartaDiagnostica: localTextKey('impostazioni.view.words.cartaDiagnostica'),
 };
 
 /*
@@ -141,11 +141,11 @@ const words = {
  * `CAMPI_IMPOSTAZIONI` dà a ogni campo: nessuna mappa inventata, nessun raggruppamento nuovo.
  */
 const GRUPPI: ReadonlyArray<readonly [string, { it: string; en: string }]> = [
-  ['design', { it: 'Interfaccia e conversazione', en: 'Interface and conversation' }],
-  ['sfondo', { it: 'Accessibilità e risorse', en: 'Accessibility and resources' }],
-  ['animazioni', { it: 'Movimento dell’interfaccia', en: 'Interface motion' }],
-  ['desktop', { it: 'Desktop', en: 'Desktop' }],
-  ['chat', { it: 'Spazio di lettura', en: 'Reading space' }],
+  ['design', localTextKey('impostazioni.view.GRUPPI.design')],
+  ['sfondo', localTextKey('impostazioni.view.GRUPPI.sfondo')],
+  ['animazioni', localTextKey('impostazioni.view.GRUPPI.animazioni')],
+  ['desktop', localTextKey('impostazioni.view.GRUPPI.desktop')],
+  ['chat', localTextKey('impostazioni.view.GRUPPI.chat')],
 ];
 
 /*
@@ -386,7 +386,7 @@ export function createSettingsView(screen: HTMLElement, options: SettingsViewOpt
    * ⛔ L'ultima voce è **testo, non un link**: è la pagina in cui sei già, e un link che non naviga
    *   è un link morto (VA ADR 002, dicembre 2024, che ha superato l'ADR 001).
    */
-  const breadcrumb = node('nav', 'settings-breadcrumb'); breadcrumb.setAttribute('aria-label', 'Breadcrumb');
+  const breadcrumb = node('nav', 'settings-breadcrumb'); breadcrumb.setAttribute('aria-label', localText(localTextKey('impostazioni.view.breadcrumbLabel'), options.language())); // 03/10/2026: il nome del punto di riferimento si legge nella lingua dell'interfaccia
   /*
    * ⛔ `data-settings-chrome` NON È DECORATIVO: è l'unica cosa che la rimozione cerca
    *   (`for (const element of screen.querySelectorAll('[data-settings-chrome]')) element.remove()`).

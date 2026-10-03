@@ -27,7 +27,7 @@
  *   menu contestuale, che sono le uniche con un comportamento vero dietro.
  */
 
-import { t } from './lingua.js';
+import { t, tn } from './lingua.js';
 import { accorciaPercorso, creaSchede } from './schede.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -60,11 +60,11 @@ export function contaDiff(voceOCode = []) {
 
 /** «3 file modificati · +112 −2», o «Nessuna modifica in questa sessione». */
 export function riassuntoReview(voci = []) {
-  if (voci.length === 0) return 'Nessuna modifica in questa sessione';
+  if (voci.length === 0) return t('varie.review.summary.none');
   let aggiunte = 0;
   let rimozioni = 0;
   for (const v of voci) { const c = contaDiff(v); aggiunte += c.aggiunte; rimozioni += c.rimozioni; }
-  return `${voci.length} file modificat${voci.length === 1 ? 'o' : 'i'} · +${aggiunte} −${rimozioni}`;
+  return tn('varie.review.summary.filesOne', 'varie.review.summary.filesMany', voci.length, { added: aggiunte, removed: rimozioni });
 }
 
 /**
@@ -120,10 +120,10 @@ export function aggiornaSommarioSchedeReview(contenitore, voci = []) {
 /** Il sottotitolo di una riga: «giro 5 · scrittura con ricevuta a1f4…9c02», o «giro 5 · nuovo file». */
 export function sottotitoloFile(voce = {}) {
   const pezzi = [];
-  if (Number.isFinite(voce.giro)) pezzi.push(`giro ${voce.giro}`);
-  if (voce.ricevuta) pezzi.push(`scrittura con ricevuta ${voce.ricevuta}`);
-  else pezzi.push(voce.nuovo ? 'nuovo file' : 'file modificato');
-  if (voce.simboliPersi?.length > 0) pezzi.push(`⚠ ${voce.simboliPersi.length} simbol${voce.simboliPersi.length === 1 ? 'o sparito' : 'i spariti'}`);
+  if (Number.isFinite(voce.giro)) pezzi.push(t("varie.review.turn", { n: voce.giro }));
+  if (voce.ricevuta) pezzi.push(t('varie.review.subtitle.writeWithReceipt', { receipt: voce.ricevuta }));
+  else pezzi.push(voce.nuovo ? t('varie.review.subtitle.newFile') : t('varie.review.subtitle.modifiedFile'));
+  if (voce.simboliPersi?.length > 0) pezzi.push(tn('varie.review.subtitle.symbolsGoneOne', 'varie.review.subtitle.symbolsGoneMany', voce.simboliPersi.length));
   return pezzi.join(' · ');
 }
 
@@ -201,10 +201,11 @@ export function creaRigaFileReview(voce, { attiva = false, onApri, document: doc
  *    nella Revisione una scheda NON si chiude: l'elenco è quello dei file scritti dalla sessione,
  *    e un comando che finge di toglierne uno sarebbe una funzione senza niente dietro.
  */
+/* ⛔ Le voci sono getter: si leggono a ogni uso, non alla creazione del modulo, e seguono il cambio di lingua. */
 export const AZIONI_FILE = Object.freeze({
-  apri: 'Apri il file',
-  copiaPercorso: 'Copia il percorso',
-  copiaDiff: 'Copia il diff di questo file',
+  get apri() { return t('varie.review.menu.open'); },
+  get copiaPercorso() { return t('varie.review.menu.copyPath'); },
+  get copiaDiff() { return t('varie.review.menu.copyDiff'); },
 });
 
 /**
@@ -221,7 +222,7 @@ export function creaSchedeReview(striscia, { azioni = {}, root = globalThis.docu
     chiave: 'reviewFile',
     classe: 'talos-schede__tab talos-review__scheda',
     idMenu: 'menuSchedaReview',
-    etichettaMenu: 'Azioni sul file',
+    etichettaMenu: t('varie.review.menu.label'),
     scorre: true,
     identifica: chiaveFileReview,
     /* BC-68, 17/09: il DiffView è il pannello che la linguetta governa (uno solo, riusato). */
@@ -230,9 +231,9 @@ export function creaSchedeReview(striscia, { azioni = {}, root = globalThis.docu
     suggerimento: suggerimentoFile,
     contenuto: (scheda, voce, indice, tutte) => riempiLinguettaFile(scheda, voce, tutte),
     vociMenu: (voce) => [
-      [t(AZIONI_FILE.apri), () => azioni.apri?.(voce), azioni.puoAprire ? Boolean(azioni.puoAprire(voce)) : true],
-      [t(AZIONI_FILE.copiaPercorso), () => azioni.copiaPercorso?.(voce), true],
-      [t(AZIONI_FILE.copiaDiff), () => azioni.copiaDiff?.(voce), (voce.code?.length ?? 0) > 0],
+      [AZIONI_FILE.apri, () => azioni.apri?.(voce), azioni.puoAprire ? Boolean(azioni.puoAprire(voce)) : true],
+      [AZIONI_FILE.copiaPercorso, () => azioni.copiaPercorso?.(voce), true],
+      [AZIONI_FILE.copiaDiff, () => azioni.copiaDiff?.(voce), (voce.code?.length ?? 0) > 0],
     ],
     azioni: { seleziona: (chiave) => azioni.seleziona?.(chiave) },
   });
@@ -248,20 +249,20 @@ export function aggiornaDiffReview(card, voce) {
   if (avvisoVecchio) avvisoVecchio.remove();
   if (!voce) {
     if (testa) { testa.querySelector('.talos-truncate').textContent = '—'; for (const n of testa.querySelectorAll('.talos-badge, .talos-diff-num')) n.hidden = true; }
-    if (diff) diff.replaceChildren(el(documentObj, 'div', 'talos-diff__line talos-diff__line--ctx', 'Nessun file scritto finora.'));
+    if (diff) diff.replaceChildren(el(documentObj, 'div', 'talos-diff__line talos-diff__line--ctx', t("varie.review.noFilesYet")));
     return;
   }
   if (testa) {
     testa.querySelector('.talos-truncate').textContent = voce.path;
     const badge = testa.querySelector('.talos-badge');
-    if (badge) { badge.hidden = !voce.ricevuta; if (voce.ricevuta) badge.textContent = `Ricevuta ${voce.ricevuta}`; }
+    if (badge) { badge.hidden = !voce.ricevuta; if (voce.ricevuta) badge.textContent = t("varie.review.receipt", { receipt: voce.ricevuta }); }
     const c = contaDiff(voce);
     const piu = testa.querySelector('.talos-diff-num--plus');
     const meno = testa.querySelector('.talos-diff-num--minus');
     if (piu) { piu.hidden = false; piu.textContent = `+${c.aggiunte}`; }
     if (meno) { meno.hidden = c.rimozioni === 0; meno.textContent = `−${c.rimozioni}`; } // «−0» non si scrive
     const giro = testa.querySelector('.talos-muted');
-    if (giro) { giro.hidden = !Number.isFinite(voce.giro); if (Number.isFinite(voce.giro)) giro.textContent = `giro ${voce.giro}`; }
+    if (giro) { giro.hidden = !Number.isFinite(voce.giro); if (Number.isFinite(voce.giro)) giro.textContent = t("varie.review.turn", { n: voce.giro }); }
   }
   if (diff) {
     diff.replaceChildren(...(voce.code || []).map((riga) => {
@@ -275,9 +276,9 @@ export function aggiornaDiffReview(card, voce) {
   if (voce.simboliPersi?.length > 0 && diff) {
     const avviso = el(documentObj, 'div', 'talos-system-note talos-review__avviso');
     avviso.setAttribute('data-c', 'SystemNote');
-    avviso.append(el(documentObj, 'span', 'talos-badge talos-badge--warning talos-badge--sm', 'Attenzione'));
+    avviso.append(el(documentObj, 'span', 'talos-badge talos-badge--warning talos-badge--sm', t("varie.review.warning")));
     const corpo = el(documentObj, 'div');
-    corpo.append(el(documentObj, 'div', 'talos-system-note__title', `Questa riscrittura fa sparire ${voce.simboliPersi.length === 1 ? 'una funzione o classe' : `${voce.simboliPersi.length} funzioni o classi`} che c'erano prima`));
+    corpo.append(el(documentObj, 'div', 'talos-system-note__title', t(voce.simboliPersi.length === 1 ? 'varie.review.removesOneSymbol' : 'varie.review.removesManySymbols', { n: voce.simboliPersi.length })));
     corpo.append(el(documentObj, 'p', null, voce.simboliPersi.join(', ')));
     avviso.append(corpo);
     diff.before(avviso);

@@ -109,7 +109,7 @@ test('PJ-05 — MiniMax sonda GET 200/401/404 e falso 200; Z.AI richiede consens
     status = s; const r = await sonda.prova('minimax-anthropic'); assert.equal(r.esito, esito); assert.equal(r.httpStatus, s);
     assert.equal(b.richieste.at(-1).method, 'GET'); assert.equal(b.richieste.at(-1).url, '/minimax-anthropic/anthropic/v1/models');
     assert.equal(b.richieste.at(-1).headers['x-api-key'], 'finta-minimax-anthropic');
-    if (s === 404) assert.match(r.motivo, /non è verificata/);
+    if (s === 404) assert.match(r.motivo, /does not verify that the key is valid/);
   }
   status = 200; malformato = true; assert.equal((await sonda.prova('minimax-anthropic')).esito, 'errore'); malformato = false;
   const prima = b.richieste.length; const nessuna = await sonda.prova('zai-anthropic');
@@ -119,7 +119,7 @@ test('PJ-05 — MiniMax sonda GET 200/401/404 e falso 200; Z.AI richiede consens
     const inviata = b.richieste.at(-1); assert.equal(inviata.url, '/zai-anthropic/anthropic/v1/messages'); assert.equal(inviata.method, 'POST');
     assert.equal(inviata.body.max_tokens, 1); assert.equal(inviata.headers.authorization, 'Bearer finta-zai-anthropic');
     assert.equal(inviata.headers['anthropic-version'], '2023-06-01');
-    if (s === 404) assert.match(r.motivo, /non.*verificat/);
+    if (s === 404) assert.match(r.motivo, /not.*verif/);
   }
   status = 200; malformato = true; assert.equal((await sonda.prova('zai-anthropic', { consentiGenerazione: true })).esito, 'errore');
 });
@@ -134,7 +134,7 @@ test('PJ-06 — MiniMax cataloga tutte le pagine; Z.AI dichiara la riserva senza
   ciclo = true; await assert.rejects(() => sonda.elencaModelli('minimax-anthropic'), { code: 'CATALOG_UPSTREAM_ERROR' });
   const prima = b.richieste.length, z = await sonda.elencaModelli('zai-anthropic');
   assert.equal(b.richieste.length, prima); assert.equal(z.fonte, 'documentazione'); assert.equal(z.credenzialeVerificata, false);
-  assert.ok(z.modelli.some(m => m.id === 'zai-anthropic:glm-5.3-flash')); assert.match(z.avviso, /non verificat/);
+  assert.ok(z.modelli.some(m => m.id === 'zai-anthropic:glm-5.3-flash')); assert.match(z.avviso, /not verified/);
 });
 
 test('PJ-07 — cache Anthropic terzi: letture, scritture, assenza e zero distinti', async t => {

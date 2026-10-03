@@ -79,7 +79,7 @@ test('FUORI-02: col sì della persona la scrittura fuori parte; senza nessuno a 
   const senza = join(radice, 'senza-canale.txt');
   const r = await giro(progetto, [chiama('b', 'scrivi', { percorso: senza, contenuto: 'x' })], { livelloAccesso: 'scrittura-progetto' });
   assert.equal(existsSync(senza), false);
-  assert.match(r.esito('b'), /REFUSED\..*fuori dalla cartella della sessione.*non ha un canale di approvazione/s);
+  assert.match(r.esito('b'), /REFUSED\..*outside the session folder.*no active approval channel/s);
 });
 
 test('FUORI-03: un collegamento DENTRO il progetto che porta FUORI conta come fuori — per scrivi e file_edit, e anche in scrittura-area', async (t) => {
@@ -115,7 +115,7 @@ test('FUORI-04: «Scrittura: Sempre» non scavalca il confine (fuori chiede lo s
   assert.match(esito('f'), /REFUSED/);
   const negato = await giro(progetto, [chiama('n', 'scrivi', { percorso: fuoriFile, contenuto: 'x' })], { livelloAccesso: 'scrittura-progetto', permessiPerAttrezzo: { scrivi: 'nega' }, risposta: true });
   assert.equal(negato.domande.length, 0, 'nega non chiede');
-  assert.match(negato.esito('n'), /REFUSED.*nega/s);
+  assert.match(negato.esito('n'), /REFUSED.*deny/s);
 });
 
 test('FUORI-05: il consenso «per questa cartella» vale fino a fine sessione, sottocartelle comprese; altrove fuori chiede di nuovo', async (t) => {

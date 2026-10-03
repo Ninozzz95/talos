@@ -372,7 +372,7 @@ async function montaLibreriaFile({ apri = 'lib-md', modo = 'anteprima' } = {}) {
 }
 
 function montaSessioniWorkflowSpec({ scena, tema }) {
-  const fissate = document.querySelector('.talos-sidebar__block:has(.talos-eyebrow[data-t="fissate"])');
+  const fissate = document.querySelector('.talos-sidebar__block:has(.talos-eyebrow[data-t="modello.sidebar.pinned"])');
   const sessioni = document.querySelector('.talos-sidebar__sessions');
   if (!sessioni) throw new Error('sidebar sessioni assente dal laboratorio WorkflowSpec');
   for (const finta of document.querySelectorAll('.talos-sidebar .talos-session-item')) finta.remove();
@@ -734,7 +734,7 @@ const LABORATORI = {
     document.getElementById('testataGruppoStrumenti')?.setAttribute('aria-expanded', 'true');
   },
   SessionItem() {
-    const fissate = document.querySelector('.talos-sidebar__block:has(.talos-eyebrow[data-t="fissate"])');
+    const fissate = document.querySelector('.talos-sidebar__block:has(.talos-eyebrow[data-t="modello.sidebar.pinned"])');
     const sessioni = document.querySelector('.talos-sidebar__sessions');
     for (const finta of document.querySelectorAll('.talos-sidebar .talos-session-item')) finta.remove();
     for (const s of FISSATE) fissate.append(creaSessionItem(s, { adesso: ADESSO }));

@@ -30,6 +30,7 @@
 
 /* ⛔ BC-61, 17/09 — la mappa id → nome umano dei fornitori è UNA SOLA, ed è già in `fonti-modelli.js`
    (la usa la striscia delle fonti del Laboratorio modelli). Qui si legge, non si ricopia. */
+import { t as traduci } from './lingua.js';
 import { nomeFornitore } from './fonti-modelli.js';
 
 /** I preset del tema, con il nome come lo scrive il mockup. */
@@ -85,10 +86,10 @@ export function fornitoreDelModello(modello) {
  */
 /** Le due righe del piede dai dati del monolite. */
 export function testiPiede({ cartella, nomeAnteprima, tema, modello } = {}) {
-  const titolo = nomeDaPercorso(cartella) || (typeof nomeAnteprima === 'string' && nomeAnteprima.trim()) || 'Workspace locale';
+  const titolo = nomeDaPercorso(cartella) || (typeof nomeAnteprima === 'string' && nomeAnteprima.trim()) || traduci('varie.footer.localWorkspace');
   const nomeTema = NOMI_TEMA[tema] || NOMI_TEMA.forge; // il ripiego dice il tema di serie (owner 24/09/2026 sera: «tema default forge»)
   const fornitore = nomeFornitore(fornitoreDelModello(modello));
-  return { titolo, sotto: fornitore ? `Tema ${nomeTema} · ${fornitore}` : `Tema ${nomeTema}` };
+  return { titolo, sotto: fornitore ? traduci('varie.footer.themeWithProvider', { theme: nomeTema, provider: fornitore }) : traduci('varie.footer.theme', { theme: nomeTema }) };
 }
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -127,7 +128,7 @@ export function creaWorkspaceFooter(dati = {}, opzioni = {}) {
   impostazioni.className = 'talos-button talos-button--secondary talos-icon-button';
   impostazioni.setAttribute('data-c', 'IconButton');
   impostazioni.dataset.vaia = 'impostazioni';
-  impostazioni.title = 'Impostazioni (Ctrl ,)';
+  impostazioni.title = traduci("varie.footer.settingsShortcut");
   impostazioni.append(simbolo(documentObj, 'i', 'i-settings'));
   piede.append(avatar, testo, impostazioni);
   aggiornaWorkspaceFooter(piede, dati);

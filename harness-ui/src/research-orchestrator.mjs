@@ -677,16 +677,15 @@ function trovaRifiutoDiPermesso(messaggiFinali) {
     const testo = typeof m.content === 'string' ? m.content.trim() : '';
     if (!testo.startsWith('REFUSED. ')) continue;
     /*
-     * ⛔ Le uniche altre due frasi che cominciano con `REFUSED. ` nel kernel sono gli input
-     * vuoti (`REFUSED. Empty html`, `REFUSED. Empty report`): non sono rifiuti di permesso, e
-     * chiamarli così manderebbe l'owner a cambiare un permesso che non c'entra.
+     * ⛔ H-05 (owner 02/10/2026): gli input vuoti (`Empty html`, `Empty report`) cominciavano anche loro con `REFUSED. ` e qui
+     *   si saltavano a mano; ora il kernel li dice `INVALID. `, quindi non arrivano più fin qui — e nemmeno un NOT FOUND
+     *   (un id di Library che non c'è) passa più per un rifiuto di permesso.
      * ⛔ Resta fuori anche la premessa negata di `scrivi` (`REFUSED. <perché> Nothing was
      *   written.`) — e non serve escluderla a mano: a livello `'ricerca'` `scrivi` non passa
      *   mai il cancello, quindi quel ramo non può essere raggiunto qui. Se un giorno una
      *   ricerca girasse a un livello più largo, questa riga andrà rivista: è scritto qui
      *   perché l'assunzione sia visibile, non nascosta.
      */
-    if (testo.startsWith('REFUSED. Empty ')) continue;
     return testo;
   }
   return null;
@@ -801,7 +800,7 @@ const SEGNI_TRAFFICO = ['rate limit', 'rate-limit', 'too many requests', 'http 4
 const SEGNI_TIMEOUT = ['idle timeout', 'timeout', 'timed out', 'deadline exceeded', 'http 408', 'http 504', 'http 524'];
 const SEGNI_GUASTO = ['bad gateway', 'service unavailable', 'gateway timeout', 'overloaded', 'at capacity', 'over capacity', 'internal server error', 'upstream error', 'provider returned error', 'http 500', 'http 502', 'http 503'];
 const SEGNI_RETE = ['econnreset', 'econnrefused', 'etimedout', 'enotfound', 'eai_again', 'epipe', 'fetch failed', 'socket hang up', 'connection reset', 'connection refused', 'network', 'terminated'];
-const SEGNI_FLUSSO = ['flusso sse', 'unexpected eof', 'premature close', 'stream ended', 'incomplete chunked'];
+const SEGNI_FLUSSO = ['flusso sse', 'sse stream', 'unexpected eof', 'premature close', 'stream ended', 'incomplete chunked'];
 
 /**
  * ⭐⭐⭐ BC-44 — LA TABELLA, in una funzione pura che un test può mordere da sola.
@@ -828,7 +827,8 @@ export function classificaErroreDiCorsa({ codice = null, messaggio = null } = {}
    *   su richiesta …» e `agent-service` lo marca `internal-error` come tutto il resto. Uno stop
    *   voluto non si riprende da solo, mai — sarebbe ripartire contro chi ha premuto Ferma.
    */
-  if (m.includes('fermato su richiesta')) return esito('fermato');
+  /* Due forme per sempre: l'inglese di oggi («stopped on request») e l'italiano delle sessioni salvate («fermato su richiesta»). */
+  if (m.includes('stopped on request') || m.includes('fermato su richiesta')) return esito('fermato');
 
   // 2. Le NON transitorie che contengono le parole delle transitorie: prima loro (vedi sopra).
   if (dentro(SEGNI_CREDITO)) return esito('credito');

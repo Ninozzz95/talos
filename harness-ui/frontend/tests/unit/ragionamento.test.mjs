@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { t } from '../../src/components/lingua.js';
+import { TESTI } from '../../src/i18n/testi/index.js';
 
 import {
   ETICHETTA_INTERRUTTORE_RAGIONAMENTO, argomentoDelRagionamento, argomentoPuoCambiare, etichettaRagionamento, formattaDurataRagionamento,
@@ -126,6 +128,9 @@ test('RAGIONAMENTO-ETICHETTA AL CONTRARIO — senza una durata vera non si inven
 });
 
 test('RAGIONAMENTO-INTERRUTTORE — il nome dice cosa fa, non «mostra/nascondi»', () => {
-  assert.equal(ETICHETTA_INTERRUTTORE_RAGIONAMENTO, 'Apri il ragionamento mentre scrive');
-  assert.doesNotMatch(ETICHETTA_INTERRUTTORE_RAGIONAMENTO, /mostra|nascond/i);
+  // 03/10/2026: la costante è una chiave del dizionario; il nome a schermo è la sua voce, nelle due lingue
+  assert.equal(t(ETICHETTA_INTERRUTTORE_RAGIONAMENTO), 'Apri il ragionamento mentre scrive');
+  assert.doesNotMatch(t(ETICHETTA_INTERRUTTORE_RAGIONAMENTO), /mostra|nascond/i);
+  assert.equal(TESTI.en[ETICHETTA_INTERRUTTORE_RAGIONAMENTO], 'Open the reasoning while it writes');
+  assert.doesNotMatch(TESTI.en[ETICHETTA_INTERRUTTORE_RAGIONAMENTO], /show|hide/i);
 });

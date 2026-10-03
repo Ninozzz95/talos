@@ -9,6 +9,7 @@
  * cancello semantico (`disco.leggi`) restano com'erano: il disco non cambia mai.
  */
 import assert from 'node:assert/strict';
+import { togliConfiniDati } from '../src/kernel/confine-dati.mjs';
 import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -52,7 +53,7 @@ test('T-01-03 — dal kernel vero: l’esito dell’attrezzo `leggi` non porta i
     return { ok: true, status: 200, json: async () => ({ choices: [{ message: risposta }], usage: { prompt_tokens: 10, completion_tokens: 5 } }), text: async () => '' };
   };
   await talosLavora({ cartella, task: { consegna: 'leggi nota.md' }, modello: 'x', chiave: 'y', fetchDiRete: fetch });
-  const esito = chiamate[1].corpo.messages.find((m) => m.role === 'tool').content;
+  const esito = togliConfiniDati(chiamate[1].corpo.messages.find((m) => m.role === 'tool').content);
   assert.equal(esito, 'riga letta', 'né in testa né altrove');
 });
 

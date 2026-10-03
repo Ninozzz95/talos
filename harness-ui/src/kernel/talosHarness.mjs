@@ -58,7 +58,7 @@ import { leggiAttesaRichiestaDalFornitore, erroreEsitoProviderIncerto, leggiRifi
 import { createHash, generateKeyPairSync, randomUUID, sign as firmaCrypto, verify as verificaCrypto } from 'node:crypto'
 import { lookup as risolviDns } from 'node:dns'
 import { existsSync, statSync } from 'node:fs'
-import { lstat, open, readFile, readlink, realpath, stat as statAsync } from 'node:fs/promises'
+import { lstat, open, readdir, readFile, readlink, realpath, stat as statAsync } from 'node:fs/promises'
 import { request as richiestaHttp } from 'node:http'
 import { request as richiestaHttps } from 'node:https'
 import { basename, delimiter as separatoreDiPath, dirname, join, posix as percorsiPosix, resolve, sep } from 'node:path'
@@ -105,6 +105,8 @@ import { TETTO_PAGINA_WEB, paginaTagliataPerIlModello, salvaPaginaIntera, eUnaPa
 import { collegamentoLinuxSulPercorso, spiegazioneCollegamentoLinux, erroriDiRipgrep, avvisoCollegamentiDiRipgrep } from './collegamento-linux.mjs' // 5a, owner 01/10/2026: collegamenti Linux su un disco di Windows, errore onesto
 import { worktreeDiWindowsLettoDaLinux, spiegazioneWorktreeWindows } from './worktree-windows.mjs' // F-016, owner 01-02/10/2026: worktree di Windows letto dal git di Linux
 import { formatoEstraibile, estraiTestoDocumento, ErroreEstrazione, MAX_BYTE_DOCUMENTO } from './estrai-documento.mjs' // F-001, owner 01-02/10/2026: leggi estrae il testo di docx/xlsx/pptx/pdf
+import { avvolgiDati, avvisoSospetto, scansionaIstruzioni, luogoDellaFonte, ISTRUZIONE_CONFINE_DATI, SEGNO_ISTRUZIONE_CONFINE, sospettoNeiRisultatiFigli } from './confine-dati.mjs' // F-027 / H-02 + H-03, owner 02/10/2026
+export { APERTURA_DATI, CHIUSURA_DATI, avvolgiDati, avvisoSospetto, neutralizzaDati, scansionaIstruzioni, togliConfiniDati, testoPerLoSchermo, luogoDellaFonte, ISTRUZIONE_CONFINE_DATI, SEGNO_ISTRUZIONE_CONFINE, TIPI_DI_LUOGO, INTESTAZIONE_RISULTATO_FIGLIO, testoDelRisultatoFiglio, sospettoNeiRisultatiFigli } from './confine-dati.mjs'
 import { serveLoStatoDelBersaglio, motivoPerNonScrivereTesto } from './guardia-scrittura-binari.mjs' // F-001, owner 02/10/2026: «tutta la guardia di Hermes»
 import { bloccoDelPavimento, rifiutoDelPavimento } from './pavimento-comandi.mjs' // N-02, owner 02/10/2026: il pavimento di Hermes, parti 1+2+3
 import { vistaWindows, vistaLinux } from './percorsi-casa-linux.mjs' // Fase B, owner 01/10/2026: le due viste dello stesso percorso
@@ -307,8 +309,8 @@ export async function compattaConversazione(messaggi, chiamaModello) {
             compito,
             {
                 role: 'user',
-                content: `[conversazione compattata al giro ${GIRI_PRIMA_DI_COMPATTARE}: `
-                    + `quanto segue e' un riassunto, non la cronologia originale]\n\n${riassunto}`,
+                content: `[conversation compacted at turn ${GIRI_PRIMA_DI_COMPATTARE}: `
+                    + `what follows is a summary, not the original history]\n\n${riassunto}`,
             },
         ],
         compattato: true,
@@ -491,7 +493,7 @@ export async function consumaFlussoSSE(response, onDelta, { segnaleStop, ripetiz
         maxBufferSize: 1_048_576,
         onEvent: evento => eventi.push(evento),
         onError: errore => {
-            if (errore.type === 'max-buffer-size-exceeded') throw Object.assign(new Error('Evento SSE oltre il limite.'), { code: 'PROVIDER_STREAM_INVALID' })
+            if (errore.type === 'max-buffer-size-exceeded') throw Object.assign(new Error('SSE event over the size limit.'), { code: 'PROVIDER_STREAM_INVALID' })
         },
     })
     let content = ''
@@ -723,8 +725,8 @@ export async function consumaFlussoSSE(response, onDelta, { segnaleStop, ripetiz
              * qui sotto lo interrompe — quindi l'esito non può venire da lì:
              * o lo diciamo adesso, o non lo dice nessuno.
              */
-            annullaAnnunciate(0, '⛔ Fermato su richiesta: non riesco a eseguirlo, la sessione e stata interrotta prima. Questo attrezzo non e stato eseguito.')
-            const fermata = new Error('⛔ fermato su richiesta mentre il modello stava rispondendo.')
+            annullaAnnunciate(0, FRASE_FERMATO_NON_ESEGUITO)
+            const fermata = new Error('⛔ stopped on request while the model was answering.')
             fermata.fermatoSuRichiesta = true
             throw fermata
         }
@@ -737,10 +739,10 @@ export async function consumaFlussoSSE(response, onDelta, { segnaleStop, ripetiz
             if (dati === '[DONE]') { streamCompleted = true; break }
             let pacchetto = null
             try { pacchetto = JSON.parse(dati) } catch {
-                throw Object.assign(new Error('Evento SSE con JSON non valido.'), { code: 'PROVIDER_STREAM_INVALID' })
+                throw Object.assign(new Error('SSE event with invalid JSON.'), { code: 'PROVIDER_STREAM_INVALID' })
             }
             if (!pacchetto || typeof pacchetto !== 'object' || Array.isArray(pacchetto)) {
-                throw Object.assign(new Error('Evento SSE non valido.'), { code: 'PROVIDER_STREAM_INVALID' })
+                throw Object.assign(new Error('Invalid SSE event.'), { code: 'PROVIDER_STREAM_INVALID' })
             }
             if (pacchetto.usage) usage = pacchetto.usage
             const sceltaDelPacchetto = pacchetto?.choices?.[0]
@@ -822,13 +824,13 @@ export async function consumaFlussoSSE(response, onDelta, { segnaleStop, ripetiz
     }
     // EOF never supplies a missing terminal event. Intentional loop truncation is separate.
     if (!ripetizione && !streamCompleted && !['stop', 'length', 'tool_calls', 'function_call', 'content_filter', 'error'].includes(finishReason) && !erroreFornitore) {
-        throw Object.assign(new Error('Flusso del fornitore concluso senza un evento finale.'), { code: 'PROVIDER_STREAM_INCOMPLETE' })
+        throw Object.assign(new Error("The provider's stream finished without a final event."), { code: 'PROVIDER_STREAM_INCOMPLETE' })
     }
     } catch (errore) {
         // Preserve the reader's diagnostics; orchestration owns the recovery decision.
         if (errore?.fermatoSuRichiesta || segnaleStop?.aborted) throw errore
         const chiamateInCorso = toolCalls.some(Boolean)
-        if (chiamateInCorso) annullaAnnunciate(0, '⛔ La connessione col fornitore si è interrotta prima che questa chiamata fosse completa: non è stata eseguita.')
+        if (chiamateInCorso) annullaAnnunciate(0, '⛔ The connection to the provider dropped before this call was complete: it was not run.')
         await lettore.cancel().catch(() => {})
         if (errore && typeof errore === 'object') {
             errore.parziale = { content: !vistoUnDelta && typeof messaggioIntero?.content === 'string' ? messaggioIntero.content : content, chiamateInCorso }
@@ -870,9 +872,9 @@ export async function consumaFlussoSSE(response, onDelta, { segnaleStop, ripetiz
          */
         annullaAnnunciate(
             ripetizione.daScartare,
-            `⛔ Scartato: il modello ha chiesto ${ripetizione.viste} volte di fila la stessa identica cosa`
-            + ` ("${ripetizione.nome}" con gli stessi argomenti) e continuava — non riesco a distinguerlo da un ciclo.`
-            + ' Questo attrezzo non e stato eseguito.',
+            `⛔ Discarded: the model asked ${ripetizione.viste} times in a row for the very same thing`
+            + ` ("${ripetizione.nome}" with the same arguments) and kept going — I cannot tell it from a loop.`
+            + ' This tool did not run.',
         )
         toolCalls.length = ripetizione.daScartare
     }
@@ -1178,7 +1180,7 @@ function righeDelleOccorrenze(contenuto, vecchio) {
  * il motivo per cui non si tocca niente.
  *
  * `{ok:true, testo, occorrenze, righe}` · `{ok:false, motivo, occorrenze, righe}` con
- * `motivo` in `'illeggibile' | 'vuoto' | 'identici' | 'assente' | 'ambigua'`.
+ * `motivo` in `'illeggibile' | 'argomenti' | 'vuoto' | 'identici' | 'assente' | 'ambigua'`.
  *
  * ⛔ `'ambigua'` e' un RIFIUTO, non una scelta della prima occorrenza: cambiare la riga sbagliata
  *   e dichiararlo riuscito e' il danno peggiore possibile qui (opencode fa lo stesso,
@@ -1186,7 +1188,7 @@ function righeDelleOccorrenze(contenuto, vecchio) {
  */
 export function applicaSostituzione(contenuto, vecchio, nuovo, { tutte = false } = {}) {
     if (typeof contenuto !== 'string') return { ok: false, motivo: 'illeggibile', occorrenze: 0, righe: [] }
-    if (typeof vecchio !== 'string' || typeof nuovo !== 'string') return { ok: false, motivo: 'illeggibile', occorrenze: 0, righe: [] }
+    if (typeof vecchio !== 'string' || typeof nuovo !== 'string') return { ok: false, motivo: 'argomenti', occorrenze: 0, righe: [] }
     if (vecchio === '') return { ok: false, motivo: 'vuoto', occorrenze: 0, righe: [] }
     if (vecchio === nuovo) return { ok: false, motivo: 'identici', occorrenze: 0, righe: [] }
     const pezzi = contenuto.split(vecchio)
@@ -1199,31 +1201,161 @@ export function applicaSostituzione(contenuto, vecchio, nuovo, { tutte = false }
 }
 
 /**
- * ⛔ Ogni rifiuto porta la MOSSA SUCCESSIVA, non solo la diagnosi — stessa ragione misurata di
+ * ⛔ Ogni esito porta la MOSSA SUCCESSIVA, non solo la diagnosi — stessa ragione misurata di
  *   `messaggioArgomentiAssenti` (arXiv:2608.26130): un agente legge l'esito che ha davanti, non
  *   va a cercare un'istruzione altrove. E i due guasti («non c'e'» / «ce ne sono tanti») restano
  *   due frasi DIVERSE: dire «non trovato» a chi ha scritto un testo ambiguo lo manda a cercare un
  *   errore che non ha fatto.
+ * ⛔⛔ H-05 (red-team degli attrezzi, ZIP dell'owner del 02/10/2026; owner «Voglio il +1», poi «Sì, questo +1»): qui tutto
+ *   cominciava con «REFUSED», la parola dei rifiuti di sicurezza. Chi impara a ignorarla perché «è solo un mismatch» smette di
+ *   vedere i rifiuti che contano. ⇒ Ogni esito ha la sua parola: NOT FOUND, AMBIGUOUS, NO CHANGE, INVALID. REFUSED resta a
+ *   sicurezza, permessi e protezione dei file (binari, non UTF-8, collegamenti cambiati), più su in `file_edit`.
+ * ⭐ Il +1 su NOT FOUND (`diagnosiTestoAssente`): prima «già applicata» come Hermes (`tools/fuzzy_match.py:307-312`), poi il
+ *   MOTIVO esatto quando il testo c'è a meno di una differenza nota (a capo, virgolette, escape, spazi), poi le righe più
+ *   vicine come Hermes (`find_closest_lines`, `:599-639`). ⛔ Mai applicata una corrispondenza approssimata (owner: no).
+ * @param {{contenuto?:string, vecchio?:string, nuovo?:string}} [testi] il file e i due testi, per diagnosticare NOT FOUND
  */
-export function messaggioSostituzioneRifiutata(percorso, esito) {
-    const testa = 'REFUSED. Nothing was changed'
+export function messaggioSostituzioneRifiutata(percorso, esito, { contenuto = null, vecchio = null, nuovo = null } = {}) {
     if (esito.motivo === 'vuoto') {
-        return `${testa}: \`old_string\` is empty, so there is nothing to look for. `
+        return 'INVALID. Nothing was changed: `old_string` is empty, so there is nothing to look for. '
             + 'Give the exact text you want replaced. To create a file use `scrivi`; to add at the end use `scrivi` with mode:"append".'
     }
+    if (esito.motivo === 'argomenti') {
+        return 'INVALID. Nothing was changed: `old_string` and `new_string` must both be text.'
+    }
     if (esito.motivo === 'identici') {
-        return `${testa}: \`old_string\` and \`new_string\` are identical, so this edit would do nothing. `
+        return 'NO CHANGE. Nothing was changed: `old_string` and `new_string` are identical, so this edit would do nothing. '
             + 'Send the text you actually want in its place.'
     }
     if (esito.motivo === 'assente') {
-        return `${testa}: \`old_string\` does not appear in ${percorso}, not even once. `
-            + 'It must match the file EXACTLY, whitespace and indentation included — read the file with `leggi` and copy the text from it instead of retyping it.'
+        if (typeof contenuto === 'string' && typeof vecchio === 'string' && typeof nuovo === 'string'
+            && nuovo.length >= MIN_CARATTERI_GIA_APPLICATA && contenuto.includes(nuovo)) {
+            const riga = contenuto.slice(0, contenuto.indexOf(nuovo)).split('\n').length
+            return `NO CHANGE. The edit looks already applied: \`new_string\` is already in ${percorso} (line ${riga}) and \`old_string\` is not. `
+                + 'Nothing was written; do not send this edit again.'
+        }
+        const diagnosi = typeof contenuto === 'string' && typeof vecchio === 'string' ? diagnosiTestoAssente(contenuto, vecchio) : ''
+        return `NOT FOUND. Nothing was changed: \`old_string\` does not appear in ${percorso}, not even once.${diagnosi ? ` ${diagnosi.trimEnd()}\n` : ' '}`
+            + 'It must match the file EXACTLY, whitespace and indentation included. Copy the exact text from `leggi` and send the edit again.'
     }
     if (esito.motivo === 'ambigua') {
-        return `${testa}: \`old_string\` appears ${esito.occorrenze} times in ${percorso} (lines ${esito.righe.join(', ')}), so it is ambiguous. `
+        return `AMBIGUOUS. Nothing was changed: \`old_string\` appears ${esito.occorrenze} times in ${percorso} (lines ${esito.righe.join(', ')}), so it is ambiguous. `
             + 'Add the surrounding lines until it is unique, or pass replace_all:true to change every occurrence.'
     }
-    return `${testa}: ${percorso} could not be read as text.`
+    return `NOT FOUND. Nothing was changed: ${percorso} could not be read as text.`
+}
+
+/* Come Hermes (`fuzzy_match.py:309`): un `new_string` sotto gli 8 caratteri compare per caso, e «già applicata» sarebbe falso. */
+const MIN_CARATTERI_GIA_APPLICATA = 8
+/* Oltre queste misure si salta la ricerca delle righe vicine: è un aiuto, e non deve costare più dell'esito che accompagna. */
+const MAX_RIGHE_PER_LE_VICINE = 50_000
+const MAX_CARATTERI_PER_CONFRONTO = 500
+
+const intervalloDiRighe = (contenuto, dove, lunghezza) => {
+    const prima = contenuto.slice(0, dove).split('\n').length
+    const ultima = prima + (contenuto.slice(dove, dove + lunghezza).match(/\n/gu)?.length ?? 0)
+    return prima === ultima ? `line ${prima}` : `lines ${prima}-${ultima}`
+}
+const VIRGOLETTE = /[‘’‚‛′]|[“”„‟″]/gu
+const dritte = (t) => t.replace(VIRGOLETTE, (c) => ('“”„‟″'.includes(c) ? '"' : "'"))
+const conEscapeDecodificati = (t) => t.replace(/\\u([0-9a-fA-F]{4})/gu, (_, h) => String.fromCharCode(Number.parseInt(h, 16)))
+const conEscapeScritti = (t) => t.replace(/[^\x00-\x7F]/gu, (c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, '0')}`)
+/* Come Hermes (`_visualize_whitespace`, `fuzzy_match.py:592-596`) gli spazi IN TESTA si vedono; qui anche quelli IN CODA, perché
+   la diagnosi li riconosce. In mezzo il testo resta leggibile. */
+const spaziVisibili = (riga) => {
+    const inizio = riga.length - riga.trimStart().length, fine = Math.max(inizio, riga.trimEnd().length)
+    const vedi = (t) => t.replace(/\t/gu, '→').replace(/ /gu, '·')
+    return vedi(riga.slice(0, inizio)) + riga.slice(inizio, fine) + vedi(riga.slice(fine))
+}
+
+/**
+ * Perché `old_string` non c'è, quando c'è a meno di UNA differenza nota — e dove. ⛔ Solo diagnosi: il testo trovato così non si
+ * sostituisce mai (owner 02/10/2026). Stringa vuota quando non c'è niente di vero da dire.
+ */
+export function diagnosiTestoAssente(contenuto, vecchio) {
+    if (vecchio === '' || contenuto === '') return ''
+    // 1. a capo: il file ha \r\n e old_string \n (o il contrario)
+    if (contenuto.includes('\r\n') && !vecchio.includes('\r') && vecchio.includes('\n')) {
+        const conCrlf = vecchio.replace(/\n/gu, '\r\n')
+        const dove = contenuto.indexOf(conCrlf)
+        if (dove !== -1) return `The text IS in the file at ${intervalloDiRighe(contenuto, dove, conCrlf.length)}, but the file uses CRLF line endings (\\r\\n) and \`old_string\` uses LF (\\n): send it with \\r\\n.`
+    }
+    if (!contenuto.includes('\r') && vecchio.includes('\r\n')) {
+        const conLf = vecchio.replace(/\r\n/gu, '\n')
+        const dove = contenuto.indexOf(conLf)
+        if (dove !== -1) return `The text IS in the file at ${intervalloDiRighe(contenuto, dove, conLf.length)}, but the file uses LF line endings (\\n) and \`old_string\` uses CRLF (\\r\\n): send it with \\n.`
+    }
+    // 2. virgolette curve contro dritte: la mappa è carattere per carattere, quindi la posizione vale anche nel file vero
+    // `search` e non `test`: VIRGOLETTE è globale, e `test` ricorderebbe dove si era fermato
+    if (contenuto.search(VIRGOLETTE) !== -1 || vecchio.search(VIRGOLETTE) !== -1) {
+        const dove = dritte(contenuto).indexOf(dritte(vecchio))
+        if (dove !== -1) return `The text IS in the file at ${intervalloDiRighe(contenuto, dove, vecchio.length)}, but it differs only in quote characters (curly ‘ ’ “ ” against straight ' "): copy them from the file.`
+    }
+    // 3. escape \uXXXX al posto dei caratteri, o il contrario (la nota di Claude Code, detta col punto esatto)
+    if (/\\u[0-9a-fA-F]{4}/u.test(vecchio)) {
+        const decodificato = conEscapeDecodificati(vecchio)
+        const dove = contenuto.indexOf(decodificato)
+        if (dove !== -1) return `The text IS in the file at ${intervalloDiRighe(contenuto, dove, decodificato.length)}, but \`old_string\` has \\uXXXX escapes where the file has the characters themselves: send the characters.`
+    }
+    if (/\\u[0-9a-fA-F]{4}/u.test(contenuto) && /[^\x00-\x7F]/u.test(vecchio)) {
+        const scritto = conEscapeScritti(vecchio)
+        const dove = contenuto.indexOf(scritto)
+        if (dove !== -1) return `The text IS in the file at ${intervalloDiRighe(contenuto, dove, scritto.length)}, but the file has \\uXXXX escapes where \`old_string\` has the characters: send the escapes as the file has them.`
+    }
+    // 4. spazi: le stesse righe a meno di rientri, tab contro spazi e spazi in coda
+    const righeFile = contenuto.split('\n').map((r) => r.replace(/\r$/u, ''))
+    const righeVecchio = vecchio.split('\n').map((r) => r.replace(/\r$/u, ''))
+    const pulite = righeVecchio.map((r) => r.trim())
+    if (pulite.some((r) => r !== '') && righeFile.length <= MAX_RIGHE_PER_LE_VICINE) {
+        for (let i = 0; i + righeVecchio.length <= righeFile.length; i++) {
+            if (righeFile[i].trim() !== pulite[0]) continue
+            if (!pulite.every((r, k) => righeFile[i + k].trim() === r)) continue
+            const k = righeVecchio.findIndex((r, j) => r !== righeFile[i + j])
+            if (k === -1) break
+            const intervallo = righeVecchio.length === 1 ? `line ${i + 1}` : `lines ${i + 1}-${i + righeVecchio.length}`
+            return `The text IS in the file at ${intervallo}, but it differs only in whitespace (indentation, tabs or spaces, spaces at line ends) `
+                + `— first difference at line ${i + k + 1} (→ = tab, · = space):\n  file has: ${spaziVisibili(righeFile[i + k])}\n  you sent: ${spaziVisibili(righeVecchio[k])}\n`
+        }
+    }
+    // 5. le righe più vicine alla prima riga non vuota di old_string (come Hermes, con un punteggio a bigrammi)
+    return righeViciniNumerate(righeFile, righeVecchio)
+}
+
+/* Somiglianza di Dice sui bigrammi: 1 per testi uguali, 0 per testi senza bigrammi in comune. */
+function somiglianza(a, b) {
+    if (a === b) return 1
+    if (a.length < 2 || b.length < 2) return 0
+    const conta = new Map()
+    for (let i = 0; i < a.length - 1; i++) { const g = a.slice(i, i + 2); conta.set(g, (conta.get(g) ?? 0) + 1) }
+    let comuni = 0
+    for (let i = 0; i < b.length - 1; i++) {
+        const g = b.slice(i, i + 2), n = conta.get(g) ?? 0
+        if (n > 0) { comuni++; conta.set(g, n - 1) }
+    }
+    return (2 * comuni) / (a.length - 1 + b.length - 1)
+}
+function righeViciniNumerate(righeFile, righeVecchio) {
+    const ancora = (righeVecchio.find((r) => r.trim() !== '') ?? '').trim().slice(0, MAX_CARATTERI_PER_CONFRONTO)
+    if (ancora === '' || righeFile.length > MAX_RIGHE_PER_LE_VICINE) return ''
+    const punteggi = []
+    for (let i = 0; i < righeFile.length; i++) {
+        const riga = righeFile[i].trim().slice(0, MAX_CARATTERI_PER_CONFRONTO)
+        if (riga === '') continue
+        const p = somiglianza(ancora, riga)
+        if (p > 0.5) punteggi.push([p, i])
+    }
+    if (punteggi.length === 0) return ''
+    punteggi.sort((x, y) => y[0] - x[0] || x[1] - y[1])
+    const larghezza = String(righeFile.length).length
+    const pezzi = []
+    const visti = new Set()
+    for (const [, i] of punteggi.slice(0, 3)) {
+        const da = Math.max(0, i - 1), a = Math.min(righeFile.length, i + righeVecchio.length + 1)
+        if (visti.has(da)) continue
+        visti.add(da)
+        pezzi.push(righeFile.slice(da, a).map((r, k) => `${String(da + k + 1).padStart(larghezza + 2)}│ ${r}`).join('\n'))
+    }
+    return `Closest text in the file:\n${pezzi.join('\n  ---\n')}\n`
 }
 
 /**
@@ -1416,10 +1548,10 @@ async function chiamaConRitentaBase({
     attesaRitentaMassimaMs,
 }) {
     if (attesaRitentaMassimaMs !== undefined && !(typeof attesaRitentaMassimaMs === 'number' && Number.isFinite(attesaRitentaMassimaMs) && attesaRitentaMassimaMs >= 0)) {
-        throw Object.assign(new Error('Il tetto all\'attesa fra i tentativi deve essere un numero finito di millisecondi, non negativo.'), { code: 'RETRY_CAP_INVALID' })
+        throw Object.assign(new Error('The cap on the wait between attempts must be a finite, non-negative number of milliseconds.'), { code: 'RETRY_CAP_INVALID' })
     }
     if (maxOutputTokens !== undefined && (!Number.isSafeInteger(maxOutputTokens) || maxOutputTokens < 1)) {
-        throw Object.assign(new Error('La riserva di risposta deve essere un intero positivo.'), { code: 'CTX_INVALID_RESERVE' })
+        throw Object.assign(new Error('The response reserve must be a positive integer.'), { code: 'CTX_INVALID_RESERVE' })
     }
     const inStreaming = Boolean(onDelta)
     let ultimoStato = null
@@ -1449,7 +1581,7 @@ async function chiamaConRitentaBase({
          * chiamata DOPO lo stop, e la sessione sembrava non fermarsi mai.
          */
         if (segnaleStop?.aborted) {
-            const fermata = new Error('⛔ fermato su richiesta prima di chiamare il modello.')
+            const fermata = new Error('⛔ stopped on request before calling the model.')
             fermata.fermatoSuRichiesta = true
             throw fermata
         }
@@ -1535,7 +1667,7 @@ async function chiamaConRitentaBase({
             if (inStreaming) {
                 const { scelta, usage, ripetizione, finishReason, nativeFinishReason, erroreFornitore } = await consumaFlussoSSE(r, onDelta, { segnaleStop, ...(onChiamataCompleta ? { onChiamataCompleta } : {}) })
                 if (erroreFornitore || finishReason === 'error') {
-                    for (const [indice, chiamata] of (scelta.tool_calls ?? []).entries()) onDelta?.({ tipo: 'tool-annullato', indice, toolCallId: chiamata.id, nome: chiamata.function?.name, motivo: '⛔ Il fornitore ha interrotto la risposta: questo attrezzo non e stato eseguito.' })
+                    for (const [indice, chiamata] of (scelta.tool_calls ?? []).entries()) onDelta?.({ tipo: 'tool-annullato', indice, toolCallId: chiamata.id, nome: chiamata.function?.name, motivo: '⛔ The provider cut the response short: this tool did not run.' })
                     throw erroreEsitoProviderIncerto({ code: 'PROVIDER_STREAM_ERROR', usage,
                         parziale: { content: typeof scelta.content === 'string' ? scelta.content : '', chiamateInCorso: Boolean(scelta.tool_calls?.length) } })
                 }
@@ -1549,7 +1681,7 @@ async function chiamaConRitentaBase({
                  *   quando non esce niente (OpenRouter docs, «Errors and debugging», 25/09/2026).
                  */
                 if (!scelta.content && !scelta.tool_calls) {
-                    if (!accettaVuota) throw new Error('flusso SSE senza contenuto ne tool_calls')
+                    if (!accettaVuota) throw new Error('SSE stream with neither content nor tool_calls')
                     return {
                         scelta, usage, tentativi: tentativo + 1, ...(finishReason !== undefined ? { finishReason } : {}), ...motivi,
                         vuota: { finishReason: finishReason ?? null, nativeFinishReason: nativeFinishReason ?? null, erroreFornitore: erroreFornitore ?? null, ragionamento: Boolean(scelta.reasoning_content) },
@@ -1563,7 +1695,7 @@ async function chiamaConRitentaBase({
                 throw erroreEsitoProviderIncerto({ code: 'PROVIDER_STREAM_ERROR', usage: j?.usage,
                     parziale: { content: typeof scelta?.content === 'string' ? scelta.content : '', chiamateInCorso: Boolean(scelta?.tool_calls?.length) } })
             }
-            if (!scelta) throw new Error('risposta senza messaggio: ' + JSON.stringify(j).slice(0, 300))
+            if (!scelta) throw new Error('response without a message: ' + JSON.stringify(j).slice(0, 300))
             /*
              * ⛔⛔ LA VALANGA NON PASSA SOLO DALLO STREAMING — 11/09/2026. Senza
              * `onDelta` (è la strada di TALOS-BANCO, e di chiunque chiami questa
@@ -1607,7 +1739,7 @@ async function chiamaConRitentaBase({
             catch { /* lo stop ha cancellato il timer: il giro dopo dirà perché ci fermiamo */ }
         }
     }
-    const e = new Error(`HTTP ${ultimoStato} dopo ${tentativiFatti} ${tentativiFatti === 1 ? 'tentativo' : 'tentativi'}: ${ultimoTesto}`)
+    const e = new Error(`HTTP ${ultimoStato} after ${tentativiFatti} ${tentativiFatti === 1 ? 'attempt' : 'attempts'}: ${ultimoTesto}`)
     e.stato = ultimoStato
     e.limitatoDalFornitore = siRitenta(ultimoStato) || Boolean(ultimoRifiuto)
     if (ultimaAttesaRichiesta !== null) e.retryAfterMs = ultimaAttesaRichiesta // G02-10 punto 5, additivo
@@ -1636,13 +1768,13 @@ export function comeSonoFinitiIGiri({ giroRaggiunto, giriMassimi, haRisposto }) 
     if (!haRisposto && Number.isFinite(giriMassimi) && giroRaggiunto >= giriMassimi) {
         return {
             esito: 'giri-esauriti',
-            detto: `⛔ giri esauriti: ${giriMassimi} su ${giriMassimi} usati senza chiudere il task.`
-                + ' Non e un fallimento del ragionamento: e un tetto raggiunto.',
+            detto: `⛔ turns exhausted: ${giriMassimi} of ${giriMassimi} used without closing the task.`
+                + ' This is not a reasoning failure: a cap was reached.',
         }
     }
     return haRisposto
         ? { esito: 'concluso', detto: null }
-        : { esito: 'fermato', detto: '⛔ la generazione si e fermata senza risposta e senza esaurire i giri.' }
+        : { esito: 'fermato', detto: '⛔ generation stopped without an answer and without exhausting the turns.' }
 }
 
 /* ═══════════════ LEVA 4 · l'uscita del giudice, dove sta la diagnosi ═══════
@@ -1828,14 +1960,14 @@ const ATTREZZI = [
     },
     {
         name: 'leggi',
-        description: 'Reads text from a workspace file. Path is relative, e.g. "src/prezzo.mjs". Reads LINES: by default the first 2000 lines, at most 100 KB per page; a partial page says which lines it shows and the offset to continue with. Text comes back clean, without line numbers. A line longer than 2000 characters is shown up to 2000 and ends with a byteOffset: call leggi with that byteOffset to read the rest of that line. Explicit format:"hex" inspects original bytes: there offset and limit are BYTES (limit up to 4096); it does not interpret text, images or other media.',
+        description: 'Reads text from a workspace file. Path is relative, e.g. "src/prezzo.mjs". Reads LINES: by default the first 2000 lines, at most 100 KB per page; a partial page says which lines it shows and the offset to continue with. Text comes back clean, without line numbers. A line longer than 2000 characters is shown up to 2000 and ends with a byteOffset: call leggi with that byteOffset to read the rest of that line, up to 100 KB per call (add limit to take fewer bytes). Explicit format:"hex" inspects original bytes: there offset and limit are BYTES (limit up to 4096); it does not interpret text, images or other media.',
         input_schema: {
             type: 'object',
             properties: {
                 percorso: { type: 'string' },
                 offset: { type: 'integer', minimum: 0, description: 'First line to read, 1-based (default 1). With format:"hex": start byte offset.' },
-                limit: { type: 'integer', minimum: 1, description: 'Number of lines to read (default 2000). With format:"hex": number of bytes, 4..4096.' },
-                byteOffset: { type: 'integer', minimum: 0, description: 'Continue inside a line that was too long to show: use the byteOffset given at the end of that line or by the previous read. Not with offset, limit or hex.' },
+                limit: { type: 'integer', minimum: 1, description: 'Number of lines to read (default 2000). With format:"hex": number of bytes, 4..4096. With byteOffset: bytes to read inside the line, 4..102400 (default 102400).' },
+                byteOffset: { type: 'integer', minimum: 0, description: 'Continue inside a line that was too long to show: use the byteOffset given at the end of that line or by the previous read. Not with offset or hex.' },
                 format: { type: 'string', enum: ['text', 'hex'], description: 'Default text. Explicit hex returns original bytes as hexadecimal, with a default and maximum limit of 4096 bytes.' },
             },
             required: ['percorso'],
@@ -3041,7 +3173,7 @@ const ATTREZZI_ESTESI = [
      */
     {
         name: 'research_deposit',
-        description: 'Deposita il rapporto di questa ricerca. Con parte, invia una sezione per chiamata e attendi la conferma; ultima:true chiude il deposito. Senza parte resta il deposito unico. '
+        description: "Deposits this research's report. With `parte`, send one section per call and wait for the confirmation; ultima:true closes the deposit. Without `parte` it stays a single deposit. "
             + 'What you pass here is the permanent report — the one the '
             + 'user will read and the one that gets saved. Your chat message is not the report and '
             + 'is never saved as one. Pass three things: `testo` (the report as Markdown prose), '
@@ -3056,7 +3188,7 @@ const ATTREZZI_ESTESI = [
             properties: {
                 parte: {
                     type: 'object',
-                    description: 'Deposito incrementale: indice da 1, ultima:true solo alla chiusura. Ogni chiamata contiene solo questa parte di testo, affermazioni e fonti (elenchi anche vuoti); prevale sulle descrizioni del deposito unico. Attendi la conferma prima della parte seguente.',
+                    description: 'Incremental deposit: indice starts at 1, ultima:true only at the end. Each call carries only this part of the text, claims and sources (lists may be empty); it prevails over the single-deposit descriptions. Wait for the confirmation before the next part.',
                     properties: { indice: { type: 'integer', minimum: 1, maximum: 512 }, ultima: { type: 'boolean' } },
                     required: ['indice', 'ultima'],
                     additionalProperties: false,
@@ -3297,6 +3429,18 @@ const ATTREZZI_ESTESI = [
             childId: { type: 'string' }, question: { type: 'string' },
         }, required: ['childId', 'question'] },
     },
+    /* ⭐ K3 (F-013/F-014, owner 03/10 «Come Claude Code, completo»; Codex `list_agents`/`interrupt_agent`, multi_agents_spec.rs
+       @c73775f): il padre vede i suoi figli e li può fermare. Prima `ask_child` era l'unico canale e diceva sempre «requested». */
+    {
+        name: 'list_children',
+        description: 'List your direct child agents: state (running, finished, stopped, not finished, interrupted), task, seconds since their last activity, and whether their result was delivered or is still waiting in your queue. Read-only.',
+        input_schema: { type: 'object', properties: {}, required: [] },
+    },
+    {
+        name: 'stop_child',
+        description: 'Stop one direct child agent that is still running, together with its own children. Returns its previous state. Use list_children first to get the childId.',
+        input_schema: { type: 'object', properties: { childId: { type: 'string' } }, required: ['childId'] },
+    },
     {
         name: 'answer_parent_question',
         description: 'Answer a pending question from your direct parent agent using its exact requestId.',
@@ -3432,7 +3576,7 @@ export function formattaOraCorrente(epochMs) {
 export function formattaEsitoMcp(risultato) {
     const blocchi = Array.isArray(risultato?.content) ? risultato.content : []
     const testo = blocchi
-        .map((blocco) => (blocco?.type === 'text' ? blocco.text : `[${blocco?.type ?? 'contenuto'} non testuale omesso]`))
+        .map((blocco) => (blocco?.type === 'text' ? blocco.text : `[${blocco?.type ?? 'content'} non-text content omitted]`))
         .join('\n')
     if (risultato?.isError) return `MCP tool error: ${testo || '(no error detail)'}`
     return testo || '(empty result)'
@@ -3574,7 +3718,7 @@ export function firmaDiSfogliamento(nome, argomenti) {
         ? CAMPI_CHE_IDENTIFICANO_LA_DOMANDA[nome]
         : null
     if (!dichiarati) {
-        throw new TypeError(`firmaDiSfogliamento: l'attrezzo "${nome}" non dichiara in CAMPI_CHE_IDENTIFICANO_LA_DOMANDA quali campi identificano la sua domanda, e senza quelli la firma non misurerebbe niente`)
+        throw new TypeError(`firmaDiSfogliamento: the tool "${nome}" does not declare in CAMPI_CHE_IDENTIFICANO_LA_DOMANDA which fields identify its question, and without them the signature would measure nothing`)
     }
     const dati = argomenti && typeof argomenti === 'object' ? argomenti : {}
     const filtri = Object.keys(dichiarati).sort().map((campo) => {
@@ -3648,7 +3792,7 @@ export function decisioneDiSfogliamento({
     tettoAssoluto = PAGINE_MASSIME_PER_ELENCO,
 } = {}) {
     if (!(registro instanceof Map)) {
-        throw new TypeError('decisioneDiSfogliamento: serve il registro degli sfogliamenti (Map), altrimenti il tetto non esiste')
+        throw new TypeError('decisioneDiSfogliamento: the browsing registry (a Map) is required, otherwise the cap does not exist')
     }
     const firma = firmaDiSfogliamento(nome, argomenti)
     const stato = registro.get(firma) ?? { pagine: 0, voci: 0, totale: null }
@@ -3734,7 +3878,7 @@ export function decisioneDiSfogliamento({
  */
 export function registraEsitoDiSfogliamento({ registro, nome, argomenti, risultato } = {}) {
     if (!(registro instanceof Map)) {
-        throw new TypeError('registraEsitoDiSfogliamento: serve il registro degli sfogliamenti (Map)')
+        throw new TypeError('registraEsitoDiSfogliamento: the browsing registry (a Map) is required')
     }
     const stato = registro.get(firmaDiSfogliamento(nome, argomenti))
     if (!stato) return
@@ -3767,7 +3911,7 @@ export function formattaRicercaLibreria(risultato) {
  * "prima fetta", debito dichiarato non silenzioso).
  */
 export function formattaLetturaLibreria(risultato) {
-    if (!risultato) return 'REFUSED. That Library id does not exist. Nothing was read.'
+    if (!risultato) return 'NOT FOUND. That Library id does not exist. Nothing was read.'
     if (risultato.immagineBase64) {
         return `name: ${risultato.nome} — this is an image (${risultato.mediaType}); this harness cannot show image content inline yet. See it in the project's Library folder.`
     }
@@ -3775,7 +3919,7 @@ export function formattaLetturaLibreria(risultato) {
 }
 
 export function formattaOrigineLibreria(risultato) {
-    if (!risultato) return 'REFUSED. That Library id does not exist.'
+    if (!risultato) return 'NOT FOUND. That Library id does not exist.'
     const righe = [`name: ${risultato.nome}`]
     if (risultato.origine === 'generated') {
         righe.push('origin: generated')
@@ -3906,6 +4050,8 @@ const ISTRUZIONI = [
     'If the task asks you to change something that DOES NOT EXIST in the project,',
     'say so plainly and change nothing. Do not invent it, and do not edit tests',
     'to make them pass.',
+    '',
+    ISTRUZIONE_CONFINE_DATI,
 ].join('\n')
 
 const ISTRUZIONI_ASK = 'When user input is needed to continue, call ask_user_question instead of asking in plain text. '
@@ -3966,8 +4112,8 @@ export function erroreRispostaVuota(vuota, tentativi) {
     const motivo = vuota?.nativeFinishReason
         ?? (vuota?.erroreFornitore?.messaggio || null)
         ?? (vuota?.finishReason && vuota.finishReason !== 'stop' ? vuota.finishReason : null)
-    const volte = tentativi === 1 ? 'una volta' : `${tentativi} volte di fila`
-    const frase = `Il modello ha risposto senza testo né attrezzi (${volte}${motivo ? `; motivo del fornitore: ${motivo}` : ''}).`
+    const volte = tentativi === 1 ? 'once' : `${tentativi} times in a row`
+    const frase = `The model answered with neither text nor tools (${volte}${motivo ? `; provider reason: ${motivo}` : ''}).`
     return Object.assign(new Error(frase), { code: 'PROVIDER_EMPTY_RESPONSE', classe: 'risposta-vuota', transitorio: false })
 }
 
@@ -4006,7 +4152,7 @@ export function storiaDelGiroFallito(messaggi, frase) {
         break
     }
     if (storia.at(-1)?.role === 'tool') {
-        storia.push({ role: 'assistant', content: `[Il giro si è fermato qui per un errore: ${String(frase ?? 'errore sconosciuto').slice(0, 300)}]` })
+        storia.push({ role: 'assistant', content: `[The turn stopped here because of an error: ${String(frase ?? 'unknown error').slice(0, 300)}]` })
     }
     return storia
 }
@@ -4385,14 +4531,19 @@ async function istantaneaDelFile(radice, percorso) {
  *   curve di un file Windows-1252 (`0x92 0x93 0x94`) diventavano `EF BF BD`, 27 → 36 byte, con l'esito «the rest of the file is
  *   untouched». Decisione dell'owner: si RIFIUTA, come Codex (`codex-rs/file-system/src/lib.rs:649-659`, `String::from_utf8` →
  *   `InvalidData`). Hermes fa l'altra scelta (preserva i byte con `surrogateescape`, `tools/file_operations.py:1576-1579`).
- * ⛔ Un NUL ⇒ binario (è il segnale di `leggi`, `campioneBinarioDelFile`; prende anche UTF-16). Altrimenti il decodificatore
+ * ⛔ Un NUL ⇒ binario (è il segnale di `leggi`, `campioneBinarioDelFile`). Altrimenti il decodificatore
  *   RIGOROSO (`TextDecoder` con `fatal`, WHATWG Encoding «UTF-8 decoder»: sovralunghe, surrogati e oltre U+10FFFF compresi); se
  *   rifiuta, l'offset del primo byte rotto lo dà `primoByteNonUtf8`, la STESSA di `leggi` a byte (READ22, `READ_INVALID_UTF8`).
+ * ⛔ F-025 (02/10/2026): un UTF-16 col BOM viene PRIMA del NUL — `leggi` lo mostra come testo, e «binary file» qui sarebbe falso
+ *   (un UTF-16 di soli ideogrammi non ha nemmeno un NUL, e passava per «Windows-1252 al byte 0»). Si rifiuta lo stesso:
+ *   riscriverlo in UTF-8 ne cambierebbe la codifica.
  * ⛔ Il testo valido si decodifica con `toString('utf8')`, che CONSERVA il BOM come U+FEFF: la riscrittura lo rimette identico.
  * Gira identica nel servente della casa Linux (`casa-linux-servente.mjs`).
  */
 export async function leggiPerModifica(assoluto) {
     const dati = await readFile(assoluto)
+    const utf16 = bomUtf16DaCampione(dati.subarray(0, 4))
+    if (utf16) return { stato: 'utf16', byte: dati.length, nome: utf16.nome, bom: utf16.bom }
     if (dati.includes(0)) return { stato: 'binario', byte: dati.length }
     try { new TextDecoder('utf-8', { fatal: true }).decode(dati) }
     catch {
@@ -4466,9 +4617,14 @@ function validaLettura({ offset, limit, format, byteOffset }) {
         return { modo: 'hex', inizio, limite: limit ?? MAX_BYTE_HEX_LEGGI }
     }
     if (byteOffset !== undefined) {
-        if (offset !== undefined || limit !== undefined) throw rifiutoLettura('READ_INVALID_RANGE', 'byteOffset continues inside one line: do not combine it with offset or limit.')
+        if (offset !== undefined) throw rifiutoLettura('READ_INVALID_RANGE', 'byteOffset continues inside one line: do not combine it with offset.')
         if (!interoDaAlmeno(byteOffset, 0)) throw rifiutoLettura('READ_INVALID_RANGE', 'byteOffset must be a non-negative safe integer taken from a previous read.')
-        return { modo: 'byte', inizio: byteOffset }
+        /* F-026 (owner 02/10/2026, «Voglio il +1»): con byteOffset `limit` sono i BYTE da prendere dentro la riga, per chiederne
+           meno dei 100 KB di una pagina. Almeno 4: un carattere UTF-8 intero ci sta sempre, quindi il seguito non resta mai vuoto. */
+        if (limit !== undefined && (!Number.isSafeInteger(limit) || limit < 4 || limit > MAX_BYTE_LEGGI)) {
+            throw rifiutoLettura('READ_INVALID_RANGE', `with byteOffset, limit is the number of bytes to read inside the line, 4..${MAX_BYTE_LEGGI}.`)
+        }
+        return { modo: 'byte', inizio: byteOffset, limite: limit ?? null }
     }
     if (offset !== undefined && !interoDaAlmeno(offset, 0)) throw rifiutoLettura('READ_INVALID_RANGE', 'offset is the first line to read (1-based).')
     if (limit !== undefined && !interoDaAlmeno(limit, 1)) throw rifiutoLettura('READ_INVALID_RANGE', 'limit is the number of lines to read (at least 1).')
@@ -4477,16 +4633,32 @@ function validaLettura({ offset, limit, format, byteOffset }) {
 /* Il campione iniziale del FILE, dallo stesso handle, guardato prima di qualunque decodifica: un salto non lo scavalca. */
 async function campioneBinarioDelFile(handle, campione, segnale) {
     const b = Buffer.allocUnsafe(Math.max(1, campione))
-    let visti = 0
+    let visti = 0, nul = false
     while (visti < campione) {
         segnale?.throwIfAborted()
         const { bytesRead } = await handle.read(b, visti, campione - visti, visti)
         segnale?.throwIfAborted()
         if (bytesRead === 0) break
-        if (b.subarray(visti, visti + bytesRead).includes(0)) return { binario: true, visti: visti + bytesRead }
+        nul ||= b.subarray(visti, visti + bytesRead).includes(0)
         visti += bytesRead
+        // F-025: col NUL ci si ferma, ma solo dopo i primi 4 byte, che dicono se è UTF-16 col BOM (o UTF-32, che non lo è)
+        if (nul && visti >= 4) break
     }
-    return { binario: false, visti }
+    return { binario: nul, visti, utf16: bomUtf16DaCampione(b.subarray(0, Math.min(visti, 4))) }
+}
+/*
+ * F-025 (owner 02/10/2026, «Sì, questo +1»): un file UTF-16 col BOM è TESTO — prima il suo NUL lo faceva dire «binario».
+ *   Come Claude Code 2.1.287 (UTF-16LE se il file comincia con FF FE, altrimenti UTF-8), più il big-endian (FE FF) che lui non
+ *   legge. FF FE 00 00 è il BOM di UTF-32LE: resta un binario. Senza BOM non si indovina (Notepad e PowerShell 5 lo scrivono).
+ * ⛔ Si guarda nel campione che `leggi` legge GIÀ: nessuna lettura in più per i file di testo (REV-READ-BOUNDS, G02-10d).
+ */
+const UTF16LE = Object.freeze({ codifica: 'utf-16le', nome: 'UTF-16LE', bom: 'FF FE' })
+const UTF16BE = Object.freeze({ codifica: 'utf-16be', nome: 'UTF-16BE', bom: 'FE FF' })
+function bomUtf16DaCampione(b) {
+    if (b.length < 2) return null
+    if (b[0] === 0xfe && b[1] === 0xff) return UTF16BE
+    if (b[0] === 0xff && b[1] === 0xfe) return b.length >= 4 && b[2] === 0 && b[3] === 0 ? null : UTF16LE
+    return null
 }
 /*
  * Le prime `max` unità UTF-16 di una riga E quanti byte ORIGINALI occupano. Si decodifica un byte alla volta a flusso:
@@ -4513,15 +4685,18 @@ async function leggiRighe(handle, byteSulDisco, { primaRiga, quante, esplicita }
     let raccolte = 0, ultimaRiga = 0, accorciate = 0, pienaDaTetto = false, prossima = null
     const righeAccorciate = [] // T25/B09: QUALI righe il modello ha visto solo in parte (la guardia di `scrivi` le vuole complete)
     let pos = 0, primoBlocco = true, contaInterrotto = false
+    // F-025: i byte non UTF-8 delle righe MOSTRATE (dove sta il primo, quanti sono), per dirlo in testa invece di tacerlo
+    const guasti = { byte: 0, sequenze: 0, primoByte: -1, valore: null, riga: null, multibyteValidi: 0 }
     const chiudiRiga = (conAcapo) => {
         if (prossima === null && riga >= primaRiga) {
-            // come la lettura di sempre: byte non validi si leggono con «�» (il rigore è solo per `byteOffset`)
+            // come la lettura di sempre: byte non validi si leggono con «�» (il rigore è solo per `byteOffset`); F-025 lo dice in testa
             const dati = Buffer.concat(testa, byteTesta)
             const testo = new TextDecoder('utf-8').decode(dati)
-            let pezzo = testo
+            let pezzo = testo, byteMostratiRiga = dati.length
             if (byteRiga > byteTesta || testo.length > MAX_CARATTERI_RIGA_LEGGI) {
                 const { testo: mostrato, byte: byteMostrati } = primiCaratteriEByte(dati, MAX_CARATTERI_RIGA_LEGGI)
                 pezzo = `${mostrato}[… line ${riga} continues: ${byteRiga - byteMostrati} more bytes; continue inside it with leggi byteOffset=${inizioRiga + byteMostrati}]`
+                byteMostratiRiga = byteMostrati
             }
             pezzo += conAcapo ? '\n' : ''
             const peso = Buffer.byteLength(pezzo)
@@ -4530,6 +4705,9 @@ async function leggiRighe(handle, byteSulDisco, { primaRiga, quante, esplicita }
             else {
                 uscita.push(pezzo); byteUscita += peso; raccolte++; ultimaRiga = riga
                 if (pezzo !== testo + (conAcapo ? '\n' : '')) { accorciate++; righeAccorciate.push(riga) }
+                const s = scansioneUtf8(dati.subarray(0, byteMostratiRiga))
+                guasti.byte += s.byte; guasti.sequenze += s.sequenze; guasti.multibyteValidi += s.multibyteValidi
+                if (s.primo !== -1 && guasti.primoByte === -1) { guasti.primoByte = inizioRiga + s.primo; guasti.valore = dati[s.primo]; guasti.riga = riga }
             }
         }
         riga++; byteRiga = 0; testa = []; byteTesta = 0
@@ -4554,6 +4732,9 @@ async function leggiRighe(handle, byteSulDisco, { primaRiga, quante, esplicita }
         let i = 0
         if (primoBlocco) {
             primoBlocco = false
+            // F-025: UTF-16 col BOM prima del NUL (un testo UTF-16 di soli ideogrammi può non averne nessuno)
+            const utf16 = bomUtf16DaCampione(dati.subarray(0, 4))
+            if (utf16) return { binario: false, utf16, testo: null, byteSulDisco, letti: bytesRead, troncato: false }
             if (dati.includes(0)) return { binario: true, testo: null, byteSulDisco, letti: bytesRead, troncato: false }
             // il BOM si toglie solo al byte 0 (T-01): il file sul disco resta com'è
             if (dati.length >= 3 && dati[0] === 0xef && dati[1] === 0xbb && dati[2] === 0xbf) { inizioRiga = 3; i = 3 }
@@ -4581,11 +4762,18 @@ async function leggiRighe(handle, byteSulDisco, { primaRiga, quante, esplicita }
         throw rifiutoLettura('READ_OFFSET_OUT_OF_RANGE', `offset=${primaRiga} is beyond the ${righeTotali} lines of the file.`)
     }
     return { binario: false, modo: 'righe', testo: uscita.join(''), byteSulDisco, letti: pos, troncato: prossima !== null, primaRiga, ultimaRiga, righeTotali,
-        nextOffset: prossima, accorciate, righeAccorciate, pienaDaTetto, esplicita, tetto }
+        nextOffset: prossima, accorciate, righeAccorciate, pienaDaTetto, esplicita, tetto,
+        nonUtf8: guasti.byte > 0 ? { byte: guasti.byte, sequenze: guasti.sequenze, primoByte: guasti.primoByte, valore: guasti.valore, riga: guasti.riga, multibyteValidi: guasti.multibyteValidi } : null }
 }
-async function leggiDentroRiga(handle, byteSulDisco, inizio, { tetto, campione, segnale }) {
-    if (inizio > byteSulDisco) throw rifiutoLettura('READ_OFFSET_OUT_OF_RANGE', `byteOffset=${inizio} exceeds ${byteSulDisco} bytes on disk.`)
+async function leggiDentroRiga(handle, byteSulDisco, inizio, { tetto, limite = null, campione, segnale }) {
+    if (inizio > byteSulDisco) {
+        // F-025: in un UTF-16 il byteOffset conta i byte del testo DECODIFICATO, che può essere più lungo del file
+        const c = await campioneBinarioDelFile(handle, Math.min(campione, 4), segnale)
+        if (c.utf16) return { binario: false, utf16: c.utf16, testo: null, byteSulDisco, letti: c.visti, troncato: false }
+        throw rifiutoLettura('READ_OFFSET_OUT_OF_RANGE', `byteOffset=${inizio} exceeds ${byteSulDisco} bytes on disk.`)
+    }
     const c = await campioneBinarioDelFile(handle, campione, segnale)
+    if (c.utf16) return { binario: false, utf16: c.utf16, testo: null, byteSulDisco, letti: c.visti, troncato: false }
     if (c.binario) return { binario: true, testo: null, byteSulDisco, letti: c.visti, troncato: false }
     // di che riga si tratta: si contano gli a capo prima di `inizio` (fino a 64 MiB; oltre, il numero non si dà)
     let riga = 1, contati = 0
@@ -4598,19 +4786,21 @@ async function leggiDentroRiga(handle, byteSulDisco, inizio, { tetto, campione, 
         contati += bytesRead
     }
     const numeroRiga = contati >= inizio ? riga : null
-    const dati = Buffer.allocUnsafe(tetto + 1)
+    // F-026: la pagina è il tetto di ogni pagina (100 KB), o meno se il modello lo chiede con `limit`
+    const pagina = limite ?? tetto
+    const dati = Buffer.allocUnsafe(pagina + 1)
     let letti = 0, rigaFinita = false
     for (;;) {
         segnale?.throwIfAborted()
-        const { bytesRead } = await handle.read(dati, letti, Math.min(BYTE_PER_BLOCCO_LEGGI, tetto + 1 - letti), inizio + letti)
+        const { bytesRead } = await handle.read(dati, letti, Math.min(BYTE_PER_BLOCCO_LEGGI, pagina + 1 - letti), inizio + letti)
         segnale?.throwIfAborted()
         if (bytesRead === 0) { rigaFinita = true; break }
         const a = dati.subarray(letti, letti + bytesRead).indexOf(0x0a)
-        if (a !== -1 && letti + a <= tetto) { letti += a; rigaFinita = true; break }
+        if (a !== -1 && letti + a <= pagina) { letti += a; rigaFinita = true; break }
         letti += bytesRead
-        if (letti > tetto) break
+        if (letti > pagina) break
     }
-    let fine = Math.min(letti, tetto)
+    let fine = Math.min(letti, pagina)
     // a tetto raggiunto un carattere spezzato non si chiude con «�»: si tiene solo cio' che e' intero
     if (!rigaFinita) fine -= byteUtf8InAttesa(dati.subarray(Math.max(0, fine - 4), fine))
     let testo
@@ -4631,7 +4821,25 @@ async function leggiDentroRiga(handle, byteSulDisco, inizio, { tetto, campione, 
     }
     const fineAssoluta = inizio + fine
     const eof = rigaFinita && fineAssoluta >= byteSulDisco
+    /*
+     * F-026 (owner 02/10/2026, «Voglio il +1»): quanti byte di QUESTA riga restano dopo la pagina. Si cerca l'a capo da qui in
+     *   avanti come la pagina di testo conta le righe (`MAX_BYTE_CONTEGGIO_RIGHE`): a blocchi da 64 KB, memoria costante, al
+     *   massimo 64 MiB; oltre, il numero non si dà invece di darne uno sbagliato. Hermes quel resto non lo recupera
+     *   (tools/file_tools.py:111), Pi rimanda a `sed`: qui il modello sa quanto gli manca prima di chiederlo.
+     */
+    let restanoNellaRiga = null
+    if (!rigaFinita) {
+        for (let avanti = 0; avanti < MAX_BYTE_CONTEGGIO_RIGHE;) {
+            segnale?.throwIfAborted()
+            const { bytesRead } = await handle.read(b, 0, b.length, fineAssoluta + avanti)
+            if (bytesRead === 0) { restanoNellaRiga = avanti; break }
+            const a = b.subarray(0, bytesRead).indexOf(0x0a)
+            if (a !== -1) { restanoNellaRiga = avanti + a; break }
+            avanti += bytesRead
+        }
+    }
     return { binario: false, modo: 'byte', testo, byteSulDisco, offset: inizio, endOffset: fineAssoluta, riga: numeroRiga, rigaFinita, eof,
+        limite, pienaDaTetto: !rigaFinita && limite === null, tetto, restanoNellaRiga,
         nextByteOffset: rigaFinita ? null : fineAssoluta,
         rigaDopo: rigaFinita && !eof && numeroRiga !== null ? numeroRiga + 1 : null,
         inizioRigaDopo: rigaFinita && !eof ? fineAssoluta + 1 : null }
@@ -4646,6 +4854,34 @@ function primoByteNonUtf8(b) {
         if (!(b[p] === 0xef && b[p + 1] === 0xbf && b[p + 2] === 0xbd)) return p
     }
     return 0
+}
+/*
+ * F-025 (owner 02/10/2026, «Voglio il +1»): QUANTI byte di un pezzo non sono UTF-8, dove sta il primo, e quante sequenze
+ *   multibyte valide ci sono (per dire «sembra Windows-1252» solo quando il resto non è UTF-8). Una «sequenza» è una «�» del
+ *   decodificatore standard: WHATWG Encoding, «UTF-8 decoder», che sostituisce il «maximal subpart» (Unicode §3.9, U+FFFD
+ *   substitution of maximal subparts) — stessi limiti del secondo byte dopo E0, ED, F0, F4. La prova F025-WHATWG lo confronta
+ *   con `TextDecoder` su 10.000 pezzi casuali.
+ */
+export function scansioneUtf8(dati) {
+    let i = 0, byte = 0, sequenze = 0, primo = -1, multibyteValidi = 0
+    while (i < dati.length) {
+        const c = dati[i]
+        if (c < 0x80) { i++; continue }
+        const n = c >= 0xc2 && c <= 0xdf ? 1 : c >= 0xe0 && c <= 0xef ? 2 : c >= 0xf0 && c <= 0xf4 ? 3 : 0
+        let k = 1
+        if (n > 0) {
+            const minimo = c === 0xe0 ? 0xa0 : c === 0xf0 ? 0x90 : 0x80
+            const massimo = c === 0xed ? 0x9f : c === 0xf4 ? 0x8f : 0xbf
+            for (; k <= n && i + k < dati.length; k++) {
+                const d = dati[i + k]
+                if (k === 1 ? d < minimo || d > massimo : d < 0x80 || d > 0xbf) break
+            }
+            if (k > n) { multibyteValidi++; i += n + 1; continue }
+        }
+        if (primo === -1) primo = i
+        byte += k; sequenze++; i += k
+    }
+    return { byte, sequenze, primo, multibyteValidi }
 }
 /* READ24, invariato: byte originali in esadecimale, a qualunque offset in byte. */
 async function leggiEsadecimale(handle, byteSulDisco, inizio, limite, { blocco, segnale }) {
@@ -4685,6 +4921,29 @@ async function testoDelDocumento(handle, chiave, formato, byteSulDisco, segnale)
     while (testiDeiDocumenti.size > MAX_TESTI_DEI_DOCUMENTI) testiDeiDocumenti.delete(testiDeiDocumenti.keys().next().value)
     return esito
 }
+/*
+ * F-025: il testo di un UTF-16 col BOM (riconosciuto da `bomUtf16DaCampione` nel campione che `leggi` legge già). Passa dalla
+ *   stessa paginazione dei documenti (F-001) e dalla stessa memoria dei 4 recenti; oltre il tetto dei documenti si dice perché.
+ */
+async function testoUtf16(handle, chiave, { codifica }, byteSulDisco, segnale) {
+    const ricordato = testiDeiDocumenti.get(chiave)
+    if (ricordato) { testiDeiDocumenti.delete(chiave); testiDeiDocumenti.set(chiave, ricordato); return ricordato }
+    if (byteSulDisco > MAX_BYTE_DOCUMENTO) throw new ErroreEstrazione(`the file is too large to convert (${byteSulDisco} bytes; the limit is ${MAX_BYTE_DOCUMENTO})`)
+    segnale?.throwIfAborted()
+    const grezzi = await handle.readFile()
+    segnale?.throwIfAborted()
+    // il BOM si toglie (ignoreBOM:false, il default dello standard, come T-01 per UTF-8); il file sul disco non si tocca
+    let testo, sostituiti = 0
+    try { testo = new TextDecoder(codifica, { fatal: true }).decode(grezzi) }
+    catch {
+        testo = new TextDecoder(codifica).decode(grezzi)
+        sostituiti = (testo.match(/�/gu) ?? []).length
+    }
+    const esito = { testo, sostituiti }
+    testiDeiDocumenti.set(chiave, esito)
+    while (testiDeiDocumenti.size > MAX_TESTI_DEI_DOCUMENTI) testiDeiDocumenti.delete(testiDeiDocumenti.keys().next().value)
+    return esito
+}
 /* Un «file» in memoria con la sola `read` che usano `leggiRighe` e `leggiDentroRiga` (stessa forma di FileHandle.read). */
 const fileInMemoria = (dati) => ({
     read: async (buffer, inizio, quanti, posizione) => {
@@ -4711,7 +4970,7 @@ export async function leggiTestoLimitato(radice, percorso, {
                 const estratto = await testoDelDocumento(handle, `${percorsoSulDisco}\0${byteSulDisco}\0${mtimeMs}`, formato, byteSulDisco, segnale)
                 const dati = Buffer.from(estratto.testo, 'utf8'), finto = fileInMemoria(dati)
                 const base = richiesta.modo === 'byte'
-                    ? await leggiDentroRiga(finto, dati.length, richiesta.inizio, { tetto, campione, segnale })
+                    ? await leggiDentroRiga(finto, dati.length, richiesta.inizio, { tetto, limite: richiesta.limite, campione, segnale })
                     : await leggiRighe(finto, dati.length, richiesta, { tetto, blocco, campione, segnale })
                 return { ...base, mtimeMs, estratto: { formato, byteFile: byteSulDisco, avviso: estratto.avviso } }
             } catch (errore) {
@@ -4720,10 +4979,27 @@ export async function leggiTestoLimitato(radice, percorso, {
             }
         }
         // T25/B09: l'istantanea (mtime + dimensione) della lettura, per sapere poi se il file è cambiato dopo
-        const base = richiesta.modo === 'byte'
-            ? await leggiDentroRiga(handle, byteSulDisco, richiesta.inizio, { tetto, campione, segnale })
+        let base = richiesta.modo === 'byte'
+            ? await leggiDentroRiga(handle, byteSulDisco, richiesta.inizio, { tetto, limite: richiesta.limite, campione, segnale })
             : await leggiRighe(handle, byteSulDisco, richiesta, { tetto, blocco, campione, segnale })
-        return { ...base, mtimeMs, ...(estrattoFallito ? { estrattoFallito } : {}) }
+        let decodificaFallita = null
+        if (base.utf16) {
+            const utf16 = base.utf16
+            try {
+                const decodificato = await testoUtf16(handle, `${percorsoSulDisco}\0${byteSulDisco}\0${mtimeMs}\0${utf16.codifica}`, utf16, byteSulDisco, segnale)
+                const dati = Buffer.from(decodificato.testo, 'utf8'), finto = fileInMemoria(dati)
+                const letta = richiesta.modo === 'byte'
+                    ? await leggiDentroRiga(finto, dati.length, richiesta.inizio, { tetto, limite: richiesta.limite, campione, segnale })
+                    : await leggiRighe(finto, dati.length, richiesta, { tetto, blocco, campione, segnale })
+                return { ...letta, mtimeMs, decodificato: { nome: utf16.nome, bom: utf16.bom, byteFile: byteSulDisco, sostituiti: decodificato.sostituiti } }
+            } catch (errore) {
+                if (!(errore instanceof ErroreEstrazione)) throw errore
+                // non decodificabile qui: come prima della cura, un file col NUL non è testo UTF-8
+                decodificaFallita = { nome: utf16.nome, motivo: errore.message }
+                base = { binario: true, testo: null, byteSulDisco, letti: base.letti, troncato: false }
+            }
+        }
+        return { ...base, mtimeMs, ...(estrattoFallito ? { estrattoFallito } : {}), ...(decodificaFallita ? { decodificaFallita } : {}) }
     } finally {
         await handle.close()
     }
@@ -4731,21 +5007,49 @@ export async function leggiTestoLimitato(radice, percorso, {
 /* L'esito di `leggi` per il modello. Un taglio si dichiara in TESTA, dove anche un modello che vede solo l'inizio lo legge.
    F-001: un documento estratto lo dice in testa (formato, peso sul disco, «testo e non byte»), con l'avviso di copertura dei
    PDF; un'estrazione fallita dice perché, e sotto resta la lettura di sempre. */
-export function esitoDellaLettura(letta, percorso) {
+export function esitoDellaLettura(letta, percorso, { avvolgi = (testo) => testo } = {}) {
     if (letta?.estratto) {
         const { formato, byteFile, avviso } = letta.estratto
         return `[TALOS extracted text: "${percorso}" is a ${formato.toUpperCase()} document, ${byteFile} bytes on disk. Below is its text, `
             + 'not its bytes: line numbers, offset and byteOffset refer to this extracted text. Use leggi format:"hex" for the raw bytes.]\n'
-            + (avviso ? `[${avviso}]\n` : '') + esitoDellaLetturaDiTesto(letta, percorso)
+            + (avviso ? `[${avviso}]\n` : '') + esitoDellaLetturaDiTesto(letta, percorso, avvolgi)
     }
     if (letta?.estrattoFallito) {
         const { formato, motivo } = letta.estrattoFallito
         return `[TALOS could not extract the text of "${percorso}" as a ${formato.toUpperCase()} document: ${motivo}. Below is what a plain read gives.]\n`
-            + esitoDellaLetturaDiTesto(letta, percorso)
+            + esitoDellaLetturaDiTesto(letta, percorso, avvolgi)
     }
-    return esitoDellaLetturaDiTesto(letta, percorso)
+    // F-025: un UTF-16 col BOM decodificato lo dice in testa, come un documento estratto
+    if (letta?.decodificato) {
+        const { nome, bom, byteFile, sostituiti } = letta.decodificato
+        return `[TALOS decoded "${percorso}" from ${nome} (byte order mark ${bom}), ${byteFile} bytes on disk. Below is the decoded text: `
+            + 'line numbers, offset and byteOffset refer to this decoded text, not to the file\'s bytes. Use leggi format:"hex" for the raw bytes.]\n'
+            + (sostituiti > 0 ? `[${sostituiti} character(s) are not valid ${nome} and are shown as "�".]\n` : '')
+            + esitoDellaLetturaDiTesto(letta, percorso, avvolgi)
+    }
+    if (letta?.decodificaFallita) {
+        const { nome, motivo } = letta.decodificaFallita
+        return `[TALOS could not decode "${percorso}" as ${nome}: ${motivo}. Below is what a plain read gives.]\n`
+            + esitoDellaLetturaDiTesto(letta, percorso, avvolgi)
+    }
+    return esitoDellaLetturaDiTesto(letta, percorso, avvolgi)
 }
-function esitoDellaLetturaDiTesto(letta, percorso) {
+/*
+ * F-025 (owner 02/10/2026, «Sì, questo +1»): la perdita si DICHIARA — quanti byte, il primo (byte del file, valore, riga), la
+ *   codifica probabile e la mossa dopo. «Sembra Windows-1252» solo se nelle righe mostrate non c'è nessuna sequenza UTF-8
+ *   multibyte valida: altrimenti il file mescola UTF-8 buono e byte d'altro (rotto, troncato o codifiche miste).
+ */
+function clausolaNonUtf8(n) {
+    if (!n) return ''
+    const quanti = n.byte === 1 ? '1 byte in these lines is' : `${n.byte} bytes in these lines are`
+    const codifica = n.multibyteValidi === 0
+        ? 'they look like a single-byte encoding such as Windows-1252'
+        : 'the text mixes valid UTF-8 with other bytes (damaged, truncated or mixed encodings)'
+    return `; ${quanti} NOT valid UTF-8 (first: byte ${n.primoByte} = 0x${n.valore.toString(16).padStart(2, '0')}, line ${n.riga}), `
+        + `each invalid sequence is shown as "�"; ${codifica}. For the exact bytes use leggi format:"hex" offset=${n.primoByte}; `
+        + 'file_edit refuses this file until it is valid UTF-8'
+}
+function esitoDellaLetturaDiTesto(letta, percorso, avvolgi = (testo) => testo) {
     if (letta.binario) return messaggioFileBinario(percorso, letta.byteSulDisco)
     if (letta.format === 'hex') {
         const seguito = letta.nextOffset === null ? 'EOF was reached' : `nextOffset=${letta.nextOffset}; continue with leggi format:"hex" offset=${letta.nextOffset}`
@@ -4753,26 +5057,32 @@ function esitoDellaLetturaDiTesto(letta, percorso) {
     }
     if (letta.modo === 'byte') {
         const dove = letta.riga === null ? 'inside an uncounted line (beyond 64 MiB)' : `inside line ${letta.riga}`
+        // F-026: quanto resta di QUESTA riga, e perché la pagina finisce qui (il tetto di ogni pagina, o il `limit` chiesto)
+        const resto = letta.restanoNellaRiga === null || letta.restanoNellaRiga === undefined
+            ? 'more than 64 MiB remain after this page' : `${letta.restanoNellaRiga} more bytes after this page`
         const seguito = !letta.rigaFinita
-            ? `the line continues: continue inside it with leggi byteOffset=${letta.nextByteOffset}`
+            ? `the line continues: ${resto}; continue inside it with leggi byteOffset=${letta.nextByteOffset}`
             : letta.eof ? 'line ends here; EOF reached'
                 : letta.rigaDopo !== null ? `line ends here; next line: leggi offset=${letta.rigaDopo}`
                     : `line ends here; the next line starts at leggi byteOffset=${letta.inizioRigaDopo}`
-        return `[TALOS read bytes [${letta.offset}, ${letta.endOffset}) ${dove} of "${percorso}"; ${seguito}. The file may change between reads.]\n${letta.testo}`
+        const pagina = Number.isSafeInteger(letta.limite) ? `; limit=${letta.limite} bytes`
+            : letta.pienaDaTetto ? `; page capped at ${Math.round(letta.tetto / 1024)} KB, like every page (add limit to take less)` : ''
+        return `[TALOS read bytes [${letta.offset}, ${letta.endOffset}) ${dove} of "${percorso}"${pagina}; ${seguito}. The file may change between reads.]\n${avvolgi(letta.testo)}`
     }
     const testo = testoLeggibile(letta.testo, percorso, letta.byteSulDisco)
     if (testo !== letta.testo) return testo
     if (letta.letti === 0 && letta.byteSulDisco === 0 && letta.testo === '') {
         return `[TALOS read "${percorso}": 0 bytes at open; EOF reached without reading content. The file may change between reads.]`
     }
-    if (!letta.esplicita && letta.nextOffset === null && letta.accorciate === 0) return testo
+    if (!letta.esplicita && letta.nextOffset === null && letta.accorciate === 0 && !letta.nonUtf8) return avvolgi(testo)
     const totale = letta.righeTotali === null ? 'an uncounted total (file larger than 64 MiB)' : String(letta.righeTotali)
     const intervallo = letta.ultimaRiga >= letta.primaRiga ? `lines ${letta.primaRiga}-${letta.ultimaRiga} of ${totale}` : `no lines of ${totale}`
     const seguito = letta.nextOffset === null ? 'EOF reached' : `continue with leggi offset=${letta.nextOffset}`
     const accorciate = letta.accorciate > 0
-        ? `; ${letta.accorciate} over-long line(s) shown up to ${MAX_CARATTERI_RIGA_LEGGI} characters, each ending with the byteOffset to continue inside it` : ''
+        ? `; ${letta.accorciate} over-long line(s) shown up to ${MAX_CARATTERI_RIGA_LEGGI} characters, each ending with the byteOffset to continue inside it `
+            + `(up to ${Math.round(MAX_BYTE_LEGGI / 1024)} KB per call; add limit to take less)` : ''
     const tetto = letta.pienaDaTetto ? `; page capped at ${Math.round(letta.tetto / 1024)} KB` : ''
-    return `[TALOS read ${intervallo} in "${percorso}"; ${seguito}${accorciate}${tetto}. The file may change between reads.]\n${testo}`
+    return `[TALOS read ${intervallo} in "${percorso}"; ${seguito}${accorciate}${tetto}${clausolaNonUtf8(letta.nonUtf8)}. The file may change between reads.]\n${avvolgi(testo)}`
 }
 /*
  * ⛔ 27/09/2026 (owner, «come Hermes»; era il rattoppo T-01 del pacchetto desktop del 15/09, ora nel kernel): zero risultati
@@ -5039,9 +5349,9 @@ function attendiAlPiu(promessa, ms, segnale) {
  * risposta (così il modello non gira a vuoto), poi si mostra ciò che c'è con lo stato in testa.
  */
 async function riprendiRicerca(id, offset, { ricerche, segnale, tempoMs, radice = null }) {
-    if (!ricerche) return 'REFUSED. Searches do not continue in the background here: run the search again with testo, nome or dentro.'
+    if (!ricerche) return 'NOT FOUND. Searches do not continue in the background here: run the search again with testo, nome or dentro.'
     const voce = ricerche.prendi(id)
-    if (!voce) return `REFUSED. There is no search "${id}" in this session: it may have finished more than ${durataLeggibile(ricerche.conservaDopoMs)} ago, or the server restarted. Nothing was searched; run the search again.`
+    if (!voce) return `NOT FOUND. There is no search "${id}" in this session: it may have finished more than ${durataLeggibile(ricerche.conservaDopoMs)} ago, or the server restarted. Nothing was searched; run the search again.`
     if (voce.stato === 'in-corso') await attendiAlPiu(voce.finita, tempoMs, segnale)
     if (segnale?.aborted) return 'stopped: the search was interrupted.'
     /* Il registro segna «finita» appena il processo esce; per una ricerca finita un'uscita 2 resta un errore dichiarato. */
@@ -5075,7 +5385,7 @@ async function riprendiRicerca(id, offset, { ricerche, segnale, tempoMs, radice 
  *   Assente (test, ponte del telefono) ⇒ si usa il ripiego `POTATE_SENZA_GITIGNORE`.
  */
 export async function cercaNelProgetto(disco, { testo, nome, dentro, offset = 0, continua }, { radice, segnale, ricerche = null, tempoRgMs } = {}) {
-    if (!Number.isSafeInteger(offset) || offset < 0) return 'REFUSED. "offset" must be a non-negative safe integer counting matching files; nothing was searched.'
+    if (!Number.isSafeInteger(offset) || offset < 0) return 'INVALID. "offset" must be a non-negative safe integer counting matching files; nothing was searched.'
     /* F001b (owner 01/10/2026): una ricerca che continua si riprende per riferimento; le altre chiavi qui non contano. */
     const tempoMs = tempoRgMs ?? tempoRipgrepPer(radice)
     if (continua !== undefined && continua !== null && continua !== '') return riprendiRicerca(String(continua), offset, { ricerche, segnale, tempoMs, radice })
@@ -5099,17 +5409,17 @@ export async function cercaNelProgetto(disco, { testo, nome, dentro, offset = 0,
     const grezzoDentro = dentro === undefined || dentro === null ? '' : String(dentro).trim()
     if (grezzoDentro !== '' && grezzoDentro !== '.') {
         if (RISALITA.test(grezzoDentro) || /^(?:[a-zA-Z]:|\/|\\\\)/u.test(grezzoDentro)) {
-            return `REFUSED. "${grezzoDentro}" is not a subfolder of this workspace: \`dentro\` takes a folder INSIDE the workspace, e.g. "src" or "src/kernel". Nothing was searched.`
+            return `INVALID. "${grezzoDentro}" is not a subfolder of this workspace: \`dentro\` takes a folder INSIDE the workspace, e.g. "src" or "src/kernel". Nothing was searched.`
         }
         dentroPulito = grezzoDentro.replace(/\\/gu, '/').replace(/^\.\//u, '').replace(/\/+$/u, '')
         if (RISALITA.test(dentroPulito)) {
-            return `REFUSED. "${grezzoDentro}" is not a subfolder of this workspace: \`dentro\` takes a folder INSIDE the workspace, e.g. "src" or "src/kernel". Nothing was searched.`
+            return `INVALID. "${grezzoDentro}" is not a subfolder of this workspace: \`dentro\` takes a folder INSIDE the workspace, e.g. "src" or "src/kernel". Nothing was searched.`
         }
         try {
             const voci = await disco.elenca(dentroPulito)
-            if (!Array.isArray(voci)) throw new Error('non è un elenco')
+            if (!Array.isArray(voci)) throw new Error('not a list')
         } catch {
-            return `REFUSED. "${dentroPulito}" is not a folder of this workspace. \`dentro\` takes a subfolder INSIDE the workspace, e.g. "src" — check the project map you received at the start, or leave \`dentro\` out to search everywhere. Nothing was searched.`
+            return `NOT FOUND. "${dentroPulito}" is not a folder of this workspace. \`dentro\` takes a subfolder INSIDE the workspace, e.g. "src" — check the project map you received at the start, or leave \`dentro\` out to search everywhere. Nothing was searched.`
         }
     }
     /* P18 / SEARCH33: con la cartella vera e ripgrep disponibile, contenuto e inventario nomi usano `rg`.
@@ -5395,7 +5705,7 @@ function fermaQuandoArrivaLoStop(processoFiglio, segnaleStop, quandoFermato) {
  * In WSL non serve: `wsl.exe` esce con la shell anche se un `cmd &` resta vivo (misurato: 69 ms), ma l'aiutante vale ovunque.
  */
 const DRENAGGIO_DOPO_L_USCITA_MS = 2_000
-const NOTA_PROCESSO_IN_BACKGROUND = "⛔ Un processo avviato da questo comando gira ancora in background e tiene aperta l'uscita: ciò che stampa da ora non viene raccolto."
+const NOTA_PROCESSO_IN_BACKGROUND = '⛔ A process started by this command is still running in the background and keeps the output open: whatever it prints from now on is not collected.'
 /** `concludi(codice, { inBackground })` una volta sola: alla chiusura dei tubi, o 2 s dopo l'uscita se i tubi restano aperti. */
 function concludiAllUscitaDelProcesso(p, concludi, { drenaggioMs = DRENAGGIO_DOPO_L_USCITA_MS } = {}) {
     let fatto = false, attesa = null
@@ -5413,7 +5723,14 @@ const USCITA_FERMATO_SU_RICHIESTA = 130
  * la rilegge `talosLavora` per dire nel registro DOVE si è fermato. Una costante
  * e non due stringhe uguali per caso: se cambia qui, cambia in tutti e due.
  */
-const MOTIVO_FERMATO_CHIEDENDO = 'fermato su richiesta mentre aspettavo la tua approvazione'
+const MOTIVO_FERMATO_CHIEDENDO = "stopped on request while waiting for the person's approval"
+/** La forma italiana di prima: le storie salvate la contengono ancora, e chi legge la riconosce per sempre. */
+const MOTIVO_FERMATO_CHIEDENDO_IT = 'fermato su richiesta mentre aspettavo la tua approvazione'
+/** Il lettore a due forme del motivo (inglese di oggi, italiano delle storie salvate). Esportato per la prova al contrario. */
+export const contieneMotivoFermatoChiedendo = (testo) => {
+    const t = String(testo ?? '')
+    return t.includes(MOTIVO_FERMATO_CHIEDENDO) || t.includes(MOTIVO_FERMATO_CHIEDENDO_IT)
+}
 
 /**
  * ⛔ L'altra meta' della stessa disciplina: la marca che un comando (o una prova)
@@ -5421,7 +5738,17 @@ const MOTIVO_FERMATO_CHIEDENDO = 'fermato su richiesta mentre aspettavo la tua a
  * La scrivono i tre rami di esecuzione, la rilegge `talosLavora` per dire nel
  * registro QUALE attrezzo stava girando quando la persona ha premuto «Ferma».
  */
-const MARCA_FERMATO_MENTRE_GIRAVA = '⛔ Fermato su richiesta:'
+const MARCA_FERMATO_MENTRE_GIRAVA = '⛔ Stopped on request:'
+/** La forma italiana di prima, per sempre riconosciuta da chi legge (le storie salvate sono italiane e restano tali). */
+const MARCA_FERMATO_MENTRE_GIRAVA_IT = '⛔ Fermato su richiesta:'
+/** Il lettore a due forme della marca di stop. Esportato per la prova al contrario. */
+export const contieneMarcaFermatoMentreGirava = (testo) => {
+    const t = String(testo ?? '')
+    return t.includes(MARCA_FERMATO_MENTRE_GIRAVA) || t.includes(MARCA_FERMATO_MENTRE_GIRAVA_IT)
+}
+/** La frase concordata con la CLI, INTERA: la CLI confronta righe intere (`error-view.ts` KERNEL_TOOL_STOP_EN). */
+const FRASE_FERMATO_NON_ESEGUITO = '⛔ Stopped on request: it could not run, the session was stopped first. This tool did not run.'
+const FRASE_FERMATO_TEMPO_SCADUTO = '⛔ Stopped when the 120 seconds ran out: it did not finish on its own.'
 /*
  * ⛔ Stop per riga (owner 02/10/2026) — CHI ha fermato il comando lo dice il MOTIVO dell'abort: la riga dei Processi (e il
  *   `!` della persona) chiama `abort(MOTIVO_STOP_DELLA_RIGA)`, e `AbortSignal.any` porta al segnale combinato il motivo
@@ -5435,10 +5762,10 @@ export const MOTIVO_STOP_DELLA_RIGA = 'stop-della-riga'
 function fraseFermato(segnale, { prova = false } = {}) {
     if (segnale?.reason === MOTIVO_STOP_DELLA_RIGA) {
         return prova
-            ? "⛔ L'ha fermata la persona dalla scheda Processi, apposta, mentre girava. Non rilanciarla se non te lo chiede."
-            : "⛔ L'ha fermato la persona dalla scheda Processi, apposta, mentre girava. Non rilanciarlo se non te lo chiede."
+            ? '⛔ The person stopped this test on purpose from the Processes tab while it ran. Do not run it again unless they ask you to.'
+            : '⛔ The person stopped this command on purpose from the Processes tab while it ran. Do not run it again unless they ask you to.'
     }
-    return `${MARCA_FERMATO_MENTRE_GIRAVA} ${prova ? 'la prova e stata interrotta' : 'il comando e stato interrotto'} mentre girava.`
+    return `${MARCA_FERMATO_MENTRE_GIRAVA} ${prova ? 'the test was stopped' : 'the command was stopped'} while it ran.`
 }
 
 /**
@@ -5488,7 +5815,7 @@ function fraseFermato(segnale, { prova = false } = {}) {
  */
 async function suiteMancante(comando, cartella, { dove = null } = {}) {
     const testo = String(comando ?? '').trim()
-    if (testo === '') return 'il comando di prova e vuoto'
+    if (testo === '') return 'the test command is empty'
     /* ⛔ Un comando composto ha piu' programmi dentro: leggerne uno solo direbbe una cosa falsa sugli altri. */
     if (/[&|<>^%()"`$]/.test(testo)) return null
     const pezzi = testo.split(/\s+/)
@@ -5514,7 +5841,7 @@ async function suiteMancante(comando, cartella, { dove = null } = {}) {
              */
             return dove === 'wsl2' || programmaEseguibileEsiste(programma, cartella)
                 ? null
-                : `il programma "${programma}" non esiste (non e un eseguibile ne in questa cartella ne sul PATH)`
+                : `the program "${programma}" does not exist (it is not an executable in this folder or on the PATH)`
         }
         /*
          * ⛔⛔⛔ B1, bocciatura del controllore avversariale (17/09, stesso giorno della cura).
@@ -5530,17 +5857,17 @@ async function suiteMancante(comando, cartella, { dove = null } = {}) {
          * ⇒ Si guarda DOVE GUARDA NPM, e la regola si applica a QUEL manifesto.
          */
         const manifesto = manifestoPiuVicino(cartella)
-        if (manifesto === null) return `nessun package.json da qui fino alla radice del disco (serve a "${testo}")`
+        if (manifesto === null) return `there is no package.json from this folder up to the root of the disk ("${testo}" needs one)`
         let letto
         try { letto = JSON.parse(await readFile(manifesto, 'utf8')) }
-        catch (e) { return `${manifesto} non e leggibile come JSON (${e.message})` }
+        catch (e) { return `${manifesto} is not readable as JSON (${e.message})` }
         const riga = letto?.scripts?.[script]
-        if (typeof riga !== 'string' || riga.trim() === '') return `${manifesto} non dichiara scripts.${script}`
+        if (typeof riga !== 'string' || riga.trim() === '') return `${manifesto} has no scripts.${script}`
         return null
     }
     // A Windows PATH probe cannot decide whether a WSL command exists; the real process reports it.
     if (dove !== 'wsl2' && !programmaEseguibileEsiste(programma, cartella)) {
-        return `il programma "${programma}" non esiste (non e un eseguibile ne in questa cartella ne sul PATH)`
+        return `the program "${programma}" does not exist (it is not an executable in this folder or on the PATH)`
     }
     return null
 }
@@ -5606,8 +5933,92 @@ function programmaEseguibileEsiste(programma, cartella) {
     return false
 }
 
-/** ⛔ 127 = «command not found», il codice che una shell usa da sempre. Non 0, mai 0: vedi BC-57. */
-const USCITA_NESSUNA_SUITE = 127
+/*
+ * (Qui c'era `USCITA_NESSUNA_SUITE = 127`: tolta il 03/10/2026, quando anche «zero test eseguiti» è diventato un NOT RUN senza codice
+ *  inventato — vedi `CODICE_NESSUN_TEST` qui sotto. 127 in POSIX vuol dire «comando non trovato», e nessuno dei due casi lo era.)
+ */
+
+/*
+ * ⛔⛔ H-04 (red-team degli attrezzi, ZIP dell'owner del 02/10/2026; owner «Voglio il +1», poi «Sì»): `prova` senza suite usciva
+ *   `exit 127`, e 127 in POSIX vuol dire «comando non trovato» — chi legge il codice crede che manchi npm, non che i test non
+ *   siano partiti. ⇒ «NOT RUN», nessun codice d'uscita (non è girato niente: un numero sarebbe inventato), e la mossa dopo.
+ * ⭐ Il +1: i runner che il progetto HA davvero, letti dai suoi file (manifesti, configurazioni, cartelle di test). `prova` non
+ *   prende argomenti — il comando lo fissa la sessione — quindi la mossa è il runner trovato, lanciato con `shell`.
+ *   Né Claude Code, né Codex, né Hermes hanno un attrezzo dedicato ai test: da loro la suite assente è l'errore del comando.
+ */
+export const CODICE_NESSUNA_SUITE = 'NO_TEST_SUITE_CONFIGURED'
+/*
+ * ⛔ «ZERO TEST ESEGUITI» È UN NOT RUN, NON UN 127 (owner 03/10/2026, «Sì, NOT RUN anche lì»). Il comando delle prove È partito ed è
+ *   uscito col suo codice (di solito 0), ma i TEST non sono girati: prima si rispondeva `exit 127`, un numero inventato che in POSIX
+ *   vuol dire «comando non trovato». Ora la testa è «NOT RUN: NO_TESTS_RAN», col codice VERO del runner detto in parole, e la riga
+ *   con cui il runner lo dichiara citata sotto. Il registro dell'uscita tiene il codice vero (`actualExitCode`). Stessa forma di H-04.
+ */
+export const CODICE_NESSUN_TEST = 'NO_TESTS_RAN'
+function messaggioNessunTestEseguito(p, sandbox = '') {
+    const uscita = Number.isSafeInteger(p.actualExitCode) ? p.actualExitCode : 'unknown'
+    return `NOT RUN: ${CODICE_NESSUN_TEST} — the test command ran${sandbox} and exited ${uscita}, but no tests ran: this is not a pass. `
+        + 'Create the suite or point the command at the folder that has one.\n'
+        + `The runner said: ${p.dichiarazione ?? '(no declaration line)'}\n${p.testo ?? ''}`.replace(/\n$/u, '')
+}
+const MAX_BYTE_FILE_DEL_PROGETTO = 1024 * 1024
+async function testoSePiccolo(percorso) {
+    try {
+        const s = await statAsync(percorso)
+        return s.isFile() && s.size <= MAX_BYTE_FILE_DEL_PROGETTO ? await readFile(percorso, 'utf8') : null
+    } catch { return null }
+}
+/**
+ * I runner di test che una cartella dichiara, dal più specifico al più generico. Solo la cartella e le sue `test`/`tests`/
+ * `__tests__` (un livello): una ricerca nell'albero intero costerebbe più della risposta che porta.
+ * @returns {Promise<Array<{nome:string, comando:string, perche:string}>>}
+ */
+export async function runnerDiTestNelProgetto(cartella) {
+    const trovati = []
+    const aggiungi = (nome, comando, perche) => { if (!trovati.some((r) => r.comando === comando)) trovati.push({ nome, comando, perche }) }
+    let nomi = []
+    try { nomi = await readdir(cartella) } catch { return trovati }
+    const c = (n) => join(cartella, n)
+    const pkg = nomi.includes('package.json') ? await testoSePiccolo(c('package.json')) : null
+    if (pkg) {
+        let json = null
+        try { json = JSON.parse(pkg) } catch { /* un package.json rotto non dichiara niente */ }
+        for (const campo of ['devDependencies', 'dependencies']) {
+            const dip = json?.[campo] && typeof json[campo] === 'object' ? json[campo] : {}
+            for (const [nome, comando] of [['vitest', 'npx vitest run'], ['jest', 'npx jest'], ['mocha', 'npx mocha'], ['ava', 'npx ava'], ['@playwright/test', 'npx playwright test']]) {
+                if (Object.hasOwn(dip, nome)) aggiungi(nome, comando, `package.json ${campo}`)
+            }
+        }
+    }
+    const pyproject = nomi.includes('pyproject.toml') ? await testoSePiccolo(c('pyproject.toml')) : null
+    const setupCfg = nomi.includes('setup.cfg') ? await testoSePiccolo(c('setup.cfg')) : null
+    const tox = nomi.includes('tox.ini') ? await testoSePiccolo(c('tox.ini')) : null
+    if (nomi.includes('pytest.ini') || nomi.includes('conftest.py') || /^\[tool\.pytest/mu.test(pyproject ?? '')
+        || /^\[tool:pytest\]/mu.test(setupCfg ?? '') || /^\[pytest\]/mu.test(tox ?? '')) aggiungi('pytest', 'python -m pytest', 'pytest configuration')
+    if (nomi.includes('Cargo.toml')) aggiungi('cargo', 'cargo test', 'Cargo.toml')
+    if (nomi.includes('go.mod')) aggiungi('go', 'go test ./...', 'go.mod')
+    if (nomi.some((n) => /\.(?:sln|csproj|fsproj|vbproj)$/iu.test(n))) aggiungi('dotnet', 'dotnet test', 'a .NET project file')
+    if (nomi.includes('pom.xml')) aggiungi('maven', 'mvn test', 'pom.xml')
+    if (nomi.includes('build.gradle') || nomi.includes('build.gradle.kts')) aggiungi('gradle', nomi.includes('gradlew') ? './gradlew test' : 'gradle test', 'a Gradle build file')
+    const make = nomi.includes('Makefile') ? await testoSePiccolo(c('Makefile')) : null
+    if (/^test\s*:/mu.test(make ?? '')) aggiungi('make', 'make test', 'Makefile target "test"')
+    // `node --test` solo se ci sono file di test di Node e nessun runner più specifico li reclama
+    if (trovati.length === 0) {
+        const fileDiTest = (elenco) => elenco.some((n) => /\.test\.(?:mjs|cjs|js)$/u.test(n))
+        let visti = fileDiTest(nomi)
+        for (const sotto of ['test', 'tests', '__tests__']) {
+            if (visti || !nomi.includes(sotto)) continue
+            try { visti = fileDiTest(await readdir(c(sotto))) } catch { /* non è una cartella */ }
+        }
+        if (visti) aggiungi('node', 'node --test', '*.test.js files')
+    }
+    return trovati
+}
+function messaggioProvaNonEseguita(cartella, motivo, trovati) {
+    const mossa = trovati.length > 0
+        ? ` Test runners found in this folder: ${trovati.map((r) => `${r.nome} (${r.perche})`).join(', ')}. To run one, use shell, e.g. \`${trovati[0].comando}\`.`
+        : ' No test runner was found in this folder either: create the tests first, or check the work another way.'
+    return `NOT RUN: ${CODICE_NESSUNA_SUITE} — no test suite found in ${cartella}: ${motivo}. No command was run, so there is no exit code; this is not a pass.${mossa}`
+}
 
 /*
  * ⛔⛔⛔ LA SECONDA FALLA DI `prova`: UNA SUITE CHE GIRA **ZERO** TEST ESCE 0.
@@ -5683,8 +6094,9 @@ async function eseguiProva(comando, cartella, { segnaleStop, dove = null, onByte
         })
         const classificazione = zeroTest.finish(risultato.codice)
         if (classificazione.zeroTests) {
-            return { ...risultato, codice: USCITA_NESSUNA_SUITE, ...(onBytes ? { actualExitCode: risultato.codice } : {}),
-                testo: `exit 0 but NO tests ran (${classificazione.declaration}): this is not a pass. Create the suite or point the command at the folder that has one.\n${risultato.testo}` }
+            /* «zero test eseguiti» = NOT RUN (owner 03/10/2026): nessun codice inventato; quello vero resta in `actualExitCode` */
+            return { ...risultato, codice: null, nonEseguita: true, nessunTestEseguito: true, actualExitCode: risultato.codice,
+                dichiarazione: classificazione.declaration, testo: risultato.testo }
         }
         return risultato
     }
@@ -5718,7 +6130,7 @@ async function eseguiProva(comando, cartella, { segnaleStop, dove = null, onByte
             }
             /* ⛔ F-020: una prova uccisa dal tempo non è né un `exit null` muto né una suite mancante — stesso 124 e stessa frase del ramo Windows di `shell`. */
             if (fermatoDalTempo) {
-                risolvi({ codice: 124, fermatoDalTempo: true, testo: `${uscita}\n\n⛔ Fermato allo scadere dei 120 secondi: non ha finito da solo.`.trim() })
+                risolvi({ codice: 124, fermatoDalTempo: true, testo: `${uscita}\n\n${FRASE_FERMATO_TEMPO_SCADUTO}`.trim() })
                 return
             }
             /*
@@ -5742,7 +6154,9 @@ async function eseguiProva(comando, cartella, { segnaleStop, dove = null, onByte
             const classificazione = zeroTest.finish(codice)
             if (classificazione.zeroTests) {
                 risolvi({
-                    codice: USCITA_NESSUNA_SUITE,
+                    /* ⛔ 03/10/2026 (owner, «Sì, NOT RUN anche lì»): era `USCITA_NESSUNA_SUITE` (127). Ora nessun codice, quello vero
+                       in `actualExitCode`, e la frase la compone il ramo `prova` (`messaggioNessunTestEseguito`). */
+                    codice: null, nonEseguita: true, nessunTestEseguito: true, actualExitCode: codice, dichiarazione: classificazione.declaration,
                     /*
                      * ⛔⛔ E LA TESTATA NON SI SCRIVE QUI — 20/09/2026, quarto referto avversario: la
                      *   scriveva anche il chiamante, che avvolge ogni esito come `exit ${codice}\n${testo}`
@@ -5753,7 +6167,7 @@ async function eseguiProva(comando, cartella, { segnaleStop, dove = null, onByte
                      *   L'«exit 0 but» del messaggio è quello del RUNNER, non il nostro: il nostro
                      *   sta nella testata che il chiamante scrive sopra.
                      */
-                    testo: `exit 0 but NO tests ran (${classificazione.declaration}): this is not a pass. Create the suite or point the command at the folder that has one.\n${uscita}`,
+                    testo: uscita, // la frase NOT RUN la compone il ramo `prova`, che conosce anche la sandbox
                 })
                 return
             }
@@ -6266,13 +6680,13 @@ async function sondaRuntimeMobileNode(seriale) {
     const { fuori } = await eseguiComando(trovaAdbLocale(), ['-s', seriale, 'shell', comando], { timeoutMs: 15_000 })
     const testo = String(fuori ?? '')
     if (testo.includes('SUL_PATH')) {
-        return 'node è già sul PATH di questa shell: chiamalo direttamente (`node script.mjs`).'
+        return 'node is already on the PATH of this shell: call it directly (`node script.mjs`).'
     }
     if (testo.includes('TROVATO')) {
-        return `node NON è sul PATH, ma un runtime funzionante è presente a ${percorsoNoto}/node — invocalo così: `
-            + `LD_LIBRARY_PATH=${percorsoNoto}/lib ${percorsoNoto}/node <script>. Non cercarne altri, non provare a scaricarlo o installarlo: non funzionerebbe (Bionic, non glibc).`
+        return `node is NOT on the PATH, but a working runtime is present at ${percorsoNoto}/node — call it like this: `
+            + `LD_LIBRARY_PATH=${percorsoNoto}/lib ${percorsoNoto}/node <script>. Do not look for another one, do not try to download or install it: it would not work (Bionic, not glibc).`
     }
-    return 'Nessun runtime Node è presente su questo device in questo momento: non tentare di scaricarlo, installarlo o cercarlo con apt/npm/curl — non funzionerebbe (la shell del telefono è Bionic, non glibc). Se il task richiede di eseguire JavaScript, dichiara questo limite invece di provarci.'
+    return 'No Node runtime is present on this device right now: do not try to download it, install it or look for it with apt/npm/curl — it would not work (the phone shell is Bionic, not glibc). If the task requires running JavaScript, state this limit instead of trying.'
 }
 
 /**
@@ -6660,7 +7074,7 @@ function eseguiSuWindows(comando, cartella, { onPezzo, onBytes, tracciaCartella 
             const testoDelComando = fermatoSuRichiesta
                 ? `${uscita}\n\n${fraseFermato(segnaleStop)}`.trim()
                 : fermatoDalTempo
-                    ? `${uscita}\n\n⛔ Fermato allo scadere dei 120 secondi: non ha finito da solo.`.trim()
+                    ? `${uscita}\n\n${FRASE_FERMATO_TEMPO_SCADUTO}`.trim()
                     : uscita
             risolvi({
                 codice: codiceFinale, // 124: il codice che `timeout(1)` usa da sempre per «tempo scaduto»
@@ -6712,14 +7126,14 @@ export async function eseguiComandoSandboxato(comando, cartella, { mobile = fals
      *   né una shell. Si risponde con una frase che dice cosa fare.
      */
     if (String(comando ?? '').trim() === '') {
-        return { codice: -1, testo: 'Il comando è vuoto: scrivi cosa eseguire.', enforcement: 'none' }
+        return { codice: -1, testo: 'The command is empty: write what to run.', enforcement: 'none' }
     }
     if (mobile) {
         const seriale = await risolviSerialeAdbAttivo()
         if (!seriale) {
             return {
                 codice: -1,
-                testo: 'Nessun dispositivo ADB pronto in questo momento: la sessione è mobile, ma il telefono non è raggiungibile (scollegato, o più di un dispositivo collegato).',
+                testo: 'No ADB device is ready right now: the session is mobile, but the phone cannot be reached (unplugged, or more than one device connected).',
                 enforcement: 'none',
             }
         }
@@ -6745,7 +7159,7 @@ export async function eseguiComandoSandboxato(comando, cartella, { mobile = fals
         if (push.codice !== 0) {
             return {
                 codice: push.codice,
-                testo: `Impossibile sincronizzare la cartella del task sul telefono (adb push fallito): ${uscitaUtile(`${push.fuori}\n${push.errori}`.trim(), 2_000, 0.25)}`,
+                testo: `Could not sync the task folder to the phone (adb push failed): ${uscitaUtile(`${push.fuori}\n${push.errori}`.trim(), 2_000, 0.25)}`,
                 enforcement: 'adb-shell-on-device',
             }
         }
@@ -6800,7 +7214,7 @@ export async function eseguiComandoSandboxato(comando, cartella, { mobile = fals
     if (destinazione.ambiente === 'assente') {
         return {
             codice: -1,
-            testo: "Questa sessione e impostata su Linux (WSL2), ma WSL non e installato o non risponde. Cambia la scelta nella sessione, oppure installa WSL2.",
+            testo: 'This session is set to Linux (WSL2), but WSL is not installed or not responding. Change the choice in the session, or install WSL2.',
             enforcement: 'none',
         }
     }
@@ -6845,7 +7259,7 @@ export async function eseguiComandoSandboxato(comando, cartella, { mobile = fals
             testo: fermatoSuRichiesta
                 ? `${fraseFermato(segnaleStop)}\n\n${uscitaWsl}`.trim()
                 : fermatoDalTempo
-                    ? `${uscitaWsl}\n\n⛔ Fermato allo scadere dei 120 secondi: non ha finito da solo.`.trim()
+                    ? `${uscitaWsl}\n\n${FRASE_FERMATO_TEMPO_SCADUTO}`.trim()
                     : worktreeWindows ? `${uscitaWsl}\n\n⛔ ${spiegazioneWorktreeWindows(worktreeWindows)}` : uscitaWsl,
             enforcement: 'wsl2',
             /* ⛔ F009 — con che utente ha girato e su che disco: l'etichetta lo dichiara (`etichettaSandbox`). `utente: null` =
@@ -7387,7 +7801,7 @@ async function premessaDellaScrittura(radice, percorso, contenuto, { leggiPrima 
 
         const esito = await cancelloSemantico(prima, dopo, await libreriaStandard(leggiLibreriaStandardTs))
         if (esito.stato === 'assente') {
-            return { stato: 'assente', perche: esito.perche ?? 'introduce un riferimento che non esiste', esisteva }
+            return { stato: 'assente', perche: esito.perche ?? 'it introduces a reference that does not exist', esisteva }
         }
         return { stato: esito.stato, esisteva, contenutoPrima }
     }
@@ -7501,7 +7915,7 @@ export function serializzaCanonica(valore) {
     if (valore === null) return 'null'
     if (typeof valore === 'string' || typeof valore === 'boolean') return JSON.stringify(valore)
     if (typeof valore === 'number') {
-        if (!Number.isFinite(valore)) throw new Error(`serializzaCanonica: numero non rappresentabile (${valore})`)
+        if (!Number.isFinite(valore)) throw new Error(`serializzaCanonica: number not representable (${valore})`)
         return JSON.stringify(valore)
     }
     if (Array.isArray(valore)) return `[${valore.map(serializzaCanonica).join(',')}]`
@@ -7509,7 +7923,7 @@ export function serializzaCanonica(valore) {
         const chiavi = Object.keys(valore).sort()
         return `{${chiavi.map((k) => `${JSON.stringify(k)}:${serializzaCanonica(valore[k])}`).join(',')}}`
     }
-    throw new Error(`serializzaCanonica: tipo non rappresentabile (${typeof valore})`)
+    throw new Error(`serializzaCanonica: type not representable (${typeof valore})`)
 }
 
 /**
@@ -7959,10 +8373,10 @@ export async function postcondizioneDiScrivi(disco, percorso, contenutoAtteso, m
      */
     if (modalita === 'accoda') {
         if (typeof riletto === 'string' && riletto.endsWith(contenutoAtteso)) return { esito: 'retta' }
-        return { esito: 'smentita', perche: 'il file riletto dal disco non finisce con il pezzo appena aggiunto' }
+        return { esito: 'smentita', perche: 'the file read back from disk does not end with the piece just appended' }
     }
     if (riletto === contenutoAtteso) return { esito: 'retta' }
-    return { esito: 'smentita', perche: 'il contenuto riletto dal disco non combacia con quello scritto' }
+    return { esito: 'smentita', perche: 'the content read back from disk does not match what was written' }
 }
 
 /**
@@ -8471,13 +8885,13 @@ async function scritturaFuoriDalProgetto(azione, { cartella, posizioneFn, consen
    provare il ramo Piano qui sotto da solo. Nel giro del kernel è irraggiungibile finché il primo cancello
    (`bloccatoDalPiano`, allowlist al dispatch) regge: è difesa in profondità, e senza questa porta nessuna
    prova poteva accorgersi che fosse sparita. Nessun comportamento cambia. */
-export async function verificaPermessoScrittura(azione, { livelloAccesso, modalitaOperativa = 'normale', chiediApprovazioneFn, permessiPerAttrezzo, cartella, catena = CATENA_VUOTA, segnaleStop, posizioneFn, consensiSessione, reteConsentita = false } = {}) {
+export async function verificaPermessoScrittura(azione, { livelloAccesso, modalitaOperativa = 'normale', chiediApprovazioneFn, permessiPerAttrezzo, cartella, catena = CATENA_VUOTA, segnaleStop, posizioneFn, consensiSessione, reteConsentita = false, sospetto = null } = {}) {
     const override = permessiPerAttrezzo?.[azione.tipo]
-    if (modalitaOperativa === 'piano' && azione.tipo !== 'leggi') {
+    if (modalitaOperativa === 'piano' && azione.tipo !== 'leggi' && azione.tipo !== 'elenca') {
         return {
             consentito: false,
             via: 'modalita-piano',
-            motivo: 'la sessione è in modalità Piano: può esplorare e chiedere chiarimenti, ma non può eseguire azioni che modificano o eseguono il lavoro finché la modalità non cambia.',
+            motivo: 'the session is in Plan mode: it can explore and ask for clarification, but it cannot take actions that change things or carry out the work until the mode changes.',
         }
     }
     const haOverride = override === 'sempre' || override === 'chiedi' || override === 'nega'
@@ -8513,11 +8927,14 @@ export async function verificaPermessoScrittura(azione, { livelloAccesso, modali
      *   livelli più sotto: un livello «lettura» deve poter LEGGERE — negarlo lì risponderebbe
      *   «nessuna scrittura è permessa» a una lettura, che è falso e confonde chi lo riceve.
      */
-    const segreto = (azione.tipo === 'shell' || azione.tipo === 'leggi')
-        ? motivoDaChiedere({ tipo: azione.tipo, comando: azione.comando, percorso: azione.percorso, cartella })
+    /* ⛔ D2 (owner 03/10/2026): `elenca` è una lettura come `leggi` e passa di qui alle stesse condizioni — solo quando
+       `motivoDaChiedere` dice di chiedere (un segreto, o un percorso fuori dalla cartella della sessione). */
+    const lettura = azione.tipo === 'leggi' || azione.tipo === 'elenca'
+    const segreto = (azione.tipo === 'shell' || lettura)
+        ? motivoDaChiedere({ tipo: azione.tipo, comando: azione.comando, percorso: azione.percorso, cartella, accessoPieno: livelloAccesso === 'accesso-pieno' })
         : null
     const segretoForzaConferma = Boolean(segreto)
-    const soloSegreto = segretoForzaConferma && azione.tipo === 'leggi'
+    const soloSegreto = segretoForzaConferma && lettura
 
     /*
      * ⭐⭐⭐ 29/8, continuazione FASE D — ENFORCEMENT della trifecta, non
@@ -8555,7 +8972,7 @@ export async function verificaPermessoScrittura(azione, { livelloAccesso, modali
      * altro campo aggiunto in questa sessione).
      */
     if (haOverride && override === 'nega') {
-        return { consentito: false, via: 'permesso-per-attrezzo-nega', motivo: `l'attrezzo "${azione.tipo}" è disattivato per questa sessione (permesso per-attrezzo: nega).` }
+        return { consentito: false, via: 'permesso-per-attrezzo-nega', motivo: `the tool "${azione.tipo}" is turned off for this session (per-tool permission: deny).` }
     }
     /*
      * ⛔⛔ F4-03 (owner 01/10/2026 sera) — `'scrittura-progetto'` è «Scrive nel progetto», la politica di serie, che promette
@@ -8575,11 +8992,22 @@ export async function verificaPermessoScrittura(azione, { livelloAccesso, modali
         ? await scritturaFuoriDalProgetto(azione, { cartella, posizioneFn, consensiSessione })
         : null
     const fuoriForzaConferma = Boolean(fuori)
-    if (haOverride && override === 'sempre' && !trifectaChiude && !sempreDaConfermare && !segretoForzaConferma && !fuoriForzaConferma) {
+    /*
+     * ⛔⛔ F-027 (owner 02/10/2026, «+1 con conferma») — DOPO UN CONTENUTO SOSPETTO, IL PASSO CHE CAMBIA QUALCOSA LO DECIDE UNA
+     *   PERSONA. Nel giro è entrato testo che sembra un'istruzione per un'IA (`confine-dati.mjs`, `scansionaIstruzioni`): da lì
+     *   ogni azione che passa da questo cancello chiede, anche con «sempre» e con «Accesso completo» — la stessa forma del segreto
+     *   di F15 qui sopra, e lo stesso «fallisce chiuso» se non c'è un canale per chiedere. È la versione piccola di ROPE (arXiv
+     *   2608.27496: ciò che viene da una fonte non fidata non raggiunge un attrezzo che cambia lo stato senza un'autorità
+     *   dell'utente) e del controllo delle chiamate di goose (`security/scanner.rs:132`).
+     * ⛔ NARROWING PURO: può solo trasformare un sì automatico in una domanda; `nega` resta il primo di tutti. E `leggi` no: una
+     *   lettura non cambia niente (owner, «letture come oggi»).
+     */
+    const sospettoForzaConferma = Boolean(sospetto) && azione.tipo !== 'leggi' && azione.tipo !== 'elenca'
+    if (haOverride && override === 'sempre' && !trifectaChiude && !sempreDaConfermare && !segretoForzaConferma && !fuoriForzaConferma && !sospettoForzaConferma) {
         return { consentito: true, via: 'permesso-per-attrezzo-sempre' }
     }
     if (!soloSegreto && !haOverride && livelloAccesso === 'lettura') {
-        return { consentito: false, via: 'livello-lettura', motivo: 'la sessione è in sola lettura: nessuna scrittura, comando o documento è permesso in questo momento.' }
+        return { consentito: false, via: 'livello-lettura', motivo: 'the session is read-only: no write, command or document is allowed right now.' }
     }
     /*
      * ⭐⭐⭐ L1, 11/09/2026 — il livello `'ricerca'`. Stessa FORMA di `livello-scrittura-area`
@@ -8601,7 +9029,7 @@ export async function verificaPermessoScrittura(azione, { livelloAccesso, modali
             return {
                 consentito: false,
                 via: 'livello-ricerca',
-                motivo: `questa è una ricerca approfondita: può leggere, cercare e navigare, ma l'unica scrittura permessa è il deposito del proprio rapporto con "research_deposit" — "${azione.tipo}" resta negato.`,
+                motivo: `this is a deep research: it can read, search and browse, but the only write allowed is depositing its own report with "research_deposit" — "${azione.tipo}" stays denied.`,
             }
         }
         const radice = azione.radice ? resolve(azione.radice) : null
@@ -8611,7 +9039,7 @@ export async function verificaPermessoScrittura(azione, { livelloAccesso, modali
             return {
                 consentito: false,
                 via: 'livello-ricerca',
-                motivo: `il rapporto di una ricerca si deposita solo nella cartella di quella ricerca: "${azione.percorso ?? '(nessun percorso)'}" non ci risolve dentro.`,
+                motivo: `a research report is deposited only in that research's own folder: "${azione.percorso ?? '(no path)'}" does not resolve inside it.`,
             }
         }
     }
@@ -8627,7 +9055,7 @@ export async function verificaPermessoScrittura(azione, { livelloAccesso, modali
          *   `../` fuori resta negato.
          */
         if (azione.tipo !== 'scrivi' && azione.tipo !== 'file_edit') {
-            return { consentito: false, via: 'livello-scrittura-area', motivo: `la sessione è limitata alla scrittura nel workspace: "${azione.tipo}" resta negato (solo "scrivi" e "file_edit", che portano un percorso verificabile, sono ammessi a questo livello).` }
+            return { consentito: false, via: 'livello-scrittura-area', motivo: `the session is limited to writing in the workspace: "${azione.tipo}" stays denied (only "scrivi" and "file_edit", which carry a verifiable path, are allowed at this level).` }
         }
         // ⛔ cartella assente non è un "vince tutto": senza una radice da
         // controllare, un percorso non verificabile è negato, non permesso.
@@ -8638,7 +9066,7 @@ export async function verificaPermessoScrittura(azione, { livelloAccesso, modali
         catch { posizione = null }
         const dentro = posizione?.verificato === true && posizione.dentro === true
         if (!dentro) {
-            return { consentito: false, via: 'livello-scrittura-area', motivo: `"${azione.percorso}" non risolve dentro il workspace corrente: la sessione è limitata alla scrittura nel workspace.` }
+            return { consentito: false, via: 'livello-scrittura-area', motivo: `"${azione.percorso}" does not resolve inside the current workspace: the session is limited to writing in the workspace.` }
         }
     }
 
@@ -8665,7 +9093,7 @@ export async function verificaPermessoScrittura(azione, { livelloAccesso, modali
      * ⛔ Il canale che manca resta un errore, non un permesso: il ramo `!chiediApprovazioneFn` qui
      * sotto continua a rifiutare chi avrebbe dovuto chiedere.
      */
-    const vaChiesto = sempreDaConfermare || (haOverride && override === 'chiedi') || trifectaForzaConferma || richiestoDalLivello || segretoForzaConferma || fuoriForzaConferma
+    const vaChiesto = sempreDaConfermare || (haOverride && override === 'chiedi') || trifectaForzaConferma || richiestoDalLivello || segretoForzaConferma || fuoriForzaConferma || sospettoForzaConferma
     /*
      * ⛔ F15 — `segreto-forza-conferma` viene PRIMA di «trifecta» e di «per-attrezzo: chiedi»
      * nella scelta della via: quando due meccanismi avrebbero chiesto la stessa cosa, la
@@ -8673,7 +9101,7 @@ export async function verificaPermessoScrittura(azione, { livelloAccesso, modali
      * mezzo» è un fatto sul comando; «l'attrezzo era su chiedi» è un fatto sulle impostazioni.
      * ⛔ F4-03 — `fuori-dal-progetto` subito dopo, per la stessa ragione: è un fatto sul percorso.
      */
-    const viaRichiesta = segretoForzaConferma ? 'segreto-forza-conferma' : fuoriForzaConferma ? 'fuori-dal-progetto' : sempreDaConfermare ? 'attrezzo-sempre-da-confermare' : trifectaForzaConferma ? 'trifecta-forza-conferma' : richiestoDalLivello ? 'livello-su-richiesta' : 'permesso-per-attrezzo-chiedi'
+    const viaRichiesta = segretoForzaConferma ? 'segreto-forza-conferma' : fuoriForzaConferma ? 'fuori-dal-progetto' : sospettoForzaConferma ? 'contenuto-sospetto' : sempreDaConfermare ? 'attrezzo-sempre-da-confermare' : trifectaForzaConferma ? 'trifecta-forza-conferma' : richiestoDalLivello ? 'livello-su-richiesta' : 'permesso-per-attrezzo-chiedi'
     if (!vaChiesto) {
         return { consentito: true, via: 'nessun-vincolo' }
     }
@@ -8682,15 +9110,19 @@ export async function verificaPermessoScrittura(azione, { livelloAccesso, modali
             // ⛔ F15 — al MODELLO si dice il fatto tecnico (è lui che legge questo testo e deve
             //   capire cosa riprovare); la frase in lingua naturale è per la PERSONA, e viaggia
             //   in `azione.segreto.frase` qui sotto. Due destinatari, due testi.
-            ? `il percorso "${segreto.percorso}" appartiene alla classe dei file riservati (chiavi, credenziali, portachiavi): serve una conferma umana anche con un permesso "sempre"`
+            ? (segreto.classe === 'fuori-workspace'
+                ? `the path "${segreto.percorso}" is outside the session folder: reading or listing outside the project needs a human yes`
+                : `the path "${segreto.percorso}" belongs to the class of reserved files (keys, credentials, keychains): a human confirmation is needed even with an "always" permission`)
             : fuoriForzaConferma
-            ? `il percorso "${azione.percorso}" ${fuori.verificato ? `finisce fuori dalla cartella della sessione (in "${fuori.cartella}")` : 'non si è potuto verificare, e potrebbe finire fuori dalla cartella della sessione'}: con «Scrive nel progetto» serve un sì umano`
+            ? `the path "${azione.percorso}" ${fuori.verificato ? `ends up outside the session folder (in "${fuori.cartella}")` : 'could not be verified, and may end up outside the session folder'}: with the project-write policy a human yes is needed`
+            : sospettoForzaConferma
+            ? `this action comes after suspicious content (text that looks like instructions to an AI, ${sospetto.motivi.join(', ')}) read from ${sospetto.fonte}: a human confirmation is needed even with "always"`
             : sempreDaConfermare
-            ? 'questo attrezzo richiede sempre una conferma umana separata, per costruzione — mai un\'eccezione'
+            ? 'this tool always requires a separate human confirmation, by design — never an exception'
             : trifectaForzaConferma
-                ? 'la trifecta si chiude su questa chiamata (dati privati + contenuto non attendibile + un modo per farli uscire): il "sempre" concesso prima non basta più'
-                : richiestoDalLivello ? 'livello di accesso: su-richiesta' : 'permesso per-attrezzo: chiedi'
-        return { consentito: false, via: viaRichiesta, motivo: `l'attrezzo "${azione.tipo}" richiede approvazione (${percheRichiesto}), ma questa sessione non ha un canale di approvazione attivo.` }
+                ? 'the trifecta closes on this call (private data + untrusted content + a way to send them out): the "always" granted earlier is no longer enough'
+                : richiestoDalLivello ? 'access level: on-request' : 'per-tool permission: ask'
+        return { consentito: false, via: viaRichiesta, motivo: `the tool "${azione.tipo}" requires approval (${percheRichiesto}), but this session has no active approval channel.` }
     }
     /*
      * ⛔⛔⛔ LO STOP MENTRE LA DOMANDA È SULLO SCHERMO — 11/09/2026, misurato:
@@ -8734,8 +9166,12 @@ export async function verificaPermessoScrittura(azione, { livelloAccesso, modali
         //   qui avrebbe fatto sparire la trifecta ogni volta che un segreto la precedeva.
         // ⛔ F4-03 — `fuoriDalProgetto` porta la frase per la persona e, se la cartella è verificata, la `chiave` che il registro
         //   ricorda quando la risposta è «Consenti in questa cartella per la sessione».
-        const azioneDaChiedere = (segretoForzaConferma || trifectaForzaConferma || fuoriForzaConferma)
-            ? { ...azione, ...(trifectaForzaConferma ? { trifecta: true } : {}), ...(segretoForzaConferma ? { segreto } : {}), ...(fuoriForzaConferma ? { fuoriDalProgetto: fuori } : {}) }
+        // F-027: la frase per la PERSONA viaggia con la domanda, come quella del segreto — chi risponde deve vedere il perché
+        const contenutoSospetto = sospettoForzaConferma
+            ? { fonte: sospetto.fonte, motivi: sospetto.motivi, luogo: luogoDellaFonte(sospetto.fonte) } // la domanda la scrive l'interfaccia (`kernel.contenutoSospetto.domanda`)
+            : null
+        const azioneDaChiedere = (segretoForzaConferma || trifectaForzaConferma || fuoriForzaConferma || sospettoForzaConferma)
+            ? { ...azione, ...(trifectaForzaConferma ? { trifecta: true } : {}), ...(segretoForzaConferma ? { segreto } : {}), ...(fuoriForzaConferma ? { fuoriDalProgetto: fuori } : {}), ...(contenutoSospetto ? { contenutoSospetto } : {}) }
             : azione
         const domanda = chiediApprovazioneFn(azioneDaChiedere)
         approvato = gara ? await Promise.race([domanda, gara]) : await domanda
@@ -8745,15 +9181,15 @@ export async function verificaPermessoScrittura(azione, { livelloAccesso, modali
         approvato = false
     }
     if (approvato === FERMATO) {
-        return { consentito: false, via: 'fermato-su-richiesta', motivo: `${MOTIVO_FERMATO_CHIEDENDO} per "${azione.tipo}".` }
+        return { consentito: false, via: 'fermato-su-richiesta', motivo: `${MOTIVO_FERMATO_CHIEDENDO} for "${azione.tipo}".` }
     }
     if (!approvato) {
         /* F4-03 — «non approvato» qui copre anche la sessione senza nessuno davanti (automazioni, passi dei Workflow): il registro
            chiude la domanda subito. Al modello si dice cosa fare, non solo che non si può. */
         if (viaRichiesta === 'fuori-dal-progetto') {
-            return { consentito: false, via: viaRichiesta, motivo: `la scrittura fuori dalla cartella della sessione non è stata confermata${fuori.cartella ? ` ("${fuori.cartella}")` : ''}. Non riprovare fuori: scrivi dentro il progetto, o chiedi alla persona cosa preferisce.` }
+            return { consentito: false, via: viaRichiesta, motivo: `writing outside the session folder was not confirmed${fuori.cartella ? ` ("${fuori.cartella}")` : ''}. Do not try again outside: write inside the project, or ask the person what they prefer.` }
         }
-        return { consentito: false, via: viaRichiesta, motivo: 'l\'owner non ha approvato questa azione.' }
+        return { consentito: false, via: viaRichiesta, motivo: 'the owner did not approve this action.' }
     }
     return { consentito: true, via: viaRichiesta }
 }
@@ -9227,6 +9663,8 @@ function confermaEsitoMutazione(risultato, nome) {
 
 export async function talosLavora({
     cartella, task, modello, chiave, comandoProva = 'npm test',
+    /* H-04: chi chiama sa già che la suite non c'è (il desktop: package.json senza scripts.test o col segnaposto di npm init) */
+    provaSenzaSuite = null,
     messaggiIniziali, onGiro, onScrittura, segnaleStop, fetchDiRete, mobile = false,
     /* ⛔ Stop per riga (owner 02/10/2026): `({ toolCallId, ferma }) => sgancia`. Ogni `shell` e `prova` ha il SUO segnale,
        registrato col suo `toolCallId` finché gira: fermarlo chiude quel comando (130, «fermato su richiesta») e il giro continua. */
@@ -9275,6 +9713,7 @@ export async function talosLavora({
     /* 24/09/2026, decisioni owner 36-39: il canale della scelta sul piano (il registro); assente ⇒ l'attrezzo non si offre. */
     presentaPianoFn,
     agentRole = 'root', askParentFn, answerChildQuestionFn, askChildFn, answerParentQuestionFn, onWorkflowPlanPropose,
+    listChildrenFn, stopChildFn, // K3 (F-014, 03/10): elenco e stop dei figli diretti, dal registro
     /*
      * ⭐⭐⭐ P-13 (10/09) — il contesto STABILE del progetto: oggi l'elenco dei file.
      *   Opzionale come tutti gli altri: chi non lo passa (TALOS-BANCO senza la leva
@@ -9495,6 +9934,12 @@ export async function talosLavora({
      * basta, non tiene una coda propria.
      */
     codaMessaggiFn,
+    /*
+     * ⛔ F-027, estensione (owner 03/10/2026): il sospetto della mappa o della scheda del progetto (`contestoDelProgetto().sospetto`),
+     *   passato SOLO nel giro in cui quel preambolo arriva al modello (sessione nuova, o aggiornamento in coda). Accende la stessa
+     *   conferma di un file sospetto letto durante il giro.
+     */
+    sospettoDelContesto = null,
     /*
      * ⛔ Stesso principio di `fetchDiRete`/`unSaltoFn`: il trasporto di rete
      * VERO resta il default (retrocompatibile), ma è iniettabile — senza
@@ -9791,7 +10236,7 @@ export async function talosLavora({
             approvato = gara ? await Promise.race([domanda, gara]) : await domanda
         }
         catch { approvato = false }
-        if (approvato === FERMATO) return { consentito: false, via: 'fermato-su-richiesta', motivo: `${MOTIVO_FERMATO_CHIEDENDO} per "${tipo}".` }
+        if (approvato === FERMATO) return { consentito: false, via: 'fermato-su-richiesta', motivo: `${MOTIVO_FERMATO_CHIEDENDO} for "${tipo}".` }
         if (!approvato) return { consentito: false, via: 'wsl-root', motivo: `${motivo}, and the owner did not confirm it.` }
         consensiSessione.rootWsl = true
         return null
@@ -9997,7 +10442,7 @@ export async function talosLavora({
             approvato = gara ? await Promise.race([domanda, gara]) : await domanda
         }
         catch { approvato = false }
-        if (approvato === FERMATO) return `REFUSED. ${MOTIVO_FERMATO_CHIEDENDO} per "${tipo}".`
+        if (approvato === FERMATO) return `REFUSED. ${MOTIVO_FERMATO_CHIEDENDO} for "${tipo}".`
         if (approvato !== true) return `REFUSED. Nothing was ${verbo}: the person did not allow opening the network path "${percorso}".`
         if (perLaSessione && consensiSessione) consensiSessione.reteCartella = true
         reteConsentitaPerChiamata.add(toolCallId)
@@ -10016,8 +10461,94 @@ export async function talosLavora({
     }
     /* G02-9: il permesso, poi la barriera dell'ospite per le sole azioni che modificano (vedi `primaDiMutazioneFn`).
        F009: `conferma` sta FRA i due — è un'approvazione della persona, e la barriera dell'ospite viene dopo quella. */
+    /*
+     * ⛔⛔ F-027 / H-02 + H-03 (owner 02/10/2026, «+1 con conferma»): il contenuto che arriva da FUORI sta dentro il confine dei
+     *   dati (`confine-dati.mjs`). Fuori dal confine restano le intestazioni che TALOS mette sempre in testa (`[TALOS read …]`,
+     *   `exit N [sandbox: …]`) e gli esiti che sono solo di TALOS; dentro, il corpo che porta il contenuto esterno — comprese le
+     *   note di TALOS SU quel contenuto (un taglio, un rimando a `process_output`), perché separarle da un'uscita che l'attaccante
+     *   controlla non si può fare in modo sicuro (una nota falsificata uscirebbe dal confine).
+     * ⛔ Il PRIMO contenuto sospetto del giro accende la conferma: da lì ogni passo che passa dal cancello chiede, anche con
+     *   «sempre» (come i segreti di F15). Vale per il giro: un messaggio nuovo della persona è un'autorizzazione nuova.
+     */
+    let sospettoDelGiro = sospettoDelContesto && typeof sospettoDelContesto.fonte === 'string' && Array.isArray(sospettoDelContesto.motivi)
+        ? { fonte: sospettoDelContesto.fonte, motivi: [...sospettoDelContesto.motivi], luogo: sospettoDelContesto.luogo ?? luogoDellaFonte(sospettoDelContesto.fonte) }
+        : null
+    let sospettoDellaChiamata = null
+    /* Il testo di un messaggio, anche quando porta immagini (`content` a pezzi). */
+    const testoDelMessaggio = (contenuto) => (typeof contenuto === 'string' ? contenuto
+        : Array.isArray(contenuto) ? contenuto.map((pezzo) => (typeof pezzo?.text === 'string' ? pezzo.text : '')).join('\n') : '')
+    /* K5 (03/10/2026, review del desktop): UN solo modo di far entrare una voce della coda, usato dal blocco di fine turno e
+       da quello dopo gli strumenti, così non possono divergere. Con la voce entra anche F-027: un risultato sospetto di una
+       figlia accende la conferma per il resto del giro, da qualunque dei due punti arrivi. */
+    const consegnaVoceInCoda = (messaggioInCoda) => {
+        messaggi.push({ role: 'user', content: messaggioInCoda })
+        sospettoDelGiro ??= sospettoNeiRisultatiFigli(testoDelMessaggio(messaggioInCoda)) // F-027: un risultato sospetto di una figlia
+    }
+    const avvolgiEsterno =(fonte, opzioniConfine = {}) => (testo) => {
+        if (typeof testo !== 'string' || testo === '') return testo
+        const avvolto = avvolgiDati(testo, { fonte, ...opzioniConfine })
+        if (avvolto.sospetti.length === 0) return avvolto.testo
+        const motivi = [...avvolto.sospetti].sort()
+        sospettoDellaChiamata = { fonte, motivi, luogo: luogoDellaFonte(fonte) } // le parole le mette l'interfaccia, nelle due lingue
+        sospettoDelGiro ??= sospettoDellaChiamata
+        return `${avvisoSospetto(avvolto.sospetti)}\n${avvolto.testo}`
+    }
+    /*
+     * DOVE PASSA IL CONFINE, attrezzo per attrezzo (03/10/2026, rileggendo la prima stesura). ⛔ Un prefisso di testo NON dice chi
+     *   ha scritto un esito: un server MCP che risponde «REFUSED. …», o un file che si chiama «no file matches …», lo imiterebbero e
+     *   uscirebbero dal confine — e dalla scansione. Per questo:
+     *   - dove TALOS mette SEMPRE una sua riga in testa al contenuto esterno (`exit N`, `[TALOS retained process output; …]`,
+     *     `HTTP 200 · …`, `N results for "…"`, `name: …`), la testa resta fuori e il resto va dentro; senza quella riga l'esito è di
+     *     TALOS, perché in quegli attrezzi il contenuto esterno non arriva mai in prima posizione;
+     *   - dove il contenuto esterno può stare in prima posizione (MCP, plugin, attrezzi forgiati, il rapporto di una ricerca, i
+     *     risultati della Libreria) il confine si mette NEL RAMO dell'attrezzo, dove si sa che cosa viene da fuori — qui non si tocca;
+     *   - `cerca` non ha una testa sui risultati: lì gli esiti di TALOS sono le sue frasi fisse, riconosciute per prefisso. È l'unico
+     *     punto imitabile (un percorso che comincia con una di quelle frasi), e lo chiude la riga che segue;
+     *   - ⛔ ciò che resta FUORI dal confine passa comunque dalla scansione: se sembra un'istruzione per un'IA, va dentro tutto.
+     */
+    const TESTA_DEL_COMANDO = /^exit (?:-?\d+|null)(?: \[sandbox: [^\]\n]*\])?\n/u
+    const TESTE_DI_TALOS = new Map([
+        ['shell', TESTA_DEL_COMANDO],
+        ['prova', /^(?:exit (?:-?\d+|null)(?: \[sandbox: [^\]\n]*\])?|NOT RUN: NO_TESTS_RAN — [^\n]*)\n/u], // 03/10: la testa del NOT RUN è di TALOS
+        ['process_output', /^\[TALOS retained process output; [^\n]*\]\n/u],
+        ['naviga', /^HTTP \d{3} · [^\n]*\n/u],
+        ['web_search', /^\d+ results for "[^\n]*"\.\n/u],
+        ['library_read', /^(?=name: )/u], // la testa sta dentro: il nome del file è del file
+    ])
+    const DI_COMANDI = new Set(['shell', 'prova', 'process_output'])
+    const ESITI_DI_CERCA = /^(?:REFUSED\.|NOT FOUND\.|INVALID\.|give at least one of |stopped: the search was interrupted\.|no file matches |no further matches at offset |inconclusive search: |⛔ fermato su richiesta)/u
+    const conConfine = (nome, esito) => {
+        if (typeof esito !== 'string' || esito === '') return esito
+        const opzioniConfine = DI_COMANDI.has(nome) ? { comandi: true } : {}
+        const dentroTutto = () => avvolgiEsterno(nome, opzioniConfine)(esito)
+        const fuori = (testo) => scansionaIstruzioni(testo).length === 0
+        const testa = TESTE_DI_TALOS.get(nome)
+        if (testa) {
+            const trovata = testa.exec(esito)?.[0]
+            if (trovata === undefined) return fuori(esito) ? esito : dentroTutto()
+            if (!fuori(trovata)) return dentroTutto()
+            return `${trovata}${avvolgiEsterno(nome, opzioniConfine)(esito.slice(trovata.length))}`
+        }
+        if (nome === 'cerca') return ESITI_DI_CERCA.test(esito) && fuori(esito) ? esito : dentroTutto()
+        return esito
+    }
+    /*
+     * ⛔ F-027, estensione (owner 03/10/2026): l'elenco di `elenca` porta NOMI di file e di cartelle, che sceglie chi ha scritto il
+     *   progetto — dati come il contenuto di un file. Restano fuori, identiche, le due frasi di TALOS che `elencaDaCartella`
+     *   restituisce al posto di un elenco: riconosciute per RIGA INTERA, non per prefisso (un nome di file che comincia come
+     *   loro non basta). La spiegazione del collegamento Linux va dentro: porta la destinazione del collegamento, che è un dato.
+     *   E come sempre ciò che resta fuori passa dalla scansione.
+     */
+    const FRASI_DI_ELENCA = [
+        /^"[^"\n]*" is not a readable folder of this workspace\. Check the project map you received at the start, or use `cerca` to find where it is\. Note: `elenca` opens FOLDERS — to read a file use `leggi`\.$/u,
+        /^no files and no folders\. (?:"[^"\n]*" is empty|the workspace root is empty) — this is the complete listing, not a failure\.$/u,
+    ]
+    const confineDiElenca = (esito) => {
+        if (typeof esito !== 'string' || esito === '') return esito
+        return FRASI_DI_ELENCA.some((re) => re.test(esito)) && scansionaIstruzioni(esito).length === 0 ? esito : avvolgiEsterno('elenca')(esito)
+    }
     const verificaPermessoConBarriera = async (azione, opzioni, { conferma } = {}) => {
-        const permessoBase = await verificaPermessoScrittura(azione, { posizioneFn: posizioneDelGiro, consensiSessione, ...opzioni })
+        const permessoBase = await verificaPermessoScrittura(azione, { posizioneFn: posizioneDelGiro, consensiSessione, ...opzioni, sospetto: sospettoDelGiro })
         const rifiuto = permessoBase.consentito && typeof conferma === 'function' ? await conferma(permessoBase) : null
         const permesso = rifiuto ?? permessoBase
         if (!permesso.consentito || typeof primaDiMutazioneFn !== 'function' || !AZIONI_MOBILE_PER_ATTREZZO[azione?.tipo]) return permesso
@@ -10035,15 +10566,15 @@ export async function talosLavora({
     const leggiAmbienteComandi = async () => {
         segnaleStop?.throwIfAborted()
         if (ambienteComandiFn === undefined) return { dove: null, revisione: 0 }
-        if (typeof ambienteComandiFn !== 'function') throw new Error('COMMAND_ENVIRONMENT_INVALID: callback non valido.')
+        if (typeof ambienteComandiFn !== 'function') throw new Error('COMMAND_ENVIRONMENT_INVALID: invalid callback.')
         const scelta = await ambienteComandiFn()
         segnaleStop?.throwIfAborted()
         if (!scelta || ![null, 'windows', 'wsl2'].includes(scelta.dove)
             || !Number.isSafeInteger(scelta.revisione) || scelta.revisione < 0) {
-            throw new Error('COMMAND_ENVIRONMENT_INVALID: scelta dei comandi non valida.')
+            throw new Error('COMMAND_ENVIRONMENT_INVALID: invalid command environment choice.')
         }
         if (scelta.dove !== null && (mobile || process.platform !== 'win32')) {
-            throw new Error('COMMAND_ENVIRONMENT_UNSUPPORTED: questa sessione non puo usare una shell Windows/WSL.')
+            throw new Error('COMMAND_ENVIRONMENT_UNSUPPORTED: this session cannot use a Windows/WSL shell.')
         }
         return { dove: scelta.dove, revisione: scelta.revisione }
     }
@@ -10051,7 +10582,7 @@ export async function talosLavora({
     const verificaAmbienteComandi = async () => {
         const attuale = await leggiAmbienteComandi()
         if (attuale.dove !== ambienteDelGiro.dove || attuale.revisione !== ambienteDelGiro.revisione) {
-            throw new Error('COMMAND_ENVIRONMENT_CHANGED: la scelta della shell e cambiata dopo la richiesta al modello. Il comando non e stato eseguito; preparalo per il nuovo ambiente.')
+            throw new Error('COMMAND_ENVIRONMENT_CHANGED: the shell choice changed after the request to the model. The command was not run; prepare it for the new environment.')
         }
     }
     // Executable hooks are not read-only tools. Do not start them for a limited delegate.
@@ -10069,7 +10600,7 @@ export async function talosLavora({
         ? [...ATTREZZI_OPENAI, ...ATTREZZI_ESTESI_OPENAI.filter((a) => strumentiEstesi.includes(a.function.name))]
         : ATTREZZI_OPENAI
     const needsRoleFilter = agentRole === 'child' || (strumentiEstesi ?? []).some((name) =>
-        ['ask_parent', 'answer_parent_question', 'ask_child', 'answer_child_question', 'workflow_plan_propose', 'present_plan', 'request_plan_mode'].includes(name)
+        ['ask_parent', 'answer_parent_question', 'ask_child', 'answer_child_question', 'list_children', 'stop_child', 'workflow_plan_propose', 'present_plan', 'request_plan_mode'].includes(name)
         // F-012 (§1.5): i tre dei run hanno filtri loro (root, runtime presente) — quando chiesti, si filtra
         || ATTREZZI_WORKFLOW.has(name) || name === 'process_output')
     const filterBaseTools = (a, negati = negatiDalLivello) => {
@@ -10082,6 +10613,8 @@ export async function talosLavora({
         /* ⛔ F3-10 (23/09/2026, decisioni owner D02-a/D03-a): il dialogo col figlio è un attrezzo di Normale,
            non di Piano; la proposta Workflow si offre al root in entrambi i modi. */
         if (modalitaOperativa === 'piano' && name === 'ask_child') return false
+        /* K3: senza il canale del registro (banco, una sessione senza figli possibili) i due attrezzi non si offrono */
+        if ((name === 'list_children' && typeof listChildrenFn !== 'function') || (name === 'stop_child' && typeof stopChildFn !== 'function')) return false
         // D1 «Come Claude» (24/09/2026): in Piano si risponde ancora alle figlie vive.
         if (modalitaOperativa === 'piano' && name === 'answer_child_question' && figliViviAllAvvio !== true) return false
         if (name === 'workflow_plan_propose' && (agentRole === 'child' || typeof onWorkflowPlanPropose !== 'function')) return false
@@ -10170,6 +10703,8 @@ export async function talosLavora({
         // F-012 (piano 0.1.19 §1.5, 28/09): del Piano entrano SOLO le due letture dei run —
         // `workflow_control` muove un run e dalla modalità Piano non si tocca niente.
         'workflow_status', 'workflow_output', 'process_output',
+        // K3 (03/10): guardare i propri figli e fermarne uno non tocca il disco (desktop, revisione della proposta)
+        'list_children', 'stop_child',
         // D1 «Come Claude» (24/09/2026): rispondere a una figlia viva non è esecutivo; delegare e chiederle no.
         ...(figliViviAllAvvio === true ? ['answer_child_question'] : []),
     ])
@@ -10235,7 +10770,7 @@ export async function talosLavora({
             }, cerca).then((letta) => letta.value)
             : cerca()
     }
-    const RETE_NON_PARTITA = Symbol('rete: la lettura anticipata non è partita')
+    const RETE_NON_PARTITA = Symbol('network: the early read did not start')
     /* La lettura partita in anticipo, oppure — se non c'è, o se si è fermata davanti alla rete — quella fatta adesso. */
     const anticipataOppure = async (avviate, c, leggiOra) => { const prima = avviate.get(c); const r = prima ? await prima : RETE_NON_PARTITA; return r === RETE_NON_PARTITA ? leggiOra() : r }
     const partenzaDellaLettura = (nome, argomenti) => {
@@ -10248,12 +10783,13 @@ export async function talosLavora({
         if (nome === 'cerca') return seLocale(String(argomenti.dentro ?? '').trim() || '.', () => cercaDelGiro(argomenti))
         if (nome === 'elenca') {
             const base = percorsoDiFile(argomenti)
-            return RISALITA.test(base) || classificaPercorsoDiRete(base) ? null : seLocale(base || '.', () => elencaDelGiro(base, { spiegaErrore: (e) => spiegaCollegamentoLinux('elenca', argomenti, e) }))
+            /* D2: una cartella fuori dal progetto (o un segreto) non si apre in anticipo: prima la domanda, come `leggi`. */
+            return RISALITA.test(base) || classificaPercorsoDiRete(base) || motivoDaChiedere({ tipo: 'elenca', percorso: percorsoDelGiro(base) || '.', cartella, accessoPieno: livelloAccesso === 'accesso-pieno' }) ? null : seLocale(base || '.', () => elencaDelGiro(base, { spiegaErrore: (e) => spiegaCollegamentoLinux('elenca', argomenti, e) }))
         }
         if (nome === 'leggi') {
             const percorso = percorsoDelGiro(percorsoDiFile(argomenti))
             /* Un percorso di rete non parte MAI in anticipo: toccarlo è già il danno (vedi `controllaPercorsoDiRete`). */
-            return percorso === '' || classificaPercorsoDiRete(percorso) || motivoDaChiedere({ tipo: 'leggi', percorso, cartella }) ? null : seLocale(percorso, () => leggiTestoDelGiro(percorso, { offset: argomenti.offset, limit: argomenti.limit, format: argomenti.format, byteOffset: argomenti.byteOffset }))
+            return percorso === '' || classificaPercorsoDiRete(percorso) || motivoDaChiedere({ tipo: 'leggi', percorso, cartella, accessoPieno: livelloAccesso === 'accesso-pieno' }) ? null : seLocale(percorso, () => leggiTestoDelGiro(percorso, { offset: argomenti.offset, limit: argomenti.limit, format: argomenti.format, byteOffset: argomenti.byteOffset }))
         }
         if (nome === 'naviga') return apriPaginaWeb(argomenti.url ?? '')
         if (nome === 'web_search') return ricercaWebConfigurata ? cercaSulWeb(argomenti) : null
@@ -10275,6 +10811,13 @@ export async function talosLavora({
     const ricostruzioneIniziale = ricostruisciContestoIniziale === true && storiaPresente && messaggiIniziali[0]?.role !== 'system'
     if (storiaPresente && !ricostruzioneIniziale) {
         messaggi = [...messaggiIniziali]
+        /*
+         * ⛔ F-027, estensione (owner 03/10/2026): una sessione nata PRIMA del confine ha il suo prompt di sistema di allora, e
+         *   una ripresa non lo riscrive (romperebbe la cache del prefisso). Senza la frase, il modello vedrebbe i confini senza
+         *   sapere che cosa sono. Si APPENDE in coda, come l'aggiornamento del contesto del progetto: una volta, poi è nella storia.
+         */
+        const haLaFrase = messaggi.some((m) => m?.role === 'system' && testoDelMessaggio(m.content).includes(SEGNO_ISTRUZIONE_CONFINE))
+        if (!haLaFrase) messaggi.push({ role: 'system', content: ISTRUZIONE_CONFINE_DATI })
     }
     else {
         const askDisponibile = agentRole !== 'child' && attrezziOpenAI.some((tool) => tool.function?.name === 'ask_user_question')
@@ -10329,7 +10872,7 @@ export async function talosLavora({
             const serialeSonda = await risolviSerialeAdbAttivo()
             if (serialeSonda) {
                 const esitoSonda = await sondaRuntimeMobileNode(serialeSonda)
-                messaggi.push({ role: 'system', content: `[Ambiente del device collegato] ${esitoSonda}` })
+                messaggi.push({ role: 'system', content: `[Environment of the connected device] ${esitoSonda}` })
             }
         }
         if (ricostruzioneIniziale) {
@@ -10339,6 +10882,10 @@ export async function talosLavora({
             messaggi.push({ role: 'user', content: imageMessageContent(task.consegna, task.immagini) })
         }
     }
+    /* ⛔ F-027, estensione: il messaggio che apre il giro può essere il risultato di una figlia (il padre risvegliato dalle
+       deleghe). Se la scansione l'ha trovato sospetto, il giro chiede conferma come dopo un file sospetto. */
+    const ultimoDellaPersona = [...messaggi].reverse().find((m) => m?.role === 'user')
+    if (ultimoDellaPersona) sospettoDelGiro ??= sospettoNeiRisultatiFigli(testoDelMessaggio(ultimoDellaPersona.content))
     // Optional durable admission owned by the session store. It must complete
     // before even the planner can contact a provider; never fabricate a lost
     // system/project prompt later from the visible transcript.
@@ -10511,7 +11058,7 @@ export async function talosLavora({
          */
         if (segnaleStop?.aborted) {
             fermatoSuRichiesta = true
-            puntoDiFermata ??= `prima del giro ${giro + 1}`
+            puntoDiFermata ??= `before round ${giro + 1}`
             break
         }
         turniUsati = giro + 1
@@ -10521,7 +11068,7 @@ export async function talosLavora({
         } catch (errore) {
             if (!segnaleStop?.aborted) throw errore
             fermatoSuRichiesta = true
-            puntoDiFermata ??= `prima del giro ${giro + 1}`
+            puntoDiFermata ??= `before round ${giro + 1}`
             break
         }
         if (ambienteComandiFn && !mobile) {
@@ -10567,7 +11114,7 @@ export async function talosLavora({
             }
             if (segnaleStop?.aborted) {
                 fermatoSuRichiesta = true
-                puntoDiFermata ??= `durante la compattazione, al giro ${giro + 1}`
+                puntoDiFermata ??= `during compaction, at round ${giro + 1}`
                 break
             }
             if (esito.compattato) {
@@ -10636,9 +11183,9 @@ export async function talosLavora({
             if (modalitaAllAvvio === 'piano') {
                 noteInCoda.push({
                     role: 'system',
-                    content: 'Modalità Piano attiva. Esplora e chiarisci il problema; non implementare, non modificare file e non eseguire il lavoro. Restituisci un piano decision-complete. Se una decisione materiale non è ricavabile dall’ambiente, usa ask_user_question.'
+                    content: 'Plan mode is on. Explore and clarify the problem; do not implement, do not modify files and do not carry out the work. Return a decision-complete plan. If a material decision cannot be derived from the environment, use ask_user_question.'
                         + (attrezziOpenAI.some((a) => a.function?.name === 'present_plan')
-                            ? ' Quando il piano è pronto, chiama present_plan con il piano completo in Markdown: è l’unico modo di fartelo approvare.'
+                            ? ' When the plan is ready, call present_plan with the full plan in Markdown: it is the only way to get it approved.'
                             : ''),
                 })
             }
@@ -10677,7 +11224,7 @@ export async function talosLavora({
              */
             if (segnaleStop?.aborted) {
                 fermatoSuRichiesta = true
-                puntoDiFermata ??= `mentre il modello stava rispondendo, al giro ${giro + 1}`
+                puntoDiFermata ??= `while the model was answering, at round ${giro + 1}`
                 break
             }
             // RETRY-02: retain delivered text for explicit recovery, never repeat an uncertain generation.
@@ -10725,7 +11272,7 @@ export async function talosLavora({
                 catch (erroreAttesa) { if (!segnaleStop?.aborted) throw erroreAttesa }
                 if (segnaleStop?.aborted) {
                     fermatoSuRichiesta = true
-                    puntoDiFermata ??= `mentre aspettavo di richiedere una risposta arrivata vuota, al giro ${giro + 1}`
+                    puntoDiFermata ??= `while waiting to ask again after an empty answer, at round ${giro + 1}`
                     break
                 }
                 continue
@@ -10822,7 +11369,7 @@ export async function talosLavora({
                 messaggioInCoda = null
             }
             if (messaggioInCoda) {
-                messaggi.push({ role: 'user', content: messaggioInCoda })
+                consegnaVoceInCoda(messaggioInCoda)
                 continue
             }
             ultimoHaConcluso = Boolean(String(risposta.content ?? '').trim())
@@ -10868,6 +11415,7 @@ export async function talosLavora({
 
         let fermatoDentroIlGiro = false
         for (const c of chiamate) {
+            sospettoDellaChiamata = null // F-027: il segno della scheda è di QUESTA chiamata
             /*
              * ⛔⛔ 08/09/2026 — quello che avevamo già ACCODATO va fermato
              * anche lui. È il limite noto di chi si ferma solo a monte
@@ -10981,9 +11529,28 @@ export async function talosLavora({
                        chiama «elenca», non «gira per il disco», e chi vuole leggere fuori ha `leggi`. */
                     /* 02/10/2026 (owner, «Sì, stessa regola»): un percorso di rete si decide PRIMA di aprire la cartella (`controllaPercorsoDiRete`). */
                     const rifiutoReteElenca = RISALITA.test(base) ? null : await controllaPercorsoDiRete('elenca', base || '.', c.id)
+                    /*
+                     * ⛔⛔⛔ D2 (owner 03/10/2026, «Chiedere sempre, credenziali sempre») — lo stress test della CLI ha elencato
+                     *   `C:/Users/<persona>` con `.ssh` e i file di credenziali: un assoluto non passava da `RISALITA` né da nessun
+                     *   cancello. Ora come `leggi` (F15): se `motivoDaChiedere` dice di chiedere — un segreto, o una cartella fuori
+                     *   da quella della sessione — si chiede alla persona PRIMA di aprire la cartella; un no (o nessun canale per
+                     *   chiedere) non la apre. Una cartella del progetto non sfiora il cancello: bit per bit quella di ieri.
+                     */
+                    const percorsoElenca = percorsoDelGiro(base) || '.'
+                    const daChiedereElenca = RISALITA.test(base) || rifiutoReteElenca ? null : motivoDaChiedere({ tipo: 'elenca', percorso: percorsoElenca, cartella, accessoPieno: livelloAccesso === 'accesso-pieno' })
+                    const permessoElenca = daChiedereElenca
+                        ? await verificaPermessoConBarriera(
+                            { tipo: 'elenca', toolCallId: c.id, percorso: percorsoElenca },
+                            { livelloAccesso, modalitaOperativa, chiediApprovazioneFn, permessiPerAttrezzo, cartella, catena, segnaleStop },
+                        )
+                        : null
+                    const elencoNegato = Boolean(permessoElenca && !permessoElenca.consentito)
                     esito = RISALITA.test(base)
                         ? `REFUSED. "" climbs out of the workspace with "..". \`elenca\` takes a path INSIDE the workspace, e.g. "src" or "src/kernel".`
-                        : rifiutoReteElenca ?? await anticipataOppure(lettureAvviate, c, () => elencaDelGiro(base, { spiegaErrore: (e) => spiegaCollegamentoLinux('elenca', argomenti, e) }))
+                        : rifiutoReteElenca ?? (elencoNegato
+                            ? `REFUSED. ${permessoElenca.motivo} The folder was not listed.`
+                            : confineDiElenca(await anticipataOppure(lettureAvviate, c, () => elencaDelGiro(base, { spiegaErrore: (e) => spiegaCollegamentoLinux('elenca', argomenti, e) }))))
+                    if (elencoNegato) erroreTool = true
                 }
                 else if (nome === 'cerca') {
                     /*
@@ -11033,7 +11600,7 @@ export async function talosLavora({
                     const rifiutoRete = percorso === '' ? null : await controllaPercorsoDiRete('leggi', percorso, c.id)
                     const paginaSalvata = !rifiutoRete && Boolean(cartellaPagineWeb) && percorso !== ''
                         && await eUnaPaginaSalvata(cartellaPagineWeb, percorsoComeDiscoNode(cartella, percorso))
-                    const daChiedere = rifiutoRete || percorso === '' || paginaSalvata ? null : motivoDaChiedere({ tipo: 'leggi', percorso, cartella })
+                    const daChiedere = rifiutoRete || percorso === '' || paginaSalvata ? null : motivoDaChiedere({ tipo: 'leggi', percorso, cartella, accessoPieno: livelloAccesso === 'accesso-pieno' })
                     const permessoLettura = daChiedere
                         ? await verificaPermessoConBarriera(
                             { tipo: 'leggi', toolCallId: c.id, percorso },
@@ -11058,7 +11625,7 @@ export async function talosLavora({
                         ? messaggioArgomentiAssenti('leggi', { troncati: argomentiTroncati.has(c.id) })
                         : permessoLettura && !permessoLettura.consentito
                             ? `REFUSED. ${permessoLettura.motivo} The file was not read.`
-                            : esitoDellaLettura(letta, mostrato(percorso)))
+                            : esitoDellaLettura(letta, mostrato(percorso), { avvolgi: avvolgiEsterno(`leggi ${mostrato(percorso)}`) }))
                     erroreTool = Boolean(rifiutoRete) || percorso === '' || Boolean(permessoLettura && !permessoLettura.consentito)
                 }
                 else if (nome === 'process_output') {
@@ -11404,6 +11971,11 @@ export async function talosLavora({
                             esito = `REFUSED. Nothing was changed: ${mostrato(percorso)} is a binary file (${letto.byte} bytes, it contains NUL bytes), `
                                 + 'and file_edit only edits UTF-8 text. Inspect it with leggi format:"hex"; do not retry file_edit on it.'
                         }
+                        else if (letto?.stato === 'utf16') {
+                            // F-025: `leggi` ne mostra il testo decodificato; qui si dice cos'è davvero e perché non si tocca
+                            esito = `REFUSED. Nothing was changed: ${mostrato(percorso)} is ${letto.nome} text (byte order mark ${letto.bom}), and file_edit only edits UTF-8 text: `
+                                + 'rewriting it would change its encoding. leggi shows its decoded text; do not retry file_edit on it, and tell the person before converting it to UTF-8.'
+                        }
                         else if (letto?.stato === 'non-utf8') {
                             /*
                              * ⛔ F4-01 — il motivo vero, il byte e il suo valore: è quello che serve per capire la codifica (0x80-0x9F
@@ -11419,13 +11991,13 @@ export async function talosLavora({
                              * ⛔ «Non esiste» e' un guasto DIVERSO da «il testo non c'e'», e si dice
                              *   diverso: mandare a rileggere un file che non esiste brucerebbe un giro.
                              */
-                            esito = `REFUSED. Nothing was changed: ${mostrato(percorso)} does not exist, or it cannot be read as text. `
+                            esito = `NOT FOUND. Nothing was changed: ${mostrato(percorso)} does not exist, or it cannot be read as text. `
                                 + 'Check the path with `elenca` or `cerca`; to create a new file use `scrivi`.'
                         }
                         else {
                             const sostituzione = applicaSostituzione(contenutoPrima, vecchio, nuovo, { tutte: sostituzioneSuTutteRichiesta(argomenti) })
                             if (!sostituzione.ok) {
-                                esito = messaggioSostituzioneRifiutata(mostrato(percorso), sostituzione)
+                                esito = messaggioSostituzioneRifiutata(mostrato(percorso), sostituzione, { contenuto: contenutoPrima, vecchio, nuovo })
                             }
                             else {
                                 const misuraModifica = misuraRicordata() // rilievo 1 di Codex: la seconda misura prima di scrivere
@@ -11557,10 +12129,11 @@ export async function talosLavora({
                     else {
                         // BC-57: dichiarare una suite assente prima di tentare il comando.
                         await verificaAmbienteComandi()
-                        const manca = await suiteMancante(comandoProva, cartella, { dove: doveDelGiro() })
+                        const manca = provaSenzaSuite ?? await suiteMancante(comandoProva, cartella, { dove: doveDelGiro() })
                         if (manca) {
-                            p = { codice: USCITA_NESSUNA_SUITE, testo: `nessuna suite trovata in ${cartella}: ${manca}` }
-                            esito = `exit ${p.codice}\n${p.testo}`
+                            // H-04: NOT RUN, nessun codice d'uscita (non è partito niente), e i runner del progetto come mossa dopo
+                            p = { codice: null, nonEseguita: true, testo: messaggioProvaNonEseguita(cartella, manca, await runnerDiTestNelProgetto(cartella)) }
+                            esito = p.testo
                             /* ⭐ OSS-2 — il comando si dichiara anche qui: e' cio' che spiega il rifiuto. Nessuna `durataMs`: non e' girato niente, e uno zero direbbe «istantaneo». */
                             processoPerEvento = { comando: comandoProva, cwd: cartella }
                         }
@@ -11577,13 +12150,14 @@ export async function talosLavora({
                             finally { fermabile.sgancia() }
                             processoPerEvento = { durataMs: Math.round(performance.now() - primaDiProvare), comando: comandoProva, cwd: cartella }
                             /* F009: una prova girata in Linux dichiara con che utente, come la shell (owner: «dichiararlo sempre»). */
-                            esito = p.enforcement === 'wsl2'
-                                ? `exit ${p.codice} [sandbox: ${etichettaSandbox(p.enforcement, p.wsl)}]\n${p.testo}`
-                                : `exit ${p.codice}\n${p.testo}`
+                            const sandboxProva = p.enforcement === 'wsl2' ? ` [sandbox: ${etichettaSandbox(p.enforcement, p.wsl)}]` : ''
+                            esito = p.nessunTestEseguito
+                                ? messaggioNessunTestEseguito(p, sandboxProva)
+                                : `exit ${p.codice}${sandboxProva}\n${p.testo}`
                         }
                     }
                     // ⭐ FASE D — 'prova' non produce un artefatto testuale: hashContenuto resta null, non un valore inventato.
-                    erroreTool = !permesso.consentito || p?.codice !== 0 || p?.outputStorageFailed === true
+                    erroreTool = !permesso.consentito || p?.codice !== 0 || p?.outputStorageFailed === true // H-04: un NOT RUN (codice null) non è un successo
                     if (Number.isSafeInteger(p?.codice)) processoPerEvento = { ...processoPerEvento, exitCode: p.codice }
                     ricevutaEmessa = true
                     {
@@ -11756,7 +12330,7 @@ export async function talosLavora({
                     const titolo = String(argomenti.titolo ?? '').trim().slice(0, 120) || 'Artefatto'
                     const html = String(argomenti.html ?? '')
                     if (!html.trim()) {
-                        esito = 'REFUSED. Empty html: nothing was created.'
+                        esito = 'INVALID. Empty html: nothing was created.'
                     }
                     else if (typeof onArtefatto !== 'function') {
                         esito = 'ARTIFACT_UNAVAILABLE: artifact creation is not configured on this harness. Nothing was created.'
@@ -12670,7 +13244,7 @@ export async function talosLavora({
                      */
                     const strutturato = argomenti.affermazioni !== undefined || argomenti.fonti !== undefined
                     const aParti = argomenti.parte !== undefined
-                    let composto = aParti ? { ok: false, motivo: 'Il deposito a parti richiede il compositore della ricerca; nessuna parte è stata scritta.' } : null
+                    let composto = aParti ? { ok: false, daNoi: true, motivo: 'A multi-part deposit needs the research composer; no part was written.' } : null
                     // BC-49: il compositore ora può registrare checkpoint; il permesso precede ogni effetto.
                     if ((strutturato || aParti) && permesso.consentito && idBuono && typeof componiRapportoRicercaFn === 'function') {
                         /*
@@ -12708,11 +13282,11 @@ export async function talosLavora({
                              *   `testo` com'è), che è il comportamento di prima di L8. `null` è proprio
                              *   ciò che quella strada legge.
                              */
-                            composto = aParti ? { ok: false, motivo: 'La parte non è stata confermata sul disco. Riprova lo stesso indice con gli stessi contenuti.' } : null
+                            composto = aParti ? { ok: false, daNoi: true, motivo: 'The part was not confirmed on disk. Try the same index again with the same contents.' } : null
                         }
                     }
                     if (aParti && composto?.ok && composto.parziale !== true && composto.giaScritto !== true) {
-                        composto = { ok: false, motivo: 'Questo compositore non supporta ancora il deposito a parti; nessuna sezione è stata pubblicata.' }
+                        composto = { ok: false, daNoi: true, motivo: 'This composer does not support multi-part deposits yet; no section was published.' }
                     }
                     const testoDaScrivere = composto?.ok ? composto.documento : testoRapporto
                     let rapportoScritto = null
@@ -12724,7 +13298,7 @@ export async function talosLavora({
                         esito = 'research_deposit is only available inside a deep research session: this session is not one, so there is no research folder to deposit into.'
                     }
                     else if (!aParti && !testoRapporto.trim()) {
-                        esito = 'REFUSED. Empty report: nothing was deposited. Write the full report text in `testo`.'
+                        esito = 'INVALID. Empty report: nothing was deposited. Write the full report text in `testo`.'
                     }
                     /*
                      * ⛔⛔ IL RIFIUTO A PAROLE, E NESSUN FILE. Un argomento mal formato non è un
@@ -12735,7 +13309,9 @@ export async function talosLavora({
                      *   togliere. Il motivo arriva dal compositore e NOMINA l'indice e il campo.
                      */
                     else if (composto && composto.ok === false) {
-                        esito = `REFUSED. ${composto.motivo} Nothing was written: call research_deposit again with that fixed — everything you already found is still valid.`
+                        /* H-05: le parti malformate sono INVALID; ciò che manca o si guasta dalla NOSTRA parte (compositore assente, disco
+                           che non conferma, compositore senza parti) è FAILED — non un argomento sbagliato, e non un rifiuto di sicurezza. */
+                        esito = `${composto.daNoi ? 'FAILED.' : 'INVALID.'} ${composto.motivo} Nothing was written: call research_deposit again with that fixed — everything you already found is still valid.`
                     }
                     else if (aParti && composto?.parziale) {
                         esito = composto.messaggio
@@ -12919,7 +13495,11 @@ export async function talosLavora({
                                 const grezzo = await onLibreriaCerca(argomenti)
                                 /* ⛔ BC-10: come il fratello `library_list` — il totale dei risultati è il fondo vero di questa ricerca. */
                                 registraEsitoDiSfogliamento({ registro: sfogliamenti, nome, argomenti, risultato: grezzo })
-                                const testo = formattaRicercaLibreria(grezzo)
+                                /* F-027: nomi ed estratti dei file dentro il confine; la riga di TALOS in testa e la coda del tetto fuori. */
+                                const formattata = formattaRicercaLibreria(grezzo)
+                                const finePrimaRiga = grezzo?.pagina?.length > 0 ? formattata.indexOf('\n\n') : -1
+                                const testo = finePrimaRiga === -1 ? formattata
+                                    : `${formattata.slice(0, finePrimaRiga + 2)}${avvolgiEsterno('library_search')(formattata.slice(finePrimaRiga + 2))}`
                                 esito = sfoglia.coda ? `${testo}\n\n${sfoglia.coda}` : testo
                             }
                             catch (rotto) {
@@ -12967,6 +13547,10 @@ export async function talosLavora({
                     else {
                         try {
                             esito = uscitaUtile(String(await onLetturaSezione(nome, argomenti ?? {})), 16_000, 0.25)
+                            /* F-027: le conversazioni passate riportano pagine, file e uscite già lette, e i rapporti di ricerca sono
+                               scritti sulle pagine del web: contenuto venuto da fuori, dentro il confine. Note, attività e memoria no:
+                               le scrive la persona o l'agente. Il messaggio di un guasto resta di TALOS (ramo `catch`). */
+                            if (nome === 'conversation_search' || nome === 'research_search') esito = avvolgiEsterno(nome)(esito)
                         }
                         catch (rotto) {
                             esito = `${nome} failed: ${rotto instanceof Error ? rotto.message : String(rotto)}`
@@ -12989,6 +13573,9 @@ export async function talosLavora({
                     else {
                         try {
                             esito = uscitaUtile(String(await onWorkflowFn(nome, argomenti ?? {})), 16_000, 0.25)
+                            /* F-027, estensione (03/10/2026): l'uscita di un run porta ciò che i suoi agenti hanno letto e scritto. Lo stato e
+                               i comandi del run sono di TALOS e restano fuori. */
+                            if (nome === 'workflow_output') esito = avvolgiEsterno('workflow_output')(esito)
                         }
                         catch (rotto) {
                             esito = `${nome} failed: ${rotto instanceof Error ? rotto.message : String(rotto)}`
@@ -13092,7 +13679,10 @@ export async function talosLavora({
                     }
                     else {
                         try {
-                            esito = formattaLetturaRicerca(await onRicercaLeggi(argomenti))
+                            const letta = await onRicercaLeggi(argomenti)
+                            esito = formattaLetturaRicerca(letta)
+                            // F-027: il rapporto è scritto da un modello sulle pagine del web — dentro il confine; il resto è di TALOS
+                            if (letta?.trovata && letta.contenutoRapporto !== null) esito = avvolgiEsterno('research_read')(esito)
                         }
                         catch (rotto) {
                             esito = `research_read failed: ${rotto instanceof Error ? rotto.message : String(rotto)}`
@@ -13203,6 +13793,30 @@ export async function talosLavora({
                             ? 'REFUSED. ask_child requires a parent channel.'
                             : JSON.stringify(await askChildFn(argomenti))
                 }
+                else if (nome === 'list_children') {
+                    esito = !listChildrenFn
+                        ? 'REFUSED. list_children requires a parent channel.'
+                        : JSON.stringify(await listChildrenFn(argomenti && typeof argomenti === 'object' ? argomenti : {}))
+                }
+                else if (nome === 'stop_child') {
+                    /* K3: il permesso dell'attrezzo vale («sempre» di serie; «nega» e «chiedi» della persona sì). Ferma lavoro che il
+                       modello stesso ha avviato e non tocca il disco: anche in Piano, quindi il controllo non passa dal ramo di Piano. */
+                    const override = permessiPerAttrezzo?.stop_child
+                    const permessoStop = override === 'nega'
+                        ? { consentito: false, motivo: 'the tool "stop_child" is turned off for this session (per-tool permission: deny).' }
+                        : override === 'chiedi'
+                            ? await verificaPermessoConBarriera(
+                                { tipo: 'stop_child', toolCallId: c.id, childId: String(argomenti?.childId ?? '') },
+                                { livelloAccesso, modalitaOperativa: 'normale', chiediApprovazioneFn, permessiPerAttrezzo, cartella, catena, segnaleStop },
+                            )
+                            : null
+                    esito = !stopChildFn
+                        ? 'REFUSED. stop_child requires a parent channel.'
+                        : permessoStop && !permessoStop.consentito
+                            ? `REFUSED. ${permessoStop.motivo} No agent was stopped.`
+                            : JSON.stringify(await stopChildFn(argomenti && typeof argomenti === 'object' ? argomenti : {}))
+                    if (permessoStop && !permessoStop.consentito) erroreTool = true
+                }
                 else if (nome === 'answer_parent_question') {
                     esito = agentRole !== 'child' || !answerParentQuestionFn
                         ? 'REFUSED. answer_parent_question requires a child agent.'
@@ -13257,11 +13871,11 @@ export async function talosLavora({
                      * inventa una regola sul filesystem che non è in grado di verificare.
                      */
                     else if (argomenti.cartella !== undefined && argomenti.cartella !== null && typeof argomenti.cartella !== 'string') {
-                        esito = 'REFUSED. cartella must be a string (an absolute path), or omitted to work in the same folder as you. No child was started.'
+                        esito = 'INVALID. cartella must be a string (an absolute path), or omitted to work in the same folder as you. No child was started.'
                     }
                     else if (argomenti.modalita !== undefined && !['lettura', 'modifica'].includes(argomenti.modalita)) {
                         erroreTool = true
-                        esito = 'REFUSED. modalita must be lettura or modifica. No child was started.'
+                        esito = 'INVALID. modalita must be lettura or modifica. No child was started.'
                     }
                     else {
                         const cartellaFiglio = typeof argomenti.cartella === 'string' && argomenti.cartella.trim() !== ''
@@ -13274,8 +13888,15 @@ export async function talosLavora({
                                 erroreTool = true
                                 esito = `REFUSED. ${risultato.motivo ?? 'the delegation was refused.'} No child was started.`
                             }
-                            else {
+                            else if (risultato?.esito === 'avviato') {
                                 esito = risultato?.riassunto ?? '(no summary returned)'
+                            }
+                            else {
+                                /* F-027, estensione (03/10/2026): un host che aspetta la figlia restituisce il SUO riassunto, che è contenuto
+                                   di fuori come un file (la figlia ha letto quello che ha letto). L'«avviato» e i rifiuti sono di TALOS. */
+                                esito = typeof risultato?.riassunto === 'string' && risultato.riassunto !== ''
+                                    ? avvolgiEsterno('delega')(risultato.riassunto)
+                                    : '(no summary returned)'
                             }
                         }
                         catch (rotto) {
@@ -13299,10 +13920,11 @@ export async function talosLavora({
                     else {
                         try {
                             const risultato = await chiamaToolMcpFn(nome, argomenti)
-                            esito = formattaEsitoMcp(risultato)
+                            esito = avvolgiEsterno(`mcp ${nome}`)(formattaEsitoMcp(risultato)) // F-027: tutto ciò che torna è del server
                         }
                         catch (rotto) {
-                            esito = `MCP tool call failed: ${rotto instanceof Error ? rotto.message : String(rotto)}`
+                            // F-027: il messaggio d'errore può essere del server (JSON-RPC `error.message`)
+                            esito = avvolgiEsterno(`mcp ${nome}`)(`MCP tool call failed: ${rotto instanceof Error ? rotto.message : String(rotto)}`)
                         }
                     }
                 }
@@ -13319,10 +13941,11 @@ export async function talosLavora({
                     }
                     else {
                         try {
-                            esito = await eseguiToolPluginFn(nome, argomenti)
+                            const uscita = await eseguiToolPluginFn(nome, argomenti)
+                            esito = typeof uscita === 'string' ? avvolgiEsterno(`plugin ${nome}`)(uscita) : uscita // F-027
                         }
                         catch (rotto) {
-                            esito = `plugin tool call failed: ${rotto instanceof Error ? rotto.message : String(rotto)}`
+                            esito = avvolgiEsterno(`plugin ${nome}`)(`plugin tool call failed: ${rotto instanceof Error ? rotto.message : String(rotto)}`)
                         }
                     }
                 }
@@ -13345,10 +13968,10 @@ export async function talosLavora({
                     }
                     else {
                         try {
-                            esito = formattaEsitoForge(await eseguiToolForgeFn(nome, argomenti))
+                            esito = avvolgiEsterno(`tool ${nome}`)(formattaEsitoForge(await eseguiToolForgeFn(nome, argomenti))) // F-027
                         }
                         catch (rotto) {
-                            esito = `forged tool call failed: ${rotto instanceof Error ? rotto.message : String(rotto)}`
+                            esito = avvolgiEsterno(`tool ${nome}`)(`forged tool call failed: ${rotto instanceof Error ? rotto.message : String(rotto)}`)
                         }
                     }
                 }
@@ -13368,7 +13991,7 @@ export async function talosLavora({
                         esito = 'skill loading is not configured on this harness: no skill channel was set.'
                     }
                     else if (!skillsDisponibili.some((s) => s.name === argomenti.nome)) {
-                        esito = `REFUSED. "${argomenti.nome}" is not a known skill. Available: ${skillsDisponibili.map((s) => s.name).join(', ')}.`
+                        esito = `NOT FOUND. "${argomenti.nome}" is not a known skill. Available: ${skillsDisponibili.map((s) => s.name).join(', ')}.`
                     }
                     else {
                         try {
@@ -13437,12 +14060,13 @@ export async function talosLavora({
             }
 
             /* ⛔ L'unico posto che produce questa frase e' `verificaPermessoScrittura` quando il segnale vince la gara con la domanda: la costante lega i due capi, non e' una stringa cercata a caso. */
-            if (String(esito).includes(MOTIVO_FERMATO_CHIEDENDO)) puntoDiFermata ??= `mentre aspettavo la tua approvazione per "${nome}"`
+            if (contieneMotivoFermatoChiedendo(esito)) puntoDiFermata ??= `while waiting for your approval for "${nome}"`
             /* Stop per riga: un comando fermato dalla SUA riga porta la stessa marca, ma il giro continua — il punto di fermata
                del giro si scrive solo se a fermarsi è il giro. */
-            if (segnaleStop?.aborted && String(esito).includes(MARCA_FERMATO_MENTRE_GIRAVA)) puntoDiFermata ??= `mentre "${nome}" era in corso`
+            if (segnaleStop?.aborted && contieneMarcaFermatoMentreGirava(esito)) puntoDiFermata ??= `while "${nome}" was running`
             /* ⛔ 27/09/2026 (era il rattoppo T-03 del pacchetto desktop): senza motore del contesto l'uscita si taglia
                DICHIARANDO quanto manca (testa + coda, `uscitaUtile`), non con uno `slice` muto che si legge «era tutto qui». */
+            esito = conConfine(nome, esito) // F-027: il contenuto esterno nel confine, prima del taglio e dell'evento
             const contenutoTool = contextHooks ? String(esito) : uscitaUtile(String(esito), 8_000, 0.5)
             messaggi.push({
                 role: 'tool',
@@ -13453,7 +14077,8 @@ export async function talosLavora({
             /* ⭐ OSS-1/OSS-2 — i campi del processo, quando il ramo li ha misurati. Spread e non chiavi
                fisse: chi non misura non manda `durataMs: undefined`, che in JSON diventerebbe una
                chiave fantasma e romperebbe i `deepStrictEqual` gia' scritti altrove. */
-            onGiro?.({ giro, tipo: 'tool-esito', toolCallId: c.id, content: contenutoTool, ...(processoPerEvento ?? {}), ...(typeof erroreTool === 'boolean' ? { isError: erroreTool } : {}) })
+            onGiro?.({ giro, tipo: 'tool-esito', toolCallId: c.id, content: contenutoTool, ...(processoPerEvento ?? {}), ...(typeof erroreTool === 'boolean' ? { isError: erroreTool } : {}),
+                ...(sospettoDellaChiamata ? { contenutoSospetto: sospettoDellaChiamata } : {}) })
         }
 
         if (fermatoDentroIlGiro) {
@@ -13466,11 +14091,11 @@ export async function talosLavora({
              */
             const gia = new Set(messaggi.filter((m) => m.role === 'tool').map((m) => m.tool_call_id))
             const nomiNonEseguiti = chiamate.filter((c) => !gia.has(c.id)).map((c) => c.function?.name ?? '?')
-            puntoDiFermata ??= `mentre lavoravo con gli attrezzi del giro ${giro + 1}`
-            if (nomiNonEseguiti.length > 0) puntoDiFermata += `; ${nomiNonEseguiti.length} non eseguito/i (${nomiNonEseguiti.join(', ')})`
+            puntoDiFermata ??= `while working with the tools of round ${giro + 1}`
+            if (nomiNonEseguiti.length > 0) puntoDiFermata += `; ${nomiNonEseguiti.length} not run (${nomiNonEseguiti.join(', ')})`
             for (const c of chiamate) {
                 if (gia.has(c.id)) continue
-                const contenutoFermato = '⛔ fermato su richiesta: questo attrezzo non e stato eseguito.'
+                const contenutoFermato = FRASE_FERMATO_NON_ESEGUITO
                 messaggi.push({ role: 'tool', tool_call_id: c.id, content: contenutoFermato })
                 onGiro?.({ giro, tipo: 'tool-esito', toolCallId: c.id, content: contenutoFermato, isError: true })
             }
@@ -13496,6 +14121,32 @@ export async function talosLavora({
         if (ripetizione) {
             fermatoPerRipetizione = ripetizione
             break
+        }
+
+        /*
+         * ⭐⭐ K5 (owner 03/10/2026, «Come Claude Code, completo»; patch approvata dalla lane desktop) — ciò che la persona
+         * ha messo in coda mentre gli strumenti giravano entra SUBITO dopo i loro risultati, nella stessa chiamata al
+         * modello, non a fine lavoro. Così Codex (`tui/src/bottom_pane/pending_input_preview.rs:96`, «Messages to be
+         * submitted after next tool call»), Pi (`packages/agent/README.md:395-430`, lo steering entra dopo gli strumenti)
+         * e Claude Code (doc interactive-mode, «Queue messages while Claude works»).
+         * Tutte le voci, in ordine. `codaMessaggiFn` resta l'unico punto di consegna: `QueuedMessageDelivered` parte
+         * quando la voce entra qui, la pausa e un reindirizzamento pendente la tengono ferma come prima.
+         * ⛔ Uno Stop arrivato durante gli strumenti non consuma la coda: il messaggio resta alla persona.
+         * ⛔ Il blocco di fine turno (zero chiamate, sopra) resta com'è: un messaggio accodato mentre il modello scrive
+         *   solo testo esce da lì, una volta sola.
+         */
+        if (!segnaleStop?.aborted) {
+            for (;;) {
+                let messaggioInCoda = null
+                try {
+                    messaggioInCoda = codaMessaggiFn?.() ?? null
+                }
+                catch {
+                    messaggioInCoda = null // stessa disciplina del blocco di fine turno: una coda che lancia è vuota
+                }
+                if (!messaggioInCoda) break
+                consegnaVoceInCoda(messaggioInCoda)
+            }
         }
 
     }
@@ -13527,7 +14178,7 @@ export async function talosLavora({
     const comeFinita = fermatoSuRichiesta
         ? {
             esito: 'fermato',
-            detto: puntoDiFermata ? `⛔ interrotto su richiesta: ${puntoDiFermata}.` : '⛔ interrotto su richiesta.',
+            detto: puntoDiFermata ? `⛔ stopped on request: ${puntoDiFermata}.` : '⛔ stopped on request.',
         }
         /*
          * ⛔ Un esito SUO, e una frase che una persona capisce senza sapere
@@ -13538,13 +14189,13 @@ export async function talosLavora({
         : fermatoPerRipetizione
             ? {
                 esito: 'ripetizione',
-                detto: `⛔ il modello ha chiesto ${fermatoPerRipetizione.viste} volte la stessa identica cosa`
-                    + ` nella stessa risposta ("${fermatoPerRipetizione.nome}" con gli stessi argomenti),`
-                    + ' e continuava: la risposta e stata chiusa li. Le prime copie sono state eseguite,'
-                    + ' le altre no. Non e un limite sul numero di attrezzi — richieste DIVERSE nello stesso'
-                    + ' giro passano tutte. Succede con i modelli locali quando il decoder entra in ripetizione'
-                    + ' (llama.cpp/ik_llama.cpp, difetto noto): con un altro modello, o un altro quantizzato,'
-                    + ' di solito non si ripresenta.',
+                detto: `⛔ the model asked ${fermatoPerRipetizione.viste} times for the very same thing`
+                    + ` in the same answer ("${fermatoPerRipetizione.nome}" with the same arguments),`
+                    + ' and kept going: the answer was closed there. The first copies were run,'
+                    + ' the others were not. This is not a limit on the number of tools — DIFFERENT requests in the same'
+                    + ' round all go through. It happens with local models when the decoder falls into repetition'
+                    + ' (llama.cpp/ik_llama.cpp, a known defect): with another model, or another quantization,'
+                    + ' it usually does not come back.',
             }
             : comeSonoFinitiIGiri({
             giroRaggiunto: turniUsati,

@@ -3478,3 +3478,15 @@ test('⛔⛔ A2 — se il pacchetto non si legge più, l\'attrezzo NON gira e lo
     rimuoviCartellaDiProva(cartellaTrust);
   }
 });
+
+test('K3B-AGENT-01 — la lingua dell\'interfaccia arriva al kernel; senza lingua il kernel non la riceve', async () => {
+  const visti = [];
+  for (const linguaInterfaccia of ['en', null]) {
+    await avviaSessione({ cartella: '/tmp/x', task: { consegna: 'prova' }, modello: 'm', chiave: 'k',
+      onEvento: () => {}, linguaInterfaccia,
+      talosLavoraFn: talosLavoraFinto({ script: { esito: { comeFinita: 'concluso', detto: 'fatto' } }, cattura: (input) => { visti.push(input); } }),
+    });
+  }
+  assert.equal(visti[0].linguaInterfaccia, 'en');
+  assert.equal('linguaInterfaccia' in visti[1], false);
+});

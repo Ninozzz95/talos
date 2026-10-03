@@ -1880,6 +1880,9 @@ test('TOOL-BATCH-REASONING-VISIBILE-02 — un ragionamento CON testo fra due com
   expect(esito).toEqual({ segmenti: 1, voci: 3, reasoningHidden: false, ordine: true });
 });
 
+/* ⛔ 03/10/2026: la suite è fissata all'italiano (playwright.config.mjs, `locale`). Queste quattro guardano le frasi INGLESI del
+ *   segmento e delle righe (prima arrivavano dal locale en-US di Chromium, per caso): l'inglese si chiede qui, dichiarato. */
+test.describe('in inglese', () => { test.use({ locale: 'en-US' });
 test('TOOL-LIFECYCLE-SAME-ROW-01 — start, argomenti ed esito aggiornano la stessa riga', async ({ page }) => {
   await apriChat(page);
   const result = await page.evaluate(() => {
@@ -2032,6 +2035,7 @@ test('TOOL-LIFECYCLE-ERROR-01 — l’errore conclude la riga e aggiorna il batc
     rowText: '1 command failed', // 26/09: le parole delle specie (D1), tradotte — questa prova gira in inglese
     batches: ['1 command (1 error)', 'Reading 1 file…'], // 26/09: le parole del segmento (D1), tutte tradotte (prima la testa restava italiana)
   });
+});
 });
 
 /*

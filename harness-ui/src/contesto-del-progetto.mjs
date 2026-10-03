@@ -78,6 +78,30 @@ import { costruisciMappaCartelle, mappaEntroIlTetto, TETTO_TOKEN_MAPPA_PREDEFINI
 import { istruzioniDiProgetto, trovaRadiceProgetto, TETTO_BYTE_PREDEFINITO } from './istruzioni-di-progetto.mjs';
 import { schedaDiLavoro } from './scheda-di-lavoro.mjs';
 import { costoElenco } from './costo-elenco.mjs';
+import { createHash } from 'node:crypto';
+import { avvolgiDati, avvisoSospetto, luogoDellaFonte } from './kernel/confine-dati.mjs';
+
+/*
+ * ⛔ F-027, estensione (owner 03/10/2026, «Sì, tutti e quattro»): l'albero delle cartelle e le righe della scheda che vengono dal
+ *   progetto entrano nel confine dei dati, come il contenuto di un file letto. Hermes, che una mappa non ce l'ha, scansiona i file
+ *   di contesto e li blocca se sospetti (`agent/prompt_builder.py:83-114`, `_scan_context_content`, letto il 03/10/2026).
+ * ⛔ Il codice del confine NON è casuale qui, ed è voluto: il preambolo deve restare byte-identico fra un giro e l'altro (è la
+ *   cache del prefisso, e `aggiornamentoInCoda` confronta per uguaglianza). È uno per FONTE (sha256 di un'etichetta fissa), né
+ *   dal contenuto né dal percorso:
+ *   - dal contenuto, se cambia git il codice della scheda cambierebbe con lei, e il primo byte diverso fra due sessioni sulla
+ *     stessa cartella salirebbe alla prima riga della scheda invece di restare sulla riga cambiata davvero (BC48-MINUTO);
+ *   - dal percorso, il prefisso non sarebbe più identico fra due macchine sullo stesso progetto, che è la ragione per cui la
+ *     scheda dice il NOME della cartella e non il percorso (`scheda-di-lavoro.mjs`).
+ *   Non indebolisce il confine: il codice serve ad appaiare le due righe, e un contenuto non può chiuderlo comunque, perché il
+ *   marcatore dentro il contenuto è disinnescato (`TALOS-DATA`, F027-FALSIFICARE).
+ */
+function confineStabile(fonte) {
+  return (testo) => {
+    const nonce = createHash('sha256').update(`talos-preambolo\0${fonte}`).digest('hex').slice(0, 12);
+    const avvolto = avvolgiDati(testo, { fonte, nonce });
+    return { testo: avvolto.sospetti.length ? `${avvisoSospetto(avvolto.sospetti)}\n${avvolto.testo}` : avvolto.testo, sospetti: avvolto.sospetti };
+  };
+}
 
 /**
  * Quanto a lungo un preambolo resta buono senza che nessuno dica che i file sono cambiati.
@@ -190,10 +214,13 @@ async function costruisciPreambolo({ cartella, creaFiltro, permesso, modello, pi
    *   Ma i due modi di degradare NON sono lo stesso, e la differenza è quella che il 10/09 è
    *   costata 25.163 token invece di 6.518 — vedi `filtroGitignore()` qui sotto.
    */
+  let sospettiScheda = [];
+  const confineScheda = confineStabile('scheda');
   const [mappa, istruzioni, scheda, nomeProgetto] = await Promise.all([
     costruisciMappaCartelle({ radice: cartella, filtro, fs: deps.fs }).catch(() => null),
     istruzioniDiProgetto({ cartella, tetto: tettoIstruzioni, fs: deps.fs }),
-    schedaDiLavoro({ cartella, permesso, modello, piattaforma, statoVolatile, fs: deps.fs, eseguiGit: deps.eseguiGit }).catch(() => null),
+    schedaDiLavoro({ cartella, permesso, modello, piattaforma, statoVolatile, fs: deps.fs, eseguiGit: deps.eseguiGit,
+      confine: (righe) => { const r = confineScheda(righe); sospettiScheda = r.sospetti; return r.testo; } }).catch(() => null),
     trovaRadiceProgetto(cartella, { fs: deps.fs }).catch(() => null),
   ]);
 
@@ -225,7 +252,7 @@ async function costruisciPreambolo({ cartella, creaFiltro, permesso, modello, pi
    *   caso peggiore, che e' l'unico che conta. Qui si taglia in PROFONDITA' finche' non entra, e
    *   il testo lo dichiara.
    */
-  const resaMappa = mappaHaSostanza ? mappaEntroIlTetto(mappa, { radice: cartella, tettoToken: tettoTokenMappa }) : null;
+  const resaMappa = mappaHaSostanza ? mappaEntroIlTetto(mappa, { radice: cartella, tettoToken: tettoTokenMappa, confine: confineStabile('mappa') }) : null;
   if (resaMappa) pezzi.push(resaMappa.testo);
   pezzi.push(scheda?.testo ?? `${INIZIO_SCHEDA}non sono riuscito a leggere lo stato di questa cartella; quello che precede e' comunque vero.`);
   /* Doppio a-capo fra i blocchi: sono tre cose diverse, e un modello che legge un muro di testo
@@ -233,8 +260,14 @@ async function costruisciPreambolo({ cartella, creaFiltro, permesso, modello, pi
   const testo = pezzi.join('\n\n');
 
   const costo = costoElenco(testo, { finestra, contatore });
+  /* F-027: il sospetto del preambolo, nella forma di `contenutoSospetto`. Chi lo consegna al modello lo passa al kernel
+     (`sospettoDelContesto`) SOLO nel giro in cui il preambolo arriva davvero. */
+  const sospettiMappa = resaMappa?.sospetti ?? [];
+  const motiviSospetti = [...new Set([...sospettiMappa, ...(scheda ? sospettiScheda : [])])].sort();
+  const fonteSospetta = sospettiMappa.length ? 'mappa' : 'scheda';
   const esito = {
     testo,
+    sospetto: motiviSospetti.length ? { fonte: fonteSospetta, motivi: motiviSospetti, luogo: luogoDellaFonte(fonteSospetta) } : null,
     blocchi: {
       scheda: scheda ? { byte: Buffer.byteLength(scheda.testo, 'utf8') } : null,
       istruzioni: istruzioni ? { byte: istruzioni.byte, usati: istruzioni.usati, omessi: istruzioni.omessi, tagliati: istruzioni.tagliati, indicizzati: istruzioni.indicizzati, sezioniSempre: istruzioni.sezioniSempre } : null,

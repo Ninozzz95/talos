@@ -19,35 +19,23 @@
 /** @typedef {{valore:string, nome:string, descrizione:string, nota:string, rischio:'basso'|'medio'|'alto'|'massimo'}} Politica */
 
 /** Le quattro, nell'ordine in cui si presentano: dal più prudente al più libero. */
+/*
+ * 03/10/2026, seconda ondata della lingua: nome, descrizione e nota stanno nel dizionario (inglese prima) e si leggono quando si
+ *   mostrano, nella lingua corrente. I nomi sono gli stessi del piede della chat (`chat.foot.permission.*`). `valore` e `rischio`
+ *   sono dati di logica e restano qui. Gli oggetti restano congelati: un getter senza setter rifiuta l'assegnazione.
+ */
+import { t } from './lingua.js';
+
+const politicaDa = (valore, chiave, rischio) => Object.freeze(Object.defineProperties({ valore, rischio }, {
+  nome: { enumerable: true, get: () => t(`chat.foot.permission.${chiave}`) },
+  descrizione: { enumerable: true, get: () => t(`varie.policy.${chiave}.description`) },
+  nota: { enumerable: true, get: () => t(`varie.policy.${chiave}.note`) },
+}));
 export const POLITICHE = Object.freeze([
-  Object.freeze({
-    valore: 'Read only',
-    nome: 'Solo lettura',
-    descrizione: 'Legge il progetto e lancia comandi che non cambiano niente. Ogni scrittura viene rifiutata.',
-    nota: 'Minimo rischio',
-    rischio: 'basso',
-  }),
-  Object.freeze({
-    valore: 'Workspace write',
-    nome: 'Scrive nel progetto',
-    descrizione: 'Scrive da sola dentro la cartella della sessione; per scrivere fuori ti chiede. Comandi e test passano dal cancello.', // F4-03, owner 01/10/2026
-    nota: 'Consigliato',
-    rischio: 'medio',
-  }),
-  Object.freeze({
-    valore: 'On request',
-    nome: 'Chiede prima',
-    descrizione: 'Ti chiede conferma prima di ogni azione che lascia traccia: scritture, comandi, rete.',
-    nota: 'Controllato',
-    rischio: 'medio',
-  }),
-  Object.freeze({
-    valore: 'Full access',
-    nome: 'Accesso pieno',
-    descrizione: 'File e rete senza i cancelli ordinari. Solo se sai già cosa sta per fare.',
-    nota: 'Alto rischio',
-    rischio: 'massimo',
-  }),
+  politicaDa('Read only', 'readOnly', 'basso'),
+  politicaDa('Workspace write', 'workspaceWrite', 'medio'),
+  politicaDa('On request', 'onRequest', 'medio'),
+  politicaDa('Full access', 'fullAccess', 'massimo'),
 ]);
 
 const PER_VALORE = new Map(POLITICHE.map((p) => [p.valore, p]));

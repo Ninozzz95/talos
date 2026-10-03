@@ -16,6 +16,7 @@
  *   · alla fine, `ToolCallResult.content`, che è salvato: riaprendo la sessione la scheda si ricostruisce da lì.
  * Modulo PURO: niente DOM, niente stato globale — lo disegna `legacy/app.js`.
  */
+import { t } from './lingua.js';
 import { processiDagliEventi } from './inspector.js';
 import { leggiEsitoComando, rigaDiStatoComando } from './esito-comando.js';
 
@@ -104,10 +105,10 @@ const NASCONDI_CURSORE = '\x1b[?25l';
  * dove è girato, quanto ci ha messo. `null` mentre il comando gira: lo dice il pallino della scheda.
  */
 export function rigaEsitoComandoAgente(c = {}) {
-  if (c.stato === 'in-consenso') return 'Aspetta il tuo consenso';
+  if (c.stato === 'in-consenso') return t('processi.agentTerminal.awaitingConsent');
   if (typeof c.testo !== 'string') return null;
   const esito = leggiEsitoComando(c.testo);
-  if (!esito.verdetto) return c.stato === 'non-eseguito' ? 'Non eseguito: il comando non è partito' : null;
+  if (!esito.verdetto) return c.stato === 'non-eseguito' ? t('processi.agentTerminal.notRun') : null;
   return rigaDiStatoComando(esito, Number.isFinite(c.durataMs) ? c.durataMs : null);
 }
 
@@ -127,7 +128,7 @@ export function testoSchedaAgente(scheda = {}) {
     /* le righe vuote in CODA non dicono niente e staccano l'esito dal suo comando (visto in foto, 02/10) */
     if (uscita.trim()) righe.push(uscita.replace(/(?:\r?\n[ \t]*)+$/u, ''));
     /* oltre i tetti di app.js (`registraUscitaAgente`) l'uscita se ne va e resta la testata: si dice, mai in silenzio */
-    if (c.sfrattato) righe.push(`${ANSI.attenuato}(uscita non più tenuta in questa pagina: troppo testo in questa sessione)${ANSI.fine}`);
+    if (c.sfrattato) righe.push(`${ANSI.attenuato}${t('processi.agentTerminal.evicted')}${ANSI.fine}`);
     const esito = rigaEsitoComandoAgente(c);
     if (esito) righe.push(`${ANSI.attenuato}${TONO_DELLO_STATO[c.stato] ?? ''}— ${esito}${ANSI.fine}`);
     blocchi.push(righe.join('\n'));

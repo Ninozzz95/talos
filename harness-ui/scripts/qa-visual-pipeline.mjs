@@ -2507,7 +2507,7 @@ const SCENARI = {
     await p.screenshot('shell-refused-fail-closed', { nota: 'ripiego sicuro: shell:\'chiedi\' sotto Workspace write fallisce CHIUSO, mai una card che trapela' });
     if (await p.esiste('.real-approval-card')) {
       p.difetto('è apparsa una .real-approval-card — inattesa col ripiego sicuro attuale (chiediApprovazioneFn non costruita fuori da "On request")', { severita: 'blocco' });
-    } else if (/REFUSED/.test(testoChatDopoRichiesta) && /non ha un canale di approvazione attivo/.test(testoChatDopoRichiesta)) {
+    } else if (/REFUSED/.test(testoChatDopoRichiesta) && /non ha un canale di approvazione attivo|no active approval channel/.test(testoChatDopoRichiesta)) {
       p.nota('CONFERMATO: shell:\'chiedi\' sotto "Workspace write" fallisce chiuso col motivo esatto — nessuna card, nessun bypass silenzioso (ripiego sicuro, non la cura finale).');
     } else {
       p.difetto(`esito inatteso per la richiesta shell (né REFUSED col motivo atteso né una card) — chat: ${JSON.stringify(testoChatDopoRichiesta.slice(-800))}`, { severita: 'blocco' });

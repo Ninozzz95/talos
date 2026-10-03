@@ -1,6 +1,8 @@
 /** SET-01: presentation metadata only. Values and validation remain with the existing preference owner. */
+import { LINGUA_PSEUDO, linguaCorrenteDiT, t } from '../../components/lingua.js';
+import { TESTI } from '../../i18n/testi/index.js';
 export type SettingsLanguage = 'it' | 'en';
-export type LocalText = Readonly<{ it: string; en: string }>;
+export type LocalText = Readonly<{ it: string; en: string; chiave: string }>;
 export type SettingsSection = 'appearance' | 'chat' | 'tools' | 'memoria' | 'privacy' | 'models' | 'costi' | 'workspace' | 'account';
 export interface LegacySettingField {
   id: string; chiave: string; titolo: string; sezione: string; gruppo: string; tipo: string;
@@ -10,14 +12,27 @@ export interface SettingSearchEntry {
   id: string; section: SettingsSection; label: string; description: string;
   terms: string; kind: 'field' | 'section' | 'action'; studio: boolean;
 }
-export const localText = (value: LocalText, language: string): string => value[language === 'en' ? 'en' : 'it'];
-const text = (it: string, en: string): LocalText => ({ it, en });
+/*
+ * 03/10/2026, seconda ondata della lingua: le parole stanno nel dizionario (area `impostazioni`), non più in coppie scritte qui.
+ *   `text(chiave)` dà lo stesso oggetto di prima — `it` ed `en` letti dal dizionario quando si leggono —, così chi legge
+ *   `.it`/`.en` (la ricerca delle Impostazioni, che cerca nelle due lingue) non cambia. In pseudo-lingua `localText` passa da
+ *   `t()`, che marca il testo: lo strato 3 del cancello vede le Impostazioni come il resto dell'app.
+ */
+export const localText = (value: LocalText, language: string): string =>
+  linguaCorrenteDiT() === LINGUA_PSEUDO ? t(value.chiave) : value[language === 'en' ? 'en' : 'it'];
+const text = (chiave: string): LocalText => Object.freeze({
+  chiave,
+  get it() { return TESTI.it[chiave] as string; },
+  get en() { return TESTI.en[chiave] as string; },
+});
+/** Lo stesso testo a due lingue, per chi compone le Impostazioni fuori da questo file (`settings-view.ts`). */
+export const localTextKey = text;
 export const SETTINGS_SECTIONS: Readonly<Record<SettingsSection, { title: LocalText; eyebrow?: LocalText; description: LocalText; scope: LocalText; icon: string; keywords: string }>> = {
-  appearance: { title: text('Aspetto e movimento', 'Appearance and motion'), eyebrow: text('Il tuo spazio', 'Your space'), description: text('Il tema è solo l’inizio. Ogni preferenza resta al suo posto.', 'The theme is only the beginning. Every preference stays where it belongs.'), scope: text('Questo profilo', 'This profile'), icon: 'image', keywords: 'theme colore color font animation animazioni accessibilità accessibility' },
-  chat: { title: text('Chat e composer', 'Chat and composer'), description: text('Imposta come leggere e scrivere. Modello e permessi restano quelli della sessione.', 'Choose how to read and write. Model and permissions remain specific to the session.'), scope: text('Profilo e sessione', 'Profile and session'), icon: 'chat', keywords: 'message messaggi invio enter input text testo font composer' },
-  tools: { title: text('Strumenti agente e permessi', 'Agent tools and permissions'), description: text('Controlla cosa può fare l’agente e da dove provengono le ricerche web.', 'Control what the agent can do and where web search results come from.'), scope: text('Sessione e server', 'Session and server'), icon: 'sliders', keywords: 'tools permissions permessi policy search ricerca web duckduckgo tavily brave chiave key' },
-  memoria: { title: text('Memoria e contesto', 'Memory and context'), description: text('Leggi la ripartizione del contesto e i limiti disponibili. Le misure mancanti restano esplicite.', 'Review context allocation and available limits. Unavailable measurements stay explicit.'), scope: text('Sessione corrente', 'Current session'), icon: 'brain', keywords: 'memory contesto context tokens token memoria finestra compaction' },
-  privacy: { title: text('Sicurezza e privacy', 'Security and privacy'), description: text('Gestisci i dati locali e trasferisci le preferenze. Pulizia e ripristino richiedono una scelta esplicita.', 'Manage local data and transfer preferences. Clearing or resetting always requires an explicit choice.'), scope: text('Questo profilo', 'This profile'), icon: 'shield', keywords: 'privacy security sicurezza dati data export esporta import importa backup reset ripristina' },
+  appearance: { title: text('impostazioni.sections.appearance.title'), eyebrow: text('impostazioni.sections.appearance.eyebrow'), description: text('impostazioni.sections.appearance.description'), scope: text('impostazioni.sections.appearance.scope'), icon: 'image', keywords: /* lingua: termini di ricerca scritti apposta nelle due lingue */ 'theme colore color font animation animazioni accessibilità accessibility' },
+  chat: { title: text('impostazioni.sections.chat.title'), description: text('impostazioni.sections.chat.description'), scope: text('impostazioni.sections.chat.scope'), icon: 'chat', keywords: 'message messaggi invio enter input text testo font composer' },
+  tools: { title: text('impostazioni.sections.tools.title'), description: text('impostazioni.sections.tools.description'), scope: text('impostazioni.sections.tools.scope'), icon: 'sliders', keywords: 'tools permissions permessi policy search ricerca web duckduckgo tavily brave chiave key' },
+  memoria: { title: text('impostazioni.sections.memoria.title'), description: text('impostazioni.sections.memoria.description'), scope: text('impostazioni.sections.memoria.scope'), icon: 'brain', keywords: 'memory contesto context tokens token memoria finestra compaction' },
+  privacy: { title: text('impostazioni.sections.privacy.title'), description: text('impostazioni.sections.privacy.description'), scope: text('impostazioni.sections.privacy.scope'), icon: 'shield', keywords: 'privacy security sicurezza dati data export esporta import importa backup reset ripristina' },
   /* ⛔ 23/09/2026 — DECISIONE OWNER: «Provider e accessi» è TOLTA DEL TUTTO dalle Impostazioni
      («Toglierla del tutto»). Era una seconda porta sugli STESSI fornitori della scheda «Provider»
      del laboratorio qui sotto: due superfici per una cosa sola. Le sue parole di ricerca passano
@@ -26,10 +41,10 @@ export const SETTINGS_SECTIONS: Readonly<Record<SettingsSection, { title: LocalT
      Decisions»: «User interface complexity increases when a single feature or hypertext link is
      presented in multiple ways». Il vecchio id `providers` resta solo come INDIRIZZO RITIRATO
      (`SEZIONI_RITIRATE` sotto), mai come sezione. */
-  models: { title: text('Laboratorio modelli', 'Model laboratory'), eyebrow: text('Intelligenza, sotto controllo', 'Intelligence, under control'), description: text('Scegli dove eseguire i modelli. Accessi, cataloghi e runtime hanno stati distinti.', 'Choose where models run. Provider access, catalogues and runtimes have distinct states.'), scope: text('Computer e provider', 'Computer and providers'), icon: 'cpu', keywords: 'model modelli laboratorio lab runtime ollama lm studio gguf hugging face download gpu ram provider providers fornitore fornitori api key chiave chiavi credenziale credenziali token endpoint address indirizzo openai anthropic openrouter gemini accessi' },
-  costi: { title: text('Costi e consumo', 'Costs and usage'), description: text('Consulta il consumo registrato per giorno e modello, distinguendo dati disponibili e mancanti.', 'Review recorded usage by day and model, distinguishing known values from missing data.'), scope: text('Sessioni registrate', 'Recorded sessions'), icon: 'chart', keywords: 'cost costi prezzo price token usage consumo billing spesa' },
-  workspace: { title: text('File e workspace', 'Files and workspace'), description: text('Verifica cartella e sessione attive prima di cambiare spazio di lavoro.', 'Check the active folder and session before changing workspace.'), scope: text('Workspace corrente', 'Current workspace'), icon: 'folder', keywords: 'folder directory cartella file project progetto workspace path percorso' },
-  account: { title: text('Account, Doctor e backup', 'Account, Doctor and backup'), description: text('Diagnostica, configurazione e recupero. Le verifiche si avviano solo su tua richiesta.', 'Diagnostics, configuration and recovery. Checks run only when you request them.'), scope: text('Questo computer', 'This computer'), icon: 'activity', keywords: 'account doctor diagnostica diagnostic backup recovery recupero configurazione' },
+  models: { title: text('impostazioni.sections.models.title'), eyebrow: text('impostazioni.sections.models.eyebrow'), description: text('impostazioni.sections.models.description'), scope: text('impostazioni.sections.models.scope'), icon: 'cpu', keywords: 'model modelli laboratorio lab runtime ollama lm studio gguf hugging face download gpu ram provider providers fornitore fornitori api key chiave chiavi credenziale credenziali token endpoint address indirizzo openai anthropic openrouter gemini accessi' },
+  costi: { title: text('impostazioni.sections.costi.title'), description: text('impostazioni.sections.costi.description'), scope: text('impostazioni.sections.costi.scope'), icon: 'chart', keywords: 'cost costi prezzo price token usage consumo billing spesa' },
+  workspace: { title: text('impostazioni.sections.workspace.title'), description: text('impostazioni.sections.workspace.description'), scope: text('impostazioni.sections.workspace.scope'), icon: 'folder', keywords: 'folder directory cartella file project progetto workspace path percorso' },
+  account: { title: text('impostazioni.sections.account.title'), description: text('impostazioni.sections.account.description'), scope: text('impostazioni.sections.account.scope'), icon: 'activity', keywords: 'account doctor diagnostica diagnostic backup recovery recupero configurazione' },
 };
 /*
  * ⛔ 23/09/2026 — GLI INDIRIZZI RITIRATI, e dove portano adesso. Owner: «Provider e accessi» tolta
@@ -57,51 +72,53 @@ export function sectionForField(field: LegacySettingField): SettingsSection {
   return Object.hasOwn(SETTINGS_SECTIONS, field.sezione) ? field.sezione as SettingsSection : 'appearance';
 }
 export const FIELD_HELP: Readonly<Record<string, LocalText>> = {
-  themePresetSelect: text('Palette e atmosfera, nello studio temi.', 'Palette and atmosphere, in the theme studio.'),
-  colorModeSelect: text('Chiaro, scuro o preferenza del sistema.', 'Light, dark or the system preference.'),
-  uiDensitySelect: text('Regola lo spazio nelle liste, senza ridurre la dimensione del testo.', 'Adjust list spacing without making text smaller.'),
-  uiLanguageSelect: text('Traduce menu e controlli; non modifica i messaggi.', 'Translate menus and controls, not your messages.'),
-  sceneOverrideSelect: text('Scegli una scena oppure segui l’atmosfera del tema.', 'Choose a scene or follow the theme’s atmosphere.'),
-  uiFontScaleSelect: text('Dimensione dei testi dell’interfaccia, indipendente dalla chat.', 'Interface text size, independent of conversation text.'),
-  chatFontScaleSelect: text('Dimensione del testo nella conversazione.', 'Text size within the conversation.'),
+  themePresetSelect: text('impostazioni.fieldHelp.themePresetSelect'),
+  colorModeSelect: text('impostazioni.fieldHelp.colorModeSelect'),
+  uiDensitySelect: text('impostazioni.fieldHelp.uiDensitySelect'),
+  uiLanguageSelect: text('impostazioni.fieldHelp.uiLanguageSelect'),
+  sceneOverrideSelect: text('impostazioni.fieldHelp.sceneOverrideSelect'),
+  uiFontScaleSelect: text('impostazioni.fieldHelp.uiFontScaleSelect'),
+  chatFontScaleSelect: text('impostazioni.fieldHelp.chatFontScaleSelect'),
   // 24/09/2026, decisione owner 35.
-  askTimeoutSelect: text('Quanto aspetta una domanda di TALOS prima di scadere; alla scadenza il giro si ferma. Di serie non scade.', 'How long a TALOS question waits before it expires; when it expires the turn stops. By default it never expires.'),
-  composerPlusSelect: text('Mostra gli strumenti aggiuntivi in un cassetto o in un menu.', 'Show additional tools in a drawer or a menu.'),
-  messageStyleSelect: text('Presentazione della conversazione: sezioni o fumetti.', 'Conversation presentation: sections or bubbles.'),
-  streamingAnimationSelect: text('Come viene mostrato il testo mentre arriva.', 'How incoming text is displayed.'),
-  windowPresentationSelect: text('Apri gli strumenti in un pannello o a schermo intero.', 'Open tools in a panel or a full-screen view.'),
-  backgroundMotionToggle: text('Attiva la scena animata dietro l’interfaccia.', 'Enable the animated scene behind the interface.'),
-  interfaceMotionToggle: text('Transizioni dei controlli, distinte dall’animazione dello sfondo.', 'Control transitions, separate from background animation.'),
-  pauseWhenHiddenToggle: text('Sospende lo sfondo quando la finestra non è visibile.', 'Pause the background while the window is hidden.'),
-  respectDataSaverToggle: text('Rispetta la preferenza di risparmio dati quando il browser la espone.', 'Respect data-saving preferences when reported by the browser.'),
-  reducedMotionToggle: text('Riduce le animazioni dell’app; rispetta anche la preferenza di sistema.', 'Reduce app animation; the system preference is also respected.'),
-  motionModeSelect: text('Motore di disegno della scena nello studio temi.', 'Scene rendering engine in the theme studio.'),
-  motionQualitySelect: text('Equilibrio fra dettaglio e risorse della scena.', 'Balance scene detail and resource use.'),
-  motionSpeedRange: text('Velocità della scena animata.', 'Animated scene speed.'),
-  motionIntensityRange: text('Intensità complessiva della scena.', 'Overall scene intensity.'),
-  motionGlowRange: text('Luminosità degli effetti della scena.', 'Scene lighting effect strength.'),
-  motionDensityRange: text('Quantità di elementi nella scena.', 'Number of elements in the scene.'),
-  motionDepthRange: text('Profondità percepita dello sfondo.', 'Perceived background depth.'),
-  motionTrailsRange: text('Persistenza delle scie nello sfondo.', 'Background trail persistence.'),
-  motionContrastRange: text('Contrasto della scena, non del testo.', 'Scene contrast, not text contrast.'),
-  motionParallaxRange: text('Spostamento della scena rispetto al puntatore.', 'Scene movement relative to the pointer.'),
-  motionProfileSelect: text('Profilo delle transizioni dell’interfaccia.', 'Interface transition profile.'),
-  motionEasingSelect: text('Accelerazione e rallentamento delle transizioni.', 'How transitions accelerate and slow down.'),
-  motionDurationRange: text('Scala la durata delle transizioni rispetto al profilo, in percentuale.', 'Scale transition duration relative to the profile, as a percentage.'),
-  motionUiIntensityRange: text('Ampiezza delle animazioni dei controlli.', 'Control animation strength.'),
-  motionStaggerRange: text('Intervallo tra elementi animati in sequenza.', 'Delay between elements animated in sequence.'),
-  motionWindowsToggle: text('Apertura e chiusura delle finestre.', 'Window opening and closing.'),
-  motionSurfacesToggle: text('Transizioni di schede e superfici.', 'Card and surface transitions.'),
-  motionNavigationToggle: text('Passaggio fra le sezioni.', 'Transitions between sections.'),
-  motionComposerToggle: text('Interazioni nell’area di scrittura.', 'Interactions in the writing area.'),
-  motionMessagesToggle: text('Comparsa dei messaggi.', 'Message appearance.'),
-  motionFeedbackToggle: text('Conferme e segnali di stato.', 'Confirmations and status feedback.'),
-  immersiveHeaderToggle: text('Riduce l’ingombro visivo dell’intestazione.', 'Reduce the visual weight of the header.'),
-  chatFullWidthToggle: text('Usa la larghezza disponibile per la conversazione.', 'Use the available width for the conversation.'),
+  askTimeoutSelect: text('impostazioni.fieldHelp.askTimeoutSelect'),
+  composerPlusSelect: text('impostazioni.fieldHelp.composerPlusSelect'),
+  messageStyleSelect: text('impostazioni.fieldHelp.messageStyleSelect'),
+  streamingAnimationSelect: text('impostazioni.fieldHelp.streamingAnimationSelect'),
+  windowPresentationSelect: text('impostazioni.fieldHelp.windowPresentationSelect'),
+  backgroundMotionToggle: text('impostazioni.fieldHelp.backgroundMotionToggle'),
+  interfaceMotionToggle: text('impostazioni.fieldHelp.interfaceMotionToggle'),
+  pauseWhenHiddenToggle: text('impostazioni.fieldHelp.pauseWhenHiddenToggle'),
+  respectDataSaverToggle: text('impostazioni.fieldHelp.respectDataSaverToggle'),
+  reducedMotionToggle: text('impostazioni.fieldHelp.reducedMotionToggle'),
+  motionModeSelect: text('impostazioni.fieldHelp.motionModeSelect'),
+  motionQualitySelect: text('impostazioni.fieldHelp.motionQualitySelect'),
+  motionSpeedRange: text('impostazioni.fieldHelp.motionSpeedRange'),
+  motionIntensityRange: text('impostazioni.fieldHelp.motionIntensityRange'),
+  motionGlowRange: text('impostazioni.fieldHelp.motionGlowRange'),
+  motionDensityRange: text('impostazioni.fieldHelp.motionDensityRange'),
+  motionDepthRange: text('impostazioni.fieldHelp.motionDepthRange'),
+  motionTrailsRange: text('impostazioni.fieldHelp.motionTrailsRange'),
+  motionContrastRange: text('impostazioni.fieldHelp.motionContrastRange'),
+  motionParallaxRange: text('impostazioni.fieldHelp.motionParallaxRange'),
+  motionProfileSelect: text('impostazioni.fieldHelp.motionProfileSelect'),
+  motionEasingSelect: text('impostazioni.fieldHelp.motionEasingSelect'),
+  motionDurationRange: text('impostazioni.fieldHelp.motionDurationRange'),
+  motionUiIntensityRange: text('impostazioni.fieldHelp.motionUiIntensityRange'),
+  motionStaggerRange: text('impostazioni.fieldHelp.motionStaggerRange'),
+  motionWindowsToggle: text('impostazioni.fieldHelp.motionWindowsToggle'),
+  motionSurfacesToggle: text('impostazioni.fieldHelp.motionSurfacesToggle'),
+  motionNavigationToggle: text('impostazioni.fieldHelp.motionNavigationToggle'),
+  motionComposerToggle: text('impostazioni.fieldHelp.motionComposerToggle'),
+  motionMessagesToggle: text('impostazioni.fieldHelp.motionMessagesToggle'),
+  motionFeedbackToggle: text('impostazioni.fieldHelp.motionFeedbackToggle'),
+  immersiveHeaderToggle: text('impostazioni.fieldHelp.immersiveHeaderToggle'),
+  chatFullWidthToggle: text('impostazioni.fieldHelp.chatFullWidthToggle'),
 };
 export function normalizeSearch(value: unknown): string {
   return String(value ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('it').trim();
 }
+/** Le due voci di una chiave del dizionario, per la ricerca nelle due lingue (vuoto se la chiave non c'è). */
+const bilingue = (chiave: string): string[] => [TESTI.it[chiave], TESTI.en[chiave]].filter((v): v is string => typeof v === 'string');
 export function buildSettingsIndex(fields: readonly LegacySettingField[], studioIds: readonly string[], language: SettingsLanguage, translate: (value: string) => string): SettingSearchEntry[] {
   const entries: SettingSearchEntry[] = Object.entries(SETTINGS_SECTIONS).map(([id, section]) => ({ id, section: id as SettingsSection, kind: 'section', studio: false,
     label: localText(section.title, language), description: localText(section.description, language), terms: [section.title.it, section.title.en, section.description.it, section.description.en, section.keywords].join(' ') }));
@@ -109,9 +126,13 @@ export function buildSettingsIndex(fields: readonly LegacySettingField[], studio
     const section = sectionForField(field), help = FIELD_HELP[field.id];
     entries.push({ id: field.id, section, kind: 'field', studio: studioIds.includes(field.id), label: translate(field.titolo),
       description: help ? localText(help, language) : '', terms: [field.id, field.chiave, field.titolo, translate(field.titolo), SETTINGS_SECTIONS[section].title.it, SETTINGS_SECTIONS[section].title.en,
-        help?.it, help?.en, ...(field.opzioni || []).flatMap(option => [option[1] || '', translate(option[1] || '')])].join(' ') });
+        help?.it, help?.en, ...(field.opzioni || []).flatMap(option => [option[1] || '', translate(option[1] || '')]),
+        /* 03/10/2026, corsia S2: `titolo` e le etichette delle opzioni sono ora nella lingua CORRENTE (getter sul dizionario):
+           la ricerca trova il campo in tutte e due le lingue leggendo le due voci, come per le sezioni qui sopra. */
+        ...bilingue(`impostazioni.field.${field.id}.title`),
+        ...(field.opzioni || []).flatMap(option => bilingue(`impostazioni.field.${field.id}.option.${String(option[0]).replace(/[^A-Za-z0-9_]/gu, '_')}`))].join(' ') });
   }
-  entries.push({ id: 'workspaceRestore', section: 'appearance', label: translate('Riprendi il workspace all’avvio'), description: localText(text('Riapre la sessione senza avviare operazioni.', 'Reopen the session without starting operations.'), language), terms: 'Riprendi workspace avvio ripristino sessione restore startup session', kind: 'field', studio: false });
+  entries.push({ id: 'workspaceRestore', section: 'appearance', label: localText(text('impostazioni.search.workspaceRestore.title'), language), description: localText(text('impostazioni.search.workspaceRestore.description'), language), terms: 'Riprendi workspace avvio ripristino sessione restore startup session', kind: 'field', studio: false });
   return entries;
 }
 export function searchSettings(entries: readonly SettingSearchEntry[], query: string): SettingSearchEntry[] {

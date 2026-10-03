@@ -69,16 +69,18 @@ export function decodificaFrameServer(buffer) {
 /* ═════════════════════════ le parole a schermo ═════════════════════════ */
 
 /** ⛔ Nomi umani, mai tecnici: a schermo non compaiono «clipboard», «paste» né «xterm». */
+/* 03/10/2026, seconda ondata della lingua: CHIAVI del dizionario (`processi.terminal.clipboard.*`), passate a `t()` da chi
+   disegna. Prima erano frasi italiane in stile gettext, e il titolo del menu arrivava all'etichetta accessibile SENZA `t()`. */
 export const TESTI_APPUNTI = Object.freeze({
-  titoloMenu: 'Terminale',
-  copia: 'Copia',
-  incolla: 'Incolla',
-  selezionaTutto: 'Seleziona tutto',
-  pulisci: 'Pulisci lo schermo',
-  copiaNegataTitolo: 'Non ho potuto copiare',
-  copiaNegataTesto: 'Gli appunti di sistema non sono raggiungibili da questa finestra: seleziona il testo e usa il menu del tasto destro del sistema.',
-  incollaNegataTitolo: 'Non ho potuto incollare',
-  incollaNegataTesto: 'Gli appunti di sistema non sono raggiungibili da questa finestra: dai il permesso agli appunti, oppure incolla con il tasto destro del sistema.',
+  titoloMenu: 'processi.terminal.clipboard.menuTitle',
+  copia: 'processi.terminal.clipboard.copy',
+  incolla: 'processi.terminal.clipboard.paste',
+  selezionaTutto: 'processi.terminal.clipboard.selectAll',
+  pulisci: 'processi.terminal.clipboard.clear',
+  copiaNegataTitolo: 'processi.terminal.clipboard.copyDeniedTitle',
+  copiaNegataTesto: 'processi.terminal.clipboard.copyDeniedText',
+  incollaNegataTitolo: 'processi.terminal.clipboard.pasteDeniedTitle',
+  incollaNegataTesto: 'processi.terminal.clipboard.pasteDeniedText',
 });
 
 /* ═════════════════════════ la decisione sui tasti (pura) ═════════════════════════ */
@@ -242,7 +244,7 @@ export function collegaAppunti(term, {
   solaLettura = false,
 } = {}) {
   if (!term || !ospite) return () => {};
-  const menu = creaMenuContestuale(radiceMenu, { id: 'menuTerminale', etichetta: TESTI_APPUNTI.titoloMenu });
+  const menu = creaMenuContestuale(radiceMenu, { id: 'menuTerminale', etichetta: t(TESTI_APPUNTI.titoloMenu) });
   const chiudiMenu = () => { menu.hidden = true; menu.replaceChildren(); };
 
   async function copia() {

@@ -49,6 +49,7 @@
  *   · dopo un'eliminazione riuscita si lasciasse la frase «Disponibile nei modelli installati»
  *     ⇒ AZ-FRASE rossa.
  */
+import { serviIlDizionario } from './aiuto-dizionario.mjs'; // corsia D della lingua: i componenti importano il dizionario
 import { expect, test } from '@playwright/test';
 import { readFile, mkdir, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
@@ -121,6 +122,7 @@ async function prepara(page, dove = '') {
      ridisegnerebbe il pannello dal suo stato (vuoto) e due scritture sulla stessa lista si
      pesterebbero. Qui il ridisegno lo comanda la prova, che è l'unico modo di misurare il giro. */
   await page.route('**/api/v1/huggingface/downloads', () => { /* appesa */ });
+  await serviIlDizionario(page);
   await page.route('**/__corsiad/*.js', async (route) => {
     const nome = new URL(route.request().url()).pathname.split('/').pop();
     try {

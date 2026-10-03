@@ -90,7 +90,11 @@ test('R4-ASK-RECEIPT-DECISION: la domanda chiusa diventa la ricevuta «Decisione
     await expect(riquadro).toContainText(testo);
   }
   await expect(ricevuta.locator('fieldset:visible')).toHaveCount(0);
-  await expect(ricevuta).toContainText(/Chiesta alle \d\d:\d\d in modalità Normale · hai risposto alle \d\d:\d\d/u);
+  /* Revisione Codex 02/10/2026, rilievo 3: qui la scheda non ha inviato niente — la risposta è arrivata dal flusso, e la testata
+     dice «da un’altra finestra». La ricevuta lo dice uguale: «hai risposto» sotto quella testata era la contraddizione. */
+  await expect(ricevuta).toContainText('Risposta inviata da un’altra finestra');
+  await expect(ricevuta).toContainText(/Chiesta alle \d\d:\d\d in modalità Normale · risposta da un’altra finestra alle \d\d:\d\d/u);
+  await expect(ricevuta).not.toContainText('hai risposto');
   const opzioni = ricevuta.locator('details.talos-question-card__offered').first();
   await opzioni.locator('summary').click();
   await expect(opzioni).toContainText('Consigliata');
@@ -212,6 +216,9 @@ test('R4-ASK-ROW-WAITS: con una domanda aperta la riga dice «aspetta te», anch
  * respinta (QUERY_INVALID) e il secondo tentativo è andato. Il rifiuto non è un guasto: riga DISCRETA col motivo in parole,
  * pallino neutro, niente conteggio nel segmento; il testo del kernel resta nel dettaglio. Il testo del rifiuto è quello VERO. */
 const RIFIUTO_VERO = 'ask_user_question failed [QUERY_INVALID]: questions[0].why è obbligatorio: una frase che dice perché la risposta conta';
+/* ⛔ 03/10/2026: la suite è fissata all'italiano (playwright.config.mjs, `locale`); questa guarda le frasi INGLESI delle righe e del
+ *   segmento (prima arrivavano dal locale en-US di Chromium, per caso): l'inglese si chiede qui, dichiarato. */
+test.describe('in inglese', () => { test.use({ locale: 'en-US' });
 test('R4-ASK-CORRECTED-ROW: la domanda respinta per la forma è una riga discreta col motivo, non un errore; AL CONTRARIO un altro rifiuto resta errore', async ({ page }) => {
   const { scritture } = await apri(page, 'ask-corretta');
   await evento(page, avvio);
@@ -262,4 +269,5 @@ test('R4-ASK-CORRECTED-ROW: la domanda respinta per la forma è una riga discret
   await expect(page.locator('#conversation .talos-activity__head .tool-note-summary-text')).toHaveText('Asking the user a question failed');
   await expect(page.locator('#conversation .talos-activity--segment .talos-activity__descrizione')).toHaveText('asking the user a question failed'); // il segmento, con due voci
   expect(scritture).toEqual([]);
+});
 });

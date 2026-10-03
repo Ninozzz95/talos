@@ -43,9 +43,11 @@ test('PHASE1-BUILD-PARALLEL-01 produce un bundle ESM deterministico fuori da pub
 });
 
 /*
- * F5 File reader (26/09/2026) — il server statico serve al massimo 4 MiB per file (`MAX_STATIC_BYTES`): oltre, la richiesta
+ * F5 File reader (26/09/2026) — il server statico serve al massimo `MAX_STATIC_BYTES` per file: oltre, la richiesta
  *   fallisce e la pagina non lo dice (la prova browser l'ha preso sulla resa PowerPoint, 6,7 MB non minificata). Qui si
- *   chiedono al gestore VERO, sulla build vera, gli asset grossi: `app.js` (3 MB, il più vicino al tetto) e le rese Office.
+ *   chiedono al gestore VERO, sulla build vera, gli asset grossi: `app.js` e le rese Office.
+ * 03/10/2026: il tetto è passato da 4 a 8 MiB (owner), perché col dizionario it+en `app.js` pesa 4,22 MB. Questa prova l'ha
+ *   preso: era rossa con la corsia E della lingua, prima che il tetto si alzasse.
  */
 test('F5-BUILD-TETTO: ogni asset grosso della build si serve davvero, sotto il tetto del server statico', async () => {
   const { createStaticHandler } = await import('../../../src/static-files.mjs');
@@ -61,4 +63,14 @@ test('F5-BUILD-TETTO: ogni asset grosso della build si serve davvero, sotto il t
   } finally {
     await rimuoviCartellaDiProvaAttesa(output);
   }
+});
+
+/* Il verso contrario (03/10/2026): il tetto c'è ancora. Un asset di 8 MiB esatti si serve; un byte in più no, e lo dice col
+   codice. Il disco è finto (`fsAdapter`): si prova il gestore, non la build. */
+test('F5-BUILD-TETTO AL CONTRARIO: oltre 8 MiB il gestore statico rifiuta con PAYLOAD_LIMIT', async () => {
+  const { createStaticHandler } = await import('../../../src/static-files.mjs');
+  const TETTO = 8 * 1024 * 1024;
+  const serviDiTaglia = (n) => createStaticHandler('/finto', { readFile: async () => Buffer.alloc(n) });
+  assert.equal((await serviDiTaglia(TETTO)('/app.js'))?.statusCode, 200);
+  await assert.rejects(serviDiTaglia(TETTO + 1)('/app.js'), (errore) => errore.code === 'PAYLOAD_LIMIT');
 });

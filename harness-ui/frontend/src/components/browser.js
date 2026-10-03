@@ -19,46 +19,48 @@
  */
 
 import { t, tn, linguaCorrenteDiT } from './lingua.js';
+/* Date nella lingua dell'interfaccia (italiano → it-IT, inglese → en-US), letta a ogni uso. */
+const localeUI = () => (linguaCorrenteDiT() === 'en' ? 'en-US' : 'it-IT');
 import { renderizzaAnnotazioni, MASSIMO_ANNOTAZIONI } from './annotazioni.js';
 import { sembraHtml, testoLeggibile, riassuntoPulizia } from './testo-pagina.js'; // 06/9 O-28: il sorgente di una pagina non si legge
 import { creaSchede } from './schede.js'; // BC-68, 17/09: la MECCANICA delle linguette è una sola, condivisa con Terminale e Revisione
 
 export const TESTI = Object.freeze({
-  intestazione: 'Letture della sessione',
-  riepilogoLetture: (n) => tn('Testo acquisito dall’agente · {n} pagina', 'Testo acquisito dall’agente · {n} pagine', n),
-  riepilogoMisto: (letture, vive) => `${tn('{n} lettura dell’agente', '{n} letture dell’agente', letture)} · ${tn('{n} pagina aperta da te', '{n} pagine aperte da te', vive)}`,
-  riepilogoVuoto: 'Nessuna pagina ancora',
-  posizioneLettura: (i, n) => t('Lettura {i} di {n}', { i, n }),
-  posizioneViva: 'Pagina aperta da te · viva dentro TALOS',
-  posizioneBloccata: 'Pagina aperta da te · non mostrabile qui',
-  posizioneCaricamento: 'Apertura in corso…',
+  get intestazione() { return t('varie.browser.heading.sessionReads'); },
+  riepilogoLetture: (n) => tn('varie.browser.summary.agentTextOne', 'varie.browser.summary.agentTextMany', n),
+  riepilogoMisto: (letture, vive) => `${tn('varie.browser.summary.readingsOne', 'varie.browser.summary.readingsMany', letture)} · ${tn('varie.browser.summary.openedOne', 'varie.browser.summary.openedMany', vive)}`,
+  get riepilogoVuoto() { return t('varie.browser.summary.empty'); },
+  posizioneLettura: (i, n) => t("varie.browser.position.reading", { i, n }),
+  get posizioneViva() { return t('varie.browser.position.live'); },
+  get posizioneBloccata() { return t('varie.browser.position.blocked'); },
+  get posizioneCaricamento() { return t('varie.browser.position.loading'); },
   /* ⛔ 07/9, guardando lo screenshot dopo un ricaricamento: «senza navigazione interattiva» era
      diventato falso — dentro una pagina viva ci si clicca, si scorre e si scrive. Una riga che
      descrive limiti che non esistono più fa credere che la funzione non ci sia. */
-  limitiLetture: 'Le letture dell’agente sono copie testuali; una pagina che apri tu è viva e ci puoi navigare dentro. Le note restano in questo browser.',
+  get limitiLetture() { return t('varie.browser.limits.reads'); },
   /* ⛔ 07/9 — «quando il sito lo consente» non è più vero: un sito che vieta la cornice ora si apre
      lo stesso, in un browser che TALOS pilota sul tuo computer. La riga diceva un limite che
      abbiamo tolto — e una promessa al ribasso invecchia peggio di una mancata. */
-  limitiVive: 'Le letture sono copie testuali; una pagina che apri tu è viva dentro TALOS — se il sito vieta la cornice, la mostra un browser pilotato sul tuo computer. Le note restano qui.',
-  provenienzaAgente: 'Agente',
-  provenienzaTu: 'Tu',
-  cornicePronta: 'Pagina viva',
-  chiediAllAgente: 'Chiedi all’agente di leggerla',
-  nessunaScheda: 'Nessuna pagina letta',
+  get limitiVive() { return t('varie.browser.limits.live'); },
+  get provenienzaAgente() { return t('varie.browser.origin.agent'); },
+  get provenienzaTu() { return t('varie.browser.origin.you'); },
+  get cornicePronta() { return t('varie.browser.frame.ready'); },
+  get chiediAllAgente() { return t('varie.browser.frame.askAgent'); },
+  get nessunaScheda() { return t('varie.browser.frame.noTab'); },
   /* ⭐ 16/09 — le facce dei sei stati. Nessun nome tecnico a schermo: «loading» è un nome per il
      codice, a chi guarda si dice che cosa sta succedendo e che cosa può fare adesso. */
-  statoApro: 'Apertura in corso…',
-  statoAproSotto: 'Se ci mette troppo puoi annullare: la scheda resta dov’è.',
-  statoRiprovo: (tentativo, totale) => t('Non ha risposto: riprovo ({tentativo} di {totale})…', { tentativo, totale }),
-  statoRiprovoSotto: 'Ogni tentativo aspetta un po’ di più del precedente.',
-  statoNonRaggiunta: 'Non sono riuscito ad aprire questa pagina',
-  statoAnnullata: 'Apertura annullata',
-  statoAnnullataSotto: 'Hai chiuso la scheda mentre apriva: non è stato scritto niente.',
-  statoRiposo: 'Questa pagina era a riposo: la sto ricaricando',
-  statoRiposoSotto: 'Restano vive le ultime pagine che hai guardato; le altre si ricaricano quando ci torni.',
-  statoVivaInPausa: 'Questa pagina è in pausa',
-  riprova: 'Riprova',
-  annulla: 'Annulla',
+  get statoApro() { return t('varie.browser.state.opening'); },
+  get statoAproSotto() { return t('varie.browser.state.openingHint'); },
+  statoRiprovo: (tentativo, totale) => t('varie.browser.state.retrying', { attempt: tentativo, total: totale }),
+  get statoRiprovoSotto() { return t('varie.browser.state.retryingHint'); },
+  get statoNonRaggiunta() { return t('varie.browser.state.unreachable'); },
+  get statoAnnullata() { return t('varie.browser.state.cancelled'); },
+  get statoAnnullataSotto() { return t('varie.browser.state.cancelledHint'); },
+  get statoRiposo() { return t('varie.browser.state.resting'); },
+  get statoRiposoSotto() { return t('varie.browser.state.restingHint'); },
+  get statoVivaInPausa() { return t('varie.browser.state.livePaused'); },
+  get riprova() { return t('varie.browser.action.retry'); },
+  get annulla() { return t('varie.browser.action.cancel'); },
   /*
    * ⛔⛔ 16/09/2026, SECONDO GIRO DI RIPARAZIONE — «30 caratteri» IN UN PANNELLO INGLESE.
    * Stavano nel codice come pezzo di stringa attaccato a un numero (`${n} caratteri`), quindi
@@ -67,9 +69,9 @@ export const TESTI = Object.freeze({
    * frasi di `TESTI` — cioè roba che `tests/unit/i18n-copertura.test.mjs` legge e di cui pretende
    * l'inglese — con il numero come segnaposto e il plurale scelto dalla lingua risolta.
    */
-  caratteriUno: '{n} carattere',
-  caratteriMolti: '{n} caratteri',
-  annullaNavigazione: 'Annulla navigazione',
+  get caratteriUno() { return t('varie.browser.chars.one'); },
+  get caratteriMolti() { return t('varie.browser.chars.many'); },
+  get annullaNavigazione() { return t('varie.browser.action.cancelNavigation'); },
   /*
    * ⛔⛔ 16/09, GIRO DI RIPARAZIONE — LE ETICHETTE DELLA BARRA, trovate GUARDANDO la foto inglese.
    *   In una app tutta inglese la barra del Browser diceva «Rileggi · Pagina · Testo dell'agente ·
@@ -82,13 +84,13 @@ export const TESTI = Object.freeze({
    *   Il modello HTML resta com'è: non è un file di questa corsia, e il suo testo continua a valere
    *   come partenza per chi apre la pagina prima che il codice giri.
    */
-  barraRileggi: 'Rileggi',
-  barraAnnota: 'Annota',
-  barraNota: 'Nota locale',
-  barraCopia: 'Copia testo',
-  barraModoPagina: 'Pagina',
-  barraModoTesto: 'Testo dell’agente',
-  unaVivaAllaVolta: 'La pagina pilotata è una alla volta: aprendone un’altra questa resta nella sua scheda e si riapre quando ci torni.',
+  get barraRileggi() { return t('varie.browser.bar.reread'); },
+  get barraAnnota() { return t('varie.browser.bar.annotate'); },
+  get barraNota() { return t('varie.browser.bar.note'); },
+  get barraCopia() { return t('varie.browser.bar.copy'); },
+  get barraModoPagina() { return t('varie.browser.bar.modePage'); },
+  get barraModoTesto() { return t('varie.browser.bar.modeText'); },
+  get unaVivaAllaVolta() { return t('varie.browser.state.oneLiveAtATime'); },
   /*
    * ⛔⛔⛔ 16/09/2026, GIRO DI RIPARAZIONE — LE FRASI DEI GUASTI VIVONO QUI, non nel server.
    *
@@ -108,26 +110,26 @@ export const TESTI = Object.freeze({
    * Ricerca 16/09/2026 — api-craft «Shall REST API error messages be internationalized?»:
    *   «locale-neutral errors with well-defined error values… allows the consumer to localize».
    */
-  guastoTimeout: 'Il sito non ha risposto in tempo ({secondi} secondi)',
-  guastoDns: 'Questo indirizzo non esiste',
-  guastoRifiuto: 'Nessuno risponde a questo indirizzo',
-  guastoCertificato: 'Il sito ha un certificato non valido',
-  guastoRete: 'Non sono riuscito a raggiungere il sito',
-  guastoIndirizzo: 'Questo non è un indirizzo che posso aprire',
-  rifiutoDeny: 'Il sito vieta di essere mostrato dentro un altro sito',
-  rifiutoSameOrigin: 'Il sito si mostra solo dentro le sue stesse pagine',
-  rifiutoFrameAncestors: 'Il sito consente la cornice solo ad altri siti, non a TALOS',
+  get guastoTimeout() { return t('varie.browser.failure.timeout'); },
+  get guastoDns() { return t('varie.browser.failure.dns'); },
+  get guastoRifiuto() { return t('varie.browser.failure.refused'); },
+  get guastoCertificato() { return t('varie.browser.failure.certificate'); },
+  get guastoRete() { return t('varie.browser.failure.network'); },
+  get guastoIndirizzo() { return t('varie.browser.failure.address'); },
+  get rifiutoDeny() { return t('varie.browser.refusal.deny'); },
+  get rifiutoSameOrigin() { return t('varie.browser.refusal.sameOrigin'); },
+  get rifiutoFrameAncestors() { return t('varie.browser.refusal.frameAncestors'); },
   /* i rimedi: uno per genere, scelti perché portino a un gesto vero. Prima si sceglievano leggendo
      la frase italiana del server con quattro regex — in inglese non agganciavano niente. */
-  rimedioIndirizzo: 'Controlla l’indirizzo.',
-  rimedioCertificato: 'Il sito ha un certificato non valido: aprilo fuori da TALOS se ti fidi.',
-  rimedioAspetta: 'Riprova fra un momento.',
-  rimedioServizio: 'Controlla che il servizio sia acceso.',
+  get rimedioIndirizzo() { return t('varie.browser.remedy.address'); },
+  get rimedioCertificato() { return t('varie.browser.remedy.certificate'); },
+  get rimedioAspetta() { return t('varie.browser.remedy.wait'); },
+  get rimedioServizio() { return t('varie.browser.remedy.service'); },
   /* le parole degli stati sulla striscia: si ascoltano (sr-only), non si guardano soltanto */
-  etichettaApre: 'in apertura',
-  etichettaRiprova: 'sto riprovando',
-  etichettaNonRaggiunta: 'non raggiunta',
-  etichettaAnnullataBreve: 'annullata',
+  get etichettaApre() { return t('varie.browser.label.opening'); },
+  get etichettaRiprova() { return t('varie.browser.label.retrying'); },
+  get etichettaNonRaggiunta() { return t('varie.browser.label.unreachable'); },
+  get etichettaAnnullataBreve() { return t('varie.browser.label.cancelled'); },
 });
 
 /**
@@ -139,15 +141,15 @@ export const TESTI = Object.freeze({
  */
 export function frasePerGenere(genere, dettagli = {}) {
   switch (String(genere || '')) {
-    case 'timeout': return t(TESTI.guastoTimeout, { secondi: Number(dettagli?.secondi ?? 0) });
-    case 'dns': return t(TESTI.guastoDns);
-    case 'rifiuto': return t(TESTI.guastoRifiuto);
-    case 'certificato': return t(TESTI.guastoCertificato);
-    case 'rete': return t(TESTI.guastoRete);
-    case 'indirizzo': return t(TESTI.guastoIndirizzo);
-    case 'xfo-deny': return t(TESTI.rifiutoDeny);
-    case 'xfo-sameorigin': return t(TESTI.rifiutoSameOrigin);
-    case 'frame-ancestors': return t(TESTI.rifiutoFrameAncestors);
+    case 'timeout': return t('varie.browser.failure.timeout', { secondi: Number(dettagli?.secondi ?? 0) });
+    case 'dns': return TESTI.guastoDns;
+    case 'rifiuto': return TESTI.guastoRifiuto;
+    case 'certificato': return TESTI.guastoCertificato;
+    case 'rete': return TESTI.guastoRete;
+    case 'indirizzo': return TESTI.guastoIndirizzo;
+    case 'xfo-deny': return TESTI.rifiutoDeny;
+    case 'xfo-sameorigin': return TESTI.rifiutoSameOrigin;
+    case 'frame-ancestors': return TESTI.rifiutoFrameAncestors;
     default: return '';
   }
 }
@@ -163,12 +165,12 @@ export function frasePerGenere(genere, dettagli = {}) {
  */
 export function rimedioPerGenere(genere) {
   switch (String(genere || '')) {
-    case 'dns': case 'indirizzo': return t(TESTI.rimedioIndirizzo);
-    case 'certificato': return t(TESTI.rimedioCertificato);
-    case 'timeout': case 'rete': return t(TESTI.rimedioAspetta);
-    case 'rifiuto': return t(TESTI.rimedioServizio);
+    case 'dns': case 'indirizzo': return TESTI.rimedioIndirizzo;
+    case 'certificato': return TESTI.rimedioCertificato;
+    case 'timeout': case 'rete': return TESTI.rimedioAspetta;
+    case 'rifiuto': return TESTI.rimedioServizio;
     /* un rifiuto del sito non è un guasto: la via è farla leggere all'agente, e quella resta */
-    default: return t('{invito}: usa «Rileggi».', { invito: t(TESTI.chiediAllAgente) });
+    default: return t("varie.browser.remedy.default", { hint: TESTI.chiediAllAgente });
   }
 }
 
@@ -179,10 +181,10 @@ export function rimedioPerGenere(genere) {
  */
 export function etichettaStatoScheda(situazione) {
   switch (situazione) {
-    case 'loading': return t(TESTI.etichettaApre);
-    case 'retrying': return t(TESTI.etichettaRiprova);
-    case 'error': case 'unreachable': return t(TESTI.etichettaNonRaggiunta);
-    case 'cancelled': return t(TESTI.etichettaAnnullataBreve);
+    case 'loading': return TESTI.etichettaApre;
+    case 'retrying': return TESTI.etichettaRiprova;
+    case 'error': case 'unreachable': return TESTI.etichettaNonRaggiunta;
+    case 'cancelled': return TESTI.etichettaAnnullataBreve;
     default: return '';
   }
 }
@@ -347,12 +349,12 @@ export function erroreDiUnaPaginaTerza(messaggio, indirizziCornici = [], origine
    *   13/09 sulle guardie: chi non riesce a valutare risponde di no, non lancia e non lascia passare.
    */
   if (typeof origineNostra !== 'string' || origineNostra.trim() === '') {
-    return { terzo: false, perche: 'origine della app non dichiarata: non posso attribuire niente a nessuno' };
+    return { terzo: false, perche: 'app origin not declared: cannot attribute anything to anyone' };
   }
-  if (!ERRORE_DI_SANDBOX.test(String(messaggio ?? ''))) return { terzo: false, perche: 'non è un errore del sandbox' };
+  if (!ERRORE_DI_SANDBOX.test(String(messaggio ?? ''))) return { terzo: false, perche: 'not a sandbox error' };
   const estranee = (indirizziCornici || []).filter((u) => !eNostra(u, origineNostra));
-  if (estranee.length === 0) return { terzo: false, perche: 'nessuna cornice di un’altra origine: se è sandbox, è nostro' };
-  return { terzo: true, perche: `cornice ospitata: ${estranee[0]}` };
+  if (estranee.length === 0) return { terzo: false, perche: 'no frame from another origin: if it is sandbox, it is ours' };
+  return { terzo: true, perche: `hosted frame: ${estranee[0]}` };
 }
 
 /** L'host e il percorso corto di un indirizzo, per le schede e la cronologia (mockup: «example.org/documentazione»). */
@@ -369,7 +371,7 @@ export function titoloDaLettura(pagina) {
   if (pagina?.titolo) return pagina.titolo;
   const riga = String(pagina?.testo || '').split('\n').map((r) => r.trim()).find((r) => r.length > 0);
   if (riga) return riga.length > 80 ? `${riga.slice(0, 79)}…` : riga;
-  return hostDaUrl(pagina?.url) || t('Pagina');
+  return hostDaUrl(pagina?.url) || t("varie.browser.page");
 }
 
 /** «localhost:5173» → «http://localhost:5173/»; «example.org/x» → https; una frase non è un indirizzo. */
@@ -385,8 +387,9 @@ export function urlApribile(testo) {
   } catch { return null; }
 }
 
-const oraRoma = new Intl.DateTimeFormat('it-IT', { timeZone: 'Europe/Rome', hour: '2-digit', minute: '2-digit' });
-const giornoRoma = new Intl.DateTimeFormat('it-IT', { timeZone: 'Europe/Rome', day: '2-digit', month: '2-digit' });
+/* I formattatori si costruiscono a ogni uso: seguono la lingua corrente. */
+const oraRoma = () => new Intl.DateTimeFormat(localeUI(), { timeZone: 'Europe/Rome', hour: '2-digit', minute: '2-digit' });
+const giornoRoma = () => new Intl.DateTimeFormat(localeUI(), { timeZone: 'Europe/Rome', day: '2-digit', month: '2-digit' });
 
 /*
  * ⛔ 08/9: quando la lettura è stata TAGLIATA, il numero che conta non è quanto l'agente ha
@@ -431,12 +434,12 @@ function numeroLocale(n) {
 /** «Agente · 05/09, 10:42 (Roma) · 365 caratteri» — la provenienza di una lettura, nel formato del mockup. */
 export function formattaProvenienza(pagina) {
   const quando = pagina?.quando ? new Date(pagina.quando) : null;
-  const chi = t(pagina?.origine === 'tu' ? TESTI.provenienzaTu : TESTI.provenienzaAgente);
+  const chi = pagina?.origine === 'tu' ? TESTI.provenienzaTu : TESTI.provenienzaAgente;
   const parti = [chi];
-  if (quando && !Number.isNaN(quando.getTime())) parti.push(`${giornoRoma.format(quando)}, ${oraRoma.format(quando)} (Roma)`);
+  if (quando && !Number.isNaN(quando.getTime())) parti.push(`${giornoRoma().format(quando)}, ${oraRoma().format(quando)} ${t('varie.browser.romeSuffix')}`);
   if (pagina?.tipo !== 'viva') {
     const quanti = String(pagina?.testo || '').length;
-    parti.push(tn(TESTI.caratteriUno, TESTI.caratteriMolti, quanti, { n: numeroLocale(quanti) }));
+    parti.push(tn('varie.browser.chars.one', 'varie.browser.chars.many', quanti, { n: numeroLocale(quanti) }));
   }
   return parti.join(' · ');
 }
@@ -666,7 +669,7 @@ export function creaBrowser(schermo, { azioni = {}, modoIniziale = 'pagina' } = 
   el.annulla?.addEventListener('click', () => { const s = attiva(); if (!s) return; if (azioni.annullaApertura) azioni.annullaApertura(s); else azioni.chiudi?.(s.id); });
   if (el.url) {
     el.url.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') { e.preventDefault(); const u = urlApribile(el.url.value); if (u) { azioni.apri?.(u); el.url.blur(); } else { el.url.setAttribute('aria-invalid', 'true'); mostraAvviso(t('Non è un indirizzo: scrivi un sito (es. localhost:5173 o example.org).')); } }
+      if (e.key === 'Enter') { e.preventDefault(); const u = urlApribile(el.url.value); if (u) { azioni.apri?.(u); el.url.blur(); } else { el.url.setAttribute('aria-invalid', 'true'); mostraAvviso(t("varie.browser.address.notAnAddress")); } }
       if (e.key === 'Escape') { e.preventDefault(); el.url.value = attiva()?.url || ''; el.url.removeAttribute('aria-invalid'); el.url.blur(); }
     });
     el.url.addEventListener('focus', () => el.url.select());
@@ -718,7 +721,7 @@ export function creaBrowser(schermo, { azioni = {}, modoIniziale = 'pagina' } = 
     classe: 'talos-tabstrip__scheda',
     tag: 'div',
     idMenu: 'menuSchedaBrowser',
-    etichettaMenu: t('Azioni sulla pagina'),
+    etichettaMenu: t("varie.browser.tab.actions"),
     scorre: true,
     chiudibile: true,
     identifica: (s) => s.id,
@@ -731,8 +734,8 @@ export function creaBrowser(schermo, { azioni = {}, modoIniziale = 'pagina' } = 
       return false;
     },
     vociMenu: (s) => [
-      [t('Chiudi'), () => azioni.chiudi?.(s.id), true],
-      [t('Copia l’indirizzo'), () => { navigator.clipboard?.writeText?.(s.url || ''); }, Boolean(s.url)],
+      [t("varie.browser.tab.close"), () => azioni.chiudi?.(s.id), true],
+      [t("varie.browser.tab.copyAddress"), () => { navigator.clipboard?.writeText?.(s.url || ''); }, Boolean(s.url)],
     ],
     azioni: {
       seleziona: (id) => azioni.seleziona?.(id),
@@ -797,7 +800,7 @@ export function creaBrowser(schermo, { azioni = {}, modoIniziale = 'pagina' } = 
     const chiudi = doc.createElement('button');
     chiudi.type = 'button'; chiudi.className = 'talos-tabstrip__chiudi'; chiudi.tabIndex = -1;
     chiudi.dataset.browserChiudi = s.id;
-    chiudi.setAttribute('aria-label', t('Chiudi {titolo}', { titolo: nome }));
+    chiudi.setAttribute('aria-label', t("varie.browser.tab.closeLabel", { title: nome }));
     const svgX = doc.createElementNS('http://www.w3.org/2000/svg', 'svg');
     svgX.setAttribute('class', 'i'); svgX.setAttribute('aria-hidden', 'true');
     const useX = doc.createElementNS('http://www.w3.org/2000/svg', 'use');
@@ -837,8 +840,8 @@ export function creaBrowser(schermo, { azioni = {}, modoIniziale = 'pagina' } = 
     const riassunto = document.createElement('summary');
     const misure = riassuntoPulizia(grezzo);
     riassunto.textContent = misure
-      ? t('Sorgente ricevuto dall’agente ({n} caratteri)', { n: numeroLocale(misure.caratteriPrima) })
-      : t('Sorgente ricevuto dall’agente');
+      ? t("varie.browser.source.withChars", { n: numeroLocale(misure.caratteriPrima) })
+      : t("varie.browser.source.plain");
     const pre = document.createElement('pre');
     pre.className = 'talos-browser__text';
     pre.textContent = grezzo;
@@ -925,7 +928,7 @@ export function creaBrowser(schermo, { azioni = {}, modoIniziale = 'pagina' } = 
         if (!frame.isConnected || frame.dataset.caricata === 'si') return;
         if (stato.modiChiesti[idSuo] === 'pagina') return; // chi ha chiesto la pagina non si vede rispondere col testo
         impostaModo(idSuo, 'testo');
-        if (attiva()?.id === idSuo) mostraAvviso(t('Questo sito non si lascia mostrare dentro TALOS. Qui sotto c’è il testo che ha letto l’agente.'));
+        if (attiva()?.id === idSuo) mostraAvviso(t("varie.browser.refusal.notice"));
         renderizza();
       }, 4000);
     }
@@ -956,7 +959,7 @@ export function creaBrowser(schermo, { azioni = {}, modoIniziale = 'pagina' } = 
        richiesta «Pagina» fatta su una zittiva il ripiego dappertutto). Adesso si legge e si scrive
        per id, e una scheda che fallisce lascia le altre dov'erano. */
     if (modoDi(s.id) === 'pagina' && stato.modiChiesti[s.id] !== 'pagina') impostaModo(s.id, 'testo');
-    return `${t(s.motivoCornice || 'Questo sito non si lascia mostrare dentro TALOS')}. ${t('Qui sotto c’è il testo che ha letto l’agente.')}`;
+    return `${t(s.motivoCornice || t('varie.browser.refusal.fallback'))}. ${t("varie.browser.refusal.belowText")}`;
   }
 
   /*
@@ -1028,8 +1031,8 @@ export function creaBrowser(schermo, { azioni = {}, modoIniziale = 'pagina' } = 
      */
     const bRiprova = box.querySelector('[data-stato-riprova]');
     const bAnnulla = box.querySelector('[data-stato-annulla]');
-    if (bRiprova) bRiprova.textContent = t(TESTI.riprova);
-    if (bAnnulla) bAnnulla.textContent = t(TESTI.annulla);
+    if (bRiprova) bRiprova.textContent = TESTI.riprova;
+    if (bAnnulla) bAnnulla.textContent = TESTI.annulla;
     const situazione = statoDellaScheda(s);
     const riposata = Boolean(s && stato.riposate.has(s.id));
     /*
@@ -1046,9 +1049,9 @@ export function creaBrowser(schermo, { azioni = {}, modoIniziale = 'pagina' } = 
          l'attributo — e nessuno dei due dipende dall'altro. */
       el.caricamento.dataset.stato = lavora ? situazione : '';
       const suoTitolo = el.caricamento.querySelector('.talos-browser__heading');
-      if (suoTitolo && lavora) suoTitolo.textContent = situazione === 'retrying' ? TESTI.statoRiprovo(Number(s?.tentativi || 0), Number(s?.tentativiMassimi || 0)) : t(TESTI.statoApro);
+      if (suoTitolo && lavora) suoTitolo.textContent = situazione === 'retrying' ? TESTI.statoRiprovo(Number(s?.tentativi || 0), Number(s?.tentativiMassimi || 0)) : TESTI.statoApro;
       const suoSotto = el.caricamento.querySelector('p.talos-muted');
-      if (suoSotto && lavora) suoSotto.textContent = t(situazione === 'retrying' ? TESTI.statoRiprovoSotto : TESTI.statoAproSotto);
+      if (suoSotto && lavora) suoSotto.textContent = situazione === 'retrying' ? TESTI.statoRiprovoSotto : TESTI.statoAproSotto;
       /*
        * ⛔⛔ 16/09, GIRO DI RIPARAZIONE, trovato GUARDANDO la foto del tema chiaro in inglese e non
        *   da un conteggio verde: dentro un pannello tutto inglese («No answer: trying again (2 of
@@ -1058,7 +1061,7 @@ export function creaBrowser(schermo, { azioni = {}, modoIniziale = 'pagina' } = 
        * ⇒ L'etichetta la scrive il componente, come tutto il resto del pannello. Il modello resta
        *   com'è (non è un file di questa corsia) e continua a valere come testo di partenza.
        */
-      if (el.annulla && lavora) el.annulla.textContent = t(TESTI.annullaNavigazione);
+      if (el.annulla && lavora) el.annulla.textContent = TESTI.annullaNavigazione;
     }
     /*
      * ⛔ 16/09, punto 4(f) — LA PAGINA PILOTATA È UNA ALLA VOLTA (assunzione approvata dall'owner
@@ -1073,9 +1076,9 @@ export function creaBrowser(schermo, { azioni = {}, modoIniziale = 'pagina' } = 
     box.dataset.stato = (riposata || vivaARiposo) && situazione === 'loaded' ? 'riposo' : situazione;
     if (!parla) return situazione;
     if (vivaARiposo) {
-      const h = box.querySelector('[data-stato-titolo]'); if (h) h.textContent = t(TESTI.statoVivaInPausa);
+      const h = box.querySelector('[data-stato-titolo]'); if (h) h.textContent = TESTI.statoVivaInPausa;
       const m = box.querySelector('[data-stato-motivo]'); if (m) { m.textContent = ''; m.hidden = true; }
-      const r = box.querySelector('[data-stato-rimedio]'); if (r) { r.textContent = t(TESTI.unaVivaAllaVolta); r.hidden = false; }
+      const r = box.querySelector('[data-stato-rimedio]'); if (r) { r.textContent = TESTI.unaVivaAllaVolta; r.hidden = false; }
       const ri = box.querySelector('[data-stato-riprova]'); if (ri) ri.hidden = false;
       const an = box.querySelector('[data-stato-annulla]'); if (an) an.hidden = true;
       return situazione;
@@ -1097,12 +1100,12 @@ export function creaBrowser(schermo, { azioni = {}, modoIniziale = 'pagina' } = 
      */
     const detto = frasePerGenere(s?.genere, s?.dettagli) || (s?.genere ? '' : String(s?.motivo || ''));
     const testi = {
-      loading: [t(TESTI.statoApro), '', t(TESTI.statoAproSotto)],
-      retrying: [TESTI.statoRiprovo(tentativi, massimi), detto, t(TESTI.statoRiprovoSotto)],
-      error: [t(TESTI.statoNonRaggiunta), detto || t('Il sito non consente di essere mostrato dentro TALOS'), rimedioPerGenere(s?.genere)],
-      unreachable: [t(TESTI.statoNonRaggiunta), detto, rimedioPerGenere(s?.genere)],
-      cancelled: [t(TESTI.statoAnnullata), '', t(TESTI.statoAnnullataSotto)],
-      loaded: [t(TESTI.statoRiposo), '', t(TESTI.statoRiposoSotto)], // qui ci si arriva solo se la cornice era stata messa a riposo
+      loading: [TESTI.statoApro, '', TESTI.statoAproSotto],
+      retrying: [TESTI.statoRiprovo(tentativi, massimi), detto, TESTI.statoRiprovoSotto],
+      error: [TESTI.statoNonRaggiunta, detto || t("varie.browser.refusal.notAllowed"), rimedioPerGenere(s?.genere)],
+      unreachable: [TESTI.statoNonRaggiunta, detto, rimedioPerGenere(s?.genere)],
+      cancelled: [TESTI.statoAnnullata, '', TESTI.statoAnnullataSotto],
+      loaded: [TESTI.statoRiposo, '', TESTI.statoRiposoSotto], // qui ci si arriva solo se la cornice era stata messa a riposo
     };
     const [t1, t2, t3] = testi[situazione] || testi.loaded;
     if (titolo) titolo.textContent = t1;
@@ -1134,15 +1137,15 @@ export function creaBrowser(schermo, { azioni = {}, modoIniziale = 'pagina' } = 
     const avvisoCornice = corniceDellaLettura(s);
     const letture = stato.schede.filter((x) => x.tipo !== 'viva').length;
     const vive = stato.schede.length - letture;
-    if (el.riepilogo) el.riepilogo.textContent = stato.schede.length === 0 ? t(TESTI.riepilogoVuoto) : (vive === 0 ? TESTI.riepilogoLetture(letture) : TESTI.riepilogoMisto(letture, vive));
+    if (el.riepilogo) el.riepilogo.textContent = stato.schede.length === 0 ? TESTI.riepilogoVuoto : (vive === 0 ? TESTI.riepilogoLetture(letture) : TESTI.riepilogoMisto(letture, vive));
     renderizzaSchede();
     /* ⛔ 16/09 — la barra parla la lingua di chi guarda. Si riscrive a ogni disegno, che è anche
        ciò che accade al cambio di lingua (`EVENTO_LINGUA` ridisegna le superfici del codice). */
-    if (el.rileggi) el.rileggi.textContent = t(TESTI.barraRileggi);
-    if (el.annota) el.annota.textContent = t(TESTI.barraAnnota);
-    if (el.nota) el.nota.textContent = t(TESTI.barraNota);
-    if (el.copia) el.copia.textContent = t(TESTI.barraCopia);
-    for (const b of el.modi) b.textContent = t(b.dataset.browserModo === 'pagina' ? TESTI.barraModoPagina : TESTI.barraModoTesto);
+    if (el.rileggi) el.rileggi.textContent = TESTI.barraRileggi;
+    if (el.annota) el.annota.textContent = TESTI.barraAnnota;
+    if (el.nota) el.nota.textContent = TESTI.barraNota;
+    if (el.copia) el.copia.textContent = TESTI.barraCopia;
+    for (const b of el.modi) b.textContent = b.dataset.browserModo === 'pagina' ? TESTI.barraModoPagina : TESTI.barraModoTesto;
     const i = indiceAttiva();
     if (el.indietro) el.indietro.disabled = i <= 0;
     if (el.avanti) el.avanti.disabled = i < 0 || i >= stato.schede.length - 1;
@@ -1150,17 +1153,17 @@ export function creaBrowser(schermo, { azioni = {}, modoIniziale = 'pagina' } = 
     if (el.fuori) el.fuori.disabled = !s || !/^https?:\/\//i.test(s.url);
     for (const b of [el.rileggi, el.annota, el.nota, el.copia]) if (b) b.disabled = !s;
     if (el.copia) el.copia.disabled = !s || s.tipo === 'viva';
-    if (el.rileggi) el.rileggi.title = t(s?.tipo === 'viva' ? 'Ricarica la pagina nella cornice' : 'Prepara nel composer la richiesta di rileggere questa pagina');
+    if (el.rileggi) el.rileggi.title = s?.tipo === 'viva' ? t('varie.browser.rereadTitle.live') : t('varie.browser.rereadTitle.reading');
     if (el.posizione) {
       // ⛔ 16/09 — la riga di posizione legge lo stato canonico della scheda, non due valori scelti a mano
       const qui = statoDellaScheda(s);
       el.posizione.textContent = !s ? '' : s.tipo === 'viva'
-        ? t(qui === 'loading' || qui === 'retrying' ? TESTI.posizioneCaricamento : (qui === 'error' || qui === 'unreachable' || qui === 'cancelled') ? TESTI.posizioneBloccata : TESTI.posizioneViva)
+        ? (qui === 'loading' || qui === 'retrying' ? TESTI.posizioneCaricamento : (qui === 'error' || qui === 'unreachable' || qui === 'cancelled') ? TESTI.posizioneBloccata : TESTI.posizioneViva)
         : TESTI.posizioneLettura(stato.schede.filter((x) => x.tipo !== 'viva').indexOf(s) + 1, letture);
     }
     // stati
     const richiesta = stato.richiesta;
-    if (el.bloccato) { el.bloccato.hidden = !richiesta; if (richiesta && el.bloccatoTesto) el.bloccatoTesto.textContent = t('L’agente chiede di leggere {url}. La scelta vale per questa richiesta.', { url: richiesta.url }); }
+    if (el.bloccato) { el.bloccato.hidden = !richiesta; if (richiesta && el.bloccatoTesto) el.bloccatoTesto.textContent = t("varie.browser.ask.notice", { url: richiesta.url }); }
     // ⛔ 16/09 — `#browserCaricamento` non è più solo delle pagine vive: lo accende `renderizzaStato`
     //   per QUALUNQUE scheda che sta aprendo o riprovando (prima una lettura in attesa non diceva niente).
     if (el.vuoto) el.vuoto.hidden = stato.schede.length > 0;
@@ -1194,8 +1197,8 @@ export function creaBrowser(schermo, { azioni = {}, modoIniziale = 'pagina' } = 
       const letto = lettura ? quantoHaLetto(s.testo) : { tagliato: false };
       conto.hidden = !letto.tagliato;
       if (letto.tagliato) {
-        conto.textContent = `${breve(letto.ricevuti)} ${t('di')} ${breve(letto.totale)}`;
-        b.title = t('La pagina è stata tagliata: l’agente ne ha ricevuta solo una parte. Aprila per vedere quale.');
+        conto.textContent = t('varie.browser.partial.of', { received: breve(letto.ricevuti), total: breve(letto.totale) });
+        b.title = t("varie.browser.partial.hint");
       }
     }
     const modoQui = modoDi(s?.id);
@@ -1226,12 +1229,12 @@ export function creaBrowser(schermo, { azioni = {}, modoIniziale = 'pagina' } = 
     renderizzaCornice(s);
     // nota
     const nota = s ? stato.note[s.url] : '';
-    if (el.notaSalvata) { el.notaSalvata.hidden = !nota; el.notaSalvata.textContent = nota ? t('Nota: {nota}', { nota }) : ''; }
+    if (el.notaSalvata) { el.notaSalvata.hidden = !nota; el.notaSalvata.textContent = nota ? t("varie.browser.note.saved", { note: nota }) : ''; }
     if (!s || (el.editorNota && !el.editorNota.hidden && el.editorNota.dataset.browserId !== s.id)) { if (el.editorNota) el.editorNota.hidden = true; el.nota?.setAttribute('aria-expanded', 'false'); }
     if (el.editorNota && s) el.editorNota.dataset.browserId = s.id;
     /* ⛔ 08/9, owner: «non ci deve essere nulla di sotto il riquadro del browser». La riga dei
        limiti non c'e' piu' nel markup; il codice regge un DOM che non la contiene. */
-    if (el.limiti) el.limiti.textContent = t(vive > 0 ? TESTI.limitiVive : TESTI.limitiLetture);
+    if (el.limiti) el.limiti.textContent = vive > 0 ? TESTI.limitiVive : TESTI.limitiLetture;
     // il pannello dei commenti: solo su una pagina viva proxata
     /* ⛔ 07/9 — la stessa condizione stava scritta in DUE posti con due valori diversi: qui «solo
        proxata» e sul pulsante «proxata o viva». Risultato: il pulsante accendeva il modo e il
@@ -1253,7 +1256,7 @@ export function creaBrowser(schermo, { azioni = {}, modoIniziale = 'pagina' } = 
         el.annotazioni.hidden = lista.length === 0 && !stato.annotaAttivo;
       }
     }
-    if (el.annota) { el.annota.setAttribute('aria-pressed', String(annotabile && stato.annotaAttivo)); el.annota.title = annotabile ? t('Segna gli elementi della pagina da cambiare: i commenti finiscono nel composer') : t('Prepara una bozza nella chat senza inviarla'); }
+    if (el.annota) { el.annota.setAttribute('aria-pressed', String(annotabile && stato.annotaAttivo)); el.annota.title = annotabile ? t("varie.browser.annotate.on") : t("varie.browser.annotate.off"); }
     dialogaConOverlay({ tipo: 'annota', attivo: annotabile && stato.annotaAttivo });
   }
 

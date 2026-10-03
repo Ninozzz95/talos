@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { TESTI } from '../../src/i18n/testi/index.js'; // corsia A della lingua (03/10/2026): le frasi stanno nel dizionario, il sorgente porta la chiave
 
 /*
  * ⛔⛔⛔ BC-42 (12/09/2026) — `GET …/tree?percorso=` PRENDEVA 400 A OGNI APERTURA DI SESSIONE, e il
@@ -76,14 +77,19 @@ test('BC-42/4 — il debito si salda dove l\'albero si rilegge davvero, non altr
 test('BC-42/5 — il messaggio dell\'albero rotto dice COSA è successo, non «query non valida»', () => {
   const corpo = corpoFunzione(APP, 'renderizzaAlberoRealeUnaVolta');
   assert.ok(/errore\?\.code === 'QUERY_INVALID'/.test(corpo), 'la cartella sparita si riconosce dal codice che il server manda davvero');
-  assert.ok(/è stata spostata o cancellata/.test(corpo), 'si dice il fatto');
-  assert.ok(/Apri una sessione nuova sulla cartella giusta/.test(corpo), 'e cosa farci: un errore senza via d\'uscita è solo uno spavento');
+  assert.ok(/tr\('app\.files\.folderGone'/.test(corpo), 'la cartella sparita ha la sua frase');
+  assert.ok(/è stata spostata o cancellata/.test(TESTI.it['app.files.folderGone']), 'si dice il fatto');
+  assert.ok(/Apri una sessione nuova sulla cartella giusta/.test(TESTI.it['app.files.folderGone']), 'e cosa farci: un errore senza via d\'uscita è solo uno spavento');
   assert.equal(/textElement\('li', 'ft-loading', 'Albero non disponibile\.'\)/.test(corpo), false, 'la frase muta di prima non torna a schermo');
   /* ⛔ Il gergo si cerca in ciò che FINISCE A SCHERMO, non nei commenti: il commento sopra la cura
      cita «Query non valida» apposta, per spiegare da dove viene il 400. */
-  const aSchermo = [...corpo.matchAll(/'ft-loading',\s*([\s\S]*?)\)\);/g)].map((m) => m[1]).join(' ');
-  assert.ok(aSchermo.length > 0, 'le due frasi mostrate devono essere trovabili');
-  assert.equal(/Query|QUERY_INVALID|400/.test(aSchermo), false, 'mai il gergo del server a schermo (H22)');
+  const sorgenteASchermo = [...corpo.matchAll(/'ft-loading',\s*([\s\S]*?)\)\);/g)].map((m) => m[1]).join(' ');
+  /* Le frasi stanno nel dizionario: a schermo va la voce della chiave, in tutte e due le lingue. */
+  const chiavi = [...sorgenteASchermo.matchAll(/tr\('([^']+)'/g)].map((m) => m[1]);
+  assert.ok(chiavi.length >= 2, 'le due frasi mostrate devono essere trovabili');
+  const aSchermo = chiavi.flatMap((k) => [TESTI.it[k], TESTI.en[k]]);
+  assert.ok(aSchermo.every((v) => typeof v === 'string'), 'ogni chiave ha la sua frase in italiano e in inglese');
+  assert.equal(/Query|QUERY_INVALID|400/.test(aSchermo.join(' ')), false, 'mai il gergo del server a schermo (H22)');
 });
 
 test('BC-42, AL CONTRARIO — i cancelli RESPINGONO il sorgente com\'era prima della cura', () => {

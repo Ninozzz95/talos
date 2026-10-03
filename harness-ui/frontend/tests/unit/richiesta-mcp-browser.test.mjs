@@ -12,7 +12,12 @@ import { tmpdir } from 'node:os';
 import { chromium } from '@playwright/test';
 import { build } from 'esbuild';
 
-const sorgente = await readFile(new URL('../../src/components/richiesta-mcp.js', import.meta.url), 'utf8');
+/* 03/10/2026 — il componente ora importa il dizionario (`lingua.js`), come ogni altro: non si può più incollare il suo testo in una
+   pagina vuota. Si impacchetta col suo vero grafo di import, nello stesso modo di `famiglia-consenso-stile-browser.test.mjs`. */
+const codiceModulo = (await build({ absWorkingDir: tmpdir(), stdin: { contents: `
+  import { creaRichiestaMcp, segnaEsitoRichiestaMcp, erroreDelModulo } from './src/components/richiesta-mcp.js';
+  window.__mcp = { creaRichiestaMcp, segnaEsitoRichiestaMcp, erroreDelModulo };
+`, resolveDir: fileURLToPath(new URL('../..', import.meta.url)), sourcefile: 'rm-banco.js' }, bundle: true, write: false, format: 'iife', logLevel: 'silent' })).outputFiles[0].text;
 /* il foglio VERO dell'app (main.css con tutti i suoi @import), impacchettato come in provider-modale-salva-browser.test.mjs */
 const frontend = fileURLToPath(new URL('../..', import.meta.url));
 const soloFrontend = { name: 'solo-frontend', setup(b) {
@@ -39,7 +44,7 @@ test.after(async () => { await browser?.close(); });
 async function pagina() {
   const page = await browser.newPage();
   await page.setContent('<!doctype html><meta charset="utf-8"><body><div id="r"></div></body>');
-  await page.addScriptTag({ type: 'module', content: `${sorgente}\nwindow.__mcp = { creaRichiestaMcp, segnaEsitoRichiestaMcp, erroreDelModulo };` });
+  await page.addScriptTag({ content: codiceModulo });
   await page.waitForFunction(() => window.__mcp);
   return page;
 }
@@ -194,7 +199,7 @@ test('RICHIESTA-MCP-07: dentro la chat, col foglio vero: esito ed errore piccoli
   const page = await browser.newPage({ viewport: { width: 1920, height: 1080 } });
   await page.setContent('<!doctype html><html lang="it"><head><meta charset="utf-8"></head><body><div id="conversation"><article class="talos-message"><div class="talos-message__body" id="r"></div></article></div></body></html>');
   await page.addStyleTag({ content: foglio });
-  await page.addScriptTag({ type: 'module', content: `${sorgente}\nwindow.__mcp = { creaRichiestaMcp, segnaEsitoRichiestaMcp };` });
+  await page.addScriptTag({ content: codiceModulo });
   await page.waitForFunction(() => window.__mcp);
   const m = await page.evaluate(([modulo, paginaR]) => {
     const r = document.getElementById('r');

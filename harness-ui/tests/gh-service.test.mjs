@@ -205,7 +205,7 @@ test('GH-SERVIZIO-06 — al contrario: ramo non pubblicato o con commit da invia
   assert.equal((await servizio.crea({ sessionId: 's', titolo: 'x'.repeat(257), base: 'main' })).code, 'GH_INPUT_INVALID');
   assert.equal((await servizio.crea({ sessionId: 's', titolo: 'x', base: '--web' })).code, 'GH_INPUT_INVALID');
   const stesso = await servizio.crea({ sessionId: 's', titolo: 'x', base: 'feat/pr-tab' });
-  assert.deepEqual([stesso.code, stesso.erroreAvvio], ['GH_INPUT_INVALID', 'La base e il ramo sono lo stesso'], 'il ramo stesso è sul remoto, ma non può essere la sua base');
+  assert.deepEqual([stesso.code, stesso.erroreAvvio], ['GH_INPUT_INVALID', 'The base and the branch are the same'], 'il ramo stesso è sul remoto, ma non può essere la sua base');
   assert.ok(!chiamate.some((c) => c.argomenti[1] === 'create'));
 });
 
@@ -349,4 +349,82 @@ test('GH-COLLEGA-03 — due clic PRIMA che arrivi il codice: un solo `gh auth lo
   assert.deepEqual([a.codice, b.codice], ['ZZ99-YY88', 'ZZ99-YY88']);
   assert.equal((await servizio.collega()).codice, 'ZZ99-YY88');
   assert.equal(lanci, 1);
+});
+
+/* ─────────── K4a (03/10/2026): l'errore dell'installazione e quello dell'accesso arrivano alla scheda con la loro chiave ─────────── */
+
+const serverIt = async () => (await import('../frontend/src/i18n/testi/server.js')).default;
+const riempiEn = async (chiave, params) => {
+  const dizionario = await serverIt();
+  return dizionario.en[chiave.replace(/^server\./u, '')].replace(/\{([a-zA-Z0-9_]+)\}/gu, (tutto, nome) => String(params?.[nome] ?? tutto));
+};
+
+test('GH-K4A-01 — l\'errore dell\'installazione: frase inglese + chiave + valori, e la voce inglese è IDENTICA alla frase', async (t) => {
+  const pacchetto = PACCHETTI_GH['win32-x64'];
+  const crea = (env, extra) => creaServizioGh({
+    cartellaStrumenti: join(env.cartella, 'strumenti'), servizioGit: { sincronizzazione: async () => SINC_PUBBLICATO }, piattaforma: 'win32', architettura: 'x64', ambiente: { PATH: '' },
+    eseguiFn: async () => ({ codice: 1, stdout: '', stderr: '' }), esisteFn: async (p) => env.esistenti.has(p), ...extra,
+  });
+  const scarica = (impronteFile, improntaZip) => async (url, destinazione) => { writeFileSync(destinazione, url.endsWith('checksums.txt') ? `${impronteFile}  ${pacchetto.nome}\n` : 'zip'); return { byte: 3, sha256: improntaZip }; };
+  const casi = [
+    ['server.gh.install.checksumPublished', (env) => crea(env, { scaricaFn: scarica('f'.repeat(64), pacchetto.sha256), estraiFn: async () => {} })],
+    ['server.gh.install.checksumFile', (env) => crea(env, { scaricaFn: scarica(pacchetto.sha256, 'e'.repeat(64)), estraiFn: async () => {} })],
+    ['server.gh.install.noGhExe', (env) => crea(env, { scaricaFn: scarica(pacchetto.sha256, pacchetto.sha256), estraiFn: async () => {} })],
+    ['server.gh.install.unsupported', (env) => creaServizioGh({ cartellaStrumenti: join(env.cartella, 'l'), servizioGit: { sincronizzazione: async () => SINC_PUBBLICATO }, piattaforma: 'linux', architettura: 'x64', ambiente: { PATH: '' }, eseguiFn: async () => ({ codice: 1, stdout: '', stderr: '' }), esisteFn: async () => false }), { platform: 'linux', arch: 'x64' }],
+  ];
+  for (const [chiave, creaServizio, params] of casi) {
+    const env = ambiente(t, { ghDiSistema: null });
+    const servizio = creaServizio(env);
+    const rifiuto = await servizio.installa();
+    assert.ok(rifiuto.erroreAvvio, chiave);
+    const { installazione } = await servizio.stato();
+    assert.equal(installazione.erroreChiave, chiave, chiave);
+    assert.equal(installazione.errore, await riempiEn(chiave, installazione.erroreParams), `${chiave}: la frase inglese non coincide con la voce`);
+    if (params) assert.deepEqual(installazione.erroreParams, params, chiave);
+  }
+  /* il download vero (`fetch` globale, nessuna `scaricaFn`): HTTP 502 ⇒ la frase con il numero, e la sua voce */
+  const fetchPrima = globalThis.fetch;
+  globalThis.fetch = async () => ({ ok: false, status: 502, body: null });
+  try {
+    const envDownload = ambiente(t, { ghDiSistema: null });
+    const scaricante = crea(envDownload, {});
+    await scaricante.installa();
+    const { installazione: giu } = await scaricante.stato();
+    assert.deepEqual([giu.errore, giu.erroreChiave, giu.erroreParams], ['Download failed (HTTP 502)', 'server.gh.install.downloadFailed', { status: 502 }]);
+    assert.equal(await riempiEn(giu.erroreChiave, giu.erroreParams), giu.errore);
+  } finally { globalThis.fetch = fetchPrima; }
+  /* AL CONTRARIO: un errore che il sistema operativo scrive con le sue parole non riceve una chiave inventata */
+  const env = ambiente(t, { ghDiSistema: null });
+  const altrui = creaServizioGh({
+    cartellaStrumenti: join(env.cartella, 'strumenti'), servizioGit: { sincronizzazione: async () => SINC_PUBBLICATO }, piattaforma: 'win32', architettura: 'x64', ambiente: { PATH: '' },
+    eseguiFn: async () => ({ codice: 1, stdout: '', stderr: '' }), esisteFn: async () => false,
+    scaricaFn: async () => { throw new Error('ENOSPC: no space left on device'); },
+  });
+  await altrui.installa();
+  const { installazione } = await altrui.stato();
+  assert.equal(installazione.errore, 'ENOSPC: no space left on device');
+  assert.equal('erroreChiave' in installazione, false);
+});
+
+test('GH-K4A-02 — l\'errore dell\'accesso: «gh è uscito con N» ha la sua chiave; le parole di `gh` restano le sue, senza chiave', async (t) => {
+  const env = ambiente(t);
+  const crea = (emetti) => creaServizioGh({
+    cartellaStrumenti: join(env.cartella, 'strumenti'), servizioGit: { sincronizzazione: async () => SINC_PUBBLICATO }, piattaforma: 'win32', architettura: 'x64',
+    ambiente: { PATH: join(env.cartella, 'sistema') }, esisteFn: async (p) => env.esistenti.has(p),
+    eseguiFn: async (e, a) => (a[0] === '--version' ? { codice: 0, stdout: 'gh version 2.97.0 (2026-07-31)\n', stderr: '' } : { codice: 0, stdout: '{}', stderr: '' }),
+    avviaFn: () => { const f = figlioFinto(); setImmediate(() => emetti(f)); return f; },
+  });
+  /* esce con 3 senza dire niente: la frase è la nostra, con la sua chiave e il numero */
+  const muto = crea((f) => f.emit('close', 3));
+  const r = await muto.collega();
+  assert.equal(r.code, 'GH_LOGIN_FAILED');
+  const { collegamento } = await muto.stato();
+  assert.deepEqual([collegamento.stato, collegamento.errore, collegamento.erroreChiave, collegamento.erroreParams], ['fallito', 'gh exited with 3', 'server.gh.login.exitedWith', { code: 3 }]);
+  assert.equal(await riempiEn(collegamento.erroreChiave, collegamento.erroreParams), collegamento.errore);
+  /* esce con 1 dicendo qualcosa: sono le parole di `gh`, e non si traducono */
+  const parla = crea((f) => { f.stderr.emit('data', 'error connecting to github.com\n'); f.emit('close', 1); });
+  await parla.collega();
+  const letto = (await parla.stato()).collegamento;
+  assert.equal(letto.errore, 'error connecting to github.com');
+  assert.equal('erroreChiave' in letto, false);
 });

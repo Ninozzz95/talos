@@ -4,6 +4,7 @@
  *   `src/kernel/collegamento-linux.mjs`. NAMESPACE26: il codice EACCES non si riscrive in ENOENT.
  */
 import test from 'node:test'
+import { togliConfiniDati } from '../src/kernel/confine-dati.mjs'
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
 import { mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs'
@@ -113,7 +114,7 @@ async function giro(cartella, chiamate) {
             const message = c ? { role: 'assistant', content: null, tool_calls: [{ id: `c${n}`, type: 'function', function: { name: c[0], arguments: JSON.stringify(c[1]) } }] } : { role: 'assistant', content: 'fatto' }
             return new Response(JSON.stringify({ choices: [{ message, finish_reason: c ? 'tool_calls' : 'stop' }] }), { headers: { 'Content-Type': 'application/json' } })
         },
-        onGiro: (e) => { if (e.tipo === 'tool-esito') esiti.push(String(e.content)) },
+        onGiro: (e) => { if (e.tipo === 'tool-esito') esiti.push(togliConfiniDati(String(e.content))) },
     })
     return esiti
 }
@@ -187,7 +188,7 @@ async function giroInsieme(cartella, chiamate, extra = {}) {
             primo = false
             return new Response(JSON.stringify({ choices: [{ message, finish_reason: fine }] }), { headers: { 'Content-Type': 'application/json' } })
         },
-        onGiro: (e) => { if (e.tipo === 'tool-esito') esiti.push(String(e.content)) },
+        onGiro: (e) => { if (e.tipo === 'tool-esito') esiti.push(togliConfiniDati(String(e.content))) },
     })
     return esiti
 }

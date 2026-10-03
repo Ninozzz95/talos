@@ -77,19 +77,13 @@ export function valutaSogliaContesto({ tokenMisurati, soglia, warningTokens = nu
   // oltre la soglia «quasi pieno» sarebbe falso: si dice che la soglia è superata (visto nella foto 2-durante: 184.000 su 150.000)
   let testo;
   if (source === 'fallback') {
-    testo = inglese()
-      ? `TALOS precautionary threshold: model window unverified (${numeri.n} of ${numeri.m} tokens).`
-      : `Soglia prudenziale TALOS: finestra del modello non verificata (${numeri.n} su ${numeri.m} token).`;
+    testo = t('chat.context.notice.windowUnverified', numeri);
   } else if (source === 'route-minimum') {
-    testo = inglese()
-      ? `The route's precautionary compaction threshold ${rapporto >= 1 ? 'was exceeded' : 'is approaching'} (${numeri.n} of ${numeri.m} tokens).`
-      : `La soglia prudenziale della route ${rapporto >= 1 ? 'è stata superata' : 'si avvicina'} (${numeri.n} su ${numeri.m} token).`;
+    testo = rapporto >= 1 ? t('chat.context.notice.routeExceeded', numeri) : t('chat.context.notice.routeApproaching', numeri);
   } else if (source === 'explicit-cap') {
-    testo = inglese()
-      ? `The configured compaction limit ${rapporto >= 1 ? 'was exceeded' : 'is approaching'} (${numeri.n} of ${numeri.m} tokens).`
-      : `Il limite di compattazione configurato ${rapporto >= 1 ? 'è stato superato' : 'si avvicina'} (${numeri.n} su ${numeri.m} token).`;
+    testo = rapporto >= 1 ? t('chat.context.notice.limitExceeded', numeri) : t('chat.context.notice.limitApproaching', numeri);
   } else {
-    testo = rapporto >= 1 ? t('Il contesto ha superato la soglia ({n} su {m} token).', numeri) : t('Il contesto è quasi pieno ({n} su {m} token).', numeri);
+    testo = rapporto >= 1 ? t('chat.context.notice.overThreshold', numeri) : t('chat.context.notice.almostFull', numeri);
   }
   const warning = numero(warningTokens) && warningTokens > 0 ? warningTokens : Math.floor(soglia * FRAZIONE_AVVISO);
   return { mostra: tokenMisurati >= warning, rapporto, testo };
@@ -168,14 +162,14 @@ export function interpretaEventoCompattazione(evento) {
  * conosciamo si riporta com'è: nasconderlo dietro una frase generica sarebbe dire meno del vero.
  */
 const MOTIVI = Object.freeze({
-  attrezzo: 'il modello ha risposto con un attrezzo invece del riassunto',
-  troncato: 'il riassunto è uscito troncato',
-  vuoto: 'il modello ha risposto vuoto',
-  errore: 'il fornitore ha risposto con un errore',
-  superata: 'la conversazione è andata avanti nel frattempo: il riassunto non vale più',
-  'non-salvata': 'il riassunto non è stato salvato su disco',
+  attrezzo: 'chat.context.failure.tool',
+  troncato: 'chat.context.failure.truncated',
+  vuoto: 'chat.context.failure.empty',
+  errore: 'chat.context.failure.provider',
+  superata: 'chat.context.failure.superseded',
+  'non-salvata': 'chat.context.failure.notSaved',
   // 24/09/2026: la chiusura che il registro scrive al ripristino per un riassunto rimasto a metà (session-registry.mjs, ripristina)
-  interrotta: 'il server si è fermato mentre riassumeva: la conversazione resta intera',
+  interrotta: 'chat.context.failure.interrupted',
 });
 export function motivoUmano(motivo, dettaglio = null) {
   const frase = motivo in MOTIVI ? t(MOTIVI[motivo]) : String(motivo ?? '');
@@ -184,17 +178,17 @@ export function motivoUmano(motivo, dettaglio = null) {
 
 /** Il testo della riga persistente: i numeri quando ci sono, mai inventati quando mancano. */
 export function testoRigaCompattazione({ stato, tokenPrima = null, tokenDopo = null, motivo = null, dettaglio = null } = {}) {
-  if (stato === 'annullata') return t('Riassunto annullato · la conversazione intera torna al modello');
-  if (stato === 'non-riuscita') return `${t('Conversazione non riassunta')}${motivo ? ` · ${motivoUmano(motivo, dettaglio)}` : ''}`;
-  const base = t('Conversazione riassunta');
-  return numero(tokenPrima) && numero(tokenDopo) ? `${base} · ${formattaToken(tokenPrima)} → ${formattaToken(tokenDopo)} ${t('token')}` : base;
+  if (stato === 'annullata') return t('chat.context.row.undone');
+  if (stato === 'non-riuscita') return `${t('chat.context.row.notSummarized')}${motivo ? ` · ${motivoUmano(motivo, dettaglio)}` : ''}`;
+  const base = t('chat.context.row.summarized');
+  return numero(tokenPrima) && numero(tokenDopo) ? `${base} · ${formattaToken(tokenPrima)} → ${formattaToken(tokenDopo)} ${t('chat.context.row.tokens')}` : base;
 }
 
 /** La frase della barra mentre il legacy lavora: fissa (Hermes `status.tsx:52`), col motivo solo quando aggiunge qualcosa. */
 export function testoBarraLegacy(motivo) {
-  if (motivo === 'overflow') return t('La conversazione non entrava nel modello: la riassumo e riprovo…');
-  if (motivo === 'emergenza') return t('Riassumo la conversazione prima di continuare…');
-  return t('Riassumo la conversazione…');
+  if (motivo === 'overflow') return t('chat.context.progress.overflow');
+  if (motivo === 'emergenza') return t('chat.context.progress.emergency');
+  return t('chat.context.summarizing');
 }
 
 /* ------------------------------------------------------------------ l'avviso sopra il composer */
@@ -220,13 +214,13 @@ export function montaAvvisoContesto({ document: doc = globalThis.document, rifer
   avviso.id = 'avvisoContesto';
   avviso.dataset.c = 'ContextNearlyFullNotice';
   avviso.setAttribute('role', 'group');
-  avviso.setAttribute('aria-label', inglese() ? 'Compaction threshold' : 'Soglia di compattazione');
+  avviso.setAttribute('aria-label', t('chat.context.notice.ariaLabel'));
   avviso.hidden = true;
   const icona = doc.createElement('span'); icona.className = 'talos-avviso-piano__icona'; icona.setAttribute('aria-hidden', 'true'); icona.append(ICONA(doc, 'i-history'));
   const testo = doc.createElement('p'); testo.className = 'talos-avviso-piano__testo'; testo.setAttribute('role', 'status'); testo.dataset.avvisoContestoTesto = '';
   const azioni = doc.createElement('div'); azioni.className = 'talos-avviso-piano__azioni';
-  const compatta = doc.createElement('button'); compatta.type = 'button'; compatta.className = 'talos-button talos-button--secondary talos-button--sm'; compatta.dataset.avvisoContesto = 'compatta'; compatta.textContent = t('Compatta ora');
-  const chiudi = doc.createElement('button'); chiudi.type = 'button'; chiudi.className = 'talos-icon-button'; chiudi.dataset.avvisoContesto = 'chiudi'; chiudi.setAttribute('aria-label', t('Chiudi l’avviso')); chiudi.append(ICONA(doc, 'i-x'));
+  const compatta = doc.createElement('button'); compatta.type = 'button'; compatta.className = 'talos-button talos-button--secondary talos-button--sm'; compatta.dataset.avvisoContesto = 'compatta'; compatta.textContent = t('chat.context.compactNow');
+  const chiudi = doc.createElement('button'); chiudi.type = 'button'; chiudi.className = 'talos-icon-button'; chiudi.dataset.avvisoContesto = 'chiudi'; chiudi.setAttribute('aria-label', t('chat.context.notice.dismiss')); chiudi.append(ICONA(doc, 'i-x'));
   azioni.append(compatta, chiudi);
   avviso.append(icona, testo, azioni);
   avviso.addEventListener('click', (event) => {
@@ -269,35 +263,35 @@ export function creaNotaJournalRiparato(info, { document: doc = globalThis.docum
   const giroBuco = Number.isSafeInteger(buco?.recuperataFinoAlGiro) ? buco.recuperataFinoAlGiro : null;
   // `riparato:false` (session-registry.mjs:5212-5214): la coda resta incerta, e si dice — mai «recuperata» su una riparazione non riuscita
   const frase = fallita
-    ? t('La riparazione della conversazione non è riuscita: la coda del file resta incerta.')
+    ? t('chat.context.recovery.repairFailed')
     : buco
       ? (giroBuco !== null
-        ? t('Conversazione recuperata fino al giro {g}: quello che veniva dopo non era leggibile.', { g: giroBuco })
-        : t('Conversazione recuperata fino all’ultimo punto completo: quello che veniva dopo non era leggibile.'))
+        ? t('chat.context.recovery.upToTurn', { g: giroBuco })
+        : t('chat.context.recovery.upToLastPoint'))
       : Number.isSafeInteger(righe)
-        ? tn('Conversazione recuperata dopo un’interruzione: {n} riga scartata', 'Conversazione recuperata dopo un’interruzione: {n} righe scartate', righe)
-        : t('Conversazione recuperata dopo un’interruzione');
-  const nota = creaNotaSistema({ tipo: fallita ? 'warning' : 'info', badge: t('Nota'), titolo: t(fallita ? 'TALOS · conversazione non recuperata' : 'TALOS · conversazione recuperata'), testo: frase }, { document: doc });
+        ? tn('chat.context.recovery.discardedOne', 'chat.context.recovery.discardedMany', righe)
+        : t('chat.context.recovery.afterInterruption');
+  const nota = creaNotaSistema({ tipo: fallita ? 'warning' : 'info', badge: t('chat.note.badge'), titolo: fallita ? t('chat.context.recovery.titleNotRecovered') : t('chat.context.recovery.titleRecovered'), testo: frase }, { document: doc });
   nota.dataset.journalRiparato = chiaveRiparazione(info);
   const corpo = nota.lastElementChild;
   const dettaglio = doc.createElement('p'); dettaglio.className = 'talos-system-note__perche';
   dettaglio.textContent = fallita
-    ? (info.errore ? t('Il sistema ha risposto: {e}. Nessuna riga è stata scartata; riprova a riaprire la conversazione o conserva la diagnosi.', { e: info.errore }) : t('Nessuna riga è stata scartata; riprova a riaprire la conversazione o conserva la diagnosi.'))
+    ? (info.errore ? t('chat.context.recovery.systemAnswered', { e: info.errore }) : t('chat.context.recovery.noLineDiscarded'))
     : buco
-      ? tn('Nel salvataggio mancava un pezzo: {n} parte successiva è stata lasciata da parte. Il file originale non è stato modificato.', 'Nel salvataggio mancava un pezzo: {n} parti successive sono state lasciate da parte. Il file originale non è stato modificato.', Number.isSafeInteger(buco.deltaScartati) ? buco.deltaScartati : 1)
+      ? tn('chat.context.recovery.missingPartOne', 'chat.context.recovery.missingPartsMany', Number.isSafeInteger(buco.deltaScartati) ? buco.deltaScartati : 1)
     : Number.isSafeInteger(info?.byteScartati)
-      ? t('Le righe scartate erano in fondo al file e non erano leggibili ({b} byte). Il resto della conversazione è intatto.', { b: formattaToken(info.byteScartati) })
-      : t('Il resto della conversazione è intatto.');
+      ? t('chat.context.recovery.discardedAtEnd', { b: formattaToken(info.byteScartati) })
+      : t('chat.context.recovery.restIntact');
   corpo.append(dettaglio);
   if (info?.backup) {
     const azioni = doc.createElement('div'); azioni.className = 'talos-cluster talos-system-note__azioni';
-    const dove = doc.createElement('button'); dove.type = 'button'; dove.className = 'talos-button talos-button--secondary talos-button--sm'; dove.textContent = t('Dove sta la copia'); dove.setAttribute('aria-expanded', 'false');
+    const dove = doc.createElement('button'); dove.type = 'button'; dove.className = 'talos-button talos-button--secondary talos-button--sm'; dove.textContent = t('chat.context.recovery.whereIsCopy'); dove.setAttribute('aria-expanded', 'false');
     const percorso = doc.createElement('p'); percorso.className = 'talos-journal-riparato__percorso'; percorso.hidden = true;
     const codice = doc.createElement('code'); codice.textContent = info.backup; percorso.append(codice);
-    const copiaBtn = doc.createElement('button'); copiaBtn.type = 'button'; copiaBtn.className = 'talos-button talos-button--ghost talos-button--sm'; copiaBtn.textContent = t('Copia il percorso');
+    const copiaBtn = doc.createElement('button'); copiaBtn.type = 'button'; copiaBtn.className = 'talos-button talos-button--ghost talos-button--sm'; copiaBtn.textContent = t('chat.context.recovery.copyPath');
     copiaBtn.addEventListener('click', async () => {
-      try { await (copia ? copia(info.backup) : doc.defaultView?.navigator?.clipboard?.writeText(info.backup)); copiaBtn.textContent = t('Copiato'); }
-      catch { copiaBtn.textContent = t('Copia non riuscita: seleziona il percorso'); }
+      try { await (copia ? copia(info.backup) : doc.defaultView?.navigator?.clipboard?.writeText(info.backup)); copiaBtn.textContent = t('chat.common.copied'); }
+      catch { copiaBtn.textContent = t('chat.context.recovery.copyFailed'); }
     });
     percorso.append(copiaBtn);
     dove.addEventListener('click', () => { const aperto = percorso.hidden; percorso.hidden = !aperto; dove.setAttribute('aria-expanded', String(aperto)); });
@@ -328,16 +322,16 @@ function guasto(codice, messaggio, status) { return Object.assign(new Error(mess
 async function chiamaPost(fetchFn, url, signal) {
   let risposta;
   try { risposta = await fetchFn(url, { method: 'POST', credentials: 'same-origin', headers: { Accept: 'application/json' }, signal }); }
-  catch (errore) { if (errore?.name === 'AbortError') throw errore; throw guasto('RETE', t('Connessione al server interrotta. Riprova.')); }
+  catch (errore) { if (errore?.name === 'AbortError') throw errore; throw guasto('RETE', t('chat.context.request.connectionLost')); }
   let dati = null;
   try { dati = await risposta.json(); } catch { dati = null; }
-  if (!risposta.ok || dati?.error || dati?.ok === false) throw guasto(dati?.error?.code || 'HTTP', dati?.error?.message || t('Operazione non riuscita.'), risposta.status);
+  if (!risposta.ok || dati?.error || dati?.ok === false) throw guasto(dati?.error?.code || 'HTTP', dati?.error?.message || t('chat.common.operationFailed'), risposta.status);
   return dati;
 }
 
 /** `POST /api/v1/sessions/:id/compact` (legacy, `http-app.mjs:4955`). Torna `{ compattato }`. */
 export async function compattaLegacy({ fetchFn = globalThis.fetch, base = '/api/v1', sessionId, signal } = {}) {
-  if (typeof sessionId !== 'string' || !sessionId) throw guasto('SESSIONE', t('Apri una conversazione per riassumerla.'));
+  if (typeof sessionId !== 'string' || !sessionId) throw guasto('SESSIONE', t('chat.context.request.openConversationToSummarize'));
   const dati = await chiamaPost(fetchFn, `${base.replace(/\/$/, '')}/sessions/${encodeURIComponent(sessionId)}/compact`, signal);
   const corpo = dati?.data ?? dati ?? {};
   const compattato = corpo.compattato === true;
@@ -350,7 +344,7 @@ export async function compattaLegacy({ fetchFn = globalThis.fetch, base = '/api/
 
 /** `POST /api/v1/sessions/:id/compaction/:at/undo` (rotta di F3, forma del brief). Torna i dati della busta. */
 export async function annullaCompattazioneLegacy({ fetchFn = globalThis.fetch, base = '/api/v1', sessionId, at, signal } = {}) {
-  if (typeof sessionId !== 'string' || !sessionId || typeof at !== 'string' || !at) throw guasto('SESSIONE', t('Non c’è un riassunto da annullare.'));
+  if (typeof sessionId !== 'string' || !sessionId || typeof at !== 'string' || !at) throw guasto('SESSIONE', t('chat.context.request.nothingToUndo'));
   const dati = await chiamaPost(fetchFn, `${base.replace(/\/$/, '')}/sessions/${encodeURIComponent(sessionId)}/compaction/${encodeURIComponent(at)}/undo`, signal);
   return dati?.data ?? dati ?? {};
 }

@@ -101,7 +101,7 @@ test('⭐⭐⭐ T-13-03 — `dentro:".."` esce dal workspace: REFUSED col motivo
     mkdirSync(join(cartella, 'src'), { recursive: true });
     writeFileSync(join(cartella, 'src', 'a.mjs'), 'TOKEN_RISALITA_V4\n');
     const esito = await cercaNelProgetto(discoVero(cartella), { testo: 'TOKEN_RISALITA_V4', dentro: '..' }, { radice: cartella });
-    assert.match(esito, /^REFUSED\./u, 'una sottocartella che risale fuori non è un luogo di ricerca');
+    assert.match(esito, /^INVALID\./u, 'una sottocartella che risale fuori non è un luogo di ricerca (H-05: argomento sbagliato)');
     assert.match(esito, /workspace/u, 'il motivo lo dice a parole');
     assert.doesNotMatch(esito, /a\.mjs/u, 'e la ricerca non è mai partita');
 });

@@ -21,9 +21,12 @@ test('NAV-02: stable unique command ids, all routes real and no first-run comman
   assert.equal(commandById('__proto__'), undefined);
 });
 for (const command of COMMANDS.filter(c => c.requirement)) test(`NAV-02: ${command.id} requires an actual session`, () => {
-  assert.equal(commandDisabledReason(command, empty), 'Apri prima una sessione.');
+  // 03/10/2026: il motivo è una chiave del dizionario (area `comandi`); la voce italiana dice la stessa cosa di prima.
+  assert.equal(commandDisabledReason(command, empty), 'comandi.reason.openSessionFirst');
+  assert.equal(t(commandDisabledReason(command, empty)), 'Apri prima una sessione.');
   assert.equal(commandDisabledReason(command, idle), null);
-  assert.equal(commandDisabledReason(command, busy), command.requirement === 'idle-session' ? 'Attendi la fine dell’esecuzione.' : null);
+  assert.equal(commandDisabledReason(command, busy), command.requirement === 'idle-session' ? 'comandi.reason.waitForRun' : null);
+  if (command.requirement === 'idle-session') assert.equal(t(commandDisabledReason(command, busy)), 'Attendi la fine dell’esecuzione.');
 });
 for (const [query, id] of [['attivita', 'tasks'], ['attività', 'tasks'], ['tasks', 'tasks'], ['gguf locale', 'models'], ['local download', 'models'], ['api chiavi', 'providers'], ['share snapshot', 'share'], ['settings', 'settings'], ['home', 'home']]) test(`NAV-02: search ${query}`, () => {
   assert.ok(findCommands(query, empty).some(item => item.command.id === id));
@@ -38,7 +41,7 @@ test('NAV-02: exact match ranking and safe unsupported/empty searches', () => {
 });
 test('NAV-02: search does not silently hide unavailable commands', () => {
   const result = findCommands('esporta', empty);
-  assert.equal(result.length, 1); assert.equal(result[0].disabledReason, 'Apri prima una sessione.');
+  assert.equal(result.length, 1); assert.equal(t(result[0].disabledReason), 'Apri prima una sessione.');
 });
 test('NAV-02: every advertised shortcut is registered, no decorative hotkeys', () => {
   for (const command of COMMANDS.filter(c => c.shortcut)) assert.ok(SCORCIATOIE.some(s => s.combo === command.shortcut));
@@ -49,6 +52,15 @@ test('NAV-02: every command and every added workspace string has English coverag
   impostaLingua('en');
   try { assert.equal(findCommands('Tasks', empty, t)[0].command.id, 'tasks'); }
   finally { impostaLingua('it'); }
+});
+test('NAV-02: the label is searched in both languages, whatever the UI language (03/10/2026, area `comandi`)', () => {
+  impostaLingua('en');
+  try {
+    assert.ok(findCommands('libreria', empty, t).some(item => item.command.id === 'library'), 'Italian label with the UI in English');
+    assert.equal(t(findCommands('Library', empty, t)[0].command.label), 'Library and documents');
+  } finally { impostaLingua('it'); }
+  assert.ok(findCommands('documents', empty).some(item => item.command.id === 'library'), 'English label with the UI in Italian');
+  assert.ok(!/^comandi\./u.test(t(commandById('library').label)), 'never a raw key');
 });
 test('NAV-02: empty results and arrow wrap have deterministic selection', () => {
   assert.equal(nextCommandIndex(0, 0, 1), -1);
@@ -77,5 +89,5 @@ test('NAV-02: every provider entry point lands on Model laboratory → Provider,
   assert.doesNotMatch(app, /case 'providers':[^\n]*setSettingsSection\('account'\)/);
   // Il CODICE del velo è sparito (le note datate che lo nominano restano, e non contano).
   assert.doesNotMatch(app, /\$\('#veloFornitori'\)|popolaVeloFornitori\(|apriFornitoreDelVelo\(|apriVeloMockup\('veloFornitori'\)|id === 'veloFornitori'/);
-  assert.equal(commandById('providers').description, 'Chiavi e indirizzi dei fornitori, nel Laboratorio modelli.');
+  assert.equal(t(commandById('providers').description), 'Chiavi e indirizzi dei fornitori, nel Laboratorio modelli.');
 });

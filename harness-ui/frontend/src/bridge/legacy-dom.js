@@ -1,3 +1,4 @@
+import { t as traduci } from '../components/lingua.js';
 import { SCREEN_BY_VIEW, VIEW_BY_DESTINATION } from '../domain/navigation.ts';
 import frammenti from '../legacy/frammenti.html';
 
@@ -40,7 +41,7 @@ export const VISTA_PER_VAIA = VIEW_BY_DESTINATION;
 
 function uno(root, selettore) {
   const el = root.querySelector(selettore);
-  if (!el) throw new Error(`ponte: manca nel mockup «${selettore}»`);
+  if (!el) throw new Error(`bridge: missing in the mockup «${selettore}»`); // diagnostica per chi sviluppa, mai a schermo
   return el;
 }
 
@@ -57,7 +58,7 @@ function battezza(el, { id, classi = [], dati = {} }) {
  */
 export function montaPonteLegacy(documentObj = document) {
   const radice = documentObj.querySelector('.talos-shell');
-  if (!radice) throw new Error('ponte: la pagina non ha il guscio del mockup (.talos-shell)');
+  if (!radice) throw new Error('bridge: the page has no mockup shell (.talos-shell)');
   if (documentObj.getElementById('talos-legacy')) return;
 
   /*
@@ -112,7 +113,7 @@ export function montaPonteLegacy(documentObj = document) {
    * nascosto — uno stato vuoto onesto, non un dato inventato. `data-fissate` è
    * l'aggancio con cui app.js lo riaccenderà.
    */
-  const fissate = uno(sidebar, '[data-c="NavGroup"]:has(.talos-eyebrow[data-t="fissate"])');
+  const fissate = uno(sidebar, '[data-c="NavGroup"]:has(.talos-eyebrow[data-t="modello.sidebar.pinned"])'); // 03/10/2026: la chiave stabile della corsia S1 (era «fissate»)
   for (const finta of fissate.querySelectorAll('.talos-session-item')) finta.remove();
   fissate.dataset.fissate = 'vuoto';
   fissate.hidden = true;
@@ -224,9 +225,9 @@ export function montaPonteLegacy(documentObj = document) {
   // 06/9 T-18: l'albero dei rami è Fase 3 (BranchTree): via i rami DIMOSTRATIVI del mockup, resta una frase onesta
   const veloAlbero = documentObj.querySelector('#veloAlbero');
   if (veloAlbero) {
-    const titolo = veloAlbero.querySelector('.talos-dialog__title'); if (titolo) titolo.textContent = 'I rami di questa sessione';
+    const titolo = veloAlbero.querySelector('.talos-dialog__title'); if (titolo) titolo.textContent = traduci("varie.bridge.branches.title");
     const albero = veloAlbero.querySelector('[data-c="BranchTree"]');
-    if (albero) { albero.replaceChildren(); const p = documentObj.createElement('p'); p.className = 'talos-inspector__hint'; p.textContent = 'Nessun ramo ancora. Quando modificherai un tuo messaggio, la sessione si dividerà qui: il ramo vecchio resta leggibile e riapribile.'; albero.appendChild(p); }
+    if (albero) { albero.replaceChildren(); const p = documentObj.createElement('p'); p.className = 'talos-inspector__hint'; p.textContent = traduci("varie.bridge.branches.empty"); albero.appendChild(p); }
     for (const b of veloAlbero.querySelectorAll('.talos-dialog__footer .talos-button--secondary, .talos-dialog__body .talos-card')) b.hidden = true;
   }
 

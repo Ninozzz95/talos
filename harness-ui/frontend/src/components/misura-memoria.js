@@ -1,18 +1,21 @@
+import { t, tn, linguaCorrenteDiT } from './lingua.js';
+/* Numeri e date nella lingua dell'interfaccia (come fanno gli altri componenti): italiano → it-IT, inglese → en-US. */
+const localeUI = () => (linguaCorrenteDiT() === 'en' ? 'en-US' : 'it-IT');
 // MemoryMeter: misure del server, nessuna stima per processo.
 const numero = n => Number.isFinite(n) && n >= 0;
 export function normalizzaCapacita(c) {
- if(!c || c.schema!=='talos.model-lab.capacity/1' || !c.memory || !c.storage || !numero(c.memory.totalBytes) || c.memory.totalBytes===0 || !numero(c.memory.freeBytes) || c.memory.freeBytes>c.memory.totalBytes || !['availableBytes','reserveBytes','allocatableBytes'].every(k=>numero(c.storage[k])) || typeof c.measuredAt!=='string' || Number.isNaN(Date.parse(c.measuredAt)))throw Error('La misura della capacità non è valida.');
+ if(!c || c.schema!=='talos.model-lab.capacity/1' || !c.memory || !c.storage || !numero(c.memory.totalBytes) || c.memory.totalBytes===0 || !numero(c.memory.freeBytes) || c.memory.freeBytes>c.memory.totalBytes || !['availableBytes','reserveBytes','allocatableBytes'].every(k=>numero(c.storage[k])) || typeof c.measuredAt!=='string' || Number.isNaN(Date.parse(c.measuredAt)))throw Error(t('modelli.memory.invalidCapacity'));
  return c;
 }
 export function datiMemoria(capacita,runtimes=[],{erroreRuntime=''}={}) {
  const c=normalizzaCapacita(capacita),ll=runtimes.find(r=>r.runtimeId==='llama.cpp');
  return {totale:c.memory.totalBytes,libera:c.memory.freeBytes,usata:c.memory.totalBytes-c.memory.freeBytes,percentuale:(1-c.memory.freeBytes/c.memory.totalBytes)*100,discoDisponibile:c.storage.availableBytes,discoRiserva:c.storage.reserveBytes,discoAllocabile:c.storage.allocatableBytes,caricato:erroreRuntime?null:ll?.runtimeState==='ready'};
 }
-const byte=n=>new Intl.NumberFormat('it-IT',{maximumFractionDigits:1}).format(n/1024**3)+' GiB';
+const byte=n=>new Intl.NumberFormat(localeUI(),{maximumFractionDigits:1}).format(n/1024**3)+' GiB';
 /** ⛔ Il NUMERO senza l'unità serve solo all'eroe della card, dove «GiB» è un `<small>` suo:
     `#machineFreeMemoryMetric` resta la MISURA INTERA («12 GiB»), perché è il nodo che le prove
     già scritte leggono (`tests/parity/misura-memoria-vivo.spec.mjs`, `toHaveText('12 GiB')`). */
-const giga=n=>new Intl.NumberFormat('it-IT',{maximumFractionDigits:1}).format(n/1024**3);
+const giga=n=>new Intl.NumberFormat(localeUI(),{maximumFractionDigits:1}).format(n/1024**3);
 function el(tag,cls,txt){const n=document.createElement(tag);if(cls)n.className=cls;if(txt!=null)n.textContent=txt;return n;}
 /*
  * ⛔ LA TENUTA DI UNA MISURA, E PERCHÉ NON SI MOSTRA UNO ZERO.
@@ -34,23 +37,23 @@ export const RITMO_ETA_MS = 1_000;
 const SOGLIA_ADESSO_S = 5;
 /** «10,7 GiB» → «3 minuti fa». `null` se la data non è leggibile: non si inventa un'età. */
 export function etaMisura(measuredAt, adesso = Date.now()) {
- const t = Date.parse(measuredAt);
- if (Number.isNaN(t)) return null;
- const s = Math.max(0, Math.round((adesso - t) / 1000));
- if (s < SOGLIA_ADESSO_S) return 'adesso';
- if (s < 60) return s + ' s fa';
+ const istante = Date.parse(measuredAt);
+ if (Number.isNaN(istante)) return null;
+ const s = Math.max(0, Math.round((adesso - istante) / 1000));
+ if (s < SOGLIA_ADESSO_S) return t('modelli.memory.now');
+ if (s < 60) return t('modelli.memory.secondsAgo', { n: s });
  const m = Math.round(s / 60);
- if (m < 60) return m + (m === 1 ? ' minuto fa' : ' minuti fa');
+ if (m < 60) return tn('modelli.memory.minuteAgo', 'modelli.memory.minutesAgo', m);
  const h = Math.round(m / 60);
- if (h < 24) return h + (h === 1 ? ' ora fa' : ' ore fa');
+ if (h < 24) return tn('modelli.memory.hourAgo', 'modelli.memory.hoursAgo', h);
  const g = Math.round(h / 24);
- return g + (g === 1 ? ' giorno fa' : ' giorni fa');
+ return tn('modelli.memory.dayAgo', 'modelli.memory.daysAgo', g);
 }
 /** `fresca` entro la tenuta, `vecchia` oltre, `assente` se non c'è nulla da mostrare. */
 export function freschezzaMisura(measuredAt, adesso = Date.now()) {
- const t = Date.parse(measuredAt ?? '');
- if (Number.isNaN(t)) return 'assente';
- return adesso - t < TENUTA_MISURA_MS ? 'fresca' : 'vecchia';
+ const istante = Date.parse(measuredAt ?? '');
+ if (Number.isNaN(istante)) return 'assente';
+ return adesso - istante < TENUTA_MISURA_MS ? 'fresca' : 'vecchia';
 }
 /* ⛔ IL BATTITO È UNO SOLO, PER TUTTE LE CARD — e non costa su una card che non si vede.
    La ricerca citata qui sopra dice due cose che tirano in direzioni opposte: la telemetria vuole
@@ -68,7 +71,7 @@ function aggiornaBadgeEta(card){
  if (!nodo || card.dataset.memoryData !== 'misurata') return;
  const età = etaMisura(card.dataset.memoryMisuratoIl);
  if (età === null) return;
- nodo.textContent = 'Misurato ' + new Date(card.dataset.memoryMisuratoIl).toLocaleTimeString('it-IT', { timeZone: 'Europe/Rome' }) + ' · ' + età;
+ nodo.textContent = t('modelli.memory.measuredAtAge', { time: new Date(card.dataset.memoryMisuratoIl).toLocaleTimeString(localeUI(), { timeZone: 'Europe/Rome' }), age: età });
 }
 function accendiBattito(){
  if (battito !== null) return;
@@ -82,12 +85,12 @@ function accendiBattito(){
   if (visibili === 0 && CARD_VIVE.size === 0) { clearInterval(battito); battito = null; }
  }, RITMO_ETA_MS);
 }
-const CAMPI=[
- ['totale','RAM totale','machineMemoryMetric'],
- ['libera','RAM libera','machineFreeMemoryMetric'],
- ['discoDisponibile','Disponibile sul disco','machineStorageMetric'],
- ['discoRiserva','Riserva sul disco',null],
- ['discoAllocabile','Allocabile sul disco','machineAllocatableMetric'],
+const CAMPI=()=>[
+ ['totale',t('modelli.memory.totalRam'),'machineMemoryMetric'],
+ ['libera',t('modelli.memory.freeRam'),'machineFreeMemoryMetric'],
+ ['discoDisponibile',t('modelli.memory.diskAvailable'),'machineStorageMetric'],
+ ['discoRiserva',t('modelli.memory.diskReserve'),null],
+ ['discoAllocabile',t('modelli.memory.diskAllocatable'),'machineAllocatableMetric'],
 ];
 /* ⛔ L'EROE DELLA CARD, e da dove viene il suo numero.
    Il mockup (`prototypes/calm-lab/src/model-lab.mjs`, scheda `system`) apre la prima card con un
@@ -104,7 +107,7 @@ export function creaMisuraMemoria(dati={}){
     fondo var(--panel)`, lette dal suo CSS il 19/09/2026). */
  const card=el('section','talos-card talos-card--pad system-card');
  card.dataset.c='MemoryMeter';card.dataset.memoryMeter='';card.dataset.sistemaCard='memoria';
- const head=el('div','section-heading talos-cluster');head.append(el('h3','talos-lab__heading','Memoria e spazio sul disco'));
+ const head=el('div','section-heading talos-cluster');head.append(el('h3','talos-lab__heading',t('modelli.memory.heading')));
  const date=el('span','talos-badge talos-badge--sm');date.dataset.memoryDate='';date.dataset.c='Badge';head.append(date);card.append(head);
  const errore=el('p','talos-muted');errore.dataset.memoryError='';errore.setAttribute('role','alert');errore.hidden=true;card.append(errore);
  /* L'eroe: la MISURA INTERA resta su `[data-memory-value=libera]` — il gancio che le prove già
@@ -129,7 +132,7 @@ export function creaMisuraMemoria(dati={}){
  /* I fatti veri in tabella, con la forma di `.model-facts` del mockup (`dl > div > dt/dd`: è la
     forma che la specifica HTML ammette per una lista di definizioni dentro un `dl`). */
  const fatti=el('dl','model-facts');
- for(const [key,title] of CAMPI){
+ for(const [key,title] of CAMPI()){
   if(key===EROE)continue;
   if(key==='discoDisponibile')fatti.append(el('hr','talos-lab__rule'));
   const row=el('div','talos-kv');const value=el('dd','talos-kv__v');value.dataset.memoryValue=key;
@@ -137,11 +140,11 @@ export function creaMisuraMemoria(dati={}){
  }
  card.append(fatti);
  const tenuta=el('p','talos-muted talos-lab__space');tenuta.dataset.memoryTenuta='';card.append(tenuta);
- const actions=el('div','talos-cluster talos-lab__space');for(const [key,title] of [['refresh','Rimisura'],['unload','Libera memoria del modello']]){const b=el('button','talos-button talos-button--secondary talos-button--sm',title);b.type='button';b.dataset.c='Button';b.dataset.memoryAction=key;if(key==='unload')b.dataset.action='runtimeLibera';else b.dataset.demo='Misure di esempio: nella app vengono lette dal server';actions.append(b);}card.append(actions);
+ const actions=el('div','talos-cluster talos-lab__space');for(const [key,title] of [['refresh',t('modelli.memory.remeasure')],['unload',t('modelli.memory.unloadModel')]]){const b=el('button','talos-button talos-button--secondary talos-button--sm',title);b.type='button';b.dataset.c='Button';b.dataset.memoryAction=key;if(key==='unload')b.dataset.action='runtimeLibera';else b.dataset.demo=t('modelli.memory.demoNote');actions.append(b);}card.append(actions);
  const detail=el('p','talos-muted talos-lab__space');detail.dataset.memoryDetail='';card.append(detail);
  /* L'avviso in fondo è quello del mockup (`.inline-notice`), con la NOSTRA frase: dice cosa TALOS
     libera davvero e cosa non tocca. Il mockup al suo posto ha una nota di scenario. */
- card.append(el('p','talos-muted inline-notice','GiB = 1.024³ byte. La memoria del singolo modello non è misurata. Liberare il modello di TALOS conserva il file sul disco.'));
+ card.append(el('p','talos-muted inline-notice',t('modelli.memory.notice')));
  aggiornaMisuraMemoria(card,dati);return card;
 }
 export function aggiornaMisuraMemoria(card,stato={}) {
@@ -169,26 +172,26 @@ export function aggiornaMisuraMemoria(card,stato={}) {
  const badge=card.querySelector('[data-memory-date]');
  if(badge){
   const età=d?etaMisura(capacita.measuredAt):null;
-  badge.textContent=caricamento?'Misurazione…':errore?'Misura non disponibile':caricamentoRuntime&&!capacita?'Misurazione…':d?'Misurato '+new Date(capacita.measuredAt).toLocaleTimeString('it-IT',{timeZone:'Europe/Rome'})+(età?' · '+età:''):'Non ancora misurata';
+  badge.textContent=caricamento?t('modelli.memory.measuring'):errore?t('modelli.memory.measurementUnavailable'):caricamentoRuntime&&!capacita?t('modelli.memory.measuring'):d?t('modelli.memory.measuredAt', { time: new Date(capacita.measuredAt).toLocaleTimeString(localeUI(),{timeZone:'Europe/Rome'}), age: età ? ' · '+età : '' }):t('modelli.memory.notYetMeasured');
   badge.className='talos-badge talos-badge--sm'+(errore?' talos-badge--danger':freschezza==='assente'?'':freschezza==='vecchia'?' talos-badge--warning':' talos-badge--success');
  }
  /* L'eroe porta il NUMERO, l'unità sta nel suo `<small>`: insieme il contenitore legge «12 GiB»,
     che è il testo che le prove già scritte pretendono da `#machineFreeMemoryMetric`. Quando la
     misura non c'è, l'unità si SVUOTA (non basta nasconderla: `textContent` la conterebbe lo
     stesso) e il contenitore legge esattamente «Non misurata». */
- set('[data-memory-hero]',d?giga(d[EROE]):'Non misurata');
+ set('[data-memory-hero]',d?giga(d[EROE]):t('modelli.memory.notMeasured'));
  set('[data-memory-unit]',d?' GiB':'');
- for(const [key]of CAMPI){if(key===EROE)continue;set('[data-memory-value='+key+']',d?byte(d[key]):'Non misurata');}
+ for(const [key]of CAMPI()){if(key===EROE)continue;set('[data-memory-value='+key+']',d?byte(d[key]):t('modelli.memory.notMeasured'));}
  const pressione=d?.percentuale>=90?'critico':d?.percentuale>=75?'alto':'normale';card.dataset.memoryLevel=pressione;
- const avviso=pressione==='critico'?' · RAM quasi esaurita':pressione==='alto'?' · Molta RAM in uso':'';
- const label=d?byte(d.usata)+' in uso su '+byte(d.totale)+' · '+new Intl.NumberFormat('it-IT',{maximumFractionDigits:1}).format(d.percentuale)+'%'+avviso:'Memoria non misurata.';set('[data-memory-label]',label);
+ const avviso=pressione==='critico'?t('modelli.memory.ramAlmostExhausted'):pressione==='alto'?t('modelli.memory.highRamUsage'):'';
+ const label=d?t('modelli.memory.usage', { used: byte(d.usata), total: byte(d.totale), percent: new Intl.NumberFormat(localeUI(),{maximumFractionDigits:1}).format(d.percentuale), notice: avviso }):t('modelli.memory.memoryNotMeasured');set('[data-memory-label]',label);
  const meter=card.querySelector('[data-memory-bar]');if(meter){meter.hidden=!d;meter.value=d?.percentuale||0;meter.setAttribute('aria-label',label);}
  const caricato=!erroreRuntime && runtimeVerificato && !caricamentoRuntime && runtimes.some(r=>r.runtimeId==='llama.cpp' && r.runtimeState==='ready');
- set('[data-memory-tenuta]',caricamentoRuntime||!runtimeVerificato?'Verifica del modello in corso…':erroreRuntime?'Stato del modello non verificato: '+erroreRuntime:caricato?'TALOS ha un modello caricato nel motore locale.':'Nessun modello caricato da TALOS.');
- set('[data-memory-detail]',capacita&&!errore?[capacita.platform,capacita.arch,new Date(capacita.measuredAt).toLocaleString('it-IT',{timeZone:'Europe/Rome'})].filter(Boolean).join(' · '):'Riprova a misurare dal server locale.');
+ set('[data-memory-tenuta]',caricamentoRuntime||!runtimeVerificato?t('modelli.memory.checkingModel'):erroreRuntime?t('modelli.memory.modelStateUnverified', { error: erroreRuntime }):caricato?t('modelli.memory.modelLoaded'):t('modelli.memory.noModelLoaded'));
+ set('[data-memory-detail]',capacita&&!errore?[capacita.platform,capacita.arch,new Date(capacita.measuredAt).toLocaleString(localeUI(),{timeZone:'Europe/Rome'})].filter(Boolean).join(' · '):t('modelli.memory.retryMeasurement'));
  const refresh=card.querySelector('[data-memory-action=refresh]');if(refresh)refresh.disabled=caricamento||caricamentoRuntime||scaricamento;
  const scarica=card.querySelector('[data-memory-action=unload]');
- if(scarica){scarica.disabled=!d||!caricato||caricamento||scaricamento;scarica.textContent=scaricamento?'Liberazione…':'Libera memoria del modello';}
+ if(scarica){scarica.disabled=!d||!caricato||caricamento||scaricamento;scarica.textContent=scaricamento?t('modelli.memory.unloading'):t('modelli.memory.unloadModel');}
  card.setAttribute('aria-busy',String(caricamento||caricamentoRuntime||scaricamento));
  /* Il battito si accende solo quando c'è un'età da far scorrere: su una card senza misura non c'è
     niente che invecchi, e un orologio acceso per un badge che non cambia è costo puro. */
@@ -312,7 +315,7 @@ export function montaMisuraMemoria(originale,canonico){
   }
  }
  // gli id che il monolite cerca tornano sui campi della card — ognuno solo se quel campo c'è
- for(const [key,,id]of CAMPI)if(id){const n=card.querySelector('[data-memory-value='+key+']');if(n)n.id=id;}
+ for(const [key,,id]of CAMPI())if(id){const n=card.querySelector('[data-memory-value='+key+']');if(n)n.id=id;}
  for(const [selettore,id]of [['[data-memory-label]','memoriaBarraEtichetta'],['[data-memory-tenuta]','memoriaTenuta'],['[data-memory-detail]','machineCapacityDetail']]){const n=card.querySelector(selettore);if(n)n.id=id;}
  /* Destinazione: la colonna legacy se esiste; altrimenti la card resta dov'è.
     ⛔ Un id doppio non è un difetto estetico: la specifica HTML vuole l'id UNICO nell'albero, e

@@ -76,9 +76,12 @@ export function runRedirectCancelled({ redirectId }) {
     return { type: 'RunRedirectCancelled', redirectId }
 }
 
-export function runRedirectFailed({ redirectId, message, code }) {
+export function runRedirectFailed({ redirectId, message, code, reason, params }) {
     const evento = { type: 'RunRedirectFailed', redirectId, message }
     if (code !== undefined) evento.code = code
+    // K2 (03/10/2026): il motivo e i valori, perché l'interfaccia dica `message` nella lingua scelta (errori.<code>.<reason>)
+    if (reason !== undefined) evento.reason = reason
+    if (params !== undefined) evento.params = params
     return evento
 }
 
@@ -212,7 +215,7 @@ export function toolCallOutput({ toolCallId, delta }) {
  *   non poteva sapere CHE COSA e' stato eseguito ne' DOVE. Per `shell` `cwd` e' la cartella
  *   EFFETTIVA (quella che il comando ha visto davvero), non quella richiesta.
  */
-export function toolCallResult({ messageId, toolCallId, content, role = 'tool', durataMs, comando, cwd, stdout, stderr, exitCode, isError, receipt, outcome }) {
+export function toolCallResult({ messageId, toolCallId, content, role = 'tool', durataMs, comando, cwd, stdout, stderr, exitCode, isError, receipt, outcome, suspicious }) {
     const evento = { type: 'ToolCallResult', messageId, toolCallId, content, role }
     // Optional TALOS extension, using MCP's boolean semantics. Never infer it from content.
     if (typeof isError === 'boolean') evento.isError = isError
@@ -248,6 +251,13 @@ export function toolCallResult({ messageId, toolCallId, content, role = 'tool', 
     if (receipt && typeof receipt === 'object' && !Array.isArray(receipt)) evento.receipt = receipt
     /* G02 (dalla lane CLI, 6167226e9): un attrezzo annullato prima di partire lo DICE; solo il valore 'cancelled'. */
     if (outcome === 'cancelled') evento.outcome = outcome
+    /* F-027 (owner 02/10/2026): il risultato porta testo che sembra un'istruzione per un'IA — da dove e quali pattern, per il
+       segno nella scheda. Solo se c'è: senza, l'evento resta identico a prima, byte per byte. */
+    if (suspicious && typeof suspicious.source === 'string' && Array.isArray(suspicious.patterns) && suspicious.patterns.length > 0) {
+        /* `place`: il tipo di posto e il nome (`{tipo, nome}` dal kernel); le parole nelle due lingue le mette l'interfaccia. */
+        evento.suspicious = { source: suspicious.source, patterns: suspicious.patterns.map(String),
+            ...(suspicious.place && typeof suspicious.place.tipo === 'string' ? { place: { tipo: suspicious.place.tipo, ...(typeof suspicious.place.nome === 'string' ? { nome: suspicious.place.nome } : {}) } } : {}) }
+    }
     return evento
 }
 
@@ -464,13 +474,13 @@ export function eventiPerRisposta(risposta, { messageId, parentMessageId, testoG
  * talosLavora mette in `messaggi.push({role:'tool', tool_call_id,
  * content})`, talosHarness.mjs riga ~836) a ToolCallResult.
  */
-export function eventoPerEsitoTool({ messageId, toolCallId, content, durataMs, comando, cwd, stdout, stderr, exitCode, isError, receipt, outcome }) {
+export function eventoPerEsitoTool({ messageId, toolCallId, content, durataMs, comando, cwd, stdout, stderr, exitCode, isError, receipt, outcome, suspicious }) {
     /* ⭐ OSS-1/OSS-2 — inoltro puro: la decisione su COSA entra nell'evento sta tutta in
        `toolCallResult` qui sopra, un posto solo. Chi non passa i tre campi ottiene l'oggetto
        identico di prima, byte per byte.
        ⛔ BLOCCO 7 (B4): stessa regola per i due flussi e per il codice d'uscita — l'inoltro non
          decide niente, e la guardia «solo se non vuoti» vive in `toolCallResult`. */
-    return toolCallResult({ messageId, toolCallId, content: String(content), durataMs, comando, cwd, stdout, stderr, exitCode, isError, receipt, outcome })
+    return toolCallResult({ messageId, toolCallId, content: String(content), durataMs, comando, cwd, stdout, stderr, exitCode, isError, receipt, outcome, suspicious })
 }
 
 /**

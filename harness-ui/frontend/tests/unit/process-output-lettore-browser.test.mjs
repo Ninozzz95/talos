@@ -14,7 +14,9 @@ import { chromium } from '@playwright/test';
 import { build } from 'esbuild';
 
 const frontend = fileURLToPath(new URL('../..', import.meta.url));
-const sorgente = await readFile(new URL('../../src/components/process-output.js', import.meta.url), 'utf8');
+/* Corsia C della lingua (03/10/2026): il componente importa `lingua.js` e il dizionario, che una pagina senza server non
+   può risolvere. Si inietta il suo PACCHETTO (esbuild, come la build), non il sorgente nudo. */
+const pacchetto = (await build({ entryPoints: [fileURLToPath(new URL('../../src/components/process-output.js', import.meta.url))], bundle: true, format: 'iife', globalName: '__poModulo', write: false, logLevel: 'silent' })).outputFiles[0].text;
 const soloFrontend = { name: 'solo-frontend', setup(b) {
   b.onResolve({ filter: /.*/ }, (args) => {
     if (/\.(woff2?|ttf)$/u.test(args.path)) return { path: args.path, external: true };
@@ -45,7 +47,7 @@ test('LETTORE-OUTPUT-STILE: dentro la chat le righe di stato sono piccole e atte
   await page.route('**/*', (route) => route.abort());
   await page.setContent('<!doctype html><html lang="it"><head><meta charset="utf-8"></head><body><div id="conversation"><article class="talos-message"><div class="talos-message__body" id="r"></div></article></div></body></html>');
   await page.addStyleTag({ content: foglio });
-  await page.addScriptTag({ type: 'module', content: `${sorgente}\nwindow.__po = { creaLettoreOutput };` });
+  await page.addScriptTag({ content: `${pacchetto}\nwindow.__po = { creaLettoreOutput: __poModulo.creaLettoreOutput };` });
   await page.waitForFunction(() => window.__po);
   const m = await page.evaluate(async ([ricevuta, casi]) => {
     const r = document.getElementById('r');

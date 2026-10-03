@@ -12,11 +12,14 @@
  */
 
 /** Un titolo che non c'è non diventa «(senza titolo)»: diventa la prima riga del testo. */
+import { t as traduci, tn, linguaCorrenteDiT } from './lingua.js';
+/* Date nella lingua dell'interfaccia (italiano → it-IT, inglese → en-US), letta a ogni uso. */
+const localeUI = () => (linguaCorrenteDiT() === 'en' ? 'en-US' : 'it-IT');
 export function titoloNota(nota) {
   const t = String(nota?.titolo ?? '').trim();
   if (t) return t;
   const prima = String(nota?.contenuto ?? '').split('\n').map((r) => r.trim()).find(Boolean);
-  return prima ? prima.slice(0, 80) : 'Nota senza titolo';
+  return prima ? prima.slice(0, 80) : traduci('sezioni.notes.untitled');
 }
 
 /** «oggi 14:32», «ieri 09:10», poi la data: i tempi relativi valgono fino a 24 ore (decisione H26). */
@@ -29,9 +32,9 @@ export function quandoNota(quando, adesso = new Date()) {
   const ore = (adesso.getTime() - d.getTime()) / 3_600_000;
   const orario = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
   if (ore < 0) return orario;
-  if (ore < 24 && d.getDate() === adesso.getDate()) return `oggi ${orario}`;
-  if (ore < 48) return `ieri ${orario}`;
-  return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')} ${orario}`;
+  if (ore < 24 && d.getDate() === adesso.getDate()) return traduci('sezioni.notes.when.today', { time: orario });
+  if (ore < 48) return traduci('sezioni.notes.when.yesterday', { time: orario });
+  return `${d.toLocaleDateString(localeUI(), { day: '2-digit', month: '2-digit' })} ${orario}`;
 }
 
 /** Il filtro della ricerca: titolo e testo, senza distinzione fra maiuscole e accenti mancanti. */
@@ -45,8 +48,8 @@ export function filtraNote(note, cerca) {
 /** «2 note» / «1 nota» / «nessuna nota» — il plurale italiano non si costruisce con una `s`. */
 export function sommarioNote(quante) {
   const n = Number(quante) || 0;
-  if (n === 0) return 'nessuna nota';
-  return n === 1 ? '1 nota' : `${n} note`;
+  if (n === 0) return traduci('sezioni.notes.count.none');
+  return tn('sezioni.notes.count.one', 'sezioni.notes.count.many', n);
 }
 
 /**
@@ -64,7 +67,7 @@ export function montaNote(schermo, note, { cerca = '', onCopia = null, adesso = 
   const stato = schermo.querySelector('[data-note-stato]');
   const sommario = schermo.querySelector('[data-note-sommario]');
   const filtrate = filtraNote(note, cerca);
-  if (stato) stato.textContent = cerca ? `${sommarioNote(filtrate.length)} su ${sommarioNote(Array.isArray(note) ? note.length : 0)}` : sommarioNote(filtrate.length);
+  if (stato) stato.textContent = cerca ? traduci("sezioni.notes.filteredOfTotal", { shown: sommarioNote(filtrate.length), total: sommarioNote(Array.isArray(note) ? note.length : 0) }) : sommarioNote(filtrate.length);
   if (sommario) sommario.textContent = sommarioNote(Array.isArray(note) ? note.length : 0);
   if (!lista) return filtrate.length;
   lista.replaceChildren();
@@ -92,7 +95,7 @@ export function montaNote(schermo, note, { cerca = '', onCopia = null, adesso = 
       const copia = d.createElement('button');
       copia.type = 'button';
       copia.className = 'talos-button talos-button--ghost talos-button--sm';
-      copia.textContent = 'Copia';
+      copia.textContent = traduci("sezioni.common.copy");
       copia.addEventListener('click', () => onCopia(nota));
       azioni.append(copia);
       li.append(azioni);

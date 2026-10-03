@@ -260,3 +260,58 @@ test('⭐⭐⭐ COMPATIBILITÀ — `?id=<sessionId>` (quel che manda public/app.
   gestore.gestisciUpgrade(reqFinto({ url: '/api/v1/terminal/ws?id=sess-viva' }), socketFinto(), Buffer.alloc(0));
   assert.deepEqual(registro.chiamate.apri, [{ id: 'sess-viva', cartella: 'C:/workspace-vero' }]);
 });
+
+/*
+ * ⛔⛔⛔ TERMINALE-AVVIO-FALLITO (03/10/2026, owner «si»): aprire il Terminale di una sessione la cui cartella non c'è più faceva
+ *   lanciare a node-pty un'eccezione non gestita e abbatteva il server. Ora l'avvio fallito è un frame `errore` + chiusura 1011.
+ */
+function registroCheLancia(messaggio = 'Cannot create process, error code: 267') {
+  const chiamate = { apri: [], scrivi: [] };
+  return {
+    chiamate,
+    apriDichiarando(args) { chiamate.apri.push(args); throw new Error(messaggio); },
+    scrivi(...args) { chiamate.scrivi.push(args); },
+    ridimensiona() {},
+    segnaDisconnesso() {},
+  };
+}
+function wsConChiusura() {
+  const ws = wsFinta();
+  ws.chiusure = [];
+  ws.close = (codice, motivo) => { ws.chiusure.push([codice, motivo]); };
+  return ws;
+}
+const statDi = (esito) => () => { if (esito instanceof Error) throw esito; return { isDirectory: () => esito }; };
+const enoent = () => Object.assign(new Error('ENOENT: no such file or directory'), { code: 'ENOENT' });
+
+test('TERMINALE-AVVIO-FALLITO-01 — cartella sparita: il server NON cade, il client riceve `errore` folder-missing e la WS si chiude con 1011', () => {
+  const ws = wsConChiusura();
+  const gestore = creaGestoreTerminaleWs({ registro: registroCheLancia(), originiConsentite: ORIGINE_OK, risolviScheda: schedaFinta('C:/sparita') }, { WebSocketServer: wssFinta(ws), statFn: statDi(enoent()) });
+  assert.doesNotThrow(() => gestore.gestisciUpgrade(reqFinto({}), socketFinto(), Buffer.alloc(0)));
+  assert.equal(ws.inviati.length, 1, 'un solo frame: l\'errore, niente «agganciato» né backlog');
+  const frame = decodificaFrame(ws.inviati[0]);
+  assert.equal(frame.tipo, TIPO_FRAME_CONTROLLO);
+  const corpo = JSON.parse(frame.payload.toString('utf8'));
+  assert.deepEqual([corpo.evento, corpo.code, corpo.reason, corpo.cartella], ['errore', 'TERMINAL_START_FAILED', 'folder-missing', 'C:/sparita']);
+  assert.match(corpo.message, /does not exist/u);
+  assert.deepEqual(ws.chiusure, [[1011, 'terminal start failed']]);
+});
+
+test('TERMINALE-AVVIO-FALLITO-02 — «non è una cartella» e «spawn rifiutato» si distinguono, e dopo l\'errore i messaggi del client non toccano il registro', () => {
+  for (const [stat, atteso] of [[statDi(false), 'not-a-folder'], [statDi(true), 'spawn-failed'], [statDi(Object.assign(new Error('EACCES'), { code: 'EACCES' })), 'spawn-failed']]) {
+    const ws = wsConChiusura();
+    const registro = registroCheLancia();
+    const gestore = creaGestoreTerminaleWs({ registro, originiConsentite: ORIGINE_OK, risolviScheda: schedaFinta() }, { WebSocketServer: wssFinta(ws), statFn: stat });
+    gestore.gestisciUpgrade(reqFinto({}), socketFinto(), Buffer.alloc(0));
+    assert.equal(JSON.parse(decodificaFrame(ws.inviati[0]).payload.toString('utf8')).reason, atteso);
+    ws._emetti('message', codificaFrame(TIPO_FRAME_DATI, 'ls'));
+    assert.equal(registro.chiamate.scrivi.length, 0, 'nessun ascoltatore registrato su una shell mai nata');
+  }
+});
+
+test('TERMINALE-AVVIO-FALLITO-03 — una WS già chiusa al momento dell\'errore non fa cadere il server', () => {
+  const ws = wsConChiusura();
+  ws.send = () => { throw new Error('WebSocket is not open'); };
+  const gestore = creaGestoreTerminaleWs({ registro: registroCheLancia(), originiConsentite: ORIGINE_OK, risolviScheda: schedaFinta() }, { WebSocketServer: wssFinta(ws), statFn: statDi(enoent()) });
+  assert.doesNotThrow(() => gestore.gestisciUpgrade(reqFinto({}), socketFinto(), Buffer.alloc(0)));
+});

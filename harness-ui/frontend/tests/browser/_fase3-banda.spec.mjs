@@ -1,3 +1,4 @@
+import { serviIlDizionario } from './aiuto-dizionario.mjs'; // corsia D della lingua: i componenti importano il dizionario
 import { expect, test } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import { mkdir } from 'node:fs/promises';
@@ -53,6 +54,7 @@ const COMPONENTI = resolve(process.cwd(), 'src', 'components');
 const CARTELLA_FOTO = resolve(process.cwd(), 'artifacts', 'fase3-banda', 'foto');
 
 async function serviIlModulo(page) {
+  await serviIlDizionario(page);
   await page.route('**/__lab/*.js', async (route) => {
     const nome = new URL(route.request().url()).pathname.split('/').pop();
     try {
@@ -523,10 +525,13 @@ test.describe('la banda del laboratorio', () => {
        numero che nessuno usa più. */
     const sorgente = readFileSync(resolve(process.cwd(), 'src', 'domain', 'catalog-engine.ts'), 'utf8');
     const nelCatalogo = [...sorgente.matchAll(/required <= (\d+(?:\.\d+)?)/g)].map(t => Number(t[1]));
-    const nellaEtichetta = [...sorgente.matchAll(/Entro (\d+,\d+) GiB/g)].map(t => Number(t[1].replace(',', '.')));
+    /* 03/10/2026, corsia S2 della lingua: l'etichetta «Entro 18,6 GiB · stima» sta nel dizionario (`modelli.catalog.fit.fits`),
+       in tutte e due le lingue: la soglia si legge da lì, e le due voci devono dire lo stesso numero. */
+    const dizionario = readFileSync(resolve(process.cwd(), 'src', 'i18n', 'testi', 'modelli.js'), 'utf8');
+    const nellaEtichetta = [...dizionario.matchAll(/"catalog\.fit\.fits": "(?:Entro|Within) (\d+[,.]\d+) GiB/g)].map(t => Number(t[1].replace(',', '.')));
 
     expect(nelCatalogo, 'catalog-engine.ts:346 non dichiara più la soglia').toEqual([18.6]);
-    expect(nellaEtichetta, 'catalog-engine.ts:172 non dichiara più la soglia').toEqual([18.6]);
+    expect(nellaEtichetta, 'modelli.catalog.fit.fits (it e en) non dichiara più la soglia').toEqual([18.6, 18.6]);
 
     const dichiarato = await page.evaluate(() => window.__lab.BUDGET_DEMO_GIB);
     expect(dichiarato).toBe(nelCatalogo[0]);

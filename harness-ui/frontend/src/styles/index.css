@@ -813,6 +813,11 @@ button.talos-turn-spine__tick:focus-visible{outline:var(--talos-focus-width) sol
 .talos-tool-row[role="button"]{cursor:pointer}
 .talos-tool-row__body{margin:0 6px 6px 50px; padding:8px 10px; border-radius:9px; background:var(--talos-panel-soft); border:1px solid var(--talos-border-subtle); font-family:var(--talos-font-mono); font-size:11.5px; line-height:1.55; color:var(--talos-muted); white-space:pre-wrap; overflow-wrap:anywhere; max-height:240px; overflow:auto}
 .talos-tool-row[aria-expanded="false"] + .talos-tool-row__body{display:none}
+/* F-027 (owner 02/10/2026): il segno del contenuto sospetto sulla riga, e la sua nota in testa al dettaglio — col carattere e gli a
+   capo della chat, non col monospazio del corpo. */
+.talos-tool-row > .talos-tool-row__sospetto{flex:none}
+.talos-tool-row__body > .talos-tool-row__nota-sospetto{margin:0 0 8px; font-family:var(--talos-font-ui); font-size:13px; line-height:1.45; white-space:normal; color:var(--talos-text)}
+.talos-tool-row__nota-sospetto .assistant-copy{margin:2px 0 0; font-size:13px; line-height:1.5; color:var(--talos-assistant-text)}
 /* ⛔⛔ BLOCCO 7 (B4) — IL TETTO DEL CORPO ERA IL BUDGET DI UN FLUSSO SOLO.
     Misurato il 20/09/2026 sul 4174: con i due flussi separati il contenuto misura 316 px contro un
     tetto di 240 — 78 oltre — e la sezione «Diagnostica» resta SOTTO il bordo: la cosa per cui la

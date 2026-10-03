@@ -22,6 +22,6 @@ export default defineConfig({
   },
   // 1.62.1 inietta un getter non protetto con serviceWorkers:block negli iframe
   // a origine opaca. Il prodotto non registra SW e ogni test ha un contesto nuovo.
-  use: { baseURL, trace: 'retain-on-failure', screenshot: 'only-on-failure', video: 'off' },
+  use: { baseURL, locale: 'it-IT', trace: 'retain-on-failure', screenshot: 'only-on-failure', video: 'off' },
   projects: [{ name: 'chromium-desktop', use: { ...devices['Desktop Chrome'] } }],
 });

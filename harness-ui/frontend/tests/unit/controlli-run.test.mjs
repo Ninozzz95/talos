@@ -88,8 +88,8 @@ test('WF-RUN-COMMAND-CLIENT: one POST with a fresh commandId; an ambiguous outco
   const riprova = server([risposta(502, null), risposta(200, { ok: true, data: { runId: 'r1', status: 'running', groups: [] } })]);
   assert.deepEqual(await creaClientGrafo({ sessionId: S, fetchFn: riprova.fetchFn }).comando(RUN, 'retry', { uuid: () => 'id-4' }), { ok: false, ambiguo: true });
   assert.deepEqual(riprova.chiamate.map((c) => c.metodo), ['POST', 'GET']);
-  await assert.rejects(creaClientGrafo({ sessionId: S, fetchFn: ok.fetchFn }).comando({ tipo: 'piano', workflowId: 'w1', version: 1 }, 'pause'), /non valido/u);
-  await assert.rejects(creaClientGrafo({ sessionId: S, fetchFn: ok.fetchFn }).comando(RUN, 'delete'), /non valido/u);
+  await assert.rejects(creaClientGrafo({ sessionId: S, fetchFn: ok.fetchFn }).comando({ tipo: 'piano', workflowId: 'w1', version: 1 }, 'pause'), /invalid run command/u); // 03/10/2026: errore di contratto, in inglese
+  await assert.rejects(creaClientGrafo({ sessionId: S, fetchFn: ok.fetchFn }).comando(RUN, 'delete'), /invalid run command/u); // 03/10/2026: errore di contratto, in inglese
 });
 
 test('WF-RUN-RETRY-PREVIEW: the preview is read before the confirmation', async () => {

@@ -80,7 +80,7 @@ test('⛔⛔⛔ VERSO CONTRARIO — sotto `ricerca`, `scrivi` è RESPINTO e il f
   const rete = reteDiRisposte(chiamata('scrivi', { percorso: 'nuovo.txt', contenuto: 'ciao' }), CONCLUSO);
   await talosLavora({ cartella, task: TASK_RICERCA, modello: 'x', chiave: 'y', fetchDiRete: rete.fetch, livelloAccesso: 'ricerca' });
   assert.match(rispostaTool(rete), /^REFUSED\./);
-  assert.match(rispostaTool(rete), /ricerca approfondita/);
+  assert.match(rispostaTool(rete), /deep research/);
   assert.equal(existsSync(join(cartella, 'nuovo.txt')), false, 'una ricerca non scrive nel progetto ospite: l\'intenzione originale resta intatta');
 });
 
@@ -152,7 +152,7 @@ test('⛔ sotto `ricerca`, `research_deposit` con testo VUOTO è respinto e non 
     cartella, task: TASK_RICERCA, modello: 'x', chiave: 'y', fetchDiRete: rete.fetch, livelloAccesso: 'ricerca',
     strumentiEstesi: ['research_deposit'],
   });
-  assert.match(rispostaTool(rete), /^REFUSED\. Empty report/);
+  assert.match(rispostaTool(rete), /^INVALID\. Empty report/); // H-05
   assert.equal(existsSync(percorsoRapporto(cartella, 'ric-1')), false);
 });
 
@@ -187,7 +187,7 @@ test('⛔ `lettura` resta INVARIATO: `research_deposit` è respinto lì come tut
     strumentiEstesi: ['research_deposit'],
   });
   assert.match(rispostaTool(rete), /^REFUSED\./);
-  assert.match(rispostaTool(rete), /sola lettura/, 'il motivo è quello di sempre: il livello lettura non ha cambiato una virgola');
+  assert.match(rispostaTool(rete), /read-only/, 'il motivo è quello di sempre: il livello lettura non ha cambiato una virgola');
   assert.equal(existsSync(percorsoRapporto(cartella, 'ric-1')), false);
 });
 

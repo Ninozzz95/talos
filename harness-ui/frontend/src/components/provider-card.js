@@ -1,3 +1,7 @@
+import { t, tn, linguaCorrenteDiT } from './lingua.js';
+import { testoDelCampo, nomeDelFornitore } from './testo-server.js'; // K4a: nome, nota e motivo della prova arrivano dal server con la loro chiave
+/* Numeri e date nella lingua dell'interfaccia (come fanno gli altri componenti): italiano → it-IT, inglese → en-US. */
+const localeUI = () => (linguaCorrenteDiT() === 'en' ? 'en-US' : 'it-IT');
 // ProviderCard: credenziale presente, configurazione e sonda restano tre fatti distinti.
 /*
  * ⛔ 19/09/2026 (FASE 4-bis) — IL MARCHIO VERO ENTRA NEL GLIFO. Fino a ieri il riquadro portava
@@ -8,11 +12,11 @@
  */
 import { glifoFornitore, marchioDiFornitore } from './loghi-fornitori.js';
 /** 12/09 (review P-K): il badge dell'indirizzo. Senza un predefinito (Azure, Vertex, Bedrock) non si dice «predefinito» di un campo vuoto. */
-export function etichettaIndirizzo(row={}){if(!row.supportsEndpoint)return null;if(row.endpointConfigured)return 'Indirizzo personalizzato';return row.endpoint?'Indirizzo predefinito':'Indirizzo da impostare';}
+export function etichettaIndirizzo(row={}){if(!row.supportsEndpoint)return null;if(row.endpointConfigured)return t('modelli.provider.customEndpoint');return row.endpoint?t('modelli.provider.defaultEndpoint'):t('modelli.provider.missingEndpoint');}
 export function statoProvider(row={},prova=null){
- const esito=prova?.esito,labels={'in-corso':'Prova in corso…','non-autorizzato':'Credenziale rifiutata',irraggiungibile:'Non raggiungibile','non-provabile':'Da configurare',errore:'Prova non riuscita'};
- const conteggio=Number.isInteger(prova?.modelli)&&prova.modelli>=0?' · '+prova.modelli+' modelli':'';
- return {chiave:etichettaOrigineChiave(row),tempo:row.id!=='huggingface',prova:!prova?'Mai provato':esito==='collegato'?(row.id==='esterno'?'Agente raggiunto':row.id==='huggingface'?'Profilo raggiunto':'Servizio raggiunto'+conteggio):labels[esito]||'Prova non riuscita',tono:esito==='collegato'?'success':['non-autorizzato','irraggiungibile','errore'].includes(esito)?'danger':'warning',occupato:esito==='in-corso'};
+ const esito=prova?.esito,labels={'in-corso':t('modelli.provider.testing'),'non-autorizzato':t('modelli.provider.credentialRejected'),irraggiungibile:t('modelli.provider.unreachable'),'non-provabile':t('modelli.provider.needsConfiguration'),errore:t('modelli.provider.testFailed')};
+ const conteggio=Number.isInteger(prova?.modelli)&&prova.modelli>=0;
+ return {chiave:etichettaOrigineChiave(row),tempo:row.id!=='huggingface',prova:!prova?t('modelli.provider.untested'):esito==='collegato'?(row.id==='esterno'?t('modelli.provider.agentReached'):row.id==='huggingface'?t('modelli.provider.profileReached'):conteggio ? tn('modelli.provider.oneReachedModel', 'modelli.provider.manyReachedModels', prova.modelli) : t('modelli.provider.serviceReached')):labels[esito]||t('modelli.provider.testFailed'),tono:esito==='collegato'?'success':['non-autorizzato','irraggiungibile','errore'].includes(esito)?'danger':'warning',occupato:esito==='in-corso'};
 }
 /*
  * ⛔ PO-01 — «Chiave salvata» non basta più: da quando esiste l'accesso, una chiave può arrivare
@@ -23,18 +27,18 @@ export function statoProvider(row={},prova=null){
  *   essere usata e nessuno capisce perché.
  */
 export function etichettaOrigineChiave(row={}){
- if(row.id==='esterno')return row.agente?'Agente configurato':'Agente da configurare';
- if(row.origineChiave==='ambiente')return 'Chiave dall\u2019ambiente';
- if(row.origineChiave==='accesso')return 'Accesso fatto';
- if(row.keyConfigured===true)return 'Chiave salvata';
- return row.requiresKey===true?'Chiave mancante':'Chiave facoltativa';
+ if(row.id==='esterno')return row.agente?t('modelli.provider.agentConfigured'):t('modelli.provider.agentNeedsConfiguration');
+ if(row.origineChiave==='ambiente')return t('modelli.provider.environmentKey');
+ if(row.origineChiave==='accesso')return t('modelli.provider.signedIn');
+ if(row.keyConfigured===true)return t('modelli.provider.keySaved');
+ return row.requiresKey===true?t('modelli.provider.keyMissing'):t('modelli.provider.optionalKey');
 }
 export function statoChiavePool(chiave={}){
- const cause={traffico:'Troppo traffico',credenziale:'Credenziale rifiutata',credito:'Credito non disponibile',rete:'Collegamento interrotto','timeout-fornitore':'Tempo massimo superato','guasto-fornitore':'Servizio non raggiungibile','flusso-interrotto':'Risposta interrotta'};
- if(chiave.stato!=='in-panchina')return 'Disponibile';
+ const cause={traffico:t('modelli.provider.tooMuchTraffic'),credenziale:t('modelli.provider.credentialRejected'),credito:t('modelli.provider.creditUnavailable'),rete:t('modelli.provider.connectionInterrupted'),'timeout-fornitore':t('modelli.provider.timeout'),'guasto-fornitore':t('modelli.provider.serviceUnreachable'),'flusso-interrotto':t('modelli.provider.responseInterrupted')};
+ if(chiave.stato!=='in-panchina')return t('modelli.provider.available');
  const data=Number.isFinite(chiave.inPanchinaFino)?new Date(chiave.inPanchinaFino):null;
- const istante=data&&!Number.isNaN(data.getTime())?data.toLocaleString('it-IT',{dateStyle:'short',timeStyle:'medium'}):null;
- return (istante?'In panchina fino a '+istante:'In panchina')+' · '+(cause[chiave.causa]||'Accesso da verificare');
+ const istante=data&&!Number.isNaN(data.getTime())?data.toLocaleString(localeUI(),{dateStyle:'short',timeStyle:'medium'}):null;
+ return t('modelli.provider.benchReason', { status: istante ? t('modelli.provider.benchedUntil', { time: istante }) : t('modelli.provider.benched'), reason: cause[chiave.causa] || t('modelli.provider.checkAccess') });
 }
 function el(tag,cls,txt){const n=document.createElement(tag);if(cls)n.className=cls;if(txt!=null)n.textContent=txt;return n;}
 
@@ -168,7 +172,7 @@ const VESTITO=Object.freeze({
    rilegge il filtro, e due stringhe scritte a mano in due punti sono un rinominamento mancato. */
 const FILTRO_CHIP='providerFilter';
 function vesti(nodo,stile){if(nodo)Object.assign(nodo.style,stile);return nodo;}
-function campo(label,tipo,key,row,valore=''){const wrap=el('label','talos-stack talos-provider__field');wrap.append(el('span','talos-muted',label));const input=el('input','talos-field__input');input.type=tipo;input.dataset[key]=row.id;input.autocomplete='off';input.value=valore;if(tipo==='password'){input.spellcheck=false;input.placeholder=row.keyConfigured?'Incolla una nuova chiave':'Incolla la chiave';}if(tipo==='number'){input.min='5';input.max='300';input.step='1';}wrap.append(input);return wrap;}
+function campo(label,tipo,key,row,valore=''){const wrap=el('label','talos-stack talos-provider__field');wrap.append(el('span','talos-muted',label));const input=el('input','talos-field__input');input.type=tipo;input.dataset[key]=row.id;input.autocomplete='off';input.value=valore;if(tipo==='password'){input.spellcheck=false;input.placeholder=row.keyConfigured?t('modelli.provider.pasteNewKey'):t('modelli.provider.pasteKey');}if(tipo==='number'){input.min='5';input.max='300';input.step='1';}wrap.append(input);return wrap;}
 // P-K-bis/P-L-bis: identità esplicite e configurazione non segreta del processo.
 const CLOUD_CONFIGURABILI=new Set(['azure','vertex','bedrock']);
 function multiriga(label,key,row,valore=''){
@@ -193,19 +197,19 @@ export async function salvaCollegamentoProvider(row,card,{fetchImpl=globalThis.f
  let risposta;
  try{risposta=await fetchImpl(`${baseUrl}/api/v1/providers/${encodeURIComponent(row.id)}/runtime`,{
   method:'POST',credentials:'same-origin',headers:{Accept:'application/json','Content-Type':'application/json'},body:JSON.stringify(leggiCollegamentoProvider(row,card))});}
- catch{throw new Error('Collegamento non salvato: il server locale non risponde.');}
- let esito;try{esito=await risposta.json();}catch{throw new Error('Collegamento non salvato: risposta locale non valida.');}
- if(!risposta.ok||esito?.ok!==true||!esito.data||typeof esito.data!=='object')throw new Error('Collegamento non salvato. Controlla i campi e riprova.');
+ catch{throw new Error(t('modelli.provider.saveServerUnavailable'));}
+ let esito;try{esito=await risposta.json();}catch{throw new Error(t('modelli.provider.saveInvalidResponse'));}
+ if(!risposta.ok||esito?.ok!==true||!esito.data||typeof esito.data!=='object')throw new Error(t('modelli.provider.saveCheckFields'));
  return esito.data;
 }
 function aggiungiCampiAgente(body,row){
  const a=row.agente||{};
- body.append(campo('Comando','text','providerComando',row,a.comando||''),campo('Cartella di lavoro','text','providerCwd',row,a.cwd||''),
-  multiriga('Argomenti (uno per riga)','providerArgomenti',row,(a.argomenti||[]).join('\n')),
-  multiriga("Variabili d'ambiente da passare (solo i nomi)",'providerVariabili',row,(a.variabiliAmbiente||[]).join('\n')));
- const tempo=campo('Tempo massimo (secondi)','number','providerTempoAgente',row,String((a.timeoutMs??180000)/1000));
+ body.append(campo(t('modelli.provider.command'),'text','providerComando',row,a.comando||''),campo(t('modelli.provider.workingFolder'),'text','providerCwd',row,a.cwd||''),
+  multiriga(t('modelli.provider.arguments'),'providerArgomenti',row,(a.argomenti||[]).join('\n')),
+  multiriga(t('modelli.provider.environmentVariables'),'providerVariabili',row,(a.variabiliAmbiente||[]).join('\n')));
+ const tempo=campo(t('modelli.provider.timeoutSeconds'),'number','providerTempoAgente',row,String((a.timeoutMs??180000)/1000));
  const input=tempo.querySelector('input');input.min='0.05';input.max='3600';input.step='0.001';body.append(tempo);
- const nota=el('p','talos-muted','Indica percorsi assoluti. Passa le credenziali tramite i nomi delle variabili, senza incollarne i valori. Salva il collegamento prima di provarlo.');
+ const nota=el('p','talos-muted',t('modelli.provider.agentConnectionNote'));
  nota.style.gridColumn='1 / -1';body.append(nota);
 }
 function button(action,label,tone='secondary'){const b=el('button','talos-button talos-button--'+tone+' talos-button--sm',label);b.type='button';b.dataset.c='Button';b.dataset.providerAction=action;return b;}
@@ -217,13 +221,12 @@ function button(action,label,tone='secondary'){const b=el('button','talos-button
  * mockup («Confermando si modifica solo lo stato temporaneo del prototipo») in TALOS sarebbero
  * false, ed è la stessa scelta già presa per la frase di sicurezza il 19/09/2026.
  */
-const NOTA_CHIAVI='Le chiavi restano sul computer.';
-const NOTA_CHIAVI_RESTO='Presenza della chiave, collegamento ed esecuzione sono verifiche distinte.';
+
 function creaAvvisoChiavi(){
  const avviso=el('div','talos-provider__avviso');vesti(avviso,VESTITO.avviso);
  const icona=simboloProvider('i-shield');icona.style.flex='none';icona.style.marginTop='2px';
- const forte=el('strong','',NOTA_CHIAVI);Object.assign(forte.style,{color:'var(--talos-text)',fontWeight:'550'});
- const testo=el('span','');testo.append(forte,document.createTextNode(' '+NOTA_CHIAVI_RESTO));
+ const forte=el('strong','',t('modelli.provider.keysStayLocal'));Object.assign(forte.style,{color:'var(--talos-text)',fontWeight:'550'});
+ const testo=el('span','');testo.append(forte,document.createTextNode(' '+t('modelli.provider.separateChecks')));
  avviso.append(icona,testo);return avviso;
 }
 
@@ -342,10 +345,10 @@ function apriConfigurazioneProvider(card,row,{onSalvaConfigurazione=null,onConfi
  dialogo.dataset.providerModale=row.id;
  dialogo.setAttribute('aria-labelledby','titolo-modale-'+row.id);
  vesti(dialogo,VESTITO.modale.dialogo);
- const titolo=el('h2','talos-provider__modale-titolo','Configura '+(row.label||row.id));
+ const titolo=el('h2','talos-provider__modale-titolo',t('modelli.provider.configureNamed', { name: nomeDelFornitore(row) }));
  titolo.id='titolo-modale-'+row.id;vesti(titolo,VESTITO.modale.titolo);
  const chiudi=el('button','talos-button talos-button--ghost talos-icon-button');chiudi.type='button';
- chiudi.setAttribute('aria-label','Chiudi');chiudi.dataset.providerModaleChiudi='';
+ chiudi.setAttribute('aria-label',t('modelli.provider.close'));chiudi.dataset.providerModaleChiudi='';
  vesti(chiudi,VESTITO.modale.chiudi);chiudi.append(iconaAzione('chiudi','18px'));
  const testa=el('header','talos-provider__modale-testa');vesti(testa,VESTITO.modale.testa);testa.append(titolo,chiudi);
  const telaio=el('div','talos-provider__modale-corpo');vesti(telaio,VESTITO.modale.corpo);
@@ -359,7 +362,7 @@ function apriConfigurazioneProvider(card,row,{onSalvaConfigurazione=null,onConfi
   */
  {const avviso=creaAvvisoChiavi();avviso.dataset.providerModaleAvviso='';telaio.append(avviso);}
  const piede=el('footer','talos-provider__modale-piede');vesti(piede,VESTITO.modale.piede);
- const annulla=el('button','talos-button talos-button--secondary','Annulla');annulla.type='button';annulla.dataset.providerModaleAnnulla='';
+ const annulla=el('button','talos-button talos-button--secondary',t('modelli.provider.cancel'));annulla.type='button';annulla.dataset.providerModaleAnnulla='';
  vesti(annulla,VESTITO.modale.pulsante);
  /*
   * LA PRIMARIA È IL GESTO VERO DELLA CARD, e il suo nome lo DICE. Il mockup porta «Salva
@@ -375,7 +378,7 @@ function apriConfigurazioneProvider(card,row,{onSalvaConfigurazione=null,onConfi
  const salvaChiaveInterno=corpo.querySelector('[data-provider-salva-chiave]');
  const configurazionePropria=row.id==='esterno'||CLOUD_CONFIGURABILI.has(row.id);
  if(salvaRuntime||campoChiave){
-  const primaria=el('button','talos-button talos-button--primary talos-button--sm','Salva');
+  const primaria=el('button','talos-button talos-button--primary talos-button--sm',t('modelli.provider.save'));
   primaria.type='button';primaria.dataset.providerModaleSalva='';
   vesti(primaria,VESTITO.modale.pulsante);
   /* I doppioni spariscono finché la modale è aperta, e tornano alla chiusura (la card in linea li usa ancora): il pulsante
@@ -395,15 +398,15 @@ function apriConfigurazioneProvider(card,row,{onSalvaConfigurazione=null,onConfi
    const chiave=(campoChiave?.value||'').trim();
    const letto=salvaRuntime&&!configurazionePropria?leggiCollegamentoProvider(row,corpo):null;
    const collegamento=letto&&(letto.endpoint!==(row.endpoint||'')||letto.timeoutSeconds!==Number(row.timeoutSeconds??60))?{endpoint:letto.endpoint,timeoutSeconds:letto.timeoutSeconds}:null;
-   if(!chiave&&!collegamento&&!configurazionePropria){avvisa('Niente da salvare: incolla una chiave o cambia un campo.',false);return;}
+   if(!chiave&&!collegamento&&!configurazionePropria){avvisa(t('modelli.provider.nothingToSave'),false);return;}
    const controlli=[...dialogo.querySelectorAll('input,textarea,button')],prima=controlli.map(c=>c.disabled);
-   dialogo.dataset.salvataggio='in-corso';card.dataset.salvataggioCollegamento='in-corso';dialogo.setAttribute('aria-busy','true');controlli.forEach(c=>{c.disabled=true;});primaria.textContent='Salvo…';
+   dialogo.dataset.salvataggio='in-corso';card.dataset.salvataggioCollegamento='in-corso';dialogo.setAttribute('aria-busy','true');controlli.forEach(c=>{c.disabled=true;});primaria.textContent=t('modelli.provider.saving');
    const salvato=[];
    try{
     /* Una chiamata per cosa: se la seconda fallisce, la prima è passata e lo si sa — il campo della chiave si svuota, e un
        secondo «Salva» non aggiunge la stessa chiave due volte al gruppo. */
     const chiama=async(dati,fase)=>{
-     if(typeof onSalvaConfigurazione!=='function')throw Object.assign(new Error('Questa schermata non sa salvare.'),{fase});
+     if(typeof onSalvaConfigurazione!=='function')throw Object.assign(new Error(t('modelli.provider.saveUnsupported')),{fase});
      await onSalvaConfigurazione({provider:row.id,pool:Boolean(salvaChiaveInterno&&!salvaChiaveInterno.dataset.providerAction),chiave:'',collegamento:null,...dati});
     };
     if(chiave){await chiama({chiave},'chiave');salvato.push('chiave');campoChiave.value='';}
@@ -413,16 +416,16 @@ function apriConfigurazioneProvider(card,row,{onSalvaConfigurazione=null,onConfi
      salvato.push('collegamento');
     }
    }catch(errore){
-    const motivo=errore?.message||'Il server locale non ha risposto.';
+    const motivo=errore?.message||t('modelli.provider.serverDidNotRespond');
     avvisa(errore?.fase==='collegamento'
-     ?(salvato.includes('chiave')?`La chiave è salvata, ma la configurazione no: ${motivo}`:`La configurazione non è stata salvata: ${motivo}`)
-     :`La chiave non è stata salvata: ${motivo}`,true);
+     ?(salvato.includes('chiave')?t('modelli.provider.keySavedConfigurationFailed', { reason: motivo }):t('modelli.provider.configurationFailed', { reason: motivo }))
+     :t('modelli.provider.keySaveFailed', { reason: motivo }),true);
     return;
    }finally{
-    delete dialogo.dataset.salvataggio;delete card.dataset.salvataggioCollegamento;dialogo.setAttribute('aria-busy','false');controlli.forEach((c,i)=>{c.disabled=prima[i];});primaria.textContent='Salva';
+    delete dialogo.dataset.salvataggio;delete card.dataset.salvataggioCollegamento;dialogo.setAttribute('aria-busy','false');controlli.forEach((c,i)=>{c.disabled=prima[i];});primaria.textContent=t('modelli.provider.save');
    }
    chiudiModale();
-   onConfigurazioneSalvata?.({provider:row.id,etichetta:row.label||row.id,salvato});
+   onConfigurazioneSalvata?.({provider:row.id,etichetta:nomeDelFornitore(row),salvato});
   };
   primaria.addEventListener('click',salva);
   /* Invio in un campo a una riga salva, come «Salva» (Hermes, `credential-key-ui.tsx`: «Enter saves a key»). */
@@ -526,10 +529,10 @@ const statoLista=new WeakMap();
 
 /** La faccetta della credenziale a cui un fornitore appartiene: una sola, sempre. */
 export function credenzialeDiFornitore(row={}){
- const e=etichettaOrigineChiave(row);
- if(e==='Chiave facoltativa')return 'facoltativa';
- if(e==='Chiave mancante'||e==='Agente da configurare')return 'daImpostare';
- return 'impostata';
+ // Si decide dai DATI (le stesse condizioni di `etichettaOrigineChiave`), mai confrontando l'etichetta tradotta: il testo cambia con la lingua.
+ if(row.id==='esterno')return row.agente?'impostata':'daImpostare';
+ if(row.origineChiave==='ambiente'||row.origineChiave==='accesso'||row.keyConfigured===true)return 'impostata';
+ return row.requiresKey===true?'daImpostare':'facoltativa';
 }
 /** I conteggi VERI di ogni valore, sull'elenco INTERO (non su quello già filtrato). */
 export function faccetteFornitori(rows=[],{prove=new Map()}={}){
@@ -575,17 +578,17 @@ export function installaFiltriFornitori(lista){
  lista.setAttribute('data-provider-filtri','');
  statoLista.set(lista,{filtri:filtroVuoto(),rows:[],opzioni:{}});
  const riga=el('div','talos-provider__filtri');riga.dataset.providerFiltriRiga='';
- riga.setAttribute('role','group');riga.setAttribute('aria-label','Filtri dei fornitori');
+ riga.setAttribute('role','group');riga.setAttribute('aria-label',t('modelli.provider.filters'));
  vesti(riga,VESTITO.filtri);
  const cerca=el('label','talos-field talos-field--sm');
- cerca.append(el('span','talos-muted','Cerca'));
+ cerca.append(el('span','talos-muted',t('modelli.provider.search')));
  const campo=el('input','talos-field__input');campo.type='search';
- campo.setAttribute('data-provider-filtro-cerca','');campo.setAttribute('aria-label','Cerca un fornitore');
- campo.autocomplete='off';campo.placeholder='Nome o identificatore…';
+ campo.setAttribute('data-provider-filtro-cerca','');campo.setAttribute('aria-label',t('modelli.provider.searchProvider'));
+ campo.autocomplete='off';campo.placeholder=t('modelli.provider.nameOrId');
  cerca.append(campo);
- const gruppoCred=el('div','talos-cluster');gruppoCred.setAttribute('role','group');gruppoCred.setAttribute('aria-label','Credenziale');gruppoCred.dataset.providerFiltroGruppo='credenziale';
- const gruppoProva=el('div','talos-cluster');gruppoProva.setAttribute('role','group');gruppoProva.setAttribute('aria-label','Ultima prova');gruppoProva.dataset.providerFiltroGruppo='prova';
- const togli=el('button','talos-button talos-button--ghost talos-button--sm','Togli i filtri');togli.type='button';togli.dataset.providerFiltroTogli='';togli.hidden=true;
+ const gruppoCred=el('div','talos-cluster');gruppoCred.setAttribute('role','group');gruppoCred.setAttribute('aria-label',t('modelli.provider.credential'));gruppoCred.dataset.providerFiltroGruppo='credenziale';
+ const gruppoProva=el('div','talos-cluster');gruppoProva.setAttribute('role','group');gruppoProva.setAttribute('aria-label',t('modelli.provider.lastTest'));gruppoProva.dataset.providerFiltroGruppo='prova';
+ const togli=el('button','talos-button talos-button--ghost talos-button--sm',t('modelli.provider.clearFilters'));togli.type='button';togli.dataset.providerFiltroTogli='';togli.hidden=true;
  const esito=el('p','talos-muted','');esito.dataset.providerFiltroEsito='';esito.setAttribute('role','status');esito.setAttribute('aria-live','polite');
  riga.append(cerca,gruppoCred,gruppoProva,togli,esito);
  lista.before(riga);
@@ -601,15 +604,15 @@ function disegnaFiltriFornitori(lista,rows,filtri,visibili,prove){
  const gCred=riga.querySelector('[data-provider-filtro-gruppo="credenziale"]');
  const gProva=riga.querySelector('[data-provider-filtro-gruppo="prova"]');
  gCred.replaceChildren(
-  chipFiltro('credenziale','impostata','Impostata',c.credenziale.impostata,filtri.credenziale.includes('impostata')),
-  chipFiltro('credenziale','daImpostare','Da impostare',c.credenziale.daImpostare,filtri.credenziale.includes('daImpostare')),
-  chipFiltro('credenziale','facoltativa','Facoltativa',c.credenziale.facoltativa,filtri.credenziale.includes('facoltativa')));
+  chipFiltro('credenziale','impostata',t('modelli.provider.configured'),c.credenziale.impostata,filtri.credenziale.includes('impostata')),
+  chipFiltro('credenziale','daImpostare',t('modelli.provider.needsSetup'),c.credenziale.daImpostare,filtri.credenziale.includes('daImpostare')),
+  chipFiltro('credenziale','facoltativa',t('modelli.provider.optional'),c.credenziale.facoltativa,filtri.credenziale.includes('facoltativa')));
  gProva.replaceChildren(
-  chipFiltro('prova','provato','Provato',c.prova.provato,filtri.prova.includes('provato')),
-  chipFiltro('prova','mai','Mai provato',c.prova.mai,filtri.prova.includes('mai')));
+  chipFiltro('prova','provato',t('modelli.provider.tested'),c.prova.provato,filtri.prova.includes('provato')),
+  chipFiltro('prova','mai',t('modelli.provider.untested'),c.prova.mai,filtri.prova.includes('mai')));
  const togli=riga.querySelector('[data-provider-filtro-togli]');if(togli)togli.hidden=filtriAccesi(filtri)===0;
  const esito=riga.querySelector('[data-provider-filtro-esito]');
- if(esito)esito.textContent=visibili===c.totale?`${c.totale} fornitori`:`${visibili} fornitori su ${c.totale}`;
+ if(esito)esito.textContent=visibili===c.totale?tn('modelli.provider.oneProvider', 'modelli.provider.manyProviders', c.totale):tn('modelli.provider.oneFilteredProvider', 'modelli.provider.manyFilteredProviders', visibili, { total: c.totale });
 }
 
 /** Il clic (o la digitazione) dentro la riga dei filtri. */
@@ -648,7 +651,7 @@ function collegaFiltriFornitori(lista,riga,rendi){
 
 // P-K — soli campi non segreti: il salvataggio esistente continua a leggere l'indirizzo.
 export function componiIndirizzoCloud(provider,{endpoint='',regione='',progetto='',versioneApi='v1'}={}){
- const invalido=()=>{throw new Error('Controlla i campi del collegamento.');};
+ const invalido=()=>{throw new Error(t('modelli.provider.checkConnectionFields'));};
  if(provider==='azure'){
   let url;try{url=new URL(endpoint);}catch{invalido();}
   if(!['https:','http:'].includes(url.protocol)||url.username||url.password||url.hash||!['v1','2024-10-21'].includes(versioneApi))invalido();
@@ -664,13 +667,13 @@ export function componiIndirizzoCloud(provider,{endpoint='',regione='',progetto=
 }
 function aggiungiCampiCloud(body,row){
  if(!row.cloud)return;
- if(row.cloud.campi.includes('regione'))body.append(campo('Regione','text','providerRegione',row,row.regione||''));
- if(row.cloud.campi.includes('progetto'))body.append(campo('Progetto','text','providerProgetto',row,row.progetto||''));
+ if(row.cloud.campi.includes('regione'))body.append(campo(t('modelli.provider.region'),'text','providerRegione',row,row.regione||''));
+ if(row.cloud.campi.includes('progetto'))body.append(campo(t('modelli.provider.project'),'text','providerProgetto',row,row.progetto||''));
  if(row.cloud.campi.includes('versioneApi')){
-  const versione=campo('Versione del collegamento','text','providerVersione',row,row.versioneApi||'v1');
-  versione.querySelector('input').placeholder='v1 oppure 2024-10-21';body.append(versione);
+  const versione=campo(t('modelli.provider.connectionVersion'),'text','providerVersione',row,row.versioneApi||'v1');
+  versione.querySelector('input').placeholder=t('modelli.provider.versionPlaceholder');body.append(versione);
  }
- const nota=el('p','talos-muted',row.cloud.nota);nota.style.gridColumn='1 / -1';body.append(nota);
+ const nota=el('p','talos-muted',testoDelCampo(row.cloud,'nota'));nota.style.gridColumn='1 / -1';body.append(nota);
  // Delega sul corpo: gli input delle bozze vengono conservati da aggiornaProviderList.
  body.addEventListener('input',e=>{
   const endpoint=body.querySelector('[data-provider-endpoint]');if(!endpoint)return;
@@ -754,7 +757,7 @@ export function creaProviderCard(row,{aperta=false,prova=null,occupato=false,onM
  glifo.dataset.glifo=glifoMarchio?'marchio':'monogramma';
  glifo.append(iconaGlifo);
  const identita=el('span','talos-provider__identita');vesti(identita,VESTITO.identita);
- const title=el('strong','talos-provider__name',row.label||row.id);vesti(title,VESTITO.nome);
+ const title=el('strong','talos-provider__name',nomeDelFornitore(row));vesti(title,VESTITO.nome);
  /* ⛔ Il nome umano è primario, l'id grezzo è secondario — `provider-head p` del mockup. L'id
     NON è decorazione: è la chiave che il server riconosce, e per dodici fornitori su ventotto
     dice qualcosa che l'etichetta non dice (`zai-anthropic`, `ollama-cloud`, `lmstudio`…). */
@@ -794,7 +797,7 @@ export function creaProviderCard(row,{aperta=false,prova=null,occupato=false,onM
   *   la riga NON compare: due righe, che è esattamente la card locale del mockup. Una riga con
   *   dentro «non previsto» sarebbe una parola nostra, e le parole nostre non si inventano.
   */
- for(const [k,v]of [['Credenziale',d.chiave],['Configurazione',etichettaIndirizzo(row)],['Ultima prova',d.prova]])
+ for(const [k,v]of [[t('modelli.provider.credential'),d.chiave],[t('modelli.provider.configuration'),etichettaIndirizzo(row)],[t('modelli.provider.lastTest'),d.prova]])
   if(v)  {const riga=el('div','talos-kv');riga.dataset.c='KeyValue';riga.append(el('span','talos-kv__k',k),el('span','talos-kv__v',v));fatti.append(riga);}
  card.append(fatti);
  const body=el('div','talos-provider__body');body.id=idCorpo;body.hidden=!aperta;
@@ -808,27 +811,27 @@ export function creaProviderCard(row,{aperta=false,prova=null,occupato=false,onM
  const conAccesso=row.supportsOAuth===true;
  const pool=Array.isArray(row.pool)?row.pool:[],poolCollegato=typeof onAzionePool==='function';
  if(pool.length){
-  const elenco=el('ul','talos-stack');elenco.setAttribute('aria-label','Chiavi di '+(row.label||row.id));
+  const elenco=el('ul','talos-stack');elenco.setAttribute('aria-label',t('modelli.provider.keysForProvider', { name: nomeDelFornitore(row) }));
   Object.assign(elenco.style,{gridColumn:'1 / -1',margin:'0',padding:'0',listStyle:'none'});
   for(const [i,chiave]of pool.entries()){
    const riga=el('li','talos-cluster'),testo=el('div','talos-stack'),impronta=/^[a-f0-9]{64}$/u.test(chiave.impronta||'')?chiave.impronta.slice(0,12):'';
    Object.assign(riga.style,{flexWrap:'nowrap',justifyContent:'space-between',alignItems:'flex-start'});
    Object.assign(testo.style,{gap:'4px',minWidth:'0',flex:'1'});
-   testo.append(el('strong','',`Chiave ${i+1}${impronta?' · '+impronta:''}`),el('span','talos-muted',statoChiavePool(chiave)));
-   if(chiave.origine==='ambiente')testo.append(el('span','talos-muted','Impostata fuori da TALOS'));
+   testo.append(el('strong','',t('modelli.provider.numberedKey', { number: i + 1, fingerprint: impronta ? ' · ' + impronta : '' })),el('span','talos-muted',statoChiavePool(chiave)));
+   if(chiave.origine==='ambiente')testo.append(el('span','talos-muted',t('modelli.provider.setOutsideTalos')));
    riga.append(testo);
    if(poolCollegato&&chiave.origine!=='ambiente'){
-    const rimuovi=el('button','talos-button talos-button--ghost talos-button--sm','Rimuovi');rimuovi.type='button';
-    rimuovi.setAttribute('aria-label',`Rimuovi chiave ${i+1}`);
+    const rimuovi=el('button','talos-button talos-button--ghost talos-button--sm',t('modelli.provider.remove'));rimuovi.type='button';
+    rimuovi.setAttribute('aria-label',t('modelli.provider.removeNumberedKey', { number: i + 1 }));
     const aziona=async()=>{
      rimuovi.disabled=true;
      try{await onAzionePool({azione:'rimuovi',provider:row.id,impronta:chiave.impronta});}
-     catch{const feedback=body.querySelector('[data-provider-feedback]');if(feedback){feedback.textContent='La chiave non è stata rimossa. Aggiorna il pannello e riprova.';feedback.hidden=false;}}
+     catch{const feedback=body.querySelector('[data-provider-feedback]');if(feedback){feedback.textContent=t('modelli.provider.keyRemovalFailed');feedback.hidden=false;}}
      finally{rimuovi.disabled=busy;}
     };
     if(typeof onMenu==='function'){
-     rimuovi.textContent='⋯';rimuovi.setAttribute('aria-label',`Azioni per chiave ${i+1}`);rimuovi.setAttribute('aria-haspopup','menu');
-     rimuovi.addEventListener('click',()=>onMenu([{chiave:'rimuovi',etichetta:'Rimuovi',pericolo:true,aziona}],{ancora:rimuovi}));
+     rimuovi.textContent='⋯';rimuovi.setAttribute('aria-label',t('modelli.provider.numberedKeyActions', { number: i + 1 }));rimuovi.setAttribute('aria-haspopup','menu');
+     rimuovi.addEventListener('click',()=>onMenu([{chiave:'rimuovi',etichetta:t('modelli.provider.remove'),pericolo:true,aziona}],{ancora:rimuovi}));
     }else rimuovi.addEventListener('click',aziona);
     riga.append(rimuovi);
    }
@@ -836,31 +839,31 @@ export function creaProviderCard(row,{aperta=false,prova=null,occupato=false,onM
   }
   body.append(elenco);
  }
- const campoChiave=campo(poolCollegato?'Aggiungi una chiave':row.keyConfigured?'Sostituisci la chiave':row.requiresKey?'Chiave di accesso':'Chiave di accesso (facoltativa)','password','providerKey',row);
+ const campoChiave=campo(poolCollegato?t('modelli.provider.addKey'):row.keyConfigured?t('modelli.provider.replaceKey'):row.requiresKey?t('modelli.provider.accessKey'):t('modelli.provider.optionalAccessKey'),'password','providerKey',row);
  if(conAccesso){
-  const accedi=button('oauth-start',row.origineChiave==='accesso'?'Rifai l\u2019accesso':'Accedi con '+(row.label||row.id),'primary');
+  const accedi=button('oauth-start',row.origineChiave==='accesso'?t('modelli.provider.signInAgain'):t('modelli.provider.signInWith', { name: nomeDelFornitore(row) }),'primary');
   accedi.classList.add('talos-provider__accedi');
   /* ⛔ Pulsante e nota nella STESSA riga: la nota sotto lasciava un vuoto verticale grande
      quanto la card, e il pulsante da solo su una riga intera si stirava come un banner. */
   const riga=el('div','talos-provider__accesso');riga.append(accedi);
   const nota=el('p','talos-muted',row.origineChiave==='ambiente'
-   ?'Adesso vale la chiave impostata fuori da TALOS: finch\u00e9 c\u2019\u00e8, l\u2019accesso non viene usato.'
-   :'Si apre il sito del fornitore: la password non passa da TALOS, e alla fine torna una chiave.');
+   ?t('modelli.provider.environmentKeyPriority')
+   :t('modelli.provider.signInNote'));
   riga.append(nota);body.append(riga);
   const oppure=document.createElement('details');oppure.className='talos-provider__oppure';
-  const riassunto=document.createElement('summary');riassunto.textContent='Oppure incolla una chiave';
+  const riassunto=document.createElement('summary');riassunto.textContent=t('modelli.provider.pasteKeyInstead');
   oppure.append(riassunto,campoChiave);body.append(oppure);
  }else if(!esterno)body.append(campoChiave);
- if(row.supportsEndpoint)body.append(campo('Indirizzo del servizio','url','providerEndpoint',row,row.endpoint||''));
+ if(row.supportsEndpoint)body.append(campo(t('modelli.provider.serviceEndpoint'),'url','providerEndpoint',row,row.endpoint||''));
  // P-K — campi collegati all'input salvato dalla regia esistente.
  aggiungiCampiCloud(body,row);
  if(CLOUD_CONFIGURABILI.has(row.id)){
-  body.append(multiriga('Modelli configurati (uno per riga)','providerModelli',row,(row.modelli||[]).map(m=>m.id).join('\n')));
-  const nota=el('p','talos-muted','Indica i nomi delle distribuzioni o dei modelli abilitati. Questa lista non verifica l’accesso né il supporto agli strumenti.');nota.style.gridColumn='1 / -1';body.append(nota);
+  body.append(multiriga(t('modelli.provider.configuredModels'),'providerModelli',row,(row.modelli||[]).map(m=>m.id).join('\n')));
+  const nota=el('p','talos-muted',t('modelli.provider.configuredModelsNote'));nota.style.gridColumn='1 / -1';body.append(nota);
  }
  if(esterno)aggiungiCampiAgente(body,row);
  // P-K — fine
- if(d.tempo&&!esterno)body.append(campo('Tempo massimo (secondi)','number','providerTimeout',row,String(row.timeoutSeconds??60)));
+ if(d.tempo&&!esterno)body.append(campo(t('modelli.provider.timeoutSeconds'),'number','providerTimeout',row,String(row.timeoutSeconds??60)));
  /*
   * ⛔ Una sola azione a vista: salvare la chiave appena incollata. Le altre sono azioni su
   *   qualcosa di GIÀ configurato — si fanno una volta ogni tanto, non mentre stai configurando —
@@ -868,13 +871,13 @@ export function creaProviderCard(row,{aperta=false,prova=null,occupato=false,onM
   *   `[data-provider-action]` (app.js:3197, 4700) le trova al `.click()` senza sapere del menu.
   */
  const actions=el('div','talos-cluster');
- const salva=button('save-key',poolCollegato?'Aggiungi chiave':'Salva chiave','primary');salva.dataset.providerSalvaChiave='';
+ const salva=button('save-key',poolCollegato?t('modelli.provider.addKeyAction'):t('modelli.provider.saveKey'),'primary');salva.dataset.providerSalvaChiave='';
  if(poolCollegato){
   delete salva.dataset.providerAction;
   salva.addEventListener('click',async()=>{
    const input=campoChiave.querySelector('input');salva.disabled=true;
    try{await onAzionePool({azione:'aggiungi',provider:row.id,key:input.value});input.value='';}
-   catch{const feedback=body.querySelector('[data-provider-feedback]');if(feedback){feedback.textContent='La chiave non è stata aggiunta. Controlla il collegamento e riprova.';feedback.hidden=false;}}
+   catch{const feedback=body.querySelector('[data-provider-feedback]');if(feedback){feedback.textContent=t('modelli.provider.keyAdditionFailed');feedback.hidden=false;}}
    finally{salva.disabled=busy;}
   });
  }
@@ -893,11 +896,11 @@ export function creaProviderCard(row,{aperta=false,prova=null,occupato=false,onM
   *     (`Prova collegamento`, ed è il gesto principale di quella card) e il menu non l'ha mai
   *     nascosta. Spostarla anche lì darebbe due comandi identici sulla stessa card.
   */
- const test=button('test',esterno?'Prova collegamento':'Verifica accesso');
+ const test=button('test',esterno?t('modelli.provider.testConnection'):t('modelli.provider.verifyAccess'));
  const vociMenu=[];
- if(d.tempo)vociMenu.push({chiave:'save-runtime',etichetta:row.supportsEndpoint||esterno?'Salva collegamento':'Salva tempo massimo',icona:'i-clock',elemento:aggiungiNascosto(button('save-runtime',row.supportsEndpoint||esterno?'Salva collegamento':'Salva tempo massimo'))});
- if(row.supportsEndpoint&&row.endpointConfigured)vociMenu.push({chiave:'reset-runtime',etichetta:'Ripristina indirizzo',icona:'i-history',elemento:aggiungiNascosto(button('reset-runtime','Ripristina indirizzo'))});
- if(row.keyConfigured&&!poolCollegato)vociMenu.push({chiave:'remove-key',etichetta:pool.length>1?'Rimuovi tutte le chiavi':'Rimuovi chiave',icona:'i-trash',pericolo:true,separaPrima:true,elemento:aggiungiNascosto(button('remove-key',pool.length>1?'Rimuovi tutte le chiavi':'Rimuovi chiave','ghost talos-button--danger'))});
+ if(d.tempo)vociMenu.push({chiave:'save-runtime',etichetta:row.supportsEndpoint||esterno?t('modelli.provider.saveConnection'):t('modelli.provider.saveTimeout'),icona:'i-clock',elemento:aggiungiNascosto(button('save-runtime',row.supportsEndpoint||esterno?t('modelli.provider.saveConnection'):t('modelli.provider.saveTimeout')))});
+ if(row.supportsEndpoint&&row.endpointConfigured)vociMenu.push({chiave:'reset-runtime',etichetta:t('modelli.provider.resetEndpoint'),icona:'i-history',elemento:aggiungiNascosto(button('reset-runtime',t('modelli.provider.resetEndpoint')))});
+ if(row.keyConfigured&&!poolCollegato)vociMenu.push({chiave:'remove-key',etichetta:pool.length>1?t('modelli.provider.removeAllKeys'):t('modelli.provider.removeKey'),icona:'i-trash',pericolo:true,separaPrima:true,elemento:aggiungiNascosto(button('remove-key',pool.length>1?t('modelli.provider.removeAllKeys'):t('modelli.provider.removeKey'),'ghost talos-button--danger'))});
  if(configurazionePropria){
   const salvaRuntime=vociMenu.find(v=>v.chiave==='save-runtime').elemento;
   salvaRuntime.addEventListener('click',async e=>{
@@ -905,10 +908,10 @@ export function creaProviderCard(row,{aperta=false,prova=null,occupato=false,onM
    const controlli=[...body.querySelectorAll('input,textarea,button')],prima=controlli.map(c=>c.disabled);
    card.dataset.salvataggioCollegamento='in-corso';card.setAttribute('aria-busy','true');controlli.forEach(c=>{c.disabled=true;});
    const feedback=body.querySelector('[data-provider-feedback]');
-   try{await salvaCollegamentoProvider(row,card);feedback.textContent='Collegamento salvato.';feedback.setAttribute('role','status');
+   try{await salvaCollegamentoProvider(row,card);feedback.textContent=t('modelli.provider.connectionSaved');feedback.setAttribute('role','status');
     // Aggiorna lo stato pubblico con il gesto già collegato dalla regia legacy.
     document.getElementById('providerRefresh')?.click();
-   }catch{feedback.textContent='Collegamento non salvato. Controlla i campi e il server locale, poi riprova.';feedback.setAttribute('role','alert');}
+   }catch{feedback.textContent=t('modelli.provider.saveCheckServer');feedback.setAttribute('role','alert');}
    finally{feedback.hidden=false;delete card.dataset.salvataggioCollegamento;card.setAttribute('aria-busy',String(busy));controlli.forEach((c,i)=>{c.disabled=prima[i];});}
   });
  }
@@ -918,7 +921,7 @@ export function creaProviderCard(row,{aperta=false,prova=null,occupato=false,onM
  if(esterno){test.hidden=false;vesti(test,VESTITO.pulsante);test.prepend(iconaAzione('verifica'));actions.append(test);for(const v of vociMenu){v.elemento.hidden=false;} }
  if(!esterno&&typeof onMenu==='function'&&vociMenu.length){
   const tre=el('button','talos-button talos-button--ghost talos-icon-button talos-button--sm');tre.type='button';
-  tre.setAttribute('aria-label','Altre azioni per '+(row.label||row.id));tre.setAttribute('aria-haspopup','menu');
+  tre.setAttribute('aria-label',t('modelli.provider.moreActionsFor', { name: nomeDelFornitore(row) }));tre.setAttribute('aria-haspopup','menu');
   tre.append(simboloProvider('i-more'));
   /* Dentro la modale «Salva collegamento» non si offre: lo fa già il «Salva» del piede (owner 01/10, «Un Salva solo»). */
   const voci=()=>vociMenu.filter(v=>!(v.chiave==='save-runtime'&&card.querySelector(':scope > .talos-provider__modale[open]'))).map(v=>({chiave:v.chiave,etichetta:v.etichetta,icona:v.icona,pericolo:v.pericolo,separaPrima:v.separaPrima,aziona:()=>v.elemento.click()}));
@@ -930,7 +933,7 @@ export function creaProviderCard(row,{aperta=false,prova=null,occupato=false,onM
  }
  actions.append(...nascoste);
  body.append(actions);
- if(prova&&prova.esito!=='in-corso'){const note=el('p','talos-muted',prova.esito==='collegato'?(esterno?'Agente inizializzato e chiuso. Nessun messaggio inviato.':row.id==='openrouter'?'Il catalogo risponde. La validità della chiave richiede una verifica dedicata.':'La verifica del servizio non esegue un modello.'):(prova.motivo||d.prova));note.dataset.provaEsito=prova.esito;if(Number.isFinite(prova.millisecondi))note.append(document.createTextNode(' · '+prova.millisecondi+' ms'));body.append(note);}
+ if(prova&&prova.esito!=='in-corso'){const note=el('p','talos-muted',prova.esito==='collegato'?(esterno?t('modelli.provider.agentTestNote'):row.id==='openrouter'?t('modelli.provider.catalogTestNote'):t('modelli.provider.serviceTestNote')):(testoDelCampo(prova,'motivo')||d.prova));note.dataset.provaEsito=prova.esito;if(Number.isFinite(prova.millisecondi))note.append(document.createTextNode(t('modelli.provider.elapsedMilliseconds', { n: prova.millisecondi })));body.append(note);}
  const feedback=el('p','talos-muted');feedback.dataset.providerFeedback=row.id;feedback.setAttribute('role','status');feedback.hidden=true;body.append(feedback);
  for(const control of body.querySelectorAll('input,textarea,button'))control.disabled=busy;
  /*
@@ -965,10 +968,10 @@ export function creaProviderCard(row,{aperta=false,prova=null,occupato=false,onM
   *   Name»), stato solo in `aria-expanded`. Il verso del comando, a schermo, lo dice il corpo che
   *   si apre — non serve dirlo due volte.
   */
- const configura=el('button','talos-button talos-button--secondary talos-button--sm','Configura');
+ const configura=el('button','talos-button talos-button--secondary talos-button--sm',t('modelli.provider.configure'));
  configura.type='button';configura.dataset.c='Button';configura.dataset.providerToggle=row.id;
  configura.setAttribute('aria-expanded',String(aperta));configura.setAttribute('aria-controls',idCorpo);
- configura.setAttribute('aria-label','Configura '+(row.label||row.id));
+ configura.setAttribute('aria-label',t('modelli.provider.configureNamed', { name: nomeDelFornitore(row) }));
  /* ⛔ L'ICONA PRIMA DELLA PAROLA, come nel mockup (`<svg class="icon"/><span>Configura</span>`):
     il primo giro la metteva in coda, e la FOTO del 19/09/2026 l'ha mostrata a destra mentre
     «Verifica accesso» — che usa `prepend` — l'aveva a sinistra: due pulsanti uguali con l'icona
@@ -1007,7 +1010,7 @@ export function aggiornaProviderList(lista,rows,opzioni={}){
  if(stato){stato.rows=rows;stato.opzioni=opzioni;}
  /* ⛔ Un messaggio solo non è una card: nell'elenco vuoto la griglia si spegne, o il testo
     resterebbe incolonnato in una cella da 340 invece di leggersi come una riga. */
- if(errore||!rows.length){const p=el('p','talos-muted',errore?errore.message||String(errore):caricamento?'Leggo gli accessi…':'Nessun fornitore dichiarato dal server.');p.dataset.c='EmptyState';if(errore)p.setAttribute('role','alert');lista.replaceChildren(p);lista.style.display='block';if(stato)disegnaFiltriFornitori(lista,rows,stato.filtri,0,prove);return;}
+ if(errore||!rows.length){const p=el('p','talos-muted',errore?errore.message||String(errore):caricamento?t('modelli.provider.loadingAccess'):t('modelli.provider.noProviders'));p.dataset.c='EmptyState';if(errore)p.setAttribute('role','alert');lista.replaceChildren(p);lista.style.display='block';if(stato)disegnaFiltriFornitori(lista,rows,stato.filtri,0,prove);return;}
  const visibili=stato?filtraFornitori(rows,stato.filtri,{prove}):rows;
  if(stato)disegnaFiltriFornitori(lista,rows,stato.filtri,visibili.length,prove);
  /*
@@ -1016,7 +1019,7 @@ export function aggiornaProviderList(lista,rows,opzioni={}){
   *   filtro che li ha esclusi. Un vuoto che accusa il server di un lavoro fatto dal filtro è la
   *   stessa classe di difetto dell'«esito stampato dopo un errore».
   */
- if(!visibili.length){const p=el('p','talos-muted','Nessun fornitore con questi filtri.');p.dataset.c='EmptyState';lista.replaceChildren(p);lista.style.display='block';return;}
+ if(!visibili.length){const p=el('p','talos-muted',t('modelli.provider.noMatchingProviders'));p.dataset.c='EmptyState';lista.replaceChildren(p);lista.style.display='block';return;}
  const focus=document.activeElement,focusId=focus?.closest('[data-provider-id]')?.dataset.providerId;
  const old=new Map([...lista.querySelectorAll('[data-provider-id]')].map(n=>[n.dataset.providerId,n]));
  /*
@@ -1063,10 +1066,10 @@ export function montaProviderPanel(panel){
  panel.classList.add('talos-provider-panel');
  const head=panel.querySelector('.model-lab-panel-heading')||panel.querySelector('[data-provider-heading]');
  head?.classList.add('talos-page__head');
- const title=head?.querySelector('h4')||head?.querySelector('h2');if(title)title.textContent='Fornitori e accessi';
- const note=head?.querySelector('p');if(note){note.className='talos-muted';note.textContent=`${NOTA_CHIAVI} ${NOTA_CHIAVI_RESTO}`;}
+ const title=head?.querySelector('h4')||head?.querySelector('h2');if(title)title.textContent=t('modelli.provider.providersAndAccess');
+ const note=head?.querySelector('p');if(note){note.className='talos-muted';note.textContent=`${t('modelli.provider.keysStayLocal')} ${t('modelli.provider.separateChecks')}`;}
  const test=panel.querySelector('#providerTestAll')||panel.querySelector('[data-provider-test-all]');
- if(test&&!panel.querySelector('#providerRefresh')){test.className='talos-button talos-button--secondary talos-button--sm';test.dataset.c='Button';const refresh=button('refresh','Aggiorna');refresh.id='providerRefresh';delete refresh.dataset.providerAction;test.before(refresh);}
+ if(test&&!panel.querySelector('#providerRefresh')){test.className='talos-button talos-button--secondary talos-button--sm';test.dataset.c='Button';const refresh=button('refresh',t('modelli.provider.refresh'));refresh.id='providerRefresh';delete refresh.dataset.providerAction;test.before(refresh);}
  /*
   * I FILTRI NASCONO QUI, una volta sola, sopra la lista della scheda Provider — che dal 23/09/2026 è
   * l'UNICA lista dei fornitori (il velo «Fornitori e accessi» è tolto per decisione owner).

@@ -10,15 +10,46 @@
  * c'è, la riga lo dice. Un passo mai partito non ha barra: il suo stato sta scritto nella riga.
  */
 import { formattaDurata, iconaDellaFase, STATI_PASSO } from './comuni.js';
+import { linguaCorrenteDiT, t as tr } from '../lingua.js';
+
+/*
+ * ⛔ Gli AIUTI DI LINGUA dei grafi (owner 03/10/2026, «ogni singola parola nella app deve essere sia in inglese che in italiano»).
+ *   Stanno qui, nella foglia della catena di import (`tela.js`, `grafo-workflow.js` e `rail-workflow.js` importano da qui, mai
+ *   il contrario), perché `comuni.js` tiene i numeri/orari in `it-IT` fissi: chi disegna non usa `cifra` né `ora` di là, ma
+ *   queste, che seguono la lingua corrente AL MOMENTO DELL'USO. (Dal 03/10/2026 anche `STATI_PASSO[…].parola` legge il dizionario.)
+ */
+const CHIAVE_PAROLA_PASSO = Object.freeze({
+  planned: 'agenti.stepState.planned', pending: 'agenti.stepState.waiting', blocked: 'agenti.stepState.waiting', ready: 'agenti.stepState.ready',
+  leased: 'agenti.stepState.starting', running: 'agenti.stepState.running', retry_wait: 'agenti.stepState.retryWait',
+  waiting_human: 'agenti.stepState.waitingForYou', reconciling: 'agenti.stepState.verifying', uncertain: 'agenti.stepState.toVerify',
+  succeeded: 'agenti.stepState.done', failed: 'agenti.stepState.failed', cancelled: 'agenti.stepState.cancelled',
+  skipped: 'agenti.stepState.skipped', superseded: 'agenti.stepState.superseded',
+});
+/** Lo stato di un passo IN PAROLE, nella lingua corrente (le stesse parole di `STATI_PASSO`, che restano la fonte dei toni). */
+export const parolaDelPasso = (stato) => tr(CHIAVE_PAROLA_PASSO[stato] ?? 'agenti.stepState.unknown');
+/** Il locale dei numeri e quello degli orari (24 ore anche in inglese, come l'asse e le righe del contesto). */
+export const localeNumeri = () => (linguaCorrenteDiT() === 'en' ? 'en-US' : 'it-IT');
+export const localeOra = () => (linguaCorrenteDiT() === 'en' ? 'en-GB' : 'it-IT');
+const FORMATI_CIFRE = new Map();
+/** Un numero col raggruppamento SEMPRE (5.000 / 5,000), nella lingua corrente. */
+export function cifra(n) {
+  const locale = localeNumeri();
+  if (!FORMATI_CIFRE.has(locale)) FORMATI_CIFRE.set(locale, new Intl.NumberFormat(locale, { useGrouping: 'always' }));
+  return FORMATI_CIFRE.get(locale).format(n);
+}
+/** Ore e minuti di un istante (numero, data o ISO), nella lingua corrente; `null` se non è una data (mai l'epoca per un `null`). */
+export function oraBreve(valore) {
+  const ms = typeof valore === 'number' ? valore : valore instanceof Date ? valore.getTime() : Date.parse(valore ?? '');
+  return Number.isFinite(ms) ? new Date(ms).toLocaleTimeString(localeOra(), { hour: '2-digit', minute: '2-digit' }) : null;
+}
 
 const ALTEZZA_RIGA = 30;
 const LARGHEZZA_NOMI = 248;
 const SCORTA = 8;
 const TROPPE_RIGHE = 400;
 const tonoDi = (stato) => STATI_PASSO[stato]?.tono ?? 'neutro';
-const parolaDi = (stato) => STATI_PASSO[stato]?.parola ?? 'Stato sconosciuto';
-const ora = (t) => new Date(t).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
-const cifre = new Intl.NumberFormat('it-IT', { useGrouping: 'always' });
+const parolaDi = parolaDelPasso;
+const ora = (istante) => new Date(istante).toLocaleTimeString(localeOra(), { hour: '2-digit', minute: '2-digit' });
 const INTERVALLI_MIN = [1, 2, 5, 10, 15, 30, 60, 120, 240];
 
 export function creaTempo(host, { icona, onSeleziona, onZoom }) {
@@ -27,13 +58,13 @@ export function creaTempo(host, { icona, onSeleziona, onZoom }) {
   const el = (tag, classe, testo) => { const n = d.createElement(tag); if (classe) n.className = classe; if (testo != null) n.textContent = testo; return n; };
   const radice = el('div', 'gv-tempo');
   const testa = el('div', 'gv-tempo-testa');
-  const testaNomi = el('div', 'gv-tempo-testa-nomi', 'Agente');
+  const testaNomi = el('div', 'gv-tempo-testa-nomi', tr('agenti.timeline.agentColumn'));
   const asse = el('div', 'gv-tempo-asse');
   testa.append(testaNomi, asse);
   const corpo = el('div', 'gv-tempo-corpo');
   corpo.tabIndex = 0;
   corpo.setAttribute('role', 'list');
-  corpo.setAttribute('aria-label', 'Passi nel tempo, per fase');
+  corpo.setAttribute('aria-label', tr('agenti.timeline.listLabel'));
   const spazio = el('div', 'gv-tempo-spazio');
   const sfondo = el('div', 'gv-tempo-sfondo');
   const righeHost = el('div', 'gv-tempo-righe');
@@ -84,8 +115,8 @@ export function creaTempo(host, { icona, onSeleziona, onZoom }) {
         const x0 = s.asseDa * pxMs, x1 = s.asseA * pxMs;
         const vuoto = el('div', 'gv-tempo-vuoto');
         vuoto.style.transform = `translateX(${x0}px)`; vuoto.style.width = `${Math.max(6, x1 - x0)}px`;
-        vuoto.title = `${ora(s.da)} → ${ora(s.a)}: nessun agente al lavoro. Compresso sull'asse.`;
-        vuoto.append(el('span', 'gv-tempo-vuoto-etichetta', `${formattaDurata(s.a - s.da)} senza attività`));
+        vuoto.title = tr('agenti.timeline.idleTitle', { da: ora(s.da), a: ora(s.a) });
+        vuoto.append(el('span', 'gv-tempo-vuoto-etichetta', tr('agenti.timeline.idleLabel', { durata: formattaDurata(s.a - s.da) })));
         asse.append(vuoto);
         const fascia = el('div', 'gv-tempo-fascia');
         fascia.style.transform = `translateX(${LARGHEZZA_NOMI + x0}px)`; fascia.style.width = `${Math.max(6, x1 - x0)}px`;
@@ -103,7 +134,7 @@ export function creaTempo(host, { icona, onSeleziona, onZoom }) {
     }
     const adesso = el('div', 'gv-tempo-adesso');
     adesso.style.transform = `translateX(${x(a.t1)}px)`;
-    adesso.append(el('span', null, `adesso ${ora(a.t1)}`));
+    adesso.append(el('span', null, tr('agenti.timeline.now', { ora: ora(a.t1) })));
     sfondo.append(adesso);
     const t = dati.tempoCorrente();
     if (t !== null) {
@@ -139,7 +170,7 @@ export function creaTempo(host, { icona, onSeleziona, onZoom }) {
       b.setAttribute('aria-expanded', String(!chiuse.has(voce.g.phaseId)));
       b.append(icona('i-chevron', chiuse.has(voce.g.phaseId) ? 'gv-gira-giu' : ''), icona(iconaDellaFase(voce.g)));
       const c = dati.conteggi(voce.g.phaseId) ?? { terminated: 0, attention: 0 };
-      b.append(el('span', 'gv-tempo-nome-testo', voce.g.label), el('span', 'gv-tempo-nome-conto', `${cifre.format(c.terminated)}/${cifre.format(voce.g.total)}`));
+      b.append(el('span', 'gv-tempo-nome-testo', voce.g.label), el('span', 'gv-tempo-nome-conto', `${cifra(c.terminated)}/${cifra(voce.g.total)}`));
       b.addEventListener('click', () => { if (chiuse.has(voce.g.phaseId)) chiuse.delete(voce.g.phaseId); else chiuse.add(voce.g.phaseId); costruisciRighe(); disegnaRighe(true); });
       n.append(b);
       // la campata della fase: dal primo inizio all'ultima fine (o adesso), col tono di chi c'è dentro
@@ -156,7 +187,7 @@ export function creaTempo(host, { icona, onSeleziona, onZoom }) {
     const r = dati.cella(voce.g.phaseId, voce.indice);
     if (!r) {
       n.dataset.carica = 'true';
-      n.append(el('span', 'gv-tempo-nome gv-tempo-nome--carica', 'Carico…'));
+      n.append(el('span', 'gv-tempo-nome gv-tempo-nome--carica', tr('agenti.timeline.loading')));
       return n;
     }
     const stato = dati.statoDi(r.nodeId) ?? r.state;
@@ -179,11 +210,11 @@ export function creaTempo(host, { icona, onSeleziona, onZoom }) {
       const a = finito ? tt.a : fine;
       if (!ultimo) {
         barra(n, tt.da, a, { tono: 'errore', classe: 'gv-tempo-barra--primo',
-          titolo: `Tentativo ${k + 1} non riuscito · ${ora(tt.da)} → ${finito ? ora(tt.a) : 'in corso'}` });
+          titolo: tr('agenti.timeline.attemptFailed', { n: k + 1, da: ora(tt.da), a: finito ? ora(tt.a) : tr('agenti.timeline.stillRunning') }) });
         return;
       }
       const durata = formattaDurata(a - tt.da);
-      const titolo = `${r.label} · ${parolaDi(stato)} · ${ora(tt.da)} → ${finito ? ora(tt.a) : 'in corso'} · ${durata}`;
+      const titolo = `${r.label} · ${parolaDi(stato)} · ${ora(tt.da)} → ${finito ? ora(tt.a) : tr('agenti.timeline.stillRunning')} · ${durata}`;
       const { b, w } = barra(n, tt.da, a, { tono, titolo, cliccabile: r.nodeId });
       b.dataset.stato = stato;
       if (w > 64) b.append(el('span', 'gv-tempo-barra-testo', durata));

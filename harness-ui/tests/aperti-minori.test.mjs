@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
+import { t as tr, tn as trn } from '../frontend/src/components/lingua.js'; // corsia A della lingua (03/10/2026): il sorgente porta le chiavi, le frasi stanno nel dizionario
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const app = await readFile(join(root, 'frontend/src/legacy/app.js'), 'utf8');
@@ -23,7 +24,7 @@ function funzioneDalMonolite(nome, { state = {}, Date: DateFinto = Date, deps = 
   };
   const sorgente = deps.map(estrai).join('\n') + estrai(nome);
   // eslint-disable-next-line no-new-func
-  return new Function('state', 'Date', `${sorgente}\nreturn ${nome};`)(state, DateFinto);
+  return new Function('state', 'Date', 'tr', 'trn', `${sorgente}\nreturn ${nome};`)(state, DateFinto, tr, trn);
 }
 
 /*

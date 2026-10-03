@@ -270,7 +270,7 @@ test('⛔⛔⛔ BC79-02 — 400 SEMPRE: due richieste e non quattro, un codice s
     assert.ok(!ultimo.message.includes(nome),
       `⛔ nessun nome tecnico nella frase: trovato «${nome}» in ${JSON.stringify(ultimo.message)}`);
   }
-  assert.ok(/motore locale/i.test(ultimo.message),
+  assert.ok(/local engine/i.test(ultimo.message),
     `⛔ la frase deve dire CHI ha rifiutato — ${JSON.stringify(ultimo.message)}`);
 });
 
@@ -335,12 +335,12 @@ test('⛔⛔ BC79-05 — i codici del ritento, contati sul motore: 401 e 400 un 
   const a401 = await conta(401);
   assert.equal(a401.richieste, 1, `⛔ una credenziale rifiutata non migliora ritentando — richieste: ${a401.richieste}`);
   assert.equal(a401.senzaAttrezzi, 0, '⛔ e un 401 non è il caso degli attrezzi: nessuna riprova senza');
-  assert.ok(/dopo 1 tentativo\b/.test(a401.ultimo.message),
+  assert.ok(/after 1 attempt\b/.test(a401.ultimo.message),
     `⛔ il messaggio deve dire i tentativi VERI, non la costante 4 — ${JSON.stringify(a401.ultimo.message)}`);
 
   const a429 = await conta(429);
   assert.equal(a429.richieste, 4, `⛔ un limite di traffico si ritenta come sempre — richieste: ${a429.richieste}`);
-  assert.ok(/dopo 4 tentativi\b/.test(a429.ultimo.message), JSON.stringify(a429.ultimo.message));
+  assert.ok(/after 4 attempts\b/.test(a429.ultimo.message), JSON.stringify(a429.ultimo.message));
 
   const a503 = await conta(503);
   assert.equal(a503.richieste, 4, `⛔ un guasto del motore si ritenta come sempre — richieste: ${a503.richieste}`);
@@ -512,7 +512,7 @@ test('⛔⛔⛔ BC79-CTX — il contesto pieno non è un rifiuto degli attrezzi:
   assert.equal(motore.richieste.length, 1, `⛔ nessuna riprova senza attrezzi — richieste: ${JSON.stringify(motore.richieste.map((r) => r.haTools))}`);
   assert.equal(ultimo.type, 'RunError');
   assert.equal(ultimo.code, 'LOCAL_CONTEXT_EXCEEDED', `⛔ il suo codice, non un guasto del fornitore — ultimo: ${JSON.stringify(ultimo)}`);
-  assert.match(ultimo.message, /\(17230 token\).*\(16384 token\)/u, 'i numeri del motore restano leggibili');
+  assert.match(ultimo.message, /\(17230 tokens\).*\(16384 tokens\)/u, 'i numeri del motore restano leggibili');
   assert.equal(quanteVolte(testoDetto(eventi), 'Questo modello non usa gli attrezzi'), 0, '⛔ e nessun avviso falso sugli attrezzi');
 });
 

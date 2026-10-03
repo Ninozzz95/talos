@@ -1,3 +1,6 @@
+import { t, tn, linguaCorrenteDiT } from './lingua.js';
+/* Numeri e date nella lingua dell'interfaccia (come fanno gli altri componenti): italiano → it-IT, inglese → en-US. */
+const localeUI = () => (linguaCorrenteDiT() === 'en' ? 'en-US' : 'it-IT');
 /*
  * scheda-modello.js — LA PAGINA DEL MODELLO (corsia 4, 18/09/2026).
  *
@@ -189,9 +192,9 @@ export const SCHEDE = Object.freeze(['card', 'files', 'compatibility']);
 
 /** Le parole a schermo delle tre schede. Mai il nome tecnico (`NIENTE NOMI TECNICI NELLA UI`). */
 export const ETICHETTE_SCHEDE = Object.freeze({
-  card: 'Scheda Hugging Face',
-  files: 'File del modello',
-  compatibility: 'Compatibilità',
+  get card() { return t('modelli.detail.huggingFaceCard'); },
+  get files() { return t('modelli.detail.modelFiles'); },
+  get compatibility() { return t('modelli.detail.compatibility'); },
 });
 
 /*
@@ -225,14 +228,14 @@ export const CARATTERI_INDICE = 44;
 export const PREFISSO_REPO = 'hf:';
 
 /** La parola dell'origine nella toolbar: «Locale» per un file sul disco, «Repository» per l'altro. */
-export const ORIGINI = Object.freeze({ locale: 'Locale', repo: 'Repository', importato: 'Dal computer' });
+export const ORIGINI = Object.freeze({ get locale() { return t('modelli.detail.local'); }, get repo() { return t('modelli.detail.repository'); }, get importato() { return t('modelli.detail.fromComputer'); } });
 
 /**
  * Lo stato di un repository che non è sul disco. Non si può dedurre da `STATI_INSTALLATO`, che
  * parla di file: «Non installato» è la parola che il laboratorio usa già per questa condizione
  * (`hf-catalogo.js`, colonna dello stato).
  */
-export const STATO_NON_INSTALLATO = Object.freeze({ etichetta: 'Non installato', tono: 'warning' });
+export const STATO_NON_INSTALLATO = Object.freeze({ get etichetta() { return t('modelli.detail.notInstalled'); }, tono: 'warning' });
 
 /*
  * ⛔ LA PREFERENZA CHE RESTA — le immagini remote delle schede.
@@ -257,7 +260,7 @@ export const CAMPO_IMMAGINI_REMOTE = Object.freeze({
   id: 'readmeRemoteImagesToggle',
   chiave: CHIAVE_IMMAGINI_REMOTE,
   tipo: 'checkbox',
-  titolo: 'Immagini remote nelle schede',
+  get titolo() { return t('modelli.detail.remoteImageSetting'); },
   sezione: 'chat',
   gruppo: 'chat',
 });
@@ -265,7 +268,7 @@ export const CAMPO_IMMAGINI_REMOTE = Object.freeze({
  * La frase che spiega il campo, nella forma di `FIELD_HELP` (`features/settings/schema.ts`): è il
  * pezzo che manca perché la voce compaia anche in Impostazioni, accanto alle altre.
  */
-export const AIUTO_IMMAGINI_REMOTE = 'Carica le immagini che le schede dei modelli portano da server esterni. Spento, nessuna richiesta parte: si vede il testo e l’elenco delle figure.';
+export function aiutoImmaginiRemote() { return t('modelli.detail.remoteImageHelp'); }
 
 /**
  * La porta delle preferenze di serie: lo STESSO documento dell'app.
@@ -344,7 +347,7 @@ export function nomeUmano(modello = null, repo = null) {
    */
   const daRepo = String(repo?.repo || modello?.repo || '').split('/').filter(Boolean).pop() || '';
   if (daRepo && daRepo !== REPO_IMPORTATO) return daRepo;
-  return String(modello?.id ?? '').trim() || 'Modello';
+  return String(modello?.id ?? '').trim() || t('modelli.detail.model');
 }
 
 /** La parola dell'origine per la toolbar: un file importato non è «locale» come uno scaricato. */
@@ -449,7 +452,7 @@ const QUOTA_STRETTA = 0.9;
 
 let contatore = 0; // id unici per montaggio: due pagine nella stessa schermata non devono collidere
 
-const numero = new Intl.NumberFormat('it-IT');
+const numero = { format: (valore) => new Intl.NumberFormat(localeUI()).format(valore) };
 
 /* ═══════════════════════════ le funzioni pure (provate dai test) ═══════════════════════════ */
 
@@ -489,10 +492,10 @@ export function improntaBreve(valore, { primi = CARATTERI_IMPRONTA, ultimi = CAR
 
 /** Gli esiti del confronto fra il file sul disco e quello dichiarato dal repository. */
 export const ESITI_FILE = Object.freeze({
-  coincide: { etichetta: 'Coincide col repository', tono: 'success' },
-  diverso: { etichetta: 'Diverso dal repository', tono: 'danger' },
-  'non-confrontabile': { etichetta: 'Non confrontabile', tono: 'warning' },
-  'solo-locale': { etichetta: 'Il repository non lo elenca', tono: 'warning' },
+  coincide: { get etichetta() { return t('modelli.detail.matchesRepository'); }, tono: 'success' },
+  diverso: { get etichetta() { return t('modelli.detail.differsFromRepository'); }, tono: 'danger' },
+  'non-confrontabile': { get etichetta() { return t('modelli.detail.cannotCompare'); }, tono: 'warning' },
+  'solo-locale': { get etichetta() { return t('modelli.detail.repositoryDoesNotList'); }, tono: 'warning' },
 });
 
 /**
@@ -528,9 +531,9 @@ export function confrontaFile(locali = [], remoti = []) {
 }
 
 const MOTIVI = Object.freeze({
-  measurement: 'Il server non ha potuto misurare la macchina.',
-  capabilities: 'Il runtime non ha osservato le capacità di questo modello (attrezzi, chiamate di attrezzo, ruolo di sistema).',
-  template: 'Il modello non dichiara il supporto agli attrezzi: la chat sì, l’agente no.',
+  get measurement() { return t('modelli.detail.machineNotMeasured'); },
+  get capabilities() { return t('modelli.detail.capabilitiesNotObserved'); },
+  get template() { return t('modelli.detail.toolsUnsupported'); },
   fits: '',
 });
 
@@ -538,8 +541,8 @@ const MOTIVI = Object.freeze({
 function motivoContesto(fit) {
   const efficace = contestoK(fit?.inspection?.context?.effectiveTokens?.value);
   const chiesto = contestoK(fit?.context?.requestedTokens);
-  if (!efficace || !chiesto) return 'Il contesto del modello è più corto di quello richiesto.';
-  return `Il contesto efficace è ${efficace}, ne servono ${chiesto}.`;
+  if (!efficace || !chiesto) return t('modelli.detail.contextTooShort');
+  return t('modelli.detail.effectiveContextRequired', { effective: efficace, required: chiesto });
 }
 
 /**
@@ -561,17 +564,17 @@ export function verdettoMemoria(fit) {
     || (Number.isFinite(richiesti) && Number.isFinite(liberi) && liberi > 0 && richiesti / liberi >= QUOTA_STRETTA);
   if (stato === 'compatible' || stato === 'tight') {
     const cifre = Number.isFinite(richiesti) && Number.isFinite(liberi)
-      ? `${byte(richiesti)} richiesti su ${byte(liberi)} liberi`
-      : 'Misure incomplete.';
+      ? t('modelli.detail.memoryRequiredFree', { required: byte(richiesti), free: byte(liberi) })
+      : t('modelli.detail.incompleteMeasurements');
     return stretto
-      ? { chiave: 'stretto', etichetta: 'Entra stretto', tono: 'warning', dettaglio: cifre }
-      : { chiave: 'entra', etichetta: 'Entra', tono: 'success', dettaglio: cifre };
+      ? { chiave: 'stretto', etichetta: t('modelli.detail.tightFit'), tono: 'warning', dettaglio: cifre }
+      : { chiave: 'entra', etichetta: t('modelli.detail.fits'), tono: 'success', dettaglio: cifre };
   }
   if (stato === 'chat-only') {
     const perContesto = String(fit.reason || '') === 'context';
     return {
       chiave: 'solo-chat',
-      etichetta: 'Entra solo senza l’agente',
+      etichetta: t('modelli.detail.chatOnly'),
       tono: 'warning',
       dettaglio: perContesto ? motivoContesto(fit) : MOTIVI.template,
     };
@@ -579,17 +582,17 @@ export function verdettoMemoria(fit) {
   if (stato === 'blocked') {
     const motivo = String(fit.reason || '');
     if (motivo === 'storage') {
-      return { chiave: 'non-entra', etichetta: 'Non entra', tono: 'danger', dettaglio: `Sul disco servono ${byte(fit.storage?.requiredBytes)}, restano ${byte(fit.storage?.availableBytes)}.` };
+      return { chiave: 'non-entra', etichetta: t('modelli.detail.doesNotFit'), tono: 'danger', dettaglio: t('modelli.detail.diskRequiredRemaining', { required: byte(fit.storage?.requiredBytes), available: byte(fit.storage?.availableBytes) }) };
     }
     if (motivo === 'memory') {
-      return { chiave: 'non-entra', etichetta: 'Non entra', tono: 'danger', dettaglio: `In memoria servono ${byte(fit.memory?.requiredBytes)}, liberi ${byte(fit.memory?.availableBytes)}.` };
+      return { chiave: 'non-entra', etichetta: t('modelli.detail.doesNotFit'), tono: 'danger', dettaglio: t('modelli.detail.memoryRequiredAvailable', { required: byte(fit.memory?.requiredBytes), available: byte(fit.memory?.availableBytes) }) };
     }
     if (motivo === 'context') {
-      return { chiave: 'non-entra', etichetta: 'Non entra', tono: 'danger', dettaglio: motivoContesto(fit) };
+      return { chiave: 'non-entra', etichetta: t('modelli.detail.doesNotFit'), tono: 'danger', dettaglio: motivoContesto(fit) };
     }
-    return { chiave: 'non-entra', etichetta: 'Non entra', tono: 'danger', dettaglio: MOTIVI[motivo] || '' };
+    return { chiave: 'non-entra', etichetta: t('modelli.detail.doesNotFit'), tono: 'danger', dettaglio: MOTIVI[motivo] || '' };
   }
-  return { chiave: 'ignoto', etichetta: 'Non verificato', tono: '', dettaglio: MOTIVI[String(fit.reason || '')] || '' };
+  return { chiave: 'ignoto', etichetta: t('modelli.detail.unchecked'), tono: '', dettaglio: MOTIVI[String(fit.reason || '')] || '' };
 }
 
 /**
@@ -601,25 +604,25 @@ export function verdettoMemoria(fit) {
  *   restano «Sconosciuto»: un numero che non c'è non diventa uno zero.
  */
 export function testoFatto(fatto, { numeri = null } = {}) {
-  if (fatto === null || fatto === undefined) return 'Sconosciuto';
+  if (fatto === null || fatto === undefined) return t('modelli.detail.unknown');
   if (typeof fatto === 'object') {
-    if (String(fatto.state || '') === 'unknown') return 'Sconosciuto';
+    if (String(fatto.state || '') === 'unknown') return t('modelli.detail.unknown');
     const valore = fatto.value;
-    if (valore === null || valore === undefined) return 'Sconosciuto';
-    if (typeof valore === 'boolean') return valore ? 'Sì' : 'No';
+    if (valore === null || valore === undefined) return t('modelli.detail.unknown');
+    if (typeof valore === 'boolean') return valore ? t('modelli.detail.yes') : t('modelli.detail.no');
     if (typeof valore === 'number') {
-      if (!Number.isFinite(valore)) return 'Sconosciuto';
+      if (!Number.isFinite(valore)) return t('modelli.detail.unknown');
       return (numeri ? numeri(valore) : null) || String(valore);
     }
     return String(valore);
   }
-  return typeof fatto === 'boolean' ? (fatto ? 'Sì' : 'No') : String(fatto);
+  return typeof fatto === 'boolean' ? (fatto ? t('modelli.detail.yes') : t('modelli.detail.no')) : String(fatto);
 }
 
 /** Da dove viene un fatto: `osservato` dal runtime, `dichiarato` dal file, niente se non si sa. */
 export function provenienzaFatto(fatto) {
   const stato = typeof fatto === 'object' && fatto ? String(fatto.state || '') : '';
-  return stato === 'observed' ? 'osservato' : stato === 'declared' ? 'dichiarato' : '';
+  return stato === 'observed' ? t('modelli.detail.observed') : stato === 'declared' ? t('modelli.detail.declared') : '';
 }
 
 function slug(testo) {
@@ -753,7 +756,7 @@ function rigaFatto(doc, etichetta, fatto, opzioni) {
 }
 
 /** Un pulsante di copia con esito a schermo — l'idioma del progetto (`app.js:3853`, `conversazione.js:637`). */
-function copia(doc, valore, { etichetta = 'Copia', suggerimento = '' } = {}) {
+function copia(doc, valore, { etichetta = t('modelli.detail.copy'), suggerimento = '' } = {}) {
   const b = nodo(doc, 'button', 'talos-button talos-button--ghost talos-button--sm');
   b.type = 'button';
   b.dataset.modelloCopia = '';
@@ -761,12 +764,12 @@ function copia(doc, valore, { etichetta = 'Copia', suggerimento = '' } = {}) {
   b.append(icona(doc, 'copy', 'i i--sm'), scritta);
   if (suggerimento) { b.title = suggerimento; b.setAttribute('aria-label', suggerimento); }
   b.addEventListener('click', async () => {
-    let esito = 'Copiato';
+    let esito = t('modelli.detail.copied');
     try {
       const appunti = globalThis.navigator?.clipboard;
-      if (typeof appunti?.writeText !== 'function') throw new Error('appunti non disponibili');
+      if (typeof appunti?.writeText !== 'function') throw new Error('clipboard unavailable');
       await appunti.writeText(String(valore));
-    } catch { esito = 'Copia non riuscita'; }
+    } catch { esito = t('modelli.detail.copyFailed'); }
     scritta.textContent = esito;
     globalThis.setTimeout?.(() => {
       // ⛔ Il pulsante può essere già stato buttato da un ridisegno: si riporta l'etichetta solo se è ancora vivo.
@@ -830,10 +833,10 @@ export function montaSchedaModello(contenitore, {
   document: documento = null,
 } = {}) {
   const doc = documento || contenitore?.ownerDocument || globalThis.document;
-  if (!contenitore || !doc) throw new Error('La pagina del modello vuole un contenitore.');
-  if (typeof apiGet !== 'function') throw new Error('La pagina del modello vuole un lettore (`apiGet`).');
+  if (!contenitore || !doc) throw new Error(t('modelli.detail.pageNeedsContainer'));
+  if (typeof apiGet !== 'function') throw new Error(t('modelli.detail.pageNeedsReader'));
   const bersaglio = bersaglioDi(id, repo);
-  if (!bersaglio.id && bersaglio.tipo !== 'repo') throw new Error('La pagina del modello vuole un id.');
+  if (!bersaglio.id && bersaglio.tipo !== 'repo') throw new Error(t('modelli.detail.pageNeedsId'));
 
   const suffisso = `sm${(contatore += 1)}`;
   const idPannello = `${suffisso}-pannello`;
@@ -890,10 +893,10 @@ export function montaSchedaModello(contenitore, {
   const rigaSchede = nodo(doc, 'div', 'model-page-tabs talos-cluster');
   const listaSchede = nodo(doc, 'div', 'talos-tabs__list');
   listaSchede.setAttribute('role', 'tablist');
-  listaSchede.setAttribute('aria-label', 'Sezioni della pagina del modello');
+  listaSchede.setAttribute('aria-label', t('modelli.detail.pageSections'));
   // La nota del mockup (`.model-page-tab-note`): uno scudo e la frase, a destra delle linguette.
   const notaSchede = nodo(doc, 'span', 'model-page-tab-note');
-  notaSchede.append(icona(doc, 'shield', 'i i--xs'), doc.createTextNode('Nessun avvio automatico'));
+  notaSchede.append(icona(doc, 'shield', 'i i--xs'), doc.createTextNode(t('modelli.detail.noAutomaticStart')));
   rigaSchede.append(listaSchede, notaSchede);
   const pannello = nodo(doc, 'section', 'talos-tabs__panel');
   pannello.id = idPannello;
@@ -904,7 +907,7 @@ export function montaSchedaModello(contenitore, {
    *   interrogativo, che vuol dire un'altra cosa). ⇒ La frase resta, il glifo no: un'icona che dice
    *   «non lo so» su una nota che spiega una regola sarebbe un secondo messaggio, e sbagliato.
    */
-  const chiusura = paragrafo(doc, 'model-page-end talos-page__note', 'Leggere questa pagina non scarica file, non carica il modello e non cambia le nuove chat.');
+  const chiusura = paragrafo(doc, 'model-page-end talos-page__note', t('modelli.detail.pageReadEffect'));
 
   const gruppoPannello = nodo(doc, 'div', 'talos-tabs__panels');
   gruppoPannello.append(pannello);
@@ -951,7 +954,7 @@ export function montaSchedaModello(contenitore, {
       applica(dati);
     } catch (errore) {
       if (stato.distrutto || generazione !== generazioneLettura) return;
-      stato.errori[chiave] = String(errore?.message || errore || 'Richiesta non riuscita');
+      stato.errori[chiave] = String(errore?.message || errore || t('modelli.detail.requestFailed'));
     } finally {
       if (!stato.distrutto && generazione === generazioneLettura) {
         stato.caricamento[chiave] = false;
@@ -1003,7 +1006,7 @@ export function montaSchedaModello(contenitore, {
     return leggi('modello', percorsoModelli(), (dati) => {
       const elenco = Array.isArray(dati?.items) ? dati.items : [];
       stato.modello = elenco.find((voce) => String(voce?.id) === String(stato.id)) || null;
-      if (!stato.modello) stato.errori.modello = 'Questo modello non è fra quelli installati.';
+      if (!stato.modello) stato.errori.modello = t('modelli.detail.modelNotInstalledNotice');
     });
   }
 
@@ -1050,7 +1053,7 @@ export function montaSchedaModello(contenitore, {
     const b = nodo(doc, 'button', 'talos-button talos-button--ghost talos-button--sm');
     b.type = 'button';
     b.dataset.modelloIndietro = '';
-    b.append(icona(doc, 'arrow-left', 'i i--sm'), doc.createTextNode('Tutti i modelli'));
+    b.append(icona(doc, 'arrow-left', 'i i--sm'), doc.createTextNode(t('modelli.detail.allModels')));
     b.addEventListener('click', () => indietro?.());
     return b;
   }
@@ -1070,9 +1073,9 @@ export function montaSchedaModello(contenitore, {
       link.href = hu;
       link.target = '_blank';
       link.rel = 'noopener noreferrer'; // `app.js:3850` usa esattamente questa forma
-      link.append(icona(doc, 'link', 'i i--sm'), doc.createTextNode('Apri su Hugging Face'));
+      link.append(icona(doc, 'link', 'i i--sm'), doc.createTextNode(t('modelli.detail.openHuggingFace')));
       gruppo.append(link);
-      gruppo.append(copia(doc, hu, { etichetta: 'Copia link', suggerimento: 'Copia il link del repository' }));
+      gruppo.append(copia(doc, hu, { etichetta: t('modelli.detail.copyLink'), suggerimento: t('modelli.detail.copyRepositoryLink') }));
     }
     return gruppo;
   }
@@ -1126,7 +1129,7 @@ export function montaSchedaModello(contenitore, {
     glifo.append(icona(doc, 'robot', 'i'));
 
     const testo = nodo(doc, 'div', '');
-    testo.append(nodo(doc, 'div', 'eyebrow talos-eyebrow', 'Nel tuo laboratorio'));
+    testo.append(nodo(doc, 'div', 'eyebrow talos-eyebrow', t('modelli.detail.inYourLab')));
     const nome = nodo(doc, 'h1', '', nomeUmano(stato.modello, bersaglio));
     nome.dataset.modelloNome = '';
     nome.id = `${suffisso}-titolo`;
@@ -1140,31 +1143,31 @@ export function montaSchedaModello(contenitore, {
     const pezzi = [];
     const repoDelModello = String(stato.modello?.repo || bersaglio.repo || '');
     if (repoDelModello && repoDelModello !== REPO_IMPORTATO) pezzi.push(repoDelModello);
-    else pezzi.push('Importato dal computer: non ha un repository');
-    if (repo?.revision || bersaglio.revisione) pezzi.push(`revisione ${String(repo?.revision || bersaglio.revisione).slice(0, 12)}`);
+    else pezzi.push(t('modelli.detail.importedNoRepository'));
+    if (repo?.revision || bersaglio.revisione) pezzi.push(t('modelli.detail.revision', { revision: String(repo?.revision || bersaglio.revisione).slice(0, 12) }));
     if (dati?.licenza) pezzi.push(dati.licenza);
-    if (repo?.gated) pezzi.push('accesso limitato');
+    if (repo?.gated) pezzi.push(t('modelli.detail.restrictedAccess'));
     if (repo?.pipelineTag) pezzi.push(repo.pipelineTag);
-    if (Number.isFinite(repo?.downloads)) pezzi.push(`${numero.format(repo.downloads)} download`);
-    if (Number.isFinite(repo?.likes)) pezzi.push(`${numero.format(repo.likes)} like`);
+    if (Number.isFinite(repo?.downloads)) pezzi.push(tn('modelli.detail.downloadCountOne', 'modelli.detail.downloadCount', repo.downloads, { n: numero.format(repo.downloads) }));
+    if (Number.isFinite(repo?.likes)) pezzi.push(tn('modelli.detail.likeCountOne', 'modelli.detail.likeCount', repo.likes, { n: numero.format(repo.likes) }));
     rigaRepo.append(icona(doc, 'doc', 'i i--xs'), nodo(doc, 'span', 'talos-mono', pezzi.join(' · ')));
     testo.append(rigaRepo);
     identita.append(glifo, testo);
     testata.append(identita);
 
     // La frase del mockup, parola per parola: è copy del mockup, non un dato (vedi la testata).
-    testata.append(paragrafo(doc, 'model-hero-caption', 'Conosci il modello. Scegli come usarlo.'));
+    testata.append(paragrafo(doc, 'model-hero-caption', t('modelli.detail.heroCaption')));
     if (!remoto() && stato.modello && typeof onLiberaMemoria === 'function') {
       const comandi = nodo(doc, 'div', 'talos-cluster');
       const libera = nodo(doc, 'button', 'talos-button talos-button--secondary talos-button--sm',
-        runtime.unloading ? 'Liberazione…' : 'Libera memoria');
+        runtime.unloading ? t('modelli.detail.releasing') : t('modelli.detail.releaseMemory'));
       libera.type = 'button';
       libera.dataset.modelloLiberaMemoria = '';
       libera.disabled = !dati?.caricato || Boolean(runtime.unloading || runtime.loading || runtime.error);
       libera.addEventListener('click', () => { void onLiberaMemoria(stato.modello.id); });
-      const statoMemoria = runtime.loading ? 'Verifica memoria…' : runtime.error ? 'Stato memoria non disponibile'
-        : dati?.caricato ? 'Caricato in memoria' : 'Non caricato in memoria';
-      comandi.append(libera, paragrafo(doc, 'talos-muted', statoMemoria + ' · Il file resta sul disco.'));
+      const statoMemoria = runtime.loading ? t('modelli.detail.checkingMemory') : runtime.error ? t('modelli.detail.memoryStateUnavailable')
+        : dati?.caricato ? t('modelli.detail.loadedIntoMemory') : t('modelli.detail.notLoadedIntoMemory');
+      comandi.append(libera, paragrafo(doc, 'talos-muted', t('modelli.detail.memoryStateFileRemains', { state: statoMemoria })));
       testata.append(comandi);
     }
 
@@ -1205,7 +1208,7 @@ export function montaSchedaModello(contenitore, {
   function disegnaStriscia(dati) {
     const striscia = nodo(doc, 'section', 'model-context-strip');
     striscia.dataset.modelloStriscia = '';
-    striscia.setAttribute('aria-label', 'Stato del modello e del suo repository');
+    striscia.setAttribute('aria-label', t('modelli.detail.modelRepositoryState'));
     const cella = (etichetta, contenuto, { icona: nomeIcona = '' } = {}) => {
       const c = nodo(doc, 'div', '');
       if (nomeIcona) c.append(icona(doc, nomeIcona, 'i i--sm'));
@@ -1249,11 +1252,11 @@ export function montaSchedaModello(contenitore, {
      *   quella giusta è peggio di nessuna icona: `index.template.html` non è un file di questa
      *   corsia, quindi la si chiede.
      */
-    striscia.append(cella('Destinazione', eRemoto ? 'Solo nel repository' : 'Sul dispositivo'));
-    striscia.append(cella('Profilo', eRemoto ? profiloDelRepository() : profiloLocale(dati)));
+    striscia.append(cella(t('modelli.detail.destination'), eRemoto ? t('modelli.detail.repositoryOnly') : t('modelli.detail.onDevice')));
+    striscia.append(cella(t('modelli.detail.profile'), eRemoto ? profiloDelRepository() : profiloLocale(dati)));
     const pastigliaStato = badge(doc, statoInstallato.etichetta, statoInstallato.tono);
     pastigliaStato.dataset.modelloStato = eRemoto ? 'non-installato' : dati?.stato || 'disco';
-    striscia.append(cella('Stato', pastigliaStato));
+    striscia.append(cella(t('modelli.detail.state'), pastigliaStato));
 
     if (eRemoto) {
       /*
@@ -1262,18 +1265,18 @@ export function montaSchedaModello(contenitore, {
        *   pagato una volta («Sconosciuto · Sconosciuto», 18/09/2026): due parole uguali non sono
        *   una misura, sono un guasto che sembra un guasto del disegno.
        */
-      striscia.append(cella('Verifica', 'Dopo l’installazione'));
+      striscia.append(cella(t('modelli.detail.check'), t('modelli.detail.afterInstallation')));
       return striscia;
     }
     if (stato.fit) {
       const verdetto = verdettoMemoria(stato.fit);
       const contenuto = badge(doc, verdetto.etichetta, verdetto.tono);
       contenuto.dataset.modelloVerdetto = verdetto.chiave;
-      striscia.append(cella('Verifica', contenuto));
+      striscia.append(cella(t('modelli.detail.check'), contenuto));
     } else if (stato.caricamento.fit) {
-      striscia.append(cella('Verifica', 'In corso…'));
+      striscia.append(cella(t('modelli.detail.check'), t('modelli.detail.running')));
     } else {
-      striscia.append(cella('Verifica', 'Non ancora richiesta'));
+      striscia.append(cella(t('modelli.detail.check'), t('modelli.detail.notRequested')));
     }
     return striscia;
   }
@@ -1295,9 +1298,11 @@ export function montaSchedaModello(contenitore, {
    */
   function profiloDelRepository() {
     const quanti = Array.isArray(stato.modello?.files) ? stato.modello.files.length : null;
-    if (quanti === null) return 'Repository non ancora letto';
+    if (quanti === null) return t('modelli.detail.repositoryNotRead');
     const peso = byte(stato.modello?.byteTotali);
-    return peso === '—' ? `${quanti} file` : `${quanti} file · ${peso}`;
+    return peso === '—'
+      ? tn('modelli.detail.repositoryFileOne', 'modelli.detail.repositoryFiles', quanti)
+      : tn('modelli.detail.repositoryFileSizeOne', 'modelli.detail.repositoryFilesSize', quanti, { size: peso });
   }
 
   /* ---- scheda «card»: il README ---- */
@@ -1312,13 +1317,13 @@ export function montaSchedaModello(contenitore, {
      *   guardando (un'anteprima) invece di come è scritto (un formato). È anche la regola di casa
      *   «niente nomi tecnici nella UI» — `Markdown` era un nome di formato a schermo.
      */
-    testa.append(icona(doc, 'doc', 'i i--sm'), nodo(doc, 'span', 'talos-mono', 'README.md'), nodo(doc, 'span', 'talos-label', 'Anteprima editoriale'));
+    testa.append(icona(doc, 'doc', 'i i--sm'), nodo(doc, 'span', 'talos-mono', 'README.md'), nodo(doc, 'span', 'talos-label', t('modelli.detail.editorialPreview')));
     if (stato.repo?.revision) testa.append(badge(doc, String(stato.repo.revision).slice(0, 12), ''));
     scatola.append(testa);
 
-    if (stato.caricamento.repo) return conTesta(scatola, paragrafo(doc, 'talos-muted', 'Lettura della scheda…'));
+    if (stato.caricamento.repo) return conTesta(scatola, paragrafo(doc, 'talos-muted', t('modelli.detail.readingCard')));
     if (stato.errori.repo) {
-      const errore = paragrafo(doc, 'talos-muted', `La scheda non è stata letta: ${stato.errori.repo}`);
+      const errore = paragrafo(doc, 'talos-muted', t('modelli.detail.cardNotRead', { error: stato.errori.repo }));
       errore.dataset.modelloErrore = 'repo';
       errore.setAttribute('role', 'alert');
       // ⛔ Col «Riprova» anche qui: senza, la scheda che non si è letta non aveva NESSUNA via
@@ -1327,7 +1332,7 @@ export function montaSchedaModello(contenitore, {
     }
     if (stato.errori.modello) {
       return conTesta(scatola,
-        nodo(doc, 'h3', '', 'Il modello non è fra quelli installati'),
+        nodo(doc, 'h3', '', t('modelli.detail.modelNotInstalled')),
         paragrafo(doc, 'talos-muted', stato.errori.modello));
     }
     if (!percorsoRepo(stato.modello)) {
@@ -1337,16 +1342,16 @@ export function montaSchedaModello(contenitore, {
        *   `stato.modello` è `null` e questa riga direbbe una cosa falsa (che non c'è nessuna scheda)
        *   su una scheda che sta arrivando. Un istante, ma è l'istante in cui si guarda la pagina.
        */
-      if (remoto()) return conTesta(scatola, paragrafo(doc, 'talos-muted', 'Lettura della scheda…'));
+      if (remoto()) return conTesta(scatola, paragrafo(doc, 'talos-muted', t('modelli.detail.readingCard')));
       return conTesta(scatola,
-        nodo(doc, 'h3', '', 'Questo modello non ha una scheda Hugging Face'),
-        paragrafo(doc, 'talos-muted', 'Il file è stato importato dal computer: non c’è un repository da cui leggere README, revisione e impronte. I file e la compatibilità qui accanto restano quelli veri, letti dal disco e dal motore locale.'));
+        nodo(doc, 'h3', '', t('modelli.detail.noHuggingFaceCard')),
+        paragrafo(doc, 'talos-muted', t('modelli.detail.importedCardExplanation')));
     }
     const readme = senzaFrontMatter(stato.repo?.readme);
     if (!readme.trim()) {
       return conTesta(scatola,
-        nodo(doc, 'h3', '', 'Il repository non ha un README'),
-        paragrafo(doc, 'talos-muted', `Il repository ${stato.modello.repo} non dichiara una scheda: restano la revisione, i file e la compatibilità.`));
+        nodo(doc, 'h3', '', t('modelli.detail.noReadme')),
+        paragrafo(doc, 'talos-muted', t('modelli.detail.repositoryNoCard', { repo: stato.modello.repo })));
     }
 
     const frammento = renderizzaMarkdown(readme, {
@@ -1371,8 +1376,8 @@ export function montaSchedaModello(contenitore, {
     if (indice.length) {
       const rigaIndice = nodo(doc, 'nav', 'readme-index talos-cluster');
       rigaIndice.dataset.modelloIndice = '';
-      rigaIndice.setAttribute('aria-label', 'Indice della scheda');
-      rigaIndice.append(nodo(doc, 'span', 'talos-label', 'In questa scheda'));
+      rigaIndice.setAttribute('aria-label', t('modelli.detail.cardIndex'));
+      rigaIndice.append(nodo(doc, 'span', 'talos-label', t('modelli.detail.inThisCard')));
       for (const voce of indice) {
         const b = nodo(doc, 'button', 'talos-button talos-button--ghost talos-button--sm', voce.breve);
         b.type = 'button';
@@ -1427,17 +1432,17 @@ export function montaSchedaModello(contenitore, {
     const testa = nodo(doc, 'div', 'talos-cluster');
     testa.append(
       icona(doc, 'image', 'i i--sm'),
-      nodo(doc, 'h3', 'talos-lab__heading talos-grow', 'Immagini della scheda'),
+      nodo(doc, 'h3', 'talos-lab__heading talos-grow', t('modelli.detail.cardImages')),
       badge(doc, String(fuori.quante), ''),
     );
     scatola.append(testa);
 
     if (!stato.consenso) {
-      const host = fuori.host.length ? fuori.host.join(', ') : 'un server esterno';
+      const host = fuori.host.length ? fuori.host.join(', ') : t('modelli.detail.externalServer');
       scatola.append(paragrafo(doc, 'talos-muted',
-        `Questa scheda porta ${fuori.quante} immagini da ${host}: non le carichiamo senza il tuo consenso.`));
+        tn('modelli.detail.imageConsentOne', 'modelli.detail.imageConsent', fuori.quante, { host })));
       const comandi = nodo(doc, 'div', 'talos-cluster');
-      const mostra = nodo(doc, 'button', 'talos-button talos-button--secondary talos-button--sm', 'Mostra le immagini');
+      const mostra = nodo(doc, 'button', 'talos-button talos-button--secondary talos-button--sm', t('modelli.detail.showImages'));
       mostra.type = 'button';
       mostra.dataset.modelloImmaginiMostra = '';
       mostra.addEventListener('click', () => { stato.consenso = true; disegnaPannello(); });
@@ -1457,7 +1462,7 @@ export function montaSchedaModello(contenitore, {
         try { porta.scrivi(stato.consensoPersistente); } catch { /* la preferenza non si scrive: resta bloccato */ }
         if (stato.consensoPersistente) { stato.consenso = true; disegnaPannello(); }
       });
-      etichetta.append(casella, doc.createTextNode('Ricordalo per tutte le schede'));
+      etichetta.append(casella, doc.createTextNode(t('modelli.detail.rememberForAllCards')));
       comandi.append(mostra, etichetta);
       scatola.append(comandi);
       return scatola;
@@ -1488,7 +1493,7 @@ export function montaSchedaModello(contenitore, {
        *   muto; così si legge PERCHÉ non c'è.
        */
       img.addEventListener('error', () => {
-        const avviso = nodo(doc, 'figcaption', 'talos-label', 'Immagine della scheda non disponibile.');
+        const avviso = nodo(doc, 'figcaption', 'talos-label', t('modelli.detail.imageUnavailable'));
         avviso.setAttribute('role', 'status');
         figura.replaceChildren(avviso);
       });
@@ -1497,13 +1502,13 @@ export function montaSchedaModello(contenitore, {
       griglia.append(figura);
     }
     scatola.append(griglia);
-    const nascondi = nodo(doc, 'button', 'talos-button talos-button--ghost talos-button--sm', 'Nascondi le immagini');
+    const nascondi = nodo(doc, 'button', 'talos-button talos-button--ghost talos-button--sm', t('modelli.detail.hideImages'));
     nascondi.type = 'button';
     nascondi.dataset.modelloImmaginiNascondi = '';
     nascondi.addEventListener('click', () => { stato.consenso = false; disegnaPannello(); });
     scatola.append(nascondi);
     if (stato.consensoPersistente) {
-      scatola.append(paragrafo(doc, 'talos-label', 'Le immagini di ogni scheda si caricano da sole: è la preferenza «Immagini remote nelle schede», nelle Impostazioni.'));
+      scatola.append(paragrafo(doc, 'talos-label', t('modelli.detail.automaticImagesNote')));
     }
     return scatola;
   }
@@ -1532,7 +1537,7 @@ export function montaSchedaModello(contenitore, {
    *   condizione dedotta; TruePPM `HeaderEstimateChip`, che sostituisce un «· estimated» criptico
    *   con «2.5 pts · Estimated» a parole intere).
    */
-  const NOTA_STIMA = 'Le varianti si stimano dal peso del file (base dichiarata dal server: i soli pesi) contro la memoria e il disco liberi adesso. Non è l’esito di un caricamento: la cache del contesto si somma dopo lo scaricamento, e il valore vero varia.';
+  const NOTA_STIMA = () => t('modelli.detail.estimateNote');
 
   /* --------------- la scelta del file e il download (repository non installato) --------------- */
 
@@ -1550,15 +1555,15 @@ export function montaSchedaModello(contenitore, {
     const sezione = nodo(doc, 'section', 'talos-card talos-card--pad');
     sezione.dataset.modelloSceltaFile = '';
     const testa = nodo(doc, 'div', 'talos-cluster');
-    testa.append(icona(doc, 'download', 'i i--sm'), nodo(doc, 'h3', 'talos-lab__heading talos-grow', 'Scegli il file da scaricare'));
-    sezione.append(testa, paragrafo(doc, 'talos-label', NOTA_STIMA));
+    testa.append(icona(doc, 'download', 'i i--sm'), nodo(doc, 'h3', 'talos-lab__heading talos-grow', t('modelli.detail.chooseDownloadFile')));
+    sezione.append(testa, paragrafo(doc, 'talos-label', NOTA_STIMA()));
     /*
      * ⭐ 27/09/2026 — owner «errore chiaro ora, motore dopo» (sessione ec3bc6c0: Spark-X2.5-4B, architettura `spark2_5`, motore
      *   b10517). Il server confronta l'architettura che l'hub dichiara (`gguf.architecture`) coi nomi che la libreria del motore
      *   conosce (`motore-architetture.mjs`): solo un «no» misurato si dice; «non lo so» (`null`) tace.
      */
     if (stato.repo?.motoreConosce === false && stato.repo?.architettura) {
-      const avviso = paragrafo(doc, 'talos-callout', `Il motore installato non sa leggere l’architettura «${stato.repo.architettura}» di questo modello: si può scaricare, ma non si avvierà finché il motore non viene aggiornato.`);
+      const avviso = paragrafo(doc, 'talos-callout', t('modelli.detail.architectureUnsupported', { architecture: stato.repo.architettura }));
       avviso.dataset.c = 'Callout';
       avviso.dataset.modelloMotore = 'sconosciuto';
       avviso.setAttribute('role', 'note');
@@ -1586,17 +1591,17 @@ export function montaSchedaModello(contenitore, {
      */
     if (typeof apiPost !== 'function') {
       const pulsante = dove.querySelector('#paginaModelloScarica');
-      if (pulsante) { pulsante.disabled = true; pulsante.title = 'La pagina è stata montata senza uno scrittore (`apiPost`): il download non può partire da qui.'; }
-      sezione.append(paragrafo(doc, 'talos-label', 'Questa pagina non ha ricevuto uno scrittore (`apiPost`): il download si avvia dal pannello del laboratorio.'));
+      if (pulsante) { pulsante.disabled = true; pulsante.title = t('modelli.detail.noDownloadWriterTitle'); }
+      sezione.append(paragrafo(doc, 'talos-label', t('modelli.detail.noDownloadWriterNote')));
     }
 
     const scarica = stato.hf.scarica;
     if (scarica.inCorso) {
       const pulsante = dove.querySelector('#paginaModelloScarica');
       if (pulsante) pulsante.disabled = true;
-      sezione.append(paragrafo(doc, 'talos-muted', 'Avvio del download…'));
+      sezione.append(paragrafo(doc, 'talos-muted', t('modelli.detail.startingDownload')));
     } else if (scarica.errore) {
-      const p = paragrafo(doc, 'talos-muted', `Download non avviato: ${scarica.errore}`);
+      const p = paragrafo(doc, 'talos-muted', t('modelli.detail.downloadNotStarted', { error: scarica.errore }));
       p.dataset.modelloScaricaEsito = 'errore';
       p.setAttribute('role', 'alert');
       sezione.append(p);
@@ -1606,7 +1611,7 @@ export function montaSchedaModello(contenitore, {
       p.setAttribute('role', 'status');
       sezione.append(p);
       if (typeof apriDownload === 'function') {
-        const apri = nodo(doc, 'button', 'talos-button talos-button--secondary talos-button--sm', 'Apri Download');
+        const apri = nodo(doc, 'button', 'talos-button talos-button--secondary talos-button--sm', t('modelli.detail.openDownloads'));
         apri.type = 'button';
         apri.addEventListener('click', apriDownload);
         sezione.append(apri);
@@ -1656,7 +1661,7 @@ export function montaSchedaModello(contenitore, {
     if (typeof apiPost !== 'function' || stato.hf.scarica.inCorso || stato.distrutto) return;
     const corpo = corpoDownloadHf(stato.repo, gruppo);
     if (!corpo) {
-      stato.hf.scarica = { inCorso: false, esito: '', errore: 'La variante scelta non ha un file da scaricare.' };
+      stato.hf.scarica = { inCorso: false, esito: '', errore: t('modelli.detail.variantNoFile') };
       disegnaPannello();
       return;
     }
@@ -1667,7 +1672,7 @@ export function montaSchedaModello(contenitore, {
       if (stato.distrutto) return;
       const stato2 = esito && typeof esito.state === 'string' ? ` (${esito.state})` : '';
       // Le stesse parole del pannello (`app.js:3827`): il file e il suo peso.
-      stato.hf.scarica = { inCorso: false, errore: '', esito: `Download avviato: ${corpo.files[0].path} · ${byte(corpo.bytes)}${stato2}. Prosegue nella sezione Download.` };
+      stato.hf.scarica = { inCorso: false, errore: '', esito: t('modelli.detail.downloadStarted', { file: corpo.files[0].path, size: byte(corpo.bytes), state: stato2 }) };
     } catch (errore) {
       if (stato.distrutto) return;
       stato.hf.scarica = { inCorso: false, esito: '', errore: String(errore?.message || errore) };
@@ -1678,9 +1683,9 @@ export function montaSchedaModello(contenitore, {
   function disegnaFiles() {
     const scatola = nodo(doc, 'section', 'talos-stack');
     scatola.dataset.modelloFiles = '';
-    if (stato.caricamento.modello || (remoto() && stato.caricamento.repo)) return conParagrafo(scatola, 'Lettura dei file…');
+    if (stato.caricamento.modello || (remoto() && stato.caricamento.repo)) return conParagrafo(scatola, t('modelli.detail.readingFiles'));
     if (stato.errori.modello) return conParagrafo(scatola, stato.errori.modello, { errore: true });
-    if (remoto() && stato.errori.repo) return conParagrafo(scatola, `L’elenco dei file non è stato letto: ${stato.errori.repo}`, { errore: true });
+    if (remoto() && stato.errori.repo) return conParagrafo(scatola, t('modelli.detail.filesNotRead', { error: stato.errori.repo }), { errore: true });
 
     /*
      * ⛔ IN MODALITÀ REPOSITORY I FILE SUL DISCO SONO ZERO, e la lista «locale» deve restare VUOTA:
@@ -1701,21 +1706,21 @@ export function montaSchedaModello(contenitore, {
     if (remoto() && stato.repo) scatola.append(disegnaSceltaFile());
 
     const testa = nodo(doc, 'div', 'talos-cluster');
-    testa.append(nodo(doc, 'h3', 'talos-lab__heading', remoto() ? 'Tutti i file del repository' : 'File del modello'));
-    if (!remoto() || locali.length) testa.append(badge(doc, `${confronto.file.length} sul disco`, ''));
-    if (Array.isArray(stato.repo?.files)) testa.append(badge(doc, `${stato.repo.files.length} nel repository`, ''));
+    testa.append(nodo(doc, 'h3', 'talos-lab__heading', remoto() ? t('modelli.detail.allRepositoryFiles') : t('modelli.detail.modelFiles')));
+    if (!remoto() || locali.length) testa.append(badge(doc, tn('modelli.detail.filesOnDiskOne', 'modelli.detail.filesOnDisk', confronto.file.length), ''));
+    if (Array.isArray(stato.repo?.files)) testa.append(badge(doc, tn('modelli.detail.filesInRepositoryOne', 'modelli.detail.filesInRepository', stato.repo.files.length), ''));
     scatola.append(testa);
     scatola.append(paragrafo(doc, 'talos-label',
       remoto()
-        ? 'Questo modello non è sul disco: qui sotto ci sono i file che il repository dichiara, con l’impronta che dichiara. Dopo il download, l’impronta del file scaricato si confronta con questa.'
+        ? t('modelli.detail.remoteFilesExplanation')
         : percorsoRepo(stato.modello)
-          ? 'L’impronta del file sul disco confrontata con quella dichiarata dal repository.'
-          : 'Il modello è importato dal computer: non c’è un repository con cui confrontare l’impronta.'));
+          ? t('modelli.detail.checksumComparisonExplanation')
+          : t('modelli.detail.importedChecksumExplanation')));
 
     if (!locali.length) {
       if (remoto()) {
         if (!confronto.soloRepository.length) {
-          scatola.append(paragrafo(doc, 'talos-muted', 'Il repository non elenca file nella revisione letta.'));
+          scatola.append(paragrafo(doc, 'talos-muted', t('modelli.detail.noRepositoryFiles')));
           return scatola;
         }
         /*
@@ -1728,11 +1733,11 @@ export function montaSchedaModello(contenitore, {
           scatola.append(riga(doc, String(file.path), byte(file.sizeBytes), { chiave: 'nel-repository' }));
         }
         if (Number.isFinite(stato.modello?.byteTotali)) {
-          scatola.append(riga(doc, 'Peso complessivo del repository', byte(stato.modello.byteTotali), { chiave: 'peso-repository' }));
+          scatola.append(riga(doc, t('modelli.detail.totalRepositorySize'), byte(stato.modello.byteTotali), { chiave: 'peso-repository' }));
         }
         return scatola;
       }
-      scatola.append(paragrafo(doc, 'talos-muted', 'Il manifest non elenca file.'));
+      scatola.append(paragrafo(doc, 'talos-muted', t('modelli.detail.manifestNoFiles')));
       return scatola;
     }
     for (const voce of confronto.file) scatola.append(disegnaFile(voce));
@@ -1740,9 +1745,9 @@ export function montaSchedaModello(contenitore, {
     if (stato.modello?.sha256) {
       const rigaModello = nodo(doc, 'div', 'talos-cluster talos-lab__space');
       rigaModello.append(
-        nodo(doc, 'span', 'talos-label', 'Impronta dell’intero modello'),
+        nodo(doc, 'span', 'talos-label', t('modelli.detail.wholeModelChecksum')),
         nodo(doc, 'span', 'talos-mono', improntaBreve(stato.modello.sha256)),
-        copia(doc, stato.modello.sha256, { etichetta: 'Copia', suggerimento: 'Copia l’impronta SHA-256 dell’intero modello' }),
+        copia(doc, stato.modello.sha256, { etichetta: t('modelli.detail.copy'), suggerimento: t('modelli.detail.copyWholeModelChecksum') }),
       );
       rigaModello.title = String(stato.modello.sha256);
       scatola.append(rigaModello);
@@ -1750,7 +1755,7 @@ export function montaSchedaModello(contenitore, {
     if (confronto.soloRepository.length) {
       const dettagli = nodo(doc, 'details', 'talos-lab__space');
       dettagli.dataset.modelloSoloRepo = '';
-      dettagli.append(nodo(doc, 'summary', '', `Altri ${confronto.soloRepository.length} file nel repository, non scaricati`));
+      dettagli.append(nodo(doc, 'summary', '', tn('modelli.detail.otherRepositoryFilesOne', 'modelli.detail.otherRepositoryFiles', confronto.soloRepository.length)));
       for (const file of confronto.soloRepository) {
         dettagli.append(riga(doc, String(file.path), byte(file.sizeBytes), { chiave: 'solo-repository' }));
       }
@@ -1772,7 +1777,7 @@ export function montaSchedaModello(contenitore, {
 
     const impronta = String(voce.locale?.sha256 || '');
     const rigaImpronta = nodo(doc, 'div', 'talos-kv');
-    const valoreImpronta = nodo(doc, 'span', 'talos-kv__v', impronta ? improntaBreve(impronta) : 'non dichiarata');
+    const valoreImpronta = nodo(doc, 'span', 'talos-kv__v', impronta ? improntaBreve(impronta) : t('modelli.detail.undeclared'));
     valoreImpronta.dataset.modelloImpronta = '';
     if (impronta) {
       valoreImpronta.title = impronta;
@@ -1790,11 +1795,11 @@ export function montaSchedaModello(contenitore, {
        *   sinistra, valore a destra, e niente in mezzo.
        */
       const testaImpronta = nodo(doc, 'div', 'talos-cluster');
-      testaImpronta.append(nodo(doc, 'span', 'talos-kv__k', 'Checksum SHA-256 sul disco'),
-        copia(doc, impronta, { etichetta: 'Copia', suggerimento: 'Copia l’impronta SHA-256 intera' }));
+      testaImpronta.append(nodo(doc, 'span', 'talos-kv__k', t('modelli.detail.diskChecksum')),
+        copia(doc, impronta, { etichetta: t('modelli.detail.copy'), suggerimento: t('modelli.detail.copyFullChecksum') }));
       rigaImpronta.append(testaImpronta, valoreImpronta);
     } else {
-      rigaImpronta.append(nodo(doc, 'span', 'talos-kv__k', 'Checksum SHA-256 sul disco'), valoreImpronta);
+      rigaImpronta.append(nodo(doc, 'span', 'talos-kv__k', t('modelli.detail.diskChecksum')), valoreImpronta);
     }
 
     file.append(
@@ -1810,19 +1815,19 @@ export function montaSchedaModello(contenitore, {
        *   dati.dimensione, 'modelloDimensione')`, `modelli-installati.js:147` — quindi la forma giusta
        *   era gia' in casa e non una nuova.
        */
-      riga(doc, 'Dimensione', byte(voce.locale?.bytes), { chiave: 'dimensione' }),
+      riga(doc, t('modelli.detail.size'), byte(voce.locale?.bytes), { chiave: 'dimensione' }),
       rigaImpronta,
-      riga(doc, 'Revisione del repository', voce.remoto?.revision || String(stato.repo?.revision || '').slice(0, 12) || (voce.remoto ? 'non dichiarata' : '—'), { chiave: 'revisione' }),
-      riga(doc, 'Impronta nel repository', voce.remoto?.sha256 ? improntaBreve(voce.remoto.sha256) : (voce.remoto ? 'non dichiarata' : 'il file non è elencato'), { chiave: 'impronta-repository' }),
+      riga(doc, t('modelli.detail.repositoryRevision'), voce.remoto?.revision || String(stato.repo?.revision || '').slice(0, 12) || (voce.remoto ? t('modelli.detail.undeclared') : '—'), { chiave: 'revisione' }),
+      riga(doc, t('modelli.detail.repositoryChecksum'), voce.remoto?.sha256 ? improntaBreve(voce.remoto.sha256) : (voce.remoto ? t('modelli.detail.undeclared') : t('modelli.detail.fileNotListed')), { chiave: 'impronta-repository' }),
     );
     if (voce.esito === 'diverso') {
       const avviso = paragrafo(doc, 'talos-muted',
-        'Le due impronte non coincidono: il file sul disco non è quello che il repository dichiara per questo percorso.');
+        t('modelli.detail.checksumsDiffer'));
       avviso.setAttribute('role', 'alert');
       file.append(avviso);
     }
     if (voce.locale?.security) {
-      file.append(riga(doc, 'Esito della scansione', String(voce.locale.security), { chiave: 'security' }));
+      file.append(riga(doc, t('modelli.detail.scanResult'), String(voce.locale.security), { chiave: 'security' }));
     }
     return file;
   }
@@ -1842,19 +1847,19 @@ export function montaSchedaModello(contenitore, {
      */
     if (remoto()) {
       const card = nodo(doc, 'section', 'talos-card talos-card--pad');
-      card.append(nodo(doc, 'h3', 'talos-lab__heading', 'Memoria e spazio'));
+      card.append(nodo(doc, 'h3', 'talos-lab__heading', t('modelli.detail.memoryAndSpace')));
       const quanti = Array.isArray(stato.modello?.files) ? stato.modello.files.length : 0;
       const dichiara = quanti
-        ? `Il repository dichiara ${quanti} file${Number.isFinite(stato.modello?.byteTotali) ? `, ${byte(stato.modello.byteTotali)} in tutto` : ''}.`
-        : 'Il repository non elenca file nella revisione letta.';
+        ? tn('modelli.detail.repositoryDeclaredFilesOne', 'modelli.detail.repositoryDeclaredFiles', quanti, { total: Number.isFinite(stato.modello?.byteTotali) ? t('modelli.detail.repositoryTotal', { size: byte(stato.modello.byteTotali) }) : '' })
+        : t('modelli.detail.noRepositoryFiles');
       card.append(paragrafo(doc, 'talos-muted',
-        `Questo modello non è ancora sul disco: la verifica pesa il file che hai, e senza il file non c’è niente da pesare. ${dichiara} La stima si fa dopo il download — e il peso di una singola quantizzazione è quello del file che scaricherai, non il totale del repository.`));
+        t('modelli.detail.remoteCompatibilityExplanation', { declared: dichiara })));
       scatola.append(card);
       scatola.append(disegnaMacchina());
       return scatola;
     }
     if (stato.caricamento.fit) {
-      conParagrafo(scatola, 'Verifica della memoria in corso…');
+      conParagrafo(scatola, t('modelli.detail.checkingMemoryProgress'));
       scatola.append(disegnaMacchina());
       return scatola;
     }
@@ -1863,16 +1868,16 @@ export function montaSchedaModello(contenitore, {
        * ⛔ Se il VERDETTO non riesce, la MACCHINA si mostra lo stesso: sono due letture diverse, e
        *   la misura della macchina non dipende dal modello. Insieme all'errore arriva il «Riprova».
        */
-      conParagrafo(scatola, `La verifica non è riuscita: ${stato.errori.fit}`, { errore: true });
+      conParagrafo(scatola, t('modelli.detail.checkFailed', { error: stato.errori.fit }), { errore: true });
       scatola.append(disegnaMacchina());
       return scatola;
     }
-    if (!stato.fit) return conParagrafo(scatola, 'Verifica non ancora richiesta.');
+    if (!stato.fit) return conParagrafo(scatola, t('modelli.detail.checkNotRequested'));
 
     const verdetto = verdettoMemoria(stato.fit);
     const card = nodo(doc, 'section', 'talos-card talos-card--pad');
     const testa = nodo(doc, 'div', 'talos-cluster');
-    testa.append(nodo(doc, 'h3', 'talos-lab__heading', 'Memoria e spazio'));
+    testa.append(nodo(doc, 'h3', 'talos-lab__heading', t('modelli.detail.memoryAndSpace')));
     const etichettaVerdetto = badge(doc, verdetto.etichetta, verdetto.tono);
     etichettaVerdetto.dataset.modelloVerdetto = verdetto.chiave;
     testa.append(etichettaVerdetto);
@@ -1900,23 +1905,23 @@ export function montaSchedaModello(contenitore, {
       meter.dataset.modelloMeter = '';
       meter.min = 0; meter.max = 100; meter.low = 75; meter.high = 90; meter.optimum = 0;
       meter.value = percento;
-      meter.setAttribute('aria-label', `Memoria richiesta ${byte(richiesti)} su ${byte(liberi)} liberi: ${percento} per cento`);
+      meter.setAttribute('aria-label', t('modelli.detail.memoryMeterLabel', { required: byte(richiesti), free: byte(liberi), percent: percento }));
       card.append(meter);
     }
     // ⛔ «Memoria» è la RAM, «spazio» è il disco: due grandezze diverse che il server chiama
     //    entrambe `availableBytes` (`local-runtime-probe.mjs:251-252`). Le etichette lo dicono.
     card.append(
-      riga(doc, 'Memoria richiesta', byte(richiesti), { chiave: 'memoria-richiesta' }),
-      riga(doc, 'RAM libera', byte(liberi), { chiave: 'ram-libera' }),
-      riga(doc, 'Spazio richiesto sul disco', byte(stato.fit.storage?.requiredBytes), { chiave: 'spazio-richiesto' }),
-      riga(doc, 'Spazio allocabile sul disco', byte(stato.fit.storage?.availableBytes), { chiave: 'spazio-allocabile' }),
+      riga(doc, t('modelli.detail.requiredMemory'), byte(richiesti), { chiave: 'memoria-richiesta' }),
+      riga(doc, t('modelli.detail.freeRam'), byte(liberi), { chiave: 'ram-libera' }),
+      riga(doc, t('modelli.detail.requiredDiskSpace'), byte(stato.fit.storage?.requiredBytes), { chiave: 'spazio-richiesto' }),
+      riga(doc, t('modelli.detail.allocatableDiskSpace'), byte(stato.fit.storage?.availableBytes), { chiave: 'spazio-allocabile' }),
     );
-    card.append(paragrafo(doc, 'talos-label', 'La memoria è la RAM; lo spazio è il disco. Non sono la stessa grandezza, anche quando il server le chiama uguale.'));
+    card.append(paragrafo(doc, 'talos-label', t('modelli.detail.memoryDiskDifference')));
     scatola.append(card);
 
     const contesto = nodo(doc, 'section', 'talos-card talos-card--pad talos-lab__space');
-    contesto.append(nodo(doc, 'h3', 'talos-lab__heading', 'Contesto e capacità'));
-    contesto.append(paragrafo(doc, 'talos-label', `Verifica per il profilo «${String(stato.fit.profile || profilo)}».`));
+    contesto.append(nodo(doc, 'h3', 'talos-lab__heading', t('modelli.detail.contextAndCapabilities')));
+    contesto.append(paragrafo(doc, 'talos-label', t('modelli.detail.profileCheck', { profile: String(stato.fit.profile || profilo) })));
     const ispezione = stato.fit.inspection || {};
     // ⛔ Ogni fatto porta con sé la sua provenienza, e si vede: `osservato` e `dichiarato` non
     //    valgono uguale, e ciò che il runtime non ha visto resta «Sconosciuto».
@@ -1924,15 +1929,15 @@ export function montaSchedaModello(contenitore, {
     //    sarebbero due modi di scrivere la stessa grandezza.
     const TOKEN = { numeri: contestoK };
     const fatti = [
-      ['Contesto richiesto dalla verifica', { value: contestoK(stato.fit.context?.requestedTokens) || '—' }],
-      ['Contesto addestrato', ispezione.context?.trainedTokens, TOKEN],
-      ['Contesto del runtime', ispezione.context?.runtimeTokens, TOKEN],
-      ['Contesto efficace', ispezione.context?.effectiveTokens, TOKEN],
-      ['Template di chat', ispezione.template],
-      ['Attrezzi', ispezione.capabilities?.tools],
-      ['Chiamate di attrezzo', ispezione.capabilities?.toolCalls],
-      ['Ruolo di sistema', ispezione.capabilities?.systemRole],
-      ['Modello servito dal runtime', { value: ispezione.runtime?.servingModelId || (ispezione.runtime?.reachable ? 'nessuno' : 'runtime non raggiungibile') }],
+      [t('modelli.detail.requestedContext'), { value: contestoK(stato.fit.context?.requestedTokens) || '—' }],
+      [t('modelli.detail.trainedContext'), ispezione.context?.trainedTokens, TOKEN],
+      [t('modelli.detail.runtimeContext'), ispezione.context?.runtimeTokens, TOKEN],
+      [t('modelli.detail.effectiveContext'), ispezione.context?.effectiveTokens, TOKEN],
+      [t('modelli.detail.chatTemplate'), ispezione.template],
+      [t('modelli.detail.tools'), ispezione.capabilities?.tools],
+      [t('modelli.detail.toolCalls'), ispezione.capabilities?.toolCalls],
+      [t('modelli.detail.systemRole'), ispezione.capabilities?.systemRole],
+      [t('modelli.detail.runtimeModel'), { value: ispezione.runtime?.servingModelId || (ispezione.runtime?.reachable ? t('modelli.detail.none') : t('modelli.detail.runtimeUnreachable')) }],
     ];
     for (const [etichetta, fatto, opzioni] of fatti) contesto.append(rigaFatto(doc, etichetta, fatto, opzioni));
     /*
@@ -1958,14 +1963,14 @@ export function montaSchedaModello(contenitore, {
       .map((fatto) => testoFatto(fatto))
       .filter((testo, indice, tutti) => testo && testo !== '—' && tutti.indexOf(testo) === indice)
       .join(' · ');
-    const rigaBackend = paragrafo(doc, 'talos-muted talos-mono talos-lab__space', backend || 'Backend non dichiarato dal runtime.');
+    const rigaBackend = paragrafo(doc, 'talos-muted talos-mono talos-lab__space', backend || t('modelli.detail.backendUndeclared'));
     // ⛔ Un aggancio per la prova: questa riga è il difetto `[object Object]`, e un test che la
     //   cercasse per classe la confonderebbe con le altre della card.
     rigaBackend.dataset.modelloBackend = '';
     contesto.append(rigaBackend);
     if (ispezione.observedAt) {
       const quando = new Date(ispezione.observedAt);
-      contesto.append(paragrafo(doc, 'talos-label', Number.isNaN(quando.getTime()) ? 'Misura senza data.' : `Misurato ${quando.toLocaleString('it-IT', { timeZone: 'Europe/Rome' })}.`));
+      contesto.append(paragrafo(doc, 'talos-label', Number.isNaN(quando.getTime()) ? t('modelli.detail.measurementNoDate') : t('modelli.detail.measuredAt', { time: quando.toLocaleString(localeUI(), { timeZone: 'Europe/Rome' }) })));
     }
     scatola.append(contesto);
 
@@ -1975,10 +1980,10 @@ export function montaSchedaModello(contenitore, {
 
   function disegnaMacchina() {
     const card = nodo(doc, 'section', 'talos-card talos-card--pad talos-lab__space');
-    card.append(nodo(doc, 'h3', 'talos-lab__heading', 'Questa macchina'));
-    if (stato.caricamento.capacita) { card.append(paragrafo(doc, 'talos-muted', 'Misurazione…')); return card; }
+    card.append(nodo(doc, 'h3', 'talos-lab__heading', t('modelli.detail.thisMachine')));
+    if (stato.caricamento.capacita) { card.append(paragrafo(doc, 'talos-muted', t('modelli.detail.measuring'))); return card; }
     if (stato.errori.capacita) {
-      const errore = paragrafo(doc, 'talos-muted', `Capacità non misurata: ${stato.errori.capacita}`);
+      const errore = paragrafo(doc, 'talos-muted', t('modelli.detail.capacityNotMeasured', { error: stato.errori.capacita }));
       errore.setAttribute('role', 'alert');
       card.append(errore);
       card.append(pulsanteRicarica());
@@ -1986,7 +1991,7 @@ export function montaSchedaModello(contenitore, {
     }
     let misura = null;
     try { misura = datiMemoria(stato.capacita, [], {}); } catch { misura = null; }
-    if (!misura) { card.append(paragrafo(doc, 'talos-muted', 'La misura della capacità non è disponibile.')); return card; }
+    if (!misura) { card.append(paragrafo(doc, 'talos-muted', t('modelli.detail.capacityUnavailable'))); return card; }
     /*
      * ⛔ Le etichette sono quelle della card della memoria del Model Lab (`misura-memoria.js:13`),
      *   ma qui NON si ripetono le righe che il verdetto ha già scritto con le sue parole: nella
@@ -1995,11 +2000,11 @@ export function montaSchedaModello(contenitore, {
      *   ce n'è; questa card dice com'è fatta la macchina.
      */
     card.append(
-      riga(doc, 'RAM totale', byte(misura.totale), { chiave: 'ram-totale' }),
-      riga(doc, 'RAM in uso', `${byte(misura.usata)} (${numero.format(Math.round(misura.percentuale))}%)`, { chiave: 'ram-in-uso' }),
-      riga(doc, 'Disponibile sul disco', byte(misura.discoDisponibile), { chiave: 'disco-disponibile' }),
-      riga(doc, 'Riserva sul disco', byte(misura.discoRiserva), { chiave: 'disco-riserva' }),
-      riga(doc, 'Allocabile sul disco', byte(misura.discoAllocabile), { chiave: 'disco-allocabile' }),
+      riga(doc, t('modelli.detail.totalRam'), byte(misura.totale), { chiave: 'ram-totale' }),
+      riga(doc, t('modelli.detail.ramInUse'), `${byte(misura.usata)} (${numero.format(Math.round(misura.percentuale))}%)`, { chiave: 'ram-in-uso' }),
+      riga(doc, t('modelli.detail.availableOnDisk'), byte(misura.discoDisponibile), { chiave: 'disco-disponibile' }),
+      riga(doc, t('modelli.detail.diskReserve'), byte(misura.discoRiserva), { chiave: 'disco-riserva' }),
+      riga(doc, t('modelli.detail.allocatableOnDisk'), byte(misura.discoAllocabile), { chiave: 'disco-allocabile' }),
     );
     const contestoMacchina = [stato.capacita?.platform, stato.capacita?.arch].filter(Boolean).join(' · ');
     if (contestoMacchina) card.append(paragrafo(doc, 'talos-muted talos-mono', contestoMacchina));
@@ -2007,7 +2012,7 @@ export function montaSchedaModello(contenitore, {
   }
 
   function pulsanteRicarica() {
-    const b = nodo(doc, 'button', 'talos-button talos-button--ghost talos-button--sm', 'Riprova');
+    const b = nodo(doc, 'button', 'talos-button talos-button--ghost talos-button--sm', t('modelli.detail.retry'));
     b.type = 'button';
     b.dataset.modelloRicarica = '';
     b.disabled = Boolean(ricaricaInCorso);

@@ -26,16 +26,16 @@ import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 export const KEYRING_SERVICE_RICERCA = 'talos-harness-search';
 const MAX_KEY_LENGTH = 4096;
 const FONTI = Object.freeze({
-  duckduckgo: Object.freeze({ id: 'duckduckgo', label: 'DuckDuckGo (senza chiave)', needsKey: false, needsEndpoint: false, keyless: true,
-    nota: 'Nessuna chiave e nessun account: TALOS legge la pagina dei risultati pubblica di DuckDuckGo. Non è un\'API ufficiale: sotto uso intenso può rispondere con un blocco, e allora l\'esito lo dice. Solo la query lascia questo computer.' }),
+  duckduckgo: Object.freeze({ id: 'duckduckgo', label: 'DuckDuckGo (no key)', labelChiave: 'server.search.label.duckduckgo', needsKey: false, needsEndpoint: false, keyless: true,
+    nota: 'No key and no account: TALOS reads the public DuckDuckGo results page. It is not an official API: under heavy use it can answer with a block, and then the outcome says so. Only the query leaves this computer.' }),
   tavily: Object.freeze({ id: 'tavily', label: 'Tavily', needsKey: true, needsEndpoint: false, keyless: false,
-    nota: '1.000 ricerche al mese senza costi e senza carta. È progettato per gli agenti, quindi restituisce risultati puliti.', link: 'https://app.tavily.com' }),
+    nota: '1,000 searches a month at no cost and with no card. It is built for agents, so it returns clean results.', link: 'https://app.tavily.com' }),
   brave: Object.freeze({ id: 'brave', label: 'Brave Search', needsKey: true, needsEndpoint: false, keyless: false,
-    nota: 'Un indice indipendente. È richiesta una carta di credito e Brave offre limiti di spesa. Brave non consente di conservare i risultati senza un accordo separato: TALOS apre le fonti con naviga prima di salvarle.', link: 'https://api-dashboard.search.brave.com' }),
-  searxng: Object.freeze({ id: 'searxng', label: 'SearXNG (istanza tua)', needsKey: false, needsEndpoint: true, keyless: false,
-    nota: 'La tua istanza SearXNG: nessuna terza parte vede la query. Basta un container Docker. L\'output JSON è disattivato all\'inizio: attivalo nelle impostazioni dell\'istanza, o TALOS riceverà una pagina HTML.' }),
-  custom: Object.freeze({ id: 'custom', label: 'Endpoint personalizzato', needsKey: false, needsEndpoint: true, keyless: false,
-    nota: 'Qualsiasi altra API di ricerca che restituisca un array «results» al primo livello (chiave opzionale, inviata come Bearer).' }),
+    nota: 'An independent index. A credit card is required and Brave offers spending limits. Brave does not allow storing the results without a separate agreement: TALOS opens the sources with naviga before saving them.', link: 'https://api-dashboard.search.brave.com' }),
+  searxng: Object.freeze({ id: 'searxng', label: 'SearXNG (your instance)', labelChiave: 'server.search.label.searxng', needsKey: false, needsEndpoint: true, keyless: false,
+    nota: 'Your own SearXNG instance: no third party sees the query. A Docker container is enough. JSON output is off at the start: turn it on in the instance settings, or TALOS will receive an HTML page.' }),
+  custom: Object.freeze({ id: 'custom', label: 'Custom endpoint', labelChiave: 'server.search.label.custom', needsKey: false, needsEndpoint: true, keyless: false,
+    nota: 'Any other search API that returns a «results» array at the top level (optional key, sent as Bearer).' }),
 });
 export const FONTI_RICERCA_IDS = Object.freeze(Object.keys(FONTI));
 
@@ -47,8 +47,8 @@ function normalizzaEndpoint(valore) {
   const testo = typeof valore === 'string' ? valore.trim().replace(/\/+$/, '') : '';
   if (!testo) return '';
   let u;
-  try { u = new URL(testo); } catch { throw new SearchSourceError('SEARCH_ENDPOINT_INVALID', 'Indirizzo non valido: serve un URL http(s) completo.'); }
-  if (u.protocol !== 'http:' && u.protocol !== 'https:') throw new SearchSourceError('SEARCH_ENDPOINT_INVALID', 'Indirizzo non valido: solo http o https.');
+  try { u = new URL(testo); } catch { throw new SearchSourceError('SEARCH_ENDPOINT_INVALID', 'Invalid address: a full http(s) URL is required.'); }
+  if (u.protocol !== 'http:' && u.protocol !== 'https:') throw new SearchSourceError('SEARCH_ENDPOINT_INVALID', 'Invalid address: only http or https.');
   return u.toString().replace(/\/+$/, '');
 }
 
@@ -107,7 +107,7 @@ export function createSearchSourceStore({ env = process.env, keyring = null, fil
   function definizione(id) {
     if (id === 'off') return null;
     const d = FONTI[id];
-    if (!d) throw new SearchSourceError('SEARCH_SOURCE_INVALID', `Fonte sconosciuta: ${id}`);
+    if (!d) throw new SearchSourceError('SEARCH_SOURCE_INVALID', `Unknown source: ${id}`);
     return d;
   }
   function prontezza() {
@@ -118,9 +118,9 @@ export function createSearchSourceStore({ env = process.env, keyring = null, fil
     return 'pronta';
   }
   function keyringOp(op, id, valore) {
-    if (!keyring || typeof keyring[op] !== 'function') throw new SearchSourceError('SEARCH_STORE_UNAVAILABLE', 'Portachiavi del sistema non disponibile.');
+    if (!keyring || typeof keyring[op] !== 'function') throw new SearchSourceError('SEARCH_STORE_UNAVAILABLE', 'The system keychain is not available.');
     try { return op === 'set' ? keyring.set(KEYRING_SERVICE_RICERCA, id, valore) : keyring.remove(KEYRING_SERVICE_RICERCA, id); }
-    catch { throw new SearchSourceError('SEARCH_STORE_UNAVAILABLE', 'Portachiavi del sistema non disponibile.'); }
+    catch { throw new SearchSourceError('SEARCH_STORE_UNAVAILABLE', 'The system keychain is not available.'); }
   }
 
   /** Vista pubblica: mai una chiave, solo se c'è. */
@@ -137,15 +137,15 @@ export function createSearchSourceStore({ env = process.env, keyring = null, fil
     const endpointNorm = source === 'off' ? '' : normalizzaEndpoint(endpoint ?? (source === scelta.source ? scelta.endpoint : ''));
     const precedente = scelta;
     scelta = { source, endpoint: endpointNorm };
-    try { scriviFile(file, scelta); } catch (errore) { scelta = precedente; throw new SearchSourceError('SEARCH_STORE_UNAVAILABLE', `Scelta non salvata: ${errore.message}`); }
+    try { scriviFile(file, scelta); } catch (errore) { scelta = precedente; throw new SearchSourceError('SEARCH_STORE_UNAVAILABLE', `Choice not saved: ${errore.message}`); }
     return listPublic();
   }
   function setKey(source, valore) {
     const d = definizione(source);
-    if (!d) throw new SearchSourceError('SEARCH_SOURCE_INVALID', 'Nessuna fonte scelta.');
-    if (typeof valore !== 'string' || valore.trim() === '') throw new SearchSourceError('SEARCH_KEY_REQUIRED', 'Incolla prima una chiave.');
+    if (!d) throw new SearchSourceError('SEARCH_SOURCE_INVALID', 'No source chosen.');
+    if (typeof valore !== 'string' || valore.trim() === '') throw new SearchSourceError('SEARCH_KEY_REQUIRED', 'Paste a key first.');
     const chiave = valore.trim();
-    if (chiave.length > MAX_KEY_LENGTH) throw new SearchSourceError('SEARCH_KEY_INVALID', 'Chiave troppo lunga.');
+    if (chiave.length > MAX_KEY_LENGTH) throw new SearchSourceError('SEARCH_KEY_INVALID', 'Key too long.');
     keyringOp('set', source, chiave);
     chiavi.set(source, chiave);
     return listPublic();

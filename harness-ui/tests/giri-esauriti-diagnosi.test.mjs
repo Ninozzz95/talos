@@ -4,6 +4,7 @@ import { dirname, join } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { nomeUmanoAttrezzo as nomeUmanoAttrezzoCondiviso, nomeDiRipiegoAttrezzo } from '../frontend/src/components/nomi-attrezzi.js';
+import { t as tr, tn as trn } from '../frontend/src/components/lingua.js'; // corsia A della lingua (03/10/2026): il sorgente porta le chiavi, le frasi stanno nel dizionario
 
 const root =join(dirname(fileURLToPath(import.meta.url)), '..');
 const app = await readFile(join(root, 'frontend/src/legacy/app.js'), 'utf8');
@@ -34,7 +35,8 @@ function funzioneDalMonolite(nome, { state = {}, deps = [], legami = LEGAMI_NOMI
   };
   const sorgente = deps.map(estrai).join('\n') + estrai(nome);
   // eslint-disable-next-line no-new-func
-  return new Function('state', ...Object.keys(legami), `${sorgente}\nreturn ${nome};`)(state, ...Object.values(legami));
+  const tutti = { tr, trn, ...legami }; // le funzioni del monolite parlano col dizionario
+  return new Function('state', ...Object.keys(tutti), `${sorgente}\nreturn ${nome};`)(state, ...Object.values(tutti));
 }
 
 const DEPS_RIASSUNTO = ['chiaveStabile', 'chiaveChiamataAttrezzo'];

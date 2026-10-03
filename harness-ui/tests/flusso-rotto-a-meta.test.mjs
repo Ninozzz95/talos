@@ -98,7 +98,7 @@ test('STREAM-BREAK-TOOL-CALL-HALF: una chiamata a metà non si esegue né si rip
   });
   const annullata = eventi.find((e) => e.tipo === 'tool-annullato');
   assert.equal(annullata?.toolCallId, 'call_1');
-  assert.match(annullata.motivo, /non è stata eseguita/u);
+  assert.match(annullata.motivo, /it was not run/u);
   assert.equal(r.corpi.length, 1);
 });
 

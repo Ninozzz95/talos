@@ -165,7 +165,7 @@ test('CTX-PURE-INDEX-PROVENANCE — ogni impronta porta l attrezzo e il comando 
   const indice = indiceMeccanico(lista);
   assert.deepEqual(indice.impronte, ['e071f707df7bbeee2a6a1eb48011ddd0', '3f2a9c1b', '0a1b2c3d4e']);
   assert.equal(indice.origini.e071f707df7bbeee2a6a1eb48011ddd0, `shell «${comando}»`, 'la prima comparsa vince: il comando, non il testo che la ripete');
-  assert.equal(indice.origini['3f2a9c1b'], "testo dell'assistente");
+  assert.equal(indice.origini['3f2a9c1b'], 'assistant text');
   assert.equal(indice.origini['0a1b2c3d4e'], 'leggi «src/a.mjs»');
   assert.ok(indice.testo.includes('seq 1 20000 | md5sum'), 'il comando è nel testo dell indice');
   assert.ok(indice.testo.includes(`  · shell «${comando}»: e071f707df7bbeee2a6a1eb48011ddd0`), indice.testo);
@@ -174,15 +174,15 @@ test('CTX-PURE-INDEX-PROVENANCE — ogni impronta porta l attrezzo e il comando 
   assert.equal(lungo.origini.ab12cd34ef.length, 'shell «»'.length + 240);
   assert.ok(lungo.origini.ab12cd34ef.endsWith('…»') && !lungo.origini.ab12cd34ef.includes('\n'));
   /* Un esito senza la sua chiamata nel mezzo resta dichiarato, non inventato. */
-  assert.equal(indiceMeccanico([esito('orfano', 'deadbeef1')]).origini.deadbeef1, 'risultato di un attrezzo');
+  assert.equal(indiceMeccanico([esito('orfano', 'deadbeef1')]).origini.deadbeef1, 'tool result');
   /* Fusione: la provenienza sopravvive al record e alla compattazione dopo; un record VECCHIO (senza origini) lo dice. */
   const record = creaRecord({ coveredThrough: 1, riassunto: [], indice });
   const fuso = indiceMeccanico([chiamata('z', 'leggi', { percorso: 'b' })], { precedente: record.indice });
   assert.equal(fuso.origini.e071f707df7bbeee2a6a1eb48011ddd0, `shell «${comando}»`);
   const vecchio = indiceMeccanico([], { precedente: { percorsi: [], impronte: ['cafe1234'], errori: [], fileRiletti: [] } });
-  assert.ok(vecchio.testo.includes('provenienza non registrata (compattazione precedente): cafe1234'), vecchio.testo);
+  assert.ok(vecchio.testo.includes('origin not recorded (earlier compaction): cafe1234'), vecchio.testo);
   /* Senza impronte la riga resta quella di sempre. */
-  assert.ok(indiceMeccanico([user('x')]).testo.includes('- Impronte trovate nei risultati: (nessuno)'));
+  assert.ok(indiceMeccanico([user('x')]).testo.includes('- Fingerprints found in the results: (none)'));
 });
 
 test('CTX-PURE-INDEX-OUR-ERRORS — l indice riconosce gli errori dei NOSTRI attrezzi (`error: ENOENT…`, `exit N [sandbox`) con la provenienza (banco GLM 27/09, M7)', () => {
@@ -206,7 +206,7 @@ test('CTX-PURE-INDEX-OUR-ERRORS — l indice riconosce gli errori dei NOSTRI att
     '✗ la prova è rossa',
   ]);
   assert.ok(!indice.testo.includes('exit 0'), 'un exit 0 non è un errore');
-  assert.ok(indice.testo.includes('- Errori visti: error: ENOENT'), indice.testo);
+  assert.ok(indice.testo.includes('- Errors seen: error: ENOENT'), indice.testo);
   /* al tetto di 20 esce il più vecchio, come per le impronte; un errore identico non si duplica */
   const molti = indiceMeccanico(Array.from({ length: 25 }, (_, i) => [chiamata(`e${i}`, 'shell', { comando: `cmd${i}` }), esito(`e${i}`, `exit 1 [sandbox: wsl2]`)]).flat());
   assert.equal(molti.errori.length, 20);
@@ -241,7 +241,7 @@ test('CTX-PURE-SUMMARY-REQUEST — nessun attrezzo, budget dichiarato, riassunto
   assert.match(ultimo.content, /at most 1200 words/);
   assert.match(ultimo.content, /Do not call any tool/);
   assert.doesNotMatch(ultimo.content, /MERGE it/);
-  const precedente = user(`${MARCATORE_RIASSUNTO}\n\nvecchio riassunto\n\n${MARCATORE_INDICE}\n- Percorsi toccati: x`);
+  const precedente = user(`${MARCATORE_RIASSUNTO}\n\nvecchio riassunto\n\n${MARCATORE_INDICE}\n- Paths touched: x`);
   const conPrecedente = costruisciRichiestaDiRiassunto({ testa: parti.testa, mezzo: [precedente, ...parti.mezzo] });
   assert.match(conPrecedente.at(-1).content, /MERGE it/);
   const passato = conPrecedente.find((m) => typeof m.content === 'string' && m.content.startsWith(MARCATORE_RIASSUNTO));

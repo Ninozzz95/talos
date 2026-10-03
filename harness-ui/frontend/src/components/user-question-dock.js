@@ -1,3 +1,4 @@
+import { t, tn } from './lingua.js';
 /* Ask Question is a tool result surface, not a new view or modal. */
 
 /*
@@ -35,10 +36,9 @@ let prossimoIdOpzione = 0;
 
 function testoAnnuncio(questions) {
   const testi = questions.map((entry) => String(entry?.question || '').trim()).filter(Boolean);
-  const testa = questions.length === 1 ? 'TALOS chiede una decisione: ' : 'TALOS chiede ' + questions.length + ' decisioni: ';
-  const corpo = testi.join(' · ') || 'domanda senza testo';
+  const corpo = testi.join(' · ') || t('chat.question.withoutText');
   // «prima?.» nella prima foto: il punto si aggiunge solo se la domanda non finisce già con una pausa.
-  return testa + corpo + (/[.?!…]$/.test(corpo) ? ' ' : '. ') + 'Le risposte sono sopra il campo di scrittura.';
+  return tn('chat.question.announceOne', 'chat.question.announceMany', questions.length, { corpo, pausa: /[.?!…]$/.test(corpo) ? ' ' : '. ' });
 }
 
 function annunciaDomanda(doc, questions, pianifica) {
@@ -68,31 +68,32 @@ function ora(at) {
 
 /* La frase dell'esito: una per stato, e per `cancelled` una per motivo. Mai «annullata» per ciò che non lo è. */
 function fraseEsito(status, motivo, altrove) {
-  const dove = altrove ? ' da un’altra finestra' : '';
-  if (status === 'answered') return 'Risposta inviata' + dove;
-  if (status === 'skipped') return 'Domanda saltata' + dove;
-  if (status === 'expired') return 'Domanda scaduta: nessuna risposta in tempo, il giro si è fermato';
-  if (status === 'unanswerable') return 'Nessuno poteva rispondere: TALOS prosegue con l’ipotesi più prudente e la dichiara';
-  if (motivo === 'fermato') return 'Domanda annullata: hai fermato il giro';
-  if (motivo === 'reindirizzamento') return 'Domanda annullata: hai dato una nuova indicazione mentre aspettava';
-  if (motivo === 'nuovo-messaggio') return 'Domanda chiusa: hai scritto un altro messaggio';
-  if (motivo === 'interrotta') return 'Domanda interrotta: il server si è riavviato prima della risposta';
-  if (motivo === 'non-salvata') return 'Domanda annullata: la risposta non è stata salvata';
-  return 'Domanda annullata';
+
+  if (status === 'answered') return altrove ? t('chat.question.outcome.answeredElsewhere') : t('chat.question.outcome.answered');
+  if (status === 'skipped') return altrove ? t('chat.question.outcome.skippedElsewhere') : t('chat.question.outcome.skipped');
+  if (status === 'expired') return t('chat.question.outcome.expired');
+  if (status === 'unanswerable') return t('chat.question.outcome.unanswerable');
+  if (motivo === 'fermato') return t('chat.question.outcome.stopped');
+  if (motivo === 'reindirizzamento') return t('chat.question.outcome.redirected');
+  if (motivo === 'nuovo-messaggio') return t('chat.question.outcome.newMessage');
+  if (motivo === 'interrotta') return t('chat.question.outcome.interrupted');
+  if (motivo === 'non-salvata') return t('chat.question.outcome.notSaved');
+  return t('chat.question.outcome.cancelled');
 }
 
-/* Chi e quando: «Chiesta alle 15:01 in modalità Piano · hai risposto alle 15:02». */
-function fraseChiEQuando(richiesta, status, esito) {
+/* Chi e quando: «Chiesta alle 15:01 in modalità Piano · hai risposto alle 15:02».
+   ⛔ Revisione Codex del 02/10/2026, rilievo 3: con la testata «… da un’altra finestra» la ricevuta non dice «hai risposto». */
+function fraseChiEQuando(richiesta, status, esito, altrove = false) {
   const parti = [];
   const chiesta = ora(richiesta?.at);
-  const modo = richiesta?.origine?.modalita === 'piano' ? 'Piano' : richiesta?.origine?.modalita ? 'Normale' : null;
-  if (chiesta || modo) parti.push('Chiesta' + (chiesta ? ' alle ' + chiesta : '') + (modo ? ' in modalità ' + modo : ''));
+  const modo = richiesta?.origine?.modalita === 'piano' ? t('chat.question.mode.plan') : richiesta?.origine?.modalita ? t('chat.question.mode.normal') : null;
+  if (chiesta || modo) parti.push(t('chat.question.asked', { ora: chiesta ? t('chat.question.at', { ora: chiesta }) : '', modo: modo ? t('chat.question.inMode', { modo }) : '' }));
   const chiusa = ora(esito?.at);
   if (chiusa) {
-    const chi = esito?.da === 'sistema' ? 'chiusa dal sistema'
-      : status === 'answered' ? 'hai risposto'
-        : status === 'skipped' ? 'hai saltato' : 'chiusa';
-    parti.push(chi + ' alle ' + chiusa);
+    const chi = esito?.da === 'sistema' ? t('chat.question.closedBy.system')
+      : status === 'answered' ? (altrove ? t('chat.question.closedBy.answeredElsewhere') : t('chat.question.closedBy.youAnswered'))
+        : status === 'skipped' ? (altrove ? t('chat.question.closedBy.skippedElsewhere') : t('chat.question.closedBy.youSkipped')) : t('chat.question.closedBy.closed');
+    parti.push(t('chat.question.closedAt', { chi, ora: chiusa }));
   }
   return parti.join(' · ');
 }
@@ -134,16 +135,16 @@ export function mountUserQuestionDock({ root, composer, question, onSubmit, annu
   const card = make('section', 'talos-approval real-question-card talos-question-card');
   card.dataset.c = 'UserQuestionCard';
   card.dataset.requestId = question.requestId;
-  card.setAttribute('aria-label', 'Domande di TALOS');
+  card.setAttribute('aria-label', t('chat.question.cardLabel'));
   const head = make('div', 'talos-approval__head');
-  const badge = make('span', 'talos-badge talos-badge--accent', 'TALOS chiede');
+  const badge = make('span', 'talos-badge talos-badge--accent', t('chat.question.badge'));
   const progresso = make('span', 'talos-muted talos-grow');
   const conto = make('span', 'talos-question-card__timer');
   conto.hidden = true;
   head.append(badge, progresso, conto);
   const answerPane = make('div', 'talos-question-card__questions');
   const reviewPane = make('div', 'talos-question-card__review');
-  const reviewTitle = make('h3', 'talos-question-card__review-title', 'Rivedi le risposte');
+  const reviewTitle = make('h3', 'talos-question-card__review-title', t('chat.question.review.title'));
   const reviewList = make('dl', 'talos-question-card__review-list');
   const reviewWarning = make('p', 'talos-question-card__warning');
   reviewWarning.setAttribute('role', 'status');
@@ -153,13 +154,13 @@ export function mountUserQuestionDock({ root, composer, question, onSubmit, annu
   const notice = make('p', 'talos-question-card__notice');
   notice.setAttribute('role', 'status');
   const actions = make('div', 'talos-approval__foot talos-question-card__actions');
-  const backButton = button('Indietro', 'talos-button talos-button--ghost talos-button--sm');
-  const nextButton = button('Avanti', 'talos-button talos-button--primary talos-button--md');
-  const reviewButton = button('Rivedi risposte', 'talos-button talos-button--primary talos-button--md');
-  const editButton = button('Modifica risposte', 'talos-button talos-button--secondary talos-button--sm');
-  const sendButton = button('Conferma e invia', 'talos-button talos-button--primary talos-button--md');
-  const skipButton = button('Salta', 'talos-button talos-button--ghost talos-button--sm');
-  const confirmSkipButton = button('Conferma salto', 'talos-button talos-button--secondary talos-button--sm');
+  const backButton = button(t('chat.common.back'), 'talos-button talos-button--ghost talos-button--sm');
+  const nextButton = button(t('chat.question.next'), 'talos-button talos-button--primary talos-button--md');
+  const reviewButton = button(t('chat.question.review.open'), 'talos-button talos-button--primary talos-button--md');
+  const editButton = button(t('chat.question.review.edit'), 'talos-button talos-button--secondary talos-button--sm');
+  const sendButton = button(t('chat.question.review.confirm'), 'talos-button talos-button--primary talos-button--md');
+  const skipButton = button(t('chat.question.skip'), 'talos-button talos-button--ghost talos-button--sm');
+  const confirmSkipButton = button(t('chat.question.confirmSkip'), 'talos-button talos-button--secondary talos-button--sm');
   actions.append(backButton, skipButton, editButton, confirmSkipButton, nextButton, reviewButton, sendButton);
   card.append(head, answerPane, reviewPane, receiptPane, notice, actions);
   const fields = [];
@@ -271,9 +272,9 @@ export function mountUserQuestionDock({ root, composer, question, onSubmit, annu
     const fieldset = make('fieldset', 'talos-stack talos-question-card__fieldset');
     const id = typeof prompt.id === 'string' && prompt.id ? prompt.id : 'q' + index;
     fieldset.dataset.questionId = id;
-    fieldset.append(make('legend', 'assistant-copy', prompt.question || 'Domanda'));
+    fieldset.append(make('legend', 'assistant-copy', prompt.question || t('chat.question.label')));
     const perche = typeof prompt.why === 'string' ? prompt.why.trim() : '';
-    if (perche) fieldset.append(make('p', 'talos-question-card__why', 'Perché conta: ' + perche));
+    if (perche) fieldset.append(make('p', 'talos-question-card__why', t('chat.question.whyItMatters', { perche })));
     const field = { id, prompt, multi: prompt.multiSelect === true, options: [], other: null, textarea: null, fieldset };
     if (Array.isArray(prompt.options) && prompt.options.length) {
       for (const [numero, option] of prompt.options.entries()) {
@@ -296,7 +297,7 @@ export function mountUserQuestionDock({ root, composer, question, onSubmit, annu
         input.setAttribute('aria-labelledby', nome.id);
         const descritta = [];
         if (option.recommended === true) {
-          const consigliata = make('span', 'talos-badge talos-question-card__recommended', 'Consigliata');
+          const consigliata = make('span', 'talos-badge talos-question-card__recommended', t('chat.question.recommended'));
           consigliata.id = suffisso + '-consigliata';
           titolo.append(consigliata);
           descritta.push(consigliata.id);
@@ -326,8 +327,8 @@ export function mountUserQuestionDock({ root, composer, question, onSubmit, annu
       field.other = make('input', 'talos-field__input');
       field.other.type = 'text';
       field.other.maxLength = 4_000;
-      field.other.placeholder = 'Altro…';
-      field.other.setAttribute('aria-label', 'Altra risposta');
+      field.other.placeholder = t('chat.question.other.placeholder');
+      field.other.setAttribute('aria-label', t('chat.question.other.label'));
       field.other.addEventListener('input', () => {
         if (!field.multi && field.other.value.trim()) {
           for (const option of field.options) option.checked = false;
@@ -342,8 +343,8 @@ export function mountUserQuestionDock({ root, composer, question, onSubmit, annu
       field.textarea.rows = 3;
       field.textarea.maxLength = 4_000;
       // 24/09/2026, visto nella foto del giro vero: un campo vuoto senza indicazione non dice che cosa si aspetta.
-      field.textarea.placeholder = 'Scrivi la tua risposta…';
-      field.textarea.setAttribute('aria-label', prompt.question || 'Risposta libera');
+      field.textarea.placeholder = t('chat.question.free.placeholder');
+      field.textarea.setAttribute('aria-label', prompt.question || t('chat.question.free.label'));
       field.textarea.addEventListener('input', persistDraft);
       fieldset.append(field.textarea);
     }
@@ -353,7 +354,7 @@ export function mountUserQuestionDock({ root, composer, question, onSubmit, annu
   restoreDraft();
 
   /* La ricevuta «Decisione» (decisione owner 10): si costruisce una volta, dai dati della richiesta e dell'esito. */
-  function disegnaRicevuta(status, esito) {
+  function disegnaRicevuta(status, esito, altrove = false) {
     const risposte = status === 'answered' && esito?.answers && typeof esito.answers === 'object' ? esito.answers : {};
     const elenco = make('dl', 'talos-question-card__receipt-list');
     for (const field of fields) {
@@ -362,23 +363,23 @@ export function mountUserQuestionDock({ root, composer, question, onSubmit, annu
       const valore = risposte[field.id];
       const scelte = Array.isArray(valore) ? valore : typeof valore === 'string' ? [valore] : [];
       const note = new Set(field.options.map((input) => input.value));
-      const testoRisposta = scelte.length === 0 ? 'Nessuna risposta'
-        : scelte.map((voce) => (field.options.length && !note.has(voce) ? 'Altro: «' + voce + '»' : voce)).join(', ');
+      const testoRisposta = scelte.length === 0 ? t('chat.question.receipt.noAnswer')
+        : scelte.map((voce) => (field.options.length && !note.has(voce) ? t('chat.question.receipt.otherAnswer', { voce }) : voce)).join(', ');
       const risposta = make('dd', 'talos-question-card__receipt-answer', testoRisposta);
-      riga.append(make('dt', 'talos-question-card__receipt-question', field.prompt.question || 'Domanda'), risposta);
+      riga.append(make('dt', 'talos-question-card__receipt-question', field.prompt.question || t('chat.question.label')), risposta);
       const perche = typeof field.prompt.why === 'string' ? field.prompt.why.trim() : '';
-      if (perche) riga.append(make('dd', 'talos-question-card__why', 'Perché conta: ' + perche));
+      if (perche) riga.append(make('dd', 'talos-question-card__why', t('chat.question.whyItMatters', { perche })));
       if (field.options.length) {
         const dettagli = make('details', 'talos-question-card__offered');
-        dettagli.append(make('summary', '', 'Opzioni offerte (' + field.options.length + ')'));
+        dettagli.append(make('summary', '', t('chat.question.receipt.optionsOffered', { n: field.options.length })));
         const lista = make('ul', 'talos-question-card__offered-list');
         for (const [indice, input] of field.options.entries()) {
           const voce = make('li', 'talos-question-card__offered-item');
           voce.append(make('span', 'talos-question-card__option-label', input.value));
-          if (field.prompt.options?.[indice]?.recommended === true) voce.append(make('span', 'talos-badge talos-question-card__recommended', 'Consigliata'));
+          if (field.prompt.options?.[indice]?.recommended === true) voce.append(make('span', 'talos-badge talos-question-card__recommended', t('chat.question.recommended')));
           if (scelte.includes(input.value)) {
             voce.dataset.scelta = 'true';
-            voce.append(make('span', 'talos-badge talos-badge--accent talos-question-card__chosen', 'Scelta'));
+            voce.append(make('span', 'talos-badge talos-badge--accent talos-question-card__chosen', t('chat.question.receipt.chosen')));
           }
           lista.append(voce);
         }
@@ -387,7 +388,7 @@ export function mountUserQuestionDock({ root, composer, question, onSubmit, annu
       }
       elenco.append(riga);
     }
-    const chiEQuando = fraseChiEQuando(question, status, esito);
+    const chiEQuando = fraseChiEQuando(question, status, esito, altrove);
     receiptPane.replaceChildren(...(chiEQuando ? [make('p', 'talos-question-card__receipt-meta', chiEQuando)] : []), elenco);
   }
 
@@ -404,11 +405,11 @@ export function mountUserQuestionDock({ root, composer, question, onSubmit, annu
       answerPane.hidden = true;
       reviewPane.hidden = true;
       actions.hidden = true;
-      badge.textContent = 'Decisione';
+      badge.textContent = t('chat.question.decision');
       badge.className = 'talos-badge';
       const frase = fraseEsito(next.status, next.esito?.motivo, next.altrove);
       progresso.textContent = frase;
-      disegnaRicevuta(next.status, next.esito);
+      disegnaRicevuta(next.status, next.esito, Boolean(next.altrove));
       receiptPane.hidden = false;
       /* La frase sta già nella testata: qui resta per il lettore di schermo (regione `status`), fuori dalla vista. */
       notice.hidden = false;
@@ -424,7 +425,7 @@ export function mountUserQuestionDock({ root, composer, question, onSubmit, annu
     if (Number.isInteger(next.corrente)) corrente = Math.max(0, Math.min(fields.length - 1, next.corrente));
     card.dataset.state = stage;
     const ultima = corrente === fields.length - 1;
-    progresso.textContent = fields.length === 1 ? 'Una decisione' : 'Domanda ' + (corrente + 1) + ' di ' + fields.length;
+    progresso.textContent = fields.length === 1 ? t('chat.question.oneDecision') : t('chat.question.progress', { n: corrente + 1, totale: fields.length });
     answerPane.hidden = stage !== 'answer' && stage !== 'stale';
     for (const [indice, field] of fields.entries()) field.fieldset.hidden = indice !== corrente;
     reviewPane.hidden = stage !== 'review' && stage !== 'skip-review';
@@ -436,7 +437,7 @@ export function mountUserQuestionDock({ root, composer, question, onSubmit, annu
     sendButton.hidden = stage !== 'review';
     confirmSkipButton.hidden = stage !== 'skip-review';
     actions.hidden = stage === 'stale';
-    const messaggio = next.message || (busy ? 'Attendo la conferma del server…' : avvisoRipresa);
+    const messaggio = next.message || (busy ? t('chat.question.waitingForServer') : avvisoRipresa);
     notice.hidden = !messaggio;
     notice.textContent = messaggio;
     for (const control of [backButton, nextButton, reviewButton, editButton, sendButton, skipButton, confirmSkipButton]) control.disabled = busy;
@@ -451,22 +452,22 @@ export function mountUserQuestionDock({ root, composer, question, onSubmit, annu
       for (const [index, prompt] of question.questions.entries()) {
         const value = draft[fields[index].id];
         const row = make('div', 'talos-question-card__review-row');
-        row.append(make('dt', '', prompt.question), make('dd', '', Array.isArray(value) ? value.join(', ') : value || 'Non risposta'));
+        row.append(make('dt', '', prompt.question), make('dd', '', Array.isArray(value) ? value.join(', ') : value || t('chat.question.review.unanswered')));
         reviewList.append(row);
       }
       const missing = question.questions.length - Object.keys(draft).length;
       const duplicate = fields.some((field) => field.multi && field.other?.value.trim()
         && field.options.some((option) => option.checked && option.value === field.other.value.trim()));
-      reviewWarning.textContent = duplicate ? 'La risposta Altro duplica una scelta selezionata.'
-        : missing ? String(missing) + (missing === 1 ? ' domanda senza risposta' : ' domande senza risposta')
-          : 'Tutte le risposte sono pronte.';
+      reviewWarning.textContent = duplicate ? t('chat.question.review.otherDuplicatesChoice')
+        : missing ? tn('chat.question.review.unansweredOne', 'chat.question.review.unansweredMany', missing)
+          : t('chat.question.review.allReady');
       sendButton.disabled = busy || missing > 0 || duplicate;
     } else if (stage === 'skip-review') {
-      reviewTitle.textContent = 'Saltare tutte le domande?';
+      reviewTitle.textContent = t('chat.question.skipAll.title');
       reviewList.replaceChildren();
-      reviewWarning.textContent = 'La richiesta intera verrà saltata, anche se hai già scritto risposte.';
+      reviewWarning.textContent = t('chat.question.skipAll.warning');
     }
-    if (stage === 'review') reviewTitle.textContent = 'Rivedi le risposte';
+    if (stage === 'review') reviewTitle.textContent = t('chat.question.review.title');
   }
 
   async function submit(status) {
@@ -478,17 +479,17 @@ export function mountUserQuestionDock({ root, composer, question, onSubmit, annu
     render();
     try {
       await onSubmit({ requestId: question.requestId, status, ...(status === 'answered' ? { answers } : {}) });
-      if (!resolved && !destroyed) render({ message: 'Invio ricevuto. Attendo la conferma del server…' });
+      if (!resolved && !destroyed) render({ message: t('chat.question.submit.received') });
     } catch (error) {
       if (resolved || destroyed) return;
       if ([404, 409, 410].includes(error?.status)) {
         busy = false;
-        render({ stage: 'stale', message: 'Domanda non più attiva: ' + error.message + '. Ricarica la sessione per verificare lo stato.' });
+        render({ stage: 'stale', message: t('chat.question.submit.stale', { errore: error.message }) });
       } else if ([400, 422].includes(error?.status)) {
         busy = false;
-        render({ message: 'Invio non riuscito: ' + error.message + '. Puoi correggere e riprovare.' });
+        render({ message: t('chat.question.submit.failed', { errore: error.message }) });
       } else {
-        render({ message: 'Esito non verificato. Ricarica la sessione prima di riprovare.' });
+        render({ message: t('chat.question.submit.unverified') });
       }
     }
   }
@@ -538,7 +539,7 @@ export function mountUserQuestionDock({ root, composer, question, onSubmit, annu
       const restano = Math.max(0, inizioConto + scadenzaMs - adesso());
       const secondi = Math.ceil(restano / 1000);
       conto.hidden = false;
-      conto.textContent = 'Scade fra ' + Math.floor(secondi / 60) + ':' + String(secondi % 60).padStart(2, '0');
+      conto.textContent = t('chat.question.expiresIn', { minuti: Math.floor(secondi / 60), secondi: String(secondi % 60).padStart(2, '0') });
       conto.dataset.ultimi = secondi <= 20 ? 'true' : 'false';
       if (restano <= 0 && !busy) {
         fermaConto?.();
@@ -561,7 +562,7 @@ export function mountUserQuestionDock({ root, composer, question, onSubmit, annu
      *   Si dice alla persona che cosa succede con ciascuna delle due strade.
      */
     segnalaRipresa: () => {
-      avvisoRipresa = 'Il server è stato riavviato: la domanda è ancora aperta. Rispondi qui per far ripartire il lavoro; se scrivi un messaggio nuovo, la domanda si chiude.';
+      avvisoRipresa = t('chat.question.resumedAfterRestart');
       render();
     },
     destroy: () => {

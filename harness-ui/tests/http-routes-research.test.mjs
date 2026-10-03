@@ -4,6 +4,7 @@ import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
+import { AREE } from '../frontend/src/i18n/testi/index.js';
 
 import { createHttpApp } from '../src/http-app.mjs';
 import { createSessionRegistry as createSessionRegistryReale } from '../src/session-registry.mjs';
@@ -214,9 +215,12 @@ test('⛔⛔⛔ L5 — «la sessione non c\'è» e «la ricerca non c\'è» sono
    *   volte. La prima stesura di questa rotta faceva esattamente questo: si vede solo
    *   interrogando la rotta vera.
    */
-  assert.equal(problema.message, 'Questa ricerca non esiste più');
-  assert.equal(problema.title, 'Ricerca non trovata');
-  assert.doesNotMatch(problema.explanation, /imprevisto/, '⛔ non è imprevisto, ed è l’unica cosa che Doctor non può spiegare');
+  assert.equal(problema.message, 'This research no longer exists');
+  assert.equal(problema.title, 'Research not found');
+  assert.equal(AREE.errori.it['RESEARCH_NOT_FOUND.message'], 'Questa ricerca non esiste più', 'in italiano lo dice il dizionario, dal codice');
+  assert.equal(AREE.errori.it['RESEARCH_NOT_FOUND.title'], 'Ricerca non trovata');
+  assert.doesNotMatch(problema.explanation, /unexpected/, '⛔ (inglese) ');
+  assert.doesNotMatch(AREE.errori.it['RESEARCH_NOT_FOUND.explanation'], /imprevisto/, '⛔ non è imprevisto, ed è l’unica cosa che Doctor non può spiegare');
 
   for (const azione of ['pausa', 'ripresa', 'riverifica']) {
     const risposta = await chiama(b.base, `/api/v1/sessions/${sessionId}/research/mai-fatta/${azione}`, 'POST');

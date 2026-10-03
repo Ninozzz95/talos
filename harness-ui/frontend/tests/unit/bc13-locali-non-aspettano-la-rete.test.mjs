@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { TESTI } from '../../src/i18n/testi/index.js'; // corsia A della lingua (03/10/2026): le frasi stanno nel dizionario, il sorgente porta la chiave
 
 /*
  * ⭐⭐⭐ BC-13, 11/09/2026 — I MODELLI LOCALI NON ASPETTANO LA RETE.
@@ -76,7 +77,8 @@ test('BC13-CATCH: il guasto del catalogo resta dentro la scheda OpenRouter', () 
 
 test('BC13-TRE-STATI: disco illeggibile non è «nessun modello installato»', () => {
   assert.match(NUDO, /catch\(\(e\) => \{ modelliLocali = null; erroreLocali = e\?\.message/);
-  assert.match(NUDO, /if \(erroreLocali\) \{[\s\S]{0,200}Non riesco a leggere i modelli installati/);
+  assert.match(NUDO, /if \(erroreLocali\) \{[\s\S]{0,200}tr\('app\.modelPicker\.installedUnreadable'/);
+  assert.match(TESTI.it['app.modelPicker.installedUnreadable'], /^Non riesco a leggere i modelli installati: \{motivo\}$/u);
 });
 
 test('BC13-MORDE: rimesse le chiamate dopo l’await, LE STESSE due guardie di sopra diventano rosse', () => {

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import test from 'node:test';
+import { AREE } from '../frontend/src/i18n/testi/index.js';
 
 import { createHttpApp } from '../src/http-app.mjs';
 
@@ -46,7 +47,8 @@ test('CORPO-413-01 — un corpo oltre il limite riceve una RISPOSTA 413 con la s
   const busta = await risposta.json();
   assert.equal(busta.ok, false);
   assert.equal(busta.error.code, 'PAYLOAD_LIMIT');
-  assert.match(busta.error.message, /accorcia il messaggio/, 'il messaggio dice a parole cosa fare');
+  assert.match(busta.error.message, /shorten the message/, 'il messaggio (inglese: è il server) dice a parole cosa fare');
+  assert.match(AREE.errori.it['PAYLOAD_LIMIT.message'], /accorcia il messaggio/, 'e in italiano lo dice il dizionario, dal codice');
   assert.equal(registro.ricevuti.length, 0, 'un corpo rifiutato non arriva MAI al registro');
 });
 

@@ -92,12 +92,28 @@ export const CATALOGHI_DIRETTI = Object.freeze(
 );
 
 export class ProviderProbeError extends Error {
-  constructor(message, code = 'PROVIDER_PROBE_FAILED') {
+  /** @param {{chiave?: string, params?: object}} [dettaglio] la chiave del dizionario e i valori, se il testo arriva alla persona */
+  constructor(message, code = 'PROVIDER_PROBE_FAILED', dettaglio = null) {
     super(message);
     this.name = 'ProviderProbeError';
     this.code = code;
+    if (dettaglio?.chiave) { this.chiave = dettaglio.chiave; if (dettaglio.params) this.params = dettaglio.params; }
   }
 }
+
+/*
+ * ⛔⛔ K4a (03/10/2026, owner: «ogni singola parola nella app deve essere sia in inglese che in italiano») — il `motivo` di una
+ *   prova arriva a schermo (`provider-card.js`: la riga sotto il fornitore quando la prova non è `collegato`). Non è più prosa
+ *   italiana: `motivo` porta la frase INGLESE (riserva per la CLI e per chi non ha il dizionario), `motivoChiave` la chiave
+ *   dell'area `server` del dizionario dell'interfaccia (`server.probe.…`) e `motivoParams` i valori. Il fornitore si dice col
+ *   suo nome (`provider`); i quattro che hanno una parola italiana nel nome portano anche `providerChiave`.
+ *   Stesso schema del «contenuto sospetto» (8d894b012). Ricerca 03/10/2026: codice stabile + valori + riserva inglese,
+ *   tradotto dal cliente (Google AIP-193; Hermes `agent/i18n.py:1`).
+ */
+const motivoDi = (testo, chiave, params) => ({ motivo: testo, motivoChiave: chiave, ...(params ? { motivoParams: params } : {}) });
+/** Il motivo di un errore già costruito altrove: con la sua chiave se l'ha, altrimenti il solo testo (mai una chiave inventata). */
+const motivoDaErrore = (errore) => (errore?.chiave ? motivoDi(errore.message, errore.chiave, errore.params) : { motivo: errore?.message });
+
 
 function urlDellaSonda(sonda, endpoint) {
   if (sonda.urlAssoluto) return sonda.urlAssoluto;
@@ -170,11 +186,11 @@ async function corpoEntroIlTetto(risposta, tetto) {
  *   annunciato come «non è stato possibile raggiungere», cioè come se fosse spento. Ha risposto,
  *   eccome: ci ha mandati altrove, e chi legge deve poter guardare l'indirizzo che ha impostato.
  */
-function motivoDiRete(errore, etichetta, secondi) {
-  if (errore?.name === 'TimeoutError' || errore?.name === 'AbortError') return `${etichetta}: nessuna risposta entro ${secondi} secondi.`;
+function motivoDiRete(errore, etichetta, secondi, nome = { provider: etichetta }) {
+  if (errore?.name === 'TimeoutError' || errore?.name === 'AbortError') return motivoDi(`${etichetta}: no response within ${secondi} seconds.`, 'server.probe.noResponse', { ...nome, seconds: secondi });
   const dettaglio = `${errore?.message ?? ''} ${errore?.cause?.message ?? ''}`;
-  if (/redirect/iu.test(dettaglio)) return `${etichetta}: la risposta rinvia a un altro indirizzo, e non lo seguiamo. Controlla l'indirizzo impostato per questo fornitore.`;
-  return `Non è stato possibile raggiungere ${etichetta}.`;
+  if (/redirect/iu.test(dettaglio)) return motivoDi(`${etichetta}: the response redirects to another address, and we do not follow it. Check the address set for this provider.`, 'server.probe.redirected', nome);
+  return motivoDi(`Could not reach ${etichetta}.`, 'server.probe.unreachable', nome);
 }
 
 /** P-I: catalogo nativo DashScope v1; HTTP 200 non basta se il corpo dichiara un errore. */
@@ -186,7 +202,7 @@ function paginaDashScope(corpo, numero = 1) {
     || (p.total > 0 && !p.models.length)
     || p.models.some(m => !m || typeof m.model !== 'string' || !m.model.trim())
     || new Set(p.models.map(m => m.model)).size !== p.models.length) {
-    throw new ProviderProbeError('Qwen: pagina del catalogo non valida o incompleta.', 'CATALOG_UPSTREAM_ERROR');
+    throw new ProviderProbeError('Qwen: catalog page invalid or incomplete.', 'CATALOG_UPSTREAM_ERROR');
   }
   return p;
 }
@@ -211,7 +227,7 @@ export function createProviderProbe({ leggiChiave, leggiRuntime, fetchImpl = fet
   function runtimeAgente() {
     try { return leggiRuntimeAgenteEsterno(leggiRuntime('esterno'), { env }); }
     catch (e) {
-      if (e.code === 'ACP_NOT_CONFIGURED') throw new ProviderProbeError("Configura l'agente esterno in Fornitori e accessi", 'CATALOG_CONFIGURATION_REQUIRED');
+      if (e.code === 'ACP_NOT_CONFIGURED') throw new ProviderProbeError('Set up the external agent in Providers and access', 'CATALOG_CONFIGURATION_REQUIRED', { chiave: 'server.probe.configureAgent' });
       throw e;
     }
   }
@@ -239,21 +255,23 @@ export function createProviderProbe({ leggiChiave, leggiRuntime, fetchImpl = fet
     if (provider === 'esterno') {
       let runtime;
       try { runtime = runtimeAgente(); }
-      catch (e) { return { provider, esito: 'non-provabile', motivo: e.message, codice: e.code, modelli: null, millisecondi: null }; }
+      catch (e) { return { provider, esito: 'non-provabile', ...motivoDaErrore(e), codice: e.code, modelli: null, millisecondi: null }; }
       const partito = orologio();
       identitaAgente = null;
       try {
         const agente = await connettiAgenteAcp(runtime, { env, soloInizializzazione: true });
         await agente.chiudi();
         identitaAgente = { runtime: JSON.stringify(runtime), nome: agente.nome };
-        return { provider, esito: 'collegato', motivo: 'Agente inizializzato e chiuso. Nessun messaggio inviato.',
+        return { provider, esito: 'collegato', ...motivoDi('Agent initialized and closed. No message sent.', 'server.probe.agentInitialized'),
           modelli: 1, millisecondi: Math.round(orologio() - partito), credenzialeVerificata: false };
-      } catch (e) { return { provider, esito: 'errore', motivo: e.message, codice: e.code, modelli: null, millisecondi: Math.round(orologio() - partito) }; }
+      } catch (e) { return { provider, esito: 'errore', ...motivoDaErrore(e), codice: e.code, modelli: null, millisecondi: Math.round(orologio() - partito) }; }
     }
     const sonda = sonde[provider];
     if (!sonda) throw new ProviderProbeError(`unknown provider ${provider}`, 'PROVIDER_INVALID');
     const record = REGISTRO_FORNITORI[provider];
-    const etichetta = record?.etichetta ?? 'Il fornitore';
+    const etichetta = record?.etichetta ?? 'The provider';
+    /* il nome del fornitore: una parola italiana nel nome (`Z.AI (Anthropic port)`…) si dice col dizionario (`providerChiave`) */
+    const nome = { provider: etichetta, ...(record?.etichettaChiave ? { providerChiave: record.etichettaChiave } : {}) };
 
     /*
      * ⛔ Chi dichiara di non essere sondabile NON viene chiamato: zero richieste, e lo si dice.
@@ -261,7 +279,7 @@ export function createProviderProbe({ leggiChiave, leggiRuntime, fetchImpl = fet
      *   «credenziale rifiutata» su una chiave buona.
      */
     if (sonda.attiva === false && !sonda.richiestaMinima) {
-      return nonGiudicata({ provider, esito: 'non-sondabile', motivo: 'Questo fornitore non espone un elenco modelli su cui provare la credenziale.', modelli: null, millisecondi: null });
+      return nonGiudicata({ provider, esito: 'non-sondabile', ...motivoDi('This provider does not expose a model list to test the credential on.', 'server.probe.noModelList'), modelli: null, millisecondi: null });
     }
 
     const chiave = leggiChiave(provider);
@@ -272,7 +290,7 @@ export function createProviderProbe({ leggiChiave, leggiRuntime, fetchImpl = fet
      * sbagliata invece di inserirne una.
      */
     if (sonda.auth !== 'nessuna' && sonda.auth !== 'bearer-facoltativo' && !chiave) {
-      return nonGiudicata({ provider, esito: 'non-provabile', motivo: `Nessuna chiave salvata per ${etichetta}.`, modelli: null, millisecondi: null });
+      return nonGiudicata({ provider, esito: 'non-provabile', ...motivoDi(`No key saved for ${etichetta}.`, 'server.probe.noKeySaved', nome), modelli: null, millisecondi: null });
     }
 
     /*
@@ -288,7 +306,7 @@ export function createProviderProbe({ leggiChiave, leggiRuntime, fetchImpl = fet
     const generabile = sonda.richiestaMinima;
     const minima = generabile && consentiGenerazione === true ? generabile : null;
     if (generabile && !minima && sonda.attiva === false) {
-      return nonGiudicata({ provider, esito: 'non-sondabile', motivo: `${etichetta}: non è documentato un elenco modelli per verificare la chiave. La prova minima richiede una generazione con limite di un token e può consumare credito o quota; occorre richiederla esplicitamente.`, modelli: null, millisecondi: null });
+      return nonGiudicata({ provider, esito: 'non-sondabile', ...motivoDi(`${etichetta}: a model list to check the key is not documented. The minimal test needs a generation limited to one token and may use credit or quota; it has to be requested explicitly.`, 'server.probe.noDocumentedList', nome), modelli: null, millisecondi: null });
     }
 
     const runtime = leggiRuntime(provider) || {};
@@ -297,13 +315,13 @@ export function createProviderProbe({ leggiChiave, leggiRuntime, fetchImpl = fet
     let cloud;
     if (record?.cloud) {
       try { cloud = destinazioneCloud(provider, runtime, chiave, null, { catalogo: true }); }
-      catch (errore) { return { provider, esito: 'non-provabile', motivo: errore.message, codice: errore.code, modelli: null, millisecondi: null }; }
+      catch (errore) { return { provider, esito: 'non-provabile', ...motivoDaErrore(errore), codice: errore.code, modelli: null, millisecondi: null }; }
     }
     // P-K — fine
     try {
       url = cloud?.url ?? urlDellaSonda(minima ?? sonda, runtime.endpoint); // P-J (richiesta minima) + P-K (indirizzo cloud)
     } catch (errore) {
-      return nonGiudicata({ provider, esito: 'non-provabile', motivo: `Manca l'indirizzo di ${etichetta}.`, modelli: null, millisecondi: null, codice: errore.code });
+      return nonGiudicata({ provider, esito: 'non-provabile', ...motivoDi(`The address of ${etichetta} is missing.`, 'server.probe.addressMissing', nome), modelli: null, millisecondi: null, codice: errore.code });
     }
 
     const intestazioni = { Accept: 'application/json' };
@@ -330,7 +348,7 @@ export function createProviderProbe({ leggiChiave, leggiRuntime, fetchImpl = fet
       return nonGiudicata({
         provider,
         esito: 'irraggiungibile',
-        motivo: motivoDiRete(errore, etichetta, Math.min(secondi, 30)),
+        ...motivoDiRete(errore, etichetta, Math.min(secondi, 30), nome),
         modelli: null,
         millisecondi: Math.round(orologio() - partito),
       });
@@ -339,17 +357,17 @@ export function createProviderProbe({ leggiChiave, leggiRuntime, fetchImpl = fet
     if (risposta.status === 401 || risposta.status === 403) {
       // P-K — un 403 non dimostra una chiave errata; può essere il permesso del progetto/modello.
       // CLI-REQ-06 — un rifiuto è un GIUDIZIO sulla chiave: `false`, mai `null`.
-      if (record?.cloud) return { provider, esito: 'non-autorizzato', credenzialeVerificata: false, motivo: risposta.status === 401
-        ? `${etichetta}: credenziale non accettata (HTTP 401).`
-        : `${etichetta}: accesso negato (HTTP 403); controlla i permessi.`, modelli: null, millisecondi, httpStatus: risposta.status };
+      if (record?.cloud) return { provider, esito: 'non-autorizzato', credenzialeVerificata: false, ...(risposta.status === 401
+        ? motivoDi(`${etichetta}: credential not accepted (HTTP 401).`, 'server.probe.credentialNotAccepted', nome)
+        : motivoDi(`${etichetta}: access denied (HTTP 403); check the permissions.`, 'server.probe.accessDeniedPermissions', nome)), modelli: null, millisecondi, httpStatus: risposta.status };
       // P-K — fine
       const chiaveInviata = Boolean(chiave && (intestazioni.Authorization || intestazioni['x-api-key'] || sonda.auth === 'query'));
       if (!chiaveInviata || (risposta.status === 403 && !record?.chiaveObbligatoria)) {
-        return nonGiudicata({ provider, esito: 'non-autorizzato', motivo: risposta.status === 401
-          ? `${etichetta}: l'endpoint richiede autenticazione (HTTP 401); verifica indirizzo e accesso configurati.`
-          : `${etichetta}: accesso negato (HTTP 403); verifica i permessi del server o del modello.`, modelli: null, millisecondi, httpStatus: risposta.status });
+        return nonGiudicata({ provider, esito: 'non-autorizzato', ...(risposta.status === 401
+          ? motivoDi(`${etichetta}: the endpoint requires authentication (HTTP 401); check the address and the access you set up.`, 'server.probe.endpointNeedsAuth', nome)
+          : motivoDi(`${etichetta}: access denied (HTTP 403); check the permissions of the server or of the model.`, 'server.probe.accessDeniedServer', nome)), modelli: null, millisecondi, httpStatus: risposta.status });
       }
-      return { provider, esito: 'non-autorizzato', credenzialeVerificata: false, motivo: `${etichetta} ha rifiutato la credenziale (HTTP ${risposta.status}).`, modelli: null, millisecondi, httpStatus: risposta.status };
+      return { provider, esito: 'non-autorizzato', credenzialeVerificata: false, ...motivoDi(`${etichetta} rejected the credential (HTTP ${risposta.status}).`, 'server.probe.credentialRejected', { ...nome, status: risposta.status }), modelli: null, millisecondi, httpStatus: risposta.status };
     }
     if (!risposta.ok) {
       /*
@@ -361,10 +379,10 @@ export function createProviderProbe({ leggiChiave, leggiRuntime, fetchImpl = fet
        */
       const motivo = risposta.status === 404
         ? minima
-          ? `${etichetta}: la prova non ha trovato il modello che usa per controllare la chiave; potrebbe non essere più disponibile. La chiave non è verificata da questa risposta.`
-          : `${etichetta}: elenco modelli non trovato (HTTP 404). La validità della chiave non è verificata da questa risposta.`
-        : `${etichetta} ha risposto HTTP ${risposta.status}.`;
-      return nonGiudicata({ provider, esito: 'errore', motivo, modelli: null, millisecondi, httpStatus: risposta.status });
+          ? motivoDi(`${etichetta}: the test did not find the model it uses to check the key; it may no longer be available. This response does not verify the key.`, 'server.probe.minimalModelNotFound', nome)
+          : motivoDi(`${etichetta}: model list not found (HTTP 404). This response does not verify that the key is valid.`, 'server.probe.listNotFound', nome)
+        : motivoDi(`${etichetta} answered HTTP ${risposta.status}.`, 'server.probe.httpStatus', { ...nome, status: risposta.status });
+      return nonGiudicata({ provider, esito: 'errore', ...motivo, modelli: null, millisecondi, httpStatus: risposta.status });
     }
     let corpo = null;
     let letturaInterrotta = null;
@@ -386,7 +404,7 @@ export function createProviderProbe({ leggiChiave, leggiRuntime, fetchImpl = fet
      *   della rete. Il tempo massimo scade proprio qui quando il corpo non finisce mai.
      */
     if (letturaInterrotta) {
-      return nonGiudicata({ provider, esito: 'irraggiungibile', motivo: motivoDiRete(letturaInterrotta, etichetta, Math.min(secondi, 30)),
+      return nonGiudicata({ provider, esito: 'irraggiungibile', ...motivoDiRete(letturaInterrotta, etichetta, Math.min(secondi, 30), nome),
         modelli: null, millisecondi: Math.round(orologio() - partito), httpStatus: risposta.status });
     }
     /*
@@ -400,7 +418,7 @@ export function createProviderProbe({ leggiChiave, leggiRuntime, fetchImpl = fet
     if (minima) {
       if (rispostaTroppoGrande) {
         return nonGiudicata({ provider, esito: 'errore',
-          motivo: `${etichetta}: la risposta è troppo grande per essere una generazione da un token, e non è stata letta oltre il limite. La chiave non è stata giudicata.`,
+          ...motivoDi(`${etichetta}: the response is too large to be a one-token generation, and it was not read past the limit. The key was not judged.`, 'server.probe.minimalTooBig', nome),
           modelli: null, millisecondi, httpStatus: risposta.status });
       }
       const wire = sonda.wire ?? record?.wire;
@@ -432,11 +450,11 @@ export function createProviderProbe({ leggiChiave, leggiRuntime, fetchImpl = fet
         // ⛔ Questa è l'unica strada che può dire di sì a una chiave: quando passa, si dichiara.
         //   Quando NON passa, il fornitore ha comunque risposto qualcosa che la riguarda: `false`.
         credenzialeVerificata: valida,
-        motivo: valida
-          ? `${etichetta}: richiesta minima di generazione riuscita; elenco modelli non verificato.`
+        ...(valida
+          ? motivoDi(`${etichetta}: minimal generation request succeeded; model list not verified.`, 'server.probe.minimalOk', nome)
           : dichiaraErrore
-            ? `${etichetta}: la risposta dichiara un errore, quindi la chiave non è confermata.`
-            : `${etichetta}: risposta HTTP ${risposta.status} senza un messaggio valido; credenziale non verificata.`,
+            ? motivoDi(`${etichetta}: the response declares an error, so the key is not confirmed.`, 'server.probe.minimalErrorDeclared', nome)
+            : motivoDi(`${etichetta}: HTTP ${risposta.status} response without a valid message; credential not verified.`, 'server.probe.minimalNoValidMessage', { ...nome, status: risposta.status })),
         modelli: null, millisecondi, httpStatus: risposta.status };
     }
     let catalogoValido = true;
@@ -446,7 +464,7 @@ export function createProviderProbe({ leggiChiave, leggiRuntime, fetchImpl = fet
       catalogoValido = Array.isArray(corpo?.data) && corpo.data.every(m => m && typeof m.id === 'string' && m.id.trim());
     }
     if (!catalogoValido) {
-      return nonGiudicata({ provider, esito: 'errore', motivo: `${etichetta}: risposta HTTP ${risposta.status} senza un elenco modelli valido; credenziale non verificata.`, modelli: null, millisecondi, httpStatus: risposta.status });
+      return nonGiudicata({ provider, esito: 'errore', ...motivoDi(`${etichetta}: HTTP ${risposta.status} response without a valid model list; credential not verified.`, 'server.probe.noValidList', { ...nome, status: risposta.status }), modelli: null, millisecondi, httpStatus: risposta.status });
     }
     const modelli = Number(sonda.conta(corpo));
     return {
@@ -460,11 +478,13 @@ export function createProviderProbe({ leggiChiave, leggiRuntime, fetchImpl = fet
        *   senza chiave (`auth: nessuna`, locali) → `null`: non c'era niente da giudicare.
        */
       credenzialeVerificata: sonda.catalogoPubblico ? false : chiave ? true : null,
-      motivo: sonda.catalogoPubblico
-        ? `${etichetta}: catalogo pubblico raggiunto, ${modelli} modelli visibili; chiave non verificata. La generazione non è stata provata.`
+      ...(sonda.catalogoPubblico
+        ? motivoDi(`${etichetta}: public catalog reached, ${modelli} models visible; key not verified. Generation was not tested.`, 'server.probe.publicCatalogReached', { ...nome, count: modelli })
         : Number.isFinite(modelli) && modelli >= 0
-        ? `${etichetta}: catalogo raggiunto, ${modelli} modelli visibili${record?.catalogo.forma === 'dashscope-output' ? ' nella prima pagina' : ''}. La generazione non è stata provata.`
-        : `${etichetta}: credenziale accettata.`,
+        ? (record?.catalogo.forma === 'dashscope-output'
+          ? motivoDi(`${etichetta}: catalog reached, ${modelli} models visible on the first page. Generation was not tested.`, 'server.probe.catalogReachedFirstPage', { ...nome, count: modelli })
+          : motivoDi(`${etichetta}: catalog reached, ${modelli} models visible. Generation was not tested.`, 'server.probe.catalogReached', { ...nome, count: modelli }))
+        : motivoDi(`${etichetta}: credential accepted.`, 'server.probe.credentialAccepted', nome)),
       modelli: Number.isFinite(modelli) ? modelli : null,
       millisecondi,
       httpStatus: risposta.status,
@@ -478,7 +498,7 @@ export function createProviderProbe({ leggiChiave, leggiRuntime, fetchImpl = fet
       return { provider, fonte: 'configurazione', credenzialeVerificata: false,
         modelli: [{ id: 'esterno:predefinito', nome, provider, toolCalling: 'ignoto', capacita: { toolCall: null, reasoning: null } }] };
     }
-    if (!CATALOGHI_DIRETTI.includes(provider)) throw new ProviderProbeError('Catalogo diretto non disponibile.', 'PROVIDER_INVALID');
+    if (!CATALOGHI_DIRETTI.includes(provider)) throw new ProviderProbeError('Direct catalog not available.', 'PROVIDER_INVALID');
     const record = REGISTRO_FORNITORI[provider];
     const etichetta = record.etichetta;
     const runtime = leggiRuntime(provider);
@@ -487,18 +507,18 @@ export function createProviderProbe({ leggiChiave, leggiRuntime, fetchImpl = fet
     if (record.cloud && provider !== 'bedrock') {
       if (configurati.length) return { provider, fonte: 'configurazione', credenzialeVerificata: false, modelli: configurati };
       throw new ProviderProbeError(provider === 'azure'
-        ? 'Azure AI Foundry: indica il nome della distribuzione in Modelli configurati, nella pagina Fornitori e accessi.'
-        : 'Google Vertex AI: indica un modello abilitato nel progetto in Modelli configurati, nella pagina Fornitori e accessi.', 'CATALOG_CONFIGURATION_REQUIRED');
+        ? 'Azure AI Foundry: enter the deployment name in Configured models, on the Providers and access page.'
+        : 'Google Vertex AI: enter a model enabled in the project in Configured models, on the Providers and access page.', 'CATALOG_CONFIGURATION_REQUIRED');
     }
     const key = leggiChiave(provider);
-    if (!key) throw new ProviderProbeError(`Inserisci la chiave ${etichetta} nel pannello Provider.`, 'PROVIDER_KEY_MISSING');
+    if (!key) throw new ProviderProbeError(`Enter the ${etichetta} key in the Providers panel.`, 'PROVIDER_KEY_MISSING');
     // P-J — nessun catalogo remoto documentato: nessuna generazione o GET sostitutivo.
     // ⛔ CLI-REQ-06 — la condizione è «non ha un elenco», non «ha una richiesta minima»: i quattro
     //   fornitori a catalogo pubblico hanno entrambe le cose, e il loro elenco vero si chiede a loro.
     if (record.sonda.richiestaMinima && record.sonda.attiva === false) {
       const riserva = catalogoDiRiservaPer(provider);
       return { provider, fonte: 'documentazione', credenzialeVerificata: false,
-        avviso: `${etichetta}: elenco dalla documentazione del ${record.data}; accesso ai modelli non verificato.`,
+        avviso: `${etichetta}: list from the documentation dated ${record.data}; access to the models not verified.`,
         modelli: riserva.modelli };
     }
     // P-J — il wire governa auth/paginazione anche quando il nome non è «anthropic».
@@ -526,36 +546,36 @@ export function createProviderProbe({ leggiChiave, leggiRuntime, fetchImpl = fet
       if (catalogoAnthropic) { url.searchParams.set('limit', '1000'); if (cursor) url.searchParams.set('after_id', cursor); }
       let response;
       try { response = await fetchImpl(url.toString(), { headers, signal, redirect: 'error' }); }
-      catch { throw new ProviderProbeError(`Catalogo ${etichetta} non raggiungibile.`, 'CATALOG_UNREACHABLE'); }
+      catch { throw new ProviderProbeError(`${etichetta} catalog unreachable.`, 'CATALOG_UNREACHABLE'); }
       if (response.status === 404 && record.catalogo.ripiegoSu404 === 'documentazione') {
         return { provider, fonte: 'documentazione', credenzialeVerificata: false,
-          avviso: `${etichetta}: catalogo remoto HTTP 404; elenco dalla documentazione del ${record.prezzi.data}, accesso ai modelli non verificato.`,
+          avviso: `${etichetta}: remote catalog HTTP 404; list from the documentation dated ${record.prezzi.data}, access to the models not verified.`,
           modelli: record.modelliNoti.map(m => ({ ...metadatiNoti(record, m.id), id: `${provider}:${m.id}`, provider, nome: `${m.nome} · catalogo documentato`, fonte: 'documentazione' })),
         };
       }
-      if (!response.ok) throw new ProviderProbeError(`Catalogo ${etichetta}: HTTP ${response.status}.`, 'CATALOG_UPSTREAM_ERROR');
+      if (!response.ok) throw new ProviderProbeError(`${etichetta} catalog: HTTP ${response.status}.`, 'CATALOG_UPSTREAM_ERROR');
       let data;
       try { data = await response.json(); }
-      catch { throw new ProviderProbeError(`Catalogo ${etichetta} non valido.`, 'CATALOG_UPSTREAM_ERROR'); }
+      catch { throw new ProviderProbeError(`${etichetta} catalog invalid.`, 'CATALOG_UPSTREAM_ERROR'); }
       if (dashscope) {
         const pagina = paginaDashScope(data, numeroPagina);
         if ((totaleAtteso !== undefined && totaleAtteso !== pagina.total)
           || rows.length + pagina.models.length > pagina.total
           || pagina.models.some(m => rows.some(r => r.id === m.model))) {
-          throw new ProviderProbeError('Qwen: paginazione del catalogo incoerente.', 'CATALOG_UPSTREAM_ERROR');
+          throw new ProviderProbeError('Qwen: catalog pagination inconsistent.', 'CATALOG_UPSTREAM_ERROR');
         }
         totaleAtteso = pagina.total;
         rows.push(...pagina.models.map(m => ({ id: m.model, display_name: m.name })));
         cursor = rows.length < totaleAtteso ? ++numeroPagina : null;
-        if (cursor > 20) throw new ProviderProbeError('Qwen: catalogo incompleto dopo venti pagine.', 'CATALOG_UPSTREAM_ERROR');
+        if (cursor > 20) throw new ProviderProbeError('Qwen: catalog incomplete after twenty pages.', 'CATALOG_UPSTREAM_ERROR');
         continue;
       }
       const page = provider === 'gemini' ? data?.models : data?.data;
-      if (!Array.isArray(page) || page.some(row => !row || typeof (provider === 'gemini' ? row.name : row.id) !== 'string')) throw new ProviderProbeError(`Catalogo ${etichetta} non valido.`, 'CATALOG_UPSTREAM_ERROR');
-      if (catalogoAnthropic && data.has_more === true && (typeof data.last_id !== 'string' || !data.last_id)) throw new ProviderProbeError('Paginazione del catalogo incompleta.', 'CATALOG_UPSTREAM_ERROR');
+      if (!Array.isArray(page) || page.some(row => !row || typeof (provider === 'gemini' ? row.name : row.id) !== 'string')) throw new ProviderProbeError(`${etichetta} catalog invalid.`, 'CATALOG_UPSTREAM_ERROR');
+      if (catalogoAnthropic && data.has_more === true && (typeof data.last_id !== 'string' || !data.last_id)) throw new ProviderProbeError('Catalog pagination incomplete.', 'CATALOG_UPSTREAM_ERROR');
       rows.push(...page);
       cursor = provider === 'gemini' ? data.nextPageToken : catalogoAnthropic && data.has_more ? data.last_id : null;
-      if (cursor && (cursors.has(cursor) || cursors.size >= 20)) throw new ProviderProbeError('Paginazione del catalogo non valida.', 'CATALOG_UPSTREAM_ERROR');
+      if (cursor && (cursors.has(cursor) || cursors.size >= 20)) throw new ProviderProbeError('Catalog pagination invalid.', 'CATALOG_UPSTREAM_ERROR');
       cursors.add(cursor);
     } while (cursor);
     const modelli = rows.filter(row => provider === 'gemini' ? row.supportedGenerationMethods?.includes('generateContent') && !/(tts|image)/u.test(row.name) : provider === 'openai' ? /^(gpt-|chatgpt-|o[1-9])/u.test(row.id) && !/(audio|realtime|transcribe|tts|image|codex|instruct)/u.test(row.id) : typeof row.id === 'string').map(row => {

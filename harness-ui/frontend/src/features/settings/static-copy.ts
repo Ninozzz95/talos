@@ -13,64 +13,76 @@
  *   letti il 19/09/2026 — dice che «non trovo chi la usa» **non è una prova**. Qui i due segnali
  *   sono il selettore nel sorgente e il DOM vivo che non lo contiene in nessuno stato.
  */
+import { LINGUA_PSEUDO, linguaCorrenteDiT, t } from '../../components/lingua.js';
+import { TESTI } from '../../i18n/testi/index.js';
 /** Copy owned by the settings layout. Never translate provider responses, file names or input values. */
-export const SETTINGS_COPY: ReadonlyArray<readonly [string, string, string]> = [
-  ['[data-settings-group="design"] > .talos-eyebrow', 'Aspetto', 'Appearance'],
-  ['[data-settings-group="design"] > h3', 'Tema, testo e pannelli', 'Theme, text and panels'],
-  ['[data-settings-group="design"] > p', 'Preferenze di questo browser. I messaggi e i dati del progetto restano sul server locale.', 'Browser preferences. Messages and project data stay on the local server.'],
-  ['[data-settings-group="sfondo"] > .talos-eyebrow', 'Movimento', 'Motion'],
-  ['[data-settings-group="sfondo"] > h3', 'Sfondo e risorse', 'Background and resources'],
-  ['[data-settings-group="sfondo"] > p', 'Regola il movimento e quando sospenderlo. Il risparmio dati e le preferenze del sistema hanno la precedenza.', 'Adjust motion and when it pauses. Data-saving and system preferences take precedence.'],
-  ['[data-settings-group="animazioni"] > .talos-eyebrow', 'Interazioni', 'Interactions'],
-  ['[data-settings-group="animazioni"] > h3', 'Animazioni dell’interfaccia', 'Interface animation'],
-  ['[data-settings-group="animazioni"] > p', 'Scegli un profilo o regola durata, intensità e parti animate.', 'Choose a profile or adjust duration, intensity and animation families.'],
-  ['[data-settings-group="desktop"] > .talos-eyebrow', 'Desktop', 'Desktop'],
-  ['[data-settings-group="desktop"] > h3', 'Spazio di lavoro', 'Workspace'],
-  ['[data-settings-group="desktop"] > p', 'Preferenze della finestra e dello spazio di lettura.', 'Window and reading-space preferences.'],
-  ['#setting-panel-tools > .talos-card > p', 'Regole salvate con la sessione, conservate dopo un ricaricamento.', 'Rules saved with the session and retained after reloading.'],
-  ['#setting-panel-tools [data-open-sheet="permissions"]', 'Gestisci permessi', 'Manage permissions'],
-  ['#setting-panel-tools [data-vaia="capability"]', 'Gestisci strumenti', 'Manage tools'],
+export const SETTINGS_COPY: ReadonlyArray<readonly [string, string]> = [
+  ['[data-settings-group="design"] > .talos-eyebrow', 'impostazioni.copy.appearance'],
+  ['[data-settings-group="design"] > h3', 'impostazioni.copy.themeTextAndPanels'],
+  ['[data-settings-group="design"] > p', 'impostazioni.copy.browserPreferencesMessagesAndProject'],
+  ['[data-settings-group="sfondo"] > .talos-eyebrow', 'impostazioni.copy.motion'],
+  ['[data-settings-group="sfondo"] > h3', 'impostazioni.copy.backgroundAndResources'],
+  ['[data-settings-group="sfondo"] > p', 'impostazioni.copy.adjustMotionAndWhenIt'],
+  ['[data-settings-group="animazioni"] > .talos-eyebrow', 'impostazioni.copy.interactions'],
+  ['[data-settings-group="animazioni"] > h3', 'impostazioni.copy.interfaceAnimation'],
+  ['[data-settings-group="animazioni"] > p', 'impostazioni.copy.chooseAProfileOrAdjust'],
+  ['[data-settings-group="desktop"] > .talos-eyebrow', 'impostazioni.copy.desktop'],
+  ['[data-settings-group="desktop"] > h3', 'impostazioni.copy.workspace'],
+  ['[data-settings-group="desktop"] > p', 'impostazioni.copy.windowAndReadingSpacePreferences'],
+  ['#setting-panel-tools > .talos-card > p', 'impostazioni.copy.rulesSavedWithTheSession'],
+  ['#setting-panel-tools [data-open-sheet="permissions"]', 'impostazioni.copy.managePermissions'],
+  ['#setting-panel-tools [data-vaia="capability"]', 'impostazioni.copy.manageTools'],
   /* ⛔ 23/09/2026 — le due righe di `#setting-panel-providers` sono ritirate con la sezione
      (decisione owner, «Provider e accessi» tolta del tutto): il pannello non esiste più, e un
      selettore che non pesca niente è una riga morta — la stessa ragione delle sette del 19/09. */
-  ['#setting-panel-memoria > .talos-card > p:first-of-type', 'Quanto della finestra del modello è già occupato prima che tu scriva: descrizioni degli strumenti, istruzioni e ricordi. Il resto è disponibile alla conversazione.', 'Context already occupied before you write: tool descriptions, instructions and memories. The remainder is available to the conversation.'],
-  ['#setting-panel-memoria > .talos-card > p:last-child', 'Il conto degli strumenti è una stima del testo dello schema, non dei token che conterà il fornitore.', 'Tool usage is an estimate of schema text, not the tokens the provider will count.'],
-  ['#setting-panel-costi > .talos-card > p:first-of-type', 'Consumo per giorno e modello dalle sessioni registrate su questo computer. Nessuna chiamata a un fornitore.', 'Usage by day and model from sessions recorded on this computer. No provider request is made.'],
-  ['#setting-panel-costi h4:first-of-type', 'Per giorno', 'By day'],
-  ['#setting-panel-costi h4:last-of-type', 'Per modello', 'By model'],
-  ['#costiNota', 'Gli importi in denaro sono dichiarati dal fornitore. Qui si contano i token registrati nelle sessioni, non si stima un addebito.', 'Currency amounts are reported by the provider. This page counts recorded session tokens, not estimated charges.'],
-  ['#setting-panel-privacy > .talos-card:first-child > p', 'Dati locali e preferenze del profilo. I permessi della singola sessione sono in “Strumenti agente e permessi”.', 'Local data and profile preferences. Session permissions are under “Agent tools and permissions”.'],
-  ['#settingsTrasferimento > h3', 'Trasferisci le preferenze', 'Transfer preferences'],
-  ['#settingsTrasferimento > p:first-of-type', 'Esporta o importa un file di preferenze, oppure ripristina i valori iniziali. Queste azioni non trasferiscono le conversazioni.', 'Export or import a preferences file, or restore defaults. These actions do not transfer conversations.'],
-  ['#settingsEsporta', 'Esporta in un file', 'Export to a file'],
-  ['#settingsImporta', 'Importa da un file', 'Import from a file'],
-  ['#settingsRipristina', 'Ripristina i valori iniziali', 'Restore defaults'],
-  ['#settingsSvuotaLocali', 'Svuota le preferenze di questo browser', 'Clear this browser’s preferences'],
-  ['#setting-panel-workspace > .talos-card > p', 'Cartella e dati della sessione corrente.', 'Folder and data for the current session.'],
-  ['#setting-panel-workspace [data-open-panel="inspector"]', 'Apri l’albero dei file', 'Open the file tree'],
-  ['#settingsNuovaSessioneAltrove', 'Nuova sessione in un’altra cartella', 'New session in another folder'],
+  ['#setting-panel-memoria > .talos-card > p:first-of-type', 'impostazioni.copy.contextAlreadyOccupiedBeforeYou'],
+  ['#setting-panel-memoria > .talos-card > p:last-child', 'impostazioni.copy.toolUsageIsAnEstimate'],
+  ['#setting-panel-costi > .talos-card > p:first-of-type', 'impostazioni.copy.usageByDayAndModel'],
+  ['#setting-panel-costi h4:first-of-type', 'impostazioni.copy.byDay'],
+  ['#setting-panel-costi h4:last-of-type', 'impostazioni.copy.byModel'],
+  ['#costiNota', 'impostazioni.copy.currencyAmountsAreReportedBy'],
+  ['#setting-panel-privacy > .talos-card:first-child > p', 'impostazioni.copy.localDataAndProfilePreferences'],
+  ['#settingsTrasferimento > h3', 'impostazioni.copy.transferPreferences'],
+  ['#settingsTrasferimento > p:first-of-type', 'impostazioni.copy.exportOrImportAPreferences'],
+  ['#settingsEsporta', 'impostazioni.copy.exportToAFile'],
+  ['#settingsImporta', 'impostazioni.copy.importFromAFile'],
+  ['#settingsRipristina', 'impostazioni.copy.restoreDefaults'],
+  ['#settingsSvuotaLocali', 'impostazioni.copy.clearThisBrowsersPreferences'],
+  ['#setting-panel-workspace > .talos-card > p', 'impostazioni.copy.folderAndDataForThe'],
+  ['#setting-panel-workspace [data-open-panel="inspector"]', 'impostazioni.copy.openTheFileTree'],
+  ['#settingsNuovaSessioneAltrove', 'impostazioni.copy.newSessionInAnotherFolder'],
   // 01/10/2026: per chiave, non «la prima carta»: la scheda «Aggiornamenti» ora sta in testa e prendeva questo testo
-  ['#setting-panel-account > [data-settings-card="account-controls"] > p', 'Controlli e configurazione dell’agente. Il backup non è disponibile da questa pagina.', 'Agent controls and configuration. Backup is not available from this page.'],
-  ['[data-td-studio-temi] .td-studio-rimando__copia strong', 'Temi e atmosfere', 'Themes and atmospheres'],
-  ['[data-td-studio-temi] .td-studio-rimando__copia p', 'Palette, modalità chiara o scura e sfondi animati si regolano nello studio temi, con anteprima.', 'Adjust palettes, light or dark mode and animated backgrounds in the theme studio, with a preview.'],
+  ['#setting-panel-account > [data-settings-card="account-controls"] > p', 'impostazioni.copy.agentControlsAndConfigurationBackup'],
+  ['[data-td-studio-temi] .td-studio-rimando__copia strong', 'impostazioni.copy.themesAndAtmospheres'],
+  ['[data-td-studio-temi] .td-studio-rimando__copia p', 'impostazioni.copy.adjustPalettesLightOrDark'],
 ];
+/*
+ * 03/10/2026, seconda ondata della lingua: le parole stanno nel dizionario (area `impostazioni`, `copy.*`). `language` resta il
+ *   parametro di chi chiama (la lingua delle Impostazioni); in pseudo-lingua passa da `t()`, che marca, così lo strato 3 vede anche
+ *   queste righe.
+ */
+const parola = (chiave: string, language: string): string =>
+  linguaCorrenteDiT() === LINGUA_PSEUDO ? t(chiave) : (TESTI[language === 'en' ? 'en' : 'it'][chiave] as string);
+/* Le intestazioni della tabella dei costi arrivano dal modello HTML in italiano: la parola di partenza dice quale chiave. */
+const COLONNE_COSTI: Readonly<Record<string, string>> = { Giorno: 'impostazioni.copy.costsColumn.day', Sessioni: 'impostazioni.copy.costsColumn.sessions',
+  Giri: 'impostazioni.copy.costsColumn.turns', Token: 'impostazioni.copy.costsColumn.tokens', 'In cache': 'impostazioni.copy.costsColumn.cached', Modello: 'impostazioni.copy.costsColumn.model' };
 export function localizeSettingsCopy(root: HTMLElement, language: string): void {
-  for (const [selector, it, en] of SETTINGS_COPY) {
+  for (const [selector, chiave] of SETTINGS_COPY) {
     for (const element of root.querySelectorAll<HTMLElement>(selector)) {
       // Listed elements contain copy only. Do not remount forms, counters or server-rendered facts.
-      const value = language === 'en' ? en : it;
+      const value = parola(chiave, language);
       if (element.textContent !== value) element.textContent = value;
     }
   }
   const button = root.querySelector<HTMLElement>('[data-td-studio-temi] button');
   if (button) {
     const text = [...button.childNodes].find(child => child.nodeType === 3 && child.textContent?.trim());
-    if (text) text.textContent = language === 'en' ? ' Open theme studio' : ' Apri studio temi';
+    if (text) text.textContent = ` ${parola('impostazioni.copy.openThemeStudio', language)}`;
   }
   for (const cell of root.querySelectorAll<HTMLTableCellElement>('#setting-panel-costi th')) {
-    const keys = {Giorno:'Day', Sessioni:'Sessions', Giri:'Turns', Token:'Tokens', 'In cache':'Cached', Modello:'Model'};
     const original = cell.dataset.settingsLabel || cell.textContent || '';
     cell.dataset.settingsLabel = original;
-    cell.textContent = language === 'en' ? keys[original as keyof typeof keys] || original : original;
+    const chiave = COLONNE_COSTI[original];
+    cell.textContent = chiave ? parola(chiave, language) : original;
   }
 }

@@ -1,68 +1,79 @@
 /* Contratto dei controlli originali e delle preferenze di densità e lingua. ID e opzioni restano compatibili. */
-export const CAMPI_IMPOSTAZIONI = [
+/*
+ * ⛔ 03/10/2026, corsia S2 della lingua (owner: «ogni singola parola nella app deve essere sia in inglese che in italiano»):
+ *   le FRASI non stanno più qui. `titolo`, l'etichetta di ogni opzione (`opzione[1]`) e `unita` (quando è testo) sono
+ *   getter sul dizionario (`impostazioni.field.<id>.*`, area `impostazioni`), letti nella lingua corrente: in italiano
+ *   restituiscono la frase di prima, identica, e chi la cercava a schermo (le spec, la ricerca delle Impostazioni) la trova
+ *   ancora. Gli id, le chiavi, i valori delle opzioni, i limiti e le unità che non sono testo (`%`, `ms`) restano dati.
+ */
+import { t } from './lingua.js';
+
+const parteDellaChiave = (valore) => String(valore).replace(/[^A-Za-z0-9_]/gu, '_');
+
+function conTesti(campi) {
+  for (const campo of campi) {
+    Object.defineProperty(campo, 'titolo', { enumerable: true, get: () => t(`impostazioni.field.${campo.id}.title`) });
+    for (const opzione of campo.opzioni || []) {
+      if (opzione.length > 1) continue;
+      Object.defineProperty(opzione, 1, { enumerable: true, get: () => t(`impostazioni.field.${campo.id}.option.${parteDellaChiave(opzione[0])}`) });
+    }
+    if (UNITA_DA_TRADURRE.has(campo.id)) Object.defineProperty(campo, 'unita', { enumerable: true, get: () => t(`impostazioni.field.${campo.id}.unit`) });
+  }
+  return campi;
+}
+
+/** I campi la cui unità è una parola (non un simbolo come «%»): la loro `unita` viene dal dizionario. */
+const UNITA_DA_TRADURRE = new Set(['motionStaggerRange']); // «ms»: uguale nelle due lingue, ma passa dal dizionario (strato 3)
+
+export const CAMPI_IMPOSTAZIONI = conTesti([
   {
     "id": "themePresetSelect",
     "chiave": "themePreset",
     "tipo": "select",
-    "titolo": "Tema TALOS",
     "sezione": "appearance",
     "gruppo": "design",
     "opzioni": [
       [
-        "forge",
-        "Forge"
+        "forge"
       ],
       [
-        "paper",
-        "Paper"
+        "paper"
       ],
       [
-        "terminal",
-        "Terminal"
+        "terminal"
       ],
       [
-        "aurora",
-        "Aurora"
+        "aurora"
       ],
       [
-        "glacier",
-        "Glacier"
+        "glacier"
       ],
       [
-        "ember",
-        "Ember"
+        "ember"
       ],
       [
-        "atlas",
-        "Atlas"
+        "atlas"
       ],
       [
-        "noir",
-        "Noir"
+        "noir"
       ],
       [
-        "signal",
-        "Signal"
+        "signal"
       ],
       [
-        "violet",
-        "Violet"
+        "violet"
       ],
       [
-        "claudius",
-        "Claudius"
+        "claudius"
       ],
       [
-        "basicus",
-        "Basicus"
+        "basicus"
       ],
       [
-        "telemetry",
-        "Telemetry"
+        "telemetry"
       ],
       [
-        "calm",
-        "Calm"
+        "calm"
       ]
     ]
   },
@@ -70,21 +81,17 @@ export const CAMPI_IMPOSTAZIONI = [
     "id": "colorModeSelect",
     "chiave": "colorMode",
     "tipo": "select",
-    "titolo": "Modalità colore",
     "sezione": "appearance",
     "gruppo": "design",
     "opzioni": [
       [
-        "system",
-        "Segui il sistema"
+        "system"
       ],
       [
-        "dark",
-        "Scuro"
+        "dark"
       ],
       [
-        "light",
-        "Chiaro"
+        "light"
       ]
     ]
   },
@@ -92,17 +99,14 @@ export const CAMPI_IMPOSTAZIONI = [
     "id": "uiDensitySelect",
     "chiave": "uiDensity",
     "tipo": "select",
-    "titolo": "Densità delle liste",
     "sezione": "appearance",
     "gruppo": "design",
     "opzioni": [
       [
-        "comoda",
-        "Comoda"
+        "comoda"
       ],
       [
-        "compatta",
-        "Compatta"
+        "compatta"
       ]
     ]
   },
@@ -110,21 +114,17 @@ export const CAMPI_IMPOSTAZIONI = [
     "id": "uiLanguageSelect",
     "chiave": "uiLanguage",
     "tipo": "select",
-    "titolo": "Lingua dei menu",
     "sezione": "appearance",
     "gruppo": "design",
     "opzioni": [
       [
-        "sistema",
-        "Segui il sistema"
+        "sistema"
       ],
       [
-        "it",
-        "Italiano"
+        "it"
       ],
       [
-        "en",
-        "English"
+        "en"
       ]
     ]
   },
@@ -132,69 +132,53 @@ export const CAMPI_IMPOSTAZIONI = [
     "id": "sceneOverrideSelect",
     "chiave": "sceneOverride",
     "tipo": "select",
-    "titolo": "Sfondo animato",
     "sezione": "appearance",
     "gruppo": "design",
     "opzioni": [
       [
-        "follow-theme",
-        "Segui il tema"
+        "follow-theme"
       ],
       [
-        "forge",
-        "Forge"
+        "forge"
       ],
       [
-        "paper",
-        "Paper"
+        "paper"
       ],
       [
-        "terminal",
-        "Terminal"
+        "terminal"
       ],
       [
-        "aurora",
-        "Aurora"
+        "aurora"
       ],
       [
-        "glacier",
-        "Glacier"
+        "glacier"
       ],
       [
-        "ember",
-        "Ember"
+        "ember"
       ],
       [
-        "atlas",
-        "Atlas"
+        "atlas"
       ],
       [
-        "noir",
-        "Noir"
+        "noir"
       ],
       [
-        "signal",
-        "Signal"
+        "signal"
       ],
       [
-        "violet",
-        "Violet"
+        "violet"
       ],
       [
-        "claudius",
-        "Claudius"
+        "claudius"
       ],
       [
-        "basicus",
-        "Basicus"
+        "basicus"
       ],
       [
-        "telemetry",
-        "Telemetry"
+        "telemetry"
       ],
       [
-        "calm",
-        "Calm"
+        "calm"
       ]
     ]
   },
@@ -202,29 +186,23 @@ export const CAMPI_IMPOSTAZIONI = [
     "id": "uiFontScaleSelect",
     "chiave": "uiFontScale",
     "tipo": "select",
-    "titolo": "Dimensione interfaccia",
     "sezione": "appearance",
     "gruppo": "design",
     "opzioni": [
       [
-        "xsmall",
-        "Extra piccola"
+        "xsmall"
       ],
       [
-        "small",
-        "Piccola"
+        "small"
       ],
       [
-        "default",
-        "Predefinita"
+        "default"
       ],
       [
-        "large",
-        "Grande"
+        "large"
       ],
       [
-        "xlarge",
-        "Extra grande"
+        "xlarge"
       ]
     ]
   },
@@ -232,25 +210,20 @@ export const CAMPI_IMPOSTAZIONI = [
     "id": "chatFontScaleSelect",
     "chiave": "chatFontScale",
     "tipo": "select",
-    "titolo": "Testo chat",
     "sezione": "chat",
     "gruppo": "design",
     "opzioni": [
       [
-        "xcompact",
-        "Extra piccolo"
+        "xcompact"
       ],
       [
-        "compact",
-        "Piccolo"
+        "compact"
       ],
       [
-        "balanced",
-        "Predefinito"
+        "balanced"
       ],
       [
-        "expanded",
-        "Grande"
+        "expanded"
       ]
     ]
   },
@@ -258,17 +231,14 @@ export const CAMPI_IMPOSTAZIONI = [
     "id": "composerPlusSelect",
     "chiave": "composerPlus",
     "tipo": "select",
-    "titolo": "Apertura del pulsante +",
     "sezione": "chat",
     "gruppo": "design",
     "opzioni": [
       [
-        "drawer",
-        "Cassetto"
+        "drawer"
       ],
       [
-        "menu",
-        "Menu"
+        "menu"
       ]
     ]
   },
@@ -276,17 +246,14 @@ export const CAMPI_IMPOSTAZIONI = [
     "id": "messageStyleSelect",
     "chiave": "messageStyle",
     "tipo": "select",
-    "titolo": "Stile dei messaggi",
     "sezione": "chat",
     "gruppo": "design",
     "opzioni": [
       [
-        "sections",
-        "Sezioni"
+        "sections"
       ],
       [
-        "bubbles",
-        "Bolle"
+        "bubbles"
       ]
     ]
   },
@@ -294,17 +261,14 @@ export const CAMPI_IMPOSTAZIONI = [
     "id": "streamingAnimationSelect",
     "chiave": "streamingAnimation",
     "tipo": "select",
-    "titolo": "Animazione risposta",
     "sezione": "chat",
     "gruppo": "design",
     "opzioni": [
       [
-        "typewriter",
-        "Cursore testo"
+        "typewriter"
       ],
       [
-        "fade",
-        "Dissolvenza"
+        "fade"
       ]
     ]
   },
@@ -312,17 +276,14 @@ export const CAMPI_IMPOSTAZIONI = [
     "id": "windowPresentationSelect",
     "chiave": "windowPresentation",
     "tipo": "select",
-    "titolo": "Pannelli strumenti",
     "sezione": "appearance",
     "gruppo": "design",
     "opzioni": [
       [
-        "drawer",
-        "Pannello laterale"
+        "drawer"
       ],
       [
-        "fullscreen",
-        "Finestra"
+        "fullscreen"
       ]
     ]
   },
@@ -330,7 +291,6 @@ export const CAMPI_IMPOSTAZIONI = [
     "id": "backgroundMotionToggle",
     "chiave": "backgroundMotion",
     "tipo": "checkbox",
-    "titolo": "Sfondo attivo",
     "sezione": "appearance",
     "gruppo": "sfondo"
   },
@@ -338,7 +298,6 @@ export const CAMPI_IMPOSTAZIONI = [
     "id": "interfaceMotionToggle",
     "chiave": "interfaceMotion",
     "tipo": "checkbox",
-    "titolo": "Animazioni interfaccia",
     "sezione": "appearance",
     "gruppo": "sfondo"
   },
@@ -346,7 +305,6 @@ export const CAMPI_IMPOSTAZIONI = [
     "id": "pauseWhenHiddenToggle",
     "chiave": "pauseWhenHidden",
     "tipo": "checkbox",
-    "titolo": "Sospendi finestra nascosta",
     "sezione": "appearance",
     "gruppo": "sfondo"
   },
@@ -354,7 +312,6 @@ export const CAMPI_IMPOSTAZIONI = [
     "id": "respectDataSaverToggle",
     "chiave": "respectDataSaver",
     "tipo": "checkbox",
-    "titolo": "Rispetta risparmio dati",
     "sezione": "appearance",
     "gruppo": "sfondo"
   },
@@ -362,7 +319,6 @@ export const CAMPI_IMPOSTAZIONI = [
     "id": "reducedMotionToggle",
     "chiave": "reducedMotion",
     "tipo": "checkbox",
-    "titolo": "Riduci movimento",
     "sezione": "appearance",
     "gruppo": "sfondo"
   },
@@ -370,29 +326,23 @@ export const CAMPI_IMPOSTAZIONI = [
     "id": "motionModeSelect",
     "chiave": "motionMode",
     "tipo": "select",
-    "titolo": "Renderer",
     "sezione": "appearance",
     "gruppo": "sfondo",
     "opzioni": [
       [
-        "off",
-        "Spento"
+        "off"
       ],
       [
-        "static",
-        "Statico"
+        "static"
       ],
       [
-        "simple",
-        "Semplice"
+        "simple"
       ],
       [
-        "complex",
-        "Complessità alta"
+        "complex"
       ],
       [
-        "adaptive",
-        "Adattivo"
+        "adaptive"
       ]
     ]
   },
@@ -400,25 +350,20 @@ export const CAMPI_IMPOSTAZIONI = [
     "id": "motionQualitySelect",
     "chiave": "motionQuality",
     "tipo": "select",
-    "titolo": "Qualità",
     "sezione": "appearance",
     "gruppo": "sfondo",
     "opzioni": [
       [
-        "low",
-        "Bassa"
+        "low"
       ],
       [
-        "balanced",
-        "Bilanciata"
+        "balanced"
       ],
       [
-        "high",
-        "Alta"
+        "high"
       ],
       [
-        "adaptive",
-        "Adattiva"
+        "adaptive"
       ]
     ]
   },
@@ -426,7 +371,6 @@ export const CAMPI_IMPOSTAZIONI = [
     "id": "motionSpeedRange",
     "chiave": "motionSpeed",
     "tipo": "range",
-    "titolo": "Velocità",
     "sezione": "appearance",
     "gruppo": "sfondo",
     "min": 25,
@@ -437,7 +381,6 @@ export const CAMPI_IMPOSTAZIONI = [
     "id": "motionIntensityRange",
     "chiave": "motionIntensity",
     "tipo": "range",
-    "titolo": "Intensità",
     "sezione": "appearance",
     "gruppo": "sfondo",
     "min": 0,
@@ -448,7 +391,6 @@ export const CAMPI_IMPOSTAZIONI = [
     "id": "motionGlowRange",
     "chiave": "motionGlow",
     "tipo": "range",
-    "titolo": "Bagliore",
     "sezione": "appearance",
     "gruppo": "sfondo",
     "min": 0,
@@ -459,7 +401,6 @@ export const CAMPI_IMPOSTAZIONI = [
     "id": "motionDensityRange",
     "chiave": "motionDensity",
     "tipo": "range",
-    "titolo": "Densità",
     "sezione": "appearance",
     "gruppo": "sfondo",
     "min": 25,
@@ -470,7 +411,6 @@ export const CAMPI_IMPOSTAZIONI = [
     "id": "motionDepthRange",
     "chiave": "motionDepth",
     "tipo": "range",
-    "titolo": "Profondità",
     "sezione": "appearance",
     "gruppo": "sfondo",
     "min": 0,
@@ -481,7 +421,6 @@ export const CAMPI_IMPOSTAZIONI = [
     "id": "motionTrailsRange",
     "chiave": "motionTrails",
     "tipo": "range",
-    "titolo": "Scie",
     "sezione": "appearance",
     "gruppo": "sfondo",
     "min": 0,
@@ -492,7 +431,6 @@ export const CAMPI_IMPOSTAZIONI = [
     "id": "motionContrastRange",
     "chiave": "motionContrast",
     "tipo": "range",
-    "titolo": "Contrasto",
     "sezione": "appearance",
     "gruppo": "sfondo",
     "min": 0,
@@ -503,7 +441,6 @@ export const CAMPI_IMPOSTAZIONI = [
     "id": "motionParallaxRange",
     "chiave": "motionParallax",
     "tipo": "range",
-    "titolo": "Parallasse",
     "sezione": "appearance",
     "gruppo": "sfondo",
     "min": 0,
@@ -514,29 +451,23 @@ export const CAMPI_IMPOSTAZIONI = [
     "id": "motionProfileSelect",
     "chiave": "motionProfile",
     "tipo": "select",
-    "titolo": "Profilo",
     "sezione": "appearance",
     "gruppo": "animazioni",
     "opzioni": [
       [
-        "preset",
-        "Predefinito"
+        "preset"
       ],
       [
-        "minimal",
-        "Minimale"
+        "minimal"
       ],
       [
-        "expressive",
-        "Espressivo"
+        "expressive"
       ],
       [
-        "custom",
-        "Personalizzato"
+        "custom"
       ],
       [
-        "off",
-        "Spento"
+        "off"
       ]
     ]
   },
@@ -544,29 +475,23 @@ export const CAMPI_IMPOSTAZIONI = [
     "id": "motionEasingSelect",
     "chiave": "motionEasing",
     "tipo": "select",
-    "titolo": "Curva",
     "sezione": "appearance",
     "gruppo": "animazioni",
     "opzioni": [
       [
-        "precise",
-        "Precisa"
+        "precise"
       ],
       [
-        "soft",
-        "Morbida"
+        "soft"
       ],
       [
-        "elastic-light",
-        "Elastica leggera"
+        "elastic-light"
       ],
       [
-        "linear",
-        "Lineare"
+        "linear"
       ],
       [
-        "cinematic",
-        "Cinematografica"
+        "cinematic"
       ]
     ]
   },
@@ -574,7 +499,6 @@ export const CAMPI_IMPOSTAZIONI = [
     "id": "motionDurationRange",
     "chiave": "motionDuration",
     "tipo": "range",
-    "titolo": "Durata",
     "sezione": "appearance",
     "gruppo": "animazioni",
     "min": 50,
@@ -585,7 +509,6 @@ export const CAMPI_IMPOSTAZIONI = [
     "id": "motionUiIntensityRange",
     "chiave": "motionUiIntensity",
     "tipo": "range",
-    "titolo": "Intensità UI",
     "sezione": "appearance",
     "gruppo": "animazioni",
     "min": 0,
@@ -596,7 +519,6 @@ export const CAMPI_IMPOSTAZIONI = [
     "id": "motionStaggerRange",
     "chiave": "motionStagger",
     "tipo": "range",
-    "titolo": "Ritardo progressivo",
     "sezione": "appearance",
     "gruppo": "animazioni",
     "min": 0,
@@ -607,7 +529,6 @@ export const CAMPI_IMPOSTAZIONI = [
     "id": "motionWindowsToggle",
     "chiave": "motionWindows",
     "tipo": "checkbox",
-    "titolo": "Finestre",
     "sezione": "appearance",
     "gruppo": "animazioni"
   },
@@ -615,7 +536,6 @@ export const CAMPI_IMPOSTAZIONI = [
     "id": "motionSurfacesToggle",
     "chiave": "motionSurfaces",
     "tipo": "checkbox",
-    "titolo": "Superfici",
     "sezione": "appearance",
     "gruppo": "animazioni"
   },
@@ -623,7 +543,6 @@ export const CAMPI_IMPOSTAZIONI = [
     "id": "motionNavigationToggle",
     "chiave": "motionNavigation",
     "tipo": "checkbox",
-    "titolo": "Navigazione",
     "sezione": "appearance",
     "gruppo": "animazioni"
   },
@@ -631,7 +550,6 @@ export const CAMPI_IMPOSTAZIONI = [
     "id": "motionComposerToggle",
     "chiave": "motionComposer",
     "tipo": "checkbox",
-    "titolo": "Composer",
     "sezione": "appearance",
     "gruppo": "animazioni"
   },
@@ -639,7 +557,6 @@ export const CAMPI_IMPOSTAZIONI = [
     "id": "motionMessagesToggle",
     "chiave": "motionMessages",
     "tipo": "checkbox",
-    "titolo": "Messaggi",
     "sezione": "appearance",
     "gruppo": "animazioni"
   },
@@ -647,7 +564,6 @@ export const CAMPI_IMPOSTAZIONI = [
     "id": "motionFeedbackToggle",
     "chiave": "motionFeedback",
     "tipo": "checkbox",
-    "titolo": "Feedback",
     "sezione": "appearance",
     "gruppo": "animazioni"
   },
@@ -655,7 +571,6 @@ export const CAMPI_IMPOSTAZIONI = [
     "id": "immersiveHeaderToggle",
     "chiave": "immersiveHeader",
     "tipo": "checkbox",
-    "titolo": "Intestazione immersiva",
     "sezione": "appearance",
     "gruppo": "desktop"
   },
@@ -663,7 +578,6 @@ export const CAMPI_IMPOSTAZIONI = [
     "id": "chatFullWidthToggle",
     "chiave": "chatFullWidth",
     "tipo": "checkbox",
-    "titolo": "Chat a tutta larghezza",
     "sezione": "chat",
     "gruppo": "chat"
   },
@@ -671,29 +585,24 @@ export const CAMPI_IMPOSTAZIONI = [
     "id": "askTimeoutSelect",
     "chiave": "askTimeout",
     "tipo": "select",
-    "titolo": "Scadenza delle domande",
     "sezione": "chat",
     "gruppo": "domande",
     "opzioni": [
       [
-        "none",
-        "Nessuna"
+        "none"
       ],
       [
-        "60",
-        "1 minuto"
+        "60"
       ],
       [
-        "300",
-        "5 minuti"
+        "300"
       ],
       [
-        "600",
-        "10 minuti"
+        "600"
       ]
     ]
   }
-];
+]);
 /*
  * ⛔ 23/09/2026 — NOVE, NON PIÙ DIECI. Decisione owner: «Provider e accessi» tolta del tutto
  *   («Toglierla del tutto»): i fornitori si gestiscono SOLO in «Laboratorio modelli» → scheda
@@ -708,13 +617,13 @@ export const CAMPI_IMPOSTAZIONI = [
  * puntano lì — ma a schermo è «Sicurezza e privacy», la sezione a sé di D13.
  */
 export const SEZIONI_IMPOSTAZIONI = [
-  { "id": "appearance", "titolo": "Aspetto e movimento", "gruppo": "comportamento" },
-  { "id": "chat", "titolo": "Chat e composer", "gruppo": "comportamento" },
-  { "id": "tools", "titolo": "Strumenti agente e permessi", "gruppo": "comportamento" },
-  { "id": "memoria", "titolo": "Memoria e contesto", "gruppo": "comportamento" },
-  { "id": "privacy", "titolo": "Sicurezza e privacy", "gruppo": "comportamento" },
-  { "id": "models", "titolo": "Laboratorio modelli", "gruppo": "infrastruttura" },
-  { "id": "costi", "titolo": "Costi e consumo", "gruppo": "infrastruttura" },
-  { "id": "workspace", "titolo": "File e workspace", "gruppo": "infrastruttura" },
-  { "id": "account", "titolo": "Account, Doctor e backup", "gruppo": "infrastruttura" }
-];
+  { "id": "appearance", "gruppo": "comportamento" },
+  { "id": "chat", "gruppo": "comportamento" },
+  { "id": "tools", "gruppo": "comportamento" },
+  { "id": "memoria", "gruppo": "comportamento" },
+  { "id": "privacy", "gruppo": "comportamento" },
+  { "id": "models", "gruppo": "infrastruttura" },
+  { "id": "costi", "gruppo": "infrastruttura" },
+  { "id": "workspace", "gruppo": "infrastruttura" },
+  { "id": "account", "gruppo": "infrastruttura" }
+].map((sezione) => Object.defineProperty(sezione, 'titolo', { enumerable: true, get: () => t(`impostazioni.sections.${sezione.id}.title`) }));
