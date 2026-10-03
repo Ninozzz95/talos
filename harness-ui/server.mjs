@@ -774,9 +774,13 @@ async function startServer() {
     const ownerRuntimeState = {
       configurato: Boolean(config.ownerRuntimeModule),
       pronto: snapshot?.status === 'available',
-      dettaglio: snapshot?.status === 'available'
-        ? 'Runtime agente pronto.'
-        : (taskCatalogError?.message || 'Il runtime agente non è pronto per tutte le funzioni richieste.'),
+      /* K4b (03/10/2026): frase inglese di riserva + chiave del dizionario (area `server`); l'errore del catalogo è già
+         inglese e non ha chiave: si dice com'è. */
+      ...(snapshot?.status === 'available'
+        ? { dettaglio: 'Agent runtime ready.', dettaglioChiave: 'server.doctor.runtime.ready' }
+        : taskCatalogError?.message
+          ? { dettaglio: taskCatalogError.message }
+          : { dettaglio: 'The agent runtime is not ready for all the required features.', dettaglioChiave: 'server.doctor.runtime.notReady' }),
     };
     return diagnosi({
       chiaveConfigurata: providerStore.hasKey('openrouter'), cartelleProgetto: config.cartelleProgetto,
@@ -784,7 +788,9 @@ async function startServer() {
       labsAccesi: config.labs,
       providerRows: providerStore.listPublic(), providerStoreAvailable: Boolean(providerKeyring),
       ownerRuntime: ownerRuntimeState,
-      catalogoTask: { disponibile: Boolean(taskCatalogProvider), dettaglio: taskCatalogProvider ? 'Elenco attività predefinite disponibile.' : 'L’elenco delle attività predefinite non è disponibile in questa installazione.' },
+      catalogoTask: taskCatalogProvider
+        ? { disponibile: true, dettaglio: 'Preset tasks list available.', dettaglioChiave: 'server.doctor.catalog.available' }
+        : { disponibile: false, dettaglio: 'The preset tasks list is not available in this installation.', dettaglioChiave: 'server.doctor.catalog.unavailable' },
       sessioniPersistenza: typeof sessionRegistry.statoPersistenza === 'function' ? sessionRegistry.statoPersistenza() : undefined,
       scratch: await statoScratch().catch(() => undefined),
       /* 24/09/2026 — come il negozio pubblica l'intestazione di una sessione in QUESTA cartella ('link' | 'senza-link' | null

@@ -50,7 +50,7 @@ import { montaSelettoreGrafo, montaSelettoreRail } from '../components/grafo-sor
 import { montaCronologiaWorkflow } from '../components/workflow-history.js';
 import { applicaDecisionePiano, createPlanArtifact, parsePlanEvent } from '../components/plan-artifact.js';
 import { bozzaDaiTetti, creaCardProposta, disegnaCardProposta, leggiRicevutaProposta } from '../components/workflow-proposal-card.js'; // F3-33a, 25/09/2026
-import { creaClientProposta, testoErroreComando, TESTO_AMBIGUO } from '../components/workflow-proposal-client.js';
+import { creaClientProposta, testoErroreComando, testoAmbiguo } from '../components/workflow-proposal-client.js';
 import { renderizzaMarkdown } from '../components/markdown.js'; // BC-29 (12/09): il render Markdown della chat, uno solo per chat, note, libreria e ricerca
 import { confermaModale } from '../components/modale-td.js'; // 11/09 lotto G: al posto di window.confirm()
 import { montaScorciatoiaTemi } from '../components/theme-studio.js'; // 11/09 lotto F
@@ -58,6 +58,8 @@ import { aggiornaBoard, creaRigaBoard, cartellaDaExport } from '../components/bo
 import { applicaCollocazioneToast, creaPilaToast } from '../components/toast.js';
 import { creaAvvisiEliminazione } from '../components/session-deletion-feedback.js';
 import { normalizzaRicevutaOutput, creaLettoreOutput } from '../components/process-output.js';
+import { eventoPerLoSchermo } from '../contracts/confine-dati.js'; // F-027 (owner 02/10/2026): il confine dei dati è per il modello
+import { domandaContenutoSospetto, segnaContenutoSospetto } from '../components/contenuto-sospetto.js'; // F-027: il segno sulla riga e la nota nel dettaglio
 import { creaSorveglianzaConnessione, aggiornaStatoConnessione } from '../components/connessione.js'; // 05/9 T-15: stato onesto della connessione
 import { aggiornaPannelloNotifiche, apriPannelloNotifiche, nomeCampanella, deveAvvisareFuoriDallaFinestra, testoNotificaSistema, statoConsensoNotifiche } from '../components/notifiche.js'; // 06/9 T-17: pannello «Aspetta te» del mockup; 06/9 G29: notifica di sistema
 import { aggiornaInstallati, montaInstallati, gb } from '../components/modelli-installati.js'; // 06/9 B6.8: scheda «Installati» del Model Lab
@@ -71,8 +73,10 @@ import { contaDiff } from '../components/review.js'; // 06/9 B2: +N −M dei fil
 import { nomeUmanoAttrezzo as nomeUmanoAttrezzoCondiviso, nomeDiRipiegoAttrezzo, nomeLeggibileAttrezzo, fraseSpecie, origineAvvisoPlugin } from '../components/nomi-attrezzi.js'; // BC-59 (17/09): la mappa dei nomi umani vive in UN posto solo — qui c'era una copia, e si era fermata al 12/09
 import { collegaRidimensionamentoDialoghi, preparaMisuraDialogo } from '../components/dialoghi.js'; // 06/9 B7: dialoghi ridimensionabili e ricordati
 import { creaSchedeTerminale, ETICHETTA_STATO as ETICHETTA_STATO_TERMINALE, TESTI as TESTI_TERMINALE, prossimaAttivaDopoChiusura, SCHEDE_MASSIME as SCHEDE_MASSIME_TERMINALE } from '../components/terminale.js'; // 06/9 B1: il Terminale a schede (K-G)
-import { LINGUE as LINGUE_MENU, risolviLingua, applicaLingua, etichettaLinguaRisolta, t as tr, tn as trn, EVENTO_LINGUA } from '../components/lingua.js'; // 06/9 B8 + P-i18n: la lingua dei menu e delle superfici
+import { LINGUE as LINGUE_MENU, risolviLingua, linguaDaIndirizzo, applicaLingua, etichettaLinguaRisolta, t as tr, tn as trn, elenco as elencoNellaLingua, linguaCorrenteDiT, EVENTO_LINGUA } from '../components/lingua.js'; // 06/9 B8 + P-i18n: la lingua dei menu e delle superfici
 import { ritraduciImpostazioni } from '../components/impostazioni.js'; // P-i18n
+import { testoDelCampo } from '../components/testo-server.js'; // K4b: i testi del server nella lingua dell'interfaccia
+import { TESTI } from '../i18n/testi/index.js'; // le frasi che il codice RICONOSCE (non solo scrive) si confrontano con tutte e due le lingue
 import { creaBrowser, prossimaDopoChiusura as prossimaDopoChiusuraBrowser, MASSIMO_SCHEDE as MASSIMO_SCHEDE_BROWSER, localeAnnotabile, hostDaUrl } from '../components/browser.js'; // 06/9 K-I: il Browser a schede
 import { impacchetta as impacchettaAnnotazioni } from '../components/annotazioni.js'; // Browser con annotazione 06/9
 import { aggiornaConteggiNav } from '../components/nav-item.js'; // 05/9 Fase 2: NavItem — i badge dei Luoghi sono dati veri
@@ -84,7 +88,7 @@ import { montaConversazioneFiglia } from '../components/conversazione-figlia.js'
    ⛔ `rigaEsitoDaMostrare` e `senzaIntestazione` arrivano dallo STESSO contratto (20/09): la regola
      «si dichiara l'eccezione» e la forma della riga stanno in un posto solo, non in una quarta
      regex scritta qui — è il difetto che il revisore avversario ha misurato. */
-import { esitoDichiaraFallimento, leggiEsitoComando, motivoDomandaDaCorreggere, rigaDiStatoComando, rigaEsitoDaMostrare, senzaIntestazione } from '../components/esito-comando.js';
+import { esitoDichiaraFallimento, leggiEsitoComando, motivoDomandaDaCorreggere, provaSenzaSuite, provaSenzaTestEseguiti, rigaDiStatoComando, rigaEsitoDaMostrare, senzaIntestazione } from '../components/esito-comando.js';
 import { adattaScala, collegaScalaComposer } from '../components/scala-composer.js'; // 26/09, difetto (3): la scala del composer si sceglie misurando
 import { raggruppaInHunk } from '../components/diff-hunk.js'; // PO-11 (10/09): i pezzi del diff
 import { leggiRisultatiRicerca, creaRisultatiRicerca, creaPillolaFonti, apriModaleFonti } from '../components/risultati-ricerca.js'; // 10/09: la ricerca web si legge come una ricerca
@@ -102,8 +106,8 @@ import { aggiornaPiedeChat, dettaglioUtile, etichettaPermesso, fondoInVista, nom
 import { progettiConSessioni } from '../components/progetti.js'; // 06/9: la voce «Progetti» aveva un contatore e nessuna pagina (il montaggio è in sezioni-adattatori.js)
 import { collegaTooltip } from '../components/tooltip.js'; // 06/9 O-40: i suggerimenti sono nostri, col tema e con la tastiera
 import { porteLateraliAperte } from '../components/permessi.js'; // 06/9 T03-D2: chiudere «scrivi» non chiude il terminale, e va detto
-import { provenienzaDelGiroFinito, spiegaErrore, spiegaRifiutoAttrezzo, tonoDelTick, vestizioneErrore } from '../components/errori.js'; // 09/09: badge, titolo e tono li decide la FAMIGLIA della spiegazione, non un ramo scritto qui
-import { ETICHETTA_INTERRUTTORE_RAGIONAMENTO, argomentoDelRagionamento, etichettaRagionamento, formattaDurataRagionamento, argomentoPuoCambiare } from '../components/ragionamento.js'; // 13/09 sera: il ragionamento si comprime invece di sparire, e mentre ragiona dice su cosa
+import { provenienzaDelGiroFinito, spiegaErrore, spiegaRifiutoAttrezzo, testoErroreServer, tonoDelTick, vestizioneErrore } from '../components/errori.js'; // 09/09: badge, titolo e tono li decide la FAMIGLIA della spiegazione, non un ramo scritto qui
+import { argomentoDelRagionamento, etichettaRagionamento, formattaDurataRagionamento, argomentoPuoCambiare } from '../components/ragionamento.js'; // 13/09 sera: il ragionamento si comprime invece di sparire, e mentre ragiona dice su cosa
 import { DATI_VOCE, creaVistaSegmento } from '../components/attivita-segmento.js'; // R4 (24/09): il segmento compatto — segmento → voce → dettaglio, i dati delle voci fuori dal DOM
 import { descriviCoda, normalizzaStatoCoda, descriviRisultatoDelega } from '../components/coda-messaggi.js'; // 14/09: la coda è della sessione — le sue parole in un posto solo
 // 06/9 C24: la pagina delle Note — la monta `sezioni-adattatori.js`, che riusa `note.js`
@@ -167,6 +171,10 @@ import { aggiornaWorkspaceFooter, fornitoreDelModello, testiPiede as testiPiedeW
   function HOST() { return window.__talosHarnessHost || document.documentElement; }
   const $ = (selector, root = ROOT()) => root.querySelector(selector);
   const $$ = (selector, root = ROOT()) => [...root.querySelectorAll(selector)];
+  /* La lingua dei NUMERI e delle ORE segue quella dei testi: in inglese «1,234» e «02:35 PM», non «1.234» e «14:35». Anche la voce (dettatura e lettura). */
+  const localeUI = () => (linguaCorrenteDiT() === 'it' ? 'it-IT' : 'en-US');
+  /* La frase che il composer manda quando si allega SOLO un'immagine: la bolla che la porta si nasconde, e una cronologia rigiocata può essere nell'altra lingua. */
+  const FRASI_SOLO_IMMAGINE = new Set([TESTI.it['app.attachments.promptDescribeImage'], TESTI.en['app.attachments.promptDescribeImage']]);
   /*
    * Piano `procedi-col-generare-un-snoopy-neumann.md`, Fase 3 (`adb reverse`).
    * Su desktop questa pagina gira DENTRO ciò che `server.mjs` serve da
@@ -225,7 +233,7 @@ import { aggiornaWorkspaceFooter, fornitoreDelModello, testiPiede as testiPiedeW
     effort: null,
     environment: null,
     // ⛔ 27/8, trovato dalla pipeline QA visiva: la card "Session topology" leggeva questo valore come stato iniziale — restava "Refactor auth flow" finché nessuna funzione lo toccava, cioè sempre, all'apertura della pagina.
-    session: 'Nessuna sessione',
+    session: tr('app.sessions.none'),
     running: true,
     /*
      * ⭐⭐⭐ 27/8, secondo giro — owner: "nella modale nuova sessione non
@@ -807,7 +815,7 @@ import { aggiornaWorkspaceFooter, fornitoreDelModello, testiPiede as testiPiedeW
   let sessionListRefreshTimer = null;
 
   if (HOST().classList.contains('talos-embedded')) {
-    embeddedSessionBack?.setAttribute('aria-label', 'Torna alle sessioni Codice');
+    embeddedSessionBack?.setAttribute('aria-label', tr('app.shell.backToCodeSessions'));
   }
 
   const motionAnimations = new Set();
@@ -870,7 +878,12 @@ import { aggiornaWorkspaceFooter, fornitoreDelModello, testiPiede as testiPiedeW
     const scroller = scrollerConversazione(conversation);
     const haMessaggi = !!conversation.querySelector('.message, .talos-turn');
     let spazio = 0;
-    if (haMessaggi) {
+    /* Owner 03/10/2026 («Sì, va stretto»): con una domanda di TALOS agganciata sopra il composer il giro è fermo e aspetta la
+       persona — niente scorre, e la riserva della «coda a metà pagina» lasciava ~134 px vuoti fra la conversazione e la
+       domanda. Finché la domanda è lì, la conversazione finisce subito sopra di lei. */
+    const dock = document.getElementById('userQuestionDock');
+    const domandaAgganciata = Boolean(dock && !dock.hidden && dock.childElementCount > 0);
+    if (haMessaggi && !domandaAgganciata) {
       const visibile = scroller?.clientHeight || conversation.clientHeight;
       const riservaAttuale = parseFloat(getComputedStyle(conversation).paddingBottom) || 0;
       const naturale = (scroller?.scrollHeight ?? conversation.scrollHeight) - riservaAttuale;
@@ -1740,8 +1753,8 @@ import { aggiornaWorkspaceFooter, fornitoreDelModello, testiPiede as testiPiedeW
       if (surface.querySelector('.demo-surface-badge')) return;
       const badge = document.createElement('span');
       badge.className = 'demo-surface-badge';
-      badge.textContent = 'Demo UI · non collegato';
-      badge.setAttribute('aria-label', `Demo UI non collegata: ${surface.dataset.demoSurface || 'superficie'}`);
+      badge.textContent = tr('app.demo.badge');
+      badge.setAttribute('aria-label', tr('app.demo.badgeLabel', { superficie: surface.dataset.demoSurface || 'superficie' }));
       if (surface.classList.contains('chat-view')) surface.querySelector('.conversation')?.prepend(badge);
       else if (surface.classList.contains('sessions-panel')) surface.querySelector('.brand-row')?.after(badge);
       else surface.prepend(badge);
@@ -1905,6 +1918,12 @@ import { aggiornaWorkspaceFooter, fornitoreDelModello, testiPiede as testiPiedeW
     resetEmbeddedTopbarScroll(view === 'chat' ? chatConversation : target);
     workspaceUI?.update(view);
     window.__talosHarnessHostViewChange?.(view);
+    caricaContenutoVista(view);
+  }
+
+  /** Ciò che una vista carica e disegna quando la si apre. Fuori da `setView` dal 03/10/2026: il cambio di lingua lo richiama
+      sulla vista corrente (`ridisegnaNellaLinguaNuova`). */
+  function caricaContenutoVista(view) {
     if (view === 'settings') { inizializzaModelLab(); mostraLaboratorioInAttesa(); }
     if (view === 'dashboard') ensureSessionsBoard();
     if (view === 'ricerca') caricaPannelloRicerca({ pagina: true }); // 05/9 Fase 2: attiva la sola pagina Ricerca
@@ -1946,7 +1965,7 @@ import { aggiornaWorkspaceFooter, fornitoreDelModello, testiPiede as testiPiedeW
     const schermo = $('#schermoProgetti');
     if (!schermo) return;
     const stato = $('[data-progetti-stato]', schermo);
-    if (stato) stato.textContent = 'Leggo i progetti…';
+    if (stato) stato.textContent = tr('app.projects.reading');
     try {
       const [elenco, sessioni] = await Promise.all([
         apiGet('/api/v1/projects'),
@@ -1958,7 +1977,7 @@ import { aggiornaWorkspaceFooter, fornitoreDelModello, testiPiede as testiPiedeW
       });
     } catch (errore) {
       montaProgetti(schermo, []);
-      if (stato) stato.textContent = `I progetti non si leggono: ${messaggioErroreUtente(errore, 'riprova fra un momento')}`;
+      if (stato) stato.textContent = tr('app.projects.readFailed', { motivo: messaggioErroreUtente(errore, tr('app.errors.retryShortly')) });
     }
   }
 
@@ -1970,16 +1989,16 @@ import { aggiornaWorkspaceFooter, fornitoreDelModello, testiPiede as testiPiedeW
     if (!id) {
       noteCaricate = [];
       montaNote(schermo, [], { cerca: '' });
-      if (stato) stato.textContent = 'Apri una sessione per vedere le note.';
+      if (stato) stato.textContent = tr('app.notes.openSessionHint');
       return;
     }
-    if (stato) stato.textContent = 'Leggo le note…';
+    if (stato) stato.textContent = tr('app.notes.reading');
     try {
       const dati = await apiGet(`/api/v1/sessions/${encodeURIComponent(id)}/notes`);
       noteCaricate = Array.isArray(dati?.note) ? dati.note : [];
     } catch (errore) {
       noteCaricate = [];
-      if (stato) stato.textContent = `Le note non si leggono: ${messaggioErroreUtente(errore, 'riprova fra un momento')}`;
+      if (stato) stato.textContent = tr('app.notes.readFailed', { motivo: messaggioErroreUtente(errore, tr('app.errors.retryShortly')) });
       return;
     }
     disegnaPaginaNote();
@@ -1995,7 +2014,7 @@ import { aggiornaWorkspaceFooter, fornitoreDelModello, testiPiede as testiPiedeW
       onAggiorna: () => void caricaPaginaNote(),
       onCopia: (nota) => copyText(`${nota?.titolo || ''}
 
-${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
+${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
       /*
        * ⭐ 12/09 — il CRUD della persona. Le stesse quattro iniezioni che la Libreria ha dal 10/09:
        *   la sessione (senza, nessun indirizzo esiste e i comandi non compaiono), la rete, il menu
@@ -2009,7 +2028,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         void caricaPaginaNote();
         void aggiornaContatoriLuoghi(state.sessionSelection.available?.size ?? 0);
       },
-      copia: (testo) => copyText(testo, 'Nota copiata'),
+      copia: (testo) => copyText(testo, tr('app.notes.copied')),
       rendiMarkdown: renderizzaMarkdownSemplice,
     });
   }
@@ -2185,7 +2204,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       velo = document.createElement('button');
       velo.type = 'button';
       velo.className = 'td-scrim';
-      velo.setAttribute('aria-label', 'Chiudi la navigazione');
+      velo.setAttribute('aria-label', tr('app.shell.closeNavigation'));
       velo.addEventListener('click', () => chiudiCassettoBarra());
       document.body.append(velo);
     }
@@ -2356,10 +2375,10 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         handle.className = `dialog-resize-handle dialog-resize-handle--${axis}`;
         handle.dataset.dialogResize = axis;
         handle.setAttribute('aria-label', axis === 'width'
-          ? 'Ridimensiona larghezza finestra'
+          ? tr('app.shell.resizeWidth')
           : axis === 'height'
-            ? 'Ridimensiona altezza finestra'
-            : 'Ridimensiona larghezza e altezza finestra');
+            ? tr('app.shell.resizeHeight')
+            : tr('app.shell.resizeBoth'));
         (resizeMount || dialog).appendChild(handle);
 
         handle.addEventListener('pointerdown', (event) => {
@@ -2603,6 +2622,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     },
     suCambio: (stato, dettagli) => {
       aggiornaStatoConnessione(barraStatoChat, stato, dettagli);
+      if (stato === 'ricollegato') linguaDettaAlServer.clear(); // K3b: un server ripartito non sa più la lingua dell'interfaccia
       /*
        * ⛔⛔⛔ 06/9, CB-20-bis — QUI stava il buco: la sorveglianza sapeva che il server
        * non risponde e lo scriveva SOLO nella barra in fondo; la chat, che è la parte
@@ -2621,11 +2641,11 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       document.documentElement.dataset.contatto = (stato === 'riconnessione' || stato === 'caduto') ? 'perso' : 'ok';
       const elenco = $('#sessionList') || $('.talos-sidebar__sessions');
       if (elenco) elenco.title = document.documentElement.dataset.contatto === 'perso'
-        ? 'Il server non risponde: questo elenco è fermo all’ultima lettura riuscita.'
+        ? tr('app.connection.listStale')
         : '';
       syncRunComposerState();
       // una ripresa nuova prende il posto della precedente, non si impila (26/09, `components/toast.js` `chiave`)
-      if (stato === 'ricollegato') toast('Collegato di nuovo', 'Il server risponde: puoi continuare.', { chiave: 'connessione' });
+      if (stato === 'ricollegato') toast(tr('app.connection.backTitle'), tr('app.connection.backBody'), { chiave: 'connessione' });
     },
     suRicollegato: () => {
       const s = state.realSession.eventSource;
@@ -2654,7 +2674,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     try {
       sessione = (senzaPassiWorkflow((await apiGet('/api/v1/sessions')).items) || []).find((voce) => voce?.sessionId === id) ?? null;
     } catch { sessione = null; }
-    if (!sessione) { toast(tr('Questa conversazione non c’è più.')); return; }
+    if (!sessione) { toast(tr('app.sessions.conversationGone')); return; }
     passaASessione(sessione.sessionId, sessione.taskId || sessione.sessionId, sessione.nome || sessione.taskId, normalizzaModelloSessione(sessione), sessione);
   }
   /** fetch delle API centrali: ogni esito informa la sorveglianza (T-15). */
@@ -2759,7 +2779,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   function costruisciBloccoCodice(testoCodice, linguaggioDichiarato, chiuso) {
     return creaBloccoCodice(
       { testo: testoCodice, linguaggio: linguaggioDichiarato, chiuso },
-      { copia: (testo) => copyText(testo, 'Codice copiato') },
+      { copia: (testo) => copyText(testo, tr('app.common.codeCopied')) },
     );
   }
 
@@ -2845,22 +2865,22 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   }
 
   function boardErrorMessage(error) {
-    return messaggioErroreUtente(error, 'Il server locale non risponde. Apri Codice sul PC e riprova.');
+    return messaggioErroreUtente(error, tr('app.errors.serverDownOpenCode'));
   }
 
   /** Copy per persone: i dettagli tecnici restano nel Doctor e nel log. */
-  function messaggioErroreUtente(error, fallback = 'La richiesta non è riuscita. Riprova.') {
+  function messaggioErroreUtente(error, fallback = tr('app.errors.requestFailed')) {
     const messaggi = {
-      PROJECTS_NOT_CONFIGURED: 'Non c’è ancora una cartella di progetto disponibile. Apri Doctor per capire cosa manca.',
-      CONFIG_INVALID: 'La configurazione non è pronta. Apri Doctor per vedere come sistemarla.',
-      RUNTIME_NOT_AVAILABLE: 'Questa funzione non è ancora disponibile. Apri Doctor per controllare lo stato.',
-      METHOD_NOT_ALLOWED: 'Questa parte di TALOS deve essere aggiornata. Apri Doctor, aggiorna il servizio locale e riprova.',
-      WORKSPACE_LAUNCH_NOT_AVAILABLE: 'Questo collegamento alla cartella non è più valido. Aprila di nuovo dal menu di Windows.',
-      WORKSPACE_NOT_AVAILABLE: 'Questa cartella non è più disponibile. Controlla che esista e aprila di nuovo dal menu di Windows.',
-      INTERNAL_ERROR: 'Il server locale ha incontrato un problema. Apri Doctor e riprova.',
-      NOT_FOUND: 'Questa risorsa non è più disponibile. Aggiorna la pagina e riprova.',
+      PROJECTS_NOT_CONFIGURED: 'app.errors.projectsNotConfigured',
+      CONFIG_INVALID: 'app.errors.configInvalid',
+      RUNTIME_NOT_AVAILABLE: 'app.errors.runtimeNotAvailable',
+      METHOD_NOT_ALLOWED: 'app.errors.methodNotAllowed',
+      WORKSPACE_LAUNCH_NOT_AVAILABLE: 'app.errors.workspaceLaunchNotAvailable',
+      WORKSPACE_NOT_AVAILABLE: 'app.errors.workspaceNotAvailable',
+      INTERNAL_ERROR: 'app.errors.internalError',
+      NOT_FOUND: 'app.errors.notFound',
     };
-    if (error?.code && messaggi[error.code]) return messaggi[error.code];
+    if (error?.code && messaggi[error.code]) return tr(messaggi[error.code]);
     const messaggio = typeof error?.message === 'string' ? error.message.trim() : '';
     if (messaggio && !/TALOS_[A-Z0-9_]+|child_process|writeFileSync|stack| at [A-Za-z]:\\/i.test(messaggio)) return messaggio;
     return fallback;
@@ -2892,19 +2912,21 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    * un «12 su 24» inventato sarebbe uno stato inventato come un altro.
    */
   function formattaUsageBreve(usage, { live = false, finita = false, tettoGiri = null } = {}) {
-    if (!usage) return finita ? 'consumo non registrato' : 'contesto ignoto · in attesa del primo giro'; // 02/09 — una sessione finita non "aspetta" niente
+    if (!usage) return finita ? tr('app.usage.unrecorded') : tr('app.usage.contextUnknown'); // 02/09 — una sessione finita non "aspetta" niente
     const prompt = Number(usage.prompt_tokens ?? 0) || 0;
     const completion = Number(usage.completion_tokens ?? 0) || 0;
     const cache = Number(usage.cached_tokens ?? 0) || 0;
     const totale = prompt + completion;
     // ⛔ 06/9, T10-D7: qui i numeri uscivano all'inglese («76.8k token») accanto a una barra di
     //    stato che scriveva «76,8k» — lo stesso dato, due lingue, a dieci centimetri di distanza.
-    const kilo = (n) => (n >= 1000 ? `${(n / 1000).toFixed(1).replace('.', ',')}k` : String(n));
-    const cacheParte = cache > 0 ? ` · cache ${kilo(cache)}` : '';
-    const tetto = Number.isFinite(tettoGiri) && tettoGiri > 0 ? ` su ${tettoGiri}` : '';
+    const kilo = (n) => (n >= 1000 ? `${(n / 1000).toFixed(1).replace('.', localeUI() === 'it-IT' ? ',' : '.')}k` : String(n));
+    const conTetto = Number.isFinite(tettoGiri) && tettoGiri > 0;
     const giri = Number.isFinite(Number(usage.giri)) ? Number(usage.giri) : null;
-    const parteGiri = giri === null ? '' : ` · ${giri} gir${giri === 1 ? 'o' : 'i'}${tetto}`;
-    return `${kilo(totale)} token${parteGiri}${cacheParte}${live ? ' · live' : ''}`;
+    const parti = [tr('app.usage.tokens', { k: kilo(totale) })];
+    if (giri !== null) parti.push(conTetto ? trn('app.usage.turnsLimitOne', 'app.usage.turnsLimitMany', giri, { limite: tettoGiri }) : trn('app.usage.turnsOne', 'app.usage.turnsMany', giri));
+    if (cache > 0) parti.push(tr('app.usage.cache', { k: kilo(cache) }));
+    if (live) parti.push(tr('app.usage.live'));
+    return parti.join(' · ');
   }
 
   /*
@@ -3037,26 +3059,27 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
 
   /** La diagnosi in una riga: i primi tre attrezzi col conteggio, e quante chiamate erano ripetizioni. */
   function testoDiagnosiGiri(riassunto) {
-    if (!riassunto || !riassunto.registrato) return 'Attrezzi non registrati per questa sessione: la sua cronologia non porta nessun evento di attrezzo.';
+    if (!riassunto || !riassunto.registrato) return tr('app.toolDiagnosis.unrecorded');
     // ⛔ owner 04/9: a schermo l'attrezzo si chiama col suo nome UMANO, mai `web_search`/`time_now` — vedi nomeUmanoAttrezzo, unica mappa.
     const primi = riassunto.perAttrezzo.slice(0, 3).map((a) => `${nomeUmanoAttrezzo(a.nome)} ${a.chiamate}`).join(', ');
     // ⛔ 04/9, letto nello screenshot della corsa `qa-giri-esauriti-diagnosi`: «, altri 2» si legge come «altre 2 CHIAMATE». Sono altri ATTREZZI, e va detto.
-    const coda = riassunto.perAttrezzo.length > 3 ? `, e altri ${riassunto.perAttrezzo.length - 3} attrezzi` : '';
     const conRipetizioni = riassunto.perAttrezzo.filter((a) => a.ripetute > 0).sort((a, b) => b.ripetute - a.ripetute || a.nome.localeCompare(b.nome));
     const ripetizioni = riassunto.ripetute > 0
-      ? `${riassunto.ripetute} identiche a una precedente (${conRipetizioni.slice(0, 3).map((a) => `${nomeUmanoAttrezzo(a.nome)} ${a.ripetute}`).join(', ')})`
-      : 'nessuna identica a una precedente';
-    return `${riassunto.chiamate} chiamate ad attrezzi: ${primi}${coda} · ${ripetizioni}`;
+      ? tr('app.toolDiagnosis.repeatedWith', { n: riassunto.ripetute, elenco: conRipetizioni.slice(0, 3).map((a) => `${nomeUmanoAttrezzo(a.nome)} ${a.ripetute}`).join(', ') })
+      : tr('app.board.tools.repeatedNone');
+    return riassunto.perAttrezzo.length > 3
+      ? tr('app.toolDiagnosis.lineMore', { chiamate: riassunto.chiamate, primi, altri: riassunto.perAttrezzo.length - 3, ripetizioni })
+      : tr('app.toolDiagnosis.line', { chiamate: riassunto.chiamate, primi, ripetizioni });
   }
 
   /** Cosa può fare la persona ADESSO — dedotto dai numeri misurati, mai una frase fissa. */
   function consiglioDaRiassunto(riassunto) {
-    if (!riassunto || !riassunto.registrato) return 'Nel prossimo messaggio chiedi un passo solo: il tetto vale per giro, non per sessione.';
+    if (!riassunto || !riassunto.registrato) return tr('app.toolDiagnosis.adviceOneStep');
     const quotaRipetute = riassunto.chiamate > 0 ? riassunto.ripetute / riassunto.chiamate : 0;
     const primo = riassunto.perAttrezzo[0];
-    if (quotaRipetute >= 0.15) return `${riassunto.ripetute} chiamate erano già state fatte identiche: indica tu i percorsi da guardare, così i giri non tornano sugli stessi file.`;
-    if (primo && primo.chiamate / riassunto.chiamate >= 0.4) return `${primo.chiamate} chiamate su ${riassunto.chiamate} sono andate a «${nomeUmanoAttrezzo(primo.nome)}»: chiedi un passo più stretto, o dai tu il comando o il percorso giusto.`;
-    return 'Nel prossimo messaggio chiedi un passo solo: il tetto vale per giro, non per sessione.';
+    if (quotaRipetute >= 0.15) return tr('app.toolDiagnosis.adviceRepeated', { n: riassunto.ripetute });
+    if (primo && primo.chiamate / riassunto.chiamate >= 0.4) return tr('app.toolDiagnosis.adviceConcentrated', { n: primo.chiamate, totale: riassunto.chiamate, attrezzo: nomeUmanoAttrezzo(primo.nome) });
+    return tr('app.toolDiagnosis.adviceOneStep');
   }
 
   /*
@@ -3080,7 +3103,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   function aggiornaContatoreUsage() {
     const nodo = $('[data-usage-summary]');
     // ⛔ 06/9, CB-04: «Main» è il nodo della SESSIONE — qui va il totale della conversazione, non l'ultimo invio.
-    if (nodo) nodo.textContent = `Main · ${formattaUsageBreve(state.realSession.usageSessione || state.realSession.usage, { live: true })}`;
+    if (nodo) nodo.textContent = tr('app.usage.main', { consumo: formattaUsageBreve(state.realSession.usageSessione || state.realSession.usage, { live: true }) });
   }
 
   /**
@@ -3143,17 +3166,17 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
 
   function formattaContestoModelLab(tokens) {
     const value = Number(tokens);
-    if (!Number.isFinite(value) || value <= 0) return 'non dichiarato';
-    if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(value % 1_000_000 === 0 ? 0 : 1)}M token`;
-    if (value >= 1_000) return `${Math.round(value / 1_000)}k token`;
-    return `${Math.round(value)} token`;
+    if (!Number.isFinite(value) || value <= 0) return tr('app.modelLab.notDeclared');
+    if (value >= 1_000_000) return tr('app.usage.tokens', { k: `${(value / 1_000_000).toFixed(value % 1_000_000 === 0 ? 0 : 1)}M` });
+    if (value >= 1_000) return tr('app.usage.tokens', { k: `${Math.round(value / 1_000)}k` });
+    return tr('app.usage.tokens', { k: Math.round(value) });
   }
 
   /** ⭐ 02/09 — stesso stile di formattaByteModelLab/formattaContestoModelLab: nessuna dipendenza nuova, Intl già nel browser. Per download/preferiti Hugging Face nella scheda repository ridisegnata. */
   function formattaContoModelLab(numero) {
     const value = Number(numero);
     if (!Number.isFinite(value) || value < 0) return null;
-    return new Intl.NumberFormat('it-IT', { notation: 'compact', maximumFractionDigits: 1 }).format(value);
+    return new Intl.NumberFormat(localeUI(), { notation: 'compact', maximumFractionDigits: 1 }).format(value);
   }
 
   function runtimeModelLabPronto(runtime) {
@@ -3216,8 +3239,8 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const rows = Array.isArray(state.modelLab.providers) ? state.modelLab.providers : [];
     const status = $('#modelLabProviderStatus');
     if (status) {
-      if (state.modelLab.providerError) status.textContent = 'Stato provider non disponibile';
-      else if (state.modelLab.loadingProviders) status.textContent = 'Stato provider in lettura…';
+      if (state.modelLab.providerError) status.textContent = tr('app.providers.statusUnavailable');
+      else if (state.modelLab.loadingProviders) status.textContent = tr('app.providers.statusReading');
       else {
         /*
          * ⛔ Il conto che conta è quello dei provider PROVATI e collegati, non
@@ -3227,8 +3250,8 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         const provati = rows.filter((row) => state.modelLab.provePr?.get(row.id)?.esito === 'collegato').length;
         const conChiave = rows.filter((row) => row.keyConfigured).length;
         status.textContent = provati > 0
-          ? `${provati} provider collegat${provati === 1 ? 'o' : 'i'} · ${conChiave} con chiave`
-          : (conChiave > 0 ? `${conChiave} con chiave · nessuno ancora provato` : 'Nessun accesso configurato');
+          ? trn('app.providers.connectedOne', 'app.providers.connectedMany', provati, { conChiave: conChiave })
+          : (conChiave > 0 ? tr('app.providers.keysNoneTested', { n: conChiave }) : tr('app.providers.noAccess'));
       }
     }
     aggiornaProviderList($('#providerList'),rows,{onAzionePool:async ({azione,provider,key,impronta})=>{
@@ -3242,16 +3265,16 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       onSalvaConfigurazione:async({provider,chiave,pool,collegamento})=>{
         const base='/api/v1/providers/'+encodeURIComponent(provider);
         if(chiave){try{await apiPost(base+(pool?'/keys':'/key'),{key:chiave});}
-          catch(error){throw Object.assign(new Error(messaggioErroreUtente(error,'Il server non ha accettato la chiave.')),{fase:'chiave'});}}
+          catch(error){throw Object.assign(new Error(messaggioErroreUtente(error,tr('app.providers.keyRejected'))),{fase:'chiave'});}}
         if(collegamento){try{await apiPost(base+'/runtime',collegamento);}
-          catch(error){throw Object.assign(new Error(messaggioErroreUtente(error,'Il server non ha accettato la configurazione.')),{fase:'collegamento'});}}
+          catch(error){throw Object.assign(new Error(messaggioErroreUtente(error,tr('app.providers.configRejected'))),{fase:'collegamento'});}}
         state.modelLab.provePr?.delete(provider);
       },
       /* …e a modale chiusa, l'esito si annuncia (il pulsante dice «Salva», l'avviso dice «salvata») e la lista si rilegge. */
       onConfigurazioneSalvata:({etichetta,salvato})=>{
         const chiave=salvato.includes('chiave'),configurazione=salvato.includes('collegamento');
-        toast(chiave&&configurazione?'Chiave e configurazione salvate':chiave?'Chiave salvata':'Configurazione salvata',
-          chiave?`${etichetta}: la chiave è nel portachiavi del computer.`:`${etichetta}: configurazione aggiornata.`);
+        toast(chiave&&configurazione?tr('app.providers.savedKeyAndConfig'):chiave?tr('app.providers.savedKey'):tr('app.providers.savedConfig'),
+          chiave?tr('app.providers.keyInKeychain', { nome: etichetta }):tr('app.providers.configUpdated', { nome: etichetta }));
         void caricaProviderModelLab();
       },
       aperte:state.modelLab.providerAperti,prove:state.modelLab.provePr,occupati:state.modelLab.providerOccupati,caricamento:state.modelLab.loadingProviders,errore:state.modelLab.providerError,
@@ -3273,12 +3296,12 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   async function provaProviderModelLab(providerId) {
     if(state.modelLab.provePr?.get(providerId)?.esito==='in-corso'||state.modelLab.providerOccupati?.has(providerId))return;
     state.modelLab.provePr ??= new Map();
-    state.modelLab.provePr.set(providerId, { esito: 'in-corso', motivo: 'Chiedo al provider…', modelli: null, millisecondi: null });
+    state.modelLab.provePr.set(providerId, { esito: 'in-corso', motivo: tr('app.providers.asking'), modelli: null, millisecondi: null });
     renderizzaProviderModelLab();
     try {
       state.modelLab.provePr.set(providerId, await apiPost(`/api/v1/providers/${encodeURIComponent(providerId)}/test`, {}));
     } catch (error) {
-      state.modelLab.provePr.set(providerId, { esito: 'errore', motivo: error.message || 'Prova non riuscita', modelli: null, millisecondi: null });
+      state.modelLab.provePr.set(providerId, { esito: 'errore', motivo: error.message || tr('app.providers.testFailed'), modelli: null, millisecondi: null });
     }
     renderizzaProviderModelLab();
   }
@@ -3370,7 +3393,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
        diceva «in corso», perché qui si tratteneva solo l'approvazione. Anche quelle aspettano la persona: «aspetta te». */
     if (aspettaLaPersona()) { aggiornaSessionItem(riga, { stato: statoSessione({ inAttesaDomanda: true }), giri }); return; }
     if (!runRealeAttivo()) return; // conclusa o interrotta: lo dice l'elenco vero, che si ricarica da sé
-    aggiornaSessionItem(riga, { stato: { classe: 'vivo', testo: 'in corso', tono: 'live' }, giri });
+    aggiornaSessionItem(riga, { stato: { classe: 'vivo', testo: tr('app.common.inProgress'), tono: 'live' }, giri });
   }
 
   /* 24/09/2026 — il giro aspetta una scelta della persona: una domanda aperta o un piano da approvare (decisioni owner 29, 39). */
@@ -3405,7 +3428,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     try {
       const risposta = await apiPost('/api/v1/auth/' + encodeURIComponent(provider) + '/inizia', {});
       const indirizzo = risposta?.indirizzo;
-      if (typeof indirizzo !== 'string' || !indirizzo) throw new Error('Il server non ha restituito un indirizzo di accesso.');
+      if (typeof indirizzo !== 'string' || !indirizzo) throw new Error(tr('app.providers.noSignInAddress'));
       if (!finestra) {
         /*
          * ⛔ 01/10/2026, owner: «la app desktop non apre il browser per accedere a openrouter». Nell'app desktop la finestra
@@ -3426,7 +3449,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         return;
       }
       finestra.location.href = indirizzo;
-      mostraEsitoProvider(corrente(), 'Accesso aperto nel browser. Torna qui quando hai finito: la chiave arriva da sola.');
+      mostraEsitoProvider(corrente(), tr('app.providers.signInOpenedShort'));
       /*
        * \u26d4 Il messaggio vive in fondo alla card, e su una card lunga finisce SOTTO il bordo dello
        *   schermo: chi ha appena premuto non vede nessuna conferma e crede che non sia successo
@@ -3438,7 +3461,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       /* La finestra vuota gi\u00e0 aperta va chiusa: lasciarla l\u00ec, bianca e senza spiegazione, \u00e8 peggio
          del non averla aperta. */
       try { finestra?.close(); } catch { /* gi\u00e0 chiusa dalla persona */ }
-      mostraEsitoProvider(corrente(), errore.message || 'Non \u00e8 stato possibile aprire l\u2019accesso.', true);
+      mostraEsitoProvider(corrente(), errore.message || tr('app.providers.signInFailed'), true);
       corrente()?.querySelector('[data-provider-feedback]')?.scrollIntoView({ block: 'nearest' });
     }
   }
@@ -3454,7 +3477,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       window.removeEventListener('focus', alRitorno);
       await caricaProviderModelLab();
       const riga = state.modelLab.providers?.find((r) => r.id === provider);
-      if (riga?.keyConfigured) mostraEsitoProvider(corrente(), 'Accesso fatto: la chiave \u00e8 nel portachiavi del computer.');
+      if (riga?.keyConfigured) mostraEsitoProvider(corrente(), tr('app.providers.signInDone'));
     };
     window.addEventListener('focus', alRitorno);
   }
@@ -3471,14 +3494,14 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const feedback = card?.querySelector('[data-provider-feedback]');
     if (!feedback) return;
     feedback.replaceChildren();
-    feedback.append(document.createTextNode(apertoFuori
-      ? 'Accesso aperto nel browser del computer. Torna qui quando hai finito: la chiave arriva da sola. Se non si \u00e8 aperto: '
-      : 'Il browser ha bloccato la finestra. '));
+    feedback.append(document.createTextNode(`${apertoFuori
+      ? tr('app.providers.signInOpened')
+      : tr('app.providers.signInBlocked')} `));
     const link = document.createElement('a');
     link.href = indirizzo;
     link.target = '_blank';
     link.rel = 'noopener noreferrer';
-    link.textContent = 'Apri l\u2019accesso';
+    link.textContent = tr('app.providers.openSignIn');
     feedback.append(link);
     feedback.classList.toggle('is-error', !apertoFuori);
     feedback.setAttribute('role', apertoFuori ? 'status' : 'alert');
@@ -3502,7 +3525,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    */
   async function provaTuttiProvider(bottone) {
     const prima = bottone?.textContent;
-    if (bottone) { bottone.disabled = true; bottone.textContent = 'Provo tutti…'; }
+    if (bottone) { bottone.disabled = true; bottone.textContent = tr('app.providers.testingAll'); }
     try {
       await Promise.all((state.modelLab.providers || []).map((row) => provaProviderModelLab(row.id)));
     } finally {
@@ -3529,16 +3552,16 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     state.modelLab.providerOccupati.add(provider);renderizzaProviderModelLab();
     try {
       const base='/api/v1/providers/'+encodeURIComponent(provider);let messaggio;
-      if(action==='save-key'){await apiPost(base+'/key',{key});const input=corrente()?.querySelector('[data-provider-key]');if(input)input.value='';messaggio='Chiave salvata nel portachiavi del computer.';}
-      else if(action==='remove-key'){await apiPost(base+'/key/remove',{});const input=corrente()?.querySelector('[data-provider-key]');if(input)input.value='';messaggio='Chiave rimossa.';}
-      else if(action==='save-runtime'){await apiPost(base+'/runtime',{endpoint,timeoutSeconds});messaggio='Collegamento salvato.';}
-      else if(action==='reset-runtime'){await apiPost(base+'/runtime/reset',{});messaggio='Indirizzo predefinito ripristinato.';}
+      if(action==='save-key'){await apiPost(base+'/key',{key});const input=corrente()?.querySelector('[data-provider-key]');if(input)input.value='';messaggio=tr('app.providers.keySavedKeychain');}
+      else if(action==='remove-key'){await apiPost(base+'/key/remove',{});const input=corrente()?.querySelector('[data-provider-key]');if(input)input.value='';messaggio=tr('app.providers.keyRemoved');}
+      else if(action==='save-runtime'){await apiPost(base+'/runtime',{endpoint,timeoutSeconds});messaggio=tr('app.providers.linkSaved');}
+      else if(action==='reset-runtime'){await apiPost(base+'/runtime/reset',{});messaggio=tr('app.providers.addressReset');}
       else return;
       state.modelLab.provePr?.delete(provider);
       mostraEsitoProvider(corrente(),messaggio);
       await caricaProviderModelLab();
       if(action==='reset-runtime'){const row=state.modelLab.providers?.find(r=>r.id===provider),input=corrente()?.querySelector('[data-provider-endpoint]');if(row&&input)input.value=row.endpoint||'';}
-    }catch(error){mostraEsitoProvider(corrente(),error.message||'Non è stato possibile salvare questa modifica.',true);}
+    }catch(error){mostraEsitoProvider(corrente(),error.message||tr('app.providers.saveFailed'),true);}
     finally{state.modelLab.providerOccupati.delete(provider);renderizzaProviderModelLab();const feedback=corrente()?.querySelector('[data-provider-feedback]');if(feedback&&!feedback.hidden)feedback.scrollIntoView({block:'nearest'});}
   }
 
@@ -3581,21 +3604,21 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    */
   const SOGLIA_TIGHT = 0.9;
   const VERDETTI_FIT = {
-    compatible: { etichetta: 'Compatibile', classe: 'ok' },
-    tight: { etichetta: 'Al limite', classe: 'warn' },
-    'chat-only': { etichetta: 'Solo chat', classe: 'warn' },
-    blocked: { etichetta: 'Non compatibile', classe: 'bad' },
-    unknown: { etichetta: 'Non determinabile', classe: 'unknown' },
+    compatible: { etichetta: 'app.modelLab.fit.verdictCompatible', classe: 'ok' },
+    tight: { etichetta: 'app.modelLab.fit.verdictTight', classe: 'warn' },
+    'chat-only': { etichetta: 'app.modelLab.fit.verdictChatOnly', classe: 'warn' },
+    blocked: { etichetta: 'app.modelLab.fit.verdictBlocked', classe: 'bad' },
+    unknown: { etichetta: 'app.modelLab.fit.verdictUnknown', classe: 'unknown' },
   };
   /** Il perché, in italiano piano: mai il codice grezzo del server a schermo. */
   const MOTIVI_FIT = {
-    fits: 'memoria, spazio e contesto sono sufficienti',
-    storage: 'non c\'è abbastanza spazio su disco',
-    memory: 'non c\'è abbastanza memoria libera',
-    context: 'il contesto del modello è più corto di quello richiesto dal profilo',
-    capabilities: 'non è stato possibile osservare le capacità del modello',
-    template: 'il template non dichiara gli attrezzi: può conversare, non lavorare come agente',
-    measurement: 'la macchina non è stata misurata',
+    fits: 'app.modelLab.fit.reasonFits',
+    storage: 'app.modelLab.fit.reasonStorage',
+    memory: 'app.modelLab.fit.reasonMemory',
+    context: 'app.modelLab.fit.reasonContext',
+    capabilities: 'app.modelLab.fit.reasonCapabilities',
+    template: 'app.modelLab.fit.reasonTemplate',
+    measurement: 'app.modelLab.fit.reasonMeasurement',
   };
   /**
    * Deriva il verdetto mostrato. ⛔ Alza `compatible` a `tight` SOLO se
@@ -3627,7 +3650,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       const richiesti = parte?.requiredBytes;
       const disponibili = parte?.availableBytes;
       if (!Number.isFinite(richiesti) || !Number.isFinite(disponibili) || richiesti <= disponibili) return '';
-      return ` — ne mancano ${formattaByteModelLab(richiesti - disponibili)}`;
+      return ` — ${tr('app.modelLab.fit.shortBy', { quanto: formattaByteModelLab(richiesti - disponibili) })}`;
     };
     /*
      * ⛔⛔ 02/9 — «non è stato possibile osservare le capacità» è vero ma
@@ -3643,13 +3666,13 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       && runtimeDi?.reachable === true
       && runtimeDi?.servingThisModel === false
       && typeof runtimeDi?.servingModelId === 'string' && runtimeDi.servingModelId !== ''
-      ? ` — è caricato «${runtimeDi.servingModelId}», e finché c'è lui il runtime non può osservare questo modello: scaricalo per verificarlo`
+      ? ` — ${tr('app.modelLab.fit.loadedOther', { modello: runtimeDi.servingModelId })}`
       : '';
     const motivo = verdetto === 'tight'
-      ? `entra, ma sopra il ${Math.round(SOGLIA_TIGHT * 100)}% di ciò che è libero: sotto carico può non bastare`
-      : (MOTIVI_FIT[esito.reason] || esito.reason || 'motivo non dichiarato')
+      ? tr('app.modelLab.fit.tightReason', { percento: Math.round(SOGLIA_TIGHT * 100) })
+      : (MOTIVI_FIT[esito.reason] ? tr(MOTIVI_FIT[esito.reason]) : (esito.reason || tr('app.modelLab.fit.reasonUndeclared')))
         + (esito.reason === 'memory' ? scarto(esito.memory) : esito.reason === 'storage' ? scarto(esito.storage) : perColpaDiUnAltro);
-    return { verdetto, classe: voce.classe, testo: `${voce.etichetta} — ${motivo}` };
+    return { verdetto, classe: voce.classe, testo: `${tr(voce.etichetta)} — ${motivo}` };
   }
   function nodoVerdettoFit(modelId) {
     const voce = state.modelLab.fit.get(modelId);
@@ -3657,12 +3680,12 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     nodo.className = 'model-lab-fit';
     nodo.dataset.modelFit = modelId;
     if (!voce) { nodo.hidden = true; return nodo; }
-    if (voce.inCorso) { nodo.dataset.fitState = 'attesa'; nodo.textContent = 'Verifica in corso…'; return nodo; }
+    if (voce.inCorso) { nodo.dataset.fitState = 'attesa'; nodo.textContent = tr('app.modelLab.fit.checking'); return nodo; }
     if (voce.errore) {
       nodo.dataset.fitState = 'bad';
       // ⛔ L'errore VERO del server, non un "non compatibile" generico: non
       // sapere se un modello gira è diverso dal sapere che non gira.
-      nodo.textContent = `Verifica non riuscita — ${voce.errore}`;
+      nodo.textContent = tr('app.modelLab.fit.checkFailedWith', { motivo: voce.errore });
       return nodo;
     }
     const { classe, testo } = descriviFit(voce.esito);
@@ -3685,12 +3708,12 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
      * stato dell'altra domanda, senza rispondere al posto suo.
      */
     const prefissoRipiego = voce.ripiegoChat
-      ? (voce.esito?.state === 'unknown' ? 'Va bene per la chat; come agente non verificabile ora' : 'Va bene per la chat, non come agente')
+      ? (voce.esito?.state === 'unknown' ? tr('app.modelLab.fit.chatOkAgentUnknown') : tr('app.modelLab.fit.chatOkNotAgent'))
       : '';
     nodo.textContent = voce.ripiegoChat ? `${prefissoRipiego} — ${testo.replace(/^[^—]*— /, '')}` : testo;
     const ctx = voce.esito.context;
     if (Number.isFinite(ctx?.availableTokens) && Number.isFinite(ctx?.requestedTokens)) {
-      nodo.append(textElement('small', '', ` contesto ${ctx.availableTokens.toLocaleString('it-IT')} token su ${ctx.requestedTokens.toLocaleString('it-IT')} richiesti`));
+      nodo.append(textElement('small', '', ` ${tr('app.modelLab.fit.contextTokens', { disponibili: ctx.availableTokens.toLocaleString(localeUI()), richiesti: ctx.requestedTokens.toLocaleString(localeUI()) })}`));
     }
     return nodo;
   }
@@ -3727,7 +3750,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       }
       state.modelLab.fit.set(modelId, { esito, ripiegoChat });
     } catch (error) {
-      state.modelLab.fit.set(modelId, { errore: error.message || 'errore non dichiarato' });
+      state.modelLab.fit.set(modelId, { errore: error.message || tr('app.modelLab.fit.errorUndeclared') });
     }
     aggiornaNodoFit(modelId);
   }
@@ -3778,7 +3801,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       azioni: {
         verifica: (id) => { void verificaCompatibilitaModello(id); },
         libera: (id) => { void liberaMemoriaModello(id); },
-        copia: async (id) => { const m = state.modelLab.installed.find((x) => x.id === id); try { await navigator.clipboard?.writeText(m?.path || ''); toast('Percorso copiato', m?.path || ''); } catch { toast('Percorso non copiato', 'Il browser non ha dato accesso agli appunti.'); } },
+        copia: async (id) => { const m = state.modelLab.installed.find((x) => x.id === id); try { await navigator.clipboard?.writeText(m?.path || ''); toast(tr('app.common.pathCopied'), m?.path || ''); } catch { toast(tr('app.common.pathNotCopied'), tr('app.common.clipboardDenied')); } },
         rinomina: (id) => apriRinominaModelloLocale(id),
         elimina: (id) => apriEliminaModelloLocale(id),
         pagina: (id) => apriPaginaModello(id, 'card'), // 18/09: la pagina del modello, con la rotta del mockup
@@ -3798,7 +3821,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const velo = $('#veloEliminaModello'); if (!velo) return;
     velo.dataset.modelId = id;
     const testo = velo.querySelector('.talos-dialog__body p');
-    if (testo) testo.textContent = `Rimuove «${m.name || m.id}» (${gb(m.bytes)}) dal disco. Dovrai scaricarlo o importarlo di nuovo per usarlo.`;
+    if (testo) testo.textContent = tr('app.modelLab.deleteWarning', { nome: m.name || m.id, dimensione: gb(m.bytes) });
     apriVeloMockup('veloEliminaModello');
   }
   async function confermaDialogoModelloLocale(azione) {
@@ -3808,16 +3831,16 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       if (azione === 'rinomina') {
         const next = $('#nomeModelloLab')?.value.trim(); if (!next) return;
         await apiPost(`/api/v1/local-models/${encodeURIComponent(id)}/rename`, { name: next });
-        toast('Modello rinominato', next);
+        toast(tr('app.modelLab.renamed'), next);
       } else {
         await apiPost(`/api/v1/local-models/${encodeURIComponent(id)}/delete`, {});
-        toast('Modello eliminato', `${m?.name || id} non è più sul disco.`);
+        toast(tr('app.modelLab.deleted'), tr('app.modelLab.deletedBody', { nome: m?.name || id }));
         if (modelloInstallatoScelto === id) modelloInstallatoScelto = null;
       }
       chiudiVeloMockup(velo.id);
       await caricaModelliLocaliModelLab();
     } catch (error) {
-      toast(azione === 'rinomina' ? 'Rinomina non riuscita' : 'Eliminazione non riuscita', error.message);
+      toast(azione === 'rinomina' ? tr('app.common.renameFailed') : tr('app.common.deleteFailed'), error.message);
     }
   }
 
@@ -3857,15 +3880,15 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       });
     }
     if (loading || state.modelLab.runtimeError) {
-      status.textContent = loading ? 'Verifica in corso…' : 'Verifica non riuscita';
-      runtimeSelect.replaceChildren(new Option(loading ? 'Verifica in corso…' : 'Nessun runtime osservato', ''));
-      modelSelect.replaceChildren(new Option('Nessun modello osservato', ''));
+      status.textContent = loading ? tr('app.modelLab.fit.checking') : tr('app.modelLab.fit.checkFailed');
+      runtimeSelect.replaceChildren(new Option(loading ? tr('app.modelLab.fit.checking') : tr('app.modelLab.runtime.noneObserved'), ''));
+      modelSelect.replaceChildren(new Option(tr('app.modelLab.runtime.noModelObserved'), ''));
       runtimeSelect.disabled = modelSelect.disabled = runButton.disabled = prompt.disabled = true;
       return;
     }
     const pronti = state.modelLab.runtimes.filter(runtimeModelLabPronto);
     const raggiunti = state.modelLab.runtimes.filter(r => r.state === 'observed' && (r.runtimeId !== 'llama.cpp' || r.runtimeState === 'ready')).length;
-    status.textContent = raggiunti ? raggiunti + (raggiunti === 1 ? ' motore raggiunto' : ' motori raggiunti') + ' · ' + pronti.length + ' con modelli disponibili' : 'Nessun runtime raggiunto';
+    status.textContent = raggiunti ? trn('app.modelLab.runtime.reachedOne', 'app.modelLab.runtime.reachedMany', raggiunti, { pronti: pronti.length }) : tr('app.modelLab.runtime.noneReached');
     /*
      * ⛔⛔⛔ 02/9 (notte) — TERZO difetto dello stesso pannello, trovato
      * premendo il pulsante per davvero con un modello CARICATO: il
@@ -3881,9 +3904,9 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     state.modelLab.selectedRuntime = selected?.runtimeId || '';
     const models = selected?.models || [];
     state.modelLab.selectedRuntimeModel = models.some((model) => model.id === state.modelLab.selectedRuntimeModel) ? state.modelLab.selectedRuntimeModel : (models[0]?.id || '');
-    runtimeSelect.replaceChildren(...(pronti.length > 0 ? pronti.map((runtime) => new Option(runtime.runtimeId, runtime.runtimeId)) : [new Option('Nessun runtime pronto', '')]));
+    runtimeSelect.replaceChildren(...(pronti.length > 0 ? pronti.map((runtime) => new Option(runtime.runtimeId, runtime.runtimeId)) : [new Option(tr('app.modelLab.runtime.noneReady'), '')]));
     runtimeSelect.value = state.modelLab.selectedRuntime;
-    modelSelect.replaceChildren(...(models.length > 0 ? models.map((model) => new Option(model.name || model.id, model.id)) : [new Option('Nessun modello osservato', '')]));
+    modelSelect.replaceChildren(...(models.length > 0 ? models.map((model) => new Option(model.name || model.id, model.id)) : [new Option(tr('app.modelLab.runtime.noModelObserved'), '')]));
     modelSelect.value = state.modelLab.selectedRuntimeModel;
     runtimeSelect.disabled = modelSelect.disabled = prompt.disabled = runButton.disabled = !selected;
     const gate = $('#modelLabRuntimeGate');
@@ -3931,12 +3954,12 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const hfPanel = $('#modelLabHfPanel'); const installedPanel = $('#modelLabInstalledPanel');
     if (hfPanel && !hfPanel.dataset.hfMontato && !hfPanel.querySelector('[data-model-lab-enhanced="hf"]')) {
       const controls = document.createElement('div'); controls.dataset.modelLabEnhanced = 'hf'; controls.className = 'model-lab-enhanced-controls';
-      controls.innerHTML = '<label class="setting-control"><span>Ordina</span><select id="modelLabHfSortControl" aria-label="Ordina risultati Hugging Face"><option value="downloads">Download</option><option value="likes">Preferiti</option><option value="createdAt">Più recenti</option><option value="lastModified">Aggiornati</option></select></label><label class="setting-control"><span>Autore</span><input id="modelLabHfAuthorControl" type="search" aria-label="Filtra per autore Hugging Face" placeholder="Organizzazione" /></label><label class="setting-control"><span>Filtri</span><input id="modelLabHfFiltersControl" type="search" aria-label="Filtra modelli Hugging Face" placeholder="q4, text-generation" /></label><button class="secondary-btn compact" id="modelLabHfNextButtonControl" type="button" hidden>Carica altri risultati</button>';
+      controls.innerHTML = `<label class="setting-control"><span>${tr('app.modelLab.hf.sortLabel')}</span><select id="modelLabHfSortControl" aria-label="${tr('app.modelLab.hf.sortAria')}"><option value="downloads">${tr('app.modelLab.hf.sortDownloads')}</option><option value="likes">${tr('app.modelLab.hf.sortLikes')}</option><option value="createdAt">${tr('app.modelLab.hf.sortNewest')}</option><option value="lastModified">${tr('app.modelLab.hf.sortUpdated')}</option></select></label><label class="setting-control"><span>${tr('app.modelLab.hf.authorLabel')}</span><input id="modelLabHfAuthorControl" type="search" aria-label="${tr('app.modelLab.hf.authorAria')}" placeholder="${tr('app.modelLab.hf.authorPlaceholder')}" /></label><label class="setting-control"><span>${tr('app.modelLab.hf.filtersLabel')}</span><input id="modelLabHfFiltersControl" type="search" aria-label="${tr('app.modelLab.hf.filtersAria')}" placeholder="q4, text-generation" /></label><button class="secondary-btn compact" id="modelLabHfNextButtonControl" type="button" hidden>${tr('app.modelLab.hf.loadMore')}</button>`;
       hfPanel.insertBefore(controls, hfPanel.querySelector('.model-lab-catalog-layout'));
     }
     if (installedPanel && !installedPanel.dataset.installatiMontato && !installedPanel.querySelector('[data-model-lab-enhanced="installed"]')) {
       const controls = document.createElement('div'); controls.dataset.modelLabEnhanced = 'installed'; controls.className = 'model-lab-enhanced-controls';
-      controls.innerHTML = '<label class="search-field"><svg><use href="#i-search"></use></svg><input id="modelLabInstalledSearchControl" type="search" placeholder="Cerca modelli installati..." aria-label="Cerca modelli installati" /></label><input id="modelLabImportInput" type="file" accept=".gguf,application/octet-stream" hidden /><button class="secondary-btn compact" id="modelLabImportButton" type="button">Importa .gguf</button><button class="secondary-btn compact danger" id="modelLabImportCancelButton" type="button" hidden>Annulla</button><progress id="modelLabImportProgress" max="100" value="0" hidden aria-label="Avanzamento importazione"></progress><span class="settings-status" id="modelLabImportStatus" aria-live="polite"></span>';
+      controls.innerHTML = `<label class="search-field"><svg><use href="#i-search"></use></svg><input id="modelLabInstalledSearchControl" type="search" placeholder="${tr('app.modelLab.installedSearchPlaceholder')}" aria-label="${tr('app.modelLab.installedSearchAria')}" /></label><input id="modelLabImportInput" type="file" accept=".gguf,application/octet-stream" hidden /><button class="secondary-btn compact" id="modelLabImportButton" type="button">${tr('app.modelLab.import.button')}</button><button class="secondary-btn compact danger" id="modelLabImportCancelButton" type="button" hidden>${tr('app.common.cancel')}</button><progress id="modelLabImportProgress" max="100" value="0" hidden aria-label="${tr('app.modelLab.import.progressAria')}"></progress><span class="settings-status" id="modelLabImportStatus" aria-live="polite"></span>`;
       installedPanel.insertBefore(controls, $('#modelLabInstalledList'));
       $('#modelLabImportButton')?.addEventListener('click', () => $('#modelLabImportInput')?.click());
       $('#modelLabImportCancelButton')?.addEventListener('click', () => state.modelLab.importXhr?.abort());
@@ -3946,18 +3969,18 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
 
   function importaModelloLocaleModelLab(file) {
     const button = $('#modelLabImportButton'); const cancel = $('#modelLabImportCancelButton'); const progress = $('#modelLabImportProgress'); const status = $('#modelLabImportStatus');
-    if (!file || !/\.gguf$/iu.test(file.name) || !Number.isSafeInteger(file.size) || file.size <= 0) { if (status) status.textContent = 'Scegli un file .gguf non vuoto.'; return; }
+    if (!file || !/\.gguf$/iu.test(file.name) || !Number.isSafeInteger(file.size) || file.size <= 0) { if (status) status.textContent = tr('app.modelLab.import.chooseFile'); return; }
     const base = file.name.replace(/\.gguf$/iu, '').toLowerCase().replace(/[^a-z0-9]+/giu, '-').replace(/^-+|-+$/gu, '').slice(0, 96) || 'modello';
     const id = `${base}-${crypto.randomUUID().slice(0, 8)}`;
     const xhr = new XMLHttpRequest(); state.modelLab.importXhr = xhr; state.modelLab.importProgress = 0;
-    if (button) { button.disabled = true; button.textContent = 'Importazione…'; } if (cancel) cancel.hidden = false; if (progress) { progress.hidden = false; progress.value = 0; }
-    if (status) status.textContent = 'Sto copiando il modello nel catalogo locale…';
+    if (button) { button.disabled = true; button.textContent = tr('app.modelLab.import.running'); } if (cancel) cancel.hidden = false; if (progress) { progress.hidden = false; progress.value = 0; }
+    if (status) status.textContent = tr('app.modelLab.import.copying');
     xhr.open('POST', '/api/v1/local-models/import'); xhr.setRequestHeader('Content-Type', 'application/octet-stream'); xhr.setRequestHeader('X-Talos-Model-Id', id); xhr.setRequestHeader('X-Talos-Model-Filename', file.name); xhr.setRequestHeader('X-Talos-Model-Bytes', String(file.size)); xhr.setRequestHeader('X-Talos-Model-Name', file.name.replace(/\.gguf$/iu, ''));
-    xhr.upload.addEventListener('progress', (event) => { if (!event.lengthComputable) return; state.modelLab.importProgress = Math.round((event.loaded / event.total) * 100); if (progress) progress.value = state.modelLab.importProgress; if (status) status.textContent = `Importazione ${state.modelLab.importProgress}%`; });
-    const reset = () => { if (button) { button.disabled = false; button.textContent = 'Importa .gguf'; } if (cancel) cancel.hidden = true; state.modelLab.importXhr = null; };
-    xhr.addEventListener('load', async () => { let payload = null; try { payload = JSON.parse(xhr.responseText || '{}'); } catch {} if (xhr.status >= 200 && xhr.status < 300 && payload?.ok) { if (status) status.textContent = 'Modello importato e verificato.'; if (progress) progress.value = 100; await caricaModelliLocaliModelLab(); } else if (status) status.textContent = payload?.error?.message || 'Non è stato possibile importare il modello.'; reset(); });
-    xhr.addEventListener('error', () => { if (status) status.textContent = 'Collegamento interrotto: riprova.'; reset(); });
-    xhr.addEventListener('abort', () => { if (status) status.textContent = 'Importazione annullata.'; reset(); });
+    xhr.upload.addEventListener('progress', (event) => { if (!event.lengthComputable) return; state.modelLab.importProgress = Math.round((event.loaded / event.total) * 100); if (progress) progress.value = state.modelLab.importProgress; if (status) status.textContent = tr('app.modelLab.import.progress', { percento: state.modelLab.importProgress }); });
+    const reset = () => { if (button) { button.disabled = false; button.textContent = tr('app.modelLab.import.button'); } if (cancel) cancel.hidden = true; state.modelLab.importXhr = null; };
+    xhr.addEventListener('load', async () => { let payload = null; try { payload = JSON.parse(xhr.responseText || '{}'); } catch {} if (xhr.status >= 200 && xhr.status < 300 && payload?.ok) { if (status) status.textContent = tr('app.modelLab.import.done'); if (progress) progress.value = 100; await caricaModelliLocaliModelLab(); } else if (status) status.textContent = payload?.error?.message || tr('app.modelLab.import.failed'); reset(); });
+    xhr.addEventListener('error', () => { if (status) status.textContent = tr('app.modelLab.import.interrupted'); reset(); });
+    xhr.addEventListener('abort', () => { if (status) status.textContent = tr('app.modelLab.import.cancelled'); reset(); });
     xhr.send(file);
   }
 
@@ -3971,7 +3994,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    * ⛔ E' la TERZA volta che questa classe di difetto morde in questo file. */
   async function caricaDownloadModelLab() {
     try { const data = await apiGet('/api/v1/huggingface/downloads'); state.modelLab.downloads = Array.isArray(data?.items) ? data.items : []; renderizzaDownloadModelLab(); if (state.modelLab.downloads.some((item) => ['queued', 'running', 'verifying'].includes(item.state))) { if (!state.modelLab.downloadTimer) state.modelLab.downloadTimer = setTimeout(() => { state.modelLab.downloadTimer = null; caricaDownloadModelLab(); }, 800); } else if (state.modelLab.downloads.some((item) => item.state === 'ready')) caricaModelliLocaliModelLab(); }
-    catch (error) { const mount = $('#modelLabDownloadsList'); if (mount) mount.replaceChildren(textElement('p', 'model-lab-empty', error.message || 'Download non disponibili.')); }
+    catch (error) { const mount = $('#modelLabDownloadsList'); if (mount) mount.replaceChildren(textElement('p', 'model-lab-empty', error.message || tr('app.modelLab.downloads.unavailable'))); }
   }
   function hfSetGroups(files) {
     const groups = new Map(); for (const file of files || []) { const key = file.path.replace(/-\d{5}-of-\d{5}(?=\.gguf$)/iu, ''); const group = groups.get(key) || []; group.push(file); groups.set(key, group); }
@@ -3980,14 +4003,14 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   function renderizzaModelCardReadme(detail) {
     const section = document.createElement('section');
     section.className = 'model-lab-model-card';
-    if (detail.readme) section.append(textElement('h5', '', 'Scheda modello'), renderizzaMarkdownSemplice(detail.readme));
+    if (detail.readme) section.append(textElement('h5', '', tr('app.modelLab.hf.modelCard')), renderizzaMarkdownSemplice(detail.readme));
     for (const image of Array.isArray(detail.images) ? detail.images : []) {
       if (!image || typeof image.url !== 'string') continue;
       const wrapper = document.createElement('figure');
       const element = document.createElement('img');
       element.loading = 'lazy'; element.decoding = 'async'; element.alt = typeof image.alt === 'string' ? image.alt : '';
       element.src = API(`/api/v1/huggingface/image?url=${encodeURIComponent(image.url)}`);
-      element.addEventListener('error', () => wrapper.replaceChildren(textElement('figcaption', 'model-lab-empty', 'Immagine della scheda non disponibile.')));
+      element.addEventListener('error', () => wrapper.replaceChildren(textElement('figcaption', 'model-lab-empty', tr('app.modelLab.hf.cardImageMissing'))));
       wrapper.appendChild(element);
       section.appendChild(wrapper);
     }
@@ -4023,21 +4046,21 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    * bottone dice l'ora della misura, e si può rifare.
    */
   const VERDETTI_STIMA = {
-    compatible: { etichetta: 'I pesi ci stanno', classe: 'ok' },
-    tight: { etichetta: 'Al limite', classe: 'warn' },
-    blocked: { etichetta: 'Non ci sta', classe: 'bad' },
-    unknown: { etichetta: 'Non misurabile', classe: 'unknown' },
+    compatible: { etichetta: 'app.modelLab.hf.verdictFits', classe: 'ok' },
+    tight: { etichetta: 'app.modelLab.fit.verdictTight', classe: 'warn' },
+    blocked: { etichetta: 'app.modelLab.hf.verdictNoFit', classe: 'bad' },
+    unknown: { etichetta: 'app.modelLab.hf.verdictUnmeasurable', classe: 'unknown' },
   };
   function descriviStimaHf(stima) {
     const voce = VERDETTI_STIMA[stima?.state] || VERDETTI_STIMA.unknown;
     const libera = Number.isFinite(stima?.memory?.availableBytes) ? formattaByteModelLab(stima.memory.availableBytes) : null;
     let motivo;
-    if (stima?.reason === 'storage') motivo = `non c'è abbastanza spazio su disco${Number.isFinite(stima?.storage?.availableBytes) ? ` — liberi ${formattaByteModelLab(stima.storage.availableBytes)}` : ''}`;
-    else if (stima?.reason === 'memory' && stima.state === 'blocked') motivo = `i pesi superano la memoria libera${libera ? ` (${libera})` : ''}`;
-    else if (stima?.reason === 'memory') motivo = `restano pochi margini sulla memoria libera${libera ? ` (${libera})` : ''}`;
-    else if (stima?.reason === 'measurement') motivo = 'la macchina non è stata misurata';
-    else motivo = `entrano nella memoria libera${libera ? ` (${libera})` : ''}`;
-    return { classe: voce.classe, testo: `${voce.etichetta} — ${motivo}` };
+    if (stima?.reason === 'storage') motivo = Number.isFinite(stima?.storage?.availableBytes) ? tr('app.modelLab.hf.reasonStorageFree', { libero: formattaByteModelLab(stima.storage.availableBytes) }) : tr('app.modelLab.fit.reasonStorage');
+    else if (stima?.reason === 'memory' && stima.state === 'blocked') motivo = libera ? tr('app.modelLab.hf.reasonWeightsExceedFree', { libera }) : tr('app.modelLab.hf.reasonWeightsExceed');
+    else if (stima?.reason === 'memory') motivo = libera ? tr('app.modelLab.hf.reasonLittleMarginFree', { libera }) : tr('app.modelLab.hf.reasonLittleMargin');
+    else if (stima?.reason === 'measurement') motivo = tr('app.modelLab.fit.reasonMeasurement');
+    else motivo = libera ? tr('app.modelLab.hf.reasonFitsFree', { libera }) : tr('app.modelLab.hf.reasonFits');
+    return { classe: voce.classe, testo: `${tr(voce.etichetta)} — ${motivo}` };
   }
   /**
    * La nota che accompagna ogni stima, e che non si può togliere.
@@ -4049,21 +4072,21 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    * scarica 15 GB per scoprire dopo che non parte.
    */
   function nodoBaseStimaHfModelLab() {
-    return textElement('p', 'hf-variant-basis', 'La misura pesa i file del modello contro memoria e disco liberi adesso. La cache del contesto si somma sopra e si può calcolare solo dopo lo scaricamento: se già i pesi non ci stanno, non ci sta.');
+    return textElement('p', 'hf-variant-basis', tr('app.modelLab.hf.measureNote'));
   }
   /** La scheda «File»: i percorsi VERI già presenti in `detail.files`, non un secondo endpoint. */
   function nodoFileHfModelLab(detail) {
     const lista = document.createElement('div');
     lista.className = 'hf-file-list';
     const files = Array.isArray(detail.files) ? detail.files : [];
-    if (files.length === 0) { lista.append(textElement('p', 'model-lab-empty', 'Nessun file osservato in questo repository.')); return lista; }
+    if (files.length === 0) { lista.append(textElement('p', 'model-lab-empty', tr('app.modelLab.hf.noFiles'))); return lista; }
     for (const file of files) {
       const riga = document.createElement('div');
       riga.className = 'hf-file-row';
       riga.append(textElement('span', 'hf-file-path', file.path));
       riga.append(textElement('span', 'hf-file-bytes', formattaByteModelLab(Number(file.sizeBytes || 0))));
       // ⛔ L'impronta si dice presente o assente, mai finta: un set senza sha256 non si scarica.
-      riga.append(textElement('span', `hf-file-hash ${file.sha256 ? 'is-present' : 'is-missing'}`, file.sha256 ? 'sha256 ✓' : 'sha256 assente'));
+      riga.append(textElement('span', `hf-file-hash ${file.sha256 ? 'is-present' : 'is-missing'}`, file.sha256 ? tr('app.modelLab.hf.sha256Present') : tr('app.modelLab.hf.sha256Missing')));
       lista.append(riga);
     }
     return lista;
@@ -4136,16 +4159,16 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const id = idDelDownload(detail.repo, detail.revision, files[0].path); // 25/09: il costruttore è uno solo (scheda-modello.js)
     try {
       await apiPost('/api/v1/huggingface/download', { id, repo: detail.repo, revision: detail.revision, files: files.map((file) => ({ path: file.path, bytes: file.sizeBytes, sha256: file.sha256 })), bytes, sha256: files[0].sha256, license: detail.license || 'unknown', path: id });
-      toast('Download avviato', `${files[0].path} · ${gb(bytes)}`);
+      toast(tr('app.modelLab.downloads.started'), `${files[0].path} · ${gb(bytes)}`);
       setModelLabSection('downloads'); caricaDownloadModelLab();
-    } catch (error) { toast('Download non avviato', error.message); }
+    } catch (error) { toast(tr('app.modelLab.downloads.notStarted'), error.message); }
   }
   function riempiVeloFileModello(detail) {
     const velo = $('#veloFileModello'); if (!velo) return;
-    const nota = velo.querySelector('.talos-dialog__body .talos-muted'); if (nota) nota.textContent = detail.revision ? `Revisione ${String(detail.revision).slice(0, 12)}` : 'Revisione da verificare prima del download';
+    const nota = velo.querySelector('.talos-dialog__body .talos-muted'); if (nota) nota.textContent = detail.revision ? tr('app.modelLab.hf.revision', { revisione: String(detail.revision).slice(0, 12) }) : tr('app.modelLab.hf.revisionUnverified');
     const lista = velo.querySelector('.talos-list'); if (!lista) return;
-    lista.replaceChildren(...(detail.files || []).map((f) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'talos-list-row'; b.append(iconaSvgAlbero('i-doc'), document.createTextNode(` ${f.path} · ${gb(Number(f.sizeBytes || 0))}${f.sha256 ? '' : ' · sha256 assente'}`)); return b; }));
-    const piede = velo.querySelector('.talos-dialog__footer-note'); if (piede) piede.textContent = `${(detail.files || []).length} file nel repository`;
+    lista.replaceChildren(...(detail.files || []).map((f) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'talos-list-row'; b.append(iconaSvgAlbero('i-doc'), document.createTextNode(` ${f.path} · ${gb(Number(f.sizeBytes || 0))}${f.sha256 ? '' : ` · ${tr('app.modelLab.hf.sha256Missing')}`}`)); return b; }));
+    const piede = velo.querySelector('.talos-dialog__footer-note'); if (piede) piede.textContent = tr('app.modelLab.hf.fileCount', { n: (detail.files || []).length });
   }
   function mostraSchedaModelloHf(detail, bottone) {
     const cont = $('#hfScheda'); if (!cont) return;
@@ -4156,30 +4179,30 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   function renderizzaHfDetailModelLab() {
     if (renderizzaHfConMockup()) return;
     const mount = $('#modelLabHfDetail'); if (!mount) return; const detail = state.modelLab.hfDetail;
-    if (!detail) { mount.replaceChildren(textElement('p', 'model-lab-empty', 'Seleziona un repository per vedere i file GGUF.')); return; }
+    if (!detail) { mount.replaceChildren(textElement('p', 'model-lab-empty', tr('app.modelLab.hf.selectRepository'))); return; }
     const card = document.createElement('article'); card.className = 'hf-repo-card';
 
     const heading = document.createElement('div'); heading.className = 'hf-repo-heading';
     heading.append(textElement('h4', 'hf-repo-id', detail.repo));
     const actions = document.createElement('div'); actions.className = 'hf-repo-actions';
     const openLink = document.createElement('a'); openLink.className = 'secondary-btn compact'; openLink.href = `https://huggingface.co/${detail.repo}`; openLink.target = '_blank'; openLink.rel = 'noopener noreferrer';
-    openLink.append(document.createTextNode('Apri su Hugging Face'), iconaSvgAlbero('i-link'));
-    const copyLink = document.createElement('button'); copyLink.type = 'button'; copyLink.className = 'icon-btn'; copyLink.setAttribute('aria-label', 'Copia link del repository'); copyLink.title = 'Copia link del repository'; copyLink.append(iconaSvgAlbero('i-copy'));
-    copyLink.addEventListener('click', async () => { try { await navigator.clipboard?.writeText(`https://huggingface.co/${detail.repo}`); copyLink.title = 'Link copiato'; window.setTimeout(() => { copyLink.title = 'Copia link del repository'; }, 1800); } catch { copyLink.title = 'Copia non riuscita'; } });
+    openLink.append(document.createTextNode(tr('app.modelLab.hf.openOnHub')), iconaSvgAlbero('i-link'));
+    const copyLink = document.createElement('button'); copyLink.type = 'button'; copyLink.className = 'icon-btn'; copyLink.setAttribute('aria-label', tr('app.modelLab.hf.copyLink')); copyLink.title = tr('app.modelLab.hf.copyLink'); copyLink.append(iconaSvgAlbero('i-copy'));
+    copyLink.addEventListener('click', async () => { try { await navigator.clipboard?.writeText(`https://huggingface.co/${detail.repo}`); copyLink.title = tr('app.modelLab.hf.linkCopied'); window.setTimeout(() => { copyLink.title = tr('app.modelLab.hf.copyLink'); }, 1800); } catch { copyLink.title = tr('app.common.copyFailed'); } });
     actions.append(openLink, copyLink);
     heading.append(actions);
 
     const tags = document.createElement('div'); tags.className = 'hf-repo-tags';
-    tags.append(textElement('span', 'hf-tag', detail.license || 'licenza non dichiarata'));
-    tags.append(textElement('span', 'hf-tag', 'GGUF'));
+    tags.append(textElement('span', 'hf-tag', detail.license || tr('app.modelLab.hf.licenseUndeclared')));
+    tags.append(textElement('span', 'hf-tag', tr('app.modelLab.hf.formatGguf')));
     if (detail.pipelineTag) tags.append(textElement('span', 'hf-tag', detail.pipelineTag));
-    tags.append(textElement('span', `hf-tag ${detail.gated ? 'hf-tag-gated' : 'hf-tag-public'}`, detail.gated ? 'Gated' : 'Pubblico'));
+    tags.append(textElement('span', `hf-tag ${detail.gated ? 'hf-tag-gated' : 'hf-tag-public'}`, detail.gated ? tr('app.modelLab.hf.gatedTag') : tr('app.modelLab.hf.publicTag')));
 
     const statsParti = [];
     const downloadLabel = formattaContoModelLab(detail.downloads);
-    if (downloadLabel) statsParti.push(`${downloadLabel} download`);
+    if (downloadLabel) statsParti.push(tr('app.modelLab.hf.statsDownloads', { n: downloadLabel }));
     if (Number.isFinite(detail.likes) && detail.likes >= 0) statsParti.push(`${formattaContoModelLab(detail.likes)} ★`);
-    statsParti.push(`revisione ${String(detail.revision || 'main').slice(0, 12)}`);
+    statsParti.push(tr('app.modelLab.hf.statsRevision', { revisione: String(detail.revision || 'main').slice(0, 12) }));
     const stats = textElement('p', 'hf-repo-stats', statsParti.join(' · '));
 
     const variants = document.createElement('div'); variants.className = 'hf-variant-list';
@@ -4197,7 +4220,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     bottoneMisura.type = 'button';
     bottoneMisura.className = 'secondary-btn compact';
     bottoneMisura.disabled = stima?.inCorso === true || gruppiPerMisura.length === 0;
-    bottoneMisura.textContent = stima?.inCorso ? 'Misuro…' : (stima?.misurataAlle ? 'Rimisura su questo PC' : 'Misura su questo PC');
+    bottoneMisura.textContent = stima?.inCorso ? tr('app.modelLab.hf.measuring') : (stima?.misurataAlle ? tr('app.modelLab.hf.measureAgain') : tr('app.modelLab.hf.measure'));
     bottoneMisura.addEventListener('click', () => { void misuraVariantiHfModelLab(gruppiPerMisura); });
     barraMisura.append(bottoneMisura);
     /*
@@ -4205,9 +4228,9 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
      * mentre si lavora — basta caricare un modello — e un badge senza data
      * diventa una bugia silenziosa dopo un minuto.
      */
-    if (stima?.misurataAlle) barraMisura.append(textElement('span', 'hf-variant-measured-at', `misurato alle ${stima.misurataAlle.toLocaleTimeString('it-IT')}`));
+    if (stima?.misurataAlle) barraMisura.append(textElement('span', 'hf-variant-measured-at', tr('app.modelLab.hf.measuredAt', { ora: stima.misurataAlle.toLocaleTimeString(localeUI()) })));
     variants.append(barraMisura, nodoBaseStimaHfModelLab());
-    if (!groups.length) variants.append(textElement('p', 'model-lab-empty', 'Nessun file GGUF osservato.'));
+    if (!groups.length) variants.append(textElement('p', 'model-lab-empty', tr('app.modelLab.hf.noGguf')));
     for (const files of groups) {
       const bytes = files.reduce((sum, file) => sum + Number(file.sizeBytes || 0), 0);
       const expected = files[0].path.match(/-\d{5}-of-(\d{5})\.gguf$/iu)?.[1];
@@ -4216,10 +4239,10 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       const row = document.createElement('article'); row.className = `hf-variant-row${incomplete ? ' is-incomplete' : missingHash ? ' is-unverified' : ' is-ready'}`;
       const status = document.createElement('span'); status.className = 'hf-variant-status'; status.setAttribute('aria-hidden', 'true');
       const info = document.createElement('div'); info.className = 'hf-variant-info';
-      info.append(textElement('strong', '', files[0].path.split('/').pop()), textElement('small', '', `${files.length === 1 ? '1 file' : `${files.length} file`} · ${formattaByteModelLab(bytes)}`));
+      info.append(textElement('strong', '', files[0].path.split('/').pop()), textElement('small', '', `${trn('app.files.countOne', 'app.files.countMany', files.length)} · ${formattaByteModelLab(bytes)}`));
       const button = document.createElement('button'); button.type = 'button'; button.className = 'secondary-btn compact';
       button.disabled = incomplete || missingHash;
-      button.textContent = incomplete ? `Set incompleto · ${files.length}/${expected}` : missingHash ? 'Hash non verificato' : 'Scarica';
+      button.textContent = incomplete ? tr('app.modelLab.hf.incompleteSet', { presenti: files.length, attesi: expected }) : missingHash ? tr('app.modelLab.hf.hashUnverified') : tr('app.modelLab.hf.download');
       button.addEventListener('click', async () => { const id = idDelDownload(detail.repo, detail.revision, files[0].path); await apiPost('/api/v1/huggingface/download', { id, repo: detail.repo, revision: detail.revision, files: files.map((file) => ({ path: file.path, bytes: file.sizeBytes, sha256: file.sha256 })), bytes, sha256: files[0].sha256, license: detail.license || 'unknown', path: id }); setModelLabSection('downloads'); caricaDownloadModelLab(); });
       row.append(status, info, button);
       /*
@@ -4230,7 +4253,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
        */
       const voceStima = stima?.perVariante?.get(files[0].path);
       if (stima?.inCorso) {
-        row.append(textElement('p', 'hf-variant-fit is-loading', 'Misuro su questo PC…'));
+        row.append(textElement('p', 'hf-variant-fit is-loading', tr('app.modelLab.hf.measuringOnPc')));
       } else if (voceStima) {
         const descritta = descriviStimaHf(voceStima);
         const nodoStima = textElement('p', 'hf-variant-fit', descritta.testo);
@@ -4261,9 +4284,9 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
      * inventato — è un dato che avevamo e non mostravamo.
      */
     const schede = [
-      { id: 'quantizzazioni', etichetta: 'Quantizzazioni', conto: groups.length, nodo: variants },
-      { id: 'scheda', etichetta: 'Scheda modello', conto: null, nodo: renderizzaModelCardReadme(detail) },
-      { id: 'file', etichetta: 'File', conto: Array.isArray(detail.files) ? detail.files.length : 0, nodo: nodoFileHfModelLab(detail) },
+      { id: 'quantizzazioni', etichetta: tr('app.modelLab.hf.tabQuantizations'), conto: groups.length, nodo: variants },
+      { id: 'scheda', etichetta: tr('app.modelLab.hf.modelCard'), conto: null, nodo: renderizzaModelCardReadme(detail) },
+      { id: 'file', etichetta: tr('app.modelLab.hf.tabFiles'), conto: Array.isArray(detail.files) ? detail.files.length : 0, nodo: nodoFileHfModelLab(detail) },
     ];
     const barra = document.createElement('div');
     barra.className = 'hf-detail-tabs';
@@ -4291,7 +4314,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     card.append(heading, tags, stats, barra, corpo);
     mount.replaceChildren(card);
   }
-  function renderizzaHfRisultatiModelLab() { if (renderizzaHfConMockup()) return; const mount = $('#modelLabHfResults'); if (!mount) return; if (state.modelLab.hfError) { mount.replaceChildren(textElement('p', 'model-lab-empty', state.modelLab.hfError.message)); return; } if (!state.modelLab.hfResults.length) { mount.replaceChildren(textElement('p', 'model-lab-empty', 'Nessun repository GGUF trovato.')); return; } mount.replaceChildren(...state.modelLab.hfResults.map((item) => { const button = document.createElement('button'); button.type = 'button'; button.className = 'model-lab-list-item'; button.append(textElement('strong', '', item.repo), textElement('small', '', `${item.downloads ?? '—'} download · ${item.gated ? 'gated' : 'pubblico'}`)); button.addEventListener('click', async () => { state.modelLab.hfDetail = null; /* ⛔ la stima appartiene al repository che l'ha prodotta: cambiando modello va via, altrimenti si attribuisce a uno il verdetto di un altro */ state.modelLab.hfStima = null; state.modelLab.hfDetailTab = 'quantizzazioni'; renderizzaHfDetailModelLab(); try { state.modelLab.hfDetail = await apiGet(`/api/v1/huggingface/repo?repo=${encodeURIComponent(item.repo)}&revision=${encodeURIComponent(item.revision || '')}`); } catch (error) { state.modelLab.hfError = error; } renderizzaHfDetailModelLab(); }); return button; })); }
+  function renderizzaHfRisultatiModelLab() { if (renderizzaHfConMockup()) return; const mount = $('#modelLabHfResults'); if (!mount) return; if (state.modelLab.hfError) { mount.replaceChildren(textElement('p', 'model-lab-empty', state.modelLab.hfError.message)); return; } if (!state.modelLab.hfResults.length) { mount.replaceChildren(textElement('p', 'model-lab-empty', tr('app.modelLab.hf.noRepositories'))); return; } mount.replaceChildren(...state.modelLab.hfResults.map((item) => { const button = document.createElement('button'); button.type = 'button'; button.className = 'model-lab-list-item'; button.append(textElement('strong', '', item.repo), textElement('small', '', tr('app.modelLab.hf.downloadsLine', { n: item.downloads ?? '—', accesso: item.gated ? tr('app.modelLab.hf.gatedLower') : tr('app.modelLab.hf.publicLower') }))); button.addEventListener('click', async () => { state.modelLab.hfDetail = null; /* ⛔ la stima appartiene al repository che l'ha prodotta: cambiando modello va via, altrimenti si attribuisce a uno il verdetto di un altro */ state.modelLab.hfStima = null; state.modelLab.hfDetailTab = 'quantizzazioni'; renderizzaHfDetailModelLab(); try { state.modelLab.hfDetail = await apiGet(`/api/v1/huggingface/repo?repo=${encodeURIComponent(item.repo)}&revision=${encodeURIComponent(item.revision || '')}`); } catch (error) { state.modelLab.hfError = error; } renderizzaHfDetailModelLab(); }); return button; })); }
 
   function aggiungiBloccoStreamModelLab(tipo, titolo, contenuto) {
     const mount = $('#modelLabStream');
@@ -4311,25 +4334,25 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
 
   function collegaEventiProvaModelLab(sessionId) {
     if (state.modelLab.runtimeEventSource) state.modelLab.runtimeEventSource.close();
-    if (typeof EventSource !== 'function') { aggiungiBloccoStreamModelLab('error', 'Errore', 'EventSource non disponibile nel browser.'); return; }
+    if (typeof EventSource !== 'function') { aggiungiBloccoStreamModelLab('error', tr('app.modelLab.stream.error'), tr('app.modelLab.stream.noEventSource')); return; }
     const source = new EventSource(API(`/api/v1/sessions/${encodeURIComponent(sessionId)}/events`));
     state.modelLab.runtimeEventSource = source;
     window.__talosHarnessModelLabEventSource = source;
     source.onmessage = (message) => {
       let event;
       try { event = JSON.parse(message.data); } catch { return; }
-      if (event.type === 'TextMessageContent') aggiungiBloccoStreamModelLab('text', 'Risposta', event.delta);
-      else if (event.type === 'ReasoningMessageContent') aggiungiBloccoStreamModelLab('reasoning', 'Ragionamento', event.delta);
-      else if (event.type === 'ToolCallStart') aggiungiBloccoStreamModelLab('tool', 'Tool call', event.toolCallName || event.toolCallId);
-      else if (event.type === 'ToolCallArgs') aggiungiBloccoStreamModelLab('tool', 'Tool call', event.delta);
-      else if (event.type === 'RunError') aggiungiBloccoStreamModelLab('error', 'Errore', event.message || event.code || 'Runtime locale fallito');
+      if (event.type === 'TextMessageContent') aggiungiBloccoStreamModelLab('text', tr('app.modelLab.stream.response'), event.delta);
+      else if (event.type === 'ReasoningMessageContent') aggiungiBloccoStreamModelLab('reasoning', tr('app.modelLab.stream.reasoning'), event.delta);
+      else if (event.type === 'ToolCallStart') aggiungiBloccoStreamModelLab('tool', tr('app.modelLab.stream.toolCall'), event.toolCallName || event.toolCallId);
+      else if (event.type === 'ToolCallArgs') aggiungiBloccoStreamModelLab('tool', tr('app.modelLab.stream.toolCall'), event.delta);
+      else if (event.type === 'RunError') aggiungiBloccoStreamModelLab('error', tr('app.modelLab.stream.error'), event.message || event.code || tr('app.modelLab.stream.runtimeFailed'));
       if (event.type === 'RunFinished' || event.type === 'RunError') {
         source.close();
         state.modelLab.runtimeEventSource = null;
         const cancel = $('#modelLabCancelButton'); if (cancel) cancel.hidden = true;
       }
     };
-    source.onerror = () => { if (source.readyState === EventSource.CLOSED) aggiungiBloccoStreamModelLab('error', 'Errore', 'Connessione agli eventi interrotta.'); };
+    source.onerror = () => { if (source.readyState === EventSource.CLOSED) aggiungiBloccoStreamModelLab('error', tr('app.modelLab.stream.error'), tr('app.common.eventsInterrupted')); };
   }
 
   async function avviaProvaRuntimeModelLab() {
@@ -4340,12 +4363,12 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const cancelButton = $('#modelLabCancelButton');
     runButton.disabled = true;
     cancelButton.hidden = false;
-    $('#modelLabStream')?.replaceChildren(textElement('p', 'model-lab-empty', 'Avvio della sessione locale…'));
+    $('#modelLabStream')?.replaceChildren(textElement('p', 'model-lab-empty', tr('app.modelLab.startingSession')));
     try {
       const tasks = await apiGet('/api/v1/tasks');
       const taskId = tasks?.items?.[0]?.id;
       if (!taskId) {
-        aggiungiBloccoStreamModelLab('error', 'Prova non disponibile', 'In questa installazione non ci sono ancora attività pronte per la prova. Puoi usare una sessione personalizzata oppure aprire Doctor per vedere cosa manca.');
+        aggiungiBloccoStreamModelLab('error', tr('app.modelLab.stream.testUnavailable'), tr('app.modelLab.stream.testUnavailableBody'));
         cancelButton.hidden = true;
         runButton.disabled = false;
         return;
@@ -4356,7 +4379,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       state.modelLab.runtimeSessionId = data.sessionId;
       collegaEventiProvaModelLab(data.sessionId);
     } catch (error) {
-      aggiungiBloccoStreamModelLab('error', 'Errore', error.message || 'Prova runtime non riuscita');
+      aggiungiBloccoStreamModelLab('error', tr('app.modelLab.stream.error'), error.message || tr('app.modelLab.stream.testFailed'));
       cancelButton.hidden = true;
       runButton.disabled = false;
     }
@@ -4365,7 +4388,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   async function annullaProvaRuntimeModelLab() {
     if (!state.modelLab.runtimeSessionId) return;
     try { await apiPost(`/api/v1/sessions/${encodeURIComponent(state.modelLab.runtimeSessionId)}/cancel`, {}); }
-    catch (error) { aggiungiBloccoStreamModelLab('error', 'Errore', error.message || 'Annullamento non riuscito'); }
+    catch (error) { aggiungiBloccoStreamModelLab('error', tr('app.modelLab.stream.error'), error.message || tr('app.modelLab.stream.cancelFailed')); }
     state.modelLab.runtimeEventSource?.close();
     state.modelLab.runtimeEventSource = null;
     state.modelLab.runtimeSessionId = null;
@@ -4391,7 +4414,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     lab.selectedModel = aggiornaCatalogoModelli(panel, lab.catalog, {
       query: lab.search, provider: lab.provider, selezionato: lab.selectedModel,
       limite: lab.catalogLimite || 120, caricamento: lab.loadingCatalog,
-      errore: lab.catalogError ? 'Catalogo non disponibile: ' + lab.catalogError.message : '',
+      errore: lab.catalogError ? tr('app.modelLab.catalog.unavailableWith', { motivo: lab.catalogError.message }) : '',
       seleziona: model => { lab.selectedModel = model; renderizzaCatalogoModelLab(); },
       altri: () => { lab.catalogLimite += 120; renderizzaCatalogoModelLab(); },
       fornitori: () => setModelLabSection('providers'),
@@ -4428,14 +4451,14 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const globale = $('#modelLabLiberaMemoria');
     if (globale) {
       globale.disabled = Boolean(bloccato);
-      globale.textContent = state.modelLab.unloading ? 'Liberazione…' : 'Libera memoria';
-      globale.title = state.modelLab.runtimeError ? 'Stato del runtime non disponibile: aggiorna Sistema'
-        : pronto ? 'Scarica dalla memoria il modello locale. I file restano sul disco.' : 'Nessun modello locale caricato';
+      globale.textContent = state.modelLab.unloading ? tr('app.modelLab.memory.freeing') : tr('app.modelLab.memory.free');
+      globale.title = state.modelLab.runtimeError ? tr('app.modelLab.memory.runtimeUnavailable')
+        : pronto ? tr('app.modelLab.memory.unloadHint') : tr('app.modelLab.memory.noModelLoaded');
     }
     const locale = $('#azioneModello[data-action="memoria"]');
     if (locale) {
       locale.disabled = Boolean(bloccato);
-      locale.textContent = state.modelLab.unloading ? 'Liberazione…' : 'Libera memoria';
+      locale.textContent = state.modelLab.unloading ? tr('app.modelLab.memory.freeing') : tr('app.modelLab.memory.free');
     }
     montaggioPaginaModello?.aggiornaRuntime(runtimeInstallati());
 
@@ -4491,7 +4514,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       pagina.className = 'talos-pagina-modello';
       pagina.dataset.c = 'ModelPage';
       pagina.hidden = true;
-      pagina.setAttribute('aria-label', 'Pagina del modello');
+      pagina.setAttribute('aria-label', tr('app.modelLab.pageLabel'));
       /*
        * ⛔ NON `ROOT()`: quello è il `document`, e un documento accetta UN solo elemento figlio.
        *   Misurato: `HierarchyRequestError: Only one element on document allowed` — la pagina non
@@ -4660,12 +4683,12 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       await caricaCapacitaMacchina();
       await caricaRuntimeModelLab();
       if (state.modelLab.runtimeError) {
-        toast('Modello scaricato', 'Comando eseguito, ma non è stato possibile rileggere lo stato. Aggiorna Sistema.');
+        toast(tr('app.modelLab.memory.unloaded'), tr('app.modelLab.memory.rereadFailed'));
       } else {
-        toast('Memoria liberata', 'Modello scaricato dalla memoria. I file installati restano sul disco.');
+        toast(tr('app.modelLab.memory.freed'), tr('app.modelLab.memory.freedBody'));
       }
     } catch (error) {
-      toast('Memoria non liberata', error.message || 'Il runtime locale non ha risposto.');
+      toast(tr('app.modelLab.memory.notFreed'), error.message || tr('app.modelLab.memory.noResponse'));
     } finally {
       state.modelLab.unloading = false;
       aggiornaPannelloMemoria();
@@ -4676,14 +4699,14 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     if (state.modelLab.loadingCapacity || state.modelLab.capacity) return;
     state.modelLab.loadingCapacity = true; state.modelLab.capacityError = null;
     aggiornaPannelloMemoria();
-    const status = $('#machineCapacityStatus'); if (status) status.textContent = 'Misurazione…';
+    const status = $('#machineCapacityStatus'); if (status) status.textContent = tr('app.modelLab.capacity.measuring');
     try {
       state.modelLab.capacity = normalizzaCapacita(await apiGet('/api/v1/model-lab/capacity'));
-      if (status) status.textContent = 'Misurata';
+      if (status) status.textContent = tr('app.modelLab.capacity.measured');
     } catch (error) {
       state.modelLab.capacity = null;
       state.modelLab.capacityError = error;
-      if (status) status.textContent = 'Non disponibile';
+      if (status) status.textContent = tr('app.common.unavailable');
     } finally { state.modelLab.loadingCapacity = false; aggiornaPannelloMemoria(); }
   }
 
@@ -4698,11 +4721,11 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       const select = $('#modelLabProviderFilter');
       if (select) {
         const current = state.modelLab.provider;
-        select.replaceChildren(new Option('Tutti i fornitori', 'all'), ...providers.map((provider) => new Option(provider, provider)));
+        select.replaceChildren(new Option(tr('app.modelLab.allProviders'), 'all'), ...providers.map((provider) => new Option(provider, provider)));
         select.value = providers.includes(current) ? current : 'all';
         state.modelLab.provider = select.value;
       }
-      const status = $('#modelLabCatalogStatus'); if (status) status.textContent = `${state.modelLab.catalog.modelli.length} modelli osservati`;
+      const status = $('#modelLabCatalogStatus'); if (status) status.textContent = tr('app.modelLab.catalog.observed', { n: state.modelLab.catalog.modelli.length });
     } catch (error) {
       state.modelLab.catalogError = error;
     } finally { state.modelLab.loadingCatalog = false; renderizzaCatalogoModelLab(); }
@@ -4772,24 +4795,24 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const impostazioni = leggiImpostazioniDesktop();
     const a = impostazioni.appearance;
     // 05/9 R05: il riepilogo usa le parole del controllo originale, senza una seconda mappa.
-    const etichetta = (gruppo, valore) => [...($(`#${gruppo}Select`)?.options || [])].find(opzione => opzione.value === valore)?.textContent || 'Non impostato';
+    const etichetta = (gruppo, valore) => [...($(`#${gruppo}Select`)?.options || [])].find(opzione => opzione.value === valore)?.textContent || tr('app.settings.facts.notSet');
     riempiFatti('settingsChatFacts', [
-      ['Testo chat', etichetta('chatFontScale', a.chatFontScale)],
-      ['Stile dei messaggi', etichetta('messageStyle', a.messageStyle)],
-      ['Animazione risposta', etichetta('streamingAnimation', a.streamingAnimation)],
-      ['Chat a tutta larghezza', a.chatFullWidth ? 'Sì' : 'No'],
-      ['Ragionamento aperto mentre scrive', state.showReasoning ? 'Sì' : 'No'],
+      [tr('app.settings.facts.chatText'), etichetta('chatFontScale', a.chatFontScale)],
+      [tr('app.settings.facts.messageStyle'), etichetta('messageStyle', a.messageStyle)],
+      [tr('app.settings.facts.responseAnimation'), etichetta('streamingAnimation', a.streamingAnimation)],
+      [tr('app.settings.facts.fullWidthChat'), a.chatFullWidth ? tr('app.settings.facts.yes') : tr('app.settings.facts.no')],
+      [tr('app.settings.facts.reasoningOpen'), state.showReasoning ? tr('app.settings.facts.yes') : tr('app.settings.facts.no')],
     ]);
     const regole = Object.keys(state.permessiPerAttrezzo || impostazioni.chat.permessiPerAttrezzo || {}).length;
     riempiFatti('settingsToolsFacts', [
-      ['Policy attiva', etichettaPermesso(state.permissions || impostazioni.chat.permissions || 'Workspace write')],
-      ['Regole per attrezzo', regole === 0 ? 'Nessuna' : `${regole}`],
-      ['Sessione', state.realSession.id ? (state.session || 'sessione aperta') : 'nessuna aperta: valgono i valori predefiniti'],
+      [tr('app.settings.facts.activePolicy'), etichettaPermesso(state.permissions || impostazioni.chat.permissions || 'Workspace write')],
+      [tr('app.settings.facts.toolRules'), regole === 0 ? tr('app.settings.facts.none') : `${regole}`],
+      [tr('app.settings.facts.session'), state.realSession.id ? (state.session || tr('app.settings.facts.sessionOpen')) : tr('app.settings.facts.noSessionDefaults')],
     ]);
     riempiFatti('settingsWorkspaceFacts', [
-      ['Workspace attivo', state.realSession.cartellaAssoluta || (state.realSession.id ? 'in attesa del primo giro' : 'nessuna sessione aperta')],
-      ['File scritti in questa sessione', String(state.realSession.reviewFiles.size)],
-      ['Pagine lette in questa sessione', String(state.realSession.browserPagine.length)],
+      [tr('app.settings.facts.activeWorkspace'), state.realSession.cartellaAssoluta || (state.realSession.id ? tr('app.settings.facts.waitingFirstTurn') : tr('app.settings.facts.noSessionOpen'))],
+      [tr('app.settings.facts.filesWritten'), String(state.realSession.reviewFiles.size)],
+      [tr('app.settings.facts.pagesRead'), String(state.realSession.browserPagine.length)],
     ]);
     const privacy = $('#settingsPrivacyList');
     if (privacy) {
@@ -4802,7 +4825,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         }
       } catch { /* storage negato: la lista resta vuota, onestamente */ }
       privacy.replaceChildren(...(voci.length === 0
-        ? [textElement('li', 'muted-copy', 'Nessuna preferenza TALOS salvata in questo browser.')]
+        ? [textElement('li', 'muted-copy', tr('app.settings.noPreferences'))]
         : voci.map(([chiave, byte]) => { const li = document.createElement('li'); li.append(textElement('code', '', chiave), textElement('span', 'muted-copy', ` · ${byte < 1024 ? `${byte} B` : `${(byte / 1024).toFixed(1)} KB`}`)); return li; })));
     }
     /* ⛔ 23/09/2026 — qui si riempiva `#settingsProvidersList`, il riepilogo di «Provider e accessi»:
@@ -4961,12 +4984,12 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         const blob = new Blob([`${JSON.stringify(documento, null, 2)}\n`], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
-        a.href = url; a.download = `talos-preferenze-${new Date().toISOString().slice(0, 10)}.json`;
+        a.href = url; a.download = tr('app.settings.exportFileName', { data: new Date().toISOString().slice(0, 10) });
         document.body.appendChild(a); a.click(); a.remove();
         // ⛔ l'URL si revoca DOPO il clic, o su Firefox il file scaricato arriva vuoto
         setTimeout(() => URL.revokeObjectURL(url), 1000);
-        dillo('Preferenze esportate nel file scaricato.');
-      } catch (errore) { dillo(`Esportazione non riuscita: ${errore.message}`, true); }
+        dillo(tr('app.settings.exported'));
+      } catch (errore) { dillo(tr('app.settings.exportFailedWith', { motivo: errore.message }), true); }
     });
 
     const campo = $('#settingsImportaFile');
@@ -4977,17 +5000,17 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       try {
         const testo = await file.text();
         const letto = JSON.parse(testo);
-        if (!letto || typeof letto !== 'object' || Array.isArray(letto)) throw new Error('il file non contiene un documento di preferenze');
-        if (!salvaImpostazioniDesktop(letto)) throw new Error(t('Salvataggio delle preferenze non riuscito.')); // retain the validated import only after persistence
+        if (!letto || typeof letto !== 'object' || Array.isArray(letto)) throw new Error(tr('app.settings.notPreferencesDoc'));
+        if (!salvaImpostazioniDesktop(letto)) throw new Error(tr('app.settings.saveFailed')); // retain the validated import only after persistence
         const documento = leggiImpostazioniDesktop();
         applicaAspettoDesktop(documento.appearance);
         montaImpostazioni($('#schermoImpostazioni'), documento.appearance, { recupera: (id) => $('#' + id), cambiaSezione: setSettingsSection, defaultValues: DESKTOP_APPEARANCE_DEFAULTS, ripristinaAspetto: resettaAspettoDesktop });
         montaScorciatoiaTemi($('#schermoImpostazioni')); // 11/09 lotto F: idempotente — `montaImpostazioni` ridisegna le righe
         sincronizzaSelettoriDensitaLingua(normalizzaAspettoDesktop(documento.appearance));
-        dillo(`Preferenze importate da «${file.name}».`);
-        toast('Preferenze importate', file.name);
+        dillo(tr('app.settings.importedFrom', { file: file.name }));
+        toast(tr('app.settings.imported'), file.name);
       } catch (errore) {
-        dillo(`Importazione non riuscita: ${errore.message}. Il file deve essere quello prodotto da «Esporta».`, true);
+        dillo(tr('app.settings.importFailedWith', { motivo: errore.message }), true);
       } finally { campo.value = ''; }
     });
 
@@ -4999,10 +5022,10 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     $('#settingsRipristina')?.addEventListener('click', () => {
       // ⛔ distruttivo: si chiede prima, e si dice esattamente cosa NON viene toccato.
       confermaModale({
-        titolo: 'Rimetto tutte le preferenze ai valori iniziali?',
-        domanda: 'Tema, densità, lingua, preferenze della chat e cartelle ricordate tornano come appena installato.',
-        conseguenza: 'Le conversazioni e i file NON vengono toccati.',
-        etichettaConferma: 'Ripristina',
+        titolo: tr('app.settings.resetTitle'),
+        domanda: tr('app.settings.resetQuestion'),
+        conseguenza: tr('app.settings.resetConsequence'),
+        etichettaConferma: tr('app.settings.resetConfirm'),
         onConferma: () => { ripristinaPreferenzeDesktop(); },
       });
     });
@@ -5014,9 +5037,9 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         montaImpostazioni($('#schermoImpostazioni'), documento.appearance, { recupera: (id) => $('#' + id), cambiaSezione: setSettingsSection, defaultValues: DESKTOP_APPEARANCE_DEFAULTS, ripristinaAspetto: resettaAspettoDesktop });
         montaScorciatoiaTemi($('#schermoImpostazioni')); // 11/09 lotto F: idempotente — `montaImpostazioni` ridisegna le righe
         sincronizzaSelettoriDensitaLingua(normalizzaAspettoDesktop(documento.appearance));
-        dillo('Preferenze riportate ai valori iniziali. Le conversazioni non sono state toccate.');
-        toast('Preferenze ripristinate', 'Le conversazioni non sono state toccate');
-      } catch (errore) { dillo(`Ripristino non riuscito: ${errore.message}`, true); }
+        dillo(tr('app.settings.restoredLong'));
+        toast(tr('app.settings.restored'), tr('app.settings.restoredBody'));
+      } catch (errore) { dillo(tr('app.settings.restoreFailedWith', { motivo: errore.message }), true); }
     }
   }
 
@@ -5030,7 +5053,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     if (!pannello) return;
     let attrezzi = [];
     try { attrezzi = (await apiGet('/api/v1/tools'))?.attrezzi || []; }
-    catch { aggiornaContesto(pannello, null); const e = $('#contestoEtichetta'); if (e) e.textContent = 'Gli attrezzi non si leggono adesso: il server locale non risponde.'; return; }
+    catch { aggiornaContesto(pannello, null); const e = $('#contestoEtichetta'); if (e) e.textContent = tr('app.settings.toolsUnreadable'); return; }
     /*
      * ⛔ La finestra è quella del modello SCELTO, e se il catalogo non la
      * dichiara resta `null`: `ripartizioneContesto` in quel caso non calcola
@@ -5074,7 +5097,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       aggiornaCosti(pannello, sessioni, { sessioneId: state.realSession.id });
     } catch {
       const nota = $('#costiNota');
-      if (nota) nota.textContent = 'Le sessioni non si leggono adesso: il server locale non risponde.';
+      if (nota) nota.textContent = tr('app.settings.sessionsUnreadable');
     }
   }
 
@@ -5112,11 +5135,11 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const normalizzato = normalizzaFonteRicerca(stato);
     aggiornaFonteRicerca(mount, normalizzato, {
       feedback: feedback || '', query, esito,
-      scegli: source => azioneRicercaWeb(mount, () => apiPost('/api/v1/search-source', { source }), 'Fonte aggiornata.'),
-      salvaChiave: (source, key) => azioneRicercaWeb(mount, () => apiPost('/api/v1/search-source/key', { source, key }), 'Chiave salvata nel portachiavi di questo computer.'),
-      rimuoviChiave: source => azioneRicercaWeb(mount, () => apiPost('/api/v1/search-source/key/remove', { source }), 'Chiave rimossa dal portachiavi.'),
-      salvaIndirizzo: (source, endpoint) => azioneRicercaWeb(mount, () => apiPost('/api/v1/search-source', { source, endpoint }), 'Indirizzo salvato.'),
-      prova: query => azioneRicercaWeb(mount, () => apiPost('/api/v1/search-source/test', { query }), 'Prova terminata.', { prova: true }),
+      scegli: source => azioneRicercaWeb(mount, () => apiPost('/api/v1/search-source', { source }), tr('app.settings.searchSource.updated')),
+      salvaChiave: (source, key) => azioneRicercaWeb(mount, () => apiPost('/api/v1/search-source/key', { source, key }), tr('app.settings.searchSource.keySaved')),
+      rimuoviChiave: source => azioneRicercaWeb(mount, () => apiPost('/api/v1/search-source/key/remove', { source }), tr('app.settings.searchSource.keyRemoved')),
+      salvaIndirizzo: (source, endpoint) => azioneRicercaWeb(mount, () => apiPost('/api/v1/search-source', { source, endpoint }), tr('app.settings.searchSource.addressSaved')),
+      prova: query => azioneRicercaWeb(mount, () => apiPost('/api/v1/search-source/test', { query }), tr('app.settings.searchSource.testDone'), { prova: true }),
       ricarica: caricaPannelloRicercaWeb,
     });
     statoFonteRicerca = normalizzato;
@@ -5130,14 +5153,14 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     mount.setAttribute('aria-busy', 'true');
     for (const [el] of disabilitati) el.disabled = true;
     messaggioFonteRicerca(mount, '', true);
-    messaggioFonteRicerca(mount, prova ? 'Ricerca in corso…' : 'Aggiornamento in corso…');
+    messaggioFonteRicerca(mount, prova ? tr('app.settings.searchSource.searching') : tr('app.settings.searchSource.updating'));
     const precedente = mount.querySelector('[data-search-result]'); if (precedente) precedente.hidden = true;
     const prontezza = mount.querySelector('[data-search-readiness]');
     if (prontezza && statoFonteRicerca) prontezza.textContent = statoFonteRicerca.messaggio;
     try {
       const risposta = await esegui();
       const esito = prova ? normalizzaProvaRicerca(risposta) : null;
-      if (prova && !statoFonteRicerca) throw new Error('Ricarica la configurazione prima della prova.');
+      if (prova && !statoFonteRicerca) throw new Error(tr('app.settings.searchSource.reloadFirst'));
       const mantieniFuoco = focus && (document.activeElement === origine || document.activeElement === document.body);
       disegnaPannelloRicercaWeb(mount, prova ? statoFonteRicerca : risposta, feedbackOk, esito);
       if (mantieniFuoco && mount.getClientRects().length) {
@@ -5148,9 +5171,9 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       if (feedbackOk && !prova) queueMicrotask(() => { void renderSettingsRiepiloghi(); });
     } catch (error) {
       messaggioFonteRicerca(mount, '');
-      messaggioFonteRicerca(mount, messaggioErroreUtente(error, 'Operazione non riuscita. Riprova o aggiorna lo stato.'), true);
+      messaggioFonteRicerca(mount, messaggioErroreUtente(error, tr('app.settings.searchSource.failed')), true);
       const risultato = mount.querySelector('[data-search-result]'); if (risultato) risultato.hidden = true;
-      if (!mount.querySelector('[data-search-action=reload]')) { const riprova = textElement('button', 'talos-button talos-button--secondary', 'Aggiorna stato'); riprova.type = 'button'; riprova.dataset.searchAction = 'reload'; riprova.addEventListener('click', caricaPannelloRicercaWeb); mount.append(riprova); }
+      if (!mount.querySelector('[data-search-action=reload]')) { const riprova = textElement('button', 'talos-button talos-button--secondary', tr('app.common.refreshStatus')); riprova.type = 'button'; riprova.dataset.searchAction = 'reload'; riprova.addEventListener('click', caricaPannelloRicercaWeb); mount.append(riprova); }
       for (const [el, prima] of disabilitati) if (el.isConnected) el.disabled = prima;
       if (focus && (document.activeElement === document.body || document.activeElement === origine) && origine.isConnected && mount.getClientRects().length) {
         origine.focus({ preventScroll: true });
@@ -5215,7 +5238,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const generazione = hfGenerazione, cursor = append ? state.modelLab.hfCursor : null;
     state.modelLab.hfQuery = search;
     state.modelLab.hfError = null; state.modelLab.hfErrorePagina = null;
-    const status = $('#modelLabHfStatus'); if (status) status.textContent = 'Ricerca in corso...';
+    const status = $('#modelLabHfStatus'); if (status) status.textContent = tr('app.common.searching');
     state.modelLab.hfCaricamento = true; renderizzaHfConMockup();
     try {
       const params = new URLSearchParams({ query: state.modelLab.hfQuery, limit: '20', sort, direction: '-1' });
@@ -5228,12 +5251,12 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       state.modelLab.hfResults = [...new Map([...(append ? state.modelLab.hfResults : []), ...items].map(r => [r.repo, r])).values()];
       if (cursor) hfCursoriLetti.add(cursor);
       state.modelLab.hfCursor = typeof data.nextCursor === 'string' && data.nextCursor && !hfCursoriLetti.has(data.nextCursor) ? data.nextCursor : null;
-      if (status) status.textContent = `${state.modelLab.hfResults.length} repository osservati`;
+      if (status) status.textContent = tr('app.modelLab.hf.observed', { n: state.modelLab.hfResults.length });
     } catch (error) {
       if (generazione !== hfGenerazione) return;
       if (append) state.modelLab.hfErrorePagina = error;
       else { state.modelLab.hfError = error; state.modelLab.hfResults = []; }
-      if (status) status.textContent = 'Ricerca non disponibile';
+      if (status) status.textContent = tr('app.modelLab.hf.searchUnavailable');
     }
     state.modelLab.hfCaricamento = false;
     const next = $('#modelLabHfNextButtonControl'); if (next) next.hidden = !state.modelLab.hfCursor;
@@ -5312,7 +5335,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     $('#modelLabHfNextButtonControl')?.addEventListener('click', () => cercaHuggingFaceModelLab({ append: true }));
     $('#modelLabHfSortControl')?.addEventListener('change', () => { clearTimeout(attesaRicercaHf); cercaHuggingFaceModelLab(); });
     $('#modelLabDownloadsPanel [data-action="soloAttivi"]')?.addEventListener('click', () => { downloadSoloAttivi = !downloadSoloAttivi; renderizzaDownloadConMockup(); }); // 06/9 B6.10
-    $('#veloAnnullaDownload [data-lab-dialog-action="annullaDownload"], #veloAnnullaDownload .talos-button--danger')?.addEventListener('click', async () => { const id = $('#veloAnnullaDownload')?.dataset.downloadId; if (!id) return; try { await apiPost(`/api/v1/huggingface/downloads/${encodeURIComponent(id)}/cancel`, {}); toast('Download annullato', id); } catch (error) { toast('Annullamento non riuscito', error.message); } chiudiVeloMockup('veloAnnullaDownload'); caricaDownloadModelLab(); });
+    $('#veloAnnullaDownload [data-lab-dialog-action="annullaDownload"], #veloAnnullaDownload .talos-button--danger')?.addEventListener('click', async () => { const id = $('#veloAnnullaDownload')?.dataset.downloadId; if (!id) return; try { await apiPost(`/api/v1/huggingface/downloads/${encodeURIComponent(id)}/cancel`, {}); toast(tr('app.modelLab.downloads.cancelled'), id); } catch (error) { toast(tr('app.modelLab.downloads.cancelFailed'), error.message); } chiudiVeloMockup('veloAnnullaDownload'); caricaDownloadModelLab(); });
     $('#modelLabHfPanel [data-clear="hf"]')?.addEventListener('click', () => {
       clearTimeout(attesaRicercaHf); hfGenerazione++; hfFirmaRicerca = ''; hfCursoriLetti = new Set(); hfOsservatore?.disconnect();
       for (const id of ['modelLabHfSearch', 'modelLabHfAuthorControl', 'modelLabHfFiltersControl']) { const c = $(`#${id}`); if (c) c.value = ''; }
@@ -5356,7 +5379,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     caricaModelliLocaliModelLab();
     caricaProviderModelLab();
     const runButton = $('#modelLabRunButton');
-    if (runButton) runButton.dataset.disabledReason = 'Seleziona un runtime osservato e un modello';
+    if (runButton) runButton.dataset.disabledReason = tr('app.modelLab.runtime.selectFirst');
     setModelLabSection('overview');
   }
 
@@ -5383,7 +5406,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    */
   async function fermaProcesso(toolCallId) {
     const sessionId = state.realSession.id;
-    if (!sessionId) return { ok: false, messaggio: 'nessuna sessione aperta.' };
+    if (!sessionId) return { ok: false, messaggio: tr('app.processes.noSession') };
     try {
       await apiPost('/api/v1/sessions/' + encodeURIComponent(sessionId) + '/processes/' + encodeURIComponent(toolCallId) + '/stop', {});
       return { ok: true };
@@ -5430,7 +5453,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   // 05/9 Fase 2: Doctor, stessi controlli nel badge e nella pagina.
   function riassuntoDoctor(risultato) {
     const voci=controlliDoctor(risultato),n=contaGravitaDoctor(voci),problemi=n.warning+n.danger;
-    return {badge:problemi?problemi+' da rivedere':'Nessun problema rilevato',dettaglio:voci.filter(v=>v.gravita==='danger'||v.gravita==='warning').map(v=>v.titolo+': '+v.righe.join(' ')).join(' · ')||'Controlli disponibili completati; leggi le note per le verifiche non eseguite.'};
+    return {badge:problemi?tr('app.doctor.toReview',{n:problemi}):tr('app.doctor.noProblems'),dettaglio:voci.filter(v=>v.gravita==='danger'||v.gravita==='warning').map(v=>v.titolo+': '+v.righe.join(' ')).join(' · ')||tr('app.doctor.checksDone')};
   }
   const paginaDoctor={risultato:null,ricevutoAlle:null,errore:'',caricamento:false};
   function mostraDoctor(){const s=document.querySelector('#schermoDoctor');if(s)aggiornaDoctor(s,paginaDoctor.risultato,{...paginaDoctor,onRicontrolla:caricaDoctor,onEsporta:esportaDoctor});}
@@ -5439,7 +5462,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const fuoco=document.activeElement;
     paginaDoctor.caricamento=true;paginaDoctor.errore='';mostraDoctor();
     try{const risultato=await apiGet('/api/v1/doctor');controlliDoctor(risultato);paginaDoctor.risultato=risultato;paginaDoctor.ricevutoAlle=new Date().toISOString();}
-    catch(error){paginaDoctor.errore='Doctor non disponibile: '+error.message;}
+    catch(error){paginaDoctor.errore=tr('app.doctor.unavailableWith',{motivo:error.message});}
     finally{paginaDoctor.caricamento=false;mostraDoctor();if(fuoco?.matches('[data-doctor-refresh]')&&document.activeElement===document.body&&!document.querySelector('#schermoDoctor')?.hidden)fuoco.focus({preventScroll:true});}
   }
   function esportaDoctor(){
@@ -5455,7 +5478,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     try {
       badgeEl.textContent = riassuntoDoctor(await apiGet('/api/v1/doctor')).badge;
     } catch {
-      badgeEl.textContent = 'Non disponibile';
+      badgeEl.textContent = tr('app.common.unavailable');
     }
   }
 
@@ -5485,24 +5508,24 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const mount = $('#hooksListMount', sheetBody);
     if (!mount) return; // il foglio "control" non è (più) quello aperto
     if (!state.realSession.id) {
-      mount.replaceChildren(textElement('p', 'board-empty', 'Nessuna sessione attiva — apri o avvia un task per vedere gli hook del progetto.'));
+      mount.replaceChildren(textElement('p', 'board-empty', tr('app.board.hooks.noSession')));
       return;
     }
-    mount.replaceChildren(textElement('p', 'board-empty', 'Carico gli hook…'));
+    mount.replaceChildren(textElement('p', 'board-empty', tr('app.board.hooks.loading')));
     let dati;
     try {
       dati = await apiGet(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/hooks`);
     } catch (error) {
-      mount.replaceChildren(textElement('p', 'board-empty', `Hook non disponibili: ${error.message}`));
+      mount.replaceChildren(textElement('p', 'board-empty', tr('app.board.hooks.unavailable', { motivo: error.message })));
       return;
     }
     if (mount !== $('#hooksListMount', sheetBody)) return; // il foglio è cambiato mentre la fetch era in volo
     if (dati.errore) {
-      mount.replaceChildren(textElement('p', 'board-empty', `.harness-ui-hooks.json non valido: ${dati.errore}`));
+      mount.replaceChildren(textElement('p', 'board-empty', tr('app.board.hooks.invalid', { motivo: dati.errore })));
       return;
     }
     if (!dati.hooks || dati.hooks.length === 0) {
-      mount.replaceChildren(textElement('p', 'board-empty', 'Nessun hook dichiarato in questo progetto (.harness-ui-hooks.json).'));
+      mount.replaceChildren(textElement('p', 'board-empty', tr('app.board.hooks.none')));
       return;
     }
     mount.replaceChildren(...dati.hooks.map((hook) => rigaHook(hook)));
@@ -5519,20 +5542,20 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const mount = $('#subagentTreeMount', sheetBody);
     if (!mount) return; // il foglio "sessionTree" non è (più) quello aperto
     if (!state.realSession.id) {
-      mount.replaceChildren(textElement('p', 'board-empty', 'Nessuna sessione attiva.'));
+      mount.replaceChildren(textElement('p', 'board-empty', tr('app.board.noActiveSession')));
       return;
     }
-    mount.replaceChildren(textElement('p', 'board-empty', 'Carico le deleghe…'));
+    mount.replaceChildren(textElement('p', 'board-empty', tr('app.board.delegations.loading')));
     let dati;
     try {
       dati = await apiGet(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/children`);
     } catch (error) {
-      mount.replaceChildren(textElement('p', 'board-empty', `Deleghe non disponibili: ${error.message}`));
+      mount.replaceChildren(textElement('p', 'board-empty', tr('app.board.delegations.unavailable', { motivo: error.message })));
       return;
     }
     if (mount !== $('#subagentTreeMount', sheetBody)) return; // il foglio è cambiato mentre la fetch era in volo
     if (!dati.figli || dati.figli.length === 0) {
-      mount.replaceChildren(textElement('p', 'board-empty', 'Nessuna delega ancora — TALOS la avvia da sé con l\'attrezzo delega_sottotask quando un sotto-task è genuinamente separabile.'));
+      mount.replaceChildren(textElement('p', 'board-empty', tr('app.board.delegations.none')));
       return;
     }
     mount.replaceChildren(...dati.figli.map((figlio) => rigaFiglio(figlio)));
@@ -5550,11 +5573,11 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const successo = figlio.conclusa && figlio.esitoDelega === 'concluso';
     const fallita = figlio.conclusa && figlio.esitoDelega === 'fallito';
     // ⛔ 06/9, T05-D3: un figlio ucciso dalla morte del processo diceva «in corso» per sempre.
-    const stato = figlio.interrotta === true ? 'Delega · interrotta'
-      : figlio.conclusa ? `Delega · ${figlio.esitoDelega || 'conclusa'}`
-      : 'Delega · in corso';
+    const stato = figlio.interrotta === true ? tr('app.delegations.stateStopped')
+      : figlio.conclusa ? (figlio.esitoDelega === 'concluso' ? tr('app.delegations.stateDone') : figlio.esitoDelega === 'fallito' ? tr('app.delegations.stateFailed') : figlio.esitoDelega ? tr('app.delegations.stateOther', { esito: figlio.esitoDelega }) : tr('app.delegations.stateEnded'))
+      : tr('app.delegations.stateRunning');
     testo.append(
-      textElement('strong', null, tronca(figlio.task || '(compito non registrato)', 60)),
+      textElement('strong', null, tronca(figlio.task || tr('app.delegations.taskUnrecorded'), 60)),
       textElement('small', null, stato),
     );
     const statoEl = textElement('span', successo ? 'status-chip success' : fallita ? 'status-chip error' : 'status-chip', successo ? '✓' : fallita ? '!' : '●');
@@ -5581,23 +5604,23 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     );
     let statoEl;
     if (hook.fidato) {
-      statoEl = textElement('span', 'status-chip success', 'attivo');
+      statoEl = textElement('span', 'status-chip success', tr('app.board.chipActive'));
     } else {
       const bottone = document.createElement('button');
       bottone.type = 'button';
       bottone.className = 'secondary-btn';
-      bottone.textContent = 'Fida';
+      bottone.textContent = tr('app.board.trust');
       bottone.addEventListener('click', async () => {
         bottone.disabled = true;
-        bottone.textContent = 'Fido…';
+        bottone.textContent = tr('app.board.trusting');
         try {
           await apiPost(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/hooks/${encodeURIComponent(hook.id)}/trust`, {});
-          toast('Hook fidato', hook.id);
+          toast(tr('app.board.hooks.trusted'), hook.id);
           caricaPannelloHooks();
         } catch (error) {
           bottone.disabled = false;
-          bottone.textContent = 'Fida';
-          toast('Non riuscito', error.message);
+          bottone.textContent = tr('app.board.trust');
+          toast(tr('app.common.failed'), error.message);
         }
       });
       statoEl = bottone;
@@ -5674,7 +5697,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     } catch (errore) {
       /* ⛔ Si ridisegna dallo stato VERO: il menu non deve restare su una scelta che il server ha rifiutato. */
       mostraCapability();
-      toast('Scelta non applicata', messaggioErroreUtente(errore, 'Riprova, o guarda Doctor se si ripete.'));
+      toast(tr('app.permissions.choiceNotApplied'), messaggioErroreUtente(errore, tr('app.errors.retryOrDoctor')));
     }
   }
   async function salvaPermessoCapability(attrezzo, valore) {
@@ -5692,7 +5715,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     } catch (error) {
       if (state.realSession.id === id) {
         if (state.permessiPerAttrezzo[nome] === (valore || undefined)) { if (precedente === undefined) delete state.permessiPerAttrezzo[nome]; else state.permessiPerAttrezzo[nome] = precedente; salvaPreferenzeChatDesktop(); }
-        mostraCapability({ erroreAzione: 'Permesso per '+(nomeUmanoAttrezzo(nome)||'questo attrezzo')+' non salvato: '+error.message });
+        mostraCapability({ erroreAzione: tr('app.permissions.toolNotSaved', { nome: nomeUmanoAttrezzo(nome) || tr('app.permissions.thisTool'), motivo: error.message }) });
       }
     } finally { scritturaCapability = false; mostraCapability(); }
   }
@@ -5704,8 +5727,8 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       try {
         const dati = await apiGet(id ? '/api/v1/sessions/'+encodeURIComponent(id)+'/tools' : '/api/v1/tools');
         if (generazione !== generazioneCapability || (state.realSession.id || null) !== id) return;
-        if (dati.errore || !Array.isArray(dati.attrezzi)) throw new Error(dati.errore || 'Il catalogo degli attrezzi non è osservabile.');
-        if (dati.attrezzi.some(a => !a || typeof a !== 'object' || typeof a.nome !== 'string' || !a.nome.trim()) || new Set(dati.attrezzi.map(a=>a.nome)).size !== dati.attrezzi.length) throw new Error('Il catalogo contiene voci non valide. Riprova con Aggiorna.');
+        if (dati.errore || !Array.isArray(dati.attrezzi)) throw new Error(dati.errore || tr('app.board.tools.catalogUnobservable'));
+        if (dati.attrezzi.some(a => !a || typeof a !== 'object' || typeof a.nome !== 'string' || !a.nome.trim()) || new Set(dati.attrezzi.map(a=>a.nome)).size !== dati.attrezzi.length) throw new Error(tr('app.board.tools.catalogInvalid'));
         datiCapability = dati.attrezzi; mostraCapability({ caricamento: false, errore: '' });
       } catch (error) {
         if (generazione !== generazioneCapability || (state.realSession.id || null) !== id) return;
@@ -5717,21 +5740,21 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const mount = $('#toolsListMount', sheetBody);
     if (!mount) return; // il foglio "capabilities" non è (più) quello aperto
     const conSessione = Boolean(state.realSession.id);
-    mount.replaceChildren(textElement('p', 'board-empty', 'Carico gli attrezzi…'));
+    mount.replaceChildren(textElement('p', 'board-empty', tr('app.board.tools.loading')));
     let dati;
     try {
       dati = await apiGet(conSessione ? `/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/tools` : '/api/v1/tools');
     } catch (error) {
-      mount.replaceChildren(textElement('p', 'board-empty', `Attrezzi non osservabili: ${error.message}`));
+      mount.replaceChildren(textElement('p', 'board-empty', tr('app.board.tools.unobservable', { motivo: error.message })));
       return;
     }
     if (mount !== $('#toolsListMount', sheetBody)) return; // il foglio è cambiato mentre la fetch era in volo
     if (!dati.attrezzi) {
-      mount.replaceChildren(textElement('p', 'board-empty', dati.errore || 'Attrezzi non osservati.'));
+      mount.replaceChildren(textElement('p', 'board-empty', testoDelCampo(dati, 'errore') || tr('app.board.tools.notObserved'))); // K4b
       return;
     }
     if (dati.attrezzi.length === 0) {
-      mount.replaceChildren(textElement('p', 'board-empty', 'Nessun attrezzo offerto al modello in questa configurazione.'));
+      mount.replaceChildren(textElement('p', 'board-empty', tr('app.board.tools.noneOffered')));
       return;
     }
     /*
@@ -5743,8 +5766,8 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
      */
     const token = dati.attrezzi.reduce((somma, a) => somma + (a.tokenSchemaStimati || 0), 0);
     const intestazione = textElement('p', 'tools-panel-summary', conSessione
-      ? `${dati.attrezzi.length} attrezzi offerti a questa sessione · ~${token.toLocaleString('it-IT')} token di schema a ogni giro (stima)`
-      : `${dati.attrezzi.length} attrezzi che riceverà la prossima sessione · ~${token.toLocaleString('it-IT')} token di schema a ogni giro (stima) · nessuna sessione aperta: i permessi per-attrezzo non sono ancora scelti da nessuno`);
+      ? tr('app.board.tools.offeredToSession', { n: dati.attrezzi.length, token: token.toLocaleString(localeUI()) })
+      : tr('app.board.tools.offeredToNext', { n: dati.attrezzi.length, token: token.toLocaleString(localeUI()) }));
     /*
      * ⭐⭐⭐ O-02 (04/9) — «perché questa sessione è costata tanto?». Sopra
      * c'è quanto COSTA avere gli attrezzi offerti; qui quanto sono stati
@@ -5759,8 +5782,8 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const usoPerNome = new Map((uso?.perAttrezzo ?? []).map((a) => [a.nome, a]));
     const rigaUso = conSessione
       ? textElement('p', 'tools-panel-uso', uso.registrato
-        ? `Usati in questa sessione: ${uso.chiamate} chiamate · ${uso.ripetute > 0 ? `${uso.ripetute} identiche a una precedente` : 'nessuna identica a una precedente'} · ${uso.perAttrezzo.length} attrezzi su ${dati.attrezzi.length}`
-        : 'Uso in questa sessione: non registrato — la cronologia caricata non porta nessun evento di attrezzo (sessione vecchia, o nessun attrezzo chiamato).')
+        ? tr('app.board.tools.usage', { chiamate: uso.chiamate, ripetute: uso.ripetute > 0 ? trn('app.board.tools.repeatedOne', 'app.board.tools.repeatedMany', uso.ripetute) : tr('app.board.tools.repeatedNone'), usati: uso.perAttrezzo.length, totali: dati.attrezzi.length })
+        : tr('app.board.tools.usageUnrecorded'))
       : null;
     // ⛔ L'ORDINE resta quello del kernel (base, poi estesi): è l'ordine in cui il modello li riceve, e riordinarlo per uso renderebbe l'elenco diverso a ogni apertura.
     mount.replaceChildren(intestazione, ...(rigaUso ? [rigaUso] : []), ...dati.attrezzi.map((a) => rigaAttrezzo(a, usoPerNome.get(a.nome) ?? null)));
@@ -5821,7 +5844,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const p = { sessionId, voci: prima?.sessionId === sessionId ? prima.voci : [], errore: null, erroreAzione: prima?.sessionId === sessionId ? prima.erroreAzione : null, caricamento: true };
     inventariEstensioni.set(tipo, p); mostraInventarioEstensioni(tipo);
     const attuale = () => inventariEstensioni.get(tipo) === p && state.realSession.id === sessionId;
-    if (!sessionId || embeddedDemoOnly()) { p.caricamento = false; p.voci = []; p.errore = 'Apri una sessione per leggere le estensioni del progetto.'; mostraInventarioEstensioni(tipo); return; }
+    if (!sessionId || embeddedDemoOnly()) { p.caricamento = false; p.voci = []; p.errore = tr('app.board.extensions.openSession'); mostraInventarioEstensioni(tipo); return; }
     try {
       const dati = await apiGet('/api/v1/sessions/' + encodeURIComponent(sessionId) + '/' + tipo);
       if (!attuale()) return;
@@ -5829,11 +5852,11 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       const voci = dati[{skills:'skills',mcp:'server',plugins:'plugin',hooks:'hooks'}[tipo]];
       const stringhe = a => Array.isArray(a) && a.every(v => typeof v === 'string');
       const valida = v => v && typeof v.id === 'string' && v.id.length && (tipo === 'skills' ? typeof v.name === 'string' && typeof v.description === 'string' : typeof v.fidato === 'boolean') && (tipo !== 'mcp' || typeof v.comando === 'string' && stringhe(v.argomenti) && stringhe(v.allowlist)) && (tipo !== 'hooks' || stringhe(v.eventi)) && (tipo !== 'plugins' || typeof v.nome === 'string' && typeof v.descrizione === 'string' && Array.isArray(v.tools) && Array.isArray(v.hooks) && v.tools.every(t => t && typeof t.nome === 'string' && typeof t.descrizione === 'string' && typeof t.comando === 'string') && v.hooks.every(h => h && typeof h.id === 'string' && stringhe(h.eventi) && typeof h.comando === 'string') && Array.isArray(v.avvisi) && v.avvisi.every(a => a && typeof a.origine === 'string' && typeof a.avviso === 'string'));
-      if (!Array.isArray(voci) || !voci.every(valida) || new Set(voci.map(v => v.id)).size !== voci.length) throw new Error('Inventario con voci non valide');
+      if (!Array.isArray(voci) || !voci.every(valida) || new Set(voci.map(v => v.id)).size !== voci.length) throw new Error(tr('app.board.extensions.invalidInventory'));
       p.voci = voci;
       /* ⛔ 5-ter: solo `frase` (già scritta per una persona), MAI `motivo`/`codice` — è un nome tecnico. */
       p.falliti = Array.isArray(dati.falliti) ? dati.falliti.filter(f => f && typeof f === 'object').map(f => ({ id: typeof f.pluginId === 'string' ? f.pluginId : null, nome: typeof f.pluginId === 'string' ? f.pluginId : null, frase: typeof f.frase === 'string' ? f.frase : null })) : [];
-    } catch (e) { if (!attuale()) return; p.voci = []; p.errore = 'Inventario non disponibile: ' + e.message; }
+    } catch (e) { if (!attuale()) return; p.voci = []; p.errore = tr('app.board.extensions.unavailableWith', { motivo: e.message }); }
     finally { if (attuale()) { p.caricamento = false; mostraInventarioEstensioni(tipo); } }
   }
   async function fidaEstensioneCapability(tipo, voce, sessionId) {
@@ -5847,7 +5870,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       if (state.realSession.id === sessionId) await caricaEstensioniCapability(tipo);
     } catch (e) {
       const attuale = inventariEstensioni.get(tipo);
-      if (attuale?.sessionId === sessionId && state.realSession.id === sessionId) attuale.erroreAzione = 'Fiducia per ' + (voce.nome || voce.id) + ' non salvata: ' + e.message;
+      if (attuale?.sessionId === sessionId && state.realSession.id === sessionId) attuale.erroreAzione = tr('app.board.extensions.trustNotSaved', { nome: voce.nome || voce.id, motivo: e.message });
     } finally {
       scritturaEstensione = null;
       for (const t of inventariEstensioni.keys()) mostraInventarioEstensioni(t);
@@ -5858,24 +5881,24 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const mount = $('#mcpListMount', sheetBody);
     if (!mount) return; // il foglio "capabilities" non è (più) quello aperto
     if (!state.realSession.id) {
-      mount.replaceChildren(textElement('p', 'board-empty', 'Nessuna sessione attiva — apri o avvia un task per vedere i server MCP del progetto.'));
+      mount.replaceChildren(textElement('p', 'board-empty', tr('app.board.mcp.noSession')));
       return;
     }
-    mount.replaceChildren(textElement('p', 'board-empty', 'Carico i server MCP…'));
+    mount.replaceChildren(textElement('p', 'board-empty', tr('app.board.mcp.loading')));
     let dati;
     try {
       dati = await apiGet(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/mcp`);
     } catch (error) {
-      mount.replaceChildren(textElement('p', 'board-empty', `Server MCP non disponibili: ${error.message}`));
+      mount.replaceChildren(textElement('p', 'board-empty', tr('app.board.mcp.unavailable', { motivo: error.message })));
       return;
     }
     if (mount !== $('#mcpListMount', sheetBody)) return; // il foglio è cambiato mentre la fetch era in volo
     if (dati.errore) {
-      mount.replaceChildren(textElement('p', 'board-empty', `.harness-ui-mcp.json non valido: ${dati.errore}`));
+      mount.replaceChildren(textElement('p', 'board-empty', tr('app.board.mcp.invalid', { motivo: dati.errore })));
       return;
     }
     if (!dati.server || dati.server.length === 0) {
-      mount.replaceChildren(textElement('p', 'board-empty', 'Nessun server MCP dichiarato in questo progetto (.harness-ui-mcp.json).'));
+      mount.replaceChildren(textElement('p', 'board-empty', tr('app.board.mcp.none')));
       return;
     }
     mount.replaceChildren(...dati.server.map((server) => rigaServerMcp(server)));
@@ -5891,24 +5914,24 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const mount = $('#skillsListMount', sheetBody);
     if (!mount) return; // il foglio "capabilities" non è (più) quello aperto
     if (!state.realSession.id) {
-      mount.replaceChildren(textElement('p', 'board-empty', 'Nessuna sessione attiva — apri o avvia un task per vedere le skill del progetto.'));
+      mount.replaceChildren(textElement('p', 'board-empty', tr('app.board.skills.noSession')));
       return;
     }
-    mount.replaceChildren(textElement('p', 'board-empty', 'Carico le skill…'));
+    mount.replaceChildren(textElement('p', 'board-empty', tr('app.board.skills.loading')));
     let dati;
     try {
       dati = await apiGet(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/skills`);
     } catch (error) {
-      mount.replaceChildren(textElement('p', 'board-empty', `Skill non disponibili: ${error.message}`));
+      mount.replaceChildren(textElement('p', 'board-empty', tr('app.board.skills.unavailable', { motivo: error.message })));
       return;
     }
     if (mount !== $('#skillsListMount', sheetBody)) return; // il foglio è cambiato mentre la fetch era in volo
     if (dati.errore) {
-      mount.replaceChildren(textElement('p', 'board-empty', `.harness-ui-skills non valido: ${dati.errore}`));
+      mount.replaceChildren(textElement('p', 'board-empty', tr('app.board.skills.invalid', { motivo: dati.errore })));
       return;
     }
     if (!dati.skills || dati.skills.length === 0) {
-      mount.replaceChildren(textElement('p', 'board-empty', 'Nessuna skill dichiarata in questo progetto (.harness-ui-skills/).'));
+      mount.replaceChildren(textElement('p', 'board-empty', tr('app.board.skills.none')));
       return;
     }
     mount.replaceChildren(...dati.skills.map((skill) => rigaSkill(skill)));
@@ -5964,10 +5987,10 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
             return s ? (s.nome || s.taskDelega || nomeLeggibileSessione(s.taskId)) : null;
           },
           onApriSessione: ({ id }) => passaASessione(id),
-          copia: (testo) => copyText(testo, 'Percorso copiato'),
+          copia: (testo) => copyText(testo, tr('app.common.pathCopied')),
           /* F5 File reader (26/09/2026): il dettaglio legge il file col lettore del rail; qui le tre cose che vivono nella app. */
           lettore: {
-            crea: ({ doc, fonte, apriFuori }) => creaLettore({ doc, fonte, opzioni: { bloccoCodice: bloccoCodiceDelLettore, lettoreOffice: lettoreOfficeDelLettore, copia: (testo) => { void copyText(testo, 'Testo del file copiato'); }, apriFuori } }),
+            crea: ({ doc, fonte, apriFuori }) => creaLettore({ doc, fonte, opzioni: { bloccoCodice: bloccoCodiceDelLettore, lettoreOffice: lettoreOfficeDelLettore, copia: (testo) => { void copyText(testo, tr('app.files.contentCopied')); }, apriFuori } }),
           },
           /* 11/09 — il contenuto del file nel dettaglio: la stessa iniezione che la Ricerca ha già
              (:5343). Senza, il pannello cade sulla lettura strutturale minima e gli elenchi e i
@@ -5977,20 +6000,20 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       } else {
         mount.setAttribute('role', voci.length ? 'list' : 'group');
         mount.replaceChildren(...voci.map(rigaVoceLibreria));
-        if (!voci.length) mount.append(textElement('p', 'board-empty', errore || (caricamento ? 'Caricamento Libreria…' : 'Nessun file in Libreria per questo progetto.')));
+        if (!voci.length) mount.append(textElement('p', 'board-empty', errore || (caricamento ? tr('app.board.library.loading') : tr('app.board.library.none'))));
       }
     }
-    if (embeddedDemoOnly()) { mostra([], { errore: 'Nessun backend collegato.' }); return; }
-    if (!sessionId) { mostra([], { errore: 'Apri una sessione per leggere la Libreria del progetto.' }); return; }
+    if (embeddedDemoOnly()) { mostra([], { errore: tr('app.board.noBackend') }); return; }
+    if (!sessionId) { mostra([], { errore: tr('app.board.library.openSession') }); return; }
     mostra([], { caricamento: true });
     try {
       const dati = await apiGet('/api/v1/sessions/' + encodeURIComponent(sessionId) + '/library');
       if (!attuale()) return;
-      if (dati.errore) { mostra([], { errore: 'Libreria non disponibile: ' + dati.errore }); return; }
-      if (!Array.isArray(dati.voci) || dati.voci.some(v => !v || typeof v !== 'object' || Array.isArray(v))) throw new Error('Elenco della Libreria non valido');
+      if (dati.errore) { mostra([], { errore: tr('app.board.library.unavailableWith', { motivo: dati.errore }) }); return; }
+      if (!Array.isArray(dati.voci) || dati.voci.some(v => !v || typeof v !== 'object' || Array.isArray(v))) throw new Error(tr('app.board.library.invalidList'));
       mostra(dati.voci);
     } catch (error) {
-      if (attuale()) mostra([], { errore: 'Libreria non disponibile: ' + error.message });
+      if (attuale()) mostra([], { errore: tr('app.board.library.unavailableWith', { motivo: error.message }) });
     }
   }
 
@@ -6008,24 +6031,24 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const mount = $('#notesListMount', sheetBody);
     if (!mount) return; // il foglio "capabilities" non è (più) quello aperto
     if (!state.realSession.id) {
-      mount.replaceChildren(textElement('p', 'board-empty', 'Nessuna sessione attiva — apri o avvia un task per vedere le Notes.'));
+      mount.replaceChildren(textElement('p', 'board-empty', tr('app.board.notes.noSession')));
       return;
     }
-    mount.replaceChildren(textElement('p', 'board-empty', 'Carico le Notes…'));
+    mount.replaceChildren(textElement('p', 'board-empty', tr('app.board.notes.loading')));
     let dati;
     try {
       dati = await apiGet(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/notes`);
     } catch (error) {
-      mount.replaceChildren(textElement('p', 'board-empty', `Notes non disponibili: ${error.message}`));
+      mount.replaceChildren(textElement('p', 'board-empty', tr('app.board.notes.unavailable', { motivo: error.message })));
       return;
     }
     if (mount !== $('#notesListMount', sheetBody)) return; // il foglio è cambiato mentre la fetch era in volo
     if (dati.errore) {
-      mount.replaceChildren(textElement('p', 'board-empty', `.notes-store non valido: ${dati.errore}`));
+      mount.replaceChildren(textElement('p', 'board-empty', tr('app.board.notes.invalid', { motivo: dati.errore })));
       return;
     }
     if (!dati.note || dati.note.length === 0) {
-      mount.replaceChildren(textElement('p', 'board-empty', 'Nessuna nota (.notes-store/, globale — non del progetto).'));
+      mount.replaceChildren(textElement('p', 'board-empty', tr('app.board.notes.none')));
       return;
     }
     mount.replaceChildren(...dati.note.map((nota) => rigaNota(nota)));
@@ -6076,25 +6099,25 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
             caricaPannelloAttivita({ pagina: true });
             void aggiornaContatoriLuoghi(state.sessionSelection.available?.size ?? 0);
           },
-          copia: (testo) => copyText(testo, 'Attività copiata'),
+          copia: (testo) => copyText(testo, tr('app.board.tasks.copied')),
         });
       } else {
         mount.setAttribute('role', attivita.length ? 'list' : 'group');
         mount.replaceChildren(...attivita.map(rigaAttivita));
-        if (!attivita.length) mount.append(textElement('p', 'board-empty', errore || (caricamento ? 'Caricamento attività…' : 'Nessuna attività salvata. Le attività sono globali, disponibili alle tue conversazioni.')));
+        if (!attivita.length) mount.append(textElement('p', 'board-empty', errore || (caricamento ? tr('app.board.tasks.loading') : tr('app.board.tasks.none'))));
       }
     }
-    if (embeddedDemoOnly()) { mostra([], { errore: 'Nessun backend collegato.' }); return; }
-    if (!sessionId) { mostra([], { errore: 'Apri una sessione per leggere le attività salvate.' }); return; }
+    if (embeddedDemoOnly()) { mostra([], { errore: tr('app.board.noBackend') }); return; }
+    if (!sessionId) { mostra([], { errore: tr('app.board.tasks.openSession') }); return; }
     mostra([], { caricamento: true });
     try {
       const dati = await apiGet('/api/v1/sessions/' + encodeURIComponent(sessionId) + '/tasks');
       if (!attuale()) return;
-      if (dati.errore) { mostra([], { errore: 'Attività non disponibili: ' + dati.errore }); return; }
-      if (!Array.isArray(dati.attivita) || dati.attivita.some(m => !m || typeof m !== 'object' || Array.isArray(m))) throw new Error('Elenco delle attività non valido');
+      if (dati.errore) { mostra([], { errore: tr('app.board.tasks.unavailableWith', { motivo: dati.errore }) }); return; }
+      if (!Array.isArray(dati.attivita) || dati.attivita.some(m => !m || typeof m !== 'object' || Array.isArray(m))) throw new Error(tr('app.board.tasks.invalidList'));
       mostra(dati.attivita);
     } catch (error) {
-      if (attuale()) mostra([], { errore: 'Attività non disponibili: ' + error.message });
+      if (attuale()) mostra([], { errore: tr('app.board.tasks.unavailableWith', { motivo: error.message }) });
     }
   }
 
@@ -6127,25 +6150,25 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
             caricaPannelloMemoria({ pagina: true });
             void aggiornaContatoriLuoghi(state.sessionSelection.available?.size ?? 0);
           },
-          copia: (testo) => copyText(testo, 'Ricordo copiato'),
+          copia: (testo) => copyText(testo, tr('app.board.memory.copied')),
         });
       } else {
         mount.setAttribute('role', memorie.length ? 'list' : 'group');
         mount.replaceChildren(...memorie.map(rigaMemoria));
-        if (!memorie.length) mount.append(textElement('p', 'board-empty', errore || (caricamento ? 'Caricamento ricordi…' : 'Nessun ricordo salvato. I ricordi sono globali, disponibili alle tue conversazioni.')));
+        if (!memorie.length) mount.append(textElement('p', 'board-empty', errore || (caricamento ? tr('app.board.memory.loading') : tr('app.board.memory.none'))));
       }
     }
-    if (embeddedDemoOnly()) { mostra([], { errore: 'Nessun backend collegato.' }); return; }
-    if (!sessionId) { mostra([], { errore: 'Apri una sessione per leggere i ricordi salvati.' }); return; }
+    if (embeddedDemoOnly()) { mostra([], { errore: tr('app.board.noBackend') }); return; }
+    if (!sessionId) { mostra([], { errore: tr('app.board.memory.openSession') }); return; }
     mostra([], { caricamento: true });
     try {
       const dati = await apiGet('/api/v1/sessions/' + encodeURIComponent(sessionId) + '/memory');
       if (!attuale()) return;
-      if (dati.errore) { mostra([], { errore: 'Ricordi non disponibili: ' + dati.errore }); return; }
-      if (!Array.isArray(dati.memorie) || dati.memorie.some(m => !m || typeof m !== 'object' || Array.isArray(m))) throw new Error('Elenco dei ricordi non valido');
+      if (dati.errore) { mostra([], { errore: tr('app.board.memory.unavailableWith', { motivo: dati.errore }) }); return; }
+      if (!Array.isArray(dati.memorie) || dati.memorie.some(m => !m || typeof m !== 'object' || Array.isArray(m))) throw new Error(tr('app.board.memory.invalidList'));
       mostra(dati.memorie);
     } catch (error) {
-      if (attuale()) mostra([], { errore: 'Ricordi non disponibili: ' + error.message });
+      if (attuale()) mostra([], { errore: tr('app.board.memory.unavailableWith', { motivo: error.message }) });
     }
   }
 
@@ -6181,7 +6204,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
              dichiarando che il rapporto è in Libreria. */
           sessionId,
           notifica: toast,
-          copia: (testo) => copyText(testo, 'Rapporto copiato'),
+          copia: (testo) => copyText(testo, tr('app.board.research.copied')),
           onMenu: apriMenuAzioniLibreria,
           onApriSessione: ({ id }) => passaASessione(id),
           rendiMarkdown: renderizzaMarkdownSemplice,
@@ -6195,20 +6218,20 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       } else {
         mount.setAttribute('role', ricerche.length ? 'list' : 'group');
         mount.replaceChildren(...ricerche.map(rigaRicerca));
-        if (!ricerche.length) mount.append(textElement('p', 'board-empty', errore || (caricamento ? 'Caricamento ricerche…' : 'Nessuna ricerca avviata in questo progetto.')));
+        if (!ricerche.length) mount.append(textElement('p', 'board-empty', errore || (caricamento ? tr('app.board.research.loading') : tr('app.board.research.none'))));
       }
     }
-    if (embeddedDemoOnly()) { mostra([], { errore: 'Nessun backend collegato.' }); return; }
-    if (!sessionId) { mostra([], { errore: 'Apri una sessione per leggere le ricerche del progetto.' }); return; }
+    if (embeddedDemoOnly()) { mostra([], { errore: tr('app.board.noBackend') }); return; }
+    if (!sessionId) { mostra([], { errore: tr('app.board.research.openSession') }); return; }
     mostra([], { caricamento: true });
     try {
       const dati = await apiGet('/api/v1/sessions/' + encodeURIComponent(sessionId) + '/research');
       if (!attuale()) return;
-      if (dati.errore) { mostra([], { errore: 'Ricerche non disponibili: ' + dati.errore }); return; }
-      if (!Array.isArray(dati.ricerche) || dati.ricerche.some(r => !r || typeof r !== 'object' || Array.isArray(r))) throw new Error('Elenco delle ricerche non valido');
+      if (dati.errore) { mostra([], { errore: tr('app.board.research.unavailableWith', { motivo: dati.errore }) }); return; }
+      if (!Array.isArray(dati.ricerche) || dati.ricerche.some(r => !r || typeof r !== 'object' || Array.isArray(r))) throw new Error(tr('app.board.research.invalidList'));
       mostra(dati.ricerche);
     } catch (error) {
-      if (attuale()) mostra([], { errore: 'Ricerche non disponibili: ' + error.message });
+      if (attuale()) mostra([], { errore: tr('app.board.research.unavailableWith', { motivo: error.message }) });
     }
   }
 
@@ -6270,7 +6293,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       else {
         mount.setAttribute('role', 'group');
         mount.replaceChildren(...strumenti.map(s => rigaToolForgiato(s, azioni)));
-        if (!strumenti.length) mount.append(textElement('p', 'board-empty', vista.errore || (vista.caricamento ? 'Caricamento Officina…' : 'Nessun attrezzo creato dal modello. Gli attrezzi sono condivisi tra tutti i progetti.')));
+        if (!strumenti.length) mount.append(textElement('p', 'board-empty', vista.errore || (vista.caricamento ? tr('app.board.workshop.loading') : tr('app.board.workshop.none'))));
         if (vista.erroreAzione) { const errore = textElement('p', 'board-empty', vista.erroreAzione); errore.setAttribute('role', 'alert'); mount.prepend(errore); }
       }
     }
@@ -6285,22 +6308,22 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         await Promise.all(pannelliForgeAttuali().map(p => p.ricarica()));
       } catch (error) {
         scritturaForge = null;
-        for (const p of pannelliForgeAttuali()) p.mostraAzione('Modifica di «' + strumento.titolo + '» non salvata: ' + error.message);
+        for (const p of pannelliForgeAttuali()) p.mostraAzione(tr('app.board.workshop.saveFailed', { nome: strumento.titolo, motivo: error.message }));
       }
     }
     pannelliForgeAttuali();
     pannelliForge.add({ attuale, ricarica: () => caricaPannelloForge({ pagina }), mostraAzione: erroreAzione => mostra(strumenti, { ...vista, erroreAzione }) });
-    if (embeddedDemoOnly()) { mostra([], { errore: 'Nessun backend collegato.' }); return; }
-    if (!sessionId) { mostra([], { errore: 'Apri una sessione per leggere gli attrezzi.' }); return; }
+    if (embeddedDemoOnly()) { mostra([], { errore: tr('app.board.noBackend') }); return; }
+    if (!sessionId) { mostra([], { errore: tr('app.board.workshop.openSession') }); return; }
     mostra([], { caricamento: true, errore: null, erroreAzione: null });
     try {
       const dati = await apiGet('/api/v1/sessions/' + encodeURIComponent(sessionId) + '/tool-forge');
       if (!attuale()) return;
-      if (dati.errore) { mostra([], { errore: 'Officina non disponibile: ' + dati.errore, caricamento: false }); return; }
-      if (!Array.isArray(dati.strumenti) || dati.strumenti.some(s => !s || typeof s !== 'object' || Array.isArray(s) || typeof s.id !== 'string' || !s.id)) throw new Error('Elenco degli attrezzi non valido');
+      if (dati.errore) { mostra([], { errore: tr('app.board.workshop.unavailableWith', { motivo: dati.errore }), caricamento: false }); return; }
+      if (!Array.isArray(dati.strumenti) || dati.strumenti.some(s => !s || typeof s !== 'object' || Array.isArray(s) || typeof s.id !== 'string' || !s.id)) throw new Error(tr('app.board.workshop.invalidList'));
       mostra(dati.strumenti, { errore: null, caricamento: false, erroreAzione: null });
     } catch (error) {
-      if (attuale()) mostra([], { errore: 'Officina non disponibile: ' + error.message, caricamento: false, erroreAzione: null });
+      if (attuale()) mostra([], { errore: tr('app.board.workshop.unavailableWith', { motivo: error.message }), caricamento: false, erroreAzione: null });
     }
   }
 
@@ -6321,7 +6344,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       textElement('strong', null, skill.name),
       textElement('small', null, skill.description),
     );
-    riga.append(iconEl, testo, textElement('span', 'status-chip success', 'attivo'));
+    riga.append(iconEl, testo, textElement('span', 'status-chip success', tr('app.board.chipActive')));
     return riga;
   }
 
@@ -6336,27 +6359,27 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const testo = document.createElement('span');
     testo.append(
       textElement('strong', null, server.id),
-      textElement('small', null, `${server.comando} · tool: ${server.allowlist.join(', ')}`),
+      textElement('small', null, tr('app.board.mcp.serverLine', { comando: server.comando, attrezzi: server.allowlist.join(', ') })),
     );
     let statoEl;
     if (server.fidato) {
-      statoEl = textElement('span', 'status-chip success', 'attivo');
+      statoEl = textElement('span', 'status-chip success', tr('app.board.chipActive'));
     } else {
       const bottone = document.createElement('button');
       bottone.type = 'button';
       bottone.className = 'secondary-btn';
-      bottone.textContent = 'Fida';
+      bottone.textContent = tr('app.board.trust');
       bottone.addEventListener('click', async () => {
         bottone.disabled = true;
-        bottone.textContent = 'Fido…';
+        bottone.textContent = tr('app.board.trusting');
         try {
           await apiPost(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/mcp/${encodeURIComponent(server.id)}/trust`, {});
-          toast('Server MCP fidato', server.id);
+          toast(tr('app.board.mcp.trusted'), server.id);
           caricaPannelloMcp();
         } catch (error) {
           bottone.disabled = false;
-          bottone.textContent = 'Fida';
-          toast('Non riuscito', error.message);
+          bottone.textContent = tr('app.board.trust');
+          toast(tr('app.common.failed'), error.message);
         }
       });
       statoEl = bottone;
@@ -6376,24 +6399,24 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const mount = $('#pluginsListMount', sheetBody);
     if (!mount) return; // il foglio "capabilities" non è (più) quello aperto
     if (!state.realSession.id) {
-      mount.replaceChildren(textElement('p', 'board-empty', 'Nessuna sessione attiva — apri o avvia un task per vedere i plugin del progetto.'));
+      mount.replaceChildren(textElement('p', 'board-empty', tr('app.board.plugins.noSession')));
       return;
     }
-    mount.replaceChildren(textElement('p', 'board-empty', 'Carico i plugin…'));
+    mount.replaceChildren(textElement('p', 'board-empty', tr('app.board.plugins.loading')));
     let dati;
     try {
       dati = await apiGet(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/plugins`);
     } catch (error) {
-      mount.replaceChildren(textElement('p', 'board-empty', `Plugin non disponibili: ${error.message}`));
+      mount.replaceChildren(textElement('p', 'board-empty', tr('app.board.plugins.unavailable', { motivo: error.message })));
       return;
     }
     if (mount !== $('#pluginsListMount', sheetBody)) return; // il foglio è cambiato mentre la fetch era in volo
     if (dati.errore) {
-      mount.replaceChildren(textElement('p', 'board-empty', `.harness-ui-plugins/ non valido: ${dati.errore}`));
+      mount.replaceChildren(textElement('p', 'board-empty', tr('app.board.plugins.invalid', { motivo: dati.errore })));
       return;
     }
     if (!dati.plugin || dati.plugin.length === 0) {
-      mount.replaceChildren(textElement('p', 'board-empty', 'Nessun plugin dichiarato in questo progetto (.harness-ui-plugins/).'));
+      mount.replaceChildren(textElement('p', 'board-empty', tr('app.board.plugins.none')));
       return;
     }
     mount.replaceChildren(...dati.plugin.map((plugin) => rigaPlugin(plugin)));
@@ -6419,31 +6442,31 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     iconEl.innerHTML = icon('i-bolt');
     const testo = document.createElement('span');
     const pezzi = [];
-    if (plugin.tools.length > 0) pezzi.push(`${plugin.tools.length} tool`);
-    if (plugin.hooks.length > 0) pezzi.push(`${plugin.hooks.length} hook`);
+    if (plugin.tools.length > 0) pezzi.push(trn('app.board.plugins.toolsOne', 'app.board.plugins.toolsMany', plugin.tools.length));
+    if (plugin.hooks.length > 0) pezzi.push(trn('app.board.plugins.hooksOne', 'app.board.plugins.hooksMany', plugin.hooks.length));
     testo.append(
       textElement('strong', null, plugin.nome),
       textElement('small', null, `${plugin.descrizione}${pezzi.length ? ` · ${pezzi.join(', ')}` : ''}`),
     );
     let statoEl;
     if (plugin.fidato) {
-      statoEl = textElement('span', 'status-chip success', 'attivo');
+      statoEl = textElement('span', 'status-chip success', tr('app.board.chipActive'));
     } else {
       const bottone = document.createElement('button');
       bottone.type = 'button';
       bottone.className = 'secondary-btn';
-      bottone.textContent = 'Fida';
+      bottone.textContent = tr('app.board.trust');
       bottone.addEventListener('click', async () => {
         bottone.disabled = true;
-        bottone.textContent = 'Fido…';
+        bottone.textContent = tr('app.board.trusting');
         try {
           await apiPost(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/plugins/${encodeURIComponent(plugin.id)}/trust`, {});
-          toast('Plugin fidato', plugin.id);
+          toast(tr('app.board.plugins.trusted'), plugin.id);
           caricaPannelloPlugin();
         } catch (error) {
           bottone.disabled = false;
-          bottone.textContent = 'Fida';
-          toast('Non riuscito', error.message);
+          bottone.textContent = tr('app.board.trust');
+          toast(tr('app.common.failed'), error.message);
         }
       });
       statoEl = bottone;
@@ -6510,7 +6533,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     return effortCorrente;
   }
 
-  function creaModelPicker({ valoreIniziale = '', apriSubito = false, alSelezionato, etichettaVuota = 'Seleziona modello', aggiornaModelloPrincipale = true, sincronizzaSessione = false } = {}) {
+  function creaModelPicker({ valoreIniziale = '', apriSubito = false, alSelezionato, etichettaVuota = tr('app.modelPicker.select'), aggiornaModelloPrincipale = true, sincronizzaSessione = false } = {}) {
     const wrap = document.createElement('div');
     wrap.className = 'model-picker';
 
@@ -6538,7 +6561,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const searchInput = document.createElement('input');
     searchInput.type = 'search';
     searchInput.className = 'sheet-input';
-    searchInput.placeholder = 'Cerca modello o provider…';
+    searchInput.placeholder = tr('app.modelPicker.searchPlaceholder');
     searchLabel.append(searchIconSpan, searchInput);
 
     const listEl = document.createElement('div');
@@ -6551,7 +6574,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     refreshBtn.className = 'text-btn';
     const refreshIconSpan = document.createElement('span');
     refreshIconSpan.innerHTML = icon('i-history');
-    refreshBtn.append(refreshIconSpan, document.createTextNode('Aggiorna'));
+    refreshBtn.append(refreshIconSpan, document.createTextNode(tr('app.common.refresh')));
     const metaSpan = document.createElement('span');
     metaSpan.className = 'model-picker-meta';
     footer.append(refreshBtn, metaSpan);
@@ -6620,7 +6643,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const fonti = document.createElement('div');
     fonti.className = 'model-picker-sources';
     fonti.setAttribute('role', 'tablist');
-    fonti.setAttribute('aria-label', 'Dove cercare il modello');
+    fonti.setAttribute('aria-label', tr('app.modelPicker.sourcesLabel'));
     listEl.id = `modelPickerLista-${Math.random().toString(36).slice(2, 10)}`; // serve alle schede per `aria-controls`
     panel.append(fonti, searchLabel, listEl, footer);
     wrap.append(trigger, panel);
@@ -6713,7 +6736,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         bottone.append(textElement('span', '', voce.etichetta));
         if (Number.isFinite(voce.conto)) bottone.append(textElement('span', 'model-picker-source-count', String(voce.conto)));
         // Senza chiave non c'è un conteggio da dare: si dice perché, invece di stampare uno zero falso.
-        if (!voce.collegato) bottone.title = `${voce.etichetta}: chiave non collegata`;
+        if (!voce.collegato) bottone.title = tr('app.modelPicker.keyNotConnected', { nome: voce.etichetta });
         bottone.addEventListener('click', () => scegliFonte(voce.id));
         return bottone;
       });
@@ -6764,16 +6787,16 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
        *   «OpenRouter» e passava inosservato; con le schede per fornitore nomina un fornitore
        *   sbagliato, che è la stessa bugia ma leggibile. Il piede parla della scheda APERTA.
        */
-      metaSpan.textContent = modelliLocali ? `${modelliLocali.length} modelli · su questo computer` : 'Modelli installati';
+      metaSpan.textContent = modelliLocali ? tr('app.modelPicker.localCount', { n: modelliLocali.length }) : tr('app.modelPicker.installed');
       const pezzi = [];
-      pezzi.push(textElement('p', 'model-picker-source-note', 'Girano su questo computer, senza rete e senza costo. Si accendono da soli alla prima richiesta.'));
+      pezzi.push(textElement('p', 'model-picker-source-note', tr('app.modelPicker.localNote')));
       if (erroreLocali) {
         // ⛔ «non ho potuto leggere» non è «non ce n'è»: la prima si riprova, la seconda no.
-        pezzi.push(textElement('p', 'board-empty', `Non riesco a leggere i modelli installati: ${erroreLocali}`));
+        pezzi.push(textElement('p', 'board-empty', tr('app.modelPicker.installedUnreadable', { motivo: erroreLocali })));
       } else if (!modelliLocali) {
-        pezzi.push(textElement('p', 'board-empty', 'Leggo i modelli installati…'));
+        pezzi.push(textElement('p', 'board-empty', tr('app.modelPicker.installedReading')));
       } else if (modelliLocali.length === 0) {
-        pezzi.push(textElement('p', 'board-empty', 'Nessun modello installato. Si aggiungono dal Laboratorio modelli.'));
+        pezzi.push(textElement('p', 'board-empty', tr('app.modelPicker.noInstalled')));
       } else {
         for (const modello of modelliLocali) {
           const valore = `local:${modello.id}`;
@@ -6801,7 +6824,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
            * bisogno (un percorso, una segnalazione) lo ritrova per intero.
            */
           textWrap.append(textElement('strong', '', nomeModelloUmano(valore) || modello.name || modello.id));
-          textWrap.append(textElement('small', '', `su questo computer · ${formattaByteModelLab(Number(modello.bytes || 0))}${modello.state === 'ready' ? '' : ` · ${modello.state}`}`));
+          textWrap.append(textElement('small', '', tr('app.modelPicker.onThisComputer', { dimensione: formattaByteModelLab(Number(modello.bytes || 0)), stato: modello.state === 'ready' ? '' : ` · ${modello.state}` })));
           opt.title = modello.id;
           opt.append(iconWrap, textWrap);
           /*
@@ -6883,7 +6906,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         aggiornaTestoModelloSelettore(textWrap, modello);
       } else {
         const dettagli = [];
-        if (modello.alias) dettagli.push('ultima versione'); // ⭐ 27/8 — il gruppo è già quello giusto (senza ~), l'informazione "è un alias fluttuante" resta comunque visibile qui
+        if (modello.alias) dettagli.push(tr('app.modelPicker.latestVersion')); // ⭐ 27/8 — il gruppo è già quello giusto (senza ~), l'informazione "è un alias fluttuante" resta comunque visibile qui
         if (modello.contextLength) dettagli.push(`${Math.round(modello.contextLength / 1000)}k ctx`);
         if (modello.prezzoPrompt) dettagli.push(`$${(Number(modello.prezzoPrompt) * 1_000_000).toFixed(2)}/M in`);
         textWrap.append(
@@ -6950,11 +6973,11 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
 
     /** La riga del piede: quanti modelli e da dove. Niente numeri quando il catalogo non c'è. */
     function etichettaPiede(catalogo) {
-      if (!catalogo) return eFonteDiretta(fonteScelta) ? 'Collegamento diretto' : '';
+      if (!catalogo) return eFonteDiretta(fonteScelta) ? tr('app.modelPicker.directLink') : '';
       const dove = eFonteDiretta(fonteScelta)
-        ? `${PROVIDER_DIRETTI.find((p) => p.id === fonteScelta)?.etichetta || fonteScelta} · collegamento diretto`
+        ? tr('app.modelPicker.directLinkOf', { nome: PROVIDER_DIRETTI.find((p) => p.id === fonteScelta)?.etichetta || fonteScelta })
         : 'OpenRouter';
-      return `${catalogo.length} modelli · ${dove}`;
+      return tr('app.modelPicker.catalogLine', { n: catalogo.length, dove });
     }
 
     function renderLista() {
@@ -6967,17 +6990,17 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
            sono TRE motivi diversi per essere vuoto: `fraseVuotoDiretto` li distingue. */
         listEl.replaceChildren(textElement('p', 'board-empty', diretta
           ? fraseVuotoDiretto(fonteScelta, { diretti: modelliDiretti, errori: erroriDiretti })
-          : 'Carico il catalogo da OpenRouter…'));
+          : tr('app.modelPicker.catalogLoading')));
         return;
       }
       const query = searchInput.value;
       const filtrati = filtraModelli(query);
       if (filtrati.length === 0) {
         listEl.replaceChildren(textElement('p', 'board-empty', query.trim()
-          ? `Nessun modello corrisponde a "${query.trim()}".`
+          ? tr('app.modelPicker.noMatch', { ricerca: query.trim() })
           : diretta
             ? fraseVuotoDiretto(fonteScelta, { diretti: modelliDiretti, errori: erroriDiretti })
-            : 'Nessun modello disponibile.'));
+            : tr('app.modelPicker.noModels')));
         return;
       }
       const cercando = query.trim() !== '';
@@ -7069,7 +7092,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     function caricaLocali() {
       return apiGet('/api/v1/local-models')
         .then((locali) => { modelliLocali = Array.isArray(locali?.items) ? locali.items : []; erroreLocali = null; })
-        .catch((e) => { modelliLocali = null; erroreLocali = e?.message || 'lettura non riuscita'; })
+        .catch((e) => { modelliLocali = null; erroreLocali = e?.message || tr('app.modelPicker.readFailed'); })
         .finally(() => { renderFonti(); if (fonteScelta === 'locali') renderListaLocali(); });
     }
 
@@ -7121,12 +7144,12 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       renderFonti();
       if (eFonteDiretta(fonteScelta)) { await direttiInVolo; return; }
       if (fonteScelta === 'locali') await localiInVolo;
-      else listEl.replaceChildren(textElement('p', 'board-empty', 'Carico il catalogo da OpenRouter…'));
+      else listEl.replaceChildren(textElement('p', 'board-empty', tr('app.modelPicker.catalogLoading')));
       try {
         const dati = await apiGet(`/api/v1/models${forza ? '?forza=1' : ''}`);
         modelliCache = dati.modelli;
         caricato = true;
-        metaSpan.textContent = `${dati.modelli.length} modelli${dati.daCache ? ' · da cache' : ''}`;
+        metaSpan.textContent = dati.daCache ? tr('app.modelPicker.catalogCountCached', { n: dati.modelli.length }) : tr('app.modelPicker.catalogCount', { n: dati.modelli.length });
         renderFonti();
         renderLista();
       } catch (error) {
@@ -7135,7 +7158,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
            si leggeva «Catalogo non disponibile», cioè un fornitore accusato al posto di un altro. */
         renderFonti();
         if (fonteScelta === 'openrouter') {
-          listEl.replaceChildren(textElement('p', 'board-empty', `Catalogo OpenRouter non disponibile: ${error.message}`));
+          listEl.replaceChildren(textElement('p', 'board-empty', tr('app.modelPicker.catalogUnavailable', { motivo: error.message })));
           metaSpan.textContent = '';
         }
       }
@@ -7240,12 +7263,12 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    * esteso" richiesto.
    */
   const LIVELLI_RAGIONAMENTO = [
-    { valore: 'none', etichetta: 'Off' },
-    { valore: 'minimal', etichetta: 'Minimo' },
-    { valore: 'low', etichetta: 'Basso' },
-    { valore: 'medium', etichetta: 'Medio' },
-    { valore: 'high', etichetta: 'Alto' },
-    { valore: 'xhigh', etichetta: 'Massimo' },
+    { valore: 'none', get etichetta() { return tr('app.modelPicker.effort.off'); } },
+    { valore: 'minimal', get etichetta() { return tr('app.modelPicker.effort.minimal'); } },
+    { valore: 'low', get etichetta() { return tr('app.modelPicker.effort.low'); } },
+    { valore: 'medium', get etichetta() { return tr('app.modelPicker.effort.medium'); } },
+    { valore: 'high', get etichetta() { return tr('app.modelPicker.effort.high'); } },
+    { valore: 'xhigh', get etichetta() { return tr('app.modelPicker.effort.max'); } },
   ];
 
   function creaEffortPicker({ valoreIniziale = null, alCambiato } = {}) {
@@ -7254,7 +7277,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
 
     const head = document.createElement('div');
     head.className = 'effort-picker-head';
-    const label = textElement('span', 'effort-picker-label', 'Ragionamento');
+    const label = textElement('span', 'effort-picker-label', tr('app.modelPicker.reasoning'));
     const selected = textElement('span', 'effort-picker-selected', '');
     head.append(label, selected);
 
@@ -7264,7 +7287,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     range.min = '0';
     range.max = String(LIVELLI_RAGIONAMENTO.length - 1);
     range.step = '1';
-    range.setAttribute('aria-label', 'Livello di ragionamento');
+    range.setAttribute('aria-label', tr('app.modelPicker.reasoningLevel'));
 
     const labelsRow = document.createElement('div');
     labelsRow.className = 'effort-picker-labels';
@@ -7284,7 +7307,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
 
     function aggiorna() {
       range.value = String(indice);
-      selected.textContent = toccato ? LIVELLI_RAGIONAMENTO[indice].etichetta : 'Automatico';
+      selected.textContent = toccato ? LIVELLI_RAGIONAMENTO[indice].etichetta : tr('app.common.automatic');
       labelEls.forEach((el, i) => el.classList.toggle('effort-picker-tick-selected', i === indice));
     }
     aggiorna();
@@ -7328,7 +7351,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     if (generation !== state.board.generation) return;
     state.board.cartelleInCaricamento = false;
     state.board.cartelleCaricate = errori === 0;
-    if (errori) state.board.avviso = 'Cartelle non disponibili per ' + errori + ' sessioni. Premi Aggiorna per riprovare.';
+    if (errori) state.board.avviso = trn('app.board.foldersUnavailableOne', 'app.board.foldersUnavailableMany', errori);
     renderSessionsBoard(state.board.sessioni);
   }
 
@@ -7341,7 +7364,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     try {
       const { items } = await apiGet('/api/v1/sessions');
       if (generation !== state.board.generation) return;
-      if (!Array.isArray(items)) throw new Error('Elenco sessioni non valido');
+      if (!Array.isArray(items)) throw new Error(tr('app.board.sessionListInvalid'));
       state.board.sessioni = senzaPassiWorkflow(items);
       state.board.initialized = true;
       state.board.metricheInCaricamento = true;
@@ -7350,7 +7373,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         s => apiGet('/api/v1/sessions/' + encodeURIComponent(s.sessionId) + '/metrics'),
         (s, metriche) => { state.board.metriche[s.sessionId] = metriche; });
       if (generation !== state.board.generation) return;
-      if (errori) state.board.avviso = 'Metriche non disponibili per ' + errori + ' sessioni. Premi Aggiorna per riprovare.';
+      if (errori) state.board.avviso = trn('app.board.metricsUnavailableOne', 'app.board.metricsUnavailableMany', errori);
     } catch (error) {
       if (generation !== state.board.generation) return;
       state.board.sessioni = [];
@@ -7369,9 +7392,9 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   function renderEmbeddedSessionsBoardDemo(announce = false) {
     state.board.initialized = true;
     state.board.sessioni = [];
-    state.board.errore = 'Nessun dato mobile collegato.';
+    state.board.errore = tr('app.board.noMobileData');
     renderSessionsBoard([]);
-    if (announce) toast('Board demo non collegata', 'Nessuna richiesta di rete è stata eseguita.');
+    if (announce) toast(tr('app.demo.boardTitle'), tr('app.demo.noNetwork'));
   }
 
   function ensureSessionsBoard() {
@@ -7385,7 +7408,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   }
   // REAL_DATA_RENDER_END
 
-  async function copyText(text, success = 'Copiato negli appunti') {
+  async function copyText(text, success = tr('app.common.copiedToClipboard')) {
     const value = String(text || '').trim();
     if (!value) return;
     try {
@@ -7402,7 +7425,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       }
       toast(success);
     } catch {
-      toast('Copia non disponibile', 'Seleziona manualmente il contenuto.');
+      toast(tr('app.common.copyUnavailable'), tr('app.common.copyManually'));
     }
   }
 
@@ -7540,7 +7563,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
      *   lei.
      */
     const { righe, tutte } = aggiornaPannelloNotifiche(pannello, notifiche, {
-      ora: (sessione) => { const eta = formattaEta(sessione?.avviataAlle); return eta ? `avviata ${eta} fa` : ''; },
+      ora: (sessione) => { const eta = formattaEta(sessione?.avviataAlle); return eta ? tr('app.run.startedAgo', { eta }) : ''; },
     });
     righe.forEach((riga, indice) => {
       const { sessione } = notifiche[indice];
@@ -7654,7 +7677,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       ...sessione,
       sessionId: sessione.sessionId,
       taskId: sessione.taskId || sessione.sessionId,
-      nome: sessione.nome || sessione.taskId || 'Sessione',
+      nome: sessione.nome || sessione.taskId || tr('app.sessions.fallbackName'),
       modello: normalizzaModelloSessione(sessione),
     };
     state.sessioneTarget = target;
@@ -7670,14 +7693,14 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
      *   dirlo qui evita la domanda «duplica cosa?».
      */
     const voci = [
-      { etichetta: 'Apri', icona: 'i-eye', azione: () => passaASessione(target.sessionId, target.taskId, target.nome, target.modello, target) },
-      { etichetta: 'Rinomina', icona: 'i-edit', azione: () => openSheet('rename') },
-      { etichetta: 'Duplica come ramo', icona: 'i-branch', azione: () => forkSession(target) },
-      { etichetta: 'Esporta la trascrizione', icona: 'i-download', azione: () => { void esportaTrascrizioneSessione('markdown', target); } },
-      { etichetta: 'Copia identificativo', icona: 'i-link', azione: () => copyText(target.sessionId, 'Identificativo copiato') },
-      { etichetta: 'Elimina', icona: 'i-trash', azione: () => openSheet('deleteSession'), pericoloso: true },
+      { etichetta: tr('app.common.open'), icona: 'i-eye', azione: () => passaASessione(target.sessionId, target.taskId, target.nome, target.modello, target) },
+      { etichetta: tr('app.common.rename'), icona: 'i-edit', azione: () => openSheet('rename') },
+      { etichetta: tr('app.sessions.menu.duplicateAsBranch'), icona: 'i-branch', azione: () => forkSession(target) },
+      { etichetta: tr('app.sessions.menu.exportTranscript'), icona: 'i-download', azione: () => { void esportaTrascrizioneSessione('markdown', target); } },
+      { etichetta: tr('app.sessions.menu.copyId'), icona: 'i-link', azione: () => copyText(target.sessionId, tr('app.sessions.menu.idCopied')) },
+      { etichetta: tr('app.common.delete'), icona: 'i-trash', azione: () => openSheet('deleteSession'), pericoloso: true },
     ];
-    return apriMenuAzioni({ voci, etichetta: `Azioni per ${target.nome}`, classe: 'session-actions-menu', posizionamento });
+    return apriMenuAzioni({ voci, etichetta: tr('app.common.actionsFor', { nome: target.nome }), classe: 'session-actions-menu', posizionamento });
   }
 
   /*
@@ -7765,18 +7788,18 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    */
   async function esportaTrascrizioneSessione(formato, sessione = null) {
     const id = sessione?.sessionId || state.realSession.id;
-    if (!id) return { ok: false, motivo: 'Nessuna sessione aperta da esportare.' };
+    if (!id) return { ok: false, motivo: tr('app.sessions.noneToExport') };
     try {
       const esportato = await apiGet(`/api/v1/sessions/${encodeURIComponent(id)}/export`);
       const markdown = formato === 'markdown';
       const testo = markdown ? costruisciTrascrizioneMarkdown(esportato) : JSON.stringify(esportato, null, 2);
-      if (!testo || !testo.trim()) throw new Error('Esportazione vuota: nessun contenuto da scrivere.');
-      scaricaTesto(testo, `talos-sessione-${id}.${markdown ? 'md' : 'json'}`, markdown ? 'text/markdown' : 'application/json');
-      toast('Sessione esportata', markdown ? 'Trascrizione Markdown pronta.' : 'JSON pronto.');
+      if (!testo || !testo.trim()) throw new Error(tr('app.sessions.exportEmpty'));
+      scaricaTesto(testo, tr('app.sessions.exportFileName', { id, ext: markdown ? 'md' : 'json' }), markdown ? 'text/markdown' : 'application/json');
+      toast(tr('app.sessions.exported'), markdown ? tr('app.sessions.exportedMarkdown') : tr('app.sessions.exportedJson'));
       return { ok: true };
     } catch (error) {
-      toast('Esportazione non riuscita', messaggioErroreUtente(error));
-      return { ok: false, motivo: messaggioErroreUtente(error, 'riprova fra un momento') };
+      toast(tr('app.sessions.exportFailed'), messaggioErroreUtente(error));
+      return { ok: false, motivo: messaggioErroreUtente(error, tr('app.errors.retryShortly')) };
     }
   }
 
@@ -7787,16 +7810,16 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    */
   async function eliminaSessioneBersaglio() {
     const bersaglio = state.sessioneTarget;
-    if (!bersaglio) return { ok: false, motivo: 'Nessuna sessione scelta.' };
+    if (!bersaglio) return { ok: false, motivo: tr('app.sessions.noneChosen') };
     let esito;
     try {
       esito = await apiPost(`/api/v1/sessions/${encodeURIComponent(bersaglio.sessionId)}/delete`, {});
     } catch (error) {
-      toast('Eliminazione non riuscita', messaggioErroreUtente(error));
-      return { ok: false, motivo: messaggioErroreUtente(error, 'la trascrizione è ancora al suo posto') };
+      toast(tr('app.common.deleteFailed'), messaggioErroreUtente(error));
+      return { ok: false, motivo: messaggioErroreUtente(error, tr('app.sessions.transcriptStillThere')) };
     }
     const avviso = avvisiEliminazione.registra(esito);
-    if (!avviso.pending) toast('Sessione eliminata', bersaglio.nome);
+    if (!avviso.pending) toast(tr('app.sessions.deleted'), bersaglio.nome);
     if (state.realSession.id === bersaglio.sessionId) {
       if (avviso.pending && !avviso.persisted) avvisiEliminazione.mostra({dopoLettura: () => window.location.reload()});
       else window.location.reload();
@@ -7807,7 +7830,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       await aggiornaElencoSessioniReali();
       if (state.board.initialized) await refreshSessionsBoard();
     } catch {
-      toast('Elenco non aggiornato', 'La sessione è stata eliminata. Ricarica la pagina per aggiornare l’elenco.', {tono: 'avviso'});
+      toast(tr('app.sessions.listStale'), tr('app.sessions.listStaleBody'), {tono: 'avviso'});
     }
     return { ok: true };
   }
@@ -7844,15 +7867,15 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    */
   async function rinominaFileBersaglio(nuovoNome) {
     const bersaglio = state.alberoFileTarget;
-    if (!bersaglio) return { ok: false, motivo: 'Nessun file scelto.' };
-    if (!nuovoNome) return { ok: false, motivo: 'Il nome non può essere vuoto.' };
+    if (!bersaglio) return { ok: false, motivo: tr('app.files.noFileChosen') };
+    if (!nuovoNome) return { ok: false, motivo: tr('app.common.nameEmpty') };
     try {
       await apiPost(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/tree/rename`, { percorso: bersaglio.percorso, nuovoNome });
     } catch (error) {
-      toast('Rinomina non riuscita', messaggioErroreUtente(error));
-      return { ok: false, motivo: messaggioErroreUtente(error, 'il file è rimasto al suo posto') };
+      toast(tr('app.common.renameFailed'), messaggioErroreUtente(error));
+      return { ok: false, motivo: messaggioErroreUtente(error, tr('app.files.fileStillThere')) };
     }
-    toast('File rinominato', `${bersaglio.nome} → ${nuovoNome}`);
+    toast(tr('app.files.renamed'), `${bersaglio.nome} → ${nuovoNome}`);
     await invalidaLivelloGenitoreAlbero(bersaglio.percorso);
     return { ok: true };
   }
@@ -7863,14 +7886,14 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    */
   async function eliminaFileBersaglio() {
     const bersaglio = state.alberoFileTarget;
-    if (!bersaglio) return { ok: false, motivo: 'Nessun file scelto.' };
+    if (!bersaglio) return { ok: false, motivo: tr('app.files.noFileChosen') };
     try {
       await apiPost(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/tree/delete`, { percorso: bersaglio.percorso });
     } catch (error) {
-      toast('Eliminazione non riuscita', messaggioErroreUtente(error));
-      return { ok: false, motivo: messaggioErroreUtente(error, 'il file è ancora sul disco') };
+      toast(tr('app.common.deleteFailed'), messaggioErroreUtente(error));
+      return { ok: false, motivo: messaggioErroreUtente(error, tr('app.files.fileStillOnDisk')) };
     }
-    toast('File eliminato', bersaglio.nome);
+    toast(tr('app.files.deleted'), bersaglio.nome);
     await invalidaLivelloGenitoreAlbero(bersaglio.percorso);
     return { ok: true };
   }
@@ -7882,16 +7905,16 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    */
   async function creaVoceBersaglio(nome) {
     const bersaglio = state.alberoFileTarget;
-    if (!bersaglio) return { ok: false, motivo: 'Nessuna cartella scelta.' };
-    if (!nome) return { ok: false, motivo: 'Il nome non può essere vuoto.' };
+    if (!bersaglio) return { ok: false, motivo: tr('app.files.noFolderChosen') };
+    if (!nome) return { ok: false, motivo: tr('app.common.nameEmpty') };
     let esito;
     try {
       esito = await apiPost(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/tree/create`, { percorsoBase: bersaglio.percorso, nome, tipo: bersaglio.tipo });
     } catch (error) {
-      toast('Creazione non riuscita', messaggioErroreUtente(error));
-      return { ok: false, motivo: messaggioErroreUtente(error, 'non è stato creato niente') };
+      toast(tr('app.common.createFailed'), messaggioErroreUtente(error));
+      return { ok: false, motivo: messaggioErroreUtente(error, tr('app.files.nothingCreated')) };
     }
-    toast(bersaglio.tipo === 'cartella' ? 'Cartella creata' : 'File creato', esito.percorso);
+    toast(bersaglio.tipo === 'cartella' ? tr('app.files.folderCreated') : tr('app.files.fileCreated'), esito.percorso);
     await invalidaLivelloGenitoreAlbero(esito.percorso);
     return { ok: true, percorso: esito.percorso };
   }
@@ -7917,8 +7940,8 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       try {
         await apiPost(`/api/v1/sessions/${encodeURIComponent(idBersaglio)}/rename`, { nome: nomeUnico });
       } catch (error) {
-        toast('Rinomina non riuscita', messaggioErroreUtente(error));
-        return { ok: false, motivo: messaggioErroreUtente(error, 'riprova fra un momento') };
+        toast(tr('app.common.renameFailed'), messaggioErroreUtente(error));
+        return { ok: false, motivo: messaggioErroreUtente(error, tr('app.errors.retryShortly')) };
       }
     }
     if (!state.sessioneTarget || idBersaglio === state.realSession.id) {
@@ -7929,7 +7952,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       if (attiva) attiva.textContent = state.session;
     }
     state.sessioneTarget = null;
-    toast('Sessione rinominata', doppioneEvitato ? `${nomeUnico} · rinominata per evitare un doppione con una sessione viva` : nomeUnico);
+    toast(tr('app.sessions.renamed'), doppioneEvitato ? tr('app.sessions.renamedDuplicate', { nome: nomeUnico }) : nomeUnico);
     if (idBersaglio && idBersaglio !== state.realSession.id) {
       await aggiornaElencoSessioniReali();
       if (state.board.initialized) await refreshSessionsBoard();
@@ -7994,7 +8017,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
           const nuovo = campo.value.trim();
           if (!nuovo) {
             // ⛔ il velo ha un posto per dirlo: si usa, invece di far lampeggiare il campo e basta
-            if (errore) { errore.textContent = 'Il nome non può essere vuoto.'; errore.hidden = false; }
+            if (errore) { errore.textContent = tr('app.common.nameEmpty'); errore.hidden = false; }
             campo.focus();
             return;
           }
@@ -8010,7 +8033,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
 
     if (tipo === 'export') {
       const nome = $('#esportaNome', velo);
-      if (nome) nome.textContent = state.sessioneTarget?.nome || state.session || 'questa sessione';
+      if (nome) nome.textContent = state.sessioneTarget?.nome || state.session || tr('app.sessions.thisSession');
       /*
        * ⭐ Il velo usa lo STESSO `data-export-choice` del foglio vecchio: il markup del mockup era
        *   già scritto per combaciare, e nessuno l'aveva mai collegato. Qui basta agganciare.
@@ -8035,7 +8058,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       const blocco = $('#eliminaSessioneBlocco', velo);
       const errore = $('#eliminaSessioneErrore', velo);
       const conferma = $('#eliminaSessioneConferma', velo);
-      if (nome) nome.textContent = bersaglio?.nome || 'questa sessione';
+      if (nome) nome.textContent = bersaglio?.nome || tr('app.sessions.thisSession');
       if (errore) errore.hidden = true;
       /*
        * ⭐ Il velo ha DUE cose che il foglio vecchio non aveva, ed è il motivo per cui vale la pena
@@ -8044,7 +8067,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
        */
       const stat = bersaglio ? statoSessione(bersaglio) : null;
       if (stato) {
-        stato.textContent = stat?.testo || 'stato non registrato';
+        stato.textContent = stat?.testo || tr('app.sessions.statusUnrecorded');
         stato.className = `talos-badge${stat?.tono ? ` talos-badge--${stat.tono}` : ''}`;
       }
       const inCorso = Boolean(bersaglio) && !bersaglio.conclusa && bersaglio.interrotta !== true;
@@ -8066,8 +8089,8 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
           const vivi = runs.filter((r) => !['succeeded', 'failed', 'cancelled'].includes(r.status)).length;
           if (totale === 0) return;
           avvisoWorkflow.textContent = vivi > 0
-            ? (vivi === 1 ? 'Un Workflow di questa conversazione è ancora in corso: annullalo prima di eliminarla.' : `${vivi} Workflow di questa conversazione sono ancora in corso: annullali prima di eliminarla.`)
-            : (totale === 1 ? 'Con la conversazione si elimina anche il suo Workflow.' : `Con la conversazione si eliminano anche i suoi ${totale} Workflow.`);
+            ? trn('app.sessions.deleteBlockedOne', 'app.sessions.deleteBlockedMany', vivi)
+            : trn('app.sessions.deleteWorkflowsOne', 'app.sessions.deleteWorkflowsMany', totale);
           avvisoWorkflow.hidden = false;
           if (vivi > 0 && conferma) conferma.disabled = true;
         }, () => { /* senza la lettura il server decide comunque: la conferma resta com'è */ });
@@ -8080,7 +8103,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
             conferma.disabled = true;
             const esito = await eliminaSessioneBersaglio();
             if (!esito.ok) {
-              if (errore) { errore.textContent = `Eliminazione non riuscita: ${esito.motivo}`; errore.hidden = false; }
+              if (errore) { errore.textContent = tr('app.sessions.deleteFailedWith', { motivo: esito.motivo }); errore.hidden = false; }
               conferma.disabled = false;
               return;
             }
@@ -8110,7 +8133,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       if (!modulo || !campo) return;
       // ⭐ Il velo dichiara il percorso PRIMA di premere: il foglio vecchio mostrava solo il campo,
       //    e da un nome soltanto non si capisce quale dei tre omonimi si sta rinominando.
-      if (percorso) percorso.textContent = bersaglio?.percorso || 'nessun file scelto';
+      if (percorso) percorso.textContent = bersaglio?.percorso || tr('app.files.noneChosen');
       campo.value = bersaglio?.nome || '';
       if (errore) { errore.hidden = true; errore.textContent = ''; }
       window.setTimeout(() => { campo.focus(); campo.select(); }, 30);
@@ -8141,19 +8164,19 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       const conferma = $('#eliminaFileConferma', velo);
       const annulla = $('#eliminaFileAnnulla', velo);
       const cartella = bersaglio?.cartella === true;
-      if (percorso) percorso.textContent = bersaglio?.percorso || 'nessun file scelto';
+      if (percorso) percorso.textContent = bersaglio?.percorso || tr('app.files.noneChosen');
       if (errore) errore.hidden = true;
       /*
        * ⭐ Il velo dice CHE COSA sparisce. Il foglio vecchio diceva la stessa frase per un file e
        *   per una cartella, e una cartella si porta via tutto quello che contiene: chi conferma
        *   deve leggerlo prima, non scoprirlo dopo.
        */
-      if (titolo) titolo.textContent = cartella ? 'Elimina cartella' : 'Elimina file';
+      if (titolo) titolo.textContent = cartella ? tr('app.files.deleteFolder') : tr('app.files.deleteFile');
       if (messaggio) messaggio.textContent = cartella
-        ? 'La cartella viene eliminata dal disco con tutto quello che contiene. Non si annulla da TALOS.'
-        : 'Il file viene eliminato dal disco. Non si annulla da TALOS.';
+        ? tr('app.files.deleteFolderWarning')
+        : tr('app.files.deleteFileWarning');
       if (conferma) {
-        conferma.textContent = cartella ? 'Elimina cartella' : 'Elimina file';
+        conferma.textContent = cartella ? tr('app.files.deleteFolder') : tr('app.files.deleteFile');
         conferma.disabled = !bersaglio;
         if (!conferma.dataset.collegato) {
           conferma.dataset.collegato = 'si';
@@ -8161,7 +8184,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
             conferma.disabled = true;
             const esito = await eliminaFileBersaglio();
             if (!esito.ok) {
-              if (errore) { errore.textContent = `Eliminazione non riuscita: ${esito.motivo}`; errore.hidden = false; }
+              if (errore) { errore.textContent = tr('app.sessions.deleteFailedWith', { motivo: esito.motivo }); errore.hidden = false; }
               conferma.disabled = false;
               return;
             }
@@ -8192,15 +8215,15 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       const salva = $('#creaFileSalva', velo);
       const errore = $('#creaFileErrore', velo);
       if (!modulo || !campo) return;
-      if (titolo) titolo.textContent = cartella ? 'Nuova cartella' : 'Nuovo file';
-      if (etichetta) etichetta.textContent = cartella ? 'Nome della cartella' : 'Nome del file';
-      if (salva) salva.textContent = cartella ? 'Crea cartella' : 'Crea file';
+      if (titolo) titolo.textContent = cartella ? tr('app.files.newFolder') : tr('app.files.newFile');
+      if (etichetta) etichetta.textContent = cartella ? tr('app.files.folderNameLabel') : tr('app.files.fileNameLabel');
+      if (salva) salva.textContent = cartella ? tr('app.files.createFolder') : tr('app.files.createFile');
       if (aiuto) aiuto.textContent = cartella
-        ? 'Fino a 255 caratteri. Scrivi un nome, senza percorso. La cartella sarà vuota.'
-        : 'Fino a 255 caratteri. Scrivi un nome, senza percorso. Il file sarà vuoto.';
+        ? tr('app.files.nameHintFolder')
+        : tr('app.files.nameHintFile');
       // ⛔ Il percorso vuoto È la radice del progetto: lasciare la riga vuota sembrerebbe un dato
       //    mancante, e «ciò che non c'è non si scrive» vale anche al contrario — qui il dato c'è.
-      if (base) base.textContent = bersaglio?.percorso || 'la radice del progetto';
+      if (base) base.textContent = bersaglio?.percorso || tr('app.files.projectRoot');
       campo.value = '';
       if (errore) { errore.hidden = true; errore.textContent = ''; }
       window.setTimeout(() => { campo.focus(); }, 30);
@@ -8300,8 +8323,8 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         vuoto.hidden = !senzaNiente;
         if (senzaNiente) {
           vuoto.textContent = state.realSession.id
-            ? 'Nessun file ancora: apri una cartella nell’albero e i suoi file compaiono qui.'
-            : 'Nessuna sessione aperta: qui compaiono i file del suo workspace.';
+            ? tr('app.files.emptyOpenFolder')
+            : tr('app.files.emptyNoSession');
         }
       }
       if (ambito) ambito.hidden = senzaNiente;
@@ -8322,7 +8345,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
           const nessunRisultato = trovati === 0 && $$('.talos-list-row', elenco).length > 0;
           if (vuoto) {
             vuoto.hidden = !nessunRisultato;
-            if (nessunRisultato) vuoto.textContent = 'Nessun file corrisponde. Cambia ricerca o apri una cartella nell’albero.';
+            if (nessunRisultato) vuoto.textContent = tr('app.files.noMatch');
           }
           scelto = 0;
           evidenzia();
@@ -8443,14 +8466,14 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         const reasoningRow = document.createElement('label');
         reasoningRow.className = 'sheet-toggle-row';
         const reasoningLabel = document.createElement('span');
-        reasoningLabel.textContent = ETICHETTA_INTERRUTTORE_RAGIONAMENTO;
+        reasoningLabel.textContent = tr('app.reasoning.toggleLabel');
         const reasoningToggle = document.createElement('input');
         reasoningToggle.type = 'checkbox';
         reasoningToggle.className = 'talos-switch';
         reasoningToggle.setAttribute('role', 'switch');
         reasoningToggle.id = 'showReasoningToggle';
         reasoningToggle.checked = state.showReasoning;
-        reasoningToggle.setAttribute('aria-label', ETICHETTA_INTERRUTTORE_RAGIONAMENTO);
+        reasoningToggle.setAttribute('aria-label', tr('app.reasoning.toggleLabel'));
         reasoningToggle.addEventListener('change', () => {
           state.showReasoning = reasoningToggle.checked;
           salvaPreferenzeChatDesktop();
@@ -8482,15 +8505,15 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    *   grezzi restano in `data-dove-choice`, che è il contratto col server.
    */
   const DOVE_GIRANO = [
-    { valore: null, nome: 'Automatico', icona: 'i-bolt', nota: 'Come prima', descrizione: 'Sceglie da sé, e può cambiare da un comando all’altro.' },
-    { valore: 'wsl2', nome: 'Linux (WSL2)', icona: 'i-terminal', nota: 'Consigliato', descrizione: 'Sempre in Linux. Se WSL non c’è, il comando lo dice invece di ripiegare.' },
-    { valore: 'windows', nome: 'Windows', icona: 'i-folder', nota: '', descrizione: 'Sempre sul sistema di casa, con i percorsi C:\ che vedi in Esplora file.' },
+    { valore: null, nome: 'app.common.automatic', icona: 'i-bolt', nota: 'app.sheets.permissions.where.autoNote', descrizione: 'app.sheets.permissions.where.autoDesc' },
+    { valore: 'wsl2', nome: 'app.sheets.permissions.where.wslName', icona: 'i-terminal', nota: 'app.sheets.permissions.where.wslNote', descrizione: 'app.sheets.permissions.where.wslDesc' },
+    { valore: 'windows', nome: 'app.sheets.permissions.where.windowsName', icona: 'i-folder', nota: '', descrizione: 'app.sheets.permissions.where.windowsDesc' },
   ];
 
   const sheetTemplates = {
     model: {
-      eyebrow: 'Runtime',
-      title: 'Modello',
+      get eyebrow() { return tr('app.sheets.model.eyebrow'); },
+      get title() { return tr('app.sheets.model.title'); },
       /*
        * ⛔⛔⛔ 27/8, owner: "la stessa modale deve essere riprodotta nel chat
        * composer... si deve riaprire lo stesso componente della selezione
@@ -8505,11 +8528,11 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     },
 
     permissions: {
-      eyebrow: 'Sicurezza',
-      title: 'Permessi di esecuzione',
+      get eyebrow() { return tr('app.sheets.permissions.eyebrow'); },
+      get title() { return tr('app.sheets.permissions.title'); },
       html: () => `
         <div class="sheet-section">
-          <span class="sheet-label">Autonomia della sessione</span>
+          <span class="sheet-label">${tr('app.sheets.permissions.autonomy')}</span>
           ${/*
              * ⛔ 07/9 — qui a schermo c'erano i valori GREZZI del kernel («Read only»,
              * «Workspace write», «On request», «Full access») con le descrizioni in inglese, proprio
@@ -8532,31 +8555,31 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
              *   comandi (regola dell'owner del 10/09: più di due azioni vogliono un menu, non
              *   bottoni affiancati).
              */''}
-          <span class="sheet-label">Dove girano i comandi</span>
+          <span class="sheet-label">${tr('app.sheets.permissions.whereCommandsRun')}</span>
           ${DOVE_GIRANO.map((d) => `
             <button class="sheet-option ${d.valore === (state.realSession.doveGiranoIComandi ?? null) ? 'active' : ''}" data-dove-choice="${d.valore ?? ''}">
-              <span class="sheet-icon">${icon(d.icona)}</span><span><strong>${d.nome}</strong><small>${d.descrizione}</small></span><span>${d.nota}</span>
+              <span class="sheet-icon">${icon(d.icona)}</span><span><strong>${tr(d.nome)}</strong><small>${tr(d.descrizione)}</small></span><span>${d.nota ? tr(d.nota) : ''}</span>
             </button>`).join('')}
         </div>
         <div class="sheet-section">
-          <span class="sheet-label">Permesso per attrezzo · vince su quello della sessione qui sopra</span>
+          <span class="sheet-label">${tr('app.sheets.permissions.perTool')}</span>
           ${[
-            ['scrivi', 'Scrive un file — passa dal cancello semantico'],
+            ['scrivi', tr('app.sheets.permissions.toolWrite')],
             /* ⛔ BC-59 (17/09) — il SESTO, mancante anche qui: vedi la nota lunga su ATTREZZI_COL_CANCELLO. */
-            ['file_edit', 'Cambia una parte di un file esistente — stesso cancello di «Scrivi un file»'],
-            ['prova', 'Esegue la suite di test del progetto'],
-            ['shell', 'Comando di shell nella cartella progetto'],
-            ['document_create', 'Genera un documento (PDF, foglio, slide, report)'],
+            ['file_edit', tr('app.sheets.permissions.toolEdit')],
+            ['prova', tr('app.sheets.permissions.toolTests')],
+            ['shell', tr('app.sheets.permissions.toolShell')],
+            ['document_create', tr('app.sheets.permissions.toolDocument')],
             /* ⛔ O-01 (04/9) — MANCAVA: `generate_image` è il quinto in ATTREZZI_CON_PERMESSO_PER_ATTREZZO (config.mjs) dal 29/8, e questo foglio ne mostrava quattro. Il Capability hub dichiara «permesso per-attrezzo nel foglio Permessi»: su questo attrezzo era una promessa vuota. */
-            ['generate_image', 'Genera un’immagine — passa dal cancello per-attrezzo come gli altri quattro'],
+            ['generate_image', tr('app.sheets.permissions.toolImage')],
           ].map(([tool, desc]) => `
             <div class="sheet-toggle-row">
               <span><strong title="${tool}">${nomeUmanoAttrezzo(tool)}</strong><small>${desc}</small></span>
-              <select data-tool-permission-select="${tool}" aria-label="Permesso per l'attrezzo ${nomeUmanoAttrezzo(tool)}">
-                <option value="" ${!state.permessiPerAttrezzo[tool] ? 'selected' : ''}>Come la sessione</option>
-                <option value="sempre" ${state.permessiPerAttrezzo[tool] === 'sempre' ? 'selected' : ''}>Sempre consentito</option>
-                <option value="chiedi" ${state.permessiPerAttrezzo[tool] === 'chiedi' ? 'selected' : ''}>Chiedi conferma</option>
-                <option value="nega" ${state.permessiPerAttrezzo[tool] === 'nega' ? 'selected' : ''}>Nega sempre</option>
+              <select data-tool-permission-select="${tool}" aria-label="${tr('app.sheets.permissions.toolAria', { nome: nomeUmanoAttrezzo(tool) })}">
+                <option value="" ${!state.permessiPerAttrezzo[tool] ? 'selected' : ''}>${tr('app.sheets.permissions.asSession')}</option>
+                <option value="sempre" ${state.permessiPerAttrezzo[tool] === 'sempre' ? 'selected' : ''}>${tr('app.sheets.permissions.alwaysAllowed')}</option>
+                <option value="chiedi" ${state.permessiPerAttrezzo[tool] === 'chiedi' ? 'selected' : ''}>${tr('app.sheets.permissions.askConfirmation')}</option>
+                <option value="nega" ${state.permessiPerAttrezzo[tool] === 'nega' ? 'selected' : ''}>${tr('app.sheets.permissions.alwaysDeny')}</option>
               </select>
             </div>`).join('')}
           ${/*
@@ -8573,10 +8596,10 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
              *   aggiorna non trova il contesto cambiato sotto i piedi.
              */''}
           <div class="sheet-toggle-row">
-            <span><strong>uscita dei comandi che lanci tu con !</strong><small>Chi la legge, dopo che il comando è finito</small></span>
-            <select data-uscita-choice aria-label="Chi legge l'uscita dei comandi lanciati con il punto esclamativo">
-              <option value="no" ${state.realSession.comandiNellaConversazione === true ? '' : 'selected'}>Solo tu — come prima</option>
-              <option value="si" ${state.realSession.comandiNellaConversazione === true ? 'selected' : ''}>Anche il modello · ~2.000 token</option>
+            <span><strong>${tr('app.sheets.permissions.commandOutputTitle')}</strong><small>${tr('app.sheets.permissions.commandOutputSub')}</small></span>
+            <select data-uscita-choice aria-label="${tr('app.sheets.permissions.commandOutputAria')}">
+              <option value="no" ${state.realSession.comandiNellaConversazione === true ? '' : 'selected'}>${tr('app.sheets.permissions.outputOnlyYou')}</option>
+              <option value="si" ${state.realSession.comandiNellaConversazione === true ? 'selected' : ''}>${tr('app.sheets.permissions.outputModelToo')}</option>
             </select>
           </div>
         </div>
@@ -8590,24 +8613,24 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
            */
           const { aperte, avviso } = porteLateraliAperte(state.permessiPerAttrezzo, state.permissions);
           if (!avviso) return '';
-          return `<p class="sheet-avviso" role="status">${avviso} <button type="button" class="talos-button talos-button--sm" data-chiudi-porte-laterali="${aperte.join(',')}">Chiudi anche ${aperte.length === 1 ? 'quella' : 'quelle'}</button></p>`;
+          return `<p class="sheet-avviso" role="status">${avviso} <button type="button" class="talos-button talos-button--sm" data-chiudi-porte-laterali="${aperte.join(',')}">${trn('app.permissions.closeAlsoOne', 'app.permissions.closeAlsoMany', aperte.length)}</button></p>`;
         })()}
-        <p class="muted-copy">Un «chiedi» su un attrezzo accende il canale di approvazione per tutta la sessione: finché resta acceso, TALOS chiede conferma anche per le altre azioni che lasciano traccia. È il limite del kernel di oggi, dichiarato invece che nascosto.</p>`,
+        <p class="muted-copy">${tr('app.sheets.permissions.sideRoutesNote')}</p>`,
     },
     environment: {
-      eyebrow: 'Ambiente',
-      title: 'Workspace e worktree',
+      get eyebrow() { return tr('app.sheets.environment.eyebrow'); },
+      get title() { return tr('app.sheets.environment.title'); },
       html: () => `
         <div class="sheet-section">
-          <span class="sheet-label">Ambiente attivo</span>
+          <span class="sheet-label">${tr('app.sheets.environment.active')}</span>
           <button class="sheet-option active" data-environment-choice="active">
-            <span class="sheet-icon">${icon('i-branch')}</span><span><strong>wt/auth-61c · feat/mobile-code</strong><small>~/dev/talos/.worktrees/auth-61c</small></span><span>Attivo</span>
+            <span class="sheet-icon">${icon('i-branch')}</span><span><strong>wt/auth-61c · feat/mobile-code</strong><small>~/dev/talos/.worktrees/auth-61c</small></span><span>${tr('app.sheets.environment.badgeActive')}</span>
           </button>
           <button class="sheet-option" data-environment-choice="local">
-            <span class="sheet-icon">${icon('i-git')}</span><span><strong>Local · main</strong><small>~/dev/talos</small></span><span>pulito</span>
+            <span class="sheet-icon">${icon('i-git')}</span><span><strong>Local · main</strong><small>~/dev/talos</small></span><span>${tr('app.sheets.environment.statusClean')}</span>
           </button>
           <button class="sheet-option" data-environment-choice="docker">
-            <span class="sheet-icon">${icon('i-terminal')}</span><span><strong>Docker sandbox</strong><small>talos-dev:latest · isolated</small></span><span>pronto</span>
+            <span class="sheet-icon">${icon('i-terminal')}</span><span><strong>Docker sandbox</strong><small>talos-dev:latest · isolated</small></span><span>${tr('app.sheets.environment.statusReady')}</span>
           </button>
           <button class="sheet-option" data-environment-choice="ssh">
             <span class="sheet-icon">${icon('i-link')}</span><span><strong>SSH remote</strong><small>devbox · /workspace/talos</small></span><span>offline</span>
@@ -8617,15 +8640,15 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
           </button>
         </div>
         <div class="sheet-section">
-          <span class="sheet-label">Regole</span>
-          <div class="sheet-toggle-row"><span>Mostra branch sempre</span><input type="checkbox" checked></div>
-          <div class="sheet-toggle-row"><span>Crea worktree per task</span><input type="checkbox" checked></div>
-          <div class="sheet-toggle-row"><span>Setup non bloccante</span><input type="checkbox" checked></div>
+          <span class="sheet-label">${tr('app.sheets.environment.rules')}</span>
+          <div class="sheet-toggle-row"><span>${tr('app.sheets.environment.ruleBranch')}</span><input type="checkbox" checked></div>
+          <div class="sheet-toggle-row"><span>${tr('app.sheets.environment.ruleWorktree')}</span><input type="checkbox" checked></div>
+          <div class="sheet-toggle-row"><span>${tr('app.sheets.environment.ruleSetup')}</span><input type="checkbox" checked></div>
         </div>`,
     },
     capabilities: {
-      eyebrow: 'Capacità',
-      title: 'Strumenti, skill e connettori',
+      get eyebrow() { return tr('app.sheets.capabilities.eyebrow'); },
+      get title() { return tr('app.sheets.capabilities.title'); },
       /*
        * ⛔⛔⛔ 27/8 — Questo foglio elencava 11 voci (Skills, MCP, Plugin
        * market, Toolsets, Web search, Browser, Computer use, Images, Voice,
@@ -8659,65 +8682,65 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
        */
       html: () => `
         <div class="sheet-section">
-          <span class="sheet-label">Attrezzi · quelli che il kernel offre DAVVERO al modello · il permesso per-attrezzo si sceglie nel foglio Permessi</span>
+          <span class="sheet-label">${tr('app.sheets.capabilities.tools')}</span>
           <div id="toolsListMount"></div>
         </div>
         <div class="sheet-section">
-          <span class="sheet-label">Skills · cartelle SKILL.md dichiarate in .harness-ui-skills/, per progetto</span>
+          <span class="sheet-label">${tr('app.sheets.capabilities.skills')}</span>
           <div id="skillsListMount"></div>
         </div>
         <div class="sheet-section">
-          <span class="sheet-label">MCP · server dichiarati in .harness-ui-mcp.json, per progetto</span>
+          <span class="sheet-label">${tr('app.sheets.capabilities.mcp')}</span>
           <div id="mcpListMount"></div>
         </div>
         <div class="sheet-section">
-          <span class="sheet-label">Plugin · manifesti dichiarati in .harness-ui-plugins/, per progetto</span>
+          <span class="sheet-label">${tr('app.sheets.capabilities.plugins')}</span>
           <div id="pluginsListMount"></div>
         </div>
         <div class="sheet-section">
-          <span class="sheet-label">Libreria · file in .harness-ui-library/, per progetto</span>
+          <span class="sheet-label">${tr('app.sheets.capabilities.library')}</span>
           <div id="libraryListMount"></div>
         </div>
         <div class="sheet-section">
-          <span class="sheet-label">Notes · promemoria in .notes-store/, GLOBALI — non del progetto</span>
+          <span class="sheet-label">${tr('app.sheets.capabilities.notes')}</span>
           <div id="notesListMount"></div>
         </div>
         <div class="sheet-section">
-          <span class="sheet-label">Tasks · attività in .tasks-store/, GLOBALI — non del progetto</span>
+          <span class="sheet-label">${tr('app.sheets.capabilities.tasks')}</span>
           <div id="tasksListMount"></div>
         </div>
         <div class="sheet-section">
-          <span class="sheet-label">Memory · fatti in .memory-store/, GLOBALI — riletti in ogni conversazione</span>
+          <span class="sheet-label">${tr('app.sheets.capabilities.memory')}</span>
           <div id="memoryListMount"></div>
         </div>
         <div class="sheet-section">
-          <span class="sheet-label">Deep Research · rapporti in .harness-ui-research/, per progetto — salvati anche in Libreria</span>
+          <span class="sheet-label">${tr('app.sheets.capabilities.research')}</span>
           <div id="researchListMount"></div>
         </div>
         <div class="sheet-section">
-          <span class="sheet-label">Tool Forge · tool creati dal modello in .tool-forge-store/, GLOBALI — disabilitati finché non li abiliti qui</span>
+          <span class="sheet-label">${tr('app.sheets.capabilities.forge')}</span>
           <div id="forgeListMount"></div>
         </div>
         <div class="sheet-section">
-          <span class="sheet-label">Non ancora implementato</span>
+          <span class="sheet-label">${tr('app.sheets.capabilities.notImplemented')}</span>
           ${[
-            ['Toolsets', 'Raggruppare gli attrezzi in insiemi accendibili per sessione', 'i-code'],
-            ['Computer use', 'Pilotare schermo, mouse e tastiera — oggi TALOS legge solo il testo delle pagine, con naviga', 'i-layout'],
-            ['Gateways · Telegram, Discord, Slack, WhatsApp', 'Parlare con TALOS da un’app di messaggistica', 'i-link'],
-            ['Profiles', 'Insiemi di preferenze salvate e richiamabili per tipo di lavoro', 'i-robot'],
+            ['Toolsets', tr('app.sheets.capabilities.toolsetsDesc'), 'i-code'],
+            ['Computer use', tr('app.sheets.capabilities.computerUseDesc'), 'i-layout'],
+            ['Gateways · Telegram, Discord, Slack, WhatsApp', tr('app.sheets.capabilities.gatewaysDesc'), 'i-link'],
+            ['Profiles', tr('app.sheets.capabilities.profilesDesc'), 'i-robot'],
           ].map(([name, desc, ico]) => `
             <div class="sheet-option" role="group">
-              <span class="sheet-icon">${icon(ico)}</span><span><strong>${name}</strong><small>${desc}</small></span><span class="status-chip">non implementato</span>
+              <span class="sheet-icon">${icon(ico)}</span><span><strong>${name}</strong><small>${desc}</small></span><span class="status-chip">${tr('app.sheets.capabilities.chipNotImplemented')}</span>
             </div>`).join('')}
         </div>
         <div class="sheet-section">
-          <span class="sheet-label">Aggiungi contesto al messaggio</span>
-          <button class="sheet-option" data-capability-action="file"><span class="sheet-icon">${icon('i-files')}</span><span><strong>Allega un file del workspace</strong><small>Lo aggiunge al messaggio come riferimento @, dai file veri della sessione</small></span><span>@</span></button>
+          <span class="sheet-label">${tr('app.sheets.capabilities.addContext')}</span>
+          <button class="sheet-option" data-capability-action="file"><span class="sheet-icon">${icon('i-files')}</span><span><strong>${tr('app.sheets.capabilities.attachFile')}</strong><small>${tr('app.sheets.capabilities.attachFileDesc')}</small></span><span>@</span></button>
         </div>`,
     },
     control: {
-      eyebrow: 'Governo della sessione',
-      title: 'Agents, hook e diagnostica',
+      get eyebrow() { return tr('app.sheets.governance.eyebrow'); },
+      get title() { return tr('app.sheets.governance.title'); },
       /*
        * ⛔⛔ 27/8, trovato nell'inventario "legare ogni componente
        * visivo": "Agents" e "Hooks" mostravano contatori inventati (2 e
@@ -8757,22 +8780,22 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
        */
       html: () => `
         <div class="sheet-section">
-          <span class="sheet-label">Motore dell’agente</span>
-          <button class="sheet-option" data-control-action="doctor"><span class="sheet-icon">${icon('i-check')}</span><span><strong>Doctor</strong><small>Runtime, provider, shell, git e browser</small></span><span data-doctor-status>Verifica…</span></button>
-          <button class="sheet-option" data-control-action="settings"><span class="sheet-icon">${icon('i-settings')}</span><span><strong>Impostazioni Codice</strong><small>Aspetto, interazione e preferenze</small></span><span>Apri</span></button>
+          <span class="sheet-label">${tr('app.sheets.governance.agentEngine')}</span>
+          <button class="sheet-option" data-control-action="doctor"><span class="sheet-icon">${icon('i-check')}</span><span><strong>Doctor</strong><small>${tr('app.sheets.governance.doctorDesc')}</small></span><span data-doctor-status>${tr('app.sheets.governance.checking')}</span></button>
+          <button class="sheet-option" data-control-action="settings"><span class="sheet-icon">${icon('i-settings')}</span><span><strong>${tr('app.sheets.governance.settingsTitle')}</strong><small>${tr('app.sheets.governance.settingsDesc')}</small></span><span>${tr('app.common.open')}</span></button>
         </div>
         <div class="sheet-section">
-          <span class="sheet-label">Agganci</span>
+          <span class="sheet-label">${tr('app.sheets.governance.hooks')}</span>
           <div id="hooksListMount"></div>
         </div>`,
     },
     sessionTree: {
-      eyebrow: 'Albero della conversazione',
-      title: 'Albero sessione',
+      get eyebrow() { return tr('app.sheets.sessionTree.eyebrow'); },
+      get title() { return tr('app.sheets.sessionTree.title'); },
       html: () => `
         <div class="sheet-section session-tree-sheet">
-          <span class="sheet-label">Sessione</span>
-          <button class="sheet-option active" data-session-action="main"><span class="sheet-icon">${icon('i-list')}</span><span><strong data-current-session-title>${state.session.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;')}</strong><small data-usage-summary>Main · ${formattaUsageBreve(state.realSession.usageSessione || state.realSession.usage)}</small></span><span>●</span></button>
+          <span class="sheet-label">${tr('app.sheets.sessionTree.session')}</span>
+          <button class="sheet-option active" data-session-action="main"><span class="sheet-icon">${icon('i-list')}</span><span><strong data-current-session-title>${state.session.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;')}</strong><small data-usage-summary>${tr('app.usage.main', { consumo: formattaUsageBreve(state.realSession.usageSessione || state.realSession.usage) })}</small></span><span>●</span></button>
         </div>
         <div class="sheet-section">
           <!--
@@ -8782,55 +8805,55 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
             openSheet() — le deleghe VERE dell'attrezzo delega_sottotask,
             vedi LEDGER-FASE-C-SUBAGENTI.md.
           -->
-          <span class="sheet-label">Deleghe · sotto-agenti isolati</span>
+          <span class="sheet-label">${tr('app.sheets.sessionTree.delegations')}</span>
           <div id="subagentTreeMount"></div>
         </div>`,
     },
     rename: {
-      eyebrow: 'Sessione',
-      title: 'Rinomina sessione',
+      get eyebrow() { return tr('app.sheets.rename.eyebrow'); },
+      get title() { return tr('app.sheets.rename.title'); },
       html: () => `
         <form class="sheet-section rename-form" id="renameSessionForm">
-          <label class="sheet-label" for="renameSessionInput">Nome sessione</label>
+          <label class="sheet-label" for="renameSessionInput">${tr('app.sheets.rename.nameLabel')}</label>
           <input class="sheet-input" id="renameSessionInput" value="${(state.sessioneTarget?.nome || state.session).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;')}" maxlength="80" autocomplete="off">
           <div class="sheet-actions">
-            <button type="button" class="secondary-btn" data-rename-cancel>Annulla</button>
-            <button type="submit" class="primary-btn">Salva</button>
+            <button type="button" class="secondary-btn" data-rename-cancel>${tr('app.common.cancel')}</button>
+            <button type="submit" class="primary-btn">${tr('app.common.save')}</button>
           </div>
         </form>`,
     },
     references: {
-      eyebrow: 'Riferimenti nel contesto',
-      title: 'Aggiungi file con @',
+      get eyebrow() { return tr('app.sheets.reference.eyebrow'); },
+      get title() { return tr('app.sheets.reference.title'); },
       html: () => `
         <div class="sheet-section">
-          <span class="sheet-label">Suggerimenti workspace</span>
-          ${suggerimentiRiferimentiReali().map(({ percorso, origine }) => `<button class="sheet-option reference-option" data-reference-file="${attributoSicuro(percorso)}"><span class="sheet-icon">${icon('i-files')}</span><span><strong>${attributoSicuro(percorso)}</strong><small>${attributoSicuro(origine)}</small></span><span>@</span></button>`).join('') || `<p class="board-empty">${state.realSession.id ? 'Apri una cartella nell’albero Files: i file caricati compaiono qui come suggerimenti.' : 'Avvia una sessione: qui compaiono i file del suo workspace.'}</p>`}
+          <span class="sheet-label">${tr('app.sheets.reference.suggestions')}</span>
+          ${suggerimentiRiferimentiReali().map(({ percorso, origine }) => `<button class="sheet-option reference-option" data-reference-file="${attributoSicuro(percorso)}"><span class="sheet-icon">${icon('i-files')}</span><span><strong>${attributoSicuro(percorso)}</strong><small>${attributoSicuro(origine)}</small></span><span>@</span></button>`).join('') || `<p class="board-empty">${state.realSession.id ? tr('app.sheets.reference.emptyWithSession') : tr('app.sheets.reference.emptyNoSession')}</p>`}
         </div>`,
     },
     renameFile: {
-      eyebrow: 'Albero workspace',
-      title: 'Rinomina file',
+      get eyebrow() { return tr('app.sheets.treeEyebrow'); },
+      get title() { return tr('app.sheets.renameFile.title'); },
       html: () => `
         <form class="sheet-section rename-form" id="renameFileForm">
-          <label class="sheet-label" for="renameFileInput">Nuovo nome</label>
+          <label class="sheet-label" for="renameFileInput">${tr('app.sheets.renameFile.newName')}</label>
           <input class="sheet-input" id="renameFileInput" value="${(state.alberoFileTarget?.nome ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;')}" maxlength="255" autocomplete="off" spellcheck="false">
           <div class="sheet-actions">
-            <button type="button" class="secondary-btn" data-rename-file-cancel>Annulla</button>
-            <button type="submit" class="primary-btn">Rinomina</button>
+            <button type="button" class="secondary-btn" data-rename-file-cancel>${tr('app.common.cancel')}</button>
+            <button type="submit" class="primary-btn">${tr('app.common.rename')}</button>
           </div>
         </form>`,
     },
     /** ⛔ Distruttiva — la conferma è QUESTO stesso foglio (un secondo passaggio esplicito, mai un click solo), stessa disciplina "hard to reverse actions get confirmed" del resto del prodotto. */
     deleteFile: {
-      eyebrow: 'Albero workspace',
-      title: 'Elimina file',
+      get eyebrow() { return tr('app.sheets.treeEyebrow'); },
+      get title() { return tr('app.files.deleteFile'); },
       html: () => `
         <div class="sheet-section">
-          <p class="board-empty">Eliminare <strong>${(state.alberoFileTarget?.nome ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;')}</strong>? L'azione scrive DAVVERO sul disco e non si annulla da qui.</p>
+          <p class="board-empty">${tr('app.sheets.deleteFile.question', { nome: (state.alberoFileTarget?.nome ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;') })}</p>
           <div class="sheet-actions">
-            <button type="button" class="secondary-btn" data-delete-file-cancel>Annulla</button>
-            <button type="button" class="primary-btn danger" id="deleteFileConfirm">Elimina</button>
+            <button type="button" class="secondary-btn" data-delete-file-cancel>${tr('app.common.cancel')}</button>
+            <button type="button" class="primary-btn danger" id="deleteFileConfirm">${tr('app.common.delete')}</button>
           </div>
         </div>`,
     },
@@ -8841,14 +8864,14 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
      * senza un modo di eliminarla, né qui né sul server.
      */
     deleteSession: {
-      eyebrow: 'Sessioni',
-      title: 'Elimina sessione',
+      get eyebrow() { return tr('app.sheets.deleteSession.eyebrow'); },
+      get title() { return tr('app.sheets.deleteSession.title'); },
       html: () => `
         <div class="sheet-section">
-          <p class="board-empty">Eliminare <strong>${(state.sessioneTarget?.nome ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;')}</strong>? La trascrizione viene cancellata dal disco e non si annulla da qui.</p>
+          <p class="board-empty">${tr('app.sheets.deleteSession.question', { nome: (state.sessioneTarget?.nome ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;') })}</p>
           <div class="sheet-actions">
-            <button type="button" class="secondary-btn" data-delete-session-cancel>Annulla</button>
-            <button type="button" class="primary-btn danger" id="deleteSessionConfirm">Elimina</button>
+            <button type="button" class="secondary-btn" data-delete-session-cancel>${tr('app.common.cancel')}</button>
+            <button type="button" class="primary-btn danger" id="deleteSessionConfirm">${tr('app.common.delete')}</button>
           </div>
         </div>`,
     },
@@ -8860,15 +8883,15 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
      * campo solo, un submit solo).
      */
     createFile: {
-      eyebrow: 'Albero workspace',
-      title: 'Nuovo', // ⛔ sovrascritto dinamicamente in avviaCreaVoce() col titolo vero — sheetTemplates.title è una stringa ovunque altrove
+      get eyebrow() { return tr('app.sheets.treeEyebrow'); },
+      get title() { return tr('app.sheets.create.title'); }, // ⛔ sovrascritto dinamicamente in avviaCreaVoce() col titolo vero — qui è un getter, come gli altri titoli, perché la lingua si legge quando il foglio si apre
       html: () => `
         <form class="sheet-section rename-form" id="createFileForm">
-          <label class="sheet-label" for="createFileInput">${state.alberoFileTarget?.tipo === 'cartella' ? 'Nome della cartella' : 'Nome del file'}</label>
+          <label class="sheet-label" for="createFileInput">${state.alberoFileTarget?.tipo === 'cartella' ? tr('app.files.folderNameLabel') : tr('app.files.fileNameLabel')}</label>
           <input class="sheet-input" id="createFileInput" value="" maxlength="255" autocomplete="off" spellcheck="false">
           <div class="sheet-actions">
-            <button type="button" class="secondary-btn" data-create-file-cancel>Annulla</button>
-            <button type="submit" class="primary-btn">Crea</button>
+            <button type="button" class="secondary-btn" data-create-file-cancel>${tr('app.common.cancel')}</button>
+            <button type="submit" class="primary-btn">${tr('app.common.create')}</button>
           </div>
         </form>`,
     },
@@ -8881,16 +8904,16 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
      * (exportSession()) — TIPI_FOGLIO_INTERAMENTE_ONESTI lo riflette.
      */
     export: {
-      eyebrow: 'Esporta',
-      title: 'Esporta sessione',
+      get eyebrow() { return tr('app.sheets.export.eyebrow'); },
+      get title() { return tr('app.sheets.export.title'); },
       html: () => `
         <div class="sheet-section">
-          <span class="sheet-label">Formato</span>
+          <span class="sheet-label">${tr('app.sheets.export.format')}</span>
           <button class="sheet-option" data-export-choice="markdown">
-            <span class="sheet-icon">${icon('i-list')}</span><span><strong>Trascrizione leggibile</strong><small>Ogni messaggio, ragionamento, chiamata attrezzo (argomenti ed esito completi, mai troncati) ed errore, in Markdown — pensata per essere incollata qui in chat quando qualcosa va storto.</small></span><span>.md</span>
+            <span class="sheet-icon">${icon('i-list')}</span><span><strong>${tr('app.sheets.export.markdownTitle')}</strong><small>${tr('app.sheets.export.markdownDesc')}</small></span><span>.md</span>
           </button>
           <button class="sheet-option" data-export-choice="json">
-            <span class="sheet-icon">${icon('i-file')}</span><span><strong>JSON completo</strong><small>Il log eventi grezzo, byte per byte — per un'analisi automatica o un secondo strumento.</small></span><span>.json</span>
+            <span class="sheet-icon">${icon('i-file')}</span><span><strong>${tr('app.sheets.export.jsonTitle')}</strong><small>${tr('app.sheets.export.jsonDesc')}</small></span><span>.json</span>
           </button>
         </div>`,
     },
@@ -8916,9 +8939,9 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const visti = new Set();
     const elenco = [];
     const aggiungi = (percorso, origine) => { if (percorso && !visti.has(percorso) && elenco.length < massimo) { visti.add(percorso); elenco.push({ percorso, origine }); } };
-    for (const file of state.realSession.reviewFiles.values()) aggiungi(file.path, 'Modificato in questa sessione');
+    for (const file of state.realSession.reviewFiles.values()) aggiungi(file.path, tr('app.files.modifiedHere'));
     for (const [percorso, voci] of state.realSession.treeCache.entries()) {
-      for (const voce of voci || []) { if (!voce.cartella) aggiungi(percorso ? `${percorso}/${voce.nome}` : voce.nome, 'Caricato dall’albero'); }
+      for (const voce of voci || []) { if (!voce.cartella) aggiungi(percorso ? `${percorso}/${voce.nome}` : voce.nome, tr('app.sheets.reference.loadedFromTree')); }
     }
     return elenco;
   }
@@ -8931,7 +8954,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
 
   function aggiornaPillolaModello() {
     const span = $('[data-open-sheet="model"] span');
-    const label = piedeDelMockup() ? (nomeModelloBreve(state.model) || 'Scegli il modello') : (state.model || 'Seleziona modello'); // 05/9 Fase 2: il chip mostra il nome breve
+    const label = piedeDelMockup() ? (nomeModelloBreve(state.model) || tr('app.modelPicker.choose')) : (state.model || tr('app.modelPicker.select')); // 05/9 Fase 2: il chip mostra il nome breve
     if (span) span.textContent = label;
     const activeModel = $('#modelLabActiveModel');
     /* ⛔ 19/09 — L'ID GREZZO E CHI LO SERVE, accanto al nome: è ciò che la banda del laboratorio
@@ -8959,7 +8982,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
 
   function aggiornaPillolaAmbiente() {
     $$('[data-environment-label]').forEach((span) => {
-      span.textContent = state.environment || 'Ambiente non osservato';
+      span.textContent = state.environment || tr('app.status.environmentUnobserved');
     });
   }
 
@@ -8986,16 +9009,16 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       if (vicino) usageNode.dataset.giriStato = 'vicino-al-tetto';
       else delete usageNode.dataset.giriStato;
       usageNode.title = Number.isFinite(tetto) && tetto > 0
-        ? `Il kernel ha dichiarato un tetto di ${tetto} giri per questo giro di lavoro (dal messaggio «giri esauriti» di questa sessione).`
-        : 'Giri usati in questo giro di lavoro. Il tetto non è dichiarato dal server: non viene mostrato.';
+        ? tr('app.status.turnLimitDeclared', { limite: tetto })
+        : tr('app.status.turnLimitUndeclared');
     }
     const throughput = Number(usage?.tokens_per_second ?? usage?.tokensPerSecond);
     const throughputNode = $('[data-runtime-throughput]');
-    if (throughputNode) throughputNode.textContent = Number.isFinite(throughput) && throughput > 0 ? `↑ ${Math.round(throughput)} tok/s` : 'Velocità non osservata';
+    if (throughputNode) throughputNode.textContent = Number.isFinite(throughput) && throughput > 0 ? tr('app.status.tokensPerSecond', { n: Math.round(throughput) }) : tr('app.status.speedUnobserved');
     const cache = Number(usage?.cached_tokens ?? 0);
     const prompt = Number(usage?.prompt_tokens ?? 0);
     const cacheNode = $('[data-runtime-cache]');
-    if (cacheNode) cacheNode.textContent = cache > 0 && prompt > 0 ? `cache ${Math.round((cache / prompt) * 100)}%` : 'Cache non osservata';
+    if (cacheNode) cacheNode.textContent = cache > 0 && prompt > 0 ? tr('app.status.cachePercent', { percento: Math.round((cache / prompt) * 100) }) : tr('app.status.cacheUnobserved');
   }
 
   /**
@@ -9016,7 +9039,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     state.permissions = nuovoPermesso;
     aggiornaPillolaPermessi();
     sincronizzaImpostazioniSessione({ permessi: nuovoPermesso });
-    toast('Policy aggiornata', messaggioToast);
+    toast(tr('app.permissions.policyUpdated'), messaggioToast);
   }
 
   /*
@@ -9030,7 +9053,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    *   `VELO_PER_FOGLIO` non e vuota il foglio vecchio resta li, ma non ha piu logica propria.
    */
   const ATTREZZI_COL_CANCELLO = Object.freeze([
-    ['scrivi', 'Scrive un file — passa dal cancello semantico', 'i-code'],
+    ['scrivi', 'app.sheets.permissions.toolWrite', 'i-code'],
     /*
      * ⛔⛔ BC-59 (17/09) — IL SESTO. È la stessa forma di O-01, che questa lista aveva già pagato
      *   il 04/09 col quinto: `ATTREZZI_CON_PERMESSO_PER_ATTREZZO` (config.mjs:307) ne dichiara SEI
@@ -9040,19 +9063,19 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
      * ⇒ E perché non succeda una terza volta, la lista non si controlla più a occhio: il test
      *   `tests/unit/nomi-attrezzi-copertura.test.mjs` la confronta con quella del server.
      */
-    ['file_edit', 'Cambia una parte di un file esistente — passa dal cancello per-attrezzo come «Scrivi un file»', 'i-code'],
-    ['prova', 'Esegue la suite di test del progetto', 'i-check'],
-    ['shell', 'Comando di shell nella cartella progetto', 'i-terminal'],
-    ['document_create', 'Genera un documento (PDF, foglio, slide, report)', 'i-files'],
+    ['file_edit', 'app.sheets.permissions.toolEditList', 'i-code'],
+    ['prova', 'app.sheets.permissions.toolTests', 'i-check'],
+    ['shell', 'app.sheets.permissions.toolShell', 'i-terminal'],
+    ['document_create', 'app.sheets.permissions.toolDocument', 'i-files'],
     // ⛔ O-01 (04/9): il quinto c'e in `ATTREZZI_CON_PERMESSO_PER_ATTREZZO` (config.mjs) dal 29/8 e
     //    il foglio ne mostrava quattro: sul quinto la promessa era vuota.
-    ['generate_image', 'Genera un’immagine — passa dal cancello per-attrezzo come gli altri quattro', 'i-image'],
+    ['generate_image', 'app.sheets.permissions.toolImageList', 'i-image'],
   ]);
   const SCELTE_PERMESSO_ATTREZZO = Object.freeze([
-    ['', 'Come la sessione'],
-    ['sempre', 'Sempre consentito'],
-    ['chiedi', 'Chiedi conferma'],
-    ['nega', 'Nega sempre'],
+    ['', 'app.sheets.permissions.asSession'],
+    ['sempre', 'app.sheets.permissions.alwaysAllowed'],
+    ['chiedi', 'app.sheets.permissions.askConfirmation'],
+    ['nega', 'app.sheets.permissions.alwaysDeny'],
   ]);
 
   /**
@@ -9100,14 +9123,14 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
        *   leggibili come alias di `Default`, e `TUI_VISIBLE_COLLABORATION_MODES = [Default, Plan]`.
        *   Un valore vecchio si legge, non si offre più. La normalizzazione è `normalizzaModoDiLavoro`.
        */
-      modoTesto.innerHTML = '<span class="talos-list-row__title">Modo di lavoro</span><span class="talos-list-row__sub">Con Piano il modello prepara un piano e non esegue azioni.</span>';
+      modoTesto.innerHTML = `<span class="talos-list-row__title">${tr('app.permissions.workModeLabel')}</span><span class="talos-list-row__sub">${tr('app.permissions.workModeHint')}</span>`;
       const modoAside = document.createElement('span');
       modoAside.className = 'talos-list-row__aside';
       const modoSelect = document.createElement('select');
       modoSelect.className = 'talos-select talos-select--sm';
       modoSelect.dataset.workModeSelect = '';
-      modoSelect.setAttribute('aria-label', 'Modo di lavoro');
-      [['normale','Lavora normalmente'],['piano','Prima prepara il piano']].forEach(([value, label]) => {
+      modoSelect.setAttribute('aria-label', tr('app.permissions.workModeLabel'));
+      [['normale', tr('app.plan.workNormally')], ['piano', tr('app.plan.planFirst')]].forEach(([value, label]) => {
         const option = document.createElement('option');
         option.value = value;
         option.textContent = label;
@@ -9123,9 +9146,9 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         const scelto = state.permessiPerAttrezzo[attrezzo] || '';
         riga.innerHTML = `<span class="talos-list-row__icon"><svg class="i" aria-hidden="true"><use href="#${icona}"/></svg></span>`
           + `<span class="talos-list-row__text"><span class="talos-list-row__title">${nomeUmanoAttrezzo(attrezzo)}</span>`
-          + `<span class="talos-list-row__sub">${descrizione}</span></span>`
-          + `<span class="talos-list-row__aside"><select class="talos-select talos-select--sm" data-tool-permission-select="${attrezzo}" aria-label="Permesso per ${nomeUmanoAttrezzo(attrezzo)}">`
-          + SCELTE_PERMESSO_ATTREZZO.map(([valore, nome]) => `<option value="${valore}"${valore === scelto ? ' selected' : ''}>${nome}</option>`).join('')
+          + `<span class="talos-list-row__sub">${tr(descrizione)}</span></span>`
+          + `<span class="talos-list-row__aside"><select class="talos-select talos-select--sm" data-tool-permission-select="${attrezzo}" aria-label="${tr('app.sheets.permissions.toolAriaShort', { nome: nomeUmanoAttrezzo(attrezzo) })}">`
+          + SCELTE_PERMESSO_ATTREZZO.map(([valore, nome]) => `<option value="${valore}"${valore === scelto ? ' selected' : ''}>${tr(nome)}</option>`).join('')
           + '</select></span>';
         elenco.append(riga);
       }
@@ -9145,11 +9168,11 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       uscita.className = 'talos-list-row';
       const acceso = state.realSession.comandiNellaConversazione === true;
       uscita.innerHTML = '<span class="talos-list-row__icon"><svg class="i" aria-hidden="true"><use href="#i-terminal"/></svg></span>'
-        + '<span class="talos-list-row__text"><span class="talos-list-row__title">uscita dei comandi che lanci tu con !</span>'
-        + '<span class="talos-list-row__sub">Chi la legge, dopo che il comando è finito. Il comando non fa mai rispondere TALOS: la risposta arriva al messaggio dopo.</span></span>'
-        + '<span class="talos-list-row__aside"><select class="talos-select talos-select--sm" data-uscita-choice aria-label="Chi legge l’uscita dei comandi lanciati con il punto esclamativo">'
-        + `<option value="no"${acceso ? '' : ' selected'}>Solo tu — come prima</option>`
-        + `<option value="si"${acceso ? ' selected' : ''}>Anche il modello · ~2.000 token</option>`
+        + `<span class="talos-list-row__text"><span class="talos-list-row__title">${tr('app.sheets.permissions.commandOutputTitle')}</span>`
+        + `<span class="talos-list-row__sub">${tr('app.sheets.permissions.commandOutputSubLong')}</span></span>`
+        + `<span class="talos-list-row__aside"><select class="talos-select talos-select--sm" data-uscita-choice aria-label="${tr('app.sheets.permissions.commandOutputAriaList')}">`
+        + `<option value="no"${acceso ? '' : ' selected'}>${tr('app.sheets.permissions.outputOnlyYou')}</option>`
+        + `<option value="si"${acceso ? ' selected' : ''}>${tr('app.sheets.permissions.outputModelToo')}</option>`
         + '</select></span>';
       elenco.append(uscita);
     }
@@ -9165,7 +9188,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         bottone.type = 'button';
         bottone.className = 'talos-button talos-button--sm';
         bottone.dataset.chiudiPorteLaterali = aperte.join(',');
-        bottone.textContent = `Chiudi anche ${aperte.length === 1 ? 'quella' : 'quelle'}`;
+        bottone.textContent = trn('app.permissions.closeAlsoOne', 'app.permissions.closeAlsoMany', aperte.length);
         avviso.append(bottone);
       }
     }
@@ -9249,7 +9272,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
           disegnaUtenteWslIn(radice, await apiPost('/api/v1/wsl', { usaUtenteNormale: voluto }));
         } catch (errore) {
           interruttoreWsl.checked = !voluto;
-          toast('Scelta non applicata', messaggioErroreUtente(errore, 'Riprova, o guarda Doctor se si ripete.'));
+          toast(tr('app.permissions.choiceNotApplied'), messaggioErroreUtente(errore, tr('app.errors.retryOrDoctor')));
         } finally {
           interruttoreWsl.disabled = false;
         }
@@ -9262,7 +9285,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         const sessionId = state.realSession.id;
         const scelta = button.dataset.doveChoice || null;
         if (!sessionId) {
-          toast('Nessuna sessione aperta', 'Avvia una sessione: la scelta vale per quella sessione.');
+          toast(tr('app.common.noSessionOpen'), tr('app.permissions.startSessionHint'));
           return;
         }
         try {
@@ -9271,7 +9294,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
           aggiornaPillolaPermessi?.();
           dopoLaScelta();
         } catch (errore) {
-          toast('Scelta non applicata', messaggioErroreUtente(errore, 'Riprova, o guarda Doctor se si ripete.'));
+          toast(tr('app.permissions.choiceNotApplied'), messaggioErroreUtente(errore, tr('app.errors.retryOrDoctor')));
         }
       });
     });
@@ -9317,12 +9340,12 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
             salvaPreferenzeChatDesktop();
             /* F3-12 (24/09/2026): scegliere il modo qui È la risposta alla fascia del modo tolto. */
             if (state.realSession.id) risolviFasciaModoRitirato(state.realSession.id);
-            toast('Modo di lavoro aggiornato', modo.options[modo.selectedIndex].textContent);
+            toast(tr('app.permissions.workModeUpdated'), modo.options[modo.selectedIndex].textContent);
             ridisegna();
           } catch (errore) {
             state.modalitaOperativa = precedente;
             modo.value = precedente;
-            toast('Modalità non applicata', messaggioErroreUtente(errore, 'La modalità si cambia fra un giro e l’altro.'));
+            toast(tr('app.permissions.modeNotApplied'), messaggioErroreUtente(errore, tr('app.permissions.modeChangeHint')));
           }
           return;
         }
@@ -9333,7 +9356,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
           const prima = state.realSession.comandiNellaConversazione === true;
           if (!sessionId) {
             uscita.value = prima ? 'si' : 'no';
-            toast('Nessuna sessione aperta', 'Avvia una sessione: la scelta vale per quella sessione.');
+            toast(tr('app.common.noSessionOpen'), tr('app.permissions.startSessionHint'));
             return;
           }
           try {
@@ -9341,14 +9364,14 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
             state.realSession.comandiNellaConversazione = acceso;
             /* Il composer mostra già bordo e badge quando scrivi `!`: da acceso dice anche che il modello leggerà. */
             aggiornaModalitaShell?.(composerInput?.value ?? '');
-            toast('Uscita dei comandi', acceso
-              ? 'Da ora il modello legge i comandi che lanci con «!». La risposta arriva al messaggio dopo, non subito.'
-              : 'I comandi che lanci con «!» restano solo sul tuo schermo.');
+            toast(tr('app.permissions.commandOutput'), acceso
+              ? tr('app.permissions.commandOutputOn')
+              : tr('app.permissions.commandOutputOff'));
             ridisegna();
           } catch (errore) {
             /* ⛔ Il menu torna indietro: mostrare la scelta nuova racconterebbe una cosa che il server ha rifiutato. */
             uscita.value = prima ? 'si' : 'no';
-            toast('Scelta non applicata', messaggioErroreUtente(errore, 'Riprova, o guarda Doctor se si ripete.'));
+            toast(tr('app.permissions.choiceNotApplied'), messaggioErroreUtente(errore, tr('app.errors.retryOrDoctor')));
           }
           return;
         }
@@ -9358,7 +9381,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         if (select.value) state.permessiPerAttrezzo[tool] = select.value;
         else delete state.permessiPerAttrezzo[tool];
         sincronizzaImpostazioniSessione({ permessiPerAttrezzo: Object.keys(state.permessiPerAttrezzo).length ? { ...state.permessiPerAttrezzo } : null });
-        toast('Permesso per-attrezzo aggiornato', select.value ? `${nomeUmanoAttrezzo(tool)}: ${select.options[select.selectedIndex].textContent}` : `${nomeUmanoAttrezzo(tool)}: torna al permesso della sessione`);
+        toast(tr('app.permissions.toolUpdated'), select.value ? `${nomeUmanoAttrezzo(tool)}: ${select.options[select.selectedIndex].textContent}` : tr('app.permissions.toolReset', { nome: nomeUmanoAttrezzo(tool) }));
         ridisegna();
       });
       /*
@@ -9375,7 +9398,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         const comeScrivi = state.permessiPerAttrezzo.scrivi === 'nega' ? 'nega' : 'chiedi';
         for (const attrezzo of quali) state.permessiPerAttrezzo[attrezzo] = comeScrivi;
         sincronizzaImpostazioniSessione({ permessiPerAttrezzo: { ...state.permessiPerAttrezzo } });
-        toast('Chiuse anche le altre vie', `${quali.map(nomeUmanoAttrezzo).join(', ')}: ${comeScrivi === 'nega' ? 'nega sempre' : 'chiedi conferma'}`);
+        toast(tr('app.permissions.otherRoutesClosed'), `${quali.map(nomeUmanoAttrezzo).join(', ')}: ${comeScrivi === 'nega' ? tr('app.permissions.denyAlwaysLower') : tr('app.permissions.askConfirmationLower')}`);
         ridisegna();
       });
     }
@@ -9405,10 +9428,10 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     testo.append(textElement('span', 'talos-tree__title', titolo), textElement('span', 'talos-tree__sub', sotto));
     const aside = document.createElement('span'); aside.className = 'talos-tree__aside';
     if (token) aside.append(textElement('span', 'talos-mono talos-measure', token));
-    if (Number.isFinite(giri) && giri > 0) aside.append(textElement('span', 'talos-mono talos-muted', `${giri} gir${giri === 1 ? 'o' : 'i'}`));
-    if (qui) aside.append(textElement('span', 'talos-badge talos-badge--accent talos-badge--sm', 'Qui'));
+    if (Number.isFinite(giri) && giri > 0) aside.append(textElement('span', 'talos-mono talos-muted', trn('app.branches.turnsOne', 'app.branches.turnsMany', giri)));
+    if (qui) aside.append(textElement('span', 'talos-badge talos-badge--accent talos-badge--sm', tr('app.branches.here')));
     else if (onApri) {
-      const bottone = textElement('button', 'talos-button talos-button--ghost talos-button--sm', azione || 'Apri');
+      const bottone = textElement('button', 'talos-button talos-button--ghost talos-button--sm', azione || tr('app.common.open'));
       bottone.type = 'button';
       bottone.addEventListener('click', onApri);
       aside.append(bottone);
@@ -9430,11 +9453,11 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const riassunto = $('#veloAlberoRiassunto', radice);
     const titolo = $('#titoloAlbero', radice);
     if (!state.realSession.id) {
-      nodi.replaceChildren(textElement('p', 'board-empty', 'Nessuna sessione aperta: apri o avvia una sessione per vederne i rami.'));
+      nodi.replaceChildren(textElement('p', 'board-empty', tr('app.branches.noSession')));
       if (riassunto) riassunto.textContent = '';
       return;
     }
-    if (titolo) titolo.textContent = `Rami e deleghe di ${tronca(state.session || 'questa sessione', 46)}`;
+    if (titolo) titolo.textContent = tr('app.branches.title', { nome: tronca(state.session || tr('app.sessions.thisSession'), 46) });
     const elenco = [...state.sessionSelection.available.values()];
     const mia = elenco.find((v) => v.sessionId === state.realSession.id) || null;
     const usoSessione = state.realSession.usageSessione || state.realSession.usage;
@@ -9443,16 +9466,16 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const padre = mia?.forkDa ? elenco.find((v) => v.sessionId === mia.forkDa) : null;
     if (mia?.forkDa) {
       pezzi.push(nodoAlbero({
-        titolo: padre ? tronca(padre.nome || nomeLeggibileSessione(padre.taskId), 52) : 'La sessione da cui è nato questo ramo',
-        sotto: padre ? 'da qui è nato questo ramo' : 'non è più nell’elenco, ma il ramo resta leggibile',
+        titolo: padre ? tronca(padre.nome || nomeLeggibileSessione(padre.taskId), 52) : tr('app.branches.parentTitle'),
+        sotto: padre ? tr('app.branches.parentSub') : tr('app.branches.parentGoneSub'),
         token: soloToken(padre?.usageSessione),
         giri: padre?.usage?.giri,
         onApri: padre ? () => { passaASessione(padre.sessionId, padre.taskId, padre.nome, padre.modello); chiudiVeloMockup('veloAlbero'); } : null,
       }));
     }
     pezzi.push(nodoAlbero({
-      titolo: tronca(state.session || 'questa sessione', 52),
-      sotto: mia?.interrotta ? 'sessione corrente · interrotta' : mia?.conclusa ? 'sessione corrente · conclusa' : 'sessione corrente · in corso',
+      titolo: tronca(state.session || tr('app.sessions.thisSession'), 52),
+      sotto: mia?.interrotta ? tr('app.branches.currentStopped') : mia?.conclusa ? tr('app.branches.currentDone') : tr('app.branches.currentRunning'),
       token: soloToken(usoSessione),
       giri: usoSessione?.giri,
       stato: mia && !mia.conclusa && !mia.interrotta ? 'live' : 'done',
@@ -9462,21 +9485,21 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     for (const ramo of rami) {
       pezzi.push(nodoAlbero({
         titolo: tronca(ramo.nome || nomeLeggibileSessione(ramo.taskId), 52),
-        sotto: ramo.interrotta ? 'ramo · interrotto' : ramo.conclusa ? 'ramo · concluso' : 'ramo · in corso',
+        sotto: ramo.interrotta ? tr('app.branches.branchStopped') : ramo.conclusa ? tr('app.branches.branchDone') : tr('app.branches.branchRunning'),
         token: soloToken(ramo.usageSessione),
         giri: ramo.usage?.giri,
         stato: !ramo.conclusa && !ramo.interrotta ? 'live' : 'done',
         onApri: () => { passaASessione(ramo.sessionId, ramo.taskId, ramo.nome, ramo.modello); chiudiVeloMockup('veloAlbero'); },
-        azione: 'Riapri',
+        azione: tr('app.branches.reopen'),
       }));
     }
     nodi.replaceChildren(...pezzi);
     if (riassunto) {
       // ⛔ 07/9, misurato: dentro un ramo il piede diceva ancora «Nessun ramo» — vero alla lettera
       //    (questo ramo non ha figli) e disorientante, perché il ramo era proprio quello aperto.
-      if (rami.length) riassunto.textContent = `${rami.length} ram${rami.length === 1 ? 'o' : 'i'} da questa sessione`;
-      else if (mia?.forkDa) riassunto.textContent = 'Questa sessione È un ramo · nessun ramo suo';
-      else riassunto.textContent = 'Nessun ramo: si crea con «Fork questa sessione»';
+      if (rami.length) riassunto.textContent = trn('app.branches.countOne', 'app.branches.countMany', rami.length);
+      else if (mia?.forkDa) riassunto.textContent = tr('app.branches.summaryIsBranch');
+      else riassunto.textContent = tr('app.branches.summaryNone');
     }
     // le deleghe hanno una rotta a parte: finché non risponde non si dichiara un numero
     let figli = [];
@@ -9486,8 +9509,8 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     if (nodi !== $('#veloAlberoNodi', radice)) return;   // il velo è cambiato mentre la richiesta era in volo
     for (const figlio of figli) {
       nodi.append(nodoAlbero({
-        titolo: tronca(figlio.task || '(compito non registrato)', 52),
-        sotto: figlio.interrotta ? 'delega · interrotta' : figlio.conclusa ? `delega · ${figlio.esitoDelega || 'conclusa'}` : 'delega · in corso',
+        titolo: tronca(figlio.task || tr('app.delegations.taskUnrecorded'), 52),
+        sotto: figlio.interrotta ? tr('app.delegations.lowerStopped') : figlio.conclusa ? (figlio.esitoDelega === 'concluso' ? tr('app.delegations.lowerDone') : figlio.esitoDelega === 'fallito' ? tr('app.delegations.lowerFailed') : figlio.esitoDelega ? tr('app.delegations.lowerOther', { esito: figlio.esitoDelega }) : tr('app.delegations.lowerEnded')) : tr('app.delegations.lowerRunning'),
         token: soloToken(figlio.usageSessione),
         giri: figlio.usage?.giri,
         stato: !figlio.conclusa && !figlio.interrotta ? 'live' : 'done',
@@ -9496,9 +9519,9 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     }
     const nota = $('#veloAlberoNota .talos-scope__text', radice);
     if (nota && !rami.length && !figli.length && mia?.forkDa) {
-      nota.textContent = 'Da questo ramo non ne è nato nessun altro, e non ci sono deleghe. La sessione madre resta intatta: aprirla non tocca ciò che hai fatto qui.';
+      nota.textContent = tr('app.branches.noteLeaf');
     } else if (nota && !rami.length && !figli.length) {
-      nota.textContent = 'Nessun ramo e nessuna delega. Un ramo nasce da «Fork questa sessione»; le deleghe le avvia TALOS da sé quando un sotto-compito è separabile.';
+      nota.textContent = tr('app.branches.noteNone');
     }
   }
 
@@ -9530,14 +9553,14 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     riga.className = 'talos-setting';
     const etichetta = document.createElement('span');
     etichetta.className = 'talos-setting__label';
-    etichetta.textContent = ETICHETTA_INTERRUTTORE_RAGIONAMENTO;
+    etichetta.textContent = tr('app.reasoning.toggleLabel');
     const interruttore = document.createElement('input');
     interruttore.type = 'checkbox';
     interruttore.className = 'talos-switch';
     interruttore.setAttribute('role', 'switch');
     interruttore.id = 'showReasoningToggle';
     interruttore.checked = state.showReasoning;
-    interruttore.setAttribute('aria-label', ETICHETTA_INTERRUTTORE_RAGIONAMENTO);
+    interruttore.setAttribute('aria-label', tr('app.reasoning.toggleLabel'));
     interruttore.addEventListener('change', () => {
       state.showReasoning = interruttore.checked;
       salvaPreferenzeChatDesktop();
@@ -9586,7 +9609,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       button.addEventListener('click', () => {
         state.environment = button.querySelector('strong')?.textContent || null;
         aggiornaPillolaAmbiente();
-        toast('Environment selezionato', state.environment);
+        toast(tr('app.branches.environmentSelected'), state.environment);
         closeEmbeddedDialog(sheetDialog);
       });
     });
@@ -9600,7 +9623,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     $$('[data-session-action]', sheetBody).forEach((button) => {
       button.addEventListener('click', () => {
         const action = button.dataset.sessionAction;
-        toast(action === 'new-side' ? 'Side thread creato' : 'Thread selezionato', action === 'fork' ? 'Fork indipendente con contesto ereditato.' : 'Il contesto resta isolato ma collegato al task principale.');
+        toast(action === 'new-side' ? tr('app.branches.sideThreadCreated') : tr('app.branches.threadSelected'), action === 'fork' ? tr('app.branches.forkBody') : tr('app.branches.sideBody'));
         closeEmbeddedDialog(sheetDialog);
       });
     });
@@ -9632,12 +9655,12 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
           const esportato = await apiGet(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/export`);
           const isMarkdown = formato === 'markdown';
           const testo = isMarkdown ? costruisciTrascrizioneMarkdown(esportato) : JSON.stringify(esportato, null, 2);
-          if (!testo || !testo.trim()) throw new Error('Esportazione vuota: nessun contenuto da scrivere.');
-          scaricaTesto(testo, `talos-sessione-${state.realSession.id}.${isMarkdown ? 'md' : 'json'}`, isMarkdown ? 'text/markdown' : 'application/json');
+          if (!testo || !testo.trim()) throw new Error(tr('app.sessions.exportEmpty'));
+          scaricaTesto(testo, tr('app.sessions.exportFileName', { id: state.realSession.id, ext: isMarkdown ? 'md' : 'json' }), isMarkdown ? 'text/markdown' : 'application/json');
           closeEmbeddedDialog(sheetDialog);
-          toast('Sessione esportata', isMarkdown ? 'Trascrizione Markdown pronta.' : 'JSON pronto.');
+          toast(tr('app.sessions.exported'), isMarkdown ? tr('app.sessions.exportedMarkdown') : tr('app.sessions.exportedJson'));
         } catch (error) {
-          toast('Esportazione non riuscita', error.message);
+          toast(tr('app.sessions.exportFailed'), error.message);
         } finally {
           eraDisabled.forEach((b) => { b.disabled = false; });
         }
@@ -9669,7 +9692,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
           try {
             await apiPost(`/api/v1/sessions/${encodeURIComponent(targetSessionId)}/rename`, { nome: nomeUnico });
           } catch (error) {
-            toast('Rinomina non riuscita', messaggioErroreUtente(error));
+            toast(tr('app.common.renameFailed'), messaggioErroreUtente(error));
             return;
           }
         }
@@ -9682,7 +9705,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         }
         state.sessioneTarget = null;
         closeEmbeddedDialog(sheetDialog);
-        toast('Sessione rinominata', doppioneEvitato ? `${nomeUnico} · rinominata per evitare un doppione con una sessione viva` : nomeUnico);
+        toast(tr('app.sessions.renamed'), doppioneEvitato ? tr('app.sessions.renamedDuplicate', { nome: nomeUnico }) : nomeUnico);
         if (targetSessionId && targetSessionId !== state.realSession.id) {
           await aggiornaElencoSessioniReali();
           if (state.board.initialized) await refreshSessionsBoard();
@@ -9703,10 +9726,10 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         try {
           await apiPost(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/tree/rename`, { percorso: bersaglio.percorso, nuovoNome });
           closeEmbeddedDialog(sheetDialog);
-          toast('File rinominato', `${bersaglio.nome} → ${nuovoNome}`);
+          toast(tr('app.files.renamed'), `${bersaglio.nome} → ${nuovoNome}`);
           await invalidaLivelloGenitoreAlbero(bersaglio.percorso);
         } catch (error) {
-          toast('Rinomina non riuscita', error.message);
+          toast(tr('app.common.renameFailed'), error.message);
         }
       });
     }
@@ -9720,10 +9743,10 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         try {
           await apiPost(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/tree/delete`, { percorso: bersaglio.percorso });
           closeEmbeddedDialog(sheetDialog);
-          toast('File eliminato', bersaglio.nome);
+          toast(tr('app.files.deleted'), bersaglio.nome);
           await invalidaLivelloGenitoreAlbero(bersaglio.percorso);
         } catch (error) {
-          toast('Eliminazione non riuscita', error.message);
+          toast(tr('app.common.deleteFailed'), error.message);
         }
       });
     }
@@ -9762,10 +9785,10 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         try {
           const esito = await apiPost(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/tree/create`, { percorsoBase: bersaglio.percorso, nome, tipo: bersaglio.tipo });
           closeEmbeddedDialog(sheetDialog);
-          toast(bersaglio.tipo === 'cartella' ? 'Cartella creata' : 'File creato', esito.percorso);
+          toast(bersaglio.tipo === 'cartella' ? tr('app.files.folderCreated') : tr('app.files.fileCreated'), esito.percorso);
           await invalidaLivelloGenitoreAlbero(esito.percorso);
         } catch (error) {
-          toast('Creazione non riuscita', error.message);
+          toast(tr('app.common.createFailed'), error.message);
         }
       });
     }
@@ -9854,14 +9877,14 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const batch = state.realSession.batchAttivo;
     const riga = batch?.contenitore?.querySelector('[data-tool-state="running"]');
     if (riga) {
-      const nome = riga.querySelector('.talos-tool-row__name')?.textContent || 'Attrezzo in corso';
+      const nome = riga.querySelector('.talos-tool-row__name')?.textContent || tr('app.status.toolRunning');
       // 06/9: il dettaglio ripeteva il nome e la striscia diceva due volte la stessa cosa
       return { cosa: nome, dettaglio: dettaglioUtile(nome, riga.querySelector('.talos-tool-row__detail')?.textContent || '') };
     }
     const attesa = state.realSession.attesaBubble?.querySelector('.run-activity-label')?.textContent;
     if (attesa) return { cosa: attesa, dettaglio: '' };
-    if (state.realSession.messageElements.size > 0) return { cosa: 'TALOS sta scrivendo', dettaglio: '' };
-    return { cosa: 'TALOS sta lavorando', dettaglio: '' };
+    if (state.realSession.messageElements.size > 0) return { cosa: tr('app.status.talosWriting'), dettaglio: '' };
+    return { cosa: tr('app.status.talosWorking'), dettaglio: '' };
   }
   /** Vero quando il fondo della conversazione e' in vista: la striscia sopra il composer non serve. */
   /*
@@ -9985,7 +10008,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
        */
       if (t.dataset.turno === 'utente') {
         const titolo = titoloMessaggioUtente(t);
-        for (const numero of numeri) giri.push({ numero, titolo: titolo.length > 32 ? `${titolo.slice(0, 31)}…` : (titolo || 'Messaggio'), tu: true, inCorso: false });
+        for (const numero of numeri) giri.push({ numero, titolo: titolo.length > 32 ? `${titolo.slice(0, 31)}…` : (titolo || tr('app.activity.messageTitle')), tu: true, inCorso: false });
         continue;
       }
       const gruppi = [...t.querySelectorAll('[data-c="ActivityBundle"]:not(.real-reasoning-note):not(.talos-activity--segment)')];
@@ -10010,7 +10033,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       const risposta = titoloRispostaDaTurno(t);
       numeri.forEach((numero, i) => {
         const g = gruppi[i];
-        const riassunto = g?.querySelector('.tool-note-summary-text')?.textContent?.trim() || (i === numeri.length - 1 && risposta) || 'Risposta';
+        const riassunto = g?.querySelector('.tool-note-summary-text')?.textContent?.trim() || (i === numeri.length - 1 && risposta) || tr('app.activity.responseTitle');
         giri.push({ numero, titolo: riassunto.length > 32 ? `${riassunto.slice(0, 31)}…` : riassunto, attrezzi: g ? g.querySelectorAll(':scope > .talos-activity__body > [data-c="ToolRow"]').length : 0, inCorso: false });
       });
     }
@@ -10072,7 +10095,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    * ⛔ Il sollecito automatico del padre (punto 2) resta DOPO la release: tocca la regola «decide all'assestamento».
    */
   function appendRisultatoDelega(risultato, meta) {
-    const nota = creaNotaSistema({ tipo: risultato.errore ? 'warning' : 'info', badge: 'Nota', titolo: meta, testo: '' });
+    const nota = creaNotaSistema({ tipo: risultato.errore ? 'warning' : 'info', badge: tr('app.common.note'), titolo: meta, testo: '' });
     nota.classList.add('real-session-status', 'talos-risultato-delega');
     if (risultato.errore) nota.dataset.tone = 'warning';
     const corpoNota = nota.lastElementChild;
@@ -10092,12 +10115,12 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const bottone = document.createElement('button');
     bottone.type = 'button';
     bottone.className = 'talos-button talos-button--ghost talos-button--sm talos-risultato-delega__apri';
-    bottone.textContent = 'Mostra tutto';
+    bottone.textContent = tr('app.common.showAll');
     bottone.setAttribute('aria-expanded', 'false');
     bottone.hidden = true;
     bottone.addEventListener('click', () => {
       const aperta = nota.classList.toggle('is-aperta');
-      bottone.textContent = aperta ? 'Mostra meno' : 'Mostra tutto';
+      bottone.textContent = aperta ? tr('app.common.showLess') : tr('app.common.showAll');
       bottone.setAttribute('aria-expanded', aperta ? 'true' : 'false');
       aggiornaTaglio();
     });
@@ -10121,18 +10144,18 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         if (!item || typeof item.codaId !== 'string' || typeof item.childId !== 'string'
           || typeof item.testo !== 'string' || risultatiDelegaMostrati.has(item.codaId)) continue;
         const risultato = descriviRisultatoDelega(item.testo, item.childId);
-        const meta = risultato?.errore ? 'Notifica di sistema · sotto-agente non concluso' : 'Notifica di sistema · risultato del sotto-agente';
+        const meta = risultato?.errore ? tr('app.delegations.resultNoticeFailed') : tr('app.delegations.resultNotice');
         if (risultato) appendRisultatoDelega(risultato, meta);
-        else appendStatusNote(`Il sotto-agente ${item.childId} ha consegnato un risultato. È disponibile nel suo dettaglio.`, false, { meta });
+        else appendStatusNote(tr('app.delegations.resultDeliveredNamed', { id: item.childId }), false, { meta });
         risultatiDelegaMostrati.add(item.codaId);
       }
       return true;
     }
     if (evento.codaId && risultatiDelegaMostrati.has(evento.codaId)) return true;
     const risultato = descriviRisultatoDelega(evento.testo ?? evento.consegna, evento.childId);
-    const meta = risultato?.errore ? 'Risultato del sotto-agente · non concluso' : 'Risultato del sotto-agente';
+    const meta = risultato?.errore ? tr('app.delegations.resultMetaFailed') : tr('app.delegations.resultMeta');
     if (risultato) appendRisultatoDelega(risultato, meta);
-    else appendStatusNote('Un sotto-agente ha consegnato il risultato. È disponibile nel suo dettaglio.', false, { meta });
+    else appendStatusNote(tr('app.delegations.resultDelivered'), false, { meta });
     if (evento.codaId) risultatiDelegaMostrati.add(evento.codaId);
     return true;
   }
@@ -10181,7 +10204,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const esitoMadre = ultimoEventoGrafoMadre;
     const chiamate = new Set(state.realSession.eventiAttrezzi.filter(e => e.type === 'ToolCallStart').map(e => e.toolCallId)).size;
     return {
-      corrente: { ...nota, ultimoEsito: esitoMadre ? (esitoMadre.type === 'RunError' ? 'errore' : esitoMadre.type === 'RunFinished' ? 'concluso' : null) : nota.ultimoEsito, interrotta: esitoMadre ? esitoMadre.type === 'RunError' && esitoMadre.code === 'fermato' : nota.interrotta, motivoChiusura: esitoMadre ? (esitoMadre.code === 'fermato' ? 'fermata' : null) : nota.motivoChiusura, attivita: { chiamate, attrezzoCorrente: operazione, passi: [] }, sessionId: state.realSession.id, nome: state.session || 'Sessione corrente', cartella: state.realSession.cartellaAssoluta || nota.cartella, conclusa: !runRealeAttivo(), inAttesaApprovazione: state.realSession.approvazioniPendenti.size, usageSessione: state.realSession.usageSessione || nota.usageSessione },
+      corrente: { ...nota, ultimoEsito: esitoMadre ? (esitoMadre.type === 'RunError' ? 'errore' : esitoMadre.type === 'RunFinished' ? 'concluso' : null) : nota.ultimoEsito, interrotta: esitoMadre ? esitoMadre.type === 'RunError' && esitoMadre.code === 'fermato' : nota.interrotta, motivoChiusura: esitoMadre ? (esitoMadre.code === 'fermato' ? 'fermata' : null) : nota.motivoChiusura, attivita: { chiamate, attrezzoCorrente: operazione, passi: [] }, sessionId: state.realSession.id, nome: state.session || tr('app.sessions.currentFallback'), cartella: state.realSession.cartellaAssoluta || nota.cartella, conclusa: !runRealeAttivo(), inAttesaApprovazione: state.realSession.approvazioniPendenti.size, usageSessione: state.realSession.usageSessione || nota.usageSessione },
       sessioni: [...state.sessionSelection.available.values(), ...agentiInDiretta.values()].filter(a => a?.passoWorkflow == null), figli: state.realSession.figli || [],
       errore: figliErrore, aggiornato: figliAggiornati,
     };
@@ -10254,7 +10277,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     diagrammaInApertura = false;
     if (!sorgente) {
       if (preferita?.runId) {
-        toast('Run non trovato', 'La ricevuta non corrisponde a un run di questa sessione. Nessun altro run è stato aperto.');
+        toast(tr('app.activity.runNotFound'), tr('app.activity.runNotFoundBody'));
         return;
       }
       grafoWorkflow?.distruggi(); grafoWorkflow = null;
@@ -10280,7 +10303,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       sessione: { id, nome: state.session || nota.nome || null, modello: state.model || nota.modello || null },
       onChiudi: () => { chiudiGrafoAgenti(); $('#railAgenti button')?.focus(); },
       // la conversazione del passo: nascosta dagli elenchi (decisione owner 10), raggiungibile da qui
-      onApriSessione: (stepSessionId, riga) => passaASessione(stepSessionId, stepSessionId, riga.label || 'Agente del workflow',
+      onApriSessione: (stepSessionId, riga) => passaASessione(stepSessionId, stepSessionId, riga.label || tr('app.delegations.workflowAgent'),
         riga.effectiveModel?.model || state.model, { conclusa: true }),
     });
     ricordaTipoGrafo(id, 'workflow'); ricordaGrafoAperto(id, 'workflow');
@@ -10395,7 +10418,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
           let dati = state.realSession.figli.find(a => a.sessionId === voce.sessionId) || agentiInDiretta.get(voce.sessionId);
           if (!dati && voce.padreId) {
             try { dati = (await apiGet(`/api/v1/sessions/${encodeURIComponent(voce.padreId)}/children`))?.figli?.find(a => a.sessionId === voce.sessionId); }
-            catch (error) { if (state.realSession.id === id && grafoAgenti === vista) toast('Dettaglio non disponibile', error.message); return; }
+            catch (error) { if (state.realSession.id === id && grafoAgenti === vista) toast(tr('app.delegations.detailUnavailable'), error.message); return; }
             if (state.realSession.id !== id || grafoAgenti !== vista) return;
           }
           if (!dati) { passaASessione(voce.sessionId, voce.taskId || voce.sessionId, voce.nome, voce.modello, voce); return; }
@@ -10427,7 +10450,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
      */
     sorgente.onopen = () => { try { ganci.onAperto?.(); } catch { /* chi ascolta si arrangia */ } };
     sorgente.onmessage = (messaggio) => {
-      try { onEvento(JSON.parse(messaggio.data)); }
+      try { onEvento(eventoPerLoSchermo(JSON.parse(messaggio.data))); } // F-027: anche la conversazione di una figlia si guarda senza confine
       catch { /* un frammento illeggibile non deve buttare giù la vista: si scarta */ }
     };
     return () => { try { sorgente.close(); } catch { /* già chiusa */ } };
@@ -10498,7 +10521,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     contenitore.appendChild(dettaglio.elemento);
     const maniglia = montaConversazioneFiglia(dettaglio.slotConversazione, {
       sessionId: figlia.sessionId,
-      nome: figlia.taskCorto || figlia.task || 'Delega senza compito registrato',
+      nome: figlia.taskCorto || figlia.task || tr('app.delegations.noTaskRecorded'),
       apriFlusso: apriFlussoFiglia,
       onIndietro: chiudiConversazioneFiglia,
       document,
@@ -10514,20 +10537,20 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   function menuDellaDelega(figlia, dove) {
     const viva = figlia?.conclusa !== true && figlia?.interrotta !== true;
     const voci = [
-      { chiave: 'apri', etichetta: 'Apri la conversazione', icona: 'i-doc', aziona: () => apriConversazioneFiglia(figlia) },
+      { chiave: 'apri', etichetta: tr('app.delegations.menu.openConversation'), icona: 'i-doc', aziona: () => apriConversazioneFiglia(figlia) },
       {
         chiave: 'sessione',
-        etichetta: 'Apri come sessione intera',
+        etichetta: tr('app.delegations.menu.openAsSession'),
         icona: 'i-branch',
         aziona: () => {
           /* ⛔ Questa lascia la conversazione corrente: è esattamente ciò che PO-08 evita, quindi
              si dice prima di farlo invece di scoprirlo dopo.
              ⛔ 11/09 lotto G: `confermaModale` è asincrona — il seguito vive nella callback. */
           confermaModale({
-            titolo: 'Aprire questa delega come sessione intera?',
-            domanda: 'Lasci la conversazione che stai leggendo.',
-            conseguenza: 'La delega continua comunque: cambia solo quello che hai davanti.',
-            etichettaConferma: 'Apri la delega',
+            titolo: tr('app.delegations.openTitle'),
+            domanda: tr('app.delegations.menu.openQuestion'),
+            conseguenza: tr('app.delegations.menu.openConsequence'),
+            etichettaConferma: tr('app.delegations.menu.openConfirm'),
             onConferma: () => { chiudiConversazioneFiglia(); passaASessione({ id: figlia.sessionId, modello: figlia.modello || null }); },
           });
         },
@@ -10536,24 +10559,24 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     if (viva) {
       voci.push({
         chiave: 'ferma',
-        etichetta: 'Ferma questa delega',
+        etichetta: tr('app.delegations.menu.stop'),
         icona: 'i-stop',
         pericolo: true,
         separaPrima: true,
         aziona: () => {
           // ⛔ 11/09 lotto G: niente `window.confirm` sincrono — la conferma è una modale nostra.
           confermaModale({
-            titolo: 'Fermare questa delega?',
-            domanda: 'Il lavoro già fatto resta al suo posto.',
-            conseguenza: 'Quello in corso no: il giro si interrompe dove è arrivato.',
-            etichettaConferma: 'Ferma la delega',
+            titolo: tr('app.delegations.stopTitle'),
+            domanda: tr('app.delegations.menu.stopQuestion'),
+            conseguenza: tr('app.delegations.menu.stopConsequence'),
+            etichettaConferma: tr('app.delegations.menu.stopConfirm'),
             onConferma: async () => {
               try {
                 await apiPost(`/api/v1/sessions/${encodeURIComponent(figlia.sessionId)}/stop`, {});
-                toast('Delega fermata', figlia.taskCorto || 'La delega non prosegue.');
+                toast(tr('app.delegations.stopped'), figlia.taskCorto || tr('app.delegations.stoppedBody'));
                 void caricaFigliSessione();
               } catch (errore) {
-                toast('Delega non fermata', errore.message);
+                toast(tr('app.delegations.stopFailed'), errore.message);
               }
             },
           });
@@ -10652,7 +10675,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       ripartizione: state.realSession.ripartizioneContesto || null,
     });
     aggiornaInspector(inspector, {
-      titolo: state.realSession.id ? (state.session || 'Sessione') : 'Nessuna sessione aperta',
+      titolo: state.realSession.id ? (state.session || tr('app.sessions.fallbackName')) : tr('app.common.noSessionOpen'),
       contesto: state.realSession.contesto || null,
       usage: finestra.perInspector.usage,
       cacheSessione: state.realSession.id ? state.realSession.cacheSessione : null,
@@ -10725,7 +10748,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     try {
       const dati = await apiGet(`/api/v1/sessions/${encodeURIComponent(id)}/children`);
       if (state.realSession.id !== id || lettura !== figliLettura) return;
-      if (!Array.isArray(dati?.figli)) throw new Error('Risposta delle deleghe non valida');
+      if (!Array.isArray(dati?.figli)) throw new Error(tr('app.delegations.invalidResponse'));
       // Gli eventi live sono effimeri: ricostruire anche i discendenti noti dopo una caduta.
       const conosciuti = [...state.sessionSelection.available.values(), ...agentiInDiretta.values()];
       const raggiungibili = new Set([id, ...dati.figli.map(a => a.sessionId)]);
@@ -10737,7 +10760,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       for (const parentId of genitori) {
         const risposta = await apiGet(`/api/v1/sessions/${encodeURIComponent(parentId)}/children`);
         if (state.realSession.id !== id || lettura !== figliLettura) return;
-        if (!Array.isArray(risposta?.figli)) throw new Error('Risposta delle deleghe discendenti non valida');
+        if (!Array.isArray(risposta?.figli)) throw new Error(tr('app.delegations.invalidDescendantsResponse'));
         snapshot.push({ parentId, figli: risposta.figli });
       }
       if (state.realSession.id !== id || lettura !== figliLettura) return;
@@ -10749,7 +10772,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       figliErrore = null; figliAggiornati = new Date().toISOString();
     } catch (error) {
       if (state.realSession.id !== id || lettura !== figliLettura) return;
-      figliErrore = error?.message || 'Impossibile leggere le deleghe';
+      figliErrore = error?.message || tr('app.delegations.readFailed');
     }
     if (!grafoAgenti && !grafoWorkflow && !diagrammaInApertura && state.view === 'chat') {
       const tipo = grafoDaRiprendere(id);
@@ -10776,12 +10799,12 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
      */
     const senzaContatto = attivo && contattoPerso();
     sendButton.disabled = !attivo && uploadAllegatiInCorso();
-    sendButton.setAttribute('aria-label', senzaContatto ? 'Il server non risponde' : attivo ? 'Interrompi risposta' : 'Invia');
-    sendButton.title = senzaContatto ? 'Il server non risponde: la richiesta di fermare non arriverebbe.' : attivo ? 'Interrompi adesso' : 'Invia';
+    sendButton.setAttribute('aria-label', senzaContatto ? tr('app.composer.serverDown') : attivo ? tr('app.composer.stopResponse') : tr('app.composer.send'));
+    sendButton.title = senzaContatto ? tr('app.composer.serverDownStop') : attivo ? tr('app.composer.stopNow') : tr('app.composer.send');
     if (use) use.setAttribute('href', attivo ? '#i-stop' : '#i-send');
     redirectRunButton.hidden = !mostraPulsanteReindirizzo({ giroAttivo: attivo, haTesto });
     redirectRunButton.disabled = redirectOccupato || uploadAllegatiInCorso();
-    redirectRunButton.setAttribute('aria-label', 'Reindirizza con il testo scritto');
+    redirectRunButton.setAttribute('aria-label', tr('app.composer.redirectWithText'));
     aggiornaParoleCodaAVista(); // ⭐ 14/09: l'azione sulla coda segue il giro — «Indirizza ora» vivo, «Invia ora» fermo
     // ⭐ 3/9 — item 10: un suggerimento vale solo a riposo, campo vuoto, niente in coda.
     if (suggerimentoComposerAttivo && (attivo || haTesto)) svuotaSuggerimentoComposer();
@@ -10791,9 +10814,9 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
        `corsia1-bivio-coda-cronologia.test.mjs`. Il segnaposto torna a dire solo ciò che l'Invio fa. */
     composerInput.placeholder = attivo
       ? (state.realSession.domandePendenti.size > 0
-        ? 'Scrivi un follow-up… Invio indirizza, Ctrl+Invio accoda'
-        : 'Scrivi un follow-up… Invio per scegliere, Ctrl+Invio accoda')
-      : (suggerimentoComposerAttivo || (state.pendingCustomSession && !state.realSession.id ? 'Scrivi il primo messaggio…' : 'Scrivi… Invio manda, Maiusc+Invio va a capo')); // 05/9 Fase 2: le parole del mockup
+        ? tr('app.composer.followUpRedirect')
+        : tr('app.composer.followUpChoose'))
+      : (suggerimentoComposerAttivo || (state.pendingCustomSession && !state.realSession.id ? tr('app.composer.firstMessage') : tr('app.composer.placeholder'))); // 05/9 Fase 2: le parole del mockup
     /*
      * ⛔⛔ 13/09, review della corsia 1 — QUI c'era «Scrivi… Invio indirizza il giro in corso».
      *   È il ramo a giro SPENTO: non c'è nessun giro in corso da indirizzare, e `decidiInvio` non
@@ -10826,16 +10849,16 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
      * accodare, mai un toggle che si accende senza che nulla lo segua.
      */
     if (enabled && state.realSession.id) {
-      toast('Il follow-up è già in coda', 'Scrivi normalmente nel composer: un messaggio durante un run in corso si accoda da solo, non serve questo interruttore.');
+      toast(tr('app.queue.followUpQueued'), tr('app.queue.followUpQueuedBody'));
       return;
     }
     if (enabled && !state.realSession.id) {
-      toast('Nessuna sessione attiva', 'Il follow-up si mette in coda solo durante una sessione in corso — apri prima «Nuova».');
+      toast(tr('app.common.noActiveSession'), tr('app.queue.noActiveSessionBody'));
       return;
     }
     state.queueMode = Boolean(enabled);
     runStateToggle?.setAttribute('aria-pressed', String(state.queueMode));
-    if (announce) toast(state.queueMode ? 'Steering queue attiva' : 'Steering queue disattivata');
+    if (announce) toast(state.queueMode ? tr('app.queue.steeringOn') : tr('app.queue.steeringOff'));
   }
 
   function setRunState(running) {
@@ -10843,12 +10866,12 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     runStrip?.classList.toggle('is-stopped', !state.running);
     const label = $('strong', runStateToggle);
     const timer = runStateToggle?.querySelector('span:last-child');
-    if (label) label.textContent = state.running ? 'In esecuzione' : 'Interrotto';
+    if (label) label.textContent = state.running ? tr('app.composer.stateRunning') : tr('app.composer.stateStopped');
     if (timer) timer.textContent = state.running ? '01:42' : '—';
     const stopButton = $('.stop-run');
     if (stopButton) {
       stopButton.disabled = !state.running;
-      stopButton.setAttribute('aria-label', state.running ? 'Interrompi esecuzione' : 'Esecuzione interrotta');
+      stopButton.setAttribute('aria-label', state.running ? tr('app.composer.stopExecution') : tr('app.composer.executionStopped'));
     }
   }
 
@@ -10894,7 +10917,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       animateExit(existing, { durationToken: '--talos-motion-duration-disclosure' }, () => existing.remove());
       return;
     }
-    const [title, detail] = toolDetails[key] || ['Dettaglio tool', 'Nessun dettaglio aggiuntivo disponibile.'];
+    const [title, detail] = toolDetails[key] || [tr('app.activity.toolDetailTitle'), tr('app.activity.toolDetailNone')];
     const row = document.createElement('div');
     row.className = 'tool-inline-detail';
     row.innerHTML = `<strong>${title}</strong><span>${detail}</span>`;
@@ -11031,12 +11054,12 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const cambi = [];
     const modello = typeof contesto.modello === 'string' ? contesto.modello.trim() : '';
     if (modello && state.model && modello !== state.model) {
-      cambi.push(`modello ${state.model} → ${modello}`);
+      cambi.push(tr('app.status.changedModel', { da: state.model, a: modello }));
       state.model = modello; aggiornaPiedeSidebar(); // 05/9 Fase 2: WorkspaceFooter
       aggiornaPillolaModello();
     }
     if (PERMESSI_SESSIONE_VALIDI.includes(contesto.permessi) && contesto.permessi !== state.permissions) {
-      cambi.push(`permesso ${state.permissions} → ${contesto.permessi}`);
+      cambi.push(tr('app.status.changedPermission', { da: state.permissions, a: contesto.permessi }));
       state.permissions = contesto.permessi;
       aggiornaPillolaPermessi();
     }
@@ -11046,7 +11069,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     if (cambi.length > 0) {
       salvaPreferenzeChatDesktop();
       // ⭐ 04/9, W1-12 — etichetta del giro corrente, non «concluso»: il giro è appena partito.
-      appendStatusNote(`Impostazioni cambiate fuori da questa scheda. Questo giro usa: ${cambi.join(', ')}.`, false, { meta: `TALOS · giro ${state.realSession.runCount || 1}` });
+      appendStatusNote(tr('app.status.settingsChanged', { cambi: cambi.join(', ') }), false, { meta: tr('app.status.talosTurn', { n: state.realSession.runCount || 1 }) });
     }
   }
 
@@ -11201,12 +11224,12 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     state.realSession.bollaDaMostrare = null;
     const testoBolla = (daMostrare && typeof daMostrare.testo === 'string' && daMostrare.testo.trim() !== '')
       ? daMostrare.testo
-      : (task.consegna || task.consegnaCorta || task.comandoDiretto || (task.id ? task.id : 'Comando diretto'));
+      : (task.consegna || task.consegnaCorta || task.comandoDiretto || (task.id ? task.id : tr('app.composer.directCommand')));
     const etichettaMeta = (task.id
       ? nomeLeggibileSessione(task.id)
       : (task.consegna || task.consegnaCorta)
-        ? `Compito libero${task.progetto ? ` · ${task.progetto}` : ''}`
-        : 'Comando diretto') + etichettaPermessiGiro(contesto);
+        ? (task.progetto ? tr('app.composer.freeTaskIn', { progetto: task.progetto }) : tr('app.composer.freeTask'))
+        : tr('app.composer.directCommand')) + etichettaPermessiGiro(contesto);
     // 05/9 Fase 2: Conversazione — il messaggio della persona nel blocco del mockup (ora · etichetta del giro)
     const article = nellaChat(creaMessaggioUtente({ testo: testoBolla, ora: state.realSession.deferHistoricalRendering ? '' : oraMessaggio(), meta: etichettaMeta }), 'utente')
     const allegatiVisibili = daMostrare?.allegati?.length ? daMostrare.allegati : task.immagini;
@@ -11235,21 +11258,21 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     if (immagini.length) {
       const gallery = document.createElement('div');
       gallery.className = 'talos-image-gallery';
-      gallery.setAttribute('aria-label', 'Immagini allegate');
+      gallery.setAttribute('aria-label', tr('app.attachments.imagesLabel'));
       for (const a of immagini) {
         const card = creaAnteprimaImmagine(a, { apiBase: window.__talosHarnessApiBase || '' });
         if (card) gallery.append(card);
       }
       articolo.append(gallery);
       const bubble = articolo.querySelector('.message-bubble');
-      if (bubble && (!bubble.textContent.trim() || bubble.textContent.trim() === 'Descrivi l’immagine allegata.')) bubble.hidden = true;
+      if (bubble && (!bubble.textContent.trim() || FRASI_SOLO_IMMAGINE.has(bubble.textContent.trim()))) bubble.hidden = true;
     }
     const chip = chipDegliAllegati(allegati.filter(a => !immagini.includes(a)), state.model);
     if (!chip.length) return null; // ⛔ nessun allegato, nessuna riga: mai un contenitore vuoto
     const riga = document.createElement('div');
     riga.className = 'talos-allegati-chip';
     riga.setAttribute('role', 'list');
-    riga.setAttribute('aria-label', chip.length === 1 ? '1 allegato del messaggio' : `${chip.length} allegati del messaggio`);
+    riga.setAttribute('aria-label', trn('app.attachments.messageCountOne', 'app.attachments.messageCountMany', chip.length));
     for (const c of chip) {
       const uno = document.createElement('span');
       uno.className = 'talos-allegati-chip__uno';
@@ -11314,7 +11337,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const article = nellaChat(creaMessaggioUtente({
       testo: comando,
       ora: state.realSession.deferHistoricalRendering ? '' : oraMessaggio(),
-      meta: `Comando eseguito da te${etichettaPermessiGiro(contesto)}`,
+      meta: `${tr('app.composer.ranByYou')}${etichettaPermessiGiro(contesto)}`,
     }), 'utente');
     /*
      * Owner 10/09, con lo screenshot della sua interfaccia: «la bolla deve essere formattata
@@ -11331,7 +11354,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     if (corpoBolla) {
       const blocco = creaBloccoCodice({ testo: comando, linguaggio: 'bash', chiuso: true });
       const etichetta = blocco.querySelector('.code-block-lang');
-      if (etichetta) etichetta.textContent = 'Comando';
+      if (etichetta) etichetta.textContent = tr('app.composer.commandLabel');
       corpoBolla.classList.add('talos-message__body--comando');
       if (paragrafo) paragrafo.replaceWith(blocco); else corpoBolla.append(blocco);
     } else if (paragrafo) {
@@ -11492,7 +11515,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     if (!bivioInvio) { accodaDalComposer(testo); return; }
     bivioInvio.dataset.testoInSospeso = testo;
     const etichetta = $('[data-bivio-testo]', bivioInvio);
-    if (etichetta) etichetta.textContent = `«${tronca(testo, 46)}» — il giro è in corso: lo indirizzo adesso o lo metto in coda?`;
+    if (etichetta) etichetta.textContent = tr('app.composer.redirectOrQueue', { testo: tronca(testo, 46) });
     if (bivioInvio.hidden) { bivioInvio.hidden = false; markMotionEnter(bivioInvio); }
     /*
      * ⛔⛔ 13/09, corsia 1 — QUI partiva il reindirizzamento che nessuno aveva scelto. Il fuoco
@@ -11537,7 +11560,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const velo = $('#veloFermaGiro');
     if (!velo) { stopRealSession(); return; }
     const nome = $('#fermaGiroNome', velo);
-    if (nome) nome.textContent = state.session || 'Sessione in corso';
+    if (nome) nome.textContent = state.session || tr('app.sessions.running');
     const errore = $('#fermaGiroErrore', velo);
     if (errore) errore.hidden = true;
     apriVeloMockup('veloFermaGiro');
@@ -11573,9 +11596,9 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    * solo il tempo trascorso, che è vero per costruzione.
    */
   const ETICHETTE_ATTESA_PER_TEMPO = [
-    { dopoSecondi: 0, testo: 'TALOS sta elaborando la risposta…' },
-    { dopoSecondi: 5, testo: 'Il modello ci sta ancora lavorando…' },
-    { dopoSecondi: 12, testo: 'Ci sta mettendo più del solito — resta in attesa…' },
+    { dopoSecondi: 0, get testo() { return tr('app.wait.processing'); } },
+    { dopoSecondi: 5, get testo() { return tr('app.wait.stillWorking'); } },
+    { dopoSecondi: 12, get testo() { return tr('app.wait.longer'); } },
   ];
   /*
    * ⭐⭐⭐ IL MARCHIO VIVO — owner 10/09, con Hermes accanto: «il loro logo è animato, il nostro no,
@@ -11602,9 +11625,9 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     state.realSession.faseAttesa += 1;
     const etichette = {
       attesa: ETICHETTE_ATTESA_PER_TEMPO[0].testo,
-      reasoning: 'Ragionamento in corso…',
-      preparing: 'TALOS sta preparando la risposta…',
-      redirect: 'Reindirizzamento al prossimo punto sicuro…',
+      reasoning: tr('app.wait.reasoning'),
+      preparing: tr('app.wait.preparing'),
+      redirect: tr('app.wait.redirect'),
     };
     const etichetta = etichette[stato] || etichette.attesa;
     if (state.realSession.attesaBubble) {
@@ -11679,12 +11702,12 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    */
   async function eliminaMessaggioReale({ riferimento, nodo, quale }) {
     const sessionId = state.realSession.id;
-    if (!sessionId) { toast('Niente da eliminare', 'Questa conversazione non è ancora una sessione sul server.'); return false; }
+    if (!sessionId) { toast(tr('app.messages.nothingToDelete'), tr('app.messages.notASessionYet')); return false; }
     let esito;
     try {
       esito = await apiDelete(`/api/v1/sessions/${encodeURIComponent(sessionId)}/messages/${encodeURIComponent(riferimento)}`);
     } catch (errore) {
-      toast('Non l\'ho eliminato', messaggioErroreUtente(errore, 'Riprova fra un momento.'));
+      toast(tr('app.messages.notDeleted'), messaggioErroreUtente(errore, tr('app.errors.retryShortlyCapital')));
       return false;
     }
     /* Un giro della persona porta via anche ciò che gli è seguito: si toglie il TURNO, non la bolla. */
@@ -11704,18 +11727,18 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
      *   modello può ancora ricordarla.
      */
     const toltoDalModello = esito?.toltoDalModello !== false;
-    const cosa = quale === 'risposta' ? 'Risposta' : 'Messaggio';
+
     if (!toltoDalModello) {
-      toast(`${cosa} tolt${quale === 'risposta' ? 'a' : 'o'} dalla conversazione`,
+      toast(quale === 'risposta' ? tr('app.messages.responseRemoved') : tr('app.messages.messageRemoved'),
         esito?.motivo === 'posizione-assente'
-          ? 'Sparisce da qui, ma il modello potrebbe ricordarla ancora: la conversazione che riceve è stata compattata e non la contiene più nella forma originale.'
-          : 'Sparisce da qui, ma non sono riuscito a toglierla dalla conversazione che il modello riceve: potrebbe ricordarla ancora.');
+          ? tr('app.messages.removedBodyCompacted')
+          : tr('app.messages.removedBodyFailed'));
       return true;
     }
-    toast(quale === 'risposta' ? 'Risposta eliminata' : 'Messaggio eliminato',
+    toast(quale === 'risposta' ? tr('app.messages.responseDeleted') : tr('app.messages.messageDeleted'),
       quale === 'risposta'
-        ? 'Non è più nella conversazione, e dal prossimo giro il modello non la legge più.'
-        : 'Se n\'è andato con la risposta che gli era seguita: dal prossimo giro il modello non li legge più.');
+        ? tr('app.messages.deletedBodyOne')
+        : tr('app.messages.deletedBodyWithResponse'));
     return true;
   }
 
@@ -11756,7 +11779,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     });
     azioni.querySelector('[data-message-action="copy"]').setAttribute('aria-label', TESTI_MESSAGGIO.copiaTuo);
     azioni.querySelector('[data-message-action="copy"]').title = TESTI_MESSAGGIO.copiaTuo;
-    azioni.querySelector('[data-message-action="copy"]').addEventListener('click', () => copyText(testo || messaggio.querySelector('.message-bubble')?.textContent || '', 'Messaggio copiato'));
+    azioni.querySelector('[data-message-action="copy"]').addEventListener('click', () => copyText(testo || messaggio.querySelector('.message-bubble')?.textContent || '', tr('app.messages.messageCopied')));
     const riusa = document.createElement('button');
     riusa.type = 'button';
     riusa.className = 'talos-button talos-button--ghost talos-icon-button talos-button--sm';
@@ -11863,7 +11886,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
           abilitato: Boolean(state.realSession.ultimaDomanda),
           fai: () => {
             const domanda = state.realSession.ultimaDomanda;
-            if (!domanda) { toast('Nessuna domanda da rimandare', 'Questa risposta non ha una domanda registrata in questa sessione.'); return; }
+            if (!domanda) { toast(tr('app.messages.noQuestionToResend'), tr('app.messages.noQuestionToResendBody')); return; }
             void resumeSession(domanda);
           },
         },
@@ -11888,7 +11911,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     /* ⛔ Il motivo di una voce spenta si LEGGE: il `title` sul «⋯» lo dice mentre il giro è vivo. */
     const bottonePiu = azioni.querySelector('[data-message-action="piu"]');
     if (bottonePiu) aggiornaMotivoAzioniRisposta(bottonePiu);
-    azioni.querySelector('[data-message-action="copy"]').addEventListener('click', () => copyText(copy.textContent || '', 'Risposta copiata'));
+    azioni.querySelector('[data-message-action="copy"]').addEventListener('click', () => copyText(copy.textContent || '', tr('app.messages.responseCopied')));
     const ascolta = azioni.querySelector('[data-message-action="listen"]');
     if (ascolta) ascolta.addEventListener('click', () => leggiVoceAlta(copy.textContent || '', ascolta));
     const vecchieAzioni = messaggio.querySelector(':scope > .talos-message__actions');
@@ -12093,7 +12116,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     state.realSession.comandoDirettoDaAprire = false;
     /* ⛔ `giroComandoDiretto` invece dura fino a RunFinished: la CARD si apre una volta sola, ma
        ogni riga di quel giro appartiene ancora al comando che la persona ha scritto. */
-    const attivita = creaAttivita({ riassunto: 'Attivita\u2026', aperto: apertoPerComandoDiretto });
+    const attivita = creaAttivita({ riassunto: tr('app.activity.label'), aperto: apertoPerComandoDiretto });
     const article = attivita.card;
     const { contenitore, summaryText } = attivita;
     const diffBadge = { hidden: true, replaceChildren() {} }; // il badge del diff vive nella testa: vedi aggiornaRiassuntoBatch
@@ -12166,7 +12189,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       disegnaArgomentiSeInAttesa(info); // gli argomenti si disegnano un fotogramma dopo: prima di scrivere l'esito si svuota l'attesa, come fa ToolCallResult
       info.stato = 'interrotto';
       /* la riga smette di dire «…» (in corso): resta ciò che stava facendo, e che si è fermato */
-      if (info.summaryText) { const base = info.summaryText.textContent.replace(/…\s*$/u, '').trim(); info.summaryText.textContent = base ? `${base} · ${tr('interrotta')}` : tr('interrotta'); }
+      if (info.summaryText) { const base = info.summaryText.textContent.replace(/…\s*$/u, '').trim(); info.summaryText.textContent = base ? `${base} · ${tr('app.activity.interrupted')}` : tr('app.activity.interrupted'); }
       if (info.article) { impostaEsitoRiga(info.article, 'interrupted'); info.article.setAttribute('aria-busy', 'false'); }
       if (info.uscitaViva) { info.uscitaViva.parentElement?.remove(); info.uscitaViva = null; info.uscitaVivaTesto = ''; }
       state.realSession.toolCallNomi.delete(id);
@@ -12244,21 +12267,21 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   const SPECIE_DELLA_CATEGORIA = Object.freeze({ letto: 'lettura', cercato: 'ricerca', elencato: 'elenco', modificato: 'modifica', nuovo: 'creazione', comando: 'comando', 'ricerca-web': 'ricerca-web', pagina: 'pagina' });
   function formattaConteggioAttivita(categoria, totale) {
     if (SPECIE_DELLA_CATEGORIA[categoria]) return fraseSpecie(SPECIE_DELLA_CATEGORIA[categoria], totale);
-    if (categoria === 'fallito') return trn('1 attività non riuscita', '{n} attività non riuscite', totale);
-    return trn('1 altra azione', '{n} altre azioni', totale);
+    if (categoria === 'fallito') return trn('app.activity.failedOne', 'app.activity.failedMany', totale);
+    return trn('app.activity.otherOne', 'app.activity.otherMany', totale);
   }
 
   /* 26/09: tutte da `trn`, come le specie — prima la testa restava italiana anche con l'interfaccia in inglese. */
   function formattaAttivitaInCorso(categoria, totale) {
-    if (categoria === 'letto') return trn('lettura di 1 file…', 'lettura di {n} file…', totale);
-    if (categoria === 'cercato') return trn('1 ricerca in corso…', '{n} ricerche in corso…', totale);
-    if (categoria === 'elencato') return trn('elenco di 1 cartella…', 'elenco di {n} cartelle…', totale); // R4, D1
-    if (categoria === 'comando') return trn('esecuzione di 1 comando…', 'esecuzione di {n} comandi…', totale);
-    if (categoria === 'scrittura') return trn('scrittura di 1 file…', 'scrittura di {n} file…', totale);
-    if (categoria === 'modifica') return trn('modifica di 1 file…', 'modifica di {n} file…', totale); // R4, D2
-    if (categoria === 'ricerca-web') return trn('ricerca sul web…', '{n} ricerche sul web…', totale);
-    if (categoria === 'pagina') return trn('apertura di una pagina…', 'apertura di {n} pagine…', totale);
-    return trn('1 attività in corso…', '{n} attività in corso…', totale);
+    if (categoria === 'letto') return trn('app.activity.readingOne', 'app.activity.readingMany', totale);
+    if (categoria === 'cercato') return trn('app.activity.searchingOne', 'app.activity.searchingMany', totale);
+    if (categoria === 'elencato') return trn('app.activity.listingOne', 'app.activity.listingMany', totale); // R4, D1
+    if (categoria === 'comando') return trn('app.activity.commandOne', 'app.activity.commandMany', totale);
+    if (categoria === 'scrittura') return trn('app.activity.writingOne', 'app.activity.writingMany', totale);
+    if (categoria === 'modifica') return trn('app.activity.editingOne', 'app.activity.editingMany', totale); // R4, D2
+    if (categoria === 'ricerca-web') return trn('app.activity.webSearchOne', 'app.activity.webSearchMany', totale);
+    if (categoria === 'pagina') return trn('app.activity.pageOne', 'app.activity.pageMany', totale);
+    return trn('app.activity.runningOne', 'app.activity.runningMany', totale);
   }
 
   /**
@@ -12278,7 +12301,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     if (c.modificati > 0) parti.push(formattaConteggioAttivita('modificato', c.modificati));
     if (c.nuovi > 0) parti.push(formattaConteggioAttivita('nuovo', c.nuovi));
     if (c.comandi > 0) {
-      const erroreParte = c.comandiErrore > 0 ? ` ${trn('(1 errore)', '({n} errori)', c.comandiErrore)}` : '';
+      const erroreParte = c.comandiErrore > 0 ? ` ${trn('app.activity.errorOne', 'app.activity.errorMany', c.comandiErrore)}` : '';
       parti.push(`${formattaConteggioAttivita('comando', c.comandi)}${erroreParte}`);
     }
     if (c.ricercheWeb > 0) parti.push(formattaConteggioAttivita('ricerca-web', c.ricercheWeb));
@@ -12292,7 +12315,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     if (c.altro - nominati(nomi?.riusciti) > 0) parti.push(formattaConteggioAttivita('altro', c.altro - nominati(nomi?.riusciti)));
     for (const [nome, n] of nomi?.falliti || []) parti.push(fraseSpecie(`altro:${nome}`, n, { fallito: true }));
     if (c.falliti - nominati(nomi?.falliti) > 0) parti.push(formattaConteggioAttivita('fallito', c.falliti - nominati(nomi?.falliti)));
-    if (c.interrotti > 0) parti.push(trn('1 attività interrotta', '{n} attività interrotte', c.interrotti)); // 26/09, difetto (2)
+    if (c.interrotti > 0) parti.push(trn('app.activity.interruptedOne', 'app.activity.interruptedMany', c.interrotti)); // 26/09, difetto (2)
     for (const categoria of ['letto', 'cercato', 'elencato', 'comando', 'scrittura', 'modifica', 'ricerca-web', 'pagina']) {
       if (batch.inCorso[categoria] > 0) parti.push(formattaAttivitaInCorso(categoria, batch.inCorso[categoria]));
     }
@@ -12300,7 +12323,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     if (batch.inCorso.altro - nominati(nomi?.inCorso) > 0) parti.push(formattaAttivitaInCorso('altro', batch.inCorso.altro - nominati(nomi?.inCorso)));
     batch.summaryText.textContent = parti.length > 0
       ? `${parti[0].charAt(0).toUpperCase()}${parti[0].slice(1)}${parti.slice(1).map((p) => `, ${p}`).join('')}`
-      : tr('Attività…');
+      : tr('app.activity.label');
     // ⛔ SOLO se il batch ha scritto qualcosa — un batch di sole letture/ricerche/comandi non mostra un diff totale (spec owner, screenshot 1).
     if (c.diffAgg > 0 || c.diffRim > 0) impostaDiffAttivita(batch.testa, c.diffAgg, c.diffRim); // 05/9 Fase 2: «+18 −2» nella testa del bundle
     aggiornaRiassuntoSegmento(batch.segmento);
@@ -12833,7 +12856,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       disegna({ inVolo: 'approva' });
       const esito = await client.approva(versioneMostrata());
       await rileggi();
-      if (!esito.ok) disegna({ errore: esito.ambiguo ? TESTO_AMBIGUO : testoErroreComando(esito.code) });
+      if (!esito.ok) disegna({ errore: esito.ambiguo ? testoAmbiguo() : testoErroreComando(esito.code) });
     }
     async function onAvvia() {
       if (!vista.revisione) return;
@@ -12841,11 +12864,11 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       const esito = await client.avvia(versioneMostrata());
       if (esito.ok && !salvaRunRicevuto(esito.dati?.runId)) {
         await rileggi({ mostraRunStorico: false });
-        disegna({ errore: 'L’avvio non ha restituito un ID del run verificabile. Nessun run è stato attribuito a questo comando.' });
+        disegna({ errore: tr('app.workflow.startNoRunId') });
         return;
       }
       await rileggi({ mostraRunStorico: esito.ok });
-      if (!esito.ok) disegna({ errore: esito.ambiguo ? TESTO_AMBIGUO : testoErroreComando(esito.code) });
+      if (!esito.ok) disegna({ errore: esito.ambiguo ? testoAmbiguo() : testoErroreComando(esito.code) });
     }
     /* F3-33b (25/09/2026), decisioni owner: i tetti si modificano nella card, in loco; «Salva» crea la versione N+1 da
        riapprovare; la versione approvata prima resta avviabile finché la nuova non è approvata. */
@@ -12867,7 +12890,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       if (esito.ok) { await rileggi(); card.querySelector('[data-azione="approva"]')?.focus(); return; }
       // la modifica resta aperta coi valori scritti: un rifiuto non butta via il lavoro della persona
       if (esito.code === 'WORKFLOW_VERSION_NOT_LATEST' || esito.code === 'WORKFLOW_ALREADY_STARTED') await rileggi();
-      disegna({ errore: esito.ambiguo ? TESTO_AMBIGUO : testoErroreComando(esito.code) });
+      disegna({ errore: esito.ambiguo ? testoAmbiguo() : testoErroreComando(esito.code) });
     }
     async function onAvviaPrima() {
       const prima = vista.avviabilePrima;
@@ -12876,11 +12899,11 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       const esito = await client.avvia({ workflowId: ricevuta.workflowId, version: prima.version, definitionHash: prima.definitionHash });
       if (esito.ok && !salvaRunRicevuto(esito.dati?.runId)) {
         await rileggi({ mostraRunStorico: false });
-        disegna({ errore: 'L’avvio non ha restituito un ID del run verificabile. Nessun run è stato attribuito a questo comando.' });
+        disegna({ errore: tr('app.workflow.startNoRunId') });
         return;
       }
       await rileggi({ mostraRunStorico: esito.ok });
-      if (!esito.ok) disegna({ errore: esito.ambiguo ? TESTO_AMBIGUO : testoErroreComando(esito.code) });
+      if (!esito.ok) disegna({ errore: esito.ambiguo ? testoAmbiguo() : testoErroreComando(esito.code) });
     }
     void rileggi();
   }
@@ -12935,13 +12958,13 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const bersaglio = bersaglioAttrezzoNudo(ultimo.nome, ultimo.argomenti);
     if (!bersaglio) return null;
     switch (ultimo.nome) {
-      case 'leggi': return `Dimmi di più su ${bersaglio}`;
-      case 'scrivi': return `Rivediamo le modifiche in ${bersaglio}`;
-      case 'cerca': return `Approfondisci ${bersaglio}`;
-      case 'shell': return `Spiega cosa ha fatto: ${bersaglio}`;
-      case 'naviga': return `Cosa dice ${bersaglio}?`;
-      case 'web_search': return `Trova di più su ${bersaglio}`;
-      case 'delega_sottotask': return `Com'è andata: ${bersaglio}`;
+      case 'leggi': return tr('app.suggestion.readMore', { bersaglio });
+      case 'scrivi': return tr('app.suggestion.reviewChanges', { bersaglio });
+      case 'cerca': return tr('app.suggestion.digDeeper', { bersaglio });
+      case 'shell': return tr('app.suggestion.explainCommand', { bersaglio });
+      case 'naviga': return tr('app.suggestion.whatDoesItSay', { bersaglio });
+      case 'web_search': return tr('app.suggestion.findMore', { bersaglio });
+      case 'delega_sottotask': return tr('app.suggestion.howDidItGo', { bersaglio });
       default: return null;
     }
   }
@@ -12949,22 +12972,22 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   function riassuntoAttrezzoInCorso(nome, argomenti) {
     const a = argomenti || {};
     switch (nome) {
-      case 'scrivi': return a.percorso ? `Scrittura di ${a.percorso}…` : 'Scrittura file…';
+      case 'scrivi': return a.percorso ? tr('app.toolLine.writingPath', { percorso: a.percorso }) : tr('app.toolLine.writingFile');
       /* ⛔ BC-59 (17/09): senza questo ramo la riga cadeva nel ripiego e diceva «file_edit…». Il
          percorso c'è già negli argomenti (`talosHarness.mjs:2768`): dirlo costa zero e vale molto. */
-      case 'file_edit': return a.percorso ? `Modifica di ${a.percorso}…` : 'Modifica di un file…';
-      case 'leggi': return a.percorso ? `Lettura di ${a.percorso}…` : 'Lettura file…';
+      case 'file_edit': return a.percorso ? tr('app.toolLine.editingPath', { percorso: a.percorso }) : tr('app.toolLine.editingFile');
+      case 'leggi': return a.percorso ? tr('app.toolLine.readingPath', { percorso: a.percorso }) : tr('app.toolLine.readingFile');
       case 'cerca': {
         const criteri = [a.nome, a.testo].filter(Boolean).map((v) => `"${v}"`).join(' · ');
-        return criteri ? `Ricerca di ${criteri}…` : 'Ricerca nel progetto…';
+        return criteri ? tr('app.toolLine.searchingFor', { criteri }) : tr('app.toolLine.searchingProject');
       }
-      case 'elenca': return 'Elenco dei file…';
-      case 'prova': return 'Esecuzione dei test…';
-      case 'shell': return a.descrizione ? `${tronca(a.descrizione, 92)}…` : a.comando ? `Esecuzione di ${tronca(a.comando, 80)}…` : 'Esecuzione comando…';
-      case 'naviga': return a.url ? `Apertura di ${tronca(a.url, 90)}…` : 'Apertura pagina…';
-      case 'delega_sottotask': return a.task ? `Sotto-attività: ${tronca(a.task, 84)}…` : 'Avvio sotto-attività…';
-      case 'memory_write': return a.title ? `Salvataggio memoria: ${tronca(a.title, 60)}…` : 'Salvataggio in memoria…';
-      case 'research_start': return a.question ? `Ricerca approfondita: ${tronca(a.question, 60)}…` : 'Avvio ricerca approfondita…';
+      case 'elenca': return tr('app.toolLine.listingFiles');
+      case 'prova': return tr('app.toolLine.runningTests');
+      case 'shell': return a.descrizione ? `${tronca(a.descrizione, 92)}…` : a.comando ? tr('app.toolLine.runningCommandOf', { comando: tronca(a.comando, 80) }) : tr('app.toolLine.runningCommand');
+      case 'naviga': return a.url ? tr('app.toolLine.openingUrl', { url: tronca(a.url, 90) }) : tr('app.toolLine.openingPage');
+      case 'delega_sottotask': return a.task ? tr('app.toolLine.subTask', { task: tronca(a.task, 84) }) : tr('app.toolLine.startingSubTask');
+      case 'memory_write': return a.title ? tr('app.toolLine.savingMemoryOf', { titolo: tronca(a.title, 60) }) : tr('app.toolLine.savingMemory');
+      case 'research_start': return a.question ? tr('app.toolLine.deepResearchOf', { domanda: tronca(a.question, 60) }) : tr('app.toolLine.startingDeepResearch');
       // ⛔ owner 04/9: qui finivano `web_search(…)`, `time_now(…)`, `document_create(…)` — nomi TECNICI a schermo. Il ripiego ora è il nome umano (nomeUmanoAttrezzo, unica mappa), e resta il nome grezzo solo per un attrezzo che nessuno ha ancora etichettato.
       default: return `${nomeUmanoAttrezzo(nome)}…`;
     }
@@ -12973,17 +12996,17 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   function riassuntoAttrezzo(nome, argomenti) {
     const a = argomenti || {};
     switch (nome) {
-      case 'scrivi': return a.percorso ? `Scritto ${a.percorso}` : 'Scrittura file…';
+      case 'scrivi': return a.percorso ? tr('app.toolLine.wrote', { percorso: a.percorso }) : tr('app.toolLine.writingFile');
       /* ⛔ BC-59 (17/09): il verbo al passato come per `scrivi` — l'azione tiene lo stesso nome
          dall'inizio alla fine, «Modifica di x» mentre gira e «Modificato x» quando ha finito. */
-      case 'file_edit': return a.percorso ? `Modificato ${a.percorso}` : 'Modifica di un file…';
-      case 'leggi': return a.percorso ? `Letto ${a.percorso}` : 'Lettura file…';
+      case 'file_edit': return a.percorso ? tr('app.toolLine.edited', { percorso: a.percorso }) : tr('app.toolLine.editingFile');
+      case 'leggi': return a.percorso ? tr('app.toolLine.read', { percorso: a.percorso }) : tr('app.toolLine.readingFile');
       case 'cerca': {
         const criteri = [a.nome, a.testo].filter(Boolean).map((v) => `"${v}"`).join(' · ');
-        return criteri ? `Cercato ${criteri}` : 'Ricerca nel progetto…';
+        return criteri ? tr('app.toolLine.searched', { criteri }) : tr('app.toolLine.searchingProject');
       }
-      case 'elenca': return 'Elenco dei file del progetto';
-      case 'prova': return 'Esecuzione dei test…';
+      case 'elenca': return tr('app.toolLine.listedProject');
+      case 'prova': return tr('app.toolLine.runningTests');
       /*
        * ⭐⭐⭐ 29/8 — owner, riferimento diretto al comportamento noto di
        * un Bash tool simile: `descrizione` (nuova, opzionale — vedi lo schema
@@ -12995,16 +13018,16 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
        * dell'output quando il tool-call conclude (stesso posto di
        * sempre, la vista Terminale).
        */
-      case 'shell': return a.descrizione ? tronca(a.descrizione, 80) : (a.comando ? `Comando: ${a.comando}` : 'Comando shell…');
-      case 'naviga': return a.url ? `Pagina web: ${a.url}` : 'Lettura pagina web…';
-      case 'web_search': return a.query ? `Ricerca web: "${a.query}"` : 'Ricerca web…';
-      case 'artifact_create': return a.titolo ? `Artefatto: ${a.titolo}` : 'Creazione artefatto…';
-      case 'document_create': return a.title ? `Documento: ${a.title}.${a.format || '?'}` : 'Creazione documento…';
+      case 'shell': return a.descrizione ? tronca(a.descrizione, 80) : (a.comando ? tr('app.toolLine.shellCommand', { comando: a.comando }) : tr('app.toolLine.shellCommandGeneric'));
+      case 'naviga': return a.url ? tr('app.toolLine.webPage', { url: a.url }) : tr('app.toolLine.readingWebPage');
+      case 'web_search': return a.query ? tr('app.toolLine.webSearch', { ricerca: a.query }) : tr('app.toolLine.webSearchGeneric');
+      case 'artifact_create': return a.titolo ? tr('app.toolLine.artifact', { titolo: a.titolo }) : tr('app.toolLine.creatingArtifact');
+      case 'document_create': return a.title ? tr('app.toolLine.document', { titolo: a.title, formato: a.format || '?' }) : tr('app.toolLine.creatingDocument');
       // ⭐⭐⭐ 29/8 — FASE H: il prompt è la parte che l'owner vuole vedere subito, stessa tronca corta già usata per delega_sottotask.
-      case 'generate_image': return a.prompt ? `Immagine: ${tronca(a.prompt, 60)}` : 'Generazione immagine…';
-      case 'time_now': return 'Data e ora correnti'; // ⭐ 28/8 — zero argomenti, nessun placeholder "…" da mostrare
+      case 'generate_image': return a.prompt ? tr('app.toolLine.image', { prompt: tronca(a.prompt, 60) }) : tr('app.toolLine.generatingImage');
+      case 'time_now': return tr('app.toolLine.timeNow'); // ⭐ 28/8 — zero argomenti, nessun placeholder "…" da mostrare
       // ⭐⭐⭐ FASE C (28/8) — sub-agenti: il task è la parte che l'owner vuole vedere subito, tronca corta come già fatto per gli altri riassunti "in corso".
-      case 'delega_sottotask': return a.task ? `Delega: ${tronca(a.task, 60)}` : 'Delega a un sotto-agente…';
+      case 'delega_sottotask': return a.task ? tr('app.toolLine.delegation', { task: tronca(a.task, 60) }) : tr('app.toolLine.delegatingToSubAgent');
       /*
        * ⛔⛔ 30/8, QA visiva (Task 8/11) — due casi mancanti, trovati dal
        * vivo (mostravano il nome grezzo "memory_write(…)"/mai
@@ -13013,18 +13036,18 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
        * non indovinata: memory_write → {kind,title,content};
        * research_start → {depth,question}.
        */
-      case 'memory_write': return a.title ? `Memoria: ${tronca(a.title, 60)}` : 'Salvataggio in memoria…';
-      case 'research_start': return a.question ? `Ricerca approfondita: ${tronca(a.question, 60)}` : 'Avvio ricerca approfondita…';
+      case 'memory_write': return a.title ? tr('app.toolLine.memory', { titolo: tronca(a.title, 60) }) : tr('app.toolLine.savingMemory');
+      case 'research_start': return a.question ? tr('app.toolLine.deepResearch', { domanda: tronca(a.question, 60) }) : tr('app.toolLine.startingDeepResearch');
       /* ⭐ 27/09/2026, decisione owner (capacità delle sezioni): le sei letture nuove hanno la loro frase — col ripiego qui sotto
          resterebbero «nome…» coi puntini anche a giro concluso. Stessa forma di `leggi` e `web_search`: cosa, e su che cosa. */
-      case 'memory_list': return tr('Memorie elencate');
-      case 'notes_search': return typeof a.query === 'string' && a.query.trim() && !/^[\s*]*$/u.test(a.query) ? tr('Cercato fra le note: «{q}»', { q: tronca(a.query, 60) }) : tr('Note elencate');
-      case 'notes_read': return tr('Nota letta');
-      case 'tasks_search': return typeof a.query === 'string' && a.query.trim() && !/^[\s*]*$/u.test(a.query) ? tr('Cercato fra le attività: «{q}»', { q: tronca(a.query, 60) }) : tr('Attività elencate');
-      case 'research_search': return typeof a.query === 'string' && a.query.trim() ? tr('Cercato fra le ricerche: «{q}»', { q: tronca(a.query, 60) }) : tr('Ricerche elencate');
+      case 'memory_list': return tr('app.toolSummary.memoriesListed');
+      case 'notes_search': return typeof a.query === 'string' && a.query.trim() && !/^[\s*]*$/u.test(a.query) ? tr('app.toolSummary.notesSearched', { ricerca: tronca(a.query, 60) }) : tr('app.toolSummary.notesListed');
+      case 'notes_read': return tr('app.toolSummary.noteRead');
+      case 'tasks_search': return typeof a.query === 'string' && a.query.trim() && !/^[\s*]*$/u.test(a.query) ? tr('app.toolSummary.tasksSearched', { ricerca: tronca(a.query, 60) }) : tr('app.toolSummary.tasksListed');
+      case 'research_search': return typeof a.query === 'string' && a.query.trim() ? tr('app.toolSummary.researchSearched', { ricerca: tronca(a.query, 60) }) : tr('app.toolSummary.researchListed');
       case 'conversation_search':
-        if (typeof a.conversation_id === 'string' && a.conversation_id) return tr('Conversazione letta');
-        return typeof a.query === 'string' && a.query.trim() && !/^[\s*]*$/u.test(a.query) ? tr('Cercato nelle conversazioni: «{q}»', { q: tronca(a.query, 60) }) : tr('Board delle conversazioni');
+        if (typeof a.conversation_id === 'string' && a.conversation_id) return tr('app.toolSummary.conversationRead');
+        return typeof a.query === 'string' && a.query.trim() && !/^[\s*]*$/u.test(a.query) ? tr('app.toolSummary.conversationsSearched', { ricerca: tronca(a.query, 60) }) : tr('app.toolSummary.conversationBoard');
       // ⛔ owner 04/9: qui finivano `web_search(…)`, `time_now(…)`, `document_create(…)` — nomi TECNICI a schermo. Il ripiego ora è il nome umano (nomeUmanoAttrezzo, unica mappa), e resta il nome grezzo solo per un attrezzo che nessuno ha ancora etichettato.
       default: return `${nomeUmanoAttrezzo(nome)}…`;
     }
@@ -13039,18 +13062,24 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   function riassuntoEsitoAttrezzo(nome, riassuntoBase, testoEsito) {
     // ⭐⭐⭐ FASE C (28/8) — sub-agenti: il riassunto del FIGLIO (o il motivo del rifiuto) è già il contenuto ESATTO del ToolCallResult (stesso meccanismo standard di ogni altro attrezzo — nessun evento nuovo, vedi LEDGER-FASE-C-SUBAGENTI.md), qui solo reso leggibile in un'unica riga.
     if (nome === 'delega_sottotask') {
-      if (/^REFUSED\./.test(testoEsito || '')) return '✗ Delega rifiutata';
-      return `🧩 Sotto-agente: ${tronca(testoEsito, 100)}`;
+      if (/^REFUSED\./.test(testoEsito || '')) return tr('app.toolOutcome.delegationRefused');
+      if (/^INVALID\./.test(testoEsito || '')) return tr('app.toolOutcome.delegationInvalid'); // H-05: un argomento sbagliato non è un rifiuto
+      return tr('app.toolOutcome.subAgent', { esito: tronca(testoEsito, 100) });
     }
     if (nome !== 'prova') return riassuntoBase;
+    // H-04: nessuna suite, nessun test eseguito — detto, non lasciato al riassunto generico
+    if (provaSenzaTestEseguiti(testoEsito)) return tr('kernel.prova.nessunTestRiga'); // 03/10: il comando è partito, i test no
+    if (provaSenzaSuite(testoEsito)) return tr('app.toolOutcome.testsNotRun');
     const pass = /ℹ?\s*pass\s+(\d+)/i.exec(testoEsito)?.[1];
     const fail = /ℹ?\s*fail\s+(\d+)/i.exec(testoEsito)?.[1];
     if (pass === undefined || fail === undefined) return riassuntoBase;
-    return fail === '0' ? `✓ Test verdi — ${pass}/${pass}` : `✗ Test falliti — ${fail} su ${Number(pass) + Number(fail)}`;
+    return fail === '0' ? tr('app.toolOutcome.testsGreen', { passati: pass }) : tr('app.toolOutcome.testsFailed', { falliti: fail, totale: Number(pass) + Number(fail) });
   }
 
   function esitoAttrezzoFallito(nome, testoEsito) {
     const testo = String(testoEsito ?? '');
+    /* H-04 diceva «non eseguita non è un successo», e la riga diventava rossa. Owner 03/10/2026 («Stato non eseguito»): non è
+       nemmeno un fallimento. È il suo stato, come nei Processi (`provaNonEseguita`, più sotto); qui conta solo un test rosso. */
     if (nome === 'prova') return /ℹ?\s*fail\s+([1-9]\d*)/i.test(testo);
     if (nome === 'shell') {
       /*
@@ -13110,7 +13139,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const descrizioneModello = typeof argomenti?.descrizione === 'string' ? argomenti.descrizione.trim() : '';
     if (nome === 'shell' && descrizioneModello) {
       const descrizione = tronca(descrizioneModello, 92);
-      return fallito ? `${descrizione} — non riuscito` : descrizione;
+      return fallito ? `${descrizione} — ${tr('app.toolOutcome.failedSuffix')}` : descrizione;
     }
     /* ⛔ Difetto 1 registrato il 27/09 (owner, stessa notte: «1, 2 e 5 ora»): i puntini dicono «in corso», e una riga
        CONCLUSA che finiva con «…» (il ripiego «nome…» di `riassuntoAttrezzo`, visto su `memory_delete`) mentiva. Una
@@ -13124,7 +13153,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
        «completate», elenco ≠ ricerca). Le parole ora sono quelle delle specie, tradotte (`fraseSpecie`). */
     const specie = { leggi: 'lettura', cerca: 'ricerca', elenca: 'elenco', scrivi: 'scrittura', shell: 'comando', naviga: 'pagina' }[nome];
     if (specie) return fraseSpecie(specie, 1, { fallito });
-    if (fallito) return tr('Attività non riuscita');
+    if (fallito) return tr('app.activity.stepFailed');
     return riassuntoEsitoAttrezzo(nome, concluso(riassuntoAttrezzo(nome, argomenti)), testoEsito);
   }
 
@@ -13173,7 +13202,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         const dettaglio = document.createElement('details');
         dettaglio.className = 'tool-arg-lungo';
         const riassunto = document.createElement('summary');
-        riassunto.textContent = `${testoValore.length.toLocaleString('it-IT')} caratteri`;
+        riassunto.textContent = tr('app.activity.characters', { n: testoValore.length.toLocaleString(localeUI()) });
         const pre = document.createElement('pre');
         pre.className = 'tool-result-block';
         pre.appendChild(textElement('code', '', testoValore));
@@ -13241,10 +13270,10 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
              davanti a un pulsante che non funzionava. Ora è la porta: la stessa `compactSession`, che sul
              legacy chiama la rotta vera. */
           : spiegazione.id === 'contesto-pieno'
-            ? [[tr('Compatta ora'), () => { void compactSession(); }]]
+            ? [[tr('app.contextManager.compactNow'), () => { void compactSession(); }]]
             : [],
       })
-      : creaNotaSistema({ tipo: isError ? 'danger' : 'info', badge: isError ? 'Errore' : 'Nota', titolo: etichettaMeta || (isError ? 'TALOS · errore' : 'TALOS · concluso'), testo: text });
+      : creaNotaSistema({ tipo: isError ? 'danger' : 'info', badge: isError ? tr('app.notices.error') : tr('app.common.note'), titolo: etichettaMeta || (isError ? tr('app.notices.talosError') : tr('app.notices.talosDone')), testo: text });
     article.classList.add('real-session-status');
     /*
      * ⛔⛔ 13/09 sera — il tick e la classe «errore» seguono la CARTA, non il solo `isError`. Misurato
@@ -13273,19 +13302,19 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
      * "scrivi un file", è "riscrivi una regola dell'agente" (hook, MCP,
      * istruzioni, memoria), anche quando la sessione è in Full access.
      */
-    if (azione?.tipo === 'scrivi' && azione.fileDiControllo) return 'Vuole scrivere un file di controllo di TALOS: una regola dell’agente (hook, MCP, istruzioni, memoria), non un file del progetto.';
-    if (azione?.tipo === 'scrivi') return 'Vuole scrivere questo file:';
+    if (azione?.tipo === 'scrivi' && azione.fileDiControllo) return tr('app.approval.wantsWriteControlFile');
+    if (azione?.tipo === 'scrivi') return tr('app.approval.wantsWriteFile');
     /* 02/10/2026 — `file_edit` cadeva nel ripiego generico («un'azione che modifica qualcosa»), visto nella foto della carta di rete. */
-    if (azione?.tipo === 'file_edit') return 'Vuole modificare questo file:';
+    if (azione?.tipo === 'file_edit') return tr('app.approval.wantsEditFile');
     /* ⛔ 17/09, F15 — `leggi` arriva davanti a un percorso segreto: senza questo ramo la carta
        cadeva nel ripiego generico proprio nel caso in cui la persona deve capire in fretta. */
-    if (azione?.tipo === 'leggi') return 'Vuole leggere questo file:';
+    if (azione?.tipo === 'leggi') return tr('app.approval.wantsReadFile');
     /* 02/10/2026 — `elenca` chiede solo davanti a una cartella su un computer di rete (`controllaPercorsoDiRete`). */
-    if (azione?.tipo === 'elenca') return 'Vuole vedere i file di questa cartella:';
-    if (azione?.tipo === 'shell') return 'Vuole eseguire questo comando nel terminale:';
-    if (azione?.tipo === 'document_create') return `Vuole creare un documento (formato ${azione.formato || '?'})`;
+    if (azione?.tipo === 'elenca') return tr('app.approval.wantsListFolder');
+    if (azione?.tipo === 'shell') return tr('app.approval.wantsRunCommand');
+    if (azione?.tipo === 'document_create') return tr('app.approval.wantsCreateDocument', { formato: azione.formato || '?' });
     // ⭐⭐⭐ FASE B (28/8) — `prova` è il quarto attrezzo gated da verificaPermessoScrittura (trovato leggendo talosHarness.mjs): senza questo ramo, un permesso per-attrezzo `prova:'chiedi'` mostrava la card col fallback generico invece del comando VERO.
-    if (azione?.tipo === 'prova') return 'Vuole eseguire la suite di test:';
+    if (azione?.tipo === 'prova') return tr('app.approval.wantsRunTests');
     /*
      * ⛔⛔⛔ 30/8, QA visiva (Task 11) — caso mancante trovato dal vivo,
      * con la prova nell'evento grezzo persistito
@@ -13304,8 +13333,8 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
      * invece di "un'azione che modifica qualcosa") — il topic esatto
      * richiederebbe un cambio lato kernel, fuori da questo repo.
      */
-    if (azione?.tipo === 'research_start') return azione.question ? `Vuole avviare una ricerca approfondita: ${azione.question}` : 'Vuole avviare una ricerca approfondita.';
-    return 'Vuole eseguire un\'azione che modifica qualcosa.';
+    if (azione?.tipo === 'research_start') return azione.question ? tr('app.approval.wantsDeepResearchOf', { domanda: azione.question }) : tr('app.approval.wantsDeepResearch');
+    return tr('app.approval.wantsChangeSomething');
   }
 
   /** Il testo esatto da mettere nel blocco codice della carta: comando o percorso, mai una frase. */
@@ -13362,7 +13391,13 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
      *   versioni della stessa spiegazione, e la nostra invecchierebbe per prima (vedi il punto 3).
      */
     const frasiVere = [];
-    if (typeof azione?.segreto?.frase === 'string' && azione.segreto.frase.trim()) frasiVere.push(azione.segreto.frase.trim());
+    /* F-027 (owner 02/10/2026, «+1 con conferma») — nel giro è entrato testo che sembra un'istruzione per un'IA: è il motivo più
+       grave, e va per primo. La frase la scrive il kernel (`verificaPermessoScrittura`, con le parole di `confine-dati.mjs`). */
+    /* 03/10/2026: il kernel manda i DATI (luogo e motivi), la domanda la scrive l'interfaccia nella lingua scelta. */
+    if (azione?.contenutoSospetto) frasiVere.push(domandaContenutoSospetto(azione.contenutoSospetto));
+    /* K4b (03/10/2026): la frase arriva inglese con la sua chiave; si dice nella lingua dell'interfaccia (un evento vecchio, senza chiave, com'è) */
+    const fraseDelSegreto = azione?.segreto ? testoDelCampo(azione.segreto, 'frase') : null;
+    if (typeof fraseDelSegreto === 'string' && fraseDelSegreto.trim()) frasiVere.push(fraseDelSegreto.trim());
     /* F009 (owner 01/10/2026) — la conferma di root in WSL quando nessuno è interpellato: la frase la scrive il kernel (`confermaRootWsl`). */
     if (typeof azione?.wslRoot?.frase === 'string' && azione.wslRoot.frase.trim()) frasiVere.push(azione.wslRoot.frase.trim());
     /* F4-03 (owner 01/10/2026 sera) — la scrittura fuori dalla cartella della sessione con «Scrive nel progetto»: la frase la scrive il kernel. */
@@ -13371,12 +13406,12 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     if (typeof azione?.percorsoDiRete?.frase === 'string' && azione.percorsoDiRete.frase.trim()) frasiVere.push(azione.percorsoDiRete.frase.trim());
     /* ⛔ Se si chiude anche la trifecta sono DUE fatti, non uno: si mostrano tutti e due — una lista
        di motivi si giudica da ciò che manca, e tacere il secondo sarebbe rassicurare a metà. */
-    const trifecta = typeof azione?.trifecta === 'string' ? azione.trifecta.trim() : (azione?.trifecta === true ? 'Questa chiamata chiude la trifecta: dati privati, contenuto non attendibile e un modo per farli uscire.' : '');
+    const trifecta = typeof azione?.trifecta === 'string' ? azione.trifecta.trim() : (azione?.trifecta === true ? tr('app.approval.trifecta') : '');
     if (trifecta) frasiVere.push(trifecta);
     if (frasiVere.length) return frasiVere.join(' ');
-    if (regola === 'chiedi') return `Chiede perché «${nomeUmanoAttrezzo(azione.tipo)}» ha il cancello «Chiedi conferma», anche con la sessione su «${politica}».`;
-    if (state.permissions === 'On request') return `Chiede perché la sessione è su «${politica}»: ogni azione che cambia qualcosa passa da te.`;
-    return `Chiede perché il kernel considera questa azione da confermare, anche con la sessione su «${politica}».`;
+    if (regola === 'chiedi') return tr('app.approval.whyToolGate', { attrezzo: nomeUmanoAttrezzo(azione.tipo), politica });
+    if (state.permissions === 'On request') return tr('app.approval.whyOnRequest', { politica });
+    return tr('app.approval.whyKernel', { politica });
   }
 
   /**
@@ -13409,10 +13444,14 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const composer = $('#composerInput');
     const sessionId = state.realSession.id;
     if (!root || !composer || !sessionId) {
-      toast('Domanda non disponibile', 'Ricarica la sessione per rispondere.');
+      toast(tr('app.questions.unavailable'), tr('app.questions.unavailableBody'));
       return null;
     }
+    /* true = data da qui · false = non da qui · null = INCERTO: l'invio è caduto senza uno status (rete, risposta persa) e il
+       registro non aveva ancora la risposta. Revisione Codex del 02/10/2026, rilievo 2: l'incertezza non è un'attribuzione.
+       Si decide quando arriva la risoluzione, confrontandola con la risposta tentata (`stessaRisposta`). */
     let rispostaDataDaQuestaScheda = false;
+    let rispostaTentata = null;
     /* L'esito letto dal registro dopo un invio fallito (sotto) è una conseguenza del clic di ADESSO, non della storia che
        si rigioca: vale come arrivato in diretta anche se `talos.fine-rigiocata` non è ancora passato. */
     let esitoRiconciliatoQui = false;
@@ -13442,9 +13481,15 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       scadenzaMs: (Number(leggiImpostazioniDesktop()?.appearance?.askTimeout) || 0) * 1000,
       onSubmit: async (body) => {
         rispostaDataDaQuestaScheda = true;
+        rispostaTentata = body;
         try {
           return await apiPost('/api/v1/sessions/' + encodeURIComponent(sessionId) + '/question', body);
         } catch (error) {
+          /* Revisione Codex 02/10/2026, rilievo 2 — uno status dice che il server NON l'ha presa; nessuno status non dice
+             niente. L'incertezza vale da SUBITO, prima di leggere il registro: se il flusso consegna la risoluzione mentre
+             quella lettura è in corso, l'attribuzione si decide confrontando, non dal clic. */
+          const rifiutata = Number.isInteger(error?.status) && error.status >= 400;
+          if (!rifiutata) rispostaDataDaQuestaScheda = null;
           // RFC 9110: POST is not retry-safe. A lost ACK or even a subsequent
           // 409 can mean the answer was already committed. Read the journal
           // before offering any new send or claiming that this answer failed.
@@ -13459,23 +13504,37 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
                   rispostaDataDaQuestaScheda = stessaRisposta(body, resolved);
                   esitoRiconciliatoQui = true;
                   if (state.realSession.id === sessionId && state.realSession.generation === generation) {
+                    /* ⛔ Revisione Codex del 02/10/2026 (rilievo 1, bloccante): se il FLUSSO ha consegnato questa
+                       risoluzione mentre il registro si leggeva, la scheda è già chiusa con l'attribuzione di allora
+                       (risposta tentata qui, rigiocata aperta) e l'evento qui sotto si scarta per `_sequenza`. Il
+                       registro è la prova più informata: si ridisegna l'esito con l'attribuzione giusta, senza il
+                       movimento d'entrata né lo scorrimento di `finalizzaUserQuestionCard`. */
+                    const giaChiusa = scheda.dataset.state === 'resolved';
                     handleRealEvent(resolved, generation);
+                    if (giaChiusa) {
+                      scheda._dockController?.render({ stage: 'resolved', status: resolved.status,
+                        altrove: rispostaDaUnAltraFinestra(scheda) && resolved.da !== 'sistema',
+                        esito: { answers: resolved.answers, at: resolved.at, da: resolved.da, motivo: resolved.motivo } });
+                    }
                   }
                   return { reconciled: true, requestId: body.requestId, status: resolved.status };
                 }
               }
             } catch { /* No proof: preserve the original ambiguous failure. */ }
           }
-          if (Number.isInteger(error?.status) && error.status >= 400) rispostaDataDaQuestaScheda = false;
+          if (rifiutata) rispostaDataDaQuestaScheda = false;
           throw error;
         }
       },
     });
     const scheda = root.lastElementChild;
     scheda._dockController = controller;
-    scheda._rispostaDataQui = () => rispostaDataDaQuestaScheda;
+    scheda._rispostaDataQui = (risolta) => (rispostaDataDaQuestaScheda === null
+      ? Boolean(risolta && rispostaTentata && stessaRisposta(rispostaTentata, risolta))
+      : rispostaDataDaQuestaScheda);
     scheda._esitoRiconciliatoQui = () => esitoRiconciliatoQui;
     aggiornaTickGiro({ tono: 'warning' });
+    aggiornaSpazioCodaConversazione($('#conversation')); // 03/10: con la domanda agganciata la riserva in coda va a zero
     /* ⛔ 23/09/2026, riparazione D1 — qui il fuoco andava sul primo radio: chi stava scrivendo nel
        composer spuntava e INVIAVA un'opzione con lo spazio successivo. Il fuoco resta dov'è. */
     return scheda;
@@ -13487,6 +13546,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     nellaChat(scheda);
     const root = $('#userQuestionDock');
     if (root) root.hidden = !root.childElementCount;
+    aggiornaSpazioCodaConversazione($('#conversation')); // 03/10: la domanda torna nella chat, la riserva torna quella di sempre
     markMotionEnter(scheda);
     scorriAllaBollaAppesa(scheda);
   }
@@ -13503,8 +13563,8 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const bersaglio = azione?.percorso || azione?.comando || azione?.question || azione?.title || '';
     /* ⛔ 17/09, F15 — `leggi` ha il suo badge: «Chiede il permesso» davanti a un `.env` non dice
        niente, e la persona deve capire a colpo d'occhio se sta per LEGGERE o per CAMBIARE. */
-    const badge = azione?.tipo === 'scrivi' ? 'Chiede di scrivere' : azione?.tipo === 'file_edit' ? 'Chiede di modificare' :azione?.tipo === 'leggi' ? 'Chiede di leggere' : azione?.tipo === 'elenca' ? 'Chiede di aprire una cartella' : (azione?.tipo === 'shell' || azione?.tipo === 'prova') ? 'Chiede di eseguire' : azione?.tipo === 'research_start' ? 'Chiede di cercare' : 'Chiede il permesso';
-    const scheda = creaApprovazione({ badge, bersaglio, perche: descriviAzioneApprovazione(azione), codice: codiceAzioneApprovazione(azione), motivo: motivoRichiestaApprovazione(azione), nota: 'Vale solo per questa richiesta' });
+    const badge = azione?.tipo === 'scrivi' ? tr('app.approval.badgeWrite') : azione?.tipo === 'file_edit' ? tr('app.approval.badgeEdit') : azione?.tipo === 'leggi' ? tr('app.approval.badgeRead') : azione?.tipo === 'elenca' ? tr('app.approval.badgeOpenFolder') : (azione?.tipo === 'shell' || azione?.tipo === 'prova') ? tr('app.approval.badgeRun') : azione?.tipo === 'research_start' ? tr('app.approval.badgeSearch') : tr('app.approval.badgePermission');
+    const scheda = creaApprovazione({ badge, bersaglio, perche: descriviAzioneApprovazione(azione), codice: codiceAzioneApprovazione(azione), motivo: motivoRichiestaApprovazione(azione), nota: tr('app.approval.appliesOnce') });
     const article = scheda.scheda;
     article.classList.add('real-approval-card');
     article.dataset.requestId = requestId;
@@ -13529,15 +13589,17 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
      */
     const davantiAUnSegreto = Boolean(azione?.segreto);
     if (davantiAUnSegreto) sessioneBtn.remove();
+    /* F-027: dopo un contenuto sospetto il kernel chiede anche con «sempre» — «Per questa sessione» sarebbe una promessa falsa. */
+    if (azione?.contenutoSospetto) sessioneBtn.remove();
     /* ⛔ 01/10/2026 notte — stessa ragione per un percorso di rete: il kernel chiede a ogni livello e anche con «sempre»
        (`controllaPercorsoDiRete`), quindi «Per questa sessione» sarebbe una promessa falsa. Restano «Consenti una volta» e «Nega». */
     if (azione?.percorsoDiRete) sessioneBtn.remove();
     /* 02/10/2026 (owner, «Una domanda per sessione»): la cartella della sessione su un computer di rete — il kernel ricorda il sì
        per tutta la sessione (`consensiSessione.reteCartella`): il pulsante lo dice, come la conferma di root in WSL. */
     if (azione?.percorsoDiRete?.ambito === 'sessione') {
-      approvaBtn.textContent = 'Consenti per questa sessione';
+      approvaBtn.textContent = tr('app.approval.allowSession');
       const notaPiede = $('.talos-approval__foot-note', article);
-      if (notaPiede) notaPiede.textContent = 'Vale per tutta la sessione';
+      if (notaPiede) notaPiede.textContent = tr('app.approval.appliesSession');
     }
     /*
      * ⛔ F009 (owner 01/10/2026, «una volta per sessione») — la conferma di root in WSL vale per TUTTA la sessione: il kernel
@@ -13545,10 +13607,10 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
      *   scriverebbe `shell: sempre`, che è un'altra cosa. Restano due azioni: il sì per la sessione, e «Nega».
      */
     if (azione?.wslRoot && !davantiAUnSegreto) {
-      approvaBtn.textContent = 'Consenti per questa sessione';
+      approvaBtn.textContent = tr('app.approval.allowSession');
       sessioneBtn.remove();
       const notaPiede = $('.talos-approval__foot-note', article);
-      if (notaPiede) notaPiede.textContent = 'Vale per tutta la sessione';
+      if (notaPiede) notaPiede.textContent = tr('app.approval.appliesSession');
     }
     /*
      * ⛔⛔ F4-03 (owner 01/10/2026 sera) — FUORI DALLA CARTELLA DELLA SESSIONE con «Scrive nel progetto». «Per questa sessione»
@@ -13559,10 +13621,17 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
      */
     const cartellaConsentibile = Boolean(azione?.fuoriDalProgetto?.verificato === true && azione.fuoriDalProgetto.chiave);
     if (azione?.fuoriDalProgetto && !davantiAUnSegreto && !azione?.wslRoot) {
-      if (cartellaConsentibile) sessioneBtn.textContent = 'Consenti in questa cartella per la sessione';
+      if (cartellaConsentibile) sessioneBtn.textContent = tr('app.approval.allowFolderSession');
       else sessioneBtn.remove();
     }
     let rispostaDataDaQuestaScheda = false;
+    /*
+     * ⛔ Owner 03/10/2026, «Sì, stessa regola»: la regola della domanda di TALOS (revisione Codex del 02/10, rilievo 2). Un invio
+     *   caduto SENZA status non prova niente: il server può averlo preso, con l'ACK perso. Si ricorda che cosa si era mandato, e
+     *   l'attribuzione si decide quando arriva `ApprovalResolved`, confrontando. Un invio respinto CON uno status invece non è
+     *   stato preso: non conta.
+     */
+    const inviiSenzaProva = [];
     const rispondi = async (approvato, perSessione = false, ambito = null) => {
       negaBtn.disabled = true;
       approvaBtn.disabled = true;
@@ -13577,10 +13646,11 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         // ⛔ NIENT'ALTRO qui apposta — vedi il commento sopra: il case ApprovalResolved finalizza la card, sempre e solo lui.
       } catch (error) {
         rispostaDataDaQuestaScheda = false;
+        if (!(Number.isInteger(error?.status) && error.status >= 400)) inviiSenzaProva.push({ approvato: Boolean(approvato), ambito: ambito ?? null });
         negaBtn.disabled = false;
         approvaBtn.disabled = false;
         sessioneBtn.disabled = false;
-        toast('Risposta non riuscita', error.message);
+        toast(tr('app.approval.responseFailed'), error.message);
       }
     };
     negaBtn.addEventListener('click', () => rispondi(false));
@@ -13588,7 +13658,8 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     sessioneBtn.addEventListener('click', () => (cartellaConsentibile ? rispondi(true, false, 'cartella') : rispondi(true, true)));
     nellaChat(article);
     aggiornaTickGiro({ tono: 'warning' });
-    article._rispostaDataQui = () => rispostaDataDaQuestaScheda;
+    article._rispostaDataQui = (risolta) => rispostaDataDaQuestaScheda
+      || Boolean(risolta && inviiSenzaProva.some((inviato) => inviato.approvato === Boolean(risolta.approvato) && inviato.ambito === (risolta.ambito ?? null)));
     markMotionEnter(article);
     scorriAllaBollaAppesa(article);
     return article;
@@ -13603,6 +13674,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   function appendRichiestaMcpCard(evento) {
     const requestId = evento.requestId;
     let rispostaDataDaQuestaScheda = false;
+    const inviiSenzaProva = []; // owner 03/10/2026, «stessa regola»: vedi la carta del consenso qui sopra
     let scheda = null;
     const rispondi = async (corpo) => {
       scheda.inAttesa(true);
@@ -13612,6 +13684,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         await apiPost(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/mcp-elicitation`, { requestId, ...corpo });
       } catch (error) {
         rispostaDataDaQuestaScheda = false;
+        if (!(Number.isInteger(error?.status) && error.status >= 400)) inviiSenzaProva.push(corpo.action);
         if (error?.code === 'ELICITATION_NOT_PENDING') {
           /* il server non aspetta più (risposta da un'altra finestra persa, o un riavvio): la scheda lo dice e si chiude */
           segnaEsitoRichiestaMcp(scheda.scheda, { action: 'cancel', modo: scheda.scheda.dataset.modo, motivo: 'non-in-attesa' });
@@ -13620,7 +13693,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
           return;
         }
         scheda.inAttesa(false);
-        scheda.mostraErrore(error?.message || 'La risposta non è partita: riprova.');
+        scheda.mostraErrore(error?.message || tr('app.approval.answerNotSent'));
       }
     };
     scheda = creaRichiestaMcp(evento, {
@@ -13634,7 +13707,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     article.dataset.requestId = requestId;
     nellaChat(article);
     aggiornaTickGiro({ tono: 'warning' });
-    article._rispostaDataQui = () => rispostaDataDaQuestaScheda;
+    article._rispostaDataQui = (risolta) => rispostaDataDaQuestaScheda || Boolean(risolta && inviiSenzaProva.includes(risolta.action));
     markMotionEnter(article);
     scorriAllaBollaAppesa(article);
     return article;
@@ -13672,7 +13745,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
      */
     {
       const fileTreeBox = $('#inspector-files .file-tree');
-      if (fileTreeBox) fileTreeBox.replaceChildren(textElement('p', 'board-empty', 'Nessuna cartella ancora scelta — i file appariranno qui appena inizi una sessione.'));
+      if (fileTreeBox) fileTreeBox.replaceChildren(textElement('p', 'board-empty', tr('app.files.noFolderYet')));
       const demoBadgeFiles = $('.demo-surface-badge', $('[data-inspector-section="files"]'));
       if (demoBadgeFiles) demoBadgeFiles.hidden = true;
       syncFileTreeToolbar(false);
@@ -13834,7 +13907,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const cartella = attiva?.cartella || (attiva?.origine === 'standalone' ? '' : state.realSession.cartellaAssoluta) || '';
     const segmento = cartella ? ultimoSegmentoWorkspace(cartella) : '';
     const nomeCartella = segmento ? (/[\/]$/.test(segmento) ? segmento : `${segmento}/`) : '';
-    const colori = t.enforcementColore && t.enforcementColore !== 'webgl' ? ` ${tr('Colori limitati ({motivo}).', { motivo: t.enforcementColore })}` : '';
+    const colori = t.enforcementColore && t.enforcementColore !== 'webgl' ? ` ${tr('app.terminal.limitedColors', { motivo: t.enforcementColore })}` : '';
     ui.aggiorna({
       schede,
       attiva: t.attiva,
@@ -13842,20 +13915,20 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       motivoNoNuova: conSessione ? tr(TESTI_TERMINALE.troppeSchede, { n: SCHEDE_MASSIME_TERMINALE }) : tr(TESTI_TERMINALE.nuovaSchedaSenzaSessione),
       badges: [
         /* PO-10: il badge parla delle TUE shell; dove gira un comando dell'agente lo dice la sua riga d'esito */
-        ...(attiva?.origine === 'agente' ? [] : [{ chiave: 'isolamento', testo: tr('Stessa macchina, senza isolamento'), titolo: tr('La shell gira sul tuo computer, nella cartella della sessione: nessuna sandbox.') }]),
-        ...(nomeCartella ? [{ chiave: 'cartella', testo: nomeCartella, titolo: `${cartella} · ${tr('shell sul tuo computer, senza isolamento')}` }] : []),
+        ...(attiva?.origine === 'agente' ? [] : [{ chiave: 'isolamento', testo: tr('app.terminal.sameMachine'), titolo: tr('app.terminal.sameMachineBody') }]),
+        ...(nomeCartella ? [{ chiave: 'cartella', testo: nomeCartella, titolo: `${cartella} · ${tr('app.terminal.shellNoIsolation')}` }] : []),
       ],
       piede: attiva?.origine === 'agente'
         /* ⭐ PO-10 passo 2 — il piede dice il vero: «Aperta da te» era una costante, anche per ciò che non avevi aperto */
         ? { chi: attiva.giro ? tr(TESTI_TERMINALE.lanciataDallAgente, { giro: attiva.giro }) : tr(TESTI_TERMINALE.lanciataDallAgenteSenzaGiro), dettaglio: attiva.cartella || state.realSession.cartellaAssoluta || '', stato: tr(ETICHETTA_STATO_TERMINALE[attiva.stato] ?? attiva.stato), nota: tr(TESTI_TERMINALE.solaLettura) }
         : attiva
-        ? { chi: tr(TESTI_TERMINALE.apertaDaTe), dettaglio: cartella || (attiva.origine === 'standalone' ? tr('cartella predefinita del server') : ''), stato: `${tr(ETICHETTA_STATO_TERMINALE[attiva.stato] ?? attiva.stato)}${attiva.ripreso ? ` · ${tr('shell ripresa')}` : ''}`, /* ⛔ 07/9, visto in una foto: la frase generica («Ogni scheda dichiara chi l'ha aperta e
+        ? { chi: tr(TESTI_TERMINALE.apertaDaTe), dettaglio: cartella || (attiva.origine === 'standalone' ? tr('app.terminal.serverDefaultFolder') : ''), stato: `${tr(ETICHETTA_STATO_TERMINALE[attiva.stato] ?? attiva.stato)}${attiva.ripreso ? ` · ${tr('app.terminal.shellResumed')}` : ''}`, /* ⛔ 07/9, visto in una foto: la frase generica («Ogni scheda dichiara chi l'ha aperta e
              dove») restava accanto al percorso e gli rubava lo spazio, proprio mentre il percorso
              era tagliato e perdeva il nome della cartella. Dove c'è un dato vero, lo spazio è suo:
              la spiegazione resta solo quando non c'è un percorso da mostrare. `colori` invece è un
              fatto, non una spiegazione, e resta sempre. */
           nota: `${cartella ? '' : tr(TESTI_TERMINALE.nota)}${colori}`.trim() }
-        : { chi: tr(TESTI_TERMINALE.nessunaScheda), dettaglio: cartella, stato: '', nota: conSessione ? tr('Premi Nuovo per aprire una shell in questa cartella.') : tr(TESTI_TERMINALE.nuovaSchedaSenzaSessione) },
+        : { chi: tr(TESTI_TERMINALE.nessunaScheda), dettaglio: cartella, stato: '', nota: conSessione ? tr('app.terminal.pressNew') : tr(TESTI_TERMINALE.nuovaSchedaSenzaSessione) },
     });
     aggiornaTestataSessione(); // K-G: il badge «Terminale N» nella testata
   }
@@ -13895,7 +13968,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     if (record.term) return true;
     const corpo = $('#realTerminalMount');
     if (!corpo || !window.Terminal || !window.FitAddon) {
-      statoTerminale().enforcementColore = 'xterm.js non caricato'; // onesto: mai un pannello silenziosamente inerte
+      statoTerminale().enforcementColore = tr('app.terminal.noXterm'); // onesto: mai un pannello silenziosamente inerte
       return false;
     }
     const pezzi = creaTerminaleXterm({
@@ -13912,7 +13985,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       suMisura: () => inviaResizeTerminale(record),
     });
     if (!pezzi) {
-      statoTerminale().enforcementColore = 'xterm.js non caricato';
+      statoTerminale().enforcementColore = tr('app.terminal.noXterm');
       return false;
     }
     Object.assign(record, { term: pezzi.term, fit: pezzi.fit, mount: pezzi.mount, osservatore: pezzi.osservatore });
@@ -13945,15 +14018,15 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   function accendiWebglTerminale(record) {
     const t = statoTerminale();
     if (record.webgl || !record.term) return;
-    if (!window.WebglAddon) { t.enforcementColore = 'dom (WebGL non disponibile)'; return; }
+    if (!window.WebglAddon) { t.enforcementColore = tr('app.terminal.domNoWebgl'); return; }
     try {
       const webgl = new window.WebglAddon.WebglAddon(true);
-      webgl.onContextLoss(() => { webgl.dispose(); record.webgl = null; t.enforcementColore = 'dom (contesto WebGL perso)'; renderizzaSchedeTerminale(); });
+      webgl.onContextLoss(() => { webgl.dispose(); record.webgl = null; t.enforcementColore = tr('app.terminal.domWebglLost'); renderizzaSchedeTerminale(); });
       record.term.loadAddon(webgl);
       record.webgl = webgl;
       t.enforcementColore = 'webgl';
     } catch {
-      t.enforcementColore = 'dom (WebGL non disponibile)';
+      t.enforcementColore = tr('app.terminal.domNoWebgl');
     }
   }
 
@@ -13986,8 +14059,15 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
           record.ripreso = messaggio.ripreso === true;
           if (messaggio.shell) { record.shell = messaggio.shell; record.comando = messaggio.comando || ''; }
           renderizzaSchedeTerminale();
+        } else if (messaggio.evento === 'errore') {
+          /* 03/10/2026: la shell non è partita (cartella sparita, non una cartella, avvio rifiutato). Le parole dal dizionario per
+             `reason`; un motivo che l'interfaccia non conosce si dice con la frase inglese del server, mai con una chiave grezza. */
+          const chiave = { 'folder-missing': 'folderMissing', 'not-a-folder': 'notAFolder', 'spawn-failed': 'spawnFailed' }[messaggio.reason];
+          const testo = chiave ? tr(`app.terminal.startFailed.${chiave}`, { cartella: messaggio.cartella ?? '' }) : String(messaggio.message ?? '');
+          record.term?.writeln(`\r\n[${testo}]`);
+          impostaStatoScheda(record, 'terminato');
         } else if (messaggio.evento === 'uscita') {
-          record.term?.writeln(`\r\n[shell chiusa, codice ${messaggio.codice}]`);
+          record.term?.writeln(`\r\n[${tr('app.terminal.shellClosed', { codice: messaggio.codice })}]`);
           impostaStatoScheda(record, 'terminato');
         }
       } catch { /* messaggio di controllo malformato: ignorato, mai un crash della connessione */ }
@@ -14117,17 +14197,17 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   async function nuovaSchedaTerminale() {
     const t = statoTerminale();
     const sessioneId = state.realSession.id;
-    if (!sessioneId) { toast(tr('Serve una sessione'), tr(TESTI_TERMINALE.nuovaSchedaSenzaSessione)); return; }
-    if (contaShellTerminale(t) >= SCHEDE_MASSIME_TERMINALE) { toast(tr('Troppe schede'), tr(TESTI_TERMINALE.troppeSchede, { n: SCHEDE_MASSIME_TERMINALE })); return; }
+    if (!sessioneId) { toast(tr('app.terminal.sessionNeeded'), tr(TESTI_TERMINALE.nuovaSchedaSenzaSessione)); return; }
+    if (contaShellTerminale(t) >= SCHEDE_MASSIME_TERMINALE) { toast(tr('app.common.tooManyTabs'), tr(TESTI_TERMINALE.troppeSchede, { n: SCHEDE_MASSIME_TERMINALE })); return; }
     try {
       let voce = await apiPost(`/api/v1/sessions/${encodeURIComponent(sessioneId)}/terminals`, {});
       // col registro vuoto la prima POST restituisce la prima scheda (terminalId === sessionId), che qui esiste già
       if (voce?.terminalId && t.schede.has(voce.terminalId)) voce = await apiPost(`/api/v1/sessions/${encodeURIComponent(sessioneId)}/terminals`, {});
-      if (!voce?.terminalId) throw new Error('Il server non ha restituito una scheda');
+      if (!voce?.terminalId) throw new Error(tr('app.terminal.noTabReturned'));
       registraSchedaTerminale(voce);
       attivaSchedaTerminale(voce.terminalId);
     } catch (error) {
-      toast(tr('Scheda non aperta'), error.message);
+      toast(tr('app.terminal.tabNotOpened'), error.message);
     }
   }
 
@@ -14166,7 +14246,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     renderizzaSchedeTerminale();
     t.ui?.fuocoSullaAttiva();
     if (t.sessioneId && record.origine !== 'standalone') {
-      try { await apiPost(`/api/v1/sessions/${encodeURIComponent(t.sessioneId)}/terminals/${encodeURIComponent(id)}/close`, {}); } catch (error) { toast('Shell non chiusa sul server', error.message); }
+      try { await apiPost(`/api/v1/sessions/${encodeURIComponent(t.sessioneId)}/terminals/${encodeURIComponent(id)}/close`, {}); } catch (error) { toast(tr('app.terminal.closeFailed'), error.message); }
     }
   }
 
@@ -14204,7 +14284,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   function testoConTetto(testo) {
     if (testo.length <= USCITA_AGENTE_MAX_CARATTERI) return testo;
     const testa = testo.slice(0, 4_000);
-    return `${testa}\n… (${(testo.length - USCITA_AGENTE_MAX_CARATTERI).toLocaleString('it-IT')} caratteri non tenuti in questa pagina) …\n${testo.slice(-(USCITA_AGENTE_MAX_CARATTERI - 4_000))}`;
+    return `${testa}\n${tr('app.terminal.outputTrimmed', { n: (testo.length - USCITA_AGENTE_MAX_CARATTERI).toLocaleString(localeUI()) })}\n${testo.slice(-(USCITA_AGENTE_MAX_CARATTERI - 4_000))}`;
   }
 
   function registraUscitaAgente(evento) {
@@ -14303,7 +14383,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     if (record.term) return true;
     const corpo = $('#realTerminalMount');
     if (!corpo || !window.Terminal || !window.FitAddon) {
-      statoTerminale().enforcementColore = 'xterm.js non caricato';
+      statoTerminale().enforcementColore = tr('app.terminal.noXterm');
       return false;
     }
     const pezzi = creaTerminaleXterm({
@@ -14317,7 +14397,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       solaLettura: true,
     });
     if (!pezzi) {
-      statoTerminale().enforcementColore = 'xterm.js non caricato';
+      statoTerminale().enforcementColore = tr('app.terminal.noXterm');
       return false;
     }
     Object.assign(record, { term: pezzi.term, fit: pezzi.fit, mount: pezzi.mount, osservatore: pezzi.osservatore, scritto: '' });
@@ -14338,7 +14418,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   /** Punto d'ingresso unico, chiamato da setView('terminal') e da resettaSuperficiRealiDedicate() quando il tab è già aperto. */
   function apriVistaTerminaleReale() {
     const t = statoTerminale();
-    if (!$('#realTerminalMount') || !window.Terminal || !window.FitAddon) { t.enforcementColore = 'xterm.js non caricato'; renderizzaSchedeTerminale(); return; }
+    if (!$('#realTerminalMount') || !window.Terminal || !window.FitAddon) { t.enforcementColore = tr('app.terminal.noXterm'); renderizzaSchedeTerminale(); return; }
     const sessioneId = state.realSession.id || null;
     const avvia = () => {
       if (t.attiva && t.schede.has(t.attiva)) attivaSchedaTerminale(t.attiva);
@@ -14357,11 +14437,70 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   /** P-i18n (06/09): al cambio di lingua le superfici disegnate dal codice si ridisegnano; il template lo fa `applicaLingua`. */
   function collegaRidisegnoLingua() {
     document.documentElement.addEventListener(EVENTO_LINGUA, () => {
+      // il segnaposto «nessuna sessione» è un valore calcolato all'avvio: nella lingua nuova va riletto (un nome vero scelto dalla persona no)
+      if (state.session === TESTI.it['app.sessions.none'] || state.session === TESTI.en['app.sessions.none']) {
+        state.session = tr('app.sessions.none');
+        $$('[data-current-session-title]').forEach((label) => { label.textContent = state.session; });
+      }
       renderizzaSchedeTerminale();
       renderizzaBrowser();
       ritraduciImpostazioni($('#schermoImpostazioni'));
       sincronizzaSelettoriDensitaLingua(normalizzaAspettoDesktop(leggiImpostazioniDesktop().appearance));
+      ridisegnaNellaLinguaNuova();
     });
+  }
+
+  /*
+   * Owner 03/10/2026, «Ridisegno dal vivo (Consigliato)»: cambiata la lingua, ogni superficie VISIBILE si ridisegna subito,
+   *   senza ricaricare la pagina. Hermes lo ottiene col contesto React (`apps/desktop/src/i18n/context.tsx:301`, `useI18n`):
+   *   chi legge le parole si ridisegna da sé. Qui non c'è un framework, quindi l'elenco è esplicito:
+   *   - la vista corrente rifà il suo caricamento, lo stesso di `setView` (`caricaContenutoVista`);
+   *   - il Laboratorio modelli, se è montato, si ridisegna dallo STATO che ha già (nessuna richiesta in più);
+   *   - la barra delle sessioni, la testata, il piede e l'ispettore;
+   *   - la conversazione aperta si rilegge dal server: subito se il giro è fermo, alla FINE del giro se sta lavorando — il
+   *     flusso in corso non si tocca (`rileggiDopoIlGiroSeChiesto`).
+   *   La Home si ridisegna già da sola (`features/navigation/workspace-chrome.ts:235`).
+   * ⛔ Un pezzo che non riesce a ridisegnarsi non ferma gli altri: si dice in console e si va avanti.
+   */
+  function ridisegnaNellaLinguaNuova() {
+    const passi = [
+      () => caricaContenutoVista(state.view),
+      () => { if (state.view === 'dashboard' && state.board.initialized) void refreshSessionsBoard(); },
+      () => {
+        if (!state.modelLab?.initialized) return;
+        for (const disegna of [renderizzaProviderModelLab, renderizzaModelliLocaliModelLab, renderizzaRuntimeModelLab,
+          renderizzaHfConMockup, renderizzaCatalogoModelLab, aggiornaPannelloMemoria, renderizzaDownloadConMockup]) {
+          try { disegna(); } catch (errore) { console.warn('[lingua] Laboratorio modelli:', errore); }
+        }
+      },
+      () => { void aggiornaElencoSessioniReali(); },
+      () => { aggiornaPiedeSidebar(); aggiornaTestataSessione(); aggiornaSottotitoloSessione(); },
+      () => aggiornaInspectorDaStato({ subito: true }),
+      () => rileggiConversazioneNellaLingua(),
+    ];
+    for (const passo of passi) {
+      try { passo(); } catch (errore) { console.warn('[lingua] ridisegno:', errore); }
+    }
+  }
+
+  /* La conversazione è fatta di righe scritte quando l'evento è arrivato: per dirle nella lingua nuova si rilegge la storia
+     dal server, come quando la si riapre. Un giro che sta lavorando non si interrompe: si rilegge quando finisce. */
+  function rileggiConversazioneNellaLingua() {
+    const id = state.realSession.id;
+    if (!id) return;
+    if (runRealeAttivo()) { state.realSession.rileggiDopoIlGiro = id; return; }
+    state.realSession.rileggiDopoIlGiro = null;
+    const voce = state.sessionSelection.available?.get?.(id) ?? null;
+    if (voce) passaASessione(voce.sessionId, voce.taskId || voce.sessionId, voce.nome || voce.taskId, normalizzaModelloSessione(voce), voce, { forza: true });
+    else passaASessione(id, state.realSession.taskId || id, state.session, null, null, { forza: true });
+  }
+
+  function rileggiDopoIlGiroSeChiesto() {
+    const id = state.realSession.rileggiDopoIlGiro;
+    if (!id || state.realSession.inRigiocata) return;
+    state.realSession.rileggiDopoIlGiro = null;
+    /* dopo che il giro ha finito di disegnarsi, e solo se la sessione è ancora quella */
+    setTimeout(() => { if (state.realSession.id === id) rileggiConversazioneNellaLingua(); }, 0);
   }
   function collegaScorciatoieTerminale() {
     ROOT().addEventListener('keydown', (event) => {
@@ -14502,9 +14641,9 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       throw errore;
     }
     let busta;
-    try { busta = await risposta.json(); } catch { const e = new Error('Risposta locale non valida'); e.code = 'INTERNAL_ERROR'; throw e; }
+    try { busta = await risposta.json(); } catch { const e = new Error(tr('app.errors.invalidLocalResponse')); e.code = 'INTERNAL_ERROR'; throw e; }
     if (!risposta.ok || !busta?.ok) {
-      const e = new Error(busta?.error?.message || 'Richiesta locale non riuscita');
+      const e = new Error(busta?.error?.message || tr('app.errors.localRequestFailed'));
       e.code = busta?.error?.code || 'INTERNAL_ERROR';
       e.stato = risposta.status;
       throw e;
@@ -14542,7 +14681,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         if (errore?.name === 'AbortError' || !voloCorrente(id, volo)) return null;
         richiesteBrowser.delete(id);
         if (tentativo > BROWSER_RITENTATIVI) throw errore;
-        voce.stato = 'ritento'; voce.motivo = messaggioErroreUtente(errore, 'Il server non ha risposto');
+        voce.stato = 'ritento'; voce.motivo = messaggioErroreUtente(errore, tr('app.browser.serverNoResponse'));
         voce.genere = null; voce.dettagli = null; onStato?.();
         if (!await aspettaRitentativo(id, tentativo)) return null;
       }
@@ -14631,7 +14770,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
        */
       apri: (url) => {
         apriPaginaVivaBrowser(url).catch((errore) => {
-          browserUi?.avvisa(messaggioErroreUtente(errore, 'Non sono riuscito ad aprire questo indirizzo.'));
+          browserUi?.avvisa(messaggioErroreUtente(errore, tr('app.browser.cannotOpenAddress')));
         });
       },
       caricata: (id) => { const v = state.realSession.browserVive.find((x) => x.id === id); if (v && v.stato === 'caricamento') { v.stato = 'pronta'; renderizzaBrowser(); } },
@@ -14688,7 +14827,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
           .catch((errore) => {
             pagina.incorniciabile = false;
             pagina.stato = 'irraggiungibile';
-            pagina.motivo = messaggioErroreUtente(errore, 'Non ho potuto controllare se questa pagina si lascia mostrare qui dentro.');
+            pagina.motivo = messaggioErroreUtente(errore, tr('app.browser.cannotCheckFraming'));
             pagina.motivoCornice = pagina.motivo;
             // il server non ha risposto affatto: nessun genere da nominare, il pannello mostra il messaggio così com'è
             pagina.genere = null; pagina.dettagli = null;
@@ -14704,7 +14843,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         const rs = state.realSession;
         fermaRichiestaBrowser(s.id);
         if (s.tipo === 'viva') {
-          apriPaginaVivaBrowser(s.url, s.id).catch((errore) => browserUi?.avvisa(messaggioErroreUtente(errore, 'Non sono riuscito ad aprire questo indirizzo.')));
+          apriPaginaVivaBrowser(s.url, s.id).catch((errore) => browserUi?.avvisa(messaggioErroreUtente(errore, tr('app.browser.cannotOpenAddress'))));
           return;
         }
         const pagina = rs.browserPagine.find((p) => (p.id || null) === s.id);
@@ -14725,13 +14864,13 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       rileggi: (s) => {
         if (s.tipo === 'viva') {
           apriPaginaVivaBrowser(s.url, s.id).catch((errore) => {
-            browserUi?.avvisa(messaggioErroreUtente(errore, 'Non sono riuscito a ricaricare questa pagina.'));
+            browserUi?.avvisa(messaggioErroreUtente(errore, tr('app.browser.cannotReload')));
           });
-        } else preparaCommentoNelComposer(`Rileggi la pagina ${s.url} e dimmi cosa è cambiato.`);
+        } else preparaCommentoNelComposer(tr('app.browser.promptReread', { url: s.url }));
       },
       annota: (s, attivo) => {
         if (typeof attivo === 'boolean') { state.realSession.browserAnnotaAttivo = attivo; renderizzaBrowser(); return; }
-        preparaCommentoNelComposer(`Riguardo alla pagina ${s.url}: `);
+        preparaCommentoNelComposer(`${tr('app.browser.promptAbout', { url: s.url })} `);
       },
       annotazione: (s, fatto) => {
         const rs = state.realSession; const lista = rs.browserAnnotazioni[s.id] || (rs.browserAnnotazioni[s.id] = []);
@@ -14749,11 +14888,11 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         const pacchetto = impacchettaAnnotazioni({ url: s.url, titolo: s.titolo || null }, lista, rs.browserErroriPagina[s.id] || []);
         rs.browserAnnotaAttivo = false;
         preparaCommentoNelComposer(pacchetto);
-        toast('Commenti nel composer', `${lista.length} ${lista.length === 1 ? 'commento' : 'commenti'} sulla pagina: rileggi e invia quando vuoi.`);
+        toast(tr('app.browser.commentsReady'), trn('app.browser.commentsReadyBodyOne', 'app.browser.commentsReadyBodyMany', lista.length));
       },
-      copia: (s) => { if (s.testo) copyText(s.testo, 'Testo della pagina copiato'); },
+      copia: (s) => { if (s.testo) copyText(s.testo, tr('app.browser.pageTextCopied')); },
       apriFuori: (s) => { if (/^https?:\/\//i.test(s.url)) window.open(s.url, '_blank', 'noopener'); },
-      salvaNota: (s, testo) => { salvaNotaBrowser(s.url, testo); renderizzaBrowser(); toast(testo ? 'Nota conservata' : 'Nota tolta', 'Resta in questo browser, per questa sessione.'); },
+      salvaNota: (s, testo) => { salvaNotaBrowser(s.url, testo); renderizzaBrowser(); toast(testo ? tr('app.browser.noteKept') : tr('app.browser.noteRemoved'), tr('app.browser.noteBody')); },
       decidi: (requestId, si) => { const b = $(`.real-approval-card[data-request-id="${CSS.escape(requestId)}"] ${si ? '[data-approva-una-volta]' : '[data-nega]'}`); if (b) b.click(); },
     } });
     return browserUi;
@@ -14883,7 +15022,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   async function spillaSullaPaginaViva(voce, punto) {
     try {
       const fatto = await apiPost(`/api/v1/browser/vivo/descrivi?sessione=${encodeURIComponent(identitaBrowser())}`, punto);
-      if (!fatto?.trovato) { toast('Niente da annotare', 'Sotto quel punto non c’è nessun elemento.'); return; }
+      if (!fatto?.trovato) { toast(tr('app.browser.nothingToAnnotate'), tr('app.browser.noElement')); return; }
       const rs = state.realSession;
       const lista = rs.browserAnnotazioni[voce.id] || (rs.browserAnnotazioni[voce.id] = []);
       lista.push({ nota: '', fatto });
@@ -14891,7 +15030,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       renderizzaBrowser();
       $('#browserAnnotazioni .talos-annotazione:last-child textarea')?.focus();
     } catch (errore) {
-      toast('Commento non riuscito', messaggioErroreUtente(errore, 'Non riesco a leggere quell’elemento.'));
+      toast(tr('app.browser.commentFailed'), messaggioErroreUtente(errore, tr('app.browser.cannotReadElement')));
     }
   }
 
@@ -15029,14 +15168,14 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
          * ⇒ Se la pagina non si è caricata la vista si smonta: resta UNA riga, quella vera.
          */
         voce.stato = 'bloccata';
-        voce.motivo = esito?.errore || 'La pagina non si è caricata';
+        voce.motivo = esito?.errore || tr('app.browser.pageNotLoaded');
         await smontaVistaViva();
         renderizzaBrowser();
         return true;
       }
     } catch (errore) {
       voce.stato = 'bloccata';
-      voce.motivo = messaggioErroreUtente(errore, 'Non riesco ad aprire questa pagina in un browser pilotato.');
+      voce.motivo = messaggioErroreUtente(errore, tr('app.browser.cannotOpenDriven'));
       vistaViva.stato('errore');
       renderizzaBrowser();
       return true;
@@ -15075,7 +15214,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const stessoIndirizzo = (a, b) => { try { return new URL(a).href === new URL(b).href; } catch { return a === b; } };
     const giaAperta = idEsistente ? null : rs.browserVive.find((x) => stessoIndirizzo(x.url, url));
     if (giaAperta) idEsistente = giaAperta.id;
-    if (!idEsistente && schedeBrowser().length >= MASSIMO_SCHEDE_BROWSER) { toast('Troppe schede', `Chiudine una: il massimo è ${MASSIMO_SCHEDE_BROWSER}.`); return; }
+    if (!idEsistente && schedeBrowser().length >= MASSIMO_SCHEDE_BROWSER) { toast(tr('app.common.tooManyTabs'), tr('app.browser.tooManyBody', { massimo: MASSIMO_SCHEDE_BROWSER })); return; }
     const gia = idEsistente ? rs.browserVive.find((x) => x.id === idEsistente) : null;
     const voce = gia || { id: `viva-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`, tipo: 'viva', origine: 'tu', url, titolo: null, quando: new Date().toISOString(), stato: 'caricamento', motivo: null, proxata: localeAnnotabile(url) };
     if (gia) { gia.url = url; gia.stato = 'caricamento'; gia.motivo = null; gia.quando = new Date().toISOString(); gia.proxata = localeAnnotabile(url); rs.browserAnnotazioni[gia.id] = []; } else rs.browserVive.push(voce);
@@ -15133,14 +15272,14 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
            si riprova (ed è `irraggiungibile`, col motivo classificato dal server), il secondo no. */
         if (!conVista) {
           voce.stato = CLIENT_GUASTI.has(esito?.genere) ? 'irraggiungibile' : 'bloccata';
-          voce.motivo = esito?.motivo || 'Il sito non consente di essere mostrato dentro TALOS';
+          voce.motivo = esito?.motivo || tr('app.browser.siteForbidsFraming');
           voce.genere = esito?.genere || null; voce.dettagli = esito?.dettagli || null;
         }
       }
       void dallaPaginaAgliOcchiDelModello(voce); // 06/9: quello che guardi tu, lo deve vedere anche lui
     } catch (error) {
       if (error?.name === 'AbortError') { voce.stato = 'annullata'; voce.motivo = null; voce.genere = null; voce.dettagli = null; } // annullare non è un guasto
-      else { voce.stato = 'irraggiungibile'; voce.motivo = messaggioErroreUtente(error, 'Il server non ha potuto controllare la pagina'); voce.genere = null; voce.dettagli = null; }
+      else { voce.stato = 'irraggiungibile'; voce.motivo = messaggioErroreUtente(error, tr('app.browser.serverCouldNotCheck')); voce.genere = null; voce.dettagli = null; }
     }
     renderizzaBrowser();
   }
@@ -15163,7 +15302,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       if (!grezzo.trim()) return;
       const pulito = sembraHtml(grezzo) ? testoLeggibile(grezzo) : grezzo;
       if (!pulito.trim()) return;
-      const nome = `Pagina aperta: ${voce.titolo || hostDaUrl(voce.url) || voce.url}`;
+      const nome = tr('app.browser.pageOpened', { titolo: voce.titolo || hostDaUrl(voce.url) || voce.url });
       // una sola pagina alla volta: aprirne un'altra sostituisce la precedente, non le somma
       const indice = allegatiComposer.findIndex((a) => a.daBrowser);
       const allegato = { tipo: 'testo', nome, percorso: voce.url, caratteri: pulito.length, contenuto: pulito, daBrowser: true };
@@ -15206,13 +15345,13 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       composerForm.prepend(avviso);
     }
     avviso.textContent = silenzioso
-      ? 'Comando in silenzio: gira subito sulla tua macchina e non comparirà in chat.'
-      : 'Comando: gira subito sulla tua macchina, senza passare dal modello.';
+      ? tr('app.composer.silentCommandHint')
+      : tr('app.composer.commandHint');
   }
 
   async function runDirectShell(comando, silenzioso) {
     if (!state.realSession.id) {
-      toast('Nessuna sessione reale attiva', 'Avvia un task dal corpus prima di usare un comando diretto.');
+      toast(tr('app.composer.noRealSession'), tr('app.composer.noRealSessionBody'));
       return;
     }
     const sessionId = state.realSession.id;
@@ -15242,9 +15381,9 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
        *   foto del 10/09). Resta solo per `!!`, dove in chat per scelta non compare niente e
        *   senza un cenno sembrerebbe non aver fatto nulla.
        */
-      if (silenzioso) toast('Comando eseguito in silenzio', 'Non compare in chat, come hai chiesto con !!.');
+      if (silenzioso) toast(tr('app.composer.silentDone'), tr('app.composer.silentDoneBody'));
     } catch (error) {
-      toast('Comando non eseguito', error.message);
+      toast(tr('app.composer.commandFailed'), error.message);
     }
   }
 
@@ -15360,23 +15499,23 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     };
     const blocco = (testo, linguaggio = '') => { const f = recinto(testo); return `${f}${linguaggio}\n${testo}\n${f}`; };
     const descriviTask = (input) => {
-      if (!input) return '(nessun dettaglio)';
-      if (input.comandoDiretto) return `Comando diretto: \`${input.comandoDiretto}\``;
+      if (!input) return tr('app.transcript.noDetail');
+      if (input.comandoDiretto) return tr('app.transcript.directCommand', { comando: input.comandoDiretto });
       if (input.consegna) return `${input.seguito ? '**Follow-up:** ' : ''}${input.consegna}`;
       return blocco(JSON.stringify(input, null, 2), 'json');
     };
 
-    righe.push(`# Trascrizione sessione TALOS Harness`, '');
-    righe.push(`- **Sessione:** ${esportato.nome || esportato.taskId || esportato.sessionId}`);
+    righe.push(tr('app.transcript.heading'), '');
+    righe.push(tr('app.transcript.session', { nome: esportato.nome || esportato.taskId || esportato.sessionId }));
     righe.push(`- **Id:** \`${esportato.sessionId}\``);
-    righe.push(`- **Modello:** ${esportato.modello || '(default)'}`);
-    righe.push(`- **Avviata:** ${esportato.avviataAlle || '?'}`);
-    righe.push(`- **Conclusa:** ${esportato.conclusa ? 'sì' : 'no'}`);
-    if (esportato.forkDa) righe.push(`- **Fork da:** \`${esportato.forkDa}\``);
-    righe.push(`- **Eventi totali:** ${Array.isArray(esportato.eventi) ? esportato.eventi.length : 0}`, '');
+    righe.push(tr('app.transcript.model', { modello: esportato.modello || '(default)' }));
+    righe.push(tr('app.transcript.started', { quando: esportato.avviataAlle || '?' }));
+    righe.push(tr('app.transcript.finished', { esito: esportato.conclusa ? tr('app.transcript.yes') : tr('app.transcript.no') }));
+    if (esportato.forkDa) righe.push(tr('app.transcript.forkFrom', { id: esportato.forkDa }));
+    righe.push(tr('app.transcript.totalEvents', { n: Array.isArray(esportato.eventi) ? esportato.eventi.length : 0 }), '');
 
     if (!Array.isArray(esportato.eventi) || esportato.eventi.length === 0) {
-      righe.push('> ⛔ Nessun evento registrato per questa sessione.');
+      righe.push(tr('app.transcript.noEvents'));
       return righe.join('\n');
     }
 
@@ -15385,10 +15524,10 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       switch (evento.type) {
         case 'RunStarted': {
           numeroGiro += 1;
-          righe.push(`## Giro ${numeroGiro}`, '');
-          if (evento.contesto?.modello) righe.push(`- **Modello del giro:** ${evento.contesto.modello}`);
-          if (evento.contesto?.reasoning?.effort) righe.push(`- **Ragionamento:** ${evento.contesto.reasoning.effort}`);
-          if (evento.contesto?.permessi) righe.push(`- **Permessi del giro:** ${evento.contesto.permessi}`);
+          righe.push(tr('app.transcript.turn', { n: numeroGiro }), '');
+          if (evento.contesto?.modello) righe.push(tr('app.transcript.turnModel', { modello: evento.contesto.modello }));
+          if (evento.contesto?.reasoning?.effort) righe.push(tr('app.transcript.reasoningEffort', { effort: evento.contesto.reasoning.effort }));
+          if (evento.contesto?.permessi) righe.push(tr('app.transcript.turnPermissions', { permessi: evento.contesto.permessi }));
           righe.push('', descriviTask(evento.input), '');
           break;
         }
@@ -15412,7 +15551,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         }
         case 'TextMessageEnd': {
           const testo = testoBuffer.get(evento.messageId);
-          if (testo !== undefined) { righe.push('**Assistente:**', '', testo, ''); testoBuffer.delete(evento.messageId); }
+          if (testo !== undefined) { righe.push(tr('app.transcript.assistant'), '', testo, ''); testoBuffer.delete(evento.messageId); }
           break;
         }
         case 'ReasoningMessageContent': {
@@ -15421,7 +15560,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         }
         case 'ReasoningMessageEnd': {
           const pensiero = ragionamentoBuffer.get(evento.messageId);
-          if (pensiero !== undefined) { righe.push('<details><summary>💭 Ragionamento</summary>', '', pensiero, '', '</details>', ''); ragionamentoBuffer.delete(evento.messageId); }
+          if (pensiero !== undefined) { righe.push(`<details><summary>${tr('app.transcript.reasoningSummary')}</summary>`, '', pensiero, '', '</details>', ''); ragionamentoBuffer.delete(evento.messageId); }
           break;
         }
         case 'ToolCallStart': {
@@ -15434,58 +15573,58 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
           break;
         }
         case 'ToolCallResult': {
-          const info = toolBuffer.get(evento.toolCallId) || { nome: '(sconosciuto)', argomenti: '' };
+          const info = toolBuffer.get(evento.toolCallId) || { nome: tr('app.transcript.unknown'), argomenti: '' };
           let argFormattati = info.argomenti;
           try { argFormattati = JSON.stringify(JSON.parse(info.argomenti), null, 2); } catch { /* args non-JSON o incompleti: mostrati grezzi, mai persi */ }
           // ⛔ 04/9, owner: niente nomi tecnici come etichetta. Nome umano primario, identificativo come dettaglio — la forma raccomandata dall'Agent Client Protocol («title» in evidenza, «name» secondario).
-          righe.push(`**🔧 ${nomeUmanoAttrezzo(info.nome)}** · \`${info.nome}\``, '', 'Argomenti:', blocco(argFormattati || '(nessuno)', 'json'), '', 'Esito (completo, mai troncato):', blocco(String(evento.content ?? '')), '');
+          righe.push(`**🔧 ${nomeUmanoAttrezzo(info.nome)}** · \`${info.nome}\``, '', tr('app.transcript.arguments'), blocco(argFormattati || tr('app.transcript.none'), 'json'), '', tr('app.transcript.outcomeFull'), blocco(String(evento.content ?? '')), '');
           toolBuffer.delete(evento.toolCallId);
           break;
         }
         case 'StateDelta': {
           const operazione = evento.delta?.[0];
           if (operazione?.path === '/usage') {
-            righe.push(`_Utilizzo token aggiornato: ${blocco(JSON.stringify(operazione.value), 'json')}_`, '');
+            righe.push(tr('app.transcript.usageUpdated', { valore: blocco(JSON.stringify(operazione.value), 'json') }), '');
           } else if (operazione?.path?.startsWith('/file/')) {
             const percorso = operazione.path.replace(/^\/file\//, '');
-            righe.push(`✏️ **File ${operazione.op === 'add' ? 'creato' : 'modificato'}:** \`${percorso}\` _(contenuto completo nel formato JSON)_`, '');
+            righe.push(tr(operazione.op === 'add' ? 'app.transcript.fileCreated' : 'app.transcript.fileModified', { percorso }), '');
           } else {
             righe.push(`_StateDelta:_ ${blocco(JSON.stringify(evento.delta), 'json')}`, '');
           }
           break;
         }
         case 'ArtifactCreated': {
-          righe.push(`📦 **Artefatto creato:** ${evento.titolo || '(senza titolo)'} (\`${evento.id}\`)`, '');
+          righe.push(tr('app.transcript.artifactCreated', { titolo: evento.titolo || tr('app.transcript.untitled'), id: evento.id }), '');
           break;
         }
         case 'WorkspaceChanged': {
-          const elenco = Array.isArray(evento.percorsi) ? evento.percorsi.join(', ') : '(percorsi non specificati)';
-          righe.push(`📁 _Cambiamento esterno nel workspace: ${elenco}_`, '');
+          const elenco = Array.isArray(evento.percorsi) ? evento.percorsi.join(', ') : tr('app.transcript.pathsUnspecified');
+          righe.push(tr('app.transcript.workspaceChanged', { elenco }), '');
           break;
         }
         case 'QueuedMessageDelivered': {
-          righe.push(`⏭️ **Follow-up dalla coda:**`, '', evento.testo ?? '', '');
+          righe.push(tr('app.transcript.queuedFollowUp'), '', evento.testo ?? '', '');
           break;
         }
         case 'ApprovalRequested': {
-          righe.push(`⏸ **Approvazione richiesta:** ${descriviAzioneApprovazione(evento.azione)}`, '');
+          righe.push(tr('app.transcript.approvalRequested', { azione: descriviAzioneApprovazione(evento.azione) }), '');
           break;
         }
         case 'ApprovalResolved': {
-          righe.push(`_Approvazione ${evento.approvato ? 'CONCESSA' : 'NEGATA'}${evento.ambito === 'cartella' ? ' in questa cartella per la sessione' : ''}${evento.motivo === 'nessuna-interfaccia' ? ': nessuno poteva rispondere in questa sessione automatica' : ''}._`, '');
+          righe.push(tr('app.transcript.approvalResolved', { esito: evento.approvato ? tr('app.transcript.granted') : tr('app.transcript.denied'), cartella: evento.ambito === 'cartella' ? tr('app.transcript.inThisFolder') : '', automatica: evento.motivo === 'nessuna-interfaccia' ? tr('app.transcript.nobodyCouldAnswer') : '' }), '');
           break;
         }
         case 'RunFinished': {
-          righe.push('— giro concluso —', '');
+          righe.push(tr('app.transcript.turnDone'), '');
           break;
         }
         case 'RunError': {
-          righe.push(`> ⛔ **ERRORE${evento.code ? ` [${evento.code}]` : ''}:** ${evento.message}`, '');
+          righe.push(tr('app.transcript.error', { codice: evento.code ? ` [${evento.code}]` : '', messaggio: evento.message }), '');
           break;
         }
         default: {
           // ⛔ mai un evento silenziosamente scartato — vedi il commento di testa
-          righe.push(`_Evento non riconosciuto \`${evento.type}\`:_`, blocco(JSON.stringify(evento), 'json'), '');
+          righe.push(tr('app.transcript.unknownEvent', { tipo: evento.type }), blocco(JSON.stringify(evento), 'json'), '');
         }
       }
     }
@@ -15694,7 +15833,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   /** ⭐ 02/09 — il diff di UN file come testo semplice; ⭐ 17/09 BC-63: lo usa anche il menu della linguetta. */
   function testoDiffDiUnFile(file) {
     return [
-      `### ${file.path}${file.nuovo ? ' (nuovo)' : ''}`,
+      `### ${file.path}${file.nuovo ? ` (${tr('app.review.newFileSuffix')})` : ''}`,
       ...(file.code || []).map(([kind, text]) => text),
       '',
     ].join('\n');
@@ -15730,8 +15869,8 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         seleziona: (chiave) => renderReviewFile(chiave),
         puoAprire: () => Boolean(state.realSession.id),
         apri: (voce) => { void apriFileAlbero(voce.path, voce.path.split('/').pop()); },
-        copiaPercorso: (voce) => { void copyText(voce.path, 'Percorso copiato'); },
-        copiaDiff: (voce) => { void copyText(testoDiffDiUnFile(voce), `Diff di ${voce.path.split('/').pop()} copiato`); },
+        copiaPercorso: (voce) => { void copyText(voce.path, tr('app.common.pathCopied')); },
+        copiaDiff: (voce) => { void copyText(testoDiffDiUnFile(voce), tr('app.review.diffCopied', { nome: voce.path.split('/').pop() })); },
       },
     });
     return uiReview;
@@ -15843,7 +15982,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   function scriviStatoRigaAlbero(segno, stato) {
     segno.className = `ft-status-dot ft-${stato} talos-file-row__state`;
     segno.textContent = stato === 'new' ? 'A' : 'M';
-    const frase = stato === 'new' ? 'Creato in questa sessione' : 'Modificato in questa sessione';
+    const frase = stato === 'new' ? tr('app.files.createdHere') : tr('app.files.modifiedHere');
     segno.title = frase;
     segno.setAttribute('aria-label', frase);
     segno.setAttribute('role', 'img');
@@ -15863,7 +16002,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     return figli
       .map((figlia) => ({ figlia, voce: (figlia?.attivita?.file || []).find((x) => x.percorso === percorsoCompleto) }))
       .filter((x) => x.voce)
-      .map(({ figlia, voce }) => ({ figlia, scritto: voce.scritto === true, alLavoro: figlia.conclusa !== true && figlia.interrotta !== true, nome: figlia.taskCorto || figlia.task || 'Agente' }));
+      .map(({ figlia, voce }) => ({ figlia, scritto: voce.scritto === true, alLavoro: figlia.conclusa !== true && figlia.interrotta !== true, nome: figlia.taskCorto || figlia.task || tr('app.delegations.agentFallback') }));
   }
   function scriviSegnoAgentiRiga(row, percorsoCompleto) {
     const agenti = agentiSulFile(percorsoCompleto);
@@ -15890,8 +16029,8 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     segno.classList.toggle('is-al-lavoro', alLavoro.length > 0);
     const chi = (elenco) => elenco.map((x) => `«${String(x.nome).slice(0, 60)}»`).join(', ');
     const frase = alLavoro.length > 0
-      ? `${alLavoro.some((x) => x.scritto) ? 'Lo sta modificando' : 'Lo sta leggendo'}: ${chi(alLavoro)}. Apri l'agente.`
-      : `Lo ha toccato: ${chi(agenti)}. Apri l'agente.`;
+      ? tr(alLavoro.some((x) => x.scritto) ? 'app.files.agentEditing' : 'app.files.agentReading', { chi: chi(alLavoro) })
+      : tr('app.files.agentTouched', { chi: chi(agenti) });
     segno.title = frase;
     segno.setAttribute('aria-label', frase);
   }
@@ -15938,7 +16077,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     campo.type = 'text';
     campo.className = 'ft-rename talos-field__input';
     campo.value = nome;
-    campo.setAttribute('aria-label', `Nuovo nome per ${nome}`);
+    campo.setAttribute('aria-label', tr('app.files.newNameFor', { nome: nome }));
     let risolto = false;
     const ripristina = () => { delete li.dataset.rinominaInCorso; campo.replaceWith(etichetta); row.focus({ preventScroll: true }); };
     const conferma = async () => {
@@ -15987,15 +16126,15 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       allega.className = 'talos-button talos-button--primary talos-button--sm';
       allega.dataset.c = 'Button';
       allega.dataset.azioneSelezione = 'allega';
-      allega.textContent = 'Allega alla chat';
+      allega.textContent = tr('app.files.attachToChat');
       const menu = document.createElement('button');
       menu.type = 'button';
       menu.className = 'talos-button talos-button--ghost talos-button--sm talos-icon-button';
       menu.dataset.c = 'Button';
       menu.dataset.azioneSelezione = 'menu';
       menu.setAttribute('aria-haspopup', 'menu');
-      menu.setAttribute('aria-label', 'Azioni sulla selezione');
-      menu.title = 'Azioni sulla selezione';
+      menu.setAttribute('aria-label', tr('app.files.selectionActions'));
+      menu.title = tr('app.files.selectionActions');
       menu.appendChild(iconaSvgAlbero('i-more'));
       allega.addEventListener('click', () => azioniSelezioneFile('allega'));
       menu.addEventListener('click', () => apriMenuSelezioneFile(menu));
@@ -16003,7 +16142,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       sezione.appendChild(piede);
     }
     const n = scelti.length;
-    $('.talos-file-selezione__conteggio', piede).textContent = `${n} ${n === 1 ? 'selezionato' : 'selezionati'}`;
+    $('.talos-file-selezione__conteggio', piede).textContent = trn('app.files.selectedOne', 'app.files.selectedMany', n);
   }
   /** Le azioni della selezione: ognuna su TUTTI i file scelti. */
   function azioniSelezioneFile(azione) {
@@ -16015,7 +16154,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     }
     if (azione === 'copia') {
       void navigator.clipboard?.writeText(scelti.join('\n'));
-      toast('Percorsi copiati', `${scelti.length} file`);
+      toast(tr('app.files.pathsCopied'), trn('app.files.countOne', 'app.files.countMany', scelti.length));
       return;
     }
     if (azione === 'deseleziona') {
@@ -16032,9 +16171,9 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const scelti = [...fileSelezionati()];
     if (scelti.length === 0) return;
     apriMenuAzioniLibreria([
-      { chiave: 'allega', etichetta: 'Allega alla chat', icona: 'i-link', aziona: () => azioniSelezioneFile('allega') },
-      { chiave: 'copia', etichetta: 'Copia i percorsi', icona: 'i-code', aziona: () => azioniSelezioneFile('copia') },
-      { chiave: 'deseleziona', etichetta: 'Deseleziona tutto', icona: 'i-x', separaPrima: true, aziona: () => azioniSelezioneFile('deseleziona') },
+      { chiave: 'allega', etichetta: tr('app.files.attachToChat'), icona: 'i-link', aziona: () => azioniSelezioneFile('allega') },
+      { chiave: 'copia', etichetta: tr('app.files.selection.copyPaths'), icona: 'i-code', aziona: () => azioniSelezioneFile('copia') },
+      { chiave: 'deseleziona', etichetta: tr('app.files.selection.deselectAll'), icona: 'i-x', separaPrima: true, aziona: () => azioniSelezioneFile('deseleziona') },
     ], { ancoraEl });
   }
 
@@ -16055,10 +16194,10 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       bottoneUp.disabled = !enabled || !fuoriSessioneDisponibile();
       const aperto = state.realSession.fuoriSessioneAperto;
       bottoneUp.setAttribute('aria-pressed', String(aperto));
-      bottoneUp.title = aperto ? 'Chiudi, torna alla sessione' : 'Risali fuori dalla sessione';
-      bottoneUp.setAttribute('aria-label', aperto ? 'Chiudi, torna alla sola cartella della sessione' : 'Risali fuori dalla sessione (sola lettura)');
+      bottoneUp.title = aperto ? tr('app.files.outsideClose') : tr('app.files.outsideOpen');
+      bottoneUp.setAttribute('aria-label', aperto ? tr('app.files.outsideCloseLabel') : tr('app.files.outsideOpenLabel'));
       const testoUp = $('span', bottoneUp);
-      if (testoUp) testoUp.textContent = aperto ? 'Torna alla sola cartella della sessione' : 'Guarda fuori dalla cartella, in sola lettura';
+      if (testoUp) testoUp.textContent = aperto ? tr('app.files.outsideCloseText') : tr('app.files.outsideOpenText');
       aggiornaVistaFile();
     }
   }
@@ -16108,7 +16247,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       } catch (errore) {
         if (numero !== ricercaFileNumero) return;
         mostraRisultatiRicercaFile(false);
-        if (hint) { hint.hidden = false; hint.textContent = `Non sono riuscito a cercare in tutta la cartella: ${errore?.message || 'riprova'}. Qui sotto restano i file già aperti.`; }
+        if (hint) { hint.hidden = false; hint.textContent = tr('app.files.searchPartial', { motivo: errore?.message || tr('app.common.retryHint') }); }
         return;
       }
       if (numero !== ricercaFileNumero) return; // è arrivata tardi: nel frattempo la persona ha scritto altro
@@ -16139,12 +16278,12 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     }));
     mostraRisultatiRicercaFile(true);
     const conteggio = $('#fileConteggio');
-    if (conteggio) conteggio.textContent = risultati.length === 0 ? '' : `${risultati.length} trovat${risultati.length === 1 ? 'o' : 'i'}`;
+    if (conteggio) conteggio.textContent = risultati.length === 0 ? '' : trn('app.files.foundOne', 'app.files.foundMany', risultati.length);
     if (!hint) return;
     const pezzi = [];
-    if (risultati.length === 0) pezzi.push(`Nessun file con «${query}» in questa cartella.`);
-    if (dati?.troncato) pezzi.push(`L'elenco non è completo: ${dati.motivo || 'la ricerca si è fermata prima'}. Scrivi qualche lettera in più.`);
-    if (Array.isArray(dati?.saltate) && dati.saltate.length) pezzi.push(`Non ho guardato dentro ${dati.saltate.join(' e ')}.`);
+    if (risultati.length === 0) pezzi.push(tr('app.files.search.noMatch', { ricerca: query }));
+    if (dati?.troncato) pezzi.push(tr('app.files.search.incomplete', { motivo: dati.motivo || tr('app.files.search.stoppedEarly') }));
+    if (Array.isArray(dati?.saltate) && dati.saltate.length) pezzi.push(tr('app.files.search.skipped', { elenco: elencoNellaLingua(dati.saltate) }));
     hint.textContent = pezzi.join(' ');
     hint.hidden = pezzi.length === 0;
   }
@@ -16160,7 +16299,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     await rivelaERivelaRigaAlbero(percorso); // poi la seleziona e la porta in vista
   }
 
-  const VISTE_FILE = Object.freeze({ tutti: 'Tutti i file', modificati: 'Modificati in questa sessione' });
+  const VISTE_FILE = Object.freeze({ get tutti() { return tr('app.files.viewAll'); }, get modificati() { return tr('app.files.viewModified'); } });
   function vistaFileScelta() { return $('#fileVista')?.dataset.vista === 'modificati' ? 'modificati' : 'tutti'; }
   function aggiornaVistaFile() {
     const vista = vistaFileScelta();
@@ -16176,17 +16315,17 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     if (!conteggio) return;
     if (vista === 'modificati') {
       const n = state.realSession.reviewFiles instanceof Map ? state.realSession.reviewFiles.size : 0;
-      conteggio.textContent = n === 0 ? '' : `${n} file`;
+      conteggio.textContent = n === 0 ? '' : trn('app.files.countOne', 'app.files.countMany', n);
     } else {
       const n = albero ? albero.querySelectorAll('.ft-node:not([aria-expanded])').length : 0;
-      conteggio.textContent = n === 0 ? '' : `${n} a vista`;
-      conteggio.title = n === 0 ? '' : 'I file si caricano aprendo le cartelle: questo è il numero di quelli già a vista.';
+      conteggio.textContent = n === 0 ? '' : tr('app.files.visibleCount', { n: n });
+      conteggio.title = n === 0 ? '' : tr('app.files.visibleHint');
     }
   }
   function scegliVistaFile(ancora) {
     const scelta = vistaFileScelta();
     apriMenuAzioni({
-      etichetta: 'Quali file mostrare',
+      etichetta: tr('app.files.filterLabel'),
       posizionamento: { ancoraEl: ancora },
       voci: Object.entries(VISTE_FILE).map(([id, etichetta]) => ({
         icona: id === scelta ? 'i-check' : (id === 'tutti' ? 'i-folder' : 'i-file'),
@@ -16209,7 +16348,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     if (!state.realSession.id || alberoInAnteprima()) return;
     state.realSession.treeCache.clear();
     await renderizzaAlberoReale();
-    toast('File aggiornati', 'Il workspace è stato riletto.');
+    toast(tr('app.files.refreshed'), tr('app.files.refreshedBody'));
   }
 
   async function collapseSessionFileTree() {
@@ -16256,7 +16395,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       state.realSession.fuoriSessioneAperto = true;
       await renderizzaAlberoReale();
     } catch (error) {
-      toast('Non riesco a risalire', messaggioErroreUtente(error, 'Riprova, o apri Doctor se persiste.'));
+      toast(tr('app.files.cannotGoUp'), messaggioErroreUtente(error, tr('app.errors.retryOrOpenDoctor')));
     } finally {
       if (button) button.disabled = false;
     }
@@ -16274,7 +16413,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       await caricaFuoriSessione(percorso);
       await renderizzaAlberoReale();
     } catch (error) {
-      toast('Cartella non disponibile', messaggioErroreUtente(error, 'Scegline un’altra.'));
+      toast(tr('app.files.folderUnavailable'), messaggioErroreUtente(error, tr('app.files.chooseAnother')));
     }
   }
 
@@ -16301,8 +16440,8 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const bottone = document.createElement('button');
     bottone.type = 'button';
     bottone.className = 'ft-outside-row-adopt';
-    bottone.setAttribute('aria-label', `Usa "${nome}" come radice — apre una sessione nuova su questa cartella`);
-    bottone.title = 'Usa come radice (sessione nuova)';
+    bottone.setAttribute('aria-label', tr('app.files.useAsRootLabel', { nome: nome }));
+    bottone.title = tr('app.files.useAsRootTitle');
     bottone.append(iconaSvgAlbero('i-check'));
     bottone.addEventListener('click', (evento) => {
       evento.stopPropagation();
@@ -16319,22 +16458,22 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const testata = document.createElement('div');
     testata.className = 'ft-outside-zone-head';
     testata.append(iconaSvgAlbero('i-eye'));
-    const etichetta = textElement('span', '', dati ? `Fuori dalla sessione · sola lettura · ${dati.path}` : 'Fuori dalla sessione · sola lettura');
+    const etichetta = textElement('span', '', dati ? tr('app.files.outsideBanner', { percorso: dati.path }) : tr('app.files.outsideBannerShort'));
     etichetta.title = dati?.path || '';
     testata.append(etichetta);
     if (dati) testata.append(costruisciRigaAdottaFuoriSessione(dati.path, nomeDaPercorso(dati.path)));
     const chiudi = document.createElement('button');
     chiudi.type = 'button';
     chiudi.className = 'ft-outside-zone-close';
-    chiudi.setAttribute('aria-label', 'Chiudi, torna alla sola cartella della sessione');
-    chiudi.title = 'Chiudi';
+    chiudi.setAttribute('aria-label', tr('app.files.outsideCloseLabel'));
+    chiudi.title = tr('app.common.close');
     chiudi.append(iconaSvgAlbero('i-x'));
     chiudi.addEventListener('click', chiudiFuoriSessione);
     testata.append(chiudi);
     zona.append(testata);
 
     if (!dati) {
-      zona.append(textElement('p', 'ft-outside-empty', 'Carico…'));
+      zona.append(textElement('p', 'ft-outside-empty', tr('app.common.loading')));
       return zona;
     }
     if (dati.parent) {
@@ -16346,7 +16485,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       zona.append(su);
     }
     if (dati.items.length === 0) {
-      zona.append(textElement('p', 'ft-outside-empty', 'Questa cartella non contiene altre cartelle.'));
+      zona.append(textElement('p', 'ft-outside-empty', tr('app.files.noSubfolders')));
     }
     for (const voce of dati.items) {
       const riga = document.createElement('div');
@@ -16876,7 +17015,9 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const density = host.classList.contains('talos-embedded') ? safe.uiDensity : (workspacePreferences.read().density === 'compact' ? 'compatta' : 'comoda');
     if (density === 'compatta') root.setAttribute('data-densita', 'compatta'); else root.removeAttribute('data-densita');
     if (!host.classList.contains('talos-embedded')) root.dataset.density = workspacePreferences.read().density;
-    const linguaRisolta = risolviLingua(safe.uiLanguage, navigator.languages || [navigator.language]);
+    /* 03/10/2026, strato 3 del cancello della lingua: `#lingua=qps` accende la pseudo-lingua, e ciò che a schermo resta
+       senza «⟦…⟧» non è passato dal dizionario (`tests/browser/lingua-pseudo.spec.mjs`). */
+    const linguaRisolta = linguaDaIndirizzo(location.hash) ?? risolviLingua(safe.uiLanguage, navigator.languages || [navigator.language]);
     applicaLingua(ROOT(), linguaRisolta);
     sincronizzaSelettoriDensitaLingua(safe);
     aggiornaMotionDesktop(safe);
@@ -17048,12 +17189,12 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     iconEl.classList.add('ft-open');
     iconEl.replaceChildren(iconaSvgAlbero('i-folder-open'));
     if (childUl.childElementCount > 0) return; // già caricata in questa sessione
-    childUl.appendChild(textElement('li', 'ft-loading', 'Carico…'));
+    childUl.appendChild(textElement('li', 'ft-loading', tr('app.common.loading')));
     let voci;
     try {
       voci = await caricaLivelloAlbero(percorsoCompleto);
     } catch {
-      childUl.replaceChildren(textElement('li', 'ft-loading', 'Non leggibile.'));
+      childUl.replaceChildren(textElement('li', 'ft-loading', tr('app.files.unreadable')));
       return;
     }
     childUl.replaceChildren();
@@ -17119,7 +17260,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       check.tabIndex = -1;
       check.checked = selezionato;
       check.dataset.selezionaFile = percorsoCompleto;
-      check.setAttribute('aria-label', `Seleziona ${nome}`);
+      check.setAttribute('aria-label', tr('app.files.selectLabel', { nome: nome }));
       check.addEventListener('click', (evento) => evento.stopPropagation()); // la casella non apre il file
       check.addEventListener('change', () => { commutaSelezioneFile(percorsoCompleto, check.checked, li, row); });
       row.appendChild(check);
@@ -17161,7 +17302,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       const azioniBtn = document.createElement('button');
       azioniBtn.type = 'button';
       azioniBtn.className = 'ft-actions-btn talos-button talos-button--ghost talos-button--sm talos-icon-button';
-      azioniBtn.setAttribute('aria-label', `Azioni su ${nome}`);
+      azioniBtn.setAttribute('aria-label', tr('app.files.actionsOn', { nome: nome }));
       azioniBtn.appendChild(iconaSvgAlbero('i-more'));
       azioniBtn.addEventListener('click', (event) => {
         event.stopPropagation(); // non selezionare/aprire la riga sotto
@@ -17220,11 +17361,11 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         if (!percorsoSorgente || percorsoSorgente === percorsoCompleto) return;
         try {
           const esito = await apiPost(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/tree/move`, { percorso: percorsoSorgente, cartellaDestinazione: percorsoCompleto });
-          toast('Spostato', esito.nuovoPercorso);
+          toast(tr('app.files.moved'), esito.nuovoPercorso);
           state.realSession.treeCache.delete(percorsoCompleto);
           await invalidaLivelloGenitoreAlbero(percorsoSorgente);
         } catch (error) {
-          toast('Spostamento non riuscito', error.message);
+          toast(tr('app.files.moveFailed'), error.message);
         }
       });
     }
@@ -17382,25 +17523,25 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
      *   che dicono la stessa cosa in due modi sono già un difetto.
      */
     const voci = soloCreazione ? [
-      { etichetta: 'Apri in Esplora File', icona: 'i-folder-open', azione: () => apriInEsploraFile(percorsoCompleto) },
-      { etichetta: 'Nuovo file', icona: 'i-edit', azione: () => avviaCreaVoce(percorsoCompleto, 'file') },
-      { etichetta: 'Nuova cartella', icona: 'i-folder', azione: () => avviaCreaVoce(percorsoCompleto, 'cartella') },
+      { etichetta: tr('app.files.menu.openInExplorer'), icona: 'i-folder-open', azione: () => apriInEsploraFile(percorsoCompleto) },
+      { etichetta: tr('app.files.newFile'), icona: 'i-edit', azione: () => avviaCreaVoce(percorsoCompleto, 'file') },
+      { etichetta: tr('app.files.newFolder'), icona: 'i-folder', azione: () => avviaCreaVoce(percorsoCompleto, 'cartella') },
     ] : cartella ? [
-      { etichetta: 'Nuovo file', icona: 'i-edit', azione: () => avviaCreaVoce(percorsoCompleto, 'file') },
-      { etichetta: 'Nuova cartella', icona: 'i-folder', azione: () => avviaCreaVoce(percorsoCompleto, 'cartella') },
-      { etichetta: 'Rinomina', icona: 'i-edit', azione: () => avviaRinominaFile(percorsoCompleto, nome) },
-      { etichetta: 'Copia', icona: 'i-link', azione: () => avviaCopiaFile(percorsoCompleto) },
-      { etichetta: 'Imposta come radice', icona: 'i-folder', azione: () => impostaComeRadice(percorsoCompleto, nome) },
-      { etichetta: 'Apri in Esplora File', icona: 'i-folder-open', azione: () => apriInEsploraFile(percorsoCompleto) },
-      { etichetta: 'Rivela in Esplora File', icona: 'i-folder-open', azione: () => rivelaFileInEsploraFile(percorsoCompleto) },
-      { etichetta: 'Elimina', icona: 'i-trash', azione: () => avviaEliminaFile(percorsoCompleto, nome, cartella), pericoloso: true },
+      { etichetta: tr('app.files.newFile'), icona: 'i-edit', azione: () => avviaCreaVoce(percorsoCompleto, 'file') },
+      { etichetta: tr('app.files.newFolder'), icona: 'i-folder', azione: () => avviaCreaVoce(percorsoCompleto, 'cartella') },
+      { etichetta: tr('app.common.rename'), icona: 'i-edit', azione: () => avviaRinominaFile(percorsoCompleto, nome) },
+      { etichetta: tr('app.common.copy'), icona: 'i-link', azione: () => avviaCopiaFile(percorsoCompleto) },
+      { etichetta: tr('app.files.menu.setAsRoot'), icona: 'i-folder', azione: () => impostaComeRadice(percorsoCompleto, nome) },
+      { etichetta: tr('app.files.menu.openInExplorer'), icona: 'i-folder-open', azione: () => apriInEsploraFile(percorsoCompleto) },
+      { etichetta: tr('app.files.menu.revealInExplorer'), icona: 'i-folder-open', azione: () => rivelaFileInEsploraFile(percorsoCompleto) },
+      { etichetta: tr('app.common.delete'), icona: 'i-trash', azione: () => avviaEliminaFile(percorsoCompleto, nome, cartella), pericoloso: true },
     ] : [
-      { etichetta: 'Apri', icona: 'i-eye', azione: () => apriFileAlbero(percorsoCompleto, nome) },
-      { etichetta: 'Allega alla chat', icona: 'i-link', azione: () => allegaFileAllaChat(percorsoCompleto) },
-      { etichetta: 'Rinomina', icona: 'i-edit', azione: () => avviaRinominaFile(percorsoCompleto, nome) },
-      { etichetta: 'Copia', icona: 'i-link', azione: () => avviaCopiaFile(percorsoCompleto) },
-      { etichetta: 'Rivela in Esplora File', icona: 'i-folder-open', azione: () => rivelaFileInEsploraFile(percorsoCompleto) },
-      { etichetta: 'Elimina', icona: 'i-trash', azione: () => avviaEliminaFile(percorsoCompleto, nome, cartella), pericoloso: true },
+      { etichetta: tr('app.common.open'), icona: 'i-eye', azione: () => apriFileAlbero(percorsoCompleto, nome) },
+      { etichetta: tr('app.files.attachToChat'), icona: 'i-link', azione: () => allegaFileAllaChat(percorsoCompleto) },
+      { etichetta: tr('app.common.rename'), icona: 'i-edit', azione: () => avviaRinominaFile(percorsoCompleto, nome) },
+      { etichetta: tr('app.common.copy'), icona: 'i-link', azione: () => avviaCopiaFile(percorsoCompleto) },
+      { etichetta: tr('app.files.menu.revealInExplorer'), icona: 'i-folder-open', azione: () => rivelaFileInEsploraFile(percorsoCompleto) },
+      { etichetta: tr('app.common.delete'), icona: 'i-trash', azione: () => avviaEliminaFile(percorsoCompleto, nome, cartella), pericoloso: true },
     ];
     for (const voce of voci) {
       const btn = document.createElement('button');
@@ -17497,9 +17638,9 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   async function apriFileConAppDelSistema(percorsoCompleto) {
     try {
       await apiPost(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/tree/open`, { percorso: percorsoCompleto });
-      toast('Aperto con l’app del sistema', percorsoCompleto);
+      toast(tr('app.files.openedWithSystem'), percorsoCompleto);
     } catch (error) {
-      toast('Non riuscito', error.message);
+      toast(tr('app.common.failed'), error.message);
     }
   }
 
@@ -17549,7 +17690,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       schermo.dataset.c = 'LettoreFile';
       host.append(schermo);
     }
-    schermo.setAttribute('aria-label', `File: ${lettoreFile.nome}`);
+    schermo.setAttribute('aria-label', tr('app.files.readerLabel', { nome: lettoreFile.nome }));
     host.classList.add('talos-grafo-aperto');
     lettoreFile.schermoIntero = true;
     lettoreFile.istanza.impostaSchermoIntero(true);
@@ -17609,7 +17750,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         schermo.dataset.c = 'DiffGithub';
         host.append(schermo);
       }
-      schermo.setAttribute('aria-label', elemento.getAttribute('aria-label') || tr('Differenze'));
+      schermo.setAttribute('aria-label', elemento.getAttribute('aria-label') || tr('app.files.changesLabel'));
       schermo.replaceChildren(elemento);
       host.classList.add('talos-grafo-aperto');
       elemento.querySelector('.talos-lettore__nome')?.focus({ preventScroll: true });
@@ -17685,7 +17826,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       },
       conferma: (opzioni) => apriConfermaRun(document, { ...opzioni, opener: document.activeElement }),
       // l'etichetta del menu la dà chi lo apre (rami, repository, messi da parte); le righe dei file restano «Azioni sul file»
-      menu: (voci, posizionamento) => apriMenuAzioni({ voci, etichetta: posizionamento?.etichetta || tr('Azioni sul file'), posizionamento }),
+      menu: (voci, posizionamento) => apriMenuAzioni({ voci, etichetta: posizionamento?.etichetta || tr('app.files.fileActions'), posizionamento }),
       avvisa: (titolo, testo) => toast(titolo, testo),
       onSchermoIntero: diffGithubASchermoIntero,
     });
@@ -17700,7 +17841,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     ctx.sporca = false;
     // la scheda è una sola: cambiata la sessione, ciò che era dell'altra (messaggio, richiesta in riga, modalità modifica…) non resta
     if (ctx.sessioneMostrata !== id) { ctx.sessioneMostrata = id; scheda.cambiaSessione(); }
-    if (!id) { scheda.mostraErrore(tr('Apri una sessione per vedere le modifiche della sua cartella.')); return; }
+    if (!id) { scheda.mostraErrore(tr('app.files.changesNoSession')); return; }
     if (ctx.inVolo) { ctx.ancora = true; return; }
     ctx.inVolo = true;
     try {
@@ -17716,7 +17857,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       if (state.realSession.id !== id) return;
       // ⭐ 28/09: non un vicolo cieco — la scheda offre «Inizializza repository», come la vista vuota di VS Code
       if (errore?.code === 'GIT_NOT_A_REPOSITORY') scheda.mostraNonRepository();
-      else scheda.mostraErrore(errore?.message || tr('Lo stato del repository non si legge.'));
+      else scheda.mostraErrore(errore?.message || tr('app.files.repoUnreadable'));
     } finally {
       ctx.inVolo = false;
       if (ctx.ancora) { ctx.ancora = false; void caricaSchedaGithub(); }
@@ -17750,7 +17891,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
 
   async function apriFileAlbero(percorsoCompleto, nome) {
     const sessionId = state.realSession.id;
-    if (!sessionId) { toast('Nessuna sessione aperta', 'Il file si apre dalla cartella di una sessione.'); return; }
+    if (!sessionId) { toast(tr('app.common.noSessionOpen'), tr('app.files.openFromSession')); return; }
     state.alberoFileTarget = { percorso: percorsoCompleto, nome };
     const aSchermoIntero = lettoreFile?.schermoIntero === true && lettoreFile.sessionId === sessionId;
     chiudiLettoreFile({ fuoco: false });
@@ -17759,13 +17900,13 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       opzioni: {
         bloccoCodice: bloccoCodiceDelLettore,
         lettoreOffice: lettoreOfficeDelLettore,
-        copia: (testo) => { void copyText(testo, 'Testo del file copiato'); },
+        copia: (testo) => { void copyText(testo, tr('app.files.contentCopied')); },
         apriFuori: () => { void apriFileConAppDelSistema(percorsoCompleto); },
         azioni: () => [
-          ['Allega alla chat', () => allegaFileAllaChat(percorsoCompleto), true],
-          ['Scarica', () => scaricaFileDellaCartella(percorsoCompleto, nome), true],
-          ['Apri con l’app del sistema', () => { void apriFileConAppDelSistema(percorsoCompleto); }, true],
-          ['Mostra in Esplora File', () => { void rivelaFileInEsploraFile(percorsoCompleto); }, true],
+          [tr('app.files.attachToChat'), () => allegaFileAllaChat(percorsoCompleto), true],
+          [tr('app.files.menu.download'), () => scaricaFileDellaCartella(percorsoCompleto, nome), true],
+          [tr('app.files.menu.openWithSystemApp'), () => { void apriFileConAppDelSistema(percorsoCompleto); }, true],
+          [tr('app.files.menu.showInExplorer'), () => { void rivelaFileInEsploraFile(percorsoCompleto); }, true],
         ],
         onSchermoIntero: () => {
           if (!lettoreFile?.schermoIntero) { mettiLettoreASchermoIntero(); return; }
@@ -17815,7 +17956,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     composerInput.value = `${composerInput.value.replace(/@[^\s]*$/, '')}@${percorsoCompleto} `;
     autoGrowTextarea();
     composerInput.focus();
-    toast('Allegato alla chat', percorsoCompleto);
+    toast(tr('app.files.attachedToChat'), percorsoCompleto);
   }
 
   function avviaRinominaFile(percorsoCompleto, nome) {
@@ -17844,10 +17985,10 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   async function avviaCopiaFile(percorsoCompleto) {
     try {
       const esito = await apiPost(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/tree/copy`, { percorso: percorsoCompleto });
-      toast('Copiato', esito.nuovoPercorso);
+      toast(tr('app.common.copied'), esito.nuovoPercorso);
       await invalidaLivelloGenitoreAlbero(percorsoCompleto);
     } catch (error) {
-      toast('Copia non riuscita', error.message);
+      toast(tr('app.common.copyFailed'), error.message);
     }
   }
 
@@ -17856,7 +17997,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     state.alberoFileTarget = { percorso: percorsoBase, tipo };
     // ⭐ 07/9 — il velo scrive da sé titolo, etichetta, testo del pulsante e cartella di partenza.
     if (openSheet('createFile')) return;
-    sheetTitle.textContent = tipo === 'cartella' ? 'Nuova cartella' : 'Nuovo file';
+    sheetTitle.textContent = tipo === 'cartella' ? tr('app.files.newFolder') : tr('app.files.newFile');
   }
 
   /**
@@ -17901,7 +18042,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   function impostaComeRadice(percorsoRelativo, nome) {
     const radice = state.realSession.cartellaAssoluta;
     if (!radice) {
-      toast('Radice sconosciuta', 'Questa sessione non ha ancora dichiarato il proprio percorso — riprova appena parte il primo giro.');
+      toast(tr('app.files.unknownRoot'), tr('app.files.unknownRootBody'));
       return;
     }
     avviaComeNuovaRadice(`${radice.replace(/[/\\]+$/, '')}/${percorsoRelativo}`, nome);
@@ -17925,9 +18066,9 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   async function rivelaFileInEsploraFile(percorsoCompleto) {
     try {
       await apiPost(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/tree/reveal`, { percorso: percorsoCompleto });
-      toast('Aperto in Esplora File', percorsoCompleto);
+      toast(tr('app.files.openedInExplorer'), percorsoCompleto);
     } catch (error) {
-      toast('Non riuscito', error.message);
+      toast(tr('app.common.failed'), error.message);
     }
   }
 
@@ -17947,9 +18088,9 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   async function apriInEsploraFile(percorsoCompleto) {
     try {
       await apiPost(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/tree/open`, { percorso: percorsoCompleto });
-      toast('Aperto in Esplora File', percorsoCompleto || nomeRadiceAlberoReale());
+      toast(tr('app.files.openedInExplorer'), percorsoCompleto || nomeRadiceAlberoReale());
     } catch (error) {
-      toast('Non riuscito', error.message);
+      toast(tr('app.common.failed'), error.message);
     }
   }
 
@@ -18023,7 +18164,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       const azioniRadice = document.createElement('button');
       azioniRadice.type = 'button';
       azioniRadice.className = 'ft-actions-btn talos-button talos-button--ghost talos-button--sm talos-icon-button';
-      azioniRadice.setAttribute('aria-label', `Azioni su ${nomeRadiceAlberoReale()}`);
+      azioniRadice.setAttribute('aria-label', tr('app.files.actionsOn', { nome: nomeRadiceAlberoReale() }));
       azioniRadice.appendChild(iconaSvgAlbero('i-more'));
       azioniRadice.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -18052,11 +18193,11 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       if (!percorsoSorgente) return;
       try {
         const esito = await apiPost(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/tree/move`, { percorso: percorsoSorgente, cartellaDestinazione: '' });
-        toast('Spostato', esito.nuovoPercorso);
+        toast(tr('app.files.moved'), esito.nuovoPercorso);
         state.realSession.treeCache.delete('');
         await invalidaLivelloGenitoreAlbero(percorsoSorgente);
       } catch (error) {
-        toast('Spostamento non riuscito', error.message);
+        toast(tr('app.files.moveFailed'), error.message);
       }
     });
 
@@ -18073,7 +18214,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
      *   should be `treeitem` elements within a single `tree`».
      */
     contenitore.setAttribute('aria-multiselectable', 'true');
-    ul.setAttribute('aria-label', 'File del workspace');
+    ul.setAttribute('aria-label', tr('app.files.treeLabel'));
     ul.addEventListener('keydown', (e) => {
       const righe = righeVisibiliAlbero(ul);
       const i = righe.indexOf(document.activeElement);
@@ -18146,7 +18287,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
        */
       const vaultLabel = document.createElement('div');
       vaultLabel.className = 'ft-session-boundary-head';
-      vaultLabel.append(iconaSvgAlbero('i-shield'), textElement('span', '', 'Qui il modello può scrivere'));
+      vaultLabel.append(iconaSvgAlbero('i-shield'), textElement('span', '', tr('app.files.vaultLabel')));
       const vault = document.createElement('div');
       vault.className = 'ft-session-boundary';
       vault.append(vaultLabel, radice, ul);
@@ -18169,8 +18310,8 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       const sparita = errore?.code === 'QUERY_INVALID';
       const dove = state.realSession.cartellaAssoluta;
       ul.appendChild(textElement('li', 'ft-loading', sparita
-        ? `Questa cartella non si legge più${dove ? ` (${dove})` : ''}: è stata spostata o cancellata. Apri una sessione nuova sulla cartella giusta.`
-        : 'I file non si sono caricati. Premi «Aggiorna» per riprovare.'));
+        ? tr('app.files.folderGone', { dove: dove ? ` (${dove})` : '' })
+        : tr('app.files.loadFailed')));
       return;
     }
     if (generation !== state.realSession.generation) return;
@@ -18259,9 +18400,9 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     hint.replaceChildren();
     if (trovati > 0) {
       hint.appendChild(textElement('b', '', String(trovati)));
-      hint.appendChild(document.createTextNode(` risultat${trovati === 1 ? 'o' : 'i'} fra i file già caricati`));
+      hint.appendChild(document.createTextNode(trn('app.files.loadedResultsOne', 'app.files.loadedResultsMany', trovati)));
     } else {
-      hint.textContent = 'Nessun file caricato corrisponde — apri altre cartelle per includerle.';
+      hint.textContent = tr('app.files.noLoadedMatch');
     }
   }
 
@@ -18304,8 +18445,8 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         repoAnnidati.textContent = '—';
         repoAnnidati.title = '';
       } else {
-        repoAnnidati.textContent = `${elenco.length} (fiducia separata)`;
-        repoAnnidati.title = `Hanno una fiducia separata dal workspace: ${elenco.join(', ')}`;
+        repoAnnidati.textContent = tr('app.files.nestedReposLabel', { n: elenco.length });
+        repoAnnidati.title = tr('app.files.nestedReposTitle', { elenco: elenco.join(', ') });
       }
     }
     // ⭐⭐⭐ 28/8 — tenuta anche in stato, non solo nel DOM: serve a "Imposta come radice" (menu dell'albero) per calcolare il percorso assoluto di una sottocartella.
@@ -18348,31 +18489,31 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     try {
       const dati = await apiGet(sessione ? `/api/v1/sessions/${encodeURIComponent(sessione)}/tools` : '/api/v1/tools');
       if (!dati.attrezzi) {
-        scrivi('attrezzi', 'Non osservato', dati.errore || '');
-        scrivi('ricerca', 'Non osservato', dati.errore || '');
+        scrivi('attrezzi', tr('app.common.notObserved'), testoDelCampo(dati, 'errore') || ''); // K4b
+        scrivi('ricerca', tr('app.common.notObserved'), testoDelCampo(dati, 'errore') || '');
       } else {
         const token = dati.attrezzi.reduce((somma, a) => somma + (a.tokenSchemaStimati || 0), 0);
-        scrivi('attrezzi', String(dati.attrezzi.length), `~${token} token di schema a ogni giro (stima)${sessione ? '' : ' · nessuna sessione aperta: sono quelli che riceverà la prossima'}`);
+        scrivi('attrezzi', String(dati.attrezzi.length), `${tr('app.capability.schemaTokens', { token })}${sessione ? '' : ` · ${tr('app.capability.noSessionNextOnes')}`}`);
         const ricerca = dati.attrezzi.find((a) => a.nome === 'web_search');
-        if (!ricerca) scrivi('ricerca', 'non offerta', 'L\'attrezzo web_search non è fra quelli offerti in questa configurazione.');
+        if (!ricerca) scrivi('ricerca', tr('app.capability.notOffered'), tr('app.capability.webSearchNotOffered'));
         else if (ricerca.dipendenza?.stato === 'pronta') scrivi('ricerca', ricerca.dipendenza.dettaglio.replace(/^Fonte: /, ''), ricerca.dipendenza.dettaglio);
-        else scrivi('ricerca', 'senza fonte', ricerca.dipendenza?.dettaglio || '');
+        else scrivi('ricerca', tr('app.capability.noSource'), ricerca.dipendenza?.dettaglio || '');
       }
     } catch (errore) {
-      scrivi('attrezzi', 'Non osservato', errore.message);
-      scrivi('ricerca', 'Non osservato', errore.message);
+      scrivi('attrezzi', tr('app.common.notObserved'), errore.message);
+      scrivi('ricerca', tr('app.common.notObserved'), errore.message);
     }
     if (!sessione) {
-      scrivi('mcp', 'Non osservato', 'I server MCP sono dichiarati dal progetto della sessione: senza una sessione aperta non c\'è un progetto da leggere.');
+      scrivi('mcp', tr('app.common.notObserved'), tr('app.capability.mcpNeedsSession'));
       return;
     }
     try {
       const dati = await apiGet(`/api/v1/sessions/${encodeURIComponent(sessione)}/mcp`);
-      if (dati.errore) scrivi('mcp', 'dichiarazione non valida', dati.errore);
-      else if (!dati.server || dati.server.length === 0) scrivi('mcp', '0', 'Nessun server MCP dichiarato in questo progetto (.harness-ui-mcp.json).');
-      else scrivi('mcp', `${dati.server.length} (${dati.server.filter((x) => x.fidato).length} fidati)`, dati.server.map((x) => x.id).join(', '));
+      if (dati.errore) scrivi('mcp', tr('app.capability.invalidDeclaration'), dati.errore);
+      else if (!dati.server || dati.server.length === 0) scrivi('mcp', '0', tr('app.board.mcp.none'));
+      else scrivi('mcp', tr('app.capability.mcpCount', { n: dati.server.length, fidati: dati.server.filter((x) => x.fidato).length }), dati.server.map((x) => x.id).join(', '));
     } catch (errore) {
-      scrivi('mcp', 'Non osservato', errore.message);
+      scrivi('mcp', tr('app.common.notObserved'), errore.message);
     }
   }
 
@@ -18382,12 +18523,12 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     if (!el) return;
     const pagine = state.realSession.browserPagine?.length ?? 0;
     if (!state.realSession.id) {
-      el.textContent = 'Non osservato';
-      el.title = 'Nessuna sessione aperta: le pagine lette appartengono a una sessione.';
+      el.textContent = tr('app.common.notObserved');
+      el.title = tr('app.browser.pagesNoSession');
       return;
     }
-    el.textContent = pagine === 0 ? 'nessuna pagina letta' : `${pagine} pagin${pagine === 1 ? 'a letta' : 'e lette'}`;
-    el.title = 'TALOS legge il testo delle pagine con l\'attrezzo naviga; compaiono nella vista Browser.';
+    el.textContent = pagine === 0 ? tr('app.browser.pagesNone') : trn('app.browser.pagesReadOne', 'app.browser.pagesReadMany', pagine);
+    el.title = tr('app.browser.pagesHint');
   }
 
   function aggiornaUsageSessione() {
@@ -18440,7 +18581,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
      *   sarebbe falso — non è ancora eseguito.
      */
     if (info.comandoDellaPersona) {
-      if (info.summaryText) info.summaryText.textContent = 'In corso…';
+      if (info.summaryText) info.summaryText.textContent = tr('app.activity.runningLabel');
       /* ⛔ Niente comando ripetuto a destra: è già nel blocco sopra, e rubava spazio alla
          riga di stato fino a troncarla («…non su Win…», visto nella foto del 10/09). */
       return;
@@ -18476,13 +18617,16 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    *   della fine della rigiocata a una domanda già risolta altrove leggeva «Risposta inviata» come se l'avesse data lui
    *   (R4-ASK-DUPLICATE-409-REPLAY, rosso dal commit c9d605cb1).
    */
-  function rispostaDaUnAltraFinestra(card) {
+  function rispostaDaUnAltraFinestra(card, risolta = null) {
     const inDiretta = !state.realSession.inRigiocata || card?._esitoRiconciliatoQui?.() === true;
-    return inDiretta && card?._rispostaDataQui?.() !== true;
+    return inDiretta && card?._rispostaDataQui?.(risolta) !== true;
   }
 
   function handleRealEvent(evento, generation) {
     if (generation !== state.realSession.generation) return; // sessione più vecchia: scartato, non renderizzato
+    /* F-027 (owner 02/10/2026) — il confine dei dati e l'avviso in inglese sono parole per il MODELLO: da qui in giù (riga, dettaglio,
+       pannello Processi, schede dell'agente) la persona vede il contenuto, e il sospetto come segno (`evento.suspicious`). */
+    evento = eventoPerLoSchermo(evento);
     if (evento.type === 'CUSTOM' && evento.name === 'talos.process-output') {
       const info = state.realSession.toolCallNomi.get(evento.value?.toolCallId);
       const receipt = info && normalizzaRicevutaOutput(evento.value, {sessionId: state.realSession.id, toolCallId: evento.value.toolCallId});
@@ -18700,6 +18844,10 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
        *   e per sapere «è partito o no» basta il fatto.
        */
       rifiutato: typeof evento.content === 'string' && /^\s*REFUSED\b/u.test(evento.content),
+      /* H-04 (owner 02/10/2026): una `prova` senza suite non è partita (`NOT RUN:`), e nei Processi si dice «Non eseguito». */
+      senzaSuite: provaSenzaSuite(evento.content),
+      /* 03/10/2026: «zero test eseguiti» è anche lui un NOT RUN, ma il comando è partito: si dice con le sue parole */
+      nessunTest: provaSenzaTestEseguiti(evento.content),
     });
     /* ⭐ PO-10 passo 2 (02/10/2026) — i comandi dell'agente nelle LORO schede del Terminale: stessi eventi del pannello
        Processi, più il testo dell'uscita. Un fotogramma per volta, mai uno per evento. */
@@ -19047,7 +19195,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
          * ⛔ Gli eventi non portano un orario: la durata si misura solo dal vivo. In una rigiocata `inizio` è
          *   `null`, e l'etichetta dice «Ha ragionato» invece di una durata falsa di pochi millisecondi.
          */
-        const bubble = appendToolNote('Ragionamento', { classeExtra: 'real-reasoning-note', glifo: '💭', aperto: true });
+        const bubble = appendToolNote(tr('app.activity.reasoning'), { classeExtra: 'real-reasoning-note', glifo: '💭', aperto: true });
         bubble.article.hidden = true;
         bubble.article.dataset.ragionamentoId = evento.messageId; // ⭐ 13/09 sera: per darle la sua durata quando la sessione si riapre
         // ⛔ Solo `hidden`, non anche `aria-hidden`: toglie già la riga dall'albero dell'accessibilità, e ogni attributo in più è una modifica del DOM che LAG-REPLAY-REASONING-36 conta — misurato 22 contro un tetto di 20, mentre il pacchetto di prima passava.
@@ -19139,7 +19287,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
          */
         const rigaDiComandoMio = Boolean(state.realSession.giroComandoDiretto) && evento.toolCallName === 'shell';
         const bubble = appendToolNote(
-          rigaDiComandoMio ? 'Comando' : riassuntoAttrezzoInCorso(evento.toolCallName, null),
+          rigaDiComandoMio ? tr('app.composer.commandLabel') : riassuntoAttrezzoInCorso(evento.toolCallName, null),
           { contenitore: batch.contenitore, attrezzo: evento.toolCallName, aperto: rigaDiComandoMio },
         );
         impostaEsitoRiga(bubble.article, 'running'); // 05/9 Fase 2: pallino «in corso»
@@ -19278,6 +19426,9 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         /* 02/10/2026, owner: un comando FERMATO si dice «interrotto» — pallino neutro, mai contato fra gli errori. */
         const esitoDelComando = info?.nome === 'shell' ? leggiEsitoComando(testoEsito) : null;
         const fermatoApposta = Boolean(esitoDelComando?.annullato || esitoDelComando?.terminato);
+        /* Owner 03/10/2026: una prova NON ESEGUITA (nessuna suite, o zero test eseguiti: `NOT RUN:`) non è né riuscita né fallita.
+           Pallino d'attenzione e «non eseguito», come nei Processi; mai contata fra gli errori. */
+        const provaNonEseguita = info?.nome === 'prova' && provaSenzaSuite(testoEsito);
         /*
          * ⛔⛔ PO-06 (10/09) — per un comando scritto dalla PERSONA la riga porta il VERDETTO, non
          *   il conteggio della card che la contiene. Misurato dal vivo prima della cura: si leggeva
@@ -19289,7 +19440,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         const esitoUmano = info?.comandoDellaPersona ? leggiEsitoComando(testoEsito) : null;
         if (info?.summaryText) {
           info.summaryText.textContent = domandaDaCorreggere
-            ? tr('Il modello ha corretto la domanda: {motivo}', { motivo: tr(domandaDaCorreggere.frase, domandaDaCorreggere.parametri) })
+            ? tr('app.questions.corrected', { motivo: tr(domandaDaCorreggere.frase, domandaDaCorreggere.parametri) })
             : esitoUmano
             /* ⛔ 02/10/2026, owner («nella storia non scriverla») — riaprendo una sessione la riga diceva «… · 6 ms» per
                un comando fermato dopo secondi: era il tempo fra due eventi RIGIOCATI, e il giornale non ha una durata
@@ -19298,10 +19449,13 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
             : riassuntoAttrezzoConcluso(info.nome, info.argomentiParsati, testoEsito, fallito);
         }
         if (info?.article) {
-          impostaEsitoRiga(info.article, domandaDaCorreggere ? 'corretta' : fermatoApposta ? 'interrupted' : fallito ? 'error' : 'success'); // 05/9 Fase 2: il pallino della ToolRow
+          impostaEsitoRiga(info.article, domandaDaCorreggere ? 'corretta' : fermatoApposta ? 'interrupted' : provaNonEseguita ? 'not-run' : fallito ? 'error' : 'success'); // 05/9 Fase 2: il pallino della ToolRow
           info.article.setAttribute('aria-busy', 'false');
           if (info.dettaglio && info.argomentiParsati && !info.comandoDellaPersona) info.dettaglio.textContent = dettaglioRigaAttrezzo(info.nome, info.argomentiParsati);
         }
+        /* F-027 (owner 02/10/2026, «+1 con conferma»): il risultato portava testo che sembra un'istruzione per un'IA — il segno sulla
+           riga e la nota in testa al dettaglio, con le parole del kernel. */
+        if (evento.suspicious && info?.article) segnaContenutoSospetto({ riga: info.article, corpo: info.detail, sospetto: evento.suspicious });
         // F3-33a (25/09/2026): la proposta di workflow riuscita diventa una card nel transcript (decisione owner D20)
         if (info?.nome === 'workflow_plan_propose' && !fallito) montaCardProposta(evento);
         if (info?.detail) {
@@ -19377,7 +19531,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
           const attrezzoCheScriveLaTestata = info?.nome === 'shell' || info?.nome === 'prova';
           const testoBlocco = esitoUmano ? esitoUmano.output
             : (attrezzoCheScriveLaTestata ? senzaIntestazione(testoEsito) : testoEsito);
-          const daMostrare = testoBlocco.trim() === '' ? 'Nessun output.' : testoBlocco;
+          const daMostrare = testoBlocco.trim() === '' ? tr('app.activity.noOutput') : testoBlocco;
           /*
            * ⛔⛔ 10/09 — UN ESITO LUNGO NON SI ROVESCIA NELLA CHAT.
            *
@@ -19480,7 +19634,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
             info.detail.appendChild(intestazione);
           }
           if (flussiSeparati) {
-            for (const [etichetta, testo] of [['Uscita', evento.stdout], ['Diagnostica', evento.stderr]]) {
+            for (const [etichetta, testo] of [[tr('app.activity.outputLabel'), evento.stdout], [tr('app.activity.diagnosticsLabel'), evento.stderr]]) {
               if (!haFlusso(testo)) continue; // assente NON è vuoto: non si disegna un riquadro bianco
               const sezione = document.createElement('div');
               sezione.className = 'tool-stream';
@@ -19499,7 +19653,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
               if (tagliato) {
                 const quante = righe.length - RIGHE_ESITO_IN_CHAT;
                 sezione.appendChild(textElement('p', 'tool-result-tagliato',
-                  `Altre ${quante} righe non sono mostrate qui (in tutto ${righe.length}).`));
+                  tr('app.activity.moreLines', { nascoste: quante, totale: righe.length })));
               }
               info.detail.appendChild(sezione);
             }
@@ -19511,7 +19665,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
             if (tagliato) {
               const quante = righeEsito.length - RIGHE_ESITO_IN_CHAT;
               info.detail.appendChild(textElement('p', 'tool-result-tagliato',
-                `Altre ${quante} righe non sono mostrate qui (in tutto ${righeEsito.length}).`));
+                tr('app.activity.moreLines', { nascoste: quante, totale: righeEsito.length })));
             }
           }
         }
@@ -19522,10 +19676,10 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
           batch.inCorso[categoria] = Math.max(0, (batch.inCorso[categoria] || 0) - 1);
           if (categoria === 'altro') { // 26/09, difetto (12): per nome, come nel segmento
             contaNomeAltro(batch.nomiAltro?.inCorso, info.nome, -1);
-            if (!domandaDaCorreggere) contaNomeAltro(fallito ? batch.nomiAltro?.falliti : batch.nomiAltro?.riusciti, info.nome, 1);
+            if (!domandaDaCorreggere && !provaNonEseguita) contaNomeAltro(fallito ? batch.nomiAltro?.falliti : batch.nomiAltro?.riusciti, info.nome, 1);
           }
           /* 27/09, decisione 47: la domanda respinta per la forma non è stata posta — né riuscita né fallita, non si conta */
-          if (domandaDaCorreggere) { /* niente */ } else if (categoria === 'comando') {
+          if (domandaDaCorreggere || provaNonEseguita) { /* niente: né riuscita né fallita */ } else if (categoria === 'comando') {
             batch.contatori.comandi += 1;
             if (fallito) batch.contatori.comandiErrore += 1;
           } else if (fallito) {
@@ -19542,7 +19696,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
           // Una scrittura riuscita è contata soltanto dal relativo
           // StateDelta add/replace: il testo del tool non prova il disco.
           else if (categoria === 'altro') batch.contatori.altro += 1;
-          info.stato = domandaDaCorreggere ? 'corretta' : fermatoApposta ? 'interrotto' : fallito ? 'error' : 'complete';
+          info.stato = domandaDaCorreggere ? 'corretta' : fermatoApposta ? 'interrotto' : provaNonEseguita ? 'non-eseguito' : fallito ? 'error' : 'complete';
           aggiornaRiassuntoBatch(batch);
         }
         // ⭐ 3/9 — item 10: preso ORA, non dopo — fra un attimo l'entry sparisce.
@@ -19582,11 +19736,11 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         const recupero = Array.isArray(evento.delta) ? evento.delta.find(patch => patch?.path === '/recuperoCronologia') : null;
         if (recupero) {
           if (recupero.value?.contestoRicostruito === true) {
-            appendStatusNote('Le istruzioni iniziali non erano state salvate. Per riprendere, TALOS le ha ricostruite dalle fonti attuali. I messaggi precedenti sono conservati.', false, { meta: 'Contesto ricostruito' });
+            appendStatusNote(tr('app.recovery.contextRebuilt'), false, { meta: tr('app.recovery.contextRebuiltMeta') });
           }
           const numero = recupero.value?.chiamate;
           if (Number.isSafeInteger(numero) && numero > 0) {
-            appendStatusNote(`${numero === 1 ? '1 chiamata incompleta è stata conservata' : `${numero} chiamate incomplete sono state conservate`} come nota nello storico. I messaggi originali sono intatti. Puoi continuare questa conversazione.`, false, { meta: 'Storico recuperato' });
+            appendStatusNote(trn('app.recovery.callsKeptOne', 'app.recovery.callsKeptMany', numero), false, { meta: tr('app.recovery.historyRecoveredMeta') });
           }
           break;
         }
@@ -19692,7 +19846,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       case 'RunRedirectCancelled': {
         state.realSession.redirectInvalidatedIds.add(evento.redirectId);
         state.realSession.redirectPendingId = null;
-        toast('Reindirizzamento annullato', 'La richiesta di stop resta attiva.');
+        toast(tr('app.redirect.cancelled'), tr('app.redirect.cancelledBody'));
         syncRunComposerState();
         break;
       }
@@ -19702,12 +19856,16 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         state.realSession.eventoTerminaleVisto = true;
         void caricaFigliSessione(); // 06/9: a giro finito si rileggono le deleghe per la scheda «Agenti»
         nascondiAttesaRisposta();
-        appendStatusNote(`Reindirizzamento non riuscito: ${evento.message}`, true);
-        toast('Reindirizzamento non riuscito', evento.message);
+        /* K2 (03/10/2026): il motivo nella lingua scelta, dal `code` + `reason` dell'evento (il server scrive in inglese); un
+           evento vecchio, senza motivo, resta con le sue parole. */
+        const motivoRedirect = testoErroreServer({ code: evento.code, reason: evento.reason, params: evento.params, message: evento.message }).message || evento.message;
+        appendStatusNote(tr('app.redirect.failedWith', { motivo: motivoRedirect }), true);
+        toast(tr('app.redirect.failed'), motivoRedirect);
         syncRunComposerState();
         break;
       }
       case 'RunFinished': {
+        rileggiDopoIlGiroSeChiesto(); // 03/10: la lingua è cambiata durante il giro
         segnaGiroVivo(false); // ⭐ il marchio smette di respirare quando il giro finisce DAVVERO
         fermaOrbDeiMessaggi(); // 24/09: l'anello dell'orb nella testata si ferma con il giro
         contextMonitor?.setRunning(false); void contextMonitor?.refresh({ afterPending: true });
@@ -19781,7 +19939,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         const card = state.realSession.domandePendenti.get(evento.requestId);
         if (card) {
           // ⛔ 24/09/2026, decisione owner 10: l'esito completo (risposte, chi, quando, perché) va alla ricevuta.
-          finalizzaUserQuestionCard(card, evento.status, rispostaDaUnAltraFinestra(card) && evento.da !== 'sistema',
+          finalizzaUserQuestionCard(card, evento.status, rispostaDaUnAltraFinestra(card, evento) && evento.da !== 'sistema',
             { answers: evento.answers, at: evento.at, da: evento.da, motivo: evento.motivo });
           state.realSession.domandePendenti.delete(evento.requestId);
           syncRunComposerState();
@@ -19824,7 +19982,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         const card = state.realSession.approvazioniPendenti.get(evento.requestId);
         if (card) {
           // 06/9: l'esito non si concatena più alla frase (si leggeva come parte del comando): riga sua, col tono.
-          segnaEsitoApprovazione(card, { approvato: Boolean(evento.approvato), altrove: rispostaDaUnAltraFinestra(card), ambito: evento.ambito, motivo: evento.motivo }); // F4-03: ambito e motivo, se il server li manda
+          segnaEsitoApprovazione(card, { approvato: Boolean(evento.approvato), altrove: rispostaDaUnAltraFinestra(card, evento), ambito: evento.ambito, motivo: evento.motivo }); // F4-03: ambito e motivo, se il server li manda; 03/10: l'evento decide un invio senza prova
           state.realSession.approvazioniPendenti.delete(evento.requestId);
         }
         aggiornaElencoSessioniReali(); // ⛔ 04/9 — l'altro verso: risolta l'approvazione, la riga deve smettere di dire «in attesa»
@@ -19843,13 +20001,14 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       case 'McpElicitationResolved': {
         const card = state.realSession.richiesteMcpPendenti.get(evento.requestId);
         if (card) {
-          segnaEsitoRichiestaMcp(card, { action: evento.action, modo: card.dataset.modo, altrove: rispostaDaUnAltraFinestra(card) && evento.da === 'persona', motivo: evento.motivo ?? null });
+          segnaEsitoRichiestaMcp(card, { action: evento.action, modo: card.dataset.modo, altrove: rispostaDaUnAltraFinestra(card, evento) && evento.da === 'persona', motivo: evento.motivo ?? null });
           state.realSession.richiesteMcpPendenti.delete(evento.requestId);
         }
         aggiornaElencoSessioniReali();
         break;
       }
       case 'RunError': {
+        rileggiDopoIlGiroSeChiesto(); // 03/10: la lingua è cambiata durante il giro
         /*
          * ⛔⛔ 24/09/2026 sera, bug dell'owner: «l'orb resta con il ring spinning animato anche quando premo stop mentre
          *   ragiona». Lo Stop chiude il giro come `RunError` (codice `fermato`, `agent-service.mjs` `esitoInEventoFinale`),
@@ -19896,8 +20055,8 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
            *   smette di DEDURNE una regola per il presente.
            */
           const riassunto = riassuntoAttrezziDaEventi(state.realSession.eventiAttrezzi);
-          guida = ` — ${testoDiagnosiGiri(riassunto)}. ${consiglioDaRiassunto(riassunto)}`
-            + ' Il prossimo messaggio continuerà questo task nella stessa sessione. Premi «Nuova» per iniziare un task separato.';
+          guida = ` — ${tr('app.run.limitGuide', { diagnosi: testoDiagnosiGiri(riassunto), consiglio: consiglioDaRiassunto(riassunto) })}`;
+
         }
         /*
          * ⛔ 06/9, owner con due screenshot da un modello locale: qui arrivava il testo del server
@@ -19947,7 +20106,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
        */
       case 'HookInvoked': {
         if (evento.esito?.consentito === false) {
-          toast(`Hook "${evento.hookId}" ha bloccato ${evento.azione ?? evento.tipo}`, evento.esito.motivo || '');
+          toast(tr('app.hooks.blocked', { hook: evento.hookId, azione: evento.azione ?? evento.tipo }), evento.esito.motivo || '');
         }
         break;
       }
@@ -20036,7 +20195,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       }
       sorveglianza?.segnalaSse(source.readyState); // T-15: 0 = riprova da solo, 2 = ha rinunciato
       if (source.readyState === EventSource.CLOSED) {
-        appendStatusNote('Connessione agli eventi interrotta.', true);
+        appendStatusNote(tr('app.common.eventsInterrupted'), true);
       }
     };
   }
@@ -20158,7 +20317,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     closePanels();
     appendRealTaskStart(task);
     mostraAttesaRisposta();
-    toast('Avvio in corso', `${task.id} · checkout del progetto sul PC che serve questa pagina.`);
+    toast(tr('app.run.starting'), tr('app.run.startingBody', { id: task.id }));
 
     let sessionId;
     try {
@@ -20177,15 +20336,17 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       const client = window.__talosHarnessApiBase ? 'mobile' : 'desktop';
       const corpo = state.model ? { taskId: task.id, modello: state.model, client } : { taskId: task.id, client };
       corpo.modalitaOperativa = state.modalitaOperativa;
+      if (client === 'desktop') corpo.linguaInterfaccia = linguaInterfacciaPerIlServer(); // K3b: il primo giro la sa già
       const data = await apiPost('/api/v1/sessions', corpo);
       sessionId = data.sessionId;
+      if (client === 'desktop') linguaDettaAlServer.set(sessionId, corpo.linguaInterfaccia);
     } catch (error) {
       if (generation !== state.realSession.generation) return;
       nascondiAttesaRisposta();
-      appendStatusNote(`Avvio non riuscito: ${error.message}`, true);
-      toast('Avvio non riuscito', error.message);
+      appendStatusNote(tr('app.run.startFailedWith', { motivo: error.message }), true);
+      toast(tr('app.run.startFailed'), error.message);
       /* ⛔ 27/8, trovato dalla pipeline QA visiva: il titolo restava "ottimista" (il nome della sessione appena tentata) anche quando la POST falliva — la sessione non è mai esistita lato server (state.realSession.id resta null). */
-      state.session = 'Nessuna sessione';
+      state.session = tr('app.sessions.none');
       $$('[data-current-session-title]').forEach((label) => { label.textContent = state.session; });
       return;
     }
@@ -20195,16 +20356,16 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   }
 
   async function stopRealSession() {
-    if (!state.realSession.id) { toast('Nessuna sessione reale attiva'); return; }
+    if (!state.realSession.id) { toast(tr('app.composer.noRealSession')); return; }
     const redirectId = state.realSession.redirectRequestIntentId || state.realSession.redirectPendingId;
     if (redirectId) state.realSession.redirectInvalidatedIds.add(redirectId);
     sendButton.disabled = true;
     sendButton.setAttribute('aria-busy', 'true');
     try {
       await apiPost(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/stop`, redirectId ? { redirectId } : {});
-      toast('Fermata', 'La sessione si è fermata.');
+      toast(tr('app.run.stopped'), tr('app.run.stoppedBody'));
     } catch (error) {
-      toast('Stop non riuscito', error.message);
+      toast(tr('app.run.stopFailed'), error.message);
     } finally {
       sendButton.disabled = false;
       sendButton.removeAttribute('aria-busy');
@@ -20229,11 +20390,29 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     return reindirizzaSessioneReale(testo);
   }
 
+  /*
+   * ⭐ K3b (03/10/2026), decisione owner «Lingua dell'interfaccia»: la descrizione che il modello scrive sotto ogni comando è
+   *   nella lingua dell'INTERFACCIA. Il server la sa dall'avvio (`linguaInterfaccia` nel corpo) e da qui, prima di ogni giro,
+   *   solo quando è cambiata. Solo sul desktop: il server del mobile non conosce la chiave. Un errore non ferma il giro: la
+   *   descrizione resta nella lingua di prima.
+   */
+  const linguaInterfacciaPerIlServer = () => (linguaCorrenteDiT() === 'en' ? 'en' : 'it');
+  const linguaDettaAlServer = new Map(); // sessionId → lingua che il server conosce
+  async function allineaLinguaDellaSessione(sessionId) {
+    if (!sessionId || window.__talosHarnessApiBase) return;
+    const lingua = linguaInterfacciaPerIlServer();
+    if (linguaDettaAlServer.get(sessionId) === lingua) return;
+    try {
+      await apiPost(`/api/v1/sessions/${encodeURIComponent(sessionId)}/settings`, { linguaInterfaccia: lingua });
+      linguaDettaAlServer.set(sessionId, lingua);
+    } catch { /* la descrizione dei comandi resta nella lingua di prima: non vale un giro fermo */ }
+  }
+
   async function reindirizzaSessioneReale(testo) {
     if (attendiUploadAllegati()) return false;
     const immagini = allegatiComposer.filter(a => a.tipo === 'immagine');
     const sessionId = state.realSession.id;
-    const pulito = String(testo || (immagini.length ? 'Descrivi l’immagine allegata.' : '')).trim();
+    const pulito = String(testo || (immagini.length ? tr('app.attachments.promptDescribeImage') : '')).trim();
     if (!sessionId || state.realSession.eventoTerminaleVisto || !pulito || state.realSession.redirectRequestInFlight || state.realSession.redirectPendingId) return false;
     const redirectId = crypto.randomUUID();
     state.realSession.redirectRequestInFlight = true;
@@ -20241,6 +20420,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     redirectRunButton.disabled = true;
     redirectRunButton.setAttribute('aria-busy', 'true');
     try {
+      await allineaLinguaDellaSessione(sessionId); // K3b
       const dati = await apiPost(`/api/v1/sessions/${encodeURIComponent(sessionId)}/redirect`, { messaggio: pulito, redirectId, ...(immagini.length ? { immagini: payloadImmagini(immagini) } : {}) });
       if (sessionId !== state.realSession.id) return true;
       for (const image of immagini) {
@@ -20258,14 +20438,14 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       aggiornaModalitaShell(''); // ⛔ il campo si svuota da codice: `input` non scatta, e il segnale resterebbe acceso sul vuoto
       autoGrowTextarea();
       syncRunComposerState();
-      toast('Reindirizzamento richiesto', 'La correzione verrà applicata al prossimo punto sicuro.');
+      toast(tr('app.redirect.requested'), tr('app.redirect.requestedBody'));
       return true;
     } catch (error) {
       if (state.realSession.redirectInvalidatedIds.has(redirectId)) {
         state.realSession.redirectInvalidatedIds.delete(redirectId);
         return false;
       }
-      toast('Reindirizzamento non riuscito', error.message);
+      toast(tr('app.redirect.failed'), error.message);
       return false;
     } finally {
       state.realSession.redirectRequestInFlight = false;
@@ -20302,8 +20482,8 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       ? { sessionId: state.realSession.id, taskId: state.realSession.taskId, nome: state.session }
       : null);
     if (!origine?.sessionId) {
-      if (!embeddedDemoOnly()) { toast('Ramo non creato', tr('Apri prima una sessione.')); return; }
-      toast('Fork creato', 'Nuovo ramo di conversazione da questo punto.');
+      if (!embeddedDemoOnly()) { toast(tr('app.branches.notCreated'), tr('app.common.openSessionFirst')); return; }
+      toast(tr('app.branches.forkCreated'), tr('app.branches.forkCreatedBody'));
       return;
     }
     const idOrigine = origine.sessionId;
@@ -20317,17 +20497,17 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
        *   — l'identificatore interno a schermo, contro la regola dei nomi tecnici. Un ramo porta il
        *   nome di ciò da cui è nato: è l'unica cosa che dice qualcosa a chi lo rilegge domani.
        */
-      const nomeOrigine = String(origine.nome || state.session || '').replace(/\s*\(ramo\)\s*$/, '').trim();
-      state.session = nomeOrigine ? `${nomeOrigine} (ramo)` : 'Ramo della sessione';
+      const nomeOrigine = String(origine.nome || state.session || '').replace(/\s*\((?:ramo|branch)\)\s*$/, '').trim();
+      state.session = nomeOrigine ? tr('app.branches.nameSuffix', { nome: nomeOrigine }) : tr('app.branches.sessionBranch');
       sessionTitle.textContent = state.session; aggiornaTestataSessione(); // 05/9 Fase 2: Topbar
     /* ⛔ 27/8, trovato dalla pipeline QA visiva: solo sessionTitle veniva aggiornato — la card "Session topology" nel Context Rail e la voce "Main" nel foglio Albero sessione restavano al titolo demo ("Refactor auth flow") per sempre. Ogni elemento con lo stesso attributo resta sincronizzato. */
     $$('[data-current-session-title]').forEach((label) => { label.textContent = state.session; });
-      appendStatusNote(`Fork avviato dalla sessione ${idOrigine.slice(0, 8)}… — stessa cartella, stessa storia.`);
+      appendStatusNote(tr('app.branches.forkStartedNote', { id: idOrigine.slice(0, 8) }));
       collegaEventiSessione(dati.sessionId, generation);
       aggiornaElencoSessioniReali();
-      toast('Fork creato', 'Nuovo ramo di conversazione da questo punto.');
+      toast(tr('app.branches.forkCreated'), tr('app.branches.forkCreatedBody'));
     } catch (error) {
-      toast('Fork non riuscito', error.message);
+      toast(tr('app.branches.forkFailed'), error.message);
     }
   }
 
@@ -20344,7 +20524,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    * secondo caso. Stesso endpoint, stessa funzione: nessuna duplicazione.
    */
   async function resumeSession(messaggioFollowUp, immagini = [], { viaCodaId = null } = {}) {
-    if (!state.realSession.id) { toast('Nessuna sessione reale da riprendere'); return; }
+    if (!state.realSession.id) { toast(tr('app.run.noSessionToResume')); return; }
     const sessionId = state.realSession.id;
     const taskId = state.realSession.taskId;
     const generationAtSend = state.realSession.generation;
@@ -20360,9 +20540,9 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const voceElenco = state.sessionSelection.available.get(sessionId);
     if (voceElenco?.conclusa) {
       const eta = formattaEta(voceElenco.avviataAlle);
-      toast('Ripresa della sessione', `${eta ? `avviata ${eta} fa` : 'età non registrata'} · riprendere costa ${stimaTokenRipresa(voceElenco.usage)}`);
+      toast(tr('app.run.resuming'), tr('app.run.resumingBody', { eta: eta ? tr('app.run.startedAgo', { eta: eta }) : tr('app.run.ageUnrecorded'), costo: stimaTokenRipresa(voceElenco.usage) }));
     }
-    iniziaMisuraLatenza(messaggioFollowUp ? 'follow-up' : 'resume senza messaggio');
+    iniziaMisuraLatenza(messaggioFollowUp ? 'follow-up' : 'resume-senza-messaggio');
     if (messaggioFollowUp) { appendUserFollowUp(messaggioFollowUp, null, immagini); state.realSession.followUpBubbleInAttesa = true; }
     mostraAttesaRisposta(); // sia il follow-up sia un resume senza messaggio riavviano un giro vero
     try {
@@ -20371,6 +20551,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         /* ⭐ 14/09 — «Invia ora» dalla coda: il testo e le immagini li ha già il server, che toglie il messaggio e riprende. */
         await apiPost(`/api/v1/sessions/${encodeURIComponent(sessionId)}/queue/invia`, { id: viaCodaId });
       } else {
+        await allineaLinguaDellaSessione(sessionId); // K3b
         await apiPost(`/api/v1/sessions/${encodeURIComponent(sessionId)}/resume`, messaggioFollowUp ? { messaggio: messaggioFollowUp, ...(immagini.length ? { immagini: payloadImmagini(immagini) } : {}) } : {});
       }
       if (sessionId !== state.realSession.id || generationAtSend !== state.realSession.generation) return;
@@ -20432,12 +20613,12 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       state.realSession.taskId = taskId;
       collegaEventiSessione(sessionId, generation);
       aggiornaElencoSessioniReali();
-      if (!messaggioFollowUp) toast('Sessione ripresa', 'Un nuovo giro è iniziato sulla stessa conversazione.');
+      if (!messaggioFollowUp) toast(tr('app.run.resumed'), tr('app.run.resumedBody'));
     } catch (error) {
       if (sessionId !== state.realSession.id || generationAtSend !== state.realSession.generation) return;
       nascondiAttesaRisposta();
-      if (messaggioFollowUp) appendStatusNote(`Invio non riuscito: ${error.message}`, true); // il bubble utente resta — l'ha scritto davvero, solo non e' arrivato
-      toast(messaggioFollowUp ? 'Invio non riuscito' : 'Resume non riuscito', error.message);
+      if (messaggioFollowUp) appendStatusNote(tr('app.run.sendFailedWith', { motivo: error.message }), true); // il bubble utente resta — l'ha scritto davvero, solo non e' arrivato
+      toast(messaggioFollowUp ? tr('app.run.sendFailed') : tr('app.run.resumeFailed'), error.message);
       if (sessionId === state.realSession.id && !viaCodaId) ripristinaImmagini(immagini, messaggioFollowUp); // ⭐ 14/09: un messaggio della coda resta in coda sul server, non torna nel composer
     }
   }
@@ -20453,6 +20634,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   async function accodaMessaggioReale(testo, immagini = []) {
     const sessionId = state.realSession.id;
     try {
+      await allineaLinguaDellaSessione(sessionId); // K3b
       const dati = await apiPost(`/api/v1/sessions/${encodeURIComponent(sessionId)}/queue`, { messaggio: testo, ...(immagini.length ? { immagini: payloadImmagini(immagini) } : {}) });
       if (sessionId !== state.realSession.id) return; // la sessione a schermo è già un'altra, questo accodamento non la riguarda più
       /* ⭐ 14/09 — la coda la dice il server; un server vecchio senza `coda` nella risposta resta servito come prima. */
@@ -20463,7 +20645,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
        *   dopo uno stop, cioè prometteva una partenza che non sarebbe avvenuta. Il QUANDO lo dice il banner, che segue la pausa
        *   in ogni finestra. Il toast resta perché è `role="status"` (toast.js): è così che un lettore di schermo sa dell'accodamento.
        */
-      toast('Messaggio in coda', `Posizione ${dati.posizione} nella coda di questa sessione.`);
+      toast(tr('app.queue.queued'), tr('app.queue.position', { posizione: dati.posizione }));
     } catch (error) {
       /*
        * ⛔⛔⛔ 07/9 — LA RETE DI SICUREZZA. Il server rifiuta la coda quando la sessione non e
@@ -20478,8 +20660,9 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
        *   momento, cosi il pulsante smette di offrire un «ferma» che non ferma niente.
        * ⛔ Ogni altro errore resta un errore: questa scorciatoia vale SOLO per il caso nominato.
        */
-      const nonInCorso = /non è in corso|non pronta|SESSION_NOT_READY|interrott/i.test(String(error?.message || ''))
-        || error?.code === 'SESSION_NOT_READY';
+      /* K2 (03/10/2026, «L'interfaccia, dal codice»): il rifiuto si riconosce dal CODICE, mai dalla frase — le frasi del server
+         sono inglesi e `error.message` è nella lingua della persona, quindi una regex sulle parole non vale più in nessuna delle due. */
+      const nonInCorso = error?.code === 'SESSION_NOT_READY';
       if (nonInCorso && sessionId === state.realSession.id) {
         state.realSession.chiusaDalServer = true;
         state.realSession.eventoTerminaleVisto = true;
@@ -20489,7 +20672,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       }
       composerInput.value = testo;
       autoGrowTextarea();
-      toast('Messaggio non accodato', error.message);
+      toast(tr('app.queue.notQueued'), error.message);
       if (sessionId === state.realSession.id) ripristinaImmagini(immagini, testo);
     }
   }
@@ -20604,7 +20787,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   }
   function apriDialogoContesto(sessionId) {
     const root = $('#veloContesto');
-    if (!root) { toast('Context Manager', 'La finestra del contesto non è disponibile. Aggiorna la pagina.'); return; }
+    if (!root) { toast(tr('app.contextManager.title'), tr('app.contextManager.unavailable')); return; }
     ottieniMonitorContesto();
     const snapshot = contextChatSnapshot?.sessionId === sessionId ? contextChatSnapshot : null;
     if (!contextCompactor) contextCompactor = montaContextCompactor(root, {
@@ -20627,12 +20810,12 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    */
   function apriContextManager() {
     const sessionId = state.realSession.id;
-    if (!sessionId) { toast(tr('Context Manager'), tr('Apri una conversazione per gestirne il contesto.')); return; }
+    if (!sessionId) { toast(tr('app.contextManager.title'), tr('app.contextManager.noConversation')); return; }
     apriDialogoContesto(sessionId);
   }
   async function compactSession() {
     const sessionId = state.realSession.id;
-    if (!sessionId) { toast(tr('Compatta'), tr('Apri una conversazione per riassumerla.')); return; }
+    if (!sessionId) { toast(tr('app.contextManager.compact'), tr('app.contextManager.compactNoConversation')); return; }
     if (await trialContestoAttivo(sessionId)) { if (sessionId === state.realSession.id) apriDialogoContesto(sessionId); return; }
     await compattaConversazioneLegacy(sessionId);
   }
@@ -20678,14 +20861,14 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       if (esito.compattato) {
         misuraDopoCompattazione(sessionId, esito.tokenDopo);
         aggiornaSeparatoreLegacy(colonna, { at: esito.at, stato: 'riassunta', annullabile: esito.annullabile, tokenPrima: esito.tokenPrima, tokenDopo: esito.tokenDopo }, { ...opzioniRigaLegacy(sessionId), testo: testoRigaCompattazione({ stato: 'riassunta', tokenPrima: esito.tokenPrima, tokenDopo: esito.tokenDopo }) });
-      } else appendStatusNote(tr('Il server non ha riassunto la conversazione: resta com’era.'), false, { meta: tr('Conversazione non riassunta') });
+      } else appendStatusNote(tr('app.contextManager.notSummarized'), false, { meta: tr('app.contextManager.notSummarizedMeta') });
       return { stato: esito.compattato ? 'riassunta' : 'invariata' };
     } catch (errore) {
-      const risposta = { stato: 'errore', messaggio: errore?.message || tr('Operazione non riuscita.') };
+      const risposta = { stato: 'errore', messaggio: errore?.message || tr('app.common.operationFailed') };
       if (sessionId !== state.realSession.id) return risposta;
       aggiornaAvanzamentoLegacy(colonna, null, { sessionId });
       // un rifiuto dichiarato («ancora in corso», «già in corso») non è un guasto: tono di nota, non rosso
-      appendStatusNote(errore?.message || tr('Operazione non riuscita.'), errore?.code !== 'SESSION_NOT_READY', { meta: tr('Conversazione non riassunta') });
+      appendStatusNote(errore?.message || tr('app.common.operationFailed'), errore?.code !== 'SESSION_NOT_READY', { meta: tr('app.contextManager.notSummarizedMeta') });
       return risposta;
     } finally {
       compattazioneLegacy.inVolo.delete(sessionId);
@@ -20698,11 +20881,11 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     if (!voce?.at) return;
     // «in volo» lo dice la RIGA (`data-compattazione-aperta`): un solo posto, provato rompendolo (M3b). Un secondo Set qui sarebbe stato ridondante e non provabile.
     const voci = [
-      voce.inVolo || voce.annullabile === false ? null : { icona: 'i-history', etichetta: tr('Annulla il riassunto'), azione: () => { void annullaRiassuntoLegacy(sessionId, voce); } },
-      voce.riassunto ? { icona: 'i-eye', etichetta: tr('Mostra cosa è stato riassunto'), azione: () => { alternaRiassuntoLegacy(voce.nodo); } } : null,
+      voce.inVolo || voce.annullabile === false ? null : { icona: 'i-history', etichetta: tr('app.contextManager.undo'), azione: () => { void annullaRiassuntoLegacy(sessionId, voce); } },
+      voce.riassunto ? { icona: 'i-eye', etichetta: tr('app.contextManager.showSummarized'), azione: () => { alternaRiassuntoLegacy(voce.nodo); } } : null,
     ].filter(Boolean);
     if (!voci.length) return;
-    apriMenuAzioni({ voci, etichetta: tr('Azioni sul riassunto'), classe: 'compattazione-menu', posizionamento: { ancoraEl, x, y, focusElement, fuoco } });
+    apriMenuAzioni({ voci, etichetta: tr('app.contextManager.actionsLabel'), classe: 'compattazione-menu', posizionamento: { ancoraEl, x, y, focusElement, fuoco } });
     /* ⛔ Visto nella foto 3b-menu a 1440×900: il «⋯» sta al bordo destro della colonna e `apriMenuAzioni` misura la
        larghezza del menu PRIMA di posizionarlo, quando il testo può ancora andare a capo: il menu usciva dallo
        schermo. Qui si rilegge la larghezza vera (con `white-space:nowrap`, `compattazione-legacy.css`) e si
@@ -20722,7 +20905,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     } catch (errore) {
       if (sessionId !== state.realSession.id) return;
       aggiornaSeparatoreLegacy(colonna, { ...voce, inVolo: false }, { ...vivo(), testo: testoRigaCompattazione({ stato: 'riassunta', tokenPrima: voce.tokenPrima, tokenDopo: voce.tokenDopo }) });
-      toast(tr('Riassunto non annullato'), errore?.message || tr('Operazione non riuscita.'));
+      toast(tr('app.contextManager.undoFailed'), errore?.message || tr('app.common.operationFailed'));
     }
   }
   /** Gli eventi del registro (contratto F3), disegnati nel punto della conversazione in cui arrivano. */
@@ -20832,7 +21015,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       });
     catenaAggiornamentiSessione = richiesta.catch(() => undefined);
     richiesta.catch((error) => {
-      toast('Preferenza non salvata', messaggioErroreUtente(error, 'La scelta non è stata salvata. Apri Doctor e riprova.'));
+      toast(tr('app.settings.preferenceNotSaved'), messaggioErroreUtente(error, tr('app.settings.choiceNotSaved')));
     });
     return richiesta;
   }
@@ -20945,7 +21128,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
        Si mostra, e si decide DOPO il disegno: doppio rAF per il caso «era in vista davvero», osservatore per
        tutto il resto. */
     const testo = avviso.querySelector('[data-avviso-piano-testo]');
-    if (testo) testo.textContent = tr('Il piano è stato aggiornato (revisione {n}).').replace('{n}', String(revisione));
+    if (testo) testo.textContent = tr('app.plan.updated', { n: revisione });
     avviso.hidden = false;
     osservatoreAvvisoPiano?.disconnect();
     /* ⛔ Niente controllo a TEMPO (misurato: un doppio rAF cadeva prima del disegno del testo in streaming, la cui
@@ -20984,11 +21167,11 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const visibile = fasciaModoVisibile();
     const testo = fascia.querySelector('[data-fascia-modo-testo]');
     /* Il testo si scrive quando la fascia compare, così la regione viva lo annuncia una volta. */
-    if (testo) testo.textContent = visibile ? tr('Questa conversazione usava la modalità Workflow, che non c’è più.') : '';
+    if (testo) testo.textContent = visibile ? tr('app.plan.workflowGone') : '';
     const nota = fascia.querySelector('[data-fascia-modo-nota]');
-    if (nota) nota.textContent = tr('Scegli come continuare: vale per i prossimi messaggi.');
+    if (nota) nota.textContent = tr('app.plan.chooseHowToContinue');
     for (const bottone of fascia.querySelectorAll('[data-fascia-modo-scelta]')) {
-      bottone.textContent = bottone.dataset.fasciaModoScelta === 'piano' ? tr('Continua in Piano') : tr('Continua in Normale');
+      bottone.textContent = bottone.dataset.fasciaModoScelta === 'piano' ? tr('app.plan.continuePlan') : tr('app.plan.continueNormal');
       bottone.disabled = statoFasciaModo().inVolo;
     }
     fascia.hidden = !visibile;
@@ -21012,7 +21195,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       && stato.richiesto && stato.modoContratto === 'piano' && !state.realSession.inRigiocata);
     fascia.hidden = !visibile;
     const testo = fascia.querySelector('[data-fascia-piano-testo]');
-    if (testo) testo.textContent = visibile ? tr('Piano attivo dal prossimo giro') : '';
+    if (testo) testo.textContent = visibile ? tr('app.plan.activeNextTurn') : '';
   }
   function registraCambioPianoRichiesto(valore) {
     if (!valore || !['normale', 'piano'].includes(valore.modalitaOperativa)) return;
@@ -21039,7 +21222,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       if (state.realSession.id !== sessionId) return;
       risolviFasciaModoRitirato(sessionId);
       aggiornaPillolaPermessi();
-      toast(tr('Modo di lavoro aggiornato'), scelto === 'piano' ? tr('Prima prepara il piano') : tr('Lavora normalmente'));
+      toast(tr('app.permissions.workModeUpdated'), scelto === 'piano' ? tr('app.plan.planFirst') : tr('app.plan.workNormally'));
     } catch {
       stato.inVolo = false;
       if (state.realSession.id === sessionId) {
@@ -21094,7 +21277,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     if (sessionSelectionToggle) {
       sessionSelectionToggle.hidden = totale === 0;
       sessionSelectionToggle.setAttribute('aria-pressed', String(state.sessionSelection.active));
-      const nome = state.sessionSelection.active ? 'Fine selezione' : 'Seleziona sessioni';
+      const nome = state.sessionSelection.active ? tr('app.sessions.selectionDone') : tr('app.sessions.selectSessions');
       sessionSelectionToggle.setAttribute('aria-label', nome);
       sessionSelectionToggle.title = nome;
       sessionSelectionToggle.classList.toggle('is-attivo', state.sessionSelection.active);
@@ -21110,7 +21293,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     sessionSelectionSelectAll.hidden = !state.sessionSelection.active;
     sessionSelectionSelectAll.disabled = totale === 0;
     const tutto = totale > 0 && selezionate === totale;
-    sessionSelectionSelectAll.textContent = tutto ? 'Deseleziona tutto' : 'Seleziona tutto';
+    sessionSelectionSelectAll.textContent = tutto ? tr('app.sessions.deselectAll') : tr('app.sessions.selectAll');
     /*
      * ⛔ 11/09 (lotto D) — i tre puntini delle azioni di gruppo. Sono SPENTI finché non c'è niente
      *   di selezionato: un menu che si apre su «0 sessioni» offrirebbe tre azioni che non possono
@@ -21120,13 +21303,13 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       sessionSelectionMore.hidden = !state.sessionSelection.active;
       sessionSelectionMore.disabled = selezionate === 0 || state.sessionSelection.deleting;
       const nome = selezionate === 0
-        ? 'Azioni sulle sessioni selezionate (nessuna selezionata)'
-        : `Azioni su ${selezionate} session${selezionate === 1 ? 'e' : 'i'} selezionat${selezionate === 1 ? 'a' : 'e'}`;
+        ? tr('app.sessions.selectionActionsNone')
+        : trn('app.sessions.selectionActionsOne', 'app.sessions.selectionActionsMany', selezionate);
       sessionSelectionMore.setAttribute('aria-label', nome);
       sessionSelectionMore.title = nome;
     }
     sessionSelectionCount.hidden = selezionate === 0;
-    sessionSelectionCount.textContent = selezionate === 0 ? '' : `${selezionate} selezionat${selezionate === 1 ? 'a' : 'e'}`;
+    sessionSelectionCount.textContent = selezionate === 0 ? '' : trn('app.sessions.selectedCountOne', 'app.sessions.selectedCountMany', selezionate);
   }
 
   function aggiornaStatoRigheSelezione() {
@@ -21173,24 +21356,24 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    */
   async function esportaSessioniSelezionate() {
     const ids = sessioniSelezionate();
-    if (ids.length === 0) { toast('Nessuna sessione selezionata', 'Spunta almeno una riga.'); return; }
+    if (ids.length === 0) { toast(tr('app.sessions.noneSelected'), tr('app.sessions.noneSelectedBody')); return; }
     const pezzi = [];
     const fallite = [];
     for (const id of ids) {
       try { pezzi.push(costruisciTrascrizioneMarkdown(await apiGet(`/api/v1/sessions/${encodeURIComponent(id)}/export`))); }
       catch { fallite.push(id); }
     }
-    if (pezzi.length === 0) { toast('Esportazione non riuscita', 'Nessuna trascrizione si è lasciata leggere. Apri Doctor e riprova.'); return; }
-    scaricaTesto(pezzi.join('\n\n---\n\n'), `talos-sessioni-${pezzi.length}.md`, 'text/markdown');
-    toast('Trascrizioni esportate', fallite.length === 0
-      ? `${pezzi.length} session${pezzi.length === 1 ? 'e' : 'i'} in un file Markdown.`
-      : `${pezzi.length} nel file; ${fallite.length} non si è lasciata leggere.`);
+    if (pezzi.length === 0) { toast(tr('app.sessions.exportFailed'), tr('app.sessions.exportUnreadable')); return; }
+    scaricaTesto(pezzi.join('\n\n---\n\n'), tr('app.sessions.exportBatchFileName', { n: pezzi.length }), 'text/markdown');
+    toast(tr('app.sessions.transcriptsExported'), fallite.length === 0
+      ? trn('app.sessions.exportCountOne', 'app.sessions.exportCountMany', pezzi.length)
+      : tr('app.sessions.exportPartial', { riusciti: pezzi.length, falliti: fallite.length }));
   }
 
   function copiaIdentificativiSelezionati() {
     const ids = sessioniSelezionate();
-    if (ids.length === 0) { toast('Nessuna sessione selezionata', 'Spunta almeno una riga.'); return; }
-    copyText(ids.join('\n'), `${ids.length} identificativ${ids.length === 1 ? 'o copiato' : 'i copiati'}`);
+    if (ids.length === 0) { toast(tr('app.sessions.noneSelected'), tr('app.sessions.noneSelectedBody')); return; }
+    copyText(ids.join('\n'), trn('app.sessions.idsCopiedOne', 'app.sessions.idsCopiedMany', ids.length));
   }
 
   /** Il menu overflow della barra di selezione: le stesse tre azioni, sempre nello stesso ordine,
@@ -21199,13 +21382,13 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const quante = sessioniSelezionate().length;
     if (quante === 0) return;
     const voci = [
-      { etichetta: 'Esporta le trascrizioni', icona: 'i-download', azione: () => { void esportaSessioniSelezionate(); } },
-      { etichetta: 'Copia gli identificativi', icona: 'i-link', azione: () => copiaIdentificativiSelezionati() },
-      { etichetta: `Elimina ${quante} session${quante === 1 ? 'e' : 'i'}`, icona: 'i-trash', azione: () => chiediEdEliminaSessioniSelezionate(), pericoloso: true },
+      { etichetta: tr('app.sessions.selectionMenu.exportTranscripts'), icona: 'i-download', azione: () => { void esportaSessioniSelezionate(); } },
+      { etichetta: tr('app.sessions.selectionMenu.copyIds'), icona: 'i-link', azione: () => copiaIdentificativiSelezionati() },
+      { etichetta: trn('app.sessions.selectionMenu.deleteOne', 'app.sessions.selectionMenu.deleteMany', quante), icona: 'i-trash', azione: () => chiediEdEliminaSessioniSelezionate(), pericoloso: true },
     ];
     apriMenuAzioni({
       voci,
-      etichetta: `Azioni su ${quante} session${quante === 1 ? 'e selezionata' : 'i selezionate'}`,
+      etichetta: trn('app.sessions.selectionActionsOne', 'app.sessions.selectionActionsMany', quante),
       classe: 'session-bulk-menu',
       posizionamento: { ancoraEl: sessionSelectionMore, focusElement: sessionSelectionMore, fuoco: evento?.detail === 0 },
     });
@@ -21223,10 +21406,10 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const quante = sessioniSelezionate().length;
     if (quante === 0 || state.sessionSelection.deleting) return;
     confermaModale({
-      titolo: `Eliminare ${quante} session${quante === 1 ? 'e' : 'i'} selezionat${quante === 1 ? 'a' : 'e'}?`,
-      domanda: 'Le trascrizioni vengono cancellate dal disco.',
-      conseguenza: 'Non si annulla da TALOS.',
-      etichettaConferma: quante === 1 ? 'Elimina la sessione' : `Elimina ${quante} sessioni`,
+      titolo: trn('app.sessions.deleteSelectionOne', 'app.sessions.deleteSelectionMany', quante),
+      domanda: tr('app.sessions.deleteQuestion'),
+      conseguenza: tr('app.sessions.deleteConsequence'),
+      etichettaConferma: trn('app.sessions.deleteConfirmOne', 'app.sessions.deleteConfirmMany', quante),
       onConferma: () => { void eliminaSessioniSelezionate(); },
     });
   }
@@ -21241,9 +21424,9 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     state.sessionSelection.deleting = false;
     state.sessionSelection.selected.clear();
     if (fallite.length > 0) {
-      toast('Alcune sessioni non sono state eliminate', `${fallite.length} ${fallite.length === 1 ? 'operazione non riuscita' : 'operazioni non riuscite'}. Riprova.`);
+      toast(tr('app.sessions.someNotDeleted'), trn('app.sessions.deleteFailuresOne', 'app.sessions.deleteFailuresMany', fallite.length));
     } else {
-      toast('Sessioni eliminate', `${ids.length} session${ids.length === 1 ? 'e' : 'i'} rimosse.`);
+      toast(tr('app.sessions.manyDeleted'), trn('app.sessions.removedOne', 'app.sessions.removedMany', ids.length));
       state.sessionSelection.active = false;
     }
     await aggiornaElencoSessioniReali();
@@ -21286,7 +21469,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     orb.append(logo);
     const testo = document.createElement('span');
     testo.className = 'talos-caricamento-cronologia__testo';
-    testo.textContent = 'Apro la cronologia…';
+    testo.textContent = tr('app.sessions.openingHistory');
     indicatore.append(orb, testo);
     scorrevole.insertBefore(indicatore, conversation);
   }
@@ -21429,7 +21612,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     window.setTimeout(smetti, 30_000);
   }
 
-  function passaASessione(sessionId, taskId, nome, modello, impostazioniSessione = null) {
+  function passaASessione(sessionId, taskId, nome, modello, impostazioniSessione = null, { forza = false } = {}) {
     if (state.sessionSelection.active) {
       toggleSessionSelection(sessionId, !state.sessionSelection.selected.has(sessionId));
       return;
@@ -21446,7 +21629,8 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     workspacePreferences.update({ lastSession: sessionId });
     const dallElencoSubito = state.sessionSelection.available?.get?.(sessionId) ?? null;
     const contrattoSessione = impostazioniSessione || dallElencoSubito || { modello };
-    if (sessionId === state.realSession.id) {
+    /* `forza` (03/10/2026, cambio di lingua): la stessa sessione si rilegge davvero dal server invece di tornare solo in fondo. */
+    if (sessionId === state.realSession.id && !forza) {
       applicaImpostazioniSessione(contrattoSessione, sessionId);
       setView('chat');
       closePanels();
@@ -21639,7 +21823,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     if (!small) return;
     if (state.realSession.id) { small.hidden = true; return; }
     small.hidden = false;
-    small.textContent = state.pendingCustomSession ? 'in attesa del primo messaggio' : 'premi «Nuova» per iniziare';
+    small.textContent = state.pendingCustomSession ? tr('app.sessions.waitingFirstMessage') : tr('app.sessions.pressNew');
   }
 
   /** ⭐ 04/9, W1-12 — la riga della sessione PENDENTE nella sidebar (prima non esisteva: la cartella era scelta ma l'elenco non la mostrava, e nessuna riga era evidenziata). */
@@ -21677,15 +21861,15 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     if (secondi < 60) return `${secondi} s`;
     if (secondi < 3600) return `${Math.round(secondi / 60)} min`;
     if (secondi < 86400) return `${Math.round(secondi / 3600)} h`;
-    return `${Math.round(secondi / 86400)} g`;
+    return `${Math.round(secondi / 86400)} ${tr('app.time.dayShort')}`;
   }
 
   /** ⭐ 04/9, W1-12 (ricerca) — quanto costa riprendere: l'ultimo `usage` della sessione è il contesto che il modello rilegge al prossimo giro. Etichettato «stima», mai «costo». */
   function stimaTokenRipresa(usage) {
-    if (!usage) return 'consumo non registrato';
+    if (!usage) return tr('app.usage.unrecorded');
     const totale = (Number(usage.prompt_tokens ?? 0) || 0) + (Number(usage.completion_tokens ?? 0) || 0);
-    if (totale <= 0) return 'consumo non registrato';
-    return `circa ${totale >= 1000 ? `${(totale / 1000).toFixed(1)}k` : totale} token (stima)`;
+    if (totale <= 0) return tr('app.usage.unrecorded');
+    return tr('app.usage.approxTokens', { k: totale >= 1000 ? `${(totale / 1000).toFixed(1)}k` : totale });
   }
 
   /**
@@ -21702,7 +21886,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   function oraDelGiorno(iso) {
     const t = Date.parse(iso);
     if (!Number.isFinite(t)) return '';
-    return new Date(t).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
+    return new Date(t).toLocaleTimeString(localeUI(), { hour: '2-digit', minute: '2-digit' });
   }
 
   /*
@@ -21939,8 +22123,8 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         trePuntini.className = 'td-session-menu';
         trePuntini.setAttribute('aria-haspopup', 'menu');
         trePuntini.setAttribute('aria-expanded', 'false');
-        trePuntini.setAttribute('aria-label', `Azioni per ${etichetta}`);
-        trePuntini.title = 'Azioni';
+        trePuntini.setAttribute('aria-label', tr('app.common.actionsFor', { nome: etichetta }));
+        trePuntini.title = tr('app.common.actions');
         trePuntini.tabIndex = -1; // segue la riga nel roving: vedi `fermataRiga` qui sotto
         trePuntini.append(iconaSvgAlbero('i-more'));
         trePuntini.addEventListener('click', (event) => {
@@ -22024,10 +22208,10 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     card.hidden = false;
     const titolo = $('strong', card);
     const sottotitolo = $('span', card);
-    if (titolo) titolo.textContent = `${elenco.length} automazion${elenco.length === 1 ? 'e' : 'i'}`;
+    if (titolo) titolo.textContent = trn('app.automations.countOne', 'app.automations.countMany', elenco.length);
     if (sottotitolo) {
       const prossime = elenco.filter((a) => a.attiva && a.prossimaEsecuzione).map((a) => a.prossimaEsecuzione).sort();
-      sottotitolo.textContent = prossime.length > 0 ? `Prossima esecuzione ${oraDelGiorno(prossime[0])}` : 'Nessuna attiva';
+      sottotitolo.textContent = prossime.length > 0 ? tr('app.automations.nextRun', { ora: oraDelGiorno(prossime[0]) }) : tr('app.automations.noneActive');
     }
   }
 
@@ -22049,7 +22233,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       await apiPost('/api/v1/automations/' + encodeURIComponent(a.id) + '/' + azione, corpo);
       await renderAutomationsReali();
     } catch (error) {
-      vistaAutomazioni = { ...vistaAutomazioni, erroreAzione: 'Modifica di «' + a.nome + '» non salvata: ' + error.message };
+      vistaAutomazioni = { ...vistaAutomazioni, erroreAzione: tr('app.board.workshop.saveFailed', { nome: a.nome, motivo: error.message }) };
     } finally { scritturaAutomazioni = null;mostraAutomazioni(); }
   }
   async function renderAutomationsReali() {
@@ -22058,21 +22242,21 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     try {
       const dati = await apiGet('/api/v1/automations');
       if (generazione !== generazioneAutomazioni) return;
-      if (!Array.isArray(dati.items) || dati.items.some(a => !a || typeof a !== 'object' || Array.isArray(a) || typeof a.id !== 'string' || !a.id)) throw new Error('Elenco delle automazioni non valido');
+      if (!Array.isArray(dati.items) || dati.items.some(a => !a || typeof a !== 'object' || Array.isArray(a) || typeof a.id !== 'string' || !a.id)) throw new Error(tr('app.automations.invalidList'));
       datiAutomazioni = dati.items;vistaAutomazioni = { errore: null, erroreAzione: null, caricamento: false };
       aggiornaWidgetAutomazioni(datiAutomazioni);
     } catch (error) {
       if (generazione !== generazioneAutomazioni) return;
-      datiAutomazioni = [];vistaAutomazioni = { errore: 'Automazioni non disponibili: ' + error.message, erroreAzione: null, caricamento: false };
+      datiAutomazioni = [];vistaAutomazioni = { errore: tr('app.automations.unavailableWith', { motivo: error.message }), erroreAzione: null, caricamento: false };
     }
     mostraAutomazioni();
   }
 
   /** Il foglio "Nuova automazione": task dal corpus + intervallo + limite giornaliero, gli stessi tetti duri validati anche lato server. */
   async function openNewAutomationSheet() {
-    sheetEyebrow.textContent = 'Automazioni';
-    sheetTitle.textContent = 'Nuova automazione';
-    sheetBody.replaceChildren(textElement('p', 'board-empty', 'Carico l’elenco dal server…'));
+    sheetEyebrow.textContent = tr('app.automations.title');
+    sheetTitle.textContent = tr('app.automations.new');
+    sheetBody.replaceChildren(textElement('p', 'board-empty', tr('app.automations.loading')));
     prepareResizableDialog(sheetDialog, 'sheet:new-automation');
     showEmbeddedDialog(sheetDialog);
 
@@ -22080,34 +22264,34 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     try {
       tasks = (await apiGet('/api/v1/tasks')).items;
     } catch (error) {
-      sheetBody.replaceChildren(textElement('p', 'board-empty', 'Non riesco a caricare le attività in questo momento. Apri Doctor per capire cosa manca e riprova.'));
+      sheetBody.replaceChildren(textElement('p', 'board-empty', tr('app.automations.tasksUnavailable')));
       return;
     }
     if (!Array.isArray(tasks) || tasks.length === 0) {
-      sheetBody.replaceChildren(textElement('p', 'board-empty', 'Non ci sono ancora attività pronte per creare un’automazione. Puoi preparare il catalogo nelle impostazioni oppure riprovare più tardi.'));
+      sheetBody.replaceChildren(textElement('p', 'board-empty', tr('app.automations.noTasks')));
       return;
     }
 
     const form = document.createElement('form');
     form.className = 'sheet-section';
-    form.appendChild(textElement('span', 'sheet-label', 'Task del corpus'));
+    form.appendChild(textElement('span', 'sheet-label', tr('app.automations.corpusTask')));
     const selectTask = document.createElement('select');
     selectTask.className = 'sheet-input';
     for (const task of tasks) {
       const opzione = document.createElement('option');
       opzione.value = task.id;
-      opzione.textContent = `${task.id} · difficoltà ${task.difficolta}`;
+      opzione.textContent = tr('app.automations.taskOption', { id: task.id, difficolta: task.difficolta });
       selectTask.appendChild(opzione);
     }
     form.appendChild(selectTask);
-    form.appendChild(textElement('span', 'sheet-label', 'Ogni quanti minuti'));
+    form.appendChild(textElement('span', 'sheet-label', tr('app.automations.interval')));
     const inputIntervallo = document.createElement('input');
     inputIntervallo.className = 'sheet-input';
     inputIntervallo.type = 'number';
     inputIntervallo.min = '5';
     inputIntervallo.value = '30';
     form.appendChild(inputIntervallo);
-    form.appendChild(textElement('span', 'sheet-label', 'Massimo esecuzioni al giorno'));
+    form.appendChild(textElement('span', 'sheet-label', tr('app.automations.maxPerDay')));
     const inputLimite = document.createElement('input');
     inputLimite.className = 'sheet-input';
     inputLimite.type = 'number';
@@ -22118,14 +22302,13 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     /* ⛔ 24/09/2026, decisione owner («come il mobile, subito»): il modulo dice con quale modello girerà l'automazione, e il
        modello si salva con lei. Senza un modello scelto nella chat gira col predefinito del server, e lo dice. */
     const modelloAutomazione = typeof state.model === 'string' && state.model.trim() ? state.model.trim() : null;
-    form.appendChild(textElement('small', 'sheet-hint', (modelloAutomazione
-      ? 'Userà ' + (nomeModelloBreve(modelloAutomazione) || modelloAutomazione) + ', il modello scelto nella chat. '
-      : 'Userà il modello predefinito del server: nella chat non ne hai scelto uno. ')
-      + 'Nasce sempre in pausa: la attivi tu dall\'elenco quando vuoi che parta da sola.'));
+    form.appendChild(textElement('small', 'sheet-hint', `${modelloAutomazione
+      ? tr('app.automations.selectedModel', { modello: nomeModelloBreve(modelloAutomazione) || modelloAutomazione })
+      : tr('app.automations.serverDefaultModel')} ${tr('app.automations.startsPaused')}`));
     const submit = document.createElement('button');
     submit.type = 'submit';
     submit.className = 'primary-btn compact full';
-    submit.textContent = 'Crea automazione';
+    submit.textContent = tr('app.automations.create');
     form.appendChild(submit);
     form.addEventListener('submit', async (event) => {
       event.preventDefault();
@@ -22137,10 +22320,10 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
           ...(modelloAutomazione ? { modello: modelloAutomazione } : {}),
         });
         closeEmbeddedDialog(sheetDialog);
-        toast('Automazione creata', 'In pausa — attivala dall\'elenco quando vuoi.');
+        toast(tr('app.automations.created'), tr('app.automations.createdBody'));
         renderAutomationsReali();
       } catch (error) {
-        toast('Creazione non riuscita', error.message);
+        toast(tr('app.common.createFailed'), error.message);
       }
     });
     sheetBody.replaceChildren(form);
@@ -22205,10 +22388,10 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    *   rispetta il sistema di design che il progetto ha gia'.)
    */
   function montaFallbackIn(mount, valore, onChange) {
-    const posto=textElement('div','talos-stack','Leggo i fornitori con cui continuare…');mount.append(posto);
+    const posto=textElement('div','talos-stack',tr('app.modelPicker.fallbacksLoading'));mount.append(posto);
     apiGet('/api/v1/providers').then(dati=>{
       if(posto.isConnected)posto.replaceChildren(creaSceltaFallback({fornitori:dati.items||[],valore,usaAttrezzi:true,onChange}));
-    }).catch(()=>{if(posto.isConnected)posto.textContent='Le riserve non sono disponibili: riapri la scelta del modello.';});
+    }).catch(()=>{if(posto.isConnected)posto.textContent=tr('app.modelPicker.fallbacksUnavailable');});
   }
   async function scegliFallbackCorrente(valore) {
     await sincronizzaImpostazioniSessione({fallbackProviders:valore});
@@ -22246,7 +22429,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
 
     const shortcuts = document.createElement('div');
     shortcuts.className = 'workspace-chooser-shortcuts';
-    shortcuts.setAttribute('aria-label', 'Cartelle consigliate');
+    shortcuts.setAttribute('aria-label', tr('app.workspace.suggested'));
 
     const left = document.createElement('section');
     left.className = 'workspace-chooser-browser';
@@ -22254,9 +22437,9 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const leftHead = document.createElement('div');
     leftHead.className = 'workspace-chooser-section-head';
     leftHead.append(
-      textElement('span', 'eyebrow', 'Workspace'),
-      textElement('h3', '', 'Scegli la cartella di lavoro'),
-      textElement('p', '', 'TALOS lavorerà direttamente nella cartella scelta, senza creare copie.'),
+      textElement('span', 'eyebrow', tr('app.workspace.eyebrow')),
+      textElement('h3', '', tr('app.workspace.chooseTitle')),
+      textElement('p', '', tr('app.workspace.chooseBody')),
     );
     leftHead.querySelector('h3').id = 'workspaceChooserBrowserTitle';
 
@@ -22265,7 +22448,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const upButton = document.createElement('button');
     upButton.type = 'button';
     upButton.className = 'workspace-chooser-up';
-    upButton.setAttribute('aria-label', 'Vai alla cartella superiore');
+    upButton.setAttribute('aria-label', tr('app.workspace.goParent'));
     upButton.innerHTML = icon('i-arrow-left');
     const pathInput = document.createElement('input');
     pathInput.type = 'text';
@@ -22273,40 +22456,40 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     pathInput.className = 'workspace-chooser-path';
     pathInput.autocomplete = 'off';
     pathInput.spellcheck = false;
-    pathInput.setAttribute('aria-label', 'Percorso cartella');
+    pathInput.setAttribute('aria-label', tr('app.workspace.pathLabel'));
     const goButton = document.createElement('button');
     goButton.type = 'button';
     goButton.className = 'workspace-chooser-go';
-    goButton.textContent = 'Apri';
+    goButton.textContent = tr('app.common.open');
     pathBar.append(upButton, pathInput, goButton);
 
     const treeTools = document.createElement('div');
     treeTools.className = 'workspace-chooser-tree-tools';
     treeTools.setAttribute('role', 'toolbar');
-    treeTools.setAttribute('aria-label', 'Comandi cartelle');
+    treeTools.setAttribute('aria-label', tr('app.workspace.commandsLabel'));
     const newFolderButton = document.createElement('button');
     newFolderButton.type = 'button';
     newFolderButton.className = 'workspace-chooser-tree-tool';
-    newFolderButton.setAttribute('aria-label', 'Nuova cartella');
-    newFolderButton.title = 'Nuova cartella';
+    newFolderButton.setAttribute('aria-label', tr('app.files.newFolder'));
+    newFolderButton.title = tr('app.files.newFolder');
     newFolderButton.innerHTML = icon('i-folder');
     const refreshFoldersButton = document.createElement('button');
     refreshFoldersButton.type = 'button';
     refreshFoldersButton.className = 'workspace-chooser-tree-tool';
-    refreshFoldersButton.setAttribute('aria-label', 'Aggiorna cartelle');
-    refreshFoldersButton.title = 'Aggiorna';
+    refreshFoldersButton.setAttribute('aria-label', tr('app.workspace.refreshLabel'));
+    refreshFoldersButton.title = tr('app.common.refresh');
     refreshFoldersButton.innerHTML = icon('i-history');
     const collapseFoldersButton = document.createElement('button');
     collapseFoldersButton.type = 'button';
     collapseFoldersButton.className = 'workspace-chooser-tree-tool';
-    collapseFoldersButton.setAttribute('aria-label', 'Comprimi cartelle');
-    collapseFoldersButton.title = 'Comprimi tutto';
+    collapseFoldersButton.setAttribute('aria-label', tr('app.workspace.collapseLabel'));
+    collapseFoldersButton.title = tr('app.workspace.collapseTitle');
     collapseFoldersButton.innerHTML = icon('i-chevron');
     const copyFolderPathButton = document.createElement('button');
     copyFolderPathButton.type = 'button';
     copyFolderPathButton.className = 'workspace-chooser-tree-tool';
-    copyFolderPathButton.setAttribute('aria-label', 'Copia percorso cartella');
-    copyFolderPathButton.title = 'Copia percorso';
+    copyFolderPathButton.setAttribute('aria-label', tr('app.workspace.copyPathLabel'));
+    copyFolderPathButton.title = tr('app.workspace.copyPathTitle');
     copyFolderPathButton.innerHTML = icon('i-copy');
     const treeToolsSpacer = document.createElement('span');
     treeToolsSpacer.className = 'workspace-chooser-tree-tools-spacer';
@@ -22320,16 +22503,16 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     newFolderInput.maxLength = 255;
     newFolderInput.autocomplete = 'off';
     newFolderInput.spellcheck = false;
-    newFolderInput.setAttribute('aria-label', 'Nome nuova cartella');
-    newFolderInput.placeholder = 'Nome cartella';
+    newFolderInput.setAttribute('aria-label', tr('app.workspace.newFolderLabel'));
+    newFolderInput.placeholder = tr('app.workspace.newFolderPlaceholder');
     const createFolderButton = document.createElement('button');
     createFolderButton.type = 'submit';
     createFolderButton.className = 'primary-btn compact';
-    createFolderButton.textContent = 'Crea cartella';
+    createFolderButton.textContent = tr('app.files.createFolder');
     const cancelFolderButton = document.createElement('button');
     cancelFolderButton.type = 'button';
     cancelFolderButton.className = 'text-btn compact';
-    cancelFolderButton.textContent = 'Annulla';
+    cancelFolderButton.textContent = tr('app.common.cancel');
     const newFolderStatus = document.createElement('span');
     newFolderStatus.className = 'workspace-chooser-new-folder-status';
     newFolderStatus.setAttribute('role', 'status');
@@ -22341,7 +22524,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     tree.id = 'workspaceChooserTree';
     tree.className = 'workspace-chooser-tree';
     tree.setAttribute('role', 'tree');
-    tree.setAttribute('aria-label', 'Cartelle del computer');
+    tree.setAttribute('aria-label', tr('app.workspace.treeLabel'));
     const treeState = document.createElement('div');
     treeState.className = 'workspace-chooser-tree-state';
     treeState.setAttribute('role', 'status');
@@ -22356,7 +22539,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
      * guardandola annaspare; il conto lo fa il server (workspace-info.mjs) con un tetto di
      * scansione dichiarato, perché contare una cartella enorme è esso stesso il problema.
      */
-    selectedCard.innerHTML = `${icon('i-folder-open')}<span><small>Cartella scelta</small><strong data-workspace-selected-path>Nessuna cartella scelta</strong><small class="workspace-chooser-ritratto" data-workspace-ritratto hidden></small><small class="workspace-chooser-avviso" data-workspace-avviso hidden></small></span>`;
+    selectedCard.innerHTML = `${icon('i-folder-open')}<span><small>${tr('app.workspace.selectedFolderLabel')}</small><strong data-workspace-selected-path>${tr('app.workspace.noneSelected')}</strong><small class="workspace-chooser-ritratto" data-workspace-ritratto hidden></small><small class="workspace-chooser-avviso" data-workspace-avviso hidden></small></span>`;
     left.append(leftHead, pathBar, treeTools, newFolderForm, treeFrame, selectedCard);
 
     const right = document.createElement('section');
@@ -22365,26 +22548,26 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const rightHead = document.createElement('div');
     rightHead.className = 'workspace-chooser-section-head';
     rightHead.append(
-      textElement('span', 'eyebrow', 'Sessione'),
-      textElement('h3', '', 'Configura il lavoro'),
-      textElement('p', '', 'Le scelte valgono per la nuova sessione e restano modificabili in chat.'),
+      textElement('span', 'eyebrow', tr('app.workspace.sessionEyebrow')),
+      textElement('h3', '', tr('app.workspace.configureTitle')),
+      textElement('p', '', tr('app.workspace.configureBody')),
     );
     rightHead.querySelector('h3').id = 'workspaceChooserSettingsTitle';
 
     const modelPicker = creaModelPicker({ valoreIniziale: state.model || '', aggiornaModelloPrincipale: false });
     const effortPicker = creaEffortPicker({ valoreIniziale: state.effort });
-    const plannerPicker = creaModelPicker({ valoreIniziale: '', etichettaVuota: 'Nessuno', aggiornaModelloPrincipale: false });
+    const plannerPicker = creaModelPicker({ valoreIniziale: '', etichettaVuota: tr('app.common.none'), aggiornaModelloPrincipale: false });
 
     const modelSection = document.createElement('div');
     modelSection.className = 'workspace-chooser-setting-group';
-    modelSection.append(textElement('span', 'sheet-label', 'Modello'), modelPicker.elemento);
+    modelSection.append(textElement('span', 'sheet-label', tr('app.workspace.modelLabel')), modelPicker.elemento);
 
     const reasoningSection = document.createElement('div');
     reasoningSection.className = 'workspace-chooser-setting-group';
     reasoningSection.append(effortPicker.elemento);
     const reasoningToggle = document.createElement('label');
     reasoningToggle.className = 'workspace-chooser-inline-toggle';
-    reasoningToggle.innerHTML = `<span><strong>${ETICHETTA_INTERRUTTORE_RAGIONAMENTO}</strong><small>Spento, resta una riga chiusa che apri quando ti serve.</small></span>`;
+    reasoningToggle.innerHTML = `<span><strong>${tr('app.reasoning.toggleLabel')}</strong><small>${tr('app.reasoning.toggleHint')}</small></span>`;
     const reasoningInput = document.createElement('input');
     reasoningInput.type = 'checkbox';
     // ⛔ 07/9, owner: «tutti i component devono essere stilizzati custom». Nudo, questo lo
@@ -22392,7 +22575,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     reasoningInput.className = 'talos-switch';
     reasoningInput.setAttribute('role', 'switch');
     reasoningInput.checked = local.showReasoning;
-    reasoningInput.setAttribute('aria-label', ETICHETTA_INTERRUTTORE_RAGIONAMENTO);
+    reasoningInput.setAttribute('aria-label', tr('app.reasoning.toggleLabel'));
     reasoningInput.addEventListener('change', () => { local.showReasoning = reasoningInput.checked; });
     reasoningToggle.appendChild(reasoningInput);
     reasoningSection.appendChild(reasoningToggle);
@@ -22400,14 +22583,14 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const plannerSection = document.createElement('div');
     plannerSection.className = 'workspace-chooser-setting-group';
     plannerSection.append(
-      textElement('span', 'sheet-label', 'Planner opzionale'),
+      textElement('span', 'sheet-label', tr('app.workspace.plannerLabel')),
       plannerPicker.elemento,
-      textElement('small', 'workspace-chooser-help', 'Esplora in sola lettura e consegna il piano prima dell’esecuzione.'),
+      textElement('small', 'workspace-chooser-help', tr('app.workspace.plannerHelp')),
     );
 
     const permissionSection = document.createElement('div');
     permissionSection.className = 'workspace-chooser-setting-group';
-    permissionSection.appendChild(textElement('span', 'sheet-label', 'Accesso al workspace'));
+    permissionSection.appendChild(textElement('span', 'sheet-label', tr('app.workspace.accessLabel')));
     const permissionGrid = document.createElement('div');
     permissionGrid.className = 'workspace-chooser-permissions';
     // ⛔ 07/9 — era una terza mappa, e diceva «Scrive qui»/«Accesso completo» dove l'intro diceva
@@ -22466,7 +22649,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const cancel = document.createElement('button');
     cancel.type = 'button';
     cancel.className = 'secondary-btn';
-    cancel.textContent = 'Annulla';
+    cancel.textContent = tr('app.common.cancel');
     cancel.addEventListener('click', () => closeEmbeddedDialog(sheetDialog));
     const submit = document.createElement('button');
     submit.type = 'submit';
@@ -22475,7 +22658,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     /* ⛔ Stessa frase dell'invito del primo avvio, ma NON la stessa voce: questo è il bottone del
        foglio «Nuova sessione», e legarlo alla tabella dell'invito farebbe cambiare due superfici
        insieme al primo ritocco di copia. Due frasi uguali non sono una frase sola. */
-    submit.textContent = 'Scegli una cartella';
+    submit.textContent = tr('app.workspace.chooseFolder');
     /*
      * ⛔⛔⛔ BC-14 — LA RAGIONE VERA ERA FUORI DALLO SCHERMO, e il bottone ne diceva una falsa.
      *
@@ -22531,7 +22714,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       ritrattoChiestoPer = percorso;
       const riga = $('[data-workspace-ritratto]', selectedCard);
       const avviso = $('[data-workspace-avviso]', selectedCard);
-      if (riga) { riga.hidden = false; riga.textContent = 'Guardo cosa c’è dentro…'; }
+      if (riga) { riga.hidden = false; riga.textContent = tr('app.workspace.lookingInside'); }
       if (avviso) avviso.hidden = true;
       try {
         const r = await apiGet(`/api/v1/workspace-info?path=${encodeURIComponent(percorso)}`);
@@ -22555,7 +22738,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
        */
       if (selectedPath) {
         selectedPath.textContent = local.selected?.path
-          || (local.selected?.launchId ? `${local.selected.name} · scelta da Windows` : 'Nessuna cartella scelta');
+          || (local.selected?.launchId ? tr('app.workspace.pickedInWindows', { nome: local.selected.name }) : tr('app.workspace.noneSelected'));
       }
       /*
        * ⛔⛔ 06/9, MISURATO dal vivo: la carta diceva «Cartella scelta: …\AVM-harness-desktop» e
@@ -22711,7 +22894,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         row.setAttribute('aria-selected', String(pathKey(local.selected?.path) === pathKey(item.path)));
         row.setAttribute('aria-expanded', String(item.current ? !local.collapsed : false));
         row.tabIndex = pathKey(local.focusedPath) === pathKey(item.path) || (!local.focusedPath && index === 0) ? 0 : -1;
-        row.innerHTML = `<span class="workspace-chooser-tree-toggle" aria-hidden="true">${icon(item.current && !local.collapsed ? 'i-chevron' : 'i-chevron-right')}</span>${icon(item.current && !local.collapsed ? 'i-folder-open' : 'i-folder')}<span>${item.name}</span>${item.projectId ? '<small>Progetto</small>' : ''}`;
+        row.innerHTML = `<span class="workspace-chooser-tree-toggle" aria-hidden="true">${icon(item.current && !local.collapsed ? 'i-chevron' : 'i-chevron-right')}</span>${icon(item.current && !local.collapsed ? 'i-folder-open' : 'i-folder')}<span>${item.name}</span>${item.projectId ? `<small>${tr('app.workspace.kindProject')}</small>` : ''}`;
         row.addEventListener('click', (event) => {
           if (event.target.closest('.workspace-chooser-tree-toggle')) {
             if (item.current) {
@@ -22734,7 +22917,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       });
       tree.replaceChildren(...elements);
       treeState.hidden = rows.length > 1;
-      treeState.textContent = rows.length > 1 ? '' : 'Questa cartella non contiene altre cartelle.';
+      treeState.textContent = rows.length > 1 ? '' : tr('app.files.noSubfolders');
       if (restoreFocus) window.setTimeout(() => focusRow(local.focusedPath || local.current.path), 0);
     }
 
@@ -22747,7 +22930,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         button.classList.toggle('active', pathKey(local.selected?.path) === pathKey(item.path));
         button.setAttribute('aria-pressed', String(pathKey(local.selected?.path) === pathKey(item.path)));
         button.title = item.path;
-        button.innerHTML = `${icon(item.kind === 'recent' ? 'i-clock' : 'i-folder')}<span><strong>${item.label}</strong><small>${item.kind === 'project' ? 'Progetto' : item.kind === 'recent' ? 'Usata di recente' : 'Scelta rapida'}</small></span>`;
+        button.innerHTML = `${icon(item.kind === 'recent' ? 'i-clock' : 'i-folder')}<span><strong>${item.label}</strong><small>${item.kind === 'project' ? tr('app.workspace.kindProject') : item.kind === 'recent' ? tr('app.workspace.kindRecent') : tr('app.workspace.kindQuick')}</small></span>`;
         button.addEventListener('click', () => caricaWorkspaceChooser(item.path, { select: true, focusTree: true, projectId: item.projectId }));
         return button;
       }));
@@ -22760,7 +22943,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       form.setAttribute('aria-busy', 'true');
       tree.setAttribute('aria-busy', 'true');
       treeState.hidden = false;
-      treeState.textContent = 'Apro la cartella…';
+      treeState.textContent = tr('app.workspace.openingFolder');
       aggiornaConfermaWorkspaceChooser();
       try {
         const suffix = path ? `?path=${encodeURIComponent(path)}` : '';
@@ -22784,18 +22967,18 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         if (generation !== local.requestGeneration || !form.isConnected) return false;
         tree.replaceChildren();
         treeState.hidden = false;
-        treeState.replaceChildren(textElement('p', '', messaggioErroreUtente(error, 'Non riesco ad aprire questa cartella. Scegline un’altra oppure controlla Doctor.')));
+        treeState.replaceChildren(textElement('p', '', messaggioErroreUtente(error, tr('app.workspace.cannotOpenFolder'))));
         const actions = document.createElement('div');
         actions.className = 'workspace-chooser-error-actions';
         const retry = document.createElement('button');
         retry.type = 'button';
         retry.className = 'secondary-btn compact';
-        retry.textContent = 'Riprova';
+        retry.textContent = tr('app.common.tryAgain');
         retry.addEventListener('click', () => caricaWorkspaceChooser(path, { select, focusTree, projectId }));
         const doctor = document.createElement('button');
         doctor.type = 'button';
         doctor.className = 'text-btn';
-        doctor.textContent = 'Apri Doctor';
+        doctor.textContent = tr('app.common.openDoctor');
         // ⛔ 07/9 — apriva ancora il foglio legacy «control» (due voci) e poi Doctor DENTRO di esso:
         //   dal 07/9 Doctor è una schermata sua, e questo era l'ultimo chiamante rimasto del foglio.
         doctor.addEventListener('click', () => { closeEmbeddedDialog(sheetDialog); eseguiDoctor(); });
@@ -22851,16 +23034,16 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       local.creatingFolder = true;
       createFolderButton.disabled = true;
       newFolderInput.disabled = true;
-      newFolderStatus.textContent = 'Creo la cartella…';
+      newFolderStatus.textContent = tr('app.workspace.creatingFolder');
       aggiornaConfermaWorkspaceChooser();
       try {
         const created = await apiPost('/api/v1/workspace-browser/folders', { parentPath, name });
         closeNewFolderForm();
         await caricaWorkspaceChooser(parentPath, { focusTree: true });
         selezionaWorkspaceChooser({ path: created.path, projectId: projectFor(created.path) });
-        toast('Cartella creata', created.name);
+        toast(tr('app.files.folderCreated'), created.name);
       } catch (error) {
-        newFolderStatus.textContent = messaggioErroreUtente(error, 'Non riesco a creare la cartella qui. Controlla il nome e riprova.');
+        newFolderStatus.textContent = messaggioErroreUtente(error, tr('app.workspace.cannotCreateFolder'));
         newFolderInput.focus();
       } finally {
         local.creatingFolder = false;
@@ -22883,9 +23066,9 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       if (!path) return;
       try {
         await navigator.clipboard.writeText(path);
-        toast('Percorso copiato', path);
+        toast(tr('app.common.pathCopied'), path);
       } catch {
-        toast('Copia non disponibile', 'Seleziona il percorso nella barra e copialo da lì.');
+        toast(tr('app.common.copyUnavailable'), tr('app.workspace.copyManually'));
         pathInput.focus();
         pathInput.select();
       }
@@ -22990,8 +23173,8 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    */
   async function openRealTaskSheet({ launch = null } = {}) {
     sheetDialog.classList.add('sheet-dialog--new-session');
-    sheetEyebrow.textContent = 'Nuova sessione';
-    sheetTitle.textContent = 'Su quale progetto lavora TALOS?';
+    sheetEyebrow.textContent = tr('app.workspace.newSession');
+    sheetTitle.textContent = tr('app.workspace.whichProject');
     const demoBadge = $('.demo-surface-badge', sheetDialog);
     if (demoBadge) demoBadge.hidden = true;
     const chooser = creaWorkspaceChooser({ launch });
@@ -23046,7 +23229,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     } catch (error) {
       if (!isCurrent()) return false;
       rimuoviWorkspaceLaunchFragment();
-      toast('Cartella non aperta', messaggioErroreUtente(error, 'Apri di nuovo la cartella dal menu di Windows e riprova.'));
+      toast(tr('app.workspace.notOpened'), messaggioErroreUtente(error, tr('app.workspace.reopenFromWindows')));
       return false;
     }
   }
@@ -23134,7 +23317,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const nota = $('#invitoPrimoAvvioNota', invito);
     if (nota) {
       nota.textContent = modello
-        ? `Il modello è pronto: ${nomeModelloBreve(state.model)}.`
+        ? tr('app.workspace.modelReady', { nome: nomeModelloBreve(state.model) })
         : TESTI_MESSAGGIO.invitoNotaSenzaModello;
     }
   }
@@ -23167,7 +23350,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     radice.append(iconaSvgAlbero('i-files'), textElement('strong', '', nomeCartella));
     contenitore.replaceChildren(
       radice,
-      textElement('p', 'board-empty', 'I file appariranno appena inizi la sessione.'),
+      textElement('p', 'board-empty', tr('app.workspace.filesPlaceholder')),
     );
     const demoBadge = $('.demo-surface-badge', $('[data-inspector-section="files"]'));
     if (demoBadge) demoBadge.hidden = true;
@@ -23219,7 +23402,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         : `path:${cartellaLibera || nomeCartella}`;
     if (modello) { state.model = modello; aggiornaPillolaModello(); }
     if (effort) state.effort = effort;
-    state.session = `Nuova · ${nomeCartella}`;
+    state.session = tr('app.sessions.newIn', { cartella: nomeCartella });
     sessionTitle.textContent = state.session; aggiornaTestataSessione(); // 05/9 Fase 2: Topbar
     $$('[data-current-session-title]').forEach((label) => { label.textContent = state.session; });
     aggiornaSottotitoloSessione(); // W1-12 — «in attesa del primo messaggio»
@@ -23266,7 +23449,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   }
 
   async function startCustomSession({ cartellaId, cartellaLibera, workspaceLaunchId, nomeCartella, consegna, comandoProva, modello, effort, modelloPlanner, permessi, permessiPerAttrezzo, modalitaOperativa = state.modalitaOperativa, immagini = [], fallbackProviders=state.fallbackProviders||[] }) {
-    iniziaMisuraLatenza('primo messaggio della sessione');
+    iniziaMisuraLatenza('primo-messaggio-della-sessione');
     const generation = nuovaGenerazioneSessione();
     const taskSintetico = { id: `libero:${nomeCartella}`, consegna, immagini };
     state.realSession.taskId = taskSintetico.id;
@@ -23275,7 +23458,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       : workspaceLaunchId
         ? `launch:${workspaceLaunchId}`
         : `path:${cartellaLibera || nomeCartella}`;
-    state.session = `Compito libero · ${nomeCartella}`;
+    state.session = tr('app.composer.freeTaskIn', { progetto: nomeCartella });
     sessionTitle.textContent = state.session; aggiornaTestataSessione(); // 05/9 Fase 2: Topbar
     /* ⛔ 27/8, trovato dalla pipeline QA visiva: solo sessionTitle veniva aggiornato — la card "Session topology" nel Context Rail e la voce "Main" nel foglio Albero sessione restavano al titolo demo ("Refactor auth flow") per sempre. Ogni elemento con lo stesso attributo resta sincronizzato. */
     $$('[data-current-session-title]').forEach((label) => { label.textContent = state.session; });
@@ -23283,7 +23466,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     closePanels();
     appendRealTaskStart(taskSintetico);
     mostraAttesaRisposta();
-    toast('Avvio in corso', `${nomeCartella} · esecuzione diretta sulla cartella vera, nessuna copia.`);
+    toast(tr('app.run.starting'), tr('app.workspace.startingBody', { nome: nomeCartella }));
 
     let sessionId;
     try {
@@ -23337,17 +23520,19 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       }
       segnaTappaLatenza('postInviata');
       if(fallbackProviders.length)corpo.fallbackProviders=fallbackProviders;
+      if (client === 'desktop') corpo.linguaInterfaccia = linguaInterfacciaPerIlServer(); // K3b: il primo giro la sa già
       const data = await apiPost('/api/v1/sessions/custom', corpo);
       segnaTappaLatenza('postRisposta');
       sessionId = data.sessionId;
+      if (client === 'desktop') linguaDettaAlServer.set(sessionId, corpo.linguaInterfaccia);
     } catch (error) {
       if (generation !== state.realSession.generation) return;
       nascondiAttesaRisposta();
-      appendStatusNote(`Avvio non riuscito: ${error.message}`, true);
-      toast('Avvio non riuscito', error.message);
+      appendStatusNote(tr('app.run.startFailedWith', { motivo: error.message }), true);
+      toast(tr('app.run.startFailed'), error.message);
       ripristinaImmagini(immagini, consegna);
       /* ⛔ 27/8, trovato dalla pipeline QA visiva: il titolo restava "ottimista" (il nome della sessione appena tentata) anche quando la POST falliva — la sessione non è mai esistita lato server (state.realSession.id resta null). */
-      state.session = 'Nessuna sessione';
+      state.session = tr('app.sessions.none');
       $$('[data-current-session-title]').forEach((label) => { label.textContent = state.session; });
       return;
     }
@@ -23373,7 +23558,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       state.session = titoloAutomatico;
       sessionTitle.textContent = state.session; aggiornaTestataSessione(); // 05/9 Fase 2: Topbar
       $$('[data-current-session-title]').forEach((label) => { label.textContent = state.session; });
-      if (titoloDisambiguato) toast('Titolo della sessione', `«${titoloAutomatico}» · rinominata per evitare un doppione con una sessione viva`);
+      if (titoloDisambiguato) toast(tr('app.workspace.titleDisambiguated'), tr('app.workspace.titleDisambiguatedBody', { titolo: titoloAutomatico }));
       aggiornaElencoSessioniReali();
     }).catch(() => { /* best effort, vedi sopra: resta il titolo di sempre */ });
   }
@@ -23394,7 +23579,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     if (!riga) return;
     riga.hidden = allegatiComposer.length === 0;
     const conteggio = $('[data-allegati-conteggio]', riga);
-    if (conteggio) conteggio.textContent = `${allegatiComposer.length} allegat${allegatiComposer.length === 1 ? 'o' : 'i'}`;
+    if (conteggio) conteggio.textContent = trn('app.attachments.countOne', 'app.attachments.countMany', allegatiComposer.length);
     const lista = $('[data-allegati-lista]', riga);
     if (lista) {
       lista.replaceChildren();
@@ -23407,15 +23592,15 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         nome.title = a.percorso || a.nome || '';
         const costo = document.createElement('span');
         costo.className = 'talos-allegati__costo';
-        costo.textContent = a.costoIgnoto ? 'costo ignoto' : costoAllegato(a, state.model).etichetta;
+        costo.textContent = a.costoIgnoto ? tr('app.attachments.costUnknown') : costoAllegato(a, state.model).etichetta;
         if (a.costoIgnoto) costo.title = a.tipo === 'immagine'
-          ? 'Non sono riuscito a leggere le misure dell’immagine: il costo vero lo vedrai nel consumo del giro.'
-          : 'Il costo del file dipende da come verrà letto durante il giro.';
+          ? tr('app.attachments.costNoDimensions')
+          : tr('app.attachments.costDepends');
         const togli = document.createElement('button');
         togli.type = 'button';
         togli.className = 'talos-allegati__togli';
         togli.textContent = '×';
-        togli.setAttribute('aria-label', `Togli ${nome.textContent}`);
+        togli.setAttribute('aria-label', tr('app.attachments.remove', { nome: nome.textContent }));
         togli.addEventListener('click', () => { allegatiComposer.splice(indice, 1); disegnaAllegati(); });
         li.append(nome, costo, togli);
         if (a.tipo === 'immagine') {
@@ -23430,8 +23615,8 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   }
   function aggiungiAllegato(allegato) {
     if (!allegato) return;
-    if (allegatiComposer.length >= TETTI_ALLEGATI.quanti) { toast('Troppi allegati', `${TETTI_ALLEGATI.quanti} per messaggio è già tanto contesto: togline uno prima di aggiungerne un altro.`); return; }
-    if (allegatoPesante(allegato)) toast('Allegato molto grande', `${allegato.nome} pesa quanto mezza conversazione. Puoi allegarlo lo stesso: il costo stimato è scritto accanto al nome.`);
+    if (allegatiComposer.length >= TETTI_ALLEGATI.quanti) { toast(tr('app.attachments.tooMany'), tr('app.attachments.tooManyBody', { massimo: TETTI_ALLEGATI.quanti })); return; }
+    if (allegatoPesante(allegato)) toast(tr('app.attachments.veryLarge'), tr('app.attachments.veryLargeBody', { nome: allegato.nome }));
     allegatiComposer.push(allegato);
     disegnaAllegati();
     syncRunComposerState();
@@ -23458,14 +23643,14 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       if (a.contenuto) {
         const corpo = String(a.contenuto).slice(0, TETTO_TESTO_ALLEGATO);
         const tagliato = String(a.contenuto).length > TETTO_TESTO_ALLEGATO;
-        blocchi.push(`--- ${a.nome} (${a.percorso || ''})${tagliato ? ` — primi ${TETTO_TESTO_ALLEGATO.toLocaleString('it-IT')} caratteri` : ''} ---\n${corpo}`);
+        blocchi.push(`--- ${a.nome} (${a.percorso || ''})${tagliato ? ` — ${tr('app.attachments.promptTruncated', { n: TETTO_TESTO_ALLEGATO.toLocaleString(localeUI()) })}` : ''} ---\n${corpo}`);
         righe.push(`- ${a.nome}${a.percorso ? ` (${a.percorso})` : ''}`);
         continue;
       }
-      righe.push(`- file allegato: ${a.percorso || a.nome}`);
+      righe.push(`- ${tr('app.attachments.promptFileLine', { percorso: a.percorso || a.nome })}`);
     }
-    if (!righe.length && !blocchi.length) return testo || 'Descrivi l’immagine allegata.';
-    const testa = `${testo}\n\nAllegati di questo messaggio:\n${righe.join('\n')}`;
+    if (!righe.length && !blocchi.length) return testo || tr('app.attachments.promptDescribeImage');
+    const testa = `${testo}\n\n${tr('app.attachments.promptHeader')}\n${righe.join('\n')}`;
     return blocchi.length ? `${testa}\n\n${blocchi.join('\n\n')}` : testa;
   }
   function svuotaAllegati() { state.imageDraftEpoch = (state.imageDraftEpoch || 0) + 1; allegatiComposer.length = 0; disegnaAllegati(); }
@@ -23476,7 +23661,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   }
   function attendiUploadAllegati() {
     if (!uploadAllegatiInCorso()) return false;
-    toast('Caricamento allegato', 'Attendi la ricevuta del file prima di inviare.');
+    toast(tr('app.attachments.loading'), tr('app.attachments.loadingBody'));
     return true;
   }
 
@@ -23516,7 +23701,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
 
   function scegliAllegato(via) {
     if (via === 'workspace') { openSheet('files', { ancoraAlComposer: true }); return; }
-    if (via === 'schermata') { toast('Ultima schermata', 'Incolla lo screenshot nel composer con Ctrl+V: TALOS lo allega e ti dice quanto contesto costa.'); return; }
+    if (via === 'schermata') { toast(tr('app.attachments.screenshot'), tr('app.attachments.screenshotBody')); return; }
     const input = document.createElement('input');
     input.type = 'file';
     if (via === 'immagine') input.accept = 'image/*';
@@ -23531,8 +23716,8 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     if (!file) return;
     const immagine = /^image\//.test(file.type || '');
     if (immagine) {
-      if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type)) { toast('Formato immagine non supportato', 'Usa PNG, JPEG o WebP.'); return; }
-      if (file.size > 5 * 1024 * 1024) { toast('Immagine troppo grande', 'Massimo 5 MiB per immagine.'); return; }
+      if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type)) { toast(tr('app.attachments.imageFormat'), tr('app.attachments.imageFormatBody')); return; }
+      if (file.size > 5 * 1024 * 1024) { toast(tr('app.attachments.imageTooLarge'), tr('app.attachments.imageTooLargeBody')); return; }
       const upload = { generation: state.realSession.generation, epoch: state.imageDraftEpoch || 0 };
       (state.imageUploads ||= []).push(upload);
       syncRunComposerState();
@@ -23541,19 +23726,19 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         const dataUrl = await new Promise((resolve, reject) => {
           const reader = new FileReader();
           reader.onload = () => resolve(reader.result);
-          reader.onerror = () => reject(new Error('Non riesco a leggere il file.'));
+          reader.onerror = () => reject(new Error(tr('app.attachments.cannotReadFile')));
           reader.readAsDataURL(file);
         });
-        const saved = await apiPost('/api/v1/chat-images', { nome: file.name || 'immagine incollata.png', dataUrl });
+        const saved = await apiPost('/api/v1/chat-images', { nome: file.name || tr('app.attachments.pastedImageName'), dataUrl });
         if (upload.generation !== state.realSession.generation || upload.epoch !== (state.imageDraftEpoch || 0)) return;
         aggiungiAllegato({ ...saved, ...misure, costoIgnoto: !(misure.larghezza > 0) });
-      } catch (error) { if (upload.generation === state.realSession.generation) toast('Immagine non allegata', error.message); }
+      } catch (error) { if (upload.generation === state.realSession.generation) toast(tr('app.attachments.imageFailed'), error.message); }
       finally { state.imageUploads = state.imageUploads.filter(u => u !== upload); syncRunComposerState(); }
       return;
     }
-    if (file.size > 25 * 1024 * 1024) { toast('File troppo grande', 'Massimo 25 MiB per file.'); return; }
+    if (file.size > 25 * 1024 * 1024) { toast(tr('app.attachments.fileTooLarge'), tr('app.attachments.fileTooLargeBody')); return; }
     const sessionId = state.realSession.id;
-    if (!sessionId) { toast('File non allegato', 'Apri una conversazione prima di allegare un file.'); return; }
+    if (!sessionId) { toast(tr('app.attachments.fileFailed'), tr('app.attachments.fileNoConversation')); return; }
     const upload = { generation: state.realSession.generation, epoch: state.imageDraftEpoch || 0 };
     (state.fileUploads ||= []).push(upload);
     syncRunComposerState();
@@ -23564,12 +23749,12 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       });
       const result = await response.json().catch(() => null);
       if (!response.ok || !result?.ok || result.data?.tipo !== 'file' || typeof result.data.percorso !== 'string') {
-        throw new Error(response.status === 413 ? 'Massimo 25 MiB per file.' : 'Il server non ha confermato la copia del file.');
+        throw new Error(response.status === 413 ? tr('app.attachments.fileTooLargeBody') : tr('app.attachments.serverNoConfirm'));
       }
       if (upload.generation !== state.realSession.generation || upload.epoch !== (state.imageDraftEpoch || 0)) return;
       aggiungiAllegato({ ...result.data, costoIgnoto: true });
     } catch (error) {
-      if (upload.generation === state.realSession.generation) toast('File non allegato', error.message);
+      if (upload.generation === state.realSession.generation) toast(tr('app.attachments.fileFailed'), error.message);
     } finally {
       state.fileUploads = state.fileUploads.filter(u => u !== upload);
       syncRunComposerState();
@@ -23594,7 +23779,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       const url = URL.createObjectURL(file);
       const img = new Image();
       img.onload = () => { risolvi({ larghezza: img.naturalWidth, altezza: img.naturalHeight }); URL.revokeObjectURL(url); };
-      img.onerror = () => { URL.revokeObjectURL(url); rifiuta(new Error('immagine illeggibile')); };
+      img.onerror = () => { URL.revokeObjectURL(url); rifiuta(new Error(tr('app.attachments.imageUnreadable'))); };
       img.src = url;
     });
   }
@@ -23653,11 +23838,11 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
      * cosa, ma decisa da chi paga. (Se l'owner la vuole automatica, è un interruttore, non un default.)
      */
     if (value.startsWith('!')) {
-      if (immagini.length) { toast('Le immagini si inviano al modello', 'Togli il prefisso ! per inviarle in chat.'); return false; }
+      if (immagini.length) { toast(tr('app.composer.imagesToModel'), tr('app.composer.imagesToModelBody')); return false; }
       const hidden = value.startsWith('!!');
       const comando = value.replace(/^!!?/, '').trim();
       setView('chat');
-      if (!comando) { toast('Comando vuoto', 'Scrivi qualcosa dopo "!".'); return true; }
+      if (!comando) { toast(tr('app.composer.emptyCommand'), tr('app.composer.emptyCommandBody')); return true; }
       runDirectShell(comando, hidden);
       return true;
     }
@@ -23772,7 +23957,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       progetti = [];
     }
     if (progetti.length !== 1) {
-      toast('Nessuna sessione attiva', 'Premi «Nuova» in alto per scegliere una cartella e iniziare.');
+      toast(tr('app.common.noActiveSession'), tr('app.composer.noSessionBody'));
       return;
     }
     const [{ id: cartellaId, nome: nomeCartella }] = progetti;
@@ -23793,18 +23978,18 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       return true;
     }
     const copy = {
-      attach: ['Allegato demo', 'Il selettore è UI locale e non carica file reali.'],
-      photo: ['Fotocamera demo', 'Nessuna foto è stata acquisita.'],
-      photos: ['Galleria demo', 'Nessuna immagine è stata importata.'],
-      browse: ['Browse demo', 'Lo stato resta locale a questa sessione Codice.'],
-      enhance: ['Miglioramento demo', 'Nessun modello è stato chiamato.'],
-      'enhance-blocked': ['Miglioramento non collegato', 'Questa superficie resta locale.'],
-      'refresh-models': ['Profili demo', 'Nessuna discovery di rete eseguita.'],
-      'browser-url': ['Browser demo', 'Nessuna navigazione esterna eseguita.'],
-      attach_file: ['Allegato demo', 'Il selettore è UI locale e non carica file reali.'],
-      export_report: ['Export demo', 'Nessun rapporto reale è stato prodotto.'],
+      attach: [tr('app.demo.attachTitle'), tr('app.demo.attachBody')],
+      photo: [tr('app.demo.cameraTitle'), tr('app.demo.cameraBody')],
+      photos: [tr('app.demo.galleryTitle'), tr('app.demo.galleryBody')],
+      browse: [tr('app.demo.browseTitle'), tr('app.demo.browseBody')],
+      enhance: [tr('app.demo.enhanceTitle'), tr('app.demo.enhanceBody')],
+      'enhance-blocked': [tr('app.demo.enhanceBlockedTitle'), tr('app.demo.enhanceBlockedBody')],
+      'refresh-models': [tr('app.demo.profilesTitle'), tr('app.demo.profilesBody')],
+      'browser-url': [tr('app.demo.browserTitle'), tr('app.demo.browserBody')],
+      attach_file: [tr('app.demo.attachTitle'), tr('app.demo.attachBody')],
+      export_report: [tr('app.demo.exportTitle'), tr('app.demo.exportBody')],
     };
-    const feedback = copy[action] || ['Demo UI · non collegato', 'Azione locale registrata senza backend.'];
+    const feedback = copy[action] || [tr('app.demo.badge'), tr('app.demo.localActionRecorded')];
     toast(...feedback);
     return true;
   }
@@ -24067,14 +24252,14 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       openRealTaskSheet();
       return;
     }
-    state.session = 'Nuova sessione';
+    state.session = tr('app.workspace.newSession');
     sessionTitle.textContent = state.session; aggiornaTestataSessione(); // 05/9 Fase 2: Topbar
     /* ⛔ 27/8, trovato dalla pipeline QA visiva: solo sessionTitle veniva aggiornato — la card "Session topology" nel Context Rail e la voce "Main" nel foglio Albero sessione restavano al titolo demo ("Refactor auth flow") per sempre. Ogni elemento con lo stesso attributo resta sincronizzato. */
     $$('[data-current-session-title]').forEach((label) => { label.textContent = state.session; });
     $$('.session-item').forEach((item) => item.classList.remove('active'));
     setView('chat');
     closePanels();
-    toast('Nuova sessione', 'La sessione verrà creata al primo invio.');
+    toast(tr('app.workspace.newSession'), tr('app.composer.newSessionBody'));
     composerInput.focus();
   }
 
@@ -24112,7 +24297,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    */
   async function exportSession() {
     if (state.realSession.id) { openSheet('export'); return; }
-    if (!embeddedDemoOnly()) { toast('Esportazione non disponibile', tr('Apri prima una sessione.')); return; }
+    if (!embeddedDemoOnly()) { toast(tr('app.sessions.exportUnavailable'), tr('app.common.openSessionFirst')); return; }
     const payload = {
       schema: 'talos_mock_session_v1',
       exported_at: new Date().toISOString(),
@@ -24124,7 +24309,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       note: 'Interactive TALOS frontend mockup export',
     };
     scaricaTesto(JSON.stringify(payload, null, 2), 'talos-session-export.json', 'application/json');
-    toast('Sessione esportata', 'JSON pronto.');
+    toast(tr('app.sessions.exported'), tr('app.sessions.exportedJson'));
   }
 
 
@@ -24162,7 +24347,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const recognition = new Ctor();
     recognition.continuous = true; // push-to-talk: resta in ascolto finché il tasto è premuto, non un singolo comando breve
     recognition.interimResults = true; // testo parziale VISIBILE mentre si parla — stessa disciplina "lo stato si vede" di ogni altra fase
-    recognition.lang = 'it-IT';
+    recognition.lang = localeUI();
     return recognition;
   }
 
@@ -24214,12 +24399,12 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       fermaRegistrazioneVoce();
       // ⭐ un messaggio ONESTO per errore, mai un generico "qualcosa è andato storto" — gli errori VERI di SpeechRecognition, non inventati.
       const messaggi = {
-        'not-allowed': 'Permesso microfono negato — abilitalo nelle impostazioni del browser per questo sito.',
-        'no-speech': 'Nessuna voce rilevata.',
-        network: 'Il servizio di riconoscimento vocale non è raggiungibile in questo momento.',
-        'audio-capture': 'Nessun microfono trovato su questo dispositivo.',
+        'not-allowed': tr('app.voice.errNotAllowed'),
+        'no-speech': tr('app.voice.errNoSpeech'),
+        network: tr('app.voice.errNetwork'),
+        'audio-capture': tr('app.voice.errNoMic'),
       };
-      toast('Voce non riconosciuta', messaggi[event.error] || `Errore: ${event.error}`);
+      toast(tr('app.voice.notRecognized'), messaggi[event.error] || tr('app.voice.errorWith', { codice: event.error }));
     };
     // ⭐ il servizio può fermarsi da solo (silenzio prolungato) senza che il tasto sia stato rilasciato — lo stato visivo deve seguirlo, mai restare "in ascolto" quando non lo è più.
     riconoscimentoVocale.onend = () => { fermaRegistrazioneVoce(); };
@@ -24240,7 +24425,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   function impostaStatoBottoneAscolto(bottone, inAscolto) {
     bottone.classList.toggle('speaking', inAscolto);
     bottone.setAttribute('aria-pressed', String(inAscolto));
-    bottone.setAttribute('aria-label', inAscolto ? 'Ferma la lettura' : TESTI_MESSAGGIO.ascolta);
+    bottone.setAttribute('aria-label', inAscolto ? tr('app.voice.stopReading') : TESTI_MESSAGGIO.ascolta);
     const uso = bottone.querySelector('use');
     if (uso) uso.setAttribute('href', inAscolto ? '#i-stop' : '#i-play');
   }
@@ -24258,7 +24443,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     fermaLetturaVoceAlta(); // un secondo click sullo STESSO bottone, o un click su un bottone diverso, ferma sempre quella precedente prima — mai due letture insieme
     if (giàInAscoltoQui) return; // il click era per FERMARE, non per far ripartire da capo
     const utterance = new SpeechSynthesisUtterance(testo);
-    utterance.lang = 'it-IT';
+    utterance.lang = localeUI();
     utterance.onend = () => { if (elementoInAscolto === bottone) { impostaStatoBottoneAscolto(bottone, false); elementoInAscolto = null; } };
     utterance.onerror = utterance.onend;
     elementoInAscolto = bottone;
@@ -24284,7 +24469,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     commandPalette ||= createCommandPalette({
       field: campo, list: elenco, empty: vuoto, translate: tr, shortcutLabel: etichettaTasto,
       context: commandContext, execute: executeCommand,
-      reportError: error => toast('Comando non eseguito', error?.message || String(error)),
+      reportError: error => toast(tr('app.composer.commandFailed'), error?.message || String(error)),
     });
     commandPalette.prepare();
     if (velo) apriVeloMockup('veloComandi');
@@ -24296,7 +24481,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const definition = commandById(command);
     if (!definition) return;
     const unavailable = commandDisabledReason(definition, commandContext());
-    if (unavailable) { toast('Comando non disponibile', tr(unavailable)); return; }
+    if (unavailable) { toast(tr('app.composer.commandUnavailable'), tr(unavailable)); return; }
     // ⛔ si chiude quella che è aperta: il velo se c'è, il foglio altrimenti (mai tutt'e due)
     if ($('#veloComandi') && !$('#veloComandi').hidden) chiudiVeloMockup('veloComandi');
     else closeEmbeddedDialog(commandDialog);
@@ -24369,7 +24554,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     void openRealTaskSheet();
   }));
   $$('[data-session-action]').forEach((button) => button.addEventListener('click', () => {
-    toast(button.dataset.sessionAction === 'fork' ? 'Fork creato' : 'Side thread creato', 'Contesto isolato, collegamento mantenuto nel grafo sessione.');
+    toast(button.dataset.sessionAction === 'fork' ? tr('app.branches.forkCreated') : tr('app.branches.sideThreadCreated'), tr('app.branches.sideBodyShort'));
   }));
   /* ⭐ 27/8 — card "Session topology": il pulsante Fork chiama la VERA forkSession() (già reale per il blocco 1), non un toast finto — stesso attrezzo, un secondo punto d'accesso onesto. */
   $$('[data-action="fork-session"]').forEach((button) => button.addEventListener('click', () => forkSession()));
@@ -24422,7 +24607,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         if (!sessione) {
           /* La rotta è PER SESSIONE: senza, il server risponderebbe 404 — onesto e inutile.
              Meglio la frase che dice il passo successivo, nel posto dove si sta già guardando. */
-          const e = new Error('Avvia la chat: la riscrittura usa il modello di questa conversazione.');
+          const e = new Error(tr('app.composer.enhanceNeedsChat'));
           e.code = 'QUERY_INVALID';
           return Promise.reject(e);
         }
@@ -24542,7 +24727,7 @@ ${testo}`;
     function prendiIlTerminale() {
       const pane = casaDelTerminale() || ospite.querySelector('.talos-terminal');
       if (!pane) {
-        toast('Terminale non disponibile', 'La vista Terminale non è ancora montata in questa sessione.');
+        toast(tr('app.terminal.unavailable'), tr('app.terminal.unavailableBody'));
         return;
       }
       if (!casa) casa = pane.parentElement;
@@ -24732,7 +24917,7 @@ ${testo}`;
     const copyButton = event.target.closest('[data-copy-message]');
     if (copyButton) {
       const message = copyButton.closest('.message');
-      copyText($('.message-bubble, .assistant-copy', message)?.textContent || '', 'Messaggio copiato');
+      copyText($('.message-bubble, .assistant-copy', message)?.textContent || '', tr('app.messages.messageCopied'));
       return;
     }
     /*
@@ -24763,11 +24948,11 @@ ${testo}`;
   // 06/9 K-I — i pulsanti del Browser sono del componente (`components/browser.js`), non più di questo gestore
 
   const demoActionCopy = {
-    widget: ['Widget demo', 'L’aggiunta sarà disponibile quando questa Board avrà un backend.'],
-    delegate: ['Delega demo', 'Nessun subagent è stato avviato da questa interfaccia.'],
+    widget: [tr('app.demo.widgetTitle'), tr('app.demo.widgetBody')],
+    delegate: [tr('app.demo.delegateTitle'), tr('app.demo.delegateBody')],
   };
   $$('[data-demo-action]').forEach((button) => button.addEventListener('click', () => {
-    toast(...(demoActionCopy[button.dataset.demoAction] || ['Demo UI · non collegato', 'Nessuna azione reale eseguita.']));
+    toast(...(demoActionCopy[button.dataset.demoAction] || [tr('app.demo.badge'), tr('app.demo.noRealAction')]));
   }));
 
   // ⭐⭐⭐ 02/09 — campanella REALE (vedi aggiornaNotifiche). Il badge si allinea a ogni refresh dell'elenco sessioni; un refresh leggero ogni 15 s, solo a scheda visibile, coglie le sessioni che finiscono mentre se ne guarda un'altra (nessuna SSE le porta qui).
@@ -24776,17 +24961,17 @@ ${testo}`;
     const bottone = event.currentTarget;
     if (bottone.dataset.conferma !== '1') {
       bottone.dataset.conferma = '1';
-      bottone.textContent = 'Confermi? Tocca di nuovo per svuotare';
-      window.setTimeout(() => { bottone.dataset.conferma = ''; bottone.textContent = 'Svuota le preferenze di questo browser'; }, 4000);
+      bottone.textContent = tr('app.settings.clearConfirm');
+      window.setTimeout(() => { bottone.dataset.conferma = ''; bottone.textContent = tr('app.settings.clearButton'); }, 4000);
       return;
     }
     try {
       const chiavi = [];
       for (let i = 0; i < window.localStorage.length; i += 1) { const k = window.localStorage.key(i); if (/^talos/i.test(k)) chiavi.push(k); }
       for (const k of chiavi) window.localStorage.removeItem(k);
-      toast('Preferenze locali svuotate', `${chiavi.length} voci rimosse: la pagina si ricarica con i valori predefiniti.`);
+      toast(tr('app.settings.cleared'), tr('app.settings.clearedBody', { n: chiavi.length }));
       window.setTimeout(() => window.location.reload(), 600);
-    } catch { toast('Non riesco a svuotare le preferenze', 'Il browser non consente di accedere allo storage locale.'); }
+    } catch { toast(tr('app.settings.clearFailed'), tr('app.settings.storageDenied')); }
   });
   $('#settingsNuovaSessioneAltrove')?.addEventListener('click', () => createNewSession());
 
@@ -24808,7 +24993,7 @@ ${testo}`;
 
   $$('[data-file-entry]').forEach((button) => button.addEventListener('click', () => {
     $$('[data-file-entry]').forEach((entry) => entry.classList.toggle('active', entry === button));
-    toast('Elemento selezionato', button.textContent.trim());
+    toast(tr('app.settings.itemSelected'), button.textContent.trim());
   }));
 
   /*
@@ -24836,15 +25021,15 @@ ${testo}`;
       openNewAutomationSheet();
       return;
     }
-    const labels = { new: ['Nuova automazione', 'Il mockup rappresenta il flusso senza backend.'], run: ['Run avviato', 'Il mockup rappresenta il flusso senza backend.'], edit: ['Automazione aperta', 'Il mockup rappresenta il flusso senza backend.'] };
-    toast(...(labels[action] || ['Automazione', 'Il mockup rappresenta il flusso senza backend.']));
+    const labels = { new: [tr('app.automations.new'), tr('app.demo.mockupFlow')], run: [tr('app.demo.runStarted'), tr('app.demo.mockupFlow')], edit: [tr('app.demo.automationOpened'), tr('app.demo.mockupFlow')] };
+    toast(...(labels[action] || [tr('app.demo.automation'), tr('app.demo.mockupFlow')]));
   }));
 
   $('.stop-run')?.addEventListener('click', () => {
     if (!state.running) return;
     setRunState(false);
     setQueueMode(false);
-    toast('Esecuzione interrotta', 'Stato, diff e output restano disponibili per la review.');
+    toast(tr('app.composer.executionStopped'), tr('app.run.interruptedBody'));
   });
 
   runStateToggle?.addEventListener('click', () => setQueueMode(!state.queueMode, true));
@@ -24958,7 +25143,7 @@ ${testo}`;
     if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
       event.preventDefault();
       if (attendiUploadAllegati()) return;
-      const testo = composerInput.value.trim() || (allegatiComposer.some(a => a.tipo === 'immagine') ? 'Descrivi l’immagine allegata.' : '');
+      const testo = composerInput.value.trim() || (allegatiComposer.some(a => a.tipo === 'immagine') ? tr('app.attachments.promptDescribeImage') : '');
       /*
        * ⛔⛔⛔ D-10D — UN COMANDO NON E' NE' UN INDIRIZZO NE' UNA CODA.
        *
@@ -25050,7 +25235,7 @@ ${testo}`;
       composerMic.addEventListener('touchcancel', fermaRegistrazioneVoce);
     } else {
       // ⭐ onesto: questo browser non espone SpeechRecognition affatto (fuori da Chromium) — mai un bottone che sembra funzionare e non fa niente.
-      composerMic.addEventListener('click', () => toast('Voce non disponibile', 'Questo browser non supporta il riconoscimento vocale (SpeechRecognition).'));
+      composerMic.addEventListener('click', () => toast(tr('app.voice.unavailable'), tr('app.voice.unsupported')));
     }
   }
 
@@ -25107,9 +25292,9 @@ ${testo}`;
       const dati = await apiPost(`/api/v1/sessions/${encodeURIComponent(sessionId)}/queue/annulla`, primo.id ? { id: primo.id } : {});
       if (sessionId !== state.realSession.id) return;
       if (dati?.coda) applicaStatoCoda(dati.coda);
-      if (dati?.rimosso) toast('Tolto dalla coda', `«${tronca(primo.testo, 60)}» non verrà inviato.`);
+      if (dati?.rimosso) toast(tr('app.queue.removed'), tr('app.queue.removedBody', { testo: tronca(primo.testo, 60) }));
     } catch (error) {
-      toast('Non tolto dalla coda', error.message);
+      toast(tr('app.queue.notRemoved'), error.message);
     }
   });
   /* ⭐⭐ 14/09 — la seconda azione della coda. A giro vivo «Indirizza ora»: il messaggio entra come correzione, lo stesso gesto
@@ -25133,9 +25318,9 @@ ${testo}`;
       const dati = await apiPost(`/api/v1/sessions/${encodeURIComponent(sessionId)}/queue/invia`, { id: primo.id });
       if (sessionId !== state.realSession.id) return;
       if (dati?.coda) applicaStatoCoda(dati.coda);
-      toast('Reindirizzamento richiesto', 'La correzione verrà applicata al prossimo punto sicuro.');
+      toast(tr('app.redirect.requested'), tr('app.redirect.requestedBody'));
     } catch (error) {
-      toast('Reindirizzamento non riuscito', error.message);
+      toast(tr('app.redirect.failed'), error.message);
     }
   });
 
@@ -25143,8 +25328,8 @@ ${testo}`;
     button.addEventListener('click', () => {
       const card = button.closest('.approval-card');
       animateExit(card, {}, () => card?.remove());
-      if (button.hasAttribute('data-deny')) toast('Permesso negato', 'Il browser locale non verrà aperto.');
-      else toast(button.hasAttribute('data-allow-session') ? 'Permesso per sessione' : 'Permesso concesso', 'Browser locale autorizzato.');
+      if (button.hasAttribute('data-deny')) toast(tr('app.approval.browserDenied'), tr('app.approval.browserDeniedBody'));
+      else toast(button.hasAttribute('data-allow-session') ? tr('app.approval.browserSession') : tr('app.approval.browserGranted'), tr('app.approval.browserGrantedBody'));
     });
   });
 
@@ -25155,8 +25340,8 @@ ${testo}`;
    * il diff completo — per una PR, una nota, un messaggio.
    */
   $('#copyAllDiffs')?.addEventListener('click', () => {
-    if (state.realSession.reviewFiles.size === 0) { toast('Nessuna modifica da copiare', 'In questa sessione TALOS non ha ancora scritto file.'); return; }
-    copyText(testoDiffCompleto(), `Diff di ${state.realSession.reviewFiles.size} file copiato`);
+    if (state.realSession.reviewFiles.size === 0) { toast(tr('app.review.noChanges'), tr('app.review.noChangesBody')); return; }
+    copyText(testoDiffCompleto(), trn('app.review.diffCopiedFilesOne', 'app.review.diffCopiedFilesMany', state.realSession.reviewFiles.size));
   });
 
   $$('.file-review').forEach((button) => {
@@ -25179,13 +25364,13 @@ ${testo}`;
    */
   $$('[data-review-action]').forEach((button) => button.addEventListener('click', () => {
     const percorso = state.reviewFileCorrente;
-    if (!percorso) { toast('Nessun file selezionato', 'Scegli un file nella lista qui sopra.'); return; }
+    if (!percorso) { toast(tr('app.review.noFile'), tr('app.review.noFileBody')); return; }
     if (button.dataset.reviewAction === 'comment') {
       const selezione = String(window.getSelection?.()?.toString() || '').trim().split('\n')[0]?.slice(0, 160);
-      preparaCommentoNelComposer(selezione ? `Riguardo a \`${percorso}\`, alla riga «${selezione}»: ` : `Riguardo a \`${percorso}\`: `);
+      preparaCommentoNelComposer(`${selezione ? tr('app.review.promptAboutLine', { percorso, riga: selezione }) : tr('app.review.promptAbout', { percorso })} `);
       return;
     }
-    if (!state.realSession.id) { toast('Nessuna sessione aperta', 'Il file si apre dall\'albero della sessione che lo ha scritto.'); return; }
+    if (!state.realSession.id) { toast(tr('app.common.noSessionOpen'), tr('app.review.openFromTree')); return; }
     void apriFileAlbero(percorso, percorso.split('/').pop());
   }));
 
@@ -25628,7 +25813,7 @@ ${testo}`;
    * su `/memoria` (Indietro → `/`), niente da reinventare qui.
    */
 
-  $('#modelLabRunButton')?.setAttribute('data-disabled-reason', 'Seleziona un runtime osservato e un modello');
+  $('#modelLabRunButton')?.setAttribute('data-disabled-reason', tr('app.modelLab.runtime.selectFirst'));
   ensureDemoLabels();
   /*
    * ⛔⛔⛔ 27/8, owner: "il caricamento della pagina non deve azzerare le
@@ -25667,7 +25852,7 @@ ${testo}`;
     if (leggiWorkspaceLaunchId()) {
       setView('home', { startup: true });
       const opened = await apriWorkspaceDaLauncher(current);
-      if (current() && !opened) workspaceUI?.showNotice('La destinazione richiesta non è disponibile. Scegli un altro progetto.');
+      if (current() && !opened) workspaceUI?.showNotice(tr('app.workspace.notices.destinationUnavailable'));
       return;
     }
     const preferences = workspacePreferences.read();
@@ -25684,10 +25869,10 @@ ${testo}`;
           passaASessione(row.sessionId, row.taskId, row.nome, row.modello, row);
           return;
         }
-        workspaceUI?.showNotice('Il workspace precedente non è più disponibile. I tuoi altri lavori restano nella cronologia.');
+        workspaceUI?.showNotice(tr('app.workspace.notices.previousUnavailable'));
       } catch {
         if (!current()) return;
-        workspaceUI?.showNotice('Non riesco a ripristinare il workspace. Puoi riprovare dalla cronologia.');
+        workspaceUI?.showNotice(tr('app.workspace.notices.cannotRestore'));
       }
     }
     if (current()) setView('home', { startup: true });
@@ -25888,7 +26073,7 @@ ${testo}`;
   function ensureDownloadQueueBadge() {
     $('.view-pane[data-view="chat"] .model-lab-enhanced-controls')?.remove();
     const host = $('.topbar-right'); if (!host || $('#modelLabDownloadQueueBadge')) return;
-    const badge = document.createElement('button'); badge.type = 'button'; badge.id = 'modelLabDownloadQueueBadge'; badge.className = 'context-chip model-lab-queue-badge'; badge.hidden = true; badge.textContent = '↓ 0'; badge.setAttribute('aria-label', 'Apri coda download');
+    const badge = document.createElement('button'); badge.type = 'button'; badge.id = 'modelLabDownloadQueueBadge'; badge.className = 'context-chip model-lab-queue-badge'; badge.hidden = true; badge.textContent = '↓ 0'; badge.setAttribute('aria-label', tr('app.modelLab.downloads.openQueue'));
     badge.addEventListener('click', () => { setSettingsSection('models'); setModelLabSection('downloads'); });
     host.insertBefore(badge, host.firstElementChild);
   }
@@ -25913,7 +26098,7 @@ ${testo}`;
     const badge = $('#modelLabDownloadQueueBadge');
     const active = state.modelLab.downloads.filter((item) => ['queued', 'running', 'verifying', 'paused', 'failed'].includes(item.state));
     if (badge) { badge.hidden = active.length === 0; badge.textContent = active.length ? `↓ ${active.length}` : '↓ 0'; }
-    const chiama = (verbo) => async (id) => { try { await apiPost(`/api/v1/huggingface/downloads/${encodeURIComponent(id)}/${verbo}`, {}); } catch (error) { toast('Comando non eseguito', error.message); } caricaDownloadModelLab(); };
+    const chiama = (verbo) => async (id) => { try { await apiPost(`/api/v1/huggingface/downloads/${encodeURIComponent(id)}/${verbo}`, {}); } catch (error) { toast(tr('app.composer.commandFailed'), error.message); } caricaDownloadModelLab(); };
     aggiornaCodaDownload(panel, state.modelLab.downloads, {
       soloAttivi: downloadSoloAttivi, stime: stimeDownload,
       azioni: {
@@ -25951,15 +26136,15 @@ ${testo}`;
          */
         rinomina: (id, nome) => apiPost(`/api/v1/local-models/${encodeURIComponent(id)}/rename`, { name: nome })
           .then((risposta) => ({ ok: true, nome: risposta?.name ?? nome }))
-          .catch((errore) => ({ ok: false, motivo: errore?.message ?? 'rinomina non riuscita' })),
+          .catch((errore) => ({ ok: false, motivo: errore?.message ?? tr('app.modelLab.local.renameFailed') })),
         elimina: async (id) => {
           const cEra = state.modelLab.installed.some((modello) => modello.id === id);
           try { await apiPost(`/api/v1/local-models/${encodeURIComponent(id)}/delete`, {}); }
-          catch (errore) { return { ok: false, motivo: errore?.message ?? 'eliminazione non riuscita' }; }
+          catch (errore) { return { ok: false, motivo: errore?.message ?? tr('app.modelLab.local.deleteFailed') }; }
           await caricaModelliLocaliModelLab();
           caricaDownloadModelLab();
-          if (!cEra) return { ok: false, motivo: 'non risultava fra i modelli installati' };
-          if (state.modelLab.installed.some((modello) => modello.id === id)) return { ok: false, motivo: 'il modello risulta ancora installato' };
+          if (!cEra) return { ok: false, motivo: tr('app.modelLab.local.wasNotInstalled') };
+          if (state.modelLab.installed.some((modello) => modello.id === id)) return { ok: false, motivo: tr('app.modelLab.local.stillInstalled') };
           return { ok: true };
         },
       },
@@ -25971,14 +26156,14 @@ ${testo}`;
     const mount = $('#modelLabDownloadsList'); const badge = $('#modelLabDownloadQueueBadge'); if (!mount) return;
     const active = state.modelLab.downloads.filter((item) => ['queued', 'running', 'verifying', 'paused', 'failed'].includes(item.state));
     if (badge) { badge.hidden = active.length === 0; badge.textContent = active.length ? `↓ ${active.length}` : '↓ 0'; }
-    if (!state.modelLab.downloads.length) { mount.replaceChildren(textElement('p', 'model-lab-empty', 'Nessun download attivo.')); return; }
+    if (!state.modelLab.downloads.length) { mount.replaceChildren(textElement('p', 'model-lab-empty', tr('app.modelLab.downloads.none'))); return; }
     mount.replaceChildren(...state.modelLab.downloads.map((item) => {
       const row = document.createElement('article'); row.className = 'model-lab-installed-item'; row.append(textElement('strong', '', `${item.id} · ${item.state} · ${item.progress ?? 0}%`), textElement('span', '', `${formattaByteModelLab(item.bytes)} / ${formattaByteModelLab(item.totalBytes)}`));
-      const progress = document.createElement('progress'); progress.max = 100; progress.value = item.progress ?? 0; progress.setAttribute('aria-label', `Avanzamento ${item.id}`); row.append(progress);
+      const progress = document.createElement('progress'); progress.max = 100; progress.value = item.progress ?? 0; progress.setAttribute('aria-label', tr('app.modelLab.downloads.progressLabel', { id: item.id })); row.append(progress);
       const actions = document.createElement('div'); actions.className = 'model-lab-installed-actions';
-      if (['running', 'queued'].includes(item.state)) { const pause = document.createElement('button'); pause.className = 'secondary-btn compact'; pause.textContent = 'Pausa'; pause.addEventListener('click', async () => { await apiPost(`/api/v1/huggingface/downloads/${encodeURIComponent(item.id)}/pause`, {}); caricaDownloadModelLab(); }); actions.append(pause); }
-      if (['paused', 'failed'].includes(item.state)) { const resume = document.createElement('button'); resume.className = 'secondary-btn compact'; resume.textContent = 'Riprendi'; resume.addEventListener('click', async () => { await apiPost(`/api/v1/huggingface/downloads/${encodeURIComponent(item.id)}/resume`, {}); caricaDownloadModelLab(); }); actions.append(resume); }
-      if (!['ready', 'cancelled'].includes(item.state)) { const cancel = document.createElement('button'); cancel.className = 'secondary-btn compact'; cancel.textContent = 'Annulla'; cancel.addEventListener('click', async () => { await apiPost(`/api/v1/huggingface/downloads/${encodeURIComponent(item.id)}/cancel`, {}); caricaDownloadModelLab(); }); actions.append(cancel); }
+      if (['running', 'queued'].includes(item.state)) { const pause = document.createElement('button'); pause.className = 'secondary-btn compact'; pause.textContent = tr('app.modelLab.downloads.pause'); pause.addEventListener('click', async () => { await apiPost(`/api/v1/huggingface/downloads/${encodeURIComponent(item.id)}/pause`, {}); caricaDownloadModelLab(); }); actions.append(pause); }
+      if (['paused', 'failed'].includes(item.state)) { const resume = document.createElement('button'); resume.className = 'secondary-btn compact'; resume.textContent = tr('app.modelLab.downloads.resume'); resume.addEventListener('click', async () => { await apiPost(`/api/v1/huggingface/downloads/${encodeURIComponent(item.id)}/resume`, {}); caricaDownloadModelLab(); }); actions.append(resume); }
+      if (!['ready', 'cancelled'].includes(item.state)) { const cancel = document.createElement('button'); cancel.className = 'secondary-btn compact'; cancel.textContent = tr('app.common.cancel'); cancel.addEventListener('click', async () => { await apiPost(`/api/v1/huggingface/downloads/${encodeURIComponent(item.id)}/cancel`, {}); caricaDownloadModelLab(); }); actions.append(cancel); }
       row.append(actions); return row;
     }));
   }

@@ -4,6 +4,7 @@ import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
+import { AREE } from '../frontend/src/i18n/testi/index.js';
 
 import { PDFArray, PDFDocument, PDFName, PDFRawStream, decodePDFRawStream } from 'pdf-lib';
 
@@ -434,7 +435,8 @@ test('⛔⛔ il 405 porta l\'Allow esatto, e le due assenze restano due 404 DIVE
   assert.equal(ricercaIgnota.status, 404);
   const problema = (await ricercaIgnota.json()).error;
   assert.equal(problema.code, 'RESEARCH_NOT_FOUND', '⛔ «la sessione non c\'è» e «la ricerca non c\'è» mandano a cercare in due posti diversi');
-  assert.equal(problema.title, 'Ricerca non trovata');
+  assert.equal(problema.title, 'Research not found');
+  assert.equal(AREE.errori.it['RESEARCH_NOT_FOUND.title'], 'Ricerca non trovata', 'e in italiano lo dice il dizionario, dal codice');
 
   // ⛔ Un id che potrebbe attraversare una cartella cade PRIMA di toccare il magazzino.
   for (const ostile of ['a%2Fb', 'C%3A%5CWindows', 'ric.1']) {

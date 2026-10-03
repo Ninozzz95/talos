@@ -16,6 +16,8 @@
  * Tipi: `markdown · tabella · testo · html · immagine · pdf · documento · foglio · presentazione · binario`.
  */
 
+import { t } from '../lingua.js';
+
 const ESTENSIONI = new Map();
 const registra = (tipo, elenco) => { for (const e of elenco) ESTENSIONI.set(e, tipo); };
 registra('markdown', ['md', 'markdown', 'mdown', 'mkd']);
@@ -34,18 +36,18 @@ registra('testo', [
 ]);
 
 /** I vecchi Office e gli ODF senza lettore: si riconoscono per poterlo DIRE, non per aprirli. */
+/* 03/10/2026, seconda ondata della lingua: i nomi e le frasi stanno nel dizionario (`varie.reader.fileType.*`), letti quando
+   si scrive l'avviso. Le chiavi sono valori di logica: la parola la sceglie la lingua corrente. */
 const OFFICE_SENZA_LETTORE = new Map([
-  ['doc', 'Word precedente al 2007'], ['ppt', 'PowerPoint precedente al 2007'],
-  ['odt', 'OpenDocument di testo'], ['odp', 'OpenDocument di presentazione'],
+  ['doc', 'varie.reader.fileType.office.doc'], ['ppt', 'varie.reader.fileType.office.ppt'],
+  ['odt', 'varie.reader.fileType.office.odt'], ['odp', 'varie.reader.fileType.office.odp'],
 ]);
 const CON_MACRO = new Set(['docm', 'xlsm', 'pptm']);
 
 /** Il tipo con il suo articolo, per le frasi che spiegano una contraddizione fra nome e contenuto. */
-const CON_ARTICOLO = new Map([
-  ['markdown', 'un file Markdown'], ['tabella', 'una tabella CSV'], ['testo', 'un file di testo'], ['html', 'una pagina HTML'],
-  ['immagine', 'un\'immagine'], ['pdf', 'un PDF'], ['documento', 'un documento Word'], ['foglio', 'un foglio di calcolo'],
-  ['presentazione', 'una presentazione PowerPoint'],
-]);
+const CON_ARTICOLO = new Map(['markdown', 'tabella', 'testo', 'html', 'immagine', 'pdf', 'documento', 'foglio', 'presentazione']
+  .map((tipo) => [tipo, `varie.reader.fileType.kind.${tipo}`]));
+const conArticolo = (tipo) => t(CON_ARTICOLO.get(tipo));
 
 /** L'estensione del nome, minuscola; `''` se il nome non ne ha (anche `.gitignore` conta: è il nome intero). */
 export function estensioneDi(nome) {
@@ -107,8 +109,9 @@ export function sembraTesto(dati) {
   } catch { return false; }
 }
 
-const parolaFirma = (firma) => (IMMAGINI.has(firma) ? `un'immagine ${firma.toUpperCase()}` : firma === 'pdf' ? 'un PDF' : firma === 'zip' ? 'un archivio ZIP' : 'un file Office precedente al 2007');
-const senzaLettore = (estensione) => `I file ${OFFICE_SENZA_LETTORE.get(estensione)} non si mostrano qui: si aprono con l'app del sistema.`;
+const parolaFirma = (firma) => (IMMAGINI.has(firma) ? t('varie.reader.fileType.content.image', { format: firma.toUpperCase() })
+  : firma === 'pdf' ? t('varie.reader.fileType.content.pdf') : firma === 'zip' ? t('varie.reader.fileType.content.zip') : t('varie.reader.fileType.content.oldOffice'));
+const senzaLettore = (estensione) => t('varie.reader.fileType.notice.noViewer', { kind: t(OFFICE_SENZA_LETTORE.get(estensione)) });
 
 /**
  * Il tipo del file: il nome e i primi byte (bastano i primi 8 KiB; anche meno, se il file è corto).
@@ -122,8 +125,8 @@ export function tipoDelFile({ nome, byte }) {
   // una contraddizione si dice solo se il nome AVEVA detto qualcosa: un file senza estensione non ha promesso niente
   const contraddice = (tipo, frase) => (daNome === tipo || daNome === 'binario' ? null : frase);
 
-  if (firma && IMMAGINI.has(firma)) return esito('immagine', contraddice('immagine', `Il nome indica ${CON_ARTICOLO.get(daNome)}, ma il contenuto è ${parolaFirma(firma)}.`));
-  if (firma === 'pdf') return esito('pdf', contraddice('pdf', `Il nome indica ${CON_ARTICOLO.get(daNome)}, ma il contenuto è un PDF.`));
+  if (firma && IMMAGINI.has(firma)) return esito('immagine', contraddice('immagine', t('varie.reader.fileType.notice.mismatch', { nameKind: conArticolo(daNome), contentKind: parolaFirma(firma) })));
+  if (firma === 'pdf') return esito('pdf', contraddice('pdf', t('varie.reader.fileType.notice.mismatch', { nameKind: conArticolo(daNome), contentKind: t('varie.reader.fileType.content.pdf') })));
   if (firma === 'zip') {
     // un Office moderno È uno zip: il sottotipo lo dice il nome (SheetJS legge anche un xlsx chiamato .xls)
     if (TIPI_OOXML.has(daNome)) return esito(daNome);
@@ -133,19 +136,19 @@ export function tipoDelFile({ nome, byte }) {
   if (firma === 'ole') {
     if (estensione === 'xls') return esito('foglio'); // SheetJS legge il BIFF dei vecchi Excel
     if (OFFICE_SENZA_LETTORE.has(estensione)) return esito('binario', senzaLettore(estensione));
-    return esito('binario', 'Il contenuto è un file Office precedente al 2007: si apre con l\'app del sistema.');
+    return esito('binario', t('varie.reader.fileType.notice.oldOffice'));
   }
 
   // nessuna firma conosciuta
   if (OFFICE_SENZA_LETTORE.has(estensione)) return esito('binario', senzaLettore(estensione));
   if (['pdf', 'documento', 'foglio', 'presentazione'].includes(daNome) || (daNome === 'immagine' && estensione !== 'svg')) {
-    return esito('binario', `Il nome indica ${CON_ARTICOLO.get(daNome)}, ma il contenuto non lo è: il file è rotto o ha il nome sbagliato.`);
+    return esito('binario', t('varie.reader.fileType.notice.broken', { nameKind: conArticolo(daNome) }));
   }
   if (daNome === 'binario') {
     // senza estensione conosciuta: testo solo se i byte lo dimostrano, mai byte ignoti stampati in un <pre>
     return dati.length > 0 && sembraTesto(dati) ? esito('testo') : esito('binario');
   }
   // markdown, tabella, testo, html, svg: sono testo, e devono sembrarlo
-  if (!sembraTesto(dati)) return esito('binario', `Il nome indica ${CON_ARTICOLO.get(daNome)}, ma il contenuto non è testo.`);
+  if (!sembraTesto(dati)) return esito('binario', t('varie.reader.fileType.notice.notText', { nameKind: conArticolo(daNome) }));
   return esito(daNome);
 }

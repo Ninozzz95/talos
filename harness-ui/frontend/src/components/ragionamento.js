@@ -24,7 +24,8 @@
  */
 
 /** Il nome dell'interruttore: non più «mostra/nascondi», ma se aprirlo mentre il modello scrive. */
-export const ETICHETTA_INTERRUTTORE_RAGIONAMENTO = 'Apri il ragionamento mentre scrive';
+import { t } from './lingua.js';
+export const ETICHETTA_INTERRUTTORE_RAGIONAMENTO = 'chat.reasoning.openWhileWriting'; // 03/10/2026: una chiave del dizionario, da passare a t()
 
 /**
  * Una durata in parole brevi: «12 s», «1 min 5 s», «2 min».
@@ -49,10 +50,10 @@ export function formattaDurataRagionamento(secondi) {
  * @returns {string}
  */
 export function etichettaRagionamento({ inCorso = false, secondi = null } = {}) {
-  if (inCorso) return 'Sta ragionando…';
-  if (secondi === null || secondi === undefined || !Number.isFinite(Number(secondi))) return 'Ha ragionato';
-  if (Number(secondi) < 1) return 'Ha ragionato poco';
-  return `Ha ragionato per ${formattaDurataRagionamento(secondi)}`;
+  if (inCorso) return t('chat.reasoning.thinking');
+  if (secondi === null || secondi === undefined || !Number.isFinite(Number(secondi))) return t('chat.reasoning.thought');
+  if (Number(secondi) < 1) return t('chat.reasoning.thoughtBriefly');
+  return t('chat.reasoning.thoughtFor', { duration: formattaDurataRagionamento(secondi) });
 }
 
 /*

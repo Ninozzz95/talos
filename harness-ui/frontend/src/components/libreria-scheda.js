@@ -12,6 +12,7 @@
 
 /** @typedef {'image'|'pdf'|'word'|'spreadsheet'|'presentation'|'code'|'data'|'archive'|'text'|'file'} FamigliaFile */
 
+import { t as traduci } from './lingua.js';
 const ESTENSIONI_IMMAGINE = new Set(['avif', 'bmp', 'gif', 'heic', 'heif', 'jpeg', 'jpg', 'png', 'svg', 'tif', 'tiff', 'webp']);
 const ESTENSIONI_WORD = new Set(['doc', 'docx', 'odt', 'rtf']);
 const ESTENSIONI_FOGLIO = new Set(['csv', 'ods', 'tsv', 'xls', 'xlsx']);
@@ -243,7 +244,7 @@ export function creaGlifoFormato(doc, voce) {
 export function creaRigaDettaglio(doc, voce) {
   const riga = nodo(doc, 'small', 'td-lib-dettaglio');
   const pezzi = [];
-  if (voce?.origine === 'generated') pezzi.push(nodo(doc, 'span', 'td-lib-generato', 'Generato'));
+  if (voce?.origine === 'generated') pezzi.push(nodo(doc, 'span', 'td-lib-generato', traduci('sezioni.library.origin.generated')));
   pezzi.push(nodo(doc, 'span', '', presentazioneFileLibreria(voce?.nome, voce?.mediaType).estensione));
   pezzi.forEach((pezzo, i) => {
     if (i > 0) { const sep = nodo(doc, 'span', '', ' · '); sep.setAttribute('aria-hidden', 'true'); riga.append(sep); }
@@ -310,7 +311,7 @@ function inCoda(lavoro) {
       const scadenza = new Promise((_, scaduta) => {
         timer = setTimeout(() => {
           controllo.abort();
-          scaduta(new Error(`nessuna risposta in ${TEMPO_MASSIMO_LETTURA_MS / 1000} s`));
+          scaduta(new Error(`no response in ${TEMPO_MASSIMO_LETTURA_MS / 1000} s`)); // diagnostica per la console, mai a schermo
         }, TEMPO_MASSIMO_LETTURA_MS);
       });
       Promise.race([Promise.resolve().then(() => lavoro(controllo.signal)), scadenza]).then(risolvi, rifiuta).finally(() => {
@@ -507,7 +508,7 @@ export function creaAnteprimaScheda(doc, voce, { sessionId = '', indirizzoFile, 
   riquadro.dataset.art = 'loading';
   const segnaposto = nodo(doc, 'span', 'td-lib-caricamento');
   segnaposto.setAttribute('role', 'status');
-  segnaposto.setAttribute('aria-label', 'Anteprima in caricamento');
+  segnaposto.setAttribute('aria-label', traduci("sezioni.library.card.loadingPreview"));
   riquadro.replaceChildren(segnaposto);
 
   const riempiIVivi = (esito) => {
@@ -534,7 +535,7 @@ export function creaAnteprimaScheda(doc, voce, { sessionId = '', indirizzoFile, 
          apertura, o con «Aggiorna», si riprova. */
       IN_VOLO.set(chiave, inCoda(lavoro)
         .then((esito) => { ricordaAnteprima(chiave, esito); return esito; }, (errore) => {
-          doc.defaultView?.console?.warn?.(`Libreria: anteprima di «${voce?.nome ?? voce?.id}» non disegnata (${genere}): ${errore?.message ?? errore}`);
+          doc.defaultView?.console?.warn?.(`Library: preview of «${voce?.nome ?? voce?.id}» not drawn (${genere}): ${errore?.message ?? errore}`);
           return null;
         })
         .finally(() => IN_VOLO.delete(chiave)));

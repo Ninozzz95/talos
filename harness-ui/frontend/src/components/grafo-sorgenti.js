@@ -1,3 +1,5 @@
+import { t } from './lingua.js';
+
 /* Due fonti indipendenti nella stessa sessione: workflow e deleghe ordinarie. */
 const TIPI = Object.freeze(['workflow', 'deleghe']);
 let prossimoId = 0;
@@ -18,11 +20,11 @@ export function montaSelettoreRail(contenitore, { iniziale = 'workflow', onSelez
   const schede = d.createElement('div');
   schede.className = 'talos-sorgenti__schede';
   schede.setAttribute('role', 'tablist');
-  schede.setAttribute('aria-label', 'Tipo di lavoro');
+  schede.setAttribute('aria-label', t('agenti.sources.workLabel'));
   const pulsanti = new Map();
   const pannelli = new Map();
   for (const tipo of TIPI) {
-    const etichetta = tipo === 'workflow' ? 'Workflow' : 'Deleghe';
+    const etichetta = tipo === 'workflow' ? t('agenti.sources.workflow') : t('agenti.sources.delegations');
     const tab = bottone(d, etichetta);
     const pannello = d.createElement('section');
     tab.id = `${id}-${tipo}-tab`;
@@ -88,10 +90,10 @@ export function montaSelettoreGrafo(testata, { iniziale, onSelezione } = {}) {
   const gruppo = d.createElement('div');
   gruppo.className = 'talos-sorgenti__grafo';
   gruppo.setAttribute('role', 'group');
-  gruppo.setAttribute('aria-label', 'Mostra diagramma');
+  gruppo.setAttribute('aria-label', t('agenti.sources.showDiagram'));
   const pulsanti = new Map();
   for (const tipo of TIPI) {
-    const tab = bottone(d, tipo === 'workflow' ? 'Workflow' : 'Deleghe');
+    const tab = bottone(d, tipo === 'workflow' ? t('agenti.sources.workflow') : t('agenti.sources.delegations'));
     tab.className = 'talos-sorgenti__scheda';
     tab.addEventListener('click', () => { if (tipo !== iniziale) onSelezione?.(tipo); });
     gruppo.append(tab);

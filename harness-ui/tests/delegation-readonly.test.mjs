@@ -1,4 +1,5 @@
 import test from 'node:test';
+import { togliConfiniDati } from '../src/kernel/confine-dati.mjs';
 import assert from 'node:assert/strict';
 import { mkdtempSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -167,7 +168,7 @@ test('DELEGHE02-DISPATCH: all mutation surfaces are refused even when the model 
   assert.equal(readFileSync(join(cartella, 'alpha.txt'), 'utf8'), 'TOKEN_OK');
   const results = events.filter(e => e.type === 'ToolCallResult');
   assert.equal(results.length, denied.length + 1);
-  assert.equal(results[0].content, 'TOKEN_OK');
+  assert.equal(togliConfiniDati(results[0].content), 'TOKEN_OK');
   for (const e of results.slice(1)) { assert.equal(e.isError, true); assert.match(e.content, /DELEGATION_READ_ONLY/); }
   const offered = requests[0].tools.map(t => t.function.name);
   for (const [name] of denied) assert.ok(!offered.includes(name), name);
@@ -179,7 +180,7 @@ test('DELEGHE02-LEGACY: root sessions without a contract retain their existing d
     toolMcp: [{ name: 'mcp_test' }], chiamaToolMcpFn: async () => { calls++; return { content: [{ type: 'text', text: 'ok' }] }; },
   }, { consegna: 'Usa lo strumento.' });
   assert.equal(calls, 1);
-  assert.equal(events.find(e => e.type === 'ToolCallResult').content, 'ok');
+  assert.equal(togliConfiniDati(events.find(e => e.type === 'ToolCallResult').content), 'ok');
 });
 
 test('DELEGHE02-ACTUAL-WRITE: an explicit modification writes real bytes and preserves parent denials', async t => {

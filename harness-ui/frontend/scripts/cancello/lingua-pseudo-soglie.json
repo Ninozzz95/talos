@@ -1,0 +1,22 @@
+{
+  "nota": "Strato 3 del cancello della lingua (owner 03/10/2026): testi visibili senza il segno della pseudo-lingua, per vista. Si abbassano, MAI si alzano. Obiettivo: zero.",
+  "viste": {
+    "home": 0,
+    "dashboard": 0,
+    "projects": 0,
+    "library": 0,
+    "notes": 0,
+    "tasks": 0,
+    "memory": 0,
+    "research": 0,
+    "automations": 0,
+    "forge": 0,
+    "settings": 0,
+    "sessione-chat": 0,
+    "sessione-review": 0,
+    "sessione-browser": 0,
+    "dialogo-new": 0,
+    "dialogo-permissions": 0,
+    "dialogo-shortcuts": 0
+  }
+}

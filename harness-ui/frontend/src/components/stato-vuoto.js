@@ -20,6 +20,9 @@
  * suggestion rows che riempiono il composer, non inviano).
  */
 
+import { t as traduci, tn, linguaCorrenteDiT } from './lingua.js';
+/* Numeri nella lingua dell'interfaccia (italiano → it-IT, inglese → en-US), letti a ogni uso. */
+const localeUI = () => (linguaCorrenteDiT() === 'en' ? 'en-US' : 'it-IT');
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
 function el(documentObj, tag, className, testo) {
@@ -48,16 +51,16 @@ export function suggerimentiDallaCartella({ voci = [], packageJson = null, total
   const righe = [];
   const test = packageJson?.scripts?.test;
   if (typeof test === 'string' && test.trim()) {
-    const conteggio = Number.isFinite(totaleTest) && totaleTest > 0 ? ` · ${totaleTest.toLocaleString('it-IT')} test` : '';
-    righe.push({ icona: 'i-check-sq', titolo: 'Fai passare la suite di test', sub: `trovata in package.json · ${test.trim()}${conteggio}`, testo: `Fai passare la suite di test (${test.trim()}) e dimmi cosa hai cambiato.` });
+    const conteggio = Number.isFinite(totaleTest) && totaleTest > 0 ? ` · ${tn('varie.emptyState.testCount.one', 'varie.emptyState.testCount.many', totaleTest, { n: totaleTest.toLocaleString(localeUI()) })}` : '';
+    righe.push({ icona: 'i-check-sq', titolo: traduci('varie.emptyState.suggestion.passTests.title'), sub: `${traduci('varie.emptyState.suggestion.passTests.sub', { script: test.trim() })}${conteggio}`, testo: traduci('varie.emptyState.suggestion.passTests.prompt', { script: test.trim() }) });
   }
   else if (nomi.has('tests') || nomi.has('test')) {
-    righe.push({ icona: 'i-check-sq', titolo: 'Esegui i test', sub: `cartella ${nomi.has('tests') ? 'tests' : 'test'} trovata alla radice`, testo: 'Esegui i test del progetto e dimmi cosa fallisce.' });
+    righe.push({ icona: 'i-check-sq', titolo: traduci('varie.emptyState.suggestion.runTests.title'), sub: traduci('varie.emptyState.suggestion.runTests.sub', { folder: nomi.has('tests') ? 'tests' : 'test' }), testo: traduci('varie.emptyState.suggestion.runTests.prompt') });
   }
   const readme = [...nomi].find((n) => n === 'readme.md' || n === 'readme');
-  if (readme) righe.push({ icona: 'i-doc', titolo: `Spiegami ${readme === 'readme' ? 'README' : 'README.md'}`, sub: 'trovato alla radice della cartella', testo: 'Spiegami questo progetto leggendo il README, in dieci righe.' });
-  if (nomi.has('.claude')) righe.push({ icona: 'i-search', titolo: 'Trova le righe di ledger ancora aperte', sub: 'cartella .claude · cerca «🔜» e «APERTO» nei ledger', testo: 'Cerca nei ledger in .claude le righe ancora aperte (🔜, APERTO) e riassumile.' });
-  else if (nomi.has('src')) righe.push({ icona: 'i-search', titolo: 'Fammi una mappa di src', sub: 'cartella src · moduli, dipendenze, punti d\'ingresso', testo: 'Fammi una mappa della cartella src: moduli, dipendenze fra loro e punti d\'ingresso.' });
+  if (readme) righe.push({ icona: 'i-doc', titolo: traduci('varie.emptyState.suggestion.readme.title', { file: readme === 'readme' ? 'README' : 'README.md' }), sub: traduci('varie.emptyState.suggestion.readme.sub'), testo: traduci('varie.emptyState.suggestion.readme.prompt') });
+  if (nomi.has('.claude')) righe.push({ icona: 'i-search', titolo: traduci('varie.emptyState.suggestion.ledger.title'), sub: traduci('varie.emptyState.suggestion.ledger.sub'), testo: traduci('varie.emptyState.suggestion.ledger.prompt') });
+  else if (nomi.has('src')) righe.push({ icona: 'i-search', titolo: traduci('varie.emptyState.suggestion.srcMap.title'), sub: traduci('varie.emptyState.suggestion.srcMap.sub'), testo: traduci('varie.emptyState.suggestion.srcMap.prompt') });
   return righe.slice(0, 3);
 }
 
@@ -73,8 +76,8 @@ export function creaStatoVuoto(dati = {}, opzioni = {}) {
   marchio.setAttribute('aria-hidden', 'true');
   marchio.append(simbolo(documentObj, 'glyph', 'glifo'));
   const titolo = el(documentObj, 'h2', 'talos-empty__title');
-  titolo.append(documentObj.createTextNode('Cosa costruiamo in '), el(documentObj, 'span', 'talos-empty__project', dati.progetto || 'questa cartella'), documentObj.createTextNode('?'));
-  const lead = el(documentObj, 'p', 'talos-empty__lead', dati.lead || 'TALOS legge, scrive ed esegue nella cartella che gli apri. Ogni azione lascia una ricevuta firmata, e niente esce da questa macchina se non lo chiedi tu.');
+  titolo.append(documentObj.createTextNode(`${traduci('varie.emptyState.titleBefore')} `), el(documentObj, 'span', 'talos-empty__project', dati.progetto || traduci("varie.emptyState.thisFolder")), documentObj.createTextNode('?'));
+  const lead = el(documentObj, 'p', 'talos-empty__lead', dati.lead || traduci("varie.emptyState.lead"));
   /* ⛔ 08/09/2026 — il mockup ha la scritta TALOS in Orbitron sotto il glifo (owner 07/9, O-46:
      «la chat vuota senza logo e senza TALOS in Orbitron»), e questo componente non la produceva:
      la parità componenti↔mockup era rossa alle tre viewport. Il mockup è la fonte, e chi disegna
@@ -104,12 +107,12 @@ export function creaStatoVuoto(dati = {}, opzioni = {}) {
   if (dati.ultimaSessione) {
     const riapri = el(documentObj, 'button', 'talos-button talos-button--secondary talos-button--sm');
     riapri.type = 'button';
-    riapri.append(simbolo(documentObj, 'i i--sm', 'i-clock'), documentObj.createTextNode('Riapri l\'ultima sessione'));
+    riapri.append(simbolo(documentObj, 'i i--sm', 'i-clock'), documentObj.createTextNode(traduci("varie.emptyState.reopenLast")));
     riapri.title = dati.ultimaSessione.nome || '';
     if (typeof opzioni.onRiapri === 'function') riapri.addEventListener('click', opzioni.onRiapri);
     piede.append(riapri);
   }
-  piede.append(el(documentObj, 'span', 'talos-muted talos-empty__hint', dati.hint || (suggerimenti.length > 0 ? 'Gli esempi nascono da cosa c\'è nella cartella.' : 'Scrivi qui sotto cosa deve fare TALOS per iniziare.')));
+  piede.append(el(documentObj, 'span', 'talos-muted talos-empty__hint', dati.hint || (suggerimenti.length > 0 ? traduci("varie.emptyState.hintWithExamples") : traduci("varie.emptyState.hintWithoutExamples"))));
   colonna.append(piede);
   return colonna;
 }

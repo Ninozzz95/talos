@@ -71,13 +71,24 @@ const AMBIENTE_FISSO = Object.freeze({
 });
 
 export class GhServiceError extends Error {
-  constructor(message, code = 'GH_COMMAND_FAILED', dettagli = null) {
+  /**
+   * ⛔⛔ K4a (03/10/2026, owner: «ogni singola parola nella app deve essere sia in inglese che in italiano») — il `message` è la
+   *   frase INGLESE (riserva per la CLI, il modello e i log). Le due frasi che la scheda GitHub mostra davvero — l'errore
+   *   dell'installazione e quello dell'accesso — portano anche `frase: { chiave, params }`: la chiave dell'area `server` del
+   *   dizionario (`server.gh.…`) e i valori. Ricerca 03/10/2026: codice stabile + valori + riserva inglese (Google AIP-193).
+   * @param {{chiave: string, params?: object}} [frase]
+   */
+  constructor(message, code = 'GH_COMMAND_FAILED', dettagli = null, frase = null) {
     super(message);
     this.name = 'GhServiceError';
     this.code = code;
     if (dettagli) this.dettagli = dettagli;
+    if (frase?.chiave) { this.chiave = frase.chiave; if (frase.params) this.params = frase.params; }
   }
 }
+
+/** I campi `<campo>Chiave` e `<campo>Params` di una frase, se ne ha: mai una chiave senza il suo testo. */
+const campiFrase = (campo, frase) => (frase?.chiave ? { [`${campo}Chiave`]: frase.chiave, ...(frase.params ? { [`${campo}Params`]: frase.params } : {}) } : {});
 
 /** `2.97.0` ≥ `2.97.0`? Solo i tre numeri; una versione illeggibile non è mai «abbastanza nuova». */
 export function versioneAlmeno(versione, minima) {
@@ -182,7 +193,7 @@ export function codiceDiAccesso(testo) {
 
 function rifiuto(errore) {
   if (errore instanceof GhServiceError) return { erroreAvvio: errore.message, code: errore.code, ...(errore.dettagli ? { dettagli: errore.dettagli } : {}) };
-  return { erroreAvvio: errore?.message || 'gh non è riuscito', code: 'GH_COMMAND_FAILED' };
+  return { erroreAvvio: errore?.message || 'gh failed', code: 'GH_COMMAND_FAILED' };
 }
 
 /**
@@ -203,8 +214,8 @@ export function creaServizioGh({
   esisteFn = null,
   adesso = () => Date.now(),
 } = {}) {
-  if (typeof cartellaStrumenti !== 'string' || !isAbsolute(cartellaStrumenti)) throw new GhServiceError('Serve la cartella degli strumenti di TALOS', 'GH_STORE_UNAVAILABLE');
-  if (!servizioGit || typeof servizioGit.sincronizzazione !== 'function') throw new GhServiceError('Serve il servizio git', 'GH_STORE_UNAVAILABLE');
+  if (typeof cartellaStrumenti !== 'string' || !isAbsolute(cartellaStrumenti)) throw new GhServiceError('The TALOS tools folder is required', 'GH_STORE_UNAVAILABLE');
+  if (!servizioGit || typeof servizioGit.sincronizzazione !== 'function') throw new GhServiceError('The git service is required', 'GH_STORE_UNAVAILABLE');
   const cartellaVersione = join(cartellaStrumenti, VERSIONE_GH);
   const eseguibileTalos = join(cartellaVersione, 'bin', 'gh.exe');
   const esiste = esisteFn ?? (async (p) => { try { return (await stat(p)).isFile(); } catch { return false; } });
@@ -285,7 +296,7 @@ export function creaServizioGh({
 
   async function ghPronto() {
     const trovato = await trova();
-    if (!trovato?.eseguibile) throw new GhServiceError('GitHub CLI non è installata', 'GH_NOT_INSTALLED', trovato?.sistemaTroppoVecchio ? { sistemaTroppoVecchio: trovato.sistemaTroppoVecchio } : null);
+    if (!trovato?.eseguibile) throw new GhServiceError('GitHub CLI is not installed', 'GH_NOT_INSTALLED', trovato?.sistemaTroppoVecchio ? { sistemaTroppoVecchio: trovato.sistemaTroppoVecchio } : null);
     return trovato;
   }
 
@@ -294,16 +305,16 @@ export function creaServizioGh({
     const { eseguibile } = await ghPronto();
     const esito = await esegui(eseguibile, argomenti, { cartella, input, timeoutMs });
     if (esito.codice === 0) return esito;
-    if (esito.troppoGrande) throw new GhServiceError('La risposta di GitHub supera il limite consentito', 'GH_OUTPUT_TOO_LARGE');
-    if (esito.scaduto) throw new GhServiceError('GitHub non ha risposto entro il tempo massimo', 'GH_TIMEOUT');
-    if (esito.avvioFallito) { trovatoInCache = null; throw new GhServiceError('GitHub CLI non è più raggiungibile', 'GH_NOT_INSTALLED'); }
+    if (esito.troppoGrande) throw new GhServiceError('The GitHub response exceeds the allowed limit', 'GH_OUTPUT_TOO_LARGE');
+    if (esito.scaduto) throw new GhServiceError('GitHub did not respond within the maximum time', 'GH_TIMEOUT');
+    if (esito.avvioFallito) { trovatoInCache = null; throw new GhServiceError('GitHub CLI is no longer reachable', 'GH_NOT_INSTALLED'); }
     /* uscita 4 = «authentication required» (`gh help exit-codes`): un codice, non una frase */
-    if (esito.codice === 4) throw new GhServiceError('GitHub non è collegato', 'GH_NOT_LOGGED_IN');
-    throw new GhServiceError(String(esito.stderr || '').trim().split('\n').slice(-3).join(' ') || 'gh ha risposto con un errore', 'GH_COMMAND_FAILED');
+    if (esito.codice === 4) throw new GhServiceError('GitHub is not connected', 'GH_NOT_LOGGED_IN');
+    throw new GhServiceError(String(esito.stderr || '').trim().split('\n').slice(-3).join(' ') || 'gh answered with an error', 'GH_COMMAND_FAILED');
   }
 
   function json(esito) {
-    try { return JSON.parse(esito.stdout); } catch { throw new GhServiceError('Risposta di GitHub non leggibile', 'GH_OUTPUT_INVALID'); }
+    try { return JSON.parse(esito.stdout); } catch { throw new GhServiceError('GitHub response not readable', 'GH_OUTPUT_INVALID'); }
   }
 
   /* ─────────── stato e accesso ─────────── */
@@ -330,13 +341,13 @@ export function creaServizioGh({
   async function scaricaVero(url, destinazione, { tettoByte, timeoutMs }) {
     const controllo = AbortSignal.timeout(timeoutMs);
     const risposta = await fetch(url, { redirect: 'follow', signal: controllo });
-    if (!risposta.ok || !risposta.body) throw new GhServiceError(`Download non riuscito (HTTP ${risposta.status})`, 'GH_DOWNLOAD_FAILED');
+    if (!risposta.ok || !risposta.body) throw new GhServiceError(`Download failed (HTTP ${risposta.status})`, 'GH_DOWNLOAD_FAILED', null, { chiave: 'server.gh.install.downloadFailed', params: { status: risposta.status } });
     const hash = createHash('sha256');
     let byte = 0;
     const conta = new Transform({
       transform(pezzo, _codifica, avanti) {
         byte += pezzo.length;
-        if (byte > tettoByte) { avanti(new GhServiceError('Il file scaricato è più grande del previsto', 'GH_DOWNLOAD_FAILED')); return; }
+        if (byte > tettoByte) { avanti(new GhServiceError('The downloaded file is larger than expected', 'GH_DOWNLOAD_FAILED', null, { chiave: 'server.gh.install.fileTooBig' })); return; }
         hash.update(pezzo);
         avanti(null, pezzo);
       },
@@ -348,17 +359,18 @@ export function creaServizioGh({
 
   async function estraiVero(zip, destinazione) {
     const tar = join(ambiente.SystemRoot ?? ambiente.WINDIR ?? 'C:\\Windows', 'System32', 'tar.exe');
-    if (!(await esiste(tar))) throw new GhServiceError('Manca tar.exe di Windows per estrarre GitHub CLI', 'GH_EXTRACT_FAILED');
+    if (!(await esiste(tar))) throw new GhServiceError('Windows tar.exe is missing to extract GitHub CLI', 'GH_EXTRACT_FAILED', null, { chiave: 'server.gh.install.noTar' });
     const esito = await esegui(tar, ['-xf', zip, '-C', destinazione], { cartella: destinazione, timeoutMs: 120_000 });
-    if (esito.codice !== 0) throw new GhServiceError(String(esito.stderr || '').trim() || 'Estrazione non riuscita', 'GH_EXTRACT_FAILED');
+    if (esito.codice !== 0) { const detto = String(esito.stderr || '').trim(); throw new GhServiceError(detto || 'Extraction failed', 'GH_EXTRACT_FAILED', null, detto ? null : { chiave: 'server.gh.install.extractFailed' }); }
   }
   const estrai = estraiFn ?? estraiVero;
 
   let installazione = null;
   let ultimoErroreInstallazione = null;
+  let ultimaFraseInstallazione = null; // la chiave del dizionario dell'ultimo errore, se la porta
   async function installaInterno() {
     const pacchetto = PACCHETTI_GH[`${piattaforma}-${architettura}`];
-    if (!pacchetto) throw new GhServiceError(`GitHub CLI non si installa da TALOS su ${piattaforma}-${architettura}`, 'GH_UNSUPPORTED_PLATFORM');
+    if (!pacchetto) throw new GhServiceError(`GitHub CLI cannot be installed by TALOS on ${piattaforma}-${architettura}`, 'GH_UNSUPPORTED_PLATFORM', null, { chiave: 'server.gh.install.unsupported', params: { platform: piattaforma, arch: architettura } });
     await mkdir(cartellaStrumenti, { recursive: true });
     const lavoro = join(cartellaStrumenti, `.scarica-${VERSIONE_GH}-${adesso()}`);
     await mkdir(lavoro, { recursive: true });
@@ -367,17 +379,17 @@ export function creaServizioGh({
       await scarica(`${INDIRIZZO_RILASCIO}${FILE_IMPRONTE}`, impronte, { tettoByte: 64 * 1024, timeoutMs: TIMEOUT_LETTURA_MS });
       const riga = (await readFile(impronte, 'utf8')).split('\n').map((r) => r.trim().split(/\s+/u)).find((p) => p[1] === pacchetto.nome);
       if (!riga || riga[0].toLowerCase() !== pacchetto.sha256) {
-        throw new GhServiceError('L’impronta pubblicata da GitHub non coincide con quella attesa da TALOS: niente installazione', 'GH_CHECKSUM_MISMATCH');
+        throw new GhServiceError('The checksum published by GitHub does not match the one TALOS expects: no installation', 'GH_CHECKSUM_MISMATCH', null, { chiave: 'server.gh.install.checksumPublished' });
       }
       const zip = join(lavoro, pacchetto.nome);
       const scaricato = await scarica(`${INDIRIZZO_RILASCIO}${pacchetto.nome}`, zip, { tettoByte: TETTO_ZIP_BYTE, timeoutMs: TIMEOUT_SCARICA_MS });
       if (scaricato.sha256 !== pacchetto.sha256) {
-        throw new GhServiceError('Il file scaricato non ha l’impronta attesa: niente installazione', 'GH_CHECKSUM_MISMATCH');
+        throw new GhServiceError('The downloaded file does not have the expected checksum: no installation', 'GH_CHECKSUM_MISMATCH', null, { chiave: 'server.gh.install.checksumFile' });
       }
       const estratto = join(lavoro, 'estratto');
       await mkdir(estratto, { recursive: true });
       await estrai(zip, estratto);
-      if (!(await esiste(join(estratto, 'bin', 'gh.exe')))) throw new GhServiceError('Lo zip non contiene bin/gh.exe', 'GH_EXTRACT_FAILED');
+      if (!(await esiste(join(estratto, 'bin', 'gh.exe')))) throw new GhServiceError('The zip does not contain bin/gh.exe', 'GH_EXTRACT_FAILED', null, { chiave: 'server.gh.install.noGhExe' });
       await writeFile(join(estratto, 'talos-installazione.json'), JSON.stringify({ versione: VERSIONE_GH, pacchetto: pacchetto.nome, sha256: pacchetto.sha256, installato: new Date(adesso()).toISOString() }, null, 1), 'utf8');
       await rm(cartellaVersione, { recursive: true, force: true });
       await rename(estratto, cartellaVersione);
@@ -389,7 +401,7 @@ export function creaServizioGh({
 
   /* ─────────── collegare l'account ─────────── */
 
-  const collegamento = { stato: 'fermo', codice: null, indirizzo: null, errore: null, figlio: null, timer: null };
+  const collegamento = { stato: 'fermo', codice: null, indirizzo: null, errore: null, frase: null, figlio: null, timer: null };
   let avvioCollegamento = null;
 
   function avviaVero(eseguibile, argomenti) {
@@ -398,17 +410,18 @@ export function creaServizioGh({
   }
   const avvia = avviaFn ?? avviaVero;
 
-  function chiudiCollegamento(stato, errore = null) {
+  function chiudiCollegamento(stato, errore = null, frase = null) {
     clearTimeout(collegamento.timer);
     collegamento.timer = null;
     collegamento.figlio = null;
     collegamento.stato = stato;
     collegamento.errore = errore;
+    collegamento.frase = errore ? frase : null;
     if (stato !== 'in-attesa') { collegamento.codice = null; collegamento.indirizzo = null; }
   }
 
   function vistaCollegamento() {
-    return { stato: collegamento.stato, codice: collegamento.codice, indirizzo: collegamento.indirizzo, errore: collegamento.errore };
+    return { stato: collegamento.stato, codice: collegamento.codice, indirizzo: collegamento.indirizzo, errore: collegamento.errore, ...campiFrase('errore', collegamento.frase) };
   }
 
   /* ─────────── il repository e il ramo della sessione ─────────── */
@@ -424,12 +437,12 @@ export function creaServizioGh({
    */
   async function repoDelRamo(sessionId) {
     const sinc = daGit(await servizioGit.sincronizzazione({ sessionId }));
-    if (!sinc.ramo) throw new GhServiceError('Nessun ramo: la HEAD è staccata', 'GIT_DETACHED');
+    if (!sinc.ramo) throw new GhServiceError('No branch: HEAD is detached', 'GIT_DETACHED');
     const nomeRemoto = sinc.riferimento?.remoto ?? sinc.remotoPerInvio ?? null;
     const remoto = sinc.remoti?.find((r) => r.nome === nomeRemoto) ?? null;
-    if (!remoto) throw new GhServiceError('Questo repository non ha un remoto per il ramo', 'GIT_NO_REMOTE');
+    if (!remoto) throw new GhServiceError('This repository has no remote for the branch', 'GIT_NO_REMOTE');
     const repo = repoDaIndirizzo(remoto.urlInvio ?? remoto.url) ?? repoDaIndirizzo(remoto.url);
-    if (!repo) throw new GhServiceError(`Il remoto «${remoto.nome}» non è su github.com`, 'GH_NOT_GITHUB');
+    if (!repo) throw new GhServiceError(`The remote “${remoto.nome}” is not on github.com`, 'GH_NOT_GITHUB');
     return { repo, remoto: remoto.nome, sinc };
   }
 
@@ -449,7 +462,7 @@ export function creaServizioGh({
         const trovato = await trova();
         const base = {
           versioneTalos: VERSIONE_GH,
-          installazione: { inCorso: installazione != null, errore: ultimoErroreInstallazione },
+          installazione: { inCorso: installazione != null, errore: ultimoErroreInstallazione, ...campiFrase('errore', ultimaFraseInstallazione) },
           collegamento: vistaCollegamento(),
           installabile: Boolean(PACCHETTI_GH[`${piattaforma}-${architettura}`]),
         };
@@ -462,9 +475,9 @@ export function creaServizioGh({
     async installa() {
       try {
         if (!installazione) {
-          ultimoErroreInstallazione = null;
+          ultimoErroreInstallazione = null; ultimaFraseInstallazione = null;
           installazione = installaInterno()
-            .catch((errore) => { ultimoErroreInstallazione = errore?.message ?? 'Installazione non riuscita'; throw errore; })
+            .catch((errore) => { ultimoErroreInstallazione = errore?.message ?? 'Installation failed'; ultimaFraseInstallazione = errore?.chiave ? { chiave: errore.chiave, params: errore.params } : (errore?.message ? null : { chiave: 'server.gh.install.failed' }); throw errore; })
             .finally(() => { installazione = null; });
         }
         await installazione;
@@ -494,7 +507,7 @@ export function creaServizioGh({
         collegamento.stato = 'avvio';
         collegamento.codice = null;
         collegamento.indirizzo = null;
-        collegamento.errore = null;
+        collegamento.errore = null; collegamento.frase = null;
         let letto = '';
         const primoCodice = new Promise((esci) => {
           const leggi = (pezzo) => {
@@ -509,23 +522,24 @@ export function creaServizioGh({
           };
           figlio.stderr?.on('data', leggi);
           figlio.stdout?.on('data', leggi);
-          figlio.on('error', (errore) => { chiudiCollegamento('fallito', errore?.message ?? 'gh non è partito'); esci(false); });
+          figlio.on('error', (errore) => { chiudiCollegamento('fallito', errore?.message ?? 'gh did not start', errore?.message ? null : { chiave: 'server.gh.login.notStarted' }); esci(false); });
           /* chi annulla stacca prima il figlio (`chiudiCollegamento`), quindi qui arriva solo una fine che nessuno ha chiesto */
           figlio.on('close', (codice) => {
             if (collegamento.figlio !== figlio) return;
-            chiudiCollegamento(codice === 0 ? 'collegato' : 'fallito', codice === 0 ? null : (letto.trim().split('\n').slice(-2).join(' ') || `gh è uscito con ${codice}`));
+            const ultime = codice === 0 ? '' : letto.trim().split('\n').slice(-2).join(' '); // le ultime righe di `gh`, nelle sue parole
+            chiudiCollegamento(codice === 0 ? 'collegato' : 'fallito', codice === 0 ? null : (ultime || `gh exited with ${codice}`), codice === 0 || ultime ? null : { chiave: 'server.gh.login.exitedWith', params: { code: codice } });
             esci(false);
           });
           setTimeout(() => esci(false), 20_000).unref?.();
         });
         collegamento.timer = setTimeout(() => {
-          if (collegamento.figlio === figlio) { try { figlio.kill(); } catch { /* già uscito */ } chiudiCollegamento('scaduto', 'Il codice è scaduto: ricomincia'); }
+          if (collegamento.figlio === figlio) { try { figlio.kill(); } catch { /* già uscito */ } chiudiCollegamento('scaduto', 'The code has expired: start again', { chiave: 'server.gh.login.codeExpired' }); }
         }, TIMEOUT_LOGIN_MS);
         collegamento.timer.unref?.();
         const arrivato = await primoCodice;
         if (!arrivato && collegamento.stato !== 'collegato') {
-          if (collegamento.figlio === figlio) { try { figlio.kill(); } catch { /* già uscito */ } chiudiCollegamento('fallito', collegamento.errore ?? 'GitHub CLI non ha dato un codice di accesso'); }
-          throw new GhServiceError(collegamento.errore ?? 'GitHub CLI non ha dato un codice di accesso', 'GH_LOGIN_FAILED');
+          if (collegamento.figlio === figlio) { try { figlio.kill(); } catch { /* già uscito */ } chiudiCollegamento('fallito', collegamento.errore ?? 'GitHub CLI did not give an access code', collegamento.errore ? collegamento.frase : { chiave: 'server.gh.login.noCode' }); }
+          throw new GhServiceError(collegamento.errore ?? 'GitHub CLI did not give an access code', 'GH_LOGIN_FAILED', null, collegamento.frase ?? (collegamento.errore ? null : { chiave: 'server.gh.login.noCode' }));
         }
         return { ok: true, ...vistaCollegamento() };
       } catch (errore) { return rifiuto(errore); }
@@ -573,7 +587,7 @@ export function creaServizioGh({
     /** I controlli di una PR (per l'aggiornamento mentre corrono, decisione 27). */
     async controlli({ sessionId, numero } = {}) {
       try {
-        if (!Number.isSafeInteger(numero) || numero <= 0) throw new GhServiceError('Numero di PR non valido', 'QUERY_INVALID');
+        if (!Number.isSafeInteger(numero) || numero <= 0) throw new GhServiceError('Invalid PR number', 'QUERY_INVALID');
         const { repo } = await repoDelRamo(sessionId);
         const dati = json(await gh(['pr', 'view', String(numero), `--repo=${repo}`, '--json', 'number,state,statusCheckRollup']));
         return { numero, stato: String(dati?.state ?? '').toLowerCase() || null, controlli: controlliDaRollup(dati?.statusCheckRollup) };
@@ -603,20 +617,20 @@ export function creaServizioGh({
     async crea({ sessionId, titolo, testo = '', base, bozza = false } = {}) {
       try {
         const t = typeof titolo === 'string' ? titolo.trim() : '';
-        if (!t) throw new GhServiceError('Serve un titolo', 'GH_INPUT_INVALID');
-        if (t.length > TETTO_TITOLO) throw new GhServiceError(`Il titolo supera ${TETTO_TITOLO} caratteri`, 'GH_INPUT_INVALID');
-        if (typeof testo !== 'string' || testo.length > TETTO_TESTO) throw new GhServiceError(`Il testo supera ${TETTO_TESTO} caratteri`, 'GH_INPUT_INVALID');
-        if (typeof base !== 'string' || !base || base.startsWith('-')) throw new GhServiceError('Serve il ramo di base', 'GH_INPUT_INVALID');
+        if (!t) throw new GhServiceError('A title is required', 'GH_INPUT_INVALID');
+        if (t.length > TETTO_TITOLO) throw new GhServiceError(`The title exceeds ${TETTO_TITOLO} characters`, 'GH_INPUT_INVALID');
+        if (typeof testo !== 'string' || testo.length > TETTO_TESTO) throw new GhServiceError(`The text exceeds ${TETTO_TESTO} characters`, 'GH_INPUT_INVALID');
+        if (typeof base !== 'string' || !base || base.startsWith('-')) throw new GhServiceError('A base branch is required', 'GH_INPUT_INVALID');
         const { repo, remoto, sinc } = await repoDelRamo(sessionId);
         const perPr = daGit(await servizioGit.perLaPr({ sessionId, remoto, base }));
-        if (!perPr.ramiRemoti.includes(base)) throw new GhServiceError(`Il ramo «${base}» non c’è su ${remoto}`, 'GH_BASE_UNKNOWN');
+        if (!perPr.ramiRemoti.includes(base)) throw new GhServiceError(`The branch “${base}” is not on ${remoto}`, 'GH_BASE_UNKNOWN');
         if (!sinc.riferimento || sinc.riferimentoSparito || (sinc.avanti ?? 0) > 0) {
-          throw new GhServiceError('Il ramo va prima inviato su GitHub', 'GH_BRANCH_NOT_PUSHED', { pubblicato: Boolean(sinc.riferimento) && !sinc.riferimentoSparito, avanti: sinc.avanti ?? 0, remoto });
+          throw new GhServiceError('The branch must be pushed to GitHub first', 'GH_BRANCH_NOT_PUSHED', { pubblicato: Boolean(sinc.riferimento) && !sinc.riferimentoSparito, avanti: sinc.avanti ?? 0, remoto });
         }
-        if (sinc.riferimento.ramo === base) throw new GhServiceError('La base e il ramo sono lo stesso', 'GH_INPUT_INVALID');
+        if (sinc.riferimento.ramo === base) throw new GhServiceError('The base and the branch are the same', 'GH_INPUT_INVALID');
         const esito = await gh(['pr', 'create', `--repo=${repo}`, `--head=${sinc.riferimento.ramo}`, `--base=${base}`, `--title=${t}`, '--body-file', '-', ...(bozza === true ? ['--draft'] : [])], { input: testo, timeoutMs: TIMEOUT_CREA_MS });
         const url = /https:\/\/github\.com\/[^/\s]+\/[^/\s]+\/pull\/(\d+)/u.exec(esito.stdout);
-        if (!url) throw new GhServiceError('GitHub non ha restituito l’indirizzo della PR', 'GH_OUTPUT_INVALID');
+        if (!url) throw new GhServiceError('GitHub did not return the PR address', 'GH_OUTPUT_INVALID');
         return { ok: true, url: url[0], numero: Number(url[1]), repo, base, ramo: sinc.riferimento.ramo, bozza: bozza === true };
       } catch (errore) { return rifiuto(errore); }
     },

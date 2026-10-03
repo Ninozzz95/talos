@@ -1,3 +1,4 @@
+import { serviIlDizionario } from './aiuto-dizionario.mjs'; // corsia D della lingua: i componenti importano il dizionario
 import { expect, test } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import { mkdir } from 'node:fs/promises';
@@ -118,6 +119,7 @@ const MOCKUP = Object.freeze({
 const SOGLIE = { larga: 1440, stretta: 1024 };
 
 async function serviIlModulo(page) {
+  await serviIlDizionario(page);
   await page.route('**/__lab/*.js', async (route) => {
     const nome = new URL(route.request().url()).pathname.split('/').pop();
     try {

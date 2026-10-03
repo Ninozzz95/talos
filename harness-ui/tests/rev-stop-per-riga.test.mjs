@@ -17,7 +17,7 @@ import { createHttpApp } from '../src/http-app.mjs'
 import { registraRiga } from '../src/session-store.mjs'
 import { rimuoviCartellaDiProva, rimuoviCartellaDiProvaAttesa } from './aiuto/rimuovi-cartella-di-prova.mjs'
 
-const FERMATO = '⛔ Fermato su richiesta: il comando e stato interrotto mentre girava.'
+const FERMATO = '⛔ Stopped on request: the command was stopped while it ran.'
 /* Un esecutore finto che gira finché il SUO segnale non si ferma: niente processi veri sotto i giri del modello. */
 function esecutoreCheAspetta(partiti) {
     return (comando, _cartella, { segnaleStop }) => new Promise((risolvi) => {
@@ -57,10 +57,10 @@ test('STOP-01 (porta vera del kernel): fermare UNA riga chiude quel comando con 
     assert.equal(partiti.length, 1)
     const risultato = corpi[1].messages.find((m) => m.role === 'tool' && m.tool_call_id === 'c1')
     assert.match(risultato.content, /^exit 130/u)
-    assert.match(risultato.content, /Fermato su richiesta/u)
+    assert.match(risultato.content, /Stopped on request/u)
     assert.equal(corpi.length, 2, 'il modello ha avuto il turno dopo lo Stop della riga')
     assert.equal(esito.comeFinita, 'concluso', 'il giro non è stato fermato')
-    assert.doesNotMatch(String(esito.detto), /interrotto su richiesta/u)
+    assert.doesNotMatch(String(esito.detto), /stopped on request/u)
     assert.equal(registro.size, 0, 'finito il comando, la riga non si può più fermare')
 })
 
@@ -71,7 +71,7 @@ test('STOP-02: lo Stop del GIRO ferma ancora anche il comando (il segnale è l u
         quandoParte: () => setImmediate(() => stop.abort()),
     })
     assert.equal(partiti[0].segnaleStop.aborted, true)
-    assert.match(String(esito.detto), /interrotto su richiesta: mentre "shell" era in corso/u, 'col giro fermato, il punto di fermata si dice')
+    assert.match(String(esito.detto), /stopped on request: while "shell" was running/u, 'col giro fermato, il punto di fermata si dice')
 })
 
 test('STOP-03 (agent-service): anche il `!` della persona riceve il suo segnale, si ferma, e si sgancia', { timeout: 20_000 }, async () => {
@@ -160,8 +160,8 @@ test('STOP-06 (prova vera, Windows): anche `prova` si ferma dalla sua riga, con 
     const risultato = corpi[1].messages.find((m) => m.role === 'tool' && m.tool_call_id === 'p1')
     assert.match(risultato.content, /^exit 130/u)
     // owner 02/10/2026: dopo lo Stop della RIGA il modello legge chi l'ha fermata e di non rilanciarla
-    assert.match(risultato.content, /⛔ L'ha fermata la persona dalla scheda Processi, apposta, mentre girava\. Non rilanciarla se non te lo chiede\./u)
-    assert.doesNotMatch(risultato.content, /Fermato su richiesta/u, 'la marca del giro fermato non c è: il giro non si è fermato')
+    assert.match(risultato.content, /⛔ The person stopped this test on purpose from the Processes tab while it ran\. Do not run it again unless they ask you to\./u)
+    assert.doesNotMatch(risultato.content, /Stopped on request/u, 'la marca del giro fermato non c è: il giro non si è fermato')
     assert.equal(esito.comeFinita, 'concluso')
     assert.equal(registro.size, 0)
 })
@@ -216,15 +216,15 @@ test('STOP-09: dopo lo Stop di una riga, se più tardi si ferma il GIRO, il punt
             return new Response(JSON.stringify({ choices: [{ message, finish_reason: 'tool_calls' }] }), { headers: { 'Content-Type': 'application/json' } })
         },
     })
-    assert.match(String(esito.detto), /interrotto su richiesta/u)
-    assert.doesNotMatch(String(esito.detto), /mentre "shell" era in corso/u, 'lo Stop della riga non è il punto in cui si è fermato il giro')
+    assert.match(String(esito.detto), /stopped on request/u)
+    assert.doesNotMatch(String(esito.detto), /while "shell" was running/u, 'lo Stop della riga non è il punto in cui si è fermato il giro')
 })
 
 test('STOP-10 (shell vera, Windows): lo Stop della RIGA dice al modello chi l ha fermato e di non rilanciarlo; lo Stop del GIRO resta «Fermato su richiesta»', { skip: process.platform === 'win32' ? false : 'ping -n è di Windows', timeout: 60_000 }, async (t) => {
     const cartella = cartellaDiProva(t)
     const casi = [
-        [MOTIVO_STOP_DELLA_RIGA, /⛔ L'ha fermato la persona dalla scheda Processi, apposta, mentre girava\. Non rilanciarlo se non te lo chiede\./u, /Fermato su richiesta/u],
-        [undefined, /⛔ Fermato su richiesta: il comando e stato interrotto mentre girava\./u, /L'ha fermato la persona/u],
+        [MOTIVO_STOP_DELLA_RIGA, /⛔ The person stopped this command on purpose from the Processes tab while it ran\. Do not run it again unless they ask you to\./u, /Stopped on request/u],
+        [undefined, /⛔ Stopped on request: the command was stopped while it ran\./u, /The person stopped this command/u],
     ]
     for (const [motivo, attesa, vietata] of casi) {
         const giro = new AbortController(), riga = new AbortController()

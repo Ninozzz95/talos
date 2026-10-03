@@ -38,6 +38,7 @@
  *   ordine e larghezza del dettaglio vivono in `localStorage`. La SELEZIONE no — è di sessione, e
  *   ricordare quale nota era aperta tre giorni fa non aiuta nessuno.
  */
+import { t as traduci, tn } from './lingua.js';
 import { plurale } from './plurale.js';
 
 export const CHIAVE_PREFERENZE = 'talos-harness-sezioni-v1';
@@ -97,10 +98,16 @@ export function contaPerFiltro(voci, filtri) {
   return filtri.map((f) => (f.quando ? lista.filter((v) => f.quando(v)).length : lista.length));
 }
 
-/** «3 di 12 ricordi» solo quando un filtro toglie qualcosa; altrimenti il numero e basta. */
+/**
+ * «3 di 12 ricordi» solo quando un filtro toglie qualcosa; altrimenti il numero e basta.
+ * ⛔ `sostantivo` può essere una FUNZIONE (`n` → il conteggio detto nella lingua corrente, come `contaVoci` degli adattatori):
+ *   è la forma delle sezioni, perché il plurale di un sostantivo italiano non si traduce. La forma col sostantivo italiano
+ *   resta per chi la chiama già (`plurale.js` flette solo l'italiano).
+ */
 export function sommarioSezione(visibili, totale, sostantivo, pluraleEsplicito) {
-  if (visibili === totale) return plurale(totale, sostantivo, pluraleEsplicito);
-  return `${visibili} di ${plurale(totale, sostantivo, pluraleEsplicito)}`;
+  const conta = typeof sostantivo === 'function' ? sostantivo(totale) : plurale(totale, sostantivo, pluraleEsplicito);
+  if (visibili === totale) return conta;
+  return traduci('sezioni.common.shownOfTotal', { shown: visibili, total: conta });
 }
 
 /** Conserva i fallimenti (e gli id non rendicontati) così la persona può ritentarli. */
@@ -269,14 +276,14 @@ function costruisciScheletro(schermo, doc, stato) {
   const cerca = nodo(doc, 'input', 'talos-field__input');
   cerca.type = 'search';
   cerca.autocomplete = 'off';
-  cerca.placeholder = 'Cerca nel titolo e nel contenuto…';
-  cerca.setAttribute('aria-label', `Cerca in ${config.nome}`);
+  cerca.placeholder = traduci("sezioni.list.searchPlaceholder");
+  cerca.setAttribute('aria-label', traduci("sezioni.list.searchLabel", { name: config.nome }));
   cerca.value = stato.query;
   campo.append(cerca);
   const cresci = nodo(doc, 'span', 'talos-grow');
   const ordine = nodo(doc, 'select', 'td-select');
-  ordine.setAttribute('aria-label', `Ordina ${config.nome}`);
-  for (const [valore, testoOpzione] of [['nuovo', 'Ultima modifica'], ['titolo', 'Titolo A–Z']]) {
+  ordine.setAttribute('aria-label', traduci("sezioni.list.sortLabel", { name: config.nome }));
+  for (const [valore, testoOpzione] of [['nuovo', traduci('sezioni.list.sortRecent')], ['titolo', traduci('sezioni.list.sortTitle')]]) {
     const op = nodo(doc, 'option', '', testoOpzione);
     op.value = valore;
     ordine.append(op);
@@ -284,8 +291,8 @@ function costruisciScheletro(schermo, doc, stato) {
   ordine.value = stato.ordine;
   const segmento = nodo(doc, 'div', 'td-segment');
   segmento.setAttribute('role', 'group');
-  segmento.setAttribute('aria-label', `Vista ${config.nome}`);
-  for (const [vista, nomeIcona, nome] of [['elenco', 'list', 'Vista elenco'], ['schede', 'grid', 'Vista schede']]) {
+  segmento.setAttribute('aria-label', traduci("sezioni.list.viewLabel", { name: config.nome }));
+  for (const [vista, nomeIcona, nome] of [['elenco', 'list', traduci('sezioni.list.viewList')], ['schede', 'grid', traduci('sezioni.list.viewCards')]]) {
     const b = nodo(doc, 'button');
     b.type = 'button';
     b.dataset.vista = vista;
@@ -293,7 +300,7 @@ function costruisciScheletro(schermo, doc, stato) {
     b.append(icona(doc, nomeIcona));
     segmento.append(b);
   }
-  const aggiorna = nodo(doc, 'button', 'talos-button talos-button--secondary talos-button--sm', 'Aggiorna');
+  const aggiorna = nodo(doc, 'button', 'talos-button talos-button--secondary talos-button--sm', traduci('sezioni.common.refresh'));
   aggiorna.type = 'button';
   aggiorna.dataset.aggiorna = '';
   /* ATLAS F3 (27/09/2026, owner Q-11): la Libreria mostra i filtri veri nella forma a TENDINA dell'Atlas
@@ -302,7 +309,7 @@ function costruisciScheletro(schermo, doc, stato) {
   const tendinaFiltri = config.filtriATendina ? nodo(doc, 'select', 'td-select') : null;
   if (tendinaFiltri) {
     tendinaFiltri.dataset.filtri = '';
-    tendinaFiltri.setAttribute('aria-label', `Filtri ${config.nome}`);
+    tendinaFiltri.setAttribute('aria-label', traduci("sezioni.list.filtersLabel", { name: config.nome }));
   }
   barra.append(campo, ...(tendinaFiltri ? [tendinaFiltri] : []), cresci, ordine, segmento, aggiorna);
   /* ⛔ Revisione Codex 27/09, rilievo 14: la regola di casa (owner 13/09) vuole «niente controlli nativi», e aperta la
@@ -316,10 +323,10 @@ function costruisciScheletro(schermo, doc, stato) {
   const selezionaTutte = nodo(doc, 'input');
   selezionaTutte.type = 'checkbox';
   selezionaTutte.dataset.selezionaVisibili = '';
-  const testoTutte = nodo(doc, 'span', '', 'Seleziona visibili');
+  const testoTutte = nodo(doc, 'span', '', traduci('sezioni.list.selectVisible'));
   etichettaTutte.append(selezionaTutte, testoTutte);
-  const conteggioBlocco = nodo(doc, 'span', 'td-bulk-count', '0 selezionati');
-  const eliminaBlocco = nodo(doc, 'button', 'talos-button talos-button--danger talos-button--sm', 'Elimina selezionati');
+  const conteggioBlocco = nodo(doc, 'span', 'td-bulk-count', traduci('sezioni.list.selection.initial'));
+  const eliminaBlocco = nodo(doc, 'button', 'talos-button talos-button--danger talos-button--sm', traduci('sezioni.list.bulk.deleteSelected'));
   eliminaBlocco.type = 'button';
   eliminaBlocco.dataset.eliminaSelezionati = '';
   const esitoBlocco = nodo(doc, 'span', 'td-bulk-status');
@@ -328,7 +335,7 @@ function costruisciScheletro(schermo, doc, stato) {
 
   const filtri = nodo(doc, 'div', 'td-filters');
   filtri.setAttribute('role', 'group');
-  filtri.setAttribute('aria-label', `Filtri ${config.nome}`);
+  filtri.setAttribute('aria-label', traduci("sezioni.list.filtersLabel", { name: config.nome }));
   const risultati = nodo(doc, 'div', 'td-results');
   master.append(intro, barra, blocco, filtri, risultati);
 
@@ -338,7 +345,7 @@ function costruisciScheletro(schermo, doc, stato) {
   divisorio.hidden = true;
   divisorio.setAttribute('role', 'separator');
   divisorio.setAttribute('aria-orientation', 'vertical');
-  divisorio.setAttribute('aria-label', 'Larghezza del dettaglio');
+  divisorio.setAttribute('aria-label', traduci("sezioni.list.dividerLabel"));
   divisorio.setAttribute('aria-valuemin', String(LARGHEZZA_MINIMA));
   divisorio.setAttribute('aria-valuemax', String(LARGHEZZA_MASSIMA));
   divisorio.setAttribute('aria-valuenow', String(stato.larghezza));
@@ -346,7 +353,7 @@ function costruisciScheletro(schermo, doc, stato) {
   /* ---- il dettaglio ---- */
   const dettaglio = nodo(doc, 'aside', 'td-detail');
   dettaglio.hidden = true;
-  dettaglio.setAttribute('aria-label', `Dettaglio ${config.nome}`);
+  dettaglio.setAttribute('aria-label', traduci("sezioni.list.detailLabel", { name: config.nome }));
 
   spazio.append(master, divisorio, dettaglio);
   sezione.append(spazio);
@@ -388,13 +395,13 @@ function collegaBarra(schermo, doc, stato) {
     if (stato.batchInCorso || typeof stato.config.eliminaInBlocco !== 'function') return;
     const ids = [...stato.selezionateInBlocco];
     if (!ids.length) return;
-    const domanda = `Eliminare ${ids.length} ${ids.length === 1 ? 'voce selezionata' : 'voci selezionate'}?`;
+    const domanda = tn('sezioni.list.bulk.confirmOne', 'sezioni.list.bulk.confirmMany', ids.length);
     const confermata = typeof stato.config.confermaEliminazioneInBlocco === 'function'
       ? await stato.config.confermaEliminazioneInBlocco(ids)
       : (doc.defaultView?.confirm?.(domanda) ?? false);
     if (!confermata) return;
     stato.batchInCorso = true;
-    stato.batchEsito = 'Eliminazione in corso…';
+    stato.batchEsito = traduci('sezioni.list.bulk.deleting');
     disegna(schermo, doc, stato);
     try {
       const risultato = await stato.config.eliminaInBlocco(ids);
@@ -405,11 +412,11 @@ function collegaBarra(schermo, doc, stato) {
       const riusciti = Number(risultato?.riepilogo?.riusciti) || 0;
       const falliti = Number(risultato?.riepilogo?.falliti) || 0;
       stato.batchEsito = falliti
-        ? `${riusciti} eliminate, ${falliti} non eliminate.`
-        : `${riusciti} ${riusciti === 1 ? 'voce eliminata' : 'voci eliminate'}.`;
+        ? traduci('sezioni.list.bulk.partial', { done: riusciti, failed: falliti })
+        : tn('sezioni.list.bulk.deletedOne', 'sezioni.list.bulk.deletedMany', riusciti);
       await stato.config.onBatchCompletato?.(risultato);
     } catch (errore) {
-      stato.batchEsito = errore?.message || 'Eliminazione non riuscita.';
+      stato.batchEsito = errore?.message || traduci('sezioni.list.bulk.failed');
     } finally {
       stato.batchInCorso = false;
       disegna(schermo, doc, stato);
@@ -431,7 +438,7 @@ function applicaLarghezza(stato, valore) {
   stato.larghezza = larghezzaDettaglio(valore);
   stato.nodi.spazio.style.setProperty('--td-larghezza-dettaglio', `${stato.larghezza}px`);
   stato.nodi.divisorio.setAttribute('aria-valuenow', String(stato.larghezza));
-  stato.nodi.divisorio.setAttribute('aria-valuetext', `${stato.larghezza} pixel`);
+  stato.nodi.divisorio.setAttribute('aria-valuetext', traduci("sezioni.list.dividerValue", { value: stato.larghezza }));
 }
 
 function collegaDivisorio(doc, stato) {
@@ -623,7 +630,7 @@ function disegnaCrudo(schermo, doc, stato) {
   selezionaTutte.checked = stato.idsVisibili.length > 0 && visibiliSelezionati === stato.idsVisibili.length;
   selezionaTutte.indeterminate = visibiliSelezionati > 0 && visibiliSelezionati < stato.idsVisibili.length;
   selezionaTutte.disabled = stato.batchInCorso || stato.idsVisibili.length === 0;
-  conteggioBlocco.textContent = `${stato.selezionateInBlocco.size} selezionat${stato.selezionateInBlocco.size === 1 ? 'a' : 'e'}`;
+  conteggioBlocco.textContent = tn('sezioni.list.selection.one', 'sezioni.list.selection.many', stato.selezionateInBlocco.size);
   eliminaBlocco.disabled = stato.batchInCorso || stato.selezionateInBlocco.size === 0;
   /* Revisione Codex 27/09, rilievo 12: «fisso su tutte le card appena una è scelta» si legge dallo STATO, non dalle caselle
      a schermo — un filtro che nasconde la card scelta lasciava la selezione viva e i cerchi spenti. */
@@ -635,9 +642,9 @@ function disegnaCrudo(schermo, doc, stato) {
     /* ⛔ `sommarioStato` esiste perché la stessa quantità non può avere due nomi nella stessa
        schermata: le Note in alto dicono «nessuna nota» (`sommarioNote`), e qui sotto un generico
        «0 note» sarebbe una seconda parola per la stessa cosa — visto nella foto dello stato vuoto. */
-    statoRiga.textContent = errore || (caricamento ? config.caricando || 'Carico…'
+    statoRiga.textContent = errore || (caricamento ? config.caricando || traduci("sezioni.list.loading")
       : typeof config.sommarioStato === 'function' ? config.sommarioStato(visibili.length, tutte.length)
-        : sommarioSezione(visibili.length, tutte.length, config.sostantivo, config.pluraleEsplicito));
+        : sommarioSezione(visibili.length, tutte.length, config.contaVoci || config.sostantivo, config.pluraleEsplicito));
     statoRiga.setAttribute('role', errore ? 'alert' : 'status');
   }
   const percorso = schermo.querySelector('.talos-topbar__path');
@@ -700,13 +707,13 @@ function disegnaVuoto(doc, stato, quanteInTutto) {
   const box = nodo(doc, 'div', 'td-empty');
   const arte = nodo(doc, 'div', 'td-empty-art');
   arte.append(disegnoVuoto(doc, config.icona));
-  const titolo = nodo(doc, 'h3', '', filtrando ? 'Nessun risultato' : (config.vuoto?.titolo || 'Niente qui'));
+  const titolo = nodo(doc, 'h3', '', filtrando ? traduci('sezioni.list.empty.noResults') : (config.vuoto?.titolo || traduci('sezioni.list.empty.nothingHere')));
   const testo = nodo(doc, 'p', '', filtrando
-    ? 'Prova un’altra parola o togli il filtro. Quello che hai è ancora qui.'
+    ? traduci('sezioni.list.empty.tryAgain')
     : (config.stato?.errore || config.vuoto?.testo || ''));
   box.append(arte, titolo, testo);
   if (filtrando) {
-    const pulisci = nodo(doc, 'button', 'talos-button talos-button--secondary talos-button--sm', 'Togli i filtri');
+    const pulisci = nodo(doc, 'button', 'talos-button talos-button--secondary talos-button--sm', traduci('sezioni.list.empty.clearFilters'));
     pulisci.type = 'button';
     pulisci.addEventListener('click', () => {
       stato.query = '';
@@ -736,7 +743,7 @@ function disegnaScheda(doc, stato, voce) {
   const apri = nodo(doc, 'button', 'td-card-open');
   apri.type = 'button';
   const titolo = String(config.titoloDi(voce) ?? '');
-  apri.setAttribute('aria-label', `Apri ${titolo}`);
+  apri.setAttribute('aria-label', traduci("sezioni.common.openName", { name: titolo }));
   const alto = nodo(doc, 'div', 'td-card-top');
   alto.append(...[pezzi.alto].flat().filter(Boolean));
   const h3 = nodo(doc, 'h3', '', titolo);
@@ -760,7 +767,7 @@ function disegnaScheda(doc, stato, voce) {
     scegli.type = 'checkbox';
     scegli.checked = stato.selezionateInBlocco.has(id);
     scegli.disabled = stato.batchInCorso;
-    scegli.setAttribute('aria-label', `Seleziona ${titolo}`);
+    scegli.setAttribute('aria-label', traduci("sezioni.list.selectLabel", { name: titolo }));
     scegli.addEventListener('change', () => {
       if (scegli.checked) stato.selezionateInBlocco.add(id);
       else stato.selezionateInBlocco.delete(id);
@@ -777,18 +784,18 @@ function disegnaDettaglio(schermo, doc, stato, voce) {
   const config = stato.config;
   const { dettaglio } = stato.nodi;
   const testa = nodo(doc, 'div', 'td-detail-head');
-  testa.append(nodo(doc, 'span', 'td-subtle', `${config.nome} / Dettaglio`));
+  testa.append(nodo(doc, 'span', 'td-subtle', traduci('sezioni.list.detailCrumb', { name: config.nome })));
 
   const espandi = nodo(doc, 'button', 'talos-button talos-button--secondary talos-icon-button');
   espandi.type = 'button';
-  espandi.setAttribute('aria-label', stato.espanso ? 'Affianca all’elenco' : 'Espandi il dettaglio');
+  espandi.setAttribute('aria-label', stato.espanso ? traduci("sezioni.list.detail.showBeside") : traduci("sezioni.list.detail.expand"));
   espandi.setAttribute('aria-pressed', String(stato.espanso));
   espandi.append(icona(doc, stato.espanso ? 'layout' : 'grid'));
   espandi.addEventListener('click', () => { stato.espanso = !stato.espanso; disegna(schermo, doc, stato); });
 
   const chiudi = nodo(doc, 'button', 'talos-button talos-button--secondary talos-icon-button');
   chiudi.type = 'button';
-  chiudi.setAttribute('aria-label', 'Chiudi il dettaglio');
+  chiudi.setAttribute('aria-label', traduci("sezioni.list.detail.close"));
   chiudi.append(icona(doc, 'x'));
   chiudi.addEventListener('click', () => {
     const id = String(config.idDi(voce) ?? '');

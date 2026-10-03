@@ -91,7 +91,7 @@ export function bersaglioAttrezzo(nome, argomenti, { corto = false } = {}) {
   const a = argomenti || {};
   switch (nome) {
     case 'leggi': case 'file_edit': case 'scrivi': return corto ? nomeFile(a.percorso) : (a.percorso ? accorciaPercorso(String(a.percorso), LUNGHEZZA_BERSAGLIO_VOCE) : '');
-    case 'elenca': return corto ? `${nomeFile(a.percorso) || t('radice')}/` : (a.percorso ? accorciaPercorso(`${a.percorso}/`, LUNGHEZZA_BERSAGLIO_VOCE) : t('la radice del progetto'));
+    case 'elenca': return corto ? `${nomeFile(a.percorso) || t('chat.activity.root')}/` : (a.percorso ? accorciaPercorso(`${a.percorso}/`, LUNGHEZZA_BERSAGLIO_VOCE) : t('chat.activity.projectRoot'));
     case 'cerca': { const q = [a.nome, a.testo].filter(Boolean).join(' · '); return q ? `«${q}»` : ''; }
     case 'shell': return corto ? String(a.descrizione || a.comando || '') : String(a.comando || a.descrizione || '');
     case 'prova': return '';
@@ -131,7 +131,7 @@ export function fraseAdesso(voce) {
   if (!voce) return '';
   if (voce.tipo === 'reasoning') {
     const argomento = argomentoDelRagionamento(voce.testo, { massimo: 70 });
-    return argomento ? `${t('Sta ragionando')}: ${argomento}` : t('Sta ragionando…');
+    return argomento ? t('chat.activity.thinkingAbout', { argomento }) : t('chat.activity.thinking');
   }
   const a = voce.argomenti || {};
   if (voce.nome === 'shell' && a.descrizione) return `${accorciaTesto(String(a.descrizione), 92)}…`;
@@ -145,9 +145,10 @@ function metaEsito(voce) {
   if (voce.tipo !== 'tool') return '';
   if (voce.nome === 'shell' && voce.esito) {
     const e = leggiEsitoComando(voce.esito);
-    if (e.verdetto) return e.uscita === null ? t('senza codice') : `exit ${e.uscita}`;
+    if (e.verdetto) return e.uscita === null ? t('chat.activity.noExitCode') : `exit ${e.uscita}`;
   }
-  return voce.stato === 'fallito' ? t('non riuscito') : voce.stato === 'interrotto' ? t('interrotta') : '';
+  return voce.stato === 'fallito' ? t('chat.activity.state.failed') : voce.stato === 'interrotto' ? t('chat.activity.state.interrupted')
+    : voce.stato === 'non-eseguito' ? t('chat.activity.state.notRun') : '';
 }
 
 function ordinaSpecie(mappa) {
@@ -173,6 +174,7 @@ export function riassuntoVoci(voci) {
   const bersagli = [];
   let inCorso = null;
   let interrotti = 0;
+  let nonEseguiti = 0;
   for (const v of voci || []) {
     if (!v) continue;
     if (v.tipo === 'reasoning') {
@@ -183,6 +185,7 @@ export function riassuntoVoci(voci) {
     }
     if (v.stato === 'in-corso') { inCorso = v; continue; }
     if (v.stato === 'interrotto') { interrotti += 1; continue; } // 26/09: né riuscita né fallita — il giro si è fermato prima dell'esito
+    if (v.stato === 'non-eseguito') { nonEseguiti += 1; continue; } // owner 03/10/2026: una prova non eseguita, né riuscita né fallita
     if (v.stato === 'corretta') continue; // 27/09, decisione 47: la domanda respinta non è stata posta; la riga discreta basta
     const mappa = v.stato === 'fallito' ? falliti : riusciti;
     mappa.set(v.specie, (mappa.get(v.specie) || 0) + 1);
@@ -193,7 +196,7 @@ export function riassuntoVoci(voci) {
   const parti = ordinaSpecie(riusciti).map((s) => fraseSpecie(s, riusciti.get(s)));
   const partiBrevi = ordinaSpecie(riusciti).map((s) => fraseSpecie(s, riusciti.get(s), { breve: true }));
   if (ragionamenti) {
-    const parola = `${ragionamenti} ${t(ragionamenti === 1 ? 'ragionamento' : 'ragionamenti')}`;
+    const parola = tn('chat.activity.reasoningsOne', 'chat.activity.reasoningsMany', ragionamenti);
     partiBrevi.push(parola);
     /* La somma si scrive solo se TUTTE le durate sono note e arriva almeno al secondo: sotto, «(0 s)» sarebbe esatto e
        inutile — la stessa regola di «Ha ragionato poco» (`ragionamento.js`, `etichettaRagionamento`). */
@@ -201,7 +204,8 @@ export function riassuntoVoci(voci) {
   }
   /* 26/09, difetto (2): una chiamata rimasta senza esito quando il giro si è fermato si dice «interrotta» — né riuscita
      né fallita. Hermes fa lo stesso (`app/session/hooks/use-prompt-actions/rewind.ts:422-445`, clone 65ad529). */
-  if (interrotti) { const parola = tn('1 attività interrotta', '{n} attività interrotte', interrotti); parti.push(parola); partiBrevi.push(parola); }
+  if (interrotti) { const parola = tn('chat.activity.interruptedOne', 'chat.activity.interruptedMany', interrotti); parti.push(parola); partiBrevi.push(parola); }
+  if (nonEseguiti) { const parola = tn('chat.activity.notRunOne', 'chat.activity.notRunMany', nonEseguiti); parti.push(parola); partiBrevi.push(parola); }
   const erroriParti = ordinaSpecie(falliti).map((s) => fraseSpecie(s, falliti.get(s), { fallito: true }));
   const nFalliti = [...falliti.values()].reduce((a, b) => a + b, 0);
   return { parti, partiBrevi, erroriParti, nFalliti, bersagli, diff: conDiff ? { piu, meno } : null, inCorso };
@@ -229,7 +233,7 @@ export function creaRegolaAdesso({ orologio = () => performance.now() } = {}) {
         if (idMostrato === null || ora - mostratoAlle >= PERMANENZA_MINIMA_AZIONE_MS) return mostra(testo, id, ora);
         return mostrato;
       }
-      if (!mostrato || (idMostrato !== null && ora - mostratoAlle >= PAUSA_PROSSIMO_PASSO_MS)) return mostra(t('Prepara il passo successivo…'), null, ora);
+      if (!mostrato || (idMostrato !== null && ora - mostratoAlle >= PAUSA_PROSSIMO_PASSO_MS)) return mostra(t('chat.activity.preparingNextStep'), null, ora);
       return mostrato;
     },
     get testo() { return mostrato; },
@@ -250,7 +254,7 @@ export function testoDelSegmento(voci) {
     }
     const a = v.argomenti || {};
     const verbo = v.nome === 'shell' && a.descrizione ? String(a.descrizione) : verboAttrezzo(v.nome)[v.stato === 'in-corso' || v.stato === 'interrotto' ? 1 : 0]; // 26/09: interrotta = l'azione che si è fermata, non «Letto»
-    const esito = v.stato === 'fallito' ? ` (${t('non riuscito')})` : v.stato === 'interrotto' ? ` (${t('interrotta')})` : v.stato === 'in-corso' ? ` (${t('in corso')})` : v.stato === 'corretta' ? ` (${t('respinta e riformulata')})` : ''; // 27/09, decisione 47
+    const esito = v.stato === 'fallito' ? ` (${t('chat.activity.state.failed')})` : v.stato === 'interrotto' ? ` (${t('chat.activity.state.interrupted')})` : v.stato === 'non-eseguito' ? ` (${t('chat.activity.state.notRun')})` : v.stato === 'in-corso' ? ` (${t('chat.activity.state.running')})` : v.stato === 'corretta' ? ` (${t('chat.activity.state.rejectedAndRephrased')})` : ''; // 27/09, decisione 47
     righe.push(`- ${verbo} ${bersaglioAttrezzo(v.nome, a)}${esito}`.replace(/\s+\(/, ' (').trimEnd());
   }
   return righe.join('\n');
@@ -268,7 +272,8 @@ function normalizzaVoce(elemento, dati) {
   }
   const info = dati.info;
   /* 27/09, decisione owner 47: `corretta` — una domanda respinta per la forma e riformulata dal modello. */
-  const stato = info.stato === 'running' ? 'in-corso' : info.stato === 'error' ? 'fallito' : info.stato === 'interrotto' ? 'interrotto' : info.stato === 'corretta' ? 'corretta' : 'riuscito';
+  const stato = info.stato === 'running' ? 'in-corso' : info.stato === 'error' ? 'fallito' : info.stato === 'interrotto' ? 'interrotto'
+    : info.stato === 'non-eseguito' ? 'non-eseguito' : info.stato === 'corretta' ? 'corretta' : 'riuscito';
   let diff = null;
   const badge = elemento.querySelector(':scope > .tool-note-diff');
   if (badge) {
@@ -392,7 +397,7 @@ class VistaSegmento {
     /* D6 — il «⋯»: invisibile a riposo, visibile a hover/fuoco; e ciò che sta nel menu non resta anche in riga. */
     const altro = el('button', 'talos-activity__altro');
     altro.type = 'button';
-    altro.setAttribute('aria-label', t('Azioni sull’attività'));
+    altro.setAttribute('aria-label', t('chat.activity.actions'));
     altro.setAttribute('aria-haspopup', 'menu');
     altro.setAttribute('aria-expanded', 'false');
     altro.append(icona('i-more'));
@@ -407,7 +412,7 @@ class VistaSegmento {
     const interno = el('div', 'talos-activity__interno');
     this.filtriEl = el('div', 'talos-activity__filtri');
     this.filtriEl.setAttribute('role', 'group');
-    this.filtriEl.setAttribute('aria-label', t('Mostra solo'));
+    this.filtriEl.setAttribute('aria-label', t('chat.activity.filter.label'));
     this.filtriEl.hidden = true;
     this.notaEl = el('p', 'talos-activity__nota');
     this.notaEl.hidden = true;
@@ -609,7 +614,7 @@ class VistaSegmento {
       if (this.diffEl.dataset.diff !== atteso) {
         this.diffEl.dataset.diff = atteso;
         this.diffEl.replaceChildren(el('span', 'talos-activity__piu', `+${r.diff.piu}`), ' ', el('span', 'talos-activity__meno', `−${r.diff.meno}`));
-        this.diffEl.setAttribute('aria-label', t('{piu} righe aggiunte, {meno} tolte', { piu: r.diff.piu, meno: r.diff.meno }));
+        this.diffEl.setAttribute('aria-label', t('chat.activity.diffSummary', { piu: r.diff.piu, meno: r.diff.meno }));
       }
     } else if (this.diffEl.childNodes.length) { this.diffEl.replaceChildren(); delete this.diffEl.dataset.diff; }
     const errori = r.nFalliti ? r.erroriParti.join(' · ') : '';
@@ -630,10 +635,10 @@ class VistaSegmento {
     for (const { riga, voce } of coppie) {
       if (voce.tipo === 'tool' && voce.stato === 'fallito' && !this.annunciati.has(riga)) {
         this.annunciati.add(riga);
-        annuncia(`${t('Non riuscito')}: ${verboAttrezzo(voce.nome)[0]} ${bersaglioAttrezzo(voce.nome, voce.argomenti, { corto: true })}`.trim());
+        annuncia(`${t('chat.common.failed')}: ${verboAttrezzo(voce.nome)[0]} ${bersaglioAttrezzo(voce.nome, voce.argomenti, { corto: true })}`.trim());
       }
     }
-    if (this.eraVivo && !vivo) annuncia(`${t('Attività conclusa')}: ${descrizione}`);
+    if (this.eraVivo && !vivo) annuncia(`${t('chat.activity.finished')}: ${descrizione}`);
     this.eraVivo = vivo;
     if (vivo) this.avviaOrologio(); else this.fermaOrologio();
   }
@@ -661,7 +666,7 @@ class VistaSegmento {
     this.summaryText.dataset.firma = firma;
     this.summaryText.replaceChildren();
     if (adesso) this.summaryText.append(el('span', 'talos-activity__adesso', adesso), parti.length ? ' · ' : '');
-    this.summaryText.append(parti.join(' · ') || (this.vivo ? '' : t('Attività dell’agente')));
+    this.summaryText.append(parti.join(' · ') || (this.vivo ? '' : t('chat.activity.agentActivity')));
     this.summaryText.dataset.forma = breve ? 'breve' : 'intera';
     this.summaryText.title = breve ? r.parti.join(' · ') : '';
   }
@@ -721,7 +726,7 @@ class VistaSegmento {
     this.filtriEl.hidden = !mostra;
     if (!mostra) { if (this.filtro !== 'tutte') this.filtra('tutte', { silenzioso: true }); return; }
     const chiavi = ['tutte', ...(conteggi.has('ragionamento') ? ['ragionamento'] : []), ...ORDINE_SPECIE.filter((s) => conteggi.has(s)), ...[...conteggi.keys()].filter((k) => k.startsWith('altro:')), ...(r.nFalliti ? ['falliti'] : [])];
-    const etichetta = (k) => k === 'tutte' ? t('Tutte') : k === 'ragionamento' ? t('Ragionamenti') : k === 'falliti' ? t('Non riuscite') : SPECIE_ATTREZZI[k] ? t(SPECIE_ATTREZZI[k].filtro) : nomeLeggibileAttrezzo(k.slice(6));
+    const etichetta = (k) => k === 'tutte' ? t('chat.activity.filter.all') : k === 'ragionamento' ? t('chat.activity.filter.reasoning') : k === 'falliti' ? t('chat.activity.filter.failed') : SPECIE_ATTREZZI[k] ? t(SPECIE_ATTREZZI[k].filtro) : nomeLeggibileAttrezzo(k.slice(6));
     const quanti = (k) => k === 'tutte' ? voci.length : k === 'falliti' ? r.nFalliti : conteggi.get(k);
     const firma = chiavi.map((k) => `${k}:${quanti(k)}`).join('|');
     if (this.filtriEl.dataset.firma !== firma) {
@@ -752,7 +757,7 @@ class VistaSegmento {
     }
     const filtrato = k !== 'tutte';
     this.notaEl.hidden = !filtrato;
-    if (filtrato) this.notaEl.textContent = t('Mostrate {n} voci su {totale}.', { n: visibili, totale });
+    if (filtrato) this.notaEl.textContent = t('chat.activity.filter.showing', { n: visibili, totale });
     if (!silenzioso && filtrato) annuncia(this.notaEl.textContent);
   }
   /** I nodi che una voce occupa: la scheda intera per un ragionamento; la riga e i suoi fratelli fino alla riga dopo (dettaglio, diff, fonti) per un attrezzo. */
@@ -766,13 +771,13 @@ class VistaSegmento {
   /* D6 — le scorciatoie, nel menu di casa (`apriMenuAzioni`): tastiera e chiusura le fa lui. */
   vociDelMenu() {
     const voci = [
-      { icona: 'i-brain', etichetta: t('Apri tutti i ragionamenti'), azione: () => this.apriTutte({ soloRagionamenti: true }) },
-      { icona: 'i-list', etichetta: t('Apri tutte le voci'), azione: () => this.apriTutte() },
-      { icona: 'i-chev', etichetta: t('Chiudi tutte le voci'), azione: () => this.chiudiTutte() },
-      { icona: 'i-copy', etichetta: t('Copia l’attività come testo'), azione: () => { void this.copia(); } },
+      { icona: 'i-brain', etichetta: t('chat.activity.menu.openReasonings'), azione: () => this.apriTutte({ soloRagionamenti: true }) },
+      { icona: 'i-list', etichetta: t('chat.activity.menu.openAll'), azione: () => this.apriTutte() },
+      { icona: 'i-chev', etichetta: t('chat.activity.menu.closeAll'), azione: () => this.chiudiTutte() },
+      { icona: 'i-copy', etichetta: t('chat.activity.menu.copy'), azione: () => { void this.copia(); } },
     ];
     const percorsi = this.percorsiModificati();
-    if (percorsi.length) voci.push({ icona: 'i-diff', etichetta: t('Apri le modifiche in Review'), azione: () => this.azioni.apriReview?.(percorsi) });
+    if (percorsi.length) voci.push({ icona: 'i-diff', etichetta: t('chat.activity.menu.openInReview'), azione: () => this.azioni.apriReview?.(percorsi) });
     return voci;
   }
   percorsiModificati() {
@@ -783,7 +788,7 @@ class VistaSegmento {
     return esito;
   }
   apriMenu(posizionamento) {
-    this.azioni.apriMenu?.({ voci: this.vociDelMenu(), etichetta: t('Azioni sull’attività'), posizionamento: { ...posizionamento, fuoco: true, ancoraEl: posizionamento.ancoraEl ?? null, focusElement: posizionamento.focusElement ?? this.altro } });
+    this.azioni.apriMenu?.({ voci: this.vociDelMenu(), etichetta: t('chat.activity.actions'), posizionamento: { ...posizionamento, fuoco: true, ancoraEl: posizionamento.ancoraEl ?? null, focusElement: posizionamento.focusElement ?? this.altro } });
   }
   apriTutte({ soloRagionamenti = false } = {}) {
     this.imposta(true);
@@ -794,7 +799,7 @@ class VistaSegmento {
     const testo = testoDelSegmento(this.vociNormalizzate().map((c) => c.voce));
     let fatto = true;
     try { await navigator.clipboard.writeText(testo); } catch { fatto = false; }
-    const messaggio = fatto ? t('Attività copiata negli appunti.') : t('Copia non riuscita: il browser non ha concesso gli appunti.');
+    const messaggio = fatto ? t('chat.activity.copy.done') : t('chat.activity.copy.failed');
     if (this.azioni.toast) this.azioni.toast(messaggio); else annuncia(messaggio);
   }
 

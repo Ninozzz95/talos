@@ -1,5 +1,6 @@
+import { TESTI } from '../i18n/testi/index.js';
 import { descriviContextCompactor } from './context-compactor.js';
-import { linguaCorrenteDiT } from './lingua.js';
+import { t, interpola, linguaCorrenteDiT } from './lingua.js';
 
 const ACTIVE = new Set(['queued', 'preparing', 'summarizing', 'validating', 'ready']);
 
@@ -115,16 +116,18 @@ export function stimaResiduoContesto(job, adesso = Date.now()) {
  * 5) e passa ai minuti quando l'unità grande esiste, così non esce mai «circa 60 secondi».
  * Quando non c'è niente su cui basarsi non inventa: dichiara che il tempo non è stimabile.
  */
+function traduciStima(chiave, english, parametri) {
+  return english ? interpola(TESTI.en[chiave], parametri) : t(chiave, parametri);
+}
+
 export function descriviStimaResiduo(stima, { english = false } = {}) {
-  if (!stima?.noto) return english ? 'time not measurable yet' : 'tempo non ancora stimabile';
+  if (!stima?.noto) return traduciStima('chat.context.progress.timeUnknown', english);
   const ms = stima.msResidui;
-  if (ms < SOGLIA_NUMERO_MS) return english ? 'a few seconds left (estimate)' : 'ancora pochi secondi (stima)';
+  if (ms < SOGLIA_NUMERO_MS) return traduciStima('chat.context.progress.fewSeconds', english);
   const secondi = Math.round(ms / PASSO_SECONDI_MS) * (PASSO_SECONDI_MS / 1000);
-  if (secondi < 60) return english ? `about ${secondi} seconds remaining (estimate)` : `circa ${secondi} secondi rimanenti (stima)`;
+  if (secondi < 60) return traduciStima('chat.context.progress.aboutSeconds', english, { n: secondi });
   const minuti = Math.max(1, Math.round(ms / MINUTO_MS));
-  return english
-    ? `about ${minuti} minute${minuti === 1 ? '' : 's'} remaining (estimate)`
-    : `circa ${minuti} minut${minuti === 1 ? 'o' : 'i'} rimanent${minuti === 1 ? 'e' : 'i'} (stima)`;
+  return traduciStima(minuti === 1 ? 'chat.context.progress.aboutMinuteOne' : 'chat.context.progress.aboutMinutesMany', english, { n: minuti });
 }
 
 export function descriviAvanzamentoContesto(snapshot, { adesso = Date.now() } = {}) {
@@ -157,14 +160,14 @@ export function aggiornaAvanzamentoContesto(container, snapshot, { onOpen, stale
     const stima = doc.createElement('span'); stima.dataset.contextChatEta = ''; stima.setAttribute('aria-live', 'off');
     testo.append(status, stima);
     const bar = doc.createElement('progress'); bar.className = 'talos-context__progress';
-    const button = doc.createElement('button'); button.type = 'button'; button.className = 'talos-button talos-button--ghost talos-button--sm'; button.textContent = 'Context Manager'; button.addEventListener('click', () => onOpen?.());
+    const button = doc.createElement('button'); button.type = 'button'; button.className = 'talos-button talos-button--ghost talos-button--sm'; button.textContent = t('chat.context.manager'); button.addEventListener('click', () => onOpen?.());
     row.append(testo, button, bar); container.append(row);
   }
   row.dataset.contextJob = view.job.id; row.dataset.contextState = view.job.state;
   const bar = row.querySelector('progress'); bar.hidden = !view.active;
-  const text = stale ? (english ? 'Progress unavailable. Reconnecting…' : 'Avanzamento non disponibile. Riconnessione…') : view.label;
+  const text = stale ? (t('chat.context.progress.reconnecting')) : view.label;
   row.querySelector('[data-context-chat-status]').textContent = text;
-  bar.setAttribute('aria-label', english ? 'Context compaction' : 'Compattazione del contesto');
+  bar.setAttribute('aria-label', t('chat.context.progress.barLabel'));
   // La stima compare solo nella fase che HA segmenti: su «Preparazione» o «Pubblicazione» un
   // «tempo non ancora stimabile» sarebbe rumore, ed è il periodo iniziale che Microsoft dice di
   // lasciare senza stime. In riconnessione non sappiamo lo stato, quindi nemmeno il tempo.
@@ -177,7 +180,7 @@ export function aggiornaAvanzamentoContesto(container, snapshot, { onOpen, stale
     // remaining»). Non è una live region: cambiarla non annuncia niente, quindi qui la stima è
     // sicura. ⛔ `aria-valuetext` sta sul `<progress>` (ruolo `progressbar`, che lo eredita), MAI
     // sullo `span` con `role="status"`: fra i ruoli di quell'attributo `status` non c'è.
-    const conteggio = english ? `${view.value} of ${view.max} segments` : `${view.value} di ${view.max} segmenti`;
+    const conteggio = t('chat.context.progress.segments', { n: view.value, totale: view.max });
     bar.setAttribute('aria-valuetext', view.stima.noto ? `${conteggio} · ${testoStima}` : conteggio);
   } else { bar.removeAttribute('value'); bar.removeAttribute('aria-valuetext'); }
   return row;
@@ -200,7 +203,6 @@ export function aggiornaAvanzamentoLegacy(container, stato, { sessionId, testo =
   //   del monitor, con un tempo che dipende dalla rete. Misurato sulla 4176: barra sparita in 2 corse su 3.
   let row = container.querySelector('[data-compattazione-barra]');
   if (!stato) { row?.remove(); return null; }
-  const english = linguaCorrenteDiT() === 'en';
   if (!row || row.dataset.contextSession !== sessionId) {
     row?.remove();
     row = doc.createElement('section'); row.className = 'talos-context-chat-progress talos-context-chat-progress--legacy';
@@ -214,9 +216,9 @@ export function aggiornaAvanzamentoLegacy(container, stato, { sessionId, testo =
     if (typeof inserisci === 'function') inserisci(row); else container.append(row);
   }
   row.dataset.contextState = 'summarizing'; row.dataset.compattazioneMotivo = stato.motivo ?? '';
-  row.querySelector('[data-context-chat-status]').textContent = testo ?? (english ? 'Summarizing the conversation…' : 'Riassumo la conversazione…');
+  row.querySelector('[data-context-chat-status]').textContent = testo ?? (t('chat.context.summarizing'));
   const bar = row.querySelector('progress');
   bar.hidden = false; bar.removeAttribute('value'); bar.removeAttribute('aria-valuetext');
-  bar.setAttribute('aria-label', english ? 'Conversation summary in progress' : 'Riassunto della conversazione in corso');
+  bar.setAttribute('aria-label', t('chat.context.summaryInProgress'));
   return row;
 }

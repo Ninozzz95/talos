@@ -1,4 +1,5 @@
 import test from 'node:test';
+import { t } from '../../src/components/lingua.js';
 import assert from 'node:assert/strict';
 
 import {
@@ -297,7 +298,7 @@ test('P0A3-MENU: il tasto destro sul corpo apre Copia · Incolla · Seleziona tu
   const menu = banco.radice.figli.find((f) => f.id === 'menuTerminale');
   assert.ok(menu, 'il menu non è stato creato nella radice');
   const etichette = menu.figli.filter((f) => f.attributi?.role === 'menuitem').map((f) => f.textContent);
-  assert.deepEqual(etichette, [TESTI_APPUNTI.copia, TESTI_APPUNTI.incolla, TESTI_APPUNTI.selezionaTutto, TESTI_APPUNTI.pulisci]);
+  assert.deepEqual(etichette, [TESTI_APPUNTI.copia, TESTI_APPUNTI.incolla, TESTI_APPUNTI.selezionaTutto, TESTI_APPUNTI.pulisci].map((k) => t(k))); // 03/10/2026: chiavi del dizionario
   // ⛔ nessun nome tecnico a schermo: né i nomi xterm né quelli degli attrezzi del modello
   for (const testo of etichette) assert.ok(!/xterm|clipboard|paste|terminal|pty/iu.test(testo), `nome tecnico a schermo: ${testo}`);
 });
@@ -306,13 +307,13 @@ test('P0A3-MENU-VOCI: «Copia» è spenta senza selezione, e «Seleziona tutto»
   const term = new TerminalFinto({});
   const voci = vociMenuTerminale(term, { copia: () => {}, incolla: () => {} });
   const abilitate = Object.fromEntries(voci.map(([testo, , abilitato]) => [testo, abilitato]));
-  assert.equal(abilitate[TESTI_APPUNTI.copia], false, 'senza selezione non c’è niente da copiare');
+  assert.equal(abilitate[t(TESTI_APPUNTI.copia)], false, 'senza selezione non c’è niente da copiare');
   term.selezione = 'qualcosa';
   const conSelezione = vociMenuTerminale(term, { copia: () => {}, incolla: () => {} });
-  assert.equal(conSelezione.find(([t]) => t === TESTI_APPUNTI.copia)[2], true);
-  conSelezione.find(([t]) => t === TESTI_APPUNTI.selezionaTutto)[1]();
+  assert.equal(conSelezione.find(([x]) => x === t(TESTI_APPUNTI.copia))[2], true);
+  conSelezione.find(([x]) => x === t(TESTI_APPUNTI.selezionaTutto))[1]();
   assert.equal(term.tuttoSelezionato, 1);
-  conSelezione.find(([t]) => t === TESTI_APPUNTI.pulisci)[1]();
+  conSelezione.find(([x]) => x === t(TESTI_APPUNTI.pulisci))[1]();
   assert.equal(term.pulito, 1);
 });
 

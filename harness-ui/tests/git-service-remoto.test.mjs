@@ -216,7 +216,7 @@ test('F6-2 — invia: pubblica un ramo nuovo con --set-upstream sul remoto scelt
   esito = await servizio.invia({ sessionId: 'sA' });
   assert.equal(esito.code, 'GIT_PUSH_REJECTED');
   /* il perché viene dalla riga di --porcelain («[rejected] (fetch first)»), non dagli hint in inglese di stderr */
-  assert.match(esito.erroreAvvio, /^Il remoto non ha accettato l’invio: \[rejected\] \(fetch first\)$/u);
+  assert.match(esito.erroreAvvio, /^The remote did not accept the push: \[rejected\] \(fetch first\)$/u);
   // dopo il recupero la guardia lo sa: GIT_BEHIND, prima si scarica
   await servizio.recupera({ sessionId: 'sA' });
   assert.equal((await servizio.invia({ sessionId: 'sA' })).code, 'GIT_BEHIND');

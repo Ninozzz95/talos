@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { togliConfiniDati } from '../src/kernel/confine-dati.mjs';
 import {spawnSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import test from 'node:test';
@@ -16,11 +17,14 @@ for (const mode of ['capture', 'legacy', 'wsl']) {
     assert.equal(measured.events.length, 1);
     assert.equal(measured.events[0].isError, true);
     /* F009 (01/10/2026): la prova in Linux dichiara con che utente ha girato; la via di Windows resta senza intestazione. */
-    assert.match(measured.events[0].content, mode === 'wsl' ? /^exit 127 \[sandbox: wsl2 \(Linux in WSL [^\]]+\)\]\nexit 0 but NO tests ran \(# tests 0\)/ : /^exit 127\nexit 0 but NO tests ran \(# tests 0\)/);
+    /* owner 03/10/2026: «zero test eseguiti» è NOT RUN — nessun 127 inventato, il codice vero del runner detto in parole */
+    assert.match(togliConfiniDati(measured.events[0].content), mode === 'wsl'
+      ? /^NOT RUN: NO_TESTS_RAN — the test command ran \[sandbox: wsl2 \(Linux in WSL [^\]]+\)\] and exited 0, but no tests ran[^\n]*\nThe runner said: # tests 0\n/
+      : /^NOT RUN: NO_TESTS_RAN — the test command ran and exited 0, but no tests ran[^\n]*\nThe runner said: # tests 0\n/);
     assert.ok(measured.samples >= 3, 'real samples during output, not just after close');
     if (mode !== 'legacy') {
       assert.equal(measured.deliveredBytes, 64 * 1024 * 1024 + 11);
-      assert.equal(measured.exitCode, 127);
+      assert.equal(measured.exitCode, null, 'nessun codice inventato');
       assert.equal(measured.actualExitCode, 0);
     }
     assert.ok(measured.retainedGrowth < 16 * 1024 * 1024,
@@ -37,7 +41,7 @@ for (const mode of ['capture-stop', 'legacy-stop']) {
     assert.equal(measured.calls, 1, 'Stop never starts a second provider call');
     assert.equal(measured.events.length, 1);
     assert.equal(measured.events[0].isError, true);
-    assert.match(measured.events[0].content, /^exit 130\n/);
+    assert.match(togliConfiniDati(measured.events[0].content), /^exit 130\n/);
     assert.doesNotMatch(measured.events[0].content, /NO tests ran/);
   });
 }

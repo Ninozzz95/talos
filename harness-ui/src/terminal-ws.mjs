@@ -14,11 +14,22 @@
  * "non ha limiti" (owner, 28/8): il confine giusto da tenere stretto è
  * il TRASPORTO, non la shell stessa.
  */
+import { statSync } from 'node:fs';
+
 import { WebSocketServer } from 'ws';
 
 import { codificaFrame, decodificaFrame, TIPO_FRAME_CONTROLLO, TIPO_FRAME_DATI } from './pty-terminal.mjs';
 
 const PERCORSO_WS = '/api/v1/terminal/ws';
+
+/** Perché una PTY non è partita: la cartella non c'è, non è una cartella, o il sistema ha rifiutato la shell (03/10/2026). */
+export function motivoAvvioFallito(cartella, statFn = statSync) {
+  try {
+    return statFn(cartella).isDirectory() ? 'spawn-failed' : 'not-a-folder';
+  } catch (errore) {
+    return errore?.code === 'ENOENT' || errore?.code === 'ENOTDIR' ? 'folder-missing' : 'spawn-failed';
+  }
+}
 
 function leggiCookieGrezzo(grezzo, nome) {
   if (typeof grezzo !== 'string' || grezzo === '') return null;
@@ -47,6 +58,7 @@ function leggiCookieGrezzo(grezzo, nome) {
  */
 export function creaGestoreTerminaleWs({ registro, originiConsentite, risolviScheda, token = null }, deps = {}) {
   const WSS = deps.WebSocketServer ?? WebSocketServer;
+  const statFn = deps.statFn ?? statSync;
   const wss = new WSS({ noServer: true });
 
   function gestisciUpgrade(req, socket, head) {
@@ -120,7 +132,31 @@ export function creaGestoreTerminaleWs({ registro, originiConsentite, risolviSch
      * fonte: alla riga 7702 tratta solo `evento === 'uscita'` e ignora in
      * silenzio ogni altro evento di controllo — nessun `else`, nessun crash.
      */
-    const { voce, ripresa } = registro.apriDichiarando({ id, cartella: scheda.cartella });
+    /*
+     * ⛔⛔⛔ 03/10/2026 — un avvio fallito NON abbatte il server. La sera del 03/10 una sonda ha aperto il Terminale di una
+     *   sessione la cui cartella non c'era più: `node-pty` ha lanciato (errore 267, «directory name is invalid»), l'eccezione
+     *   è risalita fino al gestore dell'upgrade e il server dell'owner è caduto.
+     * ⇒ Come VS Code (`terminalProcess.ts:204-275`: `_validateCwd` + `catch` attorno allo spawn): l'errore diventa un frame di
+     *   controllo `errore` col suo `code`/`reason` (le parole le sceglie l'interfaccia, nelle due lingue) e la WebSocket si chiude
+     *   con 1011. La cartella si guarda DOPO il fallimento, non prima: una shell viva da riagganciare non dipende dalla cartella.
+     */
+    let aggancio;
+    try {
+      aggancio = registro.apriDichiarando({ id, cartella: scheda.cartella });
+    } catch (errore) {
+      const reason = motivoAvvioFallito(scheda.cartella, statFn);
+      const message = reason === 'folder-missing'
+        ? `The terminal could not start: the folder "${scheda.cartella}" does not exist.`
+        : reason === 'not-a-folder'
+          ? `The terminal could not start: "${scheda.cartella}" is not a folder.`
+          : `The terminal could not start: the system refused to launch the shell (${String(errore?.message ?? errore).slice(0, 200)}).`;
+      try {
+        ws.send(codificaFrame(TIPO_FRAME_CONTROLLO, JSON.stringify({ evento: 'errore', code: 'TERMINAL_START_FAILED', reason, cartella: scheda.cartella, message })));
+        ws.close?.(1011, 'terminal start failed');
+      } catch { /* la connessione è già chiusa: non c'è nessuno a cui dirlo, e il server resta su */ }
+      return;
+    }
+    const { voce, ripresa } = aggancio;
     /* 06/9 B1 — la scheda prende il nome della shell che il server ha scelto DAVVERO (`enforcement` di `sceltaShell`), non uno indovinato dal client. */
     ws.send(codificaFrame(TIPO_FRAME_CONTROLLO, JSON.stringify({ evento: 'agganciato', ripreso: ripresa, shell: voce.enforcement ?? null, comando: voce.comando ?? null })));
 

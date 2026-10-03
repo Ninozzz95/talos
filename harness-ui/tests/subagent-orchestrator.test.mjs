@@ -592,3 +592,21 @@ test('CHILD-MODE-NOT-WORKFLOW — qualunque sia il modo del padre, il figlio nas
     assert.equal(viste[0].modalitaOperativaRichiesta, 'normale', String(modoPadre));
   }
 });
+
+test('K3B-DELEGA-01 — la figlia descrive i comandi nella lingua della madre (cioè di chi guarda)', async () => {
+  const sessioni = new Map([['padre-en', { ...vocePadre({ cartella: '/progetto' }), linguaInterfaccia: 'en' }], ['padre-senza', vocePadre({ cartella: '/progetto' })]]);
+  const viste = [];
+  const orch = creaSubagentOrchestrator({
+    sessioni,
+    cartellaEsisteFn: () => true,
+    avviaESeguiFn: (opzioni) => {
+      viste.push(opzioni);
+      opzioni.onConclusioneFn({ ok: true, esito: { detto: 'fatto', comeFinita: 'concluso' } });
+      return { sessionId: `figlio-${viste.length}` };
+    },
+  });
+  await orch.delegaSottoTask({ sessionPadreId: 'padre-en', task: 'x' });
+  await orch.delegaSottoTask({ sessionPadreId: 'padre-senza', task: 'y' });
+  assert.equal(viste[0].linguaInterfaccia, 'en');
+  assert.equal(viste[1].linguaInterfaccia, null);
+});

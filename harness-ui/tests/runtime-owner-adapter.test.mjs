@@ -61,7 +61,7 @@ test('TOOL-DESCRIPTION-CONTRACT-01 — lo schema desktop richiede al modello una
 
   assert.deepEqual(richiesta, originale, 'l’adapter non deve mutare il body costruito dal runtime owner');
   assert.equal(adattata.tools[0].function.parameters.properties.descrizione.type, 'string');
-  assert.match(adattata.tools[0].function.parameters.properties.descrizione.description, /italiano/i);
+  assert.match(adattata.tools[0].function.parameters.properties.descrizione.description, /\bin Italian\b/u); // revisione K3: la descrizione resta in italiano come prima
   assert.deepEqual(adattata.tools[0].function.parameters.required, ['comando', 'descrizione']);
 });
 
@@ -360,4 +360,35 @@ test('RIPRESA-LOCALE-STOP-DIAGNOSI: abort durante errore HTTP resta abort e non 
   });
   await assert.rejects(() => f('http://127.0.0.1/chat/completions', { body: JSON.stringify({ model: 'ollama:test', tools: [{}] }) }), { name: 'AbortError' });
   assert.equal(chiamate, 1);
+});
+
+test('K3B-ADAPTER-01 — la descrizione dei comandi segue la lingua dell\'interfaccia, e senza lingua resta italiana', async () => {
+  const richiesta = { tools: [{ type: 'function', function: { name: 'shell', parameters: { type: 'object', properties: { comando: { type: 'string' } }, required: ['comando'] } } }] };
+  const descrizione = (corpo) => corpo.tools[0].function.parameters.properties.descrizione.description;
+  assert.match(descrizione(adattaRichiestaConDescrizioneComando(richiesta, { lingua: 'en' })), /\bin English\b/u);
+  assert.match(descrizione(adattaRichiestaConDescrizioneComando(richiesta, { lingua: 'it' })), /\bin Italian\b/u);
+  assert.match(descrizione(adattaRichiestaConDescrizioneComando(richiesta)), /\bin Italian\b/u);
+  assert.match(descrizione(adattaRichiestaConDescrizioneComando(richiesta, { lingua: 'fr' })), /\bin Italian\b/u);
+  let inviato = null;
+  const fetchAdattato = creaFetchConDescrizioneComando(async (_url, init) => { inviato = JSON.parse(init.body); return { ok: true }; }, { lingua: 'en' });
+  await fetchAdattato('https://example.test/c', { method: 'POST', body: JSON.stringify(richiesta) });
+  assert.match(descrizione(inviato), /\bin English\b/u);
+});
+
+test('K3B-ADAPTER-02 — talosLavora porta la lingua del giro (input.linguaInterfaccia) fino al corpo mandato al modello', async () => {
+  const corpi = [];
+  const adapter = createOwnerRuntimeAdapter({
+    modulePath: 'C:/owner/runtime.mjs',
+    importFn: async () => ({
+      talosLavora: ({ fetchDiRete }) => fetchDiRete('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        body: JSON.stringify({ tools: [{ type: 'function', function: { name: 'shell', parameters: { type: 'object', properties: { comando: { type: 'string' } }, required: ['comando'] } } }] }),
+      }),
+    }),
+  });
+  const fetchFinto = async (_url, init) => { corpi.push(JSON.parse(init.body)); return { ok: true }; };
+  await adapter.talosLavora({ fetchDiRete: fetchFinto, linguaInterfaccia: 'en' });
+  await adapter.talosLavora({ fetchDiRete: fetchFinto });
+  assert.match(corpi[0].tools[0].function.parameters.properties.descrizione.description, /\bin English\b/u);
+  assert.match(corpi[1].tools[0].function.parameters.properties.descrizione.description, /\bin Italian\b/u);
 });

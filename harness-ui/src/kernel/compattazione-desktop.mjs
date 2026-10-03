@@ -51,15 +51,59 @@ export const RICHIESTE_UTENTE_LETTERALI = 3;
 export const SCAMBI_CHIUSI_LETTERALI = 2;
 export const FILE_RILETTI_MASSIMI = 5;
 /*
- * ⛔ 2.048 token di uscita, dichiarati nel prompt: Hermes usa min(5% finestra, 10.000), Cline 8.192 «perché i
- *   modelli che ragionano per difetto possono spendere il budget nel pensiero e non restituire testo». Qui il
- *   ragionamento si chiede BASSO (vedi l'adapter) e 2.048 token (~1.200 parole) bastano a cinque sezioni; è un
- *   valore da tarare sul banco GLM, non una legge.
+ * ⛔ 2.048 token di uscita erano il tetto FISSO del riassunto fino al 02/10/2026 («da tarare sul banco GLM, non una
+ *   legge»). Restano esportati come valori storici: il rapporto parole/token (1.200 / 2.048) dà ancora le parole del
+ *   prompt. Il budget vero è `budgetRiassunto` qui sotto.
  */
 export const MAX_TOKEN_RIASSUNTO = 2_048;
 export const PAROLE_MASSIME_RIASSUNTO = 1_200;
-export const MARCATORE_RIASSUNTO = '[conversazione compattata: quanto segue è un riassunto, non la cronologia originale]';
-export const MARCATORE_INDICE = 'Indice meccanico (costruito dal codice, non dal modello):';
+/*
+ * ⛔ 02/10/2026, owner («Come Hermes, adesso») — il budget del riassunto SCALA con ciò che riassume. Misurato sulla
+ *   sessione vera b1e7382a dell'app installata: tre compattazioni su tre «troncato», ognuna `completion_tokens: 2048`
+ *   e `reasoning_tokens: 0` — il tetto fisso riempito di testo VISIBILE (213.785 token da riassumere), non il
+ *   ragionamento; l'unica riuscita ne aveva usati 1.570. Un riassunto troncato si scarta (giusto: `valutaRispostaDi
+ *   Riassunto`), quindi la conversazione non si compattava MAI.
+ * Hermes `agent/context_compressor.py:3427-3431` `_compute_summary_budget`:
+ *   `max(_MIN_SUMMARY_TOKENS, min(int(content_tokens * _SUMMARY_RATIO), self.max_summary_tokens))`;
+ *   `:843-846` `_MIN_SUMMARY_TOKENS = 2000`, `_SUMMARY_RATIO = 0.20`, `_SUMMARY_TOKENS_CEILING = 10_000` («Summaries above
+ *   ~10K tokens are themselves a context-pressure source»); `:2222` `min(int(self.context_length * 0.05), ceiling)`.
+ *   E come noi scarta il riassunto fermato dal tetto (`:160-166`, `_TRUNCATED_SUMMARY_MARKER`, da Pi #7048).
+ * Senza finestra dichiarata (oggi il caso comune: `calcolaSoglie` → `finestraToken: null`) vale la finestra implicita
+ *   nella soglia, soglia / `FRAZIONE_FINESTRA`: col tetto predefinito di 200.000 sono 266.666 token ⇒ il tetto 10.000.
+ */
+export const MIN_TOKEN_RIASSUNTO = 2_000;
+export const FRAZIONE_RIASSUNTO_SUL_MEZZO = 0.20;
+export const FRAZIONE_RIASSUNTO_SULLA_FINESTRA = 0.05;
+export const TETTO_TOKEN_RIASSUNTO = 10_000;
+
+/** Il budget d'uscita del riassunto e le parole da dichiarare nel prompt (stesso rapporto di 1.200 / 2.048). */
+export function budgetRiassunto({ tokenDaRiassumere, finestraToken = null, soglia = null } = {}) {
+  const positivo = (n) => Number.isFinite(n) && n > 0;
+  const finestra = positivo(finestraToken)
+    ? finestraToken
+    : (positivo(soglia) ? soglia : TETTO_TOKEN_DEFAULT) / FRAZIONE_FINESTRA;
+  const tetto = Math.min(Math.floor(finestra * FRAZIONE_RIASSUNTO_SULLA_FINESTRA), TETTO_TOKEN_RIASSUNTO);
+  const daMezzo = positivo(tokenDaRiassumere) ? Math.floor(tokenDaRiassumere * FRAZIONE_RIASSUNTO_SUL_MEZZO) : 0;
+  const maxOutputTokens = Math.max(MIN_TOKEN_RIASSUNTO, Math.min(daMezzo, tetto));
+  return { maxOutputTokens, paroleMassime: Math.floor((maxOutputTokens * PAROLE_MASSIME_RIASSUNTO) / MAX_TOKEN_RIASSUNTO) };
+}
+/** La frase concordata con la CLI (`KERNEL_COMPACTED_MARKER_STARTS`): si scrive esattamente così. */
+export const MARCATORE_RIASSUNTO = '[conversation compacted: what follows is a summary, not the original history]';
+/** La forma italiana di prima. Le storie salvate sono italiane e restano tali: chi legge la riconosce per sempre. */
+export const MARCATORE_RIASSUNTO_IT = '[conversazione compattata: quanto segue è un riassunto, non la cronologia originale]';
+/** Il lettore a due forme: un contenuto inizia con il segno del riassunto, scritto in inglese o in italiano. */
+export function iniziaConMarcatoreRiassunto(contenuto) {
+  return typeof contenuto === 'string' && (contenuto.startsWith(MARCATORE_RIASSUNTO) || contenuto.startsWith(MARCATORE_RIASSUNTO_IT));
+}
+export const MARCATORE_INDICE = 'Mechanical index (built by the code, not by the model):';
+/** La forma italiana di prima dell'indice meccanico: le storie salvate la contengono ancora. */
+export const MARCATORE_INDICE_IT = 'Indice meccanico (costruito dal codice, non dal modello):';
+/** Dove comincia l'indice meccanico dentro un riassunto, in una qualunque delle due forme; -1 se non c'è. */
+export function posizioneIndiceMeccanico(contenuto) {
+  const testo = String(contenuto ?? '');
+  const posizioni = [testo.indexOf(MARCATORE_INDICE), testo.indexOf(MARCATORE_INDICE_IT)].filter((p) => p !== -1);
+  return posizioni.length ? Math.min(...posizioni) : -1;
+}
 /** Nomi degli attrezzi che leggono o scrivono un file: i loro percorsi sono i «file da rileggere». */
 export const ATTREZZI_SUI_FILE = new Set(['leggi', 'scrivi', 'file_edit']);
 const CHIAVI_PERCORSO = ['percorso', 'path', 'file_path', 'filePath', 'file', 'filename', 'cartella'];
@@ -198,7 +242,7 @@ export function riattaccaEffimeri(messaggi, effimeri) {
 
 /** Una richiesta della persona: `user` che non è un nostro riassunto. */
 export function eRichiestaDellaPersona(m) {
-  return m?.role === 'user' && typeof m.content === 'string' && !m.content.startsWith(MARCATORE_RIASSUNTO);
+  return m?.role === 'user' && typeof m.content === 'string' && !iniziaConMarcatoreRiassunto(m.content);
 }
 
 /**
@@ -319,8 +363,8 @@ export function indiceMeccanico(messaggi, { fileRilettiMassimi = FILE_RILETTI_MA
     if (typeof m?.content !== 'string' || !m.content) continue;
     if (m.role === 'tool' || m.role === 'assistant') {
       const da = m.role === 'assistant'
-        ? 'testo dell\'assistente'
-        : (chiamatePerId.has(m.tool_call_id) ? provenienzaDellaChiamata(chiamatePerId.get(m.tool_call_id)) : 'risultato di un attrezzo');
+        ? 'assistant text'
+        : (chiamatePerId.has(m.tool_call_id) ? provenienzaDellaChiamata(chiamatePerId.get(m.tool_call_id)) : 'tool result');
       for (const hit of m.content.match(IMPRONTA) ?? []) {
         if (impronte.has(hit)) continue;
         if (impronte.size >= IMPRONTE_MASSIME) {
@@ -344,23 +388,23 @@ export function indiceMeccanico(messaggi, { fileRilettiMassimi = FILE_RILETTI_MA
   for (let i = suiFile.length - 1; i >= 0 && fileRiletti.length < fileRilettiMassimi; i -= 1) {
     if (!fileRiletti.includes(suiFile[i])) fileRiletti.push(suiFile[i]);
   }
-  const riga = (titolo, valori) => `- ${titolo}: ${valori.length ? valori.join(' · ') : '(nessuno)'}`;
+  const riga = (titolo, valori) => `- ${titolo}: ${valori.length ? valori.join(' · ') : '(none)'}`;
   /* Le impronte si raggruppano per provenienza: un comando lungo che ne produce tre si scrive una volta sola. */
   const perProvenienza = new Map();
   for (const impronta of impronte) {
-    const da = origini.get(impronta) ?? 'provenienza non registrata (compattazione precedente)';
+    const da = origini.get(impronta) ?? 'origin not recorded (earlier compaction)';
     if (!perProvenienza.has(da)) perProvenienza.set(da, []);
     perProvenienza.get(da).push(impronta);
   }
   const righeImpronte = impronte.size
-    ? ['- Impronte trovate nei risultati, con ciò che le ha prodotte:', ...[...perProvenienza].map(([da, lista]) => `  · ${da}: ${lista.join(' · ')}`)]
-    : [riga('Impronte trovate nei risultati', [])];
+    ? ['- Fingerprints found in the results, with what produced them:', ...[...perProvenienza].map(([da, lista]) => `  · ${da}: ${lista.join(' · ')}`)]
+    : [riga('Fingerprints found in the results', [])];
   const testo = [
     MARCATORE_INDICE,
-    riga('Percorsi toccati', [...percorsi].slice(0, 60)),
-    riga('File da rileggere prima di scriverci (ultimi letti/scritti)', fileRiletti),
+    riga('Paths touched', [...percorsi].slice(0, 60)),
+    riga('Files to re-read before writing to them (last read/written)', fileRiletti),
     ...righeImpronte,
-    riga('Errori visti', [...errori]),
+    riga('Errors seen', [...errori]),
   ].join('\n');
   return { testo, percorsi: [...percorsi], impronte: [...impronte], origini: Object.fromEntries(origini), errori: [...errori], fileRiletti };
 }
@@ -392,13 +436,13 @@ export function testoRichiestaDiRiassunto({ paroleMassime = PAROLE_MASSIME_RIASS
 
 /** Il riassunto precedente entra nel riassuntore SENZA il suo indice meccanico: l'indice si fonde per codice. */
 function senzaIndice(m) {
-  if (m?.role !== 'user' || typeof m.content !== 'string' || !m.content.startsWith(MARCATORE_RIASSUNTO)) return m;
-  const posizione = m.content.indexOf(MARCATORE_INDICE);
+  if (m?.role !== 'user' || typeof m.content !== 'string' || !iniziaConMarcatoreRiassunto(m.content)) return m;
+  const posizione = posizioneIndiceMeccanico(m.content);
   return posizione === -1 ? m : { ...m, content: m.content.slice(0, posizione).trimEnd() };
 }
 
 export function costruisciRichiestaDiRiassunto({ testa = [], mezzo = [], paroleMassime = PAROLE_MASSIME_RIASSUNTO } = {}) {
-  const haRiassuntoPrecedente = mezzo.some((m) => m?.role === 'user' && typeof m.content === 'string' && m.content.startsWith(MARCATORE_RIASSUNTO));
+  const haRiassuntoPrecedente = mezzo.some((m) => m?.role === 'user' && typeof m.content === 'string' && iniziaConMarcatoreRiassunto(m.content));
   return [...testa, ...mezzo.map(senzaIndice), { role: 'user', content: testoRichiestaDiRiassunto({ paroleMassime, haRiassuntoPrecedente }) }];
 }
 
@@ -409,6 +453,48 @@ export function valutaRispostaDiRiassunto({ scelta, finishReason } = {}) {
   const riassunto = String(scelta?.content ?? '').trim();
   if (!riassunto) return { ok: false, riassunto: '', motivo: 'vuoto' };
   return { ok: true, riassunto, motivo: null };
+}
+
+/*
+ * IL RIASSUNTO SI CONTA MENTRE SI SCRIVE — lane CLI, 03/10/2026 (decisione dell'owner «foglio subito + patch per il
+ *   conteggio»): il mockup del `/compact` mostra «Writing the summary ↓ 3.2k tokens» che sale dal vivo, come lo spinner di
+ *   Claude Code 2.1.283 («counts the summary's tokens as they stream», changelog, letto il 03/10/2026). Hermes dice solo
+ *   lo stato e un battito «still summarizing» (`agent/conversation_compression.py:65-71`, clone `65ad529`), senza numero.
+ * ⇒ Il riassunto viaggia in streaming e i pezzi si contano: ~4 caratteri per token (la stessa stima di `stimaToken` del
+ *   kernel), dichiarata `stimato: true`. Alla fine vale il numero del fornitore (`usage.completion_tokens`, l'ultimo pezzo
+ *   del flusso con `stream_options.include_usage`: OpenRouter, «API reference — streaming», letto il 03/10/2026), con
+ *   `stimato: false`. Contano anche i pezzi di ragionamento: sono token in uscita come il testo, e il numero finale li
+ *   comprende.
+ * ⛔ Al massimo un avviso ogni `intervalloMs` (250 ms: quattro al secondo, la richiesta della CLI), più quello finale.
+ *   Niente timer: un pezzo che arriva troppo presto si conta e basta, e lo dirà il prossimo avviso.
+ * ⛔ Un osservatore che lancia non decide l'esito del riassunto.
+ */
+export const INTERVALLO_PROGRESSO_RIASSUNTO_MS = 250;
+/** L'evento AG-UI `CUSTOM` dei passi di una compattazione: effimero, mai su disco (`session-registry.mjs`, `consegnaEvento`). */
+export const NOME_EVENTO_PROGRESSO_COMPATTAZIONE = 'talos.compattazione-progresso';
+
+export function creaContatoreRiassunto({ emetti, tentativo = 1, intervalloMs = INTERVALLO_PROGRESSO_RIASSUNTO_MS, ora = () => Date.now() } = {}) {
+  let caratteri = 0;
+  let ultimoAvviso = null;
+  const avvisa = (valore) => {
+    try { emetti?.({ fase: 'riassunto', tentativo, ...valore }); } catch { /* osservatore isolato */ }
+  };
+  return {
+    onDelta(evento) {
+      if (evento?.tipo !== 'testo' && evento?.tipo !== 'ragionamento') return;
+      caratteri += String(evento.delta ?? '').length;
+      const adesso = ora();
+      if (ultimoAvviso !== null && adesso - ultimoAvviso < intervalloMs) return;
+      ultimoAvviso = adesso;
+      avvisa({ tokenRiassunto: Math.ceil(caratteri / 4), stimato: true });
+    },
+    /** La risposta è arrivata (riuscita o no): il numero del fornitore se c'è, altrimenti l'ultima stima. */
+    chiudi(usage) {
+      const veri = Number(usage?.completion_tokens);
+      if (Number.isSafeInteger(veri) && veri >= 0) avvisa({ tokenRiassunto: veri, stimato: false });
+      else avvisa({ tokenRiassunto: Math.ceil(caratteri / 4), stimato: true });
+    },
+  };
 }
 
 /**
@@ -550,8 +636,8 @@ export function riduciCodaSottoPressione(coda, { budgetToken, stima = stimaToken
  * sostituiscono. `tokenDopo` è sempre una stima (caratteri/4): il numero vero arriva con la risposta successiva.
  */
 export function creaRecord({ coveredThrough, riassunto, tokenPrima, tokenDopo, misura, at, modello, indice = null } = {}) {
-  if (!Number.isInteger(coveredThrough) || coveredThrough < 0) throw new TypeError('coveredThrough deve essere un intero ≥ 0');
-  if (!Array.isArray(riassunto)) throw new TypeError('riassunto deve essere una lista di messaggi');
+  if (!Number.isInteger(coveredThrough) || coveredThrough < 0) throw new TypeError('coveredThrough must be an integer ≥ 0');
+  if (!Array.isArray(riassunto)) throw new TypeError('riassunto must be a list of messages');
   return {
     schema: SCHEMA_RECORD_COMPATTAZIONE,
     coveredThrough,

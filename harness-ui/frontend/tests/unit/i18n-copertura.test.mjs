@@ -4,6 +4,8 @@ import { traduzioniMancanti, impostaLingua, t, tn } from '../../src/components/l
 import { CAMPI_IMPOSTAZIONI, SEZIONI_IMPOSTAZIONI } from '../../src/components/impostazioni-campi.js';
 import { NOMI_UMANI_ATTREZZI } from '../../src/components/nomi-attrezzi.js';
 import { TESTI as TESTI_TERMINALE, ETICHETTA_STATO } from '../../src/components/terminale.js';
+import { FORMA_DELLA_CHIAVE } from '../../src/components/lingua.js';
+import { TESTI as DIZIONARIO } from '../../src/i18n/testi/index.js'; // corsia C della lingua (03/10/2026)
 import { TESTI as TESTI_BROWSER } from '../../src/components/browser.js';
 import { TESTI as TESTI_CONNESSIONE } from '../../src/components/connessione.js';
 import { AZIONI_FILE } from '../../src/components/review.js'; // BC-63, 17/09: le voci del menu delle linguette della Revisione
@@ -19,9 +21,10 @@ const frasiImpostazioni = [
   ...CAMPI_IMPOSTAZIONI.map((c) => c.unita).filter(Boolean),
 ];
 const frasiAttrezzi = Object.values(NOMI_UMANI_ATTREZZI);
+/* Corsia C della lingua (03/10/2026): i testi del Terminale sono diventati CHIAVI del dizionario (`processi.terminal.*`),
+   che `app.js` risolve con `tr()`. Una chiave non si cerca fra le frasi vecchie: deve esistere in italiano e in inglese. */
+const chiaviTerminale = [...Object.values(TESTI_TERMINALE), ...Object.values(ETICHETTA_STATO)].filter((v) => typeof v === 'string' && v);
 const frasiComponenti = [
-  ...Object.values(TESTI_TERMINALE).filter((v) => typeof v === 'string' && v),
-  ...Object.values(ETICHETTA_STATO),
   ...Object.values(TESTI_BROWSER).filter((v) => typeof v === 'string' && v),
   ...Object.values(TESTI_CONNESSIONE).filter((v) => typeof v === 'string' && v),
   ...Object.values(AZIONI_FILE),
@@ -39,8 +42,16 @@ test('I18N-COPERTURA: ogni frase di Impostazioni, attrezzi e componenti ha l’i
   assert.ok(frasiImpostazioni.length > 100 && frasiAttrezzi.length > 40 && frasiComponenti.length > 30, 'il conteggio misura davvero qualcosa');
 });
 
+test('I18N-COPERTURA del Terminale: ogni testo è una chiave, in italiano e in inglese', () => {
+  assert.ok(chiaviTerminale.length >= 20, `il conteggio misura davvero qualcosa: ${chiaviTerminale.length}`);
+  assert.deepEqual(chiaviTerminale.filter((k) => !FORMA_DELLA_CHIAVE.test(k)), [], 'nessuna frase italiana scritta a mano');
+  assert.deepEqual(chiaviTerminale.filter((k) => typeof DIZIONARIO.it[k] !== 'string' || typeof DIZIONARIO.en[k] !== 'string'), [], 'ogni chiave ha le due lingue');
+});
+
 test('I18N-COPERTURA AL CONTRARIO: una frase inventata risulta mancante', () => {
   assert.deepEqual(traduzioniMancanti('en', ['Questa frase non esiste nel codice']), ['Questa frase non esiste nel codice']);
+  // 03/10/2026: le tabelle portano chiavi stabili; una chiave inventata, con la forma giusta, resta mancante anche lei
+  assert.deepEqual(traduzioniMancanti('en', ['varie.tools.chiaveInventata']), ['varie.tools.chiaveInventata']);
 });
 
 test('I18N-T: in italiano t() restituisce la frase; in inglese traduce, interpola e declina; senza traduzione resta l’italiano', () => {

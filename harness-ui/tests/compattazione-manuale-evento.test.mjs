@@ -72,6 +72,7 @@ test('CTX-MANUAL-EVENT-01 — la compattazione manuale riuscita registra `talos.
 test('CTX-MANUAL-EVENT-02 — AL CONTRARIO: una compattazione che non riassume non registra una «fine riuscita»', async () => {
   const { registro, sessionId, eventi } = await prepara_(async () => ({ compattato: false, messaggi: STORIA, usage: null }));
   const esito = await registro.compatta(sessionId);
-  assert.deepEqual(esito, { ok: true, compattato: false });
+  /* `fase` (lane CLI, 03/10/2026): un riassunto che non è venuto si è fermato al riassunto. */
+  assert.deepEqual(esito, { ok: true, compattato: false, fase: 'riassunto' });
   assert.equal(eventi.some((e) => e?.type === 'CUSTOM' && e.name === 'talos.compattazione' && e.value?.compattato === true), false);
 });

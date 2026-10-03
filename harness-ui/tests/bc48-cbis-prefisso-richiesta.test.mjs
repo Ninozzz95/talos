@@ -71,7 +71,14 @@ test('BC48-CBIS-ORDINI: C cambia il corpo ma non allunga il prefisso di una ripr
   assert.notEqual(conC.corpi[0], preC.corpi[0]);
   assert.match(JSON.parse(conC.corpi[0]).messages[1].content, /^Istruzioni di questo progetto/);
   assert.match(JSON.parse(preC.corpi[0]).messages[1].content, /^Scheda di lavoro/);
-  assert.equal(conC.confronto.byteUtf8, preC.confronto.byteUtf8);
+  /* F-027, estensione (03/10/2026): il codice di oggi mette l'albero della mappa e le righe della scheda nel confine dei dati,
+     il commit «pre-C» no. Il prefisso identico si allunga ESATTAMENTE dei byte delle righe di confine che contiene (come stanno
+     nel JSON del corpo, con `\"` e `\n` escapati), non di un byte di più: tolte quelle, è lo stesso di prima. */
+  const prefissoC = Buffer.from(conC.corpi[0], 'utf8').subarray(0, conC.confronto.byteUtf8).toString('utf8');
+  const byteDiConfine = (prefissoC.match(/<<<TALOS_DATA id=[0-9a-f]{12} from=\\"[a-z_]+\\">>>\\n|\\n<<<END_TALOS_DATA id=[0-9a-f]{12}>>>/gu) ?? [])
+    .reduce((somma, riga) => somma + Buffer.byteLength(riga, 'utf8'), 0);
+  assert.ok(byteDiConfine > 0, 'il confine c’è, nel prefisso');
+  assert.equal(conC.confronto.byteUtf8 - byteDiConfine, preC.confronto.byteUtf8);
   // Controllo sui preamboli ricostruiti, distinto dalla storia della ripresa.
   const [ricC, ricPre] = ['C', 'pre-C'].map(ordine => misure.find(m => m.ordine === ordine && m.ricostruisci));
   assert.ok(confrontaCorpi(...ricC.preamboli).byteUtf8 > confrontaCorpi(...ricPre.preamboli).byteUtf8);

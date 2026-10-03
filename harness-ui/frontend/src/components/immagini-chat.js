@@ -1,9 +1,10 @@
+import { t } from './lingua.js';
 import { registeredOverlayManager } from '../design-system/overlays/manager.ts';
 export function urlImmagineValida(url) { return typeof url === 'string' && /^\/api\/v1\/chat-images\/[a-f0-9]{64}$/.test(url); }
 
 export function payloadImmagini(allegati = []) {
   return allegati.filter(a => a.tipo === 'immagine').map(a => {
-    if (!/^[a-f0-9]{64}$/.test(a.id || '')) throw new Error('L’immagine non è stata caricata. Allegala di nuovo prima di inviare.');
+    if (!/^[a-f0-9]{64}$/.test(a.id || '')) throw new Error(t('chat.image.notUploaded'));
     return { id: a.id };
   });
 }
@@ -13,7 +14,7 @@ export function creaAnteprimaImmagine(image, { compatta = false, document: doc =
   const card = doc.createElement('button');
   card.type = 'button';
   card.className = 'talos-image-card' + (compatta ? ' talos-image-card--compact' : '');
-  card.setAttribute('aria-label', `Apri immagine: ${image.nome}`);
+  card.setAttribute('aria-label', t('chat.image.open', { nome: image.nome }));
   const picture = doc.createElement('img');
   picture.src = apiBase + image.url;
   picture.alt = image.nome;
@@ -25,13 +26,13 @@ export function creaAnteprimaImmagine(image, { compatta = false, document: doc =
   card.addEventListener('click', () => {
     const dialog = doc.createElement('dialog');
     dialog.className = 'talos-image-viewer';
-    dialog.setAttribute('aria-label', `Immagine: ${image.nome}`);
+    dialog.setAttribute('aria-label', t('chat.image.label', { nome: image.nome }));
     const header = doc.createElement('div');
     header.className = 'talos-image-viewer__header';
     const title = doc.createElement('span');
     title.textContent = image.nome;
     const close = doc.createElement('button');
-    close.type = 'button'; close.textContent = 'Chiudi';
+    close.type = 'button'; close.textContent = t('chat.common.close');
     close.addEventListener('click', () => dialog.close());
     header.append(title, close);
     const large = doc.createElement('img');

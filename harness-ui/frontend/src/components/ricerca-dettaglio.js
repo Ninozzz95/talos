@@ -1,3 +1,6 @@
+import { t as traduci, tn, linguaCorrenteDiT } from './lingua.js';
+/* Date e numeri nella lingua dell'interfaccia (italiano → it-IT, inglese → en-US), letta a ogni uso. */
+const localeUI = () => (linguaCorrenteDiT() === 'en' ? 'en-US' : 'it-IT');
 import { creaAvanzamentoRicerca } from './ricerca-avanzamento.js'; // 24/09/2026: barra + fase e conteggi
 /*
  * ricerca-dettaglio.js — lotto L7: dove una ricerca approfondita si CONSULTA.
@@ -62,28 +65,29 @@ import { creaAvanzamentoRicerca } from './ricerca-avanzamento.js'; // 24/09/2026
  *   la sessione era in sola lettura, riprendila con il permesso giusto» no.
  */
 export const STATI_RICERCA = new Map([
-  ['running', { parola: 'In corso', tono: 'info', cosaFare: 'Sta cercando e leggendo. Il rapporto compare appena lo deposita.' }],
-  ['paused', { parola: 'In pausa', tono: 'warning', cosaFare: 'È ferma a metà. Riprendila dalla conversazione della ricerca.' }],
+  /* ⛔ `parola` e `cosaFare` sono getter: si leggono a ogni uso, non alla creazione del modulo, così seguono il cambio di lingua. */
+  ['running', { get parola() { return traduci('sezioni.research.status.running.word'); }, tono: 'info', get cosaFare() { return traduci('sezioni.research.status.running.next'); } }],
+  ['paused', { get parola() { return traduci('sezioni.research.status.paused.word'); }, tono: 'warning', get cosaFare() { return traduci('sezioni.research.status.paused.next'); } }],
   /* ⛔ Questa frase la legge SOLO la scheda dell'elenco: nel dettaglio, su una conclusa, al suo
      posto va il bilancio. Quindi dice cosa fare DA LÌ — «qui sotto» in una scheda non è un posto. */
-  ['done', { parola: 'Conclusa', tono: 'success', cosaFare: 'Aprila per leggere il rapporto e il bilancio delle verifiche.' }],
+  ['done', { get parola() { return traduci('sezioni.research.status.done.word'); }, tono: 'success', get cosaFare() { return traduci('sezioni.research.status.done.next'); } }],
   /* ⛔ «Annullata» e non «Interrotta»: è la parola che la sezione usa da sempre e che il filtro
      del prodotto porta al plurale. Una parola sola per uno stato solo — due sinonimi in due
      schermate sono la prima crepa da cui una UI comincia a divergere. */
-  ['cancelled', { parola: 'Annullata', tono: '', cosaFare: 'È stata fermata prima del rapporto. Quello che aveva raccolto resta nelle Fonti.' }],
-  ['failed', { parola: 'Non riuscita', tono: 'danger', cosaFare: 'Si è fermata su un errore. Riavviala dalla chat con la stessa domanda.' }],
+  ['cancelled', { get parola() { return traduci('sezioni.research.status.cancelled.word'); }, tono: '', get cosaFare() { return traduci('sezioni.research.status.cancelled.next'); } }],
+  ['failed', { get parola() { return traduci('sezioni.research.status.failed.word'); }, tono: 'danger', get cosaFare() { return traduci('sezioni.research.status.failed.next'); } }],
   /* I tre stati nuovi del cancello di consegna. */
-  ['senza-rapporto', { parola: 'Senza rapporto', tono: 'warning', cosaFare: 'È arrivata in fondo senza depositare un rapporto. Quello che ha raccolto resta nelle Fonti; per averne uno, riavviala.' }],
-  ['bloccata-dal-permesso', { parola: 'Bloccata', tono: 'danger', cosaFare: 'La sessione era in sola lettura e non ha potuto consegnare. Riprendila con il permesso giusto.' }],
-  ['giri-esauriti', { parola: 'Giri esauriti', tono: 'warning', cosaFare: 'Ha finito i giri a disposizione prima di concludere. Riavviala con una domanda più stretta.' }],
+  ['senza-rapporto', { get parola() { return traduci('sezioni.research.status.noReport.word'); }, tono: 'warning', get cosaFare() { return traduci('sezioni.research.status.noReport.next'); } }],
+  ['bloccata-dal-permesso', { get parola() { return traduci('sezioni.research.status.blocked.word'); }, tono: 'danger', get cosaFare() { return traduci('sezioni.research.status.blocked.next'); } }],
+  ['giri-esauriti', { get parola() { return traduci('sezioni.research.status.outOfTurns.word'); }, tono: 'warning', get cosaFare() { return traduci('sezioni.research.status.outOfTurns.next'); } }],
 ]);
 
 /** ⛔ Uno stato che non conosciamo NON diventa «Conclusa»: diventa «Stato non registrato». */
 export function statoRicercaApprofondita(stato) {
   return STATI_RICERCA.get(stato) || {
-    parola: 'Stato non registrato',
+    parola: traduci('sezioni.research.status.unknown.word'),
     tono: '',
-    cosaFare: 'Il server non dice a che punto è. Aggiorna la sezione, o riapri la conversazione della ricerca.',
+    cosaFare: traduci('sezioni.research.status.unknown.next'),
   };
 }
 
@@ -105,9 +109,9 @@ export function statoRicercaApprofondita(stato) {
  *   `frasiVoce` la preferisce al `cosaFare` generico come fa per ogni altro stato.
  */
 export const INTERROTTA_DAL_FORNITORE = Object.freeze({
-  parola: 'Interrotta dal fornitore',
+  get parola() { return traduci('sezioni.research.status.providerInterrupted.word'); },
   tono: 'warning',
-  cosaFare: 'Si è fermata a metà per un problema passeggero, non per un suo errore. Quello che aveva già raccolto è conservato: riprendila dal menu ⋯.',
+  get cosaFare() { return traduci('sezioni.research.status.providerInterrupted.next'); },
 });
 
 /** Lo stato di UNA VOCE — cioè con quello che il server dice di lei, non il solo nome dello stato. */
@@ -210,19 +214,19 @@ export function puoRicontrollareLeFonti(voce) { return haRapportoLeggibile(voce)
  *   che sta ancora girando oppure ha un giornale terminale (`research-orchestrator.mjs:989-1032`).
  */
 export const AZIONI_RICERCA = new Map([
-  ['pausa', { verbo: 'mettere in pausa', conflitto: 'Non sta girando in questo momento: si può mettere in pausa solo una ricerca in corso.' }],
-  ['ripresa', { verbo: 'riprendere', conflitto: 'Non c’è niente da riprendere: o sta ancora girando, o è già arrivata alla fine.' }],
-  ['riverifica', { verbo: 'ricontrollare le fonti', conflitto: 'Non si può ancora ricontrollare: per rileggere le pagine servono i passaggi citati, e il rapporto di questa ricerca non li porta.' }],
-  ['elimina', { verbo: 'eliminare', conflitto: 'Non si può eliminare adesso.' }],
+  ['pausa', { get verbo() { return traduci('sezioni.research.action.pause.verb'); }, get conflitto() { return traduci('sezioni.research.action.pause.conflict'); } }],
+  ['ripresa', { get verbo() { return traduci('sezioni.research.action.resume.verb'); }, get conflitto() { return traduci('sezioni.research.action.resume.conflict'); } }],
+  ['riverifica', { get verbo() { return traduci('sezioni.research.action.recheck.verb'); }, get conflitto() { return traduci('sezioni.research.action.recheck.conflict'); } }],
+  ['elimina', { get verbo() { return traduci('sezioni.research.action.delete.verb'); }, get conflitto() { return traduci('sezioni.research.action.delete.conflict'); } }],
 ]);
 
 export function paroleErroreRicerca(codice, azione) {
-  const quale = AZIONI_RICERCA.get(azione) || { verbo: 'fare questo', conflitto: 'Questa ricerca non è nello stato giusto per questa azione.' };
-  if (codice === 'RESEARCH_NOT_FOUND') return 'Questa ricerca non c’è più: qualcuno l’ha eliminata mentre era aperta. Aggiorna l’elenco.';
+  const quale = AZIONI_RICERCA.get(azione) || { verbo: traduci('sezioni.research.action.fallback.verb'), conflitto: traduci('sezioni.research.action.fallback.conflict') };
+  if (codice === 'RESEARCH_NOT_FOUND') return traduci('sezioni.research.error.notFound');
   if (codice === 'RESEARCH_CONFLICT' || codice === 'RESEARCH_RECHECK_UNAVAILABLE') return quale.conflitto;
-  if (codice === 'NOT_FOUND') return 'La sessione non è più aperta: riapri una conversazione e riprova.';
-  if (codice === 'RESEARCH_INVALID' || codice === 'QUERY_INVALID') return 'Il server ha rifiutato la richiesta. Riapri la ricerca dall’elenco e riprova.';
-  return `Non sono riuscito a ${quale.verbo}: riprova fra un momento.`;
+  if (codice === 'NOT_FOUND') return traduci('sezioni.research.error.sessionClosed');
+  if (codice === 'RESEARCH_INVALID' || codice === 'QUERY_INVALID') return traduci('sezioni.research.error.rejected');
+  return traduci('sezioni.research.error.generic', { action: quale.verbo });
 }
 
 /*
@@ -232,7 +236,7 @@ export function paroleErroreRicerca(codice, azione) {
 function dataOra(iso) {
   const d = iso ? new Date(iso) : null;
   if (!d || !Number.isFinite(d.getTime())) return null;
-  return d.toLocaleString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  return d.toLocaleString(localeUI(), { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
 /**
@@ -245,7 +249,9 @@ function dataOra(iso) {
 export function articoloData(iso) {
   const d = iso ? new Date(iso) : null;
   const giorno = d && Number.isFinite(d.getTime()) ? d.getDate() : 0;
-  return giorno === 8 || giorno === 11 ? 'l’' : 'il ';
+  /* La parola davanti alla data sta nel dizionario: in italiano «l’» o «il», in inglese «on». Lo spazio lo mette il codice, tranne dopo l’apostrofo. */
+  const parola = traduci(giorno === 8 || giorno === 11 ? 'sezioni.research.dateArticle.elided' : 'sezioni.research.dateArticle.plain');
+  return /[’']$/.test(parola) ? parola : `${parola} `;
 }
 
 /**
@@ -287,7 +293,7 @@ export function frasiVoce(voce) {
     : (typeof voce?.titolo === 'string' && voce.titolo.trim() ? voce.titolo.trim() : '');
   const motivo = typeof voce?.motivo === 'string' && voce.motivo.trim() ? voce.motivo.trim() : null;
   return {
-    domanda: grezza || 'Ricerca senza domanda',
+    domanda: grezza || traduci('sezioni.research.noQuestion'),
     parola: stato.parola,
     tono: stato.tono,
     /* ⛔ Su `done` il motivo non si mostra: il server lo manda solo quando NON è done, e stamparlo
@@ -335,13 +341,25 @@ export function leggiDocumentoRapporto(testo) {
   }
 }
 
+/**
+ * Una mappa le cui voci sono CHIAVI del dizionario: ogni lettura le traduce nella lingua di quel momento.
+ * ⛔ Una tabella di frasi a livello di modulo che tenesse le frasi stesse resterebbe nella lingua in cui il modulo è stato caricato.
+ */
+class MappaTradotta extends Map {
+  get(chiave) { const voce = super.get(chiave); return voce === undefined ? undefined : traduci(voce); }
+  * entries() { for (const [chiave, voce] of super.entries()) yield [chiave, traduci(voce)]; }
+  * values() { for (const voce of super.values()) yield traduci(voce); }
+  [Symbol.iterator]() { return this.entries(); }
+  forEach(fn, quello) { for (const [chiave, voce] of this.entries()) fn.call(quello, voce, chiave, this); }
+}
+
 /** Perché il bilancio non c'è, detto a una persona. Mai «errore di parsing». */
-export const PERCHE_SENZA_RECORD = new Map([
-  ['vuoto', 'Il file del rapporto è vuoto.'],
-  ['senza-record', 'Questo rapporto non porta con sé il riepilogo delle verifiche: sotto c’è il testo così com’è stato scritto.'],
-  ['record-troncato', 'Il riepilogo delle verifiche è troncato a metà: il bilancio non si può ricavare. Sotto c’è il testo così com’è.'],
-  ['record-di-un-altro-formato', 'Il riepilogo delle verifiche è in un formato che questa versione non legge. Sotto c’è il testo così com’è.'],
-  ['record-illeggibile', 'Il riepilogo delle verifiche non si rilegge. Ciò che è stato raccolto resta nelle Fonti.'],
+export const PERCHE_SENZA_RECORD = new MappaTradotta([
+  ['vuoto', 'sezioni.research.noRecord.empty'],
+  ['senza-record', 'sezioni.research.noRecord.missing'],
+  ['record-troncato', 'sezioni.research.noRecord.truncated'],
+  ['record-di-un-altro-formato', 'sezioni.research.noRecord.otherFormat'],
+  ['record-illeggibile', 'sezioni.research.noRecord.unreadable'],
 ]);
 
 /* ------------------------------------------------------------------------------ il bilancio */
@@ -370,38 +388,41 @@ export function bilancioDaRecord(record) {
 
 /** I pezzi della barra, in ordine di lettura, col tono già scelto fra quelli che i temi hanno. */
 export const PEZZI_BILANCIO = [
-  { chiave: 'sostenute', parola: 'sostenute', tono: 'success' },
-  { chiave: 'inParte', parola: 'in parte', tono: 'warning' },
-  { chiave: 'contese', parola: 'contese', tono: 'info' },
-  { chiave: 'nonSostenute', parola: 'non sostenute', tono: 'danger' },
-  { chiave: 'nonVerificate', parola: 'non verificate', tono: 'muted' },
+  { chiave: 'sostenute', get parola() { return traduci('sezioni.research.tally.supported'); }, tono: 'success' },
+  { chiave: 'inParte', get parola() { return traduci('sezioni.research.tally.partly'); }, tono: 'warning' },
+  { chiave: 'contese', get parola() { return traduci('sezioni.research.tally.contested'); }, tono: 'info' },
+  { chiave: 'nonSostenute', get parola() { return traduci('sezioni.research.tally.notSupported'); }, tono: 'danger' },
+  { chiave: 'nonVerificate', get parola() { return traduci('sezioni.research.tally.unverified'); }, tono: 'muted' },
 ];
+
+/** La parola di un pezzo del bilancio: «1 contesa» al singolare, come in italiano si dice. */
+const parolaDelPezzo = (pezzo, quante) => (pezzo.chiave === 'contese' && quante === 1 ? traduci('sezioni.research.tally.contestedOne') : pezzo.parola);
 
 /** «9 sostenute · 2 in parte · 1 contesa · 3 non verificate» — solo le voci che esistono. */
 export function frasiBilancio(bilancio) {
-  if (!bilancio || !bilancio.totale) return 'Nessuna affermazione registrata';
+  if (!bilancio || !bilancio.totale) return traduci('sezioni.research.tally.none');
   const pezzi = PEZZI_BILANCIO
     .filter((p) => bilancio[p.chiave] > 0)
-    .map((p) => `${bilancio[p.chiave]} ${p.chiave === 'contese' && bilancio[p.chiave] === 1 ? 'contesa' : p.parola}`);
+    .map((p) => `${bilancio[p.chiave]} ${parolaDelPezzo(p, bilancio[p.chiave])}`);
   return pezzi.join(' · ');
 }
 
 /** Il verdetto di un'affermazione, nelle parole del mobile (`researchReport.ts:67-77`). */
 export function verdettoInParole(checks) {
   switch (checks?.claimSupported) {
-    case 'yes': return { parola: 'sostenuta dalla fonte', tono: 'success' };
-    case 'partial': return { parola: 'sostenuta solo in parte', tono: 'warning' };
-    case 'no': return { parola: 'NON sostenuta dalla fonte', tono: 'danger' };
-    case 'contested': return { parola: 'contesa — le fonti non concordano', tono: 'info' };
-    default: return { parola: 'non verificata', tono: '' };
+    case 'yes': return { parola: traduci('sezioni.research.verdict.yes'), tono: 'success' };
+    case 'partial': return { parola: traduci('sezioni.research.verdict.partial'), tono: 'warning' };
+    case 'no': return { parola: traduci('sezioni.research.verdict.no'), tono: 'danger' };
+    case 'contested': return { parola: traduci('sezioni.research.verdict.contested'), tono: 'info' };
+    default: return { parola: traduci('sezioni.research.verdict.unverified'), tono: '' };
   }
 }
 
 /** Come la fonte è stata ottenuta: «pagina letta» o «solo estratto», mai una sigla. */
 export function comeOttenuta(obtained) {
-  if (obtained === 'page') return 'pagina letta';
-  if (obtained === 'snippet') return 'solo estratto dal motore di ricerca';
-  return 'origine non registrata';
+  if (obtained === 'page') return traduci('sezioni.research.obtained.page');
+  if (obtained === 'snippet') return traduci('sezioni.research.obtained.snippet');
+  return traduci('sezioni.research.obtained.unknown');
 }
 
 /* ------------------------------------------------------- le prove distinte (non gli indirizzi) */
@@ -453,14 +474,17 @@ export function proveDistinte(sources) {
   const quanti = gruppi.size;
   const indirizzi = elenco.length;
   const frase = indirizzi === 0
-    ? 'Nessuna fonte registrata'
-    : `${quanti} ${quanti === 1 ? 'prova distinta' : 'prove distinte'} su ${indirizzi} ${indirizzi === 1 ? 'indirizzo' : 'indirizzi'}`;
+    ? traduci('sezioni.research.proofs.none')
+    : traduci('sezioni.research.proofs.summary', {
+      proofs: tn('sezioni.research.proofs.distinctOne', 'sezioni.research.proofs.distinctMany', quanti),
+      addresses: tn('sezioni.research.proofs.addressesOne', 'sezioni.research.proofs.addressesMany', indirizzi),
+    });
   return { gruppi: quanti, indirizzi, frase, perIndice: gruppi };
 }
 
 /** Il gruppo di una fonte, per la riga: il dominio, o la parola che dice che non ce n'è uno. */
 export function gruppoDellaFonte(fonte) {
-  return dominioRegistrabile(fonte?.url) || 'indirizzo non leggibile';
+  return dominioRegistrabile(fonte?.url) || traduci('sezioni.research.proofs.unreadableAddress');
 }
 
 /* ------------------------------------------------------------------- le citazioni da esportare */
@@ -630,14 +654,14 @@ export function governoRicercheVive(schermo, {
  *   su una pagina che non si è aperta non è una buona notizia, è una non-notizia.
  */
 export const STATI_FONTE_RIVERIFICA = new Map([
-  ['intatta', { parola: 'intatta', tono: 'success', spiega: 'Il testo su cui il rapporto si appoggia è ancora lì.' }],
-  ['cambiata', { parola: 'cambiata', tono: 'warning', spiega: 'La pagina risponde, ma non dice più quello su cui il rapporto si appoggiava.' }],
-  ['irraggiungibile', { parola: 'non si apre', tono: 'danger', spiega: 'La pagina non si è potuta leggere adesso: non vuol dire che sia cambiata, vuol dire che non lo sappiamo.' }],
-  ['non-misurabile', { parola: 'non confrontabile', tono: '', spiega: 'Di questa fonte non era stato tenuto il testo: quanta parte sia sopravvissuta non si può dire.' }],
+  ['intatta', { get parola() { return traduci('sezioni.research.recheck.intact.word'); }, tono: 'success', get spiega() { return traduci('sezioni.research.recheck.intact.explain'); } }],
+  ['cambiata', { get parola() { return traduci('sezioni.research.recheck.changed.word'); }, tono: 'warning', get spiega() { return traduci('sezioni.research.recheck.changed.explain'); } }],
+  ['irraggiungibile', { get parola() { return traduci('sezioni.research.recheck.unreachable.word'); }, tono: 'danger', get spiega() { return traduci('sezioni.research.recheck.unreachable.explain'); } }],
+  ['non-misurabile', { get parola() { return traduci('sezioni.research.recheck.unmeasurable.word'); }, tono: '', get spiega() { return traduci('sezioni.research.recheck.unmeasurable.explain'); } }],
 ]);
 
 export function statoFonteRiverifica(stato) {
-  return STATI_FONTE_RIVERIFICA.get(stato) || { parola: 'esito non registrato', tono: '', spiega: 'Il server non dice com’è andata su questa fonte.' };
+  return STATI_FONTE_RIVERIFICA.get(stato) || { parola: traduci('sezioni.research.recheck.unknown.word'), tono: '', spiega: traduci('sezioni.research.recheck.unknown.explain') };
 }
 
 /**
@@ -650,23 +674,23 @@ export function statoFonteRiverifica(stato) {
 export function frasiRiverifica(riverifica) {
   const b = riverifica?.bilancio || {};
   const fonti = Number(b.fonti) || 0;
-  if (!fonti) return 'Nessuna fonte da ricontrollare in questo rapporto.';
+  if (!fonti) return traduci('sezioni.research.recheck.noSources');
   const pezzi = [];
-  if (b.passaggiPersi > 0) pezzi.push(`${b.passaggiPersi} ${b.passaggiPersi === 1 ? 'passaggio non si ritrova più' : 'passaggi non si ritrovano più'}`);
-  if (b.passaggiRitrovati > 0) pezzi.push(`${b.passaggiRitrovati} ancora al loro posto`);
-  if (b.cambiate > 0) pezzi.push(`${b.cambiate} ${b.cambiate === 1 ? 'pagina cambiata' : 'pagine cambiate'}`);
-  if (b.irraggiungibili > 0) pezzi.push(`${b.irraggiungibili} ${b.irraggiungibili === 1 ? 'non si apre' : 'non si aprono'}`);
-  if (b.nonMisurabili > 0) pezzi.push(`${b.nonMisurabili} non confrontabili`);
-  const testa = `${fonti} ${fonti === 1 ? 'fonte riletta' : 'fonti rilette'}`;
+  if (b.passaggiPersi > 0) pezzi.push(tn('sezioni.research.recheck.lostOne', 'sezioni.research.recheck.lostMany', b.passaggiPersi));
+  if (b.passaggiRitrovati > 0) pezzi.push(traduci('sezioni.research.recheck.found', { n: b.passaggiRitrovati }));
+  if (b.cambiate > 0) pezzi.push(tn('sezioni.research.recheck.changedOne', 'sezioni.research.recheck.changedMany', b.cambiate));
+  if (b.irraggiungibili > 0) pezzi.push(tn('sezioni.research.recheck.unreachableOne', 'sezioni.research.recheck.unreachableMany', b.irraggiungibili));
+  if (b.nonMisurabili > 0) pezzi.push(traduci('sezioni.research.recheck.unmeasurable', { n: b.nonMisurabili }));
+  const testa = tn('sezioni.research.recheck.headOne', 'sezioni.research.recheck.headMany', fonti);
   return pezzi.length ? `${testa}: ${pezzi.join(' · ')}` : testa;
 }
 
 export const VISTE = [
-  { id: 'rapporto', parola: 'Rapporto' },
-  { id: 'affermazioni', parola: 'Affermazioni' },
-  { id: 'fonti', parola: 'Fonti' },
-  { id: 'piano', parola: 'Piano' },
-  { id: 'andata', parola: 'Come è andata' },
+  { id: 'rapporto', get parola() { return traduci('sezioni.research.view.report'); } },
+  { id: 'affermazioni', get parola() { return traduci('sezioni.research.view.claims'); } },
+  { id: 'fonti', get parola() { return traduci('sezioni.research.view.sources'); } },
+  { id: 'piano', get parola() { return traduci('sezioni.research.view.plan'); } },
+  { id: 'andata', get parola() { return traduci('sezioni.research.view.howItWent'); } },
 ];
 
 /* --------------------------------------------------------------------------- costruzione DOM */
@@ -749,7 +773,7 @@ export function barraBilancio(doc, bilancio) {
   const blocco = nodo(doc, 'div', 'td-bilancio');
   const barra = nodo(doc, 'div', 'td-bilancio-barra');
   barra.setAttribute('role', 'img');
-  barra.setAttribute('aria-label', `Bilancio delle verifiche: ${frasiBilancio(bilancio)}`);
+  barra.setAttribute('aria-label', traduci("sezioni.research.tally.ariaLabel", { summary: frasiBilancio(bilancio) }));
   for (const pezzo of PEZZI_BILANCIO) {
     const quante = bilancio[pezzo.chiave] || 0;
     if (!quante) continue;
@@ -766,7 +790,7 @@ export function barraBilancio(doc, bilancio) {
     const voce = nodo(doc, 'span');
     const pallino = nodo(doc, 'i');
     pallino.dataset.tone = pezzo.tono;
-    voce.append(pallino, doc.createTextNode(`${quante} ${quante === 1 && pezzo.chiave === 'contese' ? 'contesa' : pezzo.parola}`));
+    voce.append(pallino, doc.createTextNode(`${quante} ${parolaDelPezzo(pezzo, quante)}`));
     voci.append(voce);
   }
   blocco.append(voci);
@@ -789,10 +813,10 @@ function vistaRapporto(doc, voce, lettura, ctx, dettaglio) {
      */
     const respinto = deposito.genere === 'respinto';
     pezzi.push(nodo(doc, 'p', 'td-prose', respinto
-      ? 'Quello che questa ricerca ha depositato non ha superato il controllo di consegna: qui sotto c’è per intero.'
+      ? traduci('sezioni.research.report.rejected')
       : (conclusaDavvero(voce?.stato)
-        ? 'Questa ricerca risulta conclusa, ma non ha depositato nessun rapporto.'
-        : 'Questa ricerca non ha depositato un rapporto.')));
+        ? traduci('sezioni.research.report.concludedNoReport')
+        : traduci('sezioni.research.report.noReport'))));
     /* ⛔ La spiegazione sta già sotto il titolo quando la ricerca NON è conclusa: ripeterla qui la
        fa leggere due volte nella stessa schermata (visto nella foto a 1024 px). */
     if (conclusaDavvero(voce?.stato)) pezzi.push(nodo(doc, 'p', 'td-subtle', frasi.spiegazione));
@@ -814,7 +838,7 @@ function vistaRapporto(doc, voce, lettura, ctx, dettaglio) {
      *   «non ha depositato un rapporto» — vero a metà, e la metà taciuta era tutto il lavoro.
      */
     if (frasi.haRapporto || deposito.genere === 'respinto') {
-      pezzi.push(nodo(doc, 'h3', '', 'Ciò che è stato depositato'));
+      pezzi.push(nodo(doc, 'h3', '', traduci('sezioni.research.report.filedHeading')));
       /* ⛔ VISTO NELLA FOTO (ric-scusa, chiaro, 1440): questa riga ripeteva parola per parola il
          motivo che il server manda e che sta già due righe sopra, sotto il titolo. Qui si dice
          solo CHE COS'È il file; il perché lo dice il motivo, una volta sola. */
@@ -822,25 +846,25 @@ function vistaRapporto(doc, voce, lettura, ctx, dettaglio) {
          Libreria non è finito niente — il testo vive nella cartella della ricerca. Dire dov'è una
          cosa è utile solo se è dove si dice. Due strade, due frasi. */
       pezzi.push(nodo(doc, 'p', 'td-subtle', frasi.haRapporto
-        ? 'Il file che questa ricerca ha lasciato in Libreria. Non è il suo rapporto.'
-        : 'Il testo che questa ricerca ha scritto, tenuto nella sua cartella. Non è il suo rapporto.'));
+        ? traduci('sezioni.research.report.filedFromLibrary')
+        : traduci('sezioni.research.report.filedText')));
       if (deposito.genere === 'respinto') {
         pezzi.push(nodo(doc, 'blockquote', 'td-allegato', deposito.testo));
       } else if (lettura?.stato === 'pronto') {
-        pezzi.push(nodo(doc, 'p', 'td-subtle', 'Il file depositato è vuoto.'));
+        pezzi.push(nodo(doc, 'p', 'td-subtle', traduci('sezioni.research.report.filedEmpty')));
       } else if (lettura?.stato === 'errore') {
-        const p = nodo(doc, 'p', 'td-subtle', `Il file depositato non si apre: ${lettura.errore}`);
+        const p = nodo(doc, 'p', 'td-subtle', traduci('sezioni.research.report.filedOpenFailed', { reason: lettura.errore }));
         p.setAttribute('role', 'alert');
         pezzi.push(p);
       } else if (!ctx?.puoLeggere) {
-        pezzi.push(nodo(doc, 'p', 'td-subtle', 'È in Libreria, in questo progetto: da lì si apre e si scarica.'));
+        pezzi.push(nodo(doc, 'p', 'td-subtle', traduci('sezioni.research.report.inLibrary')));
       } else {
-        pezzi.push(nodo(doc, 'p', 'td-subtle', 'Leggo il file depositato…'));
+        pezzi.push(nodo(doc, 'p', 'td-subtle', traduci('sezioni.research.report.readingFiled')));
       }
     }
     /* ⛔ Il puntatore all'ultimo messaggio è qui, e dice cos'è: senza questa riga qualcuno andrebbe
        a cercarlo e lo scambierebbe per il rapporto — che è esattamente il guasto dell'11/09. */
-    if (voce?.ultimoMessaggio) pezzi.push(nodo(doc, 'p', 'td-subtle', 'L’ultima cosa che la ricerca ha detto in chat è in «Come è andata». Non è un rapporto.'));
+    if (voce?.ultimoMessaggio) pezzi.push(nodo(doc, 'p', 'td-subtle', traduci('sezioni.research.report.lastMessageNote')));
     return pezzi;
   }
   /*
@@ -851,22 +875,22 @@ function vistaRapporto(doc, voce, lettura, ctx, dettaglio) {
    *   La riga sparisce da sola il giorno in cui l'aggancio passa `leggiRapporto`.
    */
   if (!lettura && !ctx?.puoLeggere) {
-    pezzi.push(nodo(doc, 'p', 'td-prose', 'Il rapporto di questa ricerca è depositato in Libreria, in questo progetto.'));
-    pezzi.push(nodo(doc, 'p', 'td-subtle', 'Da questa schermata non si apre ancora: la Libreria lo scarica.'));
+    pezzi.push(nodo(doc, 'p', 'td-prose', traduci('sezioni.research.report.inLibraryNotice')));
+    pezzi.push(nodo(doc, 'p', 'td-subtle', traduci('sezioni.research.report.notOpenableHere')));
     return pezzi;
   }
   if (!lettura || lettura.stato === 'caricando') {
-    pezzi.push(nodo(doc, 'p', 'td-prose', 'Leggo il rapporto…'));
+    pezzi.push(nodo(doc, 'p', 'td-prose', traduci('sezioni.research.report.reading')));
     return pezzi;
   }
   if (lettura.stato === 'errore') {
-    const p = nodo(doc, 'p', 'td-prose', `Il rapporto non si apre: ${lettura.errore}`);
+    const p = nodo(doc, 'p', 'td-prose', traduci('sezioni.research.report.openFailed', { reason: lettura.errore }));
     p.setAttribute('role', 'alert');
-    pezzi.push(p, nodo(doc, 'p', 'td-subtle', 'Il file vive in Libreria, in questo progetto: da lì si scarica anche se qui non si apre.'));
+    pezzi.push(p, nodo(doc, 'p', 'td-subtle', traduci('sezioni.research.report.livesInLibrary')));
     return pezzi;
   }
   if (!lettura.record) {
-    pezzi.push(nodo(doc, 'p', 'td-subtle', PERCHE_SENZA_RECORD.get(lettura.perche) || 'Il riepilogo delle verifiche non c’è.'));
+    pezzi.push(nodo(doc, 'p', 'td-subtle', PERCHE_SENZA_RECORD.get(lettura.perche) || traduci('sezioni.research.noRecord.fallback')));
   }
   /*
    * ⛔ COL RECORD SI MOSTRA LA RISPOSTA, NON TUTTO IL FILE. Trovato guardando la foto: il file del
@@ -878,23 +902,23 @@ function vistaRapporto(doc, voce, lettura, ctx, dettaglio) {
    */
   const testo = lettura.record?.summary?.trim() ? lettura.record.summary : lettura.prosa;
   if (testo) pezzi.push(prosaInNodi(doc, testo, ctx?.rendiMarkdown, frasi.domanda));
-  else pezzi.push(nodo(doc, 'p', 'td-prose', 'Il file del rapporto è vuoto.'));
+  else pezzi.push(nodo(doc, 'p', 'td-prose', traduci('sezioni.research.noRecord.empty')));
   return pezzi;
 }
 
 function vistaAffermazioni(doc, voce, lettura) {
   if (!lettura?.record) {
-    return [nodo(doc, 'p', 'td-prose', 'Le affermazioni compaiono quando il rapporto porta con sé il riepilogo delle verifiche: il testo dell’affermazione, il passaggio della fonte da cui viene, e chi l’ha giudicata.'),
-      nodo(doc, 'p', 'td-subtle', lettura?.record === null && lettura?.perche ? (PERCHE_SENZA_RECORD.get(lettura.perche) || '') : 'Questa ricerca non ne ha ancora uno.')];
+    return [nodo(doc, 'p', 'td-prose', traduci('sezioni.research.claims.intro')),
+      nodo(doc, 'p', 'td-subtle', lettura?.record === null && lettura?.perche ? (PERCHE_SENZA_RECORD.get(lettura.perche) || '') : traduci('sezioni.research.claims.noneYet'))];
   }
   const { claims = [], sources = [] } = lettura.record;
-  if (!claims.length) return [nodo(doc, 'p', 'td-prose', 'Il rapporto non registra nessuna affermazione verificata.')];
+  if (!claims.length) return [nodo(doc, 'p', 'td-prose', traduci('sezioni.research.claims.none'))];
   return claims.map((entrata, indice) => {
     const verdetto = verdettoInParole(entrata?.checks);
     const blocco = nodo(doc, 'article', 'td-affermazione');
     const testa = nodo(doc, 'div', 'td-affermazione-testa');
     testa.append(nodo(doc, 'span', 'td-affermazione-numero', String(indice + 1)), tag(doc, verdetto.parola, verdetto.tono));
-    blocco.append(testa, nodo(doc, 'p', 'td-affermazione-testo', entrata?.text || 'Affermazione senza testo'));
+    blocco.append(testa, nodo(doc, 'p', 'td-affermazione-testo', entrata?.text || traduci('sezioni.research.claims.noText')));
     if (entrata?.checks?.supportReason) blocco.append(nodo(doc, 'p', 'td-subtle', entrata.checks.supportReason));
     /*
      * ⛔ Il passaggio È la porzione citata: sul mobile nasce come `source.text.slice(span.from,
@@ -903,7 +927,7 @@ function vistaAffermazioni(doc, voce, lettura) {
      *   anche il testo INTERO della fonte, che il record non porta.
      */
     if (entrata?.passage) blocco.append(nodo(doc, 'blockquote', 'td-passaggio', entrata.passage));
-    else blocco.append(nodo(doc, 'p', 'td-subtle', 'Il passaggio citato non è stato ritrovato nel testo della fonte.'));
+    else blocco.append(nodo(doc, 'p', 'td-subtle', traduci('sezioni.research.claims.passageMissing')));
     const fonte = sources[(entrata?.sourceIndex ?? 0) - 1];
     const piede = nodo(doc, 'div', 'td-affermazione-piede');
     if (fonte) {
@@ -913,16 +937,16 @@ function vistaAffermazioni(doc, voce, lettura) {
       link.rel = 'noreferrer noopener';
       piede.append(link, nodo(doc, 'span', 'td-subtle', comeOttenuta(fonte.obtained)));
     } else {
-      piede.append(nodo(doc, 'span', 'td-subtle', 'Fonte citata ma mai raccolta.'));
+      piede.append(nodo(doc, 'span', 'td-subtle', traduci('sezioni.research.claims.sourceNeverGathered')));
     }
-    if (entrata?.checks?.judge) piede.append(nodo(doc, 'span', 'td-subtle', `giudicata da ${entrata.checks.judge}`));
+    if (entrata?.checks?.judge) piede.append(nodo(doc, 'span', 'td-subtle', traduci('sezioni.research.claims.judgedBy', { judge: entrata.checks.judge })));
     blocco.append(piede);
     /* Le contrarie, affiancate e mai mediate: una contesa si mostra con tutte e due le versioni. */
     for (const contraria of Array.isArray(entrata?.checks?.opposing) ? entrata.checks.opposing : []) {
       const box = nodo(doc, 'div', 'td-contraria');
-      box.append(nodo(doc, 'span', 'td-subtle', 'Una fonte dice il contrario'));
+      box.append(nodo(doc, 'span', 'td-subtle', traduci('sezioni.research.claims.opposing')));
       if (contraria?.passage) box.append(nodo(doc, 'blockquote', 'td-passaggio', contraria.passage));
-      const link = nodo(doc, 'a', '', contraria?.title || contraria?.url || 'fonte senza titolo');
+      const link = nodo(doc, 'a', '', contraria?.title || contraria?.url || traduci('sezioni.research.sources.untitled'));
       link.href = contraria?.url || '#';
       link.target = '_blank';
       link.rel = 'noreferrer noopener';
@@ -956,33 +980,33 @@ function vistaAffermazioni(doc, voce, lettura) {
 
 /** Le nove uscite, nell'ordine dell'owner. `vuoleRecord` = senza il riepilogo non esiste. */
 export const FORMATI_ESPORTAZIONE = [
-  { chiave: 'md', formato: 'md', gruppo: 'documenti', etichetta: 'Markdown', spiega: 'Il rapporto come testo, con i titoli e le citazioni.' },
-  { chiave: 'pdf-report', formato: 'pdf', tono: 'report', gruppo: 'documenti', etichetta: 'PDF — rapporto', spiega: 'Tutto: risposta, affermazioni verificate e fonti.' },
-  { chiave: 'pdf-brief', formato: 'pdf', tono: 'brief', gruppo: 'documenti', etichetta: 'PDF — sintesi', spiega: 'Solo la risposta e il bilancio delle verifiche, per chi ha due minuti.' },
-  { chiave: 'pdf-dossier', formato: 'pdf', tono: 'dossier', gruppo: 'documenti', etichetta: 'PDF — dossier', spiega: 'Il rapporto più i passaggi citati per esteso, fonte per fonte.' },
-  { chiave: 'docx', formato: 'docx', gruppo: 'documenti', etichetta: 'Word', spiega: 'Un documento .docx da riaprire e modificare.' },
-  { chiave: 'html', formato: 'html', gruppo: 'documenti', etichetta: 'Pagina HTML', spiega: 'Una pagina sola, da aprire in un browser o allegare a una mail.' },
-  { chiave: 'json', formato: 'json', gruppo: 'dati', vuoleRecord: true, etichetta: 'Record JSON', spiega: 'Affermazioni, verdetti e fonti come dati, per un altro programma.' },
-  { chiave: 'bib', formato: 'bib', gruppo: 'dati', vuoleRecord: true, etichetta: 'BibTeX', spiega: 'Le fonti per un gestore di bibliografia.' },
-  { chiave: 'ris', formato: 'ris', gruppo: 'dati', vuoleRecord: true, etichetta: 'RIS', spiega: 'Le fonti per Zotero, Mendeley, EndNote.' },
-  { chiave: 'fonti', formato: 'fonti', gruppo: 'dati', vuoleRecord: true, etichetta: 'Elenco delle fonti', spiega: 'Solo indirizzi, titoli e date dichiarate.' },
-  { chiave: 'copia', gruppo: 'appunti', etichetta: 'Copia il testo negli appunti', spiega: 'Senza scrivere nessun file.' },
+  { chiave: 'md', formato: 'md', gruppo: 'documenti', etichetta: 'Markdown', get spiega() { return traduci('sezioni.research.export.format.md.explain'); } },
+  { chiave: 'pdf-report', formato: 'pdf', tono: 'report', gruppo: 'documenti', get etichetta() { return traduci('sezioni.research.export.format.pdfReport.label'); }, get spiega() { return traduci('sezioni.research.export.format.pdfReport.explain'); } },
+  { chiave: 'pdf-brief', formato: 'pdf', tono: 'brief', gruppo: 'documenti', get etichetta() { return traduci('sezioni.research.export.format.pdfBrief.label'); }, get spiega() { return traduci('sezioni.research.export.format.pdfBrief.explain'); } },
+  { chiave: 'pdf-dossier', formato: 'pdf', tono: 'dossier', gruppo: 'documenti', get etichetta() { return traduci('sezioni.research.export.format.pdfDossier.label'); }, get spiega() { return traduci('sezioni.research.export.format.pdfDossier.explain'); } },
+  { chiave: 'docx', formato: 'docx', gruppo: 'documenti', etichetta: 'Word', get spiega() { return traduci('sezioni.research.export.format.docx.explain'); } },
+  { chiave: 'html', formato: 'html', gruppo: 'documenti', get etichetta() { return traduci('sezioni.research.export.format.html.label'); }, get spiega() { return traduci('sezioni.research.export.format.html.explain'); } },
+  { chiave: 'json', formato: 'json', gruppo: 'dati', vuoleRecord: true, get etichetta() { return traduci('sezioni.research.export.format.json.label'); }, get spiega() { return traduci('sezioni.research.export.format.json.explain'); } },
+  { chiave: 'bib', formato: 'bib', gruppo: 'dati', vuoleRecord: true, etichetta: 'BibTeX', get spiega() { return traduci('sezioni.research.export.format.bib.explain'); } },
+  { chiave: 'ris', formato: 'ris', gruppo: 'dati', vuoleRecord: true, etichetta: 'RIS', get spiega() { return traduci('sezioni.research.export.format.ris.explain'); } },
+  { chiave: 'fonti', formato: 'fonti', gruppo: 'dati', vuoleRecord: true, get etichetta() { return traduci('sezioni.research.export.format.sources.label'); }, get spiega() { return traduci('sezioni.research.export.format.sources.explain'); } },
+  { chiave: 'copia', gruppo: 'appunti', get etichetta() { return traduci('sezioni.research.export.format.copy.label'); }, get spiega() { return traduci('sezioni.research.export.format.copy.explain'); } },
 ];
 
 export const GRUPPI_ESPORTAZIONE = [
-  { id: 'documenti', parola: 'Da leggere' },
-  { id: 'dati', parola: 'Dati e citazioni' },
-  { id: 'appunti', parola: 'Senza file' },
+  { id: 'documenti', get parola() { return traduci('sezioni.research.export.group.documents'); } },
+  { id: 'dati', get parola() { return traduci('sezioni.research.export.group.data'); } },
+  { id: 'appunti', get parola() { return traduci('sezioni.research.export.group.clipboard'); } },
 ];
 
 /** Il motivo per cui un'uscita non c'è. ⛔ Detto, non nascosto: sparire non insegna niente. */
 export const MOTIVI_ESPORTAZIONE = {
-  senzaRapporto: 'Questa ricerca non ha depositato nessun testo: non c’è niente da esportare.',
-  senzaRecord: 'Il testo non porta con sé il riepilogo delle verifiche: senza quello non ci sono affermazioni né fonti da estrarre.',
-  senzaTesto: 'Il testo del rapporto non è ancora stato letto da questa schermata.',
+  get senzaRapporto() { return traduci('sezioni.research.export.reason.noReport'); },
+  get senzaRecord() { return traduci('sezioni.research.export.reason.noSummary'); },
+  get senzaTesto() { return traduci('sezioni.research.export.reason.noText'); },
   /* ⛔ L'ultima frase detta in chat non è un documento, e un PDF che la impagina sarebbe un
      documento che finge di essere un rapporto. Si può copiare: è quello che vale. */
-  soloUltimoMessaggio: 'Di questa ricerca resta solo l’ultima frase detta in chat: si può copiare, ma non è un documento da impaginare.',
+  get soloUltimoMessaggio() { return traduci('sezioni.research.export.reason.lastMessageOnly'); },
 };
 
 /**
@@ -1031,12 +1055,12 @@ export function testoDepositato(voce, lettura = null, dettaglio = null) {
   const respinto = String(ricerca?.contenutoRespinto ?? '').trim();
   const ultimo = String(voce?.ultimoMessaggio ?? '').trim();
   if (haRapportoLeggibile(voce) && (daLibreria || accettato)) {
-    return { testo: daLibreria || accettato, genere: 'rapporto', nome: 'il rapporto', suDisco: true };
+    return { testo: daLibreria || accettato, genere: 'rapporto', nome: traduci('sezioni.research.deposit.report'), suDisco: true };
   }
   if (respinto || daLibreria) {
-    return { testo: respinto || daLibreria, genere: 'respinto', nome: 'il file depositato', suDisco: true };
+    return { testo: respinto || daLibreria, genere: 'respinto', nome: traduci('sezioni.research.deposit.filedFile'), suDisco: true };
   }
-  if (ultimo) return { testo: ultimo, genere: 'ultimo', nome: 'l’ultimo messaggio', suDisco: false };
+  if (ultimo) return { testo: ultimo, genere: 'ultimo', nome: traduci('sezioni.research.deposit.lastMessage'), suDisco: false };
   return { testo: '', genere: null, nome: null, suDisco: false };
 }
 
@@ -1093,8 +1117,9 @@ export function esportazioniRicerca(voce, lettura = null, dettaglio = null) {
      *   Ma non esce muto: «esce senza le verifiche» è la differenza fra un rapporto e un testo.
      */
     if (uscita.vuoleRecord && senzaRecord) return { ...uscita, disponibile: false, motivo: MOTIVI_ESPORTAZIONE.senzaRecord };
-    const avvertenza = senzaRecord ? 'esce senza le verifiche' : null;
-    return { ...uscita, disponibile: true, motivo: null, avvertenza };
+    const avvertenza = senzaRecord ? traduci('sezioni.research.export.warning.noVerification') : null;
+    /* `senzaVerifiche` dice la cosa DAI DATI: chi disegna non deve confrontare il testo tradotto dell'avvertenza. */
+    return { ...uscita, disponibile: true, motivo: null, avvertenza, senzaVerifiche: senzaRecord };
   });
 }
 
@@ -1139,7 +1164,10 @@ export function montaPannelloEsportazioni(doc, elenco, { onScegli } = {}) {
        del gruppo, si scrive una volta e i timbri sulle righe spariscono. */
     const avvertenzeDistinte = [...new Set(dentro.filter((u) => u.disponibile).map((u) => u.avvertenza ?? null))];
     const avvertenzaDiGruppo = avvertenzeDistinte.length === 1 && avvertenzeDistinte[0] ? avvertenzeDistinte[0] : null;
-    if (avvertenzaDiGruppo) pezzi.push(nodo(doc, 'p', 'td-esporta-motivo', `Il rapporto non porta il riepilogo delle verifiche: questi file ${avvertenzaDiGruppo === 'esce senza le verifiche' ? 'escono senza di esse' : avvertenzaDiGruppo}.`));
+    if (avvertenzaDiGruppo) {
+      const tuttiSenzaVerifiche = dentro.filter((u) => u.disponibile).every((u) => u.senzaVerifiche);
+      pezzi.push(nodo(doc, 'p', 'td-esporta-motivo', tuttiSenzaVerifiche ? traduci('sezioni.research.export.warning.groupNoVerification') : traduci('sezioni.research.export.warning.groupGeneric', { warning: avvertenzaDiGruppo })));
+    }
     for (const uscita of dentro) {
       const riga = nodo(doc, 'button', 'td-esporta-voce');
       riga.type = 'button';
@@ -1180,17 +1208,17 @@ export function frasePassaggi(ritrovati, persi) {
   if (!totale) return null;
   if (!persiN) {
     return ok === 1
-      ? 'Il passaggio citato è ancora in questa pagina.'
-      : `Tutti i ${ok} passaggi citati sono ancora in questa pagina.`;
+      ? traduci('sezioni.research.passages.allOne')
+      : traduci('sezioni.research.passages.allMany', { n: ok });
   }
   if (!ok) {
     return totale === 1
-      ? 'Il passaggio citato non si ritrova più in questa pagina.'
-      : `Nessuno dei ${totale} passaggi citati si ritrova più in questa pagina.`;
+      ? traduci('sezioni.research.passages.noneOne')
+      : traduci('sezioni.research.passages.noneMany', { n: totale });
   }
   return persiN === 1
-    ? `1 dei ${totale} passaggi citati non si ritrova più in questa pagina.`
-    : `${persiN} dei ${totale} passaggi citati non si ritrovano più in questa pagina.`;
+    ? traduci('sezioni.research.passages.someOne', { total: totale })
+    : traduci('sezioni.research.passages.someMany', { lost: persiN, total: totale });
 }
 
 /**
@@ -1207,7 +1235,7 @@ export function montaEsitoRiverifica(doc, stato) {
   const blocco = nodo(doc, 'div', 'td-riverifica');
   if (stato?.stato === 'in-corso') {
     blocco.setAttribute('role', 'status');
-    blocco.append(nodo(doc, 'p', 'td-subtle', 'Sto rileggendo le pagine citate, una alla volta…'));
+    blocco.append(nodo(doc, 'p', 'td-subtle', traduci('sezioni.research.recheckPanel.running')));
     return blocco;
   }
   if (stato?.stato === 'errore') {
@@ -1219,19 +1247,19 @@ export function montaEsitoRiverifica(doc, stato) {
   if (!esito) return null;
   blocco.setAttribute('role', 'status');
   const testa = nodo(doc, 'div', 'td-riverifica-testa');
-  testa.append(nodo(doc, 'strong', '', 'Le fonti, rilette adesso'));
+  testa.append(nodo(doc, 'strong', '', traduci('sezioni.research.recheckPanel.heading')));
   const quando = dataOra(esito.fattaAlle);
-  if (quando) testa.append(nodo(doc, 'span', 'td-subtle', `controllate ${articoloData(esito.fattaAlle)}${quando}`));
+  if (quando) testa.append(nodo(doc, 'span', 'td-subtle', traduci('sezioni.research.recheckPanel.checkedOn', { article: articoloData(esito.fattaAlle), when: quando })));
   blocco.append(testa, nodo(doc, 'p', 'td-prose', frasiRiverifica(esito)));
   /* ⛔ L'avvertenza esiste solo quando `misurabile` è falso: stamparla sempre la farebbe ignorare. */
   if (esito.avvertenza) blocco.append(nodo(doc, 'p', 'td-subtle', esito.avvertenza));
-  if (esito.troncata) blocco.append(nodo(doc, 'p', 'td-subtle', `Rilette le prime ${esito.fonti?.length ?? 0} fonti su ${esito.fontiTotali}: le altre non sono state guardate.`));
+  if (esito.troncata) blocco.append(nodo(doc, 'p', 'td-subtle', traduci('sezioni.research.recheckPanel.truncated', { read: esito.fonti?.length ?? 0, total: esito.fontiTotali })));
   for (const fonte of Array.isArray(esito.fonti) ? esito.fonti : []) {
     const parole = statoFonteRiverifica(fonte?.stato);
     const riga = nodo(doc, 'div', 'td-riverifica-fonte');
     const alto = nodo(doc, 'div', 'td-riverifica-riga');
     alto.append(tag(doc, parole.parola, parole.tono));
-    const link = nodo(doc, 'a', '', fonte?.titolo || fonte?.url || 'fonte senza titolo');
+    const link = nodo(doc, 'a', '', fonte?.titolo || fonte?.url || traduci('sezioni.research.sources.untitled'));
     link.href = fonte?.url || '#';
     link.target = '_blank';
     link.rel = 'noreferrer noopener';
@@ -1251,28 +1279,28 @@ export function montaEsitoRiverifica(doc, stato) {
 function vistaFonti(doc, voce, lettura, ctx) {
   const esito = ctx?.riverifica ? montaEsitoRiverifica(doc, ctx.riverifica) : null;
   if (!lettura?.record) {
-    return [esito, nodo(doc, 'p', 'td-prose', 'Le fonti compaiono quando il rapporto porta con sé il riepilogo delle verifiche: indirizzo, data dichiarata, se la pagina è stata letta per intero, e a quale gruppo di prove appartiene.')];
+    return [esito, nodo(doc, 'p', 'td-prose', traduci('sezioni.research.sourcesView.intro'))];
   }
   const fonti = Array.isArray(lettura.record.sources) ? lettura.record.sources : [];
-  if (!fonti.length) return [esito, nodo(doc, 'p', 'td-prose', 'Il rapporto non registra nessuna fonte.')];
+  if (!fonti.length) return [esito, nodo(doc, 'p', 'td-prose', traduci('sezioni.research.sourcesView.none'))];
   const prove = proveDistinte(fonti);
   /* ⛔ La regola si spiega solo quando MORDE: se ogni fonte è un gruppo a sé, dire «due pagine dello
      stesso dominio non fanno due prove» suona come un'accusa a un elenco che non ha quel difetto. */
   const pezzi = [esito, nodo(doc, 'p', 'td-subtle', prove.gruppi < prove.indirizzi
-    ? `${prove.frase}: due pagine dello stesso dominio non fanno due prove.`
-    : `${prove.frase}: ogni fonte viene da un dominio diverso.`)];
+    ? traduci('sezioni.research.sourcesView.sameDomain', { summary: prove.frase })
+    : traduci('sezioni.research.sourcesView.otherDomains', { summary: prove.frase }))];
   for (const fonte of fonti) {
     const riga = nodo(doc, 'div', 'td-source');
-    const link = nodo(doc, 'a', '', fonte.title || fonte.url || 'fonte senza titolo');
+    const link = nodo(doc, 'a', '', fonte.title || fonte.url || traduci('sezioni.research.sources.untitled'));
     link.href = fonte.url || '#';
     link.target = '_blank';
     link.rel = 'noreferrer noopener';
     riga.append(link);
-    riga.append(nodo(doc, 'span', '', fonte.url || 'indirizzo non registrato'));
+    riga.append(nodo(doc, 'span', '', fonte.url || traduci('sezioni.research.sourcesView.addressNotRecorded')));
     const dettagli = [
-      fonte.publishedAt ? `data dichiarata: ${fonte.publishedAt}` : 'data non dichiarata',
+      fonte.publishedAt ? traduci('sezioni.research.sourcesView.declaredDate', { date: fonte.publishedAt }) : traduci('sezioni.research.sourcesView.dateNotDeclared'),
       comeOttenuta(fonte.obtained),
-      `gruppo di prove: ${gruppoDellaFonte(fonte)}`,
+      traduci('sezioni.research.sourcesView.proofGroup', { group: gruppoDellaFonte(fonte) }),
     ].join(' · ');
     riga.append(nodo(doc, 'span', '', dettagli));
     pezzi.push(riga);
@@ -1285,9 +1313,9 @@ export function frasiSpesa(spesa) {
   if (!spesa) return null;
   const pezzi = [];
   const token = Number(spesa.tokens) || 0;
-  if (token) pezzi.push(`${token >= 1000 ? `${(token / 1000).toFixed(1).replace('.', ',')}k` : token} token`);
-  if (spesa.searches) pezzi.push(`${spesa.searches} ${spesa.searches === 1 ? 'ricerca sul web' : 'ricerche sul web'}`);
-  if (spesa.pages) pezzi.push(`${spesa.pages} ${spesa.pages === 1 ? 'pagina aperta' : 'pagine aperte'}`);
+  if (token) pezzi.push(traduci('sezioni.research.spend.tokens', { value: token >= 1000 ? `${new Intl.NumberFormat(localeUI(), { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(token / 1000)}k` : token }));
+  if (spesa.searches) pezzi.push(tn('sezioni.research.spend.searchesOne', 'sezioni.research.spend.searchesMany', spesa.searches));
+  if (spesa.pages) pezzi.push(tn('sezioni.research.spend.pagesOne', 'sezioni.research.spend.pagesMany', spesa.pages));
   return pezzi.length ? pezzi.join(' · ') : null;
 }
 
@@ -1301,21 +1329,21 @@ export function frasiSpesa(spesa) {
  *   questo che si copia dalla fonte invece di inventare: una vista che nessuno può ancora
  *   guardare è una vista che nessuno correggerà.
  */
-export const PASSI_RICERCA = new Map([
-  ['search', 'Ricerca sul web'],
-  ['read', 'Lettura di una pagina'],
-  ['synthesise', 'Scrittura della sintesi'],
-  ['verify', 'Verifica delle affermazioni'],
+export const PASSI_RICERCA = new MappaTradotta([
+  ['search', 'sezioni.research.step.search'],
+  ['read', 'sezioni.research.step.read'],
+  ['synthesise', 'sezioni.research.step.synthesise'],
+  ['verify', 'sezioni.research.step.verify'],
 ]);
 
 /* ⛔ `interrupted` non è `failed`: «il processo è morto a metà» e «il passo ha sbagliato» sono due
    cose diverse, e la seconda accusa la ricerca di un guasto che non ha commesso. */
 const ESITI_PASSO = new Map([
-  ['pending', { parola: 'da fare', tono: '' }],
-  ['running', { parola: 'in corso', tono: 'info' }],
-  ['done', { parola: 'fatto', tono: 'success' }],
-  ['failed', { parola: 'non riuscito', tono: 'danger' }],
-  ['interrupted', { parola: 'interrotto a metà', tono: 'warning' }],
+  ['pending', { get parola() { return traduci('sezioni.research.stepState.pending'); }, tono: '' }],
+  ['running', { get parola() { return traduci('sezioni.research.stepState.running'); }, tono: 'info' }],
+  ['done', { get parola() { return traduci('sezioni.research.stepState.done'); }, tono: 'success' }],
+  ['failed', { get parola() { return traduci('sezioni.research.stepState.failed'); }, tono: 'danger' }],
+  ['interrupted', { get parola() { return traduci('sezioni.research.stepState.interrupted'); }, tono: 'warning' }],
 ]);
 
 function vistaPiano(doc, dettaglio) {
@@ -1333,17 +1361,17 @@ function vistaPiano(doc, dettaglio) {
   if (!piano.length && !passi.length) {
     return [
       nodo(doc, 'p', 'td-prose', ricerca
-        ? 'Questa ricerca non ha dichiarato nessuna linea di indagine.'
-        : 'Il piano arriva con il motore nuovo.'),
-      nodo(doc, 'p', 'td-subtle', 'Quando una ricerca dichiarerà le sue linee di indagine, le troverai qui con quanto ognuna ha portato — e su una ricerca in corso sarà il posto dove approvarle o cambiarle prima che parta.'),
+        ? traduci('sezioni.research.plan.noneDeclared')
+        : traduci('sezioni.research.plan.comesWithNewEngine')),
+      nodo(doc, 'p', 'td-subtle', traduci('sezioni.research.plan.futureNote')),
     ];
   }
   const pezzi = [];
   if (piano.length) {
-    pezzi.push(nodo(doc, 'h3', '', 'Linee di indagine'));
+    pezzi.push(nodo(doc, 'h3', '', traduci('sezioni.research.plan.linesHeading')));
     for (const linea of piano) {
       const riga = nodo(doc, 'div', 'td-source');
-      riga.append(nodo(doc, 'strong', '', linea?.question || linea?.domanda || 'linea senza domanda'));
+      riga.append(nodo(doc, 'strong', '', linea?.question || linea?.domanda || traduci('sezioni.research.plan.lineWithoutQuestion')));
       /*
        * ⛔ `estimate` è quello che il pianificatore ha INDOVINATO, e `run.mjs:134` lo dice con
        *   queste parole: «Mai confuso con quello che è stato speso». Quindi l'etichetta dice
@@ -1351,23 +1379,23 @@ function vistaPiano(doc, dettaglio) {
        *   sola sarebbero il modo più veloce di far leggere una stima come una misura.
        */
       const previsto = frasiSpesa(linea?.estimate);
-      if (previsto) riga.append(nodo(doc, 'span', '', `previsti ${previsto}`));
+      if (previsto) riga.append(nodo(doc, 'span', '', traduci('sezioni.research.plan.expected', { estimate: previsto })));
       pezzi.push(riga);
     }
   }
   if (passi.length) {
-    pezzi.push(nodo(doc, 'h3', '', 'Passi compiuti'));
+    pezzi.push(nodo(doc, 'h3', '', traduci('sezioni.research.plan.stepsHeading')));
     for (const passo of passi) {
       const riga = nodo(doc, 'div', 'td-source');
       const alto = nodo(doc, 'div', 'td-riverifica-riga');
-      const esito = ESITI_PASSO.get(passo?.state) || { parola: 'stato non registrato', tono: '' };
+      const esito = ESITI_PASSO.get(passo?.state) || { parola: traduci('sezioni.research.stepState.unknown'), tono: '' };
       alto.append(tag(doc, esito.parola, esito.tono));
-      alto.append(nodo(doc, 'strong', '', PASSI_RICERCA.get(passo?.kind) || 'Passo della ricerca'));
+      alto.append(nodo(doc, 'strong', '', PASSI_RICERCA.get(passo?.kind) || traduci('sezioni.research.step.fallback')));
       riga.append(alto);
-      const dettagli = [frasiSpesa(passo?.spend), passo?.error ? `si è fermato: ${passo.error}` : null].filter(Boolean);
+      const dettagli = [frasiSpesa(passo?.spend), passo?.error ? traduci('sezioni.research.plan.stopped', { error: passo.error }) : null].filter(Boolean);
       /* ⛔ `attempts` si scrive solo quando è più di uno: «1 tentativo» è rumore, «3 tentativi» è
          la ragione per cui quel passo è costato tre volte tanto. */
-      if (passo?.attempts > 1) dettagli.push(`${passo.attempts} tentativi`);
+      if (passo?.attempts > 1) dettagli.push(traduci('sezioni.research.plan.attempts', { n: passo.attempts }));
       if (dettagli.length) riga.append(nodo(doc, 'span', '', dettagli.join(' · ')));
       pezzi.push(riga);
     }
@@ -1384,7 +1412,7 @@ function vistaAndata(doc, voce, ctx, dettaglio) {
     if (!valore) return;
     righe.append(nodo(doc, 'dt', '', etichetta), nodo(doc, 'dd', '', valore));
   };
-  riga('Stato', frasi.parola);
+  riga(traduci('sezioni.research.went.status'), frasi.parola);
   /* 24/09/2026, decisione owner («Barra + fase e conteggi»): una ricerca in corso mostra a che punto è, prima dei fatti;
      l'avanzamento del dettaglio è il più fresco, altrimenti quello dell'elenco. */
   const avanzamento = voce?.stato === 'running' ? (ricerca?.avanzamento ?? voce?.avanzamento ?? null) : null;
@@ -1392,14 +1420,14 @@ function vistaAndata(doc, voce, ctx, dettaglio) {
   if (bloccoAvanzamento) pezzi.push(bloccoAvanzamento);
   /* ⛔ Sotto il titolo la spiegazione c'è già, tranne che sulle concluse: qui si scrive solo quando
      lassù non c'è, o la stessa frase compare due volte nella stessa schermata. */
-  if (conclusaDavvero(voce?.stato)) riga('Cosa è successo', frasi.spiegazione);
-  riga('Avviata', frasi.avviata || 'data non registrata');
+  if (conclusaDavvero(voce?.stato)) riga(traduci('sezioni.research.went.whatHappened'), frasi.spiegazione);
+  riga(traduci('sezioni.research.went.started'), frasi.avviata || traduci('sezioni.research.went.dateNotRecorded'));
   /* ⛔ L'etichetta era «Conclusa», cioè la STESSA parola del timbro di stato: in una schermata su una
      ricerca bloccata compariva «Conclusa» accanto a un orario, e si legge come l'esito. Trovato dal
      test che pretende che quella parola non esista su una ricerca che conclusa non è. */
-  riga('Finita', frasi.conclusa || (voce?.stato === 'running' ? 'non ancora' : 'non registrata'));
-  riga('Durata', frasi.durata || null);
-  riga('Nome della conversazione', frasi.nome);
+  riga(traduci('sezioni.research.went.finished'), frasi.conclusa || (voce?.stato === 'running' ? traduci('sezioni.research.went.notYet') : traduci('sezioni.research.went.notRecorded')));
+  riga(traduci('sezioni.research.went.duration'), frasi.durata || null);
+  riga(traduci('sezioni.research.went.conversationName'), frasi.nome);
   /*
    * ⭐ L5 (12/09) — LO SPESO E IL GIORNALE, dalla rotta del dettaglio. Non c'erano: la sezione
    *   leggeva solo l'elenco, che queste due cose non le manda.
@@ -1410,15 +1438,15 @@ function vistaAndata(doc, voce, ctx, dettaglio) {
    *   sono la stessa frase, ma stampare «0 righe saltate» su ogni ricerca sana è rumore.
    */
   if (ricerca) {
-    riga('Speso', frasiSpesa(ricerca.spesa) || 'niente di misurato');
+    riga(traduci('sezioni.research.went.spent'), frasiSpesa(ricerca.spesa) || traduci('sezioni.research.went.nothingMeasured'));
     if (ricerca.giornale) {
       const eventi = Number(ricerca.giornale.eventi) || 0;
-      riga('Giornale di bordo', `${eventi} ${eventi === 1 ? 'passaggio registrato' : 'passaggi registrati'}`);
+      riga(traduci('sezioni.research.went.log'), tn('sezioni.research.went.logEventsOne', 'sezioni.research.went.logEventsMany', eventi));
       if (ricerca.giornale.righeSaltate > 0) {
-        riga('Attenzione', `${ricerca.giornale.righeSaltate} righe del giornale non si rileggono: quello che segue è parziale.`);
+        riga(traduci('sezioni.research.went.warning'), traduci('sezioni.research.went.skippedLines', { n: ricerca.giornale.righeSaltate }));
       }
     } else {
-      riga('Giornale di bordo', 'non ne ha uno: è stata avviata prima che le ricerche lo tenessero, e non si può riprendere da dove si era fermata');
+      riga(traduci('sezioni.research.went.log'), traduci('sezioni.research.went.noLog'));
     }
   }
   pezzi.push(righe);
@@ -1431,13 +1459,13 @@ function vistaAndata(doc, voce, ctx, dettaglio) {
    *   NON è. Il pannello «Rapporto» non lo legge nemmeno.
    */
   if (voce?.ultimoMessaggio) {
-    pezzi.push(nodo(doc, 'h3', '', 'Ultimo messaggio della ricerca'));
-    pezzi.push(nodo(doc, 'p', 'td-subtle', 'È l’ultima cosa che la ricerca ha detto in chat, non il suo rapporto.'));
+    pezzi.push(nodo(doc, 'h3', '', traduci('sezioni.research.went.lastMessageHeading')));
+    pezzi.push(nodo(doc, 'p', 'td-subtle', traduci('sezioni.research.went.lastMessageNote')));
     pezzi.push(nodo(doc, 'blockquote', 'td-allegato', String(voce.ultimoMessaggio)));
   }
   if (voce?.padreId && typeof ctx?.onApriSessione === 'function') {
-    pezzi.push(nodo(doc, 'h3', '', 'Da dove è partita'));
-    const b = nodo(doc, 'button', 'talos-button talos-button--secondary talos-button--sm', 'Apri la conversazione da cui è partita');
+    pezzi.push(nodo(doc, 'h3', '', traduci('sezioni.research.went.startedFromHeading')));
+    const b = nodo(doc, 'button', 'talos-button talos-button--secondary talos-button--sm', traduci('sezioni.research.went.openSourceConversation'));
     b.type = 'button';
     b.addEventListener('click', () => ctx.onApriSessione({ id: voce.padreId }));
     pezzi.push(b);
@@ -1473,7 +1501,7 @@ export function vociMenuRicerca(voce, ctx = {}) {
   const citazioni = pronto && lettura.record ? citazioniDaRecord(lettura.record, voce?.conclusaAlle || voce?.avviataAlle) : [];
   const voci = [];
   if (typeof ctx.onApriSessione === 'function' && voce?.id) {
-    voci.push({ chiave: 'apri-conversazione', etichetta: 'Apri la conversazione', icona: 'i-eye', aziona: () => ctx.onApriSessione({ id: voce.id }) });
+    voci.push({ chiave: 'apri-conversazione', etichetta: traduci('sezioni.research.menu.openConversation'), icona: 'i-eye', aziona: () => ctx.onApriSessione({ id: voce.id }) });
   }
   /*
    * ⛔ TROVATO PER STRADA l'11/09, curando il pannello: il menu chiamava «rapporto» lo stesso file
@@ -1497,16 +1525,16 @@ export function vociMenuRicerca(voce, ctx = {}) {
   const deposito = testoDepositato(voce, lettura, ctx.dettaglio);
   const suite = typeof ctx.onEsportazioni === 'function' && haQualcosaDaEsportare(voce, lettura, ctx.dettaglio);
   if (deposito.testo) {
-    voci.push({ chiave: 'copia', etichetta: `Copia ${deposito.nome}`, icona: 'i-copy', aziona: () => ctx.onCopia?.(deposito.testo, voce) });
+    voci.push({ chiave: 'copia', etichetta: traduci('sezioni.research.menu.copy', { name: deposito.nome }), icona: 'i-copy', aziona: () => ctx.onCopia?.(deposito.testo, voce) });
     /* ⛔ L'esportazione scritta nel browser resta solo dove la suite non c'è, e solo su un testo
        che il server saprebbe impaginare: dell'ultimo messaggio si fa una copia, non un file. */
-    if (!suite && deposito.suDisco) voci.push({ chiave: 'esporta', etichetta: `Esporta ${deposito.nome}`, icona: 'i-download', aziona: () => ctx.onEsporta?.(nomeFileRapporto(frasiVoce(voce).domanda, 'md'), deposito.testo, 'text/markdown') });
+    if (!suite && deposito.suDisco) voci.push({ chiave: 'esporta', etichetta: traduci('sezioni.research.menu.export', { name: deposito.nome }), icona: 'i-download', aziona: () => ctx.onEsporta?.(nomeFileRapporto(frasiVoce(voce).domanda, 'md'), deposito.testo, 'text/markdown') });
   }
   if (suite) {
-    voci.push({ chiave: 'esporta-suite', etichetta: 'Esporta…', icona: 'i-download', aziona: () => ctx.onEsportazioni(voce) });
+    voci.push({ chiave: 'esporta-suite', etichetta: traduci('sezioni.research.menu.exportSuite'), icona: 'i-download', aziona: () => ctx.onEsportazioni(voce) });
   } else if (citazioni.length) {
-    voci.push({ chiave: 'bibtex', etichetta: 'Esporta le citazioni (BibTeX)', icona: 'i-doc', aziona: () => ctx.onEsporta?.(nomeFileRapporto(frasiVoce(voce).domanda, 'bib'), bibtexDaCitazioni(citazioni), 'application/x-bibtex') });
-    voci.push({ chiave: 'ris', etichetta: 'Esporta le citazioni (RIS)', icona: 'i-doc', aziona: () => ctx.onEsporta?.(nomeFileRapporto(frasiVoce(voce).domanda, 'ris'), risDaCitazioni(citazioni), 'application/x-research-info-systems') });
+    voci.push({ chiave: 'bibtex', etichetta: traduci('sezioni.research.menu.exportBibtex'), icona: 'i-doc', aziona: () => ctx.onEsporta?.(nomeFileRapporto(frasiVoce(voce).domanda, 'bib'), bibtexDaCitazioni(citazioni), 'application/x-bibtex') });
+    voci.push({ chiave: 'ris', etichetta: traduci('sezioni.research.menu.exportRis'), icona: 'i-doc', aziona: () => ctx.onEsporta?.(nomeFileRapporto(frasiVoce(voce).domanda, 'ris'), risDaCitazioni(citazioni), 'application/x-research-info-systems') });
   }
   /*
    * ⭐⭐⭐ L5 (12/09) — LE QUATTRO AZIONI DI SCRITTURA. Stanno in fondo e dopo un separatore
@@ -1520,20 +1548,20 @@ export function vociMenuRicerca(voce, ctx = {}) {
    */
   const scrivibili = [];
   if (typeof ctx.onPausa === 'function' && puoMettereInPausa(voce)) {
-    scrivibili.push({ chiave: 'pausa', etichetta: 'Metti in pausa', icona: 'i-stop', aziona: () => ctx.onPausa(voce) });
+    scrivibili.push({ chiave: 'pausa', etichetta: traduci('sezioni.research.menu.pause'), icona: 'i-stop', aziona: () => ctx.onPausa(voce) });
   }
   if (typeof ctx.onRiprendi === 'function' && puoRiprendere(voce)) {
-    scrivibili.push({ chiave: 'ripresa', etichetta: 'Riprendi', icona: 'i-play', aziona: () => ctx.onRiprendi(voce) });
+    scrivibili.push({ chiave: 'ripresa', etichetta: traduci('sezioni.research.menu.resume'), icona: 'i-play', aziona: () => ctx.onRiprendi(voce) });
   }
   if (typeof ctx.onRiverifica === 'function' && puoRicontrollareLeFonti(voce)) {
-    scrivibili.push({ chiave: 'riverifica', etichetta: 'Controlla se le fonti dicono ancora questo', icona: 'i-history', aziona: () => ctx.onRiverifica(voce) });
+    scrivibili.push({ chiave: 'riverifica', etichetta: traduci('sezioni.research.menu.recheck'), icona: 'i-history', aziona: () => ctx.onRiverifica(voce) });
   }
   if (scrivibili.length) {
     scrivibili[0].separaPrima = true;
     voci.push(...scrivibili);
   }
   if (typeof ctx.onElimina === 'function' && voce?.id) {
-    voci.push({ chiave: 'elimina', etichetta: 'Elimina la ricerca', icona: 'i-trash', pericolo: true, separaPrima: true, aziona: () => ctx.onElimina(voce) });
+    voci.push({ chiave: 'elimina', etichetta: traduci('sezioni.research.menu.delete'), icona: 'i-trash', pericolo: true, separaPrima: true, aziona: () => ctx.onElimina(voce) });
   }
   return voci;
 }
@@ -1563,13 +1591,13 @@ export function montaDettaglioRicerca(voce, ctx) {
   /* ---- testa: stato, quando, durata, e il menu ---- */
   const meta = nodo(doc, 'div', 'td-detail-meta');
   meta.append(tag(doc, frasi.parola, frasi.tono));
-  if (frasi.avviata) meta.append(nodo(doc, 'span', '', `avviata ${articoloData(voce?.avviataAlle)}${frasi.avviata}`));
-  if (frasi.durata) meta.append(nodo(doc, 'span', '', `durata ${frasi.durata}`));
+  if (frasi.avviata) meta.append(nodo(doc, 'span', '', traduci('sezioni.research.meta.started', { article: articoloData(voce?.avviataAlle), when: frasi.avviata })));
+  if (frasi.durata) meta.append(nodo(doc, 'span', '', traduci('sezioni.research.meta.duration', { duration: frasi.durata })));
   const strumenti = nodo(doc, 'span', 'td-tools');
   const menu = nodo(doc, 'button', 'talos-button talos-button--secondary talos-icon-button');
   menu.type = 'button';
   menu.setAttribute('aria-haspopup', 'menu');
-  menu.setAttribute('aria-label', `Azioni su ${frasi.domanda}`);
+  menu.setAttribute('aria-label', traduci("sezioni.common.actionsFor", { name: frasi.domanda }));
   menu.append(iconaSvg(doc, 'more'));
   menu.addEventListener('click', (e) => {
     e.stopPropagation();
@@ -1591,8 +1619,8 @@ export function montaDettaglioRicerca(voce, ctx) {
       const sotto = nodo(doc, 'p', 'td-subtle');
       const prove = proveDistinte(lettura.record.sources);
       sotto.textContent = lettura.record.judge
-        ? `Verificate da ${lettura.record.judge}, mai dal modello che ha scritto il rapporto · ${prove.frase}`
-        : `Verifica non eseguita: nessun giudice indipendente era disponibile · ${prove.frase}`;
+        ? traduci("sezioni.research.tally.verifiedBy", { judge: lettura.record.judge, summary: prove.frase })
+        : traduci("sezioni.research.tally.notRun", { summary: prove.frase });
       pezzi.push(sotto);
     }
   }
@@ -1611,7 +1639,7 @@ export function montaDettaglioRicerca(voce, ctx) {
   const scelta = magazzino.viste.get(String(voce?.id)) || (haRapportoLeggibile(voce) ? 'rapporto' : 'andata');
   const lista = nodo(doc, 'div', 'td-segment td-viste');
   lista.setAttribute('role', 'tablist');
-  lista.setAttribute('aria-label', 'Viste della ricerca');
+  lista.setAttribute('aria-label', traduci("sezioni.research.view.groupLabel"));
   const pannello = nodo(doc, 'div', 'td-vista');
   pannello.setAttribute('role', 'tabpanel');
   pannello.tabIndex = 0;
@@ -1670,7 +1698,7 @@ export function montaDettaglioRicerca(voce, ctx) {
         magazzino.rapporti.set(chiave, { stato: 'pronto', testo: String(testo ?? ''), ...letto });
       })
       .catch((errore) => {
-        magazzino.rapporti.set(chiave, { stato: 'errore', errore: errore?.message || 'motivo non registrato' });
+        magazzino.rapporti.set(chiave, { stato: 'errore', errore: errore?.message || traduci('sezioni.research.reasonNotRecorded') });
       })
       .then(() => ctx.ridisegna?.());
   }
@@ -1689,8 +1717,8 @@ export function montaDettaglioRicerca(voce, ctx) {
     magazzino.dettagli.set(idRicerca, { stato: 'caricando' });
     Promise.resolve()
       .then(() => ctx.opzioni.leggiDettaglio(voce))
-      .then((ricerca) => { magazzino.dettagli.set(idRicerca, ricerca ? { stato: 'pronto', ricerca } : { stato: 'errore', errore: 'scheda non disponibile' }); })
-      .catch((errore) => { magazzino.dettagli.set(idRicerca, { stato: 'errore', errore: errore?.message || 'motivo non registrato' }); })
+      .then((ricerca) => { magazzino.dettagli.set(idRicerca, ricerca ? { stato: 'pronto', ricerca } : { stato: 'errore', errore: traduci('sezioni.research.detailUnavailable') }); })
+      .catch((errore) => { magazzino.dettagli.set(idRicerca, { stato: 'errore', errore: errore?.message || traduci('sezioni.research.reasonNotRecorded') }); })
       .then(() => ctx.ridisegna?.());
   }
   return pezzi;

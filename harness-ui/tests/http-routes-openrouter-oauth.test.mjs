@@ -94,7 +94,11 @@ test('OR-HTTP-02 — il giro intero: rientro dal browser, chiave alla custodia, 
   const { stato, testo } = await leggi(rientro);
   assert.equal(stato, 200);
   assert.match(rientro.headers.get('content-type'), /text\/html/u, 'chi rientra è una PERSONA, non del codice');
-  assert.match(testo, /Account collegato/u);
+  /* 03/10/2026: la pagina non sta nell'app, quindi la lingua si negozia da `Accept-Language`; senza preferenza, l'inglese.
+     Il giro in italiano è provato in OR-HTTP-02-LINGUA. */
+  assert.match(testo, /Account connected/u);
+  assert.match(testo, /<html lang="en">/u);
+  assert.equal(rientro.headers.get('content-language'), 'en');
   assert.match(rientro.headers.get('content-security-policy'), /default-src 'none'/u);
   assert.equal(rientro.headers.get('referrer-policy'), 'no-referrer', 'l’indirizzo di questa pagina contiene il codice');
 
@@ -187,8 +191,34 @@ test('OR-HTTP-07 — AL CONTRARIO: senza custodia collegata non comincia nemmeno
   assert.equal(inizio.json.error.code, 'OAUTH_NON_CONFIGURATO');
   const rientro = await leggi(await fetch(`${base}/api/v1/auth/openrouter/ritorno/qualunque?code=C`));
   assert.equal(rientro.stato, 400);
-  assert.match(rientro.testo, /Non sono riuscito a collegare/u, 'anche qui risponde una pagina, non un JSON');
+  assert.match(rientro.testo, /I could not connect the account/u, 'anche qui risponde una pagina, non un JSON');
+  const rientroItaliano = await leggi(await fetch(`${base}/api/v1/auth/openrouter/ritorno/qualunque?code=C`, { headers: { 'Accept-Language': 'it-IT,it;q=0.9,en;q=0.8' } }));
+  assert.equal(rientroItaliano.stato, 400);
+  assert.match(rientroItaliano.testo, /Non sono riuscito a collegare/u, 'la stessa pagina, in italiano, per chi ha il browser in italiano');
+  assert.match(rientroItaliano.testo, /<html lang="it">/u);
   assert.equal(rete.chiamate.length, 0);
+});
+
+test('OR-HTTP-02-LINGUA — la pagina del ritorno parla la lingua del browser: italiano col browser in italiano, e il guasto dice la frase italiana del suo codice', async (t) => {
+  const custodia = custodiaFinta();
+  const base = await listen(t, { custodisciChiaveOpenRouter: custodia, fetchOpenRouterFn: openRouterFinto() });
+  const inizio = (await (await posta(base, '/api/v1/auth/openrouter/inizia')).json()).data;
+  const rientro = await fetch(`${base}/api/v1/auth/openrouter/ritorno/${inizio.stato}?code=CODICE-DI-RITORNO`, { headers: { 'Accept-Language': 'it' } });
+  const { stato, testo } = await leggi(rientro);
+  assert.equal(stato, 200);
+  assert.match(testo, /Account collegato/u);
+  assert.match(testo, /Il tuo account OpenRouter è collegato a TALOS/u);
+  assert.equal(rientro.headers.get('content-language'), 'it');
+  assert.match(rientro.headers.get('vary') ?? '', /Accept-Language/iu);
+  assert.deepEqual(custodia.raccolte, [CHIAVE_FINTA]);
+  // AL CONTRARIO: uno stato già usato, col browser in italiano: la frase italiana del CODICE (identica a quella del dizionario), mai l'inglese
+  const riusato = await leggi(await fetch(`${base}/api/v1/auth/openrouter/ritorno/${inizio.stato}?code=C`, { headers: { 'Accept-Language': 'it' } }));
+  assert.equal(riusato.stato, 400);
+  assert.match(riusato.testo, /Questa richiesta di collegamento non vale più: ricomincia da «Accedi con OpenRouter»\./u);
+  assert.doesNotMatch(riusato.testo, /no longer valid/u);
+  // e con il browser in inglese la frase è quella inglese del server
+  const riusatoEn = await leggi(await fetch(`${base}/api/v1/auth/openrouter/ritorno/${inizio.stato}?code=C`, { headers: { 'Accept-Language': 'en-GB' } }));
+  assert.match(riusatoEn.testo, /This connection request is no longer valid: start again from “Sign in with OpenRouter”\./u);
 });
 
 test('OR-HTTP-08 — AL CONTRARIO: query in coda, metodi sbagliati, corpo che non è JSON', async (t) => {

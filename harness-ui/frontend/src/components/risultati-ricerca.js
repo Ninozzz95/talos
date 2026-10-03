@@ -40,6 +40,7 @@
  */
 
 /** Una riga «1. Titolo» apre un risultato; le righe sotto lo completano. */
+import { t as traduci, tn } from './lingua.js';
 const INIZIO_RISULTATO = /^\s*(\d+)\.\s+(.+?)\s*$/;
 const RIGA_URL = /^\s*url:\s*(\S+)\s*$/i;
 const RIGA_DATA = /^\s*published:\s*(.+?)\s*$/i;
@@ -147,7 +148,7 @@ export function creaRisultatiRicerca(letti, { document: doc, tetto = 8 } = {}) {
   if (letti.risultati.length > mostrati.length) {
     const resto = documentObj.createElement('p');
     resto.className = 'talos-ricerca-web__resto';
-    resto.textContent = `Altri ${letti.risultati.length - mostrati.length} risultati non sono mostrati qui.`;
+    resto.textContent = traduci("sezioni.research.results.moreHidden", { count: letti.risultati.length - mostrati.length });
     blocco.append(resto);
   }
   return blocco;
@@ -208,11 +209,11 @@ export function creaPillolaFonti(letti, { document: doc, marchiMax = 3, onApri }
   pillola.type = 'button';
   pillola.className = 'talos-fonti';
   pillola.setAttribute('data-c', 'SourcesChip');
-  pillola.setAttribute('aria-label', fonti.length === 1 ? '1 fonte web' : `${fonti.length} fonti web`);
+  pillola.setAttribute('aria-label', tn('sezioni.research.sources.webOne', 'sezioni.research.sources.webMany', fonti.length));
 
   const etichetta = documentObj.createElement('span');
   etichetta.className = 'talos-fonti__testo';
-  etichetta.textContent = 'Fonti';
+  etichetta.textContent = traduci("sezioni.research.sources.title");
   pillola.append(etichetta);
 
   const marchi = documentObj.createElement('span');
@@ -261,7 +262,7 @@ export function apriModaleFonti(letti, { document: doc } = {}) {
   velo.setAttribute('data-c', 'SourcesDialog');
   velo.setAttribute('role', 'dialog');
   velo.setAttribute('aria-modal', 'true');
-  velo.setAttribute('aria-label', fonti.length === 1 ? '1 fonte web' : `${fonti.length} fonti web`);
+  velo.setAttribute('aria-label', tn('sezioni.research.sources.webOne', 'sezioni.research.sources.webMany', fonti.length));
 
   const dialogo = documentObj.createElement('div');
   dialogo.className = 'talos-dialog talos-dialog--medium';
@@ -270,7 +271,7 @@ export function apriModaleFonti(letti, { document: doc } = {}) {
   testa.className = 'talos-dialog__header';
   const titolo = documentObj.createElement('h2');
   titolo.className = 'talos-dialog__title';
-  titolo.textContent = fonti.length === 1 ? 'Fonte' : `Fonti (${fonti.length})`;
+  titolo.textContent = fonti.length === 1 ? traduci("sezioni.research.sources.titleOne") : traduci("sezioni.research.sources.titleWithCount", { count: fonti.length });
   /* ⛔ Visto nella foto: senza qualcosa che cresca in mezzo, `talos-dialog__header` (flex, gap 12px)
      lascia «Chiudi» appiccicato al titolo invece di mandarlo a destra. `talos-grow` è la classe che
      il prodotto usa già per questo, nelle sue testate. */
@@ -279,7 +280,7 @@ export function apriModaleFonti(letti, { document: doc } = {}) {
   const chiudi = documentObj.createElement('button');
   chiudi.type = 'button';
   chiudi.className = 'talos-button talos-button--ghost talos-button--sm';
-  chiudi.textContent = 'Chiudi';
+  chiudi.textContent = traduci("sezioni.common.close");
   testa.append(chiudi);
   dialogo.append(testa);
 
@@ -304,7 +305,7 @@ export function apriModaleFonti(letti, { document: doc } = {}) {
 
     const dove = documentObj.createElement('p');
     dove.className = 'talos-fonti-elenco__dove';
-    dove.textContent = fonte.quando ? `${dominioDi(fonte.url)} · ${fonte.quando}` : `${dominioDi(fonte.url)} · data non dichiarata`;
+    dove.textContent = fonte.quando ? `${dominioDi(fonte.url)} · ${fonte.quando}` : traduci("sezioni.research.sources.dateNotStated", { domain: dominioDi(fonte.url) });
     voce.append(dove);
 
     /* ⛔ «i link esatti»: l'URL per intero, non troncato — è ciò che l'owner ha chiesto per nome. */

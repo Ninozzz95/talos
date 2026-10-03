@@ -76,6 +76,7 @@
  *    elemento raggiungibile col Tab (roving tabindex) e le frecce che spostano la scelta; e la
  *    selezione non può essere affidata al solo colore (qui c'è anche il segno di spunta).
  */
+import { t as traduci, elenco as dettaElenco } from './lingua.js';
 import { CAMPI_IMPOSTAZIONI } from './impostazioni-campi.js';
 import { apriModale, chiudiModale } from './modale-td.js';
 
@@ -165,20 +166,20 @@ export function temaChiaro(seme) { return Boolean(seme?.fondoChiaro); }
  *     scheda onesta invece di lasciare tre campi vuoti (provato al verso contrario).
  */
 export const DESCRIZIONI_TEMI = Object.freeze({
-  calm: { scena: 'Orizzonte e filamento', materiale: 'Grafite / bronzo', testo: 'Un campo quasi immobile, un orizzonte e un solo filamento di bronzo. Il vuoto resta parte della composizione.' },
-  forge: { scena: 'Forgia e impulsi', materiale: 'Acciaio / rame', testo: 'Guide meccaniche, ingranaggi e un grafo diretto attraversato da impulsi. La composizione originale del mobile, nello spazio desktop.' },
-  paper: { scena: 'Pagina e marginalia', materiale: 'Carta / inchiostro', testo: 'Fibre, registri tipografici e annotazioni marginali. La luce attraversa la pagina senza trasformarla in una griglia decorativa.' },
-  terminal: { scena: 'Manoscritto al fosforo', materiale: 'Fosforo / nero', testo: 'Flussi di glifi a cadenza indipendente, tracce e fosforo. Non una pioggia uniforme: ogni colonna ha il proprio ritmo.' },
-  aurora: { scena: 'Tende magnetiche', materiale: 'Notte / luce fredda', testo: 'Raggi verticali, pieghe magnetiche e stelle sparse. Il colore proviene dalla palette attiva, non da un’immagine fissa.' },
-  glacier: { scena: 'Ghiaccio e rifrazione', materiale: 'Ghiaccio / cobalto', testo: 'Faccette traslucide e crepacci direzionali: il movimento è una lenta rifrazione, non una rotazione di particelle.' },
-  ember: { scena: 'Convezione e braci', materiale: 'Carbone / brace', testo: 'Colonne di calore, braci in risalita e aloni diffusi. Uno sfondo vivo, contenuto ai margini della lettura.' },
-  atlas: { scena: 'Rilievi e rotte', materiale: 'Blu profondo / rame', testo: 'Curve di livello, una griglia cartografica e un percorso fra punti rilevati. L’insieme mantiene una lettura topografica.' },
-  noir: { scena: 'Diaframma e luce radente', materiale: 'Nero / argento', testo: 'Lamelle, tagli di luce e un diaframma fotografico. Contrasto netto e pochi segni, senza aggiungere cromie al tema.' },
-  signal: { scena: 'Portanti e acquisizione', materiale: 'Grafite / corallo', testo: 'Tracce indipendenti, brevi interruzioni e scansione radar. Sono motivi visivi, non misure di rete o del modello.' },
-  violet: { scena: 'Orbita parametrica', materiale: 'Indaco / ametista', testo: 'Una curva continua, orbite non coincidenti e nodi sparsi. Il dettaglio si sviluppa senza riempire tutto lo spazio.' },
-  claudius: { scena: 'Manoscritto annotato', materiale: 'Carta calda / argilla', testo: 'Masse tipografiche, parentesi editoriali e fili di annotazione. Il ritmo è quello di una pagina riletta con attenzione.' },
-  basicus: { scena: 'Moduli e propagazione', materiale: 'Neutro / blu', testo: 'Moduli geometrici e un’onda che ne attraversa i confini. Una composizione spaziale, non un secondo pannello di controlli.' },
-  telemetry: { scena: 'Strumenti e registri', materiale: 'Grafite / ciano', testo: 'Quadranti, righelli e cursori sottili. Le forme sono decorative: non rappresentano statistiche del dispositivo.' },
+  calm: { get scena() { return traduci('varie.themeStudio.theme.calm.scene'); }, get materiale() { return traduci('varie.themeStudio.theme.calm.material'); }, get testo() { return traduci('varie.themeStudio.theme.calm.text'); } },
+  forge: { get scena() { return traduci('varie.themeStudio.theme.forge.scene'); }, get materiale() { return traduci('varie.themeStudio.theme.forge.material'); }, get testo() { return traduci('varie.themeStudio.theme.forge.text'); } },
+  paper: { get scena() { return traduci('varie.themeStudio.theme.paper.scene'); }, get materiale() { return traduci('varie.themeStudio.theme.paper.material'); }, get testo() { return traduci('varie.themeStudio.theme.paper.text'); } },
+  terminal: { get scena() { return traduci('varie.themeStudio.theme.terminal.scene'); }, get materiale() { return traduci('varie.themeStudio.theme.terminal.material'); }, get testo() { return traduci('varie.themeStudio.theme.terminal.text'); } },
+  aurora: { get scena() { return traduci('varie.themeStudio.theme.aurora.scene'); }, get materiale() { return traduci('varie.themeStudio.theme.aurora.material'); }, get testo() { return traduci('varie.themeStudio.theme.aurora.text'); } },
+  glacier: { get scena() { return traduci('varie.themeStudio.theme.glacier.scene'); }, get materiale() { return traduci('varie.themeStudio.theme.glacier.material'); }, get testo() { return traduci('varie.themeStudio.theme.glacier.text'); } },
+  ember: { get scena() { return traduci('varie.themeStudio.theme.ember.scene'); }, get materiale() { return traduci('varie.themeStudio.theme.ember.material'); }, get testo() { return traduci('varie.themeStudio.theme.ember.text'); } },
+  atlas: { get scena() { return traduci('varie.themeStudio.theme.atlas.scene'); }, get materiale() { return traduci('varie.themeStudio.theme.atlas.material'); }, get testo() { return traduci('varie.themeStudio.theme.atlas.text'); } },
+  noir: { get scena() { return traduci('varie.themeStudio.theme.noir.scene'); }, get materiale() { return traduci('varie.themeStudio.theme.noir.material'); }, get testo() { return traduci('varie.themeStudio.theme.noir.text'); } },
+  signal: { get scena() { return traduci('varie.themeStudio.theme.signal.scene'); }, get materiale() { return traduci('varie.themeStudio.theme.signal.material'); }, get testo() { return traduci('varie.themeStudio.theme.signal.text'); } },
+  violet: { get scena() { return traduci('varie.themeStudio.theme.violet.scene'); }, get materiale() { return traduci('varie.themeStudio.theme.violet.material'); }, get testo() { return traduci('varie.themeStudio.theme.violet.text'); } },
+  claudius: { get scena() { return traduci('varie.themeStudio.theme.claudius.scene'); }, get materiale() { return traduci('varie.themeStudio.theme.claudius.material'); }, get testo() { return traduci('varie.themeStudio.theme.claudius.text'); } },
+  basicus: { get scena() { return traduci('varie.themeStudio.theme.basicus.scene'); }, get materiale() { return traduci('varie.themeStudio.theme.basicus.material'); }, get testo() { return traduci('varie.themeStudio.theme.basicus.text'); } },
+  telemetry: { get scena() { return traduci('varie.themeStudio.theme.telemetry.scene'); }, get materiale() { return traduci('varie.themeStudio.theme.telemetry.material'); }, get testo() { return traduci('varie.themeStudio.theme.telemetry.text'); } },
 });
 
 export function descrizioneTema(id, semi) {
@@ -189,8 +190,8 @@ export function descrizioneTema(id, semi) {
      con il proprio id, che è quello che il renderer userà davvero. */
   return {
     scena: id,
-    materiale: temaChiaro(semi) ? 'Tavolozza chiara' : 'Tavolozza scura',
-    testo: 'Questa tavolozza non ha ancora una descrizione scritta. I colori qui sotto sono quelli veri, letti dal foglio dei temi.',
+    materiale: temaChiaro(semi) ? traduci('varie.themeStudio.fallback.light') : traduci('varie.themeStudio.fallback.dark'),
+    testo: traduci('varie.themeStudio.fallback.text'),
   };
 }
 
@@ -227,10 +228,11 @@ export const CURSORI_SCENA = Object.freeze([
  *   ⇒ Cambia SOLO l'etichetta visibile in questo pannello: l'id, la chiave salvata e il titolo
  *     nelle Impostazioni restano quelli del contratto.
  */
+/* ⛔ Le voci sono getter: si leggono a ogni uso e seguono il cambio di lingua. */
 export const TITOLI_STUDIO = Object.freeze({
-  backgroundMotionToggle: 'Attivo dietro la chat',
-  sceneOverrideSelect: 'Scena',
-  motionModeSelect: 'Modo di disegno',
+  get backgroundMotionToggle() { return traduci('varie.themeStudio.control.backgroundMotion'); },
+  get sceneOverrideSelect() { return traduci('varie.themeStudio.control.scene'); },
+  get motionModeSelect() { return traduci('varie.themeStudio.control.drawingMode'); },
 });
 
 /**
@@ -364,12 +366,12 @@ export function statoAnteprima({ ridotto = false, modo = 'adaptive', pausa = fal
 }
 
 export const TESTO_STATO = Object.freeze({
-  reduced: 'Movimento ridotto',
-  'renderer-fermo': 'Renderer fermo',
-  paused: 'Fotogramma fermo',
-  static: 'Fermo',
-  animating: 'Anteprima animata',
-  assente: 'Scena non disponibile',
+  get reduced() { return traduci('varie.themeStudio.state.reduced'); },
+  get 'renderer-fermo'() { return traduci('varie.themeStudio.state.rendererStopped'); },
+  get paused() { return traduci('varie.themeStudio.state.paused'); },
+  get static() { return traduci('varie.themeStudio.state.static'); },
+  get animating() { return traduci('varie.themeStudio.state.animating'); },
+  get assente() { return traduci('varie.themeStudio.state.missing'); },
 });
 
 /** Le scene del pacchetto, caricate solo quando servono davvero (in Node non si toccano). */
@@ -656,16 +658,16 @@ function miniConversazione(doc) {
   risposta.append(nodo(doc, 'span', 'td-mini-avatar'));
   const bollaRisposta = nodo(doc, 'div', 'td-mini-bolla td-mini-bolla--assistente');
   bollaRisposta.append(
-    nodo(doc, 'span', 'td-mini-linea', 'Ho letto il repository: sono 104 file sotto harness-ui.'),
+    nodo(doc, 'span', 'td-mini-linea', traduci('varie.themeStudio.mini.reply')),
     nodo(doc, 'span', 'td-mini-linea td-mini-linea--corta'),
   );
   risposta.append(bollaRisposta);
 
   const domanda = nodo(doc, 'div', 'td-mini-riga td-mini-riga--utente');
-  domanda.append(nodo(doc, 'div', 'td-mini-bolla td-mini-bolla--utente', 'Riassumi il progetto'));
+  domanda.append(nodo(doc, 'div', 'td-mini-bolla td-mini-bolla--utente', traduci('varie.themeStudio.mini.question')));
 
   const composer = nodo(doc, 'div', 'td-mini-composer');
-  composer.append(nodo(doc, 'span', 'td-mini-placeholder', 'Scrivi a TALOS'));
+  composer.append(nodo(doc, 'span', 'td-mini-placeholder', traduci('varie.themeStudio.mini.placeholder')));
   const invio = nodo(doc, 'span', 'td-mini-invio');
   invio.append(icona(doc, 'send'));
   composer.append(invio);
@@ -687,7 +689,7 @@ export function apriStudioTemi({ document: doc = globalThis.document } = {}) {
   /* ---------------------------------------------------------------- colonna sinistra: i 14 temi */
   const elenco = nodo(doc, 'div', 'td-theme-list');
   elenco.setAttribute('role', 'radiogroup');
-  elenco.setAttribute('aria-label', 'Tema dell’interfaccia');
+  elenco.setAttribute('aria-label', traduci("varie.themeStudio.themeListLabel"));
 
   /* ---------------------------------------------------------------- colonna destra: la scheda */
   const destra = nodo(doc, 'div', 'td-theme-display');
@@ -712,11 +714,11 @@ export function apriStudioTemi({ document: doc = globalThis.document } = {}) {
   const controlli = nodo(doc, 'div', 'td-theme-controls');
   const segmento = nodo(doc, 'div', 'td-segment');
   segmento.setAttribute('role', 'group');
-  segmento.setAttribute('aria-label', 'Modalità colore');
+  segmento.setAttribute('aria-label', traduci("varie.themeStudio.modeGroupLabel"));
   /* ⛔ Il mockup offre due modi (Scuro/Chiaro). La app ne ha TRE, e «Segui il sistema» è il
      default: toglierlo qui vorrebbe dire che aprire lo studio e scegliere un tema spegne per
      sempre il rispetto della preferenza di sistema, senza averlo chiesto. */
-  const MODI = [['system', 'Sistema'], ['light', 'Chiaro'], ['dark', 'Scuro']];
+  const MODI = [['system', traduci('varie.themeStudio.mode.system')], ['light', traduci('varie.themeStudio.mode.light')], ['dark', traduci('varie.themeStudio.mode.dark')]];
   const bottoniModo = MODI.map(([valore, nome]) => {
     const b = nodo(doc, 'button', '', nome);
     b.type = 'button';
@@ -729,7 +731,7 @@ export function apriStudioTemi({ document: doc = globalThis.document } = {}) {
     segmento.append(b);
     return b;
   });
-  const pausa = nodo(doc, 'button', 'td-studio-button', 'Ferma anteprima');
+  const pausa = nodo(doc, 'button', 'td-studio-button', traduci("varie.themeStudio.stopPreview"));
   pausa.type = 'button';
   pausa.addEventListener('click', () => { vista?.alterna(); aggiorna(); });
   controlli.append(segmento, pausa);
@@ -804,15 +806,15 @@ export function apriStudioTemi({ document: doc = globalThis.document } = {}) {
     return sezione;
   }
 
-  const gruppoSfondo = gruppo('Sfondo animato', ['backgroundMotionToggle', 'sceneOverrideSelect', 'motionModeSelect', 'motionQualitySelect'], { compatta: true });
-  const gruppoCursori = gruppo('La scena, cursore per cursore', CURSORI_SCENA, { compatta: true });
+  const gruppoSfondo = gruppo(traduci('varie.themeStudio.group.background'), ['backgroundMotionToggle', 'sceneOverrideSelect', 'motionModeSelect', 'motionQualitySelect'], { compatta: true });
+  const gruppoCursori = gruppo(traduci('varie.themeStudio.group.sliders'), CURSORI_SCENA, { compatta: true });
 
   /* ⛔ «Ripristina» NON è per singolo cursore, ed è una scelta, non una dimenticanza: i valori
      iniziali vivono in `DESKTOP_APPEARANCE_DEFAULTS` dentro `legacy/app.js`, che non li esporta.
      Riscriverli qui sarebbe la stessa colpa della quindicesima tavolozza, con i numeri al posto
      dei colori — e il giorno che l'owner ne cambiasse uno, lo studio mentirebbe. ⇒ qui si preme il
      pulsante della app (`#resetMotionButton`), che è l'unico posto dove quei valori sono scritti. */
-  const ripristina = nodo(doc, 'button', 'td-studio-button', 'Ripristina i valori del movimento');
+  const ripristina = nodo(doc, 'button', 'td-studio-button', traduci('varie.themeStudio.resetMotion'));
   ripristina.type = 'button';
   ripristina.addEventListener('click', () => {
     const vero = doc.getElementById('resetMotionButton');
@@ -822,7 +824,7 @@ export function apriStudioTemi({ document: doc = globalThis.document } = {}) {
 
   /* ------------------------------------------------------------------- i tre dati del mockup */
   const dettagli = nodo(doc, 'div', 'td-theme-details');
-  const datiTema = ['Materiale', 'Accento applicato', 'Raggio delle schede'].map((nome) => {
+  const datiTema = [traduci('varie.themeStudio.detail.material'), traduci('varie.themeStudio.detail.accent'), traduci('varie.themeStudio.detail.cardRadius')].map((nome) => {
     const box = nodo(doc, 'div');
     box.append(nodo(doc, 'span', '', nome));
     const valore = nodo(doc, 'strong', '', '—');
@@ -831,15 +833,15 @@ export function apriStudioTemi({ document: doc = globalThis.document } = {}) {
     return valore;
   });
 
-  const nota = nodo(doc, 'p', 'td-theme-note', 'La scena resta fuori dal testo: qui puoi esplorarla in movimento. Il tema si applica subito, senza chiudere il pannello e senza spostare la selezione.');
+  const nota = nodo(doc, 'p', 'td-theme-note', traduci('varie.themeStudio.note.scene'));
 
   /* Il `<details>` del mockup (riga 6312), con i fatti veri di questa app al posto dei suoi. */
   const approfondimento = nodo(doc, 'details', 'td-theme-note');
-  approfondimento.append(nodo(doc, 'summary', '', 'Porting, qualità e accessibilità'));
-  approfondimento.append(nodo(doc, 'p', '', '14 composizioni Canvas portate dal mobile 355dc8e; la tavolozza è quella del desktop, letta dal foglio dei temi. L’anteprima è indipendente dall’accensione dello sfondo nella Chat. Con «Riduci movimento» il tempo si ferma e resta il fotogramma a colori; fuori vista il disegno si sospende. Un tetto di trenta fotogrammi al secondo e di pixel contiene il costo, senza dichiarare prestazioni del dispositivo.'));
+  approfondimento.append(nodo(doc, 'summary', '', traduci('varie.themeStudio.about.title')));
+  approfondimento.append(nodo(doc, 'p', '', traduci('varie.themeStudio.about.text')));
 
   const azioni = nodo(doc, 'div', 'td-theme-actions');
-  const vaiAImpostazioni = nodo(doc, 'button', 'td-studio-button', 'Tutte le impostazioni dell’aspetto');
+  const vaiAImpostazioni = nodo(doc, 'button', 'td-studio-button', traduci('varie.themeStudio.allAppearanceSettings'));
   vaiAImpostazioni.type = 'button';
   vaiAImpostazioni.addEventListener('click', () => {
     chiudiModale();
@@ -924,14 +926,14 @@ export function apriStudioTemi({ document: doc = globalThis.document } = {}) {
     const stileRadice = (doc.defaultView || globalThis).getComputedStyle?.(doc.documentElement);
     const applicato = (proprieta) => stileRadice?.getPropertyValue?.(proprieta)?.trim() || '';
     datiTema[0].textContent = scheda.materiale;
-    datiTema[1].textContent = risolviColore(applicato('--talos-accent'), doc, seme?.accento || '') || 'non dichiarato';
-    datiTema[2].textContent = applicato('--talos-radius-card') || seme?.raggio || 'non dichiarato';
+    datiTema[1].textContent = risolviColore(applicato('--talos-accent'), doc, seme?.accento || '') || traduci("varie.themeStudio.notStated");
+    datiTema[2].textContent = applicato('--talos-radius-card') || seme?.raggio || traduci("varie.themeStudio.notStated");
 
     const scenaAttiva = scenaPerAspetto({ tema: scelto, scena: valoreAspetto('sceneOverrideSelect', doc) || 'follow-theme' }, scene);
     const stato = vista?.aggiorna({ scena: scenaAttiva }) || 'assente';
     didascaliaScena.textContent = scene.has(scenaAttiva) ? (DESCRIZIONI_TEMI[scenaAttiva]?.scena || scenaAttiva) : scheda.scena;
     didascaliaStato.textContent = TESTO_STATO[stato] || stato;
-    pausa.textContent = vista?.inPausa() ? 'Riprendi anteprima' : 'Ferma anteprima';
+    pausa.textContent = vista?.inPausa() ? traduci("varie.themeStudio.resumePreview") : traduci("varie.themeStudio.stopPreview");
     pausa.disabled = stato === 'reduced' || stato === 'assente' || stato === 'renderer-fermo';
     anteprima.dataset.stato = stato;
     /* ⛔ NIENTE fondo calcolato qui. Il mockup dipinge il riquadro con `var(--talos-background)`
@@ -952,7 +954,7 @@ export function apriStudioTemi({ document: doc = globalThis.document } = {}) {
    *   ⛔ Nessun anello: `aggiorna()` scrive solo dentro la modale, mai sulla radice.
    */
   let osservatoreRadice = null;
-  const modale = apriModale('Temi e atmosfere', studio, {
+  const modale = apriModale(traduci('varie.themeStudio.modalTitle'), studio, {
     document: doc,
     ampia: true,
     /* ⛔ Il canvas muore con la modale: un `requestAnimationFrame` che sopravvive a una finestra
@@ -1059,8 +1061,8 @@ export function montaScorciatoiaTemi(schermo, { document: doc = globalThis.docum
   const scheda = nodo(doc, 'section', 'td-studio-rimando');
   scheda.dataset.tdStudioTemi = '';
   const copia = nodo(doc, 'div', 'td-studio-rimando__copia');
-  copia.append(nodo(doc, 'h3', '', 'Temi e atmosfere'));
-  copia.append(nodo(doc, 'p', '', `Le ${nomiTemi().length} atmosfere, il modo chiaro e scuro, lo sfondo animato e i suoi cursori si scelgono guardandoli, in un pannello solo.`));
+  copia.append(nodo(doc, 'h3', '', traduci('varie.themeStudio.modalTitle')));
+  copia.append(nodo(doc, 'p', '', traduci('varie.themeStudio.referral.text', { n: nomiTemi().length })));
   /* ⛔ Una riga di nomi separati da puntini è decorazione; qui serve a FARSI TROVARE: la ricerca
      delle Impostazioni conta ancora fra i risultati le preferenze migrate (legge il contratto, non
      il DOM), e questa è la sola frase a schermo che le nomina tutte. Scritta come una frase, non
@@ -1068,8 +1070,8 @@ export function montaScorciatoiaTemi(schermo, { document: doc = globalThis.docum
   /* ⛔ 12/09, visto sul 4174: la scheda scriveva «Renderer», cioè il nome tecnico che lo studio
      stesso ha già riscritto in «Modo di disegno» (TITOLI_STUDIO). Stesso nome nei due posti. */
   const nomi = CONTROLLI_MIGRATI.map((id) => titoloStudio(id)).filter(Boolean);
-  copia.append(nodo(doc, 'p', 'td-studio-rimando__elenco', `Qui dentro: ${nomi.slice(0, -1).join(', ')} e ${nomi.at(-1)}.`));
-  const apri = nodo(doc, 'button', 'td-studio-button primary', 'Apri Temi e atmosfere');
+  copia.append(nodo(doc, 'p', 'td-studio-rimando__elenco', traduci('varie.themeStudio.referral.inside', { names: dettaElenco(nomi) })));
+  const apri = nodo(doc, 'button', 'td-studio-button primary', traduci('varie.themeStudio.referral.open'));
   apri.type = 'button';
   apri.prepend(icona(doc, 'image'));
   apri.addEventListener('click', () => apriStudioTemi({ document: doc }));

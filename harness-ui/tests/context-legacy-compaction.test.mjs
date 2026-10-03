@@ -34,7 +34,7 @@ test('CTX-LEGACY-TOOL-TEXT-AT-CAP — text accompanying an unfinished tool call 
     }),
   });
   assert.equal(result.comeFinita, 'giri-esauriti');
-  assert.match(result.detto, /giri esauriti/i);
+  assert.match(result.detto, /turns exhausted/i);
 });
 
 test('CTX-LEGACY-WHITESPACE-AT-CAP — blank model output cannot complete a capped task', async (t) => {
@@ -165,7 +165,7 @@ test('CTX-LEGACY-STOP-DURING-SUMMARY — stop reaches summary request and preven
   assert.equal(abortObserved, true);
   assert.equal(calls, 9);
   assert.equal(result.comeFinita, 'fermato');
-  assert.match(result.detto, /compattazione/i);
+  assert.match(result.detto, /compaction/i);
 });
 
 async function provaTurnoDopoRiassuntoFallito(t, erroreHttp) {

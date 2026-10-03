@@ -39,6 +39,7 @@
  *   contano le chiamate. Il giro vero lo lancia l'owner.
  */
 import assert from 'node:assert/strict';
+import { togliConfiniDati } from '../src/kernel/confine-dati.mjs';
 import { existsSync, mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -468,7 +469,7 @@ function reteDiRisposte(...risposte) {
 
 const CONCLUSO = { role: 'assistant', content: 'fatto', tool_calls: [] };
 const chiamataAttrezzo = (nome, argomenti) => ({ role: 'assistant', content: null, tool_calls: [{ id: 'call_1', function: { name: nome, arguments: JSON.stringify(argomenti) } }] });
-const esitoDelloStrumento = (rete) => rete.chiamate[1].corpo.messages.find((m) => m.role === 'tool').content;
+const esitoDelloStrumento = (rete) => togliConfiniDati(rete.chiamate[1].corpo.messages.find((m) => m.role === 'tool').content);
 
 test('⭐⭐⭐ L9 §7-C — `web_search` passa dalla cache della corsa quando c\'è, e la SECONDA identica non esce in rete', async (t) => {
   const cartella = cartellaVera(t);

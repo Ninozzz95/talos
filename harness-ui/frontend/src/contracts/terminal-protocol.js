@@ -4,7 +4,7 @@ export const DATA_FRAME = 0;
 export const CONTROL_FRAME = 1;
 
 export function encodeTerminalFrame(type, payload) {
-  if (type !== DATA_FRAME && type !== CONTROL_FRAME) throw new TypeError('Tipo frame terminale non valido');
+  if (type !== DATA_FRAME && type !== CONTROL_FRAME) throw new TypeError('Invalid terminal frame type');
   const bytes = encoder.encode(String(payload));
   const frame = new Uint8Array(bytes.length + 1);
   frame[0] = type;

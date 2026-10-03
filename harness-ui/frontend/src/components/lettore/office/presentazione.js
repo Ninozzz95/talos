@@ -18,6 +18,7 @@
  *   stessa cornice ospite di Word (`ospite.js`).
  * ⛔ Ciò che non disegniamo (grafici, SmartArt, oggetti incorporati, media, inchiostro, 3D) diventa un riquadro che lo DICE.
  */
+import { t as traduci } from '../../lingua.js';
 import { PptxHandler } from 'pptx-viewer-core';
 import { URI_AMMESSE, pulisciHtml } from './ospite.js';
 
@@ -30,7 +31,17 @@ const percento = (v, tot) => `${Math.round((Number(v) / tot) * 100 * 1000) / 100
 const GIUSTIFICA = { top: 'flex-start', middle: 'center', bottom: 'flex-end' };
 const ALLINEA = { left: 'left', center: 'center', right: 'right', justify: 'justify', dist: 'justify', justLow: 'justify', thaiDist: 'justify' };
 const MIME_IMMAGINE = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', bmp: 'image/bmp', webp: 'image/webp', svg: 'image/svg+xml' };
-const SEGNAPOSTO = { chart: 'Grafico', smartArt: 'SmartArt', ole: 'Oggetto incorporato', media: 'Audio o video', ink: 'Inchiostro', model3d: 'Modello 3D', zoom: 'Collegamento a una slide', contentPart: 'Contenuto' };
+// i nomi si risolvono all'uso (funzioni), così seguono il cambio di lingua
+const SEGNAPOSTO = {
+  chart: () => traduci('varie.reader.slide.placeholder.chart'),
+  smartArt: () => traduci('varie.reader.slide.placeholder.smartArt'),
+  ole: () => traduci('varie.reader.slide.placeholder.embeddedObject'),
+  media: () => traduci('varie.reader.slide.placeholder.media'),
+  ink: () => traduci('varie.reader.slide.placeholder.ink'),
+  model3d: () => traduci('varie.reader.slide.placeholder.model3d'),
+  zoom: () => traduci('varie.reader.slide.placeholder.slideLink'),
+  contentPart: () => traduci('varie.reader.slide.placeholder.content'),
+};
 
 /** Un colore con la sua opacità (0-1) in esadecimale a 8 cifre; `null` se il colore non è valido. */
 export function conOpacita(colore, opacita) {
@@ -203,14 +214,14 @@ async function elementoNodo(doc, gestore, elemento, dim) {
       nodo.append(img);
     } else {
       nodo.classList.add('talos-segnaposto');
-      nodo.textContent = 'Immagine non leggibile';
+      nodo.textContent = traduci("varie.reader.slide.imageUnreadable");
     }
     return nodo;
   }
   if (elemento.type === 'table') { nodo.append(tabella(doc, elemento, larghezza)); return nodo; }
   if (SEGNAPOSTO[elemento.type] || elemento.type === 'unknown') {
     nodo.classList.add('talos-segnaposto');
-    nodo.textContent = `${SEGNAPOSTO[elemento.type] ?? 'Elemento'}: non mostrato qui`;
+    nodo.textContent = traduci("varie.reader.slide.elementNotShown", { name: (SEGNAPOSTO[elemento.type] ?? (() => traduci('varie.reader.slide.placeholder.element')))() });
     return nodo;
   }
   if (paragrafi(elemento).some((p) => p.length)) nodo.append(testo(doc, elemento, larghezza));
@@ -243,8 +254,8 @@ export async function htmlPresentazione({ doc, byte, gestore = new PptxHandler()
   const radice = crea(doc, 'div', 'talos-diapositive');
   for (const [i, slide] of dati.slides.entries()) {
     const riga = crea(doc, 'section', 'talos-slide-riga');
-    riga.setAttribute('aria-label', `Diapositiva ${i + 1}`);
-    riga.append(crea(doc, 'p', 'talos-slide-n', slide.hidden ? `${i + 1} · nascosta` : String(i + 1)));
+    riga.setAttribute('aria-label', traduci("varie.reader.slide.label", { n: i + 1 }));
+    riga.append(crea(doc, 'p', 'talos-slide-n', slide.hidden ? traduci('varie.reader.slide.hidden', { n: i + 1 }) : String(i + 1)));
     const foglio = crea(doc, 'div', slide.hidden ? 'talos-slide talos-slide--nascosta' : 'talos-slide');
     foglio.style.setProperty('--r', `${larghezza} / ${altezza}`);
     const sfondo = coloreValido(slide.backgroundColor);

@@ -29,14 +29,23 @@ import { testoRiusoCache } from './consumo-sessione.js';
    nostro), non si stampa come stringa troncata. Vedi `components/comando-shell.js`. */
 import { ICONA_FAMIGLIA, analizzaComando, disegnaComando, iconaComando, NOME_FAMIGLIA } from './comando-shell.js';
 
-const num = new Intl.NumberFormat('it-IT', { maximumFractionDigits: 1 });
+/* ⛔ Numeri e orari nella LINGUA CORRENTE, risolti quando si disegna: un formato creato al caricamento resterebbe italiano. */
+const localeNumeri = () => (linguaCorrenteDiT() === 'en' ? 'en-US' : 'it-IT');
+const localeOra = () => (linguaCorrenteDiT() === 'en' ? 'en-GB' : 'it-IT');
+const FORMATI_NUMERI = new Map();
+function formatoNumeri(opzioni) {
+  const chiave = `${localeNumeri()}|${JSON.stringify(opzioni)}`;
+  if (!FORMATI_NUMERI.has(chiave)) FORMATI_NUMERI.set(chiave, new Intl.NumberFormat(localeNumeri(), opzioni));
+  return FORMATI_NUMERI.get(chiave);
+}
+const num = { format: (v) => formatoNumeri({ maximumFractionDigits: 1 }).format(v) };
 /** «41,2k», «200k», «0,4k» come nel mockup. */
 export function kilo(n) {
   const v = Number(n);
   if (!Number.isFinite(v) || v < 0) return '—';
   return `${num.format(v / 1000)}k`; // «200k», «145,4k», «0,4k»: un decimale quando serve, come nel mockup
 }
-const numPercento = new Intl.NumberFormat('it-IT', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+const numPercento = { format: (v) => formatoNumeri({ minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(v) };
 /** Percentuale troncata a un decimale (3,75 → «3,7%»), così la somma delle parti e «Libera» tornano a 100. */
 export function percento(parte, tutto) {
   if (!Number.isFinite(parte) || !Number.isFinite(tutto) || tutto <= 0) return null;
@@ -48,10 +57,10 @@ export function righeAmbiente(contesto = null) {
   const c = contesto || {};
   const annidati = Array.isArray(c.repoAnnidati) ? c.repoAnnidati.length : null;
   return [
-    ['Ramo', c.branch || '—'],
-    ['Worktree', c.worktree || '—'],
-    ['Non salvate', Number.isFinite(c.nonSalvate) ? `${c.nonSalvate} file` : '—'],
-    ['Repo annidati', annidati === null ? '—' : annidati === 0 ? 'nessuno' : `${annidati} · fiducia separata`],
+    [tr('processi.inspector.envBranch'), c.branch || '—'],
+    [tr('processi.inspector.envWorktree'), c.worktree || '—'],
+    [tr('processi.inspector.envUnsaved'), Number.isFinite(c.nonSalvate) ? tn('processi.inspector.envFilesOne', 'processi.inspector.envFilesMany', c.nonSalvate) : '—'],
+    [tr('processi.inspector.envNestedRepos'), annidati === null ? '—' : annidati === 0 ? tr('processi.inspector.envNone') : tr('processi.inspector.envSeparateTrust', { n: annidati })],
   ];
 }
 
@@ -71,15 +80,15 @@ export function righeFinestra(usage = null, finestra = null, ripartizione = null
     if (p) percentoOccupato += Number(p.replace('%', '').replace(',', '.'));
     righe.push([etichetta, `${kilo(token)}${p ? ` · ${p}` : ''}`, classe]);
   };
-  for (const [chiave, etichetta] of [['attrezzi', 'Attrezzi'], ['istruzioni', 'Istruzioni'], ['memoria', 'Memoria']]) {
-    if (Number.isFinite(r[chiave])) aggiungi(etichetta, r[chiave], 'stima');
+  for (const [chiave, etichetta] of [['attrezzi', 'processi.inspector.windowTools'], ['istruzioni', 'processi.inspector.windowInstructions'], ['memoria', 'processi.inspector.windowMemory']]) {
+    if (Number.isFinite(r[chiave])) aggiungi(tr(etichetta), r[chiave], 'stima');
   }
-  if (usati === null) righe.push(['Conversazione', '—']); else aggiungi('Conversazione', usati, '');
+  if (usati === null) righe.push([tr('processi.inspector.windowConversation'), '—']); else aggiungi(tr('processi.inspector.windowConversation'), usati, '');
   // «Libera» = la finestra meno TUTTO ciò che la occupa; la sua percentuale chiude a 100 con le altre
-  righe.push(['Libera', finestra && usati !== null ? `${kilo(Math.max(0, finestra - occupati))} · ${numPercento.format(Math.max(0, Math.round((100 - percentoOccupato) * 10) / 10))}%` : '—']);
+  righe.push([tr('processi.inspector.windowFree'), finestra && usati !== null ? `${kilo(Math.max(0, finestra - occupati))} · ${numPercento.format(Math.max(0, Math.round((100 - percentoOccupato) * 10) / 10))}%` : '—']);
   // Quota dell'intera sessione: non è un'altra parte dell'occupazione della finestra.
-  righe.push(['Riusato dalla cache', testoRiusoCache(cacheSessione)]);
-  return { titoloDestra: finestra ? kilo(finestra) : 'finestra non dichiarata', righe };
+  righe.push([tr('processi.inspector.windowCache'), testoRiusoCache(cacheSessione)]);
+  return { titoloDestra: finestra ? kilo(finestra) : tr('processi.inspector.windowUndeclared'), righe };
 }
 
 /*
@@ -155,12 +164,12 @@ export function righeGiri(giri = []) {
      * messages (such as user prompts)») e le mappe di conversazione del 2026, dove i prompt della
      * persona sono voci di prima classe accanto ai turni dell'assistente, distinte dal ruolo.
      */
-    const misura = g.tu ? 'tuo messaggio'
-      : g.senzaContatto ? 'senza contatto'
-        : g.inCorso ? 'in corso'
+    const misura = g.tu ? tr('processi.inspector.turnYourMessage')
+      : g.senzaContatto ? tr('processi.inspector.turnNoContact')
+        : g.inCorso ? tr('processi.inspector.turnRunning')
           : Number.isFinite(g.token) ? kilo(g.token)
-            : (Number.isFinite(g.attrezzi) ? `${g.attrezzi} ${g.attrezzi === 1 ? 'attrezzo' : 'attrezzi'}` : '—');
-    const titolo = g.titolo || (g.tu ? 'Messaggio' : 'Giro');
+            : (Number.isFinite(g.attrezzi) ? tn('processi.inspector.turnToolsOne', 'processi.inspector.turnToolsMany', g.attrezzi) : '—');
+    const titolo = g.titolo || (g.tu ? tr('processi.inspector.turnMessage') : tr('processi.inspector.turnTurn'));
     return [`${g.numero} · ${titolo}`, misura, g.senzaContatto ? 'warning' : g.inCorso ? 'accent' : ''];
   });
 }
@@ -209,10 +218,10 @@ export function righeFile(file = []) {
  * da solo non dice niente a chi non distingue i colori, e nemmeno a chi legge con uno screen reader.
  */
 export const STATI_PROCESSO = Object.freeze({
-  'in-coda': { etichetta: 'In coda', tono: '', icona: 'i-list', vivo: true },
-  'in-avvio': { etichetta: 'In avvio', tono: 'accent', icona: 'i-play', vivo: true },
-  'in-corso': { etichetta: 'In corso', tono: 'accent', icona: 'i-bolt', vivo: true },
-  'in-attesa': { etichetta: 'In attesa', tono: 'warning', icona: 'i-clock', vivo: true },
+  'in-coda': { get etichetta() { return tr('processi.process.stateQueued'); }, tono: '', icona: 'i-list', vivo: true },
+  'in-avvio': { get etichetta() { return tr('processi.process.stateStarting'); }, tono: 'accent', icona: 'i-play', vivo: true },
+  'in-corso': { get etichetta() { return tr('processi.process.stateRunning'); }, tono: 'accent', icona: 'i-bolt', vivo: true },
+  'in-attesa': { get etichetta() { return tr('processi.process.stateWaiting'); }, tono: 'warning', icona: 'i-clock', vivo: true },
   /*
    * ⛔ 02/10/2026, owner: un comando dell'agente che aspetta il CONSENSO non è «in corso» — non è ancora partito. La prova
    *   dal vivo sul 4174 lo diceva «In corso», con lo Stop in riga, e lo Stop rispondeva «non è più in corso» (il kernel
@@ -221,11 +230,11 @@ export const STATI_PROCESSO = Object.freeze({
    *   processi avviati, e l'approvazione resta a parte (`apps/desktop/src/components/assistant-ui/tool/approval.tsx:123`).
    *   Lo scudo è l'icona dei permessi nella chat («Chiede di scrivere»).
    */
-  'in-consenso': { etichetta: 'Aspetta il tuo consenso', tono: 'warning', icona: 'i-shield', vivo: true },
-  riuscito: { etichetta: 'Riuscito', tono: 'success', icona: 'i-check', vivo: false },
-  fallito: { etichetta: 'Non riuscito', tono: 'danger', icona: 'i-x', vivo: false },
-  annullato: { etichetta: 'Annullato', tono: '', icona: 'i-stop', vivo: false },
-  ucciso: { etichetta: 'Terminato a forza', tono: 'warning', icona: 'i-stop', vivo: false },
+  'in-consenso': { get etichetta() { return tr('processi.process.stateAwaitingApproval'); }, tono: 'warning', icona: 'i-shield', vivo: true },
+  riuscito: { get etichetta() { return tr('processi.process.stateSucceeded'); }, tono: 'success', icona: 'i-check', vivo: false },
+  fallito: { get etichetta() { return tr('processi.process.stateFailed'); }, tono: 'danger', icona: 'i-x', vivo: false },
+  annullato: { get etichetta() { return tr('processi.process.stateCancelled'); }, tono: '', icona: 'i-stop', vivo: false },
+  ucciso: { get etichetta() { return tr('processi.process.stateKilled'); }, tono: 'warning', icona: 'i-stop', vivo: false },
   /*
    * ⛔ 17/09, OSS-2 — «NON ESEGUITO» non è «NON RIUSCITO», e la differenza si vede in una foto.
    *   Una `prova` su un progetto senza suite torna `exit 127` con «nessuna suite trovata», e il
@@ -234,7 +243,7 @@ export const STATI_PROCESSO = Object.freeze({
    *   ⛔ 127 non è una scelta nostra: nella shell POSIX è «command not found», cioè esattamente
    *   «non è partito». Tono neutro, non `danger`: non c'è niente di rotto da segnalare.
    */
-  'non-eseguito': { etichetta: 'Non eseguito', tono: 'warning', icona: 'i-stop', vivo: false },
+  'non-eseguito': { get etichetta() { return tr('processi.process.stateNotRun'); }, tono: 'warning', icona: 'i-stop', vivo: false },
 });
 
 /**
@@ -305,7 +314,7 @@ function statoDaUscita(uscita, errore) {
 function oraConSecondi(ms) {
   if (!Number.isFinite(ms)) return '—';
   const t = new Date(ms);
-  return Number.isNaN(t.getTime()) ? '—' : t.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  return Number.isNaN(t.getTime()) ? '—' : t.toLocaleTimeString(localeOra(), { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 }
 
 /**
@@ -344,7 +353,7 @@ export function datiProcesso(p = {}) {
    *   ⛔ Il silenzio resta riservato a `null`, che è l'unica forma di «non lo so».
    */
   const durata = Number.isFinite(p.durataMs) && p.durataMs >= 0
-    ? (p.durataMs < 100 ? '<0,1 s' : `${num.format(p.durataMs / 1000)} s`) // «0,3 s», «18,1 s», «74 s» come nel mockup
+    ? (p.durataMs < 100 ? `<${num.format(0.1)} s` : `${num.format(p.durataMs / 1000)} s`) // «0,3 s», «18,1 s», «74 s» come nel mockup
     : null;
   /*
    * ⛔⛔⛔ D3, 17/09 sera — UN COMANDO RIFIUTATO AVEVA UNA DURATA E UN'USCITA, e le aveva INVENTATE
@@ -356,16 +365,18 @@ export function datiProcesso(p = {}) {
    *   durato un secondo e di essere uscito bene è la bugia più grande di tutta la scheda.
    * ⇒ Chi non è stato eseguito non porta NUMERI: porta il motivo, in parole. La riga dice
    *   «negato da te», che è un fatto e si legge senza traduzione.
-   * ⛔ Non vale per `exit 127` della `prova` senza suite: lì il 127 arriva DAL SERVER ed è un dato
-   *   vero (è «command not found»), quindi resta a schermo. La differenza non è lo stato: è se il
-   *   numero l'abbiamo ricevuto o costruito.
+   * ⛔ Il 127 delle sessioni registrate prima del 03/10 arriva DAL SERVER e resta a schermo com'era.
+   *   ⛔ H-04 (owner 02/10/2026): da oggi la `prova` senza suite non ha codice (`NOT RUN:`): la riga
+   *     dice il motivo in parole, come un rifiuto — «nessuna suite di test».
    */
   const misura = stato === 'non-eseguito' && p.rifiutato === true
-    ? 'negato da te'
-    : [durata, !descrittore.vivo && Number.isFinite(p.uscita) ? `uscita ${p.uscita}` : null].filter(Boolean).join(' · ') || (descrittore.vivo ? '' : '—');
-  const chi = `${p.chi === 'tu' ? 'tu' : 'agente'} · ${p.chi === 'tu' ? 'terminale' : `giro ${p.giro ?? '—'}`}`;
+    ? tr('processi.process.deniedByYou')
+    : stato === 'non-eseguito' && p.nessunTest === true ? [tr('kernel.prova.nessunTestBreve'), durata].filter(Boolean).join(' · ')
+    : stato === 'non-eseguito' && p.senzaSuite === true ? tr('processi.process.noTestSuite')
+    : [durata, !descrittore.vivo && Number.isFinite(p.uscita) ? tr('processi.process.exitCode', { codice: p.uscita }) : null].filter(Boolean).join(' · ') || (descrittore.vivo ? '' : '—');
+  const chi = p.chi === 'tu' ? tr('processi.process.whoYou') : tr('processi.process.whoAgent', { giro: p.giro ?? '—' });
   const fermo = Number.isFinite(p.fermoDaMs) && p.fermoDaMs >= SOGLIA_ATTESA_MS
-    ? `Nessuna uscita da ${Math.round(p.fermoDaMs / 1000)} secondi. Il processo è vivo: potrebbe aspettare un input. TALOS non lo ferma da solo.`
+    ? tr('processi.process.silent', { secondi: Math.round(p.fermoDaMs / 1000) })
     : null;
   const analisi = analizzaComando(p.comando || '');
   const cartella = typeof p.cwd === 'string' && p.cwd.trim() ? p.cwd.trim() : '—';
@@ -390,17 +401,17 @@ export function datiProcesso(p = {}) {
    *     `riempiCard` accetta già `classiValore` (è il gancio che usano Indice dei giri e File).
    */
   const dettaglio = [
-    ['Comando', p.comando || '—', 'lungo'],
-    ['Stato', descrittore.etichetta],
-    ['Avviato', quando],
-    ['Durata', durata || '—'],
-    ['Uscita', Number.isFinite(p.uscita) && !descrittore.vivo ? String(p.uscita) : '—'],
+    [tr('processi.process.detailCommand'), p.comando || '—', 'lungo'],
+    [tr('processi.process.detailStatus'), descrittore.etichetta],
+    [tr('processi.process.detailStarted'), quando],
+    [tr('processi.process.detailDuration'), durata || '—'],
+    [tr('processi.process.detailExit'), Number.isFinite(p.uscita) && !descrittore.vivo ? String(p.uscita) : '—'],
     /* ⛔ 17/09, OSS-2 — la cartella NON è più «—» per costruzione: `ToolCallResult` porta `cwd`
        (corsia B). Resta «—» quando il campo non arriva davvero, che è un fatto, non un ripiego. */
-    ['Cartella', cartella],
-    ['PID', '—'],
-    ['Chi', chi],
-    ['Descrizione', typeof p.descrizione === 'string' && p.descrizione.trim() ? p.descrizione.trim() : '—', 'lungo'],
+    [tr('processi.process.detailFolder'), cartella],
+    [tr('processi.process.detailPid'), '—'],
+    [tr('processi.process.detailWho'), chi],
+    [tr('processi.process.detailDescription'), typeof p.descrizione === 'string' && p.descrizione.trim() ? p.descrizione.trim() : '—', 'lungo'],
   ];
   return {
     preparato: true,
@@ -463,7 +474,7 @@ function bottoneApri(d, card, riga, idRiga) {
   b.type = 'button';
   b.setAttribute('aria-expanded', 'false');
   b.setAttribute('aria-controls', `processo-dettaglio-${idRiga}`);
-  b.setAttribute('aria-label', 'Mostra i dettagli di questo comando');
+  b.setAttribute('aria-label', tr('processi.process.showDetails'));
   const svg = d.createElementNS(SVG_NS_INSPECTOR, 'svg');
   svg.setAttribute('class', 'i i--sm');
   svg.setAttribute('aria-hidden', 'true');
@@ -479,7 +490,7 @@ function bottoneApri(d, card, riga, idRiga) {
     evento.stopPropagation?.(); // la card intera seleziona: aprire il dettaglio non è selezionare
     const aperto = b.getAttribute('aria-expanded') === 'true';
     b.setAttribute('aria-expanded', aperto ? 'false' : 'true');
-    b.setAttribute('aria-label', aperto ? 'Mostra i dettagli di questo comando' : 'Nascondi i dettagli di questo comando');
+    b.setAttribute('aria-label', aperto ? tr('processi.process.showDetails') : tr('processi.process.hideDetails'));
     riga.aperto = !aperto;
     if (riga.aperto && riga.dettaglioSporco) { riempiCard(d, riga.dettaglio, riga.righeDettaglio, { classiValore: CLASSI_DETTAGLIO_PROCESSO }); riga.dettaglioSporco = false; }
     riga.dettaglio.hidden = aperto;
@@ -502,8 +513,8 @@ function bottoneFerma(d, riga, scheda, idRiga) {
   const b = el(d, 'button', 'talos-button talos-button--ghost talos-button--sm talos-process__ferma');
   b.type = 'button';
   b.hidden = true;
-  b.setAttribute('aria-label', 'Ferma questo comando');
-  b.title = 'Ferma questo comando';
+  b.setAttribute('aria-label', tr('processi.process.stop'));
+  b.title = tr('processi.process.stop');
   const svg = d.createElementNS(SVG_NS_INSPECTOR, 'svg');
   svg.setAttribute('class', 'i i--sm');
   svg.setAttribute('aria-hidden', 'true');
@@ -517,19 +528,19 @@ function bottoneFerma(d, riga, scheda, idRiga) {
     const ferma = scheda.azioni?.ferma;
     if (typeof ferma !== 'function' || b.disabled) return;
     b.disabled = true;
-    avvisoFermata(riga, 'Fermo il comando…');
+    avvisoFermata(riga, tr('processi.process.stopping'));
     let esito;
     try { esito = await ferma(idRiga); } catch (errore) { esito = { ok: false, messaggio: errore?.message }; }
     if (esito?.ok === false) {
       b.disabled = false;
-      avvisoFermata(riga, `Non fermato: ${esito.messaggio || 'riprova.'}`);
+      avvisoFermata(riga, tr('processi.process.notStopped', { motivo: esito.messaggio || tr('processi.process.tryAgain') }));
       return;
     }
     clearTimeout(riga.timerFermata);
     riga.timerFermata = setTimeout(() => {
       if (!FERMABILE.has(riga.card.dataset.stato)) return;
       b.disabled = false;
-      avvisoFermata(riga, 'Non si è fermato: riprova lo Stop.');
+      avvisoFermata(riga, tr('processi.process.didNotStop'));
     }, ATTESA_FERMATA_MS);
   });
   return b;
@@ -661,7 +672,7 @@ function aggiornaRiga(d, riga, p, scheda) {
        ogni delta, ma appena il JSON è completo si ferma — e da lì in poi questi nodi non si
        toccano più, nemmeno quando lo stato cambia. */
     riga.cmd.replaceChildren(disegnaComando(d, p.comando, p.analisi));
-    riga.cmd.setAttribute('aria-label', `Comando ${NOME_FAMIGLIA[p.famiglia] || 'generico'}: ${p.comando}`);
+    riga.cmd.setAttribute('aria-label', tr('processi.process.commandAria', { famiglia: NOME_FAMIGLIA[p.famiglia] || tr('processi.process.familyGeneric'), comando: p.comando }));
     /*
      * ⛔⛔ TROVATO NELLA FOTO, non in un test: qui c'era `STATI_PROCESSO[p.stato].icona`, cioè
      *   l'icona dello STATO scritta sopra l'icona della FAMIGLIA. A schermo ogni riga mostrava lo
@@ -672,7 +683,7 @@ function aggiornaRiga(d, riga, p, scheda) {
      */
     riga.icona.querySelector?.('use')?.setAttribute?.('href', `#${ICONA_FAMIGLIA[p.famiglia] || ICONA_FAMIGLIA.generico}`);
   }
-  if (!m || m.stato !== p.stato) {
+  if (!m || m.stato !== p.stato || m.etichetta !== p.etichetta) {
     riga.statoEl.className = `talos-badge talos-badge--sm talos-process__stato${p.tono ? ` talos-badge--${p.tono}` : ''}`;
     riga.statoTesto.textContent = p.etichetta;
     riga.statoUse.setAttribute('href', `#${p.icona}`);
@@ -692,7 +703,7 @@ function aggiornaRiga(d, riga, p, scheda) {
     if (riga.aperto) { riempiCard(d, riga.dettaglio, p.dettaglio, { classiValore: CLASSI_DETTAGLIO_PROCESSO }); riga.dettaglioSporco = false; }
     else riga.dettaglioSporco = true;
   }
-  riga.mostrato = { comando: p.comando, stato: p.stato, chi: p.chi, quando: p.quando, misura: p.misura, fermo: p.fermo, chiaveDettaglio, descrizione };
+  riga.mostrato = { comando: p.comando, stato: p.stato, etichetta: p.etichetta, chi: p.chi, quando: p.quando, misura: p.misura, fermo: p.fermo, chiaveDettaglio, descrizione };
 }
 
 /**
@@ -725,8 +736,8 @@ export function disegnaProcessi(d, contenitore, lista, opzioni = {}) {
     const box = el(d, 'div', 'talos-field talos-field--sm talos-process-filtro');
     const campo = el(d, 'input', 'talos-field__input talos-process-filtro__campo');
     campo.type = 'search';
-    campo.setAttribute('aria-label', 'Filtra i comandi eseguiti');
-    campo.setAttribute('placeholder', 'Filtra i comandi…');
+    campo.setAttribute('aria-label', tr('processi.process.filterLabel'));
+    campo.setAttribute('placeholder', tr('processi.process.filterPlaceholder'));
     campo.value = scheda.filtro;
     campo.addEventListener('input', () => {
       scheda.filtro = String(campo.value || '');
@@ -746,7 +757,7 @@ export function disegnaProcessi(d, contenitore, lista, opzioni = {}) {
   if (!scheda.zona) {
     scheda.zona = el(d, 'div', 'talos-process-lista');
     scheda.zona.setAttribute('role', 'list');
-    scheda.zona.setAttribute('aria-label', 'Comandi eseguiti in questa sessione');
+    scheda.zona.setAttribute('aria-label', tr('processi.process.listLabel'));
     contenitore.append(scheda.zona);
   }
 
@@ -784,12 +795,12 @@ export function disegnaProcessi(d, contenitore, lista, opzioni = {}) {
         disegnaProcessi(d, contenitore, scheda.ultima, { ridisegna: true });
         /* ⛔ Chi legge con uno screen reader deve sapere che la lista è cresciuta: senza questo
            l'elenco cambia in silenzio (accessibilità della paginazione, ricerca 16/09). */
-        if (scheda.annuncio) scheda.annuncio.textContent = `Ora vedi ${Math.min(scheda.mostrati, scheda.ultima.length)} comandi.`;
+        if (scheda.annuncio) scheda.annuncio.textContent = tr('processi.process.nowShowing', { n: Math.min(scheda.mostrati, scheda.ultima.length) });
       });
       scheda.altri = b;
       contenitore.append(b);
     }
-    scheda.altri.textContent = `Carica altri · ne vedi ${visibili.length} di ${filtrati.length}`;
+    scheda.altri.textContent = tr('processi.process.loadMore', { visibili: visibili.length, totale: filtrati.length });
   } else if (scheda.altri) {
     scheda.altri.remove();
     scheda.altri = null;
@@ -812,18 +823,14 @@ export function disegnaProcessi(d, contenitore, lista, opzioni = {}) {
     const vuoto = el(d, 'div', 'talos-card talos-inspector-card');
     vuoto.dataset.c = 'EmptyState';
     const head = el(d, 'div', 'talos-inspector-card__head');
-    head.appendChild(el(d, 'b', '', 'Processi'));
-    vuoto.append(head, el(d, 'p', 'talos-inspector__hint', tutti.length
-      ? 'Nessun comando corrisponde al filtro.'
-      : 'Nessun comando eseguito in questa sessione. Quando l\'agente o tu lanciate un comando, qui compaiono comando, durata e uscita.'));
+    head.appendChild(el(d, 'b', '', tr('processi.process.title')));
+    vuoto.append(head, el(d, 'p', 'talos-inspector__hint', fraseVuota(tutti.length)));
     scheda.vuoto = vuoto;
     contenitore.append(vuoto);
   } else if (serveVuoto && scheda.vuoto) {
     const frase = scheda.vuoto.querySelector?.('.talos-inspector__hint');
     if (frase) {
-      frase.textContent = tutti.length
-        ? 'Nessun comando corrisponde al filtro.'
-        : 'Nessun comando eseguito in questa sessione. Quando l\'agente o tu lanciate un comando, qui compaiono comando, durata e uscita.';
+      frase.textContent = fraseVuota(tutti.length);
     }
   } else if (!serveVuoto && scheda.vuoto) {
     scheda.vuoto.remove();
@@ -843,6 +850,10 @@ function testoFiltrabile(p) {
   return `${p.comando || ''} ${p.descrizione || ''} ${p.famiglia || ''}`.toLowerCase();
 }
 
+/** La frase dello stato vuoto: o niente corrisponde al filtro, o non c'è ancora nessun comando. */
+function fraseVuota(quanti) {
+  return quanti ? tr('processi.process.emptyNoMatch') : tr('processi.process.emptyNone');
+}
 function el(d, tag, classe, testo) { const n = d.createElement(tag); if (classe) n.className = classe; if (testo != null) n.textContent = testo; return n; }
 function kv(d, k, v, classeV = '') { const r = el(d, 'div', 'talos-kv'); r.append(el(d, 'span', 'talos-kv__k', k), el(d, 'span', `talos-kv__v${classeV ? ` ${classeV}` : ''}`, v)); return r; }
 /**
@@ -865,8 +876,7 @@ function kv(d, k, v, classeV = '') { const r = el(d, 'div', 'talos-kv'); r.appen
 /* ⛔ L'unico import di questo file, e vale la pena: `plurale.js` è il posto in cui vive il plurale
    italiano (nato il 06/09 per il difetto BH-12, nove componenti che scrivevano «1 ricordi»). Qui
    si leggeva «1 scritture»: la decima occorrenza dello stesso difetto. */
-import { plurale } from './plurale.js';
-import { linguaCorrenteDiT } from './lingua.js';
+import { linguaCorrenteDiT, t as tr, tn } from './lingua.js';
 
 /*
  * ⛔ 23/09/2026 (riparazione D6 della revisione UI) — i conteggi degli agenti si scrivono col raggruppamento
@@ -878,6 +888,11 @@ import { linguaCorrenteDiT } from './lingua.js';
  */
 function conteggioAgenti(n) {
   try { return new Intl.NumberFormat(linguaCorrenteDiT(), { useGrouping: 'always' }).format(n); } catch { return String(n); }
+}
+
+/** Un intero nella lingua corrente, col raggruppamento di Intl per difetto (le quattro cifre restano «1000» in italiano). */
+function conteggioIntero(n) {
+  try { return new Intl.NumberFormat(localeNumeri()).format(n); } catch { return String(n); }
 }
 
 const SVG_NS_INSPECTOR = 'http://www.w3.org/2000/svg';
@@ -893,15 +908,15 @@ function chevron(d) {
 
 /** Il «…» della card di una delega: apre lo STESSO menu del tasto destro, ancorato al bottone. */
 function bottoneAzioni(d, a, azioni) {
-  const nome = a.taskCorto || a.task || 'delega senza compito';
+  const nome = a.taskCorto || a.task || tr('processi.agents.noTaskShort');
   /* ⛔ Le classi sono ESATTAMENTE quelle del «…» della Libreria (`libreria.js`), non un secondo
      vestito per lo stesso oggetto: zero CSS nuovo, e se il tema cambia cambiano insieme. */
   const b = el(d, 'button', 'talos-button talos-button--ghost talos-button--sm');
   b.type = 'button';
   b.dataset.azione = 'menu';
   b.setAttribute('aria-haspopup', 'menu');
-  b.setAttribute('aria-label', `Azioni su: ${nome}`);
-  b.title = 'Azioni su questa delega';
+  b.setAttribute('aria-label', tr('processi.agents.actionsOn', { nome }));
+  b.title = tr('processi.agents.actionsOnThis');
   const svg = d.createElementNS(SVG_NS_INSPECTOR, 'svg');
   svg.setAttribute('class', 'i');
   svg.setAttribute('aria-hidden', 'true');
@@ -929,16 +944,16 @@ export function disegnaAgenti(d, contenitore, agenti, azioni = {}) {
     let s = filtriAgenti.get(contenitore);
     if (!s || s.sessionId !== azioni.sessionId || s.righe.parentNode !== contenitore) {
       const barra = el(d, 'div', 'talos-agenti-filtri');
-      const grafo = el(d, 'button', 'talos-button talos-button--ghost talos-button--sm', 'Apri visuale diagramma'); grafo.type = 'button';
-      const cerca = el(d, 'input'); cerca.type = 'search'; cerca.setAttribute('aria-label', 'Cerca agenti'); cerca.placeholder = 'Cerca nome, modello o compito…';
-      const titolo = el(d, 'h3', 'talos-agenti-titolo', 'Agenti della sessione');
-      const filtro = el(d, 'div', 'talos-agenti-stati'); filtro.setAttribute('role', 'group'); filtro.setAttribute('aria-label', 'Filtra stato agenti');
+      const grafo = el(d, 'button', 'talos-button talos-button--ghost talos-button--sm', tr('processi.agents.openDiagram')); grafo.type = 'button';
+      const cerca = el(d, 'input'); cerca.type = 'search'; cerca.setAttribute('aria-label', tr('processi.agents.searchLabel')); cerca.placeholder = tr('processi.agents.searchPlaceholder');
+      const titolo = el(d, 'h3', 'talos-agenti-titolo', tr('agenti.rail.agentsTitle'));
+      const filtro = el(d, 'div', 'talos-agenti-stati'); filtro.setAttribute('role', 'group'); filtro.setAttribute('aria-label', tr('processi.agents.statusFilterLabel'));
       const conto = el(d, 'span'); conto.setAttribute('role', 'status');
       const righe = el(d, 'div', 'talos-agenti-elenco');
-      const pagine = el(d, 'nav', 'talos-agenti-pagine'); pagine.setAttribute('aria-label', 'Pagine degli agenti');
-      const precedente = el(d, 'button', 'talos-button talos-button--ghost talos-button--sm', 'Precedente'); precedente.type = 'button'; precedente.setAttribute('aria-label', 'Pagina precedente');
+      const pagine = el(d, 'nav', 'talos-agenti-pagine'); pagine.setAttribute('aria-label', tr('processi.agents.pagesLabel'));
+      const precedente = el(d, 'button', 'talos-button talos-button--ghost talos-button--sm', tr('agenti.delegations.previous')); precedente.type = 'button'; precedente.setAttribute('aria-label', tr('processi.agents.previousPage'));
       const pagina = el(d, 'span', 'talos-mono');
-      const successiva = el(d, 'button', 'talos-button talos-button--ghost talos-button--sm', 'Successiva'); successiva.type = 'button'; successiva.setAttribute('aria-label', 'Pagina successiva');
+      const successiva = el(d, 'button', 'talos-button talos-button--ghost talos-button--sm', tr('agenti.delegations.next')); successiva.type = 'button'; successiva.setAttribute('aria-label', tr('processi.agents.nextPage'));
       pagine.append(precedente, pagina, successiva);
       barra.append(titolo, grafo, cerca, filtro, conto); contenitore.replaceChildren(barra, righe, pagine);
       s = { sessionId: azioni.sessionId, cerca, filtro, valore: 'tutti', conto, righe, dati: [], azioni: {}, pagina: 0 };
@@ -948,12 +963,12 @@ export function disegnaAgenti(d, contenitore, agenti, azioni = {}) {
         const paginaMassima = Math.max(0, Math.ceil(filtrati.length / 25) - 1);
         s.pagina = Math.min(s.pagina, paginaMassima);
         const inizio = s.pagina * 25;
-        const testoConto = s.azioni.errore ? `Dati non aggiornati: ${s.azioni.errore}` : `${conteggioAgenti(filtrati.length)} di ${conteggioAgenti(s.dati.length)} agenti · tutti i livelli`;
+        const testoConto = s.azioni.errore ? tr('processi.agents.staleData', { errore: s.azioni.errore }) : tr('processi.agents.countAllLevels', { n: conteggioAgenti(filtrati.length), totale: conteggioAgenti(s.dati.length) });
         if (s.conto.textContent !== testoConto) s.conto.textContent = testoConto;
         const attivo = d.activeElement, rigaAttiva = s.righe.contains(attivo) ? attivo.closest('[data-sessione-figlia]') : null;
         const idAttivo = rigaAttiva?.dataset.sessioneFiglia, menuAttivo = attivo?.getAttribute('aria-haspopup') === 'menu';
         disegnaAgenti(d, s.righe, filtrati.slice(inizio, inizio + 25), { onApri: s.azioni.onApri, onMenu: s.azioni.onMenu, compatta: true });
-        if (s.dati.length && !filtrati.length) s.righe.replaceChildren(el(d, 'p', 'talos-inspector__hint', 'Nessun agente per questi filtri.'));
+        if (s.dati.length && !filtrati.length) s.righe.replaceChildren(el(d, 'p', 'talos-inspector__hint', tr('agenti.delegations.noAgentForFilters')));
         if (idAttivo) {
           const riga = [...s.righe.querySelectorAll('[data-sessione-figlia]')].find(n => n.dataset.sessioneFiglia === idAttivo);
           (menuAttivo ? riga?.querySelector('[aria-haspopup="menu"]') || s.cerca : riga || s.cerca).focus({preventScroll:true});
@@ -963,11 +978,11 @@ export function disegnaAgenti(d, contenitore, agenti, azioni = {}) {
           b.hidden = ['ignoto', 'interrotta'].includes(b.dataset.stato) && s.valore !== b.dataset.stato && !s.dati.some(a => statoDelega(a) === b.dataset.stato);
         }
         pagine.hidden = filtrati.length <= 25;
-        pagina.textContent = `${conteggioAgenti(filtrati.length ? inizio + 1 : 0)}–${conteggioAgenti(Math.min(inizio + 25, filtrati.length))} di ${conteggioAgenti(filtrati.length)}`;
+        pagina.textContent = tr('agenti.delegations.pageRange', { da: conteggioAgenti(filtrati.length ? inizio + 1 : 0), a: conteggioAgenti(Math.min(inizio + 25, filtrati.length)), totale: conteggioAgenti(filtrati.length) });
         precedente.disabled = s.pagina === 0; successiva.disabled = s.pagina >= paginaMassima;
       };
-      for (const [valore, testo] of [['tutti', 'Tutti'], ['in-corso', 'Attivi'], ['attesa', 'In attesa'], ['fallita', 'Errori'], ['conclusa', 'Terminati'], ['interrotta', 'Interrotti'], ['ignoto', 'Non disponibili']]) {
-        const b = el(d, 'button', '', testo); b.type = 'button'; b.dataset.stato = valore;
+      for (const [valore, testo] of [['tutti', 'processi.agents.filterAll'], ['in-corso', 'processi.agents.filterActive'], ['attesa', 'processi.agents.filterWaiting'], ['fallita', 'processi.agents.filterErrors'], ['conclusa', 'processi.agents.filterFinished'], ['interrotta', 'processi.agents.filterStopped'], ['ignoto', 'processi.agents.filterUnavailable']]) {
+        const b = el(d, 'button', '', tr(testo)); b.type = 'button'; b.dataset.stato = valore;
         b.addEventListener('click', () => { s.valore = valore; s.pagina = 0; disegna(); }); filtro.append(b);
       }
       s.disegna = disegna; cerca.addEventListener('input', () => { s.pagina = 0; disegna(); });
@@ -982,7 +997,7 @@ export function disegnaAgenti(d, contenitore, agenti, azioni = {}) {
   contenitore.replaceChildren();
   if (!lista.length) {
     const vuoto = el(d, 'div', 'talos-card talos-inspector-card'); vuoto.dataset.c = 'EmptyState';
-    const head = el(d, 'div', 'talos-inspector-card__head'); head.appendChild(el(d, 'b', '', 'Sotto-agenti'));
+    const head = el(d, 'div', 'talos-inspector-card__head'); head.appendChild(el(d, 'b', '', tr('processi.agents.emptyTitle')));
     /*
      * ⛔⛔ BC-03 (11/09) — lo stato vuoto prometteva TRE cose che la scheda piena non dà: «i suoi
      *   giri», «le sue richieste di permesso» e «il pulsante per fermarlo». Misurato sulla scheda
@@ -993,7 +1008,7 @@ export function disegnaAgenti(d, contenitore, agenti, azioni = {}) {
      *   «pulsante per fermarlo» esiste per davvero (il «…» della card). Una promessa si mantiene o
      *   si toglie: riscrivere solo la frase avrebbe nascosto il buco invece di chiuderlo.
      */
-    vuoto.append(head, el(d, 'p', 'talos-inspector__hint', 'Nessun sotto-agente in questa sessione. Quando una delega parte, qui compare con il suo compito, lo stato e quello che ha fatto; da lì si apre la sua conversazione o si ferma.'));
+    vuoto.append(head, el(d, 'p', 'talos-inspector__hint', tr('processi.agents.emptyText')));
     contenitore.appendChild(vuoto);
     return 0;
   }
@@ -1016,7 +1031,7 @@ export function disegnaAgenti(d, contenitore, agenti, azioni = {}) {
       card.classList.add('talos-inspector-card--apribile');
       card.setAttribute('role', 'button');
       card.tabIndex = 0;
-      card.setAttribute('aria-label', `Apri la conversazione di: ${a.taskCorto || a.task || 'delega senza compito'}`);
+      card.setAttribute('aria-label', tr('processi.agents.openConversationOf', { nome: a.taskCorto || a.task || tr('processi.agents.noTaskShort') }));
       const apri = () => azioni.onApri(a);
       card.addEventListener('click', apri);
       card.addEventListener('keydown', (evento) => {
@@ -1038,7 +1053,7 @@ export function disegnaAgenti(d, contenitore, agenti, azioni = {}) {
     /* ⛔ 09/09: `taskCorto` prima di `task` — la consegna intera comincia col preambolo del kernel,
        uguale per ogni figlia, e a 52 caratteri due deleghe diverse diventano la stessa riga (visto
        nella foto della scheda «Agenti» del giro D2). Il ripiego su `task` regge le figlie vecchie. */
-    head.append(el(d, 'b', '', tronca(a.taskCorto || a.task || 'Delega senza compito registrato', 52)), el(d, 'span', `talos-badge talos-badge--sm${statoDelega(a) === 'fallita' ? ' talos-badge--danger' : statoDelega(a) === 'conclusa' ? ' talos-badge--success' : ''}`, etichettaDelega(a)));
+    head.append(el(d, 'b', '', tronca(a.taskCorto || a.task || tr('agenti.agent.noTaskRecorded'), 52)), el(d, 'span', `talos-badge talos-badge--sm${statoDelega(a) === 'fallita' ? ' talos-badge--danger' : statoDelega(a) === 'conclusa' ? ' talos-badge--success' : ''}`, etichettaDelega(a)));
     /*
      * ⛔⛔ 10/09, owner, regola generale e non un caso: «non mettere i pulsanti uno accanto
      *   all'altro, usa i tre puntini + dropdown… e anche azioni tasto destro mouse, ragiona sempre
@@ -1061,16 +1076,16 @@ export function disegnaAgenti(d, contenitore, agenti, azioni = {}) {
       if (descrizione) card.append(el(d, 'p', 'talos-agenti-compito', descrizione));
       const meta = el(d, 'div', 'talos-agenti-meta');
       if (a.attivita?.attrezzoCorrente) meta.append(el(d, 'span', '', nomeUmanoAttrezzo(a.attivita.attrezzoCorrente)));
-      if (a.avviataAlle) meta.append(el(d, 'span', '', `Avviata ${oraBreve(a.avviataAlle)}`));
-      if (Number.isSafeInteger(a.numeroFigli)) meta.append(el(d, 'span', '', `${a.numeroFigli} ${a.numeroFigli === 1 ? 'figlio' : 'figli'}`));
+      if (a.avviataAlle) meta.append(el(d, 'span', '', tr('processi.agents.startedAt', { ora: oraBreve(a.avviataAlle) })));
+      if (Number.isSafeInteger(a.numeroFigli)) meta.append(el(d, 'span', '', tn('processi.agents.childOne', 'processi.agents.childMany', a.numeroFigli)));
       if (meta.childNodes.length) card.append(meta);
     }
     // ⛔ il server manda `avviataAlle` ed `evidenzaDelega` (scritture, artefatti, chiamate ad attrezzi):
     // si mostra quello che c'e' davvero, mai una riga «Modello —» che non ha dietro nessun dato.
     const ev = a.evidenzaDelega && typeof a.evidenzaDelega === 'object' ? a.evidenzaDelega : null;
     const righe = [];
-    if (a.avviataAlle && !azioni.compatta) righe.push(['Avviata', oraBreve(a.avviataAlle)]);
-    if (ev) righe.push(['Ha fatto', `${plurale(Number(ev.toolCalls || 0), 'chiamata')} · ${plurale(Number(ev.scritture || 0), 'scrittura', 'scritture')}`]);
+    if (a.avviataAlle && !azioni.compatta) righe.push([tr('processi.agents.rowStarted'), oraBreve(a.avviataAlle)]);
+    if (ev) righe.push([tr('processi.agents.rowDone'), `${tn('processi.agents.callsOne', 'processi.agents.callsMany', Number(ev.toolCalls || 0), { n: conteggioIntero(Number(ev.toolCalls || 0)) })} · ${tn('processi.agents.writesOne', 'processi.agents.writesMany', Number(ev.scritture || 0), { n: conteggioIntero(Number(ev.scritture || 0)) })}`]);
     for (const [k, v] of righe) {
       const kv = el(d, 'div', 'talos-kv');
       kv.append(el(d, 'span', 'talos-kv__k', k), el(d, 'span', 'talos-kv__v talos-mono', v));
@@ -1088,8 +1103,8 @@ export function disegnaAgenti(d, contenitore, agenti, azioni = {}) {
       const nota = el(d, 'p', 'talos-inspector__hint talos-inspector__hint--danger');
       const file = [...new Set(collisioni.map((c) => c.percorso))];
       nota.textContent = file.length === 1
-        ? `Anche un'altra delega ha scritto ${file[0]}: l'ultima scrittura ha coperto la precedente. Riaprilo prima di fidarti.`
-        : `Anche altre deleghe hanno scritto questi file: ${file.join(', ')}. L'ultima scrittura ha coperto le precedenti.`;
+        ? tr('processi.agents.collisionOne', { file: file[0] })
+        : tr('processi.agents.collisionMany', { file: file.join(', ') });
       card.append(nota);
     }
     contenitore.appendChild(card);
@@ -1189,7 +1204,7 @@ function statoDelega(a) {
   if (a?.approvalPendingCount > 0 || a?.inAttesaApprovazione > 0 || a?.inAttesaApprovazione === true) return 'attesa';
   return a?.conclusa === false ? 'in-corso' : 'ignoto';
 }
-function etichettaDelega(a) { return { interrotta: 'Interrotta', 'in-corso': 'In corso', fallita: 'Non riuscita', conclusa: 'Conclusa', attesa: 'In attesa', ignoto: 'Stato non disponibile' }[statoDelega(a)]; }
+function etichettaDelega(a) { return tr({ interrotta: 'processi.agents.stateStopped', 'in-corso': 'processi.agents.stateRunning', fallita: 'processi.agents.stateFailed', conclusa: 'processi.agents.stateDone', attesa: 'processi.agents.stateWaiting', ignoto: 'agenti.delegations.statusUnavailable' }[statoDelega(a)]); }
 
 /*
  * ⛔⛔ I DUE NUMERI DELLE SCHEDE — owner, 20/09/2026: «badge counter in tempo reale in sidebar
@@ -1230,7 +1245,7 @@ export function contaProcessiAttivi(processi = []) {
 }
 function oraBreve(iso) {
   const t = new Date(iso);
-  return Number.isNaN(t.getTime()) ? '—' : t.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
+  return Number.isNaN(t.getTime()) ? '—' : t.toLocaleTimeString(localeOra(), { hour: '2-digit', minute: '2-digit' });
 }
 function tronca(t, n) { const s = String(t || '').trim(); return s.length > n ? `${s.slice(0, n - 1)}…` : s; }
 
@@ -1324,12 +1339,12 @@ export function aggiornaInspector(inspector, dati = {}, { document: d = globalTh
     if (finestra) { const testa = finestra.querySelector('.talos-inspector-card__head span'); if (testa) testa.textContent = f.titoloDestra; }
     riempiCard(d, finestra, f.righe, { classiValore: (r) => (r[2] === 'stima' ? 'talos-measure--estimate' : '') });
     const giri = righeGiri(dati.giri);
-    riempiCard(d, indice, giri.length ? giri : [['Nessun giro ancora', '—']], { classiValore: (r) => (r[2] === 'accent' ? 'talos-kv__v--accent' : '') });
+    riempiCard(d, indice, giri.length ? giri : [[tr('processi.inspector.turnsNone'), '—']], { classiValore: (r) => (r[2] === 'accent' ? 'talos-kv__v--accent' : '') });
   }
   if (!schedaDaSaltare(inspector, inspector.querySelector('#railFile'), 'file')) {
     const fileCard = inspector.querySelector('#railFile [data-c="InspectorCard"]');
     const file = righeFile(dati.file);
-    riempiCard(d, fileCard, file.length ? file : [['Nessun file scritto finora', '—']], { classiValore: (r) => (r[1].startsWith('+') ? 'talos-diff-num--plus' : '') });
+    riempiCard(d, fileCard, file.length ? file : [[tr('processi.inspector.filesNone'), '—']], { classiValore: (r) => (r[1].startsWith('+') ? 'talos-diff-num--plus' : '') });
   }
   const agenti = inspector.querySelector('#railAgenti');
   /* ⛔ Quando una conversazione figlia è aperta, `#railAgenti` è `hidden` per scelta di chi l'ha
@@ -1464,7 +1479,7 @@ export function processiDagliEventi(eventi = [], { adesso = Date.now(), nomiComa
       p.uscita = Number.isFinite(e.uscita) ? e.uscita : (e.errore ? 1 : 0);
       /* ⛔ 17/09 sera — il rifiuto vince sul codice di uscita: un comando negato all'approvazione
          non è mai partito, e «REFUSED» non porta nessun `exit N` da cui dedurlo. */
-      p.stato = e.rifiutato === true ? 'non-eseguito' : statoDaUscita(p.uscita, Boolean(e.errore));
+      p.stato = e.rifiutato === true || e.senzaSuite === true ? 'non-eseguito' : statoDaUscita(p.uscita, Boolean(e.errore));
       /*
        * ⛔⛔⛔ 17/09, OSS-1 — LA DURATA HA TRE FONTI, IN QUEST'ORDINE, E LA TERZA È IL SILENZIO.
        *   (1) `durataMs` dichiarato dal server: è l'unico misurato dove il comando è girato davvero,
@@ -1493,6 +1508,11 @@ export function processiDagliEventi(eventi = [], { adesso = Date.now(), nomiComa
        *   sarebbe rimasto inventato in tutti gli altri.
        */
       if (e.rifiutato === true) { p.rifiutato = true; p.durataMs = null; p.uscita = null; }
+      /* H-04 (owner 02/10/2026): una `prova` senza suite non è partita — nessun numero, come un rifiuto (`NOT RUN:` dal kernel). */
+      /* 03/10/2026: con «zero test eseguiti» (anche lui un NOT RUN) il comando È partito — la durata è vera e resta; il codice
+         d'uscita no (uno 0 si leggerebbe «passato»). */
+      if (e.nessunTest === true) { p.nessunTest = true; p.uscita = null; }
+      else if (e.senzaSuite === true) { p.senzaSuite = true; p.durataMs = null; p.uscita = null; }
       /* ⛔ Sta in FONDO al ramo, dopo la durata e l'uscita: messo prima, il calcolo del delta qui
          sopra avrebbe rimesso dentro il numero che questa riga serve a togliere. Trovato rileggendo
          l'ordine, non da una prova — una cancellazione che avviene prima di chi riempie non

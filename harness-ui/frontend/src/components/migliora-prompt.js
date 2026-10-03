@@ -1,3 +1,4 @@
+import { t } from './lingua.js';
 /*
  * MiglioraPrompt — «Migliora il prompt» nel composer del desktop.
  *
@@ -39,9 +40,9 @@ import { nomeModelloUmano } from './chat-foot.js';
  * del pannello (stessa scelta del mobile, EnhancerSetup.vue:18-23).
  */
 export const PROFONDITA = Object.freeze([
-  Object.freeze({ valore: 'concisa', nome: 'Asciutta', spiega: 'Stessa lunghezza. Chiarisce obiettivo e risultato atteso, senza aggiungere sezioni.' }),
-  Object.freeze({ valore: 'equilibrata', nome: 'Equilibrata', spiega: 'Un briefing chiaro: obiettivo, risultato atteso, i vincoli che hai già scritto e due o tre verifiche.' }),
-  Object.freeze({ valore: 'estesa', nome: 'Estesa', spiega: 'Un briefing completo: ambito, formato della risposta, vincoli, casi limite e criteri di accettazione.' }),
+  Object.freeze({ valore: 'concisa', get nome() { return t('chat.improve.level.concise.name'); }, get spiega() { return t('chat.improve.level.concise.description'); } }),
+  Object.freeze({ valore: 'equilibrata', get nome() { return t('chat.improve.level.balanced.name'); }, get spiega() { return t('chat.improve.level.balanced.description'); } }),
+  Object.freeze({ valore: 'estesa', get nome() { return t('chat.improve.level.extended.name'); }, get spiega() { return t('chat.improve.level.extended.description'); } }),
 ]);
 
 export const PROFONDITA_PREDEFINITA = 'equilibrata';
@@ -91,7 +92,7 @@ export function riassumiEsito(dati) {
 /** Il nome del modello come lo legge una persona (H22: mai la targa del runtime a schermo). */
 export function etichettaModello(modello) {
   const nome = nomeModelloUmano(modello);
-  return nome || 'il modello di questa chat';
+  return nome || t('chat.improve.model.thisChat');
 }
 
 /**
@@ -105,7 +106,7 @@ export function etichettaModello(modello) {
  */
 export function fraseProvenienza(modello) {
   const nome = nomeModelloUmano(modello);
-  return nome ? `Lo riscrive ${nome}, il modello di questa chat.` : 'Lo riscrive il modello di questa chat.';
+  return nome ? t('chat.improve.model.rewritesNamed', { nome }) : t('chat.improve.model.rewrites');
 }
 
 /**
@@ -116,11 +117,11 @@ export function fraseProvenienza(modello) {
  */
 export function messaggioErrore(errore) {
   const codice = errore?.code ?? errore?.codice ?? null;
-  if (codice === 'PROVIDER_KEY_REQUIRED') return 'Manca la chiave di OpenRouter. Collegala in Impostazioni → Provider, poi riprova.';
-  if (codice === 'RUNTIME_NOT_AVAILABLE') return 'Il motore locale di questa chat non è acceso. Avvialo dal Laboratorio modelli, poi riprova.';
-  if (codice === 'PROVIDER_RUNTIME_UNAVAILABLE') return 'Il modello non ha restituito una riscrittura utilizzabile. Riprova.';
-  if (codice === 'QUERY_INVALID') return typeof errore?.message === 'string' && errore.message ? errore.message : 'Il testo non è utilizzabile così.';
-  return 'La riscrittura non è riuscita. Riprova.';
+  if (codice === 'PROVIDER_KEY_REQUIRED') return t('chat.improve.error.keyMissing');
+  if (codice === 'RUNTIME_NOT_AVAILABLE') return t('chat.improve.error.runtimeOff');
+  if (codice === 'PROVIDER_RUNTIME_UNAVAILABLE') return t('chat.improve.error.unusable');
+  if (codice === 'QUERY_INVALID') return typeof errore?.message === 'string' && errore.message ? errore.message : t('chat.improve.error.textInvalid');
+  return t('chat.improve.error.failed');
 }
 
 const STATI = Object.freeze(['scelta', 'attesa', 'errore', 'esito']);
@@ -190,10 +191,10 @@ export function montaMiglioraPrompt({
   // — testa: il titolo, e da chi verrà riscritto. Nient'altro.
   const testa = elemento('header');
   testa.style.cssText = 'display:flex;align-items:baseline;gap:var(--talos-space-sm)';
-  const titolo = elemento('h2', null, 'Migliora il prompt');
+  const titolo = elemento('h2', null, t('chat.improve.title'));
   titolo.id = 'migliora-prompt-titolo';
   titolo.style.cssText = 'margin:0;font-size:var(--talos-font-size-md);font-weight:600';
-  const chiudiBtn = elemento('button', 'talos-button talos-button--ghost talos-button--sm', 'Chiudi');
+  const chiudiBtn = elemento('button', 'talos-button talos-button--ghost talos-button--sm', t('chat.common.close'));
   chiudiBtn.type = 'button';
   /*
    * ⛔ Trovato nella foto dell'11/09 (tema chiaro): «Chiudi» usciva color accento e competeva col
@@ -212,7 +213,7 @@ export function montaMiglioraPrompt({
   const scelta = elemento('div');
   scelta.dataset.miglioraScelta = '';
   scelta.style.cssText = 'display:flex;flex-direction:column;gap:var(--talos-space-sm)';
-  const etichetta = elemento('span', 'talos-label', 'Quanto riscrivere');
+  const etichetta = elemento('span', 'talos-label', t('chat.improve.howMuch'));
   etichetta.id = 'migliora-prompt-quanto';
   const linguette = elemento('div', 'talos-tabs talos-tabs--pills');
   const listaLinguette = elemento('div', 'talos-tabs__list');
@@ -231,7 +232,7 @@ export function montaMiglioraPrompt({
   const spiegazione = elemento('p', null, '');
   spiegazione.dataset.miglioraSpiegazione = '';
   spiegazione.style.cssText = 'margin:0;color:var(--talos-muted);font-size:var(--talos-font-size-sm);line-height:1.5;max-width:64ch';
-  const avvia = elemento('button', 'talos-button talos-button--primary', 'Migliora');
+  const avvia = elemento('button', 'talos-button talos-button--primary', t('chat.improve.run'));
   avvia.type = 'button';
   avvia.dataset.miglioraAvvia = '';
   avvia.style.alignSelf = 'flex-end';
@@ -251,7 +252,7 @@ export function montaMiglioraPrompt({
   guasto.style.cssText = 'display:flex;flex-direction:column;gap:var(--talos-space-sm);padding:var(--talos-space-control);border:1px solid var(--talos-danger);border-radius:var(--talos-radius-control);color:var(--talos-danger);font-size:var(--talos-font-size-sm)';
   const guastoTesto = elemento('p', null, '');
   guastoTesto.style.margin = '0';
-  const riprova = elemento('button', 'talos-button talos-button--ghost talos-button--sm', 'Riprova');
+  const riprova = elemento('button', 'talos-button talos-button--ghost talos-button--sm', t('chat.common.retry'));
   riprova.type = 'button';
   riprova.dataset.miglioraRiprova = '';
   riprova.style.alignSelf = 'flex-start';
@@ -264,7 +265,7 @@ export function montaMiglioraPrompt({
   // Le etichette del confronto restano piu' piccole del testo che nominano: nella foto
   // dell'11/09 avevano lo stesso peso dell'originale e si confondevano con esso.
   const stileEtichetta = 'font-size:var(--talos-font-size-xs)';
-  const intestazionePrima = elemento('span', 'talos-label', 'Il tuo testo');
+  const intestazionePrima = elemento('span', 'talos-label', t('chat.improve.yourText'));
   intestazionePrima.style.cssText = stileEtichetta;
   const prima = elemento('p', null, '');
   prima.dataset.miglioraPrima = '';
@@ -309,15 +310,15 @@ export function montaMiglioraPrompt({
    *   non condividono più lo spazio con il testo.
    */
   azioni.style.cssText = 'display:flex;flex-wrap:wrap;justify-content:flex-end;gap:var(--talos-space-sm);padding-top:var(--talos-space-sm);flex:0 0 auto';
-  const annulla = elemento('button', 'talos-button talos-button--ghost talos-button--sm', 'Annulla');
+  const annulla = elemento('button', 'talos-button talos-button--ghost talos-button--sm', t('chat.common.cancel'));
   annulla.type = 'button';
   annulla.dataset.miglioraAnnulla = '';
   annulla.addEventListener('click', () => chiudi());
-  const aggiungi = elemento('button', 'talos-button talos-button--secondary talos-button--sm', 'Aggiungi sotto');
+  const aggiungi = elemento('button', 'talos-button talos-button--secondary talos-button--sm', t('chat.improve.addBelow'));
   aggiungi.type = 'button';
   aggiungi.dataset.miglioraAggiungi = '';
   aggiungi.addEventListener('click', () => decidi('aggiungi'));
-  const copiaBtn = elemento('button', 'talos-button talos-button--secondary talos-button--sm', 'Copia');
+  const copiaBtn = elemento('button', 'talos-button talos-button--secondary talos-button--sm', t('chat.common.copy'));
   copiaBtn.type = 'button';
   copiaBtn.dataset.miglioraCopia = '';
   const copiaStato = elemento('span', null, '');
@@ -331,14 +332,14 @@ export function montaMiglioraPrompt({
     copiaStato.textContent = '';
     try {
       await copiaTesto(esito.promptMigliorato);
-      copiaStato.textContent = 'Copiato';
+      copiaStato.textContent = t('chat.common.copied');
     } catch {
-      copiaStato.textContent = 'Copia non riuscita';
+      copiaStato.textContent = t('chat.improve.copyFailed');
     } finally {
       copiaBtn.disabled = false;
     }
   });
-  const sostituisci = elemento('button', 'talos-button talos-button--primary talos-button--sm', 'Sostituisci');
+  const sostituisci = elemento('button', 'talos-button talos-button--primary talos-button--sm', t('chat.improve.replace'));
   sostituisci.type = 'button';
   sostituisci.dataset.miglioraSostituisci = '';
   sostituisci.addEventListener('click', () => decidi('sostituisci'));
@@ -373,13 +374,13 @@ export function montaMiglioraPrompt({
     guasto.hidden = stato !== 'errore';
     risultato.hidden = stato !== 'esito';
     avvia.disabled = stato === 'attesa';
-    if (stato === 'attesa') attesa.textContent = `Sto riscrivendo con ${etichettaModello(modello)}…`;
+    if (stato === 'attesa') attesa.textContent = t('chat.improve.rewriting', { modello: etichettaModello(modello) });
     if (stato === 'errore') guastoTesto.textContent = errore;
     if (stato === 'esito' && esito) {
       prima.textContent = anteprimaOriginale(esito.promptOriginale);
-      intestazioneDopo.textContent = `Riscritto da ${etichettaModello(esito.modello || modello)}`;
+      intestazioneDopo.textContent = t('chat.improve.rewrittenBy', { modello: etichettaModello(esito.modello || modello) });
       dopo.textContent = esito.promptMigliorato;
-      sintesi.textContent = esito.sintesi ? `Cosa è cambiato: ${esito.sintesi}` : '';
+      sintesi.textContent = esito.sintesi ? t('chat.improve.whatChanged', { sintesi: esito.sintesi }) : '';
       sintesi.hidden = esito.sintesi === '';
       /*
        * ⛔ QUARTA foto, 11/09: i principi erano `talos-chip`, e `.talos-chip` NON ESISTE come
@@ -398,7 +399,7 @@ export function montaMiglioraPrompt({
     const testo = String(leggiPrompt() ?? '').trim();
     if (testo === '') {
       stato = 'errore';
-      errore = 'Scrivi il tuo messaggio nel composer, poi torna qui.';
+      errore = t('chat.improve.writeFirst');
       disegna();
       return;
     }

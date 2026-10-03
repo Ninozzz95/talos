@@ -7,11 +7,11 @@ export const TALOS_STORAGE_KEYS = Object.freeze({
 const ALLOWED_KEYS = new Set(Object.values(TALOS_STORAGE_KEYS));
 
 function assertKey(key) {
-  if (!ALLOWED_KEYS.has(key)) throw new TypeError('Chiave di persistenza non consentita');
+  if (!ALLOWED_KEYS.has(key)) throw new TypeError('Persistence key not allowed');
 }
 
 export function createPersistence({ storage = globalThis.localStorage } = {}) {
-  if (!storage) throw new TypeError('Storage non disponibile');
+  if (!storage) throw new TypeError('Storage is not available');
   return Object.freeze({
     read(key, fallback = null) {
       assertKey(key);

@@ -10,6 +10,7 @@
  * Il resto del contratto nuovo è in tests/rev-read-lines.test.mjs.
  */
 import assert from 'node:assert/strict';
+import { togliConfiniDati } from '../src/kernel/confine-dati.mjs';
 import {mkdtempSync, writeFileSync} from 'node:fs';
 import {open} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
@@ -67,7 +68,8 @@ test('READ22-INVALID: malformed offset/limit/byteOffset are rejected before open
   let opened=0;
   const apriFn=async()=>{opened++;throw Error('must not open');};
   for(const args of [{offset:null},{offset:-1},{offset:0.5},{offset:'0'},{offset:Infinity},{limit:0},{limit:'4'},{limit:NaN},
-    {byteOffset:-1},{byteOffset:'3'},{byteOffset:0,offset:1},{byteOffset:0,limit:5},{format:'hex',limit:3},{format:'hex',limit:4097},{format:'hex',byteOffset:0}]){
+    /* F-026 (owner 02/10/2026): con byteOffset `limit` sono byte, 4..102400 — fuori da lì si rifiuta come prima */
+    {byteOffset:-1},{byteOffset:'3'},{byteOffset:0,offset:1},{byteOffset:0,limit:3},{byteOffset:0,limit:102401},{format:'hex',limit:3},{format:'hex',limit:4097},{format:'hex',byteOffset:0}]){
     await assert.rejects(leggiTestoLimitato('unused','unused',{...args,apriFn}),(e)=>e.code==='READ_INVALID_RANGE',JSON.stringify(args));
   }
   assert.equal(opened,0);
@@ -88,7 +90,10 @@ test('READ22-HANDLE: a byte page uses one handle, a bounded read and the stat ta
   const r=await leggiTestoLimitato(root,'file.txt',{byteOffset:10000,tetto:1000,apriFn:m.apriFn});
   assert.equal(r.testo,'A'.repeat(1000));assert.equal(r.byteSulDisco,12000);assert.equal(r.nextByteOffset,11000);
   assert.deepEqual([m.stats.open,m.stats.close],[1,1]);
-  assert.ok(m.stats.bytes<=BYTE_CAMPIONE_BINARIO+10000+1001,'sample, newline count before the offset, then the page');
+  /* F-026 (owner 02/10/2026, «dice quanti byte restano in quella riga»): dopo la pagina si cerca dove finisce la riga, a
+     blocchi da 64 KB fermandosi all'a capo — qui il resto del file, 9.000 byte. Il limite resta finito: un blocco in più. */
+  assert.ok(m.stats.bytes<=BYTE_CAMPIONE_BINARIO+10000+1001+64*1024,'sample, newline count before the offset, the page, then the scan to the end of the line');
+  assert.equal(r.restanoNellaRiga,9000);
   assert.ok(m.stats.positions.includes(10000));
 });
 
@@ -134,7 +139,7 @@ test('READ22-KERNEL: schema and both prefetched/serial dispatch honor lines and 
     const fetchDiRete=async(_url,opts)=>{messages.push(JSON.parse(opts.body));return{ok:true,status:200,json:async()=>({choices:[{message:turns++===0?{role:'assistant',content:null,tool_calls}:{role:'assistant',content:'done'}}],usage:{prompt_tokens:10,completion_tokens:5}})};};
     await talosLavora({cartella:root,task:{consegna:'read exact file parts'},modello:'x',chiave:'fixture',fetchDiRete});
     const outs=messages[1].messages.filter(m=>m.role==='tool');
-    const uno=outs.find(m=>m.tool_call_id==='one').content,due=outs.find(m=>m.tool_call_id==='two').content;
+    const uno=togliConfiniDati(outs.find(m=>m.tool_call_id==='one').content),due=togliConfiniDati(outs.find(m=>m.tool_call_id==='two').content);
     assert.match(uno,/lines 2-3 of 6/);assert.ok(uno.endsWith('\nriga2\nriga3\n'),uno);
     assert.match(due,/inside line 5/);assert.ok(due.endsWith('\n'+'L'.repeat(1000)),due.slice(0,200));
   }

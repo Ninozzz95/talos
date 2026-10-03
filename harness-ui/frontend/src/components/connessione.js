@@ -21,15 +21,19 @@
  *    websocket.org/guides/heartbeat; oneuptime 2026-01-24 connection health).
  */
 
+import { t } from './lingua.js';
 export const STATI = Object.freeze(['collegato', 'riconnessione', 'caduto', 'ricollegato']);
 
 /** Le parole a schermo (H22: niente termini tecnici). */
-export const TESTI = Object.freeze({
+/* 03/10/2026, seconda ondata della lingua: getter sul dizionario, letti nella lingua corrente. «Connessione persa · riprovo…»
+   non aveva l'inglese: con l'interfaccia in inglese arrivava a schermo in italiano. */
+export const TESTI = Object.freeze(Object.defineProperties({
   collegato: '',
-  riconnessione: (n) => `Connessione persa · riprovo${n > 1 ? ` (${n})` : '…'}`,
-  caduto: 'Il server non risponde',
-  ricollegato: 'Collegato di nuovo',
-});
+  riconnessione: (n) => (n > 1 ? t('app.connection.reconnectingN', { n }) : t('app.connection.reconnecting')),
+}, {
+  caduto: { enumerable: true, get: () => t('app.connection.down') },
+  ricollegato: { enumerable: true, get: () => t('app.connection.backTitle') },
+}));
 
 export const RITMO = Object.freeze({
   battitoMinimoMs: 2000, // primo battito dopo un segnale di caduta

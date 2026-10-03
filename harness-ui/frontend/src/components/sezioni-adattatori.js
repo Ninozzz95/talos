@@ -45,6 +45,9 @@
  *   dodici ore, ed è il segno che una frase «non può esistere» va datata, mai lasciata sospesa.
  *   **Progetti** resta di sola lettura: per quello le rotte non ci sono davvero.
  */
+import { t as traduci, tn, linguaCorrenteDiT } from './lingua.js';
+/* Date e numeri nella lingua dell'interfaccia (italiano → it-IT, inglese → en-US), letta a ogni uso. */
+const localeUI = () => (linguaCorrenteDiT() === 'en' ? 'en-US' : 'it-IT');
 import { titoloNota, quandoNota, sommarioNote } from './note.js';
 import { genereMemoria, testiMemoria } from './memoria.js';
 import { statoAttivita, prioritaAttivita, testiAttivita, riepilogoAttivita } from './attivita.js';
@@ -66,7 +69,6 @@ import {
   esportazioniRicerca, montaPannelloEsportazioni, indirizzoEsportazione,
 } from './ricerca-dettaglio.js';
 import { frasiProgetto, sommarioProgetti, ultimeSessioni } from './progetti.js';
-import { plurale } from './plurale.js';
 import { montaSezione, statoSezione, icona } from './sezione-elenco-dettaglio.js';
 /* 12/09 L5 — l'eliminazione di una ricerca è irreversibile: la stessa modale di conferma che usano
    la Libreria e le tre sezioni scrivibili, mai un `confirm()` del browser né una seconda modale. */
@@ -77,7 +79,7 @@ import { azioneAnnulla } from './toast.js';
 import {
   SCHEMI, servizioVoci, valoriIniziali, validaValori, corpoCreazione, corpoModifica,
   paroleErroreRete, parolaOrigine, parolaStato, STATI_ATTIVITA,
-  costruisciModulo, montaTestoVoce, costruisciStatoAttivita, confermaEliminazione, accordo,
+  costruisciModulo, montaTestoVoce, costruisciStatoAttivita, confermaEliminazione, messaggiVoce,
 } from './modulo-voce.js';
 import { creaAvanzamentoRicerca } from './ricerca-avanzamento.js'; // 24/09/2026: barra + fase e conteggi della ricerca in corso
 
@@ -93,6 +95,11 @@ export function anteprima(testo, quanti = 240) {
 /** Quante parole ha una nota: è il numero che dice se vale la pena aprirla. */
 export function conteggioParole(testo) {
   return String(testo ?? '').split(/\s+/).filter(Boolean).length;
+}
+
+/** «12 parole» / «1 parola», nella lingua corrente. */
+function contaParole(n) {
+  return tn('sezioni.notes.words.one', 'sezioni.notes.words.many', n, { n: new Intl.NumberFormat(localeUI()).format(n) });
 }
 
 /**
@@ -144,9 +151,17 @@ export function estensioneFile(nome) {
 }
 
 /** Solo la data, per il piede della scheda: l'ora intera vive nel dettaglio. */
+/* I conteggi detti nella lingua corrente: passati alle sezioni (`contaVoci`) e usati nelle barre. */
+const formattaNumero = (n) => new Intl.NumberFormat(localeUI()).format(n);
+const contaRicordi = (n) => tn('sezioni.memory.count.one', 'sezioni.memory.count.many', n, { n: formattaNumero(n) });
+const contaAttivita = (n) => tn('sezioni.tasks.count.one', 'sezioni.tasks.count.many', n, { n: formattaNumero(n) });
+const contaFile = (n) => tn('sezioni.library.count.one', 'sezioni.library.count.many', n, { n: formattaNumero(n) });
+const contaRicerche = (n) => tn('sezioni.research.count.one', 'sezioni.research.count.many', n, { n: formattaNumero(n) });
+const contaProgetti = (n) => tn('sezioni.projects.count.one', 'sezioni.projects.count.many', n, { n: formattaNumero(n) });
+
 export function dataBreve(iso) {
   const d = iso ? new Date(iso) : null;
-  return d && Number.isFinite(d.getTime()) ? d.toLocaleDateString('it-IT') : '';
+  return d && Number.isFinite(d.getTime()) ? d.toLocaleDateString(localeUI()) : '';
 }
 
 function meta(doc, pezzi) {
@@ -209,7 +224,7 @@ function bottoneMenu(doc, titolo, apri) {
   const b = nodo(doc, 'button', 'td-card-azioni');
   b.type = 'button';
   b.setAttribute('aria-haspopup', 'menu');
-  b.setAttribute('aria-label', `Azioni su ${titolo}`);
+  b.setAttribute('aria-label', traduci("sezioni.common.actionsFor", { name: titolo }));
   b.append(icona(doc, 'more'));
   b.addEventListener('click', (e) => { e.stopPropagation(); apri({ ancoraEl: b }); });
   return b;
@@ -226,7 +241,10 @@ function scrittura(schermo, { schema, lista, opzioni, ridisegna }) {
   const avvisa = notificatore(opzioni);
   const servizio = opzioni.servizio || servizioVoci({ schema, sessionId: opzioni.sessionId, rete: opzioni.rete });
   const ricarica = () => (opzioni.onCambiata || opzioni.onAggiorna)?.();
-  const titoloDi = (v) => String(v?.titolo ?? '').trim() || `${schema.sostantivo.charAt(0).toUpperCase()}${schema.sostantivo.slice(1)} senza titolo`;
+  const titoloDi = (v) => String(v?.titolo ?? '').trim() || schema.senzaTitolo;
+  /* I messaggi con il participio sono per genere (`messaggiVoce`): in italiano concorda, in inglese no. */
+  const parole = messaggiVoce(schema);
+  const nomeSezione = () => (schema.chiave === 'note' ? traduci('sezioni.notes.name') : schema.chiave === 'attivita' ? traduci('sezioni.tasks.name') : traduci('sezioni.memory.name'));
 
   /* ---- la voce INTERA: l'elenco non porta formato, origine e data di nascita (backend §6) ---- */
   function letturaDi(id) { return m.voci.get(String(id ?? '')) || null; }
@@ -242,7 +260,7 @@ function scrittura(schermo, { schema, lista, opzioni, ridisegna }) {
     Promise.resolve()
       .then(() => servizio.leggi(id))
       .then((dati) => { m.voci.set(id, { stato: 'pronto', voce: dati?.[schema.campoRisposta] || null }); })
-      .catch((errore) => { m.voci.set(id, { stato: 'errore', errore: errore?.message || 'motivo non registrato' }); })
+      .catch((errore) => { m.voci.set(id, { stato: 'errore', errore: errore?.message || traduci('sezioni.common.reasonNotRecorded') }); })
       .then(() => ridisegna());
   }
 
@@ -269,7 +287,7 @@ function scrittura(schermo, { schema, lista, opzioni, ridisegna }) {
     /* ⛔ MDN «aria-invalid»: un campo obbligatorio vuoto non si accusa prima che qualcuno abbia
        provato a salvare. Questo è quel momento, e da qui in poi gli errori si vedono. */
     if (!esito.ok) { ridisegna(); return; }
-    if (!servizio) { mod.erroreRete = 'Manca la sessione: riapri una conversazione e riprova.'; ridisegna(); return; }
+    if (!servizio) { mod.erroreRete = traduci('sezioni.voice.noSession'); ridisegna(); return; }
     mod.inCorso = true;
     ridisegna();
     try {
@@ -286,11 +304,11 @@ function scrittura(schermo, { schema, lista, opzioni, ridisegna }) {
          *   vecchio (contratto §4). Dirgli «Salvato» sarebbe una bugia con la ricevuta.
          */
         if (dati?.duplicato) {
-          avvisa('Esiste già', `«${titoloDi(nata)}» era già fra i ricordi: ho aperto quello, e il testo che avevi scritto non l’ha sostituito.`);
+          avvisa(traduci('sezioni.voice.duplicateTitle'), traduci('sezioni.voice.duplicateBody', { title: titoloDi(nata) }));
         } else {
-          avvisa(accordo(schema, 'Salvat'), `«${titoloDi(nata)}» è fra le voci di ${schema.chiave === 'note' ? 'Note' : schema.chiave === 'attivita' ? 'Attività' : 'Memoria'}.`, azioneAnnulla(async () => {
-            try { await servizio.elimina(nata?.id); avvisa(accordo(schema, 'Annullat'), `«${titoloDi(nata)}» non è mai ${accordo(schema, 'stat')} ${accordo(schema, 'salvat')}.`); }
-            catch (errore) { avvisa(`Non ${accordo(schema, 'annullat')}`, paroleErroreRete(errore?.code, schema, { azione: 'annullare' }), { tono: 'errore' }); }
+          avvisa(parole.salvata(), traduci('sezioni.voice.savedBody', { title: titoloDi(nata), section: nomeSezione() }), azioneAnnulla(async () => {
+            try { await servizio.elimina(nata?.id); avvisa(parole.annullata(), parole.corpoAnnullata(titoloDi(nata))); }
+            catch (errore) { avvisa(parole.nonAnnullata(), paroleErroreRete(errore?.code, schema, { azione: traduci('varie.voice.action.undo') }), { tono: 'errore' }); }
             ricarica();
           }));
         }
@@ -306,12 +324,12 @@ function scrittura(schermo, { schema, lista, opzioni, ridisegna }) {
       if (dopo?.id) m.voci.set(String(dopo.id), { stato: 'pronto', voce: dopo });
       const indietro = corpoModifica(schema, valoriIniziali(schema, prima), dopo).corpo;
       chiudiModulo();
-      avvisa(accordo(schema, 'Modificat'), `«${titoloDi(dopo)}» è ${accordo(schema, 'aggiornat')}.`, azioneAnnulla(async () => {
+      avvisa(parole.modificata(), parole.corpoModificata(titoloDi(dopo)), azioneAnnulla(async () => {
         try {
           const tornata = await servizio.modifica(mod.id, indietro);
           if (tornata?.[schema.campoRisposta]?.id) m.voci.set(String(mod.id), { stato: 'pronto', voce: tornata[schema.campoRisposta] });
-          avvisa(`${accordo(schema, 'Rimess')} com’era`, `«${titoloDi(prima)}» è ${accordo(schema, 'tornat')} al testo di prima.`);
-        } catch (errore) { avvisa(`Non ${accordo(schema, 'annullat')}`, paroleErroreRete(errore?.code, schema, { azione: 'annullare' }), { tono: 'errore' }); }
+          avvisa(parole.rimessa(), parole.corpoRimessa(titoloDi(prima)));
+        } catch (errore) { avvisa(parole.nonAnnullata(), paroleErroreRete(errore?.code, schema, { azione: traduci('varie.voice.action.undo') }), { tono: 'errore' }); }
         ricarica();
       }));
       ricarica();
@@ -366,9 +384,9 @@ function scrittura(schermo, { schema, lista, opzioni, ridisegna }) {
   function notaPiede() {
     if (!m.modulo) return null;
     const stato = m.modulo.inCorso
-      ? 'Sto salvando…'
-      : (m.modulo.modo === 'crea' ? `Non ancora ${accordo(schema, 'salvat')}` : 'Modifiche non ancora salvate');
-    return contaParoleNelModulo ? `${plurale(conteggioParole(m.modulo.valori?.contenuto), 'parola', 'parole')} · ${stato}` : stato;
+      ? traduci('sezioni.voice.saving')
+      : (m.modulo.modo === 'crea' ? parole.nonSalvataAncora() : traduci('sezioni.voice.unsavedChanges'));
+    return contaParoleNelModulo ? `${contaParole(conteggioParole(m.modulo.valori?.contenuto))} · ${stato}` : stato;
   }
 
   function nodiModulo(doc2) {
@@ -382,12 +400,12 @@ function scrittura(schermo, { schema, lista, opzioni, ridisegna }) {
 
   function azioniModulo(doc2) {
     const mod = m.modulo;
-    const salvaBtn = bottone(doc2, mod.inCorso ? 'Salvo…' : 'Salva', { variante: 'primary', esegui: () => salva() });
+    const salvaBtn = bottone(doc2, mod.inCorso ? traduci('sezioni.voice.saveBusy') : traduci('sezioni.common.save'), { variante: 'primary', esegui: () => salva() });
     salvaBtn.disabled = Boolean(mod.inCorso);
     /* ATLAS F2: nella nota «Annulla» è il bottone di serie dell'Atlas (`button('Annulla',…,'tiny')`, non fantasma) e viene
        PRIMA di «Salva», anche nell'ordine del DOM — l'ordine di lettura e di tabulazione è quello che si vede
        (W3C C27). «Salva» porta la spunta dell'Atlas (`icon('check')`). Le altre sezioni restano com'erano. */
-    const annullaBtn = bottone(doc2, 'Annulla', { variante: contaParoleNelModulo ? 'secondary' : 'ghost', esegui: () => { chiudiModulo(); ridisegna(); } });
+    const annullaBtn = bottone(doc2, traduci('sezioni.common.cancel'), { variante: contaParoleNelModulo ? 'secondary' : 'ghost', esegui: () => { chiudiModulo(); ridisegna(); } });
     annullaBtn.disabled = Boolean(mod.inCorso);
     if (contaParoleNelModulo) {
       salvaBtn.prepend(icona(doc2, 'check'));
@@ -407,15 +425,15 @@ function scrittura(schermo, { schema, lista, opzioni, ridisegna }) {
     if (typeof opzioni.copia === 'function') { await opzioni.copia(testo); return; }
     try {
       await globalThis.navigator?.clipboard?.writeText?.(testo);
-      avvisa(accordo(schema, 'Copiat'), `«${titoloDi(intera)}» è negli appunti.`);
-    } catch { avvisa(`Non ${accordo(schema, 'copiat')}`, 'Gli appunti non sono disponibili in questa finestra.', { tono: 'errore' }); }
+      avvisa(parole.copiata(), traduci('sezioni.voice.copiedBody', { title: titoloDi(intera) }));
+    } catch { avvisa(parole.nonCopiata(), traduci('sezioni.voice.clipboardUnavailable'), { tono: 'errore' }); }
   }
 
   function esporta(v) {
     const intera = voceIntera(v);
     const nome = `${titoloDi(intera).replace(/[\\/:*?"<>|]/g, '-').slice(0, 80)}.md`;
     esportaTesto(doc, nome, `# ${titoloDi(intera)}\n\n${testoDi(schema, intera)}`);
-    avvisa(accordo(schema, 'Esportat'), `${nome} è nella cartella dei download.`);
+    avvisa(parole.esportata(), traduci('sezioni.voice.exportedBody', { name: nome }));
   }
 
   function elimina(v) {
@@ -442,13 +460,13 @@ function scrittura(schermo, { schema, lista, opzioni, ridisegna }) {
       const dopo = dati?.[schema.campoRisposta] || null;
       if (dopo?.id) m.voci.set(String(dopo.id), { stato: 'pronto', voce: dopo });
       if (conAnnulla && prima) {
-        avvisa(accordo(schema, 'Aggiornat'), `«${titoloDi(intera)}»: ${parolaStato(nuovo).toLocaleLowerCase('it')}.`, azioneAnnulla(async () => {
+        avvisa(parole.aggiornata(), traduci('sezioni.voice.statusBody', { title: titoloDi(intera), status: parolaStato(nuovo).toLocaleLowerCase(linguaCorrenteDiT()) }), azioneAnnulla(async () => {
           await cambiaStato(intera, prima, { conAnnulla: false });
-          avvisa(`${accordo(schema, 'Rimess')} com’era`, `«${titoloDi(intera)}»: ${parolaStato(prima).toLocaleLowerCase('it')}.`);
+          avvisa(parole.rimessa(), traduci('sezioni.voice.statusBody', { title: titoloDi(intera), status: parolaStato(prima).toLocaleLowerCase(linguaCorrenteDiT()) }));
         }));
       }
     } catch (errore) {
-      avvisa(`Non ${accordo(schema, 'aggiornat')}`, paroleErroreRete(errore?.code, schema, { azione: 'cambiare stato' }), { tono: 'errore' });
+      avvisa(parole.nonAggiornata(), paroleErroreRete(errore?.code, schema, { azione: traduci('varie.voice.action.changeStatus') }), { tono: 'errore' });
     }
     ricarica();
     ridisegna();
@@ -464,17 +482,17 @@ function scrittura(schermo, { schema, lista, opzioni, ridisegna }) {
     if (!servizio) return [];
     const intera = voceIntera(v);
     const voci = [
-      { chiave: 'modifica', etichetta: 'Modifica', icona: 'i-edit', aziona: () => apriModulo('modifica', intera) },
+      { chiave: 'modifica', etichetta: traduci('sezioni.common.edit'), icona: 'i-edit', aziona: () => apriModulo('modifica', intera) },
     ];
     if (schema.risorsa === 'tasks') {
       for (const stato of STATI_ATTIVITA) {
         if (stato === intera?.stato) continue;
-        voci.push({ chiave: `stato-${stato}`, etichetta: `Segna «${parolaStato(stato)}»`, icona: stato === 'done' ? 'i-check' : stato === 'doing' ? 'i-clock' : 'i-list', aziona: () => void cambiaStato(intera, stato) });
+        voci.push({ chiave: `stato-${stato}`, etichetta: traduci('sezioni.voice.markAs', { status: parolaStato(stato) }), icona: stato === 'done' ? 'i-check' : stato === 'doing' ? 'i-clock' : 'i-list', aziona: () => void cambiaStato(intera, stato) });
       }
     }
-    voci.push({ chiave: 'copia', etichetta: 'Copia il testo', icona: 'i-copy', aziona: () => void copia(intera) });
-    if (schema.risorsa === 'notes') voci.push({ chiave: 'esporta', etichetta: 'Esporta come Markdown', icona: 'i-download', aziona: () => esporta(intera) });
-    voci.push({ chiave: 'elimina', etichetta: 'Elimina', icona: 'i-trash', pericolo: true, separaPrima: true, aziona: () => elimina(intera) });
+    voci.push({ chiave: 'copia', etichetta: traduci('sezioni.voice.copyText'), icona: 'i-copy', aziona: () => void copia(intera) });
+    if (schema.risorsa === 'notes') voci.push({ chiave: 'esporta', etichetta: traduci('sezioni.voice.exportMarkdown'), icona: 'i-download', aziona: () => esporta(intera) });
+    voci.push({ chiave: 'elimina', etichetta: traduci('sezioni.common.delete'), icona: 'i-trash', pericolo: true, separaPrima: true, aziona: () => elimina(intera) });
     return voci;
   }
 
@@ -529,8 +547,8 @@ function scrittura(schermo, { schema, lista, opzioni, ridisegna }) {
       return parola ? nodo(doc2, 'span', 'td-origine', parola) : null;
     },
     azioniVoce: (v, doc2) => (servizio ? [
-      bottone(doc2, 'Modifica', { esegui: () => apriModulo('modifica', v) }),
-      bottone(doc2, 'Tutte le azioni', { esegui: (e) => apriMenu(v, { ancoraEl: e?.currentTarget || null }) }),
+      bottone(doc2, traduci('sezioni.common.edit'), { esegui: () => apriModulo('modifica', v) }),
+      bottone(doc2, traduci("sezioni.common.allActions"), { esegui: (e) => apriMenu(v, { ancoraEl: e?.currentTarget || null }) }),
     ] : []),
     /**
      * Dopo il montaggio: aggancia la selezione al modulo, o chiude il modulo se la selezione è
@@ -615,7 +633,7 @@ function scrittura(schermo, { schema, lista, opzioni, ridisegna }) {
       if (!testa) return;
       /* ⛔ «Nuova voce» era una parola di sistema: chi guarda sta scrivendo una NOTA, non «una
          voce». Il nome lo porta lo schema, che è lo stesso del pulsante da cui si è arrivati. */
-      if (m.modulo) testa.textContent = `${nome} / ${m.modulo.modo === 'crea' ? schema.titoloNuova : 'Modifica'}`;
+      if (m.modulo) testa.textContent = `${nome} / ${m.modulo.modo === 'crea' ? schema.titoloNuova : traduci('sezioni.common.edit')}`;
     },
     notaPiede,
   };
@@ -649,36 +667,36 @@ export function montaNote(schermo, note, opzioni = {}) {
   const magazzino = magazzinoScrittura(schermo);
   return montaScrivibile(schermo, scrivi, {
     chiave: 'note',
-    nome: 'Note',
+    nome: traduci('sezioni.notes.name'),
     icona: 'doc',
     famiglia: 'td-note',
     sostantivo: 'nota',
     nuovaNellaTesta: true, // ATLAS F2: «Nuova nota» nella testata della pagina (vedi `montaPulsanteNuova`)
     voci: scrivi.vociConBozza(),
     stato: { errore: opzioni.errore || null, caricamento: Boolean(opzioni.caricamento) },
-    caricando: 'Leggo le note…',
+    caricando: traduci('sezioni.notes.loading'),
     onAggiorna: opzioni.onAggiorna,
     eliminaInBlocco: scrivi.servizio?.eliminaInBlocco,
     onBatchCompletato: scrivi.ricarica,
     // Una sola famiglia di note sul disco: nessun filtro finto per riempire la riga.
-    filtri: scrivi.filtriSenzaBozza([{ id: 'tutte', etichetta: 'Tutte' }]),
+    filtri: scrivi.filtriSenzaBozza([{ id: 'tutte', etichetta: traduci('sezioni.common.filterAllF') }]),
     queryIniziale: cerca,
     idDi: (n) => n?.id ?? titoloNota(n),
-    titoloDi: (n) => (n?.__bozza ? 'Nuova nota' : titoloNota(n)),
+    titoloDi: (n) => (n?.__bozza ? SCHEMI.note.titoloNuova : titoloNota(n)),
     quandoDi: (n) => n?.aggiornataAlle ?? n?.quando ?? n?.creataAlle ?? n?.createdAt ?? null,
     cercaIn: (n) => `${n?.titolo ?? ''} ${n?.contenuto ?? ''}`,
-    sommarioBarra: (_n, { errore, caricamento }) => (errore ? 'Note non disponibili' : caricamento ? 'Leggo le note…' : sommarioNote(lista.length)),
+    sommarioBarra: (_n, { errore, caricamento }) => (errore ? traduci('sezioni.notes.unavailable') : caricamento ? traduci('sezioni.notes.loading') : sommarioNote(lista.length)),
     /* ⛔ I due sommari contano l'elenco VERO: la bozza è un modulo aperto, non una nota. */
-    sommarioStato: (visibili) => (visibili === lista.length ? sommarioNote(lista.length) : `${sommarioNote(visibili)} su ${sommarioNote(lista.length)}`),
+    sommarioStato: (visibili) => (visibili === lista.length ? sommarioNote(lista.length) : traduci('sezioni.notes.filteredOfTotal', { shown: sommarioNote(visibili), total: sommarioNote(lista.length) })),
     scheda: (n, { doc, icona: ic }) => ({
-      alto: [ic('doc'), nodo(doc, 'span', '', 'Appunto')],
+      alto: [ic('doc'), nodo(doc, 'span', '', traduci('sezioni.notes.card.kind'))],
       corpo: [nodo(doc, 'p', 'td-excerpt', anteprima(n?.contenuto))],
       basso: [
         /* ATLAS F2 (NON DEPLOYABILE fino a review e 4174): la data col suo orologio, come il piede della card dell'Atlas
            (`source/atlas.js:36` `noteCard`: `icon('clock')` + data). Il secondo pezzo resta il dato vero di oggi (le
            parole): la «Nota locale» dell'Atlas non ha una sorgente ed è la NC-05, che decide l'owner. */
-        (() => { const q = nodo(doc, 'span', 'td-card-quando'); q.append(ic('clock'), nodo(doc, 'span', '', quandoNota(n?.aggiornataAlle ?? n?.creataAlle, adesso) || 'senza data')); return q; })(),
-        nodo(doc, 'span', '', plurale(conteggioParole(n?.contenuto), 'parola', 'parole')),
+        (() => { const q = nodo(doc, 'span', 'td-card-quando'); q.append(ic('clock'), nodo(doc, 'span', '', quandoNota(n?.aggiornataAlle ?? n?.creataAlle, adesso) || traduci('sezioni.notes.card.noDate'))); return q; })(),
+        nodo(doc, 'span', '', contaParole(conteggioParole(n?.contenuto))),
       ],
       adorno: scrivi.adorno(n, doc),
     }),
@@ -687,7 +705,7 @@ export function montaNote(schermo, note, opzioni = {}) {
       scrivi.chiediVoceIntera(n);
       const intera = scrivi.voceIntera(n);
       const pezzi = [
-        meta(doc, [etichetta('Nota'), nodo(doc, 'span', '', quandoNota(intera?.aggiornataAlle ?? intera?.creataAlle, adesso) || 'data non registrata'), scrivi.origine(n, doc)]),
+        meta(doc, [etichetta(traduci('sezioni.notes.detail.kind')), nodo(doc, 'span', '', quandoNota(intera?.aggiornataAlle ?? intera?.creataAlle, adesso) || traduci('sezioni.common.dateNotRecordedLower')), scrivi.origine(n, doc)]),
         nodo(doc, 'h2', '', titoloNota(intera)),
       ];
       /*
@@ -712,28 +730,29 @@ export function montaNote(schermo, note, opzioni = {}) {
       /* Senza rete restano le due azioni che vivono nel browser e non promettono niente al server. */
       if (azioni.length) return azioni;
       return [
-        bottone(doc, 'Copia', { esegui: () => onCopia?.(n) }),
-        bottone(doc, 'Esporta', {
+        bottone(doc, traduci('sezioni.common.copy'), { esegui: () => onCopia?.(n) }),
+        bottone(doc, traduci('sezioni.common.export'), {
           esegui: () => {
             esportaTesto(doc, `${titoloNota(n).replace(/[\\/:*?"<>|]/g, '-').slice(0, 80)}.md`, `# ${titoloNota(n)}\n\n${n?.contenuto ?? ''}`);
-            avvisa('Esportata', `${titoloNota(n)} è stata scaricata come file Markdown.`);
+            avvisa(messaggiVoce(SCHEMI.note).esportata(), traduci('sezioni.notes.exportedBody', { title: titoloNota(n) }));
           },
         }),
       ];
     },
-    notaPiede: () => scrivi.notaPiede() || 'Le note valgono per tutti i progetti',
-    vuoto: { titolo: 'Nessuna nota', testo: 'TALOS scrive una nota quando trova qualcosa che vale la pena ricordare, e da qui le scrivi anche tu. Le note valgono per tutti i progetti.' },
+    notaPiede: () => scrivi.notaPiede() || traduci('sezioni.notes.footerNote'),
+    vuoto: { titolo: traduci('sezioni.notes.empty.title'), testo: traduci('sezioni.notes.empty.text') },
   }, ridisegna);
 }
 
 /* --------------------------------------------------------------------------------- MEMORIA */
 
-const GENERI_FILTRO = [
-  ['tutti', 'Tutte', null],
-  ['preference', 'Preferenze', 'preference'],
-  ['project_fact', 'Fatti', 'project_fact'],
-  ['procedure', 'Procedure', 'procedure'],
-  ['policy_note', 'Regole', 'policy_note'],
+/* ⛔ Le etichette dei filtri si leggono a ogni disegno (funzione), non alla creazione del modulo: seguono il cambio di lingua. */
+const generiFiltro = () => [
+  ['tutti', traduci('sezioni.common.filterAllF'), null],
+  ['preference', traduci('sezioni.memory.filter.preferences'), 'preference'],
+  ['project_fact', traduci('sezioni.memory.filter.facts'), 'project_fact'],
+  ['procedure', traduci('sezioni.memory.filter.procedures'), 'procedure'],
+  ['policy_note', traduci('sezioni.memory.filter.rules'), 'policy_note'],
 ];
 
 export function aggiornaPaginaMemoria(schermo, memorie, opzioni = {}) {
@@ -743,23 +762,23 @@ export function aggiornaPaginaMemoria(schermo, memorie, opzioni = {}) {
   const scrivi = scrittura(schermo, { schema: SCHEMI.memory, lista, opzioni, ridisegna });
   return montaScrivibile(schermo, scrivi, {
     chiave: 'memoria',
-    nome: 'Memoria',
+    nome: traduci('sezioni.memory.name'),
     icona: 'brain',
     famiglia: 'td-memory',
     sostantivo: 'ricordo',
     voci: scrivi.vociConBozza(),
     stato: { errore: opzioni.errore || null, caricamento: Boolean(opzioni.caricamento) },
-    caricando: 'Caricamento ricordi…',
+    caricando: traduci('sezioni.memory.loading'),
     onAggiorna: opzioni.onAggiorna,
     eliminaInBlocco: scrivi.servizio?.eliminaInBlocco,
     onBatchCompletato: scrivi.ricarica,
-    filtri: scrivi.filtriSenzaBozza(GENERI_FILTRO.map(([id, etichetta, genere]) => ({ id, etichetta, quando: genere ? (m) => m?.genere === genere : null }))),
+    filtri: scrivi.filtriSenzaBozza(generiFiltro().map(([id, etichetta, genere]) => ({ id, etichetta, quando: genere ? (m) => m?.genere === genere : null }))),
     idDi: (m) => m?.id,
-    titoloDi: (m) => (m?.__bozza ? 'Nuovo ricordo' : testiMemoria(m).titolo),
+    titoloDi: (m) => (m?.__bozza ? SCHEMI.memory.titoloNuova : testiMemoria(m).titolo),
     quandoDi: (m) => m?.aggiornataAlle ?? null,
     cercaIn: (m) => `${testiMemoria(m).titolo} ${testiMemoria(m).contenuto} ${genereMemoria(m?.genere).testo}`,
-    sommarioBarra: (_n, { errore, caricamento }) => (errore ? 'Ricordi non disponibili' : caricamento ? 'Caricamento ricordi…' : `${plurale(lista.length, 'ricordo')} · globali`),
-    sommarioStato: (visibili) => (visibili === lista.length ? plurale(lista.length, 'ricordo') : `${visibili} di ${plurale(lista.length, 'ricordo')}`),
+    sommarioBarra: (_n, { errore, caricamento }) => (errore ? traduci('sezioni.memory.unavailable') : caricamento ? traduci('sezioni.memory.loading') : traduci('sezioni.memory.globalCount', { count: contaRicordi(lista.length) })),
+    sommarioStato: (visibili) => (visibili === lista.length ? contaRicordi(lista.length) : traduci('sezioni.common.shownOfTotal', { shown: visibili, total: contaRicordi(lista.length) })),
     scheda: (m, { doc, icona: ic, etichetta }) => {
       const g = genereMemoria(m?.genere);
       const segno = nodo(doc, 'span', 'td-memory-mark');
@@ -770,7 +789,7 @@ export function aggiornaPaginaMemoria(schermo, memorie, opzioni = {}) {
         alto: [segno, etichetta(g.testo, g.tono || 'accent')],
         corpo: [nodo(doc, 'p', 'td-excerpt', anteprima(testiMemoria(m).contenuto))],
         /* Nella scheda la data e basta: l'ora intera sta nel dettaglio e qui si troncava. */
-        basso: [nodo(doc, 'span', '', dataBreve(m?.aggiornataAlle) || 'Data non registrata')],
+        basso: [nodo(doc, 'span', '', dataBreve(m?.aggiornataAlle) || traduci('sezioni.common.dateNotRecorded'))],
         adorno: scrivi.adorno(m, doc),
       };
     },
@@ -783,7 +802,7 @@ export function aggiornaPaginaMemoria(schermo, memorie, opzioni = {}) {
       return [
         /* ⛔ L'origine era un `h3 Origine` col valore grezzo (`persona`/`modello`) scritto sotto:
            un nome di campo a schermo. Adesso è una parola, accanto alla data, dove la si legge. */
-        meta(doc, [etichetta(g.testo, g.tono || 'accent'), nodo(doc, 'span', '', t.aggiornata || 'data non registrata'), scrivi.origine(m, doc)]),
+        meta(doc, [etichetta(g.testo, g.tono || 'accent'), nodo(doc, 'span', '', t.aggiornata || traduci('sezioni.common.dateNotRecordedLower')), scrivi.origine(m, doc)]),
         nodo(doc, 'h2', '', t.titolo),
         nodo(doc, 'div', 'td-prose', t.contenuto),
       ];
@@ -792,16 +811,16 @@ export function aggiornaPaginaMemoria(schermo, memorie, opzioni = {}) {
       if (scrivi.inModulo(m)) return scrivi.azioniModulo(doc);
       const azioni = scrivi.azioniVoce(m, doc);
       if (azioni.length) return azioni;
-      return [bottone(doc, 'Copia', {
+      return [bottone(doc, traduci('sezioni.common.copy'), {
         esegui: async () => {
           const t = testiMemoria(m);
-          try { await navigator.clipboard.writeText(`${t.titolo}\n\n${t.contenuto}`); avvisa('Copiato', `«${t.titolo}» è negli appunti.`); }
-          catch { avvisa('Copia non riuscita', 'Il browser non ha dato accesso agli appunti.'); }
+          try { await navigator.clipboard.writeText(`${t.titolo}\n\n${t.contenuto}`); avvisa(messaggiVoce(SCHEMI.memory).copiata(), traduci('sezioni.voice.copiedBody', { title: t.titolo })); }
+          catch { avvisa(traduci('sezioni.memory.copyFailed'), traduci('sezioni.common.noClipboardAccess')); }
         },
       })];
     },
-    notaPiede: () => scrivi.notaPiede() || 'I ricordi valgono per tutte le conversazioni',
-    vuoto: { titolo: 'Nessun ricordo', testo: 'I ricordi sono globali, disponibili alle tue conversazioni. Li salva TALOS quando impara qualcosa di te, e da qui li scrivi anche tu.' },
+    notaPiede: () => scrivi.notaPiede() || traduci('sezioni.memory.footerNote'),
+    vuoto: { titolo: traduci('sezioni.memory.empty.title'), testo: traduci('sezioni.memory.empty.text') },
   }, ridisegna);
 }
 
@@ -813,28 +832,28 @@ export function aggiornaPaginaAttivita(schermo, attivita, opzioni = {}) {
   const scrivi = scrittura(schermo, { schema: SCHEMI.tasks, lista, opzioni, ridisegna });
   return montaScrivibile(schermo, scrivi, {
     chiave: 'attivita',
-    nome: 'Attività',
+    nome: traduci('sezioni.tasks.name'),
     icona: 'check-sq',
     famiglia: 'td-task',
     sostantivo: 'attività',
     voci: scrivi.vociConBozza(),
     stato: { errore: opzioni.errore || null, caricamento: Boolean(opzioni.caricamento) },
-    caricando: 'Caricamento attività…',
+    caricando: traduci('sezioni.tasks.loading'),
     onAggiorna: opzioni.onAggiorna,
     eliminaInBlocco: scrivi.servizio?.eliminaInBlocco,
     onBatchCompletato: scrivi.ricarica,
     filtri: scrivi.filtriSenzaBozza([
-      { id: 'tutte', etichetta: 'Tutte' },
-      { id: 'todo', etichetta: 'Da fare', quando: (a) => a?.stato === 'todo' },
-      { id: 'doing', etichetta: 'In corso', quando: (a) => a?.stato === 'doing' },
-      { id: 'done', etichetta: 'Fatte', quando: (a) => a?.stato === 'done' },
+      { id: 'tutte', etichetta: traduci('sezioni.common.filterAllF') },
+      { id: 'todo', etichetta: traduci('sezioni.tasks.status.todo'), quando: (a) => a?.stato === 'todo' },
+      { id: 'doing', etichetta: traduci('sezioni.tasks.status.doing'), quando: (a) => a?.stato === 'doing' },
+      { id: 'done', etichetta: traduci('sezioni.tasks.filter.done'), quando: (a) => a?.stato === 'done' },
     ]),
     idDi: (a) => a?.id,
-    titoloDi: (a) => (a?.__bozza ? 'Nuova attività' : testiAttivita(a).titolo),
+    titoloDi: (a) => (a?.__bozza ? SCHEMI.tasks.titoloNuova : testiAttivita(a).titolo),
     quandoDi: (a) => a?.aggiornataAlle ?? null,
     cercaIn: (a) => `${testiAttivita(a).titolo} ${testiAttivita(a).descrizione} ${statoAttivita(a?.stato).testo}`,
-    sommarioBarra: (_n, { errore, caricamento }) => (errore ? 'Attività non disponibili' : caricamento ? 'Caricamento attività…' : riepilogoAttivita(lista)),
-    sommarioStato: (visibili) => (visibili === lista.length ? plurale(lista.length, 'attività', 'attività') : `${visibili} di ${plurale(lista.length, 'attività', 'attività')}`),
+    sommarioBarra: (_n, { errore, caricamento }) => (errore ? traduci('sezioni.tasks.unavailable') : caricamento ? traduci('sezioni.tasks.loading') : riepilogoAttivita(lista)),
+    sommarioStato: (visibili) => (visibili === lista.length ? contaAttivita(lista.length) : traduci('sezioni.common.shownOfTotal', { shown: visibili, total: contaAttivita(lista.length) })),
     scheda: (a, { doc, icona: ic, etichetta }) => {
       const s = statoAttivita(a?.stato);
       const t = testiAttivita(a);
@@ -854,7 +873,7 @@ export function aggiornaPaginaAttivita(schermo, attivita, opzioni = {}) {
       if (scrivi.servizio && !a?.__bozza) {
         segno.setAttribute('role', 'checkbox');
         segno.setAttribute('aria-checked', String(fatta));
-        segno.setAttribute('aria-label', fatta ? `Riapri ${t.titolo}` : `Segna fatta ${t.titolo}`);
+        segno.setAttribute('aria-label', fatta ? traduci("sezioni.tasks.card.reopenLabel", { title: t.titolo }) : traduci("sezioni.tasks.card.markDoneLabel", { title: t.titolo }));
         segno.addEventListener('click', (e) => { e.stopPropagation(); void scrivi.cambiaStato(a, fatta ? 'todo' : 'done'); });
       } else {
         segno.disabled = true;
@@ -867,11 +886,11 @@ export function aggiornaPaginaAttivita(schermo, attivita, opzioni = {}) {
       adorni.append(segno, ...(menu ? [menu] : []));
       return {
         dati: { done: String(fatta), comandabile: String(Boolean(scrivi.servizio)) },
-        alto: [etichetta(s.testo, s.tono || ''), ...(a?.priorita === 'high' ? [nodo(doc, 'span', 'td-priority', 'Alta priorità')] : [])],
-        corpo: [nodo(doc, 'p', 'td-excerpt', anteprima(t.descrizione, 130) || 'Nessuna descrizione.')],
+        alto: [etichetta(s.testo, s.tono || ''), ...(a?.priorita === 'high' ? [nodo(doc, 'span', 'td-priority', traduci('sezioni.tasks.card.highPriority'))] : [])],
+        corpo: [nodo(doc, 'p', 'td-excerpt', anteprima(t.descrizione, 130) || traduci('sezioni.tasks.row.noDescription'))],
         basso: [
           nodo(doc, 'span', '', prioritaAttivita(a?.priorita)),
-          nodo(doc, 'span', '', dataBreve(a?.aggiornataAlle) || 'Data non registrata'),
+          nodo(doc, 'span', '', dataBreve(a?.aggiornataAlle) || traduci('sezioni.common.dateNotRecorded')),
         ],
         adorno: adorni,
       };
@@ -883,15 +902,15 @@ export function aggiornaPaginaAttivita(schermo, attivita, opzioni = {}) {
       const s = statoAttivita(intera?.stato);
       const t = testiAttivita(intera);
       const pezzi = [
-        meta(doc, [etichetta(s.testo, s.tono || ''), nodo(doc, 'span', '', prioritaAttivita(intera?.priorita)), nodo(doc, 'span', '', t.aggiornata || 'data non registrata'), scrivi.origine(a, doc)]),
+        meta(doc, [etichetta(s.testo, s.tono || ''), nodo(doc, 'span', '', prioritaAttivita(intera?.priorita)), nodo(doc, 'span', '', t.aggiornata || traduci('sezioni.common.dateNotRecordedLower')), scrivi.origine(a, doc)]),
         nodo(doc, 'h2', '', t.titolo),
       ];
       if (scrivi.servizio) {
-        pezzi.push(nodo(doc, 'h3', '', 'Stato'));
+        pezzi.push(nodo(doc, 'h3', '', traduci('sezioni.tasks.detail.status')));
         pezzi.push(costruisciStatoAttivita(doc, { stato: intera?.stato, onScegli: (nuovo) => void scrivi.cambiaStato(a, nuovo) }));
       }
-      pezzi.push(nodo(doc, 'h3', '', 'Descrizione'));
-      pezzi.push(nodo(doc, 'div', 'td-prose', t.descrizione || 'Nessuna descrizione.'));
+      pezzi.push(nodo(doc, 'h3', '', traduci('sezioni.tasks.detail.description')));
+      pezzi.push(nodo(doc, 'div', 'td-prose', t.descrizione || traduci('sezioni.tasks.row.noDescription')));
       return pezzi;
     },
     azioniDettaglio: (a, { doc }) => {
@@ -902,8 +921,8 @@ export function aggiornaPaginaAttivita(schermo, attivita, opzioni = {}) {
     /* ⛔ VISTO NELLA FOTO: qui c'era «Le attività vivono in .tasks-store/», e l'introduzione due
        centimetri più in su dice già la stessa identica frase. Due volte la stessa cosa nella stessa
        schermata non è ridondanza innocua: è spazio tolto a ciò che non è ancora stato detto. */
-    notaPiede: () => scrivi.notaPiede() || 'Lo stato si cambia da qui e dalla chat',
-    vuoto: { titolo: 'Nessuna attività', testo: 'Le attività sono globali, disponibili alle tue conversazioni. Le apre TALOS mentre lavora, e da qui le apri anche tu.' },
+    notaPiede: () => scrivi.notaPiede() || traduci('sezioni.tasks.footerNote'),
+    vuoto: { titolo: traduci('sezioni.tasks.empty.title'), testo: traduci('sezioni.tasks.empty.text') },
   }, ridisegna);
 }
 
@@ -955,7 +974,7 @@ export function aggiornaPaginaLibreria(schermo, voci, opzioni = {}) {
       const nomeVecchio = testiVoceLibreria(prima).nome;
       const esito = await servizioVero.rinomina(id, nome);
       if (esito?.ok && nomeVecchio && nomeVecchio !== nome) {
-        avvisa('Rinominato', `«${nomeVecchio}» adesso si chiama «${nome}».`, azioneAnnulla(async () => {
+        avvisa(traduci('sezioni.library.toast.renamed'), traduci('sezioni.library.toast.renamedBody', { previous: nomeVecchio, current: nome }), azioneAnnulla(async () => {
           const indietro = await servizioVero.rinomina(id, nomeVecchio);
           if (indietro?.ok) opzioni.onCambiata?.();
         }));
@@ -970,7 +989,7 @@ export function aggiornaPaginaLibreria(schermo, voci, opzioni = {}) {
    */
   async function apriConSistema(v) {
     const esito = await servizioVero.apri(v?.id);
-    if (!esito?.ok) avvisa('Non aperto', esito?.motivo || 'Il server non ha risposto.', { tono: 'errore' });
+    if (!esito?.ok) avvisa(traduci('sezioni.library.toast.notOpened'), esito?.motivo || traduci('sezioni.library.server.noReply'), { tono: 'errore' });
   }
   /*
    * F5 File reader (26/09/2026) — il dettaglio mostra il file col LETTORE, lo stesso della scheda File del rail
@@ -1039,13 +1058,14 @@ export function aggiornaPaginaLibreria(schermo, voci, opzioni = {}) {
   }
   return montaSezione(schermo, {
     chiave: 'libreria',
-    nome: 'Libreria',
+    nome: traduci('sezioni.library.name'),
     icona: 'files',
     famiglia: 'td-document',
     sostantivo: 'file',
+    contaVoci: contaFile,
     voci: Array.isArray(voci) ? voci : [],
     stato: { errore: opzioni.errore || null, caricamento: Boolean(opzioni.caricamento) },
-    caricando: 'Caricamento Libreria…',
+    caricando: traduci('sezioni.library.loading'),
     /* Revisione Codex 27/09, rilievo 9: un file cambiato FUORI da TALOS (Mostra nella cartella) non cambia la sua data nella
        Libreria, quindi la sua anteprima in memoria resterebbe quella vecchia. «Aggiorna» è il gesto di chi vuole la verità:
        dimentica le anteprime di questa sessione. */
@@ -1053,15 +1073,15 @@ export function aggiornaPaginaLibreria(schermo, voci, opzioni = {}) {
     eliminaInBlocco,
     onBatchCompletato: opzioni.onCambiata || opzioni.onAggiorna,
     filtri: [
-      { id: 'tutte', etichetta: 'Tutti' },
-      { id: 'uploaded', etichetta: 'Caricati', quando: (v) => v?.origine === 'uploaded' },
-      { id: 'generated', etichetta: 'Generati', quando: (v) => v?.origine === 'generated' },
+      { id: 'tutte', etichetta: traduci('sezioni.common.filterAllM') },
+      { id: 'uploaded', etichetta: traduci('sezioni.library.filter.uploaded'), quando: (v) => v?.origine === 'uploaded' },
+      { id: 'generated', etichetta: traduci('sezioni.library.filter.generated'), quando: (v) => v?.origine === 'generated' },
     ],
     idDi: (v) => v?.id,
     titoloDi: (v) => testiVoceLibreria(v).nome,
     quandoDi: (v) => v?.aggiornatoIl ?? null,
     cercaIn: (v) => `${testiVoceLibreria(v).nome} ${tipoVoceLibreria(v?.fileType).testo} ${origineVoceLibreria(v?.origine)}`,
-    sommarioBarra: (n, { errore, caricamento }) => (errore ? 'Libreria non disponibile' : caricamento ? 'Caricamento Libreria…' : `${plurale(n, 'file')} · Token non disponibili`),
+    sommarioBarra: (n, { errore, caricamento }) => (errore ? traduci('sezioni.library.unavailable') : caricamento ? traduci('sezioni.library.loading') : traduci('sezioni.library.topbarSummary', { count: contaFile(n) })),
     /*
      * ⛔⛔⛔ ATLAS F3 (27/09/2026) — LA CARD È QUELLA DEL MOBILE. Owner: «le carte devono essere identiche alla versione
      *   mobile, non negoziabile». Riferimento `TalosMobileLibraryFileTile.vue` (ramo `lane/talos-mobile-allineamento`):
@@ -1084,13 +1104,13 @@ export function aggiornaPaginaLibreria(schermo, voci, opzioni = {}) {
           /* ⭐ BC-38, owner: «nella card/riga SOLO la cartella» — nella riga dell'elenco vale ancora. */
           basso: [
             nodo(doc, 'span', '', t.dataBreve),
-            ...(prov(v).cartellaBreve ? [nodo(doc, 'span', '', `in ${prov(v).cartellaBreve}`)] : []),
+            ...(prov(v).cartellaBreve ? [nodo(doc, 'span', '', traduci('sezioni.library.row.inFolder', { folder: prov(v).cartellaBreve }))] : []),
           ],
         };
       }
       const menu = nodo(doc, 'button', 'td-lib-menu');
       menu.type = 'button';
-      menu.setAttribute('aria-label', `Azioni su ${testiVoceLibreria(v).nome}`);
+      menu.setAttribute('aria-label', traduci("sezioni.common.actionsFor", { name: testiVoceLibreria(v).nome }));
       menu.setAttribute('aria-haspopup', 'menu');
       menu.append(iconaSprite(doc, 'i-lib-more-vertical'));
       menu.addEventListener('click', (e) => { e.stopPropagation(); apriMenuDellaVoce(v, { ancoraEl: menu }); });
@@ -1186,13 +1206,13 @@ export function aggiornaPaginaLibreria(schermo, voci, opzioni = {}) {
           codice.append(doc.createTextNode(segmento));
           if (i < segmenti.length - 1) codice.append(doc.createElement('wbr'));
         });
-        rigaKV('Cartella', codice);
+        rigaKV(traduci('sezioni.library.detail.folder'), codice);
       } else {
         /* ⛔ Stato onesto: la rotta non lo manda (server più vecchio del pannello). Si dice dov'è
            la cartella, che resta vero, invece di mostrare un percorso inventato. */
-        rigaKV('Cartella', 'Non registrata. Il file sta nella cartella dati di TALOS, fuori dal progetto.'); // PO-26 (24/09): non più dentro il progetto
+        rigaKV(traduci('sezioni.library.detail.folder'), traduci('sezioni.library.detail.folderNotRecorded')); // PO-26 (24/09): non più dentro il progetto
       }
-      rigaKV('Creato da', `${p.creatoDa.chi}, ${p.creatoDa.dettaglio}`);
+      rigaKV(traduci('sezioni.library.detail.createdBy'), `${p.creatoDa.chi}, ${p.creatoDa.dettaglio}`);
       if (p.sessione) {
         const nome = p.sessione.nome || nomeLeggibileSessione(p.sessione.id);
         if (typeof opzioni.onApriSessione === 'function') {
@@ -1202,21 +1222,21 @@ export function aggiornaPaginaLibreria(schermo, voci, opzioni = {}) {
           const vai = nodo(doc, 'button', 'talos-button talos-button--ghost talos-button--sm td-vai-sessione', nome);
           vai.type = 'button';
           vai.dataset.azione = 'apri-sessione';
-          vai.setAttribute('aria-label', `Apri la conversazione ${nome}`);
+          vai.setAttribute('aria-label', traduci("sezioni.library.detail.openConversationLabel", { name: nome }));
           /* ⛔ `({id, nome})` e non due argomenti: è la STESSA forma che la Ricerca approfondita
              già riceve (`legacy/app.js:5295`, `onApriSessione: ({ id }) => passaASessione(id)`).
              Due firme diverse per la stessa iniezione sarebbero due cose da tenere allineate. */
           vai.addEventListener('click', () => opzioni.onApriSessione({ id: p.sessione.id, nome }));
-          rigaKV('Sessione', vai);
+          rigaKV(traduci('sezioni.library.detail.session'), vai);
         } else {
           /* ⛔ Senza chi la sappia aprire NON si disegna un bottone: sarebbe una promessa vuota
              (stessa regola della riga, che non disegna le azioni senza sessione). */
-          rigaKV('Sessione', nome);
+          rigaKV(traduci('sezioni.library.detail.session'), nome);
         }
       } else {
-        rigaKV('Sessione', 'Non registrata: il file è stato salvato prima che TALOS annotasse la conversazione d’origine.');
+        rigaKV(traduci('sezioni.library.detail.session'), traduci('sezioni.library.detail.sessionNotRecorded'));
       }
-      rigaKV('Aggiornato', t.aggiornata || 'Data non registrata');
+      rigaKV(traduci('sezioni.library.detail.updated'), t.aggiornata || traduci('sezioni.common.dateNotRecorded'));
       pezzi.push(righe);
       return pezzi;
     },
@@ -1234,8 +1254,8 @@ export function aggiornaPaginaLibreria(schermo, voci, opzioni = {}) {
         const copia = nodo(doc, 'button', 'talos-button talos-button--secondary talos-button--sm');
         copia.type = 'button';
         copia.dataset.azione = 'copia-percorso-dettaglio';
-        copia.append(iconaSprite(doc, 'i-copy'), doc.createTextNode('Copia percorso'));
-        copia.setAttribute('aria-label', `Copia il percorso di ${testiVoceLibreria(v).nome}`);
+        copia.append(iconaSprite(doc, 'i-copy'), doc.createTextNode(traduci("sezioni.library.action.copyPath")));
+        copia.setAttribute('aria-label', traduci("sezioni.library.action.copyPathLabel", { name: testiVoceLibreria(v).nome }));
         copia.addEventListener('click', () => { void opzioni.copia(p.percorso); });
         pezzi.push(copia);
       }
@@ -1252,12 +1272,12 @@ export function aggiornaPaginaLibreria(schermo, voci, opzioni = {}) {
         nomeSessione: opzioni.nomeSessione,
         copia: opzioni.copia,
       });
-      riga.querySelector('[data-azione="menu"]')?.prepend(doc.createTextNode('Tutte le azioni'));
+      riga.querySelector('[data-azione="menu"]')?.prepend(doc.createTextNode(traduci("sezioni.common.allActions")));
       ospite.append(riga);
       pezzi.push(ospite);
       return pezzi;
     },
-    vuoto: { titolo: 'Nessun file', testo: 'I file caricati o generati dall’agente compaiono qui. Stanno nella cartella dati di TALOS, fuori dal progetto.' },
+    vuoto: { titolo: traduci('sezioni.library.empty.title'), testo: traduci('sezioni.library.empty.text') },
   });
 }
 
@@ -1333,9 +1353,9 @@ export function aggiornaPaginaRicerca(schermo, ricerche, opzioni = {}) {
   const leggiRapporto = typeof opzioni.leggiRapporto === 'function' ? opzioni.leggiRapporto
     : (opzioni.sessionId ? async (voce) => {
       const indirizzo = indirizzoFileLibreria(opzioni.sessionId, voce?.reportLibraryId);
-      if (!indirizzo) throw new Error('questa ricerca non ha un rapporto in Libreria');
+      if (!indirizzo) throw new Error(traduci('sezioni.research.reportError.noReport'));
       const risposta = await fetch(indirizzo);
-      if (!risposta.ok) throw new Error(`il file non si apre (${risposta.status})`);
+      if (!risposta.ok) throw new Error(traduci('sezioni.research.reportError.notOpening', { status: risposta.status }));
       return risposta.text();
     } : null);
 
@@ -1386,7 +1406,7 @@ export function aggiornaPaginaRicerca(schermo, ricerche, opzioni = {}) {
   }
 
   function guasto(errore, azione) {
-    avvisa('Non riuscito', paroleErroreRicerca(errore?.code, azione), { tono: 'errore' });
+    avvisa(traduci('sezioni.common.failed'), paroleErroreRicerca(errore?.code, azione), { tono: 'errore' });
   }
 
   /*
@@ -1399,10 +1419,10 @@ export function aggiornaPaginaRicerca(schermo, ricerche, opzioni = {}) {
     try {
       const dati = await servizio.pausa(voce?.id);
       aggiornaVoceInElenco(dati?.ricerca);
-      avvisa(dati?.ricerca?.stato === 'paused' ? 'In pausa' : 'Pausa chiesta',
+      avvisa(dati?.ricerca?.stato === 'paused' ? traduci('sezioni.research.toast.paused') : traduci('sezioni.research.toast.pauseRequested'),
         dati?.ricerca?.stato === 'paused'
-          ? 'La ricerca è ferma: riprendila quando vuoi, dallo stesso menu.'
-          : 'La ricerca si fermerà al primo punto sicuro: fin lì il lavoro già pagato non si butta.');
+          ? traduci('sezioni.research.toast.pausedBody')
+          : traduci('sezioni.research.toast.pauseRequestedBody'));
     } catch (errore) { guasto(errore, 'pausa'); }
     ricarica();
   }
@@ -1411,7 +1431,7 @@ export function aggiornaPaginaRicerca(schermo, ricerche, opzioni = {}) {
     try {
       const dati = await servizio.ripresa(voce?.id);
       aggiornaVoceInElenco(dati?.ricerca);
-      avvisa('Ripresa', 'La ricerca riparte dal punto in cui si era fermata, non da capo.');
+      avvisa(traduci('sezioni.research.toast.resumed'), traduci('sezioni.research.toast.resumedBody'));
     } catch (errore) { guasto(errore, 'ripresa'); }
     ricarica();
   }
@@ -1443,11 +1463,11 @@ export function aggiornaPaginaRicerca(schermo, ricerche, opzioni = {}) {
     try {
       const dati = await servizio.riverifica(id);
       magazzino.riverifiche.set(id, { stato: 'pronto', esito: dati?.riverifica || null });
-      if (!aperta) avvisa('Fonti rilette', frasiRiverifica(dati?.riverifica));
+      if (!aperta) avvisa(traduci('sezioni.research.toast.sourcesReread'), frasiRiverifica(dati?.riverifica));
     } catch (errore) {
       const parole = paroleErroreRicerca(errore?.code, 'riverifica');
       magazzino.riverifiche.set(id, { stato: 'errore', errore: parole });
-      if (!aperta) avvisa('Non riuscito', parole, { tono: 'errore' });
+      if (!aperta) avvisa(traduci('sezioni.common.failed'), parole, { tono: 'errore' });
     }
     ridisegna();
   }
@@ -1472,10 +1492,10 @@ export function aggiornaPaginaRicerca(schermo, ricerche, opzioni = {}) {
     const citato = titolo.length > 110 ? `${titolo.slice(0, 110).trimEnd()}…` : titolo;
     confermaModale({
       document: schermo.ownerDocument || globalThis.document,
-      titolo: 'Elimino la ricerca?',
-      domanda: `«${citato}» viene cancellata dal disco insieme al suo rapporto in Libreria.`,
-      conseguenza: 'Non c’è un cestino: spariscono anche le fonti raccolte e il giornale di bordo, e nessuno potrà più rileggerli.',
-      etichettaConferma: 'Elimina la ricerca',
+      titolo: traduci("sezioni.research.delete.title"),
+      domanda: traduci('sezioni.research.delete.question', { title: citato }),
+      conseguenza: traduci('sezioni.research.delete.consequence'),
+      etichettaConferma: traduci('sezioni.research.menu.delete'),
       onConferma: async () => {
         try {
           await servizio.elimina(voce?.id);
@@ -1487,7 +1507,7 @@ export function aggiornaPaginaRicerca(schermo, ricerche, opzioni = {}) {
           if (st && String(st.selezione) === String(voce?.id)) st.selezione = null;
           magazzino.dettagli.delete(String(voce?.id));
           magazzino.riverifiche.delete(String(voce?.id));
-          avvisa('Eliminata', `«${titolo}» non c’è più.`);
+          avvisa(traduci('sezioni.research.toast.deleted'), traduci('sezioni.research.toast.deletedBody', { title: titolo }));
         } catch (errore) { guasto(errore, 'elimina'); }
         ricarica();
       },
@@ -1526,14 +1546,14 @@ export function aggiornaPaginaRicerca(schermo, ricerche, opzioni = {}) {
       magazzino.dettagli.set(id, { stato: 'caricando' });
       try {
         const ricerca = await leggiDettaglio(voce);
-        magazzino.dettagli.set(id, ricerca ? { stato: 'pronto', ricerca } : { stato: 'errore', errore: 'scheda non disponibile' });
+        magazzino.dettagli.set(id, ricerca ? { stato: 'pronto', ricerca } : { stato: 'errore', errore: traduci('sezioni.research.detailUnavailable') });
       } catch (errore) {
-        magazzino.dettagli.set(id, { stato: 'errore', errore: errore?.message || 'motivo non registrato' });
+        magazzino.dettagli.set(id, { stato: 'errore', errore: errore?.message || traduci('sezioni.common.reasonNotRecorded') });
       }
       ridisegna();
     }
     const elenco = esportazioniRicerca(voce, letturaDi(voce), dettaglioDi(voce));
-    apriModale('Esporta la ricerca', montaPannelloEsportazioni(doc, elenco, {
+    apriModale(traduci('sezioni.research.exportTitle'), montaPannelloEsportazioni(doc, elenco, {
       onScegli: (uscita) => { chiudiModale(); esegui(voce, uscita); },
     }), { document: doc });
   }
@@ -1541,8 +1561,8 @@ export function aggiornaPaginaRicerca(schermo, ricerche, opzioni = {}) {
   function esegui(voce, uscita) {
     if (uscita.chiave === 'copia') {
       Promise.resolve(copia(uscita.testo)).then(
-        () => avvisa('Copiato', 'Il testo del rapporto è negli appunti.'),
-        () => avvisa('Non copiato', 'Gli appunti non sono disponibili in questa finestra.', { tono: 'errore' }),
+        () => avvisa(traduci('sezioni.research.toast.copied'), traduci('sezioni.research.toast.copiedReport')),
+        () => avvisa(traduci('sezioni.research.toast.notCopied'), traduci('sezioni.voice.clipboardUnavailable'), { tono: 'errore' }),
       );
       return;
     }
@@ -1559,7 +1579,7 @@ export function aggiornaPaginaRicerca(schermo, ricerche, opzioni = {}) {
      *   sopra), e annunciarne uno diverso da quello salvato è una bugia gratuita. L'azione si
      *   chiama come la riga che è stata premuta, dall'inizio alla fine.
      */
-    avvisa('Esportato', `${uscita.etichetta}: il file è nella cartella dei download.`);
+    avvisa(traduci('sezioni.research.toast.exported'), traduci('sezioni.research.toast.exportedFormat', { format: uscita.etichetta }));
   }
 
   function apriMenu(voce, dove) {
@@ -1577,13 +1597,13 @@ export function aggiornaPaginaRicerca(schermo, ricerche, opzioni = {}) {
         /* ⛔ Anche il messaggio d'esito diceva «rapporto» su un file che rapporto non è: la parola
            si decide in un posto solo, e questo è uno dei quattro posti dov'era sbagliata. */
         Promise.resolve(copia(prosa)).then(
-          () => avvisa('Copiato', haRapportoLeggibile(quale ?? voce) ? 'Il testo del rapporto è negli appunti.' : 'Il testo del file depositato è negli appunti.'),
-          () => avvisa('Non copiato', 'Gli appunti non sono disponibili in questa finestra.', { tono: 'errore' }),
+          () => avvisa(traduci('sezioni.research.toast.copied'), haRapportoLeggibile(quale ?? voce) ? traduci('sezioni.research.toast.copiedReport') : traduci('sezioni.research.toast.copiedFiled')),
+          () => avvisa(traduci('sezioni.research.toast.notCopied'), traduci('sezioni.voice.clipboardUnavailable'), { tono: 'errore' }),
         );
       },
       onEsporta: (nome, testo, mime) => {
         scaricaTesto(schermo.ownerDocument || globalThis.document, nome, testo, mime);
-        avvisa('Esportato', `${nome} è nella cartella dei download.`);
+        avvisa(traduci('sezioni.research.toast.exported'), traduci('sezioni.voice.exportedBody', { name: nome }));
       },
     });
     /* ⛔ Il menu lo disegna `legacy/app.js` (`apriMenuAzioniLibreria`), lo stesso dell'albero dei
@@ -1594,33 +1614,21 @@ export function aggiornaPaginaRicerca(schermo, ricerche, opzioni = {}) {
 
   collegaTastoDestro(schermo, { trovaVoce, apriMenu });
 
-  /*
-   * ⛔ LA FRASE FALSA DELL'INTRO, tolta da qui perché il suo file non è di questa lane.
-   *   `index.template.html:1058` (e la sua copia in `public/`) dice ancora «I rapporti vivono in
-   *   .harness-ui-research/»: è falsa (lì c'è solo la scheda) e la sezione la MOSTRA, perché
-   *   `montaSezione` sposta il paragrafo del prodotto dentro `.td-intro`. Il diff per il file vero
-   *   sta nel rapporto del lotto; finché non è applicato, la frase si corregge qui — dove la si
-   *   vede — invece di lasciarla a schermo un giorno in più.
-   */
-  const spiegazioneVera = 'Ogni ricerca approfondita di questo progetto, col suo rapporto, le affermazioni verificate e le fonti da cui vengono.';
-  for (const p of schermo.querySelectorAll('.talos-page__head p, .td-intro p')) {
-    if (p.getAttribute('role') === 'status' || p.hasAttribute('data-research-esito')) continue;
-    /* 26/09: il modello non dice più «I rapporti vivono in .harness-ui-research/» (guardia `nessuna-cartella-dati-a-schermo`): resta il solo ripiego sulla frase provvisoria. */
-    if (p.textContent.includes('non è ancora disponibile')) p.textContent = spiegazioneVera;
-  }
+  /* Il vecchio ripiego che cercava nel TESTO del modello la frase provvisoria «non è ancora disponibile» è stato tolto: il modello porta già la frase vera, e confrontare un testo che si traduce non è un modo di decidere. */
 
   const visibili = montaSezione(schermo, {
     chiave: 'ricerca',
-    nome: 'Ricerca',
+    nome: traduci('sezioni.research.name'),
     icona: 'globe',
     famiglia: 'td-research',
     /* ⛔ La parola è UNA: la barra in alto dice «5 ricerche elencate» (`riepilogoRicerche`), quindi
        la riga di stato non può dire «5 rapporti». Il rapporto è ciò che una ricerca PRODUCE. */
     sostantivo: 'ricerca',
     pluraleEsplicito: 'ricerche',
+    contaVoci: contaRicerche,
     voci: elenco,
     stato: { errore: opzioni.errore || null, caricamento: Boolean(opzioni.caricamento) },
-    caricando: 'Caricamento ricerche…',
+    caricando: traduci('sezioni.research.loading'),
     onAggiorna: opzioni.onAggiorna,
     eliminaInBlocco: servizio?.eliminaInBlocco,
     onBatchCompletato: ricarica,
@@ -1636,10 +1644,10 @@ export function aggiornaPaginaRicerca(schermo, ricerche, opzioni = {}) {
      *   La regola sta in `haRapportoLeggibile`, una funzione sola per filtro, piede e pannello.
      */
     filtri: [
-      { id: 'tutte', etichetta: 'Tutte' },
-      { id: 'vive', etichetta: 'In corso', quando: (r) => r?.stato === 'running' || r?.stato === 'paused' },
-      { id: 'con-rapporto', etichetta: 'Col rapporto', quando: (r) => haRapportoLeggibile(r) },
-      { id: 'senza-rapporto', etichetta: 'Senza rapporto', quando: (r) => !haRapportoLeggibile(r) && r?.stato !== 'running' && r?.stato !== 'paused' },
+      { id: 'tutte', etichetta: traduci('sezioni.common.filterAllF') },
+      { id: 'vive', etichetta: traduci('sezioni.research.filter.running'), quando: (r) => r?.stato === 'running' || r?.stato === 'paused' },
+      { id: 'con-rapporto', etichetta: traduci('sezioni.research.filter.withReport'), quando: (r) => haRapportoLeggibile(r) },
+      { id: 'senza-rapporto', etichetta: traduci('sezioni.research.filter.withoutReport'), quando: (r) => !haRapportoLeggibile(r) && r?.stato !== 'running' && r?.stato !== 'paused' },
     ],
     idDi: (r) => r?.id,
     titoloDi: (r) => frasiVoce(r).domanda,
@@ -1649,7 +1657,7 @@ export function aggiornaPaginaRicerca(schermo, ricerche, opzioni = {}) {
       const f = frasiVoce(r);
       return `${f.domanda} ${f.parola} ${f.nome || ''}`;
     },
-    sommarioBarra: (n, { errore, caricamento }) => (errore ? 'Ricerche non disponibili' : caricamento ? 'Caricamento ricerche…' : riepilogoRicerche(elenco)),
+    sommarioBarra: (n, { errore, caricamento }) => (errore ? traduci('sezioni.research.unavailable') : caricamento ? traduci('sezioni.research.loading') : riepilogoRicerche(elenco)),
     scheda: (r, { doc, icona, etichetta }) => {
       const f = frasiVoce(r);
       const lettura = letturaDi(r);
@@ -1669,7 +1677,7 @@ export function aggiornaPaginaRicerca(schermo, ricerche, opzioni = {}) {
           nodo(doc, 'p', 'td-excerpt', riga),
           /* 24/09/2026, decisione owner («Barra + fase e conteggi»): una ricerca in corso dice a che punto è, nella scheda
              stessa (il server manda `avanzamento` nell'elenco per le sole ricerche in corso). */
-          ...(r?.stato === 'running' && r?.avanzamento ? [creaAvanzamentoRicerca(doc, r.avanzamento, { etichetta: 'Avanzamento di ' + f.domanda })].filter(Boolean) : []),
+          ...(r?.stato === 'running' && r?.avanzamento ? [creaAvanzamentoRicerca(doc, r.avanzamento, { etichetta: traduci("sezioni.research.row.progressLabel", { title: f.domanda }) })].filter(Boolean) : []),
         ],
         /*
          * ⛔ TROVATO NELLA FOTO: «Avviata il 11/09/20…» e «Rapporto disponibi…», tutti e due
@@ -1680,12 +1688,12 @@ export function aggiornaPaginaRicerca(schermo, ricerche, opzioni = {}) {
          *   una cosa che chi guarda vuole sapere.
          */
         basso: [
-          nodo(doc, 'span', '', f.avviata ? `Avviata ${articoloData(r?.avviataAlle)}${dataBreve(r?.avviataAlle)}` : 'Data non registrata'),
+          nodo(doc, 'span', '', f.avviata ? traduci('sezioni.research.row.started', { article: articoloData(r?.avviataAlle), date: dataBreve(r?.avviataAlle) }) : traduci('sezioni.common.dateNotRecorded')),
           /* ⛔ CORRETTO L'11/09: qui «Col rapporto» compariva su ogni ricerca NON conclusa che
              avesse un file in Libreria — cioè contraddiceva il timbro «Senza rapporto» due
              centimetri più in alto. Adesso a destra si scrive solo l'anomalia che il timbro non
              dice già: una conclusa che il rapporto non ce l'ha. */
-          nodo(doc, 'span', '', r?.stato === 'done' && !f.haRapporto ? 'Nessun rapporto' : ''),
+          nodo(doc, 'span', '', r?.stato === 'done' && !f.haRapporto ? traduci('sezioni.research.card.noReport') : ''),
         ],
         adorno: (() => {
           /* ⛔ Un solo bottone, non cinque affiancati (owner 10/09): le azioni stanno nel menu, e
@@ -1693,7 +1701,7 @@ export function aggiornaPaginaRicerca(schermo, ricerche, opzioni = {}) {
           const b = nodo(doc, 'button', 'td-card-azioni');
           b.type = 'button';
           b.setAttribute('aria-haspopup', 'menu');
-          b.setAttribute('aria-label', `Azioni su ${f.domanda}`);
+          b.setAttribute('aria-label', traduci("sezioni.common.actionsFor", { name: f.domanda }));
           const svg = doc.createElementNS('http://www.w3.org/2000/svg', 'svg');
           const use = doc.createElementNS('http://www.w3.org/2000/svg', 'use');
           svg.setAttribute('class', 'i');
@@ -1719,8 +1727,8 @@ export function aggiornaPaginaRicerca(schermo, ricerche, opzioni = {}) {
       },
     }),
     vuoto: {
-      titolo: 'Nessuna ricerca',
-      testo: 'Chiedi in chat di avviare una ricerca approfondita: comparirà qui mentre lavora, e ci resterà col suo rapporto.',
+      titolo: traduci('sezioni.research.empty.title'),
+      testo: traduci('sezioni.research.empty.text'),
     },
   });
 
@@ -1743,49 +1751,50 @@ export function montaProgetti(schermo, progetti, opzioni = {}) {
   const { onApriSessione = null, quanteRecenti = 3 } = opzioni;
   return montaSezione(schermo, {
     chiave: 'progetti',
-    nome: 'Progetti',
+    nome: traduci('sezioni.projects.name'),
     icona: 'folder',
     famiglia: 'td-project',
     sostantivo: 'progetto',
     pluraleEsplicito: 'progetti',
+    contaVoci: contaProgetti,
     voci: Array.isArray(progetti) ? progetti : [],
     stato: { errore: opzioni.errore || null, caricamento: Boolean(opzioni.caricamento) },
-    caricando: 'Leggo i progetti…',
+    caricando: traduci('sezioni.projects.loading'),
     onAggiorna: opzioni.onAggiorna,
-    filtri: [{ id: 'tutti', etichetta: 'Tutti' }],
+    filtri: [{ id: 'tutti', etichetta: traduci('sezioni.common.filterAllM') }],
     idDi: (p) => p?.id,
     titoloDi: (p) => p?.nome ?? '',
     // `ultimaAlle` è già un numero di millisecondi (progetti.js, `quandoUltima`): niente da convertire.
     quandoDi: (p) => (Number.isFinite(p?.ultimaAlle) && p.ultimaAlle > 0 ? new Date(p.ultimaAlle) : null),
     cercaIn: (p) => `${p?.nome ?? ''} ${(p?.sessioni || []).map((s) => s?.nome ?? '').join(' ')}`,
-    sommarioBarra: (n, { errore, caricamento }) => (errore ? 'Progetti non disponibili' : caricamento ? 'Leggo i progetti…' : sommarioProgetti(n)),
+    sommarioBarra: (n, { errore, caricamento }) => (errore ? traduci('sezioni.projects.unavailable') : caricamento ? traduci('sezioni.projects.loading') : sommarioProgetti(n)),
     scheda: (p, { doc, icona }) => {
       const chips = nodo(doc, 'div', 'td-source-chips');
-      for (const s of ultimeSessioni(p, quanteRecenti)) chips.append(nodo(doc, 'span', '', s?.nome || s?.sessionId || 'sessione senza nome'));
+      for (const s of ultimeSessioni(p, quanteRecenti)) chips.append(nodo(doc, 'span', '', s?.nome || s?.sessionId || traduci('sezioni.projects.card.sessionUntitled')));
       return {
-        alto: [icona('folder'), nodo(doc, 'span', '', 'Cartella di lavoro')],
+        alto: [icona('folder'), nodo(doc, 'span', '', traduci('sezioni.projects.card.workingFolder'))],
         corpo: [nodo(doc, 'p', 'td-excerpt', frasiProgetto(p)), chips],
         /* Il conteggio sta già nel corpo (`frasiProgetto`): qui va il QUANDO, che è l'altra metà. */
-        basso: [nodo(doc, 'span', '', p?.ultimaAlle ? `Ultima volta ${new Date(p.ultimaAlle).toLocaleDateString('it-IT')}` : 'mai aperta')],
+        basso: [nodo(doc, 'span', '', p?.ultimaAlle ? traduci('sezioni.projects.card.lastTime', { date: new Date(p.ultimaAlle).toLocaleDateString(localeUI()) }) : traduci('sezioni.projects.card.neverOpened'))],
       };
     },
     dettaglio: (p, { doc, etichetta }) => {
       const pezzi = [
-        meta(doc, [etichetta('Progetto'), nodo(doc, 'span', '', frasiProgetto(p))]),
+        meta(doc, [etichetta(traduci('sezioni.projects.detail.kind')), nodo(doc, 'span', '', frasiProgetto(p))]),
         nodo(doc, 'h2', '', p?.nome ?? ''),
-        nodo(doc, 'h3', '', 'Sessioni recenti'),
+        nodo(doc, 'h3', '', traduci('sezioni.projects.detail.recentSessions')),
       ];
       const recenti = ultimeSessioni(p, quanteRecenti);
-      if (!recenti.length) pezzi.push(nodo(doc, 'p', 'td-subtle', 'Nessuna sessione ancora in questo progetto.'));
+      if (!recenti.length) pezzi.push(nodo(doc, 'p', 'td-subtle', traduci('sezioni.projects.detail.noSessions')));
       for (const s of recenti) {
         const riga = nodo(doc, 'div', 'td-source');
-        const apri = bottone(doc, s?.nome || s?.sessionId || 'Sessione senza nome', { variante: 'ghost', esegui: () => onApriSessione?.(s) });
+        const apri = bottone(doc, s?.nome || s?.sessionId || traduci('sezioni.projects.sessionUntitled'), { variante: 'ghost', esegui: () => onApriSessione?.(s) });
         riga.append(apri);
-        if (s?.avviataAlle) riga.append(nodo(doc, 'span', '', `Avviata il ${new Date(s.avviataAlle).toLocaleString('it-IT')}`));
+        if (s?.avviataAlle) riga.append(nodo(doc, 'span', '', traduci('sezioni.projects.detail.startedOn', { date: new Date(s.avviataAlle).toLocaleString(localeUI()) })));
         pezzi.push(riga);
       }
       return pezzi;
     },
-    vuoto: { titolo: 'Nessun progetto', testo: 'Un progetto nasce quando apri una sessione su una cartella. Comparirà qui.' },
+    vuoto: { titolo: traduci('sezioni.projects.empty.title'), testo: traduci('sezioni.projects.empty.text') },
   });
 }

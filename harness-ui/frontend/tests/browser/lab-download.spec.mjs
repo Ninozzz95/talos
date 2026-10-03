@@ -48,6 +48,7 @@
  *   · si rimettesse «Riprova» sulla scheda d'errore ⇒ DL-ETICHETTA rossa;
  *   · si scrivesse la scheda d'errore da uno stato che non è più `failed` ⇒ DL-ERRORE rossa.
  */
+import { serviIlDizionario } from './aiuto-dizionario.mjs'; // corsia D della lingua: i componenti importano il dizionario
 import { expect, test } from '@playwright/test';
 import { readFile, mkdir, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
@@ -92,6 +93,7 @@ async function prepara(page, dove = '') {
     });
   }
   await page.route('**/api/v1/huggingface/downloads', () => { /* appesa: vedi la testata */ });
+  await serviIlDizionario(page);
   await page.route('**/__c3/*.js', async (route) => {
     const nome = new URL(route.request().url()).pathname.split('/').pop();
     try {

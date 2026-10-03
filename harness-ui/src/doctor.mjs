@@ -17,6 +17,22 @@ import { createProcessPolicy } from './process-policy.mjs';
 import { cartellaScratchAttesa, radiceScratch, ripulisciScratch } from './scratch.mjs';
 
 /*
+ * ⛔⛔ K4a (03/10/2026, owner: «ogni singola parola nella app deve essere sia in inglese che in italiano») — i testi che il
+ *   Doctor manda alla persona non sono più prosa italiana: il campo (`dettaglio`, `etichetta`) porta la frase INGLESE, la
+ *   riserva per la CLI e per chi non ha il dizionario; accanto, `<campo>Chiave` (`server.doctor.…`, area `server` del
+ *   dizionario dell'interfaccia) e `<campo>Params` (i valori che la frase usa). L'interfaccia dice `t(chiave, params)`; senza
+ *   la chiave nel dizionario mostra la frase inglese, mai la chiave. Stesso schema del «contenuto sospetto» (8d894b012).
+ *   Un parametro `<nome>Chiave` (es. `labelChiave`) dice che il valore `<nome>` è a sua volta un testo del dizionario.
+ *   Ricerca 03/10/2026: codice stabile + parametri + riserva inglese, tradotto dal cliente (Google AIP-193; thread api-craft
+ *   «Shall REST API error messages be internationalized?»; Hermes `agent/i18n.py:1`, catalogo a chiavi puntate con riserva `en`).
+ */
+const frase = (campo, testo, chiave, params) => ({ [campo]: testo, ...(chiave ? { [`${campo}Chiave`]: chiave } : {}), ...(chiave && params ? { [`${campo}Params`]: params } : {}) });
+/** Il campo che chi chiama ha già scritto (`dettaglio`), con la sua chiave e i suoi valori se li porta: mai una chiave senza frase. */
+const passaFrase = (campo, origine) => frase(campo, origine[campo],
+  typeof origine[`${campo}Chiave`] === 'string' ? origine[`${campo}Chiave`] : null,
+  origine[`${campo}Params`] && typeof origine[`${campo}Params`] === 'object' ? origine[`${campo}Params`] : null);
+
+/*
  * ⛔ Corsia SCRATCH, 24/09/2026 — la capability `doctor` è la radice dei temporanei di TALOS
  *   (`src/scratch.mjs`), non più la TEMP di sistema. Si calcola a ogni uso, non al caricamento del
  *   modulo: `TALOS_SCRATCH_DIR` può arrivare dopo l'import (test, figlio del guscio desktop), e una
@@ -67,7 +83,7 @@ export async function ripulisciResiduiDoctor({ cartella, adesso = Date.now(), et
 async function eseguiComandoSandboxatoLocale(comando, cartella) {
   // Doctor esegue soltanto il controllo fisso `echo ok`; non accetta testo
   // composto dal chiamante. Il resto del sistema usa il runtime owner.
-  if (comando !== 'echo ok') return { codice: 1, testo: 'Controllo non previsto', enforcement: 'none' };
+  if (comando !== 'echo ok') return { codice: 1, testo: 'Check not supported', enforcement: 'none' };
   const risultato = await DOCTOR_PROCESS_POLICY.runApprovedProcess({
     executable: 'echo',
     args: ['ok'],
@@ -131,7 +147,12 @@ export async function diagnosi({
     naviga: true, // built-in, nessuna dipendenza esterna da verificare
   };
   if (Array.isArray(labsAccesi)) {
-    risultato.labs = { accesi: [...labsAccesi], dettaglio: labsAccesi.length ? `Labs accesi: ${labsAccesi.join(', ')} (NOT_LIVE_VALIDATED finché non provati).` : 'Labs accesi: nessuno.' };
+    risultato.labs = {
+      accesi: [...labsAccesi],
+      ...(labsAccesi.length
+        ? frase('dettaglio', `Labs on: ${labsAccesi.join(', ')} (NOT_LIVE_VALIDATED until tested).`, 'server.doctor.labs.on', { list: labsAccesi.join(', ') })
+        : frase('dettaglio', 'Labs on: none.', 'server.doctor.labs.none')),
+    };
   }
   if (scratch && typeof scratch === 'object') {
     /*
@@ -148,23 +169,33 @@ export async function diagnosi({
       byte,
       voci,
       ...(Number.isInteger(scratch.illeggibili) && scratch.illeggibili > 0 ? { illeggibili: scratch.illeggibili } : {}),
-      dettaglio: !percorso
-        ? 'Radice dei temporanei non determinabile.'
+      /* La chiave `…scratch.summary` ha due voci, `One` e `Many`: l'interfaccia sceglie con `n` (il numero di voci). */
+      ...(!percorso
+        ? frase('dettaglio', 'Temporary files root cannot be determined.', 'server.doctor.scratch.undetermined')
         : scratch.esiste === true
-          ? `${voci} vo${voci === 1 ? 'ce' : 'ci'}, ${byte} byte in ${percorso}. Ciò che resta fermo per 24 ore si toglie all'avvio.`
-          : `Radice dei temporanei non ancora creata: ${percorso}.`,
+          ? frase('dettaglio', `${voci} ${voci === 1 ? 'entry' : 'entries'}, ${byte} bytes in ${percorso}. Anything left idle for 24 hours is removed at startup.`,
+            'server.doctor.scratch.summary', { n: voci, bytes: byte, path: percorso })
+          : frase('dettaglio', `Temporary files root not created yet: ${percorso}.`, 'server.doctor.scratch.missing', { path: percorso })),
     };
   }
   if (ricercaWeb && typeof ricercaWeb === 'object') {
     const fonte = Array.isArray(ricercaWeb.fonti) ? ricercaWeb.fonti.find((f) => f.id === ricercaWeb.source) : null;
+    const nome = fonte?.label ?? ricercaWeb.source;
+    /* il nome della fonte può essere a sua volta un testo del dizionario (`labelChiave`): «Custom endpoint», «SearXNG (your instance)» */
+    const parametriNome = { label: nome, ...(fonte?.labelChiave ? { labelChiave: fonte.labelChiave } : {}) };
     risultato.ricercaWeb = {
       fonte: ricercaWeb.source,
-      etichetta: fonte?.label ?? (ricercaWeb.source === 'off' ? 'Spenta' : ricercaWeb.source),
+      ...(fonte?.label !== undefined
+        ? frase('etichetta', fonte.label, fonte.labelChiave ?? null)
+        : ricercaWeb.source === 'off' ? frase('etichetta', 'Off', 'server.doctor.search.offLabel') : { etichetta: ricercaWeb.source }),
       pronta: ricercaWeb.readiness === 'pronta',
-      dettaglio: ricercaWeb.readiness === 'pronta' ? (fonte?.keyless ? 'Pronta, senza chiave: DuckDuckGo (pagina pubblica, può bloccare sotto uso intenso).' : `Pronta: ${fonte?.label ?? ricercaWeb.source}.`)
-        : ricercaWeb.readiness === 'spenta' ? 'Spenta da te: il modello non cercherà sul web.'
-          : ricercaWeb.readiness === 'chiave-mancante' ? `Serve ancora la chiave di ${fonte?.label ?? ricercaWeb.source}.`
-            : `Serve ancora l'indirizzo dell'istanza ${fonte?.label ?? ricercaWeb.source}.`,
+      ...(ricercaWeb.readiness === 'pronta'
+        ? (fonte?.keyless
+          ? frase('dettaglio', 'Ready, no key needed: DuckDuckGo (public page, may block under heavy use).', 'server.doctor.search.readyKeyless')
+          : frase('dettaglio', `Ready: ${nome}.`, 'server.doctor.search.ready', parametriNome))
+        : ricercaWeb.readiness === 'spenta' ? frase('dettaglio', 'Turned off by you: the model will not search the web.', 'server.doctor.search.off')
+          : ricercaWeb.readiness === 'chiave-mancante' ? frase('dettaglio', `The ${nome} key is still needed.`, 'server.doctor.search.keyMissing', parametriNome)
+            : frase('dettaglio', `The address of the ${nome} instance is still needed.`, 'server.doctor.search.endpointMissing', parametriNome)),
     };
   }
   if (negozioSessioni && typeof negozioSessioni === 'object') {
@@ -179,20 +210,20 @@ export async function diagnosi({
     risultato.negozioSessioni = {
       modalitaIntestazione: modalita,
       ...(cartella ? { cartella } : {}),
-      dettaglio: modalita === 'link'
-        ? 'Le sessioni si salvano con la pubblicazione atomica (collegamento): il disco la supporta.'
+      ...(modalita === 'link'
+        ? frase('dettaglio', 'Sessions are saved with atomic publishing (hard link): the disk supports it.', 'server.doctor.sessionStore.link')
         : modalita === 'senza-link'
-          ? 'Le sessioni si salvano con il ripiego sicuro (creazione esclusiva e byte verificati): il disco non supporta i collegamenti, ad esempio exFAT. Un crash a metà scrittura può lasciare una riga spezzata, che viene riparata alla riapertura.'
-          : 'Nessuna sessione ancora salvata da questo avvio: la modalità si conosce alla prima scrittura.',
+          ? frase('dettaglio', 'Sessions are saved with the safe fallback (exclusive creation and verified bytes): the disk does not support links, for example exFAT. A crash mid-write can leave a broken line, which is repaired when the session is reopened.', 'server.doctor.sessionStore.noLink')
+          : frase('dettaglio', 'No session has been saved since this start: the mode is known at the first write.', 'server.doctor.sessionStore.unknown')),
     };
   }
   if (Array.isArray(cartelleProgetto)) {
     risultato.cartelleProgetto = {
       disponibili: cartelleProgetto.length > 0,
       conteggio: cartelleProgetto.length,
-      dettaglio: cartelleProgetto.length > 0
-        ? `${cartelleProgetto.length} cartell${cartelleProgetto.length === 1 ? 'a' : 'e'} di progetto disponibili.`
-        : 'Nessuna cartella di progetto è stata configurata nell’elenco consentito.',
+      ...(cartelleProgetto.length > 0
+        ? frase('dettaglio', `${cartelleProgetto.length} project ${cartelleProgetto.length === 1 ? 'folder' : 'folders'} available.`, 'server.doctor.folders.available', { n: cartelleProgetto.length })
+        : frase('dettaglio', 'No project folder has been set up in the allowed list.', 'server.doctor.folders.none')),
     };
   }
   if (Array.isArray(providerRows)) {
@@ -202,13 +233,13 @@ export async function diagnosi({
     risultato.ownerRuntime = {
       configurato: ownerRuntime.configurato === true,
       pronto: ownerRuntime.pronto === true,
-      dettaglio: typeof ownerRuntime.dettaglio === 'string' ? ownerRuntime.dettaglio : 'Stato runtime non osservato.',
+      ...(typeof ownerRuntime.dettaglio === 'string' ? passaFrase('dettaglio', ownerRuntime) : frase('dettaglio', 'Runtime state not observed.', 'server.doctor.runtime.notObserved')),
     };
   }
   if (catalogoTask && typeof catalogoTask === 'object') {
     risultato.catalogoTask = {
       disponibile: catalogoTask.disponibile === true,
-      dettaglio: typeof catalogoTask.dettaglio === 'string' ? catalogoTask.dettaglio : 'Elenco attività predefinite non osservato.',
+      ...(typeof catalogoTask.dettaglio === 'string' ? passaFrase('dettaglio', catalogoTask) : frase('dettaglio', 'Preset tasks list not observed.', 'server.doctor.catalog.notObserved')),
     };
   }
   if (sessioniPersistenza && typeof sessioniPersistenza === 'object') {
@@ -220,14 +251,17 @@ export async function diagnosi({
     const totali = Number(sessioniPersistenza.ultimaLettura?.totali) || 0;
     const perMotivo = {};
     for (const s of scartate) perMotivo[s.motivo] = (perMotivo[s.motivo] || 0) + 1;
+    /* i motivi sono identificatori dello stato (`corrotta`, `vuota`…), non frasi: si riportano come sono */
+    const motivi = Object.entries(perMotivo).map(([m, n]) => `${n} ${m}`).join(', ');
     risultato.sessioniPersistenza = {
       corrotte: Array.isArray(sessioniPersistenza.corrotte) ? [...sessioniPersistenza.corrotte] : [],
       scartate,
       perMotivo,
       ultimaLettura: { ripristinate, totali },
-      dettaglio: scartate.length === 0
-        ? `${ripristinate} sessioni ripristinate su ${totali}: nessuna scartata.`
-        : `${ripristinate} ripristinate, ${scartate.length} scartate su ${totali}: ${Object.entries(perMotivo).map(([m, n]) => `${n} ${m}`).join(', ')}.`,
+      ...(scartate.length === 0
+        ? frase('dettaglio', `${ripristinate} of ${totali} sessions restored: none discarded.`, 'server.doctor.sessions.restoredAll', { restored: ripristinate, total: totali })
+        : frase('dettaglio', `${ripristinate} restored, ${scartate.length} discarded out of ${totali}: ${motivi}.`, 'server.doctor.sessions.restoredSome',
+          { restored: ripristinate, discarded: scartate.length, total: totali, reasons: motivi })),
     };
   }
   return risultato;

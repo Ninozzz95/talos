@@ -1,3 +1,4 @@
+import { t } from './lingua.js';
 /** The existing artifact card, backed by its exact Library copy after replay.
  * HTML remains behind the server's sandbox/CSP and session page capability.
  * No HTML, absolute filesystem path or expiring capability is persisted here.
@@ -21,19 +22,19 @@ export function creaCardArtefatto({evento, sessionId, API = p => p,
   let fonte = null;
   let apertura = Promise.resolve();
   const viva = () => card.isConnected && ancoraValida();
-  const {card, frame, apri} = creaArtefatto({titolo: evento.titolo || 'Artefatto',
+  const {card, frame, apri} = creaArtefatto({titolo: evento.titolo || t('chat.artifact.badge'),
     onApri: apriPagina}, opzioni);
-  apri.title = 'Apri in una nuova scheda';
+  apri.title = t('chat.artifact.openInTab');
   const stato = card.ownerDocument.createElement('p');
   stato.className = 'talos-artifact__status talos-muted';
   stato.setAttribute('role', 'status');
-  stato.textContent = 'Recupero dell’anteprima dalla Libreria…';
+  stato.textContent = t('chat.artifact.loading');
   card.insertBefore(stato, frame);
   apri.disabled = true;
   frame.hidden = true;
   function erroreVisibile(messaggio) {
     stato.hidden = false;
-    stato.textContent = `Anteprima non disponibile. ${messaggio}. Controlla la voce nella Libreria.`;
+    stato.textContent = t('chat.artifact.unavailable', { messaggio });
   }
   function apriPagina() {
     if (!indirizzo || !viva() || apri.disabled) return;
@@ -46,17 +47,17 @@ export function creaCardArtefatto({evento, sessionId, API = p => p,
       const chiudi = () => { try { tab?.close(); } catch { /* the user may have closed it already */ } };
       try {
         tab = apriFn('about:blank', '_blank');
-        if (!tab) { erroreVisibile('Il browser ha bloccato la nuova scheda'); return; }
+        if (!tab) { erroreVisibile(t('chat.artifact.tabBlocked')); return; }
         tab.opener = null; // Before any await or untrusted document navigation.
         apri.disabled = true;
         const pagina = await fonte.creaPagina();
-        if (!paginaValida(pagina)) throw new Error('Il riferimento alla pagina non è valido');
+        if (!paginaValida(pagina)) throw new Error(t('chat.artifact.pageReferenceInvalid'));
         if (!viva() || tab.closed) { chiudi(); return; }
         tab.location.replace(API(pagina));
         stato.hidden = true;
       } catch (errore) {
         chiudi();
-        if (viva()) erroreVisibile(errore instanceof Error ? errore.message : 'Il recupero non è riuscito');
+        if (viva()) erroreVisibile(errore instanceof Error ? errore.message : t('chat.artifact.loadFailed'));
       } finally {
         if (viva()) {
           apri.disabled = false;
@@ -73,18 +74,18 @@ export function creaCardArtefatto({evento, sessionId, API = p => p,
       let pagina;
       if (Object.hasOwn(evento, 'voceLibreriaId')) {
         if (typeof evento.voceLibreriaId !== 'string' || !ID_LIBRERIA.test(evento.voceLibreriaId)
-          || typeof sessionId !== 'string' || !sessionId) throw new Error('Il riferimento salvato non è valido');
+          || typeof sessionId !== 'string' || !sessionId) throw new Error(t('chat.artifact.savedReferenceInvalid'));
         fonte = fonteDaLibreria({sessionId, voce: {id: evento.voceLibreriaId},
           fetchFn: (percorso, init) => fetchFn(API(percorso), init)});
         pagina = await fonte.creaPagina();
-        if (!paginaValida(pagina)) throw new Error('Il riferimento alla pagina non è valido');
+        if (!paginaValida(pagina)) throw new Error(t('chat.artifact.pageReferenceInvalid'));
         if (!viva()) return;
         stato.hidden = true;
       } else {
-        if (typeof evento.id !== 'string' || !evento.id) throw new Error('Il riferimento all’anteprima non è valido');
+        if (typeof evento.id !== 'string' || !evento.id) throw new Error(t('chat.artifact.previewReferenceInvalid'));
         pagina = `/api/v1/artifacts/${encodeURIComponent(evento.id)}`;
         // Old journals have no exact durable association. Do not guess by title.
-        stato.textContent = 'Anteprima temporanea: potrebbe non essere disponibile dopo il riavvio.';
+        stato.textContent = t('chat.artifact.temporary');
       }
       if (!viva()) return;
       indirizzo = API(pagina);
@@ -93,7 +94,7 @@ export function creaCardArtefatto({evento, sessionId, API = p => p,
       apri.disabled = false;
     } catch (errore) {
       if (!viva()) return;
-      erroreVisibile(errore instanceof Error ? errore.message : 'Il recupero non è riuscito');
+      erroreVisibile(errore instanceof Error ? errore.message : t('chat.artifact.loadFailed'));
       // No volatile fallback: it could display an unrelated or no longer saved copy.
     }
   })();

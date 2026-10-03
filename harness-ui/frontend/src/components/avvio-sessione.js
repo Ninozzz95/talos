@@ -73,6 +73,7 @@
  */
 
 import { nomeUmanoPolitica } from './politiche.js';
+import { t } from './lingua.js';
 
 /*
  * ⛔ 12/09 — qui viveva `PERMESSO_PER_CARTELLA_LIBERA = 'Full access'`, il permesso che il server
@@ -112,8 +113,8 @@ export function statoAvvioSessione({ cartella = null, permesso = '', occupato = 
       puoAvviare: false,
       // ⛔ L'unico `disabled` legittimo: c'è una lettura in volo, e premere due volte non aiuta.
       disabilitato: true,
-      etichetta: 'Apro la cartella…',
-      motivo: 'Aspetta: sto leggendo la cartella.',
+      etichetta: t('varie.sessionStart.busy.label'),
+      motivo: t('varie.sessionStart.busy.reason'),
       rimedioSu: null,
     };
   }
@@ -124,8 +125,8 @@ export function statoAvvioSessione({ cartella = null, permesso = '', occupato = 
       puoAvviare: false,
       disabilitato: false,
       // Qui «Scegli una cartella» è VERO, ed è un'istruzione: premendolo si va all'albero.
-      etichetta: 'Scegli una cartella',
-      motivo: 'Scegli la cartella su cui vuoi lavorare.',
+      etichetta: t('varie.sessionStart.noFolder.label'),
+      motivo: t('varie.sessionStart.noFolder.reason'),
       rimedioSu: 'cartella',
     };
   }
@@ -147,7 +148,7 @@ export function statoAvvioSessione({ cartella = null, permesso = '', occupato = 
     situazione: 'pronto',
     puoAvviare: true,
     disabilitato: false,
-    etichetta: `Continua nella chat — ${nome}`,
+    etichetta: t('varie.sessionStart.ready.label', { folder: nome }),
     motivo: motivoQuandoSiPuoPartire({ nome, autorizzata, daEsploraFile, permesso }),
     rimedioSu: null,
   };
@@ -178,9 +179,7 @@ function motivoQuandoSiPuoPartire({ nome, autorizzata, daEsploraFile, permesso }
      fra i progetti…»). Il soggetto è già stabilito: qui basta il pronome. */
   const coda = autorizzata
     ? ''
-    : daEsploraFile
-      ? ' Arriva da Esplora file.'
-      : ' Non è fra i progetti già autorizzati: viene verificata all’avvio.';
+    : ` ${t(daEsploraFile ? 'varie.sessionStart.origin.fileExplorer' : 'varie.sessionStart.origin.notAuthorized')}`;
   return `${cosaFaraDentro(permesso, nome, umano)}${coda}`;
 }
 
@@ -188,16 +187,16 @@ function motivoQuandoSiPuoPartire({ nome, autorizzata, daEsploraFile, permesso }
 function cosaFaraDentro(permesso, nome, umano) {
   switch (permesso) {
     case 'Read only':
-      return `Con «${umano}» TALOS legge ${nome} e non ci scrive niente.`;
+      return t('varie.sessionStart.policy.readOnly', { policy: umano, folder: nome });
     case 'On request':
-      return `Con «${umano}» TALOS resterà nella cartella scelta e chiederà conferma prima di ogni scrittura.`;
+      return t('varie.sessionStart.policy.onRequest', { policy: umano });
     case 'Full access':
-      return `Con «${umano}» TALOS lavora in ${nome} senza i cancelli ordinari su file e rete.`;
+      return t('varie.sessionStart.policy.fullAccess', { policy: umano, folder: nome });
     case 'Workspace write':
-      return `Con «${umano}» TALOS resterà nella cartella scelta: scrive solo dentro ${nome}.`;
+      return t('varie.sessionStart.policy.workspaceWrite', { policy: umano, folder: nome });
     default:
       // ⛔ Un permesso che non conosciamo non si racconta: si nomina e basta (stessa disciplina di
       //   `nomeUmanoPolitica`, che in quel caso torna il valore grezzo invece di inventare).
-      return `Permesso scelto: «${umano}». TALOS resterà nella cartella scelta.`;
+      return t('varie.sessionStart.policy.unknown', { policy: umano });
   }
 }

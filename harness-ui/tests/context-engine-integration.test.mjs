@@ -133,5 +133,5 @@ test('CTX-SUMMARY-REASONING-ATE-BUDGET a reply with no text but reasoning tokens
   const adapter = createOwnerRuntimeAdapter({ destinazioneModelloDeps: { leggiChiave: () => 'k', leggiRuntime: () => ({ endpoint: 'https://openrouter.ai/api/v1' }), localePronto: () => false, chiamaLocale: async () => { throw new Error('no'); } } });
   await assert.rejects(adapter.callContextModel({ provider: 'openrouter', model: 'z-ai/glm-5.3-flash', messages: history, maxOutputTokens: 512,
     fetchDiRete: async () => Response.json({ choices: [{ message: { content: null, reasoning: 'pensa pensa' }, finish_reason: 'length' }], usage: { completion_tokens: 512, completion_tokens_details: { reasoning_tokens: 512 } } }) }),
-    error => error.code === 'CTX_TRUNCATED_SUMMARY' && /512 token/.test(error.message) && /ragionamento/.test(error.message) && error.usage?.completion_tokens === 512);
+    error => error.code === 'CTX_TRUNCATED_SUMMARY' && /512 tokens/.test(error.message) && /reasoning/.test(error.message) && error.usage?.completion_tokens === 512);
 });

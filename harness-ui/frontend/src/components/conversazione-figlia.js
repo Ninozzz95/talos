@@ -1,3 +1,4 @@
+import { t, tn } from './lingua.js';
 /*
  * PO-08 — LA CONVERSAZIONE DI UN SOTTO-AGENTE, DENTRO IL PANNELLO.
  *
@@ -81,7 +82,6 @@ import {
  */
 import { renderizzaMarkdown } from './markdown.js';
 import { nomeUmanoAttrezzo } from './nomi-attrezzi.js';
-import { parola, plurale } from './plurale.js';
 /* ⛔ 20/09/2026 — lo stesso contratto che usa la chat: una regola sola per l'esito di un comando. */
 import { esitoDichiaraFallimento, leggiEsitoComando } from './esito-comando.js';
 
@@ -94,10 +94,10 @@ import { esitoDichiaraFallimento, leggiEsitoComando } from './esito-comando.js';
  * stato con due nomi diversi.
  */
 export const ETICHETTA_STATO_FIGLIA = Object.freeze({
-  'in-corso': 'In corso',
-  conclusa: 'Conclusa',
-  fallita: 'Non riuscita',
-  interrotta: 'Interrotta',
+  get 'in-corso'() { return t('chat.child.state.running'); },
+  get conclusa() { return t('chat.child.state.done'); },
+  get fallita() { return t('chat.child.state.failed'); },
+  get interrotta() { return t('chat.child.state.interrupted'); },
 });
 
 /**
@@ -176,7 +176,7 @@ export function bersaglioAttrezzo(argomenti) {
 
 /** Il nome da mostrare per un attrezzo. ⛔ Mai l'id tecnico: se non lo conosciamo, lo si dice. */
 function nomeAttrezzoAschermo(id) {
-  return nomeUmanoAttrezzo(id) ?? 'attrezzo non ancora registrato';
+  return nomeUmanoAttrezzo(id) ?? t('chat.child.toolNotRegistered');
 }
 
 /** La consegna di un giro, dalle tre forme che `RunStarted.input` può avere. */
@@ -185,9 +185,9 @@ function consegnaDaInput(input) {
   /* ⛔ `consegnaCorta` PRIMA di `consegna`: la consegna intera di una figlia comincia col preambolo
      del kernel, uguale per ogni delega — è la stessa ragione per cui `inspector.js` legge `taskCorto`
      prima di `task` (09/09: a 52 caratteri due deleghe diverse diventavano la stessa riga). */
-  if (typeof input.comandoDiretto === 'string' && input.comandoDiretto.trim()) return { testo: input.comandoDiretto.trim(), meta: 'Comando' };
+  if (typeof input.comandoDiretto === 'string' && input.comandoDiretto.trim()) return { testo: input.comandoDiretto.trim(), meta: t('chat.child.command') };
   const testo = [input.consegnaCorta, input.consegna].find((v) => typeof v === 'string' && v.trim());
-  return { testo: testo ? testo.trim() : '', meta: input.seguito === true ? 'Follow-up' : '' };
+  return { testo: testo ? testo.trim() : '', meta: input.seguito === true ? t('chat.child.followUp') : '' };
 }
 
 /**
@@ -350,7 +350,7 @@ export function digerisciEventoFiglia(r, e) {
     case 'RunFinished': {
       const esito = pezzo(e.outcome);
       r.stato = ESITI_FERMATA.has(esito) ? 'interrotta' : ESITI_FALLITI.has(esito) ? 'fallita' : 'conclusa';
-      r.motivo = r.stato === 'interrotta' ? 'La figlia è stata fermata prima di concludere.' : '';
+      r.motivo = r.stato === 'interrotta' ? t('chat.child.stoppedBeforeFinish') : '';
       break;
     }
     case 'RunError': {
@@ -359,7 +359,7 @@ export function digerisciEventoFiglia(r, e) {
       /* ⛔ Il motivo è il messaggio del server, non una frase nostra: se dice «24 su 24 giri usati»
          quella è l'unica cosa che permette a chi legge di fare qualcosa. Quando il server non dice
          niente si dice che non l'ha detto, invece di riempire il buco. */
-      r.motivo = pezzo(e.message).trim() || 'Il server non ha detto perché.';
+      r.motivo = pezzo(e.message).trim() || t('chat.child.noReason');
       turnoCorrente().blocchi.push({ tipo: 'errore', id: `errore-${turnoCorrente().blocchi.length}`, codice, messaggio: r.motivo });
       break;
     }
@@ -420,7 +420,7 @@ function ricorda(mappa, chiave, valore, tetto) {
 
 /** Il riassunto di un gruppo di attrezzi: «3 attrezzi usati», «1 attrezzo usato». */
 function riassuntoGruppo(quanti) {
-  return `${plurale(quanti, 'attrezzo')} ${parola(quanti, 'usato', 'usati')}`;
+  return tn('chat.child.toolsUsedOne', 'chat.child.toolsUsedMany', quanti);
 }
 
 /**
@@ -476,9 +476,9 @@ export function montaConversazioneFiglia(contenitore, {
      pulsante per nome e non lo trovava. Aveva ragione lei. */
   const indietro = el(d, 'button', 'talos-button talos-button--ghost talos-button--sm talos-figlia__indietro');
   indietro.type = 'button';
-  indietro.append(simbolo(d, 'i i--sm', 'i-arrow-left'), d.createTextNode('Indietro'));
-  indietro.setAttribute('aria-label', 'Indietro: torna all’elenco dei sotto-agenti');
-  const titolo = el(d, 'b', 'talos-figlia__titolo talos-truncate', nome || 'Delega senza compito registrato');
+  indietro.append(simbolo(d, 'i i--sm', 'i-arrow-left'), d.createTextNode(t('chat.common.back')));
+  indietro.setAttribute('aria-label', t('chat.child.backToList'));
+  const titolo = el(d, 'b', 'talos-figlia__titolo talos-truncate', nome || t('chat.child.noTask'));
   const badge = el(d, 'span', 'talos-badge talos-badge--sm');
   /* ⛔ L'UNICA cosa annunciata da sola: il cambio di stato. Il testo che scorre NON è una live
      region — per-token announcements vanno evitati (ricerca 10/09, in testa al file). */
@@ -487,11 +487,11 @@ export function montaConversazioneFiglia(contenitore, {
   elemento.append(testata);
 
   const misure = el(d, 'div', 'talos-kv talos-figlia__misure');
-  const misureChiave = el(d, 'span', 'talos-kv__k', 'Modello');
+  const misureChiave = el(d, 'span', 'talos-kv__k', t('chat.common.model'));
   const misureValore = el(d, 'span', 'talos-kv__v talos-mono', '—');
   misure.append(misureChiave, misureValore);
   const conteggi = el(d, 'div', 'talos-kv talos-figlia__misure');
-  const conteggiChiave = el(d, 'span', 'talos-kv__k', 'Ha fatto');
+  const conteggiChiave = el(d, 'span', 'talos-kv__k', t('chat.child.did'));
   const conteggiValore = el(d, 'span', 'talos-kv__v talos-mono', '—');
   conteggi.append(conteggiChiave, conteggiValore);
   elemento.append(misure, conteggi);
@@ -532,7 +532,7 @@ export function montaConversazioneFiglia(contenitore, {
   corpo.tabIndex = 0;
   elemento.append(corpo);
 
-  const vuoto = el(d, 'p', 'talos-inspector__hint talos-figlia__vuoto', 'Nessun evento ancora da questo sotto-agente. Il collegamento è aperto: appena la figlia dice o fa qualcosa, compare qui.');
+  const vuoto = el(d, 'p', 'talos-inspector__hint talos-figlia__vuoto', t('chat.child.empty'));
   /*
    * ⛔⛔ 16/09 — LO STATO VUOTO DICEVA UNA COSA CHE NON SAPEVA. «Il collegamento è aperto» compariva
    *   nell'istante del montaggio, prima che l'EventSource avesse aperto qualunque cosa: se il server
@@ -541,7 +541,7 @@ export function montaConversazioneFiglia(contenitore, {
    *   quando il collegamento è confermato (`onAperto`). Due fatti diversi, due frasi diverse.
    * ⛔ `role="status"` e non `aria-live="assertive"`: è un'attesa, non un allarme.
    */
-  const scheletro = el(d, 'p', 'talos-inspector__hint talos-figlia__scheletro', 'Mi collego a questo sotto-agente…');
+  const scheletro = el(d, 'p', 'talos-inspector__hint talos-figlia__scheletro', t('chat.child.connecting'));
   scheletro.setAttribute('role', 'status');
   corpo.append(scheletro, vuoto);
 
@@ -605,7 +605,7 @@ export function montaConversazioneFiglia(contenitore, {
        *   disponibile, non imposto — AG-UI lo tiene distinto dalla risposta «to avoid polluting
        *   conversation history», e a schermo la traduzione di quella frase è «collassato».
        */
-      const creato = creaAttivita({ riassunto: 'Ragionamento', aperto: false }, { document: d });
+      const creato = creaAttivita({ riassunto: t('chat.child.reasoning'), aperto: false }, { document: d });
       creato.card.dataset.c = 'ReasoningBundle';
       const corpoTesto = el(d, 'div', 'assistant-copy talos-figlia__ragionamento');
       rendiMarkdown(corpoTesto, blocco.testo);
@@ -707,15 +707,15 @@ export function montaConversazioneFiglia(contenitore, {
     const tono = TONO_STATO[ridotto.stato];
     badge.className = `talos-badge talos-badge--sm${tono ? ` talos-badge--${tono}` : ''}`;
     elemento.dataset.stato = ridotto.stato;
-    elemento.setAttribute('aria-label', `Conversazione del sotto-agente: ${titolo.textContent} — ${ETICHETTA_STATO_FIGLIA[ridotto.stato]}`);
+    elemento.setAttribute('aria-label', t('chat.child.ariaLabel', { titolo: titolo.textContent, stato: ETICHETTA_STATO_FIGLIA[ridotto.stato] }));
     /* ⛔ «—» e non «(default)»: il modello lo dichiara `RunStarted.contesto`, e finché quell'evento
        non è arrivato non lo sappiamo. Un nome di ripiego qui sarebbe un modello inventato. */
     misureValore.textContent = ridotto.modello || '—';
-    conteggiValore.textContent = `${plurale(ridotto.giri, 'giro')} · ${plurale(ridotto.attrezzi, 'chiamata')}`;
+    conteggiValore.textContent = `${tn('chat.child.turnsOne', 'chat.child.turnsMany', ridotto.giri)} · ${tn('chat.child.callsOne', 'chat.child.callsMany', ridotto.attrezzi)}`;
     /* ⛔ L'accordo si flette col numero: «1 evento non collegabili» è la firma di una frase
        incollata, e chi la legge smette di fidarsi del resto della riga. */
     const notaTesto = (eventiNonDisegnati > 0 ? nota.textContent : '') || ridotto.motivo || (ridotto.scartati > 0
-      ? `${plurale(ridotto.scartati, 'evento', 'eventi')} che non ${parola(ridotto.scartati, 'si è potuto', 'si sono potuti')} collegare a niente: ${parola(ridotto.scartati, 'scartato', 'scartati')}.`
+      ? tn('chat.child.discardedOne', 'chat.child.discardedMany', ridotto.scartati)
       : '');
     nota.textContent = notaTesto;
     nota.hidden = notaTesto === '';
@@ -728,7 +728,7 @@ export function montaConversazioneFiglia(contenitore, {
      */
     const conTurni = ridotto.turni.length > 0;
     const fase = conTurni ? null : (riduttore.digeriti > 0 ? 'ricostruisco' : (flussoAperto ? null : 'collego'));
-    if (fase) scheletro.textContent = fase === 'collego' ? 'Mi collego a questo sotto-agente…' : 'Ricostruisco la conversazione…';
+    if (fase) scheletro.textContent = fase === 'collego' ? t('chat.child.connecting') : t('chat.child.rebuilding');
     scheletro.hidden = fase === null;
     vuoto.hidden = conTurni || fase !== null;
 
@@ -847,7 +847,7 @@ export function montaConversazioneFiglia(contenitore, {
           programmaDisegno();
         } catch (errore) {
           eventiNonDisegnati += 1;
-          nota.textContent = `${plurale(eventiNonDisegnati, 'evento', 'eventi')} di questo sotto-agente non ${parola(eventiNonDisegnati, 'si è potuto', 'si sono potuti')} disegnare: ${errore instanceof Error ? errore.message : String(errore)}`;
+          nota.textContent = tn('chat.child.notDrawnOne', 'chat.child.notDrawnMany', eventiNonDisegnati, { errore: errore instanceof Error ? errore.message : String(errore) });
           nota.hidden = false;
         }
       }, {
@@ -858,9 +858,9 @@ export function montaConversazioneFiglia(contenitore, {
       });
     } catch (errore) {
       /* ⛔ Un flusso che non si apre non è un pannello bianco: si dice, e si dice PERCHÉ. */
-      nota.textContent = `Non riesco a seguire questo sotto-agente: ${errore instanceof Error ? errore.message : String(errore)}`;
+      nota.textContent = t('chat.child.cannotFollow', { errore: errore instanceof Error ? errore.message : String(errore) });
       nota.hidden = false;
-      vuoto.textContent = 'Nessun evento: il collegamento con questo sotto-agente non si è aperto.';
+      vuoto.textContent = t('chat.child.connectionFailed');
     }
   }
 

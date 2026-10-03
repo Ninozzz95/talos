@@ -75,7 +75,7 @@ export function apriModale(titolo, contenuto, { document: doc = globalThis.docum
   h2.id = idTitolo;
   const chiudiBtn = nodo(doc, 'button', 'talos-button talos-button--ghost talos-icon-button');
   chiudiBtn.type = 'button';
-  chiudiBtn.setAttribute('aria-label', 'Chiudi');
+  chiudiBtn.setAttribute('aria-label', t('chat.common.close'));
   chiudiBtn.append(icona(doc, 'x'));
   chiudiBtn.addEventListener('click', () => chiudiModale());
   testa.append(h2, chiudiBtn);
@@ -162,10 +162,10 @@ export function chiudiModale({ immediata = false } = {}) {
  *   di troppo non cancella niente (stessa scelta della riga della Libreria).
  */
 export function confermaModale({
-  titolo = 'Confermi?',
+  titolo = t('chat.confirm.title'),
   domanda,
   conseguenza = '',
-  etichettaConferma = 'Elimina',
+  etichettaConferma = t('chat.common.delete'),
   onConferma,
   document: doc = globalThis.document,
 } = {}) {
@@ -173,7 +173,7 @@ export function confermaModale({
   const pezzi = [testo];
   if (conseguenza) pezzi.push(nodo(doc, 'p', 'td-subtle', conseguenza));
   const piede = nodo(doc, 'div', 'td-detail-footer');
-  const annulla = nodo(doc, 'button', 'talos-button talos-button--secondary talos-button--sm', t('Annulla')); // 01/10: nell'interfaccia inglese restava «Annulla»
+  const annulla = nodo(doc, 'button', 'talos-button talos-button--secondary talos-button--sm', t('chat.common.cancel')); // 01/10: nell'interfaccia inglese restava «Annulla»
   annulla.type = 'button';
   annulla.addEventListener('click', () => chiudiModale());
   /* `--secondary` prima di `--danger`: senza la variante il bottone resta testo rosso senza

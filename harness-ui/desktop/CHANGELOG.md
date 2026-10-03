@@ -6,6 +6,34 @@ Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/). Versions
 
 ## Unreleased
 
+## desktop-v0.1.22 — 2026-10-03 (beta, published as a GitHub pre-release)
+
+A beta: installs of 0.1.21 do not receive it automatically. TALOS now speaks English and Italian across the interface,
+asks before reading or listing anything outside the project, and lets you queue a message that goes in right after the
+current step.
+
+### Added
+- Every screen, dialog and fragment of the interface speaks both English and Italian, including the server's messages
+  people read (Doctor, providers, web-search sources, GitHub, files, the approval card's sentence before a secret).
+  A language gate keeps it so: no hard-coded text, no Italian sentence in the code, a pseudo-language check on every
+  section, the open session and the main dialogs.
+- The short description under each command follows the interface language.
+- The model can list its sub-agents and stop one (with the ones it started); a sub-agent's result is never stuck behind
+  a Stop, and the parent picks it up.
+- A message queued while tools run goes in right after their results, in the same turn.
+
+### Changed
+- Reading or listing outside the project folder asks first; credentials always ask. With Full access only credentials ask.
+- The kernel writes to the model in English.
+
+### Fixed
+- Opening the Terminal of a session whose folder no longer exists no longer brings the server down; the terminal says why.
+- A sub-agent's suspicious result delivered in the middle of a turn still makes the next change ask for confirmation.
+
+### Known
+- A part of the server's texts is still being translated (lane K4b); a few kernel sentences for people (the WSL root
+  consent, the local engine notice, provider notices in the chat) are still Italian only.
+
 ## desktop-v0.1.21 — 2026-10-02
 
 TALOS now updates itself: it looks for a new version in the background, checks our signature, and installs it when you

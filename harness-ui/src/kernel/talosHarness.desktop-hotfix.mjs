@@ -46,20 +46,13 @@ const SHELL_EXECUTION_HEADER = /^exit\s+-?\d+\s+\[sandbox:[^\]]+\](?:\r?\n|$)/i;
 const SHELL_ZERO_HEADER = /^exit\s+0\s+\[sandbox:[^\]]+\](?:\r?\n|$)/i;
 const DEFAULT_NPM_TEST = /^npm\s+test\s*$/i;
 const PLACEHOLDER_NPM_TEST = /^\s*echo\s+(?:["']?error:\s*)?no test specified["']?\s*(?:&&|;)\s*exit\s+1\s*$/i;
-/* 01/10/2026 (F017): una virgola, non un punto e virgola — la frase viaggia senza virgolette in un comando che vale in cmd.exe e
-   in bash (vedi `comandoNessunaSuite`), e in bash `;` separerebbe due comandi. Nessuno la confronta per testo: conta il 127. */
-const TEST_SENTINEL_MESSAGE = `${NO_TEST_SUITE_CODE}: workspace has no usable npm scripts.test, verification was not run.`;
 /*
- * ⛔⛔ LO STESSO FATTO DEVE AVERE LO STESSO CODICE — 20/09/2026, BLOCCO 5.
- *   L'adapter usciva **2**, il kernel canonico esce **127** (`USCITA_NESSUNA_SUITE`, il cancello
- *   `suiteMancante`). Due codici per la stessa condizione, e la riga dei Processi li distingue:
- *   `statoDaUscita(2)` → **«Non riuscito»** con il pallino rosso, `statoDaUscita(127)` →
- *   **«Non eseguito»**. Cioè: sul desktop una suite che non esiste veniva dipinta come un
- *   fallimento, mentre il vero è che **non è partita** — ed è la stessa bugia che il commento di
- *   `suiteMancante` racconta per il caso `exit 127`, solo dall'altro lato.
- *   ⇒ Si allinea al canonico: **127**, che è anche il codice che la UI già traduce bene.
+ * ⛔⛔ H-04 (owner 02/10/2026, «Voglio il +1»): qui c'era un comando FINTO, `1>&2 echo NO_TEST_SUITE_CONFIGURED…&& exit 127`, lanciato
+ *   davvero perché la riga dei Processi dicesse «Non eseguito» (BLOCCO 5, 20/09: «lo stesso fatto deve avere lo stesso codice»;
+ *   F017, 01/10: niente eseguibile, perché nel pacchetto TALOS.exe partiva come app). Ma 127 in POSIX è «comando non trovato», e il
+ *   numero era fabbricato. ⇒ Nessun processo: il desktop dice al kernel PERCHÉ la suite non c'è, e il kernel risponde il suo
+ *   NOT RUN, senza codice d'uscita, coi runner del progetto come mossa dopo. Lo stesso fatto ha ancora la stessa forma.
  */
-const USCITA_NESSUNA_SUITE_DESKTOP = 127;
 const PATH_SPECIAL = /^(?:[\\/]|[A-Za-z]:)|(?:^|[\\/])[^\\/]*:[^\\/]*(?:[\\/]|$)/u;
 
 function parseToolCall(call) {
@@ -135,7 +128,9 @@ export function correggiEsitoToolDesktop({ name, args, content, cartella }) {
     if (!text.startsWith(SEARCH_INCOMPLETE_NOTICE)) text = `${SEARCH_INCOMPLETE_NOTICE}\n${text}`;
   }
 
-  if (name === 'elenca' && /is not a readable folder of this workspace/i.test(text)) {
+  /* F-027, estensione (03/10/2026): solo la FRASE di TALOS, a inizio testo — l'elenco ora sta nel confine dei dati, e un file
+     che si chiama come la frase non deve far sostituire l'elenco intero. */
+  if (name === 'elenca' && /^"[^"\n]*" is not a readable folder of this workspace\./u.test(text)) {
     const target = classifyElencaTarget(cartella, args);
     if (target?.type === 'file') {
       text = `"${target.requested}" is a FILE, not a folder. Use \`leggi\` to read it; use \`elenca\` only on directories.`;
@@ -193,39 +188,28 @@ export function correggiMessaggiDesktop(messages, { cartella } = {}) {
 }
 
 /*
- * ⛔⛔ F017 (01/10/2026) — «prova» senza suite usciva 0 nell'app INSTALLATA. Il comando era `"${process.execPath}" -e "…exit(127)"`:
- *   dal sorgente execPath è node.exe (127), nel pacchetto è TALOS.exe, e `desktop/child-bootstrap.mjs:19` toglie
- *   ELECTRON_RUN_AS_NODE prima del server ⇒ TALOS.exe partiva come APP, seconda istanza, uscita 0. Riprodotto sulla build
- *   Preview: «exit 0» in 82 ms; con la variabile, 127. E nella casa Linux un percorso di Windows non è nemmeno un comando.
- * ⇒ Nessun eseguibile: `echo` ed `exit` esistono in cmd.exe e in bash. La redirezione IN TESTA e `&&` attaccato alla frase:
- *   così cmd non stampa uno spazio in coda (misurato: cmd e bash danno 127, la frase su stderr, stdout vuoto).
+ * Perché la suite di serie (`npm test`) non c'è, detto al kernel — o `null` quando si lancia il comando com'è: un comando
+ *   esplicito, un `package.json` illeggibile (la diagnosi vera è quella di npm), una cartella che non c'è.
+ * ⛔ F017 (01/10/2026): nessun eseguibile lanciato per dirlo — oggi nessun processo affatto.
  */
-function comandoNessunaSuite() {
-  return `1>&2 echo ${TEST_SENTINEL_MESSAGE}&& exit ${USCITA_NESSUNA_SUITE_DESKTOP}`;
-}
-
-export async function comandoProvaDesktop({ cartella, comandoProva, esplicito = false } = {}) {
-  if (esplicito || (typeof comandoProva === 'string' && !DEFAULT_NPM_TEST.test(comandoProva.trim()))) return comandoProva;
-  // If the workspace itself is not usable, preserve npm's own diagnostic. The
-  // sentinel is reserved for the fact we can actually establish: no test suite.
-  if (typeof cartella !== 'string' || !cartella) return comandoProva;
-  try { if (!lstatSync(cartella).isDirectory()) return comandoProva; }
-  catch { return comandoProva; }
+export async function motivoProvaSenzaSuiteDesktop({ cartella, comandoProva, esplicito = false } = {}) {
+  if (esplicito || (typeof comandoProva === 'string' && !DEFAULT_NPM_TEST.test(comandoProva.trim()))) return null;
+  if (typeof cartella !== 'string' || !cartella) return null;
+  try { if (!lstatSync(cartella).isDirectory()) return null; }
+  catch { return null; }
 
   let raw;
   try { raw = await readFile(join(cartella, 'package.json'), 'utf8'); }
-  catch (error) {
-    if (error?.code === 'ENOENT') return comandoNessunaSuite();
-    return comandoProva;
-  }
+  catch (error) { return error?.code === 'ENOENT' ? 'there is no package.json in this folder' : null; }
 
   let packageJson;
   try { packageJson = JSON.parse(raw); }
-  catch { return comandoProva; }
+  catch { return null; }
 
   const test = packageJson?.scripts?.test;
-  if (typeof test === 'string' && test.trim() && !PLACEHOLDER_NPM_TEST.test(test)) return comandoProva;
-  return comandoNessunaSuite();
+  if (typeof test !== 'string' || !test.trim()) return 'package.json has no scripts.test';
+  if (PLACEHOLDER_NPM_TEST.test(test)) return 'package.json scripts.test is the npm init placeholder, which only prints "no test specified"';
+  return null;
 }
 
 function usageAdd(target, usage) {
@@ -379,8 +363,10 @@ function wrapOnGiro(original, { cartella, telemetry, calls }) {
  *     finestra): bloccante anche quando la via normale è già stata tentata. Sotto soglia NON si compatta mai.
  *   - la CODA LETTERALE: tutti i `system` iniziali, le ultime 3 richieste della persona, gli ultimi 2 scambi chiusi,
  *     più l'indice meccanico (`compattazione-desktop.mjs`, funzioni pure: là stanno la forma e le fonti).
- *   - il RIASSUNTORE non ha attrezzi, ha `max_tokens` dichiarato e ragionamento basso; un riassunto con attrezzo,
- *     vuoto o troncato si ritenta subito UNA volta, poi si va avanti senza (e per questo turno la via normale tace).
+ *   - il RIASSUNTORE non ha attrezzi, ha `max_tokens` dichiarato e ragionamento basso; un riassunto con attrezzo o
+ *     vuoto si ritenta subito UNA volta, poi si va avanti senza (e per questo turno la via normale tace). ⛔ 02/10/2026:
+ *     il `max_tokens` è il budget di Hermes sul mezzo (`budgetRiassunto`), e un riassunto TRONCATO non si ritenta —
+ *     con lo stesso budget torna troncato uguale (sessione b1e7382a: 2 richieste, 2 × 2.048 token, zero riassunti).
  *   - il PIANO si stacca prima e si riattacca dopo: non entra né nel riassunto né nell'archivio.
  *   - il TRIAL riceve `messages` (corretto) E `originali` (grezzo), entrambi senza effimeri — contratto con F4.
  *   - ogni compattazione produce un RECORD `talos.compattazione.v1` (`coveredThrough` + proiezione + numeri): emesso su
@@ -402,7 +388,7 @@ function wrapOnGiro(original, { cartella, telemetry, calls }) {
  */
 function wrapContextHooks(original, {
   cartella, modello, chiave, fetchDiRete, segnaleStop, telemetry, extraUsage, emitOnGiro,
-  reasoning, soglie, recordIniziale = null, records = [],
+  reasoning, soglie, recordIniziale = null, records = [], progressoAcceso = false,
 } = {}) {
   let compacted = compattazione.eRecordValido(recordIniziale) ? recordIniziale : null;
   let compactions = 0;
@@ -419,6 +405,8 @@ function wrapContextHooks(original, {
    * (gli schemi degli attrezzi, il tokenizzatore) e si aggiunge al pavimento. */
   let ultimoPavimentoStimato = 0;
   let ultimaProiezioneStimata = 0;
+  /* Il `max_tokens` dato all'ultimo riassunto: è la dimensione massima che il riassunto aggiunge al pavimento. */
+  let ultimoBudgetRiassunto = compattazione.MAX_TOKEN_RIASSUNTO;
   /* Rete di sicurezza: quante compattazioni del turno sono rimaste sopra la soglia, per QUALUNQUE ragione. */
   let inefficaciTotali = 0;
   let attendeVerdetto = false;
@@ -434,18 +422,31 @@ function wrapContextHooks(original, {
 
   const projectLegacy = (rawMessages) => (compacted ? compattazione.applicaRecord(rawMessages, compacted) : rawMessages);
 
-  const chiediRiassunto = async (messaggiRichiesta) => {
+  /*
+   * Lane CLI, 03/10/2026 — `compaction.progress`: con `progressoAcceso` la compattazione dice i suoi passi VERI su
+   *   `onGiro` (`tipo: 'compattazione-progresso'`): `lettura` della conversazione, `riassunto` che si conta mentre si
+   *   scrive (streaming, `creaContatoreRiassunto`), `sostituzione` della storia. Spento (il default), niente cambia: né
+   *   lo streaming della richiesta di riassunto né gli eventi.
+   * ⛔ I pezzi del riassunto NON passano dall'`onDelta` del giro: il riassunto non è una risposta per la persona.
+   * ⛔ `accettaVuota`: in streaming una risposta vuota lancerebbe, mentre senza streaming torna vuota e la giudica
+   *   `valutaRispostaDiRiassunto` («vuoto»). Acceso, si tiene lo stesso esito di prima.
+   */
+  const progresso = (giro, valore) => { if (progressoAcceso) emitOnGiro?.({ giro, tipo: 'compattazione-progresso', ...valore }); };
+
+  const chiediRiassunto = async (messaggiRichiesta, maxOutputTokens, contatore = null) => {
     const esito = await kernel.chiamaConRitenta({
       modello,
       chiave,
       messaggi: messaggiRichiesta,
       attrezzi: [],
-      maxOutputTokens: compattazione.MAX_TOKEN_RIASSUNTO,
+      maxOutputTokens,
       ...(reasoningRiassunto ? { reasoning: reasoningRiassunto } : {}),
       ...(fetchDiRete ? { fetchDiRete } : {}),
       ...(segnaleStop ? { segnaleStop } : {}),
+      ...(contatore ? { onDelta: contatore.onDelta, accettaVuota: true } : {}),
     });
     usageAdd(extraUsage, esito.usage);
+    contatore?.chiudi(esito.usage);
     return compattazione.valutaRispostaDiRiassunto(esito);
   };
 
@@ -470,6 +471,7 @@ function wrapContextHooks(original, {
       /* Niente da riassumere ma la coda si è accorciata: la proiezione nuova è deterministica, senza il riassuntore
        * (Hermes `_FEASIBILITY_SKIP_MIDDLE_FRACTION`, `:1124-1127`: «dropping alone suffices»). */
       emitOnGiro?.({ giro: requestIndex, tipo: 'compattazione-inizio', tokenMisurati, soglia, motivo });
+      progresso(requestIndex, { fase: 'lettura', messaggi: projected.length, tokenPrima: tokenMisurati, motivo });
       const proiezioneSolaCoda = [...parti.testa, ...parti.mezzo, ...parti.coda];
       const recordSolaCoda = compattazione.creaRecord({
         coveredThrough: rawMessages.length,
@@ -481,6 +483,8 @@ function wrapContextHooks(original, {
         modello,
         indice: compacted?.indice ?? null,
       });
+      /* Nessun riassunto da contare: dalla lettura si passa alla sostituzione (le fasi vere, mai finte). */
+      progresso(requestIndex, { fase: 'sostituzione', tokenDopo: recordSolaCoda.tokenDopo ?? null, motivo });
       compacted = recordSolaCoda;
       ultimaProiezioneStimata = recordSolaCoda.tokenDopo ?? 0;
       records.push(recordSolaCoda);
@@ -491,19 +495,30 @@ function wrapContextHooks(original, {
       return proiezioneSolaCoda;
     }
     emitOnGiro?.({ giro: requestIndex, tipo: 'compattazione-inizio', tokenMisurati, soglia, motivo });
-    const richiesta = compattazione.costruisciRichiestaDiRiassunto(parti);
+    progresso(requestIndex, { fase: 'lettura', messaggi: projected.length, tokenPrima: tokenMisurati, motivo });
+    const budget = compattazione.budgetRiassunto({
+      tokenDaRiassumere: kernel.stimaTokenConversazione(parti.mezzo), finestraToken: soglie.finestraToken, soglia: soglie.soglia,
+    });
+    ultimoBudgetRiassunto = budget.maxOutputTokens;
+    const richiesta = compattazione.costruisciRichiestaDiRiassunto({ ...parti, paroleMassime: budget.paroleMassime });
     let esito;
     for (let tentativo = 0; tentativo < 2; tentativo += 1) {
-      try { esito = await chiediRiassunto(richiesta); }
+      const contatore = progressoAcceso
+        ? compattazione.creaContatoreRiassunto({ emetti: (valore) => progresso(requestIndex, { ...valore, motivo }), tentativo: tentativo + 1 })
+        : null;
+      try { esito = await chiediRiassunto(richiesta, budget.maxOutputTokens, contatore); }
       catch (errore) {
         if (segnaleStop?.aborted) throw errore;
         esito = { ok: false, riassunto: '', motivo: 'errore' };
       }
-      if (esito.ok) break;
+      /* Troncato: lo stesso budget lo troncherebbe uguale, un secondo tentativo identico paga e non serve. */
+      if (esito.ok || esito.motivo === 'troncato') break;
     }
     if (!esito.ok) {
       tentativiFallitiNelTurno += 1;
-      emitOnGiro?.({ giro: requestIndex, tipo: 'compattazione-fine', compattato: false, motivo: esito.motivo });
+      /* `interrottaIn`: il passo dove si è fermata (lane CLI, 03/10/2026). Non `fase`: nell'evento `talos.compattazione`
+         `fase` dice già inizio/fine. */
+      emitOnGiro?.({ giro: requestIndex, tipo: 'compattazione-fine', compattato: false, motivo: esito.motivo, interrottaIn: 'riassunto' });
       return null;
     }
     const indice = compattazione.indiceMeccanico(parti.mezzo, { precedente: compacted?.indice ?? null });
@@ -520,6 +535,7 @@ function wrapContextHooks(original, {
       modello,
       indice,
     });
+    progresso(requestIndex, { fase: 'sostituzione', tokenDopo: record.tokenDopo ?? null, motivo });
     compacted = record;
     ultimaProiezioneStimata = record.tokenDopo ?? 0;
     records.push(record);
@@ -580,7 +596,7 @@ function wrapContextHooks(original, {
          * proiezione (schemi degli attrezzi, tokenizzatore). Se da solo, più il riassunto massimo, arriva alla soglia,
          * restano solo istruzioni e attrezzi: è il caso in cui Hermes smette (`context_compressor.py:2762-2782`). */
         const scarto = Math.max(0, promptTokens - ultimaProiezioneStimata);
-        const pavimentoVero = ultimoPavimentoStimato + scarto + compattazione.MAX_TOKEN_RIASSUNTO;
+        const pavimentoVero = ultimoPavimentoStimato + scarto + ultimoBudgetRiassunto;
         if (ultimaCodaAlMinimo || pavimentoVero >= soglie.soglia) compattazioniInefficaci += 1;
       }
     }
@@ -660,11 +676,8 @@ export async function talosLavora(input = {}) {
   const explicitTestCommand = typeof input.comandoProva === 'string'
     && input.comandoProva.trim().length > 0
     && !DEFAULT_NPM_TEST.test(input.comandoProva.trim());
-  const command = await comandoProvaDesktop({
-    cartella: input.cartella,
-    comandoProva: input.comandoProva ?? 'npm test',
-    esplicito: explicitTestCommand,
-  });
+  const comandoProva = input.comandoProva ?? 'npm test';
+  const provaSenzaSuite = await motivoProvaSenzaSuiteDesktop({ cartella: input.cartella, comandoProva, esplicito: explicitTestCommand });
   const onGiro = wrapOnGiro(input.onGiro, { cartella: input.cartella, telemetry, calls });
   /*
    * Le soglie si calcolano UNA volta per turno, dall'ambiente e dalla finestra che il chiamante passa
@@ -688,6 +701,7 @@ export async function talosLavora(input = {}) {
     soglie,
     recordIniziale: input.recordCompattazioneIniziale ?? null,
     records,
+    progressoAcceso: input.progressoCompattazione === true,
   });
   const onDelta = wrapOnDelta(input.onDelta, telemetry);
 
@@ -695,7 +709,8 @@ export async function talosLavora(input = {}) {
     telemetry.mark('kernel-running');
     const result = await kernel.talosLavora({
       ...input,
-      comandoProva: command,
+      comandoProva,
+      provaSenzaSuite,
       contextHooks,
       onGiro,
       onDelta,

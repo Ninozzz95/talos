@@ -27,7 +27,7 @@ import { modelloRichiestaValido, permessiPerAttrezzoRichiestaValido, permessiRic
 import { ID_CATALOGO_IN_UI, REGISTRO_FORNITORI } from './provider-registry.mjs'; // 12/09, P-A: le rotte del catalogo per fornitore si costruiscono dal registro, non da una terna ricopiata due volte
 import { cartelleFrequenti as cartelleFrequentiReale } from './frequent-dirs.mjs';
 import { RUNTIME_BOOTSTRAP_SCHEMA, RUNTIME_RESOURCE_SCHEMA, parseBootstrapEnvelope } from './runtime-contract.mjs';
-import { getDiagnosticProblem, toPublicProblem } from './public-problem.mjs';
+import { getDiagnosticProblem, paramsPubblici, toPublicProblem } from './public-problem.mjs';
 import { createSseSession } from './http-lifecycle.mjs';
 import { creaReplayCoalescente } from './sse-replay-coalescente.mjs'; // 11/09: il replay di una sessione lunga non si rigioca token per token — vedi la rotta /events
 import { iconaDelDominio } from './favicon-proxy.mjs'; // 10/09: le favicon delle fonti, prese dal server e mai dal browser
@@ -519,7 +519,7 @@ const STATUS_BY_CODE = Object.freeze({
   WORKFLOW_RUN_NOT_FINISHED: 409,
   /**
    * ⛔⛔⛔ 07/9, O-49 — era QUERY_INVALID (400), e l’owner leggeva a schermo
-   * «Risposta non riuscita · Query non valida» premendo Approva su una scheda del permesso.
+   * «Risposta non riuscita · Invalid query» premendo Approva su una scheda del permesso.
    * La query non c’entrava niente: la richiesta era formata benissimo, solo che quella
    * approvazione non era più in attesa (stop, reindirizzamento, o la scheda ridisegnata
    * dopo un riavvio del server, che perde `approvazionePendente` perché vive in memoria).
@@ -630,218 +630,218 @@ const STATUS_BY_CODE = Object.freeze({
   OAUTH_CUSTODIA_FALLITA: 500,
 });
 
-const MESSAGE_BY_CODE = Object.freeze({
-  WORKFLOW_STORE_UNAVAILABLE: 'Workflow non disponibile su questo server',
-  CONFIG_INVALID: 'Configurazione non valida',
-  QUERY_INVALID: 'Query non valida',
-  /* ⛔⛔ 25/09/2026 sera, decisione owner «motivo vero»: un avvio rifiutato diceva «Avvio non riuscito: Query non valida» (il
+export const MESSAGE_BY_CODE = Object.freeze({
+  WORKFLOW_STORE_UNAVAILABLE: 'Workflow not available on this server',
+  CONFIG_INVALID: 'Invalid configuration',
+  QUERY_INVALID: 'Invalid query',
+  /* ⛔⛔ 25/09/2026 sera, decisione owner «motivo vero»: un avvio rifiutato diceva «Avvio non riuscito: Invalid query» (il
      Qwen dell'owner). I rifiuti d'avvio che una persona può incontrare hanno una frase sua, come O-49 qui sotto: che cosa
      scegliere di nuovo e dove. Le frasi tecniche dei controlli (formato OpenRouter, {effort?, summary?}) restano nei log. */
-  MODEL_ID_INVALID: 'Il modello scelto ha un nome che questo server non riconosce: sceglilo di nuovo dalla pillola del modello',
-  REASONING_INVALID: 'Il livello di ragionamento scelto non è fra quelli ammessi: sceglilo di nuovo dalla pillola del ragionamento',
-  PERMISSIONS_INVALID: 'I permessi scelti non sono fra quelli ammessi: sceglili di nuovo dalla pillola dei permessi',
-  REPORT_UNAVAILABLE: 'Rapporto non ancora prodotto',
-  SEARCH_SOURCE_INVALID: 'Fonte di ricerca non valida',
-  SEARCH_KEY_REQUIRED: 'Serve una chiave per questa fonte',
-  SEARCH_KEY_INVALID: 'Chiave di ricerca non valida',
-  SEARCH_ENDPOINT_INVALID: 'Indirizzo della fonte non valido',
-  SEARCH_STORE_UNAVAILABLE: 'Portachiavi della ricerca non disponibile',
-  WSL_STORE_UNAVAILABLE: 'Preferenze di WSL non disponibili',
-  SEARCH_NOT_READY: 'La fonte di ricerca non è pronta',
-  SEARCH_BLOCKED: 'La fonte di ricerca ha rifiutato la richiesta',
-  SEARCH_UNREACHABLE: 'La fonte di ricerca non è raggiungibile',
-  SEARCH_FAILED: 'La ricerca non è riuscita',
-  AUTH_REQUIRED: 'Questo server accetta solo la finestra TALOS che lo ha avviato',
-  CHAT_FILE_ORIGIN_FORBIDDEN: 'Carica il file dalla finestra TALOS di questa sessione',
-  PAGE_ORIGIN_FORBIDDEN: 'Apri la pagina dalla finestra TALOS di questa sessione',
-  TERMINAL_LIMIT_REACHED: 'Hai già il massimo di terminali aperti per questa sessione: chiudine uno e riprova',
-  TERMINAL_STORE_UNAVAILABLE: 'I terminali non sono disponibili su questo server',
-  BROWSER_PROXY_SOLO_LOCALE: 'Il proxy con annotazione vale solo per un dev server sul tuo computer',
-  BROWSER_PROXY_NON_HTML: 'Non è una pagina HTML',
-  BROWSER_PROXY_TROPPO_GRANDE: 'La pagina supera i 5 MB',
-  BROWSER_PROXY_IRRAGGIUNGIBILE: 'La pagina non risponde',
-  GIT_NOT_A_REPOSITORY: 'Questa cartella non è un repository git',
-  GIT_ALREADY_A_REPOSITORY: 'Questa cartella è già in un repository git',
-  GIT_INIT_NEEDS_CONFIRM: 'La cartella contiene la tua cartella utente: serve una conferma',
-  GIT_PATH_INVALID: 'Percorso non valido per questa sessione',
-  GIT_PATHS_REQUIRED: 'Serve almeno un percorso esplicito',
-  GIT_MESSAGE_REQUIRED: 'Il commit vuole un messaggio',
-  GIT_NOTHING_TO_COMMIT: 'Non c’è niente da committare su questi percorsi',
-  GIT_WORKTREE_DIFFERS: 'Alcuni file sono cambiati dopo essere stati messi in stage',
-  GIT_COMMAND_FAILED: 'git non è riuscito a completare l’operazione',
-  GIT_STORE_UNAVAILABLE: 'Le funzioni git non sono disponibili su questo server',
-  GIT_TIMEOUT: 'git non ha risposto entro il tempo massimo',
-  GIT_OUTPUT_TOO_LARGE: 'L’uscita di git supera il limite consentito',
-  GIT_DIFF_AREA_INVALID: 'Area del diff non valida',
-  GIT_PATH_UNCHANGED: 'Questo file non ha modifiche da mostrare in quest’area',
-  GIT_NOTHING_TO_DISCARD: 'Non c’è niente da annullare su questi file',
-  GIT_CONFLICTS: 'Prima vanno risolti i conflitti',
-  GIT_NESTED_REPO: 'È un altro repository: non si tocca da qui',
-  GIT_STAGED_CHANGED: 'Ciò che è preparato è cambiato: guarda di nuovo e riprova',
-  GIT_NOTHING_STAGED: 'Non c’è niente di preparato da committare',
-  GIT_STAGED_OUTSIDE: 'Ci sono file preparati fuori dalla cartella della sessione',
-  GIT_HEAD_CHANGED: 'L’ultimo commit è cambiato: guarda di nuovo e riprova',
-  GIT_COMMIT_PUSHED: 'L’ultimo commit è già stato inviato: non si riscrive',
-  GIT_MERGE_COMMIT: 'L’ultimo commit è un’unione: non si annulla da qui',
-  GIT_COMMIT_OUTSIDE: 'L’ultimo commit tocca file fuori dalla cartella della sessione',
-  GIT_BRANCH_INVALID: 'Nome di ramo non valido',
-  GIT_BRANCH_EXISTS: 'Esiste già un ramo con questo nome',
-  GIT_BRANCH_NOT_FOUND: 'Questo ramo non esiste',
-  GIT_BRANCH_CURRENT: 'Il ramo corrente non si elimina',
-  GIT_BRANCH_NOT_MERGED: 'Il ramo ha commit che non sono in nessun altro ramo',
-  GIT_SWITCH_BLOCKED: 'Ci sono modifiche che il cambio di ramo sovrascriverebbe',
+  MODEL_ID_INVALID: 'The chosen model has a name this server does not recognize: choose it again from the model pill',
+  REASONING_INVALID: 'The chosen reasoning level is not among the allowed ones: choose it again from the reasoning pill',
+  PERMISSIONS_INVALID: 'The chosen permissions are not among the allowed ones: choose them again from the permissions pill',
+  REPORT_UNAVAILABLE: 'Report not produced yet',
+  SEARCH_SOURCE_INVALID: 'Invalid search source',
+  SEARCH_KEY_REQUIRED: 'A key is needed for this source',
+  SEARCH_KEY_INVALID: 'Invalid search key',
+  SEARCH_ENDPOINT_INVALID: 'Invalid source address',
+  SEARCH_STORE_UNAVAILABLE: 'Search keychain not available',
+  WSL_STORE_UNAVAILABLE: 'WSL preferences not available',
+  SEARCH_NOT_READY: 'The search source is not ready',
+  SEARCH_BLOCKED: 'The search source rejected the request',
+  SEARCH_UNREACHABLE: 'The search source is unreachable',
+  SEARCH_FAILED: 'The search failed',
+  AUTH_REQUIRED: 'This server only accepts the TALOS window that started it',
+  CHAT_FILE_ORIGIN_FORBIDDEN: 'Upload the file from this session’s TALOS window',
+  PAGE_ORIGIN_FORBIDDEN: 'Open the page from this session’s TALOS window',
+  TERMINAL_LIMIT_REACHED: 'You already have the maximum number of open terminals for this session: close one and try again',
+  TERMINAL_STORE_UNAVAILABLE: 'Terminals are not available on this server',
+  BROWSER_PROXY_SOLO_LOCALE: 'The annotation proxy only works for a dev server on your computer',
+  BROWSER_PROXY_NON_HTML: 'Not an HTML page',
+  BROWSER_PROXY_TROPPO_GRANDE: 'The page is over 5 MB',
+  BROWSER_PROXY_IRRAGGIUNGIBILE: 'The page does not respond',
+  GIT_NOT_A_REPOSITORY: 'This folder is not a git repository',
+  GIT_ALREADY_A_REPOSITORY: 'This folder is already inside a git repository',
+  GIT_INIT_NEEDS_CONFIRM: 'The folder contains your user folder: confirmation needed',
+  GIT_PATH_INVALID: 'Invalid path for this session',
+  GIT_PATHS_REQUIRED: 'At least one explicit path is needed',
+  GIT_MESSAGE_REQUIRED: 'The commit needs a message',
+  GIT_NOTHING_TO_COMMIT: 'There is nothing to commit on these paths',
+  GIT_WORKTREE_DIFFERS: 'Some files changed after being staged',
+  GIT_COMMAND_FAILED: 'git could not complete the operation',
+  GIT_STORE_UNAVAILABLE: 'git features are not available on this server',
+  GIT_TIMEOUT: 'git did not respond within the time limit',
+  GIT_OUTPUT_TOO_LARGE: 'git’s output exceeds the allowed limit',
+  GIT_DIFF_AREA_INVALID: 'Invalid diff area',
+  GIT_PATH_UNCHANGED: 'This file has no changes to show in this area',
+  GIT_NOTHING_TO_DISCARD: 'There is nothing to discard on these files',
+  GIT_CONFLICTS: 'Conflicts must be resolved first',
+  GIT_NESTED_REPO: 'It is another repository: it cannot be touched from here',
+  GIT_STAGED_CHANGED: 'What is staged has changed: look again and retry',
+  GIT_NOTHING_STAGED: 'There is nothing staged to commit',
+  GIT_STAGED_OUTSIDE: 'There are staged files outside the session folder',
+  GIT_HEAD_CHANGED: 'The last commit has changed: look again and retry',
+  GIT_COMMIT_PUSHED: 'The last commit has already been pushed: it will not be rewritten',
+  GIT_MERGE_COMMIT: 'The last commit is a merge: it cannot be undone from here',
+  GIT_COMMIT_OUTSIDE: 'The last commit touches files outside the session folder',
+  GIT_BRANCH_INVALID: 'Invalid branch name',
+  GIT_BRANCH_EXISTS: 'A branch with this name already exists',
+  GIT_BRANCH_NOT_FOUND: 'This branch does not exist',
+  GIT_BRANCH_CURRENT: 'The current branch cannot be deleted',
+  GIT_BRANCH_NOT_MERGED: 'The branch has commits that are in no other branch',
+  GIT_SWITCH_BLOCKED: 'There are changes that switching branch would overwrite',
   // ⭐ F6-2 (27/09): il remoto
-  GIT_NO_REMOTE: 'Questo repository non ha nessun remoto',
-  GIT_REMOTE_UNKNOWN: 'Remoto sconosciuto',
-  GIT_REMOTE_REQUIRED: 'Scegli il remoto su cui pubblicare il ramo',
-  GIT_REMOTE_MISMATCH: 'Il ramo segue un altro remoto',
-  GIT_NO_UPSTREAM: 'Il ramo non segue nessun ramo remoto: prima si pubblica',
-  GIT_UPSTREAM_GONE: 'Il ramo remoto non esiste più',
-  GIT_DETACHED: 'Nessun ramo: la HEAD è staccata',
-  GIT_BEHIND: 'Il ramo remoto ha commit che qui non ci sono: prima scarica',
-  GIT_WORKTREE_DIRTY: 'Scaricare sovrascriverebbe file con modifiche non committate',
-  GIT_PULL_FAILED: 'git pull non è riuscito',
-  GIT_PUSH_REJECTED: 'Il remoto non ha accettato l’invio',
-  GIT_FETCH_RUNNING: 'Un recupero è già in corso',
-  GIT_ABORTED: 'Fermato',
+  GIT_NO_REMOTE: 'This repository has no remote',
+  GIT_REMOTE_UNKNOWN: 'Unknown remote',
+  GIT_REMOTE_REQUIRED: 'Choose the remote to publish the branch to',
+  GIT_REMOTE_MISMATCH: 'The branch tracks another remote',
+  GIT_NO_UPSTREAM: 'The branch does not track any remote branch: publish it first',
+  GIT_UPSTREAM_GONE: 'The remote branch no longer exists',
+  GIT_DETACHED: 'No branch: HEAD is detached',
+  GIT_BEHIND: 'The remote branch has commits that are not here: pull first',
+  GIT_WORKTREE_DIRTY: 'Pulling would overwrite files with uncommitted changes',
+  GIT_PULL_FAILED: 'git pull failed',
+  GIT_PUSH_REJECTED: 'The remote did not accept the push',
+  GIT_FETCH_RUNNING: 'A fetch is already running',
+  GIT_ABORTED: 'Stopped',
   // ⭐ F6-2 passo 4 (27/09): le modifiche di un commit del grafo
-  GIT_COMMIT_INVALID: 'Un commit si indica col suo hash intero',
+  GIT_COMMIT_INVALID: 'A commit is identified by its full hash',
   // ⭐ F6-3 (27/09): GitHub con `gh`
-  GH_STORE_UNAVAILABLE: 'GitHub non è disponibile su questo server',
-  GH_NOT_INSTALLED: 'GitHub CLI non è installata',
-  GH_NOT_LOGGED_IN: 'GitHub non è collegato',
-  GH_UNSUPPORTED_PLATFORM: 'TALOS non sa installare GitHub CLI su questo sistema',
-  GH_DOWNLOAD_FAILED: 'Il download di GitHub CLI non è riuscito',
-  GH_CHECKSUM_MISMATCH: 'Il file scaricato non ha l’impronta attesa: GitHub CLI non è stata installata',
-  GH_EXTRACT_FAILED: 'L’estrazione di GitHub CLI non è riuscita',
-  GH_TIMEOUT: 'GitHub non ha risposto entro il tempo massimo',
-  GH_COMMAND_FAILED: 'GitHub ha risposto con un errore',
-  GH_OUTPUT_INVALID: 'La risposta di GitHub non è leggibile',
-  GH_OUTPUT_TOO_LARGE: 'La risposta di GitHub supera il limite consentito',
-  GH_NOT_GITHUB: 'Il remoto del ramo non è su github.com',
-  GH_BRANCH_NOT_PUSHED: 'Il ramo va prima inviato su GitHub',
-  GH_BASE_UNKNOWN: 'Il ramo di base non c’è sul remoto',
-  GH_INPUT_INVALID: 'Titolo, testo o base della PR non validi',
-  GH_LOGIN_FAILED: 'GitHub CLI non ha dato un codice di accesso',
-  GH_GIT_FAILED: 'git non è riuscito',
-  GIT_COMMIT_UNKNOWN: 'Questo commit non c’è nel repository',
-  GIT_NOTHING_TO_STASH: 'Non ci sono modifiche da mettere da parte',
-  GIT_STASH_CHANGED: 'Ciò che è messo da parte è cambiato: guarda di nuovo',
-  GIT_STASH_OUTSIDE: 'Questa voce tocca file fuori dalla cartella della sessione',
-  GIT_STASH_CONFLICT: 'Riprendendo si sono creati conflitti: la voce resta messa da parte',
-  GIT_HUNK_INVALID: 'Pezzo o azione non validi',
-  GIT_DIFF_CHANGED: 'Il file è cambiato: guarda di nuovo le differenze',
-  GIT_HUNK_UNSUPPORTED: 'Questo file si prepara intero: non ha pezzi',
-  GIT_HUNK_FAILED: 'git non riesce ad applicare questo pezzo',
-  SESSION_MODEL_UNKNOWN: 'Non so quale modello usa questa sessione',
-  MODEL_CALL_FAILED: 'Il modello non ha risposto',
-  PAYLOAD_LIMIT: 'Il contenuto supera la misura che il server accetta: accorcia il messaggio, oppure metti il testo in un file e allegalo',
-  METHOD_NOT_ALLOWED: 'Metodo non consentito',
-  NOT_FOUND: 'Risorsa non trovata',
-  TASK_NOT_ALLOWED: 'Task non ammesso',
-  SESSION_NOT_READY: 'Sessione non pronta per questa azione',
-  AUTOMATION_INVALID: 'Parametri automazione non validi',
-  CATALOG_UNREACHABLE: 'Catalogo modelli non raggiungibile',
-  CATALOG_UPSTREAM_ERROR: 'Catalogo modelli non disponibile',
-  CATALOG_CONFIGURATION_REQUIRED: "Configura i modelli o l'agente esterno in Fornitori e accessi",
-  INTERNAL_ERROR: 'Errore interno',
-  FILE_NOT_FOUND: 'File non trovato',
-  FILE_TOO_LARGE: 'File troppo grande per l\'anteprima',
-  FILE_EXISTS: 'Esiste già un file con questo nome',
-  PLATFORM_UNSUPPORTED: 'Non disponibile su questa piattaforma',
+  GH_STORE_UNAVAILABLE: 'GitHub is not available on this server',
+  GH_NOT_INSTALLED: 'GitHub CLI is not installed',
+  GH_NOT_LOGGED_IN: 'GitHub is not connected',
+  GH_UNSUPPORTED_PLATFORM: 'TALOS cannot install GitHub CLI on this system',
+  GH_DOWNLOAD_FAILED: 'The GitHub CLI download failed',
+  GH_CHECKSUM_MISMATCH: 'The downloaded file does not have the expected fingerprint: GitHub CLI was not installed',
+  GH_EXTRACT_FAILED: 'Extracting GitHub CLI failed',
+  GH_TIMEOUT: 'GitHub did not respond within the time limit',
+  GH_COMMAND_FAILED: 'GitHub answered with an error',
+  GH_OUTPUT_INVALID: 'GitHub’s response cannot be read',
+  GH_OUTPUT_TOO_LARGE: 'GitHub’s response exceeds the allowed limit',
+  GH_NOT_GITHUB: 'The branch’s remote is not on github.com',
+  GH_BRANCH_NOT_PUSHED: 'The branch must be pushed to GitHub first',
+  GH_BASE_UNKNOWN: 'The base branch is not on the remote',
+  GH_INPUT_INVALID: 'Invalid PR title, text or base',
+  GH_LOGIN_FAILED: 'GitHub CLI did not give a login code',
+  GH_GIT_FAILED: 'git failed',
+  GIT_COMMIT_UNKNOWN: 'This commit is not in the repository',
+  GIT_NOTHING_TO_STASH: 'There are no changes to stash',
+  GIT_STASH_CHANGED: 'What is stashed has changed: look again',
+  GIT_STASH_OUTSIDE: 'This entry touches files outside the session folder',
+  GIT_STASH_CONFLICT: 'Applying it created conflicts: the entry stays stashed',
+  GIT_HUNK_INVALID: 'Invalid hunk or action',
+  GIT_DIFF_CHANGED: 'The file has changed: look at the differences again',
+  GIT_HUNK_UNSUPPORTED: 'This file is staged whole: it has no hunks',
+  GIT_HUNK_FAILED: 'git cannot apply this hunk',
+  SESSION_MODEL_UNKNOWN: 'I don’t know which model this session uses',
+  MODEL_CALL_FAILED: 'The model did not respond',
+  PAYLOAD_LIMIT: 'The content exceeds the size the server accepts: shorten the message, or put the text in a file and attach it',
+  METHOD_NOT_ALLOWED: 'Method not allowed',
+  NOT_FOUND: 'Resource not found',
+  TASK_NOT_ALLOWED: 'Task not allowed',
+  SESSION_NOT_READY: 'Session not ready for this action',
+  AUTOMATION_INVALID: 'Invalid automation parameters',
+  CATALOG_UNREACHABLE: 'Model catalog unreachable',
+  CATALOG_UPSTREAM_ERROR: 'Model catalog unavailable',
+  CATALOG_CONFIGURATION_REQUIRED: 'Set up the models or the external agent in Providers and access',
+  INTERNAL_ERROR: 'Internal error',
+  FILE_NOT_FOUND: 'File not found',
+  FILE_TOO_LARGE: 'File too large for the preview',
+  FILE_EXISTS: 'A file with this name already exists',
+  PLATFORM_UNSUPPORTED: 'Not available on this platform',
   /* ⛔ 11/9 — messaggi per una PERSONA, non per un programma: dicono che cosa non c'è e non
      nominano né il codice né il file JSON dietro. Il motivo preciso del magazzino viaggia a
      parte, in `errore.message`, come per ogni altra famiglia di questo elenco. */
-  NOTE_INVALID: 'Questa nota non è valida',
-  NOTE_NOT_FOUND: 'Questa nota non esiste più',
-  TASK_INVALID: 'Questa attività non è valida',
-  TASK_NOT_FOUND: 'Questa attività non esiste più',
-  MEMORY_INVALID: 'Questa memoria non è valida',
-  MEMORY_NOT_FOUND: 'Questa memoria non esiste più',
+  NOTE_INVALID: 'This note is not valid',
+  NOTE_NOT_FOUND: 'This note no longer exists',
+  TASK_INVALID: 'This task is not valid',
+  TASK_NOT_FOUND: 'This task no longer exists',
+  MEMORY_INVALID: 'This memory is not valid',
+  MEMORY_NOT_FOUND: 'This memory no longer exists',
   /* ⛔ 12/9 — frasi per una PERSONA: dicono che cosa non si può fare e non nominano né il codice
      né la cartella dietro. Il motivo preciso (in inglese, perché è la risposta scritta per il
      modello) viaggia a parte in `errore.message`, come per ogni altra famiglia di questo elenco. */
-  RESEARCH_INVALID: 'Richiesta non valida per la ricerca approfondita',
-  RESEARCH_NOT_FOUND: 'Questa ricerca non esiste più',
-  RESEARCH_CONFLICT: 'Questa ricerca non è nello stato giusto per questa azione',
-  RESEARCH_RECHECK_UNAVAILABLE: 'Non si può ancora ricontrollare questa ricerca',
-  PROCESS_NOT_RUNNING: 'Questo comando non è più in corso',
-  ELICITATION_NOT_PENDING: 'Questa richiesta non aspetta più una risposta',
-  ELICITATION_ANSWER_INVALID: 'La risposta non corrisponde a ciò che il server ha chiesto',
-  LIBRARY_NOT_FOUND: 'Questo file della Libreria non esiste più',
-  LIBRARY_NAME_EMPTY: 'Serve un nome con almeno una lettera o un numero',
-  LIBRARY_TOO_LARGE: 'File troppo grande da scaricare',
-  LIBRARY_MALFORMED: 'La scheda di questo file della Libreria è illeggibile',
-  LIBRARY_READ_FAILED: 'Non riesco a leggere questo file della Libreria',
-  LIBRARY_INVALID: 'Richiesta non valida per la Libreria',
-  HOOK_INVALID: 'Configurazione hook non valida',
-  MCP_INVALID: 'Configurazione server MCP non valida',
-  PLUGIN_INVALID: 'Configurazione plugin non valida',
-  SESSION_STILL_RUNNING: 'Sessione ancora in corso — fermala prima di eliminarla',
-  WORKFLOW_RUN_NOT_FINISHED: 'Un Workflow di questa conversazione è ancora in corso — annullalo prima di eliminarla',
-  BROWSER_VIVO_NON_CONFIGURATO: 'Il browser pilotato non è configurato su questo TALOS',
-  BROWSER_VIVO_ASSENTE: 'Non trovo un browser Chromium su questo computer: TALOS ne usa uno già installato, Chrome o Edge',
-  BROWSER_VIVO_SCHEDA_ASSENTE: 'Questa sessione non ha una pagina aperta nel browser pilotato',
-  BROWSER_VIVO_TROPPE_SCHEDE: 'Troppe pagine aperte insieme nel browser pilotato',
-  BROWSER_VIVO_GESTO_IGNOTO: 'Questo gesto non è riconosciuto',
-  BROWSER_VIVO_SENZA_SESSIONE: 'Serve la sessione a cui appartiene la pagina',
-  BROWSER_VIVO_CONNESSIONE_FALLITA: 'Il browser è partito ma non risponde al protocollo di controllo',
-  BROWSER_VIVO_SENZA_CONNESSIONE: 'Manca il modo di collegarsi al browser pilotato',
-  /* ⛔ 07/9, O-49: questo testo finisce dentro il fumetto rosso in basso a destra — deve dire cos’è successo, non «Query non valida». */
-  APPROVAL_NOT_PENDING: 'Questa richiesta di permesso non è più in attesa: la sessione è andata avanti',
-  QUESTION_NOT_PENDING: 'Questa domanda non è più in attesa: la sessione è andata avanti',
-  QUESTION_ANSWER_NOT_SAVED: 'La risposta non è stata salvata: la domanda è stata chiusa senza risposta',
-  PLAN_NOT_PENDING: 'Questo piano non aspetta più una scelta: la sessione è andata avanti',
-  PLAN_STALE: 'Il piano a schermo non è più l’ultimo: leggi la versione aggiornata e scegli su quella',
-  PLAN_DECISION_NOT_SAVED: 'La scelta sul piano non è stata salvata: il piano aspetta ancora, puoi riprovare',
-  PLAN_APPROVAL_ORIGIN_FORBIDDEN: 'La scelta sul piano deve partire da questa finestra di TALOS',
-  MODE_WORKFLOW_RETIRED: 'La modalità Workflow non esiste più: scegli Normale o Piano',
-  WORKSPACE_LAUNCH_UNAUTHORIZED: 'Il comando locale non è autorizzato. Riavvia TALOS e riprova.',
-  WORKSPACE_LAUNCH_NOT_AVAILABLE: 'Questo collegamento non è più disponibile. Usa di nuovo “Apri cartella con TALOS”.',
-  WORKSPACE_NOT_AVAILABLE: 'La cartella non è disponibile. Controlla che esista e che TALOS possa lavorarci, poi riprova.',
-  WORKSPACE_ALREADY_EXISTS: 'Esiste già un file o una cartella con questo nome.',
-  PROVIDER_INVALID: 'Provider non riconosciuto',
-  PROVIDER_KEY_REQUIRED: 'Inserisci una chiave prima di salvarla',
-  PROVIDER_KEY_INVALID: 'La chiave inserita non è valida',
-  PROVIDER_STORE_UNAVAILABLE: 'Il portachiavi del computer non è disponibile: controlla Doctor',
-  PROVIDER_RUNTIME_INVALID: 'Controlla indirizzo e tempo massimo del provider',
-  PROVIDER_RUNTIME_UNAVAILABLE: 'Non è stato possibile salvare le preferenze del provider: controlla Doctor',
+  RESEARCH_INVALID: 'Invalid request for the deep research',
+  RESEARCH_NOT_FOUND: 'This research no longer exists',
+  RESEARCH_CONFLICT: 'This research is not in the right state for this action',
+  RESEARCH_RECHECK_UNAVAILABLE: 'This research cannot be rechecked yet',
+  PROCESS_NOT_RUNNING: 'This command is no longer running',
+  ELICITATION_NOT_PENDING: 'This request no longer waits for an answer',
+  ELICITATION_ANSWER_INVALID: 'The answer does not match what the server asked',
+  LIBRARY_NOT_FOUND: 'This Library file no longer exists',
+  LIBRARY_NAME_EMPTY: 'A name with at least one letter or number is needed',
+  LIBRARY_TOO_LARGE: 'File too large to download',
+  LIBRARY_MALFORMED: 'The card of this Library file is unreadable',
+  LIBRARY_READ_FAILED: 'I cannot read this Library file',
+  LIBRARY_INVALID: 'Invalid request for the Library',
+  HOOK_INVALID: 'Invalid hook configuration',
+  MCP_INVALID: 'Invalid MCP server configuration',
+  PLUGIN_INVALID: 'Invalid plugin configuration',
+  SESSION_STILL_RUNNING: 'Session still running — stop it before deleting it',
+  WORKFLOW_RUN_NOT_FINISHED: 'A Workflow in this conversation is still running — cancel it before deleting it',
+  BROWSER_VIVO_NON_CONFIGURATO: 'The driven browser is not set up on this TALOS',
+  BROWSER_VIVO_ASSENTE: 'I cannot find a Chromium browser on this computer: TALOS uses one that is already installed, Chrome or Edge',
+  BROWSER_VIVO_SCHEDA_ASSENTE: 'This session has no page open in the driven browser',
+  BROWSER_VIVO_TROPPE_SCHEDE: 'Too many pages open at once in the driven browser',
+  BROWSER_VIVO_GESTO_IGNOTO: 'This gesture is not recognized',
+  BROWSER_VIVO_SENZA_SESSIONE: 'The session the page belongs to is needed',
+  BROWSER_VIVO_CONNESSIONE_FALLITA: 'The browser started but does not answer the control protocol',
+  BROWSER_VIVO_SENZA_CONNESSIONE: 'There is no way to connect to the driven browser',
+  /* ⛔ 07/9, O-49: questo testo finisce dentro il fumetto rosso in basso a destra — deve dire cos’è successo, non «Invalid query». */
+  APPROVAL_NOT_PENDING: 'This permission request is no longer pending: the session has moved on',
+  QUESTION_NOT_PENDING: 'This question is no longer pending: the session has moved on',
+  QUESTION_ANSWER_NOT_SAVED: 'The answer was not saved: the question was closed without an answer',
+  PLAN_NOT_PENDING: 'This plan no longer waits for a choice: the session has moved on',
+  PLAN_STALE: 'The plan on screen is no longer the latest: read the updated version and choose on that one',
+  PLAN_DECISION_NOT_SAVED: 'The choice on the plan was not saved: the plan is still waiting, you can try again',
+  PLAN_APPROVAL_ORIGIN_FORBIDDEN: 'The choice on the plan must come from this TALOS window',
+  MODE_WORKFLOW_RETIRED: 'Workflow mode no longer exists: choose Normal or Plan',
+  WORKSPACE_LAUNCH_UNAUTHORIZED: 'The local command is not authorized. Restart TALOS and try again.',
+  WORKSPACE_LAUNCH_NOT_AVAILABLE: 'This link is no longer available. Use “Open folder with TALOS” again.',
+  WORKSPACE_NOT_AVAILABLE: 'The folder is not available. Check that it exists and that TALOS can work in it, then try again.',
+  WORKSPACE_ALREADY_EXISTS: 'A file or folder with this name already exists.',
+  PROVIDER_INVALID: 'Provider not recognized',
+  PROVIDER_KEY_REQUIRED: 'Enter a key before saving it',
+  PROVIDER_KEY_INVALID: 'The key you entered is not valid',
+  PROVIDER_STORE_UNAVAILABLE: 'The computer’s keychain is not available: check Doctor',
+  PROVIDER_RUNTIME_INVALID: 'Check the provider’s address and timeout',
+  PROVIDER_RUNTIME_UNAVAILABLE: 'The provider’s preferences could not be saved: check Doctor',
   /*
    * ⭐⭐⭐ PO-01 (10/9) — le sette frasi dell'accesso a OpenRouter. ⛔ Le legge una PERSONA:
    * niente nomi tecnici, nessun `code_verifier`, nessuno `state`, nessun numero di stato HTTP.
    * Ognuna dice COSA FARE, perché il codice più utile è quello che indica la porta aperta.
    */
-  OAUTH_NON_CONFIGURATO: 'Su questo server non è possibile collegare un account: incolla una chiave nelle Impostazioni',
-  OAUTH_ATTESA_IGNOTA: 'Questa richiesta di collegamento non vale più: ricomincia da «Accedi con OpenRouter»',
-  OAUTH_CODICE_MANCANTE: 'Manca il codice di conferma: ricomincia da «Accedi con OpenRouter»',
-  OAUTH_SCAMBIO_RIFIUTATO: 'OpenRouter non ha accettato questa conferma: ricomincia da «Accedi con OpenRouter»',
-  OAUTH_RETE: 'Non sono riuscito a raggiungere OpenRouter: controlla la connessione e riprova',
-  OAUTH_RISPOSTA_INATTESA: 'OpenRouter ha risposto in un modo che non riconosco: riprova più tardi',
-  OAUTH_CUSTODIA_FALLITA: 'Il collegamento è riuscito ma non sono riuscito a metterlo al sicuro: apri Doctor',
-  RUNTIME_NOT_AVAILABLE: 'Runtime locale non disponibile',
-  RUNTIME_UNREACHABLE: 'Runtime locale non raggiungibile',
-  RUNTIME_OPERATION_UNSUPPORTED: 'Operazione runtime non supportata',
-  MODEL_NOT_FOUND: 'Modello locale non trovato',
-  MODEL_NOT_READY: 'Il modello non è ancora pronto (download o verifica in corso)',
-  MODEL_HEADER_INVALID: 'Il file GGUF del modello non è valido',
-  MODEL_HEADER_UNREADABLE: 'Il file GGUF del modello non è leggibile',
-  RUNTIME_PROBE_FAILED: 'Il runtime locale non ha risposto al controllo',
-  FIT_INVALID: 'Parametri di verifica non validi',
-  PROBE_CONSENT_REQUIRED: 'Serve un consenso esplicito per far girare il modello',
-  PROBE_GENERATION_FAILED: 'La prova di generazione è fallita',
-  PROBE_GENERATION_INCOMPLETE: 'La prova di generazione non si è conclusa',
-  MODEL_NOT_COMPATIBLE: 'Il modello non è compatibile con questo profilo',
-  MODEL_LOAD_UNCONFIRMED: 'Caricamento modello non confermato',
-  MODEL_UNLOAD_UNCONFIRMED: 'Scaricamento modello non confermato',
-  LOCAL_RUNTIME_FAILED: 'Runtime locale fallito',
-  HF_HUB_INVALID: 'Richiesta Hugging Face non valida', HF_HUB_UPSTREAM: 'Hugging Face non raggiungibile', HF_HUB_RESPONSE_INVALID: 'Risposta Hugging Face non valida',
-  HF_REPOSITORY_GATED: 'Repository Hugging Face gated o non autorizzato', HF_RATE_LIMITED: 'Limite richieste Hugging Face raggiunto', HF_REDIRECT_INVALID: 'Redirect Hugging Face non valido',
-  HF_REDIRECT_HOST_REJECTED: 'Host di download Hugging Face non autorizzato', HF_RESOLVE_INVALID: 'URL di download Hugging Face non valido', HF_TRANSFER_INVALID: 'Trasferimento modello non valido',
-  HF_TRANSFER_COLLISION: 'Questo modello è già presente: scaricalo di nuovo solo dopo averlo rimosso',
-  RUNTIME_ALREADY_RUNNING: 'Il runtime locale ha già un modello caricato: liberalo prima di caricarne un altro', HF_DOWNLOAD_FAILED: 'Download Hugging Face fallito', HF_PATH_REJECTED: 'Percorso modello non autorizzato',
-  CHECKSUM_MISMATCH: 'Verifica checksum modello fallita', MODEL_FILE_UNREADABLE: 'File modello non leggibile', CANCELLED_BY_OWNER: 'Download annullato', PAUSED_BY_OWNER: 'Download in pausa',
-  HF_IMAGE_URL_INVALID: 'URL immagine non valido', HF_IMAGE_HOST_REJECTED: 'Origine immagine non autorizzata', HF_IMAGE_REDIRECT_REJECTED: 'Reindirizzamento immagine non autorizzato', HF_IMAGE_PRIVATE_ADDRESS: 'Immagine non raggiungibile da un indirizzo privato', HF_IMAGE_DNS_FAILED: 'Origine immagine non raggiungibile', HF_IMAGE_ABORTED: 'Richiesta immagine annullata', HF_IMAGE_UPSTREAM: 'Servizio immagini non disponibile', HF_IMAGE_MIME_REJECTED: 'Formato immagine non supportato', HF_IMAGE_TOO_LARGE: 'Immagine troppo grande', HF_IMAGE_CONFIG_INVALID: 'Proxy immagini non configurato',
-  LOCAL_IMPORT_INVALID: 'Controlla il file GGUF scelto e riprova', LOCAL_IMPORT_TOO_LARGE: 'Il modello scelto supera lo spazio consentito', LOCAL_IMPORT_SIZE_MISMATCH: 'La dimensione del file non coincide con quella dichiarata', LOCAL_IMPORT_EMPTY: 'Il file scelto è vuoto', LOCAL_IMPORT_NOT_GGUF: 'Il file scelto non è un modello GGUF',
+  OAUTH_NON_CONFIGURATO: 'An account cannot be connected on this server: paste a key in Settings',
+  OAUTH_ATTESA_IGNOTA: 'This connection request is no longer valid: start again from “Sign in with OpenRouter”',
+  OAUTH_CODICE_MANCANTE: 'The confirmation code is missing: start again from “Sign in with OpenRouter”',
+  OAUTH_SCAMBIO_RIFIUTATO: 'OpenRouter did not accept this confirmation: start again from “Sign in with OpenRouter”',
+  OAUTH_RETE: 'I could not reach OpenRouter: check the connection and try again',
+  OAUTH_RISPOSTA_INATTESA: 'OpenRouter answered in a way I do not recognize: try again later',
+  OAUTH_CUSTODIA_FALLITA: 'The connection succeeded but I could not store it safely: open Doctor',
+  RUNTIME_NOT_AVAILABLE: 'Local runtime not available',
+  RUNTIME_UNREACHABLE: 'Local runtime unreachable',
+  RUNTIME_OPERATION_UNSUPPORTED: 'Runtime operation not supported',
+  MODEL_NOT_FOUND: 'Local model not found',
+  MODEL_NOT_READY: 'The model is not ready yet (download or verification in progress)',
+  MODEL_HEADER_INVALID: 'The model’s GGUF file is not valid',
+  MODEL_HEADER_UNREADABLE: 'The model’s GGUF file is not readable',
+  RUNTIME_PROBE_FAILED: 'The local runtime did not answer the check',
+  FIT_INVALID: 'Invalid check parameters',
+  PROBE_CONSENT_REQUIRED: 'Explicit consent is needed to run the model',
+  PROBE_GENERATION_FAILED: 'The generation test failed',
+  PROBE_GENERATION_INCOMPLETE: 'The generation test did not finish',
+  MODEL_NOT_COMPATIBLE: 'The model is not compatible with this profile',
+  MODEL_LOAD_UNCONFIRMED: 'Model loading not confirmed',
+  MODEL_UNLOAD_UNCONFIRMED: 'Model unloading not confirmed',
+  LOCAL_RUNTIME_FAILED: 'Local runtime failed',
+  HF_HUB_INVALID: 'Invalid Hugging Face request', HF_HUB_UPSTREAM: 'Hugging Face unreachable', HF_HUB_RESPONSE_INVALID: 'Invalid Hugging Face response',
+  HF_REPOSITORY_GATED: 'Hugging Face repository gated or unauthorized', HF_RATE_LIMITED: 'Hugging Face request limit reached', HF_REDIRECT_INVALID: 'Invalid Hugging Face redirect',
+  HF_REDIRECT_HOST_REJECTED: 'Hugging Face download host not authorized', HF_RESOLVE_INVALID: 'Invalid Hugging Face download URL', HF_TRANSFER_INVALID: 'Invalid model transfer',
+  HF_TRANSFER_COLLISION: 'This model is already present: download it again only after removing it',
+  RUNTIME_ALREADY_RUNNING: 'The local runtime already has a model loaded: release it before loading another', HF_DOWNLOAD_FAILED: 'Hugging Face download failed', HF_PATH_REJECTED: 'Model path not authorized',
+  CHECKSUM_MISMATCH: 'Model checksum verification failed', MODEL_FILE_UNREADABLE: 'Model file not readable', CANCELLED_BY_OWNER: 'Download cancelled', PAUSED_BY_OWNER: 'Download paused',
+  HF_IMAGE_URL_INVALID: 'Invalid image URL', HF_IMAGE_HOST_REJECTED: 'Image origin not authorized', HF_IMAGE_REDIRECT_REJECTED: 'Image redirect not authorized', HF_IMAGE_PRIVATE_ADDRESS: 'Image not reachable from a private address', HF_IMAGE_DNS_FAILED: 'Image origin unreachable', HF_IMAGE_ABORTED: 'Image request cancelled', HF_IMAGE_UPSTREAM: 'Image service unavailable', HF_IMAGE_MIME_REJECTED: 'Image format not supported', HF_IMAGE_TOO_LARGE: 'Image too large', HF_IMAGE_CONFIG_INVALID: 'Image proxy not configured',
+  LOCAL_IMPORT_INVALID: 'Check the chosen GGUF file and try again', LOCAL_IMPORT_TOO_LARGE: 'The chosen model exceeds the allowed space', LOCAL_IMPORT_SIZE_MISMATCH: 'The file size does not match the declared one', LOCAL_IMPORT_EMPTY: 'The chosen file is empty', LOCAL_IMPORT_NOT_GGUF: 'The chosen file is not a GGUF model',
 });
 
 const SECURITY_HEADERS = Object.freeze({
@@ -994,17 +994,49 @@ function successEnvelope(data, clock) {
  * diagnostico salvava quindi un dettaglio VUOTO, e la scheda Doctor — che la risposta invita ad
  * aprire («Apri Doctor, copia il riferimento e riprova») — non poteva dire nulla piu di quello che
  * si leggeva gia a schermo. Un riferimento che non porta a niente manda la persona a cercare una
- * risposta che non esiste: e cosi che «Query non valida» e diventato un muro.
+ * risposta che non esiste: e cosi che «Invalid query» e diventato un muro.
  * ⇒ L'errore VERO viaggia in `context.errore` e il suo messaggio viene registrato — ripulito da
  *   `safeDiagnosticDetail` (chiavi, percorsi, nomi di variabili d'ambiente) prima di essere scritto.
  *   Fuori, nella risposta HTTP, non cambia niente: la persona continua a vedere il testo pubblico.
  */
+/*
+ * ⛔⛔ K2 (03/10/2026, «L'interfaccia, dal codice») — il MOTIVO di un rifiuto del registro, accanto al codice.
+ * `SESSION_NOT_READY` copre venti frasi diverse; solo `reason` (identificatore stabile, inglese, kebab-case) dice quale è
+ * arrivata, e l'interfaccia lo usa per scegliere la sua voce (`testoErroreServer`). I valori della frase viaggiano in `params`
+ * (li passa già `toPublicProblem`). ⛔ Passa solo un motivo della forma ammessa: niente testo libero, niente percorsi.
+ */
+function motivoPubblico(errore) {
+  const motivo = errore?.reason;
+  return typeof motivo === 'string' && motivo.length <= 80 && /^[a-z0-9]+(?:-[a-z0-9]+)*$/u.test(motivo) ? motivo : null;
+}
+
+/*
+ * ⛔ Revisione K2 (03/10/2026): un valore che è un PERCORSO ASSOLUTO del disco (la copia di sicurezza della coda incerta,
+ *   `queue-uncertain-with-backup`) non va nei `params` della risposta. Prima di K2 quel percorso stava solo nella frase del
+ *   registro, che per `SESSION_STORE_AMBIGUOUS` la busta non pubblica: resta nella diagnosi locale (`doctorReference`), come prima.
+ */
+const PERCORSO_ASSOLUTO = /^(?:[A-Za-z]:[\\/]|\\\\|\/)/u;
+
+/** Un rifiuto del registro (`{erroreAvvio, code, reason?, params?}`) come errore che le rotte lanciano: porta codice, motivo e valori. */
+function erroreDelRegistro(esito) {
+  const errore = new Error(esito.erroreAvvio);
+  errore.code = esito.code;
+  if (typeof esito.reason === 'string') errore.reason = esito.reason;
+  if (esito.params && typeof esito.params === 'object') {
+    const pubblici = Object.fromEntries(Object.entries(esito.params).filter(([, v]) => !(typeof v === 'string' && PERCORSO_ASSOLUTO.test(v))));
+    if (Object.keys(pubblici).length > 0) errore.params = pubblici;
+  }
+  return errore;
+}
+
 function errorEnvelope(code, clock, context = {}) {
 const { errore = null, ...restoContesto } = context;
-const problem = toPublicProblem(errore && (errore.code === code || !errore.code) ? errore : { code }, restoContesto);
+const daMostrare = errore && (errore.code === code || !errore.code) ? errore : { code };
+const problem = toPublicProblem(daMostrare, restoContesto);
+const motivo = motivoPubblico(daMostrare);
 return {
 ok: false,
-error: { code, message: MESSAGE_BY_CODE[code] ?? problem.title, ...problem },
+error: { code, message: MESSAGE_BY_CODE[code] ?? problem.title, ...problem, ...(motivo ? { reason: motivo } : {}) },
 meta: { schema: API_SCHEMA, generatedAt: generatedAt(clock) },
 };
 }
@@ -1036,39 +1068,39 @@ meta: { schema: API_SCHEMA, generatedAt: generatedAt(clock) },
  */
 export const COPIA_CONTESTO = Object.freeze({
   CTX_NOT_ENABLED: Object.freeze({
-    title: 'Contesto non attivo qui',
-    explanation: 'La gestione del contesto non è attiva su questa installazione: di questa conversazione non c’è nessuna misura da mostrare.',
-    action: 'Non serve fare niente: i messaggi restano interi e la conversazione funziona lo stesso.',
+    title: 'Context not active here',
+    explanation: 'Context management is not active on this installation: there is no measurement of this conversation to show.',
+    action: 'Nothing to do: the messages stay whole and the conversation works all the same.',
     riprovabile: false,
   }),
   CTX_ROUTE_NOT_FOUND: Object.freeze({
-    title: 'Operazione del contesto non trovata',
-    explanation: 'Questa operazione sul contesto non esiste su questo server.',
-    action: 'Ricarica la pagina: le azioni disponibili sono quelle che vedi a schermo.',
+    title: 'Context operation not found',
+    explanation: 'This context operation does not exist on this server.',
+    action: 'Reload the page: the available actions are the ones you see on screen.',
     riprovabile: false,
   }),
   METHOD_NOT_ALLOWED: Object.freeze({
-    title: 'Operazione non consentita',
-    explanation: 'Questa operazione sul contesto esiste, ma non si chiede in questo modo.',
-    action: 'Ricarica la pagina e usa i comandi del pannello.',
+    title: 'Operation not allowed',
+    explanation: 'This context operation exists, but it is not requested this way.',
+    action: 'Reload the page and use the panel’s controls.',
     riprovabile: false,
   }),
   CTX_INVALID_INPUT: Object.freeze({
-    title: 'Richiesta del contesto non valida',
-    explanation: 'La richiesta sul contesto non ha una forma ammessa, quindi non è stata eseguita. Nessun messaggio è stato modificato.',
-    action: 'Ricarica la pagina e ripeti l’azione dal pannello invece di comporre la richiesta a mano.',
+    title: 'Invalid context request',
+    explanation: 'The context request does not have an allowed form, so it was not carried out. No message was modified.',
+    action: 'Reload the page and repeat the action from the panel instead of composing the request by hand.',
     riprovabile: false,
   }),
   CTX_STALE_REVISION: Object.freeze({
-    title: 'Il contesto è cambiato',
-    explanation: 'Il contesto si è mosso dopo che avevi letto questi dati, quindi la modifica non è stata applicata.',
-    action: 'Usa Aggiorna: i dati tornano freschi, poi ripeti la modifica.',
+    title: 'The context has changed',
+    explanation: 'The context moved after you read this data, so the change was not applied.',
+    action: 'Use Refresh: the data comes back fresh, then repeat the change.',
     riprovabile: true,
   }),
   CTX_SERVICE_CLOSED: Object.freeze({
-    title: 'Contesto non raggiungibile adesso',
-    explanation: 'Il servizio del contesto si sta chiudendo, quindi in questo momento non risponde.',
-    action: 'Riprova fra poco con Aggiorna.',
+    title: 'Context unreachable right now',
+    explanation: 'The context service is shutting down, so it does not respond at the moment.',
+    action: 'Try again shortly with Refresh.',
     riprovabile: true,
   }),
   /*
@@ -1087,33 +1119,33 @@ export const COPIA_CONTESTO = Object.freeze({
    *   ripiego, che parla comunque del contesto. Il ripiego è provato su un codice VERO senza copia.
    */
   CTX_SESSION_NOT_FOUND: Object.freeze({
-    title: 'Conversazione non trovata',
-    explanation: 'Questa conversazione non è più nel progetto, quindi del suo contesto non c’è niente da mostrare.',
-    action: 'Torna all’elenco delle conversazioni: mostra quelle che ci sono adesso.',
+    title: 'Conversation not found',
+    explanation: 'This conversation is no longer in the project, so there is nothing to show of its context.',
+    action: 'Go back to the list of conversations: it shows the ones that exist now.',
     riprovabile: false,
   }),
   CTX_JOB_NOT_FOUND: Object.freeze({
-    title: 'Preparazione del contesto non trovata',
-    explanation: 'Questa preparazione del contesto non esiste più: può essere già finita, o essere stata annullata.',
-    action: 'Usa Aggiorna: il pannello mostra le preparazioni in corso adesso.',
+    title: 'Context preparation not found',
+    explanation: 'This context preparation no longer exists: it may have already finished, or been cancelled.',
+    action: 'Use Refresh: the panel shows the preparations in progress now.',
     riprovabile: false,
   }),
   CTX_FACT_CONFLICT_NOT_FOUND: Object.freeze({
-    title: 'Nessun conflitto da risolvere',
-    explanation: 'Questa informazione protetta non ha un conflitto aperto: può essere già stata risolta.',
-    action: 'Usa Aggiorna: il pannello mostra i conflitti aperti adesso.',
+    title: 'No conflict to resolve',
+    explanation: 'This protected piece of information has no open conflict: it may have already been resolved.',
+    action: 'Use Refresh: the panel shows the open conflicts now.',
     riprovabile: false,
   }),
   CTX_HISTORY_DIVERGED: Object.freeze({
-    title: 'La conversazione non combacia con l’archivio',
-    explanation: 'La cronologia attiva è diversa da quella archiviata, quindi il contesto non è stato toccato. Gli originali sono conservati.',
-    action: 'Usa Aggiorna; se la differenza resta, riapri la conversazione per rileggerla intera.',
+    title: 'The conversation does not match the archive',
+    explanation: 'The active history differs from the archived one, so the context was not touched. The originals are preserved.',
+    action: 'Use Refresh; if the difference remains, reopen the conversation to reread it whole.',
     riprovabile: false,
   }),
   CTX_NOTHING_TO_COMPACT: Object.freeze({
-    title: 'Niente da compattare',
-    explanation: 'Non ci sono scambi precedenti da compattare mantenendo intero l’ultimo scambio. Nessun messaggio è stato modificato.',
-    action: 'Non serve fare niente: la conversazione è già alla sua misura minima.',
+    title: 'Nothing to compact',
+    explanation: 'There are no earlier exchanges to compact while keeping the last exchange whole. No message was modified.',
+    action: 'Nothing to do: the conversation is already at its minimum size.',
     riprovabile: false,
   }),
   /*
@@ -1140,30 +1172,30 @@ export const COPIA_CONTESTO = Object.freeze({
    *   non provabile — vedi il commento a `MAX_REQUEST_BODY_BYTES`.
    */
   QUERY_INVALID: Object.freeze({
-    title: 'Richiesta del contesto malformata',
-    explanation: 'L’indirizzo o il corpo di questa richiesta sul contesto non ha una forma ammessa, quindi non è stato eseguito niente. Nessun messaggio è stato modificato.',
-    action: 'Ricarica la pagina e ripeti l’azione dal pannello invece di comporre la richiesta a mano.',
+    title: 'Malformed context request',
+    explanation: 'The address or body of this context request does not have an allowed form, so nothing was carried out. No message was modified.',
+    action: 'Reload the page and repeat the action from the panel instead of composing the request by hand.',
     riprovabile: false,
   }),
   PAYLOAD_LIMIT: Object.freeze({
-    title: 'Richiesta del contesto troppo grande',
-    explanation: 'Questa richiesta supera la misura che il server accetta, quindi non è stata eseguita. Nessun messaggio è stato modificato.',
-    action: 'Ripeti l’azione dal pannello con meno dati per volta.',
+    title: 'Context request too large',
+    explanation: 'This request exceeds the size the server accepts, so it was not carried out. No message was modified.',
+    action: 'Repeat the action from the panel with less data at a time.',
     riprovabile: false,
   }),
   INTERNAL_ERROR: Object.freeze({
-    title: 'Contesto non riuscito',
-    explanation: 'L’operazione sul contesto si è interrotta per un guasto del servizio. Nessun messaggio è stato modificato.',
-    action: 'Usa Aggiorna per rileggere lo stato, poi riprova.',
+    title: 'Context operation failed',
+    explanation: 'The context operation stopped because of a service fault. No message was modified.',
+    action: 'Use Refresh to reread the state, then try again.',
     riprovabile: true,
   }),
 });
 /* ⛔ Il ripiego NON dice «problema imprevisto»: dice che il contesto non è aggiornato, che è la sola
    cosa vera per chi guarda il pannello, e che nessun messaggio è stato toccato. */
 export const COPIA_CONTESTO_PREDEFINITA = Object.freeze({
-  title: 'Contesto non disponibile',
-  explanation: 'L’operazione sul contesto non è riuscita, quindi quello che vedi potrebbe non essere aggiornato. Nessun messaggio è stato modificato.',
-  action: 'Usa Aggiorna per rileggere lo stato prima di riprovare.',
+  title: 'Context not available',
+  explanation: 'The context operation did not succeed, so what you see may not be up to date. No message was modified.',
+  action: 'Use Refresh to reread the state before trying again.',
   riprovabile: true,
 });
 
@@ -1188,6 +1220,7 @@ export function bustaContesto(code, message, clock, errore = null) {
       action: copia.action,
       riprovabile: copia.riprovabile,
       ...(riferimento ? { doctorReference: riferimento } : {}),
+      ...(paramsPubblici(errore) ? { params: paramsPubblici(errore) } : {}),
     },
     meta: { schema: API_SCHEMA, generatedAt: generatedAt(clock) },
   };
@@ -1207,15 +1240,64 @@ export function bustaContesto(code, message, clock, errore = null) {
  *   l'indirizzo di questa pagina contiene il codice di autorizzazione, e senza quell'intestazione
  *   finirebbe nel campo Referer di qualunque cosa la pagina caricasse.
  */
-function paginaRitornoOpenRouter(res, method, problema) {
+/*
+ * ⛔⛔ 03/10/2026 (owner: «ogni singola parola nella app deve essere sia in inglese che in italiano») — L'UNICO POSTO DEL SERVER
+ *   CHE PARLA ITALIANO, e perché. Ogni altra frase per la persona il server la manda in inglese con un codice, e l'interfaccia la
+ *   dice nella sua lingua dal dizionario (area `errori`). Questa pagina però non sta nell'app: la apre il browser di SISTEMA
+ *   dopo l'autorizzazione su OpenRouter, e lì nessun dizionario gira. Quindi la lingua si negozia da `Accept-Language`
+ *   (MDN «Accept-Language», letta il 03/10/2026: un suggerimento, non un obbligo; si risponde sempre con la pagina migliore,
+ *   mai con un 406), con l'inglese come riserva, e le sue poche frasi stanno qui in due lingue.
+ * ⛔ Le sette frasi italiane dei guasti sono IDENTICHE a quelle che il dizionario ha sotto `errori.OAUTH_*.message`: una prova
+ *   (`errori-del-server-nel-dizionario.test.mjs`) lo controlla, così le due strade non si allontanano.
+ */
+const PAGINA_RITORNO_OPENROUTER = Object.freeze({
+  en: Object.freeze({
+    titoloKo: 'I could not connect the account',
+    titoloOk: 'Account connected',
+    chiudiEriprova: 'You can close this tab and try again from TALOS.',
+    ok: 'Your OpenRouter account is connected to TALOS. You can close this tab and go back to the app.',
+  }),
+  it: Object.freeze({
+    titoloKo: 'Non sono riuscito a collegare l’account',
+    titoloOk: 'Account collegato',
+    chiudiEriprova: 'Puoi chiudere questa scheda e riprovare da TALOS.',
+    ok: 'Il tuo account OpenRouter è collegato a TALOS. Puoi chiudere questa scheda e tornare all’app.',
+  }),
+});
+export const GUASTI_RITORNO_OPENROUTER_IT = Object.freeze({
+  OAUTH_NON_CONFIGURATO: 'Su questo server non è possibile collegare un account: incolla una chiave nelle Impostazioni',
+  OAUTH_ATTESA_IGNOTA: 'Questa richiesta di collegamento non vale più: ricomincia da «Accedi con OpenRouter»',
+  OAUTH_CODICE_MANCANTE: 'Manca il codice di conferma: ricomincia da «Accedi con OpenRouter»',
+  OAUTH_SCAMBIO_RIFIUTATO: 'OpenRouter non ha accettato questa conferma: ricomincia da «Accedi con OpenRouter»',
+  OAUTH_RETE: 'Non sono riuscito a raggiungere OpenRouter: controlla la connessione e riprova',
+  OAUTH_RISPOSTA_INATTESA: 'OpenRouter ha risposto in un modo che non riconosco: riprova più tardi',
+  OAUTH_CUSTODIA_FALLITA: 'Il collegamento è riuscito ma non sono riuscito a metterlo al sicuro: apri Doctor',
+});
+
+/** La lingua della pagina: la prima, per peso, fra quelle che conosciamo (it, en) in `Accept-Language`; altrimenti l'inglese. */
+export function linguaDellaPagina(acceptLanguage) {
+  const scelte = String(acceptLanguage ?? '').split(',').map((voce, ordine) => {
+    const [tag, ...parametri] = voce.trim().split(';');
+    const q = Number(/q=([0-9.]+)/u.exec(parametri.join(';'))?.[1] ?? 1);
+    return { primaria: tag.trim().slice(0, 2).toLowerCase(), q: Number.isFinite(q) ? q : 0, ordine };
+  }).filter((voce) => voce.q > 0 && Object.hasOwn(PAGINA_RITORNO_OPENROUTER, voce.primaria))
+    .sort((a, b) => b.q - a.q || a.ordine - b.ordine);
+  return scelte[0]?.primaria ?? 'en';
+}
+
+/** `problema`: `null` se l'accesso è riuscito; altrimenti `{ codice, messaggio }` (la frase inglese del codice). */
+function paginaRitornoOpenRouter(req, res, method, problema) {
   const nonce = randomBytes(16).toString('base64');
-  const titolo = problema ? 'Non sono riuscito a collegare l’account' : 'Account collegato';
+  const lingua = linguaDellaPagina(req.headers['accept-language']);
+  const testi = PAGINA_RITORNO_OPENROUTER[lingua];
+  const titolo = problema ? testi.titoloKo : testi.titoloOk;
+  const motivo = problema ? ((lingua === 'it' ? GUASTI_RITORNO_OPENROUTER_IT[problema.codice] : null) ?? problema.messaggio) : null;
   const frase = problema
     /* ⛔ Le frasi di MESSAGE_BY_CODE non finiscono con un punto (sono etichette): aggiungerlo qui
        evita la riga sgrammaticata che si legge a schermo, «ricomincia da «Accedi con OpenRouter» Puoi…». */
-    ? `${/[.!?]$/u.test(problema) ? problema : `${problema}.`} Puoi chiudere questa scheda e riprovare da TALOS.`
-    : 'Il tuo account OpenRouter è collegato a TALOS. Puoi chiudere questa scheda e tornare all’app.';
-  const html = '<!doctype html><html lang="it"><head><meta charset="utf-8">'
+    ? `${/[.!?]$/u.test(motivo) ? motivo : `${motivo}.`} ${testi.chiudiEriprova}`
+    : testi.ok;
+  const html = `<!doctype html><html lang="${lingua}"><head><meta charset="utf-8">`
     + '<meta name="viewport" content="width=device-width, initial-scale=1">'
     + `<title>${titolo}</title>`
     + `<style nonce="${nonce}">`
@@ -1231,6 +1313,8 @@ function paginaRitornoOpenRouter(res, method, problema) {
     + '</main></body></html>';
   send(res, problema ? 400 : 200, 'text/html; charset=utf-8', html, method, {
     'Content-Security-Policy': `default-src 'none'; style-src 'nonce-${nonce}'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`,
+    'Content-Language': lingua,
+    Vary: 'Accept-Language',
   });
 }
 
@@ -1283,7 +1367,7 @@ export function politicaPagina(base) {
 
 function requireNoQuery(url) {
   if ([...url.searchParams.keys()].length > 0) {
-    const error = new Error('Query non valida');
+    const error = new Error('Invalid query');
     error.code = 'QUERY_INVALID';
     throw error;
   }
@@ -1294,7 +1378,7 @@ function requireNoQuery(url) {
    `workflowPageQuery`. */
 function workflowGroupQuery(url) {
   const ordinamenti = url.searchParams.getAll('sort');
-  if (ordinamenti.length > 1 || (ordinamenti.length === 1 && ordinamenti[0] !== 'stato')) throw Object.assign(new Error('Query non valida'), { code: 'QUERY_INVALID' });
+  if (ordinamenti.length > 1 || (ordinamenti.length === 1 && ordinamenti[0] !== 'stato')) throw Object.assign(new Error('Invalid query'), { code: 'QUERY_INVALID' });
   const senza = new URL(url);
   senza.searchParams.delete('sort');
   return { ...workflowPageQuery(senza, ['offset', 'limit'], 50), ...(ordinamenti.length ? { sort: 'stato' } : {}) };
@@ -1306,7 +1390,7 @@ const FASI_DEGLI_ARCHI_MAX = 64;
 function workflowEdgeQuery(url) {
   const fasi = url.searchParams.getAll('phaseId');
   if (fasi.length > FASI_DEGLI_ARCHI_MAX || fasi.some((fase) => fase.length < 1 || fase.length > 128)) {
-    throw Object.assign(new Error('Query non valida'), { code: 'QUERY_INVALID' });
+    throw Object.assign(new Error('Invalid query'), { code: 'QUERY_INVALID' });
   }
   const senza = new URL(url);
   senza.searchParams.delete('phaseId');
@@ -1317,20 +1401,20 @@ function workflowEdgeQuery(url) {
    fino a LINEAGE_PAGE_MAX. Una direzione diversa, o ripetuta, è una domanda sbagliata (400), non un passo che manca (404). */
 function workflowLineageQuery(url) {
   const direzioni = url.searchParams.getAll('direction');
-  if (direzioni.length !== 1 || !LINEAGE_DIRECTIONS.includes(direzioni[0])) throw Object.assign(new Error('Query non valida'), { code: 'QUERY_INVALID' });
+  if (direzioni.length !== 1 || !LINEAGE_DIRECTIONS.includes(direzioni[0])) throw Object.assign(new Error('Invalid query'), { code: 'QUERY_INVALID' });
   const senza = new URL(url);
   senza.searchParams.delete('direction');
   return { ...workflowPageQuery(senza, ['offset', 'limit'], LINEAGE_PAGE_MAX), direction: direzioni[0] };
 }
 
 function workflowPageQuery(url, allowed, maxLimit = 50) {
-  if ([...url.searchParams.keys()].some((key) => !allowed.includes(key))) throw Object.assign(new Error('Query non valida'), { code: 'QUERY_INVALID' });
-  if ([...url.searchParams.keys()].some((key) => url.searchParams.getAll(key).length !== 1)) throw Object.assign(new Error('Query duplicata'), { code: 'QUERY_INVALID' });
+  if ([...url.searchParams.keys()].some((key) => !allowed.includes(key))) throw Object.assign(new Error('Invalid query'), { code: 'QUERY_INVALID' });
+  if ([...url.searchParams.keys()].some((key) => url.searchParams.getAll(key).length !== 1)) throw Object.assign(new Error('Duplicate query parameter'), { code: 'QUERY_INVALID' });
   const number = (key, fallback, min, max) => {
     const raw = url.searchParams.get(key);
     if (raw === null) return fallback;
     if (!/^(0|[1-9][0-9]*)$/.test(raw) || !Number.isSafeInteger(Number(raw)) || Number(raw) < min || Number(raw) > max) {
-      throw Object.assign(new Error('Query non valida'), { code: 'QUERY_INVALID' });
+      throw Object.assign(new Error('Invalid query'), { code: 'QUERY_INVALID' });
     }
     return Number(raw);
   };
@@ -1384,7 +1468,7 @@ function requireValidStaticQuery(url) {
     && entries[0][0] === 'qa'
     && QA_STATES.has(entries[0][1]);
   if (!allowsQa) {
-    const error = new Error('Query non valida');
+    const error = new Error('Invalid query');
     error.code = 'QUERY_INVALID';
     throw error;
   }
@@ -1396,7 +1480,7 @@ function parseModelsQuery(url) {
   const query = {};
   for (const [key, value] of url.searchParams) {
     if (!allowed.has(key) || Object.hasOwn(query, key) || value.length > 1024) {
-      const error = new Error('Query non valida');
+      const error = new Error('Invalid query');
       error.code = value.length > 1024 ? 'PAYLOAD_LIMIT' : 'QUERY_INVALID';
       throw error;
     }
@@ -1411,7 +1495,7 @@ function parseTreeQuery(url) {
   const query = {};
   for (const [key, value] of url.searchParams) {
     if (!allowed.has(key) || Object.hasOwn(query, key) || value.length > 1024) {
-      const error = new Error('Query non valida');
+      const error = new Error('Invalid query');
       error.code = value.length > 1024 ? 'PAYLOAD_LIMIT' : 'QUERY_INVALID';
       throw error;
     }
@@ -1434,7 +1518,7 @@ function parseEsportaRicercaQuery(url) {
   const query = {};
   for (const [key, value] of url.searchParams) {
     if (!allowed.has(key) || Object.hasOwn(query, key) || value.length > 1024) {
-      const error = new Error('Query non valida');
+      const error = new Error('Invalid query');
       error.code = value.length > 1024 ? 'PAYLOAD_LIMIT' : 'QUERY_INVALID';
       throw error;
     }
@@ -1469,7 +1553,7 @@ function parseEsportaRicercaQuery(url) {
 function requireModalitaOperativa(body) {
   if (!('modalitaOperativa' in body) || ['normale', 'piano'].includes(body.modalitaOperativa)) return;
   const ritirato = body.modalitaOperativa === 'workflow';
-  const errore = new Error(ritirato ? 'La modalità Workflow non esiste più: scegli normale o piano' : 'modalitaOperativa deve essere normale o piano');
+  const errore = new Error(ritirato ? 'Workflow mode no longer exists: choose normal or plan' : 'modalitaOperativa must be normale or piano');
   errore.code = ritirato ? 'MODE_WORKFLOW_RETIRED' : 'QUERY_INVALID';
   throw errore;
 }
@@ -1874,7 +1958,7 @@ function leggiCorpoJsonCon(req, limiteByte) {
       if (totale > limiteByte) {
         respinto = true;
         pezzi.length = 0;
-        const errore = new Error('Corpo oltre il limite consentito');
+        const errore = new Error('Body exceeds the allowed limit');
         errore.code = 'PAYLOAD_LIMIT';
         reject(errore);
         return;
@@ -1887,14 +1971,14 @@ function leggiCorpoJsonCon(req, limiteByte) {
         const testo = Buffer.concat(pezzi).toString('utf8');
         resolve(testo.length ? JSON.parse(testo) : {});
       } catch {
-        const errore = new Error('Corpo JSON non valido');
+        const errore = new Error('Invalid JSON body');
         errore.code = 'QUERY_INVALID';
         reject(errore);
       }
     });
     req.on('error', () => {
       if (respinto) return; // già respinta col suo 413: un errore del socket durante il drenaggio non la rifiuta una seconda volta
-      const errore = new Error('Richiesta interrotta');
+      const errore = new Error('Request aborted');
       errore.code = 'QUERY_INVALID';
       reject(errore);
     });
@@ -1919,13 +2003,13 @@ function leggiCorpoJsonCon(req, limiteByte) {
  */
 function requireFallbackProviders(value) {
   try { return validaFallbackProviders(value, { usaAttrezzi: true }); }
-  catch (errore) { throw Object.assign(new Error(errore?.message || 'Controlla i fornitori con cui continuare.'), { code: Object.hasOwn(STATUS_BY_CODE, errore?.code) ? errore.code : 'QUERY_INVALID' }); }
+  catch (errore) { throw Object.assign(new Error(errore?.message || 'Check the providers to continue with.'), { code: Object.hasOwn(STATUS_BY_CODE, errore?.code) ? errore.code : 'QUERY_INVALID' }); }
 }
 
 function requireTaskIdBody(body) {
   const chiavi = Object.keys(body ?? {});
   // ⭐⭐⭐ 29/8 — FASE K: modelloPlanner riusa la STESSA validazione di modello (modelloRichiestaValido) — è lo stesso formato OpenRouter, mai un secondo validatore.
-  const chiaviAmmesse = ['taskId', 'modello', 'modelloPlanner', 'reasoning', 'client', 'permessi', 'permessiPerAttrezzo', 'modalitaOperativa', 'provider', 'runtimeId', 'modelId', 'fallbackConsent', 'fallbackProviders'];
+  const chiaviAmmesse = ['taskId', 'modello', 'modelloPlanner', 'reasoning', 'client', 'permessi', 'permessiPerAttrezzo', 'modalitaOperativa', 'provider', 'runtimeId', 'modelId', 'fallbackConsent', 'fallbackProviders', 'linguaInterfaccia'];
   const soloAmmesse = chiavi.length > 0 && chiavi.length <= chiaviAmmesse.length && chiavi.every((k) => chiaviAmmesse.includes(k)) && chiavi.includes('taskId');
   if (
     !soloAmmesse || typeof body.taskId !== 'string' || body.taskId.length === 0
@@ -1933,37 +2017,44 @@ function requireTaskIdBody(body) {
     || ('provider' in body && body.provider !== 'cloud' && body.provider !== 'local')
     || (body.provider === 'local' && (typeof body.runtimeId !== 'string' || body.runtimeId.trim() === '' || typeof body.modelId !== 'string' || body.modelId.trim() === '' || ('fallbackConsent' in body && typeof body.fallbackConsent !== 'boolean')))
   ) {
-    const errore = new Error('Corpo non valido: atteso {taskId, modello?, modelloPlanner?, reasoning?, client?, permessi?, permessiPerAttrezzo?, provider?, runtimeId?, modelId?, fallbackConsent?}');
+    const errore = new Error('Invalid body: expected {taskId, modello?, modelloPlanner?, reasoning?, client?, permessi?, permessiPerAttrezzo?, provider?, runtimeId?, modelId?, fallbackConsent?}');
     errore.code = 'QUERY_INVALID';
     throw errore;
   }
   if ('modello' in body && body.modello !== undefined && !modelloRichiestaValido(body.modello)) {
-    const errore = new Error('modello deve avere la forma "vendor/nome-modello" (formato OpenRouter)');
+    const errore = new Error('model must have the form "vendor/model-name" (OpenRouter format)');
     errore.code = 'MODEL_ID_INVALID';
     throw errore;
   }
   if ('modelloPlanner' in body && body.modelloPlanner !== undefined && !modelloRichiestaValido(body.modelloPlanner)) {
-    const errore = new Error('modelloPlanner deve avere la forma "vendor/nome-modello" (formato OpenRouter)');
+    const errore = new Error('modelloPlanner must have the form "vendor/model-name" (OpenRouter format)');
     errore.code = 'MODEL_ID_INVALID';
     throw errore;
   }
   if ('reasoning' in body && !reasoningRichiestaValido(body.reasoning)) {
-    const errore = new Error('reasoning deve essere {effort?, summary?} coi valori ammessi da OpenRouter');
+    const errore = new Error('reasoning must be {effort?, summary?} with the values OpenRouter allows');
     errore.code = 'REASONING_INVALID';
     throw errore;
   }
   if ('permessi' in body && !permessiRichiestaValido(body.permessi)) {
-    const errore = new Error('permessi deve essere uno fra "Read only", "Workspace write", "On request", "Full access"');
+    const errore = new Error('permessi must be one of "Read only", "Workspace write", "On request", "Full access"');
     errore.code = 'PERMISSIONS_INVALID';
     throw errore;
   }
   if ('permessiPerAttrezzo' in body && !permessiPerAttrezzoRichiestaValido(body.permessiPerAttrezzo)) {
-    const errore = new Error('permessiPerAttrezzo deve mappare scrivi/prova/shell/document_create a "sempre"/"chiedi"/"nega"');
+    const errore = new Error('permessiPerAttrezzo must map scrivi/prova/shell/document_create to "sempre"/"chiedi"/"nega"');
     errore.code = 'PERMISSIONS_INVALID';
     throw errore;
   }
   requireModalitaOperativa(body);
+  /* K3b (03/10/2026): la lingua dell'interfaccia di chi avvia, per la descrizione dei comandi del primo giro. */
+  if ('linguaInterfaccia' in body && body.linguaInterfaccia !== 'it' && body.linguaInterfaccia !== 'en') {
+    const errore = new Error('linguaInterfaccia must be "it" or "en"');
+    errore.code = 'QUERY_INVALID';
+    throw errore;
+  }
   return {
+    linguaInterfaccia: 'linguaInterfaccia' in body ? body.linguaInterfaccia : null,
     taskId: body.taskId,
     modello: 'modello' in body && body.modello !== undefined ? body.modello : null,
     modelloPlanner: 'modelloPlanner' in body && body.modelloPlanner !== undefined ? body.modelloPlanner : null,
@@ -2034,7 +2125,7 @@ function requireHuggingFaceDownloadBody(body) {
     // della richiesta e la risposta era un 500 «Errore interno» (giro da utente nuovo). Si chiede qui.
     && nonVuota(body.license);
   if (!valido) {
-    const errore = new Error('Corpo non valido: atteso {id, repo, revision (hash 40-64 esa), files: [{path, bytes, sha256}], bytes, path, license}');
+    const errore = new Error('Invalid body: expected {id, repo, revision (40-64 hex hash), files: [{path, bytes, sha256}], bytes, path, license}');
     errore.code = 'QUERY_INVALID';
     throw errore;
   }
@@ -2042,7 +2133,7 @@ function requireHuggingFaceDownloadBody(body) {
 
 function requireCustomTaskBody(body) {
   // ⭐⭐⭐ 29/8 — FASE K: stesso principio di requireTaskIdBody, modelloPlanner riusa modelloRichiestaValido.
-  const AMMESSE = ['cartellaId', 'cartellaLibera', 'workspaceLaunchId', 'consegna', 'comandoProva', 'modello', 'modelloPlanner', 'reasoning', 'client', 'permessi', 'permessiPerAttrezzo', 'modalitaOperativa', 'fallbackProviders'];
+  const AMMESSE = ['cartellaId', 'cartellaLibera', 'workspaceLaunchId', 'consegna', 'comandoProva', 'modello', 'modelloPlanner', 'reasoning', 'client', 'permessi', 'permessiPerAttrezzo', 'modalitaOperativa', 'fallbackProviders', 'linguaInterfaccia'];
   const chiavi = Object.keys(body ?? {});
   const haCartellaId = 'cartellaId' in body && body.cartellaId !== undefined;
   const haCartellaLibera = 'cartellaLibera' in body && body.cartellaLibera !== undefined;
@@ -2056,37 +2147,43 @@ function requireCustomTaskBody(body) {
     || (haWorkspaceLaunchId && (typeof body.workspaceLaunchId !== 'string' || !/^[A-Za-z0-9_-]{32}$/.test(body.workspaceLaunchId)))
     || ('client' in body && body.client !== 'desktop' && body.client !== 'mobile')
   ) {
-    const errore = new Error('Corpo non valido: atteso {cartellaId XOR cartellaLibera XOR workspaceLaunchId, consegna, comandoProva?, modello?, modelloPlanner?, reasoning?, client?, permessi?, permessiPerAttrezzo?}');
+    const errore = new Error('Invalid body: expected {cartellaId XOR cartellaLibera XOR workspaceLaunchId, consegna, comandoProva?, modello?, modelloPlanner?, reasoning?, client?, permessi?, permessiPerAttrezzo?}');
     errore.code = 'QUERY_INVALID';
     throw errore;
   }
   if ('modello' in body && body.modello !== undefined && !modelloRichiestaValido(body.modello)) {
-    const errore = new Error('modello deve avere la forma "vendor/nome-modello" (formato OpenRouter)');
+    const errore = new Error('model must have the form "vendor/model-name" (OpenRouter format)');
     errore.code = 'MODEL_ID_INVALID';
     throw errore;
   }
   if ('modelloPlanner' in body && body.modelloPlanner !== undefined && !modelloRichiestaValido(body.modelloPlanner)) {
-    const errore = new Error('modelloPlanner deve avere la forma "vendor/nome-modello" (formato OpenRouter)');
+    const errore = new Error('modelloPlanner must have the form "vendor/model-name" (OpenRouter format)');
     errore.code = 'MODEL_ID_INVALID';
     throw errore;
   }
   if ('reasoning' in body && !reasoningRichiestaValido(body.reasoning)) {
-    const errore = new Error('reasoning deve essere {effort?, summary?} coi valori ammessi da OpenRouter');
+    const errore = new Error('reasoning must be {effort?, summary?} with the values OpenRouter allows');
     errore.code = 'REASONING_INVALID';
     throw errore;
   }
   if ('permessi' in body && !permessiRichiestaValido(body.permessi)) {
-    const errore = new Error('permessi deve essere uno fra "Read only", "Workspace write", "On request", "Full access"');
+    const errore = new Error('permessi must be one of "Read only", "Workspace write", "On request", "Full access"');
     errore.code = 'PERMISSIONS_INVALID';
     throw errore;
   }
   if ('permessiPerAttrezzo' in body && !permessiPerAttrezzoRichiestaValido(body.permessiPerAttrezzo)) {
-    const errore = new Error('permessiPerAttrezzo deve mappare scrivi/prova/shell/document_create a "sempre"/"chiedi"/"nega"');
+    const errore = new Error('permessiPerAttrezzo must map scrivi/prova/shell/document_create to "sempre"/"chiedi"/"nega"');
     errore.code = 'PERMISSIONS_INVALID';
     throw errore;
   }
   requireModalitaOperativa(body);
+  if ('linguaInterfaccia' in body && body.linguaInterfaccia !== 'it' && body.linguaInterfaccia !== 'en') { // K3b
+    const errore = new Error('linguaInterfaccia must be "it" or "en"');
+    errore.code = 'QUERY_INVALID';
+    throw errore;
+  }
   return {
+    ...('linguaInterfaccia' in body ? { linguaInterfaccia: body.linguaInterfaccia } : {}), // K3b
     ...(haCartellaId ? { cartellaId: body.cartellaId } : {}),
     ...(haCartellaLibera ? { cartellaLibera: body.cartellaLibera } : {}),
     ...(haWorkspaceLaunchId ? { workspaceLaunchId: body.workspaceLaunchId } : {}),
@@ -2116,7 +2213,7 @@ function requireAutomationCreateBody(body) {
     && chiavi.includes('taskId') && chiavi.includes('intervalloMinuti');
   if (!soloAmmesse || typeof body.taskId !== 'string' || typeof body.intervalloMinuti !== 'number'
     || (body.modello !== undefined && !modelloRichiestaValido(body.modello))) {
-    const errore = new Error('Corpo non valido: atteso {taskId, intervalloMinuti, nome?, limiteAlGiorno?, modello?}');
+    const errore = new Error('Invalid body: expected {taskId, intervalloMinuti, nome?, limiteAlGiorno?, modello?}');
     errore.code = 'QUERY_INVALID';
     throw errore;
   }
@@ -2133,7 +2230,7 @@ function requireAutomationCreateBody(body) {
 function requireAutomationToggleBody(body) {
   const chiavi = Object.keys(body ?? {});
   if (chiavi.length !== 1 || chiavi[0] !== 'attiva' || typeof body.attiva !== 'boolean') {
-    const errore = new Error('Corpo non valido: atteso {attiva: boolean}');
+    const errore = new Error('Invalid body: expected {attiva: boolean}');
     errore.code = 'QUERY_INVALID';
     throw errore;
   }
@@ -2152,7 +2249,7 @@ function requireAutomationToggleBody(body) {
 function requireNomeBody(body) {
   const chiavi = Object.keys(body ?? {});
   if (chiavi.length !== 1 || chiavi[0] !== 'nome' || typeof body.nome !== 'string') {
-    const errore = new Error('Corpo non valido: atteso {nome}');
+    const errore = new Error('Invalid body: expected {nome}');
     errore.code = 'QUERY_INVALID';
     throw errore;
   }
@@ -2188,9 +2285,9 @@ function corpoConChiaviAmmesse(body, { ammesse, obbligatorie = [], forma }) {
   const mancanti = obbligatorie.filter((chiave) => oggetto?.[chiave] === undefined);
   if (!oggetto || chiavi.length === 0 || ignote.length > 0 || mancanti.length > 0) {
     const dettaglio = ignote.length > 0
-      ? ` — chiave non ammessa: ${ignote.join(', ')}`
-      : (mancanti.length > 0 ? ` — manca: ${mancanti.join(', ')}` : '');
-    throw erroreCorpo(`Corpo non valido: atteso ${forma}${dettaglio}`);
+      ? ` — key not allowed: ${ignote.join(', ')}`
+      : (mancanti.length > 0 ? ` — missing: ${mancanti.join(', ')}` : '');
+    throw erroreCorpo(`Invalid body: expected ${forma}${dettaglio}`);
   }
   return oggetto;
 }
@@ -2213,14 +2310,14 @@ function requireCorpoSenzaParametri(body) {
   const oggetto = body && typeof body === 'object' && !Array.isArray(body) ? body : null;
   const chiavi = oggetto ? Object.keys(oggetto) : [];
   if (!oggetto || chiavi.length > 0) {
-    throw erroreCorpo(`Corpo non valido: questa azione non prende parametri${chiavi.length > 0 ? ` — chiave non ammessa: ${chiavi.join(', ')}` : ''}`);
+    throw erroreCorpo(`Invalid body: this action takes no parameters${chiavi.length > 0 ? ` — key not allowed: ${chiavi.join(', ')}` : ''}`);
   }
 }
 
 /** ⛔ `undefined` = «non lo cambio» (contratto di ogni `aggiorna*` dei tre magazzini): un campo assente non è un campo svuotato. */
 function testoSeC(corpo, chiave) {
   if (corpo[chiave] === undefined) return undefined;
-  if (typeof corpo[chiave] !== 'string') throw erroreCorpo(`Corpo non valido: ${chiave} deve essere testo`);
+  if (typeof corpo[chiave] !== 'string') throw erroreCorpo(`Invalid body: ${chiave} must be text`);
   return corpo[chiave];
 }
 
@@ -2229,14 +2326,14 @@ function requireNotaBody(body, { creazione }) {
   const corpo = corpoConChiaviAmmesse(body, {
     ammesse: ['titolo', 'contenuto', 'formato'],
     obbligatorie: creazione ? ['titolo', 'contenuto'] : [],
-    forma: creazione ? '{titolo, contenuto, formato?}' : '{titolo?, contenuto?, formato?}, almeno uno',
+    forma: creazione ? '{titolo, contenuto, formato?}' : '{titolo?, contenuto?, formato?}, at least one',
   });
   const formato = corpo.formato;
   const formatoAmmesso = formato === undefined
     || formato === 'markdown' || formato === 'testo'
     || (!creazione && formato === null);
   if (!formatoAmmesso) {
-    throw erroreCorpo(`Corpo non valido: formato deve essere "markdown" o "testo"${creazione ? '' : ' oppure null'}`);
+    throw erroreCorpo(`Invalid body: formato must be "markdown" or "testo"${creazione ? '' : ' or null'}`);
   }
   return { titolo: testoSeC(corpo, 'titolo'), contenuto: testoSeC(corpo, 'contenuto'), formato };
 }
@@ -2246,10 +2343,10 @@ function requireAttivitaBody(body, { creazione }) {
   const corpo = corpoConChiaviAmmesse(body, {
     ammesse: ['titolo', 'descrizione', 'priorita'],
     obbligatorie: creazione ? ['titolo'] : [],
-    forma: creazione ? '{titolo, descrizione?, priorita?}' : '{titolo?, descrizione?, priorita?}, almeno uno',
+    forma: creazione ? '{titolo, descrizione?, priorita?}' : '{titolo?, descrizione?, priorita?}, at least one',
   });
   if (corpo.descrizione !== undefined && corpo.descrizione !== null && typeof corpo.descrizione !== 'string') {
-    throw erroreCorpo('Corpo non valido: descrizione deve essere testo oppure null');
+    throw erroreCorpo('Invalid body: descrizione must be text or null');
   }
   return { titolo: testoSeC(corpo, 'titolo'), descrizione: corpo.descrizione, priorita: testoSeC(corpo, 'priorita') };
 }
@@ -2265,46 +2362,51 @@ function requireMemoriaBody(body, { creazione }) {
   const corpo = corpoConChiaviAmmesse(body, {
     ammesse: ['titolo', 'contenuto', 'genere'],
     obbligatorie: creazione ? ['titolo', 'contenuto'] : [],
-    forma: creazione ? '{titolo, contenuto, genere?}' : '{titolo?, contenuto?, genere?}, almeno uno',
+    forma: creazione ? '{titolo, contenuto, genere?}' : '{titolo?, contenuto?, genere?}, at least one',
   });
   return { titolo: testoSeC(corpo, 'titolo'), contenuto: testoSeC(corpo, 'contenuto'), genere: testoSeC(corpo, 'genere') };
 }
 
 /** Allowlist stretta per le preferenze che appartengono alla sessione. */
 function requireSessionSettingsBody(body) {
-  const ammesse = ['modello', 'modelloPlanner', 'reasoning', 'permessi', 'permessiPerAttrezzo', 'fallbackProviders', 'modalitaOperativa'];
+  const ammesse = ['modello', 'modelloPlanner', 'reasoning', 'permessi', 'permessiPerAttrezzo', 'fallbackProviders', 'modalitaOperativa', 'linguaInterfaccia'];
   const chiavi = body && typeof body === 'object' && !Array.isArray(body) ? Object.keys(body) : [];
   if (chiavi.length === 0 || chiavi.some((chiave) => !ammesse.includes(chiave))) {
-    const errore = new Error('Corpo non valido: attesa almeno una preferenza di sessione riconosciuta');
+    const errore = new Error('Invalid body: at least one recognized session preference is expected');
     errore.code = 'QUERY_INVALID';
     throw errore;
   }
   if ('modello' in body && !modelloRichiestaValido(body.modello)) {
-    const errore = new Error('modello deve avere la forma "vendor/nome-modello"');
+    const errore = new Error('model must have the form "vendor/model-name"');
     errore.code = 'MODEL_ID_INVALID';
     throw errore;
   }
   if ('modelloPlanner' in body && body.modelloPlanner !== null && !modelloRichiestaValido(body.modelloPlanner)) {
-    const errore = new Error('modelloPlanner deve essere null o avere la forma "vendor/nome-modello"');
+    const errore = new Error('modelloPlanner must be null or have the form "vendor/model-name"');
     errore.code = 'MODEL_ID_INVALID';
     throw errore;
   }
   if ('reasoning' in body && !reasoningRichiestaValido(body.reasoning)) {
-    const errore = new Error('reasoning deve usare effort e summary ammessi');
+    const errore = new Error('reasoning must use allowed effort and summary values');
     errore.code = 'REASONING_INVALID';
     throw errore;
   }
   if ('permessi' in body && (body.permessi === null || !permessiRichiestaValido(body.permessi))) {
-    const errore = new Error('permessi non riconosciuto');
+    const errore = new Error('permessi not recognized');
     errore.code = 'PERMISSIONS_INVALID';
     throw errore;
   }
   if ('permessiPerAttrezzo' in body && !permessiPerAttrezzoRichiestaValido(body.permessiPerAttrezzo)) {
-    const errore = new Error('permessiPerAttrezzo non riconosciuto');
+    const errore = new Error('permessiPerAttrezzo not recognized');
     errore.code = 'PERMISSIONS_INVALID';
     throw errore;
   }
   requireModalitaOperativa(body);
+  if ('linguaInterfaccia' in body && body.linguaInterfaccia !== 'it' && body.linguaInterfaccia !== 'en') { // K3b
+    const errore = new Error('linguaInterfaccia must be "it" or "en"');
+    errore.code = 'QUERY_INVALID';
+    throw errore;
+  }
   return Object.fromEntries(chiavi.map((chiave) => [chiave, chiave === 'fallbackProviders' ? requireFallbackProviders(body[chiave]) : body[chiave]]));
 }
 
@@ -2312,7 +2414,7 @@ function requireSessionSettingsBody(body) {
 function requirePercorsoBody(body) {
   const chiavi = Object.keys(body ?? {});
   if (chiavi.length !== 1 || chiavi[0] !== 'percorso' || typeof body.percorso !== 'string') {
-    const errore = new Error('Corpo non valido: atteso {percorso}');
+    const errore = new Error('Invalid body: expected {percorso}');
     errore.code = 'QUERY_INVALID';
     throw errore;
   }
@@ -2324,7 +2426,7 @@ function requireSpostaBody(body) {
   const chiavi = Object.keys(body ?? {});
   const attese = ['percorso', 'cartellaDestinazione'];
   if (chiavi.length !== 2 || !attese.every((k) => chiavi.includes(k)) || typeof body.percorso !== 'string' || typeof body.cartellaDestinazione !== 'string') {
-    const errore = new Error('Corpo non valido: atteso {percorso, cartellaDestinazione}');
+    const errore = new Error('Invalid body: expected {percorso, cartellaDestinazione}');
     errore.code = 'QUERY_INVALID';
     throw errore;
   }
@@ -2339,7 +2441,7 @@ function requireCreaVoceBody(body) {
     chiavi.length !== 3 || !attese.every((k) => chiavi.includes(k))
     || typeof body.percorsoBase !== 'string' || typeof body.nome !== 'string' || typeof body.tipo !== 'string'
   ) {
-    const errore = new Error('Corpo non valido: atteso {percorsoBase, nome, tipo}');
+    const errore = new Error('Invalid body: expected {percorsoBase, nome, tipo}');
     errore.code = 'QUERY_INVALID';
     throw errore;
   }
@@ -2351,7 +2453,7 @@ function requireRinominaBody(body) {
   const chiavi = Object.keys(body ?? {});
   const attese = ['percorso', 'nuovoNome'];
   if (chiavi.length !== 2 || !attese.every((k) => chiavi.includes(k)) || typeof body.percorso !== 'string' || typeof body.nuovoNome !== 'string') {
-    const errore = new Error('Corpo non valido: atteso {percorso, nuovoNome}');
+    const errore = new Error('Invalid body: expected {percorso, nuovoNome}');
     errore.code = 'QUERY_INVALID';
     throw errore;
   }
@@ -2362,7 +2464,7 @@ function requireRinominaBody(body) {
 function requireComandoBody(body) {
   const chiavi = Object.keys(body ?? {});
   if (chiavi.length !== 1 || chiavi[0] !== 'comando' || typeof body.comando !== 'string' || body.comando.trim().length === 0) {
-    const errore = new Error('Corpo non valido: atteso {comando}');
+    const errore = new Error('Invalid body: expected {comando}');
     errore.code = 'QUERY_INVALID';
     throw errore;
   }
@@ -2387,7 +2489,7 @@ function requireApprovaBody(body) {
     || typeof body.approvato !== 'boolean'
     || (conAmbito && (body.ambito !== 'cartella' || body.approvato !== true))
   ) {
-    const errore = new Error('Corpo non valido: atteso {requestId, approvato} o {requestId, approvato: true, ambito: "cartella"}');
+    const errore = new Error('Invalid body: expected {requestId, approvato} or {requestId, approvato: true, ambito: "cartella"}');
     errore.code = 'QUERY_INVALID';
     throw errore;
   }
@@ -2432,7 +2534,7 @@ function requireRispostaDomandaBody(body) {
     && ['answered', 'skipped', 'cancelled', 'expired'].includes(status) // 24/09/2026, decisione owner 35: la scadenza
     && answersCoerenti;
   if (!valido) {
-    const errore = new Error('Corpo non valido: atteso {requestId, status: answered|skipped|cancelled|expired, answers?}');
+    const errore = new Error('Invalid body: expected {requestId, status: answered|skipped|cancelled|expired, answers?}');
     errore.code = 'QUERY_INVALID';
     throw errore;
   }
@@ -2448,7 +2550,7 @@ function requireRispostaDomandaBody(body) {
 function requireAbilitaForgeBody(body) {
   const chiavi = Object.keys(body ?? {});
   if (chiavi.length !== 1 || chiavi[0] !== 'abilitato' || typeof body.abilitato !== 'boolean') {
-    const errore = new Error('Corpo non valido: atteso {abilitato}');
+    const errore = new Error('Invalid body: expected {abilitato}');
     errore.code = 'QUERY_INVALID';
     throw errore;
   }
@@ -2464,7 +2566,7 @@ function requireAbilitaForgeBody(body) {
 function requireQueueBody(body) {
   const chiavi = Object.keys(body ?? {});
   if (chiavi.length !== 1 || chiavi[0] !== 'messaggio' || typeof body.messaggio !== 'string' || body.messaggio.trim().length === 0) {
-    const errore = new Error('Corpo non valido: atteso {messaggio}');
+    const errore = new Error('Invalid body: expected {messaggio}');
     errore.code = 'QUERY_INVALID';
     throw errore;
   }
@@ -2474,14 +2576,14 @@ function requireQueueBody(body) {
 /** Resume legacy senza body oppure nuovo turno con una sola stringa non vuota. */
 function requireResumeBody(body) {
   if (!body || typeof body !== 'object' || Array.isArray(body)) {
-    const errore = new Error('Corpo non valido: atteso {messaggio?}');
+    const errore = new Error('Invalid body: expected {messaggio?}');
     errore.code = 'QUERY_INVALID';
     throw errore;
   }
   const chiavi = Object.keys(body);
   if (chiavi.length === 0) return null;
   if (chiavi.length !== 1 || chiavi[0] !== 'messaggio' || typeof body.messaggio !== 'string' || body.messaggio.trim().length === 0) {
-    const errore = new Error('Corpo non valido: atteso {messaggio?}');
+    const errore = new Error('Invalid body: expected {messaggio?}');
     errore.code = 'QUERY_INVALID';
     throw errore;
   }
@@ -2499,23 +2601,23 @@ const BATCH_ELIMINA_RISORSE = new Set(['library', 'notes', 'tasks', 'memory', 'r
  */
 function requireBatchEliminaBody(body) {
   if (!body || typeof body !== 'object' || Array.isArray(body)) {
-    const errore = new Error('Corpo batch non valido');
+    const errore = new Error('Invalid batch body');
     errore.code = 'QUERY_INVALID';
     throw errore;
   }
   const chiavi = Object.keys(body);
   if (chiavi.length !== 2 || !chiavi.includes('azione') || !chiavi.includes('ids') || body.azione !== 'elimina' || !Array.isArray(body.ids)) {
-    const errore = new Error('Corpo batch non valido: atteso {azione:"elimina", ids:[...]}');
+    const errore = new Error('Invalid batch body: expected {azione:"elimina", ids:[...]}');
     errore.code = 'QUERY_INVALID';
     throw errore;
   }
   if (body.ids.length < 1 || body.ids.length > BATCH_ELIMINA_MAX_IDS) {
-    const errore = new Error(`Il batch richiede da 1 a ${BATCH_ELIMINA_MAX_IDS} id`);
+    const errore = new Error(`The batch requires 1 to ${BATCH_ELIMINA_MAX_IDS} ids`);
     errore.code = 'QUERY_INVALID';
     throw errore;
   }
   if (!body.ids.every((id) => typeof id === 'string' && id.trim().length > 0) || new Set(body.ids).size !== body.ids.length) {
-    const errore = new Error('Gli id del batch devono essere stringhe non vuote e uniche');
+    const errore = new Error('Batch ids must be non-empty, unique strings');
     errore.code = 'QUERY_INVALID';
     throw errore;
   }
@@ -2526,7 +2628,7 @@ const REDIRECT_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-
 
 function requireRedirectId(value) {
   if (typeof value !== 'string' || !REDIRECT_ID_PATTERN.test(value)) {
-    const errore = new Error('Identificatore del reindirizzamento non valido');
+    const errore = new Error('Invalid redirect identifier');
     errore.code = 'QUERY_INVALID';
     throw errore;
   }
@@ -2538,7 +2640,7 @@ function requireRedirectBody(body) {
   const chiavi = Object.keys(body ?? {});
   const ammesse = new Set(['messaggio', 'redirectId']);
   if (chiavi.length < 1 || chiavi.length > 2 || !chiavi.every((chiave) => ammesse.has(chiave)) || !chiavi.includes('messaggio') || typeof body.messaggio !== 'string' || body.messaggio.trim().length === 0) {
-    const errore = new Error('Corpo non valido: atteso {messaggio, redirectId?}');
+    const errore = new Error('Invalid body: expected {messaggio, redirectId?}');
     errore.code = 'QUERY_INVALID';
     throw errore;
   }
@@ -2553,7 +2655,7 @@ function requireStopBody(body) {
   const chiavi = Object.keys(body ?? {});
   if (chiavi.length === 0) return null;
   if (chiavi.length !== 1 || chiavi[0] !== 'redirectId') {
-    const errore = new Error('Corpo non valido: atteso {redirectId?}');
+    const errore = new Error('Invalid body: expected {redirectId?}');
     errore.code = 'QUERY_INVALID';
     throw errore;
   }
@@ -2839,7 +2941,7 @@ export function createHttpApp({
 
   async function imageInput(body) {
     if (!body || !Object.hasOwn(body, 'immagini')) return { body, immagini: [] };
-    if (!chatImageStore) throw Object.assign(new Error('Gli allegati immagine non sono configurati.'), { code: 'QUERY_INVALID' });
+    if (!chatImageStore) throw Object.assign(new Error('Image attachments are not configured.'), { code: 'QUERY_INVALID' });
     const immagini = await chatImageStore.validateReferences(body.immagini);
     const rest = { ...body };
     delete rest.immagini;
@@ -3450,12 +3552,12 @@ export function createHttpApp({
           const stato = url.searchParams.get('stato');
           const allowedStatuses = new Set(['created', 'running', 'paused', 'needs_attention', 'succeeded', 'failed', 'cancelled']);
           if (stato !== null && !allowedStatuses.has(stato)) {
-            throw Object.assign(new Error('Stato Workflow non valido'), { code: 'QUERY_INVALID' });
+            throw Object.assign(new Error('Invalid Workflow status'), { code: 'QUERY_INVALID' });
           }
           const rawQuery = url.searchParams.get('q');
           const query = rawQuery?.trim().toLocaleLowerCase('it') ?? null;
           if (rawQuery !== null && (!query || rawQuery.length > 256 || /[\u0000-\u001f\u007f]/u.test(rawQuery))) {
-            throw Object.assign(new Error('Ricerca Workflow non valida'), { code: 'QUERY_INVALID' });
+            throw Object.assign(new Error('Invalid Workflow search'), { code: 'QUERY_INVALID' });
           }
           const runs = await listRunSummariesForSession(workflowStore, { rootSessionId: sessionId });
           const filtered = runs.filter((run) => (stato === null || run.status === stato)
@@ -3480,13 +3582,13 @@ export function createHttpApp({
         const numeriOutput = output ? (() => {
           const chiavi = [...url.searchParams.keys()];
            if (chiavi.some((k) => !['offset', 'limit', 'resultId', 'format'].includes(k)) || chiavi.some((k) => url.searchParams.getAll(k).length !== 1)) {
-            throw Object.assign(new Error('Query non valida'), { code: 'QUERY_INVALID' });
+            throw Object.assign(new Error('Invalid query'), { code: 'QUERY_INVALID' });
           }
           const numero = (chiave, ripiego) => {
             const grezzo = url.searchParams.get(chiave);
             if (grezzo === null) return ripiego;
             if (!/^(0|[1-9][0-9]*)$/u.test(grezzo) || !Number.isSafeInteger(Number(grezzo)) || Number(grezzo) > 2_000_000) {
-              throw Object.assign(new Error('Query non valida'), { code: 'QUERY_INVALID' });
+              throw Object.assign(new Error('Invalid query'), { code: 'QUERY_INVALID' });
             }
             return Number(grezzo);
           };
@@ -3494,18 +3596,18 @@ export function createHttpApp({
            const format = url.searchParams.get('format') ?? 'json';
            if (resultId === '' || !['json', 'raw'].includes(format)
              || (format === 'raw' && (resultId === undefined || url.searchParams.has('offset') || url.searchParams.has('limit')))) {
-             throw Object.assign(new Error('Query non valida'), { code: 'QUERY_INVALID' });
+             throw Object.assign(new Error('Invalid query'), { code: 'QUERY_INVALID' });
            }
            return { offset: numero('offset', 0), limit: numero('limit', null), resultId, format };
         })() : null;
         const nodeDetail = resource?.startsWith('nodes/') && !output;
         const outputOffset = nodeDetail ? (() => {
           const keys = [...url.searchParams.keys()];
-          if (keys.some((key) => key !== 'outputOffset') || keys.length > 1) throw Object.assign(new Error('Query non valida'), { code: 'QUERY_INVALID' });
+          if (keys.some((key) => key !== 'outputOffset') || keys.length > 1) throw Object.assign(new Error('Invalid query'), { code: 'QUERY_INVALID' });
           const raw = url.searchParams.get('outputOffset');
           if (raw === null) return 0;
           if (!/^(0|[1-9][0-9]*)$/u.test(raw) || !Number.isSafeInteger(Number(raw)) || Number(raw) > 2_000_000) {
-            throw Object.assign(new Error('Query non valida'), { code: 'QUERY_INVALID' });
+            throw Object.assign(new Error('Invalid query'), { code: 'QUERY_INVALID' });
           }
           return Number(raw);
         })() : null;
@@ -3613,7 +3715,7 @@ export function createHttpApp({
          */
         const concludiAccessoOpenRouter = async (stato, codice) => {
           if (typeof codice !== 'string' || codice.trim() === '') {
-            const errore = new Error('Manca il codice di conferma'); errore.code = 'OAUTH_CODICE_MANCANTE'; throw errore;
+            const errore = new Error('The confirmation code is missing'); errore.code = 'OAUTH_CODICE_MANCANTE'; throw errore;
           }
           /* ⛔ Il codice si controlla PRIMA di consumare lo stato: una richiesta a metà non deve
              bruciare un accesso che la persona può ancora concludere. */
@@ -3622,12 +3724,12 @@ export function createHttpApp({
           try {
             await custodisciChiaveOpenRouter(chiave);
           } catch {
-            const errore = new Error('Chiave non messa al sicuro'); errore.code = 'OAUTH_CUSTODIA_FALLITA'; throw errore;
+            const errore = new Error('Key not stored safely'); errore.code = 'OAUTH_CUSTODIA_FALLITA'; throw errore;
           }
         };
         try {
           if (typeof custodisciChiaveOpenRouter !== 'function') {
-            const errore = new Error('Custodia delle chiavi non collegata'); errore.code = 'OAUTH_NON_CONFIGURATO'; throw errore;
+            const errore = new Error('Key custody not connected'); errore.code = 'OAUTH_NON_CONFIGURATO'; throw errore;
           }
           if (iniziaOAuth) {
             requireNoQuery(url);
@@ -3669,13 +3771,13 @@ export function createHttpApp({
             ? decodeURIComponent(ritornoOAuth[1])
             : (url.searchParams.get('state') ?? url.searchParams.get('stato') ?? '');
           await concludiAccessoOpenRouter(statoDelRientro, url.searchParams.get('code') ?? '');
-          paginaRitornoOpenRouter(res, method, null);
+          paginaRitornoOpenRouter(req, res, method, null);
           return;
         } catch (error) {
           const normalized = normalizeError(error);
           /* ⛔ Al rientro dal browser risponde una PAGINA anche il guasto: chi sta guardando è una
              persona, e un JSON di errore la lascerebbe davanti a un muro senza uscita. */
-          if (ritornoOAuth) { paginaRitornoOpenRouter(res, method, MESSAGE_BY_CODE[normalized.code] ?? null); return; }
+          if (ritornoOAuth) { paginaRitornoOpenRouter(req, res, method, MESSAGE_BY_CODE[normalized.code] ? { codice: normalized.code, messaggio: MESSAGE_BY_CODE[normalized.code] } : null); return; }
           sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
           return;
         }
@@ -3685,19 +3787,19 @@ export function createHttpApp({
     const contextMatch = /^\/api\/v1\/sessions\/([^/]+)\/context(\/.*)?$/u.exec(url.pathname);
     if (contextMatch) {
       const allowed = metodiAmmessiPerRotta(url.pathname);
-      if (!allowed) { sendJson(res, 404, bustaContesto('CTX_ROUTE_NOT_FOUND', 'Operazione del contesto non trovata.', clock), method); return; }
-      if (!allowed.includes(method)) { sendJson(res, 405, bustaContesto('METHOD_NOT_ALLOWED', 'Metodo non consentito.', clock), method, { Allow: allowed.join(', ') }); return; }
-      if (!contextService) { sendJson(res, 503, bustaContesto('CTX_NOT_ENABLED', 'Il motore del contesto non è attivo in questa istanza.', clock), method); return; }
+      if (!allowed) { sendJson(res, 404, bustaContesto('CTX_ROUTE_NOT_FOUND', 'Context operation not found.', clock), method); return; }
+      if (!allowed.includes(method)) { sendJson(res, 405, bustaContesto('METHOD_NOT_ALLOWED', 'Method not allowed.', clock), method, { Allow: allowed.join(', ') }); return; }
+      if (!contextService) { sendJson(res, 503, bustaContesto('CTX_NOT_ENABLED', 'The context engine is not active in this instance.', clock), method); return; }
       try {
         requireNoQuery(url);
         const sessionId = decodeURIComponent(contextMatch[1]);
         const segments = (contextMatch[2] ?? '/').split('/').map(segment => decodeURIComponent(segment));
-        if (segments.slice(1).some(segment => segment.includes('/') || segment.includes('\\') || segment === '..' || segment === '.')) throw Object.assign(new Error('Percorso del contesto non valido.'), { code: 'CTX_INVALID_INPUT' });
+        if (segments.slice(1).some(segment => segment.includes('/') || segment.includes('\\') || segment === '..' || segment === '.')) throw Object.assign(new Error('Invalid context path.'), { code: 'CTX_INVALID_INPUT' });
         const path = segments.join('/');
         const body = ['GET', 'HEAD'].includes(method) ? undefined : await leggiCorpoJson(req);
         const headerKey = req.headers['idempotency-key'];
         if (headerKey && body) {
-          if (body.idempotencyKey && body.idempotencyKey !== headerKey) throw Object.assign(new Error('Identità della richiesta discordante.'), { code: 'CTX_INVALID_INPUT' });
+          if (body.idempotencyKey && body.idempotencyKey !== headerKey) throw Object.assign(new Error('Request identity mismatch.'), { code: 'CTX_INVALID_INPUT' });
           body.idempotencyKey = headerKey;
         }
         const result = await contextService.request({ sessionId, method: method === 'HEAD' ? 'GET' : method, path, body });
@@ -3747,7 +3849,7 @@ export function createHttpApp({
         const record = REGISTRO_FORNITORI[fornitoreId];
         if (record?.catalogo?.fonte === 'runtime-locale') {
           const runtime = localRuntimes?.[fornitoreId];
-          if (!runtime || typeof runtime.listModels !== 'function') { const errore = new Error('Motore locale non configurato su questo server.'); errore.code = 'REPORT_UNAVAILABLE'; throw errore; }
+          if (!runtime || typeof runtime.listModels !== 'function') { const errore = new Error('Local engine not configured on this server.'); errore.code = 'REPORT_UNAVAILABLE'; throw errore; }
           const stato = (c) => (c && c.state === 'observed' ? (c.value === true ? 'osservato-si' : 'osservato-no') : 'ignoto');
           const modelli = (await runtime.listModels()).map((m) => ({
             id: `${fornitoreId}:${m.id}`,
@@ -3767,7 +3869,7 @@ export function createHttpApp({
           sendJson(res, 200, successEnvelope(await catalogoFornitoriFn(fornitoreId), clock), method);
           return;
         }
-        if (!providerProbe) { const errore = new Error('Sonda provider non configurata.'); errore.code = 'REPORT_UNAVAILABLE'; throw errore; }
+        if (!providerProbe) { const errore = new Error('Provider probe not configured.'); errore.code = 'REPORT_UNAVAILABLE'; throw errore; }
         sendJson(res, 200, successEnvelope(await providerProbe.elencaModelli(fornitoreId), clock), method);
       }
       catch (error) { const normalized = normalizeError(error); sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method); }
@@ -3810,9 +3912,7 @@ export function createHttpApp({
         const percorso = parseTreeQuery(url);
         const esito = await sessionRegistry.scaricaFile(sessionId, percorso);
         if ('erroreAvvio' in esito) {
-          const errore = new Error(esito.erroreAvvio);
-          errore.code = esito.code;
-          throw errore;
+          throw erroreDelRegistro(esito);
         }
         if (esito.bytes.length < 5 || esito.bytes.subarray(0, 5).toString('latin1') !== '%PDF-') {
           sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method);
@@ -3861,13 +3961,13 @@ export function createHttpApp({
      */
     if (method === 'GET' && url.pathname === '/api/v1/lettore/ospite') {
       const nonce = creaNonceCsp();
-      const documento = `<!doctype html><html lang="it"><head><meta charset="utf-8"><title>Documento</title></head><body><script nonce="${nonce}">(() => {`
+      const documento = `<!doctype html><html lang="it"><head><meta charset="utf-8"><title>Document</title></head><body><script nonce="${nonce}">(() => {`
         + `const genitore = window.parent; const nonce = document.currentScript.nonce;`
         + `const RESE = { documento: '/lettore-ospite-documento.js', presentazione: '/lettore-ospite-presentazione.js' }; const caricate = new Map();`
         + `const carica = (formato) => { if (!caricate.has(formato)) caricate.set(formato, new Promise((ok, ko) => {`
         + ` const s = document.createElement('script'); s.nonce = nonce; s.src = RESE[formato];`
-        + ` s.onload = () => (window.TalosResaOspite && window.TalosResaOspite[formato] ? ok(window.TalosResaOspite[formato]) : ko(new Error('la resa non è pronta')));`
-        + ` s.onerror = () => { caricate.delete(formato); ko(new Error('la resa non si è caricata')); }; document.head.append(s); }));`
+        + ` s.onload = () => (window.TalosResaOspite && window.TalosResaOspite[formato] ? ok(window.TalosResaOspite[formato]) : ko(new Error('the renderer is not ready')));`
+        + ` s.onerror = () => { caricate.delete(formato); ko(new Error('the renderer failed to load')); }; document.head.append(s); }));`
         + ` return caricate.get(formato); };`
         + `const adatta = () => { const radice = document.documentElement; radice.style.zoom = '1';`
         + ` const largo = Math.max(document.body.scrollWidth, radice.scrollWidth); const scala = largo > innerWidth ? innerWidth / largo : 1;`
@@ -3901,9 +4001,7 @@ export function createHttpApp({
         const percorso = parseTreeQuery(url);
         const esito = await sessionRegistry.scaricaFile(sessionId, percorso);
         if ('erroreAvvio' in esito) {
-          const errore = new Error(esito.erroreAvvio);
-          errore.code = esito.code;
-          throw errore;
+          throw erroreDelRegistro(esito);
         }
         const nomi = nomiPerContentDisposition(esito.nome);
         res.writeHead(200, {
@@ -3960,9 +4058,7 @@ export function createHttpApp({
         requireNoQuery(url);
         const esito = await sessionRegistry.scaricaVoceLibreria(sessionId, voceId);
         if ('erroreAvvio' in esito) {
-          const errore = new Error(esito.erroreAvvio);
-          errore.code = esito.code;
-          throw errore;
+          throw erroreDelRegistro(esito);
         }
         /*
          * ⛔ Intestazioni identiche a quelle dello scarico di un file del workspace, e per gli
@@ -4038,9 +4134,7 @@ export function createHttpApp({
         requireNoQuery(url);
         const esito = await sessionRegistry.scaricaVoceLibreria(sessionId, voceId);
         if ('erroreAvvio' in esito) {
-          const errore = new Error(esito.erroreAvvio);
-          errore.code = esito.code;
-          throw errore;
+          throw erroreDelRegistro(esito);
         }
         if (!/\.pdf$/iu.test(String(esito.nome ?? ''))) {
           /* ⛔ 404 e non 415: a questo indirizzo, per una voce che non è un PDF, non esiste
@@ -4106,7 +4200,7 @@ export function createHttpApp({
       try {
         requireNoQuery(url);
         if (rifiutoOrigineApprovazione(req, { token }) === 'altra-finestra') {
-          throw Object.assign(new Error('Apri la pagina dalla finestra TALOS di questa sessione'), { code: 'PAGE_ORIGIN_FORBIDDEN' });
+          throw Object.assign(new Error('Open the page from this session’s TALOS window'), { code: 'PAGE_ORIGIN_FORBIDDEN' });
         }
         let sessionId;
         try { sessionId = decodeURIComponent(creaPaginaMatch[1]); } catch { sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method); return; }
@@ -4115,7 +4209,7 @@ export function createHttpApp({
         const perVoce = chiavi.length === 1 && chiavi[0] === 'voceId' && typeof corpo.voceId === 'string' && corpo.voceId !== '';
         const perPercorso = chiavi.length === 1 && chiavi[0] === 'percorso' && typeof corpo.percorso === 'string' && corpo.percorso !== '';
         if (!perVoce && !perPercorso) {
-          const errore = new Error('Corpo non valido: atteso {percorso} o {voceId}');
+          const errore = new Error('Invalid body: expected {percorso} or {voceId}');
           errore.code = 'QUERY_INVALID';
           throw errore;
         }
@@ -4124,12 +4218,10 @@ export function createHttpApp({
           ? await sessionRegistry.leggiPagina(sessionId, segmenti)
           : await sessionRegistry.scaricaVoceLibreria(sessionId, corpo.voceId);
         if ('erroreAvvio' in esito) {
-          const errore = new Error(esito.erroreAvvio);
-          errore.code = esito.code;
-          throw errore;
+          throw erroreDelRegistro(esito);
         }
         if (!/^(?:text\/html|application\/xhtml\+xml)/u.test(tipoPerPagina(esito.nome))) {
-          const errore = new Error('Questo file non è una pagina HTML');
+          const errore = new Error('This file is not an HTML page');
           errore.code = 'QUERY_INVALID';
           throw errore;
         }
@@ -4170,9 +4262,7 @@ export function createHttpApp({
           esito = await sessionRegistry.leggiPagina(ambito.sessionId, [...ambito.prefisso, ...segmenti]);
         }
         if ('erroreAvvio' in esito) {
-          const errore = new Error(esito.erroreAvvio);
-          errore.code = esito.code;
-          throw errore;
+          throw erroreDelRegistro(esito);
         }
         const origine = `http://${req.headers.host ?? '127.0.0.1'}`;
         res.writeHead(200, {
@@ -4207,7 +4297,7 @@ export function createHttpApp({
     try {
       requireNoQuery(url);
       if (!BATCH_ELIMINA_RISORSE.has(risorsa)) {
-        const errore = new Error('Risorsa batch non valida');
+        const errore = new Error('Invalid batch resource');
         errore.code = 'QUERY_INVALID';
         throw errore;
       }
@@ -4227,29 +4317,25 @@ export function createHttpApp({
           if (risorsa === 'library') {
             const esito = await sessionRegistry.eliminaVoceLibreria(sessionId, id);
             if ('erroreAvvio' in esito) {
-              const errore = new Error(esito.erroreAvvio);
-              errore.code = esito.code;
-              throw errore;
+              throw erroreDelRegistro(esito);
             }
           } else if (risorsa === 'research') {
             if (!idRicercaValido(id)) {
-              const errore = new Error('id di ricerca non valido');
+              const errore = new Error('invalid research id');
               errore.code = 'RESEARCH_INVALID';
               throw errore;
             }
             const esito = await sessionRegistry.eliminaRicerca(sessionId, id);
             if ('erroreAvvio' in esito) {
-              const errore = new Error(esito.erroreAvvio);
-              errore.code = esito.code;
-              throw errore;
+              throw erroreDelRegistro(esito);
             }
             if (!esito.ok) {
-              const errore = new Error(esito.motivo ?? 'ricerca non eliminabile');
+              const errore = new Error(esito.motivo ?? 'research cannot be deleted');
               errore.code = 'RESEARCH_CONFLICT';
               throw errore;
             }
             if (!esito.eliminata) {
-              const errore = new Error('ricerca non trovata');
+              const errore = new Error('research not found');
               errore.code = 'RESEARCH_NOT_FOUND';
               throw errore;
             }
@@ -4257,7 +4343,7 @@ export function createHttpApp({
             const magazzino = magazziniDellaPersona[risorsa];
             const voce = await magazzino.leggi(id);
             if (!voce) {
-              const errore = new Error('voce non trovata');
+              const errore = new Error('entry not found');
               errore.code = magazzino.codiceAssente;
               throw errore;
             }
@@ -4302,9 +4388,7 @@ export function createHttpApp({
         const nome = requireNomeBody(await leggiCorpoJson(req));
         const esito = await sessionRegistry.rinominaVoceLibreria(sessionId, voceId, nome);
         if ('erroreAvvio' in esito) {
-          const errore = new Error(esito.erroreAvvio);
-          errore.code = esito.code;
-          throw errore;
+          throw erroreDelRegistro(esito);
         }
         if (req.aborted || res.destroyed) return;
         sendJson(res, 200, successEnvelope({ id: esito.id, nomePrima: esito.nomePrima, nomeDopo: esito.nomeDopo }, clock), method);
@@ -4337,9 +4421,7 @@ export function createHttpApp({
            nessuno a cui chiedere «sei sicuro?»: esegue, e dice esattamente che cosa ha tolto. */
         const esito = await sessionRegistry.eliminaVoceLibreria(sessionId, voceId);
         if ('erroreAvvio' in esito) {
-          const errore = new Error(esito.erroreAvvio);
-          errore.code = esito.code;
-          throw errore;
+          throw erroreDelRegistro(esito);
         }
         if (req.aborted || res.destroyed) return;
         sendJson(res, 200, successEnvelope({ eliminato: true, id: esito.id, nome: esito.nome }, clock), method);
@@ -4373,9 +4455,7 @@ export function createHttpApp({
         requireNoQuery(url);
         const esito = await sessionRegistry.apriVoceLibreria(sessionId, voceId);
         if ('erroreAvvio' in esito) {
-          const errore = new Error(esito.erroreAvvio);
-          errore.code = esito.code;
-          throw errore;
+          throw erroreDelRegistro(esito);
         }
         if (req.aborted || res.destroyed) return;
         sendJson(res, 200, successEnvelope({ aperto: true }, clock), method);
@@ -4404,9 +4484,7 @@ export function createHttpApp({
            avere effetti (RFC 9110 §9.2.1, «metodi sicuri»). È lo stesso verbo di `.../tree/reveal`. */
         const esito = await sessionRegistry.rivelaVoceLibreria(sessionId, voceId);
         if ('erroreAvvio' in esito) {
-          const errore = new Error(esito.erroreAvvio);
-          errore.code = esito.code;
-          throw errore;
+          throw erroreDelRegistro(esito);
         }
         if (req.aborted || res.destroyed) return;
         sendJson(res, 200, successEnvelope({ rivelato: true }, clock), method);
@@ -4601,7 +4679,7 @@ export function createHttpApp({
         if (req.aborted || res.destroyed) return;
         if (esito && 'erroreAvvio' in esito) {
           const stato = esito.code === 'NOT_FOUND' ? 404 : esito.code === 'SESSION_STILL_RUNNING' ? 409 : 400;
-          sendJson(res, stato, errorEnvelope(esito.code, clock, { errore: new Error(esito.erroreAvvio) }), method);
+          sendJson(res, stato, errorEnvelope(esito.code, clock, { errore: erroreDelRegistro(esito) }), method);
           return;
         }
         sendJson(res, 200, successEnvelope({ rimosso: true, riferimento: esito.riferimento }, clock), method);
@@ -4682,7 +4760,7 @@ export function createHttpApp({
           return;
         }
         if (!idRicercaValido(ricercaId)) {
-          const errore = new Error('id di ricerca non valido');
+          const errore = new Error('invalid research id');
           errore.code = 'RESEARCH_INVALID';
           throw errore;
         }
@@ -4692,8 +4770,8 @@ export function createHttpApp({
 
         if (method === 'DELETE') {
           const esito = await sessionRegistry.eliminaRicerca(sessionId, ricercaId);
-          if ('erroreAvvio' in esito) { const e = new Error(esito.erroreAvvio); e.code = esito.code; throw e; }
-          if (!esito.ok) { const e = new Error(esito.motivo ?? 'ricerca non eliminabile'); e.code = 'RESEARCH_CONFLICT'; throw e; }
+          if ('erroreAvvio' in esito) { throw erroreDelRegistro(esito); }
+          if (!esito.ok) { const e = new Error(esito.motivo ?? 'research cannot be deleted'); e.code = 'RESEARCH_CONFLICT'; throw e; }
           if (!esito.eliminata) {
             sendJson(res, 404, errorEnvelope('RESEARCH_NOT_FOUND', clock), method);
             return;
@@ -4707,7 +4785,7 @@ export function createHttpApp({
 
         if (azione === 'riverifica') {
           const esito = await sessionRegistry.riverificaRicerca(sessionId, ricercaId);
-          if ('erroreAvvio' in esito) { const e = new Error(esito.erroreAvvio); e.code = esito.code; throw e; }
+          if ('erroreAvvio' in esito) { throw erroreDelRegistro(esito); }
           if (esito.ok && esito.ricerca === null) {
             sendJson(res, 404, errorEnvelope('RESEARCH_NOT_FOUND', clock), method);
             return;
@@ -4724,7 +4802,7 @@ export function createHttpApp({
              *   501 riguarda il METODO, e «is cacheable by default». Un «non ancora disponibile»
              *   messo in cache sopravviverebbe al giorno in cui diventa disponibile.
              */
-            const e = new Error(esito.motivo ?? 'ri-verifica non disponibile');
+            const e = new Error(esito.motivo ?? 'recheck not available');
             e.code = 'RESEARCH_RECHECK_UNAVAILABLE';
             throw e;
           }
@@ -4737,12 +4815,12 @@ export function createHttpApp({
           const esito = azione === 'pausa'
             ? await sessionRegistry.pausaRicerca(sessionId, ricercaId)
             : await sessionRegistry.riprendiRicerca(sessionId, ricercaId);
-          if ('erroreAvvio' in esito) { const e = new Error(esito.erroreAvvio); e.code = esito.code; throw e; }
+          if ('erroreAvvio' in esito) { throw erroreDelRegistro(esito); }
           if (esito.ok && esito.ricerca === null) {
             sendJson(res, 404, errorEnvelope('RESEARCH_NOT_FOUND', clock), method);
             return;
           }
-          if (!esito.ok) { const e = new Error(esito.motivo ?? 'azione non possibile'); e.code = 'RESEARCH_CONFLICT'; throw e; }
+          if (!esito.ok) { const e = new Error(esito.motivo ?? 'action not possible'); e.code = 'RESEARCH_CONFLICT'; throw e; }
         }
 
         /*
@@ -4755,7 +4833,7 @@ export function createHttpApp({
          *   risposta destinata a uno schermo italiano.
          */
         const letta = await sessionRegistry.leggiRicerca(sessionId, ricercaId);
-        if ('erroreAvvio' in letta) { const e = new Error(letta.erroreAvvio); e.code = letta.code; throw e; }
+        if ('erroreAvvio' in letta) { throw erroreDelRegistro(letta); }
         if (!letta.ricerca) {
           sendJson(res, 404, errorEnvelope('RESEARCH_NOT_FOUND', clock), method);
           return;
@@ -4813,7 +4891,7 @@ export function createHttpApp({
           return;
         }
         if (!idRicercaValido(ricercaId)) {
-          const errore = new Error('id di ricerca non valido');
+          const errore = new Error('invalid research id');
           errore.code = 'RESEARCH_INVALID';
           throw errore;
         }
@@ -4823,7 +4901,7 @@ export function createHttpApp({
           throw errore;
         }
         const letta = await sessionRegistry.leggiRicerca(sessionId, ricercaId);
-        if ('erroreAvvio' in letta) { const e = new Error(letta.erroreAvvio); e.code = letta.code; throw e; }
+        if ('erroreAvvio' in letta) { throw erroreDelRegistro(letta); }
         if (!letta.ricerca) {
           sendJson(res, 404, errorEnvelope('RESEARCH_NOT_FOUND', clock), method);
           return;
@@ -4860,19 +4938,19 @@ export function createHttpApp({
         if (rejectedOrigin) throw Object.assign(new Error('File upload must originate from this TALOS window'),
           { code: 'CHAT_FILE_ORIGIN_FORBIDDEN' });
         if (req.headers['content-type'] !== 'application/octet-stream') {
-          throw Object.assign(new Error('Il file richiede application/octet-stream'), { code: 'QUERY_INVALID' });
+          throw Object.assign(new Error('The file requires application/octet-stream'), { code: 'QUERY_INVALID' });
         }
         const encodedName = req.headers['x-talos-file-name'];
         if (typeof encodedName !== 'string' || !encodedName) {
-          throw Object.assign(new Error('Nome del file mancante'), { code: 'QUERY_INVALID' });
+          throw Object.assign(new Error('File name missing'), { code: 'QUERY_INVALID' });
         }
         let name;
         try { name = decodeURIComponent(encodedName); }
-        catch { throw Object.assign(new Error('Nome del file non codificato correttamente'), { code: 'QUERY_INVALID' }); }
+        catch { throw Object.assign(new Error('File name not encoded correctly'), { code: 'QUERY_INVALID' }); }
         const sessionId = decodeURIComponent(chatFileMatch[1]);
         const workspace = await sessionRegistry.cartellaPerChatFile(sessionId);
         if ('erroreAvvio' in workspace) {
-          throw Object.assign(new Error(workspace.erroreAvvio), { code: workspace.code });
+          throw erroreDelRegistro(workspace);
         }
         const uploaded = await saveChatFile({ rootDir: workspace.cartella, name, source: req });
         if (req.aborted || res.destroyed) return;
@@ -4911,7 +4989,7 @@ export function createHttpApp({
         const body = await leggiCorpoJson(req);
         const keys = body && typeof body === 'object' && !Array.isArray(body) ? Object.keys(body) : [];
         if (keys.length !== 1 || keys[0] !== 'percorso' || typeof body.percorso !== 'string') {
-          const error = new Error('Scegli una cartella valida');
+          const error = new Error('Choose a valid folder');
           error.code = 'QUERY_INVALID';
           throw error;
         }
@@ -4937,12 +5015,12 @@ export function createHttpApp({
           || !keys.includes('name')
           || typeof body.parentPath !== 'string'
           || typeof body.name !== 'string') {
-          const error = new Error('Scegli una cartella e un nome validi');
+          const error = new Error('Choose a valid folder and name');
           error.code = 'QUERY_INVALID';
           throw error;
         }
         if (!workspaceBrowser || typeof workspaceBrowser.createFolder !== 'function') {
-          const error = new Error('Creazione cartella non disponibile');
+          const error = new Error('Folder creation not available');
           error.code = 'WORKSPACE_NOT_AVAILABLE';
           throw error;
         }
@@ -4969,9 +5047,10 @@ export function createHttpApp({
       try {
         requireNoQuery(url);
         const corpo = await leggiCorpoJson(req);
-        const { taskId, modello, modelloPlanner, reasoning, mobile, permessi, permessiPerAttrezzo, modalitaOperativa, provider, runtimeId, modelId, fallbackConsent, fallbackProviders } = requireTaskIdBody(corpo);
+        const { taskId, modello, modelloPlanner, reasoning, mobile, permessi, permessiPerAttrezzo, modalitaOperativa, provider, runtimeId, modelId, fallbackConsent, fallbackProviders, linguaInterfaccia } = requireTaskIdBody(corpo);
         const opzioniSessione = {
           ...(fallbackProviders !== undefined ? { fallbackProviders } : {}),
+          ...(linguaInterfaccia ? { linguaInterfaccia } : {}), // K3b: additivo, come gli altri opzionali
           modelloScelto: modello, modelloPlannerScelto: modelloPlanner, reasoningScelto: reasoning, mobile,
           permessiScelto: permessi, permessiPerAttrezzoScelto: permessiPerAttrezzo, modalitaOperativaScelta: modalitaOperativa,
         };
@@ -4986,9 +5065,7 @@ export function createHttpApp({
          */
         const esito = sessionRegistry.avvia(taskId, opzioniSessione, origineDellaRichiesta(req));
         if ('erroreAvvio' in esito) {
-          const errore = new Error(esito.erroreAvvio);
-          errore.code = esito.code;
-          throw errore;
+          throw erroreDelRegistro(esito);
         }
         if (req.aborted || res.destroyed) return;
         sendJson(res, 200, successEnvelope({ sessionId: esito.sessionId }, clock), method);
@@ -5024,26 +5101,26 @@ export function createHttpApp({
     if (method === 'POST' && searchSourceMatch) {
       try {
         requireNoQuery(url);
-        if (!searchSourceStore) { const error = new Error('Fonte di ricerca non configurata'); error.code = 'SEARCH_STORE_UNAVAILABLE'; throw error; }
+        if (!searchSourceStore) { const error = new Error('Search source not configured'); error.code = 'SEARCH_STORE_UNAVAILABLE'; throw error; }
         const azione = searchSourceMatch[1] ?? 'source';
         const body = await leggiCorpoJson(req, 16 * 1024);
         const keys = Object.keys(body || {});
         let data;
         if (azione === 'source') {
           if (keys.some((k) => !['source', 'endpoint'].includes(k)) || typeof body.source !== 'string' || (Object.hasOwn(body, 'endpoint') && typeof body.endpoint !== 'string')) {
-            const error = new Error('Corpo non valido'); error.code = 'QUERY_INVALID'; throw error;
+            const error = new Error('Invalid body'); error.code = 'QUERY_INVALID'; throw error;
           }
           data = searchSourceStore.setSource({ source: body.source, endpoint: body.endpoint });
         } else if (azione === 'key') {
-          if (keys.length !== 2 || typeof body.source !== 'string' || typeof body.key !== 'string') { const error = new Error('Corpo non valido'); error.code = 'QUERY_INVALID'; throw error; }
+          if (keys.length !== 2 || typeof body.source !== 'string' || typeof body.key !== 'string') { const error = new Error('Invalid body'); error.code = 'QUERY_INVALID'; throw error; }
           data = searchSourceStore.setKey(body.source, body.key);
         } else if (azione === 'key/remove') {
-          if (keys.length !== 1 || typeof body.source !== 'string') { const error = new Error('Corpo non valido'); error.code = 'QUERY_INVALID'; throw error; }
+          if (keys.length !== 1 || typeof body.source !== 'string') { const error = new Error('Invalid body'); error.code = 'QUERY_INVALID'; throw error; }
           data = searchSourceStore.clearKey(body.source);
         } else {
-          if (keys.some((k) => k !== 'query') || (Object.hasOwn(body, 'query') && typeof body.query !== 'string')) { const error = new Error('Corpo non valido'); error.code = 'QUERY_INVALID'; throw error; }
-          if (typeof provaRicercaWebFn !== 'function') { const error = new Error('Prova della ricerca non configurata'); error.code = 'SEARCH_STORE_UNAVAILABLE'; throw error; }
-          if (searchSourceStore.prontezza() !== 'pronta') { const error = new Error('La fonte non è pronta'); error.code = 'SEARCH_NOT_READY'; throw error; }
+          if (keys.some((k) => k !== 'query') || (Object.hasOwn(body, 'query') && typeof body.query !== 'string')) { const error = new Error('Invalid body'); error.code = 'QUERY_INVALID'; throw error; }
+          if (typeof provaRicercaWebFn !== 'function') { const error = new Error('Search test not configured'); error.code = 'SEARCH_STORE_UNAVAILABLE'; throw error; }
+          if (searchSourceStore.prontezza() !== 'pronta') { const error = new Error('The source is not ready'); error.code = 'SEARCH_NOT_READY'; throw error; }
           data = await provaRicercaWebFn(body.query || 'TALOS local-first coding agent');
         }
         sendJson(res, 200, successEnvelope(data, clock), method);
@@ -5062,10 +5139,10 @@ export function createHttpApp({
     if (method === 'POST' && url.pathname === '/api/v1/wsl') {
       try {
         requireNoQuery(url);
-        if (!preferenzeWslStore) { const error = new Error('Preferenze di WSL non configurate'); error.code = 'WSL_STORE_UNAVAILABLE'; throw error; }
+        if (!preferenzeWslStore) { const error = new Error('WSL preferences not configured'); error.code = 'WSL_STORE_UNAVAILABLE'; throw error; }
         const body = await leggiCorpoJson(req, 4 * 1024);
         const keys = Object.keys(body || {});
-        if (keys.length !== 1 || typeof body.usaUtenteNormale !== 'boolean') { const error = new Error('Corpo non valido'); error.code = 'QUERY_INVALID'; throw error; }
+        if (keys.length !== 1 || typeof body.usaUtenteNormale !== 'boolean') { const error = new Error('Invalid body'); error.code = 'QUERY_INVALID'; throw error; }
         preferenzeWslStore.imposta({ usaUtenteNormale: body.usaUtenteNormale });
         sendJson(res, 200, successEnvelope(await preferenzeWslStore.stato(), clock), method);
       } catch (error) {
@@ -5079,7 +5156,7 @@ export function createHttpApp({
     if (method === 'POST' && providerTestMatch) {
       try {
         requireNoQuery(url);
-        if (!providerProbe || typeof providerProbe.prova !== 'function') { const error = new Error('Prova provider non configurata'); error.code = 'PROVIDER_STORE_UNAVAILABLE'; throw error; }
+        if (!providerProbe || typeof providerProbe.prova !== 'function') { const error = new Error('Provider test not configured'); error.code = 'PROVIDER_STORE_UNAVAILABLE'; throw error; }
         const data = await providerProbe.prova(decodeURIComponent(providerTestMatch[1]));
         sendJson(res, 200, successEnvelope(data, clock), method);
       } catch (error) {
@@ -5094,7 +5171,7 @@ export function createHttpApp({
     if (method === 'POST' && (providerKeyMatch || providerRuntimeMatch)) {
       try {
         requireNoQuery(url);
-        if (!providerStore) { const error = new Error('Portachiavi provider non configurato'); error.code = 'PROVIDER_STORE_UNAVAILABLE'; throw error; }
+        if (!providerStore) { const error = new Error('Provider keychain not configured'); error.code = 'PROVIDER_STORE_UNAVAILABLE'; throw error; }
         const provider = decodeURIComponent((providerKeyMatch || providerRuntimeMatch)[1]);
         // P-K-bis: cinquanta modelli validi; P-L-bis: argomenti del processo entro schema.
         const limiteRuntime = provider === 'esterno' ? 1024 * 1024 : REGISTRO_FORNITORI[provider]?.cloud ? 64 * 1024 : 16 * 1024;
@@ -5106,18 +5183,18 @@ export function createHttpApp({
           const keys = Object.keys(body || {});
           if (remove) {
             if (pool) {
-              if (keys.length !== 1 || keys[0] !== 'impronta' || !/^[a-f0-9]{64}$/.test(body.impronta)) throw Object.assign(new Error('Corpo non valido'), { code: 'QUERY_INVALID' });
+              if (keys.length !== 1 || keys[0] !== 'impronta' || !/^[a-f0-9]{64}$/.test(body.impronta)) throw Object.assign(new Error('Invalid body'), { code: 'QUERY_INVALID' });
               data = providerStore.rimuoviChiave(provider, body.impronta);
             } else {
-              if (keys.length !== 0) throw Object.assign(new Error('Corpo non valido'), { code: 'QUERY_INVALID' });
+              if (keys.length !== 0) throw Object.assign(new Error('Invalid body'), { code: 'QUERY_INVALID' });
               data = providerStore.clearKey(provider);
             }
           } else {
             if (pool) {
-              if (!keys.includes('key') || keys.some(k => !['key','priorita'].includes(k))) throw Object.assign(new Error('Corpo non valido'), { code: 'QUERY_INVALID' });
+              if (!keys.includes('key') || keys.some(k => !['key','priorita'].includes(k))) throw Object.assign(new Error('Invalid body'), { code: 'QUERY_INVALID' });
               data = providerStore.aggiungiChiave(provider, body.key, { priorita: body.priorita });
             } else {
-              if (keys.length !== 1 || keys[0] !== 'key') throw Object.assign(new Error('Corpo non valido'), { code: 'QUERY_INVALID' });
+              if (keys.length !== 1 || keys[0] !== 'key') throw Object.assign(new Error('Invalid body'), { code: 'QUERY_INVALID' });
               data = providerStore.setKey(provider, body.key);
             }
           }
@@ -5125,7 +5202,7 @@ export function createHttpApp({
           const reset = providerRuntimeMatch[2] === 'reset';
           const keys = Object.keys(body || {});
           if (reset) {
-            if (keys.length !== 0) { const error = new Error('Corpo non valido'); error.code = 'QUERY_INVALID'; throw error; }
+            if (keys.length !== 0) { const error = new Error('Invalid body'); error.code = 'QUERY_INVALID'; throw error; }
             data = providerStore.resetEndpoint(provider);
           } else {
             /*
@@ -5148,7 +5225,7 @@ export function createHttpApp({
               || (agente ? !Object.hasOwn(body, 'agente') : cloud
                 ? (Object.hasOwn(body, 'endpoint') && typeof body.endpoint !== 'string')
                 : typeof body.endpoint !== 'string' || !Object.hasOwn(body, 'timeoutSeconds'))) {
-              const error = new Error('Corpo runtime non valido'); error.code = 'QUERY_INVALID'; throw error;
+              const error = new Error('Invalid runtime body'); error.code = 'QUERY_INVALID'; throw error;
             }
             data = providerStore.setRuntime(provider, body);
             // P-K-bis — fine
@@ -5167,7 +5244,7 @@ export function createHttpApp({
         requireNoQuery(url);
         const sessionId = decodeURIComponent(url.pathname.split('/')[4]);
         const stopped = sessionRegistry.ferma(sessionId);
-        if (!stopped) { const error = new Error('Sessione non trovata'); error.code = 'NOT_FOUND'; throw error; }
+        if (!stopped) { const error = new Error('Session not found'); error.code = 'NOT_FOUND'; throw error; }
         sendJson(res, 200, successEnvelope({ ok: true, sessionId }, clock), method);
       } catch (error) {
         const normalized = normalizeError(error);
@@ -5193,14 +5270,14 @@ export function createHttpApp({
     if (method === 'POST' && /^\/api\/v1\/sessions\/([^/]+)\/terminals$/.test(url.pathname)) {
       try {
         requireNoQuery(url);
-        if (!terminalRegistry) { const error = new Error('Terminali non disponibili'); error.code = 'TERMINAL_STORE_UNAVAILABLE'; throw error; }
+        if (!terminalRegistry) { const error = new Error('Terminals not available'); error.code = 'TERMINAL_STORE_UNAVAILABLE'; throw error; }
         const body = await leggiCorpoJson(req);
         /* ⛔ AL CONTRARIO — un corpo con QUALUNQUE chiave è rifiutato: la sessione la dice il percorso, mai il corpo (altrimenti tornerebbe un id scelto dal client da un'altra porta). */
         const keys = body && typeof body === 'object' && !Array.isArray(body) ? Object.keys(body) : [];
-        if (keys.length !== 0) { const error = new Error('Corpo non valido'); error.code = 'QUERY_INVALID'; throw error; }
+        if (keys.length !== 0) { const error = new Error('Invalid body'); error.code = 'QUERY_INVALID'; throw error; }
         const sessionId = decodeURIComponent(url.pathname.split('/')[4]);
         const esito = terminalRegistry.crea({ sessionId });
-        if ('erroreAvvio' in esito) { const error = new Error(esito.erroreAvvio); error.code = esito.code; throw error; }
+        if ('erroreAvvio' in esito) { throw erroreDelRegistro(esito); }
         sendJson(res, 200, successEnvelope(esito, clock), method);
       } catch (error) {
         const normalized = normalizeError(error);
@@ -5220,15 +5297,15 @@ export function createHttpApp({
     if (method === 'POST' && /^\/api\/v1\/sessions\/([^/]+)\/terminals\/([^/]+)\/close$/.test(url.pathname)) {
       try {
         requireNoQuery(url);
-        if (!terminalRegistry) { const error = new Error('Terminali non disponibili'); error.code = 'TERMINAL_STORE_UNAVAILABLE'; throw error; }
+        if (!terminalRegistry) { const error = new Error('Terminals not available'); error.code = 'TERMINAL_STORE_UNAVAILABLE'; throw error; }
         const body = await leggiCorpoJson(req);
         const keys = body && typeof body === 'object' && !Array.isArray(body) ? Object.keys(body) : [];
-        if (keys.length !== 0) { const error = new Error('Corpo non valido'); error.code = 'QUERY_INVALID'; throw error; }
+        if (keys.length !== 0) { const error = new Error('Invalid body'); error.code = 'QUERY_INVALID'; throw error; }
         const parti = url.pathname.split('/');
         const sessionId = decodeURIComponent(parti[4]);
         const terminalId = decodeURIComponent(parti[6]);
         const esito = terminalRegistry.chiudi({ sessionId, terminalId });
-        if ('erroreAvvio' in esito) { const error = new Error(esito.erroreAvvio); error.code = esito.code; throw error; }
+        if ('erroreAvvio' in esito) { throw erroreDelRegistro(esito); }
         sendJson(res, 200, successEnvelope(esito, clock), method);
       } catch (error) {
         const normalized = normalizeError(error);
@@ -5265,7 +5342,7 @@ export function createHttpApp({
     if (method === 'POST' && /^\/api\/v1\/sessions\/([^/]+)\/git\/(stage|unstage|commit|discard|commit-staged|amend|undo-commit|switch|branch-create|branch-rename|branch-delete|stash|stash-pop|stash-drop|hunk|commit-message|fetch|fetch-stop|pull|push|init)$/.test(url.pathname)) {
       try {
         requireNoQuery(url);
-        if (!gitService) { const error = new Error('Git non disponibile'); error.code = 'GIT_STORE_UNAVAILABLE'; throw error; }
+        if (!gitService) { const error = new Error('Git not available'); error.code = 'GIT_STORE_UNAVAILABLE'; throw error; }
         const body = await leggiCorpoJson(req);
         const parti = url.pathname.split('/');
         const sessionId = decodeURIComponent(parti[4]);
@@ -5299,7 +5376,7 @@ export function createHttpApp({
         const ammesse = AMMESSE[azione] ?? ['percorsi'];
         const chiavi = body && typeof body === 'object' && !Array.isArray(body) ? Object.keys(body) : null;
         if (chiavi === null || chiavi.some((k) => !ammesse.includes(k))) {
-          const error = new Error('Corpo non valido'); error.code = 'QUERY_INVALID'; throw error;
+          const error = new Error('Invalid body'); error.code = 'QUERY_INVALID'; throw error;
         }
         const PORTE = {
           commit: () => gitService.commit({ sessionId, percorsi: body.percorsi, messaggio: body.messaggio }),
@@ -5334,8 +5411,8 @@ export function createHttpApp({
            *   compattazione. Qui si mettono solo in fila: nessuna delle tre sa delle altre.
            */
           'commit-message': async () => {
-            if (typeof sessionRegistry?.chiediAllaSessione !== 'function') return { erroreAvvio: 'Il modello non è disponibile su questo server', code: 'MODEL_CALL_FAILED' };
-            if (body.bozza !== undefined && typeof body.bozza !== 'string') return { erroreAvvio: 'Corpo non valido', code: 'QUERY_INVALID' };
+            if (typeof sessionRegistry?.chiediAllaSessione !== 'function') return { erroreAvvio: 'The model is not available on this server', code: 'MODEL_CALL_FAILED' };
+            if (body.bozza !== undefined && typeof body.bozza !== 'string') return { erroreAvvio: 'Invalid body', code: 'QUERY_INVALID' };
             const d = await gitService.diffPerMessaggio({ sessionId });
             if ('erroreAvvio' in d) return d;
             const { testo, troncato } = comprimiDiffPerMessaggio(d.testo);
@@ -5343,12 +5420,12 @@ export function createHttpApp({
             const r = await sessionRegistry.chiediAllaSessione(sessionId, prompt);
             if ('erroreAvvio' in r) return r;
             const messaggio = pulisciMessaggioGenerato(r.testo);
-            if (!messaggio) return { erroreAvvio: 'Il modello non ha scritto un messaggio', code: 'MODEL_CALL_FAILED' };
+            if (!messaggio) return { erroreAvvio: 'The model did not write a message', code: 'MODEL_CALL_FAILED' };
             return { messaggio, area: d.area, troncato, modello: r.modello };
           },
         };
         const esito = PORTE[azione] ? await PORTE[azione]() : await gitService[azione]({ sessionId, percorsi: body.percorsi });
-        if ('erroreAvvio' in esito) { const error = new Error(esito.erroreAvvio); error.code = esito.code; throw error; }
+        if ('erroreAvvio' in esito) { throw erroreDelRegistro(esito); }
         sendJson(res, 200, successEnvelope(esito, clock), method);
       } catch (error) {
         const normalized = normalizeError(error);
@@ -5365,24 +5442,24 @@ export function createHttpApp({
     if (method === 'POST' && (/^\/api\/v1\/github\/(install|login|login-cancel)$/.test(url.pathname) || /^\/api\/v1\/sessions\/([^/]+)\/github\/pulls$/.test(url.pathname))) {
       try {
         requireNoQuery(url);
-        if (!ghService) { const error = new Error('GitHub non disponibile'); error.code = 'GH_STORE_UNAVAILABLE'; throw error; }
+        if (!ghService) { const error = new Error('GitHub not available'); error.code = 'GH_STORE_UNAVAILABLE'; throw error; }
         const body = await leggiCorpoJson(req);
         const chiavi = body && typeof body === 'object' && !Array.isArray(body) ? Object.keys(body) : null;
         const crea = url.pathname.endsWith('/github/pulls');
         /* ⛔ AL CONTRARIO — solo le chiavi previste: un corpo che ne porta altre è rifiutato, mai ignorato in silenzio */
         const ammesse = crea ? ['titolo', 'testo', 'base', 'bozza'] : [];
-        if (chiavi === null || chiavi.some((k) => !ammesse.includes(k))) { const error = new Error('Corpo non valido'); error.code = 'QUERY_INVALID'; throw error; }
+        if (chiavi === null || chiavi.some((k) => !ammesse.includes(k))) { const error = new Error('Invalid body'); error.code = 'QUERY_INVALID'; throw error; }
         let esito;
         if (crea) {
           let sessionId;
           try { sessionId = decodeURIComponent(url.pathname.split('/')[4]); } catch { sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method); return; }
-          if (body.bozza !== undefined && typeof body.bozza !== 'boolean') { const error = new Error('Corpo non valido'); error.code = 'QUERY_INVALID'; throw error; }
+          if (body.bozza !== undefined && typeof body.bozza !== 'boolean') { const error = new Error('Invalid body'); error.code = 'QUERY_INVALID'; throw error; }
           esito = await ghService.crea({ sessionId, titolo: body.titolo, testo: body.testo ?? '', base: body.base, bozza: body.bozza === true });
         } else {
           const azione = url.pathname.split('/').pop();
           esito = azione === 'install' ? await ghService.installa() : azione === 'login' ? await ghService.collega() : await ghService.annullaCollegamento();
         }
-        if ('erroreAvvio' in esito) { const error = new Error(esito.erroreAvvio); error.code = esito.code; throw error; }
+        if ('erroreAvvio' in esito) { throw erroreDelRegistro(esito); }
         sendJson(res, 200, successEnvelope(esito, clock), method);
       } catch (error) {
         const normalized = normalizeError(error);
@@ -5395,9 +5472,9 @@ export function createHttpApp({
       try {
         requireNoQuery(url);
         const body = await leggiCorpoJson(req);
-        if (!localRuntimes || typeof body?.runtimeId !== 'string' || typeof body?.modelId !== 'string') { const error = new Error('Corpo runtime non valido'); error.code = 'QUERY_INVALID'; throw error; }
+        if (!localRuntimes || typeof body?.runtimeId !== 'string' || typeof body?.modelId !== 'string') { const error = new Error('Invalid runtime body'); error.code = 'QUERY_INVALID'; throw error; }
         const runtime = localRuntimes[body.runtimeId];
-        if (!runtime || typeof runtime.load !== 'function') { const error = new Error('Runtime locale non disponibile'); error.code = 'RUNTIME_NOT_AVAILABLE'; throw error; }
+        if (!runtime || typeof runtime.load !== 'function') { const error = new Error('Local runtime not available'); error.code = 'RUNTIME_NOT_AVAILABLE'; throw error; }
         const data = await runtime.load(body.modelId, { contextLength: body.contextLength });
         sendJson(res, 200, successEnvelope(data, clock), method);
       } catch (error) {
@@ -5425,9 +5502,9 @@ export function createHttpApp({
          * ⛔ Trovato provando il pulsante «Libera la memoria» dal vivo con un
          * modello VERAMENTE caricato — nessun test copriva questa rotta.
          */
-        if (!localRuntimes || typeof body?.runtimeId !== 'string' || (body?.modelId !== undefined && typeof body.modelId !== 'string')) { const error = new Error('Corpo runtime non valido'); error.code = 'QUERY_INVALID'; throw error; }
+        if (!localRuntimes || typeof body?.runtimeId !== 'string' || (body?.modelId !== undefined && typeof body.modelId !== 'string')) { const error = new Error('Invalid runtime body'); error.code = 'QUERY_INVALID'; throw error; }
         const runtime = localRuntimes[body.runtimeId];
-        if (!runtime || typeof runtime.unload !== 'function') { const error = new Error('Runtime locale non disponibile'); error.code = 'RUNTIME_NOT_AVAILABLE'; throw error; }
+        if (!runtime || typeof runtime.unload !== 'function') { const error = new Error('Local runtime not available'); error.code = 'RUNTIME_NOT_AVAILABLE'; throw error; }
         const data = await runtime.unload(body.modelId);
         sendJson(res, 200, successEnvelope(data, clock), method);
       } catch (error) {
@@ -5445,8 +5522,8 @@ export function createHttpApp({
         const filename = String(req.headers['x-talos-model-filename'] || '').trim();
         const nameHeader = req.headers['x-talos-model-name'];
         const expectedBytes = Number(req.headers['x-talos-model-bytes']);
-        if (contentType !== 'application/octet-stream' || !id || !filename || !Number.isSafeInteger(expectedBytes) || expectedBytes <= 0) { const error = new Error('Scegli un file GGUF valido'); error.code = 'LOCAL_IMPORT_INVALID'; throw error; }
-        if (!localModelTransfer || typeof localModelTransfer.importStream !== 'function') { const error = new Error('Import locale non disponibile'); error.code = 'RUNTIME_NOT_AVAILABLE'; throw error; }
+        if (contentType !== 'application/octet-stream' || !id || !filename || !Number.isSafeInteger(expectedBytes) || expectedBytes <= 0) { const error = new Error('Choose a valid GGUF file'); error.code = 'LOCAL_IMPORT_INVALID'; throw error; }
+        if (!localModelTransfer || typeof localModelTransfer.importStream !== 'function') { const error = new Error('Local import not available'); error.code = 'RUNTIME_NOT_AVAILABLE'; throw error; }
         const data = await localModelTransfer.importStream(req, { id, filename, expectedBytes, ...(typeof nameHeader === 'string' ? { name: nameHeader } : {}) });
         sendJson(res, 200, successEnvelope(data, clock), method);
       } catch (error) {
@@ -5461,18 +5538,18 @@ export function createHttpApp({
         requireNoQuery(url);
         const match = /^\/api\/v1\/local-models\/([^/]+)\/(rename|copy-path|delete)$/.exec(url.pathname);
         const id = decodeURIComponent(match[1]);
-        if (!localModelStore) { const error = new Error('Modelli locali non configurati'); error.code = 'RUNTIME_NOT_AVAILABLE'; throw error; }
+        if (!localModelStore) { const error = new Error('Local models not configured'); error.code = 'RUNTIME_NOT_AVAILABLE'; throw error; }
         const action = match[2];
         if (action === 'rename') {
           const body = await leggiCorpoJson(req);
-          if (typeof localModelStore.rename !== 'function' || typeof body?.name !== 'string') { const error = new Error('Nome modello non valido'); error.code = 'QUERY_INVALID'; throw error; }
+          if (typeof localModelStore.rename !== 'function' || typeof body?.name !== 'string') { const error = new Error('Invalid model name'); error.code = 'QUERY_INVALID'; throw error; }
           sendJson(res, 200, successEnvelope(await localModelStore.rename(id, body.name), clock), method);
         } else if (action === 'copy-path') {
           const model = typeof localModelStore.inspect === 'function' ? await localModelStore.inspect(id) : null;
-          if (!model) { const error = new Error('Modello non trovato'); error.code = 'NOT_FOUND'; throw error; }
+          if (!model) { const error = new Error('Model not found'); error.code = 'NOT_FOUND'; throw error; }
           sendJson(res, 200, successEnvelope({ id, path: model.path }, clock), method);
         } else {
-          if (typeof localModelStore.remove !== 'function') { const error = new Error('Eliminazione modello non configurata'); error.code = 'RUNTIME_NOT_AVAILABLE'; throw error; }
+          if (typeof localModelStore.remove !== 'function') { const error = new Error('Model deletion not configured'); error.code = 'RUNTIME_NOT_AVAILABLE'; throw error; }
           await localModelStore.remove(id);
           sendJson(res, 200, successEnvelope({ id, deleted: true }, clock), method);
         }
@@ -5502,8 +5579,8 @@ export function createHttpApp({
      */
     if (method === 'GET' && url.pathname === '/api/v1/local-models/fit-estimate') {
       try {
-        if (!localRuntimeProbe) { const error = new Error('Probe runtime locale non configurato'); error.code = 'RUNTIME_NOT_AVAILABLE'; throw error; }
-        for (const key of url.searchParams.keys()) { if (key !== 'bytes' && key !== 'contextTokens') { const error = new Error('Query non valida'); error.code = 'QUERY_INVALID'; throw error; } }
+        if (!localRuntimeProbe) { const error = new Error('Local runtime probe not configured'); error.code = 'RUNTIME_NOT_AVAILABLE'; throw error; }
+        for (const key of url.searchParams.keys()) { if (key !== 'bytes' && key !== 'contextTokens') { const error = new Error('Invalid query'); error.code = 'QUERY_INVALID'; throw error; } }
         const bytes = Number(url.searchParams.get('bytes'));
         const contextRaw = url.searchParams.get('contextTokens');
         const contextTokens = contextRaw === null ? null : Number(contextRaw);
@@ -5520,18 +5597,18 @@ export function createHttpApp({
       try {
         const match = /^\/api\/v1\/local-models\/([^/]+)\/fit$/.exec(url.pathname);
         const id = decodeURIComponent(match[1]);
-        if (!localRuntimeProbe) { const error = new Error('Probe runtime locale non configurato'); error.code = 'RUNTIME_NOT_AVAILABLE'; throw error; }
+        if (!localRuntimeProbe) { const error = new Error('Local runtime probe not configured'); error.code = 'RUNTIME_NOT_AVAILABLE'; throw error; }
         const profileParam = url.searchParams.get('profile');
         const contextParam = url.searchParams.get('contextTokens');
         const options = {};
         if (profileParam !== null) options.profile = profileParam;
         if (contextParam !== null) {
           const parsed = Number(contextParam);
-          if (!Number.isSafeInteger(parsed) || parsed <= 0) { const error = new Error('contextTokens non valido'); error.code = 'FIT_INVALID'; throw error; }
+          if (!Number.isSafeInteger(parsed) || parsed <= 0) { const error = new Error('invalid contextTokens'); error.code = 'FIT_INVALID'; throw error; }
           options.contextTokens = parsed;
         }
         // Solo profile/contextTokens sono ammessi — qualunque altro parametro è un errore, non ignorato in silenzio.
-        for (const key of url.searchParams.keys()) { if (key !== 'profile' && key !== 'contextTokens') { const error = new Error('Query non valida'); error.code = 'QUERY_INVALID'; throw error; } }
+        for (const key of url.searchParams.keys()) { if (key !== 'profile' && key !== 'contextTokens') { const error = new Error('Invalid query'); error.code = 'QUERY_INVALID'; throw error; } }
         const data = await localRuntimeProbe.fit(id, options);
         sendJson(res, 200, successEnvelope(data, clock), method);
       } catch (error) {
@@ -5555,12 +5632,12 @@ export function createHttpApp({
         requireNoQuery(url);
         const match = /^\/api\/v1\/local-models\/([^/]+)\/qualify$/.exec(url.pathname);
         const id = decodeURIComponent(match[1]);
-        if (!localRuntimeProbe) { const error = new Error('Probe runtime locale non configurato'); error.code = 'RUNTIME_NOT_AVAILABLE'; throw error; }
+        if (!localRuntimeProbe) { const error = new Error('Local runtime probe not configured'); error.code = 'RUNTIME_NOT_AVAILABLE'; throw error; }
         const body = await leggiCorpoJson(req);
         const options = { modelId: id, consent: body?.consent === true };
         if (typeof body?.profile === 'string') options.profile = body.profile;
         if (body?.contextTokens !== undefined) {
-          if (!Number.isSafeInteger(body.contextTokens) || body.contextTokens <= 0) { const error = new Error('contextTokens non valido'); error.code = 'FIT_INVALID'; throw error; }
+          if (!Number.isSafeInteger(body.contextTokens) || body.contextTokens <= 0) { const error = new Error('invalid contextTokens'); error.code = 'FIT_INVALID'; throw error; }
           options.contextTokens = body.contextTokens;
         }
         const data = await localRuntimeProbe.qualify(options);
@@ -5578,7 +5655,7 @@ export function createHttpApp({
         const body = await leggiCorpoJson(req, 1_000_000);
         // 08/9, BH-07 — prima l'input di chi chiama, poi il servizio: stesso ordine di /huggingface/repo e /huggingface/image, e un corpo malformato non torna valido aspettando (vedi la doc su requireHuggingFaceDownloadBody)
         requireHuggingFaceDownloadBody(body);
-        if (!localModelTransfer || typeof localModelTransfer.start !== 'function') { const error = new Error('Download Hugging Face non configurato'); error.code = 'RUNTIME_NOT_AVAILABLE'; throw error; }
+        if (!localModelTransfer || typeof localModelTransfer.start !== 'function') { const error = new Error('Hugging Face download not configured'); error.code = 'RUNTIME_NOT_AVAILABLE'; throw error; }
         const data = await localModelTransfer.start(body);
         sendJson(res, 200, successEnvelope(data, clock), method);
       } catch (error) { const normalized = normalizeError(error); sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method); }
@@ -5587,8 +5664,8 @@ export function createHttpApp({
     if (method === 'POST' && /^\/api\/v1\/huggingface\/downloads\/([^/]+)\/(pause|resume|cancel)$/.test(url.pathname)) {
       try {
         requireNoQuery(url); const match = /^\/api\/v1\/huggingface\/downloads\/([^/]+)\/(pause|resume|cancel)$/.exec(url.pathname); const id = decodeURIComponent(match[1]);
-        if (!localModelTransfer || typeof localModelTransfer[match[2]] !== 'function') { const error = new Error('Download Hugging Face non configurato'); error.code = 'RUNTIME_NOT_AVAILABLE'; throw error; }
-        const changed = await localModelTransfer[match[2]](id); if (!changed) { const error = new Error('Download non trovato o non modificabile'); error.code = 'NOT_FOUND'; throw error; }
+        if (!localModelTransfer || typeof localModelTransfer[match[2]] !== 'function') { const error = new Error('Hugging Face download not configured'); error.code = 'RUNTIME_NOT_AVAILABLE'; throw error; }
+        const changed = await localModelTransfer[match[2]](id); if (!changed) { const error = new Error('Download not found or not modifiable'); error.code = 'NOT_FOUND'; throw error; }
         sendJson(res, 200, successEnvelope(localModelTransfer.status(id), clock), method);
       } catch (error) { const normalized = normalizeError(error); sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method); }
       return;
@@ -5609,9 +5686,7 @@ export function createHttpApp({
         if (immagini.length) richiesta.immagini = immagini;
         const esito = sessionRegistry.avviaLibero(richiesta, origineDellaRichiesta(req));
         if ('erroreAvvio' in esito) {
-          const errore = new Error(esito.erroreAvvio);
-          errore.code = esito.code;
-          throw errore;
+          throw erroreDelRegistro(esito);
         }
         if (req.aborted || res.destroyed) return;
         sendJson(res, 200, successEnvelope({ sessionId: esito.sessionId }, clock), method);
@@ -5682,7 +5757,7 @@ export function createHttpApp({
         }
         const corpo = await leggiCorpoJson(req);
         if (Object.keys(corpo ?? {}).length !== 0) {
-          const errore = new Error('Corpo non valido: atteso {}'); errore.code = 'QUERY_INVALID'; throw errore;
+          const errore = new Error('Invalid body: expected {}'); errore.code = 'QUERY_INVALID'; throw errore;
         }
         await automationStore.elimina(automationId);
         if (req.aborted || res.destroyed) return;
@@ -5710,9 +5785,7 @@ export function createHttpApp({
         const nome = requireNomeBody(corpo);
         const esito = await sessionRegistry.rinomina(sessionId, nome);
         if ('erroreAvvio' in esito) {
-          const errore = new Error(esito.erroreAvvio);
-          errore.code = esito.code;
-          throw errore;
+          throw erroreDelRegistro(esito);
         }
         if (req.aborted || res.destroyed) return;
         sendJson(res, 200, successEnvelope({ ok: true }, clock), method);
@@ -5753,15 +5826,13 @@ export function createHttpApp({
         const runDellaSessione = puoAvereWorkflow ? await listRunSummariesForSession(workflowStore, { rootSessionId: sessionId }) : [];
         const inCorso = runDellaSessione.filter((r) => !['succeeded', 'failed', 'cancelled'].includes(r.status));
         if (inCorso.length > 0) {
-          const errore = new Error(`${inCorso.length} Workflow ancora in corso`);
+          const errore = new Error(`${inCorso.length} Workflow(s) still running`);
           errore.code = 'WORKFLOW_RUN_NOT_FINISHED';
           throw errore;
         }
         const esito = await sessionRegistry.elimina(sessionId);
         if ('erroreAvvio' in esito) {
-          const errore = new Error(esito.erroreAvvio);
-          errore.code = esito.code;
-          throw errore;
+          throw erroreDelRegistro(esito);
         }
         const workflowNonEliminati = [];
         let workflowEliminati = 0;
@@ -5806,9 +5877,7 @@ export function createHttpApp({
         const { percorso, nuovoNome } = requireRinominaBody(corpo);
         const esito = await sessionRegistry.rinominaFile(sessionId, percorso, nuovoNome);
         if ('erroreAvvio' in esito) {
-          const errore = new Error(esito.erroreAvvio);
-          errore.code = esito.code;
-          throw errore;
+          throw erroreDelRegistro(esito);
         }
         if (req.aborted || res.destroyed) return;
         sendJson(res, 200, successEnvelope({ nuovoPercorso: esito.nuovoPercorso }, clock), method);
@@ -5835,9 +5904,7 @@ export function createHttpApp({
         const percorso = requirePercorsoBody(corpo);
         const esito = await sessionRegistry.eliminaFile(sessionId, percorso);
         if ('erroreAvvio' in esito) {
-          const errore = new Error(esito.erroreAvvio);
-          errore.code = esito.code;
-          throw errore;
+          throw erroreDelRegistro(esito);
         }
         if (req.aborted || res.destroyed) return;
         sendJson(res, 200, successEnvelope({ eliminato: true }, clock), method);
@@ -5864,9 +5931,7 @@ export function createHttpApp({
         const percorso = requirePercorsoBody(corpo);
         const esito = await sessionRegistry.rivelaFile(sessionId, percorso);
         if ('erroreAvvio' in esito) {
-          const errore = new Error(esito.erroreAvvio);
-          errore.code = esito.code;
-          throw errore;
+          throw erroreDelRegistro(esito);
         }
         if (req.aborted || res.destroyed) return;
         sendJson(res, 200, successEnvelope({ rivelato: true }, clock), method);
@@ -5901,9 +5966,7 @@ export function createHttpApp({
         const percorso = requirePercorsoBody(corpo);
         const esito = await sessionRegistry.apriInEsploraFile(sessionId, percorso);
         if ('erroreAvvio' in esito) {
-          const errore = new Error(esito.erroreAvvio);
-          errore.code = esito.code;
-          throw errore;
+          throw erroreDelRegistro(esito);
         }
         if (req.aborted || res.destroyed) return;
         sendJson(res, 200, successEnvelope({ aperto: true }, clock), method);
@@ -5935,9 +5998,7 @@ export function createHttpApp({
         const { percorso, cartellaDestinazione } = requireSpostaBody(corpo);
         const esito = await sessionRegistry.spostaFile(sessionId, percorso, cartellaDestinazione);
         if ('erroreAvvio' in esito) {
-          const errore = new Error(esito.erroreAvvio);
-          errore.code = esito.code;
-          throw errore;
+          throw erroreDelRegistro(esito);
         }
         if (req.aborted || res.destroyed) return;
         sendJson(res, 200, successEnvelope({ nuovoPercorso: esito.nuovoPercorso }, clock), method);
@@ -5964,9 +6025,7 @@ export function createHttpApp({
         const percorso = requirePercorsoBody(corpo);
         const esito = await sessionRegistry.copiaFile(sessionId, percorso);
         if ('erroreAvvio' in esito) {
-          const errore = new Error(esito.erroreAvvio);
-          errore.code = esito.code;
-          throw errore;
+          throw erroreDelRegistro(esito);
         }
         if (req.aborted || res.destroyed) return;
         sendJson(res, 200, successEnvelope({ nuovoPercorso: esito.nuovoPercorso }, clock), method);
@@ -5993,9 +6052,7 @@ export function createHttpApp({
         const { percorsoBase, nome, tipo } = requireCreaVoceBody(corpo);
         const esito = await sessionRegistry.creaVoceWorkspace(sessionId, percorsoBase, nome, tipo);
         if ('erroreAvvio' in esito) {
-          const errore = new Error(esito.erroreAvvio);
-          errore.code = esito.code;
-          throw errore;
+          throw erroreDelRegistro(esito);
         }
         if (req.aborted || res.destroyed) return;
         sendJson(res, 200, successEnvelope({ percorso: esito.percorso }, clock), method);
@@ -6085,9 +6142,7 @@ export function createHttpApp({
         const { messaggio, redirectId } = requireRedirectBody(body);
         const esito = sessionRegistry.reindirizza(sessionId, messaggio, { ...(redirectId ? { redirectId } : {}), ...(immagini.length ? { immagini } : {}) });
         if ('erroreAvvio' in esito) {
-          const errore = new Error(esito.erroreAvvio);
-          errore.code = esito.code;
-          throw errore;
+          throw erroreDelRegistro(esito);
         }
         if (req.aborted || res.destroyed) return;
         sendJson(res, 200, successEnvelope({ ok: true, redirectId: esito.redirectId }, clock), method);
@@ -6116,9 +6171,7 @@ export function createHttpApp({
         if (sessionRegistry.staChiudendoIlGiro?.(sessionIdOrigine)) await sessionRegistry.attendiFuoriDallaFinestra(sessionIdOrigine);
         const esito = sessionRegistry.forka(sessionIdOrigine);
         if ('erroreAvvio' in esito) {
-          const errore = new Error(esito.erroreAvvio);
-          errore.code = esito.code;
-          throw errore;
+          throw erroreDelRegistro(esito);
         }
         if (req.aborted || res.destroyed) return;
         sendJson(res, 200, successEnvelope({ sessionId: esito.sessionId }, clock), method);
@@ -6151,14 +6204,12 @@ export function createHttpApp({
          */
         const { body, immagini } = await imageInput(await leggiCorpoJson(req));
         const nuovoMessaggioUtente = requireResumeBody(body);
-        if (!nuovoMessaggioUtente && immagini.length) throw Object.assign(new Error('Scrivi un messaggio per inviare le immagini.'), { code: 'QUERY_INVALID' });
+        if (!nuovoMessaggioUtente && immagini.length) throw Object.assign(new Error('Write a message to send the images.'), { code: 'QUERY_INVALID' });
         /* REV-SESSION-READY v2: come per il fork, la finestra di chiusura si aspetta. */
         if (sessionRegistry.staChiudendoIlGiro?.(sessionId)) await sessionRegistry.attendiFuoriDallaFinestra(sessionId);
         const esito = sessionRegistry.resume(sessionId, nuovoMessaggioUtente, immagini);
         if ('erroreAvvio' in esito) {
-          const errore = new Error(esito.erroreAvvio);
-          errore.code = esito.code;
-          throw errore;
+          throw erroreDelRegistro(esito);
         }
         if (req.aborted || res.destroyed) return;
         sendJson(res, 200, successEnvelope({ sessionId: esito.sessionId }, clock), method);
@@ -6176,11 +6227,11 @@ export function createHttpApp({
         const corpo = await leggiCorpoJson(req, MAX_REQUEST_BODY_BYTES);
         if (!corpo || typeof corpo !== 'object' || Array.isArray(corpo)
           || Object.keys(corpo).some((chiave) => chiave !== 'domanda')) {
-          throw Object.assign(new Error('Il corpo accetta soltanto la domanda.'), { code: 'QUERY_INVALID' });
+          throw Object.assign(new Error('The body accepts only the question.'), { code: 'QUERY_INVALID' });
         }
         const domanda = typeof corpo.domanda === 'string' ? corpo.domanda.trim() : '';
         if (!domanda || Array.from(domanda).length > MAX_DOMANDA_ASSISTENZA) {
-          throw Object.assign(new Error(`La domanda deve contenere da 1 a ${MAX_DOMANDA_ASSISTENZA} caratteri.`), { code: 'QUERY_INVALID' });
+          throw Object.assign(new Error(`The question must contain 1 to ${MAX_DOMANDA_ASSISTENZA} characters.`), { code: 'QUERY_INVALID' });
         }
         const risposta = await cercaAssistenzaFn({ domanda, cartella: cartellaAssistenza });
         if (req.aborted || res.destroyed) return;
@@ -6204,12 +6255,15 @@ export function createHttpApp({
           sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method);
           return;
         }
-        const patch = requireSessionSettingsBody(await leggiCorpoJson(req));
-        const esito = await sessionRegistry.aggiornaImpostazioni(sessionId, patch);
+        const { linguaInterfaccia, ...patch } = requireSessionSettingsBody(await leggiCorpoJson(req));
+        /* K3b (03/10/2026): la lingua dell'interfaccia non è una preferenza della conversazione: si tiene a parte, e può arrivare da sola. */
+        if (linguaInterfaccia !== undefined) {
+          const lingua = sessionRegistry.impostaLinguaInterfaccia(sessionId, linguaInterfaccia);
+          if ('erroreAvvio' in lingua) throw erroreDelRegistro(lingua);
+        }
+        const esito = Object.keys(patch).length ? await sessionRegistry.aggiornaImpostazioni(sessionId, patch) : { aggiornate: true };
         if ('erroreAvvio' in esito) {
-          const errore = new Error(esito.erroreAvvio);
-          errore.code = esito.code;
-          throw errore;
+          throw erroreDelRegistro(esito);
         }
         if (req.aborted || res.destroyed) return;
         sendJson(res, 200, successEnvelope({ updated: true }, clock), method);
@@ -6255,7 +6309,7 @@ export function createHttpApp({
         catch { sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method); return; }
         if (typeof sessionRegistry.annullaCompattazione !== 'function') { sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method); return; }
         const esito = await sessionRegistry.annullaCompattazione(sessionId, at);
-        if ('erroreAvvio' in esito) { const errore = new Error(esito.erroreAvvio); errore.code = esito.code; throw errore; }
+        if ('erroreAvvio' in esito) { throw erroreDelRegistro(esito); }
         if (req.aborted || res.destroyed) return;
         sendJson(res, 200, successEnvelope({ annullata: true }, clock), method);
       } catch (error) {
@@ -6274,7 +6328,7 @@ export function createHttpApp({
         try { sessionId = decodeURIComponent(policyMatch[1]); }
         catch { sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method); return; }
         const policy = sessionRegistry.politicaCompattazione(sessionId);
-        if ('erroreAvvio' in policy) { const error = new Error(policy.erroreAvvio); error.code = policy.code; throw error; }
+        if ('erroreAvvio' in policy) { throw erroreDelRegistro(policy); }
         if (req.aborted || res.destroyed) return;
         sendJson(res, 200, successEnvelope(policy, clock), method);
       } catch (error) {
@@ -6298,9 +6352,7 @@ export function createHttpApp({
         }
         const esito = await sessionRegistry.compatta(sessionId);
         if ('erroreAvvio' in esito) {
-          const errore = new Error(esito.erroreAvvio);
-          errore.code = esito.code;
-          throw errore;
+          throw erroreDelRegistro(esito);
         }
         if (req.aborted || res.destroyed) return;
         /* 26/09: con `at` e le stime quando la storia è stata ridotta — la chat aggiorna la riga e la misura (`compattaLegacy`). */
@@ -6363,15 +6415,15 @@ export function createHttpApp({
         const corpo = await leggiCorpoJson(req, 64 * 1024);
         const chiaviAmmesse = ['prompt', 'profondita'];
         if (!corpo || typeof corpo !== 'object' || Array.isArray(corpo) || Object.keys(corpo).some((k) => !chiaviAmmesse.includes(k))) {
-          const e = new Error('Corpo non valido: si accettano solo `prompt` e `profondita`.'); e.code = 'QUERY_INVALID'; throw e;
+          const e = new Error('Invalid body: only `prompt` and `profondita` are accepted.'); e.code = 'QUERY_INVALID'; throw e;
         }
         const prompt = typeof corpo.prompt === 'string' ? corpo.prompt.trim() : '';
-        if (prompt === '') { const e = new Error('Scrivi qualcosa prima di farlo migliorare.'); e.code = 'QUERY_INVALID'; throw e; }
+        if (prompt === '') { const e = new Error('Write something before asking for it to be improved.'); e.code = 'QUERY_INVALID'; throw e; }
         if (lunghezzaInCaratteri(prompt) > PROMPT_ENHANCER_MAX_CARATTERI) {
-          const e = new Error(`Il testo supera i ${PROMPT_ENHANCER_MAX_CARATTERI} caratteri.`); e.code = 'QUERY_INVALID'; throw e;
+          const e = new Error(`The text exceeds ${PROMPT_ENHANCER_MAX_CARATTERI} characters.`); e.code = 'QUERY_INVALID'; throw e;
         }
         const profondita = normalizzaProfonditaPrompt(corpo.profondita);
-        if (profondita === null) { const e = new Error('Livello di riscrittura sconosciuto.'); e.code = 'QUERY_INVALID'; throw e; }
+        if (profondita === null) { const e = new Error('Unknown rewrite level.'); e.code = 'QUERY_INVALID'; throw e; }
 
         const contesto = typeof sessionRegistry.leggiSessioneContesto === 'function'
           ? sessionRegistry.leggiSessioneContesto(sessionId) : null;
@@ -6393,7 +6445,7 @@ export function createHttpApp({
         if (contesto.provider === 'local' || (contesto.runtimeId && contesto.modelId)) {
           const runtime = localRuntimes?.[contesto.runtimeId];
           if (!runtime || typeof runtime.generateStream !== 'function') {
-            const e = new Error('Il motore locale di questa sessione non è disponibile.'); e.code = 'RUNTIME_NOT_AVAILABLE'; throw e;
+            const e = new Error('This session’s local engine is not available.'); e.code = 'RUNTIME_NOT_AVAILABLE'; throw e;
           }
           modelloUsato = contesto.modelId || contesto.modello;
           fornitoreUsato = contesto.runtimeId;
@@ -6403,7 +6455,7 @@ export function createHttpApp({
           })) {
             if (evento?.type === 'text' && typeof evento.value === 'string') contenuto += evento.value;
             if (evento?.type === 'error') {
-              const e = new Error('Il motore locale non ha completato la riscrittura.'); e.code = 'RUNTIME_NOT_AVAILABLE'; throw e;
+              const e = new Error('The local engine did not complete the rewrite.'); e.code = 'RUNTIME_NOT_AVAILABLE'; throw e;
             }
           }
         } else {
@@ -6425,7 +6477,7 @@ export function createHttpApp({
            * miglioramento vuoto da mostrare. Un modello che risponde fuori formato è un
            * caso ritentabile e si dice così: la UI offre «Riprova», non un testo finto.
            */
-          const e = new Error('Il modello ha risposto in un formato che non si può usare.');
+          const e = new Error('The model answered in a format that cannot be used.');
           e.code = 'PROVIDER_RUNTIME_UNAVAILABLE'; throw e;
         }
         if (req.aborted || res.destroyed) return;
@@ -6455,7 +6507,7 @@ export function createHttpApp({
         catch { sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method); return; }
         const corpo = await leggiCorpoJson(req);
         const esito = await sessionRegistry.doveGiranoIComandi(sessionId, corpo?.dove ?? null);
-        if ('erroreAvvio' in esito) { const e = new Error(esito.erroreAvvio); e.code = esito.code; throw e; }
+        if ('erroreAvvio' in esito) { throw erroreDelRegistro(esito); }
         if (req.aborted || res.destroyed) return;
         sendJson(res, 200, successEnvelope({ ok: true, dove: esito.dove }, clock), method);
       } catch (error) {
@@ -6488,7 +6540,7 @@ export function createHttpApp({
         try { sessionId = decodeURIComponent(leggiComandiMatch[1]); }
         catch { sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method); return; }
         const esito = sessionRegistry.impostazioniComandi(sessionId);
-        if ('erroreAvvio' in esito) { const e = new Error(esito.erroreAvvio); e.code = esito.code; throw e; }
+        if ('erroreAvvio' in esito) { throw erroreDelRegistro(esito); }
         if (req.aborted || res.destroyed) return;
         sendJson(res, 200, successEnvelope({ dove: esito.dove, comandiNellaConversazione: esito.comandiNellaConversazione }, clock), method);
       } catch (error) {
@@ -6508,7 +6560,7 @@ export function createHttpApp({
         catch { sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method); return; }
         const corpo = await leggiCorpoJson(req);
         const esito = await sessionRegistry.comandiNellaConversazione(sessionId, corpo?.acceso);
-        if ('erroreAvvio' in esito) { const e = new Error(esito.erroreAvvio); e.code = esito.code; throw e; }
+        if ('erroreAvvio' in esito) { throw erroreDelRegistro(esito); }
         if (req.aborted || res.destroyed) return;
         sendJson(res, 200, successEnvelope({ ok: true, acceso: esito.acceso }, clock), method);
       } catch (error) {
@@ -6534,11 +6586,11 @@ export function createHttpApp({
         const corpo = await leggiCorpoJson(req);
         if (!corpo || typeof corpo !== 'object' || Array.isArray(corpo) || typeof corpo.requestId !== 'string' || !corpo.requestId
           || Object.keys(corpo).some((chiave) => !['requestId', 'action', 'content'].includes(chiave))) {
-          const errore = new Error('Corpo non valido'); errore.code = 'QUERY_INVALID'; throw errore;
+          const errore = new Error('Invalid body'); errore.code = 'QUERY_INVALID'; throw errore;
         }
         const { requestId, ...risposta } = corpo;
         const esito = await sessionRegistry.rispondiElicitazioneMcp(sessionId, requestId, risposta);
-        if ('erroreAvvio' in esito) { const errore = new Error(esito.erroreAvvio); errore.code = esito.code; throw errore; }
+        if ('erroreAvvio' in esito) { throw erroreDelRegistro(esito); }
         if (req.aborted || res.destroyed) return;
         sendJson(res, 200, successEnvelope({ ok: true }, clock), method);
       } catch (error) {
@@ -6564,9 +6616,7 @@ export function createHttpApp({
         const comando = requireComandoBody(corpo);
         const esito = sessionRegistry.shell(sessionId, comando);
         if ('erroreAvvio' in esito) {
-          const errore = new Error(esito.erroreAvvio);
-          errore.code = esito.code;
-          throw errore;
+          throw erroreDelRegistro(esito);
         }
         if (req.aborted || res.destroyed) return;
         sendJson(res, 200, successEnvelope({ ok: true }, clock), method);
@@ -6598,9 +6648,7 @@ export function createHttpApp({
            `rispondiDomanda` in session-registry.mjs e draft-ietf-httpapi-idempotency-key-header-07 §2.6). */
         const esito = await sessionRegistry.rispondiDomanda(sessionId, risposta.requestId, risposta);
         if ('erroreAvvio' in esito) {
-          const errore = new Error(esito.erroreAvvio);
-          errore.code = esito.code;
-          throw errore;
+          throw erroreDelRegistro(esito);
         }
         if (req.aborted || res.destroyed) return;
         sendJson(res, 200, successEnvelope({ ok: true }, clock), method);
@@ -6624,13 +6672,13 @@ export function createHttpApp({
         const contentType = typeof req.headers['content-type'] === 'string'
           ? req.headers['content-type'].split(';', 1)[0].trim().toLowerCase() : '';
         if (contentType !== 'application/json') {
-          throw Object.assign(new Error('La scelta sul piano vuole application/json'), { code: 'QUERY_INVALID' });
+          throw Object.assign(new Error('The plan choice requires application/json'), { code: 'QUERY_INVALID' });
         }
         const rifiutoOrigine = rifiutoOrigineApprovazione(req, { token });
         if (rifiutoOrigine) {
           throw Object.assign(new Error(rifiutoOrigine === 'altra-finestra'
-            ? 'La scelta sul piano deve partire da questa finestra di TALOS'
-            : 'Un programma che non è un browser può scegliere sul piano solo col gettone di TALOS'), { code: 'PLAN_APPROVAL_ORIGIN_FORBIDDEN' });
+            ? 'The choice on the plan must come from this TALOS window'
+            : 'A program that is not a browser can choose on the plan only with the TALOS token'), { code: 'PLAN_APPROVAL_ORIGIN_FORBIDDEN' });
         }
         let sessionId;
         try { sessionId = decodeURIComponent(planDecisionMatch[1]); }
@@ -6639,9 +6687,7 @@ export function createHttpApp({
         const corpo = await leggiCorpoJsonCon(req, Math.min(limiteCorpoByte, 32_768));
         const esito = await sessionRegistry.rispondiPiano(sessionId, corpo);
         if ('erroreAvvio' in esito) {
-          const errore = new Error(esito.erroreAvvio);
-          errore.code = esito.code;
-          throw errore;
+          throw erroreDelRegistro(esito);
         }
         if (req.aborted || res.destroyed) return;
         sendJson(res, 200, successEnvelope({ ok: true }, clock), method);
@@ -6670,9 +6716,7 @@ export function createHttpApp({
           ? sessionRegistry.rispondiApprovazione(sessionId, requestId, approvato)
           : sessionRegistry.rispondiApprovazione(sessionId, requestId, approvato, { ambito });
         if ('erroreAvvio' in esito) {
-          const errore = new Error(esito.erroreAvvio);
-          errore.code = esito.code;
-          throw errore;
+          throw erroreDelRegistro(esito);
         }
         if (req.aborted || res.destroyed) return;
         sendJson(res, 200, successEnvelope({ ok: true }, clock), method);
@@ -6709,9 +6753,7 @@ export function createHttpApp({
         }
         const esito = await sessionRegistry.fidaHook(sessionId, hookId);
         if ('erroreAvvio' in esito) {
-          const errore = new Error(esito.erroreAvvio);
-          errore.code = esito.code;
-          throw errore;
+          throw erroreDelRegistro(esito);
         }
         if (req.aborted || res.destroyed) return;
         sendJson(res, 200, successEnvelope({ ok: true }, clock), method);
@@ -6755,9 +6797,7 @@ export function createHttpApp({
         const { abilitato } = requireAbilitaForgeBody(corpo);
         const esito = await sessionRegistry.abilitaToolForgiato(sessionId, toolId, abilitato);
         if ('erroreAvvio' in esito) {
-          const errore = new Error(esito.erroreAvvio);
-          errore.code = esito.code;
-          throw errore;
+          throw erroreDelRegistro(esito);
         }
         if (req.aborted || res.destroyed) return;
         sendJson(res, 200, successEnvelope({ ok: true }, clock), method);
@@ -6784,9 +6824,7 @@ export function createHttpApp({
         }
         const esito = await sessionRegistry.fidaServerMcp(sessionId, serverId);
         if ('erroreAvvio' in esito) {
-          const errore = new Error(esito.erroreAvvio);
-          errore.code = esito.code;
-          throw errore;
+          throw erroreDelRegistro(esito);
         }
         if (req.aborted || res.destroyed) return;
         sendJson(res, 200, successEnvelope({ ok: true }, clock), method);
@@ -6819,9 +6857,7 @@ export function createHttpApp({
         }
         const esito = await sessionRegistry.fidaPlugin(sessionId, pluginId);
         if ('erroreAvvio' in esito) {
-          const errore = new Error(esito.erroreAvvio);
-          errore.code = esito.code;
-          throw errore;
+          throw erroreDelRegistro(esito);
         }
         if (req.aborted || res.destroyed) return;
         sendJson(res, 200, successEnvelope({ ok: true }, clock), method);
@@ -6860,9 +6896,7 @@ export function createHttpApp({
         }
         const esito = sessionRegistry.statoCoda(sessionId);
         if ('erroreAvvio' in esito) {
-          const errore = new Error(esito.erroreAvvio);
-          errore.code = esito.code;
-          throw errore;
+          throw erroreDelRegistro(esito);
         }
         sendJson(res, 200, successEnvelope({ voci: esito.voci, inPausa: esito.inPausa }, clock), method);
       } catch (error) {
@@ -6892,9 +6926,7 @@ export function createHttpApp({
         if (sessionRegistry.staChiudendoIlGiro?.(sessionId)) await sessionRegistry.attendiFuoriDallaFinestra(sessionId);
         const esito = sessionRegistry.accodaMessaggio(sessionId, messaggio, immagini);
         if ('erroreAvvio' in esito) {
-          const errore = new Error(esito.erroreAvvio);
-          errore.code = esito.code;
-          throw errore;
+          throw erroreDelRegistro(esito);
         }
         if (req.aborted || res.destroyed) return;
         sendJson(res, 200, successEnvelope({ ok: true, posizione: esito.posizione, ...(esito.coda ? { coda: esito.coda } : {}) }, clock), method);
@@ -6924,15 +6956,13 @@ export function createHttpApp({
         }
         const corpo = await leggiCorpoJson(req);
         if (!corpo || typeof corpo.id !== 'string' || corpo.id.length === 0 || Object.keys(corpo).some((chiave) => chiave !== 'id')) {
-          const errore = new Error('Corpo non valido: atteso {id}');
+          const errore = new Error('Invalid body: expected {id}');
           errore.code = 'QUERY_INVALID';
           throw errore;
         }
         const esito = await sessionRegistry.inviaDallaCoda(sessionId, corpo.id);
         if ('erroreAvvio' in esito) {
-          const errore = new Error(esito.erroreAvvio);
-          errore.code = esito.code;
-          throw errore;
+          throw erroreDelRegistro(esito);
         }
         if (req.aborted || res.destroyed) return;
         sendJson(res, 200, successEnvelope({ ok: true, modo: esito.modo, coda: esito.coda, ...(esito.redirectId ? { redirectId: esito.redirectId } : {}) }, clock), method);
@@ -6958,15 +6988,13 @@ export function createHttpApp({
         /* ⭐ 14/09 — «Togli» toglie il messaggio che la persona VEDE (`id`); senza corpo resta il comportamento di prima. */
         const corpoAnnulla = await leggiCorpoJson(req);
         if (corpoAnnulla && Object.hasOwn(corpoAnnulla, 'id') && (typeof corpoAnnulla.id !== 'string' || corpoAnnulla.id.length === 0)) {
-          const errore = new Error('Corpo non valido: atteso {id?}');
+          const errore = new Error('Invalid body: expected {id?}');
           errore.code = 'QUERY_INVALID';
           throw errore;
         }
         const esito = sessionRegistry.svuotaCoda(sessionId, typeof corpoAnnulla?.id === 'string' ? { id: corpoAnnulla.id } : {});
         if ('erroreAvvio' in esito) {
-          const errore = new Error(esito.erroreAvvio);
-          errore.code = esito.code;
-          throw errore;
+          throw erroreDelRegistro(esito);
         }
         if (req.aborted || res.destroyed) return;
         sendJson(res, 200, successEnvelope({ ok: true, rimosso: esito.rimosso, ...(esito.coda ? { coda: esito.coda } : {}) }, clock), method);
@@ -6996,9 +7024,9 @@ export function createHttpApp({
            questo blocco, così una rotta nuova non eredita per sbaglio il comportamento di un'altra. */
         let data;
         try {
-          if (!browserVivo) { const error = new Error('Browser vivo non configurato'); error.code = 'BROWSER_VIVO_NON_CONFIGURATO'; throw error; }
+          if (!browserVivo) { const error = new Error('Driven browser not configured'); error.code = 'BROWSER_VIVO_NON_CONFIGURATO'; throw error; }
           const sessionId = url.searchParams.get('sessione') || '';
-          if (!sessionId) { const error = new Error('Serve la sessione'); error.code = 'QUERY_INVALID'; throw error; }
+          if (!sessionId) { const error = new Error('The session is required'); error.code = 'QUERY_INVALID'; throw error; }
 
           if (method === 'GET' && url.pathname === '/api/v1/browser/vivo/stato') {
             data = browserVivo.stato();
@@ -7019,7 +7047,7 @@ export function createHttpApp({
                 flusso.send({ dati: frame.dati, metadati: frame.metadati, numero: frame.numeroFrame, url: frame.url });
               });
             } catch (errore) {
-              flusso.send({ errore: errore?.message || 'Non riesco a trasmettere questa pagina', codice: errore?.code || 'BROWSER_VIVO_ERRORE' });
+              flusso.send({ errore: errore?.message || 'I cannot stream this page', codice: errore?.code || 'BROWSER_VIVO_ERRORE' });
               flusso.close();
               return;
             }
@@ -7029,7 +7057,7 @@ export function createHttpApp({
           } else if (method === 'POST' && url.pathname === '/api/v1/browser/vivo/apri') {
             const corpo = await leggiCorpoJson(req);
             const indirizzo = typeof corpo?.url === 'string' ? corpo.url : '';
-            if (!indirizzo || indirizzo.length > 2048) { const error = new Error('Indirizzo mancante'); error.code = 'QUERY_INVALID'; throw error; }
+            if (!indirizzo || indirizzo.length > 2048) { const error = new Error('Address missing'); error.code = 'QUERY_INVALID'; throw error; }
             data = await browserVivo.apri(sessionId, indirizzo, { larghezza: Number(corpo?.larghezza) || 1280, altezza: Number(corpo?.altezza) || 800 });
           } else if (method === 'POST' && url.pathname === '/api/v1/browser/vivo/gesto') {
             data = await browserVivo.gesto(sessionId, await leggiCorpoJson(req) || {});
@@ -7047,7 +7075,7 @@ export function createHttpApp({
             });
           } else if (method === 'POST' && url.pathname === '/api/v1/browser/vivo/chiudi') {
             data = await browserVivo.chiudi(sessionId);
-          } else { const error = new Error('Metodo non consentito'); error.code = 'METHOD_NOT_ALLOWED'; throw error; }
+          } else { const error = new Error('Method not allowed'); error.code = 'METHOD_NOT_ALLOWED'; throw error; }
           sendJson(res, 200, successEnvelope(data, clock), method);
         } catch (error) {
           const normalized = normalizeError(error);
@@ -7130,12 +7158,12 @@ export function createHttpApp({
         const keys = [...url.searchParams.keys()];
         const paths = url.searchParams.getAll('path');
         if (keys.some((key) => key !== 'path') || paths.length > 1) {
-          const error = new Error('Query workspace non valida');
+          const error = new Error('Invalid workspace query');
           error.code = 'QUERY_INVALID';
           throw error;
         }
         if (!workspaceBrowser || typeof workspaceBrowser.browse !== 'function') {
-          const error = new Error('Browser workspace non disponibile');
+          const error = new Error('Workspace browser not available');
           error.code = 'WORKSPACE_NOT_AVAILABLE';
           throw error;
         }
@@ -7194,7 +7222,7 @@ export function createHttpApp({
       } else if (url.pathname === '/api/v1/huggingface/search') {
         const query = url.searchParams.get('query') || ''; const limit = Number(url.searchParams.get('limit') || 20); const cursor = url.searchParams.get('cursor') || null;
         const sort = url.searchParams.get('sort') || 'downloads'; const direction = url.searchParams.get('direction') || '-1'; const author = url.searchParams.get('author') || null; const filters = url.searchParams.getAll('filter').filter((value) => value !== 'gguf');
-        if (!hfHubClient?.searchModels) { const error = new Error('Hub Hugging Face non configurato'); error.code = 'RUNTIME_NOT_AVAILABLE'; throw error; }
+        if (!hfHubClient?.searchModels) { const error = new Error('Hugging Face hub not configured'); error.code = 'RUNTIME_NOT_AVAILABLE'; throw error; }
         data = await hfHubClient.searchModels({ query, limit, cursor, sort, direction, author, filters });
       } else if (url.pathname === '/api/v1/huggingface/repo') {
         const repo = url.searchParams.get('repo'); const revision = url.searchParams.get('revision');
@@ -7206,8 +7234,8 @@ export function createHttpApp({
          * ⇒ Prima l'input di chi chiama (400), poi la disponibilità del servizio (503) —
          *   la stessa forma che `/api/v1/huggingface/image` usa già trenta righe più sotto.
          */
-        if (!repo) { const error = new Error('Parametro repo mancante'); error.code = 'QUERY_INVALID'; throw error; }
-        if (!hfHubClient?.describeModel || !hfHubClient?.listGgufFiles) { const error = new Error('Hub Hugging Face non configurato'); error.code = 'RUNTIME_NOT_AVAILABLE'; throw error; }
+        if (!repo) { const error = new Error('repo parameter missing'); error.code = 'QUERY_INVALID'; throw error; }
+        if (!hfHubClient?.describeModel || !hfHubClient?.listGgufFiles) { const error = new Error('Hugging Face hub not configured'); error.code = 'RUNTIME_NOT_AVAILABLE'; throw error; }
         const detail = await hfHubClient.describeModel(repo, revision || 'main');
         /*
          * ⛔⛔⛔ 03/9 — BUG REALE trovato riproducendo la chiamata a mano:
@@ -7236,8 +7264,8 @@ export function createHttpApp({
         data = { ...detail, files, motoreConosce: motoreConosce === true || motoreConosce === false ? motoreConosce : null };
       } else if (url.pathname === '/api/v1/huggingface/image') {
         const source = url.searchParams.get('url');
-        if (!source) { const error = new Error('URL immagine mancante'); error.code = 'QUERY_INVALID'; throw error; }
-        if (typeof hfImageProxyFn !== 'function') { const error = new Error('Proxy immagini Hugging Face non configurato'); error.code = 'RUNTIME_NOT_AVAILABLE'; throw error; }
+        if (!source) { const error = new Error('Image URL missing'); error.code = 'QUERY_INVALID'; throw error; }
+        if (typeof hfImageProxyFn !== 'function') { const error = new Error('Hugging Face image proxy not configured'); error.code = 'RUNTIME_NOT_AVAILABLE'; throw error; }
         const image = await hfImageProxyFn(source);
         send(res, 200, image.mimeType, image.bytes, method, { 'Cache-Control': 'no-store' });
         return;
@@ -7245,22 +7273,22 @@ export function createHttpApp({
         requireNoQuery(url); data = { items: typeof localModelTransfer?.listStatuses === 'function' ? await localModelTransfer.listStatuses() : [] };
       } else if (url.pathname === '/api/v1/providers') {
         requireNoQuery(url);
-        if (!providerStore || typeof providerStore.listPublic !== 'function') { const error = new Error('Portachiavi provider non configurato'); error.code = 'PROVIDER_STORE_UNAVAILABLE'; throw error; }
+        if (!providerStore || typeof providerStore.listPublic !== 'function') { const error = new Error('Provider keychain not configured'); error.code = 'PROVIDER_STORE_UNAVAILABLE'; throw error; }
         data = { items: providerStore.listPublic() };
       } else if (/^\/api\/v1\/providers\/([^/]+)\/runtime$/.test(url.pathname)) {
         requireNoQuery(url);
-        if (!providerStore || typeof providerStore.getRuntime !== 'function') { const error = new Error('Portachiavi provider non configurato'); error.code = 'PROVIDER_STORE_UNAVAILABLE'; throw error; }
+        if (!providerStore || typeof providerStore.getRuntime !== 'function') { const error = new Error('Provider keychain not configured'); error.code = 'PROVIDER_STORE_UNAVAILABLE'; throw error; }
         data = providerStore.getRuntime(decodeURIComponent(url.pathname.split('/')[4]));
       } else if (url.pathname === '/api/v1/models') {
         const forzaAggiornamento = parseModelsQuery(url);
         if (!catalogoModelliFn) {
-          const errore = new Error('Catalogo modelli non configurato'); errore.code = 'REPORT_UNAVAILABLE'; throw errore;
+          const errore = new Error('Model catalog not configured'); errore.code = 'REPORT_UNAVAILABLE'; throw errore;
         }
         data = await catalogoModelliFn({ forzaAggiornamento });
       } else if (url.pathname === '/api/v1/model-lab/capacity') {
         requireNoQuery(url);
         if (!capacitaMacchinaFn) {
-          const errore = new Error('Capacità macchina non configurata'); errore.code = 'REPORT_UNAVAILABLE'; throw errore;
+          const errore = new Error('Machine capacity not configured'); errore.code = 'REPORT_UNAVAILABLE'; throw errore;
         }
         data = await capacitaMacchinaFn();
       } else if (url.pathname === '/api/v1/tools') {
@@ -7273,35 +7301,35 @@ export function createHttpApp({
          * per-attrezzo sono `null`: nessuna sessione li ha ancora scelti.
          */
         requireNoQuery(url);
-        if (!sessionRegistry?.elencaAttrezziPredefiniti) { const errore = new Error('Elenco attrezzi non configurato'); errore.code = 'REPORT_UNAVAILABLE'; throw errore; }
+        if (!sessionRegistry?.elencaAttrezziPredefiniti) { const errore = new Error('Tool list not configured'); errore.code = 'REPORT_UNAVAILABLE'; throw errore; }
         const esito = await sessionRegistry.elencaAttrezziPredefiniti();
         data = { attrezzi: esito.attrezzi, errore: esito.errore };
       } else if (url.pathname === '/api/v1/wsl') {
         /* F009 — i fatti di WSL e la preferenza: il foglio «Dove girano i comandi» e le Impostazioni li mostrano. */
         requireNoQuery(url);
-        if (!preferenzeWslStore) { const error = new Error('Preferenze di WSL non configurate'); error.code = 'WSL_STORE_UNAVAILABLE'; throw error; }
+        if (!preferenzeWslStore) { const error = new Error('WSL preferences not configured'); error.code = 'WSL_STORE_UNAVAILABLE'; throw error; }
         data = await preferenzeWslStore.stato();
       } else if (url.pathname === '/api/v1/search-source') {
         requireNoQuery(url);
-        if (!searchSourceStore) { const error = new Error('Fonte di ricerca non configurata'); error.code = 'SEARCH_STORE_UNAVAILABLE'; throw error; }
+        if (!searchSourceStore) { const error = new Error('Search source not configured'); error.code = 'SEARCH_STORE_UNAVAILABLE'; throw error; }
         data = searchSourceStore.listPublic();
       } else if (url.pathname === '/api/v1/setup/stato') {
         requireNoQuery(url);
         if (!setupStatoFn) {
-          const errore = new Error('Stato del primo avvio non configurato'); errore.code = 'REPORT_UNAVAILABLE'; throw errore;
+          const errore = new Error('First-run state not configured'); errore.code = 'REPORT_UNAVAILABLE'; throw errore;
         }
         data = await setupStatoFn();
       } else if (url.pathname === '/api/v1/doctor') {
         requireNoQuery(url);
         if (!diagnosiFn) {
-          const errore = new Error('Doctor non configurato'); errore.code = 'REPORT_UNAVAILABLE'; throw errore;
+          const errore = new Error('Doctor not configured'); errore.code = 'REPORT_UNAVAILABLE'; throw errore;
         }
         data = await diagnosiFn();
       } else if (/^\/api\/v1\/doctor\/doctor-[a-f0-9]{12}$/u.test(url.pathname)) {
         requireNoQuery(url);
         const reference = url.pathname.split('/').at(-1);
         const detail = getDiagnosticProblem(reference);
-        if (!detail) { const error = new Error('Riferimento Doctor non trovato'); error.code = 'NOT_FOUND'; throw error; }
+        if (!detail) { const error = new Error('Doctor reference not found'); error.code = 'NOT_FOUND'; throw error; }
         /*
          * ⛔⛔ 07/9 — la scheda prometteva «Apri Doctor, copia il riferimento» e poi non diceva
          * NIENTE piu di quello che gia si leggeva a schermo: solo il codice. Il motivo vero era
@@ -7399,7 +7427,7 @@ export function createHttpApp({
 
         if (browserProxyMatch) {
           const indirizzo = url.searchParams.get('url');
-          if (typeof indirizzo !== 'string' || indirizzo.length === 0 || indirizzo.length > 2048) { const error = new Error('Indirizzo mancante'); error.code = 'QUERY_INVALID'; throw error; }
+          if (typeof indirizzo !== 'string' || indirizzo.length === 0 || indirizzo.length > 2048) { const error = new Error('Address missing'); error.code = 'QUERY_INVALID'; throw error; }
           const esito = await proxyPagina(indirizzo, { fetchFn, origineNostra: `http://${req.headers.host || '127.0.0.1'}` });
           if (!esito.ok) { const error = new Error(esito.motivo); error.code = esito.codice; throw error; }
           sendHtmlProxato(res, esito.html, method);
@@ -7428,19 +7456,19 @@ export function createHttpApp({
         if (url.pathname === '/api/v1/workspace-info') {
           const percorso = url.searchParams.get('path');
           if (typeof percorso !== 'string' || percorso.length === 0 || percorso.length > 4096) {
-            const error = new Error('Percorso mancante'); error.code = 'QUERY_INVALID'; throw error;
+            const error = new Error('Path missing'); error.code = 'QUERY_INVALID'; throw error;
           }
           data = await ritrattoCartellaFn(percorso);
         } else if (url.pathname === '/api/v1/browser/leggi') {
           const indirizzo = url.searchParams.get('url');
           if (typeof indirizzo !== 'string' || indirizzo.length === 0 || indirizzo.length > 2048) {
-            const error = new Error('Indirizzo mancante'); error.code = 'QUERY_INVALID'; throw error;
+            const error = new Error('Address missing'); error.code = 'QUERY_INVALID'; throw error;
           }
           const pagina = await leggiPaginaFn(indirizzo);
           data = { url: pagina.url, stato: pagina.stato, corpo: pagina.corpo };
         } else if (browserFrameMatch) {
           const indirizzo = url.searchParams.get('url');
-          if (typeof indirizzo !== 'string' || indirizzo.length === 0 || indirizzo.length > 2048) { const error = new Error('Indirizzo mancante'); error.code = 'QUERY_INVALID'; throw error; }
+          if (typeof indirizzo !== 'string' || indirizzo.length === 0 || indirizzo.length > 2048) { const error = new Error('Address missing'); error.code = 'QUERY_INVALID'; throw error; }
           const origineNostra = `http://${req.headers.host || '127.0.0.1'}`;
           const esitoCornice = await verificaIncorniciabile(indirizzo, { fetchFn, origineNostra });
           /*
@@ -7481,9 +7509,7 @@ export function createHttpApp({
                     : elenco === 'sync' ? await gitService.sincronizzazione({ sessionId })
                       : await gitService.ramo({ sessionId });
           if ('erroreAvvio' in esito) {
-            const errore = new Error(esito.erroreAvvio);
-            errore.code = esito.code;
-            throw errore;
+            throw erroreDelRegistro(esito);
           }
           data = esito;
         } else if (gitDiffMatch) {
@@ -7491,7 +7517,7 @@ export function createHttpApp({
              mai una parte ignorata. Il percorso lo convalida il servizio (GIT_PATH_INVALID), in un posto solo. */
           const chiavi = [...url.searchParams.keys()];
           if (chiavi.some((k) => k !== 'percorso' && k !== 'area') || ['percorso', 'area'].some((k) => url.searchParams.getAll(k).length !== 1)) {
-            throw Object.assign(new Error('Query non valida'), { code: 'QUERY_INVALID' });
+            throw Object.assign(new Error('Invalid query'), { code: 'QUERY_INVALID' });
           }
           let sessionId;
           try {
@@ -7502,9 +7528,7 @@ export function createHttpApp({
           }
           const esito = await gitService.diff({ sessionId, percorso: url.searchParams.get('percorso'), area: url.searchParams.get('area') });
           if ('erroreAvvio' in esito) {
-            const errore = new Error(esito.erroreAvvio);
-            errore.code = esito.code;
-            throw errore;
+            throw erroreDelRegistro(esito);
           }
           data = esito;
         } else if (gitConfrontoMatch) {
@@ -7515,7 +7539,7 @@ export function createHttpApp({
           const obbligatorie = diUnFile ? ['a', 'percorso'] : ['a'];
           const chiavi = [...url.searchParams.keys()];
           if (chiavi.some((k) => !ammesse.includes(k)) || ammesse.some((k) => url.searchParams.getAll(k).length > 1) || obbligatorie.some((k) => url.searchParams.getAll(k).length !== 1)) {
-            throw Object.assign(new Error('Query non valida'), { code: 'QUERY_INVALID' });
+            throw Object.assign(new Error('Invalid query'), { code: 'QUERY_INVALID' });
           }
           let sessionId;
           try {
@@ -7530,9 +7554,7 @@ export function createHttpApp({
             ? await gitService.diffFra({ sessionId, da, a, percorso: url.searchParams.get('percorso'), prima: url.searchParams.get('prima') })
             : await gitService.modificheFra({ sessionId, da, a });
           if ('erroreAvvio' in esito) {
-            const errore = new Error(esito.erroreAvvio);
-            errore.code = esito.code;
-            throw errore;
+            throw erroreDelRegistro(esito);
           }
           data = esito;
         } else if (ghStatoMatch || ghPrMatch || ghControlliMatch) {
@@ -7540,10 +7562,10 @@ export function createHttpApp({
           const bozza = ghPrMatch?.[2] === 'pull-draft';
           const chiavi = [...url.searchParams.keys()];
           if (bozza ? chiavi.some((k) => k !== 'base') || url.searchParams.getAll('base').length > 1 : chiavi.length > 0) {
-            throw Object.assign(new Error('Query non valida'), { code: 'QUERY_INVALID' });
+            throw Object.assign(new Error('Invalid query'), { code: 'QUERY_INVALID' });
           }
           /* il numero di una PR: cifre, senza zeri davanti, al più nove — una PR sola, mai un'opzione per `gh` */
-          if (ghControlliMatch && !/^[1-9]\d{0,8}$/u.test(ghControlliMatch[2])) throw Object.assign(new Error('Numero di PR non valido'), { code: 'QUERY_INVALID' });
+          if (ghControlliMatch && !/^[1-9]\d{0,8}$/u.test(ghControlliMatch[2])) throw Object.assign(new Error('Invalid PR number'), { code: 'QUERY_INVALID' });
           let sessionId = null;
           if (!ghStatoMatch) {
             try {
@@ -7559,9 +7581,7 @@ export function createHttpApp({
               : bozza ? await ghService.bozza({ sessionId, base: url.searchParams.get('base') })
                 : await ghService.pullRequest({ sessionId });
           if ('erroreAvvio' in esito) {
-            const errore = new Error(esito.erroreAvvio);
-            errore.code = esito.code;
-            throw errore;
+            throw erroreDelRegistro(esito);
           }
           data = esito;
         } else if (terminalsMatch) {
@@ -7575,9 +7595,7 @@ export function createHttpApp({
           }
           const esito = terminalRegistry.elenca(sessionId);
           if ('erroreAvvio' in esito) {
-            const errore = new Error(esito.erroreAvvio);
-            errore.code = esito.code;
-            throw errore;
+            throw erroreDelRegistro(esito);
           }
           data = { items: esito.items };
         } else if (projectTreeMatch) {
@@ -7591,9 +7609,7 @@ export function createHttpApp({
           const percorso = parseTreeQuery(url);
           const esito = await sessionRegistry.anteprimaAlbero(projectId, percorso);
           if ('erroreAvvio' in esito) {
-            const errore = new Error(esito.erroreAvvio);
-            errore.code = esito.code;
-            throw errore;
+            throw erroreDelRegistro(esito);
           }
           data = { voci: esito.voci };
         } else if (treeMatch) {
@@ -7607,9 +7623,7 @@ export function createHttpApp({
           const percorso = parseTreeQuery(url);
           const esito = await sessionRegistry.albero(sessionId, percorso);
           if ('erroreAvvio' in esito) {
-            const errore = new Error(esito.erroreAvvio);
-            errore.code = esito.code;
-            throw errore;
+            throw erroreDelRegistro(esito);
           }
           data = { voci: esito.voci };
         } else if (treeSearchMatch) {
@@ -7620,15 +7634,13 @@ export function createHttpApp({
           const chiavi = [...url.searchParams.keys()];
           const q = url.searchParams.get('q');
           if (chiavi.length !== 1 || chiavi[0] !== 'q' || q === null) {
-            const errore = new Error('Query non valida');
+            const errore = new Error('Invalid query');
             errore.code = 'QUERY_INVALID';
             throw errore;
           }
           const esito = await sessionRegistry.cercaFile(sessionId, q);
           if ('erroreAvvio' in esito) {
-            const errore = new Error(esito.erroreAvvio);
-            errore.code = esito.code;
-            throw errore;
+            throw erroreDelRegistro(esito);
           }
           data = { risultati: esito.risultati, troncato: esito.troncato, motivo: esito.motivo, saltate: esito.saltate };
         } else if (treeFileMatch) {
@@ -7643,9 +7655,7 @@ export function createHttpApp({
           const percorso = parseTreeQuery(url);
           const esito = await sessionRegistry.apriFile(sessionId, percorso);
           if ('erroreAvvio' in esito) {
-            const errore = new Error(esito.erroreAvvio);
-            errore.code = esito.code;
-            throw errore;
+            throw erroreDelRegistro(esito);
           }
           data = { percorso, contenuto: esito.contenuto, dimensione: esito.dimensione };
         } else if (exportMatch) {
@@ -7674,9 +7684,7 @@ export function createHttpApp({
           }
           const esito = await sessionRegistry.elencaHooks(sessionId);
           if ('erroreAvvio' in esito) {
-            const errore = new Error(esito.erroreAvvio);
-            errore.code = esito.code;
-            throw errore;
+            throw erroreDelRegistro(esito);
           }
           data = { hooks: esito.hooks, errore: esito.errore };
         } else if (toolsMatch) {
@@ -7690,9 +7698,7 @@ export function createHttpApp({
           }
           const esito = await sessionRegistry.elencaAttrezzi(sessionId);
           if ('erroreAvvio' in esito) {
-            const errore = new Error(esito.erroreAvvio);
-            errore.code = esito.code;
-            throw errore;
+            throw erroreDelRegistro(esito);
           }
           data = { attrezzi: esito.attrezzi, errore: esito.errore };
         } else if (mcpMatch) {
@@ -7706,9 +7712,7 @@ export function createHttpApp({
           }
           const esito = await sessionRegistry.elencaServerMcp(sessionId);
           if ('erroreAvvio' in esito) {
-            const errore = new Error(esito.erroreAvvio);
-            errore.code = esito.code;
-            throw errore;
+            throw erroreDelRegistro(esito);
           }
           data = { server: esito.server, errore: esito.errore };
         } else if (processesMatch) {
@@ -7722,9 +7726,7 @@ export function createHttpApp({
           }
           const esito = await sessionRegistry.elencaProcessi(sessionId);
           if ('erroreAvvio' in esito) {
-            const errore = new Error(esito.erroreAvvio);
-            errore.code = esito.code;
-            throw errore;
+            throw erroreDelRegistro(esito);
           }
           /*
            * ⛔ `registrato` viaggia accanto a `processi`: una sessione che non ha
@@ -7751,9 +7753,7 @@ export function createHttpApp({
           }
           const esito = sessionRegistry.elencaMetriche(sessionId);
           if ('erroreAvvio' in esito) {
-            const errore = new Error(esito.erroreAvvio);
-            errore.code = esito.code;
-            throw errore;
+            throw erroreDelRegistro(esito);
           }
           /*
            * ⛔ `registrato` viaggia accanto alle tre metriche per la stessa ragione
@@ -7782,9 +7782,7 @@ export function createHttpApp({
           }
           const esito = await sessionRegistry.elencaSkill(sessionId);
           if ('erroreAvvio' in esito) {
-            const errore = new Error(esito.erroreAvvio);
-            errore.code = esito.code;
-            throw errore;
+            throw erroreDelRegistro(esito);
           }
           data = { skills: esito.skills, errore: esito.errore };
         } else if (libraryMatch) {
@@ -7798,9 +7796,7 @@ export function createHttpApp({
           }
           const esito = await sessionRegistry.elencaLibreria(sessionId);
           if ('erroreAvvio' in esito) {
-            const errore = new Error(esito.erroreAvvio);
-            errore.code = esito.code;
-            throw errore;
+            throw erroreDelRegistro(esito);
           }
           data = { voci: esito.voci, errore: esito.errore };
         } else if (notesMatch) {
@@ -7814,9 +7810,7 @@ export function createHttpApp({
           }
           const esito = await sessionRegistry.elencaNote(sessionId);
           if ('erroreAvvio' in esito) {
-            const errore = new Error(esito.erroreAvvio);
-            errore.code = esito.code;
-            throw errore;
+            throw erroreDelRegistro(esito);
           }
           data = { note: esito.note, errore: esito.errore };
         } else if (tasksMatch) {
@@ -7830,9 +7824,7 @@ export function createHttpApp({
           }
           const esito = await sessionRegistry.elencaAttivita(sessionId);
           if ('erroreAvvio' in esito) {
-            const errore = new Error(esito.erroreAvvio);
-            errore.code = esito.code;
-            throw errore;
+            throw erroreDelRegistro(esito);
           }
           data = { attivita: esito.attivita, errore: esito.errore };
         } else if (memoryMatch) {
@@ -7846,9 +7838,7 @@ export function createHttpApp({
           }
           const esito = await sessionRegistry.elencaMemorie(sessionId);
           if ('erroreAvvio' in esito) {
-            const errore = new Error(esito.erroreAvvio);
-            errore.code = esito.code;
-            throw errore;
+            throw erroreDelRegistro(esito);
           }
           data = { memorie: esito.memorie, errore: esito.errore };
         } else if (researchMatch) {
@@ -7862,9 +7852,7 @@ export function createHttpApp({
           }
           const esito = await sessionRegistry.elencaRicerche(sessionId);
           if ('erroreAvvio' in esito) {
-            const errore = new Error(esito.erroreAvvio);
-            errore.code = esito.code;
-            throw errore;
+            throw erroreDelRegistro(esito);
           }
           /*
            * ⭐ 12/09, L5 — `totale` ESCE, e i quattordici campi della voce c'erano già (L4 li ha
@@ -7885,9 +7873,7 @@ export function createHttpApp({
           }
           const esito = await sessionRegistry.elencaToolForgiati(sessionId);
           if ('erroreAvvio' in esito) {
-            const errore = new Error(esito.erroreAvvio);
-            errore.code = esito.code;
-            throw errore;
+            throw erroreDelRegistro(esito);
           }
           data = { strumenti: esito.strumenti, errore: esito.errore };
         } else if (pluginsMatch) {
@@ -7901,9 +7887,7 @@ export function createHttpApp({
           }
           const esito = await sessionRegistry.elencaPlugin(sessionId);
           if ('erroreAvvio' in esito) {
-            const errore = new Error(esito.erroreAvvio);
-            errore.code = esito.code;
-            throw errore;
+            throw erroreDelRegistro(esito);
           }
           /* ⛔ A-4 (17/09/2026): `falliti` moriva QUI. Un pacchetto guasto spariva dal pannello
              senza che niente dicesse perché — vedi `caricaPlugin` e `elencaPlugin`. */
@@ -7912,7 +7896,7 @@ export function createHttpApp({
           const query = {};
           for (const [key, value] of url.searchParams) {
             if (!['after', 'through', 'limit'].includes(key) || Object.hasOwn(query, key) || !/^(0|[1-9][0-9]*)$/u.test(value) || !Number.isSafeInteger(Number(value))) {
-              const error = new Error('Parametri della cronologia non validi'); error.code = 'QUERY_INVALID'; throw error;
+              const error = new Error('Invalid history parameters'); error.code = 'QUERY_INVALID'; throw error;
             }
             query[key] = Number(value);
           }
@@ -7920,7 +7904,7 @@ export function createHttpApp({
           try { sessionId = decodeURIComponent(timelineMatch[1]); }
           catch { sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method); return; }
           const esito = await sessionRegistry.timelineAgenti(sessionId, query);
-          if (esito.erroreAvvio) { const error = new Error(esito.erroreAvvio); error.code = esito.code; throw error; }
+          if (esito.erroreAvvio) { throw erroreDelRegistro(esito); }
           data = esito;
         } else if (childrenMatch) {
           requireNoQuery(url);
@@ -7933,9 +7917,7 @@ export function createHttpApp({
           }
           const esito = await sessionRegistry.elencaFigli(sessionId);
           if ('erroreAvvio' in esito) {
-            const errore = new Error(esito.erroreAvvio);
-            errore.code = esito.code;
-            throw errore;
+            throw erroreDelRegistro(esito);
           }
           data = { figli: esito.figli };
         } else if (eventsMatch) {

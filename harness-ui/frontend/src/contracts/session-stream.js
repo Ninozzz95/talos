@@ -1,7 +1,7 @@
 import { normalizeSessionEvent } from './session-events.js';
 
 export function createSessionStreamFactory({ EventSourceImpl = globalThis.EventSource, endpoint } = {}) {
-  if (typeof EventSourceImpl !== 'function' || typeof endpoint !== 'function') throw new TypeError('EventSource ed endpoint sono obbligatori');
+  if (typeof EventSourceImpl !== 'function' || typeof endpoint !== 'function') throw new TypeError('EventSource and endpoint are required');
   return Object.freeze({
     open({ sessionId, onEvent = () => {}, onState = () => {}, onError = () => {} }) {
       if (!sessionId) throw new TypeError('Identificativo sessione obbligatorio');
@@ -21,7 +21,7 @@ export function createSessionStreamFactory({ EventSourceImpl = globalThis.EventS
       };
       source.onerror = () => {
         if (closed || terminal) return;
-        const error = new Error('Streaming della sessione interrotto');
+        const error = new Error('Session streaming interrupted');
         error.code = 'SESSION_STREAM_INTERRUPTED';
         onState('interrupted');
         onError(error);

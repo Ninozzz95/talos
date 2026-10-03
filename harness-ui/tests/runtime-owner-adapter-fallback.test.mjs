@@ -61,8 +61,8 @@ for (const stato of [401, 403]) test(`P2-KEYLESS-${stato} endpoint locale senza 
   const f = creaFetchMultiProvider(fetch, b.opzioni);
   await assert.rejects(esegui(f, { modello: 'ollama:qwen3' }), error => {
     assert.equal(error.stato, stato);
-    assert.doesNotMatch(error.message, /Credenziale rifiutata|chiave.*rifiutata/iu);
-    assert.match(error.message, stato === 401 ? /autenticazione|indirizzo|endpoint/iu : /accesso|permess/iu);
+    assert.doesNotMatch(error.message, /Credenziale rifiutata|chiave.*rifiutata|Credential rejected|key.*rejected/iu);
+    assert.match(error.message, stato === 401 ? /sign in|address|endpoint/iu : /access|permission/iu);
     return true;
   });
   assert.equal(b.richieste.length, 1);
@@ -80,7 +80,7 @@ test('P2-OPTIONAL-KEY-403 un divieto di accesso non mette in panchina la chiave 
   const f = creaFetchMultiProvider(fetch, b.opzioni);
   await assert.rejects(esegui(f, { modello: 'ollama:qwen3' }), error => {
     assert.equal(error.stato, 403);
-    assert.match(error.message, /accesso|permess/iu);
+    assert.match(error.message, /access|permission/iu);
     return true;
   });
   assert.equal(b.richieste.length, 1);
@@ -252,7 +252,7 @@ test('PH-FALLBACK-21 chiave mancante: errore PROVIDER_KEY_MISSING col nome umano
   const f=creaFetchMultiProvider(fetch,b.opzioni);
   await assert.rejects(()=>esegui(f),(errore)=>{
     assert.equal(errore.code,'PROVIDER_KEY_MISSING','la chiave che manca non si travveste da rifiuto del fornitore');
-    assert.match(errore.message,/Manca la chiave per DeepSeek./,'a schermo va il nome umano del fornitore, non il suo id');
+    assert.match(errore.message,/The key for DeepSeek is missing\./,'a schermo va il nome umano del fornitore, non il suo id');
     return true;
   });
   assert.deepEqual(b.consumi,[],'nessuna ricevuta per una chiamata mai partita');
@@ -374,7 +374,7 @@ test('PH-FALLBACK-25 contesto pieno del motore locale: il suo codice e i suoi nu
     }));
     await assert.rejects(() => esegui(f, { modello: 'local:un-gguf', attrezzi }), (errore) => {
       assert.equal(errore.code, 'LOCAL_CONTEXT_EXCEEDED', `con ${attrezzi.length} attrezzi: il suo codice, non un guasto del fornitore`);
-      assert.match(errore.message, /\(17230 token\).*\(16384 token\)/u);
+      assert.match(errore.message, /\(17230 tokens\).*\(16384 tokens\)/u);
       return true;
     });
     assert.equal(locali.length, 1, `con ${attrezzi.length} attrezzi: nessuna riprova senza attrezzi`);

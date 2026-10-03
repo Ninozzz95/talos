@@ -1,4 +1,7 @@
 /** ReportRow del mockup: metadati GET /research. WAI Tabs/Disclosure, 05/09/2026. */
+import { t as traduci, tn, linguaCorrenteDiT } from './lingua.js';
+/* Date nella lingua dell'interfaccia (italiano → it-IT, inglese → en-US), letta a ogni uso. */
+const localeUI=()=>(linguaCorrenteDiT()==='en'?'en-US':'it-IT');
 import {statoRicercaApprofondita,statoDellaVoce,articoloData} from './ricerca-dettaglio.js';
 import {creaAvanzamentoRicerca} from './ricerca-avanzamento.js';
 /*
@@ -25,13 +28,13 @@ export function testiRicerca(ricerca){
  /* ⛔ 11/09: la rotta manda `domanda`; fino a ieri mandava `titolo`. Si leggono ENTRAMBI, o il
     giorno del cambio tutta la cronologia diventa «Ricerca senza titolo» e nessun test se ne accorge. */
  const scritta=[ricerca?.domanda,ricerca?.titolo].find(v=>typeof v==='string'&&v.trim());
- const titolo=scritta?scritta.trim():'Ricerca senza titolo';
+ const titolo=scritta?scritta.trim():traduci('sezioni.research.untitled');
  const data=typeof ricerca?.avviataAlle==='string'?new Date(ricerca.avviataAlle):null,valida=data&&Number.isFinite(data.getTime());
  /* ⛔ «Avviata l'11/09», non «il 11»: l'articolo si elide davanti a otto e undici. La regola sta
     in `articoloData`, in un posto solo, e vale anche per le schede della sezione. */
- return {titolo,avviata:valida?data.toLocaleString('it-IT',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}):null,dataBreve:valida?'Avviata '+articoloData(ricerca?.avviataAlle)+data.toLocaleDateString('it-IT'):'Data non registrata'};
+ return {titolo,avviata:valida?data.toLocaleString(localeUI(),{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}):null,dataBreve:valida?traduci('sezioni.research.row.started',{article:articoloData(ricerca?.avviataAlle),date:data.toLocaleDateString(localeUI())}):traduci('sezioni.common.dateNotRecorded')};
 }
-export function riepilogoRicerche(ricerche){return ricerche.length+(ricerche.length===1?' ricerca elencata':' ricerche elencate');}
+export function riepilogoRicerche(ricerche){return tn('sezioni.research.summary.one','sezioni.research.summary.many',ricerche.length);}
 export function filtraRicerche(ricerche,{query='',stato='tutte'}={}){
  const q=String(query).trim().toLocaleLowerCase('it');
  return ricerche.filter(r=>(stato==='tutte'||r?.stato===stato)&&(!q||[testiRicerca(r).titolo,statoRicerca(r).testo].join(' ').toLocaleLowerCase('it').includes(q)));
@@ -43,7 +46,7 @@ export function creaReportRow(ricerca,{document:doc=globalThis.document,aperta=f
  const icona=el(doc,'span','talos-list-row__icon'),svg=doc.createElementNS('http://www.w3.org/2000/svg','svg'),use=doc.createElementNS('http://www.w3.org/2000/svg','use');svg.setAttribute('class','i');svg.setAttribute('aria-hidden','true');use.setAttribute('href','#i-globe');svg.append(use);icona.append(svg);
  const testo=el(doc,'span','talos-list-row__text'),titolo=el(doc,'span','talos-list-row__title',t.titolo),sotto=el(doc,'span','talos-list-row__sub');titolo.title=t.titolo;testo.append(titolo,sotto);
  // 24/09/2026, decisione owner («Barra + fase e conteggi»): una ricerca in corso dice a che punto è, nella riga stessa.
- if(ricerca?.stato==='running'&&ricerca?.avanzamento){const av=creaAvanzamentoRicerca(doc,ricerca.avanzamento,{etichetta:'Avanzamento di '+t.titolo});if(av)testo.append(av);}
+ if(ricerca?.stato==='running'&&ricerca?.avanzamento){const av=creaAvanzamentoRicerca(doc,ricerca.avanzamento,{etichetta:traduci("sezioni.research.row.progressLabel", { title: t.titolo })});if(av)testo.append(av);}
  const aside=el(doc,'span','talos-list-row__aside');aside.append(el(doc,'span','talos-badge'+(stato.tono?' talos-badge--'+stato.tono:''),stato.testo));
  /*
   * ⛔ 11/09, lotto L7 — il pulsante non è più `hidden` «in attesa della fase 3»: esiste quando c'è
@@ -51,12 +54,12 @@ export function creaReportRow(ricerca,{document:doc=globalThis.document,aperta=f
   *   (`onApriRapporto`). Senza una delle due non compare: un bottone spento da diciotto giorni e
   *   un bottone che promette una schermata che non si apre sono lo stesso difetto.
   */
- const apri=el(doc,'button','talos-button talos-button--ghost talos-button--sm','Apri il rapporto');apri.type='button';
+ const apri=el(doc,'button','talos-button talos-button--ghost talos-button--sm',traduci("sezioni.research.row.openReport"));apri.type='button';
  apri.hidden=!(ricerca?.reportLibraryId&&typeof onApriRapporto==='function');
- apri.setAttribute('aria-label','Apri il rapporto di '+t.titolo);
+ apri.setAttribute('aria-label',traduci("sezioni.research.row.openReportLabel", { title: t.titolo }));
  apri.addEventListener('click',()=>onApriRapporto?.(ricerca));
  const dettagli=el(doc,'button','talos-button talos-button--ghost talos-button--sm');dettagli.type='button';
- function mostra(){riga.dataset.aperta=String(aperta);sotto.textContent=aperta&&t.avviata?'Avviata '+articoloData(ricerca?.avviataAlle)+t.avviata:t.dataBreve;dettagli.textContent=aperta?'Chiudi':'Dettagli';dettagli.setAttribute('aria-expanded',String(aperta));dettagli.setAttribute('aria-label',(aperta?'Chiudi i dettagli di ':'Dettagli di ')+t.titolo);}
+ function mostra(){riga.dataset.aperta=String(aperta);sotto.textContent=aperta&&t.avviata?traduci("sezioni.research.row.started", { article: articoloData(ricerca?.avviataAlle), date: t.avviata }):t.dataBreve;dettagli.textContent=aperta?traduci("sezioni.common.close"):traduci("sezioni.common.details");dettagli.setAttribute('aria-expanded',String(aperta));dettagli.setAttribute('aria-label',aperta?traduci('sezioni.common.detailsCloseLabel',{name:t.titolo}):traduci('sezioni.common.detailsOpenLabel',{name:t.titolo}));}
  dettagli.addEventListener('click',()=>{aperta=!aperta;mostra();onEspandi?.(aperta);});mostra();aside.append(apri,dettagli);riga.append(icona,testo,aside);return riga;
 }
 const PAGINE=new WeakMap();
@@ -78,10 +81,10 @@ function renderRicerca(schermo,pagina){
  const {ricerche,opzioni}=pagina,visibili=filtraRicerche(ricerche,pagina),doc=schermo.ownerDocument;
  for(const tab of schermo.querySelectorAll('[data-research-stato]')){const attivo=pagina.stato===tab.dataset.researchStato;tab.setAttribute('aria-selected',String(attivo));tab.tabIndex=attivo?0:-1;}
  schermo.querySelector('[data-research-refresh]').disabled=Boolean(opzioni.caricamento);
- schermo.querySelector('.talos-topbar__path').textContent=opzioni.errore?'Ricerche non disponibili':opzioni.caricamento?'Caricamento ricerche…':riepilogoRicerche(ricerche);
- const esito=schermo.querySelector('[data-research-esito]');esito.textContent=opzioni.errore||(opzioni.caricamento?'Caricamento ricerche…':visibili.length===ricerche.length?riepilogoRicerche(ricerche):visibili.length+' di '+ricerche.length+' ricerche elencate');esito.setAttribute('role',opzioni.errore?'alert':'status');
+ schermo.querySelector('.talos-topbar__path').textContent=opzioni.errore?traduci("sezioni.research.unavailable"):opzioni.caricamento?traduci("sezioni.research.loading"):riepilogoRicerche(ricerche);
+ const esito=schermo.querySelector('[data-research-esito]');esito.textContent=opzioni.errore||(opzioni.caricamento?traduci("sezioni.research.loading"):visibili.length===ricerche.length?riepilogoRicerche(ricerche):traduci("sezioni.research.filteredOfTotal", { shown: visibili.length, total: ricerche.length }));esito.setAttribute('role',opzioni.errore?'alert':'status');
  const lista=schermo.querySelector('[data-research-list]'),attivo=doc.activeElement?.closest('[data-research-id]')?.dataset.researchId;lista.setAttribute('role',visibili.length?'list':'group');
  lista.replaceChildren(...visibili.map(r=>creaReportRow(r,{document:doc,aperta:pagina.aperte.has(r.id),onEspandi:aperta=>{if(aperta)pagina.aperte.add(r.id);else pagina.aperte.delete(r.id);}})));
- if(!visibili.length)lista.append(el(doc,'p','talos-list-row talos-muted',opzioni.errore||(opzioni.caricamento?'Caricamento ricerche…':ricerche.length?'Nessuna ricerca corrisponde ai filtri.':'Nessuna ricerca avviata in questo progetto.')));
+ if(!visibili.length)lista.append(el(doc,'p','talos-list-row talos-muted',opzioni.errore||(opzioni.caricamento?traduci("sezioni.research.loading"):ricerche.length?traduci("sezioni.research.noMatches"):traduci("sezioni.research.empty"))));
  if(attivo)[...lista.querySelectorAll('[data-research-id]')].find(n=>n.dataset.researchId===attivo)?.querySelector('button:not([hidden])')?.focus({preventScroll:true});
 }

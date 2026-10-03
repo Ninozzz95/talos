@@ -1,4 +1,5 @@
 import test from 'node:test';
+import { togliConfiniDati } from '../src/kernel/confine-dati.mjs';
 import assert from 'node:assert/strict';
 import {mkdtempSync, existsSync, writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
@@ -43,15 +44,15 @@ for(const dove of ['windows','wsl2'])test(`SHELL07-${dove.toUpperCase()}: real p
 });
 test('SHELL07-PROVA: explicit WSL applies to the configured test command', {skip:SALTA_SENZA_WSL}, async t=>{
   const r=await run(fixture(t),{dove:'wsl2',tool:'prova',command:'printf SHELL07'});
-  assert.match(r.output.content,/^exit 0 \[sandbox: wsl2 \(Linux in WSL [^\]]+\)\]\nSHELL07/);assert.equal(r.output.isError,false); // F009: la prova in Linux dichiara con che utente
+  assert.match(togliConfiniDati(r.output.content),/^exit 0 \[sandbox: wsl2 \(Linux in WSL [^\]]+\)\]\nSHELL07/);assert.equal(r.output.isError,false); // F009: la prova in Linux dichiara con che utente
 });
 test('SHELL07-PROVA-ZERO: a zero-suite report is not a pass in WSL', {skip:SALTA_SENZA_WSL}, async t=>{
   const r=await run(fixture(t),{dove:'wsl2',tool:'prova',command:'printf "# tests 0\\n"'});
-  assert.match(r.output.content,/NO tests ran/);assert.equal(r.output.isError,true);
+  assert.match(r.output.content,/^NOT RUN: NO_TESTS_RAN — the test command ran \[sandbox: wsl2 \(Linux in WSL [^\]]+\)\] and exited 0, but no tests ran/u);assert.equal(r.output.isError,true); // owner 03/10: NOT RUN, niente 127
 });
 test('SHELL07-PROVA-EXIT: WSL preserves the real nonzero exit', {skip:SALTA_SENZA_WSL}, async t=>{
   const r=await run(fixture(t),{dove:'wsl2',tool:'prova',command:'printf SHELL07; exit 42'});
-  assert.match(r.output.content,/^exit 42 \[sandbox: wsl2 \(Linux in WSL [^\]]+\)\]\nSHELL07/);assert.equal(r.output.isError,true); // F009
+  assert.match(togliConfiniDati(r.output.content),/^exit 42 \[sandbox: wsl2 \(Linux in WSL [^\]]+\)\]\nSHELL07/);assert.equal(r.output.isError,true); // F009
 });
 test('SHELL07-TAP-EMPTY: a real Node TAP reporter with zero tests is not a pass',async t=>{
   const root=fixture(t);writeFileSync(join(root,'empty.test.mjs'),"import test from 'node:test'; test('present',()=>{});");
@@ -62,7 +63,7 @@ test('SHELL07-TAP-EMPTY: a real Node TAP reporter with zero tests is not a pass'
     process.stdout.write(r.stdout);process.stderr.write(r.stderr);process.exit(r.status??1);`);
   const r=await run(root,{tool:'prova',command:`"${process.execPath}" run-tests.cjs`});
   assert.match(r.output.content,/# tests 0/);
-  assert.equal(r.output.isError,true);assert.match(r.output.content,/NO tests ran/);
+  assert.equal(r.output.isError,true);assert.match(r.output.content,/^NOT RUN: NO_TESTS_RAN — /u);
 });
 test('SHELL07-CHANGE: a command prepared before an environment change is never executed', async t=>{
   const root=fixture(t);let revision=0;

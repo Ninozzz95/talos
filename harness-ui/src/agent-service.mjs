@@ -27,6 +27,7 @@
  */
 import { createHash, randomUUID } from 'node:crypto';
 import { createToolOutputPreview } from './kernel/tool-output-preview.mjs';
+import { NOME_EVENTO_PROGRESSO_COMPATTAZIONE, creaContatoreRiassunto } from './kernel/compattazione-desktop.mjs'; // lane CLI, 03/10/2026: compaction.progress
 import { delegaLimitata } from './delegation-contract.mjs';
 import { join as joinPercorso, relative as percorsoRelativo, sep as separatorePercorso } from 'node:path';
 
@@ -280,6 +281,8 @@ export async function avviaSessione({
   processOutputFn,
   processOutputReadFn,
   fallbackProviders = [], onCambioFornitore: depositaCambioFornitore,
+  /* K3b (03/10/2026): la lingua dell'interfaccia, per l'istruzione della descrizione dei comandi; assente ⇒ italiano. */
+  linguaInterfaccia = null,
   /*
    * ⛔⛔⛔ 02/09 — LEDGER-STREAMING-SCROLL-TERMINALE-2026-09-02.md, §6/§7.
    * L'etichetta del permesso della sessione ("Read only"/"Workspace
@@ -366,7 +369,7 @@ export async function avviaSessione({
   chiediDomandaFn,
   // 24/09/2026, decisioni owner 36-39: il canale della scelta sul piano, inoltrato SENZA logica come `chiediDomandaFn`.
   presentaPianoFn,
-  agentRole, askParentFn, answerChildQuestionFn, askChildFn, answerParentQuestionFn, onWorkflowPlanPropose,
+  agentRole, askParentFn, answerChildQuestionFn, askChildFn, answerParentQuestionFn, onWorkflowPlanPropose, listChildrenFn, stopChildFn,
   // D1 «Come Claude» (24/09/2026): inoltrati SENZA logica, come gli altri: il modo del padre letto a ogni chiamata e le figlie vive all'avvio.
   modalitaOperativaCorrenteFn, figliViviAllAvvio,
   /*
@@ -677,6 +680,7 @@ export async function avviaSessione({
    *   dalla terza chiamata (22/08, 16.768 token su 16.811 letti dalla cache).
    */
   let testoContestoProgetto;
+  let sospettoDelContesto = null; // F-027, estensione: il sospetto del preambolo, se arriva al modello in questo giro
   try {
     /*
      * ⛔ I DUE CONTRATTI, e non è pignoleria: `contestoDelProgetto` chiama `creaFiltro(radice)`
@@ -703,6 +707,10 @@ export async function avviaSessione({
       piattaforma: process.platform,
     });
     testoContestoProgetto = preambolo?.testo;
+    /* F-027, estensione (owner 03/10/2026): il sospetto della mappa o della scheda va al kernel SOLO se il preambolo arriva al
+       modello in questo giro — sessione nuova o ricostruita (lo mette il kernel in testa), oppure aggiornamento in coda (qui sotto). */
+    const preamboloInTesta = !(Array.isArray(messaggiIniziali) && messaggiIniziali.length > 0) || ricostruisciContestoIniziale === true;
+    if (preamboloInTesta) sospettoDelContesto = preambolo?.sospetto ?? null;
 
     /*
      * ⛔⛔⛔ IL CONTESTO SI APPENDE, NON SI RISCRIVE — e qui sta la differenza fra le due cose.
@@ -723,7 +731,10 @@ export async function avviaSessione({
      */
     if (!ricostruisciContestoIniziale && Array.isArray(messaggiIniziali) && messaggiIniziali.length > 0 && testoContestoProgetto) {
       const coda = aggiornamentoInCodaFn({ storia: messaggiIniziali, testo: testoContestoProgetto });
-      if (coda) messaggiIniziali = [...messaggiIniziali, { role: 'system', content: coda }];
+      if (coda) {
+        messaggiIniziali = [...messaggiIniziali, { role: 'system', content: coda }];
+        sospettoDelContesto = preambolo?.sospetto ?? null;
+      }
     }
   } catch {
     // ⭐ nessun preambolo: si parte esattamente come prima di BC-07, zero differenza per la sessione.
@@ -1192,6 +1203,8 @@ export async function avviaSessione({
         durataMs: evento.durataMs, comando: evento.comando, cwd: evento.cwd,
         isError: evento.isError, exitCode: evento.exitCode,
         ...(ricevuta ? { receipt: ricevuta } : {}),
+        // F-027: il kernel ha trovato nel risultato testo che sembra un'istruzione per un'IA
+        ...(evento.contenutoSospetto ? { suspicious: { source: evento.contenutoSospetto.fonte, patterns: evento.contenutoSospetto.motivi, place: evento.contenutoSospetto.luogo } } : {}),
       }));
       return;
     }
@@ -1215,8 +1228,17 @@ export async function avviaSessione({
       const record = evento.compattato ? evento.record : null;
       onEvento({ type: 'CUSTOM', name: 'talos.compattazione', value: record
         ? { fase: 'fine', giro: evento.giro, compattato: true, tokenPrima: record.tokenPrima ?? null, tokenDopo: record.tokenDopo ?? null, misura: record.misura ?? null, coveredThrough: record.coveredThrough, at: record.at, modello: record.modello ?? null, motivo: motivoCompattazionePerGiro.get(evento.giro) ?? null }
-        : { fase: 'fine', giro: evento.giro, compattato: false, motivo: evento.motivo ?? null } });
+        : { fase: 'fine', giro: evento.giro, compattato: false, motivo: evento.motivo ?? null, ...(evento.interrottaIn ? { interrottaIn: evento.interrottaIn } : {}) } });
       motivoCompattazionePerGiro.delete(evento.giro);
+    }
+    /*
+     * Lane CLI, 03/10/2026 — `compaction.progress`: i passi veri di una compattazione mentre succede (lettura, riassunto
+     *   contato dal vivo, sostituzione). È AVANZAMENTO, non storia: il registro lo consegna a chi è connesso adesso e non
+     *   lo scrive (`consegnaEvento`, elenco degli effimeri), come l'uscita di un comando.
+     */
+    if (evento.tipo === 'compattazione-progresso') {
+      const { tipo: _tipo, ...valore } = evento;
+      onEvento({ type: 'CUSTOM', name: NOME_EVENTO_PROGRESSO_COMPATTAZIONE, value: valore });
     }
   };
 
@@ -2096,10 +2118,13 @@ export async function avviaSessione({
       // ⭐ P-13 — il kernel lo mette in testa al prompt, subito dopo le istruzioni e PRIMA della
       // consegna: un contenuto stabile messo DOPO uno variabile non viene mai riusato dalla cache.
       contestoDelProgetto: testoContestoProgetto,
+      ...(sospettoDelContesto ? { sospettoDelContesto } : {}),
       onGiro, onScrittura, onDelta, reasoning, contextHooks,
+      progressoCompattazione: true, // lane CLI, 03/10/2026: la compattazione del giro dice i suoi passi (`compattazione-progresso`)
       ...(typeof onStoriaIniziale === 'function' ? { onStoriaIniziale } : {}),
       ...(ricostruisciContestoIniziale === true ? { ricostruisciContestoIniziale: true } : {}),
       fallbackProviders,
+      ...(linguaInterfaccia ? { linguaInterfaccia } : {}),
       onAvviso: async messaggio => {
         const messageId = randomUUID();
         await onEvento(textMessageStart({ messageId, role: 'assistant' }), { durable: true });
@@ -2126,7 +2151,7 @@ export async function avviaSessione({
       // («raccolta viva»). Assenti ⇒ il kernel si comporta esattamente come ieri.
       cacheWeb, onPaginaLetta,
       livelloAccesso, modalitaOperativa, chiediApprovazioneFn, chiediDomandaFn, presentaPianoFn,
-      agentRole, askParentFn, answerChildQuestionFn, askChildFn, answerParentQuestionFn, onWorkflowPlanPropose,
+      agentRole, askParentFn, answerChildQuestionFn, askChildFn, answerParentQuestionFn, onWorkflowPlanPropose, listChildrenFn, stopChildFn,
       modalitaOperativaCorrenteFn, figliViviAllAvvio,
       hookFn: hookFnConPlugin, permessiPerAttrezzo, onDelega, codaMessaggiFn,
       firma, toolMcp, chiamaToolMcpFn, skillsDisponibili, caricaSkillFn, toolPlugin, eseguiToolPluginFn,
@@ -2248,10 +2273,21 @@ export async function avviaSessione({
 export async function compattaSessione({
   messaggiFinali, modello, chiave, fetchDiRete = fetch,
   compattaConversazioneFn = compattaConversazioneReale,
+  onProgresso = null,
 }) {
-  const chiamaModello = (richiesta) => chiamaConRitenta({
-    modello, chiave, messaggi: richiesta, attrezzi: [], fetchDiRete,
-  });
+  /* Lane CLI, 03/10/2026 — con `onProgresso` il riassunto viaggia in streaming e si conta mentre si scrive
+     (`creaContatoreRiassunto`, `kernel/compattazione-desktop.mjs`); senza, la chiamata è quella di sempre. */
+  let tentativo = 0;
+  const chiamaModello = async (richiesta) => {
+    tentativo += 1;
+    const contatore = typeof onProgresso === 'function' ? creaContatoreRiassunto({ emetti: onProgresso, tentativo }) : null;
+    const esito = await chiamaConRitenta({
+      modello, chiave, messaggi: richiesta, attrezzi: [], fetchDiRete,
+      ...(contatore ? { onDelta: contatore.onDelta, accettaVuota: true } : {}),
+    });
+    contatore?.chiudi(esito?.usage);
+    return esito;
+  };
   return compattaConversazioneFn(messaggiFinali, chiamaModello);
 }
 
@@ -2267,13 +2303,17 @@ export async function compattaSessione({
  *   misurato il 09/09 sul giro D1 (`runtime-owner-adapter.mjs::callContextModel`).
  * @returns {Promise<{scelta:object|null, finishReason:string|null, usage:object|null}>}
  */
-export async function riassumiPerCompattazione({ modello, chiave, messaggi, maxOutputTokens, reasoning, fetchDiRete = fetch, segnaleStop }) {
+export async function riassumiPerCompattazione({ modello, chiave, messaggi, maxOutputTokens, reasoning, fetchDiRete = fetch, segnaleStop, onProgresso = null, tentativo = 1 }) {
+  /* Lane CLI, 03/10/2026: con `onProgresso` il riassunto si conta mentre si scrive, come in `compattaSessione`. */
+  const contatore = typeof onProgresso === 'function' ? creaContatoreRiassunto({ emetti: onProgresso, tentativo }) : null;
   const esito = await chiamaConRitenta({
     modello, chiave, messaggi, attrezzi: [], fetchDiRete,
     ...(Number.isSafeInteger(maxOutputTokens) && maxOutputTokens > 0 ? { maxOutputTokens } : {}),
     ...(reasoning ? { reasoning } : {}),
     ...(segnaleStop ? { segnaleStop } : {}),
+    ...(contatore ? { onDelta: contatore.onDelta, accettaVuota: true } : {}),
   });
+  contatore?.chiudi(esito?.usage);
   return { scelta: esito?.scelta ?? null, finishReason: esito?.finishReason ?? null, usage: esito?.usage ?? null };
 }
 

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import test from 'node:test';
+import { AREE } from '../frontend/src/i18n/testi/index.js';
 
 import { createHttpApp } from '../src/http-app.mjs';
 
@@ -315,7 +316,8 @@ test('HTTP-COLLISIONE-409-01 — un runtime già acceso risponde 409, non 500', 
   const corpo = await risposta.json();
   assert.equal(corpo.error.code, 'RUNTIME_ALREADY_RUNNING');
   // ⛔ E il messaggio dice cosa fare, non «problema imprevisto».
-  assert.match(corpo.error.message, /liberalo prima/);
+  assert.match(corpo.error.message, /release it before/);
+  assert.match(AREE.errori.it['RUNTIME_ALREADY_RUNNING.message'], /liberalo prima/, 'e in italiano lo dice il dizionario, dal codice');
 });
 
 test('HTTP-COLLISIONE-409-02 — AL CONTRARIO: un guasto VERO del runtime resta 500', async (t) => {

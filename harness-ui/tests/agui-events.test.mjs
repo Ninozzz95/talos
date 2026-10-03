@@ -87,6 +87,11 @@ test('RUN-REDIRECT-EVENTS-01 — il lifecycle del reindirizzamento conserva id e
     runRedirectFailed({ redirectId: 'd1', message: 'contesto non disponibile', code: 'SESSION_NOT_READY' }),
     { type: 'RunRedirectFailed', redirectId: 'd1', message: 'contesto non disponibile', code: 'SESSION_NOT_READY' },
   );
+  // K2 (03/10/2026): motivo e valori viaggiano con l'evento, solo se ci sono
+  assert.deepStrictEqual(
+    runRedirectFailed({ redirectId: 'd1', message: 'm', code: 'SESSION_NOT_READY', reason: 'redirect-empty', params: { n: 1 } }),
+    { type: 'RunRedirectFailed', redirectId: 'd1', message: 'm', code: 'SESSION_NOT_READY', reason: 'redirect-empty', params: { n: 1 } },
+  );
 });
 
 test('textMessageStart/Content/End — ruolo di default assistant', () => {

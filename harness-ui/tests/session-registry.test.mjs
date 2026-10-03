@@ -26,9 +26,23 @@ import { talosLavora as talosLavoraReale } from '../src/kernel/talosHarness.mjs'
 // BC-09 (13/09/2026): la copia locale dei ritentativi e diventata l'aiuto condiviso, uno solo per tutta la suite.
 import { rimuoviCartellaDiProva } from './aiuto/rimuovi-cartella-di-prova.mjs';
 import { TaskCatalogError } from '../src/task-catalog.mjs';
+// K2 (03/10/2026): i rifiuti del registro portano `code` + `reason` + la frase INGLESE; l'italiano sta nel dizionario dell'interfaccia.
+import { TESTI as DIZIONARIO } from '../frontend/src/i18n/testi/index.js';
 import { imageMessageContent } from '../src/chat-image-attachments.mjs';
 // ⭐ L4 (11/09) — lo scrittore VERO del record recintato, per le fixture di ricerca.
 import { talosResearchReportDocument } from '../src/research/report.mjs';
+
+/**
+ * K2 — un rifiuto del registro si controlla per `code`, `reason` e frase inglese; e che la voce del dizionario (la frase che la
+ * persona legge) esista nelle due lingue con lo STESSO inglese. Prima si confrontava la frase italiana scritta nel registro.
+ */
+function assertRifiuto(esito, code, reason) {
+  assert.equal(esito?.code, code, `codice di ${reason}`);
+  assert.equal(esito?.reason, reason, `motivo di ${code}`);
+  const chiave = `errori.${code}.${reason.replace(/-/gu, '_')}`;
+  assert.equal(esito.erroreAvvio, DIZIONARIO.en[chiave], `l'inglese del registro è quello del dizionario (${chiave})`);
+  assert.ok(typeof DIZIONARIO.it[chiave] === 'string' && DIZIONARIO.it[chiave] !== DIZIONARIO.en[chiave], `${chiave} ha il suo italiano`);
+}
 
 test('WF-PROPOSAL-REGISTRY-TRUST: session and model authority are supplied by registry', async () => {
   const finta = sessioneControllabile();
@@ -244,6 +258,20 @@ function sessioneControllabile() {
 }
 
 /** Più run davvero indipendenti: serve a provare madre e figlia vive nello stesso istante. */
+/**
+ * F-020 K2 (03/10): un padre fermato dalla PERSONA si risveglia coi risultati delle figlie che finiscono dopo. Le prove sullo
+ * Stop che chiudono la figlia per ultima vedono quindi un terzo giro (la ripresa del padre): la prova lo dichiara, lo chiude
+ * e aspetta l'assestamento, o il giro scrive nella cartella dopo che la prova l'ha tolta (DESK-TEMP-1, trovato dal desktop).
+ */
+async function chiudiIlRisveglioDelPadre(finta, registro, parentId) {
+  // Il risveglio parte quando il risultato della figlia è sul disco (`durableSync`): si aspetta quello, non un numero di tick.
+  for (let i = 0; i < 300 && finta.chiamate < 3; i += 1) await new Promise((ok) => setTimeout(ok, 10));
+  assert.equal(finta.chiamate, 3, 'K2: il risultato della figlia risveglia il padre fermato dalla persona');
+  assert.match(JSON.stringify(finta.run(2).input), /talos\.subagent-result\.v1/u, 'il giro nuovo porta il risultato della figlia');
+  finta.concludi(2, { type: 'RunFinished', runId: 'r3' }, { ok: true, esito: { comeFinita: 'concluso', messaggiFinali: storiaDelGiro(1) } });
+  await registro.attendiAssestamento(parentId);
+}
+
 function sessioniControllabili() {
   const run = [];
   return {
@@ -601,7 +629,7 @@ test('⛔⛔ AL CONTRARIO — elencaHooks con hooks.json malformato: {hooks:null
 test('⛔ AL CONTRARIO — elencaHooks su un id inesistente: NOT_FOUND', async () => {
   const registro = createSessionRegistry({ modello: 'm', chiave: 'k' });
   const esito = await registro.elencaHooks('id-mai-esistito');
-  assert.deepEqual(esito, { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' });
+  assertRifiuto(esito, 'NOT_FOUND', 'session-not-found');
 });
 
 test('⭐⭐⭐ fidaHook: rilegge hooks.json e fida con l\'hash VERO letto da disco, mai uno passato dal chiamante', async () => {
@@ -644,7 +672,7 @@ test('⛔⛔ AL CONTRARIO — fidaHook su un hookId che non esiste in hooks.json
 test('⛔ AL CONTRARIO — fidaHook su un id sessione inesistente: NOT_FOUND', async () => {
   const registro = createSessionRegistry({ modello: 'm', chiave: 'k' });
   const esito = await registro.fidaHook('id-mai-esistito', 'audit');
-  assert.deepEqual(esito, { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' });
+  assertRifiuto(esito, 'NOT_FOUND', 'session-not-found');
 });
 
 /*
@@ -693,7 +721,7 @@ test('⛔⛔ AL CONTRARIO — elencaServerMcp con .harness-ui-mcp.json malformat
 test('⛔ AL CONTRARIO — elencaServerMcp su un id inesistente: NOT_FOUND', async () => {
   const registro = createSessionRegistry({ modello: 'm', chiave: 'k' });
   const esito = await registro.elencaServerMcp('id-mai-esistito');
-  assert.deepEqual(esito, { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' });
+  assertRifiuto(esito, 'NOT_FOUND', 'session-not-found');
 });
 
 test('⭐⭐⭐ fidaServerMcp: rilegge .harness-ui-mcp.json e fida con l\'hash VERO letto da disco, mai uno passato dal chiamante', async () => {
@@ -736,7 +764,7 @@ test('⛔⛔ AL CONTRARIO — fidaServerMcp su un serverId che non esiste in .ha
 test('⛔ AL CONTRARIO — fidaServerMcp su un id sessione inesistente: NOT_FOUND', async () => {
   const registro = createSessionRegistry({ modello: 'm', chiave: 'k' });
   const esito = await registro.fidaServerMcp('id-mai-esistito', 'filesystem');
-  assert.deepEqual(esito, { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' });
+  assertRifiuto(esito, 'NOT_FOUND', 'session-not-found');
 });
 
 /*
@@ -1703,8 +1731,7 @@ test('⛔⛔⛔ AL CONTRARIO — rispondiApprovazione con un requestId SBAGLIATO
 
   const risultato = registro.rispondiApprovazione(sessionId, 'un-id-che-non-esiste', true);
 
-  assert.equal(risultato.code, 'APPROVAL_NOT_PENDING');
-  assert.equal(risultato.erroreAvvio, 'Questa richiesta di permesso non è più in attesa');
+  assertRifiuto(risultato, 'APPROVAL_NOT_PENDING', 'permission-request-expired');
 });
 
 test('⛔ AL CONTRARIO — rispondiApprovazione senza NESSUNA richiesta pendente: APPROVAL_NOT_PENDING, non un crash', () => {
@@ -2227,7 +2254,7 @@ test('⛔ forka() su una sessione origine ANCORA IN CORSO: SESSION_NOT_READY, di
 
   const risultato = registro.forka(sessionId);
   assert.equal(risultato.code, 'SESSION_NOT_READY');
-  assert.match(risultato.erroreAvvio, /ancora in corso/);
+  assertRifiuto(risultato, 'SESSION_NOT_READY', 'source-running');
   assert.equal(finta.chiamate, 1, 'solo la sessione origine, il fork non deve aver chiamato avviaSessione una seconda volta');
 
   finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' }); // pulizia
@@ -2608,7 +2635,7 @@ test('⛔ compatta() su una sessione ANCORA IN CORSO: SESSION_NOT_READY, compatt
 
   const risultato = await registro.compatta(sessionId);
   assert.equal(risultato.code, 'SESSION_NOT_READY');
-  assert.match(risultato.erroreAvvio, /ancora in corso/);
+  assertRifiuto(risultato, 'SESSION_NOT_READY', 'running-wait-compact');
   assert.equal(chiamate, 0, 'una sessione dal vivo non deve mai raggiungere compattaSessioneFn');
 
   finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' }); // pulizia
@@ -2625,7 +2652,7 @@ test('⛔ compatta() su una sessione conclusa MA SENZA messaggiFinali (talosLavo
 
   const risultato = await registro.compatta(sessionId);
   assert.equal(risultato.code, 'SESSION_NOT_READY');
-  assert.match(risultato.erroreAvvio, /non ha una conversazione/);
+  assert.equal(risultato.reason, 'no-conversation-to-compact');
 });
 
 test('⭐⭐⭐ compatta(): chiama compattaSessioneFn con messaggiFinali/modello/chiave, e un resume SUCCESSIVO riparte dal riassunto', async () => {
@@ -2649,7 +2676,10 @@ test('⭐⭐⭐ compatta(): chiama compattaSessioneFn con messaggiFinali/modello
   await new Promise((r) => setImmediate(r));
 
   const risultato = await registro.compatta(sessionId);
-  assert.deepEqual(inputCatturato, { messaggiFinali: storiaFinale, modello: 'z-ai/glm-4.7-flash', chiave: 'segreta' });
+  /* `onProgresso` (lane CLI, 03/10/2026): il registro passa al riassuntore chi ascolta i passi della compattazione. */
+  const { onProgresso, ...argomenti } = inputCatturato;
+  assert.equal(typeof onProgresso, 'function');
+  assert.deepEqual(argomenti, { messaggiFinali: storiaFinale, modello: 'z-ai/glm-4.7-flash', chiave: 'segreta' });
   assert.deepEqual(senzaStime(risultato), { ok: true, compattato: true, annullabile: false });
 
   // ⭐ La prova che conta: compatta() ha mutato messaggiFinali sul posto —
@@ -2687,7 +2717,7 @@ test('⛔ verso contrario: se compattaSessioneFn torna compattato:false, un resu
   await new Promise((r) => setImmediate(r));
 
   const risultato = await registro.compatta(sessionId);
-  assert.deepEqual(risultato, { ok: true, compattato: false });
+  assert.deepEqual(risultato, { ok: true, compattato: false, fase: 'riassunto' }); // `fase`: lane CLI, 03/10/2026
 
   registro.resume(sessionId);
   assert.deepEqual(secondoGiro.ultimoInput.messaggiIniziali, storiaFinale, 'compattato:false non deve toccare messaggiFinali');
@@ -3314,7 +3344,7 @@ test('⭐⭐⭐⭐ delega FILO INTERO: la madre riceve AVVIATO subito, continua 
   await new Promise((r) => setImmediate(r));
   const consegnaCanonica = finta.run(0).input.codaMessaggiFn();
   assert.match(consegnaCanonica, /Modulo scritto e testato\./);
-  assert.match(consegnaCanonica, /sotto-agente/i);
+  assert.match(consegnaCanonica, /sub-agent/i);
 
   const figliDelPadre = registro.elencaFigli(padreId);
   assert.equal(figliDelPadre.figli.length, 1, 'il registro riconosce la figlia come figlia DI QUESTO padre, non una sessione slegata');
@@ -3825,7 +3855,7 @@ test('⭐⭐⭐ elencaFigli(): NOT_FOUND su una sessione inesistente, zero figli
   const finta = sessioneControllabile();
   const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaEsisteFn: () => true });
 
-  assert.deepEqual(registro.elencaFigli('fantasma'), { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' });
+  assertRifiuto(registro.elencaFigli('fantasma'), 'NOT_FOUND', 'session-not-found');
 
   const { sessionId: padreId } = registro.avvia('task-vero');
   assert.deepEqual(registro.elencaFigli(padreId), { ok: true, figli: [] }, 'nessuna delega ancora avvenuta: elenco vero, vuoto — non un errore');
@@ -4103,7 +4133,7 @@ test('DELEGA RECOVERY: checkpoint successivo resta autorevole sui risultati gia 
 
 test('⛔ accodaMessaggio: NOT_FOUND su un id inesistente', () => {
   const registro = createSessionRegistry({ modello: 'm', chiave: 'k' });
-  assert.deepEqual(registro.accodaMessaggio('fantasma', 'ciao'), { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' });
+  assertRifiuto(registro.accodaMessaggio('fantasma', 'ciao'), 'NOT_FOUND', 'session-not-found');
 });
 
 test('⛔⛔ accodaMessaggio: SESSION_NOT_READY su una sessione GIÀ CONCLUSA — il percorso giusto lì è resume(), non la coda', async () => {
@@ -4115,10 +4145,11 @@ test('⛔⛔ accodaMessaggio: SESSION_NOT_READY su una sessione GIÀ CONCLUSA �
      l'assestamento la coda risponde «sta chiudendo il giro» (v3, REV-SESSION-READY-11): un'altra risposta, un altro caso. */
   await registro.attendiAssestamento(sessionId);
 
-  assert.deepEqual(
-    registro.accodaMessaggio(sessionId, 'ciao'),
-    { erroreAvvio: 'La sessione è già conclusa: usa resume(), non la coda', code: 'SESSION_NOT_READY' },
+  assert.equal(
+    registro.accodaMessaggio(sessionId, 'ciao').reason,
+    'concluded-use-resume',
   );
+  assertRifiuto(registro.accodaMessaggio(sessionId, 'ciao'), 'SESSION_NOT_READY', 'concluded-use-resume');
 });
 
 test('⛔ accodaMessaggio: QUERY_INVALID su un testo vuoto o di soli spazi', () => {
@@ -4177,7 +4208,7 @@ test('⛔ svuotaCoda: rimosso:false su una coda già vuota, mai un errore — e 
   /* ⭐ 14/09 — la risposta porta anche `coda` (la coda è della sessione e si annuncia a ogni finestra): l'intento di
      questa prova non cambia, cambia solo la forma esatta della risposta. */
   assert.deepEqual(registro.svuotaCoda(sessionId), { ok: true, rimosso: false, coda: { voci: [], inPausa: false } });
-  assert.deepEqual(registro.svuotaCoda('fantasma'), { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' });
+  assertRifiuto(registro.svuotaCoda('fantasma'), 'NOT_FOUND', 'session-not-found');
   finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
 });
 
@@ -4248,7 +4279,7 @@ test('⛔⛔ AL CONTRARIO — elencaSkill con .harness-ui-skills malformato: {sk
 test('⛔ AL CONTRARIO — elencaSkill su un id inesistente: NOT_FOUND', async () => {
   const registro = createSessionRegistry({ modello: 'm', chiave: 'k' });
   const esito = await registro.elencaSkill('id-mai-esistito');
-  assert.deepEqual(esito, { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' });
+  assertRifiuto(esito, 'NOT_FOUND', 'session-not-found');
 });
 
 /*
@@ -4307,7 +4338,7 @@ test('⛔⛔ AL CONTRARIO — elencaLibreria con .harness-ui-library malformato:
 test('⛔ AL CONTRARIO — elencaLibreria su un id inesistente: NOT_FOUND', async () => {
   const registro = createSessionRegistry({ modello: 'm', chiave: 'k' });
   const esito = await registro.elencaLibreria('id-mai-esistito');
-  assert.deepEqual(esito, { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' });
+  assertRifiuto(esito, 'NOT_FOUND', 'session-not-found');
 });
 
 /*
@@ -4373,7 +4404,7 @@ test('⛔ AL CONTRARIO — le quattro azioni su una SESSIONE che non esiste: NOT
     await registro.eliminaVoceLibreria('mai-esistita', 'lib-1'),
     await registro.rivelaVoceLibreria('mai-esistita', 'lib-1'),
   ]) {
-    assert.deepEqual(esito, { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' });
+    assertRifiuto(esito, 'NOT_FOUND', 'session-not-found');
   }
 });
 
@@ -4514,7 +4545,7 @@ test('⛔⛔ AL CONTRARIO — elencaNote con .notes-store malformato: {note:null
 test('⛔ AL CONTRARIO — elencaNote su un id inesistente: NOT_FOUND', async () => {
   const registro = createSessionRegistry({ modello: 'm', chiave: 'k' });
   const esito = await registro.elencaNote('id-mai-esistito');
-  assert.deepEqual(esito, { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' });
+  assertRifiuto(esito, 'NOT_FOUND', 'session-not-found');
 });
 
 /*
@@ -4562,7 +4593,7 @@ test('⛔⛔ AL CONTRARIO — elencaAttivita con .tasks-store malformato: {attiv
 test('⛔ AL CONTRARIO — elencaAttivita su un id inesistente: NOT_FOUND', async () => {
   const registro = createSessionRegistry({ modello: 'm', chiave: 'k' });
   const esito = await registro.elencaAttivita('id-mai-esistito');
-  assert.deepEqual(esito, { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' });
+  assertRifiuto(esito, 'NOT_FOUND', 'session-not-found');
 });
 
 /*
@@ -4609,7 +4640,7 @@ test('⛔⛔ AL CONTRARIO — elencaMemorie con .memory-store malformato: {memor
 test('⛔ AL CONTRARIO — elencaMemorie su un id inesistente: NOT_FOUND', async () => {
   const registro = createSessionRegistry({ modello: 'm', chiave: 'k' });
   const esito = await registro.elencaMemorie('id-mai-esistito');
-  assert.deepEqual(esito, { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' });
+  assertRifiuto(esito, 'NOT_FOUND', 'session-not-found');
 });
 
 /*
@@ -4759,7 +4790,7 @@ test('⛔⛔ AL CONTRARIO — elencaPlugin con .harness-ui-plugins malformato: {
 test('⛔ AL CONTRARIO — elencaPlugin su un id sessione inesistente: NOT_FOUND', async () => {
   const registro = createSessionRegistry({ modello: 'm', chiave: 'k' });
   const esito = await registro.elencaPlugin('id-mai-esistito');
-  assert.deepEqual(esito, { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' });
+  assertRifiuto(esito, 'NOT_FOUND', 'session-not-found');
 });
 
 test('⭐⭐⭐ fidaPlugin: rilegge .harness-ui-plugins/ e fida con l\'hash VERO letto da disco, mai uno passato dal chiamante', async () => {
@@ -4802,7 +4833,7 @@ test('⛔⛔ AL CONTRARIO — fidaPlugin su un pluginId che non esiste in .harne
 test('⛔ AL CONTRARIO — fidaPlugin su un id sessione inesistente: NOT_FOUND', async () => {
   const registro = createSessionRegistry({ modello: 'm', chiave: 'k' });
   const esito = await registro.fidaPlugin('id-mai-esistito', 'esempio');
-  assert.deepEqual(esito, { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' });
+  assertRifiuto(esito, 'NOT_FOUND', 'session-not-found');
 });
 
 /*
@@ -4892,7 +4923,7 @@ test('SESSION-SETTINGS-DURABILITY-01 contrario — id assente e patch vuota non 
   const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'openai/gpt-default', chiave: 'k' });
   const { sessionId } = registro.avvia('task-vero');
   const prima = registro.elenca()[0];
-  assert.deepEqual(await registro.aggiornaImpostazioni('assente', { permessi: 'Read only' }), { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' });
+  assertRifiuto(await registro.aggiornaImpostazioni('assente', { permessi: 'Read only' }), 'NOT_FOUND', 'session-not-found');
   assert.equal((await registro.aggiornaImpostazioni(sessionId, {})).code, 'QUERY_INVALID');
   assert.deepEqual(registro.elenca()[0], prima);
   finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
@@ -5798,7 +5829,7 @@ test('⛔⛔ AL CONTRARIO — ripristina(): una sessione interrotta rifiuta fork
     const secondo = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaStore });
     await secondo.ripristina();
     const esito = secondo.forka(sessionId);
-    assert.deepEqual(esito, { erroreAvvio: 'La sessione origine è stata interrotta da un riavvio del server e non ha una conversazione da ereditare: avvia una sessione nuova.', code: 'SESSION_NOT_READY' });
+    assertRifiuto(esito, 'SESSION_NOT_READY', 'source-interrupted-by-restart');
   } finally {
     await rimuoviCartellaStoreDopoLeScritture(cartellaStore);
   }
@@ -5815,7 +5846,7 @@ test('⛔⛔ AL CONTRARIO — ripristina(): una sessione interrotta rifiuta comp
     const secondo = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaStore });
     await secondo.ripristina();
     const esito = await secondo.compatta(sessionId);
-    assert.deepEqual(esito, { erroreAvvio: 'Questa sessione è stata interrotta da un riavvio del server e non ha una conversazione da compattare: avvia una sessione nuova.', code: 'SESSION_NOT_READY' });
+    assertRifiuto(esito, 'SESSION_NOT_READY', 'interrupted-by-restart-compact');
   } finally {
     await rimuoviCartellaStoreDopoLeScritture(cartellaStore);
   }
@@ -6146,7 +6177,7 @@ test('⛔⛔ AL CONTRARIO — ripristina(): una sessione interrotta rifiuta shel
     const secondo = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaStore });
     await secondo.ripristina();
     const esito = secondo.shell(sessionId, 'echo ciao');
-    assert.deepEqual(esito, { erroreAvvio: 'Questa sessione è stata interrotta da un riavvio del server: un comando diretto qui richiederebbe scrivere sopra una cronologia che non concluderà mai. Avvia una sessione nuova.', code: 'SESSION_NOT_READY' });
+    assertRifiuto(esito, 'SESSION_NOT_READY', 'interrupted-by-restart-direct-command');
   } finally {
     await rimuoviCartellaStoreDopoLeScritture(cartellaStore);
   }
@@ -6163,7 +6194,7 @@ test('⛔⛔⛔ AL CONTRARIO — ripristina(): una sessione interrotta rifiuta a
     const secondo = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaStore });
     await secondo.ripristina();
     const esito = secondo.accodaMessaggio(sessionId, 'un messaggio che nessuno leggerà mai');
-    assert.deepEqual(esito, { erroreAvvio: 'Questa sessione è stata interrotta da un riavvio del server: un messaggio in coda qui non verrebbe mai consegnato. Avvia una sessione nuova.', code: 'SESSION_NOT_READY' });
+    assertRifiuto(esito, 'SESSION_NOT_READY', 'interrupted-by-restart-queue');
   } finally {
     await rimuoviCartellaStoreDopoLeScritture(cartellaStore);
   }
@@ -6537,7 +6568,7 @@ test('⛔⛔ AL CONTRARIO — elencaToolForgiati con .tool-forge-store malformat
 test('⛔ AL CONTRARIO — elencaToolForgiati su un id inesistente: NOT_FOUND', async () => {
   const registro = createSessionRegistry({ modello: 'm', chiave: 'k' });
   const esito = await registro.elencaToolForgiati('id-mai-esistito');
-  assert.deepEqual(esito, { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' });
+  assertRifiuto(esito, 'NOT_FOUND', 'session-not-found');
 });
 
 test('⭐⭐⭐⭐⭐ abilitaToolForgiato: cambia DAVVERO lo stato — l\'UNICA mutazione owner-facing di tutta FASE N', async () => {
@@ -6575,7 +6606,7 @@ test('⛔⛔ AL CONTRARIO — abilitaToolForgiato su un tool id inesistente: NOT
 test('⛔ AL CONTRARIO — abilitaToolForgiato su un id di SESSIONE inesistente: NOT_FOUND', async () => {
   const registro = createSessionRegistry({ modello: 'm', chiave: 'k' });
   const esito = await registro.abilitaToolForgiato('id-mai-esistito', 'x', true);
-  assert.deepEqual(esito, { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' });
+  assertRifiuto(esito, 'NOT_FOUND', 'session-not-found');
 });
 
 test('FILE-TREE-PREVIEW-01 — legge un livello soltanto dal progetto allowlistato', async () => {
@@ -6599,9 +6630,7 @@ test('FILE-TREE-PREVIEW-02 — rifiuta un projectId fuori allowlist senza legger
     leggiAlberoWorkspaceFn: async () => { letture += 1; return []; },
   });
 
-  assert.deepEqual(await registro.anteprimaAlbero('sconosciuto'), {
-    erroreAvvio: 'Progetto non trovato', code: 'NOT_FOUND',
-  });
+  assertRifiuto(await registro.anteprimaAlbero('sconosciuto'), 'NOT_FOUND', 'project-not-found');
   assert.equal(letture, 0);
 });
 
@@ -7052,7 +7081,7 @@ test('⛔⛔ AL CONTRARIO — senza istanti (sessione ripristinata dal disco) in
   const { processi } = processiDaEventi(eventi);
   assert.equal(processi[0].inizio, null);
   assert.equal(processi[0].durataMs, null);
-  assert.match(processi[0].motivoTempoAssente, /istante/i);
+  assert.match(processi[0].motivoTempoAssente, /instant/i); // K4b: il motivo del ledger è inglese (non arriva a schermo)
 });
 
 /* --------------------------- guardia di stallo --------------------------- */
@@ -7418,7 +7447,7 @@ test('⛔⛔ AL CONTRARIO — «nessun consumo registrato» e «cache a zero» h
   ]));
   assert.equal(senzaUsage.cache.frazione, null);
   assert.equal(senzaUsage.cache.promptTokens, null);
-  assert.ok(senzaUsage.cache.motivoAssente.includes('MISURATO'), 'non misurato si DICE, non si confonde con uno zero');
+  assert.ok(senzaUsage.cache.motivoAssente.includes('NOT MEASURED'), 'non misurato si DICE, non si confonde con uno zero');
 
   // Il VERSO OPPOSTO, e nei dati veri succede in 5 sessioni su 73: la cache
   // è stata misurata e vale davvero zero.
@@ -7495,7 +7524,8 @@ test('⛔⛔ AL CONTRARIO — SENZA istanti (sessione ripresa da disco) il tempo
   assert.equal(primoToken.ms, null);
   assert.equal(primoToken.msPrimoVisibile, null);
   assert.equal(primoToken.inCorsoDaMs, null);
-  assert.ok(primoToken.motivoAssente.includes('nessun istante osservato'), 'è il caso NORMALE dei 73 file veri: nessun evento persistito porta un orario');
+  assert.ok(primoToken.motivoAssente.includes('no instant observed'), 'è il caso NORMALE dei 73 file veri: nessun evento persistito porta un orario');
+  assert.equal(primoToken.motivoAssenteChiave, 'server.metrics.noInstants', 'K4b: la chiave del dizionario viaggia accanto alla frase inglese');
   assert.equal(primoToken.tipo, 'testo', 'il TIPO del primo pezzo si legge lo stesso: non serve un orologio per sapere COSA è arrivato');
 });
 
@@ -7504,7 +7534,7 @@ test('⛔⛔ AL CONTRARIO — giro partito e NESSUN pezzo di risposta: ms null, 
   const conOrologio = metricheDaEventi(eventi, { istanti: new Map([[1, 5_000]]), adesso: 9_000 });
   assert.equal(conOrologio.primoToken.ms, null);
   assert.equal(conOrologio.primoToken.tipo, null);
-  assert.ok(conOrologio.primoToken.motivoAssente.includes('non è ancora arrivato'));
+  assert.ok(conOrologio.primoToken.motivoAssente.includes('has arrived yet'));
   assert.equal(conOrologio.primoToken.inCorsoDaMs, 4_000, 'il giro è aperto: si dice da quanto, non si inventa un tempo al primo token');
 
   const senzaOrologio = metricheDaEventi(eventi);
@@ -7521,7 +7551,7 @@ test('⛔⛔ AL CONTRARIO — solo RAGIONAMENTO e nessun testo: TTFT c\'è, TTFV
   assert.equal(primoToken.ms, 700);
   assert.equal(primoToken.tipo, 'ragionamento');
   assert.equal(primoToken.msPrimoVisibile, null, '⛔ mai il TTFT riusato come TTFV: il testo visibile non è ancora arrivato');
-  assert.ok(primoToken.motivoVisibileAssente.includes('testo visibile'));
+  assert.ok(primoToken.motivoVisibileAssente.includes('visible text'));
 });
 
 test('⭐ metricheDaEventi — anche una tool-call vale come primo pezzo di risposta (1 sessione su 73 comincia così)', () => {
@@ -7572,7 +7602,7 @@ test('⛔⛔ AL CONTRARIO — un giro ANCORA APERTO non ha un motivo di chiusura
   const { chiusura } = metricheDaEventi(eventi);
   assert.equal(chiusura.motivo, null);
   assert.equal(chiusura.codice, null);
-  assert.ok(chiusura.motivoAssente.includes('ancora in corso'));
+  assert.ok(chiusura.motivoAssente.includes('still running'));
 });
 
 test('⛔⛔⛔ metricheDaEventi — un RunFinished del giro PRECEDENTE non chiude il giro di ADESSO (11 sessioni su 73 hanno più giri)', () => {
@@ -7672,8 +7702,8 @@ test('⛔⛔⛔ processes/metrics/export DICHIARANO interrotta:true su una sessi
     const metriche = secondo.elencaMetriche(sessionId);
     assert.equal(metriche.interrotta, true);
     if (metriche.chiusura && metriche.chiusura.motivo === null) {
-      assert.match(metriche.chiusura.motivoAssente, /interrotto da un riavvio/);
-      assert.doesNotMatch(metriche.chiusura.motivoAssente, /ancora in corso/);
+      assert.match(metriche.chiusura.motivoAssente, /server restart interrupted/);
+      assert.doesNotMatch(metriche.chiusura.motivoAssente, /still running/);
     }
     assert.equal(secondo.esporta(sessionId).interrotta, true);
   } finally {
@@ -7690,7 +7720,7 @@ test('⛔⛔ AL CONTRARIO — su una sessione VIVA gli stessi tre payload dicono
   const metriche = registro.elencaMetriche(sessionId);
   assert.equal(metriche.interrotta, false);
   if (metriche.chiusura && metriche.chiusura.motivo === null) {
-    assert.match(metriche.chiusura.motivoAssente, /ancora in corso/);
+    assert.match(metriche.chiusura.motivoAssente, /still running/);
   }
   assert.equal(registro.esporta(sessionId).interrotta, false);
 
@@ -8042,7 +8072,7 @@ test('⛔⛔ D3 — con un modello di sessione sconosciuto la compattazione RIFI
 
   const esito = await registro.compatta(sessionId);
   if (esito.code === 'SESSION_MODEL_UNKNOWN') {
-    assert.match(esito.erroreAvvio, /non so quale modello/i);
+    assertRifiuto(esito, 'SESSION_MODEL_UNKNOWN', 'model-unknown-compact');
     assert.equal(compattaChiamata, false, 'si rifiuta PRIMA di chiamare');
     assert.deepEqual(visti, [], 'e senza nessuna richiesta di rete');
   } else {
@@ -8231,7 +8261,7 @@ test('⛔⛔⛔ G4-D3b — la guardia SESSION_MODEL_UNKNOWN morde DAVVERO, e pri
 
   const esito = await registro.compatta(sessionId);
   assert.equal(esito.code, 'SESSION_MODEL_UNKNOWN');
-  assert.match(esito.erroreAvvio, /non so quale modello/i);
+  assertRifiuto(esito, 'SESSION_MODEL_UNKNOWN', 'model-unknown-compact');
   assert.equal(compattaChiamata, false, '⛔ si rifiuta PRIMA di chiamare');
   assert.equal(trasportoChiesto, false, '⛔ e senza nemmeno costruire il trasporto: zero rete');
 });
@@ -8351,7 +8381,7 @@ test('MSG-RIMOSSO-04 — il messaggio della PERSONA porta via il suo giro, e non
   const { sessionId } = registro.avvia('task-vero');
   const rifiuto = await registro.rimuoviMessaggio(sessionId, 'm1');
   assert.equal(rifiuto.code, 'SESSION_STILL_RUNNING');
-  assert.match(rifiuto.erroreAvvio, /sta ancora lavorando/i);
+  assertRifiuto(rifiuto, 'SESSION_STILL_RUNNING', 'still-working-wait');
   finta.concludi({ type: 'RunFinished' }, { ok: true, esito: { messaggiFinali: [] } });
   const assente = await registro.rimuoviMessaggio(sessionId, 'mai-esistito');
   assert.equal(assente.code, 'NOT_FOUND', 'e non si scrive una lapide su un messaggio che non c e');
@@ -8950,8 +8980,8 @@ test('CTX-TRIAL-COMPACT-RESUME-RACE-HONEST — un job trial già committed non v
     libera();
     const risposta = await compattazione;
     assert.equal(risposta.code, 'SESSION_NOT_READY');
-    assert.match(risposta.erroreAvvio, /potrebbe|verific/i);
-    assert.doesNotMatch(risposta.erroreAvvio, /nessuna cronologia.*sostituita/i);
+    assertRifiuto(risposta, 'SESSION_NOT_READY', 'changed-during-compaction-job');
+    assert.notEqual(risposta.reason, 'changed-during-summary', 'non è descritto come un rollback: «nessuna cronologia sostituita» sarebbe falso');
   } finally {
     libera();
     await compattazione;
@@ -9232,7 +9262,7 @@ test('REV-SESSION-READY-03 — resume e forka nella finestra non usano MAI la cr
   assert.equal(finte[2].chiamate, 0, 'nessun giro è partito dalla cronologia vecchia');
   assert.equal(nellaFinestra.ripresa.code, 'SESSION_NOT_READY');
   assert.equal(nellaFinestra.fork.code, 'SESSION_NOT_READY');
-  assert.match(nellaFinestra.ripresa.erroreAvvio, /sta chiudendo il giro/);
+  assertRifiuto(nellaFinestra.ripresa, 'SESSION_NOT_READY', 'closing-turn-history-pending');
   await registro.attendiAssestamento(sessionId);
   assert.equal(registro.resume(sessionId, 'domanda 3').sessionId, sessionId);
   assert.deepEqual(finte[2].ultimoInput.messaggiIniziali.slice(0, 3), storiaDelGiro(2), 'la ripresa parte dalla cronologia del secondo giro');
@@ -9275,7 +9305,7 @@ test('REV-SESSION-READY-05 — un giro che LANCIA si assesta lo stesso: nessuna 
   assert.deepEqual(finali, ['RunError']);
   const compatta = await registro.compatta(sessionId);
   assert.equal(compatta.code, 'SESSION_NOT_READY', 'senza cronologia resta il rifiuto onesto, non un\'attesa');
-  assert.match(compatta.erroreAvvio, /non ha una conversazione/);
+  assertRifiuto(compatta, 'SESSION_NOT_READY', 'no-conversation-to-compact');
   await registro.attendiAssestamento('mai-esistito');
 });
 
@@ -9354,10 +9384,10 @@ test('REV-SESSION-READY-08 — un giro che RIPARTE dopo l\'evento finale (ripieg
   assert.equal(registro.staChiudendoIlGiro(sessionId), false, 'un giro ripartito non è una finestra di chiusura');
   const ripresa = registro.resume(sessionId, 'nel mezzo');
   assert.equal(ripresa.code, 'SESSION_NOT_READY');
-  assert.match(ripresa.erroreAvvio, /ancora in corso/);
+  assertRifiuto(ripresa, 'SESSION_NOT_READY', 'running-wait-resume');
   assert.equal(giro.chiamate, 1, 'nessun secondo giro in parallelo a quello cloud');
   const compatta = await registro.compatta(sessionId);
-  assert.match(compatta.erroreAvvio, /ancora in corso/, 'compatta risponde subito, non aspetta il giro cloud intero');
+  assertRifiuto(compatta, 'SESSION_NOT_READY', 'running-wait-compact'); // compatta risponde subito, non aspetta il giro cloud intero
   giro.emetti({ type: 'RunFinished', threadId: 't', runId: 'cloud' });
   giro.risolvi({ ok: true, esito: { comeFinita: 'concluso', messaggiFinali: storiaDelGiro(1) } });
   await registro.attendiAssestamento(sessionId);
@@ -9382,7 +9412,7 @@ test('REV-SESSION-READY-09 — secondo giro che LANCIA (ramo .catch): compatta n
   await registro.attendiAssestamento(sessionId);
   const esito = await compattazione;
   assert.equal(esito.code, 'SESSION_NOT_READY', 'non compatta la storia di PRIMA come se fosse l\'ultima');
-  assert.match(esito.erroreAvvio, /in sospeso/);
+  assertRifiuto(esito, 'SESSION_NOT_READY', 'last-turn-open-compact');
   assert.deepEqual(compattate, [], 'il riassuntore non ha visto la storia vecchia');
 });
 
@@ -9435,11 +9465,11 @@ test('REV-SESSION-READY-11 — nella finestra la coda dice «sta chiudendo il gi
   assert.equal(accodati.length, 2);
   for (const esito of accodati) {
     assert.equal(esito.code, 'SESSION_NOT_READY');
-    assert.match(esito.erroreAvvio, /sta chiudendo il giro/);
+    assertRifiuto(esito, 'SESSION_NOT_READY', 'closing-turn-retry');
   }
   assert.equal(registro.statoCoda(sessionId).voci?.length ?? 0, 0, 'nella coda non è rimasto niente di orfano');
   assert.equal(dopo.chiamate, 0, 'nessun giro è partito da solo');
-  assert.match(registro.accodaMessaggio(sessionId, 'dopo').erroreAvvio, /usa resume/, 'assestata, vale la regola di sempre');
+  assertRifiuto(registro.accodaMessaggio(sessionId, 'dopo'), 'SESSION_NOT_READY', 'concluded-use-resume'); // assestata, vale la regola di sempre
 });
 
 test('REV-SESSION-READY-14 — un\'attesa iniziata sul RunError locale si sveglia sul RunStarted del cloud: «in corso», non il giro intero', async () => {
@@ -9454,7 +9484,8 @@ test('REV-SESSION-READY-14 — un\'attesa iniziata sul RunError locale si svegli
   giro.emetti({ type: 'RunStarted', threadId: 't', runId: 'cloud' });
   const vinto = await Promise.race([compattazione.then((e) => e), new Promise((r) => setTimeout(() => r('appesa'), 1000))]);
   assert.notEqual(vinto, 'appesa', 'la compattazione non aspetta il giro cloud intero');
-  assert.match(vinto.erroreAvvio, /ancora in corso/);
+  assert.equal(vinto.code, 'SESSION_NOT_READY');
+  assert.match(vinto.reason, /^running-wait-(?:compact|resume)$/u);
   giro.emetti({ type: 'RunFinished', threadId: 't', runId: 'cloud' });
   giro.risolvi({ ok: true, esito: { comeFinita: 'concluso', messaggiFinali: storiaDelGiro(1) } });
   await registro.attendiAssestamento(sessionId);
@@ -9473,8 +9504,8 @@ test('REV-SESSION-READY-15 — il ripiego sul cloud al SECONDO giro: la sessione
   secondo.emetti({ type: 'RunStarted', threadId: 't', runId: 'cloud' });
   const fork = registro.forka(sessionId);
   assert.equal(fork.code, 'SESSION_NOT_READY', 'nessun fork dalla storia del primo giro mentre il secondo lavora');
-  assert.match(fork.erroreAvvio, /ancora in corso/);
-  assert.match(registro.resume(sessionId, 'nel mezzo').erroreAvvio ?? '', /ancora in corso/);
+  assertRifiuto(fork, 'SESSION_NOT_READY', 'source-running');
+  assertRifiuto(registro.resume(sessionId, 'nel mezzo'), 'SESSION_NOT_READY', 'running-wait-resume');
   secondo.emetti({ type: 'RunFinished', threadId: 't', runId: 'cloud' });
   secondo.risolvi({ ok: true, esito: { comeFinita: 'concluso', messaggiFinali: storiaDelGiro(2) } });
   await registro.attendiAssestamento(sessionId);
@@ -9539,7 +9570,7 @@ test('REV-SESSION-READY-12 — un avvio che LANCIA in modo sincrono non lascia l
   const vinto = await Promise.race([registro.attendiAssestamento(sessionId).then(() => 'assestato'), new Promise((r) => setTimeout(() => r('appesa'), 2000))]);
   assert.equal(vinto, 'assestato');
   assert.equal(registro.staChiudendoIlGiro(sessionId), false);
-  assert.doesNotMatch(registro.resume(sessionId, 'riprovo').erroreAvvio ?? '', /sta chiudendo il giro/);
+  assert.notEqual(registro.resume(sessionId, 'riprovo').reason, 'closing-turn-history-pending');
 });
 
 test('REV-SESSION-READY-13 — una correzione riparte dentro la chiusura: compatta dall’ascoltatore dice «in corso», non riassume la storia vecchia', async () => {
@@ -9564,7 +9595,7 @@ test('REV-SESSION-READY-13 — una correzione riparte dentro la chiusura: compat
   const esito = await compattazione;
   assert.equal(terzo.chiamate, 1, 'la correzione è ripartita');
   assert.equal(esito.code, 'SESSION_NOT_READY');
-  assert.match(esito.erroreAvvio, /ancora in corso/);
+  assertRifiuto(esito, 'SESSION_NOT_READY', 'running-wait-compact');
   assert.deepEqual(compattate, [], 'nessuna storia riassunta mentre il giro corretto lavora');
   terzo.concludi({ type: 'RunFinished', threadId: 't3', runId: 'r3' });
   await registro.attendiAssestamento(sessionId);
@@ -9689,7 +9720,7 @@ test('REV-SESSION-READY-21 — la scrittura tardiva di un risultato di figlia ch
     for (const rifiuta of rifiuti) rifiuta(new Error('disco pieno'));
     for (let i = 0; i < 3; i += 1) await unGiro();
     assert.deepEqual(finali, [], 'nessun RunError sul giro nuovo per una scrittura del giro di prima');
-    assert.match(registro.resume(parentId, 'nel mezzo').erroreAvvio ?? '', /ancora in corso/, 'il giro nuovo è ancora in corso');
+    assertRifiuto(registro.resume(parentId, 'nel mezzo'), 'SESSION_NOT_READY', 'running-wait-resume'); // il giro nuovo è ancora in corso
     finta.concludi(2, { type: 'RunFinished', runId: 'r3' });
     await registro.attendiAssestamento(parentId);
   } finally {
@@ -9742,7 +9773,8 @@ test('REV-SESSION-READY-23 — un secondo evento finale nella stessa finestra no
   giro.emetti({ type: 'RunStarted', threadId: 't', runId: 'cloud' });
   const vinto = await Promise.race([compattazione, new Promise((r) => setTimeout(() => r('appesa'), 1000))]);
   assert.notEqual(vinto, 'appesa', 'la prima attesa si sveglia sul RunStarted');
-  assert.match(vinto.erroreAvvio, /ancora in corso/);
+  assert.equal(vinto.code, 'SESSION_NOT_READY');
+  assert.match(vinto.reason, /^running-wait-(?:compact|resume)$/u);
   giro.emetti({ type: 'RunFinished', threadId: 't', runId: 'cloud' });
   giro.risolvi({ ok: true, esito: { comeFinita: 'concluso', messaggiFinali: storiaDelGiro(1) } });
   await registro.attendiAssestamento(sessionId);
@@ -10213,7 +10245,7 @@ test('REV-SESSION-READY-40 — un giro che RIPARTE dentro l’ascoltatore del te
   assert.ok(ripartito);
   const ripresa = registro.resume(sessionId, 'in parallelo?');
   assert.equal(ripresa.code, 'SESSION_NOT_READY', JSON.stringify(ripresa));
-  assert.match(ripresa.erroreAvvio, /in corso/u);
+  assertRifiuto(ripresa, 'SESSION_NOT_READY', 'running-wait-resume');
   assert.equal(await aspettaOAppesa(domanda, 100), 'appesa', 'la domanda non si annulla: il giro è ripartito e può ancora rispondere');
   finta.concludi(0, { type: 'RunFinished', runId: 'r1-cloud' }, { ok: true, esito: { comeFinita: 'concluso', messaggiFinali: storiaDelGiro(1) } });
   assert.equal((await aspettaOAppesa(domanda))?.status, 'cancelled', 'e si annulla quando il giro ripartito chiude senza rispondere');
@@ -10253,6 +10285,7 @@ test('REV-SESSION-READY-41 — uno Stop arrivato mentre la risposta si salva, se
     finta.concludi(0, { type: 'RunError', message: 'fermato', code: 'fermato', runId: 'r1' }, { ok: false, esito: { comeFinita: 'fermato', messaggiFinali: storiaDelGiro(1) } });
     finta.concludi(1, { type: 'RunFinished', runId: 'r2' });
     await registro.attendiAssestamento(parentId);
+    await chiudiIlRisveglioDelPadre(finta, registro, parentId);
   } finally {
     await attendiScritture({ cartellaStore });
     rimuoviCartellaDiProva(cartellaStore);
@@ -10733,7 +10766,7 @@ test('REV-SESSION-READY-54 — una domanda il cui journal è in coda è già fra
     for (let i = 0; i < 6; i += 1) await unGiro();
     assert.equal(finta.chiamate, 2, 'nessun giro riparte quando il journal finisce');
     finta.concludi(1, { type: 'RunFinished', runId: 'r2' });
-    await unGiro();
+    await chiudiIlRisveglioDelPadre(finta, registro, parentId);
   } finally {
     await attendiScritture({ cartellaStore });
     rimuoviCartellaDiProva(cartellaStore);
@@ -10949,7 +10982,7 @@ test('REV-SESSION-READY-59 — una risposta salvata IN RITARDO dopo lo Stop del 
     assert.equal(finta.chiamate, 2, 'il padre fermato non riparte');
     assert.equal(esito?.code, 'AGENT_DIALOGUE_DELIVERY_FAILED', `a chi risponde si dice che non è stata consegnata: ${JSON.stringify(esito)}`);
     finta.concludi(1, { type: 'RunFinished', runId: 'r2' });
-    await unGiro();
+    await chiudiIlRisveglioDelPadre(finta, registro, parentId);
   } finally {
     await attendiScritture({ cartellaStore });
     rimuoviCartellaDiProva(cartellaStore);
@@ -11074,8 +11107,36 @@ test('REV-SESSION-READY-63 — fermato CHI RISPONDE mentre la risposta si salva:
     prova.finta.concludi(1, { type: 'RunFinished', runId: 'r2' });
     prova.finta.concludi(0, { type: 'RunError', message: 'fermato', code: 'fermato', runId: 'r1' }, { ok: false, esito: { comeFinita: 'fermato', messaggiFinali: storiaDelGiro(1) } });
     await prova.registro.attendiAssestamento(prova.ids.padre);
+    await chiudiIlRisveglioDelPadre(prova.finta, prova.registro, prova.ids.padre);
   } finally {
     await attendiScritture({ cartellaStore: prova.cartellaStore });
     rimuoviCartellaDiProva(prova.cartellaStore);
   }
+});
+
+test('K3B-REGISTRY-01 — la lingua dell\'interfaccia arriva al primo giro di una sessione libera e resta dopo la ripresa', async () => {
+  const finta = sessioneControllabile();
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneLiberaFn: preparaEsecuzioneLiberaFinta, cartelleProgetto: [{ id: '0', percorso: '/tmp/progetto', nome: 'progetto' }], modello: 'm', chiave: 'k' });
+  const { sessionId } = registro.avviaLibero({ cartellaId: '0', consegna: 'Guarda', linguaInterfaccia: 'en' });
+  assert.equal(finta.ultimoInput.linguaInterfaccia, 'en', 'il primo giro la sa già');
+  finta.concludi({ type: 'RunFinished' }, { ok: true, esito: { detto: 'done', comeFinita: 'concluso', messaggiFinali: [{ role: 'user', content: 'Guarda' }, { role: 'assistant', content: 'fatto' }] } });
+  await new Promise(resolve => setImmediate(resolve));
+  const r1 = registro.resume(sessionId, 'ancora'); assert.equal(r1.sessionId, sessionId, JSON.stringify(r1));
+  assert.equal(finta.ultimoInput.linguaInterfaccia, 'en', 'la ripresa la conserva');
+  finta.concludi({ type: 'RunFinished' }, { ok: true, esito: { detto: 'done', comeFinita: 'concluso', messaggiFinali: [{ role: 'user', content: 'Guarda' }, { role: 'assistant', content: 'fatto' }] } });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(registro.impostaLinguaInterfaccia(sessionId, 'it'), { aggiornata: true });
+  assert.equal(registro.resume(sessionId, 'e ora').sessionId, sessionId);
+  assert.equal(finta.ultimoInput.linguaInterfaccia, 'it', 'un cambio vale dal giro dopo');
+  finta.concludi({ type: 'RunFinished' }, { ok: true, esito: { detto: 'done', comeFinita: 'concluso', messaggiFinali: [{ role: 'user', content: 'Guarda' }, { role: 'assistant', content: 'fatto' }] } });
+});
+
+test('K3B-REGISTRY-02 — senza lingua dichiarata il giro non la porta (resta l\'italiano di prima); valori e sessioni sbagliati si rifiutano', async () => {
+  const finta = sessioneControllabile();
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneLiberaFn: preparaEsecuzioneLiberaFinta, cartelleProgetto: [{ id: '0', percorso: '/tmp/progetto', nome: 'progetto' }], modello: 'm', chiave: 'k' });
+  const { sessionId } = registro.avviaLibero({ cartellaId: '0', consegna: 'Guarda' });
+  assert.equal('linguaInterfaccia' in finta.ultimoInput, false);
+  assert.equal(registro.impostaLinguaInterfaccia(sessionId, 'fr').code, 'QUERY_INVALID');
+  assert.equal(registro.impostaLinguaInterfaccia('assente', 'en').code, 'NOT_FOUND');
+  finta.concludi({ type: 'RunFinished' }, { ok: true, esito: { detto: 'done', comeFinita: 'concluso', messaggiFinali: [] } });
 });

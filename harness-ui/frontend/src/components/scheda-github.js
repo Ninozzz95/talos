@@ -27,14 +27,99 @@
  *     con un modale sopra tutto; il rifiuto del server resta scritto lì, e il nome si corregge lì.
  */
 import { linguaCorrenteDiT, t, tn } from './lingua.js';
+import { testoDelCampo } from './testo-server.js'; // K4a: l'errore dell'installazione e quello dell'accesso arrivano dal server con la loro chiave
 import { disegnoDellaRiga, disegnoSegnaposto, righeDelGrafo, soloDelRemoto } from './grafo-storia.js';
 
-/** L'ordine e i nomi dei gruppi (VS Code, `repository.ts:1011-1014`). */
+/* Il gruppo «Pull request»: nome breve di ogni voce → CHIAVE del dizionario (`github.pullRequest.*`). I nomi brevi sono quelli del codice; il testo sta nel dizionario, in italiano e in inglese. */
+const CHIAVI_PR = Object.freeze({
+  "gruppo": "github.pullRequest.group.title",
+  "leggo": "github.pullRequest.group.loading",
+  "aggiorna": "github.pullRequest.group.refresh",
+  "suGithub": "github.pullRequest.group.openOnGitHub",
+  "altreAzioni": "github.pullRequest.group.moreActions",
+  "azioni": "github.pullRequest.group.actions",
+  "aperteNelProgetto": "github.pullRequest.list.openInProject",
+  "apri": "github.pullRequest.row.openOnGitHub",
+  "aperta": "github.pullRequest.state.open",
+  "bozza": "github.pullRequest.state.draft",
+  "unita": "github.pullRequest.state.merged",
+  "chiusa": "github.pullRequest.state.closed",
+  "tua": "github.pullRequest.row.yours",
+  "inBozza": "github.pullRequest.row.draftTag",
+  "nessunControllo": "github.pullRequest.checks.none",
+  "mostraControlli": "github.pullRequest.checks.show",
+  "controlliFiniti": "github.pullRequest.checks.finished",
+  "nessunaPr": "github.pullRequest.list.noneForBranch",
+  "crea": "github.pullRequest.create.action",
+  "creo": "github.pullRequest.create.creating",
+  "creata": "github.pullRequest.create.created",
+  "ramoPrincipale": "github.pullRequest.create.onDefaultBranch",
+  "ghAssente": "github.pullRequest.cli.missing",
+  "ghVecchia": "github.pullRequest.cli.tooOld",
+  "ghScarica": "github.pullRequest.cli.download",
+  "ghScarico": "github.pullRequest.cli.downloading",
+  "ghSpiega": "github.pullRequest.cli.explainMissing",
+  "ghVecchiaSpiega": "github.pullRequest.cli.explainTooOld",
+  "ghNonInstallabile": "github.pullRequest.cli.notDownloadable",
+  "ghPagina": "github.pullRequest.cli.openPage",
+  "ghPronta": "github.pullRequest.cli.ready",
+  "scollegato": "github.pullRequest.connect.notConnected",
+  "collegaSpiega": "github.pullRequest.connect.explain",
+  "collega": "github.pullRequest.connect.action",
+  "collegaCodice": "github.pullRequest.connect.pasteCode",
+  "codice": "github.pullRequest.connect.codeLabel",
+  "copiaCodice": "github.pullRequest.connect.copyCode",
+  "codiceCopiato": "github.pullRequest.connect.codeCopied",
+  "apriGithub": "github.pullRequest.connect.openGithub",
+  "annulla": "github.pullRequest.common.cancel",
+  "collegato": "github.pullRequest.connect.connected",
+  "account": "github.pullRequest.connect.account",
+  "codiceScaduto": "github.pullRequest.connect.codeExpired",
+  "nonGithub": "github.pullRequest.error.notGithub",
+  "nessunRemoto": "github.pullRequest.error.noRemote",
+  "staccata": "github.pullRequest.error.detachedHead",
+  "nuova": "github.pullRequest.form.title",
+  "preparoBozza": "github.pullRequest.form.preparing",
+  "base": "github.pullRequest.form.base",
+  "scegliBase": "github.pullRequest.form.chooseBase",
+  "basi": "github.pullRequest.form.baseBranches",
+  "baseAssente": "github.pullRequest.form.baseMissing",
+  "titolo": "github.pullRequest.form.titleField",
+  "testo": "github.pullRequest.form.description",
+  "bozzaCasella": "github.pullRequest.form.asDraft",
+  "bozzaSpiega": "github.pullRequest.form.draftHint",
+  "serveTitolo": "github.pullRequest.form.titleRequired",
+  "pubblicaPrima": "github.pullRequest.form.publishFirst",
+  "primaScarica": "github.pullRequest.form.pullFirst",
+  "aspettaInvio": "github.pullRequest.form.waitsForPush",
+  "unFallito": "github.pullRequest.checks.failedOne",
+  "piuFalliti": "github.pullRequest.checks.failedMany",
+  "unInCorso": "github.pullRequest.checks.runningOne",
+  "piuInCorso": "github.pullRequest.checks.runningMany",
+  "unAnnullato": "github.pullRequest.checks.cancelledOne",
+  "piuAnnullati": "github.pullRequest.checks.cancelledMany",
+  "unPassato": "github.pullRequest.checks.passedOne",
+  "piuPassati": "github.pullRequest.checks.passedMany",
+  "unSaltato": "github.pullRequest.checks.skippedOne",
+  "piuSaltati": "github.pullRequest.checks.skippedMany",
+  "unDaInviare": "github.pullRequest.form.toPushOne",
+  "piuDaInviare": "github.pullRequest.form.toPushMany",
+  "unCommit": "github.pullRequest.form.commitsOne",
+  "piuCommit": "github.pullRequest.form.commitsMany",
+  "oltreCommit": "github.pullRequest.form.commitsOrMore",
+  "esitoFallito": "github.pullRequest.outcome.failed",
+  "esitoInCorso": "github.pullRequest.outcome.running",
+  "esitoAnnullato": "github.pullRequest.outcome.cancelled",
+  "esitoPassato": "github.pullRequest.outcome.passed",
+  "esitoSaltato": "github.pullRequest.outcome.skipped"
+});
+
+/** L'ordine e i nomi dei gruppi (VS Code, `repository.ts:1011-1014`). Il titolo è un getter: segue la lingua a ogni lettura. */
 export const GRUPPI = Object.freeze([
-  Object.freeze({ chiave: 'conflitti', titolo: 'Conflitti' }),
-  Object.freeze({ chiave: 'preparati', titolo: 'Preparati' }),
-  Object.freeze({ chiave: 'modificati', titolo: 'Modificati' }),
-  Object.freeze({ chiave: 'nuovi', titolo: 'Nuovi' }),
+  Object.freeze({ chiave: 'conflitti', get titolo() { return t('github.groups.conflicts'); } }),
+  Object.freeze({ chiave: 'preparati', get titolo() { return t('github.groups.staged'); } }),
+  Object.freeze({ chiave: 'modificati', get titolo() { return t('github.groups.modified'); } }),
+  Object.freeze({ chiave: 'nuovi', get titolo() { return t('github.groups.new'); } }),
 ]);
 
 /**
@@ -53,15 +138,16 @@ export function raggruppaVoci(voci = []) {
   return gruppi;
 }
 
-const PAROLA_DI = Object.freeze({ M: 'modificato', A: 'aggiunto', D: 'eliminato', R: 'rinominato', C: 'copiato', T: 'cambiato di tipo', U: 'nuovo', '!': 'in conflitto' });
+/* Le parole che spiegano la lettera dello stato: voci di dizionario, risolte con t() a ogni uso. */
+const PAROLA_DI = Object.freeze({ M: 'github.files.status.modified', A: 'github.files.status.added', D: 'github.files.status.deleted', R: 'github.files.status.renamed', C: 'github.files.status.copied', T: 'github.files.status.typeChanged', U: 'github.files.status.untracked', '!': 'github.files.status.conflict' });
 
 /** La lettera che VS Code mette accanto al file, e la parola che la spiega a chi non la conosce. */
 export function letteraStato(voce, gruppo) {
-  if (gruppo === 'conflitti') return { lettera: '!', parola: PAROLA_DI['!'] };
-  if (gruppo === 'nuovi') return { lettera: 'U', parola: PAROLA_DI.U };
+  if (gruppo === 'conflitti') return { lettera: '!', parola: t(PAROLA_DI['!']) };
+  if (gruppo === 'nuovi') return { lettera: 'U', parola: t(PAROLA_DI.U) };
   const grezza = gruppo === 'preparati' ? voce?.x : voce?.y;
   const lettera = PAROLA_DI[grezza] ? grezza : 'M';
-  return { lettera, parola: PAROLA_DI[lettera] };
+  return { lettera, parola: t(PAROLA_DI[lettera]) };
 }
 
 /**
@@ -137,41 +223,13 @@ export const ESITI_CONTROLLO = Object.freeze(['fallito', 'in-corso', 'annullato'
 const ICONA_ESITO = Object.freeze({ fallito: 'i-x', 'in-corso': 'i-clock', annullato: 'i-stop', passato: 'i-check', saltato: 'i-minus' });
 const CONTEGGIO_DI = Object.freeze({ fallito: 'falliti', 'in-corso': 'inCorso', annullato: 'annullati', passato: 'passati', saltato: 'saltati' });
 
-/** Tutte le frasi del gruppo «Pull request»: una sola lista, che il cancello dell'inglese legge (`i18n-copertura.test.mjs`). */
-export const TESTI_PR = Object.freeze({
-  gruppo: 'Pull request', leggo: 'Leggo le pull request…', aggiorna: 'Aggiorna le pull request', suGithub: 'Apri le pull request su GitHub',
-  altreAzioni: 'Altre azioni sulle pull request', azioni: 'Azioni sulle pull request', aperteNelProgetto: 'Aperte nel progetto',
-  apri: 'Apri su GitHub', aperta: 'Aperta', bozza: 'Bozza', unita: 'Unita', chiusa: 'Chiusa', tua: 'tua', inBozza: 'bozza',
-  nessunControllo: 'Nessun controllo', mostraControlli: 'Mostra i controlli', controlliFiniti: 'Controlli finiti',
-  nessunaPr: 'Nessuna pull request per questo ramo.', crea: 'Crea pull request', creo: 'Creo…', creata: 'Pull request creata',
-  ramoPrincipale: 'Sei sul ramo predefinito: crea un ramo per aprire una pull request.',
-  ghAssente: 'GitHub CLI non c’è', ghVecchia: 'GitHub CLI è troppo vecchia', ghScarica: 'Scarica GitHub CLI', ghScarico: 'Scarico GitHub CLI…',
-  ghSpiega: 'Le pull request passano da GitHub CLI. TALOS può scaricare la versione ufficiale {versione} (circa 15 MB) nella sua cartella: niente installazione nel sistema, nessuna modifica al PATH.',
-  ghVecchiaSpiega: 'Sul sistema c’è la {versione}; a TALOS serve la 2.97 o più nuova. Può scaricare la versione ufficiale {nuova} nella sua cartella, senza toccare quella del sistema.',
-  ghNonInstallabile: 'TALOS non sa scaricare GitHub CLI su questo sistema: installala da GitHub e riapri il gruppo.', ghPagina: 'Apri la pagina di GitHub CLI',
-  ghPronta: 'GitHub CLI pronta',
-  scollegato: 'GitHub non è collegato', collegaSpiega: 'Collega il tuo account per vedere e creare le pull request. L’accesso resta a GitHub CLI: TALOS non lo vede.',
-  collega: 'Collega GitHub', collegaCodice: 'Incolla questo codice nella pagina di GitHub e conferma: la scheda si aggiorna da sola.',
-  codice: 'Codice di accesso', copiaCodice: 'Copia il codice', codiceCopiato: 'Codice copiato', apriGithub: 'Apri github.com',
-  annulla: 'Annulla', collegato: 'GitHub collegato', account: 'Account {account}', codiceScaduto: 'Il codice è scaduto: ricomincia.',
-  nonGithub: 'Il remoto del ramo non è su github.com: qui non ci sono pull request.', nessunRemoto: 'Nessun remoto per questo ramo.',
-  staccata: 'HEAD staccata: passa a un ramo per vedere le sue pull request.',
-  nuova: 'Nuova pull request', preparoBozza: 'Preparo la bozza…', base: 'Base: {base}', scegliBase: 'Scegli la base', basi: 'Rami di base',
-  baseAssente: 'Il ramo «{base}» non c’è su {remoto}: scegline un altro.', titolo: 'Titolo della pull request', testo: 'Descrizione (facoltativa)',
-  bozzaCasella: 'Apri come bozza', bozzaSpiega: 'Una bozza non chiede ancora la revisione.', serveTitolo: 'Serve un titolo.',
-  pubblicaPrima: 'Il ramo non è ancora su GitHub: prima lo pubblichi, con conferma.',
-  primaScarica: 'Il ramo remoto ha commit che qui non ci sono: prima scarica.', aspettaInvio: 'Il ramo non è ancora su GitHub: la pull request aspetta l’invio.',
-  unFallito: '1 fallito', piuFalliti: '{n} falliti', unInCorso: '1 in corso', piuInCorso: '{n} in corso', unAnnullato: '1 annullato', piuAnnullati: '{n} annullati',
-  unPassato: '1 passato', piuPassati: '{n} passati', unSaltato: '1 saltato', piuSaltati: '{n} saltati',
-  unDaInviare: 'C’è 1 commit da inviare: prima lo invii, con conferma.', piuDaInviare: 'Ci sono {n} commit da inviare: prima li invii, con conferma.',
-  unCommit: '1 commit rispetto a {base}', piuCommit: '{n} commit rispetto a {base}', oltreCommit: '{n} commit o più rispetto a {base}',
-  esitoFallito: 'fallito', esitoInCorso: 'in corso', esitoAnnullato: 'annullato', esitoPassato: 'passato', esitoSaltato: 'saltato',
-});
+/** Tutte le voci del gruppo «Pull request»: una sola lista, che un test di copertura legge (`i18n-copertura.test.mjs`). Sono CHIAVI del dizionario: il testo lo dà `t()` nella lingua corrente. */
+export const TESTI_PR = CHIAVI_PR;
 
-const PAROLA_ESITO = Object.freeze({ fallito: TESTI_PR.esitoFallito, 'in-corso': TESTI_PR.esitoInCorso, annullato: TESTI_PR.esitoAnnullato, passato: TESTI_PR.esitoPassato, saltato: TESTI_PR.esitoSaltato });
+const PAROLA_ESITO = Object.freeze({ fallito: CHIAVI_PR.esitoFallito, 'in-corso': CHIAVI_PR.esitoInCorso, annullato: CHIAVI_PR.esitoAnnullato, passato: CHIAVI_PR.esitoPassato, saltato: CHIAVI_PR.esitoSaltato });
 const FRASE_ESITO = Object.freeze({
-  fallito: [TESTI_PR.unFallito, TESTI_PR.piuFalliti], 'in-corso': [TESTI_PR.unInCorso, TESTI_PR.piuInCorso], annullato: [TESTI_PR.unAnnullato, TESTI_PR.piuAnnullati],
-  passato: [TESTI_PR.unPassato, TESTI_PR.piuPassati], saltato: [TESTI_PR.unSaltato, TESTI_PR.piuSaltati],
+  fallito: [CHIAVI_PR.unFallito, CHIAVI_PR.piuFalliti], 'in-corso': [CHIAVI_PR.unInCorso, CHIAVI_PR.piuInCorso], annullato: [CHIAVI_PR.unAnnullato, CHIAVI_PR.piuAnnullati],
+  passato: [CHIAVI_PR.unPassato, CHIAVI_PR.piuPassati], saltato: [CHIAVI_PR.unSaltato, CHIAVI_PR.piuSaltati],
 });
 
 /** Gli esiti presenti, col loro numero, dal più importante: `[{ esito:'fallito', n:1 }, …]`. Nessun controllo ⇒ `[]`. */
@@ -309,7 +367,7 @@ export function creaSchedaGithub({ doc = globalThis.document, radice, api, confe
     } catch (errore) {
       // `gestisci` (sincrona) dice se l'errore l'ha preso chi chiama: allora niente avviso e niente rilettura
       if (gestisci?.(errore)) return null;
-      avvisa(t('Non riuscito'), errore?.message || t('git non è riuscito'));
+      avvisa(t("github.common.failed"), errore?.message || t("github.common.gitFailed"));
       api.ricarica?.();
       return null;
     } finally {
@@ -325,13 +383,13 @@ export function creaSchedaGithub({ doc = globalThis.document, radice, api, confe
     const nuovi = percorsi.filter((p) => voceDi(p)?.tipo === 'nonTracciato');
     const tracciati = percorsi.filter((p) => !nuovi.includes(p));
     const righe = [];
-    if (tracciati.length) righe.push([tn('Torna com’era', 'Tornano com’erano', tracciati.length), tracciati.join(', ')]);
-    if (nuovi.length) righe.push([tn('Si elimina', 'Si eliminano', nuovi.length), nuovi.join(', ')]);
+    if (tracciati.length) righe.push([tn("github.discard.revertsOne", "github.discard.revertsMany", tracciati.length), tracciati.join(', ')]);
+    if (nuovi.length) righe.push([tn("github.discard.deletedOne", "github.discard.deletedMany", nuovi.length), nuovi.join(', ')]);
     const si = await conferma({
-      titolo: tn('Annullare le modifiche a 1 file?', 'Annullare le modifiche a {n} file?', percorsi.length),
-      testo: t('Non si può tornare indietro: le modifiche non preparate vanno perse, e i file nuovi si eliminano.'),
+      titolo: tn("github.discard.titleOne", "github.discard.titleMany", percorsi.length),
+      testo: t("github.discard.warning"),
       righe,
-      conferma: t('Annulla le modifiche'),
+      conferma: t("github.discard.action"),
       pericolo: true,
     });
     if (!si) return;
@@ -350,7 +408,7 @@ export function creaSchedaGithub({ doc = globalThis.document, radice, api, confe
           stato.modifica = null;
           stato.messaggio = '';
           disegnaElenco();
-          avvisa(t('Commit modificato'), `${String(esito.commit || '').slice(0, 7)} · ${messaggio.split('\n')[0]}`);
+          avvisa(t("github.commit.amended"), `${String(esito.commit || '').slice(0, 7)} · ${messaggio.split('\n')[0]}`);
         },
       });
       return;
@@ -360,10 +418,10 @@ export function creaSchedaGithub({ doc = globalThis.document, radice, api, confe
       const tutti = [...g.modificati, ...g.nuovi].map((v) => v.percorso);
       if (tutti.length === 0) return;
       const si = await conferma({
-        titolo: t('Non c’è niente di preparato'),
-        testo: tn('Preparo 1 file e lo committo?', 'Preparo tutti i {n} file e li committo?', tutti.length),
-        righe: [[t('File'), tutti.join(', ')]],
-        conferma: t('Prepara tutto e committa'),
+        titolo: t("github.commit.nothingStaged"),
+        testo: tn("github.commit.stageAllOne", "github.commit.stageAllMany", tutti.length),
+        righe: [[t("github.common.files"), tutti.join(', ')]],
+        conferma: t("github.commit.stageAllAndCommit"),
       });
       if (!si) return;
       const preparato = await esegui(() => api.prepara(tutti));
@@ -375,7 +433,7 @@ export function creaSchedaGithub({ doc = globalThis.document, radice, api, confe
         if (!esito) return;
         stato.messaggio = '';
         disegnaElenco();
-        avvisa(t('Commit fatto'), `${String(esito.commit || '').slice(0, 7)} · ${messaggio.split('\n')[0]}`);
+        avvisa(t("github.commit.done"), `${String(esito.commit || '').slice(0, 7)} · ${messaggio.split('\n')[0]}`);
       },
     });
   }
@@ -402,7 +460,7 @@ export function creaSchedaGithub({ doc = globalThis.document, radice, api, confe
     const valore = r.valore.trim();
     if (!valore && !r.facoltativo) return;
     let rifiuto = null;
-    const esito = await esegui(() => r.fai(valore), { gestisci: (errore) => { rifiuto = errore?.message || t('Non riuscito'); return true; } });
+    const esito = await esegui(() => r.fai(valore), { gestisci: (errore) => { rifiuto = errore?.message || t("github.common.failed"); return true; } });
     if (stato.richiesta !== r) return;
     if (rifiuto) {
       r.errore = rifiuto;
@@ -444,7 +502,7 @@ export function creaSchedaGithub({ doc = globalThis.document, radice, api, confe
       carta.append(errore);
     }
     const piede = el(doc, 'div', 'talos-github-richiesta__piede');
-    piede.append(bottoneTesto(doc, t('Lascia stare'), () => chiudiRichiesta()), si);
+    piede.append(bottoneTesto(doc, t("github.common.cancel"), () => chiudiRichiesta()), si);
     aggiorna();
     carta.append(piede);
     carta.addEventListener('submit', (e) => { e.preventDefault(); void confermaRichiesta(); });
@@ -455,19 +513,19 @@ export function creaSchedaGithub({ doc = globalThis.document, radice, api, confe
 
   async function apriMenuRami(ancora) {
     let rami;
-    try { rami = (await api.rami())?.rami ?? []; } catch (errore) { avvisa(t('Non riuscito'), errore?.message || t('git non è riuscito')); return; }
+    try { rami = (await api.rami())?.rami ?? []; } catch (errore) { avvisa(t("github.common.failed"), errore?.message || t("github.common.gitFailed")); return; }
     const corrente = rami.find((r) => r.corrente) ?? null;
     const altri = rami.filter((r) => !r.corrente);
-    const voci = altri.map((r) => ({ etichetta: t('Passa a {nome}', { nome: r.nome }), icona: 'i-branch', azione: () => { void cambiaRamo(r.nome); } }));
-    voci.push({ etichetta: t('Nuovo ramo…'), icona: 'i-plus', azione: () => nuovoRamo(corrente?.nome ?? null) });
-    if (corrente) voci.push({ etichetta: t('Rinomina «{nome}»…', { nome: corrente.nome }), icona: 'i-edit', azione: () => rinominaRamo(corrente.nome) });
+    const voci = altri.map((r) => ({ etichetta: t("github.branch.menu.switchTo", { name: r.nome }), icona: 'i-branch', azione: () => { void cambiaRamo(r.nome); } }));
+    voci.push({ etichetta: t("github.branch.menu.newBranch"), icona: 'i-plus', azione: () => nuovoRamo(corrente?.nome ?? null) });
+    if (corrente) voci.push({ etichetta: t("github.branch.menu.renameBranch", { name: corrente.nome }), icona: 'i-edit', azione: () => rinominaRamo(corrente.nome) });
     if (altri.length) {
       voci.push({
-        etichetta: t('Elimina un ramo…'), icona: 'i-trash', pericoloso: true,
-        azione: () => menu(altri.map((r) => ({ etichetta: r.nome, icona: 'i-trash', pericoloso: true, azione: () => { void eliminaRamo(r.nome); } })), { ancoraEl: ancora, focusElement: ancora, fuoco: true, etichetta: t('Elimina un ramo') }),
+        etichetta: t("github.branch.menu.deleteBranch"), icona: 'i-trash', pericoloso: true,
+        azione: () => menu(altri.map((r) => ({ etichetta: r.nome, icona: 'i-trash', pericoloso: true, azione: () => { void eliminaRamo(r.nome); } })), { ancoraEl: ancora, focusElement: ancora, fuoco: true, etichetta: t("github.branch.delete.title") }),
       });
     }
-    menu(voci, { ancoraEl: ancora, focusElement: ancora, etichetta: t('Rami') });
+    menu(voci, { ancoraEl: ancora, focusElement: ancora, etichetta: t("github.branch.menu.title") });
   }
 
   const dopoIlRamo = (esito) => { if (esito) api.ricarica?.(); return esito; };
@@ -475,32 +533,32 @@ export function creaSchedaGithub({ doc = globalThis.document, radice, api, confe
 
   function nuovoRamo(da) {
     chiediInRiga({
-      titolo: da ? t('Nuovo ramo da {nome}', { nome: da }) : t('Nuovo ramo'),
-      etichetta: t('Nome del ramo'),
-      verbo: t('Crea il ramo'),
+      titolo: da ? t("github.branch.create.titleFrom", { name: da }) : t("github.branch.create.title"),
+      etichetta: t("github.branch.create.nameLabel"),
+      verbo: t("github.branch.create.action"),
       fai: (nome) => api.creaRamo(nome).then(dopoIlRamo),
     });
   }
 
   function rinominaRamo(nome) {
     chiediInRiga({
-      titolo: t('Rinomina «{nome}»', { nome }),
-      etichetta: t('Nome nuovo'),
+      titolo: t("github.branch.rename.title", { name: nome }),
+      etichetta: t("github.branch.rename.newNameLabel"),
       valore: nome,
-      verbo: t('Rinomina'),
+      verbo: t("github.branch.rename.action"),
       fai: (nuovo) => api.rinominaRamo(nome, nuovo).then(dopoIlRamo),
     });
   }
 
   async function eliminaRamo(nome) {
     let nonUnito = false;
-    const fatto = (esito) => { if (esito) { avvisa(t('Ramo eliminato'), nome); api.ricarica?.(); } };
+    const fatto = (esito) => { if (esito) { avvisa(t("github.branch.delete.done"), nome); api.ricarica?.(); } };
     await esegui(() => api.eliminaRamo(nome, false), { dopo: fatto, gestisci: (errore) => { nonUnito = errore?.code === 'GIT_BRANCH_NOT_MERGED'; return nonUnito; } });
     if (!nonUnito) return;
     const si = await conferma({
-      titolo: t('Eliminare «{nome}» lo stesso?', { nome }),
-      testo: t('Ha commit che non stanno in nessun altro ramo: eliminandolo, quei commit non si vedono più.'),
-      conferma: t('Elimina lo stesso'),
+      titolo: t("github.branch.delete.unmergedTitle", { name: nome }),
+      testo: t("github.branch.delete.unmergedWarning"),
+      conferma: t("github.branch.delete.anyway"),
       pericolo: true,
     });
     if (si) await esegui(() => api.eliminaRamo(nome, true), { dopo: fatto });
@@ -511,7 +569,7 @@ export function creaSchedaGithub({ doc = globalThis.document, radice, api, confe
   /** L'ultimo commit, se si può riscrivere; altrimenti lo dice e torna null. Il server ricontrolla comunque (HEAD e inviato). */
   async function ultimoRiscrivibile() {
     let storia;
-    try { storia = await api.storia(); } catch (errore) { avvisa(t('Non riuscito'), errore?.message || t('git non è riuscito')); return null; }
+    try { storia = await api.storia(); } catch (errore) { avvisa(t("github.common.failed"), errore?.message || t("github.common.gitFailed")); return null; }
     /* F6-2 passo 3: la storia porta anche il remoto, e col remoto davanti il primo della lista non è il nostro: si prende HEAD.
        ⛔ Col remoto molto avanti HEAD può restare FUORI dalla finestra dei 50: allora l'ultimo commit si fa da `testa` e dal
        messaggio intero che il server manda comunque, e «già inviato» lo decide il server (`GIT_COMMIT_PUSHED`, lo ricontrolla
@@ -522,7 +580,7 @@ export function creaSchedaGithub({ doc = globalThis.document, radice, api, confe
         : storia?.commit?.[0]);
     if (!ultimo) return null;
     if (ultimo.inviato) {
-      avvisa(t('L’ultimo commit è già stato inviato'), t('Riscriverlo cambierebbe la storia di chi l’ha già ricevuto: da qui non si modifica.'));
+      avvisa(t("github.commit.amend.alreadyPushed"), t("github.commit.amend.alreadyPushedExplain"));
       return null;
     }
     return { ...ultimo, messaggio: storia.ultimoMessaggio || ultimo.soggetto };
@@ -549,10 +607,10 @@ export function creaSchedaGithub({ doc = globalThis.document, radice, api, confe
     const ultimo = await ultimoRiscrivibile();
     if (!ultimo) return;
     const si = await conferma({
-      titolo: t('Annullare l’ultimo commit?'),
-      testo: t('Il commit sparisce dalla storia; le sue modifiche tornano preparate e il suo messaggio torna nella casella.'),
-      righe: [[t('Commit'), `${ultimo.breve} · ${ultimo.soggetto}`]],
-      conferma: t('Annulla il commit'),
+      titolo: t("github.commit.undo.title"),
+      testo: t("github.commit.undo.warning"),
+      righe: [[t("github.common.commit"), `${ultimo.breve} · ${ultimo.soggetto}`]],
+      conferma: t("github.commit.undo.action"),
     });
     if (!si) return;
     await esegui(() => api.annullaCommit(ultimo.commit), {
@@ -561,7 +619,7 @@ export function creaSchedaGithub({ doc = globalThis.document, radice, api, confe
         stato.modifica = null;
         stato.messaggio = esito.messaggio ?? '';
         disegnaElenco();
-        avvisa(t('Commit annullato'), ultimo.soggetto);
+        avvisa(t("github.commit.undo.done"), ultimo.soggetto);
       },
     });
   }
@@ -570,11 +628,11 @@ export function creaSchedaGithub({ doc = globalThis.document, radice, api, confe
 
   function accantona(conNuovi) {
     chiediInRiga({
-      titolo: conNuovi ? t('Metti da parte con i file nuovi') : t('Metti da parte le modifiche'),
-      etichetta: t('Nota (facoltativa)'),
-      verbo: t('Metti da parte'),
+      titolo: conNuovi ? t("github.stash.actionWithNew") : t("github.stash.action"),
+      etichetta: t("github.stash.noteOptional"),
+      verbo: t("github.stash.confirm"),
       facoltativo: true,
-      fai: (nota) => api.accantona(nota, conNuovi).then((esito) => { avvisa(t('Messe da parte'), nota); return esito; }),
+      fai: (nota) => api.accantona(nota, conNuovi).then((esito) => { avvisa(t("github.stash.done"), nota); return esito; }),
     });
   }
 
@@ -598,18 +656,18 @@ export function creaSchedaGithub({ doc = globalThis.document, radice, api, confe
     }
   }
 
-  const riprendi = (voce) => esegui(() => api.riprendi(voce.indice, voce.commit), { dopo: (esito) => { if (esito) avvisa(t('Riprese'), leggiAccantonato(voce.messaggio).nota); } });
+  const riprendi = (voce) => esegui(() => api.riprendi(voce.indice, voce.commit), { dopo: (esito) => { if (esito) avvisa(t("github.stash.restored"), leggiAccantonato(voce.messaggio).nota); } });
 
   async function scarta(voce) {
     const { nota, automatica } = leggiAccantonato(voce.messaggio);
     const si = await conferma({
-      titolo: t('Scartare ciò che è messo da parte?'),
-      testo: t('Non si può tornare indietro: queste modifiche vanno perse.'),
-      righe: [[t('Nota'), automatica ? t('Senza nota') : nota]],
-      conferma: t('Scarta'),
+      titolo: t("github.stash.drop.title"),
+      testo: t("github.stash.drop.warning"),
+      righe: [[t("github.stash.drop.noteLabel"), automatica ? t("github.stash.noNote") : nota]],
+      conferma: t("github.stash.drop.action"),
       pericolo: true,
     });
-    if (si) await esegui(() => api.scarta(voce.indice, voce.commit), { dopo: (esito) => { if (esito) avvisa(t('Scartate'), automatica ? '' : nota); } });
+    if (si) await esegui(() => api.scarta(voce.indice, voce.commit), { dopo: (esito) => { if (esito) avvisa(t("github.stash.drop.done"), automatica ? '' : nota); } });
   }
 
   /* ═══════════ F6-2 (27/09/2026) — la sincronizzazione col remoto ═══════════
@@ -631,14 +689,14 @@ export function creaSchedaGithub({ doc = globalThis.document, radice, api, confe
     return 'recupera';
   }
 
-  const IN_CORSO = { recupera: 'Recupero…', scarica: 'Scarico…', invia: 'Invio…', pubblica: 'Pubblico…' };
+  const IN_CORSO = { recupera: 'github.sync.progress.fetching', scarica: 'github.sync.progress.pulling', invia: 'github.sync.progress.pushing', pubblica: 'github.sync.progress.publishing' };
   const ICONA_SINC = { recupera: 'i-history', scarica: 'i-download', invia: 'i-send', pubblica: 'i-send' };
 
   function etichettaSinc(azione, s) {
-    if (azione === 'scarica') return t('Scarica {n}', { n: s.indietro });
-    if (azione === 'invia') return t('Invia {n}', { n: s.avanti });
-    if (azione === 'pubblica') return t('Pubblica il ramo');
-    return t('Recupera');
+    if (azione === 'scarica') return t("github.sync.button.pull", { n: s.indietro });
+    if (azione === 'invia') return t("github.sync.button.push", { n: s.avanti });
+    if (azione === 'pubblica') return t("github.sync.button.publish");
+    return t("github.sync.button.fetch");
   }
 
   function remotoPerRecupero(s) { return s?.riferimento?.remoto ?? s?.remotoPerInvio ?? null; }
@@ -658,9 +716,9 @@ export function creaSchedaGithub({ doc = globalThis.document, radice, api, confe
     if (!principale || stato.inCorso) return [];
     const voci = [];
     const remoto = remotoPerRecupero(s);
-    if (principale !== 'recupera') voci.push({ etichetta: remoto ? t('Recupera da {remoto}', { remoto }) : t('Recupera da tutti i remoti'), icona: ICONA_SINC.recupera, azione: () => { void recupera(); } });
-    if (principale !== 'scarica' && s.riferimento && !s.riferimentoSparito && s.indietro > 0) voci.push({ etichetta: t('Scarica da {rif}', { rif: s.riferimento.corto }), icona: ICONA_SINC.scarica, azione: () => { void scarica(); } });
-    if (principale !== 'invia' && s.riferimento && !s.riferimentoSparito && s.avanti > 0 && s.indietro === 0) voci.push({ etichetta: t('Invia a {rif}', { rif: s.riferimento.corto }), icona: ICONA_SINC.invia, azione: () => { void invia(); } });
+    if (principale !== 'recupera') voci.push({ etichetta: remoto ? t("github.sync.menu.fetchFromRemote", { remote: remoto }) : t("github.sync.menu.fetchFromAll"), icona: ICONA_SINC.recupera, azione: () => { void recupera(); } });
+    if (principale !== 'scarica' && s.riferimento && !s.riferimentoSparito && s.indietro > 0) voci.push({ etichetta: t("github.sync.menu.pullFrom", { ref: s.riferimento.corto }), icona: ICONA_SINC.scarica, azione: () => { void scarica(); } });
+    if (principale !== 'invia' && s.riferimento && !s.riferimentoSparito && s.avanti > 0 && s.indietro === 0) voci.push({ etichetta: t("github.sync.menu.pushTo", { ref: s.riferimento.corto }), icona: ICONA_SINC.invia, azione: () => { void invia(); } });
     return voci;
   }
 
@@ -691,11 +749,11 @@ export function creaSchedaGithub({ doc = globalThis.document, radice, api, confe
       dopo: (esito) => { prendiSinc(esito); rileggiStoria(); },
       gestisci: (errore) => { if (errore?.code === 'GIT_ABORTED') { fermato = true; return true; } return false; },
     });
-    if (fermato) avvisa(t('Recupero fermato'), '');
+    if (fermato) avvisa(t("github.sync.fetchStopped"), '');
   }
 
   async function fermaRecupero() {
-    try { await api.fermaRecupero(); } catch (errore) { avvisa(t('Non riuscito'), errore?.message || t('git non è riuscito')); }
+    try { await api.fermaRecupero(); } catch (errore) { avvisa(t("github.common.failed"), errore?.message || t("github.common.gitFailed")); }
   }
 
   function dopoScarica(esito) {
@@ -703,11 +761,11 @@ export function creaSchedaGithub({ doc = globalThis.document, radice, api, confe
     prendiSinc(esito);
     if (esito.conflitti > 0) {
       stato.chiusi.delete('conflitti');
-      avvisa(t('Scaricato con conflitti'), tn('C’è 1 conflitto: risolvilo nel gruppo Conflitti.', 'Ci sono {n} conflitti: risolvili nel gruppo Conflitti.', esito.conflitti));
+      avvisa(t("github.sync.pull.withConflicts"), tn("github.sync.pull.conflictsOne", "github.sync.pull.conflictsMany", esito.conflitti));
     } else if (esito.commitDopo && esito.commitDopo === esito.commitPrima) {
-      avvisa(t('Già aggiornato'), stato.sinc?.riferimento?.corto ?? '');
+      avvisa(t("github.sync.pull.upToDate"), stato.sinc?.riferimento?.corto ?? '');
     } else {
-      avvisa(t('Scaricato'), stato.sinc?.riferimento?.corto ?? '');
+      avvisa(t("github.sync.pull.done"), stato.sinc?.riferimento?.corto ?? '');
     }
   }
 
@@ -728,18 +786,18 @@ export function creaSchedaGithub({ doc = globalThis.document, radice, api, confe
   async function accantonaEScarica() {
     stato.bloccoScarica = null;
     const rif = stato.sinc?.riferimento?.corto ?? '';
-    const messo = await inRete('scarica', () => api.accantona(t('Prima di scaricare da {rif}', { rif }), true));
+    const messo = await inRete('scarica', () => api.accantona(t("github.sync.pull.autoStashNote", { ref: rif }), true));
     const voce = messo?.accantonati?.[0];
     if (!voce) { ridisegnaElenco(); return; }
     const scaricato = await inRete('scarica', () => api.scarica(), { dopo: dopoScarica });
     if (!scaricato || scaricato.conflitti > 0) {
-      avvisa(t('Le tue modifiche sono in «Messi da parte»'), t('Riprendile da lì quando vuoi.'));
+      avvisa(t("github.stash.notice.savedInStashes"), t("github.stash.notice.restoreLater"));
       return;
     }
     let ripreso = false;
     await esegui(() => api.riprendi(voce.indice, voce.commit), { dopo: (esito) => { ripreso = Boolean(esito); }, gestisci: () => true });
-    if (ripreso) avvisa(t('Le tue modifiche sono tornate al loro posto'), '');
-    else { avvisa(t('Le tue modifiche sono in «Messi da parte»'), t('Riprenderle ora darebbe conflitti: riprendile da lì quando vuoi.')); api.ricarica?.(); }
+    if (ripreso) avvisa(t("github.stash.notice.restoredInPlace"), '');
+    else { avvisa(t("github.stash.notice.savedInStashes"), t("github.stash.notice.restoreWouldConflict")); api.ricarica?.(); }
   }
 
   const urlDi = (s, nome) => { const r = s?.remoti?.find((x) => x.nome === nome); return r ? (r.urlInvio ?? r.url ?? '') : ''; };
@@ -749,10 +807,10 @@ export function creaSchedaGithub({ doc = globalThis.document, radice, api, confe
     if (!s?.riferimento || s.riferimentoSparito) return pubblica();
     const remoto = s.riferimento.remoto;
     const si = await conferma({
-      titolo: tn('Inviare 1 commit a {remoto}?', 'Inviare {n} commit a {remoto}?', s.avanti, { remoto }),
-      testo: t('Il ramo «{ramo}» va su «{rif}». Un invio non si annulla da qui.', { ramo: s.ramo, rif: s.riferimento.corto }),
-      righe: [[t('Remoto'), [remoto, urlDi(s, remoto)].filter(Boolean).join(' — ')], [t('Ramo'), `${s.ramo} → ${s.riferimento.corto}`]],
-      conferma: t('Invia a {remoto}', { remoto }), // il pulsante dice dove va (e una chiave generica «Invia» è del composer)
+      titolo: tn("github.sync.push.titleOne", "github.sync.push.titleMany", s.avanti, { remote: remoto }),
+      testo: t("github.sync.push.warning", { branch: s.ramo, ref: s.riferimento.corto }),
+      righe: [[t("github.common.remote"), [remoto, urlDi(s, remoto)].filter(Boolean).join(' — ')], [t("github.common.branch"), `${s.ramo} → ${s.riferimento.corto}`]],
+      conferma: t("github.sync.push.confirm", { remote: remoto }), // il pulsante dice dove va (e una chiave generica «Invia» è del composer)
     });
     if (!si) return;
     await inRete('invia', () => api.invia(remoto), {
@@ -761,7 +819,7 @@ export function creaSchedaGithub({ doc = globalThis.document, radice, api, confe
         prendiSinc(esito);
         if (stato.storia && !stato.chiusi.has('storia')) void caricaStoria(); // «solo qui» diventa «inviato»
         else stato.storia = null;
-        avvisa(t('Inviato'), `${esito.ramo} → ${stato.sinc?.riferimento?.corto ?? esito.remoto}`);
+        avvisa(t("github.sync.push.done"), `${esito.ramo} → ${stato.sinc?.riferimento?.corto ?? esito.remoto}`);
       },
     });
   }
@@ -770,16 +828,16 @@ export function creaSchedaGithub({ doc = globalThis.document, radice, api, confe
     const s = stato.sinc;
     if (!s?.ramo) return;
     const scelte = {
-      etichetta: t('Remoto'),
+      etichetta: t("github.common.remote"),
       voci: s.remoti.map((r) => ({ valore: r.nome, testo: r.nome, dettaglio: r.urlInvio ?? r.url ?? '' })),
       valore: s.remotoPerInvio ?? null,
     };
     const si = await conferma({
-      titolo: t('Pubblicare il ramo «{ramo}»?', { ramo: s.ramo }),
-      testo: t('Il ramo va sul remoto scelto e da lì in poi lo segue: gli invii successivi vanno lì.'),
-      righe: [[t('Ramo'), s.ramo]],
+      titolo: t("github.sync.publish.title", { branch: s.ramo }),
+      testo: t("github.sync.publish.explain"),
+      righe: [[t("github.common.branch"), s.ramo]],
       scelte,
-      conferma: t('Pubblica'),
+      conferma: t("github.sync.publish.confirm"),
     });
     if (!si || !scelte.valore) return;
     await inRete('pubblica', () => api.invia(scelte.valore), {
@@ -788,7 +846,7 @@ export function creaSchedaGithub({ doc = globalThis.document, radice, api, confe
         prendiSinc(esito);
         if (stato.storia && !stato.chiusi.has('storia')) void caricaStoria();
         else stato.storia = null;
-        avvisa(t('Pubblicato'), `${esito.ramo} → ${stato.sinc?.riferimento?.corto ?? esito.remoto}`);
+        avvisa(t("github.sync.publish.done"), `${esito.ramo} → ${stato.sinc?.riferimento?.corto ?? esito.remoto}`);
       },
     });
   }
@@ -799,11 +857,11 @@ export function creaSchedaGithub({ doc = globalThis.document, radice, api, confe
     const riga = el(doc, 'div', 'talos-github-sinc');
     riga.dataset.c = 'SincronizzazioneGithub';
     if (!Array.isArray(s.remoti) || s.remoti.length === 0) {
-      riga.append(el(doc, 'p', 'talos-inspector__hint talos-github-sinc__nota', t('Nessun remoto: questo repository vive solo qui.')));
+      riga.append(el(doc, 'p', 'talos-inspector__hint talos-github-sinc__nota', t("github.sync.status.noRemote")));
       return riga;
     }
     if (!s.ramo) {
-      riga.append(el(doc, 'p', 'talos-inspector__hint talos-github-sinc__nota', t('HEAD staccata: passa a un ramo per sincronizzare.')));
+      riga.append(el(doc, 'p', 'talos-inspector__hint talos-github-sinc__nota', t("github.sync.status.detachedHead")));
       return riga;
     }
     const azione = azioneSinc(s);
@@ -817,31 +875,31 @@ export function creaSchedaGithub({ doc = globalThis.document, radice, api, confe
       bottone.disabled = true;
       bottone.setAttribute('aria-busy', 'true');
     } else {
-      bottone.title = azione === 'recupera' && remotoPerRecupero(s) ? t('Recupera da {remoto}', { remoto: remotoPerRecupero(s) })
-        : azione === 'scarica' ? t('Scarica da {rif}', { rif: s.riferimento.corto })
-          : azione === 'invia' ? t('Invia a {rif}', { rif: s.riferimento.corto }) : etichettaSinc(azione, s);
+      bottone.title = azione === 'recupera' && remotoPerRecupero(s) ? t("github.sync.menu.fetchFromRemote", { remote: remotoPerRecupero(s) })
+        : azione === 'scarica' ? t("github.sync.menu.pullFrom", { ref: s.riferimento.corto })
+          : azione === 'invia' ? t("github.sync.menu.pushTo", { ref: s.riferimento.corto }) : etichettaSinc(azione, s);
       bottone.addEventListener('click', () => { void faiSinc(azione); });
     }
     riga.append(bottone);
     if (inCorso === 'recupera') {
-      const ferma = bottoneTesto(doc, t('Ferma'), () => { void fermaRecupero(); });
+      const ferma = bottoneTesto(doc, t("github.sync.stop"), () => { void fermaRecupero(); });
       ferma.classList.add('talos-github-sinc__ferma');
       riga.append(ferma);
     }
     if (s.riferimento && !s.riferimentoSparito && Number.isInteger(s.indietro) && Number.isInteger(s.avanti)) {
       const conti = el(doc, 'span', 'talos-github-sinc__conti');
       conti.setAttribute('role', 'img');
-      conti.setAttribute('aria-label', t('{giu} da scaricare, {su} da inviare', { giu: s.indietro, su: s.avanti }));
+      conti.setAttribute('aria-label', t("github.sync.status.behindAhead", { behind: s.indietro, ahead: s.avanti }));
       conti.title = conti.getAttribute('aria-label');
       conti.append(el(doc, 'span', 'talos-github-sinc__conto', `↓${s.indietro}`), el(doc, 'span', 'talos-github-sinc__conto', `↑${s.avanti}`));
       riga.append(conti);
     }
     const quando = s.ultimoRecupero ? tempoFa(s.ultimoRecupero, linguaCorrenteDiT()) : null;
-    const recupero = el(doc, 'span', 'talos-github-sinc__recupero', quando ? t('Recuperato {quando}', { quando }) : t('Mai recuperato'));
+    const recupero = el(doc, 'span', 'talos-github-sinc__recupero', quando ? t("github.sync.status.fetched", { when: quando }) : t("github.sync.status.neverFetched"));
     if (s.ultimoRecupero) recupero.title = new Date(s.ultimoRecupero).toLocaleString(linguaCorrenteDiT());
     riga.append(recupero);
     if (s.riferimentoSparito) {
-      riga.append(el(doc, 'p', 'talos-inspector__hint talos-github-sinc__nota', t('Il ramo remoto «{rif}» non esiste più: pubblicalo di nuovo.', { rif: s.riferimento?.corto ?? '' })));
+      riga.append(el(doc, 'p', 'talos-inspector__hint talos-github-sinc__nota', t("github.sync.status.remoteGone", { ref: s.riferimento?.corto ?? '' })));
     }
     return riga;
   }
@@ -852,12 +910,12 @@ export function creaSchedaGithub({ doc = globalThis.document, radice, api, confe
     const carta = el(doc, 'div', 'talos-card talos-inspector-card talos-github-richiesta talos-github-blocco');
     carta.setAttribute('role', 'group');
     /* il titolo dice l'esito, il testo del server il perché coi nomi dei file (foto 27/09: due volte «Scaricare sovrascriverebbe») */
-    carta.setAttribute('aria-label', t('Lo scarico non è partito'));
-    carta.append(el(doc, 'p', 'talos-github-richiesta__titolo', t('Lo scarico non è partito')));
+    carta.setAttribute('aria-label', t("github.sync.pull.notStarted"));
+    carta.append(el(doc, 'p', 'talos-github-richiesta__titolo', t("github.sync.pull.notStarted")));
     carta.append(el(doc, 'p', 'talos-inspector__hint talos-github-blocco__testo', b.messaggio));
     const piede = el(doc, 'div', 'talos-github-richiesta__piede');
-    const lascia = bottoneTesto(doc, t('Lascia stare'), () => { stato.bloccoScarica = null; ridisegnaElenco(); elenco.querySelector('[data-fuoco="sinc"]')?.focus({ preventScroll: true }); });
-    const si = el(doc, 'button', 'talos-button talos-button--primary talos-button--sm', t('Metti da parte e scarica'));
+    const lascia = bottoneTesto(doc, t("github.common.cancel"), () => { stato.bloccoScarica = null; ridisegnaElenco(); elenco.querySelector('[data-fuoco="sinc"]')?.focus({ preventScroll: true }); });
+    const si = el(doc, 'button', 'talos-button talos-button--primary talos-button--sm', t("github.sync.pull.stashAndPull"));
     si.type = 'button';
     si.dataset.fuoco = 'blocco-scarica';
     si.addEventListener('click', () => { void accantonaEScarica(); });
@@ -893,7 +951,7 @@ export function creaSchedaGithub({ doc = globalThis.document, radice, api, confe
         da: esito?.da ?? confronto.da, a: esito?.a ?? confronto.a, daVuoto: esito?.daVuoto === true,
       };
     } catch (errore) {
-      voce = { ...confronto, caricando: false, errore: errore?.message || t('Non riuscito'), file: [], fuori: 0, altri: false, daVuoto: false };
+      voce = { ...confronto, caricando: false, errore: errore?.message || t("github.common.failed"), file: [], fuori: 0, altri: false, daVuoto: false };
     }
     if (stato.storiaAperte.get(chiave)?.lettura !== mia) return; // chiusa, riaperta o storia riletta nel frattempo
     stato.storiaAperte.set(chiave, { ...voce, lettura: mia });
@@ -914,7 +972,7 @@ export function creaSchedaGithub({ doc = globalThis.document, radice, api, confe
       li.append(corsie, contenuto);
       return li;
     };
-    if (aperta.caricando) return [figlia(el(doc, 'p', 'talos-inspector__hint', t('Leggo i file cambiati…')), true)];
+    if (aperta.caricando) return [figlia(el(doc, 'p', 'talos-inspector__hint', t("github.files.loading")), true)];
     if (aperta.errore) return [figlia(el(doc, 'p', 'talos-inspector__hint', aperta.errore), true)];
     const righe = aperta.file.map((f) => {
       const apri = el(doc, 'button', 'talos-github-riga__apri');
@@ -922,7 +980,7 @@ export function creaSchedaGithub({ doc = globalThis.document, radice, api, confe
       apri.dataset.fuoco = `storia-file:${aperta.a}:${f.percorso}`;
       const lettera = el(doc, 'span', `talos-github-riga__lettera talos-github-riga__lettera--${f.stato}`, f.stato);
       lettera.title = PAROLA_DI[f.stato] ? t(PAROLA_DI[f.stato]) : f.stato;
-      apri.append(lettera, el(doc, 'span', 'talos-github-riga__nome', nomeDi(f.percorso)), el(doc, 'span', 'talos-github-riga__cartella', f.prima ? t('da {prima}', { prima: f.prima }) : cartellaDi(f.percorso)));
+      apri.append(lettera, el(doc, 'span', 'talos-github-riga__nome', nomeDi(f.percorso)), el(doc, 'span', 'talos-github-riga__cartella', f.prima ? t("github.files.row.renamedFrom", { before: f.prima }) : cartellaDi(f.percorso)));
       apri.title = f.prima ? `${f.prima} → ${f.percorso}` : f.percorso;
       apri.addEventListener('click', () => { void apriDiff(f.percorso, 'commit', { da: aperta.da, a: aperta.a, prima: f.prima ?? null, titolo: aperta.titolo, daVuoto: aperta.daVuoto }); });
       const li = figlia(apri);
@@ -931,9 +989,9 @@ export function creaSchedaGithub({ doc = globalThis.document, radice, api, confe
       return li;
     });
     const note = [];
-    if (!aperta.file.length) note.push(t('Nessun file cambiato in questa cartella.'));
-    if (aperta.altri) note.push(t('Qui ci sono i primi {n} file.', { n: aperta.file.length }));
-    if (aperta.fuori > 0) note.push(tn('1 file cambiato fuori dalla cartella della sessione.', '{n} file cambiati fuori dalla cartella della sessione.', aperta.fuori));
+    if (!aperta.file.length) note.push(t("github.files.empty"));
+    if (aperta.altri) note.push(t("github.files.truncated", { n: aperta.file.length }));
+    if (aperta.fuori > 0) note.push(tn("github.files.outsideOne", "github.files.outsideMany", aperta.fuori));
     for (const n of note) righe.push(figlia(el(doc, 'p', 'talos-inspector__hint', n), true));
     return righe;
   }
@@ -953,7 +1011,7 @@ export function creaSchedaGithub({ doc = globalThis.document, radice, api, confe
       letturaFile += 1;
     } catch (errore) {
       if (mia !== letturaStoria) return;
-      stato.storia = { commit: [], altri: false, caricando: false, errore: errore?.message || t('Non riuscito') };
+      stato.storia = { commit: [], altri: false, caricando: false, errore: errore?.message || t("github.common.failed") };
     }
     ridisegnaElenco();
   }
@@ -964,18 +1022,18 @@ export function creaSchedaGithub({ doc = globalThis.document, radice, api, confe
   function vociMenuRiga(voce, gruppo) {
     const voci = [];
     if (gruppo !== 'preparati' && gruppo !== 'conflitti') {
-      voci.push({ etichetta: t('Annulla le modifiche'), icona: 'i-trash', pericoloso: true, azione: () => annulla([voce.percorso]) });
+      voci.push({ etichetta: t("github.discard.action"), icona: 'i-trash', pericoloso: true, azione: () => annulla([voce.percorso]) });
     }
     if (voce.tipo !== 'eliminato' && !voce.cartella && typeof api.apriFile === 'function') {
-      voci.push({ etichetta: t('Apri il file'), icona: 'i-doc', azione: () => api.apriFile(voce.percorso) });
+      voci.push({ etichetta: t("github.files.row.open"), icona: 'i-doc', azione: () => api.apriFile(voce.percorso) });
     }
     return voci;
   }
 
   function azionePrincipale(gruppo) {
-    if (gruppo === 'preparati') return { etichetta: t('Togli'), fai: (voce) => togli([voce.percorso]) };
+    if (gruppo === 'preparati') return { etichetta: t("github.files.row.unstage"), fai: (voce) => togli([voce.percorso]) };
     if (gruppo === 'conflitti') return null;
-    return { etichetta: t('Prepara'), fai: (voce) => prepara([voce.percorso]) };
+    return { etichetta: t("github.files.row.stage"), fai: (voce) => prepara([voce.percorso]) };
   }
 
   function disegnaRiga(voce, gruppo) {
@@ -990,8 +1048,8 @@ export function creaSchedaGithub({ doc = globalThis.document, radice, api, confe
     const nome = el(doc, 'span', 'talos-github-riga__nome', nomeDi(voce.percorso));
     const dove = el(doc, 'span', 'talos-github-riga__cartella', voce.da ? `${cartellaDi(voce.percorso)} ← ${voce.da}`.replace(/^ ← /u, '← ') : cartellaDi(voce.percorso));
     apri.append(segno, nome, dove);
-    apri.setAttribute('aria-label', `${voce.percorso}, ${t(parola)}`);
-    apri.title = `${voce.percorso} · ${t(parola)}`;
+    apri.setAttribute('aria-label', `${voce.percorso}, ${parola}`);
+    apri.title = `${voce.percorso} · ${parola}`;
     if (!voce.cartella) apri.addEventListener('click', () => apriDiff(voce.percorso, gruppo === 'preparati' ? 'preparato' : 'lavoro'));
     else apri.disabled = true;
     riga.append(apri);
@@ -999,7 +1057,7 @@ export function creaSchedaGithub({ doc = globalThis.document, radice, api, confe
     if (principale) riga.append(bottoneTesto(doc, principale.etichetta, () => principale.fai(voce)));
     const voci = vociMenuRiga(voce, gruppo);
     if (voci.length) {
-      const altro = bottoneIcona(doc, 'i-more', t('Altre azioni su {nome}', { nome: nomeDi(voce.percorso) }), (e) => menu(voci, { ancoraEl: e.currentTarget, focusElement: e.currentTarget }));
+      const altro = bottoneIcona(doc, 'i-more', t("github.common.moreActionsOn", { name: nomeDi(voce.percorso) }), (e) => menu(voci, { ancoraEl: e.currentTarget, focusElement: e.currentTarget }));
       altro.setAttribute('aria-haspopup', 'menu');
       riga.append(altro);
       riga.addEventListener('contextmenu', (e) => { e.preventDefault(); menu(voci, { x: e.clientX, y: e.clientY, focusElement: altro }); });
@@ -1030,10 +1088,10 @@ export function creaSchedaGithub({ doc = globalThis.document, radice, api, confe
     sezione.dataset.gruppo = chiave;
     const testa = el(doc, 'div', 'talos-github-gruppo__testa');
     const aperto = !stato.chiusi.has(chiave);
-    testa.append(interruttoreGruppo(chiave, t(titolo), String(voci.length)));
+    testa.append(interruttoreGruppo(chiave, titolo, String(voci.length)));
     const percorsi = voci.map((v) => v.percorso);
-    if (chiave === 'preparati') testa.append(bottoneTesto(doc, t('Togli tutti'), () => togli(percorsi)));
-    else if (chiave !== 'conflitti') testa.append(bottoneTesto(doc, t('Prepara tutti'), () => prepara(percorsi)));
+    if (chiave === 'preparati') testa.append(bottoneTesto(doc, t("github.files.group.unstageAll"), () => togli(percorsi)));
+    else if (chiave !== 'conflitti') testa.append(bottoneTesto(doc, t("github.files.group.stageAll"), () => prepara(percorsi)));
     sezione.append(testa);
     if (aperto) {
       const lista = el(doc, 'ul', 'talos-github-gruppo__righe');
@@ -1048,7 +1106,7 @@ export function creaSchedaGithub({ doc = globalThis.document, radice, api, confe
     const sezione = el(doc, 'section', 'talos-github-gruppo');
     sezione.dataset.gruppo = 'accantonati';
     const testa = el(doc, 'div', 'talos-github-gruppo__testa');
-    testa.append(interruttoreGruppo('accantonati', t('Messi da parte'), String(voci.length)));
+    testa.append(interruttoreGruppo('accantonati', t("github.stash.group.title"), String(voci.length)));
     sezione.append(testa);
     if (stato.chiusi.has('accantonati')) return sezione;
     const lingua = linguaCorrenteDiT();
@@ -1061,19 +1119,19 @@ export function creaSchedaGithub({ doc = globalThis.document, radice, api, confe
       const corpo = el(doc, 'div', 'talos-github-riga__apri talos-github-riga__apri--fermo');
       const segno = el(doc, 'span', 'talos-github-riga__lettera');
       segno.append(icona(doc, 'i-layers'));
-      const nome = el(doc, 'span', 'talos-github-riga__nome', automatica ? t('Senza nota') : nota);
-      const dove = el(doc, 'span', 'talos-github-riga__cartella', [ramo ? t('su {ramo}', { ramo }) : null, tempoFa(v.data, lingua)].filter(Boolean).join(' · '));
+      const nome = el(doc, 'span', 'talos-github-riga__nome', automatica ? t("github.stash.noNote") : nota);
+      const dove = el(doc, 'span', 'talos-github-riga__cartella', [ramo ? t("github.stash.row.onBranch", { branch: ramo }) : null, tempoFa(v.data, lingua)].filter(Boolean).join(' · '));
       // su due righe, come i commit: a 1024 una riga sola tagliava «su lavor…» e l'ora spariva (visto in foto, 26/09)
       const testi = el(doc, 'span', 'talos-github-riga__testi');
       testi.append(nome, dove);
       corpo.append(segno, testi);
       corpo.title = v.messaggio;
-      riga.append(corpo, bottoneTesto(doc, t('Riprendi'), () => { void riprendi(v); }));
-      const voci = [{ etichetta: t('Scarta'), icona: 'i-trash', pericoloso: true, azione: () => { void scarta(v); } }];
-      const altro = bottoneIcona(doc, 'i-more', t('Altre azioni su questa voce'), (e) => menu(voci, { ancoraEl: e.currentTarget, focusElement: e.currentTarget, etichetta: t('Azioni su ciò che è messo da parte') }));
+      riga.append(corpo, bottoneTesto(doc, t("github.stash.row.restore"), () => { void riprendi(v); }));
+      const voci = [{ etichetta: t("github.stash.drop.action"), icona: 'i-trash', pericoloso: true, azione: () => { void scarta(v); } }];
+      const altro = bottoneIcona(doc, 'i-more', t("github.stash.row.moreActions"), (e) => menu(voci, { ancoraEl: e.currentTarget, focusElement: e.currentTarget, etichetta: t("github.stash.row.actions") }));
       altro.setAttribute('aria-haspopup', 'menu');
       riga.append(altro);
-      riga.addEventListener('contextmenu', (e) => { e.preventDefault(); menu(voci, { x: e.clientX, y: e.clientY, focusElement: altro, etichetta: t('Azioni su ciò che è messo da parte') }); });
+      riga.addEventListener('contextmenu', (e) => { e.preventDefault(); menu(voci, { x: e.clientX, y: e.clientY, focusElement: altro, etichetta: t("github.stash.row.actions") }); });
       lista.append(riga);
     }
     sezione.append(lista);
@@ -1086,12 +1144,12 @@ export function creaSchedaGithub({ doc = globalThis.document, radice, api, confe
     sezione.dataset.gruppo = 'storia';
     const testa = el(doc, 'div', 'talos-github-gruppo__testa');
     const conto = s && !s.caricando && !s.errore ? `${s.commit.length}${s.altri ? '+' : ''}` : null;
-    testa.append(interruttoreGruppo('storia', t('Commit recenti'), conto, () => { void caricaStoria(); }));
+    testa.append(interruttoreGruppo('storia', t("github.history.title"), conto, () => { void caricaStoria(); }));
     sezione.append(testa);
     if (stato.chiusi.has('storia')) return sezione;
-    if (!s || s.caricando) { sezione.append(el(doc, 'p', 'talos-inspector__hint', t('Leggo la storia…'))); return sezione; }
+    if (!s || s.caricando) { sezione.append(el(doc, 'p', 'talos-inspector__hint', t("github.history.loading"))); return sezione; }
     if (s.errore) { sezione.append(el(doc, 'p', 'talos-inspector__hint', s.errore)); return sezione; }
-    if (!s.commit.length) { sezione.append(el(doc, 'p', 'talos-inspector__hint', t('Nessun commit ancora.'))); return sezione; }
+    if (!s.commit.length) { sezione.append(el(doc, 'p', 'talos-inspector__hint', t("github.history.empty"))); return sezione; }
     const lingua = linguaCorrenteDiT();
     /* ⭐ F6-2 passo 3 (decisione 21): il grafo del ramo e del suo remoto, con «In arrivo» sopra la base comune e «In uscita»
        sopra HEAD — la forma di VS Code (`grafo-storia.js`). I conteggi sono quelli di ↓ ↑ quando ci sono (tutta la storia), se
@@ -1116,8 +1174,8 @@ export function creaSchedaGithub({ doc = globalThis.document, radice, api, confe
       const corpo = el(doc, 'button', 'talos-github-riga__apri talos-github-riga__apri--due-righe');
       corpo.type = 'button';
       const chiave = r.tipo === 'in-arrivo' || r.tipo === 'in-uscita' ? r.tipo : r.id;
-      const confronto = r.tipo === 'in-arrivo' ? { da: s.baseComune, a: s.remoto, titolo: t('In arrivo · {rif}', { rif }) }
-        : r.tipo === 'in-uscita' ? { da: s.baseComune, a: s.testa, titolo: t('In uscita · {rif}', { rif }) }
+      const confronto = r.tipo === 'in-arrivo' ? { da: s.baseComune, a: s.remoto, titolo: t("github.history.incomingRef", { ref: rif }) }
+        : r.tipo === 'in-uscita' ? { da: s.baseComune, a: s.testa, titolo: t("github.history.outgoingRef", { ref: rif }) }
           : { da: null, a: r.id, titolo: `${r.voce.breve} · ${r.voce.soggetto}` };
       const aperta = stato.storiaAperte.get(chiave) ?? null;
       corpo.setAttribute('aria-expanded', String(Boolean(aperta)));
@@ -1126,10 +1184,10 @@ export function creaSchedaGithub({ doc = globalThis.document, radice, api, confe
       if (r.tipo === 'in-arrivo' || r.tipo === 'in-uscita') {
         const n = quanti(r.tipo);
         corpo.append(
-          el(doc, 'span', 'talos-github-riga__nome', r.tipo === 'in-arrivo' ? t('In arrivo') : t('In uscita')),
+          el(doc, 'span', 'talos-github-riga__nome', r.tipo === 'in-arrivo' ? t("github.history.incoming") : t("github.history.outgoing")),
           el(doc, 'span', 'talos-github-riga__cartella', r.tipo === 'in-arrivo'
-            ? tn('1 commit da scaricare da {rif}', '{n} commit da scaricare da {rif}', n, { rif })
-            : tn('1 commit da inviare a {rif}', '{n} commit da inviare a {rif}', n, { rif })),
+            ? tn("github.history.toPullOne", "github.history.toPullMany", n, { ref: rif })
+            : tn("github.history.toPushOne", "github.history.toPushMany", n, { ref: rif })),
         );
       } else {
         const c = r.voce;
@@ -1140,7 +1198,7 @@ export function creaSchedaGithub({ doc = globalThis.document, radice, api, confe
         if (r.tipo === 'testa') riga.setAttribute('aria-current', 'true');
         corpo.append(
           el(doc, 'span', 'talos-github-riga__nome', c.soggetto),
-          el(doc, 'span', 'talos-github-riga__cartella', [c.breve, c.autore, tempoFa(c.data, lingua), remoto ? t('da scaricare') : c.inviato ? t('inviato') : t('solo qui')].filter(Boolean).join(' · ')),
+          el(doc, 'span', 'talos-github-riga__cartella', [c.breve, c.autore, tempoFa(c.data, lingua), remoto ? t("github.history.row.toPull") : c.inviato ? t("github.history.row.pushed") : t("github.history.row.localOnly")].filter(Boolean).join(' · ')),
         );
         corpo.title = `${c.breve} · ${c.soggetto}`;
       }
@@ -1149,14 +1207,14 @@ export function creaSchedaGithub({ doc = globalThis.document, radice, api, confe
       if (aperta) lista.append(...righeDeiFile(aperta, r, larghezzaGrafo));
     }
     sezione.append(lista);
-    if (s.altri) sezione.append(el(doc, 'p', 'talos-inspector__hint', t('Qui ci sono gli ultimi {n} commit.', { n: s.commit.length })));
+    if (s.altri) sezione.append(el(doc, 'p', 'talos-inspector__hint', t("github.history.truncated", { n: s.commit.length })));
     return sezione;
   }
 
   function testoBase(base) {
     return base
-      ? t('Confronto con l’ultimo commit {hash} — {soggetto}', { hash: base.breve, soggetto: base.soggetto })
-      : t('Nessun commit ancora: tutto quello che c’è è nuovo.');
+      ? t("github.diff.comparedWithLastCommit", { hash: base.breve, subject: base.soggetto })
+      : t("github.diff.noCommitYet");
   }
 
   function disegnaElenco() {
@@ -1186,13 +1244,13 @@ export function creaSchedaGithub({ doc = globalThis.document, radice, api, confe
     const c = el(doc, 'div', 'talos-card talos-inspector-card talos-github-richiesta talos-github-init');
     c.dataset.c = 'InizializzaRepository';
     c.setAttribute('role', 'group');
-    c.setAttribute('aria-label', t('Nessun repository git'));
+    c.setAttribute('aria-label', t("github.repo.none.title"));
     c.append(
-      el(doc, 'p', 'talos-github-richiesta__titolo', t('Nessun repository git')),
-      el(doc, 'p', 'talos-inspector__hint talos-github-blocco__testo', t('La cartella della sessione non ha un repository git. Inizializzalo per tenere traccia delle modifiche, fare commit e usare i rami. Resta sul tuo computer: non serve un account GitHub.')),
+      el(doc, 'p', 'talos-github-richiesta__titolo', t("github.repo.none.title")),
+      el(doc, 'p', 'talos-inspector__hint talos-github-blocco__testo', t("github.repo.none.explain")),
     );
     const inCorso = stato.inCorso === 'inizializza';
-    const fai = bottoneTesto(doc, inCorso ? t('Inizializzo…') : t('Inizializza repository'), () => { void inizializza(); }, 'primary');
+    const fai = bottoneTesto(doc, inCorso ? t("github.repo.init.progress") : t("github.repo.init.action"), () => { void inizializza(); }, 'primary');
     fai.dataset.fuoco = 'inizializza';
     fai.disabled = inCorso || stato.occupato;
     if (inCorso) c.setAttribute('aria-busy', 'true');
@@ -1207,7 +1265,7 @@ export function creaSchedaGithub({ doc = globalThis.document, radice, api, confe
     stato.nonRepository = false;
     // la risposta porta lo stato ma non il ramo nella forma della rotta `branch`: lo si mette, poi si rilegge tutto (ramo, remoti)
     if (stato.dati) stato.dati = { ...stato.dati, ramo: esito.ramo ?? null, staccata: !esito.ramo };
-    avvisa(t('Repository inizializzato'), esito.ramo ? t('Ramo: {nome}', { nome: esito.ramo }) : '');
+    avvisa(t("github.repo.init.done"), esito.ramo ? t("github.repo.header.branch", { name: esito.ramo }) : '');
     api.ricarica?.();
   };
 
@@ -1220,9 +1278,9 @@ export function creaSchedaGithub({ doc = globalThis.document, radice, api, confe
     if (!chiedi) return;
     // come VS Code (`commands.ts:1159-1166`): la cartella utente, o una che la contiene, si inizializza solo dopo un sì
     const si = await conferma({
-      titolo: t('Inizializzare un repository qui?'),
-      testo: t('Questa cartella contiene la tua cartella utente: git terrebbe traccia di tutto ciò che c’è dentro.'),
-      conferma: t('Inizializza repository'),
+      titolo: t("github.repo.init.confirmTitle"),
+      testo: t("github.repo.init.userFolderWarning"),
+      conferma: t("github.repo.init.action"),
     });
     if (!si) return;
     await inRete('inizializza', () => api.inizializza(true), { dopo: dopoInizializza });
@@ -1240,37 +1298,37 @@ export function creaSchedaGithub({ doc = globalThis.document, radice, api, confe
       return;
     }
     if (!dati) {
-      elenco.append(el(doc, 'p', 'talos-inspector__hint', t('Leggo lo stato del repository…')));
+      elenco.append(el(doc, 'p', 'talos-inspector__hint', t("github.repo.loading")));
       return;
     }
     const g = raggruppaVoci(dati.voci);
     const quanteModifiche = g.conflitti.length + g.preparati.length + g.modificati.length + g.nuovi.length;
     const testa = el(doc, 'div', 'talos-file-head talos-github__testa');
-    const nomeRamo = dati.ramo ?? (dati.staccata ? t('HEAD staccata') : t('Nessun ramo'));
+    const nomeRamo = dati.ramo ?? (dati.staccata ? t("github.repo.header.detachedHead") : t("github.repo.header.noBranch"));
     /* ⭐ Passo 3: il ramo è un pulsante — passa a un altro ramo, creane uno, rinominalo, eliminane uno */
     const ramo = el(doc, 'button', 'talos-github__ramo');
     ramo.type = 'button';
     ramo.dataset.fuoco = 'ramo';
     ramo.setAttribute('aria-haspopup', 'menu');
-    ramo.setAttribute('aria-label', t('Ramo: {nome}', { nome: nomeRamo }));
-    ramo.title = t('Ramo: {nome}', { nome: nomeRamo });
+    ramo.setAttribute('aria-label', t("github.repo.header.branch", { name: nomeRamo }));
+    ramo.title = t("github.repo.header.branch", { name: nomeRamo });
     ramo.append(icona(doc, 'i-branch'), el(doc, 'b', 'talos-file-head__nome', nomeRamo), icona(doc, 'i-chevron'));
     ramo.addEventListener('click', (e) => { void apriMenuRami(e.currentTarget); });
-    const vociRepo = [{ etichetta: t('Aggiorna'), icona: 'i-clock', azione: () => api.ricarica() }, ...vociSinc()];
+    const vociRepo = [{ etichetta: t("github.repo.menu.refresh"), icona: 'i-clock', azione: () => api.ricarica() }, ...vociSinc()];
     if (dati.base) {
-      vociRepo.push({ etichetta: t('Modifica l’ultimo commit'), icona: 'i-edit', azione: () => { void avviaModifica(); } });
-      vociRepo.push({ etichetta: t('Annulla l’ultimo commit'), icona: 'i-arrow-left', azione: () => { void annullaUltimoCommit(); } });
+      vociRepo.push({ etichetta: t("github.commit.amend.menu"), icona: 'i-edit', azione: () => { void avviaModifica(); } });
+      vociRepo.push({ etichetta: t("github.commit.undo.menu"), icona: 'i-arrow-left', azione: () => { void annullaUltimoCommit(); } });
     }
-    if (g.conflitti.length === 0 && g.preparati.length + g.modificati.length > 0) vociRepo.push({ etichetta: t('Metti da parte le modifiche'), icona: 'i-layers', azione: () => accantona(false) });
-    if (g.conflitti.length === 0 && g.nuovi.length > 0) vociRepo.push({ etichetta: t('Metti da parte con i file nuovi'), icona: 'i-layers', azione: () => accantona(true) });
+    if (g.conflitti.length === 0 && g.preparati.length + g.modificati.length > 0) vociRepo.push({ etichetta: t("github.stash.action"), icona: 'i-layers', azione: () => accantona(false) });
+    if (g.conflitti.length === 0 && g.nuovi.length > 0) vociRepo.push({ etichetta: t("github.stash.actionWithNew"), icona: 'i-layers', azione: () => accantona(true) });
     /* ⭐ «Affida all'agente» (owner 26/09, punto 10): scrive la richiesta nel composer e la persona la manda lei — non parte da sola */
     if (quanteModifiche > 0 && typeof api.affidaAllAgente === 'function') {
       const richiesta = g.preparati.length > 0
-        ? t('Guarda le modifiche preparate in questa cartella, scrivi un buon messaggio di commit e fai il commit.')
-        : t('Guarda le modifiche di questa cartella, prepara quelle da committare, scrivi un buon messaggio di commit e fai il commit.');
-      vociRepo.push({ etichetta: t('Affida il commit all’agente'), icona: 'i-robot', azione: () => api.affidaAllAgente(richiesta) });
+        ? t("github.commit.agent.promptStaged")
+        : t("github.commit.agent.promptUnstaged");
+      vociRepo.push({ etichetta: t("github.commit.agent.action"), icona: 'i-robot', azione: () => api.affidaAllAgente(richiesta) });
     }
-    const altro = bottoneIcona(doc, 'i-more', t('Altre azioni del repository'), (e) => menu(vociRepo, { ancoraEl: e.currentTarget, focusElement: e.currentTarget, etichetta: t('Azioni sul repository') }));
+    const altro = bottoneIcona(doc, 'i-more', t("github.repo.menu.moreActions"), (e) => menu(vociRepo, { ancoraEl: e.currentTarget, focusElement: e.currentTarget, etichetta: t("github.repo.menu.actions") }));
     altro.setAttribute('aria-haspopup', 'menu');
     altro.dataset.fuoco = 'repository';
     testa.append(ramo, altro);
@@ -1283,8 +1341,8 @@ export function creaSchedaGithub({ doc = globalThis.document, radice, api, confe
     if (stato.richiesta) elenco.append(disegnaRichiesta());
     if (dati.preparatiFuori > 0) {
       const avviso = el(doc, 'div', 'talos-callout talos-github__fuori', tn(
-        'C’è 1 file preparato fuori da questa cartella: il commit resta fermo finché non lo togli dall’area preparata.',
-        'Ci sono {n} file preparati fuori da questa cartella: il commit resta fermo finché non li togli dall’area preparata.',
+        "github.commit.blocked.outsideOne",
+        "github.commit.blocked.outsideMany",
         dati.preparatiFuori,
       ));
       avviso.dataset.c = 'Callout';
@@ -1296,24 +1354,24 @@ export function creaSchedaGithub({ doc = globalThis.document, radice, api, confe
       /* ⭐ Passo 3: la casella dichiara che cosa sta facendo — modifica QUEL commit, non ne fa uno nuovo */
       const modo = el(doc, 'div', 'talos-github-commit__modo');
       modo.setAttribute('role', 'status');
-      modo.append(el(doc, 'span', '', t('Modifichi il commit {hash}', { hash: stato.modifica.breve })), bottoneTesto(doc, t('Lascia stare'), () => lasciaStareModifica()));
+      modo.append(el(doc, 'span', '', t("github.commit.amend.banner", { hash: stato.modifica.breve })), bottoneTesto(doc, t("github.common.cancel"), () => lasciaStareModifica()));
       carta.append(modo);
     }
     const campo = el(doc, 'textarea', 'talos-textarea talos-github-commit__messaggio');
     campo.dataset.fuoco = 'messaggio';
     campo.rows = 3;
-    campo.placeholder = t('Messaggio del commit');
-    campo.setAttribute('aria-label', t('Messaggio del commit'));
+    campo.placeholder = t("github.commit.messageLabel");
+    campo.setAttribute('aria-label', t("github.commit.messageLabel"));
     campo.value = stato.messaggio;
     const pulsante = el(doc, 'button', 'talos-button talos-button--primary talos-button--sm talos-github-commit__fai');
     pulsante.type = 'button';
     const aggiornaPulsante = () => {
       let testo;
       let spento = stato.messaggio.trim() === '' || g.conflitti.length > 0 || dati.preparatiFuori > 0;
-      if (stato.modifica) testo = g.preparati.length > 0 ? tn('Modifica il commit e aggiungi 1 file', 'Modifica il commit e aggiungi {n} file', g.preparati.length) : t('Modifica il commit');
-      else if (g.preparati.length > 0) testo = tn('Committa 1 file preparato', 'Committa {n} file preparati', g.preparati.length);
-      else if (quanteModifiche > 0) testo = t('Prepara tutto e committa');
-      else { testo = t('Niente da committare'); spento = true; }
+      if (stato.modifica) testo = g.preparati.length > 0 ? tn("github.commit.amend.actionWithFileOne", "github.commit.amend.actionWithFilesMany", g.preparati.length) : t("github.commit.amend.action");
+      else if (g.preparati.length > 0) testo = tn("github.commit.actionOne", "github.commit.actionMany", g.preparati.length);
+      else if (quanteModifiche > 0) testo = t("github.commit.stageAllAndCommit");
+      else { testo = t("github.commit.nothingToCommit"); spento = true; }
       pulsante.textContent = testo;
       pulsante.disabled = spento;
     };
@@ -1326,7 +1384,7 @@ export function creaSchedaGithub({ doc = globalThis.document, radice, api, confe
     const campoBox = el(doc, 'div', 'talos-github-commit__campo');
     campoBox.append(campo);
     if (typeof api.generaMessaggio === 'function') {
-      const genera = bottoneIcona(doc, 'i-sparkles', stato.generando ? t('Scrivo il messaggio…') : t('Genera il messaggio'), () => { void generaMessaggio(); });
+      const genera = bottoneIcona(doc, 'i-sparkles', stato.generando ? t("github.commit.generate.writing") : t("github.commit.generate.action"), () => { void generaMessaggio(); });
       genera.classList.add('talos-github-commit__genera');
       genera.dataset.fuoco = 'genera';
       genera.disabled = stato.generando || quanteModifiche === 0 || g.conflitti.length > 0;
@@ -1334,9 +1392,9 @@ export function creaSchedaGithub({ doc = globalThis.document, radice, api, confe
       campoBox.append(genera);
     }
     carta.append(campoBox, pulsante);
-    if (g.conflitti.length > 0) carta.append(el(doc, 'p', 'talos-inspector__hint', t('Prima vanno risolti i conflitti.')));
+    if (g.conflitti.length > 0) carta.append(el(doc, 'p', 'talos-inspector__hint', t("github.commit.blocked.conflicts")));
     elenco.append(carta);
-    if (quanteModifiche === 0) elenco.append(el(doc, 'p', 'talos-inspector__hint talos-github__vuoto', t('Nessuna modifica rispetto all’ultimo commit.')));
+    if (quanteModifiche === 0) elenco.append(el(doc, 'p', 'talos-inspector__hint talos-github__vuoto', t("github.commit.blocked.noChanges")));
     for (const { chiave, titolo } of GRUPPI) {
       if (g[chiave].length) elenco.append(disegnaGruppo(chiave, titolo, g[chiave]));
     }
@@ -1380,7 +1438,7 @@ export function creaSchedaGithub({ doc = globalThis.document, radice, api, confe
       gh = await api.statoGithub();
       if (mia !== letturaPr) return;
       if (gh?.gh?.trovato && gh?.accesso?.collegato) dati = await api.pullRequest();
-    } catch (e) { errore = { code: e?.code ?? null, message: e?.message || t('Non riuscito') }; }
+    } catch (e) { errore = { code: e?.code ?? null, message: e?.message || t("github.common.failed") }; }
     if (mia !== letturaPr) return;
     stato.pr = { ...(stato.pr ?? {}), caricando: false, gh, dati, errore };
     seguiControlli();
@@ -1406,7 +1464,7 @@ export function creaSchedaGithub({ doc = globalThis.document, radice, api, confe
         const primaInCorso = ora.controlli?.conteggi?.inCorso ?? 0;
         stato.pr.dati.prDelRamo = { ...ora, controlli: c?.controlli ?? ora.controlli, stato: c?.stato ?? ora.stato };
         const dopo = stato.pr.dati.prDelRamo.controlli?.conteggi;
-        if (primaInCorso > 0 && (dopo?.inCorso ?? 0) === 0) avvisa(t(TESTI_PR.controlliFiniti), `#${pr.numero} · ${fraseControlli(dopo)}`);
+        if (primaInCorso > 0 && (dopo?.inCorso ?? 0) === 0) avvisa(t(CHIAVI_PR.controlliFiniti), `#${pr.numero} · ${fraseControlli(dopo)}`);
         ridisegnaElenco();
       } catch { /* un giro mancato non ferma il seguito: si riprova al prossimo */ }
       seguiControlli();
@@ -1419,9 +1477,9 @@ export function creaSchedaGithub({ doc = globalThis.document, radice, api, confe
     ridisegnaElenco();
     try {
       const esito = await api.installaGh();
-      avvisa(t(TESTI_PR.ghPronta), esito?.gh?.versione ?? '');
+      avvisa(t(CHIAVI_PR.ghPronta), esito?.gh?.versione ?? '');
     } catch (errore) {
-      avvisa(t('Non riuscito'), errore?.message || t('Non riuscito'));
+      avvisa(t("github.common.failed"), errore?.message || t("github.common.failed"));
     } finally {
       stato.pr = { ...(stato.pr ?? {}), installando: false };
     }
@@ -1434,7 +1492,7 @@ export function creaSchedaGithub({ doc = globalThis.document, radice, api, confe
     let esito;
     try { esito = await api.collegaGithub(); } catch (errore) {
       stato.pr = { ...(stato.pr ?? {}), collegando: false };
-      avvisa(t('Non riuscito'), errore?.message || t('Non riuscito'));
+      avvisa(t("github.common.failed"), errore?.message || t("github.common.failed"));
       return;
     }
     stato.pr = { ...(stato.pr ?? {}), collegando: false, collegamento: esito };
@@ -1455,7 +1513,7 @@ export function creaSchedaGithub({ doc = globalThis.document, radice, api, confe
       if (!stato.pr?.collegamento) return; // annullato nel frattempo
       if (Date.now() - inizioAttesaCollegamento > ATTESA_MASSIMA_COLLEGAMENTO_MS) {
         stato.pr = { ...stato.pr, collegamento: null };
-        avvisa(t(TESTI_PR.scollegato), t(TESTI_PR.codiceScaduto));
+        avvisa(t(CHIAVI_PR.scollegato), t(CHIAVI_PR.codiceScaduto));
         await caricaPr();
         return;
       }
@@ -1464,8 +1522,8 @@ export function creaSchedaGithub({ doc = globalThis.document, radice, api, confe
       if (!stato.pr?.collegamento) return; // annullato nel frattempo
       if (s?.collegamento?.stato === 'in-attesa' || s === null) { aspettaCollegamento(); return; }
       stato.pr = { ...stato.pr, collegamento: null };
-      if (s?.accesso?.collegato) avvisa(t(TESTI_PR.collegato), s.accesso.account ? t(TESTI_PR.account, { account: s.accesso.account }) : '');
-      else avvisa(t(TESTI_PR.scollegato), s?.collegamento?.errore ?? '');
+      if (s?.accesso?.collegato) avvisa(t(CHIAVI_PR.collegato), s.accesso.account ? t(CHIAVI_PR.account, { account: s.accesso.account }) : '');
+      else avvisa(t(CHIAVI_PR.scollegato), testoDelCampo(s?.collegamento, 'errore') ?? '');
       await caricaPr();
     }, INTERVALLO_COLLEGAMENTO_MS);
   }
@@ -1479,7 +1537,7 @@ export function creaSchedaGithub({ doc = globalThis.document, radice, api, confe
   }
 
   async function copiaCodice(codice) {
-    try { await globalThis.navigator?.clipboard?.writeText(codice); avvisa(t(TESTI_PR.codiceCopiato), codice); } catch { avvisa(t('Non riuscito'), codice); }
+    try { await globalThis.navigator?.clipboard?.writeText(codice); avvisa(t(CHIAVI_PR.codiceCopiato), codice); } catch { avvisa(t("github.common.failed"), codice); }
   }
 
   /* ─────────── il modulo «Nuova pull request» ─────────── */
@@ -1500,7 +1558,7 @@ export function creaSchedaGithub({ doc = globalThis.document, radice, api, confe
       };
     } catch (errore) {
       if (mia !== letturaBozza || !stato.modulo) return;
-      stato.modulo = { ...(prima ?? {}), caricando: false, errore: errore?.message || t('Non riuscito') };
+      stato.modulo = { ...(prima ?? {}), caricando: false, errore: errore?.message || t("github.common.failed") };
     }
     ridisegnaElenco();
   }
@@ -1525,7 +1583,7 @@ export function creaSchedaGithub({ doc = globalThis.document, radice, api, confe
     const m = stato.modulo;
     if (!m?.basi?.length) return;
     const voci = m.basi.map((b) => ({ etichetta: b, icona: b === m.base ? 'i-check' : 'i-branch', azione: () => { if (b !== m.base) { stato.modulo = { ...m, base: b, caricando: true }; ridisegnaElenco(); void caricaBozza(b); } } }));
-    menu(voci, { ancoraEl: ancora, focusElement: ancora, etichetta: t(TESTI_PR.basi) });
+    menu(voci, { ancoraEl: ancora, focusElement: ancora, etichetta: t(CHIAVI_PR.basi) });
   }
 
   async function creaPr() {
@@ -1533,40 +1591,40 @@ export function creaSchedaGithub({ doc = globalThis.document, radice, api, confe
     if (!m || m.caricando || m.creando || stato.occupato || stato.inCorso) return;
     const titolo = String(m.titolo ?? '').trim();
     if (!titolo) {
-      m.errore = t(TESTI_PR.serveTitolo);
+      m.errore = t(CHIAVI_PR.serveTitolo);
       ridisegnaElenco();
       elenco.querySelector('[data-fuoco="pr-titolo"]')?.focus();
       return;
     }
     /* ⛔ Prima il ramo su GitHub, con la conferma che dice remoto e ramo (decisioni 2 e 22): `gh` non spinge mai al posto nostro */
     const azione = azioneSinc(stato.sinc);
-    if (azione === 'scarica') { m.errore = t(TESTI_PR.primaScarica); ridisegnaElenco(); return; }
+    if (azione === 'scarica') { m.errore = t(CHIAVI_PR.primaScarica); ridisegnaElenco(); return; }
     if (azione === 'pubblica') await pubblica();
     else if (azione === 'invia') await invia();
     if (stato.modulo !== m) return;
     const s = stato.sinc;
-    if (!s?.riferimento || s.riferimentoSparito || (s.avanti ?? 0) > 0) { m.errore = t(TESTI_PR.aspettaInvio); ridisegnaElenco(); return; }
+    if (!s?.riferimento || s.riferimentoSparito || (s.avanti ?? 0) > 0) { m.errore = t(CHIAVI_PR.aspettaInvio); ridisegnaElenco(); return; }
     m.creando = true;
     m.errore = null;
     ridisegnaElenco();
     let rifiuto = null;
-    const esito = await esegui(() => api.creaPr({ titolo, testo: m.testo ?? '', base: m.base, bozza: m.bozza === true }), { gestisci: (errore) => { rifiuto = errore?.message || t('Non riuscito'); return true; } });
+    const esito = await esegui(() => api.creaPr({ titolo, testo: m.testo ?? '', base: m.base, bozza: m.bozza === true }), { gestisci: (errore) => { rifiuto = errore?.message || t("github.common.failed"); return true; } });
     if (stato.modulo !== m) return;
     m.creando = false;
-    if (rifiuto || !esito) { m.errore = rifiuto ?? t('Non riuscito'); ridisegnaElenco(); return; }
+    if (rifiuto || !esito) { m.errore = rifiuto ?? t("github.common.failed"); ridisegnaElenco(); return; }
     stato.modulo = null;
     letturaBozza += 1;
-    avvisa(t(TESTI_PR.creata), `#${esito.numero} · ${titolo}`);
+    avvisa(t(CHIAVI_PR.creata), `#${esito.numero} · ${titolo}`);
     await caricaPr();
   }
 
   /* ─────────── il disegno ─────────── */
 
   function testoErrorePr(errore) {
-    if (errore?.code === 'GH_NOT_GITHUB') return t(TESTI_PR.nonGithub);
-    if (errore?.code === 'GIT_NO_REMOTE') return t(TESTI_PR.nessunRemoto);
-    if (errore?.code === 'GIT_DETACHED') return t(TESTI_PR.staccata);
-    return errore?.message || t('Non riuscito');
+    if (errore?.code === 'GH_NOT_GITHUB') return t(CHIAVI_PR.nonGithub);
+    if (errore?.code === 'GIT_NO_REMOTE') return t(CHIAVI_PR.nessunRemoto);
+    if (errore?.code === 'GIT_DETACHED') return t(CHIAVI_PR.staccata);
+    return errore?.message || t("github.common.failed");
   }
 
   /** Gli esiti dei controlli in cifre, ognuno con la sua icona — la stessa grammatica di ↓N ↑M. */
@@ -1574,7 +1632,7 @@ export function creaSchedaGithub({ doc = globalThis.document, radice, api, confe
     const esiti = el(doc, 'span', 'talos-github-pr__esiti');
     const frase = fraseControlli(conteggi);
     esiti.setAttribute('role', 'img');
-    esiti.setAttribute('aria-label', frase || t(TESTI_PR.nessunControllo));
+    esiti.setAttribute('aria-label', frase || t(CHIAVI_PR.nessunControllo));
     esiti.title = esiti.getAttribute('aria-label');
     for (const { esito, n } of riassuntoControlli(conteggi)) {
       const voce = el(doc, 'span', 'talos-github-pr__esito');
@@ -1586,9 +1644,9 @@ export function creaSchedaGithub({ doc = globalThis.document, radice, api, confe
   }
 
   function parolaStatoPr(pr) {
-    if (pr.stato === 'merged') return t(TESTI_PR.unita);
-    if (pr.stato === 'closed') return t(TESTI_PR.chiusa);
-    return pr.bozza ? t(TESTI_PR.bozza) : t(TESTI_PR.aperta);
+    if (pr.stato === 'merged') return t(CHIAVI_PR.unita);
+    if (pr.stato === 'closed') return t(CHIAVI_PR.chiusa);
+    return pr.bozza ? t(CHIAVI_PR.bozza) : t(CHIAVI_PR.aperta);
   }
 
   function rigaPrDelRamo(pr) {
@@ -1613,14 +1671,14 @@ export function creaSchedaGithub({ doc = globalThis.document, radice, api, confe
     if (conControlli) {
       /* il clic apre i controlli sotto (come i file sotto un commit); la PR si apre col suo pulsante */
       corpo.setAttribute('aria-expanded', String(stato.pr?.controlliAperti === true));
-      corpo.setAttribute('aria-label', `#${pr.numero} ${pr.titolo} · ${parolaStatoPr(pr)} · ${fraseControlli(pr.controlli.conteggi)}. ${t(TESTI_PR.mostraControlli)}`);
+      corpo.setAttribute('aria-label', `#${pr.numero} ${pr.titolo} · ${parolaStatoPr(pr)} · ${fraseControlli(pr.controlli.conteggi)}. ${t(CHIAVI_PR.mostraControlli)}`);
       corpo.addEventListener('click', () => { stato.pr = { ...stato.pr, controlliAperti: !(stato.pr?.controlliAperti === true) }; disegnaElenco(); });
     } else {
       corpo.addEventListener('click', () => apriFuori(pr.url));
     }
     riga.append(corpo);
     /* a icona: un pulsante testuale, anche invisibile, prende il posto degli esiti e taglia l'ultimo (foto del 27/09) */
-    const apri = bottoneIcona(doc, 'i-link', t(TESTI_PR.apri), () => apriFuori(pr.url));
+    const apri = bottoneIcona(doc, 'i-link', t(CHIAVI_PR.apri), () => apriFuori(pr.url));
     apri.dataset.fuoco = 'pr-apri';
     riga.append(apri);
     return riga;
@@ -1655,9 +1713,9 @@ export function creaSchedaGithub({ doc = globalThis.document, radice, api, confe
     const quando = tempoFa(pr.aggiornata, linguaCorrenteDiT());
     corpo.append(
       el(doc, 'span', 'talos-github-riga__nome', `#${pr.numero} ${pr.titolo}`),
-      el(doc, 'span', 'talos-github-riga__cartella', [`${pr.ramo} → ${pr.base}`, pr.autore && pr.autore === account ? t(TESTI_PR.tua) : pr.autore, pr.bozza ? t(TESTI_PR.inBozza) : null, quando].filter(Boolean).join(' · ')),
+      el(doc, 'span', 'talos-github-riga__cartella', [`${pr.ramo} → ${pr.base}`, pr.autore && pr.autore === account ? t(CHIAVI_PR.tua) : pr.autore, pr.bozza ? t(CHIAVI_PR.inBozza) : null, quando].filter(Boolean).join(' · ')),
     );
-    corpo.title = `#${pr.numero} · ${pr.titolo} — ${t(TESTI_PR.apri)}`;
+    corpo.title = `#${pr.numero} · ${pr.titolo} — ${t(CHIAVI_PR.apri)}`;
     corpo.addEventListener('click', () => apriFuori(pr.url));
     riga.append(corpo);
     return riga;
@@ -1676,39 +1734,39 @@ export function creaSchedaGithub({ doc = globalThis.document, radice, api, confe
     };
     const piede = (...bottoni) => { const d = el(doc, 'div', 'talos-github-richiesta__piede'); d.append(...bottoni); return d; };
     if (p.installando) {
-      const c = carta(t(TESTI_PR.ghScarico), null);
+      const c = carta(t(CHIAVI_PR.ghScarico), null);
       c.setAttribute('aria-busy', 'true');
       return c;
     }
     if (p.collegamento?.codice) {
-      const c = carta(t(TESTI_PR.collega), t(TESTI_PR.collegaCodice));
+      const c = carta(t(CHIAVI_PR.collega), t(CHIAVI_PR.collegaCodice));
       const riga = el(doc, 'div', 'talos-github-pr__codice-riga');
       const codice = el(doc, 'output', 'talos-github-pr__codice', p.collegamento.codice);
-      codice.setAttribute('aria-label', `${t(TESTI_PR.codice)}: ${p.collegamento.codice.split('').join(' ')}`);
-      const copia = bottoneIcona(doc, 'i-copy', t(TESTI_PR.copiaCodice), () => { void copiaCodice(p.collegamento.codice); });
+      codice.setAttribute('aria-label', `${t(CHIAVI_PR.codice)}: ${p.collegamento.codice.split('').join(' ')}`);
+      const copia = bottoneIcona(doc, 'i-copy', t(CHIAVI_PR.copiaCodice), () => { void copiaCodice(p.collegamento.codice); });
       riga.append(codice, copia);
       c.append(riga);
-      const apri = bottoneTesto(doc, t(TESTI_PR.apriGithub), () => apriFuori(p.collegamento.indirizzo), 'primary');
+      const apri = bottoneTesto(doc, t(CHIAVI_PR.apriGithub), () => apriFuori(p.collegamento.indirizzo), 'primary');
       apri.dataset.fuoco = 'pr-apri-github';
-      c.append(piede(bottoneTesto(doc, t(TESTI_PR.annulla), () => { void annullaCollegamento(); }), apri));
+      c.append(piede(bottoneTesto(doc, t(CHIAVI_PR.annulla), () => { void annullaCollegamento(); }), apri));
       return c;
     }
     if (!gh?.gh?.trovato) {
       const vecchia = gh?.gh?.sistemaTroppoVecchio;
-      const c = carta(t(vecchia ? TESTI_PR.ghVecchia : TESTI_PR.ghAssente), gh?.installabile === false
-        ? t(TESTI_PR.ghNonInstallabile)
-        : vecchia ? t(TESTI_PR.ghVecchiaSpiega, { versione: vecchia, nuova: gh?.versioneTalos ?? '' }) : t(TESTI_PR.ghSpiega, { versione: gh?.versioneTalos ?? '' }));
-      if (gh?.installazione?.errore) c.append(el(doc, 'p', 'talos-github-richiesta__errore', gh.installazione.errore));
+      const c = carta(t(vecchia ? CHIAVI_PR.ghVecchia : CHIAVI_PR.ghAssente), gh?.installabile === false
+        ? t(CHIAVI_PR.ghNonInstallabile)
+        : vecchia ? t(CHIAVI_PR.ghVecchiaSpiega, { installed: vecchia, official: gh?.versioneTalos ?? '' }) : t(CHIAVI_PR.ghSpiega, { official: gh?.versioneTalos ?? '' }));
+      if (gh?.installazione?.errore) c.append(el(doc, 'p', 'talos-github-richiesta__errore', testoDelCampo(gh.installazione, 'errore')));
       const azione = gh?.installabile === false
-        ? bottoneTesto(doc, t(TESTI_PR.ghPagina), () => apriFuori('https://github.com/cli/cli#installation'), 'primary')
-        : bottoneTesto(doc, t(TESTI_PR.ghScarica), () => { void installaGh(); }, 'primary');
+        ? bottoneTesto(doc, t(CHIAVI_PR.ghPagina), () => apriFuori('https://github.com/cli/cli#installation'), 'primary')
+        : bottoneTesto(doc, t(CHIAVI_PR.ghScarica), () => { void installaGh(); }, 'primary');
       azione.dataset.fuoco = 'pr-gh';
       c.append(piede(azione));
       return c;
     }
     if (!gh?.accesso?.collegato) {
-      const c = carta(t(TESTI_PR.scollegato), t(TESTI_PR.collegaSpiega));
-      const collega = bottoneTesto(doc, t(TESTI_PR.collega), () => { void collegaGithub(); }, 'primary');
+      const c = carta(t(CHIAVI_PR.scollegato), t(CHIAVI_PR.collegaSpiega));
+      const collega = bottoneTesto(doc, t(CHIAVI_PR.collega), () => { void collegaGithub(); }, 'primary');
       collega.dataset.fuoco = 'pr-collega';
       c.append(piede(collega));
       return c;
@@ -1719,20 +1777,20 @@ export function creaSchedaGithub({ doc = globalThis.document, radice, api, confe
   function disegnaModuloPr() {
     const m = stato.modulo;
     const carta = el(doc, 'form', 'talos-card talos-inspector-card talos-github-richiesta talos-github-pr__modulo');
-    carta.setAttribute('aria-label', t(TESTI_PR.nuova));
+    carta.setAttribute('aria-label', t(CHIAVI_PR.nuova));
     carta.noValidate = true;
-    carta.append(el(doc, 'p', 'talos-github-richiesta__titolo', t(TESTI_PR.nuova)));
+    carta.append(el(doc, 'p', 'talos-github-richiesta__titolo', t(CHIAVI_PR.nuova)));
     const esc = (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); chiudiModuloPr(); } };
     const piede = el(doc, 'div', 'talos-github-richiesta__piede');
-    const lasciaStare = bottoneTesto(doc, t(TESTI_PR.annulla), () => chiudiModuloPr());
+    const lasciaStare = bottoneTesto(doc, t(CHIAVI_PR.annulla), () => chiudiModuloPr());
     if (m.caricando && !m.ramo) {
-      carta.append(el(doc, 'p', 'talos-inspector__hint', t(TESTI_PR.preparoBozza)));
+      carta.append(el(doc, 'p', 'talos-inspector__hint', t(CHIAVI_PR.preparoBozza)));
       piede.append(lasciaStare);
       carta.append(piede);
       return carta;
     }
     if (!m.ramo) {
-      carta.append(el(doc, 'p', 'talos-github-richiesta__errore', m.errore || t('Non riuscito')));
+      carta.append(el(doc, 'p', 'talos-github-richiesta__errore', m.errore || t("github.common.failed")));
       piede.append(lasciaStare);
       carta.append(piede);
       return carta;
@@ -1743,30 +1801,30 @@ export function creaSchedaGithub({ doc = globalThis.document, radice, api, confe
     base.type = 'button';
     base.dataset.fuoco = 'pr-base';
     base.setAttribute('aria-haspopup', 'menu');
-    base.setAttribute('aria-label', `${t(TESTI_PR.base, { base: m.base ?? '—' })}. ${t(TESTI_PR.scegliBase)}`);
-    base.title = t(TESTI_PR.scegliBase);
+    base.setAttribute('aria-label', `${t(CHIAVI_PR.base, { base: m.base ?? '—' })}. ${t(CHIAVI_PR.scegliBase)}`);
+    base.title = t(CHIAVI_PR.scegliBase);
     base.append(icona(doc, 'i-branch'), el(doc, 'b', 'talos-file-head__nome', m.base ?? '—'), icona(doc, 'i-chevron'));
     base.addEventListener('click', (e) => scegliBase(e.currentTarget));
     const ramo = el(doc, 'span', 'talos-github-pr__ramo', m.ramo);
     ramo.title = m.ramo;
     rami.append(ramo, el(doc, 'span', 'talos-github-pr__freccia', '→'), base);
     carta.append(rami);
-    if (m.caricando) carta.append(el(doc, 'p', 'talos-inspector__hint', t(TESTI_PR.preparoBozza)));
-    else if (!m.baseTrovata) carta.append(el(doc, 'p', 'talos-inspector__hint', t(TESTI_PR.baseAssente, { base: m.base ?? '—', remoto: m.remoto ?? '' })));
-    else carta.append(el(doc, 'p', 'talos-inspector__hint', m.commitOltre ? t(TESTI_PR.oltreCommit, { n: m.commit, base: m.base }) : tn(TESTI_PR.unCommit, TESTI_PR.piuCommit, m.commit, { base: m.base })));
+    if (m.caricando) carta.append(el(doc, 'p', 'talos-inspector__hint', t(CHIAVI_PR.preparoBozza)));
+    else if (!m.baseTrovata) carta.append(el(doc, 'p', 'talos-inspector__hint', t(CHIAVI_PR.baseAssente, { base: m.base ?? '—', remote: m.remoto ?? '' })));
+    else carta.append(el(doc, 'p', 'talos-inspector__hint', m.commitOltre ? t(CHIAVI_PR.oltreCommit, { n: m.commit, base: m.base }) : tn(CHIAVI_PR.unCommit, CHIAVI_PR.piuCommit, m.commit, { base: m.base })));
     const titolo = el(doc, 'input', 'talos-field__input talos-github-richiesta__campo');
     titolo.type = 'text';
     titolo.value = m.titolo ?? '';
-    titolo.placeholder = t(TESTI_PR.titolo);
-    titolo.setAttribute('aria-label', t(TESTI_PR.titolo));
+    titolo.placeholder = t(CHIAVI_PR.titolo);
+    titolo.setAttribute('aria-label', t(CHIAVI_PR.titolo));
     titolo.maxLength = 256;
     titolo.autocomplete = 'off';
     titolo.dataset.fuoco = 'pr-titolo';
     const testo = el(doc, 'textarea', 'talos-textarea talos-github-pr__testo');
     testo.rows = 5;
     testo.value = m.testo ?? '';
-    testo.placeholder = t(TESTI_PR.testo);
-    testo.setAttribute('aria-label', t(TESTI_PR.testo));
+    testo.placeholder = t(CHIAVI_PR.testo);
+    testo.setAttribute('aria-label', t(CHIAVI_PR.testo));
     testo.dataset.fuoco = 'pr-testo';
     const casella = el(doc, 'label', 'talos-github-pr__bozza');
     const spunta = el(doc, 'input', 'talos-checkbox');
@@ -1775,12 +1833,12 @@ export function creaSchedaGithub({ doc = globalThis.document, radice, api, confe
     spunta.dataset.fuoco = 'pr-bozza';
     spunta.addEventListener('change', () => { m.bozza = spunta.checked; });
     const parole = el(doc, 'span', 'talos-github-pr__bozza-testi');
-    parole.append(el(doc, 'span', '', t(TESTI_PR.bozzaCasella)), el(doc, 'span', 'talos-github-riga__cartella', t(TESTI_PR.bozzaSpiega)));
+    parole.append(el(doc, 'span', '', t(CHIAVI_PR.bozzaCasella)), el(doc, 'span', 'talos-github-riga__cartella', t(CHIAVI_PR.bozzaSpiega)));
     casella.append(spunta, parole);
     carta.append(titolo, testo, casella);
     const azione = azioneSinc(stato.sinc);
-    if (azione === 'pubblica') carta.append(el(doc, 'p', 'talos-inspector__hint', t(TESTI_PR.pubblicaPrima)));
-    else if (azione === 'invia') carta.append(el(doc, 'p', 'talos-inspector__hint', tn(TESTI_PR.unDaInviare, TESTI_PR.piuDaInviare, stato.sinc.avanti)));
+    if (azione === 'pubblica') carta.append(el(doc, 'p', 'talos-inspector__hint', t(CHIAVI_PR.pubblicaPrima)));
+    else if (azione === 'invia') carta.append(el(doc, 'p', 'talos-inspector__hint', tn(CHIAVI_PR.unDaInviare, CHIAVI_PR.piuDaInviare, stato.sinc.avanti)));
     if (m.errore) {
       const errore = el(doc, 'p', 'talos-field__error talos-github-richiesta__errore', m.errore);
       errore.id = 'talos-github-pr-errore';
@@ -1789,12 +1847,12 @@ export function creaSchedaGithub({ doc = globalThis.document, radice, api, confe
       if (!String(m.titolo ?? '').trim()) titolo.setAttribute('aria-invalid', 'true');
       carta.append(errore);
     }
-    const crea = el(doc, 'button', 'talos-button talos-button--primary talos-button--sm', m.creando ? t(TESTI_PR.creo) : t(TESTI_PR.crea));
+    const crea = el(doc, 'button', 'talos-button talos-button--primary talos-button--sm', m.creando ? t(CHIAVI_PR.creo) : t(CHIAVI_PR.crea));
     crea.type = 'submit';
     crea.dataset.fuoco = 'pr-invia';
     const aggiorna = () => { crea.disabled = m.creando === true || m.caricando === true || !String(m.titolo ?? '').trim(); };
     if (m.creando) crea.setAttribute('aria-busy', 'true');
-    titolo.addEventListener('input', () => { m.titolo = titolo.value; m.toccato = { ...m.toccato, titolo: true }; if (m.errore === t(TESTI_PR.serveTitolo)) m.errore = null; aggiorna(); });
+    titolo.addEventListener('input', () => { m.titolo = titolo.value; m.toccato = { ...m.toccato, titolo: true }; if (m.errore === t(CHIAVI_PR.serveTitolo)) m.errore = null; aggiorna(); });
     testo.addEventListener('input', () => { m.testo = testo.value; m.toccato = { ...m.toccato, testo: true }; });
     for (const campo of [titolo, testo, spunta]) campo.addEventListener('keydown', esc);
     aggiorna();
@@ -1809,28 +1867,28 @@ export function creaSchedaGithub({ doc = globalThis.document, radice, api, confe
     const sezione = el(doc, 'section', 'talos-github-gruppo talos-github-pr');
     sezione.dataset.gruppo = 'pr';
     const testa = el(doc, 'div', 'talos-github-gruppo__testa');
-    testa.append(interruttoreGruppo('pr', t(TESTI_PR.gruppo), p?.dati ? String(p.dati.aperte.length) : null, () => { void caricaPr(); }));
+    testa.append(interruttoreGruppo('pr', t(CHIAVI_PR.gruppo), p?.dati ? String(p.dati.aperte.length) : null, () => { void caricaPr(); }));
     const aperto = !stato.chiusi.has('pr');
     if (aperto && p?.dati) {
       const voci = [
-        { etichetta: t(TESTI_PR.aggiorna), icona: 'i-clock', azione: () => { void caricaPr(); } },
-        { etichetta: t(TESTI_PR.suGithub), icona: 'i-link', azione: () => apriFuori(`https://github.com/${p.dati.repo}/pulls`) },
+        { etichetta: t(CHIAVI_PR.aggiorna), icona: 'i-clock', azione: () => { void caricaPr(); } },
+        { etichetta: t(CHIAVI_PR.suGithub), icona: 'i-link', azione: () => apriFuori(`https://github.com/${p.dati.repo}/pulls`) },
       ];
-      const altro = bottoneIcona(doc, 'i-more', t(TESTI_PR.altreAzioni), (e) => menu(voci, { ancoraEl: e.currentTarget, focusElement: e.currentTarget, etichetta: t(TESTI_PR.azioni) }));
+      const altro = bottoneIcona(doc, 'i-more', t(CHIAVI_PR.altreAzioni), (e) => menu(voci, { ancoraEl: e.currentTarget, focusElement: e.currentTarget, etichetta: t(CHIAVI_PR.azioni) }));
       altro.setAttribute('aria-haspopup', 'menu');
       altro.dataset.fuoco = 'pr-altro';
       testa.append(altro);
-      testa.addEventListener('contextmenu', (e) => { e.preventDefault(); menu(voci, { x: e.clientX, y: e.clientY, focusElement: altro, etichetta: t(TESTI_PR.azioni) }); });
+      testa.addEventListener('contextmenu', (e) => { e.preventDefault(); menu(voci, { x: e.clientX, y: e.clientY, focusElement: altro, etichetta: t(CHIAVI_PR.azioni) }); });
     }
     sezione.append(testa);
     if (!aperto) { fermaControlli(); return sezione; }
-    if (!p || (p.caricando && !p.gh && !p.errore)) { sezione.append(el(doc, 'p', 'talos-inspector__hint', t(TESTI_PR.leggo))); return sezione; }
+    if (!p || (p.caricando && !p.gh && !p.errore)) { sezione.append(el(doc, 'p', 'talos-inspector__hint', t(CHIAVI_PR.leggo))); return sezione; }
     if (p.gh || p.installando || p.collegamento) {
       const stato_ = cartaStatoGh(p);
       if (stato_) { sezione.append(stato_); return sezione; }
     }
     if (p.errore) { sezione.append(el(doc, 'p', 'talos-inspector__hint', testoErrorePr(p.errore))); return sezione; }
-    if (!p.dati) { sezione.append(el(doc, 'p', 'talos-inspector__hint', t(TESTI_PR.leggo))); return sezione; }
+    if (!p.dati) { sezione.append(el(doc, 'p', 'talos-inspector__hint', t(CHIAVI_PR.leggo))); return sezione; }
     const d = p.dati;
     if (d.prDelRamo) {
       const lista = el(doc, 'ul', 'talos-github-gruppo__righe talos-github-pr__righe');
@@ -1840,17 +1898,17 @@ export function creaSchedaGithub({ doc = globalThis.document, radice, api, confe
     } else if (stato.modulo) {
       sezione.append(disegnaModuloPr());
     } else if (d.ramoPredefinito && d.ramo === d.ramoPredefinito) {
-      sezione.append(el(doc, 'p', 'talos-inspector__hint', t(TESTI_PR.ramoPrincipale)));
+      sezione.append(el(doc, 'p', 'talos-inspector__hint', t(CHIAVI_PR.ramoPrincipale)));
     } else {
       const vuota = el(doc, 'div', 'talos-github-pr__vuota');
-      const crea = bottoneTesto(doc, t(TESTI_PR.crea), () => { void apriModuloPr(); }, 'secondary');
+      const crea = bottoneTesto(doc, t(CHIAVI_PR.crea), () => { void apriModuloPr(); }, 'secondary');
       crea.dataset.fuoco = 'pr-crea';
-      vuota.append(el(doc, 'p', 'talos-inspector__hint', t(TESTI_PR.nessunaPr)), crea);
+      vuota.append(el(doc, 'p', 'talos-inspector__hint', t(CHIAVI_PR.nessunaPr)), crea);
       sezione.append(vuota);
     }
     const altre = d.aperte.filter((x) => x.numero !== d.prDelRamo?.numero);
     if (altre.length) {
-      sezione.append(el(doc, 'p', 'talos-inspector__hint talos-github-pr__sotto', t(TESTI_PR.aperteNelProgetto)));
+      sezione.append(el(doc, 'p', 'talos-inspector__hint talos-github-pr__sotto', t(CHIAVI_PR.aperteNelProgetto)));
       const lista = el(doc, 'ul', 'talos-github-gruppo__righe talos-github-pr__aperte');
       for (const x of altre) lista.append(rigaPrAperta(x, d.account));
       sezione.append(lista);
@@ -1871,10 +1929,10 @@ export function creaSchedaGithub({ doc = globalThis.document, radice, api, confe
     const { percorso, area } = d;
     if (azione === 'annulla') {
       const si = await conferma({
-        titolo: t('Annullare questo pezzo?'),
-        testo: t('Le sue righe tornano com’erano nella versione preparata. Non si può tornare indietro.'),
-        righe: [[t('File'), percorso], [t('Pezzo'), dove]],
-        conferma: t('Annulla il pezzo'),
+        titolo: t("github.diff.hunk.discardTitle"),
+        testo: t("github.diff.hunk.discardWarning"),
+        righe: [[t("github.common.files"), percorso], [t("github.diff.hunk.label"), dove]],
+        conferma: t("github.diff.hunk.discard"),
         pericolo: true,
       });
       if (!si) return;
@@ -1889,17 +1947,17 @@ export function creaSchedaGithub({ doc = globalThis.document, radice, api, confe
     const comandi = el(doc, 'span', 'talos-github-pezzo__comandi');
     const area = stato.diff.area;
     const principale = area === 'preparato'
-      ? bottoneTesto(doc, t('Togli il pezzo'), () => { void azionePezzo(indice, 'togli', dove); })
-      : bottoneTesto(doc, t('Prepara il pezzo'), () => { void azionePezzo(indice, 'prepara', dove); });
+      ? bottoneTesto(doc, t("github.diff.hunk.unstage"), () => { void azionePezzo(indice, 'togli', dove); })
+      : bottoneTesto(doc, t("github.diff.hunk.stage"), () => { void azionePezzo(indice, 'prepara', dove); });
     principale.setAttribute('aria-label', `${principale.textContent}: ${dove}`);
     comandi.append(principale);
     if (area === 'lavoro') {
-      const voci = [{ etichetta: t('Annulla il pezzo'), icona: 'i-trash', pericoloso: true, azione: () => { void azionePezzo(indice, 'annulla', dove); } }];
-      const altro = bottoneIcona(doc, 'i-more', t('Altre azioni sul pezzo: {dove}', { dove }), (e) => menu(voci, { ancoraEl: e.currentTarget, focusElement: e.currentTarget, etichetta: t('Azioni sul pezzo') }));
+      const voci = [{ etichetta: t("github.diff.hunk.discard"), icona: 'i-trash', pericoloso: true, azione: () => { void azionePezzo(indice, 'annulla', dove); } }];
+      const altro = bottoneIcona(doc, 'i-more', t("github.diff.hunk.moreActions", { where: dove }), (e) => menu(voci, { ancoraEl: e.currentTarget, focusElement: e.currentTarget, etichetta: t("github.diff.hunk.actions") }));
       altro.setAttribute('aria-haspopup', 'menu');
       comandi.append(altro);
       comandi.dataset.menu = 'si';
-      comandi.addEventListener('contextmenu', (e) => { e.preventDefault(); menu(voci, { x: e.clientX, y: e.clientY, focusElement: altro, etichetta: t('Azioni sul pezzo') }); });
+      comandi.addEventListener('contextmenu', (e) => { e.preventDefault(); menu(voci, { x: e.clientX, y: e.clientY, focusElement: altro, etichetta: t("github.diff.hunk.actions") }); });
     }
     return comandi;
   }
@@ -1908,19 +1966,19 @@ export function creaSchedaGithub({ doc = globalThis.document, radice, api, confe
     const { percorso, area, dati, errore, caricando, confronto } = stato.diff;
     const diCommit = area === 'commit'; // F6-2 passo 4: la storia si legge e basta — niente azioni sul file né sui pezzi
     vistaDiff.replaceChildren();
-    vistaDiff.setAttribute('aria-label', t('Differenze di {percorso}', { percorso }));
+    vistaDiff.setAttribute('aria-label', t("github.diff.title", { path: percorso }));
     const testata = el(doc, 'header', 'talos-lettore__testata');
-    const indietro = bottoneIcona(doc, 'i-chevron', t('Torna alle modifiche'), () => chiudiDiff());
+    const indietro = bottoneIcona(doc, 'i-chevron', t("github.diff.back"), () => chiudiDiff());
     indietro.classList.add('talos-github-diff__indietro');
     const titoli = el(doc, 'div', 'talos-lettore__titoli');
     const nome = el(doc, 'h3', 'talos-lettore__nome', nomeDi(percorso));
     nome.title = percorso;
     nome.tabIndex = -1;
-    const meta = el(doc, 'p', 'talos-lettore__meta', [diCommit ? confronto?.titolo : area === 'preparato' ? t('Preparato') : t('Da preparare'), cartellaDi(percorso)].filter(Boolean).join(' · '));
+    const meta = el(doc, 'p', 'talos-lettore__meta', [diCommit ? confronto?.titolo : area === 'preparato' ? t("github.diff.staged") : t("github.diff.notStaged"), cartellaDi(percorso)].filter(Boolean).join(' · '));
     titoli.append(nome, meta);
     const comandi = el(doc, 'div', 'talos-lettore__comandi');
     if (typeof onSchermoIntero === 'function') {
-      const schermo = bottoneIcona(doc, 'i-layout', stato.schermoIntero ? t('Esci dallo schermo intero') : t('Schermo intero'), () => { stato.schermoIntero = !stato.schermoIntero; disegnaDiff(); onSchermoIntero(vistaDiff, stato.schermoIntero); allinea(); });
+      const schermo = bottoneIcona(doc, 'i-layout', stato.schermoIntero ? t("github.diff.fullScreen.exit") : t("github.diff.fullScreen.enter"), () => { stato.schermoIntero = !stato.schermoIntero; disegnaDiff(); onSchermoIntero(vistaDiff, stato.schermoIntero); allinea(); });
       schermo.setAttribute('aria-pressed', String(stato.schermoIntero));
       comandi.append(schermo);
     }
@@ -1930,22 +1988,22 @@ export function creaSchedaGithub({ doc = globalThis.document, radice, api, confe
     if (principale) comandi.append(bottoneTesto(doc, principale.etichetta, () => principale.fai(voce)));
     const voci = voce ? vociMenuRiga(voce, gruppo) : [];
     if (voci.length) {
-      const altro = bottoneIcona(doc, 'i-more', t('Altre azioni su {nome}', { nome: nomeDi(percorso) }), (e) => menu(voci, { ancoraEl: e.currentTarget, focusElement: e.currentTarget }));
+      const altro = bottoneIcona(doc, 'i-more', t("github.common.moreActionsOn", { name: nomeDi(percorso) }), (e) => menu(voci, { ancoraEl: e.currentTarget, focusElement: e.currentTarget }));
       altro.setAttribute('aria-haspopup', 'menu');
       comandi.append(altro);
     }
     testata.append(indietro, titoli, comandi);
     const corpo = el(doc, 'div', 'talos-lettore__corpo talos-github-diff__corpo');
     corpo.setAttribute('role', 'region');
-    corpo.setAttribute('aria-label', t('Differenze di {percorso}', { percorso }));
+    corpo.setAttribute('aria-label', t("github.diff.title", { path: percorso }));
     corpo.tabIndex = 0;
-    if (caricando) corpo.append(el(doc, 'p', 'talos-inspector__hint', t('Leggo le differenze…')));
+    if (caricando) corpo.append(el(doc, 'p', 'talos-inspector__hint', t("github.diff.loading")));
     else if (errore) corpo.append(el(doc, 'p', 'talos-inspector__hint', errore));
     else if (dati) {
       corpo.append(el(doc, 'p', 'talos-inspector__hint talos-github__base', diCommit
-        ? (dati.daVuoto ? t('Il primo commit: tutto è nuovo.') : t('Confronto fra {da} e {a}', { da: String(dati.da ?? '').slice(0, 7), a: String(dati.a ?? '').slice(0, 7) }))
+        ? (dati.daVuoto ? t("github.diff.firstCommit") : t("github.diff.comparing", { from: String(dati.da ?? '').slice(0, 7), to: String(dati.a ?? '').slice(0, 7) }))
         : testoBase(dati.base)));
-      if (dati.binario) corpo.append(el(doc, 'p', 'talos-inspector__hint', t('È un file binario: le differenze non si mostrano come testo.')));
+      if (dati.binario) corpo.append(el(doc, 'p', 'talos-inspector__hint', t("github.diff.binary")));
       else {
         const { pezzi, aggiunte, rimozioni } = analizzaDiffUnificato(dati.testo);
         const blocco = el(doc, 'div', 'talos-diff-chat talos-github-diff__pezzi');
@@ -1958,21 +2016,21 @@ export function creaSchedaGithub({ doc = globalThis.document, radice, api, confe
         const conPezzi = typeof dati.impronta === 'string' && !dati.troncato && voce && voce.tipo !== 'nonTracciato' && !voce.conflitto;
         pezzi.forEach((pezzo, indice) => {
           const testaPezzo = el(doc, 'div', 'talos-diff-chat__pezzo');
-          const dove = pezzo.daRiga === null ? t('righe tolte') : (pezzo.daRiga === pezzo.aRiga ? t('riga {n}', { n: pezzo.daRiga }) : t('righe {da}-{a}', { da: pezzo.daRiga, a: pezzo.aRiga }));
+          const dove = pezzo.daRiga === null ? t("github.diff.lines.removed") : (pezzo.daRiga === pezzo.aRiga ? t("github.diff.lines.one", { n: pezzo.daRiga }) : t("github.diff.lines.range", { from: pezzo.daRiga, to: pezzo.aRiga }));
           testaPezzo.append(el(doc, 'span', 'talos-diff-chat__righe', dove));
           if (conPezzi) testaPezzo.append(comandiPezzo(indice, dove));
           const righe = el(doc, 'div', 'talos-diff');
           righe.dataset.c = 'DiffView';
           for (const r of pezzo.righe) {
-            const riga = el(doc, 'div', `talos-diff__line talos-diff__line--${r.tipo}`);
+            const riga = el(doc, 'div', `talos-diff__line talos-diff__line--${r.tipo}`, undefined);
             riga.append(el(doc, 'span', 'talos-diff-chat__num', String(r.numero)), el(doc, 'span', 'talos-diff-chat__segno', r.tipo === 'add' ? '+' : r.tipo === 'del' ? '−' : ' '));
             riga.append(doc.createTextNode(r.testo));
             righe.append(riga);
           }
           blocco.append(testaPezzo, righe);
         });
-        if (!pezzi.length) blocco.append(el(doc, 'div', 'talos-diff-chat__resto', t('Nessuna differenza nel testo (è cambiato solo il modo del file).')));
-        if (dati.troncato) blocco.append(el(doc, 'div', 'talos-diff-chat__resto', t('Il diff è troppo lungo: qui ne vedi solo la prima parte.')));
+        if (!pezzi.length) blocco.append(el(doc, 'div', 'talos-diff-chat__resto', t("github.diff.textUnchanged")));
+        if (dati.troncato) blocco.append(el(doc, 'div', 'talos-diff-chat__resto', t("github.diff.tooLong")));
         corpo.append(blocco);
       }
     }
@@ -2003,7 +2061,7 @@ export function creaSchedaGithub({ doc = globalThis.document, radice, api, confe
       stato.diff = { percorso, area, confronto, dati, errore: null, caricando: false };
     } catch (errore) {
       if (!ancoraQuesto(percorso, area, confronto)) return;
-      stato.diff = { percorso, area, confronto, dati: null, errore: errore?.message || t('Non riuscito'), caricando: false };
+      stato.diff = { percorso, area, confronto, dati: null, errore: errore?.message || t("github.common.failed"), caricando: false };
     }
     disegnaDiff();
   }

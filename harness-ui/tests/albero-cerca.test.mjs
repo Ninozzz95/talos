@@ -83,7 +83,8 @@ test('ALBERO-CERCA-04 — dal registro VERO: `cercaFile` cerca nella cartella de
   assert.equal(esito.ok, true);
   assert.deepEqual(esito.risultati.map((r) => r.percorso), ['src/dentro/bersaglio.mjs']);
   assert.equal(cercate[0].cartella, cartella, 'la cartella è quella della SESSIONE, mai una arrivata da fuori');
-  assert.deepEqual(await registro.cercaFile('non-esiste', 'x'), { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' });
+  const manca = await registro.cercaFile('non-esiste', 'x'); // K2: code + reason + la frase inglese del dizionario; l'italiano sta nell'interfaccia
+  assert.deepEqual({ code: manca.code, reason: manca.reason, erroreAvvio: manca.erroreAvvio }, { code: 'NOT_FOUND', reason: 'session-not-found', erroreAvvio: 'Session not found' });
   assert.equal(cercate.length, 1);
   /* ⛔ Si aspetta che il giro avviato FINISCA prima di chiudere la prova: l'avvio di una sessione fa lavoro asincrono
      (contesto del progetto, git, plugin), e una prova che se ne va a metà lascia il processo appeso — misurato: il file

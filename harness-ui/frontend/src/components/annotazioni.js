@@ -10,6 +10,7 @@
  * (si confrontano i percorsi degli ANTENATI, non i selettori interi).
  */
 
+import { t as traduci, tn } from './lingua.js';
 export const MASSIMO_ANNOTAZIONI = 24;
 
 /** Il percorso del contenitore: il selettore meno l'ultimo segmento. */
@@ -46,13 +47,13 @@ function stiliInRiga(stili) {
 /** Una annotazione → le righe per l'agente (etichette fisse, niente di inventato: le righe vuote non compaiono). */
 export function impacchettaAnnotazione(a, indice) {
   const f = a.fatto || {};
-  const righe = [`#${indice + 1} ${a.nota ? `— ${a.nota}` : '— (senza commento)'}`];
-  if (f.selettore) righe.push(`Elemento: ${f.selettore}`);
-  if (f.tag) righe.push(`Tag: <${f.tag}>${f.testo ? ` · testo: «${f.testo}»` : ''}`);
-  if (f.sorgente?.file || f.sorgente?.componente) righe.push(`Sorgente: ${[f.sorgente.componente, f.sorgente.file].filter(Boolean).join(' · ')}`);
-  if (f.rect) righe.push(`Posizione: x ${f.rect.x}, y ${f.rect.y}, ${f.rect.larghezza}×${f.rect.altezza} px`);
-  if (f.stili && Object.keys(f.stili).length) righe.push(`Stili: ${stiliInRiga(f.stili)}`);
-  if (f.antenati?.length) righe.push(`Dentro: ${f.antenati.join(' > ')}`);
+  const righe = [`#${indice + 1} ${a.nota ? `— ${a.nota}` : traduci('varie.annotations.package.noComment')}`];
+  if (f.selettore) righe.push(traduci('varie.annotations.package.element', { selector: f.selettore }));
+  if (f.tag) righe.push(f.testo ? traduci('varie.annotations.package.tagWithText', { tag: f.tag, text: f.testo }) : traduci('varie.annotations.package.tag', { tag: f.tag }));
+  if (f.sorgente?.file || f.sorgente?.componente) righe.push(traduci('varie.annotations.package.source', { source: [f.sorgente.componente, f.sorgente.file].filter(Boolean).join(' · ') }));
+  if (f.rect) righe.push(traduci('varie.annotations.package.position', { x: f.rect.x, y: f.rect.y, width: f.rect.larghezza, height: f.rect.altezza }));
+  if (f.stili && Object.keys(f.stili).length) righe.push(traduci('varie.annotations.package.styles', { styles: stiliInRiga(f.stili) }));
+  if (f.antenati?.length) righe.push(traduci('varie.annotations.package.inside', { ancestors: f.antenati.join(' > ') }));
   if (f.html) righe.push('HTML:', '```html', f.html, '```');
   return righe.join('\n');
 }
@@ -66,21 +67,22 @@ export function impacchettaAnnotazione(a, indice) {
  */
 export function impacchetta(pagina, annotazioni, errori = []) {
   const n = annotazioni.length;
-  const testa = [`Annotazioni sulla pagina ${pagina.url}${pagina.titolo ? ` («${pagina.titolo}»)` : ''} — ${n} ${n === 1 ? 'commento' : 'commenti'}.`];
+  const conteggio = tn('varie.annotations.oneComment', 'varie.annotations.manyComments', n);
+  const testa = [pagina.titolo ? traduci('varie.annotations.package.headerTitled', { url: pagina.url, title: pagina.titolo, count: conteggio }) : traduci('varie.annotations.package.header', { url: pagina.url, count: conteggio })];
   const gruppi = raggruppa(annotazioni);
-  if (gruppi.length > 1) testa.push(`Sono raggruppati per zona della pagina (${gruppi.length} zone): zone diverse toccano probabilmente file diversi.`);
+  if (gruppi.length > 1) testa.push(traduci('varie.annotations.package.grouped', { n: gruppi.length }));
   const corpo = [];
   let indice = 0;
   for (const g of gruppi) {
-    if (gruppi.length > 1) corpo.push(`\n## Zona: ${g.contenitore}`);
+    if (gruppi.length > 1) corpo.push(`\n${traduci('varie.annotations.package.zone', { name: g.contenitore })}`);
     for (const a of g.voci) { corpo.push(impacchettaAnnotazione(a, indice)); indice += 1; }
   }
   const coda = [];
   if (errori.length) {
-    coda.push(`\nErrori di console della pagina (${errori.length}):`);
+    coda.push(`\n${traduci('varie.annotations.package.consoleErrors', { n: errori.length })}`);
     for (const e of errori.slice(0, 10)) coda.push(`- [${e.tipo}] ${e.testo}`);
   }
-  coda.push('\nPer ogni commento: trova il codice che produce quell’elemento, applica la modifica e verifica nella pagina.');
+  coda.push(`\n${traduci('varie.annotations.package.closing')}`);
   return [...testa, ...corpo, ...coda].join('\n');
 }
 
@@ -93,8 +95,8 @@ export function renderizzaAnnotazioni(pannello, { annotazioni, attivo, onNota, o
   const bottoneAttiva = pannello.querySelector('[data-annotazioni-attiva]');
   const bottoneInvia = pannello.querySelector('[data-annotazioni-invia]');
   const bottoneSvuota = pannello.querySelector('[data-annotazioni-svuota]');
-  if (conteggio) conteggio.textContent = annotazioni.length === 0 ? (attivo ? 'Clicca un elemento nella pagina' : 'Nessun commento') : `${annotazioni.length} ${annotazioni.length === 1 ? 'commento' : 'commenti'}`;
-  if (bottoneAttiva) { bottoneAttiva.setAttribute('aria-pressed', String(attivo)); bottoneAttiva.textContent = attivo ? 'Smetti di annotare' : 'Annota un elemento'; bottoneAttiva.onclick = () => onAttiva?.(!attivo); }
+  if (conteggio) conteggio.textContent = annotazioni.length === 0 ? (attivo ? traduci("varie.annotations.panel.clickElement") : traduci("varie.annotations.panel.noComments")) : tn('varie.annotations.oneComment', 'varie.annotations.manyComments', annotazioni.length);
+  if (bottoneAttiva) { bottoneAttiva.setAttribute('aria-pressed', String(attivo)); bottoneAttiva.textContent = attivo ? traduci("varie.annotations.panel.stop") : traduci("varie.annotations.panel.start"); bottoneAttiva.onclick = () => onAttiva?.(!attivo); }
   if (bottoneInvia) { bottoneInvia.disabled = annotazioni.length === 0; bottoneInvia.onclick = () => onInvia?.(); }
   if (bottoneSvuota) { bottoneSvuota.disabled = annotazioni.length === 0; bottoneSvuota.onclick = () => onSvuota?.(); }
   if (!lista) return;
@@ -104,13 +106,13 @@ export function renderizzaAnnotazioni(pannello, { annotazioni, attivo, onNota, o
     li.className = 'talos-annotazione';
     const testa = document.createElement('div'); testa.className = 'talos-annotazione__testa';
     const num = document.createElement('span'); num.className = 'talos-badge talos-badge--accent talos-badge--sm'; num.textContent = String(i + 1);
-    const sel = document.createElement('code'); sel.className = 'talos-mono talos-annotazione__selettore'; sel.textContent = a.fatto?.selettore || a.fatto?.tag || 'elemento'; sel.title = a.fatto?.html || '';
-    const togli = document.createElement('button'); togli.type = 'button'; togli.className = 'talos-button talos-button--ghost talos-button--sm'; togli.textContent = 'Togli'; togli.addEventListener('click', () => onTogli?.(i));
+    const sel = document.createElement('code'); sel.className = 'talos-mono talos-annotazione__selettore'; sel.textContent = a.fatto?.selettore || a.fatto?.tag || traduci("varie.annotations.panel.element"); sel.title = a.fatto?.html || '';
+    const togli = document.createElement('button'); togli.type = 'button'; togli.className = 'talos-button talos-button--ghost talos-button--sm'; togli.textContent = traduci('varie.annotations.panel.remove'); togli.addEventListener('click', () => onTogli?.(i));
     testa.append(num, sel, togli);
     const meta = document.createElement('p'); meta.className = 'talos-muted talos-browser__meta';
     const pezzi = [a.fatto?.testo ? `«${a.fatto.testo.slice(0, 80)}»` : '', a.fatto?.sorgente?.componente || '', a.fatto?.sorgente?.file || ''].filter(Boolean);
     meta.textContent = pezzi.join(' · ');
-    const nota = document.createElement('textarea'); nota.className = 'talos-field__input'; nota.rows = 2; nota.placeholder = 'Cosa deve cambiare qui?'; nota.value = a.nota || '';
+    const nota = document.createElement('textarea'); nota.className = 'talos-field__input'; nota.rows = 2; nota.placeholder = traduci("varie.annotations.panel.notePlaceholder"); nota.value = a.nota || '';
     nota.addEventListener('input', () => onNota?.(i, nota.value));
     li.append(testa, meta, nota);
     lista.append(li);

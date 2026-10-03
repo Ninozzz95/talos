@@ -213,26 +213,26 @@ export class GitServiceError extends Error {
  */
 export function normalizzaPercorso(cartella, percorso) {
   if (typeof percorso !== 'string' || percorso.trim() === '' || percorso.includes('\0')) {
-    throw new GitServiceError('Percorso non valido', 'GIT_PATH_INVALID');
+    throw new GitServiceError('Invalid path', 'GIT_PATH_INVALID');
   }
   if (isAbsolute(percorso) || /^[a-zA-Z]:/u.test(percorso)) {
-    throw new GitServiceError('Il percorso deve essere relativo alla cartella della sessione', 'GIT_PATH_INVALID');
+    throw new GitServiceError('The path must be relative to the session folder', 'GIT_PATH_INVALID');
   }
   if (percorso.startsWith('-')) {
-    throw new GitServiceError('Un percorso non può cominciare con «-»', 'GIT_PATH_INVALID');
+    throw new GitServiceError('A path cannot start with “-”', 'GIT_PATH_INVALID');
   }
   if (percorso.startsWith(':')) {
-    throw new GitServiceError('Un percorso non può cominciare con «:»', 'GIT_PATH_INVALID');
+    throw new GitServiceError('A path cannot start with “:”', 'GIT_PATH_INVALID');
   }
   const pezzi = percorso.split(/[\\/]+/u);
   if (pezzi.some((p) => p === '..')) {
-    throw new GitServiceError('Il percorso esce dalla cartella della sessione', 'GIT_PATH_INVALID');
+    throw new GitServiceError('The path leaves the session folder', 'GIT_PATH_INVALID');
   }
   const pulito = pezzi.filter((p) => p !== '' && p !== '.').join('/');
-  if (pulito === '') throw new GitServiceError('Percorso non valido', 'GIT_PATH_INVALID');
+  if (pulito === '') throw new GitServiceError('Invalid path', 'GIT_PATH_INVALID');
   /* ⛔ Terza serratura: il controllo lessicale di containment che usa già il resto del server (`path-policy.isPathInside`), su percorsi REALI — così un giorno in cui una delle due regole sopra cambiasse, questa continuerebbe a mordere. */
   if (!isPathInside(cartella, resolve(cartella, pulito))) {
-    throw new GitServiceError('Il percorso esce dalla cartella della sessione', 'GIT_PATH_INVALID');
+    throw new GitServiceError('The path leaves the session folder', 'GIT_PATH_INVALID');
   }
   return pulito;
 }
@@ -249,7 +249,7 @@ export function normalizzaPercorso(cartella, percorso) {
  * @returns {Array<{x:string,y:string,percorsoRepo:string,daRepo:string|null}>}
  */
 export function analizzaStatoPorcelain(testo) {
-  if (typeof testo !== 'string') throw new GitServiceError('Uscita di git non leggibile', 'GIT_COMMAND_FAILED');
+  if (typeof testo !== 'string') throw new GitServiceError('git output not readable', 'GIT_COMMAND_FAILED');
   const campi = testo.split('\0');
   const voci = [];
   let i = 0;
@@ -258,7 +258,7 @@ export function analizzaStatoPorcelain(testo) {
     i += 1;
     if (riga === '') continue; // la coda dopo l'ultimo NUL, e nient'altro
     if (riga.length < 4 || riga[2] !== ' ') {
-      throw new GitServiceError('Riga di stato git non riconosciuta', 'GIT_COMMAND_FAILED');
+      throw new GitServiceError('git status line not recognized', 'GIT_COMMAND_FAILED');
     }
     const x = riga[0];
     const y = riga[1];
@@ -266,7 +266,7 @@ export function analizzaStatoPorcelain(testo) {
     let daRepo = null;
     if (x === 'R' || x === 'C' || y === 'R' || y === 'C') {
       /* ⛔ Il campo in più c'è SOLO qui. Consumarlo sempre spezzerebbe l'allineamento di tutte le voci successive. */
-      if (i >= campi.length) throw new GitServiceError('Rinomina senza percorso di origine', 'GIT_COMMAND_FAILED');
+      if (i >= campi.length) throw new GitServiceError('Rename without a source path', 'GIT_COMMAND_FAILED');
       daRepo = campi[i];
       i += 1;
     }
@@ -309,7 +309,7 @@ export function creaServizioGit({
   cartellaUtenteFn = homedir,
 } = {}) {
   if (typeof cartellaDiSessione !== 'function') {
-    throw new GitServiceError('Serve l’autorità sulla cartella di sessione', 'GIT_STORE_UNAVAILABLE');
+    throw new GitServiceError('Authority over the session folder is required', 'GIT_STORE_UNAVAILABLE');
   }
 
   /**
@@ -374,24 +374,24 @@ export function creaServizioGit({
     if (esito.codice === 0) return esito;
     if (esito.annullato) throw new GitServiceError('Fermato', 'GIT_ABORTED');
     if (tollera) return esito;
-    if (esito.troppoGrande) throw new GitServiceError('L’uscita di git supera il limite consentito', 'GIT_OUTPUT_TOO_LARGE');
-    if (esito.scaduto) throw new GitServiceError('git non ha risposto entro il tempo massimo', 'GIT_TIMEOUT');
-    if (esito.avvioFallito) throw new GitServiceError('git non è installato o non è raggiungibile', 'GIT_COMMAND_FAILED');
+    if (esito.troppoGrande) throw new GitServiceError('The git output exceeds the allowed limit', 'GIT_OUTPUT_TOO_LARGE');
+    if (esito.scaduto) throw new GitServiceError('git did not respond within the maximum time', 'GIT_TIMEOUT');
+    if (esito.avvioFallito) throw new GitServiceError('git is not installed or not reachable', 'GIT_COMMAND_FAILED');
     const detto = String(esito.stderr || '').trim();
     if (/not a git repository/iu.test(detto)) {
-      throw new GitServiceError('Questa cartella non è un repository git', 'GIT_NOT_A_REPOSITORY');
+      throw new GitServiceError('This folder is not a git repository', 'GIT_NOT_A_REPOSITORY');
     }
-    throw new GitServiceError(detto || 'git ha risposto con un errore', 'GIT_COMMAND_FAILED');
+    throw new GitServiceError(detto || 'git answered with an error', 'GIT_COMMAND_FAILED');
   }
 
   /** La cartella della sessione, o un rifiuto. ⛔ Mai un ripiego: un id ignoto non prende NIENTE. */
   function cartellaDi(sessionId) {
     if (typeof sessionId !== 'string' || sessionId === '') {
-      throw new GitServiceError('Sessione non valida', 'QUERY_INVALID');
+      throw new GitServiceError('Invalid session', 'QUERY_INVALID');
     }
     const cartella = cartellaDiSessione(sessionId);
     if (typeof cartella !== 'string' || cartella === '') {
-      throw new GitServiceError('Sessione non trovata', 'NOT_FOUND');
+      throw new GitServiceError('Session not found', 'NOT_FOUND');
     }
     return resolve(cartella);
   }
@@ -406,7 +406,7 @@ export function creaServizioGit({
     const esito = await git(cartella, ['rev-parse', '--show-toplevel', '--show-prefix']);
     const righe = esito.stdout.split('\n');
     const radiceRepo = (righe[0] ?? '').trim();
-    if (radiceRepo === '') throw new GitServiceError('Questa cartella non è un repository git', 'GIT_NOT_A_REPOSITORY');
+    if (radiceRepo === '') throw new GitServiceError('This folder is not a git repository', 'GIT_NOT_A_REPOSITORY');
     const prefisso = (righe[1] ?? '').trim();
     return {
       radiceRepo,
@@ -455,10 +455,10 @@ export function creaServizioGit({
   async function estremiDelConfronto(cartella, da, a) {
     const conDa = da !== null && da !== undefined && da !== '';
     if (typeof a !== 'string' || !HASH_INTERO.test(a) || (conDa && (typeof da !== 'string' || !HASH_INTERO.test(da)))) {
-      throw new GitServiceError('Un commit si indica col suo hash intero', 'GIT_COMMIT_INVALID');
+      throw new GitServiceError('A commit is given by its full hash', 'GIT_COMMIT_INVALID');
     }
     const esiste = async (h) => (await git(cartella, ['cat-file', '-e', `${h}^{commit}`], { tollera: true })).codice === 0;
-    if (!(await esiste(a)) || (conDa && !(await esiste(da)))) throw new GitServiceError('Questo commit non c’è nel repository', 'GIT_COMMIT_UNKNOWN');
+    if (!(await esiste(a)) || (conDa && !(await esiste(da)))) throw new GitServiceError('This commit is not in the repository', 'GIT_COMMIT_UNKNOWN');
     if (conDa) return { base: da, punta: a };
     const padre = await git(cartella, ['rev-parse', '--verify', '--quiet', `${a}^1`], { tollera: true });
     const primo = padre.codice === 0 ? padre.stdout.trim() : '';
@@ -603,10 +603,10 @@ export function creaServizioGit({
   /** Ogni percorso passa dalla stessa serratura, e l'elenco non può essere vuoto o furbo. */
   function normalizzaElenco(cartella, percorsi) {
     if (!Array.isArray(percorsi) || percorsi.length === 0) {
-      throw new GitServiceError('Serve almeno un percorso esplicito', 'GIT_PATHS_REQUIRED');
+      throw new GitServiceError('At least one explicit path is required', 'GIT_PATHS_REQUIRED');
     }
     if (percorsi.length > 1000) {
-      throw new GitServiceError('Troppi percorsi in una sola richiesta', 'GIT_PATHS_REQUIRED');
+      throw new GitServiceError('Too many paths in a single request', 'GIT_PATHS_REQUIRED');
     }
     const puliti = percorsi.map((p) => normalizzaPercorso(cartella, p));
     return [...new Set(puliti)];
@@ -623,15 +623,15 @@ export function creaServizioGit({
    * ⛔ Un testo oltre il tetto torna TRONCATO e lo dice, invece di diventare un errore misterioso o riempire la memoria.
    */
   async function diffInterno(cartella, percorso, area) {
-    if (area !== 'preparato' && area !== 'lavoro') throw new GitServiceError('Area del diff non valida', 'GIT_DIFF_AREA_INVALID');
+    if (area !== 'preparato' && area !== 'lavoro') throw new GitServiceError('Invalid diff area', 'GIT_DIFF_AREA_INVALID');
     const p = normalizzaPercorso(cartella, percorso);
     const stato = await statoInterno(cartella);
     const voce = stato.voci.find((v) => v.percorso === p);
     const inArea = voce && (area === 'preparato' ? voce.staged : (voce.nonStaged || voce.conflitto));
-    if (!inArea) throw new GitServiceError(`Nessuna modifica ${area === 'preparato' ? 'preparata' : 'da preparare'} per: ${p}`, 'GIT_PATH_UNCHANGED');
+    if (!inArea) throw new GitServiceError(`No ${area === 'preparato' ? 'staged' : 'unstaged'} changes for: ${p}`, 'GIT_PATH_UNCHANGED');
     let esito;
     if (area === 'lavoro' && voce.tipo === 'nonTracciato') {
-      if (voce.cartella) throw new GitServiceError(`«${p}» è una cartella: si apre il file`, 'GIT_PATH_UNCHANGED');
+      if (voce.cartella) throw new GitServiceError(`“${p}” is a folder: open the file`, 'GIT_PATH_UNCHANGED');
       esito = await git(cartella, ['diff', '--no-index', '--no-color', '--no-ext-diff', '--no-textconv', '--', '/dev/null', p], { tollera: true });
       if (esito.codice !== 0 && esito.codice !== 1) throw new GitServiceError(String(esito.stderr || '').trim() || 'git diff non è riuscito', 'GIT_COMMAND_FAILED');
     } else {
@@ -727,10 +727,10 @@ export function creaServizioGit({
         const cartella = cartellaDi(sessionId);
         const puliti = normalizzaElenco(cartella, percorsi);
         if (typeof messaggio !== 'string' || messaggio.trim() === '') {
-          throw new GitServiceError('Il commit vuole un messaggio', 'GIT_MESSAGE_REQUIRED');
+          throw new GitServiceError('The commit needs a message', 'GIT_MESSAGE_REQUIRED');
         }
         if (Buffer.byteLength(messaggio, 'utf8') > TETTO_MESSAGGIO_BYTE) {
-          throw new GitServiceError('Messaggio di commit troppo lungo', 'GIT_MESSAGE_REQUIRED');
+          throw new GitServiceError('Commit message too long', 'GIT_MESSAGE_REQUIRED');
         }
 
         const prima = await statoInterno(cartella);
@@ -738,7 +738,7 @@ export function creaServizioGit({
         /* ⛔ Un percorso che git non ha niente da committare: lo diciamo NOI, invece di lasciare a git un «pathspec did not match any file(s)» che nessuno sa leggere. */
         const senzaNiente = puliti.filter((p) => !perPercorso.has(p));
         if (senzaNiente.length > 0) {
-          throw new GitServiceError(`Niente da committare per: ${senzaNiente.join(', ')}`, 'GIT_NOTHING_TO_COMMIT');
+          throw new GitServiceError(`Nothing to commit for: ${senzaNiente.join(', ')}`, 'GIT_NOTHING_TO_COMMIT');
         }
         /* ⛔⛔ La guardia della ricerca 4: staged E modificato dopo ⇒ il commit prenderebbe la versione nuova, in silenzio. */
         const divergenti = puliti.filter((p) => {
@@ -747,13 +747,13 @@ export function creaServizioGit({
         });
         if (divergenti.length > 0) {
           throw new GitServiceError(
-            `Questi file sono cambiati dopo essere stati messi in stage, e il commit prenderebbe la versione nuova: ${divergenti.join(', ')}. Rimettili in stage e riprova.`,
+            `These files changed after being staged, and the commit would take the new version: ${divergenti.join(', ')}. Stage them again and try again.`,
             'GIT_WORKTREE_DIFFERS',
           );
         }
         const conflitti = puliti.filter((p) => perPercorso.get(p)?.conflitto);
         if (conflitti.length > 0) {
-          throw new GitServiceError(`Prima vanno risolti i conflitti su: ${conflitti.join(', ')}`, 'GIT_NOTHING_TO_COMMIT');
+          throw new GitServiceError(`Conflicts must be resolved first in: ${conflitti.join(', ')}`, 'GIT_NOTHING_TO_COMMIT');
         }
 
         /* Corsia SCRATCH, 24/09/2026: il file del messaggio vive sotto la radice dei temporanei di TALOS
@@ -825,16 +825,16 @@ export function creaServizioGit({
       try {
         const cartella = cartellaDi(sessionId);
         const verso = { prepara: ['lavoro', ['--cached']], togli: ['preparato', ['--cached', '--reverse']], annulla: ['lavoro', ['--reverse']] }[azione];
-        if (!verso || verso[0] !== area) throw new GitServiceError('Azione sul pezzo non valida', 'GIT_HUNK_INVALID');
+        if (!verso || verso[0] !== area) throw new GitServiceError('Invalid hunk action', 'GIT_HUNK_INVALID');
         const d = await diffInterno(cartella, percorso, area);
         if (typeof impronta !== 'string' || impronta !== d.impronta) {
-          throw new GitServiceError('Il file è cambiato da quando la scheda ha mostrato le differenze: guarda di nuovo', 'GIT_DIFF_CHANGED');
+          throw new GitServiceError('The file has changed since the tab showed the differences: look again', 'GIT_DIFF_CHANGED');
         }
-        if (d.voce.conflitto) throw new GitServiceError('Prima vanno risolti i conflitti', 'GIT_CONFLICTS');
-        if (d.voce.tipo === 'nonTracciato' || d.binario || d.troncato) throw new GitServiceError('Questo file si prepara intero: non ha pezzi', 'GIT_HUNK_UNSUPPORTED');
+        if (d.voce.conflitto) throw new GitServiceError('Conflicts must be resolved first', 'GIT_CONFLICTS');
+        if (d.voce.tipo === 'nonTracciato' || d.binario || d.troncato) throw new GitServiceError('This file is staged whole: it has no hunks', 'GIT_HUNK_UNSUPPORTED');
         const righe = d.testo.split('\n');
         const primo = righe.findIndex((r) => r.startsWith('@@ '));
-        if (primo < 0) throw new GitServiceError('Questo file si prepara intero: non ha pezzi', 'GIT_HUNK_UNSUPPORTED');
+        if (primo < 0) throw new GitServiceError('This file is staged whole: it has no hunks', 'GIT_HUNK_UNSUPPORTED');
         /* L'intestazione tiene solo `diff --git`, `---` e `+++`: un cambio di modo («old mode/new mode») nella patch verrebbe
            applicato insieme al pezzo, e la persona ha scelto le righe, non il modo del file. */
         const intestazione = righe.slice(0, primo).filter((r) => /^(diff --git |--- |\+\+\+ )/u.test(r));
@@ -843,7 +843,7 @@ export function creaServizioGit({
           if (r.startsWith('@@ ')) pezzi.push([r]);
           else pezzi[pezzi.length - 1].push(r);
         }
-        if (!Number.isInteger(indice) || indice < 0 || indice >= pezzi.length) throw new GitServiceError('Pezzo non valido', 'GIT_HUNK_INVALID');
+        if (!Number.isInteger(indice) || indice < 0 || indice >= pezzi.length) throw new GitServiceError('Invalid hunk', 'GIT_HUNK_INVALID');
         const scelto = pezzi[indice];
         while (scelto.length > 1 && scelto[scelto.length - 1] === '') scelto.pop(); // la riga vuota dopo l'ultimo «\n» del diff
         cartellaPatch = await cartellaScratchAttesa('talos-git-patch-');
@@ -887,11 +887,11 @@ export function creaServizioGit({
           const v = perNome.get(p);
           return !v || (!v.nonStaged && !v.conflitto);
         });
-        if (senzaNiente.length > 0) throw new GitServiceError(`Niente da annullare per: ${senzaNiente.join(', ')}`, 'GIT_NOTHING_TO_DISCARD');
+        if (senzaNiente.length > 0) throw new GitServiceError(`Nothing to discard for: ${senzaNiente.join(', ')}`, 'GIT_NOTHING_TO_DISCARD');
         const conflitti = puliti.filter((p) => perNome.get(p).conflitto);
-        if (conflitti.length > 0) throw new GitServiceError(`Prima vanno risolti i conflitti su: ${conflitti.join(', ')}`, 'GIT_CONFLICTS');
+        if (conflitti.length > 0) throw new GitServiceError(`Conflicts must be resolved first in: ${conflitti.join(', ')}`, 'GIT_CONFLICTS');
         const annidati = puliti.filter((p) => perNome.get(p).repoAnnidato);
-        if (annidati.length > 0) throw new GitServiceError(`È un altro repository, non si elimina da qui: ${annidati.join(', ')}`, 'GIT_NESTED_REPO');
+        if (annidati.length > 0) throw new GitServiceError(`It is another repository, it cannot be deleted from here: ${annidati.join(', ')}`, 'GIT_NESTED_REPO');
         const nuovi = puliti.filter((p) => perNome.get(p).tipo === 'nonTracciato');
         const tracciati = puliti.filter((p) => perNome.get(p).tipo !== 'nonTracciato');
         if (tracciati.length > 0) await git(cartella, ['checkout', '-q', '--', ...tracciati], { timeoutMs: timeoutScritturaMs });
@@ -912,19 +912,19 @@ export function creaServizioGit({
       let cartellaMessaggio = null;
       try {
         const cartella = cartellaDi(sessionId);
-        if (typeof messaggio !== 'string' || messaggio.trim() === '') throw new GitServiceError('Il commit vuole un messaggio', 'GIT_MESSAGE_REQUIRED');
-        if (Buffer.byteLength(messaggio, 'utf8') > TETTO_MESSAGGIO_BYTE) throw new GitServiceError('Messaggio di commit troppo lungo', 'GIT_MESSAGE_REQUIRED');
+        if (typeof messaggio !== 'string' || messaggio.trim() === '') throw new GitServiceError('The commit needs a message', 'GIT_MESSAGE_REQUIRED');
+        if (Buffer.byteLength(messaggio, 'utf8') > TETTO_MESSAGGIO_BYTE) throw new GitServiceError('Commit message too long', 'GIT_MESSAGE_REQUIRED');
         const prima = await statoInterno(cartella);
         if (typeof impronta !== 'string' || impronta !== prima.impronta) {
-          throw new GitServiceError('Ciò che è preparato è cambiato da quando la scheda l’ha mostrato: guarda di nuovo e riprova', 'GIT_STAGED_CHANGED');
+          throw new GitServiceError('What is staged has changed since the tab showed it: look again and try again', 'GIT_STAGED_CHANGED');
         }
         const dove = await collocazione(cartella);
         const area = await areaPreparata(cartella, dove, prima.base);
-        if (area.percorsiRepo.length === 0) throw new GitServiceError('Non c’è niente di preparato da committare', 'GIT_NOTHING_STAGED');
+        if (area.percorsiRepo.length === 0) throw new GitServiceError('There is nothing staged to commit', 'GIT_NOTHING_STAGED');
         if (area.fuori.length > 0) {
-          throw new GitServiceError(`Ci sono ${area.fuori.length} file preparati fuori dalla cartella della sessione: il commit li prenderebbe senza che tu li abbia visti`, 'GIT_STAGED_OUTSIDE');
+          throw new GitServiceError(`There are ${area.fuori.length} staged files outside the session folder: the commit would take them without you having seen them`, 'GIT_STAGED_OUTSIDE');
         }
-        if (prima.riepilogo.conflitti > 0) throw new GitServiceError('Prima vanno risolti i conflitti', 'GIT_CONFLICTS');
+        if (prima.riepilogo.conflitti > 0) throw new GitServiceError('Conflicts must be resolved first', 'GIT_CONFLICTS');
         cartellaMessaggio = await cartellaScratchAttesa('talos-git-msg-');
         const fileMessaggio = join(cartellaMessaggio, 'messaggio.txt');
         await writeFile(fileMessaggio, messaggio, 'utf8');
@@ -1030,19 +1030,19 @@ export function creaServizioGit({
       let cartellaMessaggio = null;
       try {
         const cartella = cartellaDi(sessionId);
-        if (typeof messaggio !== 'string' || messaggio.trim() === '') throw new GitServiceError('Il commit vuole un messaggio', 'GIT_MESSAGE_REQUIRED');
-        if (Buffer.byteLength(messaggio, 'utf8') > TETTO_MESSAGGIO_BYTE) throw new GitServiceError('Messaggio di commit troppo lungo', 'GIT_MESSAGE_REQUIRED');
+        if (typeof messaggio !== 'string' || messaggio.trim() === '') throw new GitServiceError('The commit needs a message', 'GIT_MESSAGE_REQUIRED');
+        if (Buffer.byteLength(messaggio, 'utf8') > TETTO_MESSAGGIO_BYTE) throw new GitServiceError('Commit message too long', 'GIT_MESSAGE_REQUIRED');
         const prima = await statoInterno(cartella);
         await ultimoCommitRiscrivibile(cartella, prima.base, commit);
         if (typeof impronta !== 'string' || impronta !== prima.impronta) {
-          throw new GitServiceError('Ciò che è preparato è cambiato da quando la scheda l’ha mostrato: guarda di nuovo e riprova', 'GIT_STAGED_CHANGED');
+          throw new GitServiceError('What is staged has changed since the tab showed it: look again and try again', 'GIT_STAGED_CHANGED');
         }
         const dove = await collocazione(cartella);
         const area = await areaPreparata(cartella, dove, prima.base);
         if (area.fuori.length > 0) {
-          throw new GitServiceError(`Ci sono ${area.fuori.length} file preparati fuori dalla cartella della sessione: il commit li prenderebbe senza che tu li abbia visti`, 'GIT_STAGED_OUTSIDE');
+          throw new GitServiceError(`There are ${area.fuori.length} staged files outside the session folder: the commit would take them without you having seen them`, 'GIT_STAGED_OUTSIDE');
         }
-        if (prima.riepilogo.conflitti > 0) throw new GitServiceError('Prima vanno risolti i conflitti', 'GIT_CONFLICTS');
+        if (prima.riepilogo.conflitti > 0) throw new GitServiceError('Conflicts must be resolved first', 'GIT_CONFLICTS');
         cartellaMessaggio = await cartellaScratchAttesa('talos-git-msg-');
         const fileMessaggio = join(cartellaMessaggio, 'messaggio.txt');
         await writeFile(fileMessaggio, messaggio, 'utf8');
@@ -1066,16 +1066,16 @@ export function creaServizioGit({
       try {
         const cartella = cartellaDi(sessionId);
         const prima = await statoInterno(cartella);
-        if (prima.riepilogo.conflitti > 0) throw new GitServiceError('Prima vanno risolti i conflitti', 'GIT_CONFLICTS');
+        if (prima.riepilogo.conflitti > 0) throw new GitServiceError('Conflicts must be resolved first', 'GIT_CONFLICTS');
         const genitori = await ultimoCommitRiscrivibile(cartella, prima.base, commit);
-        if (genitori > 1) throw new GitServiceError('L’ultimo commit è un’unione: non si annulla da qui', 'GIT_MERGE_COMMIT');
+        if (genitori > 1) throw new GitServiceError('The last commit is a merge: it cannot be undone from here', 'GIT_MERGE_COMMIT');
         // ⛔ Da una sottocartella, un commit che tocca file FUORI dalla sessione non si annulla da qui: le sue modifiche
         //   tornerebbero preparate in un posto che la scheda non mostra (è la stessa regola del commit, al contrario).
         const dove = await collocazione(cartella);
         if (dove.prefisso !== '') {
           const nomi = await git(cartella, ['diff-tree', '--no-commit-id', '--name-only', '-r', '-z', '--root', '--no-renames', commit]);
           const fuori = nomi.stdout.split('\0').filter((p) => p && !p.startsWith(dove.prefisso));
-          if (fuori.length > 0) throw new GitServiceError(`L’ultimo commit tocca ${fuori.length} file fuori dalla cartella della sessione: non si annulla da qui`, 'GIT_COMMIT_OUTSIDE');
+          if (fuori.length > 0) throw new GitServiceError(`The last commit touches ${fuori.length} files outside the session folder: it cannot be undone from here`, 'GIT_COMMIT_OUTSIDE');
         }
         const corpo = await git(cartella, ['log', '-1', '--no-color', '--format=%B', commit]);
         if (genitori === 0) await git(cartella, ['update-ref', '-d', 'HEAD', commit], { timeoutMs: timeoutScritturaMs });
@@ -1101,7 +1101,7 @@ export function creaServizioGit({
         const cartella = cartellaDi(sessionId);
         const nome = await nomeRamoValido(cartella, ramo);
         const esistenti = await ramiInterni(cartella);
-        if (!esistenti.some((r) => r.nome === nome)) throw new GitServiceError(`Il ramo «${nome}» non esiste`, 'GIT_BRANCH_NOT_FOUND');
+        if (!esistenti.some((r) => r.nome === nome)) throw new GitServiceError(`The branch “${nome}” does not exist`, 'GIT_BRANCH_NOT_FOUND');
         const esito = await git(cartella, ['switch', '--no-guess', nome], { timeoutMs: timeoutScritturaMs, tollera: true });
         if (esito.codice !== 0) throw erroreDelCambio(esito);
         return { ok: true, ramo: nome, stato: await statoInterno(cartella) };
@@ -1129,9 +1129,9 @@ export function creaServizioGit({
            ⛔ Si procede SOLO se git dice «not a git repository»: qualunque altro rifiuto (una cartella di un altro utente, «dubious
            ownership») vuol dire che git non ha potuto guardare, e un `init` lì reinizializzerebbe un repository che c'è. */
         const dentro = await git(cartella, ['rev-parse', '--git-dir'], { tollera: true });
-        if (dentro.codice === 0 || esisteFn(join(cartella, '.git'))) throw new GitServiceError('Questa cartella è già in un repository git', 'GIT_ALREADY_A_REPOSITORY');
-        if (dentro.avvioFallito) throw new GitServiceError('git non è installato o non è raggiungibile', 'GIT_COMMAND_FAILED');
-        if (dentro.scaduto) throw new GitServiceError('git non ha risposto entro il tempo massimo', 'GIT_TIMEOUT');
+        if (dentro.codice === 0 || esisteFn(join(cartella, '.git'))) throw new GitServiceError('This folder is already in a git repository', 'GIT_ALREADY_A_REPOSITORY');
+        if (dentro.avvioFallito) throw new GitServiceError('git is not installed or not reachable', 'GIT_COMMAND_FAILED');
+        if (dentro.scaduto) throw new GitServiceError('git did not respond within the maximum time', 'GIT_TIMEOUT');
         if (!/not a git repository/iu.test(String(dentro.stderr || ''))) {
           throw new GitServiceError(String(dentro.stderr || '').trim() || 'git non ha potuto guardare questa cartella', 'GIT_COMMAND_FAILED');
         }
@@ -1139,7 +1139,7 @@ export function creaServizioGit({
         const versoCasa = relative(cartella, casa);
         const contieneCasa = versoCasa === '' || (!versoCasa.startsWith('..') && !isAbsolute(versoCasa));
         if (contieneCasa && conferma !== true) {
-          throw new GitServiceError(`Si crea un repository git in «${cartella}», che contiene la tua cartella utente`, 'GIT_INIT_NEEDS_CONFIRM');
+          throw new GitServiceError(`A git repository would be created in “${cartella}”, which contains your user folder`, 'GIT_INIT_NEEDS_CONFIRM');
         }
         const configurato = await git(cartella, ['config', '--get', 'init.defaultBranch'], { tollera: true });
         const ramoIniziale = configurato.codice === 0 && configurato.stdout.trim() !== '' ? [] : ['-c', 'init.defaultBranch=main'];
@@ -1155,7 +1155,7 @@ export function creaServizioGit({
         const cartella = cartellaDi(sessionId);
         const nome = await nomeRamoValido(cartella, ramo);
         const esistenti = await ramiInterni(cartella);
-        if (esistenti.some((r) => r.nome === nome)) throw new GitServiceError(`Il ramo «${nome}» esiste già`, 'GIT_BRANCH_EXISTS');
+        if (esistenti.some((r) => r.nome === nome)) throw new GitServiceError(`The branch “${nome}” already exists`, 'GIT_BRANCH_EXISTS');
         const esito = await git(cartella, ['switch', '-c', nome], { timeoutMs: timeoutScritturaMs, tollera: true });
         if (esito.codice !== 0) throw erroreDelCambio(esito);
         return { ok: true, ramo: nome, stato: await statoInterno(cartella) };
@@ -1169,8 +1169,8 @@ export function creaServizioGit({
         const vecchio = await nomeRamoValido(cartella, da);
         const nuovo = await nomeRamoValido(cartella, a);
         const esistenti = await ramiInterni(cartella);
-        if (!esistenti.some((r) => r.nome === vecchio)) throw new GitServiceError(`Il ramo «${vecchio}» non esiste`, 'GIT_BRANCH_NOT_FOUND');
-        if (esistenti.some((r) => r.nome === nuovo)) throw new GitServiceError(`Il ramo «${nuovo}» esiste già`, 'GIT_BRANCH_EXISTS');
+        if (!esistenti.some((r) => r.nome === vecchio)) throw new GitServiceError(`The branch “${vecchio}” does not exist`, 'GIT_BRANCH_NOT_FOUND');
+        if (esistenti.some((r) => r.nome === nuovo)) throw new GitServiceError(`The branch “${nuovo}” already exists`, 'GIT_BRANCH_EXISTS');
         await git(cartella, ['branch', '-m', vecchio, nuovo], { timeoutMs: timeoutScritturaMs });
         return { ok: true, rami: await ramiInterni(cartella) };
       } catch (errore) { return rifiuto(errore); }
@@ -1190,18 +1190,18 @@ export function creaServizioGit({
         const nome = await nomeRamoValido(cartella, ramo);
         const esistenti = await ramiInterni(cartella);
         const trovato = esistenti.find((r) => r.nome === nome);
-        if (!trovato) throw new GitServiceError(`Il ramo «${nome}» non esiste`, 'GIT_BRANCH_NOT_FOUND');
-        if (trovato.corrente) throw new GitServiceError('Il ramo corrente non si elimina: prima passa a un altro', 'GIT_BRANCH_CURRENT');
+        if (!trovato) throw new GitServiceError(`The branch “${nome}” does not exist`, 'GIT_BRANCH_NOT_FOUND');
+        if (trovato.corrente) throw new GitServiceError('The current branch cannot be deleted: switch to another one first', 'GIT_BRANCH_CURRENT');
         if (forza !== true) {
           const monte = await git(cartella, ['rev-parse', '--verify', '-q', `refs/heads/${nome}@{upstream}`], { tollera: true });
           const verso = monte.codice === 0 && monte.stdout.trim() !== '' ? monte.stdout.trim() : 'HEAD';
           const unito = await git(cartella, ['merge-base', '--is-ancestor', `refs/heads/${nome}`, verso], { tollera: true });
-          if (unito.codice === 1) throw new GitServiceError(`Il ramo «${nome}» ha commit che non sono in nessun altro ramo`, 'GIT_BRANCH_NOT_MERGED');
+          if (unito.codice === 1) throw new GitServiceError(`The branch “${nome}” has commits that are in no other branch`, 'GIT_BRANCH_NOT_MERGED');
           if (unito.codice !== 0) throw new GitServiceError(String(unito.stderr || '').trim() || 'git non sa dire se il ramo è unito', 'GIT_COMMAND_FAILED');
         }
         const esito = await git(cartella, ['branch', forza === true ? '-D' : '-d', nome], { timeoutMs: timeoutScritturaMs, tollera: true });
         if (esito.codice !== 0) {
-          if (/not fully merged/iu.test(esito.stderr)) throw new GitServiceError(`Il ramo «${nome}» ha commit che non sono in nessun altro ramo`, 'GIT_BRANCH_NOT_MERGED');
+          if (/not fully merged/iu.test(esito.stderr)) throw new GitServiceError(`The branch “${nome}” has commits that are in no other branch`, 'GIT_BRANCH_NOT_MERGED');
           throw new GitServiceError(String(esito.stderr || '').trim() || 'git non ha eliminato il ramo', 'GIT_COMMAND_FAILED');
         }
         return { ok: true, rami: await ramiInterni(cartella) };
@@ -1219,19 +1219,19 @@ export function creaServizioGit({
         const cartella = cartellaDi(sessionId);
         const testo = typeof messaggio === 'string' ? messaggio.replace(/\s+/gu, ' ').trim().slice(0, 200) : '';
         const prima = await statoInterno(cartella);
-        if (prima.riepilogo.conflitti > 0) throw new GitServiceError('Prima vanno risolti i conflitti', 'GIT_CONFLICTS');
+        if (prima.riepilogo.conflitti > 0) throw new GitServiceError('Conflicts must be resolved first', 'GIT_CONFLICTS');
         /* ⛔ «C'è qualcosa da mettere da parte?» si legge dallo STATO della sessione, non dal messaggio di git: senza modifiche
              git esce 0 con «No local changes to save» e, in una cartella senza file tracciati, 1 con «pathspec … did not match»
              (misurato su git 2.55) — ma con un git in italiano quelle frasi non ci sono. E dopo si controlla che in cima alla
              pila ci sia davvero una voce nuova. */
         const daMettere = prima.voci.filter((v) => v.tipo !== 'ignorato' && (v.tipo === 'nonTracciato' ? conNuovi === true : (v.staged || v.nonStaged)));
-        if (daMettere.length === 0) throw new GitServiceError('Non ci sono modifiche da mettere da parte', 'GIT_NOTHING_TO_STASH');
+        if (daMettere.length === 0) throw new GitServiceError('There are no changes to stash', 'GIT_NOTHING_TO_STASH');
         const cima = async () => (await git(cartella, ['rev-parse', '-q', '--verify', 'refs/stash'], { tollera: true })).stdout.trim();
         const cimaPrima = await cima();
         const esito = await git(cartella, ['stash', ...(testo ? ['-m', testo] : []), ...(conNuovi === true ? ['-u'] : []), '--', '.'], { timeoutMs: timeoutScritturaMs, tollera: true, percorsiCostanti: true });
         const nuova = (await cima()) !== cimaPrima;
         if (!nuova && (esito.codice === 0 || /No local changes to save|did not match any file/iu.test(`${esito.stdout}${esito.stderr}`))) {
-          throw new GitServiceError('Non ci sono modifiche da mettere da parte', 'GIT_NOTHING_TO_STASH');
+          throw new GitServiceError('There are no changes to stash', 'GIT_NOTHING_TO_STASH');
         }
         if (esito.codice !== 0 || !nuova) throw new GitServiceError(String(esito.stderr || '').trim() || 'git non ha messo da parte le modifiche', 'GIT_COMMAND_FAILED');
         return { ok: true, accantonati: await accantonatiInterni(cartella), stato: await statoInterno(cartella) };
@@ -1258,12 +1258,12 @@ export function creaServizioGit({
         const dove = await collocazione(cartella);
         const nomi = await git(cartella, ['stash', 'show', '--name-only', '--include-untracked', '--no-color', rif]);
         const fuori = dove.prefisso === '' ? [] : nomi.stdout.split('\n').map((s) => s.trim()).filter((p) => p && !p.startsWith(dove.prefisso));
-        if (fuori.length > 0) throw new GitServiceError(`Questa voce tocca ${fuori.length} file fuori dalla cartella della sessione`, 'GIT_STASH_OUTSIDE');
+        if (fuori.length > 0) throw new GitServiceError(`This entry touches ${fuori.length} files outside the session folder`, 'GIT_STASH_OUTSIDE');
         const esito = await git(cartella, ['stash', 'pop', rif], { timeoutMs: timeoutScritturaMs, tollera: true });
         if (esito.codice !== 0) {
           // il conflitto si legge dallo stato (file non uniti), non dal messaggio di git, che può essere in un'altra lingua
           const dopo = await statoInterno(cartella).catch(() => null);
-          if ((dopo?.riepilogo?.conflitti ?? 0) > 0 || /CONFLICT/u.test(`${esito.stdout}${esito.stderr}`)) throw new GitServiceError('Riprendendo si sono creati conflitti: la voce resta messa da parte', 'GIT_STASH_CONFLICT');
+          if ((dopo?.riepilogo?.conflitti ?? 0) > 0 || /CONFLICT/u.test(`${esito.stdout}${esito.stderr}`)) throw new GitServiceError('Restoring created conflicts: the entry stays stashed', 'GIT_STASH_CONFLICT');
           throw new GitServiceError(String(esito.stderr || '').trim() || 'git non ha ripreso la voce', 'GIT_COMMAND_FAILED');
         }
         return { ok: true, accantonati: await accantonatiInterni(cartella), stato: await statoInterno(cartella) };
@@ -1308,8 +1308,8 @@ export function creaServizioGit({
       try {
         cartella = cartellaDi(sessionId);
         const sinc = await sincronizzazioneInterna(cartella);
-        if (sinc.remoti.length === 0) throw new GitServiceError('Questo repository non ha nessun remoto', 'GIT_NO_REMOTE');
-        if (recuperiInCorso.has(cartella)) throw new GitServiceError('Un recupero è già in corso', 'GIT_FETCH_RUNNING');
+        if (sinc.remoti.length === 0) throw new GitServiceError('This repository has no remote', 'GIT_NO_REMOTE');
+        if (recuperiInCorso.has(cartella)) throw new GitServiceError('A fetch is already running', 'GIT_FETCH_RUNNING');
         const nome = remoto == null ? (sinc.riferimento?.remoto ?? sinc.remotoPerInvio ?? null) : remotoConosciuto(remoto, sinc.remoti);
         const controllo = new AbortController();
         recuperiInCorso.set(cartella, controllo);
@@ -1348,16 +1348,16 @@ export function creaServizioGit({
       try {
         const cartella = cartellaDi(sessionId);
         const prima = await statoInterno(cartella);
-        if (prima.riepilogo.conflitti > 0) throw new GitServiceError('Prima vanno risolti i conflitti', 'GIT_CONFLICTS');
+        if (prima.riepilogo.conflitti > 0) throw new GitServiceError('Conflicts must be resolved first', 'GIT_CONFLICTS');
         const sinc = await sincronizzazioneInterna(cartella);
-        if (!sinc.ramo) throw new GitServiceError('Nessun ramo: la HEAD è staccata', 'GIT_DETACHED');
-        if (!sinc.riferimento) throw new GitServiceError(`Il ramo «${sinc.ramo}» non segue nessun ramo remoto: prima si pubblica`, 'GIT_NO_UPSTREAM');
-        if (sinc.riferimentoSparito) throw new GitServiceError(`Il ramo remoto «${sinc.riferimento.corto}» non esiste più`, 'GIT_UPSTREAM_GONE');
+        if (!sinc.ramo) throw new GitServiceError('No branch: HEAD is detached', 'GIT_DETACHED');
+        if (!sinc.riferimento) throw new GitServiceError(`The branch “${sinc.ramo}” does not track any remote branch: publish it first`, 'GIT_NO_UPSTREAM');
+        if (sinc.riferimentoSparito) throw new GitServiceError(`The remote branch “${sinc.riferimento.corto}” no longer exists`, 'GIT_UPSTREAM_GONE');
         const toccati = await git(cartella, ['diff', '--name-only', '-z', '--no-renames', 'HEAD...@{u}'], { tollera: true });
         const inArrivo = new Set(toccati.codice === 0 ? toccati.stdout.split('\0').filter(Boolean) : []);
         const bloccanti = prima.voci.filter((v) => inArrivo.has(v.percorsoRepo)).map((v) => v.percorso);
         if (bloccanti.length > 0) {
-          throw new GitServiceError(`Scaricare sovrascriverebbe ${bloccanti.length} file con modifiche non committate: ${bloccanti.join(', ')}. Mettile da parte o committale, poi riprova`, 'GIT_WORKTREE_DIRTY');
+          throw new GitServiceError(`Pulling would overwrite ${bloccanti.length} files with uncommitted changes: ${bloccanti.join(', ')}. Stash or commit them, then try again`, 'GIT_WORKTREE_DIRTY');
         }
         /* GitHub Desktop `getDefaultPullDivergentBranchArguments` (`pull.ts:115-135`): se `pull.ff` tace si passa `--ff` (avanti
            veloce, altrimenti unione); `pull.rebase` del progetto vale sempre, git lo legge da sé. */
@@ -1396,20 +1396,20 @@ export function creaServizioGit({
       try {
         const cartella = cartellaDi(sessionId);
         const sinc = await sincronizzazioneInterna(cartella);
-        if (!sinc.ramo) throw new GitServiceError('Nessun ramo: la HEAD è staccata', 'GIT_DETACHED');
-        if (!(await baseInterna(cartella))) throw new GitServiceError('Non c’è ancora nessun commit', 'GIT_NOTHING_TO_COMMIT');
-        if (sinc.remoti.length === 0) throw new GitServiceError('Questo repository non ha nessun remoto', 'GIT_NO_REMOTE');
+        if (!sinc.ramo) throw new GitServiceError('No branch: HEAD is detached', 'GIT_DETACHED');
+        if (!(await baseInterna(cartella))) throw new GitServiceError('There is no commit yet', 'GIT_NOTHING_TO_COMMIT');
+        if (sinc.remoti.length === 0) throw new GitServiceError('This repository has no remote', 'GIT_NO_REMOTE');
         let nome; let refspec; let pubblica = false;
         if (sinc.riferimento && !sinc.riferimentoSparito) {
           nome = sinc.riferimento.remoto;
           refspec = `${sinc.ramo}:${sinc.riferimento.ramo}`;
-          if (remoto != null && remoto !== nome) throw new GitServiceError(`Il ramo «${sinc.ramo}» segue «${sinc.riferimento.corto}»: si invia a «${nome}»`, 'GIT_REMOTE_MISMATCH');
-          if (sinc.indietro > 0) throw new GitServiceError(`Il ramo remoto ha ${sinc.indietro} commit che qui non ci sono: prima scarica`, 'GIT_BEHIND');
+          if (remoto != null && remoto !== nome) throw new GitServiceError(`The branch “${sinc.ramo}” tracks “${sinc.riferimento.corto}”: push to “${nome}”`, 'GIT_REMOTE_MISMATCH');
+          if (sinc.indietro > 0) throw new GitServiceError(`The remote branch has ${sinc.indietro} commits that are not here: pull first`, 'GIT_BEHIND');
           if (sinc.avanti === 0) return { ok: true, nienteDaInviare: true, remoto: nome, ramo: sinc.ramo, sincronizzazione: sinc };
         } else {
           pubblica = true;
           nome = remoto == null ? sinc.remotoPerInvio : remotoConosciuto(remoto, sinc.remoti);
-          if (!nome) throw new GitServiceError('Scegli il remoto su cui pubblicare il ramo', 'GIT_REMOTE_REQUIRED');
+          if (!nome) throw new GitServiceError('Choose the remote to publish the branch to', 'GIT_REMOTE_REQUIRED');
           refspec = sinc.ramo;
         }
         const argomenti = ['push', '--porcelain', ...(pubblica ? ['--set-upstream'] : []), '--', nome, refspec];
@@ -1424,7 +1424,7 @@ export function creaServizioGit({
         const rifiutata = righe.find((r) => r.flag === '!');
         if (esito.codice !== 0 || rifiutata) {
           const perche = rifiutata ? rifiutata.riepilogo : String(esito.stderr || '').trim();
-          throw new GitServiceError(perche ? `Il remoto non ha accettato l’invio: ${perche}` : 'git push non è riuscito', 'GIT_PUSH_REJECTED');
+          throw new GitServiceError(perche ? `The remote did not accept the push: ${perche}` : 'git push failed', 'GIT_PUSH_REJECTED');
         }
         return { ok: true, remoto: nome, ramo: sinc.ramo, pubblicato: pubblica, esiti: righe, sincronizzazione: await sincronizzazioneInterna(cartella) };
       } catch (errore) { return rifiuto(errore); }
@@ -1444,7 +1444,7 @@ export function creaServizioGit({
       try {
         const cartella = cartellaDi(sessionId);
         const sinc = await sincronizzazioneInterna(cartella);
-        if (!sinc.ramo) throw new GitServiceError('Nessun ramo: la HEAD è staccata', 'GIT_DETACHED');
+        if (!sinc.ramo) throw new GitServiceError('No branch: HEAD is detached', 'GIT_DETACHED');
         const nome = remotoConosciuto(remoto, sinc.remoti);
         const baseConfigurata = await configDi(cartella, `branch.${sinc.ramo}.gh-merge-base`);
         const scelta = base ?? baseConfigurata ?? basePredefinita;
@@ -1453,9 +1453,9 @@ export function creaServizioGit({
         const ramiRemoti = elenco.stdout.split('\n').map((r) => r.trim()).filter((r) => r.startsWith(prefisso))
           .map((r) => r.slice(prefisso.length)).filter((r) => r !== 'HEAD').sort((a, b) => a.localeCompare(b));
         if (scelta == null) return { ramo: sinc.ramo, remoto: nome, base: null, baseConfigurata, ramiRemoti, baseTrovata: false, commit: [], commitOltre: false };
-        if (typeof scelta !== 'string' || scelta === '' || scelta.startsWith('-')) throw new GitServiceError('Ramo di base non valido', 'GIT_BRANCH_INVALID');
+        if (typeof scelta !== 'string' || scelta === '' || scelta.startsWith('-')) throw new GitServiceError('Invalid base branch', 'GIT_BRANCH_INVALID');
         const valido = await git(cartella, ['check-ref-format', '--branch', scelta], { tollera: true });
-        if (valido.codice !== 0) throw new GitServiceError('Ramo di base non valido', 'GIT_BRANCH_INVALID');
+        if (valido.codice !== 0) throw new GitServiceError('Invalid base branch', 'GIT_BRANCH_INVALID');
         const rif = `${prefisso}${scelta}`;
         const esiste = await git(cartella, ['rev-parse', '--verify', '-q', `${rif}^{commit}`], { tollera: true });
         if (esiste.codice !== 0) return { ramo: sinc.ramo, remoto: nome, base: scelta, baseConfigurata, ramiRemoti, baseTrovata: false, commit: [], commitOltre: false };
@@ -1596,10 +1596,10 @@ export function creaServizioGit({
    */
   async function nomeRamoValido(cartella, nome) {
     if (typeof nome !== 'string' || nome === '' || nome.length > 250 || nome.startsWith('-') || nome.includes('@{') || /[\0\s]/u.test(nome)) {
-      throw new GitServiceError('Nome di ramo non valido', 'GIT_BRANCH_INVALID');
+      throw new GitServiceError('Invalid branch name', 'GIT_BRANCH_INVALID');
     }
     const esito = await git(cartella, ['check-ref-format', '--branch', nome], { tollera: true });
-    if (esito.codice !== 0 || esito.stdout.trim() !== nome) throw new GitServiceError(`«${nome}» non è un nome di ramo valido`, 'GIT_BRANCH_INVALID');
+    if (esito.codice !== 0 || esito.stdout.trim() !== nome) throw new GitServiceError(`“${nome}” is not a valid branch name`, 'GIT_BRANCH_INVALID');
     return nome;
   }
 
@@ -1612,12 +1612,12 @@ export function creaServizioGit({
 
   /** L'ultimo commit si può riscrivere se è quello che la scheda ha visto e se non è in un ramo remoto. Torna i suoi genitori. */
   async function ultimoCommitRiscrivibile(cartella, base, commit) {
-    if (!base) throw new GitServiceError('Non c’è ancora nessun commit', 'GIT_NOTHING_TO_COMMIT');
+    if (!base) throw new GitServiceError('There is no commit yet', 'GIT_NOTHING_TO_COMMIT');
     if (typeof commit !== 'string' || commit !== base.commit) {
-      throw new GitServiceError('L’ultimo commit è cambiato da quando la scheda l’ha mostrato: guarda di nuovo e riprova', 'GIT_HEAD_CHANGED');
+      throw new GitServiceError('The last commit has changed since the tab showed it: look again and try again', 'GIT_HEAD_CHANGED');
     }
     const locali = await nonInviati(cartella, 1);
-    if (!locali.has(commit)) throw new GitServiceError('L’ultimo commit è già stato inviato: riscriverlo cambierebbe la storia degli altri', 'GIT_COMMIT_PUSHED');
+    if (!locali.has(commit)) throw new GitServiceError('The last commit has already been pushed: rewriting it would change other people’s history', 'GIT_COMMIT_PUSHED');
     const genitori = await git(cartella, ['log', '-1', '--no-color', '--format=%P', commit]);
     const elenco = genitori.stdout.trim();
     return elenco === '' ? 0 : elenco.split(/\s+/u).length;
@@ -1641,11 +1641,11 @@ export function creaServizioGit({
   }
 
   async function voceAccantonata(cartella, indice, commit) {
-    if (!Number.isInteger(indice) || indice < 0 || indice > 10_000) throw new GitServiceError('Voce messa da parte non valida', 'GIT_STASH_CHANGED');
+    if (!Number.isInteger(indice) || indice < 0 || indice > 10_000) throw new GitServiceError('Invalid stash entry', 'GIT_STASH_CHANGED');
     const elenco = await accantonatiInterni(cartella);
     const voce = elenco.find((v) => v.indice === indice);
     if (!voce || typeof commit !== 'string' || voce.commit !== commit) {
-      throw new GitServiceError('Ciò che è messo da parte è cambiato da quando la scheda l’ha mostrato: guarda di nuovo', 'GIT_STASH_CHANGED');
+      throw new GitServiceError('What is stashed has changed since the tab showed it: look again', 'GIT_STASH_CHANGED');
     }
     return `stash@{${indice}}`;
   }
@@ -1654,7 +1654,7 @@ export function creaServizioGit({
   function erroreDelCambio(esito) {
     const detto = `${esito.stdout}${esito.stderr}`;
     if (/would be overwritten|Please commit your changes or stash them/iu.test(detto)) {
-      return new GitServiceError('Ci sono modifiche che il cambio di ramo sovrascriverebbe: committale o mettile da parte prima', 'GIT_SWITCH_BLOCKED');
+      return new GitServiceError('There are changes that switching branch would overwrite: commit or stash them first', 'GIT_SWITCH_BLOCKED');
     }
     return new GitServiceError(String(esito.stderr || '').trim() || 'git non ha cambiato ramo', 'GIT_COMMAND_FAILED');
   }
@@ -1671,10 +1671,10 @@ export function creaServizioGit({
 function rifiuto(errore) {
   if (errore instanceof GitServiceError) return { erroreAvvio: errore.message, code: errore.code };
   if (typeof errore?.code === 'string' && errore.code.startsWith('PROCESS_POLICY')) {
-    return { erroreAvvio: 'Comando git rifiutato dalla policy di processo', code: 'GIT_COMMAND_FAILED' };
+    return { erroreAvvio: 'git command refused by the process policy', code: 'GIT_COMMAND_FAILED' };
   }
   if (typeof errore?.code === 'string' && (errore.code === 'CWD_NOT_ALLOWED' || errore.code === 'CWD_REQUIRED' || errore.code === 'CWD_NOT_FOUND' || errore.code === 'EXECUTABLE_NOT_ALLOWED')) {
-    return { erroreAvvio: 'Cartella di lavoro non autorizzata per git', code: 'GIT_COMMAND_FAILED' };
+    return { erroreAvvio: 'Working folder not authorized for git', code: 'GIT_COMMAND_FAILED' };
   }
-  return { erroreAvvio: errore?.message || 'git non è riuscito', code: 'GIT_COMMAND_FAILED' };
+  return { erroreAvvio: errore?.message || 'git failed', code: 'GIT_COMMAND_FAILED' };
 }

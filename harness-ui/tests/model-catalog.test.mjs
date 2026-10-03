@@ -74,7 +74,7 @@ test('PF-OR-01 — rete assente senza copia: riserva con motivo, senza dettagli 
   const catalogo = createModelCatalog({ fetchFn: async () => { throw new Error('ECONNREFUSED'); } });
   const r = await catalogo.ottieni();
   assert.equal(r.fonte, 'riserva');
-  assert.equal(r.motivo, 'catalogo non raggiungibile: elenco di riserva del 12/09/2026');
+  assert.equal(r.motivo, 'catalog unreachable: fallback list of 2026-09-12');
   assert.ok(r.modelli.length > 0);
   assert.deepEqual(r.modelliDiRiserva, r.modelli);
   assert.equal(r.daCache, false);

@@ -53,7 +53,7 @@ for (const modo of ['dark', 'light']) {
       await expect(banner(page).locator('[data-coda-conteggio]')).toHaveText('1 in coda');
       await expect(banner(page).locator('[data-coda-conteggio]')).not.toHaveClass(/talos-badge--warning/);
       await expect(banner(page).locator('[data-coda-testo]')).toHaveText('«poi aggiorna il README coi numeri veri»');
-      await expect(banner(page).locator('[data-coda-testo]')).toHaveAttribute('title', '«poi aggiorna il README coi numeri veri» — Parte quando TALOS finisce di rispondere');
+      await expect(banner(page).locator('[data-coda-testo]')).toHaveAttribute('title', '«poi aggiorna il README coi numeri veri» — Entra dopo il passo in corso di TALOS');
       await expect(banner(page).locator('[data-coda-invia]')).toHaveText('Indirizza ora');
       await expect(banner(page).locator('[data-coda-togli]')).toHaveText('Togli');
       await page.screenshot({ path: testInfo.outputPath(`1-coda-viva-${modo}.png`) });

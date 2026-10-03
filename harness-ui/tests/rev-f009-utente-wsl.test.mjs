@@ -7,6 +7,7 @@
  *   (`uid=0;gid=0`), `/mnt/c/Users/<utente>` è `777 root:root`, l'interop è accesa.
  */
 import test from 'node:test'
+import { togliConfiniDati } from '../src/kernel/confine-dati.mjs'
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
 import { mkdtempSync } from 'node:fs'
@@ -115,7 +116,7 @@ async function giro(t, { chiamate = [['shell', { comando: 'echo ciao' }]], livel
         livelloAccesso: livelloAccesso === 'nessuno' ? undefined : livelloAccesso,
         ...(comandoProva ? { comandoProva } : {}),
         fetchDiRete: fornitore(chiamate),
-        onGiro: (e) => { if (e.tipo === 'tool-esito') esiti.push(String(e.content)); if (e.tipo === 'ricevuta') ricevute.push(e.ricevuta) },
+        onGiro: (e) => { if (e.tipo === 'tool-esito') esiti.push(togliConfiniDati(String(e.content))); if (e.tipo === 'ricevuta') ricevute.push(e.ricevuta) },
         chiediApprovazioneFn: async (a) => { chieste.push(a); if (stop) { stop.abort(); return new Promise(() => {}) } return risposta },
         eseguiComandoSandboxatoFn: sandbox ?? (async (comando, _cartella, opzioni) => { eseguiti.push({ comando, opzioni }); return { codice: 0, testo: 'ciao', enforcement: 'wsl2', wsl: { utente: 'root', root: true, disco: { montaggio: '/mnt/c', metadata: false } } } }),
         ...(consensiSessione !== undefined ? { consensiSessione } : {}),

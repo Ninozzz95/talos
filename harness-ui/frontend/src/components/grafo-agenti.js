@@ -1,14 +1,15 @@
 import { creaCronologiaGrafo } from './cronologia-grafo.js';
 import { graphlib, layout } from '@dagrejs/dagre';
 import { nomeUmanoAttrezzo } from './nomi-attrezzi.js';
-import { linguaCorrenteDiT } from './lingua.js';
+import { linguaCorrenteDiT, t as tr, tn } from './lingua.js';
 import { ICONA_TONO } from './grafo/comuni.js';
 
 const idValido = v => typeof v === 'string' && v.length > 0 && v.length <= 2048;
-const stati = { all: 'Tutti gli stati', active: 'In corso', waiting: 'Da approvare', done: 'Conclusi', interrupted: 'Interrotti', error: 'Non riusciti', unknown: 'Stato non disponibile' };
+/* I testi degli stati sono CHIAVI del dizionario: si risolvono quando si disegna (`tr(stati[id])`), mai al caricamento del modulo. */
+const stati = { all: 'agenti.delegations.statusAll', active: 'agenti.delegations.filterActive', waiting: 'agenti.delegations.filterWaiting', done: 'agenti.delegations.filterDone', interrupted: 'agenti.delegations.filterStopped', error: 'agenti.delegations.filterFailed', unknown: 'agenti.delegations.statusUnavailable' };
 /* il tono di ogni stato, nella scala del Workflow (`grafo/comuni.js`, ICONA_TONO) */
 const TONO_STATO = { active: 'corso', waiting: 'avviso', done: 'ok', error: 'errore', interrupted: 'attesa', unknown: 'neutro' };
-const etichetta = { active: 'In corso', waiting: 'Da approvare', done: 'Concluso', interrupted: 'Interrotto', error: 'Errore', unknown: 'Stato non disponibile' };
+const etichetta = { active: 'agenti.delegations.stateActive', waiting: 'agenti.delegations.stateWaiting', done: 'agenti.delegations.stateDone', interrupted: 'agenti.delegations.stateStopped', error: 'agenti.delegations.stateError', unknown: 'agenti.delegations.statusUnavailable' };
 function stato(a) {
   if (a.interrotta === true || a.motivoChiusura === 'fermata') return 'interrupted';
   if (a.conclusa === true) return ['errore', 'error', 'fallito', 'failed', 'rifiutato'].includes(a.ultimoEsito || a.esitoDelega) ? 'error' : 'done';
@@ -26,7 +27,11 @@ const istante = s => typeof s === 'string' && Number.isFinite(Date.parse(s)) ? D
  */
 const conteggio = n => { try { return new Intl.NumberFormat(linguaCorrenteDiT(), { useGrouping: 'always' }).format(n); } catch { return String(n); } };
 const compatto = n => { try { return new Intl.NumberFormat(linguaCorrenteDiT(), { notation: 'compact', maximumFractionDigits: 1 }).format(n); } catch { return String(n); } };
-const tempo = ms => ms == null ? 'Durata non disponibile' : ms < 60000 ? `${Math.floor(ms / 1000)} s` : ms < 3600000 ? `${Math.floor(ms / 60000)} min` : `${Math.floor(ms / 3600000)} h ${Math.floor(ms / 60000) % 60} min`;
+/* Orari e date nella lingua corrente (24 ore anche in inglese, come l'asse del Workflow). */
+const localeOra = () => (linguaCorrenteDiT() === 'en' ? 'en-GB' : 'it-IT');
+const oraBreve = valore => new Date(valore).toLocaleTimeString(localeOra(), { hour: '2-digit', minute: '2-digit' });
+const oraCompleta = valore => new Date(valore).toLocaleTimeString(localeOra());
+const tempo = ms => ms == null ? tr('agenti.delegations.durationUnavailable') : ms < 60000 ? `${Math.floor(ms / 1000)} s` : ms < 3600000 ? `${Math.floor(ms / 60000)} min` : `${Math.floor(ms / 3600000)} h ${Math.floor(ms / 60000) % 60} min`;
 
 /** Soltanto misure dichiarate: la mancanza di telemetria non equivale a zero. */
 export function attivitaNodoGrafo(a, ora = Date.now()) {
@@ -36,8 +41,8 @@ export function attivitaNodoGrafo(a, ora = Date.now()) {
   const inizio = istante(a.avviataAlle), stop = a.conclusa || a.interrotta ? fine : ora;
   const input = contaValida(a.usageSessione?.prompt_tokens), output = contaValida(a.usageSessione?.completion_tokens);
   const fase = a.operazioneCorrente;
-  const operazione = fase?.status === 'running' && fase.kind === 'reasoning' ? 'Ragionamento in corso'
-    : fase?.status === 'running' && fase.kind === 'response' ? 'Risposta in corso'
+  const operazione = fase?.status === 'running' && fase.kind === 'reasoning' ? tr('agenti.delegations.opReasoning')
+    : fase?.status === 'running' && fase.kind === 'response' ? tr('agenti.delegations.opResponding')
     : typeof att?.attrezzoCorrente === 'string' ? nomeUmanoAttrezzo(att.attrezzoCorrente) : null;
   /* 02/10/2026: un record di attrezzo della cronologia porta i soli contatori (`compatta`, decisione owner): niente elenco, ma
      il numero dei file sì — il nodo lo mostra; la sintesi in testa, che unisce i file di tutti, lo dichiara parziale. */
@@ -95,7 +100,7 @@ export function modelloGrafoAgenti({ corrente = {}, sessioni = [], figli = [] } 
   const query = String(opzioni.query || '').trim().toLocaleLowerCase();
   const isolati = opzioni.isolato ? discendenti([opzioni.isolato]) : null;
   const filtrati = [...mappa.values()].filter(a => inclusi.has(a.sessionId) && !nascosti.has(a.sessionId) && (!isolati || isolati.has(a.sessionId))).map(a => ({
-    id: a.sessionId, nome: a.taskCorto || a.nome || a.taskDelega || (typeof a.task === 'string' ? a.task : '') || 'Sessione senza titolo',
+    id: a.sessionId, nome: a.taskCorto || a.nome || a.taskDelega || (typeof a.task === 'string' ? a.task : '') || tr('agenti.delegations.untitledSession'),
     stato: stato(a), dati: a, figli: numeroFigli.get(a.sessionId) || 0,
   })).filter(n => (!query || `${n.nome} ${n.dati.modello || ''}`.toLocaleLowerCase().includes(query)) && (!opzioni.stato || opzioni.stato === 'all' || n.stato === opzioni.stato));
   const offset = Number.isSafeInteger(opzioni.offset) && opzioni.offset > 0 ? opzioni.offset : 0;
@@ -151,22 +156,22 @@ export function montaGrafoAgenti(host, { dati, onApri, onChiudi, onAggiorna, onL
     return svg;
   };
   const tasto = (classe, aria, nomeIcona, azione) => { const b = el('button', classe); b.type = 'button'; if (aria) b.setAttribute('aria-label', aria); if (nomeIcona) b.append(icona(nomeIcona)); if (azione) b.addEventListener('click', azione); return b; };
-  const root = el('section', 'talos-grafo talos-wfg talos-grafo--deleghe'); root.dataset.c = 'GrafoAgenti'; root.setAttribute('aria-label', 'Diagramma della sessione');
+  const root = el('section', 'talos-grafo talos-wfg talos-grafo--deleghe'); root.dataset.c = 'GrafoAgenti'; root.setAttribute('aria-label', tr('agenti.delegations.title'));
   const cima = el('header', 'talos-wfg__cima talos-grafo__cima');
   const titoli = el('div', 'talos-wfg__titoli');
-  const sommario = el('p', 'talos-wfg__sommario'), descrizione = el('p', 'talos-wfg__descrizione', 'Le deleghe della sessione, con il loro stato e l’attività registrata. Seleziona un agente per vederne i dettagli.');
-  titoli.append(el('h2', 'talos-wfg__titolo', 'Diagramma della sessione'), sommario, descrizione);
+  const sommario = el('p', 'talos-wfg__sommario'), descrizione = el('p', 'talos-wfg__descrizione', tr('agenti.delegations.description'));
+  titoli.append(el('h2', 'talos-wfg__titolo', tr('agenti.delegations.title')), sommario, descrizione);
   const lato = el('div', 'talos-wfg__lato'), latoRiga = el('div', 'talos-wfg__lato-riga');
   const aggiornato = el('div', 'talos-wfg__aggiornato'), aggiornatoOra = el('span', 'talos-wfg__aggiornato-ora');
   aggiornato.append(aggiornatoOra);
-  const torna = el('button', 'talos-button talos-button--secondary talos-button--sm talos-wfg__torna', 'Torna alla chat'); torna.type = 'button';
-  torna.setAttribute('aria-label', 'Chiudi il diagramma'); torna.addEventListener('click', () => onChiudi?.());
+  const torna = el('button', 'talos-button talos-button--secondary talos-button--sm talos-wfg__torna', tr('agenti.delegations.backToChat')); torna.type = 'button';
+  torna.setAttribute('aria-label', tr('agenti.delegations.closeDiagram')); torna.addEventListener('click', () => onChiudi?.());
   latoRiga.append(aggiornato, torna); lato.append(latoRiga); cima.append(titoli, lato);
 
   /* la riga dei comandi: a sinistra l'ambito e lo stato (CHE COSA), a destra cerca, zoom, adatta, lettura, segui e «⋯» (COME) */
-  const comandi = el('div', 'gv-comandi talos-grafo__comandi'); comandi.setAttribute('role', 'toolbar'); comandi.setAttribute('aria-label', 'Comandi del diagramma');
-  const viste = el('div', 'gv-viste'); viste.setAttribute('role', 'radiogroup'); viste.setAttribute('aria-label', 'Ambito del diagramma');
-  const vociAmbito = new Map([['sessione', 'Sessione corrente', 'i-branch'], ['workspace', 'Cartella corrente', 'i-folder']].map(([id, testo, ic]) => {
+  const comandi = el('div', 'gv-comandi talos-grafo__comandi'); comandi.setAttribute('role', 'toolbar'); comandi.setAttribute('aria-label', tr('agenti.delegations.controlsLabel'));
+  const viste = el('div', 'gv-viste'); viste.setAttribute('role', 'radiogroup'); viste.setAttribute('aria-label', tr('agenti.delegations.scopeLabel'));
+  const vociAmbito = new Map([['sessione', tr('agenti.delegations.scopeSession'), 'i-branch'], ['workspace', tr('agenti.delegations.scopeFolder'), 'i-folder']].map(([id, testo, ic]) => {
     const b = el('button', 'gv-vista'); b.type = 'button'; b.setAttribute('role', 'radio'); b.dataset.ambito = id; b.append(icona(ic), el('span', null, testo));
     b.addEventListener('click', () => { opzioni.ambito = id; disegnaComandi(); ridisegna(); adatta(); });
     viste.append(b); return [id, b];
@@ -179,15 +184,15 @@ export function montaGrafoAgenti(host, { dati, onApri, onChiudi, onAggiorna, onL
   const menuStato = el('div', 'talos-wfg__menu-vista');
   const sceltaStato = el('button', 'talos-wfg__scelta'); sceltaStato.type = 'button'; sceltaStato.setAttribute('aria-haspopup', 'menu'); sceltaStato.setAttribute('aria-expanded', 'false');
   const sceltaTesto = el('span'); sceltaStato.append(sceltaTesto, icona('i-chev', 'talos-wfg__scelta-freccia'));
-  const vociStato = el('div', 'talos-wfg__menu'); vociStato.setAttribute('role', 'menu'); vociStato.setAttribute('aria-label', 'Filtra stato nel diagramma'); vociStato.hidden = true;
-  for (const [id, testo] of Object.entries(stati)) {
-    const b = el('button', 'talos-wfg__menu-voce', testo); b.type = 'button'; b.setAttribute('role', 'menuitemradio'); b.tabIndex = -1; b.dataset.stato = id;
+  const vociStato = el('div', 'talos-wfg__menu'); vociStato.setAttribute('role', 'menu'); vociStato.setAttribute('aria-label', tr('agenti.delegations.filterStatusLabel')); vociStato.hidden = true;
+  for (const [id, chiave] of Object.entries(stati)) {
+    const b = el('button', 'talos-wfg__menu-voce', tr(chiave)); b.type = 'button'; b.setAttribute('role', 'menuitemradio'); b.tabIndex = -1; b.dataset.stato = id;
     b.addEventListener('click', () => { chiudiMenu(sceltaStato, vociStato, { fuoco: true }); impostaStato(id); });
     vociStato.append(b);
   }
   sceltaStato.addEventListener('click', () => (vociStato.hidden ? apriMenu(sceltaStato, vociStato) : chiudiMenu(sceltaStato, vociStato)));
   menuStato.append(sceltaStato, vociStato);
-  const ricerca = el('input', 'talos-wfg__cerca'); ricerca.type = 'search'; ricerca.placeholder = 'Cerca agente…'; ricerca.setAttribute('aria-label', 'Cerca agente nel diagramma'); ricerca.value = opzioni.query;
+  const ricerca = el('input', 'talos-wfg__cerca'); ricerca.type = 'search'; ricerca.placeholder = tr('agenti.delegations.searchPlaceholder'); ricerca.setAttribute('aria-label', tr('agenti.delegations.searchLabel')); ricerca.value = opzioni.query;
   ricerca.hidden = !opzioni.query;
   ricerca.addEventListener('input', () => { opzioni.query = ricerca.value; ridisegna(); adatta(); });
   /* Esc resta nel campo: prima svuota, poi chiude e torna alla lente. ⛔ Senza `stopPropagation` risaliva alla catena degli Esc
@@ -198,23 +203,23 @@ export function montaGrafoAgenti(host, { dati, onApri, onChiudi, onAggiorna, onL
     if (ricerca.value) { ricerca.value = ''; opzioni.query = ''; ridisegna(); adatta(); return; }
     ricerca.hidden = true; cerca.focus();
   });
-  const cerca = tasto('talos-wfg__icona-bottone', 'Cerca nel diagramma', 'i-search', () => { ricerca.hidden = ricerca.value ? false : !ricerca.hidden; if (!ricerca.hidden) ricerca.focus(); });
-  const meno = tasto('talos-wfg__icona-bottone', 'Riduci zoom', 'i-minus', () => scala(zoom / 1.2));
-  const misura = tasto('talos-wfg__icona-bottone gv-percento', 'Zoom al 100%', null, () => scala(1)); misura.textContent = '100%'; misura.dataset.zoom = '';
-  const piu = tasto('talos-wfg__icona-bottone', 'Aumenta zoom', 'i-plus', () => scala(zoom * 1.2));
-  const adattaTasto = tasto('talos-wfg__icona-bottone', 'Adatta il diagramma alla finestra', 'i-fit', () => adatta());
-  const letturaTasto = tasto('talos-wfg__icona-bottone', 'Zoom di lettura', 'i-eye', () => lettura());
-  const follow = tasto('talos-wfg__icona-bottone gv-percorso', 'Segui l’agente attivo', 'i-robot', () => { segui = !segui; follow.setAttribute('aria-pressed', String(segui)); if (segui) centraAttivo(); });
-  follow.append(el('span', null, 'Segui attivo')); follow.setAttribute('aria-pressed', 'false');
-  follow.title = 'Tiene al centro l’agente che sta lavorando';
+  const cerca = tasto('talos-wfg__icona-bottone', tr('agenti.delegations.searchButton'), 'i-search', () => { ricerca.hidden = ricerca.value ? false : !ricerca.hidden; if (!ricerca.hidden) ricerca.focus(); });
+  const meno = tasto('talos-wfg__icona-bottone', tr('agenti.delegations.zoomOut'), 'i-minus', () => scala(zoom / 1.2));
+  const misura = tasto('talos-wfg__icona-bottone gv-percento', tr('agenti.delegations.zoomReset'), null, () => scala(1)); misura.textContent = '100%'; misura.dataset.zoom = '';
+  const piu = tasto('talos-wfg__icona-bottone', tr('agenti.delegations.zoomIn'), 'i-plus', () => scala(zoom * 1.2));
+  const adattaTasto = tasto('talos-wfg__icona-bottone', tr('agenti.delegations.fit'), 'i-fit', () => adatta());
+  const letturaTasto = tasto('talos-wfg__icona-bottone', tr('agenti.delegations.readingZoom'), 'i-eye', () => lettura());
+  const follow = tasto('talos-wfg__icona-bottone gv-percorso', tr('agenti.delegations.followLabel'), 'i-robot', () => { segui = !segui; follow.setAttribute('aria-pressed', String(segui)); if (segui) centraAttivo(); });
+  follow.append(el('span', null, tr('agenti.delegations.follow'))); follow.setAttribute('aria-pressed', 'false');
+  follow.title = tr('agenti.delegations.followHint');
   const menuAltro = el('div', 'talos-wfg__menu-vista');
-  const altro = tasto('talos-wfg__icona-bottone', 'Altri comandi del diagramma', 'i-more'); altro.setAttribute('aria-haspopup', 'menu'); altro.setAttribute('aria-expanded', 'false');
-  const vociAltro = el('div', 'talos-wfg__menu talos-wfg__menu--destra'); vociAltro.setAttribute('role', 'menu'); vociAltro.setAttribute('aria-label', 'Altri comandi del diagramma'); vociAltro.hidden = true;
+  const altro = tasto('talos-wfg__icona-bottone', tr('agenti.delegations.moreControls'), 'i-more'); altro.setAttribute('aria-haspopup', 'menu'); altro.setAttribute('aria-expanded', 'false');
+  const vociAltro = el('div', 'talos-wfg__menu talos-wfg__menu--destra'); vociAltro.setAttribute('role', 'menu'); vociAltro.setAttribute('aria-label', tr('agenti.delegations.moreControls')); vociAltro.hidden = true;
   const voceAltro = (testo, azione) => { const b = el('button', 'talos-wfg__menu-voce', testo); b.type = 'button'; b.setAttribute('role', 'menuitem'); b.tabIndex = -1; b.addEventListener('click', () => { chiudiMenu(altro, vociAltro, { fuoco: true }); azione(); }); vociAltro.append(b); return b; };
-  const isola = voceAltro('Isola selezionato', () => { if (opzioni.selezionato) { opzioni.isolato = opzioni.selezionato; ridisegna(); adatta(); } });
-  const affianca = voceAltro('Affianca file', () => mostraFile()); affianca.setAttribute('aria-pressed', 'false');
-  voceAltro('Aggiorna', () => { onAggiorna?.(); void caricaCronologia(); });
-  voceAltro('Azzera filtri', () => { opzioni.query = ''; opzioni.stato = 'all'; opzioni.isolato = null; opzioni.collassati = []; ricerca.value = ''; ricerca.hidden = true; disegnaComandi(); ridisegna(); adatta(); });
+  const isola = voceAltro(tr('agenti.delegations.isolate'), () => { if (opzioni.selezionato) { opzioni.isolato = opzioni.selezionato; ridisegna(); adatta(); } });
+  const affianca = voceAltro(tr('agenti.delegations.sideFiles'), () => mostraFile()); affianca.setAttribute('aria-pressed', 'false');
+  voceAltro(tr('agenti.delegations.refresh'), () => { onAggiorna?.(); void caricaCronologia(); });
+  voceAltro(tr('agenti.delegations.clearFilters'), () => { opzioni.query = ''; opzioni.stato = 'all'; opzioni.isolato = null; opzioni.collassati = []; ricerca.value = ''; ricerca.hidden = true; disegnaComandi(); ridisegna(); adatta(); });
   altro.addEventListener('click', () => (vociAltro.hidden ? apriMenu(altro, vociAltro) : chiudiMenu(altro, vociAltro)));
   menuAltro.append(altro, vociAltro);
   const sinistra = el('div', 'gv-comandi-gruppo'); sinistra.append(viste, menuStato);
@@ -224,8 +229,8 @@ export function montaGrafoAgenti(host, { dati, onApri, onChiudi, onAggiorna, onL
   function impostaStato(id) { opzioni.stato = id; disegnaComandi(); ridisegna(); adatta(); }
   function disegnaComandi() {
     for (const [id, b] of vociAmbito) b.setAttribute('aria-checked', String(id === opzioni.ambito));
-    sceltaTesto.textContent = stati[opzioni.stato];
-    sceltaStato.setAttribute('aria-label', `Filtra stato nel diagramma: ${stati[opzioni.stato]}`);
+    sceltaTesto.textContent = tr(stati[opzioni.stato]);
+    sceltaStato.setAttribute('aria-label', tr('agenti.delegations.filterStatusWithValue', { stato: tr(stati[opzioni.stato]) }));
     for (const b of vociStato.children) b.setAttribute('aria-checked', String(b.dataset.stato === opzioni.stato));
     isola.disabled = !opzioni.selezionato;
   }
@@ -247,32 +252,32 @@ export function montaGrafoAgenti(host, { dati, onApri, onChiudi, onAggiorna, onL
   d.addEventListener('pointerdown', chiudiMenuFuori, true);
 
   const avviso = el('p', 'talos-wfg__avviso talos-grafo__stato'); avviso.setAttribute('role', 'status');
-  const riepilogo = el('div', 'talos-grafo__riepilogo'); riepilogo.setAttribute('aria-label', 'Riepilogo del lavoro');
-  const recenti = el('details', 'talos-grafo__recenti'); recenti.append(el('summary', '', 'Attività recente')); const elencoRecenti = el('div', 'talos-grafo__eventi'); recenti.append(elencoRecenti);
-  const canvas = el('div', 'talos-grafo__canvas'); canvas.tabIndex = 0; canvas.setAttribute('aria-label', 'Diagramma: trascina lo sfondo o usa le frecce per spostare');
+  const riepilogo = el('div', 'talos-grafo__riepilogo'); riepilogo.setAttribute('aria-label', tr('agenti.delegations.summaryLabel'));
+  const recenti = el('details', 'talos-grafo__recenti'); recenti.append(el('summary', '', tr('agenti.delegations.recentActivity'))); const elencoRecenti = el('div', 'talos-grafo__eventi'); recenti.append(elencoRecenti);
+  const canvas = el('div', 'talos-grafo__canvas'); canvas.tabIndex = 0; canvas.setAttribute('aria-label', tr('agenti.delegations.canvasLabel'));
   const mondo = el('div', 'talos-grafo__mondo'); canvas.append(mondo);
-  const piede = el('p', 'talos-grafo__legenda', 'Linea continua: delega · tratteggiata: ramo. Seleziona un agente per aprire il dettaglio.');
+  const piede = el('p', 'talos-grafo__legenda', tr('agenti.delegations.legend'));
   const area = el('div', 'talos-grafo__area');
-  const anteprima = el('aside', 'talos-grafo__anteprima'); anteprima.hidden = true; anteprima.setAttribute('aria-label', 'File affiancato');
-  const fileCima = el('div', 'talos-grafo__file-cima'), titoloFile = el('strong', '', 'File dell’agente');
-  const chiudiFile = tasto('talos-wfg__icona-bottone', 'Chiudi affiancamento', 'i-x', () => { letturaFile++; anteprima.hidden = true; affianca.setAttribute('aria-pressed', 'false'); adatta(); });
+  const anteprima = el('aside', 'talos-grafo__anteprima'); anteprima.hidden = true; anteprima.setAttribute('aria-label', tr('agenti.delegations.sideFileLabel'));
+  const fileCima = el('div', 'talos-grafo__file-cima'), titoloFile = el('strong', '', tr('agenti.delegations.agentFiles'));
+  const chiudiFile = tasto('talos-wfg__icona-bottone', tr('agenti.delegations.closeSide'), 'i-x', () => { letturaFile++; anteprima.hidden = true; affianca.setAttribute('aria-pressed', 'false'); adatta(); });
   fileCima.append(titoloFile, chiudiFile);
   /* il file da affiancare: una scelta del sistema di design (niente <select> nativo, regola del 13/09) */
   const menuFile = el('div', 'talos-wfg__menu-vista talos-grafo__file-scelta');
-  const sceltaFile = el('button', 'talos-wfg__scelta'); sceltaFile.type = 'button'; sceltaFile.setAttribute('aria-haspopup', 'menu'); sceltaFile.setAttribute('aria-expanded', 'false'); sceltaFile.setAttribute('aria-label', 'File da affiancare');
+  const sceltaFile = el('button', 'talos-wfg__scelta'); sceltaFile.type = 'button'; sceltaFile.setAttribute('aria-haspopup', 'menu'); sceltaFile.setAttribute('aria-expanded', 'false'); sceltaFile.setAttribute('aria-label', tr('agenti.delegations.fileToShow'));
   const sceltaFileTesto = el('span'); sceltaFile.append(sceltaFileTesto, icona('i-chev', 'talos-wfg__scelta-freccia'));
-  const vociFile = el('div', 'talos-wfg__menu'); vociFile.setAttribute('role', 'menu'); vociFile.setAttribute('aria-label', 'File da affiancare'); vociFile.hidden = true;
+  const vociFile = el('div', 'talos-wfg__menu'); vociFile.setAttribute('role', 'menu'); vociFile.setAttribute('aria-label', tr('agenti.delegations.fileToShow')); vociFile.hidden = true;
   sceltaFile.addEventListener('click', () => (vociFile.hidden ? apriMenu(sceltaFile, vociFile) : chiudiMenu(sceltaFile, vociFile)));
   menuFile.append(sceltaFile, vociFile);
   const fileTesto = el('pre', ''); anteprima.append(fileCima, menuFile, fileTesto);
   const aggregato = el('section', 'talos-grafo__aggregato'); aggregato.hidden = true;
-  aggregato.setAttribute('aria-label', 'Sessioni raggruppate per stato');
+  aggregato.setAttribute('aria-label', tr('agenti.delegations.groupedByStatus'));
   const gruppi = el('div', 'talos-grafo__gruppi');
   const gruppoDettaglio = el('div', 'talos-grafo__gruppo-dettaglio');
   aggregato.append(gruppi, gruppoDettaglio);
   area.append(canvas, aggregato, anteprima);
-  const mini = d.createElementNS('http://www.w3.org/2000/svg', 'svg'); mini.classList.add('talos-grafo__mini'); mini.setAttribute('role', 'button'); mini.setAttribute('aria-label', 'Panoramica del diagramma'); mini.setAttribute('preserveAspectRatio', 'none');
-  mini.tabIndex = 0; mini.setAttribute('aria-description', 'Clicca un punto per centrarlo. Frecce per spostare la vista; Invio o Spazio per centrare il diagramma.'); canvas.append(mini);
+  const mini = d.createElementNS('http://www.w3.org/2000/svg', 'svg'); mini.classList.add('talos-grafo__mini'); mini.setAttribute('role', 'button'); mini.setAttribute('aria-label', tr('agenti.delegations.overviewLabel')); mini.setAttribute('preserveAspectRatio', 'none');
+  mini.tabIndex = 0; mini.setAttribute('aria-description', tr('agenti.delegations.overviewHint')); canvas.append(mini);
   mini.addEventListener('pointerdown', e => e.stopPropagation());
   mini.addEventListener('click', e => { const r = mini.getBoundingClientRect(); if (!disegno) return; vistaToccata = true; x = canvas.clientWidth/2 - (e.clientX-r.left)/r.width*disegno.width*zoom; y = canvas.clientHeight/2 - (e.clientY-r.top)/r.height*disegno.height*zoom; trasforma({ anima: true }); });
   mini.addEventListener('keydown', e => {
@@ -283,43 +288,43 @@ export function montaGrafoAgenti(host, { dati, onApri, onChiudi, onAggiorna, onL
   });
 
   /* la riproduzione, nella forma di quella del Workflow (`grafo-workflow.js:187-207`): ▶, eventi, velocità, cursore, testo, «Torna al vivo» */
-  const timeline = el('div', 'gv-rip talos-grafo__timeline'); timeline.setAttribute('role', 'group'); timeline.setAttribute('aria-label', 'Riproduzione della cronologia');
-  const riproduci = tasto('gv-rip-gioca', 'Riproduci la cronologia', 'i-play', () => {
+  const timeline = el('div', 'gv-rip talos-grafo__timeline'); timeline.setAttribute('role', 'group'); timeline.setAttribute('aria-label', tr('agenti.delegations.playbackLabel'));
+  const riproduci = tasto('gv-rip-gioca', tr('agenti.delegations.play'), 'i-play', () => {
     if (play) { fermaPlayer(); aggiornaTimeline(); return; }
     if (!storico.length) return;
     if (posizione == null || posizione >= storico.length-1) mostraIstante(0);
     play = true; ultimoFrame = null; aggiornaTimeline(); framePlayer = requestAnimationFrame(tickPlayer);
   });
-  const eventoPrecedente = tasto('gv-rip-gioca gv-rip-passo', 'Evento precedente', 'i-chevron-right', () => mostraIstante(posizione == null ? storico.length-1 : Math.max(0,posizione-1)));
+  const eventoPrecedente = tasto('gv-rip-gioca gv-rip-passo', tr('agenti.delegations.previousEvent'), 'i-chevron-right', () => mostraIstante(posizione == null ? storico.length-1 : Math.max(0,posizione-1)));
   eventoPrecedente.classList.add('gv-rip-passo--indietro');
-  const eventoSuccessivo = tasto('gv-rip-gioca gv-rip-passo', 'Evento successivo', 'i-chevron-right', () => mostraIstante(posizione == null ? storico.length-1 : Math.min(storico.length-1,posizione+1)));
-  const ripVelocita = el('div', 'gv-rip-velocita'); ripVelocita.setAttribute('role', 'radiogroup'); ripVelocita.setAttribute('aria-label', 'Velocità riproduzione');
+  const eventoSuccessivo = tasto('gv-rip-gioca gv-rip-passo', tr('agenti.delegations.nextEvent'), 'i-chevron-right', () => mostraIstante(posizione == null ? storico.length-1 : Math.min(storico.length-1,posizione+1)));
+  const ripVelocita = el('div', 'gv-rip-velocita'); ripVelocita.setAttribute('role', 'radiogroup'); ripVelocita.setAttribute('aria-label', tr('agenti.delegations.speedLabel'));
   for (const v of [1, 2, 4, 16]) {
     const b = el('button', 'gv-rip-v', `${v}×`); b.type = 'button'; b.setAttribute('role', 'radio'); b.setAttribute('aria-checked', String(v === velocita));
-    b.title = v === 1 ? 'Alla velocità vera' : `${v} volte più veloce`;
+    b.title = v === 1 ? tr('agenti.delegations.speedReal') : tr('agenti.delegations.speedFaster', { v });
     b.addEventListener('click', () => { velocita = v; for (const x of ripVelocita.children) x.setAttribute('aria-checked', String(x === b)); });
     ripVelocita.append(b);
   }
-  const cursore = el('input', 'gv-rip-cursore'); cursore.type = 'range'; cursore.min = '0'; cursore.max = '0'; cursore.step = '1'; cursore.setAttribute('aria-label', 'Cronologia osservata del diagramma');
+  const cursore = el('input', 'gv-rip-cursore'); cursore.type = 'range'; cursore.min = '0'; cursore.max = '0'; cursore.step = '1'; cursore.setAttribute('aria-label', tr('agenti.delegations.sliderLabel'));
   cursore.addEventListener('input', () => mostraIstante(Number(cursore.value)));
-  const istanteReplay = el('span', 'gv-rip-testo', 'Dal vivo'), descrizioneReplay = el('span', 'gv-rip-nota talos-grafo__limite', 'Caricamento cronologia…');
-  const tornaLive = el('button', 'talos-button talos-button--secondary talos-button--sm gv-rip-vivo', 'Torna al vivo'); tornaLive.type = 'button'; tornaLive.hidden = true;
+  const istanteReplay = el('span', 'gv-rip-testo', tr('agenti.delegations.live')), descrizioneReplay = el('span', 'gv-rip-nota talos-grafo__limite', tr('agenti.delegations.loadingHistory'));
+  const tornaLive = el('button', 'talos-button talos-button--secondary talos-button--sm gv-rip-vivo', tr('agenti.delegations.backToLive')); tornaLive.type = 'button'; tornaLive.hidden = true;
   tornaLive.addEventListener('click', () => mostraIstante(null));
-  const riprovaCronologia = el('button', 'talos-button talos-button--secondary talos-button--sm', 'Riprova cronologia'); riprovaCronologia.type = 'button'; riprovaCronologia.hidden = true;
+  const riprovaCronologia = el('button', 'talos-button talos-button--secondary talos-button--sm', tr('agenti.delegations.retryHistory')); riprovaCronologia.type = 'button'; riprovaCronologia.hidden = true;
   riprovaCronologia.addEventListener('click', () => caricaCronologia());
   timeline.append(riproduci, eventoPrecedente, eventoSuccessivo, ripVelocita, cursore, istanteReplay, tornaLive, riprovaCronologia, descrizioneReplay);
 
   /* il pannello di dettaglio in basso, come quello del Workflow (`grafo-workflow.js:209-231`): chi · Evidenze recenti · Task corrente · «⋯» */
-  const dettaglio = el('section', 'talos-wfg__dettaglio gv-dettaglio talos-grafo__dettaglio'); dettaglio.hidden = true; dettaglio.setAttribute('aria-label', 'Dettaglio dell\'agente');
+  const dettaglio = el('section', 'talos-wfg__dettaglio gv-dettaglio talos-grafo__dettaglio'); dettaglio.hidden = true; dettaglio.setAttribute('aria-label', tr('agenti.delegations.detailLabel'));
   const detChi = el('div', 'talos-wfg__dettaglio-chi');
-  const detProve = el('section', 'talos-wfg__dettaglio-colonna'); detProve.setAttribute('aria-label', 'Evidenze recenti');
-  const detCompito = el('section', 'talos-wfg__dettaglio-colonna'); detCompito.setAttribute('aria-label', 'Task corrente');
+  const detProve = el('section', 'talos-wfg__dettaglio-colonna'); detProve.setAttribute('aria-label', tr('agenti.delegations.recentEvidence'));
+  const detCompito = el('section', 'talos-wfg__dettaglio-colonna'); detCompito.setAttribute('aria-label', tr('agenti.delegations.currentTask'));
   const detAltro = el('div', 'talos-wfg__dettaglio-altro');
-  const menuAgente = tasto('talos-wfg__icona-bottone', 'Altre azioni sull\'agente', 'i-more'); menuAgente.setAttribute('aria-haspopup', 'menu'); menuAgente.setAttribute('aria-expanded', 'false');
+  const menuAgente = tasto('talos-wfg__icona-bottone', tr('agenti.delegations.agentActions'), 'i-more'); menuAgente.setAttribute('aria-haspopup', 'menu'); menuAgente.setAttribute('aria-expanded', 'false');
   const vociAgente = el('div', 'talos-wfg__menu talos-wfg__menu--destra'); vociAgente.setAttribute('role', 'menu'); vociAgente.hidden = true;
   const voceAgente = (testo, azione) => { const b = el('button', 'talos-wfg__menu-voce', testo); b.type = 'button'; b.setAttribute('role', 'menuitem'); b.tabIndex = -1; b.addEventListener('click', () => { chiudiMenu(menuAgente, vociAgente); azione(); }); vociAgente.append(b); return b; };
-  voceAgente('Apri il dettaglio dell\'agente', () => { const n = disegno?.nodi.find(v => v.id === opzioni.selezionato); if (n) onApri?.(n.dati); });
-  voceAgente('Chiudi il dettaglio', () => { dettaglioAperto = false; disegnaDettaglio(); });
+  voceAgente(tr('agenti.delegations.openAgentDetail'), () => { const n = disegno?.nodi.find(v => v.id === opzioni.selezionato); if (n) onApri?.(n.dati); });
+  voceAgente(tr('agenti.delegations.closeDetail'), () => { dettaglioAperto = false; disegnaDettaglio(); });
   menuAgente.addEventListener('click', () => (vociAgente.hidden ? apriMenu(menuAgente, vociAgente) : chiudiMenu(menuAgente, vociAgente)));
   detAltro.append(menuAgente, vociAgente);
   dettaglio.append(detChi, detProve, detCompito, detAltro);
@@ -327,10 +332,10 @@ export function montaGrafoAgenti(host, { dati, onApri, onChiudi, onAggiorna, onL
   root.append(cima, comandi, riepilogo, avviso, area, timeline, dettaglio, recenti, piede); host.append(root);
   disegnaComandi();
   async function leggiFile(agente, percorso) {
-    const lettura = ++letturaFile; fileTesto.textContent = 'Lettura del file…';
+    const lettura = ++letturaFile; fileTesto.textContent = tr('agenti.delegations.readingFile');
     try { const risultato = await onLeggiFile?.(agente, percorso); if (morto || lettura !== letturaFile) return;
-      fileTesto.textContent = typeof risultato === 'string' ? risultato : 'Anteprima non disponibile per questo file.';
-    } catch (error) { if (!morto && lettura === letturaFile) fileTesto.textContent = error?.message || 'Impossibile leggere il file. Riprova selezionandolo.'; }
+      fileTesto.textContent = typeof risultato === 'string' ? risultato : tr('agenti.delegations.previewUnavailable');
+    } catch (error) { if (!morto && lettura === letturaFile) fileTesto.textContent = error?.message || tr('agenti.delegations.fileReadFailed'); }
   }
   function mostraFile() {
     if (!anteprima.hidden) { chiudiFile.click(); return; }
@@ -343,9 +348,9 @@ export function montaGrafoAgenti(host, { dati, onApri, onChiudi, onAggiorna, onL
       b.addEventListener('click', () => { chiudiMenu(sceltaFile, vociFile, { fuoco: true }); scegliFile(f.percorso); });
       return b;
     }));
-    menuFile.hidden = !files.length; titoloFile.textContent = 'Contenuto attuale del file';
+    menuFile.hidden = !files.length; titoloFile.textContent = tr('agenti.delegations.currentFileContent');
     if (files.length && typeof onLeggiFile === 'function') scegliFile(files[0].percorso);
-    else fileTesto.textContent = 'Nessun file registrato per l’agente selezionato.';
+    else fileTesto.textContent = tr('agenti.delegations.noFileForAgent');
     adatta();
   }
   function fermaPlayer() {
@@ -355,7 +360,7 @@ export function montaGrafoAgenti(host, { dati, onApri, onChiudi, onAggiorna, onL
   }
   function aggiornaTimeline() {
     tornaLive.hidden = posizione == null; root.dataset.replay = String(posizione != null);
-    istanteReplay.textContent = posizione == null ? 'Dal vivo' : new Date(clockReplay).toLocaleTimeString('it-IT');
+    istanteReplay.textContent = posizione == null ? tr('agenti.delegations.live') : oraCompleta(clockReplay);
     timeline.dataset.attiva = String(posizione != null);
     cursore.max = String(Math.max(0,storico.length-1)); cursore.disabled = !storico.length;
     cursore.value = String(posizione ?? Math.max(0,storico.length-1));
@@ -363,13 +368,14 @@ export function montaGrafoAgenti(host, { dati, onApri, onChiudi, onAggiorna, onL
     eventoPrecedente.disabled = !storico.length || posizione === 0;
     eventoSuccessivo.disabled = posizione == null || posizione >= storico.length-1;
     riproduci.disabled = storico.length < 2;
-    riproduci.setAttribute('aria-label', play ? 'Metti in pausa la riproduzione' : 'Riproduci la cronologia');
+    riproduci.setAttribute('aria-label', play ? tr('agenti.delegations.pause') : tr('agenti.delegations.play'));
     riproduci.querySelector('use')?.setAttribute('href', play ? '#i-pausa' : '#i-play');
     const nuovi = posizione == null ? 0 : storico.length-1-posizione;
-    const base = coverage === 'loading' ? 'Caricamento cronologia…' : coverage === 'unavailable' ? 'Storico precedente non registrato'
-      : coverage === 'partial' || storico.partial ? 'Cronologia parziale · intervalli mancanti' : 'Dall’avvio';
-    descrizioneReplay.textContent = erroreCronologia ? `Cronologia non aggiornata: ${erroreCronologia}`
-      : `${base}${persistita ? '' : ' · salvataggio non disponibile'}${storico.length ? ` · ${conteggio(storico.length)} eventi` : ''}${nuovi ? ` · ${conteggio(nuovi)} nuovi` : ''}`;
+    const base = coverage === 'loading' ? tr('agenti.delegations.loadingHistory') : coverage === 'unavailable' ? tr('agenti.delegations.historyEarlierMissing')
+      : coverage === 'partial' || storico.partial ? tr('agenti.delegations.historyPartial') : tr('agenti.delegations.historySinceStart');
+    descrizioneReplay.textContent = erroreCronologia ? tr('agenti.delegations.historyStale', { errore: erroreCronologia })
+      : [base, persistita ? '' : tr('agenti.delegations.historyNotSaved'), storico.length ? tn('agenti.delegations.eventsOne', 'agenti.delegations.eventsMany', storico.length, { n: conteggio(storico.length) }) : '',
+        nuovi ? tr('agenti.delegations.eventsNew', { n: conteggio(nuovi) }) : ''].filter(Boolean).join(' · ');
     riprovaCronologia.hidden = !erroreCronologia;
   }
   function mostraIstante(indice) {
@@ -405,17 +411,17 @@ export function montaGrafoAgenti(host, { dati, onApri, onChiudi, onAggiorna, onL
         do {
           const page = await onLeggiCronologia({after, ...(through == null ? {} : {through}), limit:250});
           if (morto) return;
-          if (page?.schema !== 'talos.agent-timeline.v1' || !Number.isSafeInteger(page.through) || page.through < after || (through != null && page.through !== through)) throw Error('Risposta della cronologia non valida');
-          if (!['complete','partial','unavailable'].includes(page.coverage)) throw Error('Copertura della cronologia non valida');
+          if (page?.schema !== 'talos.agent-timeline.v1' || !Number.isSafeInteger(page.through) || page.through < after || (through != null && page.through !== through)) throw Error(tr('agenti.delegations.errHistoryResponse'));
+          if (!['complete','partial','unavailable'].includes(page.coverage)) throw Error(tr('agenti.delegations.errHistoryCoverage'));
           through ??= page.through;
           storico.aggiungi(page.items);
-          if (page.coverage === 'complete' && page.next == null && storico.lastSeq !== through) throw Error('Eventi della cronologia mancanti');
+          if (page.coverage === 'complete' && page.next == null && storico.lastSeq !== through) throw Error(tr('agenti.delegations.errHistoryMissing'));
           coverage = page.coverage; persistita = page.persisted !== false;
-          if (page.next != null && (!Number.isSafeInteger(page.next) || page.next <= after || page.next !== storico.lastSeq || page.next > through)) throw Error('Pagina della cronologia non valida');
+          if (page.next != null && (!Number.isSafeInteger(page.next) || page.next <= after || page.next !== storico.lastSeq || page.next > through)) throw Error(tr('agenti.delegations.errHistoryPage'));
           after = page.next;
         } while (after != null);
         erroreCronologia = '';
-      } catch (error) { if (!morto) erroreCronologia = error?.message || 'Connessione non disponibile'; }
+      } catch (error) { if (!morto) erroreCronologia = error?.message || tr('agenti.delegations.errNoConnection'); }
       finally { letturaCronologia = null; if (!morto) { aggiornaTimeline(); ridisegna(); } }
     })();
     return letturaCronologia;
@@ -478,15 +484,15 @@ export function montaGrafoAgenti(host, { dati, onApri, onChiudi, onAggiorna, onL
     const testi = el('div', 'talos-wfg__dettaglio-testi'), testa = el('div', 'talos-wfg__dettaglio-testa');
     const pill = el('span', 'talos-wfg__pill'); pill.dataset.tono = tono;
     if (ICONA_TONO[tono]) pill.append(icona(ICONA_TONO[tono], 'talos-wfg__pill-icona'));
-    pill.append(el('span', null, etichetta[n.stato]));
+    pill.append(el('span', null, tr(etichetta[n.stato])));
     testa.append(el('h3', 'talos-wfg__dettaglio-nome', n.nome), pill);
     const avvio = istante(n.dati.avviataAlle);
-    const sotto = [n.dati.modello || (n.id === corrente.corrente.sessionId ? 'Sessione principale' : 'Sotto-agente'), a.durataMs != null ? tempo(a.durataMs) : null,
-      avvio != null ? `avviata alle ${new Date(avvio).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}` : null].filter(Boolean).join(' · ');
+    const sotto = [n.dati.modello || (n.id === corrente.corrente.sessionId ? tr('agenti.delegations.mainSession') : tr('agenti.delegations.subAgent')), a.durataMs != null ? tempo(a.durataMs) : null,
+      avvio != null ? tr('agenti.delegations.startedAt', { ora: oraBreve(avvio) }) : null].filter(Boolean).join(' · ');
     testi.append(testa, el('span', 'talos-wfg__passo-modello', sotto));
     detChi.replaceChildren(segno, testi);
 
-    const provaTesta = el('h4', 'talos-wfg__dettaglio-titolo'); provaTesta.append(icona('i-doc'), el('span', null, 'Evidenze recenti'));
+    const provaTesta = el('h4', 'talos-wfg__dettaglio-titolo'); provaTesta.append(icona('i-doc'), el('span', null, tr('agenti.delegations.recentEvidence')));
     const elenco = el('ul', 'talos-wfg__evidenze');
     const passi = (Array.isArray(n.dati.attivita?.passi) ? n.dati.attivita.passi : []).filter(p => p.tipo === 'attrezzo').slice(-4).reverse();
     const files = (a.file ?? []).slice(0, Math.max(0, 5 - passi.length));
@@ -498,19 +504,19 @@ export function montaGrafoAgenti(host, { dati, onApri, onChiudi, onAggiorna, onL
     }
     for (const f of files) {
       const voce = el('li', 'talos-wfg__evidenza');
-      voce.append(icona('i-file'), el('span', 'talos-wfg__evidenza-nome', f.creato ? 'Creato' : f.scritto ? 'Modificato' : 'Letto'));
+      voce.append(icona('i-file'), el('span', 'talos-wfg__evidenza-nome', f.creato ? tr('agenti.agent.fileCreated') : f.scritto ? tr('agenti.agent.fileEdited') : tr('agenti.agent.fileRead')));
       const o = el('code', 'talos-wfg__evidenza-oggetto', f.percorso); o.title = f.percorso; voce.append(o);
       elenco.append(voce);
     }
-    if (!elenco.children.length) elenco.append(el('li', 'talos-wfg__vuoto', a.chiamate == null ? 'Attività non disponibile per questo agente.' : 'Nessun attrezzo usato finora.'));
+    if (!elenco.children.length) elenco.append(el('li', 'talos-wfg__vuoto', a.chiamate == null ? tr('agenti.delegations.activityUnavailableForAgent') : tr('agenti.delegations.noToolsYet')));
     detProve.replaceChildren(provaTesta, elenco);
 
-    const compitoTesta = el('h4', 'talos-wfg__dettaglio-titolo'); compitoTesta.append(icona('i-eye'), el('span', null, 'Task corrente'));
+    const compitoTesta = el('h4', 'talos-wfg__dettaglio-titolo'); compitoTesta.append(icona('i-eye'), el('span', null, tr('agenti.delegations.currentTask')));
     const compito = String(n.dati.task ?? n.dati.taskDelega ?? n.dati.taskCorto ?? '').trim();
     const parti = [compitoTesta];
     if (compito) { const primo = el('p', 'talos-wfg__compito-titolo', compito); primo.title = compito; parti.push(primo); }
-    else parti.push(el('p', 'talos-wfg__vuoto', 'Il compito di questo agente non è disponibile.'));
-    const ora = a.operazione || (n.stato === 'active' ? 'Tra due operazioni' : null);
+    else parti.push(el('p', 'talos-wfg__vuoto', tr('agenti.delegations.taskUnavailable')));
+    const ora = a.operazione || (n.stato === 'active' ? tr('agenti.delegations.betweenOperations') : null);
     if (ora) parti.push(el('p', 'talos-wfg__compito-resto', ora));
     detCompito.replaceChildren(...parti);
   }
@@ -519,7 +525,7 @@ export function montaGrafoAgenti(host, { dati, onApri, onChiudi, onAggiorna, onL
   const nodiDom = new Map(), archiDom = new Map();
   const svg = d.createElementNS('http://www.w3.org/2000/svg', 'svg'); svg.setAttribute('aria-hidden', 'true'); mondo.append(svg);
   const chiaveMarcatori = Math.random().toString(36).slice(2, 8); // id unici dei marcatori: due diagrammi nella stessa pagina non si rubano la freccia
-  const vuoto = el('p', 'talos-grafo__vuoto', 'Nessun agente per questi filtri.'); mondo.append(vuoto);
+  const vuoto = el('p', 'talos-grafo__vuoto', tr('agenti.delegations.noAgentForFilters')); mondo.append(vuoto);
   function disegnaAggregato(modello) {
     const perStato = new Map();
     for (const nodo of modello.nodi) {
@@ -536,8 +542,8 @@ export function montaGrafoAgenti(host, { dati, onApri, onChiudi, onAggiorna, onL
       const card = bottone('', () => { gruppoAperto = chiave; paginaGruppo = 0; disegnaAggregato(modello); });
       card.classList.add('talos-grafo__gruppo'); card.dataset.stato = chiave;
       card.setAttribute('aria-pressed', String(gruppoAperto === chiave));
-      card.setAttribute('aria-label', `${stati[chiave]}: ${conteggio(quanti)} sessioni, mostra elenco`);
-      card.append(el('span', '', stati[chiave]), el('strong', 'talos-mono', conteggio(quanti)));
+      card.setAttribute('aria-label', tn('agenti.delegations.groupCardOne', 'agenti.delegations.groupCardMany', quanti, { stato: tr(stati[chiave]), n: conteggio(quanti) }));
+      card.append(el('span', '', tr(stati[chiave])), el('strong', 'talos-mono', conteggio(quanti)));
       const barra = el('span', 'talos-grafo__gruppo-barra');
       barra.style.width = `${Math.max(3, Math.round(quanti / modello.nodi.length * 100))}%`;
       card.append(barra); return card;
@@ -545,21 +551,21 @@ export function montaGrafoAgenti(host, { dati, onApri, onChiudi, onAggiorna, onL
     const selezionati = perStato.get(gruppoAperto) || [];
     paginaGruppo = Math.min(paginaGruppo, Math.max(0, Math.ceil(selezionati.length / 12) - 1));
     const inizio = paginaGruppo * 12;
-    const titolo = el('h3', '', `${stati[gruppoAperto] || 'Sessioni'} · ${conteggio(selezionati.length)}`);
+    const titolo = el('h3', '', `${gruppoAperto in stati ? tr(stati[gruppoAperto]) : tr('agenti.delegations.sessionsFallback')} · ${conteggio(selezionati.length)}`);
     const elenco = el('div', 'talos-grafo__gruppo-elenco');
     for (const nodo of selezionati.slice(inizio, inizio + 12)) {
       const apri = bottone(nodo.nome, () => { opzioni.selezionato = nodo.id; salva(); onApri?.(nodo.dati); });
       apri.classList.add('talos-grafo__gruppo-riga');
       apri.dataset.sessionId = nodo.id;
-      apri.setAttribute('aria-label', `Apri dettaglio ${nodo.nome}`);
+      apri.setAttribute('aria-label', tr('agenti.delegations.openDetailOf', { nome: nodo.nome }));
       elenco.append(apri);
     }
-    const pagine = el('nav', 'talos-grafo__gruppo-pagine'); pagine.setAttribute('aria-label', 'Pagine del gruppo');
-    const precedente = bottone('Precedente', () => { paginaGruppo--; disegnaAggregato(modello); }, 'Pagina precedente del gruppo');
-    const successiva = bottone('Successiva', () => { paginaGruppo++; disegnaAggregato(modello); }, 'Pagina successiva del gruppo');
+    const pagine = el('nav', 'talos-grafo__gruppo-pagine'); pagine.setAttribute('aria-label', tr('agenti.delegations.groupPages'));
+    const precedente = bottone(tr('agenti.delegations.previous'), () => { paginaGruppo--; disegnaAggregato(modello); }, tr('agenti.delegations.previousGroupPage'));
+    const successiva = bottone(tr('agenti.delegations.next'), () => { paginaGruppo++; disegnaAggregato(modello); }, tr('agenti.delegations.nextGroupPage'));
     precedente.disabled = paginaGruppo === 0;
     successiva.disabled = inizio + 12 >= selezionati.length;
-    pagine.append(precedente, el('span', 'talos-mono', `${conteggio(selezionati.length ? inizio + 1 : 0)}–${conteggio(Math.min(inizio + 12, selezionati.length))} di ${conteggio(selezionati.length)}`), successiva);
+    pagine.append(precedente, el('span', 'talos-mono', tr('agenti.delegations.pageRange', { da: conteggio(selezionati.length ? inizio + 1 : 0), a: conteggio(Math.min(inizio + 12, selezionati.length)), totale: conteggio(selezionati.length) })), successiva);
     gruppoDettaglio.replaceChildren(titolo, elenco, pagine);
   }
   function ridisegna() {
@@ -573,28 +579,34 @@ export function montaGrafoAgenti(host, { dati, onApri, onChiudi, onAggiorna, onL
     disegno = denso ? { nodi: [], archi: [], width: 0, height: 0 } : layoutGrafoAgenti(filtrato);
     const t = telemetriaGrafoAgenti(intero);
     root.dataset.obsoleto = String(Boolean(corrente.errore));
-    sommario.replaceChildren(el('strong', null, `${conteggio(intero.nodi.length)} ${intero.nodi.length === 1 ? 'sessione' : 'sessioni'}`), ` nel diagramma · ${opzioni.ambito === 'workspace' ? 'cartella corrente' : 'sessione corrente e le sue deleghe'}`);
-    aggiornatoOra.textContent = corrente.aggiornato ? `Ultimo aggiornamento ${new Date(corrente.aggiornato).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}` : '';
+    sommario.replaceChildren(el('strong', null, tn('agenti.delegations.sessionsInDiagramOne', 'agenti.delegations.sessionsInDiagramMany', intero.nodi.length, { n: conteggio(intero.nodi.length) })), ` ${tr(opzioni.ambito === 'workspace' ? 'agenti.delegations.inDiagramFolder' : 'agenti.delegations.inDiagramSession')}`);
+    aggiornatoOra.textContent = corrente.aggiornato ? tr('agenti.delegations.lastUpdate', { ora: oraBreve(corrente.aggiornato) }) : '';
     const statistica = (chiave, numero, testo, filtra) => {
       const n = filtra ? bottone('', () => impostaStato(filtra)) : el('div', '');
       n.classList.add('talos-grafo__statistica'); n.dataset.statistica = chiave; if (filtra) n.dataset.stato = filtra;
       n.append(el('strong', 'talos-mono', numero == null ? '—' : compatto(numero)), el('span', '', testo)); return n;
     };
-    riepilogo.replaceChildren(statistica('active', t.active, 'In corso', 'active'), statistica('waiting', t.waiting, 'Da approvare', 'waiting'),
-      statistica('done', t.done, 'Conclusi', 'done'), statistica('error', t.error, 'Errori', 'error'),
-      statistica('chiamate', t.chiamate, 'Chiamate strumenti'), statistica('file', t.file, 'File coinvolti'), statistica('token', t.token, 'Token registrati'));
-    const copertura = el('small', 'talos-grafo__copertura', `Intero ambito · ${conteggio(t.totale)} sessioni · strumenti ${conteggio(t.copertura)}/${conteggio(t.totale)} · file ${conteggio(t.coperturaFile)}/${conteggio(t.totale)} · consumo ${conteggio(t.coperturaToken)}/${conteggio(t.totale)}${t.parziale ? ' · conteggi parziali' : ''}${t.scritti != null ? ` · ${conteggio(t.scritti)} file scritti` : ''}${t.interrupted ? ` · ${conteggio(t.interrupted)} interrotti` : ''}${t.unknown ? ` · ${conteggio(t.unknown)} stato non disponibile` : ''}`);
+    riepilogo.replaceChildren(statistica('active', t.active, tr('agenti.delegations.filterActive'), 'active'), statistica('waiting', t.waiting, tr('agenti.delegations.filterWaiting'), 'waiting'),
+      statistica('done', t.done, tr('agenti.delegations.filterDone'), 'done'), statistica('error', t.error, tr('agenti.family.errors'), 'error'),
+      statistica('chiamate', t.chiamate, tr('agenti.delegations.statCalls')), statistica('file', t.file, tr('agenti.agent.filesInvolved')), statistica('token', t.token, tr('agenti.delegations.statTokens')));
+    const copertura = el('small', 'talos-grafo__copertura', [
+      tr('agenti.delegations.coverageHead', { totale: conteggio(t.totale), strumenti: conteggio(t.copertura), file: conteggio(t.coperturaFile), consumo: conteggio(t.coperturaToken) }),
+      t.parziale ? tr('agenti.delegations.coveragePartial') : '',
+      t.scritti != null ? tr('agenti.delegations.coverageFilesWritten', { n: conteggio(t.scritti) }) : '',
+      t.interrupted ? tr('agenti.delegations.coverageStopped', { n: conteggio(t.interrupted) }) : '',
+      t.unknown ? tr('agenti.delegations.coverageUnknown', { n: conteggio(t.unknown) }) : '',
+    ].filter(Boolean).join(' · '));
     riepilogo.append(copertura);
     if (denso) {
       for (const nodo of nodiDom.values()) nodo.remove(); nodiDom.clear();
       for (const arco of archiDom.values()) arco.remove(); archiDom.clear();
       svg.replaceChildren();
       disegnaAggregato(filtrato);
-      avviso.textContent = `${conteggio(filtrato.nodi.length)} sessioni · gruppi derivati dagli stati registrati${corrente.errore ? ` · dati non aggiornati: ${corrente.errore}` : ''}`;
-      piede.textContent = 'Sessioni raggruppate per stato. Apri un gruppo e scegli una sessione per il dettaglio.';
+      avviso.textContent = [tr('agenti.delegations.groupedSummary', { n: conteggio(filtrato.nodi.length) }), corrente.errore ? tr('agenti.delegations.staleData', { errore: corrente.errore }) : ''].filter(Boolean).join(' · ');
+      piede.textContent = tr('agenti.delegations.groupedFooter');
       aggiornaTimeline(); salva(); return;
     }
-    piede.textContent = 'Linea continua: delega · tratteggiata: ramo. Seleziona un agente per aprire il dettaglio.';
+    piede.textContent = tr('agenti.delegations.legend');
     svg.setAttribute('width', String(disegno.width)); svg.setAttribute('height', String(disegno.height));
     /* Gli archi come quelli del Workflow (`grafo-tela.css`, «gli archi»): ad angolo, con la freccia, tratteggiati e in moto verso
        l'agente che sta lavorando (`fronte`), verdi verso chi ha finito (`fatto`), a tratti per un ramo. */
@@ -650,31 +662,33 @@ export function montaGrafoAgenti(host, { dati, onApri, onChiudi, onAggiorna, onL
       nodo.dataset.selezionato = String(n.id === opzioni.selezionato); nodo.dataset.stato = n.stato;
       nodo.dataset.operativo = String(posizione == null && Boolean(a.operazione) && !corrente.errore);
       Object.assign(nodo.style, { left: `${n.x - n.width / 2}px`, top: `${n.y - n.height / 2}px`, width: `${n.width}px`, height: `${n.height}px` });
-      ui.apri.textContent = n.nome; ui.apri.removeAttribute('title'); ui.apri.removeAttribute('data-tip'); ui.apri.setAttribute('aria-label', `Apri dettaglio ${n.nome}`);
-      ui.meta.textContent = n.dati.modello || (n.id === corrente.corrente.sessionId ? 'Sessione principale' : 'Sotto-agente'); ui.meta.title = ui.meta.textContent;
+      ui.apri.textContent = n.nome; ui.apri.removeAttribute('title'); ui.apri.removeAttribute('data-tip'); ui.apri.setAttribute('aria-label', tr('agenti.delegations.openDetailOf', { nome: n.nome }));
+      ui.meta.textContent = n.dati.modello || (n.id === corrente.corrente.sessionId ? tr('agenti.delegations.mainSession') : tr('agenti.delegations.subAgent')); ui.meta.title = ui.meta.textContent;
       const tono = TONO_STATO[n.stato] ?? 'neutro';
       ui.pallino.dataset.tono = tono; ui.badge.dataset.tono = tono; ui.badge.replaceChildren();
       if (ICONA_TONO[tono]) ui.badge.append(icona(ICONA_TONO[tono], 'talos-wfg__pill-icona'));
-      ui.badge.append(el('span', null, etichetta[n.stato]));
+      ui.badge.append(el('span', null, tr(etichetta[n.stato])));
       /* 02/10/2026, foto: lo stato ripetuto qui era un doppione della pillola. Chi lavora dice cosa fa; gli altri, quando hanno fatto l'ultima cosa. */
-      ui.operazione.textContent = a.operazione || (n.stato === 'active' ? 'Tra due operazioni'
-        : a.ultimo ? `Ultima attività alle ${new Date(a.ultimo.quando).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}` : 'Nessuna attività registrata');
+      ui.operazione.textContent = a.operazione || (n.stato === 'active' ? tr('agenti.delegations.betweenOperations')
+        : a.ultimo ? tr('agenti.delegations.lastActivityAt', { ora: oraBreve(a.ultimo.quando) }) : tr('agenti.delegations.noActivityRecorded'));
       ui.operazione.title = ui.operazione.textContent;
-      ui.misure.textContent = a.chiamate == null ? 'Attività non disponibile' : `${a.chiamate} chiamate · ${a.file?.length ?? a.numeroFile ?? '—'} file${a.parziale ? '+' : ''}${a.token != null ? ` · ${compatto(a.token)} token` : ''}`;
+      ui.misure.textContent = a.chiamate == null ? tr('agenti.delegations.activityUnavailable') : [tn('agenti.delegations.callsOne', 'agenti.delegations.callsMany', a.chiamate),
+        typeof (a.file?.length ?? a.numeroFile) === 'number' ? tn('agenti.delegations.filesOne', 'agenti.delegations.filesMany', a.file?.length ?? a.numeroFile, { piu: a.parziale ? '+' : '' }) : tr('agenti.delegations.filesMany', { n: '—', piu: a.parziale ? '+' : '' }),
+        a.token != null ? tr('agenti.delegations.tokensCompact', { n: compatto(a.token) }) : ''].filter(Boolean).join(' · ');
       /* la durata corta, come il passo del Workflow: «—» quando non si sa (la frase intera resta nel title) */
-      ui.durata.textContent = a.durataMs == null ? '—' : tempo(a.durataMs); ui.durata.title = a.durataMs == null ? 'Durata non disponibile' : a.ultimo ? `Ultima attività registrata: ${new Date(a.ultimo.quando).toLocaleString('it-IT')}` : 'Ultima attività non disponibile';
-      ui.collassa.hidden = !n.figli; ui.collassa.textContent = `${opzioni.collassati.includes(n.id) ? 'Espandi' : 'Collassa'} ${n.figli}`; ui.collassa.setAttribute('aria-label', `Espandi o collassa ${n.nome}`);
+      ui.durata.textContent = a.durataMs == null ? '—' : tempo(a.durataMs); ui.durata.title = a.durataMs == null ? tr('agenti.delegations.durationUnavailable') : a.ultimo ? tr('agenti.delegations.lastActivityRecorded', { quando: new Date(a.ultimo.quando).toLocaleString(localeOra()) }) : tr('agenti.delegations.lastActivityUnavailable');
+      ui.collassa.hidden = !n.figli; ui.collassa.textContent = tr(opzioni.collassati.includes(n.id) ? 'agenti.delegations.expand' : 'agenti.delegations.collapse', { n: n.figli }); ui.collassa.setAttribute('aria-label', tr('agenti.delegations.expandOrCollapse', { nome: n.nome }));
     }
     for (const [id, n] of nodiDom) if (!vivi.has(id)) { n.remove(); nodiDom.delete(id); }
     vuoto.hidden = Boolean(disegno.nodi.length); mondo.style.width = `${disegno.width}px`; mondo.style.height = `${disegno.height}px`;
     const passi = intero.nodi.flatMap(n => (n.dati.attivita?.passi || []).filter(p => istante(p.quando) != null).map(p => ({ ...p, nodo: n }))).sort((a,b) => istante(b.quando) - istante(a.quando)).slice(0, 8);
     elencoRecenti.replaceChildren(...passi.map(p => {
-      const frase = p.tipo === 'attrezzo' ? nomeUmanoAttrezzo(p.attrezzo) : ({ avvio: 'Avviato', fine: 'Concluso', errore: 'Errore' }[p.tipo] || 'Aggiornamento');
-      const b = bottone(`${new Date(p.quando).toLocaleTimeString('it-IT')} · ${p.nodo.nome} · ${frase}${p.percorso ? ` · ${p.percorso}` : ''}`, () => { seleziona(p.nodo.id); onApri?.(p.nodo.dati); });
+      const frase = p.tipo === 'attrezzo' ? nomeUmanoAttrezzo(p.attrezzo) : tr({ avvio: 'agenti.delegations.eventStarted', fine: 'agenti.delegations.eventFinished', errore: 'agenti.delegations.eventError' }[p.tipo] || 'agenti.delegations.eventUpdate');
+      const b = bottone(`${oraCompleta(p.quando)} · ${p.nodo.nome} · ${frase}${p.percorso ? ` · ${p.percorso}` : ''}`, () => { seleziona(p.nodo.id); onApri?.(p.nodo.dati); });
       b.title = b.textContent; return b;
     }));
-    if (!passi.length) elencoRecenti.append(el('p', '', 'Nessuna attività con orario registrato.'));
-    avviso.textContent = corrente.errore ? `Dati non aggiornati: ${corrente.errore}. Riprova con Aggiorna.` : `${disegno.nodi.length} nodi visibili · ${disegno.archi.length} collegamenti registrati${corrente.aggiornato ? ` · lettura ${new Date(corrente.aggiornato).toLocaleTimeString('it-IT')}` : ''}`;
+    if (!passi.length) elencoRecenti.append(el('p', '', tr('agenti.delegations.noTimedActivity')));
+    avviso.textContent = corrente.errore ? tr('agenti.delegations.staleDataRetry', { errore: corrente.errore }) : [tr('agenti.delegations.visibleNodes', { nodi: disegno.nodi.length, archi: disegno.archi.length }), corrente.aggiornato ? tr('agenti.delegations.readAt', { ora: oraCompleta(corrente.aggiornato) }) : ''].filter(Boolean).join(' · ');
     aggiornaTimeline(); aggiornaMini(); disegnaDettaglio();
     salva(); if (primo && canvas.clientWidth && canvas.clientHeight) { primo = false; if ((root.clientWidth || canvas.clientWidth) < 600) adatta(); else lettura(); } // la colonna, non la tela coi suoi margini (misurato il 02/10: tela 586 in una colonna di 634) else if (segui) centraAttivo();
   }

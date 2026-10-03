@@ -69,20 +69,29 @@
  * italiano e sopravvive — e in più dal codice, così il giorno in cui il server lo passerà (patch
  * separata: non è questo file) qui non cambia niente.
  */
-const COSA_CONTESTO = 'La compattazione del contesto non è riuscita, e il giro si è fermato lì.';
+/*
+ * ⛔⛔ 03/10/2026 (owner: «ogni singola parola nella app deve essere sia in inglese che in italiano») — TUTTE le frasi di questo
+ * file stanno nel dizionario, area `errori` (`i18n/testi/errori.js`, chiavi `turno.*`), e si dicono con `t()` AL MOMENTO della
+ * chiamata: la lingua si può cambiare mentre l'app è aperta. Le espressioni regolari che RICONOSCONO una frase del server o del
+ * kernel (italiana o inglese) restano com'erano: sono logica, non testo a schermo.
+ */
+import { interpola, linguaCorrenteDiT, t } from './lingua.js';
+import { TESTI } from '../i18n/testi/index.js';
+
+/** I numeri nella lingua corrente (stesso uso di `capability.js`: italiano con il punto delle migliaia, altrimenti inglese). */
+const numeroLocale = (n) => Number(n).toLocaleString(linguaCorrenteDiT() === 'en' ? 'en-US' : 'it-IT');
 
 /*
  * ⛔ È vero, ed è la cosa che chi legge deve sapere per prima: il motore non pubblica NIENTE finché
  * la sintesi non passa la verifica (la versione nuova si scrive solo su `committed`), quindi un
  * fallimento lascia la conversazione esattamente com'era. Stessa scelta di Hermes, citata sopra.
+ * (La frase è `turno.contesto.originaliIntatti`.)
  */
-const ORIGINALI_INTATTI = 'Nessun messaggio è stato modificato: gli originali restano tutti al loro posto — non è la tua richiesta ad aver sbagliato.';
-
-const APRI_CONTEXT_MANAGER = 'Apri Context Manager: lì trovi lo stato della compattazione, le versioni del contesto e le fonti citate.';
-const COMPATTA_A_MANO = 'Da lì «Compatta ora» rifà il tentativo da capo, sugli stessi messaggi.';
+const COSA_CONTESTO = () => t('errori.turno.contesto.cosa');
+const ORIGINALI_INTATTI = () => t('errori.turno.contesto.originaliIntatti');
 
 /** I rimedi della famiglia contesto: dove guardare, poi il consiglio del caso, poi cosa si può rifare. */
-const rimediContesto = (proprio) => [APRI_CONTEXT_MANAGER, ...(proprio ? [proprio] : []), COMPATTA_A_MANO];
+const rimediContesto = (proprio) => [t('errori.turno.contesto.apriContextManager'), ...(proprio ? [proprio] : []), t('errori.turno.contesto.compattaAMano')];
 
 const CODICE_CONTESTO = /\bCTX_[A-Z0-9_]+/;
 
@@ -133,7 +142,7 @@ export function provenienzaDelGiroFinito({ reindirizzamentoInVolo = false } = {}
  * (`talosHarness.mjs`, «⛔ interrotto su richiesta: …») e l'inglese del browser
  * (`AbortController`, «This operation was aborted»). ⛔ Fin qui c'era solo la seconda metà.
  */
-const FERMO_SU_RICHIESTA = /interrotto su richiesta|operation was aborted|AbortError|aborted by user|fermato dall'utente/i;
+const FERMO_SU_RICHIESTA = /stopped on request|interrotto su richiesta|operation was aborted|AbortError|aborted by user|fermato dall'utente/i;
 
 /**
  * ⛔⛔⛔ 13/09, IN REVISIONE — `comeFinita: 'fermato'` NON vuol dire «l'ha chiesto la persona».
@@ -182,8 +191,32 @@ function eFermoSuRichiesta(testo, codice) {
  */
 function puntoDiFermata(testo) {
   const primaRiga = String(testo ?? '').split('\n')[0];
-  const punto = /interrotto su richiesta:\s*(.+?)\s*\.?\s*$/.exec(primaRiga)?.[1]?.trim();
-  return punto || null;
+  /* Due forme per sempre: l'inglese di oggi («stopped on request») e l'italiano delle sessioni salvate («interrotto su richiesta»). */
+  const punto = /(?:stopped on request|interrotto su richiesta):\s*(.+?)\s*\.?\s*$/.exec(primaRiga)?.[1]?.trim();
+  return punto ? puntoNellaLingua(punto) : null;
+}
+
+/**
+ * Il punto di fermata, nella lingua dell'interfaccia. Il kernel lo scrive in inglese (è testo del motore); qui si riconosce la
+ * forma e si sceglie la frase dal dizionario. Una forma che non si riconosce — l'italiano scritto da una sessione salvata, o un
+ * punto nuovo che il kernel ancora non dichiarava — passa com'è: mai una parentesi che sparisce.
+ */
+const PUNTI_DI_FERMATA = [
+  [/^while waiting for your approval for "(.+)"$/u, (m) => ['errori.turno.punto.approvazione', { nome: m[1] }]],
+  [/^while "(.+)" was running$/u, (m) => ['errori.turno.punto.inCorso', { nome: m[1] }]],
+  [/^before round (\d+)$/u, (m) => ['errori.turno.punto.primaDelGiro', { n: m[1] }]],
+  [/^while the model was answering, at round (\d+)$/u, (m) => ['errori.turno.punto.rispostaDelModello', { n: m[1] }]],
+  [/^while waiting to ask again after an empty answer, at round (\d+)$/u, (m) => ['errori.turno.punto.attesaDopoRispostaVuota', { n: m[1] }]],
+  [/^during compaction, at round (\d+)$/u, (m) => ['errori.turno.punto.compattazione', { n: m[1] }]],
+  [/^while working with the tools of round (\d+); (\d+) not run \((.+)\)$/u, (m) => ['errori.turno.punto.attrezziNonEseguiti', { n: m[1], quanti: m[2], elenco: m[3] }]],
+  [/^while working with the tools of round (\d+)$/u, (m) => ['errori.turno.punto.attrezzi', { n: m[1] }]],
+];
+export function puntoNellaLingua(punto) {
+  for (const [forma, chiave] of PUNTI_DI_FERMATA) {
+    const m = forma.exec(punto);
+    if (m) { const [k, valori] = chiave(m); return t(k, valori); }
+  }
+  return punto;
 }
 
 /**
@@ -200,39 +233,20 @@ function grezzoContesto(tecnico, codice) {
 /** Il codice tecnico e il messaggio grezzo, come li manda il server. */
 const REGOLE = [
   ...[
-    {
-      codice: 'PROVIDER_BUDGET_OCCUPIED', id: 'budget-occupato',
-      cosa: 'Il budget è temporaneamente occupato da altre richieste.',
-      perche: 'Il servizio ha rifiutato questa richiesta prima di inviarla al modello. Le richieste in corso o appena concluse impegnano ancora il budget; il tentativo automatico si è fermato.',
-      rimedi: ['Attendi che le altre richieste si concludano e che i costi vengano contabilizzati, poi scrivi «continua».'],
-    },
-    {
-      codice: 'PROVIDER_KEY_SPEND_LIMIT', id: 'limite-spesa-chiave',
-      cosa: 'Il limite di spesa della chiave è stato raggiunto.',
-      perche: 'Il servizio segnala il tetto di spesa configurato per questa chiave. TALOS non l’ha sospesa né sostituita.',
-      rimedi: ['Controlla il limite della chiave sul sito del servizio: puoi modificarlo oppure attendere il ripristino previsto dal tuo account.', 'Riprendi la conversazione dopo aver verificato il limite.'],
-    },
-    {
-      codice: 'PROVIDER_REQUEST_BUDGET', id: 'richiesta-costosa',
-      cosa: 'La richiesta supera il budget disponibile.',
-      perche: 'Il costo stimato di questa singola richiesta supera il budget che il servizio può impegnare. Ripetere la stessa richiesta non risolve il limite.',
-      rimedi: ['Controlla il credito sul sito del servizio, oppure riduci il contesto con Context Manager prima di riprendere.', 'TALOS conserva la conversazione e non ha modificato automaticamente la richiesta.'],
-    },
-    {
-      codice: 'PROVIDER_CREDIT_LIMIT', id: 'credito-insufficiente',
-      cosa: 'Il credito disponibile non copre questa richiesta.',
-      perche: 'Il servizio segnala un limite di credito. La risposta non fornisce un saldo verificato da mostrare.',
-      rimedi: ['Controlla il credito sul sito del servizio e riprendi dopo aver risolto il limite.'],
-    },
-    {
-      codice: 'PROVIDER_PAYMENT_REQUIRED', id: 'limite-spesa-sconosciuto',
-      cosa: 'Il servizio ha rifiutato la richiesta per un limite di spesa.',
-      perche: 'La risposta non permette di distinguere il credito, il limite della chiave o il budget temporaneamente occupato. TALOS non ha ripetuto la richiesta né sospeso la chiave.',
-      rimedi: ['Controlla credito e limiti sul sito del servizio prima di riprendere.'],
-    },
-  ].map(({ codice, id, ...testi }) => ({
+    { codice: 'PROVIDER_BUDGET_OCCUPIED', id: 'budget-occupato', chiave: 'budgetOccupato', rimedi: ['rimedio1'] },
+    { codice: 'PROVIDER_KEY_SPEND_LIMIT', id: 'limite-spesa-chiave', chiave: 'limiteSpesaChiave', rimedi: ['rimedio1', 'rimedio2'] },
+    { codice: 'PROVIDER_REQUEST_BUDGET', id: 'richiesta-costosa', chiave: 'richiestaCostosa', rimedi: ['rimedio1', 'rimedio2'] },
+    { codice: 'PROVIDER_CREDIT_LIMIT', id: 'credito-insufficiente', chiave: 'creditoInsufficiente', rimedi: ['rimedio1'] },
+    { codice: 'PROVIDER_PAYMENT_REQUIRED', id: 'limite-spesa-sconosciuto', chiave: 'limiteSpesaSconosciuto', rimedi: ['rimedio1'] },
+  ].map(({ codice, id, chiave, rimedi }) => ({
     id, famiglia: 'limite-fornitore', riconosce: (_testo, code) => code === codice,
-    spiega: tecnico => ({ ...testi, tecnico: tecnico.includes(codice) ? tecnico : `[${codice}]${tecnico ? ` ${tecnico}` : ''}` }),
+    /* Le chiavi si compongono qui (`errori.turno.<chiave>.cosa|perche|rimedioN`): la prova `errori-chiavi` le controlla tutte. */
+    spiega: tecnico => ({
+      cosa: t(`errori.turno.${chiave}.cosa`),
+      perche: t(`errori.turno.${chiave}.perche`),
+      rimedi: rimedi.map((r) => t(`errori.turno.${chiave}.${r}`)),
+      tecnico: tecnico.includes(codice) ? tecnico : `[${codice}]${tecnico ? ` ${tecnico}` : ''}`,
+    }),
   })),
   {
     // RETRY05: il codice del backend prevale sulle parole del messaggio.
@@ -241,9 +255,9 @@ const REGOLE = [
     famiglia: 'esito-fornitore-incerto',
     riconosce: (_testo, codice) => codice === 'PROVIDER_OUTCOME_UNKNOWN',
     spiega: (tecnico, codice) => ({
-      cosa: 'Non è stato possibile completare la risposta del modello.',
-      perche: 'TALOS non può confermare l’esito della richiesta e non l’ha reinviata automaticamente. Il testo già ricevuto e il lavoro precedente restano nella conversazione.',
-      rimedi: ['Per riprendere, scrivi «continua» nella stessa sessione. È una nuova richiesta e può comportare un altro costo.'],
+      cosa: t('errori.turno.esitoIncerto.cosa'),
+      perche: t('errori.turno.esitoIncerto.perche'),
+      rimedi: [t('errori.turno.esitoIncerto.rimedio1')],
       tecnico: tecnico.includes(codice) ? tecnico : `[${codice}]${tecnico ? ` ${tecnico}` : ''}`,
     }),
   },
@@ -265,27 +279,27 @@ const REGOLE = [
      */
     id: 'chiave-fornitore-mancante',
     famiglia: 'chiave-fornitore',
-    riconosce: (t) => /\bPROVIDER_KEY_MISSING\b/.test(t) || /Manca la chiave per\b/i.test(t),
-    spiega: (t) => {
+    riconosce: (t) => /\bPROVIDER_KEY_MISSING\b/.test(t) || /Manca la chiave per\b/i.test(t) || /\bThe key for .+ is missing\b/i.test(t),
+    spiega: (testo) => {
       /*
        * ⛔⛔ 17/09 — TROVATO IN UNA FOTO: la carta diceva «Manca la chiave per Z.». Il nome era
        *   «Z.AI», e un `[^.]+` si ferma al PRIMO punto — cioè proprio dentro il nome del
        *   fornitore che questa regola esiste per mostrare. Si prende tutto fino alla fine della
        *   riga e si toglie il punto finale, uno solo.
        */
-      const nome = /Manca la chiave per\s+(.+)$/im.exec(t)?.[1]?.trim().replace(/\.$/u, '') || null;
+      const nome = (/Manca la chiave per\s+(.+)$/im.exec(testo)?.[1] ?? /The key for\s+(.+?)\s+is missing\.?\s*$/im.exec(testo)?.[1])?.trim().replace(/\.$/u, '') || null;
       return {
-        cosa: nome ? `Manca la chiave per ${nome}.` : 'Manca la chiave del fornitore scelto.',
-        perche: 'Il modello scelto passa da un fornitore che vuole una chiave, e in questo computer non ce n’è una collegata. La richiesta non è nemmeno partita: nessun consumo, nessuna attesa.',
+        cosa: nome ? t('errori.turno.chiaveMancante.cosa', { nome }) : t('errori.turno.chiaveMancante.cosaSenzaNome'),
+        perche: t('errori.turno.chiaveMancante.perche'),
         rimedi: [
           /* «per», non «di»: la stessa preposizione del messaggio del server (D18).
              ⛔ 23/09/2026 — l'ultimo passo si chiama come la scheda che si VEDE, «Provider»: «Fornitori e
              accessi» era il titolo del velo tolto per decisione owner (e, dentro il laboratorio, una
              testata nascosta). Il pulsante «Collega un modello» accanto porta proprio lì. */
-          nome ? `Collega la chiave per ${nome} da Impostazioni → Laboratorio modelli → Provider.` : 'Collega la chiave da Impostazioni → Laboratorio modelli → Provider.',
-          'Oppure scegli un altro modello dalla pillola del composer: uno locale non chiede nessuna chiave.',
+          nome ? t('errori.turno.chiaveMancante.rimedio1', { nome }) : t('errori.turno.chiaveMancante.rimedio1SenzaNome'),
+          t('errori.turno.chiaveMancante.rimedio2'),
         ],
-        tecnico: t,
+        tecnico: testo,
       };
     },
   },
@@ -300,9 +314,9 @@ const REGOLE = [
     id: 'motore-locale-assente',
     riconosce: (t) => /\bLOCAL_RUNTIME_NOT_CONFIGURED\b/.test(t) || /motore locale non è configurato/i.test(t),
     spiega: () => ({
-      cosa: 'Il motore dei modelli locali non c’è su questo server.',
-      perche: 'Il modello scelto gira su questo computer, e il server non ha trovato il motore che lo esegue. La richiesta non è partita: nessun fornitore chiamato, nessun consumo.',
-      rimedi: ['Scegli un modello di un fornitore dalla pillola del composer: non ha bisogno del motore locale.'],
+      cosa: t('errori.turno.motoreLocaleAssente.cosa'),
+      perche: t('errori.turno.motoreLocaleAssente.perche'),
+      rimedi: [t('errori.turno.motoreLocaleAssente.rimedio1')],
     }),
   },
   {
@@ -313,12 +327,12 @@ const REGOLE = [
      */
     id: 'contesto-sintesi-invalida',
     famiglia: 'contesto',
-    riconosce: (t) => /\bCTX_SUMMARY_RESPONSE_INVALID\b/.test(t) || /sintesi non dichiara testo e stato finale|risposta di sintesi non leggibile/i.test(t),
-    spiega: (t, codice) => ({
-      cosa: COSA_CONTESTO,
-      perche: `Il modello incaricato di riassumere la conversazione ha risposto in una forma che non si può verificare: manca il testo del riassunto, o manca il segnale che dice se l’ha finito. Il contesto l’ha scartato invece di pubblicarlo. ${ORIGINALI_INTATTI}`,
-      rimedi: rimediContesto('Se succede sempre con questo modello, cambia il modello della sintesi nelle impostazioni avanzate del Context Manager: alcuni modelli spendono tutto lo spazio di risposta nel ragionamento e non ne lasciano al riassunto.'),
-      tecnico: grezzoContesto(t, codice),
+    riconosce: (t) => /\bCTX_SUMMARY_RESPONSE_INVALID\b/.test(t) || /sintesi non dichiara testo e stato finale|risposta di sintesi non leggibile|summary does not declare text and final state|unreadable summary response/i.test(t),
+    spiega: (testo, codice) => ({
+      cosa: COSA_CONTESTO(),
+      perche: t('errori.turno.contestoSintesiInvalida.perche', { originali: ORIGINALI_INTATTI() }),
+      rimedi: rimediContesto(t('errori.turno.contestoSintesiInvalida.rimedio')),
+      tecnico: grezzoContesto(testo, codice),
     }),
   },
   {
@@ -330,11 +344,11 @@ const REGOLE = [
     id: 'contesto-citazioni',
     famiglia: 'contesto',
     riconosce: (t) => /\bCTX_INVALID_SOURCE\b/.test(t) || /citazione corrisponde agli originali|non riporta fonti verificabili/i.test(t),
-    spiega: (t, codice) => ({
-      cosa: COSA_CONTESTO,
-      perche: `Un riassunto viene accettato solo se cita alla lettera pezzi dei messaggi originali: è il controllo che gli impedisce di inventare. Qui nessuna delle citazioni proposte è stata ritrovata negli originali di questa conversazione, e il riassunto è stato respinto. ${ORIGINALI_INTATTI}`,
-      rimedi: rimediContesto('Se si ripete, scegli un altro modello per la sintesi nelle impostazioni avanzate del Context Manager: copiare una citazione alla lettera è la prima cosa che sbagliano i modelli più piccoli.'),
-      tecnico: grezzoContesto(t, codice),
+    spiega: (testo, codice) => ({
+      cosa: COSA_CONTESTO(),
+      perche: t('errori.turno.contestoCitazioni.perche', { originali: ORIGINALI_INTATTI() }),
+      rimedi: rimediContesto(t('errori.turno.contestoCitazioni.rimedio')),
+      tecnico: grezzoContesto(testo, codice),
     }),
   },
   {
@@ -346,16 +360,18 @@ const REGOLE = [
      */
     id: 'contesto-sintesi-troncata',
     famiglia: 'contesto',
-    riconosce: (t) => /\bCTX_TRUNCATED_SUMMARY\b/.test(t) || /sintesi non è stata completata|non ha lasciato spazio alla sintesi/i.test(t),
-    spiega: (t, codice) => {
+    riconosce: (t) => /\bCTX_TRUNCATED_SUMMARY\b/.test(t) || /sintesi non è stata completata|non ha lasciato spazio alla sintesi|left no room for the summary/i.test(t),
+    spiega: (testo, codice) => {
       // il numero dei token di ragionamento sta dentro l'errore quando c'è: si usa, non si butta
-      const ragionamento = Number((/(\d+)\s*token nel ragionamento/i.exec(t) || [])[1]) || null;
-      const speso = ragionamento ? ` Qui il modello ha speso ${ragionamento.toLocaleString('it-IT')} token nel ragionamento, senza lasciarne alla sintesi.` : '';
+      const ragionamento = Number((/(\d+)\s*(?:token nel ragionamento|tokens on reasoning)/i.exec(testo) || [])[1]) || null;
+      const originali = ORIGINALI_INTATTI();
       return {
-        cosa: COSA_CONTESTO,
-        perche: `Il riassunto si è interrotto prima della fine: lo spazio di risposta è finito prima che il modello lo chiudesse.${speso} TALOS l’ha già chiesto una seconda volta, più corto, e neanche quella è arrivata intera; altri tentativi non ne fa. ${ORIGINALI_INTATTI}`,
-        rimedi: rimediContesto('Se si ripete, scegli per la sintesi un modello con più spazio di risposta nelle impostazioni avanzate del Context Manager: la lunghezza che il riassunto può avere dipende da quello.'),
-        tecnico: grezzoContesto(t, codice),
+        cosa: COSA_CONTESTO(),
+        perche: ragionamento
+          ? t('errori.turno.contestoTroncata.percheRagionamento', { n: numeroLocale(ragionamento), originali })
+          : t('errori.turno.contestoTroncata.perche', { originali }),
+        rimedi: rimediContesto(t('errori.turno.contestoTroncata.rimedio')),
+        tecnico: grezzoContesto(testo, codice),
       };
     },
   },
@@ -370,14 +386,15 @@ const REGOLE = [
     id: 'contesto',
     famiglia: 'contesto',
     riconosce: (t) => CODICE_CONTESTO.test(t),
-    spiega: (t, codice) => {
-      const detto = t.replace(CODICE_CONTESTO, '').replace(/^[\s:—-]+/u, '').trim();
-      const frase = detto ? (/[.!?…]$/u.test(detto) ? detto : `${detto}.`) : 'Il motore del contesto non ha detto altro.';
+    spiega: (testo, codice) => {
+      const detto = testo.replace(CODICE_CONTESTO, '').replace(/^[\s:—-]+/u, '').trim();
+      const nellaLingua = messaggioDelKernelNellaLingua(detto); // revisione K3: il motore scrive in inglese
+      const frase = nellaLingua ?? (detto ? (/[.!?…]$/u.test(detto) ? detto : `${detto}.`) : t('errori.turno.contestoGenerico.nessunaParola'));
       return {
-        cosa: COSA_CONTESTO,
-        perche: `${frase} ${ORIGINALI_INTATTI}`,
+        cosa: COSA_CONTESTO(),
+        perche: t('errori.turno.contestoGenerico.perche', { frase, originali: ORIGINALI_INTATTI() }),
         rimedi: rimediContesto(''),
-        tecnico: grezzoContesto(t, codice),
+        tecnico: grezzoContesto(testo, codice),
       };
     },
   },
@@ -385,18 +402,19 @@ const REGOLE = [
     id: 'contesto-pieno',
     // 25/09 sera: anche il motore locale pieno, che sale col suo codice e i numeri in italiano (runtime-owner-adapter.mjs)
     riconosce: (t) => /exceed_context_size|exceeds the available context size|context (?:size|length) exceeded|\bLOCAL_CONTEXT_EXCEEDED\b/i.test(t),
-    spiega: (t) => {
-      const numeri = /\((\d+)\s*tokens?\)[^(]*\((\d+)\s*tokens?\)/i.exec(t) || [];
+    spiega: (testo) => {
+      const numeri = /\((\d+)\s*tokens?\)[^(]*\((\d+)\s*tokens?\)/i.exec(testo) || [];
       const chiesti = Number(numeri[1]) || null;
-      const finestra = Number(numeri[2]) || Number((/n_ctx"?\s*:\s*(\d+)/i.exec(t) || [])[1]) || null;
-      const misura = chiesti && finestra ? ` Servivano ${chiesti.toLocaleString('it-IT')} token, la finestra ne tiene ${finestra.toLocaleString('it-IT')}.` : '';
+      const finestra = Number(numeri[2]) || Number((/n_ctx"?\s*:\s*(\d+)/i.exec(testo) || [])[1]) || null;
       return {
-        cosa: 'La conversazione non entra nella finestra del modello.',
-        perche: `Questo modello legge una quantità di testo limitata, e la sessione l'ha superata.${misura}`,
+        cosa: t('errori.turno.contestoPieno.cosa'),
+        perche: chiesti && finestra
+          ? t('errori.turno.contestoPieno.percheMisura', { chiesti: numeroLocale(chiesti), finestra: numeroLocale(finestra) })
+          : t('errori.turno.contestoPieno.perche'),
         rimedi: [
-          'Compatta il contesto: il riassunto sostituisce la storia e il giro riparte più leggero.',
-          'Scegli un modello con una finestra più grande, o riavvia quello locale con una finestra maggiore (in llama.cpp è «--ctx-size»; attenzione: con «--parallel» viene divisa fra gli slot).',
-          'Restringi la cartella della sessione: un albero grande entra nel contesto a ogni giro.',
+          t('errori.turno.contestoPieno.rimedio1'),
+          t('errori.turno.contestoPieno.rimedio2'),
+          t('errori.turno.contestoPieno.rimedio3'),
         ],
       };
     },
@@ -410,12 +428,12 @@ const REGOLE = [
      */
     id: 'architettura-sconosciuta',
     riconosce: (t) => /\bRUNTIME_ARCH_UNSUPPORTED\b|non sa leggere:?|unknown model architecture/i.test(t),
-    spiega: (t) => ({
-      cosa: 'Il motore installato non sa leggere questo modello.',
-      perche: t.replace(/\bRUNTIME_ARCH_UNSUPPORTED\b\s*/u, '').trim(),
+    spiega: (testo) => ({
+      cosa: t('errori.turno.architetturaSconosciuta.cosa'),
+      perche: testo.replace(/\bRUNTIME_ARCH_UNSUPPORTED\b\s*/u, '').trim(),
       rimedi: [
-        'Scegli un altro modello nel Laboratorio modelli: con il motore di oggi questo non si avvia, e riprovare non cambia niente.',
-        'Il modello si potrà usare quando il motore llama.cpp sarà aggiornato a una versione che conosce la sua architettura.',
+        t('errori.turno.architetturaSconosciuta.rimedio1'),
+        t('errori.turno.architetturaSconosciuta.rimedio2'),
       ],
     }),
   },
@@ -428,12 +446,12 @@ const REGOLE = [
      */
     id: 'modello-non-entra',
     riconosce: (t) => /\bRUNTIME_OUT_OF_MEMORY\b|non entra nella memoria della scheda/i.test(t),
-    spiega: (t) => ({
-      cosa: 'Il modello non entra nella memoria della scheda grafica.',
-      perche: `${t.replace(/\bRUNTIME_OUT_OF_MEMORY\b\s*/u, '').trim()} Il motore ha provato a caricarlo e la scheda non aveva spazio: riprovare non cambia niente.`,
+    spiega: (testo) => ({
+      cosa: t('errori.turno.modelloNonEntra.cosa'),
+      perche: t('errori.turno.modelloNonEntra.perche', { dettaglio: testo.replace(/\bRUNTIME_OUT_OF_MEMORY\b\s*/u, '').trim() }),
       rimedi: [
-        'Scegli una quantizzazione più piccola dello stesso modello nel Laboratorio modelli: il file deve stare sotto la memoria della scheda, con un po’ di margine.',
-        'Oppure un modello più piccolo.',
+        t('errori.turno.modelloNonEntra.rimedio1'),
+        t('errori.turno.modelloNonEntra.rimedio2'),
       ],
     }),
   },
@@ -446,16 +464,17 @@ const REGOLE = [
      */
     id: 'runtime-non-pronto',
     riconosce: (t) => /llama-server non è diventato pronto|non è diventato pronto entro|runtime non pronto|failed to load model/i.test(t),
-    spiega: (t) => {
-      const secondi = (/entro (\d+)\s*s/i.exec(t) || [])[1];
-      const taglia = (/modello di ([^)]+)\)/i.exec(t) || [])[1];
+    spiega: (testo) => {
+      const secondi = (/entro (\d+)\s*s/i.exec(testo) || [])[1];
+      const taglia = (/modello di ([^)]+)\)/i.exec(testo) || [])[1];
+      const forma = `${taglia ? 'Taglia' : ''}${secondi ? 'Attesa' : ''}`;
       return {
-        cosa: 'Il motore locale non si è acceso in tempo.',
-        perche: `Caricare un modello dal disco alla memoria richiede tempo${taglia ? ` (qui ${taglia})` : ''}${secondi ? `, e l'attesa si è fermata a ${secondi} secondi` : ''}. Non è un guasto del compito: è il motore che stava ancora partendo.`,
+        cosa: t('errori.turno.runtimeNonPronto.cosa'),
+        perche: t(`errori.turno.runtimeNonPronto.perche${forma}`, { taglia, secondi }),
         rimedi: [
-          'Riprova: al secondo tentativo il modello è spesso già in memoria e parte subito.',
-          'Apri il Laboratorio e accendi il modello prima di avviare la sessione.',
-          'Se succede sempre, scegli una quantizzazione più piccola: meno gigabyte da caricare, meno attesa.',
+          t('errori.turno.runtimeNonPronto.rimedio1'),
+          t('errori.turno.runtimeNonPronto.rimedio2'),
+          t('errori.turno.runtimeNonPronto.rimedio3'),
         ],
       };
     },
@@ -496,14 +515,14 @@ const REGOLE = [
     id: 'reindirizzato',
     famiglia: 'reindirizzato',
     riconosce: (t, codice, origine) => origine === ORIGINI.REINDIRIZZAMENTO && eFermoSuRichiesta(t, codice),
-    spiega: (t) => {
-      const punto = puntoDiFermata(t);
+    spiega: (testo) => {
+      const punto = puntoDiFermata(testo);
       return {
-        cosa: 'Hai cambiato direzione.',
-        perche: `Non è andato storto niente: la tua nuova richiesta ha la precedenza, e il giro di prima si è chiuso al primo punto sicuro${punto ? ` (${punto})` : ''} per lasciarle il posto. Quello che era già fatto resta: i file scritti restano scritti.`,
+        cosa: t('errori.turno.reindirizzato.cosa'),
+        perche: punto ? t('errori.turno.reindirizzato.perchePunto', { punto }) : t('errori.turno.reindirizzato.perche'),
         /* ⛔ Nessun rimedio, perché non c'è niente da rimediare: il lavoro riparte da solo sulla nuova direzione. Suggerire qualcosa qui direbbe che è andata storta. */
         rimedi: [],
-        tecnico: t,
+        tecnico: testo,
       };
     },
   },
@@ -518,13 +537,13 @@ const REGOLE = [
     famiglia: 'fermato',
     /* ⛔ 13/09: qui c'erano SOLO le parole inglesi — vedi la regola sopra. Il codice `fermato` e l'italiano del motore valgono quanto l'`AbortError` del browser. */
     riconosce: (t, codice) => eFermoSuRichiesta(t, codice),
-    spiega: (t) => {
+    spiega: (testo) => {
       /* Il motore dice DOVE si è fermato: si usa, non si butta — è la differenza fra «fermato» e «fermato mentre aspettavo la tua approvazione per "scrivi"». */
-      const punto = puntoDiFermata(t);
+      const punto = puntoDiFermata(testo);
       return {
-        cosa: 'Hai fermato il giro.',
-        perche: `Il lavoro si è chiuso al primo punto sicuro${punto ? ` (${punto})` : ''}, come chiesto. Quello che era già fatto resta: i file scritti restano scritti.`,
-        rimedi: ['Scrivi un altro messaggio per continuare da qui, nella stessa sessione.'],
+        cosa: t('errori.turno.fermato.cosa'),
+        perche: punto ? t('errori.turno.fermato.perchePunto', { punto }) : t('errori.turno.fermato.perche'),
+        rimedi: [t('errori.turno.fermato.rimedio1')],
       };
     },
   },
@@ -538,19 +557,19 @@ const REGOLE = [
    */
   {
     id: 'risposta-vuota-dopo-tentativi',
-    riconosce: (t, codice) => codice === 'PROVIDER_EMPTY_RESPONSE' || /ha risposto senza testo né attrezzi/u.test(t),
+    riconosce: (t, codice) => codice === 'PROVIDER_EMPTY_RESPONSE' || /ha risposto senza testo né attrezzi|answered with neither text nor tools/u.test(t),
     spiega: (tecnico) => {
-      const motivo = /motivo del fornitore: ([^)]+)\)/u.exec(tecnico)?.[1]?.trim() ?? null;
+      const motivo = /(?:motivo del fornitore|provider reason): ([^)]+)\)/u.exec(tecnico)?.[1]?.trim() ?? null;
       const malformata = /MALFORMED_FUNCTION_CALL/u.test(motivo ?? '');
       return {
-        cosa: 'Il modello ha risposto senza testo e senza attrezzi, anche dopo che TALOS gli ha chiesto di continuare e ha riprovato.',
+        cosa: t('errori.turno.rispostaVuotaDopoTentativi.cosa'),
         perche: motivo
-          ? `Il fornitore ha chiuso la risposta con il motivo «${motivo}».${malformata ? ' Succede quando il modello prova a scrivere in un attrezzo qualcosa di molto grande, come un file intero.' : ''}`
-          : 'Il fornitore non ha detto il motivo.',
+          ? t(malformata ? 'errori.turno.rispostaVuotaDopoTentativi.percheMalformata' : 'errori.turno.rispostaVuotaDopoTentativi.perche', { motivo })
+          : t('errori.turno.rispostaVuotaDopoTentativi.percheSenzaMotivo'),
         rimedi: [
-          'Scrivi «continua»: il lavoro già fatto in questo giro è rimasto nella conversazione.',
-          ...(malformata ? ['Se il compito chiede un file molto lungo, chiedilo in più parti.'] : []),
-          'Se si ripete, prova lo stesso messaggio con un altro modello.',
+          t('errori.turno.rispostaVuotaDopoTentativi.rimedio1'),
+          ...(malformata ? [t('errori.turno.rispostaVuotaDopoTentativi.rimedioFileLungo')] : []),
+          t('errori.turno.rispostaVuotaDopoTentativi.rimedioAltroModello'),
         ],
       };
     },
@@ -564,36 +583,36 @@ const REGOLE = [
      *   turno chiuso senza una parola — quindi ha già la sua carta, con la sua diagnosi: senza
      *   questa riga sarebbe caduto nel sacco generico, col rimedio «apri Doctor».
      */
-    riconosce: (t) => /flusso SSE senza contenuto|senza contenuto ne tool_calls|empty (?:response|stream)|la generazione si (?:e|è) fermata senza risposta/i.test(t),
+    riconosce: (t) => /flusso SSE senza contenuto|senza contenuto ne tool_calls|SSE stream with neither content nor tool_calls|empty (?:response|stream)|la generazione si (?:e|è) fermata senza risposta|generation stopped without an answer/i.test(t),
     spiega: () => ({
-      cosa: 'Il modello ha chiuso il turno senza dire niente e senza chiamare nessun attrezzo.',
-      perche: 'Capita soprattutto con i modelli locali: la generazione finisce subito, per un modello di chat servito senza il suo formato di conversazione, per una finestra già piena, o per un campionamento che tronca al primo token.',
+      cosa: t('errori.turno.rispostaVuota.cosa'),
+      perche: t('errori.turno.rispostaVuota.perche'),
       rimedi: [
-        'Riprova il giro: se succede una volta sola, era la generazione.',
-        'Se si ripete, guarda il modello nel Laboratorio: formato della conversazione e finestra dichiarata.',
-        'Prova lo stesso messaggio con un modello di rete: se lì funziona, il problema è nel runtime locale, non nella sessione.',
+        t('errori.turno.rispostaVuota.rimedio1'),
+        t('errori.turno.rispostaVuota.rimedio2'),
+        t('errori.turno.rispostaVuota.rimedio3'),
       ],
     }),
   },
   {
     id: 'giri-esauriti',
-    riconosce: (t, codice) => codice === 'giri-esauriti',
+    riconosce: (_testo, codice) => codice === 'giri-esauriti',
     spiega: () => ({
-      cosa: 'Il giro ha finito i passi che aveva a disposizione senza chiudere il compito.',
-      perche: 'Ogni sessione ha un tetto di passi: serve a non lasciare un agente a girare all’infinito.',
+      cosa: t('errori.turno.giriEsauriti.cosa'),
+      perche: t('errori.turno.giriEsauriti.perche'),
       rimedi: [
-        'Il prossimo messaggio continua lo stesso compito nella stessa sessione.',
-        'Premi «Nuova» per iniziare un compito separato, con il suo tetto.',
+        t('errori.turno.giriEsauriti.rimedio1'),
+        t('errori.turno.giriEsauriti.rimedio2'),
       ],
     }),
   },
   {
     id: 'senza-canale-approvazione',
-    riconosce: (t) => /canale di approvazione|approvazione non disponibile/i.test(t),
+    riconosce: (testo) => /canale di approvazione|approvazione non disponibile|approval channel/i.test(testo),
     spiega: () => ({
-      cosa: 'L’agente ha chiesto un permesso che questa sessione non è in grado di chiedere a te.',
-      perche: 'Il permesso dell’attrezzo dice «chiedi conferma», ma la sessione è partita senza un canale per farlo.',
-      rimedi: ['Riapri il foglio dei permessi e scegli di nuovo, poi riavvia il giro.'],
+      cosa: t('errori.turno.senzaCanaleApprovazione.cosa'),
+      perche: t('errori.turno.senzaCanaleApprovazione.perche'),
+      rimedi: [t('errori.turno.senzaCanaleApprovazione.rimedio1')],
     }),
   },
   /*
@@ -605,47 +624,47 @@ const REGOLE = [
    */
   {
     id: 'risposta-interrotta',
-    riconosce: (t) => /La risposta del fornitore si è interrotta/u.test(t),
+    riconosce: (t) => /La risposta del fornitore si è interrotta|The provider response was cut off/u.test(t),
     spiega: () => ({
-      cosa: 'La risposta del modello si è interrotta prima della fine.',
-      perche: 'Il fornitore ha chiuso il flusso a metà. Il testo arrivato resta qui sopra.',
-      rimedi: ['Riprova il giro.', 'Se si ripete, scegli un altro modello o un altro fornitore.'],
+      cosa: t('errori.turno.rispostaInterrotta.cosa'),
+      perche: t('errori.turno.rispostaInterrotta.perche'),
+      rimedi: [t('errori.turno.comune.riprovaIlGiro'), t('errori.turno.comune.altroModelloOFornitore')],
     }),
   },
   {
     id: 'credenziale-rifiutata',
-    riconosce: (t) => /Credenziale (?:rifiutata|non accettata) dal fornitore/u.test(t),
+    riconosce: (testo) => /Credenziale (?:rifiutata|non accettata) dal fornitore|Credential (?:rejected|not accepted) (?:by|from) the provider/u.test(testo),
     spiega: () => ({
-      cosa: 'Il fornitore ha rifiutato la chiave.',
-      perche: 'La chiave salvata non è valida per questo fornitore, o è scaduta.',
-      rimedi: ['Controlla la chiave in Fornitori e accessi, poi riprova.'],
+      cosa: t('errori.turno.credenzialeRifiutata.cosa'),
+      perche: t('errori.turno.credenzialeRifiutata.perche'),
+      rimedi: [t('errori.turno.credenzialeRifiutata.rimedio1')],
     }),
   },
   {
     id: 'fornitore-rifiuto',
-    riconosce: (t) => /Il fornitore non ha accettato la richiesta/u.test(t),
+    riconosce: (testo) => /Il fornitore non ha accettato la richiesta|The provider did not accept the request/u.test(testo),
     spiega: () => ({
-      cosa: 'Il fornitore non ha accettato la richiesta.',
-      perche: 'Non ha detto il motivo: il testo che ha mandato è qui sotto.',
-      rimedi: ['Riprova il giro.', 'Se si ripete, scegli un altro modello o un altro fornitore.'],
+      cosa: t('errori.turno.fornitoreRifiuto.cosa'),
+      perche: t('errori.turno.fornitoreRifiuto.perche'),
+      rimedi: [t('errori.turno.comune.riprovaIlGiro'), t('errori.turno.comune.altroModelloOFornitore')],
     }),
   },
   {
     id: 'rete',
-    riconosce: (t) => /ECONNREFUSED|ETIMEDOUT|fetch failed|network error|socket hang up|Connessione con il fornitore interrotta|Il fornitore non risponde|Il fornitore ha superato il tempo massimo/iu.test(t),
+    riconosce: (t) => /ECONNREFUSED|ETIMEDOUT|fetch failed|network error|socket hang up|Connessione con il fornitore interrotta|Il fornitore non risponde|Il fornitore ha superato il tempo massimo|Connection with the provider interrupted|The provider is not responding|The provider exceeded the maximum time/iu.test(t),
     spiega: () => ({
-      cosa: 'Il collegamento con il modello si è interrotto.',
-      perche: 'Il messaggio ricevuto non permette di stabilire la causa o se il modello abbia elaborato la richiesta. Può dipendere dalla connessione, dal fornitore o dal runtime locale.',
-      rimedi: ['Controlla la connessione e riprova.', 'Se il modello è locale, verifica che il runtime sia acceso nel Laboratorio.'],
+      cosa: t('errori.turno.rete.cosa'),
+      perche: t('errori.turno.rete.perche'),
+      rimedi: [t('errori.turno.rete.rimedio1'), t('errori.turno.rete.rimedio2')],
     }),
   },
   {
     id: 'quota',
-    riconosce: (t) => /\b429\b|rate.?limit|quota|insufficient (?:credit|balance)|Troppo traffico presso il fornitore|Credito non disponibile presso il fornitore/iu.test(t),
+    riconosce: (t) => /\b429\b|rate.?limit|quota|insufficient (?:credit|balance)|Troppo traffico presso il fornitore|Credito non disponibile presso il fornitore|Too much traffic at the provider|Credit not available at the provider/iu.test(t),
     spiega: () => ({
-      cosa: 'Il fornitore ha rifiutato la richiesta per limiti di traffico o di credito.',
-      perche: 'Non è un errore del compito: è il conto o la soglia di chiamate al minuto.',
-      rimedi: ['Aspetta qualche istante e riprova.', 'Oppure scegli un altro modello o un altro fornitore.'],
+      cosa: t('errori.turno.quota.cosa'),
+      perche: t('errori.turno.quota.perche'),
+      rimedi: [t('errori.turno.quota.rimedio1'), t('errori.turno.quota.rimedio2')],
     }),
   },
 ];
@@ -658,29 +677,44 @@ const REGOLE = [
  * mancato. Qui si traduce; il testo originale resta accanto, perché è quello che si incolla in una
  * segnalazione.
  */
+/* `detto` è la CHIAVE del dizionario (si dice con `t()` quando serve, nella lingua di allora). */
 const RIFIUTI = [
-  { prova: /empty html|html vuoto/i, detto: 'L’HTML era vuoto: non è stato creato niente.' },
-  { prova: /cartella is required|folder is required/i, detto: 'Manca la cartella: il sotto-agente non è partito.' },
-  { prova: /must be different from your own/i, detto: 'La cartella del figlio non poteva essere la stessa del padre.' },
-  { prova: /must be a string/i, detto: 'Il percorso non era scritto come testo.' },
-  { prova: /no delegation channel|delegation is not configured/i, detto: 'Questa sessione non può delegare a un sotto-agente.' },
-  { prova: /not configured on this harness|no generator|no saver/i, detto: 'Questa capacità non è configurata su questo TALOS.' },
-  { prova: /non ha un canale di approvazione|approval channel/i, detto: 'Serviva un permesso che questa sessione non poteva chiedere.' },
-  { prova: /too large|troppo grande/i, detto: 'Il contenuto era troppo grande per essere accettato.' },
+  { prova: /empty html|html vuoto/i, detto: 'errori.turno.rifiuto.htmlVuoto' },
+  { prova: /cartella is required|folder is required/i, detto: 'errori.turno.rifiuto.cartellaMancante' },
+  { prova: /must be different from your own/i, detto: 'errori.turno.rifiuto.cartellaUguale' },
+  { prova: /must be a string/i, detto: 'errori.turno.rifiuto.nonTesto' },
+  { prova: /no delegation channel|delegation is not configured/i, detto: 'errori.turno.rifiuto.senzaDelega' },
+  { prova: /not configured on this harness|no generator|no saver/i, detto: 'errori.turno.rifiuto.nonConfigurata' },
+  { prova: /non ha un canale di approvazione|approval channel/i, detto: 'errori.turno.rifiuto.senzaApprovazione' },
+  { prova: /too large|troppo grande/i, detto: 'errori.turno.rifiuto.troppoGrande' },
 ];
 
+/*
+ * ⛔ H-05 (owner 02/10/2026, «Voglio il +1»): il kernel non dice più REFUSED per tutto. REFUSED resta a sicurezza e permessi;
+ *   ciò che non c'è è NOT FOUND, un testo da sostituire che compare più volte è AMBIGUOUS, un argomento sbagliato è INVALID.
+ *   Sono tutti un NO dichiarato dal kernel, e ognuno si spiega con le sue parole. (NO CHANGE non è un no: non si spiega qui.)
+ */
+const PAROLE_DEL_NO = Object.freeze([
+  { parola: /^REFUSED\b\.?\s*/i, tipo: 'rifiuto', detto: 'errori.turno.no.rifiuto' },
+  { parola: /^NOT FOUND\b\.?\s*/i, tipo: 'non-trovato', detto: 'errori.turno.no.nonTrovato' },
+  { parola: /^AMBIGUOUS\b\.?\s*/i, tipo: 'ambiguo', detto: 'errori.turno.no.ambiguo' },
+  { parola: /^INVALID\b\.?\s*/i, tipo: 'non-valido', detto: 'errori.turno.no.nonValido' },
+]);
+
 /**
- * Un esito che comincia con REFUSED è un NO dichiarato dal kernel, non un guasto.
- * @returns {{rifiutato:boolean, detto:string, tecnico:string}}
+ * Un esito che comincia con REFUSED, NOT FOUND, AMBIGUOUS o INVALID è un NO dichiarato dal kernel, non un guasto.
+ * @returns {{rifiutato:boolean, tipo:string|null, detto:string, tecnico:string}}
  */
 export function spiegaRifiutoAttrezzo(esito) {
   const testo = String(esito ?? '').trim();
-  if (!/^REFUSED\b/i.test(testo)) return { rifiutato: false, detto: '', tecnico: testo };
-  const resto = testo.replace(/^REFUSED\.?\s*/i, '');
+  const no = PAROLE_DEL_NO.find((p) => p.parola.test(testo));
+  if (!no) return { rifiutato: false, tipo: null, detto: '', tecnico: testo };
+  const resto = testo.replace(no.parola, '');
   const trovato = RIFIUTI.find((r) => r.prova.test(resto));
   return {
     rifiutato: true,
-    detto: trovato ? trovato.detto : 'L’attrezzo ha rifiutato la richiesta.',
+    tipo: no.tipo,
+    detto: t(trovato ? trovato.detto : no.detto),
     tecnico: testo,
   };
 }
@@ -695,6 +729,67 @@ export function spiegaRifiutoAttrezzo(esito) {
  *   è lo stesso nei due casi. Assente = provenienza ignota, e si dice così invece di indovinarla.
  * @returns {{id:string, cosa:string, perche:string, rimedi:string[], tecnico:string, riconosciuto:boolean, origine:string|null}}
  */
+/*
+ * ⛔ Revisione K3 (03/10/2026) — I MESSAGGI DEL KERNEL NELLA LINGUA DELL'INTERFACCIA. Con K3 il kernel e l'adattatore scrivono
+ *   i loro errori in INGLESE (sono testo anche per la CLI e per i log). La carta d'errore del giro li mostrava così com'erano
+ *   (ramo «sconosciuto», e il «perché» della famiglia del contesto): con l'interfaccia in italiano la persona avrebbe letto
+ *   l'inglese dove prima leggeva l'italiano. Qui la voce del dizionario (`errori.kernel.*`: l'italiano è la frase di prima,
+ *   identica; l'inglese è quella di K3), riconosciuta nelle DUE forme, perché le storie salvate sono italiane.
+ *   Un messaggio che non è qui resta com'è: mai una chiave grezza.
+ */
+const MESSAGGI_DEL_KERNEL = [
+  { chiave: 'errori.kernel.sseOltreLimite', re: /^(?:SSE event over the size limit\.|Evento SSE oltre il limite\.)$/u },
+  { chiave: 'errori.kernel.sseJsonNonValido', re: /^(?:SSE event with invalid JSON\.|Evento SSE con JSON non valido\.)$/u },
+  { chiave: 'errori.kernel.sseNonValido', re: /^(?:Invalid SSE event\.|Evento SSE non valido\.)$/u },
+  { chiave: 'errori.kernel.flussoSenzaFine', re: /^(?:The provider's stream finished without a final event\.|Flusso del fornitore concluso senza un evento finale\.)$/u },
+  { chiave: 'errori.kernel.motoreLocaleRifiuta', re: /^(?:The local engine did not accept this request, not even as a plain chat\.|Il motore locale non ha accettato questa richiesta, nemmeno senza gli attrezzi\.)$/u },
+  { chiave: 'errori.kernel.rispostaInutilizzabile', re: /^(?:The provider did not return a usable response\.|Il fornitore non ha restituito una risposta utilizzabile\.)$/u },
+  { chiave: 'errori.kernel.rispostaIncompleta', re: /^(?:The provider did not complete the response\.|Il fornitore non ha completato la risposta\.)$/u },
+  { chiave: 'errori.kernel.inattivoOltreLimite', re: /^(?:OpenRouter stayed idle past the configured limit\.|OpenRouter è rimasto inattivo oltre il limite configurato\.)$/u },
+  { chiave: 'errori.kernel.motoreLocaleScollegato', re: /^(?:The local engine is not connected to this server\.|Il motore locale non è collegato a questo server\.)$/u },
+  { chiave: 'errori.kernel.richiestaInterrotta', re: /^(?:The request to the provider was interrupted\.|La richiesta al fornitore è stata interrotta\.)$/u },
+  { chiave: 'errori.kernel.fornitoreIrraggiungibile', re: /^(?:The provider could not be reached\.|Non è stato possibile raggiungere il fornitore\.)$/u },
+  { chiave: 'errori.kernel.credenzialeNonAccettata', re: /^(?:Credential not accepted by the provider\.|Credenziale non accettata dal fornitore\.)$/u },
+  { chiave: 'errori.kernel.accessoNegatoCredenziale', re: /^(?:Access denied: check the permissions of the credential and of the model\.|Accesso negato: controlla i permessi della credenziale e del modello\.)$/u },
+  { chiave: 'errori.kernel.modelloNonTrovato', re: /^(?:Model or address not found: check the provider configuration\.|Modello o indirizzo non trovato: controlla la configurazione del fornitore\.)$/u },
+  { chiave: 'errori.kernel.troppoTraffico', re: /^(?:Too much traffic at the provider\.|Troppo traffico presso il fornitore\.)$/u },
+  { chiave: 'errori.kernel.credenzialeRifiutata', re: /^(?:Credential rejected by the provider\.|Credenziale rifiutata dal fornitore\.)$/u },
+  { chiave: 'errori.kernel.endpointAutenticazione', re: /^(?:The endpoint requires you to sign in: check the configured address and access\.|L'endpoint richiede autenticazione: verifica indirizzo e accesso configurati\.)$/u },
+  { chiave: 'errori.kernel.accessoNegato', re: /^(?:Access denied by the provider or the model: check the permissions\.|Accesso negato dal fornitore o dal modello: verifica i permessi\.)$/u },
+  { chiave: 'errori.kernel.creditoNonDisponibile', re: /^(?:Credit not available at the provider\.|Credito non disponibile presso il fornitore\.)$/u },
+  { chiave: 'errori.kernel.connessioneInterrotta', re: /^(?:Connection with the provider interrupted\.|Connessione con il fornitore interrotta\.)$/u },
+  { chiave: 'errori.kernel.tempoMassimo', re: /^(?:The provider exceeded the maximum time\.|Il fornitore ha superato il tempo massimo\.)$/u },
+  { chiave: 'errori.kernel.nonRisponde', re: /^(?:The provider is not responding\.|Il fornitore non risponde\.)$/u },
+  { chiave: 'errori.kernel.rispostaInterrotta', re: /^(?:The provider response was cut off\.|La risposta del fornitore si è interrotta\.)$/u },
+  { chiave: 'errori.kernel.budgetOccupato', re: /^(?:The budget is temporarily taken by requests in progress or just finished\.|Il budget è temporaneamente occupato da richieste in corso o appena concluse\.)$/u },
+  { chiave: 'errori.kernel.limiteChiave', re: /^(?:The spending limit of the key has been reached\.|Il limite di spesa della chiave è stato raggiunto\.)$/u },
+  { chiave: 'errori.kernel.richiestaCostosa', re: /^(?:The estimated cost of the request exceeds the available budget\.|Il costo stimato della richiesta supera il budget disponibile\.)$/u },
+  { chiave: 'errori.kernel.limiteNonSpecificato', re: /^(?:The service rejected the request because of an unspecified spending limit\.|Il servizio ha rifiutato la richiesta per un limite di spesa non specificato\.)$/u },
+  { chiave: 'errori.kernel.richiestaNonAccettata', re: /^(?:The provider did not accept the request\.|Il fornitore non ha accettato la richiesta\.)$/u },
+  { chiave: 'errori.kernel.fallbackNonCollegato', re: /^(?:To continue with another provider, access, chat notices and usage recording are needed\.|Per continuare con un altro fornitore occorrono accessi, avvisi in chat e registrazione dei consumi\.)$/u },
+  { chiave: 'errori.kernel.chiamataGiaInCorso', re: /^(?:A call of this session is already in progress\.|Una chiamata di questa sessione è già in corso\.)$/u },
+  { chiave: 'errori.kernel.runtimeNonConfigurato', re: /^(?:The agent runtime is not configured for this installation\.|Il runtime agente non è configurato per questa installazione\.)$/u },
+  { chiave: 'errori.kernel.runtimeNonDisponibile', re: /^(?:The agent runtime is not available\. Check the server configuration\.|Il runtime agente non è disponibile\. Controlla la configurazione del server\.)$/u },
+  { chiave: 'errori.kernel.motoreNonLeggeOutput', re: /^(?:The engine of this installation does not read retained outputs yet\.|Il motore di questa installazione non legge ancora gli output conservati\.)$/u },
+  { chiave: 'errori.kernel.motoreNonConservaOutput', re: /^(?:The engine of this installation does not retain command outputs yet\.|Il motore di questa installazione non conserva ancora gli output dei comandi\.)$/u },
+  { chiave: 'errori.kernel.motoreNonApplicaAmbiente', re: /^(?:The engine of this installation does not apply the command environment choice yet\.|Il motore di questa installazione non applica ancora la scelta dell’ambiente dei comandi\.)$/u },
+  { chiave: 'errori.kernel.motoreNonApplicaBarriera', re: /^(?:The engine of this installation does not apply the barrier before changes yet\.|Il motore di questa installazione non applica ancora la barriera prima delle modifiche\.)$/u },
+  { chiave: 'errori.kernel.inattivoPerSecondi', re: /^(?:OpenRouter sent no activity for|OpenRouter non ha inviato attività per) (\d+) (?:seconds|secondi)\.$/u, parametri: (m) => ({ secondi: m[1] }) },
+  { chiave: 'errori.kernel.nessunaRispostaEntro', re: /^(?:The provider did not respond within|Il fornitore non ha risposto entro) (\d+) (?:seconds|secondi)\.$/u, parametri: (m) => ({ secondi: m[1] }) },
+  { chiave: 'errori.kernel.rispostaHttp', re: /^(?:The provider answered|Il fornitore ha risposto) HTTP (\d+)\.$/u, parametri: (m) => ({ stato: m[1] }) },
+  { chiave: 'errori.kernel.nonRispondeStato', re: /^(?:The provider is not responding \(status|Il fornitore non risponde \(stato) ([^)]+)\)\.\s*([\s\S]*)$/u, parametri: (m) => ({ stato: /^(?:unknown|sconosciuto)$/u.test(m[1]) ? t('errori.kernel.statoSconosciuto') : m[1], dettaglio: m[2] }) },
+  { chiave: 'errori.kernel.finestraLocale', re: /^(?:The conversation|La conversazione)(?: \((\d+) tokens?\))? (?:does not fit in the local model’s window|non entra nella finestra del modello locale)(?: \((\d+) tokens?\))?\.$/u, parametri: (m) => ({ conversazione: m[1] ? t('errori.kernel.quantiToken', { n: m[1] }) : '', finestra: m[2] ? t('errori.kernel.quantiToken', { n: m[2] }) : '' }) },
+];
+/** Il messaggio del kernel nella lingua corrente, o `null` se non è uno di quelli noti. */
+export function messaggioDelKernelNellaLingua(messaggio) {
+  const testo = String(messaggio ?? '').trim();
+  for (const voce of MESSAGGI_DEL_KERNEL) {
+    const m = voce.re.exec(testo);
+    if (m) return t(voce.chiave, voce.parametri ? voce.parametri(m) : undefined);
+  }
+  return null;
+}
+
 export function spiegaErrore(messaggio, codice = '', contesto = {}) {
   const tecnico = String(messaggio ?? '').trim();
   const testo = `${codice} ${tecnico}`;
@@ -718,9 +813,10 @@ export function spiegaErrore(messaggio, codice = '', contesto = {}) {
     id: 'sconosciuto',
     famiglia: null,
     origine,
-    cosa: 'Il giro si è interrotto per un errore.',
-    perche: 'Questa forma di errore non è ancora tradotta: qui sotto c’è il testo che ha mandato il server, così com’è.',
-    rimedi: ['Riprova il giro.', 'Se si ripete, apri Doctor e allega il testo qui sotto.'],
+    cosa: t('errori.turno.sconosciuto.cosa'),
+    /* Revisione K3: un messaggio noto del kernel si dice nella lingua dell'interfaccia; uno ignoto resta sotto, com'è arrivato. */
+    perche: messaggioDelKernelNellaLingua(tecnico) ?? t('errori.turno.sconosciuto.perche'),
+    rimedi: [t('errori.turno.comune.riprovaIlGiro'), t('errori.turno.sconosciuto.rimedio2')],
     tecnico,
     riconosciuto: false,
   };
@@ -736,10 +832,11 @@ export function spiegaErrore(messaggio, codice = '', contesto = {}) {
  * legge. Il giro si è comunque fermato, e la carta lo dice nel testo; ma il colpo d'occhio deve
  * separare «il contesto non si è compattato» da «la tua richiesta è andata storta».
  */
+/* `badge` e `titolo` sono CHIAVI del dizionario: `vestizioneErrore` le dice con `t()` nella lingua di quel momento. */
 const VESTIZIONI = {
-  'limite-fornitore': { badge: 'Limite del servizio', titolo: 'TALOS · richiesta sospesa', tono: 'warning' },
-  'esito-fornitore-incerto': { badge: 'Risposta interrotta', titolo: 'TALOS · ripresa manuale', tono: 'warning' },
-  fermato: { badge: 'Fermato', titolo: 'TALOS · fermato', tono: 'accent' },
+  'limite-fornitore': { badge: 'errori.turno.vestizione.limiteFornitore.badge', titolo: 'errori.turno.vestizione.limiteFornitore.titolo', tono: 'warning' },
+  'esito-fornitore-incerto': { badge: 'errori.turno.vestizione.esitoIncerto.badge', titolo: 'errori.turno.vestizione.esitoIncerto.titolo', tono: 'warning' },
+  fermato: { badge: 'errori.turno.vestizione.fermato.badge', titolo: 'errori.turno.vestizione.fermato.titolo', tono: 'accent' },
   /*
    * ⛔ 13/09 — un cambio di direzione non è un guasto E non è nemmeno una notizia: il giro riparte
    * da solo, e la persona lo vede ripartire. `silenziosa` dice a chi disegna che questa nota non
@@ -750,10 +847,10 @@ const VESTIZIONI = {
    * `aggiornaTickGiro({tono:'danger'})`, quindi il rosso aveva DUE manifestazioni e zittirne una
    * sola avrebbe lasciato l'altra — la stessa meta'-cura che questa famiglia esiste per evitare.
    */
-  reindirizzato: { badge: 'Reindirizzato', titolo: 'TALOS · nuova direzione', tono: 'accent', silenziosa: true },
-  contesto: { badge: 'Contesto', titolo: 'TALOS · contesto non compattato', tono: 'warning' },
+  reindirizzato: { badge: 'errori.turno.vestizione.reindirizzato.badge', titolo: 'errori.turno.vestizione.reindirizzato.titolo', tono: 'accent', silenziosa: true },
+  contesto: { badge: 'errori.turno.vestizione.contesto.badge', titolo: 'errori.turno.vestizione.contesto.titolo', tono: 'warning' },
 };
-const VESTIZIONE_ERRORE = { badge: 'Errore', titolo: 'TALOS · errore', tono: 'danger' };
+const VESTIZIONE_ERRORE = { badge: 'errori.turno.vestizione.errore.badge', titolo: 'errori.turno.vestizione.errore.titolo', tono: 'danger' };
 
 /**
  * Badge, titolo e tono della nota che mostra una spiegazione.
@@ -761,7 +858,8 @@ const VESTIZIONE_ERRORE = { badge: 'Errore', titolo: 'TALOS · errore', tono: 'd
  * @returns {{badge:string, titolo:string, tono:string}}
  */
 export function vestizioneErrore(spiegazione) {
-  return { ...(VESTIZIONI[spiegazione?.famiglia] ?? VESTIZIONE_ERRORE) };
+  const { badge, titolo, ...resto } = VESTIZIONI[spiegazione?.famiglia] ?? VESTIZIONE_ERRORE;
+  return { badge: t(badge), titolo: t(titolo), ...resto };
 }
 
 /**
@@ -790,4 +888,92 @@ export function tonoDelTick(vestizione) {
 export function erroreInUnaRiga(messaggio, codice = '') {
   const s = spiegaErrore(messaggio, codice);
   return s.cosa;
+}
+
+/*
+ * ⛔⛔ 03/10/2026 — GLI ERRORI DEL SERVER, DETTI NELLA LINGUA DELLA PERSONA (decisione owner «L'interfaccia, dal codice»).
+ *
+ * Il server manda un codice stabile e una frase INGLESE (`message`, `title`, `explanation`, `action`), più `params` se la frase
+ * ha dei valori. Qui si sceglie il testo dal CODICE: `errori.<CODICE>.<parte>` nel dizionario (area `errori`).
+ *
+ * ⛔ Il dizionario sostituisce le parole del server SOLO quando quelle sono la forma standard che il dizionario traduce: la
+ * frase inglese del server deve coincidere (dopo aver messo i `params`) con l'inglese della voce. Così:
+ *   · una spiegazione che il server ha scritto apposta per il caso (il motivo vero di una sessione che non può ripartire,
+ *     `SESSION_NOT_READY`) resta quella del server invece di essere coperta da quella generica;
+ *   · lo stesso codice con due copie diverse (`QUERY_INVALID` nelle rotte generali e in quelle del contesto) trova la sua:
+ *     la voce vale se è la SUA frase inglese a essere arrivata;
+ *   · un server più nuovo del dizionario, o con una parola cambiata, mostra l'inglese del server — mai una chiave grezza e mai
+ *     un'altra frase al posto di quella che il server ha detto. Una prova (`errori-del-server-nel-dizionario.test.mjs`)
+ *     tiene l'inglese del server e quello del dizionario uguali, parola per parola.
+ * Ripiego: le parole del server. Se non ne ha mandate, la voce del codice (se c'è) nella lingua corrente.
+ */
+const PARTI_DEL_PROBLEMA = Object.freeze(['message', 'title', 'explanation', 'action']);
+/* I codici che il cliente fabbrica da sé (nessun server li manda): i loro messaggi sono voci del dizionario come le altre. */
+const MESSAGGI_DEL_CLIENTE = Object.freeze(['LOCAL_REQUEST_FAILED', 'LOCAL_RESPONSE_INVALID']);
+
+function chiaviCandidate(codice, parte) {
+  const chiavi = [`errori.${codice}.${parte}`, `errori.contesto.${codice}.${parte}`];
+  if (parte === 'message') return [...chiavi, ...MESSAGGI_DEL_CLIENTE.map((c) => `errori.${c}.message`)];
+  /* Un codice senza copia sua riceve dal server quella di INTERNAL_ERROR; una rotta del contesto senza copia sua, quella predefinita. */
+  return [...chiavi, `errori.contestoPredefinita.${parte}`, `errori.INTERNAL_ERROR.${parte}`];
+}
+
+/*
+ * ⛔⛔ K2 (03/10/2026) — I MOTIVI. Un rifiuto del registro delle sessioni porta, oltre al `code`, un `reason` (kebab-case,
+ * inglese: `session-running`, `compaction-in-progress`…) che distingue le frasi dello STESSO codice, e `params` coi valori.
+ * La voce del dizionario è `errori.<CODICE>.<motivo_con_trattini_bassi>` (la forma delle chiavi, `FORMA_DELLA_CHIAVE`, non
+ * ammette il trattino): `errori.SESSION_NOT_READY.compaction_in_progress`.
+ *   · Se il problema porta un `reason`, si prova per prima la SUA voce.
+ *   · Se non lo porta (un cliente che non lo copia: oggi `publicProblem` in `api-client.ts` lo scarta) o la sua voce manca, si
+ *     provano tutte le voci dei motivi di quel codice: il confronto con la frase inglese del server resta il cancello, quindi
+ *     nessuna frase ne copre un'altra. Se nessuna coincide, restano le parole del server — mai una chiave grezza.
+ */
+const SUFFISSI_DELLE_PARTI = new Set(PARTI_DEL_PROBLEMA);
+const indiceDeiMotivi = new Map();
+
+function chiaveDelMotivo(codice, motivo) { return `errori.${codice}.${String(motivo).replace(/-/g, '_')}`; }
+
+function chiaviDeiMotivi(codice, motivo) {
+  let tutte = indiceDeiMotivi.get(codice);
+  if (!tutte) {
+    const prefisso = `errori.${codice}.`;
+    tutte = Object.keys(TESTI.en).filter((k) => k.startsWith(prefisso) && !k.slice(prefisso.length).includes('.') && !SUFFISSI_DELLE_PARTI.has(k.slice(prefisso.length)));
+    indiceDeiMotivi.set(codice, tutte);
+  }
+  if (!motivo) return tutte;
+  const sua = chiaveDelMotivo(codice, motivo);
+  return [sua, ...tutte.filter((k) => k !== sua)];
+}
+
+/**
+ * Il testo di un errore del server nella lingua corrente.
+ * @param {{code?:string, message?:string, title?:string, explanation?:string, action?:string, params?:Record<string, string|number>, problem?:object}|null|undefined} errore
+ *   un `ApiError` (porta il problema in `.problem`), il `problem` stesso o la busta `error` della risposta
+ * @returns {{message:string, title:string, explanation:string, action:string}} mai una chiave grezza; stringa vuota se non c'è niente da dire
+ * @example
+ *   const { message } = testoErroreServer(errore); // «Query non valida» / «Invalid query», secondo la lingua
+ */
+export function testoErroreServer(errore) {
+  const problema = errore && typeof errore.problem === 'object' && errore.problem ? errore.problem : (errore || {});
+  const codice = String(problema.code ?? errore?.code ?? '');
+  const params = problema.params && typeof problema.params === 'object' ? problema.params : undefined;
+  const motivo = typeof (problema.reason ?? errore?.reason) === 'string' ? String(problema.reason ?? errore.reason) : '';
+  const fuori = {};
+  for (const parte of PARTI_DEL_PROBLEMA) {
+    const server = String((parte === 'message' ? (problema.message ?? errore?.message) : problema[parte]) ?? '').trim();
+    const propria = codice ? chiaviCandidate(codice, parte) : [];
+    /* ⛔ Le voci dei MOTIVI (K2) entrano solo nel confronto con le parole del server, mai come ripiego: una frase di un motivo
+       non è il `title` né l'`action` del codice. */
+    const candidate = codice ? [...chiaviDeiMotivi(codice, motivo), ...propria] : [];
+    let testo = null;
+    if (server) {
+      const chiave = candidate.find((k) => TESTI.en[k] !== undefined && interpola(TESTI.en[k], params) === server);
+      testo = chiave ? t(chiave, params) : server;
+    } else {
+      const primaPropria = propria[0];
+      testo = primaPropria && TESTI.en[primaPropria] !== undefined ? t(primaPropria, params) : '';
+    }
+    fuori[parte] = testo;
+  }
+  return fuori;
 }

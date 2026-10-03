@@ -3,7 +3,11 @@ import { join } from 'node:path';
 
 import { PDFJS_CMAPS, PDFJS_DECODIFICATORI_JS, PDFJS_FONT_STANDARD } from './pdfjs-risorse.mjs';
 
-const MAX_STATIC_BYTES = 4_194_304;
+/* Owner 03/10/2026, «Alza il tetto a 8 MiB»: con la fase della lingua il dizionario it+en sta nel bundle e `app.js` è passato
+   da 3.953.717 a 4.218.853 byte (corsia E), oltre i 4 MiB di prima. Anche Hermes compila tutte le sue lingue nel bundle
+   (`apps/desktop/src/i18n/catalog.ts:1-24`). La regola del 14/08 resta: il tetto si alza, l'app non si azzoppa; la prova
+   F5-BUILD-TETTO continua a chiedere al gestore vero gli asset grossi della build vera. */
+const MAX_STATIC_BYTES = 8_388_608;
 /** ⭐ Riconciliazione con la copia mobile (24/8) — vedi harness-ui-due-copie-divergenti.md: stessi 10 file .woff2, stesso font/weight/subset. */
 const FONT_FILES = Object.freeze([
   'instrument-sans-latin-ext-400-normal.woff2',

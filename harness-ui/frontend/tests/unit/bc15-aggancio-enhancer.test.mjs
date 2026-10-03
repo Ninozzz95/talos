@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { TESTI } from '../../src/i18n/testi/index.js'; // corsia A della lingua (03/10/2026): le frasi stanno nel dizionario, il sorgente porta la chiave
 
 import { fraseProvenienza } from '../../src/components/migliora-prompt.js';
 
@@ -57,7 +58,8 @@ test('BC15-MODELLO: non si sceglie, si dichiara — e la dichiarazione segue il 
 
 test('BC15-SENZA-CHAT: il pulsante non si spegne, spiega', () => {
   assert.doesNotMatch(TEMPLATE, /id="miglioraPromptBtn"[^>]*disabled/);
-  assert.match(APP_NUDO, /Avvia la chat: la riscrittura usa il modello di questa conversazione\./);
+  assert.match(APP_NUDO, /new Error\(tr\('app\.composer\.enhanceNeedsChat'\)\)/);
+  assert.equal(TESTI.it['app.composer.enhanceNeedsChat'], 'Avvia la chat: la riscrittura usa il modello di questa conversazione.');
 });
 
 test('BC15-PROVENIENZA: senza un nome, la frase non si ripete', () => {

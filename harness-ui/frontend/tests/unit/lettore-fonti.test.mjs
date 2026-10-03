@@ -120,3 +120,17 @@ test('LETTORE-CORNICE-OSPITE: alla pagina ospite pronta si mandano i BYTE e il f
   assert.equal(ascoltatori.size, 0, 'smontata, la pagina non ascolta più');
   assert.throws(() => resa.rendi({ doc, finestra, byte, nome: 'x', tipo: 'foglio' }), /nessuna resa in cornice/u);
 });
+
+/* 03/10/2026, seconda ondata della lingua: i motivi del lettore arrivano a schermo, quindi con l'interfaccia in inglese si
+   leggono in inglese (le prove qui sopra restano in italiano, la lingua predefinita della prova). */
+test('LETTORE-FONTI-EN: con l’interfaccia in inglese i motivi del lettore sono inglesi', async () => {
+  const { impostaLingua } = await import('../../src/components/lingua.js');
+  impostaLingua('en');
+  try {
+    const { fetchFn } = rete([{ status: 500, corpo: 'non json' }, { status: 200, corpo: { data: { indirizzo: 'https://altrove.example/p.html' } } }]);
+    const fonte = fonteDaCartella({ sessionId: 's1', percorso: 'a.md', fetchFn });
+    await assert.rejects(fonte.leggiByte(), (e) => e.message === 'the server answered HTTP 500');
+    await assert.rejects(fonte.creaPagina(), (e) => e.message === 'the server gave no address for the page');
+    await assert.rejects(caricatoreOffice(async () => ({}))('binario'), (e) => e.message === 'no renderer for «binario»');
+  } finally { impostaLingua('it'); }
+});

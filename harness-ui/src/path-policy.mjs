@@ -323,18 +323,107 @@ export function esceDalWorkspaceVersoUnNascosto(percorso, { cartella, home = hom
   return { classe: 'fuori-workspace-nascosto', percorso: String(percorso).trim(), nascosto };
 }
 
-/** La copia per la persona: lingua naturale, nessun nome tecnico, e DICE quale file. */
+/**
+ * ⛔⛔⛔ D2 (owner 03/10/2026, «Chiedere sempre, credenziali sempre») — CASO 3, SOLO PER LE LETTURE: il percorso di
+ * `leggi` o di `elenca` esce dalla cartella della sessione. Una lettura fuori dal progetto chiede, nascosta o no.
+ *
+ * Il difetto misurato dallo stress test della CLI (03/10): `elenca "C:/Users/<persona>"` passava senza domanda e
+ * metteva nel contesto `.ssh/id_ed25519`, `.claude/.credentials.json`, `.codex/auth.json`; `leggi` apriva i file
+ * dell'app desktop in `AppData`. Il controllo era solo su `..` (`RISALITA`), cioè sulla PAROLA, non sul posto.
+ * Come fanno gli altri (letto il 03/10): OpenCode chiede `external_directory` per read/glob/grep/list fuori dal
+ * progetto, di serie `"*": "ask"` (`tool/external-directory.ts`, `agent/agent.ts:122`); Claude Code legge senza
+ * chiedere solo «within the working directory and additional directories» (doc permissions); OWASP LLM06:2025
+ * limita l'accesso ai file alla radice del progetto.
+ *
+ * ⛔ Solo letture, mai la shell: per un comando i pezzi non sono percorsi certi, e `cat ../fratello/note.txt` resta
+ *   il comportamento di oggi (CASO 2 sopra, con la stessa ragione).
+ * ⛔ Con «Accesso completo» questa regola TACE (`accessoPieno`), le credenziali no: il CASO 1 corre prima, sempre.
+ *   ⛔ Non basta la cartella: in una sessione a cartella SCELTA l'Accesso completo non la allarga alla radice (BC-14), e
+ *   senza `accessoPieno` leggere fuori chiedeva mentre scrivere fuori no — e «leggi prima di sostituire» faceva fallire la
+ *   scrittura (FULL-ACCESS-03, B2-01, review del 03/10/2026).
+ * ⛔ Lessicale, come il CASO 2: un collegamento DENTRO il progetto che porta fuori non lo vede (dichiarato).
+ *
+ * @returns {null | {classe: 'fuori-workspace', percorso: string}}
+ */
+export function letturaFuoriDalWorkspace(percorso, { cartella, home = homeDiSistema() } = {}) {
+  const grezzo = String(percorso ?? '').trim();
+  const normalizzato = conLaHomeEspansa(grezzo, home);
+  if (normalizzato === '' || normalizzato.includes('://')) return null;
+  // Senza una radice non si può dire «fuori»: nessun innesco, mai un falso allarme (come il CASO 2).
+  if (typeof cartella !== 'string' || cartella === '') return null;
+  let radice;
+  let assoluto;
+  try {
+    radice = risolvi(cartella);
+    assoluto = risolvi(radice, normalizzato);
+  } catch { return null; }
+  if (isPathInside(radice, assoluto)) return null;
+  return { classe: 'fuori-workspace', percorso: grezzo };
+}
+
+const LETTURE = new Set(['leggi', 'elenca']);
+
+/*
+ * ⭐ K4b (03/10/2026, owner «ogni singola parola nella app deve essere sia in inglese che in italiano»): la frase per la persona
+ *   è INGLESE (la sorgente) e viaggia con la sua chiave del dizionario (area `server` del frontend) e i suoi valori; la carta
+ *   d'approvazione la dice nella lingua dell'interfaccia (`testoDelCampo`). Le chiavi sono LETTERALI, una per combinazione
+ *   classe×attrezzo: il cancello K4A-S02 le confronta col dizionario. `fuori-workspace` esiste solo per le letture.
+ */
+const CHIAVI_DELLA_FRASE = Object.freeze({
+  'portachiavi|leggi': 'server.approval.read.keychain',
+  'portachiavi|elenca': 'server.approval.list.keychain',
+  'portachiavi|shell': 'server.approval.command.keychain',
+  'segreto|leggi': 'server.approval.read.secret',
+  'segreto|elenca': 'server.approval.list.secret',
+  'segreto|shell': 'server.approval.command.secret',
+  'fuori-workspace|leggi': 'server.approval.read.outside',
+  'fuori-workspace|elenca': 'server.approval.list.outside',
+  'fuori-workspace-nascosto|leggi': 'server.approval.read.hiddenOutside',
+  'fuori-workspace-nascosto|elenca': 'server.approval.list.hiddenOutside',
+  'fuori-workspace-nascosto|shell': 'server.approval.command.hiddenOutside',
+});
+const FRASI_INGLESI = Object.freeze({
+  'server.approval.read.keychain': "This read opens the system keychain, where passwords are kept: do you want me to do it?",
+  'server.approval.list.keychain': "This listing opens the system keychain, where passwords are kept: do you want me to do it?",
+  'server.approval.command.keychain': "The command opens the system keychain, where passwords are kept: do you want me to run it?",
+  'server.approval.read.secret': "This read opens a file that may contain keys or passwords ({percorso}): do you want me to do it?",
+  'server.approval.list.secret': "This listing opens a file that may contain keys or passwords ({percorso}): do you want me to do it?",
+  'server.approval.command.secret': "The command touches a file that may contain keys or passwords ({percorso}): do you want me to run it?",
+  'server.approval.read.outside': "This read opens a file outside the working folder ({percorso}): do you want me to do it?",
+  'server.approval.list.outside': "This listing opens a folder outside the working folder ({percorso}): do you want me to do it?",
+  'server.approval.read.hiddenOutside': "This read opens a hidden folder outside the working folder ({percorso}): do you want me to do it?",
+  'server.approval.list.hiddenOutside': "This listing opens a hidden folder outside the working folder ({percorso}): do you want me to do it?",
+  'server.approval.command.hiddenOutside': "The command touches a hidden folder outside the working folder ({percorso}): do you want me to run it?",
+});
+
+/** La copia per la persona: lingua naturale, nessun nome tecnico, e DICE quale file. Inglese + chiave + valori (K4b). */
 function frasePerLaPersona(segnalazione, tipo) {
+  const tipoDellaFrase = tipo === 'leggi' || tipo === 'elenca' ? tipo : 'shell';
+  const fraseChiave = CHIAVI_DELLA_FRASE[`${segnalazione.classe}|${tipoDellaFrase}`];
+  if (fraseChiave) {
+    const fraseParams = { percorso: segnalazione.percorso };
+    /* ⛔ sostituzione con FUNZIONE: un percorso con `$&` o `$1` non deve diventare un'altra frase (lezione del 02/09) */
+    return { frase: FRASI_INGLESI[fraseChiave].replace('{percorso}', () => segnalazione.percorso), fraseChiave, fraseParams };
+  }
+  return { frase: fraseItalianaDiRiserva(segnalazione, tipo) };
+}
+
+/** Una classe che la tabella non conosce (non dovrebbe esistere): la frase di prima, mai una frase vuota. */
+function fraseItalianaDiRiserva(segnalazione, tipo) {
   const azione = tipo === 'leggi'
     ? { soggetto: 'Questa lettura apre', coda: 'vuoi che la faccia?' }
-    : { soggetto: 'Il comando tocca', coda: 'vuoi che lo esegua?' };
+    : tipo === 'elenca'
+      ? { soggetto: 'Questo elenco apre', coda: 'vuoi che lo faccia?' }
+      : { soggetto: 'Il comando tocca', coda: 'vuoi che lo esegua?' };
   if (segnalazione.classe === 'portachiavi') {
-    const apre = tipo === 'leggi' ? 'Questa lettura apre' : 'Il comando apre';
+    const apre = tipo === 'leggi' ? 'Questa lettura apre' : tipo === 'elenca' ? 'Questo elenco apre' : 'Il comando apre';
     return `${apre} il portachiavi del sistema, dove sono custodite le password: ${azione.coda}`;
   }
   const cosa = segnalazione.classe === 'segreto'
     ? 'un file che può contenere chiavi o password'
-    : 'una cartella nascosta fuori dalla cartella di lavoro';
+    : segnalazione.classe === 'fuori-workspace'
+      ? (tipo === 'elenca' ? 'una cartella fuori dalla cartella di lavoro' : 'un file fuori dalla cartella di lavoro')
+      : 'una cartella nascosta fuori dalla cartella di lavoro';
   return `${azione.soggetto} ${cosa} (${segnalazione.percorso}): ${azione.coda}`;
 }
 
@@ -350,15 +439,19 @@ function frasePerLaPersona(segnalazione, tipo) {
  *
  * @returns {null | {classe: string, percorso: string, frase: string}}
  */
-export function motivoDaChiedere({ tipo, comando, percorso, cartella, home = homeDiSistema() } = {}) {
-  const testo = tipo === 'leggi' ? percorso : comando;
+export function motivoDaChiedere({ tipo, comando, percorso, cartella, home = homeDiSistema(), accessoPieno = false } = {}) {
+  const lettura = LETTURE.has(tipo);
+  const testo = lettura ? percorso : comando;
   if (typeof testo !== 'string' || testo.trim() === '') return null;
   const nominato = nominaUnSegreto(testo, { home });
-  if (nominato) return { ...nominato, frase: frasePerLaPersona(nominato, tipo) };
+  if (nominato) return { ...nominato, ...frasePerLaPersona(nominato, tipo) };
   for (const pezzo of pezziDelComando(testo)) {
     const fuori = esceDalWorkspaceVersoUnNascosto(pezzo, { cartella, home });
-    if (fuori) return { ...fuori, frase: frasePerLaPersona(fuori, tipo) };
+    if (fuori) return { ...fuori, ...frasePerLaPersona(fuori, tipo) };
   }
+  // D2: per una lettura il percorso è UNO (non un comando da spezzare), e fuori dalla cartella si chiede.
+  const fuori = lettura && !accessoPieno ? letturaFuoriDalWorkspace(testo, { cartella, home }) : null;
+  if (fuori) return { ...fuori, ...frasePerLaPersona(fuori, tipo) };
   return null;
 }
 

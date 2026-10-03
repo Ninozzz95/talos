@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { recuperaCodaInterrotta } from '../src/session-tail-recovery.mjs';
 import { messaggiSenzaMessaggio, createSessionRegistry } from '../src/session-registry.mjs';
 import { stripNativeMetadata, toNativeMessages } from '../src/native-provider-adapter.mjs';
-import { talosLavora } from '../src/kernel/talosHarness.mjs';
+import { talosLavora, ISTRUZIONE_CONFINE_DATI } from '../src/kernel/talosHarness.mjs';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -126,7 +126,8 @@ for (const legacy of [false, true]) for (const outcome of ['saved', 'failed', 's
 for (const canonical of [false, true]) test(`RETRY08-KERNEL: rebuild missing context only, canonical=${canonical}`, async t => {
   const cartella = mkdtempSync(join(tmpdir(), 'talos-rebuild-context-'));
   t.after(() => rimuoviCartellaDiProva(cartella));
-  const history = [...(canonical ? [{ role: 'system', content: 'Original verified instructions.' }] : []),
+  // F-027, estensione: la storia canonica è di una sessione nata col confine (la vecchia riceve la frase in coda: F027E-SESSIONE-VECCHIA)
+  const history = [...(canonical ? [{ role: 'system', content: `Original verified instructions.\n\n${ISTRUZIONE_CONFINE_DATI}` }] : []),
     { role: 'user', content: 'Original question.' }, { role: 'assistant', content: 'Partial answer.' }, { role: 'user', content: 'Continue.' }];
   const original = structuredClone(history);
   let snapshot, sent;

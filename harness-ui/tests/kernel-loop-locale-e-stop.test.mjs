@@ -88,7 +88,7 @@ describe('BC-01 — il modello locale che va in loop: 398 chiamate in un giro so
         const esitiAttrezzo = esito.messaggiFinali.filter((m) => m.role === 'tool')
         assert.equal(esitiAttrezzo.length, 2, '398 chiamate dentro, 2 esiti in conversazione')
         assert.equal(esito.comeFinita, 'ripetizione', 'ne "concluso" ne "giri-esauriti": la ripetizione ha un esito SUO')
-        assert.match(esito.detto, /ha chiesto 3 volte la stessa identica cosa/)
+        assert.match(esito.detto, /asked 3 times for the very same thing/)
     })
 
     /*
@@ -244,8 +244,8 @@ describe('BC-02 — lo STOP deve essere immediato, non «al prossimo punto sicur
         assert.equal(esito.comeFinita, 'fermato')
         /* ⛔ «l'owner non ha approvato» sarebbe una BUGIA: non ha risposto affatto, ha fermato la sessione. Due motivi diversi. */
         const esitoAttrezzo = String(esito.messaggiFinali.filter((m) => m.role === 'tool').at(0)?.content ?? '')
-        assert.match(esitoAttrezzo, /fermato su richiesta mentre aspettavo la tua approvazione/)
-        assert.doesNotMatch(esitoAttrezzo, /non ha approvato/)
+        assert.match(esitoAttrezzo, /stopped on request while waiting for the person's approval/)
+        assert.doesNotMatch(esitoAttrezzo, /did not approve/)
     })
 
     it('⭐⭐⭐ il registro dice DOVE si e fermato, non solo che si e fermato', async (t) => {
@@ -265,8 +265,8 @@ describe('BC-02 — lo STOP deve essere immediato, non «al prossimo punto sicur
                     : fintoBackend([{ choices: [{ delta: { content: 'fine' } }] }])
             },
         })
-        assert.match(esito.detto, /interrotto su richiesta: mentre aspettavo la tua approvazione per "scrivi"/,
-            '«⛔ interrotto su richiesta.» da solo e vero e inservibile: chi rilegge domani deve sapere COSA si e fermato')
+        assert.match(esito.detto, /stopped on request: while waiting for your approval for "scrivi"/,
+            '«⛔ stopped on request.» da solo e vero e inservibile: chi rilegge domani deve sapere COSA si e fermato')
     })
 
     describe('⛔⛔⛔ lo stop uccide l\'ALBERO del sottoprocesso, non solo la shell', () => {
@@ -310,7 +310,7 @@ describe('BC-02 — lo STOP deve essere immediato, non «al prossimo punto sicur
             assert.equal(r.fermatoSuRichiesta, true)
             /* ⛔ 130 = 128 + SIGINT: «l'ha interrotto qualcuno», DIVERSO dal 124 di «tempo scaduto». Tre esiti, tre codici. */
             assert.equal(r.codice, 130)
-            assert.match(String(r.testo), /Fermato su richiesta/)
+            assert.match(String(r.testo), /Stopped on request/)
             await new Promise((ok) => setTimeout(ok, 2_500))
             assert.equal(quantiVivi(), 0, 'il nipote e sopravvissuto: `p.kill()` ha ucciso la shell e non l\'albero')
         })
@@ -323,7 +323,7 @@ describe('BC-02 — lo STOP deve essere immediato, non «al prossimo punto sicur
             assert.equal(r.codice, 0)
             assert.notEqual(r.fermatoSuRichiesta, true)
             assert.match(String(r.testo), /CIAO-INTATTO/)
-            assert.doesNotMatch(String(r.testo), /Fermato su richiesta/)
+            assert.doesNotMatch(String(r.testo), /Stopped on request/)
         })
     })
 
@@ -464,9 +464,9 @@ describe('BC-01/BC-02 — nessun indicatore resta a girare: N annunciati, N fini
     it('⛔⛔ VALANGA — chi e scartato DICE perche: il motivo nomina la ripetizione e l attrezzo', async () => {
         const k = await contaSulKernel(valanga(398))
         const annullo = k.delta.find((d) => d.tipo === 'tool-annullato')
-        assert.match(annullo.motivo, /Scartato: il modello ha chiesto 3 volte di fila la stessa identica cosa/)
+        assert.match(annullo.motivo, /Discarded: the model asked 3 times in a row for the very same thing/)
         assert.match(annullo.motivo, /"elenca"/)
-        assert.match(annullo.motivo, /non e stato eseguito/)
+        assert.match(annullo.motivo, /This tool did not run/)
         assert.equal(annullo.nome, 'elenca')
     })
 
@@ -500,7 +500,7 @@ describe('BC-01/BC-02 — nessun indicatore resta a girare: N annunciati, N fini
         const annullati = delta.filter((d) => d.tipo === 'tool-annullato')
         assert.deepEqual(annunciati, ['a', 'b'])
         assert.equal(annullati.length, 2, 'il giro non arriva MAI al ciclo degli attrezzi: se non li chiude questo, non li chiude nessuno')
-        assert.match(annullati[0].motivo, /Fermato su richiesta/)
+        assert.equal(annullati[0].motivo, '⛔ Stopped on request: it could not run, the session was stopped first. This tool did not run.', 'la frase concordata con la CLI, INTERA')
         const a = await contaSuAgUi(delta)
         assert.equal(a.start.length, 2)
         assert.equal(a.result.length, 2, 'N annunciati, N finiti')

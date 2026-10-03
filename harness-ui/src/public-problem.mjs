@@ -1,42 +1,42 @@
 import { createHash } from 'node:crypto';
 
 const diagnostics = new Map();
-const MESSAGES = Object.freeze({
-  CONFIG_INVALID: { title: 'Configurazione non pronta', explanation: 'Manca una parte della configurazione necessaria per completare questa operazione.', action: 'Apri Doctor e segui i controlli indicati, poi riprova.' },
-  TASK_CATALOG_UNAVAILABLE: { title: 'Elenco attività non disponibile', explanation: 'Il servizio che fornisce le attività non è ancora collegato.', action: 'Controlla Doctor o configura il servizio delle attività, poi riprova.' },
-  RUNTIME_NOT_AVAILABLE: { title: 'Servizio locale non disponibile', explanation: 'Non è stato possibile trovare un servizio locale pronto.', action: 'Apri Doctor per vedere cosa manca oppure scegli un servizio online.' },
-  WORKFLOW_STORE_UNAVAILABLE: { title: 'Workflow non disponibile', explanation: 'Il registro Workflow non è configurato su questo server.', action: 'Configura l’archivio Workflow e riavvia TALOS.' },
-  WORKFLOW_PROPOSAL_NOT_FOUND: { title: 'Piano Workflow non trovato', explanation: 'Questa proposta non appartiene a una sessione disponibile o non esiste più.', action: 'Riapri la sessione e scegli una proposta verificabile.' },
-  WORKFLOW_DEFINITION_HASH_MISMATCH: { title: 'Piano Workflow cambiato', explanation: 'L’impronta da approvare non coincide con la proposta salvata.', action: 'Ricarica la proposta, leggila e approva la sua impronta attuale.' },
-  WORKFLOW_COMMAND_CONFLICT: { title: 'Comando Workflow già usato', explanation: 'Questo identificativo è già associato a un comando diverso.', action: 'Rileggi la ricevuta prima di creare un nuovo comando.' },
-  WORKFLOW_APPROVAL_CONFLICT: { title: 'Piano Workflow già approvato', explanation: 'Una diversa approvazione è già stata registrata per questa versione.', action: 'Ricarica la proposta per vedere lo stato approvato.' },
-  WORKFLOW_STORE_NEEDS_ATTENTION: { title: 'Archivio Workflow da verificare', explanation: 'L’approvazione non può essere confermata con una ricevuta durevole.', action: 'Non ripetere alla cieca il comando; conserva l’evidenza e verifica l’archivio.' },
-  WORKFLOW_APPROVAL_ORIGIN_FORBIDDEN: { title: 'Approvazione Workflow bloccata', explanation: 'La richiesta proviene da una finestra diversa da TALOS.', action: 'Torna alla proposta aperta in TALOS e conferma da lì.' },
+export const MESSAGES = Object.freeze({
+  CONFIG_INVALID: { title: 'Configuration not ready', explanation: 'Part of the configuration needed to complete this operation is missing.', action: 'Open Doctor and follow the checks listed, then try again.' },
+  TASK_CATALOG_UNAVAILABLE: { title: 'Task list unavailable', explanation: 'The service that provides the tasks is not connected yet.', action: 'Check Doctor or set up the tasks service, then try again.' },
+  RUNTIME_NOT_AVAILABLE: { title: 'Local service unavailable', explanation: 'No local service ready could be found.', action: 'Open Doctor to see what is missing, or choose an online service.' },
+  WORKFLOW_STORE_UNAVAILABLE: { title: 'Workflow unavailable', explanation: 'The Workflow registry is not set up on this server.', action: 'Set up the Workflow store and restart TALOS.' },
+  WORKFLOW_PROPOSAL_NOT_FOUND: { title: 'Workflow plan not found', explanation: 'This proposal does not belong to an available session or no longer exists.', action: 'Reopen the session and choose a verifiable proposal.' },
+  WORKFLOW_DEFINITION_HASH_MISMATCH: { title: 'Workflow plan changed', explanation: 'The fingerprint to approve does not match the saved proposal.', action: 'Reload the proposal, read it and approve its current fingerprint.' },
+  WORKFLOW_COMMAND_CONFLICT: { title: 'Workflow command already used', explanation: 'This identifier is already tied to a different command.', action: 'Re-read the receipt before creating a new command.' },
+  WORKFLOW_APPROVAL_CONFLICT: { title: 'Workflow plan already approved', explanation: 'A different approval has already been recorded for this version.', action: 'Reload the proposal to see the approved state.' },
+  WORKFLOW_STORE_NEEDS_ATTENTION: { title: 'Workflow store needs checking', explanation: 'The approval cannot be confirmed with a durable receipt.', action: 'Do not blindly repeat the command; keep the evidence and check the store.' },
+  WORKFLOW_APPROVAL_ORIGIN_FORBIDDEN: { title: 'Workflow approval blocked', explanation: 'The request comes from a window other than TALOS.', action: 'Go back to the proposal open in TALOS and confirm from there.' },
   // F3-51c (25/09/2026): Avvia e i controlli del run (Pausa, Riprendi, Annulla, Riprova).
-  WORKFLOW_RUNTIME_NOT_READY: { title: 'Avvio non ancora disponibile', explanation: 'Il motore dei Workflow non è pronto su questo server: niente è stato avviato né cambiato.', action: 'Apri Doctor per vedere cosa manca, poi riprova.' },
-  WORKFLOW_RUN_STATE_CONFLICT: { title: 'Comando non applicabile ora', explanation: 'Il Workflow non è nello stato giusto per questo comando: niente è stato cambiato.', action: 'Ricarica il Workflow e scegli fra i comandi disponibili adesso.' },
-  WORKFLOW_DEFINITION_NOT_APPROVED: { title: 'Workflow non approvato', explanation: 'Si può avviare solo la versione approvata di un Workflow.', action: 'Leggi la proposta e approvala, poi avviala.' },
-  WORKFLOW_START_UNSUPPORTED: { title: 'Workflow non avviabile qui', explanation: 'Alcuni passi non si possono ancora eseguire su questo server, o scriverebbero nel progetto: niente è stato avviato.', action: 'Chiedi una proposta con soli passi in sola lettura.' },
-  WORKFLOW_COMMAND_ORIGIN_FORBIDDEN: { title: 'Comando Workflow bloccato', explanation: 'La richiesta proviene da una finestra diversa da TALOS.', action: 'Torna al Workflow aperto in TALOS e riprova da lì.' },
+  WORKFLOW_RUNTIME_NOT_READY: { title: 'Start not available yet', explanation: 'The Workflow engine is not ready on this server: nothing was started or changed.', action: 'Open Doctor to see what is missing, then try again.' },
+  WORKFLOW_RUN_STATE_CONFLICT: { title: 'Command not applicable now', explanation: 'The Workflow is not in the right state for this command: nothing was changed.', action: 'Reload the Workflow and choose among the commands available right now.' },
+  WORKFLOW_DEFINITION_NOT_APPROVED: { title: 'Workflow not approved', explanation: 'Only the approved version of a Workflow can be started.', action: 'Read the proposal and approve it, then start it.' },
+  WORKFLOW_START_UNSUPPORTED: { title: 'Workflow cannot start here', explanation: 'Some steps cannot be run on this server yet, or would write to the project: nothing was started.', action: 'Ask for a proposal with read-only steps only.' },
+  WORKFLOW_COMMAND_ORIGIN_FORBIDDEN: { title: 'Workflow command blocked', explanation: 'The request comes from a window other than TALOS.', action: 'Go back to the Workflow open in TALOS and try again from there.' },
   // 23/09/2026: la risposta a una domanda si conferma solo dopo il salvataggio (riparazione Ask D2).
-  QUESTION_ANSWER_NOT_SAVED: { title: 'Risposta non salvata', explanation: 'TALOS non è riuscito a salvare la tua risposta sul disco, quindi la domanda è stata chiusa senza usarla.', action: 'Controlla lo spazio della cartella dati in Doctor e rispondi di nuovo quando TALOS te lo richiede.' },
+  QUESTION_ANSWER_NOT_SAVED: { title: 'Answer not saved', explanation: 'TALOS could not save your answer to disk, so the question was closed without using it.', action: 'Check the data folder space in Doctor and answer again when TALOS asks you.' },
   // 24/09/2026, decisioni owner 36-39: la scelta sul piano approvabile.
-  PLAN_NOT_PENDING: { title: 'Piano già deciso', explanation: 'La sessione è andata avanti: questo piano non aspetta più una scelta.', action: 'Ricarica la sessione e guarda il piano che vedi adesso, se ce n’è uno.' },
-  PLAN_STALE: { title: 'Piano aggiornato', explanation: 'TALOS ha presentato una versione più nuova del piano: la scelta valeva per quella vecchia.', action: 'Leggi il piano aggiornato e scegli su quello.' },
-  PLAN_DECISION_NOT_SAVED: { title: 'Scelta non salvata', explanation: 'TALOS non è riuscito a salvare la tua scelta sul disco: il piano aspetta ancora.', action: 'Controlla lo spazio della cartella dati in Doctor e scegli di nuovo.' },
-  PLAN_APPROVAL_ORIGIN_FORBIDDEN: { title: 'Scelta sul piano bloccata', explanation: 'La richiesta proviene da una finestra diversa da TALOS.', action: 'Torna al piano aperto in TALOS e scegli da lì.' },
+  PLAN_NOT_PENDING: { title: 'Plan already decided', explanation: 'The session has moved on: this plan no longer waits for a choice.', action: 'Reload the session and look at the plan you see now, if there is one.' },
+  PLAN_STALE: { title: 'Plan updated', explanation: 'TALOS presented a newer version of the plan: your choice applied to the old one.', action: 'Read the updated plan and choose on that one.' },
+  PLAN_DECISION_NOT_SAVED: { title: 'Choice not saved', explanation: 'TALOS could not save your choice to disk: the plan is still waiting.', action: 'Check the data folder space in Doctor and choose again.' },
+  PLAN_APPROVAL_ORIGIN_FORBIDDEN: { title: 'Plan choice blocked', explanation: 'The request comes from a window other than TALOS.', action: 'Go back to the plan open in TALOS and choose from there.' },
   // 23/09/2026 (F3-10): un solo selettore Normale / Piano.
-  MODE_WORKFLOW_RETIRED: { title: 'Modalità non più disponibile', explanation: 'La modalità Workflow è stata tolta: ora si lavora in Normale o in Piano, e il Workflow è uno strumento che il modello usa quando serve.', action: 'Scegli Normale o Piano e riprova.' },
-  RUNTIME_UNREACHABLE: { title: 'Servizio locale non raggiungibile', explanation: 'Il servizio locale non ha risposto.', action: 'Controlla che sia avviato in Doctor e riprova.' },
-  PATH_NOT_ALLOWED: { title: 'Percorso non consentito', explanation: 'Il percorso scelto è fuori dall’area autorizzata.', action: 'Scegli una cartella dentro il progetto aperto.' },
-  PROCESS_POLICY_REJECTED: { title: 'Operazione bloccata per sicurezza', explanation: 'Il comando richiesto non rientra nelle autorizzazioni correnti.', action: 'Controlla il permesso della sessione e riprova solo se riconosci il comando.' },
+  MODE_WORKFLOW_RETIRED: { title: 'Mode no longer available', explanation: 'Workflow mode has been removed: you now work in Normal or Plan, and Workflow is a tool the model uses when needed.', action: 'Choose Normal or Plan and try again.' },
+  RUNTIME_UNREACHABLE: { title: 'Local service unreachable', explanation: 'The local service did not respond.', action: 'Check in Doctor that it is running and try again.' },
+  PATH_NOT_ALLOWED: { title: 'Path not allowed', explanation: 'The chosen path is outside the authorized area.', action: 'Choose a folder inside the open project.' },
+  PROCESS_POLICY_REJECTED: { title: 'Operation blocked for safety', explanation: 'The requested command is not covered by the current permissions.', action: 'Check the session permission and try again only if you recognize the command.' },
   /*
    * ⛔ 07/9, O-49 — senza una voce qui la busta portava la copia di INTERNAL_ERROR:
    * «Si è verificato un problema imprevisto» e «Apri Doctor». Falso due volte: non è
    * imprevisto, ed è l’unica cosa che Doctor non può spiegare. La scheda del permesso
    * è semplicemente vecchia — si ricarica la sessione e si guarda cosa chiede adesso.
    */
-  APPROVAL_NOT_PENDING: { title: 'Richiesta di permesso scaduta', explanation: 'La sessione è andata avanti: quella domanda non aspetta più una risposta.', action: 'Ricarica la sessione e rispondi alla richiesta che vedi adesso, se ce n’è una.' },
+  APPROVAL_NOT_PENDING: { title: 'Permission request expired', explanation: 'The session has moved on: that question no longer waits for an answer.', action: 'Reload the session and answer the request you see now, if there is one.' },
   /*
    * ⛔⛔ 07/9, owner bloccato: «la sessione e ancora bloccata, non riesco a inviare messaggi e
    * spunta errore toast». `SESSION_NOT_READY` NON era in questa mappa, quindi cadeva su
@@ -48,18 +48,18 @@ const MESSAGES = Object.freeze({
    *   una porta chiusa senza indicazione di dove sia quella aperta e il modo migliore per bloccare
    *   una persona su una schermata.
    */
-  SESSION_NOT_READY: { title: 'Sessione non pronta', explanation: 'Questa sessione non puo accettare l’azione richiesta nello stato in cui si trova.', action: 'Se e stata interrotta da un riavvio, avvia una sessione nuova: la conversazione resta leggibile qui.' },
-  SESSION_STORE_WRITE_FAILED: { title: 'Salvataggio della cronologia non riuscito', explanation: 'Il riassunto non è stato confermato perché la nuova cronologia non è stata salvata. I messaggi originali restano disponibili.', action: 'Riprova la compattazione. Se il problema persiste, usa il riferimento diagnostico in Doctor.' },
+  SESSION_NOT_READY: { title: 'Session not ready', explanation: 'This session cannot accept the requested action in its current state.', action: 'If it was interrupted by a restart, start a new session: the conversation stays readable here.' },
+  SESSION_STORE_WRITE_FAILED: { title: 'History save failed', explanation: 'The summary was not confirmed because the new history was not saved. The original messages remain available.', action: 'Try compacting again. If the problem persists, use the diagnostic reference in Doctor.' },
   /*
    * ⛔ 23/09/2026, EXFAT — il testo diceva «Controlla spazio e permessi» per OGNI guasto della
    * testata, anche su una chiavetta exFAT dove `fs.link` fallisce con EISDIR (nodejs/node#65817,
    * «EISDIR actively misleads»): la causa indicata era falsa. Il codice generico non conosce la
    * causa, quindi non ne afferma nessuna; il disco senza collegamenti ha il suo codice qui sotto.
    */
-  SESSION_STORE_HEADER_FAILED: { title: 'Sessione non avviata', explanation: 'La nuova sessione non è stata avviata perché il suo file iniziale non è stato creato e verificato nella cartella delle sessioni.', action: 'Riprova. Se il problema persiste, il registro del server indica la causa rilevata dal disco: usa il riferimento diagnostico in Doctor.' },
-  SESSION_STORE_FS_UNSUPPORTED: { title: 'Disco non adatto alle sessioni', explanation: 'La nuova sessione non è stata avviata perché il file system del disco che contiene la cartella delle sessioni non supporta la creazione sicura dei file che TALOS usa.', action: 'Sposta la cartella dati di TALOS su un disco interno formattato NTFS, poi riprova.' },
-  SESSION_STORE_DELETE_FAILED: { title: 'Eliminazione della sessione non riuscita', explanation: 'La sessione non è stata eliminata e resta disponibile.', action: 'Controlla lo spazio e i permessi di archiviazione, poi riprova. Se il problema persiste, usa il riferimento diagnostico in Doctor.' },
-  SESSION_STORE_AMBIGUOUS: { title: 'Stato del salvataggio da verificare', explanation: 'L’esito del salvataggio è incerto: non sappiamo quale parte della cronologia sia stata salvata.', action: 'Non riprovare la compattazione in questa sessione. Conserva il riferimento diagnostico e verifica il registro con Doctor.' },
+  SESSION_STORE_HEADER_FAILED: { title: 'Session not started', explanation: 'The new session was not started because its initial file was not created and verified in the sessions folder.', action: 'Try again. If the problem persists, the server log gives the cause detected from the disk: use the diagnostic reference in Doctor.' },
+  SESSION_STORE_FS_UNSUPPORTED: { title: 'Disk not suitable for sessions', explanation: 'The new session was not started because the file system of the disk holding the sessions folder does not support the safe file creation TALOS uses.', action: 'Move the TALOS data folder to an internal NTFS-formatted disk, then try again.' },
+  SESSION_STORE_DELETE_FAILED: { title: 'Session deletion failed', explanation: 'The session was not deleted and remains available.', action: 'Check the storage space and permissions, then try again. If the problem persists, use the diagnostic reference in Doctor.' },
+  SESSION_STORE_AMBIGUOUS: { title: 'Save state needs checking', explanation: 'The outcome of the save is uncertain: we do not know which part of the history was saved.', action: 'Do not retry compaction in this session. Keep the diagnostic reference and check the log with Doctor.' },
   /*
    * ⛔⛔ 12/09, L5 — LA STESSA VORAGINE DI O-49, e per questo sono qui il giorno stesso in cui
    * nascono i codici. Senza una voce in questa mappa una risposta cade sulla copia di
@@ -69,14 +69,14 @@ const MESSAGES = Object.freeze({
    * vera prima di scrivere queste righe, non dedotto.
    * ⛔ Nessuna di queste è un guasto: sono tre no diversi, e ognuna dice COSA FARE.
    */
-  RESEARCH_NOT_FOUND: { title: 'Ricerca non trovata', explanation: 'Questa ricerca approfondita non è più nel progetto: può essere stata eliminata.', action: 'Torna all’elenco delle ricerche: mostra quelle che ci sono adesso.' },
-  RESEARCH_CONFLICT: { title: 'Azione non possibile adesso', explanation: 'Questa ricerca non è nello stato che l’azione richiede — per esempio è già ferma, o è già finita.', action: 'Riapri la scheda della ricerca: dice come sta in questo momento.' },
-  ELICITATION_NOT_PENDING: { title: 'Richiesta già chiusa', explanation: 'Il server non aspetta più questa risposta: è stata data da un’altra finestra, o la sessione si è fermata.', action: 'Guarda la scheda nella chat: dice com’è finita.' },
-  ELICITATION_ANSWER_INVALID: { title: 'Risposta non valida', explanation: 'Quello che hai scritto non corrisponde a ciò che il server ha chiesto.', action: 'Controlla i campi della scheda e invia di nuovo.' },
-  PROCESS_NOT_RUNNING: { title: 'Comando già finito', explanation: 'Questo comando non è più in corso: è finito da solo, o qualcuno l’ha già fermato.', action: 'Guarda la riga nella scheda Processi: dice come è finito.' },
-  RESEARCH_RECHECK_UNAVAILABLE: { title: 'Controllo delle fonti non possibile', explanation: 'Per ricontrollare le fonti serve un rapporto con i passaggi citati, e questa ricerca non ne ha.', action: 'Le ricerche nuove lo portano: questa si può rifare, oppure lasciarla com’è.' },
-  RESEARCH_INVALID: { title: 'Richiesta non valida', explanation: 'L’identificativo della ricerca non ha una forma ammessa.', action: 'Apri la ricerca dall’elenco invece di comporre l’indirizzo a mano.' },
-  INTERNAL_ERROR: { title: 'Operazione non riuscita', explanation: 'Si è verificato un problema imprevisto durante l’operazione.', action: 'Apri Doctor, copia il riferimento e riprova.' },
+  RESEARCH_NOT_FOUND: { title: 'Research not found', explanation: 'This deep research is no longer in the project: it may have been deleted.', action: 'Go back to the list of researches: it shows the ones that exist now.' },
+  RESEARCH_CONFLICT: { title: 'Action not possible now', explanation: 'This research is not in the state the action requires — for example it is already stopped, or already finished.', action: 'Reopen the research card: it says how it is right now.' },
+  ELICITATION_NOT_PENDING: { title: 'Request already closed', explanation: 'The server no longer waits for this answer: it was given from another window, or the session stopped.', action: 'Look at the card in the chat: it says how it ended.' },
+  ELICITATION_ANSWER_INVALID: { title: 'Invalid answer', explanation: 'What you wrote does not match what the server asked.', action: 'Check the fields of the card and send again.' },
+  PROCESS_NOT_RUNNING: { title: 'Command already finished', explanation: 'This command is no longer running: it finished on its own, or someone already stopped it.', action: 'Look at the row in the Processes tab: it says how it ended.' },
+  RESEARCH_RECHECK_UNAVAILABLE: { title: 'Source check not possible', explanation: 'To recheck the sources a report with the cited passages is needed, and this research has none.', action: 'New researches have it: this one can be redone, or left as it is.' },
+  RESEARCH_INVALID: { title: 'Invalid request', explanation: 'The research identifier does not have an allowed form.', action: 'Open the research from the list instead of typing the address by hand.' },
+  INTERNAL_ERROR: { title: 'Operation failed', explanation: 'An unexpected problem occurred during the operation.', action: 'Open Doctor, copy the reference and try again.' },
 });
 
 function safeCode(error) {
@@ -123,13 +123,30 @@ function messaggioPubblicabile(testo) {
   return t;
 }
 
+/**
+ * I valori che una frase pubblica contiene (un nome, un numero), per l'interfaccia che la dice nella sua lingua (decisione
+ * owner 03/10/2026, «L'interfaccia, dal codice»): un oggetto piatto di testi e numeri, coi nomi dei segnaposto del dizionario.
+ * Il `message` inglese li contiene già. Torna `null` se l'errore non ne porta: mai un oggetto vuoto, mai valori annidati.
+ * ⛔ Passano SOLO testi e numeri, e solo quelli che l'errore dichiara in `params`: niente che non sia stato scelto per la persona.
+ */
+export function paramsPubblici(error) {
+  const grezzi = error?.params;
+  if (!grezzi || typeof grezzi !== 'object' || Array.isArray(grezzi)) return null;
+  const fuori = {};
+  for (const [nome, valore] of Object.entries(grezzi)) {
+    if (/^[a-zA-Z0-9_]+$/u.test(nome) && (typeof valore === 'string' || (typeof valore === 'number' && Number.isFinite(valore)))) fuori[nome] = valore;
+  }
+  return Object.keys(fuori).length > 0 ? fuori : null;
+}
+
 export function toPublicProblem(error, { requestId = '', operation = '' } = {}) {
   const code = safeCode(error);
   const copy = MESSAGES[code] ?? MESSAGES.INTERNAL_ERROR;
   const doctorReference = referenceFor(code, requestId, operation);
   diagnostics.set(doctorReference, Object.freeze({ code, operation: String(operation || 'operation'), requestId: String(requestId || ''), detail: safeDiagnosticDetail(error) }));
   const vero = MESSAGGIO_GIA_PER_LA_PERSONA.has(code) ? messaggioPubblicabile(error?.message) : '';
-  return { title: copy.title, explanation: vero || copy.explanation, action: copy.action, doctorReference };
+  const params = paramsPubblici(error);
+  return { title: copy.title, explanation: vero || copy.explanation, action: copy.action, doctorReference, ...(params ? { params } : {}) };
 }
 
 export function logDiagnosticProblem(error, { requestId = '', operation = '', logger = console } = {}) {

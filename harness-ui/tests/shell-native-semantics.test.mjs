@@ -1,4 +1,5 @@
 import test from 'node:test';
+import { togliConfiniDati, neutralizzaDati } from '../src/kernel/confine-dati.mjs';
 import assert from 'node:assert/strict';
 import {mkdtempSync, writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
@@ -49,7 +50,8 @@ async function compare(t, command, expectedCode, root = fixture(t)) {
   const talos = await agent(command, root);
   assert.equal(talos.output.isError, expectedCode !== 0, talos.output.content);
   assert.match(talos.output.content, new RegExp(`^exit ${expectedCode}(?=\\s|$)`));
-  if (direct.output) assert.ok(talos.output.content.includes(direct.output), talos.output.content);
+  // F-027: il modello vede l'uscita dentro il confine, e neutralizzata come un'uscita di comando (CRLF → LF, niente controlli)
+  if (direct.output) assert.ok(togliConfiniDati(talos.output.content).includes(neutralizzaDati(direct.output, {comandi: true}).testo), talos.output.content);
   t.diagnostic(JSON.stringify({command, native: direct, talos: talos.output.content}));
   return talos;
 }

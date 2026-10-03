@@ -19,6 +19,11 @@ async function apri(page, session = id, conclusa = false) {
   await page.locator('#talosAvvio').waitFor({ state: 'detached' });
   await page.evaluate(({ session, conclusa }) => window.__talosHarnessUiRuntime.passaASessione(session, 'workspace', 'Verifica temporaneamente in attesa', 'test/model', { conclusa, modello: 'test/model' }), { session, conclusa });
   await page.waitForFunction(() => window.__talosHarnessUiRuntime.realSessionState.inRigiocata === false);
+  /* 03/10/2026: finita la rigiocata, la chat resta nascosta (`#conversation.is-restoring`, visibility:hidden) finché il custode
+     del ripristino non la scopre, al suo giro successivo (ogni 200 ms, `app.js` «fermaSeFinito»). `locator.focus()` non aspetta
+     la visibilità (Playwright, actionability: focus non ha controlli), quindi il focus su un elemento ancora nascosto cadeva
+     sul body: RETRY06 HTTP402 rosso 3 volte su 6 già alla corsia C. Si aspetta la chat che la persona vede. */
+  await page.waitForFunction(() => !document.getElementById('conversation')?.classList.contains('is-restoring'));
 }
 
 for (const httpStatus of [503, 402]) for (const theme of ['dark', 'light']) test(`RETRY06-LIVE HTTP${httpStatus} ${theme}: attesa, reload, invio, Stop e cambio sessione`, async ({ page }) => {

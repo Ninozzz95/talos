@@ -23,6 +23,9 @@
  * ⛔ L'ultima riga di ogni progetto NON si inventa: se un progetto non ha sessioni si dice, invece
  * di mostrare uno zero che sembra una misura.
  */
+import { t as traduci, tn, linguaCorrenteDiT } from './lingua.js';
+/* Numeri nella lingua dell'interfaccia (italiano → it-IT, inglese → en-US), letti a ogni uso. */
+const localeUI = () => (linguaCorrenteDiT() === 'en' ? 'en-US' : 'it-IT');
 import { usageDellaSessione } from './consumo-sessione.js';
 
 /** Quante sessioni recenti si mostrano sotto ogni progetto — lo stesso numero trovato in ricerca. */
@@ -93,18 +96,20 @@ export function ultimeSessioni(progetto, quante = QUANTE_RECENTI) {
 /** «6 progetti» / «1 progetto» / «nessun progetto» — il plurale italiano, non una `s`. */
 export function sommarioProgetti(quanti) {
   const n = Number(quanti) || 0;
-  if (n === 0) return 'nessun progetto';
-  return n === 1 ? '1 progetto' : `${n} progetti`;
+  if (n === 0) return traduci('sezioni.projects.count.none');
+  return tn('sezioni.projects.count.one', 'sezioni.projects.count.many', n);
 }
 
 /** La riga di fatti sotto il nome: ciò che manca non si scrive, e non diventa uno zero. */
 export function frasiProgetto(progetto) {
   if (!progetto) return '';
-  if (!progetto.quante) return 'nessuna sessione ancora';
-  const pezzi = [progetto.quante === 1 ? '1 sessione' : `${progetto.quante} sessioni`];
-  if (progetto.giri > 0) pezzi.push(progetto.giri === 1 ? '1 giro' : `${progetto.giri} giri`);
+  if (!progetto.quante) return traduci('sezioni.projects.facts.noSessionsYet');
+  const pezzi = [tn('sezioni.projects.facts.sessionsOne', 'sezioni.projects.facts.sessionsMany', progetto.quante)];
+  if (progetto.giri > 0) pezzi.push(tn('sezioni.projects.facts.turnsOne', 'sezioni.projects.facts.turnsMany', progetto.giri));
   if (progetto.token > 0) {
-    pezzi.push(progetto.token >= 1000 ? `${(progetto.token / 1000).toFixed(1).replace('.', ',')}k token` : `${progetto.token} token`);
+    pezzi.push(progetto.token >= 1000
+      ? traduci('sezioni.projects.facts.tokensThousands', { value: new Intl.NumberFormat(localeUI(), { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(progetto.token / 1000) })
+      : tn('sezioni.projects.facts.tokensOne', 'sezioni.projects.facts.tokensMany', progetto.token));
   }
   return pezzi.join(' · ');
 }
@@ -150,7 +155,7 @@ export function montaProgetti(schermo, progetti, { onApriSessione = null, quante
         bottone.className = 'talos-progetto__sessione';
         bottone.dataset.apriSessione = s.sessionId || '';
         bottone.append(
-          el(d, 'span', 'talos-progetto__sessione-nome', s.nome || s.taskId || 'Sessione senza nome'),
+          el(d, 'span', 'talos-progetto__sessione-nome', s.nome || s.taskId || traduci("sezioni.projects.sessionUntitled")),
           el(d, 'span', 'talos-progetto__sessione-quando', oraCorta(s.avviataAlle)),
         );
         if (typeof onApriSessione === 'function') bottone.addEventListener('click', () => onApriSessione(s));
@@ -160,7 +165,7 @@ export function montaProgetti(schermo, progetti, { onApriSessione = null, quante
       li.append(ul);
       // ⛔ Chi mostra solo tre non dice quante restano: se ce ne sono altre, lo diciamo.
       if (p.quante > recenti.length) {
-        li.append(el(d, 'p', 'talos-progetto__altre', `e altre ${p.quante - recenti.length} più vecchie`));
+        li.append(el(d, 'p', 'talos-progetto__altre', traduci("sezioni.projects.olderSessions", { count: p.quante - recenti.length })));
       }
     }
     lista.append(li);
@@ -173,7 +178,7 @@ function sommario0(elenco) {
   const conSessioni = elenco.filter((p) => p.quante > 0).length;
   if (!elenco.length) return sommarioProgetti(0);
   if (conSessioni === elenco.length) return sommarioProgetti(elenco.length);
-  return `${sommarioProgetti(elenco.length)} · ${conSessioni} con sessioni`;
+  return `${sommarioProgetti(elenco.length)} · ${traduci('sezioni.projects.withSessions', { count: conSessioni })}`;
 }
 
 function el(d, tag, classe, testo) {

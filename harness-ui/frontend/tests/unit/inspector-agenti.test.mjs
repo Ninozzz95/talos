@@ -263,7 +263,8 @@ export function statoVuotoDelTemplate(html) {
   const pannello = /<div class="talos-inspector__body" id="railAgenti"[^>]*>([\s\S]*?)<\/div>\s*<div class="talos-inspector__body"/.exec(html)
     || /id="railAgenti"[^>]*>([\s\S]*?)<div class="talos-inspector__body"/.exec(html);
   const dentro = pannello ? pannello[1] : html;
-  const p = /<p class="talos-inspector__hint">([^<]*)<\/p>/.exec(dentro);
+  // 03/10/2026, corsia S1: il tag porta anche `data-t` (la chiave della lingua): si cerca la classe, non la forma esatta del tag
+  const p = /<p\b[^>]*\bclass="talos-inspector__hint"[^>]*>([^<]*)<\/p>/.exec(dentro);
   return p ? p[1].trim() : null;
 }
 

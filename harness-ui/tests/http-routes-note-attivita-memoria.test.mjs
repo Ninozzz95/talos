@@ -4,6 +4,7 @@ import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
+import { AREE } from '../frontend/src/i18n/testi/index.js';
 
 import { createHttpApp } from '../src/http-app.mjs';
 /*
@@ -109,7 +110,8 @@ test('⛔⛔ AL CONTRARIO — NOTE: chiave non ammessa 400, corpo vuoto 400, con
    *   `title`/`content` (nomi di campo, in inglese): vanno riscritti per una persona PRIMA di
    *   poter uscire a schermo. Registrato nel rapporto, non fatto di nascosto qui.
    */
-  assert.equal(erroreIgnota.message, 'Query non valida');
+  assert.equal(erroreIgnota.message, 'Invalid query');
+  assert.equal(AREE.errori.it['QUERY_INVALID.message'], 'Query non valida', 'e in italiano lo dice il dizionario, dal codice');
   assert.match(String(erroreIgnota.doctorReference ?? ''), /\S/, 'il motivo preciso resta raggiungibile dal Doctor');
 
   assert.equal((await scrivi(base, perSessione('/notes'), 'POST', { titolo: 'senza contenuto' })).status, 400);

@@ -87,11 +87,21 @@ const congela = (valore) => Object.freeze(valore);
  *
  * L'ordine di dichiarazione è quello con cui i derivati si presentano: cambiarlo cambia l'ordine
  * nel pannello Provider e nel prefisso ammesso dalla regex del modello, quindi si cambia apposta.
+ *
+ * ⛔⛔ K4a (03/10/2026, owner: «ogni singola parola nella app deve essere sia in inglese che in italiano») — i testi liberi del
+ *   registro (`descrizione`, `cache.etichetta`, `motivoAusiliario`, `catalogo.riservaConfigurazione`, `prezzi.nota`) non arrivano a
+ *   nessuno schermo (misurato: nessun componente li legge) e sono in INGLESE. La sola eccezione che la persona legge è `cloud.nota`
+ *   (scheda Azure/Bedrock/Vertex): frase inglese + `notaChiave` (area `server` del dizionario dell'interfaccia).
+ *   ⛔ Quattro `etichetta` portano ancora una parola italiana («Agente esterno», «Z.AI (porta Anthropic)», «MiniMax (porta
+ *   Anthropic)», «Motore locale (llama.cpp)») e restano com'erano: altre frasi del server le citano (`PJ-17`: «Risposta di Z.AI
+ *   (porta Anthropic) incompleta») e il selettore dei modelli le confronta (`PAR-05`). Hanno `etichettaChiave`: l'interfaccia
+ *   dice il nome nelle due lingue (`nomeDelFornitore`, `components/testo-server.js`) e la sonda lo manda come `providerChiave`.
+ *   Gli `esecuzione` ('collegato', 'runtime locale'…) sono valori che il Doctor mostra: li traduce l'interfaccia per valore.
  */
 export const REGISTRO_FORNITORI = congela({
   // P-L · fonte e data: https://agentclientprotocol.com/protocol/v1/initialization, 12/09/2026.
   esterno: congela({
-    id: 'esterno', etichetta: 'Agente esterno', descrizione: 'Un agente installato su questo computer.',
+    id: 'esterno', etichetta: 'Agente esterno', etichettaChiave: 'server.provider.label.externalAgent', descrizione: 'An agent installed on this computer.',
     modelliDiRiserva: null, modelloAusiliario: null, modelsDevId: null, paginaChiavi: null,
     wire: 'acp', baseUrl: null, indirizzoModificabile: false, envIndirizzo: congela([]),
     auth: congela({ tipo: 'keyless', header: null, nomeVariabile: congela([]) }),
@@ -124,7 +134,7 @@ export const REGISTRO_FORNITORI = congela({
     modelloAusiliario: 'gpt-5-nano',
     modelsDevId: 'openai',
     etichetta: 'OpenAI',
-    descrizione: 'API diretta OpenAI, sul wire Responses.',
+    descrizione: 'Direct OpenAI API, on the Responses wire.',
     paginaChiavi: 'https://platform.openai.com/api-keys',
     wire: 'openai-responses',
     baseUrl: 'https://api.openai.com/v1',
@@ -169,7 +179,7 @@ export const REGISTRO_FORNITORI = congela({
     modelloAusiliario: 'deepseek-flash',
     modelsDevId: 'deepseek',
     etichetta: 'DeepSeek',
-    descrizione: 'API diretta DeepSeek, wire OpenAI.',
+    descrizione: 'Direct DeepSeek API, OpenAI wire.',
     paginaChiavi: 'https://platform.deepseek.com/api_keys',
     wire: 'openai-chat',
     /*
@@ -219,7 +229,7 @@ export const REGISTRO_FORNITORI = congela({
   // P-I, 12/09/2026 — API internazionali dirette. Dossier e impronta models.dev nel rapporto P-I.
   kimi: congela({
     id: 'kimi', etichetta: 'Kimi',
-    descrizione: 'Modelli Kimi, collegamento diretto internazionale.',
+    descrizione: 'Kimi models, direct international connection.',
     paginaChiavi: 'https://platform.moonshot.ai/console/api-keys',
     modelliDiRiserva: congela([
       congela({ id: 'kimi-k2.6', nome: 'Kimi K2.6', toolCalling: true,
@@ -237,7 +247,7 @@ export const REGISTRO_FORNITORI = congela({
     streaming: 'dichiarato', toolCalling: 'dichiarato',
     cache: congela({ marcatore: null, letturaUsage: congela(['cached_tokens']),
       scritturaUsage: congela([]), inclusiNelTotale: true, scontoDichiarato: null,
-      etichetta: 'Cache dichiarata nella risposta; senza conteggio: non misurato.',
+      etichetta: 'Cache declared in the response; no count: not measured.',
       fonte: 'https://platform.kimi.ai/docs/api/chat', data: '2026-09-12' }),
     richiestaCompatibile: congela({ limiteUscita: null, ragionamento: 'thinking',
       modelli: congela({
@@ -256,7 +266,7 @@ export const REGISTRO_FORNITORI = congela({
 
   minimax: congela({
     id: 'minimax', etichetta: 'MiniMax',
-    descrizione: 'Modelli MiniMax, collegamento diretto internazionale.',
+    descrizione: 'MiniMax models, direct international connection.',
     paginaChiavi: 'https://platform.minimax.io/user-center/basic-information/interface-key',
     modelliDiRiserva: congela([
       congela({ id: 'MiniMax-M3', nome: 'MiniMax M3', toolCalling: true,
@@ -275,7 +285,7 @@ export const REGISTRO_FORNITORI = congela({
     streaming: 'dichiarato', toolCalling: 'dichiarato',
     cache: congela({ marcatore: null, letturaUsage: congela(['prompt_tokens_details.cached_tokens']),
       scritturaUsage: congela([]), inclusiNelTotale: true, scontoDichiarato: null,
-      etichetta: 'Cache dichiarata nella risposta; senza conteggio: non misurato.',
+      etichetta: 'Cache declared in the response; no count: not measured.',
       fonte: 'https://platform.minimax.io/docs/api-reference/text-prompt-caching', data: '2026-09-12' }),
     richiestaCompatibile: congela({ limiteUscita: null, ragionamento: 'thinking',
       modelli: congela({
@@ -296,7 +306,7 @@ export const REGISTRO_FORNITORI = congela({
 
   qwen: congela({
     id: 'qwen', etichetta: 'Qwen',
-    descrizione: 'Modelli Qwen, collegamento diretto internazionale.',
+    descrizione: 'Qwen models, direct international connection.',
     paginaChiavi: 'https://modelstudio.console.alibabacloud.com/',
     modelliDiRiserva: congela([
       congela({ id: 'qwen-flash', nome: 'Qwen Flash', toolCalling: true,
@@ -315,7 +325,7 @@ export const REGISTRO_FORNITORI = congela({
     streaming: 'dichiarato', toolCalling: 'dichiarato',
     cache: congela({ marcatore: 'cache_control', letturaUsage: congela(['prompt_tokens_details.cached_tokens']),
       scritturaUsage: congela(['prompt_tokens_details.cache_creation_input_tokens']), inclusiNelTotale: true, scontoDichiarato: null,
-      etichetta: 'Cache dichiarata nella risposta; senza conteggio: non misurato.',
+      etichetta: 'Cache declared in the response; no count: not measured.',
       fonte: 'https://www.alibabacloud.com/help/en/model-studio/context-cache', data: '2026-09-12' }),
     richiestaCompatibile: congela({ limiteUscita: null, ragionamento: 'enable_thinking',
       modelli: congela({
@@ -352,7 +362,7 @@ export const REGISTRO_FORNITORI = congela({
     modelloAusiliario: 'glm-4.7-flash',
     modelsDevId: 'zai',
     etichetta: 'Z.AI',
-    descrizione: 'Modelli GLM tramite API diretta Z.AI.',
+    descrizione: 'GLM models through the direct Z.AI API.',
     paginaChiavi: 'https://z.ai/manage-apikey/apikey-list',
     wire: 'openai-chat',
     baseUrl: 'https://api.z.ai/api/paas/v4',
@@ -376,7 +386,7 @@ export const REGISTRO_FORNITORI = congela({
       scritturaUsage: congela([]),
       inclusiNelTotale: true,
       scontoDichiarato: null,
-      etichetta: 'Cache automatica; senza conteggio: non misurato.',
+      etichetta: 'Automatic cache; no count: not measured.',
       fonte: 'https://docs.z.ai/guides/capabilities/cache',
       data: '2026-09-12',
     }),
@@ -431,7 +441,7 @@ export const REGISTRO_FORNITORI = congela({
     modelloAusiliario: 'claude-haiku-4-5-20251001',
     modelsDevId: 'anthropic',
     etichetta: 'Anthropic',
-    descrizione: 'API diretta Anthropic, wire Messages.',
+    descrizione: 'Direct Anthropic API, Messages wire.',
     paginaChiavi: 'https://console.anthropic.com/settings/keys',
     wire: 'anthropic-messages',
     baseUrl: 'https://api.anthropic.com/v1',
@@ -482,7 +492,7 @@ export const REGISTRO_FORNITORI = congela({
     modelloAusiliario: 'gemini-2.5-flash-lite',
     modelsDevId: 'google',
     etichetta: 'Google Gemini',
-    descrizione: 'API diretta Google AI Studio.',
+    descrizione: 'Direct Google AI Studio API.',
     paginaChiavi: 'https://aistudio.google.com/app/apikey',
     wire: 'gemini',
     baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
@@ -535,7 +545,7 @@ export const REGISTRO_FORNITORI = congela({
     modelloAusiliario: 'liquid/lfm-2.5-2.6b:free',
     modelsDevId: 'openrouter',
     etichetta: 'OpenRouter',
-    descrizione: 'Aggregatore: centinaia di modelli dietro una sola chiave.',
+    descrizione: 'Aggregator: hundreds of models behind a single key.',
     paginaChiavi: 'https://openrouter.ai/keys',
     wire: 'openai-chat',
     baseUrl: 'https://openrouter.ai/api/v1',
@@ -574,7 +584,7 @@ export const REGISTRO_FORNITORI = congela({
     modelloAusiliario: null,
     modelsDevId: null, // Ollama Cloud è un servizio diverso dal runtime locale.
     etichetta: 'Ollama Local',
-    descrizione: 'Motore locale Ollama su questo computer.',
+    descrizione: 'Ollama local engine on this computer.',
     paginaChiavi: 'https://ollama.com/download',
     wire: 'openai-chat',
     /* ⛔ Ollama espone il protocollo OpenAI sotto `/v1`, il suo indirizzo base no. */
@@ -606,7 +616,7 @@ export const REGISTRO_FORNITORI = congela({
     modelloAusiliario: null,
     modelsDevId: 'lmstudio', // Metadati pubblici: l'elenco installato resta del runtime.
     etichetta: 'LM Studio',
-    descrizione: 'Motore locale LM Studio su questo computer.',
+    descrizione: 'LM Studio local engine on this computer.',
     paginaChiavi: 'https://lmstudio.ai/download',
     wire: 'openai-chat',
     /* 🌐 lmstudio.ai/docs/app/api/endpoints/openai: `http://localhost:1234/v1`, porta 1234. */
@@ -649,10 +659,10 @@ export const REGISTRO_FORNITORI = congela({
         fonte: 'https://console.groq.com/docs/tool-use/overview', data: '2026-09-12' }),
     ]),
     modelloAusiliario: null,
-    motivoAusiliario: 'Nessun modello ausiliario qualificato per questo fornitore.',
+    motivoAusiliario: 'No qualified auxiliary model for this provider.',
     modelsDevId: 'groq',
     etichetta: 'Groq',
-    descrizione: 'Modelli tramite Groq.',
+    descrizione: 'Models through Groq.',
     paginaChiavi: 'https://console.groq.com/keys',
     wire: 'openai-chat',
     baseUrl: 'https://api.groq.com/openai/v1',
@@ -668,7 +678,7 @@ export const REGISTRO_FORNITORI = congela({
     cache: congela({
       marcatore: null, letturaUsage: congela(['prompt_tokens_details.cached_tokens']),
       scritturaUsage: congela([]), inclusiNelTotale: true, scontoDichiarato: null,
-      etichetta: 'Cache dichiarata dal fornitore; senza conteggio: non misurato.',
+      etichetta: 'Cache declared by the provider; no count: not measured.',
       fonte: 'https://console.groq.com/docs/prompt-caching', data: '2026-09-12',
     }),
     richiestaCompatibile: congela({
@@ -698,10 +708,10 @@ export const REGISTRO_FORNITORI = congela({
         fonte: 'https://inference-docs.cerebras.ai/capabilities/tool-use', data: '2026-09-12' }),
     ]),
     modelloAusiliario: null,
-    motivoAusiliario: 'Nessun modello ausiliario qualificato per questo fornitore.',
+    motivoAusiliario: 'No qualified auxiliary model for this provider.',
     modelsDevId: 'cerebras',
     etichetta: 'Cerebras',
-    descrizione: 'Modelli tramite Cerebras.',
+    descrizione: 'Models through Cerebras.',
     paginaChiavi: 'https://cloud.cerebras.ai/platform',
     wire: 'openai-chat',
     baseUrl: 'https://api.cerebras.ai/v1',
@@ -717,7 +727,7 @@ export const REGISTRO_FORNITORI = congela({
     cache: congela({
       marcatore: null, letturaUsage: congela(['prompt_tokens_details.cached_tokens']),
       scritturaUsage: congela([]), inclusiNelTotale: true, scontoDichiarato: null,
-      etichetta: 'Cache dichiarata dal fornitore; senza conteggio: non misurato.',
+      etichetta: 'Cache declared by the provider; no count: not measured.',
       fonte: 'https://inference-docs.cerebras.ai/capabilities/prompt-caching', data: '2026-09-12',
     }),
     richiestaCompatibile: congela({
@@ -747,10 +757,10 @@ export const REGISTRO_FORNITORI = congela({
         fonte: 'https://docs.mistral.ai/studio/conversations/function-calling', data: '2026-09-12' }),
     ]),
     modelloAusiliario: null,
-    motivoAusiliario: 'Nessun modello ausiliario qualificato per questo fornitore.',
+    motivoAusiliario: 'No qualified auxiliary model for this provider.',
     modelsDevId: 'mistral',
     etichetta: 'Mistral',
-    descrizione: 'Modelli tramite Mistral.',
+    descrizione: 'Models through Mistral.',
     paginaChiavi: 'https://console.mistral.ai/api-keys',
     wire: 'openai-chat',
     baseUrl: 'https://api.mistral.ai/v1',
@@ -766,7 +776,7 @@ export const REGISTRO_FORNITORI = congela({
     cache: congela({
       marcatore: 'prompt_cache_key', letturaUsage: congela(['prompt_tokens_details.cached_tokens']),
       scritturaUsage: congela([]), inclusiNelTotale: true, scontoDichiarato: null,
-      etichetta: 'Cache dichiarata dal fornitore; senza conteggio: non misurato.',
+      etichetta: 'Cache declared by the provider; no count: not measured.',
       fonte: 'https://docs.mistral.ai/studio/conversations/advanced/prompt-caching', data: '2026-09-12',
     }),
     richiestaCompatibile: congela({
@@ -793,10 +803,10 @@ export const REGISTRO_FORNITORI = congela({
         fonte: 'https://docs.together.ai/docs/serverless/models', data: '2026-09-12' }),
     ]),
     modelloAusiliario: null,
-    motivoAusiliario: 'Nessun modello ausiliario qualificato per questo fornitore.',
+    motivoAusiliario: 'No qualified auxiliary model for this provider.',
     modelsDevId: 'togetherai',
     etichetta: 'Together',
-    descrizione: 'Modelli tramite Together.',
+    descrizione: 'Models through Together.',
     paginaChiavi: 'https://api.together.ai/settings/api-keys',
     wire: 'openai-chat',
     baseUrl: 'https://api.together.ai/v1',
@@ -812,7 +822,7 @@ export const REGISTRO_FORNITORI = congela({
     cache: congela({
       marcatore: null, letturaUsage: congela(['cached_tokens', 'prompt_tokens_details.cached_tokens']),
       scritturaUsage: congela([]), inclusiNelTotale: true, scontoDichiarato: null,
-      etichetta: 'Cache dichiarata dal fornitore; senza conteggio: non misurato.',
+      etichetta: 'Cache declared by the provider; no count: not measured.',
       fonte: 'https://docs.together.ai/docs/inference/openai-compatibility', data: '2026-09-12',
     }),
     catalogo: congela({ fonte: 'fornitore', forma: 'openai-data', percorso: '/models', inUI: true }),
@@ -835,10 +845,10 @@ export const REGISTRO_FORNITORI = congela({
         fonte: 'https://fireworks.ai/models/fireworks/gpt-oss-120b', data: '2026-09-12' }),
     ]),
     modelloAusiliario: null,
-    motivoAusiliario: 'Nessun modello ausiliario qualificato per questo fornitore.',
+    motivoAusiliario: 'No qualified auxiliary model for this provider.',
     modelsDevId: 'fireworks-ai',
     etichetta: 'Fireworks',
-    descrizione: 'Modelli tramite Fireworks.',
+    descrizione: 'Models through Fireworks.',
     paginaChiavi: 'https://app.fireworks.ai/settings/users/api-keys',
     wire: 'openai-chat',
     baseUrl: 'https://api.fireworks.ai/inference/v1',
@@ -854,7 +864,7 @@ export const REGISTRO_FORNITORI = congela({
     cache: congela({
       marcatore: null, letturaUsage: congela(['prompt_tokens_details.cached_tokens']),
       scritturaUsage: congela([]), inclusiNelTotale: true, scontoDichiarato: null,
-      etichetta: 'Cache dichiarata dal fornitore; senza conteggio: non misurato.',
+      etichetta: 'Cache declared by the provider; no count: not measured.',
       fonte: 'https://docs.fireworks.ai/api-reference/post-chatcompletions', data: '2026-09-12',
     }),
     richiestaCompatibile: congela({
@@ -881,10 +891,10 @@ export const REGISTRO_FORNITORI = congela({
         fonte: 'https://deepinfra.com/openai/gpt-oss-20b', data: '2026-09-12' }),
     ]),
     modelloAusiliario: null,
-    motivoAusiliario: 'Nessun modello ausiliario qualificato per questo fornitore.',
+    motivoAusiliario: 'No qualified auxiliary model for this provider.',
     modelsDevId: 'deepinfra',
     etichetta: 'DeepInfra',
-    descrizione: 'Modelli tramite DeepInfra.',
+    descrizione: 'Models through DeepInfra.',
     paginaChiavi: 'https://deepinfra.com/dash/api_keys',
     wire: 'openai-chat',
     baseUrl: 'https://api.deepinfra.com/v1/openai',
@@ -900,7 +910,7 @@ export const REGISTRO_FORNITORI = congela({
     cache: congela({
       marcatore: null, letturaUsage: congela(['prompt_tokens_details.cached_tokens']),
       scritturaUsage: congela([]), inclusiNelTotale: true, scontoDichiarato: null,
-      etichetta: 'Cache dichiarata dal fornitore; senza conteggio: non misurato.',
+      etichetta: 'Cache declared by the provider; no count: not measured.',
       fonte: 'https://docs.deepinfra.com/chat/prompt-caching', data: '2026-09-12',
     }),
     catalogo: congela({ fonte: 'fornitore', forma: 'openai-data', percorso: '/models', inUI: true }),
@@ -934,10 +944,10 @@ export const REGISTRO_FORNITORI = congela({
         fonte: 'https://novita.ai/models/model-detail/qwen-qwen3-coder-30b-a3b-instruct', data: '2026-09-12' }),
     ]),
     modelloAusiliario: null,
-    motivoAusiliario: 'Nessun modello ausiliario qualificato per questo fornitore.',
+    motivoAusiliario: 'No qualified auxiliary model for this provider.',
     modelsDevId: 'novita-ai',
     etichetta: 'Novita',
-    descrizione: 'Modelli tramite Novita.',
+    descrizione: 'Models through Novita.',
     paginaChiavi: 'https://novita.ai/settings/key-management',
     wire: 'openai-chat',
     baseUrl: 'https://api.novita.ai/openai/v1',
@@ -953,7 +963,7 @@ export const REGISTRO_FORNITORI = congela({
     cache: congela({
       marcatore: null, letturaUsage: congela(['prompt_tokens_details.cached_tokens']),
       scritturaUsage: congela([]), inclusiNelTotale: true, scontoDichiarato: null,
-      etichetta: 'Cache dichiarata dal fornitore; senza conteggio: non misurato.',
+      etichetta: 'Cache declared by the provider; no count: not measured.',
       fonte: 'https://docs.novita.ai/guides/llm-prompt-cache', data: '2026-09-12',
     }),
     catalogo: congela({ fonte: 'fornitore', forma: 'openai-data', percorso: '/models', inUI: true }),
@@ -990,10 +1000,10 @@ export const REGISTRO_FORNITORI = congela({
         fonte: 'https://nebius.com/services/token-factory', data: '2026-09-12' }),
     ]),
     modelloAusiliario: null,
-    motivoAusiliario: 'Nessun modello ausiliario qualificato per questo fornitore.',
+    motivoAusiliario: 'No qualified auxiliary model for this provider.',
     modelsDevId: 'nebius',
     etichetta: 'Nebius',
-    descrizione: 'Modelli tramite Nebius.',
+    descrizione: 'Models through Nebius.',
     paginaChiavi: 'https://tokenfactory.nebius.com',
     wire: 'openai-chat',
     baseUrl: 'https://api.tokenfactory.nebius.com/v1',
@@ -1009,7 +1019,7 @@ export const REGISTRO_FORNITORI = congela({
     cache: congela({
       marcatore: null, letturaUsage: congela(['prompt_tokens_details.cached_tokens']),
       scritturaUsage: congela([]), inclusiNelTotale: true, scontoDichiarato: null,
-      etichetta: 'Cache dichiarata dal fornitore; senza conteggio: non misurato.',
+      etichetta: 'Cache declared by the provider; no count: not measured.',
       fonte: 'https://docs.tokenfactory.nebius.com/api-reference/inference/create-chat-completion', data: '2026-09-12',
     }),
     richiestaCompatibile: congela({
@@ -1036,10 +1046,10 @@ export const REGISTRO_FORNITORI = congela({
         fonte: 'https://docs.x.ai/developers/models/grok-4.3', data: '2026-09-12' }),
     ]),
     modelloAusiliario: null,
-    motivoAusiliario: 'Nessun modello ausiliario qualificato per questo fornitore.',
+    motivoAusiliario: 'No qualified auxiliary model for this provider.',
     modelsDevId: 'xai',
     etichetta: 'xAI',
-    descrizione: 'Modelli tramite xAI.',
+    descrizione: 'Models through xAI.',
     paginaChiavi: 'https://console.x.ai',
     wire: 'openai-chat',
     baseUrl: 'https://api.x.ai/v1',
@@ -1055,7 +1065,7 @@ export const REGISTRO_FORNITORI = congela({
     cache: congela({
       marcatore: null, letturaUsage: congela(['prompt_tokens_details.cached_tokens']),
       scritturaUsage: congela([]), inclusiNelTotale: true, scontoDichiarato: null,
-      etichetta: 'Cache dichiarata dal fornitore; senza conteggio: non misurato.',
+      etichetta: 'Cache declared by the provider; no count: not measured.',
       fonte: 'https://docs.x.ai/developers/rest-api-reference/inference/chat-completions', data: '2026-09-12',
     }),
     richiestaCompatibile: congela({
@@ -1085,10 +1095,10 @@ export const REGISTRO_FORNITORI = congela({
         fonte: 'https://ollama.com/library/gpt-oss', data: '2026-09-12' }),
     ]),
     modelloAusiliario: null,
-    motivoAusiliario: 'Nessun modello ausiliario qualificato per questo fornitore.',
+    motivoAusiliario: 'No qualified auxiliary model for this provider.',
     modelsDevId: 'ollama-cloud',
     etichetta: 'Ollama Cloud',
-    descrizione: 'Modelli tramite Ollama Cloud.',
+    descrizione: 'Models through Ollama Cloud.',
     paginaChiavi: 'https://ollama.com/settings/keys',
     wire: 'openai-chat',
     baseUrl: 'https://ollama.com/v1',
@@ -1104,7 +1114,7 @@ export const REGISTRO_FORNITORI = congela({
     cache: congela({
       marcatore: null, letturaUsage: congela([]),
       scritturaUsage: congela([]), inclusiNelTotale: true, scontoDichiarato: null,
-      etichetta: 'Conteggio della cache non documentato; senza dati: non misurato.',
+      etichetta: 'Cache count not documented; no data: not measured.',
       fonte: 'https://docs.ollama.com/api/openai-compatibility', data: '2026-09-12',
     }),
     catalogo: congela({ fonte: 'fornitore', forma: 'openai-data', percorso: '/models', inUI: true }),
@@ -1138,10 +1148,10 @@ export const REGISTRO_FORNITORI = congela({
         fonte: 'https://huggingface.co/openai/gpt-oss-20b', data: '2026-09-12' }),
     ]),
     modelloAusiliario: null,
-    motivoAusiliario: 'Nessun modello ausiliario qualificato per questo fornitore.',
+    motivoAusiliario: 'No qualified auxiliary model for this provider.',
     modelsDevId: 'huggingface',
     etichetta: 'Hugging Face',
-    descrizione: 'Inferenza, catalogo e scaricamento dei modelli Hugging Face.',
+    descrizione: 'Inference, catalog and download of Hugging Face models.',
     paginaChiavi: 'https://huggingface.co/settings/tokens',
     wire: 'openai-chat',
     baseUrl: 'https://router.huggingface.co/v1',
@@ -1157,7 +1167,7 @@ export const REGISTRO_FORNITORI = congela({
     cache: congela({
       marcatore: null, letturaUsage: congela([]),
       scritturaUsage: congela([]), inclusiNelTotale: true, scontoDichiarato: null,
-      etichetta: 'Conteggio della cache non documentato; senza dati: non misurato.',
+      etichetta: 'Cache count not documented; no data: not measured.',
       fonte: 'https://huggingface.co/docs/inference-providers/tasks/chat-completion', data: '2026-09-12',
     }),
     richiestaCompatibile: congela({
@@ -1193,8 +1203,8 @@ export const REGISTRO_FORNITORI = congela({
   // L'AI SDK aggiunge /messages: /v1 fa parte della base, diversamente dall'SDK Python.
   'zai-anthropic': congela({
     id: 'zai-anthropic',
-    etichetta: 'Z.AI (porta Anthropic)',
-    descrizione: 'Modelli GLM tramite la porta del piano di programmazione Z.AI.',
+    etichetta: 'Z.AI (porta Anthropic)', etichettaChiave: 'server.provider.label.zaiAnthropic',
+    descrizione: 'GLM models through the Z.AI coding plan endpoint.',
     paginaChiavi: 'https://z.ai/manage-apikey/apikey-list',
     wire: 'anthropic-messages',
     baseUrl: 'https://api.z.ai/api/anthropic/v1',
@@ -1211,18 +1221,18 @@ export const REGISTRO_FORNITORI = congela({
       letturaUsage: congela(['cache_read_input_tokens', 'prompt_tokens_details.cached_tokens']),
       scritturaUsage: congela(['cache_creation_input_tokens', 'prompt_tokens_details.cache_write_tokens']),
       inclusiNelTotale: false, scontoDichiarato: null,
-      etichetta: 'Cache: senza conteggi nella risposta, non misurato.',
+      etichetta: 'Cache: no counts in the response, not measured.',
       fonte: 'https://docs.z.ai/devpack/tool/others', data: '2026-09-12',
     }),
     // Nessun GET modelli documentato su questa porta: riserva esplicita, mai GET inventato.
     catalogo: congela({ fonte: 'fornitore', forma: 'anthropic-data', percorso: null, inUI: true }),
-    prezzi: congela({ fonte: 'https://docs.z.ai/devpack/overview', data: '2026-09-12', nota: 'Accesso legato al piano; costo della chiamata non misurato.' }),
+    prezzi: congela({ fonte: 'https://docs.z.ai/devpack/overview', data: '2026-09-12', nota: 'Access tied to the plan; call cost not measured.' }),
     ragionamento: congela({ livelli: congela(['high', 'max']), fonte: 'https://docs.z.ai/devpack/latest-model', data: '2026-09-12' }),
     modelliDiRiserva: congela([
       congela({ id: 'glm-5.3-flash', nome: 'GLM 5.3 Flash', toolCalling: true, fonte: 'https://docs.z.ai/devpack/latest-model', data: '2026-09-12' }),
       congela({ id: 'glm-5.3', nome: 'GLM 5.3', toolCalling: true, fonte: 'https://docs.z.ai/devpack/latest-model', data: '2026-09-12' }),
     ]),
-    modelloAusiliario: null, motivoAusiliario: 'Nessun modello ausiliario qualificato per questa porta.',
+    modelloAusiliario: null, motivoAusiliario: 'No qualified auxiliary model for this endpoint.',
     modelsDevId: 'zai-coding-plan',
     limiti: congela({ timeoutPredefinitoSecondi: 60, tempoMassimoModificabile: true }),
     sonda: congela({
@@ -1240,8 +1250,8 @@ export const REGISTRO_FORNITORI = congela({
   }),
   // 12/09, review: P-I ha già `minimax` sul wire OpenAI (documentato come supportato): questa è la SECONDA porta, come `zai-anthropic`.
   'minimax-anthropic': congela({
-    id: 'minimax-anthropic', etichetta: 'MiniMax (porta Anthropic)',
-    descrizione: 'Modelli MiniMax tramite la porta compatibile Anthropic (accesso internazionale).',
+    id: 'minimax-anthropic', etichetta: 'MiniMax (porta Anthropic)', etichettaChiave: 'server.provider.label.minimaxAnthropic',
+    descrizione: 'MiniMax models through the Anthropic-compatible endpoint (international access).',
     paginaChiavi: 'https://platform.minimax.io/user-center/basic-information/interface-key',
     wire: 'anthropic-messages', baseUrl: 'https://api.minimax.io/anthropic/v1',
     fonte: 'https://platform.minimax.io/docs/api-reference/text-anthropic-api', data: '2026-09-12',
@@ -1255,7 +1265,7 @@ export const REGISTRO_FORNITORI = congela({
       letturaUsage: congela(['cache_read_input_tokens', 'prompt_tokens_details.cached_tokens']),
       scritturaUsage: congela(['cache_creation_input_tokens', 'prompt_tokens_details.cache_write_tokens']),
       inclusiNelTotale: false, scontoDichiarato: null,
-      etichetta: 'Cache dichiarata; senza conteggi nella risposta, non misurato.',
+      etichetta: 'Cache declared; no counts in the response, not measured.',
       fonte: 'https://platform.minimax.io/docs/api-reference/anthropic-api-compatible-cache', data: '2026-09-12',
     }),
     catalogo: congela({ fonte: 'fornitore', forma: 'anthropic-data', percorso: '/models', inUI: true }),
@@ -1274,7 +1284,7 @@ export const REGISTRO_FORNITORI = congela({
   // P-J — FINE porte Anthropic terze.
   // P-K — inizio: contratti ufficiali e fonti consultati il 12/09/2026, nessuna chiamata cloud.
   azure: congela({
-    id: 'azure', etichetta: 'Azure AI Foundry', descrizione: 'Modelli della propria risorsa Azure.',
+    id: 'azure', etichetta: 'Azure AI Foundry', descrizione: 'Models of your own Azure resource.',
     paginaChiavi: 'https://ai.azure.com', wire: 'openai-chat', baseUrl: '', indirizzoModificabile: true,
     envIndirizzo: congela(['AZURE_OPENAI_ENDPOINT', 'AZURE_FOUNDRY_BASE_URL']),
     auth: congela({ tipo: 'header', header: 'api-key', nomeVariabile: congela(['AZURE_OPENAI_API_KEY', 'AZURE_FOUNDRY_API_KEY']) }),
@@ -1282,20 +1292,20 @@ export const REGISTRO_FORNITORI = congela({
     endpoint: congela({ chat: '/chat/completions', modelli: '/models' }),
     cloud: congela({ tipo: 'azure', versione: 'v1', campi: congela(['endpointRisorsa', 'versioneApi']),
       fonte: 'https://learn.microsoft.com/en-us/azure/foundry/openai/api-version-lifecycle', data: '2026-09-12',
-      nota: 'Scegli il nome della distribuzione presente nella tua risorsa. Un modello nel catalogo non è una distribuzione.' }),
+      nota: 'Choose the name of the deployment in your resource. A model in the catalog is not a deployment.', notaChiave: 'server.provider.cloudNote.azure' }),
     streaming: 'dichiarato', toolCalling: 'dichiarato',
     cache: congela({ marcatore: null, letturaUsage: congela(['prompt_tokens_details.cached_tokens']), scritturaUsage: congela([]),
-      inclusiNelTotale: true, scontoDichiarato: null, etichetta: 'Cache senza conteggio: non misurato.',
+      inclusiNelTotale: true, scontoDichiarato: null, etichetta: 'Cache without a count: not measured.',
       fonte: 'https://learn.microsoft.com/en-us/azure/foundry/openai/how-to/prompt-caching', data: '2026-09-12' }),
     catalogo: congela({ fonte: 'fornitore', forma: 'openai-data', percorso: '/models', inUI: true,
-      riservaConfigurazione: 'I nomi delle distribuzioni appartengono alla risorsa: nessuna riserva universale.' }),
+      riservaConfigurazione: 'Deployment names belong to the resource: there is no universal fallback.' }),
     modelliDiRiserva: congela([]), modelloAusiliario: null, modelsDevId: null,
     prezzi: congela({ fonte: 'nessuna' }), limiti: congela({ timeoutPredefinitoSecondi: 60, tempoMassimoModificabile: true }),
     sonda: congela({ attiva: true, auth: 'header', percorso: '/models', urlAssoluto: null, conta: c => c?.data?.length, richiedeCatalogoValido: true }),
     destinazioneChat: true, credenziale: true, esecuzione: 'collegato',
   }),
   bedrock: congela({
-    id: 'bedrock', etichetta: 'Amazon Bedrock', descrizione: 'Modelli disponibili nella regione scelta.',
+    id: 'bedrock', etichetta: 'Amazon Bedrock', descrizione: 'Models available in the chosen region.',
     paginaChiavi: 'https://console.aws.amazon.com/bedrock', wire: 'openai-chat', baseUrl: '', indirizzoModificabile: true,
     envIndirizzo: congela(['BEDROCK_OPENAI_BASE_URL']),
     auth: congela({ tipo: 'bearer', header: 'Authorization', nomeVariabile: congela(['AWS_BEARER_TOKEN_BEDROCK']) }),
@@ -1303,20 +1313,20 @@ export const REGISTRO_FORNITORI = congela({
     endpoint: congela({ chat: '/chat/completions', modelli: '/models' }),
     cloud: congela({ tipo: 'bedrock', versione: 'v1', campi: congela(['regione']),
       fonte: 'https://docs.aws.amazon.com/bedrock/latest/userguide/inference-chat-completions-mantle.html', data: '2026-09-12',
-      nota: 'Usa una chiave di Amazon Bedrock. I modelli disponibili dipendono dalla regione e dagli accessi.' }),
+      nota: 'Use an Amazon Bedrock key. The available models depend on the region and on the access you have.', notaChiave: 'server.provider.cloudNote.bedrock' }),
     streaming: 'dichiarato', toolCalling: 'dichiarato',
     cache: congela({ marcatore: null, letturaUsage: congela(['prompt_tokens_details.cached_tokens', 'cacheReadInputTokens']),
       scritturaUsage: congela(['prompt_tokens_details.cache_write_tokens', 'cacheWriteInputTokens']), inclusiNelTotale: true, scontoDichiarato: null,
-      etichetta: 'Cache senza conteggio: non misurato.', fonte: 'https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_TokenUsage.html', data: '2026-09-12' }),
+      etichetta: 'Cache without a count: not measured.', fonte: 'https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_TokenUsage.html', data: '2026-09-12' }),
     catalogo: congela({ fonte: 'fornitore', forma: 'openai-data', percorso: '/models', inUI: true,
-      riservaConfigurazione: 'Elenco limitato ai modelli compatibili restituiti dalla regione scelta.' }),
+      riservaConfigurazione: 'List limited to the compatible models returned by the chosen region.' }),
     modelliDiRiserva: congela([]), modelloAusiliario: null, modelsDevId: null,
     prezzi: congela({ fonte: 'nessuna' }), limiti: congela({ timeoutPredefinitoSecondi: 60, tempoMassimoModificabile: true }),
     sonda: congela({ attiva: true, auth: 'bearer', percorso: '/models', urlAssoluto: null, conta: c => c?.data?.length, richiedeCatalogoValido: true }),
     destinazioneChat: true, credenziale: true, esecuzione: 'collegato',
   }),
   vertex: congela({
-    id: 'vertex', etichetta: 'Google Vertex AI', descrizione: 'Modelli del progetto e della regione scelti.',
+    id: 'vertex', etichetta: 'Google Vertex AI', descrizione: 'Models of the chosen project and region.',
     paginaChiavi: 'https://console.cloud.google.com/vertex-ai', wire: 'openai-chat', baseUrl: '', indirizzoModificabile: true,
     envIndirizzo: congela(['VERTEX_OPENAI_BASE_URL']),
     auth: congela({ tipo: 'bearer', header: 'Authorization', nomeVariabile: congela(['VERTEX_ACCESS_TOKEN']) }),
@@ -1324,12 +1334,12 @@ export const REGISTRO_FORNITORI = congela({
     endpoint: congela({ chat: '/chat/completions', modelli: null }),
     cloud: congela({ tipo: 'vertex', versione: 'v1', campi: congela(['progetto', 'regione']),
       fonte: 'https://docs.cloud.google.com/vertex-ai/generative-ai/docs/samples/generativeaionvertexai-gemini-chat-completions-non-streaming', data: '2026-09-12',
-      nota: 'Inserisci un accesso temporaneo già ottenuto da Google. Alla scadenza va sostituito; il rinnovo automatico non è collegato. Il catalogo non è verificabile da questo collegamento.' }),
+      nota: 'Enter a temporary access token you already got from Google. It must be replaced when it expires; automatic renewal is not connected. The catalog cannot be checked from this connection.', notaChiave: 'server.provider.cloudNote.vertex' }),
     streaming: 'dichiarato', toolCalling: 'dichiarato',
     cache: congela({ marcatore: null, letturaUsage: congela(['prompt_tokens_details.cached_tokens']), scritturaUsage: congela([]), inclusiNelTotale: true,
-      scontoDichiarato: null, etichetta: 'Cache senza conteggio: non misurato.', fonte: 'https://docs.cloud.google.com/vertex-ai/generative-ai/docs/multimodal/call-vertex-using-openai-library', data: '2026-09-12' }),
+      scontoDichiarato: null, etichetta: 'Cache without a count: not measured.', fonte: 'https://docs.cloud.google.com/vertex-ai/generative-ai/docs/multimodal/call-vertex-using-openai-library', data: '2026-09-12' }),
     catalogo: congela({ fonte: 'fornitore', forma: 'configurazione', percorso: null, inUI: true,
-      riservaConfigurazione: 'Nessun catalogo OpenAI documentato; scegliere il modello abilitato nel progetto.' }),
+      riservaConfigurazione: 'No documented OpenAI catalog; choose the model enabled in the project.' }),
     modelliDiRiserva: congela([]), modelloAusiliario: null, modelsDevId: null,
     prezzi: congela({ fonte: 'nessuna' }), limiti: congela({ timeoutPredefinitoSecondi: 60, tempoMassimoModificabile: true }),
     sonda: congela({ attiva: false, auth: 'bearer', percorso: null, urlAssoluto: null, conta: () => null }),
@@ -1344,8 +1354,8 @@ export const REGISTRO_FORNITORI = congela({
     modelliDiRiserva: null,
     modelloAusiliario: null,
     modelsDevId: null,
-    etichetta: 'Motore locale (llama.cpp)',
-    descrizione: 'Il supervisore llama-server di questo computer.',
+    etichetta: 'Motore locale (llama.cpp)', etichettaChiave: 'server.provider.label.localEngine',
+    descrizione: 'The llama-server supervisor on this computer.',
     paginaChiavi: null,
     wire: 'locale',
     baseUrl: null,               // lo decide il supervisore, e non esce di lì
@@ -1394,37 +1404,37 @@ export class ProviderRegistryError extends Error {
 export function verificaRegistro(registro = REGISTRO_FORNITORI) {
   const visti = new Set();
   for (const [chiave, record] of Object.entries(registro)) {
-    const dove = `fornitore ${chiave}`;
-    if (!record || typeof record !== 'object') throw new ProviderRegistryError(`${dove}: record assente`);
-    if (record.id !== chiave) throw new ProviderRegistryError(`${dove}: id "${record.id}" diverso dalla chiave`);
-    if (!/^[a-z][a-z0-9-]{0,31}$/u.test(record.id)) throw new ProviderRegistryError(`${dove}: id non utilizzabile come prefisso di fonte`);
-    if (visti.has(record.id)) throw new ProviderRegistryError(`${dove}: id duplicato`);
+    const dove = `provider ${chiave}`;
+    if (!record || typeof record !== 'object') throw new ProviderRegistryError(`${dove}: record missing`);
+    if (record.id !== chiave) throw new ProviderRegistryError(`${dove}: id "${record.id}" differs from the key`);
+    if (!/^[a-z][a-z0-9-]{0,31}$/u.test(record.id)) throw new ProviderRegistryError(`${dove}: id cannot be used as a source prefix`);
+    if (visti.has(record.id)) throw new ProviderRegistryError(`${dove}: duplicate id`);
     visti.add(record.id);
-    if (typeof record.etichetta !== 'string' || record.etichetta.trim() === '') throw new ProviderRegistryError(`${dove}: etichetta mancante`);
-    if (record.destinazioneChat === true && !WIRE.includes(record.wire)) throw new ProviderRegistryError(`${dove}: wire "${record.wire}" sconosciuto su una destinazione di chat`);
-    if (record.destinazioneChat !== true && record.wire !== null && !WIRE.includes(record.wire)) throw new ProviderRegistryError(`${dove}: wire "${record.wire}" sconosciuto`);
-    if (!AUTH.includes(record.auth?.tipo)) throw new ProviderRegistryError(`${dove}: auth "${record.auth?.tipo}" sconosciuta`);
-    if (!Array.isArray(record.auth?.nomeVariabile)) throw new ProviderRegistryError(`${dove}: nomeVariabile deve essere una lista`);
-    if (!['vendor/nome', 'nome'].includes(record.formaIdModello)) throw new ProviderRegistryError(`${dove}: formaIdModello sconosciuta`);
+    if (typeof record.etichetta !== 'string' || record.etichetta.trim() === '') throw new ProviderRegistryError(`${dove}: label missing`);
+    if (record.destinazioneChat === true && !WIRE.includes(record.wire)) throw new ProviderRegistryError(`${dove}: unknown wire "${record.wire}" on a chat destination`);
+    if (record.destinazioneChat !== true && record.wire !== null && !WIRE.includes(record.wire)) throw new ProviderRegistryError(`${dove}: unknown wire "${record.wire}"`);
+    if (!AUTH.includes(record.auth?.tipo)) throw new ProviderRegistryError(`${dove}: unknown auth "${record.auth?.tipo}"`);
+    if (!Array.isArray(record.auth?.nomeVariabile)) throw new ProviderRegistryError(`${dove}: nomeVariabile must be a list`);
+    if (!['vendor/nome', 'nome'].includes(record.formaIdModello)) throw new ProviderRegistryError(`${dove}: unknown formaIdModello`);
     for (const capacita of ['streaming', 'toolCalling']) {
-      if (!STATI_CAPACITA.includes(record[capacita])) throw new ProviderRegistryError(`${dove}: ${capacita} deve essere uno dei tre stati, non "${record[capacita]}"`);
+      if (!STATI_CAPACITA.includes(record[capacita])) throw new ProviderRegistryError(`${dove}: ${capacita} must be one of the three states, not "${record[capacita]}"`);
     }
-    if (!Array.isArray(record.cache?.letturaUsage)) throw new ProviderRegistryError(`${dove}: cache.letturaUsage deve essere una lista di percorsi`);
-    if (typeof record.cache?.inclusiNelTotale !== 'boolean') throw new ProviderRegistryError(`${dove}: cache.inclusiNelTotale deve dire se il totale li comprende`);
-    if (record.credenziale === true && record.auth.tipo === 'effimera') throw new ProviderRegistryError(`${dove}: una credenziale effimera non può stare nel portachiavi`);
+    if (!Array.isArray(record.cache?.letturaUsage)) throw new ProviderRegistryError(`${dove}: cache.letturaUsage must be a list of paths`);
+    if (typeof record.cache?.inclusiNelTotale !== 'boolean') throw new ProviderRegistryError(`${dove}: cache.inclusiNelTotale must say whether the total includes them`);
+    if (record.credenziale === true && record.auth.tipo === 'effimera') throw new ProviderRegistryError(`${dove}: an ephemeral credential cannot live in the keychain`);
     /* ⛔ Una destinazione di chat DEVE sapere dove bussare, tranne il locale (lo sa il supervisore). */
     // P-L · entrambi i processi hanno un proprietario locale, senza base URL pubblica.
     if (record.destinazioneChat === true && !['locale', 'acp'].includes(record.wire) && (typeof record.baseUrl !== 'string' || !record.endpoint?.chat)) {
-      throw new ProviderRegistryError(`${dove}: destinazione di chat senza indirizzo o senza endpoint`);
+      throw new ProviderRegistryError(`${dove}: chat destination without an address or an endpoint`);
     }
     // P-L · fine controllo destinazione.
     if (record.sonda?.attiva === true && !record.sonda.percorso && !record.sonda.urlAssoluto) {
-      throw new ProviderRegistryError(`${dove}: sonda attiva senza un indirizzo da chiamare`);
+      throw new ProviderRegistryError(`${dove}: active probe without an address to call`);
     }
     if (record.sonda?.dallaRadice !== undefined && (record.sonda.dallaRadice !== true
       || !/^\/(?!\/)/u.test(record.sonda.percorso ?? '') || /[\\\s]/u.test(record.sonda.percorso)
       || record.sonda.urlAssoluto)) {
-      throw new ProviderRegistryError(`${dove}: percorso della sonda relativo all'origine non valido`);
+      throw new ProviderRegistryError(`${dove}: invalid probe path relative to the origin`);
     }
     /*
      * CLI-REQ-06, 17/09/2026 — la richiesta minima è l'unica cosa nel registro che COSTA: è una
@@ -1446,11 +1456,11 @@ export function verificaRegistro(registro = REGISTRO_FORNITORI) {
         || !Array.isArray(c.messages) || c.messages.length !== 1
         || c.messages[0]?.role !== 'user' || typeof c.messages[0]?.content !== 'string' || !c.messages[0].content.trim()
         || Object.keys(c).some(k => !['model', 'max_tokens', 'stream', 'messages'].includes(k))) {
-        throw new ProviderRegistryError(`${dove}: la richiesta minima deve essere UNA generazione da un token, senza altri campi`);
+        throw new ProviderRegistryError(`${dove}: the minimal request must be ONE one-token generation, with no other fields`);
       }
       // Il wire decide come si convalida la risposta: senza uno dei due la sonda non saprebbe leggerla.
       if (!['openai-chat', 'anthropic-messages'].includes(record.wire)) {
-        throw new ProviderRegistryError(`${dove}: richiesta minima su un wire che la sonda non sa convalidare`);
+        throw new ProviderRegistryError(`${dove}: minimal request on a wire the probe cannot validate`);
       }
       /*
        * ⛔ DUE fonti, e il cancello dice esattamente quali: `sonda.fonte` per l'ENDPOINT,
@@ -1461,10 +1471,10 @@ export function verificaRegistro(registro = REGISTRO_FORNITORI) {
        */
       const datata = (f, d) => typeof f === 'string' && f.startsWith('https://') && /^\d{4}-\d{2}-\d{2}$/u.test(d ?? '');
       if (!datata(record.sonda.fonte, record.sonda.data)) {
-        throw new ProviderRegistryError(`${dove}: richiesta minima senza fonte datata per l'endpoint`);
+        throw new ProviderRegistryError(`${dove}: minimal request without a dated source for the endpoint`);
       }
       if (!datata(m.fonte, m.data)) {
-        throw new ProviderRegistryError(`${dove}: richiesta minima senza fonte datata per il modello`);
+        throw new ProviderRegistryError(`${dove}: minimal request without a dated source for the model`);
       }
     }
     if (record.richiestaCompatibile !== undefined) {
@@ -1472,14 +1482,14 @@ export function verificaRegistro(registro = REGISTRO_FORNITORI) {
       if (!p || ![null, 'max_completion_tokens'].includes(p.limiteUscita) || ![null, 'effort', 'thinking', 'enable_thinking'].includes(p.ragionamento)
         || !p.modelli || typeof p.modelli !== 'object' || Array.isArray(p.modelli)
         || typeof p.fonte !== 'string' || !p.fonte.startsWith('https://') || !/^\d{4}-\d{2}-\d{2}$/u.test(p.data ?? '')) {
-        throw new ProviderRegistryError(`${dove}: profilo di compatibilità senza contratto o fonte datata`);
+        throw new ProviderRegistryError(`${dove}: compatibility profile without a contract or a dated source`);
       }
       for (const m of Object.values(p.modelli)) {
         if (!m || !Array.isArray(m.livelliRagionamento) || (!m.livelliRagionamento.length && !m.thinking)
           || new Set(m.livelliRagionamento).size !== m.livelliRagionamento.length
           || m.livelliRagionamento.some(l => !['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'default'].includes(l))
           || (m.strumentiConFormato !== undefined && typeof m.strumentiConFormato !== 'boolean')) {
-          throw new ProviderRegistryError(`${dove}: particolarità del modello non valide`);
+          throw new ProviderRegistryError(`${dove}: invalid model quirks`);
         }
         if (['thinking', 'enable_thinking'].includes(p.ragionamento)) {
           const t = m.thinking;
@@ -1489,45 +1499,45 @@ export function verificaRegistro(registro = REGISTRO_FORNITORI) {
             || (t.conserva !== undefined && (t.conserva !== 'all' || t.attivo !== 'enabled'))
             || (t.soloStreaming !== undefined && typeof t.soloStreaming !== 'boolean')
             || ['temperaturaServer', 'sceltaObbligata', 'sceltaForzataConThinking'].some(k => m[k] !== undefined && typeof m[k] !== 'boolean')) {
-            throw new ProviderRegistryError(`${dove}: controllo del ragionamento non valido`);
+            throw new ProviderRegistryError(`${dove}: invalid reasoning control`);
           }
         } else if (m.thinking !== undefined) {
-          throw new ProviderRegistryError(`${dove}: controllo del ragionamento senza formato`);
+          throw new ProviderRegistryError(`${dove}: reasoning control without a format`);
         }
       }
     }
     for (const campo of ['modelliDiRiserva', 'modelloAusiliario']) {
-      if (!Object.hasOwn(record, campo)) throw new ProviderRegistryError(`${dove}: ${campo} deve essere dichiarato`);
+      if (!Object.hasOwn(record, campo)) throw new ProviderRegistryError(`${dove}: ${campo} must be declared`);
     }
     if (record.destinazioneChat && record.catalogo?.fonte === 'fornitore') {
       // P-K — una distribuzione/abilitazione dell'owner non si inventa come riserva pubblica.
       const riservaCloud = record.cloud?.tipo === record.id && ['azure', 'bedrock', 'vertex'].includes(record.id)
         && typeof record.catalogo.riservaConfigurazione === 'string' && record.catalogo.riservaConfigurazione.trim().length > 0;
-      if (!Array.isArray(record.modelliDiRiserva) || (!record.modelliDiRiserva.length && !riservaCloud)) throw new ProviderRegistryError(`${dove}: riserva remota vuota`);
-      if (riservaCloud && (record.modelliDiRiserva.length || record.modelloAusiliario !== null || record.modelsDevId !== null)) throw new ProviderRegistryError(`${dove}: catalogo cloud confuso con una riserva pubblica`);
+      if (!Array.isArray(record.modelliDiRiserva) || (!record.modelliDiRiserva.length && !riservaCloud)) throw new ProviderRegistryError(`${dove}: empty remote fallback`);
+      if (riservaCloud && (record.modelliDiRiserva.length || record.modelloAusiliario !== null || record.modelsDevId !== null)) throw new ProviderRegistryError(`${dove}: cloud catalog mixed up with a public fallback`);
       // P-K — fine
       const riserveViste = new Set();
       for (const m of record.modelliDiRiserva) {
         if (!m || typeof m.id !== 'string' || !/^[a-zA-Z0-9][a-zA-Z0-9._:/-]*$/u.test(m.id) || riserveViste.has(m.id)
           || typeof m.nome !== 'string' || !m.nome.trim() || m.toolCalling !== true
           || typeof m.fonte !== 'string' || !m.fonte.startsWith('https://') || !/^\d{4}-\d{2}-\d{2}$/u.test(m.data ?? '')) {
-          throw new ProviderRegistryError(`${dove}: riserva senza identità, strumenti o fonte datata`);
+          throw new ProviderRegistryError(`${dove}: fallback without an identity, tools or a dated source`);
         }
         riserveViste.add(m.id);
       }
-      if (record.modelloAusiliario !== null && !riserveViste.has(record.modelloAusiliario)) throw new ProviderRegistryError(`${dove}: ausiliario fuori dalla riserva dichiarata`);
+      if (record.modelloAusiliario !== null && !riserveViste.has(record.modelloAusiliario)) throw new ProviderRegistryError(`${dove}: auxiliary model outside the declared fallback`);
     } else if (record.modelliDiRiserva !== null || record.modelloAusiliario !== null) {
-      throw new ProviderRegistryError(`${dove}: locali e download devono dichiarare riserva e ausiliario null`);
+      throw new ProviderRegistryError(`${dove}: local and download providers must declare a null fallback and auxiliary`);
     }
     if (record.modelliNoti !== undefined) {
-      if (!Array.isArray(record.modelliNoti)) throw new ProviderRegistryError(`${dove}: modelliNoti deve essere una lista`);
+      if (!Array.isArray(record.modelliNoti)) throw new ProviderRegistryError(`${dove}: modelliNoti must be a list`);
       const modelliVisti = new Set();
       for (const modello of record.modelliNoti) {
-        if (!modello?.id || modelliVisti.has(modello.id) || !modello.nome || !modello.fonte || !/^\d{4}-\d{2}-\d{2}$/u.test(modello.data ?? '')) throw new ProviderRegistryError(`${dove}: modello senza identità o fonte datata`);
+        if (!modello?.id || modelliVisti.has(modello.id) || !modello.nome || !modello.fonte || !/^\d{4}-\d{2}-\d{2}$/u.test(modello.data ?? '')) throw new ProviderRegistryError(`${dove}: model without an identity or a dated source`);
         modelliVisti.add(modello.id);
-        if (!Number.isSafeInteger(modello.contextLength) || modello.contextLength <= 0 || !Number.isSafeInteger(modello.maxOutputTokens) || modello.maxOutputTokens <= 0) throw new ProviderRegistryError(`${dove}: limiti del modello non validi`);
-        if (['ingresso', 'cache', 'uscita'].some(k => typeof modello.prezzi?.[k] !== 'number' || !Number.isFinite(modello.prezzi[k]) || modello.prezzi[k] < 0)) throw new ProviderRegistryError(`${dove}: prezzi del modello non validi`);
-        if (!Array.isArray(modello.ragionamento?.livelli) || modello.ragionamento.livelli.some(l => !record.ragionamento?.livelli?.includes(l)) || !Array.isArray(modello.ragionamento.thinking) || modello.ragionamento.thinking.some(t => !['enabled', 'disabled'].includes(t))) throw new ProviderRegistryError(`${dove}: opzioni di ragionamento non valide`);
+        if (!Number.isSafeInteger(modello.contextLength) || modello.contextLength <= 0 || !Number.isSafeInteger(modello.maxOutputTokens) || modello.maxOutputTokens <= 0) throw new ProviderRegistryError(`${dove}: invalid model limits`);
+        if (['ingresso', 'cache', 'uscita'].some(k => typeof modello.prezzi?.[k] !== 'number' || !Number.isFinite(modello.prezzi[k]) || modello.prezzi[k] < 0)) throw new ProviderRegistryError(`${dove}: invalid model prices`);
+        if (!Array.isArray(modello.ragionamento?.livelli) || modello.ragionamento.livelli.some(l => !record.ragionamento?.livelli?.includes(l)) || !Array.isArray(modello.ragionamento.thinking) || modello.ragionamento.thinking.some(t => !['enabled', 'disabled'].includes(t))) throw new ProviderRegistryError(`${dove}: invalid reasoning options`);
       }
     }
   }
@@ -1574,7 +1584,7 @@ export function catalogoDiRiservaPer(fornitoreId) {
   if (!record?.modelliDiRiserva?.length) return null;
   const dataRiserva = record.modelliDiRiserva.map(m => m.data).sort().at(-1);
   const [anno, mese, giorno] = dataRiserva.split('-');
-  const motivo = `catalogo non raggiungibile: elenco di riserva del ${giorno}/${mese}/${anno}`;
+  const motivo = `catalog unreachable: fallback list of ${anno}-${mese}-${giorno}`;
   const metadati = { fonte: 'riserva', motivo, dataRiserva, aggiornatoAlle: null,
     verificatoAlle: null, etaCacheMs: null, daCache: false, fallbackRete: true, avvisi: [] };
   const modelli = record.modelliDiRiserva.map(m => ({

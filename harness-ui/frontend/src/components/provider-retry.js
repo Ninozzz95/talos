@@ -1,4 +1,5 @@
-import { linguaCorrenteDiT } from './lingua.js';
+import { TESTI } from '../i18n/testi/index.js';
+import { linguaCorrenteDiT, t, interpola } from './lingua.js';
 
 function valoreRetry(evento) {
   if (evento?.type !== 'CUSTOM' || evento.name !== 'talos.provider-retry') return null;
@@ -36,22 +37,23 @@ export function riduciRetry(stato, evento) {
   return { ...s, retry: v.fase === 'fine' ? null : v, lastSequence: seq };
 }
 
-export function testoRetry(retry, ora = Date.now(), en = false) {
-  const numero = en ? `Attempt ${retry.tentativo} of ${retry.tentativiMassimi}` : `Tentativo ${retry.tentativo} di ${retry.tentativiMassimi}`;
-  const motivo = retry.httpStatus === 402 && retry.motivo === 'budget-occupato'
-    ? (en ? 'The budget is temporarily occupied by ongoing or recently completed requests' : 'Il budget è temporaneamente occupato da richieste in corso o appena concluse')
-    : retry.httpStatus === 429
-    ? (en ? 'The service is limiting requests' : 'Il servizio sta limitando le richieste')
-    : retry.httpStatus === 408
-      ? (en ? 'The service rejected the request after a timeout' : 'Il servizio ha rifiutato la richiesta per timeout')
-      : (en ? 'The service is temporarily unavailable' : 'Il servizio è temporaneamente indisponibile');
+/*
+ * 03/10/2026, seconda ondata della lingua: le frasi stanno nel dizionario (`chat.retry.*`). Senza `en` si legge la lingua
+ *   corrente (anche la pseudo-lingua); `en` true/false resta per chi chiede una lingua precisa (le prove).
+ */
+export function testoRetry(retry, ora = Date.now(), en) {
+  const voce = (chiave, parametri) => (en === undefined ? t(`chat.retry.${chiave}`, parametri)
+    : interpola(TESTI[en ? 'en' : 'it'][`chat.retry.${chiave}`], parametri));
+  const numero = voce('attempt', { attempt: retry.tentativo, max: retry.tentativiMassimi });
+  const motivo = retry.httpStatus === 402 && retry.motivo === 'budget-occupato' ? voce('reason.budgetBusy')
+    : retry.httpStatus === 429 ? voce('reason.rateLimited')
+      : retry.httpStatus === 408 ? voce('reason.timeout') : voce('reason.unavailable');
   const secondi = Math.max(0, Math.ceil((retry.retryAt - ora) / 1000));
   return {
-    titolo: retry.fase === 'attesa' ? (en ? 'Retry scheduled' : 'Nuovo tentativo programmato') : numero,
-    motivo: `${motivo} (HTTP ${retry.httpStatus}).${retry.fase === 'attesa' ? ` ${numero}.` : ''}`,
-    tempo: retry.fase !== 'attesa' ? (en ? 'Request in progress' : 'Richiesta in corso')
-      : secondi > 0 ? (en ? `In ${secondi} s` : `Tra ${secondi} s`)
-        : (en ? 'Waiting for server confirmation' : 'In attesa di conferma del server'),
+    titolo: retry.fase === 'attesa' ? voce('scheduled') : numero,
+    motivo: `${voce('reason.withStatus', { reason: motivo, status: retry.httpStatus })}${retry.fase === 'attesa' ? ` ${numero}.` : ''}`,
+    tempo: retry.fase !== 'attesa' ? voce('inProgress')
+      : secondi > 0 ? voce('inSeconds', { seconds: secondi }) : voce('waitingConfirmation'),
   };
 }
 
@@ -81,7 +83,7 @@ export function montaProviderRetry({ contenitore, onShow = () => {}, document: d
       nodo.append(statoEl, tempo); parent.append(nodo);
     }
     nodo.dataset.fase = stato.retry.fase;
-    const testi = testoRetry(stato.retry, Date.now(), linguaCorrenteDiT() === 'en');
+    const testi = testoRetry(stato.retry, Date.now()); // la lingua corrente, pseudo-lingua compresa
     for (const nome of ['titolo', 'motivo', 'tempo']) {
       const el = nodo.querySelector(`.talos-provider-retry__${nome}`);
       if (el.textContent !== testi[nome]) el.textContent = testi[nome];

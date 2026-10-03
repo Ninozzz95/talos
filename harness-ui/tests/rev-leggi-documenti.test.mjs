@@ -4,6 +4,7 @@
  *   server ha già (docx, pptxgenjs, xlsx, pdf-lib, jszip): sono file veri, non stringhe che somigliano a un file.
  */
 import test from 'node:test'
+import { togliConfiniDati } from '../src/kernel/confine-dati.mjs'
 import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
 import { mkdtempSync, readFileSync, writeFileSync, truncateSync } from 'node:fs'
@@ -110,7 +111,7 @@ async function giro(cartella, chiamate) {
             const message = c ? { role: 'assistant', content: null, tool_calls: [{ id: `c${n}`, type: 'function', function: { name: c[0], arguments: JSON.stringify(c[1]) } }] } : { role: 'assistant', content: 'fatto' }
             return new Response(JSON.stringify({ choices: [{ message, finish_reason: c ? 'tool_calls' : 'stop' }] }), { headers: { 'Content-Type': 'application/json' } })
         },
-        onGiro: (e) => { if (e.tipo === 'tool-esito') esiti.push(String(e.content)) },
+        onGiro: (e) => { if (e.tipo === 'tool-esito') esiti.push(togliConfiniDati(String(e.content))) },
     })
     return esiti
 }

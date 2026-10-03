@@ -67,7 +67,7 @@ test('SEARCH34-INVALID — invalid offsets are refused before any disk access', 
   const disco = {async elenca() { io++; return []; }, async leggi() { io++; return ''; }};
   for (const offset of [-1, 1.5, '40', null, {}, Infinity, NaN, Number.MAX_SAFE_INTEGER + 1]) {
     const result = await cercaNelProgetto(disco, {nome: 'hit', offset});
-    assert.match(result, /^REFUSED\./);
+    assert.match(result, /^INVALID\./); // H-05: un argomento sbagliato, non un rifiuto
     assert.match(result, /offset.*non-negative safe integer/);
   }
   assert.equal(io, 0);

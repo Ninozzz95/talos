@@ -1,4 +1,5 @@
 import test from 'node:test';
+import { togliConfiniDati } from '../src/kernel/confine-dati.mjs';
 import assert from 'node:assert/strict';
 import { mkdtempSync, writeFileSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -121,10 +122,10 @@ test('DELEGHE01-REAL-READ: kernel and service preserve bytes and authoritative s
   const { events, result, requests } = await leggiConServizio(cartella, 'log.txt');
   assert.equal(result.ok, true);
   const tool = events.find(e => e.type === 'ToolCallResult');
-  assert.equal(tool.content, text);
+  assert.equal(togliConfiniDati(tool.content), text);
   assert.equal(tool.isError, false);
   assert.equal(esitoDelegaDaRisultato(result, events).esito, 'concluso');
-  assert.equal(requests[1].messages.find(m => m.role === 'tool').content, text);
+  assert.equal(togliConfiniDati(requests[1].messages.find(m => m.role === 'tool').content), text);
   assert.equal(Object.hasOwn(requests[1].messages.find(m => m.role === 'tool'), 'isError'), false, 'metadata stays outside provider history');
   assert.equal(readFileSync(join(cartella, 'log.txt'), 'utf8'), text);
 });

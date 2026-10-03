@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import test from 'node:test';
+import { AREE } from '../frontend/src/i18n/testi/index.js';
 
 import { createHttpApp } from '../src/http-app.mjs';
 
@@ -96,7 +97,8 @@ test('OPEN-WITH-TALOS-HTTP-05 — id assente o scaduto ha una risposta naturale 
   assert.equal(response.status, 410);
   const body = await response.json();
   assert.equal(body.error.code, 'WORKSPACE_LAUNCH_NOT_AVAILABLE');
-  assert.match(body.error.message, /Apri cartella con TALOS|collegamento/i);
+  assert.match(body.error.message, /Open folder with TALOS|link/i);
+  assert.match(AREE.errori.it['WORKSPACE_LAUNCH_NOT_AVAILABLE.message'], /Apri cartella con TALOS|collegamento/i, 'e in italiano lo dice il dizionario, dal codice');
 });
 
 test('OPEN-WITH-TALOS-HTTP-06 — workspaceLaunchId è la terza scelta XOR per una sessione custom', async (t) => {

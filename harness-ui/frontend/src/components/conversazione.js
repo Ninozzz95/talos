@@ -1,3 +1,4 @@
+import { t, tn, linguaCorrenteDiT } from './lingua.js';
 /*
  * Conversazione — i blocchi della chat, come nel mockup.
  *
@@ -92,8 +93,8 @@ export function aggiungiGiroAllaSpine(spine, { n, tick = 1, tono = null } = {}) 
   segno.type = 'button';
   segno.dataset.tick = String(Math.min(5, Math.max(1, Math.trunc(tick) || 1)));
   segno.dataset.giro = String(n ?? '');
-  segno.setAttribute('aria-label', 'Vai al giro'); // il numero sta gia' accanto: l'etichetta resta uguale a quella del mockup
-  segno.title = `Giro ${n ?? ''}`.trim();
+  segno.setAttribute('aria-label', t('chat.turn.goTo')); // il numero sta gia' accanto: l'etichetta resta uguale a quella del mockup
+  segno.title = t('chat.turn.title', { n: n ?? '' }).trim();
   spine.append(segno);
 }
 
@@ -155,7 +156,7 @@ export function creaMessaggioUtente({ testo = '', ora = '', meta = '' } = {}, op
   const messaggio = el(documentObj, 'div', 'talos-message talos-message--user');
   messaggio.setAttribute('data-c', 'Message');
   const testata = el(documentObj, 'div', 'talos-message__head');
-  testata.append(el(documentObj, 'span', 'talos-message__who', 'Tu'), el(documentObj, 'span', 'talos-message__meta', [ora, meta].filter(Boolean).join(' · ')));
+  testata.append(el(documentObj, 'span', 'talos-message__who', t('chat.message.you')), el(documentObj, 'span', 'talos-message__meta', [ora, meta].filter(Boolean).join(' · ')));
   const corpo = el(documentObj, 'div', 'talos-message__body message-bubble');
   const p = el(documentObj, 'p', null, testo);
   corpo.append(p);
@@ -206,26 +207,26 @@ const ID_MENU_RISPOSTA = 'menuRispostaMessaggio';
  * stesso aspetto. Qui stanno tutte insieme, e il cancello le legge.
  */
 export const TESTI_MESSAGGIO = Object.freeze({
-  azioniRisposta: 'Azioni sulla risposta',
-  azioniTuo: 'Azioni sul tuo messaggio',
-  altreAzioni: 'Altre azioni sulla risposta',
-  altreAzioniGiroVivo: 'Altre azioni sulla risposta — eliminare si può a giro finito',
-  copiaRisposta: 'Copia la risposta',
-  copiaTuo: 'Copia il tuo messaggio',
-  ascolta: 'Ascolta la risposta',
-  riusa: 'Riusa nel composer',
-  chiediDiNuovo: 'Chiedi di nuovo',
-  eliminaRisposta: 'Elimina la risposta',
-  confermaEliminaRisposta: 'Confermi? Elimina la risposta',
-  eliminaMessaggio: 'Elimina il messaggio',
-  confermaEliminaMessaggio: 'Confermi? Elimina anche la risposta',
-  vediModifiche: 'Visualizza le modifiche',
-  unFileModificato: '1 file modificato',
-  fileModificati: '{n} file modificati',
-  invitoCartella: 'Scegli una cartella',
-  invitoRiga: 'Per iniziare scegli una cartella: TALOS legge e scrive solo lì dentro.',
-  invitoNotaSenzaModello: 'Il modello si sceglie dalla pillola qui sotto.',
-  collegaModello: 'Collega un modello',
+  get azioniRisposta() { return t('chat.message.answerActions'); },
+  get azioniTuo() { return t('chat.message.yourActions'); },
+  get altreAzioni() { return t('chat.message.moreAnswerActions'); },
+  get altreAzioniGiroVivo() { return t('chat.message.moreAnswerActionsDeleteLater'); },
+  get copiaRisposta() { return t('chat.message.copyAnswer'); },
+  get copiaTuo() { return t('chat.message.copyYours'); },
+  get ascolta() { return t('chat.message.listen'); },
+  get riusa() { return t('chat.message.reuseInComposer'); },
+  get chiediDiNuovo() { return t('chat.message.askAgain'); },
+  get eliminaRisposta() { return t('chat.message.deleteAnswer'); },
+  get confermaEliminaRisposta() { return t('chat.message.confirmDeleteAnswer'); },
+  get eliminaMessaggio() { return t('chat.message.deleteMessage'); },
+  get confermaEliminaMessaggio() { return t('chat.message.confirmDeleteMessage'); },
+  get vediModifiche() { return t('chat.message.viewChanges'); },
+  get unFileModificato() { return t('chat.files.changedOne', { n: 1 }); },
+  get fileModificati() { return t('chat.files.changedMany'); },
+  get invitoCartella() { return t('chat.intro.chooseFolder'); },
+  get invitoRiga() { return t('chat.intro.chooseFolderHint'); },
+  get invitoNotaSenzaModello() { return t('chat.intro.modelFromPill'); },
+  get collegaModello() { return t('chat.intro.connectModel'); },
 });
 
 /**
@@ -444,7 +445,8 @@ export function dimensioneLeggibile(byte) {
   let valore = n / 1024;
   let i = 0;
   while (valore >= 1024 && i < unita.length - 1) { valore /= 1024; i += 1; }
-  return `${valore.toFixed(valore < 10 ? 1 : 0).replace('.', ',')} ${unita[i]}`;
+  const cifre = valore.toFixed(valore < 10 ? 1 : 0);
+  return `${linguaCorrenteDiT() === 'en' ? cifre : cifre.replace('.', ',')} ${unita[i]}`;
 }
 
 /** L'indirizzo da cui si scaricano i byte veri. Vuoto se manca ciò che serve: mai un link rotto. */
@@ -473,17 +475,17 @@ export function creaFileScaricabile({ allegato, percorso, sessionId } = {}, opzi
   scheda.append(testo);
 
   if (indirizzo) {
-    const link = el(d, 'a', 'talos-file-scaricabile__scarica', 'Scarica');
+    const link = el(d, 'a', 'talos-file-scaricabile__scarica', t('chat.file.download'));
     link.href = indirizzo;
     link.setAttribute('download', nome); // il nome resta quello vero anche se l'indirizzo non lo dice
     /* ⛔ Il nome sta già accanto: senza questo, uno screen reader annuncerebbe solo «Scarica», e in
        una chat con tre allegati i tre collegamenti sarebbero indistinguibili. */
-    link.setAttribute('aria-label', `Scarica ${nome}`);
+    link.setAttribute('aria-label', t('chat.file.downloadNamed', { nome }));
     scheda.append(link);
   } else {
     /* ⛔ Nessun indirizzo = nessun bottone che finge. «Un link o una scheda senza file non soddisfa
        il requisito»: allora si dice che non è disponibile, invece di offrire un clic che fallisce. */
-    scheda.append(el(d, 'span', 'talos-file-scaricabile__assente', 'Non disponibile da qui'));
+    scheda.append(el(d, 'span', 'talos-file-scaricabile__assente', t('chat.file.unavailable')));
   }
   return scheda;
 }
@@ -603,7 +605,7 @@ function scriviCodice(parti, testo, chiuso) {
 /** Il pulsante: durante lo streaming non si copia codice a metà (Streamdown, letto 09/09/2026). */
 function aggiornaBottone(bottone, chiuso) {
   bottone.disabled = !chiuso;
-  bottone.textContent = chiuso ? 'Copia' : 'In arrivo…';
+  bottone.textContent = chiuso ? t('chat.common.copy') : t('chat.code.incoming');
 }
 
 /**
@@ -618,7 +620,7 @@ export function creaBloccoCodice({ testo = '', linguaggio = '', chiuso = true } 
   blocco.dataset.lingua = chiaveLinguaggio(linguaggio);
 
   const intestazione = el(documentObj, 'div', 'code-block-head');
-  const nome = el(documentObj, 'span', 'code-block-lang', etichetta || 'testo');
+  const nome = el(documentObj, 'span', 'code-block-lang', etichetta || t('chat.code.plainText'));
   const bottone = el(documentObj, 'button', 'code-block-copy');
   bottone.type = 'button';
   intestazione.append(nome, bottone);
@@ -626,7 +628,7 @@ export function creaBloccoCodice({ testo = '', linguaggio = '', chiuso = true } 
   const pre = el(documentObj, 'pre');
   pre.setAttribute('tabindex', '0');
   pre.setAttribute('role', 'group');
-  pre.setAttribute('aria-label', ['Blocco di codice', etichetta].filter(Boolean).join(' '));
+  pre.setAttribute('aria-label', [t('chat.code.block'), etichetta].filter(Boolean).join(' '));
   const code = el(documentObj, 'code');
   pre.append(code);
 
@@ -645,7 +647,7 @@ export function creaBloccoCodice({ testo = '', linguaggio = '', chiuso = true } 
     // ⛔ Si copia il testo GREZZO tenuto qui, non `code.textContent`: dopo l'evidenziazione quello è
     // ricostruito da span, e un ritorno a capo o un tab persi lì renderebbero il codice non incollabile.
     await parti.copia(parti.testo);
-    bottone.textContent = 'Copiato';
+    bottone.textContent = t('chat.common.copied');
     bottone.classList.add('is-fatto');
     const attesa = globalThis.setTimeout?.(() => { aggiornaBottone(bottone, true); bottone.classList.remove('is-fatto'); }, 1800);
     attesa?.unref?.(); // un timer che riporta un'etichetta non tiene vivo un processo (si vede nei test)
@@ -674,8 +676,8 @@ export function aggiornaBloccoCodice(blocco, { testo, linguaggio, chiuso } = {})
   if (nuovaChiave !== parti.chiave) {
     const etichetta = etichettaLinguaggio(linguaggio);
     parti.chiave = nuovaChiave;
-    parti.nome.textContent = etichetta || 'testo';
-    parti.pre.setAttribute('aria-label', ['Blocco di codice', etichetta].filter(Boolean).join(' '));
+    parti.nome.textContent = etichetta || t('chat.code.plainText');
+    parti.pre.setAttribute('aria-label', [t('chat.code.block'), etichetta].filter(Boolean).join(' '));
     blocco.dataset.lingua = nuovaChiave;
   }
   parti.testo = nuovoTesto;
@@ -708,7 +710,7 @@ export function iconaAttrezzo(nome) {
  * monolite aggiorna: `contenitore` (le righe), `summaryText` (la frase in
  * testa), `misure` (tempo/token/diff a destra).
  */
-export function creaAttivita({ riassunto = 'Attività…', id, aperto = false, tempo = null, token = null } = {}, opzioni = {}) {
+export function creaAttivita({ riassunto = t('chat.activity.pending'), id, aperto = false, tempo = null, token = null } = {}, opzioni = {}) {
   const documentObj = opzioni.document || globalThis.document;
   const card = el(documentObj, 'div', 'talos-card talos-activity');
   card.setAttribute('data-c', 'ActivityBundle');
@@ -785,10 +787,11 @@ export function impostaEsitoRiga(riga, esito) {
   const pallino = riga?.querySelector('.talos-dot');
   if (!pallino) return;
   /* 26/09: `interrupted` — il giro si è fermato prima dell'esito; tono d'attenzione, non d'errore (difetto 2). */
-  const tono = esito === 'running' ? 'live' : esito === 'success' ? 'success' : esito === 'error' ? 'danger' : esito === 'interrupted' ? 'warning' : null;
+  /* owner 03/10/2026: `not-run` — una prova non eseguita; tono d'attenzione come `interrupted`, mai d'errore. */
+  const tono = esito === 'running' ? 'live' : esito === 'success' ? 'success' : esito === 'error' ? 'danger' : esito === 'interrupted' || esito === 'not-run' ? 'warning' : null;
   pallino.className = `talos-dot${tono ? ` talos-dot--${tono}` : ''}`;
   /* 27/09, decisione owner 47: `corretta` — il modello riformula una domanda respinta per la forma; pallino neutro, riga attenuata. */
-  riga.dataset.toolState = esito === 'running' ? 'running' : esito === 'error' ? 'error' : esito === 'success' ? 'complete' : esito === 'interrupted' ? 'interrupted' : esito === 'corretta' ? 'corrected' : '';
+  riga.dataset.toolState = esito === 'running' ? 'running' : esito === 'error' ? 'error' : esito === 'success' ? 'complete' : esito === 'interrupted' ? 'interrupted' : esito === 'not-run' ? 'not-run' : esito === 'corretta' ? 'corrected' : '';
   if (!riga.dataset.toolState) delete riga.dataset.toolState;
 }
 
@@ -814,7 +817,7 @@ export function creaFallimentoAttrezzo({ titolo = '', testo = '', codice = '', a
 /* -------------------------------------------------------------- SystemNote */
 
 /** Una nota di sistema: badge (Nota / Errore), titolo e testo. */
-export function creaNotaSistema({ tipo = 'info', badge = 'Nota', titolo = '', testo = '' } = {}, opzioni = {}) {
+export function creaNotaSistema({ tipo = 'info', badge = t('chat.note.badge'), titolo = '', testo = '' } = {}, opzioni = {}) {
   const documentObj = opzioni.document || globalThis.document;
   const nota = el(documentObj, 'div', 'talos-system-note');
   nota.setAttribute('data-c', 'SystemNote');
@@ -833,9 +836,10 @@ export function creaNotaSistema({ tipo = 'info', badge = 'Nota', titolo = '', te
  * in un dettaglio richiudibile, chiuso: serve per una segnalazione, non per essere letto ogni volta.
  * La spiegazione la costruisce `components/errori.js`; questo componente la mostra e basta.
  */
-export function creaNotaErrore({ badge = 'Errore', titolo = 'TALOS · errore', spiegazione = null, tono = 'danger' } = {}, opzioni = {}) {
+export function creaNotaErrore({ badge = t('chat.note.errorBadge'), titolo = t('chat.note.errorTitle'), spiegazione = null, tono = 'danger' } = {}, opzioni = {}) {
   const documentObj = opzioni.document || globalThis.document;
-  const nota = el(documentObj, 'div', `talos-system-note talos-system-note--${tono === 'danger' ? 'errore' : 'nota'}`);
+  const nota = el(documentObj, 'div');
+  nota.className = `talos-system-note talos-system-note--${tono === 'danger' ? 'errore' : 'nota'}`;
   nota.setAttribute('data-c', 'SystemNote');
   nota.setAttribute('data-tone', tono);
   // 06/9 (T05-D2): un giro fermato da te non e' un guasto — stessa forma, tono diverso
@@ -872,7 +876,7 @@ export function creaNotaErrore({ badge = 'Errore', titolo = 'TALOS · errore', s
     const dettaglio = documentObj.createElement('details');
     dettaglio.className = 'talos-system-note__tecnico';
     const riassunto = documentObj.createElement('summary');
-    riassunto.textContent = 'Testo del server';
+    riassunto.textContent = t('chat.note.serverText');
     dettaglio.append(riassunto, el(documentObj, 'pre', 'talos-system-note__grezzo', spiegazione.tecnico));
     corpo.append(dettaglio);
   }
@@ -905,7 +909,7 @@ export function creaDiff(righe = [], opzioni = {}) {
  * in monospazio, con il suo fondo e lo scorrimento), il `motivo` (perché lo sta chiedendo).
  * E l'esito non si appiccica più in coda alla frase: ha una riga sua.
  */
-export function creaApprovazione({ badge = 'Chiede di scrivere', bersaglio = '', aggiunte = null, rimozioni = null, perche = '', codice = '', motivo = '', diff = null, nota = 'Scade a fine sessione', onUnaVolta, onSessione, onNega } = {}, opzioni = {}) {
+export function creaApprovazione({ badge = t('chat.approval.requestsToWrite'), bersaglio = '', aggiunte = null, rimozioni = null, perche = '', codice = '', motivo = '', diff = null, nota = t('chat.approval.expiresAtSessionEnd'), onUnaVolta, onSessione, onNega } = {}, opzioni = {}) {
   const documentObj = opzioni.document || globalThis.document;
   const scheda = el(documentObj, 'div', 'talos-approval');
   scheda.setAttribute('data-c', 'ApprovalCard');
@@ -922,7 +926,7 @@ export function creaApprovazione({ badge = 'Chiede di scrivere', bersaglio = '',
   if (codice) {
     codiceEl = el(documentObj, 'pre', 'talos-approval__codice', String(codice));
     codiceEl.tabIndex = 0; // si scorre anche da tastiera: un comando lungo non si legge col solo mouse
-    codiceEl.setAttribute('aria-label', 'Il comando esatto che l’agente vuole eseguire');
+    codiceEl.setAttribute('aria-label', t('chat.approval.exactCommand'));
     scheda.append(codiceEl);
   }
   let motivoEl = null;
@@ -938,9 +942,9 @@ export function creaApprovazione({ badge = 'Chiede di scrivere', bersaglio = '',
     if (typeof onClick === 'function') b.addEventListener('click', onClick);
     return b;
   };
-  const unaVolta = bottone('talos-button talos-button--primary talos-button--md', 'Consenti una volta', onUnaVolta);
-  const sessione = bottone('talos-button talos-button--secondary', 'Per questa sessione', onSessione);
-  const nega = bottone('talos-button talos-button--ghost talos-button--danger', 'Nega', onNega);
+  const unaVolta = bottone('talos-button talos-button--primary talos-button--md', t('chat.approval.allowOnce'), onUnaVolta);
+  const sessione = bottone('talos-button talos-button--secondary', t('chat.approval.forThisSession'), onSessione);
+  const nega = bottone('talos-button talos-button--ghost talos-button--danger', t('chat.approval.deny'), onNega);
   piede.append(unaVolta, sessione, nega, el(documentObj, 'span', 'talos-grow'), el(documentObj, 'span', 'talos-approval__foot-note', nota));
   scheda.append(piede);
   return { scheda, perche: perchéEl, codice: codiceEl, motivo: motivoEl, piede, pulsanti: { unaVolta, sessione, nega } };
@@ -960,9 +964,9 @@ export function segnaEsitoApprovazione(scheda, { approvato = false, altrove = fa
   /* F4-03 (01/10/2026): il sì che vale per la cartella fino a fine sessione, e il no chiuso dal server perché nessuno poteva
      rispondere (automazioni, passi dei Workflow) — si dicono per quello che sono, non come un «Negato» qualunque. */
   const esito = approvato
-    ? (ambito === 'cartella' ? 'Consentito in questa cartella per la sessione' : 'Approvato')
-    : (motivo === 'nessuna-interfaccia' ? 'Negato: nessuno poteva rispondere in questa sessione automatica' : 'Negato');
-  const riga = el(documentObj, 'p', `talos-approval__esito talos-approval__esito--${approvato ? 'si' : 'no'}`, `${esito}${altrove && motivo !== 'nessuna-interfaccia' ? ' da un’altra finestra' : ''}`);
+    ? (ambito === 'cartella' ? t('chat.approval.allowedInFolder') : t('chat.common.approved'))
+    : (motivo === 'nessuna-interfaccia' ? t('chat.approval.deniedNoOneCanAnswer') : t('chat.approval.denied'));
+  const riga = el(documentObj, 'p', `talos-approval__esito talos-approval__esito--${approvato ? 'si' : 'no'}`, t('chat.approval.outcomeWithOrigin', { esito, altrove: altrove && motivo !== 'nessuna-interfaccia' ? t('chat.common.fromAnotherWindow') : '' }));
   riga.setAttribute('role', 'status');
   scheda.append(riga);
   return riga;
@@ -973,7 +977,7 @@ export function creaRicevuta({ testo = '', hash = '' } = {}, opzioni = {}) {
   const documentObj = opzioni.document || globalThis.document;
   const ricevuta = el(documentObj, 'div', 'talos-receipt');
   ricevuta.setAttribute('data-c', 'SignedReceipt');
-  ricevuta.append(el(documentObj, 'span', 'talos-badge talos-badge--success talos-badge--sm', 'Ricevuta firmata'), el(documentObj, 'span', 'talos-receipt__text', testo), el(documentObj, 'span', 'talos-receipt__hash', hash));
+  ricevuta.append(el(documentObj, 'span', 'talos-badge talos-badge--success talos-badge--sm', t('chat.receipt.signed')), el(documentObj, 'span', 'talos-receipt__text', testo), el(documentObj, 'span', 'talos-receipt__hash', hash));
   return ricevuta;
 }
 
@@ -1001,7 +1005,7 @@ export function creaFileToccati(file = [], opzioni = {}) {
   const card = el(documentObj, 'div', 'talos-card talos-touched');
   card.setAttribute('data-c', 'TouchedFiles');
   const testa = el(documentObj, 'div', 'talos-touched__head');
-  const quanti = file.length === 1 ? TESTI_MESSAGGIO.unFileModificato : TESTI_MESSAGGIO.fileModificati.replace('{n}', () => String(file.length));
+  const quanti = tn('chat.files.changedOne', 'chat.files.changedMany', file.length);
   testa.append(el(documentObj, 'span', 'talos-touched__titolo', quanti), el(documentObj, 'span', 'talos-grow'));
   if (typeof opzioni.onVediTutto === 'function') {
     const vedi = el(documentObj, 'button', 'talos-button talos-button--ghost talos-button--sm', TESTI_MESSAGGIO.vediModifiche);
@@ -1038,14 +1042,14 @@ export function rigaFileToccato({ percorso = '', etichetta = '', aggiunte = 0, r
 /* ---------------------------------------------------------------- Artifact */
 
 /** La scheda di un artefatto creato dal modello: titolo, formato, «Apri» e l'anteprima in un iframe isolato. */
-export function creaArtefatto({ titolo = 'Artefatto', formato = '', src = '', onApri } = {}, opzioni = {}) {
+export function creaArtefatto({ titolo = t('chat.artifact.badge'), formato = '', src = '', onApri } = {}, opzioni = {}) {
   const documentObj = opzioni.document || globalThis.document;
   const card = el(documentObj, 'div', 'talos-card talos-artifact');
   card.setAttribute('data-c', 'ArtifactCard');
   const testa = el(documentObj, 'div', 'talos-artifact__head');
-  testa.append(el(documentObj, 'span', 'talos-badge talos-badge--accent talos-badge--sm', 'Artefatto'), el(documentObj, 'span', 'talos-artifact__title talos-grow talos-truncate', titolo));
+  testa.append(el(documentObj, 'span', 'talos-badge talos-badge--accent talos-badge--sm', t('chat.artifact.badge')), el(documentObj, 'span', 'talos-artifact__title talos-grow talos-truncate', titolo));
   if (formato) testa.append(el(documentObj, 'span', 'talos-mono talos-muted', formato));
-  const apri = el(documentObj, 'button', 'talos-button talos-button--ghost talos-button--sm', 'Apri');
+  const apri = el(documentObj, 'button', 'talos-button talos-button--ghost talos-button--sm', t('chat.common.open'));
   apri.type = 'button';
   if (typeof onApri === 'function') apri.addEventListener('click', onApri);
   testa.append(apri);
@@ -1210,7 +1214,7 @@ export function animaSegnavia(svg, { window: finestra = globalThis, adesso = () 
  * TalosLineLoader, viewBox 96×16, tre nodi che si riempiono) — con l'etichetta
  * che il monolite aggiorna (`run-activity-label`) e i secondi trascorsi.
  */
-export function creaAttesa({ etichetta = 'Sto pensando…' } = {}, opzioni = {}) {
+export function creaAttesa({ etichetta = t('chat.wait.thinking') } = {}, opzioni = {}) {
   const documentObj = opzioni.document || globalThis.document;
   /*
    * ⛔⛔⛔ 10/09 — TROVATO DALLA PROVA AL VERSO CONTRARIO, e c'era da prima di oggi. Con
@@ -1312,23 +1316,24 @@ export function creaDiffInChat(gruppi, { percorso = '', apertoSeSotto = 40, docu
   const riassunto = el(documentObj, 'summary', '');
   const quanti = gruppi.pezzi.length;
   riassunto.textContent = quanti === 1
-    ? `Differenza${percorso ? ` in ${percorso}` : ''} · ${righeTotali} righe`
-    : `Differenza${percorso ? ` in ${percorso}` : ''} · ${quanti} punti del file, ${righeTotali} righe`;
+    ? t('chat.diff.title', { percorso: percorso ? t('chat.diff.inFile', { percorso }) : '', n: righeTotali })
+    : t('chat.diff.titleWithLocations', { percorso: percorso ? t('chat.diff.inFile', { percorso }) : '', punti: quanti, n: righeTotali });
   dettaglio.append(riassunto);
 
   for (const pezzo of gruppi.pezzi) {
     const testa = el(documentObj, 'div', 'talos-diff-chat__pezzo');
     /* A parole: chi legge vuole sapere a quale riga del file si trova. */
     const dove = pezzo.daRiga === null
-      ? 'righe tolte'
-      : (pezzo.daRiga === pezzo.aRiga ? `riga ${pezzo.daRiga}` : `righe ${pezzo.daRiga}-${pezzo.aRiga}`);
+      ? t('chat.diff.removedLines')
+      : (pezzo.daRiga === pezzo.aRiga ? t('chat.diff.line', { n: pezzo.daRiga }) : t('chat.diff.lines', { da: pezzo.daRiga, a: pezzo.aRiga }));
     testa.append(el(documentObj, 'span', 'talos-diff-chat__righe', dove));
     dettaglio.append(testa);
 
     const corpo = el(documentObj, 'div', 'talos-diff');
     corpo.setAttribute('data-c', 'DiffView');
     for (const r of pezzo.righe) {
-      const riga = el(documentObj, 'div', `talos-diff__line talos-diff__line--${r.tipo}`);
+      const riga = el(documentObj, 'div');
+      riga.className = `talos-diff__line talos-diff__line--${r.tipo}`;
       /* Il numero e il segno non si selezionano: copiando il diff si porta via il codice, non le colonne. */
       riga.append(el(documentObj, 'span', 'talos-diff-chat__num', r.numero === null ? '' : String(r.numero)));
       riga.append(el(documentObj, 'span', 'talos-diff-chat__segno', r.tipo === 'add' ? '+' : r.tipo === 'del' ? '−' : ' '));
@@ -1341,7 +1346,7 @@ export function creaDiffInChat(gruppi, { percorso = '', apertoSeSotto = 40, docu
   /* ⛔ Il taglio si dichiara coi numeri: un taglio silenzioso fa credere che il file sia cambiato meno. */
   if (gruppi.tagliato) {
     const resto = el(documentObj, 'div', 'talos-diff-chat__resto');
-    resto.textContent = `Altri ${gruppi.pezziNascosti} punti del file non sono mostrati qui (${gruppi.righeNascoste} righe). Il totale +${gruppi.aggiunte} −${gruppi.rimozioni} li conta tutti.`;
+    resto.textContent = t('chat.diff.hiddenLocations', { punti: gruppi.pezziNascosti, righe: gruppi.righeNascoste, aggiunte: gruppi.aggiunte, rimozioni: gruppi.rimozioni });
     dettaglio.append(resto);
   }
 

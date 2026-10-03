@@ -181,7 +181,12 @@ test('SCRATCH-08 — lo stato per il Doctor: percorso, byte e voci (il timbro no
     eseguiComandoSandboxatoFn: async (_c, cartella) => { cartellaDelComando = cartella; return { enforcement: 'desktop' }; },
     spawnSyncFn: () => ({ status: 0 }),
   });
-  assert.deepEqual(risultato.scratch, { percorso: radice, esiste: true, byte: 1024, voci: 2, dettaglio: `2 voci, 1024 byte in ${radice}. Ciò che resta fermo per 24 ore si toglie all'avvio.` });
+  // K4a: la frase è inglese (riserva), con la chiave del dizionario e i valori; l'italiano sta nell'area `server` dell'interfaccia
+  assert.deepEqual(risultato.scratch, {
+    percorso: radice, esiste: true, byte: 1024, voci: 2,
+    dettaglio: `2 entries, 1024 bytes in ${radice}. Anything left idle for 24 hours is removed at startup.`,
+    dettaglioChiave: 'server.doctor.scratch.summary', dettaglioParams: { n: 2, bytes: 1024, path: radice },
+  });
   assert.equal(dirname(cartellaDelComando), process.env.TALOS_SCRATCH_DIR, 'la cartella di prova del Doctor nasce sotto la radice, non in TEMP');
   assert.equal(existsSync(cartellaDelComando), false, 'e viene tolta');
   const senza = await diagnosi({ chiaveConfigurata: true, eseguiComandoSandboxatoFn: async () => ({ enforcement: 'none' }), spawnSyncFn: () => ({ status: 0 }) });

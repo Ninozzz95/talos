@@ -37,6 +37,7 @@
  * portano l'estensione esplicita.
  */
 
+import { t } from '../components/lingua.js';
 export type Destination = 'local' | 'cloud';
 export type FilterBasis = 'total' | 'active';
 export type FacetKey = string;
@@ -156,50 +157,58 @@ export interface ActiveChip {
   label: string;
 }
 
+/*
+ * ⛔ 03/10/2026, corsia S2 della lingua: le etichette di queste tabelle sono getter sul dizionario (`modelli.catalog.*`),
+ *   lette nella lingua corrente. Il valore (`[0]`) resta un dato; l'etichetta (`[1]`, `label`) segue la lingua.
+ */
+function voce(valore: string, chiave: string): readonly [string, string] {
+  return Object.defineProperty([valore], 1, { enumerable: true, get: () => t(chiave) }) as unknown as readonly [string, string];
+}
+
 export const SIZE_BANDS: readonly SizeBand[] = Object.freeze([
-  { id: 'tiny', label: 'Fino a 3B', min: 0, max: 3 },
-  { id: 'small', label: 'Oltre 3–8B', min: 3, max: 8 },
-  { id: 'medium', label: 'Oltre 8–14B', min: 8, max: 14 },
-  { id: 'large', label: 'Oltre 14–35B', min: 14, max: 35 },
-  { id: 'xl', label: 'Oltre 35–70B', min: 35, max: 70 },
-  { id: 'xxl', label: 'Oltre 70B', min: 70, max: Infinity },
-  { id: 'unknown', label: 'Parametri non noti' },
+  { id: 'tiny', get label() { return t('modelli.catalog.size.tiny'); }, min: 0, max: 3 },
+  { id: 'small', get label() { return t('modelli.catalog.size.small'); }, min: 3, max: 8 },
+  { id: 'medium', get label() { return t('modelli.catalog.size.medium'); }, min: 8, max: 14 },
+  { id: 'large', get label() { return t('modelli.catalog.size.large'); }, min: 14, max: 35 },
+  { id: 'xl', get label() { return t('modelli.catalog.size.xl'); }, min: 35, max: 70 },
+  { id: 'xxl', get label() { return t('modelli.catalog.size.xxl'); }, min: 70, max: Infinity },
+  { id: 'unknown', get label() { return t('modelli.catalog.size.unknown'); } },
 ]);
 
 export const FACET_OPTIONS: Readonly<Record<string, readonly (readonly [string, string])[]>> = Object.freeze({
-  destination: [['local', 'Locali'], ['cloud', 'Cloud']] as const,
-  status: [['installed', 'Installati'], ['not-installed', 'Da scaricare'], ['downloading', 'In download']] as const,
-  fit: [['fits', 'Entro 18,6 GiB · stima'], ['exceeds', 'Oltre il budget demo'], ['unknown', 'RAM non stimata']] as const,
-  tasks: [['general', 'Quotidiano'], ['code', 'Sviluppo'], ['write', 'Scrittura'], ['embedding', 'Embedding']] as const,
+  destination: [voce('local', 'modelli.catalog.destination.local'), voce('cloud', 'modelli.catalog.destination.cloud')] as const,
+  status: [voce('installed', 'modelli.catalog.status.installed'), voce('not-installed', 'modelli.catalog.status.not_installed'), voce('downloading', 'modelli.catalog.status.downloading')] as const,
+  fit: [voce('fits', 'modelli.catalog.fit.fits'), voce('exceeds', 'modelli.catalog.fit.exceeds'), voce('unknown', 'modelli.catalog.fit.unknown')] as const,
+  tasks: [voce('general', 'modelli.catalog.tasks.general'), voce('code', 'modelli.catalog.tasks.code'), voce('write', 'modelli.catalog.tasks.write'), voce('embedding', 'modelli.catalog.tasks.embedding')] as const,
   capabilities: [
-    ['tools', 'Strumenti / function calling'],
-    ['vision', 'Immagini in ingresso'],
-    ['reasoning', 'Ragionamento'],
-    ['json', 'Output JSON'],
-    ['audio', 'Audio'],
+    voce('tools', 'modelli.catalog.capabilities.tools'),
+    voce('vision', 'modelli.catalog.capabilities.vision'),
+    voce('reasoning', 'modelli.catalog.capabilities.reasoning'),
+    voce('json', 'modelli.catalog.capabilities.json'),
+    voce('audio', 'modelli.catalog.capabilities.audio'),
   ] as const,
-  formats: [['GGUF', 'GGUF'], ['safetensors', 'Safetensors'], ['unknown', 'Formato non noto']] as const,
-  quant: [['Q4_K_M', 'Q4_K_M'], ['Q5_K_M', 'Q5_K_M'], ['Q8_0', 'Q8_0'], ['F16', 'F16'], ['unknown', 'Quantizzazione non nota']] as const,
-  languages: [['it', 'Italiano'], ['en', 'Inglese'], ['multi', 'Multilingue dichiarato'], ['unknown', 'Lingua non nota']] as const,
+  formats: [voce('GGUF', 'modelli.catalog.formats.GGUF'), voce('safetensors', 'modelli.catalog.formats.safetensors'), voce('unknown', 'modelli.catalog.formats.unknown')] as const,
+  quant: [voce('Q4_K_M', 'modelli.catalog.quant.Q4_K_M'), voce('Q5_K_M', 'modelli.catalog.quant.Q5_K_M'), voce('Q8_0', 'modelli.catalog.quant.Q8_0'), voce('F16', 'modelli.catalog.quant.F16'), voce('unknown', 'modelli.catalog.quant.unknown')] as const,
+  languages: [voce('it', 'modelli.catalog.languages.it'), voce('en', 'modelli.catalog.languages.en'), voce('multi', 'modelli.catalog.languages.multi'), voce('unknown', 'modelli.catalog.languages.unknown')] as const,
   access: [
-    ['open', 'Senza richiesta di accesso'],
-    ['approval', 'Accettazione / autorizzazione'],
-    ['account', 'Account provider'],
-    ['unknown', 'Accesso da verificare'],
+    voce('open', 'modelli.catalog.access.open'),
+    voce('approval', 'modelli.catalog.access.approval'),
+    voce('account', 'modelli.catalog.access.account'),
+    voce('unknown', 'modelli.catalog.access.unknown'),
   ] as const,
-  arch: [['dense', 'Dense'], ['moe', 'Mixture of Experts'], ['unknown', 'Architettura non nota']] as const,
+  arch: [voce('dense', 'modelli.catalog.arch.dense'), voce('moe', 'modelli.catalog.arch.moe'), voce('unknown', 'modelli.catalog.arch.unknown')] as const,
 });
 
 export const CATALOG_SORTS: readonly (readonly [string, string])[] = Object.freeze([
-  ['catalog', 'Ordine del catalogo'],
-  ['params-asc', 'Parametri: meno → più'],
-  ['params-desc', 'Parametri: più → meno'],
-  ['file-asc', 'File: più leggeri'],
-  ['ram-asc', 'Stima RAM: crescente'],
-  ['context-desc', 'Contesto: maggiore'],
-  ['updated-desc', 'Aggiornati di recente · demo'],
-  ['name', 'Nome A–Z'],
-  ['price-asc', 'Costo input: crescente · demo'],
+  voce('catalog', 'modelli.catalog.sort.catalog'),
+  voce('params-asc', 'modelli.catalog.sort.params_asc'),
+  voce('params-desc', 'modelli.catalog.sort.params_desc'),
+  voce('file-asc', 'modelli.catalog.sort.file_asc'),
+  voce('ram-asc', 'modelli.catalog.sort.ram_asc'),
+  voce('context-desc', 'modelli.catalog.sort.context_desc'),
+  voce('updated-desc', 'modelli.catalog.sort.updated_desc'),
+  voce('name', 'modelli.catalog.sort.name'),
+  voce('price-asc', 'modelli.catalog.sort.price_asc'),
 ]);
 
 export function emptyCatalogFilters(): CatalogFilters {
@@ -292,7 +301,7 @@ export function catalogInputErrors(raw: unknown): string[] {
   const f = validateCatalogFilters(raw);
   const errors: string[] = [];
   if (f.minParams !== '' && f.maxParams !== '' && Number(f.minParams) > Number(f.maxParams)) {
-    errors.push('Il minimo di parametri supera il massimo.');
+    errors.push(t('modelli.catalog.error.minAboveMax'));
   }
   return errors;
 }
@@ -458,28 +467,28 @@ export function toggleCatalogFacet(raw: unknown, key: FacetKey, value: string): 
 }
 
 const CF_NAMES: Readonly<Record<string, string>> = {
-  destination: 'Destinazione',
-  status: 'Stato',
-  favorite: 'Preferiti',
-  sizes: 'Parametri',
-  minParams: 'Parametri min.',
-  maxParams: 'Parametri max.',
-  minContext: 'Contesto min.',
-  maxFile: 'File max.',
-  maxRam: 'RAM max.',
-  fit: 'Memoria',
-  tasks: 'Attività',
-  capabilities: 'Capacità',
-  formats: 'Formato',
-  quant: 'Quantizzazione',
-  authors: 'Autore',
-  providers: 'Provider',
-  licenses: 'Licenza',
-  languages: 'Lingua',
-  access: 'Accesso',
-  arch: 'Architettura',
-  maxInput: 'Input max.',
-  maxOutput: 'Output max.',
+  get destination() { return t('modelli.catalog.name.destination'); },
+  get status() { return t('modelli.catalog.name.status'); },
+  get favorite() { return t('modelli.catalog.name.favorite'); },
+  get sizes() { return t('modelli.catalog.name.sizes'); },
+  get minParams() { return t('modelli.catalog.name.minParams'); },
+  get maxParams() { return t('modelli.catalog.name.maxParams'); },
+  get minContext() { return t('modelli.catalog.name.minContext'); },
+  get maxFile() { return t('modelli.catalog.name.maxFile'); },
+  get maxRam() { return t('modelli.catalog.name.maxRam'); },
+  get fit() { return t('modelli.catalog.name.fit'); },
+  get tasks() { return t('modelli.catalog.name.tasks'); },
+  get capabilities() { return t('modelli.catalog.name.capabilities'); },
+  get formats() { return t('modelli.catalog.name.formats'); },
+  get quant() { return t('modelli.catalog.name.quant'); },
+  get authors() { return t('modelli.catalog.name.authors'); },
+  get providers() { return t('modelli.catalog.name.providers'); },
+  get licenses() { return t('modelli.catalog.name.licenses'); },
+  get languages() { return t('modelli.catalog.name.languages'); },
+  get access() { return t('modelli.catalog.name.access'); },
+  get arch() { return t('modelli.catalog.name.arch'); },
+  get maxInput() { return t('modelli.catalog.name.maxInput'); },
+  get maxOutput() { return t('modelli.catalog.name.maxOutput'); },
 };
 
 /** I chip dei filtri attivi. Un filtro al valore predefinito non produce un chip fantasma. */
@@ -493,14 +502,14 @@ export function activeCatalogFilters(raw: unknown): ActiveChip[] {
         const label = key === 'sizes' ? SIZE_BANDS.find((x) => x.id === value)?.label : FACET_OPTIONS[key]?.find((x) => x[0] === value)?.[1];
         chips.push({ key, value, label: `${name}: ${label || value}` });
       }
-    } else if (v === true) chips.push({ key, value: true, label: 'Solo preferiti' });
+    } else if (v === true) chips.push({ key, value: true, label: t('modelli.catalog.chip.favoritesOnly') });
     else if (typeof v !== 'boolean' && v !== '') {
       const unit = key.includes('Params') ? 'B' : ['maxRam', 'maxFile'].includes(key) ? ' GiB' : key === 'minContext' ? ' token' : ' $/M';
       chips.push({ key, value: v, label: `${name}: ${v}${unit}` });
     }
   }
-  if (f.includeUnknown) chips.push({ key: 'includeUnknown', value: true, label: 'Dati numerici non noti inclusi' });
-  if (f.basis === 'active') chips.push({ key: 'basis', value: 'active', label: 'Misura: parametri attivi (MoE)' });
+  if (f.includeUnknown) chips.push({ key: 'includeUnknown', value: true, label: t('modelli.catalog.chip.includeUnknown') });
+  if (f.basis === 'active') chips.push({ key: 'basis', value: 'active', label: t('modelli.catalog.chip.activeParameters') });
   return chips;
 }
 

@@ -26,9 +26,14 @@
 // 09/09 — la misura del Context Engine si legge da UN lettore solo, lo stesso che alimenta la modale:
 //   così le due superfici non possono divergere per costruzione, non per disciplina di chi scrive.
 import { descriviContextCompactor } from './context-compactor.js';
+import { t as traduci, elenco, linguaCorrenteDiT } from './lingua.js';
 
-/** Un totale leggibile: 7454 → «7.454». */
-const NUM = new Intl.NumberFormat('it-IT');
+/* Numeri nella lingua dell'interfaccia (italiano → it-IT, inglese → en-US), letti a ogni uso. */
+const localeUI = () => (linguaCorrenteDiT() === 'en' ? 'en-US' : 'it-IT');
+/** Un totale leggibile: 7454 → «7.454» (italiano) o «7,454» (inglese). */
+const num = (n) => new Intl.NumberFormat(localeUI()).format(n);
+/** Una percentuale con al più un decimale (con `minimo` 1: sempre uno). */
+const decimale = (n, minimo = 0) => new Intl.NumberFormat(localeUI(), { minimumFractionDigits: minimo, maximumFractionDigits: 1 }).format(n);
 
 /**
  * Somma i token di schema degli attrezzi, e conta quelli che non lo dichiarano.
@@ -74,9 +79,9 @@ export function ripartizioneContesto({ attrezzi = [], finestra = null, istruzion
    * la riga non si disegna.
    */
   const misurato = (v) => v != null && v !== '' && Number.isFinite(Number(v)) && Number(v) >= 0;
-  const voci = [{ id: 'attrezzi', nome: 'Attrezzi', token: attr.token, stima: true }];
-  if (misurato(istruzioniToken)) voci.push({ id: 'istruzioni', nome: 'Istruzioni di sistema', token: Number(istruzioniToken), stima: true });
-  if (misurato(memoriaToken)) voci.push({ id: 'memoria', nome: 'Ricordi', token: Number(memoriaToken), stima: true });
+  const voci = [{ id: 'attrezzi', nome: traduci('varie.context.slice.tools'), token: attr.token, stima: true }];
+  if (misurato(istruzioniToken)) voci.push({ id: 'istruzioni', nome: traduci('varie.context.slice.instructions'), token: Number(istruzioniToken), stima: true });
+  if (misurato(memoriaToken)) voci.push({ id: 'memoria', nome: traduci('varie.context.slice.memories'), token: Number(memoriaToken), stima: true });
   const occupato = voci.reduce((s, v) => s + v.token, 0);
   const f = Number.isFinite(Number(finestraToken)) && Number(finestraToken) > 0 ? Number(finestraToken) : null;
   for (const v of voci) v.percentuale = f ? (v.token / f) * 100 : null;
@@ -97,16 +102,16 @@ export function ripartizioneContesto({ attrezzi = [], finestra = null, istruzion
 
 /** «7.454 token su 131.072 · 5,7% della finestra», o la verità quando manca la finestra. */
 export function frasiRipartizione(r) {
-  if (!r) return 'Misura non ancora eseguita.';
-  const base = `${NUM.format(r.occupato)} token occupati prima che tu scriva`;
-  const quota = r.percentuale == null
-    ? ' · finestra del modello non dichiarata, la percentuale non si può calcolare'
-    : ` su ${NUM.format(r.finestra)} · ${new Intl.NumberFormat('it-IT', { maximumFractionDigits: 1 }).format(r.percentuale)}% della finestra, ${NUM.format(r.libero)} liberi`;
-  const mancanti = r.attrezziSenzaStima ? ` · ⛔ ${r.attrezziSenzaStima} attrezzi su ${r.attrezziTotale} non dichiarano quanto pesano: non sono in questo totale` : '';
+  if (!r) return traduci('varie.context.measure.notRun');
+  /* ⛔ Le tre frasi sono intere (non si compongono pezzi di frase): in inglese l'ordine delle parole è un altro. */
+  const testa = r.percentuale == null
+    ? traduci('varie.context.measure.noWindow', { used: num(r.occupato) })
+    : traduci('varie.context.measure.withWindow', { used: num(r.occupato), window: num(r.finestra), percent: decimale(r.percentuale), free: num(r.libero) });
+  const mancanti = r.attrezziSenzaStima ? ` · ${traduci('varie.context.measure.toolsUndeclared', { missing: r.attrezziSenzaStima, total: r.attrezziTotale })}` : '';
   // ⛔ 09/09: la percentuale senza la sua finestra non si può verificare, e due finestre diverse
   //    sullo stesso schermo sono esattamente il difetto misurato oggi. La fonte si NOMINA.
-  const fonte = r.fonteFinestra === 'profilo' ? ' · finestra del profilo di questa chat' : r.fonteFinestra === 'catalogo' ? ' · finestra del catalogo del modello' : '';
-  return `${base}${quota}${fonte}${mancanti} (stima)`;
+  const fonte = r.fonteFinestra === 'profilo' ? ` · ${traduci('varie.context.measure.windowFromProfile')}` : r.fonteFinestra === 'catalogo' ? ` · ${traduci('varie.context.measure.windowFromCatalog')}` : '';
+  return traduci('varie.context.measure.estimate', { text: `${testa}${fonte}${mancanti}` });
 }
 
 function el(d, tag, classe, testo) { const n = d.createElement(tag); if (classe) n.className = classe; if (testo != null) n.textContent = testo; return n; }
@@ -138,7 +143,7 @@ export function aggiornaContesto(pannello, ripartizione, { document: d = globalT
     if (senzaScala) barra.replaceChildren();
     else {
       barra.replaceChildren(...ripartizione.voci.map((v) => {
-        const f = el(d, 'span', `talos-contesto__fetta talos-contesto__fetta--${v.id}`);
+        const f = el(d, 'span', `talos-contesto__fetta talos-contesto__fetta--${v.id}`, undefined);
         f.dataset.fetta = v.id;
         f.style.width = `${Math.max(0, Math.min(100, v.percentuale))}%`;
         return f;
@@ -149,10 +154,10 @@ export function aggiornaContesto(pannello, ripartizione, { document: d = globalT
     if (!ripartizione) { voci.replaceChildren(); return ripartizione; }
     voci.replaceChildren(...ripartizione.voci.map((v) => {
       const riga = el(d, 'div', 'talos-contesto-voce');
-      const punto = el(d, 'span', `talos-contesto-voce__punto talos-contesto__fetta--${v.id}`);
+      const punto = el(d, 'span', `talos-contesto-voce__punto talos-contesto__fetta--${v.id}`, undefined);
       const valore = v.percentuale == null
-        ? `${NUM.format(v.token)} token`
-        : `${NUM.format(v.token)} token · ${new Intl.NumberFormat('it-IT', { maximumFractionDigits: 1 }).format(v.percentuale)}%`;
+        ? traduci('varie.context.slice.tokens', { n: num(v.token) })
+        : traduci('varie.context.slice.tokensPercent', { n: num(v.token), percent: decimale(v.percentuale) });
       riga.append(punto, el(d, 'span', 'talos-contesto-voce__k', v.nome), el(d, 'span', 'talos-contesto-voce__v', valore));
       return riga;
     }));
@@ -165,8 +170,8 @@ export function aggiornaContesto(pannello, ripartizione, { document: d = globalT
      */
     const mancanti = ripartizione.mancanti || [];
     if (mancanti.length) {
-      const nomi = mancanti.map((id) => (id === 'istruzioni' ? 'le istruzioni di sistema' : 'i ricordi')).join(' e ');
-      voci.appendChild(el(d, 'p', 'talos-muted talos-contesto-mancanti', `Per ora ${nomi} non ${mancanti.length > 1 ? 'sono' : 'è'} misurabil${mancanti.length > 1 ? 'i' : 'e'} da questa pagina: ${mancanti.length > 1 ? 'li conosce' : 'lo conosce'} il motore, e non ${mancanti.length > 1 ? 'sono' : 'è'} nel totale qui sopra.`));
+      const nomi = elenco(mancanti.map((id) => traduci(id === 'istruzioni' ? 'varie.context.unmeasured.instructions' : 'varie.context.unmeasured.memories')));
+      voci.appendChild(el(d, 'p', 'talos-muted talos-contesto-mancanti', traduci(mancanti.length > 1 ? 'varie.context.unmeasured.many' : 'varie.context.unmeasured.one', { names: nomi })));
     }
   }
   return ripartizione;
@@ -265,7 +270,7 @@ export function finestraDiContesto({ misura = null, revisione = null, finestraCa
       riserva: m.responseReserve,
       attuale: m.current,
       misurataAlle: m.measuredAt,
-      nota: m.current ? '' : 'il contesto è cambiato dopo la misura',
+      nota: m.current ? '' : traduci('varie.context.note.changedAfter'),
       perInspector: {
         // ⛔ `completion_tokens: 0` non è un dato mancante travestito da zero: `inputTokens`
         //    È GIÀ tutto ciò che occupa la finestra alla prossima richiesta (la risposta del
@@ -288,19 +293,19 @@ export function finestraDiContesto({ misura = null, revisione = null, finestraCa
     attuale: false,
     misurataAlle: null,
     // ⛔ senza misura e senza catalogo non si sceglie un valore di comodo: si dice che manca.
-    nota: catalogo === null ? 'finestra non dichiarata' : 'finestra dichiarata dal catalogo del modello',
+    nota: catalogo === null ? traduci('varie.context.note.noWindow') : traduci('varie.context.note.fromCatalog'),
     perInspector: { usage: usage ?? null, finestra: catalogo, ripartizione: ripartizione ?? null },
   };
 }
 
 /** «10.163 / 16.384 token · 62,0% · profilo del contesto di questa chat». */
 export function frasiFinestraContesto(f) {
-  if (!f || f.finestra == null) return 'Finestra del contesto non dichiarata.';
-  const percentuale = f.occupato == null ? null : new Intl.NumberFormat('it-IT', { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(Math.floor((f.occupato / f.finestra) * 1000) / 10);
+  if (!f || f.finestra == null) return traduci('varie.context.window.undeclared');
+  const percentuale = f.occupato == null ? null : decimale(Math.floor((f.occupato / f.finestra) * 1000) / 10, 1);
   const testa = f.occupato == null
-    ? `${NUM.format(f.finestra)} token di finestra · occupazione non ancora misurata`
-    : `${NUM.format(f.occupato)} / ${NUM.format(f.finestra)} token · ${percentuale}%`;
-  const fonte = f.fonte === 'profilo' ? ' · profilo del contesto di questa chat' : f.fonte === 'catalogo' ? ' · catalogo del modello' : '';
+    ? traduci('varie.context.window.notMeasured', { window: num(f.finestra) })
+    : traduci('varie.context.window.used', { used: num(f.occupato), window: num(f.finestra), percent: percentuale });
+  const fonte = f.fonte === 'profilo' ? ` · ${traduci('varie.context.window.profile')}` : f.fonte === 'catalogo' ? ` · ${traduci('varie.context.window.catalog')}` : '';
   const avviso = f.fonte === 'profilo' && f.nota ? ` · ⛔ ${f.nota}` : '';
   return `${testa}${fonte}${avviso}`;
 }

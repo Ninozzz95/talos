@@ -39,23 +39,29 @@ export { accorciaPercorso, cicla, creaMenuContestuale, apriMenuContestuale, nome
 export const ZONA_CHIUSURA_PX = 26; // la larghezza della «×» disegnata dal CSS in coda alla scheda
 export const SCHEDE_MASSIME = 8; // stesso tetto di `SCHEDE_MASSIME_PER_SESSIONE` del server (conhost superstiti su Windows)
 
+/*
+ * ⛔ I VALORI di `TESTI` e di `ETICHETTA_STATO` sono CHIAVI STABILI del dizionario (`processi.terminal.…`), non frasi: `src/legacy/app.js`
+ *   li importa (`TESTI_TERMINALE`, `ETICHETTA_STATO_TERMINALE`) e li passa a `tr(...)`, con gli stessi segnaposto di sempre
+ *   (`{n}` per `troppeSchede`, `{giro}` per `lanciataDallAgente`). Così `tr()` li risolve nella lingua corrente, e una chiave
+ *   che mancasse in una lingua ricade sull'inglese.
+ */
 export const TESTI = Object.freeze({
-  nuovo: 'Nuovo',
-  nuovaScheda: 'Apri una nuova scheda',
-  nuovaSchedaSenzaSessione: 'Apri una sessione per avere più schede',
-  troppeSchede: 'Hai già {n} schede aperte: chiudine una', // {n} = SCHEDE_MASSIME, sostituito da t()
-  chiudi: 'Chiudi',
-  chiudiAltre: 'Chiudi le altre',
-  chiudiTutte: 'Chiudi tutte',
-  rinomina: 'Rinomina',
-  nessunaScheda: 'Nessuna scheda aperta',
-  nota: "Ogni scheda dichiara chi l'ha aperta e dove.",
-  apertaDaTe: 'Aperta da te',
+  nuovo: 'processi.terminal.new',
+  nuovaScheda: 'processi.terminal.newTab',
+  nuovaSchedaSenzaSessione: 'processi.terminal.newTabNoSession',
+  troppeSchede: 'processi.terminal.tooManyTabs', // {n} = SCHEDE_MASSIME
+  chiudi: 'processi.terminal.close',
+  chiudiAltre: 'processi.terminal.closeOthers',
+  chiudiTutte: 'processi.terminal.closeAll',
+  rinomina: 'processi.terminal.rename',
+  nessunaScheda: 'processi.terminal.noTabs',
+  nota: 'processi.terminal.note',
+  apertaDaTe: 'processi.terminal.openedByYou',
   /* PO-10 passo 2 (02/10/2026): le schede AGENTE, in sola lettura — il piede dice chi le ha lanciate, e che si guardano */
-  lanciataDallAgente: "Lanciata dall'agente al giro {giro}",
-  lanciataDallAgenteSenzaGiro: "Lanciata dall'agente",
-  solaLettura: 'Sola lettura: qui si guardano i comandi dell’agente.',
-  schedaAgente: 'Comandi dell’agente, in sola lettura',
+  lanciataDallAgente: 'processi.terminal.launchedByAgentTurn', // {giro}
+  lanciataDallAgenteSenzaGiro: 'processi.terminal.launchedByAgent',
+  solaLettura: 'processi.terminal.readOnly',
+  schedaAgente: 'processi.terminal.agentTab',
 });
 
 /** Lo stato di una scheda → il pallino del mockup. */
@@ -72,14 +78,14 @@ export const PALLINO = Object.freeze({
 });
 
 export const ETICHETTA_STATO = Object.freeze({
-  live: 'in corso',
-  connesso: 'connessa',
-  connessione: 'connessione in corso',
-  attesa: 'in attesa',
-  disconnesso: 'disconnessa',
-  terminato: 'shell chiusa',
-  concluso: 'conclusa',
-  'con-errori': 'con errori',
+  live: 'processi.terminal.stateRunning',
+  connesso: 'processi.terminal.stateConnected',
+  connessione: 'processi.terminal.stateConnecting',
+  attesa: 'processi.terminal.stateWaiting',
+  disconnesso: 'processi.terminal.stateDisconnected',
+  terminato: 'processi.terminal.stateShellClosed',
+  concluso: 'processi.terminal.stateFinished',
+  'con-errori': 'processi.terminal.stateWithErrors',
 });
 
 /** Il nome umano della shell che il server dichiara (`enforcement` di `sceltaShell`). */
@@ -97,11 +103,11 @@ export function nomeShell(enforcement, comando = '') {
  */
 export function titoloScheda(voce, tutte = [voce]) {
   if (voce.titolo) return voce.titolo;
-  if (voce.origine === 'agente') return voce.giro ? t('agente · giro {giro}', { giro: voce.giro }) : t('agente');
+  if (voce.origine === 'agente') return voce.giro ? t('processi.terminal.tabAgentTurn', { giro: voce.giro }) : t('processi.terminal.tabAgent');
   const shell = nomeShell(voce.shell, voce.comando);
   const omonime = tutte.filter((v) => !v.titolo && v.origine !== 'agente' && nomeShell(v.shell, v.comando) === shell);
   const posizione = omonime.indexOf(voce);
-  return `${t('tu')} · ${shell}${omonime.length > 1 && posizione > 0 ? ` ${posizione + 1}` : ''}`;
+  return `${t('processi.terminal.tabYou')} · ${shell}${omonime.length > 1 && posizione > 0 ? ` ${posizione + 1}` : ''}`;
 }
 
 function svgIcona(nome, classi = 'i i--sm') {

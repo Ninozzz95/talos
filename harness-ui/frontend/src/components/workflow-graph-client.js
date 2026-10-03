@@ -24,7 +24,7 @@ export function creaClientGrafo({ fetchFn = globalThis.fetch, API = (p) => p, se
     const risposta = await fetchFn(API(percorso));
     const corpo = await risposta.json().catch(() => null);
     if (!risposta.ok || !corpo?.ok) {
-      throw Object.assign(new Error(`lettura non riuscita (${risposta.status})`), { status: risposta.status, code: corpo?.error?.code ?? null });
+      throw Object.assign(new Error(`read failed (${risposta.status})`), { status: risposta.status, code: corpo?.error?.code ?? null });
     }
     return { data: corpo.data, meta: corpo.meta ?? null };
   };
@@ -149,11 +149,11 @@ export function creaClientGrafo({ fetchFn = globalThis.fetch, API = (p) => p, se
     return { ...run, instructions: piano?.instructions ?? null, model: piano?.model ?? null };
   }
   async function output(s, nodeId, resultId) {
-    if (s?.tipo !== 'run' || !resultId) throw new Error('Risultato del run non valido');
+    if (s?.tipo !== 'run' || !resultId) throw new Error('Invalid run result');
     return (await leggi(`${delRun(s)}/nodes/${enc(nodeId)}/output?resultId=${enc(resultId)}`)).data;
   }
   function outputRawUrl(s, nodeId, resultId) {
-    if (s?.tipo !== 'run' || !resultId) throw new Error('Risultato del run non valido');
+    if (s?.tipo !== 'run' || !resultId) throw new Error('Invalid run result');
     return API(`${delRun(s)}/nodes/${enc(nodeId)}/output?resultId=${enc(resultId)}&format=raw`);
   }
 
@@ -261,7 +261,7 @@ export function creaClientGrafo({ fetchFn = globalThis.fetch, API = (p) => p, se
     retry: () => false,
   });
   async function comando(s, azione, { uuid = () => globalThis.crypto.randomUUID() } = {}) {
-    if (s?.tipo !== 'run' || !COMANDI_RUN.includes(azione)) throw new Error('comando del run non valido');
+    if (s?.tipo !== 'run' || !COMANDI_RUN.includes(azione)) throw new Error('invalid run command');
     let risposta = null;
     try {
       risposta = await fetchFn(API(`${delRun(s)}/${azione}`), {
@@ -276,7 +276,7 @@ export function creaClientGrafo({ fetchFn = globalThis.fetch, API = (p) => p, se
   }
   /** Che cosa farebbe «Riprova» adesso e di quanto sale il tetto (F3-51c): lo stesso numero che il comando applicherà. */
   async function anteprimaRiprova(s) {
-    if (s?.tipo !== 'run') throw new Error('anteprima solo per un run');
+    if (s?.tipo !== 'run') throw new Error('preview only for a run');
     return (await leggi(`${delRun(s)}/retry-preview`)).data;
   }
 

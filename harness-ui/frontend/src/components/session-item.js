@@ -25,6 +25,7 @@
  */
 import { giriDellaSessione, spiegaGiriFermati } from './consumo-sessione.js'; // 06/9 CB-04: i giri della sessione, non dell'ultimo invio
 import { nomeModelloUmano } from './chat-foot.js'; // 13/09 R-08: la targa di un GGUF locale diventa un nome
+import { linguaCorrenteDiT, t as tr, tn } from './lingua.js';
 
 /**
  * Per quanto tempo una riga dice «ha appena risposto». Un minuto: abbastanza da vederlo tornando
@@ -41,12 +42,12 @@ const TONI = Object.freeze({
   // interrotta / ignoto / pendente: pallino senza tono, come «interrotta» nel mockup.
 });
 
-/** Le parole del mockup per ogni stato. */
+/** Le parole del mockup per ogni stato: CHIAVI del dizionario, risolte quando si disegna (mai al caricamento del modulo). */
 const ETICHETTE = Object.freeze({
-  attesa: 'aspetta te',
-  vivo: 'in corso',
-  interrotto: 'interrotta',
-  errore: 'errore',
+  attesa: 'processi.session.stateWaitingForYou',
+  vivo: 'processi.session.stateRunning',
+  interrotto: 'processi.session.stateInterrupted',
+  errore: 'processi.session.stateError',
   /*
    * ⛔⛔ 07/9, misurato: premi «ferma», il giro si chiude come chiedevi, e la riga diceva
    * **«errore»** — perche il giro finisce con un `RunError` di codice `fermato` e l'elenco
@@ -55,10 +56,10 @@ const ETICHETTE = Object.freeze({
    * `end_turn` (fa sembrare completamento uno stop) ne `agent_error` (fa sembrare guasto un gesto
    * voluto): e un terzo esito. Qui si chiama «fermata».
    */
-  fermata: 'fermata',
-  successo: 'conclusa',
-  ignoto: 'conclusa · esito non registrato',
-  pendente: 'in attesa del primo messaggio',
+  fermata: 'processi.session.stateStopped',
+  successo: 'processi.session.stateDone',
+  ignoto: 'processi.session.stateDoneNoOutcome',
+  pendente: 'processi.session.statePending',
 });
 
 /**
@@ -99,7 +100,7 @@ export function statoSessione(sessione) {
    * «errore», «fermata»), è più utile della sola parola «errore»: è quello che
    * il mockup mostra («giri finiti»). Se non c'è, non si inventa.
    */
-  const testo = classe === 'errore' && sessione.motivoChiusura === 'giri-finiti' ? 'giri finiti' : ETICHETTE[classe];
+  const testo = classe === 'errore' && sessione.motivoChiusura === 'giri-finiti' ? tr('processi.session.stateTurnLimit') : tr(ETICHETTE[classe]);
   /*
    * ⛔ 06/9, misurato sullo screenshot: «interrotta · scrivi per riprenderla» TRONCAVA la riga e si
    * mangiava il nome del modello — il consiglio rubava l'informazione. In 180 px l'etichetta resta
@@ -108,11 +109,11 @@ export function statoSessione(sessione) {
    * non gridarla).
    */
   let aiuto = null;
-  if (classe === 'interrotto') aiuto = 'Interrotta dalla morte del processo: nessuno la sta eseguendo. Scrivi un messaggio per riprenderla.';
-  else if (classe === 'attesa' && sessione.inAttesaDomanda) aiuto = 'TALOS aspetta la tua risposta a una domanda: rispondi per far continuare il lavoro.';
-  else if (classe === 'attesa' && sessione.inAttesaPiano) aiuto = 'TALOS aspetta la tua scelta sul piano: approvalo o chiedi di continuare a pianificare.';
-  else if (classe === 'attesa' && sessione.inAttesaRichiestaMcp) aiuto = 'Un server MCP aspetta la tua risposta nella chat: rispondi per far continuare il lavoro.';
-  else if (classe === 'fermata') aiuto = 'L’hai fermata tu: il giro si e chiuso al primo punto sicuro. Scrivi un messaggio per continuare da qui.';
+  if (classe === 'interrotto') aiuto = tr('processi.session.helpInterrupted');
+  else if (classe === 'attesa' && sessione.inAttesaDomanda) aiuto = tr('processi.session.helpQuestion');
+  else if (classe === 'attesa' && sessione.inAttesaPiano) aiuto = tr('processi.session.helpPlan');
+  else if (classe === 'attesa' && sessione.inAttesaRichiestaMcp) aiuto = tr('processi.session.helpMcp');
+  else if (classe === 'fermata') aiuto = tr('processi.session.helpStopped');
   return { classe, testo, tono: TONI[classe] ?? null, aiuto };
 }
 
@@ -126,10 +127,11 @@ export function oraCompatta(iso, adesso = new Date()) {
   if (Number.isNaN(data.getTime())) return '';
   const giorno = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
   const differenza = Math.round((giorno(adesso) - giorno(data)) / 86_400_000);
-  if (differenza <= 0) return data.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
-  if (differenza === 1) return 'ieri';
-  if (differenza < 7) return `${differenza} g`;
-  return data.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit' });
+  const inglese = linguaCorrenteDiT() === 'en';
+  if (differenza <= 0) return data.toLocaleTimeString(inglese ? 'en-GB' : 'it-IT', { hour: '2-digit', minute: '2-digit' });
+  if (differenza === 1) return tr('processi.session.yesterday');
+  if (differenza < 7) return tr('processi.session.daysShort', { n: differenza });
+  return inglese ? data.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : data.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit' });
 }
 
 /**
@@ -181,12 +183,12 @@ function el(documentObj, tag, className, testo) {
  */
 export function nomeLeggibileSessione(taskId) {
   const grezzo = String(taskId || '').trim();
-  if (!grezzo) return 'Sessione senza nome';
+  if (!grezzo) return tr('processi.session.untitled');
   if (grezzo.startsWith('libero:')) {
     const dove = grezzo.slice('libero:'.length).trim();
-    if (!dove || dove === 'default') return 'Compito libero';
-    if (dove === 'full-access' || dove === 'workspace-launch') return 'Compito libero · cartella scelta a mano';
-    return `Compito libero · ${dove}`;
+    if (!dove || dove === 'default') return tr('processi.session.freeTask');
+    if (dove === 'full-access' || dove === 'workspace-launch') return tr('processi.session.freeTaskChosenByHand');
+    return tr('processi.session.freeTaskIn', { dove });
   }
   /*
    * ⛔ 08/09 — questa riga metteva a schermo `Delega · e02f5d85-b610-4e3b-…`: l'id della MADRE,
@@ -196,7 +198,7 @@ export function nomeLeggibileSessione(taskId) {
    * ⇒ Il nome di una figlia è il suo COMPITO (`taskDelega`, che ora esce dall'elenco); qui resta
    *   solo il ripiego per quando il compito non c'è, e senza id.
    */
-  if (grezzo.startsWith('delega:')) return 'Sotto-agente';
+  if (grezzo.startsWith('delega:')) return tr('processi.session.subAgent');
   return grezzo;
 }
 
@@ -461,11 +463,11 @@ export function aggiornaSessionItem(riga, dati = {}) {
   if (Number.isFinite(dati.giri) && dati.giri > 0) {
     const aside = riga.querySelector('.talos-session-item__aside');
     if (aside) {
-      const frase = `${dati.giri} gir${dati.giri === 1 ? 'o' : 'i'}`;
+      const frase = tn('processi.session.turnOne', 'processi.session.turnMany', dati.giri);
       /* L'ultimo figlio dell'aside \u00e8 il conteggio, quando c'\u00e8: si riconosce dalla parola, non dalla
          posizione \u2014 una riga senza giri ha l\u00ec solo l'ora, e sovrascriverla direbbe l'ora sbagliata. */
       const ultimo = aside.lastElementChild;
-      const eIlConteggio = ultimo && /\bgir[oi]\b/.test(ultimo.textContent || '');
+      const eIlConteggio = ultimo && /\b(?:gir[oi]|turns?)\b/.test(ultimo.textContent || '');
       if (eIlConteggio) {
         if (ultimo.textContent !== frase) { ultimo.textContent = frase; cambiato = true; }
       } else {
@@ -502,12 +504,12 @@ export function creaSessionItem(sessione, opzioni = {}) {
   }
 
   const etichetta = opzioni.pendente
-    ? `Nuova · ${sessione.nomeCartella || ''}`
+    ? tr('processi.session.newInFolder', { cartella: sessione.nomeCartella || '' })
     // ⭐ 08/09: una figlia si chiama col suo compito — un nome scelto a mano vince comunque
     // ⛔ `nomeDistintivo` prima di `taskDelega`: fra sorelle è lo stesso compito senza le parole che
     //    hanno tutte in comune — senza, a schermo due deleghe diverse sono la stessa riga troncata.
-    : `${sessione.nome || opzioni.nomeDistintivo || sessione.taskDelega || nomeLeggibileSessione(sessione.taskId)}${sessione.forkDa ? ' · ramo' : ''}`;
-  const stato = opzioni.pendente ? { classe: 'pendente', testo: ETICHETTE.pendente, tono: null } : statoSessione(sessione);
+    : `${sessione.nome || opzioni.nomeDistintivo || sessione.taskDelega || nomeLeggibileSessione(sessione.taskId)}${sessione.forkDa ? ` · ${tr('processi.session.branch')}` : ''}`;
+  const stato = opzioni.pendente ? { classe: 'pendente', testo: tr(ETICHETTE.pendente), tono: null } : statoSessione(sessione);
   riga.dataset.sessionState = stato.classe;
   if (stato.aiuto) riga.title = stato.aiuto; // il consiglio dove non ruba spazio alla riga
 
@@ -530,7 +532,7 @@ export function creaSessionItem(sessione, opzioni = {}) {
      */
     const { giri, fermati } = giriDellaSessione(sessione);
     if (giri !== null && giri > 0) {
-      const conto = el(documentObj, 'span', null, `${giri} gir${giri === 1 ? 'o' : 'i'}`);
+      const conto = el(documentObj, 'span', null, tn('processi.session.turnOne', 'processi.session.turnMany', giri));
       if (fermati > 0) conto.title = spiegaGiriFermati(fermati);
       aside.append(conto);
     }
@@ -542,7 +544,7 @@ export function creaSessionItem(sessione, opzioni = {}) {
     casella.type = 'checkbox';
     casella.checked = Boolean(opzioni.selezione.selezionata);
     casella.dataset.sessionSelect = sessione.sessionId || '';
-    casella.setAttribute('aria-label', `Seleziona ${etichetta}`);
+    casella.setAttribute('aria-label', tr('processi.session.select', { nome: etichetta }));
     casella.addEventListener('click', (event) => event.stopPropagation());
     casella.addEventListener('change', () => opzioni.selezione.onToggle?.(casella.checked));
     riga.append(casella);

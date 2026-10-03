@@ -76,3 +76,21 @@ test('WSL-T-05 (fase B): con la casa Linux pronta «Automatico» e «Linux» dic
   assert.equal(testiDoveGiranoIComandi({ wsl: { disponibile: false, casaLinux: { pronta: true } } }), null, 'senza WSL la casa non c è');
   assert.equal(testiDoveGiranoIComandi(null), null);
 });
+
+/* 03/10/2026, seconda ondata della lingua (owner: l'inglese è la sorgente, l'italiano la traduzione): le stesse forme vere in
+   inglese, frase intera per ogni caso — un disco, più dischi, alcuni senza permessi — e il segnaposto del comando. */
+test('WSL-T-EN: in inglese le frasi sono intere e il plurale lo sceglie il numero dei dischi', async () => {
+  const { impostaLingua } = await import('../../src/components/lingua.js');
+  impostaLingua('en');
+  try {
+    const t = testiUtenteWsl(STATO_VERO);
+    assert.equal(t.chi, 'In Linux, commands run as root (Ubuntu)');
+    assert.equal(t.dischi, '/mnt/c, /mnt/d are the Windows disks: no isolation, and Linux permissions do not apply there. If a command runs as root without your approval, TALOS asks you once per session.');
+    assert.equal(t.nota, 'Applies to all sessions. Ubuntu does not have one. To create it, from a Windows terminal:');
+    assert.equal(t.comando, 'wsl -d Ubuntu -u root adduser <name>');
+    const uno = testiUtenteWsl({ ...STATO_VERO, wsl: { ...STATO_VERO.wsl, montaggi: [{ montaggio: '/mnt/c', metadata: true }] } });
+    assert.match(uno.dischi, /^\/mnt\/c is the Windows disk: no isolation\./u);
+    const alcuni = testiUtenteWsl({ ...STATO_VERO, wsl: { ...STATO_VERO.wsl, montaggi: [{ montaggio: '/mnt/c', metadata: true }, { montaggio: '/mnt/d', metadata: false }] } });
+    assert.match(alcuni.dischi, /^\/mnt\/c, \/mnt\/d are the Windows disks: no isolation; on \/mnt\/d Linux permissions do not apply\./u);
+  } finally { impostaLingua('it'); }
+});

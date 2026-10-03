@@ -288,7 +288,7 @@ describe('BC-56 — un comando vuoto riceve una frase, non un TypeError e non un
             for (const comando of ['', '   ', '\t\n ']) {
                 const esito = await kernel.eseguiComandoSandboxato(comando, cartella, { dove })
                 assert.equal(esito.codice, -1, `misurato il 17/09 sul codice di ieri: dove='windows' LANCIA TypeError [ERR_INVALID_ARG_VALUE], dove='wsl2' dà «syntax error near unexpected token ';'», e ${JSON.stringify('   ')} su Windows esce 0 con testo vuoto — un successo che non ha eseguito niente`)
-                assert.equal(esito.testo, 'Il comando è vuoto: scrivi cosa eseguire.')
+                assert.equal(esito.testo, 'The command is empty: write what to run.')
                 assert.equal(esito.enforcement, 'none')
             }
         })
@@ -296,7 +296,7 @@ describe('BC-56 — un comando vuoto riceve una frase, non un TypeError e non un
 
     it('⛔ e AL CONTRARIO: un comando vero NON viene fermato dalla guardia', async () => {
         const esito = await kernel.eseguiComandoSandboxato('echo non-vuoto', cartella, { dove: 'windows' })
-        assert.notEqual(esito.testo, 'Il comando è vuoto: scrivi cosa eseguire.')
+        assert.notEqual(esito.testo, 'The command is empty: write what to run.')
         assert.match(esito.testo, /non-vuoto/)
     })
 })
@@ -326,7 +326,7 @@ describe('Il fermo su richiesta regge anche con `--exec`', () => {
         assert.equal(esito.enforcement, 'wsl2')
         assert.equal(esito.codice, 130, '130 = 128 + SIGINT: «l\'ha fermato qualcuno», che non è né «finito» né «tempo scaduto»')
         assert.equal(esito.fermatoSuRichiesta, true)
-        assert.match(esito.testo, /Fermato su richiesta/)
+        assert.match(esito.testo, /Stopped on request/)
         assert.doesNotMatch(esito.testo, /MAI-ARRIVATO/, 'se questa riga esce, il comando è arrivato in fondo: non è stato fermato')
 
         const conta = spawnSync('wsl.exe', ['--exec', 'bash', '-lc',

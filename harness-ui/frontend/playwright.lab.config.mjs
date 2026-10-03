@@ -84,7 +84,7 @@ export default defineConfig({
   // Le fixture dei componenti sono istanti UTC; il mockup documenta il formato locale italiano.
   // Fissare la zona rende la parita identica su workstation Windows e runner Linux — la stessa
   // scelta del cancello dei componenti.
-  use: { channel: 'chrome', headless: true, trace: 'retain-on-failure', timezoneId: 'Europe/Rome' },
+  use: { channel: 'chrome', headless: true, trace: 'retain-on-failure', timezoneId: 'Europe/Rome', locale: 'it-IT' }, // 03/10: la lingua delle prove, vedi playwright.config.mjs
   projects: viewports.map(([name, viewport]) => ({ name, use: { viewport } })),
   webServer: {
     // serve-lab.mjs COSTRUISCE il laboratorio prima di mettersi in ascolto (`build-lab.mjs`

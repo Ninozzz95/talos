@@ -95,13 +95,13 @@ const recordDiProva = (storia, extra = {}) => creaRecord({
   riassunto: [storia[0], { role: 'user', content: `${MARCATORE_RIASSUNTO}\n\nRIASSUNTO DI PROVA` }],
   tokenPrima: 9_000, tokenDopo: 120, misura: 'stimato', at: '2026-09-24T10:00:00.000Z', modello: 'm', ...extra,
 });
-const riassuntoreFinto = ({ ritardo = false, contenuto = 'RIASSUNTO DAL MODELLO' } = {}) => {
+const riassuntoreFinto = ({ ritardo = false, contenuto = 'RIASSUNTO DAL MODELLO', finishReason = 'stop' } = {}) => {
   const chiamate = [];
   let rilascia = null;
   const fn = async (input) => {
     chiamate.push(input);
     if (ritardo) await new Promise((r) => { rilascia = r; });
-    return { scelta: { role: 'assistant', content: contenuto }, finishReason: 'stop', usage: { prompt_tokens: 100, completion_tokens: 10 } };
+    return { scelta: { role: 'assistant', content: contenuto }, finishReason, usage: { prompt_tokens: 100, completion_tokens: 10 } };
   };
   return { fn, chiamate, rilascia: () => rilascia?.() };
 };
@@ -181,7 +181,8 @@ test('CTX-REG-COMPACTION-UNDO — Annulla scrive una lapide, la proiezione torna
     registro.iscriviti(sessionId, (e) => eventi.push(e));
     finte[0].concludi({ type: 'RunFinished' }, { ok: true, esito: { comeFinita: 'concluso', messaggiFinali: storia, recordDiCompattazione: [record] } });
     await attendi(() => registro.statoCompattazione(sessionId)?.record?.at === record.at);
-    assert.deepEqual(await registro.annullaCompattazione(sessionId, 'non-esiste'), { erroreAvvio: 'Nessuna compattazione con questo identificativo da annullare', code: 'COMPACTION_NOT_FOUND' });
+    const nonTrovata = await registro.annullaCompattazione(sessionId, 'non-esiste'); // K2: code + reason + frase inglese (l'italiano sta nel dizionario)
+    assert.deepEqual({ code: nonTrovata.code, reason: nonTrovata.reason, erroreAvvio: nonTrovata.erroreAvvio }, { code: 'COMPACTION_NOT_FOUND', reason: 'compaction-id-not-found', erroreAvvio: 'No compaction with this identifier to cancel' });
     const esito = await registro.annullaCompattazione(sessionId, record.at);
     assert.deepEqual(esito, { ok: true, annullata: true });
     assert.equal(registro.statoCompattazione(sessionId).record, null);
@@ -237,6 +238,35 @@ test('CTX-REG-BACKGROUND-COMPACTION-AFTER-TURN — sopra soglia, dopo RunFinishe
     assert.equal(registro.resume(sessionId, 'dopo').sessionId, sessionId);
     assert.deepEqual(finte[1].ultimoInput.recordCompattazioneIniziale, record);
     finte[1].concludi({ type: 'RunFinished' }, { ok: true, esito: { comeFinita: 'concluso', messaggiFinali: [...finte[1].ultimoInput.messaggiIniziali, { role: 'assistant', content: 'ok' }], recordDiCompattazione: [] } });
+    await attendi(() => !registro.statoCompattazione(sessionId).inCorso);
+    await attendiScritture({ cartellaStore, sessionId });
+  } finally {
+    await attendiScritture({ cartellaStore });
+    rimuoviCartellaDiProva(cartellaStore);
+  }
+});
+
+test('CTX-REG-BACKGROUND-TRUNCATED-ONE-CALL — riassunto fermato dal tetto: UNA chiamata, budget di Hermes, «troncato» dichiarato', async (t) => {
+  conTetto(t, 2_000);
+  const cartellaStore = cartellaStoreVera();
+  const storia = storiaGrande();
+  const riassuntore = riassuntoreFinto({ contenuto: '## Objective\nparziale', finishReason: 'length' });
+  const { finte, avviaSessioneFn } = sessioniControllabili(1);
+  try {
+    const registro = createSessionRegistry({ cartellaStore, avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'z-ai/glm-5.3-flash', chiave: 'k', riassumiPerCompattazioneFn: riassuntore.fn });
+    const { sessionId } = registro.avvia('task-vero');
+    const eventi = [];
+    registro.iscriviti(sessionId, (e) => eventi.push(e));
+    finte[0].concludi({ type: 'RunFinished' }, { ok: true, esito: { comeFinita: 'concluso', messaggiFinali: storia, recordDiCompattazione: [] } });
+    await attendi(() => eventi.some((e) => e.type === 'CUSTOM' && e.name === 'talos.compattazione' && e.value.fase === 'fine'), { messaggio: 'nessuna fine dal background' });
+    const fine = eventi.find((e) => e.type === 'CUSTOM' && e.name === 'talos.compattazione' && e.value.fase === 'fine');
+    assert.equal(fine.value.compattato, false);
+    assert.equal(fine.value.motivo, 'troncato');
+    assert.equal(riassuntore.chiamate.length, 1, 'un riassunto troncato non si richiede uguale una seconda volta');
+    // mezzo piccolo, soglia 2.000 senza finestra ⇒ il pavimento di Hermes, non il vecchio 2.048 fisso
+    assert.equal(riassuntore.chiamate[0].maxOutputTokens, 2_000);
+    assert.ok(riassuntore.chiamate[0].messaggi.at(-1).content.includes(`at most ${Math.floor((2_000 * 1_200) / 2_048)} words`));
+    assert.equal(registro.statoCompattazione(sessionId).record ?? null, null, 'nessun record da un riassunto troncato');
     await attendi(() => !registro.statoCompattazione(sessionId).inCorso);
     await attendiScritture({ cartellaStore, sessionId });
   } finally {

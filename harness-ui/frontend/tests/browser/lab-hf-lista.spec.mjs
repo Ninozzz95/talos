@@ -1,3 +1,4 @@
+import { serviIlDizionario } from './aiuto-dizionario.mjs'; // corsia D della lingua: i componenti importano il dizionario
 import { expect, test } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import { mkdir } from 'node:fs/promises';
@@ -78,6 +79,7 @@ const RISULTATI_CON_GATED = [...RISULTATI_VERI, RISULTATI_HF[1]];
  *   LA SUA RISPOSTA prima di disegnare la lista della prova. Da lì in poi il pannello è nostro.
  */
 async function serviIlModulo(page) {
+  await serviIlDizionario(page);
   await page.route('**/__lab/*.js', async (route) => {
     const nome = new URL(route.request().url()).pathname.split('/').pop();
     try {

@@ -6,6 +6,7 @@
  * i dataset e i token già prodotti da legacy/app.js restano la fonte di verità.
  * ⛔ 11/09 sera: la scena si muove ANCHE con i messaggi (decisione dell'owner, vedi `stageShouldAnimate`).
  */
+import { t as traduci } from '../components/lingua.js';
 import { TALOS_DESKTOP_SCENES } from './desktop-scenes.js';
 
 const SCENES = new Map(TALOS_DESKTOP_SCENES.map((scene) => [scene.id, scene]));
@@ -275,14 +276,14 @@ function installPreview() {
   const panel = document.createElement('section');
   panel.className = 'talos-motion-preview';
   panel.dataset.talosMotionPreview = 'true';
-  panel.innerHTML = '<div class="talos-motion-preview__copy"><span class="talos-eyebrow">Scena del tema</span><strong data-motion-preview-name></strong><small>Anteprima dal renderer Canvas del pacchetto. Si muove anche dietro i messaggi, finché è accesa.</small></div><div class="talos-motion-preview__stage" aria-hidden="true"></div><span class="talos-motion-preview__status" data-motion-preview-status></span>';
+  panel.innerHTML = `<div class="talos-motion-preview__copy"><span class="talos-eyebrow">${traduci('varie.motionPreview.title')}</span><strong data-motion-preview-name></strong><small>${traduci('varie.motionPreview.note')}</small></div><div class="talos-motion-preview__stage" aria-hidden="true"></div><span class="talos-motion-preview__status" data-motion-preview-status></span>`;
   const themeRow = appearance.querySelector('[data-setting-row="sceneOverrideSelect"]') || appearance.querySelector('[data-setting-row="themePresetSelect"]');
   if (themeRow) themeRow.insertAdjacentElement('afterend', panel); else appearance.prepend(panel);
   const stage = mountStage(panel.querySelector('.talos-motion-preview__stage'), { preview: true });
   const updateLabel = () => {
     const config = currentConfig();
     panel.querySelector('[data-motion-preview-name]').textContent = config.scene[0].toUpperCase() + config.scene.slice(1);
-    panel.querySelector('[data-motion-preview-status]').textContent = stage?.canvas.dataset.sceneStatus || 'non disponibile';
+    panel.querySelector('[data-motion-preview-status]').textContent = stage?.canvas.dataset.sceneStatus || traduci("varie.motionPreview.unavailable");
   };
   updateLabel();
   const interval = window.setInterval(updateLabel, 650);
@@ -291,7 +292,7 @@ function installPreview() {
 
 function reviewFrame(id, width = 640, height = 360, atSeconds = 0, overrides = {}) {
   const definition = SCENES.get(id);
-  if (!definition) throw new Error(`Scena sconosciuta: ${id}`);
+  if (!definition) throw new Error(`Unknown scene: ${id}`);
   const canvas = document.createElement('canvas');
   canvas.width = width; canvas.height = height;
   const context = canvas.getContext('2d');

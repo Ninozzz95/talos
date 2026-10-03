@@ -1,3 +1,4 @@
+import { t } from './lingua.js';
 const KEY = 'talos.session-deletion-feedback.v1';
 const empty = () => ({schema: KEY, output: false, workflow: false});
 const valid = value => value && !Array.isArray(value) && value.schema === KEY
@@ -35,11 +36,11 @@ export function creaAvvisiEliminazione({storage, mostraToast}) {
         try {storage().removeItem(KEY);} catch { /* Acknowledged in this page even if storage is denied. */ }
         dopoLettura?.();
       };
-      const message = ['La conversazione è stata eliminata. Al momento della cancellazione, la pulizia non era completa.',
-        receipt.output ? 'Alcuni output non sono stati rimossi: TALOS ritenta la pulizia alla prossima apertura dell’app.' : '',
-        receipt.workflow ? 'La rimozione di alcune automazioni non è stata confermata; non verrà ritentata automaticamente.' : '',
+      const message = [t('varie.sessionDeletion.partialBody'),
+        receipt.output ? t('varie.sessionDeletion.outputLeft') : '',
+        receipt.workflow ? t('varie.sessionDeletion.automationsUnconfirmed') : '',
       ].filter(Boolean).join(' ');
-      const element = mostraToast('Eliminazione parziale segnalata', message, {
+      const element = mostraToast(t('varie.sessionDeletion.partialTitle'), message, {
         chiave: KEY, tono: 'guasto', durata: 0,
         azione: {etichetta: 'Ho letto', esegui: acknowledge},
       });

@@ -178,7 +178,7 @@ test('CLI-REQ-06-03 — senza consenso la sonda ordinaria resta l\'elenco modell
     const esito = await sonda.prova(id);
     assert.equal(esito.esito, 'collegato', id);
     assert.equal(esito.credenzialeVerificata, false, id);
-    assert.match(esito.motivo, /catalogo pubblico/iu, id);
+    assert.match(esito.motivo, /public catalog/iu, id);
     assert.equal(b.richieste.length, 1, id);
     assert.equal(b.richieste[0].method, 'GET', `${id}: la sonda ordinaria non deve MAI generare`);
     assert.equal(b.richieste[0].url, '/models', id);
@@ -227,7 +227,7 @@ test('CLI-REQ-06-05 — 200 senza forma OpenAI non verifica niente, e la forma A
     const esito = await sonda.prova('deepinfra', { consentiGenerazione: true });
     assert.equal(esito.esito, 'errore', nome);
     assert.notEqual(esito.credenzialeVerificata, true, nome);
-    assert.match(esito.motivo, /non verificat/iu, nome);
+    assert.match(esito.motivo, /not verified/iu, nome);
   }
   /*
    * ⛔ VERSO OPPOSTO — `usage` è FACOLTATIVO: pretenderlo è un falso NEGATIVO su una chiave buona.
@@ -315,7 +315,7 @@ test('CLI-REQ-06-12 — la risposta si legge fino a un TETTO, e oltre non si leg
   const esito = await createProviderProbe({ ...deps(store), fetchImpl: fetch }).prova('huggingface', { consentiGenerazione: true });
   assert.equal(esito.esito, 'errore');
   assert.notEqual(esito.credenzialeVerificata, true);
-  assert.match(esito.motivo, /troppo grande|non riconoscibile/iu);
+  assert.match(esito.motivo, /too large|not recogni[sz]able/iu);
   // ⛔ La misura che conta: ci siamo fermati MOLTO prima di quanto il fornitore voleva mandare.
   assert.ok(scritti < 4 * 1024 * 1024, `letti troppi byte: il server ne ha scritti ${scritti}`);
 });
@@ -346,7 +346,7 @@ test('CLI-REQ-06-13 — un corpo che non finisce si ferma al TEMPO MASSIMO, e la
   assert.notEqual(esito, 'MAI FERMATA', 'la sonda non si è fermata entro il tempo massimo');
   assert.equal(esito.esito, 'irraggiungibile');
   assert.notEqual(esito.credenzialeVerificata, true);
-  assert.match(esito.motivo, /entro/iu);
+  assert.match(esito.motivo, /within/iu);
   assert.doesNotMatch(esito.motivo, /senza un messaggio valido/iu, 'una lettura scaduta non è una risposta malformata');
 });
 
@@ -357,8 +357,8 @@ test('CLI-REQ-06-14 — ogni causa si chiama col suo nome', async (t) => {
   store.setRuntime('deepinfra', { endpoint: rinvio.base });
   const spostato = await createProviderProbe({ ...deps(store), fetchImpl: fetch }).prova('deepinfra', { consentiGenerazione: true });
   assert.equal(spostato.esito, 'irraggiungibile');
-  assert.match(spostato.motivo, /rinvi|altro indirizzo/iu);
-  assert.doesNotMatch(spostato.motivo, /^Non è stato possibile raggiungere/u);
+  assert.match(spostato.motivo, /redirects|another address/iu);
+  assert.doesNotMatch(spostato.motivo, /^Could not reach/u);
   assert.equal(spostato.credenzialeVerificata, null);
 
   // Un 404 sulla prova da un token: la causa probabile è il modello, non «l'endpoint non esiste».
@@ -366,14 +366,16 @@ test('CLI-REQ-06-14 — ogni causa si chiama col suo nome', async (t) => {
   store.setRuntime('deepinfra', { endpoint: b404.base });
   const mancante = await createProviderProbe({ ...deps(store), fetchImpl: fetch }).prova('deepinfra', { consentiGenerazione: true });
   assert.equal(mancante.esito, 'errore');
-  assert.match(mancante.motivo, /modello/iu, 'il 404 della prova deve nominare il MODELLO, non l\'indirizzo');
-  assert.match(mancante.motivo, /potrebbe non essere più disponibile/u);
-  assert.match(mancante.motivo, /non è verificata/u);
+  assert.match(mancante.motivo, /the model/iu, 'il 404 della prova deve nominare il MODELLO, non l\'indirizzo');
+  assert.equal(mancante.motivoChiave, 'server.probe.minimalModelNotFound'); // K4a: la chiave dice la stessa cosa nelle due lingue
+  assert.match(mancante.motivo, /may no longer be available/u);
+  assert.match(mancante.motivo, /does not verify the key/u);
   assert.equal(mancante.credenzialeVerificata, null);
   // ⛔ E la frase del 404 sull'ELENCO MODELLI resta quella di prima: non parla di modelli di prova.
   const elenco = await createProviderProbe({ ...deps(store), fetchImpl: fetch }).prova('deepinfra');
-  assert.match(elenco.motivo, /elenco modelli/iu);
-  assert.doesNotMatch(elenco.motivo, /potrebbe non essere più disponibile/u);
+  assert.match(elenco.motivo, /model list/iu);
+  assert.equal(elenco.motivoChiave, 'server.probe.listNotFound');
+  assert.doesNotMatch(elenco.motivo, /may no longer be available/u);
 });
 
 test('CLI-REQ-06-15 — credenzialeVerificata ha TRE stati, e il terzo è dichiarato', async (t) => {
@@ -487,7 +489,7 @@ test('CLI-REQ-06-06 — chiave rifiutata, fornitore irraggiungibile e traffico r
   store.setRuntime('novita', { endpoint: b404.base });
   const quattroCentoQuattro = await createProviderProbe({ ...deps(store), fetchImpl: fetch }).prova('novita', { consentiGenerazione: true });
   assert.equal(quattroCentoQuattro.esito, 'errore');
-  assert.match(quattroCentoQuattro.motivo, /non è verificata/u);
+  assert.match(quattroCentoQuattro.motivo, /does not verify the key/u);
   assert.equal(quattroCentoQuattro.credenzialeVerificata, null);
 });
 
@@ -508,7 +510,7 @@ test('CLI-REQ-06-08 — il caso Anthropic resta intatto, nei due versi', async (
   const mai = createProviderProbe({ ...deps(store), fetchImpl: () => assert.fail('Z.AI non genera senza consenso') });
   const senza = await mai.prova('zai-anthropic');
   assert.equal(senza.esito, 'non-sondabile');
-  assert.match(senza.motivo, /un token/u);
+  assert.match(senza.motivo, /one token/u);
 
   const b = await banco(t, (r, res) => json(res, r.body?.model === 'glm-5.3-flash' ? rispostaAnthropic() : rispostaOpenAI()));
   store.setRuntime('zai-anthropic', { endpoint: b.base });

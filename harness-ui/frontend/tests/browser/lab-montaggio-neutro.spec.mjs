@@ -48,6 +48,7 @@
  * nodi, non li clona); MDN `Node.insertBefore` (`NotFoundError` quando il nodo di riferimento non e'
  * figlio di quel genitore); WHATWG DOM issue #1361 (feb 2025, `getElementById` e gli id doppi).
  */
+import { serviIlDizionario } from './aiuto-dizionario.mjs'; // corsia D della lingua: i componenti importano il dizionario
 import { expect, test } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
@@ -63,6 +64,7 @@ const TIMBRI = ['installatiMontato', 'hfMontato', 'downloadMontato', 'memoryMont
 const TIMBRI_LETTI = ['installatiMontato', 'hfMontato', 'downloadMontato'];
 
 async function serviLeSorgenti(page) {
+  await serviIlDizionario(page);
   await page.route('**/__c3/*.js', async (route) => {
     const nome = new URL(route.request().url()).pathname.split('/').pop();
     try {

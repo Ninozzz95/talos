@@ -25,8 +25,8 @@ export const SESSION_EVENT_TYPES = new Set([
 ]);
 
 export function normalizeSessionEvent(input) {
-  if (!input || typeof input !== 'object' || Array.isArray(input)) throw new TypeError('Evento sessione non valido');
-  if (!SESSION_EVENT_TYPES.has(input.type)) throw new TypeError(`Evento sessione non supportato: ${String(input.type)}`);
+  if (!input || typeof input !== 'object' || Array.isArray(input)) throw new TypeError('Invalid session event');
+  if (!SESSION_EVENT_TYPES.has(input.type)) throw new TypeError(`Unsupported session event: ${String(input.type)}`);
   const output = { ...input };
   if (Object.hasOwn(output, '_sequenza')) {
     output.sequence = output._sequenza;

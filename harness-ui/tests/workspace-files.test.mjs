@@ -69,7 +69,7 @@ test('⛔⛔ leggiContenutoFile: ".." che risale fuori dalla radice, mai il cont
 test('⛔ leggiContenutoFile: una CARTELLA non è un file — errore dichiarato, non un contenuto a caso', async () => {
   const radice = sessioneVera();
   try {
-    await assert.rejects(leggiContenutoFile({ cartella: radice, percorso: 'sub' }), /Non è un file/);
+    await assert.rejects(leggiContenutoFile({ cartella: radice, percorso: 'sub' }), /Not a file/);
   } finally {
     rimuoviCartellaDiProva(radice);
   }
@@ -639,7 +639,7 @@ test('⛔ APRI, AL CONTRARIO: una cartella non si apre col programma, e fuori da
     mkdirSync(join(cartella, 'sotto'));
     await assert.rejects(
       () => apriFileConProgrammaPredefinito({ cartella, percorso: 'sotto' }, { platform: 'win32', execFileFn: (a, b, c, cb) => cb(null) }),
-      (e) => e instanceof WorkspaceFileError && /Mostra nella cartella/.test(e.message),
+      (e) => e instanceof WorkspaceFileError && /Show in folder/.test(e.message),
       'una cartella si RIVELA, non si apre col programma: due azioni diverse',
     );
     writeFileSync(join(cartella, 'x.txt'), 'y');
@@ -674,7 +674,7 @@ test('⛔⛔⛔ BC-11 creaFileWorkspace: contenuto MANCANTE → messaggio a paro
       (e) => {
         assert.ok(e instanceof WorkspaceFileError, 'deve essere un errore NOSTRO, non un TypeError di Node');
         assert.equal(e.code, 'CONTENT_INVALID');
-        assert.match(e.message, /Contenuto mancante/);
+        assert.match(e.message, /Missing or invalid content/);
         assert.doesNotMatch(e.message, /ERR_INVALID_ARG_TYPE|argument must be of type/);
         return true;
       },
@@ -693,8 +693,8 @@ test('⛔⛔ BC-11 creaFileWorkspace: oltre il tetto → il tetto è DICHIARATO 
       creaFileWorkspace({ cartella: radice, nome: 'enorme.txt', bytes: troppo }),
       (e) => {
         assert.equal(e.code, 'CONTENT_TOO_LARGE');
-        assert.match(e.message, new RegExp(`tetto ${DIMENSIONE_MASSIMA_CREAZIONE / 1024 / 1024} MB`));
-        assert.match(e.message, /in più pezzi/, 'il messaggio deve nominare la strada giusta, non solo il divieto');
+        assert.match(e.message, new RegExp(`limit ${DIMENSIONE_MASSIMA_CREAZIONE / 1024 / 1024} MB`));
+        assert.match(e.message, /in several pieces/, 'il messaggio deve nominare la strada giusta, non solo il divieto');
         return true;
       },
     );

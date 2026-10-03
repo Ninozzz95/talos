@@ -15,6 +15,8 @@
 import { XYMinimap, XYPanZoom } from '@xyflow/system';
 
 import { conteggiFase, iconaDellaFase, iconaDelPasso, ICONA_TONO, STATI_PASSO } from './comuni.js';
+import { t as tr, tn } from '../lingua.js';
+import { cifra, parolaDelPasso } from './tempo.js';
 
 const SVG = 'http://www.w3.org/2000/svg';
 export const ZOOM_MIN = 0.1;
@@ -23,12 +25,13 @@ export const LOD_COMPATTO = 0.55;
 export const LOD_PUNTINI = 0.3;
 const MARGINE_VISIBILE = 240;
 const TROPPI_ARCHI = 400;
+/* [famiglia, chiave del testo, tono]: la chiave si risolve quando si disegna, mai al caricamento del modulo. */
 const FAMIGLIE = [
-  ['conclusi', 'Conclusi', 'ok'], ['inCorso', 'In esecuzione', 'corso'], ['inAttesa', 'In attesa', 'attesa'], ['errori', 'Errori', 'errore'],
+  ['conclusi', 'agenti.family.done', 'ok'], ['inCorso', 'agenti.family.running', 'corso'], ['inAttesa', 'agenti.family.waiting', 'attesa'],
+  ['errori', 'agenti.family.errors', 'errore'],
 ];
 const tonoDi = (stato) => STATI_PASSO[stato]?.tono ?? 'neutro';
-const parolaDi = (stato) => STATI_PASSO[stato]?.parola ?? 'Stato sconosciuto';
-const conCifre = new Intl.NumberFormat('it-IT', { useGrouping: 'always' });
+const parolaDi = parolaDelPasso;
 
 /** Passo di zoom a scatti del 10% (Argo): dal valore attuale al multiplo di 0,1 successivo, nel verso chiesto. */
 export function prossimoZoom(k, verso) {
@@ -47,8 +50,8 @@ export function creaTela(host, opzioni) {
   const tela = el('div', 'gv-tela');
   tela.tabIndex = 0;
   tela.setAttribute('role', 'group');
-  tela.setAttribute('aria-roledescription', 'diagramma');
-  tela.setAttribute('aria-label', 'Diagramma delle dipendenze. Frecce per spostarsi fra gli agenti, Invio per il dettaglio, più e meno per lo zoom, zero per adattare.');
+  tela.setAttribute('aria-roledescription', tr('agenti.graph.diagramRole'));
+  tela.setAttribute('aria-label', tr('agenti.graph.diagramLabel'));
   const mondo = el('div', 'gv-mondo');
   const fili = svg('svg', { class: 'gv-fili', 'aria-hidden': 'true' });
   const defs = svg('defs');
@@ -154,8 +157,8 @@ export function creaTela(host, opzioni) {
     const barra = el('span', 'gv-segmenti');
     barra.setAttribute('role', 'img');
     const c = conteggiFase(counts);
-    const parti = FAMIGLIE.map(([chiave, parola, tono]) => ({ n: c[chiave], parola, tono })).concat([{ n: c.annullati, parola: 'Annullati', tono: 'neutro' }]).filter((p) => p.n > 0);
-    barra.setAttribute('aria-label', parti.map((p) => `${p.parola} ${conCifre.format(p.n)}`).join(', ') || 'nessun passo');
+    const parti = FAMIGLIE.map(([chiave, parola, tono]) => ({ n: c[chiave], parola, tono })).concat([{ n: c.annullati, parola: 'agenti.family.cancelled', tono: 'neutro' }]).filter((p) => p.n > 0);
+    barra.setAttribute('aria-label', parti.map((p) => tr('agenti.graph.segmentCount', { parola: tr(p.parola), n: cifra(p.n) })).join(', ') || tr('agenti.graph.noSteps'));
     for (const p of parti) {
       const s = el('span', 'gv-segmento');
       s.dataset.tono = p.tono;
@@ -172,18 +175,18 @@ export function creaTela(host, opzioni) {
     const c = dati.conteggi(g.phaseId) ?? { counts: {}, terminated: 0, attention: 0, total: g.total, progress: null };
     const riga = el('div', 'gv-testa-riga');
     const ic = el('span', 'gv-testa-icona'); ic.append(icona(iconaDellaFase(g)));
-    const nome = el('span', 'gv-testa-nome talos-wfg__fase-nome', `Fase ${g.order + 1} — ${g.label}`);
-    nome.title = `Fase ${g.order + 1} — ${g.label}`; // il nome intero anche quando due righe non bastano
+    const nome = el('span', 'gv-testa-nome talos-wfg__fase-nome', tr('agenti.graph.phaseTitle', { n: g.order + 1, nome: g.label }));
+    nome.title = tr('agenti.graph.phaseTitle', { n: g.order + 1, nome: g.label }); // il nome intero anche quando due righe non bastano
     const perc = el('span', 'gv-testa-perc', percento(c));
     const chiudi = el('button', 'gv-testa-chiudi nopan');
     chiudi.type = 'button';
-    chiudi.setAttribute('aria-label', `Chiudi il gruppo ${g.label}`);
+    chiudi.setAttribute('aria-label', tr('agenti.graph.closeGroup', { nome: g.label }));
     chiudi.dataset.focusKey = `chiudi:${g.phaseId}`;
     chiudi.append(icona('i-chevron', 'gv-gira'));
     chiudi.addEventListener('click', (e) => { e.stopPropagation(); onGruppo?.(g.phaseId, false, b); });
     riga.append(ic, nome, perc, chiudi);
     const sotto = el('div', 'gv-testa-sotto');
-    sotto.append(segmentata(c.counts, g.total), el('span', 'gv-testa-conto', `${conCifre.format(c.terminated)} di ${conCifre.format(g.total)} terminati${c.attention ? ` · ${c.attention} da guardare` : ''}`));
+    sotto.append(segmentata(c.counts, g.total), el('span', 'gv-testa-conto', `${tr('agenti.graph.finishedOf', { fatti: cifra(c.terminated), totale: cifra(g.total) })}${c.attention ? ` · ${tr('agenti.graph.toCheck', { n: c.attention })}` : ''}`));
     testa.append(riga, sotto);
   }
   function riempiCartaGruppo(carta, g) {
@@ -191,20 +194,23 @@ export function creaTela(host, opzioni) {
     const c = dati.conteggi(g.phaseId) ?? { counts: {}, terminated: 0, attention: 0, total: g.total, progress: null };
     const conti = conteggiFase(c.counts);
     const ic = el('span', 'talos-wfg__gruppo-icona'); ic.append(icona(iconaDellaFase(g)));
-    const nome = el('span', 'talos-wfg__gruppo-nome', `Fase ${g.order + 1} — ${g.label}`);
-    const conto = el('span', 'talos-wfg__gruppo-conto', `${conCifre.format(g.total)} ${g.total === 1 ? 'agente' : 'agenti'}`);
+    const nome = el('span', 'talos-wfg__gruppo-nome', tr('agenti.graph.phaseTitle', { n: g.order + 1, nome: g.label }));
+    const totaleDetto = tn('agenti.graph.agentOne', 'agenti.graph.agentMany', g.total, { n: cifra(g.total) });
+    const conto = el('span', 'talos-wfg__gruppo-conto', totaleDetto);
     const barra = el('span', 'gv-gruppo-barra');
     barra.append(segmentata(c.counts, g.total), el('span', 'talos-wfg__barra-valore', percento(c)));
     const dl = el('dl', 'talos-wfg__conti');
-    for (const [chiave, parola, tono] of FAMIGLIE) {
+    for (const [chiave, chiaveTesto, tono] of FAMIGLIE) {
       const r = el('div', 'talos-wfg__conto');
-      const dt = el('dt'); const punto = el('span', conti[chiave] > 0 ? 'talos-wfg__punto' : 'talos-wfg__punto talos-wfg__punto--vuoto'); punto.dataset.tono = conti[chiave] > 0 ? tono : 'neutro'; dt.append(punto, parola);
-      r.append(dt, el('dd', null, conCifre.format(conti[chiave])));
+      const dt = el('dt'); const punto = el('span', conti[chiave] > 0 ? 'talos-wfg__punto' : 'talos-wfg__punto talos-wfg__punto--vuoto'); punto.dataset.tono = conti[chiave] > 0 ? tono : 'neutro'; dt.append(punto, tr(chiaveTesto));
+      r.append(dt, el('dd', null, cifra(conti[chiave])));
       dl.append(r);
     }
-    const apri = el('span', 'gv-gruppo-apri', 'Apri qui');
+    const apri = el('span', 'gv-gruppo-apri', tr('agenti.graph.openHere'));
     carta.append(ic, nome, conto, barra, dl, apri);
-    carta.setAttribute('aria-label', `Fase ${g.order + 1}, ${g.label}: ${conCifre.format(g.total)} agenti, ${c.progress === null || c.progress === undefined ? '' : `${Math.floor(c.progress * 100)}% terminati, `}premi Invio per aprire il gruppo qui`);
+    carta.setAttribute('aria-label', c.progress === null || c.progress === undefined
+      ? tr('agenti.graph.groupAria', { n: g.order + 1, nome: g.label, totale: totaleDetto })
+      : tr('agenti.graph.groupAriaProgress', { n: g.order + 1, nome: g.label, totale: totaleDetto, perc: Math.floor(c.progress * 100) }));
     carta.dataset.tono = c.attention > 0 ? 'errore' : conti.inCorso > 0 ? 'corso' : g.total > 0 && conti.conclusi === g.total ? 'ok' : 'attesa';
   }
   function disegnaBlocchi() {
@@ -228,7 +234,7 @@ export function creaTela(host, opzioni) {
         corsia.dataset.forma = b.tipo;
         corsia.dataset.blocco = b.id;
         corsia.dataset.phaseId = b.phaseId;
-        corsia.setAttribute('aria-label', `Fase ${g.order + 1}: ${g.label}`);
+        corsia.setAttribute('aria-label', tr('agenti.graph.phaseLane', { n: g.order + 1, nome: g.label }));
         posiziona(corsia, b.x, b.y, b.w, b.h);
         const testa = el('header', 'gv-testa talos-wfg__fase');
         riempiTestaFase(testa, g, b);
@@ -257,7 +263,7 @@ export function creaTela(host, opzioni) {
     corpo.append(riga);
     if (sessione.sotto) corpo.append(el('span', 'talos-wfg__passo-modello', sessione.sotto));
     cartaSessione.append(ic, corpo);
-    cartaSessione.setAttribute('aria-label', `Sessione principale: ${sessione.titolo}, coordina il workflow`);
+    cartaSessione.setAttribute('aria-label', tr('agenti.graph.mainSession', { titolo: sessione.titolo }));
   }
   function posiziona(n, x, y, w, h) {
     n.style.transform = `translate(${x}px, ${y}px)`;
@@ -302,10 +308,10 @@ export function creaTela(host, opzioni) {
         const [x1, y1] = a.punti[1], [, y2] = a.punti[2] ?? a.punti[1];
         const etichetta = svg('g', { class: 'gv-arco-conto', transform: `translate(${x1} ${(y1 + y2) / 2})` });
         const testo = svg('text', { 'text-anchor': 'middle', 'dominant-baseline': 'central' });
-        testo.textContent = conCifre.format(a.conto);
+        testo.textContent = cifra(a.conto);
         const w = 12 + 7 * testo.textContent.length;
         etichetta.append(svg('rect', { x: String(-w / 2), y: '-10', width: String(w), height: '20', rx: '10' }), testo);
-        const titolo = svg('title'); titolo.textContent = `${conCifre.format(a.conto)} dipendenze fra le due fasi`;
+        const titolo = svg('title'); titolo.textContent = tn('agenti.graph.dependencyOne', 'agenti.graph.dependencyMany', a.conto, { n: cifra(a.conto) });
         etichetta.append(titolo);
         gFili.append(etichetta);
       }
@@ -342,7 +348,7 @@ export function creaTela(host, opzioni) {
       carta.dataset.tono = 'neutro'; carta.dataset.forma = pos.forma; carta.dataset.carica = 'true';
       delete carta.dataset.stato;
       carta.replaceChildren(el('span', 'gv-passo-scheletro'));
-      carta.setAttribute('aria-label', 'Carico questo agente…');
+      carta.setAttribute('aria-label', tr('agenti.graph.loadingAgent'));
       carta.disabled = true;
       return;
     }

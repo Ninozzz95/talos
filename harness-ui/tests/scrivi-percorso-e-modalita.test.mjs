@@ -28,6 +28,7 @@
  */
 
 import assert from 'node:assert/strict';
+import { togliConfiniDati } from '../src/kernel/confine-dati.mjs';
 import { mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -229,7 +230,7 @@ const chiama = (argomenti, id = 'call_1', nome = 'scrivi') => ({
   content: '',
   tool_calls: [{ id, function: { name: nome, arguments: typeof argomenti === 'string' ? argomenti : JSON.stringify(argomenti) } }],
 });
-const esitoDelTool = (esito) => esito.messaggiFinali.filter((m) => m.role === 'tool').map((m) => m.content);
+const esitoDelTool = (esito) => esito.messaggiFinali.filter((m) => m.role === 'tool').map((m) => togliConfiniDati(m.content));
 
 test('⭐⭐⭐ IL GIRO VERO: `{"contenuto":…,"path":…}` ora scrive il file invece di dare EISDIR sulla radice', async (t) => {
   const cartella = cartellaVuota(t);

@@ -4,6 +4,7 @@ import { createServer } from 'node:http';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
+import { AREE } from '../frontend/src/i18n/testi/index.js';
 
 import { API_SCHEMA, createHttpApp } from '../src/http-app.mjs';
 import { createStaticHandler } from '../src/static-files.mjs';
@@ -90,7 +91,10 @@ test('gli errori HTTP espongono una spiegazione naturale e un riferimento Doctor
   const body = await response.json();
   assert.equal(body.ok, false);
   assert.equal(body.error.code, 'QUERY_INVALID');
-  assert.match(body.error.title, /Configurazione|Operazione|richiesta/i);
+  /* 03/10/2026: il server parla inglese e manda il codice; l'italiano lo dice l'interfaccia dal dizionario (`errori.<CODICE>`). */
+  assert.equal(body.error.message, 'Invalid query');
+  assert.match(body.error.title, /Configuration|Operation|request/i);
+  assert.match(AREE.errori.it['INTERNAL_ERROR.title'], /Configurazione|Operazione|richiesta/i, 'e in italiano la copia è quella del dizionario');
   assert.match(body.error.doctorReference, /^doctor-/);
   assert.doesNotMatch(JSON.stringify(body), /node_modules|TALOS_HARNESS_UI_PROJECT_DIRS|stack/i);
 });

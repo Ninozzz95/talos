@@ -1,3 +1,6 @@
+import { t, tn, linguaCorrenteDiT } from './lingua.js';
+/* Numeri e date nella lingua dell'interfaccia (come fanno gli altri componenti): italiano → it-IT, inglese → en-US. */
+const localeUI = () => (linguaCorrenteDiT() === 'en' ? 'en-US' : 'it-IT');
 // 05/9 Fase 2: ListRow e DetailPanel del catalogo API, dati osservati OpenRouter.
 /*
  * ⛔ 18/09/2026, corsia 1 — il catalogo passa dal MOTORE NUOVO (`domain/catalog-engine.ts`, port
@@ -24,19 +27,19 @@ import{FACET_OPTIONS,emptyCatalogFilters,selectCatalog}from'../domain/catalog-en
 import{aggiornaBarraFaccette,capacitaDelCatalogo,conteggiPerFornitore,creaBarraFaccette}from'./catalogo-faccette.js';
 const oggetto=v=>v!==null&&typeof v==='object'&&!Array.isArray(v);
 export function normalizzaCatalogoModelli(d){
- if(!oggetto(d)||!Array.isArray(d.modelli)||typeof d.daCache!=='boolean'||typeof d.aggiornatoAlle!=='string'||Number.isNaN(Date.parse(d.aggiornatoAlle))||!d.modelli.every(m=>oggetto(m)&&typeof m.id==='string'&&m.id&&typeof m.nome==='string'&&typeof m.provider==='string'&&['inputModalities','outputModalities','supportedParameters'].every(k=>Array.isArray(m[k])&&m[k].every(v=>typeof v==='string'))))throw Error('La risposta del catalogo non è valida.');
+ if(!oggetto(d)||!Array.isArray(d.modelli)||typeof d.daCache!=='boolean'||typeof d.aggiornatoAlle!=='string'||Number.isNaN(Date.parse(d.aggiornatoAlle))||!d.modelli.every(m=>oggetto(m)&&typeof m.id==='string'&&m.id&&typeof m.nome==='string'&&typeof m.provider==='string'&&['inputModalities','outputModalities','supportedParameters'].every(k=>Array.isArray(m[k])&&m[k].every(v=>typeof v==='string'))))throw Error(t('modelli.catalog.invalidResponse'));
  return d;
 }
 export function prezzoPerMilione(value){
- if(value==null||typeof value==='boolean'||typeof value==='object'||String(value).trim()==='')return 'Non dichiarato';
- const n=Number(value);return Number.isFinite(n)&&n>=0?new Intl.NumberFormat('it-IT',{maximumFractionDigits:6}).format(n*1000000)+' USD':'Non dichiarato';
+ if(value==null||typeof value==='boolean'||typeof value==='object'||String(value).trim()==='')return t('modelli.catalog.notDeclared');
+ const n=Number(value);return Number.isFinite(n)&&n>=0?new Intl.NumberFormat(localeUI(),{maximumFractionDigits:6}).format(n*1000000)+' USD':t('modelli.catalog.notDeclared');
 }
 export function filtraModelli(modelli,query='',provider='all'){const q=String(query).trim().toLocaleLowerCase('it');return modelli.filter(m=>(provider==='all'||m.provider===provider)&&(!q||[m.nome,m.id,m.provider].some(v=>String(v||'').toLocaleLowerCase('it').includes(q))));}
-const PAROLE={text:'Testo',image:'Immagini',audio:'Audio',video:'Video',file:'File',tools:'Attrezzi',tool_choice:'Scelta attrezzi',temperature:'Creatività',top_p:'Varietà',max_tokens:'Limite risposta',response_format:'Formato risposta',reasoning:'Ragionamento',include_reasoning:'Mostra ragionamento'};
-const elenco=v=>v?.length?v.map(x=>PAROLE[x]||x).join(', '):'Non dichiarato';
+const PAROLE={get text(){return t('modelli.catalog.text');},get image(){return t('modelli.catalog.images');},get audio(){return t('modelli.catalog.audio');},get video(){return t('modelli.catalog.video');},get file(){return t('modelli.catalog.file');},get tools(){return t('modelli.catalog.tools');},get tool_choice(){return t('modelli.catalog.toolChoice');},get temperature(){return t('modelli.catalog.creativity');},get top_p(){return t('modelli.catalog.variety');},get max_tokens(){return t('modelli.catalog.responseLimit');},get response_format(){return t('modelli.catalog.responseFormat');},get reasoning(){return t('modelli.catalog.reasoning');},get include_reasoning(){return t('modelli.catalog.showReasoning');}};
+const elenco=v=>v?.length?v.map(x=>PAROLE[x]||x).join(', '):t('modelli.catalog.notDeclared');
 function el(tag,cls,txt){const n=document.createElement(tag);if(cls)n.className=cls;if(txt!=null)n.textContent=String(txt);return n;}
 function kv(k,v,id){const row=el('div','talos-kv'),val=el('span','talos-kv__v',v);if(id)val.id=id;row.append(el('span','talos-kv__k',k),val);return row;}
-function contesto(n){return Number.isFinite(n)&&n>0?new Intl.NumberFormat('it-IT').format(n)+' token':'Non dichiarato';}
+function contesto(n){return Number.isFinite(n)&&n>0?tn('modelli.catalog.oneContextToken', 'modelli.catalog.manyContextTokens', n, { n: new Intl.NumberFormat(localeUI()).format(n) }):t('modelli.catalog.notDeclared');}
 
 /* ─────── l'anello che mancava: dal record OSSERVATO al modello del motore ─────── */
 /*
@@ -96,7 +99,7 @@ export function modelloCatalogo(m){
 }
 /* L'etichetta a schermo di un valore di faccetta: una sola fonte, `FACET_OPTIONS`, più il
    vocabolario delle modalità che la scheda già usa. Mai il valore grezzo del fornitore. */
-const etichettaFaccetta=(chiave,valore)=>FACET_OPTIONS[chiave]?.find(([v])=>v===valore)?.[1]||PAROLE[valore]||valore;
+const etichettaFaccetta=(chiave,valore)=>etichettaFaccettaTradotta(chiave, valore, FACET_OPTIONS[chiave]?.find(([v])=>v===valore)?.[1]||PAROLE[valore]||valore);
 
 export function creaRigaCatalogo(m,{selezionato=false,seleziona}={}){
  const b=el('button','talos-list-row');b.type='button';b.dataset.c='ListRow';b.dataset.catalog=m.id;b.dataset.provider=m.provider;b.setAttribute('aria-pressed',String(selezionato));
@@ -105,19 +108,19 @@ export function creaRigaCatalogo(m,{selezionato=false,seleziona}={}){
  b.append(icon,text);b.addEventListener('click',()=>seleziona?.(m));return b;
 }
 export function aggiornaDettaglioCatalogo(mount,m,{fornitori}={}){
- mount.replaceChildren();if(!m){mount.append(el('p','talos-muted','Seleziona un modello per vedere capacità, contesto e prezzi.'));return;}
- const nome=el('h3','',m.nome);nome.id='catalogoNome';const id=el('code','talos-mono',m.id);id.id='catalogoId';const desc=el('p','talos-detail__desc',m.description||'Il fornitore non ha fornito una descrizione.');desc.id='catalogoDescrizione';
- mount.append(nome,id,desc,kv('Fornitore',m.provider,'catalogoProvider'),kv('Ingresso',elenco(m.inputModalities),'catalogoIngresso'),kv('Risposta',elenco(m.outputModalities),'catalogoUscita'),kv('Parametri supportati',elenco(m.supportedParameters),'catalogoParametri'),kv('Contesto',contesto(m.contextLength),'catalogoContesto'));
- const alias=el('p','talos-muted','Alias: può cambiare versione nel tempo.');alias.id='catalogoAlias';alias.hidden=!m.alias;mount.append(alias,el('hr','talos-lab__rule'),el('h3','','Costo per milione di token'),kv('In ingresso',prezzoPerMilione(m.prezzoPrompt),'catalogoPrezzoInput'),kv('In uscita',prezzoPerMilione(m.prezzoCompletion),'catalogoPrezzoOutput'),el('p','talos-muted','Prezzi dichiarati da OpenRouter. Non sono una stima del costo della sessione.'));
- const raw=el('details','talos-lab__space');raw.append(el('summary','','Valori originali per token (USD)'));raw.append(kv('Ingresso',m.prezzoPrompt??'Non dichiarato','catalogoPrezzoInputRaw'),kv('Uscita',m.prezzoCompletion??'Non dichiarato','catalogoPrezzoOutputRaw'));mount.append(raw);
- const stato=el('p','talos-muted','L’elenco dei modelli non verifica le credenziali del tuo account.');stato.id='catalogoStato';mount.append(stato);
- const use=el('button','talos-button talos-button--primary talos-button--block','Usa nella sessione');use.id='catalogoAzione';use.type='button';use.dataset.richiede='fase3';use.hidden=true;mount.append(use);
+ mount.replaceChildren();if(!m){mount.append(el('p','talos-muted',t('modelli.catalog.selectModel')));return;}
+ const nome=el('h3','',m.nome);nome.id='catalogoNome';const id=el('code','talos-mono',m.id);id.id='catalogoId';const desc=el('p','talos-detail__desc',m.description||t('modelli.catalog.noDescription'));desc.id='catalogoDescrizione';
+ mount.append(nome,id,desc,kv(t('modelli.catalog.provider'),m.provider,'catalogoProvider'),kv(t('modelli.catalog.input'),elenco(m.inputModalities),'catalogoIngresso'),kv(t('modelli.catalog.response'),elenco(m.outputModalities),'catalogoUscita'),kv(t('modelli.catalog.supportedParameters'),elenco(m.supportedParameters),'catalogoParametri'),kv(t('modelli.catalog.context'),contesto(m.contextLength),'catalogoContesto'));
+ const alias=el('p','talos-muted',t('modelli.catalog.aliasNote'));alias.id='catalogoAlias';alias.hidden=!m.alias;mount.append(alias,el('hr','talos-lab__rule'),el('h3','',t('modelli.catalog.costPerMillion')),kv(t('modelli.catalog.incoming'),prezzoPerMilione(m.prezzoPrompt),'catalogoPrezzoInput'),kv(t('modelli.catalog.outgoing'),prezzoPerMilione(m.prezzoCompletion),'catalogoPrezzoOutput'),el('p','talos-muted',t('modelli.catalog.pricesNote')));
+ const raw=el('details','talos-lab__space');raw.append(el('summary','',t('modelli.catalog.originalTokenPrices')));raw.append(kv(t('modelli.catalog.input'),m.prezzoPrompt??t('modelli.catalog.notDeclared'),'catalogoPrezzoInputRaw'),kv(t('modelli.catalog.output'),m.prezzoCompletion??t('modelli.catalog.notDeclared'),'catalogoPrezzoOutputRaw'));mount.append(raw);
+ const stato=el('p','talos-muted',t('modelli.catalog.credentialsNote'));stato.id='catalogoStato';mount.append(stato);
+ const use=el('button','talos-button talos-button--primary talos-button--block',t('modelli.catalog.useInSession'));use.id='catalogoAzione';use.type='button';use.dataset.richiede='fase3';use.hidden=true;mount.append(use);
  /* ⛔ 23/09/2026 — questo pulsante apriva il velo «Fornitori e accessi» (`data-apre-velo`) quando chi
     disegnava non passava `fornitori`. Il velo è tolto per decisione owner («Toglierla: porta al Model
     Lab»): l'unica strada è `fornitori`, che nel prodotto porta alla scheda «Provider» del laboratorio
     (`app.js`, `setModelLabSection('providers')`). Senza `fornitori` (la vetrina dei componenti) il
     pulsante resta un disegno, come nel mockup: non apre più una seconda superficie. */
- const access=el('button','talos-button talos-button--ghost talos-button--sm','Fornitori e accessi');access.type='button';access.dataset.c='Button';access.addEventListener('click',event=>{if(fornitori){event.stopPropagation();fornitori();}});mount.append(access);
+ const access=el('button','talos-button talos-button--ghost talos-button--sm',t('modelli.catalog.providersAndAccess'));access.type='button';access.dataset.c='Button';access.addEventListener('click',event=>{if(fornitori){event.stopPropagation();fornitori();}});mount.append(access);
 }
 /*
  * La barra si costruisce UNA volta per pannello e si aggiorna in place: rifarla a ogni tasto
@@ -166,7 +169,7 @@ function scriviConteggiFornitori(panel,conteggi,totale,{senzaDati=false}={}){
   o.dataset.etichetta??=o.textContent;
   if(senzaDati){o.textContent=o.dataset.etichetta;continue;}
   const n=o.value==='all'?totale:conteggi.get(o.value);
-  o.textContent=n===undefined?o.dataset.etichetta:o.dataset.etichetta+' ('+new Intl.NumberFormat('it-IT').format(n)+')';
+  o.textContent=n===undefined?o.dataset.etichetta:o.dataset.etichetta+' ('+new Intl.NumberFormat(localeUI()).format(n)+')';
  }
 }
 /*
@@ -204,7 +207,7 @@ function portaDelCatalogo(originale){
  const porta=d.createElement('button');
  porta.type='button';porta.id='modelLabCatalogDoor';
  porta.className='talos-button talos-button--secondary talos-button--sm';
- porta.textContent='Catalogo dei fornitori';
+ porta.textContent=t('modelli.catalog.providerCatalog');
  /* `aria-controls` SENZA `aria-expanded`: la regia delle disclosure (`app.js:22339`) prende
     ogni elemento con LA COPPIA e ne inverte lo stato da sé — vedi il commento in
     `catalogo-faccette.js`. Un solo attributo non la sveglia. */
@@ -247,7 +250,7 @@ export function aggiornaCatalogoModelli(panel,dati,opzioni={}){
  const visibili=dati?selectCatalog(base,filtri).map(m=>riferimenti.get(m)).filter(Boolean):[];
  const selected=visibili.find(m=>m.id===selezionato?.id)||visibili[0]||null;
  list.replaceChildren();if(vuoto)vuoto.hidden=true;more.hidden=true;refresh.disabled=caricamento;panel.setAttribute('aria-busy',String(caricamento));
- if(errore){const p=el('p','talos-card talos-card--pad',errore);p.setAttribute('role','alert');list.append(p);count.textContent='Catalogo non disponibile';aggiornaDettaglioCatalogo(detail,null);return null;}
+ if(errore){const p=el('p','talos-card talos-card--pad',errore);p.setAttribute('role','alert');list.append(p);count.textContent=t('modelli.catalog.unavailable');aggiornaDettaglioCatalogo(detail,null);return null;}
  panel.__catalogoUltimo={dati,opzioni};
  /* ⛔ Il conteggio dei risultati si ANNUNCIA: `role="status"` + `aria-live` sul nodo che questa
     funzione riscrive a ogni passata. Ricerca (19/09/2026, `saasui.design` · `ideaplan.io` ·
@@ -257,9 +260,9 @@ export function aggiornaCatalogoModelli(panel,dati,opzioni={}){
     dentro la barra: due conteggi della stessa cosa a due centimetri sono la copia che questo
     progetto chiama difetto, non ridondanza. */
  count.setAttribute('aria-live','polite'); count.setAttribute('role','status');
- count.textContent=caricamento?'Aggiornamento del catalogo…':dati?visibili.length+' di '+dati.modelli.length+' modelli · OpenRouter · '+(dati.daCache?'copia salvata · ':'')+new Date(dati.aggiornatoAlle).toLocaleString('it-IT',{timeZone:'Europe/Rome'}):'Catalogo non caricato';
- if(!dati){list.append(el('p','talos-card--pad talos-muted',caricamento?'Caricamento…':'Apri questa sezione per caricare il catalogo.'));}
- else if(!visibili.length){const p=el('p','talos-card--pad talos-muted',dati.modelli.length?'Nessun modello corrisponde ai filtri.':'Il catalogo osservato è vuoto.');list.append(p);}
+ count.textContent=caricamento?t('modelli.catalog.refreshing'):dati?dati.daCache ? tn('modelli.catalog.oneCachedModelCount', 'modelli.catalog.manyCachedModelCount', dati.modelli.length, { n: visibili.length, total: dati.modelli.length, time: new Date(dati.aggiornatoAlle).toLocaleString(localeUI(),{timeZone:'Europe/Rome'}) }) : tn('modelli.catalog.oneModelCount', 'modelli.catalog.manyModelCount', dati.modelli.length, { n: visibili.length, total: dati.modelli.length, time: new Date(dati.aggiornatoAlle).toLocaleString(localeUI(),{timeZone:'Europe/Rome'}) }):t('modelli.catalog.notLoaded');
+ if(!dati){list.append(el('p','talos-card--pad talos-muted',caricamento?t('modelli.catalog.loading'):t('modelli.catalog.openToLoad')));}
+ else if(!visibili.length){const p=el('p','talos-card--pad talos-muted',dati.modelli.length?t('modelli.catalog.noMatches'):t('modelli.catalog.empty'));list.append(p);}
  else for(const m of visibili.slice(0,limite))list.append(creaRigaCatalogo(m,{selezionato:m.id===selected?.id,seleziona}));
  more.hidden=visibili.length<=limite;more.onclick=()=>altri?.();aggiornaDettaglioCatalogo(detail,selected,{fornitori});list.scrollTop=scroll;
  if(focusId&&document.activeElement===document.body&&!panel.hidden){const nuovo=[...list.querySelectorAll('[data-catalog]')].find(b=>b.dataset.catalog===focusId);nuovo?.focus({preventScroll:true});}
@@ -283,7 +286,7 @@ export function montaCatalogoModelli(originale,canonico){
  const dettaglio = originale.querySelector('[data-catalog-detail]'); if (dettaglio) dettaglio.id = 'modelLabModelDetail';
  const conteggio = originale.querySelector('[data-catalog-count]'); if (conteggio) conteggio.id = 'modelLabCatalogCount';
  const aggiorna = originale.querySelector('[data-catalog-refresh]'); if (aggiorna) aggiorna.id = 'modelLabRefreshButton';
- originale.querySelector('#modelLabProviderFilter')?.replaceChildren(new Option('Tutti i fornitori','all'));
+ originale.querySelector('#modelLabProviderFilter')?.replaceChildren(new Option(t('modelli.catalog.allProviders'),'all'));
  /* ⛔ 18/09/2026 — stesso motivo delle tre righe qui sopra: dopo l'inversione del travaso la
     destinazione è il pannello canonico e i figli che arrivano sono i LEGACY, che portano gli id
     (`#modelLabCatalogList`, `#modelLabModelDetail`) e NON gli attributi canonici. Si cerca l'uno o
@@ -296,3 +299,6 @@ export function montaCatalogoModelli(originale,canonico){
     la scheda «Provider» — vedi `portaDelCatalogo` per la misura che lo ha stabilito. */
  portaDelCatalogo(originale);
 }
+
+const CHIAVI_FACCETTE = {"destination":{"local":"modelli.facets.localModels","cloud":"modelli.facets.cloudModels"},"capabilities":{"tools":"modelli.facets.functionCalling","vision":"modelli.facets.imageInput","reasoning":"modelli.facets.reasoning","json":"modelli.facets.jsonOutput","audio":"modelli.facets.audio"}};
+function etichettaFaccettaTradotta(group, value, fallback = value) { const key = CHIAVI_FACCETTE[group]?.[value]; return key ? t(key) : fallback; }

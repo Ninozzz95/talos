@@ -174,3 +174,23 @@ test('ESITO-RIFERIMENTO: la riga «[TALOS output reference…]» del server non 
   assert.equal(leggiEsitoComando(sotto).output, 'prima riga\n[TALOS output reference: 849de2b1-d1cf-4099-ab0c-146b601c58f0; retained 1 of 1 bytes.]\n');
   assert.equal(leggiEsitoComando('[TALOS output reference: 849de2b1-d1cf-4099-ab0c-146b601c58f0; retained 1 of 1 bytes.]\nnon è un esito').verdetto, '', 'senza testata non si tocca niente');
 });
+
+test('H-04: provaSenzaSuite riconosce SOLO il NOT RUN del kernel, in testa', async () => {
+  const { provaSenzaSuite } = await import('../../src/components/esito-comando.js');
+  assert.equal(provaSenzaSuite('NOT RUN: NO_TEST_SUITE_CONFIGURED — no test suite found in C:/x: there is no package.json in this folder.'), true);
+  assert.equal(provaSenzaSuite('exit 127\nnessuna suite trovata'), false, 'le sessioni vecchie le legge il codice, com\'era');
+  assert.equal(provaSenzaSuite('exit 0\nNOT RUN: dentro l\'output di un test'), false, 'un testo che PARLA di NOT RUN non è il verdetto');
+  assert.equal(provaSenzaSuite(null), false);
+});
+
+test('NO_TESTS_RAN (owner 03/10/2026): «zero test eseguiti» è un NOT RUN anche lui, e si distingue dalla suite assente', async () => {
+  const { provaSenzaSuite, provaSenzaTestEseguiti } = await import('../../src/components/esito-comando.js');
+  const nessunTest = 'NOT RUN: NO_TESTS_RAN — the test command ran and exited 0, but no tests ran: this is not a pass. Create the suite or point the command at the folder that has one.\nThe runner said: ℹ tests 0\nℹ tests 0';
+  const senzaSuite = 'NOT RUN: NO_TEST_SUITE_CONFIGURED — no test suite found in C:/x: there is no package.json in this folder.';
+  assert.equal(provaSenzaSuite(nessunTest), true, 'lo stato è lo stesso: «Non eseguito»');
+  assert.equal(provaSenzaTestEseguiti(nessunTest), true);
+  assert.equal(provaSenzaTestEseguiti(senzaSuite), false, 'la suite assente ha le sue parole');
+  assert.equal(provaSenzaTestEseguiti('exit 127\nexit 0 but NO tests ran (ℹ tests 0)'), false, 'le sessioni vecchie le legge il codice, com\'era');
+  assert.equal(provaSenzaTestEseguiti('exit 0\nNOT RUN: NO_TESTS_RAN dentro l\'output'), false, 'solo in testa');
+  assert.equal(provaSenzaTestEseguiti(null), false);
+});

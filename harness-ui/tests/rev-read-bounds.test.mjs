@@ -11,6 +11,7 @@
  * `TextDecoder` `ignoreBOM: false` (T-01, 28/09/2026): il BOM iniziale NON si restituisce — default WHATWG Encoding, verificato il 28/09/2026.
  */
 import assert from 'node:assert/strict';
+import { togliConfiniDati } from '../src/kernel/confine-dati.mjs';
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { open } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -47,7 +48,7 @@ async function esitoDiLeggi(t, nome, contenuto) {
   writeFileSync(join(cartella, nome), contenuto);
   const rete = reteDiRisposte(chiamaLeggi(nome), FINE);
   await talosLavora({ cartella, task: { consegna: `leggi ${nome}` }, modello: 'x', chiave: 'y', fetchDiRete: rete.fetch });
-  return rete.chiamate[1].corpo.messages.find((m) => m.role === 'tool').content;
+  return togliConfiniDati(rete.chiamate[1].corpo.messages.find((m) => m.role === 'tool').content);
 }
 /* Un `open` che conta i byte letti davvero e le chiusure: la misura del limite di memoria, e dell'handle chiuso. */
 function apriContando({ dopoLaPrimaLettura, statFinto, leggiRotto } = {}) {
@@ -101,7 +102,7 @@ test('REV-READ-BOUNDS-04 — due `leggi` nella stessa risposta (sul desktop la s
   const due = { role: 'assistant', content: null, tool_calls: ['piccolo.txt', 'enorme.log'].map((percorso, i) => ({ id: `call_${i}`, function: { name: 'leggi', arguments: JSON.stringify({ percorso }) } })) };
   const rete = reteDiRisposte(due, FINE);
   await talosLavora({ cartella, task: { consegna: 'leggi' }, modello: 'x', chiave: 'y', fetchDiRete: rete.fetch });
-  const [primo, secondo] = rete.chiamate[1].corpo.messages.filter((m) => m.role === 'tool').map((m) => m.content);
+  const [primo, secondo] = rete.chiamate[1].corpo.messages.filter((m) => m.role === 'tool').map((m) => togliConfiniDati(m.content));
   assert.equal(primo, 'piccolo');
   assert.match(secondo, /^\[TALOS read lines 1-1 of 1 in "enorme\.log"; EOF reached; 1 over-long line/u);
   assert.ok(secondo.length < 2600, 'anche la lettura partita in anticipo porta solo la testa della riga');

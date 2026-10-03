@@ -1,3 +1,4 @@
+import { serviIlDizionario } from './aiuto-dizionario.mjs'; // corsia D della lingua: i componenti importano il dizionario
 import { expect, test } from '@playwright/test';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
@@ -39,6 +40,7 @@ const CARTELLA_FOTO = resolve(process.cwd(), 'artifacts', 'lab-guscio-2026-09-18
 
 /** Il modulo vero, letto dal disco e servito al posto giusto. */
 async function serviIlModulo(page) {
+  await serviIlDizionario(page);
   await page.route('**/__lab/*.js', async (route) => {
     const nome = new URL(route.request().url()).pathname.split('/').pop();
     try {

@@ -13,14 +13,14 @@
  * ⛔ I byte si COPIANO (clonazione strutturata), non si trasferiscono: spostando il lettore dal rail allo schermo intero la
  *   cornice si ricarica e li richiede, e la pagina deve averli ancora.
  */
+import { t } from '../../lingua.js';
 export const FORMATI_OSPITE = Object.freeze(['documento', 'presentazione']);
-const TITOLI = Object.freeze({ documento: 'Documento', presentazione: 'Presentazione' });
 
 export function corniceOspite({ doc, finestra = globalThis, formato, byte, nome, onErrore }) {
-  if (!FORMATI_OSPITE.includes(formato)) throw new Error(`nessuna resa in cornice per «${formato}»`);
+  if (!FORMATI_OSPITE.includes(formato)) throw new Error(t('varie.reader.frame.noRenderer', { format: formato }));
   const cornice = doc.createElement('iframe');
   cornice.className = 'talos-lettore__office';
-  cornice.title = `${TITOLI[formato]}: ${nome}`;
+  cornice.title = t(`varie.reader.frame.title.${formato}`, { name: nome }); // 03/10/2026: il titolo della cornice lo legge lo screen reader
   cornice.setAttribute('sandbox', 'allow-scripts');
   cornice.setAttribute('referrerpolicy', 'no-referrer');
   cornice.setAttribute('allow', '');
@@ -32,7 +32,7 @@ export function corniceOspite({ doc, finestra = globalThis, formato, byte, nome,
       // l'origine della pagina ospite è nulla: `'*'` è l'unico bersaglio possibile, e il destinatario è QUESTA cornice
       cornice.contentWindow.postMessage({ tipo: 'talos-lettore-documento', formato, byte, nome }, '*');
     } else if (tipo === 'talos-lettore-ospite-errore') {
-      onErrore?.(String(evento.data?.messaggio || 'motivo non registrato'));
+      onErrore?.(String(evento.data?.messaggio || t('varie.reader.frame.reasonNotRecorded')));
     }
   };
   finestra.addEventListener('message', suMessaggio);

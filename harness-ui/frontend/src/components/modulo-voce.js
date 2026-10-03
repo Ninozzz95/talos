@@ -41,6 +41,9 @@
  *     in `modale-td.js`: un toast con «Annulla», non una domanda davanti.
  */
 
+import { t as traduci, tn, linguaCorrenteDiT } from './lingua.js';
+/* Numeri nella lingua dell'interfaccia (italiano → it-IT, inglese → en-US), letti a ogni uso. */
+const localeUI = () => (linguaCorrenteDiT() === 'en' ? 'en-US' : 'it-IT');
 import { prosaInNodi } from './ricerca-dettaglio.js';
 import { confermaModale } from './modale-td.js';
 
@@ -63,24 +66,31 @@ export const SCHEMI = Object.freeze({
     sostantivo: 'nota',
     articolo: 'la',
     genere: 'f',
-    titoloNuova: 'Nuova nota',
-    titoloModifica: 'Modifica la nota',
+    /* ⛔ I testi dello schema sono getter: si leggono a ogni uso, non alla creazione del modulo, e seguono il cambio di lingua. */
+    get titoloNuova() { return traduci('varie.voice.note.newTitle'); },
+    get titoloModifica() { return traduci('varie.voice.note.editTitle'); },
+    get titoloElimina() { return traduci('varie.voice.note.deleteTitle'); },
+    get etichettaElimina() { return traduci('varie.voice.note.deleteLabel'); },
+    get serveTitolo() { return traduci('varie.voice.note.titleRequired'); },
+    get senzaTitolo() { return traduci('sezioni.notes.untitled'); },
     codiceAssente: 'NOTE_NOT_FOUND',
     codiceInvalido: 'NOTE_INVALID',
     campi: Object.freeze([
-      { nome: 'titolo', etichetta: 'Titolo', tipo: 'riga', max: 120, obbligatorio: true, invito: 'Dai un nome a questa nota…' },
-      { nome: 'contenuto', etichetta: 'Contenuto', tipo: 'testo', max: 8_000, obbligatorio: true, invito: 'Scrivi qui. I titoli con il cancelletto e gli elenchi col trattino diventano Markdown.' },
+      { nome: 'titolo', get etichetta() { return traduci('varie.voice.field.title'); }, tipo: 'riga', max: 120, obbligatorio: true, get invito() { return traduci('varie.voice.note.titleHint'); } },
+      { nome: 'contenuto', get etichetta() { return traduci('varie.voice.field.content'); }, tipo: 'testo', max: 8_000, obbligatorio: true, get invito() { return traduci('varie.voice.note.contentHint'); } },
       {
         nome: 'formato',
-        etichetta: 'Come si legge',
+        get etichetta() { return traduci('varie.voice.field.format'); },
         tipo: 'scelta',
         preimpostato: SCELTA_AUTOMATICA,
-        scelte: Object.freeze([
-          [SCELTA_AUTOMATICA, 'Riconoscilo dal testo'],
-          ['markdown', 'Markdown'],
-          ['testo', 'Testo semplice'],
-        ]),
-        aiuto: 'Lasciando «Riconoscilo dal testo» la nota cambia da sola quando il contenuto cambia.',
+        get scelte() {
+          return Object.freeze([
+            [SCELTA_AUTOMATICA, traduci('varie.voice.format.auto')],
+            ['markdown', 'Markdown'],
+            ['testo', traduci('varie.voice.format.plain')],
+          ]);
+        },
+        get aiuto() { return traduci('varie.voice.format.help'); },
       },
     ]),
   }),
@@ -91,19 +101,23 @@ export const SCHEMI = Object.freeze({
     sostantivo: 'attività',
     articolo: 'l’',
     genere: 'f',
-    titoloNuova: 'Nuova attività',
-    titoloModifica: 'Modifica l’attività',
+    get titoloNuova() { return traduci('varie.voice.task.newTitle'); },
+    get titoloModifica() { return traduci('varie.voice.task.editTitle'); },
+    get titoloElimina() { return traduci('varie.voice.task.deleteTitle'); },
+    get etichettaElimina() { return traduci('varie.voice.task.deleteLabel'); },
+    get serveTitolo() { return traduci('varie.voice.task.titleRequired'); },
+    get senzaTitolo() { return traduci('sezioni.tasks.untitled'); },
     codiceAssente: 'TASK_NOT_FOUND',
     codiceInvalido: 'TASK_INVALID',
     campi: Object.freeze([
-      { nome: 'titolo', etichetta: 'Titolo', tipo: 'riga', max: 200, obbligatorio: true, invito: 'Che cosa c’è da fare…' },
-      { nome: 'descrizione', etichetta: 'Descrizione', tipo: 'testo', max: 2_000, obbligatorio: false, invito: 'Facoltativa: i dettagli che servono per farla.' },
+      { nome: 'titolo', get etichetta() { return traduci('varie.voice.field.title'); }, tipo: 'riga', max: 200, obbligatorio: true, get invito() { return traduci('varie.voice.task.titleHint'); } },
+      { nome: 'descrizione', get etichetta() { return traduci('varie.voice.field.description'); }, tipo: 'testo', max: 2_000, obbligatorio: false, get invito() { return traduci('varie.voice.task.descriptionHint'); } },
       {
         nome: 'priorita',
-        etichetta: 'Priorità',
+        get etichetta() { return traduci('varie.voice.field.priority'); },
         tipo: 'scelta',
         preimpostato: 'normal',
-        scelte: Object.freeze([['low', 'Bassa'], ['normal', 'Normale'], ['high', 'Alta']]),
+        get scelte() { return Object.freeze([['low', traduci('varie.voice.priority.low')], ['normal', traduci('varie.voice.priority.normal')], ['high', traduci('varie.voice.priority.high')]]); },
       },
     ]),
   }),
@@ -114,24 +128,30 @@ export const SCHEMI = Object.freeze({
     sostantivo: 'ricordo',
     articolo: 'il',
     genere: 'm',
-    titoloNuova: 'Nuovo ricordo',
-    titoloModifica: 'Modifica il ricordo',
+    get titoloNuova() { return traduci('varie.voice.memory.newTitle'); },
+    get titoloModifica() { return traduci('varie.voice.memory.editTitle'); },
+    get titoloElimina() { return traduci('varie.voice.memory.deleteTitle'); },
+    get etichettaElimina() { return traduci('varie.voice.memory.deleteLabel'); },
+    get serveTitolo() { return traduci('varie.voice.memory.titleRequired'); },
+    get senzaTitolo() { return traduci('sezioni.memory.untitled'); },
     codiceAssente: 'MEMORY_NOT_FOUND',
     codiceInvalido: 'MEMORY_INVALID',
     campi: Object.freeze([
-      { nome: 'titolo', etichetta: 'Titolo', tipo: 'riga', max: 80, obbligatorio: true, invito: 'Come si chiama questo ricordo…' },
-      { nome: 'contenuto', etichetta: 'Contenuto', tipo: 'testo', max: 600, obbligatorio: true, invito: 'Quello che TALOS deve ricordare di te.' },
+      { nome: 'titolo', get etichetta() { return traduci('varie.voice.field.title'); }, tipo: 'riga', max: 80, obbligatorio: true, get invito() { return traduci('varie.voice.memory.titleHint'); } },
+      { nome: 'contenuto', get etichetta() { return traduci('varie.voice.field.content'); }, tipo: 'testo', max: 600, obbligatorio: true, get invito() { return traduci('varie.voice.memory.contentHint'); } },
       {
         nome: 'genere',
-        etichetta: 'Tipo',
+        get etichetta() { return traduci('varie.voice.field.type'); },
         tipo: 'scelta',
         preimpostato: 'preference',
-        scelte: Object.freeze([
-          ['preference', 'Preferenza'],
-          ['project_fact', 'Fatto'],
-          ['procedure', 'Procedura'],
-          ['policy_note', 'Regola'],
-        ]),
+        get scelte() {
+          return Object.freeze([
+            ['preference', traduci('sezioni.memory.kind.preference')],
+            ['project_fact', traduci('sezioni.memory.kind.fact')],
+            ['procedure', traduci('sezioni.memory.kind.procedure')],
+            ['policy_note', traduci('sezioni.memory.kind.rule')],
+          ]);
+        },
       },
     ]),
   }),
@@ -139,10 +159,10 @@ export const SCHEMI = Object.freeze({
 
 /* -------------------------------------------------------------------------------- le PAROLE */
 
-const PAROLE_STATO = new Map([['todo', 'Da fare'], ['doing', 'In corso'], ['done', 'Fatta']]);
+const PAROLE_STATO = new Map([['todo', () => traduci('sezioni.tasks.status.todo')], ['doing', () => traduci('sezioni.tasks.status.doing')], ['done', () => traduci('sezioni.tasks.status.done')]]);
 /** Le tre caselle dello stato di un'attività, nell'ordine in cui una persona le percorre. */
 export const STATI_ATTIVITA = Object.freeze(['todo', 'doing', 'done']);
-export function parolaStato(stato) { return PAROLE_STATO.get(stato) || 'Stato non registrato'; }
+export function parolaStato(stato) { return (PAROLE_STATO.get(stato) || (() => traduci('sezioni.tasks.status.unknown')))(); }
 
 /**
  * L'ACCORDO GRAMMATICALE, in un posto solo.
@@ -154,6 +174,56 @@ export function parolaStato(stato) { return PAROLE_STATO.get(stato) || 'Stato no
 export function accordo(schema, radice) { return `${radice}${schema?.genere === 'm' ? 'o' : 'a'}`; }
 
 /**
+ * I MESSAGGI DI ESITO di una voce, per GENERE. ⛔ In italiano il participio concorda («Salvata» una nota, «Salvato» un ricordo) e
+ *   in inglese no: le desinenze non si incollano più alle radici (`accordo` resta solo come funzione pura), ogni genere ha le sue
+ *   frasi nel dizionario e chi disegna prende quelle del suo schema. Le frasi senza participio non dipendono dal genere e stanno
+ *   dove si usano.
+ */
+const MESSAGGI_FEMMINILI = {
+    salvata: () => traduci('varie.voice.msg.salvata.f'),
+    annullata: () => traduci('varie.voice.msg.annullata.f'),
+    corpoAnnullata: (titolo) => traduci('varie.voice.msg.corpoAnnullata.f', { title: titolo }),
+    nonAnnullata: () => traduci('varie.voice.msg.nonAnnullata.f'),
+    modificata: () => traduci('varie.voice.msg.modificata.f'),
+    corpoModificata: (titolo) => traduci('varie.voice.msg.corpoModificata.f', { title: titolo }),
+    rimessa: () => traduci('varie.voice.msg.rimessa.f'),
+    corpoRimessa: (titolo) => traduci('varie.voice.msg.corpoRimessa.f', { title: titolo }),
+    nonSalvataAncora: () => traduci('varie.voice.msg.nonSalvataAncora.f'),
+    copiata: () => traduci('varie.voice.msg.copiata.f'),
+    nonCopiata: () => traduci('varie.voice.msg.nonCopiata.f'),
+    esportata: () => traduci('varie.voice.msg.esportata.f'),
+    aggiornata: () => traduci('varie.voice.msg.aggiornata.f'),
+    nonAggiornata: () => traduci('varie.voice.msg.nonAggiornata.f'),
+    eliminata: () => traduci('varie.voice.msg.eliminata.f'),
+    nonEliminata: () => traduci('varie.voice.msg.nonEliminata.f'),
+    domandaElimina: (titolo) => traduci('varie.voice.msg.domandaElimina.f', { title: titolo }),
+    scrittaDaTe: () => traduci('varie.voice.msg.scrittaDaTe.f'),
+    scrittaDaTalos: () => traduci('varie.voice.msg.scrittaDaTalos.f'),
+};
+const MESSAGGI_MASCHILI = {
+    salvata: () => traduci('varie.voice.msg.salvata.m'),
+    annullata: () => traduci('varie.voice.msg.annullata.m'),
+    corpoAnnullata: (titolo) => traduci('varie.voice.msg.corpoAnnullata.m', { title: titolo }),
+    nonAnnullata: () => traduci('varie.voice.msg.nonAnnullata.m'),
+    modificata: () => traduci('varie.voice.msg.modificata.m'),
+    corpoModificata: (titolo) => traduci('varie.voice.msg.corpoModificata.m', { title: titolo }),
+    rimessa: () => traduci('varie.voice.msg.rimessa.m'),
+    corpoRimessa: (titolo) => traduci('varie.voice.msg.corpoRimessa.m', { title: titolo }),
+    nonSalvataAncora: () => traduci('varie.voice.msg.nonSalvataAncora.m'),
+    copiata: () => traduci('varie.voice.msg.copiata.m'),
+    nonCopiata: () => traduci('varie.voice.msg.nonCopiata.m'),
+    esportata: () => traduci('varie.voice.msg.esportata.m'),
+    aggiornata: () => traduci('varie.voice.msg.aggiornata.m'),
+    nonAggiornata: () => traduci('varie.voice.msg.nonAggiornata.m'),
+    eliminata: () => traduci('varie.voice.msg.eliminata.m'),
+    nonEliminata: () => traduci('varie.voice.msg.nonEliminata.m'),
+    domandaElimina: (titolo) => traduci('varie.voice.msg.domandaElimina.m', { title: titolo }),
+    scrittaDaTe: () => traduci('varie.voice.msg.scrittaDaTe.m'),
+    scrittaDaTalos: () => traduci('varie.voice.msg.scrittaDaTalos.m'),
+};
+export function messaggiVoce(schema) { return schema?.genere === 'm' ? MESSAGGI_MASCHILI : MESSAGGI_FEMMINILI; }
+
+/**
  * Chi ha scritto la voce.
  * ⛔ Una voce senza `origine` sul disco è del MODELLO (rapporto backend §4): fino a oggi quella era
  *   l'unica porta che scriveva. Ma «assente» e «non l'abbiamo ancora letta» sono due cose diverse:
@@ -161,12 +231,12 @@ export function accordo(schema, radice) { return `${radice}${schema?.genere === 
  *   scrive niente. Il fatto si dichiara solo quando arriva dalla GET della voce.
  */
 export function parolaOrigine(origine, schema = null) {
-  if (origine === 'persona') return `${accordo(schema, 'Scritt')} da te`;
-  if (origine === 'modello') return `${accordo(schema, 'Scritt')} da TALOS`;
+  if (origine === 'persona') return messaggiVoce(schema).scrittaDaTe();
+  if (origine === 'modello') return messaggiVoce(schema).scrittaDaTalos();
   return '';
 }
 
-const numero = (n) => Number(n).toLocaleString('it-IT');
+const numero = (n) => Number(n).toLocaleString(localeUI());
 
 /* ---------------------------------------------------------------------------- la VALIDAZIONE */
 
@@ -204,14 +274,14 @@ export function validaValori(schema, valori) {
   for (const campo of schema.campi) {
     if (campo.tipo === 'scelta') {
       const scelto = valori?.[campo.nome];
-      if (!campo.scelte.some(([valore]) => valore === scelto)) errori[campo.nome] = 'Scegli una delle voci in elenco.';
+      if (!campo.scelte.some(([valore]) => valore === scelto)) errori[campo.nome] = traduci('varie.voice.error.pickOne');
       continue;
     }
     const testo = typeof valori?.[campo.nome] === 'string' ? valori[campo.nome] : '';
     if (campo.obbligatorio && testo.trim().length === 0) {
       errori[campo.nome] = campo.nome === 'titolo'
-        ? `Serve un titolo: è così che ritrovi ${schema.articolo}${schema.articolo.endsWith('’') ? '' : ' '}${schema.sostantivo}.`
-        : 'Serve un testo: qui non si salva una voce vuota.';
+        ? schema.serveTitolo
+        : traduci('varie.voice.error.textRequired');
       continue;
     }
     /*
@@ -221,7 +291,7 @@ export function validaValori(schema, valori) {
      *   che dice «va bene» su un corpo che il server rifiuta.
      */
     if (testo.length > campo.max) {
-      errori[campo.nome] = `${campo.etichetta} può arrivare a ${numero(campo.max)} caratteri: qui ce ne sono ${numero(testo.length)}.`;
+      errori[campo.nome] = traduci('varie.voice.error.tooLong', { label: campo.etichetta, max: numero(campo.max), length: numero(testo.length) });
     }
   }
   return { ok: Object.keys(errori).length === 0, errori };
@@ -273,12 +343,12 @@ export function corpoModifica(schema, valori, voce) {
  * ⛔ Il `message` di un 400 è generico per policy: ripeterlo a schermo sarebbe «Query non valida»
  *   davanti a una persona. Qui si traduce il CODICE, che è l'unica parte vera che esce dalla busta.
  */
-export function paroleErroreRete(codice, schema, { azione = 'salvare' } = {}) {
-  if (codice === schema.codiceAssente) return `Questa voce non c’è più: qualcuno l’ha eliminata mentre era aperta. Ho ricaricato l’elenco.`;
-  if (codice === 'NOT_FOUND') return 'La sessione non è più aperta: riapri una conversazione e riprova.';
-  if (codice === 'PAYLOAD_LIMIT') return 'Il testo è troppo lungo per essere spedito: accorcialo e riprova.';
-  if (codice === 'QUERY_INVALID' || codice === schema.codiceInvalido) return 'Il server ha rifiutato questi valori: controlla i campi qui sopra. (Il motivo preciso resta nel registro diagnostico: la busta pubblica non lo porta.)';
-  return `Non sono riuscito a ${azione}: riprova fra un momento.`;
+export function paroleErroreRete(codice, schema, { azione = traduci('varie.voice.action.save') } = {}) {
+  if (codice === schema.codiceAssente) return traduci('varie.voice.error.gone');
+  if (codice === 'NOT_FOUND') return traduci('varie.voice.error.sessionClosed');
+  if (codice === 'PAYLOAD_LIMIT') return traduci('varie.voice.error.payloadTooLarge');
+  if (codice === 'QUERY_INVALID' || codice === schema.codiceInvalido) return traduci('varie.voice.error.rejected');
+  return traduci('varie.voice.error.generic', { action: azione });
 }
 
 /* ------------------------------------------------------------------------- la PORTA di rete */
@@ -333,7 +403,7 @@ export function mostraConteggio(lunghezza, massimo) {
 /** «131 caratteri su 120» — e al singolare non diventa «1 caratteri». */
 export function fraseConteggio(lunghezza, massimo) {
   const n = Number(lunghezza) || 0;
-  return `${numero(n)} ${n === 1 ? 'carattere' : 'caratteri'} su ${numero(massimo)}`;
+  return tn('varie.voice.count.one', 'varie.voice.count.many', n, { n: numero(n), max: numero(massimo) });
 }
 
 /**
@@ -438,7 +508,7 @@ export function costruisciModulo(doc, {
 
 /* -------------------------------------------------------- il testo di una voce, reso o grezzo */
 
-const PAROLE_MODO = new Map([['anteprima', 'Anteprima'], ['testo', 'Testo']]);
+const PAROLE_MODO = new Map([['anteprima', () => traduci('varie.voice.view.preview')], ['testo', () => traduci('varie.voice.view.text')]]);
 
 /**
  * L'interruttore «Anteprima · Testo» del dettaglio, lo stesso della Libreria.
@@ -476,9 +546,9 @@ export function montaTestoVoce(doc, {
   let scelto = modi.includes(modo) ? modo : 'anteprima';
   const lista = nodo(doc, 'div', 'td-segment td-viste td-voce-modi');
   lista.setAttribute('role', 'tablist');
-  lista.setAttribute('aria-label', 'Come guardare il testo');
+  lista.setAttribute('aria-label', traduci("varie.voice.view.modesLabel"));
   const schede = modi.map((m) => {
-    const b = nodo(doc, 'button', '', PAROLE_MODO.get(m));
+    const b = nodo(doc, 'button', '', PAROLE_MODO.get(m)());
     b.type = 'button';
     b.id = `${radice}-${m}`;
     b.dataset.modo = m;
@@ -502,7 +572,7 @@ export function montaTestoVoce(doc, {
       const pre = nodo(doc, 'pre', 'td-code td-voce-testo', prosa);
       pre.tabIndex = 0;
       pre.setAttribute('role', 'region');
-      pre.setAttribute('aria-label', 'Testo come è stato scritto');
+      pre.setAttribute('aria-label', traduci("varie.voice.view.textLabel"));
       pannello.replaceChildren(pre);
     }
     onModo(m);
@@ -537,7 +607,7 @@ export function montaTestoVoce(doc, {
 export function costruisciStatoAttivita(doc, { stato, inCorso = false, onScegli = () => {} }) {
   const gruppo = nodo(doc, 'div', 'td-segment td-stati-attivita');
   gruppo.setAttribute('role', 'radiogroup');
-  gruppo.setAttribute('aria-label', 'Stato dell’attività');
+  gruppo.setAttribute('aria-label', traduci("varie.voice.taskStatusLabel"));
   const bottoni = STATI_ATTIVITA.map((valore) => {
     const b = nodo(doc, 'button', '', parolaStato(valore));
     b.type = 'button';
@@ -584,20 +654,20 @@ export function confermaEliminazione({
   schema, voce, titolo, servizio, document: doc = globalThis.document,
   avvisa = () => {}, ricarica = () => {}, dopo = () => {},
 }) {
-  const articolo = `${schema.articolo}${schema.articolo.endsWith('’') ? '' : ' '}${schema.sostantivo}`;
+  const parole = messaggiVoce(schema);
   return confermaModale({
     document: doc,
-    titolo: `Elimino ${articolo}?`,
-    domanda: `«${titolo}» viene ${accordo(schema, 'cancellat')} dal disco.`,
-    conseguenza: 'Non c’è un cestino: l’eliminazione è definitiva, e nemmeno TALOS potrà rileggere questo testo.',
-    etichettaConferma: `Elimina ${articolo}`,
+    titolo: schema.titoloElimina,
+    domanda: parole.domandaElimina(titolo),
+    conseguenza: traduci('varie.voice.deleteConsequence'),
+    etichettaConferma: schema.etichettaElimina,
     onConferma: async () => {
       try {
         await servizio.elimina(voce?.id);
-        avvisa(accordo(schema, 'Eliminat'), `«${titolo}» non c’è più.`);
+        avvisa(parole.eliminata(), traduci('varie.voice.deletedBody', { title: titolo }));
         dopo();
       } catch (errore) {
-        avvisa(`Non ${accordo(schema, 'eliminat')}`, paroleErroreRete(errore?.code, schema, { azione: 'eliminare' }), { tono: 'errore' });
+        avvisa(parole.nonEliminata(), paroleErroreRete(errore?.code, schema, { azione: traduci('varie.voice.action.delete') }), { tono: 'errore' });
       }
       ricarica();
     },

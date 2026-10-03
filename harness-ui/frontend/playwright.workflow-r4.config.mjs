@@ -49,6 +49,7 @@ export default defineConfig({
     headless: true,
     trace: 'retain-on-failure',
     timezoneId: 'Europe/Rome',
+    locale: 'it-IT', // 03/10: la lingua delle prove, vedi playwright.config.mjs
     screenshot: 'off',
     video: 'off',
   },

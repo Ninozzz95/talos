@@ -140,7 +140,7 @@ export async function fattiDelProgetto(cartella, { fs } = {}) {
  */
 export function testoSchedaDiLavoro({
   cartella, nomeProgetto = null, git = null, commit = [], fatti = null,
-  istruzioni = [], permesso = null, modello = null, piattaforma = null,
+  istruzioni = [], permesso = null, modello = null, piattaforma = null, confine,
 } = {}) {
   /* ⛔ Il NOME della cartella, mai il percorso: contiene il nome della persona e questo testo esce
      dalla macchina dentro un prompt — [[cancello-4-non-guardava-tutto-mobile]]. Ed è anche ciò che
@@ -175,6 +175,13 @@ export function testoSchedaDiLavoro({
     righe.push(`Verifica: ${fatti.comandi.join(' ; ')}`);
   }
 
+  /*
+   * ⛔ F-027, estensione (owner 03/10/2026): dalla seconda riga fin qui la scheda porta ciò che viene dal progetto — il nome della
+   *   cartella, il ramo, i MESSAGGI DEI COMMIT (li scrive chiunque abbia scritto nella storia), i manifesti, i comandi dei suoi
+   *   script. Con `confine` quelle righe entrano nel confine dei dati; la prima riga e i fatti di TALOS che seguono (permesso,
+   *   modello, piattaforma) restano fuori. Senza `confine` il testo è quello di sempre, byte per byte.
+   */
+  if (typeof confine === 'function') righe.splice(1, righe.length - 1, confine(righe.slice(1).join('\n')));
   if (permesso) righe.push(`Permesso di questo giro: ${permesso}.`);
   if (modello) righe.push(`Modello che stai usando: ${modello}.`);
   if (piattaforma) righe.push(`Piattaforma: ${piattaforma}.`);
@@ -196,7 +203,7 @@ export function testoSchedaDiLavoro({
  */
 export async function schedaDiLavoro({
   cartella, permesso = null, modello = null, piattaforma = null, nomeProgetto = null,
-  statoVolatile = true, fs, eseguiGit,
+  statoVolatile = true, fs, eseguiGit, confine,
 } = {}) {
   if (typeof cartella !== 'string' || cartella.trim() === '') return null;
   const opzioniGit = eseguiGit ? { eseguiGit } : {};
@@ -212,7 +219,7 @@ export async function schedaDiLavoro({
   ]);
 
   return {
-    testo: testoSchedaDiLavoro({ cartella, nomeProgetto, git, commit, fatti, istruzioni, permesso, modello, piattaforma }),
+    testo: testoSchedaDiLavoro({ cartella, nomeProgetto, git, commit, fatti, istruzioni, permesso, modello, piattaforma, confine }),
     git, commit, fatti, istruzioni,
   };
 }

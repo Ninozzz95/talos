@@ -29,6 +29,7 @@
  */
 
 /** L'intestazione che il kernel antepone all'output. Il codice può mancare (`null`): vedi sotto. */
+import { t } from './lingua.js'; // 03/10/2026: verdetto e «dove» arrivano a schermo, nella lingua corrente
 const INTESTAZIONE = /^exit (-?\d+|null)(?: \[sandbox: ([^\]]*)\])?\n?/u;
 
 /**
@@ -58,12 +59,12 @@ export function dovEGirato(livello) {
     /* ⛔ F009 (owner 01/10/2026, «esito e foglio della shell») — l'etichetta dice con che utente: si porta a schermo, perché
        «come root» è proprio ciò che la persona deve sapere. Le etichette di prima (senza utente) restano lette com'erano. */
     const utente = /\(Linux in WSL come ([a-z_][a-z0-9_-]{0,31}\$?);/iu.exec(l)?.[1];
-    if (utente) return `in Linux (WSL) come ${utente}, non su Windows`;
-    if (/\(Linux in WSL con un utente non verificato;/u.test(l)) return 'in Linux (WSL), con un utente non verificato';
-    return 'in Linux (WSL), non su Windows';
+    if (utente) return t('chat.command.where.wslAs', { user: utente });
+    if (/\(Linux in WSL con un utente non verificato;/u.test(l)) return t('chat.command.where.wslUnverified');
+    return t('chat.command.where.wsl');
   }
-  if (nome === 'none') return 'su Windows, senza isolamento';
-  if (nome === 'adb-shell-on-device') return 'sul telefono collegato';
+  if (nome === 'none') return t('chat.command.where.windows');
+  if (nome === 'adb-shell-on-device') return t('chat.command.where.phone');
   return null;
 }
 
@@ -117,11 +118,11 @@ export function leggiEsitoComando(grezzo) {
   const annullato = uscita === 130 || uscita === 143;
   const terminato = uscita === 124 || uscita === 137;
   const verdetto = fermato
-    ? 'Fermato: il comando non ha restituito un codice d\'uscita'
-    : riuscito ? 'Riuscito'
-      : annullato ? `Annullato · codice ${uscita}`
-        : terminato ? `Terminato a forza · codice ${uscita}`
-          : `Non riuscito · codice ${uscita}`;
+    ? t('chat.command.outcome.noExitCode')
+    : riuscito ? t('chat.command.outcome.succeeded')
+      : annullato ? t('chat.command.outcome.cancelled', { code: uscita })
+        : terminato ? t('chat.command.outcome.killed', { code: uscita })
+          : t('chat.command.outcome.failed', { code: uscita });
   return { uscita, riuscito, fermato, annullato, terminato, dove: dovEGirato(livello), livello, output, verdetto };
 }
 
@@ -235,7 +236,9 @@ export function rigaDiStatoComando(esito, millisecondi = null) {
  * ⛔ Una regola sola per chat e pannello della figlia (`conversazione-figlia.js`, `esitoDaContenuto`).
  */
 const ALIAS_ESITO_FALLITO = Object.freeze({ web_search: ['search'], delega_sottotask: ['delegation'] });
-const INIZIO_FALLITO = /^(?:REFUSED\.|ERROR\b|ERRORE\b|FAILED\b|FALLITO\b|NON RIUSCITO\b)/i;
+/* H-05 (owner 02/10/2026): NOT FOUND, AMBIGUOUS e INVALID sono un no del kernel come REFUSED — mai un pallino verde. NO CHANGE no:
+   «già applicata» o «identici» non sono un guasto. */
+const INIZIO_FALLITO = /^(?:REFUSED\.|NOT FOUND\.|AMBIGUOUS\.|INVALID\.|ERROR\b|ERRORE\b|FAILED\b|FALLITO\b|NON RIUSCITO\b)/i;
 const escapeRegex = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 /**
@@ -251,6 +254,24 @@ export function esitoDichiaraFallimento(nome, testo) {
 }
 
 /*
+ * ⛔ H-04 (owner 02/10/2026, «Voglio il +1»): una `prova` senza suite non parte, e il kernel lo dice con `NOT RUN:` e nessun codice
+ *   d'uscita (prima un `exit 127` inventato). Non è un successo e non è un comando fallito: è «Non eseguito», come un rifiuto.
+ *   ⛔ Le sessioni registrate prima della cura portano ancora `exit 127`: quelle le legge il codice d'uscita, com'era.
+ */
+export function provaSenzaSuite(testo) {
+  return typeof testo === 'string' && /^\s*NOT RUN:/u.test(testo);
+}
+
+/*
+ * ⛔ 03/10/2026 (owner, «Sì, NOT RUN anche lì»): anche «zero test eseguiti» è un `NOT RUN:`, col codice `NO_TESTS_RAN` — il comando è
+ *   partito, i test no. `provaSenzaSuite` resta vera per tutti e due (lo stato è lo stesso: «Non eseguito»); questa dice QUALE, per
+ *   le parole: «nessun test eseguito» invece di «nessuna suite di test».
+ */
+export function provaSenzaTestEseguiti(testo) {
+  return typeof testo === 'string' && /^\s*NOT RUN: NO_TESTS_RAN\b/u.test(testo);
+}
+
+/*
  * ⭐ 27/09/2026, decisione owner 47 — UNA DOMANDA DEL MODELLO RESPINTA PER LA FORMA NON È UN GUASTO. Nella sessione 56066b64
  *   glm-5.3-flash ha mandato `ask_user_question` due volte in una forma che il contratto rifiuta (`why` mancante, poi un campo
  *   in più), e al terzo tentativo la domanda è arrivata: l'owner ha visto due errori rossi per una cosa che il modello aveva
@@ -258,20 +279,20 @@ export function esitoDichiaraFallimento(nome, testo) {
  *   mostra come riga DISCRETA con il motivo in parole; il testo del kernel resta nel dettaglio, per le segnalazioni.
  * ⇒ Qui si riconosce il caso e si traduce il motivo del contratto (`src/user-question-contract.mjs`) in una frase breve.
  *   Solo `QUERY_INVALID`: `QUESTION_ALREADY_PENDING` e gli altri restano quello che sono.
- * @returns {null | { frase: string, parametri?: object }} la frase è una chiave di traduzione (italiano), o null
+ * @returns {null | { frase: string, parametri?: object }} la frase è una chiave stabile del dizionario (`chat.question.fix.*`), o null
  */
 export function motivoDomandaDaCorreggere(nome, testo) {
   if (nome !== 'ask_user_question') return null;
   const m = /^ask_user_question failed \[QUERY_INVALID\]:\s*(.*)$/su.exec(String(testo ?? '').trim());
   if (!m) return null;
   const motivo = m[1];
-  if (/\.why è obbligatorio/u.test(motivo)) return { frase: 'mancava il perché' };
+  if (/\.why è obbligatorio/u.test(motivo)) return { frase: 'chat.question.fix.missingWhy' };
   let n = /options deve contenere da (\d+) a (\d+) opzioni/u.exec(motivo);
-  if (n) return { frase: 'servono da {min} a {max} opzioni', parametri: { min: Number(n[1]), max: Number(n[2]) } };
+  if (n) return { frase: 'chat.question.fix.options', parametri: { min: Number(n[1]), max: Number(n[2]) } };
   n = /questions deve contenere da (\d+) a (\d+) domande/u.exec(motivo);
-  if (n) return { frase: 'servono da {min} a {max} domande', parametri: { min: Number(n[1]), max: Number(n[2]) } };
-  if (/opzioni duplicate/u.test(motivo)) return { frase: 'c’erano scelte doppie' };
-  if (/id domanda duplicato/u.test(motivo)) return { frase: 'c’erano domande doppie' };
-  if (/supera il limite/u.test(motivo)) return { frase: 'un testo era troppo lungo' };
-  return { frase: 'la forma non era valida' };
+  if (n) return { frase: 'chat.question.fix.questions', parametri: { min: Number(n[1]), max: Number(n[2]) } };
+  if (/opzioni duplicate/u.test(motivo)) return { frase: 'chat.question.fix.duplicateChoices' };
+  if (/id domanda duplicato/u.test(motivo)) return { frase: 'chat.question.fix.duplicateQuestions' };
+  if (/supera il limite/u.test(motivo)) return { frase: 'chat.question.fix.tooLong' };
+  return { frase: 'chat.question.fix.invalidShape' };
 }

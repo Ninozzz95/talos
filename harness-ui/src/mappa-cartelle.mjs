@@ -364,7 +364,7 @@ export function confrontaCartelle(a, b) {
  *    [[cancello-4-non-guardava-tutto-mobile]] — un percorso personale pubblicato in chiaro perché
  *    nessuno aveva guardato dove finiva. Stessa regola di `testoElenco()`.
  */
-export function testoMappaCartelle(mappa, { radice = '' } = {}) {
+export function testoMappaCartelle(mappa, { radice = '', confine } = {}) {
   const nome = basename(String(radice ?? '').replace(/[\\/]+$/, '')) || 'la cartella di lavoro';
   const voci = Array.isArray(mappa?.cartelle) ? mappa.cartelle : [];
 
@@ -409,11 +409,15 @@ export function testoMappaCartelle(mappa, { radice = '' } = {}) {
     righe.push(`(${mappa.illeggibili} cartelle non si sono lasciate leggere: quello che contengono non compare qui.)`);
   }
   righe.push('');
-  righe.push(`${nome}/ (${mappa.radiceFile ?? 0})`);
+  /* ⛔ F-027, estensione (owner 03/10/2026): l'ALBERO porta i nomi delle cartelle, che sceglie chi ha scritto il progetto — dati,
+     non istruzioni. Chi compone il preambolo passa `confine` e l'albero ci entra intero; le righe di TALOS sopra e sotto restano
+     fuori. Senza `confine` il testo è quello di sempre, byte per byte. */
+  const albero = [`${nome}/ (${mappa.radiceFile ?? 0})`];
   for (const voce of voci) {
     const foglia = voce.percorso.slice(voce.percorso.lastIndexOf('/') + 1);
-    righe.push(`${'  '.repeat(voce.livello)}${foglia}/ (${voce.file})`);
+    albero.push(`${'  '.repeat(voce.livello)}${foglia}/ (${voce.file})`);
   }
+  righe.push(typeof confine === 'function' ? confine(albero.join('\n')) : albero.join('\n'));
   if (mappa.troncato || ridotta) {
     righe.push('');
     righe.push('⚠ Fine di una mappa INCOMPLETA. ⛔ Se una cartella non compare qui sopra NON vuol dire che non esista: aprila con `elenca {"percorso":"…"}` o cercala con `cerca` prima di dire che manca.');
@@ -465,7 +469,7 @@ export const TETTO_TOKEN_MAPPA_PREDEFINITO = 1200;
  *
  * @returns {{testo:string, profonditaUsata:number, tagliataInProfondita:boolean, token:number}}
  */
-export function mappaEntroIlTetto(mappa, { radice = '', tettoToken = TETTO_TOKEN_MAPPA_PREDEFINITO, stima } = {}) {
+export function mappaEntroIlTetto(mappa, { radice = '', tettoToken = TETTO_TOKEN_MAPPA_PREDEFINITO, stima, confine } = {}) {
   const conta = typeof stima === 'function' ? stima : (t) => costoDelTesto(t, { metodo: 'stimato' }).token;
   const profonditaPiena = mappa?.profonditaRaggiunta ?? 0;
 
@@ -476,16 +480,18 @@ export function mappaEntroIlTetto(mappa, { radice = '', tettoToken = TETTO_TOKEN
        una profondita' scelta in partenza: sotto c'e' altro e non l'ho guardato. Va nello stesso
        campo (`fermatoInProfondita`), non in `troncato`: `troncato` vuol dire «mi sono fermato e
        non so cosa mi manca», e qui invece si sa esattamente. */
+    /* F-027: `confine(testo)` → `{testo, sospetti}`; i sospetti che contano sono quelli del tentativo che resta. */
+    let sospetti = [];
     const testo = testoMappaCartelle(
       { ...mappa, cartelle: voci, troncato: Boolean(mappa.troncato), fermatoInProfondita: Boolean(mappa.fermatoInProfondita) || tagliata, profonditaRaggiunta: profondita },
-      { radice },
+      { radice, confine: typeof confine === 'function' ? (albero) => { const r = confine(albero); sospetti = r.sospetti; return r.testo; } : undefined },
     );
     const token = conta(testo);
     if (token <= tettoToken || profondita === 1) {
-      return { testo, profonditaUsata: profondita, tagliataInProfondita: tagliata, token };
+      return { testo, profonditaUsata: profondita, tagliataInProfondita: tagliata, token, sospetti };
     }
   }
   /* Nessuna cartella affatto: la mappa e' una riga sola, e non c'e' niente da tagliare. */
   const testo = testoMappaCartelle(mappa, { radice });
-  return { testo, profonditaUsata: 0, tagliataInProfondita: false, token: conta(testo) };
+  return { testo, profonditaUsata: 0, tagliataInProfondita: false, token: conta(testo), sospetti: [] };
 }

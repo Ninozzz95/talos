@@ -173,27 +173,29 @@ const CONDIVISI = Object.freeze({ 'minimax-anthropic': 'minimax', 'ollama-cloud'
  * ⛔ Nessuna di queste righe è «non l'ho trovato»: ognuna è un fatto verificato il 19/09/2026.
  *   Le prime tre sono i marchi che hanno chiesto di NON esserci.
  */
+/* 03/10/2026: le ragioni sono in INGLESE e fuori dal dizionario: non arrivano mai a schermo (le legge chi sviluppa e la spec
+   `lab-provider-filtri`), come gli errori interni. */
 export const SENZA_MARCHIO = Object.freeze({
   /* ⛔ I DUE TOLTI SU ORDINE DELL'OWNER, 19/09/2026: «se non puoi usare loghi usare la lettera e
      basta». Le condizioni di questi due marchi chiedono un'approvazione che non abbiamo, quindi
      il marchio NON si può usare — e la regola è la lettera. Erano le due righe che avevo
      segnalato come «da decidere»: la decisione è questa. */
-  anthropic: 'Le sue Trademark Guidelines chiedono un\'approvazione preventiva per l\'uso dei marchi: non l\'abbiamo, quindi il marchio non si può usare.',
-  mistral: 'I suoi Commercial Terms hanno una «mutual prohibition on using the other party\'s name or marks without approval»: non l\'abbiamo, quindi il marchio non si può usare.',
-  openai: 'Rimosso su richiesta di OpenAI: l\'icona non è più in Simple Icons per ragioni di marchio.',
-  azure: 'Microsoft non è accettato da Simple Icons («banned until Microsoft give us a clear steer»), quindi Azure non ha un\'icona lì.',
-  bedrock: 'Amazon Web Services non è coperto da Simple Icons; le icone AWS Architecture sono CC BY-ND (no derivatives) e non si possono ricolorare.',
-  groq: 'La sua Trademark Policy ammette la nominative fair use SOLO per le word mark, «no logos»; il logo in UI vuole una licenza scritta.',
-  zai: 'Z.AI / Zhipu non è coperto da Simple Icons.',
-  'zai-anthropic': 'Stesso marchio di Z.AI, che non è coperto da Simple Icons.',
-  xai: 'xAI non è coperto da Simple Icons; l\'icona `X` che c\'è è il marchio dell\'omonima rete sociale, un\'altra azienda — usarla sarebbe falso.',
-  cerebras: 'Cerebras non è coperto da Simple Icons.',
-  together: 'Together AI non è coperto da Simple Icons.',
-  fireworks: 'Fireworks AI non è coperto da Simple Icons.',
-  deepinfra: 'DeepInfra non è coperto da Simple Icons.',
-  novita: 'Novita AI non è coperto da Simple Icons.',
-  nebius: 'Nebius non è coperto da Simple Icons.',
-  esterno: 'Non è un fornitore: è l\'agente che gira su questa macchina, e il suo ghilio lo dice (un robot).',
+  anthropic: 'Its Trademark Guidelines require prior approval to use the marks: we do not have it, so the mark cannot be used.',
+  mistral: 'Its Commercial Terms have a «mutual prohibition on using the other party\'s name or marks without approval»: we do not have it, so the mark cannot be used.',
+  openai: 'Removed at OpenAI\'s request: the icon is no longer in Simple Icons for trademark reasons.',
+  azure: 'Microsoft is not accepted by Simple Icons («banned until Microsoft give us a clear steer»), so Azure has no icon there.',
+  bedrock: 'Amazon Web Services is not covered by Simple Icons; the AWS Architecture icons are CC BY-ND (no derivatives) and cannot be recoloured.',
+  groq: 'Its Trademark Policy allows nominative fair use ONLY for word marks, «no logos»; a logo in the UI needs a written licence.',
+  zai: 'Z.AI / Zhipu is not covered by Simple Icons.',
+  'zai-anthropic': 'Same mark as Z.AI, which is not covered by Simple Icons.',
+  xai: 'xAI is not covered by Simple Icons; the `X` icon there is the mark of the social network of the same name, another company — using it would be false.',
+  cerebras: 'Cerebras is not covered by Simple Icons.',
+  together: 'Together AI is not covered by Simple Icons.',
+  fireworks: 'Fireworks AI is not covered by Simple Icons.',
+  deepinfra: 'DeepInfra is not covered by Simple Icons.',
+  novita: 'Novita AI is not covered by Simple Icons.',
+  nebius: 'Nebius is not covered by Simple Icons.',
+  esterno: 'Not a provider: it is the agent running on this machine, and its glyph says so (a robot).',
 });
 
 /** Il marchio di un fornitore, o `null` se non ne ha uno verificabile. */

@@ -326,7 +326,7 @@ test('⛔⛔⛔ L8 VERSO CONTRARIO — un\'affermazione senza fonte: risposta A 
     componiRapportoRicercaFn: componiRapportoRicerca,
   });
   const risposta = rispostaTool(rete);
-  assert.match(risposta, /^REFUSED\./);
+  assert.match(risposta, /^INVALID\./); // H-05 (owner 02/10/2026): un deposito malformato è un argomento sbagliato, non un rifiuto
   assert.match(risposta, /affermazioni\[0\]\.fonte/);
   assert.match(risposta, /everything you already found is still valid/, 'un rifiuto che non dice come rimediare fa ricominciare da capo');
   assert.equal(existsSync(percorsoRapporto(cartella, 'ric-1')), false, 'niente sul disco: un rapporto le cui affermazioni non hanno fonte è il «Cited but Not Verified» che questo disegno toglie');
@@ -399,7 +399,7 @@ test('⛔ L8 — il testo VUOTO resta respinto anche col deposito strutturato, e
     livelloAccesso: 'ricerca', strumentiEstesi: ['research_deposit'],
     componiRapportoRicercaFn: componiRapportoRicerca,
   });
-  assert.match(rispostaTool(rete), /^REFUSED\. Empty report/);
+  assert.match(rispostaTool(rete), /^INVALID\. Empty report/); // H-05
   assert.equal(existsSync(percorsoRapporto(cartella, 'ric-1')), false);
 });
 

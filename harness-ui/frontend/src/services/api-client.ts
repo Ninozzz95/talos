@@ -1,9 +1,14 @@
 /** CORE-02/03: one JSON transport, no automatic retry or implicit consent. */
+import { testoErroreServer } from '../components/errori.js';
 export interface RequestOptions { signal?: AbortSignal; }
 export type ApiMethod = 'GET' | 'POST' | 'PATCH' | 'DELETE' | 'PUT';
 export interface PublicProblem {
   code: string; message: string; title?: string; explanation?: string; action?: string;
   doctorReference?: string; riprovabile?: boolean;
+  /** K2 (03/10/2026): il motivo del rifiuto (kebab-case, inglese), che distingue le frasi dello stesso codice: `errori.<code>.<reason>`. */
+  reason?: string;
+  /** I valori dentro le frasi (un percorso, un nome), coi nomi dei segnaposto del dizionario: l'interfaccia li mette nella frase della sua lingua. */
+  params?: Record<string, string | number>;
 }
 const object = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -17,6 +22,17 @@ export class ApiError extends Error {
     super(problem.message); this.name = 'ApiError';
     this.code = problem.code; this.status = status; this.problem = Object.freeze({ ...problem });
     if (problem.doctorReference !== undefined) this.doctorReference = problem.doctorReference;
+    /*
+     * Owner 03/10/2026, «L'interfaccia, dal codice»: il server parla inglese (corsia K1), e chi mostra `error.message` — circa
+     *   cento punti del frontend — riceve la frase del dizionario nella lingua CORRENTE, letta quando la legge (un cambio di
+     *   lingua vale anche per un errore già nato). Il dizionario sostituisce il server solo se la frase inglese coincide
+     *   (`testoErroreServer`): un motivo specifico non viene coperto dalla frase generica del codice, e un codice ignoto resta
+     *   l'inglese del server. Si passa `this.problem`, non `this`, così il risolutore non rilegge questa stessa proprietà.
+     */
+    Object.defineProperty(this, 'message', {
+      configurable: true, enumerable: false,
+      get: () => testoErroreServer(this.problem).message || problem.message,
+    });
   }
 }
 export function isRequestCancelled(error: unknown, signal?: AbortSignal): boolean {
@@ -26,11 +42,16 @@ export function publicProblem(value: unknown): PublicProblem {
   const source = object(value) ? value : {};
   const problem: PublicProblem = {
     code: typeof source.code === 'string' && source.code ? source.code : 'INTERNAL_ERROR',
-    message: typeof source.message === 'string' && source.message ? source.message : 'Richiesta locale non riuscita',
+    message: typeof source.message === 'string' && source.message ? source.message : 'Local request failed',
   };
-  for (const key of ['title', 'explanation', 'action', 'doctorReference'] as const)
+  for (const key of ['title', 'explanation', 'action', 'doctorReference', 'reason'] as const)
     if (typeof source[key] === 'string') problem[key] = source[key];
   if (typeof source.riprovabile === 'boolean') problem.riprovabile = source.riprovabile;
+  if (object(source.params)) {
+    const params: Record<string, string | number> = {};
+    for (const [key, value] of Object.entries(source.params)) if (typeof value === 'string' || typeof value === 'number') params[key] = value;
+    if (Object.keys(params).length > 0) problem.params = params;
+  }
   return problem;
 }
 export function createApiClient({
@@ -65,7 +86,7 @@ export function createApiClient({
     catch (error) {
       options.signal?.throwIfAborted();
       if (isRequestCancelled(error)) throw error;
-      throw new ApiError({ code: 'INTERNAL_ERROR', message: 'Risposta locale non valida' }, response.status);
+      throw new ApiError({ code: 'INTERNAL_ERROR', message: 'Invalid local response' }, response.status);
     }
     options.signal?.throwIfAborted();
     if (!response.ok || !object(envelope) || envelope.ok !== true)

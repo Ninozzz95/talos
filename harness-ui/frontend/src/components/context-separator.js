@@ -16,8 +16,7 @@ function testoPausa(event, english) {
   const volte = Number.isSafeInteger(event.payload?.attempts) && event.payload.attempts > 1 ? event.payload.attempts : 1;
   const quando = Date.parse(event.payload?.retryAfter);
   const ora = Number.isFinite(quando) ? new Date(quando).toLocaleTimeString(english ? 'en-GB' : 'it-IT', { hour: '2-digit', minute: '2-digit' }) : null;
-  if (english) return `Automatic summary failed${volte > 1 ? ` ${volte} times in a row` : ''}${ora ? `. Next automatic try after ${ora}` : ''}`;
-  return `${t('Riassunto automatico non riuscito')}${volte > 1 ? ` ${volte} volte di fila` : ''}${ora ? `. Nuovo tentativo automatico dopo le ${ora}` : ''}`;
+  return t('chat.context.separator.summaryFailed', { tentativi: volte > 1 ? t('chat.context.separator.timesInARow', { n: volte }) : '', riprova: ora ? t('chat.context.separator.nextTry', { ora }) : '' });
 }
 
 /** Persistence belongs to the event/version archive. Replaying it reconstructs the separator. */
@@ -29,10 +28,10 @@ export function creaSeparatoreContesto(event, { document: doc = globalThis.docum
   if (event.versionId) row.dataset.contextVersion = event.versionId;
   row.setAttribute('role', 'group');
   const restored = event.kind?.includes('restor');
-  const label = cooling ? testoPausa(event, linguaCorrenteDiT() === 'en') : linguaCorrenteDiT() === 'en' ? (restored ? 'Context restored' : 'Context compacted') : t(restored ? 'Contesto ripristinato' : 'Contesto compattato');
+  const label = cooling ? testoPausa(event, linguaCorrenteDiT() === 'en') : (restored ? t('chat.context.separator.restored') : t('chat.context.separator.compacted'));
   row.setAttribute('aria-label', label);
   const text = doc.createElement('span'); text.textContent = label; row.append(text);
-  if (onOpen) { const button = doc.createElement('button'); button.type = 'button'; button.className = 'talos-button talos-button--ghost talos-button--sm'; button.textContent = linguaCorrenteDiT() === 'en' ? 'View context' : t('Vedi contesto'); button.addEventListener('click', () => onOpen(event)); row.append(button); }
+  if (onOpen) { const button = doc.createElement('button'); button.type = 'button'; button.className = 'talos-button talos-button--ghost talos-button--sm'; button.textContent = t('chat.context.separator.view'); button.addEventListener('click', () => onOpen(event)); row.append(button); }
   return row;
 }
 
@@ -72,7 +71,6 @@ const chiaveLegacy = (sessionId, at) => JSON.stringify(['legacy', sessionId, at]
 
 export function aggiornaSeparatoreLegacy(container, voce, { sessionId, document: doc = container?.ownerDocument ?? globalThis.document, onMenu, testo, inserisci = null } = {}) {
   if (!container || !sessionId || !voce) return null;
-  const english = linguaCorrenteDiT() === 'en';
   const at = typeof voce.at === 'string' && voce.at ? voce.at : null;
   const chiave = at ? chiaveLegacy(sessionId, at) : null;
   let row = null;
@@ -119,13 +117,13 @@ export function aggiornaSeparatoreLegacy(container, voce, { sessionId, document:
   let menu = row.querySelector('[data-compattazione-menu]');
   if (conMenu && !menu) {
     menu = doc.createElement('button'); menu.type = 'button'; menu.className = 'talos-icon-button'; menu.dataset.compattazioneMenu = '';
-    menu.setAttribute('aria-haspopup', 'menu'); menu.setAttribute('aria-expanded', 'false'); menu.title = english ? 'Actions' : 'Azioni';
+    menu.setAttribute('aria-haspopup', 'menu'); menu.setAttribute('aria-expanded', 'false'); menu.title = t('chat.context.separator.menu');
     const svg = doc.createElementNS('http://www.w3.org/2000/svg', 'svg'); svg.setAttribute('class', 'i'); svg.setAttribute('aria-hidden', 'true');
     const use = doc.createElementNS('http://www.w3.org/2000/svg', 'use'); use.setAttribute('href', '#i-more'); svg.append(use); menu.append(svg);
     menu.addEventListener('click', (event) => { event.preventDefault(); event.stopPropagation(); onMenu({ voce: leggiVoceLegacy(row), ancoraEl: menu, focusElement: menu, fuoco: event.detail === 0 }); });
     row.append(menu);
   } else if (!conMenu && menu) { menu.remove(); menu = null; row.querySelector('[data-compattazione-riassunto]')?.remove(); }
-  if (menu) menu.setAttribute('aria-label', english ? 'Actions on the summary' : 'Azioni sul riassunto');
+  if (menu) menu.setAttribute('aria-label', t('chat.context.separator.menuLabel'));
   return row;
 }
 
@@ -147,7 +145,7 @@ export function alternaRiassuntoLegacy(row, { document: doc = row?.ownerDocument
   const testo = row.dataset.compattazioneRiassunto;
   if (!testo) return false;
   const blocco = doc.createElement('div'); blocco.dataset.compattazioneRiassunto = ''; blocco.setAttribute('role', 'region');
-  blocco.setAttribute('aria-label', linguaCorrenteDiT() === 'en' ? 'What was summarized' : 'Cosa è stato riassunto');
+  blocco.setAttribute('aria-label', t('chat.context.separator.summaryLabel'));
   blocco.textContent = testo;
   row.append(blocco);
   return true;

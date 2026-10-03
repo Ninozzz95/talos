@@ -1,3 +1,4 @@
+import { t, tn, linguaCorrenteDiT } from './lingua.js';
 /*
  * ⭐ F3-52 (25/09/2026) — i controlli del run del workflow (Pausa, Riprendi, Annulla, Riprova), nella testata del diagramma.
  *   Decisioni owner del 25/09 sera (ricerca `.claude/RICERCA-10x4-F3-52-CONTROLLI-2026-09-25.md`):
@@ -12,8 +13,7 @@
  */
 import { CAMPI_TETTI } from './workflow-proposal-card.js';
 
-const cifra = (n) => new Intl.NumberFormat('it-IT', { useGrouping: 'always' }).format(n);
-const plurale = (n, uno, molti) => `${cifra(n)} ${n === 1 ? uno : molti}`;
+const cifra = (n) => new Intl.NumberFormat(linguaCorrenteDiT() === 'en' ? 'en-US' : 'it-IT', { useGrouping: 'always' }).format(n);
 const somma = (panoramica, stati) => (panoramica?.groups ?? []).reduce((tot, g) => tot + stati.reduce((s, st) => s + (g.counts?.[st] ?? 0), 0), 0);
 const RUN_FINITI = new Set(['succeeded', 'failed', 'cancelled']);
 
@@ -22,14 +22,14 @@ export function azioniDelRun(panoramica) {
   const vuoto = { principale: null, menu: [], nota: null };
   if (!panoramica?.runId || RUN_FINITI.has(panoramica.status)) return vuoto;
   const falliti = somma(panoramica, ['failed']);
-  const annulla = { azione: 'cancel', etichetta: 'Annulla il run', pericolo: true };
-  const riprova = falliti > 0 ? { azione: 'retry', etichetta: `Riprova ${plurale(falliti, 'passo', 'passi')}`, falliti } : null;
-  if (panoramica.cancelRequested) return { ...vuoto, nota: 'Annullamento in corso: i passi in corso si stanno fermando.' };
+  const annulla = { azione: 'cancel', etichetta: t('chat.run.cancel'), pericolo: true };
+  const riprova = falliti > 0 ? { azione: 'retry', etichetta: tn('chat.run.retryOne', 'chat.run.retryMany', falliti, { n: cifra(falliti) }), falliti } : null;
+  if (panoramica.cancelRequested) return { ...vuoto, nota: t('chat.run.note.cancelling') };
   if (panoramica.status === 'running' && panoramica.pauseRequested) {
-    return { principale: null, menu: [annulla], nota: 'Pausa chiesta: i passi in corso finiscono, nessuno nuovo parte.' };
+    return { principale: null, menu: [annulla], nota: t('chat.run.note.pausing') };
   }
-  if (panoramica.status === 'running') return { principale: { azione: 'pause', etichetta: 'Pausa' }, menu: [...(riprova ? [riprova] : []), annulla], nota: null };
-  if (panoramica.status === 'paused') return { principale: { azione: 'resume', etichetta: 'Riprendi' }, menu: [annulla], nota: null };
+  if (panoramica.status === 'running') return { principale: { azione: 'pause', etichetta: t('chat.run.pause') }, menu: [...(riprova ? [riprova] : []), annulla], nota: null };
+  if (panoramica.status === 'paused') return { principale: { azione: 'resume', etichetta: t('chat.run.resume') }, menu: [annulla], nota: null };
   if (panoramica.status === 'needs_attention') return { principale: riprova, menu: [annulla], nota: null };
   return { principale: null, menu: [annulla], nota: null }; // «created»: solo Annulla
 }
@@ -39,9 +39,9 @@ export function conseguenzeAnnulla(panoramica) {
   const inCorso = somma(panoramica, ['leased', 'running']);
   const nonPartiti = somma(panoramica, ['pending', 'blocked', 'ready', 'retry_wait', 'waiting_human', 'reconciling', 'planned']);
   const frasi = [];
-  if (inCorso > 0) frasi.push(`${inCorso === 1 ? 'Il passo in corso si ferma' : `I ${cifra(inCorso)} passi in corso si fermano`} subito.`);
-  if (nonPartiti > 0) frasi.push(`${nonPartiti === 1 ? 'Il passo non ancora partito non partirà' : `I ${cifra(nonPartiti)} passi non ancora partiti non partiranno`}.`);
-  frasi.push('I risultati già registrati restano. Un run annullato non si riprende.');
+  if (inCorso > 0) frasi.push(tn('chat.run.confirm.runningOne', 'chat.run.confirm.runningMany', inCorso, { n: cifra(inCorso) }));
+  if (nonPartiti > 0) frasi.push(tn('chat.run.confirm.pendingOne', 'chat.run.confirm.pendingMany', nonPartiti, { n: cifra(nonPartiti) }));
+  frasi.push(t('chat.run.confirm.resultsRemain'));
   return frasi.join(' ');
 }
 
@@ -57,24 +57,24 @@ export function righeAumento(ceilingRaise = {}) {
 }
 
 const TESTI_ERRORE = Object.freeze({
-  WORKFLOW_RUN_STATE_CONFLICT: 'Il run è cambiato nel frattempo e questo comando non vale più: il diagramma si è riletto.',
-  WORKFLOW_COMMAND_CONFLICT: 'Il comando si scontra con uno già dato: il diagramma si è riletto.',
-  WORKFLOW_COMMAND_ORIGIN_FORBIDDEN: 'Il comando è stato rifiutato: arriva da una finestra che non è questa app.',
-  WORKFLOW_RUNTIME_NOT_READY: 'I comandi del run non sono disponibili su questo server in questo momento.',
-  WORKFLOW_STORE_UNAVAILABLE: 'Il registro dei workflow non è disponibile: il comando non è partito.',
-  WORKFLOW_STORE_NEEDS_ATTENTION: 'Il registro dei workflow ha bisogno di attenzione: il comando non è partito.',
-  NOT_FOUND: 'Questo run non si trova più sul server.',
+  get WORKFLOW_RUN_STATE_CONFLICT() { return t('chat.run.error.stateConflict'); },
+  get WORKFLOW_COMMAND_CONFLICT() { return t('chat.run.error.commandConflict'); },
+  get WORKFLOW_COMMAND_ORIGIN_FORBIDDEN() { return t('chat.run.error.originForbidden'); },
+  get WORKFLOW_RUNTIME_NOT_READY() { return t('chat.run.error.notReady'); },
+  get WORKFLOW_STORE_UNAVAILABLE() { return t('chat.run.error.storeUnavailable'); },
+  get WORKFLOW_STORE_NEEDS_ATTENTION() { return t('chat.run.error.storeNeedsAttention'); },
+  get NOT_FOUND() { return t('chat.run.error.notFound'); },
 });
-export const testoErroreRun = (code) => TESTI_ERRORE[code] ?? 'Il comando non è riuscito. Riprova tra poco.';
+export const testoErroreRun = (code) => TESTI_ERRORE[code] ?? t('chat.run.error.generic');
 export const TESTO_RIUSCITO = Object.freeze({
-  pause: 'Pausa chiesta: i passi in corso finiscono, nessuno nuovo parte.',
-  resume: 'Il run riprende.',
-  cancel: 'Annullamento chiesto: i passi in corso si fermano.',
-  retry: 'Riprova partito: i passi non riusciti ripartono coi tentativi da capo.',
+  get pause() { return t('chat.run.note.pausing'); },
+  get resume() { return t('chat.run.ack.resumed'); },
+  get cancel() { return t('chat.run.ack.cancelRequested'); },
+  get retry() { return t('chat.run.ack.retryStarted'); },
 });
 export const testoAmbiguo = (azione) => (azione === 'retry'
-  ? 'Non si sa se Riprova è arrivato al server: guarda gli stati dei passi prima di ripeterlo.'
-  : 'Non si sa se il comando è arrivato: il diagramma si è riletto e non lo mostra. Riprova.');
+  ? t('chat.run.unclear.retry')
+  : t('chat.run.unclear.command'));
 
 /**
  * La finestra di conferma: un `<dialog>` modale agganciato a `body` (⛔ `legacy-dom.js:68`: un `showModal()` dentro un
@@ -106,7 +106,7 @@ export function apriConfermaRun(doc, { sopra, titolo, testo, righe = [], scelte 
       corpo.append(dl);
     }
     const piede = el('div', 'talos-dialog__footer');
-    const no = el('button', 'talos-button talos-button--secondary', 'Non ora'); no.type = 'button';
+    const no = el('button', 'talos-button talos-button--secondary', t('chat.run.confirm.notNow')); no.type = 'button';
     const si = el('button', `talos-button ${pericolo ? 'talos-button--secondary talos-button--danger' : 'talos-button--primary'}`, conferma); si.type = 'button';
     if (scelte && Array.isArray(scelte.voci) && scelte.voci.length) {
       const gruppo = el('div', 'talos-wfg-conferma__scelte');

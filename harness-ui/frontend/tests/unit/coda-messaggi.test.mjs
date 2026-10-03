@@ -9,8 +9,8 @@ test('CODA — a giro vivo: quanti, cosa, quando parte, e l’azione è la stess
   const d = descriviCoda({ voci: [{ id: 'a', testo: 'poi aggiorna il README', immagini: 0 }], inPausa: false }, { giroVivo: true });
   assert.equal(d.conteggio, '1 in coda');
   assert.equal(d.testo, '«poi aggiorna il README»', 'la riga mostra il messaggio: la spiegazione non ci stava mai');
-  assert.equal(d.spiegazione, 'Parte quando TALOS finisce di rispondere');
-  assert.equal(d.titoloTesto, '«poi aggiorna il README» — Parte quando TALOS finisce di rispondere');
+  assert.equal(d.spiegazione, 'Entra dopo il passo in corso di TALOS');
+  assert.equal(d.titoloTesto, '«poi aggiorna il README» — Entra dopo il passo in corso di TALOS');
   assert.equal(d.azione, 'Indirizza ora');
   assert.equal(d.tono, 'neutro');
 });

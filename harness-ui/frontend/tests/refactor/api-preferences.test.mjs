@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createApiClient, ApiError, publicProblem } from '../../src/services/api-client.ts';
 import { createWorkspacePreferences, WORKSPACE_PREFERENCES_KEY as KEY } from '../../src/services/workspace-preferences.ts';
+import { t } from '../../src/components/lingua.js';
 const memory = initial => { const data = new Map(initial ?? []); return { data, getItem:k=>data.get(k) ?? null, setItem:(k,v)=>data.set(k,v) }; };
 const envelope = (data, init) => Response.json({ok:true, data}, init);
 
@@ -29,7 +30,9 @@ test('API: HTTP failure is a reached server; problem fields survive but private 
 
 test('API: wrong JSON returns a stable error and never exposes the raw body', async () => {
   const api=createApiClient({fetchFn:async()=>new Response('<html>private content</html>',{status:502})});
-  await assert.rejects(api.get('/x'), e=>e.code==='INTERNAL_ERROR' && e.message==='Risposta locale non valida' && !JSON.stringify(e).includes('private content'));
+  // 03/10/2026: il problema resta inglese; il messaggio a schermo è la voce del dizionario nella lingua corrente (ApiError).
+  await assert.rejects(api.get('/x'), e=>e.code==='INTERNAL_ERROR' && e.problem.message==='Invalid local response'
+    && e.message===t('errori.LOCAL_RESPONSE_INVALID.message') && !JSON.stringify(e).includes('private content') && !e.message.includes('private content'));
 });
 
 test('API: cancellation in flight is not a network outage', async () => {
@@ -67,7 +70,7 @@ test('API: genuine network failure is observed exactly once and retains original
 });
 
 test('API: public problem normalizer does not spread arbitrary properties', () => {
-  assert.deepEqual(publicProblem(null),{code:'INTERNAL_ERROR',message:'Richiesta locale non riuscita'});
+  assert.deepEqual(publicProblem(null),{code:'INTERNAL_ERROR',message:'Local request failed'});
   assert.deepEqual(publicProblem({code:'NO',message:'Stop',riprovabile:'true',data:{apiKey:'hidden'}}),{code:'NO',message:'Stop'});
 });
 

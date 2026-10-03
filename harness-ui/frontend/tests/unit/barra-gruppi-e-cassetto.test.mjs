@@ -2,6 +2,7 @@ import { VIEW_BY_DESTINATION } from '../../src/domain/navigation.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { TESTI } from '../../src/i18n/testi/index.js'; // corsia A della lingua (03/10/2026): le frasi stanno nel dizionario, il sorgente porta la chiave
 
 /*
  * I CANCELLI DEI LOTTI A e D (11/09/2026) — la barra a due gruppi, il cassetto sotto gli 860 px e
@@ -149,8 +150,11 @@ test('D — la barra della selezione non affianca più di due comandi', () => {
 test('D — il menu della sessione offre solo azioni con una rotta vera, e nessun «archivia» finto', () => {
   const menu = /const voci = \[([\s\S]*?)\];\s*return apriMenuAzioni/.exec(APP)?.[1] || '';
   assert.ok(menu.length > 0, 'il menu della sessione esiste');
+  /* Le etichette sono chiavi del dizionario: si confrontano con la loro voce italiana, come la persona le legge. */
+  const etichette = [...menu.matchAll(/etichetta: (?:'([^']+)'|tr\('([^']+)'\))/g)].map((m) => m[1] ?? TESTI.it[m[2]]);
+  assert.ok(etichette.every((e) => typeof e === 'string'), 'ogni voce del menu ha la sua frase nel dizionario');
   for (const atteso of ['Apri', 'Rinomina', 'Duplica come ramo', 'Esporta la trascrizione', 'Copia identificativo', 'Elimina']) {
-    assert.ok(menu.includes(`'${atteso}'`), `manca la voce «${atteso}»`);
+    assert.ok(etichette.includes(atteso), `manca la voce «${atteso}»`);
   }
-  assert.ok(!/etichetta: 'Archivia'/.test(menu), '⛔ il server non ha una rotta per archiviare: una voce che non fa niente è una bugia');
+  assert.ok(!etichette.some((e) => /^Archivia/u.test(e)), '⛔ il server non ha una rotta per archiviare: una voce che non fa niente è una bugia');
 });

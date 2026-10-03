@@ -1,4 +1,7 @@
-import { plurale } from './plurale.js'; // BH-12: «1 ricordi» — il plurale vive in un posto solo
+import { t as traduci, tn, linguaCorrenteDiT } from './lingua.js';
+/* Date e numeri nella lingua dell'interfaccia (italiano → it-IT, inglese → en-US), letta a ogni uso. */
+const localeUI=()=>(linguaCorrenteDiT()==='en'?'en-US':'it-IT');
+const conta=n=>tn('sezioni.library.count.one','sezioni.library.count.many',n,{n:new Intl.NumberFormat(localeUI()).format(n)});
 import { nomeModelloUmano } from './chat-foot.js'; // BC-38: un id di modello non è un nome, e la traduzione esiste già
 /** LibraryRow del mockup, metadati GET /library. WAI Tabs/Disclosure, 05/09/2026. */
 /*
@@ -46,14 +49,15 @@ import { nomeModelloUmano } from './chat-foot.js'; // BC-38: un id di modello no
  * ⛔ Il server lo scrive un'altra sessione, in parallelo: se una rotta non risponde ancora, la riga
  *   lo DICE (`role="alert"`, col codice HTTP) e non finge. Nessun bottone che sembra aver funzionato.
  */
-const TIPI=new Map([['document',{testo:'Documento',icona:'doc'}],['image',{testo:'Immagine',icona:'image'}]]);
-const ORIGINI=new Map([['uploaded','Caricato'],['generated','Generato']]);
-export function tipoVoceLibreria(tipo){return TIPI.get(tipo)||{testo:'Tipo non registrato',icona:'files'};}
-export function origineVoceLibreria(origine){return ORIGINI.get(origine)||'Origine non registrata';}
+/* ⛔ Le etichette si leggono a ogni uso (getter e funzioni), non alla creazione del modulo: seguono il cambio di lingua. */
+const TIPI=new Map([['document',{get testo(){return traduci('sezioni.library.type.document');},icona:'doc'}],['image',{get testo(){return traduci('sezioni.library.type.image');},icona:'image'}]]);
+const ORIGINI=new Map([['uploaded',()=>traduci('sezioni.library.origin.uploaded')],['generated',()=>traduci('sezioni.library.origin.generated')]]);
+export function tipoVoceLibreria(tipo){return TIPI.get(tipo)||{testo:traduci('sezioni.library.type.unknown'),icona:'files'};}
+export function origineVoceLibreria(origine){return (ORIGINI.get(origine)||(()=>traduci('sezioni.library.origin.unknown')))();}
 export function testiVoceLibreria(voce){
- const nome=typeof voce?.nome==='string'&&voce.nome.trim()?voce.nome:'File senza nome';
+ const nome=typeof voce?.nome==='string'&&voce.nome.trim()?voce.nome:traduci('sezioni.library.unnamed');
  const data=typeof voce?.aggiornatoIl==='string'?new Date(voce.aggiornatoIl):null,valida=data&&Number.isFinite(data.getTime());
- return {nome,aggiornata:valida?data.toLocaleString('it-IT'):null,dataBreve:valida?'Aggiornato il '+data.toLocaleDateString('it-IT'):'Data non registrata'};
+ return {nome,aggiornata:valida?data.toLocaleString(localeUI()):null,dataBreve:valida?traduci('sezioni.library.row.updatedOn',{date:data.toLocaleDateString(localeUI())}):traduci('sezioni.common.dateNotRecorded')};
 }
 
 /*
@@ -127,8 +131,8 @@ export function provenienzaVoceLibreria(voce, { nomeSessione } = {}) {
   const modello = creato && typeof creato.modello === 'string' && creato.modello.trim() ? creato.modello.trim() : '';
   const umano = modello ? (nomeModelloUmano(modello) || modello) : '';
   const creatoDa = daPersona
-    ? { chi: 'Tu', dettaglio: 'caricato in Libreria' }
-    : { chi: 'TALOS', dettaglio: umano ? `generato con ${umano}` : 'modello non registrato', modello };
+    ? { chi: traduci('sezioni.library.provenance.you'), dettaglio: traduci('sezioni.library.provenance.uploaded') }
+    : { chi: 'TALOS', dettaglio: umano ? traduci('sezioni.library.provenance.generatedWith', { model: umano }) : traduci('sezioni.library.provenance.modelUnknown'), modello };
   const sess = voce?.sessione && typeof voce.sessione === 'object' && typeof voce.sessione.id === 'string' && voce.sessione.id.trim()
     ? voce.sessione
     : null;
@@ -151,21 +155,21 @@ export function indirizzoFileLibreria(sessionId,voceId){if(!sessionId||!voceId)r
 /** ⛔ Un NOME, non un percorso: la barra è il carattere che separa i pezzi di un percorso (Microsoft Learn, 10/09/2026), e `..` risalirebbe di una cartella. */
 export function nomeLibreriaValido(nome){
  const n=String(nome??'').trim();
- if(!n)return{ok:false,motivo:'Il nome non può essere vuoto.'};
- if(/[\\/]/.test(n))return{ok:false,motivo:'Il nome non può contenere una barra: qui va un nome, non un percorso.'};
- if(n==='.'||n==='..')return{ok:false,motivo:'«'+n+'» non è un nome di file.'};
- if(/[<>:"|?*]/.test(n)||[...n].some(c=>c.codePointAt(0)<32))return{ok:false,motivo:'Windows non accetta < > : " | ? * nel nome di un file.'};
- if(n.length>255)return{ok:false,motivo:'Il nome supera i 255 caratteri.'};
+ if(!n)return{ok:false,motivo:traduci('sezioni.library.nameError.empty')};
+ if(/[\\/]/.test(n))return{ok:false,motivo:traduci('sezioni.library.nameError.slash')};
+ if(n==='.'||n==='..')return{ok:false,motivo:traduci('sezioni.library.nameError.notAName',{name:n})};
+ if(/[<>:"|?*]/.test(n)||[...n].some(c=>c.codePointAt(0)<32))return{ok:false,motivo:traduci('sezioni.library.nameError.windowsChars')};
+ if(n.length>255)return{ok:false,motivo:traduci('sezioni.library.nameError.tooLong')};
  return{ok:true,nome:n};
 }
 /* ⛔ 404/405/501 non sono un guasto: sono «quella rotta non c'è ancora» (il server lo scrive un'altra sessione, adesso). Si dice così, col numero, invece di un «non riuscito» che manderebbe a cercare il difetto dalla parte sbagliata. */
 const NON_ANCORA=new Set([404,405,501]);
 async function motivoRisposta(r){
- if(!r)return 'Il server non ha risposto.';
+ if(!r)return traduci('sezioni.library.server.noReply');
  let dettaglio='';
  try{const testo=await r.text?.();if(testo){try{const j=JSON.parse(testo);dettaglio=String(j?.errore||j?.error?.message||j?.error||j?.message||'').trim();}catch{dettaglio=String(testo).slice(0,200).trim();}}}catch{/* un corpo illeggibile non deve mangiarsi il codice HTTP */}
- if(NON_ANCORA.has(r.status))return 'Questa azione non è ancora disponibile sul server (HTTP '+r.status+').'+(dettaglio?' '+dettaglio:'');
- return 'Il server ha risposto HTTP '+r.status+(dettaglio?': '+dettaglio:'.');
+ if(NON_ANCORA.has(r.status))return traduci('sezioni.library.server.notYetAvailable',{status:r.status})+(dettaglio?' '+dettaglio:'');
+ return dettaglio?traduci('sezioni.library.server.httpReplyDetail',{status:r.status,detail:dettaglio}):traduci('sezioni.library.server.httpReply',{status:r.status});
 }
 /**
  * Le tre azioni che SCRIVONO, contro le rotte del contratto. Ognuna torna `{ok, motivo}` e non lancia
@@ -175,7 +179,7 @@ async function motivoRisposta(r){
 export function azioniLibreria({sessionId,fetch:rete=globalThis.fetch}={}){
  if(!sessionId||typeof rete!=='function')return null;
  const base=id=>'/api/v1/sessions/'+encodeURIComponent(sessionId)+'/library/'+encodeURIComponent(id);
- const manda=async(url,opzioni)=>{try{const r=await rete(url,opzioni);return r?.ok?{ok:true}:{ok:false,motivo:await motivoRisposta(r)};}catch(e){return{ok:false,motivo:'Il server non ha risposto: '+(e?.message||'errore sconosciuto')+'.'};}};
+ const manda=async(url,opzioni)=>{try{const r=await rete(url,opzioni);return r?.ok?{ok:true}:{ok:false,motivo:await motivoRisposta(r)};}catch(e){return{ok:false,motivo:traduci('sezioni.library.server.noReplyReason',{reason:e?.message||traduci('sezioni.library.server.unknownError')})};}};
  return{
   rinomina:(id,nome)=>manda(base(id),{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({nome})}),
   elimina:id=>manda(base(id),{method:'DELETE'}),
@@ -208,7 +212,7 @@ export function creaLibraryRow(voce,{document:doc=globalThis.document,aperta=fal
  const nuovoBottone=(etichetta,nomeAccessibile,azione,extra)=>{const b=el(doc,'button','talos-button talos-button--ghost talos-button--sm'+(extra||''),etichetta);b.type='button';b.dataset.azione=azione;b.setAttribute('aria-label',nomeAccessibile);bottoni.push(b);return b;};
  const nuovaAncora=(etichetta,nomeAccessibile,azione)=>{const a=el(doc,'a','talos-button talos-button--ghost talos-button--sm',etichetta);a.href=indirizzo;a.dataset.azione=azione;a.setAttribute('aria-label',nomeAccessibile);return a;};
  /* ⛔ Il gruppo nomina il file per chi lo sente annunciato entrandoci; ogni bottone lo ripete, perché il nome del gruppo non arriva a tutti gli screen reader (APG, 10/09/2026). */
- const gruppo=el(doc,'span','talos-list-row__azioni');gruppo.setAttribute('role','group');gruppo.setAttribute('aria-label','Azioni su '+t.nome);
+ const gruppo=el(doc,'span','talos-list-row__azioni');gruppo.setAttribute('role','group');gruppo.setAttribute('aria-label',traduci("sezioni.common.actionsFor", { name: t.nome }));
  let rinominaBtn=null,eliminaBtn=null,rivelaBtn=null;
  let apriBtn=null,menuBtn=null;
  /*
@@ -226,10 +230,10 @@ export function creaLibraryRow(voce,{document:doc=globalThis.document,aperta=fal
   *   già la conosci non può essere l'unica via.
   */
  if(servizio&&id){
-  apriBtn=nuovoBottone('Apri','Apri '+t.nome+' con il programma predefinito','apri');
-  rinominaBtn=nuovoBottone('Rinomina','Rinomina '+t.nome,'rinomina');
-  rivelaBtn=nuovoBottone('Mostra nella cartella','Mostra '+t.nome+' nella cartella','rivela');
-  eliminaBtn=nuovoBottone('Elimina','Elimina '+t.nome,'elimina',' talos-button--danger');
+  apriBtn=nuovoBottone(traduci('sezioni.library.action.open'),traduci('sezioni.library.action.openLabel',{name:t.nome}),'apri');
+  rinominaBtn=nuovoBottone(traduci('sezioni.library.action.rename'),traduci('sezioni.library.action.renameLabel',{name:t.nome}),'rinomina');
+  rivelaBtn=nuovoBottone(traduci('sezioni.library.action.reveal'),traduci('sezioni.library.action.revealLabel',{name:t.nome}),'rivela');
+  eliminaBtn=nuovoBottone(traduci("sezioni.common.delete"),traduci('sezioni.library.action.deleteLabel',{name:t.nome}),'elimina',' talos-button--danger');
  }
  /*
   * ⭐⭐ BC-38 — «Copia percorso» sta nel MENU, non affiancato: la regola dell'owner del 10/09
@@ -241,7 +245,7 @@ export function creaLibraryRow(voce,{document:doc=globalThis.document,aperta=fal
   */
  let copiaPercorsoBtn=null;
  if(prov.percorso){
-  copiaPercorsoBtn=nuovoBottone('Copia percorso','Copia il percorso di '+t.nome,'copia-percorso');
+  copiaPercorsoBtn=nuovoBottone(traduci('sezioni.library.action.copyPath'),traduci('sezioni.library.action.copyPathLabel',{name:t.nome}),'copia-percorso');
   copiaPercorsoBtn.addEventListener('click',async()=>{
    try{
     /* ⛔ Chi inietta `copia` ha GIÀ il suo messaggio d'esito (`copyText` della app mostra il suo
@@ -249,36 +253,36 @@ export function creaLibraryRow(voce,{document:doc=globalThis.document,aperta=fal
        già scritta in `sezioni-adattatori.js`. Il messaggio nella riga serve solo al ripiego. */
     const iniettata=typeof copia==='function';
     const scrivi=iniettata?copia:globalThis.navigator?.clipboard?.writeText?.bind(globalThis.navigator.clipboard);
-    if(!scrivi)throw new Error('appunti non disponibili');
+    if(!scrivi)throw new Error('clipboard unavailable');
     await scrivi(prov.percorso);
-    if(!iniettata)avviso={tono:'stato',testo:'Percorso copiato.'};
+    if(!iniettata)avviso={tono:'stato',testo:traduci('sezioni.library.message.pathCopied')};
    }catch{
     /* ⛔ Il ripiego NON è «non riuscito»: il percorso è scritto nel dettaglio e si seleziona a mano. */
-    avviso={tono:'errore',testo:'Gli appunti non sono disponibili: il percorso è scritto nel dettaglio, selezionalo e premi Ctrl+C.'};
+    avviso={tono:'errore',testo:traduci('sezioni.library.message.clipboardUnavailable')};
    }
    mostra();
   });
  }
  /* ⛔ Scarica resta un'ANCORA anche dentro il menu: i byte li porta il browser, e vale anche per un
     file da 50 MB, che in pagina non ci starebbe. */
- const scaricaEl=indirizzo?nuovaAncora('Scarica','Scarica '+t.nome,'scarica'):null;
+ const scaricaEl=indirizzo?nuovaAncora(traduci('sezioni.library.action.download'),traduci('sezioni.library.action.downloadLabel',{name:t.nome}),'scarica'):null;
  if(scaricaEl)scaricaEl.setAttribute('download',t.nome);
  /* Le voci del menu, nell'ordine in cui si usano: prima ciò che si fa spesso, per ultima e staccata
     quella che non si rifa. `separaPrima` lo dice a chi disegna, senza che debba saperlo a memoria. */
  const vociMenu=[
-  apriBtn&&{chiave:'apri',etichetta:'Apri',icona:'i-doc',elemento:apriBtn},
-  scaricaEl&&{chiave:'scarica',etichetta:'Scarica',icona:'i-download',elemento:scaricaEl},
-  rinominaBtn&&{chiave:'rinomina',etichetta:'Rinomina',icona:'i-edit',elemento:rinominaBtn},
-  rivelaBtn&&{chiave:'rivela',etichetta:'Mostra nella cartella',icona:'i-folder',elemento:rivelaBtn},
-  copiaPercorsoBtn&&{chiave:'copia-percorso',etichetta:'Copia percorso',icona:'i-copy',elemento:copiaPercorsoBtn},
-  eliminaBtn&&{chiave:'elimina',etichetta:'Elimina',icona:'i-trash',elemento:eliminaBtn,pericolo:true,separaPrima:true},
+  apriBtn&&{chiave:'apri',etichetta:traduci('sezioni.library.action.open'),icona:'i-doc',elemento:apriBtn},
+  scaricaEl&&{chiave:'scarica',etichetta:traduci('sezioni.library.action.download'),icona:'i-download',elemento:scaricaEl},
+  rinominaBtn&&{chiave:'rinomina',etichetta:traduci('sezioni.library.action.rename'),icona:'i-edit',elemento:rinominaBtn},
+  rivelaBtn&&{chiave:'rivela',etichetta:traduci('sezioni.library.action.reveal'),icona:'i-folder',elemento:rivelaBtn},
+  copiaPercorsoBtn&&{chiave:'copia-percorso',etichetta:traduci('sezioni.library.action.copyPath'),icona:'i-copy',elemento:copiaPercorsoBtn},
+  eliminaBtn&&{chiave:'elimina',etichetta:traduci("sezioni.common.delete"),icona:'i-trash',elemento:eliminaBtn,pericolo:true,separaPrima:true},
  ].filter(Boolean);
  riga.vociMenu=()=>vociMenu.map(v=>({...v,aziona:()=>v.elemento.click()}));
  if(vociMenu.length){
   /* ⛔ L'icona «i-more» dello sprite, non tre puntini scritti a mano: il design system ce l'ha
      già, e un carattere tipografico non si allinea come un'icona né eredita il colore allo
      stesso modo. Il nome accessibile sta nell'aria-label: l'icona è muta per chi ascolta. */
-  menuBtn=nuovoBottone('','Azioni su '+t.nome,'menu');
+  menuBtn=nuovoBottone('',traduci("sezioni.common.actionsFor", { name: t.nome }),'menu');
   {const sv=doc.createElementNS('http://www.w3.org/2000/svg','svg'),us=doc.createElementNS('http://www.w3.org/2000/svg','use');sv.setAttribute('class','i');sv.setAttribute('aria-hidden','true');us.setAttribute('href','#i-more');sv.append(us);menuBtn.append(sv);}
   menuBtn.setAttribute('aria-haspopup','menu');
   menuBtn.addEventListener('click',(e)=>{e.stopPropagation();onMenu?.(riga.vociMenu(),{ancoraEl:menuBtn});});
@@ -288,15 +292,15 @@ export function creaLibraryRow(voce,{document:doc=globalThis.document,aperta=fal
  }
  /* Rinomina IN LINEA: un passo solo, quindi niente modale (LogRocket, 10/09/2026). Invio conferma, Esc annulla, e il fuoco torna da dove era partito. */
  const forma=el(doc,'form','talos-list-row__rinomina');forma.hidden=true;
- const campo=el(doc,'input','talos-list-row__nome');campo.type='text';campo.value=bozza??t.nome;campo.maxLength=255;campo.autocomplete='off';campo.spellcheck=false;campo.setAttribute('aria-label','Nuovo nome per '+t.nome);
- const salva=el(doc,'button','talos-button talos-button--primary talos-button--sm','Salva');salva.type='submit';salva.dataset.azione='rinomina-salva';salva.setAttribute('aria-label','Salva il nuovo nome di '+t.nome);
- const annullaRinomina=el(doc,'button','talos-button talos-button--ghost talos-button--sm','Annulla');annullaRinomina.type='button';annullaRinomina.dataset.azione='rinomina-annulla';annullaRinomina.setAttribute('aria-label','Annulla la rinomina di '+t.nome);
+ const campo=el(doc,'input','talos-list-row__nome');campo.type='text';campo.value=bozza??t.nome;campo.maxLength=255;campo.autocomplete='off';campo.spellcheck=false;campo.setAttribute('aria-label',traduci("sezioni.library.row.newNameLabel", { name: t.nome }));
+ const salva=el(doc,'button','talos-button talos-button--primary talos-button--sm',traduci("sezioni.common.save"));salva.type='submit';salva.dataset.azione='rinomina-salva';salva.setAttribute('aria-label',traduci("sezioni.library.row.saveLabel", { name: t.nome }));
+ const annullaRinomina=el(doc,'button','talos-button talos-button--ghost talos-button--sm',traduci("sezioni.common.cancel"));annullaRinomina.type='button';annullaRinomina.dataset.azione='rinomina-annulla';annullaRinomina.setAttribute('aria-label',traduci("sezioni.library.row.cancelRenameLabel", { name: t.nome }));
  bottoni.push(salva,annullaRinomina);forma.append(campo,salva,annullaRinomina);
  /* ⛔ Il gradino della scala: la conseguenza scritta, non un «Sei sicuro?». È l'unica delle cinque che non si rifà (saasui.design + NN/g, 10/09/2026). */
  const conferma=el(doc,'span','talos-list-row__conferma');conferma.hidden=true;
- const noElimina=el(doc,'button','talos-button talos-button--ghost talos-button--sm','Annulla');noElimina.type='button';noElimina.dataset.azione='elimina-annulla';noElimina.setAttribute('aria-label','Annulla l’eliminazione di '+t.nome);
- const siElimina=el(doc,'button','talos-button talos-button--danger talos-button--sm','Elimina');siElimina.type='button';siElimina.dataset.azione='elimina-conferma';siElimina.setAttribute('aria-label','Elimina definitivamente '+t.nome+': non si torna indietro');
- bottoni.push(noElimina,siElimina);conferma.append(el(doc,'span','talos-list-row__conferma-testo','Eliminare definitivamente? Non si torna indietro.'),noElimina,siElimina);
+ const noElimina=el(doc,'button','talos-button talos-button--ghost talos-button--sm',traduci("sezioni.common.cancel"));noElimina.type='button';noElimina.dataset.azione='elimina-annulla';noElimina.setAttribute('aria-label',traduci("sezioni.library.row.cancelDeleteLabel", { name: t.nome }));
+ const siElimina=el(doc,'button','talos-button talos-button--danger talos-button--sm',traduci("sezioni.common.delete"));siElimina.type='button';siElimina.dataset.azione='elimina-conferma';siElimina.setAttribute('aria-label',traduci("sezioni.library.row.confirmDeleteLabel", { name: t.nome }));
+ bottoni.push(noElimina,siElimina);conferma.append(el(doc,'span','talos-list-row__conferma-testo',traduci("sezioni.library.row.confirmText")),noElimina,siElimina);
  const dettagli=el(doc,'button','talos-button talos-button--ghost talos-button--sm');dettagli.type='button';dettagli.dataset.azione='dettagli';
  let stato=servizio&&id?String(modo||'normale'):'normale',occupata=false,avviso=null;
  function mostra(){
@@ -304,8 +308,8 @@ export function creaLibraryRow(voce,{document:doc=globalThis.document,aperta=fal
   /* ⭐ BC-38, owner: «nella card/riga SOLO la cartella» — l'ultimo segmento della cartella del
      PROGETTO, non il padre vero del file (`.harness-ui-library/lib-<uuid>/`, uguale su ogni riga).
      Il percorso intero sta nel dettaglio e in «Copia percorso»: niente fumetto nativo (10/09). */
-  sotto.textContent=tipo.testo+' · '+(aperta&&t.aggiornata?'Aggiornato il '+t.aggiornata:t.dataBreve)+(prov.cartellaBreve?' · in '+prov.cartellaBreve:'');
-  dettagli.textContent=aperta?'Chiudi':'Dettagli';dettagli.setAttribute('aria-expanded',String(aperta));dettagli.setAttribute('aria-label',(aperta?'Chiudi i dettagli di ':'Dettagli di ')+t.nome);
+  sotto.textContent=tipo.testo+' · '+(aperta&&t.aggiornata?traduci("sezioni.library.row.updatedOn", { date: t.aggiornata }):t.dataBreve)+(prov.cartellaBreve?' · '+traduci('sezioni.library.row.inFolder',{folder:prov.cartellaBreve}):'');
+  dettagli.textContent=aperta?traduci("sezioni.common.close"):traduci("sezioni.common.details");dettagli.setAttribute('aria-expanded',String(aperta));dettagli.setAttribute('aria-label',aperta?traduci('sezioni.common.detailsCloseLabel',{name:t.nome}):traduci('sezioni.common.detailsOpenLabel',{name:t.nome}));
   titolo.hidden=stato==='rinomina';forma.hidden=stato!=='rinomina';gruppo.hidden=stato!=='normale';conferma.hidden=stato!=='conferma';
   riga.classList.toggle('talos-list-row--muted',stato==='eliminata');
   messaggio.hidden=!avviso;
@@ -322,20 +326,20 @@ export function creaLibraryRow(voce,{document:doc=globalThis.document,aperta=fal
  async function esegui(chiama,dopo){
   if(!servizio||occupata)return;
   occupata=true;avviso=null;mostra();
-  const esito=await chiama().catch(e=>({ok:false,motivo:'Il server non ha risposto: '+(e?.message||'errore sconosciuto')+'.'}));
+  const esito=await chiama().catch(e=>({ok:false,motivo:traduci('sezioni.library.server.noReplyReason',{reason:e?.message||traduci('sezioni.library.server.unknownError')})}));
   occupata=false;
   if(esito?.ok){dopo();return;}
-  avviso={tono:'errore',testo:esito?.motivo||'Azione non riuscita.'};mostra();
+  avviso={tono:'errore',testo:esito?.motivo||traduci('sezioni.library.message.actionFailed')};mostra();
  }
  rinominaBtn?.addEventListener('click',()=>{campo.value=t.nome;cambiaModo('rinomina');});
  eliminaBtn?.addEventListener('click',()=>cambiaModo('conferma'));
  /* ⛔ L'esito si dice: «Apri» apre una finestra FUORI dal browser, quindi a schermo non cambierebbe
     niente e chi ha premuto non saprebbe se è successo qualcosa. Stessa ragione di «Mostrato nella
     cartella» qui sotto. */
- apriBtn?.addEventListener('click',()=>esegui(()=>servizio.apri(id),()=>{avviso={tono:'stato',testo:'Aperto con il programma predefinito.'};mostra();}));
- rivelaBtn?.addEventListener('click',()=>esegui(()=>servizio.rivela(id),()=>{avviso={tono:'stato',testo:'Mostrato nella cartella.'};mostra();}));
+ apriBtn?.addEventListener('click',()=>esegui(()=>servizio.apri(id),()=>{avviso={tono:'stato',testo:traduci('sezioni.library.message.opened')};mostra();}));
+ rivelaBtn?.addEventListener('click',()=>esegui(()=>servizio.rivela(id),()=>{avviso={tono:'stato',testo:traduci('sezioni.library.message.revealed')};mostra();}));
  noElimina.addEventListener('click',()=>cambiaModo('normale','elimina'));
- siElimina.addEventListener('click',()=>esegui(()=>servizio.elimina(id),()=>{stato='eliminata';onModo?.('normale',null);avviso={tono:'stato',testo:'File eliminato.'};mostra();onCambiata?.();}));
+ siElimina.addEventListener('click',()=>esegui(()=>servizio.elimina(id),()=>{stato='eliminata';onModo?.('normale',null);avviso={tono:'stato',testo:traduci('sezioni.library.message.deleted')};mostra();onCambiata?.();}));
  annullaRinomina.addEventListener('click',()=>cambiaModo('normale','rinomina'));
  campo.addEventListener('input',()=>{if(stato==='rinomina')onModo?.('rinomina',campo.value);});
  campo.addEventListener('keydown',e=>{if(e.key==='Escape'){e.preventDefault?.();cambiaModo('normale','rinomina');}});
@@ -345,7 +349,7 @@ export function creaLibraryRow(voce,{document:doc=globalThis.document,aperta=fal
   const v=nomeLibreriaValido(campo.value);
   if(!v.ok){avviso={tono:'errore',testo:v.motivo};mostra();campo.focus?.();return;}
   if(v.nome===t.nome){cambiaModo('normale','rinomina');return;}
-  esegui(()=>servizio.rinomina(id,v.nome),()=>{stato='normale';onModo?.('normale',null);avviso={tono:'stato',testo:'Rinominato in '+v.nome+'.'};mostra();rinominaBtn?.focus?.();onCambiata?.();});
+  esegui(()=>servizio.rinomina(id,v.nome),()=>{stato='normale';onModo?.('normale',null);avviso={tono:'stato',testo:traduci('sezioni.library.message.renamedTo',{name:v.nome})};mostra();rinominaBtn?.focus?.();onCambiata?.();});
  });
  dettagli.addEventListener('click',()=>{aperta=!aperta;mostra();onEspandi?.(aperta);});
  mostra();
@@ -370,8 +374,8 @@ function renderLibreria(schermo,pagina){
  const {voci,opzioni}=pagina,visibili=filtraLibreria(voci,pagina),doc=schermo.ownerDocument;
  for(const tab of schermo.querySelectorAll('[data-library-origine]')){const attivo=pagina.origine===tab.dataset.libraryOrigine;tab.setAttribute('aria-selected',String(attivo));tab.tabIndex=attivo?0:-1;}
  schermo.querySelector('[data-library-refresh]').disabled=Boolean(opzioni.caricamento);
- schermo.querySelector('.talos-topbar__path').textContent=opzioni.errore?'Libreria non disponibile':opzioni.caricamento?'Caricamento Libreria…':plurale(voci.length,'file')+' · Token non disponibili';
- const esito=schermo.querySelector('[data-library-esito]');esito.textContent=opzioni.errore||(opzioni.caricamento?'Caricamento Libreria…':visibili.length===voci.length?plurale(voci.length,'file'):visibili.length+' di '+plurale(voci.length,'file'));esito.setAttribute('role',opzioni.errore?'alert':'status');
+ schermo.querySelector('.talos-topbar__path').textContent=opzioni.errore?traduci("sezioni.library.unavailable"):opzioni.caricamento?traduci("sezioni.library.loading"):traduci('sezioni.library.topbarSummary',{count:conta(voci.length)});
+ const esito=schermo.querySelector('[data-library-esito]');esito.textContent=opzioni.errore||(opzioni.caricamento?traduci("sezioni.library.loading"):visibili.length===voci.length?conta(voci.length):traduci("sezioni.common.shownOfTotal", { shown: visibili.length, total: conta(voci.length) }));esito.setAttribute('role',opzioni.errore?'alert':'status');
  /* ⛔ Il ridisegno non deve buttare via né il fuoco né il nome digitato a metà: un aggiornamento dell'elenco arrivato mentre stai rinominando ti farebbe ricominciare da capo. */
  const lista=schermo.querySelector('[data-library-list]'),fuoco=doc.activeElement,attivo=fuoco?.closest?.('[data-library-id]')?.dataset.libraryId,azioneAttiva=fuoco?.dataset?.azione||'';
  lista.setAttribute('role',visibili.length?'list':'group');
@@ -383,7 +387,7 @@ function renderLibreria(schermo,pagina){
    onModo:(modo,bozza)=>{if(modo==='normale')pagina.modi.delete(v.id);else pagina.modi.set(v.id,{modo,bozza});},
    onCambiata:()=>{pagina.modi.delete(v.id);ricarica();},onMenu:opzioni.onMenu||null});
  }));
- if(!visibili.length)lista.append(el(doc,'p','talos-list-row talos-muted',opzioni.errore||(opzioni.caricamento?'Caricamento Libreria…':voci.length?'Nessun file corrisponde ai filtri.':'Nessun file in Libreria per questo progetto.')));
+ if(!visibili.length)lista.append(el(doc,'p','talos-list-row talos-muted',opzioni.errore||(opzioni.caricamento?traduci("sezioni.library.loading"):voci.length?traduci("sezioni.library.noMatches"):traduci("sezioni.library.empty"))));
  if(attivo){
   const tornata=[...lista.querySelectorAll('[data-library-id]')].find(n=>n.dataset.libraryId===attivo);
   (azioneAttiva&&tornata?.querySelector('[data-azione="'+azioneAttiva+'"]:not([hidden])')||tornata?.querySelector('button:not([hidden]):not([disabled])'))?.focus({preventScroll:true});

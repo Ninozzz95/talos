@@ -11,6 +11,7 @@ import { elencaNote } from '../../../src/notes-store.mjs';
 import { elencaAttivita } from '../../../src/tasks-store.mjs';
 import { elencaMemorie } from '../../../src/memory-store.mjs';
 import { rimuoviCartellaDiProva } from '../../../tests/aiuto/rimuovi-cartella-di-prova.mjs';
+import { AREE } from '../../src/i18n/testi/index.js';
 import {
   SCHEMI, SCELTA_AUTOMATICA, servizioVoci,
   valoriIniziali, validaValori, corpoCreazione, corpoModifica, paroleErroreRete,
@@ -177,8 +178,11 @@ test('⛔ BANCO-NOTE-AL-CONTRARIO: ciò che il modulo rifiuta, il server lo rifi
    *   è valida». Resta vero però ciò che conta per il modulo: NON dice QUALE campo né PERCHÉ, e
    *   quindi non basta a chi sta scrivendo. È per questo che la validazione sta davanti.
    */
-  assert.equal(rifiutata.message, 'Questa nota non è valida');
-  assert.equal(/titolo|contenuto|120|caratteri/i.test(rifiutata.message), false, 'il motivo preciso resta dietro il doctorReference');
+  /* 03/10/2026: il server dice la frase in inglese e manda il codice; l'italiano è la voce del dizionario (`errori.NOTE_INVALID.message`). */
+  assert.equal(rifiutata.message, 'This note is not valid');
+  assert.equal(AREE.errori.it['NOTE_INVALID.message'], 'Questa nota non è valida');
+  assert.equal(/titolo|contenuto|120|caratteri|title|content|characters/i.test(rifiutata.message), false, 'il motivo preciso resta dietro il doctorReference');
+  assert.equal(/titolo|contenuto|120|caratteri/i.test(AREE.errori.it['NOTE_INVALID.message']), false);
 
   /* Un corpo senza chiavi (la PATCH vuota che `corpoModifica` impedisce) è un 400. */
   const creata = (await s.crea({ titolo: 'Breve', contenuto: 'ok' })).nota;

@@ -35,6 +35,9 @@
  *   quello che oggi può.
  */
 
+import { t as traduci, tn, linguaCorrenteDiT } from './lingua.js';
+/* Date e numeri nella lingua dell'interfaccia (italiano → it-IT, inglese → en-US), letta a ogni uso. */
+const localeUI = () => (linguaCorrenteDiT() === 'en' ? 'en-US' : 'it-IT');
 import { prosaInNodi } from './ricerca-dettaglio.js';
 import { testiVoceLibreria, indirizzoFileLibreria } from './libreria.js';
 
@@ -81,7 +84,8 @@ export function modiFile(formato) {
   return formato === 'testo' ? ['testo'] : ['anteprima', 'testo'];
 }
 
-const PAROLE_MODO = new Map([['anteprima', 'Anteprima'], ['testo', 'Testo']]);
+/* ⛔ Le parole dei due modi si leggono a ogni uso (funzioni), non alla creazione del modulo: seguono il cambio di lingua. */
+const PAROLE_MODO = new Map([['anteprima', () => traduci('sezioni.library.preview.mode.preview')], ['testo', () => traduci('sezioni.library.preview.mode.text')]]);
 
 /** Il formato ha bisogno dei byte? Su un binario non si chiede niente al server. */
 export function serveLettura(formato) {
@@ -96,10 +100,10 @@ const MASSIMO_CARATTERI = 400_000;
 export function dimensioneLeggibile(byte) {
   const n = Number(byte);
   if (!Number.isFinite(n) || n < 0) return '';
-  if (n < 1024) return `${n.toLocaleString('it-IT')} byte`;
+  if (n < 1024) return traduci('sezioni.library.preview.size.bytes', { value: n.toLocaleString(localeUI()) });
   const kb = n / 1024;
-  if (kb < 1024) return `${kb.toLocaleString('it-IT', { maximumFractionDigits: 1 })} kB`;
-  return `${(kb / 1024).toLocaleString('it-IT', { maximumFractionDigits: 1 })} MB`;
+  if (kb < 1024) return `${kb.toLocaleString(localeUI(), { maximumFractionDigits: 1 })} kB`;
+  return `${(kb / 1024).toLocaleString(localeUI(), { maximumFractionDigits: 1 })} MB`;
 }
 
 /** Quante righe ha il testo. Un file che finisce con un a capo non ha una riga vuota in più. */
@@ -158,8 +162,10 @@ export function righeCsv(testo, separatore = ',') {
  */
 export function frasiRighe(formato, testo) {
   const righe = conteggioRighe(testo);
-  if (formato !== 'tabella') return `${righe.toLocaleString('it-IT')} righe`;
-  return `${Math.max(righe - 1, 0).toLocaleString('it-IT')} righe di dati`;
+  const formatta = (n) => n.toLocaleString(localeUI());
+  if (formato !== 'tabella') return tn('sezioni.library.preview.lines.one', 'sezioni.library.preview.lines.many', righe, { n: formatta(righe) });
+  const dati = Math.max(righe - 1, 0);
+  return tn('sezioni.library.preview.dataLines.one', 'sezioni.library.preview.dataLines.many', dati, { n: formatta(dati) });
 }
 
 /** Il separatore lo dice il nome: un `.tsv` è separato da tabulazioni, non da virgole. */
@@ -217,7 +223,7 @@ function cartaEsterna(doc, frase, { voce, opzioni }) {
   const box = nodo(doc, 'div', 'td-file-esterno');
   box.append(nodo(doc, 'p', '', frase));
   if (typeof opzioni?.onApri === 'function') {
-    box.append(bottone(doc, 'Apri con l’app del sistema', () => opzioni.onApri(voce)));
+    box.append(bottone(doc, traduci('sezioni.library.preview.openWithSystem'), () => opzioni.onApri(voce)));
   }
   return box;
 }
@@ -248,8 +254,8 @@ export function colonneFuori(bordoDestro, destreDelleColonne) {
 export function fraseScorrimento(quante) {
   if (!quante) return '';
   return quante === 1
-    ? 'Scorri a destra per l’altra colonna.'
-    : `Scorri a destra per le altre ${quante.toLocaleString('it-IT')} colonne.`;
+    ? traduci('sezioni.library.preview.scrollOneColumn')
+    : traduci('sezioni.library.preview.scrollMoreColumns', { n: quante.toLocaleString(localeUI()) });
 }
 
 function collegaScorrimento(scorre, tabella, avviso) {
@@ -279,7 +285,7 @@ function tabellaCsv(doc, testo, { nome, magazzino, chiave, ridisegna }) {
   const righe = righeCsv(testo, separatoreDi(nome));
   const pezzi = [];
   if (!righe.length) {
-    pezzi.push(nodo(doc, 'p', 'td-subtle', 'Il file non ha righe.'));
+    pezzi.push(nodo(doc, 'p', 'td-subtle', traduci('sezioni.library.preview.noRows')));
     return pezzi;
   }
   const tutte = magazzino.tabelleAperte.has(chiave);
@@ -287,7 +293,7 @@ function tabellaCsv(doc, testo, { nome, magazzino, chiave, ridisegna }) {
   const scorre = nodo(doc, 'div', 'td-file-tabella-scorre');
   scorre.tabIndex = 0;
   scorre.setAttribute('role', 'region');
-  scorre.setAttribute('aria-label', `Contenuto di ${nome}`);
+  scorre.setAttribute('aria-label', traduci("sezioni.library.preview.contentsLabel", { name: nome }));
   const tabella = nodo(doc, 'table', 'td-file-tabella');
   const testa = nodo(doc, 'thead');
   const rigaTesta = nodo(doc, 'tr');
@@ -322,7 +328,7 @@ function tabellaCsv(doc, testo, { nome, magazzino, chiave, ridisegna }) {
   const dati = Math.max(righe.length - 1, 0);
   const mostrati = Math.max(quante - 1, 0);
   if (dati > mostrati) {
-    const apri = bottone(doc, `Mostra tutte le ${dati.toLocaleString('it-IT')} righe`, () => {
+    const apri = bottone(doc, traduci('sezioni.library.preview.showAllRows', { n: dati.toLocaleString(localeUI()) }), () => {
       magazzino.tabelleAperte.add(chiave);
       ridisegna?.();
     });
@@ -343,23 +349,23 @@ export function contenutoModoFile(doc, modo, contesto) {
     /* ⛔ Le due frasi dicono due cose diverse, e nessuna delle due è una scusa: la prima è su come
        si GUARDA il file, la seconda è su estrarne le PAROLE. Chi legge deve poter capire perché. */
     const frase = modo === 'anteprima'
-      ? 'Questo formato si apre con l’app del sistema: TALOS non lo disegna in questa finestra.'
-      : 'Il testo di questo formato non si estrae: TALOS sa creare PDF, DOCX e fogli di calcolo, non rileggerne le parole. Il file si apre con l’app del sistema.';
+      ? traduci('sezioni.library.preview.binaryPreview')
+      : traduci('sezioni.library.preview.binaryText');
     return [cartaEsterna(doc, frase, { voce, opzioni })];
   }
 
   if (typeof opzioni?.leggiFile !== 'function') {
-    return [nodo(doc, 'p', 'td-subtle', 'Il contenuto non è leggibile da questa finestra: manca la sessione a cui il file appartiene.')];
+    return [nodo(doc, 'p', 'td-subtle', traduci('sezioni.library.preview.notReadable'))];
   }
   if (!lettura || lettura.stato === 'caricando') {
-    return [nodo(doc, 'p', 'td-subtle', 'Leggo il file…')];
+    return [nodo(doc, 'p', 'td-subtle', traduci('sezioni.library.preview.reading'))];
   }
   if (lettura.stato === 'errore') {
     const box = nodo(doc, 'div', 'td-file-esterno');
-    const riga = nodo(doc, 'p', '', `Il file non si è aperto: ${lettura.errore}`);
+    const riga = nodo(doc, 'p', '', traduci('sezioni.library.preview.openFailed', { reason: lettura.errore }));
     riga.setAttribute('role', 'alert');
     box.append(riga);
-    if (typeof opzioni?.onApri === 'function') box.append(bottone(doc, 'Apri con l’app del sistema', () => opzioni.onApri(voce)));
+    if (typeof opzioni?.onApri === 'function') box.append(bottone(doc, traduci('sezioni.library.preview.openWithSystem'), () => opzioni.onApri(voce)));
     return [box];
   }
 
@@ -376,12 +382,12 @@ export function contenutoModoFile(doc, modo, contesto) {
     const pre = nodo(doc, 'pre', 'td-code td-file-testo', mostrato);
     pre.tabIndex = 0;
     pre.setAttribute('role', 'region');
-    pre.setAttribute('aria-label', `Testo di ${nome}`);
+    pre.setAttribute('aria-label', traduci("sezioni.library.preview.textLabel", { name: nome }));
     pezzi.push(pre);
   }
 
   if (tagliato) {
-    pezzi.push(nodo(doc, 'p', 'td-subtle', `Mostrati i primi ${MASSIMO_CARATTERI.toLocaleString('it-IT')} caratteri di ${testo.length.toLocaleString('it-IT')}. Il file intero si apre con l’app del sistema.`));
+    pezzi.push(nodo(doc, 'p', 'td-subtle', traduci('sezioni.library.preview.truncated', { shown: MASSIMO_CARATTERI.toLocaleString(localeUI()), total: testo.length.toLocaleString(localeUI()) })));
   }
   pezzi.push(nodo(doc, 'p', 'td-file-misura', `${frasiRighe(formato, testo)} · ${dimensioneLeggibile(lettura.byte)}`));
   return pezzi;
@@ -415,7 +421,7 @@ export function montaAnteprimaFile(voce, ctx) {
   /* ⛔ «Contenuto del file» e non «Contenuto locale» come il mockup: lì «locale» distingueva i dati
      della demo da una rete che non c'era, qui ogni file È sul disco del progetto e la parola non
      distinguerebbe niente. Il titolo fa il paio con «Azioni sul file», che gli sta sotto. */
-  pezzi.push(nodo(doc, 'h3', '', 'Contenuto del file'));
+  pezzi.push(nodo(doc, 'h3', '', traduci('sezioni.library.preview.heading')));
 
   contatore += 1;
   const radice = `td-file-${contatore}`;
@@ -434,9 +440,9 @@ export function montaAnteprimaFile(voce, ctx) {
   if (modi.length > 1) {
     lista = nodo(doc, 'div', 'td-segment td-viste td-file-modi');
     lista.setAttribute('role', 'tablist');
-    lista.setAttribute('aria-label', `Come guardare ${nome}`);
+    lista.setAttribute('aria-label', traduci("sezioni.library.preview.modesLabel", { name: nome }));
     schede = modi.map((modo) => {
-      const b = nodo(doc, 'button', '', PAROLE_MODO.get(modo));
+      const b = nodo(doc, 'button', '', PAROLE_MODO.get(modo)());
       b.type = 'button';
       b.id = `${radice}-${modo}`;
       b.dataset.modo = modo;
@@ -457,7 +463,7 @@ export function montaAnteprimaFile(voce, ctx) {
       if (attiva && muoviIlFuoco) b.focus({ preventScroll: true });
     }
     if (schede.length) pannello.setAttribute('aria-labelledby', `${radice}-${modo}`);
-    else pannello.setAttribute('aria-label', `Contenuto di ${nome}`);
+    else pannello.setAttribute('aria-label', traduci("sezioni.library.preview.contentsLabel", { name: nome }));
     pannello.replaceChildren(...contenutoModoFile(doc, modo, {
       voce, nome, formato, lettura, opzioni, magazzino, ridisegna: ctx.ridisegna,
     }).filter(Boolean));
@@ -494,7 +500,7 @@ export function montaAnteprimaFile(voce, ctx) {
         magazzino.file.set(chiave, { stato: 'pronto', testo, byte });
       })
       .catch((errore) => {
-        magazzino.file.set(chiave, { stato: 'errore', errore: errore?.message || 'motivo non registrato' });
+        magazzino.file.set(chiave, { stato: 'errore', errore: errore?.message || traduci('sezioni.library.preview.reasonNotRecorded') });
       })
       .then(() => ctx.ridisegna?.());
   }
@@ -513,9 +519,9 @@ export function lettoreFileLibreria(sessionId, rete = globalThis.fetch) {
   if (!sessionId || typeof rete !== 'function') return null;
   return async (voce) => {
     const indirizzo = indirizzoFileLibreria(sessionId, voce?.id);
-    if (!indirizzo) throw new Error('questo file non ha un indirizzo');
+    if (!indirizzo) throw new Error(traduci('sezioni.library.preview.noAddress'));
     const risposta = await rete(indirizzo);
-    if (!risposta?.ok) throw new Error(`il server ha risposto HTTP ${risposta?.status ?? '—'}`);
+    if (!risposta?.ok) throw new Error(traduci('sezioni.library.preview.httpReplied', { status: risposta?.status ?? '—' }));
     const buffer = await risposta.arrayBuffer();
     /* `fatal:false`: un byte non valido diventa «�» invece di far fallire tutta la lettura — un
        file di testo con una riga sporca si legge lo stesso, e si VEDE dov'è sporco. */

@@ -10,12 +10,12 @@ export class TalosApiError extends Error {
 
 export function resolveApiUrl(pathname, baseUrl = globalThis.window?.__talosHarnessApiBase || '') {
   const path = String(pathname || '');
-  if (path !== '/api/v1' && !path.startsWith('/api/v1/')) throw new TypeError('Il percorso deve restare sotto /api/v1/');
+  if (path !== '/api/v1' && !path.startsWith('/api/v1/')) throw new TypeError('The path must stay under /api/v1/');
   return `${String(baseUrl || '').replace(/\/$/u, '')}${path}`;
 }
 
 export function createApiClient({ fetchImpl = globalThis.fetch, baseUrl = globalThis.window?.__talosHarnessApiBase || '' } = {}) {
-  if (typeof fetchImpl !== 'function') throw new TypeError('Fetch non disponibile');
+  if (typeof fetchImpl !== 'function') throw new TypeError('Fetch is not available');
   async function request(method, pathname, { body, signal, headers = {} } = {}) {
     const options = { method, signal, headers: { accept: 'application/json', ...headers } };
     if (body !== undefined) {
@@ -28,7 +28,7 @@ export function createApiClient({ fetchImpl = globalThis.fetch, baseUrl = global
     const payload = contentType.includes('application/json') ? await response.json() : await response.text();
     if (!response.ok) {
       const error = payload && typeof payload === 'object' ? (payload.error || payload) : {};
-      throw new TalosApiError(error.message || `Richiesta non riuscita (${response.status})`, {
+      throw new TalosApiError(error.message || `Request failed (${response.status})`, {
         code: error.code || 'API_ERROR', status: response.status, details: error.details ?? null,
       });
     }

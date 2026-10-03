@@ -116,7 +116,7 @@ describe('BC-57 — `prova` senza una suite da lanciare', () => {
         const cartella = cartellaTemporanea(t)
         const { esiti, ricevute } = await giro(cartella, [chiamata('prova')])
         assert.equal(esiti.length, 1)
-        assert.ok(esiti[0].includes('nessuna suite trovata in'), `atteso «nessuna suite trovata», ricevuto: ${esiti[0]}`)
+        assert.ok(esiti[0].includes('no test suite found in'), `atteso «no test suite found», ricevuto: ${esiti[0]}`)
         assert.ok(esiti[0].includes('package.json'), 'l\'esito dice COSA manca, non solo che manca qualcosa')
         assert.ok(!esiti[0].startsWith('exit 0'), 'un exit 0 qui e\' esattamente il difetto BC-57')
         assert.notEqual(ricevute.at(-1).evidence.exitCode, 0, 'anche la ricevuta porta un codice != 0: chi legge la prova a macchina non deve vedere un successo')
@@ -125,21 +125,21 @@ describe('BC-57 — `prova` senza una suite da lanciare', () => {
     it('⛔ CURA — package.json senza scripts.test: stessa risposta, motivo diverso', async (t) => {
         const cartella = cartellaTemporanea(t, { packageJson: { name: 'x', version: '1.0.0' } })
         const { esiti } = await giro(cartella, [chiamata('prova')])
-        assert.ok(esiti[0].includes('nessuna suite trovata in'), esiti[0])
+        assert.ok(esiti[0].includes('no test suite found in'), esiti[0])
         assert.ok(esiti[0].includes('scripts.test'), `il motivo nomina il campo assente: ${esiti[0]}`)
     })
 
     it('⛔ CURA — un comando che non e\' npm: si verifica che il PROGRAMMA esista', async (t) => {
         const cartella = cartellaTemporanea(t)
         const { esiti } = await giro(cartella, [chiamata('prova')], { comandoProva: 'programma-che-non-esiste-xyz --tutto' })
-        assert.ok(esiti[0].includes('nessuna suite trovata in'), esiti[0])
+        assert.ok(esiti[0].includes('no test suite found in'), esiti[0])
         assert.ok(esiti[0].includes('programma-che-non-esiste-xyz'), `il motivo nomina il programma: ${esiti[0]}`)
     })
 
     it('⭐ AL CONTRARIO — quando la suite C\'E\', il comando parte come sempre', async (t) => {
         const cartella = cartellaTemporanea(t)
         const { esiti } = await giro(cartella, [chiamata('prova')], { comandoProva: 'node --version' })
-        assert.ok(!esiti[0].includes('nessuna suite trovata'), `il cancello non deve mordere su un comando valido: ${esiti[0]}`)
+        assert.ok(!esiti[0].includes('no test suite found'), `il cancello non deve mordere su un comando valido: ${esiti[0]}`)
         assert.ok(esiti[0].startsWith('exit 0'), `node --version esce 0: ${esiti[0]}`)
         assert.ok(/v\d+\./.test(esiti[0]), 'e il suo testo vero arriva in conversazione')
     })
@@ -147,7 +147,7 @@ describe('BC-57 — `prova` senza una suite da lanciare', () => {
     it('⭐ AL CONTRARIO — `npm test` con package.json E scripts.test passa il cancello', async (t) => {
         const cartella = cartellaTemporanea(t, { packageJson: { name: 'x', version: '1.0.0', scripts: { test: 'node --version' } } })
         const { esiti } = await giro(cartella, [chiamata('prova')])
-        assert.ok(!esiti[0].includes('nessuna suite trovata'), `package.json + scripts.test = suite riconoscibile: ${esiti[0]}`)
+        assert.ok(!esiti[0].includes('no test suite found'), `package.json + scripts.test = suite riconoscibile: ${esiti[0]}`)
     })
 
     /*
@@ -166,7 +166,7 @@ describe('BC-57 — `prova` senza una suite da lanciare', () => {
         const dentro = join(radice, 'pacchetto')
         mkdirSync(dentro)
         const { esiti } = await giro(dentro, [chiamata('prova')])
-        assert.ok(!esiti[0].includes('nessuna suite trovata'), `npm qui esce 0 eseguendo la suite del genitore: rifiutarla e' un falso «non provato» — ricevuto: ${esiti[0]}`)
+        assert.ok(!esiti[0].includes('no test suite found'), `npm qui esce 0 eseguendo la suite del genitore: rifiutarla e' un falso «non provato» — ricevuto: ${esiti[0]}`)
         assert.ok(esiti[0].startsWith('exit 0'), `e la suite del genitore passa davvero: ${esiti[0]}`)
     })
 
@@ -175,7 +175,7 @@ describe('BC-57 — `prova` senza una suite da lanciare', () => {
         assert.equal(manifestoPiuVicinoNelTest(cartella), null,
             'PRECONDIZIONE: questa macchina non deve avere un package.json in %TEMP% ne sopra — se salta, il caso «Desktop» non e riproducibile qui e la prova sotto non direbbe niente')
         const { esiti } = await giro(cartella, [chiamata('prova')])
-        assert.ok(esiti[0].includes('nessuna suite trovata in'), esiti[0])
+        assert.ok(esiti[0].includes('no test suite found in'), esiti[0])
         assert.ok(esiti[0].includes('package.json'), esiti[0])
     })
 
@@ -212,12 +212,13 @@ describe('BC-57 — `prova` senza una suite da lanciare', () => {
         ]
         const { esiti, ricevute } = await giro(cartella, chiamate)
         assert.equal(esiti.length, 5)
-        assert.ok(esiti[3].includes('nessuna suite trovata'), 'la prova in mezzo e\' stata rifiutata')
-        assert.match(esiti[3], /^exit 127\n/)
+        assert.ok(esiti[3].includes('no test suite found'), 'la prova in mezzo e\' stata rifiutata')
+        /* H-04 (owner 02/10/2026): NOT RUN e nessun codice d'uscita — prima `exit 127`, un numero che diceva «comando non trovato» */
+        assert.match(esiti[3], /^NOT RUN: NO_TEST_SUITE_CONFIGURED — /)
         const ricevutaProva = ricevute.find(r => r.toolCallId === 'c4')
         assert.ok(ricevutaProva, 'la prova rifiutata conserva la propria ricevuta')
         assert.equal(ricevutaProva.status, 'failed')
-        assert.equal(ricevutaProva.evidence.exitCode, 127)
+        assert.equal(ricevutaProva.evidence.exitCode, null)
         assert.deepEqual([esiti[0], esiti[1], esiti[2], esiti[4]],
             ['written: a.txt', 'written: b.txt', 'written: c.txt', 'written: d.txt'])
         for (const nome of ['a', 'b', 'c', 'd']) assert.equal(readFileSync(join(cartella, `${nome}.txt`), 'utf8'), nome)
@@ -264,7 +265,7 @@ describe('F-017 residuo — «exit 0» con ZERO test eseguiti NON è un pass', (
     it('⭐⭐⭐ `node --test` in una cartella senza test: l\'exit 0 del runner NON passa per un pass', async (t) => {
         const cartella = cartellaTemporanea(t)
         const { esiti, ricevute } = await ambienteDiProduzione(() => giro(cartella, [chiamata('prova')], { comandoProva: 'node --test' }))
-        assert.ok(esiti[0].includes('NO tests ran'), `atteso «NO tests ran» nel messaggio: ${esiti[0]}`)
+        assert.ok(esiti[0].startsWith('NOT RUN: NO_TESTS_RAN — the test command ran and exited 0'), `atteso NOT RUN: NO_TESTS_RAN (owner 03/10): ${esiti[0]}`)
         assert.ok(esiti[0].includes('this is not a pass'), 'il messaggio lo DICE, non lascia indovinare')
         assert.ok(esiti[0].includes('tests 0'), 'la dichiarazione del runner si CITA, non si parafrasa')
         assert.ok(!esiti[0].startsWith('exit 0'), 'l\'exit 0 del runner non può arrivare al modello come esito')
@@ -278,14 +279,14 @@ describe('F-017 residuo — «exit 0» con ZERO test eseguiti NON è un pass', (
             + 'for (let i = 0; i < 12; i++) test(\'passa \' + i, () => assert.ok(true));\n')
         const { esiti } = await ambienteDiProduzione(() => giro(cartella, [chiamata('prova')], { comandoProva: 'node --test' }))
         assert.ok(esiti[0].startsWith('exit 0'), `la suite vera è passata: ${esiti[0]}`)
-        assert.ok(!esiti[0].includes('NO tests ran'), 'una suite che ha eseguito 12 test non va accusata')
+        assert.ok(!esiti[0].includes('NO_TESTS_RAN'), 'una suite che ha eseguito 12 test non va accusata')
         assert.ok(esiti[0].includes('tests 12'), 'e il suo conteggio vero arriva in conversazione')
     })
 
     it('⛔ «0 passing» di Mocha con uscita 0 (mochajs/mocha #4062): la CI muta diventa loud', async (t) => {
         const cartella = cartellaTemporanea(t, { packageJson: { name: 'x', version: '1.0.0', scripts: { test: 'node -e "console.log(\'0 passing (2ms)\')"' } } })
         const { esiti } = await giro(cartella, [chiamata('prova')])
-        assert.ok(esiti[0].includes('NO tests ran'), `«0 passing» con exit 0 è il caso #4062: deve essere loud. Ricevuto: ${esiti[0]}`)
+        assert.ok(esiti[0].startsWith('NOT RUN: NO_TESTS_RAN'), `«0 passing» con exit 0 è il caso #4062: deve essere loud. Ricevuto: ${esiti[0]}`)
         assert.ok(esiti[0].includes('0 passing (2ms)'), 'la riga di mocha viene citata')
     })
 })

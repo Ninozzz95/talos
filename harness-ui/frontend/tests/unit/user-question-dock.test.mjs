@@ -450,3 +450,19 @@ test('R4-ASK-NO-EXPIRY-BY-DEFAULT: senza impostazione la domanda non scade e non
   assert.equal(pianificato, false);
   assert.equal(testi(view.root).some((t) => /^Scade fra/u.test(t)), false);
 });
+
+test('R4-ASK-RECEIPT-ALTROVE: con la testata «da un’altra finestra» la ricevuta non dice «hai risposto» (revisione Codex, rilievo 3)', () => {
+  for (const [status, testata, ricevuta, mai] of [
+    ['answered', 'Risposta inviata da un’altra finestra', 'risposta da un’altra finestra alle ', 'hai risposto'],
+    ['skipped', 'Domanda saltata da un’altra finestra', 'saltata da un’altra finestra alle ', 'hai saltato'],
+  ]) {
+    const view = fixture();
+    const controller = mountUserQuestionDock({ ...view, question: trePassi, onSubmit() {} });
+    controller.render({ stage: 'resolved', status, altrove: true,
+      esito: { answers: { strada: 'A', canale: 'Il mio canale' }, at: '2026-09-24T13:02:00.000Z', da: 'persona' } });
+    const tutto = testi(view.root.children[0]);
+    assert.ok(tutto.includes(testata), testata);
+    assert.ok(tutto.some((t) => t.includes(ricevuta)), 'la ricevuta dice chi: ' + ricevuta);
+    assert.ok(!tutto.some((t) => t.includes(mai)), 'mai «' + mai + '» sotto una risposta data altrove');
+  }
+});

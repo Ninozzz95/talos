@@ -1,3 +1,6 @@
+import { t, tn, linguaCorrenteDiT } from './lingua.js';
+/* Numeri e date nella lingua dell'interfaccia (come fanno gli altri componenti): italiano → it-IT, inglese → en-US. */
+const localeUI = () => (linguaCorrenteDiT() === 'en' ? 'en-US' : 'it-IT');
 /*
  * BC-12 — LE SCHEDE DEL SELETTORE MODELLI: «Diretti» si spezza per fornitore.
  *
@@ -87,23 +90,23 @@ export function opzioniFallback(fornitori=[], {usaAttrezzi=true}={}) {
 export function creaSceltaFallback({fornitori=[],valore=[],usaAttrezzi=true,onChange=null}={}) {
   // 12/09, review P-H: stesso linguaggio dei gruppi «Planner opzionale» / «Accesso al workspace»
   // (etichetta `sheet-label` + controllo + aiuto), niente fieldset con la legenda sul bordo.
-  const wrap=document.createElement('div');wrap.className='talos-stack talos-scelta-riserve';wrap.setAttribute('role','group');wrap.setAttribute('aria-label','Se non risponde, continua con…');Object.assign(wrap.style,{minWidth:'0',margin:'16px 0 0',gap:'8px'});
-  const etichetta=document.createElement('span');etichetta.className='sheet-label';etichetta.textContent='Se non risponde, continua con…';wrap.append(etichetta);
+  const wrap=document.createElement('div');wrap.className='talos-stack talos-scelta-riserve';wrap.setAttribute('role','group');wrap.setAttribute('aria-label',t('modelli.sources.fallbackHeading'));Object.assign(wrap.style,{minWidth:'0',margin:'16px 0 0',gap:'8px'});
+  const etichetta=document.createElement('span');etichetta.className='sheet-label';etichetta.textContent=t('modelli.sources.fallbackHeading');wrap.append(etichetta);
   const selezione=valore.map(({provider,model})=>({provider,model}));
   const scelte=opzioniFallback(fornitori,{usaAttrezzi});
   const lista=document.createElement('ol');lista.className='talos-stack';
-  const select=document.createElement('select');select.className='talos-field__input';select.setAttribute('aria-label','Fornitore e modello con cui continuare');
+  const select=document.createElement('select');select.className='talos-field__input';select.setAttribute('aria-label',t('modelli.sources.fallbackProviderModel'));
   Object.assign(select.style,{flex:'1',minWidth:'0'});select.disabled=typeof onChange!=='function';
-  const vuota=document.createElement('option');vuota.value='';vuota.textContent='Nessuno';select.append(vuota);
+  const vuota=document.createElement('option');vuota.value='';vuota.textContent=t('modelli.sources.none');select.append(vuota);
   for(const [i,o]of scelte.entries()){const option=document.createElement('option');option.value=String(i);option.textContent=o.etichetta;select.append(option);}
-  const aggiungi=document.createElement('button');aggiungi.type='button';aggiungi.className='talos-button talos-button--secondary talos-button--sm';aggiungi.textContent='Aggiungi';
+  const aggiungi=document.createElement('button');aggiungi.type='button';aggiungi.className='talos-button talos-button--secondary talos-button--sm';aggiungi.textContent=t('modelli.sources.add');
   const notifica=()=>onChange?.(selezione.map(v=>({...v})));
   function disegna(){
     lista.hidden=selezione.length===0;
     lista.replaceChildren(...selezione.map((v,i)=>{
       const li=document.createElement('li');li.className='talos-cluster';
-      const label=document.createElement('span');label.textContent=scelte.find(o=>o.provider===v.provider&&o.model===v.model)?.etichetta||'Scelta non disponibile: rimuovila e scegline un’altra';
-      const rimuovi=document.createElement('button');rimuovi.type='button';rimuovi.className='talos-button talos-button--ghost talos-button--sm';rimuovi.textContent='Rimuovi';rimuovi.setAttribute('aria-label','Rimuovi '+label.textContent);rimuovi.disabled=typeof onChange!=='function';
+      const label=document.createElement('span');label.textContent=scelte.find(o=>o.provider===v.provider&&o.model===v.model)?.etichetta||t('modelli.sources.fallbackUnavailable');
+      const rimuovi=document.createElement('button');rimuovi.type='button';rimuovi.className='talos-button talos-button--ghost talos-button--sm';rimuovi.textContent=t('modelli.sources.remove');rimuovi.setAttribute('aria-label',t('modelli.sources.removeChoice', { name: label.textContent }));rimuovi.disabled=typeof onChange!=='function';
       rimuovi.addEventListener('click',()=>{selezione.splice(i,1);notifica();disegna();select.focus();});li.append(label,rimuovi);return li;
     }));
     for(const [i,option]of [...select.options].slice(1).entries())option.disabled=selezione.some(v=>v.provider===scelte[i].provider&&v.model===scelte[i].model);
@@ -111,7 +114,7 @@ export function creaSceltaFallback({fornitori=[],valore=[],usaAttrezzi=true,onCh
   }
   select.addEventListener('change',disegna);
   aggiungi.addEventListener('click',()=>{const scelta=scelte[Number(select.value)];if(!scelta||select.value===''||selezione.length>=8||selezione.some(v=>v.provider===scelta.provider&&v.model===scelta.model))return;selezione.push({provider:scelta.provider,model:scelta.model});select.value='';notifica();disegna();select.focus();});
-  const nota=document.createElement('small');nota.className='workspace-chooser-help talos-muted';nota.textContent=typeof onChange!=='function'?'La scelta non è ancora collegata a questa sessione.':'Il cambio viene annunciato in chat. La conversazione continua con i fornitori scelti, nell’ordine indicato.';
+  const nota=document.createElement('small');nota.className='workspace-chooser-help talos-muted';nota.textContent=typeof onChange!=='function'?t('modelli.sources.fallbackDisconnected'):t('modelli.sources.fallbackHelp');
   const azioni=document.createElement('div');azioni.className='talos-cluster';azioni.append(select,aggiungi);
   wrap.append(lista,azioni,nota);disegna();return wrap;
 }
@@ -138,14 +141,14 @@ export const PROVIDER_DIRETTI = Object.freeze([
   Object.freeze({ id: 'minimax', etichetta: 'MiniMax', soloSeCollegato: true }),
   Object.freeze({ id: 'qwen', etichetta: 'Qwen', soloSeCollegato: true }),
   // P-J — porte distinte, nomi umani; nessuna disponibilità senza collegamento.
-  Object.freeze({ id: 'zai-anthropic', etichetta: 'Z.AI (porta Anthropic)', soloSeCollegato: true }),
-  Object.freeze({ id: 'minimax-anthropic', etichetta: 'MiniMax (porta Anthropic)', soloSeCollegato: true }),
+  Object.freeze({ id: 'zai-anthropic', get etichetta() { return t('modelli.sources.zaiAnthropicPort'); }, soloSeCollegato: true }),
+  Object.freeze({ id: 'minimax-anthropic', get etichetta() { return t('modelli.sources.minimaxAnthropicPort'); }, soloSeCollegato: true }),
   // P-K — inizio
   Object.freeze({ id: 'azure', etichetta: 'Azure AI Foundry', soloSeCollegato: true }),
   Object.freeze({ id: 'bedrock', etichetta: 'Amazon Bedrock', soloSeCollegato: true }),
   Object.freeze({ id: 'vertex', etichetta: 'Google Vertex AI', soloSeCollegato: true }),
   // P-K — fine
-  Object.freeze({ id: 'esterno', etichetta: 'Agente esterno', senzaChiave: true, soloSeCollegato: true }), // P-L-bis
+  Object.freeze({ id: 'esterno', get etichetta() { return t('modelli.sources.externalAgent'); }, senzaChiave: true, soloSeCollegato: true }), // P-L-bis
 ]);
 
 /** Vero se quel fornitore si legge senza collegare nessuna chiave (i motori locali). */
@@ -174,9 +177,9 @@ const NOMI_FUORI_DAI_DIRETTI = Object.freeze({
   /* ⛔ «locale» resta «locale», la parola che il piede scrive dal 05/09 ed è documentata in testa a
      `workspace-footer.js`. Non è un fornitore: è «gira su questo computer». Cambiarla qui sarebbe
      un ritocco di copia che nessuno ha chiesto, dentro un giro che cura tutt'altro. */
-  local: 'locale',
-  locale: 'locale',
-  locali: 'locale',
+  get local() { return t('modelli.sources.local'); },
+  get locale() { return t('modelli.sources.local'); },
+  get locali() { return t('modelli.sources.local'); },
 });
 
 /* Le due grafie dello stesso fornitore: API diretta ↔ prefisso del catalogo OpenRouter. */
@@ -226,10 +229,10 @@ export function eFonteDiretta(fonte) {
  */
 export function fontiDelSelettore({ openrouter = null, locali = null, diretti = null } = {}) {
   const etichetta = (nome, modelli) => modelli?.some(m => m.catalogo?.fonte === 'riserva')
-    ? `${nome} · elenco di riserva` : nome;
+    ? t('modelli.sources.reserveList', { name: nome }) : nome;
   const fonti = [
     { id: 'openrouter', etichetta: etichetta('OpenRouter', openrouter), conto: contaOppureNull(openrouter), collegato: true },
-    { id: 'locali', etichetta: 'Locali', conto: contaOppureNull(locali), collegato: true },
+    { id: 'locali', etichetta: t('modelli.sources.localModels'), conto: contaOppureNull(locali), collegato: true },
   ];
   for (const provider of PROVIDER_DIRETTI) {
     const elenco = diretti ? diretti[provider.id] : null;
@@ -270,17 +273,17 @@ export function modelliDellaFonte(fonte, { openrouter = null, locali = null, dir
  */
 export function fraseVuotoDiretto(fonte, { diretti = null, errori = {} } = {}) {
   const etichetta = PROVIDER_DIRETTI.find((p) => p.id === fonte)?.etichetta || fonte;
-  if (errori && errori[fonte]) return `Catalogo ${etichetta} non disponibile: ${errori[fonte]}`;
-  if (fonte === 'esterno') return "Configura l'agente esterno in Fornitori e accessi";
-  if (!diretti) return `Leggo il catalogo ${etichetta}…`;
+  if (errori && errori[fonte]) return t('modelli.sources.catalogUnavailable', { provider: etichetta, error: errori[fonte] });
+  if (fonte === 'esterno') return t('modelli.sources.configureExternalAgent');
+  if (!diretti) return t('modelli.sources.readingCatalog', { provider: etichetta });
   if (!Array.isArray(diretti[fonte])) {
     /* ⛔ Un motore locale non ha una chiave da collegare: dirgli di collegarla manderebbe la
        persona a cercare una pagina che non esiste. Il passo successivo e' un altro: accenderlo. */
     return senzaChiave(fonte)
-      ? `${etichetta} non risponde su questo computer: avvialo e ricarica.`
-      : `Collega la chiave ${etichetta} dal pannello Provider per vedere i suoi modelli.`;
+      ? t('modelli.sources.startLocalProvider', { provider: etichetta })
+      : t('modelli.sources.connectProviderKey', { provider: etichetta });
   }
-  return `Nessun modello ${etichetta} disponibile con questa chiave.`;
+  return t('modelli.sources.noProviderModels', { provider: etichetta });
 }
 
 function contaOppureNull(elenco) {
@@ -289,47 +292,48 @@ function contaOppureNull(elenco) {
 
 /** Dettagli per la scelta, non spesa del giro. Riusa il formato monetario italiano del catalogo. */
 export function descrizioneModelloSelettore(modello = {}) {
-  const numero = new Intl.NumberFormat('it-IT', { maximumFractionDigits: 0, useGrouping: true });
+  const numero = new Intl.NumberFormat(localeUI(), { maximumFractionDigits: 0, useGrouping: true });
   const prezzo = valore => {
     const testo = prezzoPerMilione(valore);
-    return testo === 'Non dichiarato' ? 'non disponibile' : `${testo}/M token`;
+    const dichiarato = valore != null && typeof valore !== 'boolean' && typeof valore !== 'object' && String(valore).trim() !== '' && Number.isFinite(Number(valore)) && Number(valore) >= 0;
+    return dichiarato ? t('modelli.sources.pricePerMillion', { price: testo }) : t('modelli.sources.unavailable');
   };
-  const capacita = valore => valore === true ? 'sì' : valore === false ? 'no' : 'non disponibile';
+  const capacita = valore => valore === true ? t('modelli.sources.yes') : valore === false ? t('modelli.sources.no') : t('modelli.sources.unavailable');
   const dettagli = [
-    `Contesto: ${Number.isFinite(modello.contextLength) && modello.contextLength > 0 ? `${numero.format(modello.contextLength)} token` : 'non disponibile'}`,
-    `Ingresso: ${prezzo(modello.prezzoPrompt)}`,
-    `Uscita: ${prezzo(modello.prezzoCompletion)}`,
-    `Rilettura: ${prezzo(modello.prezzoCacheRead)}`,
-    `Memorizzazione: ${prezzo(modello.prezzoCacheWrite)}`,
-    `Strumenti: ${capacita(modello.capacita?.toolCall)}`,
-    `Ragionamento: ${capacita(modello.capacita?.reasoning)}`,
+    t('modelli.sources.context', { value: Number.isFinite(modello.contextLength) && modello.contextLength > 0 ? tn('modelli.sources.contextOneToken', 'modelli.sources.contextTokens', modello.contextLength, { n: numero.format(modello.contextLength) }) : t('modelli.sources.unavailable') }),
+    t('modelli.sources.input', { value: prezzo(modello.prezzoPrompt) }),
+    t('modelli.sources.output', { value: prezzo(modello.prezzoCompletion) }),
+    t('modelli.sources.cacheRead', { value: prezzo(modello.prezzoCacheRead) }),
+    t('modelli.sources.cacheWrite', { value: prezzo(modello.prezzoCacheWrite) }),
+    t('modelli.sources.tools', { value: capacita(modello.capacita?.toolCall) }),
+    t('modelli.sources.reasoning', { value: capacita(modello.capacita?.reasoning) }),
   ];
-  if (modello.alias) dettagli.unshift('Ultima versione');
-  if (modello.prezziPerMilione?.tiers?.length || modello.prezziPerMilione?.context_over_200k) dettagli.push('Prezzi variabili con il contesto');
+  if (modello.alias) dettagli.unshift(t('modelli.sources.latestVersion'));
+  if (modello.prezziPerMilione?.tiers?.length || modello.prezziPerMilione?.context_over_200k) dettagli.push(t('modelli.sources.contextPricing'));
   if (modello.catalogo?.fonte === 'riserva') {
     const data = modello.catalogo.dataRiserva;
     const parti = typeof data === 'string' && /^(\d{4})-(\d{2})-(\d{2})$/u.exec(data);
-    dettagli.unshift(`Catalogo non raggiungibile: elenco di riserva${parti ? ` del ${parti[3]}/${parti[2]}/${parti[1]}` : ''}`);
-    if (modello.catalogo.avvisi?.some(a => a.codice === 'CATALOG_CACHE_CORRUPT')) dettagli.push('Copia danneggiata rifiutata');
+    dettagli.unshift(t('modelli.sources.reserveCatalog', { date: parti ? t('modelli.sources.reserveDate', { date: `${parti[3]}/${parti[2]}/${parti[1]}` }) : '' }));
+    if (modello.catalogo.avvisi?.some(a => a.codice === 'CATALOG_CACHE_CORRUPT')) dettagli.push(t('modelli.sources.corruptCacheRejected'));
     return dettagli.join(' · ');
   }
   const data = modello.catalogo?.aggiornatoAlle;
   dettagli.push(typeof data === 'string' && Number.isFinite(Date.parse(data))
-    ? `Dati del ${new Intl.DateTimeFormat('it-IT', { timeZone: 'Europe/Rome' }).format(new Date(data))}`
-    : 'Data del catalogo non disponibile');
+    ? t('modelli.sources.catalogDataDate', { date: new Intl.DateTimeFormat(localeUI(), { timeZone: 'Europe/Rome' }).format(new Date(data)) })
+    : t('modelli.sources.catalogDateUnavailable'));
   if (modello.catalogo?.fallbackRete) {
     const etaMs = modello.catalogo.etaCacheMs;
-    dettagli.push(`Copia salvata: ${Number.isFinite(etaMs) && etaMs >= 0 ? `${numero.format(Math.floor(etaMs / 1000))} secondi al caricamento` : 'età non disponibile'}`);
+    dettagli.push(t('modelli.sources.savedCopy', { age: Number.isFinite(etaMs) && etaMs >= 0 ? tn('modelli.sources.cacheAgeOneSecond', 'modelli.sources.cacheAge', Math.floor(etaMs / 1000), { n: numero.format(Math.floor(etaMs / 1000)) }) : t('modelli.sources.cacheAgeUnavailable') }));
   }
-  if (modello.catalogo?.avvisi?.some(a => a.codice === 'CATALOG_CACHE_CORRUPT')) dettagli.push('Copia danneggiata rifiutata');
-  if (modello.catalogo?.avvisi?.some(a => a.codice === 'CATALOG_CACHE_WRITE_FAILED')) dettagli.push('Salvataggio del catalogo non disponibile');
+  if (modello.catalogo?.avvisi?.some(a => a.codice === 'CATALOG_CACHE_CORRUPT')) dettagli.push(t('modelli.sources.corruptCacheRejected'));
+  if (modello.catalogo?.avvisi?.some(a => a.codice === 'CATALOG_CACHE_WRITE_FAILED')) dettagli.push(t('modelli.sources.catalogSaveUnavailable'));
   return dettagli.join(' · ');
 }
 
 /** Il chiamante conserva il pulsante e i gesti: questo frammento scrive soltanto testo sicuro. */
 export function aggiornaTestoModelloSelettore(contenitore, modello) {
   const nome = contenitore.ownerDocument.createElement('strong');
-  nome.textContent = modello.nome || 'Nome non disponibile';
+  nome.textContent = modello.nome || t('modelli.sources.modelNameUnavailable');
   const dettagli = contenitore.ownerDocument.createElement('small');
   dettagli.textContent = descrizioneModelloSelettore(modello);
   contenitore.replaceChildren(nome, dettagli);

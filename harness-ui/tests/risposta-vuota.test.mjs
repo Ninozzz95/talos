@@ -77,7 +77,7 @@ test('EMPTY-SSE-PROVIDER-REASON: il lettore del flusso tiene il motivo che il fo
 
 test('EMPTY-OPT-IN: senza `accettaVuota` una risposta vuota lancia come prima; con, torna marcata e con il suo uso', async () => {
   const opzioni = { modello: 'x', chiave: 'y', messaggi: [{ role: 'user', content: 'ciao' }], attrezzi: [], onDelta: () => {} };
-  await assert.rejects(chiamaConRitenta({ ...opzioni, fetchDiRete: async () => vuotaRagionata() }), /flusso SSE senza contenuto ne tool_calls/u);
+  await assert.rejects(chiamaConRitenta({ ...opzioni, fetchDiRete: async () => vuotaRagionata() }), /SSE stream with neither content nor tool_calls/u);
   const esito = await chiamaConRitenta({ ...opzioni, fetchDiRete: async () => vuotaRagionata(), accettaVuota: true });
   assert.equal(esito.vuota?.finishReason, 'stop');
   assert.equal(esito.vuota?.ragionamento, true);
@@ -110,14 +110,14 @@ test('EMPTY-CEILING: veri vuoti conclusi, spinta più due ritentativi, poi error
   assert.equal(errore.code, 'PROVIDER_EMPTY_RESPONSE');
   assert.equal(errore.classe, 'risposta-vuota');
   assert.equal(errore.transitorio, false);
-  assert.match(errore.message, /senza testo né attrezzi/u);
+  assert.match(errore.message, /neither text nor tools/u);
   assert.doesNotMatch(errore.message, /interrott/u, 'mai «interrotta»: la risposta è arrivata, vuota');
   const storia = errore.messaggiDelGiro;
   assert.ok(Array.isArray(storia), 'il lavoro del giro viaggia con l\'errore');
   assert.ok(storia.some((m) => m.tool_calls?.[0]?.id === 'call_e'), 'la chiamata all\'attrezzo resta');
   assert.equal(storia.at(-2).role, 'tool', 'e il suo esito');
   assert.equal(storia.at(-1).role, 'assistant');
-  assert.match(storia.at(-1).content, /Il giro si è fermato qui/u);
+  assert.match(storia.at(-1).content, /The turn stopped here because of an error/u);
   assert.equal(storia.some((m) => m.content === kernel.NOTA_RISPOSTA_VUOTA || m.content === kernel.SEGNAPOSTO_RISPOSTA_VUOTA), false,
     'l\'impalcatura della spinta non resta nella storia');
 });

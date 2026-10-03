@@ -11,6 +11,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { ATTREZZI_LETTURA_SEZIONI, talosLavora } from '../src/kernel/talosHarness.mjs';
+import { togliConfiniDati } from '../src/kernel/confine-dati.mjs'; // F-027: research_search e conversation_search tornano dentro il confine
 
 function reteDiRisposte(...risposte) {
   const chiamate = [];
@@ -54,7 +55,7 @@ test('LETTURE-SEZIONI-02 — ogni attrezzo nuovo passa da onLetturaSezione con n
     });
     assert.deepEqual(ricevute, [[nome, { query: 'pirata', id: 'n1' }]]);
     const esito = rete.chiamate[1].corpo.messages.find((m) => m.role === 'tool');
-    assert.equal(esito.content, `esito di ${nome}`);
+    assert.equal(togliConfiniDati(esito.content), `esito di ${nome}`);
   }
 });
 

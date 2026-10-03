@@ -177,6 +177,10 @@ export default defineConfig({
   },
   use: {
     baseURL,
+    /* ⛔ 03/10/2026 (fase della lingua): le prove sono scritte sull'interfaccia ITALIANA. Con la preferenza «sistema» la lingua
+       la decide il browser, e Chromium in prova parte in en-US: appena i componenti hanno seguito davvero la lingua, ogni
+       asserzione sul testo italiano è diventata rossa. La lingua si fissa qui; l'inglese lo provano le prove che lo chiedono. */
+    locale: 'it-IT',
     trace: 'on-first-retry',
     // Le catture esplicite dei test visivi impostano prima un viewport >= 1920x1080.
     // Un fallimento su viewport funzionali più piccoli non deve produrre un PNG automatico.

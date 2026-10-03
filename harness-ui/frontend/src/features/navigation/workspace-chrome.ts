@@ -99,17 +99,17 @@ export function createWorkspaceChrome(options: WorkspaceChromeOptions) {
     const fragment = doc.createDocumentFragment();
     const hero = node('header', 'workspace-home__hero');
     const copy = node('div', '');
-    copy.append(node('p', 'workspace-eyebrow', 'TALOS / Il tuo spazio di lavoro'), node('h1', '', 'Da dove ripartiamo?'),
-      node('p', 'workspace-home__lead', 'Progetti, conversazioni e strumenti. Il tuo lavoro, in un unico posto.'));
-    const primary = button('Apri un progetto', options.openProject, 'talos-button talos-button--primary workspace-primary', 'i-folder-open');
+    copy.append(node('p', 'workspace-eyebrow', 'home.talosYourWorkspace'), node('h1', '', 'home.whereShallWePickUp'),
+      node('p', 'workspace-home__lead', 'home.projectsConversationsAndToolsYour'));
+    const primary = button('home.openAProject', options.openProject, 'talos-button talos-button--primary workspace-primary', 'i-folder-open');
     primary.dataset.homeAction = 'project'; hero.append(copy, primary); fragment.append(hero);
 
-    const actions = node('nav', 'workspace-home__actions'); actions.setAttribute('aria-label', t('Inizia un lavoro'));
+    const actions = node('nav', 'workspace-home__actions'); actions.setAttribute('aria-label', t('home.startWorking'));
     for (const [label, subtitle, symbol, action] of [
-      ['Conversazione', 'Scrivi e lavora con l’agente', 'i-list', () => options.navigate('chat')],
-      ['Terminale', 'Apri la shell del computer', 'i-terminal', () => options.navigate('terminal')],
-      ['Documenti', 'Consulta la tua libreria', 'i-doc', () => options.navigate('libreria')],
-      ['Ricerca', 'Raccogli e confronta le fonti', 'i-globe', () => options.navigate('ricerca')],
+      ['home.conversation', 'home.writeAndWorkWithYour', 'i-list', () => options.navigate('chat')],
+      ['home.terminal', 'home.openYourComputersShell', 'i-terminal', () => options.navigate('terminal')],
+      ['home.documents', 'home.browseYourLibrary', 'i-doc', () => options.navigate('libreria')],
+      ['home.research', 'home.gatherAndCompareSources', 'i-globe', () => options.navigate('ricerca')],
     ] as const) {
       const b = button(label, action, 'workspace-action', symbol);
       b.append(node('small', '', subtitle), icon('i-chevron-right')); actions.append(b);
@@ -118,35 +118,35 @@ export function createWorkspaceChrome(options: WorkspaceChromeOptions) {
     if (notice) { const n = node('p', 'workspace-notice', notice); n.setAttribute('role', 'status'); fragment.append(n); }
     if (providerMancante) {
       const avviso = node('div', 'workspace-notice workspace-notice--provider'); avviso.setAttribute('role', 'status');
-      const imposta = button('Imposta un provider', options.openProviders, 'talos-button talos-button--secondary', 'i-shield');
+      const imposta = button('home.setUpAProvider', options.openProviders, 'talos-button talos-button--secondary', 'i-shield');
       imposta.dataset.homeAction = 'provider-setup';
-      avviso.append(node('p', '', 'Nessun provider impostato. Collega un provider per usare l’agente.'), imposta);
+      avviso.append(node('p', '', 'home.noProviderIsSetUp'), imposta);
       fragment.append(avviso);
     }
     const columns = node('div', 'workspace-home__columns');
     const recent = node('section', 'workspace-card workspace-recents'); recent.setAttribute('aria-labelledby', 'homeRecentTitle');
     const titlebar = node('div', 'workspace-card__heading');
-    const title = node('h2', '', 'Riprendi il lavoro'); title.id = 'homeRecentTitle';
-    const refresh = button('Aggiorna', () => { void load(); }, 'talos-button talos-button--ghost', 'i-history'); refresh.disabled = loading;
+    const title = node('h2', '', 'home.pickUpYourWork'); title.id = 'homeRecentTitle';
+    const refresh = button('home.refresh', () => { void load(); }, 'talos-button talos-button--ghost', 'i-history'); refresh.disabled = loading;
     refresh.dataset.homeAction = 'refresh'; titlebar.append(title, refresh); recent.append(titlebar);
     recent.setAttribute('aria-busy', String(loading));
     if (loading && !hasLoaded) {
-      const p = node('p', 'workspace-empty', 'Leggo le sessioni…'); p.setAttribute('role', 'status'); recent.append(p);
+      const p = node('p', 'workspace-empty', 'home.loadingSessions'); p.setAttribute('role', 'status'); recent.append(p);
     } else if (failed && !hasLoaded) {
       const p = node('div', 'workspace-empty'); p.setAttribute('role', 'status');
-      p.append(icon('i-history'), node('h3', '', 'La cronologia non è disponibile'), node('p', '', 'Il lavoro non è stato cancellato. Riprova a leggere le sessioni.')); recent.append(p);
+      p.append(icon('i-history'), node('h3', '', 'home.historyIsUnavailable'), node('p', '', 'home.yourWorkHasNotBeen')); recent.append(p);
     } else if (sessioniDaRiprendere(sessions).length === 0) {
       const empty = node('div', 'workspace-empty');
-      empty.append(icon('i-folder-open'), node('h3', '', 'Il prossimo lavoro inizia qui'),
-        node('p', '', 'Apri un progetto o una conversazione. Le tue sessioni compariranno qui.'),
-        button('Nuova conversazione', options.openProject, 'talos-button talos-button--secondary'));
+      empty.append(icon('i-folder-open'), node('h3', '', 'home.yourNextProjectStartsHere'),
+        node('p', '', 'home.openAProjectOrA'),
+        button('home.newConversation', options.openProject, 'talos-button talos-button--secondary'));
       recent.append(empty);
     } else {
-      if (failed) { const msg = node('p', 'workspace-notice', 'Aggiornamento non riuscito. Stai vedendo l’ultima lettura disponibile.'); msg.setAttribute('role', 'status'); recent.append(msg); }
+      if (failed) { const msg = node('p', 'workspace-notice', 'home.refreshFailedYouAreSeeing'); msg.setAttribute('role', 'status'); recent.append(msg); }
       const list = node('ul', 'workspace-recents__list');
       for (const row of sessioniDaRiprendere(sessions)) {
         const li = node('li', '');
-        const b = button('Sessione senza nome', () => options.openSession(row), 'workspace-recent', 'i-list');
+        const b = button('home.untitledSession', () => options.openSession(row), 'workspace-recent', 'i-list');
         const sessionLabel = b.querySelector('span');
         if (sessionLabel && typeof row.nome === 'string' && row.nome) sessionLabel.textContent = row.nome;
         b.dataset.session = row.sessionId;
@@ -155,29 +155,29 @@ export function createWorkspaceChrome(options: WorkspaceChromeOptions) {
         if (typeof row.modello === 'string' && row.modello) { const modelLabel = node('span', ''); modelLabel.textContent = row.modello; details.append(modelLabel); }
         b.append(details, icon('i-chevron-right')); li.append(b); list.append(li);
       }
-      recent.append(list, button('Tutte le sessioni', () => options.navigate('dashboard'), 'talos-button talos-button--ghost', 'i-grid'));
+      recent.append(list, button('home.allSessions', () => options.navigate('dashboard'), 'talos-button talos-button--ghost', 'i-grid'));
     }
     const aside = node('aside', 'workspace-home__aside');
     const readiness = node('section', 'workspace-card');
-    readiness.append(node('p', 'workspace-eyebrow', 'Prima della prossima richiesta'), node('h2', '', 'Il tuo agente'));
+    readiness.append(node('p', 'workspace-eyebrow', 'home.beforeYourNextRequest'), node('h2', '', 'home.yourAgent'));
     const model = options.currentModel();
     const provider = setup && isObject(setup.provider) ? setup.provider : null;
     const ready = provider?.pronto === true;
-    const modelLabel = node('p', 'workspace-model', 'Nessun modello selezionato');
+    const modelLabel = node('p', 'workspace-model', 'home.noModelSelected');
     if (model) modelLabel.textContent = model; readiness.append(modelLabel);
     readiness.append(node('p', 'workspace-muted', model && ready
-      ? 'Modello selezionato. Le autorizzazioni vengono richieste quando servono.'
-      : 'Puoi esplorare il workspace. Configura un modello quando vuoi usare l’agente.'));
-    readiness.append(button(model ? 'Cambia modello' : 'Scegli un modello', options.openModel, 'talos-button talos-button--secondary', 'i-bolt'));
+      ? 'home.modelSelectedPermissionsWillBe'
+      : 'home.youCanExploreYourWorkspace'));
+    readiness.append(button(model ? 'home.changeModel' : 'home.chooseAModel', options.openModel, 'talos-button talos-button--secondary', 'i-bolt'));
     // Una porta sola verso lo stesso posto nella stessa schermata: con la banda accesa, la porta è la sua.
-    if (!providerMancante) readiness.append(button('Provider e accessi', options.openProviders, 'talos-button talos-button--ghost', 'i-shield'));
+    if (!providerMancante) readiness.append(button('home.providersAndAccess', options.openProviders, 'talos-button talos-button--ghost', 'i-shield'));
     const shortcuts = node('section', 'workspace-card workspace-links');
-    shortcuts.append(node('h2', '', 'Organizza il lavoro'));
-    for (const [label, view, symbol] of [['Progetti', 'progetti', 'i-folder'], ['Attività', 'attivita', 'i-check-sq'], ['Note', 'note', 'i-edit'], ['Automazioni', 'automations', 'i-clock']] as const) {
+    shortcuts.append(node('h2', '', 'home.organizeYourWork'));
+    for (const [label, view, symbol] of [['home.projects', 'progetti', 'i-folder'], ['home.tasks', 'attivita', 'i-check-sq'], ['home.notes', 'note', 'i-edit'], ['home.automations', 'automations', 'i-clock']] as const) {
       shortcuts.append(button(label, () => options.navigate(view), 'talos-button talos-button--ghost', symbol));
     }
     aside.append(readiness, shortcuts); columns.append(recent, aside); fragment.append(columns);
-    const foot = node('p', 'workspace-home__foot', 'Nessuna operazione viene avviata automaticamente.');
+    const foot = node('p', 'workspace-home__foot', 'home.noOperationsAreStartedAutomatically');
     fragment.append(foot); root.replaceChildren(fragment);
     const focusKey = focused?.session ? `[data-session="${CSS.escape(focused.session)}"]`
       : focused?.action ? `[data-home-action="${CSS.escape(focused.action)}"]` : null;
@@ -202,9 +202,9 @@ export function createWorkspaceChrome(options: WorkspaceChromeOptions) {
   function syncControls(): void {
     const prefs = preferences.read();
     const restoreLabel = doc.querySelector<HTMLLabelElement>('label[for="setting-workspaceRestore"]');
-    if (restoreLabel) restoreLabel.textContent = t('Riprendi il workspace all’avvio');
+    if (restoreLabel) restoreLabel.textContent = t('impostazioni.search.workspaceRestore.title');
     const restoreHelp = doc.getElementById('workspaceRestoreHelp');
-    if (restoreHelp) restoreHelp.textContent = t('Riapre l’ultima sessione disponibile senza avviare operazioni.');
+    if (restoreHelp) restoreHelp.textContent = t('impostazioni.search.workspaceRestore.help');
     doc.documentElement.dataset.density = prefs.density;
     /* ⛔⛔ 18/09/2026 — LA «DISPOSIZIONE DEL WORKSPACE» È STATA ELIMINATA, non solo il suo comando.
        Owner: «eliminalo» — e non si poteva togliere solo il pulsante, perché quella preferenza
@@ -229,7 +229,7 @@ export function createWorkspaceChrome(options: WorkspaceChromeOptions) {
      * (`#setting-uiDensitySelect`), «Riprendi il workspace all'avvio» e il titolo della finestra.
      * (Il preset è stato eliminato il 18/09/2026: vedi il blocco qui sopra.)
      */
-    const labels: Partial<Record<View, string>> = { home: 'Home', chat: 'Conversazione', terminal: 'Terminale', diff: 'Revisione', dashboard: 'Sessioni', settings: 'Impostazioni', doctor: 'Diagnostica', libreria: 'Libreria', ricerca: 'Ricerca', progetti: 'Progetti', note: 'Note', attivita: 'Attività', memoria: 'Memoria', automations: 'Automazioni', browser: 'Browser', officina: 'Officina', capability: 'Capacità' };
+    const labels: Partial<Record<View, string>> = { home: 'home.home', chat: 'home.conversation', terminal: 'home.terminal', diff: 'home.review', dashboard: 'home.sessions', settings: 'home.settings', doctor: 'home.diagnostics', libreria: 'home.library', ricerca: 'home.research', progetti: 'home.projects', note: 'home.notes', attivita: 'home.tasks', memoria: 'home.memory', automations: 'home.automations', browser: 'home.browser', officina: 'home.toolForge', capability: 'home.capabilities' };
     doc.title = `TALOS · ${t(labels[currentView] || currentView)}`;
   }
   doc.documentElement.addEventListener('talos:lingua', () => {
