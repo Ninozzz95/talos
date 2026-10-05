@@ -393,22 +393,27 @@ export const REGISTRO_FORNITORI = congela({
     // GET /models non è documentato nell'indice ufficiale: il 404 resta esplicito.
     catalogo: congela({ fonte: 'fornitore', forma: 'openai-data', percorso: '/models', inUI: true, ripiegoSu404: 'documentazione' }),
     prezzi: congela({ fonte: 'https://docs.z.ai/guides/overview/pricing', data: '2026-09-12', valuta: 'USD', unita: 'milione di token', archiviazioneCache: 'Gratuita temporaneamente; durata non dichiarata.' }),
-    // Vincolo esplicito P-D. La fonte oggi ammette anche low su 5.3/Flash:
-    // non lo inviamo, e il traduttore dichiara che è una scelta del profilo AVM.
-    ragionamento: congela({ formato: 'thinking', livelli: congela(['high', 'max']), fonte: 'https://docs.z.ai/api-reference/llm/chat-completion', data: '2026-09-12' }),
+    /* ⛔ BUG-18 (05/10, owner): il vincolo P-D del 12/09 («low non lo inviamo») è SUPERATO — la
+    compattazione chiede `low` per essere economica (compattazione-desktop.mjs:699) e il clamp
+    la rendeva «high», più cara (viola la regola 24/09 «mai più caro»). Dato aggiornato DOVE STA
+    IL DATO: docs.z.ai/api-reference/llm/chat-completion (riletta 05/10: reasoning_effort
+    documentato) + catalogo provider misurato 24/09 `supported_efforts: [max, high, low]`,
+    `default_effort: max` (runtime-owner-adapter.mjs:388-390). Nessun ramo per provider: il
+    meccanismo resta generico (alias canonico xhigh≡max + più-debole-prima + minimo di cura). */
+    ragionamento: congela({ formato: 'thinking', livelli: congela(['low', 'high', 'max']), fonte: 'https://docs.z.ai/api-reference/llm/chat-completion', data: '2026-10-05' }),
     modelliNoti: congela([
       congela({ id: 'glm-5.3-flash', nome: 'GLM-5.3-Flash', contextLength: 1_000_000, contestoDichiarato: '1M', maxOutputTokens: 131_072,
-        fonte: 'https://docs.z.ai/guides/vlm/glm-5.3-flash', data: '2026-09-12',
+        fonte: 'https://docs.z.ai/guides/vlm/glm-5.3-flash', data: '2026-10-05',
         prezzi: congela({ ingresso: 0.15, cache: 0.03, uscita: 0.50 }),
-        ragionamento: congela({ livelli: congela(['high', 'max']), thinking: congela(['enabled']) }) }),
+        ragionamento: congela({ livelli: congela(['low', 'high', 'max']), thinking: congela(['enabled']) }) }),
       congela({ id: 'glm-5.3', nome: 'GLM-5.3', contextLength: 1_000_000, contestoDichiarato: '1M', maxOutputTokens: 131_072,
-        fonte: 'https://docs.z.ai/guides/llm/glm-5.3', data: '2026-09-12',
+        fonte: 'https://docs.z.ai/guides/llm/glm-5.3', data: '2026-10-05',
         prezzi: congela({ ingresso: 1.40, cache: 0.26, uscita: 4.40 }),
-        ragionamento: congela({ livelli: congela(['high', 'max']), thinking: congela(['enabled']) }) }),
+        ragionamento: congela({ livelli: congela(['low', 'high', 'max']), thinking: congela(['enabled']) }) }),
       congela({ id: 'glm-5.2', nome: 'GLM-5.2', contextLength: 1_000_000, contestoDichiarato: '1M', maxOutputTokens: 131_072,
         fonte: 'https://docs.z.ai/guides/llm/glm-5.2', data: '2026-09-12',
         prezzi: congela({ ingresso: 1.40, cache: 0.26, uscita: 4.40 }),
-        ragionamento: congela({ livelli: congela(['high', 'max']), thinking: congela(['enabled', 'disabled']) }) }),
+        ragionamento: congela({ livelli: congela(['low', 'high', 'max']), thinking: congela(['enabled', 'disabled']) }) }),
       congela({ id: 'glm-5', nome: 'GLM-5', contextLength: 200_000, contestoDichiarato: '200K', maxOutputTokens: 131_072,
         fonte: 'https://docs.z.ai/guides/llm/glm-5', data: '2026-09-12',
         prezzi: congela({ ingresso: 1, cache: 0.20, uscita: 3.20 }),
@@ -1227,7 +1232,7 @@ export const REGISTRO_FORNITORI = congela({
     // Nessun GET modelli documentato su questa porta: riserva esplicita, mai GET inventato.
     catalogo: congela({ fonte: 'fornitore', forma: 'anthropic-data', percorso: null, inUI: true }),
     prezzi: congela({ fonte: 'https://docs.z.ai/devpack/overview', data: '2026-09-12', nota: 'Access tied to the plan; call cost not measured.' }),
-    ragionamento: congela({ livelli: congela(['high', 'max']), fonte: 'https://docs.z.ai/devpack/latest-model', data: '2026-09-12' }),
+    ragionamento: congela({ livelli: congela(['low', 'high', 'max']), fonte: 'https://docs.z.ai/devpack/latest-model', data: '2026-10-05' }),
     modelliDiRiserva: congela([
       congela({ id: 'glm-5.3-flash', nome: 'GLM 5.3 Flash', toolCalling: true, fonte: 'https://docs.z.ai/devpack/latest-model', data: '2026-09-12' }),
       congela({ id: 'glm-5.3', nome: 'GLM 5.3', toolCalling: true, fonte: 'https://docs.z.ai/devpack/latest-model', data: '2026-09-12' }),

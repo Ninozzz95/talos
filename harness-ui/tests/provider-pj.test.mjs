@@ -223,16 +223,27 @@ test('PJ-12 — scadenze Anthropic sui nuovi record; header assente non inventa 
   }
 });
 
-test('PJ-13 — opzioni terze esplicite: nessun livello o stop ignorato in silenzio', async t => {
+test('PJ-13 — opzioni terze esplicite: i livelli documentati passano, il resto non passa in silenzio', async t => {
   const b = await banco(t, (r, res) => json(res, risposta(r.body.model)));
-  for (const effort of ['high', 'max']) {
+  /* ⛔ 05/10/2026, BUG-18 gen.2 — riconciliazione col DATO dietro fonte datata (revisore gen.1 B1-3):
+     docs.z.ai/devpack/latest-model (riletta 05/10/2026, HTTP 200) documenta sulla porta Anthropic:
+     «reasoning_effort» minimal/light/low → effort «low», medium/high → «high», xhigh/max/ultra →
+     «max»; e «Disabling the thinking configuration is converted to `low` and does not switch to
+     another model». È il TEST a cedere (al 12/09 il registro diceva ['high','max']): «low» passa;
+     lo spegnimento si traduce nel floor «low» della porta (stessi valori della fonte, non un
+     rifiuto); «medium» NON passa perché la conversione della porta la porterebbe a «high» —
+     mai più caro del chiesto (regola owner 24/09). */
+  for (const effort of ['low', 'high', 'max']) {
     await b.invia('zai-anthropic', { reasoning_effort: effort });
     assert.equal(b.richieste.at(-1).body.output_config.effort, effort);
     assert.equal(b.richieste.at(-1).body.thinking.type, 'adaptive');
     assert.equal(b.richieste.at(-1).body.reasoning_effort, undefined);
   }
+  await b.invia('zai-anthropic', { reasoning: { enabled: false } });
+  assert.equal(b.richieste.at(-1).body.output_config.effort, 'low', 'disattivare = floor «low» della porta (fonte sopra)');
+  assert.equal(b.richieste.at(-1).body.thinking.type, 'adaptive');
   for (const [p, body] of [
-    ['zai-anthropic', { reasoning_effort: 'low' }], ['zai-anthropic', { reasoning: { enabled: false } }],
+    ['zai-anthropic', { reasoning_effort: 'medium' }], ['zai-anthropic', { reasoning_effort: 'minimal' }],
     ['minimax-anthropic', { reasoning_effort: 'high' }], ['minimax-anthropic', { stop: ['ALT'] }], ['minimax-anthropic', { reasoning: { enabled: false } }],
   ]) {
     const prima = b.richieste.length;

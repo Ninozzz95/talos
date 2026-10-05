@@ -844,9 +844,13 @@ test('eseguiComandoDiretto passa {mobile:true} a eseguiComandoSandboxatoFn quand
      L'elenco resta CHIUSO apposta: un'opzione nuova la fa vedere invece di lasciarla passare muta. */
   /* ⛔ 02/10/2026: si aggiunge `segnaleStop` — lo Stop per riga della scheda Processi (decisione owner): il `!` della
      persona prima non aveva NESSUN segnale di arresto. Dev'essere un segnale vero e, alla partenza, non ancora fermato. */
-  assert.deepEqual(Object.keys(opzioniCatturate).sort(), ['dove', 'mobile', 'onPezzo', 'segnaleStop', 'tracciaCartella']);
+  /* ⛔ 05/10/2026 (residuo BUG-14 D4): `segnaleSfondo` + `fileSfondo` — il canale di sfondo per riga (commit
+     3ec7cafea) passa DUE opzioni in più all'esecutore: il segnale «sfonda» della riga e il file di cattura. */
+  assert.deepEqual(Object.keys(opzioniCatturate).sort(), ['dove', 'fileSfondo', 'mobile', 'onPezzo', 'segnaleSfondo', 'segnaleStop', 'tracciaCartella']);
   assert.ok(opzioniCatturate.segnaleStop instanceof AbortSignal);
   assert.equal(opzioniCatturate.segnaleStop.aborted, false);
+  assert.ok(opzioniCatturate.segnaleSfondo instanceof AbortSignal, 'il segnale di sfondo della riga è un AbortSignal vero');
+  assert.equal(typeof opzioniCatturate.fileSfondo, 'string', 'il file di output di sfondo è un percorso');
   assert.equal(opzioniCatturate.tracciaCartella, true);
 });
 
@@ -870,9 +874,13 @@ test('⛔ AL CONTRARIO: senza mobile, eseguiComandoSandboxatoFn riceve {mobile:f
      L'elenco resta CHIUSO apposta: un'opzione nuova la fa vedere invece di lasciarla passare muta. */
   /* ⛔ 02/10/2026: si aggiunge `segnaleStop` — lo Stop per riga della scheda Processi (decisione owner): il `!` della
      persona prima non aveva NESSUN segnale di arresto. Dev'essere un segnale vero e, alla partenza, non ancora fermato. */
-  assert.deepEqual(Object.keys(opzioniCatturate).sort(), ['dove', 'mobile', 'onPezzo', 'segnaleStop', 'tracciaCartella']);
+  /* ⛔ 05/10/2026 (residuo BUG-14 D4): `segnaleSfondo` + `fileSfondo` — il canale di sfondo per riga (commit
+     3ec7cafea) passa DUE opzioni in più all'esecutore: il segnale «sfonda» della riga e il file di cattura. */
+  assert.deepEqual(Object.keys(opzioniCatturate).sort(), ['dove', 'fileSfondo', 'mobile', 'onPezzo', 'segnaleSfondo', 'segnaleStop', 'tracciaCartella']);
   assert.ok(opzioniCatturate.segnaleStop instanceof AbortSignal);
   assert.equal(opzioniCatturate.segnaleStop.aborted, false);
+  assert.ok(opzioniCatturate.segnaleSfondo instanceof AbortSignal, 'il segnale di sfondo della riga è un AbortSignal vero');
+  assert.equal(typeof opzioniCatturate.fileSfondo, 'string', 'il file di output di sfondo è un percorso');
   assert.equal(opzioniCatturate.tracciaCartella, true);
 });
 

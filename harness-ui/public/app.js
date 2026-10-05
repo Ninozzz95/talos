@@ -2111,6 +2111,7 @@ var init_app = __esm({
         "approval.allowSession": "Consenti per questa sessione",
         "approval.appliesSession": "Vale per tutta la sessione",
         "approval.allowFolderSession": "Consenti in questa cartella per la sessione",
+        "approval.allowSecretSession": "Consenti questo percorso per la sessione",
         "approval.responseFailed": "Risposta non riuscita",
         "approval.browserDenied": "Permesso negato",
         "approval.browserDeniedBody": "Il browser locale non verrà aperto.",
@@ -3527,6 +3528,7 @@ var init_app = __esm({
         "approval.allowSession": "Allow for this session",
         "approval.appliesSession": "Applies to the whole session",
         "approval.allowFolderSession": "Allow in this folder for the session",
+        "approval.allowSecretSession": "Allow this path for the session",
         "approval.responseFailed": "Response failed",
         "approval.browserDenied": "Permission denied",
         "approval.browserDeniedBody": "The local browser will not open.",
@@ -4712,6 +4714,7 @@ var init_chat = __esm({
         "retry.reason.rateLimited": "Il servizio sta limitando le richieste",
         "retry.reason.timeout": "Il servizio ha rifiutato la richiesta per timeout",
         "retry.reason.unavailable": "Il servizio è temporaneamente indisponibile",
+        "retry.reason.outcomeUnknown": "La risposta del fornitore si è interrotta senza esito: il giro riparte da solo, senza perdere il lavoro fatto",
         "retry.reason.withStatus": "{reason} (HTTP {status}).",
         "retry.scheduled": "Nuovo tentativo programmato",
         "retry.inProgress": "Richiesta in corso",
@@ -5373,6 +5376,7 @@ var init_chat = __esm({
         "retry.reason.rateLimited": "The service is limiting requests",
         "retry.reason.timeout": "The service rejected the request after a timeout",
         "retry.reason.unavailable": "The service is temporarily unavailable",
+        "retry.reason.outcomeUnknown": "The provider response was cut short with no outcome: the round restarts on its own, keeping the work done",
         "retry.reason.withStatus": "{reason} (HTTP {status}).",
         "retry.scheduled": "Retry scheduled",
         "retry.inProgress": "Request in progress",
@@ -6444,6 +6448,17 @@ var init_processi = __esm({
         "process.stateCancelled": "Annullato",
         "process.stateKilled": "Terminato a forza",
         "process.stateNotRun": "Non eseguito",
+        /* ⛔ BUG-14 (05/10/2026): lo stato «in sfondo», il pulsante per riga e il dettaglio (file + chi lo ha sfondato). */
+        "process.stateBackgrounded": "In sfondo",
+        "process.background": "Manda in sfondo",
+        "process.backgrounding": "Lo mando in sfondo…",
+        "process.notBackgrounded": "Non sfondato: {motivo}",
+        "process.didNotBackground": "Il comando non ha confermato lo sfondo: puoi riprovare.",
+        "process.detailOutputFile": "Output su file",
+        "process.detailBackgroundedBy": "Sfondato da",
+        "process.byYou": "te",
+        "process.byTimeout": "tempo scaduto",
+        "process.byModel": "il modello",
         "process.deniedByYou": "negato da te",
         "process.noTestSuite": "nessuna suite di test",
         "process.exitCode": "uscita {codice}",
@@ -6647,6 +6662,17 @@ var init_processi = __esm({
         "process.stateCancelled": "Cancelled",
         "process.stateKilled": "Terminated",
         "process.stateNotRun": "Not run",
+        /* ⛔ BUG-14 (05/10/2026): the «in background» state, the per-row button and the detail (file + who backgrounded it). */
+        "process.stateBackgrounded": "In background",
+        "process.background": "Send to background",
+        "process.backgrounding": "Sending to background…",
+        "process.notBackgrounded": "Not backgrounded: {motivo}",
+        "process.didNotBackground": "The command did not confirm the background switch: you can try again.",
+        "process.detailOutputFile": "Output to file",
+        "process.detailBackgroundedBy": "Backgrounded by",
+        "process.byYou": "you",
+        "process.byTimeout": "timeout",
+        "process.byModel": "the model",
         "process.deniedByYou": "denied by you",
         "process.noTestSuite": "no test suite",
         "process.exitCode": "exit {codice}",
@@ -13097,6 +13123,9 @@ var init_errori = __esm({
         "turno.esitoIncerto.cosa": "Non è stato possibile completare la risposta del modello.",
         "turno.esitoIncerto.perche": "TALOS non può confermare l’esito della richiesta e non l’ha reinviata automaticamente. Il testo già ricevuto e il lavoro precedente restano nella conversazione.",
         "turno.esitoIncerto.rimedio1": "Per riprendere, scrivi «continua» nella stessa sessione. È una nuova richiesta e può comportare un altro costo.",
+        "turno.esitoIncertoEsaurito.cosa": "La risposta del fornitore si è interrotta e il suo esito è rimasto incerto, anche dopo i reinvii automatici.",
+        "turno.esitoIncertoEsaurito.perche": "TALOS ha già ritentato da solo, più volte, e ha reinviato solo quando non era partito niente di visibile: nessun testo duplicato, nessun attrezzo ripetuto. Il risultato non è arrivato comunque.",
+        "turno.esitoIncertoEsaurito.rimedio1": "Per riprendere, scrivi «continua» nella stessa sessione: la richiesta riparte dall’ultimo punto sicuro e può comportare un altro costo.",
         // ── errori.js — chiave, motore locale, finestra, memoria
         "turno.chiaveMancante.cosa": "Manca la chiave per {nome}.",
         "turno.chiaveMancante.cosaSenzaNome": "Manca la chiave del fornitore scelto.",
@@ -13179,6 +13208,10 @@ var init_errori = __esm({
         "turno.quota.perche": "Non è un errore del compito: è il conto o la soglia di chiamate al minuto.",
         "turno.quota.rimedio1": "Aspetta qualche istante e riprova.",
         "turno.quota.rimedio2": "Oppure scegli un altro modello o un altro fornitore.",
+        "turno.ripetizione.cosa": "Il modello ha chiesto lo stesso comando più volte di fila, e TALOS ha chiuso la risposta.",
+        "turno.ripetizione.perche": "Ha chiesto {n} volte la stessa identica cosa (“{attrezzo}” con gli stessi argomenti) e continuava: la risposta è stata chiusa lì. Le prime copie sono state eseguite, le altre no. Non è un limite sul numero di attrezzi — richieste DIVERSE nello stesso giro passano tutte. Succede con i modelli locali quando il decoder entra in ripetizione (llama.cpp/ik_llama.cpp, difetto noto): con un altro modello, o un altro quantizzato, di solito non si ripresenta.",
+        "turno.ripetizione.rimedio1": "Cambia modello, o cambia quantizzazione, e riprova il giro.",
+        "turno.ripetizione.rimedio2": "Se serve proprio quel modello locale, riparti con un compito più piccolo: una richiesta alla volta.",
         "turno.sconosciuto.cosa": "Il giro si è interrotto per un errore.",
         "turno.sconosciuto.perche": "Questa forma di errore non è ancora tradotta: qui sotto c’è il testo che ha mandato il server, così com’è.",
         "turno.sconosciuto.rimedio2": "Se si ripete, apri Doctor e allega il testo qui sotto.",
@@ -13796,6 +13829,9 @@ var init_errori = __esm({
         "turno.esitoIncerto.cosa": "The model’s response could not be completed.",
         "turno.esitoIncerto.perche": "TALOS cannot confirm the outcome of the request and did not resend it automatically. The text already received and the previous work stay in the conversation.",
         "turno.esitoIncerto.rimedio1": "To resume, write “continue” in the same session. It is a new request and may incur another cost.",
+        "turno.esitoIncertoEsaurito.cosa": "The provider’s response was interrupted and its outcome remains uncertain, even after the automatic retries.",
+        "turno.esitoIncertoEsaurito.perche": "TALOS already retried on its own, several times, resending only when nothing visible had been delivered: no duplicated text, no repeated tool. The result did not arrive anyway.",
+        "turno.esitoIncertoEsaurito.rimedio1": "To resume, write “continue” in the same session: the request restarts from the last safe point and may incur another cost.",
         // ── errori.js — chiave, motore locale, finestra, memoria
         "turno.chiaveMancante.cosa": "The key for {nome} is missing.",
         "turno.chiaveMancante.cosaSenzaNome": "The key for the chosen provider is missing.",
@@ -13878,6 +13914,10 @@ var init_errori = __esm({
         "turno.quota.perche": "It is not an error of the task: it is the account or the calls-per-minute threshold.",
         "turno.quota.rimedio1": "Wait a moment and try again.",
         "turno.quota.rimedio2": "Or choose another model or another provider.",
+        "turno.ripetizione.cosa": "The model asked for the same command several times in a row, and TALOS closed the answer.",
+        "turno.ripetizione.perche": "It asked {n} times for the very same thing (“{attrezzo}” with the same arguments) and kept going: the answer was closed there. The first copies were run, the others were not. This is not a limit on the number of tools — DIFFERENT requests in the same round all go through. It happens with local models when the decoder falls into repetition (llama.cpp/ik_llama.cpp, a known defect): with another model, or another quantization, it usually does not come back.",
+        "turno.ripetizione.rimedio1": "Switch model, or switch quantization, and run the turn again.",
+        "turno.ripetizione.rimedio2": "If you need that local model, restart with a smaller task: one request at a time.",
         "turno.sconosciuto.cosa": "The turn stopped because of an error.",
         "turno.sconosciuto.perche": "This kind of error is not translated yet: below is the text the server sent, as it is.",
         "turno.sconosciuto.rimedio2": "If it repeats, open Doctor and attach the text below.",
@@ -20352,6 +20392,21 @@ var init_errori2 = __esm({
         })
       },
       {
+        /* ⛔⭐ BUG-16 (05/10/2026): l'esito incerto che ha esaurito i SUOI reinvii automatici — il kernel
+           ha già ritentato da solo (cap 10), reinvii fatti solo a zero effetti. La carta dice che il
+           tentativo automatico è finito e resta «ripresa manuale», ultima spiaggia onesta. Stessa
+           famiglia: il badge non cambia, è il TESTO a distinguere i due casi (piano BUG-16 §6). */
+        id: "esito-fornitore-incerto-esaurito",
+        famiglia: "esito-fornitore-incerto",
+        riconosce: (_testo, codice) => codice === "PROVIDER_OUTCOME_UNKNOWN_ESAURITO",
+        spiega: (tecnico, codice) => ({
+          cosa: t("errori.turno.esitoIncertoEsaurito.cosa"),
+          perche: t("errori.turno.esitoIncertoEsaurito.perche"),
+          rimedi: [t("errori.turno.esitoIncertoEsaurito.rimedio1")],
+          tecnico: tecnico.includes(codice) ? tecnico : `[${codice}]${tecnico ? ` ${tecnico}` : ""}`
+        })
+      },
+      {
         /*
          * ⭐⭐⭐ CLI-REQ-03, metà A SCHERMO (17/09/2026) — LA CHIAVE CHE MANCA NON È UN GUASTO.
          *
@@ -20646,6 +20701,32 @@ var init_errori2 = __esm({
               t("errori.turno.rispostaVuotaDopoTentativi.rimedio1"),
               ...malformata ? [t("errori.turno.rispostaVuotaDopoTentativi.rimedioFileLungo")] : [],
               t("errori.turno.rispostaVuotaDopoTentativi.rimedioAltroModello")
+            ]
+          };
+        }
+      },
+      /*
+       * ⛔ 04/10/2026, BUG-E (owner, sessione `3eb5e436…`): il kernel chiude il giro quando il modello
+       *   chiede lo stesso attrezzo con gli stessi argomenti più volte di fila (`fermatoPerRipetizione`,
+       *   `talosHarness.mjs`, esito `ripetizione`), e la carta cadeva nel sacco «sconosciuto» con la
+       *   frase «non è ancora tradotta»: nessuna regola la riconosceva. Qui si riconosce NELLE DUE
+       *   FORME — l'inglese attuale (K3) e l'italiano delle storie salvate prima di K3 (le copie in
+       *   `desktop/.prove/` la mostrano parola per parola) — con i parametri veri (quante volte, quale
+       *   attrezzo) e il rimedio giusto: NON «riprova il giro» così com'è, ma cambiare modello o
+       *   spezzare il compito, perché la ripetizione del decoder si ripresenta.
+       */
+      {
+        id: "ripetizione-identica",
+        riconosce: (t2) => /(?:the model asked \d+ times for the very same thing|il modello ha chiesto \d+ volte la stessa identica cosa)/iu.test(t2),
+        spiega: (tecnico) => {
+          const volte = /(?:asked|ha chiesto) (\d+) (?:times|volte)/iu.exec(tecnico)?.[1] ?? "—";
+          const attrezzo = /"([^"]+)"\s+(?:with the same arguments|con gli stessi argomenti)/iu.exec(tecnico)?.[1] ?? null;
+          return {
+            cosa: t("errori.turno.ripetizione.cosa"),
+            perche: t("errori.turno.ripetizione.perche", { n: volte, attrezzo: attrezzo ?? "—" }),
+            rimedi: [
+              t("errori.turno.ripetizione.rimedio1"),
+              t("errori.turno.ripetizione.rimedio2")
             ]
           };
         }
@@ -24073,7 +24154,7 @@ function datiProcesso(p = {}) {
   const durata2 = Number.isFinite(p.durataMs) && p.durataMs >= 0 ? p.durataMs < 100 ? `<${num.format(0.1)} s` : `${num.format(p.durataMs / 1e3)} s` : null;
   const misura = stato2 === "non-eseguito" && p.rifiutato === true ? t("processi.process.deniedByYou") : stato2 === "non-eseguito" && p.nessunTest === true ? [t("kernel.prova.nessunTestBreve"), durata2].filter(Boolean).join(" · ") : stato2 === "non-eseguito" && p.senzaSuite === true ? t("processi.process.noTestSuite") : [durata2, !descrittore.vivo && Number.isFinite(p.uscita) ? t("processi.process.exitCode", { codice: p.uscita }) : null].filter(Boolean).join(" · ") || (descrittore.vivo ? "" : "—");
   const chi = p.chi === "tu" ? t("processi.process.whoYou") : t("processi.process.whoAgent", { giro: p.giro ?? "—" });
-  const fermo = Number.isFinite(p.fermoDaMs) && p.fermoDaMs >= SOGLIA_ATTESA_MS ? t("processi.process.silent", { secondi: Math.round(p.fermoDaMs / 1e3) }) : null;
+  const fermo = stato2 !== "in-sfondo" && Number.isFinite(p.fermoDaMs) && p.fermoDaMs >= SOGLIA_ATTESA_MS ? t("processi.process.silent", { secondi: Math.round(p.fermoDaMs / 1e3) }) : null;
   const analisi = analizzaComando(p.comando || "");
   const cartella = typeof p.cwd === "string" && p.cwd.trim() ? p.cwd.trim() : "—";
   const quando = oraConSecondi(p.avviatoA);
@@ -24083,6 +24164,11 @@ function datiProcesso(p = {}) {
     [t("processi.process.detailStarted"), quando],
     [t("processi.process.detailDuration"), durata2 || "—"],
     [t("processi.process.detailExit"), Number.isFinite(p.uscita) && !descrittore.vivo ? String(p.uscita) : "—"],
+    /* ⛔ BUG-14 (05/10/2026): DOVE legge l'output un processo sfondato — il file è la cosa che la persona deve aprire
+       (percorso lungo: classe 'lungo', come il comando). E CHI lo ha sfondato, con le parole della riga; un valore che
+       non è nella tabella si mostra com'è invece di sparire. */
+    ...p.fileSfondo ? [[t("processi.process.detailOutputFile"), p.fileSfondo, "lungo"]] : [],
+    ...p.sfondoDa ? [[t("processi.process.detailBackgroundedBy"), CHI_SFONDA[p.sfondoDa] ? t(CHI_SFONDA[p.sfondoDa]) : p.sfondoDa]] : [],
     /* ⛔ 17/09, OSS-2 — la cartella NON è più «—» per costruzione: `ToolCallResult` porta `cwd`
        (corsia B). Resta «—» quando il campo non arriva davvero, che è un fatto, non un ripiego. */
     [t("processi.process.detailFolder"), cartella],
@@ -24147,6 +24233,8 @@ function bottoneApri(d, card, riga2, idRiga) {
     }
     riga2.dettaglio.hidden = aperto;
     card.dataset.aperto = aperto ? "no" : "si";
+    aggiornaPulsanteMostra(riga2.cmd);
+    for (const v of riga2.dettaglio.querySelectorAll?.(".talos-kv__v--lungo") ?? []) aggiornaPulsanteMostra(v);
   });
   return b;
 }
@@ -24194,6 +24282,102 @@ function avvisoFermata(riga2, testo2) {
   riga2.avvisoFerma.textContent = testo2 || "";
   riga2.avvisoFerma.hidden = !testo2;
 }
+function bottoneSfonda(d, riga2, scheda, idRiga) {
+  const b = el3(d, "button", "talos-button talos-button--ghost talos-button--sm talos-process__sfonda");
+  b.type = "button";
+  b.hidden = true;
+  b.setAttribute("aria-label", t("processi.process.background"));
+  b.title = t("processi.process.background");
+  const svg2 = d.createElementNS(SVG_NS_INSPECTOR, "svg");
+  svg2.setAttribute("class", "i i--sm");
+  svg2.setAttribute("aria-hidden", "true");
+  const use = d.createElementNS(SVG_NS_INSPECTOR, "use");
+  use.setAttribute("href", "#i-sfondo");
+  svg2.append(use);
+  b.append(svg2);
+  b.addEventListener("click", async (evento) => {
+    evento.preventDefault?.();
+    evento.stopPropagation?.();
+    const sfonda = scheda.azioni?.sfonda;
+    if (typeof sfonda !== "function" || b.disabled) return;
+    b.disabled = true;
+    avvisoFermata(riga2, t("processi.process.backgrounding"));
+    let esito;
+    try {
+      esito = await sfonda(idRiga);
+    } catch (errore2) {
+      esito = { ok: false, messaggio: errore2?.message };
+    }
+    if (esito?.ok === false) {
+      b.disabled = false;
+      avvisoFermata(riga2, t("processi.process.notBackgrounded", { motivo: esito.messaggio || t("processi.process.tryAgain") }));
+      return;
+    }
+    clearTimeout(riga2.timerFermata);
+    riga2.timerFermata = setTimeout(() => {
+      if (!FERMABILE.has(riga2.card.dataset.stato)) return;
+      b.disabled = false;
+      avvisoFermata(riga2, t("processi.process.didNotBackground"));
+    }, ATTESA_FERMATA_MS);
+  });
+  return b;
+}
+function inserisciSfonda(d, riga2, scheda, idRiga) {
+  if (!riga2.sfonda) {
+    const b = bottoneSfonda(d, riga2, scheda, idRiga);
+    riga2.mettiSfonda(b);
+    riga2.sfonda = b;
+  }
+  return riga2.sfonda;
+}
+function tagliatoDalTetto(nodo13) {
+  const s = nodo13?.scrollHeight;
+  const c = nodo13?.clientHeight;
+  if (!Number.isFinite(s) || !Number.isFinite(c)) return false;
+  return s - c > 1;
+}
+function bottoneDi(nodo13) {
+  const cfg = nodo13 && CONFIG_TAGLIO.get(nodo13);
+  if (!cfg) return null;
+  if (!cfg.pulsante) {
+    cfg.pulsante = bottoneMostraTutto(cfg.d, cfg.suClic);
+    cfg.padre.append(cfg.pulsante);
+  }
+  return cfg.pulsante;
+}
+function aggiornaPulsanteMostra(nodo13) {
+  const cfg = nodo13 && CONFIG_TAGLIO.get(nodo13);
+  if (!cfg) return;
+  if (nodo13?.dataset?.aperto === "si") {
+    if (cfg.pulsante) cfg.pulsante.hidden = false;
+    return;
+  }
+  if (tagliatoDalTetto(nodo13)) {
+    bottoneDi(nodo13);
+    if (cfg.pulsante) cfg.pulsante.hidden = false;
+  } else if (cfg.pulsante) cfg.pulsante.hidden = true;
+}
+function registraTaglio(nodo13, d, padre, suClic) {
+  if (!nodo13) return;
+  CONFIG_TAGLIO.set(nodo13, { d, padre, suClic, pulsante: null });
+  if (typeof ResizeObserver !== "function") return;
+  if (!osservatoreTaglio) osservatoreTaglio = new ResizeObserver((voci) => {
+    for (const v of voci) aggiornaPulsanteMostra(v.target);
+  });
+  osservatoreTaglio.observe(nodo13);
+}
+function bottoneMostraTutto(d, suClic) {
+  const b = el3(d, "button", "talos-button talos-button--ghost talos-button--sm talos-process__mostra-tutto");
+  b.type = "button";
+  b.textContent = t("app.common.showAll");
+  b.hidden = true;
+  if (typeof suClic === "function") b.addEventListener("click", (evento) => {
+    evento.preventDefault?.();
+    evento.stopPropagation?.();
+    suClic();
+  });
+  return b;
+}
 function creaRiga(d, p, scheda, contenitore) {
   const card = el3(d, "div", "talos-card talos-process");
   card.dataset.c = "ProcessRow";
@@ -24208,6 +24392,12 @@ function creaRiga(d, p, scheda, contenitore) {
   titolo2.hidden = true;
   const testo2 = el3(d, "div", "talos-process__testo");
   testo2.append(titolo2, cmd);
+  cmd.classList.add("talos-process__cmd--troncato");
+  cmd.dataset.aperto = "no";
+  registraTaglio(cmd, d, testo2, () => {
+    cmd.dataset.aperto = cmd.dataset.aperto === "si" ? "no" : "si";
+    aggiornaPulsanteMostra(cmd);
+  });
   const dettaglio = el3(d, "div", "talos-process__dettaglio");
   dettaglio.id = `processo-dettaglio-${String(p.id ?? "")}`;
   dettaglio.hidden = true;
@@ -24244,7 +24434,22 @@ function creaRiga(d, p, scheda, contenitore) {
     evento.preventDefault?.();
     card.lancia ? card.lancia("click") : card.click?.();
   });
-  Object.assign(riga2, { statoEl, statoTesto, statoUse, chiEl, oraEl, misuraEl, stallo, ferma, avvisoFerma, timerFermata: null });
+  Object.assign(riga2, {
+    statoEl,
+    statoTesto,
+    statoUse,
+    chiEl,
+    oraEl,
+    misuraEl,
+    stallo,
+    ferma,
+    sfonda: null,
+    avvisoFerma,
+    timerFermata: null,
+    /* La posizione del «Sfondo» è un patto: prima dello Stop, che resta l'ultimo gesto della testa.
+       Passa da qui (non da `parentNode`) perché il DOM finto dei test implementa insertBefore, non parentNode. */
+    mettiSfonda: (b) => testa.insertBefore(b, ferma)
+  });
   aggiornaRiga(d, riga2, p, scheda);
   void contenitore;
   return riga2;
@@ -24255,20 +24460,26 @@ function aggiornaRiga(d, riga2, p, scheda) {
   riga2.card.dataset.famiglia = p.famiglia;
   const fermabile = FERMABILE.has(p.stato) && typeof scheda.azioni?.ferma === "function";
   riga2.ferma.hidden = !fermabile;
+  const sfondabile = FERMABILE.has(p.stato) && typeof scheda.azioni?.sfonda === "function";
+  if (sfondabile) inserisciSfonda(d, riga2, scheda, String(p.id ?? "")).hidden = false;
+  else if (riga2.sfonda) riga2.sfonda.hidden = true;
   if (!fermabile && (riga2.ferma.disabled || !riga2.avvisoFerma.hidden)) {
     clearTimeout(riga2.timerFermata);
     riga2.ferma.disabled = false;
     avvisoFermata(riga2, "");
   }
+  if (!sfondabile && riga2.sfonda?.disabled) riga2.sfonda.disabled = false;
   riga2.card.dataset.selezionato = scheda.selezionato === p.id ? "si" : "no";
   const descrizione = typeof p.descrizione === "string" ? p.descrizione.trim() : "";
   if (!m || m.descrizione !== descrizione) {
     riga2.titolo.textContent = descrizione;
     riga2.titolo.hidden = !descrizione;
     riga2.cmd.hidden = Boolean(descrizione);
+    aggiornaPulsanteMostra(riga2.cmd);
   }
   if (!m || m.comando !== p.comando) {
     riga2.cmd.replaceChildren(disegnaComando(d, p.comando, p.analisi));
+    aggiornaPulsanteMostra(riga2.cmd);
     riga2.cmd.setAttribute("aria-label", t("processi.process.commandAria", { famiglia: NOME_FAMIGLIA[p.famiglia] || t("processi.process.familyGeneric"), comando: p.comando }));
     riga2.icona.querySelector?.("use")?.setAttribute?.("href", `#${ICONA_FAMIGLIA[p.famiglia] || ICONA_FAMIGLIA.generico}`);
   }
@@ -24668,7 +24879,16 @@ function riempiCard(d, card, righe, { classiValore = () => "" } = {}) {
   for (const n of [...card.querySelectorAll(".talos-kv")]) n.remove();
   for (const r of righe) {
     card.appendChild(d.createTextNode("\n"));
-    card.appendChild(kv2(d, r[0], r[1], classiValore(r)));
+    const rigaKv = kv2(d, r[0], r[1], classiValore(r));
+    card.appendChild(rigaKv);
+    const valore = rigaKv.querySelector(".talos-kv__v--lungo");
+    if (valore) {
+      registraTaglio(valore, d, rigaKv, () => {
+        valore.dataset.aperto = valore.dataset.aperto === "si" ? "no" : "si";
+        aggiornaPulsanteMostra(valore);
+      });
+      aggiornaPulsanteMostra(valore);
+    }
   }
 }
 function schedaDaSaltare(inspector, rail, chiave) {
@@ -24794,6 +25014,12 @@ function processiDagliEventi(eventi2 = [], { adesso = Date.now(), nomiComando = 
       const p = avviati.get(e.toolCallId);
       p.uscita = Number.isFinite(e.uscita) ? e.uscita : e.errore ? 1 : 0;
       p.stato = e.rifiutato === true || e.senzaSuite === true ? "non-eseguito" : statoDaUscita(p.uscita, Boolean(e.errore));
+      if (e.inSfondo === true && e.rifiutato !== true && e.senzaSuite !== true) {
+        p.stato = "in-sfondo";
+        p.fileSfondo = typeof e.fileSfondo === "string" && e.fileSfondo !== "" ? e.fileSfondo : null;
+        p.sfondoDa = typeof e.sfondoDa === "string" && e.sfondoDa !== "" ? e.sfondoDa : null;
+        p.uscita = null;
+      }
       if (Number.isFinite(e.durataMs) && e.durataMs >= 0) p.durataMs = Math.round(e.durataMs);
       else if (Number.isFinite(p.ricevutoA) && Number.isFinite(e.ricevutoA) && e.ricevutoA - p.ricevutoA >= RISOLUZIONE_ARRIVI_MS) p.durataMs = e.ricevutoA - p.ricevutoA;
       if (!p.comando && typeof e.comando === "string" && e.comando.trim()) {
@@ -24823,7 +25049,7 @@ function processiDagliEventi(eventi2 = [], { adesso = Date.now(), nomiComando = 
   }
   return lista.reverse();
 }
-var localeNumeri, localeOra, FORMATI_NUMERI, num, numPercento, SELETTORE_RISPOSTA_TURNO, SELETTORE_TESTO_UTENTE, STATI_PROCESSO, TETTO_PROCESSI, SOGLIA_ATTESA_MS, ATTESA_FERMATA_MS, FERMABILE, SVG_NS_INSPECTOR, filtriAgenti, CLASSI_DETTAGLIO_PROCESSO, FAMIGLIA_DELL_ATTREZZO, RISOLUZIONE_ARRIVI_MS;
+var localeNumeri, localeOra, FORMATI_NUMERI, num, numPercento, SELETTORE_RISPOSTA_TURNO, SELETTORE_TESTO_UTENTE, STATI_PROCESSO, TETTO_PROCESSI, CHI_SFONDA, SOGLIA_ATTESA_MS, ATTESA_FERMATA_MS, FERMABILE, CONFIG_TAGLIO, osservatoreTaglio, SVG_NS_INSPECTOR, filtriAgenti, CLASSI_DETTAGLIO_PROCESSO, FAMIGLIA_DELL_ATTREZZO, RISOLUZIONE_ARRIVI_MS;
 var init_inspector = __esm({
   "src/components/inspector.js"() {
     init_nomi_attrezzi();
@@ -24861,6 +25087,15 @@ var init_inspector = __esm({
       "in-consenso": { get etichetta() {
         return t("processi.process.stateAwaitingApproval");
       }, tono: "warning", icona: "i-shield", vivo: true },
+      /*
+       * ⛔ BUG-14 (05/10/2026): «IN SFONDO» non è «in corso» né «in attesa». Il comando GIRA ancora, ma fuori dalla cattura:
+       *   l'agente ha già letto la sua «IN BACKGROUND», la persona legge l'output sul file. È VIVO — ma il suo silenzio è
+       *   PER COSTRUZIONE (l'output va sul file, non più nella riga), quindi niente avviso «Nessuna uscita da N secondi».
+       *   Non è né fermabile né sfondabile: non c'è più niente da sfondare, e lo Stop di un lavoro sfondato resta in chat.
+       */
+      "in-sfondo": { get etichetta() {
+        return t("processi.process.stateBackgrounded");
+      }, tono: "accent", icona: "i-sfondo", vivo: true },
       riuscito: { get etichetta() {
         return t("processi.process.stateSucceeded");
       }, tono: "success", icona: "i-check", vivo: false },
@@ -24886,9 +25121,16 @@ var init_inspector = __esm({
       }, tono: "warning", icona: "i-stop", vivo: false }
     });
     TETTO_PROCESSI = 40;
+    CHI_SFONDA = Object.freeze({
+      persona: "processi.process.byYou",
+      "tempo-scaduto": "processi.process.byTimeout",
+      modello: "processi.process.byModel"
+    });
     SOGLIA_ATTESA_MS = 6e4;
     ATTESA_FERMATA_MS = 8e3;
     FERMABILE = /* @__PURE__ */ new Set(["in-corso", "in-attesa"]);
+    CONFIG_TAGLIO = /* @__PURE__ */ new WeakMap();
+    osservatoreTaglio = null;
     SVG_NS_INSPECTOR = "http://www.w3.org/2000/svg";
     filtriAgenti = /* @__PURE__ */ new WeakMap();
     CLASSI_DETTAGLIO_PROCESSO = (r) => r[2] === "lungo" ? "talos-kv__v--lungo" : "";
@@ -25202,7 +25444,8 @@ function valoreRetry(evento) {
   if (evento?.type !== "CUSTOM" || evento.name !== "talos.provider-retry") return null;
   const v = evento.value;
   const id4 = (x) => typeof x === "string" && x.length > 0 && x.length <= 256;
-  if (!v || v.schema !== "talos.provider-retry.v1" || ![v.runId, v.threadId, v.requestId].every(id4) || !["attesa", "invio", "fine"].includes(v.fase) || !Number.isSafeInteger(v.tentativo) || v.tentativo < 2 || !Number.isSafeInteger(v.tentativiMassimi) || v.tentativiMassimi < v.tentativo || !Number.isInteger(v.httpStatus) || !(v.httpStatus === 402 && v.motivo === "budget-occupato" || v.httpStatus === 408 || v.httpStatus === 429 || v.httpStatus >= 500 && v.httpStatus <= 599) || !Number.isFinite(v.attesaMs) || v.attesaMs < 0 || v.attesaMs > 2147483647 || v.fase === "attesa" && (!Number.isSafeInteger(v.retryAt) || v.retryAt < 1)) return null;
+  const incerto = v.canale === "esito-incerto";
+  if (!v || v.schema !== "talos.provider-retry.v1" || ![v.runId, v.threadId, v.requestId].every(id4) || !["attesa", "invio", "fine"].includes(v.fase) || !Number.isSafeInteger(v.tentativo) || v.tentativo < (incerto ? 1 : 2) || !Number.isSafeInteger(v.tentativiMassimi) || v.tentativiMassimi < v.tentativo || (incerto ? v.httpStatus !== void 0 && v.httpStatus !== null || v.motivo !== void 0 && typeof v.motivo !== "string" : !Number.isInteger(v.httpStatus) || !(v.httpStatus === 402 && v.motivo === "budget-occupato" || v.httpStatus === 408 || v.httpStatus === 429 || v.httpStatus >= 500 && v.httpStatus <= 599)) || !Number.isFinite(v.attesaMs) || v.attesaMs < 0 || v.attesaMs > 2147483647 || v.fase === "attesa" && (!Number.isSafeInteger(v.retryAt) || v.retryAt < 1)) return null;
   return {
     requestId: v.requestId,
     runId: v.runId,
@@ -25211,8 +25454,10 @@ function valoreRetry(evento) {
     tentativo: v.tentativo,
     tentativiMassimi: v.tentativiMassimi,
     httpStatus: v.httpStatus,
+    canale: incerto ? "esito-incerto" : "http",
     retryAt: v.fase === "attesa" ? v.retryAt : null,
-    ...v.httpStatus === 402 ? { motivo: v.motivo } : {}
+    ...v.httpStatus === 402 ? { motivo: v.motivo } : {},
+    ...incerto && typeof v.motivo === "string" ? { motivo: v.motivo } : {}
   };
 }
 function riduciRetry(stato2, evento) {
@@ -25233,11 +25478,12 @@ function riduciRetry(stato2, evento) {
 function testoRetry(retry, ora4 = Date.now(), en2) {
   const voce2 = (chiave, parametri) => en2 === void 0 ? t(`chat.retry.${chiave}`, parametri) : interpola(TESTI[en2 ? "en" : "it"][`chat.retry.${chiave}`], parametri);
   const numero12 = voce2("attempt", { attempt: retry.tentativo, max: retry.tentativiMassimi });
-  const motivo = retry.httpStatus === 402 && retry.motivo === "budget-occupato" ? voce2("reason.budgetBusy") : retry.httpStatus === 429 ? voce2("reason.rateLimited") : retry.httpStatus === 408 ? voce2("reason.timeout") : voce2("reason.unavailable");
+  const incerto = retry.canale === "esito-incerto";
+  const motivo = incerto ? voce2("reason.outcomeUnknown") : retry.httpStatus === 402 && retry.motivo === "budget-occupato" ? voce2("reason.budgetBusy") : retry.httpStatus === 429 ? voce2("reason.rateLimited") : retry.httpStatus === 408 ? voce2("reason.timeout") : voce2("reason.unavailable");
   const secondi = Math.max(0, Math.ceil((retry.retryAt - ora4) / 1e3));
   return {
     titolo: retry.fase === "attesa" ? voce2("scheduled") : numero12,
-    motivo: `${voce2("reason.withStatus", { reason: motivo, status: retry.httpStatus })}${retry.fase === "attesa" ? ` ${numero12}.` : ""}`,
+    motivo: `${incerto ? motivo : voce2("reason.withStatus", { reason: motivo, status: retry.httpStatus })}${retry.fase === "attesa" ? ` ${numero12}.` : ""}`,
     tempo: retry.fase !== "attesa" ? voce2("inProgress") : secondi > 0 ? voce2("inSeconds", { seconds: secondi }) : voce2("waitingConfirmation")
   };
 }
@@ -37471,6 +37717,7 @@ ${testoDi(schema, intera)}`);
     trovaVoce: (id4) => m.contesto.trovaVoce(id4),
     apriMenu: (voce2, dove) => m.contesto.apriMenu(voce2, dove)
   });
+  m.giro = { apriModulo };
   const inModulo = (v) => Boolean(m.modulo) && (v?.__bozza === true || String(m.modulo.id) === String(v?.id));
   return {
     servizio,
@@ -37587,7 +37834,7 @@ ${testoDi(schema, intera)}`);
         b.type = "button";
         b.dataset.nuova = "";
         b.append(icona6(doc, "plus"), nodo11(doc, "span", "", schema.titoloNuova));
-        b.addEventListener("click", () => apriModulo("crea"));
+        b.addEventListener("click", () => m.giro.apriModulo("crea"));
         ospite.append(b);
       }
       b.disabled = Boolean(m.modulo);
@@ -52823,7 +53070,7 @@ function creaSchede(striscia, {
       new ResizeObserver(() => {
         if (contenitore.clientWidth === 0) return;
         if (inVistaInSospeso != null) {
-          const b = bottoneDi(inVistaInSospeso);
+          const b = bottoneDi2(inVistaInSospeso);
           inVistaInSospeso = null;
           if (b) portaInVista(b);
         }
@@ -52831,7 +53078,7 @@ function creaSchede(striscia, {
       }).observe(contenitore);
     }
   }
-  function bottoneDi(id4) {
+  function bottoneDi2(id4) {
     return contenitore.querySelector(`[role=tab][${attributo}="${CSS.escape(id4)}"]`);
   }
   function creaLinguetta(voce2, indice2) {
@@ -52913,7 +53160,7 @@ function creaSchede(striscia, {
     e.preventDefault();
     if (prossima && prossima !== id4) {
       azioni.seleziona?.(prossima);
-      const bersaglio = bottoneDi(prossima);
+      const bersaglio = bottoneDi2(prossima);
       bersaglio?.focus();
       portaInVista(bersaglio);
     }
@@ -52937,8 +53184,8 @@ function creaSchede(striscia, {
     });
     for (const nodo13 of coda2?.(voci) || []) contenitore.append("\n", nodo13);
     contenitore.append("\n");
-    if (avevaIlFuoco != null && fuocoPerduto()) bottoneDi(avevaIlFuoco)?.focus();
-    portaInVista(attiva != null ? bottoneDi(attiva) : null);
+    if (avevaIlFuoco != null && fuocoPerduto()) bottoneDi2(avevaIlFuoco)?.focus();
+    portaInVista(attiva != null ? bottoneDi2(attiva) : null);
   }
   return {
     get lista() {
@@ -52953,7 +53200,7 @@ function creaSchede(striscia, {
     menu,
     chiudiMenu,
     apriMenu,
-    bottoneDi,
+    bottoneDi: bottoneDi2,
     portaInVista,
     /** Ridisegna con l'elenco e la scelta correnti. */
     aggiorna(nuoveVoci = voci, nuovaAttiva = attiva) {
@@ -52972,7 +53219,7 @@ function creaSchede(striscia, {
         const pannello = idPannello ? documento.getElementById(idPannello) : null;
         if (pannello && scelta && b.id) pannello.setAttribute("aria-labelledby", b.id);
       }
-      portaInVista(bottoneDi(id4));
+      portaInVista(bottoneDi2(id4));
     },
     fuocoSullaAttiva() {
       contenitore.querySelector('[role=tab][aria-selected="true"]')?.focus();
@@ -73049,6 +73296,16 @@ ${nota?.contenuto || ""}`.trim(), t("app.notes.copied")),
           return { ok: false, messaggio: errore2?.message || "riprova." };
         }
       }
+      async function sfondaProcesso(toolCallId) {
+        const sessionId = state.realSession.id;
+        if (!sessionId) return { ok: false, messaggio: t("app.processes.noSession") };
+        try {
+          await apiPost("/api/v1/sessions/" + encodeURIComponent(sessionId) + "/processes/" + encodeURIComponent(toolCallId) + "/sfondo", {});
+          return { ok: true };
+        } catch (errore2) {
+          return { ok: false, messaggio: errore2?.message || "riprova." };
+        }
+      }
       function apiScrivi(metodo, pathname, body, options) {
         return apiCentrale().request(metodo, pathname, body, options);
       }
@@ -74004,6 +74261,38 @@ ${nota?.contenuto || ""}`.trim(), t("app.notes.copied")),
         }
         return effortCorrente;
       }
+      function livelliEffortDelModello() {
+        const id4 = typeof state.model === "string" ? state.model.trim() : "";
+        if (!id4) return null;
+        const diretti = state.modelLab?.catalogoModelli?.livelliDiretti;
+        const duePunti = id4.indexOf(":");
+        if (duePunti > 0 && diretti && typeof diretti === "object") {
+          const perFonte = diretti[id4.slice(0, duePunti)];
+          const grezzi = perFonte?.[id4.slice(duePunti + 1)] ?? perFonte?.["*"];
+          if (Array.isArray(grezzi) && grezzi.length) {
+            const valori2 = [...new Set(grezzi.map((v) => v === "max" ? "xhigh" : v))].filter((v) => v === "none" || LIVELLI_RAGIONAMENTO.some((l) => l.valore === v));
+            if (valori2.length) return valori2;
+          }
+        }
+        const modelli = state.modelLab?.catalogoModelli?.modelli || [];
+        const taglia = (v) => {
+          const s = Math.max(v.lastIndexOf(":"), v.lastIndexOf("/"));
+          const famiglia = (s >= 0 ? v.slice(0, s) : "").toLowerCase().replace(/[^a-z0-9]/g, "");
+          return { nome: (s >= 0 ? v.slice(s + 1) : v).toLowerCase(), famiglia };
+        };
+        const mia = taglia(id4);
+        const stessoNome = (m) => typeof m?.id === "string" && m.id.trim() !== "" && taglia(m.id).nome === mia.nome;
+        const stessaFamiglia = (m) => {
+          if (!stessoNome(m)) return false;
+          const sua = taglia(m.id);
+          return !mia.famiglia || !sua.famiglia || sua.famiglia === mia.famiglia;
+        };
+        const scelto = modelli.find((m) => m?.id === id4) || modelli.find(stessaFamiglia) || modelli.find(stessoNome);
+        const supportati = scelto?.reasoning?.supportedEfforts;
+        if (!Array.isArray(supportati) || supportati.length === 0) return null;
+        const valori = supportati.map((v) => v === "max" ? "xhigh" : v).filter((v) => v === "none" || LIVELLI_RAGIONAMENTO.some((l) => l.valore === v));
+        return valori.length ? valori : null;
+      }
       function creaModelPicker({ valoreIniziale = "", apriSubito = false, alSelezionato, etichettaVuota = t("app.modelPicker.select"), aggiornaModelloPrincipale = true, sincronizzaSessione = false } = {}) {
         const wrap = document.createElement("div");
         wrap.className = "model-picker";
@@ -74450,7 +74739,8 @@ ${nota?.contenuto || ""}`.trim(), t("app.notes.copied")),
           return t("app.modelPicker.effort.max");
         } }
       ];
-      function creaEffortPicker({ valoreIniziale = null, alCambiato } = {}) {
+      function creaEffortPicker({ valoreIniziale = null, alCambiato, livelliAmmessi } = {}) {
+        const livelli = Array.isArray(livelliAmmessi) && livelliAmmessi.length ? LIVELLI_RAGIONAMENTO.filter((l) => l.valore === "none" || livelliAmmessi.includes(l.valore)) : LIVELLI_RAGIONAMENTO;
         const wrap = document.createElement("div");
         wrap.className = "effort-picker";
         const head = document.createElement("div");
@@ -74462,24 +74752,41 @@ ${nota?.contenuto || ""}`.trim(), t("app.notes.copied")),
         range.type = "range";
         range.className = "effort-picker-range";
         range.min = "0";
-        range.max = String(LIVELLI_RAGIONAMENTO.length - 1);
+        range.max = String(livelli.length - 1);
         range.step = "1";
         range.setAttribute("aria-label", t("app.modelPicker.reasoningLevel"));
         const labelsRow = document.createElement("div");
         labelsRow.className = "effort-picker-labels";
-        const labelEls = LIVELLI_RAGIONAMENTO.map((l, i2) => {
+        const labelEls = livelli.map((l, i2) => {
           const el31 = textElement("span", "effort-picker-tick", l.etichetta);
-          el31.style.left = `${i2 / (LIVELLI_RAGIONAMENTO.length - 1) * 100}%`;
+          el31.style.left = `${i2 / (livelli.length - 1) * 100}%`;
           labelsRow.appendChild(el31);
           return el31;
         });
         wrap.append(head, range, labelsRow);
-        let indice2 = LIVELLI_RAGIONAMENTO.findIndex((l) => l.valore === valoreIniziale);
+        let indice2 = livelli.findIndex((l) => l.valore === valoreIniziale);
         let toccato = indice2 >= 0;
-        if (indice2 < 0) indice2 = LIVELLI_RAGIONAMENTO.findIndex((l) => l.valore === "high");
+        if (indice2 < 0 && valoreIniziale != null) {
+          const SCALA = ["none", "minimal", "low", "medium", "high", "xhigh", "max"];
+          const salvato = valoreIniziale === "max" ? "xhigh" : valoreIniziale;
+          const pos = SCALA.indexOf(salvato);
+          if (pos >= 0) {
+            for (let d = 1; d < SCALA.length && indice2 < 0; d++) {
+              for (const vicino of [SCALA[pos + d], SCALA[pos - d]]) {
+                if (!vicino) continue;
+                indice2 = livelli.findIndex((l) => l.valore === vicino);
+                if (indice2 >= 0) {
+                  toccato = true;
+                  break;
+                }
+              }
+            }
+          }
+        }
+        if (indice2 < 0) indice2 = livelli.findIndex((l) => l.valore === "high");
         function aggiorna() {
           range.value = String(indice2);
-          selected.textContent = toccato ? LIVELLI_RAGIONAMENTO[indice2].etichetta : t("app.common.automatic");
+          selected.textContent = toccato ? livelli[indice2].etichetta : t("app.common.automatic");
           labelEls.forEach((el31, i2) => el31.classList.toggle("effort-picker-tick-selected", i2 === indice2));
         }
         aggiorna();
@@ -74487,9 +74794,20 @@ ${nota?.contenuto || ""}`.trim(), t("app.notes.copied")),
           indice2 = Number(range.value);
           toccato = true;
           aggiorna();
-          alCambiato?.(LIVELLI_RAGIONAMENTO[indice2].valore);
+          alCambiato?.(livelli[indice2].valore);
         });
-        return { elemento: wrap, getValore: () => toccato ? LIVELLI_RAGIONAMENTO[indice2].valore : null };
+        return { elemento: wrap, getValore: () => toccato ? livelli[indice2].valore : null };
+      }
+      function agganciaRicostruzioneEffortSuCatalogo({ elemento, valoreIniziale, alCambiato, foglio = sheetDialog } = {}) {
+        if (!elemento || livelliEffortDelModello()) return;
+        void apiGet("/api/v1/models").then((c) => {
+          if (c?.modelli) state.modelLab.catalogoModelli = c;
+          const ammessi = livelliEffortDelModello();
+          if (!ammessi || foglio?.hidden || !elemento.isConnected) return;
+          const aggiornato = creaEffortPicker({ valoreIniziale, alCambiato, livelliAmmessi: ammessi });
+          elemento.replaceWith(aggiornato.elemento);
+        }).catch(() => {
+        });
       }
       async function leggiDettagliBoard(sessioni, generation, leggi, ricevi) {
         let prossimo = 0, errori = 0;
@@ -75410,6 +75728,8 @@ ${nota?.contenuto || ""}`.trim(), t("app.notes.copied")),
             });
             const effortPicker = creaEffortPicker({
               valoreIniziale: state.effort,
+              livelliAmmessi: livelliEffortDelModello(),
+              // BUG-7: la pillola mostra i livelli del modello
               alCambiato: (valore) => {
                 state.effort = valore;
                 sincronizzaImpostazioniSessione({ reasoning: valore ? { effort: valore } : null });
@@ -75435,6 +75755,14 @@ ${nota?.contenuto || ""}`.trim(), t("app.notes.copied")),
             mount.replaceChildren(picker.elemento, effortPicker.elemento, reasoningRow);
             montaFallbackIn(mount, state.fallbackProviders || [], scegliFallbackCorrente);
             aggiornaVisibilitaRagionamento();
+            agganciaRicostruzioneEffortSuCatalogo({
+              elemento: effortPicker.elemento,
+              valoreIniziale: state.effort,
+              alCambiato: (valore) => {
+                state.effort = valore;
+                sincronizzaImpostazioniSessione({ reasoning: valore ? { effort: valore } : null });
+              }
+            });
           }
         }
         const demoBadge = $3(".demo-surface-badge", sheetDialog);
@@ -76352,6 +76680,18 @@ ${nota?.contenuto || ""}`.trim(), t("app.notes.copied")),
         });
         const effortPicker = creaEffortPicker({
           valoreIniziale: state.effort,
+          livelliAmmessi: livelliEffortDelModello(),
+          // BUG-7: la pillola mostra i livelli del modello
+          alCambiato: (valore) => {
+            state.effort = valore;
+            sincronizzaImpostazioniSessione({ reasoning: valore ? { effort: valore } : null });
+          }
+        });
+        agganciaRicostruzioneEffortSuCatalogo({
+          elemento: effortPicker.elemento,
+          valoreIniziale: state.effort,
+          foglio: null,
+          // il velo non è `sheetDialog`: la guardia qui è solo isConnected
           alCambiato: (valore) => {
             state.effort = valore;
             sincronizzaImpostazioniSessione({ reasoning: valore ? { effort: valore } : null });
@@ -77360,8 +77700,8 @@ ${nota?.contenuto || ""}`.trim(), t("app.notes.copied")),
           file,
           /* ⛔ Si calcolano UNA VOLTA: servono alla colonna E al numero sulla sua scheda (sotto). */
           processi,
-          /* Stop per riga: senza sessione vera non c'è niente da fermare, e il pulsante non compare. */
-          azioniProcessi: state.realSession.id ? { ferma: fermaProcesso } : null,
+          /* Stop per riga e «Sfondo» per riga (BUG-14): senza sessione vera non c'è niente da fermare, e i pulsanti non compaiono. */
+          azioniProcessi: state.realSession.id ? { ferma: fermaProcesso, sfonda: sfondaProcesso } : null,
           agenti,
           /* PO-08: la card diventa apribile solo perché qui c'è chi ascolta — senza questa funzione
              `disegnaAgenti` la lascia statica, e non promette niente che non può mantenere. */
@@ -79144,6 +79484,11 @@ ${nota?.contenuto || ""}`.trim(), t("app.notes.copied")),
         scorriAllaBollaAppesa(scheda);
       }
       function appendApprovalCard(requestId, azione) {
+        const giaViva = state.realSession.approvazioniPendenti.get(requestId);
+        if (giaViva?.isConnected) {
+          giaViva.scrollIntoView({ block: "nearest" });
+          return giaViva;
+        }
         const bersaglio = azione?.percorso || azione?.comando || azione?.question || azione?.title || "";
         const badge6 = azione?.tipo === "scrivi" ? t("app.approval.badgeWrite") : azione?.tipo === "file_edit" ? t("app.approval.badgeEdit") : azione?.tipo === "leggi" ? t("app.approval.badgeRead") : azione?.tipo === "elenca" ? t("app.approval.badgeOpenFolder") : azione?.tipo === "shell" || azione?.tipo === "prova" ? t("app.approval.badgeRun") : azione?.tipo === "research_start" ? t("app.approval.badgeSearch") : t("app.approval.badgePermission");
         const scheda = creaApprovazione({ badge: badge6, bersaglio, perche: descriviAzioneApprovazione(azione), codice: codiceAzioneApprovazione(azione), motivo: motivoRichiestaApprovazione(azione), nota: t("app.approval.appliesOnce") });
@@ -79160,7 +79505,12 @@ ${nota?.contenuto || ""}`.trim(), t("app.notes.copied")),
         approvaBtn.dataset.approvaUnaVolta = "";
         const sessioneBtn = scheda.pulsanti.sessione;
         const davantiAUnSegreto = Boolean(azione?.segreto);
-        if (davantiAUnSegreto) sessioneBtn.remove();
+        const percorsoConsentibile = davantiAUnSegreto && !azione?.contenutoSospetto && !azione?.percorsoDiRete && !azione?.wslRoot && !azione?.fuoriDalProgetto && typeof azione.segreto?.percorso === "string" && azione.segreto.percorso !== "";
+        if (percorsoConsentibile) {
+          sessioneBtn.textContent = t("app.approval.allowSecretSession");
+          const notaPiedeSegreto = $3(".talos-approval__foot-note", article);
+          if (notaPiedeSegreto) notaPiedeSegreto.textContent = t("app.approval.appliesSession");
+        } else if (davantiAUnSegreto) sessioneBtn.remove();
         if (azione?.contenutoSospetto) sessioneBtn.remove();
         if (azione?.percorsoDiRete) sessioneBtn.remove();
         if (azione?.percorsoDiRete?.ambito === "sessione") {
@@ -79209,7 +79559,10 @@ ${nota?.contenuto || ""}`.trim(), t("app.notes.copied")),
         };
         negaBtn.addEventListener("click", () => rispondi(false));
         approvaBtn.addEventListener("click", () => rispondi(true));
-        sessioneBtn.addEventListener("click", () => cartellaConsentibile ? rispondi(true, false, "cartella") : rispondi(true, true));
+        sessioneBtn.addEventListener("click", () => {
+          if (percorsoConsentibile) return rispondi(true, false, "percorso");
+          return cartellaConsentibile ? rispondi(true, false, "cartella") : rispondi(true, true);
+        });
         nellaChat(article);
         aggiornaTickGiro({ tono: "warning" });
         article._rispostaDataQui = (risolta) => rispostaDataDaQuestaScheda || Boolean(risolta && inviiSenzaProva.some((inviato) => inviato.approvato === Boolean(risolta.approvato) && inviato.ambito === (risolta.ambito ?? null)));
@@ -79779,6 +80132,7 @@ ${testo2.slice(-(USCITA_AGENTE_MAX_CARATTERI - 4e3))}`;
         }
         uscite.delete(evento.toolCallId);
         uscite.set(evento.toolCallId, voce2);
+        uscite.revisione = (uscite.revisione ?? 0) + 1;
         let totale2 = 0;
         for (const v of uscite.values()) totale2 += v.vivo.length + (v.testo?.length ?? 0);
         for (const [id4, v] of uscite) {
@@ -79786,6 +80140,7 @@ ${testo2.slice(-(USCITA_AGENTE_MAX_CARATTERI - 4e3))}`;
           totale2 -= v.vivo.length + (v.testo?.length ?? 0);
           const testata = typeof v.testo === "string" ? v.testo.split("\n", 1)[0] : null;
           uscite.set(id4, { vivo: "", testo: testata, sfrattato: true });
+          uscite.revisione = (uscite.revisione ?? 0) + 1;
         }
       }
       let schedeAgenteProgrammate = 0;
@@ -79799,6 +80154,17 @@ ${testo2.slice(-(USCITA_AGENTE_MAX_CARATTERI - 4e3))}`;
           schedeAgenteProgrammate = 0;
           aggiornaSchedeAgente();
         });
+      }
+      const memoSchedeAgente = { chiave: null, schede: null };
+      function schedeAgenteConMemo(sessione) {
+        const eventi2 = state.realSession.eventiAttrezzi;
+        const uscite = state.realSession.usciteAgente;
+        const chiave = `${sessione}|${eventi2.length}|${uscite?.revisione ?? 0}|${chiuseAgenteDellaSessione(statoTerminale()).size}`;
+        if (memoSchedeAgente.chiave === chiave && memoSchedeAgente.schede) return memoSchedeAgente.schede;
+        const schede = schedeAgenteDagliEventi(eventi2, { chiuse: chiuseAgenteDellaSessione(statoTerminale()), uscite });
+        memoSchedeAgente.chiave = chiave;
+        memoSchedeAgente.schede = schede;
+        return schede;
       }
       function chiuseAgenteDellaSessione(t2 = statoTerminale()) {
         if (!t2.chiuseAgente) t2.chiuseAgente = /* @__PURE__ */ new Map();
@@ -79819,12 +80185,17 @@ ${testo2.slice(-(USCITA_AGENTE_MAX_CARATTERI - 4e3))}`;
       }
       function aggiornaSchedeAgente() {
         const t2 = statoTerminale();
+        if (!terminaleAschermo()) {
+          t2.schedeAgenteSporche = true;
+          return;
+        }
+        t2.schedeAgenteSporche = false;
         const sessione = state.realSession.id || null;
         if (t2.sessioneAgente !== sessione) {
           for (const record2 of [...t2.schede.values()]) if (record2.origine === "agente") togliSchedaAgente(record2, { attivaUnAltra: false });
           t2.sessioneAgente = sessione;
         }
-        const schede = sessione ? schedeAgenteDagliEventi(state.realSession.eventiAttrezzi, { chiuse: chiuseAgenteDellaSessione(t2), uscite: state.realSession.usciteAgente }) : [];
+        const schede = sessione ? schedeAgenteConMemo(sessione) : [];
         const viste = /* @__PURE__ */ new Set();
         for (const s of schede) {
           viste.add(s.terminalId);
@@ -79837,7 +80208,7 @@ ${testo2.slice(-(USCITA_AGENTE_MAX_CARATTERI - 4e3))}`;
           record2.comandi = s.comandi;
           record2.stato = s.esito === "in-corso" ? "live" : s.esito;
           record2.cartella = [...s.comandi].reverse().find((c) => c.cwd)?.cwd || "";
-          if (record2.term) scriviSchedaAgente(record2);
+          if (record2.term && record2.comandi !== record2.comandiScritte) scriviSchedaAgente(record2);
         }
         for (const record2 of [...t2.schede.values()]) if (record2.origine === "agente" && !viste.has(record2.terminalId)) togliSchedaAgente(record2);
         renderizzaSchedeTerminale();
@@ -79852,6 +80223,7 @@ ${testo2.slice(-(USCITA_AGENTE_MAX_CARATTERI - 4e3))}`;
           record2.term.write(testo2);
         }
         record2.scritto = testo2;
+        record2.comandiScritte = record2.comandi;
       }
       function montaSchedaAgente(record2) {
         if (record2.term) return true;
@@ -83170,6 +83542,11 @@ ${testo2}` : testo2;
           }
           return;
         }
+        if (evento.type === "CUSTOM" && evento.name === "attesa-approvazione-silenzio") {
+          const cardAttesa = state.realSession.approvazioniPendenti.get(evento.value?.requestId);
+          if (cardAttesa?.isConnected) cardAttesa.scrollIntoView({ block: "nearest" });
+          return;
+        }
         providerRetryUi.evento(evento, { inReplay: state.realSession.inRigiocata, attivo: runRealeAttivo() });
         const compattazione = interpretaEventoCompattazione(evento);
         if (compattazione) {
@@ -83310,7 +83687,16 @@ ${testo2}` : testo2;
           /* H-04 (owner 02/10/2026): una `prova` senza suite non è partita (`NOT RUN:`), e nei Processi si dice «Non eseguito». */
           senzaSuite: provaSenzaSuite(evento.content),
           /* 03/10/2026: «zero test eseguiti» è anche lui un NOT RUN, ma il comando è partito: si dice con le sue parole */
-          nessunTest: provaSenzaTestEseguiti(evento.content)
+          nessunTest: provaSenzaTestEseguiti(evento.content),
+          /*
+           * ⛔ BUG-14 (05/10/2026) — UN COMANDO SFONDATO NON È UN COMANDO FINITO. Il campo additivo dell'evento
+           *   (`inSfondo`, dal kernel via `toolCallResult`) vince; il testo come riserva (sessioni vecchie: il kernel
+           *   mette «IN BACKGROUND» in testa al contenuto). Il file e chi lo ha sfondato passano solo se veri.
+           *   Il `content` NON si conserva (nota qui sopra): bastano i fatti, non il testo.
+           */
+          inSfondo: evento.inSfondo === true || typeof evento.content === "string" && /^\s*IN BACKGROUND\b/u.test(evento.content),
+          fileSfondo: typeof evento.fileSfondo === "string" && evento.fileSfondo !== "" ? evento.fileSfondo : null,
+          sfondoDa: typeof evento.sfondoDa === "string" && evento.sfondoDa !== "" ? evento.sfondoDa : null
         });
         if (evento.type === "ToolCallOutput" || evento.type === "ToolCallResult") registraUscitaAgente(evento);
         if (EVENTI_DELLE_SCHEDE_AGENTE.has(evento.type)) programmaSchedeAgente();
@@ -85696,7 +86082,7 @@ ${testo2}` : testo2;
         );
         rightHead.querySelector("h3").id = "workspaceChooserSettingsTitle";
         const modelPicker = creaModelPicker({ valoreIniziale: state.model || "", aggiornaModelloPrincipale: false });
-        const effortPicker = creaEffortPicker({ valoreIniziale: state.effort });
+        const effortPicker = creaEffortPicker({ valoreIniziale: state.effort, livelliAmmessi: livelliEffortDelModello() });
         const plannerPicker = creaModelPicker({ valoreIniziale: "", etichettaVuota: t("app.common.none"), aggiornaModelloPrincipale: false });
         const modelSection = document.createElement("div");
         modelSection.className = "workspace-chooser-setting-group";

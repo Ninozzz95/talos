@@ -6,6 +6,40 @@ Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/). Versions
 
 ## Unreleased
 
+## desktop-v0.1.23 — 2026-10-05 (beta, published as a GitHub pre-release)
+
+A beta: installs of 0.1.22 do not receive it automatically. The headline of this round: when the provider's
+answer is cut mid-flight and its outcome is unknown, TALOS now retries on its own instead of leaving a dead
+turn and a manual "continua".
+
+### Added
+- Automatic retry of uncertain provider outcomes (BUG-16): up to 10 guarded resends per turn, only when
+  nothing visible has happened (no text delivered, no tool started, no tool call announced), each with a
+  visible wait banner, an honest reason, and a Stop that wakes the wait immediately. When the budget runs
+  out you get the explicit "outcome uncertain" card instead of silence.
+- Read-only sub-agents whose provider response was cut get one safe resume of the same session (history
+  intact, prefix cache preserved); their result always says whether they were relaunched, or why not.
+- Stuck commands get a per-line "background" button, and timeouts now break through instead of hanging
+  (default 120 s, tunable from 500 ms up to 600 s) (BUG-3/BUG-14).
+- Provider-adaptive reasoning levels (BUG-18): the reasoning-effort level is mapped to what each provider
+  actually supports — out-of-scale, empty or absent resolves to null instead of guessing, a level the provider
+  cannot serve is refused up front rather than silently costing more, "xhigh" is a silent alias, and providers
+  that mandate thinking keep a "none" floor. Mapping decisions land in telemetry notes, never in user warnings.
+
+### Changed
+- In Full access, terminal commands no longer ask for consent — not on secret paths, not for suspicious
+  content, not for the once-per-session WSL-root approval. Delegated sub-agents inherit the permission
+  (F-022), so they can no longer hang forever on a consent card nobody can see. Secret reads and every
+  lower permission level still ask exactly as before; per-tool "ask" overrides stay sovereign (BUG-17).
+
+### Fixed
+- Approval prompts that went unanswered while the window was away are replayed to live clients, with a
+  silence watchdog (BUG-8).
+- The section list no longer goes stale after "Add" (BUG-11).
+- The composer textarea scrolls instead of overflowing (BUG-12).
+- Compaction: the real model window reaches the kernel, the summary input is bounded, and summary failures
+  are classified and shown (BUG-5).
+
 ## desktop-v0.1.22 — 2026-10-03 (beta, published as a GitHub pre-release)
 
 A beta: installs of 0.1.21 do not receive it automatically. TALOS now speaks English and Italian across the interface,

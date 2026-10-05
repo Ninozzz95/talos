@@ -5416,6 +5416,22 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
   }
 
   /*
+   * ⛔ BUG-14 (05/10/2026) — «Sfondo» per riga: la terza strada del comando lungo, accanto al pulsante Ferma.
+   *   NON è uno stop: il processo vive, l'agente continua subito e l'output va sul file che la riga mostrerà.
+   *   Stessa forma di `fermaProcesso`: qui si riporta solo se la richiesta non è partita, con le parole del server.
+   */
+  async function sfondaProcesso(toolCallId) {
+    const sessionId = state.realSession.id;
+    if (!sessionId) return { ok: false, messaggio: tr('app.processes.noSession') };
+    try {
+      await apiPost('/api/v1/sessions/' + encodeURIComponent(sessionId) + '/processes/' + encodeURIComponent(toolCallId) + '/sfondo', {});
+      return { ok: true };
+    } catch (errore) {
+      return { ok: false, messaggio: errore?.message || 'riprova.' };
+    }
+  }
+
+  /*
    * ⭐ 12/09 — LE DUE PORTE CHE MANCAVANO. Fino a ieri la app sapeva solo chiedere (`apiGet`) e
    * creare (`apiPost`): le rotte nuove di Note, Attività e Memoria vogliono anche `PATCH` (la
    * modifica parziale, RFC 5789) e `DELETE`. Scritte come una sola funzione con il metodo
@@ -6533,6 +6549,59 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     return effortCorrente;
   }
 
+  /* ⛔ BUG-7 (04/10/2026, owner): i valori della pillola che il modello dichiara, dalla stessa
+     voce di catalogo che usa `effortCompatibilePerModello` (`/api/v1/models`, campo
+     `reasoning.supportedEfforts`). «max» del fornitore è «xhigh» nell'etichetta della pillola
+     (stessa mappa del commento sopra LIVELLI_RAGIONAMENTO). `null` = catalogo assente o senza
+     livelli ⇒ lo slider resta com'era; il clamp del server resta la fonte di verità.
+     ⛔ L'id non coincide fra sessione e catalogo (misurato: sessione `zai:glm-5.3-flash`,
+     catalogo `z-ai/glm-5.3-flash`): si confrontano parte finale (nome) e famiglia con
+     normalizzazione dei separatori, mai il solo id esatto. */
+  function livelliEffortDelModello() {
+    const id = typeof state.model === 'string' ? state.model.trim() : '';
+    if (!id) return null;
+    /* ⛔ BUG-7 cura3 (05/10, revisore D2): sessione DIRETTA (`zai:glm-5.3-flash`) ⇒ i livelli
+       veri stanno nel REGISTRO dei fornitori, arrivati col payload di /api/v1/models
+       (`livelliDiretti`, model-destination.livelliRagionamentoDiretti) — non nel catalogo
+       OpenRouter, che dichiarava anche «low» rifiutato di proposito dal profilo AVM
+       (provider-registry.mjs:396-398): la pillola ricreava il sintomo. `'*'` = livello di
+       profilo, vale per i modelli senza voce propria. */
+    const diretti = state.modelLab?.catalogoModelli?.livelliDiretti;
+    const duePunti = id.indexOf(':');
+    if (duePunti > 0 && diretti && typeof diretti === 'object') {
+      const perFonte = diretti[id.slice(0, duePunti)];
+      const grezzi = perFonte?.[id.slice(duePunti + 1)] ?? perFonte?.['*'];
+      if (Array.isArray(grezzi) && grezzi.length) {
+        const valori = [...new Set(grezzi.map((v) => (v === 'max' ? 'xhigh' : v)))]
+          .filter((v) => v === 'none' || LIVELLI_RAGIONAMENTO.some((l) => l.valore === v));
+        if (valori.length) return valori;
+      }
+    }
+    const modelli = state.modelLab?.catalogoModelli?.modelli || [];
+    const taglia = (v) => {
+      const s = Math.max(v.lastIndexOf(':'), v.lastIndexOf('/'));
+      const famiglia = (s >= 0 ? v.slice(0, s) : '').toLowerCase().replace(/[^a-z0-9]/g, '');
+      return { nome: (s >= 0 ? v.slice(s + 1) : v).toLowerCase(), famiglia };
+    };
+    const mia = taglia(id);
+    /* ⛔ BUG-7 cura3 (05/10, revisore D7): prima il match CO LA STESSA FAMIGLIA, poi — solo se
+       l'id di sessione è senza famiglia — il primo a nome uguale: mai l'ordine del catalogo a
+       decidere fra due fornitori che espongono lo stesso nome di modello. */
+    const stessoNome = (m) => typeof m?.id === 'string' && m.id.trim() !== '' && taglia(m.id).nome === mia.nome;
+    const stessaFamiglia = (m) => {
+      if (!stessoNome(m)) return false;
+      const sua = taglia(m.id);
+      return !mia.famiglia || !sua.famiglia || sua.famiglia === mia.famiglia;
+    };
+    const scelto = modelli.find((m) => m?.id === id) || modelli.find(stessaFamiglia) || modelli.find(stessoNome);
+    const supportati = scelto?.reasoning?.supportedEfforts;
+    if (!Array.isArray(supportati) || supportati.length === 0) return null;
+    const valori = supportati
+      .map((v) => (v === 'max' ? 'xhigh' : v))
+      .filter((v) => v === 'none' || LIVELLI_RAGIONAMENTO.some((l) => l.valore === v));
+    return valori.length ? valori : null;
+  }
+
   function creaModelPicker({ valoreIniziale = '', apriSubito = false, alSelezionato, etichettaVuota = tr('app.modelPicker.select'), aggiornaModelloPrincipale = true, sincronizzaSessione = false } = {}) {
     const wrap = document.createElement('div');
     wrap.className = 'model-picker';
@@ -7271,7 +7340,16 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     { valore: 'xhigh', get etichetta() { return tr('app.modelPicker.effort.max'); } },
   ];
 
-  function creaEffortPicker({ valoreIniziale = null, alCambiato } = {}) {
+  function creaEffortPicker({ valoreIniziale = null, alCambiato, livelliAmmessi } = {}) {
+    /* ⛔ BUG-7 (04/10/2026, owner): con `livelliAmmessi` lo slider mostra SOLO i livelli che il
+       modello sceglie dichiara — la forma di pi (`getSupportedThinkingLevels`, models.ts:1205):
+       l'utente non può più impostare a schermo un livello che il fornitore rifiuta. «none» resta
+       sempre (spegnere il ragionamento non è un livello del fornitore). Il clamp del server
+       (openai-compatible-runtime.mjs, `livelloRagionamentoPiuVicino`) resta la fonte di verità:
+       la pillola è UX, il server è contratto. Catalogo assente ⇒ lista intera, com'era. */
+    const livelli = Array.isArray(livelliAmmessi) && livelliAmmessi.length
+      ? LIVELLI_RAGIONAMENTO.filter((l) => l.valore === 'none' || livelliAmmessi.includes(l.valore))
+      : LIVELLI_RAGIONAMENTO;
     const wrap = document.createElement('div');
     wrap.className = 'effort-picker';
 
@@ -7285,29 +7363,51 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     range.type = 'range';
     range.className = 'effort-picker-range';
     range.min = '0';
-    range.max = String(LIVELLI_RAGIONAMENTO.length - 1);
+    range.max = String(livelli.length - 1);
     range.step = '1';
     range.setAttribute('aria-label', tr('app.modelPicker.reasoningLevel'));
 
     const labelsRow = document.createElement('div');
     labelsRow.className = 'effort-picker-labels';
-    const labelEls = LIVELLI_RAGIONAMENTO.map((l, i) => {
+    const labelEls = livelli.map((l, i) => {
       const el = textElement('span', 'effort-picker-tick', l.etichetta);
-      el.style.left = `${(i / (LIVELLI_RAGIONAMENTO.length - 1)) * 100}%`;
+      el.style.left = `${(i / (livelli.length - 1)) * 100}%`;
       labelsRow.appendChild(el);
       return el;
     });
 
     wrap.append(head, range, labelsRow);
 
-    let indice = LIVELLI_RAGIONAMENTO.findIndex((l) => l.valore === valoreIniziale);
+    let indice = livelli.findIndex((l) => l.valore === valoreIniziale);
     // ⭐ nessuna scelta esplicita ancora: "toccato" resta false finché l'utente non muove lo slider — getValore() torna null, il corpo della richiesta non porta "reasoning" affatto, comportamento identico a prima di questo componente. La posizione VISIVA di partenza (Alto, come il mobile) è solo estetica.
     let toccato = indice >= 0;
-    if (indice < 0) indice = LIVELLI_RAGIONAMENTO.findIndex((l) => l.valore === 'high');
+    if (indice < 0 && valoreIniziale != null) {
+      /* ⛔ BUG-18 gen.2 (05/10, revisore D4): preferenza salvata FUORI dalla lista del modello ⇒
+         lo slider mostra il livello PIÙ VICINO con la STESSA regola del server BUG-18
+         (openai-compatible-runtime.mjs `livelloRagionamentoPiuVicino`; hermes reasoning_effort.py:
+         «so a clamp never escalates cost»): PRIMA IL PIÙ DEBOLE, poi a salire — era «sopra prima»
+         (BUG-7 cura3, revisore D5) e rendeva più cara la preferenza salvata, contro la regola 24/09.
+         «none» non è mai una meta del clamp (hermes: «clamping "minimal" to "none" would silently
+         switch thinking off») — vale anche qui. Display e filo tornano a coincidere: getValore()
+         restituisce il livello mostrato, già clampato. */
+      const SCALA = ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'];
+      const salvato = valoreIniziale === 'max' ? 'xhigh' : valoreIniziale;
+      const pos = SCALA.indexOf(salvato);
+      if (pos >= 0) {
+        for (let d = 1; d < SCALA.length && indice < 0; d++) {
+          for (const vicino of [SCALA[pos - d], SCALA[pos + d]]) {
+            if (!vicino || (vicino === 'none' && salvato !== 'none')) continue;
+            indice = livelli.findIndex((l) => l.valore === vicino);
+            if (indice >= 0) { toccato = true; break; }
+          }
+        }
+      }
+    }
+    if (indice < 0) indice = livelli.findIndex((l) => l.valore === 'high');
 
     function aggiorna() {
       range.value = String(indice);
-      selected.textContent = toccato ? LIVELLI_RAGIONAMENTO[indice].etichetta : tr('app.common.automatic');
+      selected.textContent = toccato ? livelli[indice].etichetta : tr('app.common.automatic');
       labelEls.forEach((el, i) => el.classList.toggle('effort-picker-tick-selected', i === indice));
     }
     aggiorna();
@@ -7316,10 +7416,26 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
       indice = Number(range.value);
       toccato = true;
       aggiorna();
-      alCambiato?.(LIVELLI_RAGIONAMENTO[indice].valore);
+      alCambiato?.(livelli[indice].valore);
     });
 
-    return { elemento: wrap, getValore: () => (toccato ? LIVELLI_RAGIONAMENTO[indice].valore : null) };
+    return { elemento: wrap, getValore: () => (toccato ? livelli[indice].valore : null) };
+  }
+
+  /* ⛔ BUG-7 cura3 (05/10, revisore D6): la ricostruzione post-GET vale per TUTTI i montaggi
+     dello slider, non solo per il foglio del modello — velo e workspace chooser restavano a sei
+     livelli se il catalogo non era ancora in memoria. Una sola GET, guardie su foglio chiuso e
+     nodo sconnesso; il clamp del server resta la fonte di verità. `foglio: null` per i montaggi
+     fuori da `sheetDialog` (es. il velo): lì la guardia è solo `isConnected`. */
+  function agganciaRicostruzioneEffortSuCatalogo({ elemento, valoreIniziale, alCambiato, foglio = sheetDialog } = {}) {
+    if (!elemento || livelliEffortDelModello()) return;
+    void apiGet('/api/v1/models').then((c) => {
+      if (c?.modelli) state.modelLab.catalogoModelli = c;
+      const ammessi = livelliEffortDelModello();
+      if (!ammessi || foglio?.hidden || !elemento.isConnected) return;
+      const aggiornato = creaEffortPicker({ valoreIniziale, alCambiato, livelliAmmessi: ammessi });
+      elemento.replaceWith(aggiornato.elemento);
+    }).catch(() => {});
   }
 
   // 05/9 Fase 2: Board — letture reali limitate, risultati obsoleti ignorati.
@@ -8458,6 +8574,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
          */
         const effortPicker = creaEffortPicker({
           valoreIniziale: state.effort,
+          livelliAmmessi: livelliEffortDelModello(), // BUG-7: la pillola mostra i livelli del modello
           alCambiato: (valore) => {
             state.effort = valore;
             sincronizzaImpostazioniSessione({ reasoning: valore ? { effort: valore } : null });
@@ -8483,6 +8600,20 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
         mount.replaceChildren(picker.elemento, effortPicker.elemento, reasoningRow);
         montaFallbackIn(mount,state.fallbackProviders||[],scegliFallbackCorrente);
         aggiornaVisibilitaRagionamento();
+        /* ⛔ BUG-7 (04/10/2026, owner): al momento dell'apertura il catalogo può non essere
+           ancora in memoria (misurato: foglio del modello sulla sessione dell'owner con
+           `zai:glm-5.3-flash`, slider ancora a sei livelli — `livelliEffortDelModello()` trova
+           `state.modelLab.catalogoModelli` vuoto). Una GET sola, e quando arriva il selettore si
+           RICOSTRUISCE coi livelli del modello. Solo GET; se il foglio è già chiuso o ricostruito,
+           non si tocca niente. Il clamp del server resta la fonte di verità. */
+        agganciaRicostruzioneEffortSuCatalogo({
+          elemento: effortPicker.elemento,
+          valoreIniziale: state.effort,
+          alCambiato: (valore) => {
+            state.effort = valore;
+            sincronizzaImpostazioniSessione({ reasoning: valore ? { effort: valore } : null });
+          },
+        });
       }
     }
     /*
@@ -9544,6 +9675,16 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     });
     const effortPicker = creaEffortPicker({
       valoreIniziale: state.effort,
+      livelliAmmessi: livelliEffortDelModello(), // BUG-7: la pillola mostra i livelli del modello
+      alCambiato: (valore) => {
+        state.effort = valore;
+        sincronizzaImpostazioniSessione({ reasoning: valore ? { effort: valore } : null });
+      },
+    });
+    agganciaRicostruzioneEffortSuCatalogo({
+      elemento: effortPicker.elemento,
+      valoreIniziale: state.effort,
+      foglio: null, // il velo non è `sheetDialog`: la guardia qui è solo isConnected
       alCambiato: (valore) => {
         state.effort = valore;
         sincronizzaImpostazioniSessione({ reasoning: valore ? { effort: valore } : null });
@@ -10691,8 +10832,8 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
       file,
       /* ⛔ Si calcolano UNA VOLTA: servono alla colonna E al numero sulla sua scheda (sotto). */
       processi,
-      /* Stop per riga: senza sessione vera non c'è niente da fermare, e il pulsante non compare. */
-      azioniProcessi: state.realSession.id ? { ferma: fermaProcesso } : null,
+      /* Stop per riga e «Sfondo» per riga (BUG-14): senza sessione vera non c'è niente da fermare, e i pulsanti non compaiono. */
+      azioniProcessi: state.realSession.id ? { ferma: fermaProcesso, sfonda: sfondaProcesso } : null,
       agenti,
       /* PO-08: la card diventa apribile solo perché qui c'è chi ascolta — senza questa funzione
          `disegnaAgenti` la lascia statica, e non promette niente che non può mantenere. */
@@ -13553,6 +13694,17 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
 
   function appendApprovalCard(requestId, azione) {
     /*
+     * ⛔ BUG-8 tranche 1 (04/10/2026) — la stessa domanda può arrivare DUE volte col medesimo `requestId`:
+     * il registro la rigioca mentre aspetta (osservatore di silenzio). Una seconda card identica sarebbe
+     * una bugia a schermo («due domande?») e due posti dove rispondere; se la card è ancora viva si
+     * riporta in vista QUELLA. (L'evento rigiocato è effimero: non rispunta nemmeno nella cronologia.)
+     */
+    const giaViva = state.realSession.approvazioniPendenti.get(requestId);
+    if (giaViva?.isConnected) {
+      giaViva.scrollIntoView({ block: 'nearest' });
+      return giaViva;
+    }
+    /*
      * 05/9 Fase 2: Conversazione — la scheda di approvazione del mockup: cosa
      * chiede (badge), il bersaglio, il perche', e tre risposte. «Per questa
      * sessione» approva E ricorda «sempre» per quell'attrezzo nelle
@@ -13588,7 +13740,21 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
      *   questa è una scelta, non una dimenticanza.
      */
     const davantiAUnSegreto = Boolean(azione?.segreto);
-    if (davantiAUnSegreto) sessioneBtn.remove();
+    /* ⛔ 04/10/2026, BUG-A (owner: «Aggiungi Consenti per la sessione davanti ai segreti») — davanti a
+       un segreto il secondo pulsante non sparisce più per PRINCIPIO: diventa «Consenti questo percorso
+       per la sessione» e manda `ambito: 'percorso'`. È una promessa VERA perché il kernel ora guarda
+       `consensiSessione.segretiConsentiti` (solo il percorso della domanda, mai un prefisso). Se alla
+       stessa domanda partecipano anche contenuto sospetto, percorso di rete, root WSL o un
+       fuori-progetto, quel pulsante non basterebbe a zittire TUTTO ciò che la carta chiede: si toglie,
+       com'era — la promessa falsa è peggio della domanda ripetuta (stessa regola del 17/09). */
+    const percorsoConsentibile = davantiAUnSegreto && !azione?.contenutoSospetto && !azione?.percorsoDiRete
+      && !azione?.wslRoot && !azione?.fuoriDalProgetto
+      && typeof azione.segreto?.percorso === 'string' && azione.segreto.percorso !== '';
+    if (percorsoConsentibile) {
+      sessioneBtn.textContent = tr('app.approval.allowSecretSession');
+      const notaPiedeSegreto = $('.talos-approval__foot-note', article);
+      if (notaPiedeSegreto) notaPiedeSegreto.textContent = tr('app.approval.appliesSession');
+    } else if (davantiAUnSegreto) sessioneBtn.remove();
     /* F-027: dopo un contenuto sospetto il kernel chiede anche con «sempre» — «Per questa sessione» sarebbe una promessa falsa. */
     if (azione?.contenutoSospetto) sessioneBtn.remove();
     /* ⛔ 01/10/2026 notte — stessa ragione per un percorso di rete: il kernel chiede a ogni livello e anche con «sempre»
@@ -13655,7 +13821,10 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     };
     negaBtn.addEventListener('click', () => rispondi(false));
     approvaBtn.addEventListener('click', () => rispondi(true));
-    sessioneBtn.addEventListener('click', () => (cartellaConsentibile ? rispondi(true, false, 'cartella') : rispondi(true, true)));
+    sessioneBtn.addEventListener('click', () => {
+      if (percorsoConsentibile) return rispondi(true, false, 'percorso'); // BUG-A: solo il percorso della domanda, per la sessione
+      return cartellaConsentibile ? rispondi(true, false, 'cartella') : rispondi(true, true);
+    });
     nellaChat(article);
     aggiornaTickGiro({ tono: 'warning' });
     article._rispostaDataQui = (risolta) => rispostaDataDaQuestaScheda
@@ -14301,6 +14470,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     }
     uscite.delete(evento.toolCallId);
     uscite.set(evento.toolCallId, voce); // in coda: l'ordine della mappa è l'età
+    uscite.revisione = (uscite.revisione ?? 0) + 1; // BUG-C: i delta cambiano i VALORI, non la size: il memo guarda questo
     let totale = 0;
     for (const v of uscite.values()) totale += v.vivo.length + (v.testo?.length ?? 0);
     /* oltre il tetto se ne vanno le uscite più vecchie; resta la testata, così la riga d'esito dice ancora com'è andata */
@@ -14309,6 +14479,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
       totale -= v.vivo.length + (v.testo?.length ?? 0);
       const testata = typeof v.testo === 'string' ? v.testo.split('\n', 1)[0] : null;
       uscite.set(id, { vivo: '', testo: testata, sfrattato: true });
+      uscite.revisione = (uscite.revisione ?? 0) + 1;
     }
   }
 
@@ -14317,6 +14488,29 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     if (schedeAgenteProgrammate) return;
     if (typeof window.requestAnimationFrame !== 'function') { aggiornaSchedeAgente(); return; }
     schedeAgenteProgrammate = window.requestAnimationFrame(() => { schedeAgenteProgrammate = 0; aggiornaSchedeAgente(); });
+  }
+
+  /*
+   * ⛔ 04/10/2026, BUG-C (owner: «la scheda Terminale diventa super laggosa quando l'agente scrive e
+   *   si cambia scheda») — IL MEMO. `schedeAgenteDagliEventi` ripercorre TUTTI gli eventi della
+   *   sessione (`eventiAttrezzi` cresce per tutta la sessione e non viene mai potato) e
+   *   `testoSchedaAgente` ricostruisce il testo intero della scheda: a ogni frame durante l'output
+   *   era O(N), cumulativamente O(N^2). La chiave è ciò che può cambiare davvero: il numero di
+   *   eventi (ogni Start/Args/Result è un push NUOVO), la `revisione` delle uscite vive (i delta
+   *   cambiano la mappa senza cambiarne la size) e quante schede sono chiuse a mano. Con la
+   *   chiave uguale si riusa LO STESSO array: `record.comandi` resta identico per riferimento, e
+   *   la scrittura su xterm si salta (vedi `record.comandiScritte` qui sotto).
+   */
+  const memoSchedeAgente = { chiave: null, schede: null };
+  function schedeAgenteConMemo(sessione) {
+    const eventi = state.realSession.eventiAttrezzi;
+    const uscite = state.realSession.usciteAgente;
+    const chiave = `${sessione}|${eventi.length}|${uscite?.revisione ?? 0}|${chiuseAgenteDellaSessione(statoTerminale()).size}`;
+    if (memoSchedeAgente.chiave === chiave && memoSchedeAgente.schede) return memoSchedeAgente.schede;
+    const schede = schedeAgenteDagliEventi(eventi, { chiuse: chiuseAgenteDellaSessione(statoTerminale()), uscite });
+    memoSchedeAgente.chiave = chiave;
+    memoSchedeAgente.schede = schede;
+    return schede;
   }
 
   /** Le schede agente chiuse a mano in QUESTA sessione: id → quanti comandi aveva quando è stata chiusa. */
@@ -14341,14 +14535,17 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
 
   function aggiornaSchedeAgente() {
     const t = statoTerminale();
+    /* ⛔ 04/10/2026, BUG-C — il Terminale NON è a schermo ⇒ solo dirty-flag: né ricalcolo né render
+       della striscia. Alla riapertura `apriVistaTerminaleReale()` richiama questa funzione, che
+       si aggiorna (e con la chiave del memo invariata riusa anche il risultato). */
+    if (!terminaleAschermo()) { t.schedeAgenteSporche = true; return; }
+    t.schedeAgenteSporche = false;
     const sessione = state.realSession.id || null;
     if (t.sessioneAgente !== sessione) {
       for (const record of [...t.schede.values()]) if (record.origine === 'agente') togliSchedaAgente(record, { attivaUnAltra: false });
       t.sessioneAgente = sessione;
     }
-    const schede = sessione
-      ? schedeAgenteDagliEventi(state.realSession.eventiAttrezzi, { chiuse: chiuseAgenteDellaSessione(t), uscite: state.realSession.usciteAgente })
-      : [];
+    const schede = sessione ? schedeAgenteConMemo(sessione) : [];
     const viste = new Set();
     for (const s of schede) {
       viste.add(s.terminalId);
@@ -14362,7 +14559,10 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
       record.comandi = s.comandi;
       record.stato = s.esito === 'in-corso' ? 'live' : s.esito;
       record.cartella = [...s.comandi].reverse().find((c) => c.cwd)?.cwd || '';
-      if (record.term) scriviSchedaAgente(record);
+      /* ⛔ 04/10/2026, BUG-C — con il memo che colpisce, `comandi` è LO STESSO array di prima: il
+         testo della scheda non può essere cambiato, e ricostruirlo (O(comandi)) era puro spreco.
+         Una scrittura vera parte solo quando l'array è nuovo. */
+      if (record.term && record.comandi !== record.comandiScritte) scriviSchedaAgente(record);
     }
     for (const record of [...t.schede.values()]) if (record.origine === 'agente' && !viste.has(record.terminalId)) togliSchedaAgente(record);
     renderizzaSchedeTerminale();
@@ -14377,6 +14577,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     if (record.scritto && testo.startsWith(record.scritto)) record.term.write(testo.slice(record.scritto.length));
     else { record.term.reset(); record.term.write(testo); }
     record.scritto = testo;
+    record.comandiScritte = record.comandi;
   }
 
   function montaSchedaAgente(record) {
@@ -18638,6 +18839,14 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
       }
       return;
     }
+    if (evento.type === 'CUSTOM' && evento.name === 'attesa-approvazione-silenzio') {
+      /* ⛔ BUG-8 tranche 1 (04/10/2026) — il registro dice che la domanda aspetta ancora (e da quanto). La card,
+         se c'è, torna in vista: stessa disciplina del rigioco dentro `appendApprovalCard`. Nessuna nuova riga
+         di cronologia: l'evento è effimero per costruzione (session-registry.mjs, `consegnaEvento`). */
+      const cardAttesa = state.realSession.approvazioniPendenti.get(evento.value?.requestId);
+      if (cardAttesa?.isConnected) cardAttesa.scrollIntoView({ block: 'nearest' });
+      return;
+    }
     providerRetryUi.evento(evento, { inReplay: state.realSession.inRigiocata, attivo: runRealeAttivo() });
     /*
      * ⭐ F5 (onda 2), 24/09/2026 — LA COMPATTAZIONE LEGACY SI VEDE. I tre eventi che il registro persiste e
@@ -18848,6 +19057,15 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
       senzaSuite: provaSenzaSuite(evento.content),
       /* 03/10/2026: «zero test eseguiti» è anche lui un NOT RUN, ma il comando è partito: si dice con le sue parole */
       nessunTest: provaSenzaTestEseguiti(evento.content),
+      /*
+       * ⛔ BUG-14 (05/10/2026) — UN COMANDO SFONDATO NON È UN COMANDO FINITO. Il campo additivo dell'evento
+       *   (`inSfondo`, dal kernel via `toolCallResult`) vince; il testo come riserva (sessioni vecchie: il kernel
+       *   mette «IN BACKGROUND» in testa al contenuto). Il file e chi lo ha sfondato passano solo se veri.
+       *   Il `content` NON si conserva (nota qui sopra): bastano i fatti, non il testo.
+       */
+      inSfondo: evento.inSfondo === true || (typeof evento.content === 'string' && /^\s*IN BACKGROUND\b/u.test(evento.content)),
+      fileSfondo: typeof evento.fileSfondo === 'string' && evento.fileSfondo !== '' ? evento.fileSfondo : null,
+      sfondoDa: typeof evento.sfondoDa === 'string' && evento.sfondoDa !== '' ? evento.sfondoDa : null,
     });
     /* ⭐ PO-10 passo 2 (02/10/2026) — i comandi dell'agente nelle LORO schede del Terminale: stessi eventi del pannello
        Processi, più il testo dell'uscita. Un fotogramma per volta, mai uno per evento. */
@@ -22555,7 +22773,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     rightHead.querySelector('h3').id = 'workspaceChooserSettingsTitle';
 
     const modelPicker = creaModelPicker({ valoreIniziale: state.model || '', aggiornaModelloPrincipale: false });
-    const effortPicker = creaEffortPicker({ valoreIniziale: state.effort });
+    const effortPicker = creaEffortPicker({ valoreIniziale: state.effort, livelliAmmessi: livelliEffortDelModello() }); // BUG-7: livelli del modello
     const plannerPicker = creaModelPicker({ valoreIniziale: '', etichettaVuota: tr('app.common.none'), aggiornaModelloPrincipale: false });
 
     const modelSection = document.createElement('div');

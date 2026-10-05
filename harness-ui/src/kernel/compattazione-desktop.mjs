@@ -698,3 +698,98 @@ export function reasoningPerRiassunto(reasoning) {
   if (['none', 'minimal', 'low'].includes(reasoning.effort)) return { ...reasoning };
   return { ...reasoning, effort: 'low' };
 }
+
+/*
+ * ⛔⛔ BUG-5 (05/10/2026, owner) — L'INGRESSO DEL RIASSUNTO NON È INFINITO. Misurato sulla sessione vera
+ *   b1e7382a dell'app installata: tre compattazioni su tre «troncato» — 213.785 token inviati AL RIASSUNTORE,
+ *   oltre la finestra dei modelli comuni. La richiesta di riassunto da sola rientra nell'overflow (o il
+ *   fornitore la taglia): la compattazione non arriva MAI a sostituire la storia e la conversazione cresce
+ *   senza freno. Hermes limita e protegge il suo ingresso (`agent/context_compressor.py:2645-2651`,
+ *   `protect_first_n: 3, protect_last_n: 20`); qui il limite manca del tutto.
+ * ⇒ La richiesta di riassunto (testa di `system` + mezzo + istruzione finale) si LIMITA a caratteri, per
+ *   MESSAGGI interi: dalla testa restano i `system` iniziali (sempre: sono l'identità della sessione) e poi
+ *   i messaggi finché metà del budget lo consente; dalla coda gli ultimi messaggi (l'ULTIMO è l'istruzione
+ *   `testoRichiestaDiRiassunto` e resta SEMPRE, anche se da sola superasse la sua metà); il mezzo omesso
+ *   diventa UN messaggio con il marcatore. La storia grezza resta intera (decisione 3 del 24/09): il
+ *   marcatore lo dice al riassuntore. Funzione PURA: nessuno stato, nessun I/O.
+ */
+export const CARATTERI_INGRESSO_RIASSUNTO = 160_000;
+export const MARCATORE_INGRESSO_TAGLIATO = '[… middle of the compaction input omitted: everything here is covered by the summary instruction at the end; the original messages remain in the session history …]';
+
+export function limitaIngressoRiassunto(messaggi, { caratteriMassimi = CARATTERI_INGRESSO_RIASSUNTO } = {}) {
+  const lista = Array.isArray(messaggi) ? messaggi : [];
+  const lunghezzaDi = (m) => String(m?.content ?? '').length;
+  const totale = lista.reduce((somma, m) => somma + lunghezzaDi(m), 0);
+  if (!(caratteriMassimi > 0) || totale <= caratteriMassimi) return lista;
+  const budgetTesta = Math.floor(caratteriMassimi / 2);
+  const budgetCoda = caratteriMassimi - budgetTesta - MARCATORE_INGRESSO_TAGLIATO.length;
+  if (budgetCoda <= 0) return lista;
+  /* Testa: i `system` iniziali si tengono SEMPRE (anche uno solo più grande della sua metà), poi il resto
+   * del fronte finché il budget lo consente. */
+  let fineTesta = 0;
+  let usatiTesta = 0;
+  while (fineTesta < lista.length && lista[fineTesta]?.role === 'system') {
+    usatiTesta += lunghezzaDi(lista[fineTesta]);
+    fineTesta += 1;
+  }
+  while (fineTesta < lista.length && usatiTesta + lunghezzaDi(lista[fineTesta]) <= budgetTesta) {
+    usatiTesta += lunghezzaDi(lista[fineTesta]);
+    fineTesta += 1;
+  }
+  /* Coda: si cammina all'indietro; l'ultimo messaggio (l'istruzione) si tiene comunque, il resto finché c'è
+   * budget. Il confine con la testa non si scavalca mai. */
+  let inizioCoda = lista.length;
+  let usatiCoda = 0;
+  while (inizioCoda > fineTesta) {
+    const lunghezza = lunghezzaDi(lista[inizioCoda - 1]);
+    if (inizioCoda < lista.length && usatiCoda + lunghezza > budgetCoda) break;
+    usatiCoda += lunghezza;
+    inizioCoda -= 1;
+  }
+  if (inizioCoda <= fineTesta) return lista; /* testa+coda coprono tutto: nulla da omettere, si resta com'era */
+  return [
+    ...lista.slice(0, fineTesta),
+    { role: 'user', content: MARCATORE_INGRESSO_TAGLIATO },
+    ...lista.slice(inizioCoda),
+  ];
+}
+
+/*
+ * ⛔ BUG-5 (05/10/2026) — LE CLASSI DI FALLIMENTO DEL RIASSUNTORE. Oggi `compattaOra` conta «fallito» e
+ *   basta: un 402 di credito esaurito e un riassunto vuoto pesano uguale, l'evento `compattazione-fine` non
+ *   dice PERCHÉ e chi guarda il registro non può decidere se riprovare, aspettare o smettere. Sette classi,
+ *   pure, nello spirito di Hermes `agent/error_classifier.py` (i pattern si leggono nel messaggio, non nello
+ *   stato): 'vuoto', 'troncato', 'attrezzo' (le tre di `valutaRispostaDiRiassunto`), 'contesto-pieno'
+ *   (via `classificaErroreFornitore`), 'limite-tariffa' (429/402/quota/credit — NON è overflow: il contesto
+ *   c'entra, il portafoglio no), 'errore-rete' (fetch/timeout/connessione/abort), 'errore-ignoto'.
+ */
+export const CLASSI_FALLIMENTO_RIASSUNTO = Object.freeze(['vuoto', 'troncato', 'attrezzo', 'contesto-pieno', 'limite-tariffa', 'errore-rete', 'errore-ignoto']);
+const PATTERN_LIMITE_TARIFFA = /\b(?:402|429)\b|quota|credit|insufficient|rate[ _-]?limit|too many requests/i;
+const PATTERN_ERRORE_RETE = /fetch failed|network error|timeout|timed?[ _-]?out|ECONN|ENOTFOUND|EAI_AGAIN|socket hang up|aborted|operation was aborted/i;
+
+export function classificaFallimentoRiassunto({ esito = null, errore = null } = {}) {
+  if (esito && esito.ok === false) {
+    if (esito.motivo === 'vuoto' || esito.motivo === 'troncato' || esito.motivo === 'attrezzo') return esito.motivo;
+    return classificaFallimentoRiassunto({ errore: errore ?? esito.errore ?? null });
+  }
+  if (!errore) return 'errore-ignoto';
+  if (classificaErroreFornitore(errore) === 'contesto-pieno') return 'contesto-pieno';
+  /* ⛔ Lo STATO parla prima del testo: un 402/429 con un messaggio generico («payment required», «error»)
+   *   resta un limite di tariffa, non un ignoto. */
+  const stato = Number(errore?.stato ?? errore?.status ?? NaN);
+  const testo = `${errore?.message ?? ''} ${errore?.code ?? ''} ${errore?.name ?? ''}`;
+  if (stato === 402 || stato === 429 || PATTERN_LIMITE_TARIFFA.test(testo)) return 'limite-tariffa';
+  if (errore?.name === 'AbortError' || PATTERN_ERRORE_RETE.test(testo)) return 'errore-rete';
+  return 'errore-ignoto';
+}
+
+/*
+ * ⛔ BUG-5 (05/10/2026) — IL GIRO DI FALLIMENTI. Con l'ingresso limitato un riassunto può ancora fallire per
+ *   cause che UN secondo tentativo identico non guarisce (credito, chiave, fornitore giù). Oggi ogni
+ *   compattazione paga fino a 2 tentativi, per TUTTO il turno: sotto il pavimento incomprimibile la prova del
+ *   26/09 pagava «un riassunto a ogni richiesta». La stessa malattia, lato riassuntore: al massimo
+ *   `FALLIMENTI_RIASSUNTO_CONSECUTIVI_MASSIMI` tentativi falliti CONSECUTIVI si pagano nel turno (il contatore
+ *   corre a TENTATIVO, dentro il ciclo di `compattaOra`) — il quarto identico non si chiede. Un riassunto
+ *   riuscito azzera il contatore.
+ */
+export const FALLIMENTI_RIASSUNTO_CONSECUTIVI_MASSIMI = 3;

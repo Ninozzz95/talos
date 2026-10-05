@@ -88,3 +88,21 @@ export function consumoPubblico(usage) {
   if (typeof usage.cache_discount === 'number' && Number.isFinite(usage.cache_discount)) risultato.cache_discount = usage.cache_discount;
   return Object.keys(risultato).length ? risultato : null;
 }
+
+/**
+ * BUG-16 (05/10/2026, owner: auto-retry NON negoziabile) — l'esito incerto è SOPRAVVISSUTO al suo
+ * budget di reinvii sicuri: la scheda manuale diventa l'ultima spiaggia ONESTA, non la prima strada.
+ * Porta `ritentabile: true` (il giro può riprendersi) e il conto dei reinvii già provati, così la
+ * carta può dire la verità: «ritentato automaticamente N volte senza effetti intermedi».
+ */
+export function erroreEsitoProviderIncertoEsaurito(causa, esitiRitentati) {
+  const errore = erroreEsitoProviderIncerto(causa);
+  return Object.assign(errore, {
+    code: 'PROVIDER_OUTCOME_UNKNOWN_ESAURITO',
+    message: 'La risposta del fornitore si è interrotta e il suo esito è rimasto incerto anche dopo '
+      + `${esitiRitentati} reinvii automatici senza effetti intermedi. `
+      + 'La richiesta può essere stata prodotta e pagata: riprendi esplicitamente quando vuoi continuare.',
+    ritentabile: true,
+    esitiIncertiRitentati: esitiRitentati,
+  });
+}

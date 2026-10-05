@@ -411,6 +411,8 @@ function wrapContextHooks(original, {
   let inefficaciTotali = 0;
   let attendeVerdetto = false;
   let overflowRitentato = false;
+  /* ⛔ BUG-5 (05/10/2026): i fallimenti CONSECUTIVI del riassuntore in questo turno (vedi compattaOra). */
+  let fallimentiRiassuntoConsecutivi = 0;
   /* La richiesta che `prepare` ha appena preparato: l'array (mutabile in posto), il grezzo e gli effimeri. */
   let richiestaCorrente = null;
   const reasoningRiassunto = compattazione.reasoningPerRiassunto(reasoning);
@@ -418,6 +420,19 @@ function wrapContextHooks(original, {
   const legacyMode = original === undefined || original === null;
   if (!legacyMode && typeof original.prepare !== 'function') {
     throw new TypeError('contextHooks.prepare must be a function when contextHooks is configured');
+  }
+
+  /*
+   * ⛔ BUG-5 (05/10/2026) — CAMBIO DI MODELLO: il record iniziale può essere stato scritto da un modello
+   *   diverso (la sessione riprende con un altro). L'ancora del numero vero è per costruzione del NUOVO
+   *   turno (null finché la prima risposta non arriva) e le soglie si ricalcolano su `finestraToken` del
+   *   modello NUOVO: non c'è niente da azzerare, ma il cambio si DICE — l'evento resta nel giro (il
+   *   traduttore AG-UI lo passerà al registro nella tranche 2), e chi legge il record sa che il riassunto
+   *   che contiene fu scritto da un altro modello.
+   */
+  const modelloPrecedente = typeof recordIniziale?.modello === 'string' && recordIniziale.modello ? recordIniziale.modello : null;
+  if (modelloPrecedente && modello && modelloPrecedente !== modello) {
+    emitOnGiro?.({ giro: 0, tipo: 'compattazione-modello-cambiato', modello, modelloPrecedente });
   }
 
   const projectLegacy = (rawMessages) => (compacted ? compattazione.applicaRecord(rawMessages, compacted) : rawMessages);
@@ -501,24 +516,47 @@ function wrapContextHooks(original, {
     });
     ultimoBudgetRiassunto = budget.maxOutputTokens;
     const richiesta = compattazione.costruisciRichiestaDiRiassunto({ ...parti, paroleMassime: budget.paroleMassime });
-    let esito;
+    /* ⛔ BUG-5 (05/10/2026): l'INGRESSO del riassuntore si LIMITA (testa+coda, marcatore in mezzo) — 213.785
+     *   token di ingresso (sessione vera b1e7382a) erano la causa dei tre riassunti «troncato» su tre giri:
+     *   la richiesta di riassunto da sola rientrava nell'overflow e la compattazione non sostituiva MAI la storia. */
+    const richiestaLimitata = compattazione.limitaIngressoRiassunto(richiesta);
+    /* ⛔ BUG-5, revisione R1 (05/10/2026): `esito` parte null. Se la GUARDIA del giro di fallimenti rompe al primo
+     *   giro (contatore già al massimo: il ritentativo overflow K8 dell'infer chiama `compattaOra` senza passare da
+     *   `decidiCompattazione`), nessun tentativo si paga e l'esito sintetico più sotto rende la chiusura CLASSIFICATA
+     *   e osservabile (evento `compattazione-fine`), non un TypeError interno. */
+    let esito = null;
     for (let tentativo = 0; tentativo < 2; tentativo += 1) {
+      /* ⛔ BUG-5 (05/10/2026), il GIRO DI FALLIMENTI: si pagano al massimo `FALLIMENTI_RIASSUNTO_
+       *   CONSECUTIVI_MASSIMI` tentativi consecutivi del riassuntore PER TURNO — il quarto identico non si
+       *   chiede (credito, chiave o fornitore giù: un secondo giro identico non guarisce). Il contatore si
+       *   conta a TENTATIVO, dentro il ciclo, così il tetto vale anche a cavallo di due compattazioni. */
+      if (fallimentiRiassuntoConsecutivi >= compattazione.FALLIMENTI_RIASSUNTO_CONSECUTIVI_MASSIMI) break;
       const contatore = progressoAcceso
         ? compattazione.creaContatoreRiassunto({ emetti: (valore) => progresso(requestIndex, { ...valore, motivo }), tentativo: tentativo + 1 })
         : null;
-      try { esito = await chiediRiassunto(richiesta, budget.maxOutputTokens, contatore); }
+      try { esito = await chiediRiassunto(richiestaLimitata, budget.maxOutputTokens, contatore); }
       catch (errore) {
         if (segnaleStop?.aborted) throw errore;
-        esito = { ok: false, riassunto: '', motivo: 'errore' };
+        /* ⛔ BUG-5 (05/10/2026): l'errore NON si butta più — la sua classe va all'evento (credito? rete?
+         *   overflow?), così chi guarda il registro decide se riprovare, aspettare o smettere. */
+        esito = { ok: false, riassunto: '', motivo: 'errore', classe: compattazione.classificaFallimentoRiassunto({ errore }) };
       }
+      if (esito.ok) fallimentiRiassuntoConsecutivi = 0;
+      else fallimentiRiassuntoConsecutivi += 1;
       /* Troncato: lo stesso budget lo troncherebbe uguale, un secondo tentativo identico paga e non serve. */
       if (esito.ok || esito.motivo === 'troncato') break;
     }
+    if (esito === null) {
+      /* ⛔ BUG-5, revisione R1: entrati a contatore pieno — zero tentativi pagati, zero NUOVI fallimenti contati
+       *   (il contatore resta com'era: il giro di fallimenti era già aperto) — e la chiusura si DICE. */
+      esito = { ok: false, riassunto: '', motivo: 'esaurito', classe: 'esaurito' };
+    }
     if (!esito.ok) {
       tentativiFallitiNelTurno += 1;
+      /* ⛔ BUG-5 (05/10/2026): classe e contatore CONSECUTIVO sull'evento; un riassunto riuscito ha già azzerato. */
       /* `interrottaIn`: il passo dove si è fermata (lane CLI, 03/10/2026). Non `fase`: nell'evento `talos.compattazione`
          `fase` dice già inizio/fine. */
-      emitOnGiro?.({ giro: requestIndex, tipo: 'compattazione-fine', compattato: false, motivo: esito.motivo, interrottaIn: 'riassunto' });
+      emitOnGiro?.({ giro: requestIndex, tipo: 'compattazione-fine', compattato: false, motivo: esito.motivo, classe: esito.classe ?? esito.motivo, fallimentiConsecutivi: fallimentiRiassuntoConsecutivi, interrottaIn: 'riassunto' });
       return null;
     }
     const indice = compattazione.indiceMeccanico(parti.mezzo, { precedente: compacted?.indice ?? null });

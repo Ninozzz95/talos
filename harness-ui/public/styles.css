@@ -3444,7 +3444,6 @@ a.talos-button {
 }
 .talos-composer__input {
   max-height: var(--composer-textarea-max-h, 40vh);
-  overflow-y: auto;
 }
 .talos-composer.composer-resizing {
   user-select: none;
@@ -3481,7 +3480,8 @@ a.talos-button {
   background: transparent;
   font: inherit;
   color: inherit;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
   min-height: 40px;
   font-size: 15px;
   color: var(--talos-accent-text);
@@ -3956,6 +3956,28 @@ a.talos-button {
   overflow-wrap: anywhere;
   white-space: normal;
 }
+.talos-process__cmd--troncato:not([data-aperto=si]) {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.talos-process__cmd--troncato[data-aperto=si] {
+  display: block;
+  overflow: visible;
+}
+.talos-process__mostra-tutto {
+  flex: none;
+  align-self: flex-start;
+  margin-top: 2px;
+  min-height: 0;
+  padding: 1px 6px;
+  font-size: 11px;
+}
+.talos-process__mostra-tutto[hidden] {
+  display: none;
+}
 .talos-process__cmd .talos-cmd__eseguibile {
   color: var(--talos-text);
   font-weight: 600;
@@ -4083,6 +4105,17 @@ a.talos-button {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   text-align: left;
+}
+.talos-process__dettaglio .talos-kv__v--lungo:not([data-aperto=si]) {
+  display: -webkit-box;
+  -webkit-line-clamp: 6;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.talos-process__dettaglio .talos-kv__v--lungo[data-aperto=si] {
+  display: block;
+  overflow: visible;
 }
 .talos-process__dettaglio .talos-kv__k {
   flex: none;

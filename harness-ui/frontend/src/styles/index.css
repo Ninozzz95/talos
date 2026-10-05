@@ -1526,7 +1526,13 @@ a.talos-button{text-decoration:none}
 .talos-composer .talos-composer__input{flex:1 1 auto}
 .talos-composer .talos-composer__bar{flex:none; margin-top:10px}
 /* ⛔ la larghezza del composer la decide la regola sopra, con `--composer-max-w`: una misura, un posto solo. */
-.talos-composer__input{max-height:var(--composer-textarea-max-h, 40vh); overflow-y:auto}
+/* BUG-12 (05/10/2026): qui resta SOLO il tetto (`--composer-textarea-max-h`, default 40vh).
+   ⛔ Il vecchio `overflow-y:auto` scritto QUI era una cura morta: la regola base qui sotto
+   (stesso selettore, stessa specificità 0-1-0) ridichiara `overflow` e, arrivando DOPO,
+   vinceva lei per ordine — la textarea del composer tagliava il testo lungo senza barra di
+   scroll (BUG-12, owner 05/10). Lo scorrimento ora vive NELLA regola base: una misura,
+   un posto solo, e nell'ultima regola che parla. */
+.talos-composer__input{max-height:var(--composer-textarea-max-h, 40vh)}
 .talos-composer.composer-resizing{user-select:none}
 .talos-chip__label{overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
 .talos-composer__bar .talos-composer__mic{margin-left:auto}
@@ -1539,7 +1545,14 @@ a.talos-button{text-decoration:none}
    spento ESATTAMENTE come il segnaposto, e i due non si distinguevano. Si usa la variante
    chiara dell'accento (`--talos-accent-text`), leggibile su fondo scuro; il segnaposto resta
    spento nella riga sotto, che e quello che li separa. */
-.talos-composer__input{appearance:none;-webkit-appearance:none;display:block;width:100%;border:0;outline:0;resize:none;background:transparent;font:inherit;color:inherit;overflow:hidden;min-height:40px; font-size:15px; color:var(--talos-accent-text); font-style:normal; padding:2px 4px 10px; outline:none}
+   /* BUG-12 (05/10/2026): `overflow-y:auto` sta QUI, nell'ULTIMA regola della textarea, perché
+   a parità di specificità decide l'ordine: prima viveva nella regola del tetto (sopra) e
+   veniva spenta dal `overflow:hidden` di questa riga — testo lungo tagliato, nessuna barra
+   (BUG-12, owner 05/10). `auto` = barra solo quando serve; `overflow-x:hidden` mantiene il
+   «mai scorrimento orizzontale» che `hidden` garantiva (il wrap soff della textarea non
+   produce overflow orizzontale). Il cursore resta raggiungibile: il browser segue il
+   caret mentre si scrive, e ora la rotella risponde anche a mano. */
+.talos-composer__input{appearance:none;-webkit-appearance:none;display:block;width:100%;border:0;outline:0;resize:none;background:transparent;font:inherit;color:inherit;overflow-x:hidden;overflow-y:auto;min-height:40px; font-size:15px; color:var(--talos-accent-text); font-style:normal; padding:2px 4px 10px; outline:none}
 .talos-composer__bar{display:flex; align-items:center; gap:6px; flex-wrap:nowrap; min-width:0}
 .talos-composer__bar .talos-badge--lg{flex:0 1 auto; min-width:0; max-width:220px; overflow:hidden; white-space:nowrap; padding:0 10px}
 .talos-composer__bar .talos-badge--lg > :not(.i){overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
@@ -1883,6 +1896,22 @@ a.talos-button{text-decoration:none}
   /* ⛔ `anywhere` e non `break-all`: un percorso lungo si spezza SOLO se non c'è altro modo, e
      `overflow-wrap` rispetta gli spazi fra i segmenti, così `git commit` non diventa `gitcom‑mit`. */
   overflow-wrap:anywhere; white-space:normal}
+/* ⛔ 04/10/2026, BUG-B — IL TETTO DEL COMANDO IN LISTA. Il clamp sta su `.talos-process__cmd`
+   stessa (classe `--troncato`): niente contenitori nuovi — una riga corta non aggiunge nemmeno
+   un nodo al DOM (la prova `PROC-UNA-RIGA` conta i nodi di una passata, e il tetto è un patto).
+   Due righe = l'altezza che la riga aveva col `nowrap` del 16/09, ma con righe COMPLETE invece
+   di una coda tagliata. `-webkit-line-clamp` con `-webkit-box` resta la forma che gli Electron
+   attuali supportano per l'ellissi multi-riga (MDN: «Limited availability» sulla proprietà
+   lunga). `data-aperto="si"` lo disinnesta: «Mostra tutto» apre intero. */
+.talos-process__cmd--troncato:not([data-aperto="si"]){
+  display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical;
+  overflow:hidden; text-overflow:ellipsis}
+.talos-process__cmd--troncato[data-aperto="si"]{
+  display:block; overflow:visible}
+/* ⛔ Il «Mostra tutto»: sotto il comando, piccolo, nascosto da JS finché il tetto non taglia
+   davvero (un pulsante sempre visibile mentirebbe), e nato SOLO quando serve. */
+.talos-process__mostra-tutto{flex:none; align-self:flex-start; margin-top:2px; min-height:0; padding:1px 6px; font-size:11px}
+.talos-process__mostra-tutto[hidden]{display:none}
 .talos-process__cmd .talos-cmd__eseguibile{color:var(--talos-text); font-weight:600}
 .talos-process__cmd .talos-cmd__sottocomando{color:var(--talos-accent-text); font-weight:600}
 .talos-process__cmd .talos-cmd__flag{color:var(--talos-info)}
@@ -1926,6 +1955,17 @@ a.talos-button{text-decoration:none}
    righe diventa frastagliato. `pre-wrap` qui è VIVO: questa classe non compare in nessun'altra
    regola del foglio, quindi non c'è niente con cui competere — è la lezione del 20/09 (sopra). */
 .talos-process__dettaglio .talos-kv__v--lungo{white-space:pre-wrap; overflow-wrap:anywhere; text-align:left}
+/* ⛔ 04/10/2026, BUG-B — IL TETTO DEL VALORE LUNGO NEL DETTAGLIO («Comando», «Descrizione»).
+   Stessa cura della riga in lista: sei righe — che era già il limite reale del dettaglio nel
+   commento del 20/09 («un `for` di shell su sei righe») — poi si ferma. `pre-wrap` resta vivo
+   sotto il clamp, così le interruzioni di riga vere del comando si conservano. Il «Mostra tutto»
+   che lo riapre NON sta dentro il valore (sarebbe tagliato con lui): sta sulla stessa riga kv,
+   a capo, ed è `inspector.js` a metterlo lì, solo quando il taglio è misurato. */
+.talos-process__dettaglio .talos-kv__v--lungo:not([data-aperto="si"]){
+  display:-webkit-box; -webkit-line-clamp:6; -webkit-box-orient:vertical;
+  overflow:hidden; text-overflow:ellipsis}
+.talos-process__dettaglio .talos-kv__v--lungo[data-aperto="si"]{
+  display:block; overflow:visible}
 .talos-process__dettaglio .talos-kv__k{flex:none}
 /* ⛔ L'ETICHETTA NON SI STRINGE. Misurato dal revisore: «Comando» rendeva `C..` con
    `clientWidth 13 / scrollWidth 57`, «Descrizione» 58/67 — perché `.talos-kv__k` porta

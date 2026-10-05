@@ -117,10 +117,22 @@ if (Get-NetTCPConnection -LocalPort $Porta -State Listen -ErrorAction SilentlyCo
 # adapter sottile (`talosHarness.desktop-hotfix.mjs`) che corregge esclusivamente i finding del
 # banco black-box senza spostare il metro di TALOS-BANCO e senza toccare il mobile. Una scelta
 # esplicita dell'owner continua a vincere.
-if ($env:TALOS_OWNER_RUNTIME_MODULE) {
-  Write-Output ("kernel: uso quello che hai già scelto ({0})" -f $env:TALOS_OWNER_RUNTIME_MODULE)
+# ⛔⛔⛔ 05/10/2026, owner (incidente «il 4174 girava su un altro kernel», seconda volta): una
+# TALOS_OWNER_RUNTIME_MODULE avanzata di sessione Windows puntava alla copia INSTALLATA
+# (Programs\TALOS\resources) e la porta fissa ha girato per giorni con un kernel senza le ultime
+# cure, mentre bundle e server erano freschi. Una scelta esplicita dell'owner vale SOLO se resta
+# dentro questo repo: fuori, si ignora con avviso e si usa l'adapter del repo (contratto della
+# porta: «sempre con l'ultimo codice»).
+$kernelRichiesto = $env:TALOS_OWNER_RUNTIME_MODULE
+$prefissoRepo = $radice.TrimEnd('\') + '\'
+$kernelFuoriRepo = [bool]($kernelRichiesto -and -not ([IO.Path]::GetFullPath($kernelRichiesto)).StartsWith($prefissoRepo, [StringComparison]::OrdinalIgnoreCase))
+if ($kernelRichiesto -and -not $kernelFuoriRepo) {
+  Write-Output ("kernel: uso quello che hai già scelto ({0})" -f $kernelRichiesto)
 }
 else {
+  if ($kernelFuoriRepo) {
+    Write-Output ("kernel: ATTENZIONE — TALOS_OWNER_RUNTIME_MODULE punta fuori dal repo ({0}); la ignoro e uso l'adapter del repo" -f $kernelRichiesto)
+  }
   $kernelDelRepo = Join-Path $harness ('src' + [IO.Path]::DirectorySeparatorChar + 'kernel' + [IO.Path]::DirectorySeparatorChar + 'talosHarness.mjs')
   $kernelDesktop = Join-Path $harness ('src' + [IO.Path]::DirectorySeparatorChar + 'kernel' + [IO.Path]::DirectorySeparatorChar + 'talosHarness.desktop-hotfix.mjs')
   if (-not (Test-Path $kernelDelRepo)) {
@@ -158,6 +170,14 @@ else {
   $env:TALOS_HARNESS_UI_WORKFLOW_DIR = Join-Path (Join-Path $env:LOCALAPPDATA 'TALOS-integrazione-r4') 'workflows'
   Write-Output ("registro Workflow: {0}" -f $env:TALOS_HARNESS_UI_WORKFLOW_DIR)
 }
+# ⛔⛔⛔ F-ENV-12 (04/10/2026) — LA PORTA SI IMPONE ANCHE AL FIGLIO.
+# L'app TALOS installata vive con `TALOS_HARNESS_UI_PORT` impostato nel proprio ambiente (es. 62337): se la
+# consegna parte da quell'ambiente, il figlio eredita la variabile, legge la porta dell'app INVECE di `-Porta`,
+# prova a bindarsi lì e muore («PortaInUsoError: La porta 62337 è già in uso») lasciando il 4174 giù, incidente
+# del 04/10/2026. Da qui la variabile viene SEMPRE riscritta col valore del parametro, subito prima dell'avvio:
+# l'ambiente dell'app non può più vincere.
+$env:TALOS_HARNESS_UI_PORT = [string]$Porta
+
 $log = Join-Path $harness '.talos-4174.log'
 $logErrori = Join-Path $harness '.talos-4174.err.log'
 if ($PSCmdlet.ShouldProcess('server.mjs', ("avvio sulla {0}" -f $Porta))) {

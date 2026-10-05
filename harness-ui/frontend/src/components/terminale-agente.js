@@ -138,3 +138,27 @@ export function testoSchedaAgente(scheda = {}) {
      si riscrive sempre da qui. */
   return blocchi.length ? `${NASCONDI_CURSORE}${aCapoXterm(`${blocchi.join('\n\n')}\n`)}` : '';
 }
+
+
+/* ⛔ 04/10/2026, BUG-C — IL MEMO PURA. `schedeAgenteDagliEventi` ripercorre TUTTI gli eventi e
+   `testoSchedaAgente` ricostruisce il testo: a ogni frame durante un output lungo era O(N) per
+   chiamata, O(N^2) cumulativo. La chiave del memo copre ciò che può cambiare davvero: il numero
+   di eventi (ogni Start/Args/Result è un push NUOVO in `app.js`), la `revisione` della mappa
+   uscite (i delta cambiano i VALORI senza cambiare la size), quante schede sono chiuse a mano e
+   la sessione. Con la chiave uguale si torna LO STESSO array: chi disegna riconosce `comandi`
+   per riferimento e salta la riscrittura. La funzione è pura e si prova senza DOM. */
+export function creaMemoSchedeAgente() {
+  return { chiave: null, schede: null };
+}
+
+export function schedeAgenteConMemo(eventi, opzioni = {}, memo = creaMemoSchedeAgente()) {
+  const { sessione = '', uscite = null, chiuse = null, ...resto } = opzioni;
+  const chiave = `${sessione}|${eventi.length}|${uscite?.revisione ?? 0}|${chiuse?.size ?? 0}`;
+  if (memo.chiave === chiave && memo.schede) return memo.schede;
+  /* ⛔ null esplicito NON attiva i default della funzione chiamata (chiuse => new Map()): chi non
+     ha la mappa non la passa, com'era prima del memo. */
+  const schede = schedeAgenteDagliEventi(eventi, { ...resto, ...(uscite ? { uscite } : {}), ...(chiuse ? { chiuse } : {}) });
+  memo.chiave = chiave;
+  memo.schede = schede;
+  return schede;
+}

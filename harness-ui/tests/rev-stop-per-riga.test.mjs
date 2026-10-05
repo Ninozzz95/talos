@@ -10,19 +10,35 @@ import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createServer } from 'node:http'
-import { talosLavora, eseguiComandoSandboxato, MOTIVO_STOP_DELLA_RIGA } from '../src/kernel/talosHarness.mjs'
+import { talosLavora, eseguiComandoSandboxato, MOTIVO_STOP_DELLA_RIGA, INTESTAZIONE_SFONDO } from '../src/kernel/talosHarness.mjs'
 import { eseguiComandoDiretto, avviaSessione } from '../src/agent-service.mjs'
-import { createSessionRegistry, registraComandoFermabileIn } from '../src/session-registry.mjs'
+import { createSessionRegistry, registraComandoFermabileIn, processiDaEventi } from '../src/session-registry.mjs'
 import { createHttpApp } from '../src/http-app.mjs'
 import { registraRiga } from '../src/session-store.mjs'
 import { rimuoviCartellaDiProva, rimuoviCartellaDiProvaAttesa } from './aiuto/rimuovi-cartella-di-prova.mjs'
 
 const FERMATO = '⛔ Stopped on request: the command was stopped while it ran.'
-/* Un esecutore finto che gira finché il SUO segnale non si ferma: niente processi veri sotto i giri del modello. */
+/* Un esecutore finto che gira finché il SUO segnale non si ferma: niente processi veri sotto i giri del modello.
+   ⛔ BUG-14: risponde a ENTRAMBI i segnali che arrivano (kernel/agent-service): `segnaleStop` conclude con l'exit
+   130 dello Stop; `segnaleSfondo` NON uccide — come il vero esecutore del kernel (`creaGestoreSfondo`) si conclude
+   SUBITO con l'esito-sfondo: niente exit, «IN BACKGROUND», il file e chi lo ha sfondato. Il vecchio finto, che
+   sentiva solo lo Stop, lasciava SFONDO-01 appeso fino al timeout. */
 function esecutoreCheAspetta(partiti) {
-    return (comando, _cartella, { segnaleStop }) => new Promise((risolvi) => {
-        partiti.push({ comando, segnaleStop })
+    return (comando, _cartella, { segnaleStop, segnaleSfondo, fileSfondo } = {}) => new Promise((risolvi) => {
+        partiti.push({ comando, segnaleStop, segnaleSfondo })
         segnaleStop.addEventListener('abort', () => risolvi({ codice: 130, fermatoSuRichiesta: true, testo: FERMATO, enforcement: 'none' }), { once: true })
+        if (segnaleSfondo) {
+            const sfondaAdesso = () => risolvi({
+                codice: null,
+                messoInSfondo: true,
+                daSfondo: 'persona',
+                ...(fileSfondo ? { fileSfondo } : {}),
+                testo: `${INTESTAZIONE_SFONDO}: moved to the background by the person (Processes tab). ${fileSfondo ? `Output file: ${fileSfondo}` : '(No output file.)'}`,
+                parziale: '',
+            })
+            if (segnaleSfondo.aborted) sfondaAdesso()
+            else segnaleSfondo.addEventListener('abort', sfondaAdesso, { once: true })
+        }
     })
 }
 const cartellaDiProva = (t) => { const c = mkdtempSync(join(tmpdir(), 'talos-stop-riga-')); t.after(() => rimuoviCartellaDiProva(c)); return c }
@@ -132,7 +148,9 @@ test('STOP-05: lo sgancio toglie solo la SUA registrazione (un id riusato non vi
     const sganciaVecchio = registra({ toolCallId: 'x', ferma: vecchio })
     registra({ toolCallId: 'x', ferma: nuovo })
     sganciaVecchio()
-    assert.equal(voce.comandiFermabili.get('x'), nuovo)
+    /* ⛔ BUG-14: la voce della mappa ora è { ferma, sfonda } — il confronto segue la forma nuova. */
+    assert.equal(voce.comandiFermabili.get('x').ferma, nuovo)
+    assert.equal(voce.comandiFermabili.get('x').sfonda, null, 'chi non dichiara `sfonda` non lo ottiene: il pulsante deve sparire')
 })
 
 test('STOP-06 (prova vera, Windows): anche `prova` si ferma dalla sua riga, con un processo vero, e il giro continua', { skip: process.platform === 'win32' ? false : 'ping -n è di Windows', timeout: 60_000 }, async (t) => {
@@ -235,4 +253,104 @@ test('STOP-10 (shell vera, Windows): lo Stop della RIGA dice al modello chi l ha
         assert.match(esito.testo, attesa)
         assert.doesNotMatch(esito.testo, vietata)
     }
+})
+
+/*
+ * ⛔⛔⛔ BUG-14 (05/10/2026) — SFONDO per riga: la terza strada del comando lungo, e la DOLCE.
+ *   Come lo Stop (STOP-01..04) ma il segnale è `sfonda`: niente 130, niente morte — la cattura si stacca,
+ *   il file di output apre, l'attesa conclude, e il processo VIVE. L'esito del giro porta «IN BACKGROUND»
+ *   (l'intestazione del kernel), e l'evento dice CHI lo ha sfondato e DOVE va l'output.
+ */
+
+test('SFONDO-01 (agent-service, `!` della persona): sfondare NON uccide — esito «IN BACKGROUND», evento con file e chi, nessun exit', { timeout: 20_000 }, async () => {
+    const registro = new Map(), partiti = [], eventi = []
+    const atteso = eseguiComandoDiretto({
+        cartella: '/tmp/x', comando: 'npm run dev', onEvento: (e) => eventi.push(e),
+        eseguiComandoSandboxatoFn: esecutoreCheAspetta(partiti),
+        registraComandoFermabile: ({ toolCallId, ferma, sfonda }) => {
+            registro.set(toolCallId, { ferma, sfonda })
+            return () => registro.delete(toolCallId)
+        },
+    })
+    await new Promise((r) => setImmediate(r))
+    const id = eventi.find((e) => e.type === 'ToolCallStart').toolCallId
+    assert.equal(typeof registro.get(id).sfonda, 'function', 'la registrazione porta il SECONDO segnale, quello che non uccide')
+    registro.get(id).sfonda()
+    await atteso
+    const risultato = eventi.find((e) => e.type === 'ToolCallResult')
+    assert.match(String(risultato.content), new RegExp(`^${INTESTAZIONE_SFONDO}`), 'l esito non è un exit: è la consegna dello sfondo')
+    assert.equal(risultato.inSfondo, true)
+    assert.equal(risultato.sfondoDa, 'persona')
+    assert.match(String(risultato.fileSfondo ?? ''), /processi-sfondo/, 'l output su file è dichiarato, non inventato')
+    assert.doesNotMatch(String(risultato.content), /^exit /u, 'un comando sfondato non ha nessun codice d uscita')
+    assert.equal(registro.size, 0, 'sfondato il comando, la riga non ha più segnali da chiamare')
+})
+
+test('SFONDO-02 (registro + HTTP veri): POST /processes/:id/sfondo — 200 su un comando in corso, 409 dopo lo sgancio, 404 su sessione assente, 405 su GET', async (t) => {
+    const cartellaStore = mkdtempSync(join(tmpdir(), 'talos-sfondo-riga-reg-'))
+    const runs = []
+    const registro = createSessionRegistry({
+        cartellaStore, guardaWorkspaceFn: () => () => {}, cartellaEsisteFn: () => true, modello: 'm', chiave: 'test', registraRigaFn: registraRiga,
+        preparaEsecuzioneFn: () => ({ cartella: cartellaStore, task: { id: 'task', consegna: 'Controlla' } }),
+        avviaSessioneFn(input) { return new Promise((resolve) => { runs.push({ input, resolve }); input.onEvento({ type: 'RunStarted' }) }) },
+    })
+    t.after(async () => {
+        for (const r of runs) { r.input.onEvento({ type: 'RunFinished' }); r.resolve({ ok: true, esito: { messaggiFinali: [], detto: 'Fine', comeFinita: 'concluso' } }) }
+        await new Promise((r) => setTimeout(r, 50))
+        await rimuoviCartellaDiProvaAttesa(cartellaStore)
+    })
+    const { sessionId } = registro.avvia('task')
+    let sfondato = 0
+    const sgancia = runs[0].input.registraComandoFermabile({ toolCallId: 'c7', ferma: () => {}, sfonda: () => { sfondato += 1 } })
+    const server = createServer(createHttpApp({ staticHandler: async () => null, sessionRegistry: registro }))
+    await new Promise((r) => server.listen(0, '127.0.0.1', r))
+    t.after(() => new Promise((r) => server.close(r)))
+    const base = `http://127.0.0.1:${server.address().port}/api/v1/sessions`
+    const ok = await fetch(`${base}/${sessionId}/processes/c7/sfondo`, { method: 'POST' })
+    assert.equal(ok.status, 200)
+    assert.deepEqual((await ok.json()).data, { backgrounded: true })
+    assert.equal(sfondato, 1, 'il segnale è partito UNA volta: sfondare non è fermare')
+    sgancia()
+    const finito = await fetch(`${base}/${sessionId}/processes/c7/sfondo`, { method: 'POST' })
+    assert.equal(finito.status, 409)
+    assert.equal((await finito.json()).error.code, 'PROCESS_NOT_RUNNING')
+    assert.equal((await fetch(`${base}/nessuna/processes/c7/sfondo`, { method: 'POST' })).status, 404)
+    assert.equal((await fetch(`${base}/${sessionId}/processes/c7/sfondo`, { method: 'GET' })).status, 405, 'solo POST')
+})
+
+test('SFONDO-03 (ledger dai SOLI eventi): un risultato sfondato è «in-sfondo» col suo file — anche ripristinato dal solo testo — e un exit resta «concluso»', () => {
+    const conCampi = processiDaEventi([
+        { type: 'RunStarted' },
+        { type: 'ToolCallStart', toolCallId: 'b1', toolCallName: 'shell', _sequenza: 1 },
+        /* ⛔ L'evento AG-UI porta SEMPRE `toolCallId` (agui-events, `toolCallArgs`/`toolCallResult`):
+           senza, il guard del ledger scarta l'evento e la riga resta «in corso» per sempre. */
+        { type: 'ToolCallArgs', toolCallId: 'b1', delta: JSON.stringify({ comando: 'npm run dev' }), _sequenza: 2 },
+        { type: 'ToolCallResult', toolCallId: 'b1', content: `${INTESTAZIONE_SFONDO}: persona. L'output continua su file.`, inSfondo: true, fileSfondo: '/s/.talos/processi-sfondo/b1.log', sfondoDa: 'persona', _sequenza: 3 },
+    ])
+    const p = conCampi.processi.find((x) => x.toolCallId === 'b1')
+    assert.equal(p.esito, 'in-sfondo')
+    assert.equal(p.inSfondo, true)
+    assert.equal(p.fileSfondo, '/s/.talos/processi-sfondo/b1.log')
+    assert.equal(p.sfondoDa, 'persona')
+    assert.equal(p.codiceUscita, null, 'non è uscito: nessun codice inventato')
+
+    const daTesto = processiDaEventi([
+        { type: 'RunStarted' },
+        { type: 'ToolCallStart', toolCallId: 'b2', toolCallName: 'shell', _sequenza: 1 },
+        { type: 'ToolCallArgs', toolCallId: 'b2', delta: JSON.stringify({ comando: 'vitest' }), _sequenza: 2 },
+        { type: 'ToolCallResult', toolCallId: 'b2', content: `${INTESTAZIONE_SFONDO}: tempo-scaduto. L'output continua su file.`, _sequenza: 3 },
+    ])
+    const q = daTesto.processi.find((x) => x.toolCallId === 'b2')
+    assert.equal(q.esito, 'in-sfondo', 'l intestazione in testa al testo resta la riserva per le sessioni ripristinate dal disco')
+    assert.equal(q.sfondoDa, null, 'senza il campo, chi lo ha sfondato NON si inventa')
+
+    const normale = processiDaEventi([
+        { type: 'RunStarted' },
+        { type: 'ToolCallStart', toolCallId: 'b3', toolCallName: 'shell', _sequenza: 1 },
+        { type: 'ToolCallArgs', toolCallId: 'b3', delta: JSON.stringify({ comando: 'ls' }), _sequenza: 2 },
+        { type: 'ToolCallResult', toolCallId: 'b3', content: 'exit 0 [sandbox: none]\nok', _sequenza: 3 },
+    ])
+    const r = normale.processi.find((x) => x.toolCallId === 'b3')
+    assert.equal(r.esito, 'concluso', 'un exit resta un exit: il mutante che marca tutto «in-sfondo» cade qui')
+    assert.equal(r.inSfondo, false)
 })

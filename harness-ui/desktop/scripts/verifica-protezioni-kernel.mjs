@@ -6,8 +6,9 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
  * ⛔ 27/09/2026 (owner): le protezioni che il rattoppo `desktop-critical-tools-2026-09-15-v1` applicava al kernel SOLO
  * nello staging del pacchetto ora stanno DENTRO `src/kernel/talosHarness.mjs`, cosi' il 4174 prova esattamente cio' che
  * si rilascia. Qui resta il controllo: se il kernel ne perde una, il pacchetto non si costruisce invece di partire senza.
- * T-04 (rifiutare `prova` con codice libero) non si e' portata: nel kernel di oggi `prova` non ha argomenti (e
- * `codice_prova` non c'e' mai stato) — si controlla che resti cosi'.
+ * T-04 (rifiutare `prova` con codice libero) non si e' portata come schema vuoto: dal 05/10/2026 (owner) lo schema di
+ * `prova` ha i DUE campi additivi di BUG-3/BUG-14 (`timeout`, `background` — sfonda invece di uccidere, output su file);
+ * il controllo accetta SOLO quelli e nessun altro argomento del modello.
  */
 export const PROTEZIONI_KERNEL = Object.freeze([
   {
@@ -33,9 +34,21 @@ export const PROTEZIONI_KERNEL = Object.freeze([
     presente: (k) => !k.includes('String(esito).slice(0, 8_000)') && k.includes('uscitaUtile(String(esito), 8_000, 0.5)'),
   },
   {
+    /* ⛔ 05/10/2026 (owner): BUG-3/BUG-14 (3ec7cafea) hanno aggiunto a `prova` i campi additivi `timeout` e
+       `background` (sfonda invece di uccidere; output su file). L'INTENTO di T-04 resta fermo — nessun argomento
+       libero dal modello, niente codice — ma lo schema accetta SOLO quei due campi, e nessun altro. */
     id: 'T-04',
-    descrizione: 'prova: nessun argomento del modello, quindi niente codice libero',
-    presente: (k) => /name: 'prova',[^{}]*input_schema: \{ type: 'object', properties: \{\}, required: \[\] \}/.test(k),
+    descrizione: 'prova: nessun argomento libero dal modello — solo timeout/background (BUG-3/BUG-14)',
+    presente: (k) => {
+      const inizio = k.indexOf("name: 'prova',")
+      if (inizio < 0) return false
+      const seguente = k.indexOf("name: '", inizio + "name: 'prova',".length)
+      const blocco = k.slice(inizio, seguente < 0 ? k.length : seguente)
+      const schema = blocco.match(/input_schema: \{\s*type: 'object',\s*properties: \{([\s\S]*?)\},\s*required: \[\]/)
+      if (!schema) return false
+      const chiavi = [...schema[1].matchAll(/^\s+([A-Za-z_]\w*): \{/gm)].map((m) => m[1])
+      return chiavi.length === 2 && chiavi[0] === 'timeout' && chiavi[1] === 'background'
+    },
   },
 ])
 

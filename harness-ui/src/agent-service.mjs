@@ -30,6 +30,7 @@ import { createToolOutputPreview } from './kernel/tool-output-preview.mjs';
 import { NOME_EVENTO_PROGRESSO_COMPATTAZIONE, creaContatoreRiassunto } from './kernel/compattazione-desktop.mjs'; // lane CLI, 03/10/2026: compaction.progress
 import { delegaLimitata } from './delegation-contract.mjs';
 import { join as joinPercorso, relative as percorsoRelativo, sep as separatorePercorso } from 'node:path';
+import { percorsoFileSfondo } from './kernel/talosHarness.mjs'; // BUG-14: il file di output dei comandi in sfondo (solo il percorso, nessun ciclo)
 
 import { createOwnerRuntimeAdapter } from './runtime-owner-adapter.mjs';
 import { salvaArtefatto as salvaArtefattoReale } from './artifact-store.mjs';
@@ -232,6 +233,14 @@ function esitoInEventoFinale({ threadId, runId, esito }) {
  */
 export async function avviaSessione({
   cartella, task, modello, chiave, comandoProva,
+  /*
+   * ⛔ BUG-5 (05/10/2026) — il cavo che mancava: il registro (`conCompattazione`, session-registry.mjs) passa
+   *   da qui la FINESTRA del modello (`model-catalog.mjs`, `contextLength`, via `finestraTokenFn` di server.mjs)
+   *   e prima questa funzione la SCARTAVA — `talosLavora` la legge in `input.finestraToken ?? null` e con null
+   *   la soglia di compattazione valeva il solo tetto assoluto (200k) su QUALUNQUE modello. Additivo: chi non
+   *   la passa resta com'era (null → tetto).
+   */
+  finestraToken = null,
   /*
    * ⛔⛔⛔ 11/09/2026 — DOVE FINISCE UN FILE *GENERATO*, che non è dove il modello LEGGE.
    *
@@ -1027,6 +1036,18 @@ export async function avviaSessione({
    * `_sequenza`/replay SSE, causa diversa stessa famiglia).
    */
   const messaggiTestoPerGiro = new Map();
+  /* ⛔⛔ BUG-7-cura2 (04/10/2026, owner: «chi sta scassando le palle ogni volta»): il Set NON vive qui.
+     `avviaSessione` è chiamata PER GIRO da `avviaIlGiro` (session-registry.mjs:6085-6094), quindi ogni
+     closure di questa funzione nasce e muore a ogni giro: transcript a0cc8ee0 misurato, 337 occorrenze
+     della frase in una sessione sola (24.154 righe). Hermes fa lo stesso con i suoi avvisi ausiliari
+     memoizzati per (route, model) (agent/auxiliary_reasoning_floor.py:24-26: «the (route, model) pair
+     is memoised so the next … call starts at the floor instead of burning the guaranteed 400 first»).
+     La casa giusta è `consensiSessione` — «una volta per sessione, in memoria» (session-registry.mjs:2652,
+     creato a :5950) — che QUESTA funzione riceve già da F009 (riga 386). Chi non la passa (TALOS-BANCO,
+     CLI, prove) non vede differenze: il Set resta locale alla chiamata, dedup per-chiamata come prima. */
+  const avvisiFornitoreGiaDetti = consensiSessione
+    ? (consensiSessione.avvisiFornitoreGiaDetti ??= new Set())
+    : new Set();
   const messaggiRagionamentoPerGiro = new Map();
   /*
    * ⭐⭐⭐ Piano procedi-col-generare-un-snoopy-neumann.md, Fase 4 — un
@@ -1147,6 +1168,10 @@ export async function avviaSessione({
         modello: evento.modello, tentativo: evento.tentativo, tentativiMassimi: evento.tentativiMassimi,
         httpStatus: evento.httpStatus, attesaMs: evento.attesaMs, retryAt: evento.retryAt,
         ...(evento.httpStatus === 402 && evento.motivo === 'budget-occupato' ? { motivo: evento.motivo } : {}),
+        /* R1 della review avversariale BUG-16: il canale «esito incerto» non ha uno HTTP status da
+           mostrare, ma porta il suo canale e il suo motivo onesto — senza questi la validazione del
+           frontend buttava l'evento e l'attesa restava muta (fino a ~4 minuti senza banner). */
+        ...(evento.canale === 'esito-incerto' ? { canale: evento.canale, motivo: evento.motivo } : {}),
       } });
     }
     if (evento.tipo === 'compattazione-inizio' && evento.motivo) motivoCompattazionePerGiro.set(evento.giro, evento.motivo);
@@ -1205,6 +1230,11 @@ export async function avviaSessione({
         ...(ricevuta ? { receipt: ricevuta } : {}),
         // F-027: il kernel ha trovato nel risultato testo che sembra un'istruzione per un'IA
         ...(evento.contenutoSospetto ? { suspicious: { source: evento.contenutoSospetto.fonte, patterns: evento.contenutoSospetto.motivi, place: evento.contenutoSospetto.luogo } } : {}),
+        /* ⛔ BUG-14: il kernel sparge `processoPerEvento` direttamente sull'evento `tool-esito`
+           (talosHarness.mjs `...(processoPerEvento ?? {})`) — inoltra i campi sfondo per la riga dei Processi. */
+        ...(evento.inSfondo === true
+          ? { inSfondo: true, ...(evento.fileSfondo ? { fileSfondo: evento.fileSfondo } : {}), ...(evento.sfondoDa ? { sfondoDa: evento.sfondoDa } : {}) }
+          : {}),
       }));
       return;
     }
@@ -2110,6 +2140,7 @@ export async function avviaSessione({
   try {
     const esito = await talosLavoraFn({
       cartella, task, modello, chiave, comandoProva, segnaleStop, messaggiIniziali, mobile,
+      finestraToken, /* ⛔ BUG-5 (05/10/2026): inoltrata al kernel — la soglia diventa 0,75 della finestra VERA del modello */
       ...(typeof registraComandoFermabile === 'function' ? { registraComandoFermabile } : {}),
       ...(checkpointSessionId ? { checkpointSessionId, checkpointOperation } : {}),
       ambienteComandiFn,
@@ -2125,7 +2156,24 @@ export async function avviaSessione({
       ...(ricostruisciContestoIniziale === true ? { ricostruisciContestoIniziale: true } : {}),
       fallbackProviders,
       ...(linguaInterfaccia ? { linguaInterfaccia } : {}),
-      onAvviso: async messaggio => {
+      onAvviso: async (messaggio, { ripetibile = false, nota = false } = {}) => {
+        /* ⛔ BUG-7 (04/10, owner): stesso messaggio = una bolla sola per sessione (Set sopra).
+           ⛔ BUG-7-cura2: la dedup ora dura TUTTA la sessione (Set su consensiSessione), quindi chi ha
+           un avviso che DEVE potersi ripetere lo dichiara: `onAvviso(testo, { ripetibile: true })` —
+           oggi solo «chiave rifiutata» (runtime-owner-adapter.mjs:1155): due chiavi diverse dello
+           stesso pool rifiutate in giri diversi sono DUE notizie, non una. */
+        /* ⛔ BUG-18 (05/10, owner): `{ nota: true }` = telemetria di normalizzazione del fornitore
+           (livelli adattati, campi non inviati): va nel journal DUREVOLE della sessione come evento
+           CUSTOM `avviso-fornitore` (registrato, rileggibile) e MAI in bolla in chat. Il frontend
+           non renderizza i CUSTOM che non conosce: la frase esiste, il registro la tiene, la chat tace. */
+        if (nota) {
+          await onEvento({ type: 'CUSTOM', name: 'avviso-fornitore', value: { messaggio } }, { durable: true });
+          return;
+        }
+        if (!ripetibile) {
+          if (avvisiFornitoreGiaDetti.has(messaggio)) return;
+          avvisiFornitoreGiaDetti.add(messaggio);
+        }
         const messageId = randomUUID();
         await onEvento(textMessageStart({ messageId, role: 'assistant' }), { durable: true });
         await onEvento(textMessageContent({ messageId, delta: messaggio }), { durable: true });
@@ -2417,10 +2465,13 @@ export async function eseguiComandoDiretto({
   const anteprima = createToolOutputPreview({
     onOutput: (delta) => onEvento(toolCallOutput({ toolCallId, delta })),
   });
-  /* Stop per riga: il comando ha il SUO segnale, registrato col suo `toolCallId` finché gira. */
+  /* Stop per riga + canale di sfondo (BUG-14): il comando ha i SUOI segnali, registrati col suo `toolCallId` finché gira.
+     ⛔ `sfonda` NON uccide: l'esecutore stacca la cattura, apre il file di output e conclude l'attesa — il processo vive. */
   const fermaQuesto = new AbortController();
+  const sfondoQuesto = new AbortController();
+  const sfondoFile = percorsoFileSfondo(cartella, toolCallId);
   const sgancia = typeof registraComandoFermabile === 'function'
-    ? registraComandoFermabile({ toolCallId, ferma: () => fermaQuesto.abort('stop-della-riga') }) // = MOTIVO_STOP_DELLA_RIGA del kernel
+    ? registraComandoFermabile({ toolCallId, ferma: () => fermaQuesto.abort('stop-della-riga'), sfonda: () => sfondoQuesto.abort('sfondo-della-riga') }) // = MOTIVO_STOP_DELLA_RIGA / MOTIVO_SFONDO_DELLA_RIGA del kernel
     : null;
   const execute = ({onBytes} = {}) => eseguiComandoSandboxatoFn(comando, cartella, {
     mobile,
@@ -2432,6 +2483,9 @@ export async function eseguiComandoDiretto({
     ...(preferenzeWsl ? { wsl: preferenzeWsl } : {}),
     ...(automaticoInLinux ? { automaticoInLinux: true } : {}),
     segnaleStop: fermaQuesto.signal,
+    /* ⛔ BUG-3/BUG-14: anche un `!` della persona sfonda al tempo (non muore più) e può essere sfondato dalla sua riga. */
+    segnaleSfondo: sfondoQuesto.signal,
+    fileSfondo: sfondoFile,
     onPezzo: ({ testo }) => anteprima.append(testo),
   });
   let risultato;
@@ -2446,7 +2500,11 @@ export async function eseguiComandoDiretto({
      comando è quello scritto dalla PERSONA (`!`), quindi la dichiarazione serve ancora di più.
      L'etichetta viene da `kernel/etichetta-sandbox.mjs`: una fonte sola per i due punti che
      costruiscono questa riga (l'altro è il kernel). */
-  const content = `exit ${risultato.codice} [sandbox: ${etichettaSandbox(risultato.enforcement, risultato.wsl)}]\n${risultato.testo}`;
+  /* ⛔ BUG-14: un comando sfondato NON ha «exit N» — non è uscito. Il suo testo è già l'«IN BACKGROUND» del kernel;
+     l'etichetta sandbox resta ma in coda (non è un esito, è dove ha girato). */
+  const content = risultato.messoInSfondo
+    ? `${risultato.testo}\n[sandbox: ${etichettaSandbox(risultato.enforcement, risultato.wsl)}]`
+    : `exit ${risultato.codice} [sandbox: ${etichettaSandbox(risultato.enforcement, risultato.wsl)}]\n${risultato.testo}`;
   /* ⛔ BLOCCO 7 (B4) — l'evento porta anche i DUE FLUSSI separati e il codice d'uscita, quando il
      kernel li ha davvero (allega solo i non vuoti: vedi `toolCallResult`). Per un comando scritto
      dalla PERSONA serve ancora di più: `npm` scrive l'avanzamento su stderr e `git` ci mette i
@@ -2455,7 +2513,9 @@ export async function eseguiComandoDiretto({
   onEvento(eventoPerEsitoTool({
     messageId: randomUUID(), toolCallId, content,
     stdout: risultato.fuori, stderr: risultato.errori, exitCode: risultato.codice,
-    ...(processOutputFn ? {isError: risultato.codice !== 0 || risultato.outputStorageFailed === true} : {}),
+    ...(processOutputFn && !risultato.messoInSfondo ? {isError: risultato.codice !== 0 || risultato.outputStorageFailed === true} : {}),
+    /* ⛔ BUG-14: la riga dei Processi deve dire «in sfondo» + file + chi lo ha sfondato (additivi). */
+    ...(risultato.messoInSfondo ? { inSfondo: true, ...(risultato.fileSfondo ? { fileSfondo: risultato.fileSfondo } : {}), ...(risultato.daSfondo ? { sfondoDa: risultato.daSfondo } : {}) } : {}),
   }));
   onEvento(comandoUtenteFinito({ comandoId, codice: risultato.codice, enforcement: risultato.enforcement }));
   /*

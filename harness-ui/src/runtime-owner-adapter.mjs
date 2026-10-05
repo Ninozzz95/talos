@@ -20,7 +20,7 @@ import { classificaErroreDiCorsa } from './research-orchestrator.mjs';
 import { leggiAttesaRichiestaDalFornitore, erroreEsitoProviderIncerto, consumoPubblico, marcaRifiutoProvider } from './provider-retry.mjs';
 import { normalizzaUsage, scontoDaCache } from './usage-cache.mjs'; // 12/09, P-B: i nomi della cache sono uno per fornitore, il lettore uno solo
 import { nativeProviderResponse, stripNativeMetadata } from './native-provider-adapter.mjs';
-import { preparaRichiestaCompatibile, OpenAiCompatibleRuntimeError } from './openai-compatible-runtime.mjs'; // P-D (12/09): Z.AI accetta solo alcuni livelli di ragionamento
+import { preparaRichiestaCompatibile, OpenAiCompatibleRuntimeError, aliasGrafiaRagionamento, livelloRagionamentoMinimo, livelloRagionamentoPiuVicino } from './openai-compatible-runtime.mjs'; // P-D (12/09): Z.AI accetta solo alcuni livelli di ragionamento — BUG-18 gen.2: alias, minimo e clamp in UNA scala condivisa (D5)
 import { opzioniRagionamentoPerSintesi } from './context-token-counters.mjs'; // F3 (24/09): le stesse opzioni del corpo contato, fuori OpenRouter
 // P-L · ponte locale senza listener, sessione esterna posseduta dalla Response.
 import { rispostaAgenteAcp } from './acp-agent.mjs';
@@ -91,7 +91,9 @@ export const FONTI_DI_MOTORE_LOCALE = Object.freeze(new Set([...idPerWire('local
  * protocollo. ⛔ Nessun nome tecnico (`tools`, `--jinja`, `HTTP`), nessun modello «consigliato» e
  * nessun elenco di modelli che reggono gli attrezzi (owner 11/09: «non forziamo nulla»).
  */
-const AVVISO_MOTORE_SENZA_ATTREZZI = 'Questo modello non usa gli attrezzi: qui resta una chat. Può rispondere, non può leggere file né eseguire comandi.';
+/* ⛔ BUG-7 cura2, revisore C2-2 (05/10/2026): esportato perché la prova di cablaggio (tests/bc79-2) asserisca
+   l'IDENTITÀ del messaggio, non una copia fragile del suo testo. */
+export const AVVISO_MOTORE_SENZA_ATTREZZI = 'Questo modello non usa gli attrezzi: qui resta una chat. Può rispondere, non può leggere file né eseguire comandi.';
 
 /**
  * ⛔⛔⛔ BC-79.2 — LA RIPROVA SENZA ATTREZZI, E PERCHÉ NON SI LEGGE IL TESTO DELL'ERRORE.
@@ -387,17 +389,16 @@ function capabilityReasoning(capability) {
  *   commit `bf3a42c00` su `lane/talos-mobile-allineamento`). Un nome fuori dalla scala resta sul default, come prima.
  */
 const SCALA_RAGIONAMENTO = Object.freeze(['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']);
-/** Il livello supportato più vicino e mai più caro di quello chiesto (Hermes `clamp_effort`); `null` se non si può dire. */
+/** Il livello supportato più vicino e mai più caro di quello chiesto (Hermes `clamp_effort`); `null` se non si può dire.
+ *  ⛔ BUG-18 gen.2 (revisore D5): alias, minimo e clamp vivono in UNA funzione condivisa con
+ *  openai-compatible-runtime.mjs (`aliasGrafiaRagionamento` / `livelloRagionamentoMinimo` /
+ *  `livelloRagionamentoPiuVicino`) — le due scale gemelle non devono poter più divergere. */
 export function livelloRagionamentoSenzaSalire(chiesto, supportati) {
   if (!SCALA_RAGIONAMENTO.includes(chiesto)) return null;
   const livelli = (supportati ?? []).filter((l) => typeof l === 'string' && l !== 'none' && SCALA_RAGIONAMENTO.includes(l));
   if (!livelli.length) return null;
-  const pos = (l) => SCALA_RAGIONAMENTO.indexOf(l);
-  const minimo = livelli.reduce((a, b) => (pos(b) < pos(a) ? b : a));
-  if (chiesto === 'none') return minimo;
-  if (livelli.includes(chiesto)) return chiesto;
-  const sotto = livelli.filter((l) => pos(l) < pos(chiesto));
-  return sotto.length ? sotto.reduce((a, b) => (pos(b) > pos(a) ? b : a)) : minimo;
+  if (chiesto === 'none') return livelloRagionamentoMinimo(livelli);
+  return livelloRagionamentoPiuVicino(chiesto, livelli);
 }
 
 /**
@@ -798,6 +799,13 @@ function creaFetchInstradata(fetchDiRete = fetch, { risolvi = risolviDestinazion
       if (typeof onAvviso !== 'function') throw new OpenAiCompatibleRuntimeError(avviso, 'PROVIDER_REASONING_UNSUPPORTED');
       await onAvviso(avviso);
     }
+    /* ⛔ BUG-18 (05/10, owner): le NOTE di normalizzazione (livelli adattati, campi non inviati)
+       sono telemetria locale: al journal della sessione con `{ nota: true }`, MAI in bolla in
+       chat. L'onestà resta: il testo è lo stesso che prima compariva a schermo. Senza onAvviso
+       una nota si perde in silenzio (telemetria opzionale), un avviso resta fail-closed. */
+    for (const nota of adattata.note ?? []) {
+      if (typeof onAvviso === 'function') await onAvviso(nota, { nota: true });
+    }
     /*
      * ⛔⛔⛔ BC-79.2 (17/09/2026) — LA RIPROVA SENZA ATTREZZI VIVE QUI, e il kernel non la conosce.
      * La doc per esteso sta su `MotoreLocaleRifiutaError`, sopra: qui restano i tre fatti che
@@ -892,7 +900,12 @@ function creaFetchInstradata(fetchDiRete = fetch, { risolvi = risolviDestinazion
       /* ⛔ Prima la memoria, poi l'avviso: se `onAvviso` lancia, il giro deve comunque smettere di
          mandare `tools` — altrimenti si tornerebbe a un 400 per giro con in più un'eccezione. */
       if (memoriaAttrezzi) memoriaAttrezzi.rifiutati = true;
-      if (typeof onAvviso === 'function') await onAvviso(AVVISO_MOTORE_SENZA_ATTREZZI);
+      /* ⛔ BUG-7-cura2, revisore C2-2/M1 (05/10/2026): RIPETIBILE di proposito. La memoria `rifiutati` vive quanto la
+         catena fetch (una per `talosLavora`, vedi BC-79.2): a un CAMBIO FORNITORE la catena si ricostruisce e il motore
+         può rifiutare di nuovo — la seconda volta è una notizia operativa, non la stessa bolla. Non riapre il sintomo
+         BUG-7 «bolla a ogni giro»: dentro un giro la memoria è appiccicosa, l'avviso non può ripetersi se non dopo
+         una ricostruzione vera. Stessa scelta della «chiave rifiutata» qui sotto. */
+      if (typeof onAvviso === 'function') await onAvviso(AVVISO_MOTORE_SENZA_ATTREZZI, { ripetibile: true });
       return seconda;
     }
     const risposta = await spedisci(corpoRiscritto);
@@ -1152,7 +1165,10 @@ export function creaFetchMultiProvider(fetchDiRete = fetch, {
         contesto.guastiHttp.set(scelta.impronta, (contesto.guastiHttp.get(scelta.impronta) ?? 0) + 1);
       } else if (scelta && classificazione.classe !== 'accesso') providerStore.mettiInPanchina(fonte, scelta.impronta, { classe: classificazione.classe, headers });
       if (scelta && classificazione.classe === 'credenziale' && typeof onAvviso === 'function') {
-        await onAvviso(`Una chiave di ${record.etichetta} è stata rifiutata: controlla Fornitori e accessi.`);
+        /* ⛔ BUG-7-cura2 (04/10/2026): RIPETIBILE di proposito — la dedup degli avvisi ora dura tutta la
+           sessione (agent-service, Set su consensiSessione), ma due chiavi DIVERSE dello stesso pool
+           rifiutate in giri diversi sono due notizie operative, non la stessa notizia. */
+        await onAvviso(`Una chiave di ${record.etichetta} è stata rifiutata: controlla Fornitori e accessi.`, { ripetibile: true });
       }
     };
     const rete = async (target, init) => {

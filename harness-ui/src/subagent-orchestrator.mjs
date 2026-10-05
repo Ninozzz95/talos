@@ -479,18 +479,74 @@ export function creaSubagentOrchestrator({
       let figlioId = null;
       let conclusioneRicevuta = null;
       let conclusioneGestita = false;
+      /* ⛔⭐ BUG-16 (05/10/2026, piano §4) — rilancio post-mortem di una figlia: UNO solo, solo lettura,
+         solo zero effetti. Il kernel ha già ritentato da solo (fino a 10 reinvii a giro); quando anche il
+         budget del kernel è esaurito (_ESAURITO) e la figlia era in sola LETTURA senza scritture né
+         artefatti, riprendere la STESSA sessione (stesso childId, stessa voce, storia intatta: la cache
+         del prefisso non si rompe) è un reinvio sicuro anche all'orchestratore. Una figlia in `modifica`
+         non si rilancia mai: i suoi effetti passati rendono il reinvio non idempotente. */
+      let rilanciDelega = 0;
       const completaConclusione = (risultatoSessione) => {
         if (conclusioneGestita) return;
         if (!figlioId) {
           conclusioneRicevuta = risultatoSessione;
           return;
         }
+        let rilancioFallito = null;
+        if (risultatoSessione?.codiceErrore === 'PROVIDER_OUTCOME_UNKNOWN_ESAURITO' && rilanciDelega < 1) {
+          const voce = sessioni.get(figlioId);
+          const evidenza = voce ? analizzaEvidenzaDelega(voce.eventi) : null;
+          const senzaEffetti = !evidenza || (evidenza.scritture === 0 && evidenza.artefatti === 0);
+          if (modalita === 'lettura' && senzaEffetti) {
+            /* R2 della review avversariale: il contatore cresce PRIMA dell'avvio — la consegna del
+               rilancio può arrivare SINCRONA dentro `avviaFiglia` (onConclusioneFn annidato) e deve
+               già vedere il rilancio — ma se l'avvio è rifiutato si RETROCESSA e la consegna dice la
+               verità: nessun rilancio è partito, il tetto non è consumato. */
+            rilanciDelega += 1;
+            const rilancio = avviaFiglia({
+              sessionId: figlioId,
+              voceEsistente: voce,
+              /* Il compito resta quello della voce: qui si dice solo PERCHÉ la figlia riparte, così
+                 la sua storia non contiene il task duplicato ma la ragione vera del rilancio. */
+              task: 'La risposta del fornitore si è interrotta e il suo esito è rimasto incerto: riprendi e completa il compito da dove l’hai lasciato.',
+            });
+            if (rilancio?.sessionId && !rilancio?.erroreAvvio) {
+              if (voce) voce.rilanciDelega = rilanciDelega;
+              notificaSenzaBloccare(onFiglioCreatoFn, { parentId: sessionPadreId, childId: figlioId, rilanciata: true });
+              return; // la seconda corsa ricade qui, con il suo esito
+            }
+            /* Il rilancio non è partito: si retrocede il contatore e si consegna la prima verità. */
+            rilanciDelega -= 1;
+            if (voce) voce.rilanciDelega = rilanciDelega;
+            rilancioFallito = typeof rilancio?.erroreAvvio === 'string' && rilancio.erroreAvvio
+              ? rilancio.erroreAvvio
+              : 'l’avvio della sessione figlia è stato rifiutato';
+          }
+        }
         conclusioneGestita = true;
         const voceFiglia = sessioni.get(figlioId);
         const eventi = voceFiglia?.eventi;
         const esito = esitoDelegaDaRisultato(risultatoSessione, eventi, { task: taskFiglio });
+        /* ⛔⭐ BUG-16: la consegna dichiara SEMPRE il rilancio (piano §4: «lo dice nel riassunto») e,
+           quando l'esito incerto è sopravvissuto al suo budget senza rilancio possibile, dice anche
+           perché NON si può riprovare — la madre legge `rilanciabile` dal risultato. */
+        if (rilanciDelega > 0) {
+          esito.rilanciata = rilanciDelega;
+          const nota = ' (rilanciata una volta dopo un esito incerto del fornitore)';
+          if (typeof esito.riassunto === 'string' && esito.riassunto) esito.riassunto += nota;
+          else if (typeof esito.motivo === 'string' && esito.motivo) esito.motivo += nota;
+        }
+        if (risultatoSessione?.codiceErrore === 'PROVIDER_OUTCOME_UNKNOWN_ESAURITO') {
+          esito.rilanciabile = false;
+          esito.motivoRilancio = rilancioFallito
+            ? `il rilancio non è partito: ${rilancioFallito}`
+            : rilanciDelega > 0
+              ? 'il tetto di un rilancio per figlia è già stato usato'
+              : `la delega non è una lettura pura (${modalita}): un rilancio potrebbe ripetere effetti già prodotti`;
+        }
         if (voceFiglia) {
           voceFiglia.esitoDelega = esito.esito;
+          voceFiglia.rilanciDelega = rilanciDelega;
           voceFiglia.evidenzaDelega = analizzaEvidenzaDelega(eventi);
         }
         notificaSenzaBloccare(onFiglioConclusoFn, {
@@ -514,7 +570,7 @@ export function creaSubagentOrchestrator({
        * maggior ragione deve ereditare il MODELLO, altrimenti chi paga non sa cosa sta pagando.
        * Si eredita anche lo sforzo di ragionamento e i permessi: il figlio non è più libero del padre.
        */
-      const risultatoAvvio = avviaESeguiFn({
+      const avviaFiglia = (opzioniExtra = {}) => avviaESeguiFn({
         taskId: `delega:${sessionPadreId}`,
         cartella: dove,
         /*
@@ -575,7 +631,9 @@ export function creaSubagentOrchestrator({
         onConclusioneFn: (risultatoSessione) => {
           completaConclusione(risultatoSessione);
         },
+        ...opzioniExtra,
       });
+      const risultatoAvvio = avviaFiglia();
       figlioId = risultatoAvvio?.sessionId ?? null;
       // ⛔ AL CONTRARIO: avviaESeguiFn può rifiutare PRIMA di avviare (es. chiave API non configurata) — mai una Promise appesa in eterno se onConclusioneFn non scatterà mai.
       if (risultatoAvvio?.erroreAvvio) {

@@ -163,7 +163,7 @@ test('PG-05 — alias uscita documentati e conflitti: nessuna mutazione né este
   }
   for (const id of ['mistral', 'together', 'fireworks', 'deepinfra', 'novita', 'nebius', 'ollama-cloud', 'huggingface', 'deepseek', 'openrouter']) {
     const corpo = { model: 'modello-non-qualificato', max_tokens: 17, reasoning_effort: 'high', tool_choice: 'required' };
-    assert.deepEqual(preparaRichiestaCompatibile(id, corpo), { corpo, avvisi: [] }, id);
+    assert.deepEqual(preparaRichiestaCompatibile(id, corpo), { corpo, avvisi: [], note: [] }, id);
   }
 });
 
@@ -183,14 +183,15 @@ test('PG-06 — ragionamento documentato e strumenti: solo le particolarità del
   for (const id of ['groq', 'cerebras']) {
     const r = preparaRichiestaCompatibile(id, { ...corpoPer(id), reasoning_effort: 'none' });
     assert.equal(r.corpo.reasoning_effort, undefined);
-    assert.equal(r.avvisi.length, 1);
-    assert.ok(r.avvisi[0].includes(ATTESI[id][0]));
+    assert.equal(r.avvisi.length, 0, 'BUG-18: la normalizzazione del ragionamento non parla in chat');
+    assert.equal(r.note.length, 1);
+    assert.ok(r.note[0].includes(ATTESI[id][0]));
   }
   assert.equal(preparaRichiestaCompatibile('xai', { model: 'grok-4.3', reasoning_effort: 'none' }).corpo.reasoning_effort, 'none');
-  assert.equal(preparaRichiestaCompatibile('xai', { model: 'grok-4.6', reasoning_effort: 'none' }).avvisi.length, 1);
+  assert.equal(preparaRichiestaCompatibile('xai', { model: 'grok-4.6', reasoning_effort: 'none' }).note.length, 1);
   for (const id of ['together', 'deepinfra', 'ollama-cloud', 'novita']) {
     const corpo = { ...corpoPer(id), reasoning: { effort: 'high' } };
-    assert.deepEqual(preparaRichiestaCompatibile(id, corpo), { corpo, avvisi: [] });
+    assert.deepEqual(preparaRichiestaCompatibile(id, corpo), { corpo, avvisi: [], note: [] });
   }
 });
 

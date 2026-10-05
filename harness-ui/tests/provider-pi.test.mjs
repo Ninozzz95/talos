@@ -151,14 +151,15 @@ test('PI-04 — Kimi K2: temperatura del server, thinking, strumenti e isolament
   assert.deepEqual(attivo.corpo.thinking, { type: 'enabled', keep: 'all' });
   const impossibile = prepara('kimi', 'kimi-k2.7-code', { reasoning: { enabled: false } });
   assert.equal(impossibile.corpo.thinking.type, 'enabled');
-  assert.ok(impossibile.avvisi.length);
+  assert.ok(impossibile.note.length, 'BUG-18: il controllo del ragionamento va in nota, non in chat');
+  assert.deepEqual(impossibile.avvisi, []);
   for (const model of ['kimi-k2.6', 'kimi-k2.7-code']) {
     assert.throws(() => prepara('kimi', model, { tool_choice: 'required' }), { code: 'RUNTIME_INVALID' });
     assert.throws(() => prepara('kimi', model, { tool_choice: { type: 'function', function: { name: 'ora' } } }), { code: 'RUNTIME_INVALID' });
   }
   assert.doesNotThrow(() => prepara('kimi', 'kimi-k2.6', { thinking: { type: 'disabled' }, tool_choice: { type: 'function', function: { name: 'ora' } } }));
   const k3 = { model: 'kimi-k3', reasoning_effort: 'max', temperature: 1 };
-  assert.deepEqual(preparaRichiestaCompatibile('kimi', k3), { corpo: k3, avvisi: [] });
+  assert.deepEqual(preparaRichiestaCompatibile('kimi', k3), { corpo: k3, avvisi: [], note: [] });
 });
 
 test('PI-05 — MiniMax: M3 adaptive/disabled, M2.7 sempre attivo, nessuno split implicito', () => {
@@ -171,7 +172,8 @@ test('PI-05 — MiniMax: M3 adaptive/disabled, M2.7 sempre attivo, nessuno split
   assert.equal(r.corpo.reasoning_split, undefined);
   const fisso = prepara('minimax', 'MiniMax-M2.7', { thinking: { type: 'disabled' } });
   assert.notEqual(fisso.corpo.thinking?.type, 'disabled');
-  assert.ok(fisso.avvisi.length);
+  assert.ok(fisso.note.length, 'BUG-18: M2.7 non si spegne, si dice in nota');
+  assert.deepEqual(fisso.avvisi, []);
 });
 
 test('PI-06 — Qwen: booleano thinking sul wire, streaming vincolato solo dove documentato', () => {
@@ -201,14 +203,15 @@ test('PI-REG-CONFLITTI e PI-REG-ISOLAMENTO — opzioni malformate/discordanti re
     }
     const r = prepara(id, model, { reasoning_effort: 'high' });
     assert.equal(r.corpo.reasoning_effort, undefined);
-    assert.ok(r.avvisi.length, 'livello trasformato in controllo binario dichiarato');
+    assert.ok(r.note.length, 'BUG-18: livello trasformato in controllo binario dichiarato in nota');
+    assert.deepEqual(r.avvisi, []);
     const sconosciuto = { model: 'modello-futuro', temperature: 0.2, reasoning: { effort: 'high' }, tool_choice: 'required' };
-    assert.deepEqual(preparaRichiestaCompatibile(id, sconosciuto), { corpo: sconosciuto, avvisi: [] });
+    assert.deepEqual(preparaRichiestaCompatibile(id, sconosciuto), { corpo: sconosciuto, avvisi: [], note: [] });
   }
   assert.throws(() => prepara('qwen', 'qwen-flash', { enable_thinking: false, extra_body: { enable_thinking: true } }), { code: 'RUNTIME_INVALID' });
   for (const id of ['deepseek', 'openrouter', 'novita']) {
     const corpo = { model: 'kimi-k2.6', temperature: 0.2, reasoning_effort: 'high', tool_choice: 'required' };
-    assert.deepEqual(preparaRichiestaCompatibile(id, corpo), { corpo, avvisi: [] });
+    assert.deepEqual(preparaRichiestaCompatibile(id, corpo), { corpo, avvisi: [], note: [] });
   }
 });
 
