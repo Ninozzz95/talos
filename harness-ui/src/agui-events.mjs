@@ -215,7 +215,7 @@ export function toolCallOutput({ toolCallId, delta }) {
  *   non poteva sapere CHE COSA e' stato eseguito ne' DOVE. Per `shell` `cwd` e' la cartella
  *   EFFETTIVA (quella che il comando ha visto davvero), non quella richiesta.
  */
-export function toolCallResult({ messageId, toolCallId, content, role = 'tool', durataMs, comando, cwd, stdout, stderr, exitCode, isError, receipt, outcome, suspicious }) {
+export function toolCallResult({ messageId, toolCallId, content, role = 'tool', durataMs, comando, cwd, stdout, stderr, exitCode, isError, receipt, outcome, suspicious, inSfondo, fileSfondo, sfondoDa }) {
     const evento = { type: 'ToolCallResult', messageId, toolCallId, content, role }
     // Optional TALOS extension, using MCP's boolean semantics. Never infer it from content.
     if (typeof isError === 'boolean') evento.isError = isError
@@ -246,6 +246,13 @@ export function toolCallResult({ messageId, toolCallId, content, role = 'tool', 
     if (typeof stdout === 'string' && stdout !== '') evento.stdout = stdout
     if (typeof stderr === 'string' && stderr !== '') evento.stderr = stderr
     if (Number.isFinite(exitCode)) evento.exitCode = Math.round(exitCode)
+    /* ⛔ BUG-14 (owner 05/10/2026, «come Claude Code, con l'output su file»): un comando messo in sfondo lo DICE
+       l'evento, con DOVE guarda l'output (`fileSfondo`) e CHI lo ha sfondato (`sfondoDa`: 'persona' | 'tempo-scaduto' |
+       'avvio'). La riga dei Processi legge questi campi (ispettore); il `content` resta quello del kernel, con la sua
+       intestazione `IN BACKGROUND`. Solo se c'è: senza, l'evento resta identico a prima, byte per byte. */
+    if (inSfondo === true) evento.inSfondo = true
+    if (typeof fileSfondo === 'string' && fileSfondo !== '') evento.fileSfondo = fileSfondo
+    if (typeof sfondoDa === 'string' && sfondoDa !== '') evento.sfondoDa = sfondoDa
     /* G02 (dalla lane CLI, a7dfe1193, M4-E): la ricevuta del kernel per QUESTO attrezzo, inoltrata senza interpretarla;
        solo un oggetto. Senza, l'evento resta identico a prima. */
     if (receipt && typeof receipt === 'object' && !Array.isArray(receipt)) evento.receipt = receipt
@@ -474,13 +481,14 @@ export function eventiPerRisposta(risposta, { messageId, parentMessageId, testoG
  * talosLavora mette in `messaggi.push({role:'tool', tool_call_id,
  * content})`, talosHarness.mjs riga ~836) a ToolCallResult.
  */
-export function eventoPerEsitoTool({ messageId, toolCallId, content, durataMs, comando, cwd, stdout, stderr, exitCode, isError, receipt, outcome, suspicious }) {
+export function eventoPerEsitoTool({ messageId, toolCallId, content, durataMs, comando, cwd, stdout, stderr, exitCode, isError, receipt, outcome, suspicious, inSfondo, fileSfondo, sfondoDa }) {
     /* ⭐ OSS-1/OSS-2 — inoltro puro: la decisione su COSA entra nell'evento sta tutta in
        `toolCallResult` qui sopra, un posto solo. Chi non passa i tre campi ottiene l'oggetto
        identico di prima, byte per byte.
        ⛔ BLOCCO 7 (B4): stessa regola per i due flussi e per il codice d'uscita — l'inoltro non
-         decide niente, e la guardia «solo se non vuoti» vive in `toolCallResult`. */
-    return toolCallResult({ messageId, toolCallId, content: String(content), durataMs, comando, cwd, stdout, stderr, exitCode, isError, receipt, outcome, suspicious })
+         decide niente, e la guardia «solo se non vuoti» vive in `toolCallResult`.
+       ⛔ BUG-14: e stessa regola per i tre campi dello sfondo (`inSfondo`/`fileSfondo`/`sfondoDa`). */
+    return toolCallResult({ messageId, toolCallId, content: String(content), durataMs, comando, cwd, stdout, stderr, exitCode, isError, receipt, outcome, suspicious, inSfondo, fileSfondo, sfondoDa })
 }
 
 /**

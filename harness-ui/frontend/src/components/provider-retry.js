@@ -5,19 +5,27 @@ function valoreRetry(evento) {
   if (evento?.type !== 'CUSTOM' || evento.name !== 'talos.provider-retry') return null;
   const v = evento.value;
   const id = x => typeof x === 'string' && x.length > 0 && x.length <= 256;
+  /* R1 della review avversariale BUG-16: il canale «esito-incerto» (reinvio automatico del kernel dopo
+     un giro perso senza effetti) NON ha uno HTTP status: il suo motivo arriva nel campo `motivo` e il
+     primo tentativo è 1 (il canale HTTP parte da 2 perché il primo giro non è un «ritenta»). */
+  const incerto = v.canale === 'esito-incerto';
   if (!v || v.schema !== 'talos.provider-retry.v1'
     || ![v.runId, v.threadId, v.requestId].every(id)
     || !['attesa', 'invio', 'fine'].includes(v.fase)
-    || !Number.isSafeInteger(v.tentativo) || v.tentativo < 2
+    || !Number.isSafeInteger(v.tentativo) || v.tentativo < (incerto ? 1 : 2)
     || !Number.isSafeInteger(v.tentativiMassimi) || v.tentativiMassimi < v.tentativo
-    || !Number.isInteger(v.httpStatus) || !((v.httpStatus === 402 && v.motivo === 'budget-occupato')
-      || v.httpStatus === 408 || v.httpStatus === 429 || (v.httpStatus >= 500 && v.httpStatus <= 599))
+    || (incerto
+      ? (v.httpStatus !== undefined && v.httpStatus !== null) || (v.motivo !== undefined && typeof v.motivo !== 'string')
+      : (!Number.isInteger(v.httpStatus) || !((v.httpStatus === 402 && v.motivo === 'budget-occupato')
+        || v.httpStatus === 408 || v.httpStatus === 429 || (v.httpStatus >= 500 && v.httpStatus <= 599))))
     || !Number.isFinite(v.attesaMs) || v.attesaMs < 0 || v.attesaMs > 2_147_483_647
     || (v.fase === 'attesa' && (!Number.isSafeInteger(v.retryAt) || v.retryAt < 1))) return null;
   return { requestId: v.requestId, runId: v.runId, threadId: v.threadId, fase: v.fase,
     tentativo: v.tentativo, tentativiMassimi: v.tentativiMassimi, httpStatus: v.httpStatus,
+    canale: incerto ? 'esito-incerto' : 'http',
     retryAt: v.fase === 'attesa' ? v.retryAt : null,
-    ...(v.httpStatus === 402 ? { motivo: v.motivo } : {}) };
+    ...(v.httpStatus === 402 ? { motivo: v.motivo } : {}),
+    ...(incerto && typeof v.motivo === 'string' ? { motivo: v.motivo } : {}) };
 }
 
 /** Proiezione del journal: nessuna richiesta o decisione di ritentare nel client. */
@@ -45,13 +53,16 @@ export function testoRetry(retry, ora = Date.now(), en) {
   const voce = (chiave, parametri) => (en === undefined ? t(`chat.retry.${chiave}`, parametri)
     : interpola(TESTI[en ? 'en' : 'it'][`chat.retry.${chiave}`], parametri));
   const numero = voce('attempt', { attempt: retry.tentativo, max: retry.tentativiMassimi });
-  const motivo = retry.httpStatus === 402 && retry.motivo === 'budget-occupato' ? voce('reason.budgetBusy')
-    : retry.httpStatus === 429 ? voce('reason.rateLimited')
-      : retry.httpStatus === 408 ? voce('reason.timeout') : voce('reason.unavailable');
+  /* R1 (BUG-16): il canale «esito-incerto» dice il SUO motivo, senza «stato null» — non c'è nessuno status HTTP da citare. */
+  const incerto = retry.canale === 'esito-incerto';
+  const motivo = incerto ? voce('reason.outcomeUnknown')
+    : retry.httpStatus === 402 && retry.motivo === 'budget-occupato' ? voce('reason.budgetBusy')
+      : retry.httpStatus === 429 ? voce('reason.rateLimited')
+        : retry.httpStatus === 408 ? voce('reason.timeout') : voce('reason.unavailable');
   const secondi = Math.max(0, Math.ceil((retry.retryAt - ora) / 1000));
   return {
     titolo: retry.fase === 'attesa' ? voce('scheduled') : numero,
-    motivo: `${voce('reason.withStatus', { reason: motivo, status: retry.httpStatus })}${retry.fase === 'attesa' ? ` ${numero}.` : ''}`,
+    motivo: `${incerto ? motivo : voce('reason.withStatus', { reason: motivo, status: retry.httpStatus })}${retry.fase === 'attesa' ? ` ${numero}.` : ''}`,
     tempo: retry.fase !== 'attesa' ? voce('inProgress')
       : secondi > 0 ? voce('inSeconds', { seconds: secondi }) : voce('waitingConfirmation'),
   };

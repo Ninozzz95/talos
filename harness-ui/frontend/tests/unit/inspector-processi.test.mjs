@@ -148,8 +148,10 @@ const FINE = (id, { uscita = 0, errore = false, a = 2_000 } = {}) => ({ type: 'T
 //    POSIX). Dire «Non riuscito» di un comando che non è partito è un'accusa, non un esito.
 // ⛔ 02/10/2026: DIECI — è entrato «Aspetta il tuo consenso» (decisione owner): un comando che aspetta la persona non è
 //    «in corso», e non si ferma dalla riga perché non è ancora partito.
-test('PROC-STATI: dieci stati, ognuno con etichetta E icona — mai il solo colore', () => {
-  const attesi = ['in-coda', 'in-avvio', 'in-corso', 'in-attesa', 'in-consenso', 'riuscito', 'fallito', 'annullato', 'ucciso', 'non-eseguito'];
+// ⛔ 05/10/2026, BUG-14: UNDICI — è entrato «In sfondo»: un comando mandato fuori cattura non è né «in corso» né
+//    «in attesa» (tace PER COSTRUZIONE: l'output va sul file), e non ha più né Stop né Sfondo da chiamare.
+test('PROC-STATI: undici stati, ognuno con etichetta E icona — mai il solo colore', () => {
+  const attesi = ['in-coda', 'in-avvio', 'in-corso', 'in-attesa', 'in-consenso', 'in-sfondo', 'riuscito', 'fallito', 'annullato', 'ucciso', 'non-eseguito'];
   assert.deepEqual(Object.keys(STATI_PROCESSO), attesi);
   for (const s of attesi) {
     assert.ok(STATI_PROCESSO[s].etichetta.length > 2, `${s} ha una parola sua`);
@@ -159,6 +161,40 @@ test('PROC-STATI: dieci stati, ognuno con etichetta E icona — mai il solo colo
      etichetta, altrimenti chi non distingue verde e rosso legge due volte la stessa parola. */
   const etichette = attesi.map((s) => STATI_PROCESSO[s].etichetta);
   assert.equal(new Set(etichette).size, etichette.length);
+});
+
+/* ⛔ 05/10/2026, BUG-14 — LA RIGA DEI PROCESSI DICE «IN SFONDO». Dagli eventi (con i campi additivi
+   del kernel o dal solo testo) la riga cambia stato, porta il file e chi lo ha sfondato, e NON
+   invecchia in «in attesa» col silenzio: un processo sfondato tace PER COSTRUZIONE. Quando il
+   processo esce DAVVERO, il suo esito vince sullo sfondo. */
+test('PROC-SFONDO: il comando sfondato è «in-sfondo» col file e chi, non invecchia in attesa, e l esito vero vince quando esce', () => {
+  const lista = processiDagliEventi([
+    ...START('s1', 'npm run dev', 1, 1_000),
+    { type: 'ToolCallResult', toolCallId: 's1', ricevutoA: 2_000, inSfondo: true, fileSfondo: '/s/.talos/processi-sfondo/s1.log', sfondoDa: 'persona' },
+  ], { adesso: 999_000 });
+  const p = lista.find((x) => x.id === 's1');
+  assert.equal(p.stato, 'in-sfondo', 'né «in corso» né «in attesa»: il silenzio è per costruzione, e sono passati 16 minuti');
+  assert.equal(p.fileSfondo, '/s/.talos/processi-sfondo/s1.log');
+  assert.equal(p.sfondoDa, 'persona');
+
+  /* Il fallback dal TESTO («IN BACKGROUND» in testa) vive nel normalizzatore di app.js: qui arrivo
+     già normalizzato, senza i campi del dettaglio — e la riga non se li inventa. */
+  const senzaDettagli = processiDagliEventi([
+    ...START('s1b', 'npm run dev', 1, 1_000),
+    { type: 'ToolCallResult', toolCallId: 's1b', ricevutoA: 2_000, inSfondo: true },
+  ]);
+  const s1b = senzaDettagli.find((x) => x.id === 's1b');
+  assert.equal(s1b.stato, 'in-sfondo');
+  assert.equal(s1b.fileSfondo ?? null, null);
+  assert.equal(s1b.sfondoDa ?? null, null);
+
+  const lista2 = processiDagliEventi([
+    ...START('s2', 'npm run dev', 1, 1_000),
+    { type: 'ToolCallResult', toolCallId: 's2', ricevutoA: 2_000, inSfondo: true },
+    { type: 'ToolCallResult', toolCallId: 's2', ricevutoA: 3_000, uscita: 0 },
+  ]);
+  const q = lista2.find((x) => x.id === 's2');
+  assert.equal(q.stato, 'riuscito', 'quando il processo esce davvero, l esito vero vince sullo sfondo');
 });
 
 test('PROC-USCITA: il codice di uscita si legge dal testo del risultato (formato del kernel)', () => {

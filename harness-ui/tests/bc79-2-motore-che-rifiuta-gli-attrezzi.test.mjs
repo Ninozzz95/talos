@@ -68,7 +68,7 @@ import { join } from 'node:path';
 import test from 'node:test';
 
 import { createSessionRegistry } from '../src/session-registry.mjs';
-import { createOwnerRuntimeAdapter } from '../src/runtime-owner-adapter.mjs';
+import { AVVISO_MOTORE_SENZA_ATTREZZI, createOwnerRuntimeAdapter } from '../src/runtime-owner-adapter.mjs';
 import { avviaSessione } from '../src/agent-service.mjs';
 import { rimuoviCartellaDiProva } from './aiuto/rimuovi-cartella-di-prova.mjs';
 
@@ -514,6 +514,63 @@ test('⛔⛔⛔ BC79-CTX — il contesto pieno non è un rifiuto degli attrezzi:
   assert.equal(ultimo.code, 'LOCAL_CONTEXT_EXCEEDED', `⛔ il suo codice, non un guasto del fornitore — ultimo: ${JSON.stringify(ultimo)}`);
   assert.match(ultimo.message, /\(17230 tokens\).*\(16384 tokens\)/u, 'i numeri del motore restano leggibili');
   assert.equal(quanteVolte(testoDetto(eventi), 'Questo modello non usa gli attrezzi'), 0, '⛔ e nessun avviso falso sugli attrezzi');
+});
+
+/*
+ * ⛔⛔⛔ BUG-7-cura2, revisore C2-3 (05/10/2026) — LA PROVA DI CABLAGGIO ADAPTER→`ripetibile`.
+ *
+ * La dedup degli avvisi di BUG-7-cura2 dura TUTTA la sessione (agent-service, Set su `consensiSessione`).
+ * Chi ha un avviso che DEVE potersi ripetere lo dichiara con `onAvviso(testo, { ripetibile: true })»: «chiave
+ * rifiutata» lo faceva già, AVVISO_MOTORE_SENZA_ATTREZZI no — il secondo rifiuto di un motore ricostruito
+ * dopo un cambio fornitore sarebbe morto nel Set, e nessun test lo difendeva.
+ * ⇒ Prova a LIVELLO ADAPTER (nessuna sessione, nessuna rete: `chiamaLocale` è una funzione nuda): un modulo
+ *   owner finto chiama la fetch incatenata con `local:…`, il motore finto risponde 400 con attrezzi e poi 200
+ *   senza, e la spia su `onAvviso` asserisce l'IDENTITÀ del messaggio e l'OPZIONE passata. Un mutante che
+ *   toglie `{ ripetibile: true }` cade qui.
+ */
+test('⛔⛔⛔ BC79-RIPETIBILE — l\'avviso «senza attrezzi» dall\'adapter arriva con { ripetibile: true }', async () => {
+  const viste = [];
+  const destinazioneModelloDeps = {
+    leggiChiave: () => null,
+    leggiRuntime: () => ({}),
+    localePronto: () => true,
+    chiamaLocale: async (percorso, opzioni) => {
+      const corpo = JSON.parse(opzioni.body);
+      viste.push({ percorso, haTools: Array.isArray(corpo.tools) && corpo.tools.length > 0 });
+      if (viste.length === 1) return new Response(GREZZO_LLAMA, { status: 400, headers: { 'Content-Type': 'application/json' } });
+      return new Response(JSON.stringify({ choices: [{ message: { role: 'assistant', content: 'ho risposto senza attrezzi' } }] }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    },
+    avviaLocale: async () => {},
+  };
+  const avvisi = [];
+  const adapter = createOwnerRuntimeAdapter({
+    /* ⛔ `normalizzaModuloPath` (runtime-owner-adapter) pretende un PERCORSO ASSOLUTO: su Linux «C:/owner/…»
+       non lo è (isAbsolute = false) e l'adattatore rifiutava il modulo prima di girare. Il modulo non viene
+       MAI letto — `importFn` qui sotto lo sostituisce: serve solo a passare la normalizzazione, come fa
+       IMAGE-06 (tests/runtime-owner-adapter.test.mjs: `process.cwd() + '/runtime-image-fixture.mjs'`). */
+    modulePath: process.cwd() + '/owner-runtime-bc79-ripetibile-finto.mjs',
+    importFn: async () => ({
+      talosLavora: (input) => input.fetchDiRete('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        body: JSON.stringify({
+          model: 'local:un-gguf.gguf',
+          messages: [{ role: 'user', content: 'elenca la cartella' }],
+          tools: [{ type: 'function', function: { name: 'elenca', parameters: { type: 'object', properties: { percorso: { type: 'string' } }, required: ['percorso'] } } }],
+        }),
+      }),
+    }),
+    destinazioneModelloDeps,
+  });
+
+  const risposta = await adapter.talosLavora({ onAvviso: async (messaggio, opzioni) => { avvisi.push({ messaggio, opzioni }); } });
+
+  assert.equal(viste.length, 2, `⛔ 400 con attrezzi, poi la riprova senza — viste: ${JSON.stringify(viste)}`);
+  assert.equal(viste[0].haTools, true, '⛔ la prima richiesta porta gli attrezzi (è il caso del rifiuto)');
+  assert.equal(viste[1].haTools, false, '⛔ e la riprova è senza: l\'avviso descrive UNA riprova riuscita, non una condizione per giro');
+  assert.equal(avvisi.length, 1, `⛔ l'avviso parte UNA volta per rifiuto — avvisi: ${JSON.stringify(avvisi)}`);
+  assert.equal(avvisi[0].messaggio, AVVISO_MOTORE_SENZA_ATTREZZI, '⛔ l\'IDENTITÀ del messaggio, non una copia fragile del testo');
+  assert.deepEqual(avvisi[0].opzioni, { ripetibile: true }, '⛔ IL CABLAGGIO: senza questa opzione la dedup per sessione di BUG-7-cura2 lo soffocherebbe alla seconda occorrenza');
+  assert.equal(risposta.ok, true, '⛔ la riprova senza attrezzi ha davvero successo');
 });
 
 test('⛔⛔ BC79-08 — niente è uscito da 127.0.0.1 in nessuna prova di questo file', () => {

@@ -31,3 +31,12 @@ test('RETRY05-COMPAT: non reinterpretare Stop, chiave assente o codice nel testo
   assert.equal(spiegaErrore('Manca la chiave per OpenRouter.', 'PROVIDER_KEY_MISSING').id, 'chiave-fornitore-mancante');
   assert.equal(spiegaErrore('PROVIDER_OUTCOME_UNKNOWN', 'altro').id, 'sconosciuto');
 });
+
+/* R5 della review avversariale: l'esaurimento dei reinvii deve avere la SUA spiegazione,
+   distinta da quella dell'esito incerto generico — altrimenti l'utente legge «ritento»
+   quando invece il giro ha smesso per esaurimento. */
+test('RETRY05-ESAURITO: il codice PROVIDER_OUTCOME_UNKNOWN_ESAURITO instrada alla sua spiegazione', () => {
+  const s = spiegaErrore('x', 'PROVIDER_OUTCOME_UNKNOWN_ESAURITO');
+  assert.equal(s.id, 'esito-fornitore-incerto-esaurito');
+  assert.notEqual(s.id, spiegaErrore('x', 'PROVIDER_OUTCOME_UNKNOWN').id, 'la spiegazione non deve coincidere con quella dell\'esito incerto generico');
+});

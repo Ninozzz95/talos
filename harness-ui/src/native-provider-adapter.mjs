@@ -189,7 +189,21 @@ function opzioniAnthropicTerzi(provider, model, body) {
   const effort = body.reasoning_effort ?? body.reasoning?.effort;
   const rifiuta = motivo => { throw Object.assign(new Error(`${record.etichetta}: ${motivo}`), { code: 'PROVIDER_REASONING_UNSUPPORTED' }); };
   if (provider === 'zai-anthropic') {
-    if (body.reasoning?.enabled === false || (effort && !record.ragionamento.livelli.includes(effort))) rifiuta('scegli un livello di ragionamento alto o massimo.');
+    /* ⛔ 05/10/2026, BUG-18 gen.2 — riconciliazione con la fonte datata
+       docs.z.ai/devpack/latest-model (riletta 05/10/2026, HTTP 200): sulla porta Anthropic
+       «reasoning_effort» minimal/light/low → effort «low», medium/high → «high»,
+       xhigh/max/ultra → «max», e «Disabling the thinking configuration is converted to `low`
+       and does not switch to another model». Dunque: «low» È documentato (il vecchio rifiuto
+       del 12/09, nato quando il registro diceva ['high','max'], cede al dato); lo spegnimento
+       si traduce nel floor «low» della porta, non si rifiuta; «medium» NON passa perché la
+       conversione della porta la porterebbe a «high» — mai più caro del chiesto (regola 24/09). */
+    const livelli = record.ragionamento.livelli;
+    if (body.reasoning?.enabled === false) {
+      return { anthropic: { thinking: { type: 'adaptive' }, effort: 'low' } };
+    }
+    if (effort && !livelli.includes(effort)) {
+      rifiuta(`il livello «${effort}» non è documentato su questa porta (documentati: ${livelli.join(', ')} — docs.z.ai/devpack/latest-model, 05/10/2026).`);
+    }
     return effort || body.reasoning?.enabled === true ? { anthropic: { thinking: { type: 'adaptive' }, ...(effort ? { effort } : {}) } } : {};
   }
   if (provider === 'minimax-anthropic') {

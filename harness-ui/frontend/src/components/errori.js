@@ -262,6 +262,21 @@ const REGOLE = [
     }),
   },
   {
+    /* ⛔⭐ BUG-16 (05/10/2026): l'esito incerto che ha esaurito i SUOI reinvii automatici — il kernel
+       ha già ritentato da solo (cap 10), reinvii fatti solo a zero effetti. La carta dice che il
+       tentativo automatico è finito e resta «ripresa manuale», ultima spiaggia onesta. Stessa
+       famiglia: il badge non cambia, è il TESTO a distinguere i due casi (piano BUG-16 §6). */
+    id: 'esito-fornitore-incerto-esaurito',
+    famiglia: 'esito-fornitore-incerto',
+    riconosce: (_testo, codice) => codice === 'PROVIDER_OUTCOME_UNKNOWN_ESAURITO',
+    spiega: (tecnico, codice) => ({
+      cosa: t('errori.turno.esitoIncertoEsaurito.cosa'),
+      perche: t('errori.turno.esitoIncertoEsaurito.perche'),
+      rimedi: [t('errori.turno.esitoIncertoEsaurito.rimedio1')],
+      tecnico: tecnico.includes(codice) ? tecnico : `[${codice}]${tecnico ? ` ${tecnico}` : ''}`,
+    }),
+  },
+  {
     /*
      * ⭐⭐⭐ CLI-REQ-03, metà A SCHERMO (17/09/2026) — LA CHIAVE CHE MANCA NON È UN GUASTO.
      *
@@ -570,6 +585,32 @@ const REGOLE = [
           t('errori.turno.rispostaVuotaDopoTentativi.rimedio1'),
           ...(malformata ? [t('errori.turno.rispostaVuotaDopoTentativi.rimedioFileLungo')] : []),
           t('errori.turno.rispostaVuotaDopoTentativi.rimedioAltroModello'),
+        ],
+      };
+    },
+  },
+  /*
+   * ⛔ 04/10/2026, BUG-E (owner, sessione `3eb5e436…`): il kernel chiude il giro quando il modello
+   *   chiede lo stesso attrezzo con gli stessi argomenti più volte di fila (`fermatoPerRipetizione`,
+   *   `talosHarness.mjs`, esito `ripetizione`), e la carta cadeva nel sacco «sconosciuto» con la
+   *   frase «non è ancora tradotta»: nessuna regola la riconosceva. Qui si riconosce NELLE DUE
+   *   FORME — l'inglese attuale (K3) e l'italiano delle storie salvate prima di K3 (le copie in
+   *   `desktop/.prove/` la mostrano parola per parola) — con i parametri veri (quante volte, quale
+   *   attrezzo) e il rimedio giusto: NON «riprova il giro» così com'è, ma cambiare modello o
+   *   spezzare il compito, perché la ripetizione del decoder si ripresenta.
+   */
+  {
+    id: 'ripetizione-identica',
+    riconosce: (t) => /(?:the model asked \d+ times for the very same thing|il modello ha chiesto \d+ volte la stessa identica cosa)/iu.test(t),
+    spiega: (tecnico) => {
+      const volte = /(?:asked|ha chiesto) (\d+) (?:times|volte)/iu.exec(tecnico)?.[1] ?? '—';
+      const attrezzo = /"([^"]+)"\s+(?:with the same arguments|con gli stessi argomenti)/iu.exec(tecnico)?.[1] ?? null;
+      return {
+        cosa: t('errori.turno.ripetizione.cosa'),
+        perche: t('errori.turno.ripetizione.perche', { n: volte, attrezzo: attrezzo ?? '—' }),
+        rimedi: [
+          t('errori.turno.ripetizione.rimedio1'),
+          t('errori.turno.ripetizione.rimedio2'),
         ],
       };
     },

@@ -5,6 +5,16 @@
  * Contratto superato il 29/09 da RETRY-02: conservare il frammento, nessuna nuova chiamata pagata dall'esito incerto.
  * Hermes: `agent/chat_completion_helpers.py:3431-3468`, `agent/turn_truncation.py:241-280`,
  * `agent/conversation_loop.py:833-836`. Ricerca: `.claude/RICERCA-ERRORE-A-META-RISPOSTA-2026-09-24.md`.
+ *
+ * ⛔⭐ 05/10/2026 — BUG-16 evoluce RETRY-02 (owner: auto-retry NON negoziabile): quando il giro perso
+ * NON ha prodotto NESSUN effetto — nessun testo consegnato, nessuna lettura partita nell'acceleratore
+ * E nessuna chiamata ANNUNCIATA nello stream — il kernel ritenta da solo (max 10, attesa svegliabile
+ * dallo stop, G02-10). NOTHING-VISIBLE passa al NUOVO contratto; TOOL-CALL-HALF RESTA sul vecchio:
+ * una tool_call annunciata (anche a metà, mai partita) è già il modello in territorio d'azione, con la
+ * sua card annullata a schermo ⇒ niente reinvio automatico, ripresa manuale (lo pinna anche STREAM-TOOL-ABORT
+ * in tests/provider-outcome-unknown.test.mjs, che la cura BUG-16 del 05/10 aveva rotto e resta LA VERITÀ).
+ * Il contratto completo del reinvio sicuro: `tests/bug16-auto-retry.test.mjs`;
+ * dossier: `scratchpad/piano-bug16-auto-retry-2026-10-05.md` §9-§10.
  */
 import assert from 'node:assert/strict';
 import test from 'node:test';
@@ -76,30 +86,30 @@ test('STREAM-BREAK-NOT-TRANSIENT: al contrario, un guasto che il fornitore dichi
   assert.equal(r.corpi.length, 1, 'nessuna seconda chiamata');
 });
 
-test('STREAM-BREAK-NOTHING-VISIBLE: solo ragionamento non prova assenza di costo, nessun reinvio', async () => {
+test('STREAM-BREAK-NOTHING-VISIBLE-RESENT (BUG-16): solo ragionamento, nessun effetto ⇒ un reinvio sicuro', async () => {
   const r = rete(
     () => flussoRotto([ragionamento('Sto pensando')], traffico()),
     () => flussoIntero([testo('Risposta intera.'), fine]),
   );
-  await assert.rejects(talosLavora(base({ fetchDiRete: r.fetch })), { code: 'PROVIDER_OUTCOME_UNKNOWN' });
-  assert.equal(r.corpi.length, 1);
+  const retry = [];
+  const esito = await talosLavora(base({ fetchDiRete: r.fetch, attesaRitentaMassimaMs: 1, onGiro: (e) => { if (e.tipo === 'provider-retry') retry.push(e); } }));
+  assert.equal(r.corpi.length, 2, 'BUG-16: a zero effetti il kernel ritenta da solo');
+  assert.equal(esito.comeFinita, 'concluso');
+  assert.equal(retry.length, 1);
+  assert.equal(retry[0].fase, 'attesa');
 });
 
-test('STREAM-BREAK-TOOL-CALL-HALF: una chiamata a metà non si esegue né si ripete', async () => {
+test('STREAM-BREAK-TOOL-CALL-HALF-NOT-RESENT (BUG-16): una chiamata annunciata blocca il reinvio, la ripresa resta manuale', async () => {
   const eventi = [];
   const r = rete(
     () => flussoRotto([{ choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_1', function: { name: 'scrivi', arguments: '{"percorso":"a.t' } }] } }] }], traffico()),
-    () => flussoIntero([testo('Fatto senza scrivere.'), fine]),
+    () => flussoIntero([testo('mai'), fine]),
   );
-  await assert.rejects(talosLavora(base({ fetchDiRete: r.fetch, onDelta: (e) => eventi.push(e) })), e => {
-    assert.equal(e.code, 'PROVIDER_OUTCOME_UNKNOWN');
-    assert.equal(e.messaggiDelGiro?.some(m => m.tool_calls?.length) ?? false, false);
-    return true;
-  });
+  await assert.rejects(talosLavora(base({ fetchDiRete: r.fetch, attesaRitentaMassimaMs: 1, onDelta: (e) => eventi.push(e) })), { code: 'PROVIDER_OUTCOME_UNKNOWN' });
   const annullata = eventi.find((e) => e.tipo === 'tool-annullato');
   assert.equal(annullata?.toolCallId, 'call_1');
   assert.match(annullata.motivo, /it was not run/u);
-  assert.equal(r.corpi.length, 1);
+  assert.equal(r.corpi.length, 1, 'BUG-16: la chiamata annunciata (anche a metà, mai partita) non è zero-effetti: NESSUN reinvio automatico');
 });
 
 test('STREAM-BREAK-CEILING: nessuna ripresa automatica anche se esistono altre risposte disponibili', async () => {

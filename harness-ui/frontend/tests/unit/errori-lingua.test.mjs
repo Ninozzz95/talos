@@ -20,7 +20,7 @@ const LETTERE_ITALIANE = /[àèìòù]|\b(?:il|della|non|che|una|per)\b/u;
 /** Un esempio per ogni regola di `spiegaErrore`, senza testo grezzo del server che finirebbe nella frase (quello resta com'è). */
 const ESEMPI = [
   ['x', 'PROVIDER_BUDGET_OCCUPIED'], ['x', 'PROVIDER_KEY_SPEND_LIMIT'], ['x', 'PROVIDER_REQUEST_BUDGET'], ['x', 'PROVIDER_CREDIT_LIMIT'],
-  ['x', 'PROVIDER_PAYMENT_REQUIRED'], ['x', 'PROVIDER_OUTCOME_UNKNOWN'],
+  ['x', 'PROVIDER_PAYMENT_REQUIRED'], ['x', 'PROVIDER_OUTCOME_UNKNOWN'], ['x', 'PROVIDER_OUTCOME_UNKNOWN_ESAURITO'],
   ['PROVIDER_KEY_MISSING Manca la chiave per Z.AI.', ''], ['PROVIDER_KEY_MISSING', ''], ['LOCAL_RUNTIME_NOT_CONFIGURED', ''],
   ['CTX_SUMMARY_RESPONSE_INVALID', 'CTX_SUMMARY_RESPONSE_INVALID'], ['CTX_INVALID_SOURCE', 'CTX_INVALID_SOURCE'],
   ['CTX_TRUNCATED_SUMMARY', 'CTX_TRUNCATED_SUMMARY'], ['CTX_TRUNCATED_SUMMARY 12345 token nel ragionamento', 'CTX_TRUNCATED_SUMMARY'],

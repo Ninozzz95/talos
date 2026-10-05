@@ -3,6 +3,7 @@ import { createServer } from 'node:http';
 import test from 'node:test';
 
 import { API_SCHEMA, createHttpApp } from '../src/http-app.mjs';
+import { livelliRagionamentoDiretti } from '../src/model-destination.mjs';
 
 async function listen(t, { catalogoModelliFn } = {}) {
   const app = createHttpApp({
@@ -29,7 +30,9 @@ test('⭐ GET /api/v1/models torna DAVVERO quello che catalogoModelliFn produce,
   const corpo = await risposta.json();
   assert.equal(corpo.ok, true);
   assert.equal(corpo.meta.schema, API_SCHEMA);
-  assert.deepEqual(corpo.data, { modelli, daCache: true, aggiornatoAlle: '2026-08-27T10:00:00.000Z' });
+  /* ⛔ BUG-7 cura3 (revisore C3-A/M3, 05/10/2026): la busta porta anche `livelliDiretti` (http-app.mjs, campo
+     additivo D2) — l'asserzione profonda lo dichiara invece di cadere sulla chiave in più. */
+  assert.deepEqual(corpo.data, { modelli, daCache: true, aggiornatoAlle: '2026-08-27T10:00:00.000Z', livelliDiretti: livelliRagionamentoDiretti() });
 });
 
 test('⭐⭐ ?forza=1 passa forzaAggiornamento:true a catalogoModelliFn', async (t) => {

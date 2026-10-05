@@ -5,6 +5,13 @@
  *   conferma «una volta per sessione». TALOS non crea utenti.
  * Misurato il 01/10/2026 sulla macchina dell'owner: Ubuntu esegue come root (uid 0), `C:` è drvfs senza `metadata`
  *   (`uid=0;gid=0`), `/mnt/c/Users/<utente>` è `777 root:root`, l'interop è accesa.
+ *
+ * ⛔⛔ AGGIORNAMENTO BUG-17 (owner 05/10/2026, «in full access ogni comando terminale viene accettato in
+ *   automatico, di default»): con «Accesso pieno» la carta di root NON arriva più — il sì di sessione si
+ *   concede da solo (tests/bug17-full-access-shell-senza-carte.test.mjs). La conferma «una volta per
+ *   sessione» sopravvive per i livelli che passano senza interpellare nessuno SENZA accesso pieno:
+ *   «Scrive nel progetto» (nessun livello) e shell su «Sempre». Per questo le prove della conferma qui
+ *   sotto girano con livelloAccesso: 'nessuno', non più col predefinito «accesso-pieno».
  */
 import test from 'node:test'
 import { togliConfiniDati } from '../src/kernel/confine-dati.mjs'
@@ -131,9 +138,9 @@ async function giro(t, { chiamate = [['shell', { comando: 'echo ciao' }]], livel
 
 const comeRoot = async () => ({ distro: 'Ubuntu', utente: 'root' })
 
-test('F009-07: WSL come root senza nessuno interpellato — si chiede UNA volta per sessione, con la ragione scritta per una persona', async (t) => {
+test('F009-07: WSL come root senza nessuno interpellato («Scrive nel progetto») — si chiede UNA volta per sessione, con la ragione scritta per una persona', async (t) => {
     const consensiSessione = {}
-    const primo = await giro(t, { consensiSessione, rootWslDelComandoFn: comeRoot, chiamate: [['shell', { comando: 'echo uno' }], ['shell', { comando: 'echo due' }]] })
+    const primo = await giro(t, { consensiSessione, livelloAccesso: 'nessuno', rootWslDelComandoFn: comeRoot, chiamate: [['shell', { comando: 'echo uno' }], ['shell', { comando: 'echo due' }]] })
     assert.equal(primo.chieste.length, 1, 'due comandi, una domanda sola')
     const [domanda] = primo.chieste
     assert.equal(domanda.tipo, 'shell')
@@ -142,7 +149,7 @@ test('F009-07: WSL come root senza nessuno interpellato — si chiede UNA volta 
     assert.equal(domanda.wslRoot.frase, 'Questo comando gira in Linux (WSL, Ubuntu) come root, e con i permessi di questa sessione nessuno lo approva: può cambiare tutto il sistema Linux e scrivere sui dischi di Windows. Se lo confermi, vale per tutta la sessione.')
     assert.deepEqual(primo.eseguiti.map((e) => e.comando), ['echo uno', 'echo due'])
     assert.equal(consensiSessione.rootWsl, true)
-    const secondo = await giro(t, { consensiSessione, rootWslDelComandoFn: comeRoot })
+    const secondo = await giro(t, { consensiSessione, livelloAccesso: 'nessuno', rootWslDelComandoFn: comeRoot })
     assert.equal(secondo.chieste.length, 0, 'un altro giro della stessa sessione non chiede di nuovo')
     assert.equal(secondo.interrogati.length, 0, 'e non spende nemmeno la sonda')
     assert.equal(secondo.eseguiti.length, 1)
@@ -150,7 +157,7 @@ test('F009-07: WSL come root senza nessuno interpellato — si chiede UNA volta 
 
 test('F009-08: un «no» non esegue niente, non si ricorda, e lo dice al modello e alla ricevuta', async (t) => {
     const consensiSessione = {}
-    const { chieste, eseguiti, esiti, ricevute } = await giro(t, { consensiSessione, rootWslDelComandoFn: comeRoot, risposta: false })
+    const { chieste, eseguiti, esiti, ricevute } = await giro(t, { consensiSessione, livelloAccesso: 'nessuno', rootWslDelComandoFn: comeRoot, risposta: false })
     assert.equal(chieste.length, 1)
     assert.equal(eseguiti.length, 0, 'il comando non parte')
     assert.equal(consensiSessione.rootWsl, undefined)
@@ -166,7 +173,7 @@ test('F009-09: la domanda scatta solo quando nessuno è interpellato per QUEL co
     const attrezzoSuChiedi = await giro(t, { consensiSessione: {}, rootWslDelComandoFn: comeRoot, permessiPerAttrezzo: { shell: 'chiedi' } })
     assert.equal(attrezzoSuChiedi.chieste.length, 1, 'una carta sola, quella del comando')
     assert.equal(attrezzoSuChiedi.chieste[0].wslRoot, undefined)
-    const segreto = await giro(t, { consensiSessione: {}, rootWslDelComandoFn: comeRoot, chiamate: [['shell', { comando: 'cat ~/.ssh/id_rsa' }]] })
+    const segreto = await giro(t, { consensiSessione: {}, livelloAccesso: 'nessuno', rootWslDelComandoFn: comeRoot, chiamate: [['shell', { comando: 'cat ~/.ssh/id_rsa' }]] })
     assert.equal(segreto.chieste.length, 1)
     assert.ok(segreto.chieste[0].segreto, 'la carta del segreto')
     assert.equal(segreto.chieste[0].wslRoot, undefined)
@@ -187,7 +194,7 @@ test('F009-10: senza registro della sessione (TALOS-BANCO, CLI, mobile) non si c
     const senza = await giro(t, { rootWslDelComandoFn: comeRoot })
     assert.equal(senza.chieste.length, 0)
     assert.equal(senza.eseguiti.length, 1)
-    const normale = await giro(t, { consensiSessione: {}, rootWslDelComandoFn: async () => null })
+    const normale = await giro(t, { consensiSessione: {}, livelloAccesso: 'nessuno', rootWslDelComandoFn: async () => null })
     assert.equal(normale.interrogati.length, 1)
     assert.equal(normale.chieste.length, 0)
     assert.equal(normale.eseguiti.length, 1)
@@ -200,7 +207,7 @@ test('F009-11: con un esecutore proprio (la CLI) il kernel non indovina dove gir
 })
 
 test('F009-12: chi non riesce a valutare CHIEDE — una sonda che lancia vale «forse root»', async (t) => {
-    const { chieste, eseguiti } = await giro(t, { consensiSessione: {}, rootWslDelComandoFn: async () => { throw new Error('wsl.exe muto') } })
+    const { chieste, eseguiti } = await giro(t, { consensiSessione: {}, livelloAccesso: 'nessuno', rootWslDelComandoFn: async () => { throw new Error('wsl.exe muto') } })
     assert.equal(chieste.length, 1)
     assert.equal(chieste[0].wslRoot.utente, null)
     assert.match(chieste[0].wslRoot.frase, /non è stato possibile verificare con che utente: potrebbe essere root/)
@@ -208,17 +215,17 @@ test('F009-12: chi non riesce a valutare CHIEDE — una sonda che lancia vale «
 })
 
 test('F009-13: lo Stop mentre la domanda è a schermo ferma il giro e non esegue', async (t) => {
-    const { chieste, eseguiti, esiti } = await giro(t, { consensiSessione: {}, rootWslDelComandoFn: comeRoot, stop: new AbortController() })
+    const { chieste, eseguiti, esiti } = await giro(t, { consensiSessione: {}, livelloAccesso: 'nessuno', rootWslDelComandoFn: comeRoot, stop: new AbortController() })
     assert.equal(chieste.length, 1)
     assert.equal(eseguiti.length, 0)
     assert.ok(esiti.every((e) => !/^exit /.test(e)))
 })
 
 test('F009-14: la preferenza arriva all esecuzione e alla sonda; un lettore che lancia vale «accesa»', async (t) => {
-    const spenta = await giro(t, { consensiSessione: {}, rootWslDelComandoFn: async () => null, preferenzeWslFn: () => ({ usaUtenteNormale: false }) })
+    const spenta = await giro(t, { consensiSessione: {}, livelloAccesso: 'nessuno', rootWslDelComandoFn: async () => null, preferenzeWslFn: () => ({ usaUtenteNormale: false }) })
     assert.deepEqual(spenta.eseguiti[0].opzioni.wsl, { usaUtenteNormale: false })
     assert.equal(spenta.interrogati[0].opzioni.usaUtenteNormale, false)
-    const rotta = await giro(t, { consensiSessione: {}, rootWslDelComandoFn: async () => null, preferenzeWslFn: () => { throw new Error('file illeggibile') } })
+    const rotta = await giro(t, { consensiSessione: {}, livelloAccesso: 'nessuno', rootWslDelComandoFn: async () => null, preferenzeWslFn: () => { throw new Error('file illeggibile') } })
     assert.deepEqual(rotta.eseguiti[0].opzioni.wsl, { usaUtenteNormale: true })
     const assente = await giro(t, {})
     assert.equal(assente.eseguiti[0].opzioni.wsl, null, 'senza lettore: come prima')
@@ -232,7 +239,7 @@ test('F009-15: l esito della shell dichiara con che utente ha girato e che cosa 
 test('F009-16: `prova` chiede solo quando la sessione ha scelto Linux — col ripiego automatico gira su Windows', { skip: process.platform !== 'win32' ? 'la scelta di Linux esiste solo su Windows' : false }, async (t) => {
     const automatico = await giro(t, { consensiSessione: {}, rootWslDelComandoFn: comeRoot, chiamate: [['prova', {}]], comandoProva: 'node -e 0' })
     assert.equal(automatico.interrogati.length, 0)
-    const linux = await giro(t, { consensiSessione: {}, rootWslDelComandoFn: comeRoot, chiamate: [['prova', {}]], comandoProva: 'node -e 0', risposta: false,
+    const linux = await giro(t, { consensiSessione: {}, livelloAccesso: 'nessuno', rootWslDelComandoFn: comeRoot, chiamate: [['prova', {}]], comandoProva: 'node -e 0', risposta: false,
         ambienteComandiFn: async () => ({ dove: 'wsl2', revisione: 0 }) })
     assert.equal(linux.chieste.length, 1)
     assert.equal(linux.chieste[0].tipo, 'prova')

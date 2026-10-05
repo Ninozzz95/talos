@@ -516,6 +516,21 @@ function scrittura(schermo, { schema, lista, opzioni, ridisegna }) {
     trovaVoce: (id) => m.contesto.trovaVoce(id),
     apriMenu: (voce, dove) => m.contesto.apriMenu(voce, dove),
   });
+  /*
+   * ⛔ BUG-11 (owner 05/10/2026) — IL PULSANTE «Nuova …» SI LEGA UNA VOLTA SOLA, e la sua chiusura invecchia.
+   *   `montaPulsanteNuova` crea il bottone al primo disegno e poi lo RIUSA (cerca `:scope > [data-nuova]`,
+   *   r.~610): il suo `addEventListener` resta quello del primo giro. Per Memoria e Attività il primo giro
+   *   è la passata di CARICAMENTO (`mostra([], { caricamento: true })` di `caricaPannelloMemoria` /
+   *   `caricaPannelloAttivita` in legacy/app.js ~6127/~6062), quindi l'`apriModulo` della chiusura vecchia
+   *   chiama il `ridisegna` che chiude sull'array VUOTO di allora: ogni click su «Nuovo ricordo»/
+   *   «Nuova attività» ridisegna la sezione da zero e la lista sparisce. Per Note il difetto è ritardato:
+   *   il primo giro porta i dati veri, ma ogni ricarico sostituisce l'array e il bottone resta fermo al primo.
+   *   È lo STESSO difetto del tasto destro qui sopra (`m.contesto`): ciò che si lega una volta sola deve
+   *   leggere dal magazzino, che ogni disegno aggiorna. ⇒ `m.giro` è il giro CORRENTE: ogni `scrittura`
+   *   lo riscrive e il bottone — legato una volta — vi passa sempre dall'ultima versione, così il modulo
+   *   si apre e si ridisegna con l'elenco attuale e la lista resta a schermo.
+   */
+  m.giro = { apriModulo };
 
   /* ------------------------------ i pezzi che la config usa ------------------------------ */
 
@@ -620,7 +635,10 @@ function scrittura(schermo, { schema, lista, opzioni, ridisegna }) {
         b.type = 'button';
         b.dataset.nuova = '';
         b.append(icona(doc, 'plus'), nodo(doc, 'span', '', schema.titoloNuova));
-        b.addEventListener('click', () => apriModulo('crea'));
+        /* BUG-11 (05/10/2026): il bottone si crea una volta sola e il suo listener invecchia — passa
+           dal giro corrente del magazzino (`m.giro`, scritto a ogni `scrittura`), non dalla chiusura
+           di questo giro, che dopo un ricarico porta l'array del suo tempo e svuota la lista. */
+        b.addEventListener('click', () => m.giro.apriModulo('crea'));
         ospite.append(b);
       }
       b.disabled = Boolean(m.modulo);

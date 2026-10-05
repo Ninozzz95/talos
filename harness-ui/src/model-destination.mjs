@@ -74,6 +74,44 @@ export function separaFonteModello(modello) {
   return { fonte: 'openrouter', modelloRemoto: modello };
 }
 
+/**
+ * ⛔ BUG-7 cura3 (05/10/2026, revisore D2): i livelli di ragionamento documentati per le
+ * sessioni DIRETTE si leggono dal REGISTRO dei fornitori, non dal catalogo OpenRouter —
+ * che dichiarava «low» per glm-5.3-flash mentre il profilo AVM lo rifiutava di proposito:
+ * la pillola ricreava il sintomo. ⛔ BUG-18 (05/10): il profilo ora DOCUMENTA «low»
+ * (['low','high','max'], fonte docs.z.ai) — la divergenza col catalogo è svanita e la fonte
+ * resta il registro. Forma:
+ * `{ zai: { '*': ['low','high','max'], 'glm-5.3-flash': ['low','high','max'] }, … }` — `'*'` è il livello
+ * documentato a livello di PROFILO (il vincolo P-D), vale per i modelli senza voce propria.
+ * Solo fonti che il nostro traduttore traduce davvero (`COMPATIBILI_OPENAI`): per le altre
+ * la UI non può promettere livelli. Servita accanto al catalogo su `/api/v1/models`
+ * (http-app.mjs) così il frontend fa UNA sola GET.
+ */
+export function livelliRagionamentoDiretti() {
+  const mappa = {};
+  for (const fonte of COMPATIBILI_OPENAI) {
+    if (fonte === 'openrouter') continue; // i suoi livelli restano nel catalogo
+    const record = REGISTRO_FORNITORI[fonte];
+    if (!record) continue;
+    const perModello = {};
+    const profilo = record.ragionamento?.livelli;
+    if (Array.isArray(profilo) && profilo.length) perModello['*'] = Object.freeze([...profilo]);
+    const modelli = record.richiestaCompatibile?.modelli;
+    if (modelli && typeof modelli === 'object') {
+      for (const [id, m] of Object.entries(modelli)) {
+        const livelli = m?.livelliRagionamento;
+        if (Array.isArray(livelli) && livelli.length) perModello[id] = Object.freeze([...livelli]);
+      }
+    }
+    for (const m of record.modelliNoti ?? []) {
+      const livelli = m?.ragionamento?.livelli;
+      if (Array.isArray(livelli) && livelli.length && typeof m?.id === 'string') perModello[m.id] = Object.freeze([...livelli]);
+    }
+    if (Object.keys(perModello).length) mappa[fonte] = Object.freeze(perModello);
+  }
+  return mappa;
+}
+
 /** Lista di sessione: solo identificatori, mai indirizzi, chiavi o capacità dichiarate dal client. */
 export function validaFallbackProviders(lista = [], { usaAttrezzi = false } = {}) {
   const invalida = () => { throw new ModelDestinationError('Controlla i fornitori e i modelli scelti per continuare la sessione.', 'PROVIDER_FALLBACK_INVALID'); };

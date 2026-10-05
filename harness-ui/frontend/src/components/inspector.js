@@ -231,6 +231,13 @@ export const STATI_PROCESSO = Object.freeze({
    *   Lo scudo è l'icona dei permessi nella chat («Chiede di scrivere»).
    */
   'in-consenso': { get etichetta() { return tr('processi.process.stateAwaitingApproval'); }, tono: 'warning', icona: 'i-shield', vivo: true },
+  /*
+   * ⛔ BUG-14 (05/10/2026): «IN SFONDO» non è «in corso» né «in attesa». Il comando GIRA ancora, ma fuori dalla cattura:
+   *   l'agente ha già letto la sua «IN BACKGROUND», la persona legge l'output sul file. È VIVO — ma il suo silenzio è
+   *   PER COSTRUZIONE (l'output va sul file, non più nella riga), quindi niente avviso «Nessuna uscita da N secondi».
+   *   Non è né fermabile né sfondabile: non c'è più niente da sfondare, e lo Stop di un lavoro sfondato resta in chat.
+   */
+  'in-sfondo': { get etichetta() { return tr('processi.process.stateBackgrounded'); }, tono: 'accent', icona: 'i-sfondo', vivo: true },
   riuscito: { get etichetta() { return tr('processi.process.stateSucceeded'); }, tono: 'success', icona: 'i-check', vivo: false },
   fallito: { get etichetta() { return tr('processi.process.stateFailed'); }, tono: 'danger', icona: 'i-x', vivo: false },
   annullato: { get etichetta() { return tr('processi.process.stateCancelled'); }, tono: '', icona: 'i-stop', vivo: false },
@@ -261,6 +268,17 @@ export const STATI_PROCESSO = Object.freeze({
  *   righe che si vedono senza scorrere sono già finite da un pezzo: il resto è peso che nessuno guarda.
  */
 export const TETTO_PROCESSI = 40;
+
+/*
+ * ⛔ BUG-14 (05/10/2026): chi ha sfondato, in parole. Le etichette sono quelle che il kernel passa in
+ *   `sfondoDa` ('persona' | 'tempo-scaduto' | modello); un valore fuori tabella si mostra COM'È — un dato
+ *   che non so tradurre non si nasconde (stessa regola di «misurato» vs «non misurato»).
+ */
+const CHI_SFONDA = Object.freeze({
+  persona: 'processi.process.byYou',
+  'tempo-scaduto': 'processi.process.byTimeout',
+  modello: 'processi.process.byModel',
+});
 
 /** Oltre quanto silenzio un processo vivo si dichiara «in attesa». Un minuto: la soglia era già questa. */
 const SOGLIA_ATTESA_MS = 60_000;
@@ -375,7 +393,9 @@ export function datiProcesso(p = {}) {
     : stato === 'non-eseguito' && p.senzaSuite === true ? tr('processi.process.noTestSuite')
     : [durata, !descrittore.vivo && Number.isFinite(p.uscita) ? tr('processi.process.exitCode', { codice: p.uscita }) : null].filter(Boolean).join(' · ') || (descrittore.vivo ? '' : '—');
   const chi = p.chi === 'tu' ? tr('processi.process.whoYou') : tr('processi.process.whoAgent', { giro: p.giro ?? '—' });
-  const fermo = Number.isFinite(p.fermoDaMs) && p.fermoDaMs >= SOGLIA_ATTESA_MS
+  /* ⛔ BUG-14: per «in sfondo» il silenzio NON è un sospetto — tace PER COSTRUZIONE (l'output va sul file). L'avviso
+     «Nessuna uscita da N secondi» resterebbe appeso per sempre su un processo perfettamente sano. */
+  const fermo = stato !== 'in-sfondo' && Number.isFinite(p.fermoDaMs) && p.fermoDaMs >= SOGLIA_ATTESA_MS
     ? tr('processi.process.silent', { secondi: Math.round(p.fermoDaMs / 1000) })
     : null;
   const analisi = analizzaComando(p.comando || '');
@@ -406,6 +426,11 @@ export function datiProcesso(p = {}) {
     [tr('processi.process.detailStarted'), quando],
     [tr('processi.process.detailDuration'), durata || '—'],
     [tr('processi.process.detailExit'), Number.isFinite(p.uscita) && !descrittore.vivo ? String(p.uscita) : '—'],
+    /* ⛔ BUG-14 (05/10/2026): DOVE legge l'output un processo sfondato — il file è la cosa che la persona deve aprire
+       (percorso lungo: classe 'lungo', come il comando). E CHI lo ha sfondato, con le parole della riga; un valore che
+       non è nella tabella si mostra com'è invece di sparire. */
+    ...(p.fileSfondo ? [[tr('processi.process.detailOutputFile'), p.fileSfondo, 'lungo']] : []),
+    ...(p.sfondoDa ? [[tr('processi.process.detailBackgroundedBy'), CHI_SFONDA[p.sfondoDa] ? tr(CHI_SFONDA[p.sfondoDa]) : p.sfondoDa]] : []),
     /* ⛔ 17/09, OSS-2 — la cartella NON è più «—» per costruzione: `ToolCallResult` porta `cwd`
        (corsia B). Resta «—» quando il campo non arriva davvero, che è un fatto, non un ripiego. */
     [tr('processi.process.detailFolder'), cartella],
@@ -495,6 +520,11 @@ function bottoneApri(d, card, riga, idRiga) {
     if (riga.aperto && riga.dettaglioSporco) { riempiCard(d, riga.dettaglio, riga.righeDettaglio, { classiValore: CLASSI_DETTAGLIO_PROCESSO }); riga.dettaglioSporco = false; }
     riga.dettaglio.hidden = aperto;
     card.dataset.aperto = aperto ? 'no' : 'si';
+    /* ⛔ 04/10/2026, BUG-B — appena il dettaglio ha un layout vero si rileggono i tetti: un nodo
+       chiuso non ha altezza, e senza queste due righe il «Mostra tutto» resterebbe nascosto anche
+       con un comando tagliato (la prima apertura riempie e misura, questa rilegge). */
+    aggiornaPulsanteMostra(riga.cmd);
+    for (const v of riga.dettaglio.querySelectorAll?.('.talos-kv__v--lungo') ?? []) aggiornaPulsanteMostra(v);
   });
   return b;
 }
@@ -550,6 +580,136 @@ function avvisoFermata(riga, testo) {
   riga.avvisoFerma.hidden = !testo;
 }
 
+/*
+ * ⛔ BUG-14 (05/10/2026) — «Sfondo» per riga: la terza strada del comando lungo (owner: «MAI kill»). Stessa forma del
+ *   bottone Ferma — stessa posizione, stesso avviso di riga (`avvisoFerma`, che è lo stato della riga, non dello stop) —
+ *   ma il gesto è l'OPPOSTO dolce: non ferma niente, stacca la cattura e il processo vive col suo file di output.
+ *   Compare dove compare Ferma («in corso» e «in attesa») e solo se chi disegna sa sfondare; quando l'esito «IN
+ *   BACKGROUND» arriva, la riga passa a «in sfondo» e il pulsante si toglie da solo (non è più fermabile).
+ */
+function bottoneSfonda(d, riga, scheda, idRiga) {
+  const b = el(d, 'button', 'talos-button talos-button--ghost talos-button--sm talos-process__sfonda');
+  b.type = 'button';
+  b.hidden = true;
+  b.setAttribute('aria-label', tr('processi.process.background'));
+  b.title = tr('processi.process.background');
+  const svg = d.createElementNS(SVG_NS_INSPECTOR, 'svg');
+  svg.setAttribute('class', 'i i--sm');
+  svg.setAttribute('aria-hidden', 'true');
+  const use = d.createElementNS(SVG_NS_INSPECTOR, 'use');
+  use.setAttribute('href', '#i-sfondo');
+  svg.append(use);
+  b.append(svg);
+  b.addEventListener('click', async (evento) => {
+    evento.preventDefault?.();
+    evento.stopPropagation?.(); // la card intera seleziona: sfondare non è selezionare
+    const sfonda = scheda.azioni?.sfonda;
+    if (typeof sfonda !== 'function' || b.disabled) return;
+    b.disabled = true;
+    avvisoFermata(riga, tr('processi.process.backgrounding'));
+    let esito;
+    try { esito = await sfonda(idRiga); } catch (errore) { esito = { ok: false, messaggio: errore?.message }; }
+    if (esito?.ok === false) {
+      b.disabled = false;
+      avvisoFermata(riga, tr('processi.process.notBackgrounded', { motivo: esito.messaggio || tr('processi.process.tryAgain') }));
+      return;
+    }
+    /* Il processo è vivo ma fuori cattura: se l'esito «in sfondo» non arriva entro la soglia, la riga lo dice e il
+       pulsante torna — la persona può riprovare, come per lo Stop. ⛔ Non è un fallimento del kernel: è un avviso. */
+    clearTimeout(riga.timerFermata);
+    riga.timerFermata = setTimeout(() => {
+      if (!FERMABILE.has(riga.card.dataset.stato)) return;
+      b.disabled = false;
+      avvisoFermata(riga, tr('processi.process.didNotBackground'));
+    }, ATTESA_FERMATA_MS);
+  });
+  return b;
+}
+
+/* Il pulsante «Sfondo» di UNA riga, creato SOLO quando quella riga lo può usare: chi non può sfondare
+   (e nella lista storica è quasi tutta) non paga i tre nodi. La posizione è un patto (mettiSfonda):
+   prima dello Stop, che resta l'ultimo gesto della testa. È lo stesso rimedio pigro del «Mostra
+   tutto» (bottoneDi/CONFIG_TAGLIO): un nodo nascosto che non serve è un nodo in più a ogni riga. */
+function inserisciSfonda(d, riga, scheda, idRiga) {
+  if (!riga.sfonda) {
+    const b = bottoneSfonda(d, riga, scheda, idRiga);
+    riga.mettiSfonda(b);
+    riga.sfonda = b;
+  }
+  return riga.sfonda;
+}
+
+/*
+ * ⛔ 04/10/2026, BUG-B (owner: «nei Processi le righe lunghe di comando non vengono troncate
+ *   risultando in righe altissime anche nella visuale non compressa»).
+ *
+ * ⛔ IL DIFETTO: il comando senza descrizione È il titolo della riga, e andava a capo senza
+ *   limite — un `for` di shell su sei righe rende la riga sei volte più alta delle altre. Nel
+ *   dettaglio il «Comando» faceva lo stesso col `pre-wrap` del 20/09.
+ *
+ * ⛔ PERCHÉ NON L'ELLISSI DI UNA SOLA RIGA (la cura del 16/09): taglia la CODA, cioè il bersaglio
+ *   e le opzioni. Qui le righe sono COMPLETE fino al tetto (due in lista, sei nel dettaglio), e il
+ *   resto si apre con «Mostra tutto» — che è la stessa scelta già fatta per il testo di una
+ *   delega in chat (`appendRisultatoDelega`, `legacy/app.js`).
+ *
+ * ⛔ PERCHÉ IL PULSANTE DECIDE DA SOLO: un pulsante su una riga corta direbbe che c'è qualcosa
+ *   di tagliato quando non c'è. Con un DOM senza numeri veri (le prove) il taglio non si misura e
+ *   il pulsante resta nascosto: è la stessa prudenza di `appendRisultatoDelega`, che misura
+ *   `scrollHeight` contro `clientHeight`. Il `ResizeObserver` rilegge al cambio di layout — colonna
+ *   che si apre, riga che passa da nascosta a visibile — perché un contenuto clippato senza
+ *   porta perderebbe testo.
+ */
+const CONFIG_TAGLIO = new WeakMap();
+let osservatoreTaglio = null;
+
+/** C'è davvero qualcosa sotto il tetto? Senza numeri di layout non si inventa: è un finto. */
+function tagliatoDalTetto(nodo) {
+  const s = nodo?.scrollHeight;
+  const c = nodo?.clientHeight;
+  if (!Number.isFinite(s) || !Number.isFinite(c)) return false;
+  return s - c > 1;
+}
+
+/** Il bottone di un nodo registrato, creato SOLO al primo taglio misurato: una riga corta non
+    aggiunge nemmeno un nodo al DOM (la prova `PROC-UNA-RIGA` conta i nodi di una passata). */
+function bottoneDi(nodo) {
+  const cfg = nodo && CONFIG_TAGLIO.get(nodo);
+  if (!cfg) return null;
+  if (!cfg.pulsante) {
+    cfg.pulsante = bottoneMostraTutto(cfg.d, cfg.suClic);
+    cfg.padre.append(cfg.pulsante);
+  }
+  return cfg.pulsante;
+}
+
+function aggiornaPulsanteMostra(nodo) {
+  const cfg = nodo && CONFIG_TAGLIO.get(nodo);
+  if (!cfg) return;
+  if (nodo?.dataset?.aperto === 'si') { if (cfg.pulsante) cfg.pulsante.hidden = false; return; }
+  // aperto ⇒ il pulsante resta (è la porta per richiudere); chiuso ⇒ c'è solo se il tetto taglia.
+  if (tagliatoDalTetto(nodo)) { bottoneDi(nodo); if (cfg.pulsante) cfg.pulsante.hidden = false; }
+  else if (cfg.pulsante) cfg.pulsante.hidden = true;
+}
+
+/** Registra chi può aprire `nodo` quando il suo contenuto eccede il tetto. */
+function registraTaglio(nodo, d, padre, suClic) {
+  if (!nodo) return;
+  CONFIG_TAGLIO.set(nodo, { d, padre, suClic, pulsante: null });
+  if (typeof ResizeObserver !== 'function') return;
+  if (!osservatoreTaglio) osservatoreTaglio = new ResizeObserver((voci) => { for (const v of voci) aggiornaPulsanteMostra(v.target); });
+  osservatoreTaglio.observe(nodo);
+}
+
+/** Il bottone «Mostra tutto»: nascosto finché il contenuto non eccede il suo tetto. */
+function bottoneMostraTutto(d, suClic) {
+  const b = el(d, 'button', 'talos-button talos-button--ghost talos-button--sm talos-process__mostra-tutto');
+  b.type = 'button';
+  b.textContent = tr('app.common.showAll');
+  b.hidden = true;
+  if (typeof suClic === 'function') b.addEventListener('click', (evento) => { evento.preventDefault?.(); evento.stopPropagation?.(); suClic(); });
+  return b;
+}
+
 function creaRiga(d, p, scheda, contenitore) {
   const card = el(d, 'div', 'talos-card talos-process');
   card.dataset.c = 'ProcessRow';
@@ -582,12 +742,30 @@ function creaRiga(d, p, scheda, contenitore) {
   titolo.hidden = true;
   const testo = el(d, 'div', 'talos-process__testo');
   testo.append(titolo, cmd);
+  /*
+   * ⛔ 04/10/2026, BUG-B — il comando senza descrizione È il titolo della riga, e prende un tetto
+   *   (due righe, CSS `.talos-process__cmd--troncato`) direttamente su `cmd`: niente contenitore
+   *   nuovo (la prova `PROC-UNA-RIGA` conta i nodi di una passata, e il tetto è un patto). Il
+   *   «Mostra tutto» nasce SOLO quando il taglio è misurato, come fratello di `cmd` dentro
+   *   `testo` — se stesse dentro, il suo testo finirebbe in `cmd.textContent` e ogni prova che
+   *   legge il comando dalla riga leggerebbe «Mostra tutto» in coda.
+   */
+  cmd.classList.add('talos-process__cmd--troncato');
+  cmd.dataset.aperto = 'no';
+  registraTaglio(cmd, d, testo, () => {
+    cmd.dataset.aperto = cmd.dataset.aperto === 'si' ? 'no' : 'si';
+    aggiornaPulsanteMostra(cmd);
+  });
   const dettaglio = el(d, 'div', 'talos-process__dettaglio');
   dettaglio.id = `processo-dettaglio-${String(p.id ?? '')}`;
   dettaglio.hidden = true;
   const riga = { card, cmd, titolo, statoEl: null, statoTesto: null, statoUse: null, chiEl: null, oraEl: null, misuraEl: null, stallo: null, dettaglio, icona, mostrato: null, aperto: false, dettaglioSporco: true, righeDettaglio: p.dettaglio };
   const apri = bottoneApri(d, card, riga, String(p.id ?? ''));
   const ferma = bottoneFerma(d, riga, scheda, String(p.id ?? '')); // Stop per riga: prima del «⌄», che resta l'ultimo
+  /* BUG-14 «Sfondo» per riga: il pulsante NON nasce qui. Lo crea `inserisciSfonda` al primo bisogno
+     (stato fermabile + chi disegna sa sfondare) e si mette PRIMA dello Stop, che resta l'ultimo gesto.
+     ⛔ PROC-UNA-RIGA: la prova conta i nodi creati a ogni passata — le righe che non sfonderanno mai
+     (la maggior parte di una lista storica) non devono pagare i tre nodi button+svg+use. */
   testa.append(icona, testo, ferma, apri);
 
   const meta = el(d, 'div', 'talos-process__meta');
@@ -628,7 +806,12 @@ function creaRiga(d, p, scheda, contenitore) {
     card.lancia ? card.lancia('click') : card.click?.();
   });
 
-  Object.assign(riga, { statoEl, statoTesto, statoUse, chiEl, oraEl, misuraEl, stallo, ferma, avvisoFerma, timerFermata: null });
+  Object.assign(riga, {
+    statoEl, statoTesto, statoUse, chiEl, oraEl, misuraEl, stallo, ferma, sfonda: null, avvisoFerma, timerFermata: null,
+    /* La posizione del «Sfondo» è un patto: prima dello Stop, che resta l'ultimo gesto della testa.
+       Passa da qui (non da `parentNode`) perché il DOM finto dei test implementa insertBefore, non parentNode. */
+    mettiSfonda: (b) => testa.insertBefore(b, ferma),
+  });
   aggiornaRiga(d, riga, p, scheda);
   void contenitore;
   return riga;
@@ -638,15 +821,21 @@ function aggiornaRiga(d, riga, p, scheda) {
   const m = riga.mostrato;
   riga.card.dataset.stato = p.stato;
   riga.card.dataset.famiglia = p.famiglia;
-  /* Stop per riga: solo mentre gira, e solo se chi disegna sa fermare. Quando il comando finisce l'avviso se ne va: l'esito
-     della riga dice già come è finito. */
+  /* Stop per riga e «Sfondo» per riga (BUG-14): solo mentre gira, e solo se chi disegna sa fare quel gesto. Quando il
+     comando finisce — o passa «in sfondo» — l'avviso se ne va e i pulsanti si tolgono. */
   const fermabile = FERMABILE.has(p.stato) && typeof scheda.azioni?.ferma === 'function';
   riga.ferma.hidden = !fermabile;
+  const sfondabile = FERMABILE.has(p.stato) && typeof scheda.azioni?.sfonda === 'function';
+  /* ⛔ PROC-UNA-RIGA: il pulsante nasce SOLO al primo bisogno (inserisciSfonda) — chi non può sfondare
+     non ha il nodo finché non gli serve; chi lo era e non lo è più lo nasconde senza cancellarlo. */
+  if (sfondabile) inserisciSfonda(d, riga, scheda, String(p.id ?? '')).hidden = false;
+  else if (riga.sfonda) riga.sfonda.hidden = true;
   if (!fermabile && (riga.ferma.disabled || !riga.avvisoFerma.hidden)) {
     clearTimeout(riga.timerFermata);
     riga.ferma.disabled = false;
     avvisoFermata(riga, '');
   }
+  if (!sfondabile && riga.sfonda?.disabled) riga.sfonda.disabled = false;
   riga.card.dataset.selezionato = scheda.selezionato === p.id ? 'si' : 'no';
   /* ⛔ IL TITOLO, che è la descrizione scritta dal modello (BLOCCO 4, vedi `creaRiga`). Si riscrive
      solo se è cambiata, come tutto il resto di questa riga. */
@@ -666,12 +855,18 @@ function aggiornaRiga(d, riga, p, scheda) {
      *   vuota, che è peggio di una riga lunga.
      */
     riga.cmd.hidden = Boolean(descrizione);
+    /* ⛔ 04/10/2026, BUG-B — il comando da nascosto a visibile cambia il layout: il «Mostra tutto»
+       va riletto qui, che è l'istante in cui il contenuto comincia ad avere un'altezza. */
+    aggiornaPulsanteMostra(riga.cmd);
   }
   if (!m || m.comando !== p.comando) {
     /* ⛔ Il comando si ridisegna SOLO se è cambiato: durante lo streaming degli argomenti cambia a
        ogni delta, ma appena il JSON è completo si ferma — e da lì in poi questi nodi non si
        toccano più, nemmeno quando lo stato cambia. */
     riga.cmd.replaceChildren(disegnaComando(d, p.comando, p.analisi));
+    /* ⛔ 04/10/2026, BUG-B — subito dopo la riscrittura si rilegge il tetto: è il momento in cui
+       il contenuto cambia, e il «Mostra tutto» (se serve) nasce qui. */
+    aggiornaPulsanteMostra(riga.cmd);
     riga.cmd.setAttribute('aria-label', tr('processi.process.commandAria', { famiglia: NOME_FAMIGLIA[p.famiglia] || tr('processi.process.familyGeneric'), comando: p.comando }));
     /*
      * ⛔⛔ TROVATO NELLA FOTO, non in un test: qui c'era `STATI_PROCESSO[p.stato].icona`, cioè
@@ -1263,7 +1458,24 @@ function riempiCard(d, card, righe, { classiValore = () => '' } = {}) {
   if (!card) return;
   for (const n of [...card.querySelectorAll('.talos-kv')]) n.remove();
   // gli a-capo fra le righe sono quelli del sorgente del mockup: le PAROLE del cancello li vedono come spazi
-  for (const r of righe) { card.appendChild(d.createTextNode('\n')); card.appendChild(kv(d, r[0], r[1], classiValore(r))); }
+  for (const r of righe) {
+    card.appendChild(d.createTextNode('\n'));
+    const rigaKv = kv(d, r[0], r[1], classiValore(r));
+    card.appendChild(rigaKv);
+    /* ⛔ 04/10/2026, BUG-B — il VALORE LUNGO prende sei righe e poi si ferma: qui gli si appicica
+       accanto la porta d'uscita. Il bottone è FUORI dal valore clippato (è figlio della riga kv),
+       altrimenti verrebbe tagliato con lui. `talos-kv__v--lungo` la mette solo
+       `CLASSI_DETTAGLIO_PROCESSO`, cioè solo nel dettaglio di un processo: le altre card della
+       colonna non ne hanno, e restano identiche a prima. */
+    const valore = rigaKv.querySelector('.talos-kv__v--lungo');
+    if (valore) {
+      registraTaglio(valore, d, rigaKv, () => {
+        valore.dataset.aperto = valore.dataset.aperto === 'si' ? 'no' : 'si';
+        aggiornaPulsanteMostra(valore);
+      });
+      aggiornaPulsanteMostra(valore);
+    }
+  }
 }
 
 /**
@@ -1480,6 +1692,15 @@ export function processiDagliEventi(eventi = [], { adesso = Date.now(), nomiComa
       /* ⛔ 17/09 sera — il rifiuto vince sul codice di uscita: un comando negato all'approvazione
          non è mai partito, e «REFUSED» non porta nessun `exit N` da cui dedurlo. */
       p.stato = e.rifiutato === true || e.senzaSuite === true ? 'non-eseguito' : statoDaUscita(p.uscita, Boolean(e.errore));
+      /* ⛔ BUG-14 (05/10/2026) — lo sfondo vince sull'«uscita» che non c'è (non è uscito), ma perde contro il rifiuto:
+         un comando negato dal consenso non è mai partito, quindi non può essere in sfondo. Il file e chi lo ha sfondato
+         passano solo se l'evento li porta davvero (niente stringhe vuote a schermo). */
+      if (e.inSfondo === true && e.rifiutato !== true && e.senzaSuite !== true) {
+        p.stato = 'in-sfondo';
+        p.fileSfondo = typeof e.fileSfondo === 'string' && e.fileSfondo !== '' ? e.fileSfondo : null;
+        p.sfondoDa = typeof e.sfondoDa === 'string' && e.sfondoDa !== '' ? e.sfondoDa : null;
+        p.uscita = null;
+      }
       /*
        * ⛔⛔⛔ 17/09, OSS-1 — LA DURATA HA TRE FONTI, IN QUEST'ORDINE, E LA TERZA È IL SILENZIO.
        *   (1) `durataMs` dichiarato dal server: è l'unico misurato dove il comando è girato davvero,

@@ -816,6 +816,9 @@ export function classificaErroreDiCorsa({ codice = null, messaggio = null } = {}
 
   // 1. Il codice, quando dice davvero qualcosa. `internal-error` NON dice niente: è il default.
   if (c === 'PROVIDER_OUTCOME_UNKNOWN') return esito('esito-incerto');
+  /* ⛔⭐ BUG-16 (05/10/2026): l'esito incerto che ha esaurito i reinvii sicuri del kernel resta
+     'esito-incerto' — la classe non cambia, la scheda dirà il conto dei reinvii (`esitiIncertiRitentati`). */
+  if (c === 'PROVIDER_OUTCOME_UNKNOWN_ESAURITO') return esito('esito-incerto');
   if (CODICI_ESITO_DEL_TASK.has(c)) return esito(CODICI_ESITO_DEL_TASK.get(c));
   if (c.startsWith('CTX_')) return esito('contesto');
   // P-L (12/09): i guasti dell'agente esterno ACP hanno la loro classe, così una ricerca ricostruita dal codice salvato non torna «ignoto».

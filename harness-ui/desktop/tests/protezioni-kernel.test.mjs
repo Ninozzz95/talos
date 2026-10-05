@@ -19,8 +19,9 @@ const guasti = {
   'T-03': (k) => k.replace('uscitaUtile(String(esito), 8_000, 0.5)', 'String(esito).slice(0, 8_000)'),
   'T-04': (k) => {
     const prova = k.indexOf("name: 'prova',")
-    const vuoto = k.indexOf('properties: {}', prova)
-    return k.slice(0, vuoto) + "properties: { codice_prova: { type: 'string' } }" + k.slice(vuoto + 'properties: {}'.length)
+    const proprietà = k.indexOf('properties: {', prova)
+    const punto = k.indexOf('timeout: {', proprietà)
+    return k.slice(0, punto) + "codice_prova: { type: 'string' },\n                " + k.slice(punto)
   },
 }
 

@@ -1,4 +1,4 @@
-import { validaFallbackProviders } from './model-destination.mjs';
+import { livelliRagionamentoDiretti, validaFallbackProviders } from './model-destination.mjs';
 import { pipeline } from 'node:stream/promises';
 import { prepareProcessOutputDownload } from './process-output-download.mjs';
 import { chiediMiglioramentoAlProvider } from './prompt-enhancer-provider.mjs';
@@ -1818,6 +1818,10 @@ const ROTTE_API = Object.freeze([
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/tree\/create$/, metodi: ['POST'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/stop$/, metodi: ['POST'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/processes\/([^/]+)\/stop$/, metodi: ['POST'] },
+  /* ⛔ BUG-14 (05/10/2026): la gemella dello Stop — SFONDA il comando senza ucciderlo (la riga va «in sfondo»).
+     Senza la SUA riga qui, la rotta esisteva per il 200 e per il 409 ma una GET cadeva sul 404 invece del 405
+     con l'Allow vero: la presidia SFONDO-02 di tests/rev-stop-per-riga.test.mjs. */
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/processes\/([^/]+)\/sfondo$/, metodi: ['POST'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/mcp-elicitation$/, metodi: ['POST'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/redirect$/, metodi: ['POST'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/fork$/, metodi: ['POST'] },
@@ -2487,9 +2491,9 @@ function requireApprovaBody(body) {
     chiavi.length !== (conAmbito ? 3 : 2) || !chiavi.every((k) => AMMESSE.includes(k))
     || typeof body.requestId !== 'string' || body.requestId.length === 0
     || typeof body.approvato !== 'boolean'
-    || (conAmbito && (body.ambito !== 'cartella' || body.approvato !== true))
+    || (conAmbito && ((body.ambito !== 'cartella' && body.ambito !== 'percorso') || body.approvato !== true))
   ) {
-    const errore = new Error('Invalid body: expected {requestId, approvato} or {requestId, approvato: true, ambito: "cartella"}');
+    const errore = new Error('Invalid body: expected {requestId, approvato} or {requestId, approvato: true, ambito: "cartella"|"percorso"}');
     errore.code = 'QUERY_INVALID';
     throw errore;
   }
@@ -6099,6 +6103,43 @@ export function createHttpApp({
       return;
     }
 
+    /*
+     * ⛔ BUG-14 (05/10/2026): SFONDA un comando della scheda «Processi» — la terza strada del comando lungo
+     *   (dopo `background:true` del modello e l'auto-background al tempo scaduto). Nessun corpo: il comando
+     *   lo dice l'indirizzo. 200 se il segnale è partito (la riga diventa «in sfondo» col suo file), 404 se
+     *   la sessione non c'è, 409 se il comando non è più in corso. ⛔ NON è uno stop: il processo vive.
+     */
+    const sfondoProcessoMatch = method === 'POST' && sessionRegistry
+      && /^\/api\/v1\/sessions\/([^/]+)\/processes\/([^/]+)\/sfondo$/.exec(url.pathname);
+    if (sfondoProcessoMatch) {
+      try {
+        requireNoQuery(url);
+        let sessionId, toolCallId;
+        try {
+          sessionId = decodeURIComponent(sfondoProcessoMatch[1]);
+          toolCallId = decodeURIComponent(sfondoProcessoMatch[2]);
+        } catch {
+          sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method);
+          return;
+        }
+        const esito = sessionRegistry.sfondaComando(sessionId, toolCallId);
+        if (esito === 'sessione-assente') {
+          sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method);
+          return;
+        }
+        if (esito !== 'sfondato') {
+          sendJson(res, 409, errorEnvelope('PROCESS_NOT_RUNNING', clock), method);
+          return;
+        }
+        if (req.aborted || res.destroyed) return;
+        sendJson(res, 200, successEnvelope({ backgrounded: true }, clock), method);
+      } catch (error) {
+        const normalized = normalizeError(error);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
+      }
+      return;
+    }
+
     const stopMatch = method === 'POST' && sessionRegistry
       && /^\/api\/v1\/sessions\/([^/]+)\/stop$/.exec(url.pathname);
     if (stopMatch) {
@@ -7284,7 +7325,11 @@ export function createHttpApp({
         if (!catalogoModelliFn) {
           const errore = new Error('Model catalog not configured'); errore.code = 'REPORT_UNAVAILABLE'; throw errore;
         }
-        data = await catalogoModelliFn({ forzaAggiornamento });
+        /* ⛔ BUG-7 cura3 (05/10, revisore D2): i livelli delle sessioni DIRETTE (es. `zai:…`)
+           arrivano dal registro (`livelliDiretti`, vedi model-destination.livelliRagionamentoDiretti()),
+           accanto al catalogo OpenRouter — il frontend fa UNA sola GET. Campo additivo: i
+           consumatori esistenti del catalogo non cambiano forma. */
+        data = { ...(await catalogoModelliFn({ forzaAggiornamento })), livelliDiretti: livelliRagionamentoDiretti() };
       } else if (url.pathname === '/api/v1/model-lab/capacity') {
         requireNoQuery(url);
         if (!capacitaMacchinaFn) {

@@ -279,7 +279,11 @@ test('MODEL-REASONING-04 — modello mandatory non riceve effort none e conserva
 test('MODEL-REASONING-NEVER-ESCALATE — su glm-5.3-flash nessun livello chiesto diventa più caro', async () => {
   const { normalizzaReasoningPerModello, livelloRagionamentoSenzaSalire } = await import('../src/runtime-owner-adapter.mjs');
   const glm = { reasoning: { mandatory: true, supportedEfforts: ['max', 'high', 'low'], defaultEffort: 'max' } };
-  const attesi = { none: 'low', minimal: 'low', low: 'low', medium: 'low', high: 'high', xhigh: 'high', max: 'max' };
+  /* ⛔ BUG-18 (05/10, owner): xhigh ≡ max (alias canonico: l'etichetta «max» della UI È «xhigh»,
+     app.js:7340). Prima l'utente che sceglieva «max» su un modello con catalogo [max, high, low]
+     riceveva SILENZIOSAMENTE «high»: era il gemello nascosto del difetto in chat. L'alias non è
+     un'escalation: xhigh È max, solo con la grafia del catalogo. */
+  const attesi = { none: 'low', minimal: 'low', low: 'low', medium: 'low', high: 'high', xhigh: 'max', max: 'max' };
   for (const [chiesto, atteso] of Object.entries(attesi)) {
     assert.deepEqual(normalizzaReasoningPerModello({ effort: chiesto }, glm), { effort: atteso }, `${chiesto} → ${atteso}`);
   }

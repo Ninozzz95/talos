@@ -84,6 +84,11 @@ const CLASSI_DEL_GUASTO = Object.freeze({
 
 export function classeDelFallimento({ classeErrore = null, codiceErrore = null } = {}) {
   if (codiceErrore === 'PROVIDER_OUTCOME_UNKNOWN') return { errorClass: 'internal', retryable: false };
+  /* ⛔⭐ BUG-16 (piano §5, 05/10/2026): l'esito incerto che ha esaurito i SUOI reinvii sicuri (il kernel
+     ha già ritentato fino a 10 volte a zero effetti, poi ha lanciato) è un guasto transitorio del
+     fornitore come un flusso interrotto: il ciclo di retry del passo (attempt/lease) può riprovarlo.
+     Senza questa riga il codice erediterebbe `classe: 'traffico'` dalla causa e maschererebbe da rate_limit. */
+  if (codiceErrore === 'PROVIDER_OUTCOME_UNKNOWN_ESAURITO') return { errorClass: 'transient_network', retryable: true };
   if (codiceErrore === 'PROVIDER_NETWORK_ERROR') return { errorClass: 'transient_network', retryable: true };
   const [errorClass, retryable] = CLASSI_DEL_GUASTO[classeErrore] ?? ['internal', false];
   return { errorClass, retryable };

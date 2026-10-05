@@ -31,12 +31,12 @@ test('PD-01 — record Z.AI valido, listino datato e seconda porta esplicita P-J
   assert.equal(r.modelliNoti[0].prezzi.ingresso, 0.15);
   assert.equal(r.modelliNoti[0].prezzi.uscita, 0.5);
   assert.equal(r.modelliNoti[0].contestoDichiarato, '1M');
-  assert.deepEqual(r.modelliNoti[0].ragionamento.livelli, ['high', 'max']);
+  assert.deepEqual(r.modelliNoti[0].ragionamento.livelli, ['low', 'high', 'max']);
   assert.deepEqual(r.modelliNoti.at(-1).ragionamento.livelli, []);
   for (const modifica of [
     { ...r, modelliNoti: [{ ...r.modelliNoti[0], contextLength: -1 }] },
     { ...r, modelliNoti: [{ ...r.modelliNoti[0], prezzi: { ingresso: -1 } }] },
-    { ...r, modelliNoti: [{ ...r.modelliNoti[0], ragionamento: { livelli: ['low'], thinking: ['enabled'] } }] },
+    { ...r, modelliNoti: [{ ...r.modelliNoti[0], ragionamento: { livelli: ['medium'], thinking: ['enabled'] } }] },
   ]) assert.throws(() => verificaRegistro({ zai: modifica }), { code: 'PROVIDER_REGISTRY_INVALID' });
 });
 
@@ -94,7 +94,7 @@ test('PD-05 — catalogo remoto arricchito, ripiego 404 dichiarato, mai ripiego 
   assert.equal(live.modelli[0].nome, 'GLM-5.3-Flash');
   assert.equal(live.modelli[0].contextLength, 1_000_000);
   assert.equal(live.modelli[0].prezzi.data, '2026-09-12');
-  assert.deepEqual(live.modelli[0].reasoning, { supportedEfforts: ['high', 'max'], defaultEffort: 'max', defaultEnabled: true, mandatory: true });
+  assert.deepEqual(live.modelli[0].reasoning, { supportedEfforts: ['low', 'high', 'max'], defaultEffort: 'max', defaultEnabled: true, mandatory: true });
   assert.equal(live.modelli[1].contextLength, null);
   const fallback = await elenco(404, {});
   assert.equal(fallback.fonte, 'documentazione');
@@ -113,8 +113,14 @@ test('PD-06 — destinazione diretta Bearer; la famiglia z-ai/ resta su OpenRout
   assert.deepEqual(separaFonteModello(`z-ai/${modello}`), { fonte: 'openrouter', modelloRemoto: `z-ai/${modello}` });
 });
 
-test('PD-07 — high/max solo sui modelli previsti; low omesso e dichiarato in tutte le forme', () => {
-  for (const id of ['glm-5.2', 'glm-5.3', modello]) for (const effort of ['high', 'max']) {
+test('PD-07 — i livelli documentati passano; il resto si adatta al più debole e va SOLO in nota, mai in chat', () => {
+  /* ⛔ 05/10/2026, BUG-18 (owner): «non voglio più vedere queste frasi» + «dinamica per tutti
+     i provider» + priorità Claude → Hermes → pi/codex (75cd6a41). «low» è DOCUMENTATO per
+     glm-5.3-flash da oggi (dossier bug18: docs.z.ai rilettta + catalogo misurato 24/09
+     supported_efforts [max, high, low]): passa com'è. L'alias canonico xhigh≡max risolve la
+     pillola «max» (che invia «xhigh»: app.js:7340). Il clamp segue Hermes
+     reasoning_effort.py:120-160: prima il più debole, mai più caro (regola 24/09). */
+  for (const id of ['glm-5.2', 'glm-5.3', modello]) for (const effort of ['low', 'high', 'max']) {
     const original = { model: id, messages: [], reasoning: { effort } };
     const result = prepara(original);
     assert.equal(result.corpo.reasoning_effort, effort);
@@ -122,18 +128,31 @@ test('PD-07 — high/max solo sui modelli previsti; low omesso e dichiarato in t
     assert.equal(result.corpo.reasoning, undefined);
     assert.equal(original.reasoning.effort, effort);
     assert.deepEqual(result.avvisi, []);
+    assert.deepEqual(result.note, []);
   }
-  for (const extra of [{ reasoning: { effort: 'low' } }, { reasoning_effort: 'low' }, { extra_body: { reasoning_effort: 'low' } }]) {
+  /* ⛔ BUG-18 gen.2 (revisore D2): l'alias è SILENZIOSO (Decisione 1 del dossier) — stesso
+     livello con due grafie, nessuna frase né in chat né nel journal: la config predefinita
+     dell'owner (pillola «max» → «xhigh») non deve scrivere nulla a ogni giro. */
+  for (const extra of [{ reasoning: { effort: 'xhigh' } }, { reasoning_effort: 'xhigh' }, { extra_body: { reasoning_effort: 'xhigh' } }]) {
     const result = prepara({ model: modello, ...extra });
-    assert.equal(result.corpo.reasoning_effort, undefined);
+    assert.equal(result.corpo.reasoning_effort, 'max');
     assert.equal(result.corpo.extra_body, undefined);
-    assert.match(result.avvisi.join(' '), /Z\.AI/u);
-    assert.match(result.avvisi.join(' '), /non inviato/u);
+    assert.deepEqual(result.avvisi, [], 'BUG-18: la normalizzazione non parla in chat');
+    assert.deepEqual(result.note, [], 'alias = stessa grafia del livello: silenzioso');
   }
+  /* «medium» su [low, high, max]: il più debole è «low» — mai più caro del chiesto (24/09). */
+  {
+    const result = prepara({ model: modello, reasoning: { effort: 'medium' } });
+    assert.equal(result.corpo.reasoning_effort, 'low');
+    assert.deepEqual(result.avvisi, []);
+    assert.match(result.note.join(' '), /inviato «low»/u);
+  }
+  /* Modelli senza livelli documentati: il campo non si inventa; la frase va in nota. */
   for (const id of ['glm-4.6', 'glm-5', 'glm-futuro']) {
     const result = prepara({ model: id, reasoning_effort: 'high' });
     assert.equal(result.corpo.reasoning_effort, undefined);
-    assert.equal(result.avvisi.length, 1);
+    assert.deepEqual(result.avvisi, []);
+    assert.equal(result.note.length, 1);
   }
   const or = { model: `z-ai/${modello}`, reasoning: { effort: 'low' } };
   assert.equal(runtime.preparaRichiestaCompatibile('openrouter', or).corpo, or);
@@ -148,7 +167,8 @@ test('PD-08 — thinking disabled consentito fino a 5.2, dichiarato impossibile 
   for (const model of ['glm-5.3', modello]) {
     const result = prepara({ model, extra_body: { thinking: { type: 'disabled' } } });
     assert.equal(result.corpo.thinking.type, 'enabled');
-    assert.match(result.avvisi.join(' '), /non consente di disattivare/u);
+    assert.deepEqual(result.avvisi, [], 'BUG-18: il controllo del ragionamento va in nota');
+    assert.match(result.note.join(' '), /non consente di disattivare/u);
   }
   assert.equal(prepara({ model: modello }).corpo.thinking, undefined, 'nessuna preferenza: default del server');
 });
@@ -215,15 +235,23 @@ test('PD-09 — server Z.AI FINTO: rotte HTTP, streaming e ciclo tool con creden
   assert.equal(richieste, 2);
 });
 
-test('PD-10 — il router effettivo deve omettere low prima dell’invio a Z.AI', async () => {
+test('PD-10 — il router lascia passare i livelli documentati e consegna le note come telemetria, mai in chat', async () => {
+  /* ⛔ 05/10/2026, BUG-18 (owner): «low» su glm-5.3-flash è DOCUMENTATO (dossier bug18: docs.z.ai
+     rilettta + catalogo misurato 24/09) → passa com'è, in silenzio. ⛔ gen.2 (revisore D2):
+     «xhigh» = grafia interna di «max» (app.js:7340) → alias canonico «max» SILENZIOSO
+     (Decisione 1); la telemetria `{ nota: true }` → journal CUSTOM `avviso-fornitore`, mai
+     bolla, resta per i clamp veri (PD-07, «medium»). */
   const store = createProviderCredentialStore({ env: { GLM_API_KEY: CHIAVE_FINTA } });
-  const avvisi = [];
+  const consegnati = [];
   let inviato;
   const fetchInstradata = creaFetchMultiProvider(async (_url, init) => {
     inviato = JSON.parse(init.body);
     return Response.json({ choices: [], usage: { prompt_tokens: 10 } });
-  }, { dipendenze: deps(store), onAvviso: avviso => avvisi.push(avviso) });
+  }, { dipendenze: deps(store), onAvviso: (testo, opzioni) => consegnati.push({ testo, opzioni }) });
   await fetchInstradata('https://openrouter.ai/api/v1/chat/completions', { method: 'POST', body: JSON.stringify({ model: `zai:${modello}`, reasoning_effort: 'low', messages: [] }) });
-  assert.equal(inviato.reasoning_effort, undefined, 'aggancio fuori perimetro: vedere diff nel rapporto P-D');
-  assert.match(avvisi.join(' '), /Z\.AI/u, 'l’omissione deve essere dichiarata al chiamante');
+  assert.equal(inviato.reasoning_effort, 'low', 'il livello documentato passa com\'è');
+  assert.deepEqual(consegnati, [], 'livello documentato: nessuna frase, né avviso né nota');
+  await fetchInstradata('https://openrouter.ai/api/v1/chat/completions', { method: 'POST', body: JSON.stringify({ model: `zai:${modello}`, reasoning_effort: 'xhigh', messages: [] }) });
+  assert.equal(inviato.reasoning_effort, 'max', 'alias canonico xhigh→max');
+  assert.deepEqual(consegnati, [], 'alias silenzioso (Decisione 1): né avviso né nota');
 });

@@ -28,13 +28,87 @@ function fail(message, code = 'RUNTIME_INVALID') {
  * Il chiamante di produzione richiede l'aggancio in runtime-owner-adapter.mjs:
  * diff non applicato nel rapporto P-D, perché fuori dal perimetro assegnato.
  */
+/*
+ * ⛔ 04/10/2026, BUG-7 (owner) — il concorrente si legge nel suo codice (regola 20/09):
+ *   · pi-mono `packages/ai/src/models.ts:1222-1240` (`clampThinkingLevel`): se il livello chiesto
+ *     non è fra quelli che il modello dichiara, si invia il più vicino — PRIMA verso l'alto,
+ *     poi verso il basso — e mai un livello non supportato;
+ *   · hermes `agent/auxiliary_reasoning_floor.py:1-18`: «The recovery is a *step up*, not a strip…
+ *     Dropping the field would also succeed once, but it says nothing about the next call».
+ *   TALOS prima cancellava il campo e avvisava a OGNI giro (openai-compatible-runtime.mjs:60-67),
+ *   e l'avviso finiva in una bolla assistente nuova a ogni richiesta (agent-service.mjs:2128):
+ *   la frase «Z.AI: livello di ragionamento richiesto non previsto dal profilo P-D…» a schermo
+ *   a ogni giro dell'owner su glm-5.3-flash con effort «xhigh» (transcript 3eb5e436, giro 25).
+ * La scala è quella interna dell'interfaccia (`app.js:7255-7271`: «xhigh» è l'etichetta «max»);
+ * un valore del fornitore fuori dalla scala ma presente in `livelli` (es. «max» di z.ai) passa
+ * per identità, come il `thinkingLevelMap?.[effort] ?? effort` di pi (openai-completions.ts:882).
+ */
+/*
+ * ⛔ 05/10/2026, BUG-18 (owner) — «non voglio più vedere queste frasi» + «dinamica per tutti
+ *   i provider, non ingozzabile» + priorità riferimenti Claude → Hermes → pi/codex (memoria
+ *   75cd6a41, che sostituisce il pi-mono-primo del BUG-7):
+ *   · la normalizzazione del RAGIONAMENTO smette di essere narrazione in chat: i suoi messaggi
+ *     escono in `note` (dati locali come gli avvisi, ma telemetria: il chiamante li consegna al
+ *     journal della sessione, mai in bolla) — la temperatura resta un avviso, decisione diversa;
+ *   · il clamp diventa «prima il più debole, altrimenti il minimo supportato» (hermes
+ *     agent/reasoning_effort.py:120-160), allineato a runtime-owner-adapter.mjs e alla regola
+ *     owner 24/09 «mai un costo più alto di quello scelto»;
+ *   · alias canonico xhigh≡max: l'etichetta «max» della UI È «xhigh» (app.js:7340, 7390-7391).
+ * Il meccanismo resta UNO per ogni provider: le differenze stanno nei DATI del registro
+ * (ragionamento.livelli / livelliRagionamento, con fonte+data e gate di validazione), mai in
+ * rami per fornitore.
+ */
+const SCALA_LIVELLI_RAGIONAMENTO = Object.freeze(['minimal', 'low', 'medium', 'high', 'xhigh', 'max']);
+
+/* ⛔ BUG-18: alias canonico xhigh≡max — stesso livello con due grafie (la UI chiama «max»
+   ciò che vale «xhigh», app.js:7340/7390): restituisce la grafia documentata del modello,
+   o null. Funzione UNICA anche per runtime-owner-adapter.mjs: le due scale gemelle non
+   devono più portarsi dietro due alias (D5, malattia «tredici copie»). */
+export function aliasGrafiaRagionamento(richiesto, livelli) {
+  const alias = richiesto === 'xhigh' ? 'max' : richiesto === 'max' ? 'xhigh' : null;
+  return alias != null && Array.isArray(livelli) && livelli.includes(alias) ? alias : null;
+}
+
+/* ⛔ BUG-18 gen.2 (revisore D3/M3): il minimo documentato di una lista — il floor di cura
+   per i modelli obbligati al ragionamento (hermes auxiliary_reasoning_floor.py:
+   «REASONING_FLOOR_EFFORT = "low"»; «The recovery is a *step up*, not a strip»).
+   Valori fuori scala: ignorati, nessuna invenzione. */
+export function livelloRagionamentoMinimo(livelli) {
+  let minimo = null;
+  if (!Array.isArray(livelli)) return null;
+  for (const livello of livelli) {
+    const posizione = SCALA_LIVELLI_RAGIONAMENTO.indexOf(livello);
+    if (posizione === -1) continue;
+    if (minimo === null || posizione < SCALA_LIVELLI_RAGIONAMENTO.indexOf(minimo)) minimo = livello;
+  }
+  return minimo;
+}
+
+export function livelloRagionamentoPiuVicino(richiesto, livelli) {
+  if (!Array.isArray(livelli) || livelli.length === 0) return null;
+  if (livelli.includes(richiesto)) return richiesto;
+  const alias = aliasGrafiaRagionamento(richiesto, livelli);
+  if (alias) return alias;
+  const indice = SCALA_LIVELLI_RAGIONAMENTO.indexOf(richiesto);
+  if (indice === -1) return null;
+  /* ⛔ BUG-18: prima il più debole (hermes reasoning_effort.py, clamp_effort: «the **nearest
+     weaker** supported level is returned so a clamp never escalates cost»; regola owner
+     24/09 «mai un costo più alto di quello scelto»), poi il minimo supportato
+     (auxiliary_reasoning_floor: step up solo se il modello obbligato non fa di meglio).
+     Vale per OGNI provider: il comportamento è uno, i dati cambiano. */
+  for (let i = indice - 1; i >= 0; i--) {
+    if (livelli.includes(SCALA_LIVELLI_RAGIONAMENTO[i])) return SCALA_LIVELLI_RAGIONAMENTO[i];
+  }
+  return livelloRagionamentoMinimo(livelli);
+}
+
 export function preparaRichiestaCompatibile(provider, corpo) {
   const record = REGISTRO_FORNITORI[provider];
   // P-K — il corpo HTTP usa reasoning_effort, non l'involucro del router.
   if (record?.cloud) return preparaRichiestaCloud(record, corpo);
   // P-K — fine
   if (record?.richiestaCompatibile) return preparaProfiloCompatibile(record, corpo);
-  if (record?.ragionamento?.formato !== 'thinking') return { corpo, avvisi: [] };
+  if (record?.ragionamento?.formato !== 'thinking') return { corpo, avvisi: [], note: [] };
   const oggetto = v => v !== null && typeof v === 'object' && !Array.isArray(v);
   if (!oggetto(corpo) || typeof corpo.model !== 'string') fail(`Richiesta ${record.etichetta} non valida.`);
   if (corpo.extra_body !== undefined && !oggetto(corpo.extra_body)) fail(`Opzioni ${record.etichetta} non valide.`);
@@ -45,6 +119,7 @@ export function preparaRichiestaCompatibile(provider, corpo) {
   const modello = record.modelliNoti.find(m => m.id === id);
   const opzioni = modello?.ragionamento;
   const avvisi = [];
+  const note = []; /* ⛔ BUG-18: telemetria di normalizzazione del ragionamento, mai chat. */
   const effort = reasoning_effort ?? reasoning?.effort;
   const richiesto = typeof effort === 'string' ? effort.trim().toLowerCase() : effort;
   const preferenza = thinking?.type ?? (reasoning?.enabled === false || richiesto === 'none' ? 'disabled' : reasoning?.enabled === true || richiesto != null ? 'enabled' : undefined);
@@ -54,29 +129,63 @@ export function preparaRichiestaCompatibile(provider, corpo) {
     let tipo = preferenza;
     if (!opzioni.thinking.includes(tipo)) {
       tipo = 'enabled';
-      avvisi.push(`${record.etichetta} · ${modello.nome}: il modello non consente di disattivare il ragionamento; resta attivo.`);
+      note.push(`${record.etichetta} · ${modello.nome}: il modello non consente di disattivare il ragionamento; resta attivo.`);
     }
     risultato.thinking = { type: tipo, ...(typeof thinking?.clear_thinking === 'boolean' ? { clear_thinking: thinking.clear_thinking } : {}) };
   } else if (preferenza !== undefined && richiesto == null) {
-    avvisi.push(`${record.etichetta}: controllo del ragionamento non documentato per questo modello; non inviato.`);
+    note.push(`${record.etichetta}: controllo del ragionamento non documentato per questo modello; non inviato.`);
   }
   if (richiesto != null) {
-    if (!opzioni?.livelli.includes(richiesto)) {
-      avvisi.push(`${record.etichetta}: livello di ragionamento richiesto non previsto dal profilo P-D per questo modello; non inviato.`);
-    } else if (risultato.thinking?.type !== 'disabled') {
-      risultato.reasoning_effort = richiesto;
-    } else {
-      avvisi.push(`${record.etichetta}: livello di ragionamento non inviato perché il ragionamento è disattivato.`);
+    /* ⛔ BUG-7 (04/10, owner): il livello chiesto si ADATTA al modello, non si butta.
+       ⛔ BUG-18 (05/10): direzione «prima il più debole» (regola 24/09) e alias canonico
+       xhigh≡max SILENZIOSO (Decisione 1 del dossier: stesso livello con due grafie — nulla
+       cambia per chi ha chiesto, nessuna frase a ogni giro). ⛔ gen.2 (revisore D3): «none»
+       su un modello obbligato al ragionamento NON lascia il campo a casa — ometterlo consegna
+       la scelta al predefinito del fornitore, che è il livello PIÙ caro (Z.AI default_effort:
+       max, misurato 24/09): floor al minimo documentato (hermes auxiliary_reasoning_floor.py:
+       «Dropping the field would also succeed once, but it says nothing about the next call and
+       hands the effort choice back to the provider default (often medium or higher, the
+       opposite of what a thinking-off caller asked for)»). */
+    const irrilevante = risultato.thinking?.type === 'disabled';
+    let inviato = null;
+    if (!irrilevante && richiesto !== 'none') {
+      if (opzioni?.livelli?.includes(richiesto)) {
+        inviato = richiesto;
+      } else {
+        const alias = aliasGrafiaRagionamento(richiesto, opzioni?.livelli);
+        if (alias != null) {
+          inviato = alias; /* stessa grafia del livello: silenzioso (BUG-18, Decisione 1) */
+        } else {
+          const vicino = livelloRagionamentoPiuVicino(richiesto, opzioni?.livelli);
+          if (vicino != null) {
+            inviato = vicino;
+            note.push(`${record.etichetta} · ${modello?.nome ?? corpo.model}: il livello «${richiesto}» non è documentato per questo modello; inviato «${vicino}», il più vicino.`);
+          }
+        }
+      }
+    }
+    if (richiesto === 'none' && risultato.thinking?.type === 'enabled') {
+      /* ⛔ BUG-18 gen.2 (D3): il modello rifiuta di spegnersi e il chiamante voleva il minimo
+         costo: si invia il MINIMO documentato, non il vuoto. */
+      const minimo = livelloRagionamentoMinimo(opzioni?.livelli);
+      if (minimo != null) {
+        risultato.reasoning_effort = minimo;
+        note.push(`${record.etichetta} · ${modello?.nome ?? corpo.model}: il modello non consente di disattivare il ragionamento; inviato «${minimo}», il minimo documentato (il predefinito del fornitore costa di più).`);
+      }
+    } else if (inviato != null) {
+      risultato.reasoning_effort = inviato;
+    } else if (!irrilevante && richiesto !== 'none') {
+      note.push(`${record.etichetta}: livello di ragionamento richiesto non previsto dal profilo P-D per questo modello; non inviato.`);
     }
   }
-  return { corpo: risultato, avvisi };
+  return { corpo: risultato, avvisi, note };
 }
 
 // P-K — OpenAI v1 ufficiale: nessuna deduzione di famiglia dal nome della distribuzione Azure.
 function preparaRichiestaCloud(record, corpo) {
   const oggetto = v => v !== null && typeof v === 'object' && !Array.isArray(v);
   if (!oggetto(corpo) || typeof corpo.model !== 'string' || !corpo.model.trim()) fail(`Richiesta ${record.etichetta} non valida.`);
-  const risultato = { ...corpo }, avvisi = [];
+  const risultato = { ...corpo }, avvisi = [], note = [];
   if (corpo.reasoning !== undefined) {
     if (!oggetto(corpo.reasoning)) fail(`Opzioni di ragionamento ${record.etichetta} non valide.`);
     delete risultato.reasoning;
@@ -84,10 +193,10 @@ function preparaRichiestaCloud(record, corpo) {
       if (corpo.reasoning_effort !== undefined && corpo.reasoning_effort !== corpo.reasoning.effort) fail(`Opzioni di ragionamento ${record.etichetta} in conflitto.`);
       risultato.reasoning_effort = corpo.reasoning.effort;
     }
-    if (Object.keys(corpo.reasoning).some(k => k !== 'effort')) avvisi.push(`${record.etichetta}: queste opzioni di ragionamento non sono previste dal collegamento.`);
+    if (Object.keys(corpo.reasoning).some(k => k !== 'effort')) note.push(`${record.etichetta}: queste opzioni di ragionamento non sono previste dal collegamento.`);
   }
   // I limiti di generazione restano quelli chiesti; compatibilità finale dipendente dal modello.
-  return { corpo: risultato, avvisi };
+  return { corpo: risultato, avvisi, note };
 }
 // P-K — fine
 
@@ -99,10 +208,11 @@ function preparaProfiloCompatibile(record, corpo) {
   const id = corpo.model.startsWith(`${record.id}:`) ? corpo.model.slice(record.id.length + 1) : corpo.model;
   const modello = Object.hasOwn(profilo.modelli, id) ? profilo.modelli[id] : null;
   if (['thinking', 'enable_thinking'].includes(profilo.ragionamento)) {
-    return modello ? preparaControlloThinking(record, modello, corpo) : { corpo, avvisi: [] };
+    return modello ? preparaControlloThinking(record, modello, corpo) : { corpo, avvisi: [], note: [] };
   }
   const risultato = { ...corpo };
   const avvisi = [];
+  const note = []; /* ⛔ BUG-18: telemetria di normalizzazione del ragionamento, mai chat. */
 
   if (modello?.strumentiConFormato === false && corpo.tools != null && corpo.response_format != null) {
     fail(`${record.etichetta}: questo modello non consente strumenti e formato di risposta vincolato nella stessa richiesta.`);
@@ -128,16 +238,30 @@ function preparaProfiloCompatibile(record, corpo) {
     delete risultato.reasoning;
     if (richiesto != null) risultato.reasoning_effort = richiesto;
     if (Object.keys(altre).length || (enabled === true && richiesto == null && corpo.reasoning_effort == null)) {
-      avvisi.push(`${record.etichetta}: alcune opzioni di ragionamento non hanno una traduzione documentata; non inviate.`);
+      note.push(`${record.etichetta}: alcune opzioni di ragionamento non hanno una traduzione documentata; non inviate.`);
     }
   }
   // Un modello futuro o non documentato conserva i parametri: nessuna incompatibilità dedotta.
   if (risultato.reasoning_effort != null && modello?.livelliRagionamento
     && !modello.livelliRagionamento.includes(risultato.reasoning_effort)) {
-    delete risultato.reasoning_effort;
-    avvisi.push(`${record.etichetta}: il livello di ragionamento richiesto non è documentato per questo modello; non inviato.`);
+    /* ⛔ BUG-7 (04/10, owner): stesso clamp del ramo thinking — prima il più debole (BUG-18),
+       non il taglio secco. ⛔ BUG-18: l'alias canonico xhigh≡max precede il clamp ed è
+       SILENZIOSO (Decisione 1): stessa grafia del livello, nessuna frase a ogni giro. */
+    const alias = aliasGrafiaRagionamento(risultato.reasoning_effort, modello.livelliRagionamento);
+    if (alias != null) {
+      risultato.reasoning_effort = alias;
+    } else {
+      const vicino = livelloRagionamentoPiuVicino(risultato.reasoning_effort, modello.livelliRagionamento);
+      if (vicino != null) {
+        risultato.reasoning_effort = vicino;
+        note.push(`${record.etichetta} · ${modello?.nome ?? id}: il livello di ragionamento richiesto non è documentato per questo modello; inviato «${vicino}», il più vicino.`);
+      } else {
+        delete risultato.reasoning_effort;
+        note.push(`${record.etichetta}: il livello di ragionamento richiesto non è documentato per questo modello; non inviato.`);
+      }
+    }
   }
-  return { corpo: risultato, avvisi };
+  return { corpo: risultato, avvisi, note };
 }
 
 /** P-I: controllo binario solo per modelli documentati; non inventa livelli di profondità. */
@@ -173,17 +297,18 @@ function preparaControlloThinking(record, modello, corpo) {
     thinking === undefined ? undefined : thinking.type !== 'disabled', enable_thinking].filter(v => v !== undefined);
   if (new Set(preferenze).size > 1) invalida();
   const avvisi = [];
+  const note = []; /* ⛔ BUG-18: telemetria di normalizzazione del ragionamento, mai chat. */
   let attivo = preferenze[0];
   delete risultato.reasoning;
   delete risultato.reasoning_effort;
   delete risultato.thinking;
   delete risultato.enable_thinking;
   if ((effort !== undefined && effort !== 'none') || Object.keys(reasoning ?? {}).some(k => !['enabled', 'effort'].includes(k))) {
-    avvisi.push(`${record.etichetta}: questo modello espone solo l'attivazione del ragionamento; il livello richiesto non viene inviato.`);
+    note.push(`${record.etichetta}: questo modello espone solo l'attivazione del ragionamento; il livello richiesto non viene inviato.`);
   }
   if (attivo === false && !modello.thinking.disattivabile) {
     attivo = true;
-    avvisi.push(`${record.etichetta}: questo modello non consente di disattivare il ragionamento; resta attivo.`);
+    note.push(`${record.etichetta}: questo modello non consente di disattivare il ragionamento; resta attivo.`);
   }
   if (attivo !== undefined) {
     if (qwen) risultato.enable_thinking = attivo;
@@ -203,7 +328,7 @@ function preparaControlloThinking(record, modello, corpo) {
     delete risultato.temperature;
     avvisi.push(`${record.etichetta}: la temperatura è gestita dal modello; il valore richiesto non viene inviato.`);
   }
-  return { corpo: risultato, avvisi };
+  return { corpo: risultato, avvisi, note };
 }
 
 function capability(value) {

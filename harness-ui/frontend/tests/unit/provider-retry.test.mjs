@@ -55,3 +55,36 @@ test('RETRY06-IDLE-DOM: i delta estranei non interrogano il DOM del retry', () =
   assert.equal(letture, 0);
   ui.reset();
 });
+
+/* R1 della review avversariale BUG-16: il canale «esito-incerto» (reinvio automatico del kernel) deve
+   arrivare FINO al banner: evento con la forma ESATTA che agent-service traduce dal giro del kernel
+   (canale, requestId, modello, NESSUN httpStatus, primo tentativo = 1). */
+test('RETRY06-UI-INCERTO: l\u2019attesa del reinvio BUG-16 arriva a schermo con il suo motivo, senza «HTTP null»', () => {
+  const s = riduciRetry(riduciRetry(null, start), wait({
+    canale: 'esito-incerto', fase: 'attesa', tentativo: 1, tentativiMassimi: 10,
+    httpStatus: undefined, modello: 'deepseek/deepseek-chat', retryAt: 30_000, attesaMs: 2000,
+    motivo: 'esito del fornitore incerto: nessun testo consegnato e nessuna lettura partita, reinvio sicuro — la nuova richiesta può comportare un altro costo',
+  }, 2));
+  assert.ok(s.retry, 'R1: l\u2019evento del canale incerto passa la validazione e resta vivo');
+  assert.equal(s.retry.canale, 'esito-incerto');
+  assert.equal(s.retry.tentativo, 1);
+  const t = testoRetry(s.retry, 28_100);
+  assert.match(t.titolo, /Nuovo tentativo programmato/u);
+  assert.match(t.motivo, /interrotta senza esito/u, 'la voce i18n del canale incerto, non «servizio non disponibile»');
+  assert.doesNotMatch(t.motivo, /HTTP/u, 'nessuno status inventato: qui non c\u2019è un codice HTTP');
+  assert.match(t.motivo, /Tentativo 1 di 10\./u);
+  assert.match(testoRetry(s.retry, 28_100, true).motivo, /cut short with no outcome/u, 'EN presente');
+});
+
+test('RETRY06-UI-INCERTO-SCHEMA: senza canale, con stato o col primo tentativo finto, l\u2019evento non entra', () => {
+  const s = riduciRetry(null, start);
+  const base = { canale: 'esito-incerto', fase: 'attesa', tentativo: 1, tentativiMassimi: 10,
+    httpStatus: undefined, modello: 'deepseek/deepseek-chat', retryAt: 30_000, attesaMs: 2000 };
+  /* Mutante-killer: se la validazione perdesse il canale (o lo scambio con l'HTTP), qui il banner si riempirebbe di falsi.
+     NB: `httpStatus: null` nel canale incerto resta LECITO — è la forma dei journal scritti prima della cura R1 (replay). */
+  for (const bad of [{ canale: undefined, httpStatus: 503 }, { canale: 'esito-incerto', httpStatus: 200 },
+    { canale: 'esito-incerto', tentativo: 0 }, { canale: 'http' }]) {
+    assert.equal(riduciRetry(s, wait({ ...base, ...bad }, 2)).retry, null, JSON.stringify(bad));
+  }
+  assert.ok(riduciRetry(s, wait({ ...base, httpStatus: null }, 2)).retry, 'null = assente: i journal pre-R1 restano leggibili in replay');
+});

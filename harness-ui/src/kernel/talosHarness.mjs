@@ -54,10 +54,11 @@ import { creaRegistroLetture, registraLetturaRighe, registraLetturaDentroRiga, r
 import { PROCESS_OUTPUT_ENCODINGS } from '../process-output-encoding.mjs' // OEM36: solo l'elenco; iconv-lite si carica lì, e solo a richiesta
 import { StringDecoder } from 'node:string_decoder'
 import { createParser } from 'eventsource-parser'
-import { leggiAttesaRichiestaDalFornitore, erroreEsitoProviderIncerto, leggiRifiutoProvider } from '../provider-retry.mjs'
+import { leggiAttesaRichiestaDalFornitore, erroreEsitoProviderIncerto, erroreEsitoProviderIncertoEsaurito, leggiRifiutoProvider } from '../provider-retry.mjs'
 import { createHash, generateKeyPairSync, randomUUID, sign as firmaCrypto, verify as verificaCrypto } from 'node:crypto'
 import { lookup as risolviDns } from 'node:dns'
-import { existsSync, statSync } from 'node:fs'
+import { existsSync, mkdirSync, statSync } from 'node:fs'
+import { createWriteStream } from 'node:fs'
 import { lstat, open, readdir, readFile, readlink, realpath, stat as statAsync } from 'node:fs/promises'
 import { request as richiestaHttp } from 'node:http'
 import { request as richiestaHttps } from 'node:https'
@@ -437,6 +438,27 @@ export function attesaDelTentativo(tentativo, caso = Math.random) {
  * uguale — resta aperto anche qui, dichiarato, non nascosto.
  */
 export const RIPETIZIONI_IDENTICHE_MASSIME = 3
+
+/*
+ * ⛔⭐ BUG-16 (05/10/2026, owner: auto-retry NON negoziabile, anche per i sub-agenti) — IL CANALE
+ * DEGLI ESITI INCERTI. Oggi un `PROVIDER_OUTCOME_UNKNOWN` («la risposta del fornitore si è
+ * interrotta») chiude il giro e chiede all'utente «scrivi continua»: la ripresa manuale NON è più
+ * accettabile come comportamento primario (Claude Code ritenta fino a 10 volte da solo, con attesa
+ * visibile; Hermes tiene il retry nel SUO giro con SDK spento — dossier §10 in
+ * `scratchpad/piano-bug16-auto-retry-2026-10-05.md`). La cura sta TUTTA nel catch del giro di
+ * `talosLavora`: è lì che ogni guasto di trasporto con `parziale` arriva (flusso, corpo, silenzio).
+ * Cap PER GIRO a 10: è il numero di Claude Code; Hermes sta a 3, gli SDK a 2 — qui vale solo per il
+ * canale catastrofico (esito incerto), non per i 429/5xx che hanno il loro budget di 4.
+ */
+export const ESITI_INCERTI_RITENTABILI_MASSIMI = 10
+
+/*
+ * ⛔ Tetto all'attesa AUTO-DECISA del canale incerto (lezione `Retry-After`/`x-should-retry` del
+ * dossier §9: nessuna attesa illimitata, nemmeno quando siamo noi a sceglierla). Il backoff parte
+ * da `attesaDelTentativo` (500·2^n + jitter ≤ 50%, la STESSA funzione del canale HTTP) e non può
+ * superare il minuto a passo: peggio del minuto è solo attendere il failsafe di inattività.
+ */
+export const ATTESA_INCERTA_MASSIMA_MS = 60_000
 
 /**
  * ⛔⛔⛔ LA STESSA RETE DI SICUREZZA, PER UNA RISPOSTA GIÀ COMPLETA — 11/09/2026.
@@ -1659,7 +1681,10 @@ async function chiamaConRitentaBase({
              *   che si azzera a ogni byte — commenti SSE compresi — e vale per tutti i fornitori e
              *   per il motore locale. Un tetto di durata punisce chi lavora; un tetto di inattività
              *   punisce solo chi è morto.
-             * ⛔ Il kernel vive in DUE copie (desktop e mobile): questa riga va riportata anche là.
+             * ⛔ Copie del kernel (nota 06/10, review BUG-16 NOTA-2.2): l'app mobile INCATENA QUESTO
+             *   file (nessuna seconda copia sorgente nell'albero); le copie pacchettizzate sotto
+             *   desktop (dist, dist-preview, dist-prova-aggiornamenti) sono artefatti di build:
+             *   si RIGENERANO dal sorgente a ogni consegna, non si patchano a mano.
              */
             signal: segnaleStop,
         })
@@ -2040,7 +2065,25 @@ const ATTREZZI = [
         name: 'prova',
         description: 'Runs the project test suite and returns its output. '
             + 'This is the judge: the task is done when it passes.',
-        input_schema: { type: 'object', properties: {}, required: [] },
+        input_schema: {
+            type: 'object',
+            properties: {
+                /* ⛔ BUG-3 (owner 05/10/2026): il timeout è PER CHIAMATA e NON uccide — al tempo il comando va in sfondo
+                   (output su file) e il giro continua. Predefinito 120 s come sempre, tetto 600 s. */
+                timeout: {
+                    type: 'number',
+                    description: 'max milliseconds to wait for this test suite before it is moved to the background (NOT killed; its output keeps going to a file you can read with leggi). Default 120000, max 600000',
+                },
+                /* ⛔ BUG-14 (owner: «come Claude Code, che usa un output su file»): il run_in_background di Claude Code
+                   (sdk-tools.d.ts:793-795). true ⇒ la suite parte già in sfondo e l'attrezzo risponde SUBITO col percorso
+                   del file dove l'output continua a finire: rileggilo con `leggi` per sapere com'è andata. */
+                background: {
+                    type: 'boolean',
+                    description: 'true to start this test run in the background right away (like Claude Code run_in_background): the tool returns immediately with the output file path; read that file later with leggi',
+                },
+            },
+            required: [],
+        },
     },
     {
         name: 'shell',
@@ -2087,6 +2130,19 @@ const ATTREZZI = [
                  * comporta esattamente come oggi.
                  */
                 descrizione: { type: 'string', description: 'a short, active-voice description of what this command does, shown to the user in place of the raw command' },
+                /* ⛔ BUG-3 (owner 05/10/2026): il timeout è PER CHIAMATA e NON uccide — al tempo il comando va in sfondo
+                   (stessa riga + badge, output su file) e il giro continua. Predefinito 120 s come sempre, tetto 600 s. */
+                timeout: {
+                    type: 'number',
+                    description: 'max milliseconds to wait for this command before it is moved to the background (NOT killed; its output keeps going to a file you can read with leggi). Default 120000, max 600000',
+                },
+                /* ⛔ BUG-14 (owner: «esattamente come fa Claude Code, lui usa un output su file»): true ⇒ il comando parte già
+                   in sfondo e l'attrezzo risponde SUBITO col percorso del file dove l'output continua a finire: rileggilo
+                   con `leggi`. È il `run_in_background` di Claude Code (sdk-tools.d.ts:793-795). */
+                background: {
+                    type: 'boolean',
+                    description: 'true to start this command in the background right away (like Claude Code run_in_background): the tool returns immediately with the output file path; read that file later with leggi',
+                },
             },
             required: ['comando'],
         },
@@ -5749,6 +5805,141 @@ export const contieneMarcaFermatoMentreGirava = (testo) => {
 /** La frase concordata con la CLI, INTERA: la CLI confronta righe intere (`error-view.ts` KERNEL_TOOL_STOP_EN). */
 const FRASE_FERMATO_NON_ESEGUITO = '⛔ Stopped on request: it could not run, the session was stopped first. This tool did not run.'
 const FRASE_FERMATO_TEMPO_SCADUTO = '⛔ Stopped when the 120 seconds ran out: it did not finish on its own.'
+
+/*
+ * ⛔⛔⛔ BUG-14 + BUG-3 (owner 05/10/2026: «pulsante per mettere in background esattamente come fa
+ *    Claude Code — lui usa un output su file») — IL SFONDO DI UN COMANDO IN CORSA.
+ *
+ * Tre strade, UNA sola meccanica, MAI una kill:
+ *   1. LA PERSONA, dal pulsante della riga nella scheda «Processi» (Claude Code: Ctrl+B manda il
+ *      comando corrente in background e l'output continua su file — sdk-tools.d.ts:3265-3268);
+ *   2. IL TEMPO: il timeout per-chiamata (`timeout` additivo sugli schemi `shell`/`prova`,
+ *      predefinito 120 s come oggi, tetto 600 s) NON uccide più quando la cura dello sfondo è
+ *      cablata — sfonda il comando (BUG-3, decisione owner: «auto-background su shell E prova,
+ *      stessa riga + badge, niente kill»);
+ *   3. IL MODELLO alla partenza (`background: true` additivo, il `run_in_background` di Claude
+ *      Code, sdk-tools.d.ts:793-795): il comando parte già in sfondo e l'attrezzo risponde SUBITO.
+ *
+ * L'OUTPUT NON SI PERDE (chiede esplicita dell'owner: «un output su file»): dal momento dello
+ * sfondo stdout+stderr del processo vengono ACCODATI a `<sessione>/.talos/processi-sfondo/
+ * <toolCallId>.log`. Il processo tiene i tubi aperti (come F007-B), la cattura in memoria si
+ * stacca, il file cresce finché il processo esce. Il modello rilegge il file con `leggi`; la
+ * persona lo apre dai Processi.
+ *
+ * ⛔ L'esito arriva SUBITO al giro: `{ codice: null, messoInSfondo: true, daSfondo, fileSfondo }`.
+ *   Il modello continua a lavorare; la riga resta nei Processi col suo stato «in sfondo» (Hermes
+ *   annota il processo nel suo registry e continua: `tools/process_registry.py`).
+ * ⛔ Lo Stop della riga resta VIVO anche sul processo in sfondo: nessun `sciogli()` qui — la
+ *   persona deve poterlo uccidere dopo, e la riga è lì per questo.
+ */
+export const MOTIVO_SFONDO_DELLA_RIGA = 'sfondo-della-riga'
+/** Il timeout predefinito di `shell`/`prova`: quello di sempre (120 s), ora DICHIARATO e per-chiamata. */
+export const TIMEOUT_SHELL_PREDEFINITO_MS = 120_000
+/** Tetto: nessun comando tiene il giro in ostaggio più di 10 minuti — poi è sfondo, comunque non kill. */
+export const TIMEOUT_SHELL_MASSIMO_MS = 600_000
+const TIMEOUT_SHELL_MINIMO_MS = 500
+
+/** Il timeout per-chiamata, normalizzato: fuori scala o assurdo ⇒ il default. Mai un `0` che disattiva tutto. */
+export function normalizzaTimeoutShell(v) {
+    const n = Number(v)
+    if (!Number.isFinite(n) || n <= 0) return TIMEOUT_SHELL_PREDEFINITO_MS
+    return Math.min(Math.max(Math.round(n), TIMEOUT_SHELL_MINIMO_MS), TIMEOUT_SHELL_MASSIMO_MS)
+}
+
+/** La frase del tempo scaduto con i SECONDI veri: col timeout per-chiamata «120» non è più sempre vero.
+ *  ⛔ A 120 s torna la costante ESATTA di sempre: `k3-lingua-kernel` la conta una volta, e le storie
+ *  salvate la riconoscono; il template qui sotto NON la contiene (e non deve contenerla). */
+const fraseTempoScaduto = (ms = TIMEOUT_SHELL_PREDEFINITO_MS) => {
+    const secondi = Math.round(Number(ms) / 1000)
+    return secondi === 120
+        ? FRASE_FERMATO_TEMPO_SCADUTO
+        : `⛔ Stopped when the ${secondi} seconds ran out: it did not finish on its own.`
+}
+
+/** La cartella dei log dei comandi in sfondo, DENTRO la cartella della sessione (relativa, per le due case). */
+export const SFONDO_DIR = '.talos/processi-sfondo'
+/** Il percorso nativo del log di sfondo di UN comando: `<cartella sessione>/.talos/processi-sfondo/<toolCallId>.log`. */
+export function percorsoFileSfondo(cartella, toolCallId) {
+    return join(String(cartella ?? '.'), ...SFONDO_DIR.split('/'), `${toolCallId}.log`)
+}
+
+/**
+ * Dal momento dello sfondo, l'output va SU FILE: accodo stdout+stderr al log (append) e chiudo il
+ * flusso quando il processo esce. Torna il percorso, o `null` se il disco ha detto no — e l'esito
+ * lo DICE, non lo tace (senza file i tubi restano aperti e letti a vuoto, come F007-B).
+ */
+function sfondaOutputSuFile(p, percorso) {
+    try {
+        mkdirSync(dirname(percorso), { recursive: true })
+        const flusso = createWriteStream(percorso, { flags: 'a' })
+        flusso.on('error', () => { try { flusso.end() } catch { /* il log è un conforto, mai un crash */ } })
+        p.stdout?.pipe(flusso, { end: false })
+        p.stderr?.pipe(flusso, { end: false })
+        const chiudi = () => { try { flusso.end() } catch { /* già chiuso */ } }
+        p.once('close', chiudi)
+        p.once('error', chiudi)
+        return percorso
+    }
+    catch { return null }
+}
+
+export const INTESTAZIONE_SFONDO = 'IN BACKGROUND'
+const NOTA_SFONDO_OUTPUT = '⏳ The command keeps running in the background (it was NOT killed): what it prints from now on is appended to the output file above.'
+
+/** Il testo dell'esito-sfondo: il modello legge «il comando vive, ecco dove guardare l'output».
+ *  ⛔ L'intestazione `IN BACKGROUND` è un CONTRATTO: `esitoDelProcesso` (session-registry) la legge
+ *  a inizio contenuto per segnare la riga «in sfondo» nei Processi. Cambiala lì insieme a qui. */
+function testoSfondo({ da, file, attesaMs = TIMEOUT_SHELL_PREDEFINITO_MS, uscitaParziale = '' }) {
+    const secondi = Math.max(1, Math.round(attesaMs / 1000))
+    const chi = da === 'persona'
+        ? 'moved to the background by the person (Processes tab)'
+        : da === 'tempo-scaduto'
+            ? `timed out after ${secondi} s and was moved to the background instead of being killed`
+            : 'started in the background on request'
+    const rigaFile = file
+        ? `Output file: ${file}`
+        : '(No output file: the folder refused the write; the output is not collected any more.)'
+    return `${INTESTAZIONE_SFONDO}: ${chi}. ${NOTA_SFONDO_OUTPUT}\n${rigaFile}${uscitaParziale ? `\n\nOutput so far:\n${uscitaParziale}` : ''}`
+}
+
+/**
+ * Il gestore di sfondo di UN processo in corsa, condiviso dai tre esecutori (eseguiProva,
+ * eseguiSuWindows, eseguiComando): reagisce al segnale della riga, al timer e alla partenza-già-
+ * in-sfondo, e in tutti e tre i casi conclude la Promise del chiamante SUBITO, senza toccare il
+ * processo. `eConcluso` è il «il processo è già finito da solo» dell'esecutore: vinto quello, lo
+ * sfondo non tocca più niente (niente file vuoti, niente stacca dopo la fine).
+ */
+function creaGestoreSfondo({ p, segnaleSfondo, fileSfondo, cattura = null, eConcluso = () => false, leggiParziale, risolvi, finisciTubi = null, fermaTimer = null }) {
+    let concluso = false
+    const sfondaAdesso = async (da, attesaMs) => {
+        if (concluso || eConcluso()) return
+        concluso = true
+        if (fermaTimer) fermaTimer()
+        const file = fileSfondo ? sfondaOutputSuFile(p, fileSfondo) : null
+        cattura?.stacca()
+        finisciTubi?.()
+        const parziale = String(await leggiParziale() ?? '')
+        risolvi({
+            codice: null,
+            messoInSfondo: true,
+            daSfondo: da,
+            ...(file ? { fileSfondo: file } : {}),
+            testo: testoSfondo({ da, file, attesaMs, uscitaParziale: parziale }),
+            parziale,
+        })
+    }
+    if (segnaleSfondo) {
+        if (segnaleSfondo.aborted) sfondaAdesso('persona', 0)
+        else segnaleSfondo.addEventListener('abort', () => { sfondaAdesso('persona', 0) }, { once: true })
+    }
+    return {
+        /** Il timer chiede qui: con la cura attiva sfonda invece di uccidere (torna true se ha preso la mano). */
+        alTempoScaduto: (attesaMs) => { if (!concluso && !eConcluso() && segnaleSfondo) { sfondaAdesso('tempo-scaduto', attesaMs); return true } return false },
+        /** Partenza già in sfondo (`background: true`): appena il processo esiste, l'attesa si conclude. */
+        subito: () => { setTimeout(() => { sfondaAdesso('avvio', 0) }, 0) },
+    }
+}
+
 /*
  * ⛔ Stop per riga (owner 02/10/2026) — CHI ha fermato il comando lo dice il MOTIVO dell'abort: la riga dei Processi (e il
  *   `!` della persona) chiama `abort(MOTIVO_STOP_DELLA_RIGA)`, e `AbortSignal.any` porta al segnale combinato il motivo
@@ -6085,13 +6276,16 @@ export function provaSenzaTest(codice, testo) {
     return DICHIARAZIONI_ZERO_TEST.some((r) => r.test(uscita))
 }
 
-async function eseguiProva(comando, cartella, { segnaleStop, dove = null, onBytes, wsl = null } = {}) {
+async function eseguiProva(comando, cartella, { segnaleStop, dove = null, onBytes, wsl = null, timeoutMs = TIMEOUT_SHELL_PREDEFINITO_MS, segnaleSfondo = null, fileSfondo = null, inSfondoSubito = false } = {}) {
     const zeroTest = createZeroTestScanner()
     if (dove !== null || onBytes) {
         const esegui = dove === null ? eseguiSuWindows : eseguiComandoSandboxato
         const risultato = await esegui(comando, cartella, {
             dove, segnaleStop, onBytes, wsl, onPezzo: ({ testo }) => { zeroTest.append(testo) },
+            timeoutMs, segnaleSfondo, fileSfondo, inSfondoSubito,
         })
+        /* ⛔ BUG-14: un comando messo in sfondo NON ha un codice d'uscita da classificare — l'esito è già com'è. */
+        if (risultato.messoInSfondo) return risultato
         const classificazione = zeroTest.finish(risultato.codice)
         if (classificazione.zeroTests) {
             /* «zero test eseguiti» = NOT RUN (owner 03/10/2026): nessun codice inventato; quello vero resta in `actualExitCode` */
@@ -6114,7 +6308,16 @@ async function eseguiProva(comando, cartella, { segnaleStop, dove = null, onByte
             onText: (_stream, testo) => zeroTest.append(testo),
         })
         let fermatoDalTempo = false
-        const timer = setTimeout(() => { fermatoDalTempo = true; uccidiAlberoDelProcesso(p) }, 120_000)
+        /* ⛔ BUG-14/BUG-3: anche la `prova` sfonda al tempo invece di morire (owner 05/10/2026), quando il canale è cablato. */
+        let timer = null
+        const gestoreSfondo = creaGestoreSfondo({
+            p, segnaleSfondo, fileSfondo, cattura,
+            leggiParziale: async () => { const acquisito = await cattura.settled; return formatCapturedOutput(acquisito.combined.text.trim(), acquisito.metadata) },
+            fermaTimer: () => { if (timer) clearTimeout(timer) },
+            risolvi: (esitoSfondo) => risolvi(esitoSfondo),
+        })
+        timer = setTimeout(() => { fermatoDalTempo = true; if (!gestoreSfondo.alTempoScaduto(timeoutMs)) uccidiAlberoDelProcesso(p) }, timeoutMs)
+        if (inSfondoSubito) gestoreSfondo.subito()
         /* ⛔ `prova` è il comando più lungo del giro (fino a 120 s): senza questo, premere «Ferma» durante un `npm test` non ferma niente. */
         let fermatoSuRichiesta = false
         const sciogli = fermaQuandoArrivaLoStop(p, segnaleStop, () => { fermatoSuRichiesta = true })
@@ -6130,7 +6333,7 @@ async function eseguiProva(comando, cartella, { segnaleStop, dove = null, onByte
             }
             /* ⛔ F-020: una prova uccisa dal tempo non è né un `exit null` muto né una suite mancante — stesso 124 e stessa frase del ramo Windows di `shell`. */
             if (fermatoDalTempo) {
-                risolvi({ codice: 124, fermatoDalTempo: true, testo: `${uscita}\n\n${FRASE_FERMATO_TEMPO_SCADUTO}`.trim() })
+                risolvi({ codice: 124, fermatoDalTempo: true, testo: `${uscita}\n\n${fraseTempoScaduto(timeoutMs)}`.trim() })
                 return
             }
             /*
@@ -6238,7 +6441,7 @@ export const DURATA_FATTI_WSL_MS = 5 * 60_000
  *   comporta byte per byte come prima. Il taglio, l'accorpamento e la decisione di che farne
  *   restano fuori di qui — questa funzione sa solo dire «e' arrivato questo, adesso».
  */
-export function eseguiComando(programma, argomenti, { timeoutMs = 8_000, cwd, onPezzo, onBytes, controlFooter = null, segnaleStop } = {}) {
+export function eseguiComando(programma, argomenti, { timeoutMs = 8_000, cwd, onPezzo, onBytes, controlFooter = null, segnaleStop, segnaleSfondo = null, fileSfondo = null, inSfondoSubito = false } = {}) {
     if (onBytes !== undefined && typeof onBytes !== 'function') throw new TypeError('onBytes must be a function')
     const metadata = onBytes && normalizzaMetadatiCattura({ schema: 'talos.process-output-metadata.v1', controlFooter })
     return new Promise((risolvi) => {
@@ -6273,7 +6476,27 @@ export function eseguiComando(programma, argomenti, { timeoutMs = 8_000, cwd, on
         /* ⛔ F-020: il codice di un processo ucciso non dice «tempo scaduto» (`null` con un segnale, 1 con `taskkill /F`). Il flag lo dice alla fonte.
            ⛔ F-007 (30/09): il tempo uccide l'ALBERO come lo Stop — con `p.kill()` il nipote teneva i tubi e l'esito aspettava lui. */
         let fermatoDalTempo = false
-        const timer = setTimeout(() => { fermatoDalTempo = true; uccidiAlberoDelProcesso(p) }, timeoutMs)
+        /* ⛔ BUG-14/BUG-3: con il canale di sfondo cablato, il tempo NON uccide — sfonda (decisione owner 05/10/2026:
+           «auto-background su shell E prova, stessa riga + badge, niente kill»). Senza canale: come sempre. */
+        let timer = null
+        const gestoreSfondo = creaGestoreSfondo({
+            p, segnaleSfondo, fileSfondo, cattura,
+            leggiParziale: async () => (cattura ? (await cattura.settled).combined.text : pezziInsieme.join('')),
+            finisciTubi: () => { if (finisciFuori) finisciFuori(); if (finisciErrori) finisciErrori() },
+            fermaTimer: () => { if (timer) clearTimeout(timer) },
+            risolvi: async (esitoSfondo) => {
+                const output = cattura ? await cattura.settled : null
+                risolvi({
+                    ...esitoSfondo,
+                    fuori: output ? output.stdout.text : pezziFuori.join(''),
+                    errori: output ? output.stderr.text : pezziErrori.join(''),
+                    insieme: output ? output.combined.text : pezziInsieme.join(''),
+                    ...(output ? { outputCapture: output.metadata } : {}),
+                })
+            },
+        })
+        timer = setTimeout(() => { fermatoDalTempo = true; if (!gestoreSfondo.alTempoScaduto(timeoutMs)) uccidiAlberoDelProcesso(p) }, timeoutMs)
+        if (inSfondoSubito) gestoreSfondo.subito()
         let fermatoSuRichiesta = false
         const sciogli = fermaQuandoArrivaLoStop(p, segnaleStop, () => { fermatoSuRichiesta = true })
         /* ⛔ F007-B: si conclude all'uscita del processo (più al massimo 2 s di drenaggio), non alla chiusura dei tubi. */
@@ -6975,7 +7198,7 @@ export function staccaCartellaFinale(testo, marcatore = MARCATORE_CARTELLA) {
  *   poterlo scegliere, ora che «dove gira un comando» e' una decisione della sessione e non piu'
  *   una conseguenza di quale programma hai scritto.
  */
-function eseguiSuWindows(comando, cartella, { onPezzo, onBytes, tracciaCartella = false, segnaleStop } = {}) {
+function eseguiSuWindows(comando, cartella, { onPezzo, onBytes, tracciaCartella = false, segnaleStop, timeoutMs = TIMEOUT_SHELL_PREDEFINITO_MS, segnaleSfondo = null, fileSfondo = null, inSfondoSubito = false } = {}) {
     if (onBytes !== undefined && typeof onBytes !== 'function') throw new TypeError('onBytes must be a function')
     return new Promise((risolvi) => {
         /* ⛔ Su Windows la shell qui e' cmd: la coda parla la sua lingua, non quella di bash. */
@@ -7013,7 +7236,25 @@ function eseguiSuWindows(comando, cartella, { onPezzo, onBytes, tracciaCartella 
          *   fonte no. Ora la fonte lo DICE, e il testo lo dice a chi legge.
          */
         let fermatoDalTempo = false
-        const timer = setTimeout(() => { fermatoDalTempo = true; uccidiAlberoDelProcesso(p) }, 120_000)
+        /* ⛔ BUG-14/BUG-3: il tempo sfonda invece di uccidere quando il canale di sfondo è cablato (owner 05/10/2026);
+           l'output da lì in poi va sul file di sfondo, il processo vive, il giro riceve subito l'esito. */
+        let timer = null
+        const gestoreSfondo = creaGestoreSfondo({
+            p, segnaleSfondo, fileSfondo, cattura,
+            leggiParziale: async () => (cattura ? (await cattura.settled).combined.text : insieme),
+            finisciTubi: () => { if (finisciFuori) finisciFuori(); if (finisciErrori) finisciErrori() },
+            fermaTimer: () => { if (timer) clearTimeout(timer) },
+            risolvi: async (esitoSfondo) => {
+                const output = cattura ? await cattura.settled : null
+                risolvi({
+                    ...esitoSfondo,
+                    enforcement: 'none',
+                    ...iDueFlussi(output ? output.stdout.text : fuori, output ? output.stderr.text : errori),
+                })
+            },
+        })
+        timer = setTimeout(() => { fermatoDalTempo = true; if (!gestoreSfondo.alTempoScaduto(timeoutMs)) uccidiAlberoDelProcesso(p) }, timeoutMs)
+        if (inSfondoSubito) gestoreSfondo.subito()
         /*
          * ⛔⛔⛔ 11/09 — E UN COMANDO FERMATO SU RICHIESTA NON È NESSUNA DELLE DUE
          *   COSE DI SOPRA. Sono tre esiti diversi (finito da solo · tempo scaduto ·
@@ -7074,7 +7315,7 @@ function eseguiSuWindows(comando, cartella, { onPezzo, onBytes, tracciaCartella 
             const testoDelComando = fermatoSuRichiesta
                 ? `${uscita}\n\n${fraseFermato(segnaleStop)}`.trim()
                 : fermatoDalTempo
-                    ? `${uscita}\n\n${FRASE_FERMATO_TEMPO_SCADUTO}`.trim()
+                    ? `${uscita}\n\n${fraseTempoScaduto(timeoutMs)}`.trim()
                     : uscita
             risolvi({
                 codice: codiceFinale, // 124: il codice che `timeout(1)` usa da sempre per «tempo scaduto»
@@ -7107,7 +7348,7 @@ function eseguiSuWindows(comando, cartella, { onPezzo, onBytes, tracciaCartella 
     })
 }
 
-export async function eseguiComandoSandboxato(comando, cartella, { mobile = false, onPezzo, onBytes, tracciaCartella = false, dove = null, segnaleStop, wsl = null, automaticoInLinux = false } = {}) {
+export async function eseguiComandoSandboxato(comando, cartella, { mobile = false, onPezzo, onBytes, tracciaCartella = false, dove = null, segnaleStop, wsl = null, automaticoInLinux = false, timeoutMs = TIMEOUT_SHELL_PREDEFINITO_MS, segnaleSfondo = null, fileSfondo = null, inSfondoSubito = false } = {}) {
     if (onBytes !== undefined && typeof onBytes !== 'function') throw new TypeError('onBytes must be a function')
     /*
      * ⛔⛔ BC-56, 16/09/2026 — IL COMANDO VUOTO AVEVA TRE ESITI, TUTTI SBAGLIATI.
@@ -7128,6 +7369,8 @@ export async function eseguiComandoSandboxato(comando, cartella, { mobile = fals
     if (String(comando ?? '').trim() === '') {
         return { codice: -1, testo: 'The command is empty: write what to run.', enforcement: 'none' }
     }
+    /* ⛔ BUG-3: il timeout è PER CHIAMATA (schema `timeout`, additivo) — normalizzato una volta qui, vale per tutte le strade. */
+    const attesaMs = normalizzaTimeoutShell(timeoutMs)
     if (mobile) {
         const seriale = await risolviSerialeAdbAttivo()
         if (!seriale) {
@@ -7165,7 +7408,7 @@ export async function eseguiComandoSandboxato(comando, cartella, { mobile = fals
         }
         const comandoConCd = `cd ${JSON.stringify(mirrorDevice)} && ${comando}`
         const { codice, fuori, errori, insieme, outputCapture } = await eseguiComando(
-            trovaAdbLocale(), ['-s', seriale, 'shell', comandoConCd], { timeoutMs: 120_000, onPezzo, onBytes, segnaleStop },
+            trovaAdbLocale(), ['-s', seriale, 'shell', comandoConCd], { timeoutMs: attesaMs, onPezzo, onBytes, segnaleStop, segnaleSfondo, fileSfondo, inSfondoSubito },
         )
         return {
             codice,
@@ -7226,11 +7469,26 @@ export async function eseguiComandoSandboxato(comando, cartella, { mobile = fals
         // F018/T24: heredoc e commenti devono finire prima della chiusura del gruppo.
         // Il comando resta intatto; LF separa la sintassi del wrapper da quella ricevuta.
         // SHELL05: cwd e dato argv; shift lo rimuove prima del comando della persona.
-        const { codice: codiceGrezzo, fuori, errori, insieme, fermatoSuRichiesta, fermatoDalTempo, outputCapture } = await eseguiComando(
+        const wslRisultato = await eseguiComando(
             'wsl.exe', argomentiWslPerScript(distro, `cd -- "$1" && {\nshift\n${comando}\n}${tracciaCartella ? codaCheStampaLaCartella(false, marcatoreWsl) : ''}`, [percorsoWsl], { utente: utenteArgv }),
             /* ⛔ Il marcatore non si vede nemmeno nei pezzi che escono mentre escono (D-10B). */
-            { timeoutMs: 120_000, segnaleStop, onBytes, controlFooter: tracciaCartella ? { type: 'cwd-marker-v1', stream: 'stdout', marker: marcatoreWsl, prefixBytes: 1 } : null, onPezzo: onPezzo && ((pezzo) => onPezzo({ ...pezzo, testo: staccaCartellaFinale(pezzo.testo, marcatoreWsl).testo })) },
+            { timeoutMs: attesaMs, segnaleStop, onBytes, controlFooter: tracciaCartella ? { type: 'cwd-marker-v1', stream: 'stdout', marker: marcatoreWsl, prefixBytes: 1 } : null, onPezzo: onPezzo && ((pezzo) => onPezzo({ ...pezzo, testo: staccaCartellaFinale(pezzo.testo, marcatoreWsl).testo })), segnaleSfondo, fileSfondo, inSfondoSubito },
         )
+        /* ⛔ BUG-14: un comando sfondato (riga della persona, tempo, partenza in sfondo) NON prosegue nella composizione WSL:
+           niente marcatore di cartella da cercare, niente 124 — l'esito è già il testo «IN BACKGROUND» composto dall'esecutore. */
+        if (wslRisultato.messoInSfondo) {
+            return {
+                codice: null,
+                messoInSfondo: true,
+                daSfondo: wslRisultato.daSfondo,
+                ...(wslRisultato.fileSfondo ? { fileSfondo: wslRisultato.fileSfondo } : {}),
+                testo: wslRisultato.testo,
+                enforcement: 'wsl2',
+                wsl: { utente: scelta ? scelta.utente : null, root: scelta ? scelta.root : null, disco: discoDellaCartella(fatti, cartella) },
+                ...iDueFlussi(wslRisultato.fuori ?? '', wslRisultato.errori ?? ''),
+            }
+        }
+        const { codice: codiceGrezzo, fuori, errori, insieme, fermatoSuRichiesta, fermatoDalTempo, outputCapture } = wslRisultato
         /*
          * ⛔ Qui NON si applica la regola «cartella solo con codice 0» del ramo cmd: la coda POSIX
          *   gira sempre, quindi la cartella al fallimento e' NOSTRA e serve.
@@ -7259,7 +7517,7 @@ export async function eseguiComandoSandboxato(comando, cartella, { mobile = fals
             testo: fermatoSuRichiesta
                 ? `${fraseFermato(segnaleStop)}\n\n${uscitaWsl}`.trim()
                 : fermatoDalTempo
-                    ? `${uscitaWsl}\n\n${FRASE_FERMATO_TEMPO_SCADUTO}`.trim()
+                    ? `${uscitaWsl}\n\n${fraseTempoScaduto(attesaMs)}`.trim()
                     : worktreeWindows ? `${uscitaWsl}\n\n⛔ ${spiegazioneWorktreeWindows(worktreeWindows)}` : uscitaWsl,
             enforcement: 'wsl2',
             /* ⛔ F009 — con che utente ha girato e su che disco: l'etichetta lo dichiara (`etichettaSandbox`). `utente: null` =
@@ -7279,7 +7537,7 @@ export async function eseguiComandoSandboxato(comando, cartella, { mobile = fals
             cartellaFinale: cartellaFinaleValida(ripulito.cartella),
         }
     }
-    return eseguiSuWindows(comando, cartella, { onPezzo, onBytes, tracciaCartella, segnaleStop })
+    return eseguiSuWindows(comando, cartella, { onPezzo, onBytes, tracciaCartella, segnaleStop, timeoutMs: attesaMs, segnaleSfondo, fileSfondo, inSfondoSubito })
 }
 
 /**
@@ -8933,7 +9191,25 @@ export async function verificaPermessoScrittura(azione, { livelloAccesso, modali
     const segreto = (azione.tipo === 'shell' || lettura)
         ? motivoDaChiedere({ tipo: azione.tipo, comando: azione.comando, percorso: azione.percorso, cartella, accessoPieno: livelloAccesso === 'accesso-pieno' })
         : null
-    const segretoForzaConferma = Boolean(segreto)
+    /* ⛔ 04/10/2026, BUG-A (owner: «Aggiungi Consenti per la sessione davanti ai segreti») — il sì
+       dato con `ambito: 'percorso'` resta in `consensiSessione.segretiConsentiti` (SOLO il percorso
+       chiamato in causa dalla domanda, mai un prefisso, mai una cartella): quel percorso non
+       ridomanda fino a fine sessione, tutti gli altri segreti sì. Il registro riempie l'elenco SOLO
+       con il percorso che il kernel ha messo nella domanda (stessa disciplina di `cartelleFuori`,
+       F4-03): il client non dice mai il percorso. Additivo: chi non passa `consensiSessione`
+       (TALOS-BANCO, CLI) non vede nessuna differenza. */
+    const segretoConsentito = Boolean(segreto && consensiSessione?.segretiConsentiti?.includes?.(segreto.percorso))
+    /*
+     * ⛔⛔ BUG-17 (owner 05/10/2026, «in full access ogni comando terminale viene accettato in automatico
+     *   senza passare dall'utente di default») — con «Accesso pieno» la SHELL non fa più NESSUNA domanda,
+     *   nemmeno sui segreti (F15): il permesso massimo è una scelta ESPLICITA della persona, che ha alzato
+     *   il livello sapendo che copre i comandi. Perimetro STRETTO: solo `shell` (il «comando terminale»
+     *   della direttiva) — `leggi`/`elenca` sui segreti continuano a chiedere, e un per-attrezzo «chiedi»
+     *   resta sovrano (è una scelta più stretta di quella di serie). Fuori dall'accesso pieno F15 resta
+     *   com'era (P0-bis 16/09, «entrambi stretto»).
+     */
+    const accessoPieno = livelloAccesso === 'accesso-pieno'
+    const segretoForzaConferma = Boolean(segreto) && !segretoConsentito && !(accessoPieno && azione.tipo === 'shell')
     const soloSegreto = segretoForzaConferma && lettura
 
     /*
@@ -9002,7 +9278,12 @@ export async function verificaPermessoScrittura(azione, { livelloAccesso, modali
      * ⛔ NARROWING PURO: può solo trasformare un sì automatico in una domanda; `nega` resta il primo di tutti. E `leggi` no: una
      *   lettura non cambia niente (owner, «letture come oggi»).
      */
-    const sospettoForzaConferma = Boolean(sospetto) && azione.tipo !== 'leggi' && azione.tipo !== 'elenca'
+    /*
+     * ⛔⛔ BUG-17 (owner 05/10/2026) — F-027 («+1 con conferma») non interrompe più la SHELL con
+     *   «Accesso pieno», stessa ragione di F15 qui sopra. Per ogni altro attrezzo, e con permessi
+     *   inferiori, il cancello resta com'era.
+     */
+    const sospettoForzaConferma = Boolean(sospetto) && azione.tipo !== 'leggi' && azione.tipo !== 'elenca' && !(accessoPieno && azione.tipo === 'shell')
     if (haOverride && override === 'sempre' && !trifectaChiude && !sempreDaConfermare && !segretoForzaConferma && !fuoriForzaConferma && !sospettoForzaConferma) {
         return { consentito: true, via: 'permesso-per-attrezzo-sempre' }
     }
@@ -10206,12 +10487,24 @@ export async function talosLavora({
      *   prima» o una carta per QUESTO comando (segreto, attrezzo su «chiedi») la persona ha appena risposto: una seconda carta
      *   di fila sarebbe rumore, e l'esito dichiara lo stesso con che utente ha girato.
      * ⛔ Chi non riesce a valutare CHIEDE: un utente non verificato, o una sonda che lancia, si trattano come root.
+     * ⛔ AGGIORNAMENTO BUG-17 (owner 05/10/2026): «accesso-pieno» ESCE dal perimetro — lì il sì si concede
+     *   da solo (ramo BUG-17 qui sotto). Il perimetro «il FATTO, non il nome della politica» resta per
+     *   tutti gli altri livelli, inclusi quelli che arrivano SENZA livello.
      */
     const confermaRootWsl = async (permessoDato, toolCallId, tipo, comando, preferenze, { soloSeSceltoLinux = false } = {}) => {
         /* Le DUE vie per cui `verificaPermessoScrittura` consente senza interpellare nessuno (misurato il 01/10/2026: sono gli
            unici due `consentito: true` che non passano da una carta). */
         if (permessoDato?.via !== 'nessun-vincolo' && permessoDato?.via !== 'permesso-per-attrezzo-sempre') return null
         if (!consensiSessione || consensiSessione.rootWsl === true || mobile || typeof rootWslFn !== 'function') return null
+        /*
+         * ⛔⛔ BUG-17 (owner 05/10/2026, «in full access ogni comando terminale viene accettato in automatico,
+         *    di default») — con «Accesso pieno» la conferma WSL-root NON viene più chiesta: il sì «una volta
+         *    per sessione» si concede DA SOLO, senza carta e senza spendere la sonda. Il perimetro della
+         *    decisione 01/10 resta per TUTTI GLI ALTRI livelli: «Scrive nel progetto» e shell «Sempre»
+         *    arrivano qui con livello assente (`livelloDaPermessi`: solo «Full access» ⇒ 'accesso-pieno') e
+         *    continuano a chiedere — è il buco che il mutante del 01/10 aveva smascherato, e non lo riapriamo.
+         */
+        if (livelloAccesso === 'accesso-pieno') { consensiSessione.rootWsl = true; return null }
         if (soloSeSceltoLinux && doveDelGiro() !== 'wsl2') return null
         let root
         try { root = await rootWslFn(comando, { dove: doveDelGiro(), usaUtenteNormale: preferenze?.usaUtenteNormale === true }) }
@@ -10339,9 +10632,14 @@ export async function talosLavora({
      */
     const segnaleDelComando = (toolCallId) => {
         const ferma = new AbortController()
-        const sgancia = typeof registraComandoFermabile === 'function' ? registraComandoFermabile({ toolCallId, ferma: () => ferma.abort(MOTIVO_STOP_DELLA_RIGA) }) : null
+        /* ⛔ BUG-14: ogni comando ha anche il SUO canale di sfondo (il pulsante «Sfondo» della riga nei Processi)
+           e il SUO file di output, dentro la cartella della sessione. L'abort qui NON uccide: il gestore di sfondo
+           dell'esecutore stacca la cattura, apre il file e conclude l'attesa — il processo vive. */
+        const sfondo = new AbortController()
+        const sgancia = typeof registraComandoFermabile === 'function' ? registraComandoFermabile({ toolCallId, ferma: () => ferma.abort(MOTIVO_STOP_DELLA_RIGA), sfonda: () => sfondo.abort(MOTIVO_SFONDO_DELLA_RIGA) }) : null
         return {
             segnale: segnaleStop ? AbortSignal.any([segnaleStop, ferma.signal]) : ferma.signal,
+            sfondo: { segnale: sfondo.signal, file: percorsoFileSfondo(cartella, toolCallId) },
             sgancia: () => { if (typeof sgancia === 'function') sgancia() },
         }
     }
@@ -11050,6 +11348,13 @@ export async function talosLavora({
 
     /* ⛔ 25/09/2026 notte: il `try` attorno al ciclo esiste per una cosa sola, `storiaDelGiroFallito` (vedi il `catch` in fondo). */
     try {
+    /* ⛔⭐ BUG-16: budget dei reinvii sicuri CONSECUTIVI (vedi ESITI_INCERTI_RITENTABILI_MASSIMI).
+       Dichiariato FUORI dal ciclo di proposito: il `continue` del reinvio rientra nello stesso
+       corpo e una dichiarazione interna si azzererebbe a ogni reinvio, vanificando il cap
+       (misurato: eventi [1,1] invece di [1,2], cap mai raggiunto). NON è globale della sessione:
+       ogni risposta CONSEGNATA lo azzera (vedi l'onGiro 'risposta' qui sotto) — il progresso
+       ricomincia il conto. */
+    let esitiIncertiDelGiro = 0
     for (let giro = 0; giro < giriMassimiEffettivi; giro++) {
         /*
          * ⛔ PRIMA di contare il giro come usato: un giro fermato qui non ha
@@ -11239,6 +11544,70 @@ export async function talosLavora({
                    ma a schermo il ragionamento di questo tentativo si chiude, o resterebbe aperto per sempre. */
                 else onGiro?.({ giro, tipo: 'risposta', risposta: { role: 'assistant', content: '' } })
             }
+            /*
+             * ⛔⭐ BUG-16 (05/10/2026) — RETRY-02 si evolve: «never repeat an uncertain generation»
+             * resta VERO quando qualcosa è stato consegnato (testo in storia qui sotto, letture
+             * pure partite nell'acceleratore); ma quando il giro perso NON ha prodotto NESSUN
+             * effetto, «scrivi continua» non è più la prima strada: si ritenta da soli, come
+             * Claude Code (fino a 10, attesa visibile) e Hermes (retry nel SUO giro, SDK spento,
+             * Retry-After onorato — dossier §10 in `scratchpad/piano-bug16-auto-retry-2026-10-05.md`).
+             * La condizione è TUTTA osservabile QUI, nessuna nuova singsonia:
+             *   · nessun testo consegnato — `parziale.content` vuoto (il ramo sopra non ha
+             *     spinto niente in storia: il reinvio non duplica nulla di visibile);
+             *   · nessun attrezzo partito — `partiteNelloStream.size === 0`: l'acceleratore
+             *     VELOCITÀ non fa partire che LETTURE PURE, e una lettura partita è pur sempre
+             *     un attrezzo in volo: con anche solo una in sospeso il reinvio NON è sicuro;
+             *   · nessuna chiamata ANNUNCIATA — `parziale.chiamateInCorso !== true`: una
+             *     tool_call arrivata nello stream (argomenti completi o a metà) è già il
+             *     modello che entra in territorio d'azione, e a schermo esiste la sua card
+             *     annullata (`tool-annullato`): il giro non è più «a zero effetti» e la
+             *     ripresa resta manuale (STREAM-TOOL-ABORT in tests/provider-outcome-unknown.test.mjs);
+             *   · il fornitore non ha DETTO errore — `rotta.causaDiTrasporto !==
+             *     'PROVIDER_STREAM_ERROR'`: un frame di errore esplicito (HTTP 200 con errore
+             *     dentro) è un esito NOTO, non incerto: chi possiede i ritenti lì è la lane
+             *     di trasporto (`chiamaConRitenta`, backoff + Retry-After), non il giro —
+             *     reinvii qui martellerebbero un fornitore che sta rifiutando
+             *     (EMPTY-ERROR-AFTER-TOOLS in tests/risposta-vuota.test.mjs);
+             *   · le scritture partono solo DOPO una risposta completa, che qui non c'è stata;
+             *   · lo stop è già stato gestito sopra (break) — qui non si arriva mai abortiti.
+             * Attesa auto-decisa: backoff `attesaDelTentativo` con jitter, tetto
+             * `ATTESA_INCERTA_MASSIMA_MS`, svegliabile dallo stop come le altre attese.
+             * Cap esaurito ⇒ PROVIDER_OUTCOME_UNKNOWN_ESAURITO (ritentabile:true): la scheda
+             * manuale resta l'ultima spiaggia, ma dice quanti reinvii ha già provati da sola.
+             */
+            const nessunTestoConsegnato = !(typeof parziale?.content === 'string' && parziale.content.trim())
+            if (parziale && nessunTestoConsegnato && parziale.chiamateInCorso !== true
+                && rotta.causaDiTrasporto !== 'PROVIDER_STREAM_ERROR' && partiteNelloStream.size === 0
+                && esitiIncertiDelGiro < ESITI_INCERTI_RITENTABILI_MASSIMI) {
+                esitiIncertiDelGiro += 1
+                /* G02-10: anche questa attesa auto-decisa rispetta il tetto FACOLTATIVO dell'ospite
+                   (`attesaRitentaMassimaMs`, lo stesso che lega l'attesa CHIESTA dal fornitore; il desktop
+                   non lo passa mai ⇒ qui vale sempre il tetto di 60 s). I test lo passano piccolo. */
+                const attesa = Math.min(attesaDelTentativo(esitiIncertiDelGiro - 1),
+                    attesaRitentaMassimaMs ?? ATTESA_INCERTA_MASSIMA_MS, ATTESA_INCERTA_MASSIMA_MS)
+                onGiro?.({ giro, tipo: 'provider-retry', fase: 'attesa', tentativo: esitiIncertiDelGiro,
+                    tentativiMassimi: ESITI_INCERTI_RITENTABILI_MASSIMI, attesaMs: attesa,
+                    retryAt: Date.now() + attesa,
+                    /* R1 della review avversariale: l'attesa visibile richiede requestId+modello (la validazione
+                       del frontend li esige) e un CANALE dichiarato, perché qui non c'è nessun HTTP status da
+                       mostrare: è un esito incerto, non un codice. Il requestId è quello della richiesta di
+                       reinvio che sta PER partire (la stessa coppia che il canale HTTP mette nei suoi eventi). */
+                    requestId: randomUUID(), modello,
+                    canale: 'esito-incerto',
+                    motivo: 'esito del fornitore incerto: nessun testo consegnato e nessuna lettura partita, reinvio sicuro — la nuova richiesta può comportare un altro costo' })
+                try { await dormiConSegnale(attesa, undefined, segnaleStop ? { signal: segnaleStop } : undefined) }
+                catch (erroreAttesa) { if (!segnaleStop?.aborted) throw erroreAttesa }
+                if (segnaleStop?.aborted) {
+                    fermatoSuRichiesta = true
+                    puntoDiFermata ??= `while waiting to resend after an uncertain provider outcome, at round ${giro + 1}`
+                    break
+                }
+                continue
+            }
+            if (parziale && nessunTestoConsegnato && parziale.chiamateInCorso !== true
+                && rotta.causaDiTrasporto !== 'PROVIDER_STREAM_ERROR' && partiteNelloStream.size === 0) {
+                throw erroreEsitoProviderIncertoEsaurito(rotta, esitiIncertiDelGiro)
+            }
             throw parziale ? erroreEsitoProviderIncerto(rotta) : rotta
         }
         if (usage) {
@@ -11351,6 +11720,8 @@ export async function talosLavora({
             ...(typeof finishReason === 'string' ? { motivoFine: finishReason } : {}),
             ...(troncataDalTetto ? { troncataDalTetto: true } : {}),
         })
+        /* ⛔⭐ BUG-16: una risposta CONSEGNATA è progresso — il budget dei reinvii sicuri ricomincia. */
+        esitiIncertiDelGiro = 0
 
         const chiamate = risposta.tool_calls ?? []
         if (chiamate.length === 0) {
@@ -12141,24 +12512,35 @@ export async function talosLavora({
                             /* ⭐ OSS-1 — `performance.now()` e non `Date.now()`: un orologio monotono non torna indietro se l'ora di sistema cambia a meta' comando. */
                             const primaDiProvare = performance.now()
                             await verificaAmbienteComandi()
-                            const fermabile = segnaleDelComando(c.id) // Stop per riga
+                            const fermabile = segnaleDelComando(c.id) // Stop per riga + canale sfondo (BUG-14)
                             const esegui = async ({ onBytes } = {}) => {
                                 if (captureProcessFn) await verificaAmbienteComandi()
-                                return eseguiProva(comandoProva, cartella, { segnaleStop: fermabile.segnale, dove: doveDelGiro(), onBytes, wsl: preferenzeWslProva })
+                                return eseguiProva(comandoProva, cartella, {
+                                    segnaleStop: fermabile.segnale, dove: doveDelGiro(), onBytes, wsl: preferenzeWslProva,
+                                    /* ⛔ BUG-3/BUG-14: timeout per-chiamata + canale di sfondo (il tempo sfonda, non uccide). */
+                                    timeoutMs: normalizzaTimeoutShell(argomenti?.timeout),
+                                    segnaleSfondo: fermabile.sfondo.segnale,
+                                    fileSfondo: fermabile.sfondo.file,
+                                    inSfondoSubito: argomenti?.background === true,
+                                })
                             }
                             try { p = captureProcessFn ? await captureProcessFn({ toolCallId: c.id }, esegui) : await esegui() }
                             finally { fermabile.sgancia() }
                             processoPerEvento = { durataMs: Math.round(performance.now() - primaDiProvare), comando: comandoProva, cwd: cartella }
                             /* F009: una prova girata in Linux dichiara con che utente, come la shell (owner: «dichiararlo sempre»). */
                             const sandboxProva = p.enforcement === 'wsl2' ? ` [sandbox: ${etichettaSandbox(p.enforcement, p.wsl)}]` : ''
-                            esito = p.nessunTestEseguito
-                                ? messaggioNessunTestEseguito(p, sandboxProva)
-                                : `exit ${p.codice}${sandboxProva}\n${p.testo}`
+                            esito = p.messoInSfondo
+                                ? p.testo
+                                : p.nessunTestEseguito
+                                    ? messaggioNessunTestEseguito(p, sandboxProva)
+                                    : `exit ${p.codice}${sandboxProva}\n${p.testo}`
                         }
                     }
                     // ⭐ FASE D — 'prova' non produce un artefatto testuale: hashContenuto resta null, non un valore inventato.
-                    erroreTool = !permesso.consentito || p?.codice !== 0 || p?.outputStorageFailed === true // H-04: un NOT RUN (codice null) non è un successo
+                    erroreTool = !permesso.consentito || (!p?.messoInSfondo && (p?.codice !== 0 || p?.outputStorageFailed === true)) // H-04: un NOT RUN (codice null) non è un successo; un SFONDO non è un errore
                     if (Number.isSafeInteger(p?.codice)) processoPerEvento = { ...processoPerEvento, exitCode: p.codice }
+                    /* ⛔ BUG-14: la riga dei Processi deve dire «in sfondo» e DOVE guarda l'output — campi additivi. */
+                    if (p?.messoInSfondo) processoPerEvento = { ...processoPerEvento, inSfondo: true, ...(p.fileSfondo ? { fileSfondo: p.fileSfondo } : {}), ...(p.daSfondo ? { sfondoDa: p.daSfondo } : {}) }
                     ricevutaEmessa = true
                     {
                         const ricevuta = creaRicevutaOperazione({
@@ -12220,7 +12602,7 @@ export async function talosLavora({
                             /* ⭐ OSS-1 — stessa misura del ramo `prova`, stesso orologio monotono. */
                             const primaDelComando = performance.now()
                             await verificaAmbienteComandi()
-                            const fermabile = segnaleDelComando(c.id) // Stop per riga
+                            const fermabile = segnaleDelComando(c.id) // Stop per riga + canale sfondo (BUG-14)
                             const esegui = async ({ onBytes } = {}) => {
                                 if (captureProcessFn) await verificaAmbienteComandi()
                                 return eseguiComandoSandboxatoFn(comandoDiShell(argomenti), cartella, {
@@ -12229,6 +12611,12 @@ export async function talosLavora({
                                 // ⛔ 11/09 — senza lo Stop del giro, «Ferma» durante un comando lungo lo lasciava girare fino in fondo
                                 // (misurato 46 s); dal 02/10 il segnale è anche quello della sua riga nei Processi
                                 segnaleStop: fermabile.segnale,
+                                /* ⛔ BUG-3/BUG-14: `timeout` per-chiamata (il tempo sfonda, non uccide) e `background:true`
+                                   (il `run_in_background` di Claude Code: parte già in sfondo, output su file, risposta subito). */
+                                timeoutMs: normalizzaTimeoutShell(argomenti?.timeout),
+                                segnaleSfondo: fermabile.sfondo.segnale,
+                                fileSfondo: fermabile.sfondo.file,
+                                inSfondoSubito: argomenti?.background === true,
 
                                 onPezzo: ({ testo }) => anteprima.append(testo),
                                 })
@@ -12258,12 +12646,18 @@ export async function talosLavora({
                                `none` da solo non dice che è cmd.exe con gli stessi privilegi. Vedi
                                `etichetta-sandbox.mjs` per le fonti e per il perché la spiegazione sta
                                dentro le quadre. */
-                            esito = `exit ${p.codice} [sandbox: ${etichettaSandbox(p.enforcement, p.wsl)}]\n${p.testo}`
+                            /* ⛔ BUG-14: un comando in sfondo NON ha un «exit N» — non è uscito. L'esito è il testo «IN BACKGROUND»
+                               dell'esecutore (intestazione contrattuale che `esitoDelProcesso` legge per la riga). */
+                            esito = p.messoInSfondo
+                                ? p.testo
+                                : `exit ${p.codice} [sandbox: ${etichettaSandbox(p.enforcement, p.wsl)}]\n${p.testo}`
                         }
                     }
                     esitoPermessoPerRicevuta = permessoShell
-                    erroreTool = !permessoShell.consentito || p?.codice !== 0 || p?.outputStorageFailed === true
+                    erroreTool = !permessoShell.consentito || (!p?.messoInSfondo && (p?.codice !== 0 || p?.outputStorageFailed === true)) // un sfondo non è un errore (BUG-14)
                     if (Number.isSafeInteger(p?.codice)) processoPerEvento = { ...processoPerEvento, exitCode: p.codice }
+                    /* ⛔ BUG-14: la riga dei Processi deve dire «in sfondo» e DOVE guarda l'output — campi additivi. */
+                    if (p?.messoInSfondo) processoPerEvento = { ...processoPerEvento, inSfondo: true, ...(p.fileSfondo ? { fileSfondo: p.fileSfondo } : {}), ...(p.daSfondo ? { sfondoDa: p.daSfondo } : {}) }
                     // ⭐ FASE D — l'output di un comando shell non è "un artefatto scritto" nello stesso senso di un file: hashContenuto resta null qui, coerente con 'prova'.
                     ricevutaEmessa = true
                     {

@@ -148,6 +148,14 @@ test('EMPTY-ERROR-AFTER-TOOLS: errore SSE non entra nella scala dei vuoti, lavor
   assert.equal(errore.messaggiDelGiro.some(m => m.content === kernel.NOTA_RISPOSTA_VUOTA), false);
 });
 
+test('EMPTY-ERROR-NO-EFFECTS: errore SSE a ZERO effetti ⇒ nessun reinvio a livello giro (la corsia di trasporto è già passata di qui)', async () => {
+  const r = rete(vuotaGemini, vuotaGemini);
+  const errore = await rifiuto(talosLavora(base({ fetchDiRete: r.fetch, attesaRitentaMassimaMs: 1 })));
+  assert.equal(errore.code, 'PROVIDER_OUTCOME_UNKNOWN');
+  assert.equal(errore.causaDiTrasporto, 'PROVIDER_STREAM_ERROR');
+  assert.equal(r.corpi.length, 1, 'un frame di errore esplicito è un esito NOTO: nessun reinvio del giro, nemmeno a zero effetti');
+});
+
 test('WORK-KEPT-ANY-ERROR: un errore qualunque dopo gli attrezzi porta con sé la storia coerente del giro', async () => {
   const credenziale = Object.assign(new Error('Credenziale rifiutata dal fornitore.'), { code: 'PROVIDER_REQUEST_ERROR', classe: 'credenziale', transitorio: false });
   const r = rete(() => flussoIntero([chiamaElenca, fineAttrezzi]), () => { throw credenziale; });

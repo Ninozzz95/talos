@@ -6,6 +6,16 @@ import { attivitaDellaVoce, contatoriAttivitaDellaVoce } from './attivita-figlia
 import { validaFallbackProviders } from './model-destination.mjs';
 import { ContrattoDomandaUtenteError, ESITO_DOMANDA_SENZA_INTERFACCIA, ESITO_DOMANDA_SOSTITUITA, validaDomandeUtente, validaRispostaDomanda } from './user-question-contract.mjs';
 import { ContrattoPianoError, PERMESSI_DOPO_IL_PIANO, esitoPianoPerIlModello, improntaPiano, validaDecisionePiano, validaPiano } from './plan-contract.mjs';
+
+/*
+ * ⛔ BUG-8 tranche 1 (04/10/2026) — i tempi dell'osservatore di silenzio delle domande di approvazione:
+ * la domanda viene RIGIOCATA ai sottoscrittori vivi dopo 45 s e poi ogni 60 s finché qualcuno risponde
+ * (mai risolta in automatico: un no fabbricato è la malattia, non la cura). Sono opzioni della factory
+ * (`attesaSilenzioPrimaMs`/`attesaSilenzioRipetiMs`) perché i test li accorciano e l'ospite li accordi;
+ * queste sono i default di produzione.
+ */
+export const ATTESA_SILENZIO_PRIMA_MS = 45_000;
+export const ATTESA_SILENZIO_RIPETI_MS = 60_000;
 import { AgentDialogueError, validateAgentAnswer, validateAgentQuestion } from './agent-dialogue-contract.mjs';
 import { cacheSessioneDaEventi, giriFermatiDaEventi } from './usage-cache.mjs';
 import { contextUsageFromEvents } from '../../context-engine/src/usage.mjs';
@@ -48,7 +58,7 @@ import { segnalaFileCambiati } from './contesto-del-progetto.mjs'; // P-13 (10/0
  *   `applicaRecord`. Nessuna seconda implementazione: cambia solo il chiamante (decisione 5 dell'owner).
  */
 import * as compattazione from './kernel/compattazione-desktop.mjs';
-import { stimaTokenConversazione } from './kernel/talosHarness.mjs';
+import { stimaTokenConversazione, INTESTAZIONE_SFONDO } from './kernel/talosHarness.mjs';
 import {
   avviaSessione as avviaSessioneReale,
   compattaSessione as compattaSessioneReale,
@@ -298,12 +308,15 @@ export function modelloDellaFiglia(padre) {
  * ⛔ Stop per riga (owner 02/10/2026): i comandi che girano ADESSO in una sessione, `toolCallId → ferma`, finché girano.
  *   La mappa nasce pigra: le voci di sessione si creano in più punti (anche ripristinate dal disco). Lo sgancio toglie solo
  *   la SUA registrazione: un id riusato da un comando successivo non viene cancellato da quello vecchio.
+ * ⛔ BUG-14 (05/10/2026): la mappa porta ANCHE `sfonda` — il secondo segnale del kernel (talosHarness.mjs:10588),
+ *   che NON uccide: stacca la cattura, apre il file di output e conclude l'attesa, e il processo vive. Prima di oggi
+ *   l'adapter lo scartava e il pulsante «Sfondo» non aveva nessuno da chiamare.
  */
 export function registraComandoFermabileIn(voce) {
-  return ({ toolCallId, ferma }) => {
+  return ({ toolCallId, ferma, sfonda }) => {
     voce.comandiFermabili ??= new Map();
-    voce.comandiFermabili.set(toolCallId, ferma);
-    return () => { if (voce.comandiFermabili?.get(toolCallId) === ferma) voce.comandiFermabili.delete(toolCallId); };
+    voce.comandiFermabili.set(toolCallId, { ferma, sfonda: typeof sfonda === 'function' ? sfonda : null });
+    return () => { if (voce.comandiFermabili?.get(toolCallId)?.ferma === ferma) voce.comandiFermabili.delete(toolCallId); };
   };
 }
 
@@ -1065,6 +1078,12 @@ function chiamateDaEventi(eventi) {
       if (typeof evento.delta === 'string') chiamata.frammenti.push(evento.delta);
     } else if (tipo === 'ToolCallResult') {
       chiamata.contenuto = typeof evento.content === 'string' ? evento.content : String(evento.content ?? '');
+      /* ⛔ BUG-14 (05/10/2026): i campi additivi dello sfondo (agui-events, `toolCallResult`) vengono presi QUI, così il
+         ledger dei processi ricostruito dagli eventi — anche di una sessione ripristinata dal disco — sa dire «in sfondo»,
+         dove scrive e chi lo ha sfondato. Il testo resta la fonte di riserva: l'intestazione «IN BACKGROUND» del kernel. */
+      if (evento.inSfondo === true) chiamata.inSfondo = true;
+      if (typeof evento.fileSfondo === 'string' && evento.fileSfondo !== '') chiamata.fileSfondo = evento.fileSfondo;
+      if (typeof evento.sfondoDa === 'string' && evento.sfondoDa !== '') chiamata.sfondoDa = evento.sfondoDa;
       if (Number.isSafeInteger(evento._sequenza)) chiamata.sequenzaFine = evento._sequenza;
     }
   }
@@ -1118,12 +1137,18 @@ function esitoDelProcesso(chiamata) {
     if (chiamata.runConclusoDopo === 'RunFinished') return { esito: 'senza-esito', codiceUscita: null, sandbox: null };
     return { esito: 'in-corso', codiceUscita: null, sandbox: null };
   }
-  if (chiamata.contenuto.startsWith('REFUSED.')) return { esito: 'rifiutato', codiceUscita: null, sandbox: null };
+  if (chiamata.contenuto.startsWith('REFUSED.')) return { esito: 'rifiutato', codiceUscita: null, sandbox: null, fileSfondo: null, sfondoDa: null };
   /* H-04 (owner 02/10/2026): una `prova` senza suite non parte, e non ha un codice d'uscita — prima era un `exit 127` inventato. */
-  if (chiamata.contenuto.startsWith('NOT RUN:')) return { esito: 'non-eseguito', codiceUscita: null, sandbox: null };
+  if (chiamata.contenuto.startsWith('NOT RUN:')) return { esito: 'non-eseguito', codiceUscita: null, sandbox: null, fileSfondo: null, sfondoDa: null };
+  /* ⛔ BUG-14 (05/10/2026): un comando SFONDATO non è uscito — non ha «exit N», non è «concluso» e non è «fallito».
+     Lo dicono il campo additivo dell'evento (`inSfondo`) o l'intestazione che il kernel scrive in testa al testo
+     (una sessione ripristinata dal disco ha gli eventi, ma il campo additivo può non esserci: il testo resta). */
+  if (chiamata.inSfondo === true || chiamata.contenuto.startsWith(INTESTAZIONE_SFONDO)) {
+    return { esito: 'in-sfondo', codiceUscita: null, sandbox: null, fileSfondo: chiamata.fileSfondo ?? null, sfondoDa: chiamata.sfondoDa ?? null };
+  }
   const trovato = /^exit (-?\d+)(?: \[sandbox: ([^\]]*)\])?/.exec(chiamata.contenuto);
-  if (trovato) return { esito: 'concluso', codiceUscita: Number(trovato[1]), sandbox: trovato[2] ?? null };
-  return { esito: 'concluso', codiceUscita: null, sandbox: null };
+  if (trovato) return { esito: 'concluso', codiceUscita: Number(trovato[1]), sandbox: trovato[2] ?? null, fileSfondo: null, sfondoDa: null };
+  return { esito: 'concluso', codiceUscita: null, sandbox: null, fileSfondo: null, sfondoDa: null };
 }
 
 /**
@@ -1460,16 +1485,18 @@ export function processiDaEventi(eventi, { istanti = null, adesso = null } = {})
   const processi = chiamate
     .filter((chiamata) => ATTREZZI_CHE_LANCIANO_PROCESSI.includes(chiamata.nome))
     .map((chiamata) => {
-      const { esito, codiceUscita, sandbox } = esitoDelProcesso(chiamata);
+      const { esito, codiceUscita, sandbox, fileSfondo = null, sfondoDa = null } = esitoDelProcesso(chiamata);
       const { comando, motivo: motivoComandoAssente } = comandoDellaChiamata(chiamata);
       const inizioMs = chiamata.sequenzaInizio === null ? null : leggiIstante(chiamata.sequenzaInizio);
       const fineMs = chiamata.sequenzaFine === null ? null : leggiIstante(chiamata.sequenzaFine);
 
       let durataMs = null;
       let motivoTempoAssente = null;
+      /* ⛔ BUG-14: anche «in-sfondo» è un processo VIVO — conta il tempo da quando è partito, come «in-corso». */
+      const vivo = esito === 'in-corso' || esito === 'in-sfondo';
       if (inizioMs === null) motivoTempoAssente = MOTIVO_SENZA_ISTANTI;
       else if (fineMs !== null) durataMs = fineMs - inizioMs;
-      else motivoTempoAssente = esito === 'in-corso' ? MOTIVO_ANCORA_IN_CORSO : MOTIVO_FINE_NON_OSSERVATA;
+      else motivoTempoAssente = vivo ? MOTIVO_ANCORA_IN_CORSO : MOTIVO_FINE_NON_OSSERVATA;
 
       return {
         toolCallId: chiamata.toolCallId,
@@ -1483,11 +1510,16 @@ export function processiDaEventi(eventi, { istanti = null, adesso = null } = {})
         sequenzaFine: chiamata.sequenzaFine,
         inizio: inizioMs === null ? null : new Date(inizioMs).toISOString(),
         durataMs,
-        inCorsoDaMs: esito === 'in-corso' && inizioMs !== null && adessoNoto ? adesso - inizioMs : null,
+        inCorsoDaMs: vivo && inizioMs !== null && adessoNoto ? adesso - inizioMs : null,
         motivoTempoAssente,
         esito,
         codiceUscita,
         sandbox,
+        /* ⛔ BUG-14 (05/10/2026): lo stato dello sfondo esce col ledger — la riga dei Processi dice «in sfondo»,
+           mostra il file di output e chi lo ha sfondato ('persona' | 'tempo-scaduto' | modello). */
+        inSfondo: esito === 'in-sfondo',
+        fileSfondo,
+        sfondoDa,
       };
     });
 
@@ -2249,6 +2281,9 @@ export function createSessionRegistry({
   resolveWorkspaceLaunchFn = null,
   consumeWorkspaceLaunchFn = null,
   compattaSessioneFn = compattaSessioneReale,
+  /* ⛔ BUG-8 t1 — i tempi dell'osservatore di silenzio delle approvazioni (default: costanti in testa al file). */
+  attesaSilenzioPrimaMs = ATTESA_SILENZIO_PRIMA_MS,
+  attesaSilenzioRipetiMs = ATTESA_SILENZIO_RIPETI_MS,
   contextHooksFn,
   contextCompactFn,
   workflowPlanProposeFn = null,
@@ -4118,7 +4153,12 @@ export function createSessionRegistry({
     /* ⭐ 14/09 — e così l'annuncio della coda: è STATO, non storia. Chi si collega dopo lo riceve dalla rotta degli eventi. */
     const effimero = workspaceCambiato || evento.type === 'ToolCallOutput'
       || (evento.type === 'CUSTOM' && (evento.name === 'talos.coda' || evento.name === 'talos.agenti'
-        || evento.name === compattazione.NOME_EVENTO_PROGRESSO_COMPATTAZIONE)); // lane CLI 03/10: avanzamento, non storia
+        || evento.name === compattazione.NOME_EVENTO_PROGRESSO_COMPATTAZIONE)) // lane CLI 03/10: avanzamento, non storia
+      /* ⛔ BUG-8 t1 (04/10/2026) — il rigioco della domanda e il suo colpo di silenzio sono AVANZAMENTO, non storia:
+         la domanda vera è già in `voce.eventi` (quella persistita), rigiocarla nel registro scriverebbe la stessa
+         scheda ogni 60 s su disco e nella cronologia. Marcatura esplicita, mai un type nuovo: la forma resta quella. */
+      || (evento.type === 'ApprovalRequested' && evento.rigiocoAttesa === true)
+      || (evento.type === 'CUSTOM' && evento.name === 'attesa-approvazione-silenzio');
     /* ⛔ P-13 — i file sono cambiati davvero: il prossimo giro ricostruirà l'elenco. Si chiama
        SOLO da qui, cioè quando il disco cambia: farlo a ogni evento annullerebbe la cache e con
        essa tutto il vantaggio, riportando l'elenco a costare pieno ogni volta. */
@@ -4263,8 +4303,20 @@ export function createSessionRegistry({
    * sarebbe un "nega" travestito da "l'owner ha deciso" — se l'owner non
    * risponde, la sessione resta onestamente in pausa finché non lo fa (o
    * finché non la ferma con `ferma()`, che chiude comunque il giro).
+   *
+   * ⛔⛔ BUG-8 tranche 1 (04/10/2026) — ma «in pausa» non può voler dire «scomparsa». L'evento
+   * `ApprovalRequested` parte UNA volta: se si perde (WS ricaduto, finestra chiusa, renderer
+   * riavviato) la sessione resta appesa su una domanda che nessuno vede — tre volte oggi, ai
+   * revisori (l'agente «non si può fermare» perché sembra morto, non morto davvero: lo stop
+   * funziona da 11/09). ⇒ L'osservatore di silenzio qui sotto RIGIOCA la domanda ai vivi
+   * (prima attesa `ATTESA_SILENZIO_PRIMA_MS`, poi ogni `ATTESA_SILENZIO_RIPETI_MS`) con un
+   * colpo CUSTOM che porta da quanto aspetta. NIENTE risoluzione automatica: nessun `resolve`
+   * nel timer — chi non risponde rivede la domanda, non un no fabbricato. Tranche 2 (se mai):
+   * guardie anti-ripetizione, NON il TTL (session-registry.mjs:810-845 lo spiega già).
+   * I tempi sono opzioni della factory (`attesaSilenzioPrimaMs`/`attesaSilenzioRipetiMs`):
+   * i test li accorciano, l'ospite può accordarli — i default sono le costanti in testa al file.
    */
-  function richiediApprovazione(voce, azione) {
+  function richiediApprovazione(voce, azione, { silenzioPrimaMs = attesaSilenzioPrimaMs, silenzioRipetiMs = attesaSilenzioRipetiMs } = {}) {
     /*
      * ⛔⛔ F4-03 (owner 01/10/2026 sera) — una scrittura FUORI dal progetto in una sessione che nessuno segue (automazioni,
      *   passi dei Workflow: `senzaInterfaccia`) si chiude SUBITO con un no, e la cronologia dice perché (`motivo`). Owner:
@@ -4279,8 +4331,31 @@ export function createSessionRegistry({
     }
     return new Promise((resolve) => {
       const requestId = randomUUID();
-      voce.approvazionePendente = { requestId, resolve, azione };
+      voce.approvazionePendente = { requestId, resolve, azione, da: clock().getTime() };
       broadcast(voce, approvalRequested({ requestId, azione }));
+      /*
+       * ⛔ BUG-8 tranche 1 — l'osservatore di silenzio (vedi la doc sopra). Il rigioco è
+       * EFFIMERO per costruzione: `rigiocoAttesa: true` lo marca, e `consegnaEvento` lo
+       * esclude da `voce.eventi` e dal disco (stessa via di `ToolCallOutput`) — la storia
+       * resta byte per byte quella di prima, il rigioco parla solo ai vivi. Il colpo
+       * CUSTOM porta `attesaMs`: la UI può dire «in attesa da 2 min», non ripetere la
+       * domanda a vuoto. ⛔ Il guard è DOPPIO: `pendente.requestId === requestId` (mai un
+       * nudge per la domanda sbagliata, stessa disciplina di `rispondiApprovazione`) e
+       * `sessioni.get(voce.sessionId) === voce` (una voce uscita dal registro non tiene
+       * vivo un timer nel vuoto).
+       */
+      let ripeti = null;
+      const rigioco = () => {
+        const pendente = voce.approvazionePendente;
+        if (!pendente || pendente.requestId !== requestId) return;
+        if (sessioni.get(voce.sessionId) !== voce) return;
+        const attesaMs = Math.max(0, clock().getTime() - pendente.da);
+        broadcast(voce, { ...approvalRequested({ requestId, azione }), rigiocoAttesa: true });
+        broadcast(voce, { type: 'CUSTOM', name: 'attesa-approvazione-silenzio', value: { requestId, attesaMs, tipo: azione?.tipo ?? null } });
+        ripeti = setTimeout(rigioco, silenzioRipetiMs);
+      };
+      const primo = setTimeout(rigioco, silenzioPrimaMs);
+      voce.approvazionePendente.fermaOsservatore = () => { clearTimeout(primo); if (ripeti !== null) clearTimeout(ripeti); };
     });
   }
 
@@ -4292,6 +4367,7 @@ export function createSessionRegistry({
   function negaApprovazionePendente(voce) {
     const pendente = voce.approvazionePendente;
     if (!pendente) return false;
+    pendente.fermaOsservatore?.(); // BUG-8 t1: fermata la sessione, il rigioco del silenzio tace
     voce.approvazionePendente = null;
     pendente.resolve(false);
     broadcast(voce, approvalResolved({ requestId: pendente.requestId, approvato: false }));
@@ -9240,7 +9316,17 @@ export function createSessionRegistry({
        *   come il sì di F009 (`consensiSessione`): un riavvio del server lo richiede.
        */
       const chiaveCartella = pendente.azione?.fuoriDalProgetto?.chiave;
-      if (ambito !== undefined && (ambito !== 'cartella' || approvato !== true || typeof chiaveCartella !== 'string' || !chiaveCartella)) {
+      /* ⛔ 04/10/2026, BUG-A (owner) — `ambito: 'percorso'` = «Consenti questo percorso per la
+         sessione» davanti a un segreto. Stessa disciplina di F4-03: il percorso lo porta la
+         DOMANDA (`segreto.percorso`, il pezzo com'è stato mostrato), mai il client; solo con un
+         sì; vive in memoria come `cartelleFuori` (un riavvio del server lo richiede). SOLO il
+         percorso esatto: nessun prefisso, nessuna cartella — gli altri segreti continuano a
+         chiedere. */
+      const percorsoSegreto = pendente.azione?.segreto?.percorso;
+      const ambitoValido = ambito === undefined
+        || (ambito === 'cartella' && approvato === true && typeof chiaveCartella === 'string' && chiaveCartella)
+        || (ambito === 'percorso' && approvato === true && typeof percorsoSegreto === 'string' && percorsoSegreto);
+      if (!ambitoValido) {
         return rifiuto('QUERY_INVALID', 'permission-request-no-folder', 'This request has no folder to allow for the session');
       }
       if (ambito === 'cartella') {
@@ -9248,9 +9334,15 @@ export function createSessionRegistry({
         const elenco = (consensi.cartelleFuori ??= []);
         if (!elenco.includes(chiaveCartella)) elenco.push(chiaveCartella);
       }
+      if (ambito === 'percorso') {
+        const consensi = (voce.consensiSessione ??= {});
+        const elenco = (consensi.segretiConsentiti ??= []);
+        if (!elenco.includes(percorsoSegreto)) elenco.push(percorsoSegreto);
+      }
+      pendente.fermaOsservatore?.(); // BUG-8 t1: risolta la domanda, l'osservatore di silenzio si spegne
       voce.approvazionePendente = null;
       pendente.resolve(Boolean(approvato));
-      broadcast(voce, approvalResolved({ requestId, approvato: Boolean(approvato), ...(ambito === 'cartella' ? { ambito } : {}) }));
+      broadcast(voce, approvalResolved({ requestId, approvato: Boolean(approvato), ...(ambito === 'cartella' || ambito === 'percorso' ? { ambito } : {}) }));
       return { ok: true };
     },
 
@@ -9790,10 +9882,26 @@ export function createSessionRegistry({
     fermaComando(sessionId, toolCallId) {
       const voce = sessioni.get(sessionId);
       if (!voce) return 'sessione-assente';
-      const ferma = voce.comandiFermabili?.get(toolCallId);
+      const ingresso = voce.comandiFermabili?.get(toolCallId);
+      const ferma = ingresso?.ferma ?? null; // BUG-14: la voce ora è { ferma, sfonda }
       if (typeof ferma !== 'function') return 'non-in-corso';
       ferma();
       return 'fermato';
+    },
+
+    /*
+     * ⛔ BUG-14 (05/10/2026): SFONDA un comando della scheda «Processi» — specchio di `fermaComando`, con la differenza
+     *   di proposito: NON c'è segnale di morte. Il kernel (talosHarness.mjs:5890 `sfondaAdesso`) stacca la cattura,
+     *   apre il file di output e conclude l'attesa: il processo VIVE e il giro continua subito col suo «IN BACKGROUND».
+     *   ⇒ 'sfondato' | 'sessione-assente' | 'non-in-corso'.
+     */
+    sfondaComando(sessionId, toolCallId) {
+      const voce = sessioni.get(sessionId);
+      if (!voce) return 'sessione-assente';
+      const sfonda = voce.comandiFermabili?.get(toolCallId)?.sfonda ?? null;
+      if (typeof sfonda !== 'function') return 'non-in-corso';
+      sfonda();
+      return 'sfondato';
     },
 
     /**
@@ -10070,6 +10178,11 @@ export function createSessionRegistry({
           interrotta: voce.interrotta ?? false,
           // ⭐⭐⭐ 02/09 — la campanella del desktop: una sessione ferma su un'approvazione è la notifica più urgente, e solo l'elenco la può dire a chi guarda un'ALTRA sessione.
           inAttesaApprovazione: Boolean(voce.approvazionePendente),
+          // ⛔ BUG-8 t1 (04/10/2026) — da QUANTO aspetta, in ms: la campanella dice «in attesa da 3 min» invece di un
+          //   «in attesa» senza età. `null` quando non aspetta: mai uno zero fabbricato (stessa disciplina di `usage`).
+          inAttesaApprovazioneDaMs: voce.approvazionePendente
+            ? Math.max(0, clock().getTime() - (voce.approvazionePendente.da ?? clock().getTime()))
+            : null,
           // ⭐ 02/09 — la Board diceva "Conclusa" anche a una sessione morta su RunError: l'ultimo evento del ciclo agente decide.
           ultimoEsito: ultimoEsitoDaEventi(voce.eventi),
           // ⛔ 07/9 — il TERZO esito: «fermata» non e ne un errore ne una fine pulita (vedi
