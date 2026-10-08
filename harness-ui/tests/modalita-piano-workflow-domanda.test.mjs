@@ -1186,7 +1186,7 @@ test('DOMANDA-CAMPI-IN-PIU — il kernel ripulisce i campi in più del modello e
   assert.deepEqual(ricevute[0][0].options.map((o) => Object.keys(o).sort()), [['description', 'label', 'recommended'], ['description', 'label']]);
   const esiti = risultato.messaggiFinali.filter((m) => m.role === 'tool').map((m) => m.content);
   assert.match(esiti[0], /"status":"answered"/u);
-  assert.match(esiti[1], /ask_user_question failed \[QUERY_INVALID\]: questions\[0\]\.why è obbligatorio/u);
+  assert.match(esiti[1], /ask_user_question failed \[QUERY_INVALID\]: questions\[0\]\.why is required/u);
   // lo schema che il modello riceve dice «nient'altro» a ogni livello
   assert.equal(schema?.additionalProperties, false);
   assert.equal(schema?.properties?.questions?.items?.additionalProperties, false);
@@ -1211,5 +1211,5 @@ test('DOMANDA-CAMPI-IN-PIU-SENZA-INTERFACCIA — anche senza chi risponde il ker
   });
   const esiti = risultato.messaggiFinali.filter((m) => m.role === 'tool').map((m) => m.content);
   assert.doesNotMatch(esiti[0], /QUERY_INVALID/u, 'i campi in più non respingono la domanda');
-  assert.match(esiti[1], /ask_user_question failed \[QUERY_INVALID\]: questions\[0\]\.why è obbligatorio/u);
+  assert.match(esiti[1], /ask_user_question failed \[QUERY_INVALID\]: questions\[0\]\.why is required/u);
 });

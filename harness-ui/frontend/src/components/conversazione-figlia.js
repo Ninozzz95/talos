@@ -84,6 +84,8 @@ import { renderizzaMarkdown } from './markdown.js';
 import { nomeUmanoAttrezzo } from './nomi-attrezzi.js';
 /* ⛔ 20/09/2026 — lo stesso contratto che usa la chat: una regola sola per l'esito di un comando. */
 import { esitoDichiaraFallimento, leggiEsitoComando } from './esito-comando.js';
+/* C2 R6 (08/10/2026): le chiamate della figlia coperte da un permesso dato più in alto lo dicono sulla riga, come nella chat. */
+import { segnaConsentitoDa } from './consentito-da.js';
 
 /* ═══════════════════════════════════════════════════ La riduzione (pura) ═══ */
 
@@ -345,6 +347,8 @@ export function digerisciEventoFiglia(r, e) {
       if (!blocco) { r.scartati += 1; break; }
       blocco.contenuto = pezzo(e.content);
       blocco.esito = e.errore === true ? 'error' : esitoDaContenuto(blocco.attrezzo, blocco.contenuto);
+      // C2 R6: la ricevuta dell'operazione dice se un permesso dato più in alto ha coperto la chiamata
+      if (typeof e.receipt?.consentitoDa?.sessionId === 'string') blocco.consentitoDa = e.receipt.consentitoDa;
       break;
     }
     case 'RunFinished': {
@@ -439,7 +443,7 @@ function riassuntoGruppo(quanti) {
  * @returns {{aggiorna:(eventi:Array<object>)=>void, distruggi:()=>void, elemento:Element}}
  */
 export function montaConversazioneFiglia(contenitore, {
-  sessionId, nome = '', apriFlusso, onIndietro, document: documentObj,
+  sessionId, nome = '', apriFlusso, onIndietro, document: documentObj, nomeSessione = null,
 } = {}) {
   const d = documentObj || globalThis.document;
   const eventi = [];
@@ -645,6 +649,9 @@ export function montaConversazioneFiglia(contenitore, {
     const bersaglio = bersaglioAttrezzo(blocco.argomenti);
     if (vista.dettaglio.textContent !== bersaglio) vista.dettaglio.textContent = bersaglio;
     if (vista.esitoMostrato !== blocco.esito) { impostaEsitoRiga(vista.riga, blocco.esito); vista.esitoMostrato = blocco.esito; }
+    // C2 R6: il segno si mette SOLO qui — `disegna` chiama questa funzione anche subito dopo `creaVistaBlocco`, quindi copre la
+    // riga nata dal rigioco e la ricevuta arrivata dopo; `segnaConsentitoDa` non raddoppia
+    if (blocco.consentitoDa) segnaConsentitoDa({ riga: vista.riga, consentitoDa: blocco.consentitoDa, nomeSessione }, { document: d });
   }
 
   /*

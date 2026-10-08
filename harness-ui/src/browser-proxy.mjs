@@ -79,10 +79,10 @@ async function scarta(response) {
  */
 export async function proxyPagina(indirizzo, { fetchFn = globalThis.fetch, millisecondi = MILLISECONDI_MASSIMI, origineNostra = '' } = {}) {
   let url;
-  try { url = new URL(String(indirizzo)); } catch { return { ok: false, codice: 'QUERY_INVALID', motivo: 'URL non valido' }; }
+  try { url = new URL(String(indirizzo)); } catch { return { ok: false, codice: 'QUERY_INVALID', motivo: 'Invalid URL' }; }
   const ammesso = urlAmmesso(url);
   if (!ammesso.ok) return { ok: false, codice: 'QUERY_INVALID', motivo: ammesso.motivo };
-  const rifiutoLocale = () => ({ ok: false, codice: 'BROWSER_PROXY_SOLO_LOCALE', motivo: 'Il proxy con annotazione vale solo per un dev server sul tuo computer (localhost, 127.0.0.1)' });
+  const rifiutoLocale = () => ({ ok: false, codice: 'BROWSER_PROXY_SOLO_LOCALE', motivo: 'The proxy with annotation only works for a dev server on your computer (localhost, 127.0.0.1)' });
   if (!bersaglioLocale(url)) return rifiutoLocale();
   const budget = Number.isFinite(millisecondi) && millisecondi > 0 ? millisecondi : MILLISECONDI_MASSIMI;
   const controller = new AbortController();
@@ -105,17 +105,17 @@ export async function proxyPagina(indirizzo, { fetchFn = globalThis.fetch, milli
       if (![301, 302, 303, 307, 308].includes(response.status)) break;
       const location = response.headers.get('location');
       await scarta(response);
-      if (!location || hop >= REDIRECT_MASSIMI) return { ok: false, codice: 'BROWSER_PROXY_REDIRECT', motivo: 'Reindirizzamento non valido o troppo lungo', stato: status };
+      if (!location || hop >= REDIRECT_MASSIMI) return { ok: false, codice: 'BROWSER_PROXY_REDIRECT', motivo: 'Invalid or too long redirect', stato: status };
       let next;
-      try { next = new URL(location, url); } catch { return { ok: false, codice: 'BROWSER_PROXY_REDIRECT', motivo: 'Indirizzo di reindirizzamento non valido', stato: status }; }
-      if (!urlAmmesso(next).ok) return { ok: false, codice: 'QUERY_INVALID', motivo: 'Il reindirizzamento usa un indirizzo non consentito', stato: status };
+      try { next = new URL(location, url); } catch { return { ok: false, codice: 'BROWSER_PROXY_REDIRECT', motivo: 'Invalid redirect address', stato: status }; }
+      if (!urlAmmesso(next).ok) return { ok: false, codice: 'QUERY_INVALID', motivo: 'The redirect uses an address that is not allowed', stato: status };
       if (!bersaglioLocale(next)) return rifiutoLocale();
       url = next;
     }
     const tipo = String(response.headers.get('content-type') || '');
-    if (!/text\/html/i.test(tipo)) { await scarta(response); return { ok: false, codice: 'BROWSER_PROXY_NON_HTML', motivo: `Non è una pagina HTML (${tipo.split(';')[0] || 'tipo ignoto'})`, stato: status }; }
+    if (!/text\/html/i.test(tipo)) { await scarta(response); return { ok: false, codice: 'BROWSER_PROXY_NON_HTML', motivo: `Not an HTML page (${tipo.split(';')[0] || 'unknown type'})`, stato: status }; }
     const lunghezza = Number(response.headers.get('content-length') || 0);
-    if (lunghezza > BYTE_MASSIMI) { await scarta(response); return { ok: false, codice: 'BROWSER_PROXY_TROPPO_GRANDE', motivo: 'La pagina supera i 5 MB', stato: status }; }
+    if (lunghezza > BYTE_MASSIMI) { await scarta(response); return { ok: false, codice: 'BROWSER_PROXY_TROPPO_GRANDE', motivo: 'The page is over 5 MB', stato: status }; }
     const testo = await leggiHtmlLimitato(response, controller.signal);
     controller.signal.throwIfAborted();
     return { ok: true, html: riscriviHtml(testo, url.href, origineNostra), url: url.href, stato: status };
@@ -127,7 +127,7 @@ export async function proxyPagina(indirizzo, { fetchFn = globalThis.fetch, milli
        motivo qui è italiano e composto dal server, quindi chi disegna deve poter riscrivere la
        frase nella lingua di chi guarda invece di provare a tradurre una chiave che contiene un
        numero. Stessa cura del percorso della cornice, stesso contratto. */
-    if (errore?.code === 'BROWSER_PROXY_TROPPO_GRANDE') return { ok: false, codice: errore.code, motivo: 'La pagina supera i 5 MB', stato: status }; // PR #27
+    if (errore?.code === 'BROWSER_PROXY_TROPPO_GRANDE') return { ok: false, codice: errore.code, motivo: 'The page is over 5 MB', stato: status }; // PR #27
     const { genere, motivo, dettagli } = classificaGuasto(errore, { millisecondi });
     return { ok: false, codice: 'BROWSER_PROXY_IRRAGGIUNGIBILE', motivo, genere, dettagli };
   } finally {

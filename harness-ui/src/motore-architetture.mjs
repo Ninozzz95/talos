@@ -63,8 +63,10 @@ export function buildDelMotore(binario) {
   return m ? m[1] : null;
 }
 
-/** Il testo della carta: che cosa, e perché nessun riavvio lo cambia. */
+/** Il testo della carta: che cosa, e perché nessun riavvio lo cambia.
+ *  ⛔ K4b (07/10/2026): inglese, con una forma STABILE — l'interfaccia (`frontend/src/components/errori.js`, regola
+ *  «architettura-sconosciuta») ne estrae architettura e build e scrive la frase nella lingua di chi guarda. */
 export function testoArchitetturaSconosciuta(architettura, build) {
-  const motore = build ? `il motore installato (llama.cpp ${build})` : 'il motore installato';
-  return `Il modello usa l’architettura «${architettura}», che ${motore} non sa leggere: serve una versione più recente del motore, e riprovare non cambia niente.`;
+  const motore = build ? `the installed engine (llama.cpp ${build})` : 'the installed engine';
+  return `The model uses the architecture "${architettura}", which ${motore} cannot read: a newer engine version is needed, and retrying changes nothing.`;
 }

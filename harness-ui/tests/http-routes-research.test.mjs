@@ -345,7 +345,7 @@ test('⭐⭐⭐⭐ L5 — DETTAGLIO: piano, passi, spesa, giornale, e le afferma
   assert.equal(ricerca.proveDistinte, 2);
 
   assert.equal(ricerca.affermazioni.length, 2);
-  assert.equal(ricerca.affermazioni[0].verdettoUmano, 'non verificata', '⛔ la parola esce da `talosResearchSupportLabel`: due frasari sono due verdetti');
+  assert.match(ricerca.affermazioni[0].verdettoUmano, /(?:unverified|non verificata)/, '⛔ la parola esce da `talosResearchSupportLabel`: due frasari sono due verdetti');
   assert.equal(ricerca.affermazioni[0].giudice, null, '⛔ un modello non timbra sé stesso');
   assert.equal(ricerca.affermazioni[0].contrarie, null, '⛔ «non guardato» non è «guardato, nessuna»');
   assert.match(ricerca.affermazioni[0].passaggio, /controllo del computer/);
@@ -610,7 +610,8 @@ test('⭐⭐⭐⭐ L5 §6.8 «+1.1» — RI-VERIFICA vera: il passaggio ancora n
   assert.equal(r.fonti[0].stato, 'non-misurabile');
   assert.equal(r.fonti[0].sopravvissuto, null, '⛔ `null`, mai `1`: uno e «non misurato» non sono lo stesso numero');
   assert.equal(r.misurabile, false);
-  assert.match(r.avvertenza, /non era stato tenuto/);
+  assert.match(r.avvertenza, /was not kept/);
+  assert.equal(r.avvertenzaChiave, 'server.research.recheck.warning');
   assert.equal(r.testiTenuti, 0);
   assert.deepEqual(r.bilancio, {
     fonti: 3, intatte: 0, cambiate: 0, irraggiungibili: 1, nonMisurabili: 2,
@@ -670,7 +671,8 @@ test('⭐⭐⭐⭐ BC-44 — una ricerca caduta sul FORNITORE si riprende dalla 
 
   assert.equal(caduta.riprendibile, true, '⛔ la voce dice al frontend che il pulsante può esistere: fino a ieri lo offriva e la rotta rispondeva 409');
   assert.deepEqual(caduta.motivoErrore, { classe: 'timeout-fornitore', transitorio: true });
-  assert.match(caduta.motivo, /^La ricerca si è interrotta a metà/);
+  assert.match(caduta.motivo, /^Research was interrupted midway/);
+  assert.equal(caduta.motivoChiave, 'server.research.state.interrupted');
   assert.doesNotMatch(caduta.motivo, /Upstream|internal-error/, '⛔ niente nomi tecnici a schermo: il messaggio grezzo resta su meta.json');
 
   const prima = b.avvii.length;

@@ -358,7 +358,7 @@ export function sorgenteOverlay() {
  */
 function porta(cdp) {
   const invia = typeof cdp?.invia === 'function' ? cdp.invia.bind(cdp) : (typeof cdp?.send === 'function' ? cdp.send.bind(cdp) : null);
-  if (!invia) throw new TypeError('browser-annota: il client CDP deve avere «invia(metodo, parametri, sessionId)»');
+  if (!invia) throw new TypeError('browser-annota: the CDP client must have "invia(metodo, parametri, sessionId)"');
   const ascolta = typeof cdp?.su === 'function' ? cdp.su.bind(cdp) : (typeof cdp?.on === 'function' ? cdp.on.bind(cdp) : null);
   const smettiDi = typeof cdp?.togli === 'function' ? cdp.togli.bind(cdp) : (typeof cdp?.off === 'function' ? cdp.off.bind(cdp) : null);
   return { invia, ascolta, smettiDi };
@@ -367,7 +367,7 @@ function porta(cdp) {
 /** Una risposta CDP può portare l'errore nel corpo invece di lanciarlo: i due casi diventano uno. */
 async function chiama(invia, metodo, parametri, sessionId) {
   const risposta = await invia(metodo, parametri || {}, sessionId);
-  if (risposta && risposta.error) { const e = new Error(`${metodo}: ${risposta.error.message || 'errore CDP'}`); e.codiceCdp = risposta.error.code; throw e; }
+  if (risposta && risposta.error) { const e = new Error(`${metodo}: ${risposta.error.message || 'CDP error'}`); e.codiceCdp = risposta.error.code; throw e; }
   return risposta;
 }
 
@@ -391,10 +391,10 @@ function statoDi(cdp, sessionId) {
 async function apriMondo(invia, sessionId, stato) {
   const albero = await chiama(invia, 'Page.getFrameTree', {}, sessionId);
   const frameId = albero?.frameTree?.frame?.id || stato.frameId;
-  if (!frameId) throw new Error('browser-annota: nessun frame principale da Page.getFrameTree');
+  if (!frameId) throw new Error('browser-annota: no main frame from Page.getFrameTree');
   const mondo = await chiama(invia, 'Page.createIsolatedWorld', { frameId, worldName: MONDO_OVERLAY, grantUniveralAccess: false }, sessionId);
   const contesto = mondo?.executionContextId;
-  if (contesto == null) throw new Error('browser-annota: Page.createIsolatedWorld non ha dato un executionContextId');
+  if (contesto == null) throw new Error('browser-annota: Page.createIsolatedWorld did not give an executionContextId');
   await chiama(invia, 'Runtime.evaluate', { expression: sorgenteOverlay(), contextId: contesto, returnByValue: true, awaitPromise: false }, sessionId);
   stato.frameId = frameId; stato.contesto = contesto;
   return contesto;
@@ -569,7 +569,7 @@ function riga(tipo, testo, origine) {
  */
 export function raccogliErrori(cdp, sessionId) {
   const { invia, ascolta, smettiDi } = porta(cdp);
-  if (!ascolta) throw new TypeError('browser-annota: il client CDP deve avere «su(evento, gestore)» per raccogliere gli errori');
+  if (!ascolta) throw new TypeError('browser-annota: the CDP client must have "su(evento, gestore)" to collect the errors');
   const errori = [];
   const disdette = [];
   let vivo = true;
@@ -599,7 +599,7 @@ export function raccogliErrori(cdp, sessionId) {
     'Runtime.exceptionThrown': (p, s) => {
       if (!miaSessione(p, s)) return;
       const d = p?.exceptionDetails || {};
-      const testo = [d.text, testoRemoto(d.exception)].filter(Boolean).join(' ') || 'eccezione senza testo';
+      const testo = [d.text, testoRemoto(d.exception)].filter(Boolean).join(' ') || 'exception without text';
       const dove = d.url ? ` — ${d.url}:${(d.lineNumber ?? 0) + 1}` : '';
       /* un rifiuto di promessa non gestito arriva QUI, non fra le chiamate a console */
       aggiungi(riga(/in promise/i.test(testo) ? 'promessa' : 'eccezione', testo + dove, 'Runtime.exceptionThrown'));

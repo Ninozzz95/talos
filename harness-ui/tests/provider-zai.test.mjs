@@ -145,7 +145,7 @@ test('PD-07 — i livelli documentati passano; il resto si adatta al più debole
     const result = prepara({ model: modello, reasoning: { effort: 'medium' } });
     assert.equal(result.corpo.reasoning_effort, 'low');
     assert.deepEqual(result.avvisi, []);
-    assert.match(result.note.join(' '), /inviato «low»/u);
+    assert.match(result.note.join(' '), /sent "low"/u, 'K4b: la nota (telemetria, classe L) è in inglese');
   }
   /* Modelli senza livelli documentati: il campo non si inventa; la frase va in nota. */
   for (const id of ['glm-4.6', 'glm-5', 'glm-futuro']) {
@@ -168,7 +168,7 @@ test('PD-08 — thinking disabled consentito fino a 5.2, dichiarato impossibile 
     const result = prepara({ model, extra_body: { thinking: { type: 'disabled' } } });
     assert.equal(result.corpo.thinking.type, 'enabled');
     assert.deepEqual(result.avvisi, [], 'BUG-18: il controllo del ragionamento va in nota');
-    assert.match(result.note.join(' '), /non consente di disattivare/u);
+    assert.match(result.note.join(' '), /cannot disable/u);
   }
   assert.equal(prepara({ model: modello }).corpo.thinking, undefined, 'nessuna preferenza: default del server');
 });

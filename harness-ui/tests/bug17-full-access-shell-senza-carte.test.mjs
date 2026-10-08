@@ -58,7 +58,9 @@ test('B17-F009-01: accesso pieno + WSL root — ZERO carte, il comando gira, il 
     const primo = await giro(t, { consensiSessione, rootWslDelComandoFn: comeRoot, chiamate: [['shell', { comando: 'echo uno' }], ['shell', { comando: 'echo due' }]] })
     assert.equal(primo.chieste.length, 0, 'in accesso pieno nessuna carta, nemmeno la prima volta')
     assert.deepEqual(primo.eseguiti.map((e) => e.comando), ['echo uno', 'echo due'])
-    assert.equal(consensiSessione.rootWsl, true, 'il sì «una volta per sessione» è concesso da solo')
+    /* A3-R1 (07/10/2026): prima qui si asseriva `true` — cioè si fissava il difetto. Il sì dell'Accesso pieno si deriva dal
+       livello e non si scrive fra i sì di sessione, o sopravvive al downgrade (B17-F009-05). */
+    assert.equal(consensiSessione.rootWsl, undefined, 'il sì dell\'Accesso pieno non si scrive fra i sì della persona')
     const secondo = await giro(t, { consensiSessione, rootWslDelComandoFn: comeRoot })
     assert.equal(secondo.interrogati.length, 0, 'dal secondo giro né carta né sonda')
     assert.equal(secondo.eseguiti.length, 1)
@@ -81,6 +83,32 @@ test('B17-F009-04: contropelo — «Scrive nel progetto» (nessun livello) chied
     const { chieste } = await giro(t, { livelloAccesso: 'nessuno', rootWslDelComandoFn: comeRoot })
     assert.equal(chieste.length, 1, 'il perimetro della decisione 01/10 resta per gli altri livelli')
     assert.equal(chieste[0].wslRoot.utente, 'root')
+})
+
+/*
+ * ⛔⛔ A3-R1 (07/10/2026, riserva R1 della review BUG-17) — IL SÌ DELL'ACCESSO PIENO NON È UN SÌ DELLA PERSONA.
+ *   Prima della cura l'Accesso pieno SCRIVEVA `consensiSessione.rootWsl = true`: abbassato il permesso, la carta di root
+ *   non tornava più, e il sì «una volta per sessione» risultava dato senza che nessuno l'avesse dato. Forma di Hermes
+ *   (`tools/approval.py:53-54`, `:268-283`): il permesso massimo si DERIVA dal livello corrente, non si scrive fra i sì.
+ */
+test('B17-F009-05: Accesso pieno, poi «Scrive nel progetto» — la carta di root TORNA (il downgrade revoca)', async (t) => {
+    const consensiSessione = {}
+    const pieno = await giro(t, { consensiSessione, rootWslDelComandoFn: comeRoot })
+    assert.equal(pieno.chieste.length, 0, 'in Accesso pieno nessuna carta')
+    const abbassato = await giro(t, { consensiSessione, livelloAccesso: 'nessuno', rootWslDelComandoFn: comeRoot })
+    assert.equal(abbassato.chieste.length, 1, 'dopo il downgrade la carta di root si chiede di nuovo')
+    assert.equal(abbassato.chieste[0].wslRoot.utente, 'root')
+})
+
+test('B17-F009-06: contropelo — il sì DATO DALLA PERSONA sopravvive a Accesso pieno e ritorno', async (t) => {
+    const consensiSessione = {}
+    const prima = await giro(t, { consensiSessione, livelloAccesso: 'nessuno', rootWslDelComandoFn: comeRoot })
+    assert.equal(prima.chieste.length, 1, 'la persona risponde sì alla carta di root')
+    assert.equal(consensiSessione.rootWsl, true)
+    await giro(t, { consensiSessione, rootWslDelComandoFn: comeRoot })
+    const dopo = await giro(t, { consensiSessione, livelloAccesso: 'nessuno', rootWslDelComandoFn: comeRoot })
+    assert.equal(dopo.chieste.length, 0, 'il sì della persona vale per tutta la sessione, qualunque livello ci sia stato in mezzo')
+    assert.equal(dopo.interrogati.length, 0, 'e non si rispende la sonda')
 })
 
 /* ── il cancello dei permessi, chiamato da solo ─────────────────────────────────────────────── */

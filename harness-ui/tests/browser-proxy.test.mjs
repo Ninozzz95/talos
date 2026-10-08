@@ -55,16 +55,16 @@ test('PROXY-GUASTO: porta chiusa, nome inesistente e scadenza si raccontano per 
 
   const spento = await chiedi(conCausa('ECONNREFUSED'));
   assert.equal(spento.genere, 'rifiuto');
-  assert.match(spento.motivo, /Nessuno risponde/i, 'un dev server spento si dice così, non «la pagina non risponde»');
+  assert.match(spento.motivo, /No response/i, 'un dev server spento si dice così, non «la pagina non risponde»');
 
   const scaduto = await chiedi(conCausa('UND_ERR_CONNECT_TIMEOUT'));
   assert.equal(scaduto.genere, 'timeout');
-  assert.match(scaduto.motivo, /non ha risposto in tempo/i);
+  assert.match(scaduto.motivo, /did not respond in time/i);
 
   // AL CONTRARIO: un guasto che non so nominare non si traveste da uno che conosco
   const ignoto = await chiedi(new TypeError('fetch failed'));
   assert.equal(ignoto.genere, 'rete');
-  assert.match(ignoto.motivo, /raggiungere il sito/i);
+  assert.match(ignoto.motivo, /Could not reach the site/i);
 });
 
 /*

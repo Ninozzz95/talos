@@ -181,7 +181,7 @@ import {
 export function rileggiRapportoRecintato(testo, { ripiegoConsentito = false } = {}) {
   const vuoto = { ok: false, intestazione: null, affermazioni: 0, fonti: [], motivo: null, bilancio: null, proveDistinte: 0, ripiego: false, record: null };
   if (typeof testo !== 'string' || testo.trim().length === 0) {
-    return { ...vuoto, motivo: 'il rapporto è vuoto' };
+    return { ...vuoto, motivo: "the report is empty", motivoChiave: 'server.research.report.empty' };
   }
   const record = talosResearchParseReport(testo);
   if (record) {
@@ -195,12 +195,12 @@ export function rileggiRapportoRecintato(testo, { ripiegoConsentito = false } = 
       ripiego: false,
       record,
     };
-    if (record.claims.length === 0) return { ...comune, ok: false, motivo: 'il record del rapporto non porta nessuna affermazione' };
-    if (fonti.length === 0) return { ...comune, ok: false, motivo: 'il record del rapporto non elenca nessuna fonte' };
+    if (record.claims.length === 0) return { ...comune, ok: false, motivo: "the report record contains no claims", motivoChiave: 'server.research.report.noClaims' };
+    if (fonti.length === 0) return { ...comune, ok: false, motivo: "the report record lists no sources", motivoChiave: 'server.research.report.noSources' };
     return { ...comune, ok: true, motivo: null };
   }
   if (!ripiegoConsentito) {
-    return { ...vuoto, motivo: 'il rapporto non porta il record verificabile (blocco ```talos-research-report)' };
+    return { ...vuoto, motivo: "the report has no verifiable record (```talos-research-report block)", motivoChiave: 'server.research.report.noRecord' };
   }
   const minimo = rileggiRapportoMinimo(testo);
   return { ...minimo, bilancio: null, proveDistinte: 0, ripiego: true, record: null };
@@ -418,12 +418,13 @@ export function componiRapportoRicerca({ domanda = null, testo, affermazioni, fo
         quoteSpan: null,
         claimSupported: 'unchecked',
         /*
-         * ⛔ IN ITALIANO, e non è un dettaglio: `report.mjs` stampa questa frase nella PROSA
+         * ⛔ P per la persona (K4b: riserva inglese e supportReasonChiave): `report.mjs` stampa questa frase nella PROSA
          *   («Esito: non verificata — …»), cioè la legge una persona, e tutto il resto di quel
          *   documento è italiano. Trovato guardando l'artefatto vero prodotto dalla cura, non
          *   da un test: nessuna asserzione poteva vederlo.
          */
-        supportReason: 'depositata dal modello che ha scritto il rapporto: nessun giudice indipendente l\'ha ancora controllata.',
+        supportReason: "deposited by the model that wrote the report: no independent judge has checked it yet.",
+        supportReasonChiave: 'server.research.reason.modelDeposited',
         judge: null,
         judgedAt: null,
       },
@@ -524,7 +525,7 @@ function promptRicerca(question, depth, piano = []) {
      *   è dichiarata qui e controllata da `rileggiRapportoMinimo` — mai un cancello che chiede
      *   una forma che nessuno ha detto.
      */
-    'Deposita il rapporto con research_deposit seguendo le istruzioni sulle parti qui sotto.',
+    'Deposit the report with research_deposit following the part instructions below.',
     /*
      * ⭐⭐⭐⭐ L8 (12/09/2026) — LA CONSEGNA NON CHIEDE PIÙ UN RECINTO, CHIEDE TRE ARGOMENTI.
      *
@@ -542,9 +543,9 @@ function promptRicerca(question, depth, piano = []) {
      *   scrive. ⛔ `judge` e `claimSupported` non sono nemmeno più argomenti: non c'è più nulla
      *   da raccomandare, perché non c'è più nulla che il modello possa timbrare.
      */
-    '`testo`: prosa Markdown della parte corrente; il rapporto assemblato porta titolo, risultati e fonti, senza riscrivere la prosa.',
-    '`affermazioni`: one entry per factual claim that matters, each with `testo` (the claim), `fonte` (the exact http(s) URL it rests on, spelled as in `fonti`) and `passaggio` (the sentence you actually read in that source, copied VERBATIM — never reworded, never invented; "" is the honest answer if you cannot find it, and it is counted as such).',
-    '`fonti`: one entry per source, with `url` (full http(s)), `titolo`, `dataDichiarata` (the date the source itself declares, or omit it) and `letta`: true only if you opened the page, false if you only saw a search-result snippet.',
+    '`testo`: Markdown prose of current part; the assembled report includes title, findings and sources, without rewriting the prose.',
+    '`affermazioni`: one entry for each factual claim that matters, each with `testo` (the claim), `fonte` (the exact http(s) URL it rests on, spelled as in `fonti`) and `passaggio` (the sentence you actually read in that source, copied VERBATIM — never reworded, never invented; "" is the honest answer if you cannot find it, and it is counted as such).',
+    '`fonti`: one entry for each source, with `url` (full http(s)), `titolo`, `dataDichiarata` (the date the source itself declares, or omit it) and `letta`: true only if you opened the page, false if you only saw a search-result snippet.',
     'The server builds the verifiable record from those three and saves it with your text: you do not have to write any JSON, and you cannot mark your own claims as verified — an independent check happens later.',
     'That deposited document IS the permanent report. Your chat message is not the report and is never saved as one — after depositing, just tell the user in one or two lines that the report is ready.',
     'Note any real uncertainty instead of guessing, and never deposit a report without sources.',
@@ -774,12 +775,19 @@ function statoVivo(voceRicerca, voceSessione) {
 const CLASSI_TRANSITORIE = new Set(['rete', 'timeout-fornitore', 'traffico', 'guasto-fornitore', 'flusso-interrotto']);
 
 /** La mezza frase italiana di ogni classe — il pezzo variabile di `motivoDelloStato`. */
+const CHIAVI_CAUSE_RICERCA = new Map([
+  ["rete", 'server.research.cause.network'],
+  ["timeout-fornitore", 'server.research.cause.providerTimeout'],
+  ["traffico", 'server.research.cause.traffic'],
+  ["guasto-fornitore", 'server.research.cause.providerFault'],
+  ["flusso-interrotto", 'server.research.cause.streamInterrupted'],
+]);
 const CLAUSOLA_DI_CLASSE = new Map([
-  ['rete', 'la connessione con il fornitore del modello è caduta'],
-  ['timeout-fornitore', 'il fornitore del modello ha chiuso la connessione mentre lavorava'],
-  ['traffico', 'il fornitore del modello ha rifiutato per troppo traffico'],
-  ['guasto-fornitore', 'il fornitore del modello ha risposto con un guasto suo'],
-  ['flusso-interrotto', 'la risposta del modello si è interrotta a metà'],
+  ['rete', "the connection to the model provider dropped"],
+  ['timeout-fornitore', "the model provider closed the connection while working"],
+  ['traffico', "the model provider rejected the request due to too much traffic"],
+  ['guasto-fornitore', "the model provider returned its own failure"],
+  ['flusso-interrotto', "the model response was interrupted midway"],
 ]);
 
 /* Gli esiti del TASK: non sono guasti, e hanno già il loro stato. */
@@ -914,36 +922,61 @@ function causaDellaCaduta(record, voceSessione) {
  *   lettura e non ha potuto depositare il rapporto» è il prodotto che ammette il proprio
  *   errore; «ricerca fallita» sarebbe farlo pagare all'owner.
  */
+const FRASI_RICERCA = Object.freeze({
+  'server.research.state.uncertain': "The provider request has an uncertain outcome. Work already done is preserved. Resume explicitly when you want to continue: another request may incur another cost.",
+  'server.research.state.interrupted': "Research was interrupted midway: {cause}. Work already done is preserved and can resume from there.",
+  'server.research.state.readOnly': "The session was read-only and could not deposit the report: the work was done, but delivery was not.",
+  'server.research.state.reportUnreadable': "Research finished but the report is unreadable: {detail}.",
+  'server.research.state.reportMissing': "Research finished without depositing a readable report.",
+  'server.research.state.turnsExhausted': "Research exhausted its available turns before depositing the report.",
+  'server.research.state.cancelled': "Research was stopped permanently: what it collected remains readable.",
+  'server.research.state.paused': "Research is paused: it can resume where it stopped.",
+  'server.research.state.failedDetail': "Research did not finish: {detail}.",
+  'server.research.state.failed': "Research did not finish.",
+});
+const DETTAGLI_RICERCA = new Map([
+  ["the report is empty", { detail: "the report is empty", detailChiave: 'server.research.report.empty' }],
+  ["the report record contains no claims", { detail: "the report record contains no claims", detailChiave: 'server.research.report.noClaims' }],
+  ["the report record lists no sources", { detail: "the report record lists no sources", detailChiave: 'server.research.report.noSources' }],
+  ["the report has no verifiable record (```talos-research-report block)", { detail: "the report has no verifiable record (```talos-research-report block)", detailChiave: 'server.research.report.noRecord' }],
+  ["there is no report file", { detail: "there is no report file", detailChiave: 'server.research.detail.noFile' }],
+  ["the report has no heading", { detail: "the report has no heading", detailChiave: 'server.research.minimum.noHeading' }],
+  ["the report contains no claims", { detail: "the report contains no claims", detailChiave: 'server.research.minimum.noClaims' }],
+  ["the report lists no sources", { detail: "the report lists no sources", detailChiave: 'server.research.minimum.noSources' }],
+]);
+// Compatibilità retroattiva per dettagli storici persistiti in italiano prima della migrazione
+for (const [b64, v] of [
+  ['aWwgcmFwcG9ydG8gw6ggdnVvdG8=', { detail: "the report is empty", detailChiave: 'server.research.report.empty' }],
+  ['aWwgcmVjb3JkIGRlbCByYXBwb3J0byBub24gcG9ydGEgbmVzc3VuYSBhZmZlcm1hemlvbmU=', { detail: "the report record contains no claims", detailChiave: 'server.research.report.noClaims' }],
+  ['aWwgcmVjb3JkIGRlbCByYXBwb3J0byBub24gZWxlbmNhIG5lc3N1bmEgZm9udGU=', { detail: "the report record lists no sources", detailChiave: 'server.research.report.noSources' }],
+  ['aWwgcmFwcG9ydG8gbm9uIHBvcnRhIGlsIHJlY29yZCB2ZXJpZmljYWJpbGUgKGJsb2NjbyBgYGB0YWxvcy1yZXNlYXJjaC1yZXBvcnQp', { detail: "the report has no verifiable record (```talos-research-report block)", detailChiave: 'server.research.report.noRecord' }],
+  ['bm9uIGMnw6ggbmVzc3VuIGZpbGUgZGkgcmFwcG9ydG8=', { detail: "there is no report file", detailChiave: 'server.research.detail.noFile' }],
+  ['aWwgcmFwcG9ydG8gbm9uIGhhIHVuJ2ludGVzdGF6aW9uZQ==', { detail: "the report has no heading", detailChiave: 'server.research.minimum.noHeading' }],
+  ['aWwgcmFwcG9ydG8gbm9uIGNvbnRpZW5lIG5lc3N1bmEgYWZmZXJtYXppb25l', { detail: "the report contains no claims", detailChiave: 'server.research.minimum.noClaims' }],
+  ['aWwgcmFwcG9ydG8gbm9uIGVsZW5jYSBuZXNzdW5hIGZvbnRl', { detail: "the report lists no sources", detailChiave: 'server.research.minimum.noSources' }],
+]) {
+  DETTAGLI_RICERCA.set(Buffer.from(b64, 'base64').toString('utf8'), v);
+}
+function motivoRicerca(chiave, params = null) {
+  const motivo = FRASI_RICERCA[chiave].replace(/\{(\w+)\}/gu, (m, n) => params && n in params ? String(params[n]) : m);
+  return { motivo, motivoChiave: chiave, ...(params ? { motivoParams: params } : {}) };
+}
+function dettaglioRicerca(dettaglio) {
+  return DETTAGLI_RICERCA.get(dettaglio) ?? { detail: dettaglio };
+}
 function motivoDelloStato(stato, dettaglio = null, motivoErrore = null) {
-  if (stato === 'failed' && motivoErrore?.classe === 'esito-incerto') {
-    return 'La richiesta al fornitore ha un esito incerto. Il lavoro già fatto è conservato. Riprendi esplicitamente quando vuoi continuare: una nuova richiesta può comportare un altro costo.';
-  }
-  /*
-   * ⭐⭐⭐ BC-44 — quando la caduta è transitoria la frase cambia, e cambia in due punti: dice
-   *   CHI è caduto (mai «la ricerca non ce l'ha fatta»: non è stata lei) e dice che si riprende.
-   *   ⛔ La frase NON nomina il codice né il messaggio del fornitore: «Upstream idle timeout
-   *     exceeded» a schermo sarebbe un nome tecnico, e quelli non entrano nella UI.
-   */
+  if (stato === 'failed' && motivoErrore?.classe === 'esito-incerto') return motivoRicerca('server.research.state.uncertain');
   if (stato === 'failed' && motivoErrore?.transitorio === true && CLAUSOLA_DI_CLASSE.has(motivoErrore.classe)) {
-    return `La ricerca si è interrotta a metà: ${CLAUSOLA_DI_CLASSE.get(motivoErrore.classe)}. Il lavoro già fatto è conservato e può riprendere da lì.`;
+    return motivoRicerca('server.research.state.interrupted', { cause: CLAUSOLA_DI_CLASSE.get(motivoErrore.classe), causeChiave: CHIAVI_CAUSE_RICERCA.get(motivoErrore.classe) });
   }
   switch (stato) {
-    case 'bloccata-dal-permesso':
-      return 'La sessione era in sola lettura e non ha potuto depositare il rapporto: il lavoro è stato fatto, la consegna no.';
-    case 'senza-rapporto':
-      return dettaglio
-        ? `La ricerca è finita ma il rapporto non è leggibile: ${dettaglio}.`
-        : 'La ricerca è finita senza depositare un rapporto leggibile.';
-    case 'giri-esauriti':
-      return 'La ricerca ha esaurito i giri a disposizione prima di depositare il rapporto.';
-    case 'cancelled':
-      return 'La ricerca è stata fermata per sempre: quello che aveva raccolto resta leggibile.';
-    case 'paused':
-      return 'La ricerca è in pausa: può riprendere da dove si era fermata.';
-    case 'failed':
-      return dettaglio ? `La ricerca non è arrivata in fondo: ${dettaglio}.` : 'La ricerca non è arrivata in fondo.';
-    default:
-      return null;
+    case 'bloccata-dal-permesso': return motivoRicerca('server.research.state.readOnly');
+    case 'senza-rapporto': return dettaglio ? motivoRicerca('server.research.state.reportUnreadable', dettaglioRicerca(dettaglio)) : motivoRicerca('server.research.state.reportMissing');
+    case 'giri-esauriti': return motivoRicerca('server.research.state.turnsExhausted');
+    case 'cancelled': return motivoRicerca('server.research.state.cancelled');
+    case 'paused': return motivoRicerca('server.research.state.paused');
+    case 'failed': return dettaglio ? motivoRicerca('server.research.state.failedDetail', dettaglioRicerca(dettaglio)) : motivoRicerca('server.research.state.failed');
+    default: return { motivo: null };
   }
 }
 
@@ -1490,7 +1523,7 @@ export function creaResearchOrchestrator({
 
     if (!verificati) {
       await registra(cartella, id, {
-        kind: 'step_failed', stepId: passo, error: 'la verifica non è girata: il rapporto è stato depositato senza verdetti',
+        kind: 'step_failed', stepId: passo, error: "verification did not run: the report was deposited without verdicts", errorChiave: 'server.research.step.verificationMissing',
       });
       return composto;
     }
@@ -1569,7 +1602,7 @@ export function creaResearchOrchestrator({
       : {
         stato: 'senza-rapporto',
         daDeposito,
-        motivoDettaglio: letto?.motivo ?? 'non c\'è nessun file di rapporto',
+        motivoDettaglio: letto?.motivo ?? "there is no report file",
         /*
          * ⛔⛔ `contenutoRapporto` resta NULL quando il cancello dice di no — e il testo respinto
          *   esce da un'altra porta, `contenutoRespinto`. Due nomi perché sono due cose: se la
@@ -2136,7 +2169,7 @@ export function creaResearchOrchestrator({
     const { eventi, righeSaltate } = await leggiGiornaleFn({ cartella, id, rigoroso: true });
     let deposito;
     try { deposito = consegnaPartiRapporto(eventi); }
-    catch { return { ok: false, esito: 'Le parti conservate non superano il controllo di integrità. Ripristina il giornale prima di riprendere.' }; }
+    catch { return { ok: false, esito: "The retained parts fail the integrity check. Restore the journal before resuming." }; }
     if (voce.messaggiFinali) {
       await riapriLaMetadata(cartella, id);
       await registra(cartella, id, rigaDiRipresa);
@@ -2294,12 +2327,12 @@ export function creaResearchOrchestrator({
     const recintato = giudizio.letto?.record ?? null;
     if (!recintato) {
       const coda = giudizio.letto?.ripiego
-        ? 'il suo rapporto è in forma vecchia, senza il record verificabile: non porta i passaggi citati, e senza quelli non c\'è niente da ri-trovare'
-        : (giudizio.motivoDettaglio ?? 'non c\'è nessun file di rapporto');
-      return { trovata: true, ok: false, motivo: `questa ricerca non si può ricontrollare: ${coda}` };
+        ? "its report uses the old format without a verifiable record: it contains no cited passages, so there is nothing to find again"
+        : (giudizio.motivoDettaglio ?? "there is no report file");
+      return { trovata: true, ok: false, motivo: `this research cannot be rechecked: ${coda}` };
     }
     if (typeof leggiPaginaFn !== 'function') {
-      return { trovata: true, ok: false, motivo: 'la lettura delle pagine non è disponibile su questo TALOS: senza di quella non si può andare a vedere se le fonti dicono ancora questo' };
+      return { trovata: true, ok: false, motivo: "page reading is not available on this TALOS: without it, the sources cannot be checked again" };
     }
 
     /*
@@ -2317,7 +2350,7 @@ export function creaResearchOrchestrator({
       return {
         trovata: true,
         ok: false,
-        motivo: 'non c\'è ancora niente da ricontrollare: il rapporto non porta nessun passaggio citato e il testo delle fonti non è stato tenuto',
+        motivo: "there is nothing to recheck yet: the report contains no cited passages and source text was not kept",
       };
     }
 
@@ -2372,7 +2405,8 @@ export function creaResearchOrchestrator({
         misurabile: testoTenutoPerUrl.size > 0,
         avvertenza: testoTenutoPerUrl.size > 0
           ? null
-          : 'Il testo delle pagine non era stato tenuto per questa ricerca: «intatta» o «cambiata» non si possono dire. Ciò che si misura è se i passaggi citati sono ancora nella pagina di oggi.',
+          : "Page text was not kept for this research: it cannot be called «unchanged» or «changed». What is measured is whether the cited passages are still present on today’s page.",
+        ...(testoTenutoPerUrl.size > 0 ? {} : { avvertenzaChiave: 'server.research.recheck.warning' }),
         fonti,
         bilancio: {
           fonti: fonti.length,
@@ -2441,7 +2475,7 @@ export function creaResearchOrchestrator({
       avviataAlle: r.avviataAlle ?? null,
       conclusaAlle: r.conclusaAlle ?? null,
       reportLibraryId: r.reportLibraryId ?? null,
-      motivo: stato === 'done' ? null : motivoDelloStato(stato, r.motivoDettaglio ?? null, caduta),
+      ...(stato === 'done' ? { motivo: null } : motivoDelloStato(stato, r.motivoDettaglio ?? null, caduta)),
       padreId: r.padreId ?? null,
       ultimoMessaggio: r.ultimoMessaggio ?? null,
       /*
@@ -2659,6 +2693,7 @@ export function creaResearchOrchestrator({
           verdetto: c?.checks?.claimSupported ?? 'unchecked',
           verdettoUmano: talosResearchSupportLabel(c?.checks ?? {}),
           motivoVerdetto: c?.checks?.supportReason ?? null,
+          ...(c?.checks?.supportReasonChiave ? { motivoVerdettoChiave: c.checks.supportReasonChiave, ...(c.checks.supportReasonParams ? { motivoVerdettoParams: c.checks.supportReasonParams } : {}) } : {}),
           giudice: c?.checks?.judge ?? null,
           giudicataAlle: c?.checks?.judgedAt ?? null,
           contrarie: Array.isArray(c?.checks?.opposing) ? c.checks.opposing : null,

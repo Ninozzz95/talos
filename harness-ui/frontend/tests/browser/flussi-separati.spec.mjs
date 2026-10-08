@@ -28,6 +28,8 @@ async function scena(page, { conFlussi, colorMode = 'dark', codice = 0, stdoutVu
       window.localStorage.setItem('talos.harness.desktop.settings.v1', JSON.stringify({ version: 1, appearance: { colorMode, uiLanguage: 'it' }, chat: {}, workspaces: {} }));
     } catch {}
   }, { colorMode });
+  // VELO-SPEC (08/10/2026): lo stream della sessione finta resta aperto e muto (prima andava al server di prova, che non la conosce)
+  await page.route('**/api/v1/sessions/flussi-separati/events*', () => { /* resta pending */ });
   await page.goto('/');
   await page.locator('#talosAvvio').waitFor({ state: 'detached', timeout: 15000 });
   await page.locator('.talos-nav-item[data-vaia="chat"]').click();
@@ -36,6 +38,10 @@ async function scena(page, { conFlussi, colorMode = 'dark', codice = 0, stdoutVu
     const r = window.__talosHarnessUiRuntime;
     r.passaASessione('flussi-separati', 'workspace', 'Flussi', 'qwen/qwen3.8-flash', { conclusa: false, modello: 'qwen/qwen3.8-flash' });
     const g = r.realSessionState.generation;
+    /* VELO-SPEC (08/10/2026): il confine che il server manda SEMPRE, a storia vuota, PRIMA degli eventi: così gli eventi qui
+       sotto restano DAL VIVO, il percorso che questa prova ha sempre coperto prima di A1-R3 (col confine dopo restava verde
+       anche lui, misurato: la posizione non decide l'esito, decide quale percorso si copre). */
+    r.handleRealEvent({ type: 'CUSTOM', name: 'talos.fine-rigiocata', value: null }, g);
     let seq = 99000;
     const evento = (e) => r.handleRealEvent({ ...e, _sequenza: seq += 1 }, g);
     evento({ type: 'RunStarted', input: { consegna: 'esegui' }, contesto: { cartella: 'C:\\progetti\\talos-prova', modello: 'glm-5.3-flash' } });
@@ -59,8 +65,9 @@ async function scena(page, { conFlussi, colorMode = 'dark', codice = 0, stdoutVu
     evento(conFlussi
       ? { ...base, content: testo, stdout: stdoutVuoto ? '' : '> build\n> node scripts/build.mjs\n\nBuild pronta', stderr: 'npm notice Changelog', exitCode: typeof codice === 'number' ? codice : null }
       : { ...base, content: testo });
-  }, { conFlussi, codice, stdoutVuoto, attrezzo, contenuto });
+  },{ conFlussi, codice, stdoutVuoto, attrezzo, contenuto });
   await page.waitForTimeout(700);
+  await page.waitForFunction(() => !document.querySelector('#conversation')?.classList.contains('is-restoring')); // VELO-SPEC: si misura a velo tolto
   /*
    * ⛔ Il blocco nasce CHIUSO — `aria-expanded="false"` nasconde `.talos-tool-row__body` — quindi
    *   senza aprirlo non si guarda niente: la prima stesura di questa prova misurava zero sezioni su

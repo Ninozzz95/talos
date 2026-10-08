@@ -1,6 +1,7 @@
 import { talosSafeFileStem } from '../document-filename.mjs'
 import { talosResearchBibtex, talosResearchRis } from './citations.mjs'
-import { talosResearchParseReport } from './report.mjs'
+import { talosResearchParseReport, talosResearchReportDocument, talosResearchSupportLabel } from './report.mjs'
+import { LINGUE_DOCUMENTO, linguaDocumento, testiDocumento } from './testi-documento.mjs'
 import {
     escapeHtml,
     inlineInHtml,
@@ -115,8 +116,9 @@ export const FORMATI_ESPORTAZIONE = Object.freeze(Object.keys(FORMATI))
 export const TONI_ESPORTAZIONE = TALOS_RESEARCH_PDF_TONES
 export const TONO_ESPORTAZIONE_PREDEFINITO = TALOS_RESEARCH_PDF_DEFAULT_TONE
 
-/** ⛔ La frase che tiene separato «rapporto» da «prosa depositata». Una sola, in un posto solo. */
-export const DICITURA_SENZA_VERIFICHE = 'Rapporto SENZA VERIFICHE: questa ricerca non porta il record verificabile, quindi nessuna affermazione è stata confrontata con la sua fonte.'
+/** ⛔ La frase che tiene separato «rapporto» da «prosa depositata». Una sola, in un posto solo (`testi-documento.mjs`);
+ *  qui la forma inglese, per chi la importa. Nei file esportati esce nella lingua chiesta. */
+export const DICITURA_SENZA_VERIFICHE = testiDocumento('en').senzaVerifiche
 
 /** Il tetto del nome, in byte UTF-8: lo stesso che `document-generator.mjs` usa per i suoi file. */
 const BYTE_MASSIMI_DEL_NOME = 60
@@ -133,10 +135,11 @@ const BYTE_MASSIMI_DEL_NOME = 60
  * @param {string} formato
  * @returns {string}
  */
-export function nomeSicuroDiEsportazione(domanda, formato) {
+export function nomeSicuroDiEsportazione(domanda, formato, lingua) {
     const forma = FORMATI[formato]
     if (!forma) throw new EsportazioneRicercaError(`unknown export format: ${formato}`, 'RESEARCH_INVALID')
-    const grezzo = talosSafeFileStem(String(domanda ?? ''), BYTE_MASSIMI_DEL_NOME, 'ricerca')
+    const riserva = testiDocumento(lingua).nomeFileRiserva
+    const grezzo = talosSafeFileStem(String(domanda ?? ''), BYTE_MASSIMI_DEL_NOME, riserva)
     /*
      * ⛔ `..` sopravvive a `talosSafeFileStem` (il punto non è un carattere vietato su nessun
      *   filesystem): qui cade, e con lui ogni nome fatto di soli punti e spazi.
@@ -145,7 +148,7 @@ export function nomeSicuroDiEsportazione(domanda, formato) {
      *   punti lasciava un nome che comincia ancora per punto — cioè un file nascosto su ogni
      *   sistema Unix. Si toglie tutto il prefisso di punti E spazi, quante volte si ripeta.
      */
-    const stelo = /[^.\s]/u.test(grezzo) ? grezzo.replace(/^[.\s]+/u, '').trim() || 'ricerca' : 'ricerca'
+    const stelo = /[^.\s]/u.test(grezzo) ? grezzo.replace(/^[.\s]+/u, '').trim() || riserva : riserva
     return `${stelo}${forma.suffisso ?? ''}.${forma.estensione}`
 }
 
@@ -210,13 +213,32 @@ function letteAlle(ricerca) {
 
 /* ─────────────────────────────── i costruttori, uno per formato ─────────────────────────── */
 
-function testoMarkdown(ricerca, record) {
+function testoMarkdown(ricerca, record, lingua) {
     const prosa = prosaDisponibile(ricerca)
     if (!prosa) return null
     // Col record: il rapporto COM'È — recinto compreso, perché è quello che lo rende
     // ri-verificabile da chi lo riceve.
-    if (record) return prosa
-    return `> ⛔ ${DICITURA_SENZA_VERIFICHE}\n\n${senzaIlRecinto(prosa)}\n`
+    /* ⛔ K4b (07/10/2026, owner: «nella lingua dell'interfaccia»): con una lingua CHIESTA il documento si riscrive dal
+       record — stesso scrittore (`talosResearchReportDocument`), stesso recinto — con le parole di TALOS in quella lingua.
+       La prosa del modello e i passaggi restano com'erano. Senza lingua (un client più vecchio) esce com'è salvato. */
+    if (record) return lingua ? talosResearchReportDocument(ingressoDalRecord(record), { lingua }) : prosa
+    return `> ⛔ ${testiDocumento(lingua).senzaVerifiche}\n\n${senzaIlRecinto(prosa)}\n`
+}
+
+/** Il record riletto, nella forma che `talosResearchReportDocument` vuole. La citazione di un'affermazione senza
+ *  passaggio il record non la conserva: la frase lo dice senza citarla. */
+function ingressoDalRecord(record) {
+    return {
+        question: record.question,
+        summary: record.summary,
+        judge: record.judge ?? null,
+        claims: (record.claims ?? []).map((c) => ({
+            claim: { text: c?.text ?? '', sourceIndex: c?.sourceIndex, quote: '' },
+            passage: c?.passage ?? '',
+            checks: c?.checks ?? {},
+        })),
+        sources: record.sources ?? [],
+    }
 }
 
 /**
@@ -247,34 +269,35 @@ function testoJson(ricerca, record) {
 }
 
 /** L'elenco delle fonti, in Markdown: titolo, indirizzo, data dichiarata, passaggi citati. */
-function testoFonti(ricerca, record) {
+function testoFonti(ricerca, record, lingua) {
+    const T = testiDocumento(lingua)
     const righe = [
-        `# Fonti — ${ricerca.domanda ?? 'ricerca'}`,
+        `# ${T.fontiTitolo(ricerca.domanda ?? T.nomeFileRiserva)}`,
         '',
-        `${record.sources.length} fonti, ${record.claims.length} affermazioni.`,
+        T.fontiConteggio(record.sources.length, record.claims.length),
         '',
     ]
     record.sources.forEach((fonte, indice) => {
         const numero = indice + 1
         righe.push(`## ${numero}. ${fonte.title || dominioOIndirizzo(fonte.url)}`)
         righe.push('')
-        righe.push(`- Indirizzo: ${fonte.url}`)
-        righe.push(`- Data dichiarata: ${fonte.publishedAt ?? 'non dichiarata'}`)
-        righe.push(`- Come è stata ottenuta: ${fonte.obtained === 'page' ? 'pagina letta' : 'solo estratto dal motore di ricerca'}`)
+        righe.push(`- ${T.fontiIndirizzo}: ${fonte.url}`)
+        righe.push(`- ${T.fontiData}: ${fonte.publishedAt ?? T.fontiNonDichiarata}`)
+        righe.push(`- ${T.fontiCome}: ${fonte.obtained === 'page' ? T.fontiPaginaLetta : T.soloEstratto}`)
         /* ⛔ `sourceIndex` è 1-BASED nel record (vedi `pdf.mjs`): confrontare con `indice`
            attribuirebbe ogni passaggio alla fonte precedente. */
         const passaggi = record.claims.filter((c) => Number(c?.sourceIndex) === numero)
         righe.push('')
         if (passaggi.length === 0) {
-            righe.push('Nessuna affermazione poggia su questa fonte.')
+            righe.push(T.fontiNessuna)
         } else {
-            righe.push('Passaggi citati:')
+            righe.push(T.fontiPassaggi)
             righe.push('')
             for (const claim of passaggi) {
                 const passaggio = String(claim.passage ?? '').trim()
                 righe.push(passaggio
                     ? `- «${passaggio}» — ${claim.text}`
-                    : `- (il passaggio citato non è stato ritrovato nel testo della fonte) — ${claim.text}`)
+                    : `- ${T.fontiPassaggioAssente} — ${claim.text}`)
             }
         }
         righe.push('')
@@ -285,9 +308,9 @@ function testoFonti(ricerca, record) {
 /** Il dominio, o l'indirizzo grezzo: un titolo mancante non diventa una riga vuota. */
 function dominioOIndirizzo(url) {
     try {
-        return new URL(url).hostname || String(url ?? 'fonte')
+        return new URL(url).hostname || String(url ?? 'source')
     } catch {
-        return String(url ?? 'fonte')
+        return String(url ?? 'source')
     }
 }
 
@@ -303,14 +326,15 @@ function dominioOIndirizzo(url) {
  * ⛔ Tema chiaro E scuro, come ogni superficie di questo prodotto (owner 11/09): chi la apre di
  *   notte non prende un lampo bianco.
  */
-function testoHtml(ricerca, record) {
+function testoHtml(ricerca, record, lingua) {
+    const T = testiDocumento(lingua)
     const prosa = prosaDisponibile(ricerca)
-    const domanda = ricerca.domanda ?? 'Ricerca approfondita'
+    const domanda = ricerca.domanda ?? T.ricercaApprofondita
     const b = ricerca.bilancio
     const corpo = []
 
     if (!record) {
-        corpo.push(`<p class="avviso">⛔ ${escapeHtml(DICITURA_SENZA_VERIFICHE)}</p>`)
+        corpo.push(`<p class="avviso">⛔ ${escapeHtml(T.senzaVerifiche)}</p>`)
         /*
          * ⛔⛔⛔ 12/09, IL DIFETTO VISTO IN FOTO: qui c'era
          *   `senzaIlRecinto(prosa).split(/\n{2,}/).map(b => \`<p>${escapeHtml(b)}</p>\`)`.
@@ -326,49 +350,52 @@ function testoHtml(ricerca, record) {
         /* ⛔ Anche la SINTESI e' Markdown: e' scritta dallo stesso modello che scrive il rapporto. */
         corpo.push(`<div class="sintesi">${markdownInHtml(record.summary, { livelloMinimo: 2 })}</div>`)
         if (b) {
+            const L = T.htmlBilancio
             corpo.push('<ul class="bilancio">',
-                `<li><b>${b.totali}</b> affermazioni</li>`,
-                `<li><b>${b.sostenute}</b> sostenute</li>`,
-                `<li><b>${b.inParte}</b> in parte</li>`,
-                `<li><b>${b.nonSostenute}</b> non sostenute</li>`,
-                `<li><b>${b.contese}</b> contese</li>`,
-                `<li><b>${b.nonVerificate}</b> non verificate</li>`,
+                `<li><b>${b.totali}</b> ${L.totali}</li>`,
+                `<li><b>${b.sostenute}</b> ${L.sostenute}</li>`,
+                `<li><b>${b.inParte}</b> ${L.inParte}</li>`,
+                `<li><b>${b.nonSostenute}</b> ${L.nonSostenute}</li>`,
+                `<li><b>${b.contese}</b> ${L.contese}</li>`,
+                `<li><b>${b.nonVerificate}</b> ${L.nonVerificate}</li>`,
                 '</ul>')
         }
-        corpo.push(`<p class="giudice">${record.judge
-            ? `Verifica eseguita da: ${escapeHtml(record.judge)} — mai dal modello che ha scritto il rapporto.`
-            : 'Verifica non eseguita: nessun giudice indipendente era disponibile.'}</p>`)
-        corpo.push('<h2>Le affermazioni</h2>')
-        /* ⛔ I verdetti escono dalla SCHEDA (`affermazioni[].verdettoUmano`), cioè dalla stessa
-           `talosResearchSupportLabel` che scrive la prosa: due frasari sono due verdetti. */
+        corpo.push(`<p class="giudice">${record.judge ? T.htmlGiudice(escapeHtml(record.judge)) : T.senzaGiudice}</p>`)
+        corpo.push(`<h2>${T.titoloAffermazioni}</h2>`)
+        /* ⛔ I verdetti escono dalla stessa `talosResearchSupportLabel` che scrive la prosa: due frasari sono due verdetti.
+           ⛔ K4b (07/10/2026): dal CODICE del verdetto della scheda (`affermazioni[].verdetto`) nella lingua chiesta, non
+           da `verdettoUmano`, che è la parola fissata quando la ricerca è finita. Senza codice resta quella. */
         for (const a of ricerca.affermazioni ?? []) {
+            const parolaVerdetto = typeof a.verdetto === 'string' && a.verdetto
+                ? talosResearchSupportLabel({ claimSupported: a.verdetto }, lingua)
+                : String(a.verdettoUmano ?? '')
             corpo.push('<article>',
                 /* ⛔ Il TESTO dell'affermazione passa dall'inline (un `**` scritto dal modello e'
                    enfasi); il PASSAGGIO no — vedi sotto. */
                 `<h3>${a.numero}. ${inlineInHtml(a.testo)}</h3>`,
-                `<p class="verdetto v-${escapeHtml(a.verdetto)}">Esito: ${escapeHtml(a.verdettoUmano)}${a.motivoVerdetto ? ` — ${escapeHtml(a.motivoVerdetto)}` : ''}</p>`,
+                `<p class="verdetto v-${escapeHtml(a.verdetto)}">${T.esito}: ${escapeHtml(parolaVerdetto)}${a.motivoVerdetto ? ` — ${escapeHtml(a.motivoVerdetto)}` : ''}</p>`,
                 /* ⛔⛔ IL PASSAGGIO NON SI RENDE MAI: e' la PROVA, cioe' il testo com'e' nella
                    fonte. Un asterisco dentro una citazione e' un asterisco che c'era davvero, e
                    trasformarlo in corsivo vorrebbe dire modificare l'unica cosa che il rapporto
                    conserva perche' non sia modificabile. Escapato, mai reso. */
                 a.passaggio
                     ? `<blockquote>${escapeHtml(a.passaggio)}</blockquote>`
-                    : '<p class="assente">Il passaggio citato non è stato ritrovato nel testo della fonte.</p>',
-                `<p class="fonte">Fonte ${a.fonte ?? '—'}</p>`,
+                    : `<p class="assente">${T.htmlPassaggioAssente}</p>`,
+                `<p class="fonte">${T.fonte} ${a.fonte ?? '—'}</p>`,
                 '</article>')
         }
-        corpo.push(`<h2>Fonti (${record.sources.length})</h2>`, '<ol class="fonti">')
+        corpo.push(`<h2>${T.titoloFonti(record.sources.length)}</h2>`, '<ol class="fonti">')
         for (const f of record.sources) {
             corpo.push(`<li><b>${escapeHtml(f.title || dominioOIndirizzo(f.url))}</b><br>`
                 + `<span class="url">${escapeHtml(f.url)}</span><br>`
-                + `<span class="quando">${f.publishedAt ? `data dichiarata: ${escapeHtml(f.publishedAt)}` : 'data non dichiarata'}`
-                + ` · ${f.obtained === 'page' ? 'pagina letta' : 'solo estratto dal motore di ricerca'}</span></li>`)
+                + `<span class="when">${f.publishedAt ? T.dataDichiarata(escapeHtml(f.publishedAt)) : T.dataNonDichiarata}`
+                + ` · ${f.obtained === 'page' ? T.fontiPaginaLetta : T.soloEstratto}</span></li>`)
         }
         corpo.push('</ol>')
     }
 
     return `<!doctype html>
-<html lang="it"><head><meta charset="utf-8">
+<html lang="${linguaDocumento(lingua)}"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${escapeHtml(domanda)}</title>
 <style>
@@ -401,7 +428,7 @@ a { color:inherit; text-decoration:underline; text-underline-offset:2px; }
 table { border-collapse:collapse; width:100%; font-size:.9rem; }
 th, td { border-bottom:1px solid var(--bordo); padding:7px 10px; }
 th { border-bottom:2px solid var(--tenue); font-weight:600; }
-.meta, .quando, .fonte, .url { color:var(--tenue); font-size:.85rem; }
+.meta, .when, .fonte, .url { color:var(--tenue); font-size:.85rem; }
 .sintesi { font-size:1.05rem; }
 .avviso { background:var(--pannello); border-left:4px solid var(--allarme); padding:12px 14px; border-radius:0 6px 6px 0; }
 .bilancio { list-style:none; display:flex; flex-wrap:wrap; gap:8px 18px; padding:12px 14px; margin:18px 0;
@@ -418,9 +445,9 @@ footer { margin-top:44px; color:var(--tenue); font-size:.8rem; border-top:1px so
 </style></head>
 <body><main>
 <h1>${escapeHtml(domanda)}</h1>
-<p class="meta">Stato: ${escapeHtml(ricerca.stato ?? 'ignoto')}${ricerca.modello ? ` · modello: ${escapeHtml(ricerca.modello)}` : ''}${letteAlle(ricerca) ? ` · ${escapeHtml(soloLaData(letteAlle(ricerca)))}` : ''}</p>
+<p class="meta">${T.htmlStato}: ${escapeHtml(ricerca.stato ?? T.htmlStatoIgnoto)}${ricerca.modello ? ` · ${T.htmlModello}: ${escapeHtml(ricerca.modello)}` : ''}${letteAlle(ricerca) ? ` · ${escapeHtml(soloLaData(letteAlle(ricerca)))}` : ''}</p>
 ${corpo.join('\n')}
-<footer>TALOS · ricerca approfondita</footer>
+<footer>${T.pdfPiede}</footer>
 </main></body></html>
 `
 }
@@ -432,16 +459,18 @@ ${corpo.join('\n')}
  *   documento (lo dice già `talosResearchPdfSpec`), perché non c'è niente da cui differire. Ciò
  *   che si aggiunge è la riga che dice **perché** è così.
  */
-function specPdf(ricerca, record, tono) {
+function specPdf(ricerca, record, tono, lingua) {
+    const T = testiDocumento(lingua)
     const opzioni = {
         date: soloLaData(letteAlle(ricerca)) || undefined,
         title: ricerca.titolo && ricerca.titolo !== ricerca.domanda ? ricerca.titolo : null,
+        lingua: linguaDocumento(lingua),
     }
     if (record) return talosResearchPdfSpec(record, tono, opzioni)
 
     const sintetico = {
         version: 1,
-        question: ricerca.domanda ?? 'Ricerca approfondita',
+        question: ricerca.domanda ?? T.ricercaApprofondita,
         /* ⛔ La sintesi del record sintetico resta VUOTA: la prosa entra qui sotto come BLOCCHI
            impaginati, non come un paragrafo unico lungo cinque pagine col `##` dentro. */
         summary: '',
@@ -454,7 +483,7 @@ function specPdf(ricerca, record, tono) {
         ...spec,
         blocks: [
             spec.blocks[0],
-            { t: 'note', x: DICITURA_SENZA_VERIFICHE },
+            { t: 'note', x: T.senzaVerifiche },
             /* ⛔ `livelloMinimo: 2`: la copertina porta gia' il titolo della ricerca. */
             ...markdownInBlocchiReport(senzaIlRecinto(prosaDisponibile(ricerca) ?? ''), { livelloMinimo: 2 }),
         ],
@@ -466,13 +495,18 @@ function specPdf(ricerca, record, tono) {
 /**
  * Il contenuto di un'esportazione, nel formato chiesto.
  *
- * @param {{ricerca:object, formato:string, tono?:string}} richiesta
+ * @param {{ricerca:object, formato:string, tono?:string, lingua?:'en'|'it'}} richiesta — `lingua` (K4b, owner 07/10/2026):
+ *   la lingua delle parole di TALOS nel file, quella dell'interfaccia; senza, inglese (e il `md` com'è salvato).
  * @param {{generaDocumentoFn?:Function}} [deps] — iniettabile SOLO per non caricare pdfmake in
  *   un test che non guarda il PDF. Il valore vero è `generateTalosDocument`, il generatore di
  *   `document_create`: un secondo generatore vorrebbe dire due `.docx` diversi dallo stesso TALOS.
  * @returns {Promise<{formato:string, nomeFile:string, mediaType:string, bytes:Uint8Array}>}
  */
-export async function costruisciEsportazione({ ricerca, formato, tono }, deps = {}) {
+export async function costruisciEsportazione({ ricerca, formato, tono, lingua }, deps = {}) {
+    if (lingua !== undefined && !LINGUE_DOCUMENTO.includes(lingua)) {
+        throw new EsportazioneRicercaError(`unknown language "${lingua}" — expected one of: ${LINGUE_DOCUMENTO.join(', ')}`, 'RESEARCH_INVALID')
+    }
+    const T = testiDocumento(lingua)
     const forma = FORMATI[formato]
     if (!forma) {
         throw new EsportazioneRicercaError(
@@ -502,7 +536,7 @@ export async function costruisciEsportazione({ ricerca, formato, tono }, deps = 
         )
     }
 
-    const nomeFile = nomeSicuroDiEsportazione(ricerca.domanda, formato)
+    const nomeFile = nomeSicuroDiEsportazione(ricerca.domanda, formato, lingua)
     const comune = { formato, nomeFile, mediaType: forma.mediaType }
 
     if (formato === 'md' || formato === 'html' || formato === 'pdf' || formato === 'docx') {
@@ -519,7 +553,7 @@ export async function costruisciEsportazione({ ricerca, formato, tono }, deps = 
 
     switch (formato) {
         case 'md':
-            return { ...comune, bytes: CODIFICA.encode(testoMarkdown(ricerca, record)) }
+            return { ...comune, bytes: CODIFICA.encode(testoMarkdown(ricerca, record, lingua)) }
         case 'json':
             return { ...comune, bytes: CODIFICA.encode(testoJson(ricerca, record)) }
         case 'bib':
@@ -527,15 +561,15 @@ export async function costruisciEsportazione({ ricerca, formato, tono }, deps = 
         case 'ris':
             return { ...comune, bytes: CODIFICA.encode(`${talosResearchRis(citazioniDaRecord(record, letteAlle(ricerca)))}\n`) }
         case 'fonti':
-            return { ...comune, bytes: CODIFICA.encode(testoFonti(ricerca, record)) }
+            return { ...comune, bytes: CODIFICA.encode(testoFonti(ricerca, record, lingua)) }
         case 'html':
-            return { ...comune, bytes: CODIFICA.encode(testoHtml(ricerca, record)) }
+            return { ...comune, bytes: CODIFICA.encode(testoHtml(ricerca, record, lingua)) }
         case 'pdf': {
             const genera = deps.generaDocumentoFn ?? (await import('../document-generator.mjs')).generateTalosDocument
             const documento = await genera({
                 format: 'pdf',
-                title: ricerca.domanda ?? 'Ricerca approfondita',
-                report: specPdf(ricerca, record, tonoScelto),
+                title: ricerca.domanda ?? T.ricercaApprofondita,
+                report: specPdf(ricerca, record, tonoScelto, lingua),
             })
             // ⛔ Il nome lo decide QUESTO modulo, non il generatore: la sua politica è quella dei
             //   file del workspace, e qui il nome è parte del contratto della rotta.
@@ -548,8 +582,8 @@ export async function costruisciEsportazione({ ricerca, formato, tono }, deps = 
             const prosa = senzaIlRecinto(prosaDisponibile(ricerca) ?? '')
             const documento = await genera({
                 format: 'docx',
-                title: ricerca.domanda ?? 'Ricerca approfondita',
-                body: record ? prosa : `${DICITURA_SENZA_VERIFICHE}\n\n${prosa}`,
+                title: ricerca.domanda ?? T.ricercaApprofondita,
+                body: record ? prosa : `${T.senzaVerifiche}\n\n${prosa}`,
             })
             return { ...comune, bytes: documento.bytes }
         }

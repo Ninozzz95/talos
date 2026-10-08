@@ -73,7 +73,7 @@ function senzaSeparatoriInCoda(percorso) {
  */
 export function nomeCartellaProgetto(percorsoCanonico, { piattaforma = process.platform } = {}) {
   if (typeof percorsoCanonico !== 'string' || percorsoCanonico.length === 0) {
-    throw new TypeError('nomeCartellaProgetto: serve un percorso assoluto.');
+    throw new TypeError('nomeCartellaProgetto: an absolute path is required.');
   }
   const pulito = senzaSeparatoriInCoda(percorsoCanonico);
   const impronta = createHash('sha256').update(chiaveDelPercorso(pulito, piattaforma), 'utf8').digest('hex').slice(0, LUNGHEZZA_IMPRONTA);
@@ -150,7 +150,7 @@ async function sposta(da, a, deps) {
   await deps.cpFn(da, a, { recursive: true, errorOnExist: true, force: false, verbatimSymlinks: true });
   if (!(await stessoContenuto(da, a, deps))) {
     await deps.rmFn(a, { recursive: true, force: true });
-    throw Object.assign(new Error(`la copia di ${da} non coincide con l'originale: l'originale resta dov'è`), { code: 'PO26_COPIA_DIVERSA' });
+    throw Object.assign(new Error(`the copy of ${da} does not match the original: the original stays where it is`), { code: 'PO26_COPIA_DIVERSA' });
   }
   await deps.rmFn(da, { recursive: true, force: true });
   return 'copiata';
@@ -237,13 +237,13 @@ export function rapportoDaDire(rapporto) {
  * @param {{radiceDati: string, onMigrazione?: (rapporto: object) => void}} opzioni
  */
 export function creaCartellaDatiProgetto({ radiceDati, onMigrazione = null, piattaforma = process.platform }, deps = {}) {
-  if (typeof radiceDati !== 'string' || radiceDati.length === 0) throw new TypeError('creaCartellaDatiProgetto: serve radiceDati.');
+  if (typeof radiceDati !== 'string' || radiceDati.length === 0) throw new TypeError('creaCartellaDatiProgetto: radiceDati is required.');
   const realpathFn = deps.realpathFn ?? fsp.realpath;
   const migraFn = deps.migraFn ?? migraDatiGenerati;
   const perProgetto = new Map();
   return async function cartellaDatiDelProgetto(cartellaProgetto) {
     if (typeof cartellaProgetto !== 'string' || cartellaProgetto.length === 0) {
-      throw new TypeError('cartellaDatiDelProgetto: serve la cartella del progetto.');
+      throw new TypeError('cartellaDatiDelProgetto: the project folder is required.');
     }
     const canonico = await percorsoCanonico(cartellaProgetto, { realpathFn });
     const chiave = chiaveDelPercorso(senzaSeparatoriInCoda(canonico), piattaforma);

@@ -1,4 +1,5 @@
 import { talosResearchVerifiedStanding } from './verification.mjs'
+import { testiDocumento } from './testi-documento.mjs'
 
 /*
  * PORTO FEDELE di AVM/mobile/src/lib/research/researchReport.ts (175 righe, 11/09/2026).
@@ -83,16 +84,11 @@ const FENCE_CLOSE = '```'
  * @param {TalosResearchChecks} checks
  * @returns {string}
  */
-export function talosResearchSupportLabel(checks) {
-    switch (checks.claimSupported) {
-        case 'yes': return 'sostenuta dalla fonte'
-        case 'partial': return 'sostenuta solo in parte'
-        case 'no': return 'NON sostenuta dalla fonte'
-        // ⛔ CONTESA-01: la parola dice anche PERCHÉ, se no «contesa» da sola
-        // si legge come una sfumatura di «parziale», che è ciò che non è.
-        case 'contested': return 'contesa — le fonti non concordano'
-        default: return 'non verificata'
-    }
+export function talosResearchSupportLabel(checks, lingua = 'en') {
+    /* ⛔ K4b (07/10/2026): le parole stanno in `testi-documento.mjs`, in inglese e in italiano; senza lingua è inglese.
+       ⛔ CONTESA-01: la parola dice anche PERCHÉ, se no «contesa» da sola si legge come una sfumatura di «parziale». */
+    const parole = testiDocumento(lingua).verdetto
+    return Object.hasOwn(parole, checks?.claimSupported) && checks.claimSupported !== 'altro' ? parole[checks.claimSupported] : parole.altro
 }
 
 /**
@@ -105,8 +101,9 @@ export function talosResearchSupportLabel(checks) {
  * }} input
  * @returns {string}
  */
-export function talosResearchReportDocument(input) {
+export function talosResearchReportDocument(input, { lingua = 'en' } = {}) {
     const standing = talosResearchVerifiedStanding(input.claims)
+    const T = testiDocumento(lingua)
 
     /** @type {TalosResearchReportRecord} */
     const record = {
@@ -128,13 +125,7 @@ export function talosResearchReportDocument(input) {
         })),
     }
 
-    const verdictLine = [
-        `Affermazioni: ${standing.total}`,
-        `sostenute: ${standing.supported}`,
-        `in parte: ${standing.partial}`,
-        `non sostenute: ${standing.unsupported}`,
-        `non verificate: ${standing.unchecked}`,
-    ].join(' · ')
+    const verdictLine = T.bilancioRiga(standing).join(' · ')
 
     const prose = [
         `# ${input.question}`,
@@ -142,32 +133,30 @@ export function talosResearchReportDocument(input) {
         input.summary,
         '',
         verdictLine,
-        input.judge
-            ? `Verifica eseguita da: ${input.judge} — mai dal modello che ha scritto il rapporto.`
-            : 'Verifica non eseguita: nessun giudice indipendente era disponibile.',
+        input.judge ? T.giudice(input.judge) : T.senzaGiudice,
         '',
-        '## Le affermazioni',
+        `## ${T.titoloAffermazioni}`,
         ...input.claims.map((entry, index) => {
             const source = input.sources[entry.claim.sourceIndex - 1]
             return [
                 '',
                 `### ${index + 1}. ${entry.claim.text}`,
-                `Esito: ${talosResearchSupportLabel(entry.checks)}${entry.checks.supportReason ? ` — ${entry.checks.supportReason}` : ''}`,
+                `${T.esito}: ${talosResearchSupportLabel(entry.checks, lingua)}${entry.checks.supportReason ? ` — ${entry.checks.supportReason}` : ''}`,
                 entry.passage
                     ? `\n> ${entry.passage}`
-                    : `\n> (il passaggio citato non è nel testo della fonte: "${entry.claim.quote}")`,
+                    : `\n> ${T.passaggioAssente(entry.claim.quote)}`,
                 '',
                 source
-                    ? `Fonte: ${source.title} — ${source.url}${source.obtained === 'snippet' ? ' (solo estratto dal motore di ricerca)' : ''}`
-                    : 'Fonte: citata ma mai raccolta.',
+                    ? `${T.fonte}: ${source.title} — ${source.url}${source.obtained === 'snippet' ? ` (${T.soloEstratto})` : ''}`
+                    : T.fonteMaiRaccolta,
             ].join('\n')
         }),
         '',
-        `## Fonti (${input.sources.length})`,
+        `## ${T.titoloFonti(input.sources.length)}`,
         ...input.sources.map((source, index) => [
             `${index + 1}. ${source.title} — ${source.url}`,
-            `   ${source.publishedAt ? `data dichiarata: ${source.publishedAt}` : 'data non dichiarata'}`,
-            `   ${source.obtained === 'page' ? 'pagina letta' : 'solo estratto dal motore di ricerca'}`,
+            `   ${source.publishedAt ? T.dataDichiarata(source.publishedAt) : T.dataNonDichiarata}`,
+            `   ${source.obtained === 'page' ? T.paginaLetta : T.soloEstratto}`,
         ].join('\n')),
     ].join('\n')
 

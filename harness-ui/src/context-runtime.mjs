@@ -13,10 +13,10 @@ const isLocal = profile => ['local', 'ollama', 'llama.cpp'].includes(profile.pro
 
 export async function resolveDesktopContextProfile({ profiles, provider, model, readLocalRuntime }) {
   const profile = profiles?.find(item => item.provider === provider && item.model === model);
-  if (!profile) fail('CTX_MODEL_NOT_CONFIGURED', 'Il modello non ha un profilo fissato per questa prova.');
+  if (!profile) fail('CTX_MODEL_NOT_CONFIGURED', 'The model does not have a fixed profile for this trial.');
   if (provider === 'local') {
     const runtime = await readLocalRuntime?.();
-    if (runtime?.state !== 'ready' || runtime.modelId !== model || !Number.isSafeInteger(runtime.windowTokens) || runtime.windowTokens !== profile.windowTokens) fail('CTX_RUNTIME_PROFILE_MISMATCH', 'Il modello locale caricato o la finestra effettiva non corrispondono al profilo di prova.');
+    if (runtime?.state !== 'ready' || runtime.modelId !== model || !Number.isSafeInteger(runtime.windowTokens) || runtime.windowTokens !== profile.windowTokens) fail('CTX_RUNTIME_PROFILE_MISMATCH', 'The loaded local model or the actual window does not match the trial profile.');
   }
   return { provider: profile.provider, model: profile.model, windowTokens: profile.windowTokens, responseReserve: profile.responseReserve };
 }
@@ -32,10 +32,10 @@ export async function resolveDesktopContextProfile({ profiles, provider, model, 
  * non lo espone — la riga è di F3, qui si passa ciò che il registro dà.
  */
 export async function createDesktopContextRuntime({ sessionDirectory, enabledSessionIds = [], politicaAbilitazione, readSession, resolveModelProfile, tokenCounter, callModel, usagePolicy, onEvent, loadLegacy } = {}) {
-  if (!Array.isArray(enabledSessionIds) || enabledSessionIds.some(id => typeof id !== 'string' || !/^[a-zA-Z0-9_-]{1,256}$/u.test(id))) fail('CTX_INVALID_INPUT', 'Elenco delle conversazioni di prova non valido.');
-  if (politicaAbilitazione !== undefined && typeof politicaAbilitazione !== 'function') fail('CTX_INVALID_INPUT', 'La politica di abilitazione deve essere una funzione.');
+  if (!Array.isArray(enabledSessionIds) || enabledSessionIds.some(id => typeof id !== 'string' || !/^[a-zA-Z0-9_-]{1,256}$/u.test(id))) fail('CTX_INVALID_INPUT', 'Invalid list of trial conversations.');
+  if (politicaAbilitazione !== undefined && typeof politicaAbilitazione !== 'function') fail('CTX_INVALID_INPUT', 'The enablement policy must be a function.');
   if (!enabledSessionIds.length && !politicaAbilitazione) return null;
-  if (typeof sessionDirectory !== 'string' || !isAbsolute(sessionDirectory) || typeof readSession !== 'function' || typeof resolveModelProfile !== 'function' || typeof tokenCounter?.countPreparedContext !== 'function' || typeof callModel !== 'function') fail('CTX_PORT_MISSING', 'Configurazione server del motore del contesto incompleta.');
+  if (typeof sessionDirectory !== 'string' || !isAbsolute(sessionDirectory) || typeof readSession !== 'function' || typeof resolveModelProfile !== 'function' || typeof tokenCounter?.countPreparedContext !== 'function' || typeof callModel !== 'function') fail('CTX_PORT_MISSING', 'Incomplete context engine server configuration.');
   const enabled = new Set(enabledSessionIds);
   const decisioni = new Map();
   async function isEnabled(sessionId) {
@@ -58,14 +58,14 @@ export async function createDesktopContextRuntime({ sessionDirectory, enabledSes
   let closing;
   async function profileFor(selected) {
     const resolved = await resolveModelProfile({ provider: selected.provider, model: selected.model });
-    if (!resolved || resolved.provider !== selected.provider || resolved.model !== selected.model) fail('CTX_MODEL_MISMATCH', 'Il profilo server non corrisponde al modello selezionato.');
-    if (!Number.isSafeInteger(resolved.windowTokens) || !Number.isSafeInteger(resolved.responseReserve) || resolved.responseReserve < 1 || resolved.windowTokens <= resolved.responseReserve) fail('CTX_MODEL_INVALID', 'Finestra e riserva del modello non sono verificate.');
+    if (!resolved || resolved.provider !== selected.provider || resolved.model !== selected.model) fail('CTX_MODEL_MISMATCH', 'The server profile does not match the selected model.');
+    if (!Number.isSafeInteger(resolved.windowTokens) || !Number.isSafeInteger(resolved.responseReserve) || resolved.responseReserve < 1 || resolved.windowTokens <= resolved.responseReserve) fail('CTX_MODEL_INVALID', 'Model window and reserve are not verified.');
     // Never persist the resolver object: it may contain credentials or endpoints.
     return { provider: resolved.provider, model: resolved.model, windowTokens: resolved.windowTokens, responseReserve: resolved.responseReserve };
   }
   async function sessionProfile({ sessionId, session }) {
     session ??= await readSession(sessionId);
-    if (!session) fail('CTX_SESSION_NOT_FOUND', 'Conversazione non trovata.');
+    if (!session) fail('CTX_SESSION_NOT_FOUND', 'Conversation not found.');
     const selected = session.provider === 'local'
       ? { provider: 'local', model: session.modelId ?? session.modello }
       : (() => { const { fonte, modelloRemoto } = separaFonteModello(session.modello); return { provider: fonte, model: modelloRemoto }; })();
@@ -82,9 +82,9 @@ export async function createDesktopContextRuntime({ sessionDirectory, enabledSes
   const service = createDesktopContextService({
     engine, store, readSession, isSessionEnabled: isEnabled, resolveSessionModel: sessionProfile, onEvent, registraAncora: contatore.registraAncora,
     loadLegacy: loadLegacy ?? (async ({ sessionId }) => {
-      if (!await isEnabled(sessionId)) fail('CTX_NOT_ENABLED', 'Conversazione non abilitata.');
+      if (!await isEnabled(sessionId)) fail('CTX_NOT_ENABLED', 'Conversation not enabled.');
       try { return await readFile(join(directory, `${sessionId}.jsonl`), 'utf8'); }
-      catch (error) { if (error.code === 'ENOENT') return null; fail('CTX_LEGACY_READ_FAILED', 'Il registro originale non è leggibile. Nessuna nuova inferenza è stata avviata.'); }
+      catch (error) { if (error.code === 'ENOENT') return null; fail('CTX_LEGACY_READ_FAILED', 'The original log is not readable. No new inference was started.'); }
     }),
     runInference: async ({ sessionId, priority, signal }, operation) => {
       const profile = await sessionProfile({ sessionId });

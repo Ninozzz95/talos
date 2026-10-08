@@ -62,7 +62,7 @@ test('ARCH-01 — la libreria del motore dice sì, no, o «non lo so»; una coda
   assert.equal(motoreConosceArchitettura(join(base, 'altrove', 'llama-server.exe'), 'spark2_5'), null, 'nessuna libreria: non lo so, e non si ferma niente');
   assert.equal(buildDelMotore(binario), 'b10517');
   assert.equal(buildDelMotore('C:/talos/bin/llama-server.exe'), null);
-  assert.match(testoArchitetturaSconosciuta('spark2_5', 'b10517'), /«spark2_5».*llama\.cpp b10517.*riprovare non cambia niente/u);
+  assert.match(testoArchitetturaSconosciuta('spark2_5', 'b10517'), /"spark2_5".*llama\.cpp b10517.*retrying changes nothing/u);
   assert.equal(RIGA_ARCHITETTURA_SCONOSCIUTA.exec("0.00.258.513 E llama_model_load: error loading model: unknown model architecture: 'spark2_5'")?.[1], 'spark2_5', 'la riga VERA di llama.cpp b10517 (27/09)');
 });
 
@@ -85,7 +85,7 @@ test('ARCH-03 — un modello che il motore non sa leggere si ferma PRIMA di avvi
   await assert.rejects(supervisor.start({ modelPath: modello }), (error) => {
     assert.equal(error.code, 'RUNTIME_ARCH_UNSUPPORTED');
     assert.equal(error.architettura, 'spark2_5');
-    assert.match(error.message, /«spark2_5».*llama\.cpp b10517/u);
+    assert.match(error.message, /"spark2_5".*llama\.cpp b10517/u);
     return true;
   });
   assert.equal(avvii, 0, 'il motore non parte nemmeno');

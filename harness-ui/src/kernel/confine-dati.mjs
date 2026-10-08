@@ -154,6 +154,8 @@ const LUOGHI = Object.freeze({
     conversation_search: 'conversazione', mcp: 'strumento', plugin: 'strumento', tool: 'strumento',
     /* 03/10/2026, estensione del confine (owner: «Sì, tutti e quattro») */
     elenca: 'cartella', mappa: 'progetto', scheda: 'progetto', delega: 'delega', workflow_output: 'workflow',
+    /* automazioni a due porte (08/10/2026): i resoconti dei giri li ha scritti un'altra sessione */
+    automation_runs: 'automazione',
 })
 /** Tutti i tipi di posto che il kernel può mandare: l'interfaccia ha una chiave `kernel.luogo.<tipo>` per ognuno (lo prova il frontend). */
 export const TIPI_DI_LUOGO = Object.freeze([...new Set([...Object.values(LUOGHI), 'altro'])])

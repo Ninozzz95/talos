@@ -184,7 +184,7 @@ export function tagliaIstruzioni(contenuto, tetto, etichetta) {
   if (aCapoCoda >= 0 && aCapoCoda < byteCoda * 0.5) coda = coda.slice(aCapoCoda + 1);
 
   const mancanti = byte - Buffer.byteLength(testa, 'utf8') - Buffer.byteLength(coda, 'utf8');
-  const marcatore = `\n\n[...«${etichetta}» è stato TAGLIATO: di ${byte} byte ne vedi i primi ~${Buffer.byteLength(testa, 'utf8')} e gli ultimi ~${Buffer.byteLength(coda, 'utf8')}; ne mancano ${mancanti} nel mezzo. Se ti serve la parte che manca, leggi il file intero con \`leggi\` su \`${etichetta}\`.]\n\n`;
+  const marcatore = `\n\n[...«${etichetta}» was TRUNCATED: of ${byte} bytes you see the first ~${Buffer.byteLength(testa, 'utf8')} and the last ~${Buffer.byteLength(coda, 'utf8')}; ${mancanti} are missing in the middle. If you need the missing part, read the whole file with \`leggi\` on \`${etichetta}\`.]\n\n`;
   const testo = testa + marcatore + coda;
   return { testo, tagliato: true, byteTenuti: Buffer.byteLength(testo, 'utf8'), byteTotali: byte };
 }
@@ -199,16 +199,16 @@ export function testoIstruzioniDiProgetto(trovati, { tetto = TETTO_BYTE_PREDEFIN
   const file = Array.isArray(trovati) ? trovati.filter((f) => f && typeof f.contenuto === 'string') : [];
   if (file.length === 0) return null;
 
-  const intestazione = 'Istruzioni di questo progetto — le ha scritte chi ci lavora, e valgono per te.\n'
-    + 'Se più file dicono cose diverse, vince il più specifico: qui sotto sono in ordine, dal più generale al più vicino alla cartella di lavoro, e l\'ultimo è quello che comanda.\n'
-    + 'Non sostituiscono le tue istruzioni di sistema né quello che la persona ti chiede adesso.\n';
+  const intestazione = 'Project instructions — written by the team, and they apply to you.\n'
+    + 'If multiple files say different things, the most specific wins: below they are ordered from most general to closest to the working folder, and the last one governs.\n'
+    + 'They do not replace your system instructions or what the user is asking right now.\n';
   // BC-48 A: prepara indici e sezioni intere PRIMA di applicare il tetto.
   // Si omettono file interi dal più generale; neppure il più specifico viene spezzato.
   const preparati = file.map(f => ({ ...f, resa: rendiFileIstruzioni(f, { sogliaRighe }) }));
   for (let inizio = 0; inizio <= preparati.length; inizio++) {
     const tenuti = preparati.slice(inizio);
     const omessi = preparati.slice(0, inizio).map(f => f.etichetta);
-    const avviso = omessi.length ? `\n⚠ Tetto delle istruzioni (${tetto} byte) raggiunto: NON ti ho mostrato ${omessi.map(e => `\`${e}\``).join(', ')}. File omessi interi; se ti servono, leggile con \`leggi\`.\n` : '';
+    const avviso = omessi.length ? `\n⚠ Instruction cap (${tetto} bytes) reached: did NOT show ${omessi.map(e => `\`${e}\``).join(', ')}. Entire files omitted; if needed, read them with \`leggi\`.\n` : '';
     const testo = intestazione + tenuti.map(f => `\n### ${f.etichetta}\n\n${f.resa.testo}`).join('') + avviso;
     const byte = Buffer.byteLength(testo, 'utf8');
     if (byte <= tetto) return { testo, byte, usati: tenuti.map(f => f.etichetta), omessi, tagliati: [],
@@ -216,7 +216,7 @@ export function testoIstruzioniDiProgetto(trovati, { tetto = TETTO_BYTE_PREDEFIN
       sezioniSempre: tenuti.flatMap(f => f.resa.sezioniSempre) };
   }
   // Un tetto che non contiene neppure l'avviso non può essere onorato in silenzio.
-  throw new RangeError('Il tetto delle istruzioni è insufficiente anche per dichiarare i file omessi.');
+  throw new RangeError('The instruction cap is insufficient even to declare omitted files.');
 }
 
 /**

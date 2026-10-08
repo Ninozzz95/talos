@@ -206,10 +206,10 @@ export async function costruisciMappaCartelle({
   filtro,
 } = {}) {
   if (typeof radice !== 'string' || radice.length === 0 || radice.includes('\0')) {
-    throw new MappaCartelleError('La cartella di partenza non è valida');
+    throw new MappaCartelleError('The starting folder is invalid');
   }
   if (filtro !== undefined && typeof filtro !== 'function') {
-    throw new MappaCartelleError('Il filtro deve essere una funzione');
+    throw new MappaCartelleError('The filter must be a function');
   }
 
   const disco = { readdir, realpath, stat, ...(fs ?? {}) };
@@ -365,14 +365,14 @@ export function confrontaCartelle(a, b) {
  *    nessuno aveva guardato dove finiva. Stessa regola di `testoElenco()`.
  */
 export function testoMappaCartelle(mappa, { radice = '', confine } = {}) {
-  const nome = basename(String(radice ?? '').replace(/[\\/]+$/, '')) || 'la cartella di lavoro';
+  const nome = basename(String(radice ?? '').replace(/[\\/]+$/, '')) || 'the working folder';
   const voci = Array.isArray(mappa?.cartelle) ? mappa.cartelle : [];
 
   if (voci.length === 0) {
     /* ⛔ «nessuna sottocartella» è un fatto VERO e utile (un progetto piatto esiste); «nessun
        file» invece si dice solo se davvero non ce ne sono, e in quel caso chi compone il preambolo
        decide di non mandare niente — vedi `contesto-del-progetto.mjs`. */
-    return `Struttura di «${nome}»: nessuna sottocartella, ${mappa?.radiceFile ?? 0} file nella cartella principale.`;
+    return `Structure of «${nome}»: no subfolders, ${mappa?.radiceFile ?? 0} files in the root folder.`;
   }
 
   /* ⛔⛔ BC-40 — DUE modi di NON essere completa, e non sono la stessa cosa:
@@ -396,17 +396,17 @@ export function testoMappaCartelle(mappa, { radice = '', confine } = {}) {
    *   ([[il-promemoria-dove-guarda-per-ultimo]]: non riscrivere la regola, SPOSTARLA).
    */
   const coda = ridotta
-    ? `, primi ${mappa.profonditaRaggiunta} livelli soltanto (⚠ MAPPA INCOMPLETA PER SCELTA: fin qui è tutto vero, sotto ci sono altre cartelle che non ho elencato)`
-    : mappa.troncato ? '' : ', albero COMPLETO';
-  righe.push(`Struttura di «${nome}» — ${voci.length} cartelle${coda}. Fra parentesi quanti file contiene ognuna (i propri, non quelli delle sottocartelle).`);
-  righe.push('I singoli file non sono elencati: usa `cerca` per trovarli per nome o per contenuto, e `elenca` con `percorso` per aprire una cartella precisa (es. `elenca {"percorso":"src"}`).');
+    ? `, first ${mappa.profonditaRaggiunta} levels only (⚠ MAP INCOMPLETE BY CHOICE: everything up to here is true, below are other folders not listed)`
+    : mappa.troncato ? '' : ', COMPLETE tree';
+  righe.push(`Structure of «${nome}» — ${voci.length} folders${coda}. In parentheses how many files each contains (its own, not subfolders).`);
+  righe.push('Individual files are not listed: use `cerca` to find them by name or content, and `elenca` with `percorso` to open a specific folder (e.g. `elenca {"percorso":"src"}`).');
   if (mappa.troncato && mappa.motivoTroncamento === 'tempo') {
-    righe.push(`⚠ MAPPA INCOMPLETA — questa cartella è grande e leggerla tutta avrebbe fatto aspettare: mi sono fermato dopo ${voci.length} cartelle (profondità ${mappa.profonditaRaggiunta}). Quelle elencate sono vere; le altre non le ho guardate: cercale con \`cerca\` o \`elenca\` prima di dire che mancano.`);
+    righe.push(`⚠ INCOMPLETE MAP — this folder is large and reading it all would take too long: stopped after ${voci.length} folders (depth ${mappa.profonditaRaggiunta}). Those listed are real; others were not checked: look for them with \`cerca\` or \`elenca\` before assuming they are missing.`);
   } else if (mappa.troncato) {
-    righe.push(`⚠ MAPPA INCOMPLETA — mi sono fermato a ${voci.length} cartelle (profondità ${mappa.profonditaRaggiunta}): più in basso l'albero continua e non l'ho guardato.`);
+    righe.push(`⚠ INCOMPLETE MAP — stopped at ${voci.length} folders (depth ${mappa.profonditaRaggiunta}): the tree continues below and was not inspected.`);
   }
   if (mappa.illeggibili > 0) {
-    righe.push(`(${mappa.illeggibili} cartelle non si sono lasciate leggere: quello che contengono non compare qui.)`);
+    righe.push(`(${mappa.illeggibili} folders could not be read: their contents do not appear here.)`);
   }
   righe.push('');
   /* ⛔ F-027, estensione (owner 03/10/2026): l'ALBERO porta i nomi delle cartelle, che sceglie chi ha scritto il progetto — dati,
@@ -420,7 +420,7 @@ export function testoMappaCartelle(mappa, { radice = '', confine } = {}) {
   righe.push(typeof confine === 'function' ? confine(albero.join('\n')) : albero.join('\n'));
   if (mappa.troncato || ridotta) {
     righe.push('');
-    righe.push('⚠ Fine di una mappa INCOMPLETA. ⛔ Se una cartella non compare qui sopra NON vuol dire che non esista: aprila con `elenca {"percorso":"…"}` o cercala con `cerca` prima di dire che manca.');
+    righe.push('⚠ End of an INCOMPLETE map. ⛔ If a folder does not appear above, it does NOT mean it does not exist: open it with `elenca {"percorso":"…"}` or search with `cerca` before assuming it is missing.');
   }
   return righe.join('\n');
 }

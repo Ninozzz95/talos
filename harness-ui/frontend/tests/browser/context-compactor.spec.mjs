@@ -137,6 +137,10 @@ test('CTX-UI-DESKTOP-ROUNDTRIP pulsante, SQLite e replay della chat vera', async
     await page.evaluate(({ sessionId, model }) => window.__talosHarnessUiRuntime.passaASessione(sessionId, 'fixture', 'Decisione sul database', model, { conclusa: true, modello: model }), { sessionId, model });
     await expect(page.locator('#veloContesto')).toBeHidden();
     await expect(chatProgress.locator('progress')).toHaveAttribute('value', '2');
+    // VELO-SPEC-2 (08/10/2026, bugfixer): dopo la ricarica la storia si rigioca e `toHaveAttribute` legge anche una chat sotto il velo
+    // (`#conversation.is-restoring`, `visibility:hidden`): la prima foto qui sotto la prendeva velata. Il server di prova manda il confine:
+    // si aspetta che il velo si tolga, e se non si toglie la prova è rossa.
+    await expect(page.locator('#conversation')).not.toHaveClass(/\bis-restoring\b/);
     for (const [width, height] of [[1920, 1080], [2560, 1440], [3840, 2160]]) {
       await page.setViewportSize({ width, height });
       const bounds = await chatProgress.boundingBox();

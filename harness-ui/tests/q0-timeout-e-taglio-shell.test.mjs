@@ -67,10 +67,22 @@ test('F-007-TIMEOUT-KILLS-TREE: il tempo scaduto uccide anche il comando sotto l
     }
 })
 
+/*
+ * ⛔ 08/10/2026 (bugfixer, rosso riprodotto dalla CLI su r4): la prova leggeva la riga ESATTA del timer e contava 0 da
+ *   3ec7cafea (04/10, BUG-3/BUG-14), che ha messo il passaggio in sottofondo fra lo stop e l'uccisione
+ *   (`if (!gestoreSfondo.alTempoScaduto(timeoutMs)) uccidiAlberoDelProcesso(p)`). L'uccisione dell'albero c'era ancora: era il
+ *   testo a non combaciare. ⇒ Si misura la PROPRIETÀ su ogni timer di scadenza, non la forma della riga: i timer sono tre, ognuno
+ *   passa da `uccidiAlberoDelProcesso(p)` e nessuno chiama `p.kill()`.
+ */
 test('F-007-ONE-KILL-PATH: ogni timer di scadenza dei comandi passa dalla stessa uccisione dell albero', () => {
     const sorgente = readFileSync(new URL('../src/kernel/talosHarness.mjs', import.meta.url), 'utf8')
+    const timer = sorgente.split('\n').filter((riga) => /setTimeout\(\(\) => \{ fermatoDalTempo = true;/u.test(riga))
+    assert.equal(timer.length, 3, 'shell Windows, prova ed eseguiComando')
+    for (const riga of timer) {
+        assert.match(riga, /uccidiAlberoDelProcesso\(p\)/u, `il timer deve uccidere l'albero: ${riga.trim()}`)
+        assert.doesNotMatch(riga, /\bp\.kill\(/u, `nessun timer uccide la sola shell: ${riga.trim()}`)
+    }
     assert.equal((sorgente.match(/fermatoDalTempo = true; p\.kill\(\)/gu) ?? []).length, 0, 'nessun timer uccide la sola shell')
-    assert.equal((sorgente.match(/fermatoDalTempo = true; uccidiAlberoDelProcesso\(p\)/gu) ?? []).length, 3, 'shell Windows, prova ed eseguiComando')
 })
 
 /*

@@ -119,6 +119,9 @@ test('BC-03 · IL CASO DEL BUG: una madre RIPRISTINATA dal disco porta ancora le
   assert.equal(b.taskCorto, 'Scrivi la PARTE 2');
   assert.equal(a.conclusa, true);
   assert.equal(a.esitoDelega, 'concluso');
+  // 0.1.23: il resoconto sopravvive al riavvio, accanto allo stato; una figlia mai conclusa non ne ha uno
+  assert.equal(a.riassuntoDelega, 'fatto');
+  assert.equal(b.riassuntoDelega, null);
   assert.equal(b.interrotta, true, 'una figlia che il riavvio ha spento è INTERROTTA, non «in corso» per sempre');
   assert.equal(a.evidenzaDelega.scritture, 1, 'le scritture si ricontano dagli eventi persistiti');
   assert.equal(a.avviataAlle, '2026-09-11T09:01:00.000Z');

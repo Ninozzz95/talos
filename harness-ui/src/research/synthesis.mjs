@@ -160,45 +160,45 @@ export function talosResearchSynthesisPrompt(question, collections) {
   const catalogue = sources.map((source, index) => [
     `[${index + 1}] ${source.title}`,
     source.url,
-    source.publishedAt ? `data dichiarata: ${source.publishedAt}` : 'data non dichiarata',
-    source.obtained === 'snippet' ? 'ATTENZIONE: solo estratto dal motore di ricerca' : '',
+    source.publishedAt ? `declared date: ${source.publishedAt}` : 'date not declared',
+    source.obtained === 'snippet' ? 'WARNING: search engine snippet only' : '',
     source.window ?? talosResearchPageBudget(source.text, { cap: TALOS_RESEARCH_PAGE_BUDGET }).window,
   ].filter(Boolean).join('\n')).join('\n\n---\n\n');
 
   const prompt = [
-    `Domanda: ${question}`,
+    `Question: ${question}`,
     '',
-    'Fonti raccolte, numerate:',
+    'Collected sources, numbered:',
     '',
     catalogue,
     '',
-    'Scrivi un rapporto rispettando ESATTAMENTE questo formato:',
+    'Write a report following EXACTLY this format:',
     '',
-    'SINTESI: una o due frasi che rispondono alla domanda.',
+    'SYNTHESIS: one or two sentences answering the question.',
     '',
     // Scritto come un esempio invece che come un segnaposto etichettato perché
     // uno etichettato viene ricopiato: un giro vero è tornato con sei righe che
     // cominciavano con la parola AFFERMAZIONE, e un rapporto in cui ogni
     // affermazione è il nome del campo è peggio di nessun rapporto.
-    'Poi una riga per ogni affermazione, in questa forma:',
-    'affermazione | numero della fonte | "passaggio copiato dalla fonte"',
+    'Then write one line for each claim, structured like this:',
+    'claim | source number | "passage copied from source"',
     '',
-    'Per esempio:',
-    'La torre è alta 96 metri | 3 | "la torre misura 96 metri dalla base"',
+    'For example:',
+    'The tower is 96 meters tall | 3 | "the tower measures 96 meters from the base"',
     '',
-    'Regole:',
-    '- scrivi l’affermazione vera e propria, non la parola «affermazione».',
-    '- il passaggio deve essere copiato alla lettera dalla fonte che citi:',
-    '  viene confrontato con il testo che abbiamo salvato, meccanicamente.',
-    '- se le fonti non bastano a sostenere qualcosa, dillo invece di dedurlo.',
-    '- niente affermazioni senza fonte.',
+    'Rules:',
+    '- write the actual claim itself, not the word "claim".',
+    '- the passage must be copied verbatim from the source you cite:',
+    '  it is mechanically compared against the text we saved.',
+    '- if sources do not suffice to support something, state that instead of deducing it.',
+    '- no claims without a source.',
   ].join('\n');
 
   return { prompt, sources };
 }
 
 /** Il nome del campo, restituito al posto di un'affermazione. Mai un'affermazione. */
-const PLACEHOLDER = /^[<[(]?\s*(l['’]?\s*)?affermazione\s*(vera e propria)?\s*[>\])]?$/i;
+const PLACEHOLDER = /^[<[(]?\s*(?:(?:l['’]?\s*)?affermazione\s*(?:vera e propria)?|(?:the\s+)?(?:actual\s+)?claim)\s*[>\])]?$/i;
 
 /**
  * R11 — una domanda di seguito, risposta con quello che era già stato pagato.
@@ -223,14 +223,14 @@ export function talosResearchFollowUpPrompt(question, collections) {
   return {
     sources: built.sources,
     prompt: [
-      'Queste sono le fonti già raccolte in una ricerca precedente.',
-      'NON è stata fatta nessuna ricerca nuova e non ce ne sarà: quello che',
-      'c’è qui sotto è tutto quello che esiste.',
+      'These are the sources already collected in a previous research.',
+      'NO new search was made and none will be: what',
+      'is below is everything that exists.',
       '',
       built.prompt,
       '',
-      '- se queste fonti non rispondono alla domanda, scrivilo nella SINTESI',
-      '  invece di rispondere da quello che sai: qui si risponde solo con le fonti.',
+      '- if these sources do not answer the question, state it in SYNTHESIS',
+      '  instead of answering from what you know: answers here rely only on the sources.',
     ].join('\n'),
   };
 }
@@ -263,10 +263,8 @@ function comparable(text) {
  */
 export function talosResearchParseSynthesis(answer, sources) {
   const lines = answer.split('\n').map((line) => line.trim()).filter(Boolean);
-  const summary = lines
-    .find((line) => line.toUpperCase().startsWith('SINTESI:'))
-    ?.slice('SINTESI:'.length)
-    .trim() ?? '';
+  const summaryLine = lines.find((line) => line.toUpperCase().startsWith('SINTESI:') || line.toUpperCase().startsWith('SYNTHESIS:'));
+  const summary = summaryLine ? summaryLine.replace(/^(?:SINTESI|SYNTHESIS):/i, '').trim() : '';
 
   /** @type {TalosResearchClaim[]} */
   const claims = [];

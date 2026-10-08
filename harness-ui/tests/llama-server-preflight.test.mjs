@@ -301,8 +301,8 @@ test('GPU memory exhausted: its own code and the card numbers printed by the eng
   });
   await assert.rejects(f.supervisor.start(options), (e) => {
     assert.equal(e.code, 'RUNTIME_OUT_OF_MEMORY');
-    assert.match(e.message, /non entra nella memoria della scheda grafica/u);
-    assert.match(e.message, /AMD Radeon RX 9070 XT: 15,9 GB, liberi 15,1 GB/u, 'the numbers come from the engine line, in GB like the model lab');
+    assert.match(e.message, /does not fit in the graphics card memory/u);
+    assert.match(e.message, /AMD Radeon RX 9070 XT: 15\.9 GB, 15\.1 GB free/u, 'the numbers come from the engine line, in GB like the model lab');
     assert.doesNotMatch(e.message, /failed to load model/u, 'no engine jargon in the sentence');
     return true;
   });

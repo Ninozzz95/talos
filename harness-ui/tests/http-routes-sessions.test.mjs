@@ -2879,6 +2879,39 @@ test('⭐⭐ GET .../metrics dice da quanto ragiona il modello, per il ragioname
   assert.deepEqual(corpo.data.ragionamentiMs, { chiuso: 1_000 }, '⛔ AL CONTRARIO: quello finito sta fra le durate, non fra gli aperti');
 });
 
+/* ATTESA-DA-CAPO (08/10/2026, bugfixer): riaperta a metà di un'attesa, la bolla contava da quando la pagina l'aveva ridisegnata
+   (8 s contro 33 s, dal vivo). La bolla rigiocata sa quale evento l'ha aperta e ne CHIEDE l'età: `?eta=<_sequenza>`.
+   ⛔ Review di «talos desktop»: una finestra degli ultimi 64 eventi perdeva l'evento d'apertura dopo 63 pezzi di ragionamento
+   (93 sessioni su 109 del backup del 4174 ne hanno di più). Qui l'apertura sta dietro 100 pezzi. */
+test('ATTESA-DA-CAPO — GET .../metrics?eta=<sequenza> dice l’età di QUEL evento, anche dietro 100 pezzi di ragionamento (registro VERO)', async (t) => {
+  let ora = 1_000;
+  const avvio = { type: 'RunStarted', threadId: 't', runId: 'r1', input: { consegna: 'c' } };
+  const registro = registroVeroConEventi(t, {
+    clock: () => new Date(ora),
+    emetti: (onEvento) => {
+      onEvento(avvio);
+      ora = 4_000;
+      onEvento({ type: 'ReasoningMessageStart', messageId: 'r', role: 'reasoning' });
+      for (let i = 0; i < 100; i += 1) onEvento({ type: 'ReasoningMessageContent', messageId: 'r', delta: 'x' });
+    },
+  });
+  const { base } = await listen(t, { sessionRegistry: registro });
+  const { sessionId } = registro.avvia('sconto-a-scaglioni');
+  await Promise.resolve();
+  ora = 34_000;
+  assert.ok(Number.isSafeInteger(avvio._sequenza), 'premessa: il registro ha dato la sua sequenza al RunStarted');
+  const metriche = (query = '') => fetch(`${base}/api/v1/sessions/${sessionId}/metrics${query}`);
+  const corpo = await (await metriche(`?eta=${avvio._sequenza}`)).json();
+  assert.equal(corpo.ok, true);
+  assert.deepEqual(corpo.data.etaEvento, { sequenza: avvio._sequenza, ms: 33_000 }, 'l’età dell’evento chiesto, fino all’HTTP');
+  /* ⛔ AL CONTRARIO: senza domanda nessuna età; una sequenza che non c'è non diventa uno zero; una query storta si rifiuta */
+  assert.equal((await (await metriche()).json()).data.etaEvento, null, 'chi non chiede (CLI, Board) non riceve niente di nuovo');
+  assert.equal((await (await metriche('?eta=999999')).json()).data.etaEvento, null, 'una sequenza sconosciuta: niente, mai uno zero');
+  for (const storta of ['?eta=abc', '?eta=-1', '?eta=1.5', '?eta=01', '?eta=1&eta=2', '?altro=1', '?eta=']) {
+    assert.equal((await metriche(storta)).status, 400, `query «${storta}» rifiutata`);
+  }
+});
+
 /* ───────────── ⭐⭐ 14/09 — la coda è della sessione: si legge, si toglie per id, si invia, e arriva a chi apre dopo ─────────────
  * Codex espone `thread/queue/list|delete|start` (app-server-protocol, common.rs:596-627); Hermes mette la coda in pausa allo Stop. */
 

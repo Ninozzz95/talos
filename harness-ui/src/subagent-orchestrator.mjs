@@ -93,9 +93,9 @@ export function analizzaEvidenzaDelega(eventi) {
 
 function motivoEvidenzaMancante(evidenza, richiestaScrittura = false) {
   const dettaglio = richiestaScrittura
-    ? 'la richiesta prevedeva una modifica ma non risultano scritture o artefatti'
-    : `${evidenza.toolCallsFalliti} tool su ${evidenza.toolCalls} hanno fallito e non risultano scritture o artefatti`;
-  return `Il sotto-agente ha dichiarato successo, ma non ha lasciato evidenza verificabile: ${dettaglio}. Il lavoro non è considerato concluso.`;
+    ? 'the request involved a change but there are no writes or artifacts'
+    : `${evidenza.toolCallsFalliti} of ${evidenza.toolCalls} tools failed and there are no writes or artifacts`;
+  return `The sub-agent declared success, but left no verifiable evidence: ${dettaglio}. The work is not considered finished.`;
 }
 
 /**
@@ -110,7 +110,7 @@ function motivoEvidenzaMancante(evidenza, richiestaScrittura = false) {
  */
 export function esitoDelegaDaRisultato(risultato, eventi, contesto = {}) {
   if (modalitaDelega(contesto.task) === 'invalida') {
-    return { esito: 'fallito', riassunto: null, motivo: 'Il contratto della delega non è valido: nessuna capacità può essere assunta.' };
+    return { esito: 'fallito', riassunto: null, motivo: 'The delegation contract is not valid: no capability can be assumed.' };
   }
   if (risultato?.ok) {
     const evidenza = analizzaEvidenzaDelega(eventi);
@@ -121,25 +121,25 @@ export function esitoDelegaDaRisultato(risultato, eventi, contesto = {}) {
     // una tool-call riuscita; una delega senza tool conserva il contratto.
     if (evidenza && evidenza.toolCalls > 0 && ((!evidenza.verificabile) || (richiestaScrittura && evidenza.scritture === 0 && evidenza.artefatti === 0))) {
       return {
-        riassunto: risultato.esito?.detto || '(il sotto-agente non ha lasciato un riassunto testuale)',
+        riassunto: risultato.esito?.detto || '(the sub-agent left no text summary)',
         esito: 'fallito',
         motivo: motivoEvidenzaMancante(evidenza, richiestaScrittura),
       };
     }
     return {
-      riassunto: risultato.esito?.detto || '(il sotto-agente non ha lasciato un riassunto testuale)',
+      riassunto: risultato.esito?.detto || '(the sub-agent left no text summary)',
       esito: 'concluso',
     };
   }
   if (risultato?.esito) {
     // giri-esauriti / fermato: la figlia ha girato, non ha chiuso il task.
     return {
-      riassunto: risultato.esito.detto || `Il sotto-task non si è concluso (${risultato.esito.comeFinita}).`,
+      riassunto: risultato.esito.detto || `The sub-task did not finish (${risultato.esito.comeFinita}).`,
       esito: 'fallito',
     };
   }
   // erroreInterno: avviaSessione dichiara di non lanciare mai, ma un ripiego onesto resta necessario (stesso principio già in uso nel .catch() di avviaESegui).
-  return { riassunto: null, esito: 'fallito', motivo: risultato?.erroreInterno ?? 'errore sconosciuto nella sessione figlia' };
+  return { riassunto: null, esito: 'fallito', motivo: risultato?.erroreInterno ?? 'unknown error in the child session' };
 }
 
 /** Ricostruisce il verdetto di una figlia dopo il riavvio del server. */
@@ -149,6 +149,47 @@ export function esitoDelegaDaEventi(eventi, contesto = {}) {
   if (!terminale) return null;
   if (terminale.type === 'RunError') return 'fallito';
   return esitoDelegaDaRisultato({ ok: true, esito: { detto: terminale.result?.detto ?? '', comeFinita: 'concluso' } }, eventi, contesto).esito;
+}
+
+/*
+ * ⛔ 0.1.23 (bugfixer, 08/10/2026) — IL RESOCONTO DI UNA FIGLIA, ACCANTO AL SUO ESITO E NON AL POSTO SUO.
+ *   La scheda dell'agente diceva «Che cosa ha riportato: concluso»: leggeva `esitoDelega`, che è uno STATO (concluso,
+ *   fallito, fermato), perché il resoconto non usciva mai dal server. Hermes tiene i due fatti separati (`child_status` e
+ *   `child_summary`, tools/delegate_tool_results.py:369; e :308 «is "failed" even when a summary exists»).
+ * ⇒ `riassuntoDelega` è il testo con cui la figlia ha chiuso il suo ultimo giro (`result.detto`), solo se c'è davvero — mai
+ *   il segnaposto che il modello della madre riceve quando manca — e con un tetto, perché viaggia in ogni snapshot.
+ */
+export const TETTO_RIASSUNTO_DELEGA = 2000;
+/*
+ * ⛔ Review della sessione desktop (08/10/2026, GIALLO): quando un giro non finisce «concluso» il kernel ANTEPONE al testo
+ *   della figlia una riga di STATO, in inglese (`talosHarness.mjs`, `ultimoTesto = \`${comeFinita.detto}\n${ultimoTesto}\``):
+ *   fermata su richiesta, giri esauriti, generazione ferma senza risposta, ripetizione. Senza toglierla, «Che cosa ha
+ *   riportato» ricominciava con uno stato — lo stesso difetto che questo campo cura. Si toglie SOLO la prima riga, SOLO se è
+ *   una di queste frasi (dall'inizio), e MAI per un giro concluso: il testo della figlia che segue resta. Al ripristino
+ *   `comeFinita` non c'è (il `RunFinished` salvato porta solo `detto`): vale il riconoscimento della frase.
+ *   `delega-riassunto.test.mjs` legge il kernel e diventa rosso se una di queste frasi cambia lì.
+ */
+export const PREFISSI_STATO_DEL_KERNEL = Object.freeze([
+  '⛔ stopped on request',                       // fermato su richiesta (con o senza il punto di fermata)
+  '⛔ turns exhausted:',                         // giri esauriti
+  '⛔ generation stopped without an answer',     // generazione ferma senza risposta
+  '⛔ the model asked ',                         // la stessa richiesta ripetuta nella stessa risposta
+]);
+export function riassuntoDelegaDaDetto(detto, { comeFinita = null } = {}) {
+  if (typeof detto !== 'string') return null;
+  let testo = detto.trim();
+  if (comeFinita !== 'concluso') {
+    const [prima, ...resto] = testo.split('\n');
+    if (PREFISSI_STATO_DEL_KERNEL.some((p) => prima.startsWith(p))) testo = resto.join('\n').trim();
+  }
+  if (!testo) return null;
+  return testo.length > TETTO_RIASSUNTO_DELEGA ? `${testo.slice(0, TETTO_RIASSUNTO_DELEGA - 1)}…` : testo;
+}
+/** Lo stesso resoconto dopo il riavvio del server: il `result.detto` dell'ultimo giro chiuso bene (un errore non ne ha). */
+export function riassuntoDelegaDaEventi(eventi) {
+  if (!Array.isArray(eventi)) return null;
+  const terminale = [...eventi].reverse().find((evento) => evento?.type === 'RunFinished' || evento?.type === 'RunError');
+  return terminale?.type === 'RunFinished' ? riassuntoDelegaDaDetto(terminale.result?.detto) : null;
 }
 
 /**
@@ -224,15 +265,15 @@ export function percorsoDellaFigliaUsabile(proposto, cartellaMadre) {
    *   risposta la dice.
    */
   const spiegazione = forma === 'relativo' || forma === 'unita-senza-radice'
-    ? `la cartella «${proposto}» non è un percorso assoluto`
-    : `la cartella «${proposto}» è scritta nella forma di un altro sistema operativo`;
+    ? `the folder "${proposto}" is not an absolute path`
+    : `the folder "${proposto}" is written in the form of another operating system`;
   if (formaMadre === 'assente') {
-    return { ok: false, motivo: `${spiegazione}. Ometti la cartella per lavorare dove lavora chi ti ha delegato.` };
+    return { ok: false, motivo: `${spiegazione}. Omit the folder to work where the one who delegated to you works.` };
   }
   return {
     ok: false,
-    motivo: `${spiegazione}: su questo computer i percorsi si scrivono come «${cartellaMadre}». `
-      + `Ometti la cartella per lavorare dove lavora chi ti ha delegato, oppure usa esattamente «${cartellaMadre}».`,
+    motivo: `${spiegazione}: on this computer paths are written like "${cartellaMadre}". `
+      + `Omit the folder to work where the one who delegated to you works, or use exactly "${cartellaMadre}".`,
   };
 }
 
@@ -274,13 +315,44 @@ export function compitoDaPromptDiDelega(prompt) {
  * @param {object} padre la voce della sessione madre
  * @returns {{ok: true, modello: string|null} | {ok: false, motivo: string}}
  */
+
+/**
+ * C2 R6-bis (owner 08/10/2026, «Segnalo anche») — per ogni «Consenti sempre» del padre, che la figlia riceve per COPIA alla
+ * nascita, la sessione che l'ha dato: il padre, oppure, se anche il suo era una copia, la sua origine. `null` se il padre non ha
+ * nessun «sempre». Esportata per le prove.
+ * @param {object|null|undefined} padre la voce della sessione madre (`permessiPerAttrezzo`, `origineSempre`)
+ * @param {string} padreId
+ * @returns {Record<string, string>|null}
+ */
+export function origineDeiSempreCopiati(padre, padreId) {
+  const origine = {};
+  for (const [attrezzo, valore] of Object.entries(padre?.permessiPerAttrezzo ?? {})) {
+    if (valore !== 'sempre') continue;
+    const daChi = padre?.origineSempre?.[attrezzo];
+    origine[attrezzo] = typeof daChi === 'string' && daChi ? daChi : padreId;
+  }
+  return Object.keys(origine).length ? origine : null;
+}
+
 export function creaSubagentOrchestrator({
   sessioni, avviaESeguiFn, cartellaEsisteFn = esisteCartella,
   modelloPerLaFigliaFn = (padre) => ({ ok: true, modello: padre?.modello ?? null }),
   statisticheFiglioFn = () => ({}),
   onFiglioCreatoFn = null,
   onFiglioConclusoFn = null,
+  /*
+   * ⭐ CLI, passo 7 dei sotto-agenti asincroni (owner 01/10/2026), FACOLTATIVI: i due tetti e lo sforzo di serie della
+   * figlia, come la configurazione `agents.*` di Codex (core/src/config/mod.rs:3845-3870). Senza, tutto resta com'era:
+   * LIMITE_FIGLI_CONCORRENTI, LIMITE_PROFONDITA_DELEGA e lo sforzo della madre. Un valore che non è un intero positivo
+   * vale come assente; gli intervalli ammessi li decide chi compone (la CLI: 1–32 e 1–4).
+   */
+  limiti = null,
+  figlioDefault = null,
 }) {
+  const interoPositivo = (valore, diSerie) => (Number.isSafeInteger(valore) && valore > 0 ? valore : diSerie);
+  const limiteFigli = interoPositivo(limiti?.figliConcorrenti, LIMITE_FIGLI_CONCORRENTI);
+  const limiteProfondita = interoPositivo(limiti?.profondita, LIMITE_PROFONDITA_DELEGA);
+  const reasoningDiSerie = figlioDefault?.reasoning && typeof figlioDefault.reasoning === 'object' ? figlioDefault.reasoning : null;
   function notificaSenzaBloccare(callback, payload, { onErrore = null } = {}) {
     if (typeof callback !== 'function') return;
     Promise.resolve()
@@ -324,6 +396,10 @@ export function creaSubagentOrchestrator({
            * rifare il giro fra un mese. Il nome corto viaggia accanto.
            */
           taskCorto: voce.task?.consegnaCorta ?? (voce.task?.consegna ? compitoDaPromptDiDelega(voce.task.consegna) : null),
+          /* C2b «Coordinazione»: come è partita — 'da-solo' | 'consentito' | null (prima di C2b, o senza Coordinazione). Il grafo e
+             la scheda «Agenti» lo dicono accanto al nome, e il modello se la persona ne ha chiesto un altro. */
+          avvio: voce.avvioDelega ?? null,
+          modello: voce.modello ?? null,
           /*
            * ⛔ D3 — i file che QUESTA figlia ha scritto e che anche un'altra sorella ha toccato. La
            * lista sta sulla madre (il registro la scrive mentre gli eventi passano); qui esce filtrata
@@ -342,11 +418,13 @@ export function creaSubagentOrchestrator({
            */
           interrotta: voce.interrotta === true,
           esitoDelega: voce.esitoDelega ?? null,
+          riassuntoDelega: voce.riassuntoDelega ?? null, // 0.1.23: il resoconto della figlia, separato dal suo stato
           evidenzaDelega: voce.evidenzaDelega ?? null,
           avviataAlle: voce.avviataAlle ?? null,
           conclusaAlle: statistiche.conclusaAlle ?? null,
           ultimaAttivitaAlle: statistiche.ultimaAttivitaAlle ?? null,
           approvalPendingCount: Number.isSafeInteger(statistiche.approvalPendingCount) ? statistiche.approvalPendingCount : 0,
+          questionPendingCount: Number.isSafeInteger(statistiche.questionPendingCount) ? statistiche.questionPendingCount : 0,
           ultimoEsito: statistiche.ultimoEsito ?? null,
           motivoChiusura: statistiche.motivoChiusura ?? null,
           usageSessione: statistiche.usageSessione ?? null,
@@ -391,21 +469,23 @@ export function creaSubagentOrchestrator({
    *   delega, domande, memoria, messaggi, pianificazioni); Claude Code, sotto-agenti: senza `permissionMode` girano nel modo
    *   del padre, e andare oltre è un difetto (anthropics/claude-code#52557).
    */
-  function delegaSottoTask({ sessionPadreId, task, cartella, modalita }) {
+  /* C2b «Coordinazione» (08/10/2026): `modelloChiesto` è un nome GIÀ ammesso dal registro (fra i disponibili, col consenso
+     per il cloud): vince sul modello del padre. `avvio` ('da-solo' | 'consentito') va sulla figlia, per il tetto e per il segno. */
+  function delegaSottoTask({ sessionPadreId, task, cartella, modalita, modelloChiesto = null, avvio = null }) {
     return new Promise((resolve) => {
       const padre = sessioni.get(sessionPadreId);
       if (!padre) {
-        resolve({ esito: 'rifiutato', motivo: 'la sessione padre non esiste più' });
+        resolve({ esito: 'rifiutato', motivo: 'the parent session no longer exists' });
         return;
       }
       const padreInLettura = padre.permessi === 'Read only' || delegaLimitata(padre.task);
       if (modalita === undefined) modalita = padreInLettura ? 'lettura' : 'modifica';
       if (!['lettura', 'modifica'].includes(modalita)) {
-        resolve({ esito: 'rifiutato', motivo: 'La modalità della delega deve essere lettura o modifica.' });
+        resolve({ esito: 'rifiutato', motivo: 'The delegation mode must be read or write.' });
         return;
       }
       if (modalita === 'modifica' && padreInLettura) {
-        resolve({ esito: 'rifiutato', motivo: 'La sessione padre è limitata alla lettura: non può delegare modifiche.' });
+        resolve({ esito: 'rifiutato', motivo: 'The parent session is limited to reading: it cannot delegate changes.' });
         return;
       }
       const taskFiglio = {
@@ -420,9 +500,11 @@ export function creaSubagentOrchestrator({
        *   il locale l'ha scelto perché niente esca, e un ripiego silenzioso su quel punto è
        *   esattamente il difetto misurato il 17/09 (`openrouter.ai`, corpo col testo della madre).
        */
-      const modelloScelto = modelloPerLaFigliaFn(padre);
+      const modelloScelto = typeof modelloChiesto === 'string' && modelloChiesto !== ''
+        ? { ok: true, modello: modelloChiesto } // C2b: chiesto dalla persona, già verificato dal registro
+        : modelloPerLaFigliaFn(padre);
       if (modelloScelto?.ok !== true) {
-        resolve({ esito: 'rifiutato', motivo: modelloScelto?.motivo ?? 'non si sa con quale modello far partire la sotto-sessione' });
+        resolve({ esito: 'rifiutato', motivo: modelloScelto?.motivo ?? 'it is not known which model to start the sub-session with' });
         return;
       }
       /*
@@ -462,18 +544,18 @@ export function creaSubagentOrchestrator({
            quella dichiarata: si consiglia solo una cartella che il disco conferma. */
         const madreConsigliabile = dove !== padre.cartella && cartellaEsisteFn(padre.cartella);
         const invece = madreConsigliabile
-          ? ` Ometti la cartella per lavorare dove lavora chi ti ha delegato, oppure usa esattamente «${padre.cartella}».`
+          ? ` Omit the folder to work where the one who delegated to you works, or use exactly "${padre.cartella}".`
           : '';
-        resolve({ esito: 'rifiutato', motivo: `la cartella ${dove} non esiste su questo computer.${invece}` });
+        resolve({ esito: 'rifiutato', motivo: `the folder ${dove} does not exist on this computer.${invece}` });
         return;
       }
       const profonditaVoluta = (padre.profonditaDelega ?? 0) + 1;
-      if (profonditaVoluta > LIMITE_PROFONDITA_DELEGA) {
-        resolve({ esito: 'rifiutato', motivo: `profondità di delega massima raggiunta (limite ${LIMITE_PROFONDITA_DELEGA})` });
+      if (profonditaVoluta > limiteProfondita) {
+        resolve({ esito: 'rifiutato', motivo: `maximum delegation depth reached (limit ${limiteProfondita})` });
         return;
       }
-      if (contaFigliAttivi(sessionPadreId) >= LIMITE_FIGLI_CONCORRENTI) {
-        resolve({ esito: 'rifiutato', motivo: `limite di ${LIMITE_FIGLI_CONCORRENTI} figli concorrenti raggiunto` });
+      if (contaFigliAttivi(sessionPadreId) >= limiteFigli) {
+        resolve({ esito: 'rifiutato', motivo: `limit of ${limiteFigli} concurrent children reached` });
         return;
       }
       let figlioId = null;
@@ -508,7 +590,7 @@ export function creaSubagentOrchestrator({
               voceEsistente: voce,
               /* Il compito resta quello della voce: qui si dice solo PERCHÉ la figlia riparte, così
                  la sua storia non contiene il task duplicato ma la ragione vera del rilancio. */
-              task: 'La risposta del fornitore si è interrotta e il suo esito è rimasto incerto: riprendi e completa il compito da dove l’hai lasciato.',
+              task: 'The provider response was cut off and its outcome is uncertain: resume and finish the task from where you left it.',
             });
             if (rilancio?.sessionId && !rilancio?.erroreAvvio) {
               if (voce) voce.rilanciDelega = rilanciDelega;
@@ -520,7 +602,7 @@ export function creaSubagentOrchestrator({
             if (voce) voce.rilanciDelega = rilanciDelega;
             rilancioFallito = typeof rilancio?.erroreAvvio === 'string' && rilancio.erroreAvvio
               ? rilancio.erroreAvvio
-              : 'l’avvio della sessione figlia è stato rifiutato';
+              : 'the start of the child session was refused';
           }
         }
         conclusioneGestita = true;
@@ -532,20 +614,21 @@ export function creaSubagentOrchestrator({
            perché NON si può riprovare — la madre legge `rilanciabile` dal risultato. */
         if (rilanciDelega > 0) {
           esito.rilanciata = rilanciDelega;
-          const nota = ' (rilanciata una volta dopo un esito incerto del fornitore)';
+          const nota = ' (relaunched once after an uncertain provider outcome)';
           if (typeof esito.riassunto === 'string' && esito.riassunto) esito.riassunto += nota;
           else if (typeof esito.motivo === 'string' && esito.motivo) esito.motivo += nota;
         }
         if (risultatoSessione?.codiceErrore === 'PROVIDER_OUTCOME_UNKNOWN_ESAURITO') {
           esito.rilanciabile = false;
           esito.motivoRilancio = rilancioFallito
-            ? `il rilancio non è partito: ${rilancioFallito}`
+            ? `the relaunch did not start: ${rilancioFallito}`
             : rilanciDelega > 0
-              ? 'il tetto di un rilancio per figlia è già stato usato'
-              : `la delega non è una lettura pura (${modalita}): un rilancio potrebbe ripetere effetti già prodotti`;
+              ? 'the cap of one relaunch per child has already been used'
+              : `the delegation is not a pure read (${modalita}): a relaunch could repeat effects already produced`;
         }
         if (voceFiglia) {
           voceFiglia.esitoDelega = esito.esito;
+          voceFiglia.riassuntoDelega = riassuntoDelegaDaDetto(risultatoSessione?.esito?.detto, { comeFinita: risultatoSessione?.esito?.comeFinita });
           voceFiglia.rilanciDelega = rilanciDelega;
           voceFiglia.evidenzaDelega = analizzaEvidenzaDelega(eventi);
         }
@@ -615,16 +698,26 @@ export function creaSubagentOrchestrator({
         task: taskFiglio,
         padreId: sessionPadreId,
         profonditaDelega: profonditaVoluta,
+        avvioDelega: avvio, // C2b: 'da-solo' conta nel tetto dell'albero; nell'intestazione, regge al riavvio
         /* ⛔ BC-76: non `padre.modello` — vedi `modelloPerLaFigliaFn` in testa a questa funzione.
            Per una madre cloud è lo stesso valore di prima; per una madre locale è il nome con il
            prefisso della sua fonte, cioè l'unico che tiene la figlia sul motore di casa. */
         modelloRichiesta: modelloScelto.modello,
-        reasoningRichiesto: padre.reasoning ?? null,
+        reasoningRichiesto: reasoningDiSerie ?? padre.reasoning ?? null,
         linguaInterfaccia: padre.linguaInterfaccia ?? null, // K3b: la figlia descrive i comandi nella lingua di chi guarda
         permessiRichiesti: modalita === 'lettura' ? 'Read only' : padre.permessi ?? null,
         permessiPerAttrezzoRichiesti: modalita === 'lettura'
           ? Object.fromEntries(Object.entries(padre.permessiPerAttrezzo ?? {}).filter(([, valore]) => valore === 'nega'))
           : { ...padre.permessiPerAttrezzo },
+        /* ⛔ C2 R6-bis (owner 08/10/2026): da chi arriva ogni «sempre» copiato qui sopra — il padre, o chi l'aveva dato a lui (una
+           copia di una copia risale all'origine). Serve alla riga «Permesso ereditato» della figlia; una delega in lettura non
+           copia nessun «sempre». */
+        origineSempreRichiesta: modalita === 'lettura' ? null : origineDeiSempreCopiati(padre, sessionPadreId),
+        /* ⛔ C2-Q (08/10/2026, RED del bugfixer REV-C2Q-A/B): la figlia di una sessione che nessuno segue (automazioni, passi dei
+           Workflow) nasce come lei, `senzaInterfaccia`. Senza, una sua domanda alla persona o una sua scrittura fuori dal progetto
+           aspettavano per sempre una persona che non c'è: decisione 4 dell'owner su C2, «le automazioni senza nessuno davanti
+           continuano a negare subito». Nell'intestazione: vale anche dopo un riavvio, e per le nipoti. */
+        senzaInterfaccia: padre?.senzaInterfaccia === true,
         /* ⛔ F3-10 (23/09/2026, decisione owner D05-a): la figlia nasce SEMPRE in Normale, col suo ruolo di
            figlia. Prima ereditava `padre.modalitaOperativa ?? 'workflow'`, cioè un modo che non esiste più. */
         modalitaOperativaRichiesta: 'normale',
@@ -641,15 +734,20 @@ export function creaSubagentOrchestrator({
         return;
       }
       if (!figlioId) {
-        resolve({ esito: 'rifiutato', motivo: 'la sessione figlia non ha restituito un identificatore valido' });
+        resolve({ esito: 'rifiutato', motivo: 'the child session did not return a valid identifier' });
         return;
       }
       notificaSenzaBloccare(onFiglioCreatoFn, { parentId: sessionPadreId, childId: figlioId });
       if (conclusioneRicevuta) completaConclusione(conclusioneRicevuta);
+      /* C2b «Coordinazione» (contratto §7, audit): la ricevuta dice come è partito l'agente e, se la persona l'ha chiesto, su
+         quale modello. Senza `avvio` (la CLI, o un registro senza Coordinazione) la frase resta quella di sempre. */
+      const comePartito = avvio === 'da-solo' ? ' It started on its own (Coordination is on in this conversation).'
+        : avvio === 'consentito' ? ' The person approved starting it.' : '';
+      const suQualeModello = typeof modelloChiesto === 'string' && modelloChiesto !== '' ? ` It runs on ${modelloScelto.modello}, as the person asked.` : '';
       resolve({
         esito: 'avviato',
         childId: figlioId,
-        riassunto: `Sotto-agente ${figlioId} avviato in background (${modalita === 'lettura' ? 'sola lettura' : 'con i permessi del padre'}). Continua il lavoro: il risultato finale verrà consegnato separatamente quando sarà disponibile.`,
+        riassunto: `Sub-agent ${figlioId} started in the background (${modalita === 'lettura' ? 'read-only' : 'with the parent\'s permissions'}).${comePartito}${suQualeModello} Keep working: the final result will be delivered separately when it is available.`,
       });
     });
   }

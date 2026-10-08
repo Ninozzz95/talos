@@ -103,7 +103,8 @@ export function nomeShell(enforcement, comando = '') {
  */
 export function titoloScheda(voce, tutte = [voce]) {
   if (voce.titolo) return voce.titolo;
-  if (voce.origine === 'agente') return voce.giro ? t('processi.terminal.tabAgentTurn', { giro: voce.giro }) : t('processi.terminal.tabAgent');
+  /* ⭐ BUG-23 (06/10): UNA scheda «agente» per sessione — il giro CORRENTE lo dice il piede, non la linguetta. */
+  if (voce.origine === 'agente') return t('processi.terminal.tabAgent');
   const shell = nomeShell(voce.shell, voce.comando);
   const omonime = tutte.filter((v) => !v.titolo && v.origine !== 'agente' && nomeShell(v.shell, v.comando) === shell);
   const posizione = omonime.indexOf(voce);

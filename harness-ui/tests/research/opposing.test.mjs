@@ -101,22 +101,22 @@ test('trovare la frase che parla della stessa cosa', async (t) => {
 test('la domanda al giudice', async (t) => {
   await t.test('chiede di CONTRADDIRE, e dice che tacere non è contraddire', () => {
     const prompt = talosResearchOpposingPrompt('afferma X', 'passaggio Y');
-    assert.ok(prompt.includes('CONTRADDICE'));
+    assert.ok(prompt.includes('CONTRADICT'));
     // ⛔ Senza questa riga un passaggio che semplicemente non parla
     //   dell'affermazione verrebbe letto come una smentita, e le contese
     //   comparirebbero ovunque.
-    assert.ok(prompt.includes('non parla'));
+    assert.ok(prompt.includes('does not address'));
     assert.ok(prompt.includes('afferma X'));
     assert.ok(prompt.includes('passaggio Y'));
   });
 
   await t.test('⛔ e nemmeno qui c\'è un menu con le barre da ricopiare', () => {
-    assert.ok(!talosResearchOpposingPrompt('x', 'y').includes('SI | NO'));
-    assert.ok(talosResearchOpposingPrompt('x', 'y').includes('Esempio di risposta:'));
+    assert.ok(!talosResearchOpposingPrompt('x', 'y').includes('YES | NO'));
+    assert.ok(talosResearchOpposingPrompt('x', 'y').includes('Example response:'));
   });
 
   await t.test('non è la domanda del primo giro', () => {
-    assert.ok(!talosResearchOpposingPrompt('x', 'y').includes('sostiene l’affermazione?'));
+    assert.ok(!talosResearchOpposingPrompt('x', 'y').includes('support the claim?'));
   });
 });
 

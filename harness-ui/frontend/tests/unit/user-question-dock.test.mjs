@@ -24,6 +24,14 @@ class Element {
     this.children = [];
     this.append(...nodes);
   }
+  /* C2-Q (08/10): la riga «chi chiede» va in TESTA alla testata. */
+  prepend(...nodes) {
+    for (const node of [...nodes].reverse()) {
+      node.remove();
+      node.parentElement = this;
+      this.children.unshift(node);
+    }
+  }
   remove() {
     if (!this.parentElement) return;
     this.parentElement.children = this.parentElement.children.filter((node) => node !== this);
@@ -127,6 +135,27 @@ test('R4-ASK-DOCK-MULTI: review never submits, edit preserves answers, confirm u
   controller.render({ stage: 'resolved', status: 'answered' });
   assert.equal(view.saved.size, 0);
   assert.equal(view.root.children[0].dataset.state, 'resolved');
+});
+
+test('C2Q-DOCK: la domanda di una FIGLIA porta in testa la riga «chi chiede»; senza, la carta è quella di sempre', () => {
+  const view = fixture();
+  const chi = view.root.ownerDocument.createElement('span');
+  chi.className = 'talos-badge talos-approval__chi';
+  mountUserQuestionDock({ ...view, question: { ...question, requestId: 'r-figlia', sessionId: 'figlia-1' }, onSubmit() {}, chiChiede: chi });
+  const testata = view.root.children[0].children[0];
+  assert.equal(testata.className, 'talos-approval__head');
+  assert.equal(testata.children[0], chi, 'la riga «chi chiede» è la PRIMA della testata, come sulla carta di permesso');
+  assert.equal(testata.children[1].className, 'talos-badge talos-badge--accent', 'e il badge della domanda resta subito dopo');
+  // visto nella foto: con la riga dell'agente il badge non dice anche «TALOS chiede» (due «chiede», e la domanda a TALOS)
+  assert.equal(testata.children[1].textContent, 'Domanda');
+
+  // AL CONTRARIO: senza `chiChiede` la testata è quella di prima, col badge per primo e la sua frase
+  const altra = fixture();
+  mountUserQuestionDock({ ...altra, question, onSubmit() {} });
+  const testataSola = altra.root.children[0].children[0];
+  assert.equal(testataSola.children[0].className, 'talos-badge talos-badge--accent');
+  assert.equal(testataSola.children[0].textContent, 'TALOS chiede');
+  assert.equal(testataSola.children.some((n) => n.className?.includes('talos-approval__chi')), false);
 });
 
 test('R4-ASK-DRAFT: same live request restores local draft; another request cannot inherit it', () => {

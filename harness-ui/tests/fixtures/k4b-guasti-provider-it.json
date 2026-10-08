@@ -1,0 +1,6 @@
+{
+  "providerOutcome.silence": "La risposta del fornitore si è interrotta per silenzio prolungato e l’esito della richiesta è incerto. Riprendi esplicitamente quando vuoi continuare: una nuova richiesta può comportare un altro costo.",
+  "providerOutcome.interrupted": "La risposta del fornitore si è interrotta e l’esito della richiesta è incerto. Riprendi esplicitamente quando vuoi continuare: una nuova richiesta può comportare un altro costo.",
+  "providerOutcome.noData": "Connessione con il fornitore interrotta: nessun dato per {minutes} minuti.",
+  "providerOutcome.exhausted.10": "La risposta del fornitore si è interrotta e il suo esito è rimasto incerto anche dopo 10 reinvii automatici senza effetti intermedi. La richiesta può essere stata prodotta e pagata: riprendi esplicitamente quando vuoi continuare."
+}

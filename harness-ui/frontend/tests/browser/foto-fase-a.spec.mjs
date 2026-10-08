@@ -27,7 +27,10 @@ async function apri(page, { larghezza, altezza, tema }) {
     try { localStorage.setItem('talos.harness.desktop.settings.v1', JSON.stringify({ version: 1, appearance: { colorMode }, chat: { model: 'qwen/qwen3.8-flash' } })); }
     catch { /* finestra privata: la app parte lo stesso */ }
   }, { colorMode: tema });
-  await page.route('**/api/v1/sessions/fotoA-*/events*', (r) => r.fulfill({ contentType: 'text/event-stream', body: '' }));
+  /* VELO-SPEC-2 (08/10/2026, bugfixer): flusso APERTO E MUTO, come in scroll-p0.spec.mjs. Con un corpo vuoto il flusso si chiudeva,
+     il browser lo riapriva e da A1-R3 la chat restava sotto il velo (`#conversation.is-restoring`, `visibility:hidden`): le foto
+     mostravano «Apro la cronologia…» al posto della conversazione, e le prove erano verdi lo stesso. */
+  await page.route('**/api/v1/sessions/fotoA-*/events*', () => { /* resta pending: aperto e muto */ });
   await page.goto('/');
   await page.locator('#talosAvvio').waitFor({ state: 'detached', timeout: 8000 });
   await page.waitForFunction(() => window.__talosHarnessUiRuntime);
@@ -35,6 +38,8 @@ async function apri(page, { larghezza, altezza, tema }) {
 
 async function scatta(page, nome) {
   const cartella = await preparaCartellaFoto('fase-a-frontend');
+  // VELO-SPEC-2: niente foto di una chat sotto il velo (`visibility:hidden`): aspetta che si tolga, e se non si toglie la prova è rossa
+  await expect(page.locator('#conversation')).not.toHaveClass(/\bis-restoring\b/);
   await writeFile(path.join(cartella, `${nome}.png`), await page.screenshot());
 }
 
@@ -48,6 +53,7 @@ for (const [larghezza, altezza] of MISURE) {
         const r = window.__talosHarnessUiRuntime;
         r.passaASessione('fotoA-uno', 'workspace', 'Fase A', 'qwen/qwen3.8-flash', { conclusa: false, modello: 'qwen/qwen3.8-flash' });
         const g = r.realSessionState.generation;
+        r.handleRealEvent({ type: 'CUSTOM', name: 'talos.fine-rigiocata', value: null }, g); // VELO-SPEC-2: il confine che il server manda sempre, prima degli eventi vivi
         r.handleRealEvent({ type: 'RunStarted', _sequenza: 10, input: { consegna: 'Aggiorna il ledger con i numeri veri' }, contesto: { cartella: 'C:\\progetti\\AVM', modello: 'glm-5.3-flash' } }, g);
         r.handleRealEvent({ type: 'TextMessageStart', messageId: 'm1' }, g);
         r.handleRealEvent({ type: 'TextMessageContent', messageId: 'm1', delta: 'Sto leggendo i file del progetto e annoto le misure. '.repeat(6) }, g);
@@ -65,6 +71,7 @@ for (const [larghezza, altezza] of MISURE) {
         const r = window.__talosHarnessUiRuntime;
         r.passaASessione('fotoA-pila', 'workspace', 'Fase A', 'qwen/qwen3.8-flash', { conclusa: false, modello: 'qwen/qwen3.8-flash' });
         const g = r.realSessionState.generation;
+        r.handleRealEvent({ type: 'CUSTOM', name: 'talos.fine-rigiocata', value: null }, g); // VELO-SPEC-2: il confine che il server manda sempre, prima degli eventi vivi
         r.handleRealEvent({ type: 'RunStarted', _sequenza: 10, input: { consegna: 'Scrivi un file' }, contesto: { cartella: 'C:\\progetti\\AVM', modello: 'glm-5.3-flash' } }, g);
         r.handleRealEvent({ type: 'StateDelta', _sequenza: 11, delta: [{ op: 'add', path: '/file/src/uno.mjs', value: 'a\nb\n' }] }, g);
         const campo = document.querySelector('#composerInput');
@@ -84,6 +91,7 @@ for (const [larghezza, altezza] of MISURE) {
         const r = window.__talosHarnessUiRuntime;
         r.passaASessione('fotoA-due', 'workspace', 'Fase A', 'qwen/qwen3.8-flash', { conclusa: false, modello: 'qwen/qwen3.8-flash' });
         const g = r.realSessionState.generation;
+        r.handleRealEvent({ type: 'CUSTOM', name: 'talos.fine-rigiocata', value: null }, g); // VELO-SPEC-2: il confine che il server manda sempre, prima degli eventi vivi
         let seq = 5000;
         r.handleRealEvent({ type: 'RunStarted', _sequenza: seq += 1, input: { consegna: 'Scrivi due file' }, contesto: { cartella: 'C:\\progetti\\AVM', modello: 'glm-5.3-flash' } }, g);
         r.handleRealEvent({ type: 'StateDelta', _sequenza: seq += 1, delta: [{ op: 'replace', path: '/file/src/session-registry.mjs', prima: 'riga uno\nriga vecchia\n', value: 'riga uno\nriga due\nriga tre\n' }] }, g);
@@ -101,6 +109,7 @@ for (const [larghezza, altezza] of MISURE) {
         const r = window.__talosHarnessUiRuntime;
         r.passaASessione('fotoA-tre', 'workspace', 'Fase A', 'qwen/qwen3.8-flash', { conclusa: false, modello: 'qwen/qwen3.8-flash' });
         const g = r.realSessionState.generation;
+        r.handleRealEvent({ type: 'CUSTOM', name: 'talos.fine-rigiocata', value: null }, g); // VELO-SPEC-2: il confine che il server manda sempre, prima degli eventi vivi
         let seq = 6000;
         r.handleRealEvent({ type: 'ToolCallStart', toolCallId: 'f1', toolCallName: 'naviga', _sequenza: seq += 1 }, g);
         r.handleRealEvent({ type: 'ToolCallArgs', toolCallId: 'f1', delta: JSON.stringify({ url: 'https://esempio.test/guida' }), _sequenza: seq += 1 }, g);
@@ -118,6 +127,7 @@ for (const [larghezza, altezza] of MISURE) {
         const r = window.__talosHarnessUiRuntime;
         r.passaASessione('fotoA-bc80', 'workspace', 'Fase A', 'qwen/qwen3.8-flash', { conclusa: false, modello: 'qwen/qwen3.8-flash' });
         const g = r.realSessionState.generation;
+        r.handleRealEvent({ type: 'CUSTOM', name: 'talos.fine-rigiocata', value: null }, g); // VELO-SPEC-2: il confine che il server manda sempre, prima degli eventi vivi
         let seq = 9000;
         r.handleRealEvent({ type: 'RunStarted', _sequenza: seq += 1, input: { consegna: 'Scrivi tre file' }, contesto: { cartella: 'C:\\progetti\\AVM', modello: 'glm-5.3-flash' } }, g);
         for (const [percorso, prima, dopo] of [
@@ -157,6 +167,7 @@ for (const [larghezza, altezza] of MISURE) {
         const r = window.__talosHarnessUiRuntime;
         r.passaASessione('fotoA-bc68', 'workspace', 'Fase A', 'qwen/qwen3.8-flash', { conclusa: false, modello: 'qwen/qwen3.8-flash' });
         const g = r.realSessionState.generation;
+        r.handleRealEvent({ type: 'CUSTOM', name: 'talos.fine-rigiocata', value: null }, g); // VELO-SPEC-2: il confine che il server manda sempre, prima degli eventi vivi
         let seq = 7000;
         const titoli = ['Guida introduttiva', 'Registro dei processi', 'Note di rilascio'];
         titoli.forEach((titolo, i) => {

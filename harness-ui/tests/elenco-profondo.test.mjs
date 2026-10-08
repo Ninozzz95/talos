@@ -160,16 +160,16 @@ test('ELENCO-TETTO-03: il tetto morde, e il testo lo DICE in testa e in coda', a
   assert.equal(esito.troncato, true);
 
   const testo = testoElenco(esito.percorsi, { ...esito, radice: '/casa/progetto-mio' });
-  assert.match(testo, /ELENCO INCOMPLETO/);
-  assert.match(testo, /elenco INCOMPLETO/); // anche in coda: dopo mille righe la prima è lontana
-  assert.equal(testo.split('INCOMPLETO').length - 1, 2);
-  assert.match(testo, /non vuol dire che non esista/);
+  assert.match(testo, /INCOMPLETE LIST/);
+  assert.match(testo, /INCOMPLETE list/); // anche in coda: dopo mille righe la prima è lontana
+  assert.equal(testo.split('INCOMPLETE').length - 1, 2);
+  assert.match(testo, /does not mean it does not exist/);
 
   // AL CONTRARIO: se il tetto non morde, nessun avviso — un allarme che c'è sempre non è un allarme
   const intero = await costruisciElencoProfondo({ radice: RADICE, fs, tettoFile: 100 });
   assert.equal(intero.troncato, false);
   assert.equal(intero.percorsi.length, 10);
-  assert.equal(/INCOMPLETO/.test(testoElenco(intero.percorsi, { ...intero, radice: RADICE })), false);
+  assert.equal(/INCOMPLETE/.test(testoElenco(intero.percorsi, { ...intero, radice: RADICE })), false);
 });
 
 test('ELENCO-CACHE-04: due giri di fila danno la stessa identica stringa, anche se il disco cambia ordine', async () => {
@@ -266,7 +266,7 @@ test('ELENCO-ILLEGGIBILE-06: una cartella che non si lascia leggere si salta con
   const vuoto = await costruisciElencoProfondo({ radice: RADICE, fs: radiceChiusa });
   assert.deepEqual(vuoto.percorsi, []);
   assert.equal(vuoto.dettaglio.illeggibili, 1);
-  assert.match(testoElenco(vuoto.percorsi, { ...vuoto, radice: RADICE }), /Nessun file/);
+  assert.match(testoElenco(vuoto.percorsi, { ...vuoto, radice: RADICE }), /No files/);
 });
 
 test('ELENCO-ESTENSIONI-07: fuori i binari, ma un\'estensione mai vista resta dentro', async () => {
@@ -336,16 +336,16 @@ test('ELENCO-TESTO-09: l\'intestazione dice il nome della cartella, mai il perco
     troncato: false,
     fileEsclusi: 12,
   });
-  assert.match(testo, /«harness-ui»/);
+  assert.match(testo, /"harness-ui"/);
   assert.equal(testo.includes('Antonino'), false, 'un percorso assoluto porta il nome della persona dentro il prompt');
   assert.equal(testo.includes('C:\\'), false);
-  assert.match(testo, /12 file non compaiono/);
-  assert.match(testo, /^File di «harness-ui» — 2 percorsi/m);
+  assert.match(testo, /12 files do not appear/);
+  assert.match(testo, /^Files of "harness-ui" — 2 paths/m);
 
   // senza file esclusi non si nomina nessuna esclusione; con l'elenco vuoto si dice il vero
-  assert.equal(/non compaiono/.test(testoElenco(['a.txt'], { radice: '/casa/x' })), false);
-  assert.match(testoElenco([], { radice: '/casa/progetto' }), /Nessun file da mostrare per «progetto»/);
-  assert.match(testoElenco([], { radice: '' }), /la cartella di lavoro/);
+  assert.equal(/do not appear/.test(testoElenco(['a.txt'], { radice: '/casa/x' })), false);
+  assert.match(testoElenco([], { radice: '/casa/progetto' }), /No files to show for "progetto"/);
+  assert.match(testoElenco([], { radice: '' }), /the working folder/);
   // e nessun nome tecnico a schermo
   assert.equal(/readdir|fs\.|node_modules/.test(testo), false);
 });

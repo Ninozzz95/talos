@@ -118,10 +118,10 @@ test('F-014-ACCESS: un passo dipendente legge dal CAS soltanto il predecessore p
   assert.equal(typeof input.onWorkflowFn, 'function', 'il callback deve essere presente nel giro reale');
   const testo = await input.onWorkflowFn('workflow_output', { runId: avviato.runId, nodeId: 'prima' });
   assert.match(testo, /RISULTATO-PRIMA-COMPLETO/u);
-  await assert.rejects(() => input.onWorkflowFn('workflow_output', { runId: randomUUID(), nodeId: 'prima' }));
-  await assert.rejects(() => input.onWorkflowFn('workflow_output', { runId: avviato.runId, nodeId: 'altra' }));
-  await assert.rejects(() => input.onWorkflowFn('workflow_status', { runId: avviato.runId }));
-  await assert.rejects(() => input.onWorkflowFn('workflow_control', { runId: avviato.runId, azione: 'cancel' }));
+  await assert.rejects(() => input.onWorkflowFn('workflow_output', { runId: randomUUID(), nodeId: 'prima' }), { code: 'WORKFLOW_STEP_OUTPUT_FORBIDDEN' });
+  await assert.rejects(() => input.onWorkflowFn('workflow_output', { runId: avviato.runId, nodeId: 'altra' }), { code: 'WORKFLOW_STEP_OUTPUT_FORBIDDEN' });
+  await assert.rejects(() => input.onWorkflowFn('workflow_status', { runId: avviato.runId }), { code: 'WORKFLOW_STEP_TOOL_FORBIDDEN' });
+  await assert.rejects(() => input.onWorkflowFn('workflow_control', { runId: avviato.runId, azione: 'cancel' }), { code: 'WORKFLOW_STEP_TOOL_FORBIDDEN' });
   const callback = creaOnWorkflowFn({ store, runtimeFn: () => null });
   const legame = { runId: avviato.runId, nodeId: created.nodeId,
     activityExecutionId: created.activityExecutionId, attempt: created.attempt,

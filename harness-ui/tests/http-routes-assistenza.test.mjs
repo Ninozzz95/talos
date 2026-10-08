@@ -47,7 +47,7 @@ test('FASE3-HELP-NON-LO-SO — una domanda fuori corpus non produce una risposta
   const base = await avvia(t);
   const risposta = await chiedi(base, 'zxqv astronautica melanzana quantistica 998877');
   assert.equal(risposta.status, 200);
-  assert.deepEqual((await risposta.json()).data, { risposta: 'non lo so', fonti: [] });
+  assert.deepEqual((await risposta.json()).data, { risposta: 'I do not know', fonti: [] });
 });
 
 test('FASE3-HELP-LIMITE — corpo estraneo, domanda vuota o oltre 500 caratteri sono 400', async (t) => {

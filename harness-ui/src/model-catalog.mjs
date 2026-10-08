@@ -93,7 +93,7 @@ export function createModelCatalog({
         risposta = await fetchFn(url, { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(15_000) });
       } catch {
         // ⛔ un errore di rete non è "zero modelli": la UI deve poterli distinguere (stesso principio di discoveryProblems nel mobile).
-        throw new ModelCatalogError('Catalogo OpenRouter non raggiungibile.', 'CATALOG_UNREACHABLE');
+        throw new ModelCatalogError('OpenRouter catalog unreachable.', 'CATALOG_UNREACHABLE');
       }
       if (!risposta.ok) {
         throw new ModelCatalogError(`Catalogo OpenRouter ha risposto ${risposta.status}`, 'CATALOG_UPSTREAM_ERROR');
@@ -102,7 +102,7 @@ export function createModelCatalog({
       try {
         corpo = await risposta.json();
       } catch {
-        throw new ModelCatalogError('Catalogo OpenRouter: risposta non valida', 'CATALOG_UPSTREAM_ERROR');
+        throw new ModelCatalogError('OpenRouter catalog: invalid response', 'CATALOG_UPSTREAM_ERROR');
       }
       if (!Array.isArray(corpo?.data)) {
         throw new ModelCatalogError('Catalogo OpenRouter: formato inatteso', 'CATALOG_UPSTREAM_ERROR');
@@ -120,7 +120,7 @@ export function createModelCatalog({
       if (cache) return { modelli: structuredClone(cache.modelli), daCache: true, fonte: 'openrouter',
         aggiornatoAlle: new Date(cache.creatoAlle).toISOString(),
         etaCacheMs: Math.max(0, clock().getTime() - cache.creatoAlle), fallbackRete: true,
-        motivo: 'Catalogo non raggiungibile: viene usata la copia salvata.' };
+        motivo: 'Catalog unreachable: the saved copy is used.' };
       return catalogoDiRiservaPer('openrouter');
     }
   }

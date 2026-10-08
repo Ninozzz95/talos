@@ -116,8 +116,28 @@ test('K3-STOP-CONCORDATE — le frasi che la CLI confronta per intero stanno nel
   assert.equal(conta("${prova ? 'the test was stopped' : 'the command was stopped'} while it ran."), 1);
   assert.equal(conta("const FRASE_FERMATO_NON_ESEGUITO = '⛔ Stopped on request: it could not run, the session was stopped first. This tool did not run.'"), 1);
   assert.equal(conta("const FRASE_FERMATO_TEMPO_SCADUTO = '⛔ Stopped when the 120 seconds ran out: it did not finish on its own.'"), 1);
-  /* il tempo scaduto è scritto UNA volta e usato nei tre rami (shell Windows, prova, WSL): mai tre copie che divergono */
-  assert.equal(conta('${FRASE_FERMATO_TEMPO_SCADUTO}'), 3);
+  /* A21 (07/10/2026) — il tempo scaduto si prova sul COMPORTAMENTO, non contando una stringa: da quando il timeout è per
+     chiamata i tre rami (shell Windows, prova, WSL) passano per `fraseTempoScaduto(ms)`. La CLI riconosce la frase con una
+     regex (`cli/src/i18n/error-view.ts:236`): a 120 s deve uscire la costante ESATTA, con un altro N la stessa forma con N. */
+  assert.equal(conta('fraseTempoScaduto(timeoutMs)'), 2, 'shell Windows e prova');
+  assert.equal(conta('fraseTempoScaduto(attesaMs)'), 1, 'WSL');
+  const definizione = (nome) => {
+    const inizio = sorgente.indexOf(`const ${nome} =`);
+    assert.ok(inizio >= 0, `${nome} è nel kernel`);
+    const fine = nome === 'fraseTempoScaduto' ? sorgente.indexOf('\n}', inizio) + 2 : sorgente.indexOf('\n', inizio);
+    return sorgente.slice(inizio, fine);
+  };
+  const { runInNewContext } = await import('node:vm');
+  const frase = runInNewContext(`${['FRASE_FERMATO_TEMPO_SCADUTO', 'TIMEOUT_SHELL_PREDEFINITO_MS', 'fraseTempoScaduto'].map(definizione).join('\n')}\nfraseTempoScaduto`);
+  const costante = '⛔ Stopped when the 120 seconds ran out: it did not finish on its own.';
+  for (const ms of [undefined, 120_000, 119_600, 120_400]) assert.equal(frase(ms), costante, `a ${ms ?? 'predefinito'} ms la costante esatta`);
+  const comeLaCli = /^⛔ Stopped when the (?<seconds>\d+) seconds ran out: it did not finish on its own\.$/u;
+  for (const [ms, secondi] of [[500, '1'], [30_000, '30'], [600_000, '600']]) {
+    const testo = frase(ms);
+    assert.match(testo, comeLaCli, `a ${ms} ms la forma che la CLI riconosce`);
+    assert.equal(testo.match(comeLaCli).groups.seconds, secondi);
+    assert.equal(testo, `⛔ Stopped when the ${secondi} seconds ran out: it did not finish on its own.`);
+  }
   /* AL CONTRARIO: le forme italiane di prima non si scrivono più (restano solo come «_IT» per chi legge) */
   assert.equal(conta('Fermato allo scadere'), 0);
   assert.equal(conta("'la prova e stata interrotta'"), 0);

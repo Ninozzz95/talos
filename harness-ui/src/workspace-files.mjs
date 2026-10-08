@@ -149,7 +149,7 @@ export async function leggiFilePerScarico({ cartella, percorso }, deps = {}) {
   if (!stat.isFile()) throw new WorkspaceFileError('Not a file: a folder cannot be downloaded');
   if (stat.size > DIMENSIONE_MASSIMA_SCARICO) {
     throw new WorkspaceFileError(
-      `File troppo grande da scaricare (${Math.round(stat.size / 1024 / 1024)} MB, tetto ${DIMENSIONE_MASSIMA_SCARICO / 1024 / 1024} MB)`,
+      `File too large to download (${Math.round(stat.size / 1024 / 1024)} MB, cap ${DIMENSIONE_MASSIMA_SCARICO / 1024 / 1024} MB)`,
       'FILE_TOO_LARGE',
     );
   }
@@ -195,7 +195,7 @@ export async function leggiFilePagina({ cartella, segmenti }, deps = {}) {
   if (!stat.isFile()) throw new WorkspaceFileError('File not found', 'FILE_NOT_FOUND');
   if (stat.size > DIMENSIONE_MASSIMA_SCARICO) {
     throw new WorkspaceFileError(
-      `File troppo grande da mostrare (${Math.round(stat.size / 1024 / 1024)} MB, tetto ${DIMENSIONE_MASSIMA_SCARICO / 1024 / 1024} MB)`,
+      `File too large to show (${Math.round(stat.size / 1024 / 1024)} MB, cap ${DIMENSIONE_MASSIMA_SCARICO / 1024 / 1024} MB)`,
       'FILE_TOO_LARGE',
     );
   }
@@ -329,7 +329,7 @@ export function normalizzaSottocartella(valore) {
     throw new WorkspaceFileError('The folder must be relative to the workspace, not an absolute path', 'FOLDER_INVALID');
   }
   const pezzi = valore.split(/[\\/]+/u).filter((p) => p !== '' && p !== '.');
-  if (pezzi.some((p) => p === '..')) throw new WorkspaceFileError('Una cartella non può uscire dallo spazio di lavoro («..»)', 'FOLDER_INVALID');
+  if (pezzi.some((p) => p === '..')) throw new WorkspaceFileError('A folder cannot leave the workspace ("..")', 'FOLDER_INVALID');
   if (pezzi.length > PROFONDITA_MASSIMA_SOTTOCARTELLA) throw new WorkspaceFileError(`Troppe cartelle annidate (al massimo ${PROFONDITA_MASSIMA_SOTTOCARTELLA})`, 'FOLDER_INVALID');
   for (const p of pezzi) {
     if (CARATTERI_VIETATI_IN_CARTELLA.test(p) || NOMI_DI_PERIFERICA.test(p) || /[. ]$/u.test(p) || p.length > 255) {

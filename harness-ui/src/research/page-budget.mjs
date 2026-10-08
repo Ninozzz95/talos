@@ -193,10 +193,10 @@ export function talosResearchPageBudget(testo, opzioni = {}) {
    * solo QUANTO, e dove trovare il resto quando il resto ha davvero un posto.
    */
   const dove = riferimento?.percorso
-    ? `Il testo intero è in ${riferimento.percorso}.${riferimento.chiamata ? ` Per sfogliare il mezzo: ${riferimento.chiamata}` : ''}`
-    : 'Il testo intero è conservato nel dossier di questa ricerca.';
+    ? `The full text is in ${riferimento.percorso}.${riferimento.chiamata ? ` To browse the middle: ${riferimento.chiamata}` : ''}`
+    : 'The full text is preserved in the dossier for this research.';
 
-  const marcatore = `… [visti ${mostrati} caratteri su ${totali}: ${testa.length} in testa, ${coda.length} in coda; ${tolti} tolti dal mezzo. ${dove}] …`;
+  const marcatore = `… [showing ${mostrati} characters out of ${totali}: ${testa.length} head, ${coda.length} tail; ${tolti} omitted from middle. ${dove}] …`;
 
   return {
     window: `${testa}\n\n${marcatore}\n\n${coda}`,

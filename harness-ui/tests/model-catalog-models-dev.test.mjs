@@ -225,7 +225,7 @@ test('PE-06 — rete assente: copia vecchia con età misurata e avviso persisten
   assert.equal(r.etaCacheMs, 86400000);
   assert.equal(r.fallbackRete, true);
   assert.equal(r.daCache, true);
-  assert.match(r.avvisi[0].messaggio, /copia salvata/iu);
+  assert.match(r.avvisi[0].messaggio, /saved copy/iu);
   assert.doesNotMatch(JSON.stringify(r), /informazioni riservate/);
   assert.equal((await riletto.ottieni('zai')).fallbackRete, true);
   assert.equal(chiamate, 1);
@@ -240,7 +240,7 @@ test('PE-07 — cache corrotta: JSON invalido, forma errata e impronta alterata 
   for (const testo of ['{rotto', JSON.stringify(malformata), JSON.stringify({ ...busta, sha256: '0'.repeat(64) })]) {
     await writeFile(catalogo.percorsoCache, testo);
     const nuovo = createModelsDevCatalog({ ...opts, fetchFn: senzaRete });
-    await assert.rejects(nuovo.ottieni('deepseek'), e => e instanceof ModelsDevCatalogError && e.code === 'CATALOG_CACHE_CORRUPT' && /rifiutata/iu.test(e.message));
+    await assert.rejects(nuovo.ottieni('deepseek'), e => e instanceof ModelsDevCatalogError && e.code === 'CATALOG_CACHE_CORRUPT' && /rejected/iu.test(e.message));
   }
 });
 
@@ -286,7 +286,7 @@ test('PE-10 — mappa completa; non esiste non è un registro rotto né un model
   for (const id of ['ollama', 'local', 'inesistente', '__proto__']) {
     const r = await catalogo.ottieni(id);
     assert.equal(r.disponibile, false);
-    assert.match(r.motivo, /catalogo.*non disponibile/iu);
+    assert.match(r.motivo, /catalog.*not available/iu);
     assert.deepEqual(r.modelli, []);
   }
   assert.equal(verificaRegistro(), true);
@@ -382,7 +382,7 @@ test('PE-18 — fornitore mappato assente dalla fonte: indisponibilità esplicit
   const { catalogo } = await banco(t, { fetchFn: async () => risposta({ deepseek: FIXTURE.deepseek }) });
   const r = await catalogo.ottieni('zai');
   assert.equal(r.disponibile, false);
-  assert.match(r.motivo, /Catalogo Z\.AI non disponibile/);
+  assert.match(r.motivo, /Catalog Z\.AI not available/);
   const rotta = createProviderModelCatalog({ catalogo, chiaveConfigurata: () => true });
   await assert.rejects(rotta.ottieni('zai'), e => e.code === 'CATALOG_UPSTREAM_ERROR');
 });

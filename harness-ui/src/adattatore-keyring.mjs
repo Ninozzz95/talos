@@ -36,7 +36,7 @@ export function leggiScopePortachiavi(env = process.env) {
   if (valore === undefined || valore === '') return null;
   const normalizzato = String(valore).trim();
   if (normalizzato === SCOPE_DESKTOP || normalizzato === SCOPE_PREVIEW) return normalizzato;
-  throw new Error(`TALOS_HARNESS_UI_KEYRING_SCOPE="${valore}" non è valida: la variabile accetta "desktop", "desktop-preview", o nessun valore.`);
+  throw new Error(`TALOS_HARNESS_UI_KEYRING_SCOPE="${valore}" is not valid: the variable accepts "desktop", "desktop-preview", or no value.`);
 }
 
 /**
@@ -45,7 +45,7 @@ export function leggiScopePortachiavi(env = process.env) {
  * adattatore assente passa intatto: chi lo riceve gestisce già quel caso.
  */
 export function avvolgiAdattatoreKeyring(keyring, scope) {
-  if (scope !== null && scope !== undefined && ![SCOPE_DESKTOP, SCOPE_PREVIEW].includes(scope)) throw new Error('Scope portachiavi non valido.');
+  if (scope !== null && scope !== undefined && ![SCOPE_DESKTOP, SCOPE_PREVIEW].includes(scope)) throw new Error('Invalid keyring scope.');
   if (!keyring || !scope) return keyring;
   const suffix = scope === SCOPE_PREVIEW ? SUFFISSO_PREVIEW : SUFFISSO_DESKTOP;
   const conSuffisso = (servizio) => `${servizio}${suffix}`;
@@ -99,7 +99,7 @@ export function leggiPortachiaviDiProva(env = process.env) {
   const valore = env.TALOS_HARNESS_UI_KEYRING;
   if (valore === undefined || valore === '') return false;
   if (String(valore).trim() === PORTACHIAVI_MEMORIA) return true;
-  throw new Error(`TALOS_HARNESS_UI_KEYRING="${valore}" non è valida: la variabile accetta "memoria" o nessun valore.`);
+  throw new Error(`TALOS_HARNESS_UI_KEYRING="${valore}" is not valid: the variable accepts "memoria" or no value.`);
 }
 
 export function creaAdattatorePortachiaviInMemoria() {

@@ -392,7 +392,7 @@ export const REGISTRO_FORNITORI = congela({
     }),
     // GET /models non è documentato nell'indice ufficiale: il 404 resta esplicito.
     catalogo: congela({ fonte: 'fornitore', forma: 'openai-data', percorso: '/models', inUI: true, ripiegoSu404: 'documentazione' }),
-    prezzi: congela({ fonte: 'https://docs.z.ai/guides/overview/pricing', data: '2026-09-12', valuta: 'USD', unita: 'milione di token', archiviazioneCache: 'Gratuita temporaneamente; durata non dichiarata.' }),
+    prezzi: congela({ fonte: 'https://docs.z.ai/guides/overview/pricing', data: '2026-09-12', valuta: 'USD', unita: 'million tokens', archiviazioneCache: 'Temporarily free; duration not declared.' }),
     /* ⛔ BUG-18 (05/10, owner): il vincolo P-D del 12/09 («low non lo inviamo») è SUPERATO — la
     compattazione chiede `low` per essere economica (compattazione-desktop.mjs:699) e il clamp
     la rendeva «high», più cara (viola la regola 24/09 «mai più caro»). Dato aggiornato DOVE STA
@@ -1274,7 +1274,7 @@ export const REGISTRO_FORNITORI = congela({
       fonte: 'https://platform.minimax.io/docs/api-reference/anthropic-api-compatible-cache', data: '2026-09-12',
     }),
     catalogo: congela({ fonte: 'fornitore', forma: 'anthropic-data', percorso: '/models', inUI: true }),
-    prezzi: congela({ fonte: 'https://platform.minimax.io/docs/guides/pricing-paygo', data: '2026-09-12', valuta: 'USD', unita: 'milione di token' }),
+    prezzi: congela({ fonte: 'https://platform.minimax.io/docs/guides/pricing-paygo', data: '2026-09-12', valuta: 'USD', unita: 'million tokens' }),
     modelliDiRiserva: congela([
       congela({ id: 'MiniMax-M2.5', nome: 'MiniMax M2.5', toolCalling: true, fonte: 'https://platform.minimax.io/docs/api-reference/text-anthropic-api', data: '2026-09-12' }),
       congela({ id: 'MiniMax-M3', nome: 'MiniMax M3', toolCalling: true, fonte: 'https://platform.minimax.io/docs/api-reference/text-anthropic-api', data: '2026-09-12' }),

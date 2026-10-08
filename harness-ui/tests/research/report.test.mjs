@@ -93,10 +93,10 @@ test('RAPPORTO-02 si legge come un documento stratificato, risposta prima e font
     sources: SOURCES,
   });
 
-  assert.ok(documento.indexOf('Ha vinto Norris.') < documento.indexOf('## Le affermazioni'));
-  assert.ok(documento.indexOf('## Le affermazioni') < documento.indexOf('## Fonti (2)'));
+  assert.ok(documento.indexOf('Ha vinto Norris.') < documento.indexOf('## Claims'));
+  assert.ok(documento.indexOf('## Claims') < documento.indexOf('## Sources (2)'));
   // Il record per la macchina va per ultimo, così un'anteprima mostra prosa e non JSON.
-  assert.ok(documento.indexOf('```talos-research-report') > documento.indexOf('## Fonti (2)'));
+  assert.ok(documento.indexOf('```talos-research-report') > documento.indexOf('## Sources (2)'));
 });
 
 test('RAPPORTO-03 dice chi ha verificato, e lo dice chiaro quando non l’ha fatto nessuno', { skip: salta }, () => {
@@ -111,11 +111,11 @@ test('RAPPORTO-03 dice chi ha verificato, e lo dice chiaro quando non l’ha fat
     sources: SOURCES,
   });
 
-  assert.ok(conGiudice.includes('mai dal modello che ha scritto il rapporto'));
+  assert.ok(conGiudice.includes('never by the model that authored the report'));
   // L'assenza si dichiara invece di lasciarla in bianco: chi non vede una riga
   // di verifica dà per scontato che ci fosse e che sia andata bene.
-  assert.ok(senza.includes('Verifica non eseguita'));
-  assert.ok(senza.includes('non verificata'));
+  assert.ok(senza.includes('Verification not performed'));
+  assert.ok(senza.includes('unverified'));
 });
 
 test('RAPPORTO-04 mostra la citazione che nella fonte non c’era, invece di lasciarla cadere in silenzio', { skip: salta }, () => {
@@ -139,7 +139,7 @@ test('RAPPORTO-04 mostra la citazione che nella fonte non c’era, invece di las
     sources: SOURCES,
   });
 
-  assert.ok(documento.includes('non è nel testo della fonte'));
+  assert.ok(documento.includes('is not in the source text'));
   assert.ok(documento.includes('"mai scritto"'));
 });
 
@@ -162,7 +162,7 @@ test('RAPPORTO-05 non dichiara «nessun giudice» quando erano solo le citazioni
   });
 
   assert.ok(documento.includes('local:qwen3-3b'));
-  assert.ok(!documento.includes('Verifica non eseguita'));
+  assert.ok(!documento.includes('Verification not performed'));
   assert.equal(talosResearchParseReport(documento).judge, 'local:qwen3-3b');
 });
 

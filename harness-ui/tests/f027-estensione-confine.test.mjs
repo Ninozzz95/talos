@@ -181,14 +181,14 @@ test('F027E-MAPPA: l\'albero e la scheda stanno nel confine; le prime righe e i 
   const c = cartella(t, {'a.md': 'x'}, ['src', 'docs']);
   dimenticaTuttiGliElenchi();
   const p = await contestoDelProgetto({cartella: c, permesso: 'Sola lettura', modello: 'm1', piattaforma: 'win32'});
-  assert.match(p.testo, /^Struttura di «/u, 'la prima riga resta quella di sempre');
+  assert.match(p.testo, /^(?:Struttura di|Structure of) «/u, 'la prima riga resta quella di sempre');
   assert.match(p.testo, CONFINE('mappa'));
   assert.match(p.testo, CONFINE('scheda'));
-  assert.match(p.testo, /\nScheda di lavoro — /u);
+  assert.match(p.testo, /\n(?:Scheda di lavoro|Working sheet) — /u);
   const fuori = p.testo.replace(/<<<TALOS_DATA[^\n]*>>>\n[\s\S]*?\n<<<END_TALOS_DATA[^\n]*>>>/gu, '');
-  assert.match(fuori, /Permesso di questo giro: Sola lettura\./u, 'il permesso è un fatto di TALOS, fuori');
+  assert.match(fuori, /(?:Turn permission|Permesso di questo giro): Sola lettura\./u, 'il permesso è un fatto di TALOS, fuori');
   assert.doesNotMatch(fuori, /docs\/ \(0\)|src\/ \(0\)/u, 'le cartelle stanno dentro');
-  assert.doesNotMatch(fuori, /Cartella di lavoro: /u, 'il nome della cartella sta dentro');
+  assert.doesNotMatch(fuori, /(?:Working folder|Cartella di lavoro): /u, 'il nome della cartella sta dentro');
   assert.equal(p.sospetto, null);
   assert.equal(preamboloVistoDa([{role: 'system', content: p.testo}]), p.testo, 'si ritrova nella storia come prima');
 });

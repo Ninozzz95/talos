@@ -103,7 +103,7 @@ test('VINCOLO 2 · una scheda che muore là fuori sparisce dalla mappa, senza ch
   assert.equal(g.stato().schede.length, 1);
   cdp.emetti('Target.detachedFromTarget', { targetId: 'tg-1' });
   assert.equal(g.stato().schede.length, 0, 'la verità su chi è vivo la dice il browser, non la nostra mappa');
-  await assert.rejects(() => g.gesto('sessione-A', { tipo: 'clic', x: 1, y: 1 }), /pagina aperta/);
+  await assert.rejects(() => g.gesto('sessione-A', { tipo: 'clic', x: 1, y: 1 }), /page open/);
 });
 
 test('VINCOLO 2, al contrario: la morte di UN’ALTRA scheda non tocca la nostra', async () => {
@@ -139,8 +139,8 @@ test('SENZA CHROMIUM: lo dice in italiano e non finge — nessun download di nas
   const { g } = gestoreFinto({ trovato: null });
   await assert.rejects(() => g.apri('sessione-A', 'https://example.org'), (e) => {
     assert.equal(e.code, 'BROWSER_VIVO_ASSENTE');
-    assert.match(e.message, /già installato/);
-    assert.match(e.message, /non ne scarica uno suo/);
+    assert.match(e.message, /(?:already installed|già installato)/);
+    assert.match(e.message, /(?:does not download its own|non ne scarica uno suo)/);
     return true;
   });
 });

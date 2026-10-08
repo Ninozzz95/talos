@@ -1,0 +1,12 @@
+{
+  "research.reason.noSource": "la fonte citata non esiste fra quelle raccolte",
+  "research.reason.noQuote": "il passaggio non è nel testo della fonte",
+  "research.reason.noJudge": "nessun giudice indipendente disponibile: l’autore non può verificare sé stesso",
+  "research.reason.noVerdict": "il giudice non ha dato un verdetto leggibile",
+  "research.reason.noResponse": "il giudice non ha risposto",
+  "research.reason.modelDeposited": "depositata dal modello che ha scritto il rapporto: nessun giudice indipendente l'ha ancora controllata.",
+  "runtime.notice.noTools": "Questo modello non usa gli attrezzi: qui resta una chat. Può rispondere, non può leggere file né eseguire comandi.",
+  "runtime.notice.keyRejected": "Una chiave di {provider} è stata rifiutata: controlla Fornitori e accessi.",
+  "runtime.notice.trafficFallback": "Il fornitore {provider} limita il traffico: continuo con {nextProvider} · modello {model}",
+  "runtime.notice.unavailableFallback": "Il fornitore {provider} non risponde: continuo con {nextProvider} · modello {model}"
+}

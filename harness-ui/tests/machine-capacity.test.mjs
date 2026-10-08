@@ -17,7 +17,7 @@ test('MODEL-LAB-CAPACITY-01 calcola RAM e storage con le API iniettate', async (
   assert.equal(result.schema, MACHINE_CAPACITY_SCHEMA);
   assert.deepEqual(result.memory, { totalBytes: 16_000, freeBytes: 4_000 });
   assert.deepEqual(result.storage, { totalBytes: 20_000, availableBytes: 9_000, reserveBytes: 1_000, allocatableBytes: 8_000 });
-  assert.deepEqual(result.runtime, { status: 'unconfigured', reason: 'Runtime locale desktop non scelto' });
+  assert.deepEqual(result.runtime, { status: 'unconfigured', reason: 'Local desktop runtime not chosen' });
 });
 
 test('MODEL-LAB-CAPACITY-RESERVE-01 non produce storage allocabile negativo', async () => {

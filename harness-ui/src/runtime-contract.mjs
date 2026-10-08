@@ -22,30 +22,30 @@ function validDate(value) { return typeof value === 'string' && Number.isFinite(
 
 export function parseResourceEnvelope(value) {
   const keys = ['schema', 'status', 'items', 'consulted', 'observedAt', 'reason'];
-  if (!exactKeys(value, keys) || value.schema !== RUNTIME_RESOURCE_SCHEMA) invalid('Envelope risorsa runtime non valido.');
-  if (!['available', 'unavailable'].includes(value.status)) invalid('Stato risorsa runtime non riconosciuto.');
-  if (typeof value.consulted !== 'boolean' || !validDate(value.observedAt)) invalid('Metadati risorsa runtime non validi.');
-  if (value.reason !== null && !nonEmpty(value.reason)) invalid('Motivo risorsa runtime non valido.');
+  if (!exactKeys(value, keys) || value.schema !== RUNTIME_RESOURCE_SCHEMA) invalid('Invalid runtime resource envelope.');
+  if (!['available', 'unavailable'].includes(value.status)) invalid('Runtime resource status not recognized.');
+  if (typeof value.consulted !== 'boolean' || !validDate(value.observedAt)) invalid('Invalid runtime resource metadata.');
+  if (value.reason !== null && !nonEmpty(value.reason)) invalid('Invalid runtime resource reason.');
   if (value.status === 'available') {
-    if (!value.consulted || !Array.isArray(value.items)) invalid('Una risorsa disponibile deve essere stata consultata e avere un elenco.');
+    if (!value.consulted || !Array.isArray(value.items)) invalid('An available resource must have been consulted and have a list.');
   } else if (value.items !== null || value.consulted) {
-    invalid('Una risorsa non disponibile non può dichiarare elementi o consultazione completata.');
+    invalid('An unavailable resource cannot declare items or a completed consultation.');
   }
   return structuredClone(value);
 }
 
 export function parseBootstrapEnvelope(value) {
   const keys = ['schema', 'authoritative', 'runtime', 'observedAt'];
-  if (!exactKeys(value, keys) || value.schema !== RUNTIME_BOOTSTRAP_SCHEMA) invalid('Bootstrap runtime non valido.');
-  if (value.authoritative !== 'backend' || !validDate(value.observedAt)) invalid('Il bootstrap deve essere confermato dal backend.');
+  if (!exactKeys(value, keys) || value.schema !== RUNTIME_BOOTSTRAP_SCHEMA) invalid('Invalid runtime bootstrap.');
+  if (value.authoritative !== 'backend' || !validDate(value.observedAt)) invalid('The bootstrap must be confirmed by the backend.');
   if (value.runtime !== null) parseResourceEnvelope(value.runtime);
   return structuredClone(value);
 }
 
 export function deriveRuntimePhase(snapshot) {
-  if (!snapshot || typeof snapshot !== 'object' || Array.isArray(snapshot)) invalid('Snapshot runtime non valido.');
-  if (snapshot.authoritative !== 'backend') invalid('Lo stato runtime del browser non è autorevole.');
-  if (!['booting', 'offline', 'degraded', 'ready'].includes(snapshot.state)) invalid('Fase runtime non riconosciuta.');
+  if (!snapshot || typeof snapshot !== 'object' || Array.isArray(snapshot)) invalid('Invalid runtime snapshot.');
+  if (snapshot.authoritative !== 'backend') invalid('The runtime state from the browser is not authoritative.');
+  if (!['booting', 'offline', 'degraded', 'ready'].includes(snapshot.state)) invalid('Runtime phase not recognized.');
   if (snapshot.state === 'booting') return 'booting';
   if (snapshot.state === 'offline') return 'offline';
   if (snapshot.state === 'degraded') return 'degraded';

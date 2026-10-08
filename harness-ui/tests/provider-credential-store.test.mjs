@@ -125,7 +125,7 @@ test('PROVIDER-RUNTIME-RESTART-02 file corrotto o valori non validi sono ignorat
   writeFileSync(runtimeFile, '{broken', 'utf8');
   const corrupt = createProviderCredentialStore({ env: {}, runtimeFile, logger: (message) => entries.push(message) });
   assert.equal(corrupt.getRuntime('openai').endpointConfigured, false);
-  assert.match(entries.join('\n'), /preferenze provider ignorate/i);
+  assert.match(entries.join('\n'), /provider preferences ignored/i);
 
   writeFileSync(runtimeFile, JSON.stringify({
     version: 1,

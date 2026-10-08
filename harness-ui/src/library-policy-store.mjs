@@ -90,16 +90,16 @@ export async function leggiPolitica({ cartella }, deps = {}) {
     testo = await readFileFn(percorso, 'utf8');
   } catch (errore) {
     if (errore?.code === 'ENOENT') return politicaDefault();
-    throw new LibraryPolicyError(`Impossibile leggere ${NOME_FILE_POLITICA}: ${errore.message}`, 'LIBRARY_POLICY_READ_FAILED');
+    throw new LibraryPolicyError(`Cannot read ${NOME_FILE_POLITICA}: ${errore.message}`, 'LIBRARY_POLICY_READ_FAILED');
   }
   let politica;
   try {
     politica = JSON.parse(testo);
   } catch {
-    throw new LibraryPolicyError(`${NOME_FILE_POLITICA} non è JSON valido`, 'LIBRARY_POLICY_MALFORMED');
+    throw new LibraryPolicyError(`${NOME_FILE_POLITICA} is not valid JSON`, 'LIBRARY_POLICY_MALFORMED');
   }
   if (!Number.isSafeInteger(politica.revision) || politica.revision < 0) {
-    throw new LibraryPolicyError(`${NOME_FILE_POLITICA} ha una "revision" non valida`, 'LIBRARY_POLICY_MALFORMED');
+    throw new LibraryPolicyError(`${NOME_FILE_POLITICA} has an invalid "revision"`, 'LIBRARY_POLICY_MALFORMED');
   }
   return {
     revision: politica.revision,

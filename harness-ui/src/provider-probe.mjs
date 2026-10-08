@@ -584,6 +584,7 @@ export function createProviderProbe({ leggiChiave, leggiRuntime, fetchImpl = fet
       return { ...noti, id: `${provider}:${id}`, nome: row.display_name || row.displayName || noti.nome || id, provider,
         contextLength: row.max_input_tokens ?? row.inputTokenLimit ?? noti.contextLength ?? null,
         ...(row.capabilities?.image_input ? { inputModalities: row.capabilities.image_input.supported ? ['text','image'] : ['text'] } : {}),
+        ...ragionamentoDaCapacitaAnthropic(row.capabilities),
       };
     });
     // P-K-bis: conserva i dati letti dal catalogo, aggiunge soltanto gli id mancanti.
@@ -592,6 +593,25 @@ export function createProviderProbe({ leggiChiave, leggiRuntime, fetchImpl = fet
     return { provider, modelli };
   }
   return Object.freeze({ prova, elencaModelli });
+}
+
+/**
+ * ⭐ 08/10/2026 (owner: «impossibile che su Anthropic 5.x non si possa aggiustare il ragionamento») — il catalogo vivo di Anthropic dichiara
+ * per ogni modello se pensa (`capabilities.thinking.supported`) e a quali livelli (`capabilities.effort.{low,medium,high,xhigh,max}.supported`,
+ * platform.claude.com/docs/en/api/models/list, letta 08/10/2026), e qui si buttava: ogni Claude risultava senza ragionamento, e lo sforzo
+ * configurato dalla persona veniva scartato a monte. Letto dal DATO e non dall'id del modello (OpenCode transform.ts:657-684 lo deduce con
+ * una regex sull'id e va riscritta a ogni modello nuovo).
+ * Si OFFRE, non si impone: `defaultEnabled:false` e mai `mandatory`. Misurato 08/10/2026: i modelli solo-adattivi (senza `types.disabled`:
+ * Opus 5.5, Fable 5…) ragionano comunque da soli, in modo adattivo, e non si possono spegnere; ma `mandatory:true` farebbe imporre a
+ * `normalizzaReasoningPerModello` il livello PIÙ BASSO della lista a chi non ne sceglie uno (cambierebbe costo e qualità di chi non ha chiesto
+ * niente). Senza scelta non si manda niente: vale il livello di serie di Anthropic. Un modello che pensa solo a budget (`types.enabled`, senza `effort`) ha ragionamento e nessun livello.
+ * Senza `thinking.supported` la riga non porta niente, come prima. I livelli sono i cinque che il kernel conosce, in ordine di intensità.
+ */
+const LIVELLI_SFORZO_ANTHROPIC = Object.freeze(['low', 'medium', 'high', 'xhigh', 'max']);
+function ragionamentoDaCapacitaAnthropic(capacita) {
+  if (capacita?.thinking?.supported !== true) return {};
+  const supportedEfforts = LIVELLI_SFORZO_ANTHROPIC.filter((livello) => capacita.effort?.[livello]?.supported === true);
+  return { reasoning: { supportedEfforts, defaultEffort: null, defaultEnabled: false, mandatory: false } };
 }
 
 /** Metadati dichiarati, mai trasformati in misure della chiamata o prezzi osservati. */

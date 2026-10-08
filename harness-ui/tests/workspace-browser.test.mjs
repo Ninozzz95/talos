@@ -103,7 +103,7 @@ test('WORKSPACE-CHOOSER-PERMISSION-05 — una directory non leggibile espone un 
     () => browser.browse(),
     (error) => error instanceof WorkspaceBrowserError
       && error.code === 'WORKSPACE_NOT_AVAILABLE'
-      && error.message === 'Questa cartella non è disponibile. Scegline un’altra oppure controlla Doctor.',
+      && error.message === 'This folder is not available. Choose another or check Doctor.',
   );
 });
 

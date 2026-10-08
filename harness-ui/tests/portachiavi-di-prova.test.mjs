@@ -22,7 +22,7 @@ test('KEYRING-PROVA-01 — la variabile è STRICT: assente → sistema, «memori
   assert.equal(leggiPortachiaviDiProva({}), false);
   assert.equal(leggiPortachiaviDiProva({ TALOS_HARNESS_UI_KEYRING: '' }), false);
   assert.equal(leggiPortachiaviDiProva({ TALOS_HARNESS_UI_KEYRING: PORTACHIAVI_MEMORIA }), true);
-  assert.throws(() => leggiPortachiaviDiProva({ TALOS_HARNESS_UI_KEYRING: 'finto' }), /non è valida/);
+  assert.throws(() => leggiPortachiaviDiProva({ TALOS_HARNESS_UI_KEYRING: 'finto' }), /is not valid/);
 });
 
 test('KEYRING-PROVA-02 — la custodia in memoria conserva, rimuove, e ogni istanza è separata', async () => {

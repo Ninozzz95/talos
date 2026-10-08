@@ -3,7 +3,7 @@
  *
  * Porta del mockup `TALOS-Calm-Lab-04.html` (md5 952fd467eff2cdd331f968c419fa1cc0). Le misure
  * NON sono stimate: sono state lette dal vivo il 18/09/2026 con Playwright sulla pagina aperta
- * (`file:///C:/Users/Antonino/Downloads/TALOS-Calm-Lab-04.html`, 1440x900, sezione «Aspetto e
+ * (il mockup aperto dal disco, 1440x900, sezione «Aspetto e
  * movimento»), `getBoundingClientRect` + `getComputedStyle`, e ogni riga qui sotto riporta il
  * numero misurato. Dove il mockup dava `.4375rem` e poi lo correggeva, il valore scritto e' quello
  * EFFETTIVO della catena a schermo, non quello del primo blocco.

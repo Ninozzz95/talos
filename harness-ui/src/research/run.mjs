@@ -256,6 +256,11 @@ function replaceStep(steps, stepId, change) {
  * @param {TalosResearchEvent} event
  * @returns {TalosResearchRun | null}
  */
+function senzaMetadatiErrore(step) {
+  const { errorChiave, errorParams, ...resto } = step;
+  return resto;
+}
+
 export function talosResearchApply(run, event) {
   if (event.kind === 'run_started') {
     // Solo il primo. Un avvio ripetuto azzererebbe un giro che ha già speso
@@ -307,7 +312,7 @@ export function talosResearchApply(run, event) {
       if (existing) {
         return touched({
           steps: replaceStep(run.steps, event.stepId, (step) => ({
-            ...step,
+            ...senzaMetadatiErrore(step),
             state: 'running',
             attempts: step.attempts + 1,
             startedAt: event.at,
@@ -336,7 +341,7 @@ export function talosResearchApply(run, event) {
       if (!existing || existing.state === 'done') return run;
       return touched({
         steps: replaceStep(run.steps, event.stepId, (step) => ({
-          ...step,
+          ...senzaMetadatiErrore(step),
           state: 'done',
           finishedAt: event.at,
           // Registrato una volta, sulla transizione. Sommarlo alla cifra
@@ -354,10 +359,11 @@ export function talosResearchApply(run, event) {
       if (!existing || existing.state === 'done') return run;
       return touched({
         steps: replaceStep(run.steps, event.stepId, (step) => ({
-          ...step,
+          ...senzaMetadatiErrore(step),
           state: 'failed',
           finishedAt: event.at,
           error: event.error,
+          ...(event.errorChiave ? { errorChiave: event.errorChiave, ...(event.errorParams ? { errorParams: event.errorParams } : {}) } : {}),
         })),
       });
     }

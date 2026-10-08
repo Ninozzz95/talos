@@ -385,7 +385,13 @@ test('⛔⛔⛔ BC76-07 — il RIPIEGO sul cloud sopravvive, col suo consenso, e
         fetchDiRete: async (url, opzioni) => {
           const corpo = typeof opzioni?.body === 'string' ? JSON.parse(opzioni.body) : null;
           if (corpo?.model) modelliCloudVisti.push(corpo.model);
-          return Response.json({ choices: [{ message: { role: 'assistant', content: 'risposta cloud' } }] });
+          /* ⛔ 08/10/2026 (bugfixer; rosso riprodotto dalla CLI su r4, bisezione: 7f8978489, BUG-16) — la richiesta è in streaming
+             (`stream: true`, misurato sul corpo) e qui si rispondeva con un JSON semplice: per il kernel è un flusso rotto, cioè un
+             esito INCERTO. Prima di BUG-16 il giro moriva subito in RunError e la prova passava senza che il ripiego fosse mai
+             riuscito; da BUG-16 l'esito incerto si ritenta (fino a 10, attese crescenti) e il secondo giro non chiudeva entro 15 s.
+             ⇒ La risposta finta è quella che un fornitore manda davvero: uno stream SSE, testo e fine. */
+          return new Response(sse([fotogrammaTesto('risposta cloud'), { choices: [{ delta: {}, finish_reason: 'stop' }] }]),
+            { headers: { 'Content-Type': 'text/event-stream' } });
         },
       }),
     }),
@@ -405,6 +411,9 @@ test('⛔⛔⛔ BC76-07 — il RIPIEGO sul cloud sopravvive, col suo consenso, e
   const eventiCon = await attendiFine(registro, con.sessionId, { quanti: 2 });
   assert.ok(eventiCon.some((e) => e.type === 'RuntimeFallback'), '⛔ il ripiego deve essere ANNUNCIATO');
   assert.ok(modelliCloudVisti.length > 0, '⛔ col consenso il giro riparte sul cloud');
+  // 08/10/2026: «sopravvive» vuol dire che il giro sul cloud FINISCE bene — prima la prova accettava anche un RunError
+  assert.equal(eventiCon.at(-1).type, 'RunFinished', `⛔ il giro di ripiego deve finire, non cadere: ${eventiCon.at(-1).type}`);
+  assert.equal(modelliCloudVisti.length, 1, '⛔ una risposta completa non si ritenta: una sola richiesta al cloud');
   assert.equal(modelliCloudVisti.at(-1), 'vendor/modello-di-serie',
     '⛔ al cloud va il modello di SERIE del server: il nome di un GGUF locale non esiste su OpenRouter');
 });

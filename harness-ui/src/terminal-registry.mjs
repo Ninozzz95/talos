@@ -150,16 +150,16 @@ export function creaRegistroSchedeTerminale({
      */
     crea({ sessionId } = {}) {
       if (typeof sessionId !== 'string' || sessionId === '') {
-        return { erroreAvvio: 'Sessione non valida', code: 'QUERY_INVALID' };
+        return { erroreAvvio: 'Invalid session', code: 'QUERY_INVALID' };
       }
       const cartella = cartellaDiSessione(sessionId);
       if (typeof cartella !== 'string' || cartella === '') {
         /* ⛔ Qui viveva il `??` di server.mjs:589. Una sessione che non esiste non prende una cartella di ripiego: non prende NIENTE. */
-        return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
+        return { erroreAvvio: 'Session not found', code: 'NOT_FOUND' };
       }
       const gia = schedeDi(sessionId);
       if (gia.length >= schedeMassimePerSessione) {
-        return { erroreAvvio: `Massimo ${schedeMassimePerSessione} terminali per sessione`, code: 'TERMINAL_LIMIT_REACHED' };
+        return { erroreAvvio: `Maximum of ${schedeMassimePerSessione} terminals in each session`, code: 'TERMINAL_LIMIT_REACHED' };
       }
       if (gia.length === 0) return pubblica(registraPrimaScheda(sessionId, cartella));
       let terminalId = generaId();
@@ -179,8 +179,8 @@ export function creaRegistroSchedeTerminale({
 
     /** Elenco delle schede di UNA sessione — mai di tutte: una sessione non vede i terminali delle altre. */
     elenca(sessionId) {
-      if (typeof sessionId !== 'string' || sessionId === '') return { erroreAvvio: 'Sessione non valida', code: 'QUERY_INVALID' };
-      if (cartellaDiSessione(sessionId) === null) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
+      if (typeof sessionId !== 'string' || sessionId === '') return { erroreAvvio: 'Invalid session', code: 'QUERY_INVALID' };
+      if (cartellaDiSessione(sessionId) === null) return { erroreAvvio: 'Session not found', code: 'NOT_FOUND' };
       return { items: schedeDi(sessionId).map(pubblica) };
     },
 
@@ -195,11 +195,11 @@ export function creaRegistroSchedeTerminale({
      */
     chiudi({ sessionId, terminalId } = {}) {
       if (typeof sessionId !== 'string' || sessionId === '' || typeof terminalId !== 'string' || terminalId === '') {
-        return { erroreAvvio: 'Terminale non valido', code: 'QUERY_INVALID' };
+        return { erroreAvvio: 'Invalid terminal', code: 'QUERY_INVALID' };
       }
       const voce = schede.get(terminalId);
       if (!voce || voce.sessionId !== sessionId) {
-        return { erroreAvvio: 'Terminale non trovato', code: 'NOT_FOUND' };
+        return { erroreAvvio: 'Terminal not found', code: 'NOT_FOUND' };
       }
       chiudiPtyFn(terminalId);
       schede.delete(terminalId);

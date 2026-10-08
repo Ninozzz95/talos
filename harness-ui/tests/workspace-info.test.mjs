@@ -92,18 +92,18 @@ test('RITRATTO-GIT: senza git non si inventa niente, con git si legge ramo e mod
 test('RITRATTO-FRASI: la riga della modale e l’avviso, coi numeri veri', () => {
   const ritratto = { leggibile: true, radice: false, file: 1234, cartelle: 56, oltreIlTetto: false, tetto: TETTO_FILE, git: { ramo: 'main', nonSalvate: 3, repoAnnidati: ['/a/mobile'] }, istruzioni: ['CLAUDE.md'] };
   const frase = frasiRitratto(ritratto);
-  assert.match(frase, /1\.234 file/);
-  assert.match(frase, /ramo main/);
-  assert.match(frase, /3 modifiche non salvate/);
-  assert.match(frase, /1 repo annidati/);
+  assert.match(frase, /1\.234 files/);
+  assert.match(frase, /branch main/);
+  assert.match(frase, /3 uncommitted changes/);
+  assert.match(frase, /1 nested repos/);
   assert.match(frase, /CLAUDE\.md/);
   assert.equal(avvisoRitratto(ritratto), '');
   // una radice si avvisa
-  assert.match(avvisoRitratto({ ...ritratto, radice: true }), /cartella radice/);
+  assert.match(avvisoRitratto({ ...ritratto, radice: true }), /root folder/);
   // e una cartella oltre il tetto pure
-  assert.match(avvisoRitratto({ ...ritratto, oltreIlTetto: true }), /più di 20\.000 file/);
+  assert.match(avvisoRitratto({ ...ritratto, oltreIlTetto: true }), /more than 20\.000 files/);
   // AL CONTRARIO: una cartella illeggibile lo dice, e non finge numeri
-  assert.equal(frasiRitratto({ leggibile: false }), 'Non riesco a leggere questa cartella.');
+  assert.equal(frasiRitratto({ leggibile: false }), 'Cannot read this folder.');
   assert.equal(avvisoRitratto(null), '');
 });
 

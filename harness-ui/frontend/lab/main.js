@@ -14,7 +14,7 @@ import {aggiornaEstensioni,collegaSchedeCapability,mostraSchedaCapability} from 
 import {ESTENSIONI} from './fixtures/estensioni.js';
 import { aggiornaPaginaCapability } from '../src/components/capability.js';
 import { ATTREZZI } from './fixtures/capability.js';
-import { aggiornaPaginaAutomazioni } from '../src/components/automazioni.js';
+import { aggiornaPaginaAutomazioni } from '../src/components/automazioni-sezione.js'; // 08/10/2026: la pagina è l'impianto di Note e Libreria
 import { AUTOMAZIONI, ADESSO as ADESSO_AUTOMAZIONI } from './fixtures/automazioni.js';
 import { aggiornaPaginaOfficina } from '../src/components/officina.js';
 import { STRUMENTI_FORGIATI } from './fixtures/officina.js';

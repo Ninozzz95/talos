@@ -224,7 +224,7 @@ test('⛔⛔⛔ AL CONTRARIO — chiamaToolMcpFn su un nome MAI connesso in ques
 
   await assert.rejects(
     chiamaToolMcpFn('mcp__server-inventato__tool-inventato', {}),
-    /non è fra quelli connessi/,
+    /(?:is not among those connected|non è fra quelli connessi)/,
   );
 });
 

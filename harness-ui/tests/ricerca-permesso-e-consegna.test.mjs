@@ -279,20 +279,21 @@ test('⛔⛔⛔ VERSO CONTRARIO — LA SCUSA DEL 11/09, VERBATIM: 290 byte, ness
   assert.equal(letto.ok, false);
   assert.equal(letto.intestazione, null);
   assert.deepEqual(letto.fonti, []);
-  assert.match(letto.motivo, /intestazione/);
+  assert.match(letto.motivo, /heading/);
+  assert.equal(letto.motivoChiave, 'server.research.minimum.noHeading');
 });
 
 test('⛔ VERSO CONTRARIO — un rapporto ben scritto ma SENZA FONTI è respinto, e il motivo lo nomina', () => {
   const letto = rileggiRapportoMinimo('# Un titolo\n\nDue affermazioni.\nAnche una terza.\n');
   assert.equal(letto.ok, false);
   assert.equal(letto.affermazioni, 2);
-  assert.equal(letto.motivo, 'il rapporto non elenca nessuna fonte');
+  assert.equal(letto.motivo, 'the report lists no sources');
 });
 
 test('⛔ VERSO CONTRARIO — solo titolo e fonti, nessuna affermazione: respinto. Un elenco di link non è un rapporto', () => {
   const letto = rileggiRapportoMinimo('# Titolo\n\n## Fonti\n- https://esempio.it/a\n');
   assert.equal(letto.ok, false);
-  assert.equal(letto.motivo, 'il rapporto non contiene nessuna affermazione');
+  assert.equal(letto.motivo, 'the report contains no claims');
   assert.equal(letto.fonti.length, 1, 'le fonti le ha viste: manca il resto');
 });
 
@@ -305,7 +306,7 @@ test('⛔ VERSO CONTRARIO — vuoto, spazi, o non una stringa: respinti senza ec
 test('⛔ un URL citato IN MEZZO alla prosa non conta come fonte: la bibliografia si dichiara, non si indovina', () => {
   const letto = rileggiRapportoMinimo('# Titolo\n\nCome dice https://esempio.it/a, le cose stanno così.\n');
   assert.equal(letto.ok, false);
-  assert.equal(letto.motivo, 'il rapporto non elenca nessuna fonte');
+  assert.equal(letto.motivo, 'the report lists no sources');
 });
 
 test('le intestazioni delle fonti sono riconosciute in italiano e in inglese', () => {
@@ -345,8 +346,8 @@ test('scriviRapporto/leggiRapporto: andata e ritorno dentro la cartella della ri
 
 test('⛔ VERSO CONTRARIO — scriviRapporto con un id ostile o un testo vuoto LANCIA, e leggiRapporto su un id ostile torna null (mai un\'eccezione per un\'assenza)', async (t) => {
   const cartella = cartellaVuota(t);
-  await assert.rejects(() => scriviRapporto({ cartella, id: '../fuori', testo: RAPPORTO_VERO }), /id di ricerca non valido/);
-  await assert.rejects(() => scriviRapporto({ cartella, id: 'ric-1', testo: '  ' }), /vuole del testo/);
+  await assert.rejects(() => scriviRapporto({ cartella, id: '../fuori', testo: RAPPORTO_VERO }), /invalid research id/);
+  await assert.rejects(() => scriviRapporto({ cartella, id: 'ric-1', testo: '  ' }), /requires text/);
   assert.equal(await leggiRapporto({ cartella, id: '../fuori' }), null);
   assert.equal(await leggiRapporto({ cartella, id: 'mai-esistita' }), null);
 });

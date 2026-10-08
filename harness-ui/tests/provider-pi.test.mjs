@@ -316,8 +316,9 @@ test('PI-REG-AVVISI — modifica non silenziosa: senza canale avvisi si ferma pr
   const r = await (await aperto(url, { method: 'POST', body: corpo })).json();
   assert.equal(r.usage.prompt_tokens_details.cached_tokens, 6);
   assert.equal(avvisi.length, 1);
-  assert.match(avvisi[0], /temperatura/);
-  assert.equal(avvisi[0].includes(CHIAVE), false);
+  assert.equal(avvisi[0]?.testoChiave, 'server.compatibleNotice.temperatureIgnored');
+  assert.match(avvisi[0].testo, /temperature/);
+  assert.equal(JSON.stringify(avvisi[0]).includes(CHIAVE), false);
 });
 
 function verificaPubblico(catalogo) {

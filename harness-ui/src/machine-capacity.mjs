@@ -42,7 +42,7 @@ export async function misuraCapacitaMacchina({
     freeMemoryBytes = interoPositivo(freememFn());
     filesystem = await statfsFn(storagePath, { bigint: true });
   } catch (error) {
-    throw new MachineCapacityError(`Misura capacità macchina non disponibile: ${error?.message || 'errore sconosciuto'}`);
+    throw new MachineCapacityError(`Machine capacity measurement not available: ${error?.message || 'unknown error'}`);
   }
   const blockSize = interoPositivo(filesystem?.bsize);
   const availableBlocks = interoPositivo(filesystem?.bavail);
@@ -52,7 +52,7 @@ export async function misuraCapacitaMacchina({
   const reserve = interoPositivo(reserveBytes) ?? MODEL_RESERVE_BYTES;
   const allocatableStorageBytes = availableStorageBytes === null ? null : Math.max(0, availableStorageBytes - reserve);
   if (totalMemoryBytes === null || freeMemoryBytes === null || availableStorageBytes === null || totalStorageBytes === null) {
-    throw new MachineCapacityError('Il sistema ha restituito una misura incompleta', 'MACHINE_CAPACITY_INVALID');
+    throw new MachineCapacityError('The system returned an incomplete measurement', 'MACHINE_CAPACITY_INVALID');
   }
   return {
     schema: MACHINE_CAPACITY_SCHEMA,
@@ -61,6 +61,6 @@ export async function misuraCapacitaMacchina({
     measuredAt: new Date().toISOString(),
     memory: { totalBytes: totalMemoryBytes, freeBytes: freeMemoryBytes },
     storage: { totalBytes: totalStorageBytes, availableBytes: availableStorageBytes, reserveBytes: reserve, allocatableBytes: allocatableStorageBytes },
-    runtime: { status: 'unconfigured', reason: 'Runtime locale desktop non scelto' },
+    runtime: { status: 'unconfigured', reason: 'Local desktop runtime not chosen' },
   };
 }

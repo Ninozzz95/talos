@@ -1,6 +1,8 @@
 import { test } from '@playwright/test';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { homedir } from 'node:os';
+import { pathToFileURL } from 'node:url';
 
 /*
  * ============================================================================
@@ -44,8 +46,9 @@ import { join } from 'node:path';
  *   OTTO FOTO SU OTTO erano la stessa sezione. Il selettore vero è
  *   `[data-action="navigate"][data-value="…"]`.
  */
-const USCITA = 'C:/Users/Antonino/Downloads/confronto-fase1';
-const MOCKUP = 'file:///C:/Users/Antonino/Downloads/TALOS-Calm-Lab-04.html';
+/* cartella delle foto e mockup: di chi lancia la prova (mai un percorso scritto a mano, 08/10/2026) */
+const USCITA = process.env.TALOS_CONFRONTO_USCITA || join(homedir(), 'Downloads', 'confronto-fase1');
+const MOCKUP = pathToFileURL(process.env.TALOS_MOCKUP_CALM_LAB || join(homedir(), 'Downloads', 'TALOS-Calm-Lab-04.html')).href;
 const APP = 'http://127.0.0.1:4174/';
 const ID_MODELLO = 'unsloth-GLM-4-7-Flash-GGUF-0d32489ecb9d-GLM-4-7-Flash-Q4-K-M-gguf';
 

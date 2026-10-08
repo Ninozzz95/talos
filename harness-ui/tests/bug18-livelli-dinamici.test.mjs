@@ -44,7 +44,7 @@ test('BUG18-GENERALE-01 — stessa meccanica sul profilo richiestaCompatibile (c
   const adattato = preparaRichiestaCompatibile('cerebras', { model: 'cerebras:gpt-oss-120b', reasoning_effort: 'xhigh' });
   assert.equal(adattato.corpo.reasoning_effort, 'high');
   assert.deepEqual(adattato.avvisi, [], 'BUG-18: la normalizzazione non parla in chat');
-  assert.match(adattato.note.join(' '), /inviato «high»/u);
+  assert.match(adattato.note.join(' '), /sent "high"/u);
   const documentato = preparaRichiestaCompatibile('cerebras', { model: 'cerebras:gpt-oss-120b', reasoning_effort: 'medium' });
   assert.equal(documentato.corpo.reasoning_effort, 'medium');
   assert.deepEqual(documentato.avvisi, []);

@@ -37,14 +37,16 @@ function erroreArchitettura(architettura, binario, righeMotore = []) {
   errore.righeMotore = righeMotore;
   return errore;
 }
-const inGb = (byte) => (byte / 2 ** 30).toLocaleString('it-IT', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+/* ⛔ K4b (07/10/2026): numeri col punto decimale e frase inglese a forma STABILE; l'interfaccia (`errori.js`, regola
+   «modello-non-entra») ne estrae i valori e la scrive nella lingua di chi guarda. */
+const inGb = (byte) => (byte / 2 ** 30).toFixed(1);
 function erroreMemoriaPiena(primo, modelPath) {
   let byte = 0;
   try { byte = statSync(modelPath).size; } catch { byte = 0; }
   const d = primo?.memoriaDispositivo ?? null;
   const modello = byte >= 2 ** 30 / 10 ? ` (${inGb(byte)} GB)` : '';
-  const scheda = d ? ` (${d.nome}: ${inGb(d.totaleMiB * 2 ** 20)} GB, liberi ${inGb(d.liberaMiB * 2 ** 20)} GB)` : '';
-  const errore = new LlamaServerSupervisorError(`Il modello${modello} non entra nella memoria della scheda grafica${scheda}.`, 'RUNTIME_OUT_OF_MEMORY');
+  const scheda = d ? ` (${d.nome}: ${inGb(d.totaleMiB * 2 ** 20)} GB, ${inGb(d.liberaMiB * 2 ** 20)} GB free)` : '';
+  const errore = new LlamaServerSupervisorError(`The model${modello} does not fit in the graphics card memory${scheda}.`, 'RUNTIME_OUT_OF_MEMORY');
   errore.righeMotore = primo?.righeMotore ?? [];
   return errore;
 }
@@ -142,15 +144,15 @@ export function leggiNglDalFitter(stdout) {
  */
 export function decidiTipoKvCache({ nglConF16, nglConQ8 } = {}) {
   if (nglConF16 === 'tutto') {
-    return { tipo: 'f16', perche: 'con KV f16 il fitter del binario dichiara che TUTTI i livelli entrano nel dispositivo' };
+    return { tipo: 'f16', perche: 'with f16 KV the binary fitter declares that ALL layers fit on the device' };
   }
   if (nglConF16 === null || nglConF16 === undefined) {
-    return { tipo: 'q8_0', perche: 'il fitter del binario non ha risposto: si resta sulla KV quantizzata di prima' };
+    return { tipo: 'q8_0', perche: 'the binary fitter did not answer: staying on the previous quantized KV' };
   }
   if (nglConQ8 === 'tutto') {
-    return { tipo: 'q8_0', perche: `con KV f16 entrerebbero solo ${nglConF16} livelli, con q8_0 entrano tutti` };
+    return { tipo: 'q8_0', perche: `with f16 KV only ${nglConF16} layers would fit, with q8_0 all of them fit` };
   }
-  return { tipo: 'q8_0', perche: `con KV f16 entrerebbero solo ${nglConF16} livelli: la cache dimezzata ne fa entrare di più` };
+  return { tipo: 'q8_0', perche: `with f16 KV only ${nglConF16} layers would fit: the halved cache fits more` };
 }
 
 /**
@@ -319,7 +321,7 @@ export function createLlamaServerSupervisor({
     if (leveMemorizzate.has(chiave)) return leveMemorizzate.get(chiave);
     const fitter = percorsoFitter(binario);
     const contesto = Number.isInteger(contextLength) && contextLength > 0 ? ['-c', String(contextLength)] : [];
-    let kv = { tipo: 'q8_0', perche: 'il fitter del binario non è stato trovato: si resta sulla KV quantizzata di prima' };
+    let kv = { tipo: 'q8_0', perche: 'the binary fitter was not found: staying on the previous quantized KV' };
     if (fitter) {
       const conF16 = leggiNglDalFitter(await probeBinary(fitter, ['-m', modelPath, ...contesto, '-fa', '1'], 30_000, { signal: operation.controller.signal }) ?? '');
       checkStart(operation);
@@ -474,15 +476,15 @@ export function createLlamaServerSupervisor({
    * scambierebbe un avviso per un guasto). Fonti nel rapporto R-03.
    */
   const FIRME_RIPIEGO = Object.freeze([
-    { classe: 'driver', motivo: 'la scheda grafica non è disponibile (driver Vulkan assente o incompatibile)', firme: ['ggml_vulkan: No devices found', 'ErrorIncompatibleDriver', 'ErrorInitializationFailed', 'ErrorLayerNotPresent'] },
-    { classe: 'perso', motivo: 'la scheda grafica non risponde più (dispositivo perso)', firme: ['DeviceLostError', 'ErrorDeviceLost', 'device lost'] },
+    { classe: 'driver', motivo: 'the graphics card is not available (Vulkan driver missing or incompatible)', firme: ['ggml_vulkan: No devices found', 'ErrorIncompatibleDriver', 'ErrorInitializationFailed', 'ErrorLayerNotPresent'] },
+    { classe: 'perso', motivo: 'the graphics card no longer responds (device lost)', firme: ['DeviceLostError', 'ErrorDeviceLost', 'device lost'] },
   ]);
   const FIRME_MEMORIA = Object.freeze(['ErrorOutOfDeviceMemory', 'ErrorOutOfHostMemory']);
 
   function classificaGuastoVulkan(righe) {
     const testo = righe.join('\n');
     for (const f of FIRME_RIPIEGO) if (f.firme.some(s => testo.includes(s))) return { classe: f.classe, motivo: f.motivo };
-    if (FIRME_MEMORIA.some(s => testo.includes(s))) return { classe: 'memoria', motivo: 'la memoria della scheda grafica non basta per questo modello con questo contesto' };
+    if (FIRME_MEMORIA.some(s => testo.includes(s))) return { classe: 'memoria', motivo: 'the graphics card memory is not enough for this model with this context' };
     return null;
   }
 
@@ -521,11 +523,11 @@ export function createLlamaServerSupervisor({
      */
     const leve = conOffload
       ? await leveVelocita(binario, modelPath, contextLength, operation)
-      : { kv: { tipo: 'q8_0', perche: 'nessun offload sul dispositivo: la KV cache non entra nella scelta' }, speculativa: await speculativaDisponibile(binario, operation) };
+      : { kv: { tipo: 'q8_0', perche: 'no offload to the device: the KV cache is not part of the choice' }, speculativa: await speculativaDisponibile(binario, operation) };
     checkStart(operation);
-    emitLog('stderr', `[talos] motore ${motore.variante}${motore.ripiego ? ` (ripiego da ${motore.ripiego.da})` : ''}: ${binario}\n`);
+    emitLog('stderr', `[talos] engine ${motore.variante}${motore.ripiego ? ` (fallback from ${motore.ripiego.da})` : ''}: ${binario}\n`);
     emitLog('stderr', `[talos] KV cache ${leve.kv.tipo} — ${leve.kv.perche}\n`);
-    emitLog('stderr', `[talos] decodifica speculativa a n-grammi: ${leve.speculativa ? 'accesa (--spec-type ngram-mod)' : 'non offerta da questo binario'}\n`);
+    emitLog('stderr', `[talos] n-gram speculative decoding: ${leve.speculativa ? 'on (--spec-type ngram-mod)' : 'not offered by this binary'}\n`);
     checkStart(operation); // Log subscribers may have requested stop synchronously.
     entry.child = processPolicy.spawn(binario, [
       '-m', modelPath,
@@ -593,7 +595,7 @@ export function createLlamaServerSupervisor({
         if (sconosciuta) throw erroreArchitettura(sconosciuta, binario, [...entry.ultimeRighe]);
         const detto = entry.ultimeRighe.slice(-4).join(' | ');
         const errore = new LlamaServerSupervisorError(
-          `llama-server si è chiuso dopo ${Math.round((Date.now() - (deadline - attesa)) / 1000)} s senza mai diventare pronto${detto ? `: ${detto}` : ''}`,
+          `llama-server closed after ${Math.round((Date.now() - (deadline - attesa)) / 1000)} s without ever becoming ready${detto ? `: ${detto}` : ''}`,
           'RUNTIME_PROCESS_FAILED',
         );
         errore.righeMotore = [...entry.ultimeRighe];
@@ -613,7 +615,7 @@ export function createLlamaServerSupervisor({
     state = 'failed';
     // ⛔ Il messaggio dice QUANTO si e' aspettato e quanto pesa il modello:
     // «timeout» da solo manda a cercare un guasto che non c'e'.
-    throw new LlamaServerSupervisorError(`llama-server non è diventato pronto entro ${Math.round(attesa / 1000)} s (modello di ${(byteModello / 1_000_000_000).toFixed(1)} GB)`, 'RUNTIME_HEALTH_TIMEOUT');
+    throw new LlamaServerSupervisorError(`llama-server did not become ready within ${Math.round(attesa / 1000)} s (${(byteModello / 1_000_000_000).toFixed(1)} GB model)`, 'RUNTIME_HEALTH_TIMEOUT');
   }
 
   // Reserve the operation before the first await (port allocation/lock included).
@@ -664,7 +666,7 @@ export function createLlamaServerSupervisor({
         checkStart(operation); // Stop is never a reason to start a CPU fallback.
         const guasto = motore.variante === 'vulkan' && primo.code === 'RUNTIME_PROCESS_FAILED' ? classificaGuastoVulkan(primo.righeMotore ?? []) : null;
         if (guasto?.classe === 'memoria') {
-          motore.proposta = { a: 'cpu', motivo: `${guasto.motivo}; sul processore il modello può girare, più lento: la scelta è della persona` };
+          motore.proposta = { a: 'cpu', motivo: `${guasto.motivo}; the model can run on the processor, slower: the choice belongs to the person` };
           throw erroreMemoriaPiena(primo, modelPath); // 25/09 sera: la carta vera, coi numeri (vedi `erroreMemoriaPiena`)
         }
         if (!guasto || !fallbackBinaryPath) throw primo;
@@ -674,14 +676,14 @@ export function createLlamaServerSupervisor({
         const ripiego = { da: motore.variante, a: 'cpu', motivo: guasto.motivo, classe: guasto.classe, righe: (primo.righeMotore ?? []).slice(-4) };
         motore = { ...nuovoMotore('cpu'), ripiego };
         for (const listener of listeners) {
-          try { listener({ stream: 'stderr', text: `[talos] ${guasto.motivo}: il modello viene caricato sul processore.\n`, ripiego }); } catch { /* observer isolation */ }
+          try { listener({ stream: 'stderr', text: `[talos] ${guasto.motivo}: the model is being loaded on the processor.\n`, ripiego }); } catch { /* observer isolation */ }
         }
         try {
           return await lanciaProcesso({ modelId, modelPath, selectedPort, contextLength, binario: fallbackBinaryPath, ngl: 0, apiKey, operation });
         } catch (secondo) {
           checkStart(operation);
           const codaGpu = ripiego.righe.join(' | ');
-          const errore = new LlamaServerSupervisorError(`${secondo.message}${codaGpu ? ` [prima, sulla scheda grafica: ${codaGpu}]` : ''}`, secondo.code === 'RUNTIME_HEALTH_TIMEOUT' ? 'RUNTIME_HEALTH_TIMEOUT' : 'RUNTIME_PROCESS_FAILED');
+          const errore = new LlamaServerSupervisorError(`${secondo.message}${codaGpu ? ` [before, on the graphics card: ${codaGpu}]` : ''}`, secondo.code === 'RUNTIME_HEALTH_TIMEOUT' ? 'RUNTIME_HEALTH_TIMEOUT' : 'RUNTIME_PROCESS_FAILED');
           errore.righeMotore = secondo.righeMotore;
           throw errore;
         }

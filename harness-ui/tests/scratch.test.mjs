@@ -38,8 +38,8 @@ test('SCRATCH-01 — la radice: esplicita, poi cartella dati spostata, poi %LOCA
   assert.equal(radiceScratch({ LOCALAPPDATA: 'C:\\Users\\P\\AppData\\Local' }, opzioni), join('C:\\Users\\P\\AppData\\Local', 'TALOS', 'cache', 'scratch'));
   assert.equal(radiceScratch({}, opzioni), join('C:\\Users\\P', 'AppData', 'Local', 'TALOS', 'cache', 'scratch'), 'senza LOCALAPPDATA: la cartella locale standard sotto la casa');
   assert.equal(radiceScratch({ TALOS_SCRATCH_DIR: '   ', LOCALAPPDATA: 'C:\\L' }, opzioni), join('C:\\L', 'TALOS', 'cache', 'scratch'), 'una variabile vuota non conta');
-  assert.throws(() => radiceScratch({ TALOS_SCRATCH_DIR: 'relativa\\x' }, opzioni), /assoluta/);
-  assert.throws(() => radiceScratch({ TALOS_DESKTOP_DATA_DIR: '.\\dati' }, opzioni), /assoluta/);
+  assert.throws(() => radiceScratch({ TALOS_SCRATCH_DIR: 'relativa\\x' }, opzioni), /absolute folder/);
+  assert.throws(() => radiceScratch({ TALOS_DESKTOP_DATA_DIR: '.\\dati' }, opzioni), /absolute folder/);
 });
 
 test('SCRATCH-02 — le cartelle usa-e-getta nascono SOTTO la radice (creata se manca), e il prefisso è un nome, mai un percorso', async () => {
@@ -51,8 +51,8 @@ test('SCRATCH-02 — le cartelle usa-e-getta nascono SOTTO la radice (creata se 
   // senza radice esplicita: quella del processo (qui TALOS_SCRATCH_DIR del file), mai la TEMP di sistema
   assert.equal(dirname(cartellaScratch('talos-prova-')), process.env.TALOS_SCRATCH_DIR);
   for (const cattivo of ['../fuori-', 'a/b-', 'a\\b-', '', '.nascosto-', 'C:x', null]) {
-    assert.throws(() => cartellaScratch(cattivo, { radice }), /Prefisso/, `prefisso ${JSON.stringify(cattivo)}`);
-    await assert.rejects(cartellaScratchAttesa(cattivo, { radice }), /Prefisso/);
+    assert.throws(() => cartellaScratch(cattivo, { radice }), /prefix/, `prefisso ${JSON.stringify(cattivo)}`);
+    await assert.rejects(cartellaScratchAttesa(cattivo, { radice }), /prefix/);
   }
 });
 
@@ -94,7 +94,7 @@ test('SCRATCH-04 — il timbro: al massimo una pulizia l\'ora, anche fra process
   const ferma = join(radice, 'ferma'); mkdirSync(ferma); data(ferma, adesso - 30 * ORA);
   const secondo = await ripulisciScratch({ radice, adesso: adesso + 30 * 60 * 1000 });
   assert.equal(secondo.eseguita, false, 'mezz\'ora dopo non si ripota');
-  assert.match(secondo.motivo, /ultima ora/);
+  assert.match(secondo.motivo, /last hour/);
   assert.equal(existsSync(ferma), true);
   const terzo = await ripulisciScratch({ radice, adesso: adesso + INTERVALLO_PULIZIA_MS + 60_000 });
   assert.equal(terzo.eseguita, true);
@@ -164,7 +164,7 @@ test('SCRATCH-07 — radice assente, illeggibile o mal configurata: nessuna ecce
   assert.deepEqual(stato, { percorso: assente, esiste: false, byte: 0, voci: 0, illeggibili: 0 });
   const giri = await avviaPuliziaScratch({ env: { TALOS_SCRATCH_DIR: 'relativa' }, log: { log() {}, warn() {} } });
   assert.ok(Array.isArray(giri));
-  assert.match(giri[0].motivo, /radice non valida/);
+  assert.match(giri[0].motivo, /invalid root/);
 });
 
 test('SCRATCH-08 — lo stato per il Doctor: percorso, byte e voci (il timbro non è una voce), anche dentro diagnosi()', async () => {

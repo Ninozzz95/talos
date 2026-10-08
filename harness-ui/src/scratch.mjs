@@ -57,7 +57,7 @@ const RIMOZIONE_CON_RITENTATIVI = Object.freeze({ recursive: true, force: true, 
 const PREFISSO_VALIDO = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 
 function assoluta(valore, nome) {
-  if (!isAbsolute(valore)) throw new Error(`${nome} deve essere una cartella assoluta.`);
+  if (!isAbsolute(valore)) throw new Error(`${nome} must be an absolute folder.`);
   return resolve(valore);
 }
 
@@ -86,7 +86,7 @@ export function radiceScratch(env = process.env, { platform = process.platform, 
 
 function controllaPrefisso(prefisso) {
   if (typeof prefisso !== 'string' || !PREFISSO_VALIDO.test(prefisso)) {
-    throw new Error(`Prefisso della cartella temporanea non valido: ${JSON.stringify(prefisso)}`);
+    throw new Error(`Invalid temporary folder prefix: ${JSON.stringify(prefisso)}`);
   }
 }
 
@@ -155,7 +155,7 @@ export async function ripulisciScratch({
   try {
     esito.radice = radice ?? radiceScratch();
   } catch (errore) {
-    esito.motivo = `radice non valida: ${errore?.message ?? errore}`;
+    esito.motivo = `invalid root: ${errore?.message ?? errore}`;
     return esito;
   }
   let voci;
@@ -164,7 +164,7 @@ export async function ripulisciScratch({
     const fileTimbro = join(esito.radice, FILE_TIMBRO);
     try {
       const info = await lstat(fileTimbro);
-      if (adesso - info.mtimeMs < intervalloMs) { esito.motivo = 'già eseguita nell’ultima ora'; return esito; }
+      if (adesso - info.mtimeMs < intervalloMs) { esito.motivo = 'already run within the last hour'; return esito; }
     } catch { /* nessun timbro: prima pulizia */ }
     // Come Hermes: il timbro si tocca PRIMA di potare, così un secondo processo che parte adesso salta.
     try {
@@ -190,7 +190,7 @@ export async function ripulisciScratch({
     } catch (errore) {
       const codice = errore?.code ?? 'errore';
       esito.rimaste.push({ nome, codice });
-      process.emitWarning(`voce dei temporanei non rimossa (${codice}), si ritenta alla prossima pulizia: ${percorso}`, 'ResiduoScratch');
+      process.emitWarning(`temporary entry not removed (${codice}), it will be retried at the next cleanup: ${percorso}`, 'ResiduoScratch');
     }
   }
   return esito;
@@ -207,7 +207,7 @@ export async function avviaPuliziaScratch({ env = process.env, adesso = Date.now
     let radice = null;
     try { radice = radiceScratch(env); } catch (errore) {
       // Una radice mal configurata si dichiara; i residui storici si tolgono lo stesso.
-      giri.push({ radice: null, eseguita: false, motivo: `radice non valida: ${errore?.message ?? errore}`, tolte: [], rimaste: [] });
+      giri.push({ radice: null, eseguita: false, motivo: `invalid root: ${errore?.message ?? errore}`, tolte: [], rimaste: [] });
     }
     if (radice) giri.push(await ripulisciScratch({ radice, adesso }));
     giri.push(await ripulisciScratch({ radice: tmpdir(), adesso, prefissi: PREFISSI_STORICI_IN_TEMP, soloCartelle: true, timbro: false }));
@@ -220,14 +220,14 @@ export async function avviaPuliziaScratch({ env = process.env, adesso = Date.now
     return giri;
   }
   for (const giro of giri) {
-    if (giro.motivo?.startsWith('radice non valida')) {
+    if (giro.motivo?.startsWith('invalid root')) {
       try { log.warn?.(`[scratch] ${giro.motivo}`); } catch { /* il log non deve rompere l'avvio */ }
     }
   }
   const tolte = giri.reduce((n, g) => n + g.tolte.length, 0);
   const rimaste = giri.reduce((n, g) => n + g.rimaste.length, 0);
   if (tolte || rimaste) {
-    try { log.log?.(`[scratch] pulizia all'avvio: ${tolte} voci tolte, ${rimaste} non rimosse (si ritenta alla prossima).`); } catch { /* idem */ }
+    try { log.log?.(`[scratch] startup cleanup: ${tolte} entries removed, ${rimaste} not removed (retried next time).`); } catch { /* idem */ }
   }
   return giri;
 }

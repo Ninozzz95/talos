@@ -18,11 +18,11 @@ const oggetto = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
 
 /* Un campo del modulo: solo i primitivi che la spec ammette, niente annidamenti. */
 function campo(nome, schema) {
-  if (!oggetto(schema)) rifiutaRichiesta(`campo ${nome}: schema non valido`);
+  if (!oggetto(schema)) rifiutaRichiesta(`field ${nome}: invalid schema`);
   const titolo = typeof schema.title === 'string' ? { title: schema.title } : {};
   const descrizione = typeof schema.description === 'string' ? { description: schema.description } : {};
   if (schema.type === 'string') {
-    if (schema.enum !== undefined && (!Array.isArray(schema.enum) || !schema.enum.length || schema.enum.some((x) => typeof x !== 'string'))) rifiutaRichiesta(`campo ${nome}: enum non valido`);
+    if (schema.enum !== undefined && (!Array.isArray(schema.enum) || !schema.enum.length || schema.enum.some((x) => typeof x !== 'string'))) rifiutaRichiesta(`field ${nome}: invalid enum`);
     return { type: 'string', ...titolo, ...descrizione,
       ...(schema.enum ? { enum: [...schema.enum] } : {}), ...(Array.isArray(schema.enumNames) ? { enumNames: schema.enumNames.map(String) } : {}),
       ...(typeof schema.format === 'string' ? { format: schema.format } : {}),
@@ -38,34 +38,34 @@ function campo(nome, schema) {
   if (schema.type === 'array') {
     const voci = oggetto(schema.items) ? schema.items : null;
     const scelte = voci?.type === 'string' && Array.isArray(voci.enum) && voci.enum.length && voci.enum.every((x) => typeof x === 'string') ? voci.enum : null;
-    if (!scelte) rifiutaRichiesta(`campo ${nome}: una lista è ammessa solo come scelta multipla di testi`);
+    if (!scelte) rifiutaRichiesta(`field ${nome}: a list is allowed only as multiple choice of texts`);
     return { type: 'array', ...titolo, ...descrizione, items: { type: 'string', enum: [...scelte] },
       ...(Number.isSafeInteger(schema.minItems) ? { minItems: schema.minItems } : {}), ...(Number.isSafeInteger(schema.maxItems) ? { maxItems: schema.maxItems } : {}),
       ...(Array.isArray(schema.default) ? { default: schema.default.filter((x) => scelte.includes(x)) } : {}) };
   }
-  return rifiutaRichiesta(`campo ${nome}: tipo ${String(schema.type)} non ammesso (solo primitivi)`);
+  return rifiutaRichiesta(`field ${nome}: type ${String(schema.type)} not allowed (primitives only)`);
 }
 
 /** La richiesta del server, ripulita: `{mode, message, requestedSchema}` o `{mode, message, url, dominio, elicitationId}`. */
 export function validaRichiestaElicitazione(parametri) {
-  if (!oggetto(parametri)) rifiutaRichiesta('richiesta non valida');
+  if (!oggetto(parametri)) rifiutaRichiesta('invalid request');
   const message = typeof parametri.message === 'string' ? parametri.message.trim() : '';
-  if (!message) rifiutaRichiesta('message obbligatorio');
-  if (message.length > LIMITI_ELICITAZIONE.messaggioMax) rifiutaRichiesta('message troppo lungo');
+  if (!message) rifiutaRichiesta('message is required');
+  if (message.length > LIMITI_ELICITAZIONE.messaggioMax) rifiutaRichiesta('message too long');
   const mode = parametri.mode ?? 'form';
   if (mode === 'url') {
-    if (typeof parametri.url !== 'string' || parametri.url.length > LIMITI_ELICITAZIONE.urlMax) rifiutaRichiesta('url obbligatorio');
+    if (typeof parametri.url !== 'string' || parametri.url.length > LIMITI_ELICITAZIONE.urlMax) rifiutaRichiesta('url is required');
     let indirizzo;
-    try { indirizzo = new URL(parametri.url); } catch { rifiutaRichiesta('url non valido'); }
-    if (indirizzo.protocol !== 'https:' || !indirizzo.hostname) rifiutaRichiesta('url: solo https');
-    if (typeof parametri.elicitationId !== 'string' || !parametri.elicitationId) rifiutaRichiesta('elicitationId obbligatorio nel modo url');
+    try { indirizzo = new URL(parametri.url); } catch { rifiutaRichiesta('invalid url'); }
+    if (indirizzo.protocol !== 'https:' || !indirizzo.hostname) rifiutaRichiesta('url: https only');
+    if (typeof parametri.elicitationId !== 'string' || !parametri.elicitationId) rifiutaRichiesta('elicitationId is required in url mode');
     return { mode: 'url', message, url: indirizzo.href, dominio: indirizzo.hostname, elicitationId: parametri.elicitationId };
   }
-  if (mode !== 'form') rifiutaRichiesta(`mode ${String(mode)} sconosciuto`);
+  if (mode !== 'form') rifiutaRichiesta(`unknown mode ${String(mode)}`);
   const schema = parametri.requestedSchema;
-  if (!oggetto(schema) || schema.type !== 'object' || !oggetto(schema.properties)) rifiutaRichiesta('requestedSchema obbligatorio (object con properties)');
+  if (!oggetto(schema) || schema.type !== 'object' || !oggetto(schema.properties)) rifiutaRichiesta('requestedSchema is required (object with properties)');
   const nomi = Object.keys(schema.properties);
-  if (nomi.length > LIMITI_ELICITAZIONE.campiMax) rifiutaRichiesta('troppi campi');
+  if (nomi.length > LIMITI_ELICITAZIONE.campiMax) rifiutaRichiesta('too many fields');
   const properties = Object.fromEntries(nomi.map((nome) => [nome, campo(nome, schema.properties[nome])]));
   const required = Array.isArray(schema.required) ? schema.required.filter((n) => nomi.includes(n)) : [];
   return { mode: 'form', message, requestedSchema: { type: 'object', properties, ...(required.length ? { required } : {}) } };
@@ -84,16 +84,16 @@ function valoreValido(schema, valore) {
 
 /** La risposta della persona a una richiesta GIÀ validata: accept col contenuto conforme (solo form), decline o cancel. */
 export function validaRispostaElicitazione(risposta, richiesta) {
-  if (!oggetto(risposta) || !AZIONI_ELICITAZIONE.includes(risposta.action)) rifiutaRisposta('action deve essere accept, decline o cancel');
+  if (!oggetto(risposta) || !AZIONI_ELICITAZIONE.includes(risposta.action)) rifiutaRisposta('action must be accept, decline or cancel');
   if (risposta.action !== 'accept' || richiesta.mode === 'url') {
-    if (risposta.content !== undefined) rifiutaRisposta('il contenuto accompagna solo accept di un modulo');
+    if (risposta.content !== undefined) rifiutaRisposta('content only accompanies accept of a form');
     return { action: risposta.action };
   }
   const contenuto = risposta.content ?? {};
-  if (!oggetto(contenuto)) rifiutaRisposta('content deve essere un oggetto');
+  if (!oggetto(contenuto)) rifiutaRisposta('content must be an object');
   const campi = richiesta.requestedSchema.properties;
-  for (const nome of Object.keys(contenuto)) if (!Object.hasOwn(campi, nome)) rifiutaRisposta(`campo sconosciuto: ${nome}`);
-  for (const nome of richiesta.requestedSchema.required ?? []) if (contenuto[nome] === undefined) rifiutaRisposta(`campo obbligatorio mancante: ${nome}`);
-  for (const [nome, valore] of Object.entries(contenuto)) if (!valoreValido(campi[nome], valore)) rifiutaRisposta(`valore non valido per ${nome}`);
+  for (const nome of Object.keys(contenuto)) if (!Object.hasOwn(campi, nome)) rifiutaRisposta(`unknown field: ${nome}`);
+  for (const nome of richiesta.requestedSchema.required ?? []) if (contenuto[nome] === undefined) rifiutaRisposta(`missing required field: ${nome}`);
+  for (const [nome, valore] of Object.entries(contenuto)) if (!valoreValido(campi[nome], valore)) rifiutaRisposta(`invalid value for ${nome}`);
   return { action: 'accept', content: { ...contenuto } };
 }

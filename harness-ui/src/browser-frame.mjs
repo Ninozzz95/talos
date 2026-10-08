@@ -38,11 +38,11 @@ export const MILLISECONDI_MASSIMI = 6_000;
  *   `rimedioPerIlMotivo` rimette il difetto. La prova le tiene ferme da tutt'e due i lati.
  */
 const CODICI = [
-  [/^(ENOTFOUND|EAI_AGAIN|ERR_NAME_NOT_RESOLVED)$/i, 'dns', 'Questo indirizzo non esiste'],
-  [/^(ECONNREFUSED)$/i, 'rifiuto', 'Nessuno risponde a questo indirizzo'],
+  [/^(ENOTFOUND|EAI_AGAIN|ERR_NAME_NOT_RESOLVED)$/i, 'dns', 'This address does not exist'],
+  [/^(ECONNREFUSED)$/i, 'rifiuto', 'No response at this address'],
   [/^(UND_ERR_CONNECT_TIMEOUT|UND_ERR_HEADERS_TIMEOUT|UND_ERR_BODY_TIMEOUT|ETIMEDOUT)$/i, 'timeout', null],
-  [/CERT|SELF_SIGNED|TLS|SSL|ERR_SSL/i, 'certificato', 'Il sito ha un certificato non valido'],
-  [/^(ECONNRESET|EPIPE|EHOSTUNREACH|ENETUNREACH|EPROTO|UND_ERR_SOCKET)$/i, 'rete', 'Non sono riuscito a raggiungere il sito'],
+  [/CERT|SELF_SIGNED|TLS|SSL|ERR_SSL/i, 'certificato', 'The site has an invalid certificate'],
+  [/^(ECONNRESET|EPIPE|EHOSTUNREACH|ENETUNREACH|EPROTO|UND_ERR_SOCKET)$/i, 'rete', 'Could not reach the site'],
 ];
 
 /*
@@ -77,14 +77,14 @@ const CODICI = [
  */
 export function classificaGuasto(errore, { millisecondi = MILLISECONDI_MASSIMI } = {}) {
   const secondi = Math.round(millisecondi / 1000);
-  const scaduto = { genere: 'timeout', motivo: `Il sito non ha risposto in tempo (${secondi} secondi)`, dettagli: { secondi } };
+  const scaduto = { genere: 'timeout', motivo: `The site did not respond in time (${secondi} seconds)`, dettagli: { secondi } };
   const nome = String(errore?.name || '');
   if (nome === 'AbortError' || nome === 'TimeoutError') return scaduto;
   const codice = String(errore?.cause?.code || errore?.code || '');
   for (const [prova, genere, motivo] of CODICI) {
     if (prova.test(codice)) return genere === 'timeout' ? scaduto : { genere, motivo, dettagli: {} };
   }
-  return { genere: 'rete', motivo: 'Non sono riuscito a raggiungere il sito', dettagli: {} };
+  return { genere: 'rete', motivo: 'Could not reach the site', dettagli: {} };
 }
 
 /*
@@ -124,9 +124,9 @@ export function siRitenta(genere) {
  * @returns {{ok:true}|{ok:false, motivo:string}}
  */
 export function urlAmmesso(url) {
-  if (!(url instanceof URL)) return { ok: false, motivo: 'URL non valido' };
-  if (url.protocol !== 'http:' && url.protocol !== 'https:') return { ok: false, motivo: 'Solo http e https' };
-  if (url.username || url.password) return { ok: false, motivo: 'Niente credenziali nell\'indirizzo' };
+  if (!(url instanceof URL)) return { ok: false, motivo: 'Invalid URL' };
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') return { ok: false, motivo: 'Only http and https' };
+  if (url.username || url.password) return { ok: false, motivo: 'No credentials in the address' };
   return { ok: true };
 }
 
@@ -158,11 +158,11 @@ export function valutaIntestazioni(headers, origineNostra) {
     });
     return ammessa
       ? { incorniciabile: true, motivo: null, genere: null }
-      : { incorniciabile: false, motivo: 'La pagina dichiara «frame-ancestors» e non include TALOS', genere: 'frame-ancestors' };
+      : { incorniciabile: false, motivo: 'The page declares "frame-ancestors" and does not include TALOS', genere: 'frame-ancestors' };
   }
   const xfo = String(headers.get('x-frame-options') || '').trim().toUpperCase();
-  if (xfo === 'DENY') return { incorniciabile: false, motivo: 'La pagina vieta ogni cornice (X-Frame-Options: DENY)', genere: 'xfo-deny' };
-  if (xfo === 'SAMEORIGIN') return { incorniciabile: false, motivo: 'La pagina si mostra solo dentro il suo stesso sito (X-Frame-Options: SAMEORIGIN)', genere: 'xfo-sameorigin' };
+  if (xfo === 'DENY') return { incorniciabile: false, motivo: 'The page forbids any frame (X-Frame-Options: DENY)', genere: 'xfo-deny' };
+  if (xfo === 'SAMEORIGIN') return { incorniciabile: false, motivo: 'The page shows only inside its own site (X-Frame-Options: SAMEORIGIN)', genere: 'xfo-sameorigin' };
   return { incorniciabile: true, motivo: null, genere: null };
 }
 
@@ -174,7 +174,7 @@ export function valutaIntestazioni(headers, origineNostra) {
 export async function verificaIncorniciabile(indirizzo, { fetchFn = globalThis.fetch, origineNostra, millisecondi = MILLISECONDI_MASSIMI } = {}) {
   let url;
   // ⛔ 16/09 — `genere: 'indirizzo'`: non è un guasto di rete, non si ritenta, e il rimedio è guardare ciò che si è scritto.
-  try { url = new URL(String(indirizzo)); } catch { return { url: String(indirizzo), incorniciabile: false, motivo: 'URL non valido', stato: null, titolo: null, genere: 'indirizzo', dettagli: {} }; }
+  try { url = new URL(String(indirizzo)); } catch { return { url: String(indirizzo), incorniciabile: false, motivo: 'Invalid URL', stato: null, titolo: null, genere: 'indirizzo', dettagli: {} }; }
   const ammesso = urlAmmesso(url);
   if (!ammesso.ok) return { url: url.href, incorniciabile: false, motivo: ammesso.motivo, stato: null, titolo: null, genere: 'indirizzo', dettagli: {} };
   const controller = new AbortController();

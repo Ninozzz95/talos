@@ -41,9 +41,9 @@ test('FRAME-VERIFICA: legge intestazioni e titolo con un fetch finto, e non scar
   assert.equal(negato.incorniciabile, false);
   assert.match(negato.motivo, /DENY/);
   const morto = await verificaIncorniciabile('http://localhost:1/', { fetchFn: async () => { throw new TypeError('fetch failed'); }, origineNostra: NOSTRA });
-  assert.deepEqual([morto.incorniciabile, morto.motivo], [false, 'Non sono riuscito a raggiungere il sito']);
+  assert.deepEqual([morto.incorniciabile, morto.motivo], [false, 'Could not reach the site']);
   const nonUrl = await verificaIncorniciabile('non è un url', { fetchFn: async () => { throw new Error('mai chiamato'); }, origineNostra: NOSTRA });
-  assert.equal(nonUrl.motivo, 'URL non valido');
+  assert.equal(nonUrl.motivo, 'Invalid URL');
 });
 
 /*
@@ -70,24 +70,24 @@ test('GUASTO-CLASSIFICATO: timeout, nome inesistente, porta chiusa e certificato
 
   const dns = await chiedi(conCausa('ENOTFOUND'));
   assert.equal(dns.genere, 'dns');
-  assert.match(dns.motivo, /non esiste/i, 'il rimedio giusto è «controlla l’indirizzo», e lo sceglie il motivo');
+  assert.match(dns.motivo, /does not exist/i, 'il rimedio giusto è «controlla l’indirizzo», e lo sceglie il motivo');
 
   const rifiuto = await chiedi(conCausa('ECONNREFUSED'));
   assert.equal(rifiuto.genere, 'rifiuto');
-  assert.match(rifiuto.motivo, /Nessuno risponde/i, 'porta chiusa: il rimedio è «controlla che il servizio sia acceso»');
+  assert.match(rifiuto.motivo, /No response/i, 'porta chiusa: il rimedio è «controlla che il servizio sia acceso»');
 
   const scaduto = await chiedi(conCausa('UND_ERR_CONNECT_TIMEOUT'));
   assert.equal(scaduto.genere, 'timeout');
-  assert.match(scaduto.motivo, /non ha risposto in tempo/i);
+  assert.match(scaduto.motivo, /did not respond in time/i);
 
   const certificato = await chiedi(conCausa('CERT_HAS_EXPIRED'));
   assert.equal(certificato.genere, 'certificato');
-  assert.match(certificato.motivo, /certificato/i);
+  assert.match(certificato.motivo, /certificate/i);
 
   const abortito = Object.assign(new Error('The operation was aborted'), { name: 'AbortError' });
   const perTempo = await chiedi(abortito);
   assert.equal(perTempo.genere, 'timeout');
-  assert.match(perTempo.motivo, /non ha risposto in tempo/i, 'anche la scadenza nostra si racconta come scadenza, non come «non risponde»');
+  assert.match(perTempo.motivo, /did not respond in time/i, 'anche la scadenza nostra si racconta come scadenza, non come «non risponde»');
 
   // e la classificazione è una funzione a sé, provabile senza passare dalla rete
   assert.equal(classificaGuasto(conCausa('EAI_AGAIN')).genere, 'dns');

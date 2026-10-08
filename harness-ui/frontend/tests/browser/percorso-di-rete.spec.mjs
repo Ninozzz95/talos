@@ -35,7 +35,7 @@ async function apriApp(page, tema = 'dark') {
     try { localStorage.setItem('talos.harness.desktop.settings.v1', JSON.stringify({ version: 1, appearance: { colorMode, uiFontScale: 'default' }, chat: { model: 'qwen/qwen3.8-flash' } })); }
     catch { /* finestra privata */ }
   }, { colorMode: tema });
-  await page.route('**/api/v1/sessions/rete-*/events*', (rotta) => rotta.fulfill({ contentType: 'text/event-stream', body: 'retry: 600000\n\n' }));
+  await page.route('**/api/v1/sessions/rete-*/events*', () => { /* VELO-SPEC (08/10/2026): aperto e muto — un corpo che si chiude fa riaprire lo stream, e ogni onopen rimette la chat nella storia */ });
   await page.goto('/');
   await page.locator('#talosAvvio').waitFor({ state: 'detached', timeout: 8000 }).catch(() => {});
   await page.waitForFunction(() => Boolean(window.__talosHarnessUiRuntime));
@@ -45,6 +45,7 @@ async function domanda(page, { sessionId, requestId, azione }) {
   await page.evaluate(({ sessionId, requestId, azione }) => {
     const runtime = window.__talosHarnessUiRuntime;
     runtime.passaASessione(sessionId, 'workspace', 'Percorso di rete', 'qwen/qwen3.8-flash', { conclusa: false, modello: 'qwen/qwen3.8-flash' });
+    runtime.handleRealEvent({ type: 'CUSTOM', name: 'talos.fine-rigiocata', value: null }, runtime.realSessionState.generation); // VELO-SPEC: da A1-R3 una sessione aperta resta velata fino al confine, che il server manda SEMPRE (anche a storia vuota)
     const g = runtime.realSessionState.generation;
     runtime.handleRealEvent({ type: 'RunStarted', input: { consegna: 'Aggiorna il report sul NAS dell ufficio' }, contesto: { cartella: 'C:\\progetti\\AVM', modello: 'qwen/qwen3.8-flash' }, _sequenza: 1 }, g);
     runtime.handleRealEvent({ type: 'ApprovalRequested', requestId, azione, _sequenza: 2 }, g);

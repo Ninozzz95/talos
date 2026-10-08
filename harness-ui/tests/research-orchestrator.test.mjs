@@ -568,7 +568,7 @@ test('⛔⛔⛔ §6.5 COMPATIBILITÀ ALL\'INDIETRO — una ricerca già su disco
   assert.equal(esito.stato, 'senza-rapporto', 'il timbro verde non regge alla rilettura del contenuto');
   assert.equal(esito.contenutoRapporto, null, 'una scusa non si serve come rapporto');
   assert.equal(esito.contenutoRespinto, SCUSA_DEL_11_SETTEMBRE, 'ma il testo pagato non si butta: esce da una porta che dichiara di essere quella degli scarti');
-  assert.match(esito.motivo, /non ha un'intestazione|non elenca nessuna fonte/, 'il motivo dice PERCHÉ, in italiano');
+  assert.match(esito.motivo, /has no heading|lists no sources/, 'il fallback indica perché il rapporto non è leggibile');
   // ⛔ Ciò che è costato denaro non si sovrascrive: la correzione vive nella LETTURA.
   assert.equal(store.record.get('/p::d2a453a8').terminata, 'done', 'il record su disco resta com\'era: nessuna riscrittura in silenzio');
   assert.equal(store.record.get('/p::d2a453a8').reportLibraryId, libId, 'e il puntatore al lavoro già pagato non si perde');
@@ -639,7 +639,7 @@ test('⛔⛔⛔ L2, LA FIXTURE DEL GUASTO — la scusa verbatim del 11/09 + un R
   assert.equal(store.libreria.size, 0);
   assert.equal(record.ultimoMessaggio, SCUSA_DEL_11_SETTEMBRE, 'la scusa si conserva: è la diagnosi, non il prodotto');
   const esito = await orch.leggi({ cartella: '/p', id });
-  assert.match(esito.motivo, /sola lettura/, 'il prodotto nomina il proprio errore, in italiano');
+  assert.match(esito.motivo, /read-only/, 'il fallback nomina il vincolo di sola lettura');
 });
 
 test('⛔ L2 AL CONTRARIO — la scusa DA SOLA, senza nessun REFUSED nei risultati degli attrezzi, non basta a dire "bloccata dal permesso"', async () => {
@@ -695,7 +695,7 @@ test('L4 — rapporto col RECORD ma SENZA FONTI: "senza-rapporto", e il motivo n
   await conclusione({ ok: true, esito: { comeFinita: 'concluso', messaggiFinali: [{ role: 'assistant', content: 'fatto' }] } });
   const record = store.record.get(`/p::${id}`);
   assert.equal(record.terminata, 'senza-rapporto');
-  assert.equal(record.motivoDettaglio, 'il record del rapporto non elenca nessuna fonte');
+  assert.equal(record.motivoDettaglio, 'the report record lists no sources');
   assert.equal(store.libreria.size, 0, 'un rapporto che non passa il cancello non entra in Libreria');
 });
 
@@ -716,7 +716,7 @@ test('⛔⛔⛔ L4, VERSO CONTRARIO — un rapporto in PROSA che passava L2 non 
   await conclusione({ ok: true, esito: { comeFinita: 'concluso', messaggiFinali: [{ role: 'assistant', content: 'fatto' }] } });
   const record = store.record.get(`/p::${id}`);
   assert.equal(record.terminata, 'senza-rapporto');
-  assert.match(record.motivoDettaglio, /record verificabile/);
+  assert.match(record.motivoDettaglio, /verifiable record/);
   assert.equal(store.libreria.size, 0);
   // ⛔ Ma il lavoro pagato non sparisce: si legge, da una porta che dichiara di essere quella degli scarti.
   const letta = await orch.leggi({ cartella: '/p', id });
@@ -864,7 +864,7 @@ test('CONTRATTO — una voce vecchia (nata senza padreId/nome/conclusaAlle) non 
   assert.equal(v.modelloGiudice, null, 'L9 — stessa onestà: una ricerca di ieri non ha mai avuto un giudice designato, e dargliene uno adesso sarebbe raccontare una scelta che nessuno ha fatto');
   assert.equal(v.nome, 'Una domanda di ieri');
   assert.equal(v.stato, 'cancelled');
-  assert.match(v.motivo, /fermata per sempre/);
+  assert.match(v.motivo, /stopped permanently/);
 });
 
 test('AL CONTRARIO — salvaVoceLibreriaFn che lancia: "failed", mai un successo inventato', async () => {

@@ -70,7 +70,7 @@ test('F022-DEFAULT: without a mode the child inherits the parent permissions, ne
   const { run, starts } = orchestrator({ permessi: 'Workspace write' });
   const esito = await run();
   assert.equal(esito.esito, 'avviato');
-  assert.match(esito.riassunto, /con i permessi del padre/);
+  assert.match(esito.riassunto, /with the parent's permissions/);
   assert.equal(starts[0].permessiRichiesti, 'Workspace write');
   assert.deepEqual(starts[0].permessiPerAttrezzoRichiesti, { scrivi: 'sempre', shell: 'chiedi', prova: 'nega' });
   assert.deepEqual(starts[0].task.contrattoDelega, contratto('modifica'));
@@ -81,7 +81,7 @@ test('F022-PARENT-READONLY: without a mode, a read-only parent starts a read-onl
     const { run, starts } = orchestrator(parent);
     const esito = await run();
     assert.equal(esito.esito, 'avviato');
-    assert.match(esito.riassunto, /sola lettura/);
+    assert.match(esito.riassunto, /read-only/);
     assert.equal(starts[0].permessiRichiesti, 'Read only');
     assert.deepEqual(starts[0].task.contrattoDelega, contratto('lettura'));
   }

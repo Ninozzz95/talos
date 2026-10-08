@@ -50,27 +50,27 @@ function oggettoSemplice(value) {
 }
 
 function testo(value, { nome, max }) {
-  if (typeof value !== 'string') rifiuta(`${nome} deve essere testo`);
+  if (typeof value !== 'string') rifiuta(`${nome} must be text`);
   const pulito = value.trim();
-  if (!pulito) rifiuta(`${nome} non può essere vuoto`);
-  if (pulito.length > max) rifiuta(`${nome} supera il limite di ${max} caratteri`);
+  if (!pulito) rifiuta(`${nome} cannot be empty`);
+  if (pulito.length > max) rifiuta(`${nome} exceeds the limit of ${max} characters`);
   return pulito;
 }
 
 /* L'anteprima è codice o un diff: gli spazi in testa contano, quindi non si accorcia; si toglie solo l'a-capo finale. */
 function anteprima(value, nome) {
-  if (typeof value !== 'string') rifiuta(`${nome} deve essere testo`);
+  if (typeof value !== 'string') rifiuta(`${nome} must be text`);
   const pulita = value.replace(/\r\n/gu, '\n').replace(/\n+$/u, '');
-  if (!pulita.trim()) rifiuta(`${nome} non può essere vuota`);
-  if (pulita.length > LIMITI_DOMANDA_UTENTE.anteprimaMax) rifiuta(`${nome} supera il limite di ${LIMITI_DOMANDA_UTENTE.anteprimaMax} caratteri`);
-  if (pulita.split('\n').length > LIMITI_DOMANDA_UTENTE.anteprimaRigheMax) rifiuta(`${nome} supera il limite di ${LIMITI_DOMANDA_UTENTE.anteprimaRigheMax} righe`);
+  if (!pulita.trim()) rifiuta(`${nome} cannot be empty`);
+  if (pulita.length > LIMITI_DOMANDA_UTENTE.anteprimaMax) rifiuta(`${nome} exceeds the limit of ${LIMITI_DOMANDA_UTENTE.anteprimaMax} characters`);
+  if (pulita.split('\n').length > LIMITI_DOMANDA_UTENTE.anteprimaRigheMax) rifiuta(`${nome} exceeds the limit of ${LIMITI_DOMANDA_UTENTE.anteprimaRigheMax} lines`);
   return pulita;
 }
 
 function soleChiavi(value, ammesse, nome, { ignora = false } = {}) {
   const chiavi = Object.keys(value);
   if (!ignora && chiavi.some((chiave) => !ammesse.includes(chiave))) {
-    rifiuta(`${nome} contiene campi non riconosciuti`);
+    rifiuta(`${nome} contains unrecognized fields`);
   }
 }
 
@@ -102,26 +102,26 @@ function soleChiavi(value, ammesse, nome, { ignora = false } = {}) {
 export function validaDomandeUtente(questions, { perche = 'facoltativo', campiInPiu = 'rifiuta' } = {}) {
   const ignora = campiInPiu === 'ignora';
   if (!Array.isArray(questions) || questions.length < LIMITI_DOMANDA_UTENTE.domandeMin || questions.length > LIMITI_DOMANDA_UTENTE.domandeMax) {
-    rifiuta(`questions deve contenere da ${LIMITI_DOMANDA_UTENTE.domandeMin} a ${LIMITI_DOMANDA_UTENTE.domandeMax} domande`);
+    rifiuta(`questions must contain from ${LIMITI_DOMANDA_UTENTE.domandeMin} to ${LIMITI_DOMANDA_UTENTE.domandeMax} questions`);
   }
   const ids = new Set();
   return questions.map((question, indice) => {
-    if (!oggettoSemplice(question)) rifiuta(`questions[${indice}] deve essere un oggetto`);
+    if (!oggettoSemplice(question)) rifiuta(`questions[${indice}] must be an object`);
     soleChiavi(question, ['id', 'header', 'question', 'why', 'options', 'multiSelect'], `questions[${indice}]`, { ignora });
     const id = testo(question.id, { nome: `questions[${indice}].id`, max: LIMITI_DOMANDA_UTENTE.idMax });
-    if (!ID_DOMANDA.test(id)) rifiuta(`questions[${indice}].id deve essere snake_case stabile`);
-    if (ids.has(id)) rifiuta(`id domanda duplicato: ${id}`);
+    if (!ID_DOMANDA.test(id)) rifiuta(`questions[${indice}].id must be a stable snake_case`);
+    if (ids.has(id)) rifiuta(`duplicate question id: ${id}`);
     ids.add(id);
     const header = question.header === undefined ? undefined
       : testo(question.header, { nome: `questions[${indice}].header`, max: LIMITI_DOMANDA_UTENTE.titoloMax });
     const domanda = testo(question.question, { nome: `questions[${indice}].question`, max: LIMITI_DOMANDA_UTENTE.domandaMax });
     if (perche === 'obbligatorio' && question.why === undefined) {
-      rifiuta(`questions[${indice}].why è obbligatorio: una frase che dice perché la risposta conta`);
+      rifiuta(`questions[${indice}].why is required: a sentence saying why the answer matters`);
     }
     const why = question.why === undefined ? undefined
       : testo(question.why, { nome: `questions[${indice}].why`, max: LIMITI_DOMANDA_UTENTE.percheMax });
     if (question.multiSelect !== undefined && typeof question.multiSelect !== 'boolean') {
-      rifiuta(`questions[${indice}].multiSelect deve essere booleano`);
+      rifiuta(`questions[${indice}].multiSelect must be a boolean`);
     }
     const multiSelect = question.multiSelect === true;
     let options;
@@ -129,18 +129,18 @@ export function validaDomandeUtente(questions, { perche = 'facoltativo', campiIn
       if (!Array.isArray(question.options)
         || question.options.length < LIMITI_DOMANDA_UTENTE.opzioniMin
         || question.options.length > LIMITI_DOMANDA_UTENTE.opzioniMax) {
-        rifiuta(`questions[${indice}].options deve contenere da ${LIMITI_DOMANDA_UTENTE.opzioniMin} a ${LIMITI_DOMANDA_UTENTE.opzioniMax} opzioni`);
+        rifiuta(`questions[${indice}].options must contain from ${LIMITI_DOMANDA_UTENTE.opzioniMin} to ${LIMITI_DOMANDA_UTENTE.opzioniMax} options`);
       }
       const viste = new Set();
       options = question.options.map((option, opzioneIndice) => {
-        if (!oggettoSemplice(option)) rifiuta(`questions[${indice}].options[${opzioneIndice}] deve essere un oggetto`);
+        if (!oggettoSemplice(option)) rifiuta(`questions[${indice}].options[${opzioneIndice}] must be an object`);
         soleChiavi(option, ['label', 'description', 'recommended', 'preview'], `questions[${indice}].options[${opzioneIndice}]`, { ignora });
         if (option.recommended !== undefined && typeof option.recommended !== 'boolean') {
-          rifiuta(`questions[${indice}].options[${opzioneIndice}].recommended deve essere booleano`);
+          rifiuta(`questions[${indice}].options[${opzioneIndice}].recommended must be a boolean`);
         }
         const label = testo(option.label, { nome: `questions[${indice}].options[${opzioneIndice}].label`, max: LIMITI_DOMANDA_UTENTE.etichettaMax });
         const chiave = label.toLowerCase();
-        if (viste.has(chiave)) rifiuta(`questions[${indice}] contiene opzioni duplicate`);
+        if (viste.has(chiave)) rifiuta(`questions[${indice}] contains duplicate options`);
         viste.add(chiave);
         return {
           label,
@@ -153,10 +153,10 @@ export function validaDomandeUtente(questions, { perche = 'facoltativo', campiIn
         };
       });
       const consigliate = options.filter((option) => option.recommended === true);
-      if (consigliate.length > 1) rifiuta(`questions[${indice}] ha più di un'opzione consigliata: al più una`);
+      if (consigliate.length > 1) rifiuta(`questions[${indice}] has more than one recommended option: at most one`);
       if (consigliate.length === 1) options = [consigliate[0], ...options.filter((option) => option.recommended !== true)];
     } else if (multiSelect) {
-      rifiuta(`questions[${indice}].multiSelect richiede options`);
+      rifiuta(`questions[${indice}].multiSelect requires options`);
     }
     return {
       id,
@@ -209,20 +209,20 @@ export function fingerprintDomanda(questions) {
 
 export function validaRispostaDomanda(questions, response) {
   const domande = validaDomandeUtente(questions);
-  if (!oggettoSemplice(response)) rifiuta('la risposta alla domanda deve essere un oggetto');
+  if (!oggettoSemplice(response)) rifiuta('the answer to the question must be an object');
   soleChiavi(response, ['requestId', 'status', 'answers', 'skipped', 'notes'], 'risposta');
   /* ⛔ 24/09/2026, decisioni owner 9 e 35: `expired` è la scadenza dell'impostazione della persona (Nessuna/1/5/10 min):
      niente risposte, e il registro ferma il giro. */
   if (!['answered', 'skipped', 'cancelled', 'expired'].includes(response.status)) {
-    rifiuta('status deve essere answered, skipped, cancelled o expired');
+    rifiuta('status must be answered, skipped, cancelled or expired');
   }
   if (response.status !== 'answered') {
     for (const campo of ['answers', 'skipped', 'notes']) {
-      if (Object.hasOwn(response, campo)) rifiuta(`status ${response.status} non deve contenere ${campo}`);
+      if (Object.hasOwn(response, campo)) rifiuta(`status ${response.status} must not contain ${campo}`);
     }
     return { status: response.status };
   }
-  if (!oggettoSemplice(response.answers)) rifiuta('answered richiede answers come oggetto');
+  if (!oggettoSemplice(response.answers)) rifiuta('answered requires answers as an object');
   /*
    * 02/10/2026, decisione owner «Estendo il contratto»: una domanda si può saltare da sola (Codex manda una lista vuota,
    *   OpenCode «Unanswered»). Ogni domanda sta in `answers` OPPURE in `skipped`, mai in entrambi né in nessuno; almeno una
@@ -231,25 +231,25 @@ export function validaRispostaDomanda(questions, response) {
   const conosciute = new Set(domande.map((q) => q.id));
   let saltate = [];
   if (response.skipped !== undefined) {
-    if (!Array.isArray(response.skipped)) rifiuta('skipped deve essere un array di id di domande');
+    if (!Array.isArray(response.skipped)) rifiuta('skipped must be an array of question ids');
     saltate = response.skipped.map((id, i) => testo(id, { nome: `skipped[${i}]`, max: LIMITI_DOMANDA_UTENTE.idMax }));
-    if (new Set(saltate).size !== saltate.length) rifiuta('skipped contiene id duplicati');
-    if (saltate.some((id) => !conosciute.has(id))) rifiuta('skipped contiene id di domande sconosciute');
+    if (new Set(saltate).size !== saltate.length) rifiuta('skipped contains duplicate ids');
+    if (saltate.some((id) => !conosciute.has(id))) rifiuta('skipped contains ids of unknown questions');
   }
   const chiavi = Object.keys(response.answers);
-  if (chiavi.some((id) => !conosciute.has(id))) rifiuta('answers deve contenere esattamente le domande poste: contiene id sconosciuti');
-  if (chiavi.some((id) => saltate.includes(id))) rifiuta('una domanda non può avere risposta ed essere saltata');
+  if (chiavi.some((id) => !conosciute.has(id))) rifiuta('answers must contain exactly the questions asked: it contains unknown ids');
+  if (chiavi.some((id) => saltate.includes(id))) rifiuta('a question cannot be both answered and skipped');
   if (chiavi.length + saltate.length !== domande.length) {
-    rifiuta('answers deve contenere esattamente una risposta per ogni domanda non saltata');
+    rifiuta('answers must contain exactly one answer for each question that is not skipped');
   }
-  if (chiavi.length === 0) rifiuta('answered richiede almeno una risposta: se le salti tutte, status è skipped');
+  if (chiavi.length === 0) rifiuta('answered requires at least one answer: if you skip them all, status is skipped');
   /* La nota della persona resta un campo a parte, mai mescolata alla risposta (la ricevuta sa cosa è nota e cosa è scelta). */
   let note;
   if (response.notes !== undefined) {
-    if (!oggettoSemplice(response.notes)) rifiuta('notes deve essere un oggetto { id: testo }');
+    if (!oggettoSemplice(response.notes)) rifiuta('notes must be an object { id: text }');
     note = {};
     for (const [id, valore] of Object.entries(response.notes)) {
-      if (!conosciute.has(id)) rifiuta('notes contiene id di domande sconosciute');
+      if (!conosciute.has(id)) rifiuta('notes contains ids of unknown questions');
       note[id] = testo(valore, { nome: `notes.${id}`, max: LIMITI_DOMANDA_UTENTE.notaMax });
     }
   }
@@ -266,13 +266,13 @@ export function validaRispostaDomanda(questions, response) {
       continue;
     }
     if (!Array.isArray(value) || value.length === 0 || value.length > q.options.length + 1) {
-      rifiuta(`answers.${q.id} deve essere un array non vuoto di scelte`);
+      rifiuta(`answers.${q.id} must be a non-empty array of choices`);
     }
     const pulite = value.map((voce, i) => testo(voce, { nome: `answers.${q.id}[${i}]`, max: LIMITI_DOMANDA_UTENTE.rispostaMax }));
-    if (new Set(pulite).size !== pulite.length) rifiuta(`answers.${q.id} contiene scelte duplicate`);
+    if (new Set(pulite).size !== pulite.length) rifiuta(`answers.${q.id} contains duplicate choices`);
     const note = new Set(q.options.map((option) => option.label));
     if (pulite.filter((voce) => !note.has(voce)).length > 1) {
-      rifiuta(`answers.${q.id} può contenere al massimo una risposta «Altro»`);
+      rifiuta(`answers.${q.id} can contain at most one "Other" answer`);
     }
     answers[q.id] = pulite;
   }

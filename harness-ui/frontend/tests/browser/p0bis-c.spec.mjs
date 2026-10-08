@@ -340,6 +340,16 @@ for (const modo of ['dark', 'light']) {
      *   il contratto dichiarato e si degrada onestamente se manca — esattamente come per OSS-1.
      */
     const FRASE_SEGRETO = 'Il comando tocca un file che può contenere chiavi o password (.env): vuoi che lo esegua?';
+    /*
+     * ⛔ K4b (07/10/2026) — il server manda la frase in INGLESE con la sua chiave e i suoi valori
+     *   (`path-policy.mjs`, `frasePerLaPersona`), e la carta la dice nella lingua dell'interfaccia. La fixture è il
+     *   payload VERO del server, copiato dalla sorgente: con la frase italiana di prima la prova passava da un ramo
+     *   (il testo grezzo) che il server non usa più. `FRASE_SEGRETO` resta ciò che la persona legge in italiano.
+     */
+    const SEGRETO_DAL_SERVER = Object.freeze({
+      frase: 'The command touches a file that may contain keys or passwords (.env): do you want me to run it?',
+      fraseChiave: 'server.approval.command.secret', fraseParams: { percorso: '.env' }, classe: 'segreto', percorso: '.env',
+    });
 
     async function cartaDiApprovazione(page, azione, requestId = 'app-1') {
       await manda(page, [
@@ -363,7 +373,7 @@ for (const modo of ['dark', 'light']) {
 
         const carta = await cartaDiApprovazione(page, {
           tipo: 'shell', comando: 'cat .env',
-          segreto: { frase: FRASE_SEGRETO, classe: 'segreto', percorso: '.env' },
+          segreto: SEGRETO_DAL_SERVER,
         });
         await expect(carta).toBeVisible();
 
@@ -419,7 +429,12 @@ for (const modo of ['dark', 'light']) {
       await page.locator('[data-vaia="chat"]').first().click();
       const carta = await cartaDiApprovazione(page, {
         tipo: 'leggi', percorso: 'config/.env.production',
-        segreto: { frase: FRASE_SEGRETO, classe: 'portachiavi' },
+        // K4b: il payload che il server manda per un `leggi` su un file di chiavi (`server.approval.read.secret`)
+        segreto: {
+          frase: 'This read opens a file that may contain keys or passwords (config/.env.production): do you want me to do it?',
+          fraseChiave: 'server.approval.read.secret', fraseParams: { percorso: 'config/.env.production' },
+          classe: 'segreto', percorso: 'config/.env.production',
+        },
       }, 'app-3');
       const letto = await carta.evaluate((n) => ({
         badge: n.querySelector('.talos-badge')?.textContent?.trim() || '',
@@ -447,7 +462,7 @@ for (const modo of ['dark', 'light']) {
         await page.locator('[data-vaia="chat"]').first().click();
         const carta = await cartaDiApprovazione(page, {
           tipo: 'shell', comando: 'cat .env',
-          segreto: { frase: FRASE_SEGRETO, classe: 'segreto' },
+          segreto: SEGRETO_DAL_SERVER,
         }, 'd1-1');
         await expect(carta).toBeVisible();
 

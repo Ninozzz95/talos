@@ -128,7 +128,7 @@ for (const caso of FORME_STORTE) {
 
       assert.equal(esito.esito, 'rifiutato');
       assert.equal(avvii.length, 0, 'nessuna figlia deve partire in una cartella che nessuno ha scelto');
-      assert.match(esito.motivo, /Ometti la cartella|non è un percorso assoluto/);
+      assert.match(esito.motivo, /Omit the folder|is not an absolute path/);
     } finally {
       rimuoviCartellaDiProva(cartellaMadre);
     }
@@ -222,7 +222,7 @@ test('⛔⛔⛔ il rifiuto PORTA la cartella della madre: un «no» muto è ciò
     assert.equal(esito.esito, 'rifiutato');
     assert.ok(esito.motivo.includes(cartellaMadre),
       `il motivo non nomina la cartella buona, quindi il modello può solo indovinare un\'altra forma: ${esito.motivo}`);
-    assert.match(esito.motivo, /Ometti la cartella/, 'e deve dire anche la via più semplice: non passarne nessuna');
+    assert.match(esito.motivo, /Omit the folder/, 'e deve dire anche la via più semplice: non passarne nessuna');
   } finally {
     rimuoviCartellaDiProva(cartellaMadre);
   }

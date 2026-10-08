@@ -142,7 +142,8 @@ test('L3 — il passaggio sostiene davvero l\'affermazione', async (t) => {
     // questa riga il test passa in entrambi i casi: un giudice chiamato che
     // lancia finisce anch'esso `unchecked` senza giudice registrato, quindi le
     // tre asserzioni sopra non distinguono «saltato» da «provato e fallito».
-    assert.equal(verified[0].checks.supportReason, 'il passaggio non è nel testo della fonte');
+    assert.equal(verified[0].checks.supportReason, 'the passage is not in the source text');
+    assert.equal(verified[0].checks.supportReasonChiave, 'server.research.reason.noQuote');
   });
 
   await t.test('marca unchecked, col motivo, quando non esiste un giudice indipendente', async () => {
@@ -153,7 +154,8 @@ test('L3 — il passaggio sostiene davvero l\'affermazione', async (t) => {
     }, [claim()], [PAGE]);
 
     assert.equal(verified[0].checks.claimSupported, 'unchecked');
-    assert.match(verified[0].checks.supportReason, /giudice/i);
+    assert.match(verified[0].checks.supportReason, /independent judge/i);
+    assert.equal(verified[0].checks.supportReasonChiave, 'server.research.reason.noJudge');
   });
 
   await t.test('impedisce a un giudice che cade di portarsi giù il resto del rapporto', async () => {
@@ -229,7 +231,7 @@ test('la domanda che il giudice vede', async (t) => {
     assert.ok(prompt.includes('Lando Norris ha vinto'));
     // Senza questa il modello risponde da quello che già sa, e una frase vera
     // si prende una promozione da un passaggio che non l'ha mai detta.
-    assert.ok(prompt.toLowerCase().includes('solo'));
+    assert.ok(prompt.toLowerCase().includes('alone'));
   });
 });
 
@@ -407,12 +409,12 @@ test('la domanda al giudice non contiene un menu da ricopiare', async (t) => {
 
   await t.test('le tre restano offerte, una per riga, con un esempio', () => {
     const prompt = talosResearchJudgePrompt('afferma X', 'passaggio Y');
-    for (const parola of ['SI', 'PARZIALE', 'NO']) {
+    for (const parola of ['YES', 'PARTIAL', 'NO']) {
       assert.ok(prompt.split(String.fromCharCode(10)).includes(parola));
     }
     // ⛔ L'esempio è la parte che sostituisce il menu: senza, «comincia con
     //   una di queste tre parole» resta un'istruzione senza forma.
-    assert.ok(prompt.includes('Esempio di risposta:'));
+    assert.ok(prompt.includes('Example response:'));
   });
 });
 

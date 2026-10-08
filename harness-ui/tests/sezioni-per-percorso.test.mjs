@@ -84,7 +84,7 @@ test('BC48-A-PATH-TETTO: sezione enorme omessa con avviso una volta sola', () =>
   inietta(messages);
   assert.equal(messages.length, 3);
   assert.ok(Buffer.byteLength(messages.at(-1).content) <= 450);
-  assert.match(messages.at(-1).content, /⚠ Tetto delle istruzioni/);
+  assert.match(messages.at(-1).content, /⚠ (?:Instruction cap|Tetto delle istruzioni)/);
   assert.doesNotMatch(messages.at(-1).content, /INIZIO|FINE/);
   inietta(messages); assert.equal(messages.length, 3);
 });
@@ -109,7 +109,7 @@ test('BC48-A-PATH-MOLTE: nessuna omissione silenziosa quando il tetto non contie
   const messages = scambio('leggi', { percorso: 'src/a' });
   const prima = structuredClone(messages);
   const f = [{ etichetta: 'AGENTS.md', contenuto: Array.from({ length: 4 }, (_, i) => `## Area ${i}\n<!-- talos: paths: harness-ui/** -->\n${'X'.repeat(1000)}\n`).join('') }];
-  assert.throws(() => crea({ file: f, tetto: 100 })(messages), /tetto/i);
+  assert.throws(() => crea({ file: f, tetto: 100 })(messages), /tetto|cap/i);
   assert.deepEqual(messages, prima);
 });
 
@@ -188,7 +188,7 @@ test('BC48-A-KERNEL-REALE: lettura vera, due turni, storico accodato e nessuna r
   const primo = await adapter.talosLavora(input);
   assert.equal(richieste.length, 2);
   assert.ok(primo.messaggiFinali.some(m => m.role === 'tool' && togliConfiniDati(m.content) === 'Contenuto vero dal disco.'));
-  const marche = messages => messages.filter(m => typeof m.content === 'string' && m.content.startsWith('Sezione di `'));
+  const marche = messages => messages.filter(m => typeof m.content === 'string' && (m.content.startsWith('Section of `') || m.content.startsWith('Sezione di `')));
   assert.equal(marche(richieste[0].messages).length, 0);
   assert.equal(marche(richieste[1].messages).length, 2);
   const storico = [...primo.messaggiFinali, { role: 'user', content: 'rileggi quel file, contnua da lì' }];

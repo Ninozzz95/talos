@@ -127,10 +127,11 @@ test('RAGIONAMENTO-ETICHETTA AL CONTRARIO — senza una durata vera non si inven
   assert.doesNotMatch(etichettaRagionamento({ inCorso: false, secondi: 3 }), /Sta ragionando/, 'un ragionamento finito non dice mai che sta ragionando');
 });
 
-test('RAGIONAMENTO-INTERRUTTORE — il nome dice cosa fa, non «mostra/nascondi»', () => {
-  // 03/10/2026: la costante è una chiave del dizionario; il nome a schermo è la sua voce, nelle due lingue
-  assert.equal(t(ETICHETTA_INTERRUTTORE_RAGIONAMENTO), 'Apri il ragionamento mentre scrive');
-  assert.doesNotMatch(t(ETICHETTA_INTERRUTTORE_RAGIONAMENTO), /mostra|nascond/i);
-  assert.equal(TESTI.en[ETICHETTA_INTERRUTTORE_RAGIONAMENTO], 'Open the reasoning while it writes');
-  assert.doesNotMatch(TESTI.en[ETICHETTA_INTERRUTTORE_RAGIONAMENTO], /show|hide/i);
+test('RAGIONAMENTO-INTERRUTTORE — il nome dice cosa fa: «Mostra ragionamento» (A14, owner 08/10/2026)', () => {
+  // 03/10/2026: la costante è una chiave del dizionario; il nome a schermo è la sua voce, nelle due lingue.
+  // ⛔ A14 (owner 08/10/2026 sera) supera la decisione del 13/09 («non mostra/nascondi»): spento, il ragionamento resta una riga col
+  //   solo tempo e non si apre; acceso (di serie) è chiuso e si apre col clic. Il nome torna a dire esattamente questo.
+  assert.equal(t(ETICHETTA_INTERRUTTORE_RAGIONAMENTO), 'Mostra ragionamento');
+  assert.equal(TESTI.en[ETICHETTA_INTERRUTTORE_RAGIONAMENTO], 'Show reasoning');
+  assert.doesNotMatch(t(ETICHETTA_INTERRUTTORE_RAGIONAMENTO), /mentre scrive/i, 'il nome promette ancora l\'apertura automatica, che non esiste più');
 });

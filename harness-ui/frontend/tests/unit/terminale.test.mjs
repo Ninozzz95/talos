@@ -16,7 +16,8 @@ test('TERMINALE-NOMI: la shell dichiarata dal server dà il nome; le omonime si 
   assert.equal(titoloScheda(a, [a, b, c]), 'tu · Git Bash');
   assert.equal(titoloScheda(b, [a, b, c]), 'tu · Git Bash 2');
   assert.equal(titoloScheda(c, [a, b, c]), 'build');
-  assert.equal(titoloScheda({ terminalId: 'g', origine: 'agente', giro: 7 }), 'agente · giro 7');
+  /* ⭐ BUG-23 (06/10): la linguetta agente è UNA per sessione e non dice più il giro — lo dice il piede. */
+assert.equal(titoloScheda({ terminalId: 'g', origine: 'agente', giro: 7 }), 'agente');
 });
 
 test('TERMINALE-CHIUSURA: il fuoco passa alla vicina che prende il posto, poi alla precedente, poi a nessuna (Hermes closeTerminal)', () => {

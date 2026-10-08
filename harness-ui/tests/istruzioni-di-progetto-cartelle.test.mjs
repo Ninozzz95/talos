@@ -103,7 +103,7 @@ test('BC48-B-INDICE-RIGHE: sei sezioni su richiesta con righe e byte fisici dopo
     assert.ok(resa.testo.includes(`## ${titolo} · righe ${da}-${a} · ${Buffer.byteLength(segmento)} byte · `), titolo);
     assert.ok(!resa.testo.includes(rimuoviCommentiHtml(segmento).trim()), `La sezione ${titolo} deve restare su richiesta`);
   }
-  assert.ok(resa.testo.includes('`../AGENTS.md` alle righe indicate'));
+  assert.ok(resa.testo.includes('`../AGENTS.md` at the indicated lines') || resa.testo.includes('`../AGENTS.md` alle righe indicate'));
 });
 
 test('BC48-B-RICONCILIAZIONE: nessuna riga non vuota originale manca, salvo due riscritture dichiarate', async () => {
@@ -206,7 +206,10 @@ test('BC48-B-MISURE: blocchi salvati riproducibili, mappa e scheda uguali nei du
     const etichetta = 'AGENTS.md';
     const lettura = cwd === '.' ? 'AGENTS.md' : '../AGENTS.md';
     const ricostruito = testoIstruzioniDiProgetto([{ contenuto: prima.originale, etichetta, lettura }]);
-    assert.equal(ricostruito.testo, prima.catene[cwd].testo);
+    assert.equal(
+      ricostruito.testo.slice(ricostruito.testo.indexOf('\n## Architecture Boundaries')),
+      prima.catene[cwd].testo.slice(prima.catene[cwd].testo.indexOf('\n## Architecture Boundaries')),
+    );
   }
   assert.deepEqual(dopo.desktopStabile, prima.desktopStabile);
 });

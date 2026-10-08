@@ -24,7 +24,7 @@ export class WorkspaceBrowserError extends Error {
 }
 
 function failQuery() {
-  throw new WorkspaceBrowserError('Scegli una cartella compresa nel disco mostrato.', 'QUERY_INVALID');
+  throw new WorkspaceBrowserError('Choose a folder within the shown disk.', 'QUERY_INVALID');
 }
 
 function containsTraversal(path) {
@@ -79,7 +79,7 @@ async function assertNoSymbolicLinkSegments(root, candidate, lstatFn) {
     }
   } catch (error) {
     if (error instanceof WorkspaceBrowserError) throw error;
-    throw new WorkspaceBrowserError('Questa cartella non è disponibile. Scegline un’altra oppure controlla Doctor.');
+    throw new WorkspaceBrowserError('This folder is not available. Choose another or check Doctor.');
   }
 }
 
@@ -150,7 +150,7 @@ export function createWorkspaceBrowser({
       try {
         [canonicalRoot, canonicalCandidate] = await Promise.all([realpathFn(lexicalRoot), realpathFn(candidate)]);
       } catch {
-        throw new WorkspaceBrowserError('Questa cartella non è disponibile. Scegline un’altra oppure controlla Doctor.');
+        throw new WorkspaceBrowserError('This folder is not available. Choose another or check Doctor.');
       }
       if (!inside(canonicalRoot, canonicalCandidate)) failQuery();
 
@@ -158,7 +158,7 @@ export function createWorkspaceBrowser({
       try {
         entries = await readdirFn(canonicalCandidate, { withFileTypes: true });
       } catch {
-        throw new WorkspaceBrowserError('Questa cartella non è disponibile. Scegline un’altra oppure controlla Doctor.');
+        throw new WorkspaceBrowserError('This folder is not available. Choose another or check Doctor.');
       }
       const items = entries
         .filter((entry) => entry?.isDirectory?.() && !entry?.isSymbolicLink?.())
@@ -194,7 +194,7 @@ export function createWorkspaceBrowser({
       try {
         [canonicalRoot, canonicalParent] = await Promise.all([realpathFn(lexicalRoot), realpathFn(lexicalParent)]);
       } catch {
-        throw new WorkspaceBrowserError('Questa cartella non è disponibile. Scegline un’altra oppure controlla Doctor.');
+        throw new WorkspaceBrowserError('This folder is not available. Choose another or check Doctor.');
       }
       if (!inside(canonicalRoot, canonicalParent)) failQuery();
       const candidate = join(canonicalParent, name);
@@ -203,9 +203,9 @@ export function createWorkspaceBrowser({
         await mkdirFn(candidate, { recursive: false });
       } catch (error) {
         if (error?.code === 'EEXIST') {
-          throw new WorkspaceBrowserError('Esiste già un file o una cartella con questo nome.', 'WORKSPACE_ALREADY_EXISTS');
+          throw new WorkspaceBrowserError('A file or folder with this name already exists.', 'WORKSPACE_ALREADY_EXISTS');
         }
-        throw new WorkspaceBrowserError('Non riesco a creare la cartella qui. Controlla i permessi e riprova.');
+        throw new WorkspaceBrowserError('Cannot create folder here. Check permissions and try again.');
       }
       return { name, path: candidate };
     },

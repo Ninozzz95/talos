@@ -37,6 +37,9 @@ function automationStoreFinto() {
   };
 }
 
+// Y3 (08/10/2026 sera): le scritture sulle automazioni vogliono la finestra di TALOS (o il gettone); la prova si presenta come lei
+const finestra = (base) => ({ 'Content-Type': 'application/json', Origin: base, 'Sec-Fetch-Site': 'same-origin' });
+
 async function listen(t, { automationStore = automationStoreFinto() } = {}) {
   const app = createHttpApp({
     staticHandler: async () => null,
@@ -63,7 +66,7 @@ test('⭐ GET /api/v1/automations torna vuoto senza automazioni, e senza automat
 test('⭐⭐ POST /api/v1/automations crea, torna la voce, e GET la ritrova — sempre attiva:false', async (t) => {
   const { base } = await listen(t);
   const risposta = await fetch(`${base}/api/v1/automations`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    method: 'POST', headers: finestra(base),
     body: JSON.stringify({ taskId: 'sconto-a-scaglioni', intervalloMinuti: 30 }),
   });
   assert.equal(risposta.status, 200);
@@ -78,7 +81,7 @@ test('⭐⭐ POST /api/v1/automations crea, torna la voce, e GET la ritrova — 
 test('⛔ POST /api/v1/automations con un tetto duro violato: 422, AUTOMATION_INVALID', async (t) => {
   const { base } = await listen(t);
   const risposta = await fetch(`${base}/api/v1/automations`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    method: 'POST', headers: finestra(base),
     body: JSON.stringify({ taskId: 'x', intervalloMinuti: 1 }),
   });
   assert.equal(risposta.status, 422);
@@ -91,7 +94,7 @@ test('⛔ POST /api/v1/automations con un corpo malformato: 400, QUERY_INVALID',
   const { base } = await listen(t);
   for (const corpo of [{}, { taskId: 'x' }, { intervalloMinuti: 30 }, { taskId: 'x', intervalloMinuti: 30, extra: 1 }]) {
     const risposta = await fetch(`${base}/api/v1/automations`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(corpo),
+      method: 'POST', headers: finestra(base), body: JSON.stringify(corpo),
     });
     assert.equal(risposta.status, 400, `corpo ${JSON.stringify(corpo)} deve essere rifiutato`);
   }
@@ -100,18 +103,18 @@ test('⛔ POST /api/v1/automations con un corpo malformato: 400, QUERY_INVALID',
 test('⭐⭐⭐ POST /api/v1/automations/:id/toggle accende e spegne — e AL CONTRARIO su un id inesistente: 404', async (t) => {
   const { base } = await listen(t);
   const creata = (await (await fetch(`${base}/api/v1/automations`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    method: 'POST', headers: finestra(base),
     body: JSON.stringify({ taskId: 'x', intervalloMinuti: 30 }),
   })).json()).data;
 
   const accesa = await fetch(`${base}/api/v1/automations/${creata.id}/toggle`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ attiva: true }),
+    method: 'POST', headers: finestra(base), body: JSON.stringify({ attiva: true }),
   });
   assert.equal(accesa.status, 200);
   assert.equal((await accesa.json()).data.attiva, true);
 
   const suIdInesistente = await fetch(`${base}/api/v1/automations/non-esiste/toggle`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ attiva: true }),
+    method: 'POST', headers: finestra(base), body: JSON.stringify({ attiva: true }),
   });
   assert.equal(suIdInesistente.status, 404);
 });
@@ -119,13 +122,13 @@ test('⭐⭐⭐ POST /api/v1/automations/:id/toggle accende e spegne — e AL CO
 test('⛔ POST /api/v1/automations/:id/toggle con un corpo che non è {attiva: boolean}: 400', async (t) => {
   const { base } = await listen(t);
   const creata = (await (await fetch(`${base}/api/v1/automations`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    method: 'POST', headers: finestra(base),
     body: JSON.stringify({ taskId: 'x', intervalloMinuti: 30 }),
   })).json()).data;
 
   for (const corpo of [{}, { attiva: 'si' }, { attiva: 1 }]) {
     const risposta = await fetch(`${base}/api/v1/automations/${creata.id}/toggle`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(corpo),
+      method: 'POST', headers: finestra(base), body: JSON.stringify(corpo),
     });
     assert.equal(risposta.status, 400, `corpo ${JSON.stringify(corpo)} deve essere rifiutato`);
   }
@@ -134,12 +137,12 @@ test('⛔ POST /api/v1/automations/:id/toggle con un corpo che non è {attiva: b
 test('⭐ POST /api/v1/automations/:id/elimina la toglie DAVVERO — GET non la ritrova più', async (t) => {
   const { base } = await listen(t);
   const creata = (await (await fetch(`${base}/api/v1/automations`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    method: 'POST', headers: finestra(base),
     body: JSON.stringify({ taskId: 'x', intervalloMinuti: 30 }),
   })).json()).data;
 
   const eliminazione = await fetch(`${base}/api/v1/automations/${creata.id}/elimina`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}',
+    method: 'POST', headers: finestra(base), body: '{}',
   });
   assert.equal(eliminazione.status, 200);
 
@@ -150,7 +153,7 @@ test('⭐ POST /api/v1/automations/:id/elimina la toglie DAVVERO — GET non la 
 test('⛔⛔ senza automationStore configurato, le rotte POST tornano 405 — stesso trattamento di ogni endpoint mai attivato', async (t) => {
   const { base } = await listen(t, { automationStore: null });
   const risposta = await fetch(`${base}/api/v1/automations`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ taskId: 'x', intervalloMinuti: 30 }),
+    method: 'POST', headers: finestra(base), body: JSON.stringify({ taskId: 'x', intervalloMinuti: 30 }),
   });
   assert.equal(risposta.status, 405);
 });
@@ -158,11 +161,11 @@ test('⛔⛔ senza automationStore configurato, le rotte POST tornano 405 — st
 /* 24/09/2026, decisione owner: il modulo manda il modello scelto nella chat; la rotta lo valida come quello di una sessione. */
 test('AUTO-MODEL-HTTP: POST con modello lo salva; un modello malformato è 400 e non arriva allo store', async (t) => {
   const { base } = await listen(t);
-  const ok = await fetch(`${base}/api/v1/automations`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+  const ok = await fetch(`${base}/api/v1/automations`, { method: 'POST', headers: finestra(base),
     body: JSON.stringify({ taskId: 'x', intervalloMinuti: 30, modello: 'z-ai/glm-5.3-flash' }) });
   assert.equal(ok.status, 200);
   assert.equal((await ok.json()).data.modello, 'z-ai/glm-5.3-flash');
-  const rotto = await fetch(`${base}/api/v1/automations`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+  const rotto = await fetch(`${base}/api/v1/automations`, { method: 'POST', headers: finestra(base),
     body: JSON.stringify({ taskId: 'y', intervalloMinuti: 30, modello: 'non un modello!' }) });
   assert.equal(rotto.status, 400);
   const elenco = await (await fetch(`${base}/api/v1/automations`)).json();

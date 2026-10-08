@@ -61,13 +61,13 @@ export function talosResearchDossierDocument(collection) {
         ...collection.sources.map((source) => [
             `## ${source.title}`,
             source.url,
-            source.publishedAt ? `data dichiarata: ${source.publishedAt}` : 'data non dichiarata',
-            source.obtained === 'snippet' ? '(solo estratto dal motore di ricerca)' : '',
+            source.publishedAt ? `declared date: ${source.publishedAt}` : 'date not declared',
+            source.obtained === 'snippet' ? '(search engine snippet only)' : '',
             '',
             source.text,
         ].filter(Boolean).join('\n')),
         ...(collection.unreachable.length > 0
-            ? ['## Non raggiungibili', ...collection.unreachable.map((entry) => `${entry.url} — ${entry.reason}`)]
+            ? ['## Unreachable', ...collection.unreachable.map((entry) => `${entry.url} — ${entry.reason}`)]
             : []),
     ].join('\n\n')
 

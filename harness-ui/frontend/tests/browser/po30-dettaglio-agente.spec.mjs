@@ -17,13 +17,17 @@ const FIGLIE = [
     attivita: { file: [{ percorso: 'src/registro.mjs', letto: true, scritto: true, creato: false }, { percorso: 'README.md', letto: true, scritto: false, creato: false }], fileTagliati: 0, attrezzoCorrente: 'leggi', chiamate: 3,
       passi: [{ tipo: 'avvio', attrezzo: null, percorso: null, quando: '2026-09-18T01:00:00.000Z' }, { tipo: 'attrezzo', attrezzo: 'leggi', percorso: 'src/registro.mjs', quando: '2026-09-18T01:00:05.000Z' }, { tipo: 'attrezzo', attrezzo: 'shell', percorso: null, quando: '2026-09-18T01:00:20.000Z' }], passiTagliati: 0 } },
   { sessionId: 'po30d-figlia-b', task: 'Compito: controlla i test', taskCorto: 'controlla i test', conclusa: true, interrotta: false, avviataAlle: new Date(Date.now() - 50 * 60_000).toISOString(), modello: 'z-ai/glm-5.3-flash', permessi: 'read-only',
-    collisioni: [], esitoDelega: 'I test passano tutti.', attivita: { file: [], fileTagliati: 0, attrezzoCorrente: null, chiamate: 1, passi: [{ tipo: 'fine', attrezzo: null, percorso: null, quando: null }], passiTagliati: 0 } },
+    // 0.1.23: lo stato e il resoconto come li manda il server (`snapshotFiglio`): `esitoDelega` è uno stato, mai il testo
+    collisioni: [], esitoDelega: 'concluso', riassuntoDelega: 'I test passano tutti.', attivita: { file: [], fileTagliati: 0, attrezzoCorrente: null, chiamate: 1, passi: [{ tipo: 'fine', attrezzo: null, percorso: null, quando: null }], passiTagliati: 0 } },
 ];
 
 async function scena(page, { larghezza = 1440, altezza = 900, tema = 'dark', figlie = FIGLIE } = {}) {
   await page.setViewportSize({ width: larghezza, height: altezza });
   await page.addInitScript(({ colorMode }) => { try { localStorage.setItem('talos.harness.desktop.settings.v1', JSON.stringify({ version: 1, appearance: { colorMode, uiLanguage: 'it' } })); } catch { /* */ } }, { colorMode: tema });
-  await page.route('**/api/v1/sessions/po30d-*/events*', (r) => r.fulfill({ contentType: 'text/event-stream', body: '' }));
+  /* VELO-SPEC-3 (08/10/2026, bugfixer): flusso APERTO E MUTO e il confine dopo l'apertura, come VELO-SPEC e c2b-coordinazione. Con un
+     corpo vuoto e nessun confine la chat restava sotto il velo («Apro una cronologia lunga…») e la scheda Agenti diceva «0 di 0
+     agenti»: 37 prove su 41 rosse l'08/10 sera, misurate identiche anche su 36a1346f7. */
+  await page.route('**/api/v1/sessions/po30d-*/events*', () => { /* resta pending: aperto e muto */ });
   await page.route('**/api/v1/sessions/po30d-uno/tree?*', (r) => r.fulfill({ contentType: 'application/json', body: JSON.stringify({ ok: true, data: { voci: ALBERO[new URL(r.request().url()).searchParams.get('percorso') || ''] ?? [] } }) }));
   await page.route('**/api/v1/sessions/po30d-uno/children', (r) => r.fulfill({ contentType: 'application/json', body: JSON.stringify({ ok: true, data: { figli: figlie } }) }));
   await page.goto('/');
@@ -33,6 +37,7 @@ async function scena(page, { larghezza = 1440, altezza = 900, tema = 'dark', fig
     const r = window.__talosHarnessUiRuntime;
     r.passaASessione('po30d-uno', 'workspace', 'PO30D', 'qwen/qwen3.8-flash', { conclusa: false, modello: 'qwen/qwen3.8-flash' });
     const g = r.realSessionState.generation;
+    r.handleRealEvent({ type: 'CUSTOM', name: 'talos.fine-rigiocata', value: null }, g); // VELO-SPEC-3: il confine che il server manda sempre, prima degli eventi vivi
     r.handleRealEvent({ type: 'RunStarted', _sequenza: 9301, input: { consegna: 'Dividi il lavoro' }, contesto: { cartella: 'C:\\progetti\\talos-prova', modello: 'glm-5.3-flash' } }, g);
     r.handleRealEvent({ type: 'ToolCallStart', toolCallId: 'd1', toolCallName: 'delega_sottotask', _sequenza: 9302 }, g);
     r.handleRealEvent({ type: 'ToolCallResult', toolCallId: 'd1', content: 'ok', _sequenza: 9303 }, g);
@@ -75,7 +80,11 @@ test('RIPRESA-GRAFO-INGRESSI — elenco e dettaglio aprono lo stesso grafo centr
 test('RIPRESA-GRAFO-SESSIONE-VUOTA — una nuova sessione offline non eredita le deleghe precedenti', async ({ page }) => {
   await scena(page);
   await page.route('**/api/v1/sessions/po30d-vuota/children', r => r.fulfill({ status: 503, json: { ok: false, error: { message: 'Lettura non disponibile' } } }));
-  await page.evaluate(() => window.__talosHarnessUiRuntime.passaASessione('po30d-vuota', 'workspace', 'Sessione senza snapshot'));
+  await page.evaluate(() => {
+    const r = window.__talosHarnessUiRuntime;
+    r.passaASessione('po30d-vuota', 'workspace', 'Sessione senza snapshot');
+    r.handleRealEvent({ type: 'CUSTOM', name: 'talos.fine-rigiocata', value: null }, r.realSessionState.generation); // VELO-SPEC-3: anche l'altra sessione riceve il confine
+  });
   await page.locator('#railTabs [data-rail="agenti"]').click();
   await expect(page.locator('#railAgenti').getByRole('status')).toContainText('Dati non aggiornati');
   await expect(page.locator('#railAgenti [data-c="AgentRow"]')).toHaveCount(0);
@@ -133,7 +142,11 @@ test('RIPRESA-GRAFO-NAVIGAZIONE — ricarica ricorda la ricerca, un’altra sess
   await expect(grafo.getByRole('searchbox')).toHaveValue('controlla');
   await expect(grafo.locator('[data-nodo-id]')).toHaveCount(1);
   await page.route('**/api/v1/sessions/po30d-due/children', r => r.fulfill({ json: { ok: true, data: { figli: [] } } }));
-  await page.evaluate(() => window.__talosHarnessUiRuntime.passaASessione('po30d-due', 'workspace', 'Altra sessione'));
+  await page.evaluate(() => {
+    const r = window.__talosHarnessUiRuntime;
+    r.passaASessione('po30d-due', 'workspace', 'Altra sessione');
+    r.handleRealEvent({ type: 'CUSTOM', name: 'talos.fine-rigiocata', value: null }, r.realSessionState.generation); // VELO-SPEC-3: anche l'altra sessione riceve il confine
+  });
   await expect(grafo).toHaveCount(0);
   await expect(page.locator('#schermoChat')).toBeVisible();
   await expect(page.locator('#schermoChat')).not.toHaveClass(/talos-grafo-aperto/);
@@ -407,7 +420,7 @@ for (const larghezza of [1440, 390]) {
   test(`RIPRESA-AGENTE-PANORAMICA-MD ${larghezza} — compito e risultato formattati e contenuti non fidati`, async ({ page }, info) => {
     await scena(page, { larghezza });
     const task = '## Obiettivo\n\nLeggi **registro** e `src/main.js`.\n\n- Primo passo\n- Secondo passo\n\n```js\nconst esempio = 1;\n```\n\n[Documentazione](https://example.com)\n\n<img src=x onerror="window.__unsafe=1">\n\n[Pericolo](javascript:alert(1))';
-    await page.route('**/api/v1/sessions/po30d-uno/children', r => r.fulfill({ json: { ok: true, data: { figli: [{ ...FIGLIE[0], task, conclusa: true, esitoDelega: '## Risultato\n\n**Completato**\n\n- Test verificati' }] } } }));
+    await page.route('**/api/v1/sessions/po30d-uno/children', r => r.fulfill({ json: { ok: true, data: { figli: [{ ...FIGLIE[0], task, conclusa: true, esitoDelega: 'concluso', riassuntoDelega: '## Risultato\n\n**Completato**\n\n- Test verificati' }] } } }));
     await page.evaluate(() => { const r = window.__talosHarnessUiRuntime; r.handleRealEvent({ type: 'ToolCallStart', toolCallId: 'md', toolCallName: 'delega_sottotask', _sequenza: 9994 }, r.realSessionState.generation); r.handleRealEvent({ type: 'ToolCallResult', toolCallId: 'md', content: 'ok', _sequenza: 9995 }, r.realSessionState.generation); });
     await expect(page.locator('#railAgenti [data-c="AgentRow"]')).toHaveCount(1);
     await apri(page);

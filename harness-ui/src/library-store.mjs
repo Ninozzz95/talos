@@ -205,17 +205,17 @@ async function leggiMeta(percorsoMeta, readFileFn, id) {
   try {
     testo = await readFileFn(percorsoMeta, 'utf8');
   } catch (errore) {
-    if (errore?.code === 'ENOENT') return undefined; // assente: non un errore, un "non c'è" onesto
-    throw new LibraryStoreError(`Impossibile leggere ${id}/${NOME_FILE_META}: ${errore.message}`, 'LIBRARY_READ_FAILED');
+    if (errore?.code === 'ENOENT') return undefined; // assente: non un errore, un elemento assente onesto
+    throw new LibraryStoreError(`Cannot read ${id}/${NOME_FILE_META}: ${errore.message}`, 'LIBRARY_READ_FAILED');
   }
   let meta;
   try {
     meta = JSON.parse(testo);
   } catch {
-    throw new LibraryStoreError(`${id}/${NOME_FILE_META} non è JSON valido`, 'LIBRARY_MALFORMED');
+    throw new LibraryStoreError(`${id}/${NOME_FILE_META} is not valid JSON`, 'LIBRARY_MALFORMED');
   }
   if (typeof meta.nome !== 'string' || meta.nome.length === 0) {
-    throw new LibraryStoreError(`${id}/${NOME_FILE_META} manca di "nome"`, 'LIBRARY_MALFORMED');
+    throw new LibraryStoreError(`${id}/${NOME_FILE_META} is missing "nome"`, 'LIBRARY_MALFORMED');
   }
   return meta;
 }
@@ -247,7 +247,7 @@ export async function elencaVoci({ cartella, conProvenienza = false }, deps = {}
     voci = await readdirFn(cartellaLibreria, { withFileTypes: true });
   } catch (errore) {
     if (errore?.code === 'ENOENT') return [];
-    throw new LibraryStoreError(`Impossibile leggere ${CARTELLA_LIBRERIA}: ${errore.message}`, 'LIBRARY_READ_FAILED');
+    throw new LibraryStoreError(`Cannot read ${CARTELLA_LIBRERIA}: ${errore.message}`, 'LIBRARY_READ_FAILED');
   }
   const entries = [];
   for (const voce of voci) {
@@ -452,11 +452,11 @@ export async function leggiBytesVoce({ cartella, id }, deps = {}) {
     stat = await statFn(percorsoContenuto);
   } catch (errore) {
     // ⛔ La scheda c'è e il file no: uno stato ROTTO, non un «non trovato» — dirlo è il solo modo perché qualcuno lo ripari.
-    throw new LibraryStoreError(`${id}: la scheda c'è, il file no (${errore.message})`, 'LIBRARY_READ_FAILED');
+    throw new LibraryStoreError(`${id}: the entry exists, but its file does not (${errore.message})`, 'LIBRARY_READ_FAILED');
   }
   if (stat.size > DIMENSIONE_MASSIMA_SCARICO) {
     throw new LibraryStoreError(
-      `File troppo grande da scaricare (${Math.round(stat.size / 1024 / 1024)} MB, tetto ${DIMENSIONE_MASSIMA_SCARICO / 1024 / 1024} MB)`,
+      `File too large to download (${Math.round(stat.size / 1024 / 1024)} MB, cap ${DIMENSIONE_MASSIMA_SCARICO / 1024 / 1024} MB)`,
       'LIBRARY_TOO_LARGE',
     );
   }
@@ -532,7 +532,7 @@ export async function rinominaVoce({ cartella, id, nome }, deps = {}) {
   const writeFileFn = deps.writeFileFn ?? fsp.writeFile;
   const nomeSicuro = sanificaNomeLibreria(nome);
   if (!nomeSicuro) {
-    throw new LibraryStoreError('Il nome è vuoto una volta tolti i caratteri di percorso — scegline uno semplice.', 'LIBRARY_NAME_EMPTY');
+    throw new LibraryStoreError("The name is empty after path characters are removed — choose a simple one.", 'LIBRARY_NAME_EMPTY');
   }
   const cartellaVoce = cartellaDellaVoce(cartella, id);
   if (!cartellaVoce) return null;
@@ -573,14 +573,14 @@ export async function eliminaVoce({ cartella, id }, deps = {}) {
  */
 export async function eliminaVoci({ cartella, ids }, deps = {}) {
   if (!Array.isArray(ids) || ids.length === 0) {
-    throw new LibraryStoreError('Per eliminare a lotti serve un array `ids` con almeno un id.', 'LIBRARY_INVALID');
+    throw new LibraryStoreError("Batch deletion requires an `ids` array with at least one id.", 'LIBRARY_INVALID');
   }
   if (ids.length > 100) {
-    throw new LibraryStoreError('Massimo 100 id per chiamata: spegni la richiesta in più lotti.', 'LIBRARY_INVALID');
+    throw new LibraryStoreError("At most 100 ids each call: split the request into multiple batches.", 'LIBRARY_INVALID');
   }
   for (const id of ids) {
     if (typeof id !== 'string' || !id.trim()) {
-      throw new LibraryStoreError('Ogni elemento di `ids` deve essere un id non vuoto (stringa).', 'LIBRARY_INVALID');
+      throw new LibraryStoreError("Every element of `ids` must be a non-empty id (string).", 'LIBRARY_INVALID');
     }
   }
   const eliminate = [];
@@ -619,10 +619,10 @@ export async function salvaVoce({ cartella, nome, mediaType, origine = 'uploaded
   const writeFileFn = deps.writeFileFn ?? fsp.writeFile;
   const randomUUIDFn = deps.randomUUIDFn ?? randomUUID;
   if (typeof nome !== 'string' || nome.trim().length === 0) {
-    throw new LibraryStoreError('Un file di Libreria vuole un nome', 'LIBRARY_INVALID');
+    throw new LibraryStoreError('A Library file needs a name', 'LIBRARY_INVALID');
   }
   if (typeof testo !== 'string' && typeof base64 !== 'string') {
-    throw new LibraryStoreError('Un file di Libreria vuole un contenuto (testo o base64)', 'LIBRARY_INVALID');
+    throw new LibraryStoreError('A Library file needs content (text or base64)', 'LIBRARY_INVALID');
   }
   const id = `lib-${randomUUIDFn()}`;
   const cartellaVoce = join(cartella, CARTELLA_LIBRERIA, id);

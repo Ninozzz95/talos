@@ -370,7 +370,8 @@ test('C4-D · la forma a capo sotto i 1500: altezze, trabocchi, e la soglia vist
 test('C4-E · la citazione del mockup: `.catalog-sorting` contro `.catalog-sort`', async ({ page }) => {
   /* ⛔ Il mockup NON è dentro `public/`, quindi non è servito dal server di prova: si apre dal
      disco (il test può leggere, non scrivere: nessun sorgente viene toccato). */
-  const mockup = pathToFileURL('C:/Users/Antonino/Desktop/projects/AVM-harness-desktop/harness-ui/frontend/prototypes/calm-lab/TALOS-Calm-Lab.html').href;
+  // il prototipo sta nel repo (frontend/prototypes/calm-lab): si apre relativo a questo file, non da un percorso del disco di qualcuno
+  const mockup = new URL('../../prototypes/calm-lab/TALOS-Calm-Lab.html', import.meta.url).href;
   await page.goto(mockup);
   await page.waitForTimeout(1200);
   // Il mockup disegna il catalogo con il suo JS: si aspetta la scena, non il tempo.

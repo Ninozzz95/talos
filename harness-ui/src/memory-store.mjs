@@ -79,21 +79,21 @@ function normalizzaTitoloPerConfronto(titolo) {
 
 function validaTitolo(title) {
   if (typeof title !== 'string' || title.trim().length === 0 || title.length > TITOLO_MASSIMO) {
-    throw new MemoryStoreError(`title deve avere 1-${TITOLO_MASSIMO} caratteri`, 'MEMORY_INVALID');
+    throw new MemoryStoreError(`title must have 1-${TITOLO_MASSIMO} characters`, 'MEMORY_INVALID');
   }
   return title.trim();
 }
 
 function validaContenuto(content) {
   if (typeof content !== 'string' || content.trim().length === 0 || content.length > CONTENUTO_MASSIMO) {
-    throw new MemoryStoreError(`content deve avere 1-${CONTENUTO_MASSIMO} caratteri`, 'MEMORY_INVALID');
+    throw new MemoryStoreError(`content must have 1-${CONTENUTO_MASSIMO} characters`, 'MEMORY_INVALID');
   }
   return content.trim();
 }
 
 function validaGenere(kind) {
   if (!GENERI.includes(kind)) {
-    throw new MemoryStoreError(`kind deve essere uno fra ${GENERI.join('/')}`, 'MEMORY_INVALID');
+    throw new MemoryStoreError(`kind must be one of ${GENERI.join('/')}`, 'MEMORY_INVALID');
   }
   return kind;
 }
@@ -103,7 +103,7 @@ const ORIGINI = Object.freeze(['persona', 'modello']);
 
 function validaOrigine(origine) {
   if (!ORIGINI.includes(origine)) {
-    throw new MemoryStoreError(`origine deve essere una fra ${ORIGINI.join('/')}`, 'MEMORY_INVALID');
+    throw new MemoryStoreError(`origine must be one of ${ORIGINI.join('/')}`, 'MEMORY_INVALID');
   }
   return origine;
 }
@@ -210,7 +210,7 @@ export async function aggiornaMemoria({ cartella, id, title, content, kind }, de
   const writeFileFn = deps.writeFileFn ?? fsp.writeFile;
   const clockFn = deps.clockFn ?? (() => new Date());
   const voce = await leggiMemoria({ cartella, id }, { readFileFn });
-  if (!voce) throw new MemoryStoreError(`nessuna memoria con id ${id}`, 'MEMORY_NOT_FOUND');
+  if (!voce) throw new MemoryStoreError(`no memory with id ${id}`, 'MEMORY_NOT_FOUND');
   if (title !== undefined) voce.titolo = validaTitolo(title);
   if (content !== undefined) voce.contenuto = validaContenuto(content);
   if (kind !== undefined) voce.genere = validaGenere(kind);

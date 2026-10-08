@@ -55,6 +55,8 @@ async function apri(page, sessione) {
   await page.locator('#talosAvvio').waitFor({ state: 'detached', timeout: 10_000 });
   await page.evaluate((id) => window.__talosHarnessUiRuntime.passaASessione(id, 'workspace', 'Giro interrotto', 'z-ai/glm-5.3-flash', { conclusa: true, modello: 'z-ai/glm-5.3-flash' }), sessione);
   await expect(page.locator('#conversation')).toContainText('Ripresa finita', { timeout: 10_000 });
+  // VELO-SPEC-2 (08/10/2026, bugfixer): `toContainText` legge anche una chat sotto il velo (`visibility:hidden`): la foto aspetta che si tolga
+  await page.waitForFunction(() => !document.querySelector('#conversation')?.classList.contains('is-restoring'));
   await page.locator('#railTabs [data-rail="contesto"]').click();
   return contatore;
 }

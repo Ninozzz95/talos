@@ -50,9 +50,9 @@ test('starts llama-server on loopback without shell and reaches ready after heal
    */
   assert.deepEqual(logs.map((riga) => riga.text), [
     // R-03 (13/09): il supervisore dichiara QUALE motore accende, prima delle leve.
-    '[talos] motore cpu: C:\\talos\\llama-server.exe\n',
-    '[talos] KV cache q8_0 — nessun offload sul dispositivo: la KV cache non entra nella scelta\n',
-    '[talos] decodifica speculativa a n-grammi: non offerta da questo binario\n',
+    '[talos] engine cpu: C:\\talos\\llama-server.exe\n',
+    '[talos] KV cache q8_0 — no offload to the device: the KV cache is not part of the choice\n',
+    '[talos] n-gram speculative decoding: not offered by this binary\n',
     'ready\n',
   ]);
 });
@@ -238,7 +238,7 @@ test('decidiTipoKvCache sceglie f16 solo quando il fitter dichiara che entra TUT
   assert.equal(decidiTipoKvCache({ nglConF16: null }).tipo, 'q8_0');
   assert.equal(decidiTipoKvCache({}).tipo, 'q8_0');
   // Ogni scelta porta il suo perché: un log senza motivo non è verificabile.
-  assert.match(decidiTipoKvCache({ nglConF16: 'tutto' }).perche, /TUTTI i livelli/u);
+  assert.match(decidiTipoKvCache({ nglConF16: 'tutto' }).perche, /ALL layers fit/u);
 });
 
 test('supportaSpeculativaNgram legge il --help del binario e non lo suppone', () => {
@@ -361,7 +361,7 @@ test('un motore che si chiude da solo viene dichiarato SUBITO, con le sue ultime
   await assert.rejects(avvio, (error) => {
     assert.equal(error.code, 'RUNTIME_PROCESS_FAILED');
     assert.match(error.message, /ErrorOutOfDeviceMemory/u);
-    assert.match(error.message, /si è chiuso/u);
+    assert.match(error.message, /closed after/u);
     return true;
   });
   assert.ok(Date.now() - iniziato < 5_000, 'non deve consumare l attesa di salute');

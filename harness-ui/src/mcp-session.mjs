@@ -164,7 +164,7 @@ export async function preparaToolMcpPerSessione({ cartella, cartellaTrust, onEli
   const chiamaToolMcpFn = toolMcp.length > 0
     ? async (nomeEsposto, argomenti) => {
       const voce = instradamento.get(nomeEsposto);
-      if (!voce) throw new Error(`tool MCP "${nomeEsposto}" non è fra quelli connessi in questa sessione`);
+      if (!voce) throw new Error(`MCP tool "${nomeEsposto}" is not among those connected in this session`);
       return chiamaToolMcpFnReale({ client: voce.client }, voce.nomeOriginale, argomenti);
     }
     : null;
