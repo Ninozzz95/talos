@@ -51,7 +51,7 @@ const SCHEMI = [
   [String.raw`(include|output|print|share)\s+${RIEMPITIVO}(conversation|chat\s+history|previous\s+messages|full\s+context|entire\s+context)`, 'context_exfil'],
   [String.raw`authorized_keys`, 'ssh_backdoor'],
   [String.raw`(?:\b(?:echo|cat|cp|mv|dd|tee|install|printf|rsync|scp|ln|append|add|write|sed|chmod|chown|truncate|rm|touch|curl|wget|git)\b|\bopen\s*\(|>>?)[^\n]{0,512}(?:\$HOME/\.ssh|~/\.ssh)`, 'ssh_access'],
-  [String.raw`\$HOME/\.hermes/\.env|~/\.hermes/\.env`, 'hermes_env'], // `\~` di Python non è un escape valido col flag `u`
+  [String.raw`\$HOME/\.hermes/\.env|~/\.hermes/\.env`, 'hermes_env'], // python tilde escape is not valid with u flag
   [String.raw`${MODIFICA}(?:AGENTS\.md|CLAUDE\.md|\.cursorrules|\.clinerules)`, 'agent_config_mod'],
   [String.raw`${MODIFICA}\.hermes/(config\.yaml|SOUL\.md)`, 'hermes_config_mod'],
   // `(?-i:…)`: il valore che è il NOME di una variabile d'ambiente (SHOUTY_SNAKE) non è un segreto (Hermes #116221).

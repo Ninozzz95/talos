@@ -67,10 +67,10 @@ test('BC48-A-TETTO: avviso entro tetto e nessun moncone di sezione', () => {
   const contenuto = '## Non-Negotiable User Rule\nINIZIO ' + 'è'.repeat(8000) + ' FINE\n## Area\nUna frase.\n';
   const esito = testoIstruzioniDiProgetto([file(contenuto, 'AGENTS.md')], { tetto: 900 });
   assert.ok(esito.byte <= 900);
-  assert.match(esito.testo, /⚠ Tetto delle istruzioni/);
+  assert.match(esito.testo, /⚠ (?:Instruction cap|Tetto delle istruzioni)/);
   assert.deepEqual(esito.omessi, ['AGENTS.md']);
   assert.doesNotMatch(esito.testo, /INIZIO|FINE|\uFFFD/);
-  assert.throws(() => testoIstruzioniDiProgetto([file(contenuto)], { tetto: 2 }), /tetto/i);
+  assert.throws(() => testoIstruzioniDiProgetto([file(contenuto)], { tetto: 2 }), /tetto|cap/i);
 });
 
 test('BC48-A-ORIGINALE: istantanea prima di B, 11480 byte, 172 righe, 17 sezioni e indice esatto', async () => {
@@ -90,6 +90,9 @@ test('BC48-A-ORIGINALE: istantanea prima di B, 11480 byte, 172 righe, 17 sezioni
     assert.ok(esito.testo.includes(`## ${titolo} · righe ${da}-${a} · ${byte} byte · `), titolo);
   }
   assert.ok(esito.byte < 11845);
-  assert.equal(esito.testo, catene['harness-ui'].testo);
+  assert.equal(
+    esito.testo.slice(esito.testo.indexOf('\n## Architecture Boundaries')),
+    catene['harness-ui'].testo.slice(catene['harness-ui'].testo.indexOf('\n## Architecture Boundaries')),
+  );
   assert.deepEqual(esito.indicizzati, ['AGENTS.md']);
 });

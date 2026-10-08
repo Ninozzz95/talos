@@ -377,7 +377,7 @@ export async function scriviAtomico(percorso, contenuto, deps = {}) {
     /* ⛔ Si ARRICCHISCE l'errore originale invece di crearne uno nuovo: `code`, `errno`, `path` e
        la pila appartengono al guasto vero, e un chiamante che filtra sul codice deve continuare
        a vederlo. */
-    errore.message = `${errore.message} — il file vecchio è intatto e il nuovo contenuto NON è perso: sta in ${dove}`;
+    errore.message = `${errore.message} — the old file is intact and the new contents are NOT lost: they are at ${dove}`;
     throw errore;
   }
 
@@ -466,16 +466,16 @@ export async function creaRicerca({ cartella, id, domanda, profondita, padreId =
   const mkdirFn = deps.mkdirFn ?? fsp.mkdir;
   const writeFileFn = deps.writeFileFn ?? fsp.writeFile;
   if (typeof id !== 'string' || id.length === 0) {
-    throw new ResearchStoreError('Una ricerca vuole un id', 'RESEARCH_INVALID');
+    throw new ResearchStoreError("Research requires an id", 'RESEARCH_INVALID');
   }
   if (typeof domanda !== 'string' || domanda.trim().length === 0) {
-    throw new ResearchStoreError('Una ricerca vuole una domanda', 'RESEARCH_INVALID');
+    throw new ResearchStoreError("Research requires a question", 'RESEARCH_INVALID');
   }
   if (!idRicercaValido(id)) {
     // ⛔ L4 — l'id è diventato un NOME DI CARTELLA: quello che prima poteva al più sporcare un
     //   nome di file adesso può attraversare il disco. Il controllo c'era già a valle (nel
     //   kernel, per il deposito); qui è a monte, sul dato, dove nasce.
-    throw new ResearchStoreError(`id di ricerca non valido: ${String(id)}`, 'RESEARCH_INVALID');
+    throw new ResearchStoreError(`invalid research id: ${id}`, 'RESEARCH_INVALID');
   }
   const cartellaRicerca = cartellaDellaRicerca(cartella, id);
   await mkdirFn(cartellaRicerca, { recursive: true });
@@ -585,7 +585,7 @@ export async function migraRicerca({ cartella, id }, deps = {}) {
   } catch (errore) {
     // ⛔ Un `<id>.json` illeggibile NON si cancella e NON si sostituisce: è l'unica copia di
     //   qualcosa che è costato denaro. Si dice, e si lascia dov'è.
-    throw new ResearchStoreError(`${id}: la voce da migrare è illeggibile, lasciata dov'era: ${errore.message}`, 'RESEARCH_READ_FAILED');
+    throw new ResearchStoreError(`${id}: the entry to migrate is unreadable and was left where it was: ${errore.message}`, 'RESEARCH_READ_FAILED');
   }
   await scriviAtomico(percorsoMeta(cartella, id), JSON.stringify({ ...voce, migrataDa: `${id}.json` }, null, 2), deps);
   await rmFn(legacy, { force: true });
@@ -759,14 +759,14 @@ export function dentroLaRadice(radice, percorso) {
 export async function scriviRapporto({ cartella, id, testo }, deps = {}) {
   const mkdirFn = deps.mkdirFn ?? fsp.mkdir;
   const writeFileFn = deps.writeFileFn ?? fsp.writeFile;
-  if (!idRicercaValido(id)) throw new ResearchStoreError(`id di ricerca non valido: ${String(id)}`, 'RESEARCH_INVALID');
+  if (!idRicercaValido(id)) throw new ResearchStoreError(`invalid research id: ${id}`, 'RESEARCH_INVALID');
   if (typeof testo !== 'string' || testo.trim().length === 0) {
-    throw new ResearchStoreError('Un rapporto vuole del testo', 'RESEARCH_INVALID');
+    throw new ResearchStoreError("A report requires text", 'RESEARCH_INVALID');
   }
   const radice = cartellaDellaRicerca(cartella, id);
   const percorso = percorsoRapporto(cartella, id);
   if (!dentroLaRadice(radice, percorso)) {
-    throw new ResearchStoreError(`${percorso} non risolve dentro ${radice}`, 'RESEARCH_INVALID');
+    throw new ResearchStoreError(`${percorso} does not resolve inside ${radice}`, 'RESEARCH_INVALID');
   }
   await mkdirFn(radice, { recursive: true });
   // ⛔ L4 — atomica: un rapporto è il prodotto per cui la ricerca è stata pagata. Se la scrittura
@@ -815,7 +815,7 @@ export async function leggiRapporto({ cartella, id }, deps = {}) {
  */
 export function rileggiRapportoMinimo(testo) {
   if (typeof testo !== 'string' || testo.trim().length === 0) {
-    return { ok: false, intestazione: null, affermazioni: 0, fonti: [], motivo: 'il rapporto è vuoto' };
+    return { ok: false, intestazione: null, affermazioni: 0, fonti: [], motivo: "the report is empty", motivoChiave: 'server.research.minimum.empty' };
   }
   const righe = testo.split(/\r?\n/);
   const rigaTitolo = righe.find((r) => /^#{1,6}\s+\S/.test(r.trim()));
@@ -847,9 +847,9 @@ export function rileggiRapportoMinimo(testo) {
     if (/^[-*_=\s|]+$/.test(riga)) continue;
     affermazioni += 1;
   }
-  if (!intestazione) return { ok: false, intestazione: null, affermazioni, fonti, motivo: 'il rapporto non ha un\'intestazione' };
-  if (affermazioni === 0) return { ok: false, intestazione, affermazioni, fonti, motivo: 'il rapporto non contiene nessuna affermazione' };
-  if (fonti.length === 0) return { ok: false, intestazione, affermazioni, fonti, motivo: 'il rapporto non elenca nessuna fonte' };
+  if (!intestazione) return { ok: false, intestazione: null, affermazioni, fonti, motivo: "the report has no heading", motivoChiave: 'server.research.minimum.noHeading' };
+  if (affermazioni === 0) return { ok: false, intestazione, affermazioni, fonti, motivo: "the report contains no claims", motivoChiave: 'server.research.minimum.noClaims' };
+  if (fonti.length === 0) return { ok: false, intestazione, affermazioni, fonti, motivo: "the report lists no sources", motivoChiave: 'server.research.minimum.noSources' };
   return { ok: true, intestazione, affermazioni, fonti, motivo: null };
 }
 
@@ -894,9 +894,9 @@ const codeDelGiornale = new Map();
 export async function accodaEvento({ cartella, id, evento, durevole = true, separaRiga = false }, deps = {}) {
   const mkdirFn = deps.mkdirFn ?? fsp.mkdir;
   const appendFileFn = deps.appendFileFn ?? fsp.appendFile;
-  if (!idRicercaValido(id)) throw new ResearchStoreError(`id di ricerca non valido: ${String(id)}`, 'RESEARCH_INVALID');
+  if (!idRicercaValido(id)) throw new ResearchStoreError(`invalid research id: ${id}`, 'RESEARCH_INVALID');
   if (!evento || typeof evento !== 'object' || typeof evento.kind !== 'string' || evento.kind.length === 0) {
-    throw new ResearchStoreError('Un evento del giornale vuole un `kind`', 'RESEARCH_INVALID');
+    throw new ResearchStoreError("A journal event requires a `kind`", 'RESEARCH_INVALID');
   }
   const percorso = percorsoGiornale(cartella, id);
   // ⛔ Serializzato SUBITO, non dentro la coda: `evento` potrebbe cambiare mentre aspetta il turno.
@@ -956,7 +956,7 @@ export async function leggiGiornale({ cartella, id, rigoroso = false }, deps = {
 
 /** Il piano approvato, scritto atomicamente. `piano` è `TalosResearchBranch[]` (vedi `run.mjs`). */
 export async function scriviPiano({ cartella, id, piano }, deps = {}) {
-  if (!idRicercaValido(id)) throw new ResearchStoreError(`id di ricerca non valido: ${String(id)}`, 'RESEARCH_INVALID');
+  if (!idRicercaValido(id)) throw new ResearchStoreError(`invalid research id: ${id}`, 'RESEARCH_INVALID');
   await scriviAtomico(percorsoPiano(cartella, id), JSON.stringify(piano, null, 2), deps);
   return percorsoPiano(cartella, id);
 }
@@ -989,9 +989,9 @@ export async function leggiPiano({ cartella, id }, deps = {}) {
 export async function scriviFonte({ cartella, id, testo }, deps = {}) {
   const mkdirFn = deps.mkdirFn ?? fsp.mkdir;
   const statFn = deps.statFn ?? fsp.stat;
-  if (!idRicercaValido(id)) throw new ResearchStoreError(`id di ricerca non valido: ${String(id)}`, 'RESEARCH_INVALID');
+  if (!idRicercaValido(id)) throw new ResearchStoreError(`invalid research id: ${id}`, 'RESEARCH_INVALID');
   if (typeof testo !== 'string' || testo.length === 0) {
-    throw new ResearchStoreError('Una fonte tenuta vuole del testo', 'RESEARCH_INVALID');
+    throw new ResearchStoreError("A retained source requires text", 'RESEARCH_INVALID');
   }
   const impronta = createHash('sha256').update(testo, 'utf8').digest('hex');
   const ref = `${CARTELLA_FONTI}/${impronta}.txt`;
@@ -1042,7 +1042,7 @@ export async function leggiFonte({ cartella, id, ref }, deps = {}) {
  * @param {{cartella: string, id: string, voci: readonly object[]}} input
  */
 export async function scriviIndiceFonti({ cartella, id, voci }, deps = {}) {
-  if (!idRicercaValido(id)) throw new ResearchStoreError(`id di ricerca non valido: ${String(id)}`, 'RESEARCH_INVALID');
+  if (!idRicercaValido(id)) throw new ResearchStoreError(`invalid research id: ${id}`, 'RESEARCH_INVALID');
   const elenco = Array.isArray(voci) ? voci : [];
   await scriviAtomico(percorsoIndiceFonti(cartella, id), JSON.stringify(elenco, null, 2), deps);
   return percorsoIndiceFonti(cartella, id);
@@ -1111,7 +1111,7 @@ export function percorsoCacheFetch(cartella, id) {
  * farebbe ripagare pagine già pagate, che è esattamente il costo che esiste per evitare.
  */
 export async function scriviIstantaneaCache({ cartella, id, istantanea }, deps = {}) {
-  if (!idRicercaValido(id)) throw new ResearchStoreError(`id di ricerca non valido: ${String(id)}`, 'RESEARCH_INVALID');
+  if (!idRicercaValido(id)) throw new ResearchStoreError(`invalid research id: ${id}`, 'RESEARCH_INVALID');
   await scriviAtomico(percorsoCacheFetch(cartella, id), JSON.stringify(istantanea), deps);
   return percorsoCacheFetch(cartella, id);
 }

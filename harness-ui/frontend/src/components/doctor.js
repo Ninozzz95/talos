@@ -17,6 +17,14 @@ function valida(r){
  if(r.providers&&!r.providers.items.every(p=>oggetto(p)&&typeof p.id==='string'&&typeof p.label==='string'&&typeof p.keyConfigured==='boolean'))errore();
  const s=r.sessioniPersistenza;if(s){if(!s.corrotte.every(v=>typeof v==='string'))errore();if('scartate'in s&&(!Array.isArray(s.scartate)||!s.scartate.every(v=>oggetto(v)&&typeof v.sessionId==='string'&&typeof v.motivo==='string'&&(!('dettaglio'in v)||typeof v.dettaglio==='string'))))errore();if('ultimaLettura'in s&&(!oggetto(s.ultimaLettura)||!['ripristinate','totali'].every(k=>Number.isInteger(s.ultimaLettura[k])&&s.ultimaLettura[k]>=0)))errore();}
 }
+function dettaglioSessioni(s, scarti) {
+ if (!s.dettaglioParams || !s.perMotivo) return testoDelCampo(s, 'dettaglio');
+ const reasons = Object.entries(s.perMotivo).map(([motivo, n]) => {
+  const voce = scarti.find(v => v.motivo === motivo);
+  return `${n} ${voce ? testoDelCampo(voce, 'motivo') : motivo}`;
+ }).join(', ');
+ return testoDelCampo({ ...s, dettaglioParams: { ...s.dettaglioParams, reasons } }, 'dettaglio');
+}
 export function controlliDoctor(r){
  valida(r);const c=[];const add=(id,titolo,gravita,...righe)=>c.push({id,titolo,gravita,righe:righe.flat().filter(Boolean)});const ignoto=(id,titolo)=>add(id,titolo,'info',traduci('varie.doctor.notObserved'));
  add('chiave',traduci('varie.doctor.check.apiKey.title'),r.chiaveApi?'info':'warning',r.chiaveApi?traduci('varie.doctor.check.apiKey.configured'):traduci('varie.doctor.check.apiKey.missing'));
@@ -29,7 +37,7 @@ export function controlliDoctor(r){
  if(r.ricercaWeb)add('ricerca',traduci('varie.doctor.check.search.title'),r.ricercaWeb.pronta||r.ricercaWeb.fonte==='off'?'info':'warning',testoDelCampo(r.ricercaWeb,'etichetta')||r.ricercaWeb.fonte,testoDelCampo(r.ricercaWeb,'dettaglio'),traduci('varie.doctor.check.search.note'));else ignoto('ricerca',traduci('varie.doctor.check.search.title'));
  if(r.providers)add('fornitori',traduci('varie.doctor.check.providers.title'),r.providers.storeAvailable?'info':'warning',r.providers.storeAvailable?traduci('varie.doctor.check.providers.keychainAvailable'):traduci('varie.doctor.check.providers.keychainUnavailable'),r.providers.items.map(p=>nomeDelFornitore(p)+': '+(p.keyConfigured?traduci('varie.doctor.check.providers.keyConfigured'):p.requiresKey===false?traduci('varie.doctor.check.providers.keyOptional'):traduci('varie.doctor.check.providers.keyMissing'))+(testo(p.execution)?' · '+esecuzioneDelFornitore(p.execution): '')), traduci('varie.doctor.check.providers.note'));else ignoto('fornitori',traduci('varie.doctor.check.providers.title'));
  if(r.labs)add('labs',traduci('varie.doctor.check.labs.title'),'info',testoDelCampo(r.labs,'dettaglio')||traduci('varie.doctor.check.labs.on',{list:r.labs.accesi.join(', ')||traduci('varie.doctor.check.labs.none')}));else ignoto('labs',traduci('varie.doctor.check.labs.title'));
- if(r.sessioniPersistenza){const s=r.sessioniPersistenza,scarti=s.scartate||[],nonElencate=s.corrotte.filter(id=>!scarti.some(v=>v.sessionId===id));add('sessioni',traduci('varie.doctor.check.sessions.title'),s.corrotte.length||scarti.some(v=>['corrotta','lettura-fallita'].includes(v.motivo))?'danger':scarti.length?'warning':'success',testoDelCampo(s,'dettaglio')||(s.ultimaLettura?traduci('varie.doctor.check.sessions.restored',{restored:s.ultimaLettura.ripristinate,total:s.ultimaLettura.totali}):traduci('varie.doctor.check.sessions.notObserved')),scarti.map(v=>v.sessionId+' · '+v.motivo+(v.dettaglio?' · '+v.dettaglio:'')),nonElencate.map(id=>traduci('varie.doctor.check.sessions.corrupt',{id})));}else ignoto('sessioni',traduci('varie.doctor.check.sessions.title'));
+ if(r.sessioniPersistenza){const s=r.sessioniPersistenza,scarti=s.scartate||[],nonElencate=s.corrotte.filter(id=>!scarti.some(v=>v.sessionId===id));add('sessioni',traduci('varie.doctor.check.sessions.title'),s.corrotte.length||scarti.some(v=>['corrotta','lettura-fallita'].includes(v.motivo))?'danger':scarti.length?'warning':'success',dettaglioSessioni(s,scarti)||(s.ultimaLettura?traduci('varie.doctor.check.sessions.restored',{restored:s.ultimaLettura.ripristinate,total:s.ultimaLettura.totali}):traduci('varie.doctor.check.sessions.notObserved')),scarti.map(v=>v.sessionId+' · '+testoDelCampo(v,'motivo')+(v.dettaglio?' · '+testoDelCampo(v,'dettaglio'):'')),nonElencate.map(id=>traduci('varie.doctor.check.sessions.corrupt',{id})));}else ignoto('sessioni',traduci('varie.doctor.check.sessions.title'));
  return c.sort((a,b)=>ORDINE[a.gravita]-ORDINE[b.gravita]);
 }
 export function contaGravitaDoctor(voci){const n={success:0,info:0,warning:0,danger:0};for(const v of voci)n[v.gravita]++;return n;}

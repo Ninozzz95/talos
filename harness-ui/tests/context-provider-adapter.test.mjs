@@ -33,13 +33,19 @@ test('CTX-MODEL-SUMMARY rejects absent finish reason and keeps billed usage on f
   await assert.rejects(model.summarize({ model: local, messages: [], maxOutputTokens: 20 }), e => e.code === 'CTX_SUMMARY_RESPONSE_INVALID' && e.usage.inputTokens === 12);
 });
 
-test('CTX-NATIVE-PREFIX reset removes stale opaque state on a copy and represents closed tools as historical data', () => {
+test('CTX-NATIVE-PREFIX reset strips stale opaque state on a copy and keeps the exchange native', () => {
   const original = history('anthropic'); const before = structuredClone(original);
   const prepared = prepareProviderContext({ messages: original, provider: 'anthropic', model: 'original', reset: true });
   assert.equal(prepared.resetApplied, true); assert.deepEqual(original, before);
-  assert.ok(prepared.messages.every(m => !m.talos_provider_state && !m.tool_calls && m.role !== 'tool'));
+  /* revisione stall (major 4, 06/10/2026): anche l'ASSENZA di warning spurio va pinnata — il reset
+     emette CTX_NATIVE_STATE_RESET e nient'altro. */
+  assert.deepEqual(prepared.warnings, ['CTX_NATIVE_STATE_RESET']);
+  assert.ok(prepared.messages.every(m => !m.talos_provider_state && !m.reasoning_content));
+  assert.ok(prepared.messages[2].tool_calls?.length === 1);
+  assert.equal(prepared.messages[3].role, 'tool'); assert.equal(prepared.messages[3].tool_call_id, 'c1');
   assert.ok(JSON.stringify(prepared.messages).includes('answer'));
   assert.ok(!JSON.stringify(prepared.messages).includes('real-signature'));
+  assert.ok(!JSON.stringify(prepared.messages).includes('Historical tool calls'));
 });
 
 test('CTX-NATIVE-PREFIX unchanged native state is preserved byte-for-byte through JSON', () => {
@@ -47,16 +53,18 @@ test('CTX-NATIVE-PREFIX unchanged native state is preserved byte-for-byte throug
   assert.deepEqual(prepareProviderContext({ messages: original, provider: 'anthropic', model: 'original' }).messages, original);
 });
 
-test('CTX-MODEL-SWITCH Gemini never fabricates signatures for replayed tools', async () => {
+test('CTX-MODEL-SWITCH Gemini replays foreign tools natively without carrying foreign signatures', async () => {
   const prepared = prepareProviderContext({ messages: history('anthropic'), provider: 'gemini', model: 'gemini-3.8-flash' });
   const { body } = await buildPreparedProviderRequest({ messages: prepared.messages, model: { provider: 'gemini', model: 'gemini-3.8-flash' } });
-  assert.ok(!JSON.stringify(body).includes('thoughtSignature')); assert.ok(!JSON.stringify(body).includes('functionCall'));
+  assert.ok(!JSON.stringify(body).includes('real-signature'));
+  assert.ok(!JSON.stringify(body).includes('skip_thought_signature_validator') || JSON.stringify(body).includes('functionCall'));
+  assert.ok(JSON.stringify(body).includes('functionCall'));
 });
 
-test('CTX-TOOL-PAIRING reset refuses pending and orphan tools', () => {
-  for (const messages of [history('gemini').slice(0, -1), [{ role: 'tool', tool_call_id: 'missing', content: 'bad' }]]) {
-    assert.throws(() => prepareProviderContext({ messages, provider: 'local', model: 'qwen', reset: true }), { code: 'CTX_PENDING_TOOLS' });
-  }
+test('CTX-TOOL-PAIRING reset refuses orphan tool results and mid-history structural breaks', () => {
+  assert.throws(() => prepareProviderContext({ messages: [{ role: 'tool', tool_call_id: 'missing', content: 'bad' }], provider: 'local', model: 'qwen', reset: true }), { code: 'CTX_PENDING_TOOLS' });
+  const broken = history('gemini').slice(0, -1); broken.splice(3, 0, { role: 'user', content: 'meanwhile' });
+  assert.throws(() => prepareProviderContext({ messages: broken, provider: 'local', model: 'qwen', reset: true }), { code: 'CTX_PENDING_TOOLS' });
 });
 
 test('CTX-CANCEL summary and local SDK compilation honor already aborted signal', async () => {
@@ -67,7 +75,7 @@ test('CTX-CANCEL summary and local SDK compilation honor already aborted signal'
   assert.equal(calls, 0);
 });
 
-test('CTX-NATIVE-SIGNATURE-ORDER a later signature cannot authorize an unsigned first Gemini call', async () => {
+test('CTX-NATIVE-SIGNATURE-ORDER the pinned SDK bypasses its validator for unsigned replay while real signatures stay attached to their own calls', async () => {
   const original = history('gemini');
   original[2].talos_provider_state.model = 'gemini-3.8-flash';
   const signed = original[2].talos_provider_state.content.at(-1);
@@ -75,7 +83,10 @@ test('CTX-NATIVE-SIGNATURE-ORDER a later signature cannot authorize an unsigned 
   original[2].tool_calls.unshift({ ...call, id: 'unsigned' });
   original.splice(3, 0, { role: 'tool', tool_call_id: 'unsigned', content: 'first result' });
   const prepared = prepareProviderContext({ messages: original, provider: 'gemini', model: 'gemini-3.8-flash' });
+  assert.deepEqual(prepared.warnings, ['CTX_GEMINI_SIGNATURE_MISSING']);
   const { body } = await buildPreparedProviderRequest({ messages: prepared.messages, model: { provider: 'gemini', model: 'gemini-3.8-flash' } });
-  assert.ok(!JSON.stringify(body).includes('skip_thought_signature_validator'));
-  assert.ok(!JSON.stringify(body).includes('functionCall'));
+  const serialized = JSON.stringify(body);
+  assert.ok(serialized.includes('functionCall'));
+  assert.ok(serialized.includes('real-signature'));
+  assert.ok(serialized.includes('skip_thought_signature_validator'));
 });

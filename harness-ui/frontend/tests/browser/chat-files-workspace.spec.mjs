@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { createServer } from 'node:http';
-import { mkdirSync, mkdtempSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -35,7 +36,8 @@ test('CHAT-FILES-WORKSPACE: drop uploads original bytes before exposing the real
     if (path === `/api/v1/sessions/${SESSION_ID}/chat-files` && request.method() === 'POST') {
       uploads.push({ bytes: [...request.postDataBuffer()], name: request.headers()['x-talos-file-name'] });
       return route.fulfill({ status: 201, contentType: 'application/json',
-        body: JSON.stringify({ ok: true, data: { tipo: 'file', nome: 'report.bin', percorso: 'allegati/report.bin', bytes: BYTES.length } }) });
+        body: JSON.stringify({ ok: true, data: { tipo: 'file', nome: 'report.bin', percorso: 'allegati/report.bin', bytes: BYTES.length,
+          assoluto: 'C:\\ses\\allegati\\report.bin' } }) });
     }
     if (path === `/api/v1/sessions/${SESSION_ID}/resume` && request.method() === 'POST') {
       sent.push(JSON.parse(request.postData()));
@@ -64,7 +66,10 @@ test('CHAT-FILES-WORKSPACE: drop uploads original bytes before exposing the real
 });
 
 function assertMessageHasPath(value) {
-  expect(value.messaggio).toContain('allegati/report.bin');
+  /* ⛔ BUG-20 (05/10/2026): il modello deve ricevere il percorso ASSOLUTO — il relativo `allegati/<nome>`
+   * non è risolvibile quando la radice della sessione non è la base del file (Full access → radice del disco)
+   * o la base è una copia usa-e-getta ripulita. */
+  expect(value.messaggio).toContain('C:\\ses\\allegati\\report.bin');
   expect(value.messaggio).not.toContain('file allegato: report.bin\n');
 }
 
@@ -110,6 +115,13 @@ test('CHAT-FILES-REAL-BROWSER: drop reaches the real session workspace and survi
     expect(recovered.ok).toBe(true);
     expect(recovered.bytes.toString('utf8')).toBe(contents);
     expect((await leggiTestoLimitato(workspace, 'allegati/report.txt')).testo).toBe(contents);
+    /* ⭐ BUG-20 (06/10/2026): l'upload reale passa per l'helper VERIFICATO — il lock SHA256 scritto dalla
+     * build deve esistere e combaciare coi byte dell'exe appena usato (verifica di sola lettura: nessuna
+     * esecuzione alla cieca, nessun fallback silenzioso). */
+    const eseguibileHelper = fileURLToPath(new URL('../../../native/talos-chat-upload.exe', import.meta.url));
+    const improntaHelper = createHash('sha256').update(readFileSync(eseguibileHelper)).digest('hex');
+    expect(readFileSync(`${eseguibileHelper}.sha256`, 'utf8'),
+      'lock SHA256 assente o non allineato all\'exe eseguito: l\'upload reale è partito senza verifica dei byte').toContain(improntaHelper);
     await page.locator('#composerInput').fill('Leggi il file');
     const sent = page.waitForResponse((response) => /\/sessions\/[^/]+\/(?:resume|queue)$/u.test(new URL(response.url()).pathname), { timeout: 5000 });
     await page.locator('#composerInput').press('Enter');
@@ -117,7 +129,12 @@ test('CHAT-FILES-REAL-BROWSER: drop reaches the real session workspace and survi
     expect(sentResponse.url()).toContain(`/sessions/${sessionId}/resume`);
     expect(sentResponse.status(), JSON.stringify(await sentResponse.json())).toBe(200);
     await expect.poll(() => runs.length).toBe(2);
-    expect(runs[1].task.consegna).toContain('allegati/report.txt');
+    /* ⛔ BUG-20: il testo entro tetto viaggia COL messaggio (blocco `--- nome (assoluto) ---`), e la
+     * consegna nomina il file col suo assoluto — non col relativo cieco. */
+    const assoluto = join(realpathSync(workspace), 'allegati', 'report.txt');
+    expect(runs[1].task.consegna).toContain(assoluto);
+    expect(runs[1].task.consegna).toContain('--- report.txt (');
+    expect(runs[1].task.consegna).toContain('Prova testuale € dal file trascinato.');
     await page.reload();
     expect((await registry.scaricaFile(sessionId, 'allegati/report.txt')).bytes.toString('utf8')).toBe(contents);
   } finally {

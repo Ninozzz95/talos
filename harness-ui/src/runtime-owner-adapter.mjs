@@ -17,7 +17,7 @@ import { parseRuntimeOwnerSnapshot } from './runtime-owner-contract.mjs';
 import { risolviDestinazioneModello, separaFonteModello, FONTI_MODELLO, validaFallbackProviders } from './model-destination.mjs';
 import { REGISTRO_FORNITORI, ID_MOTORI_LOCALI_OPENAI, idPerWire } from './provider-registry.mjs';
 import { classificaErroreDiCorsa } from './research-orchestrator.mjs';
-import { leggiAttesaRichiestaDalFornitore, erroreEsitoProviderIncerto, consumoPubblico, marcaRifiutoProvider } from './provider-retry.mjs';
+import { leggiAttesaRichiestaDalFornitore, leggiAttesaResetDalCorpo, erroreEsitoProviderIncerto, consumoPubblico, marcaRifiutoProvider } from './provider-retry.mjs';
 import { normalizzaUsage, scontoDaCache } from './usage-cache.mjs'; // 12/09, P-B: i nomi della cache sono uno per fornitore, il lettore uno solo
 import { nativeProviderResponse, stripNativeMetadata } from './native-provider-adapter.mjs';
 import { preparaRichiestaCompatibile, OpenAiCompatibleRuntimeError, aliasGrafiaRagionamento, livelloRagionamentoMinimo, livelloRagionamentoPiuVicino } from './openai-compatible-runtime.mjs'; // P-D (12/09): Z.AI accetta solo alcuni livelli di ragionamento — BUG-18 gen.2: alias, minimo e clamp in UNA scala condivisa (D5)
@@ -28,6 +28,9 @@ import { rispostaAgenteAcp } from './acp-agent.mjs';
 // BC-48 A · sezioni di progetto nel canale degli originali, prima della richiesta.
 import { trovaIstruzioniDiProgetto, trovaRadiceProgetto } from './istruzioni-di-progetto.mjs';
 import { collegaSezioniAiContextHooks } from './context-provider-adapter.mjs';
+// ⭐ 06/10/2026 — la ricarica della memoria post-compact (opzione A + C-b, ricerca 5×5×5×5 §6.4): la
+// compattazione LOCALE riceve lo stesso punto di aggancio del kernel, con lo stesso blocco di fatti.
+import { PREFISSO_SINTESI_RECINTATA, costruisciBloccoFatti } from './kernel/ricarica-post-compact.mjs';
 // P0 · punto 7 (16/09): il failsafe di inattività e il dispatcher stanno in una porta sola.
 import {
   SilenzioDelFornitoreError,
@@ -38,7 +41,14 @@ import {
 } from './generation-idle.mjs';
 
 const ENDPOINT_OPENROUTER = 'https://openrouter.ai/api/v1/chat/completions';
-const RICHIESTA_DI_RIASSUNTO = 'Summarize the conversation, keeping the decisions, files and results that matter for the work.';
+/* ⭐ 06/10/2026 — C-a della cura post-compact (ricerca 5×5×5×5 §6.4, zero-cost): le stesse regole verbatim
+ * del kernel, qui su una riga. Le richieste pendenti e le azioni irreversibili (commit/push CON hash) NON
+ * si affidano al caso del riassunto (opencode `summary.txt:10-11`; prompt di codex `compact/prompt.md`). */
+const RICHIESTA_DI_RIASSUNTO = [
+  'Summarize the conversation, keeping the decisions, files and results that matter for the work.',
+  'Any question left unanswered to the person must be quoted VERBATIM; every irreversible action taken',
+  '(commit, push, publish, delete) must be named VERBATIM with its identifier — the full commit hash.',
+].join('\n');
 const GIRI_PRIMA_DI_COMPATTARE = 12;
 const OPENROUTER_IDLE_MS_PREDEFINITO = 60_000;
 const SSE_BUFFER_MASSIMO = 1_048_576;
@@ -92,8 +102,8 @@ export const FONTI_DI_MOTORE_LOCALE = Object.freeze(new Set([...idPerWire('local
  * nessun elenco di modelli che reggono gli attrezzi (owner 11/09: «non forziamo nulla»).
  */
 /* ⛔ BUG-7 cura2, revisore C2-2 (05/10/2026): esportato perché la prova di cablaggio (tests/bc79-2) asserisca
-   l'IDENTITÀ del messaggio, non una copia fragile del suo testo. */
-export const AVVISO_MOTORE_SENZA_ATTREZZI = 'Questo modello non usa gli attrezzi: qui resta una chat. Può rispondere, non può leggere file né eseguire comandi.';
+   l'IDENTITÀ del messaggio, non una copia fragile del suo testo. K4b: frase inglese + chiave per la persona. */
+export const AVVISO_MOTORE_SENZA_ATTREZZI = Object.freeze({ testo: 'This model does not use tools: this remains a chat. It can answer, but it cannot read files or run commands.', testoChiave: 'server.runtime.notice.noTools' });
 
 /**
  * ⛔⛔⛔ BC-79.2 — LA RIPROVA SENZA ATTREZZI, E PERCHÉ NON SI LEGGE IL TESTO DELL'ERRORE.
@@ -244,7 +254,7 @@ export async function chiamaConRitentaLocale({
   throw errore;
 }
 
-export async function compattaConversazioneLocale(messaggi, chiamaModello) {
+export async function compattaConversazioneLocale(messaggi, chiamaModello, fontiRicarica = null) {
   let risposta;
   let usage = null;
   try {
@@ -254,11 +264,24 @@ export async function compattaConversazioneLocale(messaggi, chiamaModello) {
   }
   const riassunto = String(risposta?.content ?? '').trim();
   if (!riassunto) return { messaggi, compattato: false, usage };
+  /* ⭐ 06/10/2026 — opzione A: come `compattaConversazione` del kernel, stesso recinto e stesso blocco di
+   * fatti fusi nello STESSO messaggio (un solo cache-break). Fail-soft per costruzione: senza fonti il
+   * messaggio resta quello di prima (contratto K3); con fonti che falliscono, il blocco lo dice onesto. */
+  let corpo = riassunto;
+  if (fontiRicarica) {
+    let blocco = null;
+    try {
+      blocco = await costruisciBloccoFatti(fontiRicarica);
+    } catch (errore) {
+      blocco = { testo: `(post-compaction facts block unavailable: ${String(errore?.message ?? errore ?? 'unknown').slice(0, 160)})`, fontiLette: [], fontiNonLette: [] };
+    }
+    corpo = `${PREFISSO_SINTESI_RECINTATA}\n\n${riassunto}\n\n${blocco.testo}`;
+  }
   return {
     messaggi: [
       messaggi[0],
       messaggi[1],
-      { role: 'user', content: `[conversation compacted at turn ${GIRI_PRIMA_DI_COMPATTARE}: what follows is a summary, not the original history]\n\n${riassunto}` },
+      { role: 'user', content: `[conversation compacted at turn ${GIRI_PRIMA_DI_COMPATTARE}: what follows is a summary, not the original history]\n\n${corpo}` },
     ],
     compattato: true,
     usage,
@@ -581,6 +604,20 @@ async function preparaRispostaSse(response, { inattivitaMs, controller, userSign
 }
 
 /**
+ * Decisione 14: `provider.ignore` con l'elenco degli esclusi aggiunto a quello che la richiesta portava già (unione, senza doppioni).
+ * Lo STESSO oggetto se non c'è niente da aggiungere: chi confronta per identità vede che il corpo non è cambiato.
+ */
+export function unisciEsclusi(provider, esclusi) {
+  const lista = Array.isArray(esclusi) ? esclusi.filter((s) => typeof s === 'string' && s) : [];
+  if (!lista.length) return provider;
+  const base = provider && typeof provider === 'object' && !Array.isArray(provider) ? provider : {};
+  const gia = Array.isArray(base.ignore) ? base.ignore.filter((s) => typeof s === 'string') : [];
+  const ignore = [...new Set([...gia, ...lista])];
+  if (ignore.length === gia.length && Array.isArray(base.ignore) && provider === base) return provider;
+  return { ...base, ignore };
+}
+
+/**
  * Trasporto OpenRouter desktop: sostituisce il timeout totale hard-coded del
  * runtime owner con un limite di inattività osservabile sullo stream SSE.
  * Il fetch resta provider-specifico e confinato in questo adapter.
@@ -596,6 +633,13 @@ export function creaFetchOpenRouterResiliente(fetchDiRete = fetch, {
   inattivitaMsFn = () => leggiInattivitaGenerazioneMs(),
   modelCapabilityFn = async () => null,
   userSignal = null,
+  /*
+   * ⛔ Decisione 14 dell'owner (08/10/2026 sera): i fornitori a valle che la persona ha escluso, mandati a OpenRouter come
+   *   `provider.ignore` (docs «Provider Routing», 08/10). Solo QUI, il trasporto di OpenRouter: un altro fornitore non conosce
+   *   il campo (Hermes lo mette solo nel suo plugin OpenRouter, `plugins/model-providers/openrouter/__init__.py:140`). Letti a
+   *   ogni richiesta: un'esclusione appena aggiunta vale dalla chiamata dopo, senza riavviare niente.
+   */
+  esclusiFn = async () => [],
 } = {}) {
   if (typeof fetchDiRete !== 'function') throw new TypeError('fetchDiRete must be a function.');
   return async (url, init = undefined) => {
@@ -616,7 +660,11 @@ export function creaFetchOpenRouterResiliente(fetchDiRete = fetch, {
           ? await Promise.resolve(modelCapabilityFn(body.model)).catch(() => null)
           : null;
         const reasoning = normalizzaReasoningPerModello(body?.reasoning, capability);
-        if (reasoning !== body?.reasoning) nextInit = { ...init, body: JSON.stringify({ ...body, reasoning }) };
+        const esclusi = await Promise.resolve(esclusiFn()).catch(() => []);
+        const provider = unisciEsclusi(body?.provider, esclusi);
+        if (reasoning !== body?.reasoning || provider !== body?.provider) {
+          nextInit = { ...init, body: JSON.stringify({ ...body, reasoning, ...(provider ? { provider } : {}) }) };
+        }
       } catch {
         // Body non JSON: il confine Fetch resta trasparente.
       }
@@ -744,7 +792,7 @@ function creaFetchInstradata(fetchDiRete = fetch, { risolvi = risolviDestinazion
     } catch (erroreRisoluzione) {
       if (erroreRisoluzione?.code !== 'LOCAL_RUNTIME_NOT_READY' || typeof dipendenze.avviaLocale !== 'function') throw erroreRisoluzione;
       const { modelloRemoto } = separaFonteModello(corpo.model);
-      await dipendenze.avviaLocale(modelloRemoto); // ⛔ se l'avvio stesso fallisce, il SUO errore (non quello generico "non acceso") arriva a chi ha chiamato
+      await dipendenze.avviaLocale(modelloRemoto); // ⛔ se l'avvio stesso fallisce, il SUO errore (non quello generico non acceso) arriva a chi ha chiamato
       destinazione = risolvi(corpo.model, dipendenze); // dopo un avvio riuscito questo non deve più lanciare: se lancia ancora, è un errore vero da mostrare, non da inghiottire
     }
     /*
@@ -778,7 +826,7 @@ function creaFetchInstradata(fetchDiRete = fetch, { risolvi = risolviDestinazion
       opzioni = { ...opzioni, body: JSON.stringify(corpo) };
     }
     // P-L · il corpo del kernel incontra ACP solo qui; stop e chiusura seguono la risposta.
-    if (destinazione.esterno) return rispostaAgenteAcp({ runtime: destinazione.runtime, body: corpo, signal: opzioni.signal });
+    if (destinazione.esterno) return rispostaAgenteAcp({ runtime: destinazione.runtime, body: corpo, signal: opzioni.signal, onAvviso });
     // P-L · fine instradamento agente esterno.
     if (destinazione.native) return sorveglia(await nativeProviderResponse({ provider: destinazione.fonte, model: destinazione.modelloRemoto, apiKey: destinazione.apiKey, baseURL: destinazione.baseURL, body: corpo, fetchFn: fetchDiRete, signal: opzioni.signal }));
     if (corpo.messages?.some(m => m.talos_provider_state)) {
@@ -795,9 +843,14 @@ function creaFetchInstradata(fetchDiRete = fetch, { risolvi = risolviDestinazion
        dirlo (`onAvviso`) si preferisce fermarsi prima della rete con una frase in italiano, invece di
        spedire in silenzio una richiesta diversa da quella chiesta (fail-closed, come nel rapporto). */
     const adattata = preparaRichiestaCompatibile(destinazione.fonte, { ...corpo, model: destinazione.modelloRemoto });
-    for (const avviso of adattata.avvisi) {
-      if (typeof onAvviso !== 'function') throw new OpenAiCompatibleRuntimeError(avviso, 'PROVIDER_REASONING_UNSUPPORTED');
-      await onAvviso(avviso);
+    for (const [indice, avviso] of adattata.avvisi.entries()) {
+      const frase = adattata.frasiAvvisi?.[indice];
+      if (typeof onAvviso !== 'function') {
+        const errore = new OpenAiCompatibleRuntimeError(avviso, 'PROVIDER_REASONING_UNSUPPORTED');
+        if (frase?.testoChiave) { errore.chiave = frase.testoChiave; errore.params = frase.testoParams; }
+        throw errore;
+      }
+      await onAvviso(frase ?? avviso);
     }
     /* ⛔ BUG-18 (05/10, owner): le NOTE di normalizzazione (livelli adattati, campi non inviati)
        sono telemetria locale: al journal della sessione con `{ nota: true }`, MAI in bolla in
@@ -982,6 +1035,23 @@ function classificaLimiteOpenRouter(testo) {
   return sconosciuto;
 }
 
+/*
+ * ⛔ Decisione 14, nota 2 della review del bugfixer (08/10/2026 notte) — ESCLUSI TUTTI I FORNITORI DI UN MODELLO.
+ *   Misurato con la chiave vera: con `provider.ignore` che copre i 30 fornitori di z-ai/glm-5.3-flash OpenRouter risponde
+ *   404 `{"error":{"message":"All providers have been ignored…","metadata":{"failed_routing_step":"Filter by Ignored
+ *   Providers"}}}`, e la persona leggeva «The provider did not accept the request.»: niente le diceva che la causa era il SUO
+ *   elenco. ⇒ Si riconosce dal dato STRUTTURATO (il passo d'instradamento fallito), mai dalla prosa, come i 402 qui sopra.
+ *   Non è colpa della chiave (niente panchina) né transitorio (niente ritenti, niente riserva): si rimedia nelle impostazioni.
+ */
+function classificaTuttiEsclusiOpenRouter(testo) {
+  if (Buffer.byteLength(testo, 'utf8') >= 16_384) return null;
+  let corpo;
+  try { corpo = JSON.parse(testo); } catch { return null; }
+  return corpo?.error?.metadata?.failed_routing_step === 'Filter by Ignored Providers'
+    ? { code: 'OPENROUTER_ALL_PROVIDERS_EXCLUDED', classe: 'tutti-esclusi', transitorio: false }
+    : null;
+}
+
 function erroreFornitorePubblico(classificazione, stato = null) {
   const messaggi = {
     traffico: 'Too much traffic at the provider.', credenziale: 'Credential rejected by the provider.',
@@ -995,6 +1065,7 @@ function erroreFornitorePubblico(classificazione, stato = null) {
     'limite-chiave': 'The spending limit of the key has been reached.',
     'richiesta-costosa': 'The estimated cost of the request exceeds the available budget.',
     'limite-credito': 'The service rejected the request because of an unspecified spending limit.',
+    'tutti-esclusi': 'Every provider of this model is in your excluded list on OpenRouter.',
   };
   const e = new Error(messaggi[classificazione.classe] ?? 'The provider did not accept the request.');
   return Object.assign(e, { code: 'PROVIDER_REQUEST_ERROR', stato, ...classificazione, limitatoDalFornitore: classificazione.classe === 'traffico' });
@@ -1130,14 +1201,20 @@ export function creaFetchMultiProvider(fetchDiRete = fetch, {
       }
       const panchina = providerStore.elencaPool(fonte).find(v => v.causa);
       const classificazione = classificaErroreDiCorsa({ messaggio: ({traffico:'HTTP 429',credenziale:'HTTP 401',credito:'insufficient credit',rete:'network', 'timeout-fornitore':'timeout', 'guasto-fornitore':'upstream error', 'flusso-interrotto':'unexpected eof'})[panchina?.causa] ?? '' });
-      contesto.errore = erroreFornitorePubblico(classificazione, classificazione.classe === 'traffico' ? 429 : classificazione.transitorio ? 503 : 401);
+      /* ⛔⛔ BUG-25 (06/10/2026) — QUI NASCEVA IL SINTOMO DELL'OWNER. Il fast-fail della panchina
+       * sintetizzava `transitorio ? 503 : 401`: per il credito usciva un 401 che a valle
+       * `classificaErroreDiCorsa` rileggeva come `credenziale` — «la chiave non è valida» — per
+       * un credito esaurito che NON invalida nulla. Lo stato è la causa, per nome:
+       * credito⇒402, traffico⇒429, credenziale⇒401 (vero), altro⇒503. */
+      contesto.errore = erroreFornitorePubblico(classificazione, classificazione.classe === 'traffico' ? 429
+        : classificazione.classe === 'credito' ? 402 : classificazione.transitorio ? 503 : 401);
       return new Response(contesto.errore.message, { status: contesto.errore.stato });
     }
     contesto.errore = null;
     contesto.rispostaAccettata = false;
     contesto.headersRitenta = {};
     contesto.scelta = scelta; contesto.fonte = fonte;
-    const segnala = async (classificatoDalTesto, headers, stato) => {
+    const segnala = async (classificatoDalTesto, headers, stato, attesaCorpo = null) => {
       /* P2 (ledger Codex 28/09, `SUBENTRO-KERNEL-P2-2026-09-28`; riportata sulla base di RETRY01-09 il 30/09 col sì
        * dell'owner). Un 401 senza chiave inviata, o un 403 con una chiave FACOLTATIVA, non dicono che una chiave è stata
        * rifiutata: diventano «accesso», non transitorio, senza avviso di chiave e senza panchina. Fonti rilette il
@@ -1147,7 +1224,7 @@ export function creaFetchMultiProvider(fetchDiRete = fetch, {
         ? { classe: 'accesso', transitorio: false }
         : classificatoDalTesto;
       contesto.errore = erroreFornitorePubblico(classificazione, stato);
-      const attesa = leggiAttesaRichiestaDalFornitore(headers); // G02-10: retry-after-ms vince su retry-after
+      const attesa = leggiAttesaRichiestaDalFornitore(headers) ?? attesaCorpo; // G02-10: retry-after-ms vince su retry-after; BUG-25: poi la grammatica del corpo
       if (attesa !== null) {
         // Only a normalized delay leaves the adapter; never arbitrary provider headers. The milliseconds travel too.
         const limitata = Math.min(attesa, Number.MAX_SAFE_INTEGER);
@@ -1155,20 +1232,35 @@ export function creaFetchMultiProvider(fetchDiRete = fetch, {
       }
       // A spending limit does not invalidate a credential. Never rotate keys to bypass it.
       if (fonte === 'openrouter' && stato === 402) return;
-      const ultimaChiave = stato === 429 && scelta && !providerStore.elencaPool(fonte)
+      // Nemmeno l'elenco degli esclusi della persona: la chiave è sana, e ruotarla o sospenderla non cambierebbe niente.
+      if (classificazione.classe === 'tutti-esclusi') return;
+      /* ⛔ BUG-25 (06/10/2026) — il credito con una scadenza DICHIARATA (header o corpo) diventa un
+       * rifiuto marcato che il kernel ritenta sulla STESSA chiave (parity Claude Code: header-driven,
+       * attesa dichiarata vince; il marker non tocca OpenRouter-402 strutturato, RETRY09 resta fermo). */
+      contesto.creditoDichiarato = classificazione.classe === 'credito' && attesa !== null;
+      const altreChiaviDisponibili = scelta && providerStore.elencaPool(fonte)
         .some(v => v.impronta !== scelta.impronta && v.stato === 'disponibile');
       const guastoHttp = contesto.guastiHttp && headers && (
         (stato >= 500 && stato <= 599 && classificazione.classe === 'guasto-fornitore')
-        || (stato === 429 && classificazione.classe === 'traffico' && ultimaChiave));
+        || (stato === 429 && classificazione.classe === 'traffico' && !altreChiaviDisponibili));
       if (scelta && guastoHttp) {
         // The kernel owns the retry budget; suspending its last key would turn retries into local errors.
         contesto.guastiHttp.set(scelta.impronta, (contesto.guastiHttp.get(scelta.impronta) ?? 0) + 1);
-      } else if (scelta && classificazione.classe !== 'accesso') providerStore.mettiInPanchina(fonte, scelta.impronta, { classe: classificazione.classe, headers });
+      } else if (scelta && classificazione.classe !== 'accesso'
+        /* ⛔ BUG-25 — la panchina a metà giro è SOLO rotazione: con un'altra chiave disponibile
+         * serve (il ritento del kernel userà quella); a chiave unica il credito NON panchina mai
+         * qui — il giro esaurisce il SUO budget contro il fornitore vero e la panchina (se il
+         * fornitore dichiara una scadenza) arriva post-giro in `eseguiConFallback`. Benching ora
+         * trasformava il ritento successivo del kernel in una risposta LOCALE inventata (il 401
+         * finto «la chiave non è valida»: il sintomo dell'owner). */
+        && !(classificazione.classe === 'credito' && !altreChiaviDisponibili)) {
+        providerStore.mettiInPanchina(fonte, scelta.impronta, { classe: classificazione.classe, headers });
+      }
       if (scelta && classificazione.classe === 'credenziale' && typeof onAvviso === 'function') {
         /* ⛔ BUG-7-cura2 (04/10/2026): RIPETIBILE di proposito — la dedup degli avvisi ora dura tutta la
            sessione (agent-service, Set su consensiSessione), ma due chiavi DIVERSE dello stesso pool
            rifiutate in giri diversi sono due notizie operative, non la stessa notizia. */
-        await onAvviso(`Una chiave di ${record.etichetta} è stata rifiutata: controlla Fornitori e accessi.`, { ripetibile: true });
+        await onAvviso({ testo: `A ${record.etichetta} key was rejected: check Providers and access.`, testoChiave: 'server.runtime.notice.keyRejected', testoParams: { provider: record.etichetta } }, { ripetibile: true });
       }
     };
     const rete = async (target, init) => {
@@ -1199,8 +1291,10 @@ export function creaFetchMultiProvider(fetchDiRete = fetch, {
         let testo = '';
         try { testo = await leggiDettaglioRifiuto(response, 16_385); } catch { /* lo stato resta disponibile */ }
         const classificazione = fonte === 'openrouter' && response.status === 402
-          ? classificaLimiteOpenRouter(testo) : classificaGuasto({ message: testo }, response.status);
-        await segnala(classificazione, response.headers, response.status);
+          ? classificaLimiteOpenRouter(testo)
+          : (fonte === 'openrouter' && response.status === 404 && classificaTuttiEsclusiOpenRouter(testo)) || classificaGuasto({ message: testo }, response.status);
+        // BUG-25: gli header dicono per primi; solo se tacciono, le grammatiche di reset nel corpo (parity Hermes).
+        await segnala(classificazione, response.headers, response.status, leggiAttesaResetDalCorpo(testo));
         return new Response(JSON.stringify({ error: { message: contesto.errore.message } }), { status: response.status, headers: { 'Content-Type': 'application/json', ...contesto.headersRitenta } });
       } catch (error) {
         if (opzioni.signal?.aborted && opzioni.signal.reason?.name !== 'TimeoutError') throw opzioni.signal.reason;
@@ -1216,9 +1310,15 @@ export function creaFetchMultiProvider(fetchDiRete = fetch, {
     }, onAvviso, instradaOpenRouter: true, inattivitaGenerazioneMs, sorvegliaCorpo, memoriaAttrezzi });
     try {
       const risposta = await instradata(url, opzioni);
-      // Keep Response semantics for direct callers and let local adapters negotiate first.
-      if (contesto.guastiHttp && !risposta.ok && contesto.errore?.transitorio === false) throw contesto.errore;
-      return marcaRifiutoProvider(risposta, contesto.errore?.classe);
+      /* ⛔ BUG-25 — il rifiuto-credito CON scadenza dichiarata NON si lancia come eccezione: si
+       * restituisce marcato, perché il kernel (che possiede il budget di retry) lo ritenta sulla
+       * STESSA chiave onorando l'attesa dichiarata. Senza dichiarazione la strada resta quella di
+       * sempre: eccezione onesta, nessun retry, nessuna panchina (parity Hermes: non si bruciano
+       * richieste — e comunque il credito non invalida la chiave). */
+      if (contesto.guastiHttp && !risposta.ok && contesto.errore?.transitorio === false && !contesto.creditoDichiarato) throw contesto.errore;
+      const motivoRifiuto = contesto.creditoDichiarato ? 'credito'
+        : contesto.errore?.classe && contesto.errore.classe !== 'credito' ? contesto.errore.classe : null;
+      return marcaRifiutoProvider(risposta, motivoRifiuto);
     }
     catch (error) {
       /*
@@ -1236,9 +1336,11 @@ export function creaFetchMultiProvider(fetchDiRete = fetch, {
       // P-K — fine
       // Gli SDK nativi lanciano sugli HTTP non riusciti: ricondurli alla stessa
       // risposta permette al kernel di esaurire il proprio budget anche qui.
-      if (contesto.guastiHttp && contesto.errore?.transitorio === false) throw contesto.errore;
+      if (contesto.guastiHttp && contesto.errore?.transitorio === false && !contesto.creditoDichiarato) throw contesto.errore;
       if (contesto.errore?.stato) return marcaRifiutoProvider(new Response(contesto.errore.message,
-        { status: contesto.errore.stato, headers: contesto.headersRitenta }), contesto.errore.classe);
+        { status: contesto.errore.stato, headers: contesto.headersRitenta }),
+      contesto.creditoDichiarato ? 'credito'
+        : contesto.errore.classe === 'credito' ? null : contesto.errore.classe);
       if (contesto.errore) throw contesto.errore;
       throw error;
     }
@@ -1324,8 +1426,22 @@ export function creaFetchMultiProvider(fetchDiRete = fetch, {
             });
           }
           if (!incerto && !contesto.errore && contesto.scelta) providerStore.mettiInPanchina(destinazione.provider, contesto.scelta.impronta, { classe: classificazione.classe });
+          /* ⛔ BUG-25 — la panchina-credito CON scadenza DICHIARATA arriva POST-giro (mai inventare
+           * risposte locali a giro in corso) e vale fino allo scadere dichiarato, anche a chiave
+           * unica: è un fatto del fornitore, non una stima (parity Hermes «reset_at overrides»).
+           * ⛔ SOLO per il credito ONESTO (non-strutturato): `creditoDichiarato` resta falso per
+           * OpenRouter-402 strutturato (RETRY09: limiti permanenti, niente panchina, niente retry).
+           * Senza dichiarazione NESSUNA panchina: l'errore si ripete onesto e la chiave resta
+           * utilizzabile. */
+          if (!incerto && classificazione.classe === 'credito' && contesto.creditoDichiarato === true
+            && contesto.scelta && contesto.headersRitenta['Retry-After-Ms']) {
+            providerStore.mettiInPanchina(destinazione.provider, contesto.scelta.impronta, { classe: 'credito', headers: new Headers(contesto.headersRitenta) });
+          }
           const usage = consumoPubblico(pulito.usage);
           if (typeof onConsumoFornitore === 'function') await onConsumoFornitore({ tipo: 'consumo-fornitore', ...destinazione, usage, costoDichiarato: usage?.cost ?? null, esito: classificazione.classe === 'traffico' ? 'traffico' : 'interrotto' });
+          // BUG-25: la scadenza dichiarata dal fornitore viaggia con l'errore onesto (scheda quota, bottone «riprendi»).
+          if (Number.isFinite(error?.retryAfterMs)) pulito.retryAfterMs = error.retryAfterMs;
+          else if (contesto.creditoDichiarato === true && contesto.headersRitenta['Retry-After-Ms']) pulito.retryAfterMs = Number(contesto.headersRitenta['Retry-After-Ms']);
           if (incerto || !classificazione.transitorio || (destinazione.provider === 'openrouter' && contesto.errore?.stato === 402)) throw pulito;
           let prossima = null;
           while (++indice < catena.length) {
@@ -1336,9 +1452,9 @@ export function creaFetchMultiProvider(fetchDiRete = fetch, {
           }
           if (!prossima) throw pulito;
           const messaggio = classificazione.classe === 'traffico'
-            ? `Il fornitore ${REGISTRO_FORNITORI[destinazione.provider].etichetta} limita il traffico: continuo con ${REGISTRO_FORNITORI[prossima.provider].etichetta} · modello ${prossima.model}`
-            : `Il fornitore ${REGISTRO_FORNITORI[destinazione.provider].etichetta} non risponde: continuo con ${REGISTRO_FORNITORI[prossima.provider].etichetta} · modello ${prossima.model}`;
-          await onCambioFornitore({ tipo: 'cambio-fornitore', precedente: destinazione, effettivo: prossima, classe: classificazione.classe, rispostaInterrotta, messaggio });
+            ? `Provider ${REGISTRO_FORNITORI[destinazione.provider].etichetta} is limiting traffic: continuing with ${REGISTRO_FORNITORI[prossima.provider].etichetta} · model ${prossima.model}`
+            : `Provider ${REGISTRO_FORNITORI[destinazione.provider].etichetta} is not responding: continuing with ${REGISTRO_FORNITORI[prossima.provider].etichetta} · model ${prossima.model}`;
+          await onCambioFornitore({ tipo: 'cambio-fornitore', precedente: destinazione, effettivo: prossima, classe: classificazione.classe, rispostaInterrotta, messaggio, messaggioChiave: classificazione.classe === 'traffico' ? 'server.runtime.notice.trafficFallback' : 'server.runtime.notice.unavailableFallback', messaggioParams: { provider: REGISTRO_FORNITORI[destinazione.provider].etichetta, nextProvider: REGISTRO_FORNITORI[prossima.provider].etichetta, model: prossima.model } });
           opzioni.segnaleStop?.throwIfAborted();
           destinazione = prossima; effettivo = prossima;
           continue;
@@ -1593,6 +1709,10 @@ export function createOwnerRuntimeAdapter({
         },
         modelCapabilityFn,
         userSignal: input?.segnaleStop ?? null,
+        esclusiFn: async () => { // decisione 14: gli esclusi si leggono a ogni richiesta, dalla stessa preferenza del tempo massimo
+          const runtime = await Promise.resolve(openRouterRuntimeFn()).catch(() => null);
+          return Array.isArray(runtime?.esclusi) ? runtime.esclusi : [];
+        },
       });
       /*
        * ⛔ L'ORDINE conta: il multi-provider sta PIÙ ESTERNO della resilienza
@@ -1750,9 +1870,13 @@ export function createOwnerRuntimeAdapter({
       if (specifier) return richiama('chiamaConRitenta', options);
       return chiamaConRitentaLocale(options);
     },
-    async compattaConversazione(messaggi, chiamaModello) {
-      if (specifier) return richiama('compattaConversazione', messaggi, chiamaModello);
-      return compattaConversazioneLocale(messaggi, chiamaModello);
+    /* ⭐ 06/10/2026 — la ricarica post-compact (opzione A, ricerca 5×5×5×5 §6.4): il TERZO argomento
+     * opzionale (le fonti dichiarate per il blocco di fatti freschi) passa a ENTRAMBI i rami. Ramo
+     * motore: `richiama` è una chiamata JS diretta, un runtime che non conosce il terzo argomento
+     * lo ignora — additive, il contratto a due argomenti resta byte per byte valido. */
+    async compattaConversazione(messaggi, chiamaModello, fontiRicarica = null) {
+      if (specifier) return richiama('compattaConversazione', messaggi, chiamaModello, fontiRicarica);
+      return compattaConversazioneLocale(messaggi, chiamaModello, fontiRicarica);
     },
     forgeToolPrefix: FORGE_PREFISSO_NOME_TOOL,
   });

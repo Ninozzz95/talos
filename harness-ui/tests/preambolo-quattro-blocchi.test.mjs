@@ -155,8 +155,8 @@ test('BC48-A-BC07: un AGENTS.md da 200 KB senza sezioni è omesso intero e dichi
     assert.ok(esito.byte <= TETTO_BYTE_PREDEFINITO, `⛔ il tetto è una promessa: ${esito.byte} byte contro ${TETTO_BYTE_PREDEFINITO}`);
     assert.deepEqual(esito.tagliati, []);
     assert.deepEqual(esito.omessi, ['AGENTS.md']);
-    assert.match(esito.testo, /⚠ Tetto delle istruzioni/);
-    assert.match(esito.testo, /leggile con `leggi`/);
+    assert.match(esito.testo, /⚠ (?:Instruction cap|Tetto delle istruzioni)/);
+    assert.match(esito.testo, /leggile con `leggi`|read them with `leggi`/);
     assert.ok(!esito.testo.includes('# Inizio riconoscibile'), 'nessuna testa isolata');
     assert.ok(!esito.testo.includes('# Fine riconoscibile'), 'nessuna coda isolata');
   } finally { await rimuoviCartellaDiProvaAttesa(base); }
@@ -171,7 +171,7 @@ test('BC-07, AL CONTRARIO: una cartella SENZA AGENTS.md/CLAUDE.md non ha il bloc
     const preambolo = await contestoDelProgetto({ cartella: base, deps: { eseguiGit: gitFinto } });
     assert.ok(preambolo, 'il preambolo esiste lo stesso: scheda + mappa');
     assert.equal(preambolo.blocchi.istruzioni, null);
-    assert.ok(!preambolo.testo.includes('Istruzioni di questo progetto'));
+    assert.ok(!preambolo.testo.includes('Istruzioni di questo progetto') && !preambolo.testo.includes('Project instructions'));
   } finally { await rimuoviCartellaDiProvaAttesa(base); }
 });
 
@@ -205,7 +205,7 @@ test('BC-07, AL CONTRARIO: quando il tetto morde si tolgono INTERI i file generi
     const esito = testoIstruzioniDiProgetto(trovati, { tetto: 10_000 });
     assert.deepEqual(esito.usati, ['pacchetto/AGENTS.md'], '⛔ sopravvive il più VICINO al lavoro');
     assert.deepEqual(esito.omessi, ['AGENTS.md']);
-    assert.match(esito.testo, /NON ti ho mostrato `AGENTS\.md`/, '⛔ un avviso che non dice CHE COSA manca non è azionabile');
+    assert.match(esito.testo, /NON ti ho mostrato `AGENTS\.md`|did NOT show `AGENTS\.md`/, '⛔ un avviso che non dice CHE COSA manca non è azionabile');
     assert.ok(esito.byte <= 10_000);
   } finally { await rimuoviCartellaDiProvaAttesa(base); }
 });
@@ -270,9 +270,9 @@ test('BC-07, AL CONTRARIO: se il tetto sulle cartelle morde, il testo lo DICHIAR
     const mappa = await costruisciMappaCartelle({ radice: base, tettoCartelle: 10 });
     assert.equal(mappa.troncato, true);
     const testo = testoMappaCartelle(mappa, { radice: base });
-    assert.match(testo, /MAPPA INCOMPLETA/);
-    assert.match(testo, /Fine di una mappa INCOMPLETA/);
-    assert.ok(!testo.includes('albero COMPLETO'), '⛔ una mappa tagliata non può dirsi completa');
+    assert.match(testo, /(?:INCOMPLETE MAP|MAP(?:PA)? INCOMPLET[EA])/);
+    assert.match(testo, /Fine di una mappa INCOMPLETA|End of an INCOMPLETE map/);
+    assert.ok(!testo.includes('albero COMPLETO') && !testo.includes('COMPLETE tree'), '⛔ una mappa tagliata non può dirsi completa');
   } finally { await rimuoviCartellaDiProvaAttesa(base); }
 });
 
@@ -281,7 +281,7 @@ test('BC-07: una mappa completa lo dichiara, e non porta nessun avviso', async (
   try {
     const mappa = await costruisciMappaCartelle({ radice: base });
     const testo = testoMappaCartelle(mappa, { radice: base });
-    assert.match(testo, /albero COMPLETO/);
+    assert.match(testo, /albero COMPLETO|COMPLETE tree/);
     assert.ok(!testo.includes('INCOMPLETA'));
   } finally { await rimuoviCartellaDiProvaAttesa(base); }
 });
@@ -317,7 +317,7 @@ test('BC-07: se il preambolo È cambiato, si APPENDE dichiarando che sostituisce
   const coda = aggiornamentoInCoda({ storia, testo: nuovo });
   assert.ok(coda);
   assert.ok(coda.startsWith(INIZIO_AGGIORNAMENTO));
-  assert.match(coda, /SOSTITUISCE/);
+  assert.match(coda, /SOSTITUISCE|REPLACES/);
   assert.ok(coda.endsWith(nuovo), 'il preambolo nuovo va per intero in coda al messaggio');
   /* ⛔ E il PREFISSO non si tocca: la storia che è entrata esce identica. Questa è la differenza
      fra appendere e riscrivere, e la ragione per cui esiste tutta questa cura. */
@@ -398,8 +398,8 @@ test('BC-07: la mappa entra nel tetto di TOKEN togliendo profondita, e lo DICHIA
     assert.ok(stretta.profonditaUsata < 3, `⛔ il tetto deve mordere (profondita usata ${stretta.profonditaUsata})`);
     assert.ok(stretta.token <= 300 || stretta.profonditaUsata === 1);
     assert.equal(stretta.tagliataInProfondita, true);
-    assert.match(stretta.testo, /MAPPA INCOMPLETA/, '⛔ una mappa tagliata non puo sembrare intera');
-    assert.match(stretta.testo, /Fine di una mappa INCOMPLETA/);
+    assert.match(stretta.testo, /(?:INCOMPLETE MAP|MAP(?:PA)? INCOMPLET[EA])/, '⛔ una mappa tagliata non puo sembrare intera');
+    assert.match(stretta.testo, /Fine di una mappa INCOMPLETA|End of an INCOMPLETE map/);
     /* ⛔ Cio che resta deve essere VERO E CHIUSO: tutte le cartelle fino alla profondita usata,
        nessuna esclusa. E' la differenza fra tagliare in profondita e tagliare in ordine alfabetico. */
     const attese = mappa.cartelle.filter((c) => c.livello <= stretta.profonditaUsata).length;
@@ -415,7 +415,7 @@ test('BC-07, AL CONTRARIO: una mappa che sta gia nel tetto non viene toccata ne 
     const resa = mappaEntroIlTetto(mappa, { radice: base, tettoToken: TETTO_TOKEN_MAPPA_PREDEFINITO });
     assert.equal(resa.tagliataInProfondita, false);
     assert.equal(resa.testo, testoMappaCartelle(mappa, { radice: base }), '⛔ nessuna differenza di un byte: il prefisso deve restare stabile');
-    assert.match(resa.testo, /albero COMPLETO/);
+    assert.match(resa.testo, /albero COMPLETO|COMPLETE tree/);
   } finally { await rimuoviCartellaDiProvaAttesa(base); }
 });
 

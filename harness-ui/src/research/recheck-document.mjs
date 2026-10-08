@@ -33,32 +33,32 @@ export function talosResearchRecheckDocument(question, recheck, runId) {
   const standing = talosResearchRecheckStanding(recheck);
 
   return [
-    `# Ricontrollo — ${question}`,
+    `# Recheck — ${question}`,
     '',
-    `Data del ricontrollo: ${recheck.at}`,
+    `Recheck date: ${recheck.at}`,
     '',
-    `Fonti ricontrollate: ${standing.total}`,
-    `- intatte: ${standing.intact}`,
-    `- cambiate dal giorno della ricerca: ${standing.changed}`,
-    `- non rispondono più: ${standing.unreachable}`,
+    `Sources rechecked: ${standing.total}`,
+    `- intact: ${standing.intact}`,
+    `- changed since research day: ${standing.changed}`,
+    `- no longer responding: ${standing.unreachable}`,
     standing.passagesLost > 0
-      ? `\n**${standing.passagesLost} passaggi citati non sono più nella loro fonte.**`
-      : '\nTutti i passaggi citati sono ancora nelle loro fonti.',
+      ? `\n**${standing.passagesLost} cited passages are no longer in their source.**`
+      : '\nAll cited passages are still in their sources.',
     standing.unreachable > 0
-      ? '\nLe fonti che non rispondono più restano leggibili qui: il testo estratto\nè stato conservato il giorno della ricerca.'
+      ? '\nSources that no longer respond remain readable here: the extracted text\nwas preserved on the day of research.'
       : '',
     '',
-    '## Fonte per fonte',
+    '## Source by source',
     ...recheck.sources.map((source) => {
       const head = source.state === 'unreachable'
-        ? `non risponde più${source.reason ? ` (${source.reason})` : ''}`
+        ? `no longer responds${source.reason ? ` (${source.reason})` : ''}`
         : source.state === 'intact'
-          ? `intatta (${Math.round((source.survived ?? 0) * 100)}% del testo di allora è ancora lì)`
-          : `cambiata (${Math.round((source.survived ?? 0) * 100)}% del testo di allora è ancora lì)`;
+          ? `intact (${Math.round((source.survived ?? 0) * 100)}% of original text is still there)`
+          : `changed (${Math.round((source.survived ?? 0) * 100)}% of original text is still there)`;
       const quotes = source.passagesLost > 0
-        ? `  ${source.passagesLost} passaggi citati non ci sono più, ${source.passagesStanding} reggono ancora`
+        ? `  ${source.passagesLost} cited passages are gone, ${source.passagesStanding} still hold`
         : source.passagesStanding > 0
-          ? `  i ${source.passagesStanding} passaggi citati reggono ancora`
+          ? `  the ${source.passagesStanding} cited passages still hold`
           : '';
       return [`- ${source.title} — ${source.url}`, `  ${head}`, quotes].filter(Boolean).join('\n');
     }),

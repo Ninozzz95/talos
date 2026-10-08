@@ -1,5 +1,5 @@
-import { createHash } from 'node:crypto';
-import { mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { createHash, randomBytes } from 'node:crypto';
+import { copyFile, mkdir, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -50,15 +50,105 @@ async function writeBuildManifest(outputDir, metafile, mode) {
   return { manifest, metafile };
 }
 
+/*
+ * ⛔⛔ 08/10/2026 — LA CARTELLA NON SI SVUOTA MAI SOTTO CHI LEGGE.
+ *   Prima qui c'era `rm(output)` e poi esbuild la riempiva in qualche secondo: in quella finestra ogni lettore trovava una
+ *   `dist` mezza vuota. Misurato nella suite browser intera: almeno dieci spec ricostruiscono `dist` nel loro `beforeAll`
+ *   (browser-p0:54, anteprima-tema, azioni-risposta, chat-lunga-p0, colonna-destra-p0, f009-utente-wsl, flussi-separati,
+ *   lab-faccette, p0bis-c, parita-sezioni), e gli altri worker leggevano `build-manifest.json` che non c'era: 11 ENOENT a 8
+ *   worker, 48 a 6, cioè rossi «instabili» che passavano da soli. Lo stesso buco c'era per il server del 4174 durante una
+ *   consegna (build e poi copia in `public/`).
+ * ⇒ Si costruisce in una cartella d'appoggio DENTRO l'uscita (`.costruzione-<pid>-<caso>`, già ignorata da git con `dist/`),
+ *   poi ogni file si PUBBLICA con una rinomina: chi legge trova il file vecchio o quello nuovo, mai un buco. Il manifesto va
+ *   per ULTIMO (chi lo legge trova già tutti i file che elenca); poi si tolgono solo i file che la build nuova non ha più.
+ * ⛔ Windows: rinominare sopra un file aperto da un altro processo (il server che lo sta servendo, un antivirus) dà
+ *   EPERM/EBUSY/EACCES. Si ritenta con attese crescenti per circa un secondo, come graceful-fs e write-file-atomic (Node.js
+ *   PR #22014 e graceful-fs, letti l'08/10/2026), e in ultimo si copia sopra (`copyFile`).
+ * ⛔ Due build insieme (due worker) scrivono gli stessi file dallo stesso sorgente: l'ordine fra le loro rinomine non cambia
+ *   il risultato, e la pulizia di ognuna salta le cartelle d'appoggio delle altre.
+ */
+const PREFISSO_APPOGGIO = '.costruzione-';
+const ERRORI_DA_RITENTARE = new Set(['EPERM', 'EBUSY', 'EACCES']);
+
+async function rinominaConRitentativi(da, a) {
+  let attesa = 10;
+  for (let tentativo = 0; ; tentativo += 1) {
+    try { await rename(da, a); return; } catch (errore) {
+      if (!ERRORI_DA_RITENTARE.has(errore?.code)) throw errore;
+      if (tentativo >= 7) { await copyFile(da, a); await rm(da, { force: true }); return; } // ~1,3 s di attese in tutto
+      await new Promise((fatto) => setTimeout(fatto, attesa));
+      attesa *= 2;
+    }
+  }
+}
+
+async function pubblicaCostruzione(appoggio, uscita) {
+  const nuovi = await listFiles(appoggio);
+  const ordine = [...nuovi.filter((f) => f !== 'build-manifest.json'), ...nuovi.filter((f) => f === 'build-manifest.json')];
+  for (const relativo of ordine) {
+    const destinazione = path.join(uscita, ...relativo.split('/'));
+    await mkdir(path.dirname(destinazione), { recursive: true });
+    await rinominaConRitentativi(path.join(appoggio, ...relativo.split('/')), destinazione);
+  }
+  const tenuti = new Set(nuovi);
+  for (const voce of await readdir(uscita, { withFileTypes: true })) {
+    if (voce.name.startsWith(PREFISSO_APPOGGIO)) continue; // l'appoggio di questa build o di un'altra in corso
+    const assoluto = path.join(uscita, voce.name);
+    const presenti = voce.isDirectory() ? (await listFiles(assoluto)).map((f) => `${voce.name}/${f}`) : [voce.name];
+    for (const relativo of presenti) {
+      if (!tenuti.has(relativo)) await rm(path.join(uscita, ...relativo.split('/')), { force: true });
+    }
+  }
+}
+
+/*
+ * ⛔ Revisione del bugfixer (08/10/2026, GIALLO): una build UCCISA a metà (un worker di Playwright fermato dal timeout
+ *   dentro il `beforeAll` che ricostruisce, cioè il caso normale nella suite) lasciava il suo appoggio per sempre: la pulizia
+ *   salta tutti i nomi col prefisso, e `aggiorna-4174.ps1:74` copia `dist\*` intero in `public/` (su Windows il punto davanti
+ *   non nasconde niente) ⇒ un bundle vecchio servito, fuori dal manifesto. Misurato con la sua sonda: build uccisa a
+ *   120/250/400/700 ms, l'appoggio c'era ancora dopo la build successiva.
+ * ⇒ All'inizio di ogni build si tolgono gli appoggi ORFANI: quelli il cui processo non c'è più (`process.kill(pid, 0)` →
+ *   ESRCH; EPERM vuol dire che esiste) e, per un pid riusato da un altro processo, quelli più vecchi di dieci minuti — una
+ *   build intera dura pochi secondi. L'appoggio di una build sorella viva resta.
+ */
+const ETA_MASSIMA_APPOGGIO_MS = 10 * 60 * 1000;
+function processoVivo(pid) {
+  try { process.kill(pid, 0); return true; } catch (errore) { return errore?.code === 'EPERM'; }
+}
+async function togliAppoggiOrfani(uscita) {
+  for (const voce of await readdir(uscita, { withFileTypes: true })) {
+    if (!voce.isDirectory() || !voce.name.startsWith(PREFISSO_APPOGGIO)) continue;
+    const pid = Number(voce.name.slice(PREFISSO_APPOGGIO.length).split('-')[0]);
+    const assoluto = path.join(uscita, voce.name);
+    let vecchio = false;
+    try { vecchio = Date.now() - (await stat(assoluto)).mtimeMs > ETA_MASSIMA_APPOGGIO_MS; } catch { continue; }
+    if (pid === process.pid && !vecchio) continue; // un'altra build di questo stesso processo, in corso
+    if (Number.isSafeInteger(pid) && pid > 0 && processoVivo(pid) && !vecchio) continue;
+    await rm(assoluto, { recursive: true, force: true });
+  }
+}
+
 export async function buildFrontend({
   entryPoint,
   htmlTemplate,
   outputDir,
   mode = 'production',
 } = {}) {
-  const output = assertSafeOutput(outputDir);
-  await rm(output, { recursive: true, force: true });
-  await mkdir(output, { recursive: true });
+  const uscita = assertSafeOutput(outputDir);
+  await mkdir(uscita, { recursive: true });
+  await togliAppoggiOrfani(uscita);
+  const appoggio = path.join(uscita, `${PREFISSO_APPOGGIO}${process.pid}-${randomBytes(4).toString('hex')}`);
+  await mkdir(appoggio);
+  try {
+    const costruita = await costruisciIn(appoggio, { entryPoint, htmlTemplate, mode });
+    await pubblicaCostruzione(appoggio, uscita);
+    return costruita;
+  } finally {
+    await rm(appoggio, { recursive: true, force: true });
+  }
+}
+
+async function costruisciIn(output, { entryPoint, htmlTemplate, mode }) {
   const result = await esbuild.build({
     absWorkingDir: FRONTEND_ROOT,
     /* ⛔ `avvio` è un entry a parte e non un pezzo di `app`: deve arrivare PRIMA del primo

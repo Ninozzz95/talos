@@ -1,4 +1,5 @@
 import { t as traduci, tn, linguaCorrenteDiT } from './lingua.js';
+import { testoDelCampo } from './testo-server.js';
 /* Date e numeri nella lingua dell'interfaccia (italiano → it-IT, inglese → en-US), letta a ogni uso. */
 const localeUI = () => (linguaCorrenteDiT() === 'en' ? 'en-US' : 'it-IT');
 import { creaAvanzamentoRicerca } from './ricerca-avanzamento.js'; // 24/09/2026: barra + fase e conteggi
@@ -291,7 +292,8 @@ export function frasiVoce(voce) {
   const grezza = typeof voce?.domanda === 'string' && voce.domanda.trim()
     ? voce.domanda.trim()
     : (typeof voce?.titolo === 'string' && voce.titolo.trim() ? voce.titolo.trim() : '');
-  const motivo = typeof voce?.motivo === 'string' && voce.motivo.trim() ? voce.motivo.trim() : null;
+  const motivoTradotto = testoDelCampo(voce, 'motivo');
+  const motivo = typeof motivoTradotto === 'string' && motivoTradotto.trim() ? motivoTradotto.trim() : null;
   return {
     domanda: grezza || traduci('sezioni.research.noQuestion'),
     parola: stato.parola,
@@ -919,7 +921,7 @@ function vistaAffermazioni(doc, voce, lettura) {
     const testa = nodo(doc, 'div', 'td-affermazione-testa');
     testa.append(nodo(doc, 'span', 'td-affermazione-numero', String(indice + 1)), tag(doc, verdetto.parola, verdetto.tono));
     blocco.append(testa, nodo(doc, 'p', 'td-affermazione-testo', entrata?.text || traduci('sezioni.research.claims.noText')));
-    if (entrata?.checks?.supportReason) blocco.append(nodo(doc, 'p', 'td-subtle', entrata.checks.supportReason));
+    if (entrata?.checks?.supportReason) blocco.append(nodo(doc, 'p', 'td-subtle', testoDelCampo(entrata.checks, 'supportReason')));
     /*
      * ⛔ Il passaggio È la porzione citata: sul mobile nasce come `source.text.slice(span.from,
      *   span.to)` (`researchVerification.ts:424`), quindi non c'è niente da evidenziare dentro —
@@ -1127,10 +1129,13 @@ export function esportazioniRicerca(voce, lettura = null, dettaglio = null) {
  * L'indirizzo della rotta di esportazione. ⛔ Scritto UNA volta, qui: un indirizzo ricomposto
  *   dentro un gestore di clic è un indirizzo che diverge al primo cambiamento del contratto.
  */
-export function indirizzoEsportazione(sessionId, ricercaId, formato, tono = null) {
+export function indirizzoEsportazione(sessionId, ricercaId, formato, tono = null, lingua = linguaCorrenteDiT()) {
   const base = `/api/v1/sessions/${encodeURIComponent(String(sessionId ?? ''))}/research/${encodeURIComponent(String(ricercaId ?? ''))}/esporta`;
   const query = new URLSearchParams({ formato: String(formato) });
   if (tono) query.set('tono', tono);
+  /* ⛔ K4b (07/10/2026, owner): il file esce nella lingua dell'interfaccia. Il server conosce solo it/en: la pseudo-lingua
+     del cancello e ogni altra valgono inglese, la lingua sorgente. */
+  query.set('lingua', lingua === 'it' ? 'it' : 'en');
   return `${base}?${query.toString()}`;
 }
 
@@ -1252,7 +1257,7 @@ export function montaEsitoRiverifica(doc, stato) {
   if (quando) testa.append(nodo(doc, 'span', 'td-subtle', traduci('sezioni.research.recheckPanel.checkedOn', { article: articoloData(esito.fattaAlle), when: quando })));
   blocco.append(testa, nodo(doc, 'p', 'td-prose', frasiRiverifica(esito)));
   /* ⛔ L'avvertenza esiste solo quando `misurabile` è falso: stamparla sempre la farebbe ignorare. */
-  if (esito.avvertenza) blocco.append(nodo(doc, 'p', 'td-subtle', esito.avvertenza));
+  if (esito.avvertenza) blocco.append(nodo(doc, 'p', 'td-subtle', testoDelCampo(esito, 'avvertenza')));
   if (esito.troncata) blocco.append(nodo(doc, 'p', 'td-subtle', traduci('sezioni.research.recheckPanel.truncated', { read: esito.fonti?.length ?? 0, total: esito.fontiTotali })));
   for (const fonte of Array.isArray(esito.fonti) ? esito.fonti : []) {
     const parole = statoFonteRiverifica(fonte?.stato);
@@ -1392,7 +1397,7 @@ function vistaPiano(doc, dettaglio) {
       alto.append(tag(doc, esito.parola, esito.tono));
       alto.append(nodo(doc, 'strong', '', PASSI_RICERCA.get(passo?.kind) || traduci('sezioni.research.step.fallback')));
       riga.append(alto);
-      const dettagli = [frasiSpesa(passo?.spend), passo?.error ? traduci('sezioni.research.plan.stopped', { error: passo.error }) : null].filter(Boolean);
+      const dettagli = [frasiSpesa(passo?.spend), passo?.error ? traduci('sezioni.research.plan.stopped', { error: testoDelCampo(passo, 'error') }) : null].filter(Boolean);
       /* ⛔ `attempts` si scrive solo quando è più di uno: «1 tentativo» è rumore, «3 tentativi» è
          la ragione per cui quel passo è costato tre volte tanto. */
       if (passo?.attempts > 1) dettagli.push(traduci('sezioni.research.plan.attempts', { n: passo.attempts }));

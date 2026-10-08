@@ -34,9 +34,9 @@ test('DOMANDE-TITOLO: `header` facoltativo, ≤ 12 caratteri, conservato; troppo
   const [prima, , terza] = validaDomandeUtente(DOMANDE);
   assert.equal(prima.header, 'Fix');
   assert.equal(Object.hasOwn(terza, 'header'), false, 'assente resta assente: la UI lo ricava dall\'id');
-  assert.throws(() => validaDomandeUtente([{ ...DOMANDE[0], header: 'Thirteen char' }]), /header supera il limite di 12/u);
-  assert.throws(() => validaDomandeUtente([{ ...DOMANDE[0], header: 7 }]), /header deve essere testo/u);
-  assert.throws(() => validaDomandeUtente([{ ...DOMANDE[0], header: '   ' }]), /header non può essere vuoto/u);
+  assert.throws(() => validaDomandeUtente([{ ...DOMANDE[0], header: 'Thirteen char' }]), /header exceeds the limit of 12/u);
+  assert.throws(() => validaDomandeUtente([{ ...DOMANDE[0], header: 7 }]), /header must be text/u);
+  assert.throws(() => validaDomandeUtente([{ ...DOMANDE[0], header: '   ' }]), /header cannot be empty/u);
 });
 
 test('DOMANDE-ANTEPRIMA: `preview` per opzione, spazi in testa conservati, a-capo finale tolto, limiti di caratteri e righe', () => {
@@ -45,9 +45,9 @@ test('DOMANDE-ANTEPRIMA: `preview` per opzione, spazi in testa conservati, a-cap
   assert.equal(Object.hasOwn(prima.options[1], 'preview'), false);
   const conAnteprima = (preview) => [{ ...DOMANDE[0], options: [{ ...DOMANDE[0].options[0], preview }, DOMANDE[0].options[1]] }];
   assert.equal(validaDomandeUtente(conAnteprima('  indented\r\n  code'))[0].options[0].preview, '  indented\n  code');
-  assert.throws(() => validaDomandeUtente(conAnteprima('\n\n')), /preview non può essere vuota/u);
-  assert.throws(() => validaDomandeUtente(conAnteprima('x'.repeat(LIMITI_DOMANDA_UTENTE.anteprimaMax + 1))), /supera il limite di 2000 caratteri/u);
-  assert.throws(() => validaDomandeUtente(conAnteprima(Array.from({ length: 21 }, (_, i) => `line ${i}`).join('\n'))), /supera il limite di 20 righe/u);
+  assert.throws(() => validaDomandeUtente(conAnteprima('\n\n')), /preview cannot be empty/u);
+  assert.throws(() => validaDomandeUtente(conAnteprima('x'.repeat(LIMITI_DOMANDA_UTENTE.anteprimaMax + 1))), /exceeds the limit of 2000 characters/u);
+  assert.throws(() => validaDomandeUtente(conAnteprima(Array.from({ length: 21 }, (_, i) => `line ${i}`).join('\n'))), /exceeds the limit of 20 lines/u);
   assert.notEqual(fingerprintDomanda(DOMANDE), fingerprintDomanda(conAnteprima('+  other')), 'l\'anteprima è parte di ciò che la persona ha visto');
 });
 
@@ -55,7 +55,7 @@ test('DOMANDE-PRIMA: domande e risposte senza i campi nuovi restano valide come 
   const vecchie = [{ id: 'scelta', question: 'Quale strada?', options: [{ label: 'A', description: 'a' }, { label: 'B', description: 'b' }] }];
   assert.deepEqual(validaDomandeUtente(vecchie), vecchie);
   assert.deepEqual(validaRispostaDomanda(vecchie, { status: 'answered', answers: { scelta: 'A' } }), { status: 'answered', answers: { scelta: 'A' } });
-  assert.throws(() => validaRispostaDomanda(DOMANDE, { status: 'answered', answers: { fix: 'Yes' } }), /una risposta per ogni domanda non saltata/u);
+  assert.throws(() => validaRispostaDomanda(DOMANDE, { status: 'answered', answers: { fix: 'Yes' } }), /one answer for each question that is not skipped/u);
 });
 
 test('DOMANDE-SALTATA-E-NOTA: una domanda saltata da sola e una nota per risposta, in campi separati', () => {
@@ -63,15 +63,15 @@ test('DOMANDE-SALTATA-E-NOTA: una domanda saltata da sola e una nota per rispost
   assert.deepEqual(validaRispostaDomanda(DOMANDE, risposta), risposta);
   assert.deepEqual(validaRispostaDomanda(DOMANDE, { ...risposta, notes: { verify: 'not now' } }).notes, { verify: 'not now' }, 'una nota anche su una domanda saltata');
   for (const [sbagliata, motivo] of [
-    [{ ...risposta, skipped: ['verify', 'verify'] }, /duplicati/u],
-    [{ ...risposta, skipped: ['nope'] }, /sconosciute/u],
-    [{ ...risposta, skipped: ['verify', 'fix'] }, /risposta ed essere saltata/u],
-    [{ status: 'answered', answers: {}, skipped: ['fix', 'verify', 'commit'] }, /almeno una risposta/u],
-    [{ ...risposta, notes: { nope: 'x' } }, /notes contiene id di domande sconosciute/u],
-    [{ ...risposta, notes: { fix: 'x'.repeat(LIMITI_DOMANDA_UTENTE.notaMax + 1) } }, /supera il limite di 1000/u],
-    [{ ...risposta, notes: 'x' }, /notes deve essere un oggetto/u],
-    [{ status: 'skipped', skipped: ['fix'] }, /status skipped non deve contenere skipped/u],
-    [{ status: 'cancelled', notes: { fix: 'x' } }, /status cancelled non deve contenere notes/u],
+    [{ ...risposta, skipped: ['verify', 'verify'] }, /duplicate/u],
+    [{ ...risposta, skipped: ['nope'] }, /unknown/u],
+    [{ ...risposta, skipped: ['verify', 'fix'] }, /both answered and skipped/u],
+    [{ status: 'answered', answers: {}, skipped: ['fix', 'verify', 'commit'] }, /at least one answer/u],
+    [{ ...risposta, notes: { nope: 'x' } }, /notes contains ids of unknown questions/u],
+    [{ ...risposta, notes: { fix: 'x'.repeat(LIMITI_DOMANDA_UTENTE.notaMax + 1) } }, /exceeds the limit of 1000/u],
+    [{ ...risposta, notes: 'x' }, /notes must be an object/u],
+    [{ status: 'skipped', skipped: ['fix'] }, /status skipped must not contain skipped/u],
+    [{ status: 'cancelled', notes: { fix: 'x' } }, /status cancelled must not contain notes/u],
   ]) assert.throws(() => validaRispostaDomanda(DOMANDE, sbagliata), motivo, JSON.stringify(sbagliata));
 });
 

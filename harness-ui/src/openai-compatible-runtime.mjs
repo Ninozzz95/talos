@@ -17,6 +17,11 @@ export class OpenAiCompatibleRuntimeError extends Error {
   }
 }
 
+function aggiungiAvviso(avvisi, frasiAvvisi, frase) {
+  avvisi.push(frase.testo);
+  frasiAvvisi.push(frase);
+}
+
 function fail(message, code = 'RUNTIME_INVALID') {
   throw new OpenAiCompatibleRuntimeError(message, code);
 }
@@ -54,6 +59,7 @@ function fail(message, code = 'RUNTIME_INVALID') {
  *     agent/reasoning_effort.py:120-160), allineato a runtime-owner-adapter.mjs e alla regola
  *     owner 24/09 «mai un costo più alto di quello scelto»;
  *   · alias canonico xhigh≡max: l'etichetta «max» della UI È «xhigh» (app.js:7340, 7390-7391).
+ *     ⛔ 08/10/2026: la UI ha un «Max» vero; l'alias resta per le scelte salvate prima (vedi sotto).
  * Il meccanismo resta UNO per ogni provider: le differenze stanno nei DATI del registro
  * (ragionamento.livelli / livelliRagionamento, con fonte+data e gate di validazione), mai in
  * rami per fornitore.
@@ -63,7 +69,11 @@ const SCALA_LIVELLI_RAGIONAMENTO = Object.freeze(['minimal', 'low', 'medium', 'h
 /* ⛔ BUG-18: alias canonico xhigh≡max — stesso livello con due grafie (la UI chiama «max»
    ciò che vale «xhigh», app.js:7340/7390): restituisce la grafia documentata del modello,
    o null. Funzione UNICA anche per runtime-owner-adapter.mjs: le due scale gemelle non
-   devono più portarsi dietro due alias (D5, malattia «tredici copie»). */
+   devono più portarsi dietro due alias (D5, malattia «tredici copie»).
+   ⛔⛔ 08/10/2026 — L'ALIAS RESTA NEI DUE VERSI, deciso dall'owner. Dall'08/10 la pillola ha un «Max» vero (manda `max`)
+   e chiama `xhigh` «Molto alto», e mostra solo i livelli che il modello dichiara: una scelta NUOVA non arriva mai qui
+   come `xhigh` su un modello che ha solo `max`. Ci arrivano le sessioni e le preferenze salvate PRIMA, quando «Massimo»
+   mandava `xhigh` (BUG-18 del 05/10: su glm-5.3-flash finivano in silenzio a «high»). Owner 08/10: «Restano a Max». */
 export function aliasGrafiaRagionamento(richiesto, livelli) {
   const alias = richiesto === 'xhigh' ? 'max' : richiesto === 'max' ? 'xhigh' : null;
   return alias != null && Array.isArray(livelli) && livelli.includes(alias) ? alias : null;
@@ -110,16 +120,16 @@ export function preparaRichiestaCompatibile(provider, corpo) {
   if (record?.richiestaCompatibile) return preparaProfiloCompatibile(record, corpo);
   if (record?.ragionamento?.formato !== 'thinking') return { corpo, avvisi: [], note: [] };
   const oggetto = v => v !== null && typeof v === 'object' && !Array.isArray(v);
-  if (!oggetto(corpo) || typeof corpo.model !== 'string') fail(`Richiesta ${record.etichetta} non valida.`);
-  if (corpo.extra_body !== undefined && !oggetto(corpo.extra_body)) fail(`Opzioni ${record.etichetta} non valide.`);
+  if (!oggetto(corpo) || typeof corpo.model !== 'string') fail(`${record.etichetta} request is not valid.`);
+  if (corpo.extra_body !== undefined && !oggetto(corpo.extra_body)) fail(`${record.etichetta} options are not valid.`);
   const unito = { ...corpo, ...(corpo.extra_body ?? {}) };
   const { extra_body, reasoning, reasoning_effort, thinking, ...resto } = unito;
-  if (thinking !== undefined && (!oggetto(thinking) || !['enabled', 'disabled'].includes(thinking.type))) fail(`Controllo del ragionamento ${record.etichetta} non valido.`);
+  if (thinking !== undefined && (!oggetto(thinking) || !['enabled', 'disabled'].includes(thinking.type))) fail(`${record.etichetta} reasoning control is not valid.`);
   const id = corpo.model.startsWith(`${provider}:`) ? corpo.model.slice(provider.length + 1) : corpo.model;
   const modello = record.modelliNoti.find(m => m.id === id);
   const opzioni = modello?.ragionamento;
-  const avvisi = [];
-  const note = []; /* ⛔ BUG-18: telemetria di normalizzazione del ragionamento, mai chat. */
+  const avvisi = [], frasiAvvisi = [];
+  const note = []; /* ⛔ BUG-18: telemetria di normalizzazione del ragionamento, mai chat. K4b: classe L, inglese semplice. */
   const effort = reasoning_effort ?? reasoning?.effort;
   const richiesto = typeof effort === 'string' ? effort.trim().toLowerCase() : effort;
   const preferenza = thinking?.type ?? (reasoning?.enabled === false || richiesto === 'none' ? 'disabled' : reasoning?.enabled === true || richiesto != null ? 'enabled' : undefined);
@@ -129,11 +139,11 @@ export function preparaRichiestaCompatibile(provider, corpo) {
     let tipo = preferenza;
     if (!opzioni.thinking.includes(tipo)) {
       tipo = 'enabled';
-      note.push(`${record.etichetta} · ${modello.nome}: il modello non consente di disattivare il ragionamento; resta attivo.`);
+      note.push(`${record.etichetta} · ${modello.nome}: this model cannot disable reasoning; it remains active.`);
     }
     risultato.thinking = { type: tipo, ...(typeof thinking?.clear_thinking === 'boolean' ? { clear_thinking: thinking.clear_thinking } : {}) };
   } else if (preferenza !== undefined && richiesto == null) {
-    note.push(`${record.etichetta}: controllo del ragionamento non documentato per questo modello; non inviato.`);
+    note.push(`${record.etichetta}: reasoning control is not documented for this model; not sent.`);
   }
   if (richiesto != null) {
     /* ⛔ BUG-7 (04/10, owner): il livello chiesto si ADATTA al modello, non si butta.
@@ -159,7 +169,7 @@ export function preparaRichiestaCompatibile(provider, corpo) {
           const vicino = livelloRagionamentoPiuVicino(richiesto, opzioni?.livelli);
           if (vicino != null) {
             inviato = vicino;
-            note.push(`${record.etichetta} · ${modello?.nome ?? corpo.model}: il livello «${richiesto}» non è documentato per questo modello; inviato «${vicino}», il più vicino.`);
+            note.push(`${record.etichetta} · ${modello?.nome ?? corpo.model}: the level "${richiesto}" is not documented for this model; sent "${vicino}", the nearest.`);
           }
         }
       }
@@ -170,30 +180,30 @@ export function preparaRichiestaCompatibile(provider, corpo) {
       const minimo = livelloRagionamentoMinimo(opzioni?.livelli);
       if (minimo != null) {
         risultato.reasoning_effort = minimo;
-        note.push(`${record.etichetta} · ${modello?.nome ?? corpo.model}: il modello non consente di disattivare il ragionamento; inviato «${minimo}», il minimo documentato (il predefinito del fornitore costa di più).`);
+        note.push(`${record.etichetta} · ${modello?.nome ?? corpo.model}: this model cannot disable reasoning; sent "${minimo}", the lowest documented level (the provider default costs more).`);
       }
     } else if (inviato != null) {
       risultato.reasoning_effort = inviato;
     } else if (!irrilevante && richiesto !== 'none') {
-      note.push(`${record.etichetta}: livello di ragionamento richiesto non previsto dal profilo P-D per questo modello; non inviato.`);
+      note.push(`${record.etichetta}: the requested reasoning level is not supported by the P-D profile for this model; not sent.`);
     }
   }
-  return { corpo: risultato, avvisi, note };
+  return { corpo: risultato, avvisi, note, ...(frasiAvvisi.length ? { frasiAvvisi } : {}) };
 }
 
 // P-K — OpenAI v1 ufficiale: nessuna deduzione di famiglia dal nome della distribuzione Azure.
 function preparaRichiestaCloud(record, corpo) {
   const oggetto = v => v !== null && typeof v === 'object' && !Array.isArray(v);
-  if (!oggetto(corpo) || typeof corpo.model !== 'string' || !corpo.model.trim()) fail(`Richiesta ${record.etichetta} non valida.`);
+  if (!oggetto(corpo) || typeof corpo.model !== 'string' || !corpo.model.trim()) fail(`${record.etichetta} request is not valid.`);
   const risultato = { ...corpo }, avvisi = [], note = [];
   if (corpo.reasoning !== undefined) {
-    if (!oggetto(corpo.reasoning)) fail(`Opzioni di ragionamento ${record.etichetta} non valide.`);
+    if (!oggetto(corpo.reasoning)) fail(`${record.etichetta} reasoning options are not valid.`);
     delete risultato.reasoning;
     if (corpo.reasoning.effort !== undefined) {
-      if (corpo.reasoning_effort !== undefined && corpo.reasoning_effort !== corpo.reasoning.effort) fail(`Opzioni di ragionamento ${record.etichetta} in conflitto.`);
+      if (corpo.reasoning_effort !== undefined && corpo.reasoning_effort !== corpo.reasoning.effort) fail(`${record.etichetta} reasoning options conflict.`);
       risultato.reasoning_effort = corpo.reasoning.effort;
     }
-    if (Object.keys(corpo.reasoning).some(k => k !== 'effort')) note.push(`${record.etichetta}: queste opzioni di ragionamento non sono previste dal collegamento.`);
+    if (Object.keys(corpo.reasoning).some(k => k !== 'effort')) note.push(`${record.etichetta}: these reasoning options are not supported by the connection.`);
   }
   // I limiti di generazione restano quelli chiesti; compatibilità finale dipendente dal modello.
   return { corpo: risultato, avvisi, note };
@@ -203,7 +213,7 @@ function preparaRichiestaCloud(record, corpo) {
 /** P-G, 12/09/2026: sole differenze documentate nel record, senza confronti sui fornitori. */
 function preparaProfiloCompatibile(record, corpo) {
   const oggetto = v => v !== null && typeof v === 'object' && !Array.isArray(v);
-  if (!oggetto(corpo) || typeof corpo.model !== 'string' || !corpo.model.trim()) fail(`Richiesta ${record.etichetta} non valida.`);
+  if (!oggetto(corpo) || typeof corpo.model !== 'string' || !corpo.model.trim()) fail(`${record.etichetta} request is not valid.`);
   const profilo = record.richiestaCompatibile;
   const id = corpo.model.startsWith(`${record.id}:`) ? corpo.model.slice(record.id.length + 1) : corpo.model;
   const modello = Object.hasOwn(profilo.modelli, id) ? profilo.modelli[id] : null;
@@ -212,33 +222,33 @@ function preparaProfiloCompatibile(record, corpo) {
   }
   const risultato = { ...corpo };
   const avvisi = [];
-  const note = []; /* ⛔ BUG-18: telemetria di normalizzazione del ragionamento, mai chat. */
+  const note = []; /* ⛔ BUG-18: telemetria di normalizzazione del ragionamento, mai chat. K4b: classe L, inglese semplice. */
 
   if (modello?.strumentiConFormato === false && corpo.tools != null && corpo.response_format != null) {
-    fail(`${record.etichetta}: questo modello non consente strumenti e formato di risposta vincolato nella stessa richiesta.`);
+    fail(`${record.etichetta}: this model does not allow tools and a constrained response format in the same request.`);
   }
   if (profilo.limiteUscita === 'max_completion_tokens' && Object.hasOwn(corpo, 'max_tokens')) {
     if (corpo.max_tokens != null && corpo.max_completion_tokens != null && corpo.max_completion_tokens !== corpo.max_tokens) {
-      fail(`${record.etichetta}: sono stati indicati due limiti di uscita diversi.`);
+      fail(`${record.etichetta}: two different output limits were given.`);
     }
     risultato.max_completion_tokens = corpo.max_completion_tokens ?? corpo.max_tokens;
     delete risultato.max_tokens;
   }
 
   if (profilo.ragionamento === 'effort' && corpo.reasoning != null) {
-    if (!oggetto(corpo.reasoning)) fail(`Opzioni di ragionamento ${record.etichetta} non valide.`);
+    if (!oggetto(corpo.reasoning)) fail(`${record.etichetta} reasoning options are not valid.`);
     const { effort, enabled, ...altre } = corpo.reasoning;
-    if (effort != null && typeof effort !== 'string') fail(`Livello di ragionamento ${record.etichetta} non valido.`);
-    if (enabled !== undefined && typeof enabled !== 'boolean') fail(`Controllo del ragionamento ${record.etichetta} non valido.`);
+    if (effort != null && typeof effort !== 'string') fail(`${record.etichetta} reasoning level is not valid.`);
+    if (enabled !== undefined && typeof enabled !== 'boolean') fail(`${record.etichetta} reasoning control is not valid.`);
     const richiesto = enabled === false ? 'none' : effort;
     if ((enabled === false && effort != null && effort !== 'none')
       || (richiesto != null && corpo.reasoning_effort != null && corpo.reasoning_effort !== richiesto)) {
-      fail(`${record.etichetta}: sono state indicate preferenze di ragionamento discordanti.`);
+      fail(`${record.etichetta}: conflicting reasoning preferences were given.`);
     }
     delete risultato.reasoning;
     if (richiesto != null) risultato.reasoning_effort = richiesto;
     if (Object.keys(altre).length || (enabled === true && richiesto == null && corpo.reasoning_effort == null)) {
-      note.push(`${record.etichetta}: alcune opzioni di ragionamento non hanno una traduzione documentata; non inviate.`);
+      note.push(`${record.etichetta}: some reasoning options have no documented translation; not sent.`);
     }
   }
   // Un modello futuro o non documentato conserva i parametri: nessuna incompatibilità dedotta.
@@ -254,10 +264,10 @@ function preparaProfiloCompatibile(record, corpo) {
       const vicino = livelloRagionamentoPiuVicino(risultato.reasoning_effort, modello.livelliRagionamento);
       if (vicino != null) {
         risultato.reasoning_effort = vicino;
-        note.push(`${record.etichetta} · ${modello?.nome ?? id}: il livello di ragionamento richiesto non è documentato per questo modello; inviato «${vicino}», il più vicino.`);
+        note.push(`${record.etichetta} · ${modello?.nome ?? id}: the requested reasoning level is not documented for this model; sent "${vicino}", the nearest.`);
       } else {
         delete risultato.reasoning_effort;
-        note.push(`${record.etichetta}: il livello di ragionamento richiesto non è documentato per questo modello; non inviato.`);
+        note.push(`${record.etichetta}: the requested reasoning level is not documented for this model; not sent.`);
       }
     }
   }
@@ -267,7 +277,7 @@ function preparaProfiloCompatibile(record, corpo) {
 /** P-I: controllo binario solo per modelli documentati; non inventa livelli di profondità. */
 function preparaControlloThinking(record, modello, corpo) {
   const oggetto = v => v !== null && typeof v === 'object' && !Array.isArray(v);
-  const invalida = () => fail(`${record.etichetta}: opzioni di ragionamento non valide o discordanti.`);
+  const invalida = () => fail(`${record.etichetta}: invalid or conflicting reasoning options.`);
   if (corpo.extra_body !== undefined && !oggetto(corpo.extra_body)) invalida();
   const risultato = { ...corpo };
   for (const [k, v] of Object.entries(corpo.extra_body ?? {})) {
@@ -296,19 +306,19 @@ function preparaControlloThinking(record, modello, corpo) {
   const preferenze = [reasoning?.enabled, effort === undefined ? undefined : effort !== 'none',
     thinking === undefined ? undefined : thinking.type !== 'disabled', enable_thinking].filter(v => v !== undefined);
   if (new Set(preferenze).size > 1) invalida();
-  const avvisi = [];
-  const note = []; /* ⛔ BUG-18: telemetria di normalizzazione del ragionamento, mai chat. */
+  const avvisi = [], frasiAvvisi = [];
+  const note = []; /* ⛔ BUG-18: telemetria di normalizzazione del ragionamento, mai chat. K4b: classe L, inglese semplice. */
   let attivo = preferenze[0];
   delete risultato.reasoning;
   delete risultato.reasoning_effort;
   delete risultato.thinking;
   delete risultato.enable_thinking;
   if ((effort !== undefined && effort !== 'none') || Object.keys(reasoning ?? {}).some(k => !['enabled', 'effort'].includes(k))) {
-    note.push(`${record.etichetta}: questo modello espone solo l'attivazione del ragionamento; il livello richiesto non viene inviato.`);
+    note.push(`${record.etichetta}: this model only supports switching reasoning on or off; the requested level is not sent.`);
   }
   if (attivo === false && !modello.thinking.disattivabile) {
     attivo = true;
-    note.push(`${record.etichetta}: questo modello non consente di disattivare il ragionamento; resta attivo.`);
+    note.push(`${record.etichetta}: this model cannot disable reasoning; it remains active.`);
   }
   if (attivo !== undefined) {
     if (qwen) risultato.enable_thinking = attivo;
@@ -318,17 +328,17 @@ function preparaControlloThinking(record, modello, corpo) {
   }
   const thinkingEffettivo = attivo ?? modello.thinking.predefinito;
   if (modello.thinking.soloStreaming && thinkingEffettivo && risultato.stream !== true) {
-    fail(`${record.etichetta}: questo modello richiede lo streaming quando il ragionamento è attivo.`);
+    fail(`${record.etichetta}: this model requires streaming when reasoning is enabled.`);
   }
   if ((modello.sceltaObbligata === false && risultato.tool_choice === 'required')
     || (modello.sceltaForzataConThinking === false && thinkingEffettivo && oggetto(risultato.tool_choice))) {
-    fail(`${record.etichetta}: la scelta forzata dello strumento non è compatibile con questo modello e la modalità richiesta.`);
+    fail(`${record.etichetta}: forced tool choice is incompatible with this model and requested mode.`);
   }
   if (modello.temperaturaServer && Object.hasOwn(risultato, 'temperature')) {
     delete risultato.temperature;
-    avvisi.push(`${record.etichetta}: la temperatura è gestita dal modello; il valore richiesto non viene inviato.`);
+    aggiungiAvviso(avvisi, frasiAvvisi, { testo: `${record.etichetta}: temperature is managed by the model; the requested value is not sent.`, testoChiave: 'server.compatibleNotice.temperatureIgnored', testoParams: { provider: record.etichetta } });
   }
-  return { corpo: risultato, avvisi, note };
+  return { corpo: risultato, avvisi, note, ...(frasiAvvisi.length ? { frasiAvvisi } : {}) };
 }
 
 function capability(value) {

@@ -52,7 +52,7 @@ export const TARATURA_STIMA = Object.freeze({
   bytePerToken: 3.5,
   margine: 0.15,
   margineMinimoToken: 8,
-  misurata: '09/09/2026 su z-ai/glm-5.3-flash (3,92 byte/token, 3,64 caratteri/token)',
+  misurata: '09/09/2026 on z-ai/glm-5.3-flash (3.92 bytes/token, 3.64 characters/token)',
 });
 
 /**
@@ -97,17 +97,17 @@ const quotaPunteggiatura = testo => {
  * Vedi ricerca (1) e (3) in testa al file.
  */
 export function stimaRegolaQuattroCaratteri(testo) {
-  if (typeof testo !== 'string') fallisci('COSTO_TESTO_INVALIDO', 'Il testo da stimare deve essere una stringa.');
+  if (typeof testo !== 'string') fallisci('COSTO_TESTO_INVALIDO', 'The text to estimate must be a string.');
   return Math.ceil([...testo].length / 4);
 }
 
 /** Quanto costa questo testo, con il metodo dichiarato. */
 export function costoDelTesto(testo, { metodo = 'auto', contatore } = {}) {
-  if (typeof testo !== 'string') fallisci('COSTO_TESTO_INVALIDO', 'Il testo da misurare deve essere una stringa.');
+  if (typeof testo !== 'string') fallisci('COSTO_TESTO_INVALIDO', 'The text to measure must be a string.');
   if (!METODI.includes(metodo)) fallisci('COSTO_METODO_IGNOTO', `Metodo sconosciuto: ${metodo}. Ammessi: ${METODI.join(', ')}.`);
-  if (contatore !== undefined && typeof contatore !== 'function') fallisci('COSTO_CONTATORE_INVALIDO', 'Il contatore deve essere una funzione (testo) => numero di token.');
+  if (contatore !== undefined && typeof contatore !== 'function') fallisci('COSTO_CONTATORE_INVALIDO', 'The counter must be a function (text) => number of tokens.');
   // ⛔ Chiedere `'contato'` senza avere un contatore non produce una stima battezzata misura: si ferma.
-  if (metodo === 'contato' && !contatore) fallisci('COSTO_CONTATORE_ASSENTE', 'Il metodo "contato" richiede un contatore vero: senza, il numero sarebbe una stima travestita da misura.');
+  if (metodo === 'contato' && !contatore) fallisci('COSTO_CONTATORE_ASSENTE', 'The "contato" method needs a real counter: without one, the number would be an estimate dressed up as a measurement.');
 
   const byte = Buffer.byteLength(testo, 'utf8');
   const caratteri = [...testo].length;
@@ -118,11 +118,11 @@ export function costoDelTesto(testo, { metodo = 'auto', contatore } = {}) {
 
   if (contatore && metodo !== 'stimato') {
     const conteggio = contatore(testo);
-    if (typeof conteggio?.then === 'function') fallisci('COSTO_CONTATORE_ASINCRONO', 'Il contatore deve essere sincrono: usa contatoreDaContextEngine() per pre-misurare i testi e ottenere una porta sincrona.');
-    if (!Number.isSafeInteger(conteggio) || conteggio < 0) fallisci('COSTO_CONTEGGIO_INVALIDO', 'Il contatore non ha restituito un numero di token valido; nessun ripiego silenzioso su una stima.');
+    if (typeof conteggio?.then === 'function') fallisci('COSTO_CONTATORE_ASINCRONO', 'The counter must be synchronous: use contatoreDaContextEngine() to pre-measure the texts and get a synchronous port.');
+    if (!Number.isSafeInteger(conteggio) || conteggio < 0) fallisci('COSTO_CONTEGGIO_INVALIDO', 'The counter did not return a valid token count; no silent fallback to an estimate.');
     // ⛔ Un contatore che dichiara di aver stimato NON diventa «contato» passando di qui.
     const suoMetodo = contatore.metodo === 'stimato' ? 'stimato' : 'contato';
-    const fonte = contatore.fonte ?? 'contatore iniettato (fonte non dichiarata)';
+    const fonte = contatore.fonte ?? 'injected counter (source not declared)';
     return {
       ...base,
       token: conteggio,
@@ -130,8 +130,8 @@ export function costoDelTesto(testo, { metodo = 'auto', contatore } = {}) {
       fonte,
       margineToken: suoMetodo === 'contato' ? 0 : Math.max(TARATURA_STIMA.margineMinimoToken, Math.ceil(conteggio * TARATURA_STIMA.margine)),
       confidenza: suoMetodo === 'contato'
-        ? `contato: ${fonte} ha tokenizzato questo testo. ⛔ Il fornitore dichiara la propria misura come stima a meno di uno scarto piccolo, e un tokenizer nuovo cambia i numeri (Claude 4.7+: ~30% token in più sullo stesso testo — Claude Platform Docs, token-counting, letto 10/09/2026).`
-        : `stimato dal contatore iniettato (${fonte}): ha dichiarato metodo "stimato", e passare di qui non lo trasforma in una misura.`,
+        ? `counted: ${fonte} tokenized this text. ⛔ The provider declares its own measurement as an estimate within a small margin, and a new tokenizer changes the numbers (Claude 4.7+: ~30% more tokens on the same text — Claude Platform Docs, token-counting, read 10/09/2026).`
+        : `estimated by the injected counter (${fonte}): it declared method "stimato", and going through here does not turn it into a measurement.`,
     };
   }
 
@@ -141,24 +141,24 @@ export function costoDelTesto(testo, { metodo = 'auto', contatore } = {}) {
   const token = Math.ceil(byte / TARATURA_STIMA.bytePerToken);
   const margineToken = token === 0 ? 0 : Math.max(TARATURA_STIMA.margineMinimoToken, Math.ceil(token * TARATURA_STIMA.margine));
   const avvisoNonLatino = nonLatino
-    ? ' ⛔ Il testo contiene caratteri non ASCII: per gli script non latini il BPE a livello di byte arriva fino a 3 volte l\'inglese e questa stima è un PAVIMENTO, non un tetto (8 ideogrammi = 11 token misurati in cl100k_base, dove byte/3,5 ne predice 7 e caratteri/4 solo 2).'
+    ? ' ⛔ The text contains non-ASCII characters: for non-Latin scripts byte-level BPE reaches up to 3 times English and this estimate is a FLOOR, not a ceiling (8 ideograms = 11 tokens measured in cl100k_base, where bytes/3.5 predicts 7 and characters/4 only 2).'
     : '';
   const avvisoDenso = punteggiaturaDensa
-    ? ` ⛔ Testo fitto di separatori (${Math.round(quotaSeparatori * 100)}% di caratteri non alfanumerici: è la forma di un elenco di percorsi, non di prosa): il BPE spezza a ogni "/", "-" e ".", quindi anche qui la stima è un PAVIMENTO.`
+    ? ` ⛔ Text dense with separators (${Math.round(quotaSeparatori * 100)}% non-alphanumeric characters: the shape of a list of paths, not of prose): BPE splits at every "/", "-" and ".", so here too the estimate is a FLOOR.`
     : '';
   return {
     ...base,
     token,
     metodo: 'stimato',
-    fonte: 'nessun contatore iniettato',
+    fonte: 'no injected counter',
     margineToken,
-    confidenza: `stimato: byte UTF-8 (${byte}) ÷ ${TARATURA_STIMA.bytePerToken}, taratura ${TARATURA_STIMA.misurata}; margine dichiarato ±${Math.round(TARATURA_STIMA.margine * 100)}% (${margineToken} token). ⛔ Non è un conteggio: nessun tokenizer ha guardato questo testo.${avvisoNonLatino}${avvisoDenso}`,
+    confidenza: `estimated: UTF-8 bytes (${byte}) ÷ ${TARATURA_STIMA.bytePerToken}, calibration ${TARATURA_STIMA.misurata}; declared margin ±${Math.round(TARATURA_STIMA.margine * 100)}% (${margineToken} tokens). ⛔ This is not a count: no tokenizer looked at this text.${avvisoNonLatino}${avvisoDenso}`,
   };
 }
 
 /** Il costo di un elenco, e quanto ne resta nella finestra. */
 export function costoElenco(testoElenco, { finestra, giri = 1, contatore, metodo = 'auto', listino = LISTINO_22_08 } = {}) {
-  if (!Number.isSafeInteger(giri) || giri < 1) fallisci('COSTO_GIRI_INVALIDI', 'I giri devono essere un intero maggiore o uguale a 1.');
+  if (!Number.isSafeInteger(giri) || giri < 1) fallisci('COSTO_GIRI_INVALIDI', 'Rounds must be an integer greater than or equal to 1.');
   const misura = costoDelTesto(testoElenco, { metodo, contatore });
   const token = misura.token;
 
@@ -203,8 +203,8 @@ export function costoElenco(testoElenco, { finestra, giri = 1, contatore, metodo
       fattoreRisparmio: dollariConCache > 0 ? arrotonda(dollariSenzaCache / dollariConCache, 3) : null,
       listino: `prompt $${listino.promptDollariPerMilione}/M, input_cache_read $${listino.cacheReadDollariPerMilione}/M (${listino.misurato})`,
       avvertenza: cacheAttiva
-        ? `⛔ I primi ${listino.giriPagatiPieni} giri si pagano PIENI (${tokenPieni} token a $${listino.promptDollariPerMilione}/M): la cache prende dalla TERZA chiamata. Il risparmio qui vale solo perché i giri sono ${giri}.`
-        : `⛔ Con ${giri} gir${giri === 1 ? 'o' : 'i'} la cache non ha ancora preso: si paga tutto pieno, esattamente come senza cache. Chi prova due volte sole conclude «non funziona» — è l'unico esito sbagliato possibile, non un difetto della cache.`,
+        ? `⛔ The first ${listino.giriPagatiPieni} turns are paid in FULL (${tokenPieni} tokens at $${listino.promptDollariPerMilione}/M): the cache kicks in from the THIRD call. The saving here only holds because there are ${giri} turns.`
+        : `⛔ With ${giri} turn${giri === 1 ? '' : 's'} the cache has not kicked in yet: everything is paid in full, exactly as without a cache. Anyone who tries it only twice concludes "it does not work" — that is the only wrong outcome possible, not a defect of the cache.`,
     },
   };
 }
@@ -223,11 +223,11 @@ export function costoElenco(testoElenco, { finestra, giri = 1, contatore, metodo
  *    dichiara `metodo: 'stimato'` e il risultato lo eredita: nessun travestimento.
  */
 export async function contatoreDaContextEngine({ counter, model, testi, signal, sottraiInvolucro = true } = {}) {
-  if (typeof counter?.countPreparedContext !== 'function') fallisci('COSTO_CONTATORE_ASSENTE', 'Serve un contatore con countPreparedContext (createContextTokenCounter).');
-  if (!Array.isArray(testi) || testi.some(testo => typeof testo !== 'string')) fallisci('COSTO_TESTI_INVALIDI', 'I testi da pre-misurare devono essere un elenco di stringhe.');
+  if (typeof counter?.countPreparedContext !== 'function') fallisci('COSTO_CONTATORE_ASSENTE', 'A counter with countPreparedContext (createContextTokenCounter) is required.');
+  if (!Array.isArray(testi) || testi.some(testo => typeof testo !== 'string')) fallisci('COSTO_TESTI_INVALIDI', 'The texts to pre-measure must be a list of strings.');
   const conta = async testo => {
     const esito = await counter.countPreparedContext({ messages: [{ role: 'user', content: testo }], tools: [], model, signal });
-    if (!Number.isSafeInteger(esito?.inputTokens) || esito.inputTokens < 0) fallisci('COSTO_CONTEGGIO_INVALIDO', 'Il contatore del Context Engine non ha restituito un conteggio valido.');
+    if (!Number.isSafeInteger(esito?.inputTokens) || esito.inputTokens < 0) fallisci('COSTO_CONTEGGIO_INVALIDO', 'The Context Engine counter did not return a valid count.');
     return esito;
   };
   const involucro = sottraiInvolucro ? (await conta('')).inputTokens : 0;
@@ -240,9 +240,9 @@ export async function contatoreDaContextEngine({ counter, model, testi, signal, 
     metodiVisti.add(esito.method);
     misurati.set(testo, Math.max(0, esito.inputTokens - involucro));
   }
-  const fonte = `context-token-counters (${model?.provider ?? 'provider ignoto'}/${model?.model ?? 'modello ignoto'}, method=${[...metodiVisti].join('+') || 'nessuno'}${sottraiInvolucro ? `, involucro ${involucro} token sottratto` : ''})`;
+  const fonte = `context-token-counters (${model?.provider ?? 'unknown provider'}/${model?.model ?? 'unknown model'}, method=${[...metodiVisti].join('+') || 'none'}${sottraiInvolucro ? `, wrapper of ${involucro} tokens subtracted` : ''})`;
   const porta = testo => {
-    if (!misurati.has(testo)) fallisci('COSTO_TESTO_NON_MISURATO', 'Questo testo non è stato pre-misurato: la porta non stima di nascosto. Passalo a contatoreDaContextEngine().');
+    if (!misurati.has(testo)) fallisci('COSTO_TESTO_NON_MISURATO', 'This text was not pre-measured: the port does not estimate behind the scenes. Pass it to contatoreDaContextEngine().');
     return misurati.get(testo);
   };
   porta.fonte = fonte;

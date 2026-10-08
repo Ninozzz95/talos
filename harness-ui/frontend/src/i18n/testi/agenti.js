@@ -134,6 +134,10 @@ export default {
     'agent.task': 'Compito',
     'agent.noTaskRecorded': 'Delega senza compito registrato',
     'agent.model': 'Modello',
+    // C2b «Coordinazione» (owner 08/10/2026): come è partito l'agente
+    'agent.howStarted': 'Come è partito',
+    'agent.startedOnItsOwn': 'Da solo (Coordinazione)',
+    'agent.startedAllowed': 'Consentito da te',
     'agent.started': 'Partito',
     'agent.startedAgo': '{eta} fa',
     'agent.usingNow': 'Sta usando',
@@ -291,6 +295,8 @@ export default {
     'delegations.startedAt': 'avviata alle {ora}',
     'delegations.mainSession': 'Sessione principale',
     'delegations.subAgent': 'Sotto-agente',
+    'delegations.startedOnItsOwn': 'da solo', // C2b
+    'delegations.startedAllowed': 'consentito da te', // C2b
     'delegations.activityUnavailableForAgent': 'Attività non disponibile per questo agente.',
     'delegations.noToolsYet': 'Nessun attrezzo usato finora.',
     'delegations.taskUnavailable': 'Il compito di questo agente non è disponibile.',
@@ -578,6 +584,10 @@ export default {
     'agent.task': 'Task',
     'agent.noTaskRecorded': 'Delegation with no recorded task',
     'agent.model': 'Model',
+    // C2b «Coordination» (owner 08/10/2026): how the agent started
+    'agent.howStarted': 'How it started',
+    'agent.startedOnItsOwn': 'On its own (Coordination)',
+    'agent.startedAllowed': 'Allowed by you',
     'agent.started': 'Started',
     'agent.startedAgo': '{eta} ago',
     'agent.usingNow': 'Using now',
@@ -735,6 +745,8 @@ export default {
     'delegations.startedAt': 'started at {ora}',
     'delegations.mainSession': 'Main session',
     'delegations.subAgent': 'Sub-agent',
+    'delegations.startedOnItsOwn': 'on its own', // C2b
+    'delegations.startedAllowed': 'allowed by you', // C2b
     'delegations.activityUnavailableForAgent': 'Activity not available for this agent.',
     'delegations.noToolsYet': 'No tools used so far.',
     'delegations.taskUnavailable': 'This agent’s task is not available.',

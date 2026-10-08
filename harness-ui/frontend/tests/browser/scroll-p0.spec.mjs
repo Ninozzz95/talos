@@ -58,7 +58,10 @@ const FOTO = resolve(QUI, '..', '..', 'artifacts', 'p0-C');
 test.use({ channel: 'chrome' });
 
 test.beforeEach(async ({ page }) => {
-  await page.route('**/api/v1/sessions/scroll-p0-*/events', (route) => route.fulfill({ contentType: 'text/event-stream', body: '' }));
+  /* VELO-SPEC (08/10/2026, bugfixer): flusso APERTO E MUTO (handler che non risolve), come in chat-attesa-fondo.spec.mjs. Con un
+     corpo vuoto il flusso si chiudeva e il browser lo riapriva, e ogni `onopen` rimette la chat «nella storia» (app.js, `source.onopen`):
+     dopo il confine mandato dalla prova, una riapertura la rivelava di nuovo. */
+  await page.route('**/api/v1/sessions/scroll-p0-*/events', () => { /* resta pending: aperto e muto */ });
   /* ⛔ Solo lo STUB: nessun giro vero parte da qui, e il server di prova non ha queste sessioni. */
   await page.route('**/api/v1/sessions/scroll-p0-*/resume', (route) => route.fulfill({
     status: 200, contentType: 'application/json',
@@ -71,7 +74,10 @@ test.beforeEach(async ({ page }) => {
 
 async function apri(page, id) {
   await page.evaluate((id) => {
-    window.__talosHarnessUiRuntime.passaASessione(`scroll-p0-${id}`, 'workspace', 'Prova dello scorrimento', 'local:prova', { conclusa: false, modello: 'local:prova' });
+    const r = window.__talosHarnessUiRuntime;
+    r.passaASessione(`scroll-p0-${id}`, 'workspace', 'Prova dello scorrimento', 'local:prova', { conclusa: false, modello: 'local:prova' });
+    /* VELO-SPEC: da A1-R3 una sessione aperta resta velata fino al confine, che il server manda SEMPRE (anche a storia vuota). */
+    r.handleRealEvent({ type: 'CUSTOM', name: 'talos.fine-rigiocata', value: null }, r.realSessionState.generation);
   }, id);
 }
 
@@ -684,6 +690,8 @@ test('P0-CHAT-STREAM-CADENCE-06 — output visibile segue i delta senza pause UI
     window.__talosHarnessUiRuntime.passaASessione('scroll-p0-stream-cadence', 'workspace',
       'Prova dello scorrimento', 'local:prova', { conclusa: false, modello: 'local:prova' });
     trace.syncMs = performance.now() - start;
+    // VELO-SPEC: il confine del server a storia vuota (vedi `apri`), fuori dalla misura del passaggio sincrono
+    window.__talosHarnessUiRuntime.handleRealEvent({ type: 'CUSTOM', name: 'talos.fine-rigiocata', value: null }, window.__talosHarnessUiRuntime.realSessionState.generation);
   });
   const warmupMs = Number(process.env.TALOS_P0_CADENCE_WARMUP_MS) || 0;
   const preRunWarmupMs = Number(process.env.TALOS_P0_CADENCE_PRE_RUN_WARMUP_MS) || 0;

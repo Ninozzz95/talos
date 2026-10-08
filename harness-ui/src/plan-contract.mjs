@@ -33,10 +33,10 @@ export class ContrattoPianoError extends Error {
 }
 
 export function validaPiano(plan) {
-  if (typeof plan !== 'string') throw new ContrattoPianoError('plan deve essere testo Markdown');
+  if (typeof plan !== 'string') throw new ContrattoPianoError('plan must be Markdown text');
   const pulito = plan.trim();
-  if (!pulito) throw new ContrattoPianoError('plan non può essere vuoto');
-  if (pulito.length > LIMITI_PIANO.pianoMax) throw new ContrattoPianoError(`plan supera il limite di ${LIMITI_PIANO.pianoMax} caratteri`);
+  if (!pulito) throw new ContrattoPianoError('plan cannot be empty');
+  if (pulito.length > LIMITI_PIANO.pianoMax) throw new ContrattoPianoError(`plan exceeds the limit of ${LIMITI_PIANO.pianoMax} characters`);
   return pulito;
 }
 
@@ -47,18 +47,18 @@ export function improntaPiano(plan) {
 
 /* La decisione della persona, come arriva dalla scheda (rotta HTTP) o dal registro. */
 export function validaDecisionePiano(body) {
-  if (!body || typeof body !== 'object' || Array.isArray(body)) throw new ContrattoPianoError('decisione non valida');
+  if (!body || typeof body !== 'object' || Array.isArray(body)) throw new ContrattoPianoError('invalid decision');
   const ammesse = ['requestId', 'decisione', 'hash', 'feedback'];
-  if (Object.keys(body).some((k) => !ammesse.includes(k))) throw new ContrattoPianoError('decisione con campi non riconosciuti');
-  if (typeof body.requestId !== 'string' || !body.requestId) throw new ContrattoPianoError('requestId obbligatorio');
-  if (!DECISIONI_PIANO.includes(body.decisione)) throw new ContrattoPianoError('decisione sconosciuta');
-  if (typeof body.hash !== 'string' || !/^sha256:[0-9a-f]{64}$/u.test(body.hash)) throw new ContrattoPianoError('hash del piano obbligatorio');
+  if (Object.keys(body).some((k) => !ammesse.includes(k))) throw new ContrattoPianoError('decision contains unrecognized fields');
+  if (typeof body.requestId !== 'string' || !body.requestId) throw new ContrattoPianoError('requestId is required');
+  if (!DECISIONI_PIANO.includes(body.decisione)) throw new ContrattoPianoError('unknown decision');
+  if (typeof body.hash !== 'string' || !/^sha256:[0-9a-f]{64}$/u.test(body.hash)) throw new ContrattoPianoError('plan hash is required');
   let feedback;
   if (body.feedback !== undefined) {
-    if (typeof body.feedback !== 'string') throw new ContrattoPianoError('feedback deve essere testo');
+    if (typeof body.feedback !== 'string') throw new ContrattoPianoError('feedback must be text');
     feedback = body.feedback.trim();
-    if (feedback.length > LIMITI_PIANO.feedbackMax) throw new ContrattoPianoError(`feedback supera ${LIMITI_PIANO.feedbackMax} caratteri`);
-    if (body.decisione !== 'continua-a-pianificare' && feedback) throw new ContrattoPianoError('il feedback accompagna solo «continua a pianificare»');
+    if (feedback.length > LIMITI_PIANO.feedbackMax) throw new ContrattoPianoError(`feedback exceeds ${LIMITI_PIANO.feedbackMax} characters`);
+    if (body.decisione !== 'continua-a-pianificare' && feedback) throw new ContrattoPianoError('feedback only accompanies "continua-a-pianificare"');
   }
   return { requestId: body.requestId, decisione: body.decisione, hash: body.hash, ...(feedback ? { feedback } : {}) };
 }

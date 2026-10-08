@@ -73,7 +73,7 @@ export async function migraChiaviLegacySuDesktop({ keyring = null, markerFile = 
     try {
       if (desktopProvider.tracciaInCustodia(id)) { esito.saltati.push({ tipo: 'provider', id, motivo: 'gia in custodia' }); continue; }
       const righe = legacyProvider.esportaPool(id);
-      if (!righe.length) { esito.saltati.push({ tipo: 'provider', id, motivo: 'niente da migrare' }); continue; }
+      if (!righe.length) { esito.saltati.push({ tipo: 'provider', id, motivo: 'nothing to migrate' }); continue; }
       for (const riga of righe) desktopProvider.aggiungiChiave(id, riga.chiave, { priorita: riga.priorita });
       esito.migrati.push({ tipo: 'provider', id, chiavi: righe.length });
     } catch (errore) {
@@ -94,7 +94,7 @@ export async function migraChiaviLegacySuDesktop({ keyring = null, markerFile = 
       if (fontiDesktop.find((f) => f.id === id)?.keyConfigured) { esito.saltati.push({ tipo: 'ricerca', id, motivo: 'gia in custodia' }); continue; }
       let valore = null;
       try { valore = portachiaviNudo.get(KEYRING_SERVICE_RICERCA, id); } catch { valore = null; }
-      if (typeof valore !== 'string' || !valore.trim()) { esito.saltati.push({ tipo: 'ricerca', id, motivo: 'niente da migrare' }); continue; }
+      if (typeof valore !== 'string' || !valore.trim()) { esito.saltati.push({ tipo: 'ricerca', id, motivo: 'nothing to migrate' }); continue; }
       desktopRicerca.setKey(id, valore);
       esito.migrati.push({ tipo: 'ricerca', id, chiavi: 1 });
     } catch (errore) {
@@ -125,7 +125,7 @@ export async function migraChiaviLegacySuDesktop({ keyring = null, markerFile = 
     }
   }
 
-  logger.log?.(`Migrazione chiavi: ${esito.migrati.length} voci copiate, ${esito.saltati.length} saltate, ${esito.errori.length} errori.`);
-  if (esito.errori.length) logger.warn?.(`Migrazione incompleta: ${esito.errori.map((v) => `${v.tipo} ${v.id}: ${v.messaggio}`).join('; ')}`);
+  logger.log?.(`Key migration: ${esito.migrati.length} entries copied, ${esito.saltati.length} skipped, ${esito.errori.length} errors.`);
+  if (esito.errori.length) logger.warn?.(`Migration incomplete: ${esito.errori.map((v) => `${v.tipo} ${v.id}: ${v.messaggio}`).join('; ')}`);
   return Object.freeze(esito);
 }

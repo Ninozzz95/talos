@@ -1,7 +1,8 @@
 /*
- * ⭐ PO-10 passo 2 (02/10/2026) — le linguette delle schede AGENTE del Terminale (`components/terminale.js`), in un Chromium
- * vero col foglio vero (`main.css`). Decisioni dell'owner: si riconoscono (icona dello sprite, come Hermes `rail.tsx:144-145`),
- * il pallino finito è verde o rosso se un comando è fallito, si chiudono ma NON si rinominano (né doppio clic, né F2, né menu).
+ * ⭐ PO-10 passo 2 (02/10/2026) → BUG-23 (06/10) — le linguette delle schede del Terminale (`components/terminale.js`), in un
+ * Chromium vero col foglio vero (`main.css`). Decisioni dell'owner: le schede agente si riconoscono (icona dello sprite, come
+ * Hermes `rail.tsx:144-145`), il pallino finito è verde o rosso se un comando è fallito, si chiudono ma NON si rinominano (né
+ * doppio clic, né F2, né menu); BUG-23: la linguetta agente è UNA per sessione e non dice più il giro (lo dice il piede).
  */
 import assert from 'node:assert/strict';
 import test from 'node:test';
@@ -35,11 +36,11 @@ test.before(async () => {
 });
 test.after(() => browser?.close());
 
+/* ⭐ BUG-23 (06/10): UNA scheda «agente» per sessione — la fixture ha UNA scheda agente (id fisso 'agente'); i tre stati
+   del pallino si provano aggiornando la stessa scheda. */
 const SCHEDE = [
   { terminalId: 's1', origine: 'tu', titolo: null, shell: 'git-bash', stato: 'live', cartella: 'C:/p' },
-  { terminalId: 'agente-giro-2', origine: 'agente', giro: 2, titolo: null, stato: 'live' },
-  { terminalId: 'agente-giro-3', origine: 'agente', giro: 3, titolo: null, stato: 'con-errori' },
-  { terminalId: 'agente-giro-4', origine: 'agente', giro: 4, titolo: null, stato: 'concluso' },
+  { terminalId: 'agente', origine: 'agente', giro: 2, titolo: null, stato: 'live' },
 ];
 
 test('PO10-LINGUETTE: icona e pallino delle schede agente; niente rinomina per loro, sì per le tue', async (t) => {
@@ -53,7 +54,9 @@ test('PO10-LINGUETTE: icona e pallino delle schede agente; niente rinomina per l
   await page.evaluate((schede) => {
     window.rinominate = []; window.chiuse = [];
     window.ui = window.ts.creaSchedeTerminale(document.getElementById('pane'), { azioni: { seleziona: () => {}, chiudi: (id) => window.chiuse.push(id), rinomina: (id, n) => window.rinominate.push([id, n]) } });
-    window.ui.aggiorna({ schede, attiva: 's1', puoAprire: true, badges: [], piede: { chi: "Lanciata dall'agente al giro 2", dettaglio: 'C:/p', stato: 'in corso', nota: 'Sola lettura: qui si guardano i comandi dell’agente.' } });
+    const piede = { chi: "Lanciata dall'agente al giro 2", dettaglio: 'C:/p', stato: 'in corso', nota: 'Sola lettura: qui si guardano i comandi dell’agente.' };
+    window.__schede = schede; window.__piede = piede;
+    window.ui.aggiorna({ schede, attiva: 's1', puoAprire: true, badges: [], piede });
   }, SCHEDE);
   const linguette = await page.evaluate(() => [...document.querySelectorAll('[role=tab]')].map((b) => ({
     testo: b.textContent.trim(), origine: b.dataset.origine ?? null, icona: b.querySelector('use')?.getAttribute('href') ?? null,
@@ -61,16 +64,23 @@ test('PO10-LINGUETTE: icona e pallino delle schede agente; niente rinomina per l
   })));
   assert.deepEqual(linguette.map((l) => [l.testo, l.origine, l.icona]), [
     ['tu · Git Bash', null, null],
-    ['agente · giro 2', 'agente', '#i-robot'],
-    ['agente · giro 3', 'agente', '#i-robot'],
-    ['agente · giro 4', 'agente', '#i-robot'],
+    ['agente', 'agente', '#i-robot'],
   ]);
-  assert.deepEqual(linguette.slice(1).map((l) => l.pallino), ['talos-dot talos-dot--live', 'talos-dot talos-dot--danger', 'talos-dot talos-dot--success']);
   assert.equal(linguette[1].descrizione, 'Comandi dell’agente, in sola lettura');
   assert.match(await page.locator('.talos-terminal__foot').textContent(), /Lanciata dall'agente al giro 2.*in corso.*Sola lettura/u);
+  /* ⭐ BUG-23 (06/10): la linguetta NON dice il giro (lo dice il piede); i tre stati del pallino si provano sulla
+     STESSA scheda, aggiornandola: live → con-errori → concluso. */
+  assert.equal(linguette[1].pallino, 'talos-dot talos-dot--live');
+  for (const [stato, pallino] of [['con-errori', 'talos-dot talos-dot--danger'], ['concluso', 'talos-dot talos-dot--success']]) {
+    await page.evaluate((s) => window.ui.aggiorna({
+      schede: window.__schede.map((x) => (x.origine === 'agente' ? { ...x, stato: s } : x)),
+      attiva: 's1', puoAprire: true, badges: [], piede: window.__piede,
+    }), stato);
+    assert.equal(await page.locator('[role=tab][data-origine="agente"] .talos-dot').getAttribute('class'), pallino);
+  }
 
   // la scheda agente: doppio clic e F2 non aprono la rinomina, il menu non la offre
-  const agente = page.locator('[role=tab]', { hasText: 'agente · giro 2' });
+  const agente = page.locator('[role=tab]', { hasText: /^agente$/u });
   await agente.dblclick();
   assert.equal(await page.locator('.talos-terminal__rinomina').count(), 0, 'doppio clic: niente campo');
   await agente.focus(); await page.keyboard.press('F2');

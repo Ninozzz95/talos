@@ -122,6 +122,8 @@ test.describe('R4 segmento compatto — prodotto', () => {
     expect(await page.locator(`${SEG} .talos-activity__conteggi`).first().evaluate((n) => n.scrollWidth <= n.clientWidth + 1)).toBe(true);
     /* Il diff del segmento dai StateDelta veri (D2). */
     await expect(page.locator(`${SEG} .talos-activity__diff`)).toHaveText(/\+2\s*[−-]1/);
+    // LINGUA-7 (08/10/2026): a voce, ogni numero col suo plurale — «2 righe aggiunte, 1 tolta», non «1 tolte»
+    await expect(page.locator(`${SEG} .talos-activity__diff`)).toHaveAttribute('aria-label', '2 righe aggiunte, 1 tolta');
     expect(c.nonGet, 'nessuna scrittura verso il server').toBe(0);
   });
 

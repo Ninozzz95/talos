@@ -1,4 +1,5 @@
 import { talosResearchSupportLabel } from './report.mjs'
+import { testiDocumento } from './testi-documento.mjs'
 import { inlineInTestoSemplice, markdownInBlocchiReport, runsDiMarkdown } from './markdown-server.mjs'
 
 /*
@@ -66,9 +67,9 @@ export const TALOS_RESEARCH_PDF_TONES = Object.freeze(['report', 'brief', 'dossi
 /** Il tono di partenza: quello completo, che non lascia fuori niente. */
 export const TALOS_RESEARCH_PDF_DEFAULT_TONE = 'report'
 
-/** @param {{checks?:object}} claim */
-function verdetto(claim) {
-    return talosResearchSupportLabel(claim?.checks ?? {})
+/** @param {{checks?:object}} claim @param {'en'|'it'} [lingua] */
+function verdetto(claim, lingua) {
+    return talosResearchSupportLabel(claim?.checks ?? {}, lingua)
 }
 
 /**
@@ -123,73 +124,72 @@ export function talosResearchPdfTally(report) {
  * controllo meccanico» sono due fatti diversi, e il record li tiene separati apposta. Un PDF
  * che tace su questo consegna un verdetto senza dire chi l'ha dato.
  */
-function nota(report) {
+function nota(report, T) {
     return {
         t: 'note',
-        x: report.judge
-            ? `Le affermazioni sono state giudicate da ${report.judge}, confrontandole con il passaggio della fonte.`
-            : 'Nessun giudice indipendente era disponibile: i verdetti vengono dal solo controllo meccanico della citazione.',
+        x: report.judge ? T.pdfGiudicate(report.judge) : T.pdfSenzaGiudice,
     }
 }
 
-function copertina(report, options) {
+function copertina(report, options, T) {
     const titolo = String(options.title ?? '').trim()
     return {
         t: 'cover',
         title: titolo || report.question,
-        subtitle: titolo ? report.question : 'Ricerca approfondita TALOS',
+        subtitle: titolo ? report.question : T.pdfSottotitolo,
         ...(options.date ? { date: options.date } : {}),
     }
 }
 
-function bilancio(report) {
+function bilancio(report, T) {
     const tally = talosResearchPdfTally(report)
+    const [sostenute, inParte, smentite, nonVerificate] = T.pdfKpi
     return {
         t: 'kpi',
         items: [
-            { l: 'Sostenute', v: String(tally.supported) },
-            { l: 'In parte', v: String(tally.partial) },
-            { l: 'Smentite', v: String(tally.contradicted) },
-            { l: 'Non verificate', v: String(tally.unverified) },
+            { l: sostenute, v: String(tally.supported) },
+            { l: inParte, v: String(tally.partial) },
+            { l: smentite, v: String(tally.contradicted) },
+            { l: nonVerificate, v: String(tally.unverified) },
         ],
     }
 }
 
-function rapportoCompleto(report, options) {
+function rapportoCompleto(report, options, T) {
     const blocks = [
-        copertina(report, options),
-        { t: 'h', lvl: 1, x: 'In breve' },
+        copertina(report, options, T),
+        { t: 'h', lvl: 1, x: T.pdfInBreve },
         ...markdownInBlocchiReport(report.summary, { livelloMinimo: 2 }),
-        bilancio(report),
-        nota(report),
+        bilancio(report, T),
+        nota(report, T),
         { t: 'pb' },
-        { t: 'h', lvl: 1, x: 'Le affermazioni, una per una' },
+        { t: 'h', lvl: 1, x: T.pdfUnaPerUna },
     ]
     report.claims.forEach((claim, index) => {
         blocks.push({ t: 'h', lvl: 3, x: `${index + 1}. ${inlineInTestoSemplice(claim.text)}` })
-        blocks.push({ t: 'p', x: `Verdetto: ${verdetto(claim)} — fonte: ${fonteDi(report, claim.sourceIndex)}` })
+        blocks.push({ t: 'p', x: T.pdfVerdettoFonte(verdetto(claim, options.lingua), fonteDi(report, claim.sourceIndex)) })
         // Il passaggio è la prova. Senza, «sostenuta» è una parola che chiede fiducia invece
         // di darla.
         if (String(claim.passage ?? '').trim().length > 0) blocks.push({ t: 'note', x: `«${claim.passage}»` })
     })
     if (report.sources.length > 0) {
-        blocks.push({ t: 'pb' }, { t: 'h', lvl: 1, x: 'Le fonti' })
+        blocks.push({ t: 'pb' }, { t: 'h', lvl: 1, x: T.pdfFonti })
         blocks.push({
             t: 'table',
-            head: ['#', 'Titolo', 'Indirizzo', 'Come'],
+            head: [...T.pdfTestaFonti],
             align: ['r', 'l', 'l', 'l'],
             rows: report.sources.map((source, index) => [
                 String(index + 1),
                 source.title || '—',
                 source.url,
-                source.obtained === 'page' ? 'pagina letta' : 'solo estratto',
+                source.obtained === 'page' ? T.paginaLetta : T.pdfEstratto,
             ]),
         })
     }
     return blocks
 }
 
-function sintesi(report, options) {
+function sintesi(report, options, T) {
     const tally = talosResearchPdfTally(report)
     const regge = report.claims.filter((claim) => claim?.checks?.claimSupported === 'yes')
     const nonRegge = report.claims.filter((claim) => (
@@ -208,51 +208,48 @@ function sintesi(report, options) {
         { t: 'h', lvl: 1, x: titolo || report.question },
         ...(titolo ? [{ t: 'note', x: report.question }] : []),
         ...markdownInBlocchiReport(report.summary, { livelloMinimo: 3 }),
-        bilancio(report),
+        bilancio(report, T),
     ]
     if (regge.length > 0) {
-        blocks.push({ t: 'h', lvl: 2, x: 'Quello che regge' })
+        blocks.push({ t: 'h', lvl: 2, x: T.pdfRegge })
         // Quattro, non tutte: una sintesi che riporta trenta punti non è una sintesi, è il
         // rapporto senza le prove.
         blocks.push({ t: 'list', items: regge.slice(0, 4).map((claim) => runsDiMarkdown(claim.text)) })
     }
     if (nonRegge.length > 0) {
-        blocks.push({ t: 'h', lvl: 2, x: 'Quello che NON regge' })
+        blocks.push({ t: 'h', lvl: 2, x: T.pdfNonRegge })
         blocks.push({
             t: 'list',
-            items: nonRegge.slice(0, 4).map((claim) => `${inlineInTestoSemplice(claim.text)} — ${verdetto(claim)}`),
+            items: nonRegge.slice(0, 4).map((claim) => `${inlineInTestoSemplice(claim.text)} — ${verdetto(claim, options.lingua)}`),
         })
     }
     if (tally.unverified > 0) {
-        blocks.push({
-            t: 'note',
-            x: `${tally.unverified} affermazioni non è stato possibile verificarle: la fonte non è stata riaperta o il passaggio non c'era.`,
-        })
+        blocks.push({ t: 'note', x: T.pdfNonVerificate(tally.unverified) })
     }
-    blocks.push(nota(report))
+    blocks.push(nota(report, T))
     return blocks
 }
 
-function dossier(report, options) {
+function dossier(report, options, T) {
     return [
-        copertina(report, options),
-        { t: 'h', lvl: 1, x: 'Affermazioni e prove' },
-        nota(report),
+        copertina(report, options, T),
+        { t: 'h', lvl: 1, x: T.pdfAffermazioniEProve },
+        nota(report, T),
         {
             t: 'table',
-            head: ['#', 'Affermazione', 'Verdetto', 'Fonte'],
+            head: [...T.pdfTestaDossier],
             align: ['r', 'l', 'l', 'l'],
             rows: report.claims.map((claim, index) => [
                 String(index + 1),
                 runsDiMarkdown(claim.text),
-                verdetto(claim),
+                verdetto(claim, options.lingua),
                 fonteDi(report, claim.sourceIndex),
             ]),
         },
         {
             t: 'chart',
             kind: 'pie',
-            labels: ['Sostenute', 'In parte', 'Smentite', 'Non verificate'],
+            labels: [...T.pdfKpi],
             series: [{ data: Object.values(talosResearchPdfTally(report)) }],
         },
     ]
@@ -266,26 +263,28 @@ function dossier(report, options) {
  *
  * @param {TalosResearchReportRecord} report
  * @param {'report'|'brief'|'dossier'} tone
- * @param {{date?:string, title?:string|null}} [options]
+ * @param {{date?:string, title?:string|null, lingua?:'en'|'it'}} [options] — `lingua`: la lingua delle parole di TALOS
+ *   (K4b, owner 07/10/2026: quella dell'interfaccia al momento dell'esportazione); senza, inglese.
  * @returns {{theme:string, footer:object, blocks:object[]}}
  */
 export function talosResearchPdfSpec(report, tone, options = {}) {
+    const T = testiDocumento(options.lingua)
     const blocks = (report.claims?.length ?? 0) === 0
         ? [
-            copertina(report, options),
+            copertina(report, options, T),
             ...markdownInBlocchiReport(report.summary, { livelloMinimo: 2 }),
-            { t: 'note', x: 'Questa ricerca non ha prodotto affermazioni verificabili.' },
+            { t: 'note', x: T.pdfNessunaAffermazione },
         ]
         : tone === 'brief'
-            ? sintesi(report, options)
+            ? sintesi(report, options, T)
             : tone === 'dossier'
-                ? dossier(report, options)
-                : rapportoCompleto(report, options)
+                ? dossier(report, options, T)
+                : rapportoCompleto(report, options, T)
 
     return {
         // Il dossier vive di tabelle larghe; gli altri due si leggono.
         theme: tone === 'dossier' ? 'plain' : 'report',
-        footer: { text: 'TALOS · ricerca approfondita', pageNo: true },
+        footer: { text: T.pdfPiede, pageNo: true },
         blocks,
     }
 }

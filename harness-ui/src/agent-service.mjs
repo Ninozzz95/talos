@@ -109,9 +109,9 @@ import { improntaPacchettoPlugin, statoTrustPlugin } from './plugin-registry.mjs
  *   soltanto una fiducia mai data.
  */
 const FRASI_RIVERIFICA = Object.freeze({
-  'mai-approvato': 'Questo plugin non è approvato: aprilo dal pannello e approvalo se lo vuoi usare.',
-  'regola-precedente': 'Questo plugin era stato approvato con la regola precedente: approvalo di nuovo.',
-  'contenuto-cambiato': 'Il contenuto di questo plugin è cambiato da quando l\'hai approvato.',
+  'mai-approvato': 'This plugin is not approved: open it from the panel and approve it if you want to use it.',
+  'regola-precedente': 'This plugin was approved under the previous rule: approve it again.',
+  'contenuto-cambiato': 'The content of this plugin has changed since you approved it.',
 });
 import { preparaToolPluginPerSessione as preparaToolPluginPerSessioneReale } from './plugin-session.mjs';
 import { eseguiHook as eseguiHookReale } from './hook-registry.mjs';
@@ -147,7 +147,10 @@ const chiamaConRitenta = (options) => OWNER_RUNTIME.chiamaConRitenta(options);
 export function leggiPaginaPerLaVista(url) {
   return OWNER_RUNTIME.leggiPagina(url);
 }
-const compattaConversazioneReale = (messaggi, chiamaModello) => OWNER_RUNTIME.compattaConversazione(messaggi, chiamaModello);
+/* ⭐ 06/10/2026 — la ricarica post-compact (opzione A, ricerca 5×5×5×5 §6.4): il TERZO argomento
+ * (le fonti dichiarate per il blocco di fatti) attraversa anche questa maglia. Additivo: chi chiama
+ * a due argomenti non vede cambiare niente, chi inietta una funzione propria lo ignora. */
+const compattaConversazioneReale = (messaggi, chiamaModello, fontiRicarica = null) => OWNER_RUNTIME.compattaConversazione(messaggi, chiamaModello, fontiRicarica);
 const eseguiComandoSandboxatoReale = (...args) => OWNER_RUNTIME.eseguiComandoSandboxato(...args);
 const eseguiFlowForge = (...args) => OWNER_RUNTIME.eseguiFlowForge(...args);
 const FORGE_PREFISSO_NOME_TOOL = OWNER_RUNTIME.forgeToolPrefix;
@@ -284,6 +287,8 @@ export async function avviaSessione({
   onEvento, segnaleStop, messaggiIniziali, reasoning, contextHooks, onStoriaIniziale, ricostruisciContestoIniziale = false, mobile = false,
   /* Stop per riga (owner 02/10/2026): `({ toolCallId, ferma }) => sgancia`, passata così com'è al motore. */
   registraComandoFermabile = null,
+  /* A6-bis (08/10/2026): `({ toolCallId, codice, segnale }) => void`, l'uscita vera di un comando già sfondato; passata al motore. */
+  segnalaUscitaSfondo = null,
   /* G02 (dalla lane CLI, e1f7eb363): l'identità con cui la CLI chiave il suo checkpoint; passata così com'è al motore. */
   checkpointSessionId = null, checkpointOperation = 'start',
   ambienteComandiFn,
@@ -375,12 +380,17 @@ export async function avviaSessione({
    * si ripete: aggiunto nello stesso commit del resto della fase.
    */
   onDelega,
+  // C2b «Coordinazione» (08/10/2026): inoltrata SENZA logica come `onDelega`; assente ⇒ la delega va come prima
+  coordinazioneFn,
   chiediDomandaFn,
+  // CLI 6b (02/10/2026): inoltrato senza logica, come `chiediDomandaFn`.
+  figliaChiedeAllaPersona,
   // 24/09/2026, decisioni owner 36-39: il canale della scelta sul piano, inoltrato SENZA logica come `chiediDomandaFn`.
   presentaPianoFn,
   agentRole, askParentFn, answerChildQuestionFn, askChildFn, answerParentQuestionFn, onWorkflowPlanPropose, listChildrenFn, stopChildFn,
   // D1 «Come Claude» (24/09/2026): inoltrati SENZA logica, come gli altri: il modo del padre letto a ogni chiamata e le figlie vive all'avvio.
   modalitaOperativaCorrenteFn, figliViviAllAvvio,
+  permessiCorrentiFn, // C2-a (07/10/2026): i permessi della catena letti a ogni chiamata, inoltrati senza logica come il modo
   /*
    * ⭐⭐⭐ FASE D (28/8) — coda messaggi su una sessione IN CORSO. Stesso
    * principio di `hookFn`/`onDelega`: inoltrato SENZA logica propria, la
@@ -392,7 +402,7 @@ export async function avviaSessione({
   codaMessaggiFn,
   cartellaPagineWeb, // politica di taglio di `naviga` (owner 01/10/2026): la cartella delle pagine della sessione, inoltrata com'è al kernel
   ricercheInCorso, // F001b (owner 01/10/2026): il registro delle ricerche che continuano della sessione, inoltrato com'è al kernel
-  preferenzeWslFn, consensiSessione, // F009 (owner 01/10/2026): preferenza dell'utente di WSL e «sì» a root della sessione, inoltrati com'è al kernel
+  preferenzeWslFn, consensiSessione, // F009 (owner 01/10/2026): preferenza utente WSL e consenso root della sessione, inoltrati tal quali al kernel
   casaLinuxSessione, // Fase B (owner 01/10/2026): la casa Linux della sessione, inoltrata com'è al kernel
   registroLetture, // T25/B09: il registro delle letture della SESSIONE, inoltrato com'è al kernel (assente ⇒ il kernel ne crea uno per il giro)
   /*
@@ -419,6 +429,8 @@ export async function avviaSessione({
    *   lega alla sessione il registro (`rootSessionId`). Assente = il kernel non li offre.
    */
   onWorkflowFn,
+  /* Automazioni a due porte (08/10/2026): il canale degli attrezzi `automation_*`, inoltrato com'è (lo lega il registro). */
+  onAutomazioneFn,
   /*
    * ⛔⛔ Rilievo 3 (piano 0.1.19 §1.7, 28/09) — il canale di `request_plan_mode`: inoltrato così
    *   com'è (il registro lo costruisce: accoda il cambio del modo, la patch va a fine giro).
@@ -779,7 +791,7 @@ export async function avviaSessione({
       skillsDisponibili = skills.map((s) => ({ name: s.name, description: s.description }));
       caricaSkillFn = async (nome) => {
         const skill = skills.find((s) => s.name === nome);
-        if (!skill) throw new Error(`skill "${nome}" scomparsa fra l'offerta al modello e la chiamata`);
+        if (!skill) throw new Error(`skill "${nome}" disappeared between the offer to the model and the call`);
         return skill.corpo;
       };
     }
@@ -852,14 +864,14 @@ export async function avviaSessione({
          *   esegue.
          */
         const pluginId = preparato.pluginIdDiTool?.(nomeEsposto) ?? null;
-        if (!pluginId) return '⛔ Non riconosco a quale plugin appartiene questo strumento, quindi non lo eseguo.';
+        if (!pluginId) return '⛔ I cannot tell which plugin this tool belongs to, so I am not running it.';
         let stato;
         try {
           const hash = await improntaPacchettoPlugin({ cartella, pluginId });
           stato = await statoTrustPlugin({ cartellaTrust: cartellaTrustPlugin, pluginId, hash });
         } catch (errore) {
           /* Un pacchetto che non si legge più non autorizza: si dice, non si esegue. */
-          return `⛔ Non riesco più a controllare i file di questo plugin, quindi non lo eseguo. (${errore?.message ?? 'lettura fallita'})`;
+          return `⛔ I can no longer check the files of this plugin, so I am not running it. (${errore?.message ?? 'read failed'})`;
         }
         /*
          * ⛔ A-6(b): la frase è quella del MOTIVO vero. Prima il ripiego diceva sempre «non è più
@@ -1017,7 +1029,7 @@ export async function avviaSessione({
         try {
           esito = await eseguiHookFn({ hook, evento, cartella });
         } catch {
-          esito = { consentito: false, motivo: `l'hook di plugin "${hook.id}" è fallito nell'esecuzione.` };
+          esito = { consentito: false, motivo: `the plugin hook "${hook.id}" failed while running.` };
         }
         onEvento(hookInvoked({ hookId: hook.id, tipo: evento.tipo, azione: evento.azione, esito }));
         if (esito?.consentito === false) return esito;
@@ -1172,6 +1184,15 @@ export async function avviaSessione({
            mostrare, ma porta il suo canale e il suo motivo onesto — senza questi la validazione del
            frontend buttava l'evento e l'attesa restava muta (fino a ~4 minuti senza banner). */
         ...(evento.canale === 'esito-incerto' ? { canale: evento.canale, motivo: evento.motivo } : {}),
+      } });
+    }
+    /* Decisione 14 (owner 08/10/2026 sera): chi ha servito il giro. Un evento persistito, così la testata della risposta lo dice
+       anche dopo una ricarica; il nome è quello di OpenRouter, mai riscritto. */
+    if (evento.tipo === 'fornitore-a-valle') {
+      if (typeof evento.fornitore !== 'string' || !evento.fornitore) return undefined;
+      return onEvento({ type: 'CUSTOM', name: 'talos.fornitore-a-valle', value: {
+        schema: 'talos.fornitore-a-valle.v1', threadId, runId, giro: evento.giro, fornitore: evento.fornitore,
+        ...(typeof evento.modello === 'string' && evento.modello ? { modello: evento.modello } : {}),
       } });
     }
     if (evento.tipo === 'compattazione-inizio' && evento.motivo) motivoCompattazionePerGiro.set(evento.giro, evento.motivo);
@@ -1329,11 +1350,11 @@ export async function avviaSessione({
         testo: html,
       });
       if (typeof voceSalvata !== 'string' || !/^lib-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(voceSalvata)) {
-        throw new Error('La Libreria non ha restituito un riferimento valido alla copia');
+        throw new Error('The Library did not return a valid reference to the copy');
       }
       voceLibreriaId = voceSalvata;
     } catch (errore) {
-      console.error('[artefatti] copia in Libreria non riuscita:', errore instanceof Error ? errore.message : errore);
+      console.error('[artifacts] copy to Library failed:', errore instanceof Error ? errore.message : errore);
     }
     onEvento(artifactCreated({ messageId: randomUUID(), id, titolo, voceLibreriaId }));
     return { id };
@@ -1570,7 +1591,7 @@ export async function avviaSessione({
             : { base64: Buffer.from(documento.bytes).toString('base64') }),
         });
       } catch (errore) {
-        console.error('[documenti] copia in Libreria non riuscita:', errore instanceof Error ? errore.message : errore);
+        console.error('[documents] copy to Library failed:', errore instanceof Error ? errore.message : errore);
       }
     }
 
@@ -1688,7 +1709,7 @@ export async function avviaSessione({
         base64: Buffer.from(immagineGenerata.bytes).toString('base64'),
       });
     } catch (errore) {
-      console.error('[immagini] copia in Libreria non riuscita:', errore instanceof Error ? errore.message : errore);
+      console.error('[images] copy to Library failed:', errore instanceof Error ? errore.message : errore);
     }
     /*
      * ⛔ PO-05, stessa cura del documento: `[image image/png, 51234 bytes]` è una riga onesta e
@@ -2004,7 +2025,9 @@ export async function avviaSessione({
   const onAttivitaLista = async (argomenti) => {
     const tutte = await elencaAttivitaFn({ cartella: cartellaAttivita });
     const stato = argomenti?.status ?? 'all';
-    const filtrate = stato === 'all' ? tutte : tutte.filter((a) => (stato === 'done' ? a.stato === 'done' : a.stato !== 'done'));
+    const filtrate = stato === 'all'
+      ? tutte
+      : tutte.filter((a) => (stato === 'done' ? a.stato === 'done' : a.stato !== 'done'));
     const richiesto = Number(argomenti?.limit);
     const limite = Number.isFinite(richiesto) ? Math.min(Math.max(richiesto, 1), 50) : 20;
     return { attivita: filtrate.slice(0, limite), totale: filtrate.length };
@@ -2142,6 +2165,7 @@ export async function avviaSessione({
       cartella, task, modello, chiave, comandoProva, segnaleStop, messaggiIniziali, mobile,
       finestraToken, /* ⛔ BUG-5 (05/10/2026): inoltrata al kernel — la soglia diventa 0,75 della finestra VERA del modello */
       ...(typeof registraComandoFermabile === 'function' ? { registraComandoFermabile } : {}),
+      ...(typeof segnalaUscitaSfondo === 'function' ? { segnalaUscitaSfondo } : {}),
       ...(checkpointSessionId ? { checkpointSessionId, checkpointOperation } : {}),
       ambienteComandiFn,
       ...(processOutputFn ? { captureProcessFn: ({toolCallId}, execute) => processOutputFn({runId, toolCallId}, execute) } : {}),
@@ -2171,23 +2195,32 @@ export async function avviaSessione({
           return;
         }
         if (!ripetibile) {
-          if (avvisiFornitoreGiaDetti.has(messaggio)) return;
-          avvisiFornitoreGiaDetti.add(messaggio);
+          /* ⛔ K4b × BUG-7 (07/10/2026): un avviso per la persona ora arriva anche come OGGETTO
+             `{testo, testoChiave, testoParams}`, costruito NUOVO a ogni giro (`frasiAvvisi`). Confrontato per
+             identità non sarebbe mai «già detto» e la bolla tornerebbe a ogni giro: la dedup legge il testo. */
+          const giaDetto = typeof messaggio === 'string' ? messaggio : String(messaggio?.testo ?? '');
+          if (avvisiFornitoreGiaDetti.has(giaDetto)) return;
+          avvisiFornitoreGiaDetti.add(giaDetto);
         }
         const messageId = randomUUID();
         await onEvento(textMessageStart({ messageId, role: 'assistant' }), { durable: true });
-        await onEvento(textMessageContent({ messageId, delta: messaggio }), { durable: true });
+        const delta = typeof messaggio === 'string' ? messaggio : messaggio.testo;
+        const evento = textMessageContent({ messageId, delta });
+        if (messaggio?.testoChiave) { evento.deltaChiave = messaggio.testoChiave; if (messaggio.testoParams) evento.deltaParams = messaggio.testoParams; }
+        await onEvento(evento, { durable: true });
         await onEvento(textMessageEnd({ messageId }), { durable: true });
       },
       onCambioFornitore: async evento => {
-        if (typeof depositaCambioFornitore !== 'function') throw new Error('Il cambio non è collegato alla sessione.');
+        if (typeof depositaCambioFornitore !== 'function') throw new Error('The switch is not connected to the session.');
         for (const messageId of messaggiTestoPerGiro.values()) await onEvento(textMessageEnd({ messageId }), { durable: true });
         for (const messageId of messaggiRagionamentoPerGiro.values()) await onEvento(reasoningMessageEnd({ messageId }), { durable: true });
-        for (const ids of toolCallIdStreamatiPerGiro.values()) for (const toolCallId of ids) await onEvento(eventoPerEsitoTool({ messageId: randomUUID(), toolCallId, content: 'Richiesta interrotta prima dell’esecuzione.', isError: true }), { durable: true });
+        for (const ids of toolCallIdStreamatiPerGiro.values()) for (const toolCallId of ids) await onEvento(eventoPerEsitoTool({ messageId: randomUUID(), toolCallId, content: 'Request interrupted before execution.', isError: true }), { durable: true });
         messaggiTestoPerGiro.clear(); messaggiRagionamentoPerGiro.clear(); toolCallIdStreamatiPerGiro.clear();
         const messageId = randomUUID();
         await onEvento(textMessageStart({ messageId, role: 'assistant' }), { durable: true });
-        await onEvento(textMessageContent({ messageId, delta: evento.messaggio }), { durable: true });
+        const deltaCambio = textMessageContent({ messageId, delta: evento.messaggio });
+        if (evento.messaggioChiave) { deltaCambio.deltaChiave = evento.messaggioChiave; if (evento.messaggioParams) deltaCambio.deltaParams = evento.messaggioParams; }
+        await onEvento(deltaCambio, { durable: true });
         await onEvento(textMessageEnd({ messageId }), { durable: true });
         await onEvento({ type: 'CUSTOM', name: 'cambio-fornitore', value: evento }, { durable: true });
         await depositaCambioFornitore(evento);
@@ -2198,10 +2231,10 @@ export async function avviaSessione({
       // la cache della corsa e la finestra della pagina le costruisce `research-orchestrator.mjs`
       // («raccolta viva»). Assenti ⇒ il kernel si comporta esattamente come ieri.
       cacheWeb, onPaginaLetta,
-      livelloAccesso, modalitaOperativa, chiediApprovazioneFn, chiediDomandaFn, presentaPianoFn,
+      livelloAccesso, modalitaOperativa, chiediApprovazioneFn, chiediDomandaFn, figliaChiedeAllaPersona, presentaPianoFn,
       agentRole, askParentFn, answerChildQuestionFn, askChildFn, answerParentQuestionFn, onWorkflowPlanPropose, listChildrenFn, stopChildFn,
-      modalitaOperativaCorrenteFn, figliViviAllAvvio,
-      hookFn: hookFnConPlugin, permessiPerAttrezzo, onDelega, codaMessaggiFn,
+      modalitaOperativaCorrenteFn, figliViviAllAvvio, permessiCorrentiFn,
+      hookFn: hookFnConPlugin, permessiPerAttrezzo, onDelega, coordinazioneFn, codaMessaggiFn,
       firma, toolMcp, chiamaToolMcpFn, skillsDisponibili, caricaSkillFn, toolPlugin, eseguiToolPluginFn,
       onLibreriaLista, onLibreriaCerca, onLibreriaLeggi, onLibreriaOrigine,
       onLibreriaRinomina, onLibreriaElimina, onLibreriaEsporta, onLibreriaPolitica,
@@ -2210,6 +2243,7 @@ export async function avviaSessione({
       onMemoriaCerca, onMemoriaScrivi, onMemoriaAggiorna, onMemoriaElimina,
       onLetturaSezione, memorieNelPrompt, // 27/09/2026, decisione owner: le letture delle sezioni e le memorie nel prompt
       onWorkflowFn, // F-012 (piano 0.1.19 §1.5): i tre attrezzi dei run, inoltrato com'è
+      onAutomazioneFn, // automazioni a due porte (08/10/2026): inoltrato com'è
       onRichiestaPianoFn, // Rilievo 3 (§1.7): la richiesta del modo Piano, inoltrata com'è
       onRicercaLista, onRicercaAvvia, onRicercaLeggi, onRicercaRinomina,
       onRicercaPausa, onRicercaRiprendi, onRicercaAnnulla, onRicercaElimina,
@@ -2259,7 +2293,9 @@ export async function avviaSessione({
      *   non può sapere se ritentare. Solo una parola in forma di classe, mai un oggetto.
      */
     const classe = typeof errore?.classe === 'string' && /^[a-z][a-z-]{0,39}$/u.test(errore.classe) ? errore.classe : undefined;
-    onEvento(runError({ message: messaggio, code, classe }));
+    const eventoFinale = runError({ message: messaggio, code, classe });
+    if (errore?.chiave) { eventoFinale.messageChiave = errore.chiave; if (errore.params) eventoFinale.messageParams = errore.params; }
+    onEvento(eventoFinale);
     /*
      * ⭐⭐⭐ BC-44 (12/09/2026) — IL CODICE VIAGGIAVA SOLO NELL'EVENTO, e chi conclude legge il
      * VALORE DI RITORNO. Questo ramo tornava `erroreInterno` (la frase) e buttava `code`: chi
@@ -2322,6 +2358,10 @@ export async function compattaSessione({
   messaggiFinali, modello, chiave, fetchDiRete = fetch,
   compattaConversazioneFn = compattaConversazioneReale,
   onProgresso = null,
+  /* ⭐ 06/10/2026 — le fonti della RICARICA POST-COMPACT (`ricarica-post-compact.mjs`, opzione A della ricerca
+     5×5×5×5 §6.4): passate al terzo parametro di `compattaConversazioneFn` — additive, la firma dei due
+     argomenti resta valida (il registro le dichiara, chi inietta una funzione propria le ignora). */
+  fontiRicarica = null,
 }) {
   /* Lane CLI, 03/10/2026 — con `onProgresso` il riassunto viaggia in streaming e si conta mentre si scrive
      (`creaContatoreRiassunto`, `kernel/compattazione-desktop.mjs`); senza, la chiamata è quella di sempre. */
@@ -2336,7 +2376,7 @@ export async function compattaSessione({
     contatore?.chiudi(esito?.usage);
     return esito;
   };
-  return compattaConversazioneFn(messaggiFinali, chiamaModello);
+  return compattaConversazioneFn(messaggiFinali, chiamaModello, fontiRicarica ?? null);
 }
 
 /**
@@ -2435,6 +2475,8 @@ export async function eseguiComandoDiretto({
   /* ⛔ Stop per riga (owner 02/10/2026): `({ toolCallId, ferma }) => sgancia`. Fino a oggi un comando `!` della persona non
      riceveva NESSUN segnale di stop: si poteva solo aspettare la sua fine o i 120 s. */
   registraComandoFermabile = null,
+  /* A6-bis (08/10/2026): quando il comando finisce in sfondo, la sua uscita vera va al registro (`talos.processo-sfondo`). */
+  segnalaUscitaSfondo = null,
 }) {
   /*
    * ⛔⛔⛔ D-10D — questo NON è più un giro del modello: ha il suo vocabolario.
@@ -2492,9 +2534,14 @@ export async function eseguiComandoDiretto({
   try {
     risultato = processOutputFn ? await processOutputFn({runId: comandoId, toolCallId}, execute) : await execute();
   } finally {
-    if (typeof sgancia === 'function') sgancia();
+    // A6-bis R2: uno sfondato resta fermabile finché vive (come nel kernel): si sgancia alla sua uscita vera
+    if (typeof sgancia === 'function' && !(risultato?.messoInSfondo && risultato.uscita)) sgancia();
   }
+  if (typeof sgancia === 'function' && risultato?.messoInSfondo && risultato.uscita) risultato.uscita.finally(() => sgancia()).catch(() => {});
   anteprima.flush(); // Anche l'ultimo pezzo ammesso deve essere consegnato.
+  if (risultato?.messoInSfondo && risultato.uscita && typeof segnalaUscitaSfondo === 'function') {
+    risultato.uscita.then((u) => segnalaUscitaSfondo({ toolCallId, ...u })).catch(() => {}); // A6-bis (G2: anche un'eccezione del segnalatore)
+  }
   /* ⛔ BLOCCO 6 (B3) — era `[sandbox: ${risultato.enforcement}]`, cioè `[sandbox: none]`: un valore
      che non dice a chi legge che il comando è partito con gli stessi privilegi di TALOS. Qui il
      comando è quello scritto dalla PERSONA (`!`), quindi la dichiarazione serve ancora di più.

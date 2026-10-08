@@ -1,0 +1,15 @@
+{
+  "server.sessionStore.corrupt": "La sessione {sessionId} ha una riga corrotta (non l'ultima): il file non è un crash a metà append, è danneggiato altrove.",
+  "server.sessionStore.readFailed": "Impossibile leggere la sessione {sessionId}: {detail}",
+  "server.sessionStore.noHeader": "{n} record, nessuna intestazione",
+  "server.sessionStore.badCommandSettings": "La scelta salvata dei comandi non e valida; il registro originale e conservato.",
+  "server.sessionStore.futureSchema": "schema {schema}, questo TALOS legge fino a {max}",
+  "server.sessionStore.reason.corrotta": "corrotta",
+  "server.sessionStore.reason.letturaFallita": "lettura-fallita",
+  "server.sessionStore.reason.vuota": "vuota",
+  "server.sessionStore.reason.senzaIntestazione": "senza-intestazione",
+  "server.sessionStore.reason.impostazioniComandiNonValide": "impostazioni-comandi-non-valide",
+  "server.sessionStore.reason.schemaFuturo": "schema-futuro",
+  "server.sessionStore.reason.intestazionePendenteSenzaJournal": "intestazione-pendente-senza-journal",
+  "server.sessionStore.reason.intestazioneInQuarantena": "intestazione-in-quarantena"
+}

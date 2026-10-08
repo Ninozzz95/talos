@@ -22,9 +22,13 @@
  */
 import { randomUUID } from 'node:crypto';
 
+import { azioniConsentiteDelRun, motiviDiAttenzioneDelRun } from './azioni-del-run.mjs';
 import { listRunSummariesForSession, readRunState } from './store.mjs';
 import { readResultBytes } from './result-store.mjs';
 import { decodeWorkflowResultText, selectWorkflowResult } from './output-access.mjs';
+
+/** Le azioni che `workflow_control` accetta dal modello: la stessa lista per il rifiuto e per `workflow_status`. */
+const AZIONI_DEL_MODELLO = Object.freeze(['pause', 'resume', 'cancel']);
 
 /* La costante dell'anteprima vive nel read-model, accanto a PLANNED_TASK_PREVIEW_MAX («stessa
    regola», piano §1.6); qui si RIESPORTA perché è il canale del modello a dichiararla. */
@@ -92,6 +96,14 @@ export function dettaglioRunPerIlModello(input, { adesso = new Date().toISOStrin
     const righe = [];
     const richieste = [run.pauseRequested ? 'pause requested' : null, run.cancelRequested ? 'cancel requested' : null].filter(Boolean);
     righe.push(`run ${runId} — ${run.status ?? 'unknown'}${richieste.length > 0 ? ` (${richieste.join(', ')})` : ''}`);
+    // A10 (07/10/2026): che cosa vale adesso, e perché il run aspetta — prima ancora di provare un controllo
+    // ⛔ Al modello si elencano solo le azioni del SUO attrezzo (workflow_control): `retry` è della persona, dal pannello.
+    const ammesse = azioniConsentiteDelRun(state);
+    const azioni = ammesse.filter((a) => AZIONI_DEL_MODELLO.includes(a));
+    const motivi = motiviDiAttenzioneDelRun(run);
+    righe.push(`allowed actions now: ${azioni.length > 0 ? azioni.join(', ') : 'none'}`
+      + (ammesse.includes('retry') ? '; the person can retry the failed steps from the Workflow panel' : '')
+      + (motivi.length > 0 ? `; needs attention because: ${motivi.join(', ')}` : ''));
     const avvio = events[0]?.at ?? null;
     const fine = events.at(-1)?.at ?? null;
     if (avvio) righe.push(rigaDelTempo(run, avvio, fine, adesso));
@@ -233,14 +245,29 @@ export function creaOnWorkflowFn({ store, runtimeFn } = {}) {
         }
         if (nome === 'workflow_control') {
             const azione = String(argomenti?.azione ?? '');
-            if (!['pause', 'resume', 'cancel'].includes(azione)) {
+            if (!AZIONI_DEL_MODELLO.includes(azione)) {
                 return 'azione must be one of "pause", "resume" or "cancel". Nothing was changed.';
             }
             const runId = String(argomenti?.runId ?? '');
             await runDellaSessione(store, runId, rootSessionId);
             const runtime = typeof runtimeFn === 'function' ? runtimeFn() : null;
             if (!runtime) return 'the workflow runtime is not available right now: the run cannot be controlled from here. Nothing was changed.';
-            const esito = await runtime.orchestrator.requestRunControl({ runId, action: azione, commandId: randomUUID() });
+            let esito;
+            try { esito = await runtime.orchestrator.requestRunControl({ runId, action: azione, commandId: randomUUID() }); }
+            catch (errore) {
+                /* ⛔ A10 (07/10/2026) — il rifiuto dice al MODELLO che cosa può usare LUI adesso (questo attrezzo ha solo
+                   pause/resume/cancel) e perché il run aspetta; `retry` è della persona, dal pannello Workflow. */
+                /* ⛔ Il motivo si legge dal CAMPO `refusalReason`, mai tagliando il messaggio: il messaggio porta anche
+                   «Allowed actions now: …» con `retry`, che al modello non va proposto (review A10, mutante M6). */
+                if (errore?.code !== 'WORKFLOW_RUN_STATE_CONFLICT' || !Array.isArray(errore.allowedActions)
+                    || typeof errore.refusalReason !== 'string') throw errore;
+                const motivo = errore.refusalReason;
+                const usabili = errore.allowedActions.filter((a) => AZIONI_DEL_MODELLO.includes(a));
+                const motivi = Array.isArray(errore.attentionReasons) ? errore.attentionReasons : [];
+                return `${motivo}. Nothing was changed. You can use now: ${usabili.length > 0 ? usabili.join(', ') : 'nothing'}.`
+                    + (errore.allowedActions.includes('retry') ? ' The person can also retry the failed steps from the Workflow panel.' : '')
+                    + (motivi.length > 0 ? ` The run needs attention because: ${motivi.join(', ')}.` : '');
+            }
             runtime.scheduler.sveglia(runId);
             const pausa = azione === 'pause' && esito.status === 'running'
                 ? ' The pause takes effect when the steps in flight finish.' : '';

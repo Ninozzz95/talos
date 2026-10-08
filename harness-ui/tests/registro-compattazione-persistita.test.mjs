@@ -422,7 +422,9 @@ test('CTX-REG-FINAL-HISTORY-WRITE-FAIL-VISIBLE — messaggi-finali non scritti �
     finta.concludi({ type: 'RunFinished' }, { ok: true, esito: { comeFinita: 'concluso', messaggiFinali: storiaDiBase(), recordDiCompattazione: [] } });
     await attendi(() => eventi.some((e) => e.type === 'RunError' && e.code === 'SESSION_STORE_WRITE_FAILED'), { tentativi: 100, messaggio: `nessun RunError visibile; eventi: ${eventi.map((e) => e.type).join(',')}` });
     const errore = eventi.find((e) => e.type === 'RunError' && e.code === 'SESSION_STORE_WRITE_FAILED');
-    assert.match(errore.message, /conversazione|storia/i);
+    assert.match(errore.message, /conversation|history/i);
+    assert.equal(errore.messageChiave, 'server.sessionPersistence.historyNotSaved');
+    assert.deepEqual(errore.messageParams, { detail: 'ENOSPC' });
   } finally {
     console.error = consoleError;
     await attendiScritture({ cartellaStore });
@@ -512,6 +514,75 @@ test('CTX-REG-DANGLING-COMPACTION-CLOSED-AT-RESTORE — un riassunto iniziato e 
   }
 });
 
+/*
+ * ⛔⛔ A20 (07/10/2026, bugfixer) — LE CHIUSURE FINTE. Su DESKTOP OLD (1363 giri) il ripristino aggiungeva 10 «interrotta» a 45
+ *   compattazioni tutte concluse: l'adapter apre con `giro` senza `at` e chiude con un `fine` che porta anche `at`, e le due
+ *   chiavi non combaciavano. Misura: `bugfixer/A20-EVENTI-710672f5.sse` (GET in sola lettura dal 4174).
+ */
+async function chiusureDopoIlRipristino(sessionId, eventiCompattazione) {
+  const cartellaStore = cartellaStoreVera();
+  try {
+    seminaJournal(cartellaStore, sessionId, storiaDiBase());
+    for (const [value, _sequenza] of eventiCompattazione) {
+      registraRigaSync({ cartellaStore, sessionId, record: { type: 'CUSTOM', name: 'talos.compattazione', value, _sequenza } });
+    }
+    const finta = sessioneControllabile();
+    const registro = createSessionRegistry({ cartellaStore, modello: 'm', chiave: 'k', avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta });
+    await registro.ripristina();
+    return registro.esporta(sessionId).eventi
+      .filter((e) => e.type === 'CUSTOM' && e.name === 'talos.compattazione' && e.value?.fase === 'fine' && e.value?.motivo === 'interrotta');
+  } finally {
+    await attendiScritture({ cartellaStore });
+    rimuoviCartellaDiProva(cartellaStore);
+  }
+}
+
+test('A20-01 LA FORMA VERA: inizio dell adapter senza «at» e fine con «at» sono la STESSA compattazione — nessuna chiusura finta', async () => {
+  const chiusure = await chiusureDopoIlRipristino('sess-a20-forma-vera', [
+    [{ fase: 'inizio', giro: 2, motivo: 'soglia', soglia: 100_000, tokenPrima: 120_000 }, 3],
+    [{ fase: 'fine', giro: 2, compattato: true, at: '2026-10-05T10:00:00.000Z', coveredThrough: 4, tokenPrima: 120_000, tokenDopo: 30_000, motivo: 'soglia' }, 4],
+    [{ fase: 'inizio', giro: 74, motivo: 'emergenza', soglia: 100_000, tokenPrima: 190_000 }, 5],
+    [{ fase: 'fine', giro: 74, compattato: true, at: '2026-10-05T11:00:00.000Z', coveredThrough: 6, tokenPrima: 190_000, tokenDopo: 40_000, motivo: 'emergenza' }, 6],
+    [{ fase: 'inizio', giro: 0, motivo: 'soglia', soglia: 100_000, tokenPrima: 110_000 }, 7],
+    [{ fase: 'fine', giro: 0, compattato: false, motivo: 'vuoto' }, 8],
+  ]);
+  assert.equal(chiusure.length, 0, `nessuna compattazione era rimasta aperta: ${JSON.stringify(chiusure.map((e) => e.value))}`);
+});
+
+test('A20-02 PILA PER GIRO: un inizio interrotto davvero, poi inizio+fine nello stesso giro ⇒ esattamente UNA chiusura', async () => {
+  const chiusure = await chiusureDopoIlRipristino('sess-a20-pila', [
+    [{ fase: 'inizio', giro: 2, motivo: 'soglia', soglia: 100_000, tokenPrima: 120_000 }, 3], // interrotto: il server si è fermato
+    [{ fase: 'inizio', giro: 2, motivo: 'soglia', soglia: 100_000, tokenPrima: 125_000 }, 4],
+    [{ fase: 'fine', giro: 2, compattato: true, at: '2026-10-05T10:00:00.000Z', coveredThrough: 5, tokenPrima: 125_000, tokenDopo: 30_000, motivo: 'soglia' }, 5],
+  ]);
+  assert.equal(chiusure.length, 1, `una sola interruzione vera: ${JSON.stringify(chiusure.map((e) => e.value))}`);
+  assert.equal(chiusure[0].value.giro, 2);
+  assert.ok(chiusure[0]._sequenza > 5, 'la chiusura viene dopo l ultimo evento');
+  /* review di «talos desktop» (mutante MB, pila → coda): il fine chiude l'inizio PIÙ RECENTE (sequenza 4); resta aperto, e si
+     chiude, quello interrotto davvero (sequenza 3, tokenPrima 120.000) — non il contrario. */
+  assert.equal(chiusure[0].value.sequenzaInizio, 3, 'la chiusura è dell inizio interrotto, il più vecchio');
+});
+
+test('A20-03 SFONDO E ADAPTER NELLO STESSO GIRO: ciascun fine chiude il suo inizio, mai quello dell altro', async () => {
+  const AT_SFONDO = '2026-10-05T09:00:00.000Z';
+  // i due chiusi ⇒ nessuna chiusura
+  assert.equal((await chiusureDopoIlRipristino('sess-a20-entrambi', [
+    [{ fase: 'inizio', motivo: 'background', soglia: 100_000, tokenPrima: 150_000, coveredThrough: 1, at: AT_SFONDO }, 3],
+    [{ fase: 'inizio', giro: 3, motivo: 'soglia', soglia: 100_000, tokenPrima: 160_000 }, 4],
+    [{ fase: 'fine', compattato: true, motivo: 'background', at: AT_SFONDO, coveredThrough: 2 }, 5],
+    [{ fase: 'fine', giro: 3, compattato: true, at: '2026-10-05T09:05:00.000Z', coveredThrough: 5, motivo: 'soglia' }, 6],
+  ])).length, 0);
+  // AL CONTRARIO: solo lo sfondo si chiude ⇒ resta aperto quello dell'adapter, e la chiusura è sua (senza «at», col giro)
+  const restaAdapter = await chiusureDopoIlRipristino('sess-a20-solo-sfondo', [
+    [{ fase: 'inizio', motivo: 'background', soglia: 100_000, tokenPrima: 150_000, coveredThrough: 1, at: AT_SFONDO }, 3],
+    [{ fase: 'inizio', giro: 3, motivo: 'soglia', soglia: 100_000, tokenPrima: 160_000 }, 4],
+    [{ fase: 'fine', compattato: true, motivo: 'background', at: AT_SFONDO, giro: 3, coveredThrough: 2 }, 5],
+  ]);
+  assert.equal(restaAdapter.length, 1);
+  assert.equal(restaAdapter[0].value.giro, 3);
+  assert.equal(Object.hasOwn(restaAdapter[0].value, 'at'), false, 'la chiusura è dell inizio dell adapter, non dello sfondo');
+});
+
 test('CTX-REG-POISONED-RESUME-HONEST — su una coda avvelenata resume dice il vero (SESSION_STORE_AMBIGUOUS), non «Riprova»', async () => {
   const cartellaStore = cartellaStoreVera();
   const sessionId = 'sess-avvelenata';
@@ -578,7 +649,7 @@ test('CTX-REG-RESUME-CLOSES-ORPHAN-TOOL-CALLS — una tool_call senza risultato 
     const chiusure = messaggi.filter((m) => m.role === 'tool');
     assert.equal(chiusure.length, 2, 'una chiusura per ogni chiamata orfana');
     assert.deepEqual(chiusure.map((m) => m.tool_call_id), ['call_orfana', 'call_orfana_2']);
-    assert.match(chiusure[0].content, /interrott|non disponibile/i);
+    assert.match(chiusure[0].content, /interrupt|not available/i);
     assert.equal(messaggi.indexOf(chiusure[1]), messaggi.length - 2, 'le chiusure stanno subito dopo l’assistant, prima del nuovo messaggio');
     assert.equal(messaggi.at(-1).content, 'continua');
     finta.concludi({ type: 'RunFinished' }, { ok: true, esito: { comeFinita: 'concluso', messaggiFinali: [...messaggi], recordDiCompattazione: [] } });

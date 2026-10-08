@@ -59,7 +59,7 @@ function percorsoDi(cartella, id) {
 
 function validaTitolo(title) {
   if (typeof title !== 'string' || title.trim().length === 0 || title.length > TITOLO_MASSIMO) {
-    throw new TaskStoreError(`title deve avere 1-${TITOLO_MASSIMO} caratteri`, 'TASK_INVALID');
+    throw new TaskStoreError(`title must have 1-${TITOLO_MASSIMO} characters`, 'TASK_INVALID');
   }
   return title.trim();
 }
@@ -68,21 +68,21 @@ function validaTitolo(title) {
 function validaDescrizione(description) {
   if (description === undefined || description === null) return null;
   if (typeof description !== 'string' || description.length > DESCRIZIONE_MASSIMA) {
-    throw new TaskStoreError(`description deve avere al massimo ${DESCRIZIONE_MASSIMA} caratteri`, 'TASK_INVALID');
+    throw new TaskStoreError(`description must have at most ${DESCRIZIONE_MASSIMA} characters`, 'TASK_INVALID');
   }
   return description.trim() || null;
 }
 
 function validaPriorita(priority) {
   if (!PRIORITA.includes(priority)) {
-    throw new TaskStoreError(`priority deve essere una fra ${PRIORITA.join('/')}`, 'TASK_INVALID');
+    throw new TaskStoreError(`priority must be one of ${PRIORITA.join('/')}`, 'TASK_INVALID');
   }
   return priority;
 }
 
 function validaStato(status) {
   if (!STATI.includes(status)) {
-    throw new TaskStoreError(`status deve essere uno fra ${STATI.join('/')}`, 'TASK_INVALID');
+    throw new TaskStoreError(`status must be one of ${STATI.join('/')}`, 'TASK_INVALID');
   }
   return status;
 }
@@ -97,7 +97,7 @@ const ORIGINI = Object.freeze(['persona', 'modello']);
 
 function validaOrigine(origine) {
   if (!ORIGINI.includes(origine)) {
-    throw new TaskStoreError(`origine deve essere una fra ${ORIGINI.join('/')}`, 'TASK_INVALID');
+    throw new TaskStoreError(`origine must be one of ${ORIGINI.join('/')}`, 'TASK_INVALID');
   }
   return origine;
 }
@@ -186,7 +186,7 @@ export async function aggiornaAttivita({ cartella, id, title, description, prior
   const writeFileFn = deps.writeFileFn ?? fsp.writeFile;
   const clockFn = deps.clockFn ?? (() => new Date());
   const voce = await leggiAttivita({ cartella, id }, { readFileFn });
-  if (!voce) throw new TaskStoreError(`nessuna attività con id ${id}`, 'TASK_NOT_FOUND');
+  if (!voce) throw new TaskStoreError(`no task with id ${id}`, 'TASK_NOT_FOUND');
   if (title !== undefined) voce.titolo = validaTitolo(title);
   if (description !== undefined) voce.descrizione = validaDescrizione(description);
   if (priority !== undefined) voce.priorita = validaPriorita(priority);
@@ -203,7 +203,7 @@ export async function completaAttivita({ cartella, id, status = 'done' }, deps =
   const writeFileFn = deps.writeFileFn ?? fsp.writeFile;
   const clockFn = deps.clockFn ?? (() => new Date());
   const voce = await leggiAttivita({ cartella, id }, { readFileFn });
-  if (!voce) throw new TaskStoreError(`nessuna attività con id ${id}`, 'TASK_NOT_FOUND');
+  if (!voce) throw new TaskStoreError(`no task with id ${id}`, 'TASK_NOT_FOUND');
   voce.stato = validaStato(status);
   voce.aggiornataAlle = clockFn().toISOString();
   await mkdirFn(cartella, { recursive: true });

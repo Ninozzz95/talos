@@ -230,6 +230,36 @@ function grezzoContesto(tecnico, codice) {
   return tecnico ? `[${trovato}] ${tecnico}` : `[${trovato}]`;
 }
 
+/*
+ * ⛔ K4b (07/10/2026) — i due messaggi del motore locale arrivano dal server in inglese a forma stabile (e in italiano dalle
+ *   sessioni salvate prima): se ne estraggono i VALORI e la frase si scrive nella lingua di chi guarda. Se la forma non
+ *   torna, resta il testo grezzo — mai una frase inventata.
+ */
+const gbNellaLingua = (s) => {
+  const n = Number(String(s).replace(',', '.'));
+  return Number.isFinite(n) ? n.toLocaleString(linguaCorrenteDiT() === 'it' ? 'it-IT' : 'en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : String(s);
+};
+function perchéArchitettura(testo) {
+  const grezzo = String(testo).replace(/\bRUNTIME_ARCH_UNSUPPORTED\b\s*/u, '').trim();
+  const architettura = /architecture "([^"]+)"/u.exec(grezzo)?.[1] ?? /architettura «([^»]+)»/u.exec(grezzo)?.[1];
+  if (!architettura) return grezzo;
+  const build = /llama\.cpp (b\d{3,6})/u.exec(grezzo)?.[1];
+  const motore = build ? t('errori.turno.architetturaSconosciuta.motoreConBuild', { build }) : t('errori.turno.architetturaSconosciuta.motoreInstallato');
+  return t('errori.turno.architetturaSconosciuta.perche', { architettura, motore });
+}
+function dettaglioMemoriaPiena(testo) {
+  const grezzo = String(testo).replace(/\bRUNTIME_OUT_OF_MEMORY\b\s*/u, '').trim();
+  if (!/does not fit in the graphics card memory|non entra nella memoria della scheda/u.test(grezzo)) return grezzo;
+  const modelloGb = /^(?:The model|Il modello) \((\d+(?:[.,]\d+)?) GB\)/u.exec(grezzo)?.[1];
+  /* Il nome si legge AVIDO dalla parentesi che segue «memory»/«scheda grafica» fino all'ultimo «: N GB, …»: i nomi veri hanno
+     parentesi («AMD Radeon(TM) 780M Graphics», «Radeon 8060S Graphics (RADV GFX1151)»). Review del bugfixer, 07/10/2026. */
+  const scheda = /(?:memory|scheda grafica) \((.+): (\d+(?:[.,]\d+)?) GB, (?:(\d+(?:[.,]\d+)?) GB free|liberi (\d+(?:[.,]\d+)?) GB)\)\.?$/u.exec(grezzo);
+  return t('errori.turno.modelloNonEntra.dettaglio', {
+    modello: modelloGb ? t('errori.turno.modelloNonEntra.parteModello', { gb: gbNellaLingua(modelloGb) }) : '',
+    scheda: scheda ? t('errori.turno.modelloNonEntra.parteScheda', { nome: scheda[1].trim(), totale: gbNellaLingua(scheda[2]), liberi: gbNellaLingua(scheda[3] ?? scheda[4]) }) : '',
+  });
+}
+
 /** Il codice tecnico e il messaggio grezzo, come li manda il server. */
 const REGOLE = [
   ...[
@@ -248,6 +278,18 @@ const REGOLE = [
       tecnico: tecnico.includes(codice) ? tecnico : `[${codice}]${tecnico ? ` ${tecnico}` : ''}`,
     }),
   })),
+  /* Decisione 14, nota 2 del bugfixer (08/10/2026 notte): l'elenco degli esclusi copre TUTTI i fornitori del modello. Non è un
+     limite del servizio (la famiglia sopra direbbe «Limite del servizio», falso): è una scelta della persona, e la carta dice dove
+     si cambia. Il codice lo mette il server (`classificaTuttiEsclusiOpenRouter`) dal dato strutturato di OpenRouter. */
+  {
+    id: 'tutti-esclusi', riconosce: (_testo, code) => code === 'OPENROUTER_ALL_PROVIDERS_EXCLUDED',
+    spiega: tecnico => ({
+      cosa: t('errori.turno.tuttiEsclusi.cosa'),
+      perche: t('errori.turno.tuttiEsclusi.perche'),
+      rimedi: [t('errori.turno.tuttiEsclusi.rimedio1'), t('errori.turno.tuttiEsclusi.rimedio2')],
+      tecnico: tecnico.includes('OPENROUTER_ALL_PROVIDERS_EXCLUDED') ? tecnico : `[OPENROUTER_ALL_PROVIDERS_EXCLUDED]${tecnico ? ` ${tecnico}` : ''}`,
+    }),
+  },
   {
     // RETRY05: il codice del backend prevale sulle parole del messaggio.
     // Un esito incerto non dimostra invio mancato, costo nullo o credenziale invalida.
@@ -442,10 +484,12 @@ const REGOLE = [
      *   Sta PRIMA delle regole su «failed to load model», che altrimenti la prenderebbero.
      */
     id: 'architettura-sconosciuta',
-    riconosce: (t) => /\bRUNTIME_ARCH_UNSUPPORTED\b|non sa leggere:?|unknown model architecture/i.test(t),
+    /* ⛔ K4b (07/10/2026): il server la scrive in inglese («…which the installed engine (llama.cpp bNNNN) cannot read…»);
+       la forma italiana resta per le sessioni salvate prima. Il perché si COMPONE dai valori, nella lingua di chi guarda. */
+    riconosce: (t) => /\bRUNTIME_ARCH_UNSUPPORTED\b|non sa leggere:?|cannot read: a newer engine|unknown model architecture/i.test(t),
     spiega: (testo) => ({
       cosa: t('errori.turno.architetturaSconosciuta.cosa'),
-      perche: testo.replace(/\bRUNTIME_ARCH_UNSUPPORTED\b\s*/u, '').trim(),
+      perche: perchéArchitettura(testo),
       rimedi: [
         t('errori.turno.architetturaSconosciuta.rimedio1'),
         t('errori.turno.architetturaSconosciuta.rimedio2'),
@@ -460,10 +504,10 @@ const REGOLE = [
      *   vera»), e questa regola sta PRIMA. Il rimedio è quello di Hermes (`physics_check`): una quantizzazione più piccola.
      */
     id: 'modello-non-entra',
-    riconosce: (t) => /\bRUNTIME_OUT_OF_MEMORY\b|non entra nella memoria della scheda/i.test(t),
+    riconosce: (t) => /\bRUNTIME_OUT_OF_MEMORY\b|non entra nella memoria della scheda|does not fit in the graphics card memory/i.test(t),
     spiega: (testo) => ({
       cosa: t('errori.turno.modelloNonEntra.cosa'),
-      perche: t('errori.turno.modelloNonEntra.perche', { dettaglio: testo.replace(/\bRUNTIME_OUT_OF_MEMORY\b\s*/u, '').trim() }),
+      perche: t('errori.turno.modelloNonEntra.perche', { dettaglio: dettaglioMemoriaPiena(testo) }),
       rimedi: [
         t('errori.turno.modelloNonEntra.rimedio1'),
         t('errori.turno.modelloNonEntra.rimedio2'),

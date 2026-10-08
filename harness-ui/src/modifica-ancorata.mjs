@@ -41,15 +41,15 @@
 
 /** Le strategie, dalla più severa alla più tollerante. Nessuna di esse indovina: tutte confrontano. */
 const STRATEGIE = Object.freeze([
-  { nome: 'esatta', descrizione: 'il testo combacia carattere per carattere', normalizza: (t) => t },
+  { nome: 'esatta', descrizione: 'the text matches character by character', normalizza: (t) => t },
   {
     nome: 'spazi-in-coda',
-    descrizione: 'combacia ignorando gli spazi a fine riga',
+    descrizione: 'matches ignoring trailing spaces',
     normalizza: (t) => t.split('\n').map((r) => r.replace(/[ \t]+$/u, '')).join('\n'),
   },
   {
     nome: 'rientro',
-    descrizione: 'combacia ignorando il rientro a inizio riga',
+    descrizione: 'matches ignoring the indentation at the start of the line',
     normalizza: (t) => t.split('\n').map((r) => r.replace(/^[ \t]+/u, '').replace(/[ \t]+$/u, '')).join('\n'),
   },
 ]);
@@ -95,17 +95,17 @@ export function modificaAncorata(contenuto, vecchio, nuovo, { tutte = false } = 
   const metti = String(nuovo ?? '');
 
   if (cerca === '') {
-    throw new ModificaError('Il testo da sostituire è vuoto: dimmi che cosa cercare.', 'MODIFICA_VUOTA');
+    throw new ModificaError('The text to replace is empty: tell me what to look for.', 'MODIFICA_VUOTA');
   }
   if (cerca === metti) {
-    throw new ModificaError('Il testo nuovo è identico a quello vecchio: non c\'è niente da cambiare.', 'MODIFICA_IDENTICA');
+    throw new ModificaError('The new text is identical to the old one: there is nothing to change.', 'MODIFICA_IDENTICA');
   }
   /*
    * ⛔ Solo spazi: combacerebbe ovunque, e «ovunque» non è un'ancora. Hermes rifiuta lo stesso caso
    *   («old_string is only whitespace»), e per la stessa ragione.
    */
   if (cerca.trim() === '') {
-    throw new ModificaError('Il testo da sostituire è fatto solo di spazi: serve qualcosa che lo distingua.', 'MODIFICA_SOLO_SPAZI');
+    throw new ModificaError('The text to replace is made only of spaces: something to tell it apart is needed.', 'MODIFICA_SOLO_SPAZI');
   }
 
   for (const strategia of STRATEGIE) {
@@ -124,11 +124,11 @@ export function modificaAncorata(contenuto, vecchio, nuovo, { tutte = false } = 
     if (trovate.length > 1 && !tutte) {
       const dove = trovate.slice(0, 5).map((i) => {
         const p = posizioneDi(testoN, i);
-        return `riga ${p.riga}`;
+        return `line ${p.riga}`;
       });
       throw new ModificaError(
-        `Quel testo compare ${trovate.length} volte (${dove.join(', ')}${trovate.length > 5 ? ', e altre' : ''}): `
-        + 'aggiungi qualche riga intorno per renderlo unico, oppure chiedi di sostituirle tutte.',
+        `That text appears ${trovate.length} times (${dove.join(', ')}${trovate.length > 5 ? ', and others' : ''}): `
+        + 'add a few lines around it to make it unique, or ask to replace them all.',
         'MODIFICA_AMBIGUA',
         { occorrenze: trovate.length, righe: trovate.map((i) => posizioneDi(testoN, i).riga) },
       );
@@ -140,15 +140,15 @@ export function modificaAncorata(contenuto, vecchio, nuovo, { tutte = false } = 
      */
     if (tutte && strategia.nome !== 'esatta') {
       throw new ModificaError(
-        'Non trovo quel testo esatto, e «tutte le occorrenze» vale solo sul testo esatto: '
-        + 'rileggi il file e copia il punto com\'è.',
+        'I cannot find that exact text, and "all occurrences" only applies to the exact text: '
+        + 'reread the file and copy the spot as it is.',
         'MODIFICA_TUTTE_NON_ESATTA',
       );
     }
     if (strategia.nome !== 'esatta' && testoN.length !== testo.length) {
       throw new ModificaError(
-        `Ho trovato quel testo ${strategia.descrizione}, ma il file ha spazi che spostano le posizioni: `
-        + 'rileggilo e copia il punto com\'è, spazi compresi.',
+        `I found that text ${strategia.descrizione}, but the file has spaces that shift the positions: `
+        + 'reread it and copy the spot as it is, spaces included.',
         'MODIFICA_POSIZIONE_INCERTA',
         { strategia: strategia.nome },
       );
@@ -171,7 +171,7 @@ export function modificaAncorata(contenuto, vecchio, nuovo, { tutte = false } = 
    *   smettere i cicli di ritentativo). Si dice che cosa fare, non solo che è andata male.
    */
   throw new ModificaError(
-    'Non trovo quel testo nel file: rileggilo e copia il punto esatto da cambiare, con qualche riga intorno.',
+    'I cannot find that text in the file: reread it and copy the exact spot to change, with a few lines around it.',
     'MODIFICA_NON_TROVATA',
   );
 }

@@ -44,8 +44,19 @@ export async function progettoBC48() {
 }
 
 export function separaBlocchi(testo) {
-  const intestazioni = { istruzioni: 'Istruzioni di questo progetto — ', mappa: 'Struttura di «', scheda: 'Scheda di lavoro — ' };
-  const posizioni = Object.entries(intestazioni).map(([nome, inizio]) => ({ nome, indice: testo.indexOf(inizio) })).filter(p => p.indice >= 0).sort((a, b) => a.indice - b.indice);
+  const intestazioni = [
+    { nome: 'istruzioni', marcatori: ['Project instructions — ', 'Istruzioni di questo progetto — '] },
+    { nome: 'mappa', marcatori: ['Structure of «', 'Struttura di «'] },
+    { nome: 'scheda', marcatori: ['Working sheet — ', 'Scheda di lavoro — '] },
+  ];
+  const posizioni = intestazioni.map(({ nome, marcatori }) => {
+    let indice = -1;
+    for (const m of marcatori) {
+      const idx = testo.indexOf(m);
+      if (idx >= 0 && (indice === -1 || idx < indice)) indice = idx;
+    }
+    return { nome, indice };
+  }).filter(p => p.indice >= 0).sort((a, b) => a.indice - b.indice);
   return Object.fromEntries(posizioni.map((p, i) => [p.nome, testo.slice(p.indice, i + 1 < posizioni.length ? posizioni[i + 1].indice - 2 : undefined)]));
 }
 

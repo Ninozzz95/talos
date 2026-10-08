@@ -8,8 +8,8 @@
   "files": [
     {
       "path": "app.js",
-      "bytes": 4796722,
-      "sha256": "d5989c4a1a03e1f8d3fcc81c92322143b3f8149b91f52828a939b444f3cbddeb"
+      "bytes": 5025530,
+      "sha256": "9473ca0d737fc5a110cc5e055aff010798b7f64f1f30414a420c02f41d4cd07f"
     },
     {
       "path": "asset-manifest.json",
@@ -73,13 +73,13 @@
     },
     {
       "path": "index.html",
-      "bytes": 439341,
-      "sha256": "9d59b8b25e06c81be3ef82785e5454dc8798bab826d46653d76391cf9d15f9d1"
+      "bytes": 441743,
+      "sha256": "0a6904ba21a134ab6f214efbf9d4e08d7f61e397f157d78255d5e30203d86a73"
     },
     {
       "path": "lettore-foglio.js",
-      "bytes": 1619807,
-      "sha256": "10d13e83268414217f926078c9dcfae5a98beaf3e9b53b5500cba2c54c47d711"
+      "bytes": 1689967,
+      "sha256": "6f869803242229608df1c965a54719c1bd5f645db94f8716be30473b32c60276"
     },
     {
       "path": "lettore-ospite-documento.js",
@@ -88,13 +88,13 @@
     },
     {
       "path": "lettore-ospite-presentazione.js",
-      "bytes": 4250915,
-      "sha256": "065bb5f3e88d7d262c59b4dc80cee1a88916a2f4e4cbde494cf71398b6f9de1b"
+      "bytes": 4321079,
+      "sha256": "59f3b11a5f765fe24dcd038c7261e77295daf6ba218de3d2fa9c734e096593b3"
     },
     {
       "path": "styles.css",
-      "bytes": 615481,
-      "sha256": "c391a8201d5a4030c2046dce0e4c3ac8299359704fb90ca38ca80827731a41d5"
+      "bytes": 625166,
+      "sha256": "9cdaf5a253d824a399d1ff6b27b80f9d24dbf3ddf9e41f714cc93a7d101dbe61"
     },
     {
       "path": "talos/brand/logo-short.svg",

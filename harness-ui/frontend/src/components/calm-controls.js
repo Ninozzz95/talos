@@ -304,9 +304,22 @@ export function mountCalmControls(root = globalThis.document, { scope = null } =
       return ['hidden', 'disabled', 'inert'].includes(m.attributeName) && [...records.keys()].some(s => target?.contains(s));
     }
     if (inScope && target?.closest('label,select,option,optgroup')) return true;
-    if (m.type === 'childList') return [...m.addedNodes, ...m.removedNodes].some(n =>
-      n.nodeType === 1 && (n.matches(sources) || n.querySelector(sources) ||
-        n.matches('[data-calm-source]') || n.querySelector('[data-calm-source]')));
+    /*
+     * ⛔ B1 (07/10/2026, profilo CPU sul 4174) — fuori dall'ambito una sorgente non si migliora mai (`eligible`): un nodo
+     *   AGGIUNTO fuori conta solo se porta dentro un ambito intero (una schermata montata); un nodo TOLTO conta solo se
+     *   portava via un controllo già migliorato (va smontato, `remove`). Prima ogni nodo della chat, della Review o
+     *   dell'ispettore con una checkbox faceva ripartire `refresh` — che rilegge e rinomina tutti i controlli — a ogni
+     *   evento del replay: 6,4 s su 25,6 s all'apertura di una sessione da 1286 giri.
+     */
+    if (m.type === 'childList') {
+      const conta = n => n.nodeType === 1 && (n.matches(sources) || n.querySelector(sources) ||
+        n.matches('[data-calm-source]') || n.querySelector('[data-calm-source]'));
+      const portaUnAmbito = n => n.nodeType === 1 && Boolean(scope) && (n.matches(scope) || Boolean(n.querySelector(scope)));
+      /* Un nodo tolto conta solo se ha staccato un controllo migliorato: si chiede ai record (poche decine), non al
+         sottoalbero tolto (migliaia di nodi quando la finestra di replay smonta un turno: `contains` costava 0,6 s). */
+      const staccatoUnControllo = () => m.removedNodes.length > 0 && [...records.keys()].some(s => !s.isConnected);
+      return [...m.addedNodes].some(n => (inScope ? conta(n) : portaUnAmbito(n))) || staccatoUnControllo();
+    }
     return false;
   }
   const observer = new win.MutationObserver(mutations => { if (mutations.some(relevant)) schedule(); });

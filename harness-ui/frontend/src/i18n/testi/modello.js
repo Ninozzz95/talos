@@ -449,7 +449,7 @@ export default {
     'chat.theGuardIsWritten': 'La guardia è scritta e i test la coprono nei due versi. Prima di applicare la modifica al file vero ti mostro cosa cambia.',
     'chat.asksToWrite': 'Chiede di scrivere',
     'chat.itWantsToWrite': 'Vuole scrivere questo file. Serve per aggiungere le soglie della guardia che hai chiesto: 60 secondi di silenzio e tre ripetizioni identiche.',
-    'chat.asksWhyWritingA': 'Chiede perché «scrittura di un file» ha il cancello «Chiedi conferma», anche con la sessione su «Accesso pieno».',
+    'chat.asksWhyWritingA': 'Chiede perché la regola di «Scrittura di un file» è «Chiedi conferma», anche con la sessione su «Accesso pieno».',
     'chat.constSoglieSilenzioms30': '− const SOGLIE = { silenzioMs: 30_000 };',
     'chat.exportConstSoglieStallo': '+ export const SOGLIE_STALLO_PREDEFINITE = Object.freeze({',
     'chat.silenzioms6000030': '+ silenzioMs: 60_000, // 30-60 s è lo stato dell\'arte',
@@ -1564,8 +1564,13 @@ export default {
     'automations.automations': 'Automazioni',
     'automations.3Automations2Active': '3 automazioni · 2 attive',
     'automations.newAutomation': 'Nuova automazione',
-    'automations.scheduledTasks': 'Attività programmate',
+    // owner 08/10 sera: un nome solo per la stessa cosa (era «Attività programmate»), e come le altre sezioni il titolo è una
+    // frase che descrive, sotto l'occhiello col nome («Note» / «Quello che TALOS ha annotato»)
+    'automations.scheduledTasks': 'Quello che TALOS fa da solo, all\'ora che scegli',
     'automations.theyRepeatACatalog': 'Ripetono un\'attività del catalogo quando il server TALOS è acceso. Le nuove automazioni nascono in pausa: scegli tu quando attivarle.',
+    // automazioni a due porte (08/10/2026)
+    'automations.v2Intro': 'Fanno da sole quello che scrivi, all\'ora che scegli, mentre TALOS è aperto. Puoi chiederne una anche in qualunque chat.',
+    'automations.v2Scope': 'Un giro perso mentre TALOS è chiuso gira una volta alla riapertura, se sono passati meno di 7 giorni. Un giro che non ha niente da dire si archivia da solo; gli altri aspettano in Da guardare.',
     'automations.searchByNameOr': 'Cerca per nome o attività',
     'automations.searchTheAutomations': 'Cerca le automazioni…',
     'automations.automationStatus': 'Stato delle automazioni',
@@ -2411,7 +2416,7 @@ export default {
     'chat.theGuardIsWritten': 'The guard is written and the tests cover it both ways. Before applying the change to the real file I show you what changes.',
     'chat.asksToWrite': 'Asks to write',
     'chat.itWantsToWrite': 'It wants to write this file. It is needed to add the guard thresholds you asked for: 60 seconds of silence and three identical repetitions.',
-    'chat.asksWhyWritingA': 'Asks why «writing a file» has the «Ask for confirmation» gate, even with the session on «Full access».',
+    'chat.asksWhyWritingA': 'It asks because the rule for “Writing a file” is “Ask for confirmation”, even with the session on “Full access”.',
     'chat.constSoglieSilenzioms30': '− const SOGLIE = { silenzioMs: 30_000 };',
     'chat.exportConstSoglieStallo': '+ export const SOGLIE_STALLO_PREDEFINITE = Object.freeze({',
     'chat.silenzioms6000030': '+ silenzioMs: 60_000, // 30-60 s è lo stato dell\'arte',
@@ -3526,8 +3531,13 @@ export default {
     'automations.automations': 'Automations',
     'automations.3Automations2Active': '3 automations · 2 active',
     'automations.newAutomation': 'New automation',
-    'automations.scheduledTasks': 'Scheduled tasks',
+    // owner 08/10 sera: un nome solo per la stessa cosa (era «Scheduled tasks»), e come le altre sezioni il titolo è una frase
+    // che descrive, sotto l'occhiello col nome («Note» / «What TALOS has noted»)
+    'automations.scheduledTasks': 'What TALOS does on its own, at the time you choose',
     'automations.theyRepeatACatalog': 'They repeat a catalog task while the TALOS server is on. New automations start paused: you choose when to activate them.',
+    // automations with two doors (08/10/2026)
+    'automations.v2Intro': 'They do what you write on their own, at the time you choose, while TALOS is open. You can also ask for one in any chat.',
+    'automations.v2Scope': 'A run missed while TALOS is closed runs once when it opens again, if less than 7 days have passed. A run with nothing to report is archived on its own; the others wait in To review.',
     'automations.searchByNameOr': 'Search by name or task',
     'automations.searchTheAutomations': 'Search the automations…',
     'automations.automationStatus': 'Automation status',

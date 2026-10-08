@@ -32,15 +32,15 @@ test('COSTO-ELENCO-02 il metodo è dichiarato: con un contatore vero è contato,
   const testo = elencoFinto(10);
   const senza = costoDelTesto(testo);
   assert.equal(senza.metodo, 'stimato');
-  assert.match(senza.confidenza, /byte UTF-8/u);
-  assert.match(senza.confidenza, /Non è un conteggio/u);
+  assert.match(senza.confidenza, /UTF-8 bytes/u);
+  assert.match(senza.confidenza, /This is not a count/u);
   assert.ok(senza.margineToken > 0, 'una stima dichiara il proprio margine');
 
   const con = costoDelTesto(testo, { contatore: contatoreFinto(new Map([[testo, 77]])) });
   assert.equal(con.metodo, 'contato');
   assert.equal(con.token, 77);
   assert.equal(con.margineToken, 0, 'un conteggio non porta un margine di stima');
-  assert.match(con.confidenza, /ha tokenizzato questo testo/u);
+  assert.match(con.confidenza, /tokenized this text/u);
 });
 
 test('COSTO-ELENCO-03 AL CONTRARIO: una stima non può travestirsi da misura', () => {
@@ -51,7 +51,7 @@ test('COSTO-ELENCO-03 AL CONTRARIO: una stima non può travestirsi da misura', (
   const eredita = costoDelTesto(testo, { contatore: contatoreFinto(new Map([[testo, 50]]), { metodo: 'stimato', fonte: 'ripiego euristico' }) });
   assert.equal(eredita.metodo, 'stimato');
   assert.equal(eredita.token, 50);
-  assert.match(eredita.confidenza, /non lo trasforma in una misura/u);
+  assert.match(eredita.confidenza, /does not turn it into a measurement/u);
   assert.ok(eredita.margineToken > 0);
   // ⛔ Un conteggio non valido non ripiega in silenzio su una stima: fallisce.
   for (const rotto of [Number.NaN, 12.5, -1, '900', null]) {
@@ -118,7 +118,7 @@ test('COSTO-ELENCO-07 la cache su 24 giri cambia il conto, e la differenza è di
   assert.ok(ventiquattro.conCache.dollari < ventiquattro.conCache.dollariSenzaCache);
   assert.ok(ventiquattro.conCache.risparmioDollari > 0);
   // La differenza è DETTA, non lasciata da dedurre.
-  assert.match(ventiquattro.conCache.avvertenza, /si pagano PIENI/u);
+  assert.match(ventiquattro.conCache.avvertenza, /are paid in FULL/u);
   assert.match(ventiquattro.conCache.listino, /input_cache_read/u);
   // 2 giri pieni + 22 a un sesto ⇒ risparmio atteso: 24/(2+22/6) = 4,17×
   assert.equal(ventiquattro.conCache.fattoreRisparmio, Number((24 / (2 + 22 / 6)).toFixed(3)));
@@ -132,8 +132,8 @@ test('COSTO-ELENCO-07b ⛔ con due soli giri la cache non ha ancora preso, e il 
     assert.equal(esito.conCache.dollari, esito.conCache.dollariSenzaCache, `con ${giri} giri la cache non può risparmiare niente`);
     assert.equal(esito.conCache.risparmioDollari, 0);
     assert.equal(esito.conCache.fattoreRisparmio, 1);
-    assert.match(esito.conCache.avvertenza, /non ha ancora preso/u);
-    assert.match(esito.conCache.avvertenza, /esito sbagliato/u);
+    assert.match(esito.conCache.avvertenza, /has not kicked in yet/u);
+    assert.match(esito.conCache.avvertenza, /wrong outcome/u);
   }
   // ⛔ Il terzo giro è quello che cambia tutto: la prova che il confine è dove diciamo.
   const due = costoElenco(testo, { giri: 2 }).conCache;
@@ -180,7 +180,7 @@ test('COSTO-ELENCO-08 ⛔ accenti, emoji e ideogrammi: la regola dei 4 caratteri
   assert.ok(nostra.token > regola * 3, 'la stima a byte sta almeno 3 volte sopra la regola dei caratteri');
   assert.ok(veroMisurato / nostra.token < 2, `la stima a byte resta entro 2× dal vero (${nostra.token} contro ${veroMisurato})`);
   assert.equal(nostra.nonLatino, true);
-  assert.match(nostra.confidenza, /PAVIMENTO/u);
+  assert.match(nostra.confidenza, /FLOOR/u);
 
   // Emoji: 4 byte l'una, e in UTF-16 sono due unità di codice — nessuna delle due è un token.
   const emoji = '🚀🚀🚀🚀';
@@ -207,8 +207,8 @@ test('COSTO-ELENCO-08b ⛔ un elenco di percorsi è fitto di separatori, e la st
   const misura = costoDelTesto(elenco);
   assert.equal(misura.punteggiaturaDensa, true, 'un elenco di percorsi è denso di "/", "-" e "."');
   assert.ok(misura.quotaSeparatori > 0.1);
-  assert.match(misura.confidenza, /PAVIMENTO/u);
-  assert.match(misura.confidenza, /separatori/u);
+  assert.match(misura.confidenza, /FLOOR/u);
+  assert.match(misura.confidenza, /separators/u);
   // Prosa italiana: stessa lingua, nessuna bandiera — la bandiera distingue davvero due forme di testo.
   const prosa = 'Questo è un testo di prosa italiana, scritto per la prova, senza percorsi di file dentro. '.repeat(10);
   const misuraProsa = costoDelTesto(prosa);

@@ -64,7 +64,7 @@ test('BC49: parte ripetuta anche concorrente è idempotente; contenuto diverso a
   assert.equal(j.eventi.filter(e => e.kind === 'deposit_part').length, 1);
   const alterato = structuredClone(j.eventi);
   alterato.find(e => e.kind === 'deposit_part').contenuto.testo = 'manomesso';
-  assert.throws(() => rileggiPartiRapporto(alterato), /impronta|integrità/i);
+  assert.throws(() => rileggiPartiRapporto(alterato), /impronta|integrit[àa]|integrity/i);
 });
 
 test('BC49: buco, ultimo prematuro, campo malformato e parte sovradimensionata non committano', async t => {
@@ -83,8 +83,8 @@ for (const conversazione of [false, true]) test(`BC49: caduta e ripresa ${conver
   const dopoRiavvio = creaResearchOrchestrator(b.opzioni);
   assert.equal((await dopoRiavvio.riprendi({ cartella: b.cartella, id })).ok, true);
   const consegna = b.avviati.at(-1).messaggiIniziali.at(-1).content;
-  assert.match(consegna, /prossima parte.*2/i);
-  assert.match(consegna, /non rigenerare/i);
+  assert.match(consegna, /(?:prossima parte|next part).*2/i);
+  assert.match(consegna, /(?:non rigenerare|do not regenerate)/i);
   const ultima = await dopoRiavvio.componiRapporto({ cartella: b.cartella, id, domanda, ...parti[1] });
   assert.equal(ultima.ok, true);
   const j = await leggiGiornale({ cartella: b.cartella, id });
@@ -147,7 +147,7 @@ async function giroKernel(cartella, argomenti, compositore, livelloAccesso = 'ri
 test('BC49: kernel conferma la parte senza rapporto incompleto; assenza adattatore e guasto falliscono chiusi', async t => {
   const b = await banco(t);
   const r = await giroKernel(b.cartella, parti[0], a => b.deposita(a));
-  assert.match(r.risposta, /parte 1.*registrata/i);
+  assert.match(r.risposta, /(?:parte 1.*registrata|part 1.*recorded)/i);
   await assert.rejects(readFile(percorsoRapporto(b.cartella, id)), { code: 'ENOENT' });
   for (const fn of [undefined, async () => { throw new Error('disco pieno'); }]) {
     const rifiuto = await giroKernel(b.cartella, parti[1], fn);
@@ -333,6 +333,28 @@ test('BC49: inventario e campi TALOS-BANCO invariati, eccetto le esenzioni dichi
         assert.deepEqual([...(schema.required ?? [])].sort(), obbligatori, nome);
       }
     }
+    /* Automazioni a due porte (owner 08/10/2026 notte): otto attrezzi estesi NUOVI. Come gli altri: nomi, campi e obbligatori
+     * fissati qui PRIMA di toglierli dal censimento storico, nessuno nella base — le due impronte restano quelle di prima. */
+    const attrezziAutomazioni = {
+      automation_list: [[], []],
+      automation_runs: [['id', 'limit'], ['id']],
+      automation_create: [['cartella', 'coordinazione', 'istruzioni', 'modello', 'nome', 'permessi', 'pianificazione', 'ripeti'], ['istruzioni', 'nome', 'pianificazione']],
+      automation_update: [['cartella', 'coordinazione', 'id', 'istruzioni', 'modello', 'nome', 'permessi', 'pianificazione', 'prossimoGiroAlle', 'ripeti'], ['id']],
+      automation_pause: [['id'], ['id']],
+      automation_resume: [['id'], ['id']],
+      automation_run: [['contesto', 'id'], ['id']],
+      automation_stop: [['id'], ['id']],
+    };
+    for (const [nome, [campi, obbligatori]] of Object.entries(attrezziAutomazioni)) {
+      const tool = attrezzi.map((entry) => entry.function ?? entry).find((entry) => entry.name === nome);
+      if (attrezzi === ATTREZZI_OPENAI) assert.equal(tool, undefined, `${nome} non deve entrare nel banco base`);
+      else {
+        assert.ok(tool, `${nome} deve essere un attrezzo esteso`);
+        const schema = tool.parameters ?? tool.input_schema;
+        assert.deepEqual(Object.keys(schema.properties ?? {}).sort(), campi, nome);
+        assert.deepEqual([...(schema.required ?? [])].sort(), obbligatori, nome);
+      }
+    }
     // OUTPUT15: validate the new read contract before exempting this one addition.
     // Both historic hashes remain unchanged and still protect every previous tool.
     const processOutput = attrezzi.map(t => t.function ?? t).find(f => f.name === 'process_output');
@@ -356,7 +378,7 @@ test('BC49: inventario e campi TALOS-BANCO invariati, eccetto le esenzioni dichi
       assert.match(processOutput.description, /Read-only; never reruns the command/);
       assert.match(processOutput.description, /BYTES; follow nextOffset/);
     }
-    const copia = structuredClone(attrezzi).filter((t) => !['process_output', 'file_edit', 'ask_user_question', 'present_plan', 'workflow_plan_propose', ...Object.keys(runTools), ...Object.keys(dialogueTools), ...Object.keys(lettureSezioni)].includes((t.function ?? t).name));
+    const copia = structuredClone(attrezzi).filter((t) => !['process_output', 'file_edit', 'ask_user_question', 'present_plan', 'workflow_plan_propose', ...Object.keys(runTools), ...Object.keys(dialogueTools), ...Object.keys(lettureSezioni), ...Object.keys(attrezziAutomazioni)].includes((t.function ?? t).name));
     for (const t of copia) {
       const f = t.function ?? t;
       if (f.name === 'cerca') {
@@ -387,6 +409,22 @@ test('BC49: inventario e campi TALOS-BANCO invariati, eccetto le esenzioni dichi
         f.description = 'Finds files anywhere in the workspace, at any depth. '
           + 'Give "testo" to find files CONTAINING that text (e.g. the name of a failing test), '
           + 'and/or "nome" to match the file path. Returns matching paths, most relevant first.';
+      }
+      /* BUG-3/BUG-14 (3ec7cafea, 04/10/2026), esenzione dichiarata dal bugfixer l'08/10: `shell` e `prova` — DUE ATTREZZI DELLA
+       * BASE del banco — guadagnano `timeout` (numero, ms prima di passare in sottofondo, NON di uccidere) e `background`
+       * (booleano, in sottofondo subito). Quel commit non aveva toccato questa prova, che da allora era rossa (riprodotta dalla CLI
+       * su r4 l'08/10). Si asserisce che cosa sono — facoltativi, col loro tipo, e la prosa dice «NOT killed» — poi si tolgono
+       * dalla copia: l'impronta della base torna 38d65a3f…, prova misurata che degli altri campi non è cambiato niente.
+       * ⛔ Il preambolo del banco però È cambiato (due campi in più per ognuno dei due attrezzi): una campagna prima del 04/10 e
+       *   una dopo non hanno lo stesso preambolo, e va detto quando le si confronta. */
+      if (f.name === 'shell' || f.name === 'prova') {
+        const schema = f.parameters ?? f.input_schema;
+        assert.equal(schema.properties.timeout?.type, 'number', `${f.name}: timeout deve essere un numero`);
+        assert.equal(schema.properties.background?.type, 'boolean', `${f.name}: background deve essere un booleano`);
+        assert.equal((schema.required ?? []).some((c) => c === 'timeout' || c === 'background'), false, `${f.name}: timeout e background restano FACOLTATIVI`);
+        assert.match(schema.properties.timeout.description, /moved to the background \(NOT killed/u, `${f.name}: la scadenza sposta in sottofondo, non uccide`);
+        delete schema.properties.timeout;
+        delete schema.properties.background;
       }
       if (f.name === 'research_deposit') {
         const schema = f.parameters ?? f.input_schema;
@@ -448,8 +486,15 @@ test('BC49: inventario e campi TALOS-BANCO invariati, eccetto le esenzioni dichi
       }
       if (f.name === 'delega_sottotask') {
         const schema = f.parameters ?? f.input_schema;
-        assert.deepEqual(Object.keys(schema.properties).sort(), ['cartella', 'modalita', 'task']);
+        /* C2b «Coordinazione» (owner 08/10/2026 sera, esenzione dichiarata da talos desktop): `modello`, facoltativo, SOLO se la
+         * persona l'ha chiesto. Si asserisce che cos'è, poi si toglie dalla copia: l'impronta estesa resta 105dd078…, prova misurata
+         * che degli altri campi della delega non cambia niente. ⛔ È un campo in più nel preambolo degli attrezzi ESTESI: una
+         * campagna del banco che usa la delega, prima e dopo, non ha lo stesso preambolo. */
+        assert.deepEqual(Object.keys(schema.properties).sort(), ['cartella', 'modalita', 'modello', 'task']);
         assert.deepEqual(schema.required, ['task']);
+        assert.equal(schema.properties.modello.type, 'string', 'delega_sottotask: modello è un nome');
+        assert.match(schema.properties.modello.description, /only when the person explicitly asked/u, 'delega_sottotask: solo se la persona lo chiede');
+        delete schema.properties.modello;
         assert.deepEqual(schema.properties.modalita, {
           type: 'string', enum: ['lettura', 'modifica'],
           description: 'Optional. Omit it to give the child your own permissions (read-only if you are read-only). lettura = read-only analysis. modifica = changes within your permissions; refused if you are read-only.',
@@ -532,7 +577,7 @@ test('BC49: ordine delle chiavi JSON non cambia idempotenza; perdita di una part
   assert.equal((await b.deposita(diversoOrdine)).prossimaParte, 2);
   await b.deposita(parti[1]);
   const j = await leggiGiornale({ cartella: b.cartella, id });
-  assert.throws(() => rileggiPartiRapporto(j.eventi.filter(e => !(e.kind === 'deposit_part' && e.indice === 1))), /manca una parte/i);
+  assert.throws(() => rileggiPartiRapporto(j.eventi.filter(e => !(e.kind === 'deposit_part' && e.indice === 1))), /(?:manca una parte|missing a part)/i);
 });
 
 test('BC49: errore durante la verifica lascia ultimo checkpoint ripetibile e non raddoppia la prosa', async t => {
@@ -545,7 +590,7 @@ test('BC49: errore durante la verifica lascia ultimo checkpoint ripetibile e non
     valida: componiRapportoRicerca, clock: () => new Date(), finalizza: async () => { throw new Error('processo caduto'); },
   }), /processo caduto/);
   const j = await leggiGiornale({ cartella: b.cartella, id });
-  assert.match(consegnaPartiRapporto(j.eventi), /ultima parte è già registrata/);
+  assert.match(consegnaPartiRapporto(j.eventi), /(?:ultima parte è già registrata|final part is already recorded)/i);
   const r = await b.deposita(parti[1]);
   assert.equal(talosResearchParseReport(r.documento).summary, unico.testo.trim());
   assert.equal((await leggiGiornale({ cartella: b.cartella, id })).eventi.filter(e => e.kind === 'deposit_part').length, 2);
@@ -555,7 +600,7 @@ test('BC49: rapporto finale alterato non viene sovrascritto né dichiarato ident
   const b = await banco(t);
   await b.deposita(parti[0]); await b.deposita(parti[1]);
   await writeFile(percorsoRapporto(b.cartella, id), 'modifica esterna');
-  await assert.rejects(b.deposita(parti[1]), /impronta/);
+  await assert.rejects(b.deposita(parti[1]), /(?:impronta|digest)/i);
   assert.equal(await readFile(percorsoRapporto(b.cartella, id), 'utf8'), 'modifica esterna');
 });
 
@@ -566,7 +611,7 @@ test('BC49: una sola parte già salvata basta alla ripresa automatica BC44, una 
   const caduta = { ok: false, esito: null, erroreInterno: 'Upstream idle timeout exceeded', codiceErrore: 'internal-error' };
   await b.avviati[0].onConclusioneFn(caduta);
   assert.equal(b.avviati.length, 2);
-  assert.match(b.avviati[1].messaggiIniziali[0].content, /prossima parte.*2/i);
+  assert.match(b.avviati[1].messaggiIniziali[0].content, /(?:prossima parte|next part).*2/i);
   await b.avviati[1].onConclusioneFn(caduta);
   assert.equal(b.avviati.length, 2);
   const j = await leggiGiornale({ cartella: b.cartella, id });
@@ -576,7 +621,7 @@ test('BC49: una sola parte già salvata basta alla ripresa automatica BC44, una 
 test('BC49: L9 giudica le prove assemblate soltanto alla chiusura; ricevuta finale e deposito unico coincidono', async t => {
   let giudizi = 0;
   const b = await banco(t, {
-    chiediAlModelloFn: async prompt => { giudizi++; return prompt.prompt.includes('Il passaggio, DA SOLO, sostiene') ? 'SI — il passaggio lo dice.' : 'NO — nessuna prova contraria.'; },
+    chiediAlModelloFn: async prompt => { giudizi++; return (prompt.prompt.includes('the passage, ALONE, support') || prompt.prompt.includes('Il passaggio, DA SOLO, sostiene')) ? 'SI — il passaggio lo dice.' : 'NO — nessuna prova contraria.'; },
     modelliGiudiceFn: () => [{ id: 'altro/giudice', provider: 'openrouter', model: 'altro/giudice' }],
   });
   await b.orch.raccoltaDellaRicerca(id).around({ kind: 'extract', url: fonte.url, provider: 'naviga' }, async () => ({ stato: 200, url: fonte.url, corpo: affermazione.passaggio }));

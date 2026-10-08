@@ -25,7 +25,7 @@ test('CTX-HEADER-PARTIAL-STAGING — un header incompleto non diventa sessione a
     assert.throws(() => sessionStore.registraIntestazioneSync(
       { cartellaStore, sessionId: 'sess-partial', record: { tipo: 'intestazione', sessionId: 'sess-partial' } },
       { writeFileSyncFn: (path) => { writeFileSync(path, '{"tipo":"int'); throw new Error('disco pieno'); } },
-    ));
+    ), /disco pieno/u);
     assert.deepEqual(await elencaSessioniPersistite({ cartellaStore }), []);
     assert.ok(!readdirSync(cartellaStore).some((name) => name.endsWith('.jsonl')));
   } finally { rimuoviCartellaDiProva(cartellaStore); }
@@ -52,7 +52,7 @@ test('CTX-HEADER-COLLISION — non sovrascrive né conferma una sessione preesis
     writeFileSync(path, '{"tipo":"intestazione","sessionId":"precedente"}\n');
     assert.throws(() => sessionStore.registraIntestazioneSync(
       { cartellaStore, sessionId: 'sess-existing', record: { tipo: 'intestazione', sessionId: 'sess-existing' } },
-    ));
+    ), { name: 'SessionStoreError', code: 'SESSION_STORE_HEADER_EXISTS' });
     assert.equal(readFileSync(path, 'utf8'), '{"tipo":"intestazione","sessionId":"precedente"}\n');
   } finally { rimuoviCartellaDiProva(cartellaStore); }
 });
@@ -63,7 +63,7 @@ test('CTX-HEADER-STAGING-CLEANUP-FAIL — un alias pending non conferma la creaz
     assert.throws(() => sessionStore.registraIntestazioneSync(
       { cartellaStore, sessionId: 'sess-cleanup', record: { tipo: 'intestazione', sessionId: 'sess-cleanup' } },
       { unlinkSyncFn: (path) => { if (path.endsWith('.pending')) throw new Error('file occupato'); unlinkSync(path); } },
-    ));
+    ), { name: 'SessionStoreError', code: 'SESSION_STORE_HEADER_FAILED' });
     assert.ok(readdirSync(cartellaStore).some((name) => name.endsWith('.pending')));
     assert.deepEqual(await elencaSessioniPersistite({ cartellaStore }), []);
   } finally { rimuoviCartellaDiProva(cartellaStore); }
@@ -79,7 +79,7 @@ test('CTX-HEADER-POST-LINK-VERIFY-FAIL — se verifica e rollback falliscono il 
         readFileSyncFn: (path) => { if (path.endsWith('.jsonl')) throw new Error('read EACCES'); return readFileSync(path); },
         unlinkSyncFn: (path) => { if (path.endsWith('.jsonl')) throw new Error('unlink EACCES'); unlinkSync(path); },
       },
-    ));
+    ), /link ambiguo/u);
     assert.ok(readdirSync(cartellaStore).some((name) => name.endsWith('.pending')));
     assert.deepEqual(await elencaSessioniPersistite({ cartellaStore }), []);
   } finally { rimuoviCartellaDiProva(cartellaStore); }
@@ -101,7 +101,7 @@ test('CTX-HEADER-COLLISION-SAME-BYTES — inode bigint distingue un altro file c
             size: options?.bigint ? BigInt(bytes.length) : bytes.length, isFile: () => true };
         },
       },
-    ));
+    ), /EEXIST/u);
     assert.deepEqual(readFileSync(finale), bytes);
   } finally { rimuoviCartellaDiProva(cartellaStore); }
 });
@@ -157,7 +157,7 @@ test('CTX-HEADER-ORPHAN-PENDING-DIAGNOSTIC — staging parziale senza finale res
         writeFileSyncFn: (path) => { writeFileSync(path, '{"task":"segreto-non-pubblico'); throw new Error('write EACCES'); },
         unlinkSyncFn: () => { throw new Error('unlink EACCES'); },
       },
-    ));
+    ), /write EACCES/u);
     const index = await elencaSessioniPersistite({ cartellaStore, conDiagnostica: true });
     assert.deepEqual(index.sessionIds, []);
     assert.deepEqual(index.quarantined, [{ sessionId, motivo: 'intestazione-pendente-senza-journal' }]);

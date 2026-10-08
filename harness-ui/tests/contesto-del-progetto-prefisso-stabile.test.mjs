@@ -24,8 +24,8 @@ test('BC48-MINUTO: cambia git, dopo 60 secondi ricostruisce e cambia SOLO la sch
   assert.deepEqual(Buffer.from(a.istruzioni), Buffer.from(b.istruzioni));
   assert.deepEqual(Buffer.from(a.mappa), Buffer.from(b.mappa));
   assert.notEqual(a.scheda, b.scheda);
-  assert.match(a.scheda, /niente da salvare/);
-  assert.match(b.scheda, /1 file non salvati/);
+  assert.match(a.scheda, /nothing to save|niente da salvare/);
+  assert.match(b.scheda, /1 unsaved files|1 file non salvati/);
   const stabile = a.istruzioni + '\n\n' + a.mappa + '\n\n';
   assert.ok(prima.testo.startsWith(stabile));
   assert.ok(dopo.testo.startsWith(stabile));
@@ -43,7 +43,7 @@ test('BC48-SCHEDA-ASSENTE: il ripiego finale lascia identico il prefisso', async
   assert.equal(b.istruzioni, a.istruzioni);
   assert.equal(b.mappa, a.mappa);
   assert.ok(assente.testo.startsWith(a.istruzioni + '\n\n' + a.mappa + '\n\n'));
-  assert.match(b.scheda, /non sono riuscito/);
+  assert.match(b.scheda, /could not read|non sono riuscito/);
   assert.equal(preamboloVistoDa([{ role: 'system', content: assente.testo }]), assente.testo);
 });
 

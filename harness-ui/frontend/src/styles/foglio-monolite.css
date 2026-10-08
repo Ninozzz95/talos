@@ -349,7 +349,7 @@ dialog.sheet-dialog .chip:hover,dialog.command-dialog .chip:hover,.ft-actions-me
 .model-picker-trigger-label{ min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: calc(12px * var(--talos-ui-font-scale)) var(--font-mono); }
 .model-picker-chevron svg{ width: 14px; height: 14px; color: var(--muted); flex: 0 0 auto; }
 .model-picker-trigger[aria-expanded="true"] .model-picker-chevron svg{ transform: rotate(180deg); }
-.model-picker-panel{ display: flex; flex-direction: column; gap: 8px; margin-top: 6px; padding: 10px; border: 1px solid var(--line-strong); border-radius: 12px; background: var(--surface-elevated); box-shadow: var(--shadow); }
+.model-picker-panel{ display: flex; flex-direction: column; gap: 8px; margin-top: 6px; padding: 10px; border: 1px solid var(--line-strong); border-radius: 12px; background: var(--surface-elevated); /* owner 08/10/2026: niente ombra — il riquadro sta in linea nella modale, non sospeso */ }
 .model-picker-panel[hidden]{ display: none; }
 .model-picker-search{ position: relative; display: block; flex: 0 0 auto; }
 .model-picker-search svg{ position: absolute; left: 10px; top: 50%; transform: translateY(-50%); width: 14px; height: 14px; color: var(--muted); pointer-events: none; }

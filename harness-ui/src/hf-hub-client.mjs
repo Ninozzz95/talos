@@ -72,7 +72,7 @@ export function createHfHubClient({ fetchImpl = fetch, token, baseUrl = 'https:/
   async function request(path, options = {}) {
     const response = await fetchImpl(new URL(path, root), { ...options, headers: { ...headers(), ...(options.headers || {}) } });
     if (response.ok || (options.redirect === 'manual' && response.status >= 300 && response.status < 400)) return response;
-    if (response.status === 401 || response.status === 403) throw new HfHubError('Repository Hugging Face gated o non autorizzato', 'HF_REPOSITORY_GATED');
+    if (response.status === 401 || response.status === 403) throw new HfHubError("Hugging Face repository is gated or unauthorized", 'HF_REPOSITORY_GATED');
     if (response.status === 429) throw new HfHubError('Limite richieste Hugging Face raggiunto', 'HF_RATE_LIMITED');
     throw new HfHubError(`Hugging Face HTTP ${response.status}`, 'HF_HUB_UPSTREAM');
   }

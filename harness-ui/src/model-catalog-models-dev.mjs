@@ -66,9 +66,9 @@ const Catalogo = z.record(Identificatore, z.object({
 })).superRefine((dati, ctx) => {
   if (!Object.keys(dati).length) ctx.addIssue({ code: 'custom', message: 'Catalogo vuoto' });
   for (const [id, p] of Object.entries(dati)) {
-    if (p.id !== id) ctx.addIssue({ code: 'custom', message: 'Identità fornitore incoerente' });
+    if (p.id !== id) ctx.addIssue({ code: 'custom', message: 'Inconsistent provider identity' });
     for (const [modelloId, m] of Object.entries(p.models)) {
-      if (m.id !== modelloId) ctx.addIssue({ code: 'custom', message: 'Identità modello incoerente' });
+      if (m.id !== modelloId) ctx.addIssue({ code: 'custom', message: 'Inconsistent model identity' });
     }
   }
 });
@@ -98,7 +98,7 @@ function normalizza(m, record, metadati) {
   return {
     // Solo OpenRouter usa gli id senza prefisso di destinazione; gli id upstream restano intatti.
     id: record.id === 'openrouter' ? m.id : `${record.id}:${m.id}`,
-    modelId: m.id, provider: record.id, nome: m.name || 'Nome non disponibile', alias: false,
+    modelId: m.id, provider: record.id, nome: m.name || 'Name unavailable', alias: false,
     contextLength: m.limit?.context > 0 ? m.limit.context : null,
     maxOutputTokens: m.limit?.output > 0 ? m.limit.output : null,
     maxInputTokens: m.limit?.input > 0 ? m.limit.input : null,
@@ -126,9 +126,9 @@ export function createModelsDevCatalog({
   ttlMs = TTL_MS, retryMs = RINVIO_MS, timeoutMs = 15_000, fsImpl = {},
 } = {}) {
   let indirizzo;
-  try { indirizzo = new URL(url); } catch { throw new ModelsDevCatalogError('Indirizzo del catalogo non valido.', 'CONFIG_INVALID'); }
+  try { indirizzo = new URL(url); } catch { throw new ModelsDevCatalogError('Invalid catalog address.', 'CONFIG_INVALID'); }
   if (!['http:', 'https:'].includes(indirizzo.protocol) || indirizzo.username || indirizzo.password || indirizzo.hash || !cartellaStore) {
-    throw new ModelsDevCatalogError('Configurazione del catalogo non valida.', 'CONFIG_INVALID');
+    throw new ModelsDevCatalogError('Invalid catalog configuration.', 'CONFIG_INVALID');
   }
   url = indirizzo.href;
   const fs = { mkdir, readFile, rename, rm, writeFile, ...fsImpl };
@@ -140,8 +140,8 @@ export function createModelsDevCatalog({
 
   function erroreSenzaCopia() {
     return avvisi.has('CATALOG_CACHE_CORRUPT')
-      ? new ModelsDevCatalogError('Copia del catalogo danneggiata: rifiutata. La fonte non è disponibile per recuperarla.', 'CATALOG_CACHE_CORRUPT')
-      : new ModelsDevCatalogError('Catalogo non disponibile: impossibile leggere la fonte e nessuna copia salvata utilizzabile.');
+      ? new ModelsDevCatalogError('The catalog copy is damaged: rejected. The source is not available to recover it.', 'CATALOG_CACHE_CORRUPT')
+      : new ModelsDevCatalogError('Catalog not available: the source cannot be read and no usable saved copy exists.');
   }
 
   async function leggiDisco() {
@@ -150,16 +150,16 @@ export function createModelsDevCatalog({
     let testo;
     try { testo = await fs.readFile(percorsoCache, 'utf8'); }
     catch (e) {
-      if (e.code !== 'ENOENT') avvisa('CATALOG_CACHE_READ_FAILED', 'La copia salvata non è leggibile.');
+      if (e.code !== 'ENOENT') avvisa('CATALOG_CACHE_READ_FAILED', 'The saved copy cannot be read.');
       return;
     }
     try {
       const busta = JSON.parse(testo);
-      if (!Busta.safeParse(busta).success || busta.url !== url || busta.verificatoAlle < busta.acquisitoAlle || impronta(JSON.stringify(busta.dati)) !== busta.sha256) throw new Error('Copia non valida');
+      if (!Busta.safeParse(busta).success || busta.url !== url || busta.verificatoAlle < busta.acquisitoAlle || impronta(JSON.stringify(busta.dati)) !== busta.sha256) throw new Error('Invalid copy');
       copia = busta;
     } catch {
       // Nessun ETag viene caricato separatamente: non può sopravvivere ai dati che garantisce.
-      avvisa('CATALOG_CACHE_CORRUPT', 'Copia del catalogo danneggiata: rifiutata.');
+      avvisa('CATALOG_CACHE_CORRUPT', 'The catalog copy is damaged: rejected.');
     }
   }
 
@@ -171,7 +171,7 @@ export function createModelsDevCatalog({
       await fs.rename(temporaneo, percorsoCache);
       avvisi.delete('CATALOG_CACHE_WRITE_FAILED');
     } catch {
-      avvisa('CATALOG_CACHE_WRITE_FAILED', 'Catalogo letto, ma non è stato possibile salvare la copia.');
+      avvisa('CATALOG_CACHE_WRITE_FAILED', 'Catalog read, but the copy could not be saved.');
     } finally {
       await fs.rm(temporaneo, { force: true }).catch(() => {});
     }
@@ -191,15 +191,15 @@ export function createModelsDevCatalog({
       const nuovoEtag = Etag.safeParse(ricevutoEtag).success ? ricevutoEtag : null;
       const invariato = risposta.status === 304;
       if (invariato) {
-        if (!copia) throw new ModelsDevCatalogError('Il catalogo non ha restituito dati utilizzabili.');
+        if (!copia) throw new ModelsDevCatalogError('The catalog returned no usable data.');
         copia = { ...copia, verificatoAlle: clock().getTime(), etag: nuovoEtag ?? copia.etag };
       } else {
         if (!risposta.ok) {
           await risposta.body?.cancel?.();
-          throw new ModelsDevCatalogError('La fonte del catalogo non è disponibile.');
+          throw new ModelsDevCatalogError('The catalog source is not available.');
         }
         const dati = await risposta.json();
-        if (!Catalogo.safeParse(dati).success) throw new ModelsDevCatalogError('La fonte ha restituito un catalogo non valido.');
+        if (!Catalogo.safeParse(dati).success) throw new ModelsDevCatalogError('The source returned an invalid catalog.');
         const acquisitoAlle = clock().getTime();
         copia = { versione: 1, schemaRevision: MODELS_DEV_SCHEMA_REVISION, url,
           etag: nuovoEtag, acquisitoAlle, verificatoAlle: acquisitoAlle,
@@ -216,7 +216,7 @@ export function createModelsDevCatalog({
         throw erroreSenzaCopia();
       }
       fallbackRete = true;
-      avvisa('CATALOG_REFRESH_FAILED', 'Aggiornamento non disponibile: viene usata la copia salvata.');
+      avvisa('CATALOG_REFRESH_FAILED', 'Update not available: the saved copy is used.');
       return true;
     }
   }
@@ -225,7 +225,7 @@ export function createModelsDevCatalog({
     const record = fornitore(id);
     const modelsDevId = record?.modelsDevId ?? null;
     const indisponibile = { provider: id, modelsDevId, disponibile: false, modelli: [],
-      motivo: `Catalogo${record ? ` ${record.etichetta}` : ''} non disponibile.`, fonte: 'models.dev',
+      motivo: `Catalog${record ? ` ${record.etichetta}` : ''} not available.`, fonte: 'models.dev',
       aggiornatoAlle: null, verificatoAlle: null, etaCacheMs: null, daCache: false, fallbackRete: false, avvisi: [] };
     if (!modelsDevId) return indisponibile;
     // Una promessa condivisa comprende lettura disco, download e scrittura atomica.
@@ -249,10 +249,10 @@ export function createProviderModelCatalog({ catalogo, chiaveConfigurata } = {})
   async function ottieni(id, opzioni) {
     const record = fornitore(id);
     if (!record?.destinazioneChat || record.catalogo.fonte === 'runtime-locale' || id === 'openrouter') {
-      throw new ModelsDevCatalogError('Catalogo non disponibile per questa destinazione.', 'REPORT_UNAVAILABLE');
+      throw new ModelsDevCatalogError('Catalog not available for this destination.', 'REPORT_UNAVAILABLE');
     }
     if (record.chiaveObbligatoria && (typeof chiaveConfigurata !== 'function' || await chiaveConfigurata(id) !== true)) {
-      throw new ModelsDevCatalogError(`Collega la chiave ${record.etichetta} dal pannello Provider.`, 'PROVIDER_KEY_REQUIRED');
+      throw new ModelsDevCatalogError(`Connect the ${record.etichetta} key from the Providers panel.`, 'PROVIDER_KEY_REQUIRED');
     }
     let dati;
     try {
@@ -260,9 +260,9 @@ export function createProviderModelCatalog({ catalogo, chiaveConfigurata } = {})
     } catch (errore) {
       // Il catalogo stesso preferisce già la copia valida, anche vecchia. Qui non ne ha una.
       const riserva = catalogoDiRiservaPer(id);
-      if (!riserva) throw new ModelsDevCatalogError('Catalogo non disponibile.', 'CATALOG_UPSTREAM_ERROR');
+      if (!riserva) throw new ModelsDevCatalogError('Catalog not available.', 'CATALOG_UPSTREAM_ERROR');
       if (errore instanceof ModelsDevCatalogError && errore.code === 'CATALOG_CACHE_CORRUPT') {
-        const avviso = { codice: 'CATALOG_CACHE_CORRUPT', messaggio: 'Copia danneggiata rifiutata: viene usato l’elenco di riserva.' };
+        const avviso = { codice: 'CATALOG_CACHE_CORRUPT', messaggio: 'Damaged copy rejected: the fallback list is used.' };
         riserva.avvisi.push(avviso);
         for (const m of riserva.modelli) m.catalogo.avvisi.push({ ...avviso });
       }

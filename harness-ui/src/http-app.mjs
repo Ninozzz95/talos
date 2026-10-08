@@ -26,12 +26,14 @@ import { ritrattoCartella } from './workspace-info.mjs'; // 06/9 F9/F10/F19-F21:
 import { modelloRichiestaValido, permessiPerAttrezzoRichiestaValido, permessiRichiestaValido, reasoningRichiestaValido } from './config.mjs';
 import { ID_CATALOGO_IN_UI, REGISTRO_FORNITORI } from './provider-registry.mjs'; // 12/09, P-A: le rotte del catalogo per fornitore si costruiscono dal registro, non da una terna ricopiata due volte
 import { cartelleFrequenti as cartelleFrequentiReale } from './frequent-dirs.mjs';
+import { CustomTaskError, validaCartellaLibera } from './custom-task.mjs'; // automazioni a due porte (08/10/2026): la cartella si verifica alla creazione
 import { RUNTIME_BOOTSTRAP_SCHEMA, RUNTIME_RESOURCE_SCHEMA, parseBootstrapEnvelope } from './runtime-contract.mjs';
 import { getDiagnosticProblem, paramsPubblici, toPublicProblem } from './public-problem.mjs';
 import { createSseSession } from './http-lifecycle.mjs';
 import { creaReplayCoalescente } from './sse-replay-coalescente.mjs'; // 11/09: il replay di una sessione lunga non si rigioca token per token — vedi la rotta /events
 import { iconaDelDominio } from './favicon-proxy.mjs'; // 10/09: le favicon delle fonti, prese dal server e mai dal browser
 import { creaRegistroAttese, ritornoDaHost, scambiaCodicePerChiave } from './openrouter-oauth.mjs'; // PO-01 10/9: i conti dell'accesso a OpenRouter, puri e provabili senza rete
+import { slugDelFornitore } from './openrouter-fornitori.mjs'; // decisione 14 (08/10/2026): dal nome del fornitore a valle allo slug
 import { fileURLToPath } from 'node:url'; // 11/09: i tre magazzini GLOBALI stanno accanto a server.mjs, come li trova session-registry.mjs
 /*
  * ⭐⭐⭐⭐ 11/09/2026, owner: «tutte le Note, Attività, Memoria, Libreria devono avere CRUD completi».
@@ -133,6 +135,24 @@ const API_ERROR_CODES = new Set([
   'SERVER_SHUTTING_DOWN', // F3 (24/09): il fence dello spegnimento gentile del registro
   'COMPACTION_NOT_FOUND', // F3 (24/09): Annulla su un identificativo che non è l'ultima compattazione
   'AUTOMATION_INVALID',
+  /* Automazioni a due porte (owner 08/10/2026 notte): ogni rifiuto della pianificazione e dei giri ha il suo codice, e
+     l'interfaccia ne sceglie le parole (`i18n/testi/errori.js`), come per gli altri (decisione owner 03/10, AIP-193). */
+  'AUTOMATION_SCHEDULE_INVALID',
+  'AUTOMATION_SCHEDULE_TOO_FREQUENT',
+  'AUTOMATION_SCHEDULE_PAST',
+  'AUTOMATION_CRON_FIELDS',
+  'AUTOMATION_CRON_INVALID',
+  'AUTOMATION_TIMEZONE_INVALID',
+  'AUTOMATION_FOLDER_UNAVAILABLE',
+  'AUTOMATION_LEGACY',
+  /* decisione 13 (08/10 sera): le istruzioni proposte da un giro, decise dalla persona una volta sola */
+  'AUTOMATION_PROPOSAL_NOT_FOUND',
+  'AUTOMATION_PROPOSAL_DECIDED',
+  'AUTOMATION_PROPOSAL_STALE',
+  'AUTOMATION_ORIGIN_FORBIDDEN', // Y3 (08/10 sera): una scrittura sulle automazioni che non viene dalla finestra di TALOS
+  'AUTOMATION_RUN_IN_PROGRESS',
+  'AUTOMATION_NO_RUN_IN_PROGRESS',
+  'AUTOMATION_RUN_NOT_STARTED',
   'CATALOG_UNREACHABLE',
   'CATALOG_UPSTREAM_ERROR',
   'CATALOG_CONFIGURATION_REQUIRED', // P-K-bis/P-L-bis: configurazione mancante, non guasto interno.
@@ -193,6 +213,10 @@ const API_ERROR_CODES = new Set([
   /* ⭐ 07/9, O-49 — la risposta a una richiesta di consenso che nel frattempo non è più in attesa. */
   'APPROVAL_NOT_PENDING',
   'QUESTION_NOT_PENDING',
+  /* ⛔ C2 (07/10/2026) — la risposta a una richiesta di permesso dichiarata da una sessione fuori dalla catena della figlia. */
+  'APPROVAL_ANSWER_FORBIDDEN',
+  /* ⛔ C2-Q (08/10/2026) — la stessa cosa per la DOMANDA di una figlia alla persona. */
+  'QUESTION_ANSWER_FORBIDDEN',
   /* ⛔ F3-10, 23/09/2026 — il modo Workflow è ritirato (400). */
   'MODE_WORKFLOW_RETIRED',
   /* ⛔ CTX-D2, 23/09/2026 — la risposta Ask non è stata salvata: mai un 200 (vedi rispondiDomanda). */
@@ -213,6 +237,8 @@ const API_ERROR_CODES = new Set([
   'WORKSPACE_NOT_AVAILABLE',
   'WORKSPACE_ALREADY_EXISTS',
   'PROVIDER_INVALID', 'PROVIDER_KEY_REQUIRED', 'PROVIDER_KEY_INVALID', 'PROVIDER_STORE_UNAVAILABLE', 'PROVIDER_RUNTIME_INVALID', 'PROVIDER_RUNTIME_UNAVAILABLE',
+  // decisione 14 (08/10/2026 sera): i fornitori a valle esclusi su OpenRouter
+  'OPENROUTER_PROVIDER_NOT_FOUND', 'OPENROUTER_ENDPOINTS_UNAVAILABLE', 'PROVIDER_SETTINGS_ORIGIN_FORBIDDEN',
   'PROVIDER_POOL_FULL', 'PROVIDER_KEY_NOT_FOUND', 'PROVIDER_FALLBACK_INVALID', 'PROVIDER_FALLBACK_TOOLS_UNSUPPORTED', // P-H (12/09): pool di chiavi e riserve — senza questa riga il codice vero cadeva nel 500 di fondo
   // ⭐ 04/9, R-03 — fonte della ricerca web (search-source-store.mjs, duckduckgo-search.mjs).
   'SEARCH_SOURCE_INVALID', 'SEARCH_KEY_REQUIRED', 'SEARCH_KEY_INVALID', 'SEARCH_ENDPOINT_INVALID', 'SEARCH_STORE_UNAVAILABLE', 'SEARCH_NOT_READY', 'SEARCH_BLOCKED', 'SEARCH_UNREACHABLE', 'SEARCH_FAILED',
@@ -458,6 +484,22 @@ const STATUS_BY_CODE = Object.freeze({
   COMPACTION_NOT_FOUND: 404,
   /** ⭐ 27/8 — un tetto duro dell'automazione violato (intervallo/limite fuori range) è un errore di CONTENUTO, non di forma: stesso status di ROW_INVALID. */
   AUTOMATION_INVALID: 422,
+  AUTOMATION_SCHEDULE_INVALID: 422,
+  AUTOMATION_SCHEDULE_TOO_FREQUENT: 422,
+  AUTOMATION_SCHEDULE_PAST: 422,
+  AUTOMATION_CRON_FIELDS: 422,
+  AUTOMATION_CRON_INVALID: 422,
+  AUTOMATION_TIMEZONE_INVALID: 422,
+  AUTOMATION_FOLDER_UNAVAILABLE: 422,
+  AUTOMATION_LEGACY: 409,
+  AUTOMATION_PROPOSAL_NOT_FOUND: 404,
+  AUTOMATION_PROPOSAL_DECIDED: 409,
+  AUTOMATION_PROPOSAL_STALE: 409,
+  AUTOMATION_ORIGIN_FORBIDDEN: 403,
+  /** un giro della stessa automazione è ancora vivo: mai due insieme (Hermes) — conflitto di stato, non di forma */
+  AUTOMATION_RUN_IN_PROGRESS: 409,
+  AUTOMATION_NO_RUN_IN_PROGRESS: 409,
+  AUTOMATION_RUN_NOT_STARTED: 422,
   /** ⭐ 27/8 — il catalogo modelli dipende da OpenRouter: quando è irraggiungibile o risponde male non è colpa del client. */
   CATALOG_UNREACHABLE: 503,
   CATALOG_UPSTREAM_ERROR: 503,
@@ -532,6 +574,10 @@ const STATUS_BY_CODE = Object.freeze({
    */
   APPROVAL_NOT_PENDING: 409,
   QUESTION_NOT_PENDING: 409,
+  /** C2 (07/10/2026): chi dichiara di rispondere da una sessione che non è la figlia né un suo antenato — 403, la richiesta è capita ma non ammessa. */
+  APPROVAL_ANSWER_FORBIDDEN: 403,
+  /** C2-Q (08/10/2026): la stessa regola per la domanda di una figlia alla persona. */
+  QUESTION_ANSWER_FORBIDDEN: 403,
   /** ⛔ F3-10, 23/09/2026 — un valore ritirato è una richiesta sbagliata; Piano con figlie vive è lo stato che la blocca. */
   MODE_WORKFLOW_RETIRED: 400,
   /** ⛔ CTX-D2, 23/09/2026 — stesso 500 di SESSION_STORE_HEADER_FAILED/DELETE_FAILED: il salvataggio non è riuscito e l'esito è definitivo (la domanda è chiusa), ripetere non lo cambia. */
@@ -556,6 +602,9 @@ const STATUS_BY_CODE = Object.freeze({
   PROVIDER_FALLBACK_TOOLS_UNSUPPORTED: 422,
   PROVIDER_STORE_UNAVAILABLE: 503,
   PROVIDER_RUNTIME_INVALID: 422,
+  OPENROUTER_PROVIDER_NOT_FOUND: 404,
+  OPENROUTER_ENDPOINTS_UNAVAILABLE: 502,
+  PROVIDER_SETTINGS_ORIGIN_FORBIDDEN: 403,
   PROVIDER_RUNTIME_UNAVAILABLE: 503,
   SEARCH_SOURCE_INVALID: 422,
   SEARCH_KEY_REQUIRED: 422,
@@ -741,6 +790,21 @@ export const MESSAGE_BY_CODE = Object.freeze({
   TASK_NOT_ALLOWED: 'Task not allowed',
   SESSION_NOT_READY: 'Session not ready for this action',
   AUTOMATION_INVALID: 'Invalid automation parameters',
+  AUTOMATION_SCHEDULE_INVALID: 'This schedule is not valid',
+  AUTOMATION_SCHEDULE_TOO_FREQUENT: 'An automation runs at most every 5 minutes',
+  AUTOMATION_SCHEDULE_PAST: 'This time has already passed: choose a time in the future',
+  AUTOMATION_CRON_FIELDS: 'A custom schedule has exactly 5 fields: minute, hour, day of month, month, day of week',
+  AUTOMATION_CRON_INVALID: 'This custom schedule cannot be read',
+  AUTOMATION_TIMEZONE_INVALID: 'Unknown time zone',
+  AUTOMATION_FOLDER_UNAVAILABLE: 'This folder does not exist, or TALOS cannot read and write in it',
+  AUTOMATION_LEGACY: 'This automation uses the old format: create a new one to change it',
+  AUTOMATION_PROPOSAL_NOT_FOUND: 'This run did not propose new instructions',
+  AUTOMATION_PROPOSAL_DECIDED: 'This proposal was already approved or discarded',
+  AUTOMATION_PROPOSAL_STALE: 'The instructions changed after this proposal: compare them again before changing them',
+  AUTOMATION_ORIGIN_FORBIDDEN: 'Automations can be changed only from the TALOS window',
+  AUTOMATION_RUN_IN_PROGRESS: 'A run of this automation is still going: wait for it, or stop it',
+  AUTOMATION_NO_RUN_IN_PROGRESS: 'No run of this automation is going right now',
+  AUTOMATION_RUN_NOT_STARTED: 'The run did not start',
   CATALOG_UNREACHABLE: 'Model catalog unreachable',
   CATALOG_UPSTREAM_ERROR: 'Model catalog unavailable',
   CATALOG_CONFIGURATION_REQUIRED: 'Set up the models or the external agent in Providers and access',
@@ -789,7 +853,9 @@ export const MESSAGE_BY_CODE = Object.freeze({
   BROWSER_VIVO_SENZA_CONNESSIONE: 'There is no way to connect to the driven browser',
   /* ⛔ 07/9, O-49: questo testo finisce dentro il fumetto rosso in basso a destra — deve dire cos’è successo, non «Invalid query». */
   APPROVAL_NOT_PENDING: 'This permission request is no longer pending: the session has moved on',
+  APPROVAL_ANSWER_FORBIDDEN: 'This permission request can be answered only from the session that asked or from one that started it',
   QUESTION_NOT_PENDING: 'This question is no longer pending: the session has moved on',
+  QUESTION_ANSWER_FORBIDDEN: 'This question can be answered only from the session that asked or from one that started it',
   QUESTION_ANSWER_NOT_SAVED: 'The answer was not saved: the question was closed without an answer',
   PLAN_NOT_PENDING: 'This plan no longer waits for a choice: the session has moved on',
   PLAN_STALE: 'The plan on screen is no longer the latest: read the updated version and choose on that one',
@@ -805,6 +871,9 @@ export const MESSAGE_BY_CODE = Object.freeze({
   PROVIDER_KEY_INVALID: 'The key you entered is not valid',
   PROVIDER_STORE_UNAVAILABLE: 'The computer’s keychain is not available: check Doctor',
   PROVIDER_RUNTIME_INVALID: 'Check the provider’s address and timeout',
+  OPENROUTER_PROVIDER_NOT_FOUND: 'This provider is not among the providers of this model on OpenRouter: add it by hand in the OpenRouter settings',
+  OPENROUTER_ENDPOINTS_UNAVAILABLE: 'OpenRouter did not answer with the providers of this model: try again in a moment',
+  PROVIDER_SETTINGS_ORIGIN_FORBIDDEN: 'Provider settings can be changed only from the TALOS window',
   PROVIDER_RUNTIME_UNAVAILABLE: 'The provider’s preferences could not be saved: check Doctor',
   /*
    * ⭐⭐⭐ PO-01 (10/9) — le sette frasi dell'accesso a OpenRouter. ⛔ Le legge una PERSONA:
@@ -1365,6 +1434,21 @@ export function politicaPagina(base) {
   ].join('; ');
 }
 
+/* ATTESA-DA-CAPO (08/10/2026): `/metrics` accetta UNA domanda sola, `eta`, una volta, con un intero in forma canonica (la
+   `_sequenza` di un evento). Tutto il resto si rifiuta come prima: `requireNoQuery`. */
+function sequenzaChiestaPerEta(url) {
+  const chiavi = [...url.searchParams.keys()];
+  if (chiavi.length === 0) return null;
+  const valore = chiavi.length === 1 && chiavi[0] === 'eta' ? url.searchParams.get('eta') : null;
+  const numero = typeof valore === 'string' && /^(0|[1-9][0-9]{0,15})$/u.test(valore) ? Number(valore) : NaN;
+  if (!Number.isSafeInteger(numero)) {
+    const error = new Error('Invalid query');
+    error.code = 'QUERY_INVALID';
+    throw error;
+  }
+  return numero;
+}
+
 function requireNoQuery(url) {
   if ([...url.searchParams.keys()].length > 0) {
     const error = new Error('Invalid query');
@@ -1514,7 +1598,9 @@ function parseTreeQuery(url) {
  * Qui si controlla solo la FORMA della query, come per l'albero del workspace.
  */
 function parseEsportaRicercaQuery(url) {
-  const allowed = new Set(['formato', 'tono']);
+  /* ⛔ K4b (07/10/2026, owner: le esportazioni nella lingua dell'interfaccia): terza chiave `lingua` (it|en). Il valore lo
+     controlla `costruisciEsportazione`, come per formato e tono. */
+  const allowed = new Set(['formato', 'tono', 'lingua']);
   const query = {};
   for (const [key, value] of url.searchParams) {
     if (!allowed.has(key) || Object.hasOwn(query, key) || value.length > 1024) {
@@ -1655,6 +1741,9 @@ const ROTTE_API = Object.freeze([
   { schema: '/api/v1/huggingface/image', metodi: ['GET'] },
   { schema: '/api/v1/huggingface/downloads', metodi: ['GET'] },
   { schema: '/api/v1/providers', metodi: ['GET'] },
+  // decisione 14 (08/10/2026 sera): i fornitori a valle esclusi su OpenRouter — l'elenco intero, e «Escludi» dal piede della risposta
+  { schema: '/api/v1/providers/openrouter/esclusi', metodi: ['POST'] },
+  { schema: '/api/v1/providers/openrouter/esclusi/dalla-risposta', metodi: ['POST'] },
   { schema: '/api/v1/models', metodi: ['GET'] },
   { schema: '/api/v1/model-lab/capacity', metodi: ['GET'] },
   { schema: '/api/v1/tools', metodi: ['GET'] },
@@ -1800,7 +1889,13 @@ const ROTTE_API = Object.freeze([
   { schema: /^\/api\/v1\/providers\/([^/]+)\/(key|keys)(?:\/(remove))?$/, metodi: ['POST'] },
   { schema: /^\/api\/v1\/providers\/([^/]+)\/runtime(?:\/(reset))?$/, metodi: ['POST'] },
   { schema: /^\/api\/v1\/automations\/([^/]+)\/toggle$/, metodi: ['POST'] },
+  { schema: /^\/api\/v1\/automations\/([^/]+)\/coordinazione$/, metodi: ['POST'] }, // C2b (08/10/2026)
   { schema: /^\/api\/v1\/automations\/([^/]+)\/elimina$/, metodi: ['POST'] },
+  // Automazioni a due porte (08/10/2026): modifica, esegui ora, ferma, lo storico, «Da guardare», segna letto
+  { schema: /^\/api\/v1\/automations\/([^/]+)\/(modifica|esegui|ferma)$/, metodi: ['POST'] },
+  { schema: /^\/api\/v1\/automations\/([^/]+)\/runs\/([^/]+)\/(letta|proposta)$/, metodi: ['POST'] }, // decisione 13: anche la proposta
+  { schema: /^\/api\/v1\/automations\/([^/]+)\/runs$/, metodi: ['GET'] },
+  { schema: '/api/v1/automations/inbox', metodi: ['GET'] },
   { schema: /^\/api\/v1\/local-models\/([^/]+)\/(rename|copy-path|delete)$/, metodi: ['POST'] },
   { schema: /^\/api\/v1\/local-models\/([^/]+)\/qualify$/, metodi: ['POST'] },
   { schema: /^\/api\/v1\/huggingface\/downloads\/([^/]+)\/(pause|resume|cancel)$/, metodi: ['POST'] },
@@ -1846,6 +1941,7 @@ const ROTTE_API = Object.freeze([
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/dove-girano-i-comandi$/, metodi: ['POST'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/comandi-nella-conversazione$/, metodi: ['POST'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/impostazioni-comandi$/, metodi: ['GET'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/pending$/, metodi: ['GET'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/approve$/, metodi: ['POST'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/question$/, metodi: ['POST'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/plan-decision$/, metodi: ['POST'] },
@@ -2210,14 +2306,68 @@ function requireCustomTaskBody(body) {
  * ammesse) — i tetti duri (intervallo minimo, limite massimo) restano
  * validati in automation-store.crea(), l'unico posto che li dichiara.
  */
+/*
+ * ⛔⛔ Automazioni a due porte (owner 08/10/2026 notte) — il corpo v2 (riconosciuto da `istruzioni`): istruzioni libere,
+ *   cartella, permessi, pianificazione, fuso, ripetizioni. Qui solo la FORMA e i tipi; i valori li valida il negozio
+ *   (`automation-store.mjs`) e la pianificazione (`automation-pianificazione.mjs`), che sono l'unico posto che li dichiara.
+ *   L'origine la mette il server (`interfaccia` qui, `chat` dall'attrezzo del modello): mai un campo del client.
+ */
+const CAMPI_AUTOMAZIONE_V2 = ['nome', 'istruzioni', 'cartella', 'modello', 'permessi', 'coordinazione', 'pianificazione', 'fusoOrario', 'ripeti'];
+function corpoAutomazioneV2(body, { parziale }) {
+  const chiavi = Object.keys(body ?? {});
+  const forma = chiavi.length > 0 && chiavi.every((k) => CAMPI_AUTOMAZIONE_V2.includes(k))
+    && (parziale || (chiavi.includes('nome') && chiavi.includes('istruzioni') && chiavi.includes('cartella') && chiavi.includes('pianificazione')))
+    && ['nome', 'istruzioni', 'cartella', 'permessi', 'fusoOrario'].every((k) => body[k] === undefined || typeof body[k] === 'string')
+    && (body.modello === undefined || body.modello === null || modelloRichiestaValido(body.modello))
+    && (body.coordinazione === undefined || typeof body.coordinazione === 'boolean')
+    && (body.ripeti === undefined || body.ripeti === null || typeof body.ripeti === 'number')
+    && (body.pianificazione === undefined || (body.pianificazione !== null && typeof body.pianificazione === 'object' && !Array.isArray(body.pianificazione)));
+  if (!forma) {
+    const errore = new Error(parziale
+      ? 'Invalid body: expected some of {nome, istruzioni, cartella, modello, permessi, coordinazione, pianificazione, fusoOrario, ripeti}'
+      : 'Invalid body: expected {nome, istruzioni, cartella, pianificazione, modello?, permessi?, coordinazione?, fusoOrario?, ripeti?}');
+    errore.code = 'QUERY_INVALID';
+    throw errore;
+  }
+  return Object.fromEntries(chiavi.map((k) => [k, body[k]]));
+}
+/** La cartella di un'automazione esiste ed è leggibile e scrivibile adesso: lo si dice alla creazione, non al primo giro. */
+function verificaCartellaAutomazione(cartella) {
+  try {
+    validaCartellaLibera(cartella);
+  } catch (errore) {
+    if (errore instanceof CustomTaskError) {
+      const rifiuto = new Error(errore.message);
+      rifiuto.code = errore.code === 'QUERY_INVALID' ? 'AUTOMATION_INVALID' : 'AUTOMATION_FOLDER_UNAVAILABLE';
+      throw rifiuto;
+    }
+    throw errore;
+  }
+}
+/** «Esegui ora»: niente, oppure `{contesto}` (dato per questo giro solo, al più 4.000 caratteri). */
+function requireAutomationRunBody(body) {
+  const chiavi = Object.keys(body ?? {});
+  const forma = chiavi.every((k) => k === 'contesto')
+    && (body?.contesto === undefined || (typeof body.contesto === 'string' && body.contesto.length <= 4000));
+  if (!forma) {
+    const errore = new Error('Invalid body: expected {} or {contesto: string}');
+    errore.code = 'QUERY_INVALID';
+    throw errore;
+  }
+  return typeof body?.contesto === 'string' ? body.contesto : null;
+}
+
 function requireAutomationCreateBody(body) {
-  const AMMESSE = ['taskId', 'nome', 'intervalloMinuti', 'limiteAlGiorno', 'modello']; // 24/09/2026: il modello si salva
+  if (body && typeof body === 'object' && 'istruzioni' in body) return { versione: 2, ...corpoAutomazioneV2(body, { parziale: false }) };
+  // 24/09/2026: il modello si salva · C2b (08/10/2026): Coordinazione, un booleano
+  const AMMESSE = ['taskId', 'nome', 'intervalloMinuti', 'limiteAlGiorno', 'modello', 'coordinazione'];
   const chiavi = Object.keys(body ?? {});
   const soloAmmesse = chiavi.length > 0 && chiavi.every((k) => AMMESSE.includes(k))
     && chiavi.includes('taskId') && chiavi.includes('intervalloMinuti');
   if (!soloAmmesse || typeof body.taskId !== 'string' || typeof body.intervalloMinuti !== 'number'
-    || (body.modello !== undefined && !modelloRichiestaValido(body.modello))) {
-    const errore = new Error('Invalid body: expected {taskId, intervalloMinuti, nome?, limiteAlGiorno?, modello?}');
+    || (body.modello !== undefined && !modelloRichiestaValido(body.modello))
+    || (body.coordinazione !== undefined && typeof body.coordinazione !== 'boolean')) {
+    const errore = new Error('Invalid body: expected {taskId, intervalloMinuti, nome?, limiteAlGiorno?, modello?, coordinazione?}');
     errore.code = 'QUERY_INVALID';
     throw errore;
   }
@@ -2227,7 +2377,19 @@ function requireAutomationCreateBody(body) {
     intervalloMinuti: body.intervalloMinuti,
     limiteAlGiorno: typeof body.limiteAlGiorno === 'number' ? body.limiteAlGiorno : undefined,
     ...(typeof body.modello === 'string' ? { modello: body.modello } : {}),
+    ...(typeof body.coordinazione === 'boolean' ? { coordinazione: body.coordinazione } : {}),
   };
+}
+
+/** C2b: un'allowlist di UNA chiave sola, {coordinazione}, un booleano — come {attiva} qui sotto. */
+function requireAutomationCoordinationBody(body) {
+  const chiavi = Object.keys(body ?? {});
+  if (chiavi.length !== 1 || chiavi[0] !== 'coordinazione' || typeof body.coordinazione !== 'boolean') {
+    const errore = new Error('Invalid body: expected {coordinazione: boolean}');
+    errore.code = 'QUERY_INVALID';
+    throw errore;
+  }
+  return body.coordinazione;
 }
 
 /** ⛔ Un'allowlist di UNA chiave sola: {attiva}, un booleano — niente altro. */
@@ -2373,7 +2535,9 @@ function requireMemoriaBody(body, { creazione }) {
 
 /** Allowlist stretta per le preferenze che appartengono alla sessione. */
 function requireSessionSettingsBody(body) {
-  const ammesse = ['modello', 'modelloPlanner', 'reasoning', 'permessi', 'permessiPerAttrezzo', 'fallbackProviders', 'modalitaOperativa', 'linguaInterfaccia'];
+  // C2 «Per questa sessione» sul server (08/10/2026): `unisciPermessiPerAttrezzo` si unisce alle scelte vere, invece di sostituirle
+  // C2-R7 (08/10/2026 sera): `rispettaNega` — il gesto della carta non scrive sopra un «nega» (vedi `aggiornaImpostazioniOra`)
+  const ammesse = ['modello', 'modelloPlanner', 'reasoning', 'permessi', 'permessiPerAttrezzo', 'unisciPermessiPerAttrezzo', 'rispettaNega', 'fallbackProviders', 'modalitaOperativa', 'linguaInterfaccia'];
   const chiavi = body && typeof body === 'object' && !Array.isArray(body) ? Object.keys(body) : [];
   if (chiavi.length === 0 || chiavi.some((chiave) => !ammesse.includes(chiave))) {
     const errore = new Error('Invalid body: at least one recognized session preference is expected');
@@ -2402,6 +2566,17 @@ function requireSessionSettingsBody(body) {
   }
   if ('permessiPerAttrezzo' in body && !permessiPerAttrezzoRichiestaValido(body.permessiPerAttrezzo)) {
     const errore = new Error('permessiPerAttrezzo not recognized');
+    errore.code = 'PERMISSIONS_INVALID';
+    throw errore;
+  }
+  if ('unisciPermessiPerAttrezzo' in body
+    && ('permessiPerAttrezzo' in body || !body.unisciPermessiPerAttrezzo || !permessiPerAttrezzoRichiestaValido(body.unisciPermessiPerAttrezzo))) {
+    const errore = new Error('unisciPermessiPerAttrezzo must map one or more tools to "sempre"/"chiedi"/"nega", without permessiPerAttrezzo');
+    errore.code = 'PERMISSIONS_INVALID';
+    throw errore;
+  }
+  if ('rispettaNega' in body && (typeof body.rispettaNega !== 'boolean' || !('unisciPermessiPerAttrezzo' in body))) {
+    const errore = new Error('rispettaNega must be true or false, and only together with unisciPermessiPerAttrezzo');
     errore.code = 'PERMISSIONS_INVALID';
     throw errore;
   }
@@ -2483,21 +2658,29 @@ function requireComandoBody(body) {
  */
 /* F4-03 (owner 01/10/2026 sera): `ambito: 'cartella'` = «Consenti in questa cartella per la sessione» — facoltativo, e solo con
    un sì. Quale cartella NON lo dice il client: il registro prende quella che il kernel ha messo nella domanda. */
+/* C2 R4 (07/10/2026): `rispostoDa` = la sessione da cui la persona risponde (la carta della figlia disegnata nel padre) —
+   facoltativo; il registro lo verifica come la figlia stessa o un suo antenato, mai fidandosi del client. */
 function requireApprovaBody(body) {
   const chiavi = Object.keys(body ?? {});
-  const AMMESSE = ['requestId', 'approvato', 'ambito'];
+  // automazioni a due porte (08/10/2026): `automazioneModificata` = «Modifica» sulla carta d'automazione, solo con un no
+  const AMMESSE = ['requestId', 'approvato', 'ambito', 'rispostoDa', 'automazioneModificata'];
   const conAmbito = chiavi.includes('ambito');
+  const conRispostoDa = chiavi.includes('rispostoDa');
+  const conModificata = chiavi.includes('automazioneModificata');
   if (
-    chiavi.length !== (conAmbito ? 3 : 2) || !chiavi.every((k) => AMMESSE.includes(k))
+    chiavi.length !== 2 + (conAmbito ? 1 : 0) + (conRispostoDa ? 1 : 0) + (conModificata ? 1 : 0) || !chiavi.every((k) => AMMESSE.includes(k))
+    || (conModificata && (typeof body.automazioneModificata !== 'string' || body.automazioneModificata.length === 0 || body.approvato !== false || conAmbito))
     || typeof body.requestId !== 'string' || body.requestId.length === 0
     || typeof body.approvato !== 'boolean'
     || (conAmbito && ((body.ambito !== 'cartella' && body.ambito !== 'percorso') || body.approvato !== true))
+    || (conRispostoDa && (typeof body.rispostoDa !== 'string' || body.rispostoDa.length === 0 || body.rispostoDa.length > 200))
   ) {
-    const errore = new Error('Invalid body: expected {requestId, approvato} or {requestId, approvato: true, ambito: "cartella"|"percorso"}');
+    const errore = new Error('Invalid body: expected {requestId, approvato} or {requestId, approvato: true, ambito: "cartella"|"percorso"}, with an optional rispostoDa');
     errore.code = 'QUERY_INVALID';
     throw errore;
   }
-  return { requestId: body.requestId, approvato: body.approvato, ...(conAmbito ? { ambito: body.ambito } : {}) };
+  return { requestId: body.requestId, approvato: body.approvato, ...(conAmbito ? { ambito: body.ambito } : {}),
+    ...(conRispostoDa ? { rispostoDa: body.rispostoDa } : {}), ...(conModificata ? { automazioneModificata: body.automazioneModificata } : {}) };
 }
 
 /*
@@ -2522,7 +2705,10 @@ function rifiutoOrigineApprovazione(req, { token }) {
 
 function requireRispostaDomandaBody(body) {
   const chiavi = Object.keys(body ?? {});
-  const ammesse = ['requestId', 'status', 'answers'];
+  /* C2-Q (08/10/2026): `rispostoDa` facoltativo, come in `requireApprovaBody` — la sessione da cui la persona risponde (la carta
+     della domanda di una figlia disegnata nel padre). Il registro lo verifica sulla catena; qui solo la forma. */
+  const ammesse = ['requestId', 'status', 'answers', 'rispostoDa'];
+  const conRispostoDa = Object.hasOwn(body ?? {}, 'rispostoDa');
   const status = body?.status;
   const answers = body?.answers;
   /*
@@ -2536,13 +2722,15 @@ function requireRispostaDomandaBody(body) {
   const valido = chiavi.length >= 2 && chiavi.every((k) => ammesse.includes(k))
     && typeof body?.requestId === 'string' && body.requestId.length > 0
     && ['answered', 'skipped', 'cancelled', 'expired'].includes(status) // 24/09/2026, decisione owner 35: la scadenza
-    && answersCoerenti;
+    && answersCoerenti
+    && (!conRispostoDa || (typeof body.rispostoDa === 'string' && body.rispostoDa.length > 0 && body.rispostoDa.length <= 200));
   if (!valido) {
-    const errore = new Error('Invalid body: expected {requestId, status: answered|skipped|cancelled|expired, answers?}');
+    const errore = new Error('Invalid body: expected {requestId, status: answered|skipped|cancelled|expired, answers?}, with an optional rispostoDa');
     errore.code = 'QUERY_INVALID';
     throw errore;
   }
-  return { requestId: body.requestId, status, ...(status === 'answered' ? { answers } : {}) };
+  return { requestId: body.requestId, status, ...(status === 'answered' ? { answers } : {}),
+    ...(conRispostoDa ? { rispostoDa: body.rispostoDa } : {}) };
 }
 
 /**
@@ -2825,7 +3013,7 @@ export function createHttpApp({
   workflowRuntime = null,
   // F5 File reader (26/09/2026): i lasciapassare delle pagine HTML rese (`pagine-lasciapassare.mjs`); iniettabile per i test
   lasciapassarePagine = creaLasciapassarePagine(),
-  elencaCartelleProgetto = () => [], automationStore = null, diagnosiFn = null,
+  elencaCartelleProgetto = () => [], automationStore = null, automationScheduler = null, diagnosiFn = null,
   // ⭐ 04/9, R-02 — stato del primo avvio (src/setup-stato.mjs): quali passi dell'intro sono già fatti, letti dalla realtà, mai un segreto.
   setupStatoFn = null,
   // ⭐ 04/9, R-03 — fonte della ricerca web scelta dalle Impostazioni (parità mobile) + prova reale.
@@ -4914,6 +5102,7 @@ export function createHttpApp({
           ricerca: letta.ricerca,
           formato: query.formato,
           tono: query.tono,
+          lingua: query.lingua,
         });
         if (req.aborted || res.destroyed) return;
         const nomiFile = nomiPerContentDisposition(file.nomeFile);
@@ -5162,6 +5351,50 @@ export function createHttpApp({
         requireNoQuery(url);
         if (!providerProbe || typeof providerProbe.prova !== 'function') { const error = new Error('Provider test not configured'); error.code = 'PROVIDER_STORE_UNAVAILABLE'; throw error; }
         const data = await providerProbe.prova(decodeURIComponent(providerTestMatch[1]));
+        sendJson(res, 200, successEnvelope(data, clock), method);
+      } catch (error) {
+        const normalized = normalizeError(error);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
+      }
+      return;
+    }
+
+    /*
+     * ⛔ Decisione 14 dell'owner (08/10/2026 sera) — I FORNITORI A VALLE ESCLUSI su OpenRouter (`provider.ignore`).
+     *   `/esclusi {esclusi:[slug…]}` scrive l'elenco INTERO (le impostazioni); `/esclusi/dalla-risposta {fornitore, modello}`
+     *   trova lo slug del nome che una risposta ha dichiarato (`openrouter-fornitori.mjs`) e lo aggiunge (il menu della risposta,
+     *   dopo la conferma). Cambiano dove va ogni richiesta futura: solo dalla finestra di TALOS (la guardia della casa).
+     */
+    const escludiMatch = method === 'POST' && /^\/api\/v1\/providers\/openrouter\/esclusi(\/dalla-risposta)?$/u.exec(url.pathname);
+    if (escludiMatch) {
+      try {
+        requireNoQuery(url);
+        const rifiutoOrigine = rifiutoOrigineApprovazione(req, { token });
+        if (rifiutoOrigine) {
+          throw Object.assign(new Error(rifiutoOrigine === 'altra-finestra'
+            ? 'Provider settings can be changed only from the TALOS window'
+            : 'A program that is not a browser can change provider settings only with the TALOS token'), { code: 'PROVIDER_SETTINGS_ORIGIN_FORBIDDEN' });
+        }
+        if (!providerStore) { const error = new Error('Provider keychain not configured'); error.code = 'PROVIDER_STORE_UNAVAILABLE'; throw error; }
+        const corpo = await leggiCorpoJson(req, 16 * 1024);
+        const chiavi = Object.keys(corpo ?? {});
+        let data;
+        if (escludiMatch[1]) {
+          if (chiavi.length !== 2 || !chiavi.includes('fornitore') || !chiavi.includes('modello')
+            || typeof corpo.fornitore !== 'string' || typeof corpo.modello !== 'string') {
+            throw Object.assign(new Error('Invalid body: expected {"fornitore", "modello"}'), { code: 'QUERY_INVALID' });
+          }
+          const slug = await slugDelFornitore({ fornitore: corpo.fornitore, modello: corpo.modello, fetchFn: fetchOpenRouterFn });
+          const prima = providerStore.getRuntime('openrouter').esclusi ?? [];
+          const runtime = providerStore.impostaEsclusi('openrouter', prima.includes(slug) ? prima : [...prima, slug]);
+          data = { slug, giaEscluso: prima.includes(slug), esclusi: runtime.esclusi };
+        } else {
+          if (chiavi.length !== 1 || chiavi[0] !== 'esclusi' || !Array.isArray(corpo.esclusi)) {
+            throw Object.assign(new Error('Invalid body: expected {"esclusi": [slug, …]}'), { code: 'QUERY_INVALID' });
+          }
+          data = { esclusi: providerStore.impostaEsclusi('openrouter', corpo.esclusi).esclusi };
+        }
+        if (req.aborted || res.destroyed) return;
         sendJson(res, 200, successEnvelope(data, clock), method);
       } catch (error) {
         const normalized = normalizeError(error);
@@ -5702,6 +5935,28 @@ export function createHttpApp({
     }
 
     /*
+     * ⛔⛔ Review del bugfixer, 08/10/2026 sera (Y3) — OGNI scrittura sulle automazioni passa dalla guardia d'origine della casa
+     *   (`rifiutoOrigineApprovazione`, la stessa di Piano e Workflow). Senza, su un server senza gettone un giro con la shell
+     *   poteva fare da sé, con un curl, ciò che la decisione 13 riserva alla persona: approvare la propria proposta, riscriversi
+     *   con `/modifica`, crearne di nuove, spegnere o eliminare, togliere un giro da «Da guardare» con `/letta`. Una sola
+     *   guardia per tutte le POST di questo prefisso: una rotta nuova nasce già protetta.
+     *   ⛔ Non è un confine contro chi falsifica le intestazioni (un curl può scrivere `Origin`): quello lo dà il gettone, acceso
+     *   nell'app desktop e tolto ai processi figli. Questa guardia chiude il caso del server senza gettone e dei siti estranei.
+     */
+    /* scritto con stringhe e non con un'espressione: il GUARDIANO dell'inventario (tests/http-inventario-rotte.test.mjs) legge le
+       espressioni accanto a `(url.pathname)` come rotte, e questa è una guardia di prefisso, non una rotta */
+    if (method === 'POST' && automationStore && (url.pathname === '/api/v1/automations' || url.pathname.startsWith('/api/v1/automations/'))) {
+      const rifiutoOrigine = rifiutoOrigineApprovazione(req, { token });
+      if (rifiutoOrigine) {
+        const errore = Object.assign(new Error(rifiutoOrigine === 'altra-finestra'
+          ? 'Automations can be changed only from the TALOS window' // = il dizionario: l'interfaccia la dice nella lingua della persona
+          : 'A program that is not a browser can change automations only with the TALOS token'), { code: 'AUTOMATION_ORIGIN_FORBIDDEN' });
+        sendJson(res, 403, errorEnvelope('AUTOMATION_ORIGIN_FORBIDDEN', clock, { errore }), method);
+        return;
+      }
+    }
+
+    /*
      * ⭐⭐⭐ 27/8 — blocco 7 (Automazioni), la vera schedulazione. Owner:
      * "hai il mio via libera". Tre rotte, stesso stile POST-per-azione già
      * in uso ovunque in questo file (mai un vero DELETE HTTP, coerenza
@@ -5711,7 +5966,11 @@ export function createHttpApp({
       try {
         requireNoQuery(url);
         const corpo = await leggiCorpoJson(req);
-        const richiesta = requireAutomationCreateBody(corpo);
+        const { versione, ...richiesta } = requireAutomationCreateBody(corpo);
+        if (versione === 2) {
+          verificaCartellaAutomazione(richiesta.cartella);
+          richiesta.origine = { tipo: 'interfaccia' };
+        }
         const voce = await automationStore.crea(richiesta);
         if (req.aborted || res.destroyed) return;
         sendJson(res, 200, successEnvelope(voce, clock), method);
@@ -5747,6 +6006,32 @@ export function createHttpApp({
       return;
     }
 
+    /* C2b «Coordinazione» (owner 08/10/2026 notte): l'interruttore nella scheda dell'automazione. Stessa forma di /toggle. */
+    const automationCoordinationMatch = method === 'POST' && automationStore
+      && /^\/api\/v1\/automations\/([^/]+)\/coordinazione$/.exec(url.pathname);
+    if (automationCoordinationMatch) {
+      try {
+        requireNoQuery(url);
+        let automationId;
+        try {
+          automationId = decodeURIComponent(automationCoordinationMatch[1]);
+        } catch {
+          sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method);
+          return;
+        }
+        const corpo = await leggiCorpoJson(req);
+        const accesa = requireAutomationCoordinationBody(corpo);
+        const voce = await automationStore.impostaCoordinazione(automationId, accesa);
+        if (!voce) { sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method); return; }
+        if (req.aborted || res.destroyed) return;
+        sendJson(res, 200, successEnvelope(voce, clock), method);
+      } catch (error) {
+        const normalized = normalizeError(error);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
+      }
+      return;
+    }
+
     const automationEliminaMatch = method === 'POST' && automationStore
       && /^\/api\/v1\/automations\/([^/]+)\/elimina$/.exec(url.pathname);
     if (automationEliminaMatch) {
@@ -5763,9 +6048,75 @@ export function createHttpApp({
         if (Object.keys(corpo ?? {}).length !== 0) {
           const errore = new Error('Invalid body: expected {}'); errore.code = 'QUERY_INVALID'; throw errore;
         }
+        /* Automazioni a due porte (08/10/2026): eliminare un'automazione col giro in corso FERMA il giro — altrimenti
+           continuerebbe a lavorare, e a spendere, per una voce che non c'è più (la sua fine troverebbe la voce sparita) */
+        const daEliminare = typeof automationStore.leggi === 'function' ? await automationStore.leggi(automationId) : null; // un negozio che non sa leggere (prove v1) non ha giri da fermare
+        if (daEliminare?.giroInCorso && typeof automationScheduler?.fermaGiro === 'function') await automationScheduler.fermaGiro(automationId);
         await automationStore.elimina(automationId);
         if (req.aborted || res.destroyed) return;
         sendJson(res, 200, successEnvelope({ ok: true }, clock), method);
+      } catch (error) {
+        const normalized = normalizeError(error);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
+      }
+      return;
+    }
+
+    /*
+     * ⛔⛔ AUTOMAZIONI A DUE PORTE (owner 08/10/2026 notte) — le azioni di una voce v2, stesso stile POST-per-azione delle
+     *   tre sopra: modifica, esegui ora, ferma il giro, segna letto. Eliminare resta `/elimina` (solo dall'interfaccia, owner).
+     */
+    const automationAzioneMatch = method === 'POST' && automationStore
+      && /^\/api\/v1\/automations\/([^/]+)\/(modifica|esegui|ferma)$/.exec(url.pathname);
+    /* decisione 13 (08/10 sera): la persona approva o scarta le istruzioni che un giro ha proposto per sé — solo da qui */
+    const automationLettaMatch = method === 'POST' && automationStore
+      && /^\/api\/v1\/automations\/([^/]+)\/runs\/([^/]+)\/(letta|proposta)$/.exec(url.pathname);
+    if (automationAzioneMatch || automationLettaMatch) {
+      try {
+        requireNoQuery(url);
+        let automationId;
+        let runId = null;
+        try {
+          automationId = decodeURIComponent((automationAzioneMatch ?? automationLettaMatch)[1]);
+          if (automationLettaMatch) runId = decodeURIComponent(automationLettaMatch[2]);
+        } catch {
+          sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method);
+          return;
+        }
+        const corpo = await leggiCorpoJson(req);
+        const azione = automationLettaMatch ? automationLettaMatch[3] : automationAzioneMatch[2];
+        let risposta;
+        if (azione === 'proposta') {
+          const chiavi = Object.keys(corpo ?? {});
+          if (chiavi.length !== 1 || chiavi[0] !== 'decisione' || (corpo.decisione !== 'approva' && corpo.decisione !== 'scarta')) {
+            const errore = new Error('Invalid body: expected {"decisione": "approva" | "scarta"}');
+            errore.code = 'QUERY_INVALID';
+            throw errore;
+          }
+          risposta = await automationStore.risolviProposta(automationId, runId, corpo.decisione);
+        } else if (azione === 'modifica') {
+          const campi = corpoAutomazioneV2(corpo, { parziale: true });
+          if (typeof campi.cartella === 'string') verificaCartellaAutomazione(campi.cartella);
+          risposta = await automationStore.modifica(automationId, campi);
+        } else if (azione === 'letta') {
+          if (Object.keys(corpo ?? {}).length !== 0) { const errore = new Error('Invalid body: expected {}'); errore.code = 'QUERY_INVALID'; throw errore; }
+          risposta = await automationStore.segnaLetto(automationId, runId);
+        } else {
+          if (!automationScheduler) { sendJson(res, 503, errorEnvelope('INTERNAL_ERROR', clock), method); return; }
+          if (azione === 'ferma' && Object.keys(corpo ?? {}).length !== 0) { const errore = new Error('Invalid body: expected {}'); errore.code = 'QUERY_INVALID'; throw errore; }
+          const esito = azione === 'esegui'
+            ? await automationScheduler.eseguiOra(automationId, { contesto: requireAutomationRunBody(corpo) })
+            : await automationScheduler.fermaGiro(automationId);
+          if (esito && esito.ok === false) {
+            const errore = new Error(esito.erroreAvvio ?? esito.code);
+            errore.code = API_ERROR_CODES.has(esito.code) ? esito.code : 'AUTOMATION_RUN_NOT_STARTED';
+            throw errore;
+          }
+          risposta = esito;
+        }
+        if (!risposta) { sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method); return; }
+        if (req.aborted || res.destroyed) return;
+        sendJson(res, 200, successEnvelope(risposta, clock), method);
       } catch (error) {
         const normalized = normalizeError(error);
         sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
@@ -5843,7 +6194,7 @@ export function createHttpApp({
         for (const run of runDellaSessione) {
           try { await removeRun(workflowStore, { runId: run.runId }); workflowEliminati += 1; } catch (errore) {
             /* La conversazione è già eliminata: un run che non si toglie si DICE nella risposta e nel log, mai in silenzio. */
-            console.error(`[workflow] run ${run.runId} della sessione eliminata non rimosso:`, errore?.code ?? errore?.message);
+            console.error(`[workflow] run ${run.runId} of deleted session not removed:`, errore?.code ?? errore?.message);
             workflowNonEliminati.push({ runId: run.runId, code: errore?.code ?? 'WORKFLOW_STORE_IO' });
           }
         }
@@ -6307,7 +6658,9 @@ export function createHttpApp({
           throw erroreDelRegistro(esito);
         }
         if (req.aborted || res.destroyed) return;
-        sendJson(res, 200, successEnvelope({ updated: true }, clock), method);
+        // C2-R7: chi è rimasto «nega» (con `rispettaNega`), solo se qualcuno — senza salti la risposta è quella di sempre
+        const nonUniti = Array.isArray(esito?.nonUniti) && esito.nonUniti.length ? { nonUniti: esito.nonUniti } : {};
+        sendJson(res, 200, successEnvelope({ updated: true, ...nonUniti }, clock), method);
       } catch (error) {
         const normalized = normalizeError(error);
         sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
@@ -6331,7 +6684,7 @@ export function createHttpApp({
         && timingSafeEqual(createHash('sha256').update(ricevuto).digest(), createHash('sha256').update(atteso).digest());
       if (!combacia) { sendJson(res, 401, errorEnvelope('AUTH_REQUIRED', clock), method); return; }
       sendJson(res, 202, successEnvelope({ spegnimento: 'avviato' }, clock), method);
-      setImmediate(() => { try { spegnimento.spegniFn?.(); } catch (errore) { console.error('[spegnimento] errore:', errore instanceof Error ? errore.message : errore); } });
+      setImmediate(() => { try { spegnimento.spegniFn?.(); } catch (errore) { console.error('[shutdown] error:', errore instanceof Error ? errore.message : errore); } });
       return;
     }
 
@@ -6682,12 +7035,13 @@ export function createHttpApp({
         let sessionId;
         try { sessionId = decodeURIComponent(questionMatch[1]); }
         catch { sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method); return; }
-        const risposta = requireRispostaDomandaBody(await leggiCorpoJson(req));
+        // C2-Q: `rispostoDa` è un'opzione del registro, non una parte della risposta (il validatore delle risposte è chiuso)
+        const { rispostoDa, ...risposta } = requireRispostaDomandaBody(await leggiCorpoJson(req));
         /* ⛔ CTX-D2, 23/09/2026 notte — si ASPETTA la conferma del registro: il 200 parte solo dopo che
            la risposta è sul disco (prima era una chiamata sincrona che dava ok prima della scrittura).
            Una ripetizione della stessa risposta riceve l'esito della prima (idempotenza, vedi
            `rispondiDomanda` in session-registry.mjs e draft-ietf-httpapi-idempotency-key-header-07 §2.6). */
-        const esito = await sessionRegistry.rispondiDomanda(sessionId, risposta.requestId, risposta);
+        const esito = await sessionRegistry.rispondiDomanda(sessionId, risposta.requestId, risposta, rispostoDa === undefined ? {} : { rispostoDa });
         if ('erroreAvvio' in esito) {
           throw erroreDelRegistro(esito);
         }
@@ -6739,6 +7093,32 @@ export function createHttpApp({
       return;
     }
 
+    /*
+     * ⛔⛔ C2 R4 (07/10/2026, owner: «la carta nel padre») — LA DOMANDA IN ATTESA di una sessione, in sola lettura. Il padre la
+     *   chiede quando lo snapshot `talos.agenti` dice che un discendente aspetta: una lettura per richiesta nuova, mai un
+     *   abbonamento al flusso della figlia (6 connessioni SSE per browser e dominio su HTTP/1.1, MDN `EventSource`, letta il
+     *   07/10/2026). La risposta passa dal `POST …/<figlia>/approve` che c'è già, con `rispostoDa`.
+     *   `{ pending: null }` = la sessione non aspetta niente; 404 = la sessione non c'è.
+     */
+    const pendingMatch = method === 'GET' && sessionRegistry && typeof sessionRegistry.domandaInAttesa === 'function'
+      && /^\/api\/v1\/sessions\/([^/]+)\/pending$/.exec(url.pathname);
+    if (pendingMatch) {
+      try {
+        requireNoQuery(url);
+        let sessionId;
+        try { sessionId = decodeURIComponent(pendingMatch[1]); }
+        catch { sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method); return; }
+        const esito = sessionRegistry.domandaInAttesa(sessionId);
+        if (esito && typeof esito === 'object' && 'erroreAvvio' in esito) { throw erroreDelRegistro(esito); }
+        if (req.aborted || res.destroyed) return;
+        sendJson(res, 200, successEnvelope({ pending: esito ?? null }, clock), method, { 'Cache-Control': 'private, no-store' });
+      } catch (error) {
+        const normalized = normalizeError(error);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
+      }
+      return;
+    }
+
     const approveMatch = method === 'POST' && sessionRegistry
       && /^\/api\/v1\/sessions\/([^/]+)\/approve$/.exec(url.pathname);
     if (approveMatch) {
@@ -6752,10 +7132,12 @@ export function createHttpApp({
           return;
         }
         const corpo = await leggiCorpoJson(req);
-        const { requestId, approvato, ambito } = requireApprovaBody(corpo);
-        const esito = ambito === undefined
+        const { requestId, approvato, ambito, rispostoDa, automazioneModificata } = requireApprovaBody(corpo);
+        const opzioni = { ...(ambito === undefined ? {} : { ambito }), ...(rispostoDa === undefined ? {} : { rispostoDa }),
+          ...(automazioneModificata === undefined ? {} : { automazioneModificata }) };
+        const esito = Object.keys(opzioni).length === 0
           ? sessionRegistry.rispondiApprovazione(sessionId, requestId, approvato)
-          : sessionRegistry.rispondiApprovazione(sessionId, requestId, approvato, { ambito });
+          : sessionRegistry.rispondiApprovazione(sessionId, requestId, approvato, opzioni);
         if ('erroreAvvio' in esito) {
           throw erroreDelRegistro(esito);
         }
@@ -7225,6 +7607,17 @@ export function createHttpApp({
       } else if (url.pathname === '/api/v1/automations') {
         requireNoQuery(url);
         data = { items: automationStore ? await automationStore.elenca() : [] };
+      } else if (url.pathname === '/api/v1/automations/inbox') {
+        // Automazioni a due porte (08/10/2026): «Da guardare», i giri con qualcosa da dire e non ancora letti
+        requireNoQuery(url);
+        data = { items: automationStore ? await automationStore.daGuardare() : [] };
+      } else if (automationStore && /^\/api\/v1\/automations\/([^/]+)\/runs$/.test(url.pathname)) {
+        requireNoQuery(url);
+        let automationId;
+        try { automationId = decodeURIComponent(/^\/api\/v1\/automations\/([^/]+)\/runs$/.exec(url.pathname)[1]); } catch { automationId = null; }
+        const voce = automationId ? await automationStore.leggi(automationId) : null;
+        if (!voce) { const error = new Error('Automation not found'); error.code = 'NOT_FOUND'; throw error; }
+        data = { items: await automationStore.giri(automationId) };
       } else if (url.pathname === '/api/v1/runtime') {
         requireNoQuery(url);
         const items = [];
@@ -7788,7 +8181,7 @@ export function createHttpApp({
            */
           data = { registrato: esito.registrato, processi: esito.processi, motivo: esito.motivo, guardia: esito.guardia, interrotta: esito.interrotta === true };
         } else if (metricsMatch) {
-          requireNoQuery(url);
+          const etaDi = sequenzaChiestaPerEta(url); // ATTESA-DA-CAPO: `?eta=<_sequenza>`, e nient'altro
           let sessionId;
           try {
             sessionId = decodeURIComponent(metricsMatch[1]);
@@ -7796,7 +8189,7 @@ export function createHttpApp({
             sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method);
             return;
           }
-          const esito = sessionRegistry.elencaMetriche(sessionId);
+          const esito = sessionRegistry.elencaMetriche(sessionId, { etaDi });
           if ('erroreAvvio' in esito) {
             throw erroreDelRegistro(esito);
           }
@@ -7815,7 +8208,7 @@ export function createHttpApp({
            * sessione indistinguibile da una viva. Un difetto dello stesso tipo era già stato
            * trovato e curato in `elencaFigli` (06/9). Il campo si dichiara, non si deduce.
            */
-          data = { registrato: esito.registrato, motivo: esito.motivo, giri: esito.giri, cache: esito.cache, cacheSessione: esito.cacheSessione ?? null, primoToken: esito.primoToken, chiusura: esito.chiusura, interrotta: esito.interrotta === true, ragionamentiMs: esito.ragionamentiMs ?? {}, ragionamentiInCorsoDaMs: esito.ragionamentiInCorsoDaMs ?? {} }; // ⭐ 13/09 sera: quanto ha ragionato, anche dopo un riavvio
+          data = { registrato: esito.registrato, motivo: esito.motivo, giri: esito.giri, cache: esito.cache, cacheSessione: esito.cacheSessione ?? null, primoToken: esito.primoToken, chiusura: esito.chiusura, interrotta: esito.interrotta === true, ragionamentiMs: esito.ragionamentiMs ?? {}, ragionamentiInCorsoDaMs: esito.ragionamentiInCorsoDaMs ?? {}, etaEvento: esito.etaEvento ?? null }; // ⭐ 13/09 sera: quanto ha ragionato, anche dopo un riavvio; ATTESA-DA-CAPO 08/10: e l'età dell'evento chiesto
         } else if (skillsMatch) {
           requireNoQuery(url);
           let sessionId;

@@ -101,7 +101,7 @@ export function rendiFileIstruzioni(file, { sogliaRighe = SOGLIA_RIGHE_INDICE } 
   const sempre = analisi.sezioni.filter(s => s.sempre);
   const indice = analisi.sezioni.filter(s => !s.sempre).map(s => `## ${s.titolo} · righe ${s.da}-${s.a} · ${s.byte} byte · ${s.primaFrase}`).join('\n');
   const lettura = file.lettura ?? file.etichetta;
-  const guida = `Prima di lavorare su un'area, leggi la sua sezione con \`leggi\` su \`${lettura}\` alle righe indicate (righe del file su disco). Le sezioni con un percorso si aprono da sole quando tocchi quei file, se la gestione del contesto è attiva.\n`;
+  const guida = `Before working on an area, read its section with \`leggi\` on \`${lettura}\` at the indicated lines (lines of the file on disk). Sections with a path open automatically when you touch those files, if context management is active.\n`;
   return { ...analisi, indicizzato, sezioniSempre: sempre.map(({ titolo, da, a, byte }) => ({ etichetta: file.etichetta, titolo, da, a, byte })),
     testo: analisi.premessa + sempre.map(s => s.testo).join('') + guida + indice + (indice ? '\n' : '') };
 }
@@ -180,12 +180,12 @@ export function creaIniettoreSezioni({ file = [], cartella, radice, tetto = 24_0
     if (pendenti) return; // Preserva l'abbinamento anche nei batch di tool.
     const aggiunte = [];
     for (const sezione of catalogo) {
-      const marca = `Sezione di \`${sezione.etichetta}\` che vale per questa cartella: ${sezione.titolo} (${sezione.occorrenza}).\n`;
+      const marca = `Section of \`${sezione.etichetta}\` that applies to this folder: ${sezione.titolo} (${sezione.occorrenza}).\n`;
       if (viste.has(marca)) continue;
       if (messages.some(m => m?.role === 'user' && typeof m.content === 'string' && m.content.startsWith(marca))) { viste.add(marca); continue; }
       if (!sezione.paths.some(glob => percorsi.some(p => combacia(p, glob)))) continue;
-      const intera = marca + `Righe ${sezione.da}-${sezione.a} del file su disco.\n` + sezione.testo;
-      const avviso = marca + `⚠ Tetto delle istruzioni (${tetto} byte): sezione omessa intera. Leggila con \`leggi\` su \`${sezione.lettura}\`, righe ${sezione.da}-${sezione.a}.`;
+      const intera = marca + `Lines ${sezione.da}-${sezione.a} of the file on disk.\n` + sezione.testo;
+      const avviso = marca + `⚠ Instruction cap (${tetto} bytes): entire section omitted. Read it with \`leggi\` on \`${sezione.lettura}\`, lines ${sezione.da}-${sezione.a}.`;
       aggiunte.push({ marca, content: intera, avviso });
     }
     let totale = aggiunte.reduce((n, a) => n + byte(a.content), 0);
@@ -195,7 +195,7 @@ export function creaIniettoreSezioni({ file = [], cartella, radice, tetto = 24_0
       totale += byte(a.avviso) - byte(a.content);
       a.content = a.avviso;
     }
-    if (totale > tetto) throw new RangeError('Il tetto delle istruzioni è insufficiente anche per gli avvisi delle sezioni.');
+    if (totale > tetto) throw new RangeError('The instruction cap is insufficient even for section notices.');
     for (const { marca, content } of aggiunte) {
       messages.push({ role: 'user', content });
       viste.add(marca);

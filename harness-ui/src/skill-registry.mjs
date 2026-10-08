@@ -47,18 +47,18 @@ const NOME_FILE_SKILL = 'SKILL.md';
 function analizzaSkillMd(testo, skillId) {
   const righe = testo.split('\n');
   if (righe[0]?.trim() !== '---') {
-    throw new SkillRegistryError(`${skillId}/SKILL.md deve iniziare con un frontmatter "---"`, 'SKILL_MALFORMED');
+    throw new SkillRegistryError(`${skillId}/SKILL.md must start with "---" frontmatter`, 'SKILL_MALFORMED');
   }
   const fineFrontmatter = righe.findIndex((r, i) => i > 0 && r.trim() === '---');
   if (fineFrontmatter === -1) {
-    throw new SkillRegistryError(`${skillId}/SKILL.md ha un frontmatter mai chiuso (manca il secondo "---")`, 'SKILL_MALFORMED');
+    throw new SkillRegistryError(`${skillId}/SKILL.md has unclosed frontmatter (missing the second "---")`, 'SKILL_MALFORMED');
   }
   const campi = {};
   for (const riga of righe.slice(1, fineFrontmatter)) {
     if (riga.trim() === '') continue;
     const indice = riga.indexOf(':');
     if (indice === -1) {
-      throw new SkillRegistryError(`${skillId}/SKILL.md ha una riga di frontmatter non valida (attesa "chiave: valore"): "${riga}"`, 'SKILL_MALFORMED');
+      throw new SkillRegistryError(`${skillId}/SKILL.md has an invalid frontmatter line (expected "key: value"): "${riga}"`, 'SKILL_MALFORMED');
     }
     const chiave = riga.slice(0, indice).trim();
     const valore = riga.slice(indice + 1).trim();
@@ -105,7 +105,7 @@ async function caricaSkillDaCartella({ cartella, nomeCartella = NOME_CARTELLA_SK
     voci = await readdirFn(cartellaSkills, { withFileTypes: true });
   } catch (errore) {
     if (errore?.code === 'ENOENT') return { skills: [] };
-    throw new SkillRegistryError(`Impossibile leggere ${nomeCartella}: ${errore.message}`, 'SKILL_READ_FAILED');
+    throw new SkillRegistryError(`Cannot read ${nomeCartella}: ${errore.message}`, 'SKILL_READ_FAILED');
   }
   const skills = [];
   for (const voce of voci) {
@@ -117,14 +117,14 @@ async function caricaSkillDaCartella({ cartella, nomeCartella = NOME_CARTELLA_SK
       testo = await readFileFn(percorso, 'utf8');
     } catch (errore) {
       if (errore?.code === 'ENOENT') continue; // una sottocartella senza SKILL.md non è una skill, non è un errore
-      throw new SkillRegistryError(`Impossibile leggere ${skillId}/${NOME_FILE_SKILL}: ${errore.message}`, 'SKILL_READ_FAILED');
+      throw new SkillRegistryError(`Cannot read ${skillId}/${NOME_FILE_SKILL}: ${errore.message}`, 'SKILL_READ_FAILED');
     }
     const { campi, corpo } = analizzaSkillMd(testo, skillId);
     if (typeof campi.name !== 'string' || campi.name.length === 0) {
-      throw new SkillRegistryError(`${skillId}/SKILL.md manca di "name" nel frontmatter`, 'SKILL_MALFORMED');
+      throw new SkillRegistryError(`${skillId}/SKILL.md is missing "name" in its frontmatter`, 'SKILL_MALFORMED');
     }
     if (typeof campi.description !== 'string' || campi.description.length === 0) {
-      throw new SkillRegistryError(`${skillId}/SKILL.md manca di "description" nel frontmatter`, 'SKILL_MALFORMED');
+      throw new SkillRegistryError(`${skillId}/SKILL.md is missing "description" in its frontmatter`, 'SKILL_MALFORMED');
     }
     skills.push({ id: skillId, name: campi.name, description: campi.description, corpo });
   }

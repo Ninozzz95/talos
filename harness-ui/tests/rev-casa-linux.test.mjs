@@ -199,7 +199,7 @@ test('CL-09: i binari dichiarati — versioni uguali al lato Windows, impronte f
     assert.equal(JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).dependencies['@vscode/ripgrep'], '1.18.0', 'rg per Linux e per Windows dalla stessa versione')
     const assente = await verificaCasaLinux('C:\\non\\esiste\\casa')
     assert.equal(assente.pronta, false)
-    assert.match(assente.motivo, /manca manifesto\.json/)
+    assert.match(assente.motivo, /manifesto\.json/)
 })
 
 test('CL-11: l ambiente si DICHIARA — senza, la casa non parte; con, arriva a wsl.exe così com è', async () => {

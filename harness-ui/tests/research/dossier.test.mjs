@@ -51,7 +51,7 @@ test('DOSSIER-02 si legge ancora come un documento, con la parte per la macchina
 
   assert.equal(documento.startsWith('# chi vinse'), true);
   assert.ok(documento.includes('Lando Norris ha vinto'));
-  assert.ok(documento.includes('(solo estratto dal motore di ricerca)'));
+  assert.ok(documento.includes('(search engine snippet only)'));
   // Per ultimo, così un'anteprima o un estratto di ricerca mostra prosa e non JSON.
   assert.ok(documento.indexOf('```talos-research-json') > documento.indexOf('Antonelli terzo.'));
 });

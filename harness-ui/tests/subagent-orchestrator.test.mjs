@@ -112,7 +112,7 @@ test('⛔⛔⛔ delegaSottoTask: sessione padre inesistente — rifiutato, avvia
   const orch = creaSubagentOrchestrator({ sessioni, cartellaEsisteFn: () => true, avviaESeguiFn: () => { chiamata = true; return { sessionId: 'mai' }; } });
   const esito = await orch.delegaSottoTask({ sessionPadreId: 'fantasma', task: 'x', cartella: '/y' });
   assert.equal(esito.esito, 'rifiutato');
-  assert.match(esito.motivo, /non esiste più/);
+  assert.match(esito.motivo, /no longer exists/);
   assert.equal(chiamata, false);
 });
 
@@ -183,7 +183,7 @@ test('⛔⛔⛔ AL CONTRARIO — delegaSottoTask: il percorso in forma WSL è ri
   });
   const esito = await orch.delegaSottoTask({ sessionPadreId: 'padre-1', task: 'x', cartella: '/mnt/c/progetto' });
   assert.equal(esito.esito, 'rifiutato');
-  assert.match(esito.motivo, /forma di un altro sistema operativo/);
+  assert.match(esito.motivo, /form of another operating system/);
   assert.match(esito.motivo, /C:\\progetto/, 'il rifiuto deve DIRE quale sia il percorso giusto, o il modello indovina');
   assert.equal(chiamata, false, 'una cartella di un altro sistema non deve MAI far partire un figlio destinato a morire');
 });
@@ -211,7 +211,7 @@ test('⛔⛔⛔ AL CONTRARIO — delegaSottoTask: cartella della forma GIUSTA ma
   });
   const esito = await orch.delegaSottoTask({ sessionPadreId: 'padre-1', task: 'x', cartella: 'C:\\non-esiste' });
   assert.equal(esito.esito, 'rifiutato');
-  assert.match(esito.motivo, /non esiste su questo computer/);
+  assert.match(esito.motivo, /does not exist on this computer/);
   assert.match(esito.motivo, /C:\\progetto/, 'anche qui il rifiuto porta la cartella buona');
   assert.equal(chiamata, false, 'una cartella inesistente non deve MAI far partire un figlio destinato a morire');
 });
@@ -238,7 +238,7 @@ test('⛔⛔⛔ AL CONTRARIO - se anche la cartella della MADRE e sparita, il ri
   });
   const esito = await orch.delegaSottoTask({ sessionPadreId: 'padre-1', task: 'x', cartella: 'C:\\progetto\\sotto' });
   assert.equal(esito.esito, 'rifiutato');
-  assert.match(esito.motivo, /non esiste su questo computer/);
+  assert.match(esito.motivo, /does not exist on this computer/);
   assert.ok(!esito.motivo.includes('usa esattamente'),
     `il rifiuto consiglia una cartella che il disco ha appena negato: ${esito.motivo}`);
   assert.equal(chiamata, false);
@@ -250,7 +250,7 @@ test(`⛔⛔⛔ delegaSottoTask: profondità oltre il limite (${LIMITE_PROFONDIT
   const orch = creaSubagentOrchestrator({ sessioni, cartellaEsisteFn: () => true, avviaESeguiFn: () => { chiamata = true; return { sessionId: 'mai' }; } });
   const esito = await orch.delegaSottoTask({ sessionPadreId: 'padre-1', task: 'x', cartella: '/diversa' });
   assert.equal(esito.esito, 'rifiutato');
-  assert.match(esito.motivo, new RegExp(`limite ${LIMITE_PROFONDITA_DELEGA}`));
+  assert.match(esito.motivo, new RegExp(`limit ${LIMITE_PROFONDITA_DELEGA}`));
   assert.equal(chiamata, false);
 });
 
@@ -275,7 +275,7 @@ test(`⛔⛔⛔ delegaSottoTask: ${LIMITE_FIGLI_CONCORRENTI}° figlio già attiv
   const orch = creaSubagentOrchestrator({ sessioni, cartellaEsisteFn: () => true, avviaESeguiFn: () => { chiamata = true; return { sessionId: 'mai' }; } });
   const esito = await orch.delegaSottoTask({ sessionPadreId: 'padre-1', task: 'x', cartella: '/undicesimo' });
   assert.equal(esito.esito, 'rifiutato');
-  assert.match(esito.motivo, new RegExp(`${LIMITE_FIGLI_CONCORRENTI} figli concorrenti`));
+  assert.match(esito.motivo, new RegExp(`${LIMITE_FIGLI_CONCORRENTI} concurrent children`));
   assert.equal(chiamata, false);
 });
 
@@ -374,7 +374,7 @@ test('esitoDelegaDaRisultato: ok:true → concluso, riassunto = esito.detto VERO
 
 test('esitoDelegaDaRisultato: ok:true ma detto vuoto/assente → riassunto onesto, mai una stringa vuota silenziosa', () => {
   const r = esitoDelegaDaRisultato({ ok: true, esito: { detto: '', comeFinita: 'concluso' } });
-  assert.match(r.riassunto, /non ha lasciato un riassunto/);
+  assert.match(r.riassunto, /left no text summary/);
 });
 
 test("esitoDelegaDaRisultato: esito presente ma NON ok (giri-esauriti/fermato) → fallito, motivo cita comeFinita VERO", () => {
@@ -400,7 +400,7 @@ test('⛔ J RED — ok:true non basta se ogni tool fallisce e non esiste alcuna 
     ],
   );
   assert.equal(r.esito, 'fallito');
-  assert.match(r.motivo, /evidenza verificabile/i);
+  assert.match(r.motivo, /verifiable evidence/i);
 });
 
 test('⭐⭐ J — una StateDelta /file/ è evidenza sufficiente per mantenere concluso', () => {
@@ -424,7 +424,7 @@ test('⛔ J — una tool-call riuscita senza file non basta quando il task chied
     { task: 'Aggiungi un test al file test/gioco.test.mjs e verifica la suite.' },
   );
   assert.equal(r.esito, 'fallito');
-  assert.match(r.motivo, /scritture o artefatti/i);
+  assert.match(r.motivo, /writes or artifacts/i);
 });
 
 test('⭐⭐ J — il callback associa e consegna il verdetto anche se arriva prima che avviaESeguiFn restituisca il sessionId', async () => {
@@ -474,7 +474,7 @@ test('⭐⭐ J — il ripristino da eventi distingue RunFinished senza prova ope
 test('⛔ AL CONTRARIO — esitoDelegaDaRisultato: risultato null/undefined non lancia, fallito onesto', () => {
   const r = esitoDelegaDaRisultato(null);
   assert.equal(r.esito, 'fallito');
-  assert.match(r.motivo, /sconosciuto/);
+  assert.match(r.motivo, /unknown/);
 });
 
 /*

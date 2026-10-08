@@ -29,7 +29,7 @@ async function apriApp(page, { tema = 'dark', larghezza = 1440, altezza = 900 } 
     try { localStorage.setItem('talos.harness.desktop.settings.v1', JSON.stringify({ version: 1, appearance: { colorMode }, chat: { model: 'qwen/qwen3.8-flash' } })); }
     catch { /* finestra privata: la app parte lo stesso */ }
   }, { colorMode: tema === 'light' ? 'light' : 'dark' });
-  await page.route('**/api/v1/sessions/bc60-*/events*', (rotta) => rotta.fulfill({ contentType: 'text/event-stream', body: '' }));
+  await page.route('**/api/v1/sessions/bc60-*/events*', () => { /* VELO-SPEC (08/10/2026): aperto e muto — un corpo che si chiude fa riaprire lo stream, e ogni onopen rimette la chat nella storia */ });
   await page.goto('/');
   await page.locator('#talosAvvio').waitFor({ state: 'detached', timeout: 8000 });
   await page.waitForFunction(() => window.__talosHarnessUiRuntime);
@@ -40,6 +40,7 @@ async function unaRisposta(page, testo = 'Ecco la risposta: ho letto il file e n
   await page.evaluate((contenuto) => {
     const runtime = window.__talosHarnessUiRuntime;
     runtime.passaASessione('bc60-uno', 'workspace', 'BC-60 azioni', 'qwen/qwen3.8-flash', { conclusa: false, modello: 'qwen/qwen3.8-flash' });
+    runtime.handleRealEvent({ type: 'CUSTOM', name: 'talos.fine-rigiocata', value: null }, runtime.realSessionState.generation); // VELO-SPEC: da A1-R3 una sessione aperta resta velata fino al confine, che il server manda SEMPRE (anche a storia vuota)
     const generazione = runtime.realSessionState.generation;
     runtime.handleRealEvent({ type: 'RunStarted', input: { consegna: 'Leggi il file e dimmi cosa c\'è' }, contesto: { cartella: 'C:\\progetti\\AVM', modello: 'qwen/qwen3.8-flash' } }, generazione);
     runtime.handleRealEvent({ type: 'TextMessageStart', messageId: 'm1' }, generazione);

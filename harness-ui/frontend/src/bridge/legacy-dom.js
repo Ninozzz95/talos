@@ -94,7 +94,20 @@ export function montaPonteLegacy(documentObj = document) {
   /* 3) La sidebar. */
   const sidebar = uno(radice, '.talos-sidebar');
   battezza(sidebar, { id: 'sessionsPanel', classi: ['sessions-panel'] });
-  battezza(uno(sidebar, '.talos-brand .talos-icon-button'), { id: 'notificationsBtn' });
+  const campanella = uno(sidebar, '.talos-brand .talos-icon-button');
+  battezza(campanella, { id: 'notificationsBtn' });
+  /* ⛔ Automazioni a due porte (08/10/2026, punto 10 dell'owner: «i non letti sempre visibili») — `app.js` scrive il conteggio in
+     `#notificationsBadge` dal 02/09, ma qui l'elemento non nasceva: il numero viveva solo nel nome per i lettori di schermo, e a
+     vista la campanella non diceva mai niente (misurato sulla 4177: `#notificationsBadge` assente). Nasce nascosto: lo mostra chi
+     conta. */
+  if (campanella && !documentObj.getElementById('notificationsBadge')) {
+    const conta = documentObj.createElement('span');
+    conta.id = 'notificationsBadge';
+    conta.className = 'talos-badge talos-badge--accent talos-badge--sm talos-campanella__conta';
+    conta.setAttribute('aria-hidden', 'true'); // il numero lo dice già il nome del pulsante
+    conta.hidden = true;
+    campanella.append(conta);
+  }
   battezza(uno(sidebar, '.talos-brand [data-azione="barra"]'), { id: 'sessionsCollapseBtn' }); // 05/9 Fase 2: la barra si comprime a icone (e si ricorda)
   battezza(uno(sidebar, '.talos-sidebar__actions .talos-field__input'), { id: 'sessionSearch' });
   battezza(uno(sidebar, '#voceNuova'), { id: 'newSessionBtn' });

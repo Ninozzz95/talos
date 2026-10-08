@@ -594,7 +594,7 @@ test('⛔⛔ leggiBytesVoce: oltre il tetto dello scarico si DICHIARA, mai si tr
       (errore) => {
         assert.equal(errore.code, 'LIBRARY_TOO_LARGE');
         assert.match(errore.message, /65 MB/);
-        assert.match(errore.message, /tetto 64 MB/);
+        assert.match(errore.message, /cap 64 MB/);
         return true;
       },
     );

@@ -35,8 +35,8 @@ export function createContextInferenceScheduler() {
   }
   return Object.freeze({
     run({ resource, priority, signal } = {}, operation) {
-      if (closed) return Promise.reject(fault('CTX_SCHEDULER_CLOSED', 'Il pianificatore delle inferenze è chiuso.'));
-      if (typeof resource !== 'string' || !resource.trim() || !['chat', 'background'].includes(priority) || typeof operation !== 'function') return Promise.reject(fault('CTX_RESOURCE_INVALID', 'Risorsa o priorità di inferenza non valida.'));
+      if (closed) return Promise.reject(fault('CTX_SCHEDULER_CLOSED', 'Inference scheduler is closed.'));
+      if (typeof resource !== 'string' || !resource.trim() || !['chat', 'background'].includes(priority) || typeof operation !== 'function') return Promise.reject(fault('CTX_RESOURCE_INVALID', 'Invalid inference resource or priority.'));
       if (signal?.aborted) return Promise.reject(signal.reason);
       let queue = resources.get(resource);
       if (!queue) { queue = { active: null, pending: [] }; resources.set(resource, queue); }
@@ -53,7 +53,7 @@ export function createContextInferenceScheduler() {
         };
         signal?.addEventListener('abort', entry.abort, { once: true });
         queue.pending.push(entry);
-        if (priority === 'chat' && queue.active?.priority === 'background') queue.active.controller.abort(fault('CTX_RESOURCE_BUSY', 'La sintesi lascia la risorsa alla chat. I segmenti già verificati restano salvati.'));
+        if (priority === 'chat' && queue.active?.priority === 'background') queue.active.controller.abort(fault('CTX_RESOURCE_BUSY', 'Synthesis yields resource to chat. Verified segments remain saved.'));
         pump(resource, queue);
       });
     },
@@ -67,10 +67,10 @@ export function createContextInferenceScheduler() {
       for (const [resource, queue] of resources) {
         for (const entry of queue.pending.splice(0)) {
           entry.signal?.removeEventListener('abort', entry.abort);
-          entry.reject(fault('CTX_SCHEDULER_CLOSED', 'Il pianificatore delle inferenze è chiuso.'));
+          entry.reject(fault('CTX_SCHEDULER_CLOSED', 'Inference scheduler is closed.'));
         }
         if (queue.active) {
-          if (queue.active.priority === 'background') queue.active.controller.abort(fault('CTX_SCHEDULER_CLOSED', 'Sintesi fermata durante la chiusura.'));
+          if (queue.active.priority === 'background') queue.active.controller.abort(fault('CTX_SCHEDULER_CLOSED', 'Synthesis stopped during shutdown.'));
           active.push(queue.active.done);
         } else resources.delete(resource);
       }

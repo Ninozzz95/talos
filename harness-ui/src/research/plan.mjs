@@ -71,12 +71,12 @@ const TOKENS_PER_BRANCH_SYNTHESIS = 2_000;
 
 /** Le facce lungo cui si apre una domanda, nell'ordine in cui vale aprirle. */
 const FACETS = [
-  'fatti e numeri',
-  'fonti contrarie',
-  'chi lo dice e con quale interesse',
-  'quanto è recente',
-  'casi reali',
-  'cosa resta incerto',
+  'facts and figures',
+  'opposing sources',
+  'who states it and their interest',
+  'how recent it is',
+  'real cases',
+  'what remains uncertain',
 ];
 
 /**

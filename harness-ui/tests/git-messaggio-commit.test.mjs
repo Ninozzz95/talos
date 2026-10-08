@@ -27,7 +27,7 @@ test('F6-1 ✨ — un diff sotto il tetto passa intero; sopra, prima si accorcia
   const tagliato = comprimiDiffPerMessaggio(enorme);
   assert.equal(tagliato.troncato, true);
   assert.ok(Buffer.byteLength(tagliato.testo, 'utf8') <= TETTO_DIFF_MESSAGGIO, `${Buffer.byteLength(tagliato.testo, 'utf8')} byte`);
-  assert.match(tagliato.testo, /il resto del diff è stato tagliato/u);
+  assert.match(tagliato.testo, /(?:remaining diff was truncated|il resto del diff è stato tagliato)/u);
   assert.ok(tagliato.testo.startsWith('+riga 0 '), 'si tiene l\'inizio, non un pezzo a caso');
 });
 

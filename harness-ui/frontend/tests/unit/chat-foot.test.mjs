@@ -36,6 +36,9 @@ test('PIEDE-ECCEZIONI: la pillola dichiara i cancelli per attrezzo, che il perme
   assert.equal(etichettaPermessoConEccezioni('Full access', {}), 'Accesso pieno');
   assert.equal(etichettaPermessoConEccezioni('Full access', null), 'Accesso pieno');
   assert.equal(etichettaPermessoConEccezioni('Full access', { scrivi: '', shell: null }), 'Accesso pieno');
+  // C2b: Coordinazione sta nella stessa mappa ma non è un'eccezione «per attrezzo» (nel velo ha la sua sezione)
+  assert.equal(etichettaPermessoConEccezioni('Workspace write', { delega_sottotask: 'sempre' }), 'Scrive nel progetto');
+  assert.equal(etichettaPermessoConEccezioni('Workspace write', { delega_sottotask: 'sempre', shell: 'chiedi' }), 'Scrive nel progetto · 1 eccezione');
 });
 
 test('PIEDE-MODELLO: un identificatore locale diventa un nome, non una targa (H22)', () => {

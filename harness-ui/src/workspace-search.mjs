@@ -35,11 +35,11 @@ export async function cercaNelWorkspace({ cartella, query }, deps = {}) {
   const adessoFn = deps.adessoFn ?? (() => performance.now());
   const limiti = { ...LIMITI_RICERCA, ...(deps.limiti ?? {}) };
   if (typeof cartella !== 'string' || cartella.length === 0 || cartella.includes('\0') || !isAbsolute(cartella)) {
-    throw new WorkspaceSearchError('Cartella della sessione non valida');
+    throw new WorkspaceSearchError('Invalid session folder');
   }
   const ago = typeof query === 'string' ? query.trim().toLowerCase() : '';
-  if (ago.length === 0) throw new WorkspaceSearchError('Scrivi che cosa cercare');
-  if (ago.length > limiti.caratteriQuery || ago.includes('\0')) throw new WorkspaceSearchError('Ricerca troppo lunga', 'PAYLOAD_LIMIT');
+  if (ago.length === 0) throw new WorkspaceSearchError('Type what to search for');
+  if (ago.length > limiti.caratteriQuery || ago.includes('\0')) throw new WorkspaceSearchError('Search too long', 'PAYLOAD_LIMIT');
 
   const radice = resolve(cartella);
   const inizio = adessoFn();
@@ -47,6 +47,7 @@ export async function cercaNelWorkspace({ cartella, query }, deps = {}) {
   const saltate = new Set();
   let visitate = 0;
   let motivo = null;
+  let motivoChiave = null;
   /* In ampiezza: i file vicini alla radice arrivano per primi, e sono quelli che di solito si cercano. */
   let livello = [{ assoluto: radice, relativo: '', profondita: 0 }];
   esterno: while (livello.length > 0) {
@@ -57,15 +58,15 @@ export async function cercaNelWorkspace({ cartella, query }, deps = {}) {
       voci.sort((a, b) => a.name.localeCompare(b.name, 'en'));
       for (const voce of voci) {
         visitate += 1;
-        if (visitate > limiti.vociVisitate) { motivo = 'la cartella è molto grande'; break esterno; }
-        if ((visitate & 0xff) === 0 && adessoFn() - inizio > limiti.millisecondi) { motivo = 'la ricerca ha impiegato troppo'; break esterno; }
+        if (visitate > limiti.vociVisitate) { motivo = 'the folder is very large'; motivoChiave = 'server.workspaceSearch.folderTooBig'; break esterno; }
+        if ((visitate & 0xff) === 0 && adessoFn() - inizio > limiti.millisecondi) { motivo = 'the search took too long'; motivoChiave = 'server.workspaceSearch.tookTooLong'; break esterno; }
         if (voce.isSymbolicLink()) continue;
         const eCartella = voce.isDirectory();
         if (eCartella && CARTELLE_SALTATE.includes(voce.name)) { saltate.add(voce.name); continue; }
         const relativo = dove.relativo ? `${dove.relativo}/${voce.name}` : voce.name;
         if (relativo.toLowerCase().includes(ago)) {
           risultati.push({ percorso: relativo, nome: voce.name, cartella: eCartella });
-          if (risultati.length >= limiti.risultati) { motivo = 'ci sono più risultati di quanti se ne mostrano'; break esterno; }
+          if (risultati.length >= limiti.risultati) { motivo = 'there are more results than are shown'; motivoChiave = 'server.workspaceSearch.moreResults'; break esterno; }
         }
         if (eCartella && dove.profondita + 1 <= limiti.profondita) prossimo.push({ assoluto: join(dove.assoluto, voce.name), relativo, profondita: dove.profondita + 1 });
       }
@@ -75,5 +76,5 @@ export async function cercaNelWorkspace({ cartella, query }, deps = {}) {
   /* Prima chi porta la parola nel NOME, poi chi la porta solo nel percorso; dentro ogni gruppo i percorsi più corti. */
   const nelNome = (r) => (r.nome.toLowerCase().includes(ago) ? 0 : 1);
   risultati.sort((a, b) => nelNome(a) - nelNome(b) || a.percorso.length - b.percorso.length || a.percorso.localeCompare(b.percorso, 'en'));
-  return { risultati, troncato: motivo !== null, motivo, saltate: [...saltate].sort(), visitate };
+  return { risultati, troncato: motivo !== null, motivo, ...(motivoChiave ? { motivoChiave } : {}), saltate: [...saltate].sort(), visitate };
 }

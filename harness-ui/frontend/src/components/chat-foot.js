@@ -1,4 +1,5 @@
 import { t, tn, linguaCorrenteDiT } from './lingua.js';
+import { CHIAVE_COORDINAZIONE } from './coordinazione.js';
 
 /*
  * ChatFooter — il piede della chat, come nel mockup: la striscia di stato del
@@ -37,8 +38,17 @@ const conSeparatoreDecimale = (testo) => (linguaCorrenteDiT() === 'en' ? testo :
 const CHIAVI_PERMESSO = {"Read only":"chat.foot.permission.readOnly","Workspace write":"chat.foot.permission.workspaceWrite","On request":"chat.foot.permission.onRequest","Full access":"chat.foot.permission.fullAccess"};
 export const NOME_PERMESSO = Object.freeze(Object.defineProperties({}, Object.fromEntries(POLITICHE.map((p) => [p.valore, { enumerable: true, get: () => t(CHIAVI_PERMESSO[p.valore]) }]))));
 
+/*
+ * ⛔ LINGUA-5 (08/10/2026, bugfixer; visto dal peer): `'Research'` è una parola del contratto che la persona non sceglie (la danno
+ *   le sessioni della Ricerca approfondita: tutto negato come «Read only» tranne il deposito dei risultati), quindi non sta in
+ *   `POLITICHE` — e `etichettaPermesso` la restituiva cruda, in inglese anche nell'interfaccia italiana (C2: il perché della carta
+ *   di una figlia di ricerca). Ha il suo nome, come le altre quattro.
+ */
+const CHIAVI_PERMESSO_NON_SCEGLIBILI = Object.freeze({ Research: 'chat.foot.permission.research' });
 export function etichettaPermesso(permesso) {
-  return NOME_PERMESSO[permesso] || (typeof permesso === 'string' && permesso.trim() ? permesso : t('chat.foot.permission.notSelected'));
+  if (NOME_PERMESSO[permesso]) return NOME_PERMESSO[permesso];
+  if (Object.hasOwn(CHIAVI_PERMESSO_NON_SCEGLIBILI, permesso)) return t(CHIAVI_PERMESSO_NON_SCEGLIBILI[permesso]);
+  return typeof permesso === 'string' && permesso.trim() ? permesso : t('chat.foot.permission.notSelected');
 }
 
 /*
@@ -50,9 +60,17 @@ export function etichettaPermesso(permesso) {
  * Decisione B11 («pillola del permesso col colore del rischio»): la pillola dice lo stato VERO,
  * eccezioni comprese. Funzione pura, così la si prova senza DOM.
  */
+/*
+ * C2b «Coordinazione» (08/10/2026): la sua chiave vive nella stessa mappa (`delega_sottotask`), ma non è un'eccezione «per
+ *   attrezzo»: nel velo ha la sua sezione, e fra le eccezioni non c'è. Contarla qui farebbe dire «1 eccezione» a una pillola che,
+ *   aperta, non ne mostra nessuna.
+ */
+const regolePerAttrezzo = (permessiPerAttrezzo) => (permessiPerAttrezzo && typeof permessiPerAttrezzo === 'object'
+  ? Object.entries(permessiPerAttrezzo).filter(([attrezzo, valore]) => valore && attrezzo !== CHIAVE_COORDINAZIONE) : []);
+
 export function etichettaPermessoConEccezioni(permesso, permessiPerAttrezzo) {
   const base = etichettaPermesso(permesso);
-  const regole = permessiPerAttrezzo && typeof permessiPerAttrezzo === 'object' ? Object.values(permessiPerAttrezzo).filter(Boolean) : [];
+  const regole = regolePerAttrezzo(permessiPerAttrezzo);
   if (regole.length === 0) return base;
   return tn('chat.foot.permission.exceptionsOne', 'chat.foot.permission.exceptionsMany', regole.length, { base });
 }
@@ -383,7 +401,7 @@ export function aggiornaPiedeChat(piede, dati = {}) {
   if (permesso) {
     const label = permesso.querySelector('.talos-chip__label');
     if (label) label.textContent = etichettaPermessoConEccezioni(dati.permesso, dati.permessiPerAttrezzo);
-    const regole = dati.permessiPerAttrezzo && typeof dati.permessiPerAttrezzo === 'object' ? Object.entries(dati.permessiPerAttrezzo).filter(([, v]) => v) : [];
+    const regole = regolePerAttrezzo(dati.permessiPerAttrezzo);
     permesso.title = regole.length
       ? t('chat.foot.permission.changeWithExceptions', { eccezioni: regole.map(([k, v]) => `${k} → ${v}`).join(', ') })
       : t('chat.foot.permission.change');
@@ -402,7 +420,10 @@ export function aggiornaPiedeChat(piede, dati = {}) {
      * all'80%, poi diventa un avviso.
      */
     const stato = statoGiri(u.giri, dati.tettoGiri);
-    giriChip.hidden = stato === null;
+    /* ⛔ A1-bis 5 (07/10/2026): durante la storia il numero è quello di un invio INTERMEDIO del replay (misurato: «Giri 107»
+       durante, «Giri 29» a fine storia su DESKTOP OLD): un numero che a fine storia non è vero. Si tace finché la storia non
+       finisce, come l'indice dei giri della colonna (A1-bis 1). */
+    giriChip.hidden = stato === null || dati.storiaInCaricamento === true;
     giriChip.classList.toggle('talos-badge--warning', stato === 'vicino');
     const n = giriChip.querySelector('.talos-mono');
     if (n && u.giri !== null) n.textContent = Number.isFinite(Number(dati.tettoGiri)) && Number(dati.tettoGiri) > 0 ? `${u.giri}/${dati.tettoGiri}` : String(u.giri);

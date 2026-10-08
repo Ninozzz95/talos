@@ -176,21 +176,21 @@ export async function ritrattoCartella(percorso, opzioni = {}) {
 
 /** La frase che la modale mostra: una riga, in italiano, coi numeri veri. */
 export function frasiRitratto(ritratto) {
-  if (!ritratto || !ritratto.leggibile) return 'Non riesco a leggere questa cartella.';
+  if (!ritratto || !ritratto.leggibile) return 'Cannot read this folder.';
   const pezzi = [];
-  pezzi.push(ritratto.oltreIlTetto ? `più di ${numeroItaliano(ritratto.tetto)} file` : `${numeroItaliano(ritratto.file)} file`);
-  if (ritratto.cartelle > 0) pezzi.push(`${numeroItaliano(ritratto.cartelle)} cartelle`);
-  if (ritratto.git?.ramo) pezzi.push(`ramo ${ritratto.git.ramo}`);
-  if (Number.isFinite(ritratto.git?.nonSalvate)) pezzi.push(ritratto.git.nonSalvate === 0 ? 'niente da salvare' : `${ritratto.git.nonSalvate} modifiche non salvate`);
-  if (ritratto.git?.repoAnnidati?.length) pezzi.push(`${ritratto.git.repoAnnidati.length} repo annidati`);
-  if (ritratto.istruzioni?.length) pezzi.push(`istruzioni: ${ritratto.istruzioni.join(', ')}`);
+  pezzi.push(ritratto.oltreIlTetto ? `more than ${numeroItaliano(ritratto.tetto)} files` : `${numeroItaliano(ritratto.file)} files`);
+  if (ritratto.cartelle > 0) pezzi.push(`${numeroItaliano(ritratto.cartelle)} folders`);
+  if (ritratto.git?.ramo) pezzi.push(`branch ${ritratto.git.ramo}`);
+  if (Number.isFinite(ritratto.git?.nonSalvate)) pezzi.push(ritratto.git.nonSalvate === 0 ? 'nothing to save' : `${ritratto.git.nonSalvate} uncommitted changes`);
+  if (ritratto.git?.repoAnnidati?.length) pezzi.push(`${ritratto.git.repoAnnidati.length} nested repos`);
+  if (ritratto.istruzioni?.length) pezzi.push(`instructions: ${ritratto.istruzioni.join(', ')}`);
   return pezzi.join(' · ');
 }
 
 /** L'avviso, quando serve: una frase che dice cosa succede se parti così. */
 export function avvisoRitratto(ritratto) {
   if (!ritratto || !ritratto.leggibile) return '';
-  if (ritratto.radice) return 'Questa è una cartella radice: l’agente vedrebbe tutto quello che c’è sotto. Scegli il progetto, non il disco.';
-  if (ritratto.oltreIlTetto) return `Qui ci sono più di ${numeroItaliano(ritratto.tetto)} file: l’albero pesa a ogni giro. Se puoi, scegli una sottocartella.`;
+  if (ritratto.radice) return 'This is a root folder: the agent would see everything below it. Choose the project, not the drive.';
+  if (ritratto.oltreIlTetto) return `There are more than ${numeroItaliano(ritratto.tetto)} files here: the tree weighs on every turn. If you can, choose a subfolder.`;
   return '';
 }

@@ -39,9 +39,9 @@ test('MAPPA-TEMPO · il tetto in tempo ferma la camminata e LO DICHIARA, con le 
   assert.ok(mappa.cartelle.length >= 5 && mappa.cartelle.length < 50, `lette ${mappa.cartelle.length}`);
   assert.ok(mappa.msImpiegati >= 1000);
   const testo = testoMappaCartelle(mappa, { radice: 'R' });
-  assert.match(testo, /MAPPA INCOMPLETA/);
-  assert.match(testo, /avrebbe fatto aspettare/);
-  assert.match(testo, /`cerca` o `elenca`/);
+  assert.match(testo, /(?:INCOMPLETE MAP|MAPPA INCOMPLETA)/);
+  assert.match(testo, /(?:would take too long|avrebbe fatto aspettare)/);
+  assert.match(testo, /`cerca` (?:or|o) `elenca`/);
 });
 
 test('MAPPA-TEMPO · al contrario: entro il budget l albero e completo, e realpath NON si chiama per cartelle vere', async () => {

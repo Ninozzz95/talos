@@ -43,7 +43,8 @@ function unknown(error) {
   assert.equal(error.code, 'PROVIDER_OUTCOME_UNKNOWN');
   assert.equal(error.esitoIncerto, true);
   assert.equal(error.transitorio, false);
-  assert.match(error.message, /Riprendi esplicitamente/u);
+  assert.match(error.message, /Resume explicitly/u);
+  assert.match(error.chiave, /^server\.providerOutcome\.(silence|interrupted)$/u);
   return true;
 }
 function noReplay(b, provider = 'deepseek') {
@@ -88,9 +89,11 @@ for (const ending of ['socket', 'EOF', 'error']) test(`PROVIDER-UNKNOWN-AGUI-${e
   assert.equal(result.ok, false);
   assert.equal(result.codiceErrore, 'PROVIDER_OUTCOME_UNKNOWN');
   const replay = JSON.parse(JSON.stringify(events));
+  const unknownEvent = replay.find(event => event.type === 'RunError' && event.code === 'PROVIDER_OUTCOME_UNKNOWN');
+  assert.equal(unknownEvent?.messageChiave, 'server.providerOutcome.interrupted');
   assert.equal(replay.at(-1).type, 'RunError');
   assert.equal(replay.at(-1).code, 'PROVIDER_OUTCOME_UNKNOWN');
-  assert.match(replay.at(-1).message, /Riprendi esplicitamente/u);
+  assert.match(replay.at(-1).message, /Resume explicitly/u);
   assert.equal(replay.filter(e => e.type === 'TextMessageContent').map(e => e.delta).join(''), 'Testo già ricevuto.');
   assert.equal(replay.filter(e => e.type === 'TextMessageEnd').length, 1);
   assert.ok(result.messaggiDelGiro.some(m => m.role === 'assistant' && m.content === 'Testo già ricevuto.'));

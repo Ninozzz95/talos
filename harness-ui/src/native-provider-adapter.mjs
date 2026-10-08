@@ -5,6 +5,7 @@ import { createOpenAI } from '@ai-sdk/openai';
 
 import { ID_NATIVI_SDK, fornitore } from './provider-registry.mjs';
 import { tokenDaCache, tokenScrittiInCache } from './usage-cache.mjs';
+import { argomentiVuoti } from './argomenti-vuoti.mjs';
 
 // Only this adapter knows the SDK message format. The kernel owns tool execution.
 export function stripNativeMetadata(messages) {
@@ -17,7 +18,7 @@ export function toNativeMessages(messages, { provider, model }) {
     if (message.role === 'system' || message.role === 'developer') return { role: 'system', content: message.content };
     if (message.role === 'tool') {
       const toolName = toolNames.get(message.tool_call_id);
-      if (!toolName) throw new Error('Risultato di strumento senza chiamata corrispondente.');
+      if (!toolName) throw new Error('Tool result without a matching call.');
       return { role: 'tool', content: [{ type: 'tool-result', toolCallId: message.tool_call_id, toolName, output: { type: 'text', value: typeof message.content === 'string' ? message.content : JSON.stringify(message.content) } }] };
     }
     const state = message.talos_provider_state;
@@ -30,11 +31,11 @@ export function toNativeMessages(messages, { provider, model }) {
       if (part.type === 'text') content.push({ type: 'text', text: part.text });
       else if (part.type === 'image_url') {
         // The upload resolver already verified these bytes. Never let SDK download arbitrary URLs.
-        if (!/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+=*$/u.test(part.image_url?.url ?? '')) throw new Error('Riferimento immagine non risolto o non consentito.');
+        if (!/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+=*$/u.test(part.image_url?.url ?? '')) throw new Error('Image reference not resolved or not allowed.');
         content.push({ type: 'file', data: part.image_url.url, mediaType: part.image_url.url.slice(5, part.image_url.url.indexOf(';')) });
-      } else throw new Error(`Contenuto non supportato dal provider: ${part.type}`);
+      } else throw new Error(`Content not supported by the provider: ${part.type}`);
     }
-    for (const call of message.tool_calls ?? []) content.push({ type: 'tool-call', toolCallId: call.id, toolName: call.function.name, input: JSON.parse(call.function.arguments) });
+    for (const call of message.tool_calls ?? []) content.push({ type: 'tool-call', toolCallId: call.id, toolName: call.function.name, input: argomentiVuoti(call.function.arguments) ? {} : JSON.parse(call.function.arguments) });
     return { role: message.role, content };
   });
 }
@@ -79,9 +80,11 @@ function responseMessage(response, provider, model, finishReason) {
     // P-J — nei nuovi profili lo schermo usa il nome umano, senza codici del protocollo.
     const record = fornitore(provider);
     const error = new Error(provider !== 'anthropic' && record?.wire === 'anthropic-messages'
-      ? `Risposta di ${record.etichetta} incompleta. Riprova: la cronologia precedente è conservata.`
-      : `Risposta ${provider} incompleta (${finishReason}). Riprova: la cronologia precedente è conservata.`);
+      ? `${record.etichetta} response incomplete. Try again: the previous history is kept.`
+      : `${provider} response incomplete (${finishReason}). Try again: the previous history is kept.`);
     error.code = 'NATIVE_RESPONSE_INCOMPLETE';
+    if (provider !== 'anthropic' && record?.wire === 'anthropic-messages') { error.chiave = 'server.nativeAdapter.incompleteNamed'; error.params = { label: record.etichetta }; }
+    else { error.chiave = 'server.nativeAdapter.incompleteWithReason'; error.params = { provider, reason: finishReason }; }
     throw error;
   }
   const assistant = response.messages.findLast(m => m.role === 'assistant');
@@ -107,9 +110,9 @@ export async function nativeProviderResponse({ provider, model, apiKey, baseURL,
   const record = fornitore(provider);
   const wireAnthropic = record?.wire === 'anthropic-messages';
   const factory = wireAnthropic ? createAnthropic : { gemini: createGoogleGenerativeAI, openai: createOpenAI }[provider];
-  if (!factory || !ID_NATIVI_SDK.includes(provider)) throw new Error('Provider nativo non riconosciuto.');
+  if (!factory || !ID_NATIVI_SDK.includes(provider)) throw new Error('Native provider not recognized.');
   if (wireAnthropic && (typeof apiKey !== 'string' || !apiKey.trim())) {
-    throw Object.assign(new Error(`Manca la chiave per ${record.etichetta}.`), { code: 'PROVIDER_KEY_MISSING' });
+    throw Object.assign(new Error(`The key for ${record.etichetta} is missing.`), { code: 'PROVIDER_KEY_MISSING' });
   }
   const credenziale = wireAnthropic && record.auth.tipo === 'bearer' ? { authToken: apiKey } : { apiKey };
   const client = factory({ ...credenziale, ...(wireAnthropic ? { baseURL: baseURL || record.baseUrl } : baseURL ? { baseURL } : {}), fetch: fetchFn });
@@ -117,7 +120,10 @@ export async function nativeProviderResponse({ provider, model, apiKey, baseURL,
   const languageModel = provider === 'openai' ? client.responses(model) : client.chat(model);
   const tools = Object.fromEntries((body.tools ?? []).map(t => [t.function.name, { description: t.function.description, inputSchema: jsonSchema(t.function.parameters) }]));
   const effort = body.reasoning_effort ?? body.reasoning?.effort;
-  const providerOptions = provider === 'openai' ? { openai: { store: false, include: ['reasoning.encrypted_content'] } } : opzioniAnthropicTerzi(provider, model, body);
+  const providerOptions = provider === 'openai' ? { openai: { store: false, include: ['reasoning.encrypted_content'] } }
+    : provider === 'anthropic' ? opzioniAnthropicNative(provider, model, body) : opzioniAnthropicTerzi(provider, model, body);
+  /* Con le opzioni esplicite (ragionamento adattivo + livello) il livello NON passa anche dal `reasoning` comune dell'SDK, che non conosce «max». */
+  const sforzoEsplicito = provider === 'anthropic' && providerOptions.anthropic?.thinking != null;
   const nativeMessages = toNativeMessages(body.messages, { provider, model });
   // SDK common reasoning maps support/model differences in the pinned adapters.
   const common = {
@@ -128,11 +134,11 @@ export async function nativeProviderResponse({ provider, model, apiKey, baseURL,
     ...(body.temperature != null ? { temperature: body.temperature } : {}),
     ...(body.top_p != null ? { topP: body.top_p } : {}),
     ...(body.stop ? { stopSequences: Array.isArray(body.stop) ? body.stop : [body.stop] } : {}),
-    ...(effort && !(wireAnthropic && provider !== 'anthropic') ? { reasoning: effort } : {}), // P-J: opzioni esplicite per i terzi.
+    ...(effort && !(wireAnthropic && provider !== 'anthropic') && !sforzoEsplicito ? { reasoning: effort } : {}), // P-J: opzioni esplicite per i terzi.
     maxOutputTokens: body.max_completion_tokens ?? body.max_tokens ?? 8192,
     providerOptions, maxRetries: 0, stopWhen: stepCountIs(1), abortSignal: signal,
     // The caller owns retries, stop, tools and traces. No telemetry or automatic downloads.
-    experimental_download: async urls => { if (urls.length) throw new Error('Download implicito di immagini non consentito.'); return []; },
+    experimental_download: async urls => { if (urls.length) throw new Error('Implicit image download is not allowed.'); return []; },
   };
   if (!body.stream) {
     let usageDelloStep; // P-J — evento nominato, senza dipendere dalla posizione negli array SDK.
@@ -155,9 +161,9 @@ export async function nativeProviderResponse({ provider, model, apiKey, baseURL,
       try {
         while (!completed) {
           const { value: part, done } = await iterator.next();
-          if (done) throw new Error('Flusso del provider interrotto prima della conclusione.');
+          if (done) throw new Error('Provider stream interrupted before completion.');
           if (part.type === 'error') throw part.error;
-          if (part.type === 'abort') throw new Error('Risposta annullata.');
+          if (part.type === 'abort') throw new Error('Response cancelled.');
           if (part.type === 'text-delta') { emit({ content: part.text }); return; }
           if (part.type === 'reasoning-delta') { emit({ reasoning_content: part.text }); return; }
           if (part.type === 'tool-input-start') {
@@ -165,7 +171,7 @@ export async function nativeProviderResponse({ provider, model, apiKey, baseURL,
             emit({ tool_calls: [{ index: callIndices.get(part.id), id: part.id, type: 'function', function: { name: part.toolName, arguments: '' } }] }); return;
           }
           if (part.type === 'tool-input-delta') { emit({ tool_calls: [{ index: callIndices.get(part.id), function: { arguments: part.delta } }] }); return; }
-          if (part.type === 'tool-call' && part.invalid) throw part.error ?? new Error('Argomenti dello strumento non validi.');
+          if (part.type === 'tool-call' && part.invalid) throw part.error ?? new Error('Invalid tool arguments.');
           if (part.type === 'finish-step') usageDelloStep = part.usage; // P-J
           if (part.type === 'finish') {
             const message = responseMessage(await result.response, provider, model, part.finishReason);
@@ -183,6 +189,65 @@ export async function nativeProviderResponse({ provider, model, apiKey, baseURL,
 }
 
 // P-J — opzioni dei nuovi profili nel medesimo SDK; nessuna traduzione HTTP proprietaria.
+/*
+ * ⭐ 08/10/2026 (owner: «impossibile che su Anthropic 5.x non si possa aggiustare il ragionamento») — Anthropic nativo, ragionamento adattivo.
+ *
+ * Due cose che l'SDK da solo non fa per noi, entrambe provate dal vivo sulla chiave dell'owner:
+ *  1. IL LIVELLO. Il `reasoning` comune dell'SDK (4.0.49, anthropic-language-model.ts:2990-3026) non conosce «max» e manda «xhigh» come «max» sui
+ *     modelli che non la dichiarano: una persona che sceglie «max» avrebbe ricevuto il default. Qui il livello va per nome, nei cinque che Anthropic
+ *     dichiara (`output_config.effort`), insieme a `thinking:{type:"adaptive", display:"summarized"}` (i modelli nuovi altrimenti restituiscono blocchi
+ *     di pensiero VUOTI: OpenCode transform.ts:902-906).
+ *  2. IL PREFISSO. Dal Fable 5.1 ogni blocco di pensiero firmato vale solo finché `system`, `tools` e i messaggi prima di lui restano uguali; per gli
+ *     account creati dal 31/08/2026 un prefisso cambiato è un 400 su ogni richiesta successiva (la sessione resta incastrata). TALOS ricostruisce il
+ *     prefisso tra un turno e l'altro (ripresa, compattazione, strumenti diversi): si chiede ad Anthropic di SCARTARE il blocco invalido invece di
+ *     rifiutare (`thinking.block_binding.prefix_mismatch_behavior:"drop_block"`, header beta aggiunto dall'SDK). Stessa scelta di OpenCode
+ *     (transform.ts:690-739, stesso motivo: «re-renders parts of that prefix between turns»). Vale per i modelli 5.1+ (misurato, binding-scope).
+ *     Senza pensiero richiesto ma con blocchi firmati già in storia, si manda il solo `block_binding` (forma «recovery» dell'SDK).
+ * I modelli a budget (prima del 4.6) restano sul percorso dell'SDK, come prima.
+ */
+const LIVELLI_ANTHROPIC = Object.freeze(['low', 'medium', 'high', 'xhigh', 'max']);
+function versioneAnthropic(modello) {
+  const v = /claude-(?:([a-z]+)-)?(\d+)(?:[.-](\d{1,2}))?(?:-([a-z]+))?(?:[.@-]|$)/iu.exec(String(modello ?? ''));
+  return v ? { linea: (v[1] ?? v[4] ?? '').toLowerCase(), maggiore: Number(v[2]), minore: Number(v[3] ?? 0) } : null;
+}
+/** Ragionamento adattivo (e livello nominato): dal 4.6 in poi, e un id senza versione leggibile si tratta da moderno. */
+export function anthropicPensaAdattivo(modello) {
+  const v = versioneAnthropic(modello);
+  return !v || v.maggiore > 4 || (v.maggiore === 4 && v.minore >= 6);
+}
+/** «xhigh» esiste dal 4.7 (Opus 4.7+, Sonnet 5, Fable 5): Opus/Sonnet 4.6 rispondono 400 «does not support effort level 'xhigh'» (misurato 08/10/2026). Id senza versione = moderno. */
+export function anthropicAccettaXhigh(modello) {
+  const v = versioneAnthropic(modello);
+  return !v || v.maggiore > 4 || (v.maggiore === 4 && v.minore >= 7);
+}
+/** I blocchi di pensiero si legano al prefisso dal 5.1 (Mythos 5.1 no: non fa il controllo di prefisso — OpenCode transform.ts:690-701). */
+export function anthropicLegaIlPensiero(modello) {
+  const v = versioneAnthropic(modello);
+  if (!v) return false;
+  if (v.maggiore === 5 && v.minore === 1 && v.linea === 'mythos') return false;
+  return v.maggiore > 5 || (v.maggiore === 5 && v.minore >= 1);
+}
+function opzioniAnthropicNative(provider, model, body) {
+  if (!anthropicPensaAdattivo(model)) return {};
+  const richiesto = body.reasoning_effort ?? body.reasoning?.effort;
+  if (richiesto === 'none' || body.reasoning?.enabled === false) return {}; // lo spegnimento resta all'SDK
+  const livello = LIVELLI_ANTHROPIC.includes(richiesto) ? richiesto : null;
+  /* Un livello che il modello non ha non è un errore per la persona: «xhigh» su un 4.6 va come «max» (come faceva l'SDK prima, e come fanno Hermes, Pi e OpenCode).
+     ⛔ Non è un clamp verso l'alto: nel kernel «xhigh» e «max» sono lo STESSO livello con due grafie (`aliasGrafiaRagionamento`, alias canonico: la vecchia etichetta
+     «Massimo» del desktop mandava «xhigh»). Decisione dell'owner l'08/10/2026: una scelta salvata come «Massimo» «resta a Max». Il catalogo vivo dice già alla
+     persona quali livelli ha il modello. */
+  const effort = livello === 'xhigh' && !anthropicAccettaXhigh(model) ? 'max' : livello;
+  if (richiesto && !effort) return {};                                       // un livello che Anthropic non conosce non si inventa
+  const pensa = Boolean(effort) || body.reasoning?.enabled === true;
+  const lega = anthropicLegaIlPensiero(model);
+  const haBlocchi = (body.messages ?? []).some((m) => m?.role === 'assistant' && m.talos_provider_state?.provider === provider && m.talos_provider_state?.model === model
+    && Array.isArray(m.talos_provider_state?.content) && m.talos_provider_state.content.some((p) => p?.type === 'reasoning'));
+  if (!pensa && !(lega && haBlocchi)) return {};
+  const blockBinding = lega ? { prefixMismatchBehavior: 'drop_block' } : null;
+  const thinking = pensa ? { type: 'adaptive', display: 'summarized', ...(blockBinding ? { blockBinding } : {}) } : { blockBinding };
+  return { anthropic: { thinking, ...(effort ? { effort } : {}) } };
+}
+
 function opzioniAnthropicTerzi(provider, model, body) {
   const record = fornitore(provider);
   if (provider === 'anthropic' || record?.wire !== 'anthropic-messages') return {};
@@ -202,15 +267,15 @@ function opzioniAnthropicTerzi(provider, model, body) {
       return { anthropic: { thinking: { type: 'adaptive' }, effort: 'low' } };
     }
     if (effort && !livelli.includes(effort)) {
-      rifiuta(`il livello «${effort}» non è documentato su questa porta (documentati: ${livelli.join(', ')} — docs.z.ai/devpack/latest-model, 05/10/2026).`);
+      rifiuta(`the level "${effort}" is not documented on this port (documented: ${livelli.join(', ')} — docs.z.ai/devpack/latest-model, 05/10/2026).`);
     }
     return effort || body.reasoning?.enabled === true ? { anthropic: { thinking: { type: 'adaptive' }, ...(effort ? { effort } : {}) } } : {};
   }
   if (provider === 'minimax-anthropic') {
-    if (body.stop) rifiuta('le sequenze di arresto non sono supportate su questa porta.');
-    if (effort) rifiuta('i livelli di intensità del ragionamento non sono documentati su questa porta.');
+    if (body.stop) rifiuta('stop sequences are not supported on this route.');
+    if (effort) rifiuta('reasoning effort levels are not documented on this route.');
     if (typeof body.reasoning?.enabled === 'boolean') {
-      if (model !== 'MiniMax-M3') rifiuta('questo modello non dichiara il controllo del ragionamento.');
+      if (model !== 'MiniMax-M3') rifiuta('this model does not declare reasoning control.');
       return { anthropic: { thinking: { type: body.reasoning.enabled ? 'adaptive' : 'disabled' } } };
     }
   }

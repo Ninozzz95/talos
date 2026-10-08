@@ -959,7 +959,11 @@ export function creaBrowser(schermo, { azioni = {}, modoIniziale = 'pagina' } = 
        richiesta «Pagina» fatta su una zittiva il ripiego dappertutto). Adesso si legge e si scrive
        per id, e una scheda che fallisce lascia le altre dov'erano. */
     if (modoDi(s.id) === 'pagina' && stato.modiChiesti[s.id] !== 'pagina') impostaModo(s.id, 'testo');
-    return `${t(s.motivoCornice || t('varie.browser.refusal.fallback'))}. ${t("varie.browser.refusal.belowText")}`;
+    /* ⛔ K4b (07/10/2026): la frase si COMPONE dal genere (`frasePerGenere`, regola del 16/09), come per i guasti. Prima qui
+       si passava a `t()` la frase già scritta dal server: dal 04/10 il server la scrive in inglese, e chi guarda in italiano
+       leggeva «The page forbids any frame…». `t(s.motivoCornice)` resta come ultima rete per un server più vecchio. */
+    const detto = frasePerGenere(s.genere, s.dettagli) || t(s.motivoCornice || t('varie.browser.refusal.fallback'));
+    return `${detto}. ${t("varie.browser.refusal.belowText")}`;
   }
 
   /*

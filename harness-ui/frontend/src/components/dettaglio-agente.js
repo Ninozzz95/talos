@@ -155,6 +155,12 @@ export function creaDettaglioAgente(figlia, { document: documento, sezione: sezi
     pezzi.push(compito);
     const fatti = el(d, 'div', 'talos-agente__fatti');
     if (dati.modello) fatti.appendChild(riga(tr('agenti.agent.model'), String(dati.modello)));
+    /* C2b «Coordinazione» (owner 08/10/2026): come è partito — da solo, o consentito da te con la carta. Senza il dato (prima di
+       C2b, o senza Coordinazione) la riga non c'è: niente si inventa. */
+    const avvio = dati.avvio ?? dati.avvioDelega; // lo snapshot delle figlie dice `avvio`, la riga dell'elenco `avvioDelega`
+    if (avvio === 'da-solo' || avvio === 'consentito') {
+      fatti.appendChild(riga(tr('agenti.agent.howStarted'), tr(avvio === 'da-solo' ? 'agenti.agent.startedOnItsOwn' : 'agenti.agent.startedAllowed')));
+    }
     const quanto = dati.avviataAlle ? eta(dati.avviataAlle) : null;
     if (quanto) fatti.appendChild(riga(tr('agenti.agent.started'), tr('agenti.agent.startedAgo', { eta: quanto })));
     if (attivita.attrezzoCorrente && dati.conclusa !== true) fatti.appendChild(riga(tr('agenti.agent.usingNow'), nomeUmanoAttrezzo(attivita.attrezzoCorrente)));
@@ -178,9 +184,12 @@ export function creaDettaglioAgente(figlia, { document: documento, sezione: sezi
     if (file.length === 0) pezzi.push(el(d, 'p', 'talos-muted talos-agente__vuoto', dati.conclusa === true ? tr('agenti.agent.noFilesDone') : tr('agenti.agent.noFilesYet')));
     else pezzi.push(...file.slice(0, 5).map(collegamentoFile));
     if (file.length > 5) { const altri = el(d, 'button', 'talos-button talos-button--ghost talos-button--sm', tr('agenti.agent.seeAllFiles', { n: file.length + (attivita.fileTagliati || 0) })); altri.type = 'button'; altri.addEventListener('click', () => mostra('file')); pezzi.push(altri); }
-    if (dati.esitoDelega) {
+    /* ⛔ 0.1.23 (bugfixer, 08/10/2026): qui si stampava `esitoDelega`, che è uno STATO («concluso», «fallito»): la scheda diceva
+       «Che cosa ha riportato: concluso». Il resoconto vero è `riassuntoDelega` (il testo con cui la figlia ha chiuso, dal
+       server); lo stato sta già in testata. Senza resoconto la sezione non c'è: meglio niente che uno stato travestito. */
+    if (typeof dati.riassuntoDelega === 'string' && dati.riassuntoDelega.trim()) {
       const sintesi = el(d, 'div', 'talos-agente__compito');
-      sintesi.append(el(d, 'b', 'talos-agente__etichetta', tr('agenti.agent.reported')), renderizzaMarkdown(String(dati.esitoDelega), { document: d, linkMarkdown: true }));
+      sintesi.append(el(d, 'b', 'talos-agente__etichetta', tr('agenti.agent.reported')), renderizzaMarkdown(dati.riassuntoDelega, { document: d, linkMarkdown: true }));
       pezzi.push(sintesi);
     }
     p.replaceChildren(...pezzi);

@@ -95,8 +95,8 @@ export async function eseguiComandoPlugin({ comando, argomenti, cartella }, deps
   });
   const testoFuori = result.stdout.trim();
   const testoErrori = result.stderr.trim();
-  if (result.code === 0) return testoFuori || '(nessun output)';
-  return [`comando terminato con codice ${result.code}`, testoErrori, testoFuori].filter(Boolean).join('\n');
+  if (result.code === 0) return testoFuori || '(no output)';
+  return [`command exited with code ${result.code}`, testoErrori, testoFuori].filter(Boolean).join('\n');
 }
 
 /**
@@ -166,7 +166,7 @@ export async function preparaToolPluginPerSessione({ cartella, cartellaTrust }, 
   const eseguiToolPluginFn = toolPlugin.length > 0
     ? async (nomeEsposto, argomenti) => {
       const voce = instradamento.get(nomeEsposto);
-      if (!voce) throw new Error(`tool di plugin "${nomeEsposto}" non è fra quelli offerti in questa sessione`);
+      if (!voce) throw new Error(`plugin tool "${nomeEsposto}" is not offered in this session`);
       return eseguiComandoPluginFn({ comando: voce.comando, argomenti, cartella });
     }
     : null;

@@ -494,10 +494,24 @@ use[href="#glifo"],.talos-brand__mark .glyph,.talos-empty__mark .glyph,.talos-av
    (`apps/desktop/src/components/assistant-ui/thread/index.tsx:193`, `{loading === 'session' && <CenteredThreadSpinner />}`). */
 .talos-conversation:has(> #conversation.is-restoring){scroll-behavior:auto}
 #conversation.is-restoring{visibility:hidden}
+/* A1-R3b (08/10/2026, bugfixer): la mini-cronologia dei giri sta ACCANTO alla conversazione (figlia di #schermoChat), quindi il velo
+   non la copriva: sotto «Apro la cronologia…» restava visibile e cliccabile su giri non ancora disegnati. Si nasconde col velo. */
+#schermoChat:has(#conversation.is-restoring) > .talos-cronologia{visibility:hidden}
 #conversation.is-restoring > *{animation:none !important; transition:none !important}
 .talos-caricamento-cronologia{display:none}
 .talos-conversation:has(> #conversation.is-restoring) > .talos-caricamento-cronologia{position:sticky; top:40%; z-index:1; height:0; overflow:visible; display:flex; flex-direction:column; align-items:center; gap:12px; pointer-events:none}
-.talos-caricamento-cronologia__testo{color:var(--talos-muted); font-size:var(--talos-font-size-sm)}
+.talos-caricamento-cronologia__riga{display:flex; flex-wrap:wrap; justify-content:center; column-gap:.35em}
+.talos-caricamento-cronologia__testo, .talos-caricamento-cronologia__conteggio{color:var(--talos-muted); font-size:var(--talos-font-size-sm)}
+.talos-caricamento-cronologia__conteggio{font-variant-numeric:tabular-nums}
+.talos-caricamento-cronologia__conteggio:empty{display:none}
+/* A1-R2 (07/10/2026): l'uscita offerta dopo 15 s di silenzio vero — l'indicatore non prende clic, il suo pulsante sì */
+.talos-caricamento-cronologia__uscita{pointer-events:auto}
+/* ⭐ BUG-24, 06/10/2026 — il bottone «Mostra precedenti» della finestra di replay (dossier D4). Vive nello SCORREVOLE,
+   sopra la colonna (come l'indicatore di caricamento): i figli della colonna restano solo turni. Stessa grammatica
+   visiva delle pillole del progetto (`.talos-filtro`): pillola sobria, muted, che si accende al passaggio. */
+.talos-mostra-precedenti{display:block; margin:10px auto 4px; padding:0 14px; height:26px; border-radius:999px; border:1px solid var(--talos-border-subtle); background:transparent; color:var(--talos-muted); font:inherit; font-size:12px; line-height:24px; cursor:pointer; font-variant-numeric:tabular-nums}
+.talos-mostra-precedenti:hover{color:var(--talos-text); background:var(--talos-accent-soft); border-color:var(--talos-accent-border, var(--talos-border-subtle))}
+.talos-mostra-precedenti[hidden]{display:none}
 /* ⛔ 11/9 — qui c'era `@media (max-width:1040px){ .talos-conversation{padding-left:0} }`, e sotto
    i 1040 lasciava 0 a sinistra contro 44 a destra. Misurato a 1024x800: la colonna partiva a x=276,
    incollata al bordo della lista sessioni, mentre il COMPOSER partiva a x=320 — 44 px piu' in la',
@@ -606,6 +620,9 @@ button.talos-turn-spine__tick:focus-visible{outline:var(--talos-focus-width) sol
 .talos-message__who{font-size:12px; font-weight:600; letter-spacing:.06em; text-transform:uppercase; color:var(--talos-muted)}
 .talos-message__who--talos{color:var(--talos-accent-hover)}
 .talos-message__meta{font-family:var(--talos-font-mono); font-size:11px; color:var(--talos-muted)}
+/* Decisione 14 (owner 08/10/2026 sera): «via DeepInfra», lo stesso carattere della meta; il punto medio lo separa come le altre parti */
+.talos-message__via{font-family:var(--talos-font-mono); font-size:11px; color:var(--talos-muted); min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.talos-message__meta:not(:empty) + .talos-message__via::before{content:'·'; margin-right:9px}
 .talos-message p{color:var(--talos-assistant-text); margin-bottom:10px; line-height:1.6}
 .talos-message p:last-child{margin-bottom:0}
 .talos-message code{font-family:var(--talos-font-mono); font-size:12.5px; color:var(--talos-text); background:var(--talos-panel-soft); padding:1px 5px; border-radius:5px}
@@ -797,6 +814,16 @@ button.talos-turn-spine__tick:focus-visible{outline:var(--talos-focus-width) sol
  */
 .talos-approval{--talos-approval-gutter:14px; margin:12px 0; border:1px solid var(--talos-accent-border); border-radius:var(--talos-radius-card); background:var(--talos-panel); box-shadow:var(--talos-shadow-card); overflow:hidden}
 .talos-approval__head{display:flex; align-items:center; gap:10px; padding:12px var(--talos-approval-gutter); border-bottom:1px solid var(--talos-border)}
+/* CARTA-BADGE (08/10/2026): nella carta di una figlia il nome è il compito delegato, spesso lungo. Si accorcia lui (ellissi,
+   intero nel suggerimento); il badge della richiesta resta intero e dentro la carta. */
+.talos-approval__chi{flex:0 1 auto; min-width:0; max-width:60%; overflow:hidden}
+/* La frase è un flex perché a cedere sia il NOME: con un nome inline-block la coda («» chiede», «” is asking») spariva senza segno
+   a 1280/1024/860/720 (fino a 155 px fuori, misurato dal bugfixer con un Range). ⛔ Il limite che il flex si porta dietro: i due
+   pezzi di testo diventano elementi flex anonimi, e uno spazio AI BORDI di un pezzo si perde. Oggi nessuna lingua ne ha attorno a
+   {name}; una lingua nuova con spazi attorno a {name} (alla francese «« {name} »») va provata col controllo «attaccato». */
+.talos-approval__chi-frase{display:flex; min-width:0; overflow:hidden; white-space:nowrap}
+.talos-approval__chi-nome{flex:0 1 auto; min-width:0; max-width:32ch; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.talos-approval__head > .talos-badge--accent{flex:none}
 .talos-approval__why{padding:10px var(--talos-approval-gutter); color:var(--talos-assistant-text); font-size:13px; border-bottom:1px solid var(--talos-border)}
 .talos-approval__foot{display:flex; align-items:center; gap:8px; padding:12px var(--talos-approval-gutter); border-top:1px solid var(--talos-border); flex-wrap:wrap}
 .talos-approval__foot-note{color:var(--talos-muted); font-size:12px}
@@ -818,6 +845,10 @@ button.talos-turn-spine__tick:focus-visible{outline:var(--talos-focus-width) sol
 .talos-tool-row > .talos-tool-row__sospetto{flex:none}
 .talos-tool-row__body > .talos-tool-row__nota-sospetto{margin:0 0 8px; font-family:var(--talos-font-ui); font-size:13px; line-height:1.45; white-space:normal; color:var(--talos-text)}
 .talos-tool-row__nota-sospetto .assistant-copy{margin:2px 0 0; font-size:13px; line-height:1.5; color:var(--talos-assistant-text)}
+/* C2 R6 (08/10/2026): la chiamata è passata per un permesso dato PIÙ IN ALTO — stesso posto del segno qui sopra, ma badge neutro
+   (è una provenienza, non un avviso), e la nota col carattere della chat in tono attenuato. */
+.talos-tool-row > .talos-tool-row__consentito-da{flex:none}
+.talos-tool-row__body > .talos-tool-row__nota-consentito-da{margin:0 0 8px; font-family:var(--talos-font-ui); font-size:13px; line-height:1.45; white-space:normal; color:var(--talos-muted)}
 /* ⛔⛔ BLOCCO 7 (B4) — IL TETTO DEL CORPO ERA IL BUDGET DI UN FLUSSO SOLO.
     Misurato il 20/09/2026 sul 4174: con i due flussi separati il contenuto misura 316 px contro un
     tetto di 240 — 78 oltre — e la sezione «Diagnostica» resta SOTTO il bordo: la cosa per cui la
@@ -1461,6 +1492,10 @@ a.talos-button{text-decoration:none}
 /* Il motivo della card del consenso (D1: «PERCHÉ ti si sta chiedendo il permesso») ha la stessa malattia: 17 px col colore del
    testo invece di 12,5 px attenuato (misurato sul 4174, sessione 5a552e6b…). Owner 02/10/2026: «sì, tutti e tre». 0,3,0. */
 .talos-message .talos-approval .talos-approval__motivo{font-size:12.5px; color:var(--talos-muted)}
+/* C2-R7 (08/10/2026 sera): «consentito solo per questa richiesta» viene DOPO l'esito ed è l'ultima riga della carta. Dal motivo
+   prendeva solo il margine sopra, e il testo toccava il bordo (foto c2-16, 1920×1080): prende il margine sotto dell'esito.
+   0,3,0 come le sorelle, così vince sul `margin:8px 0 0` di `.talos-approval__motivo`. */
+.talos-message .talos-approval .talos-approval__sempre-non-salvato{margin-bottom:12px}
 /* il pallino della scelta singola è un controllo del sistema: senza `accent-color` Chromium lo dipinge del suo blu, e col suo
    margine di serie stava 4 px più a destra delle caselle della scelta multipla. Stessa misura delle caselle (controls.css:117). */
 .talos-approval.talos-mcp-richiesta input[type="radio"]{accent-color:var(--talos-accent); width:15px; height:15px; margin:0; flex:none}
@@ -1832,6 +1867,13 @@ a.talos-button{text-decoration:none}
 .talos-inspector__hint + .talos-button{margin-top:10px}
 .talos-kv{display:flex; align-items:center; justify-content:space-between; gap:12px; min-height:30px; border-top:1px solid var(--talos-border-subtle)}
 .talos-kv:first-of-type{border-top:0}
+/* A16 (08/10/2026): l'Indice dei giri elenca TUTTI i giri — 2.000 righe in una chat da 1000 messaggi. Le righe fuori vista
+   non si impaginano né si dipingono (MDN e web.dev, «content-visibility»: il browser salta layout e pittura del sottoalbero
+   finché non si avvicina alla vista; `auto` in contain-intrinsic-size ricorda l'altezza vera dopo il primo disegno, così la
+   barra di scorrimento non salta). Misurato sul banco da 1000 giri, ritorno alla chat da un'altra sezione: senza questa riga
+   blocchi del thread fino a 61 ms, con questa riga nessuno; restano ~60 ms di stile per 2.000 righe (116-139 ms contro i
+   44-66 dell'indice da 30 righe). */
+[data-c="TurnIndex"] > .talos-kv{content-visibility:auto; contain-intrinsic-size:auto 30px}
 /* ⛔ 07/9, visto nella foto dell'Indice dei giri: le voci lunghe mandavano «0 attrezzi» a capo su
    due righe, rompendo l'allineamento della colonna. L'ellissi era gia' dichiarata qui e non si
    applicava: in un flex un item con overflow:hidden ma senza min-width:0 non scende sotto il suo
@@ -2486,7 +2528,77 @@ a.talos-button{text-decoration:none}
 #schermoAutomazioni .talos-automation__name{flex-basis:180px;min-width:0;overflow-wrap:anywhere}
 #schermoAutomazioni .talos-kv__v{white-space:normal;text-align:right;overflow-wrap:anywhere}
 .talos-automation__runs{padding:2px 14px 10px; border-top:1px solid var(--talos-border-subtle)}
+/* C2b «Coordinazione» (08/10/2026 notte): la parola dello stato accanto all'interruttore, come nel velo dei permessi; la nota sotto la riga */
+.talos-automation__coord-valore{display:inline-flex; align-items:center; gap:8px}
+.talos-automation__coord-nota{margin:2px 0 6px; font-size:11.5px; line-height:1.45}
+/* ⛔ Il foglio «Nuova automazione» mette l'interruttore in una `.sheet-toggle-row`, e il monolite dà a ogni `input` di quella
+   riga 36×36 (22×22 sotto i 780 px) con specificità 0,2,2: batteva `input.talos-switch` (0,1,1) di controls.css e schiacciava
+   il binario in un quadrato, col pomello traslato fuori dal bordo. Qui torna la misura di controls.css, con specificità più alta. */
+dialog.sheet-dialog .sheet-toggle-row input.talos-switch,
+.talos-dialog .sheet-toggle-row input.talos-switch{width:calc(var(--talos-control-height) * 1.75); min-width:calc(var(--talos-control-height) * 1.75); height:var(--talos-control-height); min-height:var(--talos-control-height); flex:none}
 .talos-automation__fix{display:flex; align-items:center; gap:12px; flex-wrap:wrap; padding:10px 14px; border-top:1px solid var(--talos-border-subtle); background:var(--talos-warning-soft); color:var(--talos-assistant-text); font-size:13px}
+/* Automazioni a due porte (owner 08/10/2026 notte). La pagina è l'impianto di Libreria e Note (`automazioni-sezione.js`, owner
+   «non negoziabile»): schede e pannello sono suoi. Qui restano solo i pezzi propri: il testo delle istruzioni (carta in chat) e
+   lo storico dei giri nel pannello. Solo token di casa. */
+.talos-automation__istruzioni-testo{margin:0; white-space:pre-wrap; overflow-wrap:anywhere; font-size:13px; line-height:1.5; color:var(--talos-assistant-text); max-height:16em; overflow:auto}
+.talos-automation__storico{display:flex; flex-direction:column; gap:6px}
+.talos-automation__storico > .talos-muted{margin:0; font-size:12.5px}
+.talos-automation__giro{display:flex; flex-direction:column; gap:4px; padding:8px 10px; border-radius:var(--talos-radius-control, 8px); background:var(--talos-panel-soft)}
+.talos-automation__giro-testa{display:flex; align-items:center; gap:8px; flex-wrap:wrap; font-size:12.5px; font-variant-numeric:tabular-nums}
+.talos-automation__giro-testo{margin:0; font-size:13px; line-height:1.5; white-space:pre-wrap; overflow-wrap:anywhere; color:var(--talos-assistant-text)}
+.talos-automation__giro-testo[data-auto-giro-accorciato]{cursor:pointer}
+.talos-automation__giro-azioni{display:flex; gap:6px; flex-wrap:wrap; margin-top:2px}
+/* nella vista a righe la colonna delle etichette è stretta: «1 da guardare» andava a capo a metà (foto 08/10). Un'etichetta non
+   si spezza; due etichette, se non ci stanno, vanno una sotto l'altra */
+.td-section[data-section="automazioni"] .td-tag{white-space:nowrap}
+.talos-automation__giro-testo[data-auto-giro-accorciato]:focus-visible{outline:2px solid var(--talos-focus, var(--talos-accent)); outline-offset:2px}
+/* Il conteggio sulla campanella della barra (prima mancava l'elemento): in alto a destra del pulsante, non cattura clic */
+#notificationsBtn{position:relative}
+.talos-campanella__conta{position:absolute; top:-5px; right:-5px; min-width:17px; height:17px; padding:0 4px; border-radius:999px; font-size:10.5px; line-height:17px; justify-content:center; font-variant-numeric:tabular-nums; pointer-events:none}
+.talos-campanella__conta[hidden]{display:none}
+/* Il foglio v2: campi in colonna, l'orario in una riga che va a capo, le cartelle recenti come pulsanti piccoli */
+.talos-automazione-foglio{display:flex; flex-direction:column; gap:10px}
+.talos-automazione-campo{display:flex; flex-direction:column; gap:4px; min-width:0}
+/* il carattere del testo, non il monospazio che Chromium dà di serie ai textarea: le istruzioni sono prosa (foto dell'08/10) */
+.talos-automazione-istruzioni{min-height:7.5em; resize:vertical; line-height:1.5; font-family:inherit; font-size:13.5px}
+.talos-automazione-orario{display:flex; flex-wrap:wrap; gap:10px}
+.talos-automazione-orario > .talos-automazione-campo{flex:1 1 120px}
+.talos-automazione-orario > [hidden], .talos-automazione-orario[hidden]{display:none}
+.talos-automazione-cartelle{display:flex; flex-wrap:wrap; gap:6px}
+.talos-automazione-cartelle:empty{display:none}
+.talos-automazione-cartelle > .talos-button{max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-family:var(--talos-font-mono); font-size:12px}
+.talos-automazione-foglio .sheet-hint{margin-top:-4px}
+.talos-automazione-errore{color:var(--talos-danger); margin:0}
+/* La carta in chat: la bozza fra la frase e il perché, con lo stesso rientro della carta */
+.talos-approval__automazione{display:flex; flex-direction:column; gap:2px; padding:8px var(--talos-approval-gutter); border-bottom:1px solid var(--talos-border)}
+/* stessa cura del pannello Processi (`.talos-process__dettaglio`): `.talos-kv__v` ha `flex:none` e non cede mai, così un percorso
+   lungo schiacciava l'etichetta a zero e usciva dalla carta (prova dal vivo dell'08/10). Il valore cede e va a capo; l'etichetta resta. */
+/* ⛔ non la riga della Coordinazione: lì il valore È l'interruttore (`inline-flex`), e allargato metteva parola e interruttore a
+   sinistra, disallineati (foto dal vivo dell'08/10) — quella riga resta com'era nella C2b */
+.talos-approval__automazione .talos-kv, .td-section[data-section="automazioni"] .td-detail .talos-kv:not(.talos-automation__coord){align-items:flex-start}
+.talos-approval__automazione .talos-kv__k, .td-section[data-section="automazioni"] .td-detail .talos-kv:not(.talos-automation__coord) > .talos-kv__k{flex:none; padding-top:6px}
+.talos-approval__automazione .talos-kv__v, .td-section[data-section="automazioni"] .td-detail .talos-kv__v:not(.talos-automation__coord-valore){flex:1 1 auto; min-width:0; white-space:normal; text-align:right; overflow-wrap:anywhere; padding-block:6px}
+/* Nel pannello i valori sono parole («Giorni feriali alle 09:00», «Scrive nel progetto»), non codice: il carattere dell'interfaccia
+   come i valori del dettaglio di Libreria (`.td-lib-riga dd`), non il monospazio di serie di `.talos-kv__v` (foto piene dell'08/10,
+   variante «Come Note» scelta dall'owner) */
+.td-section[data-section="automazioni"] .td-detail .talos-kv__v{font-family:var(--talos-font-ui); font-weight:400; font-size:12px; font-variant-numeric:tabular-nums}
+.talos-approval__automazione-istruzioni{display:flex; flex-direction:column; gap:4px; padding:6px 0}
+/* 0,2,1: batte `.talos-message p` (0,1,1, la misura del corpo della chat) — nella carta le istruzioni sono un dato, non la risposta */
+.talos-approval__automazione p.talos-automation__istruzioni-testo{margin:0; font-size:13.5px; line-height:1.55}
+/* Decisioni 12-13 dell'owner (08/10/2026 sera): gli avvisi in testa alla carta. `talos-callout` è l'avviso del progetto (giallo);
+   la variante «pericolo» è per le istruzioni che sembrano un'iniezione (rosso), con gli stessi gettoni del fallimento d'attrezzo */
+.talos-callout--pericolo{border-color:var(--talos-danger-border); background:var(--talos-danger-soft)}
+.talos-callout--pericolo > .talos-approval__avvisi-corpo > b{color:var(--talos-danger)}
+.talos-approval__avvisi{margin:2px 0 6px; padding:10px 12px}
+.talos-approval__avvisi-corpo{display:flex; flex-direction:column; gap:4px; min-width:0}
+/* La proposta di un giro nello storico (decisione 13): il perché, le minacce, adesso → proposte, poi Approva · Scarta */
+.talos-automation__proposta{display:flex; flex-direction:column; gap:4px; margin-top:2px; padding-top:8px; border-top:1px solid var(--talos-border-subtle)}
+/* Y4: il «⋯» del giro è quello delle schede (`.td-card-azioni`), ma lì è assoluto rispetto alla scheda; nella riga del giro sta
+   in fila coi pulsanti (foto dell'08/10 sera: senza questa regola finiva nell'angolo della finestra) */
+.talos-automation__giro-azioni .td-card-azioni{position:static; width:28px; height:28px; flex:none}
+.talos-automation__proposta-perche{margin:0; font-size:12.5px; line-height:1.5; color:var(--talos-muted)}
+.talos-automation__proposta p.talos-automation__istruzioni-testo{margin:0; font-size:13px; line-height:1.5; white-space:pre-wrap; overflow-wrap:anywhere}
+.talos-approval__avvisi-lista{margin:0; padding-left:18px; display:flex; flex-direction:column; gap:2px; line-height:1.5; overflow-wrap:anywhere}
 .talos-tree{display:flex; flex-direction:column; gap:6px; margin:14px 0}
 .talos-tree__rail{display:none}
 .talos-tree__node{position:relative; display:flex; align-items:center; gap:12px; padding:12px 14px; border-radius:var(--talos-radius-card); border:1px solid var(--talos-border); background:var(--talos-card-subtle)}
@@ -3211,3 +3323,10 @@ a.talos-button{text-decoration:none}
 .talos-lab-tabs-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
 .talos-lab-tabs-actions > [role=tablist]{flex:1 1 auto;min-width:0}
 #modelLabLiberaMemoria{flex:0 0 auto;margin-left:auto}
+
+/* A14 (08/10/2026, owner): «Mostra ragionamento» spento — la scheda resta una riga col solo tempo («Sta ragionando…» / «Ha ragionato
+   per N s»): niente freccia, niente corpo, e la testa non sembra un comando. Il clic lo ferma app.js (`aggiornaVisibilitaRagionamento`). */
+:root[data-mostra-ragionamento="no"] .real-reasoning-note > .talos-activity__head{cursor:default}
+:root[data-mostra-ragionamento="no"] .real-reasoning-note > .talos-activity__head:hover{background:none}
+:root[data-mostra-ragionamento="no"] .real-reasoning-note > .talos-activity__head > .talos-activity__chev{display:none}
+:root[data-mostra-ragionamento="no"] .real-reasoning-note > .talos-activity__body{display:none !important}

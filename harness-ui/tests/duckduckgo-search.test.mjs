@@ -109,7 +109,7 @@ test('ricerca: se fallisce due volte si dichiara, dicendo che aveva già ritenta
   const fetchFn = async () => { chiamate += 1; throw new TypeError('fetch failed'); };
   await assert.rejects(
     () => cercaDuckDuckGo('prova', 8, { fetchFn }),
-    (e) => e.code === 'SEARCH_UNREACHABLE' && /già ritentato/.test(e.message),
+    (e) => e.code === 'SEARCH_UNREACHABLE' && /already retried/.test(e.message),
   );
   assert.equal(chiamate, 2, 'due tentativi in tutto, mai tre');
 });
@@ -126,7 +126,7 @@ test('ricerca, AL CONTRARIO: su un abort non si ritenta affatto', async () => {
   };
   await assert.rejects(
     () => cercaDuckDuckGo('prova', 8, { fetchFn }),
-    (e) => e.code === 'SEARCH_UNREACHABLE' && /tempo scaduto/.test(e.message) && !/ritentato/.test(e.message),
+    (e) => e.code === 'SEARCH_UNREACHABLE' && /timed out/.test(e.message) && !/retried/.test(e.message),
   );
   assert.equal(chiamate, 1, '⛔ un solo tentativo: chi ha fermato il giro non va contraddetto');
 });

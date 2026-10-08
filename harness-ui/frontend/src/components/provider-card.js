@@ -202,6 +202,80 @@ export async function salvaCollegamentoProvider(row,card,{fetchImpl=globalThis.f
  if(!risposta.ok||esito?.ok!==true||!esito.data||typeof esito.data!=='object')throw new Error(t('modelli.provider.saveCheckFields'));
  return esito.data;
 }
+/*
+ * ⛔ Decisione 14 (owner 08/10/2026 sera, «Impostazioni + "Escludi" dal piede») — I FORNITORI A VALLE ESCLUSI SU OPENROUTER.
+ *   OpenRouter instrada sulla lista `provider.ignore`, fatta di slug (docs «Provider Routing», lette l'08/10/2026); il server
+ *   la unisce a ogni richiesta (`unisciEsclusi`, runtime-owner-adapter.mjs) e la tiene nel portachiavi
+ *   (`normalizzaEsclusi`, provider-credential-store.mjs). Hermes la regge solo da config e CLI (`providers_ignored`,
+ *   `hermes_cli/cli_commands_mixin.py:208`, clone 65ad529): qui ha una casa nelle Impostazioni e una nel «⋯» della risposta.
+ * ⛔ UN SALVA SOLO (owner 01/10/2026): pastiglie e campo cambiano un elenco IN BOZZA, e lo scrive il «Salva» della modale
+ *   insieme al resto. Qui nessun pulsante salva da sé: due pulsanti che salvano cose diverse sono il modo in cui si perse la chiave.
+ * ⛔ Nessuna veste nuova: la pastiglia è il chip dei filtri (`talos-button--sm --secondary`) con la × della modale, il campo
+ *   è `talos-field__input`, le righe sono `talos-cluster`.
+ */
+export const SLUG_FORNITORE=/^[a-z0-9][a-z0-9._-]{0,47}(?:\/[a-z0-9][a-z0-9._-]{0,47})?$/u; // la stessa forma di `normalizzaEsclusi` sul server
+export const ESCLUSI_MASSIMI=30; // = ESCLUSI_MASSIMI di provider-credential-store.mjs
+const bozzeEsclusi=new WeakMap();
+function campoEsclusi(row){
+ const iniziali=Array.isArray(row.esclusi)?row.esclusi.filter(s=>typeof s==='string'):[];
+ let bozza=[...iniziali];
+ const wrap=el('div','talos-stack talos-provider__field talos-provider__esclusi');wrap.dataset.providerEsclusi=row.id;wrap.style.gridColumn='1 / -1';
+ const idTitolo='esclusi-titolo-'+row.id;
+ const titolo=el('span','talos-muted',t('modelli.provider.excludedProviders'));titolo.id=idTitolo;
+ const nota=el('p','talos-muted',t('modelli.provider.excludedProvidersNote'));nota.style.margin='0';
+ const elenco=el('ul','talos-cluster');elenco.setAttribute('aria-labelledby',idTitolo);
+ Object.assign(elenco.style,{margin:'0',padding:'0',listStyle:'none',gap:'6px'});
+ const vuoto=el('p','talos-muted',t('modelli.provider.noExcludedProviders'));vuoto.style.margin='0';
+ const input=el('input','talos-field__input');input.type='text';input.autocomplete='off';input.spellcheck=false;
+ input.placeholder=t('modelli.provider.excludedProviderPlaceholder');input.setAttribute('aria-labelledby',idTitolo);input.dataset.providerEsclusoNuovo=row.id;
+ Object.assign(input.style,{flex:'1 1 auto',minWidth:'0'});
+ // non `--sm`: alto quanto il campo accanto (36 px, misurato sul 4177)
+ const aggiungi=el('button','talos-button talos-button--secondary',t('modelli.provider.excludeProviderAction'));aggiungi.type='button';aggiungi.dataset.providerEscludiAggiungi=row.id;
+ const riga=el('div','talos-cluster');Object.assign(riga.style,{flexWrap:'nowrap',gap:'8px'});riga.append(input,aggiungi);
+ const errore=el('p','talos-muted is-error');errore.dataset.providerEsclusiErrore=row.id;errore.setAttribute('role','alert');errore.hidden=true;errore.style.margin='0';
+ const sbaglia=(testo)=>{errore.textContent=testo;errore.hidden=false;input.setAttribute('aria-invalid','true');};
+ const disegna=()=>{
+  wrap.dataset.providerEsclusiBozza=JSON.stringify(bozza);
+  elenco.replaceChildren(...bozza.map((slug)=>{
+   /* ⛔ `#schermoImpostazioni li` (padding 10px 0 + filetto in alto) è la regola delle RIGHE delle Impostazioni — l'elenco delle
+      chiavi qui sopra la usa. Una pastiglia non è una riga: misurato sul 4177, ogni pastiglia stava in 50 px con un filetto sopra. */
+   const li=el('li','');Object.assign(li.style,{padding:'0',borderTop:'0'});
+   const chip=el('button','talos-button talos-button--secondary talos-button--sm',slug);chip.type='button';chip.dataset.providerEscluso=slug;
+   chip.setAttribute('aria-label',t('modelli.provider.allowProviderAgain',{name:slug}));chip.append(iconaAzione('chiudi','14px'));
+   chip.addEventListener('click',()=>{bozza=bozza.filter(s=>s!==slug);disegna();input.focus({preventScroll:true});});
+   li.append(chip);return li;
+  }));
+  elenco.hidden=bozza.length===0;vuoto.hidden=bozza.length>0;
+ };
+ /* Ciò che è scritto nel campo entra nella bozza: col pulsante, con Invio, o col «Salva» della modale (chi scrive e salva
+    senza premere «Escludi» non deve perdere quello che ha scritto). `false` = scritto ma non valido, l'errore è a schermo. */
+ const prendiDalCampo=()=>{
+  const slug=input.value.trim().toLowerCase();
+  if(!slug)return true;
+  if(!SLUG_FORNITORE.test(slug)){sbaglia(t('modelli.provider.excludedProviderInvalid',{name:input.value.trim()}));return false;}
+  if(bozza.includes(slug)){sbaglia(t('modelli.provider.excludedProviderDuplicate',{name:slug}));return false;}
+  if(bozza.length>=ESCLUSI_MASSIMI){sbaglia(tn('modelli.provider.excludedProvidersFullOne','modelli.provider.excludedProvidersFullMany',ESCLUSI_MASSIMI));return false;}
+  bozza=[...bozza,slug];input.value='';errore.hidden=true;input.removeAttribute('aria-invalid');disegna();return true;
+ };
+ aggiungi.addEventListener('click',()=>{prendiDalCampo();input.focus({preventScroll:true});});
+ /* Invio con qualcosa scritto aggiunge e NON salva (si ferma qui: la modale salva sull'Invio); a campo vuoto sale e salva. */
+ input.addEventListener('keydown',(e)=>{if(e.key==='Enter'&&!e.isComposing&&input.value.trim()){e.preventDefault();e.stopPropagation();prendiDalCampo();}});
+ input.addEventListener('input',()=>{if(!errore.hidden){errore.hidden=true;input.removeAttribute('aria-invalid');}});
+ wrap.append(titolo,nota,elenco,vuoto,riga,errore);
+ disegna();
+ bozzeEsclusi.set(wrap,{prendiDalCampo,bozza:()=>[...bozza],cambiati:()=>bozza.length!==iniziali.length||bozza.some((s,i)=>s!==iniziali[i])});
+ return wrap;
+}
+/** Scrive l'elenco INTERO degli esclusi (`POST /api/v1/providers/openrouter/esclusi`), stesso envelope di `salvaCollegamentoProvider`. */
+export async function salvaEsclusiFornitori(esclusi,{fetchImpl=globalThis.fetch,baseUrl=globalThis.window?.__talosHarnessApiBase||''}={}){
+ let risposta;
+ try{risposta=await fetchImpl(`${baseUrl}/api/v1/providers/openrouter/esclusi`,{
+  method:'POST',credentials:'same-origin',headers:{Accept:'application/json','Content-Type':'application/json'},body:JSON.stringify({esclusi})});}
+ catch{throw new Error(t('modelli.provider.saveServerUnavailable'));}
+ let esito;try{esito=await risposta.json();}catch{throw new Error(t('modelli.provider.saveInvalidResponse'));}
+ if(!risposta.ok||esito?.ok!==true||!Array.isArray(esito.data?.esclusi))throw new Error(t('modelli.provider.saveCheckFields'));
+ return esito.data.esclusi;
+}
 function aggiungiCampiAgente(body,row){
  const a=row.agente||{};
  body.append(campo(t('modelli.provider.command'),'text','providerComando',row,a.comando||''),campo(t('modelli.provider.workingFolder'),'text','providerCwd',row,a.cwd||''),
@@ -398,7 +472,11 @@ function apriConfigurazioneProvider(card,row,{onSalvaConfigurazione=null,onConfi
    const chiave=(campoChiave?.value||'').trim();
    const letto=salvaRuntime&&!configurazionePropria?leggiCollegamentoProvider(row,corpo):null;
    const collegamento=letto&&(letto.endpoint!==(row.endpoint||'')||letto.timeoutSeconds!==Number(row.timeoutSeconds??60))?{endpoint:letto.endpoint,timeoutSeconds:letto.timeoutSeconds}:null;
-   if(!chiave&&!collegamento&&!configurazionePropria){avvisa(t('modelli.provider.nothingToSave'),false);return;}
+   /* Decisione 14: gli esclusi in bozza si salvano con questo stesso «Salva»; un nome scritto e non valido ferma tutto, con l'errore accanto al campo. */
+   const esclusi=bozzeEsclusi.get(corpo.querySelector('[data-provider-esclusi]'));
+   if(esclusi&&!esclusi.prendiDalCampo())return;
+   const esclusiNuovi=esclusi?.cambiati()?esclusi.bozza():null;
+   if(!chiave&&!collegamento&&!configurazionePropria&&!esclusiNuovi){avvisa(t('modelli.provider.nothingToSave'),false);return;}
    const controlli=[...dialogo.querySelectorAll('input,textarea,button')],prima=controlli.map(c=>c.disabled);
    dialogo.dataset.salvataggio='in-corso';card.dataset.salvataggioCollegamento='in-corso';dialogo.setAttribute('aria-busy','true');controlli.forEach(c=>{c.disabled=true;});primaria.textContent=t('modelli.provider.saving');
    const salvato=[];
@@ -411,6 +489,10 @@ function apriConfigurazioneProvider(card,row,{onSalvaConfigurazione=null,onConfi
     };
     if(chiave){await chiama({chiave},'chiave');salvato.push('chiave');campoChiave.value='';}
     if(collegamento){await chiama({collegamento},'collegamento');salvato.push('collegamento');}
+    if(esclusiNuovi){
+     try{await salvaEsclusiFornitori(esclusiNuovi);}catch(e){throw Object.assign(e,{fase:'collegamento'});}
+     if(!salvato.includes('collegamento'))salvato.push('collegamento');
+    }
     if(configurazionePropria){
      try{await salvaCollegamentoProvider(row,corpo);}catch(e){throw Object.assign(e,{fase:'collegamento'});}
      salvato.push('collegamento');
@@ -797,7 +879,10 @@ export function creaProviderCard(row,{aperta=false,prova=null,occupato=false,onM
   *   la riga NON compare: due righe, che è esattamente la card locale del mockup. Una riga con
   *   dentro «non previsto» sarebbe una parola nostra, e le parole nostre non si inventano.
   */
- for(const [k,v]of [[t('modelli.provider.credential'),d.chiave],[t('modelli.provider.configuration'),etichettaIndirizzo(row)],[t('modelli.provider.lastTest'),d.prova]])
+ /* Decisione 14: chi esclude un fornitore dal «⋯» di una risposta deve ritrovare lo stato SULLA CARD, non solo aprendo «Configura».
+    Solo se ce ne sono: una riga «0 fornitori» sarebbe rumore. */
+ const esclusiDellaCard=row.id==='openrouter'&&Array.isArray(row.esclusi)&&row.esclusi.length?tn('modelli.provider.excludedCountOne','modelli.provider.excludedCountMany',row.esclusi.length):null;
+ for(const [k,v]of [[t('modelli.provider.credential'),d.chiave],[t('modelli.provider.configuration'),etichettaIndirizzo(row)],[t('modelli.provider.excludedProviders'),esclusiDellaCard],[t('modelli.provider.lastTest'),d.prova]])
   if(v)  {const riga=el('div','talos-kv');riga.dataset.c='KeyValue';riga.append(el('span','talos-kv__k',k),el('span','talos-kv__v',v));fatti.append(riga);}
  card.append(fatti);
  const body=el('div','talos-provider__body');body.id=idCorpo;body.hidden=!aperta;
@@ -933,6 +1018,10 @@ export function creaProviderCard(row,{aperta=false,prova=null,occupato=false,onM
  }
  actions.append(...nascoste);
  body.append(actions);
+ /* Decisione 14: i fornitori a valle esclusi (vedi `campoEsclusi`). DOPO la riga delle azioni, che riguarda indirizzo e tempo
+    («⋯» → «Ripristina indirizzo»): messo prima, con un indirizzo personalizzato il «⋯» restava solo in fondo, sotto l'elenco
+    degli esclusi e lontano dai campi che governa (foto sul 4174, 08/10 notte). */
+ if(row.id==='openrouter')body.append(campoEsclusi(row));
  if(prova&&prova.esito!=='in-corso'){const note=el('p','talos-muted',prova.esito==='collegato'?(esterno?t('modelli.provider.agentTestNote'):row.id==='openrouter'?t('modelli.provider.catalogTestNote'):t('modelli.provider.serviceTestNote')):(testoDelCampo(prova,'motivo')||d.prova));note.dataset.provaEsito=prova.esito;if(Number.isFinite(prova.millisecondi))note.append(document.createTextNode(t('modelli.provider.elapsedMilliseconds', { n: prova.millisecondi })));body.append(note);}
  const feedback=el('p','talos-muted');feedback.dataset.providerFeedback=row.id;feedback.setAttribute('role','status');feedback.hidden=true;body.append(feedback);
  for(const control of body.querySelectorAll('input,textarea,button'))control.disabled=busy;

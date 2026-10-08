@@ -132,7 +132,7 @@ export function base64Url(bytes) {
 export function creaCoppiaPkce({ random = (quanti) => randomBytes(quanti) } = {}) {
   const byte = random(32);
   if (!byte || typeof byte.length !== 'number' || byte.length < 32) {
-    throw erroreConCodice('Sorgente di casualità insufficiente', 'OAUTH_CASO_INSUFFICIENTE');
+    throw erroreConCodice('Insufficient randomness source', 'OAUTH_CASO_INSUFFICIENTE');
   }
   const verifier = base64Url(byte);
   const challenge = base64Url(createHash('sha256').update(verifier, 'ascii').digest());
@@ -158,12 +158,12 @@ export function creaStato({ random = (quanti) => randomBytes(quanti) } = {}) {
  */
 export function indirizzoDiAutorizzazione({ challenge, callbackUrl = null, etichetta = ETICHETTA_CHIAVE } = {}) {
   if (typeof challenge !== 'string' || challenge.trim() === '') {
-    throw erroreConCodice('Manca la sfida PKCE', 'OAUTH_SFIDA_MANCANTE');
+    throw erroreConCodice('Missing PKCE challenge', 'OAUTH_SFIDA_MANCANTE');
   }
   const url = new URL(INDIRIZZO_AUTORIZZAZIONE);
   if (callbackUrl !== null && callbackUrl !== undefined) {
     if (typeof callbackUrl !== 'string' || callbackUrl.trim() === '') {
-      throw erroreConCodice('Indirizzo di ritorno non valido', 'OAUTH_RITORNO_INVALIDO');
+      throw erroreConCodice('Invalid return address', 'OAUTH_RITORNO_INVALIDO');
     }
     url.searchParams.set('callback_url', callbackUrl.trim());
   } else {
@@ -190,9 +190,9 @@ export function indirizzoDiAutorizzazione({ challenge, callbackUrl = null, etich
 export async function scambiaCodicePerChiave({ codice, verifier, fetchDiRete = globalThis.fetch } = {}) {
   const codiceRipulito = typeof codice === 'string' ? codice.trim() : '';
   const verifierRipulito = typeof verifier === 'string' ? verifier.trim() : '';
-  if (codiceRipulito === '') throw erroreConCodice('Manca il codice di accesso', 'OAUTH_CODICE_MANCANTE');
-  if (verifierRipulito === '') throw erroreConCodice('Manca il verificatore', 'OAUTH_VERIFIER_MANCANTE');
-  if (typeof fetchDiRete !== 'function') throw erroreConCodice('Nessun modo di uscire in rete', 'OAUTH_RETE');
+  if (codiceRipulito === '') throw erroreConCodice('Missing access code', 'OAUTH_CODICE_MANCANTE');
+  if (verifierRipulito === '') throw erroreConCodice('Missing verifier', 'OAUTH_VERIFIER_MANCANTE');
+  if (typeof fetchDiRete !== 'function') throw erroreConCodice('No network access', 'OAUTH_RETE');
 
   let risposta;
   try {
@@ -208,16 +208,16 @@ export async function scambiaCodicePerChiave({ codice, verifier, fetchDiRete = g
   } catch {
     // ⛔ Il messaggio dell'eccezione di rete non viaggia: può contenere l'indirizzo completo, e
     //    con esso, in altre implementazioni, la query. Il codice basta a sapere cosa fare.
-    throw erroreConCodice('OpenRouter non è raggiungibile', 'OAUTH_RETE');
+    throw erroreConCodice('OpenRouter is unreachable', 'OAUTH_RETE');
   }
 
   if (!risposta || typeof risposta.ok !== 'boolean') {
-    throw erroreConCodice('Risposta di OpenRouter non riconoscibile', 'OAUTH_RISPOSTA_INATTESA');
+    throw erroreConCodice('Unrecognized OpenRouter response', 'OAUTH_RISPOSTA_INATTESA');
   }
   if (!risposta.ok) {
     // Lo stato HTTP sì (403 «codice scaduto» è un'informazione utile e non è un segreto), il corpo no.
     throw Object.assign(
-      erroreConCodice('OpenRouter ha rifiutato questo accesso', 'OAUTH_SCAMBIO_RIFIUTATO'),
+      erroreConCodice('OpenRouter rejected this login', 'OAUTH_SCAMBIO_RIFIUTATO'),
       { stato: risposta.status ?? 0 },
     );
   }
@@ -226,7 +226,7 @@ export async function scambiaCodicePerChiave({ codice, verifier, fetchDiRete = g
   try {
     corpo = await risposta.json();
   } catch {
-    throw erroreConCodice('OpenRouter ha risposto qualcosa che non è JSON', 'OAUTH_RISPOSTA_INATTESA');
+    throw erroreConCodice('OpenRouter returned non-JSON response', 'OAUTH_RISPOSTA_INATTESA');
   }
   const chiave = corpo && typeof corpo === 'object' && typeof corpo.key === 'string' ? corpo.key.trim() : '';
   if (chiave === '') {
@@ -237,7 +237,7 @@ export async function scambiaCodicePerChiave({ codice, verifier, fetchDiRete = g
      *   che oggi non esiste vuol dire accettare, il giorno in cui esisterà, qualcosa di cui non
      *   sappiamo il significato. Meglio un guasto pulito e riconoscibile.
      */
-    throw erroreConCodice('La risposta di OpenRouter non contiene una chiave', 'OAUTH_RISPOSTA_INATTESA');
+    throw erroreConCodice('OpenRouter response does not contain a key', 'OAUTH_RISPOSTA_INATTESA');
   }
   return { chiave };
 }
@@ -308,7 +308,7 @@ export function creaRegistroAttese({
         if (atteso.length !== chiesto.length) continue;
         if (timingSafeEqual(atteso, chiesto)) { trovata = candidato; break; }
       }
-      if (trovata === null) throw erroreConCodice('Questa richiesta di accesso non è più valida', 'OAUTH_ATTESA_IGNOTA');
+      if (trovata === null) throw erroreConCodice('This login request is no longer valid', 'OAUTH_ATTESA_IGNOTA');
       const voce = attese.get(trovata);
       attese.delete(trovata); // uso singolo: sparisce comunque, anche se lo scambio poi fallirà
       return { verifier: voce.verifier, conRitorno: voce.conRitorno };

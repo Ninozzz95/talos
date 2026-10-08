@@ -48,8 +48,16 @@ $ErrorActionPreference = 'Stop'
 $radice = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)   # …/AVM-harness-desktop
 $harness = Join-Path $radice 'harness-ui'
 $frontend = Join-Path $harness 'frontend'
-# La cartella dei journal: `TALOS_HARNESS_UI_SESSIONS_DIR` se c'è, altrimenti `.sessions-store` accanto a server.mjs — come `parseCartellaStore` in config.mjs. Il gettone sta lì (gitignorata, dell'utente).
+# La cartella dei journal: `TALOS_HARNESS_UI_SESSIONS_DIR` se c'è. Il gettone sta lì (gitignorata, dell'utente).
+# ⛔ 07/10/2026, decisione dell'owner — il 4174 scrive in `%APPDATA%\TALOS\sessions`, lo stesso archivio dell'app installata, come il
+#   processo del 06/10 avviato a mano con quella variabile. Senza questa riga il lanciatore ripartiva su `.sessions-store` accanto a
+#   server.mjs (75 vecchie sessioni di sviluppo, fino al 04/10): dopo un riavvio l'owner si è trovato un elenco diverso da quello che
+#   usava. Una scelta esplicita nella shell continua a vincere.
+if (-not $env:TALOS_HARNESS_UI_SESSIONS_DIR -and $env:APPDATA) {
+  $env:TALOS_HARNESS_UI_SESSIONS_DIR = Join-Path (Join-Path $env:APPDATA 'TALOS') 'sessions'
+}
 $cartellaStore = if ($env:TALOS_HARNESS_UI_SESSIONS_DIR) { $env:TALOS_HARNESS_UI_SESSIONS_DIR } else { Join-Path $harness '.sessions-store' }
+Write-Output ("archivio delle sessioni: {0}" -f $cartellaStore)
 $fileGettone = Join-Path $cartellaStore '.spegnimento-gettone'
 
 # ── 1) costruisci e consegna ────────────────────────────────────────────────────────────────────

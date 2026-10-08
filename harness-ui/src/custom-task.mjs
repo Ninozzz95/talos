@@ -94,32 +94,32 @@ export function elencaCartelleProgetto(cartelleProgetto) {
  * percorso per richiesta e deve tornare un errore HTTP onesto, non far
  * cadere il server.
  */
-function validaCartellaLibera(percorsoInput, { realpathSyncFn = realpathSync, statSyncFn = statSync, accessSyncFn = accessSync } = {}) {
+export function validaCartellaLibera(percorsoInput, { realpathSyncFn = realpathSync, statSyncFn = statSync, accessSyncFn = accessSync } = {}) {
   if (typeof percorsoInput !== 'string' || percorsoInput.trim().length === 0) {
     throw new CustomTaskError('cartellaLibera mancante', 'QUERY_INVALID');
   }
   if (!isAbsolute(percorsoInput)) {
-    throw new CustomTaskError('cartellaLibera deve essere un percorso assoluto', 'QUERY_INVALID');
+    throw new CustomTaskError('cartellaLibera must be an absolute path', 'QUERY_INVALID');
   }
   let reale;
   try {
     reale = realpathSyncFn(percorsoInput);
   } catch {
-    throw new CustomTaskError(`Il percorso non esiste o non è raggiungibile: ${percorsoInput}`, 'PROJECT_NOT_ALLOWED');
+    throw new CustomTaskError(`The path does not exist or cannot be reached: ${percorsoInput}`, 'PROJECT_NOT_ALLOWED');
   }
   let stat;
   try {
     stat = statSyncFn(reale);
   } catch {
-    throw new CustomTaskError(`Il percorso non è leggibile: ${percorsoInput}`, 'PROJECT_NOT_ALLOWED');
+    throw new CustomTaskError(`The path is not readable: ${percorsoInput}`, 'PROJECT_NOT_ALLOWED');
   }
   if (!stat.isDirectory()) {
-    throw new CustomTaskError(`Il percorso non è una cartella: ${percorsoInput}`, 'PROJECT_NOT_ALLOWED');
+    throw new CustomTaskError(`The path is not a folder: ${percorsoInput}`, 'PROJECT_NOT_ALLOWED');
   }
   try {
     accessSyncFn(reale, constants.R_OK | constants.W_OK);
   } catch {
-    throw new CustomTaskError(`La cartella non è leggibile/scrivibile: ${percorsoInput}`, 'PROJECT_NOT_ALLOWED');
+    throw new CustomTaskError(`The folder is not readable/writable: ${percorsoInput}`, 'PROJECT_NOT_ALLOWED');
   }
   return reale;
 }
@@ -137,7 +137,7 @@ function validaCartellaLibera(percorsoInput, { realpathSyncFn = realpathSync, st
  */
 export function preparaEsecuzioneLibera(cartelleProgetto, { cartellaId, cartellaLibera, consegna, comandoProva }, deps = {}) {
   if ((cartellaId && cartellaLibera) || (!cartellaId && !cartellaLibera)) {
-    throw new CustomTaskError('serve ESATTAMENTE uno fra cartellaId e cartellaLibera', 'QUERY_INVALID');
+    throw new CustomTaskError("exactly one of cartellaId and cartellaLibera is required", 'QUERY_INVALID');
   }
 
   let cartella;
@@ -150,7 +150,7 @@ export function preparaEsecuzioneLibera(cartelleProgetto, { cartellaId, cartella
       throw new CustomTaskError('cartellaId mancante', 'QUERY_INVALID');
     }
     const voce = cartelleProgetto.find((candidata) => candidata.id === cartellaId);
-    if (!voce) throw new CustomTaskError(`Cartella non ammessa: ${cartellaId}`);
+    if (!voce) throw new CustomTaskError(`Folder is not allowed: ${cartellaId}`);
     cartella = voce.percorso;
     nomeProgetto = voce.nome;
   }
@@ -162,7 +162,7 @@ export function preparaEsecuzioneLibera(cartelleProgetto, { cartellaId, cartella
   let comando = COMANDO_PROVA_DEFAULT;
   if (comandoProva !== undefined && comandoProva !== null) {
     if (typeof comandoProva !== 'string' || comandoProva.trim().length === 0) {
-      throw new CustomTaskError('comandoProva non valido', 'QUERY_INVALID');
+      throw new CustomTaskError("invalid comandoProva", 'QUERY_INVALID');
     }
     comando = comandoProva;
   }

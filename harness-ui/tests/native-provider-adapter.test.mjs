@@ -79,7 +79,7 @@ test('NATIVE-05 cambio provider elimina stato estraneo senza cambiare testo o st
   assert.deepEqual(stripNativeMetadata([assistant]), [{ role: 'assistant', content: 'ok' }]);
   assert.equal(toNativeMessages([assistant], { provider: 'anthropic', model: 'claude-sonnet-5' })[0].content[0].text, 'ok');
   assert.ok(assistant.talos_provider_state);
-  assert.throws(() => toNativeMessages([{ role: 'user', content: [{ type: 'image_url', image_url: { url: 'http://localhost/private' } }] }], { provider: 'gemini' }), /immagine/i);
+  assert.throws(() => toNativeMessages([{ role: 'user', content: [{ type: 'image_url', image_url: { url: 'http://localhost/private' } }] }], { provider: 'gemini' }), /image/i);
 });
 
 test('NATIVE-07 stream troncato fallisce esplicitamente e inoltra stopSequences', async () => {
@@ -88,11 +88,25 @@ test('NATIVE-07 stream troncato fallisce esplicitamente e inoltra stopSequences'
     body = JSON.parse(init.body);
     return new Response('data: ' + JSON.stringify({ ...geminiReply, candidates: [{ content: { role: 'model', parts: [{ text: 'Parziale' }] }, finishReason: 'MAX_TOKENS' }] }) + '\n\n', { headers: { 'content-type': 'text/event-stream' } });
   });
-  await assert.rejects(() => result.text(), /incompleta.*length/);
+  await assert.rejects(() => result.text(), /incomplete.*length/);
   assert.deepEqual(body.generationConfig.stopSequences, ['ALT']);
 });
 
 test('NATIVE-08 EOF senza finishReason non viene promosso a risposta riuscita', async () => {
   const result = await native('gemini', { messages, stream: true }, async () => new Response('data: ' + JSON.stringify({ candidates: [{ content: { role: 'model', parts: [{text:'Un quad'}] } }], usageMetadata:{promptTokenCount:20,candidatesTokenCount:18,totalTokenCount:38} }) + '\n\n', { headers:{'content-type':'text/event-stream'} }));
-  await assert.rejects(() => consumaFlussoSSE(result), /incompleta.*other/);
+  await assert.rejects(() => consumaFlussoSSE(result), /incomplete.*other/);
+});
+
+/* K4b (04/10/2026) — la frase «risposta incompleta» arriva alla chat come RunError: frase INGLESE + chiave + valori, e la voce italiana è quella di prima. */
+test('K4B-NATIVE-01 — risposta incompleta: la frase inglese coincide con la voce inglese, la voce italiana è la frase di prima', async () => {
+  const { default: dizionario } = await import('../frontend/src/i18n/testi/server.js');
+  const voce = (lingua, chiave, params) => dizionario[lingua][chiave.replace(/^server\./u, '')].replace(/\{([a-zA-Z0-9_]+)\}/gu, (t, n) => String(params[n]));
+  const result = await native('gemini', { messages, stream: true }, async () => new Response('data: ' + JSON.stringify({ ...geminiReply, candidates: [{ content: { role: 'model', parts: [{ text: 'Parziale' }] }, finishReason: 'MAX_TOKENS' }] }) + '\n\n', { headers: { 'content-type': 'text/event-stream' } }));
+  const errore = await result.text().then(() => null, (e) => e);
+  assert.equal(errore?.code, 'NATIVE_RESPONSE_INCOMPLETE');
+  assert.equal(errore.chiave, 'server.nativeAdapter.incompleteWithReason');
+  assert.deepEqual(errore.params, { provider: 'gemini', reason: 'length' });
+  assert.equal(errore.message, voce('en', errore.chiave, errore.params), 'la frase inglese è la voce inglese coi valori');
+  assert.equal(voce('it', errore.chiave, errore.params), 'Risposta gemini incompleta (length). Riprova: la cronologia precedente è conservata.');
+  assert.equal(voce('it', 'server.nativeAdapter.incompleteNamed', { label: 'MiniMax' }), 'Risposta di MiniMax incompleta. Riprova: la cronologia precedente è conservata.');
 });

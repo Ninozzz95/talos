@@ -3,9 +3,8 @@ import { chiudiToastAperti } from './aiuto-toast.mjs';
 
 test('R4-RETURN-ASK-GATE-TRANSITION: pending Ask protects controls, resolution restores the transparent overlay', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.route('**/api/v1/sessions/r4-return-ask/events*', (route) => route.fulfill({
-    contentType: 'text/event-stream', body: '',
-  }));
+  // VELO-SPEC (08/10/2026): stream aperto e muto — un corpo che si chiude fa riaprire lo stream, e ogni onopen rimette la chat nella storia
+  await page.route('**/api/v1/sessions/r4-return-ask/events*', () => { /* resta pending */ });
   await page.route('**/api/v1/sessions/r4-return-ask/children', (route) => route.fulfill({
     json: { ok: true, data: { figli: [] } },
   }));
@@ -19,6 +18,9 @@ test('R4-RETURN-ASK-GATE-TRANSITION: pending Ask protects controls, resolution r
     const runtime = window.__talosHarnessUiRuntime;
     runtime.passaASessione('r4-return-ask', 'workspace', 'Ask e ritorno', 'z-ai/glm-5.3-flash', { conclusa: false });
     const generation = runtime.realSessionState.generation;
+    // VELO-SPEC (08/10/2026): il confine che il server manda SEMPRE, a storia vuota, PRIMA degli eventi: gli eventi qui sotto
+    // restano DAL VIVO, il percorso che questa prova copriva prima di A1-R3 (col confine dopo era verde lo stesso: misurato).
+    runtime.handleRealEvent({ type: 'CUSTOM', name: 'talos.fine-rigiocata', value: null }, generation);
     runtime.handleRealEvent({ type: 'RunStarted', _sequenza: 9301,
       input: { consegna: 'Riepiloga il lavoro' }, contesto: {} }, generation);
     runtime.handleRealEvent({ type: 'TextMessageContent', _sequenza: 9302,
@@ -34,6 +36,8 @@ test('R4-RETURN-ASK-GATE-TRANSITION: pending Ask protects controls, resolution r
   const down = page.locator('#chatTornaInFondo');
   const band = page.locator('.talos-chat-return');
   await expect(page.locator('#userQuestionDock [data-request-id="ask-return-1"]')).toBeVisible();
+  // VELO-SPEC: sotto il velo il custode tiene il fondo (A1-R2), e la persona non vede ancora niente da scorrere: si scorre dopo
+  await page.waitForFunction(() => !document.querySelector('#conversation')?.classList.contains('is-restoring'));
   await scroller.evaluate((node) => { node.scrollTop = 0; node.dispatchEvent(new Event('scroll')); });
   await expect(down).toBeVisible();
   await expect.poll(() => band.evaluate((node) => node.getBoundingClientRect().height)).toBe(48);
@@ -59,9 +63,8 @@ test('R4-RETURN-ASK-GATE-TRANSITION: pending Ask protects controls, resolution r
 
 test('R4-RETURN-NO-GATE-HITTEST: completed message actions remain clickable under the transparent return control', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.route('**/api/v1/sessions/r4-return-history/events*', (route) => route.fulfill({
-    contentType: 'text/event-stream', body: '',
-  }));
+  // VELO-SPEC (08/10/2026): stream aperto e muto — un corpo che si chiude fa riaprire lo stream, e ogni onopen rimette la chat nella storia
+  await page.route('**/api/v1/sessions/r4-return-history/events*', () => { /* resta pending */ });
   await page.route('**/api/v1/sessions/r4-return-history/children', (route) => route.fulfill({
     json: { ok: true, data: { figli: [] } },
   }));
@@ -75,6 +78,9 @@ test('R4-RETURN-NO-GATE-HITTEST: completed message actions remain clickable unde
     const runtime = window.__talosHarnessUiRuntime;
     runtime.passaASessione('r4-return-history', 'workspace', 'Cronologia', 'z-ai/glm-5.3-flash', { conclusa: false });
     const generation = runtime.realSessionState.generation;
+    // VELO-SPEC (08/10/2026): il confine che il server manda SEMPRE, a storia vuota, PRIMA degli eventi: gli eventi qui sotto
+    // restano DAL VIVO, il percorso che questa prova copriva prima di A1-R3 (col confine dopo era verde lo stesso: misurato).
+    runtime.handleRealEvent({ type: 'CUSTOM', name: 'talos.fine-rigiocata', value: null }, generation);
     for (let index = 1; index <= 6; index += 1) {
       const seq = index * 10;
       runtime.handleRealEvent({ type: 'RunStarted', _sequenza: seq,
@@ -91,6 +97,8 @@ test('R4-RETURN-NO-GATE-HITTEST: completed message actions remain clickable unde
   });
   const scroller = page.locator('#schermoChat .talos-conversation');
   const down = page.locator('#chatTornaInFondo');
+  // VELO-SPEC: sotto il velo il custode tiene il fondo (A1-R2): si misura e si scorre dopo che la cronologia è visibile
+  await page.waitForFunction(() => !document.querySelector('#conversation')?.classList.contains('is-restoring'));
   const max = await scroller.evaluate((node) => node.scrollHeight - node.clientHeight);
   expect(max).toBeGreaterThan(400);
   const hits = [];
@@ -121,9 +129,8 @@ test('R4-RETURN-NO-GATE-HITTEST: completed message actions remain clickable unde
 });
 
 test('R4-PLAN-FINAL-REAL: a completed Plan run renders its real final text as a proposal', async ({ page }) => {
-  await page.route('**/api/v1/sessions/r4-plan-ui/events*', (route) => route.fulfill({
-    contentType: 'text/event-stream', body: '',
-  }));
+  // VELO-SPEC (08/10/2026): stream aperto e muto — un corpo che si chiude fa riaprire lo stream, e ogni onopen rimette la chat nella storia
+  await page.route('**/api/v1/sessions/r4-plan-ui/events*', () => { /* resta pending */ });
   await page.route('**/api/v1/sessions/r4-plan-ui/children', (route) => route.fulfill({
     json: { ok: true, data: { figli: [] } },
   }));
@@ -137,6 +144,9 @@ test('R4-PLAN-FINAL-REAL: a completed Plan run renders its real final text as a 
     const runtime = window.__talosHarnessUiRuntime;
     runtime.passaASessione('r4-plan-ui', 'workspace', 'Piano R4', 'z-ai/glm-5.3-flash', { conclusa: false });
     const generation = runtime.realSessionState.generation;
+    // VELO-SPEC (08/10/2026): il confine che il server manda SEMPRE, a storia vuota, PRIMA degli eventi: gli eventi qui sotto
+    // restano DAL VIVO, il percorso che questa prova copriva prima di A1-R3 (col confine dopo era verde lo stesso: misurato).
+    runtime.handleRealEvent({ type: 'CUSTOM', name: 'talos.fine-rigiocata', value: null }, generation);
     runtime.handleRealEvent({
       type: 'RunStarted', _sequenza: 8101,
       input: { consegna: 'Prepara il piano' },

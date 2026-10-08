@@ -30,6 +30,12 @@ async function apri(page, id = 'attiva', chiusa = false) {
   await page.evaluate(({ id, chiusa }) => {
     const r = window.__talosHarnessUiRuntime;
     r.passaASessione(`chat-proof-${id}`, 'workspace', 'Conversazione di prova', 'local:prova', { conclusa: chiusa, modello: 'local:prova' });
+    /* VELO-SPEC (08/10/2026, bugfixer): da A1-R3 (ba0447613) ogni sessione aperta resta velata finché il server non dice che
+       la storia è finita, e il server lo dice SEMPRE, anche a storia vuota (`talos.fine-rigiocata`, http-app.mjs subito dopo
+       `fineReplay()`). Qui lo stream finto è muto: per una sessione APERTA il confine lo manda la prova, come il server a storia
+       vuota — e gli eventi qui sotto sono dal vivo, cioè quello che queste prove hanno sempre voluto dire. Per una CHIUSA gli
+       eventi della prova sono la sua storia (CHAT-ATTESA-03): il confine non va mandato prima. */
+    if (!chiusa) r.handleRealEvent({ type: 'CUSTOM', name: 'talos.fine-rigiocata', value: null }, r.realSessionState.generation);
   }, { id, chiusa });
 }
 async function eventi(page, events) {

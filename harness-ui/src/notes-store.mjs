@@ -59,14 +59,14 @@ function percorsoDi(cartella, id) {
 
 function validaTitolo(title) {
   if (typeof title !== 'string' || title.trim().length === 0 || title.length > TITOLO_MASSIMO) {
-    throw new NoteStoreError(`title deve avere 1-${TITOLO_MASSIMO} caratteri`, 'NOTE_INVALID');
+    throw new NoteStoreError(`title must have 1-${TITOLO_MASSIMO} characters`, 'NOTE_INVALID');
   }
   return title.trim();
 }
 
 function validaContenuto(content) {
   if (typeof content !== 'string' || content.trim().length === 0 || content.length > CONTENUTO_MASSIMO) {
-    throw new NoteStoreError(`content deve avere 1-${CONTENUTO_MASSIMO} caratteri`, 'NOTE_INVALID');
+    throw new NoteStoreError(`content must have 1-${CONTENUTO_MASSIMO} characters`, 'NOTE_INVALID');
   }
   return content.trim();
 }
@@ -124,14 +124,14 @@ const ORIGINI = Object.freeze(['persona', 'modello']);
 
 function validaFormato(formato) {
   if (!FORMATI.includes(formato)) {
-    throw new NoteStoreError(`formato deve essere uno fra ${FORMATI.join('/')}`, 'NOTE_INVALID');
+    throw new NoteStoreError(`formato must be one of ${FORMATI.join('/')}`, 'NOTE_INVALID');
   }
   return formato;
 }
 
 function validaOrigine(origine) {
   if (!ORIGINI.includes(origine)) {
-    throw new NoteStoreError(`origine deve essere una fra ${ORIGINI.join('/')}`, 'NOTE_INVALID');
+    throw new NoteStoreError(`origine must be one of ${ORIGINI.join('/')}`, 'NOTE_INVALID');
   }
   return origine;
 }
@@ -227,7 +227,7 @@ export async function aggiornaNota({ cartella, id, title, content, formato }, de
   const writeFileFn = deps.writeFileFn ?? fsp.writeFile;
   const clockFn = deps.clockFn ?? (() => new Date());
   const voce = await leggiNota({ cartella, id }, { readFileFn });
-  if (!voce) throw new NoteStoreError(`nessuna nota con id ${id}`, 'NOTE_NOT_FOUND');
+  if (!voce) throw new NoteStoreError(`no note with id ${id}`, 'NOTE_NOT_FOUND');
   if (title !== undefined) voce.titolo = validaTitolo(title);
   if (content !== undefined) voce.contenuto = validaContenuto(content);
   /* ⛔ `formato: null` NON è «lascia stare» come `undefined`: è «torna a rilevarlo dal contenuto»,

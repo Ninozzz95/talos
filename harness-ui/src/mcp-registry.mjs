@@ -72,29 +72,29 @@ async function caricaServerMcpDaFile({ cartella, nomeFile = NOME_FILE_MCP }, dep
     testo = await readFileFn(percorso, 'utf8');
   } catch (errore) {
     if (errore?.code === 'ENOENT') return { server: [] };
-    throw new McpRegistryError(`Impossibile leggere ${nomeFile}: ${errore.message}`, 'MCP_CONFIG_READ_FAILED');
+    throw new McpRegistryError(`Cannot read ${nomeFile}: ${errore.message}`, 'MCP_CONFIG_READ_FAILED');
   }
   let dati;
   try {
     dati = JSON.parse(testo);
   } catch {
-    throw new McpRegistryError(`${nomeFile} non è un JSON valido`, 'MCP_CONFIG_MALFORMED');
+    throw new McpRegistryError(`${nomeFile} is not valid JSON`, 'MCP_CONFIG_MALFORMED');
   }
   if (!dati || !Array.isArray(dati.server)) {
-    throw new McpRegistryError(`${nomeFile} deve avere un campo "server" (array)`, 'MCP_CONFIG_MALFORMED');
+    throw new McpRegistryError(`${nomeFile} must have a "server" field (array)`, 'MCP_CONFIG_MALFORMED');
   }
   const server = dati.server.map((voce, indice) => {
     if (typeof voce?.id !== 'string' || voce.id.length === 0) {
-      throw new McpRegistryError(`server[${indice}] manca di "id" (stringa non vuota)`, 'MCP_CONFIG_MALFORMED');
+      throw new McpRegistryError(`server[${indice}] is missing "id" (a non-empty string)`, 'MCP_CONFIG_MALFORMED');
     }
     if (typeof voce.comando !== 'string' || voce.comando.length === 0) {
-      throw new McpRegistryError(`server[${indice}] ("${voce.id}") manca di "comando" (stringa non vuota)`, 'MCP_CONFIG_MALFORMED');
+      throw new McpRegistryError(`server[${indice}] ("${voce.id}") is missing "comando" (a non-empty string)`, 'MCP_CONFIG_MALFORMED');
     }
     if (voce.argomenti !== undefined && (!Array.isArray(voce.argomenti) || !voce.argomenti.every((a) => typeof a === 'string'))) {
-      throw new McpRegistryError(`server[${indice}] ("${voce.id}") ha "argomenti" non valido — atteso un array di stringhe`, 'MCP_CONFIG_MALFORMED');
+      throw new McpRegistryError(`server[${indice}] ("${voce.id}") has an invalid "argomenti" — an array of strings was expected`, 'MCP_CONFIG_MALFORMED');
     }
     if (!Array.isArray(voce.allowlist) || voce.allowlist.length === 0 || !voce.allowlist.every((n) => typeof n === 'string' && n.length > 0)) {
-      throw new McpRegistryError(`server[${indice}] ("${voce.id}") manca di "allowlist" (array non vuoto di nomi tool) — un server MCP non si dichiara senza dire quali tool sono ammessi`, 'MCP_CONFIG_MALFORMED');
+      throw new McpRegistryError(`server[${indice}] ("${voce.id}") is missing "allowlist" (a non-empty array of tool names) — an MCP server is not declared without saying which tools are allowed`, 'MCP_CONFIG_MALFORMED');
     }
     const argomenti = voce.argomenti ?? [];
     const hash = createHash('sha256').update(JSON.stringify({ comando: voce.comando, argomenti, allowlist: voce.allowlist })).digest('hex');
@@ -109,7 +109,7 @@ function percorsoTrust(cartellaTrust, serverId) {
   // stringa non validata come nome file — stesso principio già in uso
   // in hook-registry.mjs/workspace-files.mjs.
   if (typeof serverId !== 'string' || serverId.length === 0 || /[\\/]|\.\./.test(serverId)) {
-    throw new McpRegistryError('serverId non valido — un nome, non un percorso', 'MCP_SERVER_ID_INVALID');
+    throw new McpRegistryError('Invalid serverId — a name, not a path', 'MCP_SERVER_ID_INVALID');
   }
   return join(cartellaTrust, `${serverId}.json`);
 }

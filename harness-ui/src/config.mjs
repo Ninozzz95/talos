@@ -12,6 +12,7 @@ import { fileURLToPath } from 'node:url';
 
 import { ID_DESTINAZIONE_CHAT, idPerWire } from './provider-registry.mjs';
 import { FORMA_ID_MODELLO_LOCALE } from './local-model-store.mjs';
+import { CHIAVE_COORDINAZIONE } from './coordinazione.mjs';
 
 // P-L · JSON del runtime non segreto dell'agente esterno, letto solo alla richiesta.
 export const ENV_AGENTE_ESTERNO = 'TALOS_AGENTE_ESTERNO';
@@ -54,8 +55,8 @@ function fail(message) {
 export class PortaInUsoError extends Error {
   constructor(porta, { esplicita = false, tentativi } = {}) {
     super(esplicita
-      ? `La porta ${porta} è già in uso (TALOS_HARNESS_UI_PORT è impostata esplicitamente: non si sceglie una porta diversa da sola).`
-      : `Nessuna porta libera trovata da quella richiesta fino a ${porta} (${tentativi} tentativi).`);
+      ? `Port ${porta} is already in use (TALOS_HARNESS_UI_PORT is set explicitly: a different port is not chosen on its own).`
+      : `No free port found from the requested one up to ${porta} (${tentativi} attempts).`);
     this.name = 'PortaInUsoError';
     this.code = 'PORT_IN_USE';
     this.porta = porta;
@@ -109,7 +110,7 @@ function parseLabs(raw, moduleUrl) {
   const richiesti = [...new Set(String(raw).split(',').map((s) => s.trim()).filter(Boolean))];
   const ignoti = richiesti.filter((nome) => !ammessi.includes(nome));
   if (ignoti.length > 0) {
-    fail(`TALOS_LABS: flag non dichiarato in labs/feature-flags.json: ${ignoti.join(', ')} — ammessi: ${ammessi.length ? ammessi.join(', ') : '(nessuno: file assente)'}`);
+    fail(`TALOS_LABS: flag not declared in labs/feature-flags.json: ${ignoti.join(', ')} — allowed: ${ammessi.length ? ammessi.join(', ') : '(none: file missing)'}`);
   }
   return Object.freeze(richiesti);
 }
@@ -127,7 +128,7 @@ export const LUNGHEZZA_MINIMA_TOKEN = 32;
 function parseToken(raw) {
   if (raw === undefined || raw === null || raw === '') return undefined;
   if (typeof raw !== 'string' || raw.trim().length < LUNGHEZZA_MINIMA_TOKEN || /\s/.test(raw.trim())) {
-    fail(`TALOS_HARNESS_UI_TOKEN deve avere almeno ${LUNGHEZZA_MINIMA_TOKEN} caratteri, senza spazi`);
+    fail(`TALOS_HARNESS_UI_TOKEN must have at least ${LUNGHEZZA_MINIMA_TOKEN} characters, without spaces`);
   }
   return raw.trim();
 }
@@ -135,7 +136,7 @@ function parseToken(raw) {
 function parseModello(raw) {
   if (raw === undefined || raw === '') return MODELLI_AMMESSI[0];
   if (typeof raw !== 'string' || !MODELLI_AMMESSI.includes(raw)) {
-    fail(`TALOS_HARNESS_UI_MODEL deve essere uno fra: ${MODELLI_AMMESSI.join(', ')}`);
+    fail(`TALOS_HARNESS_UI_MODEL must be one of: ${MODELLI_AMMESSI.join(', ')}`);
   }
   return raw;
 }
@@ -322,7 +323,8 @@ export function permessiPerAttrezzoRichiestaValido(raw) {
   if (typeof raw !== 'object' || Array.isArray(raw)) return false;
   const chiavi = Object.keys(raw);
   if (chiavi.length === 0) return false; // {} esplicito non ha senso: si omette il campo, non si manda vuoto
-  return chiavi.every((k) => ATTREZZI_CON_PERMESSO_PER_ATTREZZO.has(k) && VALORI_PERMESSO_PER_ATTREZZO.has(raw[k]));
+  /* C2b (08/10/2026): anche la chiave di Coordinazione, che NON è un attrezzo di questo insieme — vedi `coordinazione.mjs` */
+  return chiavi.every((k) => (ATTREZZI_CON_PERMESSO_PER_ATTREZZO.has(k) || k === CHIAVE_COORDINAZIONE) && VALORI_PERMESSO_PER_ATTREZZO.has(raw[k]));
 }
 
 /**
@@ -348,32 +350,32 @@ function parseCartelleProgetto(raw, defaultProjectDir) {
     let percorso;
     try {
       percorso = realpathSync(defaultProjectDir);
-      if (!statSync(percorso).isDirectory()) fail('La workspace predefinita non è una directory');
+      if (!statSync(percorso).isDirectory()) fail('The default workspace is not a directory');
       accessSync(percorso, constants.R_OK | constants.W_OK);
     } catch (error) {
       if (error instanceof ConfigurationError) throw error;
-      fail('La workspace predefinita non esiste o non è leggibile/scrivibile');
+      fail('The default workspace does not exist or is not readable/writable');
     }
     return Object.freeze([{ id: 'default', percorso, nome: percorso.split(/[\\/]/).pop() || percorso }]);
   }
-  if (typeof raw !== 'string') fail('TALOS_HARNESS_UI_PROJECT_DIRS non valida');
+  if (typeof raw !== 'string') fail('TALOS_HARNESS_UI_PROJECT_DIRS is not valid');
   const cartelle = richiesti.map((percorsoInput, indice) => {
-    if (!isAbsolute(percorsoInput)) fail(`TALOS_HARNESS_UI_PROJECT_DIRS[${indice}] deve essere assoluta: ${percorsoInput}`);
+    if (!isAbsolute(percorsoInput)) fail(`TALOS_HARNESS_UI_PROJECT_DIRS[${indice}] must be absolute: ${percorsoInput}`);
     let percorso;
     try {
       percorso = realpathSync(percorsoInput);
-      if (!statSync(percorso).isDirectory()) fail(`TALOS_HARNESS_UI_PROJECT_DIRS[${indice}] non è una directory: ${percorsoInput}`);
+      if (!statSync(percorso).isDirectory()) fail(`TALOS_HARNESS_UI_PROJECT_DIRS[${indice}] is not a directory: ${percorsoInput}`);
       accessSync(percorso, constants.R_OK | constants.W_OK);
     } catch (error) {
       if (error instanceof ConfigurationError) throw error;
-      fail(`TALOS_HARNESS_UI_PROJECT_DIRS[${indice}] non esiste o non è leggibile/scrivibile: ${percorsoInput}`);
+      fail(`TALOS_HARNESS_UI_PROJECT_DIRS[${indice}] does not exist or is not readable/writable: ${percorsoInput}`);
     }
     return Object.freeze({ id: String(indice), percorso, nome: percorso.split(/[\\/]/).pop() || percorso });
   });
 
   const duplicati = new Set();
   for (const { percorso } of cartelle) {
-    if (duplicati.has(percorso)) fail(`TALOS_HARNESS_UI_PROJECT_DIRS ripete la stessa cartella: ${percorso}`);
+    if (duplicati.has(percorso)) fail(`TALOS_HARNESS_UI_PROJECT_DIRS repeats the same folder: ${percorso}`);
     duplicati.add(percorso);
   }
   return Object.freeze(cartelle);
@@ -382,7 +384,7 @@ function parseCartelleProgetto(raw, defaultProjectDir) {
 function parsePort(raw) {
   if (raw === undefined || raw === '') return DEFAULT_PORT;
   if (typeof raw !== 'string' || !/^\d+$/.test(raw)) {
-    fail('TALOS_HARNESS_UI_PORT non valida');
+    fail('TALOS_HARNESS_UI_PORT is not valid');
   }
   const port = Number(raw);
   if (!Number.isInteger(port) || port < 1024 || port > 65535) {
@@ -459,7 +461,7 @@ function parseModelsDevUrl(raw) {
     if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.hash) throw new Error();
     return url.href;
   } catch {
-    fail('TALOS_HARNESS_UI_MODELS_DEV_URL deve essere un indirizzo HTTP(S) senza credenziali o frammenti');
+    fail('TALOS_HARNESS_UI_MODELS_DEV_URL must be an HTTP(S) address without credentials or fragments');
   }
 }
 
@@ -491,14 +493,14 @@ function kernelNelRepo(moduleUrl) {
 function parseOwnerRuntimeModule(raw, moduleUrl) {
   if (raw === undefined || raw === '') return kernelNelRepo(moduleUrl);
   if (typeof raw !== 'string' || raw.trim() === '' || !isAbsolute(raw.trim())) {
-    fail('TALOS_OWNER_RUNTIME_MODULE deve essere un file assoluto');
+    fail('TALOS_OWNER_RUNTIME_MODULE must be an absolute file');
   }
   const percorso = resolve(raw.trim());
   try {
-    if (!statSync(percorso).isFile()) fail('TALOS_OWNER_RUNTIME_MODULE non è un file');
+    if (!statSync(percorso).isFile()) fail('TALOS_OWNER_RUNTIME_MODULE is not a file');
   } catch (error) {
     if (error instanceof ConfigurationError) throw error;
-    fail('TALOS_OWNER_RUNTIME_MODULE non esiste o non è leggibile');
+    fail('TALOS_OWNER_RUNTIME_MODULE does not exist or is not readable');
   }
   return percorso;
 }
@@ -506,17 +508,17 @@ function parseOwnerRuntimeModule(raw, moduleUrl) {
 function parseContextTrial(env) {
   const raw = env.TALOS_CONTEXT_TRIAL;
   if (raw === undefined || raw === '') return null;
-  if (typeof raw !== 'string' || raw.length > 65536) fail('TALOS_CONTEXT_TRIAL deve essere un manifest JSON limitato alle chat di prova.');
-  if (!env.TALOS_HARNESS_UI_PORT || parsePort(env.TALOS_HARNESS_UI_PORT) === 4174 || typeof env.TALOS_HARNESS_UI_SESSIONS_DIR !== 'string' || !env.TALOS_HARNESS_UI_SESSIONS_DIR.trim()) fail('Il trial del contesto richiede una porta esplicita diversa da 4174 e una directory sessioni isolata.');
+  if (typeof raw !== 'string' || raw.length > 65536) fail('TALOS_CONTEXT_TRIAL must be a JSON manifest limited to the trial chats.');
+  if (!env.TALOS_HARNESS_UI_PORT || parsePort(env.TALOS_HARNESS_UI_PORT) === 4174 || typeof env.TALOS_HARNESS_UI_SESSIONS_DIR !== 'string' || !env.TALOS_HARNESS_UI_SESSIONS_DIR.trim()) fail('The context trial requires an explicit port other than 4174 and an isolated sessions directory.');
   let trial;
-  try { trial = JSON.parse(raw); } catch { fail('TALOS_CONTEXT_TRIAL non contiene JSON valido.'); }
-  if (!trial || Array.isArray(trial) || Object.keys(trial).some(key => !['sessionIds', 'models'].includes(key)) || !Array.isArray(trial.sessionIds) || !trial.sessionIds.length || !Array.isArray(trial.models) || !trial.models.length) fail('Manifest del trial del contesto non valido.');
-  if (trial.sessionIds.some(id => typeof id !== 'string' || !/^[a-zA-Z0-9_-]{1,256}$/u.test(id)) || new Set(trial.sessionIds).size !== trial.sessionIds.length) fail('Identità delle chat di prova non valide o duplicate.');
+  try { trial = JSON.parse(raw); } catch { fail('TALOS_CONTEXT_TRIAL does not contain valid JSON.'); }
+  if (!trial || Array.isArray(trial) || Object.keys(trial).some(key => !['sessionIds', 'models'].includes(key)) || !Array.isArray(trial.sessionIds) || !trial.sessionIds.length || !Array.isArray(trial.models) || !trial.models.length) fail('Invalid context trial manifest.');
+  if (trial.sessionIds.some(id => typeof id !== 'string' || !/^[a-zA-Z0-9_-]{1,256}$/u.test(id)) || new Set(trial.sessionIds).size !== trial.sessionIds.length) fail('Trial chat identities are invalid or duplicated.');
   const models = new Set();
   for (const profile of trial.models) {
-    if (!profile || Array.isArray(profile) || Object.keys(profile).some(key => !['provider', 'model', 'windowTokens', 'responseReserve'].includes(key)) || !ID_DESTINAZIONE_CHAT.includes(profile.provider) || typeof profile.model !== 'string' || !profile.model.trim() || !Number.isSafeInteger(profile.windowTokens) || !Number.isSafeInteger(profile.responseReserve) || profile.responseReserve < 1 || profile.responseReserve >= profile.windowTokens) fail('Profilo modello del trial non valido: indicare finestra e riserva, senza credenziali.');
+    if (!profile || Array.isArray(profile) || Object.keys(profile).some(key => !['provider', 'model', 'windowTokens', 'responseReserve'].includes(key)) || !ID_DESTINAZIONE_CHAT.includes(profile.provider) || typeof profile.model !== 'string' || !profile.model.trim() || !Number.isSafeInteger(profile.windowTokens) || !Number.isSafeInteger(profile.responseReserve) || profile.responseReserve < 1 || profile.responseReserve >= profile.windowTokens) fail('Invalid trial model profile: give the window and the reserve, without credentials.');
     const id = `${profile.provider}:${profile.model}`;
-    if (models.has(id)) fail('Profilo modello duplicato nel trial.');
+    if (models.has(id)) fail('Duplicate model profile in the trial.');
     models.add(id); Object.freeze(profile);
   }
   Object.freeze(trial.models); Object.freeze(trial.sessionIds);
@@ -527,7 +529,7 @@ function parseWorkflowDataRoot(env) {
   const explicit = env.TALOS_HARNESS_UI_WORKFLOW_DIR;
   if (explicit !== undefined && explicit !== null && explicit !== '') {
     if (typeof explicit !== 'string' || !isAbsolute(explicit.trim())) {
-      fail('TALOS_HARNESS_UI_WORKFLOW_DIR deve essere una cartella assoluta');
+      fail('TALOS_HARNESS_UI_WORKFLOW_DIR must be an absolute folder');
     }
     return resolve(explicit.trim());
   }
@@ -535,7 +537,7 @@ function parseWorkflowDataRoot(env) {
   const desktopDataRoot = env.TALOS_DESKTOP_DATA_DIR;
   if (desktopDataRoot !== undefined && desktopDataRoot !== null && desktopDataRoot !== '') {
     if (typeof desktopDataRoot !== 'string' || !isAbsolute(desktopDataRoot.trim())) {
-      fail('TALOS_DESKTOP_DATA_DIR deve essere una cartella assoluta quando configura Workflow');
+      fail('TALOS_DESKTOP_DATA_DIR must be an absolute folder when it configures Workflow');
     }
     return join(resolve(desktopDataRoot.trim()), 'workflows');
   }
@@ -547,11 +549,11 @@ export function loadConfig(
   moduleUrl = new URL('../server.mjs', import.meta.url),
   { sondaMotore = spawnSync } = {},
 ) {
-  if (!env || typeof env !== 'object') fail('Configurazione ambiente non valida');
+  if (!env || typeof env !== 'object') fail('Invalid environment configuration');
 
   const host = env.TALOS_HARNESS_UI_HOST || DEFAULT_HOST;
   if (typeof host !== 'string' || !LOOPBACK_HOSTS.has(host)) {
-    fail('TALOS_HARNESS_UI_HOST deve essere loopback');
+    fail('TALOS_HARNESS_UI_HOST must be loopback');
   }
 
   /*
@@ -589,7 +591,7 @@ export function loadConfig(
       ? resolve(String(env.TALOS_HARNESS_UI_PUBLIC_DIR))
       : resolve(fileURLToPath(new URL('./public/', moduleUrl)));
   } catch {
-    fail('Percorso modulo non valido');
+    fail('Invalid module path');
   }
 
   return Object.freeze({
@@ -657,17 +659,17 @@ function parseFirmaRicevute(env) {
     : '';
   if (!keyId && !privateKeyB64) return undefined;
   if (!keyId || !privateKeyB64) {
-    fail('TALOS_HARNESS_RECEIPT_KEY_ID e TALOS_HARNESS_RECEIPT_PRIVATE_KEY_B64 vanno configurate insieme, mai una sola');
+    fail('TALOS_HARNESS_RECEIPT_KEY_ID and TALOS_HARNESS_RECEIPT_PRIVATE_KEY_B64 must be configured together, never just one');
   }
 
   let chiavePrivata;
   try {
     chiavePrivata = Buffer.from(privateKeyB64, 'base64').toString('utf8');
     const keyObject = createPrivateKey(chiavePrivata);
-    if (keyObject.asymmetricKeyType !== 'ed25519') fail('TALOS_HARNESS_RECEIPT_PRIVATE_KEY_B64 non è una chiave Ed25519');
+    if (keyObject.asymmetricKeyType !== 'ed25519') fail('TALOS_HARNESS_RECEIPT_PRIVATE_KEY_B64 is not an Ed25519 key');
   } catch (error) {
     if (error instanceof ConfigurationError) throw error;
-    fail('TALOS_HARNESS_RECEIPT_PRIVATE_KEY_B64 non è una chiave privata PKCS8 valida in base64');
+    fail('TALOS_HARNESS_RECEIPT_PRIVATE_KEY_B64 is not a valid base64 PKCS8 private key');
   }
 
   return Object.freeze({ chiavePrivata, keyId });
@@ -720,7 +722,7 @@ function parseRicercaWeb(env) {
   // Nessuna credenziale/endpoint: web_search resta offerto (parità di attrezzi) ma il dispatcher del kernel lo dichiara onestamente non configurato — nessun tentativo di rete.
   if (!apiKey && !endpoint) return undefined;
   if (!PROVIDER_RICERCA_AMMESSI.has(provider)) {
-    fail(`TALOS_HARNESS_SEARCH_PROVIDER deve essere uno fra: ${[...PROVIDER_RICERCA_AMMESSI].join(', ')}`);
+    fail(`TALOS_HARNESS_SEARCH_PROVIDER must be one of: ${[...PROVIDER_RICERCA_AMMESSI].join(', ')}`);
   }
   return Object.freeze({ provider, ...(apiKey ? { apiKey } : {}), ...(endpoint ? { endpoint } : {}) });
 }

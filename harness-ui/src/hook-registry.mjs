@@ -98,9 +98,9 @@ export async function improntaHook({ comando, cartella }, deps = {}) {
     if (relativo === '' || relativo.startsWith('..') || isAbsolute(relativo)) continue; // fuori dal progetto: non è un file di questo hook
     let stato;
     try { stato = await lstatFn(assoluto); } catch { continue; } // non è un file: è un argomento qualunque
-    if (stato.isSymbolicLink()) throw new HookRegistryError(`il comando nomina un collegamento ("${pezzo}"): un hook deve nominare file veri`, 'HOOK_FILE_LINK');
+    if (stato.isSymbolicLink()) throw new HookRegistryError(`the command names a link ("${pezzo}"): a hook must name real files`, 'HOOK_FILE_LINK');
     if (!stato.isFile()) continue;
-    if (stato.size > MAX_BYTE_FILE_HOOK) throw new HookRegistryError(`il file "${pezzo}" è troppo grande per entrare nell'impronta dell'hook`, 'HOOK_FILE_TOO_LARGE');
+    if (stato.size > MAX_BYTE_FILE_HOOK) throw new HookRegistryError(`the file "${pezzo}" is too large to fit in the hook's digest`, 'HOOK_FILE_TOO_LARGE');
     const contenuto = await leggiFn(assoluto);
     file.push(`${relativo.split('\\').join('/')}\0${createHash('sha256').update(contenuto).digest('hex')}`);
   }
@@ -128,26 +128,26 @@ async function caricaHooksDaFile({ cartella, nomeFile = NOME_FILE_HOOKS }, deps 
     testo = await readFileFn(percorso, 'utf8');
   } catch (errore) {
     if (errore?.code === 'ENOENT') return { hooks: [] };
-    throw new HookRegistryError(`Impossibile leggere ${nomeFile}: ${errore.message}`, 'HOOK_READ_FAILED');
+    throw new HookRegistryError(`Cannot read ${nomeFile}: ${errore.message}`, 'HOOK_READ_FAILED');
   }
   let dati;
   try {
     dati = JSON.parse(testo);
   } catch {
-    throw new HookRegistryError(`${nomeFile} non è un JSON valido`, 'HOOK_MALFORMED');
+    throw new HookRegistryError(`${nomeFile} is not valid JSON`, 'HOOK_MALFORMED');
   }
   if (!dati || !Array.isArray(dati.hooks)) {
-    throw new HookRegistryError(`${nomeFile} deve avere un campo "hooks" (array)`, 'HOOK_MALFORMED');
+    throw new HookRegistryError(`${nomeFile} must have a "hooks" field (array)`, 'HOOK_MALFORMED');
   }
   const hooks = await Promise.all(dati.hooks.map(async (voce, indice) => {
     if (typeof voce?.id !== 'string' || voce.id.length === 0) {
-      throw new HookRegistryError(`hooks[${indice}] manca di "id" (stringa non vuota)`, 'HOOK_MALFORMED');
+      throw new HookRegistryError(`hooks[${indice}] is missing "id" (a non-empty string)`, 'HOOK_MALFORMED');
     }
     if (!Array.isArray(voce.eventi) || voce.eventi.length === 0 || !voce.eventi.every((e) => EVENTI_VALIDI.has(e))) {
-      throw new HookRegistryError(`hooks[${indice}] ("${voce.id}") ha "eventi" non valido — atteso un array non vuoto fra ${[...EVENTI_VALIDI].join('/')}`, 'HOOK_MALFORMED');
+      throw new HookRegistryError(`hooks[${indice}] ("${voce.id}") has an invalid "eventi" — a non-empty array among ${[...EVENTI_VALIDI].join('/')} was expected`, 'HOOK_MALFORMED');
     }
     if (typeof voce.comando !== 'string' || voce.comando.length === 0) {
-      throw new HookRegistryError(`hooks[${indice}] ("${voce.id}") manca di "comando" (stringa non vuota)`, 'HOOK_MALFORMED');
+      throw new HookRegistryError(`hooks[${indice}] ("${voce.id}") is missing "comando" (a non-empty string)`, 'HOOK_MALFORMED');
     }
     const hash = await improntaHook({ comando: voce.comando, cartella }, deps);
     return { id: voce.id, eventi: voce.eventi, comando: voce.comando, hash };
@@ -161,7 +161,7 @@ function percorsoTrust(cartellaTrust, hookId) {
   // stringa non validata come nome file — stesso principio già in uso
   // in workspace-files.mjs per un "nome, non un percorso".
   if (typeof hookId !== 'string' || hookId.length === 0 || /[\\/]|\.\./.test(hookId)) {
-    throw new HookRegistryError('hookId non valido — un nome, non un percorso', 'HOOK_ID_INVALID');
+    throw new HookRegistryError('Invalid hookId — a name, not a path', 'HOOK_ID_INVALID');
   }
   return join(cartellaTrust, `${hookId}.json`);
 }
@@ -227,7 +227,7 @@ export async function eseguiHook({ hook, evento, cartella }, deps = {}) {
     if (typeof hook?.hash === 'string' && hook.hash.length > 0) {
       const adesso = await improntaHook({ comando: hook.comando, cartella }, deps);
       if (adesso !== hook.hash) {
-        return { consentito: false, motivo: 'Un file di questa guardia è cambiato dopo che l’avevi approvata: non la eseguo. Riapprovala dalle impostazioni delle guardie.', codice: 'HOOK_CHANGED_SINCE_TRUST' };
+        return { consentito: false, motivo: 'A file of this guard has changed since you approved it: I will not run it. Approve it again from the guards settings.', codice: 'HOOK_CHANGED_SINCE_TRUST' };
       }
     }
     const [executable, ...args] = parseProcessCommand(hook.comando);

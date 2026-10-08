@@ -94,20 +94,31 @@ export const SCHEMA_TRUST_PLUGIN = 2;
  * "niente di ovvio trovato", distinzione dichiarata a chi legge gli
  * avvisi, non solo a chi legge questo commento.
  */
+/** La chiave del dizionario (area `server`) di un avviso dello scanner, o `null` per un avviso che non conosciamo. */
+export function chiaveAvvisoPlugin(avviso) {
+  return CHIAVI_AVVISI_PLUGIN[avviso] ?? null;
+}
+const CHIAVI_AVVISI_PLUGIN = Object.freeze({
+  "recursive deletion of a filesystem root": 'server.plugin.warning.deleteRoot',
+  "downloads and runs a remote script in one step (curl/wget | sh)": 'server.plugin.warning.remoteScript',
+  "reads a credential and sends it over the network in the same command": 'server.plugin.warning.credentialLeak',
+  "reverse shell pattern (nc -e / /dev/tcp)": 'server.plugin.warning.reverseShell',
+});
+
 export function scansionaPatternSospetti(comando) {
   const testo = String(comando ?? '');
   const avvisi = [];
   if (/\brm\s+-rf\s+\/(?:\s|$)/.test(testo) || /\bdel\s+\/[sq]\b/i.test(testo)) {
-    avvisi.push('cancellazione ricorsiva di una radice del filesystem');
+    avvisi.push("recursive deletion of a filesystem root");
   }
   if (/curl\s[^|]*\|\s*(sh|bash)\b/.test(testo) || /wget\s[^|]*\|\s*(sh|bash)\b/.test(testo)) {
-    avvisi.push('scarica ed esegue uno script remoto in un solo passo (curl/wget | sh)');
+    avvisi.push("downloads and runs a remote script in one step (curl/wget | sh)");
   }
   if (/\b[A-Z_]*(API_KEY|SECRET|TOKEN|PASSWORD)\b/.test(testo) && /\b(curl|wget|nc\s|ncat)\b/.test(testo)) {
-    avvisi.push('legge una credenziale e la manda in rete nello stesso comando');
+    avvisi.push("reads a credential and sends it over the network in the same command");
   }
   if (/\bnc\s+-[a-z]*e\b|\/dev\/tcp\//.test(testo)) {
-    avvisi.push('pattern di reverse shell (nc -e / /dev/tcp)');
+    avvisi.push("reverse shell pattern (nc -e / /dev/tcp)");
   }
   return avvisi;
 }
@@ -144,7 +155,7 @@ async function elencaFileDelPacchetto(radice, { readdirFn, maxFile }) {
       const percorso = join(cartella, voce.name);
       if (voce.isSymbolicLink()) {
         throw new PluginRegistryError(
-          `Il pacchetto del plugin contiene un collegamento (${voce.name}): un collegamento porterebbe la fiducia fuori dal pacchetto`,
+          `The plugin package contains a link (${voce.name}): a link would take the trust outside the package`,
           'PLUGIN_PACKAGE_SYMLINK_UNSUPPORTED',
         );
       }
@@ -152,7 +163,7 @@ async function elencaFileDelPacchetto(radice, { readdirFn, maxFile }) {
       if (!voce.isFile()) continue;
       if (percorsi.length >= maxFile) {
         throw new PluginRegistryError(
-          `Il pacchetto del plugin supera ${maxFile} file: la fiducia non può coprirlo`,
+          `The plugin package exceeds ${maxFile} files: the trust cannot cover it`,
           'PLUGIN_PACKAGE_TOO_LARGE',
         );
       }
@@ -205,13 +216,13 @@ async function improntaDelFile(percorso, { flussoFn, maxBytePerFile, restanti })
       letti += pezzo.length;
       if (letti > maxBytePerFile) {
         throw new PluginRegistryError(
-          `Un file del pacchetto supera ${maxBytePerFile} byte: la fiducia non può coprirlo`,
+          `A file in the package exceeds ${maxBytePerFile} bytes: the trust cannot cover it`,
           'PLUGIN_PACKAGE_FILE_TOO_LARGE',
         );
       }
       if (restanti.scala(pezzo.length) < 0) {
         throw new PluginRegistryError(
-          `Il pacchetto del plugin supera ${restanti.tetto} byte in totale: la fiducia non può coprirlo`,
+          `The plugin package exceeds ${restanti.tetto} bytes in total: the trust cannot cover it`,
           'PLUGIN_PACKAGE_BYTES_TOO_LARGE',
         );
       }
@@ -447,17 +458,17 @@ export function comandoDentroIlPacchetto(comando, { radicePacchetto, radiceWorks
     pezzi = parseProcessCommand(comando);
   } catch (errore) {
     throw new PluginRegistryError(
-      `${dove}: il comando non è eseguibile così com'è scritto (${errore.code ?? 'non valido'})`,
+      `${dove}: the command cannot be run as it is written (${errore.code ?? 'invalid'})`,
       'PLUGIN_COMANDO_NON_LEGGIBILE',
     );
   }
   if (pezzi.length === 0) {
-    throw new PluginRegistryError(`${dove}: il comando è vuoto`, 'PLUGIN_COMANDO_NON_LEGGIBILE');
+    throw new PluginRegistryError(`${dove}: the command is empty`, 'PLUGIN_COMANDO_NON_LEGGIBILE');
   }
 
   const rifiutaCodice = (pezzo) => {
     throw new PluginRegistryError(
-      `${dove}: «${pezzo}» non è un file del plugin — il comando può eseguire solo un file della sua cartella`,
+      `${dove}: "${pezzo}" is not a file of the plugin — the command can only run a file in its folder`,
       'PLUGIN_COMANDO_ESEGUE_CODICE',
     );
   };
@@ -474,7 +485,7 @@ export function comandoDentroIlPacchetto(comando, { radicePacchetto, radiceWorks
     if (!daCitare) return pezzo;
     if (/["\\]/u.test(pezzo)) {
       throw new PluginRegistryError(
-        `${dove}: il comando contiene un pezzo che non si può riscrivere senza cambiarne il significato`,
+        `${dove}: the command contains a part that cannot be rewritten without changing its meaning`,
         'PLUGIN_COMANDO_NON_LEGGIBILE',
       );
     }
@@ -492,7 +503,7 @@ export function comandoDentroIlPacchetto(comando, { radicePacchetto, radiceWorks
        */
       if (comeProgramma && !haFormaDiPercorso(pezzo)) rifiutaCodice(pezzo);
       throw new PluginRegistryError(
-        `${dove}: il comando nomina «${pezzo}», che non è un file della cartella del plugin`,
+        `${dove}: the command names "${pezzo}", which is not a file in the plugin's folder`,
         'PLUGIN_COMANDO_FUORI_DAL_PACCHETTO',
       );
     }
@@ -503,7 +514,7 @@ export function comandoDentroIlPacchetto(comando, { radicePacchetto, radiceWorks
     const conBarre = assoluto.split(sep).join('/');
     if (conBarre.includes('"')) {
       throw new PluginRegistryError(
-        `${dove}: il percorso del file contiene una virgoletta e non si può citare`,
+        `${dove}: the file path contains a quote and cannot be quoted`,
         'PLUGIN_COMANDO_NON_LEGGIBILE',
       );
     }
@@ -535,20 +546,36 @@ export function comandoDentroIlPacchetto(comando, { radicePacchetto, radiceWorks
 
 /** La frase umana di un guasto del pacchetto: mai un codice, mai un percorso di sistema. */
 const FRASI_GUASTO_PLUGIN = Object.freeze({
-  PLUGIN_COMANDO_FUORI_DAL_PACCHETTO: 'Questo plugin vuole eseguire un file che sta fuori dalla sua cartella. Finché è così non può essere approvato, perché il controllo non potrebbe accorgersi se quel file cambiasse.',
-  PLUGIN_COMANDO_ESEGUE_CODICE: 'Questo plugin vuole eseguire istruzioni scritte dentro la sua scheda, invece di un file della sua cartella. Finché è così non può essere approvato, perché il controllo non coprirebbe quello che fa davvero.',
-  PLUGIN_ID_AMBIGUO: 'Il nome della cartella di questo plugin contiene «__», e con quel nome non si distingue più a quale plugin appartiene un suo strumento. Rinominala e riprova.',
-  PLUGIN_COMANDO_NON_LEGGIBILE: 'Non riesco a capire con certezza quale file eseguirebbe questo plugin, quindi non lo offro.',
-  PLUGIN_PACKAGE_SYMLINK_UNSUPPORTED: 'Questo plugin contiene un collegamento a un\'altra cartella. Finché c\'è non può essere approvato, perché il controllo non coprirebbe ciò che sta dall\'altra parte.',
-  PLUGIN_PACKAGE_TOO_LARGE: 'Questo plugin contiene troppi file perché il controllo possa coprirli tutti.',
-  PLUGIN_PACKAGE_FILE_TOO_LARGE: 'Questo plugin contiene un file troppo grande perché il controllo possa coprirlo.',
-  PLUGIN_PACKAGE_BYTES_TOO_LARGE: 'Questo plugin è troppo grande perché il controllo possa coprirlo tutto.',
-  PLUGIN_READ_FAILED: 'Non riesco a leggere i file di questo plugin.',
+  PLUGIN_COMANDO_FUORI_DAL_PACCHETTO: "This plugin wants to run a file that sits outside its folder. As long as that is so it cannot be approved, because the check could not notice if that file changed.",
+  PLUGIN_COMANDO_ESEGUE_CODICE: "This plugin wants to run instructions written inside its manifest, instead of a file in its folder. As long as that is so it cannot be approved, because the check would not cover what it really does.",
+  PLUGIN_ID_AMBIGUO: "The name of this plugin's folder contains \"__\", and with that name it is no longer possible to tell which plugin one of its tools belongs to. Rename it and try again.",
+  PLUGIN_COMANDO_NON_LEGGIBILE: "I cannot tell for certain which file this plugin would run, so I am not offering it.",
+  PLUGIN_PACKAGE_SYMLINK_UNSUPPORTED: "This plugin contains a link to another folder. As long as it is there it cannot be approved, because the check would not cover what is on the other side.",
+  PLUGIN_PACKAGE_TOO_LARGE: "This plugin contains too many files for the check to cover them all.",
+  PLUGIN_PACKAGE_FILE_TOO_LARGE: "This plugin contains a file too large for the check to cover it.",
+  PLUGIN_PACKAGE_BYTES_TOO_LARGE: "This plugin is too large for the check to cover all of it.",
+  PLUGIN_READ_FAILED: "I cannot read the files of this plugin.",
 });
 
 export function frasePerGuastoPlugin(codice) {
-  return FRASI_GUASTO_PLUGIN[codice] ?? 'Questo plugin non si può offrire in questa sessione.';
+  return FRASI_GUASTO_PLUGIN[codice] ?? "This plugin cannot be offered in this session.";
 }
+
+/** La chiave del dizionario (area `server`) della frase di un guasto del pacchetto. */
+export function chiavePerGuastoPlugin(codice) {
+  return CHIAVI_GUASTO_PLUGIN[codice] ?? 'server.plugin.fault.generic';
+}
+const CHIAVI_GUASTO_PLUGIN = Object.freeze({
+  PLUGIN_COMANDO_FUORI_DAL_PACCHETTO: 'server.plugin.fault.outsideFolder',
+  PLUGIN_COMANDO_ESEGUE_CODICE: 'server.plugin.fault.runsCode',
+  PLUGIN_ID_AMBIGUO: 'server.plugin.fault.ambiguousId',
+  PLUGIN_COMANDO_NON_LEGGIBILE: 'server.plugin.fault.unreadableCommand',
+  PLUGIN_PACKAGE_SYMLINK_UNSUPPORTED: 'server.plugin.fault.symlink',
+  PLUGIN_PACKAGE_TOO_LARGE: 'server.plugin.fault.tooManyFiles',
+  PLUGIN_PACKAGE_FILE_TOO_LARGE: 'server.plugin.fault.fileTooLarge',
+  PLUGIN_PACKAGE_BYTES_TOO_LARGE: 'server.plugin.fault.tooLarge',
+  PLUGIN_READ_FAILED: 'server.plugin.fault.readFailed',
+});
 
 /**
  * Legge `<cartella>/.harness-ui-plugins/*\/plugin.json`. Un progetto
@@ -617,7 +644,7 @@ async function caricaPluginDaCartella({ cartella, nomeCartella = NOME_CARTELLA_P
     voci = await readdirFn(cartellaPlugin, { withFileTypes: true });
   } catch (errore) {
     if (errore?.code === 'ENOENT') return { plugin: [], falliti: [] };
-    throw new PluginRegistryError(`Impossibile leggere ${nomeCartella}: ${errore.message}`, 'PLUGIN_READ_FAILED');
+    throw new PluginRegistryError(`Cannot read ${nomeCartella}: ${errore.message}`, 'PLUGIN_READ_FAILED');
   }
   const plugin = [];
   const falliti = [];
@@ -630,48 +657,48 @@ async function caricaPluginDaCartella({ cartella, nomeCartella = NOME_CARTELLA_P
       testo = await readFileFn(percorso, 'utf8');
     } catch (errore) {
       if (errore?.code === 'ENOENT') continue; // una sottocartella senza plugin.json non è un plugin
-      throw new PluginRegistryError(`Impossibile leggere ${pluginId}/${NOME_FILE_MANIFESTO}: ${errore.message}`, 'PLUGIN_READ_FAILED');
+      throw new PluginRegistryError(`Cannot read ${pluginId}/${NOME_FILE_MANIFESTO}: ${errore.message}`, 'PLUGIN_READ_FAILED');
     }
     let dati;
     try {
       dati = JSON.parse(testo);
     } catch {
-      throw new PluginRegistryError(`${pluginId}/${NOME_FILE_MANIFESTO} non è un JSON valido`, 'PLUGIN_MALFORMED');
+      throw new PluginRegistryError(`${pluginId}/${NOME_FILE_MANIFESTO} is not valid JSON`, 'PLUGIN_MALFORMED');
     }
     if (typeof dati?.nome !== 'string' || dati.nome.length === 0) {
-      throw new PluginRegistryError(`${pluginId}/${NOME_FILE_MANIFESTO} manca di "nome" (stringa non vuota)`, 'PLUGIN_MALFORMED');
+      throw new PluginRegistryError(`${pluginId}/${NOME_FILE_MANIFESTO} is missing "nome" (a non-empty string)`, 'PLUGIN_MALFORMED');
     }
     if (typeof dati?.descrizione !== 'string' || dati.descrizione.length === 0) {
-      throw new PluginRegistryError(`${pluginId}/${NOME_FILE_MANIFESTO} manca di "descrizione" (stringa non vuota)`, 'PLUGIN_MALFORMED');
+      throw new PluginRegistryError(`${pluginId}/${NOME_FILE_MANIFESTO} is missing "descrizione" (a non-empty string)`, 'PLUGIN_MALFORMED');
     }
     const hooks = dati.hooks ?? [];
     if (!Array.isArray(hooks)) {
-      throw new PluginRegistryError(`${pluginId}/${NOME_FILE_MANIFESTO} ha "hooks" non valido — atteso un array (anche vuoto)`, 'PLUGIN_MALFORMED');
+      throw new PluginRegistryError(`${pluginId}/${NOME_FILE_MANIFESTO} has an invalid "hooks" — an array was expected (it may be empty)`, 'PLUGIN_MALFORMED');
     }
     hooks.forEach((h, indice) => {
       if (typeof h?.id !== 'string' || h.id.length === 0) {
-        throw new PluginRegistryError(`${pluginId}/${NOME_FILE_MANIFESTO}: hooks[${indice}] manca di "id"`, 'PLUGIN_MALFORMED');
+        throw new PluginRegistryError(`${pluginId}/${NOME_FILE_MANIFESTO}: hooks[${indice}] is missing "id"`, 'PLUGIN_MALFORMED');
       }
       if (!Array.isArray(h.eventi) || h.eventi.length === 0 || !h.eventi.every((e) => EVENTI_VALIDI.has(e))) {
-        throw new PluginRegistryError(`${pluginId}/${NOME_FILE_MANIFESTO}: hooks[${indice}] ("${h.id}") ha "eventi" non valido — atteso un array non vuoto fra ${[...EVENTI_VALIDI].join('/')}`, 'PLUGIN_MALFORMED');
+        throw new PluginRegistryError(`${pluginId}/${NOME_FILE_MANIFESTO}: hooks[${indice}] ("${h.id}") has an invalid "eventi" — a non-empty array among ${[...EVENTI_VALIDI].join('/')} was expected`, 'PLUGIN_MALFORMED');
       }
       if (typeof h.comando !== 'string' || h.comando.length === 0) {
-        throw new PluginRegistryError(`${pluginId}/${NOME_FILE_MANIFESTO}: hooks[${indice}] ("${h.id}") manca di "comando"`, 'PLUGIN_MALFORMED');
+        throw new PluginRegistryError(`${pluginId}/${NOME_FILE_MANIFESTO}: hooks[${indice}] ("${h.id}") is missing "comando"`, 'PLUGIN_MALFORMED');
       }
     });
     const tools = dati.tools ?? [];
     if (!Array.isArray(tools)) {
-      throw new PluginRegistryError(`${pluginId}/${NOME_FILE_MANIFESTO} ha "tools" non valido — atteso un array (anche vuoto)`, 'PLUGIN_MALFORMED');
+      throw new PluginRegistryError(`${pluginId}/${NOME_FILE_MANIFESTO} has an invalid "tools" — an array was expected (it may be empty)`, 'PLUGIN_MALFORMED');
     }
     tools.forEach((t, indice) => {
       if (typeof t?.nome !== 'string' || t.nome.length === 0) {
-        throw new PluginRegistryError(`${pluginId}/${NOME_FILE_MANIFESTO}: tools[${indice}] manca di "nome"`, 'PLUGIN_MALFORMED');
+        throw new PluginRegistryError(`${pluginId}/${NOME_FILE_MANIFESTO}: tools[${indice}] is missing "nome"`, 'PLUGIN_MALFORMED');
       }
       if (typeof t.descrizione !== 'string' || t.descrizione.length === 0) {
-        throw new PluginRegistryError(`${pluginId}/${NOME_FILE_MANIFESTO}: tools[${indice}] ("${t.nome}") manca di "descrizione"`, 'PLUGIN_MALFORMED');
+        throw new PluginRegistryError(`${pluginId}/${NOME_FILE_MANIFESTO}: tools[${indice}] ("${t.nome}") is missing "descrizione"`, 'PLUGIN_MALFORMED');
       }
       if (typeof t.comando !== 'string' || t.comando.length === 0) {
-        throw new PluginRegistryError(`${pluginId}/${NOME_FILE_MANIFESTO}: tools[${indice}] ("${t.nome}") manca di "comando"`, 'PLUGIN_MALFORMED');
+        throw new PluginRegistryError(`${pluginId}/${NOME_FILE_MANIFESTO}: tools[${indice}] ("${t.nome}") is missing "comando"`, 'PLUGIN_MALFORMED');
       }
     });
     /*
@@ -699,7 +726,7 @@ async function caricaPluginDaCartella({ cartella, nomeCartella = NOME_CARTELLA_P
        */
       if (!idPluginValido(pluginId)) {
         throw new PluginRegistryError(
-          `${pluginId}: il nome della cartella del plugin non è utilizzabile come identità`,
+          `${pluginId}: the plugin's folder name cannot be used as an identity`,
           'PLUGIN_ID_AMBIGUO',
         );
       }
@@ -724,6 +751,7 @@ async function caricaPluginDaCartella({ cartella, nomeCartella = NOME_CARTELLA_P
         codice: errore.code,
         messaggio: errore.message,
         frase: frasePerGuastoPlugin(errore.code),
+        fraseChiave: chiavePerGuastoPlugin(errore.code),
       });
     }
   }
@@ -734,7 +762,7 @@ async function caricaPluginDaCartella({ cartella, nomeCartella = NOME_CARTELLA_P
 
 function percorsoTrust(cartellaTrust, pluginId) {
   if (typeof pluginId !== 'string' || pluginId.length === 0 || /[\\/]|\.\./.test(pluginId)) {
-    throw new PluginRegistryError('pluginId non valido — un nome, non un percorso', 'PLUGIN_ID_INVALID');
+    throw new PluginRegistryError('Invalid pluginId — a name, not a path', 'PLUGIN_ID_INVALID');
   }
   return join(cartellaTrust, `${pluginId}.json`);
 }
@@ -747,10 +775,15 @@ function percorsoTrust(cartellaTrust, pluginId) {
  * reinventarle. ⛔ Il `motivo` NON si mostra a schermo: è il nome tecnico, la frase è la sua
  * faccia umana.
  */
+/** Le chiavi del dizionario (area `server`) delle frasi qui sotto; `null` dove non c'è niente da spiegare. */
+const CHIAVI_TRUST_PLUGIN = Object.freeze({
+  'regola-precedente': 'server.plugin.trust.previousRule',
+  'contenuto-cambiato': 'server.plugin.trust.contentChanged',
+});
 const FRASI_TRUST_PLUGIN = Object.freeze({
   'mai-approvato': null, // niente da spiegare: è il caso normale, la UI offre «Fida» e basta.
-  'regola-precedente': 'Questo plugin era stato approvato quando il controllo guardava solo la sua scheda. Adesso copre tutti i suoi file: approvalo di nuovo.',
-  'contenuto-cambiato': 'Il contenuto di questo plugin è cambiato da quando l\'hai approvato.',
+  'regola-precedente': "This plugin was approved when the check only looked at its manifest. It now covers all of its files: approve it again.",
+  'contenuto-cambiato': "The content of this plugin has changed since you approved it.",
   fidato: null,
 });
 
@@ -771,7 +804,7 @@ const FRASI_TRUST_PLUGIN = Object.freeze({
  */
 export async function statoTrustPlugin({ cartellaTrust, pluginId, hash }, deps = {}) {
   const readFileFn = deps.readFileFn ?? fsp.readFile;
-  const esito = (motivo) => ({ fidato: motivo === 'fidato', motivo, frase: FRASI_TRUST_PLUGIN[motivo] });
+  const esito = (motivo) => ({ fidato: motivo === 'fidato', motivo, frase: FRASI_TRUST_PLUGIN[motivo], fraseChiave: CHIAVI_TRUST_PLUGIN[motivo] ?? null });
   let testo;
   try {
     testo = await readFileFn(percorsoTrust(cartellaTrust, pluginId), 'utf8');

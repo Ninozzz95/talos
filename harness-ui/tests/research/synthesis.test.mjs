@@ -50,7 +50,7 @@ test('trasformare il raccolto in un rapporto controllabile', async (t) => {
     assert.ok(prompt.includes('[1] Il pezzo'));
     // Detto perché è vero, e perché un modello che sa che la citazione è
     // controllata smette di inventare citazioni.
-    assert.ok(prompt.includes('meccanicamente'));
+    assert.ok(prompt.includes('mechanically') || prompt.includes('meccanicamente'));
     assert.equal(sources.length, 1);
   });
 
@@ -59,7 +59,7 @@ test('trasformare il raccolto in un rapporto controllabile', async (t) => {
       collection([source({ obtained: 'snippet' })]),
     ]);
 
-    assert.ok(prompt.includes('solo estratto dal motore di ricerca'));
+    assert.ok(prompt.includes('search engine snippet only') || prompt.includes('solo estratto dal motore di ricerca'));
   });
 
   /*
@@ -247,8 +247,8 @@ test('⭐ MIO — la domanda di seguito dichiara che nessuna ricerca nuova è av
 
   // Le due righe che cambiano la risposta: non c'è stata ricerca, e se le fonti
   // non bastano lo si SCRIVE invece di rispondere a memoria.
-  assert.ok(prompt.includes('NON è stata fatta nessuna ricerca nuova'));
-  assert.ok(prompt.includes('invece di rispondere da quello che sai'));
+  assert.ok(prompt.includes('NON è stata fatta nessuna ricerca nuova') || prompt.includes('NO new search was made'));
+  assert.ok(prompt.includes('invece di rispondere da quello che sai') || prompt.includes('instead of answering from what you know'));
   // Le fonti sono le stesse della sintesi: una domanda di seguito che ne
   // vedesse altre starebbe facendo una ricerca senza dirlo.
   assert.deepEqual(sources, talosResearchSynthesisPrompt('e in Francia?', [collection([source()])]).sources);
@@ -260,7 +260,7 @@ test('⭐ MIO — e resta la STESSA forma della sintesi, così si controlla ugua
   // colonne e l'avviso sulla verifica meccanica devono esserci entrambi.
   const { prompt } = talosResearchFollowUpPrompt('e in Francia?', [collection([source()])]);
 
-  assert.ok(prompt.includes('affermazione | numero della fonte | "passaggio copiato dalla fonte"'));
-  assert.ok(prompt.includes('meccanicamente'));
+  assert.ok(prompt.includes('affermazione | numero della fonte | "passaggio copiato dalla fonte"') || prompt.includes('claim | source number | "passage copied from source"'));
+  assert.ok(prompt.includes('meccanicamente') || prompt.includes('mechanically'));
   assert.ok(prompt.includes('[1] Il pezzo'));
 });

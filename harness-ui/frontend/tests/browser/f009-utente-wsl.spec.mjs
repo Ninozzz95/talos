@@ -36,7 +36,7 @@ async function apriApp(page, tema = 'dark') {
     try { localStorage.setItem('talos.harness.desktop.settings.v1', JSON.stringify({ version: 1, appearance: { colorMode, uiFontScale: 'default' }, chat: { model: 'qwen/qwen3.8-flash' } })); }
     catch { /* finestra privata */ }
   }, { colorMode: tema });
-  await page.route('**/api/v1/sessions/f009-*/events*', (rotta) => rotta.fulfill({ contentType: 'text/event-stream', body: 'retry: 600000\n\n' }));
+  await page.route('**/api/v1/sessions/f009-*/events*', () => { /* VELO-SPEC (08/10/2026): aperto e muto — un corpo che si chiude fa riaprire lo stream, e ogni onopen rimette la chat nella storia */ });
   await page.goto('/');
   await page.locator('#talosAvvio').waitFor({ state: 'detached', timeout: 8000 }).catch(() => {});
   await page.waitForFunction(() => Boolean(window.__talosHarnessUiRuntime));
@@ -138,6 +138,7 @@ test('F009-UI-04: la carta della conferma di root vale per la sessione — due a
   await page.evaluate((frase) => {
     const runtime = window.__talosHarnessUiRuntime;
     runtime.passaASessione('f009-uno', 'workspace', 'F009 conferma', 'qwen/qwen3.8-flash', { conclusa: false, modello: 'qwen/qwen3.8-flash' });
+    runtime.handleRealEvent({ type: 'CUSTOM', name: 'talos.fine-rigiocata', value: null }, runtime.realSessionState.generation); // VELO-SPEC: da A1-R3 una sessione aperta resta velata fino al confine, che il server manda SEMPRE (anche a storia vuota)
     const generazione = runtime.realSessionState.generation;
     runtime.handleRealEvent({ type: 'RunStarted', input: { consegna: 'Elenca i file' }, contesto: { cartella: 'C:\\progetti\\AVM', modello: 'qwen/qwen3.8-flash' }, _sequenza: 1 }, generazione);
     runtime.handleRealEvent({ type: 'ApprovalRequested', requestId: 'f009-app-1', azione: { tipo: 'shell', toolCallId: 'c1', comando: 'ls -la', wslRoot: { distro: 'Ubuntu', utente: 'root', frase } }, _sequenza: 2 }, generazione);
@@ -159,6 +160,7 @@ test('F009-UI-05: una carta di shell qualunque resta com era (tre azioni, «vale
   await page.evaluate(() => {
     const runtime = window.__talosHarnessUiRuntime;
     runtime.passaASessione('f009-due', 'workspace', 'F009 carta normale', 'qwen/qwen3.8-flash', { conclusa: false, modello: 'qwen/qwen3.8-flash' });
+    runtime.handleRealEvent({ type: 'CUSTOM', name: 'talos.fine-rigiocata', value: null }, runtime.realSessionState.generation); // VELO-SPEC: da A1-R3 una sessione aperta resta velata fino al confine, che il server manda SEMPRE (anche a storia vuota)
     const generazione = runtime.realSessionState.generation;
     runtime.handleRealEvent({ type: 'RunStarted', input: { consegna: 'Compila' }, contesto: { cartella: 'C:\\progetti\\AVM', modello: 'qwen/qwen3.8-flash' }, _sequenza: 1 }, generazione);
     runtime.handleRealEvent({ type: 'ApprovalRequested', requestId: 'f009-app-2', azione: { tipo: 'shell', comando: 'npm run build' }, _sequenza: 2 }, generazione);

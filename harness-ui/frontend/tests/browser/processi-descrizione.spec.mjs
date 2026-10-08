@@ -18,6 +18,10 @@ import { expect, test } from '@playwright/test';
 test.use({ locale: 'it-IT' });
 
 async function apriProcessi(page) {
+  /* ⛔ A4 (08/10/2026): il flusso degli eventi della sessione finta resta zitto e non si riconnette (come attesa-da-capo e
+     a12-dialogo-agenti). Senza, ogni riconnessione rimetteva la pagina «in rigiocata» (`source.onopen`) e da lì la colonna si
+     disegna una volta sola: un processo nuovo della scena non poteva comparire mai. */
+  await page.route('**/api/v1/sessions/processi-descrizione/events*', (route) => route.fulfill({ contentType: 'text/event-stream', body: 'retry: 3600000\n\n' }));
   await page.goto('/');
   await page.locator('#talosAvvio').waitFor({ state: 'detached', timeout: 15000 });
   await page.locator('.talos-nav-item[data-vaia="chat"]').click();
@@ -223,6 +227,22 @@ test("PROCESSI-ESPANSA — l'etichetta non è tagliata e il comando conserva le 
   await expect(riga, 'la riga del comando su più righe non c\'è: la scena non si è formata').toHaveCount(1);
   await riga.locator('.talos-process__apri').click();
   await expect(riga.locator('.talos-process__dettaglio')).toBeVisible();
+  /*
+   * ⛔ A4 (08/10/2026) — dal 04/10 (`f7873f8ce`, BUG-B) il comando nel dettaglio ha un TETTO di sei righe e un «Mostra tutto»:
+   *   questa prova misurava le sette righe a dettaglio appena aperto ed era rossa da allora (6 su 6,3). Il tetto è voluto;
+   *   le righe si misurano dopo «Mostra tutto», e il tetto chiuso si prova qui, prima di aprire.
+   */
+  const comandoChiuso = await riga.evaluate((r) => {
+    const v = [...r.querySelectorAll('.talos-kv')].find((n) => (n.querySelector('.talos-kv__k')?.textContent || '').trim() === 'Comando')?.querySelector('.talos-kv__v');
+    const lh = v ? parseFloat(getComputedStyle(v).lineHeight) : 0;
+    return v ? { righe: v.getBoundingClientRect().height / lh, tagliato: v.scrollHeight - v.clientHeight > 1 } : null;
+  });
+  expect(comandoChiuso?.righe, 'chiuso, il comando sta nel suo tetto di sei righe').toBeLessThanOrEqual(6.1);
+  expect(comandoChiuso?.tagliato, 'premessa: sette righe sotto un tetto di sei sono tagliate').toBe(true);
+  const mostraDettaglio = riga.locator('.talos-process__dettaglio .talos-process__mostra-tutto');
+  await expect(mostraDettaglio).toBeVisible();
+  await mostraDettaglio.click();
+  await expect(mostraDettaglio).toHaveAttribute('aria-expanded', 'true');
 
   const m = await riga.evaluate((r) => {
     const kv = [...r.querySelectorAll('.talos-kv')].find((n) => (n.querySelector('.talos-kv__k')?.textContent || '').trim() === 'Comando');
@@ -300,9 +320,24 @@ test("PROCESSI-ESPANSA — l'etichetta non è tagliata e il comando conserva le 
     const r = window.__talosHarnessUiRuntime;
     const g = r.realSessionState.generation;
     const evento = (e) => r.handleRealEvent({ ...e, _sequenza: (window.__sD5 = (window.__sD5 || 95000) + 1) }, g);
+    /* ⛔ A4 (08/10/2026): la storia è finita. Dal 07/10 (650f74fc8) durante la rigiocata la colonna si disegna una volta sola, e
+       la diretta comincia con l'annuncio del server (http-app.mjs, dopo replay.fineReplay()): la scena non lo mandava mai, e la
+       riga nuova non compariva. Nessun giro vivo: il comando resta «Interrotto» (A6) finché non arriva il suo esito. */
+    evento({ type: 'CUSTOM', name: 'talos.fine-rigiocata', value: {} });
+  });
+  /* ⛔ A4-bis: i ridisegni chiesti dalla fine della rigiocata si esauriscono PRIMA del comando — altrimenti il comando comparirebbe
+     di rimbalzo, e la prova non saprebbe dire se l'avvio di un comando ridisegna da sé (misurato: senza questa pausa il mutante
+     «l'avvio non ridisegna» restava verde). */
+  await page.waitForTimeout(400);
+  await page.evaluate(() => {
+    const r = window.__talosHarnessUiRuntime;
+    const g = r.realSessionState.generation;
+    const evento = (e) => r.handleRealEvent({ ...e, _sequenza: (window.__sD5 = (window.__sD5 || 95000) + 1) }, g);
     evento({ type: 'ToolCallStart', toolCallId: 'd5', toolCallName: 'shell', ricevutoA: 4000, giro: 2 });
     evento({ type: 'ToolCallArgs', toolCallId: 'd5', delta: JSON.stringify({ comando: 'cd spese\nnode --test\nfor f in a b; do\n  echo "$f"\ndone\necho fine', descrizione: 'Rilancia la verifica dopo la correzione' }) });
   });
+  /* ⛔ A4-bis (08/10/2026): la riga compare all'AVVIO del comando, senza spinte — prima arrivava solo col risultato (misurato
+     dal vivo: un `!` a modello fermo restava invisibile nei Processi per tutti i suoi 15 s). */
   const rigaViva = page.locator('.talos-process', { hasText: 'Rilancia la verifica dopo la correzione' });
   await expect(rigaViva, 'il processo nuovo non è comparso nella lista').toHaveCount(1);
   await rigaViva.locator('.talos-process__apri').click();
@@ -356,4 +391,74 @@ test("PROCESSI-ESPANSA — l'etichetta non è tagliata e il comando conserva le 
   expect(dopo.stato, 'il dettaglio NON si è aggiornato: il ramo «aperto e cambiato» non è stato esercitato e la prova non proverebbe niente').toBe('Riuscito');
   expect(dopo.classi, 'la riga «Comando» non porta più la classe del valore lungo dopo l\'aggiornamento').toContain('talos-kv__v--lungo');
   expect(dopo.whiteSpace, 'il valore lungo ha perso pre-wrap dopo l\'aggiornamento').toBe('pre-wrap');
+});
+
+/*
+ * ⛔ A4 (bugfixer, 08/10/2026) — «MOSTRA TUTTO» È UN INTERRUTTORE, E LO DICE.
+ *   Misurato sulla 4176 con un comando di ~900 caratteri senza descrizione: chiuso a due righe e «Mostra tutto» c'erano, ma
+ *   aperto il pulsante diceva ancora «Mostra tutto» e niente diceva a un lettore di schermo se il comando fosse aperto
+ *   (WAI-ARIA APG, Disclosure Pattern: `aria-expanded`; Hermes `web/src/pages/EnvPage.tsx:1072-1078`).
+ */
+test('PROCESSI-MOSTRA-MENO — aperto il pulsante dice «Mostra meno» e aria-expanded, richiuso torna com\'era; anche da tastiera', async ({ page }) => {
+  await page.goto('/');
+  await page.locator('#talosAvvio').waitFor({ state: 'detached', timeout: 15000 });
+  await page.locator('.talos-nav-item[data-vaia="chat"]').click();
+  await page.evaluate(() => {
+    const runtime = window.__talosHarnessUiRuntime;
+    runtime.passaASessione('processi-mostra-meno', 'workspace', 'Prove', 'qwen/qwen3.8-flash', { conclusa: false, modello: 'qwen/qwen3.8-flash' });
+    const generation = runtime.realSessionState.generation;
+    const comando = `node -e "const parti=['${Array.from({ length: 30 }, (_, i) => `segmento-${i}-del-percorso-molto-lungo`).join("','")}'];console.log(parti.length)"`;
+    runtime.handleRealEvent({ type: 'ToolCallStart', toolCallId: 'mm1', toolCallName: 'shell', ricevutoA: 1000, giro: 1, _sequenza: 91001 }, generation);
+    runtime.handleRealEvent({ type: 'ToolCallArgs', toolCallId: 'mm1', delta: JSON.stringify({ comando }), _sequenza: 91002 }, generation);
+    runtime.handleRealEvent({ type: 'ToolCallResult', toolCallId: 'mm1', ricevutoA: 2000, errore: false, uscita: 0, _sequenza: 91003 }, generation);
+  });
+  await page.locator('[data-rail="processi"]').click();
+  const riga = page.locator('#railProcessi .talos-process').first();
+  const pulsante = riga.locator('.talos-process__mostra-tutto');
+  await expect(pulsante, 'premessa: il comando è tagliato e il pulsante c\'è').toBeVisible();
+  await expect(pulsante).toHaveText('Mostra tutto');
+  await expect(pulsante).toHaveAttribute('aria-expanded', 'false');
+  await pulsante.click();
+  await expect(pulsante).toHaveText('Mostra meno');
+  await expect(pulsante).toHaveAttribute('aria-expanded', 'true');
+  expect(await riga.locator('.talos-process__cmd').evaluate((n) => n.scrollHeight - n.clientHeight <= 1), 'aperto, il comando si legge tutto').toBe(true);
+  await pulsante.focus();
+  await page.keyboard.press('Enter');
+  await expect(pulsante).toHaveText('Mostra tutto');
+  await expect(pulsante).toHaveAttribute('aria-expanded', 'false');
+});
+
+/*
+ * ⛔ A4-bis (bugfixer, 08/10/2026) — UN COMANDO COMPARE NEI PROCESSI QUANDO PARTE, ANCHE A MODELLO FERMO.
+ *   Misurato sulla 4176 (`sonda-a4-persona.mjs`): sessione conclusa, la persona lancia un `!` di 15 s — in chat «In corso», nei
+ *   Processi «Nessun comando eseguito» per tutti i 15 s, la riga solo a comando finito. Senza un giro vivo nessun aggiornamento
+ *   periodico copriva l'avvio, che non chiedeva il ridisegno.
+ */
+test('PROCESSI-A-MODELLO-FERMO — in una sessione conclusa, il comando della persona compare appena parte, ed è «In corso»', async ({ page }) => {
+  await page.route('**/api/v1/sessions/processi-fermo/events*', (route) => route.fulfill({ contentType: 'text/event-stream', body: 'retry: 3600000\n\n' }));
+  await page.goto('/');
+  await page.locator('#talosAvvio').waitFor({ state: 'detached', timeout: 15000 });
+  await page.locator('.talos-nav-item[data-vaia="chat"]').click();
+  await page.evaluate(() => {
+    const r = window.__talosHarnessUiRuntime;
+    r.passaASessione('processi-fermo', 'workspace', 'Fermo', 'qwen/qwen3.8-flash', { conclusa: true, modello: 'qwen/qwen3.8-flash' });
+  });
+  /* come il server: prima si apre il flusso (`onopen` mette la pagina «in rigiocata»), POI arriva la fine della rigiocata */
+  await page.waitForTimeout(500);
+  await page.evaluate(() => {
+    const r = window.__talosHarnessUiRuntime;
+    r.handleRealEvent({ type: 'CUSTOM', name: 'talos.fine-rigiocata', value: null, _sequenza: 1 }, r.realSessionState.generation);
+  });
+  await page.locator('[data-rail="processi"]').click();
+  await page.waitForTimeout(500); // i ridisegni della scena si esauriscono prima del comando
+  await page.evaluate(() => {
+    const r = window.__talosHarnessUiRuntime;
+    const g = r.realSessionState.generation;
+    r.handleRealEvent({ type: 'ComandoUtenteIniziato', comandoId: 'cmd-p1', comando: 'npm run dev', _sequenza: 2 }, g);
+    r.handleRealEvent({ type: 'ToolCallStart', toolCallId: 'p1', toolCallName: 'shell', _sequenza: 3 }, g);
+    r.handleRealEvent({ type: 'ToolCallArgs', toolCallId: 'p1', delta: JSON.stringify({ comando: 'npm run dev' }), _sequenza: 4 }, g);
+  });
+  const riga = page.locator('#railProcessi .talos-process', { hasText: 'npm run dev' });
+  await expect(riga, 'il comando che gira non è nei Processi').toHaveCount(1, { timeout: 1500 });
+  await expect(riga).toHaveAttribute('data-stato', /in-corso|in-avvio/);
 });

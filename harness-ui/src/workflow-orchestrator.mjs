@@ -13,6 +13,7 @@ import {
   settleBudgetFromActivity as makeDurableBudgetSettlement,
 } from './workflow/budget.mjs';
 import { putResultBytes } from './workflow/result-store.mjs';
+import { azioniConsentiteDelRun, codaDelRifiuto, motiviDiAttenzioneDelRun, passiFallitiDelRun, rifiutoDelControllo } from './workflow/azioni-del-run.mjs';
 import { runControlCommandHash } from './workflow/run-control.mjs';
 import { aumentoDelTettoPerRiprova, workflowStateProjection } from './workflow/run.mjs';
 import { decidiDopoFallimento } from './workflow/scheduler.mjs';
@@ -391,25 +392,15 @@ export function createWorkflowOrchestrator({
     // F3-51b (owner 25/09, «Riprova: rifà solo i passi falliti, tentativi da capo; il tetto si alza, detto prima»)
     retry: Object.freeze({ commandType: 'retry-node', type: 'retry_scheduled' }),
   });
+  /*
+   * ⛔ A10 (07/10/2026) — `rifiutoDelControllo` vive in `workflow/azioni-del-run.mjs`, insieme alle azioni ammesse: una
+   *   regola sola per il rifiuto e per ciò che si dice valido. Il rifiuto porta `allowedActions` e `attentionReasons`
+   *   (additivi) e li nomina nel testo, così chi riceve il no sa che cosa può fare adesso e perché il run aspetta.
+   */
   const RUN_TERMINALI = new Set(['succeeded', 'failed', 'cancelled']);
-
-  function rifiutoDelControllo(action, run) {
-    if (run.cancelRequested) return 'the run is being cancelled';
-    if (RUN_TERMINALI.has(run.status)) return `the run has already ended (${run.status})`;
-    if (action === 'retry' && !['running', 'needs_attention'].includes(run.status)) {
-      return `only a running run or one that needs attention can retry its failed steps (this one is ${run.status})`;
-    }
-    if (action === 'pause') {
-      if (run.pauseRequested) return 'the run is already pausing: the steps in progress are finishing';
-      if (run.status !== 'running') return `only a running run can be paused (this one is ${run.status})`;
-    }
-    if (action === 'resume' && run.status !== 'paused') {
-      return run.pauseRequested ? 'the run is still pausing: wait for the steps in progress to finish'
-        : `only a paused run can be resumed (this one is ${run.status})`;
-    }
-    if (action === 'cancel' && run.status === null) return 'the run does not exist';
-    return null;
-  }
+  const rifiutoConAzioni = (motivo, state) => Object.assign(
+    orchestratorError(`${motivo}. Nothing was changed.${codaDelRifiuto(state)}`, 'WORKFLOW_RUN_STATE_CONFLICT'),
+    { allowedActions: azioniConsentiteDelRun(state), attentionReasons: motiviDiAttenzioneDelRun(state?.run), refusalReason: motivo });
 
   async function requestRunControl(input = {}) {
     assertReady();
@@ -433,7 +424,7 @@ export function createWorkflowOrchestrator({
         return Object.freeze({ runId, action: input.action, status: current.state.run.status, receipt: prior, deduplicated: true });
       }
       const rifiuto = rifiutoDelControllo(input.action, current.state.run);
-      if (rifiuto) throw orchestratorError(`${rifiuto}. Nothing was changed.`, 'WORKFLOW_RUN_STATE_CONFLICT');
+      if (rifiuto) throw rifiutoConAzioni(rifiuto, current.state);
       const command = { commandId: input.commandId, commandType: controllo.commandType, commandPayloadHash };
       if (input.action === 'retry') await scriviRiprova(runId, current, command);
       else await appendFact(runId, { type: controllo.type, payload: { reason: 'user' }, command });
@@ -452,21 +443,18 @@ export function createWorkflowOrchestrator({
    *   ricevuta. Se il run era in «Serve attenzione», `run_resumed`. Un passo fallito il cui ultimo tentativo non è ancora
    *   rilasciato e saldato rifiuta tutto il comando (niente a metà): lo scheduler lo sta chiudendo, si riprova fra un attimo.
    */
-  function passiDaRiprovare(state) {
-    return [...state.nodes.values()].filter((node) => node.state === 'failed').map((node) => node.nodeId).sort();
-  }
+  const passiDaRiprovare = passiFallitiDelRun; // A10: la stessa lista che decide se `retry` è fra le azioni ammesse
 
   async function scriviRiprova(runId, current, command) {
     const falliti = passiDaRiprovare(current.state);
-    if (falliti.length === 0) throw orchestratorError('there is no failed step to retry. Nothing was changed.', 'WORKFLOW_RUN_STATE_CONFLICT');
+    if (falliti.length === 0) throw rifiutoConAzioni('there is no failed step to retry', current.state);
     const piani = falliti.map((nodeId) => {
       const nodeRun = current.state.nodes.get(nodeId);
       const activity = [...current.state.activities.values()].find((candidate) => candidate.nodeId === nodeId && candidate.attempt === nodeRun.attempt);
       const claim = activity ? [...current.state.capacityClaims.values()].find((candidate) => candidate.activityExecutionId === activity.activityExecutionId) : null;
       if (!activity || !['failed', 'reconciled'].includes(activity.state) || claim?.state === 'active'
         || (claim && current.state.budget.reservations.has(claim.budgetReservationId))) {
-        throw orchestratorError(`the failed step "${nodeId}" is still being settled: try again in a moment. Nothing was changed.`,
-          'WORKFLOW_RUN_STATE_CONFLICT');
+        throw rifiutoConAzioni(`the failed step "${nodeId}" is still being settled: try again in a moment`, current.state);
       }
       return { nodeId, activity, budgetReservationId: claim?.budgetReservationId ?? null };
     });

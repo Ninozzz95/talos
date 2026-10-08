@@ -72,13 +72,14 @@ async function scenaLunga(page, { larghezza, altezza, tema }) {
     try { localStorage.setItem('talos.harness.desktop.settings.v1', JSON.stringify({ version: 1, appearance: { colorMode }, chat: { model: 'qwen/qwen3.8-flash' } })); }
     catch { /* finestra privata: la app parte lo stesso */ }
   }, { colorMode: tema });
-  await page.route('**/api/v1/sessions/f2-*/events*', (r) => r.fulfill({ contentType: 'text/event-stream', body: '' }));
+  await page.route('**/api/v1/sessions/f2-*/events*', () => { /* VELO-SPEC (08/10/2026): aperto e muto — un corpo che si chiude fa riaprire lo stream, e ogni onopen rimette la chat nella storia */ });
   await page.goto('/');
   await page.locator('#talosAvvio').waitFor({ state: 'detached', timeout: 8000 });
   await page.waitForFunction(() => window.__talosHarnessUiRuntime);
   await page.evaluate(() => {
     const r = window.__talosHarnessUiRuntime;
     r.passaASessione('f2-uno', 'workspace', 'F2', 'qwen/qwen3.8-flash', { conclusa: false, modello: 'qwen/qwen3.8-flash' });
+    r.handleRealEvent({ type: 'CUSTOM', name: 'talos.fine-rigiocata', value: null }, r.realSessionState.generation); // VELO-SPEC: da A1-R3 una sessione aperta resta velata fino al confine, che il server manda SEMPRE (anche a storia vuota)
     const g = r.realSessionState.generation;
     /* Sei giri veri: ognuno lascia la riga di azioni sotto la risposta — è la roba toccabile che
        capita nella striscia mentre si rilegge. In coda, la richiesta in attesa. */

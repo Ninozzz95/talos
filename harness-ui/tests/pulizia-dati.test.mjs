@@ -68,7 +68,7 @@ test('PULIZIA-01 — cancella SOLO il namespace `-desktop`, tombstone per ogni p
   // Il riepilogo dice nomi e conteggi, MAI un valore di chiave.
   const racconto = righe.join('\n');
   assert.doesNotMatch(racconto, /sk-pulizia-finta-1|brave-pulizia-finta|sk-dev-mai-toccata|tvly-dev-mai-toccata/);
-  assert.match(racconto, /errori: 0/);
+  assert.match(racconto, /errors: 0/);
 });
 
 test('PULIZIA-02 — portachiavi guasto: fallimento ONESTO per ogni id, nessuna eccezione che sfugga', async () => {
@@ -79,8 +79,8 @@ test('PULIZIA-02 — portachiavi guasto: fallimento ONESTO per ogni id, nessuna 
   });
   assert.equal(esito.ok, false);
   assert.equal(esito.errori.length, PROVIDER_IDS.length + FONTI_RICERCA_IDS.length, 'ogni provider e ogni fonte denuncia il guasto');
-  // (K4a: il negozio provider dice «portachiavi», quello ricerca ora dice «keychain» in inglese — stesso guasto, due parole)
-  for (const id of PROVIDER_IDS) assert.ok(esito.errori.some((e) => e.tipo === 'provider' && e.id === id && /portachiavi/i.test(e.messaggio)));
+  // (K4a/K4b: il negozio provider ora dice «keychain» in inglese come quello della ricerca: stesso guasto, stessa parola)
+  for (const id of PROVIDER_IDS) assert.ok(esito.errori.some((e) => e.tipo === 'provider' && e.id === id && /keychain/i.test(e.messaggio)));
   for (const id of FONTI_RICERCA_IDS) assert.ok(esito.errori.some((e) => e.tipo === 'ricerca' && e.id === id && /keychain/i.test(e.messaggio)));
   // Nell'uninstaller questo esito (non-0) mostra il messaggio e NON cancella %APPDATA%\TALOS.
   assert.match(righe.join('\n'), /Pulizia incompleta/);

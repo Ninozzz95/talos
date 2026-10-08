@@ -28,6 +28,8 @@ for (const tema of ['dark', 'light']) {
     await page.locator('#talosAvvio').waitFor({ state: 'detached', timeout: 10_000 });
     await page.evaluate((id) => window.__talosHarnessUiRuntime.passaASessione(id, 'workspace', 'Fuoco', 'z-ai/glm-5.3-flash', { conclusa: true, modello: 'z-ai/glm-5.3-flash' }), SESSIONE);
     await page.waitForFunction(() => window.__talosHarnessUiRuntime.realSessionState.inRigiocata === false);
+    // VELO-SPEC-2: la rigiocata finisce PRIMA che il velo si tolga (`scopri` porta il fondo, poi toglie `is-restoring`): la foto aspetta il velo
+    await page.waitForFunction(() => !document.querySelector('#conversation')?.classList.contains('is-restoring'));
     const bottone = page.locator('#schermoChat [data-azione="comprimi"]:visible').first();
     await bottone.focus();
     await page.keyboard.press('Enter');

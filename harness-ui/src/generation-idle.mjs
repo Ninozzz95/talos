@@ -86,9 +86,11 @@ export const VARIABILE_INATTIVITA_GENERAZIONE = 'TALOS_GENERATION_IDLE_MS';
 export class SilenzioDelFornitoreError extends Error {
   constructor(limiteMs) {
     const minuti = Math.max(1, Math.round(limiteMs / 60_000));
-    super(`Connessione con il fornitore interrotta: nessun dato per ${minuti} minuti.`);
+    super(`Connection with the provider interrupted: no data for ${minuti} minutes.`);
     this.name = 'SilenzioDelFornitoreError';
     this.code = 'PROVIDER_SILENCE';
+    this.chiave = 'server.providerOutcome.noData';
+    this.params = { minutes: minuti };
     this.classe = 'rete';
     this.transitorio = true;
     this.limiteMs = limiteMs;
@@ -230,7 +232,7 @@ export function sorvegliaCorpoDiGenerazione(risposta, {
    *   già materializzata); «mi hai dato una Promise» non lo è mai.
    */
   if (typeof risposta?.then === 'function') {
-    throw new TypeError('sorvegliaCorpoDiGenerazione vuole una Response già risolta, non una Promise: senza `await` il failsafe resterebbe attaccato a niente.');
+    throw new TypeError('sorvegliaCorpoDiGenerazione expects a resolved Response, not a Promise: without `await` failsafe attaches to nothing.');
   }
   if (!Number.isFinite(limiteMs) || limiteMs <= 0) return risposta;
   const corpo = risposta?.body;

@@ -114,7 +114,7 @@ export function livelliRagionamentoDiretti() {
 
 /** Lista di sessione: solo identificatori, mai indirizzi, chiavi o capacità dichiarate dal client. */
 export function validaFallbackProviders(lista = [], { usaAttrezzi = false } = {}) {
-  const invalida = () => { throw new ModelDestinationError('Controlla i fornitori e i modelli scelti per continuare la sessione.', 'PROVIDER_FALLBACK_INVALID'); };
+  const invalida = () => { throw new ModelDestinationError('Check the providers and models chosen to continue the session.', 'PROVIDER_FALLBACK_INVALID'); };
   if (!Array.isArray(lista) || lista.length > 8) invalida();
   const viste = new Set();
   return lista.map(voce => {
@@ -126,7 +126,7 @@ export function validaFallbackProviders(lista = [], { usaAttrezzi = false } = {}
     if (viste.has(id)) invalida();
     viste.add(id);
     if (usaAttrezzi && record.modelliDiRiserva?.find(m => m.id === model)?.toolCalling !== true) {
-      throw new ModelDestinationError('Il modello di riserva non dichiara il supporto agli attrezzi della sessione.', 'PROVIDER_FALLBACK_TOOLS_UNSUPPORTED');
+      throw new ModelDestinationError('The fallback model does not declare support for the session tools.', 'PROVIDER_FALLBACK_TOOLS_UNSUPPORTED');
     }
     return Object.freeze({ provider, model });
   });
@@ -172,7 +172,7 @@ export function risolviDestinazioneModello(modello, { leggiChiave, leggiRuntime,
   }
   // P-L · fine destinazione agente esterno.
 
-  if (!COMPATIBILI_OPENAI.includes(fonte) && !NATIVI.includes(fonte)) throw new ModelDestinationError(`Fonte del modello non riconosciuta: ${fonte}`, 'MODEL_DESTINATION_INVALID');
+  if (!COMPATIBILI_OPENAI.includes(fonte) && !NATIVI.includes(fonte)) throw new ModelDestinationError(`Model source not recognized: ${fonte}`, 'MODEL_DESTINATION_INVALID');
 
   if (fonte === 'local') {
     /*
@@ -192,7 +192,7 @@ export function risolviDestinazioneModello(modello, { leggiChiave, leggiRuntime,
      * spedire ci pensa chi possiede la credenziale.
      */
     if (typeof localePronto !== 'function' || !localePronto()) {
-      throw new ModelDestinationError('Il motore locale non è acceso: caricalo dal Laboratorio modelli prima di usarlo in chat.', 'LOCAL_RUNTIME_NOT_READY');
+      throw new ModelDestinationError('The local engine is not running: load it from the Model Lab before using it in chat.', 'LOCAL_RUNTIME_NOT_READY');
     }
     return { fonte, modelloRemoto, locale: true, percorso: REGISTRO_FORNITORI[fonte].endpoint.chat };
   }
@@ -200,7 +200,7 @@ export function risolviDestinazioneModello(modello, { leggiChiave, leggiRuntime,
   const runtime = leggiRuntime(fonte) || {};
   const record = REGISTRO_FORNITORI[fonte];
   const base = typeof runtime.endpoint === 'string' && runtime.endpoint.trim() !== '' ? runtime.endpoint.replace(/\/+$/u, '') : null;
-  if (!base) throw new ModelDestinationError(`Manca l'indirizzo di ${record.etichetta}.`, 'PROVIDER_RUNTIME_INVALID');
+  if (!base) throw new ModelDestinationError(`The address for ${record.etichetta} is missing.`, 'PROVIDER_RUNTIME_INVALID');
 
   const chiave = leggiChiave(fonte);
   /*
@@ -212,7 +212,7 @@ export function risolviDestinazioneModello(modello, { leggiChiave, leggiRuntime,
    *   confronto per nome), e ora è una sola.
    */
   if (record.chiaveObbligatoria === true && (typeof chiave !== 'string' || chiave.trim() === '')) {
-    throw new ModelDestinationError(`Manca la chiave per ${record.etichetta}: inseriscila in Laboratorio modelli → Provider.`, 'PROVIDER_KEY_MISSING');
+    throw new ModelDestinationError(`The key for ${record.etichetta} is missing: enter it in Model Lab → Providers.`, 'PROVIDER_KEY_MISSING');
   }
 
   // P-K — lo stesso contratto di autenticazione per chat e sonda.

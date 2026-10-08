@@ -3,8 +3,9 @@
 import { REGISTRO_FORNITORI } from './provider-registry.mjs';
 
 export class ProviderCloudError extends Error {
-  constructor(message, code = 'PROVIDER_RUNTIME_INVALID') {
+  constructor(message, code = 'PROVIDER_RUNTIME_INVALID', dettaglio = null) {
     super(message); this.name = 'ProviderCloudError'; this.code = code;
+    if (dettaglio?.chiave) { this.chiave = dettaglio.chiave; if (dettaglio.params) this.params = dettaglio.params; }
   }
 }
 
@@ -12,7 +13,7 @@ export class ProviderCloudError extends Error {
 export function normalizzaRuntimeCloud(provider, { endpoint } = {}) {
   const record = REGISTRO_FORNITORI[provider];
   if (!record?.cloud) return null;
-  const invalido = () => { throw new ProviderCloudError(`Controlla l'indirizzo e la configurazione di ${record.etichetta}.`); };
+  const invalido = () => { throw new ProviderCloudError(`Check the address and configuration of ${record.etichetta}.`, 'PROVIDER_RUNTIME_INVALID', { chiave: 'server.cloud.runtimeInvalid', params: { provider: record.etichetta } }); };
   let url;
   try { url = new URL(endpoint); } catch { invalido(); }
   const locale = ['127.0.0.1', 'localhost', '[::1]'].includes(url.hostname);
@@ -52,8 +53,8 @@ export function normalizzaRuntimeCloud(provider, { endpoint } = {}) {
 /** Stringa legacy oppure involucro v1, custodito interamente come UNA chiave del pool. */
 export function intestazioniCloud(provider, chiave, { ora = Date.now() } = {}) {
   const record = REGISTRO_FORNITORI[provider];
-  const invalida = () => { throw new ProviderCloudError(`Controlla la credenziale di ${record.etichetta}.`, 'PROVIDER_CLOUD_CREDENTIAL_INVALID'); };
-  if (typeof chiave !== 'string' || !chiave.trim()) throw new ProviderCloudError(`Manca la chiave per ${record.etichetta}.`, 'PROVIDER_KEY_MISSING');
+  const invalida = () => { throw new ProviderCloudError(`Check the credential for ${record.etichetta}.`, 'PROVIDER_CLOUD_CREDENTIAL_INVALID', { chiave: 'server.cloud.credentialInvalid', params: { provider: record.etichetta } }); };
+  if (typeof chiave !== 'string' || !chiave.trim()) throw new ProviderCloudError(`The key for ${record.etichetta} is missing.`, 'PROVIDER_KEY_MISSING', { chiave: 'server.cloud.keyMissing', params: { provider: record.etichetta } });
   let valore = chiave.trim(), tipo = record.auth.tipo;
   if (valore.startsWith('{')) {
     let dati;
@@ -63,7 +64,7 @@ export function intestazioniCloud(provider, chiave, { ora = Date.now() } = {}) {
     valore = dati.valore; tipo = dati.tipo;
     if (dati.scadeAlle !== undefined) {
       if (typeof dati.scadeAlle !== 'string' || !/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d{3})?Z$/u.test(dati.scadeAlle) || !Number.isFinite(Date.parse(dati.scadeAlle))) invalida();
-      if (Date.parse(dati.scadeAlle) <= ora) throw new ProviderCloudError(`L'accesso a ${record.etichetta} è scaduto: inserisci una credenziale aggiornata.`, 'PROVIDER_CLOUD_TOKEN_EXPIRED');
+      if (Date.parse(dati.scadeAlle) <= ora) throw new ProviderCloudError(`Access to ${record.etichetta} has expired: enter an updated credential.`, 'PROVIDER_CLOUD_TOKEN_EXPIRED', { chiave: 'server.cloud.tokenExpired', params: { provider: record.etichetta } });
     }
   }
   if (typeof valore !== 'string' || !/^[\x21-\x7e]+$/u.test(valore) || valore.length > 4096) invalida();
@@ -83,7 +84,7 @@ export function destinazioneCloud(provider, runtime, chiave, modelloRemoto, { ca
     // Il deployment Azure è scelto dall'owner, mai dedotto dal nome del modello base.
     if (provider === 'azure') {
       if (typeof modelloRemoto !== 'string' || !/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,199}$/u.test(modelloRemoto) || modelloRemoto.includes('..')) {
-        throw new ProviderCloudError('Controlla il nome della distribuzione di Azure AI Foundry.', 'MODEL_DESTINATION_INVALID');
+        throw new ProviderCloudError('Check the Azure AI Foundry deployment name.', 'MODEL_DESTINATION_INVALID');
       }
       if (config.versioneApi !== 'v1') url.pathname += `/deployments/${encodeURIComponent(modelloRemoto)}`;
     }

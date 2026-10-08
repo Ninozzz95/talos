@@ -145,23 +145,23 @@ export function testoSchedaDiLavoro({
   /* ⛔ Il NOME della cartella, mai il percorso: contiene il nome della persona e questo testo esce
      dalla macchina dentro un prompt — [[cancello-4-non-guardava-tutto-mobile]]. Ed è anche ciò che
      rende il prefisso identico fra due macchine diverse sullo stesso progetto. */
-  const nome = basename(String(cartella ?? '').replace(/[\\/]+$/, '')) || 'la cartella di lavoro';
+  const nome = basename(String(cartella ?? '').replace(/[\\/]+$/, '')) || 'the working folder';
   const righe = [];
-  righe.push('Scheda di lavoro — fotografia scattata all\'inizio della sessione. Lo stato di git INVECCHIA mentre lavori: prima di fidartene, ricontrollalo.');
+  righe.push('Working sheet — snapshot taken at session start. Git status GROWS STALE while you work: check it before relying on it.');
   righe.push(nomeProgetto && nomeProgetto !== nome
-    ? `Cartella di lavoro: «${nome}», dentro il progetto «${nomeProgetto}».`
-    : `Cartella di lavoro: «${nome}».`);
+    ? `Working folder: «${nome}», inside project «${nomeProgetto}».`
+    : `Working folder: «${nome}».`);
 
   if (git) {
     const pezzi = [];
-    if (git.ramo) pezzi.push(`ramo ${git.ramo}`);
-    if (Number.isFinite(git.nonSalvate)) pezzi.push(git.nonSalvate === 0 ? 'niente da salvare' : `${numeroItaliano(git.nonSalvate)} file non salvati`);
-    if (git.repoAnnidati?.length) pezzi.push(`${git.repoAnnidati.length} repo annidati`);
+    if (git.ramo) pezzi.push(`branch ${git.ramo}`);
+    if (Number.isFinite(git.nonSalvate)) pezzi.push(git.nonSalvate === 0 ? 'nothing to save' : `${git.nonSalvate} unsaved files`);
+    if (git.repoAnnidati?.length) pezzi.push(`${git.repoAnnidati.length} nested repos`);
     if (pezzi.length) righe.push(`Git: ${pezzi.join(' · ')}.`);
   } else {
     /* ⛔ «Non è un repo git» è un FATTO, e cambia cosa ha senso fare: niente `git diff`, niente
        «guarda l'ultimo commit». Tacere lo farebbe scoprire con un giro sprecato. */
-    righe.push('Git: questa cartella non è un repository.');
+    righe.push('Git: this folder is not a repository.');
   }
   if (Array.isArray(commit) && commit.length > 0) {
     righe.push(`Ultimi commit: ${commit.slice(0, 3).join(' | ')}`);
@@ -182,8 +182,8 @@ export function testoSchedaDiLavoro({
    *   modello, piattaforma) restano fuori. Senza `confine` il testo è quello di sempre, byte per byte.
    */
   if (typeof confine === 'function') righe.splice(1, righe.length - 1, confine(righe.slice(1).join('\n')));
-  if (permesso) righe.push(`Permesso di questo giro: ${permesso}.`);
-  if (modello) righe.push(`Modello che stai usando: ${modello}.`);
+  if (permesso) righe.push(`Turn permission: ${permesso}.`);
+  if (modello) righe.push(`Model you are using: ${modello}.`);
   if (piattaforma) righe.push(`Piattaforma: ${piattaforma}.`);
   /*
    * ⛔ TOLTA l'11/09 la riga «Istruzioni di progetto presenti: …». Guardava SOLO il cwd, mentre il

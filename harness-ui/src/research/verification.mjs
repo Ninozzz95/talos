@@ -281,16 +281,16 @@ export function talosResearchJudgeOrder(authorProvider, providers, onDevice) {
  */
 export function talosResearchJudgePrompt(claim, passage) {
   return [
-    'Passaggio, copiato dalla fonte:',
+    'Passage, copied from source:',
     '"""',
     passage,
     '"""',
     '',
-    'Affermazione da verificare:',
+    'Claim to verify:',
     claim,
     '',
-    'Il passaggio, DA SOLO, sostiene l’affermazione?',
-    'Non usare altro: né quello che sai, né quello che ti sembra probabile.',
+    'Does the passage, ALONE, support the claim?',
+    'Use nothing else: neither what you know, nor what seems likely.',
     '',
     // ⛔⛔ IL MENU CON LE BARRE lo faceva RICOPIARE.
     //
@@ -302,16 +302,16 @@ export function talosResearchJudgePrompt(claim, passage) {
     //
     //   ⇒ Le tre parole si elencano una per riga, senza barre, e si mostra
     //   com’è fatta una risposta buona. Non c’è più niente da ricopiare.
-    'Rispondi con UNA riga sola. Comincia con UNA di queste tre parole:',
-    'SI',
-    'PARZIALE',
+    'Answer on ONE line only. Start with ONE of these three words:',
+    'YES',
+    'PARTIAL',
     'NO',
-    'Poi un trattino e il motivo, massimo quindici parole.',
+    'Then a dash and the reason, at most fifteen words.',
     '',
-    'Esempio di risposta: SI — il passaggio lo dice testualmente.',
+    'Example response: YES — the passage states it verbatim.',
     '',
-    'PARZIALE significa: il passaggio riguarda l’argomento ma non sostiene',
-    'tutta l’affermazione (per esempio ne sostiene il fatto ma non la misura).',
+    'PARTIAL means: the passage concerns the topic but does not support',
+    'the entire claim (for example it supports the fact but not the figure).',
   ].join('\n');
 }
 
@@ -323,10 +323,10 @@ export function talosResearchJudgePrompt(claim, passage) {
  * ⛔ Le barre in testa si saltano: un modello che risponde «| PARZIALE |
  * motivo» ha dato il verdetto, con addosso la punteggiatura del menu.
  */
-const VERDICT = /^[\s|]*(s[iì]|parziale|no)(?![\p{L}\p{N}])/iu;
+const VERDICT = /^[\s|]*(yes|s[iì]|partial|parziale|no)(?![\p{L}\p{N}])/iu;
 
 /** Un pezzo che è SOLO una parola di verdetto, senza niente attorno. */
-const SOLO_VERDETTO = /^\s*(s[iì]|parziale|no)\s*$/iu;
+const SOLO_VERDETTO = /^\s*(yes|s[iì]|partial|parziale|no)\s*$/iu;
 
 /**
  * Legge il verdetto, o ammette che non ce n'era uno.
@@ -365,7 +365,7 @@ export function talosResearchParseVerdict(answer) {
 
     const word = match[1].toLowerCase();
     return {
-      support: word === 'parziale' ? 'partial' : word === 'no' ? 'no' : 'yes',
+      support: (word === 'parziale' || word === 'partial') ? 'partial' : word === 'no' ? 'no' : 'yes',
       // La barra sta fra i separatori: «SI | motivo» è la stessa cosa
       // di «SI — motivo», e la barra non è parte del motivo.
       reason: line.slice(match[0].length).replace(/^[\s|—–\-:,.]+/, '').trim(),
@@ -378,9 +378,9 @@ export function talosResearchParseVerdict(answer) {
 /* I tre livelli insieme                                                       */
 /* -------------------------------------------------------------------------- */
 
-const NO_SOURCE = 'la fonte citata non esiste fra quelle raccolte';
-const NO_QUOTE = 'il passaggio non è nel testo della fonte';
-const NO_JUDGE = 'nessun giudice indipendente disponibile: l’autore non può verificare sé stesso';
+const NO_SOURCE = "the cited source is not among the collected sources";
+const NO_QUOTE = "the passage is not in the source text";
+const NO_JUDGE = "no independent judge is available: the author cannot verify their own work";
 
 /**
  * Cerca chi dice il contrario, e chiede al giudice se lo dice davvero.
@@ -465,6 +465,7 @@ export async function talosResearchVerify(deps, claims, sources) {
           ...base,
           claimSupported: 'unchecked',
           supportReason: source ? NO_QUOTE : NO_SOURCE,
+          supportReasonChiave: source ? 'server.research.reason.noQuote' : 'server.research.reason.noSource',
           judge: null,
           judgedAt: null,
         },
@@ -476,7 +477,7 @@ export async function talosResearchVerify(deps, claims, sources) {
       verified.push({
         claim,
         passage,
-        checks: { ...base, claimSupported: 'unchecked', supportReason: NO_JUDGE, judge: null, judgedAt: null },
+        checks: { ...base, claimSupported: 'unchecked', supportReason: NO_JUDGE, supportReasonChiave: 'server.research.reason.noJudge', judge: null, judgedAt: null },
       });
       continue;
     }
@@ -497,7 +498,8 @@ export async function talosResearchVerify(deps, claims, sources) {
           //   («era un sì o un in parte, e qualcuno dice di no») sta in
           //   un posto solo, con i suoi test.
           claimSupported: talosResearchContestedVerdict(verdict.support, opposing),
-          supportReason: judged ? verdict.reason : 'il giudice non ha dato un verdetto leggibile',
+          supportReason: judged ? verdict.reason : "the judge did not give a readable verdict",
+          ...(judged ? {} : { supportReasonChiave: 'server.research.reason.noVerdict' }),
           judge: judged ? deps.judge.id : null,
           judgedAt: judged ? deps.at() : null,
           ...(opposing.length ? { opposing } : {}),
@@ -512,7 +514,8 @@ export async function talosResearchVerify(deps, claims, sources) {
         checks: {
           ...base,
           claimSupported: 'unchecked',
-          supportReason: failure instanceof Error ? failure.message : 'il giudice non ha risposto',
+          supportReason: failure instanceof Error ? failure.message : "the judge did not respond",
+          ...(failure instanceof Error ? {} : { supportReasonChiave: 'server.research.reason.noResponse' }),
           judge: null,
           judgedAt: null,
         },

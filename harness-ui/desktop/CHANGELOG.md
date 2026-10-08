@@ -6,7 +6,51 @@ Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/). Versions
 
 ## Unreleased
 
-## desktop-v0.1.23 — 2026-10-05 (beta, published as a GitHub pre-release)
+## desktop-v0.1.24 — 2026-10-08 (beta)
+
+A beta: installs of 0.1.22 do not receive it automatically. It carries everything listed under 0.1.23 below (never
+published) and adds a large round on agents, automations and safety: agents now work strictly inside your permissions,
+automations can be created from any chat, and search never shows the contents of secret files.
+
+### Added
+- Delegated agents ask through their parent: a child's permission request appears in the parent session, a "yes for
+  this session" given to the parent also holds for its children (never upward or sideways), a "Deny" set after a card
+  wins, and a rule a child inherited is shown as inherited. A delegated agent can also ask you a question, with the card
+  in the parent session.
+- "Coordination": decides whether the model starts agents on its own. Off by default; when off, the model asks first
+  with a card. A tree of agents has a total cap.
+- Automations with two doors: create one from its page, or ask any chat and confirm a card. The card warns when the
+  automation would do more than the chat it came from (another folder, more permission, Coordination). An automation
+  may move its own next run time, but a change to its own instructions waits for your approval in "To review".
+- OpenRouter: the answer says which provider actually served it ("via DeepInfra"). You can exclude that provider from
+  the answer's "⋯" menu or from OpenRouter's settings. When every provider of a model is excluded, the chat says so and
+  where to change it.
+- "Show reasoning": show the model's reasoning, or keep only how long it thought.
+- Native Anthropic effort by name, with a real "Max".
+
+### Changed
+- Search never returns secret files: no lines, no names, no counts from `.env`, private keys, `.ssh` and the like (the
+  same files reading asks about). It says how many it left out. `.envrc` now counts as a secret file.
+- Reading a file through a link (a symbolic link or a Windows junction) asks when the real file is a secret, and the
+  card names the real file. Network and device paths are never resolved to check.
+- A shell command that names a secret file through quotes, wildcards, variables or command substitution is recognised
+  like the plain name, and asks.
+- The server speaks English and hands the interface a key for every sentence a person reads.
+
+### Fixed
+- Notes, tasks and memories you write from the app are now saved in TALOS's data folder, where the list and the model
+  read them. In the installed app they were saved next to the program instead: they did not show in the list, and an
+  update could delete them. Ones written with 0.1.22 are not moved.
+- Long sessions open behind a veil and land on the latest turn; the turn index lists every turn of a long chat.
+- Background commands show up in Processes when they start, say when they really end, show their real duration, and
+  stay stoppable until they exit; after a restart they show as "no longer tracked". The Processes count only counts what
+  is alive.
+- The Markdown export keeps the order in which things appear.
+- A session reopened while the model reasons, or after a run died mid-answer, shows what was already there.
+- Many permission fixes: "For this session" merges one tool instead of replacing the map, and a child never acts above
+  its parent, even mid-run.
+
+## desktop-v0.1.23 — 2026-10-05 (beta — NOT published: the release gates stopped the build on 2026-10-05, T-04 protection gate conflict; publication still pending, last published version is desktop-v0.1.22)
 
 A beta: installs of 0.1.22 do not receive it automatically. The headline of this round: when the provider's
 answer is cut mid-flight and its outcome is unknown, TALOS now retries on its own instead of leaving a dead

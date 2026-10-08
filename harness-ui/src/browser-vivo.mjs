@@ -212,7 +212,7 @@ export function userAgentSenzaHeadless(agente = AGENTE_PREDEFINITO) {
 export const AGENTE_PREDEFINITO = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36';
 
 export function argomentiChromium({ cartellaProfilo, porta = 0 } = {}) {
-  if (!cartellaProfilo) throw errore('BROWSER_VIVO_PROFILO_MANCANTE', 'Serve la cartella del profilo: il browser pilotato non usa mai quello personale');
+  if (!cartellaProfilo) throw errore('BROWSER_VIVO_PROFILO_MANCANTE', 'The profile folder is required: the driven browser never uses the personal one');
   return [
     /* ⛔ Porta 0: la sceglie Chrome e la leggiamo dalla riga su stderr. Una
        porta fissa è un conflitto che prima o poi capita — due sessioni, o un
@@ -279,14 +279,14 @@ export async function avviaBrowserVivo({
   terminaAlbero = terminaAlberoDiSistema,
   graziaMs = GRAZIA_CHIUSURA_MS,
 } = {}) {
-  if (!percorso) throw errore('BROWSER_VIVO_SENZA_BINARIO', 'Nessun Chromium da avviare: manca il percorso del binario');
-  if (!cartellaProfilo) throw errore('BROWSER_VIVO_PROFILO_MANCANTE', 'Serve la cartella del profilo: il browser pilotato non usa mai quello personale');
+  if (!percorso) throw errore('BROWSER_VIVO_SENZA_BINARIO', 'No Chromium to start: the binary path is missing');
+  if (!cartellaProfilo) throw errore('BROWSER_VIVO_PROFILO_MANCANTE', 'The profile folder is required: the driven browser never uses the personal one');
 
   /* La cartella del profilo si crea se manca: Chrome la creerebbe da sé, ma
      allora un errore di permessi arriverebbe come «il browser non è partito»
      invece che come quello che è. */
   try { creaCartella(cartellaProfilo); } catch (causa) {
-    throw errore('BROWSER_VIVO_PROFILO_NON_CREABILE', `Non riesco a creare la cartella del profilo (${cartellaProfilo})`, causa);
+    throw errore('BROWSER_VIVO_PROFILO_NON_CREABILE', `Cannot create the profile folder (${cartellaProfilo})`, causa);
   }
 
   const argomenti = argomentiChromium({ cartellaProfilo });
@@ -295,10 +295,10 @@ export async function avviaBrowserVivo({
   const opzioni = opzioniAvvioBrowser();
   let processo;
   try { processo = lancia(percorso, argomenti, opzioni); } catch (causa) {
-    throw errore('BROWSER_VIVO_NON_PARTE', `Non riesco ad avviare il browser (${percorso})`, causa);
+    throw errore('BROWSER_VIVO_NON_PARTE', `Cannot start the browser (${percorso})`, causa);
   }
   if (!processo || !processo.stderr) {
-    throw errore('BROWSER_VIVO_SENZA_STDERR', 'Il browser è partito senza stderr: la porta di debug si legge solo da lì');
+    throw errore('BROWSER_VIVO_SENZA_STDERR', 'The browser started without stderr: the debug port can only be read from there');
   }
 
   const chiudi = creaChiusura(processo, terminaAlbero, graziaMs);
@@ -363,16 +363,16 @@ function attendiWsUrl(processo, attesaMs) {
     const scadenza = setTimeout(() => {
       finisci(rifiuta, errore(
         'BROWSER_VIVO_ATTESA_SCADUTA',
-        `Il browser non ha annunciato la porta di debug entro ${Math.round(attesaMs / 1000)} secondi. Ultime righe: ${coda.join(' | ') || '(nessuna)'}`,
+        `The browser did not announce the debug port within ${Math.round(attesaMs / 1000)} seconds. Last lines: ${coda.join(' | ') || '(none)'}`,
       ));
     }, attesaMs);
     scadenza.unref?.();
 
     const suUscita = (codice) => finisci(rifiuta, errore(
       'BROWSER_VIVO_USCITO_SUBITO',
-      `Il browser è uscito (codice ${codice}) prima di annunciare la porta di debug. Ultime righe: ${coda.join(' | ') || '(nessuna)'}`,
+      `The browser exited (code ${codice}) before announcing the debug port. Last lines: ${coda.join(' | ') || '(none)'}`,
     ));
-    const suErrore = (causa) => finisci(rifiuta, errore('BROWSER_VIVO_NON_PARTE', 'Il browser non è partito', causa));
+    const suErrore = (causa) => finisci(rifiuta, errore('BROWSER_VIVO_NON_PARTE', 'The browser did not start', causa));
     processo.on?.('exit', suUscita);
     processo.on?.('error', suErrore);
 
@@ -385,7 +385,7 @@ function attendiWsUrl(processo, attesaMs) {
       if (trovato) finisci(risolvi, trovato[1]);
     });
     lettore.on('close', () => {
-      if (!finito) finisci(rifiuta, errore('BROWSER_VIVO_STDERR_CHIUSO', 'Lo stderr del browser si è chiuso senza annunciare la porta di debug'));
+      if (!finito) finisci(rifiuta, errore('BROWSER_VIVO_STDERR_CHIUSO', 'The browser stderr closed without announcing the debug port'));
     });
   });
 }
@@ -398,9 +398,9 @@ function attendiWsUrl(processo, attesaMs) {
 function creaChiusura(processo, terminaAlbero, graziaMs = GRAZIA_CHIUSURA_MS) {
   let gia = false;
   return async function chiudi() {
-    if (gia) return { chiuso: true, modo: 'già chiuso' };
+    if (gia) return { chiuso: true, modo: 'already closed' };
     gia = true;
-    if (processo.exitCode !== null && processo.exitCode !== undefined) return { chiuso: true, modo: 'era già uscito' };
+    if (processo.exitCode !== null && processo.exitCode !== undefined) return { chiuso: true, modo: 'already exited' };
 
     const uscita = new Promise((r) => {
       if (typeof processo.once === 'function') processo.once('exit', () => r(true));
@@ -453,7 +453,7 @@ function terminaAlberoDiSistema(processo) {
  * @param {{attesaMs?:number}} opzioni
  */
 export function creaClientCdp(socket, { attesaMs = ATTESA_CDP_MS } = {}) {
-  if (!socket || typeof socket.send !== 'function') throw errore('CDP_SOCKET_INVALIDO', 'Serve un WebSocket con «send» per parlare col browser');
+  if (!socket || typeof socket.send !== 'function') throw errore('CDP_SOCKET_INVALIDO', 'A WebSocket with "send" is required to talk to the browser');
 
   let prossimoId = 1;
   let chiuso = false;
@@ -475,7 +475,7 @@ export function creaClientCdp(socket, { attesaMs = ATTESA_CDP_MS } = {}) {
       if (m.error) {
         /* ⛔ L'errore del browser si riporta INTERO: il codice e il messaggio
            veri. Un «comando fallito» generico costringe chi legge a indovinare. */
-        attesa.rifiuta(errore('CDP_ERRORE', `${attesa.metodo}: ${m.error.message || 'errore senza messaggio'} (codice ${m.error.code ?? 'ignoto'})`, m.error));
+        attesa.rifiuta(errore('CDP_ERRORE', `${attesa.metodo}: ${m.error.message || 'error without a message'} (code ${m.error.code ?? 'unknown'})`, m.error));
       } else {
         attesa.risolvi(m.result ?? {});
       }
@@ -497,8 +497,8 @@ export function creaClientCdp(socket, { attesaMs = ATTESA_CDP_MS } = {}) {
   }
 
   ascolta('message', smista);
-  ascolta('close', () => { chiuso = true; abbandonaTutti('la connessione col browser si è chiusa'); });
-  ascolta('error', () => { chiuso = true; abbandonaTutti('la connessione col browser è andata in errore'); });
+  ascolta('close', () => { chiuso = true; abbandonaTutti('the browser connection closed'); });
+  ascolta('error', () => { chiuso = true; abbandonaTutti('the browser connection failed'); });
 
   /**
    * @param {string} metodo es. `Page.navigate`
@@ -508,14 +508,14 @@ export function creaClientCdp(socket, { attesaMs = ATTESA_CDP_MS } = {}) {
    *   browser invece che alla pagina.
    */
   function invia(metodo, parametri = {}, sessionId = null) {
-    if (chiuso) return Promise.reject(errore('CDP_SOCKET_CHIUSO', `${metodo}: la connessione col browser è già chiusa`));
+    if (chiuso) return Promise.reject(errore('CDP_SOCKET_CHIUSO', `${metodo}: the browser connection is already closed`));
     const id = prossimoId++;
     const messaggio = { id, method: metodo, params: parametri || {} };
     if (sessionId) messaggio.sessionId = sessionId;
     return new Promise((risolvi, rifiuta) => {
       const scadenza = setTimeout(() => {
         inVolo.delete(id);
-        rifiuta(errore('CDP_ATTESA_SCADUTA', `${metodo}: nessuna risposta dal browser entro ${Math.round(attesaMs / 1000)} secondi`));
+        rifiuta(errore('CDP_ATTESA_SCADUTA', `${metodo}: no answer from the browser within ${Math.round(attesaMs / 1000)} seconds`));
       }, attesaMs);
       scadenza.unref?.();
       inVolo.set(id, { risolvi, rifiuta, scadenza, metodo });
@@ -524,7 +524,7 @@ export function creaClientCdp(socket, { attesaMs = ATTESA_CDP_MS } = {}) {
       } catch (causa) {
         inVolo.delete(id);
         clearTimeout(scadenza);
-        rifiuta(errore('CDP_INVIO_FALLITO', `${metodo}: non riesco a scrivere sulla connessione col browser`, causa));
+        rifiuta(errore('CDP_INVIO_FALLITO', `${metodo}: cannot write to the browser connection`, causa));
       }
     });
   }
@@ -538,7 +538,7 @@ export function creaClientCdp(socket, { attesaMs = ATTESA_CDP_MS } = {}) {
 
   function chiudiClient() {
     chiuso = true;
-    abbandonaTutti('il client è stato chiuso');
+    abbandonaTutti('the client was closed');
     ascoltatori.clear();
     try { socket.close?.(); } catch { /* un socket già morto non si richiude */ }
   }
@@ -574,23 +574,23 @@ export async function apriSchedaVuota(cdp, { url = 'about:blank', browserContext
    */
   const creata = await cdp.invia('Target.createTarget', browserContextId ? { url, browserContextId } : { url });
   const targetId = creata?.targetId;
-  if (!targetId) throw errore('BROWSER_VIVO_SCHEDA_SENZA_ID', 'Il browser ha aperto una scheda senza dirci il suo identificativo');
+  if (!targetId) throw errore('BROWSER_VIVO_SCHEDA_SENZA_ID', 'The browser opened a tab without telling us its identifier');
   const agganciata = await cdp.invia('Target.attachToTarget', { targetId, flatten: true });
   const sessionId = agganciata?.sessionId;
-  if (!sessionId) throw errore('BROWSER_VIVO_SESSIONE_MANCANTE', 'Il browser non ha assegnato una sessione alla scheda: senza sessionId non si può pilotare');
+  if (!sessionId) throw errore('BROWSER_VIVO_SESSIONE_MANCANTE', 'The browser did not assign a session to the tab: without a sessionId it cannot be driven');
   return { targetId, sessionId };
 }
 
-/** Traduce i `net::ERR_…` di Chrome in una frase che una persona può leggere. */
+/** Traduce i `net::ERR_…` di Chrome in una frase che una persona può leggere: `{errore, erroreChiave?}` (frase inglese + chiave del dizionario). */
 function motivoDiRete(testo) {
   const t = String(testo || '');
-  if (/ERR_NAME_NOT_RESOLVED/.test(t)) return 'Il nome del sito non esiste';
-  if (/ERR_CONNECTION_REFUSED/.test(t)) return 'Nessuno risponde a quell\'indirizzo';
-  if (/ERR_CONNECTION_TIMED_OUT|ERR_TIMED_OUT/.test(t)) return 'Il sito non ha risposto in tempo';
-  if (/ERR_CERT|ERR_SSL/.test(t)) return 'Il certificato del sito non è valido';
-  if (/ERR_ABORTED/.test(t)) return 'Il caricamento è stato interrotto';
-  if (/ERR_BLOCKED_BY/.test(t)) return 'Il browser ha bloccato la pagina';
-  return t || 'La pagina non si è caricata';
+  if (/ERR_NAME_NOT_RESOLVED/.test(t)) return { errore: 'The site name does not exist', erroreChiave: 'server.liveBrowser.nameNotResolved' };
+  if (/ERR_CONNECTION_REFUSED/.test(t)) return { errore: 'Nobody answers at that address', erroreChiave: 'server.liveBrowser.connectionRefused' };
+  if (/ERR_CONNECTION_TIMED_OUT|ERR_TIMED_OUT/.test(t)) return { errore: 'The site did not answer in time', erroreChiave: 'server.liveBrowser.timedOut' };
+  if (/ERR_CERT|ERR_SSL/.test(t)) return { errore: "The site's certificate is not valid", erroreChiave: 'server.liveBrowser.badCertificate' };
+  if (/ERR_ABORTED/.test(t)) return { errore: 'The loading was interrupted', erroreChiave: 'server.liveBrowser.aborted' };
+  if (/ERR_BLOCKED_BY/.test(t)) return { errore: 'The browser blocked the page', erroreChiave: 'server.liveBrowser.blocked' };
+  return t ? { errore: t } : { errore: 'The page did not load', erroreChiave: 'server.liveBrowser.notLoaded' };
 }
 
 /**
@@ -619,10 +619,10 @@ function motivoDiRete(testo) {
 export async function vaiA(cdp, sessionId, url, { attesaMs = ATTESA_CARICAMENTO_MS } = {}) {
   let indirizzo;
   try { indirizzo = new URL(String(url)); } catch {
-    return { ok: false, stato: null, errore: 'URL non valido', url: String(url) };
+    return { ok: false, stato: null, errore: 'Invalid URL', erroreChiave: 'server.liveBrowser.invalidUrl', url: String(url) };
   }
   const ammesso = urlAmmesso(indirizzo);
-  if (!ammesso.ok) return { ok: false, stato: null, errore: ammesso.motivo, url: indirizzo.href };
+  if (!ammesso.ok) return { ok: false, stato: null, errore: ammesso.motivo, ...(ammesso.motivoChiave ? { erroreChiave: ammesso.motivoChiave, ...(ammesso.motivoParams ? { erroreParams: ammesso.motivoParams } : {}) } : {}), url: indirizzo.href };
 
   await cdp.invia('Page.enable', {}, sessionId);
   await cdp.invia('Network.enable', {}, sessionId);
@@ -655,26 +655,26 @@ export async function vaiA(cdp, sessionId, url, { attesaMs = ATTESA_CARICAMENTO_
   try {
     const esito = await cdp.invia('Page.navigate', { url: indirizzo.href }, sessionId);
     if (esito?.errorText) {
-      return { ok: false, stato: null, errore: motivoDiRete(esito.errorText), url: indirizzo.href };
+      return { ok: false, stato: null, ...motivoDiRete(esito.errorText), url: indirizzo.href };
     }
     frameAtteso = esito?.frameId || null;
-    if (!frameAtteso) return { ok: false, stato: null, errore: 'Il browser non ha detto quale riquadro sta caricando', url: indirizzo.href };
+    if (!frameAtteso) return { ok: false, stato: null, errore: 'The browser did not say which frame it is loading', erroreChiave: 'server.liveBrowser.noFrame', url: indirizzo.href };
     if (fermiVisti.has(frameAtteso) || loadVisto) fine('caricata');
     /* Se la risposta era già arrivata mentre navigavamo, non si aspetta a vuoto. */
     const scaduta = new Promise((r) => { const t = setTimeout(() => r('scaduta'), attesaMs); t.unref?.(); });
     const come = await Promise.race([caricata, scaduta]);
     const stato = statiPerFrame.has(frameAtteso) ? statiPerFrame.get(frameAtteso) : null;
     if (come === 'scaduta') {
-      return { ok: false, stato, errore: `La pagina non ha finito di caricare entro ${Math.round(attesaMs / 1000)} secondi`, url: indirizzo.href };
+      return { ok: false, stato, errore: `The page did not finish loading within ${Math.round(attesaMs / 1000)} seconds`, erroreChiave: 'server.liveBrowser.loadTimeout', erroreParams: { seconds: Math.round(attesaMs / 1000) }, url: indirizzo.href };
     }
     /* ⛔ Uno stato HTTP di errore È un fallimento, anche se il documento si è
        caricato: è esattamente il caso che la cornice non sapeva vedere. */
     if (typeof stato === 'number' && stato >= 400) {
-      return { ok: false, stato, errore: `Il sito ha risposto ${stato}`, url: indirizzo.href };
+      return { ok: false, stato, errore: `The site answered ${stato}`, erroreChiave: 'server.liveBrowser.siteStatus', erroreParams: { status: stato }, url: indirizzo.href };
     }
     return { ok: true, stato, errore: null, url: indirizzo.href };
   } catch (causa) {
-    return { ok: false, stato: null, errore: causa?.message || 'Il browser non ha eseguito la navigazione', url: indirizzo.href };
+    return { ok: false, stato: null, ...(causa?.message ? { errore: causa.message } : { errore: 'The browser did not perform the navigation', erroreChiave: 'server.liveBrowser.navigationFailed' }), url: indirizzo.href };
   } finally {
     smonta();
   }

@@ -245,7 +245,7 @@ export async function diagnosi({
   if (sessioniPersistenza && typeof sessioniPersistenza === 'object') {
     // ⭐ 04/9, W0-01 — ogni file scartato porta il suo motivo: il Doctor dice DOVE è finita la differenza fra totali e ripristinate.
     const scartate = Array.isArray(sessioniPersistenza.scartate)
-      ? sessioniPersistenza.scartate.filter((s) => s && typeof s.sessionId === 'string').map((s) => ({ sessionId: s.sessionId, motivo: String(s.motivo || 'ignoto'), ...(s.dettaglio ? { dettaglio: String(s.dettaglio).slice(0, 200) } : {}) }))
+      ? sessioniPersistenza.scartate.filter((s) => s && typeof s.sessionId === 'string').map((s) => ({ sessionId: s.sessionId, ...passaFrase('motivo', { ...s, motivo: String(s.motivo || 'ignoto') }), ...(s.dettaglio ? passaFrase('dettaglio', { ...s, dettaglio: String(s.dettaglio).slice(0, 200) }) : {}) }))
       : [];
     const ripristinate = Number(sessioniPersistenza.ultimaLettura?.ripristinate) || 0;
     const totali = Number(sessioniPersistenza.ultimaLettura?.totali) || 0;

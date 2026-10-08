@@ -787,69 +787,73 @@ details.td-theme-note p { margin: 8px 0 0; }
  *   voci NC-05 / NC-24.
  * ═══════════════════════════════════════════════════════════════════════════════ */
 
+/* ⛔ Owner 08/10/2026 («la sezione automazioni deve avere lo stesso linguaggio visivo della sezione libreria note», e alla
+   scelta fra le varianti con le foto piene: «Come Note»): testata, strumenti, card e dettaglio di questo blocco valgono
+   ANCHE per Automazioni, con lo stesso selettore `:is()` — una fonte sola, così le due sezioni non possono divergere. L'editor
+   più sotto resta solo delle Note (le automazioni si scrivono nel foglio). */
 /* Testata della pagina — CSS-0346/0347/0348 (`.page-demo>header`, `h2`, `p`) e CSS-0015 (h1,h2,h3). L'Atlas non ha il
    marchio a sinistra del titolo; il pulsante «Nuova nota» sta a destra (lo mette lì `montaPulsanteNuova`). */
-.td-section[data-section="note"] .td-intro { align-items: center; justify-content: space-between; gap: 18px; margin: 0 0 18px; }
-.td-section[data-section="note"] .td-intro > div { flex: 1 1 auto; min-width: 0; }
-.td-section[data-section="note"] .td-intro-mark { display: none; }
-.td-section[data-section="note"] .td-intro h2 { font-size: 22px; font-weight: 550; line-height: 1.5; letter-spacing: -.025em; margin: 0 0 4px; }
-.td-section[data-section="note"] .td-intro p { font-size: 11px; }
-.td-section[data-section="note"] .td-intro > [data-nuova] { flex: none; }
-.td-section[data-section="note"] .td-intro > [data-nuova] .i { width: 15px; height: 15px; }
+.td-section:is([data-section="note"], [data-section="automazioni"]) .td-intro { align-items: center; justify-content: space-between; gap: 18px; margin: 0 0 18px; }
+.td-section:is([data-section="note"], [data-section="automazioni"]) .td-intro > div { flex: 1 1 auto; min-width: 0; }
+.td-section:is([data-section="note"], [data-section="automazioni"]) .td-intro-mark { display: none; }
+.td-section:is([data-section="note"], [data-section="automazioni"]) .td-intro h2 { font-size: 22px; font-weight: 550; line-height: 1.5; letter-spacing: -.025em; margin: 0 0 4px; }
+.td-section:is([data-section="note"], [data-section="automazioni"]) .td-intro p { font-size: 11px; }
+.td-section:is([data-section="note"], [data-section="automazioni"]) .td-intro > [data-nuova] { flex: none; }
+.td-section:is([data-section="note"], [data-section="automazioni"]) .td-intro > [data-nuova] .i { width: 15px; height: 15px; }
 
 /* Strumenti — CSS-0349/0350 (`.page-tools`, `.page-tools .input-wrap`): gap 8, 14 sopra e sotto, la ricerca cresce
    (min 170). Il select è quello dei controlli (F1, `controls.css`): qui si tolgono solo le misure proprie di `.td-select`. */
-.td-section[data-section="note"] .td-toolbar { gap: 8px; margin: 14px 0; }
-.td-section[data-section="note"] .td-search { flex: 1 1 0%; min-width: 170px; max-width: none; }
-.td-section[data-section="note"] .td-toolbar > .talos-grow { display: none; }
-.td-section[data-section="note"] .td-select { min-height: 0; height: 36px; max-width: none; padding: 0 32px 0 11px; border-radius: 9px; background: var(--talos-panel-soft); font-size: 12px; }
+.td-section:is([data-section="note"], [data-section="automazioni"]) .td-toolbar { gap: 8px; margin: 14px 0; }
+.td-section:is([data-section="note"], [data-section="automazioni"]) .td-search { flex: 1 1 0%; min-width: 170px; max-width: none; }
+.td-section:is([data-section="note"], [data-section="automazioni"]) .td-toolbar > .talos-grow { display: none; }
+.td-section:is([data-section="note"], [data-section="automazioni"]) .td-select { min-height: 0; height: 36px; max-width: none; padding: 0 32px 0 11px; border-radius: 9px; background: var(--talos-panel-soft); font-size: 12px; }
 
 /* La riga della selezione — `atlas.js:148` (`row between small`, margine 12 · 16), CSS-0152/0154/0159, e la casella
    `.checkline` CSS-0188/0189: nessuna cornice, testo 11, spazio 9 fra casella e parola. */
-.td-section[data-section="note"] .td-bulk { min-height: 0; margin: 12px 0 16px; padding: 0; border: 0; background: transparent; font-size: 11px; }
-.td-section[data-section="note"] .td-bulk-select { gap: 9px; }
+.td-section:is([data-section="note"], [data-section="automazioni"]) .td-bulk { min-height: 0; margin: 12px 0 16px; padding: 0; border: 0; background: transparent; font-size: 11px; }
+.td-section:is([data-section="note"], [data-section="automazioni"]) .td-bulk-select { gap: 9px; }
 
 /* Le card — CSS-0235/0236/0237/0239/0241/0243 (`.file-card`, `.selected`, `h4`, `footer`, `.note-card .note-excerpt`,
    `.note-card footer`) e `.demo h4` (12 · 550). Altezza del contenuto, niente orecchio piegato, niente cambio di bordo
    al passaggio del mouse (l'Atlas non ne ha); la card aperta si colora col fondo d'accento invece del bordo.
    ⛔ Solo nella vista a SCHEDE (`.td-grid`): la vista a elenco (`.td-list`) ha la sua griglia a tre colonne e resta
    com'è — l'Atlas non disegna un elenco di note. */
-.td-section[data-section="note"] .td-grid { gap: 12px; }
-.td-section[data-section="note"] .td-grid .td-card { border-radius: 10px; }
-.td-section[data-section="note"] .td-grid .td-card:hover { border-color: var(--talos-border); }
-.td-section[data-section="note"] .td-grid .td-card[data-selected="true"] { border-color: var(--talos-border); box-shadow: none; background: var(--talos-accent-soft); }
-.td-section[data-section="note"] .td-grid .td-note::after { display: none; }
-.td-section[data-section="note"] .td-grid .td-card-open { gap: 0; min-height: 0; padding: 13px; }
-.td-section[data-section="note"] .td-grid .td-card-top { min-height: 26px; padding-right: 36px; }
-.td-section[data-section="note"] .td-grid .td-card[data-batch-capable="true"] .td-card-top { padding-left: 23px; padding-right: 36px; }
-.td-section[data-section="note"] .td-grid .td-card-select { top: 19.5px; left: 13px; right: auto; width: 13px; height: 13px; }
-.td-section[data-section="note"] .td-grid .td-card-azioni { top: 10px; right: 10px; }
-.td-section[data-section="note"] .td-grid .td-card h3 { font-size: 12px; font-weight: 550; line-height: 1.5; letter-spacing: normal; margin: 12px 0 0; }
+.td-section:is([data-section="note"], [data-section="automazioni"]) .td-grid { gap: 12px; }
+.td-section:is([data-section="note"], [data-section="automazioni"]) .td-grid .td-card { border-radius: 10px; }
+.td-section:is([data-section="note"], [data-section="automazioni"]) .td-grid .td-card:hover { border-color: var(--talos-border); }
+.td-section:is([data-section="note"], [data-section="automazioni"]) .td-grid .td-card[data-selected="true"] { border-color: var(--talos-border); box-shadow: none; background: var(--talos-accent-soft); }
+.td-section:is([data-section="note"], [data-section="automazioni"]) .td-grid .td-note::after { display: none; }
+.td-section:is([data-section="note"], [data-section="automazioni"]) .td-grid .td-card-open { gap: 0; min-height: 0; padding: 13px; }
+.td-section:is([data-section="note"], [data-section="automazioni"]) .td-grid .td-card-top { min-height: 26px; padding-right: 36px; }
+.td-section:is([data-section="note"], [data-section="automazioni"]) .td-grid .td-card[data-batch-capable="true"] .td-card-top { padding-left: 23px; padding-right: 36px; }
+.td-section:is([data-section="note"], [data-section="automazioni"]) .td-grid .td-card-select { top: 19.5px; left: 13px; right: auto; width: 13px; height: 13px; }
+.td-section:is([data-section="note"], [data-section="automazioni"]) .td-grid .td-card-azioni { top: 10px; right: 10px; }
+.td-section:is([data-section="note"], [data-section="automazioni"]) .td-grid .td-card h3 { font-size: 12px; font-weight: 550; line-height: 1.5; letter-spacing: normal; margin: 12px 0 0; }
 /* ⛔ REVIEW AVVERSARIA 24/09 sera: l'estratto della ricetta è `white-space: pre-line` (mockup-td.css:94), e la riga vuota
    fra due paragrafi si prendeva una delle tre righe (a 1024 restava «…pensiero.» e poi «…»). Nell'Atlas l'estratto è
    testo continuo (`.note-excerpt` non dichiara `white-space`: vale `normal`). Con `normal` gli a capo diventano spazi
    (MDN «white-space», agg. 27/08/2026: «New lines: collapse»). Solo la card delle Note. */
-.td-section[data-section="note"] .td-grid .td-excerpt { font-size: 11px; line-height: 1.7; color: var(--talos-muted); margin: 7px 0 0; -webkit-line-clamp: 3; white-space: normal; }
-.td-section[data-section="note"] .td-grid .td-card-bottom { margin-top: 12px; padding-top: 0; gap: 12px; font-size: 11px; }
-.td-section[data-section="note"] .td-card-quando { display: inline-flex; align-items: center; gap: 3px; min-width: 0; }
-.td-section[data-section="note"] .td-card-quando .i { width: 18px; height: 18px; flex: none; }
+.td-section:is([data-section="note"], [data-section="automazioni"]) .td-grid .td-excerpt { font-size: 11px; line-height: 1.7; color: var(--talos-muted); margin: 7px 0 0; -webkit-line-clamp: 3; white-space: normal; }
+.td-section:is([data-section="note"], [data-section="automazioni"]) .td-grid .td-card-bottom { margin-top: 12px; padding-top: 0; gap: 12px; font-size: 11px; }
+.td-section:is([data-section="note"], [data-section="automazioni"]) .td-card-quando { display: inline-flex; align-items: center; gap: 3px; min-width: 0; }
+.td-section:is([data-section="note"], [data-section="automazioni"]) .td-card-quando .i { width: 18px; height: 18px; flex: none; }
 
 /* Il dettaglio — CSS-0353/0354/0357 (`.page-demo .page-detail`, `header`, `footer`) e l'etichetta CSS-0116
    (`.section-label`, 10 → 11 px per Q-06): una scheda con bordo e raggio 11 a 18 px dall'elenco, invece di una colonna
    a filo. Il divisorio resta (è un comando: mouse e tastiera), e la sua larghezza entra nei 18. */
-.td-section[data-section="note"] .td-workspace[data-detail="true"] .td-master { padding-right: 11px; }
-.td-section[data-section="note"] .td-divider::before { background: transparent; }
-.td-section[data-section="note"] .td-divider:hover::before, .td-section[data-section="note"] .td-divider:focus-visible::before { background: var(--talos-accent); }
-.td-section[data-section="note"] .td-detail { margin: 28px 28px 28px 0; border: 1px solid var(--talos-border); border-radius: 11px; }
-.td-section[data-section="note"] .td-workspace[data-expanded="true"] .td-detail { width: auto; flex: 1 1 auto; margin: 28px; border: 1px solid var(--talos-border); }
-@container (max-width: 850px) { .td-section[data-section="note"] .td-workspace[data-detail="true"] .td-detail { width: auto; flex: 1 1 auto; margin: 24px; } }
-@container (max-width: 560px) { .td-section[data-section="note"] .td-workspace[data-detail="true"] .td-detail { margin: 20px; } }
-.td-section[data-section="note"] .td-detail-head { min-height: 0; padding: 18px 18px 14px; }
-.td-section[data-section="note"] .td-detail-head > span:first-child { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--talos-muted); }
-.td-section[data-section="note"] .td-detail-body { padding: 16px 18px 18px; }
-.td-section[data-section="note"] .td-detail-footer { justify-content: flex-end; gap: 8px; padding: 12px 18px 18px; }
-.td-section[data-section="note"] .td-detail-footer > .td-save-status { order: -1; margin-left: 0; margin-right: auto; font-size: 11px; line-height: 1.65; }
-.td-section[data-section="note"] .td-detail-footer .talos-button--primary .i { width: 15px; height: 15px; }
+.td-section:is([data-section="note"], [data-section="automazioni"]) .td-workspace[data-detail="true"] .td-master { padding-right: 11px; }
+.td-section:is([data-section="note"], [data-section="automazioni"]) .td-divider::before { background: transparent; }
+.td-section:is([data-section="note"], [data-section="automazioni"]) .td-divider:hover::before, .td-section:is([data-section="note"], [data-section="automazioni"]) .td-divider:focus-visible::before { background: var(--talos-accent); }
+.td-section:is([data-section="note"], [data-section="automazioni"]) .td-detail { margin: 28px 28px 28px 0; border: 1px solid var(--talos-border); border-radius: 11px; }
+.td-section:is([data-section="note"], [data-section="automazioni"]) .td-workspace[data-expanded="true"] .td-detail { width: auto; flex: 1 1 auto; margin: 28px; border: 1px solid var(--talos-border); }
+@container (max-width: 850px) { .td-section:is([data-section="note"], [data-section="automazioni"]) .td-workspace[data-detail="true"] .td-detail { width: auto; flex: 1 1 auto; margin: 24px; } }
+@container (max-width: 560px) { .td-section:is([data-section="note"], [data-section="automazioni"]) .td-workspace[data-detail="true"] .td-detail { margin: 20px; } }
+.td-section:is([data-section="note"], [data-section="automazioni"]) .td-detail-head { min-height: 0; padding: 18px 18px 14px; }
+.td-section:is([data-section="note"], [data-section="automazioni"]) .td-detail-head > span:first-child { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--talos-muted); }
+.td-section:is([data-section="note"], [data-section="automazioni"]) .td-detail-body { padding: 16px 18px 18px; }
+.td-section:is([data-section="note"], [data-section="automazioni"]) .td-detail-footer { justify-content: flex-end; gap: 8px; padding: 12px 18px 18px; }
+.td-section:is([data-section="note"], [data-section="automazioni"]) .td-detail-footer > .td-save-status { order: -1; margin-left: 0; margin-right: auto; font-size: 11px; line-height: 1.65; }
+.td-section:is([data-section="note"], [data-section="automazioni"]) .td-detail-footer .talos-button--primary .i { width: 15px; height: 15px; }
 
 /* L'editor — `editor()` (`atlas.js:37`): etichetta sopra il campo (CSS-0174 `.field-label`: 11, colore del testo,
    7 di spazio), campi `.text-input` (CSS-0176: 36, 8/11, 12 px) con contorno e fondo dei campi della 0.1.15 (Q-01:

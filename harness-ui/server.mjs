@@ -6,6 +6,7 @@ import { createLocalResumeDiagnostics } from './src/local-resume-diagnostics.mjs
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { createAutomationScheduler } from './src/automation-scheduler.mjs';
+import { creaOspiteAutomazioni } from './src/automation-per-il-modello.mjs'; // automazioni a due porte (08/10/2026)
 import { createAutomationStore } from './src/automation-store.mjs';
 import { loadConfig, trovaPortaLibera } from './src/config.mjs';
 import { createHttpApp } from './src/http-app.mjs';
@@ -20,7 +21,7 @@ import { createCapacitaAdattiva, createWorkflowScheduler } from './src/workflow/
 import { creaOnWorkflowFn } from './src/workflow/per-il-modello.mjs';
 import { createStaticHandler } from './src/static-files.mjs';
 import { listaTaskDisponibili } from './src/task-catalog.mjs';
-import { elencaCartelleProgetto } from './src/custom-task.mjs';
+import { elencaCartelleProgetto, validaCartellaLibera } from './src/custom-task.mjs';
 import { diagnosi } from './src/doctor.mjs';
 import { avviaPuliziaScratch, statoScratch } from './src/scratch.mjs';
 import { statoPrimoAvvio } from './src/setup-stato.mjs';
@@ -539,6 +540,13 @@ async function startServer() {
   const processOutputStoreFn = () => processOutputStorePromise ??= createProcessOutputStore({
     databasePath: percorsoDatiDesktop('.process-output/output.sqlite'), maxOutputBytes: maxProcessOutputBytes,
   });
+  /* Le cartelle GLOBALI di Note, Attività e Memoria: calcolate UNA volta e date sia al registro (elenchi, attrezzi del modello)
+     sia alle porte di scrittura della persona (createHttpApp, più sotto) — vedi il commento lì (08/10/2026). */
+  const cartelleArchiviPersonali = Object.freeze({
+    cartellaNote: percorsoDatiDesktop('.notes-store/'),
+    cartellaAttivita: percorsoDatiDesktop('.tasks-store/'),
+    cartellaMemoria: percorsoDatiDesktop('.memory-store/'),
+  });
   const sessionRegistry = resumeDiagnostics.wrapRegistry(createSessionRegistry(resumeDiagnostics.registryOptions({
     processOutputStoreFn,
     cartellaDatiProgettoFn: cartellaDatiProgetto,
@@ -564,6 +572,14 @@ async function startServer() {
       talosLavoraFn: (runtimeInput) => ownerRuntime.talosLavora(runtimeInput),
     }),
     modello: config.modello,
+    /* ⛔ C2-Q (owner 07/10/2026 sera, contratto C2 §5): il desktop sa mostrare la domanda di una figlia alla persona (la carta nel
+       padre), quindi la accende. CLI e mobile decidono da sé; il loro predefinito resta `false`. */
+    domandeDeiFigli: true,
+    /* ⛔⛔ C2b «Coordinazione» (owner 08/10/2026 sera): il desktop la accende — spenta di serie per ogni sessione, carta prima di
+       avviare un agente, tetto di 20 avvii da soli per albero. Il modello chiesto per una figlia si sceglie fra lo stesso catalogo
+       che i passi di Workflow usano già (F3-11c, decisione owner 42, `workflowPlanProposeFn` qui sotto). CLI e mobile no. */
+    coordinazione: true,
+    modelliDisponibiliFn: async () => ((await modelCatalog.ottieni())?.modelli ?? []).map((m) => m?.id).filter((id) => typeof id === 'string'),
     /*
      * ⛔ (16/09/2026, review — portato dal main pubblico il 18/09) — la riserva `config.chiaveApi` è la OPENROUTER_API_KEY
      *   dell'AMBIENTE: nello scope desktop NON deve raggiungere le sessioni nemmeno come riserva. Con lo scope desktop la UI
@@ -637,9 +653,7 @@ async function startServer() {
     cartellaTrustHook: percorsoDatiDesktop('.hooks-trust/'),
     cartellaTrustMcp: percorsoDatiDesktop('.mcp-trust/'),
     cartellaTrustPlugin: percorsoDatiDesktop('.plugin-trust/'),
-    cartellaNote: percorsoDatiDesktop('.notes-store/'),
-    cartellaAttivita: percorsoDatiDesktop('.tasks-store/'),
-    cartellaMemoria: percorsoDatiDesktop('.memory-store/'),
+    ...cartelleArchiviPersonali,
     cartellaForge: percorsoDatiDesktop('.tool-forge-store/'),
     /*
      * ⭐⭐⭐ O-01 (04/9) — il Capability hub («+» del composer) elenca gli
@@ -749,7 +763,15 @@ async function startServer() {
   const automationScheduler = createAutomationScheduler({
     store: automationStore,
     sessionRegistry,
+    puoCambiareSeStessa: true, // D5 (owner 08/10/2026 notte): un giro può cambiare le sue istruzioni o il suo prossimo giro
   });
+  /*
+   * ⛔⛔ Automazioni a due porte (owner 08/10/2026 notte, «non negoziabile»): la porta del MODELLO. Il registro offre gli
+   *   attrezzi `automation_*` solo da qui in poi; la CLI non lo chiama, e da lei non si offrono.
+   */
+  sessionRegistry.collegaAutomazioni(creaOspiteAutomazioni({
+    store: automationStore, scheduler: automationScheduler, verificaCartellaFn: validaCartellaLibera,
+  }));
   /*
    * ⭐⭐⭐ 27/8 — owner: "un picker per il modello, dropdown stilizzato
    * (l'abbiamo già fatto nel mobile)". Il catalogo VERO di OpenRouter
@@ -882,6 +904,14 @@ async function startServer() {
     contextService: contextRuntime?.service,
     // ⭐ 10/09: le favicon delle fonti, prese dal server una volta sola e tenute qui accanto alle sessioni.
     cartellaFavicon: percorsoDatiDesktop('.favicon-cache/'),
+    /*
+     * ⛔⛔ 08/10/2026 (bugfixer) — le STESSE tre cartelle date al registro qui sopra (`cartellaNote`…). Dal 12/09 (R-02) solo il
+     *   registro le riceveva: le porte di scrittura della PERSONA (`magazziniDellaPersona` in http-app.mjs) restavano sul loro
+     *   default accanto al codice. Senza TALOS_DESKTOP_DATA_DIR le due coincidono; nell'app installata no: misurato con la
+     *   cartella dati impostata, POST di una nota → 201 nel codice, elenco → 0, e un aggiornamento che sostituisce il codice la
+     *   cancella. Il commento in http-app.mjs lo chiamava «il difetto peggiore possibile per questa funzione».
+     */
+    ...cartelleArchiviPersonali,
     chatImageStore,
     staticHandler: createStaticHandler(config.publicDir),
     sessionRegistry,
@@ -909,6 +939,7 @@ async function startServer() {
     listaTaskDisponibili: () => (taskCatalogProvider ? listaTaskDisponibili(taskCatalogProvider) : []),
     elencaCartelleProgetto: () => elencaCartelleProgetto(config.cartelleProgetto),
     automationStore,
+    automationScheduler, // automazioni a due porte (08/10/2026): «esegui ora» e «ferma il giro»
     diagnosiFn,
     // ⭐ 04/9, R-02 — l'intro al primo avvio legge da qui cosa manca davvero: chiavi nel portachiavi (solo i nomi dei provider), motore locale, cartelle. TALOS_INTRO=0 la spegne (rollback del ledger).
     setupStatoFn: () => statoPrimoAvvio({

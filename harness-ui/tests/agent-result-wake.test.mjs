@@ -162,7 +162,10 @@ test('F-010-STORE-ERROR: a failed child queue write is visible and never trigger
     assert.equal(runtime.runs.length, 2);
     assert.equal(registry.statoCoda(sessionId).voci.length, 1);
     assert.equal(registry.statoCoda(sessionId).inPausa, true);
-    assert.ok(events.some((event) => event.type === 'RunError' && event.code === 'SESSION_STORE_WRITE_FAILED'));
+    const failure = events.find((event) => event.type === 'RunError' && event.code === 'SESSION_STORE_WRITE_FAILED');
+    assert.ok(failure);
+    assert.equal(failure.messageChiave, 'server.sessionPersistence.childNotSaved');
+    assert.match(failure.message, /result was not saved to disk/u);
     await registry.chiudi?.();
   } finally {
     try { await attendiScritture({ cartellaStore }); } catch { /* cleanup still required */ }

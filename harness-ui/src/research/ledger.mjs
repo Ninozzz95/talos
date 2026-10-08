@@ -137,6 +137,7 @@ export function talosResearchLedger(steps, evidence = {}) {
             duration: durata === null ? null : talosResearchDuration(durata),
             attempts: step.attempts,
             error: step.error,
+            ...(step.errorChiave ? { errorChiave: step.errorChiave, ...(step.errorParams ? { errorParams: step.errorParams } : {}) } : {}),
         }
     })
 

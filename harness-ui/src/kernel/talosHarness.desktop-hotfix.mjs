@@ -25,6 +25,9 @@ import { isAbsolute, join, relative, resolve } from 'node:path';
 import { isPathInside } from '../path-policy.mjs';
 import * as compattazione from './compattazione-desktop.mjs';
 import * as kernel from './talosHarness.mjs';
+// ⭐ 06/10/2026 — la ricarica della memoria post-compact (opzione A, ricerca 5×5×5×5 §6.4): il blocco di
+// fatti freschi che `compattaOra` fonde nella proiezione, accanto all'indice meccanico.
+import { costruisciBloccoFatti } from './ricarica-post-compact.mjs';
 
 export * from './talosHarness.mjs';
 
@@ -389,6 +392,10 @@ function wrapOnGiro(original, { cartella, telemetry, calls }) {
 function wrapContextHooks(original, {
   cartella, modello, chiave, fetchDiRete, segnaleStop, telemetry, extraUsage, emitOnGiro,
   reasoning, soglie, recordIniziale = null, records = [], progressoAcceso = false,
+  /* ⭐ 06/10/2026 — le fonti dichiarate dall'ospite per il blocco di fatti post-compact (`input.fontiRicarica`):
+   * LEDGER append-only, coda pendente, pericoli aperti. `cartella` (la cartella della sessione) resta la fonte
+   * del `git log` locale; i file toccati vengono dall'indice meccanico di ogni compattazione. */
+  fontiRicarica = null,
 } = {}) {
   let compacted = compattazione.eRecordValido(recordIniziale) ? recordIniziale : null;
   let compactions = 0;
@@ -560,8 +567,29 @@ function wrapContextHooks(original, {
       return null;
     }
     const indice = compattazione.indiceMeccanico(parti.mezzo, { precedente: compacted?.indice ?? null });
+    /* ⭐ 06/10/2026 — RICARICA POST-COMPACT (opzione A, percorso desktop): il punto naturale è l'indice
+     * meccanico già generato dal codice, esteso dalle letture disco (capitolato §6.4, vincolo 3). Il blocco
+     * di fatti freschi si calcola ORA, al momento del compact: git locale dalla cartella della sessione,
+     * LEDGER dichiarati dall'ospite (`input.fontiRicarica`), i file toccati dall'indice (puntatori), e il
+     * record `talos.compattazione.v1` come fonte ContextVersionV1 (dossier §6.1 punto 5). Fail-soft: una
+     * fonte che fallisce si DICHIARA nel blocco, la compattazione continua. FUSO nella STESSA proiezione:
+     * un solo cache-break, mai un messaggio separato. */
+    const dichiarateFonti = fontiRicarica && typeof fontiRicarica === 'object' ? fontiRicarica : {};
+    let bloccoFatti = '';
+    try {
+      bloccoFatti = (await costruisciBloccoFatti({
+        ...dichiarateFonti,
+        cartellaProgetto: dichiarateFonti.cartellaProgetto ?? cartella ?? null,
+        fileToccati: [...(Array.isArray(dichiarateFonti.fileToccati) ? dichiarateFonti.fileToccati : []), ...indice.fileRiletti],
+        fatti: [
+          ...(Array.isArray(dichiarateFonti.fatti) ? dichiarateFonti.fatti : []),
+          `Compaction record ${compattazione.SCHEMA_RECORD_COMPATTAZIONE}: coveredThrough=${rawMessages.length} raw messages`,
+        ],
+      })).testo;
+    } catch { /* costruisciBloccoFatti non lancia mai: qui non si arriva; per difesa il compact continua senza blocco. */ }
     const proiezione = compattazione.costruisciProiezione({
       testa: parti.testa, richiesteLetterali: parti.richiesteLetterali, riassunto: esito.riassunto, indice: indice.testo, coda: parti.coda,
+      bloccoFatti, recintaSintesi: bloccoFatti !== '',
     });
     const record = compattazione.creaRecord({
       coveredThrough: rawMessages.length,
@@ -740,6 +768,7 @@ export async function talosLavora(input = {}) {
     recordIniziale: input.recordCompattazioneIniziale ?? null,
     records,
     progressoAcceso: input.progressoCompattazione === true,
+    fontiRicarica: input.fontiRicarica ?? null,
   });
   const onDelta = wrapOnDelta(input.onDelta, telemetry);
 
