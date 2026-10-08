@@ -35,14 +35,14 @@ function isInside(root, candidate) {
 
 function executableKey(command) {
   if (typeof command !== 'string' || command.trim().length === 0 || command.includes('\0')) {
-    throw new ProcessPolicyError('Eseguibile non valido', 'EXECUTABLE_INVALID');
+    throw new ProcessPolicyError('Invalid executable', 'EXECUTABLE_INVALID');
   }
   return command.trim().toLowerCase();
 }
 
 function validateArgs(args) {
   if (!Array.isArray(args) || args.some((arg) => typeof arg !== 'string' || arg.includes('\0'))) {
-    throw new ProcessPolicyError('Argomenti del comando non validi', 'ARGS_INVALID');
+    throw new ProcessPolicyError('Invalid command arguments', 'ARGS_INVALID');
   }
 }
 
@@ -53,7 +53,7 @@ function validateArgs(args) {
  */
 export function parseProcessCommand(command) {
   if (typeof command !== 'string' || command.trim() === '' || command.includes('\0')) {
-    throw new ProcessPolicyError('Comando non valido', 'COMMAND_INVALID');
+    throw new ProcessPolicyError('Invalid command', 'COMMAND_INVALID');
   }
   const tokens = [];
   let token = '';
@@ -64,7 +64,7 @@ export function parseProcessCommand(command) {
     if (char === '\\' && quoted) { escaping = true; continue; }
     if (char === '"') { quoted = !quoted; continue; }
     if (!quoted && /[&|;<>()]/u.test(char)) {
-      throw new ProcessPolicyError('Il comando non può contenere operatori di shell', 'SHELL_SYNTAX_NOT_ALLOWED');
+      throw new ProcessPolicyError('The command cannot contain shell operators', 'SHELL_SYNTAX_NOT_ALLOWED');
     }
     if (!quoted && /\s/u.test(char)) {
       if (token) { tokens.push(token); token = ''; }
@@ -73,22 +73,22 @@ export function parseProcessCommand(command) {
     token += char;
   }
   if (escaping) token += '\\';
-  if (quoted) throw new ProcessPolicyError('Virgolette non bilanciate', 'COMMAND_INVALID');
+  if (quoted) throw new ProcessPolicyError('Unbalanced quotes', 'COMMAND_INVALID');
   if (token) tokens.push(token);
-  if (tokens.length === 0) throw new ProcessPolicyError('Comando non valido', 'COMMAND_INVALID');
+  if (tokens.length === 0) throw new ProcessPolicyError('Invalid command', 'COMMAND_INVALID');
   return tokens;
 }
 
 function validateTimeout(timeout) {
   if (timeout === undefined) return;
   if (!Number.isInteger(timeout) || timeout <= 0) {
-    throw new ProcessPolicyError('Durata massima del comando non valida', 'TIMEOUT_INVALID');
+    throw new ProcessPolicyError('Invalid maximum command duration', 'TIMEOUT_INVALID');
   }
 }
 
 function buildEnvironment(env, allowlist) {
   if (env !== undefined && (env === null || typeof env !== 'object' || Array.isArray(env))) {
-    throw new ProcessPolicyError('Ambiente del comando non valido', 'ENV_INVALID');
+    throw new ProcessPolicyError('Invalid command environment', 'ENV_INVALID');
   }
   const allowed = new Set(allowlist);
   const source = { ...process.env, ...(env ?? {}) };
@@ -97,11 +97,11 @@ function buildEnvironment(env, allowlist) {
 
 function validateCwd(cwd, cwdRoot) {
   if (typeof cwd !== 'string' || cwd.length === 0 || cwd.includes('\0') || !isAbsolute(cwd)) {
-    throw new ProcessPolicyError('Cartella di lavoro esplicita richiesta', 'CWD_REQUIRED');
+    throw new ProcessPolicyError('An explicit working folder is required', 'CWD_REQUIRED');
   }
   const resolved = resolve(cwd);
   if (cwdRoot && !isInside(cwdRoot, resolved)) {
-    throw new ProcessPolicyError('Cartella di lavoro fuori dall’area autorizzata', 'CWD_NOT_ALLOWED');
+    throw new ProcessPolicyError('Working folder outside the authorized area', 'CWD_NOT_ALLOWED');
   }
   return resolved;
 }
@@ -109,7 +109,7 @@ function validateCwd(cwd, cwdRoot) {
 function validateCaptureLimit(value) {
   if (value === undefined) return DEFAULT_CAPTURE_LIMIT_BYTES;
   if (!Number.isSafeInteger(value) || value <= 0) {
-    throw new ProcessPolicyError('Limite output non valida', 'CAPTURE_LIMIT_INVALID');
+    throw new ProcessPolicyError('Invalid output limit', 'CAPTURE_LIMIT_INVALID');
   }
   return value;
 }
@@ -136,23 +136,23 @@ function terminateChild(child) {
 export async function resolveApprovedExecutable({ id, configuredPath, expectedSha256 } = {}, deps = {}) {
   if (typeof id !== 'string' || id.trim() === '' || typeof configuredPath !== 'string'
     || !configuredPath.trim() || !isAbsolute(configuredPath) || configuredPath.includes('\0')) {
-    throw new ProcessPolicyError('Percorso dell’eseguibile non valido', 'EXECUTABLE_PATH_INVALID');
+    throw new ProcessPolicyError('Invalid executable path', 'EXECUTABLE_PATH_INVALID');
   }
   if (expectedSha256 !== undefined && !/^[a-f0-9]{64}$/iu.test(expectedSha256)) {
-    throw new ProcessPolicyError('Digest dell’eseguibile non valido', 'EXECUTABLE_DIGEST_INVALID');
+    throw new ProcessPolicyError('Invalid executable digest', 'EXECUTABLE_DIGEST_INVALID');
   }
   const statFn = deps.statFn ?? stat;
   const readFileFn = deps.readFileFn ?? readFile;
   const path = resolve(configuredPath);
   let info;
-  try { info = await statFn(path); } catch { throw new ProcessPolicyError('Eseguibile configurato non trovato', 'EXECUTABLE_NOT_FOUND'); }
-  if (!info?.isFile?.()) throw new ProcessPolicyError('Il percorso configurato non è un file', 'EXECUTABLE_NOT_FILE');
+  try { info = await statFn(path); } catch { throw new ProcessPolicyError('Configured executable not found', 'EXECUTABLE_NOT_FOUND'); }
+  if (!info?.isFile?.()) throw new ProcessPolicyError('The configured path is not a file', 'EXECUTABLE_NOT_FILE');
   let sha256 = null;
   if (expectedSha256 !== undefined) {
     const contents = await readFileFn(path);
     sha256 = createHash('sha256').update(contents).digest('hex');
     if (sha256.toLowerCase() !== expectedSha256.toLowerCase()) {
-      throw new ProcessPolicyError('Digest dell’eseguibile non corrisponde', 'EXECUTABLE_DIGEST_MISMATCH');
+      throw new ProcessPolicyError('The executable digest does not match', 'EXECUTABLE_DIGEST_MISMATCH');
     }
   }
   return Object.freeze({ id: id.trim(), path, sha256 });
@@ -180,27 +180,27 @@ export function createProcessPolicy({
    */
   finestreVisibili = false,
 } = {}) {
-  if (typeof finestreVisibili !== 'boolean') throw new ProcessPolicyError('finestreVisibili deve essere un booleano', 'POLICY_INVALID');
+  if (typeof finestreVisibili !== 'boolean') throw new ProcessPolicyError('finestreVisibili must be a boolean', 'POLICY_INVALID');
   const approved = new Set(allowedExecutables.map((value) => executableKey(value)));
   if (cwdRoot !== null && (typeof cwdRoot !== 'string' || !isAbsolute(cwdRoot))) {
-    throw new ProcessPolicyError('Radice delle cartelle di lavoro non valida', 'CWD_ROOT_INVALID');
+    throw new ProcessPolicyError('Invalid working folders root', 'CWD_ROOT_INVALID');
   }
   const environmentKeys = [...new Set(envAllowlist)];
   if (!capabilities || typeof capabilities !== 'object' || Array.isArray(capabilities)) {
-    throw new ProcessPolicyError('Capability di processo non valide', 'CAPABILITIES_INVALID');
+    throw new ProcessPolicyError('Invalid process capabilities', 'CAPABILITIES_INVALID');
   }
   const capabilityRoots = new Map(Object.entries(capabilities).map(([name, root]) => {
     if (typeof name !== 'string' || !name || typeof root !== 'string' || !isAbsolute(root)) {
-      throw new ProcessPolicyError('Capability di processo non valida', 'CAPABILITIES_INVALID');
+      throw new ProcessPolicyError('Invalid process capability', 'CAPABILITIES_INVALID');
     }
     return [name, resolve(root)];
   }));
 
   function prepare(command, args, options = {}, effectiveEnvKeys = environmentKeys) {
     const key = executableKey(command);
-    if (!approved.has(key)) throw new ProcessPolicyError('Eseguibile non autorizzato', 'EXECUTABLE_NOT_ALLOWED');
+    if (!approved.has(key)) throw new ProcessPolicyError('Executable not authorized', 'EXECUTABLE_NOT_ALLOWED');
     validateArgs(args);
-    if (options.shell === true) throw new ProcessPolicyError('I comandi tramite shell non sono consentiti', 'SHELL_NOT_ALLOWED');
+    if (options.shell === true) throw new ProcessPolicyError('Commands through a shell are not allowed', 'SHELL_NOT_ALLOWED');
     const cwd = validateCwd(options.cwd, cwdRoot);
     validateTimeout(options.timeout);
     return {
@@ -218,17 +218,17 @@ export function createProcessPolicy({
 
   function prepareApprovedProcess({ executable, args = [], cwd, envKeys, timeoutMs, signal, capability, captureLimitBytes, env } = {}) {
     if (typeof capability !== 'string' || capability.trim() === '') {
-      throw new ProcessPolicyError('Capability esplicita richiesta', 'CAPABILITY_REQUIRED');
+      throw new ProcessPolicyError('An explicit capability is required', 'CAPABILITY_REQUIRED');
     }
     const capabilityRoot = capabilityRoots.get(capability);
-    if (!capabilityRoot) throw new ProcessPolicyError('Capability non autorizzata', 'CAPABILITY_NOT_ALLOWED');
+    if (!capabilityRoot) throw new ProcessPolicyError('Capability not authorized', 'CAPABILITY_NOT_ALLOWED');
     const requestedCwd = validateCwd(cwd, capabilityRoot);
     if (!existsSync(requestedCwd)) {
-      throw new ProcessPolicyError('Cartella di lavoro non trovata', 'CWD_NOT_FOUND');
+      throw new ProcessPolicyError('Working folder not found', 'CWD_NOT_FOUND');
     }
     const keys = envKeys === undefined ? environmentKeys : envKeys;
     if (!Array.isArray(keys) || keys.some((key) => typeof key !== 'string')) {
-      throw new ProcessPolicyError('Elenco ambiente non valido', 'ENV_KEYS_INVALID');
+      throw new ProcessPolicyError('Invalid environment list', 'ENV_KEYS_INVALID');
     }
     const allowedKeys = keys.filter((key) => environmentKeys.includes(key));
     const options = {
@@ -254,10 +254,10 @@ export function createProcessPolicy({
     try {
       child = spawnFn(prepared.command, prepared.args, prepared.options);
     } catch (error) {
-      throw new ProcessPolicyError(`Impossibile avviare il comando: ${error?.message || 'errore sconosciuto'}`, 'PROCESS_START_FAILED');
+      throw new ProcessPolicyError(`Cannot start the command: ${error?.message || 'unknown error'}`, 'PROCESS_START_FAILED');
     }
     if (!child || typeof child.once !== 'function') {
-      throw new ProcessPolicyError('Il processo non ha restituito un canale valido', 'PROCESS_START_FAILED');
+      throw new ProcessPolicyError('The process did not return a valid channel', 'PROCESS_START_FAILED');
     }
     return new Promise((resolveResult, rejectResult) => {
       let stdout = '';
@@ -296,7 +296,7 @@ export function createProcessPolicy({
           if (settled) return;
           settled = true;
           cleanup();
-          rejectResult(new ProcessPolicyError(`Processo non disponibile: ${spawnError?.message || 'errore sconosciuto'}`, 'PROCESS_FAILED'));
+          rejectResult(new ProcessPolicyError(`Process not available: ${spawnError?.message || 'unknown error'}`, 'PROCESS_FAILED'));
           return;
         }
         finish(spawnError?.code === 'ENOENT' ? -1 : code, spawnError?.code === 'ENOENT' ? 'ENOENT' : signalValue);
@@ -341,7 +341,7 @@ export function createProcessPolicy({
 /** Convenience entry point for callers that already own a configured policy. */
 export function runApprovedProcess(request, { policy } = {}) {
   if (!policy || typeof policy.runApprovedProcess !== 'function') {
-    throw new ProcessPolicyError('Policy di processo richiesta', 'POLICY_REQUIRED');
+    throw new ProcessPolicyError('A process policy is required', 'POLICY_REQUIRED');
   }
   return policy.runApprovedProcess(request);
 }

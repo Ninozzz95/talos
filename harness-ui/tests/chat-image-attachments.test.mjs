@@ -44,8 +44,8 @@ test('IMAGE-02-LIMITS limiti espliciti per immagine, messaggio e cronologia', ()
   const bytes=Buffer.alloc(max);Buffer.from(png,'base64').copy(bytes);
   const large={nome:'limite.png',dataUrl:'data:image/png;base64,'+bytes.toString('base64')};
   const image=await store.upload(large);
-  await assert.rejects(store.upload({...large,dataUrl:'data:image/png;base64,'+Buffer.concat([bytes,Buffer.of(0)]).toString('base64')}), /grande|validi/);
-  await assert.rejects(store.validateReferences(Array(11).fill(image)),/10 immagini/);
+  await assert.rejects(store.upload({...large,dataUrl:'data:image/png;base64,'+Buffer.concat([bytes,Buffer.of(0)]).toString('base64')}), /large|not valid/);
+  await assert.rejects(store.validateReferences(Array(11).fill(image)),/10 images/);
   await assert.rejects(store.validateReferences([image,image,image]),{code:'PAYLOAD_LIMIT'});
   const history=[{role:'user',content:imageMessageContent('Prima',[image,image])},{role:'user',content:imageMessageContent('Dopo',[image])}];
   const original=structuredClone(history);

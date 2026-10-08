@@ -48,10 +48,12 @@ test('WS-SEARCH-04 — i tetti MORDONO e lo dicono: mai un elenco tagliato che s
   const pochi = await cercaNelWorkspace({ cartella, query: 'registro' }, { limiti: { risultati: 2 } });
   assert.equal(pochi.risultati.length, 2);
   assert.equal(pochi.troncato, true);
-  assert.match(pochi.motivo, /più risultati/);
+  assert.match(pochi.motivo, /more results/);
+  assert.equal(pochi.motivoChiave, 'server.workspaceSearch.moreResults');
   const grande = await cercaNelWorkspace({ cartella, query: 'registro' }, { limiti: { vociVisitate: 3 } });
   assert.equal(grande.troncato, true);
-  assert.match(grande.motivo, /molto grande/);
+  assert.match(grande.motivo, /very large/);
+  assert.equal(grande.motivoChiave, 'server.workspaceSearch.folderTooBig');
 });
 
 test('WS-SEARCH-05 — un collegamento non si segue: la ricerca non esce dalla cartella e non gira in tondo', async (t) => {

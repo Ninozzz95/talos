@@ -45,7 +45,7 @@ export function createPreferenzeWslStore({ file = null, statoFn = null } = {}) {
   }
 
   function imposta({ usaUtenteNormale } = {}) {
-    if (typeof usaUtenteNormale !== 'boolean') throw new PreferenzeWslError('QUERY_INVALID', 'usaUtenteNormale deve essere vero o falso.');
+    if (typeof usaUtenteNormale !== 'boolean') throw new PreferenzeWslError('QUERY_INVALID', 'usaUtenteNormale must be true or false.');
     if (file) scriviFile(file, { usaUtenteNormale });
     else inMemoria = { usaUtenteNormale };
     return leggi();

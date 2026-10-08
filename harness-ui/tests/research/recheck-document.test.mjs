@@ -57,32 +57,32 @@ const MISTO = {
 test('la prosa dice i conti, e li dice giusti', () => {
   const documento = talosResearchRecheckDocument('quanto è alto il Monte Bianco', MISTO, 'run-9');
 
-  assert.ok(documento.startsWith('# Ricontrollo — quanto è alto il Monte Bianco'));
-  assert.ok(documento.includes('Data del ricontrollo: 2027-01-01T00:00:00.000Z'));
-  assert.ok(documento.includes('Fonti ricontrollate: 3'));
-  assert.ok(documento.includes('- intatte: 1'));
-  assert.ok(documento.includes('- cambiate dal giorno della ricerca: 1'));
-  assert.ok(documento.includes('- non rispondono più: 1'));
+  assert.ok(documento.startsWith('# Recheck — quanto è alto il Monte Bianco'));
+  assert.ok(documento.includes('Recheck date: 2027-01-01T00:00:00.000Z'));
+  assert.ok(documento.includes('Sources rechecked: 3'));
+  assert.ok(documento.includes('- intact: 1'));
+  assert.ok(documento.includes('- changed since research day: 1'));
+  assert.ok(documento.includes('- no longer responding: 1'));
   // Il motivo dell'irraggiungibile arriva fino alla riga della fonte: senza,
   // «non risponde più» non dice se è un 403, un timeout o una pagina sparita.
-  assert.ok(documento.includes('non risponde più (403)'));
+  assert.ok(documento.includes('no longer responds (403)'));
   // La percentuale è quella tenuta, arrotondata — non un numero vicino.
-  assert.ok(documento.includes('cambiata (60% del testo di allora è ancora lì)'));
+  assert.ok(documento.includes('changed (60% of original text is still there)'));
 });
 
 test('⛔ la frase sulle fonti sparite esce SOLO quando ce n\'è una', () => {
   // «La pagina è sparita E il testo è ancora qui»: è la frase che nessun
   // concorrente può scrivere, e stamparla su un ricontrollo dove tutto risponde
   // sarebbe vantarsi di un salvataggio che non è servito a nessuno.
-  assert.ok(talosResearchRecheckDocument('q', MISTO, 'r').includes('restano leggibili qui'));
-  assert.ok(!talosResearchRecheckDocument('q', TUTTO_BENE, 'r').includes('restano leggibili qui'));
+  assert.ok(talosResearchRecheckDocument('q', MISTO, 'r').includes('remain readable here'));
+  assert.ok(!talosResearchRecheckDocument('q', TUTTO_BENE, 'r').includes('remain readable here'));
 });
 
 test('⛔ e AL CONTRARIO: i passaggi persi si dichiarano in grassetto, o si dichiara che non ce ne sono', () => {
   // Il silenzio non è un esito: un ricontrollo che non dice niente sui passaggi
   // si legge come uno che non li ha guardati.
-  assert.ok(talosResearchRecheckDocument('q', MISTO, 'r').includes('**1 passaggi citati non sono più nella loro fonte.**'));
-  assert.ok(talosResearchRecheckDocument('q', TUTTO_BENE, 'r').includes('Tutti i passaggi citati sono ancora nelle loro fonti.'));
+  assert.ok(talosResearchRecheckDocument('q', MISTO, 'r').includes('**1 cited passages are no longer in their source.**'));
+  assert.ok(talosResearchRecheckDocument('q', TUTTO_BENE, 'r').includes('All cited passages are still in their sources.'));
 });
 
 test('in coda c\'è il blocco, e i suoi numeri sono quelli della prosa', () => {
@@ -117,8 +117,8 @@ test('⛔ prosa e recinto non si toccano: prima del blocco c\'è una riga bianca
 test('⛔ un ricontrollo senza fonti resta un documento, non una pagina vuota', () => {
   const documento = talosResearchRecheckDocument('q', { at: '2027-01-01T00:00:00.000Z', sources: [] }, 'r');
 
-  assert.ok(documento.includes('Fonti ricontrollate: 0'));
-  assert.ok(documento.includes('## Fonte per fonte'));
+  assert.ok(documento.includes('Sources rechecked: 0'));
+  assert.ok(documento.includes('## Source by source'));
   // E il blocco c'è lo stesso, con la tenuta IGNOTA: zero passaggi controllati
   // non è «non regge più niente».
   assert.equal(talosResearchParseRecheckBlock(documento)?.tenuta, null);

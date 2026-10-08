@@ -484,10 +484,12 @@ test('L5-ESPORTA: il MENU della ricerca L8 — con la prosa respinta compaiono C
 });
 
 test('L5-ESPORTA: l’indirizzo della rotta lo scrive UNA funzione, e il tono viaggia solo dove serve', () => {
-  assert.equal(indirizzoEsportazione('s1', 'r1', 'md'), '/api/v1/sessions/s1/research/r1/esporta?formato=md');
-  assert.equal(indirizzoEsportazione('s1', 'r1', 'pdf', 'dossier'), '/api/v1/sessions/s1/research/r1/esporta?formato=pdf&tono=dossier');
+  assert.equal(indirizzoEsportazione('s1', 'r1', 'md', null, 'it'), '/api/v1/sessions/s1/research/r1/esporta?formato=md&lingua=it');
+  assert.equal(indirizzoEsportazione('s1', 'r1', 'pdf', 'dossier', 'en'), '/api/v1/sessions/s1/research/r1/esporta?formato=pdf&tono=dossier&lingua=en');
+  // K4b (07/10): il server conosce solo it/en — la pseudo-lingua del cancello e ogni altra valgono inglese, la sorgente.
+  assert.equal(indirizzoEsportazione('s1', 'r1', 'md', null, 'pseudo'), '/api/v1/sessions/s1/research/r1/esporta?formato=md&lingua=en');
   // ⛔ Un id con una barra o uno spazio non deve poter uscire dal suo segmento.
-  assert.equal(indirizzoEsportazione('a/b', 'c d', 'json'), '/api/v1/sessions/a%2Fb/research/c%20d/esporta?formato=json');
+  assert.equal(indirizzoEsportazione('a/b', 'c d', 'json', null, 'it'), '/api/v1/sessions/a%2Fb/research/c%20d/esporta?formato=json&lingua=it');
   // ⛔ Verso contrario: i tre toni del PDF sono DAVVERO tre indirizzi diversi.
   const toni = FORMATI_ESPORTAZIONE.filter((u) => u.formato === 'pdf').map((u) => indirizzoEsportazione('s', 'r', u.formato, u.tono));
   assert.equal(new Set(toni).size, 3);

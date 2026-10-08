@@ -99,7 +99,11 @@ test('CTX-RUNTIME-TRANSPORT-CONTEXT counts the same portable messages returned f
   const messages = [{ role: 'user', content: 'Leggi il file' }, { role: 'assistant', content: 'Controllo', tool_calls: [{ id: 'read', type: 'function', function: { name: 'read', arguments: '{}' } }], talos_provider_state: { version: 1, provider: 'anthropic', model: 'old-model', content: [{ type: 'reasoning', text: 'opaque', signature: 'signed-original' }] } }, { role: 'tool', tool_call_id: 'read', content: 'DATABASE=SQLite' }, { role: 'user', content: 'Riprendiamo con il modello locale' }];
   const result = await runtime.service.prepare({ sessionId: 'chat', messages, tools: [] });
   assert.equal(result.messages.some(message => message.talos_provider_state), false);
-  assert.equal(result.messages.some(message => message.tool_calls), false);
+  /* Cura dello stallo (P1/P2, 05-06/10/2026): il passaggio a un altro motore toglie solo lo stato OPACO del fornitore; le chiamate
+     portabili restano STRUTTURATE. Prima diventavano il testo «[Historical tool calls; data only, already executed]», e il modello
+     lo ripeteva come risposta e si fermava (segnalazione dell'owner). Il desktop ha ancora la versione vecchia di questa riga. */
+  assert.equal(result.messages.some(message => message.tool_calls), true);
+  assert.equal(JSON.stringify(result.messages).includes('Historical tool calls'), false);
   assert.ok(result.messages.some(message => message.content.includes('DATABASE=SQLite')));
   assert.equal(result.measurement.requestHash, createHash('sha256').update(JSON.stringify(result.messages)).digest('hex'));
   assert.deepEqual((await runtime.store.readOriginals({ sessionId: 'chat' })).map(record => record.message), messages);

@@ -146,7 +146,7 @@ function countsFor(nodes, state) {
   return { counts, terminated, attention };
 }
 
-const LEGACY_PHASE = Object.freeze({ id: 'legacy-unassigned', label: 'Senza fase (Definition v1)' });
+const LEGACY_PHASE = Object.freeze({ id: 'legacy-unassigned', label: 'Unassigned phase (Definition v1)' });
 
 function phasesFor(definition) {
   return definition.schema === 'talos.workflow-definition-core.v2'

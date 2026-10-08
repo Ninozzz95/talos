@@ -58,13 +58,15 @@
 export const VIEWPORT_DESKTOP = Object.freeze([
   /** Portatile stretto: è qui che le colonne si comprimono per prime. */
   Object.freeze({ nome: 'laptop', width: 1024, height: 800 }),
-  /** Desktop di riferimento, la misura di lavoro dell'owner. */
+  /** Desktop di riferimento, la misura di lavoro dell'owner (regola 02/09: 1440×900 E 1024×800). */
   Object.freeze({ nome: 'desktop', width: 1440, height: 900 }),
+  /** ⭐ PARAMOUNT owner 05/10: le foto delle prove dal vivo sono ≥1920×1080 — default della pipeline dal 06/10 (run bug25: le 4 PNG erano uscite a 1440×900, riserva chiusa qui). */
+  Object.freeze({ nome: 'desktop-1920', width: 1920, height: 1080 }),
 ]);
 
-/** La viewport scelta da `?qa=` — default `desktop`. ⛔ Un nome sconosciuto NON ricade in silenzio sul default: si dice quale è valido. */
+/** La viewport scelta da `?qa=` — default `desktop-1920` (PARAMOUNT ≥1920×1080). ⛔ Un nome sconosciuto NON ricade in silenzio sul default: si dice quale è valido. */
 export function viewportRichiesta(urlBase) {
-  const nome = new URL(urlBase).searchParams.get('qa') || 'desktop';
+  const nome = new URL(urlBase).searchParams.get('qa') || 'desktop-1920';
   const trovata = VIEWPORT_DESKTOP.find((v) => v.nome === nome);
   if (!trovata) throw new Error(`viewport '${nome}' sconosciuta — valide: ${VIEWPORT_DESKTOP.map((v) => v.nome).join(', ')}`);
   return { width: trovata.width, height: trovata.height };
@@ -1279,7 +1281,7 @@ const SCENARI = {
     await p.attendi(900);
     await p.cdp.evaluate("localStorage.removeItem('talos.harness.desktop.settings.v1'); location.reload();");
     await p.attendi(900);
-    await p.click('[data-open-view="settings"]');
+    await p.cdp.evaluate("(() => { const b = [...document.querySelectorAll('.talos-sidebar [data-vaia=\"impostazioni\"]')].find((x) => x.getClientRects().length > 0); if (b) { b.click(); return true; } return false; })()");
     await p.attendi(300);
     await p.screenshot('settings-default', { nota: 'Appearance desktop: token TALOS, scala interfaccia e testo chat separate' });
     const modifica = await p.cdp.evaluate("(() => { const ui=document.querySelector('#uiFontScaleSelect'); const chat=document.querySelector('#chatFontScaleSelect'); const motion=document.querySelector('#reducedMotionToggle'); const esiti=[]; for (const [el,value,prop] of [[ui,'large','value'],[chat,'expanded','value'],[motion,true,'checked']]) { try { el[prop]=value; el.dispatchEvent(new Event('change',{bubbles:true})); esiti.push('ok'); } catch (error) { esiti.push(String(error)); } } return esiti; })()");
@@ -1292,7 +1294,7 @@ const SCENARI = {
     await p.screenshot('settings-parte-bassa', { nota: 'controllo dei gruppi Interazione, Agentico e Control plane dopo scroll' });
     await p.cdp.evaluate('location.reload()');
     await p.attendi(900);
-    await p.click('[data-open-view="settings"]');
+    await p.cdp.evaluate("(() => { const b = [...document.querySelectorAll('.talos-sidebar [data-vaia=\"impostazioni\"]')].find((x) => x.getClientRects().length > 0); if (b) { b.click(); return true; } return false; })()");
     await p.attendi(250);
     await p.screenshot('settings-dopo-reload', { nota: 'valori locali ripristinati dopo reload' });
     const stato = await p.cdp.evaluate("({ui:document.querySelector('#uiFontScaleSelect')?.value,chat:document.querySelector('#chatFontScaleSelect')?.value,motion:document.querySelector('#reducedMotionToggle')?.checked,scale:document.documentElement.style.getPropertyValue('--talos-ui-font-scale')})");
@@ -1307,7 +1309,7 @@ const SCENARI = {
     await p.cdp.send('Emulation.setDeviceMetricsOverride', { ...viewport, deviceScaleFactor: 1, mobile: false });
     await p.cdp.evaluate('location.reload()');
     await p.attendi(900);
-    await p.click('[data-open-view="settings"]');
+    await p.cdp.evaluate("(() => { const b = [...document.querySelectorAll('.talos-sidebar [data-vaia=\"impostazioni\"]')].find((x) => x.getClientRects().length > 0); if (b) { b.click(); return true; } return false; })()");
     await p.click('[data-settings-tab="models"]');
     await p.attendiCondizione(
       "document.querySelector('#machineCapacityStatus')?.textContent !== 'Misurazione in corso…' && document.querySelector('#modelLabProviderStatus')?.textContent !== 'Provider da verificare'",
@@ -1534,14 +1536,14 @@ const SCENARI = {
     await p.cdp.send('Emulation.setDeviceMetricsOverride', { ...viewport, deviceScaleFactor: 1, mobile: false });
     await p.cdp.evaluate('location.reload()');
     await p.attendi(900);
-    await p.click('[data-open-view="settings"]');
+    await p.cdp.evaluate("(() => { const b = [...document.querySelectorAll('.talos-sidebar [data-vaia=\"impostazioni\"]')].find((x) => x.getClientRects().length > 0); if (b) { b.click(); return true; } return false; })()");
     await p.click('[data-settings-tab="models"]');
     await p.attendiCondizione(
       "document.querySelector('#modelLabProviderStatus')?.textContent !== 'Provider da verificare'",
       { timeoutMs: 8000, descrizione: 'stato provider caricato' },
     );
     await p.click('[data-model-lab-tab="providers"]');
-    await p.attendiCondizione("document.querySelectorAll('[data-provider-id]').length === 7", { timeoutMs: 5000, descrizione: 'sette provider presenti' });
+    await p.attendiCondizione("document.querySelectorAll('[data-provider-id]').length >= 7", { timeoutMs: 5000, descrizione: 'almeno sette provider presenti (il registro cresce: 7 alla stesura, 28 oggi — guardia dinamica 06/10)' });
     await p.cdp.evaluate("document.querySelector('#modelLabProvidersPanel')?.scrollIntoView({block:'start', inline:'nearest'})");
     await p.attendi(160);
     await p.screenshot('provider-lista', { nota: 'Elenco provider completo: stato leggibile, nessun segreto visibile' });
@@ -1549,6 +1551,12 @@ const SCENARI = {
     await p.click('[data-provider-id="openai"] [data-provider-toggle]');
     await p.attendi(180);
     await p.screenshot('provider-card-aperta', { nota: 'Card OpenAI aperta: chiave mascherata, endpoint e timeout allineati al mobile' });
+    /* ⛔ BUG-24 passo 5.5 (06/10/2026) — il toggle NON espande più il corpo in linea: apre la
+       modale «Configura» (provider-card.js:993 → apriConfigurazioneProvider, dialog showModal a
+       :472). Una modale aperta blocca i clic fuori (backdrop del <dialog>): prima di toccare
+       «Prova tutti» e le altre card va CHIUSA, come farebbe l'utente col suo pulsante. */
+    await p.click('[data-provider-id="openai"] [data-provider-modale-chiudi]');
+    await p.attendi(180);
 
     /*
      * ⭐⭐⭐ 03/9 — «PROVA TUTTI»: la cosa che questo pannello non sapeva fare.
@@ -1565,7 +1573,10 @@ const SCENARI = {
      */
     await p.click('#providerTestAll');
     await p.attendi(12_000);
-    const esiti = await p.cdp.evaluate("JSON.stringify(Array.from(document.querySelectorAll('.provider-row')).map(r => r.dataset.providerId + ': ' + (r.dataset.provaEsito || 'nessuna prova')))");
+    /* ⛔ BUG-24 passo 5.5 (06/10/2026) — l'esito della prova sta sulla CARD (article
+       [data-provider-id], dataset.provaEsito a provider-card.js:723), non più su una .provider-row:
+       le righe-telefono non esistono più nel pannello ridisegnato. */
+    const esiti = await p.cdp.evaluate("JSON.stringify(Array.from(document.querySelectorAll('[data-provider-id]')).map(r => r.dataset.providerId + ': ' + (r.dataset.provaEsito || 'nessuna prova')))");
     p.nota(`esito della prova per provider: ${esiti}`);
     if (!String(esiti).includes('collegato')) p.difetto(`«Prova tutti» non produce nessun collegamento: ${esiti}`, { severita: 'blocco' });
     await p.cdp.evaluate("document.querySelector('#providerList')?.scrollIntoView({block:'start'})");
@@ -1587,20 +1598,31 @@ const SCENARI = {
     const anthropicEndpointHidden = await p.cdp.evaluate("(() => { const n = document.querySelector('[data-provider-id=\\\"anthropic\\\"] [data-provider-endpoint]'); if (!n) return true; const l = n.closest('label'); return Boolean(l ? l.hidden : n.hidden); })()");
     if (!anthropicEndpointHidden) p.difetto('Anthropic mostra un indirizzo personalizzato non previsto dal mobile', { severita: 'blocco' });
     await p.screenshot('provider-anthropic-timeout', { nota: 'Anthropic: tempo massimo disponibile, indirizzo personalizzato assente come nel mobile' });
+    /* ⛔ BUG-24 passo 5.5 (06/10/2026) — anche il toggle di Anthropic apre la modale «Configura»:
+       la chiudiamo prima di passare a OpenAI, altrimenti il suo showModal() tiene la pagina
+       in backdrop e i clic successivi finiscono sul velo. */
+    await p.click('[data-provider-id="anthropic"] [data-provider-modale-chiudi]');
+    await p.attendi(160);
 
     await p.cdp.evaluate("document.querySelector('[data-provider-id=\\\"openai\\\"]')?.scrollIntoView({block:'center', inline:'nearest'})");
     await p.attendi(120);
+    /* ⛔ BUG-24 passo 5.5 (06/10/2026) — la configurazione vive nella modale «Configura»: il
+       toggle la apre (provider-card.js:993 → showModal :472) e il Salva visibile è il primario
+       della modale [data-provider-modale-salva] (:377-381). Il bottone in linea cercato dalla
+       vecchia prova esiste ma sta nascosto finché la modale è aperta (:385-389). */
+    await p.click('[data-provider-id="openai"] [data-provider-toggle]');
+    await p.attendi(200);
     await p.digita('[data-provider-id="openai"] [data-provider-key]', '');
-    await p.click('[data-provider-id="openai"] [data-provider-action="save-key"]');
+    await p.click('[data-provider-id="openai"] [data-provider-modale-salva]');
     await p.attendi(160);
     await p.screenshot('provider-chiave-vuota', { nota: 'Errore naturale per chiave vuota; nessuna eccezione tecnica esposta' });
-    const expectedFailure = p.cdp.richiesteFallite.findIndex((entry) => entry.status === 422 && entry.url.endsWith('/api/v1/providers/openai/key'));
-    if (expectedFailure >= 0) {
-      p.cdp.richiesteFallite.splice(expectedFailure, 1);
-      p.nota('422 su chiave vuota osservato e riconosciuto come esito atteso della prova contraria');
-    } else {
-      p.difetto('la chiave vuota non ha prodotto il rifiuto HTTP atteso', { severita: 'blocco' });
-    }
+    /* ⛔ BUG-24 passo 5.5 (06/10/2026) — il rifiuto della chiave vuota è ora CLIENT-SIDE: con il
+       campo vuoto il Salva segnala «niente da salvare» nella modale e NON invia nulla
+       (provider-card.js:397-398). Il vecchio controllo pretendeva un 422 che oggi non può più
+       arrivare: si verifica il feedback, e la sua presenza prova che il ramo senza-invio è girato. */
+    const feedbackVuoto = await p.cdp.evaluate("(() => { const f = document.querySelector('[data-provider-id=openai] .talos-provider__modale [data-provider-feedback]'); return Boolean(f && !f.hidden && f.textContent.trim().length > 0); })()");
+    if (!feedbackVuoto) p.difetto('la chiave vuota non ha prodotto il feedback «niente da salvare» nella modale', { severita: 'blocco' });
+    p.nota('chiave vuota: validazione client-side della modale, nessuna richiesta HTTP (il vecchio 422 non è più raggiungibile)');
 
     // Successo UI controllato senza toccare il portachiavi reale.
     await p.cdp.evaluate(`(() => {
@@ -1624,12 +1646,21 @@ const SCENARI = {
       };
     })()`);
     await p.digita('[data-provider-id="openai"] [data-provider-key]', 'qa-ui-sentinel');
-    await p.click('[data-provider-id="openai"] [data-provider-action="save-key"]');
-    await p.attendi(250);
+    await p.click('[data-provider-id="openai"] [data-provider-modale-salva]');
+    await p.attendi(400);
+    /* ⛔ BUG-24 passo 5.5 (06/10/2026) — al successo la modale si chiude da sola (chiudiModale,
+       provider-card.js:429) e onConfigurazioneSalvata rilegge la lista: col mock attivo la card
+       riappare con keyConfigured=true. */
+    const modaleChiusa = await p.cdp.evaluate("document.querySelector('[data-provider-id=openai] .talos-provider__modale[open]') === null");
+    if (!modaleChiusa) p.difetto('la modale «Configura» resta aperta dopo il salvataggio riuscito', { severita: 'blocco' });
     const cleared = await p.cdp.evaluate("document.querySelector('[data-provider-id=\\\"openai\\\"] [data-provider-key]')?.value === ''");
     if (!cleared) p.difetto('la chiave non viene cancellata dal campo dopo il salvataggio', { severita: 'blocco' });
     await p.screenshot('provider-chiave-salvata', { nota: 'Salvataggio UI riuscito: campo ripulito e solo presenza mostrata' });
-    await p.click('[data-provider-id="openai"] [data-provider-action="remove-key"]');
+    /* ⛔ BUG-24 passo 5.5 (06/10/2026) — «Rimuovi chiave» vive nel menu «⋯» come voce nascosta ma
+       presente nel DOM (provider-card.js:903, aggiungiNascosto): il progetto la disegna COSÌ perché
+       la regia la trovi al .click() senza sapere del menu (provider-card.js:880-883). La prova
+       segue la regia: click() diretto sul nodo, la delega di app.js:3589-3605 posta su /key/remove. */
+    await p.cdp.evaluate("document.querySelector('[data-provider-id=openai] [data-provider-action=remove-key]')?.click()");
     await p.attendi(250);
     await p.screenshot('provider-chiave-rimossa', { nota: 'Rimozione UI riuscita: il valore non compare e lo stato torna non configurato' });
 
@@ -1651,7 +1682,7 @@ const SCENARI = {
     await p.cdp.send('Emulation.setDeviceMetricsOverride', { ...viewport, deviceScaleFactor: 1, mobile: false });
     await p.cdp.evaluate('location.reload()');
     await p.attendi(1000);
-    await p.click('[data-open-view="settings"]');
+    await p.cdp.evaluate("(() => { const b = [...document.querySelectorAll('.talos-sidebar [data-vaia=\"impostazioni\"]')].find((x) => x.getClientRects().length > 0); if (b) { b.click(); return true; } return false; })()");
     await p.attendi(250);
     await p.cdp.evaluate("document.querySelector('[data-settings-tab=\\\"appearance\\\"]')?.click()");
     const layout = await p.cdp.evaluate(`(() => {
@@ -1727,7 +1758,7 @@ const SCENARI = {
     await p.cdp.send('Emulation.setDeviceMetricsOverride', { ...viewport, deviceScaleFactor: 1, mobile: false });
     await p.cdp.evaluate('location.reload()');
     await p.attendi(900);
-    await p.click('[data-open-view="settings"]');
+    await p.cdp.evaluate("(() => { const b = [...document.querySelectorAll('.talos-sidebar [data-vaia=\"impostazioni\"]')].find((x) => x.getClientRects().length > 0); if (b) { b.click(); return true; } return false; })()");
     await p.attendiCondizione("!!document.querySelector('#modelLabRuntimeStatus') || !!document.querySelector('#modelLabCard')", { descrizione: 'Model Lab runtime montato' });
     await p.screenshot('model-lab-runtime-gate', { nota: 'gate runtime: stato osservato, modelli e controlli condizionati alla capability reale' });
 
@@ -1756,7 +1787,7 @@ const SCENARI = {
   async 'qa-model-lab-huggingface-download'(p) {
     const viewport = viewportRichiesta(URL_BASE); // ⛔ matrice unica: vedi VIEWPORT_DESKTOP in testa al file
     await p.cdp.send('Emulation.setDeviceMetricsOverride', { ...viewport, deviceScaleFactor: 1, mobile: false });
-    await p.cdp.evaluate('location.reload()'); await p.attendi(900); await p.click('[data-open-view="settings"]'); await p.click('[data-settings-tab="models"]'); await p.click('[data-model-lab-tab="huggingface"]');
+    await p.cdp.evaluate('location.reload()'); await p.attendi(900); await p.cdp.evaluate("(() => { const b = [...document.querySelectorAll('.talos-sidebar [data-vaia=\"impostazioni\"]')].find((x) => x.getClientRects().length > 0); if (b) { b.click(); return true; } return false; })()"); await p.click('[data-settings-tab="models"]'); await p.click('[data-model-lab-tab="huggingface"]');
     await p.digita('#modelLabHfSearch', 'Qwen3-0.6B-GGUF'); await p.click('#modelLabHfSearchButton');
     await p.attendiCondizione("document.querySelector('#modelLabHfResults')?.textContent?.includes('Qwen') || document.querySelector('#modelLabHfStatus')?.textContent?.includes('non disponibile')", { descrizione: 'risultati Hugging Face o stato errore' });
     await p.cdp.evaluate("document.querySelector('#modelLabHfPanel')?.scrollIntoView({block:'start', inline:'nearest'})"); await p.attendi(120);
@@ -1777,7 +1808,7 @@ const SCENARI = {
   async 'qa-model-lab-runtime-run'(p) {
     const viewport = viewportRichiesta(URL_BASE); // ⛔ matrice unica: vedi VIEWPORT_DESKTOP in testa al file
     await p.cdp.send('Emulation.setDeviceMetricsOverride', { ...viewport, deviceScaleFactor: 1, mobile: false });
-    await p.cdp.evaluate('location.reload()'); await p.attendi(900); await p.click('[data-open-view="settings"]');
+    await p.cdp.evaluate('location.reload()'); await p.attendi(900); await p.cdp.evaluate("(() => { const b = [...document.querySelectorAll('.talos-sidebar [data-vaia=\"impostazioni\"]')].find((x) => x.getClientRects().length > 0); if (b) { b.click(); return true; } return false; })()");
     await p.attendiCondizione("document.querySelector('#modelLabRunButton')?.disabled === false", { timeoutMs: 8000, descrizione: 'runtime locale e modello realmente pronti' });
     await p.cdp.evaluate("document.querySelector('#modelLabOverviewPanel')?.scrollIntoView({block:'start', inline:'nearest'})");
     await p.screenshot('runtime-pronto', { nota: 'runtime llama.cpp e modello GGUF locale osservati prima dell’azione' });
@@ -1973,7 +2004,7 @@ const SCENARI = {
     await p.screenshot('export-eseguito');
 
     // --- Automazioni: crea, verifica listata, metti in pausa, elimina — tutto gratis ---
-    await p.click('[data-open-view="automations"]');
+    await p.cdp.evaluate("(() => { const b = [...document.querySelectorAll('.talos-sidebar [data-vaia=\"automazioni\"]')].find((x) => x.getClientRects().length > 0); if (b) { b.click(); return true; } return false; })()");
     await p.attendi(300);
     await p.screenshot('automazioni-vista');
     await p.click('[data-automation-action="new"]');
@@ -1991,7 +2022,7 @@ const SCENARI = {
     p.nota('automazione creata, attivata ed eliminata — ciclo completo verificato');
 
     // --- Impostazioni: Riduci movimento, Doctor ---
-    await p.click('[data-open-view="settings"]');
+    await p.cdp.evaluate("(() => { const b = [...document.querySelectorAll('.talos-sidebar [data-vaia=\"impostazioni\"]')].find((x) => x.getClientRects().length > 0); if (b) { b.click(); return true; } return false; })()");
     await p.attendi(300);
     await p.click('#reducedMotionToggle');
     await p.attendi(150);
@@ -2233,6 +2264,548 @@ const SCENARI = {
    * contratto HTTP reale (POST + envelope), sostituendo soltanto la risposta
    * nell'ultimo miglio, come un test di rete controllata.
    */
+  /*
+   * ⛔ BUG-20 (05/10/2026) — prova DAL VIVO della cura «allegato trascinato». Il messaggio che parte
+   * verso il kernel deve nominare il file col PERCORSO ASSOLUTO e, per un file di testo entro tetto,
+   * portare il contenuto inline nel blocco `--- nome (assoluto) ---`. GRATUITO: il POST a
+   * /resume|/queue viene intercettato in pagina PRIMA di partire — il modello non viene mai chiamato.
+   */
+  async 'qa-bug20-allegato-trascinato'(p) {
+    await p.attendi(1500);
+    // 1. Apro una sessione REALE GIÀ CONCLUSA dalla sidebar (stessa via di qa-turn-limit-followup):
+    //    zero costi — l'apertura non resume, non crea sessioni, non chiama il modello.
+    await p.screenshot('bug20-app-caricata', { nota: 'app con la sidebar delle sessioni reali' });
+    const aperta = await p.cdp.evaluate("(() => { const righe = [...document.querySelectorAll('.real-session-item:not(.is-pending)')]; const r = righe.find((x) => x.querySelector('.session-stato')?.dataset.sessionState !== 'vivo'); if (!r) return { righe: righe.length, id: null }; r.click(); return { righe: righe.length, id: r.dataset.realSessionId, statoDati: r.querySelector('.session-stato')?.dataset.sessionState }; })()");
+    p.nota(`candidata sessione conclusa: ${JSON.stringify(aperta)}`);
+    if (!aperta || !aperta.id) throw new Error('nessuna sessione conclusa nella sidebar: serve un server con lo store reale');
+    // ⛔ la riga corrente NON porta .active: il marcatore è aria-current="true" (session-item.js :490).
+    await p.attendiCondizione("!!document.querySelector('.real-session-item[aria-current=\"true\"]')", { timeoutMs: 20000, descrizione: 'sessione conclusa aperta (aria-current)' });
+    const idRuntime = await p.cdp.evaluate('window.__talosHarnessUiRuntime?.realSessionState?.id || null');
+    p.nota(`sessione aperta: riga=${aperta.id} runtime=${idRuntime}`);
+    // ⛔ una sessione conclusa si riapre in ripristino (is-restoring): il composer è bloccato finché
+    //    la cronologia non è tutta a schermo. Aspettare la fine PRIMA di drop e invii.
+    await p.attendiCondizione("!document.querySelector('#conversation.is-restoring')", { timeoutMs: 25000, descrizione: 'ripristino cronologia finito' });
+    const statoComposer = await p.cdp.evaluate("(() => { const input = document.querySelector('#composerInput'); const piede = document.querySelector('#schermoChat .talos-chat-foot'); let reagisce = null; if (piede) { piede.dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true })); reagisce = piede.classList.contains('is-drop'); } return { inputDisabilitato: input?.disabled ?? null, inputReadOnly: input?.readOnly ?? null, piedePresente: !!piede, piedeReagisceADragover: reagisce }; })()");
+    p.nota(`stato composer: ${JSON.stringify(statoComposer)}`);
+    await p.attendi(1200);
+    p.nota(`sessione conclusa aperta: ${aperta}`);
+    // 2. Un comando DIRETTO vero (PO-06: il «!» gira sul composer, nessuna chiamata al modello):
+    //    una riga di processo REALE nel pannello, per fotografare i filtri di stato (BUG-20b).
+    //    ⛔ PRIMA del trascinamento: fra il chip dell'allegato e l'invio non deve passare NESSUNA
+    //    altra azione sul composer — è il flusso dell'owner (trascino → invio).
+    await p.digita('#composerInput', '!echo bug20-dal-vivo');
+    await p.cdp.evaluate("document.querySelector('#composerInput').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', bubbles: true, cancelable: true }))");
+    await p.attendi(2500);
+    await p.cdp.evaluate("document.querySelector('#railTabs [data-rail=\"processi\"]')?.click()");
+    await p.attendiCondizione("!!document.querySelector('#railProcessi [data-c=\"ProcessRow\"]')", {
+      timeoutMs: 20000,
+      descrizione: 'una riga di processo vera nel pannello processi',
+    });
+    await p.screenshot('bug20b-filtri-processi', { nota: 'riga dei filtri di stato, stesso stile degli agenti' });
+    const filtri = await p.cdp.evaluate(`(() => {
+      const riga = document.querySelector('#railProcessi .talos-agenti-stati');
+      if (!riga) return { errore: 'manca la riga dei filtri di stato' };
+      const bottoni = [...riga.querySelectorAll('button')];
+      const riuscito = bottoni.find((b) => b.dataset.stato === 'riuscito');
+      if (!riuscito) return { errore: 'manca il bottone «riuscito»', bottoni: bottoni.map((b) => b.dataset.stato) };
+      const prima = document.querySelectorAll('#railProcessi [data-c="ProcessRow"]').length;
+      riuscito.click();
+      return { bottoni: bottoni.length, nascosti: bottoni.filter((b) => b.hidden).length, prima };
+    })()`);
+    p.nota(`filtri di stato: ${JSON.stringify(filtri)}`);
+    if (filtri.errore) p.difetto(`BUG-20b: ${filtri.errore}`, { severita: 'blocco' });
+    else {
+      if (filtri.prima === undefined) p.difetto('BUG-20b: il clic sul filtro non è misurabile', { severita: 'blocco' });
+      await p.attendi(500);
+      // ⛔ verifica SEMANTICA: col filtro attivo, ogni riga visibile deve portare l'etichetta del
+      //    bottone PREMUTO (se tutte le righe sono già di quello stato, il conteggio non cambia — e va bene).
+      const dopo = await p.cdp.evaluate(`(() => {
+        const premuto = document.querySelector('#railProcessi .talos-agenti-stati button[aria-pressed="true"]');
+        const righe = [...document.querySelectorAll('#railProcessi [data-c="ProcessRow"]')];
+        const pulisci = (s) => (s || '').replace(/\\s+/g, ' ').trim().toLowerCase();
+        const stati = righe.map((r) => pulisci(r.querySelector('.talos-process__stato')?.textContent));
+        return { filtro: pulisci(premuto?.textContent), totale: righe.length, stati };
+      })()`);
+      p.nota(`righe dopo il filtro: filtro=${JSON.stringify(dopo.filtro)} totale=${dopo.totale} primi=${JSON.stringify(dopo.stati.slice(0, 6))}`);
+      if (!dopo.filtro) p.difetto('BUG-20b: nessun bottone del filtro risulta premuto dopo il clic', { severita: 'blocco' });
+      else if (dopo.filtro !== 'tutti') {
+        const estranei = dopo.stati.filter((s) => s && s !== dopo.filtro);
+        if (estranei.length > 0) p.difetto(`BUG-20b: col filtro «${dopo.filtro}» restano visibili ${estranei.length} righe di altro stato (${[...new Set(estranei)].slice(0, 3).join(', ')})`, { severita: 'blocco' });
+        if (dopo.stati.some((s) => !s)) p.difetto('BUG-20b: qualche riga non mostra il badge di stato', { severita: 'difetto' });
+      }
+      await p.cdp.evaluate(`(() => { const b = [...document.querySelectorAll('#railProcessi .talos-agenti-stati button')].find((x) => x.dataset.stato === 'tutti'); if (b) b.click(); })()`);
+      await p.attendi(300);
+    }
+    await p.screenshot('bug20b-filtro-riuscito', { nota: 'dopo il clic su «Riuscito»' });
+    // 3a. ⛔ NON si intercetta da JS: api-client.ts cattura `globalThis.fetch` alla creazione —
+    //     un wrapper su window.fetch installato ora NON vede le chiamate dell'app. Si ascolta la
+    //     rete a livello CDP (Network.responseReceived), che vede tutto.
+    const uploadViste = [];
+    const richiesteUpload = new Map();
+    const ascoltaUpload = (event) => {
+      const msg = JSON.parse(event.data);
+      const m = msg.method || '';
+      if (m === 'Network.requestWillBeSent' && /\/chat-files(?:$|\?)/.test(msg.params?.request?.url || '')) {
+        richiesteUpload.set(msg.params.requestId, { fase: 'inviata', a: Date.now() });
+      } else if (m === 'Network.responseReceived' && /\/chat-files(?:$|\?)/.test(msg.params?.response?.url || '')) {
+        const r = richiesteUpload.get(msg.params.requestId) || {};
+        r.status = msg.params.response.status;
+        r.headA = Date.now();
+        richiesteUpload.set(msg.params.requestId, r);
+      } else if (m === 'Network.loadingFinished' && richiesteUpload.has(msg.params.requestId)) {
+        const r = richiesteUpload.get(msg.params.requestId);
+        r.fase = 'corpo-completo';
+        r.corpoA = Date.now();
+        richiesteUpload.set(msg.params.requestId, r);
+      } else if (m === 'Network.loadingFailed' && richiesteUpload.has(msg.params.requestId)) {
+        const r = richiesteUpload.get(msg.params.requestId);
+        r.fase = `corpo-fallito(${msg.params.errorText})`;
+        r.corpoA = Date.now();
+        richiesteUpload.set(msg.params.requestId, r);
+      }
+    };
+    p.cdp.ws.addEventListener('message', ascoltaUpload);
+    // Sonda: DataTransfer costruito bene? E cosa arriva davvero al listener del piede?
+    await p.cdp.evaluate(`(() => {
+      window.__bug20Sonda = { dropVisto: null };
+      const dt = new DataTransfer();
+      const f = new File(['sonda'], 'sonda.txt', { type: 'text/plain' });
+      let aggiunto = false;
+      try { dt.items.add(f); aggiunto = true; } catch {}
+      window.__bug20Sonda.filesDiretti = { aggiunto, items: dt.items.length, files: dt.files.length };
+      const piede = document.querySelector('#schermoChat .talos-chat-foot');
+      piede?.addEventListener('drop', (e) => { window.__bug20Sonda.dropVisto = { dt: !!e.dataTransfer, files: e.dataTransfer ? e.dataTransfer.files.length : -1 }; }, { once: true });
+      window.__bug20Sonda.quantiInput = document.querySelectorAll('#composerInput').length;
+      return window.__bug20Sonda.filesDiretti;
+    })()`);
+    // 2. Trascina un file di TESTO sul composer (la stessa via del dal vivo: DataTransfer con File).
+    await p.cdp.evaluate(`(() => {
+      const bersaglio = document.querySelector('#schermoChat .talos-chat-foot') || document.querySelector('.talos-composer');
+      if (!bersaglio) throw new Error('bersaglio del trascinamento non trovato');
+      const contenuto = 'BUG-20: questo contenuto deve viaggiare nel messaggio, entro tetto.\\nRiga due € à.';
+      const file = new File([contenuto], 'bug20-dal-vivo.txt', { type: 'text/plain' });
+      const trasferimento = new DataTransfer();
+      trasferimento.items.add(file);
+      bersaglio.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: trasferimento }));
+    })()`);
+    await p.attendi(3000);
+    const sondaUpload = await p.cdp.evaluate("(() => ({ sonda: window.__bug20Sonda, toast: document.querySelector('#toastRegion')?.textContent?.trim() || '', toastClassi: [...document.querySelectorAll('.toast')].map((t) => t.textContent.trim().replace(/\\s+/g, ' ')), chip: !!document.querySelector('#schermoChat .talos-allegati__nome') }))()");
+    p.nota(`sonda dopo il drop (+3s): ${JSON.stringify(sondaUpload)} · richieste chat-files: ${JSON.stringify([...richiesteUpload.values()])}`);
+    // ⛔ il corpo della 201 può arrivare TARDI: si aspetta il chip fino a 30s, richiedendo lo stato
+    //    ogni 5s, e il watcher di rete resta attaccato per TUTTO lo scenario.
+    let chipVisto = sondaUpload.chip;
+    for (let i = 0; i < 6 && !chipVisto; i += 1) {
+      await p.attendi(5000);
+      chipVisto = await p.cdp.evaluate("!!document.querySelector('#schermoChat .talos-allegati__nome')");
+      if (chipVisto) p.nota(`chip comparso dopo ~${3 + (i + 1) * 5}s: il corpo della 201 era solo in ritardo`);
+      else p.nota(`+${3 + (i + 1) * 5}s: ancora niente chip · richieste chat-files: ${JSON.stringify([...richiesteUpload.values()])} · toast: ${JSON.stringify(await p.cdp.evaluate("[...document.querySelectorAll('.toast')].map((t) => t.textContent.trim().replace(/\\s+/g, ' '))"))}`);
+    }
+    if (!chipVisto) p.difetto(`BUG-20: l'upload risponde 201 ma la ricevuta non raggiunge mai la UI: nessun chip, nessun toast (richieste: ${JSON.stringify([...richiesteUpload.values()])})`, { severita: 'blocco' });
+    for (const r of p.cdp.richiesteFallite.slice(-5)) p.nota(`richiesta fallita vista ora: ${r.status} ${r.url}`);
+    await p.screenshot('bug20-allegato-nel-composer', { nota: `chip dell'allegato ${chipVisto ? 'presente' : 'ASSENTE'} dopo l'upload` });
+    // 3. Ora l'invio: intercetto il POST /resume a livello CDP (non da JS: vedi 2a). Catturo il
+    //    corpo REALE che andrebbe al kernel e rispondo finto 200. Nessuna chiamata al modello.
+    let resumeCorpo = null;
+    const ascoltaResume = (event) => {
+      const msg = JSON.parse(event.data);
+      if (msg.method !== 'Fetch.requestPaused') return;
+      resumeCorpo = msg.params.request.postData || '';
+      p.cdp.send('Fetch.fulfillRequest', {
+        requestId: msg.params.requestId,
+        responseCode: 200,
+        responseHeaders: [{ name: 'Content-Type', value: 'application/json' }],
+        body: Buffer.from(JSON.stringify({ ok: true, data: { ok: true } })).toString('base64'),
+      });
+    };
+    p.cdp.ws.addEventListener('message', ascoltaResume);
+    await p.cdp.send('Fetch.enable', { patterns: [{ urlPattern: '*/api/v1/sessions/*/resume', requestStage: 'Request' }] });
+    const chipPrimaInvio = await p.cdp.evaluate("[...document.querySelectorAll('#schermoChat .talos-allegati__nome')].map((x) => x.textContent.trim()).pop() || ''");
+    p.nota(`allegato nel composer subito prima dell'invio: ${JSON.stringify(chipPrimaInvio)}`);
+    await p.digita('#composerInput', 'Mostrami il contenuto del file allegato');
+    await p.cdp.evaluate(`(() => {
+      window.__bug20Invio = { keydownVisto: null, submitVisto: false, requestSubmit: null };
+      const input = document.querySelector('#composerInput');
+      const forma = input?.closest('form');
+      input?.addEventListener('keydown', (e) => { if (e.key === 'Enter') window.__bug20Invio.keydownVisto = { valore: (input.value || '').slice(0, 80) }; }, { once: true, capture: true });
+      if (forma) forma.addEventListener('submit', () => { window.__bug20Invio.submitVisto = true; }, { once: true, capture: true });
+      const rs = forma?.requestSubmit;
+      if (rs) forma.requestSubmit = (...a) => { window.__bug20Invio.requestSubmit = true; return rs.apply(forma, a); };
+      input?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', bubbles: true, cancelable: true }));
+    })()`);
+    await p.attendi(1200);
+    p.nota(`sonda dell'invio: ${JSON.stringify(await p.cdp.evaluate('window.__bug20Invio'))}`);
+    const scadenzaResume = Date.now() + 15000;
+    while (!resumeCorpo && Date.now() < scadenzaResume) await p.attendi(300);
+    p.cdp.ws.removeEventListener('message', ascoltaResume);
+    await p.cdp.send('Fetch.disable');
+    if (!resumeCorpo) {
+      const statoInvio = await p.cdp.evaluate("(() => ({ toast: [...document.querySelectorAll('.toast')].map((t) => t.textContent.trim().replace(/\\s+/g, ' ')), chip: !!document.querySelector('#schermoChat .talos-allegati__nome'), invio: window.__bug20Invio }))()");
+      throw new Error(`il POST /resume non è mai partito: l'invio si è fermato prima della rete — stato: ${JSON.stringify(statoInvio)}`);
+    }
+    let catturato = null;
+    try { catturato = JSON.parse(resumeCorpo); } catch { catturato = { grezzo: resumeCorpo }; }
+    const messaggio = String(catturato?.messaggio ?? catturato?.task?.consegna ?? catturato?.grezzo ?? '');
+    p.nota(`messaggio catturato (primi 500): ${messaggio.slice(0, 500)}`);
+    const nomeAllegato = String(chipPrimaInvio || '').trim();
+    const assolutoOk = nomeAllegato !== '' && /allegati[\\/]/.test(messaggio) && messaggio.includes(nomeAllegato);
+    const bloccoOk = nomeAllegato !== '' && messaggio.includes(`--- ${nomeAllegato} (`);
+    const contenutoOk = messaggio.includes('BUG-20: questo contenuto deve viaggiare');
+    if (!assolutoOk) p.difetto('BUG-20: il messaggio NON nomina il file col percorso assoluto', { severita: 'blocco' });
+    if (!bloccoOk) p.difetto('BUG-20: manca il blocco inline --- nome (assoluto) ---', { severita: 'blocco' });
+    if (!contenutoOk) p.difetto('BUG-20: il contenuto del file di testo NON viaggia nel messaggio', { severita: 'blocco' });
+    await p.screenshot('bug20-messaggio-inviato', { nota: `assoluto=${assolutoOk} blocco=${bloccoOk} contenuto=${contenutoOk}` });
+    // 5. Le eccezioni restano difetti bloccanti; le richieste fallite pure, SALVO i 503 delle rotte
+    //    per-sessione che una sessione CONCLUSA raccoglie aprendola (kernel morto: /context,
+    //    /workflows, /workflow-proposals) e il 409 /queue che segue il resume FINTO — tutti difetti
+    //    non bloccanti da ridiscutere a parte.
+    p.cdp.ws.removeEventListener('message', ascoltaUpload);
+    p.nota(`richieste chat-files a fine scenario: ${JSON.stringify([...richiesteUpload.values()])}`);
+    for (const e of p.cdp.eccezioni) p.difetto(`eccezione JS non gestita: ${e.testo} (${e.url})`, { severita: 'blocco' });
+    for (const r of p.cdp.richiesteFallite) {
+      const sessioneConclusa503 = r.status === 503 && /\/api\/v1\/sessions\/[0-9a-f-]+\/(?:context|workflows|workflow-proposals)(?:\?|$)/.test(r.url);
+      const codaDopoResumeFinto = r.status === 409 && /\/queue(?:\?|$)/.test(r.url);
+      p.difetto(`richiesta HTTP fallita: ${r.status} ${r.url}`, { severita: sessioneConclusa503 || codaDopoResumeFinto ? 'difetto' : 'blocco' });
+    }
+  },
+
+  /* ⭐ BUG-23 (06/10) — LA SCHEDA AGENTE UNICA, dal vivo sul 4174 (zero costi: si apre una sessione REALE
+     conclusa dalla sidebar — niente resume, niente modello — e la scheda si ricostruisce dagli esiti salvati,
+     come BUG23-04/PO10-RIAPERTURA). Prova: UNA sola scheda agente, linguetta «agente» senza giro, i comandi di
+     tutti i giri in fila col separatore «── giro N ──», i «!» della persona assenti, il giro corrente nel piede. */
+  async 'qa-bug23-scheda-agente-unica'(p) {
+    await p.attendi(1500);
+    await p.screenshot('bug23-app-caricata', { nota: 'app con la sidebar delle sessioni reali' });
+    const aperta = await p.cdp.evaluate("(() => { const righe = [...document.querySelectorAll('.real-session-item:not(.is-pending)')]; const r = righe.find((x) => x.querySelector('.session-stato')?.dataset.sessionState !== 'vivo'); if (!r) return { righe: righe.length, id: null }; r.click(); return { righe: righe.length, id: r.dataset.realSessionId }; })()");
+    p.nota(`candidata sessione conclusa: ${JSON.stringify(aperta)}`);
+    if (!aperta || !aperta.id) throw new Error('nessuna sessione conclusa nella sidebar: serve un server con lo store reale');
+    await p.attendiCondizione("!!document.querySelector('.real-session-item[aria-current=\"true\"]')", { timeoutMs: 20000, descrizione: 'sessione conclusa aperta (aria-current)' });
+    await p.attendiCondizione("!document.querySelector('#conversation.is-restoring')", { timeoutMs: 25000, descrizione: 'ripristino cronologia finito' });
+    // Vista Terminale come la persona (il bottone della modalità, non una scorciatoia iniettata)
+    const vistaAperta = await p.cdp.evaluate("(() => { const b = [...document.querySelectorAll('[data-mode=\"terminal\"]')].find((x) => x.getClientRects().length > 0); if (!b) return false; b.click(); return true; })()");
+    p.nota(`bottone vista terminale cliccato: ${vistaAperta}`);
+    if (!vistaAperta) throw new Error('nessun bottone [data-mode="terminal"] visibile');
+    await p.attendiCondizione("!!document.querySelector('#schermoTerminale .talos-terminal__tabs [role=tab]')", { timeoutMs: 20000, descrizione: 'vista terminale aperta con linguette' });
+    // La persona sceglie la scheda: SOLO attivandola la xterm si monta e il piede dice il giro (⭐ correzione dal vivo:
+    // la prima esecuzione ha valutato la scheda mai attivata: nAgente=1, id/giro giusti, ma term nullo e piede «Nessuna scheda aperta»)
+    await p.cdp.evaluate("(() => { const b = [...document.querySelectorAll('#schermoTerminale .talos-terminal__tabs [role=tab]')].find((x) => x.textContent.trim() === 'agente'); if (b) b.click(); })()");
+    await p.attendiCondizione("(() => { const rt = window.__talosHarnessUiRuntime?.statoTerminale?.(); const r = rt && [...rt.schede.values()].find((s) => s.origine === 'agente'); return !!(r && r.term); })()", { timeoutMs: 20000, descrizione: 'xterm della scheda agente montata' });
+    await p.attendi(800);
+    const rileva = await p.cdp.evaluate(`(() => {
+      const rt = window.__talosHarnessUiRuntime?.statoTerminale?.();
+      if (!rt) return { errore: 'statoTerminale non disponibile' };
+      const agente = [...rt.schede.values()].filter((s) => s.origine === 'agente');
+      const linguette = [...document.querySelectorAll('#schermoTerminale .talos-terminal__tabs [role=tab]')].map((b) => b.textContent.trim());
+      const record = agente[0];
+      let schermo = null;
+      if (record?.term) { const b = record.term.buffer.active; const righe = []; for (let i = 0; i < b.length; i++) righe.push(b.getLine(i)?.translateToString(true) ?? ''); schermo = righe.join('\\n').replace(/\\n+$/u, ''); }
+      return {
+        nAgente: agente.length, id: record?.terminalId ?? null, giro: record?.giro ?? null, stato: record?.stato ?? null,
+        nComandi: record?.comandi?.length ?? 0, linguette,
+        haSeparatore: schermo != null ? /── (giro \\d+|agente) ──/u.test(schermo) : null,
+        comandiASchermo: schermo != null ? (schermo.match(/^\\$ /gmu) || []).length : null,
+        piede: document.querySelector('#schermoTerminale .talos-terminal__foot')?.textContent.replace(/\\s+/g, ' ').trim() ?? null,
+        estratto: schermo != null ? schermo.split('\\n').slice(0, 8) : null,
+      };
+    })()`);
+    p.nota(`scheda agente rilevata: ${JSON.stringify(rileva)}`);
+    if (rileva.errore) throw new Error(`BUG-23: ${rileva.errore}`);
+    if (rileva.nAgente > 1) p.difetto(`BUG-23: ${rileva.nAgente} schede agente aperte (deve essere UNA per sessione)`, { severita: 'blocco' });
+    if (rileva.nAgente === 1 && rileva.id !== 'agente') p.difetto(`BUG-23: l'id della scheda agente è ${JSON.stringify(rileva.id)} (atteso «agente»)`, { severita: 'blocco' });
+    const linguettaAgente = (rileva.linguette || []).find((t) => t === 'agente' || /giro/u.test(t));
+    if (linguettaAgente && linguettaAgente !== 'agente') p.difetto(`BUG-23: la linguetta dice «${linguettaAgente}» — il giro NON sta sulla linguetta`, { severita: 'blocco' });
+    if (rileva.nComandi === 0) p.nota('BUG-23: la sessione candidata non ha comandi agente salvati: si prova solo l\'unicità della scheda');
+    else {
+      if (!rileva.haSeparatore) p.difetto('BUG-23: il testo della scheda non ha nessun separatore «── giro N ──»', { severita: 'blocco' });
+      if (rileva.comandiASchermo != null && rileva.comandiASchermo < rileva.nComandi) p.nota(`BUG-23: a schermo ${rileva.comandiASchermo} comandi su ${rileva.nComandi} (le viste possono essere chiuse o fuori dal buffer)`);
+      if (!rileva.comandiASchermo) p.difetto('BUG-23: nessun comando «$ …» a schermo sebbene i comandi salvati ci siano', { severita: 'blocco' });
+    }
+    // La scheda è già attiva (clic sopra): il contenuto a schermo è quello vero
+    if (rileva.giro != null && rileva.piede && !/giro/u.test(rileva.piede)) p.difetto(`BUG-23: il piede non dice il giro corrente (piede: ${JSON.stringify(rileva.piede.slice(0, 80))})`, { severita: 'difetto' });
+    await p.screenshot('bug23-scheda-agente-unica', { nota: `nAgente=${rileva.nAgente} comandi=${rileva.nComandi} giro=${JSON.stringify(rileva.giro)} separatore=${rileva.haSeparatore}` });
+    for (const e of p.cdp.eccezioni) p.difetto(`eccezione JS non gestita: ${e.testo} (${e.url})`, { severita: 'blocco' });
+    for (const r of p.cdp.richiesteFallite) {
+      /* le 503 di /context, /workflows, /workflow-proposals su una sessione CONCLUSA sono la classe nota
+         (kernel morto: nulla da riprendere) — difetto non bloccante, come nello scenario BUG-20 */
+      const sessioneConclusa503 = r.status === 503 && /\/api\/v1\/sessions\/[0-9a-f-]+\/(?:context|workflows|workflow-proposals)(?:\?|$)/.test(r.url);
+      p.difetto(`richiesta HTTP fallita: ${r.status} ${r.url}`, { severita: sessioneConclusa503 ? 'difetto' : 'blocco' });
+    }
+  },
+
+  /* ⭐ BUG-23 gen.3 (06/10) — COLLAUDO DI STREAMING VIVO, autorizzato dall'owner: sessione VERA col modello
+     glm-5.3-flash sulla via Z.AI DIRETTA (chiave configurata; la via OpenRouter scelta inizialmente dall'owner
+     è stata sostituita su sua domanda dopo che il credito OpenRouter non copriva la richiesta), due comandi shell
+     a uscita BREVE (il caso in cui il difetto B4 duplicava l'uscita a fine comando), guardati in diretta sulla
+     scheda agente: foto durante lo streaming, verifica che ogni riga d'uscita compaia UNA volta sola, e foto in
+     ENTRAMBI i temi (R3-gen2 della review gen.2). È l'unico scenario che AVVIA una sessione reale: va eseguito
+     solo su richiesta esplicita dell'owner. */
+  async 'qa-bug23-streaming-vivo'(p) {
+    const viewport = viewportRichiesta(URL_BASE); // ⛔ matrice unica: vedi VIEWPORT_DESKTOP in testa al file
+    await p.cdp.send('Emulation.setDeviceMetricsOverride', { ...viewport, deviceScaleFactor: 1, mobile: false });
+    await p.attendi(1500);
+    // (A) nuova sessione con il modello scelto dall'owner: glm-5.3-flash via Z.AI DIRETTA
+    // (seconda scelta owner 06/10: stessa via di TALOS, chiave Z.AI configurata — OpenRouter era
+    // stato scelto prima ma il suo credito non copre la richiesta: [PROVIDER_CREDIT_LIMIT])
+    await p.click('#newSessionBtn');
+    await p.attendi(500);
+    await p.click('.model-picker-trigger');
+    await p.attendiCondizione("!document.querySelector('.model-picker-list')?.textContent?.includes('Carico il catalogo')", { timeoutMs: 30000, descrizione: 'catalogo modelli caricato' });
+    const fonteZai = await p.cdp.evaluate("(() => { const b = document.querySelector('.model-picker-source[data-picker-source=\"zai\"]'); if (!b) return false; b.click(); return true; })()");
+    p.nota(`scheda fonte Z.AI aperta: ${fonteZai}`);
+    if (!fonteZai) p.difetto('la scheda fonte Z.AI non è presente nel model picker (chiave non collegata?)', { severita: 'blocco' });
+    await p.digita('.model-picker-search input', 'glm-5.3-flash');
+    // Diagnosi 06/10 (run 5 fallito qui): prima di aspettare la voce, dice COSA c'è davvero nell'elenco.
+    await p.attendi(700);
+    p.nota(`elenco Z.AI dopo ricerca: opzioni=${await p.cdp.evaluate("document.querySelectorAll('.model-picker-option').length")} lista=${JSON.stringify((await p.cdp.evaluate("document.querySelector('.model-picker-list')?.textContent || ''")).slice(0, 240))}`);
+    // 06/10 — la voce Z.AI nativa mostra il NOME («GLM-5.3-Flash»), non l'id (che resta interno alla riga):
+    // la condizione e il clic puntano al nome ESATTO del forte della riga — così escludono anche FlashX.
+    await p.attendiCondizione("[...document.querySelectorAll('.model-picker-option')].some((o) => (o.querySelector('strong')?.textContent || '').toLowerCase() === 'glm-5.3-flash')", { timeoutMs: 20000, descrizione: 'voce GLM-5.3-Flash nativa Z.AI presente nell\'elenco' });
+    const opzioneScelta = await p.cdp.evaluate("(() => { const o = [...document.querySelectorAll('.model-picker-option')].find((x) => (x.querySelector('strong')?.textContent || '').toLowerCase() === 'glm-5.3-flash'); if (!o) return null; o.click(); return o.querySelector('strong')?.textContent || null; })()");
+    p.nota(`voce scelta (Z.AI diretta): ${JSON.stringify(opzioneScelta)}`);
+    if (opzioneScelta?.toLowerCase() !== 'glm-5.3-flash') p.difetto(`la voce scelta non è il modello nativo Z.AI: ${JSON.stringify(opzioneScelta)}`, { severita: 'blocco' });
+    await p.attendi(200);
+    p.nota(`modello selezionato: ${await p.testo('.model-picker-trigger-label')}`);
+    // (A-bis) permessi: ACCESSO PIENO — direttiva owner (BUG-17): in accesso pieno la shell non chiede consenso.
+    // La prima esecuzione viva è rimasta appesa a «— Aspetta il tuo consenso» con i permessi di default.
+    const pieno = await p.cdp.evaluate("(() => { const b = document.querySelector('#workspaceChooser [data-workspace-permission=\"Full access\"]'); if (!b) return false; b.click(); return b.getAttribute('aria-pressed') === 'true'; })()");
+    p.nota(`permessi della sessione: Full access selezionato=${pieno}`);
+    if (!pieno) p.difetto('il bottone Full access del workspace chooser non è stato trovato/premuto', { severita: 'blocco' });
+    await p.confermaNuovaSessione();
+    await p.attendiCondizione("!!document.querySelector('#conversationEmptyState')", { descrizione: 'chat vuota pronta dopo la scelta cartella+modello' });
+    // (B) compito: DUE comandi shell a uscita breve, nessun file toccato (l'uscita breve è il caso B4).
+    // ⛔ la prima versione lasciava al modello flash la via breve («rispondi fatto» senza eseguire): ora
+    // l'output lo deve CONARE dal tool vero, così i comandi non possono saltare.
+    const compito = 'Devi usare LO STRUMENTO SHELL del harness (non rispondere di getto, non simulare nulla): esegui ESATTAMENTE questi due comandi, uno dopo l\'altro, senza creare o modificare file e senza eseguire altro. Primo: node -e "console.log(\'breve-una-riga-123\')". Secondo: node -e "for (let i=0;i<40;i++){ console.log(\'riga-lunga-\'+i) }". Quando hai ENTRAMBI gli output reali del tool davanti, rispondi dicendo quante righe ha prodotto il secondo comando, contate dall\'output vero del tool.';
+    await p.digita('#composerInput', compito);
+    await p.cdp.evaluate("document.querySelector('#composerForm').requestSubmit()");
+    p.nota('sessione avviata: si apre la vista Terminale e si guarda la scheda agente in diretta');
+    // (C) vista Terminale appena esiste il bottone (come la persona); INTANTRE si diagnostica la sessione:
+    // se la linguetta agente non arriva, si fotografa la chat con l'ultima risposta (errore fornitore, domanda,
+    // o modello flash che risponde senza eseguire — successo della prima versione di questo scenario)
+    await p.attendiCondizione("(() => { const b = [...document.querySelectorAll('[data-mode=\"terminal\"]')].find((x) => x.getClientRects().length > 0); if (b) { b.click(); return true; } return false; })()", { timeoutMs: 120000, descrizione: 'vista terminale aperta durante la sessione' });
+    let tabTrovata = false;
+    for (let giro = 0; giro < 40 && !tabTrovata; giro++) {
+      await p.attendi(3000);
+      const s = await p.cdp.evaluate(`(() => {
+        const b = [...document.querySelectorAll('#schermoTerminale .talos-terminal__tabs [role=tab]')].find((x) => x.textContent.trim() === 'agente');
+        if (b) { b.click(); return { tab: true, chat: null }; }
+        return { tab: false, chat: (document.querySelector('#conversation')?.innerText || '').slice(-300) };
+      })()`);
+      if (s.tab) { tabTrovata = true; break; }
+      if (giro === 4) await p.screenshot('bug23-streaming-attesa-chat', { nota: `nessuna linguetta agente a t≈15s: ultima chat=${JSON.stringify(s.chat)}` });
+    }
+    if (!tabTrovata) {
+      const chatFinale = await p.cdp.evaluate("(document.querySelector('#conversation')?.innerText || '').slice(-500)");
+      p.difetto(`BUG-23 streaming: nessun comando agente in 120s — ultima chat: ${JSON.stringify(chatFinale)}`, { severita: 'blocco' });
+    }
+    await p.attendiCondizione("(() => { const rt = window.__talosHarnessUiRuntime?.statoTerminale?.(); const r = rt && [...rt.schede.values()].find((s) => s.origine === 'agente'); return !!(r && r.term); })()", { timeoutMs: 30000, descrizione: 'xterm della scheda agente montata' });
+    // (D) GUARDANDO IN DIRETTA: snapshot del buffer ogni secondo, foto durante lo streaming
+    const leggiBuffer = `(() => {
+      const rt = window.__talosHarnessUiRuntime?.statoTerminale?.();
+      const r = rt && [...(rt.schede?.values() ?? [])].find((s) => s.origine === 'agente');
+      if (!r?.term) return { montata: false };
+      const b = r.term.buffer.active; const righe = [];
+      for (let i = 0; i < b.length; i++) righe.push(b.getLine(i)?.translateToString(true) ?? '');
+      const testo = righe.join('\\n');
+      return { montata: true, stato: r.stato, righe: righe.filter((x) => x.trim()).length,
+        haBreve: testo.includes('breve-una-riga-123'), ha39: testo.includes('riga-lunga-39'),
+        coda: testo.split('\\n').filter((x) => x.trim()).slice(-3) };
+    })()`;
+    let vivo = null;
+    for (let i = 0; i < 75; i++) {
+      await p.attendi(1000);
+      vivo = await p.cdp.evaluate(leggiBuffer);
+      if (i === 4 || i === 9 || i === 14) await p.screenshot(`bug23-streaming-t${i + 1}s`, { nota: `durante lo streaming: stato=${JSON.stringify(vivo.stato)} righe=${vivo.righe}` });
+      p.nota(`t=${i + 1}s — ${JSON.stringify(vivo)}`);
+      /* la sessione comanda-comanda è finita quando l'ULTIMO comando non è più «live» (il pallino esce da live) */
+      if (vivo.montata && vivo.stato && vivo.stato !== 'live' && vivo.ha39) break;
+    }
+    if (!vivo?.montata) p.difetto('BUG-23 streaming: la scheda agente non si è mai montata durante la sessione', { severita: 'blocco' });
+    await p.attendi(2500); // il modello conclude il turno e risponde: nessun altro evento terminale atteso
+    await p.screenshot('bug23-streaming-fine-comandi', { nota: `a fine comandi: stato=${JSON.stringify(vivo?.stato)} righe=${vivo?.righe}` });
+    // (E) il discriminatorio B4: ogni riga d'uscita UNA volta sola nel buffer
+    const finale = await p.cdp.evaluate(`(() => {
+      const rt = window.__talosHarnessUiRuntime?.statoTerminale?.();
+      const r = rt && [...(rt.schede?.values() ?? [])].find((s) => s.origine === 'agente');
+      if (!r?.term) return { errore: 'scheda agente non montata' };
+      const b = r.term.buffer.active; const righe = [];
+      for (let i = 0; i < b.length; i++) righe.push(b.getLine(i)?.translateToString(true) ?? '');
+      const testo = righe.join('\\n');
+      /* 06/10 — si contano le RIGHE ESATTE (trim === riga d'uscita), non le sottostringhe: per substring
+         «riga-lunga-1» combacia anche con riga-lunga-10..19 (11 falsi «doppioni») e «breve-una-riga-123»
+         combacia pure con l'ECO del comando, che è testo d'ingresso a schermo, non uscita duplicata. */
+      const uscite = righe.map((x) => x.trim()).filter(Boolean);
+      const contaRighe = (s) => uscite.filter((x) => x === s).length;
+      return { nComandi: r.comandi?.length ?? 0, giro: r.giro, stato: r.stato,
+        breve: contaRighe('breve-una-riga-123'), l0: contaRighe('riga-lunga-0'), l1: contaRighe('riga-lunga-1'), l39: contaRighe('riga-lunga-39') };
+    })()`);
+    p.nota(`verifica finale buffer: ${JSON.stringify(finale)}`);
+    if (finale.errore) p.difetto(`BUG-23 streaming: ${finale.errore}`, { severita: 'blocco' });
+    else if (finale.nComandi !== 2 || finale.stato === 'live') {
+      /* la sessione non ha portato a termine i due comandi (consenso, deviazione del modello, errore):
+         un SOLO difetto chiaro, senza fingere che le righe mancanti siano «uscite duplicate» */
+      p.difetto(`BUG-23 streaming: la sessione non ha eseguito i DUE comandi attesi (nComandi=${finale.nComandi}, stato=${JSON.stringify(finale.stato)}, breve=${finale.breve}) — consenso richiesto o modello deviato`, { severita: 'blocco' });
+    } else {
+      for (const [nome, n] of [['breve-una-riga-123', finale.breve], ['riga-lunga-0', finale.l0], ['riga-lunga-1', finale.l1], ['riga-lunga-39', finale.l39]]) {
+        if (n !== 1) p.difetto(`BUG-23 streaming (B4): la riga «${nome}» compare ${n} volte nel buffer (attesa UNA) — uscita duplicata`, { severita: 'blocco' });
+      }
+    }
+    // (F) entrambi i temi (chiaro E scuro, PARAMOUNT): foto della scheda in entrambi, poi ripristino della modalità
+    /* 06/10 — in vista Terminale il bottone Impostazioni non è visibile (run 7: «foto per tema saltate»):
+       si torna prima alla vista chat, dove il bottone c'è, e ci si torna anche fra un tema e l'altro. */
+    const vaiAllaChat = async () => { await p.cdp.evaluate("(() => { const b = [...document.querySelectorAll('[data-mode=\"chat\"]')].find((x) => x.getClientRects().length > 0); if (b) { b.click(); return true; } return false; })()"); await p.attendi(400); };
+    await vaiAllaChat();
+    /* 06/10 — il bottone delle Impostazioni non ha `data-open-view`: è la voce di sidebar
+       `[data-vaia="impostazioni"]` (app.js:26238: apre la vista E la sezione appearance). */
+    const impostazioniPresenti = await p.cdp.evaluate("(() => { const b = [...document.querySelectorAll('.talos-sidebar [data-vaia=\"impostazioni\"]')].find((x) => x.getClientRects().length > 0); if (b) { b.click(); return true; } return false; })()");
+    if (!impostazioniPresenti) {
+      p.nota('il bottone Impostazioni non è visibile a fine sessione: foto per tema saltate (il resto del collaudo resta valido)');
+    } else {
+      await p.click('[data-settings-tab="appearance"]');
+      const modalitaPrima = await p.cdp.evaluate("(document.querySelector('#setting-colorModeSelect') || document.querySelector('#colorModeSelect'))?.value ?? null");
+    p.nota(`modalità colore di partenza: ${JSON.stringify(modalitaPrima)}`);
+    const impostaModo = (modo) => p.cdp.evaluate(`(() => { const s = document.querySelector('#setting-colorModeSelect') || document.querySelector('#colorModeSelect'); if (!s) return false; s.value = ${JSON.stringify(modo)}; s.dispatchEvent(new Event('change', { bubbles: true })); return true; })()`);
+    const tornaAlTerminale = async () => {
+      await p.cdp.evaluate("(() => { const b = [...document.querySelectorAll('[data-mode=\"terminal\"]')].find((x) => x.getClientRects().length > 0); if (b) b.click(); })()");
+      await p.attendi(500);
+    };
+    const riapriAspetto = async () => { await vaiAllaChat(); await p.cdp.evaluate("(() => { const b = [...document.querySelectorAll('.talos-sidebar [data-vaia=\"impostazioni\"]')].find((x) => x.getClientRects().length > 0); if (b) { b.click(); return true; } return false; })()"); await p.attendi(300); await p.click('[data-settings-tab="appearance"]'); await p.attendi(200); };
+    if (modalitaPrima) {
+      for (const modo of ['light', 'dark']) {
+        await impostaModo(modo);
+        await tornaAlTerminale();
+        const nelTema = await p.cdp.evaluate(leggiBuffer);
+        p.nota(`tema ${modo === 'light' ? 'chiaro' : 'scuro'}: buffer=${JSON.stringify(nelTema)}`);
+        await p.screenshot(`bug23-streaming-tema-${modo}`, { nota: `tema ${modo === 'light' ? 'chiaro' : 'scuro'}: la scheda agente resta corretta` });
+        if (nelTema.montata && (nelTema.haBreve === false || nelTema.ha39 === false)) p.difetto(`BUG-23 streaming: nel tema ${modo} la scheda agente perde l'uscita`, { severita: 'blocco' });
+        await riapriAspetto();
+      }
+      await impostaModo(modalitaPrima);
+      p.nota(`modalità colore ripristinata: ${JSON.stringify(modalitaPrima)}`);
+    } else {
+      p.nota('colorModeSelect non trovato: foto per tema saltata');
+    }
+    }
+    /* 06/10 — le richieste HTTP fallite si SMISTANO (verifica fatta sul codice, non assunta):
+       il fornitore «esterno» è chiesto dal picker (fonti-modelli.js:151) ma il server non lo serve
+       (422, allowlist ID_CATALOGO_IN_UI); LM Studio spento risponde 503; a sessione conclusa l'UI
+       interroga rename/context/workflows (400/503). Sono PREESISTENTI e fuori dal perimetro BUG-23:
+       restano nel rapporto come «avviso», non come blocchi della cura gen.3 (da smistare in ticket). */
+    const fuoriPerimetro = /\/providers\/(esterno|lmstudio|ollama-cloud)\/models|\/sessions\/[0-9a-f-]+\/(rename|context|workflows(\?|$)|workflow-proposals)/u;
+    for (const e of p.cdp.eccezioni) p.difetto(`eccezione JS non gestita: ${e.testo} (${e.url})`, { severita: 'blocco' });
+    for (const r of p.cdp.richiesteFallite) {
+      if (r.url.endsWith('/favicon.ico')) continue;
+      const fuori = fuoriPerimetro.test(r.url);
+      p.difetto(`${fuori ? 'richiesta HTTP fallita (preesistente, fuori perimetro BUG-23)' : 'richiesta HTTP fallita'}: ${r.status} ${r.url}`, { severita: fuori ? 'avviso' : 'blocco' });
+    }
+  },
+
+  /* ⛔ BUG-25 (06/10): prova DAL VIVO del credito col fornitore VERO — OpenRouter è senza credito
+     (owner 06/10): una richiesta respinta NON si paga ⇒ il banco è a costo zero e mostra i CORPI VERI.
+     Atteso con la cura: errore ONESTO di credito in chat ([PROVIDER_CREDIT_LIMIT] / «Credit not available»),
+     MAI il finto 401 «chiave non valida»; il modello resta SELEZIONABILE dopo l'errore (nessun lockout a
+     chiave unica senza scadenza); un SECONDO giro mostra di nuovo l'errore onesto (mai credenziale). */
+  async 'qa-bug25-credito-vivo'(p) {
+    const viewport = viewportRichiesta(URL_BASE); // ⛔ matrice unica: vedi VIEWPORT_DESKTOP in testa al file
+    await p.cdp.send('Emulation.setDeviceMetricsOverride', { ...viewport, deviceScaleFactor: 1, mobile: false });
+    await p.attendi(1500);
+    // (A) nuova sessione con un modello OpenRouter (chiave senza credito: richiesta respinta, costo zero)
+    await p.click('#newSessionBtn');
+    await p.attendi(500);
+    await p.click('.model-picker-trigger');
+    await p.attendiCondizione("!document.querySelector('.model-picker-list')?.textContent?.includes('Carico il catalogo')", { timeoutMs: 30000, descrizione: 'catalogo modelli caricato' });
+    const fonteOr = await p.cdp.evaluate("(() => { const b = document.querySelector('.model-picker-source[data-picker-source=\"openrouter\"]'); if (!b) return false; b.click(); return true; })()");
+    p.nota(`scheda fonte OpenRouter aperta: ${fonteOr}`);
+    if (!fonteOr) p.difetto('la scheda fonte OpenRouter non è presente nel model picker', { severita: 'blocco' });
+    await p.attendi(700);
+    // 06/10 — la lista è RAGGRUPPATA per fornitore: senza ricerca le righe restano chiuse (0 opzioni, run 15:09).
+    // Con la ricerca attiva renderLista() auto-apre i gruppi che matchano (schema già provato in qa-oggetto-2018 ~riga 1821).
+    await p.digita('.model-picker-search input', 'deepseek');
+    await p.attendiCondizione("!!document.querySelector('.model-picker-option')", { timeoutMs: 20000, descrizione: 'risultati ricerca renderizzati (gruppi auto-aperti dalla ricerca)' });
+    p.nota(`diagnostica elenco: opzioni=${await p.cdp.evaluate("document.querySelectorAll('.model-picker-option').length")} testa=${JSON.stringify((await p.cdp.evaluate("document.querySelector('.model-picker-list')?.textContent || ''")).slice(0, 200))}`);
+    const opzioneScelta = await p.cdp.evaluate("(() => { const o = document.querySelector('.model-picker-option strong'); if (!o) return null; const t = o.textContent; o.closest('.model-picker-option').click(); return t; })()");
+    p.nota(`voce OpenRouter scelta (giro 1): ${JSON.stringify(opzioneScelta)}`);
+    if (!opzioneScelta) p.difetto('nessuna voce OpenRouter nell\'elenco (catalogo vuoto o selettore cambiato)', { severita: 'blocco' });
+    await p.attendi(200);
+    p.nota(`modello selezionato: ${await p.testo('.model-picker-trigger-label')}`);
+    const pieno = await p.cdp.evaluate("(() => { const b = document.querySelector('#workspaceChooser [data-workspace-permission=\"Full access\"]'); if (!b) return false; b.click(); return b.getAttribute('aria-pressed') === 'true'; })()");
+    p.nota(`permessi della sessione: Full access selezionato=${pieno}`);
+    if (!pieno) p.difetto('il bottone Full access del workspace chooser non è stato trovato/premuto', { severita: 'blocco' });
+    await p.confermaNuovaSessione();
+    await p.attendiCondizione("!!document.querySelector('#conversationEmptyState')", { descrizione: 'chat vuota pronta (giro 1)' });
+    // (B) giro minimale: la richiesta parte e viene RESPINTA dal fornitore (costo zero)
+    await p.digita('#composerInput', 'Rispondi solo: ok.');
+    await p.cdp.evaluate("document.querySelector('#composerForm').requestSubmit()");
+    p.nota('giro 1 avviato: attesa dell\'errore del fornitore in chat');
+    // (C) criterio ONESTO BUG-25: l'errore parla di CREDITO; MAI «chiave non valida»/credenziale/401
+    const erroreOnesto = /credit|credito|saldo|billing|PROVIDER_CREDIT_LIMIT/i;
+    const erroreFalso = /invalid api key|chiave non (?:è |e' )?valida|not valid|credential|401/i;
+    const leggiChat = "(document.querySelector('#conversation')?.innerText || '')";
+    let testoErrore = null, visto = false;
+    for (let i = 0; i < 30 && !visto; i++) {
+      await p.attendi(2000);
+      const t = await p.cdp.evaluate(leggiChat);
+      if (erroreOnesto.test(t)) { visto = true; testoErrore = t.slice(-600); }
+    }
+    await p.screenshot('bug25-credito-errore-giro1', { nota: `errore del fornitore (giro 1): ${JSON.stringify((testoErrore || '').slice(-240))}` });
+    if (!visto) p.difetto(`BUG-25 vivo: nessun errore di credito in chat in 60s — ultima chat: ${JSON.stringify((await p.cdp.evaluate(leggiChat)).slice(-400))}`, { severita: 'blocco' });
+    else if (erroreFalso.test(testoErrore)) p.difetto(`BUG-25 vivo (il male che curavamo): l'errore è il FALSO «chiave non valida»/credenziale invece del credito onesto: ${JSON.stringify(testoErrore.slice(-300))}`, { severita: 'blocco' });
+    else p.nota('BUG-25 vivo giro 1: errore ONESTO di credito confermato (nessun falso 401)');
+    // (D) la chiave NON deve sparire: secondo giro con lo STESSO modello (lockout vietato senza scadenza)
+    await p.click('#newSessionBtn');
+    await p.attendi(500);
+    await p.click('.model-picker-trigger');
+    await p.attendiCondizione("!document.querySelector('.model-picker-list')?.textContent?.includes('Carico il catalogo')", { timeoutMs: 30000, descrizione: 'catalogo ricaricato (giro 2)' });
+    await p.cdp.evaluate("(() => { const b = document.querySelector('.model-picker-source[data-picker-source=\"openrouter\"]'); if (b) b.click(); })()");
+    await p.attendi(700);
+    // 06/10 — stessa ragione del giro 1: la ricerca auto-apre i gruppi, altrimenti 0 opzioni.
+    await p.digita('.model-picker-search input', 'deepseek');
+    await p.attendiCondizione("!!document.querySelector('.model-picker-option')", { timeoutMs: 20000, descrizione: 'risultati ricerca renderizzati (giro 2)' });
+    const opzione2 = await p.cdp.evaluate("(() => { const nome = " + JSON.stringify((opzioneScelta || '').toLowerCase()) + "; const o = [...document.querySelectorAll('.model-picker-option')].find((x) => (x.querySelector('strong')?.textContent || '').toLowerCase() === nome); if (!o) return null; o.click(); return true; })()");
+    p.nota(`giro 2: lo stesso modello è ancora SELEZIONABILE=${JSON.stringify(opzione2)}`);
+    if (!opzione2) p.difetto(`BUG-25 vivo: il modello ${JSON.stringify(opzioneScelta)} NON è più selezionabile dopo l'errore (lockout a chiave unica)`, { severita: 'blocco' });
+    await p.attendi(200);
+    await p.confermaNuovaSessione();
+    await p.attendiCondizione("!!document.querySelector('#conversationEmptyState')", { descrizione: 'chat vuota pronta (giro 2)' });
+    await p.digita('#composerInput', 'Rispondi solo: ok.');
+    await p.cdp.evaluate("document.querySelector('#composerForm').requestSubmit()");
+    let visto2 = false, testo2 = null;
+    for (let i = 0; i < 30 && !visto2; i++) {
+      await p.attendi(2000);
+      const t = await p.cdp.evaluate(leggiChat);
+      if (erroreOnesto.test(t)) { visto2 = true; testo2 = t.slice(-600); }
+    }
+    await p.screenshot('bug25-credito-errore-giro2', { nota: `errore del fornitore (giro 2, stessa chiave): ${JSON.stringify((testo2 || '').slice(-240))}` });
+    if (!visto2) p.nota('BUG-25 vivo giro 2: nessun errore in 60s — se la sessione prosegue il fornitore ha risposto (chiave viva): foto salvata');
+    else if (erroreFalso.test(testo2)) p.difetto(`BUG-25 vivo (giro 2): di nuovo il falso «chiave non valida»: ${JSON.stringify(testo2.slice(-300))}`, { severita: 'blocco' });
+    else p.nota('BUG-25 vivo giro 2: errore ancora onesto — mai il falso 401');
+    // (E) entrambi i temi (PARAMOUNT): l'errore onesto leggibile in chiaro E scuro
+    const impostaModo = (modo) => p.cdp.evaluate(`(() => { const s = document.querySelector('#setting-colorModeSelect') || document.querySelector('#colorModeSelect'); if (!s) return false; s.value = ${JSON.stringify(modo)}; s.dispatchEvent(new Event('change', { bubbles: true })); return true; })()`);
+    const apriAspetto = async () => { await p.cdp.evaluate("(() => { const b = [...document.querySelectorAll('.talos-sidebar [data-vaia=\"impostazioni\"]')].find((x) => x.getClientRects().length > 0); if (b) { b.click(); return true; } return false; })()"); await p.attendi(300); await p.click('[data-settings-tab="appearance"]'); await p.attendi(200); };
+    const tornaChat = async () => { await p.cdp.evaluate("(() => { const b = [...document.querySelectorAll('[data-mode=\"chat\"]')].find((x) => x.getClientRects().length > 0); if (b) { b.click(); return true; } return false; })()"); await p.attendi(400); };
+    await apriAspetto();
+    const modalitaPrima = await p.cdp.evaluate("(document.querySelector('#setting-colorModeSelect') || document.querySelector('#colorModeSelect'))?.value ?? null");
+    p.nota(`modalità colore di partenza: ${JSON.stringify(modalitaPrima)}`);
+    if (modalitaPrima) {
+      for (const modo of ['light', 'dark']) {
+        await impostaModo(modo); await tornaChat();
+        await p.screenshot(`bug25-credito-tema-${modo}`, { nota: `tema ${modo === 'light' ? 'chiaro' : 'scuro'}: l'errore onesto resta leggibile` });
+        await apriAspetto();
+      }
+      await impostaModo(modalitaPrima);
+      p.nota(`modalità colore ripristinata: ${JSON.stringify(modalitaPrima)}`);
+    }
+    // (F) smistamento richieste fallite: la CHAT respinta dal fornitore è ATTESA qui (è la prova BUG-25)
+    const fuoriPerimetro = /\/providers\/(esterno|lmstudio|ollama-cloud)\/models|\/sessions\/[0-9a-f-]+\/(rename|context|workflows(\?|$)|workflow-proposals)/u;
+    const chatAttesa = /\/api\/v1\/sessions\/[0-9a-f-]+\/(chat|comandi|turni|messages|stream)/u;
+    for (const e of p.cdp.eccezioni) p.difetto(`eccezione JS non gestita: ${e.testo} (${e.url})`, { severita: 'blocco' });
+    for (const r of p.cdp.richiesteFallite) {
+      if (r.url.endsWith('/favicon.ico')) continue;
+      if (chatAttesa.test(r.url)) { p.nota(`richiesta chat respinta (ATTESA nella prova BUG-25): ${r.status} ${r.url}`); continue; }
+      const fuori = fuoriPerimetro.test(r.url);
+      p.difetto(`${fuori ? 'richiesta HTTP fallita (preesistente, fuori perimetro)' : 'richiesta HTTP fallita'}: ${r.status} ${r.url}`, { severita: fuori ? 'avviso' : 'blocco' });
+    }
+  },
+
   async 'qa-compact-loading'(p) {
     const viewport = viewportRichiesta(URL_BASE); // ⛔ matrice unica: vedi VIEWPORT_DESKTOP in testa al file
     await p.cdp.send('Emulation.setDeviceMetricsOverride', { ...viewport, deviceScaleFactor: 1, mobile: false });
@@ -4878,14 +5451,14 @@ const SCENARI = {
     await p.attendi(1200);
 
     // --- Automazioni ---
-    await p.click('[data-open-view="automations"]');
+    await p.cdp.evaluate("(() => { const b = [...document.querySelectorAll('.talos-sidebar [data-vaia=\"automazioni\"]')].find((x) => x.getClientRects().length > 0); if (b) { b.click(); return true; } return false; })()");
     await p.attendi(500);
     await p.screenshot('vista-automazioni', { nota: 'atteso: riga demo dichiarata onestamente + eventuali automazioni reali' });
     const testoAutomazioni = await p.testo('.automation-list, #automationListReal');
     p.nota(`contenuto vista Automazioni: ${JSON.stringify(testoAutomazioni?.slice(0, 300))}`);
 
     // --- Settings: conferma visiva delle label "non ancora implementato" ---
-    await p.click('[data-open-view="settings"]');
+    await p.cdp.evaluate("(() => { const b = [...document.querySelectorAll('.talos-sidebar [data-vaia=\"impostazioni\"]')].find((x) => x.getClientRects().length > 0); if (b) { b.click(); return true; } return false; })()");
     await p.attendi(500);
     await p.screenshot('vista-settings', { nota: 'CRITICO: "Sotto-agenti... non ancora implementati" — stesso difetto già confermato altrove (Task 0.3, Task 8)' });
 
@@ -4958,7 +5531,7 @@ const SCENARI = {
     if (agentsVecchio) p.difetto('il tab Agents del Context Rail mostra ancora il vecchio testo "non ancora implementato"', { severita: 'blocco' });
 
     // --- D: Settings ---
-    await p.click('[data-open-view="settings"]');
+    await p.cdp.evaluate("(() => { const b = [...document.querySelectorAll('.talos-sidebar [data-vaia=\"impostazioni\"]')].find((x) => x.getClientRects().length > 0); if (b) { b.click(); return true; } return false; })()");
     await p.attendi(500);
     await p.screenshot('settings-dopo-fix', { nota: 'atteso: card Agentico non dice più "non ancora implementati" per sotto-agenti/steering' });
     const testoSettings = await p.cdp.evaluate("[...document.querySelectorAll('.settings-card')].find((c) => c.querySelector('h3')?.textContent?.includes('Agentico'))?.textContent ?? ''");
@@ -5079,6 +5652,135 @@ const SCENARI = {
    * (mai riusare una sessione con lavoro dentro), poi tasto destro →
    * scheda di conferma → Elimina → verifica sparita da sidebar e API.
    */
+  /**
+   * ⭐ BUG-24, 07/10/2026 — COLLAUDO DAL VIVO della finestra di replay su una sessione lunga REALE
+   * (sessione designata dal revisore: default b701a9ff-1601-4008-a20f-ef95413df4aa, la conversazione madre
+   * oltre la soglia dei ~300 giri della rettifica owner; override con TALOS_QA_B24_SESSIONE / TALOS_QA_B24_NOME).
+   * ⛔ SOLO LETTURA: si APRONO righe e si SCROLLA — mai digitare nel composer, mai submit, mai WebSocket.
+   * Verifiche (review avversariale BUG-24 + LEDGER §12): (1) tempo click→fondo; (2) il DOM resta una FINESTRA
+   * (`.talos-turn` montati ≥ pavimento 8 e nodi ≪ dei 19.482 misurati sul difetto); (3) il bottone
+   * «Mostra precedenti» esiste; (4) il PREPEND è ANCORATO: scrollTop cresce esattamente della crescita sopra
+   * la vista (±2 px), la vista non salta; (5) temi chiaro e scuro leggibili; (6) zero eccezioni JS e nessuna
+   * richiesta HTTP ≥400 oltre alle pre-esistenti note fuori perimetro.
+   */
+  async 'qa-bug24-finestra-replay'(p) {
+    const ID_BERSAGLIO = process.env.TALOS_QA_B24_SESSIONE || 'b701a9ff-1601-4008-a20f-ef95413df4aa';
+    const NOME_BERSAGLIO = process.env.TALOS_QA_B24_NOME || 'CLI';
+    const LEGGI_COLONNA = `(() => { const sc = document.querySelector('.talos-conversation') || document.querySelector('#conversation'); const col = document.querySelector('#conversation'); return { t: Math.round(sc?.scrollTop ?? -1), max: Math.round((sc?.scrollHeight ?? 0) - (sc?.clientHeight ?? 0)), turni: col ? col.querySelectorAll('.talos-turn').length : -1, nodi: col ? col.querySelectorAll('*').length : -1, bottoneNascosto: document.querySelector('.talos-mostra-precedenti')?.hidden ?? null, primaRiga: col?.querySelector('.talos-turn')?.textContent?.trim().slice(0, 60) ?? null, nascosta: col?.classList.contains('is-restoring') ?? null, rigiocata: window.__talosHarnessUiRuntime?.realSessionState?.inRigiocata ?? null }; })()`;
+    await p.cdp.send('Emulation.setDeviceMetricsOverride', { ...viewportRichiesta(URL_BASE), deviceScaleFactor: 1, mobile: false }); // ⛔ matrice unica: PARAMOUNT ≥1920×1080
+    await p.cdp.send('Page.reload', { ignoreCache: true });
+    await p.attendi(2500);
+    await p.screenshot('01-boot', { nota: 'boot: ultima sessione auto-aperta dal runtime' });
+
+    // --- §0: apri la sessione designata (solo click sulle righe esistenti; mai composer) ---
+    // Il NOME delle righe non basta (le deleghe possono avere nome null): si clicca riga per riga e si
+    // legge l'id che il runtime ha aperto; le candidate per nome (se ce ne sono) vanno per prime.
+    const righe = await p.cdp.evaluate(`(() => { return [...document.querySelectorAll('.real-session-item')].map((el, i) => ({ i, t: (el.textContent || '').trim().slice(0, 60) })); })()`);
+    const candidateNome = righe.filter((r) => NOME_BERSAGLIO && r.t.includes(NOME_BERSAGLIO)).map((r) => r.i);
+    const ordine = [...candidateNome, ...righe.map((r) => r.i).filter((i) => !candidateNome.includes(i))];
+    p.nota(`§0 righe: ${righe.length}; candidate per nome «${NOME_BERSAGLIO || '(nessuno)'}»: ${candidateNome.join(', ') || 'NESSUNA'} — scansione per id su ${Math.min(ordine.length, 25)} righe`);
+    let aperta = null;
+    for (const i of ordine.slice(0, 25)) {
+      await p.cdp.evaluate(`(() => { [...document.querySelectorAll('.real-session-item')][${i}]?.click(); })()`);
+      await p.attendi(1100);
+      const id = await p.cdp.evaluate("window.__talosHarnessUiRuntime?.realSessionState?.id ?? null");
+      if (id === ID_BERSAGLIO) { aperta = i; break; }
+    }
+    if (aperta === null) { p.difetto(`§0 nessuna riga ha aperto la sessione ${ID_BERSAGLIO} (il bersaglio è in sidebar?)`, { severita: 'blocco' }); return; }
+    p.nota(`§0 sessione designata aperta (riga ${aperta})`);
+
+    // --- §1: apertura — il trascritto si SCOPRE (is-restoring via) già in fondo, con il DOM da finestra ---
+    const inizio = Date.now() - 1500; // il click §0 è ~1,5 s prima (l'attesa dell'id)
+    // Sondaggio con diagnostica: ogni ~20 s registra lo stato (nascosta/turni/max) per dire COSA trattiene
+    // la scoperta (server lento, replay a goccia, porta scoperta bloccata) invece di un timeout muto.
+    let ultimoStato = null;
+    let scoperta = false;
+    while (Date.now() - inizio < 180000) {
+      ultimoStato = await p.cdp.evaluate(LEGGI_COLONNA);
+      if (!ultimoStato.nascosta && ultimoStato.max > 0) { scoperta = true; break; } // scoperta = is-restoring via (la regola owner); la fine rigiocata è di §1b
+      const trascorso = Date.now() - inizio;
+      if (trascorso - (ultimoStato.ultimoLog ?? -20000) >= 20000) {
+        ultimoStato.ultimoLog = trascorso;
+        p.nota(`§1 attesa ${Math.round(trascorso / 1000)} s: nascosta=${ultimoStato.nascosta} rigiocata=${ultimoStato.rigiocata} turni=${ultimoStato.turni} nodi=${ultimoStato.nodi} max=${ultimoStato.max} t=${ultimoStato.t} primaRiga=${JSON.stringify(ultimoStato.primaRiga)}`);
+      }
+      await p.attendi(250);
+    }
+    const allaScoperta = await p.cdp.evaluate(LEGGI_COLONNA);
+    const fondoMs = scoperta ? Date.now() - inizio : null;
+    if (!scoperta) p.difetto('§1 in 180 s il trascritto non si è scoperto (is-restoring mai tolta / nessuno scroll sul vero scroller .talos-conversation)', { severita: 'blocco' });
+    else {
+      await p.attendi(2000); // lascia passare il momento di montaggio: la regola owner vale sulla scoperta assestata
+      const assestata = await p.cdp.evaluate(LEGGI_COLONNA);
+      if (assestata.max > 0 && assestata.t < assestata.max - 40) p.difetto(`§1 alla scoperta la chat NON è in fondo (${assestata.t}/${assestata.max}, ${assestata.max - assestata.t} px dal fondo) — la regola owner è «già in fondo senza animazioni»`, { severita: 'blocco' });
+      else p.nota(`§1 TEMPO CLICK→SCOPERTA-A-FONDO: ${fondoMs} ms (t=${assestata.t}/${assestata.max} px)`);
+    }
+    await p.screenshot('02-apertura-fondo', { nota: `a fondo: ${allaScoperta.turni} turni, ${allaScoperta.nodi} nodi, fondo a ${fondoMs ?? 'mai'} ms` });
+
+    // §1b: FINE della rigiocata — la guardia app.js:21904 mangia i click del prepend finché dura, e su una
+    // ricerca lunga il replay del journal prosegue OLTRE la scoperta: si MISURA, non si assume.
+    let fineRigiocata = false;
+    while (Date.now() - inizio < 600000) {
+      const st = await p.cdp.evaluate("window.__talosHarnessUiRuntime?.realSessionState?.inRigiocata ?? null");
+      if (st === false) { fineRigiocata = true; break; }
+      await p.attendi(500);
+    }
+    if (fineRigiocata) p.nota(`§1b rigiocata FINITA ~${Math.round((Date.now() - inizio) / 1000)} s dopo il click`);
+    else p.nota(`§1b la rigiocata NON è finita entro 600 s dal click (replay di ricerca lunga): prepend non verificabile in questa corsa`);
+
+    // forma della finestra A RIPOSO (durante la rigiocata il riscrittore fa oscillare i nodi: 4.5k→26.7k→9k misurati)
+    const riposo = await p.cdp.evaluate(LEGGI_COLONNA);
+    if (riposo.turni < 8) p.difetto(`§1b turni montati ${riposo.turni} < pavimento 8 (finestra collassata?)`, { severita: 'blocco' });
+    if (riposo.turni > 200) p.difetto(`§1b ${riposo.turni} turni montati: NON è più una finestra (pavimento 8, peso 900)`, { severita: 'blocco' });
+    if (riposo.nodi > 20000) p.difetto(`§1b ${riposo.nodi} nodi montati a riposo: la finestra NON tiene il DOM piccolo (il difetto misurava 19.482)`, { severita: 'blocco' });
+    else p.nota(`§1b finestra a riposo: ${riposo.turni} turni, ${riposo.nodi} nodi montati (≪ dei 19.482 del difetto)`);
+    const ultimo = riposo;
+    if (ultimo.bottoneNascosto !== false) p.nota(`§2 ⚠ il bottone «Mostra precedenti» non è visibile (hidden=${ultimo.bottoneNascosto}): il registro sembra vuoto — il prepend non è verificabile`);
+
+    // --- §2: prepend ANCORATO — «Mostra precedenti» non deve far saltare la vista (solo a rigiocata finita) ---
+    if (fineRigiocata && ultimo.bottoneNascosto === false) {
+      const prima = await p.cdp.evaluate(LEGGI_COLONNA);
+      await p.cdp.evaluate("document.querySelector('.talos-mostra-precedenti')?.click()");
+      await p.attendi(500);
+      const dopo = await p.cdp.evaluate(LEGGI_COLONNA);
+      // seconda lettura a +2,5 s: i turni prepensi continuano a idratare (altezze che cambiano) — la misura
+      // dell'ancora vale A RIPOSO, la prima lettura racconta solo la deriva di idratazione
+      await p.attendi(2500);
+      const dopofuori = await p.cdp.evaluate(LEGGI_COLONNA);
+      const crescita = dopofuori.max - prima.max;
+      const salto = Math.abs(dopofuori.t - (prima.t + crescita));
+      p.nota(`§2 prepend: turni ${prima.turni}→${dopofuori.turni}, nodi ${prima.nodi}→${dopofuori.nodi}, scroll ${prima.t}→${dopofuori.t} (crescita ${crescita}), salto +0,5s=${Math.abs(dopo.t - (prima.t + (dopo.max - prima.max)))}px, salto a riposo=${salto}px`);
+      if (dopofuori.turni <= prima.turni) p.difetto(`§2 il prepend non ha montato turni (${prima.turni} → ${dopofuori.turni})`, { severita: 'blocco' });
+      if (salto > 12) p.difetto(`§2 la vista È SALTATA al prepend (a riposo): atteso ${prima.t + crescita}, trovato ${dopofuori.t} (scarto ${salto} px)`, { severita: 'blocco' });
+      else if (salto > 2) p.difetto(`§2 ancoraggio con deriva residua a riposo di ${salto} px (idratazione del contenuto prepento; +0,5 s era ${Math.abs(dopo.t - (prima.t + (dopo.max - prima.max)))} px): tenuto, monitorare`, { severita: 'nota' });
+      else p.nota(`§2 PREPEND ANCORATO OK (scarto a riposo ${salto} px ≤ 2)`);
+      if (prima.primaRiga && dopofuori.primaRiga && dopofuori.primaRiga === prima.primaRiga) p.nota('§2 nota: la prima riga visibile è IDENTICA dopo il prepend (ancoraggio perfetto)');
+      await p.screenshot('03-dopo-prepend', { nota: `turni=${dopofuori.turni} nodi=${dopofuori.nodi} scroll=${dopofuori.t}/${dopofuori.max} salto=${salto}px` });
+    }
+    else if (!fineRigiocata) p.nota('§2 prepend SALTATO: rigiocata ancora in corso (guardia app.js:21904) — vedi §1b');
+
+    // --- §3: temi chiaro e scuro (e ripristino della modalità di partenza) ---
+    const modalitaPrima = await p.cdp.evaluate("(document.querySelector('#setting-colorModeSelect') || document.querySelector('#colorModeSelect'))?.value ?? null");
+    const impostaModo = (modo) => p.cdp.evaluate(`(() => { const s = document.querySelector('#setting-colorModeSelect') || document.querySelector('#colorModeSelect'); if (!s) return false; s.value = ${JSON.stringify(modo)}; s.dispatchEvent(new Event('change', { bubbles: true })); return true; })()`);
+    for (const modo of ['dark', 'light']) {
+      const fatto = await impostaModo(modo);
+      if (!fatto) { p.difetto(`impossibile impostare la modalità colore ${modo}`, { severita: 'nota' }); break; }
+      await p.attendi(700);
+      await p.screenshot(`04-tema-${modo}`, { nota: `tema ${modo}: finestra di replay e bottone leggibili` });
+    }
+    if (modalitaPrima) { await impostaModo(modalitaPrima); p.nota(`modalità colore ripristinata a «${modalitaPrima}»`); }
+
+    // --- §4: igiene — zero eccezioni, HTTP ≥400 solo se non nelle pre-esistenti fuori perimetro ---
+    for (const e of p.cdp.eccezioni) p.difetto(`eccezione JS non gestita: ${e.testo} (${e.url})`, { severita: 'blocco' });
+    // Pre-esistenti fuori perimetro (verdetto gen.3 BUG-23 + run BUG-24 delle 06:24): 422 catalogo esterno,
+    // 503 lmstudio, 503 workflows/workflow-proposals/context delle sessioni, 404 anteprime docs openrouter.
+    const NOTE_HTTP = [/\/providers\/esterno\/models/, /lmstudio/, /\/workflows(\?|\/|$)/, /\/workflow-proposals/, /\/context(\?|$)/, /openrouter\.ai\/docs/];
+    for (const r of p.cdp.richiesteFallite) {
+      if (r.url.endsWith('/favicon.ico')) continue;
+      if (NOTE_HTTP.some((re) => re.test(r.url))) { p.nota(`HTTP pre-esistente fuori perimetro: ${r.status} ${r.url}`); continue; }
+      p.difetto(`richiesta HTTP fallita: ${r.status} ${r.url}`, { severita: 'blocco' });
+    }
+  },
+
   async 'qa-batchfix-c-elimina-sessione'(p) {
     await p.attendi(1200);
     await p.click('#newSessionBtn');

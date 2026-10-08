@@ -53,7 +53,8 @@ for (const modo of ['permesso', 'permesso-senza-rifiuto']) test(`PL-ACP-03 — $
   await a.prompt(testo);
   const r = (await f.leggi()).find(m => m.id === 'permesso-1' && m.result);
   assert.deepEqual(r.result.outcome, modo === 'permesso' ? { outcome: 'selected', optionId: 'no' } : { outcome: 'cancelled' });
-  assert.match(eventi[0].testo, /rifiutata.*conferma/iu);
+  assert.match(eventi[0].testo, /rejected.*confirmation/iu);
+  assert.equal(eventi[0].testoChiave, 'server.acp.notice.permissionDenied');
 });
 
 for (const modo of ['stop', 'ignora-stop']) test(`PL-ACP-04 — ${modo}: cancel e nessun processo orfano`, async t => {

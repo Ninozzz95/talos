@@ -350,7 +350,8 @@ test('⛔⛔ L8 COMPATIBILITÀ — il solo `testo` SENZA recinto viene comunque 
   assert.equal(scritto, PROSA_SENZA_RECINTO, 'scritto com\'è: nessuna riga inventata per far passare il cancello');
   const letto = rileggiRapportoRecintato(scritto);
   assert.equal(letto.ok, false);
-  assert.match(letto.motivo, /non porta il record verificabile/, 'è il motivo VERBATIM letto in `meta.json` della ricerca `3029dea2` il 12/09');
+  assert.match(letto.motivo, /has no verifiable record/, 'la riserva nomina lo stesso record mancante del caso del 12/09');
+  assert.equal(letto.motivoChiave, 'server.research.report.noRecord');
 });
 
 test('⭐⭐ L8 COMPATIBILITÀ — il MODO VECCHIO (il recinto già dentro `testo`) continua a passare, byte per byte', async (t) => {

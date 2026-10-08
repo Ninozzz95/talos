@@ -32,6 +32,12 @@ const localeOra = () => (linguaCorrenteDiT() === 'en' ? 'en-GB' : 'it-IT');
 const oraBreve = valore => new Date(valore).toLocaleTimeString(localeOra(), { hour: '2-digit', minute: '2-digit' });
 const oraCompleta = valore => new Date(valore).toLocaleTimeString(localeOra());
 const tempo = ms => ms == null ? tr('agenti.delegations.durationUnavailable') : ms < 60000 ? `${Math.floor(ms / 1000)} s` : ms < 3600000 ? `${Math.floor(ms / 60000)} min` : `${Math.floor(ms / 3600000)} h ${Math.floor(ms / 60000) % 60} min`;
+/** C2b «Coordinazione» (owner 08/10/2026): come è partito un agente — da solo o consentito da te. Senza il dato, niente.
+ *  Lo stesso fatto ha due nomi: `avvio` nello snapshot delle figlie (`snapshotFiglio`), `avvioDelega` nelle righe dell'elenco
+ *  (`GET /sessions`), da cui arrivano le nipoti. */
+export const avvioDiAgente = (a) => a?.avvio ?? a?.avvioDelega ?? null;
+export const segnoAvvio = (a) => (avvioDiAgente(a) === 'da-solo' ? tr('agenti.delegations.startedOnItsOwn')
+  : avvioDiAgente(a) === 'consentito' ? tr('agenti.delegations.startedAllowed') : null);
 
 /** Soltanto misure dichiarate: la mancanza di telemetria non equivale a zero. */
 export function attivitaNodoGrafo(a, ora = Date.now()) {
@@ -487,7 +493,7 @@ export function montaGrafoAgenti(host, { dati, onApri, onChiudi, onAggiorna, onL
     pill.append(el('span', null, tr(etichetta[n.stato])));
     testa.append(el('h3', 'talos-wfg__dettaglio-nome', n.nome), pill);
     const avvio = istante(n.dati.avviataAlle);
-    const sotto = [n.dati.modello || (n.id === corrente.corrente.sessionId ? tr('agenti.delegations.mainSession') : tr('agenti.delegations.subAgent')), a.durataMs != null ? tempo(a.durataMs) : null,
+    const sotto = [n.dati.modello || (n.id === corrente.corrente.sessionId ? tr('agenti.delegations.mainSession') : tr('agenti.delegations.subAgent')), segnoAvvio(n.dati), a.durataMs != null ? tempo(a.durataMs) : null,
       avvio != null ? tr('agenti.delegations.startedAt', { ora: oraBreve(avvio) }) : null].filter(Boolean).join(' · ');
     testi.append(testa, el('span', 'talos-wfg__passo-modello', sotto));
     detChi.replaceChildren(segno, testi);
@@ -663,7 +669,7 @@ export function montaGrafoAgenti(host, { dati, onApri, onChiudi, onAggiorna, onL
       nodo.dataset.operativo = String(posizione == null && Boolean(a.operazione) && !corrente.errore);
       Object.assign(nodo.style, { left: `${n.x - n.width / 2}px`, top: `${n.y - n.height / 2}px`, width: `${n.width}px`, height: `${n.height}px` });
       ui.apri.textContent = n.nome; ui.apri.removeAttribute('title'); ui.apri.removeAttribute('data-tip'); ui.apri.setAttribute('aria-label', tr('agenti.delegations.openDetailOf', { nome: n.nome }));
-      ui.meta.textContent = n.dati.modello || (n.id === corrente.corrente.sessionId ? tr('agenti.delegations.mainSession') : tr('agenti.delegations.subAgent')); ui.meta.title = ui.meta.textContent;
+      ui.meta.textContent = [n.dati.modello || (n.id === corrente.corrente.sessionId ? tr('agenti.delegations.mainSession') : tr('agenti.delegations.subAgent')), segnoAvvio(n.dati)].filter(Boolean).join(' · '); ui.meta.title = ui.meta.textContent; // C2b: anche come è partito
       const tono = TONO_STATO[n.stato] ?? 'neutro';
       ui.pallino.dataset.tono = tono; ui.badge.dataset.tono = tono; ui.badge.replaceChildren();
       if (ICONA_TONO[tono]) ui.badge.append(icona(ICONA_TONO[tono], 'talos-wfg__pill-icona'));

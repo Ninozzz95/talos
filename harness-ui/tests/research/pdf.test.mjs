@@ -72,7 +72,7 @@ test('il rapporto completo porta il PASSAGGIO, che è la prova', () => {
     // Senza, «sostenuta» è una parola che chiede fiducia invece di darla.
     const completo = testo(talosResearchPdfSpec(record(), 'report'))
     assert.match(completo, /il passaggio per «Spencer lavorava alla Raytheon»/)
-    assert.match(completo, /Le fonti/)
+    assert.match(completo, /Sources/)
 })
 
 test('la sintesi NON porta i passaggi né l\'elenco delle fonti', () => {
@@ -81,16 +81,16 @@ test('la sintesi NON porta i passaggi né l\'elenco delle fonti', () => {
     assert.doesNotMatch(breve, /il passaggio per/)
     assert.doesNotMatch(breve, /esempio\.it\/spencer/)
     // Ma dice quello che NON regge, che è la metà che gli altri tacciono.
-    assert.match(breve, /Quello che NON regge/)
+    assert.match(breve, /What does NOT hold/)
 })
 
 test('il dossier mette affermazione, verdetto e fonte SULLA STESSA RIGA', () => {
     const spec = talosResearchPdfSpec(record(), 'dossier')
     const tabella = spec.blocks.find((block) => block.t === 'table')
     assert.ok(tabella)
-    assert.deepEqual(tabella.head, ['#', 'Affermazione', 'Verdetto', 'Fonte'])
+    assert.deepEqual(tabella.head, ['#', 'Claim', 'Verdict', 'Source'])
     assert.equal(tabella.rows[0][1], 'Spencer lavorava alla Raytheon')
-    assert.match(tabella.rows[0][2], /sostenuta/)
+    assert.match(tabella.rows[0][2], /supported/)
     assert.equal(tabella.rows[0][3], 'Percy Spencer')
 })
 
@@ -125,7 +125,7 @@ test('dice CHI ha giudicato — o che nessuno l\'ha fatto', () => {
      */
     for (const tone of TALOS_RESEARCH_PDF_TONES) {
         assert.match(testo(talosResearchPdfSpec(record(), tone)), /deepseek-v4/)
-        assert.match(testo(talosResearchPdfSpec(record({ judge: null }), tone)), /Nessun giudice indipendente/)
+        assert.match(testo(talosResearchPdfSpec(record({ judge: null }), tone)), /No independent judge/)
     }
 })
 
@@ -139,7 +139,7 @@ test('una ricerca senza affermazioni lo DICE, invece di consegnare pagine vuote'
     // Non è un errore: una ricerca può finire senza che nessuna citazione regga. Ma un PDF di
     // sole intestazioni non lo dice a nessuno.
     for (const tone of TALOS_RESEARCH_PDF_TONES) {
-        assert.match(testo(talosResearchPdfSpec(record({ claims: [] }), tone)), /non ha prodotto affermazioni verificabili/)
+        assert.match(testo(talosResearchPdfSpec(record({ claims: [] }), tone)), /did not yield verifiable claims/)
     }
 })
 
@@ -160,5 +160,5 @@ test('⭐ il tema e il piè di pagina sono quelli che l\'impaginatore del deskto
     assert.equal(talosResearchPdfSpec(record(), 'dossier').theme, 'plain')
     assert.equal(talosResearchPdfSpec(record(), 'report').theme, 'report')
     assert.equal(talosResearchPdfSpec(record(), 'brief').theme, 'report')
-    assert.deepEqual(talosResearchPdfSpec(record(), 'report').footer, { text: 'TALOS · ricerca approfondita', pageNo: true })
+    assert.deepEqual(talosResearchPdfSpec(record(), 'report').footer, { text: 'TALOS · deep research', pageNo: true })
 })

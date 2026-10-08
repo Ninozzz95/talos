@@ -163,7 +163,7 @@ function scappaRegex(carattere) {
 function chiusuraClasse(pattern, apertura) {
   let i = apertura + 1;
   if (pattern[i] === '!' || pattern[i] === '^') i += 1;
-  if (pattern[i] === ']') i += 1; // una `]` in prima posizione e' letterale
+  if (pattern[i] === ']') i += 1; // una ] in prima posizione e letterale
   while (i < pattern.length) {
     if (pattern[i] === '\\') { i += 2; continue; }
     if (pattern[i] === ']') return i;

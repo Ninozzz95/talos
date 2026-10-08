@@ -46,10 +46,11 @@ import { pipeline } from 'node:stream/promises';
 import { setTimeout as attendiMs } from 'node:timers/promises';
 
 export class SessionStoreError extends Error {
-  constructor(message, code = 'SESSION_STORE_FAILED') {
+  constructor(message, code = 'SESSION_STORE_FAILED', dettaglio = null) {
     super(message);
     this.name = 'SessionStoreError';
     this.code = code;
+    if (dettaglio?.chiave) { this.chiave = dettaglio.chiave; if (dettaglio.params) this.params = dettaglio.params; }
   }
 }
 
@@ -142,7 +143,7 @@ let politicaSync = process.env.TALOS_SESSION_STORE_SYNC === 'busy' ? 'busy' : 's
 /** Imposta la politica del writer sincrono ('scavalca' | 'busy'); ritorna quella precedente. */
 export function impostaPoliticaScritturaSync(politica) {
   if (!POLITICHE_SYNC.has(politica)) {
-    throw new SessionStoreError(`Politica del writer sincrono sconosciuta: ${String(politica)} (ammesse: scavalca, busy).`, 'SESSION_STORE_BAD_POLICY');
+    throw new SessionStoreError(`Unknown synchronous writer policy: ${String(politica)} (allowed: scavalca, busy).`, 'SESSION_STORE_BAD_POLICY');
   }
   const precedente = politicaSync;
   politicaSync = politica;
@@ -155,7 +156,7 @@ export function politicaScritturaSync() {
 
 function rifiutaSeCodaInVolo(percorso) {
   if (politicaSync === 'busy' && codeDiScrittura.has(percorso)) {
-    throw new SessionStoreError('Il registro ha una scrittura in corso: la scrittura sincrona è stata rifiutata, riprova quando la coda è vuota.', 'SESSION_STORE_BUSY');
+    throw new SessionStoreError("The journal has a write in progress: synchronous writing was rejected; try again when the queue is empty.", 'SESSION_STORE_BUSY');
   }
 }
 
@@ -180,7 +181,7 @@ function avvelenaSeIlFileECambiato(percorso, dimensionePrima, errore) {
 }
 
 function erroreCodaIncerta() {
-  return new SessionStoreError('La coda del registro non è verificabile: interrompi le scritture e controlla il journal prima di riprovare.', 'SESSION_STORE_AMBIGUOUS');
+  return new SessionStoreError("The journal queue cannot be verified: stop writing and check the journal before trying again.", 'SESSION_STORE_AMBIGUOUS');
 }
 
 function rifiutaCodaIncerta(percorso) {
@@ -335,7 +336,7 @@ export async function attendiScritture({ cartellaStore, sessionId, giriMassimi =
     if (fotografia.length === 0) return { giri, scrittureAttese, percorsi: [...percorsi] };
     giri += 1;
     if (giri > giriMassimi) {
-      throw new SessionStoreError(`Il negozio delle sessioni non si è svuotato dopo ${giriMassimi} giri di attesa: ${fotografia.length} scrittura/e ancora in coda (${fotografia.map(([p]) => p).join(', ')}).`, 'SESSION_STORE_FLUSH_EXHAUSTED');
+      throw new SessionStoreError(`The session store did not drain after ${giriMassimi} waiting cycles: ${fotografia.length} write(s) still queued (${fotografia.map(([p]) => p).join(', ')}).`, 'SESSION_STORE_FLUSH_EXHAUSTED');
     }
     for (const [percorso] of fotografia) percorsi.add(percorso);
     scrittureAttese += fotografia.length;
@@ -388,17 +389,17 @@ function causaDa(codice) {
 }
 
 const TESTO_CAUSA = Object.freeze({
-  spazio: 'il disco della cartella sessioni è pieno',
-  'sola-lettura': 'il disco della cartella sessioni è in sola lettura',
-  permessi: 'il sistema ha negato la creazione del file nella cartella sessioni',
-  'non-supportato': 'il file system della cartella sessioni non supporta né i collegamenti né la creazione esclusiva dei file',
-  io: 'il disco della cartella sessioni ha restituito un errore di lettura o scrittura',
-  'verifica-byte': 'il disco non ha restituito i byte appena scritti',
+  spazio: "the session folder disk is full",
+  'sola-lettura': "the session folder disk is read-only",
+  permessi: "the system denied file creation in the session folder",
+  'non-supportato': "the session folder file system supports neither links nor exclusive file creation",
+  io: "the session folder disk returned a read or write error",
+  'verifica-byte': "the disk did not return the bytes just written",
 });
 
 function erroreConCausa(causa, codiceOriginale, testo = TESTO_CAUSA[causa]) {
   const code = causa === 'non-supportato' ? 'SESSION_STORE_FS_UNSUPPORTED' : 'SESSION_STORE_HEADER_FAILED';
-  const errore = new SessionStoreError(`Sessione non avviata: ${testo}${codiceOriginale ? ` (${codiceOriginale})` : ''}.`, code);
+  const errore = new SessionStoreError(`Session not started: ${testo}${codiceOriginale ? ` (${codiceOriginale})` : ''}.`, code);
   errore.causa = causa;
   if (codiceOriginale) errore.codiceOriginale = codiceOriginale;
   return errore;
@@ -442,7 +443,7 @@ export function registraIntestazioneSync({ cartellaStore, sessionId, record }, d
     try { writeFileSyncFn(finale, attesi, { flag: 'wx', flush: true }); }
     catch (errore) {
       if (errore?.code === 'EEXIST') {
-        throw new SessionStoreError('La sessione ha già un registro persistito.', 'SESSION_STORE_HEADER_EXISTS');
+        throw new SessionStoreError("The session already has a persisted journal.", 'SESSION_STORE_HEADER_EXISTS');
       }
       // Creato e poi scrittura fallita: ciò che c'è è un prefisso NOSTRO. Byte diversi dal
       // prefisso = non nostro (mai toccato); illeggibile = incerto, quindi isolato.
@@ -460,16 +461,16 @@ export function registraIntestazioneSync({ cartellaStore, sessionId, record }, d
     if (riletti && riletti.equals(attesi)) return;
     togliFinaleNostroOIsolalo();
     throw erroreConCausa('verifica-byte', null, riletti
-      ? 'la rilettura dei byte del file della sessione non coincide con quanto scritto'
-      : 'la rilettura dei byte del file della sessione non è riuscita');
+      ? "the session file bytes read back do not match the bytes written"
+      : "the session file bytes could not be read back");
   }
 
   function annunciaSenzaLink(codice) {
     if (modalitaPerCartella.get(chiaveCartella) === 'senza-link') return;
     modalitaPerCartella.set(chiaveCartella, 'senza-link');
     try {
-      logger?.warn?.(`[session-store] la cartella delle sessioni è su un file system senza collegamenti (${codice}): `
-        + 'le sessioni nuove si pubblicano con creazione esclusiva e rilettura dei byte; un crash a metà scrittura può lasciare un file vuoto, scartato al ripristino.');
+      logger?.warn?.(`[session-store] the session folder is on a file system without links (${codice}): `
+        + "new sessions are published through exclusive creation and byte readback; a crash midway through writing may leave an empty file, discarded during restore.");
     } catch { /* un logger guasto non cambia l'esito */ }
   }
 
@@ -502,7 +503,7 @@ export function registraIntestazioneSync({ cartellaStore, sessionId, record }, d
 
   mkdirSyncFn(cartellaStore, { recursive: true });
   if (existsSyncFn(finale)) {
-    throw new SessionStoreError('La sessione ha già un registro persistito.', 'SESSION_STORE_HEADER_EXISTS');
+    throw new SessionStoreError("The session already has a persisted journal.", 'SESSION_STORE_HEADER_EXISTS');
   }
   // Cartella già provata senza collegamenti: niente staging, niente alias `.pending`.
   if (modalitaPerCartella.get(chiaveCartella) === 'senza-link') return pubblicaSenzaLink();
@@ -510,7 +511,7 @@ export function registraIntestazioneSync({ cartellaStore, sessionId, record }, d
   try {
     writeFileSyncFn(staging, attesi, { flag: 'wx', flush: true });
     if (!readFileSyncFn(staging).equals(attesi)) {
-      throw new SessionStoreError('La scrittura dell’intestazione non è verificabile.', 'SESSION_STORE_HEADER_FAILED');
+      throw new SessionStoreError("The header write cannot be verified.", 'SESSION_STORE_HEADER_FAILED');
     }
     let erroreLink = null;
     try { linkSyncFn(staging, finale); }
@@ -525,7 +526,7 @@ export function registraIntestazioneSync({ cartellaStore, sessionId, record }, d
       }
       if (!stagingRimosso) {
         conservaStaging = true; // residuo di diagnosi senza journal, escluso dal replay
-        throw erroreConCausa('io', erroreLink.code, 'il file temporaneo della prova dei collegamenti non è stato eliminato');
+        throw erroreConCausa('io', erroreLink.code, 'the temporary file of the link test was not deleted');
       }
       annunciaSenzaLink(erroreLink.code);
       ripiega = true;
@@ -535,7 +536,7 @@ export function registraIntestazioneSync({ cartellaStore, sessionId, record }, d
       // conserva la quarantena finché il finale proprio non è eliminato.
       if (!finaleCompletoEProprio()) {
         annullaPubblicazioneSePropria();
-        throw erroreLink ?? new SessionStoreError('La pubblicazione dell’intestazione non è verificabile.', 'SESSION_STORE_HEADER_FAILED');
+        throw erroreLink ?? new SessionStoreError("The header publication cannot be verified.", 'SESSION_STORE_HEADER_FAILED');
       }
       // Un .pending rimasto sarebbe un secondo hard link alla conversazione:
       // deve sparire PRIMA di avviare il modello o confermare la sessione.
@@ -545,7 +546,7 @@ export function registraIntestazioneSync({ cartellaStore, sessionId, record }, d
         catch (verifica) { if (verifica?.code === 'ENOENT') stagingRimosso = true; }
         if (!stagingRimosso) {
           annullaPubblicazioneSePropria();
-          throw new SessionStoreError('Il collegamento temporaneo non è stato eliminato.', 'SESSION_STORE_HEADER_FAILED');
+          throw new SessionStoreError("The temporary link was not removed.", 'SESSION_STORE_HEADER_FAILED');
         }
       }
       stagingRimosso = true;
@@ -574,7 +575,7 @@ export function registraRigaConfermata({ cartellaStore, sessionId, record, puoAc
   const corrente = precedente.catch(() => {}).then(() => {
     rifiutaCodaIncerta(percorso);
     if (typeof puoAccodareFn === 'function' && !puoAccodareFn()) {
-      throw new SessionStoreError('Lo stato è cambiato prima della scrittura del record.', 'SESSION_STORE_PRECONDITION_FAILED');
+      throw new SessionStoreError("The state changed before the record was written.", 'SESSION_STORE_PRECONDITION_FAILED');
     }
     mkdirSync(cartellaStore, { recursive: true });
     let prima;
@@ -607,7 +608,7 @@ export function registraRigaConfermata({ cartellaStore, sessionId, record, puoAc
         truncateSyncFn(percorso, prima);
         if (dimensioneOZero(percorso) !== prima) throw erroreCodaIncerta();
         if (erroreScrittura) throw erroreScrittura;
-        throw new SessionStoreError('La scrittura era parziale; il prefisso è stato rimosso.', 'SESSION_STORE_WRITE_FAILED');
+        throw new SessionStoreError("The write was partial; the prefix was removed.", 'SESSION_STORE_WRITE_FAILED');
       }
       throw erroreCodaIncerta();
     } catch (errore) {
@@ -637,7 +638,7 @@ export async function elencaSessioniPersistite({ cartellaStore, conDiagnostica =
     voci = await readdirFn(cartellaStore, { withFileTypes: true });
   } catch (errore) {
     if (errore?.code === 'ENOENT') return conDiagnostica ? { sessionIds: [], quarantined: [] } : [];
-    throw new SessionStoreError(`Impossibile leggere ${cartellaStore}: ${errore.message}`, 'SESSION_STORE_READ_FAILED');
+    throw new SessionStoreError(`Cannot read ${cartellaStore}: ${errore.message}`, 'SESSION_STORE_READ_FAILED');
   }
   const sessionIdsTutti = voci.filter((v) => v.isFile() && v.name.endsWith(ESTENSIONE))
     .map((v) => v.name.slice(0, -ESTENSIONE.length));
@@ -692,15 +693,15 @@ export async function esisteSessionePersistita({ cartellaStore, sessionId }, dep
   // Store IDs are database keys, not necessarily filesystem-safe session IDs.
   // Recovery must never turn a forged key or an unreadable journal into "absent".
   if (typeof sessionId !== 'string' || !/^[a-zA-Z0-9_-]{1,256}$/.test(sessionId)) {
-    throw new SessionStoreError('Identificatore sessione non valido per il recupero.', 'SESSION_STORE_INSPECTION_FAILED');
+    throw new SessionStoreError("Invalid session identifier for recovery.", 'SESSION_STORE_INSPECTION_FAILED');
   }
   try {
     const info = await (deps.lstatFn ?? fsp.lstat)(percorsoDi(cartellaStore, sessionId));
-    if (!info.isFile() || info.isSymbolicLink()) throw new SessionStoreError('Il registro della sessione non e un file regolare.', 'SESSION_STORE_INSPECTION_FAILED');
+    if (!info.isFile() || info.isSymbolicLink()) throw new SessionStoreError("The session journal is not a regular file.", 'SESSION_STORE_INSPECTION_FAILED');
     return true;
   } catch (error) {
     if (error?.code === 'ENOENT') return false;
-    throw new SessionStoreError('Impossibile verificare la presenza del registro della sessione.', 'SESSION_STORE_INSPECTION_FAILED');
+    throw new SessionStoreError("Cannot verify whether the session journal exists.", 'SESSION_STORE_INSPECTION_FAILED');
   }
 }
 
@@ -729,7 +730,7 @@ export async function eliminaSessionePersistita({ cartellaStore, sessionId }, de
       await unlinkFn(percorso);
     } catch (errore) {
       if (errore?.code === 'ENOENT') return;
-      throw new SessionStoreError(`Impossibile eliminare la sessione ${sessionId}: ${errore.message}`, 'SESSION_STORE_DELETE_FAILED');
+      throw new SessionStoreError(`Cannot delete session ${sessionId}: ${errore.message}`, 'SESSION_STORE_DELETE_FAILED');
     }
   });
   codeDiScrittura.set(percorso, corrente);
@@ -956,7 +957,7 @@ function inCodaDelPercorso(percorso, lavoro) {
 
 async function leggiAStreamInterna(percorso, sessionId, perRiga, deps = {}) {
   const createReadStreamFn = deps.createReadStreamFn ?? createReadStream;
-  const erroreDiLettura = (errore) => new SessionStoreError(`Impossibile leggere la sessione ${sessionId}: ${errore?.message ?? String(errore)}`, 'SESSION_STORE_READ_FAILED');
+  const erroreDiLettura = (errore) => new SessionStoreError(`Cannot read session ${sessionId}: ${errore?.message ?? String(errore)}`, 'SESSION_STORE_READ_FAILED', { chiave: 'server.sessionStore.readFailed', params: { sessionId, detail: errore?.message ?? String(errore) } });
   let dimensione;
   try { dimensione = statSync(percorso).size; }
   catch (errore) {
@@ -984,7 +985,7 @@ async function leggiAStreamInterna(percorso, sessionId, perRiga, deps = {}) {
     if (fermata) return; // `rl.close()` non ferma le righe già in un blocco: si ignorano
     if (riga.trim() === '') return;
     if (rottaPendente) {
-      ferma({ errore: new SessionStoreError(`La sessione ${sessionId} ha una riga corrotta (non l'ultima): il file non è un crash a metà append, è danneggiato altrove.`, 'SESSION_STORE_CORRUPT') });
+      ferma({ errore: new SessionStoreError(`Session ${sessionId} has a corrupt line (not the last one): the file is not a crash midway through an append; it is damaged elsewhere.`, 'SESSION_STORE_CORRUPT', { chiave: 'server.sessionStore.corrupt', params: { sessionId } }) });
       return;
     }
     let record;
@@ -1030,10 +1031,68 @@ async function leggiAStreamInterna(percorso, sessionId, perRiga, deps = {}) {
  */
 export function leggiRegistroAStream({ cartellaStore, sessionId, perRiga }, deps = {}) {
   if (typeof perRiga !== 'function') {
-    throw new SessionStoreError('leggiRegistroAStream vuole perRiga(record, { indice, byte }).', 'SESSION_STORE_BAD_ARGUMENT');
+    throw new SessionStoreError("leggiRegistroAStream requires perRiga(record, { indice, byte }).", 'SESSION_STORE_BAD_ARGUMENT');
   }
   const percorso = percorsoDi(cartellaStore, sessionId);
   return inCodaDelPercorso(percorso, () => leggiAStreamInterna(percorso, sessionId, perRiga, deps));
+}
+
+/**
+ * ⭐ LONG-CHAT «prima la coda», tappa B (07/10/2026 notte, owner: «solo opzioni additive nel kernel e patch al desktop») — la SOLA
+ * PRIMA riga di un journal, cioè la sua intestazione. Serve a `ripristina({ soloSessioni })` per sapere di quale famiglia fa parte
+ * ogni sessione dell'archivio SENZA leggerne i corpi (Codex `rollout/src/list.rs:136` legge le prime 10 righe di ogni file per
+ * l'elenco; Pi `session-manager.ts:606-760` scansiona l'intestazione con un buffer da 4 KiB e un tetto da 1 MiB, e se il tetto
+ * scatta ricade sul caricamento completo, «autorevole»: stessa regola qui — chi riceve `troppo-grande`/`illeggibile`/`non-intestazione`
+ * non può provare l'estraneità e deve ripristinare).
+ * ⛔ SOLA LETTURA, fuori dalla coda di scrittura del percorso: `leggiRegistroAStream` RIPARA una coda spezzata (riscrive il file) anche
+ * se la lettura si ferma alla prima riga; guardare l'elenco delle sessioni non deve mai cambiare un file di una sessione non aperta.
+ * @returns {Promise<{stato:'ok', intestazione:object}|{stato:'assente'|'illeggibile'|'troppo-grande'|'non-intestazione', dettaglio?:string}>}
+ */
+export const TETTO_INTESTAZIONE_BYTE = 1024 * 1024;
+export async function leggiIntestazioneSessione({ cartellaStore, sessionId }, deps = {}) {
+  const tetto = Number.isSafeInteger(deps.tettoByte) && deps.tettoByte > 0 ? deps.tettoByte : TETTO_INTESTAZIONE_BYTE;
+  const percorso = percorsoDi(cartellaStore, sessionId);
+  let fd;
+  try { fd = await fsp.open(percorso, 'r'); }
+  catch (errore) {
+    if (errore?.code === 'ENOENT') return { stato: 'assente' };
+    return { stato: 'illeggibile', dettaglio: errore?.code ?? String(errore?.message ?? errore) };
+  }
+  try {
+    const pezzi = [];
+    let letti = 0;
+    let completa = false;
+    let finito = false;
+    const buffer = Buffer.allocUnsafe(16 * 1024);
+    while (letti < tetto && !completa) {
+      const { bytesRead } = await fd.read(buffer, 0, Math.min(buffer.length, tetto - letti), letti);
+      if (bytesRead === 0) { finito = true; break; }
+      const parte = buffer.subarray(0, bytesRead);
+      /* le righe vuote prima dell'intestazione si saltano, come fa la lettura completa */
+      let da = 0;
+      for (;;) {
+        const fine = parte.indexOf(10, da);
+        if (fine < 0) { pezzi.push(Buffer.from(parte.subarray(da))); break; }
+        pezzi.push(Buffer.from(parte.subarray(da, fine)));
+        if (Buffer.concat(pezzi).toString('utf8').trim() !== '') { completa = true; break; }
+        pezzi.length = 0;
+        da = fine + 1;
+      }
+      letti += bytesRead;
+    }
+    const testo = Buffer.concat(pezzi).toString('utf8').trim();
+    if (!completa && !finito) return { stato: 'troppo-grande', dettaglio: `la prima riga supera ${tetto} byte` };
+    if (testo === '') return { stato: 'illeggibile', dettaglio: 'file vuoto' };
+    let record;
+    try { record = JSON.parse(testo); }
+    catch { return { stato: 'illeggibile', dettaglio: 'la prima riga non è JSON' }; }
+    if (!record || typeof record !== 'object' || record.tipo !== 'intestazione') return { stato: 'non-intestazione' };
+    return { stato: 'ok', intestazione: record };
+  } catch (errore) {
+    return { stato: 'illeggibile', dettaglio: errore?.code ?? String(errore?.message ?? errore) };
+  } finally {
+    await fd.close().catch(() => {});
+  }
 }
 
 /**

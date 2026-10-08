@@ -37,6 +37,9 @@ export const MESSAGES = Object.freeze({
    * è semplicemente vecchia — si ricarica la sessione e si guarda cosa chiede adesso.
    */
   APPROVAL_NOT_PENDING: { title: 'Permission request expired', explanation: 'The session has moved on: that question no longer waits for an answer.', action: 'Reload the session and answer the request you see now, if there is one.' },
+  APPROVAL_ANSWER_FORBIDDEN: { title: 'Answer not allowed from here', explanation: 'This permission request belongs to an agent that this session did not start.', action: 'Open the session that started the agent, or the agent itself, and answer from there.' },
+  // C2-Q (08/10/2026): the same rule for a child's question to the person
+  QUESTION_ANSWER_FORBIDDEN: { title: 'Answer not allowed from here', explanation: 'This question belongs to an agent that this session did not start.', action: 'Open the session that started the agent, or the agent itself, and answer from there.' },
   /*
    * ⛔⛔ 07/9, owner bloccato: «la sessione e ancora bloccata, non riesco a inviare messaggi e
    * spunta errore toast». `SESSION_NOT_READY` NON era in questa mappa, quindi cadeva su

@@ -33,27 +33,33 @@ test('⛔ PRONTA-02 — l\'UNICA chiave è in panchina: NON è pronto, e non dic
   assert.equal(esito.pronto, false);
   assert.equal(esito.codice, 'CONFIG_INVALID');
   assert.equal(esito.fornitore, 'DeepSeek');
-  assert.match(esito.messaggio, /in pausa/u, 'la chiave C\'È: dire «manca» manderebbe la persona a incollarne una che ha già');
-  assert.match(esito.messaggio, /l'ha rifiutata/u, 'la causa, in parole umane');
-  assert.match(esito.messaggio, /fra circa \d+ (min|ore)/u, 'e fino a quando');
+  assert.match(esito.messaggio, /is paused/u, 'la chiave C\'È: dire «manca» manderebbe la persona a incollarne una che ha già');
+  assert.match(esito.messaggio, /provider rejected it/u, 'la causa, in parole umane');
+  assert.match(esito.messaggio, /in about \d+ (min|hours)/u, 'e fino a quando');
   assert.doesNotMatch(esito.messaggio, /credenziale|inPanchina|CONFIG|impronta/u, 'mai la classe tecnica a schermo');
   assert.doesNotMatch(esito.messaggio, new RegExp(CHIAVE, 'u'), 'mai il segreto');
 });
 
-test('PRONTA-03 — la causa cambia la frase: traffico e credito si dicono col loro nome', () => {
-  for (const [classe, atteso] of [['traffico', /troppo traffico/u], ['credito', /credito è esaurito/u]]) {
-    const store = storeCon({ DEEPSEEK_API_KEY: CHIAVE });
-    inPanchina(store, 'deepseek', classe);
-    const esito = creaProntoFn({ providerStore: store })('deepseek:deepseek-chat');
-    assert.equal(esito.pronto, false, classe);
-    assert.match(esito.messaggio, atteso, classe);
-  }
+test('PRONTA-03 — la causa cambia la frase: il traffico si dice col suo nome; ⛔ BUG-25: il credito a chiave unica NON panchina più (errore onesto, chiave utilizzabile)', () => {
+  const store = storeCon({ DEEPSEEK_API_KEY: CHIAVE });
+  inPanchina(store, 'deepseek', 'traffico');
+  const esito = creaProntoFn({ providerStore: store })('deepseek:deepseek-chat');
+  assert.equal(esito.pronto, false);
+  assert.match(esito.messaggio, /heavy traffic/u, 'K4b: la frase del server è inglese (la chiave la traduce)');
+});
+
+test('PRONTA-03-bis — ⛔ BUG-25: senza scadenza dichiarata il credito NON panchina la chiave unica: la sessione è PRONTA', () => {
+  const store = storeCon({ DEEPSEEK_API_KEY: CHIAVE });
+  inPanchina(store, 'deepseek', 'credito');
+  assert.equal(store.elencaPool('deepseek')[0].stato, 'disponibile',
+    'il credito esaurito non invalida una chiave: l\'errore si ripete onesto a ogni richiesta');
+  assert.equal(creaProntoFn({ providerStore: store })('deepseek:deepseek-chat').pronto, true);
 });
 
 test('PRONTA-04 — al contrario: nessuna chiave affatto dice «Manca la chiave», e nomina il fornitore', () => {
   const esito = creaProntoFn({ providerStore: storeCon({}) })('openai:gpt-5');
   assert.equal(esito.pronto, false);
-  assert.match(esito.messaggio, /^Manca la chiave di OpenAI/u);
+  assert.match(esito.messaggio, /^The OpenAI key is missing/u);
   assert.doesNotMatch(esito.messaggio, /OPENROUTER_API_KEY/u, 'mai una variabile d\'ambiente a schermo');
 });
 
@@ -64,7 +70,7 @@ test('PRONTA-05 — OpenRouter: la stessa regola, più la chiave d\'avvio; in pa
   inPanchina(store, 'openrouter', 'traffico');
   const esito = creaProntoFn({ providerStore: store })('z-ai/glm-5.3-flash');
   assert.equal(esito.pronto, false);
-  assert.match(esito.messaggio, /OpenRouter.*in pausa/u);
+  assert.match(esito.messaggio, /OpenRouter.*is paused/u);
 });
 
 test('PRONTA-06 — modello vuoto o illeggibile: mai «pronto» (falliva aperto il 17/09)', () => {
@@ -72,7 +78,7 @@ test('PRONTA-06 — modello vuoto o illeggibile: mai «pronto» (falliva aperto 
   for (const storto of ['', '   ', null, undefined, 0, {}]) {
     const esito = pronto(storto);
     assert.equal(esito.pronto, false, String(storto));
-    assert.match(esito.messaggio, /Scegli un modello/u);
+    assert.match(esito.messaggio, /Choose a model/u);
   }
 });
 
@@ -83,7 +89,7 @@ test('PRONTA-07 — un fornitore che non vuole chiave è pronto per costruzione'
 test('PRONTA-08 — il tempo alla ripresa viene dall\'orologio iniettato, non da quello di sistema', () => {
   const finto = { getKey: () => null, elencaPool: () => [{ causa: 'traffico', inPanchinaFino: ADESSO + 5 * 60_000 }, { causa: 'credenziale', inPanchinaFino: ADESSO + 3 * 3_600_000 }] };
   const esito = creaProntoFn({ providerStore: finto, adessoFn: () => ADESSO })('deepseek:deepseek-chat');
-  assert.match(esito.messaggio, /^Le 2 chiavi di DeepSeek sono in pausa: il fornitore ha chiesto di aspettare per troppo traffico\. Si riprova da sola fra circa 5 min/u, 'si annuncia la PRIMA che torna');
+  assert.match(esito.messaggio, /^The 2 DeepSeek keys are paused: the provider asked to wait because of heavy traffic\. It will retry automatically in about 5 min/u, 'si annuncia la PRIMA che torna');
   const scaduta = { getKey: () => null, elencaPool: () => [{ causa: 'traffico', inPanchinaFino: ADESSO - 1 }] };
-  assert.match(creaProntoFn({ providerStore: scaduta, adessoFn: () => ADESSO })('deepseek:deepseek-chat').messaggio, /^Manca la chiave/u, 'una panchina già scaduta non è una panchina');
+  assert.match(creaProntoFn({ providerStore: scaduta, adessoFn: () => ADESSO })('deepseek:deepseek-chat').messaggio, /^The DeepSeek key is missing/u, 'una panchina già scaduta non è una panchina');
 });

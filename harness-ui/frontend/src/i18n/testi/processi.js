@@ -127,6 +127,9 @@ export default {
     'process.stateCancelled': 'Annullato',
     'process.stateKilled': 'Terminato a forza',
     'process.stateNotRun': 'Non eseguito',
+    'process.stateInterrupted': 'Interrotto',
+    // A6-bis (08/10/2026): un comando in sfondo partito prima del riavvio del server — nessuno lo segue più (Hermes: «lost»)
+    'process.stateLost': 'Non più seguito',
     /* ⛔ BUG-14 (05/10/2026): lo stato «in sfondo», il pulsante per riga e il dettaglio (file + chi lo ha sfondato). */
     'process.stateBackgrounded': 'In sfondo',
     'process.background': 'Manda in sfondo',
@@ -163,6 +166,7 @@ export default {
     'process.commandAria': 'Comando {famiglia}: {comando}',
     'process.familyGeneric': 'generico',
     'process.filterLabel': 'Filtra i comandi eseguiti',
+    'process.statusFilterLabel': 'Filtra per stato del processo',
     'process.filterPlaceholder': 'Filtra i comandi…',
     'process.listLabel': 'Comandi eseguiti in questa sessione',
     'process.nowShowing': 'Ora vedi {n} comandi.',
@@ -220,6 +224,10 @@ export default {
     'agentTerminal.awaitingConsent': 'Aspetta il tuo consenso',
     'agentTerminal.notRun': 'Non eseguito: il comando non è partito',
     'agentTerminal.evicted': '(uscita non più tenuta in questa pagina: troppo testo in questa sessione)',
+    /* ⭐ BUG-23 (06/10): la scheda agente UNICA — separatore per giro e nota del tetto della vista */
+    'agentTerminal.turnSeparator': '── giro {giro} ──',
+    'agentTerminal.turnSeparatorAgente': '── agente ──',
+    'agentTerminal.outputCapped': '… {n} caratteri tagliati, output completo conservato',
   },
   en: {
     // ── process-output.js
@@ -341,6 +349,9 @@ export default {
     'process.stateCancelled': 'Cancelled',
     'process.stateKilled': 'Terminated',
     'process.stateNotRun': 'Not run',
+    'process.stateInterrupted': 'Interrupted',
+    // A6-bis (08/10/2026): a background command started before the server restarted — nobody follows it any more (Hermes: «lost»)
+    'process.stateLost': 'No longer tracked',
     /* ⛔ BUG-14 (05/10/2026): the «in background» state, the per-row button and the detail (file + who backgrounded it). */
     'process.stateBackgrounded': 'In background',
     'process.background': 'Send to background',
@@ -377,6 +388,7 @@ export default {
     'process.commandAria': 'Command {famiglia}: {comando}',
     'process.familyGeneric': 'generic',
     'process.filterLabel': 'Filter the commands run',
+    'process.statusFilterLabel': 'Filter by process status',
     'process.filterPlaceholder': 'Filter commands…',
     'process.listLabel': 'Commands run in this session',
     'process.nowShowing': 'Now showing {n} commands.',
@@ -434,5 +446,9 @@ export default {
     'agentTerminal.awaitingConsent': 'Waiting for your consent',
     'agentTerminal.notRun': 'Not run: the command did not start',
     'agentTerminal.evicted': '(output no longer kept in this page: too much text in this session)',
+    /* ⭐ BUG-23 (06/10): the SINGLE agent tab — per-turn separator and view-cap note */
+    'agentTerminal.turnSeparator': '── turn {giro} ──',
+    'agentTerminal.turnSeparatorAgente': '── agent ──',
+    'agentTerminal.outputCapped': '… {n} characters trimmed, full output kept',
   },
 };

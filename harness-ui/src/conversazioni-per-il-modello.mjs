@@ -21,7 +21,7 @@
  * PURO: niente I/O. Il registro passa le righe di `elenca()` e gli eventi di ogni voce.
  */
 import { chiedeTutto, paroleDellaRicerca, piega, punteggioPerParole } from './ricerca-per-parole.mjs';
-import { testoPerLoSchermo } from './kernel/confine-dati.mjs'; // F-027: l'estratto di un risultato senza l'impalcatura del confine
+import { testoPerLoSchermo } from './kernel/confine-dati.mjs'; // F-027: estratto di un risultato senza impalcatura del confine
 
 export const LINK_CONVERSAZIONE = 'talos://conversazione/';
 export const LIMITI_CONVERSAZIONI = Object.freeze({

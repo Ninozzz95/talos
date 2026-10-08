@@ -14,9 +14,9 @@ import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
  * solo ospitate nello stesso file.
  */
 
-import { existsSync as esisteSync, realpathSync as realpathSyncNativa } from 'node:fs';
+import { existsSync as esisteSync, readdirSync as elencaSync, realpathSync as realpathSyncNativa, lstatSync as lstatSyncNativa, readlinkSync as readlinkSyncNativa } from 'node:fs';
 import { homedir } from 'node:os';
-import { basename as nomeBase, dirname as cartellaDi, relative as relativoA, resolve as risolvi, sep as separatore } from 'node:path';
+import { basename as nomeBase, dirname as cartellaDi, parse as parsePercorso, relative as relativoA, resolve as risolvi, sep as separatore } from 'node:path';
 
 /**
  * La home della persona, letta una volta per chiamata e SEMPRE sovrascrivibile dal chiamante
@@ -168,7 +168,9 @@ export const PERCORSI_SEGRETI = Object.freeze({
   //   (`provider-credential-store.mjs`, `runtimeFile`): sta già in `FILE_DI_CONTROLLO.file`
   //   qui sopra, ma quella lista guarda le SCRITTURE del modello — non `shell` né `leggi`.
   //   Le due liste dicono due cose diverse sullo stesso file, e vanno tenute entrambe.
-  nomiFile: Object.freeze(['.netrc', '_netrc', '.npmrc', '.pypirc', '.pgpass', '.git-credentials', '.provider-runtime.json']),
+  // ⛔ 08/10/2026 (F-S-001, «come Hermes»): `.envrc` — il file di direnv, che esporta variabili d'ambiente e quindi segreti;
+  //   Hermes lo blocca in lettura con le varianti di `.env` (`agent/file_safety.py:332-334`, clone 65ad529). Qui mancava.
+  nomiFile: Object.freeze(['.netrc', '_netrc', '.npmrc', '.pypirc', '.pgpass', '.git-credentials', '.provider-runtime.json', '.envrc']),
   prefissiNome: Object.freeze(['id_rsa', 'id_ed25519', 'id_ecdsa', 'id_dsa']),
   estensioni: Object.freeze(['.pem', '.key', '.p12', '.pfx', '.jks', '.keystore', '.ppk']),
   esenzioni: Object.freeze(['.pub', '.example', '.sample', '.template', '.dist']),
@@ -253,6 +255,21 @@ function classeDelPezzo(pezzo, home) {
 }
 
 /**
+ * ⛔⛔⛔ F-S-001 (stress test della CLI, 08/10/2026; riprodotto sul desktop dfab19d54) — la RICERCA nei file restituiva il
+ *   contenuto di `.env` e delle chiavi private al modello senza chiedere, mentre `leggi` e la shell chiedono: era l'aggiramento.
+ *   ⛔ `secrets.json` NON è un nome segreto per `leggi`, quindi nemmeno per la ricerca (Hermes non lo blocca: `file_safety.py:332`).
+ *   Owner: «la risposta è sempre quella di Hermes, Claude e Codex». Hermes (`tools/file_tools.py:234` e `:1099-1110`, clone
+ *   65ad529) toglie dai risultati della ricerca ogni percorso bloccato in lettura — righe, nomi e conteggi — e dice quanti;
+ *   Claude Code applica alla ricerca il controllo di lettura. ⇒ La ricerca chiede a QUESTA funzione, che è la stessa classe
+ *   di `leggi` e della shell (`classeDelPezzo`): una grammatica sola, nessuna lista seconda da tenere allineata.
+ * @param {string} percorso relativo alla radice del progetto (o assoluto)
+ * @returns {boolean}
+ */
+export function eUnFileSegreto(percorso, { home = homeDiSistema() } = {}) {
+  return typeof percorso === 'string' && classeDelPezzo(percorso, home) !== null;
+}
+
+/**
  * I pezzi di un comando di shell che possono essere un percorso. ⛔ Non è un parser di shell e
  * non pretende di esserlo: si spezza su spazi e metacaratteri, perché quello che serve è
  * ACCORGERSI di un nome, non capire il comando. Un percorso fra virgolette CON spazi dentro si
@@ -260,6 +277,496 @@ function classeDelPezzo(pezzo, home) {
  */
 export function pezziDelComando(comando) {
   return String(comando ?? '').split(/[\s;|&<>()`"'=,]+/u).filter(Boolean);
+}
+
+/** Gli stessi pezzi di `pezziDelComando`, ciascuno col fatto che sia subito seguito da `(` (una chiamata: `s.key()`). */
+function pezziConSeguito(comando) {
+  const testo = String(comando ?? '');
+  const pezzi = [];
+  for (const trovato of testo.matchAll(/[^\s;|&<>()`"'=,]+/gu)) {
+    pezzi.push({ pezzo: trovato[0], chiamata: testo[trovato.index + trovato[0].length] === '(' });
+  }
+  return pezzi;
+}
+
+/*
+ * ⛔⛔⛔ C-005, terzo giro (08/10/2026) — IL GLOB SUL NOME DI UN SEGRETO.
+ *
+ * Il difetto (segnalato dal bugfixer del desktop, riprodotto su una bash vera): `cat .e?v`, `cat .en*`, `cat ./.e*v`, `cat .en[v]`,
+ * `cat .en{v,}`, `cat cert.p?m` stampano `.env` / `cert.pem` e nessuna domanda partiva, perché `eNomeSegreto` giudica il TESTO del
+ * pezzo (`.e?v` non è `.env`) mentre la shell espande il glob DOPO. È la classe che la ricerca di giugno 2026 chiama GuardFall
+ * (Cloud Security Alliance / Adversa, 30/06/2026): l'agente ispeziona il testo grezzo, la shell lo trasforma in seguito.
+ *
+ * La cura rifà il passo che la shell fa dopo: espande le graffe (testo puro, prima di ogni altra cosa, come in bash) e poi il glob
+ * `* ? [..]` + extglob sui FILE VERI della cartella di lavoro, e guarda i nomi che combaciano con la stessa grammatica di sempre.
+ * Fonti: GNU Bash manual 3.5.1 e 3.5.8 (graffe prima del resto; il punto iniziale va scritto, salvo `dotglob`); PowerShell
+ * about_Wildcards (la stella prende anche i file col punto); Codex (clone 24/09/2026: `windows-sandbox-rs/deny_read_resolver.rs`,
+ * `linux-sandbox/bwrap.rs`) risolve le regole di blocco con glob (tutti i file `.env` sotto una cartella) SUL DISCO con un tetto di
+ * profondità e rifiuta di espandere lo stesso glob dalla radice del disco; Cline (`ClineIgnoreController.validateCommand`) confronta l'argomento come TESTO e ha lo stesso buco;
+ * Hermes (`tools/approval.py`) e OpenCode (`tool/shell.ts`) non hanno nessun controllo sui nomi segreti; Goose idem.
+ *
+ * ⛔ Dichiarato, non nascosto: resta un INNESCO, non un confine. Non vede `$(echo .env)`, `$IFS`, variabili, `eval`, una `cd` prima
+ * del glob, i qualificatori di zsh. Il confine vero è il sandbox, non il testo del comando.
+ * ⛔ Solo per la SHELL: `leggi`/`elenca` ricevono un percorso letterale che nessuna shell espande.
+ * ⛔ Conservativo, mai permissivo: maiuscole e minuscole uguali; la stella prende il file col punto su Windows (cmd e PowerShell lo
+ * fanno) e non su un sistema POSIX; un pattern che non si riesce a esplorare (cartella illeggibile, troppe cartelle) CHIEDE.
+ */
+export const TETTI_GLOB_SEGRETI = Object.freeze({ alternative: 64, cartelle: 1000, nomi: 200_000, millisecondi: 100 });
+
+/* v5 (08/10/2026): ciò che la shell sostituisce senza che il testo lo dica (`${X}`, `$X`, `$(..)`, apici inversi) diventa questo carattere: un jolly
+   che combacia con qualunque cosa, ANCHE con il punto iniziale (una variabile può valere `.`). Dall'area d'uso privato di Unicode: nessun nome vero lo contiene. */
+const JOLLY = '\uE000';
+const eUnGlob = (parola) => /[*?[\uE000]|[@+!]\(/u.test(parola);
+
+/** L'indice della chiusura bilanciata dell'apertura in `testo[da]`, o -1. Una barra rovescia salta il carattere dopo. */
+function chiusaBilanciata(testo, da, apre, chiude) {
+  let profondita = 0;
+  for (let i = da; i < testo.length; i += 1) {
+    if (testo[i] === '\\') { i += 1; continue; }
+    if (testo[i] === apre) profondita += 1;
+    else if (testo[i] === chiude) { profondita -= 1; if (profondita === 0) return i; }
+  }
+  return -1;
+}
+
+/** Il contenuto di `$'..'` come lo decodifica bash (manuale 3.1.2.4): `\n`, `\xHH`, `\NNN` ottale, `\uHHHH`, `\cX`… — `$'\x2eenv'` è `.env`. */
+function decodificaAnsiC(s) {
+  const semplici = { a: '\u0007', b: '\b', e: '\u001b', E: '\u001b', f: '\f', n: '\n', r: '\r', t: '\t', v: '\v', '\\': '\\', "'": "'", '"': '"', '?': '?' };
+  let fuori = '';
+  for (let i = 0; i < s.length; i += 1) {
+    if (s[i] !== '\\' || i + 1 >= s.length) { fuori += s[i]; continue; }
+    const c = s[i + 1];
+    let m;
+    if (semplici[c] !== undefined) { fuori += semplici[c]; i += 1; }
+    else if ((m = /^x([0-9A-Fa-f]{1,2})/u.exec(s.slice(i + 1)))) { fuori += String.fromCodePoint(parseInt(m[1], 16)); i += m[0].length; }
+    else if ((m = /^u([0-9A-Fa-f]{1,4})/u.exec(s.slice(i + 1)))) { fuori += String.fromCodePoint(parseInt(m[1], 16)); i += m[0].length; }
+    else if ((m = /^U([0-9A-Fa-f]{1,8})/u.exec(s.slice(i + 1)))) { const n = parseInt(m[1], 16); fuori += n <= 0x10ffff ? String.fromCodePoint(n) : JOLLY; i += m[0].length; }
+    else if ((m = /^[0-7]{1,3}/u.exec(s.slice(i + 1)))) { fuori += String.fromCodePoint(parseInt(m[0], 8) & 0xff); i += m[0].length; }
+    else if (c === 'c' && i + 2 < s.length) { fuori += String.fromCodePoint(s.codePointAt(i + 2) & 0x1f); i += 2; }
+    else { fuori += '\\' + c; i += 1; }
+  }
+  return fuori;
+}
+
+/** Il testo fra doppi apici a partire da `da` (dopo l'apice): toglie gli escape che bash toglie lì, `$..` e apici inversi diventano il jolly. */
+function dentroDoppie(t, da) {
+  let fuori = '';
+  for (let i = da; i < t.length; i += 1) {
+    const c = t[i];
+    if (c === '"') return { testo: fuori, fine: i };
+    if (c === '\\' && i + 1 < t.length) {
+      const n = t[i + 1];
+      if (n === '\n') { i += 1; continue; }
+      if (n === '\r' && t[i + 2] === '\n') { i += 2; continue; }
+      if ('$`"\\'.includes(n)) { fuori += n; i += 1; continue; }
+      fuori += c;
+      continue;
+    }
+    if (c === '$') { const r = espansione(t, i); fuori += r.testo; i = r.fine; continue; }
+    if (c === '`') { const fine = t.indexOf('`', i + 1); fuori += JOLLY; i = fine === -1 ? t.length : fine; continue; }
+    fuori += c;
+  }
+  return { testo: fuori, fine: t.length };
+}
+
+/**
+ * Un `$` in `t[i]`: la home resta scritta com'è (`conLaHomeEspansa` la riconosce); ogni altra sostituzione diventa il jolly; `$'..'` si decodifica;
+ * `$".."` è una stringa fra doppi apici. Torna il testo e l'indice dell'ultimo carattere consumato.
+ */
+function espansione(t, i) {
+  const n = t[i + 1];
+  if (n === "'") {
+    let j = i + 2;
+    for (; j < t.length && t[j] !== "'"; j += 1) if (t[j] === '\\') j += 1;
+    return { testo: decodificaAnsiC(t.slice(i + 2, j)), fine: Math.min(j, t.length) };
+  }
+  if (n === '"') return dentroDoppie(t, i + 2);
+  if (n === '{') {
+    const fine = chiusaBilanciata(t, i + 1, '{', '}');
+    if (fine === -1) return { testo: JOLLY, fine: t.length };
+    return { testo: /^(?:HOME|USERPROFILE)$/u.test(t.slice(i + 2, fine)) ? t.slice(i, fine + 1) : JOLLY, fine };
+  }
+  if (n === '(') { const fine = chiusaBilanciata(t, i + 1, '(', ')'); return { testo: JOLLY, fine: fine === -1 ? t.length : fine }; }
+  const ambiente = /^\$env:([A-Za-z_][A-Za-z0-9_]*)/iu.exec(t.slice(i));
+  if (ambiente) return { testo: /^(?:HOME|USERPROFILE)$/iu.test(ambiente[1]) ? ambiente[0] : JOLLY, fine: i + ambiente[0].length - 1 };
+  const nome = /^\$([A-Za-z_][A-Za-z0-9_]*)/u.exec(t.slice(i));
+  if (nome) return { testo: nome[1] === 'HOME' ? nome[0] : JOLLY, fine: i + nome[0].length - 1 };
+  if (n !== undefined && /[0-9@*#?$!-]/u.test(n)) return { testo: JOLLY, fine: i + 1 };
+  return { testo: '$', fine: i };
+}
+
+/**
+ * ⛔ v5 (08/10/2026, segnalazione del bugfixer del desktop, riprodotta su una bash vera): le PAROLE come le vede la shell DOPO la rimozione delle
+ * virgolette. `.e""nv`, `.e''nv`, `.e\nv`, `".e"nv`, `.e"n"v`, `".e"'n'v`, `.e$'n'v`, `$'\x2eenv'` sono tutte `.env`; `.e${X}nv` con X vuota pure.
+ * Pezzi adiacenti fra apici e senza si uniscono in UNA parola (come Codex, `shell-command/src/bash.rs` «concatenation»); gli apici e gli escape si
+ * tolgono (bash, manuale 3.1.2 e 3.5.9); `^` fuori da una classe è l'escape di cmd e si toglie; una sostituzione che il testo non dice diventa il jolly.
+ * Una graffa `{a,b}` e un gruppo extglob `@(a|b)` restano UNA parola. Ogni parola porta `chiamata`: subito dopo c'è `(` e finisce con una lettera, come
+ * `s.key()` (un metodo, non un file: ticket C-005). Dichiarato: non è un parser di shell; i corpi di heredoc si tolgono prima.
+ */
+function paroleDellaShell(testo) {
+  const t = String(testo ?? '');
+  const parole = [];
+  let corrente = '';
+  let graffe = 0;
+  let tonde = 0;
+  const chiudi = (separatore) => {
+    if (corrente !== '') parole.push({ testo: corrente, chiamata: separatore === '(' && /[A-Za-z0-9_]$/u.test(corrente) });
+    corrente = ''; graffe = 0; tonde = 0;
+  };
+  for (let i = 0; i < t.length; i += 1) {
+    const c = t[i];
+    if (tonde > 0) {
+      if (/\s/u.test(c)) { chiudi(c); continue; }
+      corrente += c;
+      if (c === '(') tonde += 1; else if (c === ')') tonde -= 1;
+      continue;
+    }
+    if (c === '(' && /[@?*+!]$/u.test(corrente)) { tonde = 1; corrente += c; continue; }
+    if (c === '\\') {
+      const n = t[i + 1];
+      if (n === undefined) continue;
+      if (n === '\n') { i += 1; continue; }
+      if (n === '\r' && t[i + 2] === '\n') { i += 2; continue; }
+      corrente += n; i += 1; continue;
+    }
+    if (c === "'") { const fine = t.indexOf("'", i + 1); if (fine === -1) { corrente += t.slice(i + 1); break; } corrente += t.slice(i + 1, fine); i = fine; continue; }
+    if (c === '"') { const r = dentroDoppie(t, i + 1); corrente += r.testo; i = r.fine; continue; }
+    if (c === '$') { const r = espansione(t, i); corrente += r.testo; i = r.fine; continue; }
+    if (c === '`') { const fine = t.indexOf('`', i + 1); corrente += JOLLY; i = fine === -1 ? t.length : fine; continue; }
+    if (c === '^' && !corrente.endsWith('[')) continue;
+    if (graffe > 0 && !/[\s;&|<>()]/u.test(c)) {
+      corrente += c;
+      if (c === '{') graffe += 1; else if (c === '}') graffe -= 1;
+      continue;
+    }
+    if (/[\s;&<>=|()]/u.test(c)) { chiudi(c); continue; }
+    if (c === '{') graffe += 1;
+    corrente += c;
+  }
+  chiudi('');
+  return parole;
+}
+
+/** Il primo `{a,b}` di primo livello con almeno una virgola di primo livello, come lo apre bash; `{x}` senza virgola resta testo. */
+function primoGruppoDiGraffe(parola) {
+  for (let inizio = parola.indexOf('{'); inizio !== -1; inizio = parola.indexOf('{', inizio + 1)) {
+    let profondita = 0;
+    const virgole = [];
+    for (let i = inizio; i < parola.length; i += 1) {
+      const c = parola[i];
+      if (c === '{') profondita += 1;
+      else if (c === '}') {
+        profondita -= 1;
+        if (profondita === 0) {
+          if (virgole.length === 0) break;
+          const tagli = [inizio, ...virgole, i];
+          const alternative = [];
+          for (let k = 0; k + 1 < tagli.length; k += 1) alternative.push(parola.slice(tagli[k] + 1, tagli[k + 1]));
+          return { prima: parola.slice(0, inizio), alternative, dopo: parola.slice(i + 1) };
+        }
+      } else if (c === ',' && profondita === 1) virgole.push(i);
+    }
+  }
+  return null;
+}
+
+/** Le graffe si espandono per prime e senza toccare il disco: `.en{v,}` è `.env` e `.en` per la shell, esista o no il file. */
+function espandiGraffe(parola) {
+  const daFare = [parola];
+  const finiti = [];
+  while (daFare.length > 0) {
+    const p = daFare.shift();
+    const gruppo = primoGruppoDiGraffe(p);
+    if (!gruppo) finiti.push(p);
+    else for (const a of gruppo.alternative) daFare.push(gruppo.prima + a + gruppo.dopo);
+    if (finiti.length + daFare.length > TETTI_GLOB_SEGRETI.alternative) return { parole: finiti, troppe: true };
+  }
+  return { parole: finiti, troppe: false };
+}
+
+const CLASSI_POSIX = Object.freeze({
+  alpha: 'A-Za-z', digit: '0-9', alnum: 'A-Za-z0-9', upper: 'A-Z', lower: 'a-z', space: '\\s', blank: ' \\t', punct: '!-/:-@\\[-`{-~',
+  xdigit: '0-9A-Fa-f', cntrl: '\\x00-\\x1f', print: ' -~', graph: '!-~',
+});
+const escapaRegex = (c) => c.replace(/[.*+?^${}()|[\]\\/]/gu, '\\$&');
+
+function parentesiChiusa(g, aperta) {
+  let profondita = 0;
+  for (let i = aperta; i < g.length; i += 1) {
+    if (g[i] === '(') profondita += 1;
+    else if (g[i] === ')') { profondita -= 1; if (profondita === 0) return i; }
+  }
+  return -1;
+}
+
+function dividiAlternative(interno) {
+  const parti = [];
+  let profondita = 0;
+  let inizio = 0;
+  for (let i = 0; i < interno.length; i += 1) {
+    if (interno[i] === '(') profondita += 1;
+    else if (interno[i] === ')') profondita -= 1;
+    else if (interno[i] === '|' && profondita === 0) { parti.push(interno.slice(inizio, i)); inizio = i + 1; }
+  }
+  parti.push(interno.slice(inizio));
+  return parti;
+}
+
+/** `[abc]`, `[!a-c]`, `[^x]`, `[[:digit:]]`: la classe che comincia in `g[i]`, o null se non si chiude (allora `[` è una lettera). */
+function traduciClasse(g, i) {
+  let j = i + 1;
+  let negata = false;
+  if (g[j] === '!' || g[j] === '^') { negata = true; j += 1; }
+  let corpo = '';
+  let primo = true;
+  for (; j < g.length; j += 1) {
+    const c = g[j];
+    if (c === ']' && !primo) return { regex: `[${negata ? '^' : ''}${corpo}]`, fine: j };
+    primo = false;
+    if (c === '[' && g[j + 1] === ':') {
+      const chiusa = g.indexOf(':]', j + 2);
+      const nomeClasse = chiusa === -1 ? '' : g.slice(j + 2, chiusa);
+      if (CLASSI_POSIX[nomeClasse]) { corpo += CLASSI_POSIX[nomeClasse]; j = chiusa + 1; continue; }
+    }
+    corpo += c === '\\' || c === ']' || c === '[' || c === '^' ? `\\${c}` : c;
+  }
+  return null;
+}
+
+/**
+ * Un segmento CON extglob in una espressione regolare. `@(a|b)` e `?(a|b)` si traducono per davvero; `*(..)`, `+(..)` e `!(..)` valgono
+ * «qualunque cosa»: un insieme più LARGO, mai più stretto (chiede di più, mai di meno) e senza ripetizioni annidate, quindi senza il
+ * blocco da backtracking esponenziale che `*(a|aa)` darebbe a un'espressione regolare.
+ */
+function traduciGlob(g) {
+  let fuori = '';
+  for (let i = 0; i < g.length; i += 1) {
+    const c = g[i];
+    if ('@?*+!'.includes(c) && g[i + 1] === '(') {
+      const fine = parentesiChiusa(g, i + 1);
+      if (fine !== -1) {
+        const alternative = dividiAlternative(g.slice(i + 2, fine)).map(traduciGlob).join('|');
+        fuori += c === '@' ? `(?:${alternative})` : c === '?' ? `(?:${alternative})?` : '[^/]*';
+        i = fine;
+        continue;
+      }
+    }
+    if (c === '*' || c === JOLLY) { fuori += '[^/]*'; continue; }
+    if (c === '?') { fuori += '[^/]'; continue; }
+    if (c === '[') {
+      const classe = traduciClasse(g, i);
+      if (classe) { fuori += classe.regex; i = classe.fine; continue; }
+    }
+    fuori += escapaRegex(c);
+  }
+  return fuori;
+}
+
+/**
+ * Un segmento SENZA extglob in una funzione `nome => booleano`: lettere, `?`, `*` e `[..]`, con l'algoritmo a due puntatori (tempo
+ * O(n·m): un `*a*a*a*a*b` scritto dal modello contro un nome lungo non può bloccare il controllo, come farebbe una espressione regolare).
+ */
+function combaciatoreSemplice(segmento) {
+  const atomi = [];
+  for (let i = 0; i < segmento.length; i += 1) {
+    const c = segmento[i];
+    /* il jolly di una sostituzione vale come una stella: un solo atomo per una fila di stelle e jolly */
+    if (c === '*' || c === JOLLY) { if (atomi.length === 0 || atomi[atomi.length - 1].t !== 's') atomi.push({ t: 's' }); continue; }
+    if (c === '?') { atomi.push({ t: 'q' }); continue; }
+    if (c === '[') {
+      const classe = traduciClasse(segmento, i);
+      if (classe) {
+        let regola;
+        try { regola = new RegExp(`^${classe.regex}$`, 'i'); } catch { regola = /^[^/]$/u; }
+        atomi.push({ t: 'c', regola });
+        i = classe.fine;
+        continue;
+      }
+    }
+    atomi.push({ t: 'l', lettera: c.toLowerCase() });
+  }
+  const uno = (atomo, lettera) => atomo.t === 'q' || (atomo.t === 'l' ? lettera.toLowerCase() === atomo.lettera : atomo.regola.test(lettera));
+  return (nome) => {
+    let i = 0;
+    let j = 0;
+    let stella = -1;
+    let segno = 0;
+    while (i < nome.length) {
+      if (j < atomi.length && atomi[j].t === 's') { stella = j; j += 1; segno = i; }
+      else if (j < atomi.length && uno(atomi[j], nome[i])) { i += 1; j += 1; }
+      else if (stella !== -1) { j = stella + 1; segno += 1; i = segno; }
+      else return false;
+    }
+    while (j < atomi.length && atomi[j].t === 's') j += 1;
+    return j === atomi.length;
+  };
+}
+
+/**
+ * Il segmento come lo vede la shell. Il punto iniziale va scritto (bash senza `dotglob`); dove la shell è cmd o PowerShell la stella
+ * lo prende comunque (`puntiNascosti`). Maiuscole e minuscole uguali: chiedere di più, mai di meno. Se la regola non si compila
+ * (un intervallo rovesciato) vale il segmento più largo possibile.
+ */
+function combaciatoreDelSegmento(segmento, puntiNascosti) {
+  /* una sostituzione in testa può valere `.`: lì la regola del punto non vale */
+  const nascosto = !puntiNascosti && !segmento.startsWith('.') && !segmento.startsWith(JOLLY);
+  let combacia;
+  if (/[@?*+!]\(/u.test(segmento)) {
+    const molte = segmento.split('*').length - 1 > 3;
+    let regola;
+    try { regola = new RegExp(`^${molte ? '[^/]*' : traduciGlob(segmento)}$`, 'i'); } catch { regola = /^[^/]*$/u; }
+    combacia = (nome) => regola.test(nome);
+  } else combacia = combaciatoreSemplice(segmento);
+  return (nome) => !(nascosto && nome.startsWith('.')) && combacia(nome);
+}
+
+/** I nomi di una cartella e, a parte, quelli che possono essere cartelle (cartelle vere, collegamenti e giunzioni: dove il tipo non si sa, si tiene). */
+function elencaDalDisco(cartella) {
+  try {
+    const voci = elencaSync(cartella, { withFileTypes: true });
+    return { nomi: voci.map((v) => v.name), cartelle: new Set(voci.filter((v) => v.isDirectory() || v.isSymbolicLink() || (!v.isFile() && !v.isDirectory())).map((v) => v.name)) };
+  } catch (errore) { return { errore: errore?.code ?? 'EIO' }; }
+}
+
+/**
+ * Espande UNA parola con un glob sui file veri. Torna i percorsi che la shell leggerebbe (come li ha scritti la persona, con i nomi
+ * veri al posto dei caratteri jolly), e due fatti: `troppe` (oltre i tetti) e `illeggibile` (una cartella che non si apre per un
+ * motivo diverso da «non c'è»). ENOENT/ENOTDIR non sono un problema: il glob non combacia con niente lì.
+ */
+function candidatiDelGlob(parola, { home, cartella, elenca, puntiNascosti, bilancio }) {
+  const normalizzato = conLaHomeEspansa(parola, home);
+  if (normalizzato === '' || normalizzato.includes('://')) return { candidati: [], troppe: false, illeggibile: false };
+  const segmenti = normalizzato.split('/');
+  let stati;
+  let da = 0;
+  if (segmenti[0] === '') { stati = [{ reale: '/', mostrato: [''] }]; da = 1; }
+  else if (/^[A-Za-z]:$/u.test(segmenti[0])) { stati = [{ reale: `${segmenti[0]}/`, mostrato: [segmenti[0]] }]; da = 1; }
+  else if (typeof cartella === 'string' && cartella !== '') stati = [{ reale: cartella, mostrato: [] }];
+  else return { candidati: [], troppe: false, illeggibile: false };
+  let illeggibile = false;
+  let ultimo = segmenti.length - 1;
+  while (ultimo > 0 && segmenti[ultimo] === '') ultimo -= 1;
+  for (let k = da; k < segmenti.length; k += 1) {
+    const segmento = segmenti[k];
+    if (segmento === '') continue;
+    if (segmento === '.' || segmento === '..' || !eUnGlob(segmento)) {
+      stati = stati.map((s) => ({ reale: join(s.reale, segmento), mostrato: [...s.mostrato, segmento] }));
+      continue;
+    }
+    const combacia = combaciatoreDelSegmento(segmento, puntiNascosti);
+    const nuovi = [];
+    for (const s of stati) {
+      const chiave = s.reale;
+      let voce = bilancio.cache.get(chiave);
+      if (voce === undefined) {
+        if (bilancio.cartelle >= TETTI_GLOB_SEGRETI.cartelle) return { candidati: [], troppe: true, illeggibile };
+        /* v5: un tetto di TEMPO oltre a quello di cartelle (il desktop serve ogni sessione da un processo solo: mezzo secondo fermo è troppo). Speso: si chiede. */
+        if (bilancio.orologio() > bilancio.scadenza) return { candidati: [], troppe: true, illeggibile };
+        bilancio.cartelle += 1;
+        voce = elenca(chiave) ?? { errore: 'EIO' };
+        bilancio.cache.set(chiave, voce);
+      }
+      if (voce.errore) { if (voce.errore !== 'ENOENT' && voce.errore !== 'ENOTDIR') illeggibile = true; continue; }
+      /* v5: un segmento che non è l'ultimo porta solo a cartelle (o collegamenti): i file non si aprono, e non si tenta di elencarli */
+      const soloCartelle = k < ultimo && voce.cartelle instanceof Set ? voce.cartelle : null;
+      for (const nomeVoce of voce.nomi ?? []) {
+        bilancio.nomi += 1;
+        if (bilancio.nomi > TETTI_GLOB_SEGRETI.nomi) return { candidati: [], troppe: true, illeggibile };
+        if (soloCartelle && !soloCartelle.has(nomeVoce)) continue;
+        if (!combacia(nomeVoce)) continue;
+        nuovi.push({ reale: join(s.reale, nomeVoce), mostrato: [...s.mostrato, nomeVoce] });
+      }
+    }
+    stati = nuovi;
+    if (stati.length === 0) break;
+  }
+  return { candidati: stati.map((s) => s.mostrato.join('/')), troppe: false, illeggibile };
+}
+
+/**
+ * Il corpo di un heredoc è testo: la shell non espande mai i caratteri jolly lì dentro (con il delimitatore fra virgolette non espande
+ * niente; senza, espande solo variabili e `$(..)`). Per questo passo si toglie, e uno script Python o un README di cento righe con
+ * `import *` e `* voce` non apre cento cartelle né chiede per ogni asterisco. ⛔ Due eccezioni, perché lì il corpo è un programma:
+ * un heredoc che alimenta una SHELL (`bash <<'X'`), e un corpo senza virgolette che contiene `$(..)` o apici inversi (si eseguono).
+ * Un heredoc che non si chiude non si tocca.
+ */
+function senzaCorpiDiHeredoc(testo) {
+  const righe = String(testo ?? '').split('\n');
+  const fuori = [];
+  for (let i = 0; i < righe.length; i += 1) {
+    const riga = righe[i];
+    fuori.push(riga);
+    const heredoc = riga.match(/<<-?\s*(['"]?)([A-Za-z_][\w-]*)\1/u);
+    if (!heredoc || /\b(?:ba|z|da|k|c|fi|a)?sh\b|\bpwsh\b|\bpowershell\b|\bcmd\b/iu.test(riga.slice(0, heredoc.index))) continue;
+    let fine = -1;
+    for (let k = i + 1; k < righe.length; k += 1) if (righe[k].trim() === heredoc[2]) { fine = k; break; }
+    if (fine === -1) continue;
+    const siEsegue = heredoc[1] === '' && righe.slice(i + 1, fine).some((r) => r.includes('$(') || r.includes('`'));
+    if (!siEsegue) i = fine;
+  }
+  return fuori.join('\n');
+}
+
+/**
+ * I comandi DENTRO `$(..)` e fra apici inversi, ovunque stiano (anche fra doppi apici): la shell li esegue, quindi si esaminano come comandi a sé.
+ * Nella parola che li contiene valgono il jolly (`paroleDellaShell`); qui si guarda il loro testo.
+ */
+function sostituzioniDiComando(t) {
+  const dentro = [];
+  for (let i = 0; i < t.length; i += 1) {
+    if (t[i] === '\\') { i += 1; continue; }
+    if (t[i] === "'" ) { const fine = t.indexOf("'", i + 1); if (fine === -1) break; i = fine; continue; }
+    if (t[i] === '$' && t[i + 1] === '(') {
+      const fine = chiusaBilanciata(t, i + 1, '(', ')');
+      dentro.push(t.slice(i + 2, fine === -1 ? t.length : fine));
+      if (fine === -1) break;
+      i = fine;
+      continue;
+    }
+    if (t[i] === '`') {
+      const fine = t.indexOf('`', i + 1);
+      dentro.push(t.slice(i + 1, fine === -1 ? t.length : fine));
+      if (fine === -1) break;
+      i = fine;
+    }
+  }
+  return dentro;
+}
+
+/** Il passo delle parole della shell: stessa risposta di `nominaUnSegreto`, o null. */
+function nominaUnSegretoPerGlob(testo, { home, cartella, elenca, puntiNascosti, orologio, bilancio: ereditato, profondita = 0 }) {
+  const bilancio = ereditato ?? { cartelle: 0, nomi: 0, cache: new Map(), orologio, scadenza: orologio() + TETTI_GLOB_SEGRETI.millisecondi };
+  /* v5: prima i comandi dentro le sostituzioni (al massimo quattro livelli: oltre, si chiede) */
+  for (const interno of sostituzioniDiComando(senzaCorpiDiHeredoc(testo))) {
+    if (profondita >= 4) return { classe: 'segreto', percorso: interno.slice(0, 120) };
+    const trovato = nominaUnSegreto(interno, { home }) ?? nominaUnSegretoPerGlob(interno, { home, cartella, elenca, puntiNascosti, orologio, bilancio, profondita: profondita + 1 });
+    if (trovato) return trovato;
+  }
+  /* il jolly non si mostra a una persona: al suo posto `…` */
+  const prudente = (parola) => ({ classe: 'segreto', percorso: parola.split(JOLLY).join('…') });
+  for (const { testo: parola, chiamata } of paroleDellaShell(senzaCorpiDiHeredoc(testo))) {
+    if (chiamata) continue;
+    /* una parola che è SOLO una sostituzione (`$FILE`, `"$X"`) può valere qualunque cosa: non si chiede per lei (dichiarato), solo per quelle che
+       hanno almeno due caratteri scritti di loro (`.e${X}nv`, `${X}env`) */
+    if (parola.includes(JOLLY) && parola.split(JOLLY).join('').replace(/[*?[\]/]/gu, '').length < 2) continue;
+    const { parole, troppe } = espandiGraffe(parola);
+    if (troppe) return prudente(parola);
+    for (const p of parole) {
+      if (!eUnGlob(p)) {
+        /* v5: la parola dopo la rimozione delle virgolette (`.e""nv` = `.env`) passa dalla stessa grammatica di un nome scritto per intero */
+        const classe = classeDelPezzo(p, home);
+        if (classe) return { classe, percorso: p };
+        continue;
+      }
+      const trovati = candidatiDelGlob(p, { home, cartella, elenca, puntiNascosti, bilancio });
+      for (const candidato of trovati.candidati) {
+        const classe = classeDelPezzo(candidato, home);
+        if (classe) return { classe, percorso: candidato };
+      }
+      if (trovati.troppe || trovati.illeggibile) return prudente(p);
+    }
+  }
+  return null;
 }
 
 /**
@@ -270,15 +777,31 @@ export function pezziDelComando(comando) {
  * @returns {null | {classe: 'segreto'|'portachiavi', percorso: string}} `percorso` è il pezzo
  * COME LA PERSONA LO VEDRÀ, non risolto: chi risponde deve riconoscere ciò che ha davanti.
  */
-export function nominaUnSegreto(testo, { home = homeDiSistema() } = {}) {
+export function nominaUnSegreto(testo, {
+  home = homeDiSistema(), cartella, espandi = false, elenca = elencaDalDisco, puntiNascosti = process.platform === 'win32', orologio = () => performance.now(),
+} = {}) {
   const intero = String(testo ?? '');
   if (intero.trim() === '') return null;
   for (const frase of PERCORSI_SEGRETI.frasiPortachiavi) {
     if (frase.test(intero)) return { classe: 'portachiavi', percorso: intero.trim() };
   }
-  for (const pezzo of pezziDelComando(intero)) {
-    const classe = classeDelPezzo(pezzo, home);
+  for (const { pezzo, chiamata } of pezziConSeguito(intero)) {
+    /* Ticket C-005 (01/10/2026): `s.key()` in uno script è un metodo, non il file `s.key`. Solo il pezzo seguito SUBITO da `(`. */
+    /* Revisione avversariale 07/10 (R-5): `nome$(…)` è una sostituzione di comando incollata a una parola, non una chiamata:
+       il guscio apre `nome`, e `cat ~/.ssh/id_rsa$(true)` leggeva il segreto senza fermarsi. */
+    /* Revisione del bugfixer del desktop (08/10/2026, provata su un bash vero): una chiamata vera ha una lettera, una cifra o `_` subito
+       prima di `(` (`s.key()`). Un carattere di pattern lì è un'altra cosa: in bash con extglob `*() ?() @() +() !()` ESPANDONO NEL FILE
+       STESSO, e `cat ~/.ssh/id_rsa*()` leggeva il segreto senza chiedere. Si controlla il pezzo togliendo quel carattere finale (così
+       anche `.env*()` si riconosce). Residuo dichiarato: non è un parser di shell; i qualificatori di zsh come `id_rsa(.)` non si leggono. */
+    if (chiamata && /[A-Za-z0-9_]$/u.test(pezzo)) continue;
+    const classe = classeDelPezzo(chiamata ? pezzo.replace(/[$*?+@!]+$/u, '') : pezzo, home);
     if (classe) return { classe, percorso: pezzo.replace(/^["'`]+/, '').replace(/["'`]+$/, '') };
+  }
+  /* C-005 terzo giro (08/10/2026): solo per un comando di shell, dopo il passo sul testo, e solo se c'è una graffa o un carattere jolly.
+     v5: anche se c'è un apice, una barra rovescia, un `$`, un apice inverso o `^` (cmd): la shell li toglie o li sostituisce prima di aprire il file. */
+  if (espandi && /[*?[{'"\\$`^]|[@+!]\(/u.test(intero)) {
+    /* Un modulo dentro un cancello di sicurezza non lancia: se il passo dei glob si rompe per un motivo che non so, CHIEDE (mai in silenzio). */
+    try { return nominaUnSegretoPerGlob(intero, { home, cartella, elenca, puntiNascosti, orologio }); } catch { return { classe: 'segreto', percorso: intero.trim().slice(0, 120) }; }
   }
   return null;
 }
@@ -361,6 +884,103 @@ export function letturaFuoriDalWorkspace(percorso, { cartella, home = homeDiSist
   return { classe: 'fuori-workspace', percorso: grezzo };
 }
 
+/**
+ * ⛔⛔⛔ LINK-SEGRETO (08/10/2026, sonda sul candidato 2098989ff prima della beta 0.1.24) — CASO 1-bis, SOLO PER LE LETTURE:
+ * il nome che il modello usa è innocuo, ma il file VERO dietro un collegamento è un segreto. Misurato: con una giunzione
+ * `progetto/dati` → `<fuori>/.aws` (su Windows non vuole privilegi), `leggi dati/credentials` non chiedeva, anche senza
+ * «Accesso completo»; `leggi .aws/credentials` sì. ⇒ Per una lettura il percorso è UNO e esiste: si risolve e si
+ * classifica ANCHE il bersaglio, con la stessa `classeDelPezzo`.
+ * Owner: «la risposta è sempre quella di Hermes, Claude, Codex». Hermes classifica il percorso RISOLTO
+ * (`agent/file_safety.py:391`, `Path(path).expanduser().resolve()`, clone 65ad529, «defense-in-depth — not a security
+ * boundary», come qui); Claude Code ha curato questo stesso aggiramento come vulnerabilità (CVE-2025-59829, CVE-2026-25724,
+ * 2.1.7; 2.1.89 controlla il bersaglio risolto anche nelle regole «allow»).
+ * ⛔ Il vincolo da Hermes (`file_safety.py:384-388`): un percorso UNC o del namespace NT (`\\host\…`, `\\?\`, `\\.\`, `\??\`)
+ *   NON si risolve mai — su Windows la risoluzione stessa fa partire l'autenticazione SMB, cioè la fuga NTLM, prima di
+ *   qualunque confronto. Qui si scarta sulla stringa GREZZA.
+ * ⛔⛔ E NIENTE `realpath`: la prima versione lo usava, e la suite intera l'ha presa (RETE-09, RETE-10 di
+ *   `percorsi-di-rete.test.mjs`): con la cartella della sessione su una condivisione, o con un collegamento LOCALE che porta a
+ *   una condivisione, `existsSync`/`realpath` toccavano la rete PRIMA del sì della persona. Si cammina invece come
+ *   `destinazioneDiRete` (`kernel/file-namespace-contract.mjs:66`): `lstat` (non segue il collegamento) e `readlink` (legge il
+ *   collegamento stesso), un pezzo alla volta; un bersaglio locale si segue A PAROLE, e al primo salto verso la rete ci si
+ *   ferma senza classificare — quella domanda la fa il cancello della rete, prima di ogni contatto.
+ * ⛔ Solo quando un collegamento c'è davvero (bersaglio ≠ percorso scritto): senza, il caso lessicale ha già deciso, e
+ *   classificare tutti gli antenati assoluti di ogni lettura non aggiunge niente.
+ * ⛔ STESSO FILE, STESSA RISPOSTA, qualunque percorso abbia aperto il progetto (review del bugfixer, 08/10): un bersaglio che
+ *   resta DENTRO il progetto si classifica RELATIVO alla radice reale del progetto, uno che ne ESCE si classifica intero.
+ *   Senza, un progetto che sta davvero sotto `…\keyrings\progetto`, aperto da una giunzione innocente, chiedeva a OGNI
+ *   lettura, e aperto dal suo percorso vero a nessuna (LS-07). La cartella la sceglie la persona, non il modello: il rischio
+ *   sta nei collegamenti DENTRO il progetto (un repository clonato coi suoi link), ed è quello che si guarda.
+ * ⛔ È un innesco come il resto del file: se il disco non risponde si torna `null` (il comportamento di oggi), mai un'eccezione.
+ * ⛔ Restano fuori, dichiarati: la SHELL (i pezzi di un comando spesso non esistono — vedi «I LIMITI NOTI» sopra), la RICERCA
+ *   (misurato: rg e la via JS non attraversano la giunzione), e i collegamenti FISSI (un hardlink È il file: nessuna
+ *   risoluzione lo distingue, e nessuno dei concorrenti li tratta — domanda aperta all'owner).
+ * @returns {null | {classe: string, percorso: string}}
+ */
+/** Un percorso che porta fuori dalla macchina (o nel namespace NT): mai da toccare qui. Solo la stringa. */
+function eDiRete(percorso) {
+  const s = String(percorso).replace(/\//gu, '\\');
+  if (/^\\\\\?\\[A-Za-z]:\\/u.test(s)) return false; // `\\?\C:\…` è il disco locale scritto per esteso
+  return s.startsWith('\\\\') || s.startsWith('\\??\\');
+}
+
+/**
+ * Dove porta DAVVERO un percorso locale, a parole: `lstat` + `readlink`, un pezzo alla volta, mai la destinazione aperta.
+ * Un pezzo che non esiste chiude il cammino (il resto si tiene com'è scritto). `null` = un salto porta in rete, o troppi salti.
+ */
+function percorsoVeroAParole(assoluto, { lstatSync: lstatFn, readlinkSync: readlinkFn }) {
+  let davanti = assoluto;
+  for (let salti = 0; salti <= 40; salti += 1) {
+    if (eDiRete(davanti)) return null;
+    const { root } = parsePercorso(davanti);
+    const pezzi = davanti.slice(root.length).split(/[\\/]+/u).filter(Boolean);
+    let corrente = root;
+    let deviato = false;
+    for (let i = 0; i < pezzi.length; i += 1) {
+      corrente = join(corrente, pezzi[i]);
+      let info;
+      try { info = lstatFn(corrente); } catch { return davanti; }
+      if (!info.isSymbolicLink()) continue;
+      let bersaglio;
+      try { bersaglio = String(readlinkFn(corrente)); } catch { return davanti; }
+      if (eDiRete(bersaglio)) return null;
+      const locale = bersaglio.replace(/^\\\\\?\\(?=[A-Za-z]:\\)/u, '');
+      davanti = join(risolvi(cartellaDi(corrente), locale), ...pezzi.slice(i + 1));
+      deviato = true;
+      break;
+    }
+    if (!deviato) return davanti;
+  }
+  return null;
+}
+
+function bersaglioSegretoDiUnCollegamento(percorso, { cartella, home, fsSync = { lstatSync: lstatSyncNativa, readlinkSync: readlinkSyncNativa } }) {
+  const grezzo = String(percorso ?? '').trim();
+  if (eDiRete(grezzo)) return null;
+  const normalizzato = conLaHomeEspansa(grezzo, home);
+  if (normalizzato === '' || normalizzato.includes('://') || normalizzato.startsWith('//')) return null;
+  const assolutoScritto = /^[A-Za-z]:\//u.test(normalizzato) || normalizzato.startsWith('/');
+  const conCartella = typeof cartella === 'string' && cartella !== '';
+  if (!assolutoScritto && !conCartella) return null;
+  /* la cartella della sessione su una condivisione: nessun cammino, la domanda della rete viene prima (RETE-09) */
+  if (conCartella && eDiRete(cartella)) return null;
+  try {
+    const assoluto = assolutoScritto ? risolvi(normalizzato) : risolvi(cartella, normalizzato);
+    const reale = percorsoVeroAParole(assoluto, fsSync);
+    if (reale === null) return null;
+    const stesso = process.platform === 'win32' ? reale.toLowerCase() === assoluto.toLowerCase() : reale === assoluto;
+    if (stesso) return null;
+    const radiceReale = conCartella ? percorsoVeroAParole(risolvi(cartella), fsSync) : null;
+    if (conCartella && radiceReale === null) return null;
+    const dentro = radiceReale !== null && isPathInside(radiceReale, reale);
+    const daClassificare = dentro ? relativoA(radiceReale, reale) : reale;
+    if (daClassificare === '') return null;
+    const classe = classeDelPezzo(daClassificare, home);
+    return classe ? { classe, percorso: `${grezzo} → ${reale}` } : null;
+  } catch {
+    return null;
+  }
+}
+
 const LETTURE = new Set(['leggi', 'elenca']);
 
 /*
@@ -405,25 +1025,25 @@ function frasePerLaPersona(segnalazione, tipo) {
     /* ⛔ sostituzione con FUNZIONE: un percorso con `$&` o `$1` non deve diventare un'altra frase (lezione del 02/09) */
     return { frase: FRASI_INGLESI[fraseChiave].replace('{percorso}', () => segnalazione.percorso), fraseChiave, fraseParams };
   }
-  return { frase: fraseItalianaDiRiserva(segnalazione, tipo) };
+  return { frase: fraseDiRiserva(segnalazione, tipo) };
 }
 
-/** Una classe che la tabella non conosce (non dovrebbe esistere): la frase di prima, mai una frase vuota. */
-function fraseItalianaDiRiserva(segnalazione, tipo) {
+/** Una classe che la tabella non conosce (non dovrebbe esistere): la frase di prima, in inglese (K4b), mai una frase vuota. */
+function fraseDiRiserva(segnalazione, tipo) {
   const azione = tipo === 'leggi'
-    ? { soggetto: 'Questa lettura apre', coda: 'vuoi che la faccia?' }
+    ? { soggetto: 'This read opens', coda: 'do you want me to do it?' }
     : tipo === 'elenca'
-      ? { soggetto: 'Questo elenco apre', coda: 'vuoi che lo faccia?' }
-      : { soggetto: 'Il comando tocca', coda: 'vuoi che lo esegua?' };
+      ? { soggetto: 'This listing opens', coda: 'do you want me to do it?' }
+      : { soggetto: 'The command touches', coda: 'do you want me to run it?' };
   if (segnalazione.classe === 'portachiavi') {
-    const apre = tipo === 'leggi' ? 'Questa lettura apre' : tipo === 'elenca' ? 'Questo elenco apre' : 'Il comando apre';
-    return `${apre} il portachiavi del sistema, dove sono custodite le password: ${azione.coda}`;
+    const apre = tipo === 'leggi' ? 'This read opens' : tipo === 'elenca' ? 'This listing opens' : 'The command opens';
+    return `${apre} the system keychain, where passwords are kept: ${azione.coda}`;
   }
   const cosa = segnalazione.classe === 'segreto'
-    ? 'un file che può contenere chiavi o password'
+    ? 'a file that may contain keys or passwords'
     : segnalazione.classe === 'fuori-workspace'
-      ? (tipo === 'elenca' ? 'una cartella fuori dalla cartella di lavoro' : 'un file fuori dalla cartella di lavoro')
-      : 'una cartella nascosta fuori dalla cartella di lavoro';
+      ? (tipo === 'elenca' ? 'a folder outside the working folder' : 'a file outside the working folder')
+      : 'a hidden folder outside the working folder';
   return `${azione.soggetto} ${cosa} (${segnalazione.percorso}): ${azione.coda}`;
 }
 
@@ -439,12 +1059,16 @@ function fraseItalianaDiRiserva(segnalazione, tipo) {
  *
  * @returns {null | {classe: string, percorso: string, frase: string}}
  */
-export function motivoDaChiedere({ tipo, comando, percorso, cartella, home = homeDiSistema(), accessoPieno = false } = {}) {
+export function motivoDaChiedere({ tipo, comando, percorso, cartella, home = homeDiSistema(), accessoPieno = false, elenca, puntiNascosti, orologio, fsSync } = {}) {
   const lettura = LETTURE.has(tipo);
   const testo = lettura ? percorso : comando;
   if (typeof testo !== 'string' || testo.trim() === '') return null;
-  const nominato = nominaUnSegreto(testo, { home });
+  /* `elenca`, `puntiNascosti` e `fsSync` (lstat/readlink) sono per le prove: in produzione valgono il disco vero e la regola del sistema operativo. */
+  const nominato = nominaUnSegreto(testo, { home, cartella, espandi: !lettura, ...(elenca ? { elenca } : {}), ...(puntiNascosti === undefined ? {} : { puntiNascosti }), ...(orologio ? { orologio } : {}) });
   if (nominato) return { ...nominato, ...frasePerLaPersona(nominato, tipo) };
+  /* LINK-SEGRETO: il nome è innocuo, il file vero dietro un collegamento no (vedi `bersaglioSegretoDiUnCollegamento`). */
+  const collegato = lettura ? bersaglioSegretoDiUnCollegamento(testo, { cartella, home, ...(fsSync ? { fsSync } : {}) }) : null;
+  if (collegato) return { ...collegato, ...frasePerLaPersona(collegato, tipo) };
   for (const pezzo of pezziDelComando(testo)) {
     const fuori = esceDalWorkspaceVersoUnNascosto(pezzo, { cartella, home });
     if (fuori) return { ...fuori, ...frasePerLaPersona(fuori, tipo) };
@@ -474,19 +1098,19 @@ export function isPathInside(rootRealPath, candidateRealPath) {
 
 function validateRoot(root) {
   if (typeof root !== 'string' || root.trim() === '' || root.includes('\0') || !isAbsolute(root)) {
-    throw new PathPolicyError('Radice non valida', 'PATH_NOT_ALLOWED');
+    throw new PathPolicyError('Invalid root', 'PATH_NOT_ALLOWED');
   }
   return resolve(root);
 }
 
 function validateCandidate(candidate) {
   if (typeof candidate !== 'string' || candidate.trim() === '' || candidate.includes('\0') || isAbsolute(candidate)) {
-    throw new PathPolicyError('Percorso non valido', 'PATH_NOT_ALLOWED');
+    throw new PathPolicyError('Invalid path', 'PATH_NOT_ALLOWED');
   }
   // Windows device paths, UNC e alternate data stream non sono percorsi di
   // workspace: non devono poter cambiare semantica fra API diverse.
   if (/^(?:\\\\\?\\|\\\\\.\\|\\\\)/u.test(candidate) || /(?:^|[\\/])[^\\/]+:[^\\/]*$/u.test(candidate)) {
-    throw new PathPolicyError('Percorso speciale non consentito', 'PATH_NOT_ALLOWED');
+    throw new PathPolicyError('Special path not allowed', 'PATH_NOT_ALLOWED');
   }
   return candidate;
 }
@@ -502,17 +1126,17 @@ export async function resolveContainedRealPath(root, candidate, options = {}) {
   const relativeCandidate = validateCandidate(candidate);
   const realpathFn = options.realpathFn ?? realpath;
   let rootReal;
-  try { rootReal = await realpathFn(rootAbsolute); } catch { throw new PathPolicyError('Radice non leggibile', 'PATH_ROOT_UNREADABLE'); }
+  try { rootReal = await realpathFn(rootAbsolute); } catch { throw new PathPolicyError('Root not readable', 'PATH_ROOT_UNREADABLE'); }
   const lexical = resolve(rootReal, relativeCandidate);
   if (!isPathInside(rootReal, lexical)) throw new PathPolicyError('Percorso fuori dall’area autorizzata', 'PATH_NOT_ALLOWED');
   let realCandidate;
   try {
     realCandidate = await realpathFn(lexical);
   } catch (error) {
-    if (!options.allowMissing) throw new PathPolicyError('Percorso non trovato', 'PATH_NOT_FOUND');
+    if (!options.allowMissing) throw new PathPolicyError('Path not found', 'PATH_NOT_FOUND');
     const parent = dirname(lexical);
     let parentReal;
-    try { parentReal = await realpathFn(parent); } catch { throw new PathPolicyError('Cartella genitore non trovata', 'PATH_NOT_FOUND'); }
+    try { parentReal = await realpathFn(parent); } catch { throw new PathPolicyError('Parent folder not found', 'PATH_NOT_FOUND'); }
     realCandidate = join(parentReal, lexical.slice(parent.length + 1));
   }
   if (!isPathInside(rootReal, realCandidate)) throw new PathPolicyError('Percorso fuori dall’area autorizzata', 'PATH_NOT_ALLOWED');
@@ -524,14 +1148,14 @@ export async function openContainedFile(root, candidate, flags = 'r', options = 
   const realCandidate = await resolveContainedRealPath(root, candidate, options);
   const openFn = options.openFn ?? open;
   let handle;
-  try { handle = await openFn(realCandidate, flags); } catch { throw new PathPolicyError('File non leggibile', 'PATH_OPEN_FAILED'); }
+  try { handle = await openFn(realCandidate, flags); } catch { throw new PathPolicyError('File not readable', 'PATH_OPEN_FAILED'); }
   try {
     const info = await handle.stat();
-    if (!info.isFile()) throw new PathPolicyError('Il percorso non è un file', 'PATH_NOT_FILE');
+    if (!info.isFile()) throw new PathPolicyError('The path is not a file', 'PATH_NOT_FILE');
     return handle;
   } catch (error) {
     await handle.close().catch(() => {});
     if (error instanceof PathPolicyError) throw error;
-    throw new PathPolicyError('File non leggibile', 'PATH_OPEN_FAILED');
+    throw new PathPolicyError('File not readable', 'PATH_OPEN_FAILED');
   }
 }

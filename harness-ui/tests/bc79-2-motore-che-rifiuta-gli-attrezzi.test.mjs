@@ -238,9 +238,9 @@ test('⛔⛔⛔ BC79-01 — 400 CON attrezzi e 200 SENZA: due richieste al primo
     '⛔ al SECONDO giro gli attrezzi non ci sono più: è la memoria che impedisce il 400 a ogni giro');
 
   const detto = testoDetto(eventi);
-  assert.equal(quanteVolte(detto, 'Questo modello non usa gli attrezzi'), 1,
+  assert.equal(quanteVolte(detto, 'This model does not use tools'), 1,
     `⛔ l'avviso si dice UNA volta sola, non a ogni giro — detto: ${JSON.stringify(detto)}`);
-  assert.ok(detto.includes('qui resta una chat'),
+  assert.ok(detto.includes('this remains a chat'),
     `⛔ l'avviso deve dire che cosa cambia per chi legge — detto: ${JSON.stringify(detto)}`);
   assert.ok(detto.includes('ho elencato la cartella'),
     '⛔ e la risposta del modello deve comunque arrivare a schermo');
@@ -369,7 +369,7 @@ test('⛔⛔ BC79-06 — la stessa cura vale per OLLAMA, che non passa dal ponte
     `⛔ anche per Ollama: 400 con attrezzi, UNA riprova senza — richieste: ${motore.richieste.length}`);
   assert.equal(motore.richieste[1].haTools, false);
   assert.equal(motore.richieste[1].corpo.model, 'qwen3:8b', '⛔ al motore arriva il nome nudo, riprova compresa');
-  assert.ok(testoDetto(eventi).includes('Questo modello non usa gli attrezzi'));
+  assert.ok(testoDetto(eventi).includes('This model does not use tools'));
 });
 
 test('⛔⛔ BC79-07 — le fonti di motore locale si DERIVANO dal registro dei fornitori, non si scrivono a mano', async () => {
@@ -446,7 +446,7 @@ test('⛔⛔⛔⛔ BC79-09 — col PORTACHIAVI collegato (la configurazione del 
   assert.equal(motore.richieste.filter((r) => r.haTools).length, 1,
     `⛔ anche col portachiavi la memoria deve durare TUTTO il giro di sessione — con attrezzi: ${JSON.stringify(motore.richieste.map((r) => r.haTools))}`);
   assert.equal(motore.richieste.length, 3, `richieste: ${motore.richieste.length}`);
-  assert.equal(quanteVolte(testoDetto(eventi), 'Questo modello non usa gli attrezzi'), 1);
+  assert.equal(quanteVolte(testoDetto(eventi), 'This model does not use tools'), 1);
 });
 
 test('⛔⛔⛔ BC79-10 — col portachiavi, un motore che rifiuta SEMPRE porta il codice suo, non il generico del fornitore', async (t) => {
@@ -487,7 +487,7 @@ test('⛔⛔⛔ BC79-10 — col portachiavi, un motore che rifiuta SEMPRE porta 
 });
 
 /*
- * ⛔⛔⛔ 25/09/2026 sera, sessione VERA dell'owner (5233facd, MiniCPM5 sul 4174): «Questo modello non usa gli attrezzi» dopo
+ * ⛔⛔⛔ 25/09/2026 sera, sessione VERA dell'owner (5233facd, MiniCPM5 sul 4174): «This model does not use tools» dopo
  *   che li aveva usati VENTIDUE volte. Il motore aveva 16.384 token di finestra, la conversazione li ha superati, e llama-server
  *   ha risposto 400 `exceed_context_size_error`. La riprova senza attrezzi accorcia il prompt (misurato su b10517: 2.777 →
  *   2.086 token con UN attrezzo; con 45 sono migliaia) e quindi «riesce»: il comportamento di BC79-03 era falsato.
@@ -513,7 +513,7 @@ test('⛔⛔⛔ BC79-CTX — il contesto pieno non è un rifiuto degli attrezzi:
   assert.equal(ultimo.type, 'RunError');
   assert.equal(ultimo.code, 'LOCAL_CONTEXT_EXCEEDED', `⛔ il suo codice, non un guasto del fornitore — ultimo: ${JSON.stringify(ultimo)}`);
   assert.match(ultimo.message, /\(17230 tokens\).*\(16384 tokens\)/u, 'i numeri del motore restano leggibili');
-  assert.equal(quanteVolte(testoDetto(eventi), 'Questo modello non usa gli attrezzi'), 0, '⛔ e nessun avviso falso sugli attrezzi');
+  assert.equal(quanteVolte(testoDetto(eventi), 'This model does not use tools'), 0, '⛔ e nessun avviso falso sugli attrezzi');
 });
 
 /*

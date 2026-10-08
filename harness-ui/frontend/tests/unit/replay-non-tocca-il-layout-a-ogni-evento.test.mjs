@@ -29,6 +29,14 @@ const APP = readFileSync(new URL('../../src/legacy/app.js', import.meta.url), 'u
 const senzaCommenti = (s) => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
 const NUDO = senzaCommenti(APP);
 
+// Gli handle cancellabili hanno ampliato il custode: un limite di caratteri
+// troncava safety/handoff e produceva falsi negativi. Leggere la funzione intera.
+const corpoCustode = (s) => {
+  const corpo = s.match(/^  function mantieniFondoDuranteRipristino\([^]*?^  }/m)?.[0];
+  assert.ok(corpo, 'il confine della funzione custode deve esistere');
+  return corpo;
+};
+
 /** Il corpo di una funzione o di un `case`, dal segnale dato fino a `lunghezza` caratteri. */
 const attorno = (sorgente, segnale, lunghezza = 2600) => {
   const i = sorgente.indexOf(segnale);
@@ -56,7 +64,7 @@ const morde = (controllo, guasto) => {
 
 test('RIPRISTINO-01: il MutationObserver MARCA, non legge-e-scrive il layout a ogni mutazione', () => {
   const controllo = (s) => {
-    const corpo = attorno(s, 'function mantieniFondoDuranteRipristino');
+    const corpo = corpoCustode(s);
     // la forma di ieri — reflow sincrono forzato per ogni mutazione — non deve esistere più
     assert.doesNotMatch(corpo, /new MutationObserver\(inFondo\)/);
     assert.match(corpo, /new MutationObserver\(chiediFondo\)/);
@@ -70,24 +78,31 @@ test('RIPRISTINO-01: il MutationObserver MARCA, non legge-e-scrive il layout a o
 test('RIPRISTINO-02: il fondo FINALE resta sincrono — la cura non lo affida al fotogramma', () => {
   // ⛔ il verso che conta per l'owner: «cliccando una sessione la chat deve essere già in fondo».
   // 30/09: 4200 come RIPRISTINO-03 — il custode ora segue anche l'altezza (`seguiCrescita`) e il corpo è più lungo.
-  const corpo = attorno(NUDO, 'function mantieniFondoDuranteRipristino', 4200);
-  assert.match(corpo, /const scopri = \(\) => \{[^}]*inFondo\(\);[^}]*classList\.remove\('is-restoring'\);[^}]*inFondo\(\);/);
-  assert.match(corpo, /scopri\(\); window\.requestAnimationFrame\(inFondo\); window\.setTimeout\(inFondo, 250\);/);
+  const controllo = (s) => {
+    const corpo = corpoCustode(s);
+    assert.match(corpo, /const scopri = \(\) => \{[^}]*inFondo\(\);[^}]*classList\.remove\('is-restoring'\);[^}]*inFondo\(\);/);
+    assert.match(corpo, /scopri\(\);\s*if \(!smesso\) \{\s*frameFinale = window\.requestAnimationFrame\(\(\) => \{[^}]*inFondo\(\);/);
+    assert.match(corpo, /timerFinale = window\.setTimeout\(\(\) => \{[^}]*inFondo\(\); \}, 250\);/);
+  };
+  controllo(NUDO);
+  morde(controllo, NUDO.replace("return; inFondo(); conversation.classList.remove('is-restoring');", "return; window.requestAnimationFrame(inFondo); conversation.classList.remove('is-restoring');"));
 });
 
-test('RIPRISTINO-03: la rete di sicurezza non è più un numero fisso, e ha un tetto', () => {
+test('RIPRISTINO-03 (A1-R2, 07/10/2026): la rete di sicurezza non scopre MAI a tempo — solo un flusso morto la fa scoprire', () => {
   const controllo = (s) => {
-    const corpo = attorno(s, 'function mantieniFondoDuranteRipristino', 4200);
+    const corpo = corpoCustode(s);
     // 8 s erano tarati su «1.235 righe in ~1s»: su 34.026 righe scoprivano una cronologia a metà
     assert.doesNotMatch(corpo, /setTimeout\(\(\) => \{ if \(!smesso\) scopri\(\); \}, 8_000\)/);
     assert.match(corpo, /const reteDiSicurezza = \(\) => \{/);
-    // si guarda se il replay porta ancora eventi NUOVI, e non oltre i 20 s
-    assert.match(corpo, /ultimoEventoNuovo/);
-    assert.match(corpo, /< 20_000/);
+    // ⛔ A1-R2: né il silenzio né il tempo scoprono (velo caduto a 8.036 ms su zero turni, misurato sul 4174): niente tetto a 20 s
+    assert.doesNotMatch(corpo, /< 20_000/);
+    assert.doesNotMatch(corpo, /ultimoEventoNuovo/);
+    assert.match(corpo, /if \(flussoMorto\(\)\) \{ scopri\(\); seguiCrescita\(\); return; \}/);
   };
   controllo(NUDO);
-  morde(controllo, NUDO.replace(/const reteDiSicurezza[\s\S]*?window\.setTimeout\(reteDiSicurezza, 8_000\);/,
+  morde(controllo, NUDO.replace(/const reteDiSicurezza[\s\S]*?timerSicurezza = window\.setTimeout\(reteDiSicurezza, 8_000\);/,
     'window.setTimeout(() => { if (!smesso) scopri(); }, 8_000);'));
+  morde(controllo, NUDO.replace('if (flussoMorto()) { scopri(); seguiCrescita(); return; }', 'if (true) { scopri(); seguiCrescita(); return; }'));
 });
 
 test('ARGOMENTI-01: durante un replay `ToolCallArgs` NON disegna a ogni delta', () => {
@@ -175,9 +190,14 @@ test('SPAZIO-CODA-01: lo spazio in coda resta una scrittura sola, con la sua usc
  *   una guardia ciascuna.
  */
 test('RIPRISTINO-06: il custode finisce con la RIGIOCATA, non con l evento terminale (vero dal clic per una conclusa)', () => {
-  const corpo = attorno(NUDO, 'function mantieniFondoDuranteRipristino', 4200);
-  assert.match(corpo, /generation !== state\.realSession\.generation \|\| !state\.realSession\.inRigiocata\) \{/);
-  assert.doesNotMatch(corpo, /state\.realSession\.eventoTerminaleVisto\) \{/);
+  const controllo = (s) => {
+    const corpo = corpoCustode(s);
+    assert.match(corpo, /if \(generation !== state\.realSession\.generation\) \{ smetti\(\); return; \}/);
+    assert.match(corpo, /if \(!state\.realSession\.inRigiocata\) \{/);
+    assert.doesNotMatch(corpo, /state\.realSession\.eventoTerminaleVisto\) \{/);
+  };
+  controllo(NUDO);
+  morde(controllo, corpoCustode(NUDO).replace('if (!state.realSession.inRigiocata) {', 'if (state.realSession.eventoTerminaleVisto) {'));
 });
 
 test('RIPRISTINO-07: una bolla RIGIOCATA non spegne il custode — il riarmo lo stacca solo fuori dalla rigiocata', () => {
@@ -186,10 +206,10 @@ test('RIPRISTINO-07: una bolla RIGIOCATA non spegne il custode — il riarmo lo 
 });
 
 test('RIPRISTINO-08: dopo la comparsa si segue l ALTEZZA, e la cronologia si costruisce nascosta con l indicatore', () => {
-  const corpo = attorno(NUDO, 'function mantieniFondoDuranteRipristino', 4200);
+  const corpo = corpoCustode(NUDO);
   assert.match(corpo, /new ResizeObserver\(chiediFondo\)/);
   assert.match(corpo, /seguiAltezza\?\.disconnect\(\);/, 'chi smette stacca anche il ResizeObserver');
-  assert.match(corpo, /window\.setTimeout\(inFondo, 250\); seguiCrescita\(\);/);
+  assert.match(corpo, /timerFinale = window\.setTimeout\(\(\) => \{[^}]*inFondo\(\); \}, 250\);\s*seguiCrescita\(\);/);
   const stili = readFileSync(new URL('../../src/styles/index.css', import.meta.url), 'utf8');
   assert.match(stili, /#conversation\.is-restoring\{visibility:hidden\}/, 'la regola persa nel cutover del 06/09 è di nuovo nel foglio del pacchetto');
   assert.match(stili, /\.talos-conversation:has\(> #conversation\.is-restoring\) > \.talos-caricamento-cronologia\{/);
@@ -204,4 +224,13 @@ test('RIPRISTINO-09: l indicatore della cronologia si vede dal clic, senza ritar
   assert.notEqual(regola, '', 'la regola che mostra l indicatore esiste');
   assert.doesNotMatch(regola, /animation|transition-delay|visibility:hidden/, 'nessun ritardo né visibilità nascosta sull indicatore');
   assert.doesNotMatch(stili, /@keyframes talos-caricamento-ritardo/);
+});
+
+/* A1-R3b (08/10/2026, bugfixer; visto dal vivo sulla 4176 sotto il velo di DESKTOP OLD): la mini-cronologia dei giri è figlia di
+   #schermoChat, ACCANTO alla conversazione, e restava visibile e cliccabile sotto «Apro la cronologia…». Si nasconde col velo. */
+test('RIPRISTINO-10: col velo anche la mini-cronologia dei giri si nasconde, e nessun figlio la riaccende', () => {
+  const stili = readFileSync(new URL('../../src/styles/index.css', import.meta.url), 'utf8');
+  assert.match(stili, /#schermoChat:has\(#conversation\.is-restoring\) > \.talos-cronologia\{visibility:hidden\}/);
+  // al contrario: un `visibility:visible` su un figlio annullerebbe il velo per quel figlio
+  assert.doesNotMatch(stili, /\.talos-cronologia[^{]*\{[^}]*visibility:visible/);
 });

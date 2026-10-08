@@ -34,7 +34,7 @@ function ensureCredential({ credentialFile, randomBytesFn }) {
     value = readFileSync(credentialFile, 'utf8').trim();
   } catch (error) {
     if (error?.code !== 'ENOENT') {
-      throw new WorkspaceLaunchError('La credenziale del launcher non è leggibile', 'WORKSPACE_LAUNCH_CONFIG_INVALID');
+      throw new WorkspaceLaunchError('Launcher credential is not readable', 'WORKSPACE_LAUNCH_CONFIG_INVALID');
     }
     mkdirSync(dirname(credentialFile), { recursive: true });
     const generated = randomBytesFn(32).toString('hex');
@@ -43,17 +43,17 @@ function ensureCredential({ credentialFile, randomBytesFn }) {
       value = generated;
     } catch (writeError) {
       if (writeError?.code !== 'EEXIST') {
-        throw new WorkspaceLaunchError('La credenziale del launcher non può essere salvata', 'WORKSPACE_LAUNCH_CONFIG_INVALID');
+        throw new WorkspaceLaunchError('Launcher credential cannot be saved', 'WORKSPACE_LAUNCH_CONFIG_INVALID');
       }
       try {
         value = readFileSync(credentialFile, 'utf8').trim();
       } catch {
-        throw new WorkspaceLaunchError('La credenziale del launcher non è leggibile', 'WORKSPACE_LAUNCH_CONFIG_INVALID');
+        throw new WorkspaceLaunchError('Launcher credential is not readable', 'WORKSPACE_LAUNCH_CONFIG_INVALID');
       }
     }
   }
   if (!TOKEN_PATTERN.test(value)) {
-    throw new WorkspaceLaunchError('La credenziale del launcher è danneggiata', 'WORKSPACE_LAUNCH_CONFIG_INVALID');
+    throw new WorkspaceLaunchError('Launcher credential is corrupted', 'WORKSPACE_LAUNCH_CONFIG_INVALID');
   }
   return value;
 }
@@ -67,7 +67,7 @@ function authenticated(expected, candidate) {
 
 function resolveWorkspace(percorso) {
   if (typeof percorso !== 'string' || percorso.trim() === '' || Buffer.byteLength(percorso, 'utf8') > MAX_PATH_BYTES || !isAbsolute(percorso)) {
-    throw new WorkspaceLaunchError('Scegli una cartella valida e riprova', 'WORKSPACE_NOT_AVAILABLE');
+    throw new WorkspaceLaunchError('Choose a valid folder and try again', 'WORKSPACE_NOT_AVAILABLE');
   }
   let reale;
   try {
@@ -75,7 +75,7 @@ function resolveWorkspace(percorso) {
     if (!statSync(reale).isDirectory()) throw new Error('not-directory');
     accessSync(reale, constants.R_OK | constants.W_OK);
   } catch {
-    throw new WorkspaceLaunchError('La cartella non è disponibile o non consente di lavorarci', 'WORKSPACE_NOT_AVAILABLE');
+    throw new WorkspaceLaunchError('Folder is not available or does not allow work', 'WORKSPACE_NOT_AVAILABLE');
   }
   return reale;
 }
@@ -91,7 +91,7 @@ export function createWorkspaceLaunchStore({
   randomBytesFn = randomBytes,
 } = {}) {
   if (typeof credentialFile !== 'string' || credentialFile.trim() === '' || !Number.isSafeInteger(ttlMs) || ttlMs < 1_000) {
-    throw new WorkspaceLaunchError('Configurazione launcher non valida', 'WORKSPACE_LAUNCH_CONFIG_INVALID');
+    throw new WorkspaceLaunchError('Invalid launcher configuration', 'WORKSPACE_LAUNCH_CONFIG_INVALID');
   }
   const credential = ensureCredential({ credentialFile, randomBytesFn });
   const intents = new Map();
@@ -110,7 +110,7 @@ export function createWorkspaceLaunchStore({
   function get(id) {
     cleanup();
     if (typeof id !== 'string' || !INTENT_PATTERN.test(id) || !intents.has(id)) {
-      throw new WorkspaceLaunchError('Il collegamento non è più disponibile. Usa di nuovo “Apri cartella con TALOS”.', 'WORKSPACE_LAUNCH_NOT_AVAILABLE');
+      throw new WorkspaceLaunchError('Link is no longer available. Use "Open folder with TALOS" again.', 'WORKSPACE_LAUNCH_NOT_AVAILABLE');
     }
     return intents.get(id);
   }
@@ -118,7 +118,7 @@ export function createWorkspaceLaunchStore({
   return Object.freeze({
     create({ percorso, credential: candidate } = {}) {
       if (!authenticated(credential, candidate)) {
-        throw new WorkspaceLaunchError('Il comando locale non è autorizzato', 'WORKSPACE_LAUNCH_UNAUTHORIZED');
+        throw new WorkspaceLaunchError('Local command is unauthorized', 'WORKSPACE_LAUNCH_UNAUTHORIZED');
       }
       const reale = resolveWorkspace(percorso);
       cleanup();

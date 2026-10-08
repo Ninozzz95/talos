@@ -82,7 +82,7 @@ test('D-10S: il racconto porta comando, uscita e codice, nei tag che il modello 
 
 test('D-10S: un comando muto lo DICE, invece di consegnare un buco', () => {
   const r = raccontoDelComando({ comando: 'true', codice: 0, testo: '' });
-  assert.match(r, /\(nessuna uscita\)/, 'il vuoto si dichiara: un tag vuoto si legge come "non lo so"');
+  assert.match(r, /\(no output\)/, 'il vuoto si dichiara: un tag vuoto si legge come "non lo so"');
 });
 
 test('D-10S: un’uscita enorme tiene TESTA e CODA, e il taglio si dichiara col totale vero', () => {

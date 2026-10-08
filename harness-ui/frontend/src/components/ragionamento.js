@@ -23,9 +23,10 @@
  *   distinzione ogni ragionamento direbbe «Ha ragionato poco». Lì si dice solo «Ha ragionato».
  */
 
-/** Il nome dell'interruttore: non più «mostra/nascondi», ma se aprirlo mentre il modello scrive. */
+/** Il nome dell'interruttore. ⛔ A14 (owner 08/10/2026) supera la decisione del 13/09: torna «Mostra ragionamento», e spento il
+ *   ragionamento resta una riga col solo tempo, che non si apre. */
 import { t } from './lingua.js';
-export const ETICHETTA_INTERRUTTORE_RAGIONAMENTO = 'chat.reasoning.openWhileWriting'; // 03/10/2026: una chiave del dizionario, da passare a t()
+export const ETICHETTA_INTERRUTTORE_RAGIONAMENTO = 'chat.reasoning.show'; // 03/10/2026: una chiave del dizionario, da passare a t()
 
 /**
  * Una durata in parole brevi: «12 s», «1 min 5 s», «2 min».

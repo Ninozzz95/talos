@@ -9,6 +9,24 @@ import { createHttpApp } from '../src/http-app.mjs';
 import { registraRiga } from '../src/session-store.mjs';
 import { creaTimelineAgenti } from '../src/agent-timeline.mjs';
 
+/*
+ * ⛔ 08/10/2026 notte (owner, prima della 0.1.24) — IL GIORNALE SI SCRIVE DOPO L'EVENTO, in una coda asincrona: una pausa
+ *   FISSA prima di leggerlo corre contro quella scrittura. STATISTICHE-FIGLIA era rossa 2 volte su 2 nella replica della CI
+ *   sotto carico («due giri nel file della figlia»: 0 invece di 2) e verde da sola: se cade nel lavoro di rilascio DOPO il
+ *   tag la versione brucia, come la 0.1.23. ⇒ Si aspetta la CONDIZIONE che la prova vuole vedere, rileggendo, con un tetto;
+ *   arrivati al tetto si torna l'ultima lettura e l'asserzione dice il vero. Un file che non c'è ancora è una lettura vuota.
+ */
+async function attendiNelGiornale(leggi, pronta, { tettoMs = 5000, passoMs = 25 } = {}) {
+  const leggiOVuoto = () => { try { return leggi(); } catch (errore) { if (errore?.code === 'ENOENT') return []; throw errore; } };
+  const scadenza = Date.now() + tettoMs;
+  let letto = leggiOVuoto();
+  while (!pronta(letto) && Date.now() < scadenza) {
+    await new Promise((resolve) => setTimeout(resolve, passoMs));
+    letto = leggiOVuoto();
+  }
+  return letto;
+}
+
 function banco(t, extra = {}) {
   const cartellaStore = mkdtempSync(join(tmpdir(), 'talos-replay-'));
   const runs = [], writes = [];
@@ -253,9 +271,11 @@ test('TIMELINE-COMPATTI: un record di attrezzo porta i contatori, uno di stato l
   assert.equal(fine.node.attivita.compatta, undefined);
   assert.equal(fine.node.attivita.file.length, 60);
   assert.equal(fine.node.attivita.fileTagliati, 10);
-  await new Promise(resolve => setTimeout(resolve, 50));
-  const righe = readFileSync(join(cartellaStore, root + '.jsonl'), 'utf8').split('\n').filter(l => l.includes('"tipo":"grafo-agenti"') && l.includes('"event":"ToolCallResult"'));
-  assert.ok(righe.length >= 70);
+  const righe = await attendiNelGiornale(
+    () => readFileSync(join(cartellaStore, root + '.jsonl'), 'utf8').split('\n').filter(l => l.includes('"tipo":"grafo-agenti"') && l.includes('"event":"ToolCallResult"')),
+    (lette) => lette.length >= 70,
+  );
+  assert.ok(righe.length >= 70, `record di attrezzo nel giornale: ${righe.length}`);
   assert.ok(Math.max(...righe.map(l => Buffer.byteLength(l))) < 2048, 'un record di attrezzo nel file resta sotto i 2 KB');
 });
 
@@ -280,9 +300,12 @@ test('STATISTICHE-FIGLIA: un giro nuovo azzera l\'esito; togliere quel giro torn
   runs[1].input.onEvento({ type: 'TextMessageEnd', messageId: 'm1' });
   runs[1].input.onEvento({ type: 'RunFinished' });
   assert.deepEqual([figlia().ultimoEsito, figlia().motivoChiusura], ['successo', 'fine-lavoro']);
-  await new Promise(resolve => setTimeout(resolve, 50));
-  const avvii = readFileSync(join(cartellaStore, child.childId + '.jsonl'), 'utf8').split('\n').filter(Boolean).map(JSON.parse)
-    .filter(x => x?.type === 'RunStarted' || x?.evento?.type === 'RunStarted').map(x => (x.type ? x : x.evento)._sequenza);
+  const avvii = await attendiNelGiornale(
+    () => readFileSync(join(cartellaStore, child.childId + '.jsonl'), 'utf8').split('\n').filter(Boolean)
+      .map((l) => { try { return JSON.parse(l); } catch { return null; } }) // una riga a metà si rilegge al giro dopo
+      .filter(x => x?.type === 'RunStarted' || x?.evento?.type === 'RunStarted').map(x => (x.type ? x : x.evento)._sequenza),
+    (letti) => letti.length >= 2,
+  );
   assert.equal(avvii.length, 2, 'due giri nel file della figlia');
   const tolto = await r.rimuoviMessaggio(child.childId, `giro:${avvii[1]}`);
   assert.ok(!tolto.erroreAvvio, tolto.erroreAvvio);

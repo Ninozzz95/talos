@@ -84,10 +84,10 @@ test('DOMANDA-CONTRATTO — answered richiede esattamente tutte le risposte', ()
   }), { status: 'answered', answers: { scelta: 'A', nota: 'testo' } });
   assert.throws(() => validaRispostaDomanda(questions, {
     status: 'answered', answers: { scelta: 'A' },
-  }), /esattamente/u);
+  }), /exactly/u);
   assert.throws(() => validaRispostaDomanda(questions, {
     status: 'answered', answers: { scelta: 'A', nota: 'x', intrusa: 'y' },
-  }), /esattamente/u);
+  }), /exactly/u);
 });
 
 test('DOMANDA-CONTRATTO — multi-select conserva scelte note più un solo Altro', () => {
@@ -97,13 +97,13 @@ test('DOMANDA-CONTRATTO — multi-select conserva scelte note più un solo Altro
   }), { status: 'answered', answers: { scelta: ['A', 'Una terza strada'] } });
   assert.throws(() => validaRispostaDomanda(questions, {
     status: 'answered', answers: { scelta: ['A', 'Altro 1', 'Altro 2'] },
-  }), /al massimo una risposta/u);
+  }), /at most one/u);
 });
 
 test('DOMANDA-CONTRATTO — skipped/cancelled non trasportano answers', () => {
   assert.deepEqual(validaRispostaDomanda([chiusa], { status: 'skipped' }), { status: 'skipped' });
   assert.deepEqual(validaRispostaDomanda([chiusa], { status: 'cancelled' }), { status: 'cancelled' });
-  assert.throws(() => validaRispostaDomanda([chiusa], { status: 'skipped', answers: {} }), /non deve contenere/u);
+  assert.throws(() => validaRispostaDomanda([chiusa], { status: 'skipped', answers: {} }), /must not contain/u);
 });
 
 // 23/09/2026, decisione owner: 1-4 domande × 2-4 opzioni. Numeri scritti IN CHIARO, non le costanti:
@@ -150,7 +150,7 @@ test('DOMANDA-CONSIGLIATA-PRIMA — la consigliata va in testa, al più una, e s
   ]);
   assert.throws(() => validaDomandeUtente([conPerche({ options: [
     { label: 'A', description: 'a', recommended: true }, { label: 'B', description: 'b', recommended: true },
-  ] })]), /consigliata/u);
+  ] })]), /recommended option/u);
   assert.throws(() => validaDomandeUtente([conPerche({ options: [
     { label: 'A', description: 'a', recommended: 'sì' }, { label: 'B', description: 'b' },
   ] })]), /recommended/u);
@@ -163,7 +163,7 @@ test('DOMANDA-CONSIGLIATA-PRIMA — la consigliata va in testa, al più una, e s
 // 24/09/2026, decisione owner 35 (scadenza facoltativa come impostazione) e 9 (scaduta ⇒ il giro si ferma).
 test('DOMANDA-SCADUTA: «expired» è un esito ammesso, senza risposte', () => {
   assert.deepEqual(validaRispostaDomanda([chiusa], { status: 'expired' }), { status: 'expired' });
-  assert.throws(() => validaRispostaDomanda([chiusa], { status: 'expired', answers: { scelta: 'A' } }), /non deve contenere/u);
+  assert.throws(() => validaRispostaDomanda([chiusa], { status: 'expired', answers: { scelta: 'A' } }), /must not contain/u);
 });
 
 /*
@@ -190,11 +190,11 @@ test('DOMANDA-CAMPI-IN-PIU-AL-MODELLO — alla porta del modello un campo in pi�
     ],
   });
   // AL CONTRARIO: la porta predefinita (registro, HTTP) rifiuta ancora, e alla porta del modello «why» resta obbligatorio
-  assert.throws(() => validaDomandeUtente([comeGlm]), /campi non riconosciuti/u);
+  assert.throws(() => validaDomandeUtente([comeGlm]), /unrecognized fields/u);
   const { why, ...senzaPerche } = comeGlm;
   assert.ok(why);
-  assert.throws(() => validaDomandeUtente([senzaPerche], { perche: 'obbligatorio', campiInPiu: 'ignora' }), /why è obbligatorio/u);
+  assert.throws(() => validaDomandeUtente([senzaPerche], { perche: 'obbligatorio', campiInPiu: 'ignora' }), /why is required/u);
   // e ignorare non vuol dire accettare tutto: tipi, limiti e doppioni restano rifiuti
   assert.throws(() => validaDomandeUtente([{ ...comeGlm, options: [comeGlm.options[0], { ...comeGlm.options[0], id: 'u9' }] }], { perche: 'obbligatorio', campiInPiu: 'ignora' }), /duplicate/u);
-  assert.throws(() => validaDomandeUtente([{ ...comeGlm, multiSelect: 'sì' }], { perche: 'obbligatorio', campiInPiu: 'ignora' }), /booleano/u);
+  assert.throws(() => validaDomandeUtente([{ ...comeGlm, multiSelect: 'sì' }], { perche: 'obbligatorio', campiInPiu: 'ignora' }), /boolean/u);
 });

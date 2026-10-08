@@ -51,7 +51,7 @@ async function impronta(file, algoritmo, codifica) {
 export async function verificaArchivio(file, binario) {
   const attesa = binario.sha256 ?? binario.sha512;
   const vera = binario.sha256 ? await impronta(file, 'sha256', 'hex') : await impronta(file, 'sha512', 'base64');
-  if (vera !== attesa) throw new Error(`Impronta non corrispondente per ${binario.archivio}: la copia è corrotta o non è quella pubblicata.`);
+  if (vera !== attesa) throw new Error(`Digest mismatch for ${binario.archivio}: the copy is corrupt or is not the published one.`);
 }
 
 async function scaricaVerificato(binario, cache) {
@@ -64,7 +64,7 @@ async function scaricaVerificato(binario, cache) {
     await pipeline(risposta.body, createWriteStream(parziale, { flags: 'w' }));
     await verificaArchivio(parziale, binario);
     await rename(parziale, file);
-  } catch (errore) { throw new Error(`Download di ${binario.archivio} non riuscito: ${errore.message}`); }
+  } catch (errore) { throw new Error(`Download of ${binario.archivio} failed: ${errore.message}`); }
   finally { await rm(parziale, { force: true }); }
   return file;
 }
@@ -77,8 +77,8 @@ function estraiVoce(archivio, voce, destinazione) {
     const figlio = spawn(tar, ['-xzf', archivio, '-C', destinazione, voce], { env: { SystemRoot: process.env.SystemRoot ?? 'C:\\Windows' }, windowsHide: true, shell: false });
     let errori = '';
     figlio.stderr.on('data', (d) => { errori += String(d); });
-    figlio.once('error', (e) => no(new Error(`tar non avviato: ${e.message}`)));
-    figlio.once('exit', (codice) => (codice === 0 ? ok() : no(new Error(`tar uscito con ${codice}: ${errori.trim()}`))));
+    figlio.once('error', (e) => no(new Error(`tar did not start: ${e.message}`)));
+    figlio.once('exit', (codice) => (codice === 0 ? ok() : no(new Error(`tar exited with ${codice}: ${errori.trim()}`))));
   });
 }
 
@@ -87,7 +87,7 @@ function estraiVoce(archivio, voce, destinazione) {
  * licenza di Node, e scrive `manifesto.json` con versione e impronta di ogni binario estratto.
  */
 export async function preparaCasaLinux(destinazione, { cache }) {
-  if (process.platform !== 'win32') throw new Error('I binari della casa Linux si preparano da Windows.');
+  if (process.platform !== 'win32') throw new Error('The Linux home binaries are prepared from Windows.');
   await mkdir(cache, { recursive: true });
   await mkdir(destinazione, { recursive: true });
   const lavoro = join(cache, 'estratti');
@@ -125,12 +125,12 @@ export function cartellaCasaLinux(env = process.env) {
 export async function verificaCasaLinux(cartella = cartellaCasaLinux(), { controllaImpronte = false } = {}) {
   let manifesto;
   try { manifesto = JSON.parse(await readFile(join(cartella, 'manifesto.json'), 'utf8')); }
-  catch { return { pronta: false, motivo: `i binari della casa Linux non ci sono (${cartella}): manca manifesto.json` }; }
+  catch { return { pronta: false, motivo: `the Linux home binaries are not there (${cartella}): manifesto.json is missing` }; }
   for (const nome of ['node', 'rg']) {
     const file = join(cartella, nome);
-    if (!existsSync(file)) return { pronta: false, motivo: `manca il binario "${nome}" della casa Linux (${cartella})` };
+    if (!existsSync(file)) return { pronta: false, motivo: `the binary "${nome}" of the Linux home is missing (${cartella})` };
     if (controllaImpronte && manifesto.binari?.[nome]?.sha256 !== await impronta(file, 'sha256', 'hex')) {
-      return { pronta: false, motivo: `il binario "${nome}" della casa Linux non corrisponde al manifesto` };
+      return { pronta: false, motivo: `the binary "${nome}" of the Linux home does not match the manifest` };
     }
   }
   return { pronta: true, node: join(cartella, 'node'), rg: join(cartella, 'rg'), manifesto };

@@ -26,7 +26,9 @@ for (const modo of ['dark', 'light']) {
           localStorage.setItem('talos.harness.desktop.settings.v1', JSON.stringify({ appearance: { colorMode } }));
         } catch { /* un frame in sandbox non ha storage */ }
       }, modo);
-      await page.route('**/api/v1/sessions/coda-proof-*/events', (route) => route.fulfill({ contentType: 'text/event-stream', body: 'retry: 3600000\n\n' }));
+      /* VELO-SPEC-2 (08/10/2026, bugfixer): flusso APERTO E MUTO, come in scroll-p0.spec.mjs, e il confine in `apri`. Senza confine la
+         chat restava sotto il velo (`#conversation.is-restoring`, `visibility:hidden`) e le foto della coda la mostravano vuota. */
+      await page.route('**/api/v1/sessions/coda-proof-*/events', () => { /* resta pending: aperto e muto */ });
       await page.goto('/');
       await page.waitForFunction(() => window.__talosHarnessUiRuntime);
       await page.locator('#talosAvvio').waitFor({ state: 'detached', timeout: 8000 });
@@ -34,7 +36,10 @@ for (const modo of ['dark', 'light']) {
 
     async function apri(page, id, { conclusa = false } = {}) {
       await page.evaluate(([id, conclusa]) => {
-        window.__talosHarnessUiRuntime.passaASessione(`coda-proof-${id}`, 'workspace', 'Prova della coda', 'z-ai/glm-5.3-flash', { conclusa, modello: 'z-ai/glm-5.3-flash' });
+        const r = window.__talosHarnessUiRuntime;
+        r.passaASessione(`coda-proof-${id}`, 'workspace', 'Prova della coda', 'z-ai/glm-5.3-flash', { conclusa, modello: 'z-ai/glm-5.3-flash' });
+        // VELO-SPEC-2: il confine che il server manda sempre (anche a storia vuota), prima degli eventi vivi della prova
+        r.handleRealEvent({ type: 'CUSTOM', name: 'talos.fine-rigiocata', value: null }, r.realSessionState.generation);
       }, [id, conclusa]);
     }
     async function eventi(page, lista) {
@@ -45,6 +50,11 @@ for (const modo of ['dark', 'light']) {
       await page.evaluate(() => new Promise((ok) => requestAnimationFrame(() => requestAnimationFrame(ok))));
     }
     const banner = (page) => page.locator('#queuedMessage');
+    // VELO-SPEC-2: niente foto di una chat sotto il velo (`visibility:hidden`): aspetta che si tolga, o la prova è rossa
+    const fotografa = async (page, percorso) => {
+      await expect(page.locator('#conversation')).not.toHaveClass(/\bis-restoring\b/);
+      await page.screenshot({ path: percorso });
+    };
 
     test(`CODA-SCHERMO-01 — a giro vivo: quanti, cosa, quando parte, e le due azioni (${modo})`, async ({ page }, testInfo) => {
       await apri(page, `viva-${modo}`);
@@ -56,7 +66,7 @@ for (const modo of ['dark', 'light']) {
       await expect(banner(page).locator('[data-coda-testo]')).toHaveAttribute('title', '«poi aggiorna il README coi numeri veri» — Entra dopo il passo in corso di TALOS');
       await expect(banner(page).locator('[data-coda-invia]')).toHaveText('Indirizza ora');
       await expect(banner(page).locator('[data-coda-togli]')).toHaveText('Togli');
-      await page.screenshot({ path: testInfo.outputPath(`1-coda-viva-${modo}.png`) });
+      await fotografa(page, testInfo.outputPath(`1-coda-viva-${modo}.png`));
     });
 
     test(`CODA-SCHERMO-02 — dopo uno stop: IN PAUSA, e non promette più una partenza che non avverrà (${modo})`, async ({ page }, testInfo) => {
@@ -85,7 +95,7 @@ for (const modo of ['dark', 'light']) {
       await expect(banner(page).locator('[data-coda-invia]')).toHaveText('Invia ora');
       const righe = await banner(page).evaluate((el) => el.getClientRects().length === 1 && el.getBoundingClientRect().height < 64);
       expect(righe, 'il banner resta una riga sola anche con badge e due azioni').toBe(true);
-      await page.screenshot({ path: testInfo.outputPath(`2-coda-in-pausa-${modo}.png`) });
+      await fotografa(page, testInfo.outputPath(`2-coda-in-pausa-${modo}.png`));
     });
 
     test(`CODA-SCHERMO-03 — «Togli» manda l’id del messaggio che si VEDE, e disegna la coda che il server rimanda (${modo})`, async ({ page }) => {
@@ -162,7 +172,7 @@ for (const modo of ['dark', 'light']) {
       await expect(page.locator('.send-btn.is-stop'), 'il giro ripreso ha il suo «Interrompi»').toHaveCount(1);
       /* ⛔ 14/09, giro vero (parte 5): la domanda mandata da qui prende il permesso che il server dichiara, come nelle altre finestre. */
       await expect(page.locator('#conversation .talos-message--user').last().locator('.talos-message__meta')).toHaveText(/^\d{2}:\d{2} · Follow-up · \S/);
-      await page.screenshot({ path: testInfo.outputPath(`6-ripreso-interrompibile-${modo}.png`) });
+      await fotografa(page, testInfo.outputPath(`6-ripreso-interrompibile-${modo}.png`));
     });
 
     test(`CODA-SCHERMO-07 — una voce in pausa dice «Indirizza ora» mentre un giro lavora, e «Invia ora» quando si ferma (${modo})`, async ({ page }, testInfo) => {
@@ -176,7 +186,7 @@ for (const modo of ['dark', 'light']) {
       await expect(banner(page).locator('[data-coda-conteggio]')).toHaveText('1 in pausa');
       await expect(banner(page).locator('[data-coda-invia]')).toHaveText('Indirizza ora');
       await expect(banner(page).locator('[data-coda-conteggio]')).not.toHaveAttribute('title', /giro è fermo/);
-      await page.screenshot({ path: testInfo.outputPath(`7-in-pausa-a-giro-vivo-${modo}.png`) });
+      await fotografa(page, testInfo.outputPath(`7-in-pausa-a-giro-vivo-${modo}.png`));
       await eventi(page, [{ type: 'RunError', code: 'fermato', message: '⛔ interrotto su richiesta: mentre il modello stava rispondendo, al giro 1.', _sequenza: 2 }]);
       await expect(banner(page).locator('[data-coda-invia]'), 'la parola segue il giro, senza un nuovo annuncio della coda').toHaveText('Invia ora');
       await expect(banner(page).locator('[data-coda-conteggio]')).toHaveText('1 in pausa');

@@ -1,6 +1,7 @@
 import { test } from '@playwright/test';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { homedir } from 'node:os';
 
 /*
  * IL CONFRONTO TESTA A TESTA, RIFATTO — owner 18/09: «rifai tutti gli screenshot e rimettili in
@@ -17,7 +18,8 @@ import { join } from 'node:path';
  * L'affiancamento si fa con una pagina HTML fotografata: ImageMagick non è installato su questa
  * macchina (`magick` assente; il `convert` che si trova è quello di Windows).
  */
-const USCITA = 'C:/Users/Antonino/Downloads/confronto-mockup-app';
+/* dove finiscono le foto affiancate: una cartella di chi lancia la prova (mai un percorso scritto a mano, 08/10/2026) */
+const USCITA = process.env.TALOS_CONFRONTO_USCITA || join(homedir(), 'Downloads', 'confronto-mockup-app');
 const APP = 'http://127.0.0.1:4174/';
 const MOCKUP = 'http://127.0.0.1:4210/TALOS-Calm-Lab.html';
 /* nome del file ↔ data-value nel mockup ↔ id della sezione nell'app */

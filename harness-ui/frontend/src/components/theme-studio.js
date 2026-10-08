@@ -529,8 +529,10 @@ export function creaAnteprimaScena(contenitore, { document: doc = globalThis.doc
       if (passoMs > 0) statoLocale.definizione.update({ state: statoLocale.dati, input: statoLocale.ingresso, stepMs: passoMs });
       contesto.setTransform(statoLocale.dpr, 0, 0, statoLocale.dpr, 0, 0);
       statoLocale.definizione.draw({ context: contesto, state: statoLocale.dati, geometry: statoLocale.geometria });
-      canvas.dataset.sceneStatus = statoAttuale();
-      canvas.dataset.scene = statoLocale.scena;
+      // B2 (08/10/2026): solo se cambiano — uno stesso valore riscritto è comunque una mutazione da osservare (W3C bug 20131)
+      const stato = statoAttuale();
+      if (canvas.dataset.sceneStatus !== stato) canvas.dataset.sceneStatus = stato;
+      if (canvas.dataset.scene !== statoLocale.scena) canvas.dataset.scene = statoLocale.scena;
     } catch {
       /* Una scena che lancia non deve portarsi dietro la modale: si ferma quella, non lo studio. */
       statoLocale.definizione = null;
@@ -539,13 +541,25 @@ export function creaAnteprimaScena(contenitore, { document: doc = globalThis.doc
     }
   }
 
+  /*
+   * ⛔ B2 (bugfixer, 08/10/2026) — NASCOSTA È ANCHE UNA TELA CHE NON SI VEDE, non solo una finestra in secondo piano.
+   *   L'anteprima di Impostazioni → Aspetto resta montata quando si lascia la schermata senza cambiare sezione, e il suo giro
+   *   guardava solo `doc.hidden`: misurato durante una risposta lunga in chat, 1.108 disegni in 38 s (30 al secondo) dietro
+   *   una schermata `hidden`. MDN «Optimizing canvas» (25/08/2026): non disegnare quando non si vede; `checkVisibility()`
+   *   dice se la tela è resa (MDN, letto l'08/10/2026). Ferma, riparte da sola: il ResizeObserver sul contenitore qui sotto
+   *   rimisura quando la schermata torna visibile e chiama `aggiorna`, che riprogramma il giro.
+   */
+  function telaVisibile() {
+    if (!canvas.isConnected) return false;
+    return typeof canvas.checkVisibility === 'function' ? canvas.checkVisibility() : canvas.getClientRects().length > 0;
+  }
   function statoAttuale() {
     if (!statoLocale.definizione) return 'assente';
     return statoAnteprima({
       ridotto: movimentoRidotto(doc),
       modo: doc.documentElement.getAttribute('data-talos-motion-mode') || 'adaptive',
       pausa: statoLocale.pausa,
-      nascosto: Boolean(doc.hidden),
+      nascosto: Boolean(doc.hidden) || !telaVisibile(),
     });
   }
 

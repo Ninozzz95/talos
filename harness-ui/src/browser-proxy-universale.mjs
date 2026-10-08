@@ -129,16 +129,16 @@ function ottettiIpv4(host) {
 
 function motivoIpv4(ottetti) {
   const [a, b, c] = ottetti;
-  if (a === 127) return 'Indirizzo di loopback (127.0.0.0/8)';
-  if (a === 0) return 'Indirizzo «questa rete» (0.0.0.0/8)';
-  if (a === 10) return 'Indirizzo di rete privata (10.0.0.0/8)';
-  if (a === 172 && b >= 16 && b <= 31) return 'Indirizzo di rete privata (172.16.0.0/12)';
-  if (a === 192 && b === 168) return 'Indirizzo di rete privata (192.168.0.0/16)';
-  if (a === 169 && b === 254) return 'Indirizzo link-local (169.254.0.0/16: è lì che risponde il servizio metadati di una macchina cloud)';
-  if (a === 100 && b >= 64 && b <= 127) return 'Indirizzo condiviso dell\'operatore (100.64.0.0/10)';
-  if (a === 192 && b === 0 && c === 0) return 'Indirizzo riservato IETF (192.0.0.0/24)';
-  if (a === 198 && (b === 18 || b === 19)) return 'Indirizzo per prove di rete (198.18.0.0/15)';
-  if (a >= 224) return 'Indirizzo multicast o riservato (224.0.0.0/4 e oltre)';
+  if (a === 127) return 'Loopback address (127.0.0.0/8)';
+  if (a === 0) return '"This network" address (0.0.0.0/8)';
+  if (a === 10) return 'Private network address (10.0.0.0/8)';
+  if (a === 172 && b >= 16 && b <= 31) return 'Private network address (172.16.0.0/12)';
+  if (a === 192 && b === 168) return 'Private network address (192.168.0.0/16)';
+  if (a === 169 && b === 254) return 'Link-local address (169.254.0.0/16: this is where a cloud machine\'s metadata service answers)';
+  if (a === 100 && b >= 64 && b <= 127) return 'Carrier-shared address (100.64.0.0/10)';
+  if (a === 192 && b === 0 && c === 0) return 'IETF-reserved address (192.0.0.0/24)';
+  if (a === 198 && (b === 18 || b === 19)) return 'Network benchmarking address (198.18.0.0/15)';
+  if (a >= 224) return 'Multicast or reserved address (224.0.0.0/4 and above)';
   return null;
 }
 
@@ -149,20 +149,20 @@ function motivoIpv4(ottetti) {
  */
 export function indirizzoLocale(host) {
   const nudo = String(host || '').toLowerCase().replace(/^\[|\]$/g, '');
-  if (!nudo) return 'Indirizzo senza host';
+  if (!nudo) return 'Address without a host';
   if (nudo === 'localhost' || nudo.endsWith('.localhost') || nudo.endsWith('.local') || nudo.endsWith('.internal') || nudo.endsWith('.home.arpa')) {
-    return 'Nome che punta al tuo computer o alla tua rete di casa';
+    return 'Name that points to your computer or your home network';
   }
   const v4 = ottettiIpv4(nudo);
   if (v4) return motivoIpv4(v4);
   const g = gruppiIpv6(nudo);
   if (g) {
-    if (g.every((n) => n === 0)) return 'Indirizzo non specificato (::)';
-    if (g.slice(0, 7).every((n) => n === 0) && g[7] === 1) return 'Indirizzo di loopback (::1)';
+    if (g.every((n) => n === 0)) return 'Unspecified address (::)';
+    if (g.slice(0, 7).every((n) => n === 0) && g[7] === 1) return 'Loopback address (::1)';
     /* IPv4 travestito da IPv6: `::ffff:169.254.169.254` è lo stesso bersaglio, scritto come molti controlli non lo riconoscono */
     if (g.slice(0, 5).every((n) => n === 0) && g[5] === 0xffff) return motivoIpv4([g[6] >> 8, g[6] & 0xff, g[7] >> 8, g[7] & 0xff]);
-    if ((g[0] & 0xfe00) === 0xfc00) return 'Indirizzo IPv6 di rete locale (fc00::/7)';
-    if ((g[0] & 0xffc0) === 0xfe80) return 'Indirizzo IPv6 link-local (fe80::/10)';
+    if ((g[0] & 0xfe00) === 0xfc00) return 'IPv6 local network address (fc00::/7)';
+    if ((g[0] & 0xffc0) === 0xfe80) return 'IPv6 link-local address (fe80::/10)';
   }
   return null;
 }
@@ -187,7 +187,7 @@ export function bersaglioAmmesso(url) {
 /* ─────────────── quale delle tre vie ─────────────── */
 
 const SEGNI_NEL_PERCORSO = /(^|\/)(login|log-in|signin|sign-in|accedi|auth|oauth|oauth2|sso|session|account|accounts)(\/|$)/i;
-const SEGNI_NEL_MOTIVO = /(401|403|login|accesso|autentic|credenzial|sessione|cookie|non autorizzat)/i;
+const SEGNI_NEL_MOTIVO = /(401|403|login|sign.?in|accesso|autentic|credenzial|credential|sessione|session|cookie|non autorizzat|unauthori[sz]ed)/i;
 
 /**
  * Riconosce una pagina che senza cookie non mostrerebbe niente di utile. Il
@@ -210,24 +210,24 @@ export function dietroLogin({ url = '', motivo = null } = {}) {
  */
 export function decidiVia({ incorniciabile, motivo = null, url = '', proxyDisponibile = true, vivoDisponibile = false } = {}) {
   if (incorniciabile === true) {
-    return { via: 'cornice', perche: 'La pagina si lascia incorniciare: è la via più economica — nessun proxy da attraversare, nessun browser da avviare' };
+    return { via: 'cornice', perche: 'The page can be framed: it is the cheapest way — no proxy to go through, no browser to start' };
   }
   let bersaglio = null;
   try { bersaglio = new URL(String(url)); } catch { bersaglio = null; }
-  const ammesso = bersaglio ? bersaglioAmmesso(bersaglio) : { ok: false, motivo: 'Indirizzo non valido' };
+  const ammesso = bersaglio ? bersaglioAmmesso(bersaglio) : { ok: false, motivo: 'Invalid address' };
   if (!ammesso.ok) {
-    if (ammesso.locale && vivoDisponibile) return { via: 'vivo', perche: `${ammesso.motivo}: il proxy non tocca gli indirizzi privati, ma il browser vero gira sul tuo computer e ci arriva` };
-    if (ammesso.locale) return { via: 'cornice', perche: `${ammesso.motivo}: il proxy non lo tocca e il browser vero non è disponibile` };
-    return { via: 'cornice', perche: `${ammesso.motivo}: nessuna corsia lo migliora` };
+    if (ammesso.locale && vivoDisponibile) return { via: 'vivo', perche: `${ammesso.motivo}: the proxy does not touch private addresses, but the real browser runs on your computer and can reach it` };
+    if (ammesso.locale) return { via: 'cornice', perche: `${ammesso.motivo}: the proxy does not touch it and the real browser is not available` };
+    return { via: 'cornice', perche: `${ammesso.motivo}: no lane improves it` };
   }
   if (dietroLogin({ url, motivo })) {
-    if (vivoDisponibile) return { via: 'vivo', perche: 'Sembra una pagina dietro accesso: il proxy non inoltra i tuoi cookie, quindi mostrerebbe solo il modulo di accesso — il browser vero ha un profilo suo dove puoi entrare' };
-    if (proxyDisponibile) return { via: 'proxy', perche: 'Sembra dietro accesso e il browser vero non è disponibile: il proxy la mostrerà come la vede chi l\'accesso non l\'ha fatto' };
-    return { via: 'cornice', perche: 'Sembra dietro accesso e non c\'è né il proxy né il browser vero' };
+    if (vivoDisponibile) return { via: 'vivo', perche: 'It looks like a page behind a login: the proxy does not forward your cookies, so it would only show the login form — the real browser has a profile of its own where you can sign in' };
+    if (proxyDisponibile) return { via: 'proxy', perche: 'It looks like it is behind a login and the real browser is not available: the proxy will show it the way someone who has not signed in sees it' };
+    return { via: 'cornice', perche: 'It looks like it is behind a login and there is neither the proxy nor the real browser' };
   }
-  if (proxyDisponibile) return { via: 'proxy', perche: `${motivo || 'La pagina vieta la cornice'}: la passiamo dal proxy, su un'origine separata dalla nostra` };
-  if (vivoDisponibile) return { via: 'vivo', perche: `${motivo || 'La pagina vieta la cornice'}: il proxy non è disponibile, la apre il browser vero` };
-  return { via: 'cornice', perche: `${motivo || 'La pagina vieta la cornice'}: senza proxy né browser vero la cornice resterà quasi certamente vuota` };
+  if (proxyDisponibile) return { via: 'proxy', perche: `${motivo || 'The page forbids framing'}: we pass it through the proxy, on an origin separate from ours` };
+  if (vivoDisponibile) return { via: 'vivo', perche: `${motivo || 'The page forbids framing'}: the proxy is not available, the real browser opens it` };
+  return { via: 'cornice', perche: `${motivo || 'The page forbids framing'}: without a proxy or the real browser the frame will almost certainly stay empty` };
 }
 
 /* ─────────────── le intestazioni ─────────────── */
@@ -370,9 +370,9 @@ export function riscriviHtml(html, { urlPagina, origineProxy = '' } = {}) {
 /** L'indirizzo con cui la cornice chiede una pagina al proxy. Un bersaglio che il proxy non tocca non deve nemmeno avere un link: qui si alza un errore. */
 export function urlProxato(origineProxy, url) {
   const base = String(origineProxy || '').replace(/\/+$/, '');
-  if (!/^https?:\/\/[^/]+/i.test(base)) throw new Error('Origine del proxy non valida');
+  if (!/^https?:\/\/[^/]+/i.test(base)) throw new Error('Invalid proxy origin');
   let bersaglio;
-  try { bersaglio = new URL(String(url)); } catch { throw new Error('Indirizzo non valido'); }
+  try { bersaglio = new URL(String(url)); } catch { throw new Error('Invalid address'); }
   const ammesso = bersaglioAmmesso(bersaglio);
   if (!ammesso.ok) throw new Error(ammesso.motivo);
   return `${base}/vai?u=${encodeURIComponent(bersaglio.href)}`;
@@ -389,7 +389,7 @@ export function urlProxato(origineProxy, url) {
  */
 export async function leggiPagina(indirizzo, { fetchFn = globalThis.fetch, millisecondi = MILLISECONDI_MASSIMI, saltiMassimi = SALTI_MASSIMI, ammesso = bersaglioAmmesso } = {}) {
   let url;
-  try { url = new URL(String(indirizzo)); } catch { return { ok: false, motivo: 'Indirizzo non valido' }; }
+  try { url = new URL(String(indirizzo)); } catch { return { ok: false, motivo: 'Invalid address' }; }
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), millisecondi);
   try {
@@ -401,8 +401,8 @@ export async function leggiPagina(indirizzo, { fetchFn = globalThis.fetch, milli
       if (stato >= 300 && stato < 400) {
         const dove = prendiIntestazione(risposta.headers, 'location');
         try { await risposta.body?.cancel?.(); } catch { /* niente da liberare */ }
-        if (!dove) return { ok: false, motivo: `Reindirizzamento senza destinazione (${stato})` };
-        try { url = new URL(dove, url); } catch { return { ok: false, motivo: 'Reindirizzamento verso un indirizzo non valido' }; }
+        if (!dove) return { ok: false, motivo: `Redirect without a destination (${stato})` };
+        try { url = new URL(dove, url); } catch { return { ok: false, motivo: 'Redirect to an invalid address' }; }
         continue;
       }
       const tipo = String(prendiIntestazione(risposta.headers, 'content-type') || '');
@@ -411,12 +411,12 @@ export async function leggiPagina(indirizzo, { fetchFn = globalThis.fetch, milli
         return { ok: true, url: url.href, stato, intestazioni: risposta.headers, corpo: '', tipo };
       }
       const testo = await risposta.text();
-      if (testo.length > BYTE_MASSIMI) return { ok: false, motivo: 'La pagina supera i 5 MB' };
+      if (testo.length > BYTE_MASSIMI) return { ok: false, motivo: 'The page is over 5 MB' };
       return { ok: true, url: url.href, stato, intestazioni: risposta.headers, corpo: testo, tipo };
     }
-    return { ok: false, motivo: `Più di ${saltiMassimi} reindirizzamenti` };
+    return { ok: false, motivo: `More than ${saltiMassimi} redirects` };
   } catch (errore) {
-    return { ok: false, motivo: errore?.name === 'AbortError' ? `Nessuna risposta entro ${Math.round(millisecondi / 1000)} secondi` : 'La pagina non risponde' };
+    return { ok: false, motivo: errore?.name === 'AbortError' ? `No answer within ${Math.round(millisecondi / 1000)} seconds` : 'The page is not responding' };
   } finally {
     clearTimeout(timer);
   }
@@ -449,7 +449,7 @@ async function ascolta(server, porta, ospite, ripiego) {
  * @returns {Promise<{porta:number, origine:string, ospite:string, cookieCondiviso:boolean, chiave:string, chiudi:()=>Promise<void>}>}
  */
 export async function creaServerProxy({ porta = 0, leggi, ammesso = bersaglioAmmesso, ospite = OSPITE_SEPARATO, origineOspite = null, scriptOverlay = SCRIPT_OVERLAY_PREDEFINITO, chiave = randomBytes(16).toString('hex') } = {}) {
-  if (typeof leggi !== 'function') throw new TypeError('creaServerProxy vuole «leggi»: chi va a prendere la pagina');
+  if (typeof leggi !== 'function') throw new TypeError('creaServerProxy requires "leggi": the function that fetches the page');
   const prefisso = `/s/${chiave}`;
   let origine = '';
 
@@ -459,28 +459,28 @@ export async function creaServerProxy({ porta = 0, leggi, ammesso = bersaglioAmm
       res.end(testo);
     };
     (async () => {
-      if (req.method !== 'GET') return rispondi(405, 'Il proxy risponde solo a GET');
+      if (req.method !== 'GET') return rispondi(405, 'The proxy only answers GET');
       let percorso;
-      try { percorso = new URL(req.url, 'http://proxy.invalido'); } catch { return rispondi(400, 'Richiesta non valida'); }
-      if (!percorso.pathname.startsWith(`${prefisso}/`)) return rispondi(404, 'Qui non c\'è niente');
+      try { percorso = new URL(req.url, 'http://proxy.invalido'); } catch { return rispondi(400, 'Invalid request'); }
+      if (!percorso.pathname.startsWith(`${prefisso}/`)) return rispondi(404, 'There is nothing here');
       const resto = percorso.pathname.slice(prefisso.length);
       if (resto === '/annota.js') {
         res.writeHead(200, { 'content-type': 'text/javascript; charset=utf-8', 'cache-control': 'no-store' });
         res.end(scriptOverlay);
         return undefined;
       }
-      if (resto !== '/vai') return rispondi(404, 'Qui non c\'è niente');
+      if (resto !== '/vai') return rispondi(404, 'There is nothing here');
       const chiesto = percorso.searchParams.get('u');
-      if (!chiesto) return rispondi(400, 'Manca l\'indirizzo da mostrare');
+      if (!chiesto) return rispondi(400, 'The address to show is missing');
       let bersaglio;
-      try { bersaglio = new URL(chiesto); } catch { return rispondi(400, 'Indirizzo non valido'); }
+      try { bersaglio = new URL(chiesto); } catch { return rispondi(400, 'Invalid address'); }
       const via = ammesso(bersaglio);
       if (!via.ok) return rispondi(403, via.motivo);
       let pagina;
-      try { pagina = await leggi(bersaglio.href); } catch { pagina = { ok: false, motivo: 'La pagina non risponde' }; }
-      if (!pagina || pagina.ok === false) return rispondi(502, pagina?.motivo || 'La pagina non risponde');
+      try { pagina = await leggi(bersaglio.href); } catch { pagina = { ok: false, motivo: 'The page is not responding' }; }
+      if (!pagina || pagina.ok === false) return rispondi(502, pagina?.motivo || 'The page is not responding');
       const tipo = String(pagina.tipo || prendiIntestazione(pagina.intestazioni, 'content-type') || '');
-      if (!/text\/html/i.test(tipo)) return rispondi(415, 'Il proxy passa solo il documento HTML: script, stili e immagini si caricano dal sito vero grazie a <base>');
+      if (!/text\/html/i.test(tipo)) return rispondi(415, 'The proxy only passes the HTML document: scripts, styles and images load from the real site thanks to <base>');
       const { tolte, tenute } = intestazioniDaTogliere(pagina.intestazioni);
       const html = riscriviHtml(String(pagina.corpo || ''), { urlPagina: pagina.url || bersaglio.href, origineProxy: origine });
       const intestazioni = {
@@ -501,7 +501,7 @@ export async function creaServerProxy({ porta = 0, leggi, ammesso = bersaglioAmm
       res.end(html);
       return undefined;
     })().catch(() => {
-      try { rispondi(500, 'Errore del proxy'); } catch { /* risposta già chiusa */ }
+      try { rispondi(500, 'Proxy error'); } catch { /* risposta già chiusa */ }
     });
   });
 

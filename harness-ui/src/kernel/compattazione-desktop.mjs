@@ -40,6 +40,9 @@
  *    when empty», «Preserve exact file paths… error strings»), incrementale con `<prior-summary>`.
  */
 import { stimaTokenConversazione } from './talosHarness.mjs';
+// ⭐ 06/10/2026 — la ricarica della memoria post-compact (opzione A + C-b, ricerca 5×5×5×5 §6.4): il
+// recinto della sintesi entra nella proiezione accanto all'indice meccanico, NELLO STESSO messaggio.
+import { PREFISSO_SINTESI_RECINTATA } from './ricarica-post-compact.mjs';
 
 export const SCHEMA_RECORD_COMPATTAZIONE = 'talos.compattazione.v1';
 export const VARIABILE_TETTO_TOKEN = 'TALOS_COMPACTION_TOKEN_CAP';
@@ -428,6 +431,11 @@ export function testoRichiestaDiRiassunto({ paroleMassime = PAROLE_MASSIME_RIASS
     '## Constraints — rules, limits and preferences stated by the person or found in the project',
     '## Done — what is verifiably done, with the real state of the files as you last saw it',
     '## Open — what is still to do, the next single step, and anything unverified',
+    // ⭐ 06/10/2026 — C-a della cura post-compact (ricerca 5×5×5×5 §6.4, zero-cost): le richieste pendenti e
+    // le azioni irreversibili NON si affidano al caso del riassunto. Modello: opencode `summary.txt:10-11`
+    // («preserve that exact question» / «always include that exact request») e il prompt di codex.
+    'Preserve VERBATIM any question to the person left unanswered, and every irreversible action taken',
+    '(commit, push, publish, delete) with its identifier — the full commit hash, never a shorthand.',
     '',
     `Budget: at most ${paroleMassime} words in total. Preserve exact file paths, identifiers, error strings and`,
     'numbers. Reply with ONLY the summary. Do not call any tool in this turn.',
@@ -501,9 +509,23 @@ export function creaContatoreRiassunto({ emetti, tentativo = 1, intervalloMs = I
  * La proiezione: testa alla lettera, le richieste della persona estratte dal mezzo alla lettera, UN messaggio
  * `user` con riassunto + indice, coda alla lettera. Un messaggio solo per riassunto e indice: due `user` di fila
  * in più non aggiungono niente e qualche fornitore li accetta male.
+ *
+ * ⭐ 06/10/2026 — RICARICA POST-COMPACT (opzione A + C-b, ricerca 5×5×5×5 §6.4): due parametri NUOVI, entrambi
+ * opzionali. `bloccoFatti` è il blocco di fatti freschi costruito DAL CODICE al momento del compact
+ * (`costruisciBloccoFatti`, `ricarica-post-compact.mjs`): fuso NELLO STESSO messaggio `user`, dopo l'indice
+ * meccanico — un solo cache-break, mai un giro/messaggio separato (vincolo 3 del capitolato). `recintaSintesi`
+ * mette il prefisso hermes «REFERENCE ONLY» fra il marcatore e il riassunto: la sintesi resta riferimento, il
+ * blocco contiene SOLO fatti e puntatori. Senza i due parametri la proiezione resta CARATTERE PER CARATTERE
+ * quella di prima (i test CTX-PURE la fissano).
  */
-export function costruisciProiezione({ testa = [], richiesteLetterali = [], riassunto = '', indice = '', coda = [] } = {}) {
-  const contenuto = [MARCATORE_RIASSUNTO, String(riassunto ?? '').trim(), String(indice ?? '').trim()].filter(Boolean).join('\n\n');
+export function costruisciProiezione({ testa = [], richiesteLetterali = [], riassunto = '', indice = '', coda = [], bloccoFatti = '', recintaSintesi = false } = {}) {
+  const contenuto = [
+    MARCATORE_RIASSUNTO,
+    recintaSintesi ? PREFISSO_SINTESI_RECINTATA : '',
+    String(riassunto ?? '').trim(),
+    String(indice ?? '').trim(),
+    String(bloccoFatti ?? '').trim(),
+  ].filter(Boolean).join('\n\n');
   return [...testa, ...richiesteLetterali, { role: 'user', content: contenuto }, ...coda];
 }
 

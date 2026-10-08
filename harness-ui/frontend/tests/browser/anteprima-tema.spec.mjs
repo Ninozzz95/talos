@@ -836,6 +836,45 @@ test.describe('la colonna dell\'anteprima viva — il port di «Aspetto e movime
     expect((await leggi(page)).erroriPagina).toEqual([]);
   });
 
+  /* ⛔ B2 (bugfixer, 08/10/2026): l'anteprima di Impostazioni → Aspetto resta montata quando si torna alla chat senza
+     cambiare sezione, e girava a 30 disegni al secondo dietro una schermata `hidden` (1.108 in 38 s, misurato durante
+     una risposta lunga). Il contenitore nascosto come lo nasconde una schermata: la tela si FERMA e non riscrive niente;
+     mostrato di nuovo, RIPARTE da sola. */
+  test('ANTEPRIMA-10 — un contenitore nascosto ferma la tela, e mostrato la fa ripartire (i due versi)', async ({ page }) => {
+    await apri(page);
+    expect((await leggi(page)).canvas.stato, 'premessa: si parte animati').toBe('animating');
+    const scrittureNascosta = await page.evaluate(async () => {
+      const tela = document.querySelector('#at-tela');
+      const canvas = tela.querySelector('canvas');
+      // ogni chiamata al contesto 2D della tela si conta: è il disegno vero, non la sua traccia negli attributi
+      const contesto = canvas.getContext('2d');
+      let chiamate = 0;
+      for (const nome of Object.getOwnPropertyNames(CanvasRenderingContext2D.prototype)) {
+        const d = Object.getOwnPropertyDescriptor(CanvasRenderingContext2D.prototype, nome);
+        if (typeof d.value !== 'function' || nome === 'constructor') continue;
+        contesto[nome] = function (...argomenti) { chiamate += 1; return d.value.apply(this, argomenti); };
+      }
+      await new Promise((fatto) => setTimeout(fatto, 300));
+      const disegniVisibile = chiamate; // premessa: la spia conta davvero
+      tela.style.display = 'none';
+      await new Promise((fatto) => setTimeout(fatto, 300)); // il ResizeObserver e il giro se ne accorgono
+      const record = [];
+      const oss = new MutationObserver((lista) => record.push(...lista.map((r) => r.attributeName)));
+      oss.observe(canvas, { attributes: true });
+      const chiamatePrima = chiamate;
+      await new Promise((fatto) => setTimeout(fatto, 700));
+      oss.disconnect();
+      return { disegniVisibile, record: record.length, disegni: chiamate - chiamatePrima, stato: canvas.dataset.sceneStatus };
+    });
+    expect(scrittureNascosta.disegniVisibile, 'premessa: visibile, la spia vede la tela disegnare').toBeGreaterThan(0);
+    expect(scrittureNascosta.disegni, 'nascosta, la tela non deve più disegnare').toBe(0);
+    expect(scrittureNascosta.record, 'nascosta, la tela non deve riscrivere i suoi attributi').toBe(0);
+    await page.evaluate(() => { document.querySelector('#at-tela').style.display = ''; });
+    await expect.poll(async () => (await leggi(page)).canvas.stato, { timeout: 5000 }).toBe('animating');
+    expect(await laTelaCambia(page), 'mostrata di nuovo, la tela deve RIPARTIRE').toBe(true);
+    expect((await leggi(page)).erroriPagina).toEqual([]);
+  });
+
   test('ANTEPRIMA-06 — tema chiaro e scuro: i COLORI sono i token, le misure sono del mockup', async ({ page }) => {
     const foto = join(RADICE, 'artifacts', 'anteprima-tema');
     await mkdir(foto, { recursive: true });

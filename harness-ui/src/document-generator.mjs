@@ -89,9 +89,9 @@ function verifyUtf8Text(bytes) {
   try {
     text = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
   } catch (errore) {
-    return { ok: false, detail: `non è UTF-8 valido: ${errore instanceof Error ? errore.message : String(errore)}` };
+    return { ok: false, detail: `not valid UTF-8: ${errore instanceof Error ? errore.message : String(errore)}` };
   }
-  if (text.trim() === '') return { ok: false, detail: 'il file è vuoto' };
+  if (text.trim() === '') return { ok: false, detail: 'the file is empty' };
   return { ok: true, detail: `${text.length} caratteri, ${text.split('\n').length} righe` };
 }
 
@@ -284,13 +284,13 @@ function adattaElenchiPdf(definition) {
 export async function generateTalosDocument(spec) {
   if (spec.report && spec.format !== 'pdf') {
     throw new Error(
-      `TALOS_DOCUMENT_REPORT_PDF_ONLY: \`report\` descrive un PDF impaginato. Per ${spec.format}, usa `
-      + '`body` (prosa) o `rows` (una tabella).',
+      `TALOS_DOCUMENT_REPORT_PDF_ONLY: \`report\` describes a laid-out PDF. For ${spec.format}, use `
+      + '`body` (prose) or `rows` (a table).',
     );
   }
 
   if (isTalosSourceTextFormat(spec.format) && (spec.body ?? '').trim() === '') {
-    throw new Error('TALOS_DOCUMENT_SOURCE_BODY_REQUIRED: un file sorgente richiede `body` non vuoto.');
+    throw new Error('TALOS_DOCUMENT_SOURCE_BODY_REQUIRED: a source file requires a non-empty `body`.');
   }
 
   const hasContent = (spec.body ?? '').trim() !== ''
@@ -298,7 +298,7 @@ export async function generateTalosDocument(spec) {
     || (spec.slides?.length ?? 0) > 0
     || (spec.format === 'pdf' && (spec.report?.blocks.length ?? 0) > 0);
   if (!hasContent) {
-    throw new Error('TALOS_DOCUMENT_EMPTY: non c\'è niente da scrivere.');
+    throw new Error('TALOS_DOCUMENT_EMPTY: there is nothing to write.');
   }
 
   const fileName = safeFileName(spec.title, spec.format);
@@ -436,35 +436,35 @@ export async function verifyTalosDocument(document) {
       case 'docx': {
         const parts = await openOoxml(document.bytes);
         const body = parts['word/document.xml'];
-        if (!body) return { ok: false, detail: 'nessuna parte documento dentro il file' };
+        if (!body) return { ok: false, detail: 'no document part inside the file' };
         const paragraphs = (body.match(/<w:p[ >]/g) ?? []).length;
-        if (paragraphs === 0) return { ok: false, detail: 'il documento non ha paragrafi' };
-        return { ok: true, detail: `riaperto: ${paragraphs} paragrafi` };
+        if (paragraphs === 0) return { ok: false, detail: 'the document has no paragraphs' };
+        return { ok: true, detail: `reopened: ${paragraphs} paragraphs` };
       }
 
       case 'xlsx': {
         const xlsx = await import('xlsx');
         const book = xlsx.read(document.bytes, { type: 'array' });
         const names = book.SheetNames;
-        if (!names.length) return { ok: false, detail: 'nessun foglio dentro il file' };
+        if (!names.length) return { ok: false, detail: 'no sheet inside the file' };
         const first = book.Sheets[names[0]];
         const rows = xlsx.utils.sheet_to_json(first, { header: 1 });
-        return { ok: rows.length > 0, detail: `riaperto: ${names.length} fogli, ${rows.length} righe` };
+        return { ok: rows.length > 0, detail: `reopened: ${names.length} sheets, ${rows.length} rows` };
       }
 
       case 'pptx': {
         const parts = await openOoxml(document.bytes);
         const slides = Object.keys(parts).filter((name) => /^ppt\/slides\/slide\d+\.xml$/.test(name));
-        if (slides.length === 0) return { ok: false, detail: 'nessuna slide dentro il file' };
-        return { ok: true, detail: `riaperto: ${slides.length} slide` };
+        if (slides.length === 0) return { ok: false, detail: 'no slide inside the file' };
+        return { ok: true, detail: `reopened: ${slides.length} slides` };
       }
 
       case 'pdf': {
         const { PDFDocument } = await import('pdf-lib');
         const pdf = await PDFDocument.load(document.bytes);
         const pages = pdf.getPageCount();
-        if (pages === 0) return { ok: false, detail: 'il pdf non ha pagine' };
-        return { ok: true, detail: `riaperto: ${pages} pagine` };
+        if (pages === 0) return { ok: false, detail: 'the pdf has no pages' };
+        return { ok: true, detail: `reopened: ${pages} pages` };
       }
 
       default:
@@ -472,7 +472,7 @@ export async function verifyTalosDocument(document) {
     }
   } catch (errore) {
     const detail = errore instanceof Error ? errore.message : String(errore);
-    return { ok: false, detail: `non si è potuto riaprire: ${detail}` };
+    return { ok: false, detail: `could not be reopened: ${detail}` };
   }
 }
 

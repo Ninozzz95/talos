@@ -150,8 +150,12 @@ const FINE = (id, { uscita = 0, errore = false, a = 2_000 } = {}) => ({ type: 'T
 //    «in corso», e non si ferma dalla riga perché non è ancora partito.
 // ⛔ 05/10/2026, BUG-14: UNDICI — è entrato «In sfondo»: un comando mandato fuori cattura non è né «in corso» né
 //    «in attesa» (tace PER COSTRUZIONE: l'output va sul file), e non ha più né Stop né Sfondo da chiamare.
-test('PROC-STATI: undici stati, ognuno con etichetta E icona — mai il solo colore', () => {
-  const attesi = ['in-coda', 'in-avvio', 'in-corso', 'in-attesa', 'in-consenso', 'in-sfondo', 'riuscito', 'fallito', 'annullato', 'ucciso', 'non-eseguito'];
+// ⛔ 07/10/2026, A6: DODICI — è entrato «Interrotto»: un comando in primo piano il cui giro è finito senza il suo
+//    risultato (Stop, errore, server riavviato). Non è «annullato» né «fallito»: non si sa come è finito.
+// ⛔ 08/10/2026, A6-bis: TREDICI — è entrato «Non più seguito»: un comando sfondato prima di un riavvio del server, che
+//    nessuno segue più. Non è vivo e non ha un esito: non si sa se e come è finito.
+test('PROC-STATI: tredici stati, ognuno con etichetta E icona — mai il solo colore', () => {
+  const attesi = ['in-coda', 'in-avvio', 'in-corso', 'in-attesa', 'in-consenso', 'in-sfondo', 'riuscito', 'fallito', 'annullato', 'ucciso', 'perso', 'non-eseguito', 'interrotto'];
   assert.deepEqual(Object.keys(STATI_PROCESSO), attesi);
   for (const s of attesi) {
     assert.ok(STATI_PROCESSO[s].etichetta.length > 2, `${s} ha una parola sua`);
@@ -645,4 +649,117 @@ test('PROC-USCITA-CAMPO — 02/10/2026: il codice si legge da `exitCode`; col te
     { type: 'ToolCallResult', toolCallId: 'c', ricevutoA: 1_700, errore: true, uscita: uscitaDelRisultato({ exitCode: 130, content }) },
   ], { adesso: 2_000 });
   assert.equal(p.stato, 'annullato', 'fermato apposta: «Annullato», mai «Non riuscito»');
+});
+
+/*
+ * ⛔ BUG-20b (owner 05/10/2026, sera): «nel pannello processi ci vogliono i filtri, stesso stile
+ * di quelli degli agenti, per lo stato dei processi». Lo stile di riferimento è la riga
+ * `talos-agenti-stati` della scheda Agenti STESSA (inspector.js, disegnaAgenti): un `div` con
+ * `role="group"` e bottoni nudi che si marcano con `aria-pressed`, e gli stati RARI nascosti finché
+ * non esistono nei dati o non sono selezionati (la regola degli agenti per `interrotta`/`ignoto`).
+ * Zero CSS nuovo: la classe è ESATTAMENTE quella degli agenti, non un secondo vestito.
+ */
+const STATI_FILTRABILI = ['tutti', 'in-corso', 'in-attesa', 'riuscito', 'fallito'];
+const STATI_RARI = ['in-coda', 'in-avvio', 'in-consenso', 'in-sfondo', 'annullato', 'ucciso', 'non-eseguito'];
+
+function bottoniStato(rail) {
+  return conClasse(rail, 'talos-agenti-stati')[0]?.figli.filter((n) => n.tag === 'button') ?? [];
+}
+function bottoneDi(rail, stato) {
+  return bottoniStato(rail).find((b) => b.dataset.stato === stato);
+}
+
+test('PROC-FILTRO-STATO-01 — stesso stile degli agenti: riga di gruppo, bottoni aria-pressed, tutti premuto all\u2019inizio', () => {
+  const d = documentoFinto();
+  const rail = d.createElement('div');
+  const lista = [
+    datiProcesso({ id: 'a', comando: 'git status', stato: 'riuscito', giro: 1, durataMs: 10, uscita: 0 }),
+    datiProcesso({ id: 'b', comando: 'npm test', stato: 'in-corso', giro: 2 }),
+    datiProcesso({ id: 'c', comando: 'npm run build', stato: 'in-attesa', giro: 2 }),
+  ];
+  disegnaProcessi(d, rail, lista);
+
+  const righe = conClasse(rail, 'talos-agenti-stati');
+  assert.equal(righe.length, 1, 'la riga dei filtri di stato c\u2019è, con la STESSA classe degli agenti (zero CSS nuovo)');
+  const riga = righe[0];
+  assert.equal(riga.getAttribute('role'), 'group', 'role=group, come gli agenti');
+  assert.ok(riga.getAttribute('aria-label'), 'ha un\u2019etichetta accessibile');
+
+  const nomi = bottoniStato(rail).map((b) => b.dataset.stato);
+  for (const stato of STATI_FILTRABILI) assert.ok(nomi.includes(stato), `il bottone «${stato}» c\u2019è sempre`);
+  assert.equal(bottoneDi(rail, 'tutti').getAttribute('aria-pressed'), 'true', '«tutti» premuto all\u2019inizio');
+  assert.equal(bottoneDi(rail, 'in-corso').getAttribute('aria-pressed'), 'false');
+});
+
+test('PROC-FILTRO-STATO-02 — il clic filtra, si combina col filtro di testo, e «tutti» riporta tutto', () => {
+  const d = documentoFinto();
+  const rail = d.createElement('div');
+  const lista = [
+    datiProcesso({ id: 'a', comando: 'git status', stato: 'riuscito', giro: 1, durataMs: 10, uscita: 0 }),
+    datiProcesso({ id: 'b', comando: 'npm test', stato: 'in-corso', giro: 2 }),
+    datiProcesso({ id: 'c', comando: 'npm run build', stato: 'in-attesa', giro: 2 }),
+    datiProcesso({ id: 'e', comando: 'npm run lint', stato: 'fallito', giro: 1, durataMs: 10, uscita: 1 }),
+  ];
+  disegnaProcessi(d, rail, lista);
+
+  bottoneDi(rail, 'in-corso').lancia('click');
+  assert.deepEqual(carte(rail).map((c) => c.dataset.processo), ['b'], 'restano solo i processi in corso');
+  assert.equal(bottoneDi(rail, 'in-corso').getAttribute('aria-pressed'), 'true', 'il bottone scelto si marca');
+  assert.equal(bottoneDi(rail, 'tutti').getAttribute('aria-pressed'), 'false');
+
+  const campo = conClasse(rail, 'talos-process-filtro__campo')[0];
+  campo.value = 'npm';
+  campo.lancia('input');
+  assert.deepEqual(carte(rail).map((c) => c.dataset.processo), ['b'], 'filtro di testo E filtro di stato si INTERSECANO');
+
+  campo.value = '';
+  campo.lancia('input');
+  bottoneDi(rail, 'tutti').lancia('click');
+  assert.equal(carte(rail).length, 4, '«tutti» riporta tutto');
+  assert.equal(bottoneDi(rail, 'tutti').getAttribute('aria-pressed'), 'true');
+});
+
+test('PROC-FILTRO-STATO-03 — gli stati RARI sono nascosti finché non esistono nei dati (la regola degli agenti)', () => {
+  const d = documentoFinto();
+  const rail = d.createElement('div');
+  disegnaProcessi(d, rail, [
+    datiProcesso({ id: 'a', comando: 'git status', stato: 'riuscito', giro: 1, durataMs: 10, uscita: 0 }),
+    datiProcesso({ id: 'b', comando: 'npm test', stato: 'in-corso', giro: 2 }),
+  ]);
+  /* ⛔ La regola degli agenti NASCONDE il bottone raro (`hidden`), non lo rimuove: se qui l'assert
+     fallisse, il messaggio di AssertionError ispezionerebbe il nodo finto (il suo `children` è un
+     getter che crea array nuovi a ogni lettura) e esploderebbe con RangeError invece di dire il
+     difetto. ⇒ Si asserisce su PRIMITIVI (hidden), mai sul nodo intero. */
+  assert.equal(bottoneDi(rail, 'ucciso')?.hidden, true, '«ucciso» nascosto quando nessun processo lo è');
+  assert.equal(bottoneDi(rail, 'annullato')?.hidden, true, '«annullato» nascosto anche');
+
+  const lista = [
+    datiProcesso({ id: 'k', comando: 'ping -n 60 127.0.0.1', stato: 'ucciso', giro: 1, durataMs: 10, uscita: 137 }),
+    datiProcesso({ id: 'b', comando: 'npm test', stato: 'in-corso', giro: 2 }),
+  ];
+  disegnaProcessi(d, rail, lista);
+  const ucciso = bottoneDi(rail, 'ucciso');
+  assert.ok(ucciso, 'il bottone «ucciso» esiste');
+  assert.equal(ucciso.hidden, false, 'appena un processo ucciso esiste, il bottone si vede');
+  ucciso.lancia('click');
+  assert.deepEqual(carte(rail).map((c) => c.dataset.processo), ['k'], 'e filtra davvero');
+  assert.equal(bottoneDi(rail, 'annullato').hidden, true, 'un raro che NON c\u2019è resta nascosto anche con un altro raro scelto');
+});
+
+test('PROC-FILTRO-STATO-04 — ciclo di vita: a lista vuota la riga va via col filtro di testo, e torna con la scelta azzerata', () => {
+  const d = documentoFinto();
+  const rail = d.createElement('div');
+  disegnaProcessi(d, rail, [datiProcesso({ id: 'b', comando: 'npm test', stato: 'in-corso', giro: 2 })]);
+  bottoneDi(rail, 'in-corso').lancia('click');
+
+  disegnaProcessi(d, rail, []);
+  assert.equal(conClasse(rail, 'talos-agenti-stati').length, 0, 'niente filtri su una scheda vuota');
+  assert.equal(conClasse(rail, 'talos-process-filtro').length, 0, 'come il filtro di testo, che già si toglieva');
+
+  disegnaProcessi(d, rail, [
+    datiProcesso({ id: 'b', comando: 'npm test', stato: 'in-corso', giro: 2 }),
+    datiProcesso({ id: 'a', comando: 'git status', stato: 'riuscito', giro: 1, durataMs: 10, uscita: 0 }),
+  ]);
+  assert.equal(bottoneDi(rail, 'tutti').getAttribute('aria-pressed'), 'true', 'la scelta riparte da «tutti»');
+  assert.equal(carte(rail).length, 2, 'e tutte le righe sono a schermo');
 });

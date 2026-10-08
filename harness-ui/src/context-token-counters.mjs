@@ -81,7 +81,7 @@ export function opzioniRagionamentoPerSintesi(provider) {
  * dell'ultimo messaggio; qui da tutte, che costa poco e non sbaglia su una storia riscritta in mezzo.
  */
 export function conAncoraDelFornitore(counter) {
-  if (typeof counter?.countPreparedContext !== 'function') fail('CTX_TOKEN_PORT_INVALID', 'Serve un contatore da avvolgere.');
+  if (typeof counter?.countPreparedContext !== 'function') fail('CTX_TOKEN_PORT_INVALID', 'A counter to wrap is required.');
   const impronta = message => createHash('sha256').update(JSON.stringify(message)).digest('hex');
   const stima = messages => Math.ceil(Buffer.byteLength(JSON.stringify(messages), 'utf8') / 3.5) + messages.length * 4; // la stessa euristica del contatore
   const ancore = new Map();

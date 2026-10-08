@@ -17,6 +17,7 @@ import { attendiScritture } from '../src/session-store.mjs';
 import { TaskCatalogError } from '../src/task-catalog.mjs';
 import { createWorkflowOrchestrator } from '../src/workflow-orchestrator.mjs';
 import { createAgentSessionAdapter } from '../src/workflow/adapters/agent-session.mjs';
+import { creaOnWorkflowFn } from '../src/workflow/per-il-modello.mjs';
 import { approveWorkflowProposal, proposeWorkflowFromTool } from '../src/workflow/planning-control.mjs';
 import { runControlCommandHash, startWorkflowRun } from '../src/workflow/run-control.mjs';
 import { reserveBudget } from '../src/workflow/budget.mjs';
@@ -143,7 +144,7 @@ async function banco(t) {
     const definizione = await readDefinition(store, { workflowId: eventi[0].payload.workflowId, version: eventi[0].payload.definitionVersion });
     return { eventi, stato: workflowReplay({ definition: definizione.core, runId, events: eventi }) };
   };
-  return { componi, riavvia, giri, runId, stato, workflowId: proposta.workflowId };
+  return { componi, riavvia, giri, runId, stato, workflowId: proposta.workflowId, store, rootSessionId: radice.sessionId };
 }
 
 /** Porta il run al punto in cui `uno` e `due` girano insieme (`prepara` finito). */
@@ -440,4 +441,120 @@ test('WF-RUN-RETRY-REFUSES: nothing failed, or a run that has ended — refused,
   await assert.rejects(p.orchestrator.requestRunControl({ runId: b.runId, action: 'retry', commandId: id }),
     { code: 'WORKFLOW_RUN_STATE_CONFLICT' }, 'an ended run cannot retry');
   assert.ok(!(await b.stato()).eventi.some((evento) => evento.type === 'retry_scheduled'));
+});
+
+/* ═══════════════════════════════════════════════════════════════════════════════════
+ * ⛔⛔ A10 (07/10/2026, `desktop-bugfixer`) — IL RIFIUTO DICE COSA SI PUÒ FARE ADESSO, E PERCHÉ IL RUN ASPETTA.
+ *   Prima: «only a paused run can be resumed» e basta; un run in «Serve attenzione» senza passi falliti non aveva nessuna
+ *   azione valida per il modello e il rifiuto non lo diceva. Regola pura in `workflow/azioni-del-run.mjs`.
+ * ═══════════════════════════════════════════════════════════════════════════════════ */
+
+test('A10-06 RIFIUTO-CON-AZIONI: un resume su un run in corso è rifiutato nominando le azioni valide, sull errore e nel testo', async (t) => {
+  const b = await banco(t);
+  const p = b.componi();
+  await finoAiDuePassi(b, p);
+  await assert.rejects(p.orchestrator.requestRunControl({ runId: b.runId, action: 'resume', commandId: randomUUID() }), (errore) => {
+    assert.equal(errore.code, 'WORKFLOW_RUN_STATE_CONFLICT');
+    assert.deepEqual(errore.allowedActions, ['pause', 'cancel']);
+    assert.deepEqual(errore.attentionReasons, []);
+    assert.match(errore.message, /only a paused run can be resumed \(this one is running\)\. Nothing was changed\. Allowed actions now: pause, cancel\./);
+    return true;
+  });
+});
+
+test('A10-07 SERVE-ATTENZIONE: con un passo fallito il rifiuto di resume dice cancel e retry, e il motivo node_failed', async (t) => {
+  const b = await banco(t);
+  const p = b.componi();
+  await finoAiDuePassi(b, p);
+  b.giri.fallisci(b.giri.indice('Fai uno'), 'credenziale', 'Credenziale rifiutata dal fornitore.');
+  b.giri.rispondi(b.giri.indice('Fai due'));
+  assert.ok(await aspettaChe(async () => (await b.stato()).stato.run.status === 'needs_attention'));
+  await assert.rejects(p.orchestrator.requestRunControl({ runId: b.runId, action: 'resume', commandId: randomUUID() }), (errore) => {
+    assert.deepEqual(errore.allowedActions, ['cancel', 'retry']);
+    assert.deepEqual(errore.attentionReasons, ['node_failed']);
+    assert.match(errore.message, /Allowed actions now: cancel, retry\. The run needs attention because: node_failed\./);
+    return true;
+  });
+  // il MODELLO: workflow_control ha solo pause/resume/cancel ⇒ gli si dice cosa può usare lui, e che retry è della persona
+  const onWorkflowFn = creaOnWorkflowFn({ store: b.store, runtimeFn: () => ({ orchestrator: p.orchestrator, scheduler: p.scheduler }) });
+  const testo = await onWorkflowFn('workflow_control', { runId: b.runId, azione: 'resume' }, { rootSessionId: b.rootSessionId });
+  assert.match(testo, /only a paused run can be resumed \(this one is needs_attention\)/);
+  assert.match(testo, /Nothing was changed\./);
+  assert.match(testo, /You can use now: cancel\./);
+  assert.doesNotMatch(testo, /Allowed actions now/, 'il motivo viene dal campo refusalReason, non dal messaggio intero');
+  assert.match(testo, /retry.*Workflow panel/);
+  assert.match(testo, /needs attention because: node_failed/);
+  // e lo stato del run, letto dal modello, lo dice prima ancora di provarci
+  const stato = await onWorkflowFn('workflow_status', { runId: b.runId }, { rootSessionId: b.rootSessionId });
+  assert.match(stato, /allowed actions now: cancel; the person can retry the failed steps from the Workflow panel; needs attention because: node_failed$/m);
+  assert.doesNotMatch(stato, /allowed actions now: [^;]*retry/, 'retry non è un azione del modello');
+  assert.match(stato, /needs attention because: node_failed/);
+  assert.ok(!(await b.stato()).eventi.some((evento) => evento.type === 'run_resumed'), 'nothing was written');
+});
+
+/* ── A10, review di «talos desktop»: il caso del difetto con l'orchestratore vero, e i rami senza prova ───────────── */
+function adattatoreCheRestaIncerto() {
+  let apri;
+  const cancello = new Promise((resolve) => { apri = resolve; });
+  const consumo = { promptTokens: 1, completionTokens: 1, wallMs: 0, agentSeconds: 0, toolCalls: 0, modelRequests: 1, knownCostUsd: null };
+  return {
+    id: 'finto-incerto-per-sempre', apri: () => apri(),
+    async execute(ctx) {
+      if (ctx.nodeId === 'due') { await cancello; throw new Error('la fine del passo non è arrivata'); }
+      return { status: 'completed', receiptRef: `finto:${ctx.nodeId}`, results: [], actualUsage: consumo };
+    },
+    async reconcile() { return { outcome: 'still_unknown', receiptRef: null, resultIds: [], actualUsage: null }; },
+    async cancel() { return { outcome: 'cancelled', evidenceResultIds: [] }; },
+  };
+}
+
+test('A10-08 INCERTO-SENZA-FALLITI: «Serve attenzione» per un passo incerto, nessun passo fallito ⇒ il modello sa che può solo annullare', async (t) => {
+  const b = await banco(t);
+  const finto = adattatoreCheRestaIncerto();
+  const p = b.componi({ adattatori: new Map([['agent-session', finto]]) });
+  await p.orchestrator.recover();
+  await p.scheduler.avvia();
+  assert.ok(await aspettaChe(async () => (await b.stato()).eventi.some((evento) => evento.type === 'activity_started' && evento.nodeId === 'due')));
+  finto.apri();
+  assert.ok(await aspettaChe(async () => (await b.stato()).stato.run.status === 'needs_attention'), 'il passo incerto mette il run in attenzione');
+  const { stato } = await b.stato();
+  assert.equal([...stato.nodes.values()].filter((n) => n.state === 'failed').length, 0, 'premessa: nessun passo fallito');
+  assert.match(stato.run.needsAttentionReasons.join(','), /^activity_uncertain:/);
+  await assert.rejects(p.orchestrator.requestRunControl({ runId: b.runId, action: 'resume', commandId: randomUUID() }), (errore) => {
+    assert.deepEqual(errore.allowedActions, ['cancel']);
+    assert.match(errore.attentionReasons[0], /^activity_uncertain:/);
+    return true;
+  });
+  const onWorkflowFn = creaOnWorkflowFn({ store: b.store, runtimeFn: () => ({ orchestrator: p.orchestrator, scheduler: p.scheduler }) });
+  const testo = await onWorkflowFn('workflow_control', { runId: b.runId, azione: 'resume' }, { rootSessionId: b.rootSessionId });
+  assert.match(testo, /You can use now: cancel\./);
+  assert.doesNotMatch(testo, /Allowed actions now/, 'il motivo viene dal campo refusalReason, non dal messaggio intero');
+  assert.doesNotMatch(testo, /retry/, 'nessun passo fallito: niente riprova da proporre');
+  assert.match(testo, /needs attention because: activity_uncertain:/);
+  const statoPerIlModello = await onWorkflowFn('workflow_status', { runId: b.runId }, { rootSessionId: b.rootSessionId });
+  assert.match(statoPerIlModello, /allowed actions now: cancel; needs attention because: activity_uncertain:/);
+});
+
+test('A10-09 RIPROVA-SENZA-FALLITI: anche il rifiuto «there is no failed step to retry» porta azioni e motivi', async (t) => {
+  const b = await banco(t);
+  const p = b.componi();
+  await finoAiDuePassi(b, p);
+  await assert.rejects(p.orchestrator.requestRunControl({ runId: b.runId, action: 'retry', commandId: randomUUID() }), (errore) => {
+    assert.equal(errore.code, 'WORKFLOW_RUN_STATE_CONFLICT');
+    assert.match(errore.message, /there is no failed step to retry\. Nothing was changed\. Allowed actions now: pause, cancel\./);
+    assert.deepEqual(errore.allowedActions, ['pause', 'cancel']);
+    assert.deepEqual(errore.attentionReasons, []);
+    return true;
+  });
+});
+
+test('A10-10 ERRORE-NON-DI-CONFLITTO: workflow_control lascia passare INTATTO un errore che non è un rifiuto di stato', async (t) => {
+  const b = await banco(t);
+  const guasto = Object.assign(new Error('the workflow store needs attention'), { code: 'WORKFLOW_STORE_NEEDS_ATTENTION' });
+  const runtime = { orchestrator: { requestRunControl: async () => { throw guasto; } }, scheduler: { sveglia() {} } };
+  const onWorkflowFn = creaOnWorkflowFn({ store: b.store, runtimeFn: () => runtime });
+  await assert.rejects(onWorkflowFn('workflow_control', { runId: b.runId, azione: 'pause' }, { rootSessionId: b.rootSessionId }), (errore) => {
+    assert.equal(errore, guasto, 'lo stesso errore, non un testo di rifiuto inventato');
+    return true;
+  });
 });

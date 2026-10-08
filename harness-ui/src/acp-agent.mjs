@@ -11,21 +11,42 @@ import { eUnaCredenziale } from './kernel/talosHarness.mjs';
 export const VERSIONE_PROTOCOLLO_ACP = 1;
 const LIMITE = 1_048_576;
 const messaggiErrore = {
-  ACP_RUNTIME_INVALID: 'Controlla comando, argomenti, cartella e variabili dichiarate dell’agente esterno.',
-  ACP_NOT_CONFIGURED: 'Configura l’agente esterno sul computer prima di sceglierlo.',
-  ACP_VERSION_UNSUPPORTED: 'L’agente esterno usa una versione di comunicazione non supportata.',
-  ACP_PROTOCOL_INVALID: 'L’agente esterno ha inviato una risposta non valida.',
-  ACP_PROCESS_EXITED: 'La risposta dell’agente esterno si è interrotta: il processo si è chiuso.',
-  ACP_START_FAILED: 'Non è stato possibile avviare l’agente esterno. Controlla il programma installato.',
-  ACP_TIMEOUT: 'L’agente esterno ha superato il tempo massimo configurato.',
-  ACP_REQUEST_FAILED: 'L’agente esterno ha rifiutato la richiesta. Controlla il suo accesso e la sua configurazione.',
-  ACP_REQUEST_UNSUPPORTED: 'L’agente esterno accetta qui il modello predefinito e conversazioni testuali. Disattiva strumenti, allegati e opzioni di generazione aggiuntive.',
-  ACP_CANCELLED: 'Agente esterno fermato su richiesta.',
-  ACP_BUSY: 'L’agente esterno sta già rispondendo.',
-  ACP_CLOSE_FAILED: 'Non è stata confermata la chiusura dell’agente esterno.',
+  ACP_RUNTIME_INVALID: "Check the external agent’s command, arguments, folder and declared variables.",
+  ACP_NOT_CONFIGURED: "Set up the external agent on this computer before choosing it.",
+  ACP_VERSION_UNSUPPORTED: "The external agent uses an unsupported communication version.",
+  ACP_PROTOCOL_INVALID: "The external agent sent an invalid response.",
+  ACP_PROCESS_EXITED: "The external agent’s response was interrupted: the process closed.",
+  ACP_START_FAILED: "Could not start the external agent. Check the installed program.",
+  ACP_TIMEOUT: "The external agent exceeded the configured time limit.",
+  ACP_REQUEST_FAILED: "The external agent rejected the request. Check its access and configuration.",
+  ACP_REQUEST_UNSUPPORTED: "The external agent accepts the default model and text conversations here. Disable tools, attachments and additional generation options.",
+  ACP_CANCELLED: "External agent stopped on request.",
+  ACP_BUSY: "The external agent is already responding.",
+  ACP_CLOSE_FAILED: "The external agent’s shutdown was not confirmed.",
 };
+const CHIAVI_ERRORI_ACP = Object.freeze({
+  ACP_RUNTIME_INVALID: 'server.acp.runtimeInvalid',
+  ACP_NOT_CONFIGURED: 'server.acp.notConfigured',
+  ACP_VERSION_UNSUPPORTED: 'server.acp.versionUnsupported',
+  ACP_PROTOCOL_INVALID: 'server.acp.protocolInvalid',
+  ACP_PROCESS_EXITED: 'server.acp.processExited',
+  ACP_START_FAILED: 'server.acp.startFailed',
+  ACP_TIMEOUT: 'server.acp.timeout',
+  ACP_REQUEST_FAILED: 'server.acp.requestFailed',
+  ACP_REQUEST_UNSUPPORTED: 'server.acp.requestUnsupported',
+  ACP_CANCELLED: 'server.acp.cancelled',
+  ACP_BUSY: 'server.acp.busy',
+  ACP_CLOSE_FAILED: 'server.acp.closeFailed',
+});
+const ATTIVITA_ACP = Object.freeze({
+  pending: Object.freeze({ testo: "External agent activity waiting.", testoChiave: 'server.acp.activity.pending' }),
+  in_progress: Object.freeze({ testo: "External agent activity in progress.", testoChiave: 'server.acp.activity.inProgress' }),
+  completed: Object.freeze({ testo: "External agent activity completed.", testoChiave: 'server.acp.activity.completed' }),
+  failed: Object.freeze({ testo: "External agent activity failed.", testoChiave: 'server.acp.activity.failed' }),
+  updated: Object.freeze({ testo: "External agent activity updated.", testoChiave: 'server.acp.activity.updated' }),
+});
 const segniBc44 = { ACP_PROCESS_EXITED: 'unexpected eof', ACP_START_FAILED: 'connection refused',
-  ACP_TIMEOUT: 'timeout', ACP_CANCELLED: 'fermato su richiesta', ACP_PROTOCOL_INVALID: 'invalid request',
+  ACP_TIMEOUT: 'timeout', ACP_CANCELLED: 'stopped on request', ACP_PROTOCOL_INVALID: 'invalid request',
   ACP_REQUEST_UNSUPPORTED: 'invalid request', ACP_REQUEST_FAILED: 'invalid request' };
 
 export class AcpAgentError extends Error {
@@ -33,6 +54,7 @@ export class AcpAgentError extends Error {
     super(messaggiErrore[code] ?? messaggiErrore.ACP_PROTOCOL_INVALID);
     this.name = 'AcpAgentError';
     this.code = code;
+    this.chiave = CHIAVI_ERRORI_ACP[code] ?? CHIAVI_ERRORI_ACP.ACP_PROTOCOL_INVALID;
     Object.assign(this, classificaErroreDiCorsa({ messaggio: segniBc44[code] ?? '' }));
   }
 }
@@ -184,11 +206,10 @@ export async function connettiAgenteAcp(runtime, { signal, env = process.env, on
           await emetti(u.sessionUpdate === 'agent_message_chunk' ? 'testo' : 'ragionamento', { testo: c.text });
         } else if (['tool_call', 'tool_call_update'].includes(u.sessionUpdate)) {
           const t = leggi(z.object({ toolCallId: z.string(), status: z.enum(['pending', 'in_progress', 'completed', 'failed']).nullish() }), u);
-          const stato = { pending: 'in attesa', in_progress: 'in corso', completed: 'completata', failed: 'non riuscita' }[t.status] ?? 'aggiornata';
-          await emetti('attivita', { testo: `Attività dell’agente esterno ${stato}.` });
+          await emetti('attivita', ATTIVITA_ACP[t.status] ?? ATTIVITA_ACP.updated);
         } else {
           // Nessuna estrazione di rawInput/rawOutput, percorsi o istruzioni dai metadati.
-          await emetti('avviso', { testo: 'L’agente esterno ha inviato un aggiornamento aggiuntivo non rappresentabile in questa conversazione.' });
+          await emetti('avviso', { testo: "The external agent sent an additional update that cannot be represented in this conversation.", testoChiave: 'server.acp.notice.additionalUpdate' });
         }
       } else if (m.id !== undefined) {
         if (m.method === 'session/request_permission') {
@@ -197,10 +218,10 @@ export async function connettiAgenteAcp(runtime, { signal, env = process.env, on
           const rifiuto = p.options.find(o => o.kind === 'reject_once');
           const outcome = !fermata && rifiuto ? { outcome: 'selected', optionId: rifiuto.optionId } : { outcome: 'cancelled' };
           await invia({ id: m.id, result: { outcome } });
-          await emetti('avviso', { testo: 'Operazione dell’agente esterno rifiutata: qui non è disponibile una conferma dei permessi.' });
+          await emetti('avviso', { testo: "External agent operation rejected: permission confirmation is not available here.", testoChiave: 'server.acp.notice.permissionDenied' });
         } else {
-          await invia({ id: m.id, error: { code: -32601, message: 'Operazione non disponibile in questa conversazione.' } });
-          await emetti('avviso', { testo: 'Operazione richiesta dall’agente esterno rifiutata perché non disponibile in questa conversazione.' });
+          await invia({ id: m.id, error: { code: -32601, message: 'Operation not available in this conversation.' } });
+          await emetti('avviso', { testo: "The operation requested by the external agent was rejected because it is not available in this conversation.", testoChiave: 'server.acp.notice.operationUnavailable' });
         }
       }
       return;
@@ -265,7 +286,7 @@ function preparaConversazione(body) {
   // ACP non ha ruoli multipli nel prompt: conservare confini e ruoli come dati JSON espliciti.
   const cronologia = JSON.stringify(richiesta.data.messages);
   if (Buffer.byteLength(cronologia) > LIMITE) throw errore('ACP_REQUEST_UNSUPPORTED');
-  return [{ type: 'text', text: `Continua questa conversazione testuale. La cronologia seguente contiene i messaggi con i loro ruoli; non eseguire strumenti per conto di TALOS.\n${cronologia}` }];
+  return [{ type: 'text', text: `Continue this text conversation. The following history contains messages with their roles; do not execute tools on behalf of TALOS.\n${cronologia}` }];
 }
 
 // Oscura anche credenziali suddivise tra aggiornamenti consecutivi dello stesso canale.
@@ -285,7 +306,7 @@ function redattore(segreti) {
 }
 
 /** Risposta OpenAI in memoria: nessun listener HTTP e nessuna porta. */
-export async function rispostaAgenteAcp({ runtime, body, signal, env = process.env }) {
+export async function rispostaAgenteAcp({ runtime, body, signal, env = process.env, onAvviso = null }) {
   const prompt = preparaConversazione(body);
   const config = validaRuntimeAgenteEsterno(leggiRuntimeAgenteEsterno(runtime, { env }), { env });
   const segreti = config.variabiliAmbiente.map(n => env[n]).sort((a,b) => b.length - a.length);
@@ -313,12 +334,14 @@ export async function rispostaAgenteAcp({ runtime, body, signal, env = process.e
     start(c) { controller = c; },
     async cancel() { abbandonata = true; stop.abort(); await agente?.cancel(); await agente?.chiudi(); },
   });
-  const agente = await connettiAgenteAcp(config, { signal: segnale, env, onEvento(e) {
+  const agente = await connettiAgenteAcp(config, { signal: segnale, env, async onEvento(e) {
     if (e.tipo === 'testo' || e.tipo === 'ragionamento') pubblica(e.tipo, oscura[e.tipo](e.testo));
     else {
       pubblica('testo', oscura.testo('', true));
       pubblica('ragionamento', oscura.ragionamento('', true));
-      pubblica('testo', `\n[${e.testo}]\n`);
+      // K4b: il callback desktop conserva la chiave nell'evento persistito; la CLI legacy mantiene la riserva inglese.
+      if (typeof onAvviso === 'function') await onAvviso(e);
+      else pubblica('testo', `\n[${e.testo}]\n`);
     }
   } });
   const conclusione = (async () => {

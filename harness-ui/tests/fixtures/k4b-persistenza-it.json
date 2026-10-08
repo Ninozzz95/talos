@@ -1,0 +1,7 @@
+{
+  "sessionPersistence.childNotSaved": "Il risultato del sotto-agente non è stato salvato su disco. La coda in memoria resta in pausa: conserva la diagnosi prima di riavviare.",
+  "sessionPersistence.historyNotSaved": "La conversazione di questo giro non è stata salvata su disco ({detail}): dopo un riavvio il giro andrà perso. Conserva la diagnosi.",
+  "sessionPersistence.childNotConfirmed": "Il risultato del sotto-agente non è stato confermato su disco. La coda in memoria resta in pausa: conserva la diagnosi prima di riavviare.",
+  "sessionPersistence.messageNotSaved": "Il nuovo messaggio non è stato salvato su disco ({detail}): dopo un riavvio questo giro andrà perso.",
+  "sessionPersistence.compactionNotSaved": "La compattazione di questo giro non è stata salvata su disco ({detail}): dopo un riavvio il turno ripartirà dalla storia intera."
+}

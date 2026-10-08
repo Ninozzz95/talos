@@ -70,6 +70,9 @@ function documentoFinto() {
       getAttribute: (k) => (attributi.has(k) ? attributi.get(k) : null),
       append: (...x) => { for (const y of x) { if (y && typeof y === 'object') y.padre = nodo; nodo.figli.push(y); } },
       appendChild: (x) => { nodo.append(x); return x; },
+      /* C2 R6 (08/10) — il segno «permesso ereditato» si mette PRIMA della colonna dell'esito (`before`). */
+      before: (x) => { const fratelli = nodo.padre.figli; x.padre = nodo.padre; fratelli.splice(fratelli.indexOf(nodo), 0, x); },
+      prepend: (...x) => { for (const y of [...x].reverse()) { if (y && typeof y === 'object') y.padre = nodo; nodo.figli.unshift(y); } },
       replaceChildren: (...x) => { for (const f of nodo.figli) if (f && typeof f === 'object') f.padre = null; nodo.figli = []; nodo.append(...x); },
       remove: () => { if (nodo.padre) nodo.padre.figli = nodo.padre.figli.filter((f) => f !== nodo); nodo.padre = null; },
       get isConnected() { return nodo.padre !== null; },
@@ -82,6 +85,9 @@ function documentoFinto() {
       },
       focus: () => { doc.activeElement = nodo; },
       querySelector: (selettore) => {
+        /* C2 R6 (08/10) — `:scope > .classe` cerca SOLO fra i figli diretti, come nel DOM vero. */
+        const diretto = /^:scope > \.([\w-]+)$/u.exec(selettore);
+        if (diretto) return nodo.figli.find((f) => f && typeof f === 'object' && f.classi?.has(diretto[1])) ?? null;
         if (!selettore.startsWith('.')) throw new Error(`documentoFinto: selettore non gestito «${selettore}»`);
         const classe = selettore.slice(1);
         const cerca = (n) => {
@@ -268,7 +274,7 @@ test('FIGLIA-BERSAGLIO: JSON a metà non è un errore, ed è meglio niente che u
 let contatoreSessioniDiProva = 0;
 
 /** Monta con un flusso finto; ritorna la maniglia, il documento e la spia sul flusso. */
-function monta({ eventiIniziali = [], onIndietro = () => {}, sessionId = `s-prova-${(contatoreSessioniDiProva += 1)}` } = {}) {
+function monta({ eventiIniziali = [], onIndietro = () => {}, sessionId = `s-prova-${(contatoreSessioniDiProva += 1)}`, nomeSessione = null } = {}) {
   const doc = documentoFinto();
   const contenitore = doc.createElement('div');
   doc.radice.append(contenitore);
@@ -287,7 +293,7 @@ function monta({ eventiIniziali = [], onIndietro = () => {}, sessionId = `s-prov
     for (const e of eventiIniziali) onEvento(e); // il replay arriva SUBITO, come `iscriviti()`
     return () => { spia.chiusure += 1; };
   };
-  const vista = montaConversazioneFiglia(contenitore, { sessionId, nome: 'leggi il ledger', apriFlusso, onIndietro, document: doc });
+  const vista = montaConversazioneFiglia(contenitore, { sessionId, nome: 'leggi il ledger', apriFlusso, onIndietro, document: doc, nomeSessione });
   return { doc, contenitore, chiamante, spia, vista, sessionId };
 }
 
@@ -350,6 +356,33 @@ test('FIGLIA-VIVA: un evento che arriva DOPO il montaggio compare senza rimontar
 
   spia.manda({ type: 'RunFinished', outcome: 'fine-lavoro' });
   assert.equal(unaConClasse(vista.elemento, 'talos-badge').textContent, 'Conclusa');
+});
+
+test('FIGLIA-R6: un permesso dato PIÙ IN ALTO si vede sulla riga — dal rigioco, dal vivo, una volta sola, e mai l’id', () => {
+  const ricevuta = (sessionId) => ({ receipt: { kind: 'tool-operation', consentitoDa: { sessionId, tipo: 'cartella' } } });
+  const nomi = (id) => (id === 's-padre' ? 'Rifai il sito' : null);
+  const segni = (n) => conClasse(n, 'talos-tool-row__consentito-da');
+
+  /* Dal rigioco: il risultato c'è già quando la riga nasce. */
+  const primo = monta({ nomeSessione: nomi, eventiIniziali: [START(), TOOL_START('t1', 'scrivi'), TOOL_ARGS('t1', '{"percorso":"../fuori/a.md"}'), TOOL_RESULT('t1', 'ok', ricevuta('s-padre'))] });
+  const riga = unaConClasse(primo.vista.elemento, 'talos-tool-row');
+  assert.equal(segni(riga).length, 1);
+  assert.equal(segni(riga)[0].textContent, 'Permesso ereditato');
+  assert.equal(segni(riga)[0].title, 'Consentito da un permesso dato in «Rifai il sito».');
+  assert.ok(riga.figli.indexOf(segni(riga)[0]) < riga.figli.indexOf(riga.querySelector('.talos-dot')), 'prima della colonna dell’esito');
+
+  /* Dal vivo: la riga nasce col Start, la ricevuta arriva dopo — e una riconnessione che la rimanda non raddoppia. */
+  const secondo = monta({ nomeSessione: nomi, eventiIniziali: [START(), TOOL_START('t1', 'scrivi')] });
+  assert.equal(segni(secondo.vista.elemento).length, 0, 'prima del risultato non si sa chi ha consentito');
+  secondo.spia.manda(TOOL_RESULT('t1', 'ok', ricevuta('s-nonno-ignoto')));
+  secondo.spia.manda(DELTA('m1', 'fatto'));
+  assert.equal(segni(secondo.vista.elemento).length, 1);
+  assert.equal(segni(secondo.vista.elemento)[0].title, 'Consentito da un permesso dato in una sessione più in alto.');
+  assert.ok(!testoIntero(secondo.vista.elemento).includes('s-nonno-ignoto') && !segni(secondo.vista.elemento)[0].title.includes('s-nonno-ignoto'), 'l’id non va a schermo');
+
+  /* ⛔ AL CONTRARIO: una ricevuta senza il campo (il sì era della figlia, o ha risposto la persona) non segna niente. */
+  const terzo = monta({ nomeSessione: nomi, eventiIniziali: [START(), TOOL_START('t1', 'scrivi'), TOOL_RESULT('t1', 'ok', { receipt: { kind: 'tool-operation' } })] });
+  assert.equal(segni(terzo.vista.elemento).length, 0);
 });
 
 test('FIGLIA-VUOTA: zero eventi non è un pannello bianco — e prima dell’apertura non si PROMETTE un collegamento', () => {

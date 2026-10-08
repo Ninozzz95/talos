@@ -111,6 +111,16 @@ test('D1-AGENT-PASSTHROUGH: il modo del padre e le figlie vive arrivano al kerne
   assert.equal(observed.figliViviAllAvvio, true);
 });
 
+test('C2A-AGENT-PASSTHROUGH: i permessi della catena arrivano al kernel senza logica, come il modo', async () => {
+  let observed;
+  const permessiCorrentiFn = () => ({ livelloAccesso: 'lettura', permessiPerAttrezzo: {} });
+  await avviaSessione({ cartella: '/tmp/x', task: { consegna: 'prova' }, modello: 'm', chiave: 'k',
+    onEvento: () => {}, agentRole: 'child', permessiCorrentiFn,
+    talosLavoraFn: talosLavoraFinto({ script: { esito: { comeFinita: 'concluso', detto: 'fatto' } }, cattura: (input) => { observed = input; } }),
+  });
+  assert.strictEqual(observed.permessiCorrentiFn, permessiCorrentiFn);
+});
+
 /* 24/09/2026, decisioni owner 36-39 — il canale della scelta sul piano arriva al kernel, e RunStarted dice allo schermo che il
  * piano di questo giro si presenta con l'attrezzo (niente «piano proposto» fabbricato dal testo finale). Al contrario: in Normale,
  * per una figlia, o senza l'attrezzo in elenco, il segnale non c'è. */
@@ -3443,7 +3453,7 @@ test('⛔⛔⛔ A2 — un plugin scambiato DOPO l\'avvio della sessione viene fe
 
     const dopo = await esegui('plugin__demo__saluta', {});
     assert.doesNotMatch(dopo, /v2 mai approvato/, 'il codice scambiato NON deve girare');
-    assert.match(dopo, /contenuto di questo plugin è cambiato da quando l'hai approvato/i, 'e la persona legge una frase, non un codice');
+    assert.match(dopo, /content of this plugin has changed since you approved it/i, 'e la persona legge una frase, non un codice');
     assert.doesNotMatch(dopo, /sha256|PLUGIN_[A-Z_]+|contenuto-cambiato/, 'niente nomi tecnici nel messaggio');
   } finally {
     rimuoviCartellaDiProva(cartella);

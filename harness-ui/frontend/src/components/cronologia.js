@@ -279,7 +279,7 @@ export function aggiornaCronologia(nav, conversazione, { fuoco = null, voci = nu
   const d = nav.ownerDocument;
   const elenco = voci || vociDaConversazione(conversazione);
   const lista = nav.querySelector('.talos-cronologia__lista') || nav;
-  nav.hidden = elenco.length < 2; // con un solo messaggio non c'e' niente da navigare
+  if (nav.hidden !== (elenco.length < 2)) nav.hidden = elenco.length < 2; // con un solo messaggio non c'e' niente da navigare (B2: solo se cambia)
   const esistenti = [...lista.querySelectorAll('.talos-cronologia__voce')];
   // si aggiungono/tolgono solo le differenze: il DOM stabile tiene il fuoco e le transizioni
   for (let i = esistenti.length; i < elenco.length; i += 1) {
@@ -299,19 +299,28 @@ export function aggiornaCronologia(nav, conversazione, { fuoco = null, voci = nu
   const attivaVera = Number(nav.dataset.attivaVera || nav.dataset.attiva || 0);
   let contaTuoi = 0;
   let contaSue = 0;
+  /*
+   * ⛔ B2 (bugfixer, 08/10/2026) — SI SCRIVE SOLO CIÒ CHE CAMBIA. Misurato in una risposta lunga dentro una chat da 1000 giri:
+   *   questa funzione girava ~45 volte al secondo e riscriveva su OGNI bottone indice, lato, tono, etichetta e tab-stop anche
+   *   identici — 54.720 scritture per attributo, 273.600 mutazioni nella pagina in 38 s, che ogni osservatore (calm-controls,
+   *   sfondo) doveva poi esaminare. Uno `setAttribute` con lo stesso valore genera comunque un record di mutazione (W3C bug
+   *   20131 e 19402, letti l'08/10/2026): quindi si confronta prima. A schermo non cambia niente.
+   */
+  const metti = (el, nome, valore) => { if (el.getAttribute(nome) !== valore) el.setAttribute(nome, valore); };
+  const togli = (el, nome) => { if (el.hasAttribute(nome)) el.removeAttribute(nome); };
   const bottoni = [...lista.querySelectorAll('.talos-cronologia__voce')];
   bottoni.forEach((b, i) => {
     const v = elenco[i];
     const posizione = v.diUtente ? (contaTuoi += 1) : (contaSue += 1);
-    b.dataset.indice = String(i);
+    metti(b, 'data-indice', String(i));
     /*
      * ⛔ BC-08 — il LATO sta in un attributo suo, e il TONO in un altro. Prima `data-tono="utente"`
      * faceva le due cose insieme, e infatti la linea della persona era `--talos-success`: verde, cioè
      * «riuscito», per un messaggio che non ha nessun esito. Un attributo, un significato.
      */
-    b.dataset.lato = v.lato;
-    b.dataset.tono = v.tono || '';
-    b.setAttribute('aria-label', etichettaVoce(v, posizione));
+    metti(b, 'data-lato', String(v.lato));
+    metti(b, 'data-tono', v.tono || '');
+    metti(b, 'aria-label', etichettaVoce(v, posizione));
     /*
      * ⛔ 07/9, owner (screenshot): al passaggio del mouse comparivano DUE riquadri sovrapposti con
      *   lo stesso testo — il nostro fumetto e il tooltip NATIVO che Chrome disegna da `title`, che
@@ -319,16 +328,19 @@ export function aggiornaCronologia(nav, conversazione, { fuoco = null, voci = nu
      *   (foto `cronologia-hover.png`). Il `title` non serviva a nessuno: chi legge con la tastiera o
      *   con lo screen reader ha `aria-label` qui sopra, e chi passa il mouse ha il fumetto.
      */
-    b.removeAttribute('title');
+    if (b.hasAttribute('title')) b.removeAttribute('title');
     const eAttiva = i === attivo;
     b.classList.toggle('talos-cronologia__voce--attiva', eAttiva);
     // MDN, `aria-current` (12/09/2026): per un indice che segue lo scorrimento il valore è `location`
-    if (i === attivaVera) b.setAttribute('aria-current', 'location'); else b.removeAttribute('aria-current');
+    if (i === attivaVera) metti(b, 'aria-current', 'location'); else togli(b, 'aria-current');
     // roving tab-stop: una sola fermata di Tab su tutta la barra, le frecce fanno il resto
-    b.tabIndex = i === attivaVera ? 0 : -1;
-    b.querySelector('.talos-cronologia__linea').style.setProperty('--lente', `${larghezzaLente(i, attivo)}px`);
+    const fermata = i === attivaVera ? 0 : -1;
+    if (b.tabIndex !== fermata || !b.hasAttribute('tabindex')) b.tabIndex = fermata;
+    const linea = b.querySelector('.talos-cronologia__linea');
+    const lente = `${larghezzaLente(i, attivo)}px`;
+    if (linea.style.getPropertyValue('--lente') !== lente) linea.style.setProperty('--lente', lente);
   });
-  nav.dataset.attiva = String(attivo);
+  metti(nav, 'data-attiva', String(attivo));
   /*
    * ⛔ BC-08 — QUANDO LE VOCI NON CI STANNO. Con due lati le voci raddoppiano e il tetto della lista
    * (`min(70vh, 40rem)`) si riempie presto: a 900 px di altezza ci stanno 63 voci su 10 px, cioè ~31
@@ -456,9 +468,33 @@ export function collegaCronologia(nav, conversazione, { finestra = globalThis } 
     });
   };
   scorrevole.addEventListener('scroll', seguiScorrimento, { passive: true });
-  const osservatore = new finestra.MutationObserver(() => { aggiornaCronologia(nav, conversazione, { segui: !inMano() }); });
+  /*
+   * ⛔⛔ B1 (07/10/2026, misurato sul 4174 col profilo CPU) — L'OSSERVATORE MARCA, IL FOTOGRAMMA DISEGNA.
+   *   Prima ogni lotto di mutazioni della conversazione rifaceva SUBITO tutto il segnavia: `vociDaConversazione` (una
+   *   lettura di tutti i messaggi) e una riscrittura di attributi, etichette e stili di ogni voce. Durante il replay di una
+   *   sessione da 1286 giri i lotti sono migliaia (uno per evento rigiocato): 10,3 s su 25,6 s campionati, la prima voce
+   *   del profilo, e ogni attributo riscritto rimbalzava nell'osservatore di `calm-controls`. ⇒ Una sola passata per
+   *   fotogramma, come `seguiScorrimento` qui sopra: lo stato finale è lo stesso (la passata legge la conversazione di
+   *   quel momento), cambiano solo quante volte la si rifà. Fonti 07/10/2026: web.dev «Avoid large, complex layouts and
+   *   layout thrashing»; DEV, «Using MutationObservers for real-time UI updates» (batch con un flag e rAF).
+   */
+  let aggiornamentoInCoda = null;
+  const programmaAggiornamento = () => {
+    if (aggiornamentoInCoda !== null) return;
+    aggiornamentoInCoda = (finestra.requestAnimationFrame || setTimeout)(() => {
+      aggiornamentoInCoda = null;
+      aggiornaCronologia(nav, conversazione, { segui: !inMano() });
+    });
+  };
+  const osservatore = new finestra.MutationObserver(programmaAggiornamento);
   osservatore.observe(conversazione, { childList: true, subtree: true });
   aggiornaCronologia(nav, conversazione);
   seguiScorrimento(); // il segnavia parte dalla posizione VERA, non dalla voce 0
-  return () => { scorrevole.removeEventListener('scroll', seguiScorrimento); osservatore.disconnect(); delete nav.dataset.collegata; };
+  return () => {
+    scorrevole.removeEventListener('scroll', seguiScorrimento);
+    osservatore.disconnect();
+    if (aggiornamentoInCoda !== null) (finestra.cancelAnimationFrame || clearTimeout)(aggiornamentoInCoda);
+    aggiornamentoInCoda = null;
+    delete nav.dataset.collegata;
+  };
 }

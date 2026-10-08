@@ -34,15 +34,27 @@ async function apri(page, { modello }) {
   return { creazioni, scritture };
 }
 
+/* Automazioni a due porte (owner 08/10/2026 notte): il foglio è quello v2 — istruzioni libere al posto del task del corpus.
+   La decisione del 24/09 sul modello resta identica, e qui si prova insieme alla forma del corpo v2. */
+async function compila(foglio) {
+  await foglio.locator('[data-auto-foglio-nome]').fill('Rapporto mattutino');
+  await foglio.locator('[data-auto-foglio-istruzioni]').fill('Riassumi i commit di ieri.');
+  await foglio.locator('[data-auto-foglio-cartella]').fill('C:\\progetto-di-prova');
+}
+
 test('R4-AUTO-MODEL-FORM: il modulo dice con quale modello girerà l’automazione e lo manda con la creazione', async ({ page }) => {
   const { creazioni, scritture } = await apri(page, { modello: 'z-ai/glm-5.3-flash' });
   await page.locator('[data-automation-action="new"]').first().evaluate((el) => el.click());
   const foglio = page.locator('#sheetBody');
   await expect(foglio).toContainText('Userà glm-5.3-flash, il modello scelto nella chat.');
+  await compila(foglio);
   await foglio.getByRole('button', { name: 'Crea automazione' }).click();
   await expect.poll(() => creazioni.length).toBe(1);
   expect(creazioni[0].modello).toBe('z-ai/glm-5.3-flash');
-  expect(creazioni[0].taskId).toBe('verifica-catalogo');
+  expect(creazioni[0]).toMatchObject({ nome: 'Rapporto mattutino', istruzioni: 'Riassumi i commit di ieri.', cartella: 'C:\\progetto-di-prova',
+    permessi: 'Workspace write', coordinazione: false, ripeti: null, pianificazione: { tipo: 'giornaliera', ora: '09:00' } });
+  expect(typeof creazioni[0].fusoOrario).toBe('string');
+  expect(Object.hasOwn(creazioni[0], 'taskId')).toBe(false);
   expect(scritture).toEqual([]);
 });
 
@@ -51,7 +63,19 @@ test('R4-AUTO-MODEL-FORM-DEFAULT: senza un modello scelto il modulo lo dice e no
   await page.locator('[data-automation-action="new"]').first().evaluate((el) => el.click());
   const foglio = page.locator('#sheetBody');
   await expect(foglio).toContainText('Userà il modello predefinito del server: nella chat non ne hai scelto uno.');
+  await compila(foglio);
   await foglio.getByRole('button', { name: 'Crea automazione' }).click();
   await expect.poll(() => creazioni.length).toBe(1);
   expect(Object.hasOwn(creazioni[0], 'modello')).toBe(false);
+});
+
+test('R4-AUTO-FORM-REQUIRED: senza nome, istruzioni e cartella il foglio non manda niente e lo dice', async ({ page }) => {
+  const { creazioni } = await apri(page, { modello: null });
+  await page.locator('[data-automation-action="new"]').first().evaluate((el) => el.click());
+  const foglio = page.locator('#sheetBody');
+  await foglio.locator('[data-auto-foglio-cartella]').fill('');
+  await foglio.getByRole('button', { name: 'Crea automazione' }).click();
+  await expect(foglio.locator('[data-auto-foglio-errore]')).toBeVisible();
+  await expect(foglio.locator('[data-auto-foglio-nome]')).toBeFocused();
+  expect(creazioni).toEqual([]);
 });

@@ -97,7 +97,7 @@ export function cartelleFrequenti({ homedirFn = homedir, statSyncFn = statSync, 
     const etichetta = percorso.replace(/[/\\]+$/, '').split(/[/\\]/).pop() || percorso;
     trovate.push({ etichetta, percorso });
   }
-  if (trovate.length > 0) return trovate; // ⛔ cronologia reale disponibile: MAI mescolarla con Desktop/Downloads/Documenti sotto — quelle tre non sono "più usate", solo il ripiego a freddo.
+  if (trovate.length > 0) return trovate; // ⛔ cronologia reale disponibile: MAI mescolarla con Desktop/Downloads/Documenti sotto — quelle tre non sono le piu usate, solo il ripiego a freddo.
   return cartelleStandard({ homedirFn, statSyncFn });
 }
 

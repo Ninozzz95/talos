@@ -40,7 +40,7 @@ test('CONFIG-HOOKS-LEGACY-ONLY: al contrario, un progetto che ha solo il nome ve
   scrivi(c, '.harness-ui-hooks.json', { hooks: [hook('vecchio', 'echo v')] });
   assert.deepEqual((await caricaHooks({ cartella: c })).hooks.map((h) => h.id), ['vecchio']);
   scrivi(c, '.talos/hooks.json', '{ non è json');
-  await assert.rejects(caricaHooks({ cartella: c }), /\.talos\/hooks\.json non è un JSON valido/u);
+  await assert.rejects(caricaHooks({ cartella: c }), /\.talos\/hooks\.json is not valid JSON/u);
 });
 
 test('CONFIG-MCP-BOTH: i server MCP si leggono dalle due posizioni; stesso id ⇒ vince `.talos/`', async () => {

@@ -247,6 +247,26 @@ function refreshAll({ reset = false } = {}) {
   schedule();
 }
 
+/* ⛔ B1 (bugfixer, 08/10/2026): gli osservatori chiedono UN aggiornamento per fotogramma, non uno per mutazione.
+   Misurato aprendo una chat da 1000 giri (12.001 eventi rigiocati): la colonna della conversazione cambia figli a ogni
+   evento, e ogni volta `prepare` leggeva `getBoundingClientRect` (impaginazione forzata) e ridisegnava la scena —
+   2,7 s dei 5,7 s dell'apertura, chat ancora sotto il velo. Ora l'osservatore segna soltanto, e la misura col disegno
+   si fanno una volta nel fotogramma dopo (layout thrashing: dev.to/aayla_secura «Layout thrashing», FastDom; letti
+   l'08/10/2026). Il `reset` chiesto da una mutazione qualunque del fotogramma non si perde. `refresh()` dell'API resta
+   immediato. */
+let refreshInAttesa = 0;
+let resetInAttesa = false;
+function chiediRefresh({ reset = false } = {}) {
+  resetInAttesa = resetInAttesa || reset;
+  if (refreshInAttesa || destroyed) return;
+  refreshInAttesa = requestAnimationFrame(() => {
+    refreshInAttesa = 0;
+    const azzera = resetInAttesa;
+    resetInAttesa = false;
+    if (!destroyed) refreshAll({ reset: azzera });
+  });
+}
+
 function mountStage(parent, { preview = false } = {}) {
   if (!parent || parent.querySelector(':scope > canvas.talos-motion-canvas')) return null;
   const canvas = document.createElement('canvas');
@@ -331,17 +351,17 @@ export function initTalosDesktopBackground() {
   rootObserver = new MutationObserver((records) => {
     const relevant = records.some((record) => record.type === 'attributes' || record.type === 'childList');
     if (!relevant) return;
-    refreshAll({ reset: records.some((record) => record.attributeName?.startsWith('data-talos') || record.attributeName === 'data-theme') });
+    chiediRefresh({ reset: records.some((record) => record.attributeName?.startsWith('data-talos') || record.attributeName === 'data-theme') });
   });
   rootObserver.observe(watchTarget, { attributes: true, attributeFilter: ['class', 'data-theme', 'data-talos-theme', 'data-talos-scene', 'data-talos-motion-mode', 'data-talos-motion-quality', 'style'] });
   if (document.body) rootObserver.observe(document.body, { attributes: true, attributeFilter: ['class'] });
   const conversation = chat.querySelector('.talos-conversation__column');
   if (conversation) {
-    mutationObserver = new MutationObserver(() => refreshAll({ reset: false }));
+    mutationObserver = new MutationObserver(() => chiediRefresh({ reset: false }));
     mutationObserver.observe(conversation, { childList: true, subtree: false });
   }
   mediaQuery = matchMedia('(prefers-reduced-motion: reduce)');
-  const mediaHandler = () => refreshAll({ reset: false });
+  const mediaHandler = () => chiediRefresh({ reset: false });
   mediaQuery.addEventListener?.('change', mediaHandler);
   document.addEventListener('visibilitychange', schedule);
   window.addEventListener('pageshow', schedule);
@@ -365,6 +385,8 @@ export function initTalosDesktopBackground() {
     destroy: () => {
       destroyed = true;
       if (raf) cancelAnimationFrame(raf);
+      if (refreshInAttesa) cancelAnimationFrame(refreshInAttesa);
+      refreshInAttesa = 0;
       rootObserver?.disconnect(); mutationObserver?.disconnect();
       for (const stage of [...stages]) stage.dispose?.();
       document.querySelector('[data-talos-motion-preview]')?._talosDispose?.();

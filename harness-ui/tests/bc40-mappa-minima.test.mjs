@@ -73,10 +73,10 @@ test('BC-40: una mappa che si ferma in profondità lo DICHIARA, e non si dice co
     assert.equal(mappa.profonditaRaggiunta, 2);
 
     const testo = testoMappaCartelle(mappa, { radice: base });
-    assert.match(testo, /MAPPA INCOMPLETA PER SCELTA/);
-    assert.ok(!testo.includes('albero COMPLETO'),
+    assert.match(testo, /MAP INCOMPLETE BY CHOICE|MAPPA INCOMPLETA PER SCELTA/);
+    assert.ok(!testo.includes('albero COMPLETO') && !testo.includes('COMPLETE tree'),
       '⛔ una mappa che si ferma a 2 su un albero profondo 4 NON è completa');
-    assert.match(testo, /primi 2 livelli/, '⛔ deve dire FIN DOVE è vera, non solo che è tagliata');
+    assert.match(testo, /first 2 levels|primi 2 livelli/, '⛔ deve dire FIN DOVE è vera, non solo che è tagliata');
   } finally { await rimuoviCartellaDiProvaAttesa(base); }
 });
 
@@ -92,7 +92,7 @@ test('BC-40: il testo nomina gli attrezzi con cui si scende, e la forma esatta d
     /* ⛔ Il promemoria che conta sta in FONDO, dopo l’elenco: è dove il modello guarda per ultimo
        prima di rispondere ([[il-promemoria-dove-guarda-per-ultimo]]). */
     const coda = testo.slice(testo.lastIndexOf('\n', testo.length - 2));
-    assert.match(coda, /non vuol dire che non esista/i,
+    assert.match(coda, /does NOT mean it does not exist|non vuol dire che non esista/i,
       '⛔ la riga che impedisce «la cartella non esiste» deve essere l’ULTIMA, non la prima');
   } finally { await rimuoviCartellaDiProvaAttesa(base); }
 });
@@ -108,7 +108,7 @@ test('BC-40, AL CONTRARIO: un albero che finisce entro i 2 livelli si dichiara C
     assert.equal(mappa.fermatoInProfondita, false,
       '⛔ nessuna cartella è rimasta fuori: dichiarare una riduzione che non c’è è una bugia uguale e contraria');
     const testo = testoMappaCartelle(mappa, { radice: base });
-    assert.match(testo, /albero COMPLETO/);
+    assert.match(testo, /albero COMPLETO|COMPLETE tree/);
     assert.ok(!testo.includes('INCOMPLETA'));
   } finally { await rimuoviCartellaDiProvaAttesa(base); }
 });
@@ -122,7 +122,7 @@ test('BC-40, AL CONTRARIO: una cartella vuota al secondo livello NON conta come 
     const mappa = await costruisciMappaCartelle({ radice: base });
     assert.deepEqual(mappa.cartelle.map((c) => c.percorso), ['src', 'src/vuota']);
     assert.equal(mappa.fermatoInProfondita, false);
-    assert.match(testoMappaCartelle(mappa, { radice: base }), /albero COMPLETO/);
+    assert.match(testoMappaCartelle(mappa, { radice: base }), /albero COMPLETO|COMPLETE tree/);
   } finally { await rimuoviCartellaDiProvaAttesa(base); }
 });
 
@@ -136,7 +136,7 @@ test('BC-40: la profondità piena resta disponibile via parametro, e allora non 
     const piena = await costruisciMappaCartelle({ radice: base, profonditaMax: 8 });
     assert.equal(piena.profonditaRaggiunta, 4);
     assert.equal(piena.fermatoInProfondita, false, '⛔ a profondità 8 l’albero ci sta tutto');
-    assert.match(testoMappaCartelle(piena, { radice: base }), /albero COMPLETO/);
+    assert.match(testoMappaCartelle(piena, { radice: base }), /albero COMPLETO|COMPLETE tree/);
     assert.deepEqual(
       piena.cartelle.map((c) => c.percorso),
       ['src', 'src/kernel', 'src/kernel/motore', 'src/kernel/motore/giu', 'tests'],
@@ -154,9 +154,9 @@ test('BC-40: il tetto di TOKEN che taglia in profondità finisce nello stesso ca
     const stretta = mappaEntroIlTetto(mappa, { radice: base, tettoToken: 120 });
     assert.equal(stretta.profonditaUsata, 1, '⛔ il tetto deve mordere');
     assert.equal(stretta.tagliataInProfondita, true);
-    assert.match(stretta.testo, /MAPPA INCOMPLETA PER SCELTA/,
+    assert.match(stretta.testo, /MAP INCOMPLETE BY CHOICE|MAPPA INCOMPLETA PER SCELTA/,
       '⛔ per chi legge, «ho scelto di fermarmi» e «il tetto mi ha fermato» sono la stessa cosa: sotto c’è altro');
-    assert.ok(!stretta.testo.includes('albero COMPLETO'));
+    assert.ok(!stretta.testo.includes('albero COMPLETO') && !stretta.testo.includes('COMPLETE tree'));
   } finally { await rimuoviCartellaDiProvaAttesa(base); }
 });
 

@@ -263,25 +263,25 @@ export function talosResearchOpposingCandidate(claimText, citedIndex, sources, c
  */
 export function talosResearchOpposingPrompt(claim, passage) {
   return [
-    'Passaggio, copiato da UN’ALTRA fonte:',
+    'Passage, copied from ANOTHER source:',
     '"""',
     passage,
     '"""',
     '',
-    'Affermazione:',
+    'Claim:',
     claim,
     '',
-    'Questo passaggio CONTRADDICE l’affermazione?',
-    'Contraddire vuol dire dire il contrario, non tacere: se il passaggio',
-    'semplicemente non parla dell’affermazione, la risposta è NO.',
-    'Non usare altro: né quello che sai, né quello che ti sembra probabile.',
+    'Does this passage CONTRADICT the claim?',
+    'Contradict means stating the opposite, not silence: if the passage',
+    'simply does not address the claim, the answer is NO.',
+    'Use nothing else: neither what you know, nor what seems likely.',
     '',
     // ⛔ Nessun menu con le barre: un modello lo ricopia invece di
     //   sceglierne una voce. Vedi la nota sulla domanda del primo giro.
-    'Rispondi con UNA riga sola. Comincia con SI oppure con NO,',
-    'poi un trattino e il motivo, massimo quindici parole.',
+    'Answer on ONE line only. Start with YES or NO,',
+    'then a dash and the reason, at most fifteen words.',
     '',
-    'Esempio di risposta: NO — il passaggio non parla di questo.',
+    'Example response: NO — the passage does not address this.',
   ].join('\n');
 }
 

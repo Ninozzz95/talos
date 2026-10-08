@@ -32,7 +32,7 @@ const intestazioniGet = (obj) => ({ get: (k) => obj[String(k).toLowerCase()] ?? 
 test('VIA-01 — la pagina che si lascia incorniciare resta nella CORNICE, anche con proxy e browser vero pronti (la via più economica vince)', () => {
   const dentro = decidiVia({ incorniciabile: true, url: 'https://example.org/', proxyDisponibile: true, vivoDisponibile: true });
   assert.equal(dentro.via, 'cornice');
-  assert.match(dentro.perche, /economica/i);
+  assert.match(dentro.perche, /cheapest/i);
   // AL CONTRARIO: la stessa pagina che NON si lascia incorniciare non resta nella cornice
   const fuori = decidiVia({ incorniciabile: false, motivo: 'X-Frame-Options: DENY', url: 'https://example.org/', proxyDisponibile: true, vivoDisponibile: true });
   assert.notEqual(fuori.via, 'cornice');
@@ -42,7 +42,7 @@ test('VIA-02 — vietata la cornice e proxy acceso: si passa dal PROXY, e il per
   const scelta = decidiVia({ incorniciabile: false, motivo: 'X-Frame-Options: DENY', url: 'https://github.com/anthropics', proxyDisponibile: true });
   assert.equal(scelta.via, 'proxy');
   assert.match(scelta.perche, /X-Frame-Options: DENY/);
-  assert.match(scelta.perche, /origine separata/i);
+  assert.match(scelta.perche, /separate from ours/i);
 });
 
 test('VIA-03 — senza proxy si va al BROWSER VERO; senza nessuno dei due resta la cornice, dicendo che resterà vuota', () => {
@@ -51,7 +51,7 @@ test('VIA-03 — senza proxy si va al BROWSER VERO; senza nessuno dei due resta 
   // AL CONTRARIO: se non c'è né proxy né browser vero non si inventa una corsia
   const niente = decidiVia({ incorniciabile: false, motivo: 'frame-ancestors', url: 'https://github.com/', proxyDisponibile: false, vivoDisponibile: false });
   assert.equal(niente.via, 'cornice');
-  assert.match(niente.perche, /vuota/i);
+  assert.match(niente.perche, /stay empty/i);
 });
 
 test('VIA-04 — dietro accesso si sceglie il BROWSER VERO anche col proxy acceso: il proxy non inoltra i cookie', () => {
@@ -64,13 +64,13 @@ test('VIA-04 — dietro accesso si sceglie il BROWSER VERO anche col proxy acces
   // e senza browser vero il proxy la mostra lo stesso, dicendo che sarà la vista di chi non ha fatto l'accesso
   const ripiego = decidiVia({ incorniciabile: false, url: 'https://github.com/login', proxyDisponibile: true, vivoDisponibile: false });
   assert.equal(ripiego.via, 'proxy');
-  assert.match(ripiego.perche, /accesso/i);
+  assert.match(ripiego.perche, /login/i);
 });
 
 test('VIA-05 — un indirizzo privato non lo tocca il proxy, ma il browser vero gira sul computer e ci arriva', () => {
   const conVivo = decidiVia({ incorniciabile: false, url: 'http://localhost:5173/', proxyDisponibile: true, vivoDisponibile: true });
   assert.equal(conVivo.via, 'vivo');
-  assert.match(conVivo.perche, /privati/i);
+  assert.match(conVivo.perche, /private addresses/i);
   // AL CONTRARIO: senza browser vero non si ripiega sul proxy — l'indirizzo privato resta fuori
   const senzaVivo = decidiVia({ incorniciabile: false, url: 'http://localhost:5173/', proxyDisponibile: true, vivoDisponibile: false });
   assert.equal(senzaVivo.via, 'cornice');
@@ -229,7 +229,7 @@ test('URL-01 — urlProxato costruisce il link e rifiuta i bersagli che il proxy
   // AL CONTRARIO: niente link per ciò che il proxy rifiuterebbe comunque — meglio un errore che un indirizzo che dà 403
   assert.throws(() => urlProxato('http://127.0.0.2:4301/s/abc', 'http://169.254.169.254/'), /link-local/i);
   assert.throws(() => urlProxato('http://127.0.0.2:4301/s/abc', 'file:///C:/x'), /http/i);
-  assert.throws(() => urlProxato('non-una-origine', 'https://github.com/'), /Origine del proxy non valida/);
+  assert.throws(() => urlProxato('non-una-origine', 'https://github.com/'), /Invalid proxy origin/);
 });
 
 /* ─────────────── chi va a prendere la pagina ─────────────── */

@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import { appendFileSync, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, parse as parsePath } from 'node:path';
+import { spawn } from 'node:child_process';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import test from 'node:test';
 
 import { eventiSenzaMessaggio, messaggiSenzaMessaggio, posizioneDelMessaggio, testoDelMessaggioAssistente, percorsoScrittoDaEvento, registraScritturaDiFiglia } from '../src/session-registry.mjs';
@@ -216,7 +218,7 @@ test('CTX-HEADER-ORPHAN-PENDING-RESTART — Doctor conta un pending senza journa
     const riavvio = createSessionRegistry({ cartellaStore });
     assert.deepEqual(await riavvio.ripristina(), { ripristinate: 0, totali: 1 });
     assert.deepEqual(riavvio.elenca(), []);
-    assert.deepEqual(riavvio.statoPersistenza().scartate, [{ sessionId, motivo: 'intestazione-pendente-senza-journal' }]);
+    assert.deepEqual(riavvio.statoPersistenza().scartate, [{ sessionId, motivo: 'intestazione-pendente-senza-journal', motivoChiave: 'server.sessionStore.reason.intestazionePendenteSenzaJournal' }]);
     assert.doesNotMatch(JSON.stringify(riavvio.statoPersistenza()), /prompt-segreto|\.pending/i);
   } finally { await rimuoviCartellaStoreDopoLeScritture(cartellaStore); }
 });
@@ -322,7 +324,7 @@ test('LOCAL-RESUME-JSON-01 — recupera nella stessa sessione senza riscrivere c
     assert.deepEqual(inviati.find(m => m.tool_call_id === 'valida'), storia[3]);
     assert.equal(inviati.some(m => m.tool_call_id === 'rotta'), false, 'nessun risultato orfano');
     assert.match(inviati.find(m => m.role === 'assistant').content, /README\.md/);
-    assert.match(inviati.find(m => m.role === 'assistant').content, /Recupero dello storico/);
+    assert.match(inviati.find(m => m.role === 'assistant').content, /History recovery/);
     assert.deepEqual(inviati.at(-1), { role: 'user', content: 'ci sie?' });
     const aggiornato = readFileSync(join(cartellaStore, `${sessionId}.jsonl`), 'utf8');
     assert.equal(aggiornato.slice(0, originale.length), originale, 'il prefisso originale è intatto');
@@ -367,7 +369,7 @@ test('LOCAL-RESUME-JSON-02 — riavvio dopo checkpoint, stesso storico e recuper
     await secondo.ripristina();
     assert.equal(secondo.resume(sessionId, 'riprova per favore').sessionId, sessionId);
     const messaggi = finta.ultimoInput.messaggiIniziali;
-    assert.equal(messaggi.filter(m => typeof m.content === 'string' && m.content.includes('Recupero dello storico')).length, 1);
+    assert.equal(messaggi.filter(m => typeof m.content === 'string' && m.content.includes('History recovery')).length, 1);
     assert.equal(messaggi.filter(m => m.content === 'ci sei?').length, 1);
     assert.equal(messaggi.at(-1).content, 'riprova per favore');
     const record = readFileSync(join(cartellaStore, `${sessionId}.jsonl`), 'utf8').trim().split('\n').map(JSON.parse);
@@ -1834,6 +1836,100 @@ test('F4-03 REG-FUORI-03: senza interfaccia (automazioni, passi dei Workflow) la
 });
 
 /*
+ * ⛔ REG-FUORI-03B (05/10/2026) — l'osservatore di silenzio di una domanda MAI risolta NON tiene vivo il processo.
+ * Rosso storico: la suite intera restava appesa DOPO l'ultimo ✔ — F4-03 lascia la domanda «shell» in attesa PER
+ * PROGETTO e l'osservatore di silenzio (primo colpo a 45s, poi ogni 60s) era un setTimeout REF'D che si riarma
+ * all'infinito: l'event loop non si svuota mai, node:test non esce (in CI il passo restava morto 15 minuti sul
+ * messaggio «Promise resolution is still pending»). La cura sta nel registro (unref su primo e ripeti); questo
+ * test la chioda nero-scatola: un figlio node nella STESSA situazione deve uscire DA SOLO dopo la ricevuta.
+ * ⛔ N3 (review 05/10): questo figlio becca il mutante «primo» solo perché l'attesa di default (45s) supera la
+ *    race di 12s — se abbassi ATTESA_SILENZIO_PRIMA_MS sotto la race, allunga la race o affida la beccata al
+ *    figlio a attese brevi del test R1/R2 qui sotto.
+ */
+test('⛔ REG-FUORI-03B: una domanda di approvazione mai risolta NON tiene vivo il processo (il figlio esce da solo)', { timeout: 20000 }, async () => {
+  const percorso = fileURLToPath(new URL('../src/session-registry.mjs', import.meta.url));
+  // pathToFileURL: nel figlio import() esige uno SCHEME — un percorso Windows nudo (C:\…) muore con
+  // ERR_UNSUPPORTED_ESM_URL_SCHEME ('c:'), su Linux con ERR_INVALID_MODULE_SPECIFIER. Da import.meta.url
+  // è corretto su entrambe le piattaforme.
+  const figlio = spawn(process.execPath, ['-e', `
+    import(process.env.PERCORSO_REGISTRO).then(({ createSessionRegistry }) => {
+      let ingresso;
+      const avviaSessioneFn = async (input) => { ingresso = input; input.onEvento({ type: 'RunStarted', threadId: 't1', runId: 'r1' }); return new Promise(() => {}); };
+      const registro = createSessionRegistry({ avviaSessioneFn, preparaEsecuzioneFn: () => ({ cartella: '/tmp/x', comandoProva: 'npm test', task: { id: 'task-vero', consegna: 'c' } }), modello: 'm', chiave: 'k', cartellaEsisteFn: () => true });
+      registro.avvia('task-vero');
+      setTimeout(() => {
+        ingresso.chiediApprovazioneFn({ tipo: 'shell', comando: 'cat .env' }); // mai risolta: resta pendente PER PROGETTO
+        console.log('PRONTO-CON-DOMANDA-PENDENTE');
+      }, 50);
+    }).catch((errore) => { console.error('IMPORT-FALLITO', errore && errore.message || errore); process.exit(2); }); // ⛔ N2: l'import fallito non deve travestirsi da «non esce da solo»
+  `], { env: { ...process.env, PERCORSO_REGISTRO: pathToFileURL(percorso).href }, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
+  let fuori = '';
+  let errori = '';
+  figlio.stdout.on('data', (d) => { fuori += d; });
+  figlio.stderr.on('data', (d) => { errori += d; });
+  figlio.stderr.resume(); // ⛔ N1: senza drain, un figlio chiacchierone riempie la pipe e sembrerebbe «appeso»
+  const uscita = await Promise.race([
+    new Promise((risolvi) => figlio.on('exit', (codice) => risolvi({ codice }))),
+    new Promise((risolvi) => { const t = setTimeout(() => risolvi({ scaduta: true }), 12000); t.unref?.(); }),
+  ]);
+  if (uscita.scaduta) {
+    figlio.kill();
+    assert.fail(`il figlio non esce entro 12s (stderr del figlio: ${errori.slice(-300) || 'vuota'}): sospetto un timer ref'd (osservatore di silenzio senza unref?)`);
+  }
+  assert.equal(uscita.codice, 0, `il figlio è uscito con un codice inatteso (stderr: ${errori.slice(-300) || 'vuota'})`);
+  assert.ok(fuori.includes('PRONTO-CON-DOMANDA-PENDENTE'), 'il figlio arriva al fondo della preparazione prima di uscire');
+});
+
+/*
+ * ⛔⛔ REG-FUORI-03B — R1+R2 (review avversariale 05/10/2026) — le due buchi di copertura del test sopra, chiusi:
+ * R1: con le attese DI DEFAULT (45s > race 12s) il test becca solo il mutante «primo ref'd»; il mutante
+ *     «SOLO ripeti ref'd» sopravvive perché nel figlio `primo` non scade mai (il figlio muore ≪45s) e quindi
+ *     `ripeti` non viene mai armato. QUI le attese sono abbreviate via factory (100/100ms) e il figlio tiene
+ *     vivo SE STESSO con un timer proprio ref'd da 300ms: `primo` scade DAVVERO a 100ms e `rigioco` riarma
+ *     `ripeti` — se `ripeti` fosse ref'd, il figlio non uscirebbe MAI e la race scatta a 12s (rosso).
+ * R2: il marker ora prova anche la PENDENZA: una risoluzione AUTOMATICA della domanda (TTL, vietato dal
+ *     contratto «⛔ Mai un timeout automatico») entro la finestra farebbe uscire il figlio 3 con
+ *     DOMANDA-RISOLTA-DA-SOLA invece del marker — nessun rosso era possibile prima.
+ */
+test('⛔ REG-FUORI-03B R1+R2: a attese brevi (100/100ms) il ciclo di rigioco non tiene vivo il figlio e la domanda resta PENDENTE', { timeout: 20000 }, async () => {
+  const percorso = fileURLToPath(new URL('../src/session-registry.mjs', import.meta.url));
+  const figlio = spawn(process.execPath, ['-e', `
+    import(process.env.PERCORSO_REGISTRO).then(({ createSessionRegistry }) => {
+      let ingresso;
+      const avviaSessioneFn = async (input) => { ingresso = input; input.onEvento({ type: 'RunStarted', threadId: 't1', runId: 'r1' }); return new Promise(() => {}); };
+      const registro = createSessionRegistry({ avviaSessioneFn, preparaEsecuzioneFn: () => ({ cartella: '/tmp/x', comandoProva: 'npm test', task: { id: 'task-vero', consegna: 'c' } }), modello: 'm', chiave: 'k', cartellaEsisteFn: () => true, attesaSilenzioPrimaMs: 100, attesaSilenzioRipetiMs: 100 });
+      registro.avvia('task-vero');
+      let risolta = false; // ⛔ R2: bandierina di pendenza
+      setTimeout(() => {
+        ingresso.chiediApprovazioneFn({ tipo: 'shell', comando: 'cat .env' }).then(() => { risolta = true; }); // mai risolta PER PROGETTO
+      }, 50);
+      // Timer proprio REF'D: tiene vivo il figlio fino a 300ms — così "primo" (100ms, unref'd) scade DAVVERO
+      // e "rigioco" riarma "ripeti". Con la cura (tutto unref'd) il figlio esce da solo subito dopo; senza,
+      // resta appeso e la race scatta.
+      setTimeout(() => {
+        if (risolta) { console.error('DOMANDA-RISOLTA-DA-SOLA'); process.exit(3); }
+        console.log('PRONTO-CON-DOMANDA-PENDENTE');
+      }, 300);
+    }).catch((errore) => { console.error('IMPORT-FALLITO', errore && errore.message || errore); process.exit(2); });
+  `], { env: { ...process.env, PERCORSO_REGISTRO: pathToFileURL(percorso).href }, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
+  let fuori = '';
+  let errori = '';
+  figlio.stdout.on('data', (d) => { fuori += d; });
+  figlio.stderr.on('data', (d) => { errori += d; });
+  figlio.stderr.resume(); // ⛔ N1 anche qui
+  const uscita = await Promise.race([
+    new Promise((risolvi) => figlio.on('exit', (codice) => risolvi({ codice }))),
+    new Promise((risolvi) => { const t = setTimeout(() => risolvi({ scaduta: true }), 12000); t.unref?.(); }),
+  ]);
+  if (uscita.scaduta) {
+    figlio.kill();
+    assert.fail(`il figlio (R1: attese 100/100ms, timer proprio ref'd) non esce entro 12s (stderr: ${errori.slice(-300) || 'vuota'}): il ciclo di rigioco è ref'd (manca ripeti.unref?)`);
+  }
+  assert.equal(uscita.codice, 0, `il figlio R1/R2 è uscito con un codice inatteso (stderr: ${errori.slice(-300) || 'vuota'}) — 3 = DOMANDA-RISOLTA-DA-SOLA (R2)`);
+  assert.ok(fuori.includes('PRONTO-CON-DOMANDA-PENDENTE'), 'il marker del figlio R1/R2 manca');
+});
+
+/*
  * ⭐⭐⭐ 04/9 — W1-13: il cancello sui FILE DI CONTROLLO
  * (`costruisciCancelloFileDiControllo`, non esportato — provato come
  * `hookFn` sopra, attraverso ciò che PRODUCE) deve chiedere approvazione
@@ -1896,7 +1992,7 @@ test('⭐⭐ ...e un DINIEGO torna {consentito:false} con un motivo che nomina i
   const esito = await esitoPromessa;
 
   assert.equal(esito.consentito, false);
-  assert.match(esito.motivo, /file di controllo/);
+  assert.match(esito.motivo, /control file/);
   finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
 });
 
@@ -1932,7 +2028,7 @@ test("⛔⛔⛔ PO-12 — file_edit NON e' una porta di servizio: anche una MODI
   registro.rispondiApprovazione(sessionId, richiesta.requestId, false);
   const esito = await esitoPromessa;
   assert.equal(esito.consentito, false, '⛔ negata, la modifica non passa: mai un bypass silenzioso');
-  assert.match(esito.motivo, /file di controllo/);
+  assert.match(esito.motivo, /control file/);
   finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
 });
 
@@ -2751,14 +2847,14 @@ test('⭐⭐ albero() passa cartella/percorso VERI a leggiAlberoWorkspaceFn — 
 
 test('⛔ albero(): un WorkspaceTreeError VERO diventa {erroreAvvio, code}, mai un throw fino all\'HTTP', async () => {
   const finta = sessioneControllabile();
-  const leggiAlberoWorkspaceFn = async () => { throw new WorkspaceTreeError('Percorso non valido'); };
+  const leggiAlberoWorkspaceFn = async () => { throw new WorkspaceTreeError('Invalid path'); };
   const registro = createSessionRegistry({
     avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, leggiAlberoWorkspaceFn, modello: 'm', chiave: 'k',
   });
   const { sessionId } = registro.avvia('task-vero');
 
   const risultato = await registro.albero(sessionId, 'x');
-  assert.deepEqual(risultato, { erroreAvvio: 'Percorso non valido', code: 'QUERY_INVALID' });
+  assert.deepEqual(risultato, { erroreAvvio: 'Invalid path', code: 'QUERY_INVALID' });
 
   finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' }); // pulizia
   await new Promise((r) => setImmediate(r));
@@ -3349,6 +3445,25 @@ test('⭐⭐⭐⭐ delega FILO INTERO: la madre riceve AVVIATO subito, continua 
   const figliDelPadre = registro.elencaFigli(padreId);
   assert.equal(figliDelPadre.figli.length, 1, 'il registro riconosce la figlia come figlia DI QUESTO padre, non una sessione slegata');
   assert.equal(figliDelPadre.figli[0].esitoDelega, 'concluso');
+  // 0.1.23: il resoconto viaggia accanto allo stato, non al posto suo (la scheda diceva «Che cosa ha riportato: concluso»)
+  assert.equal(figliDelPadre.figli[0].riassuntoDelega, 'Modulo scritto e testato.');
+  finta.concludi(0, { type: 'RunFinished', threadId: 't1', runId: 'r1' }, { ok: true, esito: { detto: 'madre conclusa', comeFinita: 'concluso', messaggiFinali: [] } });
+});
+
+test('RIASSUNTO-SEGUITO (0.1.23): una figlia RIPRESA con un seguito porta il resoconto del giro nuovo, non quello di prima', async () => {
+  const finta = sessioniControllabili();
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaEsisteFn: () => true });
+  const { sessionId: padreId } = registro.avvia('task-vero');
+  const esitoAvvio = await finta.run(0).input.onDelega('leggi il README', '/tmp/figlio-isolato');
+  finta.concludi(1, { type: 'RunFinished', threadId: 't2', runId: 'r2' }, { ok: true, esito: { detto: 'Primo resoconto.', comeFinita: 'concluso', messaggiFinali: [{ role: 'user', content: 'leggi il README' }, { role: 'assistant', content: 'Primo resoconto.' }] } });
+  await new Promise((r) => setImmediate(r));
+  assert.equal(registro.elencaFigli(padreId).figli[0].riassuntoDelega, 'Primo resoconto.');
+  // la persona apre la figlia come sessione intera e la fa continuare: il giro nuovo non ripassa dall'orchestratore
+  const ripresa = registro.resume(esitoAvvio.childId, 'continua e riassumi di nuovo');
+  assert.equal(ripresa.sessionId, esitoAvvio.childId, JSON.stringify(ripresa));
+  finta.concludi(2, { type: 'RunFinished', threadId: 't3', runId: 'r3' }, { ok: true, esito: { detto: 'Secondo resoconto.', comeFinita: 'concluso', messaggiFinali: [] } });
+  await new Promise((r) => setImmediate(r));
+  assert.equal(registro.elencaFigli(padreId).figli[0].riassuntoDelega, 'Secondo resoconto.');
   finta.concludi(0, { type: 'RunFinished', threadId: 't1', runId: 'r1' }, { ok: true, esito: { detto: 'madre conclusa', comeFinita: 'concluso', messaggiFinali: [] } });
 });
 
@@ -3549,6 +3664,37 @@ test('AGENT-PARENT-WAKE: domanda del figlio riapre il padre concluso con request
   finta.concludi(2, { type: 'RunFinished' });
   finta.concludi(1, { type: 'RunFinished' });
   assert.equal(registro.esporta(parentId).eventi.some((event) => event.value?.requestId === request.value.requestId && event.value?.status === 'answered'), true);
+});
+
+/* ⛔⛔ A12 (08/10/2026, bugfixer) — il giro con cui la domanda della figlia RIAPRE il padre concluso porta la sua origine, come
+   quello che passa dalla coda: senza, l'interfaccia la disegnava come una bolla della persona col testo per il modello e il JSON
+   (misurato dal vivo sulla 4176). E la consegna vera del registro si legge, nell'interfaccia, come una domanda in chiaro. */
+test('A12-AGENT-DIALOGUE-ORIGIN: la domanda della figlia che riapre il padre concluso porta origine e figlia, e si legge senza JSON', async () => {
+  const { descriviDialogoAgente, FRASE_DIALOGO_AGENTE } = await import('../frontend/src/components/coda-messaggi.js');
+  const finta = sessioniControllabili();
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta,
+    modello: 'm', chiave: 'k', cartellaEsisteFn: () => true });
+  const { sessionId: parentId } = registro.avvia('task-vero');
+  const { childId } = await finta.run(0).input.onDelega('indaga', '/tmp/figlio');
+  finta.concludi(0, { type: 'RunFinished' }, { ok: true, esito: { comeFinita: 'concluso',
+    messaggiFinali: [{ role: 'user', content: 'c' }, { role: 'assistant', content: 'attendo il figlio' }] } });
+  await new Promise((resolve) => setImmediate(resolve));
+  const pending = finta.run(1).input.askParentFn('Quale dei due file devo leggere per primo?');
+  assert.equal(finta.chiamate, 3, 'premessa: il padre concluso riceve un giro nuovo');
+  const task = finta.run(2).input.task;
+  assert.equal(task?.origine, 'agent-dialogue', 'il giro della domanda di un agente non dice da dove viene');
+  assert.equal(task?.childId, childId);
+  /* la frase con cui l'interfaccia riconosce i giri salvati PRIMA di A12 (senza origine) è quella vera del registro */
+  assert.equal(task.consegna.startsWith(`${FRASE_DIALOGO_AGENTE}\n`), true,`la prima riga del registro non è più quella che l'interfaccia riconosce: ${task.consegna.slice(0, 160)}`);
+  const parole = descriviDialogoAgente(task.consegna, { sessioneId: parentId });
+  assert.equal(parole?.tipo, 'domanda-figlia');
+  assert.equal(parole?.testo, 'Quale dei due file devo leggere per primo?');
+  assert.doesNotMatch(`${parole.titolo} ${parole.testo}`, /[{}]|requestId|agent-dialogue/u, 'a schermo arriva il contratto tecnico');
+  const request = registro.esporta(childId).eventi.find((event) => event.value?.status === 'requested' && event.value?.direction === 'child-to-parent');
+  finta.run(2).input.answerChildQuestionFn({ childId, requestId: request.value.requestId, answer: 'Il README.' });
+  assert.equal((await pending).answer, 'Il README.');
+  finta.concludi(2, { type: 'RunFinished' });
+  finta.concludi(1, { type: 'RunFinished' });
 });
 
 test('AGENT-ANSWER-SPLIT-JOURNAL: retry completa il child senza duplicare answered nel parent', async () => {
@@ -3846,7 +3992,7 @@ test('⛔⛔⛔ AL CONTRARIO — la delega su una cartella che NON esiste è rif
   const prima = finta.chiamate;
   const esito = await onDelegaDelPadre('fai qualcosa', '/mnt/c/tmp/x'); // la forma WSL che il modello inventava
   assert.equal(esito.esito, 'rifiutato');
-  assert.match(esito.motivo, /non esiste su questo computer/);
+  assert.match(esito.motivo, /(?:does not exist on this computer|non esiste su questo computer)/);
   assert.equal(finta.chiamate, prima, 'nessun figlio destinato a morire');
   finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
 });
@@ -4699,8 +4845,8 @@ test('⭐⭐⭐ elencaPlugin: torna ogni plugin con il suo VERO stato di fiducia
   assert.equal(esito.errore, null);
   assert.deepEqual(esito.falliti, [], 'nessun pacchetto guasto in questo caso');
   assert.deepEqual(esito.plugin, [
-    { id: 'esempio', nome: 'esempio', descrizione: 'un plugin di prova', hooks: [], tools: pluginA.tools, fidato: true, motivo: 'fidato', frase: null, avvisi: [] },
-    { id: 'altro', nome: 'altro', descrizione: 'un altro plugin', hooks: [], tools: [], fidato: false, motivo: 'contenuto-cambiato', frase: 'Il contenuto di questo plugin è cambiato da quando l\'hai approvato.', avvisi: [] },
+    { id: 'esempio', nome: 'esempio', descrizione: 'un plugin di prova', hooks: [], tools: pluginA.tools, fidato: true, motivo: 'fidato', frase: null, fraseChiave: null, avvisi: [] },
+    { id: 'altro', nome: 'altro', descrizione: 'un altro plugin', hooks: [], tools: [], fidato: false, motivo: 'contenuto-cambiato', frase: 'Il contenuto di questo plugin è cambiato da quando l\'hai approvato.', fraseChiave: null, avvisi: [] },
   ]);
   finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
 });
@@ -4718,7 +4864,7 @@ test('⛔⛔⛔ A6 — elencaPlugin porta la FRASE umana, e i pacchetti guasti n
       plugin: [{ id: 'vecchio', nome: 'vecchio', descrizione: 'd', hooks: [], tools: [], hash: 'h' }],
       falliti: [{ pluginId: 'rotto', codice: 'PLUGIN_PACKAGE_SYMLINK_UNSUPPORTED', messaggio: 'tecnico', frase: 'Questo plugin contiene un collegamento a un\'altra cartella.' }],
     }),
-    statoTrustPluginFn: async () => ({ fidato: false, motivo: 'regola-precedente', frase: 'Questo plugin era stato approvato quando il controllo guardava solo la sua scheda.' }),
+    statoTrustPluginFn: async () => ({ fidato: false, motivo: 'regola-precedente', fraseChiave: 'server.plugin.trust.previousRule', frase: 'Questo plugin era stato approvato quando il controllo guardava solo la sua scheda.' }),
   });
   const { sessionId } = registro.avvia('task-vero');
   const esito = await registro.elencaPlugin(sessionId);
@@ -4726,6 +4872,7 @@ test('⛔⛔⛔ A6 — elencaPlugin porta la FRASE umana, e i pacchetti guasti n
   assert.equal(esito.plugin[0].fidato, false);
   assert.equal(esito.plugin[0].motivo, 'regola-precedente');
   assert.match(esito.plugin[0].frase, /approvato quando il controllo guardava solo la sua scheda/);
+  assert.equal(esito.plugin[0].fraseChiave, 'server.plugin.trust.previousRule', 'la chiave della frase attraversa il registro');
   assert.equal(esito.falliti.length, 1, 'il pacchetto guasto arriva al pannello');
   assert.equal(esito.falliti[0].pluginId, 'rotto');
   assert.match(esito.falliti[0].frase, /collegamento/);
@@ -4752,6 +4899,7 @@ test('⭐⭐⭐ elencaPlugin: gli AVVISI dello scanner arrivano PER OGNI tool/ho
   assert.equal(esito.plugin[0].avvisi.length, 3, 'un avviso dal tool (rm -rf /), due dall\'hook (curl|sh + credenziale-in-rete)');
   assert.equal(esito.plugin[0].avvisi.filter((a) => a.origine === 'tool:pulisci').length, 1);
   assert.equal(esito.plugin[0].avvisi.filter((a) => a.origine === 'hook:esfiltra').length, 2);
+  assert.ok(esito.plugin[0].avvisi.every((a) => /^server[.]plugin[.]warning[.]/u.test(a.avvisoChiave)), 'ogni avviso porta la sua chiave del dizionario');
   finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
 });
 
@@ -6874,8 +7022,8 @@ test('⭐⭐⭐ W1-13 (review) — nessun ascoltatore iscritto: il cancello RIFI
 
   assert.notEqual(esito, appeso, 'RIPRODOTTO: senza ascoltatori la tool-call resta appesa per sempre invece di ricevere un rifiuto');
   assert.equal(esito.consentito, false);
-  assert.match(esito.motivo, /nessun canale di approvazione/);
-  assert.match(esito.motivo, /file di controllo/);
+  assert.match(esito.motivo, /no active approval channel/);
+  assert.match(esito.motivo, /control file/);
   finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
 });
 
@@ -7135,7 +7283,7 @@ test('⭐⭐⭐ guardiaDiStallo — STALLO SU UN CANCELLO DI PERMESSO: parole PR
   assert.equal(silenzi[0].requestId, 'req-1');
   assert.equal(silenzi[0].comando, 'npm publish');
   assert.equal(silenzi[0].fermoDaMs, 300_000);
-  assert.match(silenzi[0].descrizione, /approvazione/i);
+  assert.match(silenzi[0].descrizione, /approval/i);
 });
 
 test('⭐ guardiaDiStallo — un\'approvazione già RISOLTA e un giro CONCLUSO non sono uno stallo', () => {

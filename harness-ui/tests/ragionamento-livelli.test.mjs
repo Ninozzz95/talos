@@ -51,7 +51,7 @@ test('BUG18-LIV-02 — low è documentato e passa; medium e minimal scendono al 
     const result = preparaZai({ model: 'glm-5.3-flash', messages: [], reasoning_effort: richiesto });
     assert.equal(result.corpo.reasoning_effort, 'low', `livello ${richiesto}`);
     assert.deepEqual(result.avvisi, []);
-    assert.match(result.note.join(' '), /inviato «low», il più vicino/u);
+    assert.match(result.note.join(' '), /sent "low", the nearest/u);
   }
 });
 
@@ -72,8 +72,8 @@ test('BUG18-LIV-04 — none su un modello che non si spegne: thinking forzato + 
   assert.deepEqual(result.corpo.thinking, { type: 'enabled' });
   assert.deepEqual(result.avvisi, []);
   assert.equal(result.note.length, 2);
-  assert.match(result.note.join(' '), /non consente di disattivare il ragionamento/u);
-  assert.match(result.note.join(' '), /inviato «low», il minimo documentato \(il predefinito del fornitore costa di più\)/u);
+  assert.match(result.note.join(' '), /cannot disable reasoning/u);
+  assert.match(result.note.join(' '), /sent "low", the lowest documented level \(the provider default costs more\)/u);
 });
 
 test('BUG18-LIV-05 — none su un modello che SI spegne: thinking disattivato, nessun campo livello (verso contrario del floor)', () => {
@@ -89,7 +89,7 @@ test('BUG18-LIV-06 — modello senza livelli documentati (glm-4.6): il livello r
   assert.equal(result.corpo.reasoning_effort, undefined);
   assert.deepEqual(result.avvisi, []);
   assert.equal(result.note.length, 1);
-  assert.match(result.note[0], /non inviato/u);
+  assert.match(result.note[0], /not sent/u);
 });
 
 test('BUG18-LIV-07 — modello ignoto al registro: la frase va in nota, senza inventare livelli', () => {
@@ -140,7 +140,7 @@ test('BUG18-LIV-10 — «disattiva» rifiutato + livello in lista: il livello re
   assert.deepEqual(result.corpo.thinking, { type: 'enabled' });
   assert.deepEqual(result.avvisi, []);
   assert.equal(result.note.length, 1, 'nessuna seconda nota sul livello');
-  assert.match(result.note[0], /non consente di disattivare/u);
+  assert.match(result.note[0], /cannot disable/u);
   assert.doesNotMatch(result.note.join(' '), /il più vicino/u);
 });
 

@@ -198,10 +198,10 @@ export async function costruisciElencoProfondo({
   filtro,
 } = {}) {
   if (typeof radice !== 'string' || radice.length === 0 || radice.includes('\0')) {
-    throw new ElencoProfondoError('La cartella di partenza non è valida');
+    throw new ElencoProfondoError('The starting folder is invalid');
   }
   if (filtro !== undefined && typeof filtro !== 'function') {
-    throw new ElencoProfondoError('Il filtro deve essere una funzione');
+    throw new ElencoProfondoError('The filter must be a function');
   }
 
   const disco = { readdir, realpath, stat, ...(fs ?? {}) };
@@ -311,27 +311,27 @@ export async function costruisciElencoProfondo({
  */
 export function testoElenco(percorsi = [], { troncato = false, radice = '', fileEsclusi = 0 } = {}) {
   const elenco = Array.isArray(percorsi) ? percorsi.filter((p) => typeof p === 'string') : [];
-  const nome = basename(String(radice ?? '').replace(/[\\/]+$/, '')) || 'la cartella di lavoro';
+  const nome = basename(String(radice ?? '').replace(/[\\/]+$/, '')) || 'the working folder';
 
   if (elenco.length === 0) {
     return troncato
-      ? `Nessun file da mostrare per «${nome}»: l'elenco si è fermato prima di raccoglierne uno.`
-      : `Nessun file da mostrare per «${nome}».`;
+      ? `No files to show for "${nome}": the listing stopped before collecting any.`
+      : `No files to show for "${nome}".`;
   }
 
   const righe = [];
   if (troncato) {
-    righe.push(`⚠ ELENCO INCOMPLETO — mi sono fermato a ${elenco.length} percorsi, l'albero ne ha altri.`);
+    righe.push(`⚠ INCOMPLETE LIST — stopped at ${elenco.length} paths, the tree has others.`);
   }
-  righe.push(`File di «${nome}» — ${elenco.length} percorsi, dalla cartella principale in giù.`);
+  righe.push(`Files of "${nome}" — ${elenco.length} paths, from root folder down.`);
   if (fileEsclusi > 0) {
-    righe.push(`(${fileEsclusi} file non compaiono: immagini, archivi, pesi dei modelli e simili.)`);
+    righe.push(`(${fileEsclusi} files do not appear: images, archives, model weights and similar.)`);
   }
   righe.push('');
   righe.push(...elenco);
   if (troncato) {
     righe.push('');
-    righe.push('⚠ Fine di un elenco INCOMPLETO: se un file non compare qui sopra non vuol dire che non esista — cercalo prima di dire che manca.');
+    righe.push('⚠ End of an INCOMPLETE list: if a file does not appear above, it does not mean it does not exist — search for it before assuming it is missing.');
   }
   return righe.join('\n');
 }

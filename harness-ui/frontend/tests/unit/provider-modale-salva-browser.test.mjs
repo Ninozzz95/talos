@@ -129,7 +129,11 @@ test('MS-05: nella modale c è UN solo pulsante che salva; chiusa la modale, la 
   const { page, modale } = await pagina(t);
   const salvano = await modale.locator('button:visible').evaluateAll((bs) => bs.map((b) => b.textContent.trim()).filter((s) => /^(Salva|Aggiungi chiave|Salva chiave|Salva configurazione)$/u.test(s)));
   assert.deepEqual(salvano, ['Salva']);
+  await modale.evaluate((d) => {
+    window.ms05Chiusa = new Promise(resolve => d.addEventListener('close', () => resolve(), { once: true }));
+  });
   await modale.getByRole('button', { name: 'Annulla', exact: true }).click();
+  await page.evaluate(() => window.ms05Chiusa);
   assert.equal(await page.locator('.talos-provider__body [data-provider-salva-chiave]').evaluate((b) => b.hidden), false);
 });
 

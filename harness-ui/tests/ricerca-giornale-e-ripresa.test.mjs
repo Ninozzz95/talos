@@ -119,7 +119,7 @@ test('⛔⛔ L4, VERSO CONTRARIO — un `<id>.json` ILLEGGIBILE non si migra e n
   t.after(() => rimuoviCartellaDiProva(cartella));
   mkdirSync(join(cartella, CARTELLA_RICERCA), { recursive: true });
   writeFileSync(percorsoVoceLegacy(cartella, 'rotta'), '{ questo non e json', 'utf8');
-  await assert.rejects(() => migraRicerca({ cartella, id: 'rotta' }), /illeggibile/);
+  await assert.rejects(() => migraRicerca({ cartella, id: 'rotta' }), /unreadable/);
   assert.ok(existsSync(percorsoVoceLegacy(cartella, 'rotta')), '⛔ è l\'unica copia di qualcosa che è costato denaro: non si tocca');
 });
 
@@ -182,7 +182,7 @@ test('⛔⛔⛔ L4, IL VINCOLO — un crash FRA il temporaneo e il rename lascia
   assert.equal(readFileSync(join(cartella, rimasti[0]), 'utf8'), 'la scrittura che non arriverà mai');
   // ⛔ `crash` è lo STESSO oggetto che il codice arricchisce: il messaggio deve dire dove sono
   //    finiti i byte, altrimenti chi legge il log non ha modo di ritrovarli.
-  assert.match(crash.message, /NON è perso/);
+  assert.match(crash.message, /NOT lost/);
   assert.match(crash.message, /\.tmp-/, 'e nomina il file per esteso, non «da qualche parte»');
 });
 
@@ -255,7 +255,7 @@ test('⛔⛔ AL CONTRARIO — la contesa che NON passa: si rilancia, e il conten
     () => scriviAtomico(percorso, '{"stato":"done"}', { attendiFn: async (ms) => { attese.push(ms); }, tentativiRename: 4 }),
     (errore) => {
       assert.equal(errore.code, 'EPERM', '⛔ il codice VERO sopravvive: un chiamante che filtra sul codice deve continuare a vederlo');
-      assert.match(errore.message, /NON è perso/, 'e il messaggio dice dove sono finiti i byte');
+      assert.match(errore.message, /NOT lost/, 'e il messaggio dice dove sono finiti i byte');
       return true;
     },
   );
@@ -477,8 +477,8 @@ test('⭐⭐⭐ L4 — UNA CORSA REGISTRATA E RIGIOCATA DÀ LO STESSO STATO, let
 test('⛔ L4, VERSO CONTRARIO — un evento senza `kind` è respinto alla scrittura, e un id ostile pure', async (t) => {
   const cartella = cartellaVera();
   t.after(() => rimuoviCartellaDiProva(cartella));
-  await assert.rejects(() => accodaEvento({ cartella, id: 'ric-1', evento: { at: 'ora' } }), /vuole un .kind./);
-  await assert.rejects(() => accodaEvento({ cartella, id: '../fuori', evento: { kind: 'run_paused' } }), /id di ricerca non valido/);
+  await assert.rejects(() => accodaEvento({ cartella, id: 'ric-1', evento: { at: 'ora' } }), /requires a .kind./);
+  await assert.rejects(() => accodaEvento({ cartella, id: '../fuori', evento: { kind: 'run_paused' } }), /invalid research id/);
   assert.deepEqual(await leggiGiornale({ cartella, id: 'ric-1' }), { eventi: [], righeSaltate: 0, byte: 0 });
 });
 
@@ -552,7 +552,8 @@ test('⛔⛔ L4, VERSO CONTRARIO — un record recintato ROTTO o di una versione
 test('⛔⛔ L4, VERSO CONTRARIO — un record con affermazioni ma ZERO fonti è respinto, e il motivo nomina il record', () => {
   const letto = rileggiRapportoRecintato(rapportoRecintato({ fonti: 0, affermazioni: 1 }));
   assert.equal(letto.ok, false);
-  assert.match(letto.motivo, /record del rapporto non elenca nessuna fonte/);
+  assert.match(letto.motivo, /report record lists no sources/);
+  assert.equal(letto.motivoChiave, 'server.research.report.noSources');
 });
 
 test('⭐⭐ L4 — il passaggio VUOTO non conta come prova: `proveDistinte` scende, le affermazioni no', () => {
@@ -704,7 +705,7 @@ test('⭐⭐⭐⭐ L4 — L\'ELENCO NON MENTE PIÙ: una `done` col rapporto vali
   assert.equal(per('con-rapporto').proveDistinte, 2);
   assert.equal(per('senza-niente').stato, 'senza-rapporto', '⛔ è il difetto che l\'owner vedeva: «Conclusa» in lista e «senza rapporto» nel dettaglio');
   assert.equal(per('senza-niente').bilancio, null);
-  assert.match(per('senza-niente').motivo, /non è leggibile|senza depositare/);
+  assert.match(per('senza-niente').motivo, /unreadable|without depositing/);
 
   // ⛔ Il disco resta com'era: la correzione vive nella LETTURA.
   assert.equal((await leggiRicerca({ cartella, id: 'senza-niente' })).terminata, 'done');
@@ -928,7 +929,8 @@ test('⭐⭐⭐⭐ BC-44 — una corsa caduta sul FORNITORE registra la causa, l
   const { ricerche } = await orch.elenca({ cartella });
   assert.equal(ricerche[0].riprendibile, true, '⛔ è il server a dire che il pulsante può esistere, non il frontend a indovinarlo');
   assert.deepEqual(ricerche[0].motivoErrore, { classe: 'timeout-fornitore', transitorio: true }, '⛔ e il messaggio grezzo NON esce: a schermo sarebbe un nome tecnico');
-  assert.equal(ricerche[0].motivo, 'La ricerca si è interrotta a metà: il fornitore del modello ha chiuso la connessione mentre lavorava. Il lavoro già fatto è conservato e può riprendere da lì.');
+  assert.equal(ricerche[0].motivo, 'Research was interrupted midway: the model provider closed the connection while working. Work already done is preserved and can resume from there.');
+  assert.equal(ricerche[0].motivoChiave, 'server.research.state.interrupted');
   assert.doesNotMatch(ricerche[0].motivo, /Upstream|timeout|internal-error/, '⛔ la frase per una persona non nomina il guasto tecnico');
 });
 
@@ -977,7 +979,8 @@ test('⛔⛔⛔ BC-44, VERSO CONTRARIO — una caduta NON transitoria resta ferm
   assert.equal((await leggiRicerca({ cartella, id })).motivoErrore.transitorio, false);
   const { ricerche } = await orch.elenca({ cartella });
   assert.equal(ricerche[0].riprendibile, false, '⛔ il pulsante non deve nemmeno comparire: una chiave sbagliata resta sbagliata al secondo tentativo');
-  assert.equal(ricerche[0].motivo, 'La ricerca non è arrivata in fondo.', 'la frase di sempre, per la causa di sempre');
+  assert.equal(ricerche[0].motivo, 'Research did not finish.', 'lo stesso significato, per la stessa causa');
+  assert.equal(ricerche[0].motivoChiave, 'server.research.state.failed');
 
   const esito = await orch.riprendi({ id });
   assert.equal(esito.ok, false, '⇒ la rotta risponde ancora 409');
@@ -1029,7 +1032,8 @@ test('PROVIDER-UNKNOWN-RESEARCH-RECOVERY: esito incerto su disco, nessuna ripres
   const secondo = orchestratoreSuDisco(cartella, sessioni);
   const riga = (await secondo.orch.elenca({ cartella })).ricerche[0];
   assert.equal(riga.riprendibile, true, 'il nuovo orchestratore rilegge la possibilità di recupero dal disco');
-  assert.match(riga.motivo, /esplicitamente/u);
+  assert.match(riga.motivo, /explicitly/u);
+  assert.equal(riga.motivoChiave, 'server.research.state.uncertain');
   assert.equal(secondo.avviati.length, 0);
   assert.equal((await secondo.orch.riprendi({ id })).ok, true);
   assert.equal(secondo.avviati.length, 1);

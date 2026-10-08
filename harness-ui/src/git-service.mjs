@@ -633,7 +633,7 @@ export function creaServizioGit({
     if (area === 'lavoro' && voce.tipo === 'nonTracciato') {
       if (voce.cartella) throw new GitServiceError(`“${p}” is a folder: open the file`, 'GIT_PATH_UNCHANGED');
       esito = await git(cartella, ['diff', '--no-index', '--no-color', '--no-ext-diff', '--no-textconv', '--', '/dev/null', p], { tollera: true });
-      if (esito.codice !== 0 && esito.codice !== 1) throw new GitServiceError(String(esito.stderr || '').trim() || 'git diff non è riuscito', 'GIT_COMMAND_FAILED');
+      if (esito.codice !== 0 && esito.codice !== 1) throw new GitServiceError(String(esito.stderr || '').trim() || 'git diff failed', 'GIT_COMMAND_FAILED');
     } else {
       esito = await git(cartella, ['diff', ...(area === 'preparato' ? ['--cached'] : []), '--no-color', '--no-ext-diff', '--no-textconv', '-U3', '--', p]);
     }
@@ -799,7 +799,7 @@ export function creaServizioGit({
         const stato = await statoInterno(cartella);
         const preparato = stato.voci.some((v) => v.staged);
         const esito = await git(cartella, ['diff', ...(preparato ? ['--cached'] : []), '--no-color', '--no-ext-diff', '--no-textconv', '-U3', '--', '.']);
-        if (esito.stdout.trim() === '') throw new GitServiceError('Non ci sono modifiche da descrivere', 'GIT_NOTHING_TO_COMMIT');
+        if (esito.stdout.trim() === '') throw new GitServiceError('There are no changes to describe', 'GIT_NOTHING_TO_COMMIT');
         const soggetti = stato.base
           ? (await git(cartella, ['log', '-10', '--no-color', '--format=%s', 'HEAD'])).stdout.split('\n').map((s) => s.trim()).filter(Boolean)
           : [];
@@ -852,7 +852,7 @@ export function creaServizioGit({
         const argomenti = ['apply', ...verso[1], '--whitespace=nowarn'];
         const prova = await git(cartella, [...argomenti, '--check', file], { tollera: true });
         if (prova.codice !== 0) {
-          throw new GitServiceError(String(prova.stderr || '').trim() || 'git non riesce ad applicare questo pezzo', 'GIT_HUNK_FAILED');
+          throw new GitServiceError(String(prova.stderr || '').trim() || 'git cannot apply this hunk', 'GIT_HUNK_FAILED');
         }
         await git(cartella, [...argomenti, file], { timeoutMs: timeoutScritturaMs });
         return { ok: true, stato: await statoInterno(cartella) };
@@ -1133,7 +1133,7 @@ export function creaServizioGit({
         if (dentro.avvioFallito) throw new GitServiceError('git is not installed or not reachable', 'GIT_COMMAND_FAILED');
         if (dentro.scaduto) throw new GitServiceError('git did not respond within the maximum time', 'GIT_TIMEOUT');
         if (!/not a git repository/iu.test(String(dentro.stderr || ''))) {
-          throw new GitServiceError(String(dentro.stderr || '').trim() || 'git non ha potuto guardare questa cartella', 'GIT_COMMAND_FAILED');
+          throw new GitServiceError(String(dentro.stderr || '').trim() || 'git could not look at this folder', 'GIT_COMMAND_FAILED');
         }
         const casa = resolve(cartellaUtenteFn());
         const versoCasa = relative(cartella, casa);
@@ -1197,12 +1197,12 @@ export function creaServizioGit({
           const verso = monte.codice === 0 && monte.stdout.trim() !== '' ? monte.stdout.trim() : 'HEAD';
           const unito = await git(cartella, ['merge-base', '--is-ancestor', `refs/heads/${nome}`, verso], { tollera: true });
           if (unito.codice === 1) throw new GitServiceError(`The branch “${nome}” has commits that are in no other branch`, 'GIT_BRANCH_NOT_MERGED');
-          if (unito.codice !== 0) throw new GitServiceError(String(unito.stderr || '').trim() || 'git non sa dire se il ramo è unito', 'GIT_COMMAND_FAILED');
+          if (unito.codice !== 0) throw new GitServiceError(String(unito.stderr || '').trim() || 'git cannot tell whether the branch is merged', 'GIT_COMMAND_FAILED');
         }
         const esito = await git(cartella, ['branch', forza === true ? '-D' : '-d', nome], { timeoutMs: timeoutScritturaMs, tollera: true });
         if (esito.codice !== 0) {
           if (/not fully merged/iu.test(esito.stderr)) throw new GitServiceError(`The branch “${nome}” has commits that are in no other branch`, 'GIT_BRANCH_NOT_MERGED');
-          throw new GitServiceError(String(esito.stderr || '').trim() || 'git non ha eliminato il ramo', 'GIT_COMMAND_FAILED');
+          throw new GitServiceError(String(esito.stderr || '').trim() || 'git did not delete the branch', 'GIT_COMMAND_FAILED');
         }
         return { ok: true, rami: await ramiInterni(cartella) };
       } catch (errore) { return rifiuto(errore); }
@@ -1233,7 +1233,7 @@ export function creaServizioGit({
         if (!nuova && (esito.codice === 0 || /No local changes to save|did not match any file/iu.test(`${esito.stdout}${esito.stderr}`))) {
           throw new GitServiceError('There are no changes to stash', 'GIT_NOTHING_TO_STASH');
         }
-        if (esito.codice !== 0 || !nuova) throw new GitServiceError(String(esito.stderr || '').trim() || 'git non ha messo da parte le modifiche', 'GIT_COMMAND_FAILED');
+        if (esito.codice !== 0 || !nuova) throw new GitServiceError(String(esito.stderr || '').trim() || 'git did not stash the changes', 'GIT_COMMAND_FAILED');
         return { ok: true, accantonati: await accantonatiInterni(cartella), stato: await statoInterno(cartella) };
       } catch (errore) { return rifiuto(errore); }
     },
@@ -1264,7 +1264,7 @@ export function creaServizioGit({
           // il conflitto si legge dallo stato (file non uniti), non dal messaggio di git, che può essere in un'altra lingua
           const dopo = await statoInterno(cartella).catch(() => null);
           if ((dopo?.riepilogo?.conflitti ?? 0) > 0 || /CONFLICT/u.test(`${esito.stdout}${esito.stderr}`)) throw new GitServiceError('Restoring created conflicts: the entry stays stashed', 'GIT_STASH_CONFLICT');
-          throw new GitServiceError(String(esito.stderr || '').trim() || 'git non ha ripreso la voce', 'GIT_COMMAND_FAILED');
+          throw new GitServiceError(String(esito.stderr || '').trim() || 'git did not restore the entry', 'GIT_COMMAND_FAILED');
         }
         return { ok: true, accantonati: await accantonatiInterni(cartella), stato: await statoInterno(cartella) };
       } catch (errore) { return rifiuto(errore); }
@@ -1372,7 +1372,7 @@ export function creaServizioGit({
         }
         const dopo = await statoInterno(cartella);
         if (esito.codice !== 0 && dopo.riepilogo.conflitti === 0) {
-          throw new GitServiceError(String(esito.stderr || '').trim() || 'git pull non è riuscito', 'GIT_PULL_FAILED');
+          throw new GitServiceError(String(esito.stderr || '').trim() || 'git pull failed', 'GIT_PULL_FAILED');
         }
         return {
           ok: esito.codice === 0,
@@ -1656,7 +1656,7 @@ export function creaServizioGit({
     if (/would be overwritten|Please commit your changes or stash them/iu.test(detto)) {
       return new GitServiceError('There are changes that switching branch would overwrite: commit or stash them first', 'GIT_SWITCH_BLOCKED');
     }
-    return new GitServiceError(String(esito.stderr || '').trim() || 'git non ha cambiato ramo', 'GIT_COMMAND_FAILED');
+    return new GitServiceError(String(esito.stderr || '').trim() || 'git did not switch branch', 'GIT_COMMAND_FAILED');
   }
 }
 

@@ -160,6 +160,23 @@ export function collegaTooltip(documentObj = globalThis.document, { ritardo = RI
     osservaTesto?.observe(elemento, { attributes: true, attributeFilter: [ATTRIBUTO, 'title'] }); // (3)
   };
 
+  /*
+   * ⛔ (4) 08/10/2026, bugfixer (VELO-PERMESSI-PIEDE v2) — UN ELEMENTO CHE COMPARE SOTTO UN PUNTATORE FERMO non è un passaggio del
+   *   mouse. Misurato sulla 4176 a 1920×1080: clic sul chip del permesso (y=1026), la finestra si apre e la maniglia del suo bordo
+   *   basso (1017-1025) cade sotto il puntatore fermo; arriva `pointerover` e 350 ms dopo «Trascina o usa le frecce…» copriva
+   *   «Riporta a…/Fatto». Radix apre i suoi tooltip solo su `onPointerMove`, una volta per ingresso (`hasPointerMoveOpenedRef`,
+   *   @radix-ui/react-tooltip dist/index.mjs, letto l'08/10/2026; è la libreria dei tooltip di Hermes).
+   * ⇒ Chi porta `data-tip-al-movimento` (le maniglie dei dialoghi, `dialoghi.js`) si apre solo al primo MOVIMENTO sopra di sé.
+   *   Gli altri suggerimenti non cambiano: renderlo di tutti vorrebbe un A/B sui 220.
+   */
+  const ATTRIBUTO_AL_MOVIMENTO = 'data-tip-al-movimento';
+  let inAttesaDiMovimento = null;
+  const programma = (elemento) => {
+    const frase = migraTitle(elemento);
+    if (!frase) return;
+    chiudi();
+    timer = setTimeout(() => apri(elemento, frase), ritardo);
+  };
   const suEntrata = (evento) => {
     const alFuoco = evento.type === 'focusin';
     const elemento = bersaglioDi(evento.target);
@@ -167,10 +184,14 @@ export function collegaTooltip(documentObj = globalThis.document, { ritardo = RI
     if (alFuoco && bersaglio && elemento !== bersaglio && !bolla.contains(evento.target)) chiudi();
     if (!elemento || elemento === bersaglio) return;
     if (alFuoco && !daTastiera(evento.target)) return; // (1) il fuoco restituito da un clic non apre niente
-    const frase = migraTitle(elemento);
-    if (!frase) return;
-    chiudi();
-    timer = setTimeout(() => apri(elemento, frase), ritardo);
+    if (!alFuoco && elemento.hasAttribute?.(ATTRIBUTO_AL_MOVIMENTO)) { inAttesaDiMovimento = elemento; return; } // (4)
+    programma(elemento);
+  };
+  const suMovimento = (evento) => {
+    if (!inAttesaDiMovimento) return;
+    const elemento = inAttesaDiMovimento;
+    inAttesaDiMovimento = null; // una volta per ingresso, come `hasPointerMoveOpenedRef` di Radix
+    if (bersaglioDi(evento.target) === elemento && elemento !== bersaglio) programma(elemento);
   };
 
   const suUscita = (evento) => {
@@ -186,19 +207,35 @@ export function collegaTooltip(documentObj = globalThis.document, { ritardo = RI
   bolla.addEventListener('pointerenter', () => { dentroLaBolla = true; });
   bolla.addEventListener('pointerleave', () => { dentroLaBolla = false; chiudi(); });
   documentObj.addEventListener('pointerover', suEntrata, true);
+  documentObj.addEventListener('pointermove', suMovimento, true);
   documentObj.addEventListener('pointerout', suUscita, true);
   documentObj.addEventListener('focusin', suEntrata, true);
   documentObj.addEventListener('focusout', suUscita, true);
-  // WCAG 1.4.13, «dismissible»: Esc lo chiude senza dover spostare il puntatore
-  documentObj.addEventListener('keydown', (evento) => { modalita = 'keyboard'; if (evento.key === 'Escape') chiudi(); }, true);
+  /*
+   * WCAG 1.4.13, «dismissible»: Esc lo chiude senza dover spostare il puntatore.
+   * ⛔ ESC-STRATI (08/10/2026, bugfixer; misurato sulla 4176): con la bolla aperta sopra la finestra dei permessi, UN Esc chiudeva
+   *   la bolla E la finestra. La bolla è lo strato più in alto: Esc è suo e basta. Radix fa così (`DismissableLayer`: ascolta in
+   *   cattura solo lo strato più alto, chiude e `preventDefault()`; @radix-ui/react-dismissable-layer, letto l'08/10/2026), e il
+   *   gestore dei veli già ignora un Esc `defaultPrevented` (overlays/manager.ts, `handleKey`). Senza bolla visibile non cambia niente.
+   * ⇒ Non è un'eccezione: è la catena degli Esc che il progetto ha già, «lo strato più alto si smonta per primo» (decisione owner
+   *   B16, app.js, la domanda «Fermo il giro?»; PO-30 ci ha messo i popover). Una bolla visibile è uno strato.
+   */
+  documentObj.addEventListener('keydown', (evento) => {
+    modalita = 'keyboard';
+    if (evento.key !== 'Escape') return;
+    const visibile = Boolean(bersaglio) && bolla.hidden !== true;
+    chiudi();
+    if (visibile) { evento.preventDefault(); evento.stopPropagation(); }
+  }, true);
   // un clic sta già facendo qualcos'altro: il suggerimento non deve restare lì sopra
-  documentObj.addEventListener('pointerdown', () => { modalita = 'pointer'; chiudi(); }, true);
+  documentObj.addEventListener('pointerdown', () => { modalita = 'pointer'; inAttesaDiMovimento = null; chiudi(); }, true);
   documentObj.defaultView?.addEventListener?.('scroll', chiudi, { capture: true, passive: true });
 
   return () => {
     chiudi();
     documentObj.__talosTooltipCollegato = false;
     documentObj.removeEventListener('pointerover', suEntrata, true);
+    documentObj.removeEventListener('pointermove', suMovimento, true);
     documentObj.removeEventListener('pointerout', suUscita, true);
     documentObj.removeEventListener('focusin', suEntrata, true);
     documentObj.removeEventListener('focusout', suUscita, true);

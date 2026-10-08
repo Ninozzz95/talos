@@ -197,9 +197,9 @@ test('⭐⭐⭐⭐ tutti e otto i formati escono 200, col loro tipo, col loro no
         assert.doesNotMatch(testo, /<script/i, '⛔ nessuno script: questo file si apre con file:// da un browser qualunque');
         assert.match(testo, /<style>/, 'CSS incorporato: deve reggere senza rete');
         assert.match(testo, /prefers-color-scheme: dark/, '⛔ tema chiaro E scuro, sempre tutti e due');
-        assert.match(testo, /sostenuta dalla fonte/, 'i verdetti ci sono');
+        assert.match(testo, /(?:sostenuta dalla fonte|supported by source)/, 'i verdetti ci sono');
         assert.match(testo, /il passaggio numero 1/, 'e il passaggio, che è la prova');
-        assert.match(testo, /<b>2<\/b> affermazioni/, 'e il bilancio, quello della SCHEDA — mai ricontato qui');
+        assert.match(testo, /<b>2<\/b> (?:affermazioni|claims)/, 'e il bilancio, quello della SCHEDA — mai ricontato qui');
       },
     },
     pdf: {
@@ -267,8 +267,8 @@ test('⭐⭐⭐⭐ tutti e otto i formati escono 200, col loro tipo, col loro no
       async rileggi(risposta) {
         const testo = await risposta.text();
         assert.match(testo, /https:\/\/esempio1\.invalid\/fonte/);
-        assert.match(testo, /Data dichiarata: 2026-03-04T00:00:00\.000Z/, 'la data DICHIARATA dalla pagina, esattamente come sta nel record: non si accorcia e non si reinventa');
-        assert.match(testo, /solo estratto dal motore di ricerca/);
+        assert.match(testo, /(?:Data dichiarata|Declared date): 2026-03-04T00:00:00\.000Z/, 'la data DICHIARATA dalla pagina, esattamente come sta nel record: non si accorcia e non si reinventa');
+        assert.match(testo, /(?:solo estratto dal motore di ricerca|search engine snippet only)/);
         assert.match(testo, /«il passaggio numero 2» — Affermazione 2\./, '⛔ e i passaggi vanno sotto la fonte GIUSTA (sourceIndex è 1-based)');
       },
     },
@@ -379,12 +379,12 @@ test('⛔⛔⛔ una ricerca SENZA RECORD: 409 per json/bib/ris/fonti, 200 con «
   const md = await esporta(b, sessionId, ricercaId, 'formato=md');
   assert.equal(md.status, 200);
   const testoMd = await md.text();
-  assert.match(testoMd, /SENZA VERIFICHE/, '⛔ e sopra c\'è scritto che non è un rapporto verificato');
+  assert.match(testoMd, /(?:SENZA VERIFICHE|UNVERIFIED)/, '⛔ e sopra c\'è scritto che non è un rapporto verificato');
   assert.match(testoMd, /sola lettura/);
 
   const html = await esporta(b, sessionId, ricercaId, 'formato=html');
   assert.equal(html.status, 200);
-  assert.match(await html.text(), /SENZA VERIFICHE/);
+  assert.match(await html.text(), /(?:SENZA VERIFICHE|UNVERIFIED)/);
 
   const pdf = await esporta(b, sessionId, ricercaId, 'formato=pdf');
   assert.equal(pdf.status, 200);
@@ -485,7 +485,8 @@ test('⛔⛔ VERSO CONTRARIO — una domanda che È un percorso non produce un n
     assert.notEqual(nome, '..md');
     assert.match(nome, /\.md$/);
   }
-  assert.equal(nomeSicuroDiEsportazione('..', 'md'), 'ricerca.md');
+  assert.equal(nomeSicuroDiEsportazione('..', 'md'), 'research.md', 'senza lingua: la sorgente, inglese');
+  assert.equal(nomeSicuroDiEsportazione('..', 'md', 'it'), 'ricerca.md', 'K4b: il nome di riserva nella lingua chiesta');
   assert.equal(nomeSicuroDiEsportazione('una domanda normale', 'fonti'), 'una domanda normale-fonti.md');
   // E un formato che non esiste non produce un nome: non c'è un ripiego silenzioso.
   assert.throws(() => nomeSicuroDiEsportazione('x', 'exe'), /unknown export format/);

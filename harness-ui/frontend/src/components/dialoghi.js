@@ -94,6 +94,9 @@ export function collegaRidimensionamentoDialoghi(radice = globalThis.document, {
     let trascinamento = null;
     if (h.tagName === 'BUTTON') h.type = 'button';
     h.style.touchAction = 'none';
+    /* ⛔ 08/10/2026 (VELO-PERMESSI-PIEDE v2): una maniglia può comparire sotto il puntatore fermo di chi ha appena aperto la
+       finestra (il bordo basso cade sul chip del compositore): il suo suggerimento si apre solo al primo movimento (tooltip.js, (4)). */
+    h.setAttribute('data-tip-al-movimento', '');
     h.setAttribute('aria-keyshortcuts', `${axis === 'height' ? '' : 'ArrowLeft ArrowRight '}${axis === 'width' ? '' : 'ArrowUp ArrowDown '}Home`);
 
     const ripristina = () => {

@@ -77,7 +77,7 @@ export function creaTimelineAgenti({ write, clock, persistent, leggiDalDisco = n
   async function leggi(rootId, { after = 0, through, limit = 250 } = {}) {
     const s = state(rootId); const end = through ?? s?.seq ?? 0;
     if (![after,end,limit].every(Number.isSafeInteger) || after < 0 || end < after || end > (s?.seq ?? 0) || limit < 1 || limit > 500) {
-      return { erroreAvvio: 'Intervallo della cronologia non valido', code: 'QUERY_INVALID' };
+      return { erroreAvvio: 'Invalid timeline range', code: 'QUERY_INVALID' };
     }
     await s?.pending;
     const inRam = s?.items ?? [];
@@ -85,7 +85,7 @@ export function creaTimelineAgenti({ write, clock, persistent, leggiDalDisco = n
     let prima = [], coverage = s?.coverage ?? 'unavailable';
     if (s && after + 1 < primoInRam && persistent && typeof leggiDalDisco === 'function') {
       try { prima = (await vecchiDalDisco(rootId, s, primoInRam)).filter(r => r.seq > after && r.seq <= end); }
-      catch { return { erroreAvvio: 'La parte più vecchia della cronologia non si legge dal file della sessione', code: 'TIMELINE_READ_FAILED' }; }
+      catch { return { erroreAvvio: 'Oldest part of timeline could not be read from session file', code: 'TIMELINE_READ_FAILED' }; }
       // il file deve dare OGNI record fra `after` e la finestra: se ne manca uno, la risposta non si dice completa
       const finoA = Math.min(end, primoInRam - 1);
       if (prima.length !== finoA - after || prima.some((r, i) => r.seq !== after + 1 + i)) coverage = 'partial';

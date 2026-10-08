@@ -109,7 +109,10 @@ test('BUG16-CAP-10: dieci reinvii vani ⇒ PROVIDER_OUTCOME_UNKNOWN_ESAURITO, ri
     assert.equal(e.ritentabile, true);
     assert.equal(e.esitiIncertiRitentati, 10);
     assert.equal(e.transitorio, false);
-    assert.match(e.message, /10 reinvii automatici/u);
+    assert.match(e.message, /10 automatic resends/u);
+    /* K4b, riserva F1: la chiave è quella dell'esaurito (con il numero), non quella del caso base che la crea */
+    assert.equal(e.chiave, 'server.providerOutcome.exhausted');
+    assert.deepEqual(e.params, { n: 10 });
     return true;
   });
   assert.equal(r.corpi.length, 11, 'una rotta più dieci reinvii, poi il cap');

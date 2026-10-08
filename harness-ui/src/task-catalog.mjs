@@ -25,7 +25,7 @@ export class TaskCatalogError extends Error {
 
 function providerRequired(provider) {
   if (!provider || typeof provider.list !== 'function' || typeof provider.prepare !== 'function') {
-    throw new TaskCatalogError('Il catalogo task non è disponibile in questa installazione. Configura il runtime proprietario.', 'TASK_CATALOG_UNAVAILABLE');
+    throw new TaskCatalogError("The task catalog is unavailable in this installation. Configure the owner runtime.", 'TASK_CATALOG_UNAVAILABLE');
   }
   return provider;
 }
@@ -55,11 +55,11 @@ export function listaTaskDisponibili(provider) {
  */
 export function preparaEsecuzione(taskId, provider) {
   if (typeof taskId !== 'string' || taskId.length === 0) {
-    throw new TaskCatalogError('Id task non valido', 'QUERY_INVALID');
+    throw new TaskCatalogError("Invalid task id", 'QUERY_INVALID');
   }
   const risultato = providerRequired(provider).prepare(taskId);
   if (!risultato || typeof risultato !== 'object' || typeof risultato.cartella !== 'string' || !risultato.task) {
-    throw new TaskCatalogError('Il catalogo task ha restituito una sessione non valida.', 'TASK_CATALOG_INVALID');
+    throw new TaskCatalogError("The task catalog returned an invalid session.", 'TASK_CATALOG_INVALID');
   }
   return risultato;
 }

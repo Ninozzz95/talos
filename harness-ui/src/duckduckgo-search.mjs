@@ -120,17 +120,17 @@ export async function cercaDuckDuckGo(query, maxRisultati = 8, { fetchFn = globa
     risposta = await chiamata();
   } catch (primo) {
     if (primo?.name === 'AbortError') {
-      throw Object.assign(new Error('DuckDuckGo non raggiungibile: tempo scaduto'), { code: 'SEARCH_UNREACHABLE' });
+      throw Object.assign(new Error('DuckDuckGo unreachable: timed out'), { code: 'SEARCH_UNREACHABLE' });
     }
     try {
       risposta = await chiamata();
     } catch (secondo) {
-      throw Object.assign(new Error(`DuckDuckGo non raggiungibile: ${secondo?.name === 'AbortError' ? 'tempo scaduto' : secondo?.message ?? secondo} (già ritentato una volta)`), { code: 'SEARCH_UNREACHABLE' });
+      throw Object.assign(new Error(`DuckDuckGo unreachable: ${secondo?.name === 'AbortError' ? 'timed out' : secondo?.message ?? secondo} (already retried once)`), { code: 'SEARCH_UNREACHABLE' });
     }
   }
   const testo = (await risposta.text()).slice(0, MAX_BYTE);
   if (sembraBloccoDuckDuckGo(risposta.status, testo)) {
-    throw Object.assign(new Error(`DuckDuckGo ha rifiutato la richiesta (HTTP ${risposta.status}): limite o verifica anti-bot. Riprova più tardi o imposta una fonte con chiave.`), { code: 'SEARCH_BLOCKED' });
+    throw Object.assign(new Error(`DuckDuckGo refused the request (HTTP ${risposta.status}): limit or anti-bot check. Try again later or set a source with a key.`), { code: 'SEARCH_BLOCKED' });
   }
   if (!risposta.ok) throw Object.assign(new Error(`DuckDuckGo ha risposto HTTP ${risposta.status}`), { code: 'SEARCH_FAILED' });
   return analizzaHtmlDuckDuckGo(testo, maxRisultati);

@@ -170,8 +170,8 @@ test('⭐⭐⭐ L9 — la CONSEGNA porta le linee del piano, numerate e in ordin
   await orch.avvia({ cartella, question: 'Come evolvono gli harness?', depth: 'quick' });
   const consegna = avviati[0].task.consegna;
   assert.match(consegna, /Your plan has 2 lines of inquiry/);
-  assert.match(consegna, /1\. Come evolvono gli harness\? — fatti e numeri/);
-  assert.match(consegna, /2\. Come evolvono gli harness\? — fonti contrarie/);
+  assert.match(consegna, /1\. Come evolvono gli harness\? — (?:fatti e numeri|facts and figures)/);
+  assert.match(consegna, /2\. Come evolvono gli harness\? — (?:fonti contrarie|opposing sources)/);
   assert.match(consegna, /do not reorder it: the journal tracks your progress by that order/);
   assert.match(consegna, /this is a default, not a cage/, '⛔ un piano a cui il modello non può disobbedire farebbe di una ricerca uno scraper');
 });
@@ -280,7 +280,7 @@ test('⭐⭐⭐⭐ L9 — VERIFICA VERA: il giudice è un ALTRO modello, e il ve
   assert.equal(composto.giudice, 'altro/giudice');
   assert.deepEqual(composto.bilancio, { total: 1, supported: 1, partial: 0, unsupported: 0, unchecked: 0, contested: 0 });
   assert.equal(giudice.chiamate[0].modello, 'altro/giudice', '⛔ interpellato il giudice, MAI l\'autore');
-  assert.match(giudice.chiamate[0].prompt, /Non usare altro: né quello che sai/,
+  assert.match(giudice.chiamate[0].prompt, /(?:Non usare altro: né quello che sai|Use nothing else: neither what you know)/,
     '⛔ la riga portante del prompt del giudice: senza, risponde da quello che già sa e promuove una citazione che la fonte non ha mai fatto');
 
   const record = talosResearchParseReport(composto.documento);
@@ -324,7 +324,7 @@ test('⛔⛔⛔ L9, VERSO CONTRARIO — nessun altro modello disponibile ⇒ `ju
   assert.equal(composto.bilancio.supported, 0);
   const record = talosResearchParseReport(composto.documento);
   assert.equal(record.claims[0].checks.judge, null);
-  assert.match(record.claims[0].checks.supportReason, /nessun giudice indipendente disponibile/,
+  assert.match(record.claims[0].checks.supportReason, /no independent judge is available/,
     '⛔ e il PERCHÉ è scritto: «non verificata» senza il motivo è indistinguibile da una svista');
   assert.equal(record.claims[0].checks.quotePresent, true,
     '⛔ L2 gira lo stesso: il passaggio si ritrova anche senza giudice — sono due livelli, non uno');
@@ -356,7 +356,7 @@ test('⛔⛔⛔ L9, VERSO CONTRARIO — un passaggio che nella pagina NON C\'È 
   assert.equal(record.claims[0].checks.quotePresent, false);
   assert.notEqual(record.claims[0].checks.claimSupported, 'yes');
   assert.notEqual(record.claims[0].checks.claimSupported, 'partial');
-  assert.match(record.claims[0].checks.supportReason, /il passaggio non è nel testo della fonte/);
+  assert.match(record.claims[0].checks.supportReason, /the passage is not in the source text/);
   assert.equal(composto.bilancio.supported, 0, '⛔ una citazione che non si ritrova NON porta a casa una spunta');
   assert.equal(giudice.chiamate.length, 0,
     '⛔ e il giudice non è stato nemmeno pagato: chiedergli se un passaggio INVENTATO sostiene un\'affermazione è chiedergli un secondo parere su una fabbricazione');
@@ -378,7 +378,9 @@ test('⭐⭐⭐⭐ L9 §6.8 (+1.3) — la CONTRARIA si cerca apposta, e quando l
    */
   const nega = 'Nel 2026 quasi nessun prodotto adotta davvero permessi per attrezzo: restano una rarita accademica.';
   const giudice = giudiceFinto([
+    ['the passage, ALONE, support', 'SI — lo dice testualmente'],
     ['Il passaggio, DA SOLO, sostiene', 'SI — lo dice testualmente'],
+    ['contradict', 'SI — lo contraddice direttamente'],
     ['contraddice', 'SI'],
   ]);
   const { orch } = orchestratore(cartella, new Map(), {
@@ -436,7 +438,7 @@ test('⭐⭐⭐⭐ L9 + L4 — DOPO UN RIAVVIO: la ripresa riparte dal PASSO giu
   const testo = JSON.stringify(secondo.avviati[0]);
   assert.match(testo, /Steps already completed: b1:search/, '⛔ i passi già pagati si NOMINANO: «do not redo work that is listed as done»');
   assert.match(testo, /Lines of inquiry still open/, '⛔ e le linee ancora aperte escono dal PIANO, non dal giornale: un ramo mai partito non ha eventi, e chiedere al solo giornale chiamerebbe il giro finito');
-  assert.match(testo, /fonti contrarie/, 'il ramo 2, quello che non è stato toccato');
+  assert.match(testo, /(?:fonti contrarie|opposing sources)/, 'il ramo 2, quello che non è stato toccato');
   assert.doesNotMatch(testo, /The journal records the run itself but not individual collection steps/,
     '⛔ la frase di ripiego di L4 NON deve più comparire: era vera quando il collettore non era agganciato, e oggi direbbe il falso');
   assert.ok(consegna === '' || typeof consegna === 'string');
@@ -607,7 +609,10 @@ test('⛔⛔ L9, VERSO CONTRARIO — un guasto della VERIFICA non porta via il r
 
 test('⭐⭐⭐⭐ L9, LA CATENA INTERA — il modello chiama `research_deposit`, e il SERVER verifica prima che il file esista', async (t) => {
   const cartella = cartellaVera(t);
-  const giudice = giudiceFinto([['Il passaggio, DA SOLO, sostiene', 'SI — il passaggio lo dice testualmente']]);
+  const giudice = giudiceFinto([
+    ['the passage, ALONE, support', 'SI — il passaggio lo dice testualmente'],
+    ['Il passaggio, DA SOLO, sostiene', 'SI — il passaggio lo dice testualmente'],
+  ]);
   const { orch } = orchestratore(cartella, new Map(), {
     chiediAlModelloFn: giudice.fn,
     modelliGiudiceFn: () => [{ id: 'altro/giudice', provider: 'openrouter', model: 'altro/giudice' }],

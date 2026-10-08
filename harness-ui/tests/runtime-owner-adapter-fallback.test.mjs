@@ -49,7 +49,7 @@ test('PH-FALLBACK-01 kernel reale: esaurisce quattro tentativi, storia intatta, 
 
 test('PH-FALLBACK-02 classe permanente: niente fallback, credenziale segnalata una volta', async t => {
   const b = await banco(t, (_req,res) => { res.writeHead(401); res.end('invalid api key'); });
-  await assert.rejects(esegui(creaFetchMultiProvider(fetch,b.opzioni)));
+  await assert.rejects(esegui(creaFetchMultiProvider(fetch,b.opzioni)), { code: 'PROVIDER_REQUEST_ERROR', message: /Credential rejected/u });
   assert.equal(b.richieste.length, 1);
   assert.equal(b.eventi.filter(e=>e.tipo==='cambio-fornitore').length, 0);
 });
@@ -91,11 +91,11 @@ test('P2-OPTIONAL-KEY-403 un divieto di accesso non mette in panchina la chiave 
 
 test('PH-FALLBACK-03 esclusione senza chiave e modello senza attrezzi', async t => {
   const b = await banco(t, (_req,res) => { res.writeHead(429); res.end('rate limit'); }, { DEEPSEEK_API_KEY: 'finta-deepseek' });
-  await assert.rejects(esegui(creaFetchMultiProvider(fetch,b.opzioni)));
+  await assert.rejects(esegui(creaFetchMultiProvider(fetch,b.opzioni)), { code: 'PROVIDER_REQUEST_ERROR', message: /Too much traffic/u });
   assert.equal(b.richieste.some(r=>r.url.startsWith('/zai')), false);
   b.store.setKey('zai','finta-zai');
   const f = creaFetchMultiProvider(fetch, { ...b.opzioni, fallbackProviders: [{provider:'zai',model:'modello-ignoto'}] });
-  await assert.rejects(esegui(f, { attrezzi: [{type:'function',function:{name:'leggi',parameters:{type:'object'}}}] }));
+  await assert.rejects(esegui(f, { attrezzi: [{type:'function',function:{name:'leggi',parameters:{type:'object'}}}] }), { code: 'PROVIDER_REQUEST_ERROR', message: /Too much traffic/u });
   assert.equal(b.richieste.some(r=>r.url.startsWith('/zai')), false);
 });
 
@@ -109,7 +109,7 @@ test('PH-FALLBACK-04 due chiavi: il 429 mette in panchina solo la prima e la sec
 });
 test('PH-FALLBACK-05 stop esplicito: nessuna richiesta o cambio',async t=>{
   const b=await banco(t,(_req,res)=>rispondiBene(res));const stop=new AbortController();stop.abort();
-  await assert.rejects(esegui(creaFetchMultiProvider(fetch,b.opzioni),{segnaleStop:stop.signal}));
+  await assert.rejects(esegui(creaFetchMultiProvider(fetch,b.opzioni),{segnaleStop:stop.signal}), { name: 'AbortError' });
   assert.equal(b.richieste.length,0);assert.equal(b.eventi.length,0);
   assert.equal(b.consumi.length,0,'⛔ 14/09 AL CONTRARIO: uno stop prima della rete non è un giro, e non lascia un consumo');
 });
@@ -121,7 +121,7 @@ test('PH-FALLBACK-20 stop DOPO che la richiesta è partita: un consumo «fermato
     setTimeout(()=>{try{res.end();}catch{}},3000);
   });
   const stop=new AbortController();
-  await assert.rejects(esegui(creaFetchMultiProvider(fetch,b.opzioni),{segnaleStop:stop.signal,onDelta:()=>stop.abort()}));
+  await assert.rejects(esegui(creaFetchMultiProvider(fetch,b.opzioni),{segnaleStop:stop.signal,onDelta:()=>stop.abort()}), /stopped on request while the model was answering/u);
   assert.equal(b.richieste.length,1,'la richiesta è partita una volta sola, e nessun cambio di fornitore dopo lo stop');
   assert.equal(b.eventi.filter(e=>e.tipo==='cambio-fornitore').length,0);
   const fermati=b.consumi.filter(c=>c.esito==='fermato');
@@ -172,7 +172,7 @@ test('PH-FALLBACK-09 senza canale onesto e kernel privo di contratto: rifiuto es
 });
 test('PH-FALLBACK-10 avviso non depositato: nessuna chiamata alla riserva',async t=>{
   const b=await banco(t,(_req,res)=>{res.writeHead(503);res.end('upstream error');});
-  await assert.rejects(esegui(creaFetchMultiProvider(fetch,{...b.opzioni,onCambioFornitore:()=>{throw new Error('deposito non disponibile');}})));
+  await assert.rejects(esegui(creaFetchMultiProvider(fetch,{...b.opzioni,onCambioFornitore:()=>{throw new Error('deposito non disponibile');}})), /deposito non disponibile/u);
   assert.equal(b.richieste.some(r=>r.url.startsWith('/zai')),false);
 });
 test('PH-FALLBACK-11 whitelist usage: nessun campo estraneo nei consumi pubblici',async t=>{
@@ -181,7 +181,7 @@ test('PH-FALLBACK-11 whitelist usage: nessun campo estraneo nei consumi pubblici
   assert.equal(JSON.stringify(b.consumi).includes('finta-segreta'),false);
 });
 test('PH-FALLBACK-12 coppie malformate e capacità autoproclamate respinte',()=>{
-  for(const v of [null,{},[{provider:'no',model:'x'}],[{provider:'zai',model:'x',key:'finta'}],[{provider:'zai',model:'x',toolCalling:true}],[{provider:'zai',model:'https://altro.test'}]])assert.throws(()=>validaFallbackProviders(v));
+  for(const v of [null,{},[{provider:'no',model:'x'}],[{provider:'zai',model:'x',key:'finta'}],[{provider:'zai',model:'x',toolCalling:true}],[{provider:'zai',model:'https://altro.test'}]])assert.throws(()=>validaFallbackProviders(v), { name: 'ModelDestinationError', code: 'PROVIDER_FALLBACK_INVALID' });
   assert.throws(()=>validaFallbackProviders([{provider:'zai',model:'ignoto'}],{usaAttrezzi:true}),{code:'PROVIDER_FALLBACK_TOOLS_UNSUPPORTED'});
 });
 test('PH-FALLBACK-13 SDK nativo: il 503 esaurisce il budget del kernel prima del cambio',async t=>{
@@ -207,7 +207,7 @@ test('PH-FALLBACK-15 motore locale: il pool non cerca una credenziale inesistent
 });
 test('PH-FALLBACK-16 errore nel deposito del consumo riuscito non chiama un altro fornitore',async t=>{
   const b=await banco(t,(_req,res)=>rispondiBene(res));
-  await assert.rejects(esegui(creaFetchMultiProvider(fetch,{...b.opzioni,onConsumoFornitore:()=>{throw new Error('network del deposito');}})));
+  await assert.rejects(esegui(creaFetchMultiProvider(fetch,{...b.opzioni,onConsumoFornitore:()=>{throw new Error('network del deposito');}})), /network del deposito/u);
   assert.equal(b.richieste.length,1);assert.equal(b.eventi.length,0);
 });
 test('PH-FALLBACK-17 il planner non eredita il cambio del modello principale',async t=>{
@@ -352,7 +352,7 @@ test('PH-FALLBACK-24 indirizzo del motore mancante: errore di configurazione, no
   const f = creaFetchMultiProvider(fetch, localeCon(b, { leggiRuntime: () => ({}) }));
   await assert.rejects(() => esegui(f, { modello: 'ollama:qwen3' }), (errore) => {
     assert.equal(errore.code, 'PROVIDER_RUNTIME_INVALID');
-    assert.match(errore.message, /Manca l'indirizzo di/u);
+    assert.match(errore.message, /The address for .* is missing/u);
     return true;
   });
   assert.deepEqual(b.consumi, []);

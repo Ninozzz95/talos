@@ -157,7 +157,7 @@ test('P0-D-02 · il tempo del fornitore vale ancora sulla PRIMA risposta: fornit
   const b = await fornitoreFinto(t, (_req, res) => { /* nessun writeHead: silenzio totale */ void res; });
   const store = negozio(b.base, { timeoutSeconds: 5 });
   const t0 = Date.now();
-  await assert.rejects(chiamata(fetchDelBanco(store)));
+  await assert.rejects(chiamata(fetchDelBanco(store)), { code: 'PROVIDER_OUTCOME_UNKNOWN' });
   const durata = Date.now() - t0;
   assert.ok(durata >= 4_500 && durata < 12_000, `deve fermarsi vicino ai 5 s, non al vecchio muro: ${durata} ms`);
 });
@@ -200,7 +200,7 @@ test('P0-D-05 · failsafe scaduto: errore di SILENZIO, non “timeout di generaz
   const errore = await chiamata(fetchBanco, { onDelta: () => {} }).then(() => null, e => e);
   assert.notEqual(errore, null, 'il failsafe deve fermare un fornitore che tace oltre il limite');
   const testo = `${errore?.code ?? ''} ${errore?.message ?? ''}`;
-  assert.match(testo, /PROVIDER_SILENCE|Connessione con il fornitore interrotta|silenzio/i, testo);
+  assert.match(testo, /PROVIDER_SILENCE|Connection with the provider interrupted|silence/i, testo);
   /* ⛔ E NON deve dire «timeout di generazione»: la causa è un canale morto, non un modello lento. */
   assert.equal(/timeout di generazione|tempo massimo di generazione/i.test(testo), false, testo);
   /*
@@ -268,7 +268,9 @@ test('P0-D-06 · l’errore di silenzio è della classe “connessione”, non �
   assert.equal(e.code, 'PROVIDER_SILENCE');
   assert.equal(e.classe, 'rete');
   assert.equal(e.transitorio, true);
-  assert.match(e.message, /connessione/i);
+  assert.match(e.message, /connection/i);
+  assert.equal(e.chiave, 'server.providerOutcome.noData');
+  assert.deepEqual(e.params, { minutes: 30 });
 });
 
 /* ══════════════════════════════════════════════════════════════════════════════════════════
@@ -318,7 +320,7 @@ test('P0-D-08 · Stop su fornitore muto: chiude in meno di un secondo (via non-O
   const controllore = new AbortController();
   setTimeout(() => controllore.abort(), 300).unref();
   const t0 = Date.now();
-  await assert.rejects(chiamata(fetchDelBanco(store), { onDelta: () => {}, segnaleStop: controllore.signal }));
+  await assert.rejects(chiamata(fetchDelBanco(store), { onDelta: () => {}, segnaleStop: controllore.signal }), { name: 'AbortError' });
   const durata = Date.now() - t0;
   assert.ok(durata < 1_000, `lo stop deve chiudere subito, non dopo il failsafe: ${durata} ms`);
 });
@@ -336,7 +338,7 @@ test('P0-D-09 · Stop su fornitore muto: chiude in meno di un secondo (via OpenR
   const t0 = Date.now();
   await assert.rejects(resiliente('https://openrouter.ai/api/v1/chat/completions', {
     method: 'POST', body: JSON.stringify({ model: 'z-ai/glm-5.3-flash', stream: true }),
-  }));
+  }), { name: 'AbortError' });
   const durata = Date.now() - t0;
   assert.ok(durata < 1_000, `lo stop deve chiudere subito anche qui: ${durata} ms`);
 });

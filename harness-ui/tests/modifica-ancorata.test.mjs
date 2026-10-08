@@ -54,9 +54,9 @@ test('PO-12: un testo che compare DUE volte non si sostituisce a caso — si rif
   const errore = lanciato(() => modificaAncorata(FILE, '  if (!nome) return null;', '  if (!nome) return "";'));
   assert.ok(errore instanceof ModificaError && errore.code === 'MODIFICA_AMBIGUA', errore.message);
   assert.deepEqual(errore.righe, [2, 7], 'le righe vere, non un conteggio: «2 occorrenze» non è azionabile');
-  assert.match(errore.message, /compare 2 volte/);
-  assert.match(errore.message, /riga 2, riga 7/);
-  assert.match(errore.message, /aggiungi qualche riga intorno|sostituirle tutte/, 'il messaggio dice COSA FARE');
+  assert.match(errore.message, /appears 2 times/);
+  assert.match(errore.message, /line 2, line 7/);
+  assert.match(errore.message, /add a few lines around|replace them all/, 'il messaggio dice COSA FARE');
 });
 
 test('PO-12: con più contesto lo stesso punto diventa unico, e la sostituzione riesce', () => {
@@ -99,7 +99,7 @@ test('PO-12: gli spazi non fanno indovinare — se la posizione è incerta si di
   const senzaRientro = 'alfa\nbeta   \ngamma';
   const e = lanciato(() => modificaAncorata(senzaRientro, '    beta', 'BETA'));
   assert.equal(e.code, 'MODIFICA_POSIZIONE_INCERTA', 'trovato con tolleranza, ma la posizione non è sicura');
-  assert.match(e.message, /rileggilo e copia il punto com/i, 'e dice che cosa fare');
+  assert.match(e.message, /reread it and copy the spot as it is/i, 'e dice che cosa fare');
 });
 
 test('PO-12, AL CONTRARIO: i quattro casi in cui NON si tocca il file', () => {
@@ -118,7 +118,7 @@ test('PO-12, AL CONTRARIO: i quattro casi in cui NON si tocca il file', () => {
 test('PO-12: il messaggio del «non trovato» dice che cosa fare, non solo che è andata male', () => {
   const e = lanciato(() => modificaAncorata(FILE, 'zzz', 'x'));
   assert.equal(e.code, 'MODIFICA_NON_TROVATA');
-  assert.match(e.message, /rileggilo e copia il punto esatto/,
+  assert.match(e.message, /reread it and copy the exact spot/,
     'la ricerca del 10/09 dice che un messaggio azionabile è ciò che ferma i cicli di ritentativo');
 });
 

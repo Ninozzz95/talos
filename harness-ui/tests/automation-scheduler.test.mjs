@@ -215,3 +215,22 @@ test('AUTO-MODEL-USED: il pianificatore avvia col modello salvato; senza modello
     { taskId: 't2', opts: { senzaInterfaccia: true } },
   ]);
 });
+
+/* C2b «Coordinazione» (owner 08/10/2026 notte): accesa nella scheda, l'esecuzione nasce col «sempre» sulla chiave della delega;
+   spenta, o assente (le automazioni di prima), nessuna chiave: la carta d'avvio si nega subito, come prima. */
+test('AUTO-COORD-01: Coordinazione accesa nella scheda passa il «sempre» della delega; spenta o assente, niente', async () => {
+  const voci = [
+    { id: 'a1', taskId: 'acc', attiva: true, coordinazione: true, prossimaEsecuzione: '2026-10-08T09:59:00.000Z', limiteAlGiorno: 3, eseguiteOggi: 0, giornoContatore: null },
+    { id: 'a2', taskId: 'spe', attiva: true, coordinazione: false, prossimaEsecuzione: '2026-10-08T09:59:00.000Z', limiteAlGiorno: 3, eseguiteOggi: 0, giornoContatore: null },
+    { id: 'a3', taskId: 'vec', attiva: true, prossimaEsecuzione: '2026-10-08T09:59:00.000Z', limiteAlGiorno: 3, eseguiteOggi: 0, giornoContatore: null },
+  ];
+  const opzioni = [];
+  const registry = { avvia(taskId, opts) { opzioni.push({ taskId, opts }); return { sessionId: 's-' + taskId }; } };
+  const scheduler = createAutomationScheduler({ store: storeFinto(voci), sessionRegistry: registry, clock: () => new Date('2026-10-08T10:00:00.000Z') });
+  await scheduler.unTick();
+  assert.deepEqual(opzioni, [
+    { taskId: 'acc', opts: { senzaInterfaccia: true, permessiPerAttrezzoScelto: { delega_sottotask: 'sempre' } } },
+    { taskId: 'spe', opts: { senzaInterfaccia: true } },
+    { taskId: 'vec', opts: { senzaInterfaccia: true } },
+  ]);
+});

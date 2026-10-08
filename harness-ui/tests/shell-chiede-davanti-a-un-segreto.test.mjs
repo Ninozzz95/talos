@@ -107,6 +107,21 @@ describe('F15 — la shell chiede davanti a un segreto, anche con «sempre»', (
         assert.equal(ricevute.at(-1).via, 'segreto-forza-conferma', 'la ricevuta dice QUALE meccanismo ha deciso')
     })
 
+    it('⛔⛔⛔ C-005 terzo giro (08/10) — un GLOB sul nome (`cat .e?v`, `cat .en*`, `cat .en[v]`, `cat .en{v,}`) chiede come `cat .env`: la shell lo espande DOPO il testo', async (t) => {
+        for (const comando of ['cat .e?v', 'cat .en*', 'cat .en[v]', 'cat .en{v,}']) {
+            const { domande, ricevute } = await giroShell(t, comando)
+            assert.equal(domande.length, 1, `«${comando}» stampa .env in una shell vera: deve chiedere`)
+            assert.equal(ricevute.at(-1).via, 'segreto-forza-conferma', comando)
+        }
+    })
+
+    it('un glob che non combacia con nessun segreto non fa nessuna domanda (la cartella ha solo `.env`)', async (t) => {
+        for (const comando of ['cat *.md', 'cat src/*.ts', 'cat READ?E.md']) {
+            const { domande } = await giroShell(t, comando)
+            assert.equal(domande.length, 0, `«${comando}»: nessun segreto dietro il glob`)
+        }
+    })
+
     it('⭐⭐⭐ LA COPIA PER LA PERSONA è in lingua naturale, nomina il file e NON contiene nomi tecnici', async (t) => {
         const { domande } = await giroShell(t, 'cat ~/.ssh/id_rsa')
         const frase = domande[0].segreto?.frase ?? ''

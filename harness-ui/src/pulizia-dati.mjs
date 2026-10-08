@@ -73,7 +73,7 @@ export async function puliziaDatiDesktop({ keyring, logger = console } = {}) {
     } catch (errore) { segnala('ricerca', id, errore); }
   }
 
-  logger.log?.(`Pulizia dati TALOS: ${cancellati.filter((v) => v.tipo === 'provider').length} chiavi provider, ${cancellati.filter((v) => v.tipo === 'ricerca').length} fonti di ricerca; errori: ${errori.length}.`);
+  logger.log?.(`TALOS data cleanup: ${cancellati.filter((v) => v.tipo === 'provider').length} provider keys, ${cancellati.filter((v) => v.tipo === 'ricerca').length} search sources; errors: ${errori.length}.`);
   if (errori.length) logger.error?.(`Pulizia incompleta: ${errori.map((v) => `${v.tipo} ${v.id}: ${v.messaggio}`).join('; ')}`);
   return Object.freeze({ cancellati, errori, ok: errori.length === 0 });
 }

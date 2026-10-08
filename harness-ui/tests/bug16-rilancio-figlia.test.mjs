@@ -24,7 +24,7 @@ const ESAURITO = {
     + 'riprendi esplicitamente quando vuoi continuare.',
   codiceErrore: 'PROVIDER_OUTCOME_UNKNOWN_ESAURITO',
 };
-const RILANCIO = 'La risposta del fornitore si è interrotta e il suo esito è rimasto incerto: riprendi e completa il compito da dove l’hai lasciato.';
+const RILANCIO = 'The provider response was cut off and its outcome is uncertain: resume and finish the task from where you left it.';
 
 function vocePadre({ cartella = '/progetto' } = {}) {
   return { cartella, profonditaDelega: 0, conclusa: false, padreId: null, modello: null, reasoning: null, permessi: null, permessiPerAttrezzo: null };
@@ -72,7 +72,7 @@ test('BUG16-RILANCIO-LETTURA: figlia in lettura morta con esito incerto esaurito
   assert.equal(conclusive.length, 1);
   assert.equal(conclusive[0].risultato.esito, 'concluso');
   assert.equal(conclusive[0].risultato.rilanciata, 1);
-  assert.match(conclusive[0].risultato.riassunto, /rilanciata una volta dopo un esito incerto/u);
+  assert.match(conclusive[0].risultato.riassunto, /relaunched once after an uncertain provider outcome/u);
   assert.equal(sessioni.get(ids[0]).rilanciDelega, 1);
 });
 
@@ -86,7 +86,7 @@ test('BUG16-NIENTE-RILANCIO-MODIFICA: figlia in modifica con esito incerto ⇒ n
   assert.equal(conclusive.length, 1);
   assert.equal(conclusive[0].risultato.esito, 'fallito');
   assert.equal(conclusive[0].risultato.rilanciabile, false);
-  assert.match(conclusive[0].risultato.motivoRilancio, /lettura pura/u);
+  assert.match(conclusive[0].risultato.motivoRilancio, /not a pure read/u);
   assert.match(conclusive[0].risultato.motivo, /10 reinvii automatici/u, 'il messaggio del kernel arriva onesto alla madre');
   assert.equal(conclusive[0].risultato.rilanciata, undefined);
 });
@@ -114,8 +114,8 @@ test('BUG16-TETTO-UNO: anche la figlia rilanciata muore con esito incerto ⇒ ne
   assert.equal(conclusive[0].risultato.esito, 'fallito');
   assert.equal(conclusive[0].risultato.rilanciata, 1);
   assert.equal(conclusive[0].risultato.rilanciabile, false);
-  assert.match(conclusive[0].risultato.motivoRilancio, /tetto/u);
-  assert.match(conclusive[0].risultato.motivo, /rilanciata una volta dopo un esito incerto/u);
+  assert.match(conclusive[0].risultato.motivoRilancio, /cap of one relaunch/u);
+  assert.match(conclusive[0].risultato.motivo, /relaunched once after an uncertain provider outcome/u);
 });
 
 test('BUG16-RILANCIO-SOLO-ESAURITO: un esito incerto SENZA cap esaurito non tocca all\'orchestratore (già gestito dal kernel)', async () => {
@@ -178,7 +178,7 @@ test('BUG16-RILANCIO-AVVIO-RIFIUTATO: l\'avvio del rilancio è rifiutato ⇒ ret
     assert.equal(esito.esito, 'fallito');
     assert.equal(esito.rilanciata, undefined, 'nessun rilancio è mai partito: la consegna non può dire «rilanciata»');
     assert.equal(esito.rilanciabile, false);
-    assert.match(esito.motivoRilancio, /il rilancio non è partito: session-deleted/u, 'motivo onesto, col motivo del rifiuto');
+    assert.match(esito.motivoRilancio, /the relaunch did not start: session-deleted/u, 'motivo onesto, col motivo del rifiuto');
     assert.match(esito.motivo, /10 reinvii automatici/u, 'il messaggio del kernel arriva onesto alla madre');
     assert.equal(creazioni.filter((n) => n.rilanciata).length, 0, 'nessuna notifica «figlia rilanciata»: non è mai partita');
   }
@@ -207,6 +207,6 @@ test('BUG16-RILANCIO-AVVIO-RIFIUTATO: l\'avvio del rilancio è rifiutato ⇒ ret
     assert.equal(esito.esito, 'fallito');
     assert.equal(esito.rilanciata, undefined);
     assert.equal(esito.rilanciabile, false);
-    assert.match(esito.motivoRilancio, /il rilancio non è partito: provider-not-ready/u);
+    assert.match(esito.motivoRilancio, /the relaunch did not start: provider-not-ready/u);
   }
 });

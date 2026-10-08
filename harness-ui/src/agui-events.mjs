@@ -357,8 +357,11 @@ export function queuedMessageDelivered({ testo }) {
  */
 /* F4-03 (01/10/2026): `ambito: 'cartella'` quando il sì vale per la cartella fino a fine sessione; `motivo: 'nessuna-interfaccia'`
    quando nessuno poteva rispondere e il registro ha chiuso da sé. Facoltativi: senza, l'evento è quello di prima, identico. */
-export function approvalResolved({ requestId, approvato, ambito, motivo }) {
-    return { type: 'ApprovalResolved', requestId, approvato, ...(ambito ? { ambito } : {}), ...(motivo ? { motivo } : {}) }
+/* C2 R6 (07/10/2026): `rispostoDa` quando la persona ha risposto dalla carta disegnata in un'ALTRA sessione della catena (il
+   padre); facoltativo come gli altri. */
+export function approvalResolved({ requestId, approvato, ambito, motivo, rispostoDa }) {
+    return { type: 'ApprovalResolved', requestId, approvato, ...(ambito ? { ambito } : {}), ...(motivo ? { motivo } : {}),
+        ...(typeof rispostoDa === 'string' && rispostoDa ? { rispostoDa } : {}) }
 }
 
 /*
@@ -391,11 +394,14 @@ export function mcpElicitationResolved({ requestId, action, at, da, motivo }) {
     return { type: 'McpElicitationResolved', requestId, action, ...(at ? { at } : {}), ...(da ? { da } : {}), ...(motivo ? { motivo } : {}) }
 }
 
-export function userQuestionResolved({ requestId, status, answers = null, skipped = null, notes = null, at, da, motivo }) {
+/* C2-Q (08/10/2026): `rispostoDa` come in `approvalResolved` — la persona ha risposto dalla carta disegnata in un'ALTRA sessione
+   della catena (il padre). Facoltativo: senza, l'evento è quello di prima, identico. */
+export function userQuestionResolved({ requestId, status, answers = null, skipped = null, notes = null, at, da, motivo, rispostoDa }) {
     return {
         type: 'UserQuestionResolved', requestId, status, ...(answers ? { answers } : {}),
         ...(skipped?.length ? { skipped } : {}), ...(notes && Object.keys(notes).length ? { notes } : {}),
         ...(at ? { at } : {}), ...(da ? { da } : {}), ...(motivo ? { motivo } : {}),
+        ...(typeof rispostoDa === 'string' && rispostoDa ? { rispostoDa } : {}),
     }
 }
 

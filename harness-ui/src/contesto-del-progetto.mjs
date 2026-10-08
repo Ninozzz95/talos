@@ -148,8 +148,20 @@ const chiaveDi = (cartella, permesso, modello) => `${cartella}|${permesso ?? ''}
  * ⛔ E non sono sentinelle invisibili (`<!--TALOS-PREAMBOLO-->`): sono le prime parole che il
  *   modello legge davvero. Una sentinella tecnica costerebbe token per non dire niente a chi legge.
  */
-export const INIZIO_SCHEDA = 'Scheda di lavoro — ';
-export const INIZIO_AGGIORNAMENTO = 'Aggiornamento del contesto del progetto:';
+export const INIZIO_SCHEDA = 'Working sheet — ';
+export const INIZIO_AGGIORNAMENTO = 'Project context update:';
+/**
+ * ⛔ K4b — le prime parole dei preamboli salvati PRIMA che il preambolo passasse all'inglese (07/10/2026): DATI salvati, da
+ *   RICONOSCERE in `preamboloVistoDa`, MAI da emettere. Stanno in chiaro e in un posto solo perché chi legge il codice le veda
+ *   e l'inventario della lingua le conti come eccezione dichiarata (review del bugfixer, 07/10/2026: in base64 erano una
+ *   guardia aggirata in silenzio). `tests/k4b-marche-storiche.test.mjs` prova che riconoscono e che nessuno le emette.
+ */
+export const MARCHE_STORICHE_IT = Object.freeze({
+  aggiornamento: 'Aggiornamento del contesto del progetto:',
+  istruzioni: 'Istruzioni di questo progetto — ',
+  scheda: 'Scheda di lavoro — ',
+  mappa: 'Struttura di «',
+});
 
 /**
  * Costruisce (o riusa) il PREAMBOLO di una cartella: blocchi 2, 3 e 4 in un testo solo.
@@ -254,7 +266,7 @@ async function costruisciPreambolo({ cartella, creaFiltro, permesso, modello, pi
    */
   const resaMappa = mappaHaSostanza ? mappaEntroIlTetto(mappa, { radice: cartella, tettoToken: tettoTokenMappa, confine: confineStabile('mappa') }) : null;
   if (resaMappa) pezzi.push(resaMappa.testo);
-  pezzi.push(scheda?.testo ?? `${INIZIO_SCHEDA}non sono riuscito a leggere lo stato di questa cartella; quello che precede e' comunque vero.`);
+  pezzi.push(scheda?.testo ?? `${INIZIO_SCHEDA}could not read the status of this folder; what precedes is still true.`);
   /* Doppio a-capo fra i blocchi: sono tre cose diverse, e un modello che legge un muro di testo
      senza confini le mescola. Costa 2 byte per blocco. */
   const testo = pezzi.join('\n\n');
@@ -299,7 +311,7 @@ async function costruisciPreambolo({ cartella, creaFiltro, permesso, modello, pi
   /* ⛔ Un rinnovo in sottofondo che finisce DOPO un `segnalaFileCambiati` non deve resuscitare
      una voce buttata: si scrive solo se la chiave è ancora quella attesa o se non c'è niente. */
   const precedente = cache.get(chiave);
-  if (rinnovo && !precedente) return esito; // buttata da segnalaFileCambiati mentre si ricostruiva: la cartella e' cambiata, questa mappa e' gia' vecchia
+  if (rinnovo && !precedente) return esito; // buttata da segnalaFileCambiati mentre si ricostruiva: cartella cambiata, mappa vecchia
   cache.set(chiave, { quando: ora, esito, rinnovo: precedente?.rinnovo ?? null });
   return esito;
 }
@@ -366,9 +378,9 @@ export function aggiornamentoInCoda({ storia, testo } = {}) {
      In entrambi i casi non si appende: non c'e' niente da SOSTITUIRE. */
   if (visto === null) return null;
   if (visto === testo) return null;
-  return INIZIO_AGGIORNAMENTO + ' quanto segue SOSTITUISCE la scheda di lavoro, le istruzioni di '
-    + 'progetto e la mappa delle cartelle che hai ricevuto prima in questa conversazione. Quelle '
-    + 'non valgono piu\u0027.\n\n' + testo;
+  return INIZIO_AGGIORNAMENTO + ' the following REPLACES the working sheet, project instructions '
+    + 'and folder map you received earlier in this conversation. Those '
+    + 'no longer apply.\n\n' + testo;
 }
 
 /**
@@ -380,15 +392,17 @@ export function preamboloVistoDa(storia) {
   for (let i = storia.length - 1; i >= 0; i -= 1) {
     const m = storia[i];
     if (m?.role !== 'system' || typeof m.content !== 'string') continue;
-    if (m.content.startsWith(INIZIO_AGGIORNAMENTO)) {
+    if (m.content.startsWith(INIZIO_AGGIORNAMENTO) || m.content.startsWith(MARCHE_STORICHE_IT.aggiornamento)) {
       const taglio = m.content.indexOf('\n\n');
       return taglio >= 0 ? m.content.slice(taglio + 2) : null;
     }
-    if (m.content.startsWith(INIZIO_SCHEDA)) return m.content;
+    if (m.content.startsWith(INIZIO_SCHEDA) || m.content.startsWith(MARCHE_STORICHE_IT.scheda)) return m.content;
     // BC-48 C: i preamboli nuovi iniziano col blocco stabile; quelli salvati prima restano validi.
-    const inizioStabile = m.content.startsWith('Istruzioni di questo progetto — ')
-      || m.content.startsWith('Struttura di «');
-    if (inizioStabile && m.content.includes(`\n\n${INIZIO_SCHEDA}`)) return m.content;
+    const inizioStabile = m.content.startsWith('Project instructions — ')
+      || m.content.startsWith(MARCHE_STORICHE_IT.istruzioni)
+      || m.content.startsWith('Structure of «')
+      || m.content.startsWith(MARCHE_STORICHE_IT.mappa);
+    if (inizioStabile && (m.content.includes(`\n\n${INIZIO_SCHEDA}`) || m.content.includes(`\n\n${MARCHE_STORICHE_IT.scheda}`))) return m.content;
   }
   return null;
 }

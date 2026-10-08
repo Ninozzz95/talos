@@ -57,10 +57,10 @@ for (const ordine of ['C', 'pre-C']) {
     const misura = await eseguiBanco({ ordine, ricostruisci: true });
     verificaPrefisso(misura);
     assert.notEqual(misura.preamboli[0], misura.preamboli[1]);
-    assert.match(misura.preamboli[1], /1 file non salvati/);
+    assert.match(misura.preamboli[1], /(?:1 unsaved files|1 file non salvati)/);
     const dopo = JSON.parse(misura.corpi[1]);
     assert.equal(dopo.messages.length, 6);
-    assert.match(dopo.messages.at(-1).content, /^Aggiornamento del contesto del progetto:/);
+    assert.match(dopo.messages.at(-1).content, /^(?:Project context update|Aggiornamento del contesto del progetto):/);
     assert.ok(dopo.messages.at(-1).content.endsWith(misura.preamboli[1]));
     misure.push(misura);
   });
@@ -69,8 +69,8 @@ for (const ordine of ['C', 'pre-C']) {
 test('BC48-CBIS-ORDINI: C cambia il corpo ma non allunga il prefisso di una ripresa', () => {
   const [conC, preC] = ['C', 'pre-C'].map(ordine => misure.find(m => m.ordine === ordine && !m.ricostruisci));
   assert.notEqual(conC.corpi[0], preC.corpi[0]);
-  assert.match(JSON.parse(conC.corpi[0]).messages[1].content, /^Istruzioni di questo progetto/);
-  assert.match(JSON.parse(preC.corpi[0]).messages[1].content, /^Scheda di lavoro/);
+  assert.match(JSON.parse(conC.corpi[0]).messages[1].content, /^(?:Project instructions|Istruzioni di questo progetto)/);
+  assert.match(JSON.parse(preC.corpi[0]).messages[1].content, /^(?:Working sheet|Scheda di lavoro)/);
   /* F-027, estensione (03/10/2026): il codice di oggi mette l'albero della mappa e le righe della scheda nel confine dei dati,
      il commit «pre-C» no. Il prefisso identico si allunga ESATTAMENTE dei byte delle righe di confine che contiene (come stanno
      nel JSON del corpo, con `\"` e `\n` escapati), non di un byte di più: tolte quelle, è lo stesso di prima. */
@@ -89,7 +89,7 @@ test('BC48-CBIS-MARCATORE: watcher vero, 18 KB e almeno 19533 byte dopo la cura'
   verificaPrefisso(misura, MINIMO_PREFISSO_LUNGO);
   assert.ok(misura.invalidazioni > 0);
   assert.notEqual(misura.preamboli[0], misura.preamboli[1]);
-  assert.match(JSON.parse(misura.corpi[1]).messages.at(-1).content, /^Aggiornamento del contesto del progetto:/);
+  assert.match(JSON.parse(misura.corpi[1]).messages.at(-1).content, /^(?:Project context update|Aggiornamento del contesto del progetto):/);
   assert.equal(typeof misura.messaggiFinali[1].content, 'string', 'storia canonica integra');
   misure.push(misura);
 });
@@ -99,7 +99,7 @@ test('BC48-CBIS-WATCHER: 11,5 KiB, modifica rilevata e preambolo iniziale intatt
   verificaPrefisso(misura);
   assert.ok(misura.invalidazioni > 0);
   assert.notEqual(misura.preamboli[0], misura.preamboli[1]);
-  assert.match(JSON.parse(misura.corpi[1]).messages.at(-1).content, /^Aggiornamento del contesto del progetto:/);
+  assert.match(JSON.parse(misura.corpi[1]).messages.at(-1).content, /^(?:Project context update|Aggiornamento del contesto del progetto):/);
   misure.push(misura);
 });
 

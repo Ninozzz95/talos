@@ -24,9 +24,9 @@ import { separaFonteModello } from './model-destination.mjs';
 
 /** La causa della panchina, detta a una persona. Mai la classe tecnica a schermo. */
 const CAUSA_UMANA = Object.freeze({
-  credenziale: 'il fornitore l\'ha rifiutata',
-  credito: 'il credito è esaurito',
-  traffico: 'il fornitore ha chiesto di aspettare per troppo traffico',
+  credenziale: "the provider rejected it",
+  credito: "credit has run out",
+  traffico: "the provider asked to wait because of heavy traffic",
 });
 
 function fraseDellaPanchina(etichetta, pool, adesso) {
@@ -34,11 +34,11 @@ function fraseDellaPanchina(etichetta, pool, adesso) {
   if (ferme.length === 0) return null;
   // La prima a tornare disponibile è quella che interessa: è quando si può riprovare.
   const prima = ferme.reduce((a, b) => (a.inPanchinaFino <= b.inPanchinaFino ? a : b));
-  const causa = CAUSA_UMANA[prima.causa] ?? 'il fornitore non l\'ha accettata';
+  const causa = CAUSA_UMANA[prima.causa] ?? "the provider did not accept it";
   const minuti = Math.max(1, Math.ceil((prima.inPanchinaFino - adesso) / 60_000));
-  const quando = minuti >= 120 ? `fra circa ${Math.round(minuti / 60)} ore` : `fra circa ${minuti} min`;
-  const quante = ferme.length === 1 ? `La chiave di ${etichetta} è in pausa` : `Le ${ferme.length} chiavi di ${etichetta} sono in pausa`;
-  return `${quante}: ${causa}. Si riprova da sola ${quando}; per non aspettare, collega un'altra chiave da Fornitori e accessi.`;
+  const quando = minuti >= 120 ? `in about ${Math.round(minuti / 60)} hours` : `in about ${minuti} min`;
+  const quante = ferme.length === 1 ? `The ${etichetta} key is paused` : `The ${ferme.length} ${etichetta} keys are paused`;
+  return `${quante}: ${causa}. It will retry automatically ${quando}; to avoid waiting, connect another key from Providers and access.`;
 }
 
 /**
@@ -50,11 +50,11 @@ export function creaProntoFn({ providerStore, chiaveApi = null, adessoFn = Date.
     /* ⛔ D2 (17/09): con un modello vuoto rispondeva «pronto» e la sessione partiva. Un modello che non si sa
        leggere NON è pronto, e lo dice. */
     if (typeof modello !== 'string' || modello.trim() === '') {
-      return { pronto: false, codice: 'CONFIG_INVALID', messaggio: 'Scegli un modello prima di avviare la sessione.' };
+      return { pronto: false, codice: 'CONFIG_INVALID', messaggio: "Choose a model before starting the session." };
     }
     let fonte;
     try { ({ fonte } = separaFonteModello(modello)); }
-    catch { return { pronto: false, codice: 'CONFIG_INVALID', messaggio: 'Questo modello non è riconosciuto: scegline uno dall\'elenco.' }; }
+    catch { return { pronto: false, codice: 'CONFIG_INVALID', messaggio: "This model is not recognized: choose one from the list." }; }
     const record = REGISTRO_FORNITORI[fonte];
     /* ⛔ `codice` e `messaggio` solo quando c'è qualcosa da dire: un «pronto» non porta un codice d'errore. */
     if (!record || record.chiaveObbligatoria !== true) return { pronto: true, fornitore: record?.etichetta ?? fonte };
@@ -67,7 +67,7 @@ export function creaProntoFn({ providerStore, chiaveApi = null, adessoFn = Date.
       pronto: false,
       fornitore: record.etichetta,
       codice: 'CONFIG_INVALID',
-      messaggio: panchina ?? `Manca la chiave di ${record.etichetta}: collegala da Fornitori e accessi.`,
+      messaggio: panchina ?? `The ${record.etichetta} key is missing: connect it from Providers and access.`,
     };
   };
 }

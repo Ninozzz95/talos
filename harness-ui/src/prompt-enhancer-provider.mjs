@@ -7,13 +7,13 @@ function erroreApi(message, code) {
 
 function mappaErroreDestinazione(errore) {
   if (errore?.code === 'PROVIDER_KEY_MISSING') {
-    return erroreApi('Manca la credenziale del provider usato da questa chat. Collegala in Impostazioni → Provider, poi riprova.', 'PROVIDER_KEY_REQUIRED');
+    return erroreApi('The credential for the provider used by this chat is missing. Connect it in Settings → Providers, then try again.', 'PROVIDER_KEY_REQUIRED');
   }
   if (errore?.code === 'MODEL_DESTINATION_INVALID' || errore?.code === 'MODEL_DESTINATION_MISCONFIGURED') {
-    return erroreApi('Il modello di questa chat non ha una destinazione valida.', 'PROVIDER_RUNTIME_UNAVAILABLE');
+    return erroreApi('This chat\'s model has no valid destination.', 'PROVIDER_RUNTIME_UNAVAILABLE');
   }
   if (typeof errore?.code === 'string' && errore.code.startsWith('PROVIDER_')) {
-    return erroreApi('Il provider di questa chat non è disponibile per la riscrittura.', 'PROVIDER_RUNTIME_UNAVAILABLE');
+    return erroreApi('This chat\'s provider is not available for rewriting.', 'PROVIDER_RUNTIME_UNAVAILABLE');
   }
   return errore;
 }
@@ -26,13 +26,13 @@ function mappaErroreDestinazione(errore) {
  */
 export async function chiediMiglioramentoAlProvider({ modello, messaggi, providerStore, fetchFn = globalThis.fetch } = {}) {
   if (typeof modello !== 'string' || modello.trim() === '') {
-    throw erroreApi('Questa sessione non dichiara un modello.', 'SESSION_NOT_READY');
+    throw erroreApi('This session does not declare a model.', 'SESSION_NOT_READY');
   }
   if (!providerStore || typeof providerStore.getKey !== 'function' || typeof providerStore.getRuntime !== 'function') {
-    throw erroreApi('Il portachiavi dei provider non è configurato.', 'PROVIDER_STORE_UNAVAILABLE');
+    throw erroreApi('The provider keychain is not configured.', 'PROVIDER_STORE_UNAVAILABLE');
   }
   if (typeof fetchFn !== 'function') {
-    throw erroreApi('Il trasporto del provider non è configurato.', 'PROVIDER_RUNTIME_UNAVAILABLE');
+    throw erroreApi('The provider transport is not configured.', 'PROVIDER_RUNTIME_UNAVAILABLE');
   }
 
   let destinazione;
@@ -47,7 +47,7 @@ export async function chiediMiglioramentoAlProvider({ modello, messaggi, provide
   }
 
   if (destinazione.locale || destinazione.esterno) {
-    throw erroreApi('Il provider di questa chat non è disponibile per la riscrittura.', 'PROVIDER_RUNTIME_UNAVAILABLE');
+    throw erroreApi('This chat\'s provider is not available for rewriting.', 'PROVIDER_RUNTIME_UNAVAILABLE');
   }
 
   const body = {
@@ -76,11 +76,11 @@ export async function chiediMiglioramentoAlProvider({ modello, messaggi, provide
       });
     }
   } catch {
-    throw erroreApi('Il provider di questa chat non ha risposto.', 'PROVIDER_RUNTIME_UNAVAILABLE');
+    throw erroreApi('This chat\'s provider did not answer.', 'PROVIDER_RUNTIME_UNAVAILABLE');
   }
 
   if (!risposta?.ok) {
-    throw erroreApi(`Il provider di questa chat ha risposto ${risposta?.status ?? '?'}.`, 'PROVIDER_RUNTIME_UNAVAILABLE');
+    throw erroreApi(`This chat's provider answered ${risposta?.status ?? '?'}.`, 'PROVIDER_RUNTIME_UNAVAILABLE');
   }
 
   let letto;

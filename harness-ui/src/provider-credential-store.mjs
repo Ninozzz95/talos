@@ -126,19 +126,19 @@ export function leggiScadenzaFornitore(provider, { headers, resetAt } = {}, ora 
 }
 
 const MESSAGE_BY_CODE = Object.freeze({
-  PROVIDER_INVALID: 'Provider non riconosciuto',
-  PROVIDER_KEY_REQUIRED: 'Inserisci una chiave prima di salvarla',
-  PROVIDER_KEY_INVALID: 'La chiave inserita non è valida',
-  PROVIDER_STORE_UNAVAILABLE: 'Il portachiavi del computer non è disponibile: controlla Doctor',
-  PROVIDER_RUNTIME_INVALID: 'Controlla i campi del collegamento: indirizzo, modelli, comando e tempo massimo',
-  PROVIDER_RUNTIME_UNAVAILABLE: 'Non è stato possibile salvare le preferenze del provider: controlla Doctor',
-  PROVIDER_POOL_FULL: 'Sono già presenti otto chiavi per questo fornitore',
-  PROVIDER_KEY_NOT_FOUND: 'La chiave non è più presente: aggiorna il pannello',
+  PROVIDER_INVALID: 'Provider not recognized',
+  PROVIDER_KEY_REQUIRED: 'Enter a key before saving it',
+  PROVIDER_KEY_INVALID: 'The entered key is not valid',
+  PROVIDER_STORE_UNAVAILABLE: 'The computer keychain is not available: check Doctor',
+  PROVIDER_RUNTIME_INVALID: 'Check the connection fields: address, models, command and maximum time',
+  PROVIDER_RUNTIME_UNAVAILABLE: 'Could not save the provider preferences: check Doctor',
+  PROVIDER_POOL_FULL: 'There are already eight keys for this provider',
+  PROVIDER_KEY_NOT_FOUND: 'The key is no longer there: refresh the panel',
 });
 
 export class ProviderCredentialError extends Error {
   constructor(code, details = '') {
-    super(MESSAGE_BY_CODE[code] || 'Configurazione provider non disponibile');
+    super(MESSAGE_BY_CODE[code] || 'Provider configuration not available');
     this.name = 'ProviderCredentialError';
     this.code = code;
     this.details = details;
@@ -210,6 +210,44 @@ function normalizzaModelli(provider, value, segreti = []) {
     return { id: m.id, ...(m.nome === undefined ? {} : { nome: m.nome.trim() }) };
   });
 }
+/*
+ * ⛔ Decisione 14 dell'owner (08/10/2026 sera) — I FORNITORI A VALLE DA ESCLUDERE, solo per OpenRouter: mandati in ogni richiesta
+ *   come `provider.ignore` (docs OpenRouter «Provider Routing», lette l'08/10: «List of provider slugs to skip»; uno slug di base
+ *   come `deepinfra` copre anche le sue varianti, `deepinfra/turbo` una sola). Hermes fa lo stesso dalla sua configurazione
+ *   (`agent/chat_completion_helpers.py:469-487`, `providers_ignored`). Qui solo SLUG: minuscole, cifre, `.`, `_`, `-`, e al più
+ *   una variante dopo `/`. Al massimo 30, senza doppioni: OpenRouter avverte che escluderne molti toglie strade di riserva.
+ */
+export const ESCLUSI_MASSIMI = 30;
+const FORMA_SLUG_FORNITORE = /^[a-z0-9][a-z0-9._-]{0,47}(?:\/[a-z0-9][a-z0-9._-]{0,47})?$/u;
+export function normalizzaEsclusi(provider, value) {
+  const invalido = () => { throw new ProviderCredentialError('PROVIDER_RUNTIME_INVALID'); };
+  if (provider !== 'openrouter' || !Array.isArray(value) || value.length > ESCLUSI_MASSIMI) invalido();
+  const visti = [];
+  for (const voce of value) {
+    if (typeof voce !== 'string') invalido();
+    const slug = voce.trim().toLowerCase();
+    if (!FORMA_SLUG_FORNITORE.test(slug)) invalido();
+    if (!visti.includes(slug)) visti.push(slug);
+  }
+  return visti;
+}
+/*
+ * ⛔ Nota 1 della review del bugfixer (08/10/2026 notte): DAL DISCO si legge tollerante. `normalizzaEsclusi` lancia, e dentro il
+ *   `try` di riga la riga INTERA di OpenRouter (tempo massimo, indirizzo) si perdeva all'avvio per un solo slug scritto male a
+ *   mano in `providers.json`. Qui si tengono gli slug buoni (al più 30, senza doppioni) e si scartano gli altri con un avviso
+ *   senza contenuto; la scrittura dalle rotte resta severa (`impostaEsclusi` → `normalizzaEsclusi`, 422).
+ * @returns {string[]|null} null se il valore non è un elenco di OpenRouter (si ignora tutto il campo, non la riga)
+ */
+function esclusiDalDisco(provider, value, avvisa) {
+  if (provider !== 'openrouter' || !Array.isArray(value)) { avvisa('Excluded providers ignored: invalid value'); return null; }
+  const buoni = [];
+  for (const voce of value) {
+    const slug = typeof voce === 'string' ? voce.trim().toLowerCase() : '';
+    if (FORMA_SLUG_FORNITORE.test(slug) && !buoni.includes(slug) && buoni.length < ESCLUSI_MASSIMI) buoni.push(slug);
+  }
+  if (buoni.length !== value.length) avvisa(`Excluded providers: ${value.length - buoni.length} entries ignored (invalid, repeated or over ${ESCLUSI_MASSIMI})`);
+  return buoni;
+}
 function normalizzaAgente(value, env, segreti = []) {
   try {
     const agente = validaRuntimeAgenteEsterno(value, { env });
@@ -226,7 +264,7 @@ function readRuntimePreferences(runtimeFile, runtimes, logger, env, segreti) {
     parsed = JSON.parse(readFileSync(runtimeFile, 'utf8'));
     if (parsed?.version !== 1 || !isRecord(parsed.providers)) throw new Error('schema');
   } catch {
-    noSecretLogger(logger, 'Preferenze provider ignorate: file non leggibile');
+    noSecretLogger(logger, 'Provider preferences ignored: file not readable');
     return;
   }
   for (const provider of [...PROVIDER_IDS, 'esterno']) {
@@ -236,7 +274,7 @@ function readRuntimePreferences(runtimeFile, runtimes, logger, env, segreti) {
       try {
         if (!isRecord(row) || Object.keys(row).some(k => k !== 'agente')) throw new Error('schema');
         runtimes.set(provider, { agente: normalizzaAgente(row.agente, env, segreti) });
-      } catch { noSecretLogger(logger, 'Preferenza agente esterno ignorata: valore non valido'); }
+      } catch { noSecretLogger(logger, 'External agent preference ignored: invalid value'); }
       continue;
     }
     const definition = PROVIDER_DEFINITIONS[provider];
@@ -245,7 +283,8 @@ function readRuntimePreferences(runtimeFile, runtimes, logger, env, segreti) {
     if (!isRecord(row)) continue;
     try {
       const timeout = normalizeTimeout(row.timeoutSeconds ?? DEFAULT_TIMEOUT_SECONDS);
-      const extra = Object.hasOwn(row, 'modelli') ? { modelli: normalizzaModelli(provider, row.modelli, segreti) } : {};
+      const extra = { ...(Object.hasOwn(row, 'modelli') ? { modelli: normalizzaModelli(provider, row.modelli, segreti) } : {}),
+        ...(Object.hasOwn(row, 'esclusi') ? ((e) => (e?.length ? { esclusi: e } : {}))(esclusiDalDisco(provider, row.esclusi, (m) => noSecretLogger(logger, m))) : {}) };
       if (!definition.supportsEndpoint || row.endpointConfigured === false) {
         runtimes.set(provider, { endpoint: null, endpointConfigured: false, timeoutSeconds: timeout, ...extra });
         continue;
@@ -253,7 +292,7 @@ function readRuntimePreferences(runtimeFile, runtimes, logger, env, segreti) {
       const endpoint = normalizeProviderEndpoint(provider, row.endpoint);
       runtimes.set(provider, { endpoint, endpointConfigured: true, timeoutSeconds: timeout, ...extra });
     } catch {
-      noSecretLogger(logger, `Preferenza provider ${provider} ignorata: valore non valido`);
+      noSecretLogger(logger, `Provider ${provider} preference ignored: invalid value`);
     }
   }
 }
@@ -270,6 +309,7 @@ function writeRuntimePreferences(runtimeFile, runtimes) {
       endpointConfigured: definition.supportsEndpoint && value.endpointConfigured === true,
       timeoutSeconds: value.timeoutSeconds,
       ...(value.modelli ? { modelli: value.modelli } : {}),
+      ...(value.esclusi ? { esclusi: value.esclusi } : {}),
     };
   }
   const temporary = `${runtimeFile}.tmp`;
@@ -313,7 +353,7 @@ export function createProviderCredentialStore({ env = process.env, keyring = nul
         if (uniche.length > MAX_POOL_KEYS) throw new Error('schema');
         pools.set(provider, uniche);
       } catch {
-        noSecretLogger(logger, `Elenco chiavi ${provider} ignorato: formato non valido`);
+        noSecretLogger(logger, `Key list for ${provider} ignored: invalid format`);
         try { if (key) pools.set(provider, [voceChiave(key, 0, 'ambiente')]); } catch { /* nessun segreto in diagnosi */ }
       }
     }
@@ -321,7 +361,7 @@ export function createProviderCredentialStore({ env = process.env, keyring = nul
       const endpoint = readEnvironment(env, definition.endpointEnv);
       if (endpoint) {
         try { runtimes.set(provider, { endpoint: normalizeProviderEndpoint(provider, endpoint), endpointConfigured: true, timeoutSeconds: DEFAULT_TIMEOUT_SECONDS }); }
-        catch { noSecretLogger(logger, `Endpoint ${provider} ignorato: formato non valido`); }
+        catch { noSecretLogger(logger, `Endpoint ${provider} ignored: invalid format`); }
       }
     }
   }
@@ -332,7 +372,7 @@ export function createProviderCredentialStore({ env = process.env, keyring = nul
   function righe(provider) { requireProvider(provider); return [...(pools.get(provider) || [])].sort((a,b) => a.priorita - b.priorita); }
   function pubblica(v, i = 0) {
     const inPanchina = v.inPanchinaFino > ora();
-    return { impronta: v.impronta, nome: `Chiave ${i + 1}`, priorita: v.priorita, origine: v.origine,
+    return { impronta: v.impronta, nome: `Key ${i + 1}`, priorita: v.priorita, origine: v.origine,
       stato: inPanchina ? 'in-panchina' : 'disponibile', inPanchinaFino: inPanchina ? v.inPanchinaFino : null,
       causa: inPanchina ? v.causa : null };
   }
@@ -376,7 +416,7 @@ export function createProviderCredentialStore({ env = process.env, keyring = nul
       // L'indice si pubblica per ultimo. Un indice vuoto impedisce di resuscitare ambiente/legacy.
       keyringOperation('set', `${provider}:indice`, JSON.stringify({ version: 1, chiavi: nuove.map(v => [v.impronta, v.priorita, v.inPanchinaFino, v.causa]) }), POOL_INDEX_SERVICE);
     } catch (error) {
-      for (const id of aggiunte) { try { keyringOperation('remove', `${provider}:${id}`, null, POOL_SERVICE); } catch { noSecretLogger(logger, 'Pulizia del portachiavi incompleta: controlla Doctor'); } }
+      for (const id of aggiunte) { try { keyringOperation('remove', `${provider}:${id}`, null, POOL_SERVICE); } catch { noSecretLogger(logger, 'Keychain cleanup incomplete: check Doctor'); } }
       throw error;
     }
     pools.set(provider, nuove.map(v => ({ ...v, origine: 'custodia' })));
@@ -408,15 +448,30 @@ export function createProviderCredentialStore({ env = process.env, keyring = nul
     const attuali = righe(provider), v = attuali.find(v => v.impronta === impronta);
     if (!v) return null; // rimossa durante una richiesta in volo
     if (!Object.hasOwn(PANCHINE_PROVIDER_MS, classe)) return pubblica(v);
+    const dichiarata = leggiScadenzaFornitore(provider, { headers, resetAt }, ora());
+    /*
+     * ⛔ BUG-25 (06/10/2026, owner: «quando raggiungo i limiti di credito la chiave non è più
+     * valida — questo non deve succedere») — il credito a CHIAVE UNICA non panchina più a STIMA:
+     * senza una scadenza DICHIARATA dal fornitore (header o grammatica del corpo) la chiave resta
+     * utilizzabile e l'errore si ripete onesto a ogni richiesta. Parity Hermes
+     * (`credential_pool.py:366-399`, `_exhausted_ttl`): «Provider-supplied reset_at timestamps
+     * override these defaults», e un billing non verificato non può costare un'ora di lockout
+     * («the credential may be healthy»). CON la scadenza dichiarata la panchina dura ESATTAMENTE
+     * fin lì — anche a chiave unica, perché è un fatto del fornitore. A pool MULTI-chiave il
+     * credito resta 1 h (parity: la panchina È la rotazione verso l'altra chiave).
+     * ⛔ Le altre classi NON cambiano (PH-POOL-01..05 restano il contratto: traffico 1 h, a chiave
+     *   unica 60 s; credenziale 5 min anche a chiave unica — Hermes: «401 keeps its own TTL»).
+     */
+    if (classe === 'credito' && attuali.length === 1 && dichiarata === null) return pubblica(v);
     const stima = classe === 'traffico' && attuali.length === 1 ? 60_000 : PANCHINE_PROVIDER_MS[classe];
-    const nuova = { ...v, inPanchinaFino: leggiScadenzaFornitore(provider, { headers, resetAt }, ora()) ?? ora() + stima, causa: classe };
+    const nuova = { ...v, inPanchinaFino: dichiarata ?? ora() + stima, causa: classe };
     const nuove = attuali.map(r => r === v ? nuova : r);
     // Le panchine ambientali restano in memoria: nessuna scrittura segreta non richiesta.
     if (daPortachiavi.has(provider)) {
       try { salvaPool(provider, nuove); }
-      catch { pools.set(provider, nuove); noSecretLogger(logger, `Panchina ${provider} attiva in memoria: salvataggio non disponibile`); }
+      catch { pools.set(provider, nuove); noSecretLogger(logger, `Fallback keys for ${provider} active in memory: saving not available`); }
     } else pools.set(provider, nuove);
-    if (classe === 'credenziale') noSecretLogger(logger, `Credenziale rifiutata da ${PROVIDER_DEFINITIONS[provider].label}: controlla gli accessi`);
+    if (classe === 'credenziale') noSecretLogger(logger, `Credential rejected by ${PROVIDER_DEFINITIONS[provider].label}: check the sign-ins`);
     return pubblica(nuova);
   }
   function setKey(provider, value) {
@@ -455,14 +510,21 @@ export function createProviderCredentialStore({ env = process.env, keyring = nul
             viste.add(r[0]);
             const v = voceChiave(keyring.get(POOL_SERVICE, `${provider}:${r[0]}`), r[1]);
             if (v.impronta !== r[0] || (r[2] !== null && (!Number.isSafeInteger(r[2]) || r[2] < 0 || r[2] > 8.64e15)) || (r[3] !== null && !Object.hasOwn(PANCHINE_PROVIDER_MS, r[3]))) throw new Error('schema');
-            return { ...v, inPanchinaFino: r[2], causa: r[3] };
+            /* ⛔ BUG-25 — migrazione onesta (una tantum, dichiarata): una panchina-credito EREDITATA
+             * da un giro vecchio, su un pool rimasto con una chiave sola, non sopravvive
+             * all'aggiornamento: si carica DISPONIBILE. La regola nuova (sopra) non la riprenderebbe
+             * mai senza una scadenza dichiarata. L'indice NON si riscrive mai: al prossimo rifiuto
+             * la dichiarazione, se c'è, rinasce dal fornitore. */
+            const creditoEreditato = r[3] === 'credito' && dati.chiavi.length === 1
+              && r[2] !== null && r[2] > Date.now();
+            return { ...v, inPanchinaFino: creditoEreditato ? null : r[2], causa: creditoEreditato ? null : r[3] };
           });
           pools.set(provider, nuove); if (nuove.length) loaded += 1;
           continue;
         }
         const value = keyring.get(KEYRING_SERVICE, provider);
         if (typeof value === 'string' && value.trim() !== '' && value.length <= MAX_KEY_LENGTH) { pools.set(provider, [voceChiave(value)]); daPortachiavi.add(provider); loaded += 1; }
-      } catch { noSecretLogger(logger, `Chiave ${provider} non leggibile dal portachiavi`); }
+      } catch { noSecretLogger(logger, `Key ${provider} not readable from the keychain`); }
     }
     return { loaded, available: true };
   }
@@ -474,8 +536,24 @@ export function createProviderCredentialStore({ env = process.env, keyring = nul
     // P-K — campi non segreti derivati dalla stessa preferenza anche dopo riavvio.
     const cloud = REGISTRO_FORNITORI[provider].cloud && endpoint ? normalizzaRuntimeCloud(provider, { endpoint }) : null;
     return { provider, endpoint, endpointConfigured: saved?.endpointConfigured === true, timeoutSeconds: saved?.timeoutSeconds ?? DEFAULT_TIMEOUT_SECONDS, ...(cloud ?? {}),
-      ...(REGISTRO_FORNITORI[provider].cloud ? { modelli: structuredClone(saved?.modelli ?? []) } : {}) };
+      ...(REGISTRO_FORNITORI[provider].cloud ? { modelli: structuredClone(saved?.modelli ?? []) } : {}),
+      ...(provider === 'openrouter' ? { esclusi: [...(saved?.esclusi ?? [])] } : {}) }; // decisione 14
     // P-K — fine
+  }
+  /**
+   * Decisione 14 (owner 08/10/2026 sera): l'elenco INTERO dei fornitori a valle da escludere su OpenRouter, e nient'altro —
+   * endpoint e tempo massimo restano quelli salvati. Lista vuota = nessuna esclusione. Scrittura atomica col ritorno indietro.
+   */
+  function impostaEsclusi(provider, lista) {
+    requireProvider(provider);
+    const esclusi = normalizzaEsclusi(provider, lista);
+    const previous = runtimes.get(provider);
+    const base = previous ?? { endpoint: null, endpointConfigured: false, timeoutSeconds: DEFAULT_TIMEOUT_SECONDS };
+    const { esclusi: _vecchi, ...senza } = base;
+    runtimes.set(provider, esclusi.length ? { ...senza, esclusi } : senza);
+    try { writeRuntimePreferences(runtimeFile, runtimes); }
+    catch (error) { if (previous) runtimes.set(provider, previous); else runtimes.delete(provider); throw error; }
+    return getRuntime(provider);
   }
   function setRuntime(provider, value = {}) {
     // P-K-bis: la whitelist vale anche fuori da HTTP; validare tutto prima di scrivere.
@@ -494,11 +572,12 @@ export function createProviderCredentialStore({ env = process.env, keyring = nul
     const definition = requireProvider(provider);
     const timeout = normalizeTimeout(timeoutSeconds);
     const previous = runtimes.get(provider);
-    const extra = Object.hasOwn(value, 'modelli') ? { modelli: normalizzaModelli(provider, value.modelli, segretiRuntime()) }
-      : previous?.modelli ? { modelli: previous.modelli } : {};
+    const extra = { ...(Object.hasOwn(value, 'modelli') ? { modelli: normalizzaModelli(provider, value.modelli, segretiRuntime()) }
+      : previous?.modelli ? { modelli: previous.modelli } : {}),
+      ...(previous?.esclusi ? { esclusi: previous.esclusi } : {}) }; // decisione 14: si cambiano solo con `impostaEsclusi`
     if (!definition.supportsEndpoint) {
       if (!definition.supportsTimeout) throw new ProviderCredentialError('PROVIDER_RUNTIME_INVALID');
-      runtimes.set(provider, { endpoint: null, endpointConfigured: false, timeoutSeconds: timeout });
+      runtimes.set(provider, { endpoint: null, endpointConfigured: false, timeoutSeconds: timeout, ...(previous?.esclusi ? { esclusi: previous.esclusi } : {}) });
       try { writeRuntimePreferences(runtimeFile, runtimes); }
       catch (error) { if (previous) runtimes.set(provider, previous); else runtimes.delete(provider); throw error; }
       return getRuntime(provider);
@@ -540,6 +619,7 @@ export function createProviderCredentialStore({ env = process.env, keyring = nul
           regione: runtime.regione ?? null, progetto: runtime.progetto ?? null,
           endpointRisorsa: runtime.endpointRisorsa ?? null, versioneApi: runtime.versioneApi ?? 'v1' } : {}),
         // P-K — fine
+        ...(provider === 'openrouter' ? { esclusi: runtime.esclusi } : {}), // decisione 14: i fornitori a valle saltati
         execution: definition.execution,
         /*
          * ⛔ PO-01 (10/09) — la guardia della UI: il pulsante «Accedi con …» compare solo dove il
@@ -561,6 +641,6 @@ export function createProviderCredentialStore({ env = process.env, keyring = nul
       agente: getRuntime('esterno').agente });
   }
 
-  return Object.freeze({ getKey, getKeySync: getKey, hasKey, setKey, clearKey, loadFromKeyring, getRuntime, setRuntime, resetEndpoint, listPublic,
+  return Object.freeze({ getKey, getKeySync: getKey, hasKey, setKey, clearKey, loadFromKeyring, getRuntime, setRuntime, impostaEsclusi, resetEndpoint, listPublic,
     aggiungiChiave, rimuoviChiave, elencaPool, scegliChiave, mettiInPanchina, esportaPool, tracciaInCustodia });
 }

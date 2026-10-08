@@ -44,7 +44,7 @@ export class WorkspaceTreeError extends Error {
  */
 export async function leggiAlberoWorkspace({ cartella, percorso = '' }, { discoNodeFn } = {}) {
   if (typeof percorso !== 'string' || percorso.includes('\0') || isAbsolute(percorso)) {
-    throw new WorkspaceTreeError('Percorso non valido');
+    throw new WorkspaceTreeError('Invalid path');
   }
 
   let voci;
@@ -52,13 +52,13 @@ export async function leggiAlberoWorkspace({ cartella, percorso = '' }, { discoN
     const radiceReale = realpathSync(cartella);
     const candidatoReale = percorso === '' ? radiceReale : realpathSync(resolve(cartella, percorso));
     if (!isPathInside(radiceReale, candidatoReale)) {
-      throw new WorkspaceTreeError('Percorso fuori dalla cartella della sessione');
+      throw new WorkspaceTreeError('Path outside session folder');
     }
     const disco = (discoNodeFn ?? (({ radice }) => createWorkspaceDisk({ rootDir: radice })) )({ radice: cartella });
     voci = await disco.elenca(percorso);
   } catch (errore) {
     if (errore instanceof WorkspaceTreeError) throw errore;
-    throw new WorkspaceTreeError('Percorso non leggibile');
+    throw new WorkspaceTreeError('Path not readable');
   }
 
   return voci

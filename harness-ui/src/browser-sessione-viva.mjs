@@ -108,19 +108,19 @@ export function creaGestoreBrowserVivo({
     const trovato = trovaFn();
     if (!trovato) {
       throw errorePagina('BROWSER_VIVO_ASSENTE',
-        'Non trovo un browser Chromium su questo computer. TALOS ne usa uno già installato — Chrome o Edge — e non ne scarica uno suo.');
+        'Cannot find a Chromium browser on this computer. TALOS uses an already installed one — Chrome or Edge — and does not download its own.');
     }
     const browser = await avviaFn({ percorso: trovato.percorso, cartellaProfilo });
     if (typeof connettiFn !== 'function') {
       await browser.chiudi();
-      throw errorePagina('BROWSER_VIVO_SENZA_CONNESSIONE', 'Manca il modo di collegarsi al browser (connettiFn)');
+      throw errorePagina('BROWSER_VIVO_SENZA_CONNESSIONE', 'There is no way to connect to the browser (connettiFn)');
     }
     let socket;
     try {
       socket = await connettiFn(browser.wsUrl);
     } catch (causa) {
       await browser.chiudi();
-      throw errorePagina('BROWSER_VIVO_CONNESSIONE_FALLITA', 'Il browser è partito ma non risponde al protocollo di controllo', causa);
+      throw errorePagina('BROWSER_VIVO_CONNESSIONE_FALLITA', 'The browser started but does not answer the control protocol', causa);
     }
     const cdp = clientFn(socket);
     // vincolo 2: la verità su chi è vivo la dice il browser, non la nostra mappa
@@ -171,17 +171,17 @@ export function creaGestoreBrowserVivo({
 
   function schedaDi(sessionId) {
     const scheda = schede.get(sessionId);
-    if (!scheda) throw errorePagina('BROWSER_VIVO_SCHEDA_ASSENTE', 'Questa sessione non ha una pagina aperta');
+    if (!scheda) throw errorePagina('BROWSER_VIVO_SCHEDA_ASSENTE', 'This session has no page open');
     return scheda;
   }
 
   const gestore = {
     /** Apre (o riusa) la scheda di questa sessione e ci porta l'indirizzo. */
     async apri(sessionId, url, { larghezza = 1280, altezza = 800 } = {}) {
-      if (!sessionId) throw errorePagina('BROWSER_VIVO_SENZA_SESSIONE', 'Serve la sessione a cui appartiene la scheda');
+      if (!sessionId) throw errorePagina('BROWSER_VIVO_SENZA_SESSIONE', 'The session the tab belongs to is required');
       await gestore.raccogliScadute();
       if (!schede.has(sessionId) && schede.size >= schedeMassime) {
-        throw errorePagina('BROWSER_VIVO_TROPPE_SCHEDE', `Troppe pagine aperte insieme: il massimo è ${schedeMassime}`);
+        throw errorePagina('BROWSER_VIVO_TROPPE_SCHEDE', `Too many pages open at once: the maximum is ${schedeMassime}`);
       }
       const { cdp } = await assicuraFinestra();
       let scheda = schede.get(sessionId);
@@ -222,7 +222,7 @@ export function creaGestoreBrowserVivo({
       const esito = await vaiA(cdp, scheda.cdpSessionId, url);
       scheda.url = esito.url || url;
       tocca(scheda);
-      return { ok: esito.ok, stato: esito.stato, errore: esito.errore ?? null, url: scheda.url, canale: finestra?.canale ?? null, isolata: Boolean(scheda.contestoId), annotabile: Boolean(scheda.annotabile) };
+      return { ok: esito.ok, stato: esito.stato, errore: esito.errore ?? null, ...(esito.erroreChiave ? { erroreChiave: esito.erroreChiave, ...(esito.erroreParams ? { erroreParams: esito.erroreParams } : {}) } : {}), url: scheda.url, canale: finestra?.canale ?? null, isolata: Boolean(scheda.contestoId), annotabile: Boolean(scheda.annotabile) };
     },
 
     /** Comincia a trasmettere: `onFrame` riceve un fotogramma per volta. Torna la funzione per smettere. */
@@ -257,7 +257,7 @@ export function creaGestoreBrowserVivo({
       if (gesto.tipo === 'clic') return mandaClic(cdp, s, gesto);
       if (gesto.tipo === 'tasto') return mandaTasto(cdp, s, gesto);
       if (gesto.tipo === 'rotella') return mandaRotella(cdp, s, gesto);
-      throw errorePagina('BROWSER_VIVO_GESTO_IGNOTO', `Gesto non riconosciuto: ${gesto?.tipo}`);
+      throw errorePagina('BROWSER_VIVO_GESTO_IGNOTO', `Gesture not recognized: ${gesto?.tipo}`);
     },
 
     /*

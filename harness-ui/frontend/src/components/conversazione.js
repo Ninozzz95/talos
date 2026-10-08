@@ -105,13 +105,15 @@ export function aggiungiGiroAllaSpine(spine, { n, tick = 1, tono = null } = {}) 
  * @param {Element} conversazione la colonna dei messaggi (`#conversation`)
  * @returns {() => void} per staccare l'osservatore
  */
-export function collegaNavigazioneSpina(conversazione) {
+export function collegaNavigazioneSpina(conversazione, opzioni = {}) {
   if (!conversazione || conversazione.dataset.spinaCollegata === 'si') return () => {};
   conversazione.dataset.spinaCollegata = 'si';
   const documentObj = conversazione.ownerDocument;
   const finestra = documentObj.defaultView || globalThis;
   const scorrevole = scorrevoleConversazione(conversazione);
-  conversazione.addEventListener('click', (evento) => {
+  let collegata = true;
+  const gestisciClic = (evento) => {
+    if (!collegata) return;
     const tick = evento.target.closest?.('.talos-turn-spine__tick');
     if (!tick) return;
     const turno = tick.closest('.talos-turn');
@@ -121,20 +123,72 @@ export function collegaNavigazioneSpina(conversazione) {
     const top = scorrevole.scrollTop + turno.getBoundingClientRect().top
       - scorrevole.getBoundingClientRect().top - (scorrevole.clientTop || 0);
     scorrevole.scrollTo({ top, behavior: ridotto ? 'instant' : 'smooth' });
-  });
-  if (typeof finestra.IntersectionObserver !== 'function') return () => {};
+  };
+  conversazione.addEventListener('click', gestisciClic);
+  const scollegaClic = () => {
+    collegata = false;
+    conversazione.removeEventListener('click', gestisciClic);
+    delete conversazione.dataset.spinaCollegata;
+  };
+  if (typeof finestra.IntersectionObserver !== 'function') return scollegaClic;
   const osservatore = new finestra.IntersectionObserver((voci) => {
+    if (!collegata) return; // delivery già catturate possono arrivare dopo disconnect
     for (const voce of voci) {
       const spina = voce.target.querySelector('.talos-turn-spine');
       if (!spina) continue;
       for (const t of spina.querySelectorAll('.talos-turn-spine__tick')) t.classList.toggle('talos-turn-spine__tick--visibile', voce.isIntersecting);
     }
   }, { root: scorrevole, threshold: 0.35 });
-  const guarda = () => { for (const turno of conversazione.querySelectorAll('.talos-turn')) osservatore.observe(turno); };
-  guarda();
+  /*
+   * ⭐⭐ BUG-24, 06/10/2026 — D6 (dossier BUG-24, BP-5): registro ADDITIVO. La forma di ieri ri-osservava TUTTI i
+   * `.talos-turn` a OGNI mutazione: durante il replay di una conversazione lunga è una scansione O(n) per evento →
+   * O(n²) sull'apertura — il moltiplicatore quadratico del difetto (una mutazione per evento montato). La mutazione
+   * dice QUALI nodi sono stati aggiunti: si osservano solo quelli (un nodo re-inserito torna in `addedNodes`, e
+   * `observe` su un nodo già osservato non fa niente). La scansione intera resta quella d'aggancio, una volta sola.
+   */
+  const eTurno = (nodo) => nodo && nodo.nodeType === 1 && nodo.classList?.contains('talos-turn');
+  const osservaTurno = (nodo) => { if (eTurno(nodo) && nodo.isConnected !== false) osservatore.observe(nodo); };
+  for (const turno of conversazione.querySelectorAll('.talos-turn')) osservatore.observe(turno);
+  /*
+   * ⭐ BUG-24, 06/10/2026 — D4: l'osservatore di BACKFILL. Quando la PRIMA riga montata entra nella vista (rootMargin
+   * negativo sopra, come da dossier), chiama `suCimaRaggiunta` — nel monolite prepone la pagina vecchia con prepend
+   * ancorato (letture prima delle scritture, in `app.js:aggiungiPaginaPrecedenti`). Il bersaglio si riaggancia a ogni
+   * lotto di mutazioni, O(1): la prima riga montata cambia solo a prepend o a smontaggio della finestra. Opzionale:
+   * senza `suCimaRaggiunta` niente cambia rispetto a prima.
+   */
+  const suCimaRaggiunta = typeof opzioni?.suCimaRaggiunta === 'function' ? opzioni.suCimaRaggiunta : null;
+  let osservatoreCima = null;
+  let bersaglioCima = null;
+  const riagganciaCima = () => {
+    if (!collegata || !osservatoreCima) return;
+    const primo = conversazione.querySelector('.talos-turn');
+    if (primo === bersaglioCima) return;
+    if (bersaglioCima) osservatoreCima.unobserve(bersaglioCima);
+    bersaglioCima = primo;
+    if (bersaglioCima) osservatoreCima.observe(bersaglioCima);
+  };
+  if (suCimaRaggiunta) {
+    osservatoreCima = new finestra.IntersectionObserver((voci) => {
+      if (!collegata) return;
+      for (const voce of voci) { if (voce.isIntersecting) { suCimaRaggiunta(); break; } }
+    }, { root: scorrevole, rootMargin: '-120px 0px 0px 0px', threshold: 0 });
+    riagganciaCima();
+  }
+  const guarda = (mutazioniLotto) => {
+    if (!collegata) return;
+    for (const mutazione of mutazioniLotto || []) {
+      for (const nodo of mutazione.removedNodes || []) { if (eTurno(nodo)) osservatore.unobserve(nodo); }
+      for (const nodo of mutazione.addedNodes || []) osservaTurno(nodo);
+    }
+    riagganciaCima();
+  };
   const mutazioni = new finestra.MutationObserver(guarda);
   mutazioni.observe(conversazione, { childList: true, subtree: true });
-  return () => { osservatore.disconnect(); mutazioni.disconnect(); delete conversazione.dataset.spinaCollegata; };
+  return () => {
+    if (!collegata) return;
+    scollegaClic();
+    osservatore.disconnect(); osservatoreCima?.disconnect(); mutazioni.disconnect();
+  };
 }
 
 /** Cambia il tono dell'ULTIMO tick di una spine (es. «current» → null a giro finito, «danger» su errore). */
@@ -195,6 +249,31 @@ export function creaMessaggioTalos({ modello = '', ora = '', paragrafi = [], wor
   return messaggio;
 }
 
+/**
+ * ⛔ Decisione 14 dell'owner (08/10/2026 sera) — «via DeepInfra» nella testata della risposta: il fornitore a valle che
+ *   OpenRouter dichiara in ogni risposta (Hermes lo scrive per ogni chiamata, `agent/turn_usage.py:194-204`). Un turno di TALOS
+ *   può avere più giri e più fornitori: «via DeepInfra, Chutes», in ordine d'arrivo, senza doppioni. Un elemento SUO accanto a
+ *   `.talos-message__meta`, che chi apre il messaggio riscrive (`ensureAssistantMessageElement`).
+ * @returns {string[]} i fornitori del messaggio, dopo l'aggiunta
+ */
+export function segnaFornitoreAValle(messaggio, fornitore, opzioni = {}) {
+  const testata = messaggio?.querySelector?.(':scope > .talos-message__head');
+  if (!testata || typeof fornitore !== 'string' || !fornitore.trim()) return [];
+  const documentObj = opzioni.document || messaggio.ownerDocument || globalThis.document;
+  const nomi = messaggio.dataset.fornitoriAValle ? messaggio.dataset.fornitoriAValle.split('\n') : [];
+  if (!nomi.includes(fornitore.trim())) nomi.push(fornitore.trim());
+  messaggio.dataset.fornitoriAValle = nomi.join('\n');
+  let via = testata.querySelector(':scope > .talos-message__via');
+  if (!via) { via = el(documentObj, 'span', 'talos-message__via'); testata.append(via); }
+  via.textContent = t('chat.message.via', { nomi: nomi.join(', ') });
+  via.title = t('chat.message.viaTitle');
+  return nomi;
+}
+/** I fornitori a valle scritti nella testata del messaggio (vuoto se nessuno). */
+export function fornitoriAValleDi(messaggio) {
+  return messaggio?.dataset?.fornitoriAValle ? messaggio.dataset.fornitoriAValle.split('\n') : [];
+}
+
 /** L'id del menu della risposta: UNO per tutta la conversazione, come il menu delle schede. */
 const ID_MENU_RISPOSTA = 'menuRispostaMessaggio';
 
@@ -227,6 +306,9 @@ export const TESTI_MESSAGGIO = Object.freeze({
   get invitoRiga() { return t('chat.intro.chooseFolderHint'); },
   get invitoNotaSenzaModello() { return t('chat.intro.modelFromPill'); },
   get collegaModello() { return t('chat.intro.connectModel'); },
+  /* ⛔ Decisione 14 (08/10/2026 sera): le frasi del fornitore a valle NON stanno qui — questa tabella la misura il cancello
+     I18N-COPERTURA contro l'indice a FRASI di `EN`, che le chiavi nuove non hanno; sono chiavi `chat.message.*` lette con `t()`
+     nel punto d'uso (la forma della corsia K4), e la loro parità italiano/inglese la tiene il dizionario. */
 });
 
 /**
@@ -963,12 +1045,24 @@ export function segnaEsitoApprovazione(scheda, { approvato = false, altrove = fa
   if (esistente) esistente.remove();
   /* F4-03 (01/10/2026): il sì che vale per la cartella fino a fine sessione, e il no chiuso dal server perché nessuno poteva
      rispondere (automazioni, passi dei Workflow) — si dicono per quello che sono, non come un «Negato» qualunque. */
+  /* Automazioni a due porte (08/10/2026): sulla carta di un'automazione il no è «Annullata», e «Modifica» non è un no — la
+     persona ha corretto la bozza e l'ha salvata lei (`modificata-dalla-persona`, dal server). */
+  const cartaAutomazione = Boolean(scheda.dataset?.cartaAutomazione);
+  const modificata = !approvato && motivo === 'modificata-dalla-persona';
   const esito = approvato
     ? (ambito === 'cartella' ? t('chat.approval.allowedInFolder') : t('chat.common.approved'))
-    : (motivo === 'nessuna-interfaccia' ? t('chat.approval.deniedNoOneCanAnswer') : t('chat.approval.denied'));
-  const riga = el(documentObj, 'p', `talos-approval__esito talos-approval__esito--${approvato ? 'si' : 'no'}`, t('chat.approval.outcomeWithOrigin', { esito, altrove: altrove && motivo !== 'nessuna-interfaccia' ? t('chat.common.fromAnotherWindow') : '' }));
+    : modificata ? t('chat.approval.editedByYou')
+      : (motivo === 'nessuna-interfaccia' ? t('chat.approval.deniedNoOneCanAnswer') : cartaAutomazione ? t('chat.approval.cancelled') : t('chat.approval.denied'));
+  const riga = el(documentObj, 'p', `talos-approval__esito talos-approval__esito--${approvato || modificata ? 'si' : 'no'}`, t('chat.approval.outcomeWithOrigin', { esito, altrove: altrove && motivo !== 'nessuna-interfaccia' ? t('chat.common.fromAnotherWindow') : '' }));
   riga.setAttribute('role', 'status');
   scheda.append(riga);
+  /* C2-R7 (owner 08/10/2026 sera, «vince il "Nega"»): «Per questa sessione» davanti a un «nega» messo DOPO la nascita della carta
+     ha consentito solo questa richiesta, e il server non ha scritto il «sempre» (`nonUniti`). La carta lo dice sotto l'esito; il
+     nome umano dell'attrezzo lo mette chi ha ricevuto la risposta (`data-sempre-non-salvato`). */
+  const attrezzoNonSalvato = approvato ? scheda.dataset?.sempreNonSalvato : '';
+  if (attrezzoNonSalvato && !scheda.querySelector('.talos-approval__sempre-non-salvato')) {
+    scheda.append(el(documentObj, 'p', 'talos-approval__motivo talos-approval__sempre-non-salvato', t('chat.approval.alwaysNotSaved', { attrezzo: attrezzoNonSalvato })));
+  }
   return riga;
 }
 
@@ -1315,8 +1409,10 @@ export function creaDiffInChat(gruppi, { percorso = '', apertoSeSotto = 40, docu
 
   const riassunto = el(documentObj, 'summary', '');
   const quanti = gruppi.pezzi.length;
+  /* LINGUA-7 (08/10/2026): il plurale lo sceglie il numero (`tn`, Intl.PluralRules): «1 righe» / «1 lines» erano a schermo a ogni
+     scrittura di una riga. Con più punti del file le righe sono almeno due, quindi lì il plurale è sempre giusto. */
   riassunto.textContent = quanti === 1
-    ? t('chat.diff.title', { percorso: percorso ? t('chat.diff.inFile', { percorso }) : '', n: righeTotali })
+    ? tn('chat.diff.titleOne', 'chat.diff.titleMany', righeTotali, { percorso: percorso ? t('chat.diff.inFile', { percorso }) : '' })
     : t('chat.diff.titleWithLocations', { percorso: percorso ? t('chat.diff.inFile', { percorso }) : '', punti: quanti, n: righeTotali });
   dettaglio.append(riassunto);
 
@@ -1346,7 +1442,11 @@ export function creaDiffInChat(gruppi, { percorso = '', apertoSeSotto = 40, docu
   /* ⛔ Il taglio si dichiara coi numeri: un taglio silenzioso fa credere che il file sia cambiato meno. */
   if (gruppi.tagliato) {
     const resto = el(documentObj, 'div', 'talos-diff-chat__resto');
-    resto.textContent = t('chat.diff.hiddenLocations', { punti: gruppi.pezziNascosti, righe: gruppi.righeNascoste, aggiunte: gruppi.aggiunte, rimozioni: gruppi.rimozioni });
+    // LINGUA-7: due numeri, due plurali — quanti punti (la frase intera cambia: «Un altro punto … è») e quante righe
+    resto.textContent = tn('chat.diff.hiddenLocationsOne', 'chat.diff.hiddenLocationsMany', gruppi.pezziNascosti, {
+      punti: gruppi.pezziNascosti, righe: tn('chat.diff.lineCountOne', 'chat.diff.lineCountMany', gruppi.righeNascoste),
+      aggiunte: gruppi.aggiunte, rimozioni: gruppi.rimozioni,
+    });
     dettaglio.append(resto);
   }
 

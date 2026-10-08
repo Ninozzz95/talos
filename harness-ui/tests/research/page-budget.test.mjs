@@ -60,8 +60,8 @@ test('il budget per pagina', async (t) => {
     // La lezione D-10G, 10/09: «l'elenco completo dei test» scritto su qualunque
     // troncamento, visto dall'owner su una pagina web. Un marcatore che nomina
     // il contenuto mente appena il contenuto non è quello.
-    assert.match(esito.marker, /visti \d+ caratteri su 84312/);
-    assert.match(esito.marker, /\d+ tolti dal mezzo/);
+    assert.match(esito.marker, /showing \d+ characters out of 84312/);
+    assert.match(esito.marker, /\d+ omitted from middle/);
     assert.doesNotMatch(esito.marker, /elenco|riassunto|contenuto secondario|il resto non serve/i);
   });
 
@@ -72,20 +72,20 @@ test('il budget per pagina', async (t) => {
     // scriverla sarebbe un cancello inerte, cioè un'istruzione che il modello
     // proverà e che fallirà, bruciando un giro per colpa nostra.
     assert.doesNotMatch(esito.marker, /leggi\(|read_file|percorso=/);
-    assert.match(esito.marker, /conservato nel dossier/);
+    assert.match(esito.marker, /preserved in the dossier/);
   });
 
   await t.test('col deposito dice il percorso, e la chiamata solo se gliela danno vera', () => {
     const soloPercorso = talosResearchPageBudget(pagina(84_312), {
       reference: { percorso: 'fonti/a1b2c3.txt' },
     });
-    assert.match(soloPercorso.marker, /Il testo intero è in fonti\/a1b2c3\.txt\./);
-    assert.doesNotMatch(soloPercorso.marker, /Per sfogliare/);
+    assert.match(soloPercorso.marker, /The full text is in fonti\/a1b2c3\.txt\./);
+    assert.doesNotMatch(soloPercorso.marker, /To browse/);
 
     const conChiamata = talosResearchPageBudget(pagina(84_312), {
       reference: { percorso: 'fonti/a1b2c3.txt', chiamata: 'leggi(percorso="fonti/a1b2c3.txt", da=11250, quanti=4000)' },
     });
-    assert.match(conChiamata.marker, /Per sfogliare il mezzo: leggi\(percorso="fonti\/a1b2c3\.txt", da=11250, quanti=4000\)/);
+    assert.match(conChiamata.marker, /To browse the middle: leggi\(percorso="fonti\/a1b2c3\.txt", da=11250, quanti=4000\)/);
   });
 
   await t.test('deterministico: due giri identici danno gli stessi byte', () => {
@@ -99,7 +99,7 @@ test('il budget per pagina', async (t) => {
      * nulla. (platform.claude.com/docs/en/build-with-claude/prompt-caching,
      * letta l'11/09/2026.)
      */
-    assert.match(talosResearchPageBudget(lunga).marker, /su 84312/);
+    assert.match(talosResearchPageBudget(lunga).marker, /of 84312/);
   });
 
   await t.test('taglia sui confini di riga quando ce ne sono', () => {

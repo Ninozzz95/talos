@@ -127,7 +127,7 @@ test('ARGOMENTI: porta 0 e profilo nostro; e NON ci sono i flag che aprirebbero 
     assert.equal(args.some((a) => a.startsWith(flag)), false, `${flag} non deve mai finire nella riga di comando`);
   }
   // e senza profilo non si parte proprio: il profilo personale non è un ripiego
-  assert.throws(() => argomentiChromium({}), /profilo/i);
+  assert.throws(() => argomentiChromium({}), /profile folder/i);
 });
 
 test('RIGA: l\'indirizzo si estrae solo se è davvero un ws://', () => {
@@ -190,7 +190,7 @@ test('AVVIO AL CONTRARIO: un browser che muore subito, e un binario che non part
   const p = processoFinto();
   const avvio = avviaBrowserVivo({ percorso: '/finto/chrome', cartellaProfilo: '/tmp/p', creaCartella: () => {}, avvia: () => p, graziaMs: 10, terminaAlbero: () => true });
   setImmediate(() => p.esci(1));
-  await assert.rejects(avvio, (e) => e.codice === 'BROWSER_VIVO_USCITO_SUBITO' && /codice 1/.test(e.message));
+  await assert.rejects(avvio, (e) => e.codice === 'BROWSER_VIVO_USCITO_SUBITO' && /code 1/.test(e.message));
 
   await assert.rejects(
     avviaBrowserVivo({ percorso: '/non/ci/sono', cartellaProfilo: '/tmp/p', creaCartella: () => {}, avvia: () => { throw new Error('ENOENT'); } }),
@@ -215,8 +215,9 @@ test('CHIUSURA: chiude davvero, e se l\'albero non risponde arriva comunque il S
   p.stderr.write('DevTools listening on ws://127.0.0.1:1/x\n');
   const vivo = await avvio;
   assert.deepEqual(await vivo.chiudi(), { chiuso: true, modo: 'albero' });
-  // la seconda chiamata non ri-uccide niente
-  assert.deepEqual(await vivo.chiudi(), { chiuso: true, modo: 'già chiuso' });
+  const ris2 = await vivo.chiudi();
+  assert.equal(ris2.chiuso, true);
+  assert.match(ris2.modo, /(?:already closed|già chiuso)/);
 
   // AL CONTRARIO: taskkill fallisce e il processo ignora tutto ⇒ SIGKILL, non un browser vivo
   const sordo = processoFinto({ pid: 999 });
@@ -260,7 +261,7 @@ test('CDP AL CONTRARIO: una risposta di errore, un socket già morto, una chiusu
   const cdp = creaClientCdp(conErrore, { attesaMs: 500 });
   await assert.rejects(cdp.invia('Page.navigate', { url: 'boh' }, 'S'), (e) => {
     assert.equal(e.codice, 'CDP_ERRORE');
-    assert.match(e.message, /Page\.navigate: Cannot navigate to invalid URL \(codice -32000\)/);
+    assert.match(e.message, /Page\.navigate: Cannot navigate to invalid URL \(code -32000\)/);
     return true;
   });
 
@@ -270,7 +271,7 @@ test('CDP AL CONTRARIO: una risposta di errore, un socket già morto, una chiusu
   const cdpMorto = creaClientCdp(morto, { attesaMs: 500 });
   await assert.rejects(cdpMorto.invia('Page.enable', {}, 'S'), (e) => e.codice === 'CDP_INVIO_FALLITO');
   // chiudere un socket già morto non deve esplodere
-  morto.close = () => { throw new Error('già chiuso'); };
+  morto.close = () => { throw new Error('already closed'); };
   assert.doesNotThrow(() => cdpMorto.chiudi());
 
   // chi era in volo quando la connessione cade riceve un rifiuto, non resta appeso per sempre
@@ -352,14 +353,17 @@ test('NAVIGA AL CONTRARIO: un 404 caricato benissimo È un fallimento, e un erro
   // ⛔ è l'inganno esatto per cui la cornice <iframe> non si accorgeva di niente
   const quattroZeroQuattro = await vaiA(cdpFinto({ stato: 404 }), 'S', 'https://esempio.org/manca');
   assert.deepEqual([quattroZeroQuattro.ok, quattroZeroQuattro.stato], [false, 404]);
+  assert.deepEqual([quattroZeroQuattro.erroreChiave, quattroZeroQuattro.erroreParams], ['server.liveBrowser.siteStatus', { status: 404 }]);
   assert.match(quattroZeroQuattro.errore, /404/);
 
   const rotta = await vaiA(cdpFinto({ errorText: 'net::ERR_NAME_NOT_RESOLVED' }), 'S', 'https://non-esiste.invalid/');
-  assert.deepEqual(rotta, { ok: false, stato: null, errore: 'Il nome del sito non esiste', url: 'https://non-esiste.invalid/' });
+  assert.deepEqual(rotta, { ok: false, stato: null, errore: 'The site name does not exist', erroreChiave: 'server.liveBrowser.nameNotResolved', url: 'https://non-esiste.invalid/' });
 
   const lenta = await vaiA(cdpFinto({ mai: true }), 'S', 'http://localhost:5173/', { attesaMs: 30 });
   assert.equal(lenta.ok, false);
-  assert.match(lenta.errore, /non ha finito di caricare/);
+  assert.match(lenta.errore, /did not finish loading/);
+  assert.equal(lenta.erroreChiave, 'server.liveBrowser.loadTimeout');
+  assert.deepEqual(lenta.erroreParams, { seconds: 0 }, 'i secondi arrivano come valore, non incollati nella frase');
 });
 
 test('NAVIGA AL CONTRARIO: schemi e indirizzi vietati non arrivano MAI al browser', async () => {
@@ -370,7 +374,7 @@ test('NAVIGA AL CONTRARIO: schemi e indirizzi vietati non arrivano MAI al browse
     assert.equal(cdp.chiamate.length, 0, `${cattivo} non deve nemmeno accendere Page/Network`);
   }
   const nonUrl = await vaiA(cdpFinto(), 'S', 'questo non è un indirizzo');
-  assert.deepEqual([nonUrl.ok, nonUrl.errore], [false, 'URL non valido']);
+  assert.deepEqual([nonUrl.ok, nonUrl.errore], [false, 'Invalid URL']);
 
   // …e il verso giusto: loopback e rete privata RESTANO ammessi, sono il motivo per cui il browser vivo esiste
   for (const buono of ['http://localhost:5173/', 'http://127.0.0.1:4174/harness', 'http://192.168.1.40:3000/']) {

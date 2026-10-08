@@ -73,7 +73,8 @@ export function statoSessione(sessione) {
      owner 29): prima la riga diceva «interrotta · scrivi per riprenderla», cioè il contrario di ciò che serve. */
   // 24/09/2026, decisione owner 39: anche un PIANO che aspetta la scelta (e dopo un riavvio resta approvabile).
   // 02/10/2026: anche un server MCP che chiede dati o di aprire una pagina aspetta la persona.
-  if (sessione.inAttesaApprovazione || sessione.inAttesaDomanda || sessione.inAttesaPiano || sessione.inAttesaRichiestaMcp) classe = 'attesa';
+  // C2-R7 (owner 08/10/2026 sera): anche una DISCENDENTE (figlia, nipote) che aspetta la persona — la carta sta nella chat di questa
+  if (sessione.inAttesaApprovazione || sessione.inAttesaDomanda || sessione.inAttesaPiano || sessione.inAttesaRichiestaMcp || sessione.inAttesaDiscendente) classe = 'attesa';
   /*
    * ⛔ 06/9, prova T05-D3 — l'ordine era invertito rispetto alla convenzione dichiarata in cima a
    * questo file, e il difetto si vedeva a schermo: quattro sessioni delle 16:02-16:08 dicevano

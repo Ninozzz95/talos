@@ -2,7 +2,13 @@
 const RIFIUTO_PROVIDER = Symbol.for('talos.provider-rejection.v1');
 
 export function marcaRifiutoProvider(risposta, motivo) {
-  if (risposta?.status === 402 && motivo === 'budget-occupato') {
+  /*
+   * ⛔ BUG-25 (06/10/2026) — il canale interno accetta anche `credito`: Z.AI fattura il credito
+   * come 429 + codice business (tabella ufficiale docs.z.ai/api-reference/api-code), OpenRouter
+   * come 402 — il marker non può legarsi al solo 402. Il motivo è messo SOLO dall'adapter quando
+   * il fornitore dichiara una scadenza: senza dichiarazione nessun marker, nessun retry a vuoto.
+   */
+  if ((risposta?.status === 402 && motivo === 'budget-occupato') || motivo === 'credito') {
     Object.defineProperty(risposta, RIFIUTO_PROVIDER, { value: Object.freeze({
       schema: 'talos.provider-rejection.v1', motivo,
     }) });
@@ -12,8 +18,44 @@ export function marcaRifiutoProvider(risposta, motivo) {
 
 export function leggiRifiutoProvider(risposta) {
   const rifiuto = risposta?.[RIFIUTO_PROVIDER];
-  return risposta?.status === 402 && rifiuto?.schema === 'talos.provider-rejection.v1'
-    && rifiuto.motivo === 'budget-occupato' ? rifiuto : null;
+  if (rifiuto?.schema !== 'talos.provider-rejection.v1') return null;
+  if (rifiuto.motivo === 'credito') return rifiuto;
+  return risposta?.status === 402 && rifiuto.motivo === 'budget-occupato' ? rifiuto : null;
+}
+
+/**
+ * ⛔ BUG-25 (06/10/2026) — grammatiche di reset DICHIARATE NEL CORPO del rifiuto, stessa tabella
+ * di Hermes (`agent/retry_utils.py:64-76`, clone 65ad529): `quotaResetDelay: 30s|500ms|2m|1h`,
+ * `resets_in_seconds: 90`, `resets in 4hr 5min`, `retry after 12 s`. La precedenza è INVARIATA:
+ * gli header (`retry-after-ms` > `retry-after`) vincono sempre; la grammatica vale solo quando
+ * gli header non dicono nulla. Z.AI dichiara i propri limiti nel corpo (codici business 1310 e
+ * 1316-1321, tabella ufficiale 06/10): un reset DICHIARATO è un fatto del fornitore, non una
+ * stima nostra — alimenta panchina, marcatura e messaggio. I tempi ASSOLUTI («Resets at …»)
+ * restano fuori dalla tranche 1: il formato esatto va confermato dal vivo prima di parsarlo.
+ * @param {string|null} testo corpo del rifiuto già letto (limitato, come `leggiDettaglioRifiuto`)
+ * @returns {number|null} millisecondi dichiarati, o null
+ */
+export function leggiAttesaResetDalCorpo(testo) {
+  if (typeof testo !== 'string' || !testo || testo.length > 16_384) return null;
+  const UNITA = { ms: 1, s: 1000, sec: 1000, secs: 1000, second: 1000, seconds: 1000, m: 60_000, min: 60_000, mins: 60_000, minute: 60_000, minutes: 60_000, h: 3_600_000, hr: 3_600_000, hrs: 3_600_000, hour: 3_600_000, hours: 3_600_000 };
+  const componi = (elenco) => {
+    if (!elenco.length) return null;
+    const totale = elenco.reduce((somma, [valore, unita]) => somma + Number(valore) * (UNITA[unita.toLowerCase()] ?? 0), 0);
+    return totale > 0 ? Math.round(totale) : null;
+  };
+  let m = /\bquotaResetDelay\s*[:=]\s*(\d+(?:\.\d+)?)\s*(ms|s|m|h)\b/i.exec(testo);
+  if (m) return componi([[m[1], m[2]]]);
+  m = /\bresets_in_seconds\s*["']?\s*[:=]\s*(\d+(?:\.\d+)?)/i.exec(testo);
+  if (m) return componi([[m[1], 's']]);
+  m = /\bresets\s+in\s+((?:\d+(?:\.\d+)?\s*(?:ms|hrs?|hours?|mins?|minutes?|secs?|seconds?|s|m|h)\b[,\s]*){1,4})/i.exec(testo);
+  if (m) {
+    const parti = [...m[1].matchAll(/(\d+(?:\.\d+)?)\s*(ms|hrs?|hours?|mins?|minutes?|secs?|seconds?|s|m|h)\b/gi)].map(x => [x[1], x[2]]);
+    const attesa = componi(parti);
+    if (attesa !== null) return attesa;
+  }
+  m = /\bretry\s+after\s+(\d+(?:\.\d+)?)\s*(ms|secs?|seconds?|mins?|minutes?|s|m|h)\b/i.exec(testo);
+  if (m) return componi([[m[1], m[2]]]);
+  return null;
 }
 
 /** RFC 9110 §10.2.3: milliseconds to wait, null for an invalid/missing field.
@@ -62,11 +104,9 @@ export function leggiAttesaRichiestaDalFornitore(headers, now = Date.now()) {
 export function erroreEsitoProviderIncerto(causa) {
   const causaDiTrasporto = ['PROVIDER_SILENCE', 'UND_ERR_BODY_TIMEOUT', 'UND_ERR_HEADERS_TIMEOUT', 'PROVIDER_FIRST_RESPONSE_TIMEOUT', 'PROVIDER_STREAM_ERROR', 'PROVIDER_STREAM_INCOMPLETE', 'PROVIDER_STREAM_INVALID']
     .find(codice => codice === causa?.causaDiTrasporto || codice === causa?.code);
-  const motivo = causaDiTrasporto === 'PROVIDER_SILENCE'
-    ? 'La risposta del fornitore si è interrotta per silenzio prolungato'
-    : 'La risposta del fornitore si è interrotta';
-  const errore = new Error(motivo + ' e l’esito della richiesta è incerto. '
-    + 'Riprendi esplicitamente quando vuoi continuare: una nuova richiesta può comportare un altro costo.');
+  const silenzio = causaDiTrasporto === 'PROVIDER_SILENCE';
+  const errore = new Error(silenzio ? "The provider response was interrupted by prolonged silence and the outcome of the request is uncertain. Resume explicitly when you want to continue: a new request may incur another cost." : "The provider response was interrupted and the outcome of the request is uncertain. Resume explicitly when you want to continue: a new request may incur another cost.");
+  errore.chiave = silenzio ? 'server.providerOutcome.silence' : 'server.providerOutcome.interrupted';
   return Object.assign(errore, {
     code: 'PROVIDER_OUTCOME_UNKNOWN', esitoIncerto: true, transitorio: false,
     classe: typeof causa?.classe === 'string' ? causa.classe : 'esito-incerto',
@@ -97,11 +137,16 @@ export function consumoPubblico(usage) {
  */
 export function erroreEsitoProviderIncertoEsaurito(causa, esitiRitentati) {
   const errore = erroreEsitoProviderIncerto(causa);
+  /* ⛔ K4b (07/10/2026, riserva F1 del bugfixer) — la base mette la chiave del caso NON esaurito (`interrupted` o
+     `silence`): senza sovrascriverla, la carta e la trascrizione dicevano la frase senza «dopo N reinvii automatici».
+     La chiave ha le forme One/Many (`testoDelServer` sceglie con `tn` sul numero). */
   return Object.assign(errore, {
     code: 'PROVIDER_OUTCOME_UNKNOWN_ESAURITO',
-    message: 'La risposta del fornitore si è interrotta e il suo esito è rimasto incerto anche dopo '
-      + `${esitiRitentati} reinvii automatici senza effetti intermedi. `
-      + 'La richiesta può essere stata prodotta e pagata: riprendi esplicitamente quando vuoi continuare.',
+    message: 'The provider response was interrupted and its outcome remained uncertain even after '
+      + `${esitiRitentati} automatic ${esitiRitentati === 1 ? 'resend' : 'resends'} with no intermediate effects. `
+      + 'The request may have been produced and paid for: resume explicitly when you want to continue.',
+    chiave: 'server.providerOutcome.exhausted',
+    params: { n: esitiRitentati },
     ritentabile: true,
     esitiIncertiRitentati: esitiRitentati,
   });

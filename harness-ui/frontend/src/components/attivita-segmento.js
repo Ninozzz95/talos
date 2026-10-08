@@ -614,7 +614,11 @@ class VistaSegmento {
       if (this.diffEl.dataset.diff !== atteso) {
         this.diffEl.dataset.diff = atteso;
         this.diffEl.replaceChildren(el('span', 'talos-activity__piu', `+${r.diff.piu}`), ' ', el('span', 'talos-activity__meno', `−${r.diff.meno}`));
-        this.diffEl.setAttribute('aria-label', t('chat.activity.diffSummary', { piu: r.diff.piu, meno: r.diff.meno }));
+        // LINGUA-7 (08/10/2026): ogni numero col suo plurale («1 riga aggiunta, 3 tolte»)
+        this.diffEl.setAttribute('aria-label', t('chat.activity.diffSummary', {
+          aggiunte: tn('chat.activity.linesAddedOne', 'chat.activity.linesAddedMany', r.diff.piu),
+          tolte: tn('chat.activity.linesRemovedOne', 'chat.activity.linesRemovedMany', r.diff.meno),
+        }));
       }
     } else if (this.diffEl.childNodes.length) { this.diffEl.replaceChildren(); delete this.diffEl.dataset.diff; }
     const errori = r.nFalliti ? r.erroriParti.join(' · ') : '';
@@ -630,7 +634,7 @@ class VistaSegmento {
     this.aggiornaFiltri(r, voci);
     this.aggiornaFissate(coppie);
     this.normalizzaCorpi();
-    this.adatta();
+    this.programmaAdatta(); // B1: la misura una volta per fotogramma, non a ogni evento rigiocato
 
     for (const { riga, voce } of coppie) {
       if (voce.tipo === 'tool' && voce.stato === 'fallito' && !this.annunciati.has(riga)) {
@@ -669,6 +673,21 @@ class VistaSegmento {
     this.summaryText.append(parti.join(' · ') || (this.vivo ? '' : t('chat.activity.agentActivity')));
     this.summaryText.dataset.forma = breve ? 'breve' : 'intera';
     this.summaryText.title = breve ? r.parti.join(' · ') : '';
+  }
+
+  /*
+   * ⛔⛔ B1 (07/10/2026, misurato sul 4174 col profilo CPU) — LA MISURA UNA VOLTA PER FOTOGRAMMA. `aggiorna` scrive i
+   *   conteggi e `adatta` rilegge subito `scrollWidth`/`clientWidth`: un layout forzato a OGNI aggiornamento del segmento,
+   *   cioè a ogni evento rigiocato — 4,3 s su 25,6 s all'apertura di una sessione da 1286 giri. ⇒ `aggiorna` chiede la
+   *   misura, il fotogramma la fa una volta (la callback di rAF gira PRIMA del disegno di quel fotogramma: nessun
+   *   fotogramma con la forma sbagliata). Senza rAF (test, ambienti senza finestra) si misura subito, come prima.
+   */
+  programmaAdatta() {
+    const raf = this.card.ownerDocument?.defaultView?.requestAnimationFrame;
+    if (typeof raf !== 'function') { this.adatta(); return; }
+    if (this.adattaInCoda) return;
+    this.adattaInCoda = true;
+    raf(() => { this.adattaInCoda = false; this.adatta(); });
   }
 
   /* D1/D2 — si misura, non si indovina: se la forma intera non entra, la breve; un bersaglio sotto i 64 px si toglie. */

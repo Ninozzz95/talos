@@ -135,7 +135,7 @@ test('⛔⛔ AL CONTRARIO — un nome NON instradato: eseguiToolPluginFn lancia,
     { cartella: '/tmp/prova', cartellaTrust: '/tmp/trust' },
     { caricaPluginFn: async () => ({ plugin: [plugin] }), verificaTrustPluginFn: async () => true },
   );
-  await assert.rejects(() => eseguiToolPluginFn('plugin__esempio__nome_inventato', {}), /non è fra quelli offerti/);
+  await assert.rejects(() => eseguiToolPluginFn('plugin__esempio__nome_inventato', {}), /is not offered/);
 });
 
 /*
@@ -158,7 +158,7 @@ test('⭐⭐ eseguiComandoPlugin: exit 0 senza output — stringa onesta, mai un
   const cartella = cartellaVera();
   try {
     const esito = await eseguiComandoPlugin({ comando: 'node -e "process.exit(0)"', argomenti: {}, cartella });
-    assert.equal(esito, '(nessun output)');
+    assert.equal(esito, '(no output)');
   } finally {
     rmSync(cartella, { recursive: true, force: true });
   }
@@ -169,7 +169,7 @@ test('⛔⛔⛔ AL CONTRARIO — exit non-zero: RISOLVE (mai rigetta) con l\'esi
   try {
     const comando = 'node -e "console.error(\'motivo reale\'); process.exit(1)"';
     const esito = await eseguiComandoPlugin({ comando, argomenti: {}, cartella });
-    assert.match(esito, /comando terminato con codice 1/);
+    assert.match(esito, /command exited with code 1/);
     assert.match(esito, /motivo reale/);
   } finally {
     rmSync(cartella, { recursive: true, force: true });

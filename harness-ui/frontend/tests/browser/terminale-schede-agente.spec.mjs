@@ -2,10 +2,11 @@ import { fileURLToPath } from 'node:url';
 import { expect, test } from '@playwright/test';
 
 /*
- * ⭐ PO-10 passo 2 (02/10/2026) — le schede AGENTE del Terminale, di punta a punta nella app vera.
- * Decisioni dell'owner (memoria `decisione-owner-po-10-schede-agente-sola-lettura-28-09`): una scheda per giro, i comandi
- * in fila ($ comando, uscita, esito), niente tastiera, compare SENZA rubare la scheda attiva, si chiude (e torna solo con un
- * comando nuovo del suo giro), i «!» della persona non ci vanno, il pallino finito verde o rosso, il piede dice il vero.
+ * ⭐ PO-10 passo 2 (02/10/2026) → BUG-23 (owner 05/10, cura 06/10) — la scheda AGENTE del Terminale, di punta a punta nella app vera.
+ * Decisioni dell'owner: UNA scheda «agente» per sessione (niente più «agente · giro N»: il giro CORRENTE lo mostra il
+ * piede), i comandi di TUTTI i giri in fila ($ comando, uscita, esito), niente tastiera, compare SENZA rubare la scheda
+ * attiva, si chiude a mano (e torna con un comando nuovo, di qualunque giro), i «!» della persona non ci vanno, il pallino
+ * finito verde o rosso (esito dell'ULTIMO giro), il piede dice il vero.
  * Flusso finto come `ask-ricevuta.spec.mjs`; ogni non-GET si ferma e si conta; e le WebSocket delle shell NON arrivano al
  * server (routeWebSocket senza `connectToServer`): su questo banco nessuna PTY si apre davvero.
  */
@@ -67,49 +68,57 @@ test('PO10-SCHEDA-AGENTE: compare senza rubare la scheda, si legge, non si scriv
   await page.keyboard.press('Control+Backquote');
   await expect(page.locator('#schermoTerminale .talos-terminal__tabs [role=tab]').first()).toBeVisible();
   for (const e of comando('a1', 'npm test', null)) await evento(page, e);
-  await evento(page, { type: 'ToolCallOutput', toolCallId: 'a1', delta: 'riga 1\n' });
   await expect.poll(() => linguette(page)).toEqual([
     expect.objectContaining({ attiva: true }),
-    { testo: 'agente · giro 1', attiva: false, pallino: 'talos-dot talos-dot--live' },
+    { testo: 'agente', attiva: false, pallino: 'talos-dot talos-dot--live' },
   ]);
   expect((await linguette(page))[0].testo).toMatch(/^tu · /u);
   // la persona la sceglie: si legge
-  await page.locator('#schermoTerminale [role=tab]', { hasText: 'agente · giro 1' }).click();
-  await expect.poll(() => schermo(page, 'agente-giro-1')).toBe('$ npm test\nriga 1');
+  await page.locator('#schermoTerminale [role=tab]', { hasText: 'agente' }).click();
+  await expect.poll(() => schermo(page, 'agente')).toBe('── giro 1 ──\n$ npm test');
+  /* BUG-23 gen.3 (prova B4): il delta arriva a scheda MONTATA — il caso vero (l'owner guarda il Terminale
+     mentre l'agente lavora): F1 lo streamma in append diretto, SUBITO. Senza il gancio F1 questa attesa
+     resta alla testata per sempre (il delta non è un evento strutturale e il memo non ricalcola). */
+  await evento(page, { type: 'ToolCallOutput', toolCallId: 'a1', delta: 'riga 1\n' });
+  await expect.poll(() => schermo(page, 'agente')).toBe('── giro 1 ──\n$ npm test\nriga 1');
   await expect(page.locator('#schermoTerminale .talos-terminal__foot')).toContainText("Lanciata dall'agente al giro 1");
   await expect(page.locator('#schermoTerminale .talos-terminal__foot')).toContainText('in corso');
   // non si scrive: la tastiera non arriva a niente
-  expect(await page.evaluate(() => window.__talosHarnessUiRuntime.statoTerminale().schede.get('agente-giro-1').term.options.disableStdin)).toBe(true);
+  expect(await page.evaluate(() => window.__talosHarnessUiRuntime.statoTerminale().schede.get('agente').term.options.disableStdin)).toBe(true);
   await page.keyboard.type('rm -rf /');
   await page.keyboard.press('Enter');
-  expect(await schermo(page, 'agente-giro-1')).toBe('$ npm test\nriga 1');
-  // arriva l'esito: l'uscita vera prende il posto di quella viva, senza la testata, con la riga d'esito
-  await evento(page, { type: 'ToolCallResult', toolCallId: 'a1', content: 'exit 0 [sandbox: none]\ntutti verdi\n', cwd: 'C:\\p' });
+  expect(await schermo(page, 'agente')).toBe('── giro 1 ──\n$ npm test\nriga 1');
+  // arriva l'esito: l'uscita vera (che CONTIENE il vivo già streammato, come lo stdout vero) si completa:
+  // BUG-23 gen.3 (prova B4) — il `content` finale è coerente col vivo; senza `record.scritto` avanzato da F1
+  // il ramo `startsWith` riappesa l'uscita intera e «riga 1» finisce DUE volte a schermo.
+  await evento(page, { type: 'ToolCallResult', toolCallId: 'a1', content: 'exit 0 [sandbox: none]\nriga 1\ntutti verdi\n', cwd: 'C:\\p' });
   /* la durata c'è solo quando è misurata (dal server, o fra due arrivi oltre la risoluzione): qui può esserci o no */
-  await expect.poll(() => schermo(page, 'agente-giro-1')).toMatch(/^\$ npm test\ntutti verdi\n— Riuscito · su Windows, senza isolamento( · [\d.]+ m?s)?$/u);
+  /* il separatore «── giro 1 ──» apre il primo comando del giro (BUG-23): può esserci, prima del testo.
+     Il vivo «riga 1» deve restare UNA volta sola: la regex ancorata non perdona l'uscita doppia (prova B4, gen.3). */
+  await expect.poll(() => schermo(page, 'agente')).toMatch(/^(── giro 1 ──\n)?\$ npm test\nriga 1\ntutti verdi\n— Riuscito · su Windows, senza isolamento( · [\d.]+ m?s)?$/u);
   await expect.poll(async () => (await linguette(page))[1].pallino).toBe('talos-dot talos-dot--success');
   await expect(page.locator('#schermoTerminale .talos-terminal__foot')).toContainText('conclusa');
   // un secondo comando del giro che fallisce: la scheda diventa rossa e lo dice
   for (const e of comando('a2', 'npm run lint', 'errore: 3 problemi', { uscita: 1 })) await evento(page, e);
   await expect.poll(async () => (await linguette(page))[1].pallino).toBe('talos-dot talos-dot--danger');
   await expect(page.locator('#schermoTerminale .talos-terminal__foot')).toContainText('con errori');
-  await expect.poll(() => schermo(page, 'agente-giro-1')).toContain('$ npm run lint\nerrore: 3 problemi\n— Non riuscito · codice 1');
+  await expect.poll(() => schermo(page, 'agente')).toContain('$ npm run lint\nerrore: 3 problemi\n— Non riuscito · codice 1');
   // un «!» della persona non va nelle schede agente
   await evento(page, { type: 'ComandoUtenteIniziato', comando: 'ping -n 1 127.0.0.1', contesto: { cartella: 'C:\\p' } });
   for (const e of comando('io', 'ping -n 1 127.0.0.1', 'pong')) await evento(page, e);
   await evento(page, { type: 'ComandoUtenteFinito' });
   await page.waitForTimeout(200);
-  expect((await linguette(page)).map((l) => l.testo).filter((t) => t.startsWith('agente'))).toEqual(['agente · giro 1']);
-  expect(await schermo(page, 'agente-giro-1')).not.toContain('ping');
+  expect((await linguette(page)).map((l) => l.testo).filter((t) => t.startsWith('agente'))).toEqual(['agente']);
+  expect(await schermo(page, 'agente')).not.toContain('ping');
   expect(scritture).toEqual([]);
 });
 
-test('PO10-CHIUSA: una scheda agente chiusa non torna da sola; torna con un comando nuovo del suo giro', async ({ page }) => {
+test('PO10-CHIUSA: una scheda agente chiusa non torna da sola; torna con un comando nuovo (BUG-23: la scheda è UNICA per sessione)', async ({ page }) => {
   const scritture = await apri(page, 'po10-chiusa');
   await evento(page, avvio);
   await page.keyboard.press('Control+Backquote');
   for (const e of comando('a1', 'git status', 'pulito')) await evento(page, e);
-  const agente = page.locator('#schermoTerminale [role=tab]', { hasText: 'agente · giro 1' });
+  const agente = page.locator('#schermoTerminale [role=tab]', { hasText: 'agente' });
   await expect(agente).toHaveCount(1);
   await agente.click({ button: 'right' });
   const voci = await page.locator('#menuSchedaTerminale [role=menuitem]').allTextContents();
@@ -129,9 +138,9 @@ test('PO10-RIAPERTURA: riaprendo la sessione la scheda si ricostruisce dall’es
   const storia = [{ ...avvio, _sequenza: 1 }, ...comando('a1', 'npm test', 'tutti verdi').map((e, i) => ({ ...e, _sequenza: i + 2 })), { type: 'RunFinished', _sequenza: 9 }];
   const scritture = await apri(page, 'po10-storia', { replay: storia, conclusa: true });
   await page.keyboard.press('Control+Backquote');
-  const agente = page.locator('#schermoTerminale [role=tab]', { hasText: 'agente · giro 1' });
+  const agente = page.locator('#schermoTerminale [role=tab]', { hasText: 'agente' });
   await expect(agente).toHaveCount(1);
   await agente.click();
-  await expect.poll(() => schermo(page, 'agente-giro-1')).toMatch(/^\$ npm test\ntutti verdi\n— Riuscito · su Windows, senza isolamento( · [\d.]+ m?s)?$/u);
+  await expect.poll(() => schermo(page, 'agente')).toMatch(/^(── giro 1 ──\n)?\$ npm test\ntutti verdi\n— Riuscito · su Windows, senza isolamento( · [\d.]+ m?s)?$/u);
   expect(scritture).toEqual([]);
 });

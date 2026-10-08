@@ -23,6 +23,7 @@ test('VIEWPORT-DESKTOP-01 — la matrice desktop è dichiarata in UN posto solo'
   assert.match(script, /export const VIEWPORT_DESKTOP/);
   assert.match(script, /nome: 'laptop', width: 1024, height: 800/);
   assert.match(script, /nome: 'desktop', width: 1440, height: 900/);
+  assert.match(script, /nome: 'desktop-1920', width: 1920, height: 1080/);
 });
 
 test('VIEWPORT-DESKTOP-02 — nessuna viewport scritta a mano fuori dalla matrice', async () => {
@@ -46,9 +47,10 @@ test('VIEWPORT-DESKTOP-03 — AL CONTRARIO: una viewport sconosciuta NON ricade 
   const { viewportRichiesta, VIEWPORT_DESKTOP } = await import('../scripts/qa-visual-pipeline.mjs');
   assert.deepEqual(viewportRichiesta('http://x/?qa=laptop'), { width: 1024, height: 800 });
   assert.deepEqual(viewportRichiesta('http://x/?qa=desktop'), { width: 1440, height: 900 });
-  assert.deepEqual(viewportRichiesta('http://x/'), { width: 1440, height: 900 }, 'senza parametro si usa il desktop');
+  assert.deepEqual(viewportRichiesta('http://x/?qa=desktop-1920'), { width: 1920, height: 1080 });
+  assert.deepEqual(viewportRichiesta('http://x/'), { width: 1920, height: 1080 }, 'senza parametro si usa desktop-1920 (PARAMOUNT ≥1920×1080, 06/10)');
   assert.throws(() => viewportRichiesta('http://x/?qa=tablet'), /sconosciuta/);
-  assert.equal(VIEWPORT_DESKTOP.length, 2);
+  assert.equal(VIEWPORT_DESKTOP.length, 3);
 });
 
 /*

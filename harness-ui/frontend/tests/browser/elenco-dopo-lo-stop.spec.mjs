@@ -63,6 +63,11 @@ for (const modo of ['dark', 'light']) {
 
     test(`ELENCO-STOP-01 — dopo lo stop la riga dice «fermata» subito, non al giro dei 15 s (${modo})`, async ({ page }, testInfo) => {
       const { riga, letture, voce } = await prepara(page, `lista-stop-${modo}`);
+      /* VELO-SPEC-2 (08/10/2026, bugfixer): lo stop è IN DIRETTA, quindi dopo il confine, come in ELENCO-STOP-03. Senza confine la chat
+         restava sotto il velo (`visibility:hidden`) e la foto qui sotto la mostrava vuota; e lo stop passava per storia. Il velo si
+         toglie DOPO il confine (`scopri`, ~400 ms misurati): si aspetta, o la foto cade ancora sotto il velo. */
+      await eventi(page, [{ type: 'CUSTOM', name: 'talos.fine-rigiocata', value: null }]); // come lo manda il server (http-app.mjs:8185)
+      await page.waitForFunction(() => !document.querySelector('#conversation')?.classList.contains('is-restoring'));
       Object.assign(riga, { conclusa: true, ultimoEsito: 'errore', motivoChiusura: 'fermata' });
       const primaDelloStop = letture.length;
       const t = Date.now();
@@ -76,6 +81,7 @@ for (const modo of ['dark', 'light']) {
 
     test(`ELENCO-STOP-02 AL CONTRARIO — la barra dice quello che dice il server: se non l’ha ancora chiusa, resta «in corso» (${modo})`, async ({ page }) => {
       const { letture, voce } = await prepara(page, `lista-contrario-${modo}`);
+      await eventi(page, [{ type: 'CUSTOM', name: 'talos.fine-rigiocata', value: null }]); // VELO-SPEC-2: lo stop in diretta, come in 01
       const primaDelloStop = letture.length;
       await eventi(page, [{ type: 'RunError', code: 'fermato', message: INTERROTTO, _sequenza: 2 }]);
       await expect.poll(() => letture.length, { timeout: 2000 }).toBeGreaterThan(primaDelloStop);

@@ -22,7 +22,7 @@ export function comprimiDiffPerMessaggio(testo, tetto = TETTO_DIFF_MESSAGGIO) {
   const righe = intero.split('\n').map((r) => (r.length > RIGA_MASSIMA ? `${r.slice(0, RIGA_MASSIMA)}…[riga accorciata]` : r));
   const accorciato = righe.join('\n');
   if (Buffer.byteLength(accorciato, 'utf8') <= tetto) return { testo: accorciato, troncato: true };
-  const nota = '\n[… il resto del diff è stato tagliato per stare nel limite]';
+  const nota = '\n[… remaining diff was truncated to stay within limit]';
   const spazio = tetto - Buffer.byteLength(nota, 'utf8');
   const tenute = [];
   let usati = 0;

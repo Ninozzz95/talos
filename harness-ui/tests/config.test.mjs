@@ -101,7 +101,7 @@ test('trovaPortaLibera: nessuna porta libera entro il tetto di tentativi → err
   const tentaLegameFn = async () => ({ ok: false, errore: Object.assign(new Error('EADDRINUSE'), { code: 'EADDRINUSE' }) });
   await assert.rejects(
     () => trovaPortaLibera(4174, { esplicita: false, tentativiMassimi: 5, tentaLegameFn }),
-    (errore) => errore instanceof PortaInUsoError && /5 tentativi/.test(errore.message),
+    (errore) => errore instanceof PortaInUsoError && /5 attempts/.test(errore.message),
   );
 });
 

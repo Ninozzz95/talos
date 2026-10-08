@@ -68,7 +68,7 @@ export function righeAmbiente(contesto = null) {
  * Le righe di «Finestra del contesto». `usage` = ultimo StateDelta /usage; `finestra` =
  * contextLength del modello (o null); `ripartizione` = { attrezzi, istruzioni, memoria } in token, se il kernel la dichiara.
  */
-export function righeFinestra(usage = null, finestra = null, ripartizione = null, cacheSessione = null) {
+export function righeFinestra(usage = null, finestra = null, ripartizione = null, cacheSessione = null, { storiaInCaricamento = false } = {}) {
   const u = usage || {};
   const usati = Number.isFinite(u.prompt_tokens) ? u.prompt_tokens + (Number.isFinite(u.completion_tokens) ? u.completion_tokens : 0) : null;
   const righe = [];
@@ -87,7 +87,9 @@ export function righeFinestra(usage = null, finestra = null, ripartizione = null
   // «Libera» = la finestra meno TUTTO ciò che la occupa; la sua percentuale chiude a 100 con le altre
   righe.push([tr('processi.inspector.windowFree'), finestra && usati !== null ? `${kilo(Math.max(0, finestra - occupati))} · ${numPercento.format(Math.max(0, Math.round((100 - percentoOccupato) * 10) / 10))}%` : '—']);
   // Quota dell'intera sessione: non è un'altra parte dell'occupazione della finestra.
-  righe.push([tr('processi.inspector.windowCache'), testoRiusoCache(cacheSessione)]);
+  /* ⛔ A1-bis (07/10/2026): durante la storia la misura non è ancora arrivata — «non misurato» sarebbe un'affermazione falsa
+     su una sessione che la misura ce l'ha (foto del ritorno a 4 s: «non misurato», poi «94 % · su 1286 giri»). */
+  righe.push([tr('processi.inspector.windowCache'), storiaInCaricamento && !cacheSessione ? '—' : testoRiusoCache(cacheSessione)]);
   return { titoloDestra: finestra ? kilo(finestra) : tr('processi.inspector.windowUndeclared'), righe };
 }
 
@@ -242,6 +244,9 @@ export const STATI_PROCESSO = Object.freeze({
   fallito: { get etichetta() { return tr('processi.process.stateFailed'); }, tono: 'danger', icona: 'i-x', vivo: false },
   annullato: { get etichetta() { return tr('processi.process.stateCancelled'); }, tono: '', icona: 'i-stop', vivo: false },
   ucciso: { get etichetta() { return tr('processi.process.stateKilled'); }, tono: 'warning', icona: 'i-stop', vivo: false },
+  /* A6-bis (08/10/2026): sfondato prima di un riavvio del server — il processo forse vive ancora, ma nessuno lo segue più:
+     non si conta fra i vivi e non si inventa un esito (Hermes, `process_registry_notifications.py`: «Lost»). */
+  perso: { get etichetta() { return tr('processi.process.stateLost'); }, tono: '', icona: 'i-sfondo', vivo: false },
   /*
    * ⛔ 17/09, OSS-2 — «NON ESEGUITO» non è «NON RIUSCITO», e la differenza si vede in una foto.
    *   Una `prova` su un progetto senza suite torna `exit 127` con «nessuna suite trovata», e il
@@ -251,6 +256,13 @@ export const STATI_PROCESSO = Object.freeze({
    *   «non è partito». Tono neutro, non `danger`: non c'è niente di rotto da segnalare.
    */
   'non-eseguito': { get etichetta() { return tr('processi.process.stateNotRun'); }, tono: 'warning', icona: 'i-stop', vivo: false },
+  /*
+   * ⛔ A6 (07/10/2026) — «INTERROTTO»: un comando in primo piano il cui giro è finito, fermato o morto senza che arrivasse
+   *   il suo risultato. Non è «annullato» (nessuno l'ha annullato) né «fallito» (non c'è un'uscita): non si sa come è
+   *   finito, e si dice così. Forma di Hermes, `tools/process_registry.py:538` (`completion_reason … lost`) e `:1017`
+   *   («without inventing an exit»): niente codice d'uscita, niente durata. Tono neutro come «non eseguito».
+   */
+  interrotto: { get etichetta() { return tr('processi.process.stateInterrupted'); }, tono: '', icona: 'i-stop', vivo: false },
 });
 
 /**
@@ -480,7 +492,7 @@ function schedaDi(contenitore) {
      *   Un difetto che si vede in UNA delle due superfici è un difetto, non un caso particolare.
      */
     for (const n of [...(contenitore.querySelectorAll?.('[data-c="ProcessRow"], [data-c="EmptyState"]') || [])]) n.remove?.();
-    contenitore.__processi = { righe: new Map(), mostrati: TETTO_PROCESSI, filtro: '', selezionato: null, ultima: [], zona: null, filtroEl: null, campo: null, altri: null, vuoto: null, annuncio: null };
+    contenitore.__processi = { righe: new Map(), mostrati: TETTO_PROCESSI, filtro: '', stato: 'tutti', selezionato: null, ultima: [], zona: null, filtroEl: null, statiEl: null, campo: null, altri: null, vuoto: null, annuncio: null };
   }
   return contenitore.__processi;
 }
@@ -539,6 +551,12 @@ function bottoneApri(d, card, riga, idRiga) {
  */
 const ATTESA_FERMATA_MS = 8_000;
 const FERMABILE = new Set(['in-corso', 'in-attesa']);
+/*
+ * ⛔ BUG-20b (owner 05/10/2026, sera): i filtri di stato del pannello processi. Gli stati RARI
+ * seguono la STESSA regola dei filtri degli agenti (`interrotta`/`ignoto` lì): nascosti finché
+ * non esistono nei dati o non sono loro stessi scelti — un bottone sempre a zero è rumore.
+ */
+const STATI_RARI_FILTRO = new Set(['in-coda', 'in-avvio', 'in-consenso', 'in-sfondo', 'annullato', 'ucciso', 'non-eseguito', 'interrotto']);
 function bottoneFerma(d, riga, scheda, idRiga) {
   const b = el(d, 'button', 'talos-button talos-button--ghost talos-button--sm talos-process__ferma');
   b.type = 'button';
@@ -682,13 +700,31 @@ function bottoneDi(nodo) {
   return cfg.pulsante;
 }
 
+/*
+ * ⛔ A4 (08/10/2026) — APERTO, IL PULSANTE DICE «MOSTRA MENO» E LO DICE ANCHE A UN LETTORE DI SCHERMO.
+ *   Misurato sulla 4176 (comando di ~900 caratteri): dopo l'apertura il pulsante diceva ancora «Mostra tutto», e niente
+ *   diceva se il testo sopra fosse aperto o chiuso. Il pulsante è un «disclosure» (WAI-ARIA APG, Disclosure Pattern, letto
+ *   l'08/10/2026: `aria-expanded` vero/falso sul pulsante); Hermes fa lo stesso, nome che cambia + `aria-expanded`
+ *   (web/src/pages/EnvPage.tsx:1072-1078, clone del 24/09).
+ */
+function statoPulsanteMostra(nodo, pulsante) {
+  if (!pulsante) return;
+  const aperto = nodo?.dataset?.aperto === 'si';
+  const testo = tr(aperto ? 'app.common.showLess' : 'app.common.showAll');
+  if (pulsante.textContent !== testo) pulsante.textContent = testo;
+  const espanso = aperto ? 'true' : 'false';
+  // lo stesso valore riscritto accoda lo stesso una mutazione (W3C DOM): si scrive solo se cambia
+  if (pulsante.getAttribute?.('aria-expanded') !== espanso) pulsante.setAttribute('aria-expanded', espanso);
+}
+
 function aggiornaPulsanteMostra(nodo) {
   const cfg = nodo && CONFIG_TAGLIO.get(nodo);
   if (!cfg) return;
-  if (nodo?.dataset?.aperto === 'si') { if (cfg.pulsante) cfg.pulsante.hidden = false; return; }
+  if (nodo?.dataset?.aperto === 'si') { if (cfg.pulsante) cfg.pulsante.hidden = false; statoPulsanteMostra(nodo, cfg.pulsante); return; }
   // aperto ⇒ il pulsante resta (è la porta per richiudere); chiuso ⇒ c'è solo se il tetto taglia.
   if (tagliatoDalTetto(nodo)) { bottoneDi(nodo); if (cfg.pulsante) cfg.pulsante.hidden = false; }
   else if (cfg.pulsante) cfg.pulsante.hidden = true;
+  statoPulsanteMostra(nodo, cfg.pulsante);
 }
 
 /** Registra chi può aprire `nodo` quando il suo contenuto eccede il tetto. */
@@ -941,12 +977,40 @@ export function disegnaProcessi(d, contenitore, lista, opzioni = {}) {
     box.append(campo);
     scheda.filtroEl = box;
     scheda.campo = campo;
+    /*
+     * ⛔ BUG-20b (owner 05/10/2026, sera): «i filtri, stesso stile di quelli degli agenti». La riga
+     * riusa la classe `talos-agenti-stati` di `disegnaAgenti` — zero CSS nuovo, lo stesso vestito
+     * per lo stesso oggetto (come il «…» riusa quello della Libreria). I bottoni sono nudi, si
+     * marcano con `aria-pressed`, e le etichette sono le STESSE parole dei badge di stato: una
+     * stringa sola per concetto.
+     */
+    const stati = el(d, 'div', 'talos-agenti-stati');
+    stati.setAttribute('role', 'group');
+    stati.setAttribute('aria-label', tr('processi.process.statusFilterLabel'));
+    for (const [valore, etichetta] of [
+      ['tutti', tr('processi.agents.filterAll')],
+      ...['in-coda', 'in-avvio', 'in-corso', 'in-attesa', 'in-consenso', 'in-sfondo', 'riuscito', 'fallito', 'annullato', 'ucciso', 'non-eseguito', 'interrotto'].map((s) => [s, STATI_PROCESSO[s].etichetta]),
+    ]) {
+      const b = el(d, 'button', '', etichetta);
+      b.type = 'button';
+      b.dataset.stato = valore;
+      b.addEventListener('click', () => {
+        scheda.stato = valore;
+        disegnaProcessi(d, contenitore, scheda.ultima, { ridisegna: true });
+      });
+      stati.append(b);
+    }
+    scheda.statiEl = stati;
     contenitore.insertBefore(box, contenitore.firstChild || null);
+    contenitore.insertBefore(stati, box.nextSibling || null);
   } else if (!grezzi.length && scheda.filtroEl) {
     scheda.filtroEl.remove();
     scheda.filtroEl = null;
     scheda.campo = null;
     scheda.filtro = '';
+    scheda.statiEl.remove();
+    scheda.statiEl = null;
+    scheda.stato = 'tutti';
   }
 
   if (!scheda.zona) {
@@ -957,7 +1021,17 @@ export function disegnaProcessi(d, contenitore, lista, opzioni = {}) {
   }
 
   const cerca = scheda.filtro.trim().toLowerCase();
-  const filtrati = cerca ? grezzi.filter((p) => testoFiltrabile(p).includes(cerca)) : grezzi;
+  const voluto = scheda.stato || 'tutti';
+  /* ⛔ `statoProcesso` è una lettura di campi (nessun parse): filtrare anche per stato qui non costa nulla. */
+  const filtrati = grezzi.filter((p) => (!cerca || testoFiltrabile(p).includes(cerca)) && (voluto === 'tutti' || statoProcesso(p) === voluto));
+  /* I bottoni si sincronizzano a OGNI passata: aria-pressed segue la scelta, e gli stati rari
+     appaiono solo se esistono nei dati o sono loro stessi scelti (regola degli agenti). */
+  if (scheda.statiEl) {
+    for (const b of scheda.statiEl.children) {
+      b.setAttribute('aria-pressed', String(b.dataset.stato === voluto));
+      b.hidden = STATI_RARI_FILTRO.has(b.dataset.stato) && voluto !== b.dataset.stato && !grezzi.some((p) => statoProcesso(p) === b.dataset.stato);
+    }
+  }
   /* ⛔ `datiProcesso` — e con lui il parse della riga di comando — gira SOLO su ciò che si vede. */
   const visibili = filtrati.slice(0, scheda.mostrati).map((p) => datiProcesso(p));
 
@@ -1435,8 +1509,19 @@ export function statoProcesso(p = {}) {
 export function contaAgentiAttivi(agenti = []) {
   return (Array.isArray(agenti) ? agenti : []).filter((a) => statoDelega(a) === 'in-corso').length;
 }
+/*
+ * ⛔ A6 (07/10/2026) — il badge conta ciò che GIRA: fuori `in-consenso` (un comando che aspetta il consenso non è ancora
+ *   partito; Hermes tiene nel registro solo i processi avviati, vedi `STATI_PROCESSO['in-consenso']`), e ogni `id` una
+ *   volta sola, come la lista che si apre cliccandolo (`scheda.righe` è una Map per id): un doppione lato client gonfiava
+ *   il numero senza mostrare una riga in più.
+ */
 export function contaProcessiAttivi(processi = []) {
-  return (Array.isArray(processi) ? processi : []).filter((p) => STATI_PROCESSO[statoProcesso(p)]?.vivo === true).length;
+  const vivi = new Set();
+  for (const p of Array.isArray(processi) ? processi : []) {
+    const stato = statoProcesso(p);
+    if (stato !== 'in-consenso' && STATI_PROCESSO[stato]?.vivo === true) vivi.add(p?.id ?? p);
+  }
+  return vivi.size;
 }
 function oraBreve(iso) {
   const t = new Date(iso);
@@ -1454,14 +1539,46 @@ function tronca(t, n) { const s = String(t || '').trim(); return s.length > n ? 
  */
 const CLASSI_DETTAGLIO_PROCESSO = (r) => (r[2] === 'lungo' ? 'talos-kv__v--lungo' : '');
 
+/*
+ * ⛔⛔ A16 (bugfixer, 08/10/2026) — UNA RIGA UGUALE NON SI RIFÀ, E L'A-CAPO SE NE VA CON LA SUA RIGA.
+ *   Prima `riempiCard` toglieva tutte le `.talos-kv` e le ricreava a ogni disegno della colonna (fino a uno per
+ *   fotogramma durante una risposta), e l'a-capo che metteva davanti a ciascuna NON lo toglieva mai: misurato sul 4174 in
+ *   sola lettura, l'Indice dei giri di una sessione da 12 righe aveva 68 nodi di testo all'apertura, 152 dopo un cambio di
+ *   sessione e ritorno, 234 dopo il secondo. Con l'indice completo di una chat da 1000 giri (2.000 righe) rifare tutto a
+ *   ogni fotogramma non sarebbe stato possibile.
+ * ⇒ Le righe si riconciliano per POSIZIONE, con la loro firma (chiave · valore · classe): uguale = si tiene il nodo,
+ *   diversa = si sostituisce quella riga sola, in più = si aggiunge, in meno = si toglie insieme al SUO a-capo. È la
+ *   riconciliazione per chiave delle librerie di interfaccia, fatta a mano perché questo file non ha dipendenze: qui la
+ *   chiave è la posizione, perché le liste della colonna crescono in coda e cambiano in fondo (l'ultimo giro).
+ * ⛔ Se qualcun altro ha toccato le righe (un nodo nostro non è più figlio della card), si rifà tutto da capo: meglio un
+ *   disegno intero che un ordine sbagliato.
+ */
+const RIGHE_DELLA_CARD = new WeakMap(); // card → [{ acapo, riga, firma }], nell'ordine in cui stanno nella card
+
 function riempiCard(d, card, righe, { classiValore = () => '' } = {}) {
   if (!card) return;
-  for (const n of [...card.querySelectorAll('.talos-kv')]) n.remove();
+  let vecchie = RIGHE_DELLA_CARD.get(card) || null;
+  if (!vecchie || !vecchie.every((v) => v.riga.parentNode === card && v.acapo.parentNode === card)) {
+    for (const v of vecchie || []) { v.acapo.remove(); v.riga.remove(); }
+    for (const n of [...card.querySelectorAll('.talos-kv')]) n.remove(); // le righe dimostrative del mockup, la prima volta
+    vecchie = [];
+  }
+  const nuove = [];
   // gli a-capo fra le righe sono quelli del sorgente del mockup: le PAROLE del cancello li vedono come spazi
-  for (const r of righe) {
-    card.appendChild(d.createTextNode('\n'));
-    const rigaKv = kv(d, r[0], r[1], classiValore(r));
-    card.appendChild(rigaKv);
+  for (const [i, r] of righe.entries()) {
+    const classe = classiValore(r);
+    const firma = `${r[0]}\u0000${r[1]}\u0000${classe}`;
+    const vecchia = vecchie[i];
+    if (vecchia && vecchia.firma === firma) { nuove.push(vecchia); continue; }
+    const rigaKv = kv(d, r[0], r[1], classe);
+    if (vecchia) {
+      vecchia.riga.replaceWith(rigaKv);
+      nuove.push({ acapo: vecchia.acapo, riga: rigaKv, firma });
+    } else {
+      const acapo = d.createTextNode('\n');
+      card.append(acapo, rigaKv);
+      nuove.push({ acapo, riga: rigaKv, firma });
+    }
     /* ⛔ 04/10/2026, BUG-B — il VALORE LUNGO prende sei righe e poi si ferma: qui gli si appicica
        accanto la porta d'uscita. Il bottone è FUORI dal valore clippato (è figlio della riga kv),
        altrimenti verrebbe tagliato con lui. `talos-kv__v--lungo` la mette solo
@@ -1476,6 +1593,8 @@ function riempiCard(d, card, righe, { classiValore = () => '' } = {}) {
       aggiornaPulsanteMostra(valore);
     }
   }
+  for (const v of vecchie.slice(righe.length)) { v.acapo.remove(); v.riga.remove(); }
+  RIGHE_DELLA_CARD.set(card, nuove);
 }
 
 /**
@@ -1547,11 +1666,15 @@ export function aggiornaInspector(inspector, dati = {}, { document: d = globalTh
     const cards = inspector.querySelectorAll('#railContesto [data-c="InspectorCard"], #railContesto [data-c="TurnIndex"]');
     const [ambiente, finestra, indice] = cards;
     riempiCard(d, ambiente, righeAmbiente(dati.contesto));
-    const f = righeFinestra(dati.usage, dati.finestra, dati.ripartizione, dati.cacheSessione);
+    const f = righeFinestra(dati.usage, dati.finestra, dati.ripartizione, dati.cacheSessione, { storiaInCaricamento: dati.storiaInCaricamento === true });
     if (finestra) { const testa = finestra.querySelector('.talos-inspector-card__head span'); if (testa) testa.textContent = f.titoloDestra; }
     riempiCard(d, finestra, f.righe, { classiValore: (r) => (r[2] === 'stima' ? 'talos-measure--estimate' : '') });
     const giri = righeGiri(dati.giri);
-    riempiCard(d, indice, giri.length ? giri : [[tr('processi.inspector.turnsNone'), '—']], { classiValore: (r) => (r[2] === 'accent' ? 'talos-kv__v--accent' : '') });
+    /* ⛔ A1-bis (07/10/2026): durante la storia l'indice è vuoto perché i giri NON SONO ANCORA ARRIVATI, non perché non ce
+       ne sono — «Nessun giro ancora» su una sessione da 1363 giri era una frase falsa a schermo per ~14 s. Si dice la
+       stessa cosa del velo della chat, con la stessa chiave. */
+    const indiceVuoto = dati.storiaInCaricamento === true ? tr('app.sessions.openingHistory') : tr('processi.inspector.turnsNone');
+    riempiCard(d, indice, giri.length ? giri : [[indiceVuoto, '—']], { classiValore: (r) => (r[2] === 'accent' ? 'talos-kv__v--accent' : '') });
   }
   if (!schedaDaSaltare(inspector, inspector.querySelector('#railFile'), 'file')) {
     const fileCard = inspector.querySelector('#railFile [data-c="InspectorCard"]');
@@ -1625,12 +1748,37 @@ const FAMIGLIA_DELL_ATTREZZO = Object.freeze({ prova: 'test' });
  */
 const RISOLUZIONE_ARRIVI_MS = 100;
 
-export function processiDagliEventi(eventi = [], { adesso = Date.now(), nomiComando = ['shell', 'bash', 'esegui', 'comando', 'terminal', 'prova'] } = {}) {
+/** Gli attrezzi che diventano una riga dei Processi (un posto solo: li usa anche `app.js` per sapere quando ridisegnare). */
+export const NOMI_COMANDO = Object.freeze(['shell', 'bash', 'esegui', 'comando', 'terminal', 'prova']);
+export function processiDagliEventi(eventi = [], { adesso = Date.now(), nomiComando = NOMI_COMANDO, giroCorrente = null, giroVivo = null, sfondiNonSeguitiFinoA = null } = {}) {
   const avviati = new Map();
   const argomenti = new Map();
   const richiesteDiConsenso = new Map(); // requestId → toolCallId: `ApprovalResolved` porta solo il primo
   const lista = [];
+  /* ⛔ A5 R2 (08/10/2026, review desktop) — un evento già visto (stessa `_sequenza`) si salta. Senza, un blocco intero arrivato
+     due volte (rigiocata sovrapposta al vivo: avvio + argomenti con le stesse sequenze) dava, con la sola guardia per id, una riga
+     col JSON degli argomenti raddoppiato. App.js filtra già a monte; qui vale anche per chi chiama la funzione da sé. */
+  const sequenzeViste = new Set();
+  /* ⛔ A6-bis R2 (G1, review di talos desktop): l'uscita di uno sfondato può arrivare PRIMA del suo risultato «in sfondo» — il
+     kernel aggancia l'uscita subito, e fra lì e il `ToolCallResult` ci sono attese vere (gancio post_tool_call, cattura del
+     contesto). Il giornale conserva quell'ordine. Un'uscita per una riga non ancora chiusa si TIENE qui e si applica quando il
+     suo risultato la porta in sfondo; un risultato in primo piano la ignora (il suo esito è già quello vero). */
+  const usciteAnticipate = new Map();
+  /* ⛔ Taccuino (08/10/2026): la DURATA di uno sfondato è quella del processo, dall'avvio all'uscita vera (Hermes: `started_at` e
+     `exited_at`, `tools/process_registry.py:533-536`). Quella del risultato «in sfondo» (0,2 s, misurato sulla 4176 per un
+     comando di 8 s) è il tempo della CHIAMATA fino allo sfondamento: detta come durata, era falsa. Un orologio che va indietro
+     (avvio dopo la fine) non dà una durata. */
+  const chiudiSfondo = (p, e) => {
+    p.stato = e.esito === 'riuscito' ? 'riuscito' : e.esito === 'fallito' ? 'fallito' : 'ucciso';
+    p.uscita = Number.isSafeInteger(e.codice) ? e.codice : null;
+    p.durataSfondoMs = Number.isFinite(e.finitoAlle) && Number.isFinite(p.avviatoA) && e.finitoAlle >= p.avviatoA ? e.finitoAlle - p.avviatoA : null;
+    p.durataMs = p.durataSfondoMs;
+  };
   for (const e of eventi) {
+    if (Number.isFinite(e?._sequenza)) {
+      if (sequenzeViste.has(e._sequenza)) continue;
+      sequenzeViste.add(e._sequenza);
+    }
     /*
      * ⛔ 02/10/2026 — il consenso. `ApprovalRequested` nomina la chiamata (`azione.toolCallId`, G02); la risposta no, solo
      *   `requestId`. Finché aspetta, la riga dice «Aspetta il tuo consenso» e non è fermabile. Dato il consenso il comando
@@ -1642,6 +1790,17 @@ export function processiDagliEventi(eventi = [], { adesso = Date.now(), nomiComa
       const p = avviati.get(e.toolCallId);
       if (typeof e.requestId === 'string') richiesteDiConsenso.set(e.requestId, e.toolCallId);
       if (p.stato === 'in-avvio' || p.stato === 'in-corso') p.stato = 'in-consenso';
+      continue;
+    }
+    /*
+     * ⛔ A6-bis (bugfixer, 08/10/2026) — L'USCITA VERA DI UN COMANDO SFONDATO (`talos.processo-sfondo`, dal registro). Prima la riga
+     *   «in sfondo» restava viva per sempre e il numero sulla scheda la contava; ora si chiude col SUO evento, come dice la nota
+     *   A6 più sotto. Solo una riga ancora «in sfondo»: un esito già detto non si riscrive.
+     */
+    if (e.type === 'ProcessoSfondoFinito') {
+      const p = avviati.get(e.toolCallId);
+      if (p?.stato === 'in-sfondo') chiudiSfondo(p, e);
+      else usciteAnticipate.set(e.toolCallId, e); // G1: arriva prima del suo risultato (dopo un esito vero non si applica più)
       continue;
     }
     if (e.type === 'ApprovalResolved' && richiesteDiConsenso.has(e.requestId)) {
@@ -1669,6 +1828,13 @@ export function processiDagliEventi(eventi = [], { adesso = Date.now(), nomiComa
        *   sul tempo d'arrivo solo quando il server non lo dichiara), `ricevutoA` resta il metro del
        *   silenzio di un processo ancora aperto, che è una domanda su NOI, non su di lui.
        */
+      /*
+       * ⛔ A5 (08/10/2026, bugfixer) — UN COMANDO, UNA RIGA. Un secondo `ToolCallStart` con un id già visto spingeva una riga
+       *   nuova e vuota, e ne azzerava gli argomenti. Non riprodotto dal vivo (cinque percorsi sulla 4176, sempre una riga):
+       *   l'owner non ricorda la scena e ha scelto la protezione. Lo stesso id che arriva due volte succede nelle pile vere
+       *   (openai/openai-agents-python#1862, LocalAI e1a6010): la chiave è l'id, e vince il primo.
+       */
+      if (avviati.has(e.toolCallId)) continue;
       const p = {
         /* ⛔ 02/10/2026, foto della prova dello Stop: il `!` della persona diceva «agente · giro 1». `chi` arriva dal
            client, con lo stesso criterio della card in chat (`giroComandoDiretto` + `shell`, PO-06). */
@@ -1697,10 +1863,13 @@ export function processiDagliEventi(eventi = [], { adesso = Date.now(), nomiComa
          passano solo se l'evento li porta davvero (niente stringhe vuote a schermo). */
       if (e.inSfondo === true && e.rifiutato !== true && e.senzaSuite !== true) {
         p.stato = 'in-sfondo';
+        p.sequenzaSfondo = Number.isFinite(e._sequenza) ? e._sequenza : null; // A6-bis: per riconoscere uno sfondo di prima del riavvio
         p.fileSfondo = typeof e.fileSfondo === 'string' && e.fileSfondo !== '' ? e.fileSfondo : null;
         p.sfondoDa = typeof e.sfondoDa === 'string' && e.sfondoDa !== '' ? e.sfondoDa : null;
         p.uscita = null;
+        if (usciteAnticipate.has(e.toolCallId)) chiudiSfondo(p, usciteAnticipate.get(e.toolCallId)); // G1: già uscito
       }
+      usciteAnticipate.delete(e.toolCallId);
       /*
        * ⛔⛔⛔ 17/09, OSS-1 — LA DURATA HA TRE FONTI, IN QUEST'ORDINE, E LA TERZA È IL SILENZIO.
        *   (1) `durataMs` dichiarato dal server: è l'unico misurato dove il comando è girato davvero,
@@ -1713,6 +1882,8 @@ export function processiDagliEventi(eventi = [], { adesso = Date.now(), nomiComa
        */
       if (Number.isFinite(e.durataMs) && e.durataMs >= 0) p.durataMs = Math.round(e.durataMs);
       else if (Number.isFinite(p.ricevutoA) && Number.isFinite(e.ricevutoA) && e.ricevutoA - p.ricevutoA >= RISOLUZIONE_ARRIVI_MS) p.durataMs = e.ricevutoA - p.ricevutoA;
+      // uno sfondato non ha ancora una durata sua (o ha quella della sua uscita, se è già arrivata): mai quella della chiamata
+      if (e.inSfondo === true && e.rifiutato !== true && e.senzaSuite !== true) p.durataMs = p.durataSfondoMs ?? null;
       /* ⛔ Il comando del risultato riempie un BUCO, non sostituisce ciò che il modello ha mandato:
          `prova` non ha argomenti obbligatori, ma un `shell` con gli argomenti suoi resta quello. */
       if (!p.comando && typeof e.comando === 'string' && e.comando.trim()) {
@@ -1739,6 +1910,31 @@ export function processiDagliEventi(eventi = [], { adesso = Date.now(), nomiComa
          l'ordine, non da una prova — una cancellazione che avviene prima di chi riempie non
          cancella niente. */
     }
+  }
+  /*
+   * ⛔⛔ A6 (07/10/2026) — UN COMANDO IN PRIMO PIANO NON SOPRAVVIVE AL SUO GIRO. Prima una riga si chiudeva SOLO col suo
+   *   `ToolCallResult`: dopo uno Stop, un errore o un server riavviato a metà comando restava «in corso» per sempre, e il
+   *   badge la contava. Due FATTI la chiudono, dichiarati da chi chiama (`legacy/app.js`, `disegnaInspectorAdesso`):
+   *   (a) è cominciato un giro successivo (`giroCorrente > p.giro`); (b) il suo giro non è più vivo (`giroVivo === false`,
+   *   cioè `runRealeAttivo()`: evento terminale visto o sessione chiusa dichiarata dal server).
+   * ⛔ «In sfondo» resta fuori: vive oltre la fine del giro per costruzione (BUG-3/14) e si chiude col SUO evento (C06).
+   * ⛔ E resta fuori il comando `!` della PERSONA (`chi: 'tu'`): non è un passo del giro del modello ma un'operazione sua
+   *   (`ComandoUtenteIniziato`/`ComandoUtenteFinito`, session-registry.mjs:9148), che gira anche a modello fermo e in
+   *   parallelo a un giro nuovo. Si chiude col suo risultato (RED di «talos desktop», 07/10/2026: A6-09, A6-10).
+   * ⛔ Senza i due fatti (chiamanti che non li passano) non cambia niente: nessuna deduzione dal solo tempo.
+   */
+  /* A6-bis: uno sfondo nato prima che il server si riavviasse (la sua sequenza è nel tratto scritto dal server di PRIMA) non lo
+     segue più nessuno: «Non più seguito», non vivo. Senza il dato (sessione nata da questo server, chiamanti vecchi) non cambia niente. */
+  if (Number.isFinite(sfondiNonSeguitiFinoA)) {
+    for (const p of lista) if (p.stato === 'in-sfondo' && Number.isFinite(p.sequenzaSfondo) && p.sequenzaSfondo <= sfondiNonSeguitiFinoA) p.stato = 'perso';
+  }
+  for (const p of lista) {
+    if (!STATI_PROCESSO[p.stato]?.vivo || p.stato === 'in-sfondo' || p.chi === 'tu') continue;
+    const superato = Number.isFinite(giroCorrente) && Number.isFinite(p.giro) && giroCorrente > p.giro;
+    if (!superato && giroVivo !== false) continue;
+    p.stato = 'interrotto';
+    p.uscita = null;
+    p.durataMs = null;
   }
   for (const p of lista) {
     if (!STATI_PROCESSO[p.stato]?.vivo || !Number.isFinite(p.ricevutoA)) continue;

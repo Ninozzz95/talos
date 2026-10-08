@@ -222,7 +222,7 @@ test('⛔⛔⛔ CLI-REQ-02 — una GIUNZIONE dentro il pacchetto è RIFIUTATA pe
     assert.equal(falliti.length, 1);
     assert.equal(falliti[0].pluginId, 'demo');
     assert.equal(falliti[0].codice, 'PLUGIN_PACKAGE_SYMLINK_UNSUPPORTED');
-    assert.match(falliti[0].frase, /collegamento/i);
+    assert.match(falliti[0].frase, /link to another folder/i);
 
     // Il cancello non esplode: degrada a «nessun plugin», che è il suo comportamento di sempre.
     const esito = await preparaToolPluginPerSessione({ cartella, cartellaTrust });
@@ -271,14 +271,15 @@ test('⛔⛔⛔ CLI-REQ-02 — un archivio scritto con la REGOLA PRECEDENTE si d
 
     // 1 · mai approvato: nessun archivio.
     const mai = await statoTrustPlugin({ cartellaTrust, pluginId: 'demo', hash });
-    assert.deepEqual(mai, { fidato: false, motivo: 'mai-approvato', frase: null });
+    assert.deepEqual(mai, { fidato: false, motivo: 'mai-approvato', frase: null, fraseChiave: null });
 
     // 2 · la forma che scriveva `fidaPlugin` PRIMA di oggi: hash, data, nessuno `schema`.
     writeFileSync(join(cartellaTrust, 'demo.json'), JSON.stringify({ hash, fidatoIl: new Date().toISOString() }), 'utf8');
     const vecchio = await statoTrustPlugin({ cartellaTrust, pluginId: 'demo', hash });
     assert.equal(vecchio.fidato, false, 'la regola precedente non autorizza: fallisce CHIUSO');
     assert.equal(vecchio.motivo, 'regola-precedente');
-    assert.match(vecchio.frase, /approvalo di nuovo/i);
+    assert.match(vecchio.frase, /approve it again/i);
+    assert.equal(vecchio.fraseChiave, 'server.plugin.trust.previousRule');
     assert.doesNotMatch(vecchio.frase, /hash|schema|sha256|plugin\.json/i, 'niente nomi tecnici nella frase');
 
     // 3 · approvato con la regola di oggi, poi il codice cambia.
@@ -288,7 +289,8 @@ test('⛔⛔⛔ CLI-REQ-02 — un archivio scritto con la REGOLA PRECEDENTE si d
     const cambiato = await statoTrustPlugin({ cartellaTrust, pluginId: 'demo', hash: await hashDi(cartella) });
     assert.equal(cambiato.fidato, false);
     assert.equal(cambiato.motivo, 'contenuto-cambiato');
-    assert.equal(cambiato.frase, 'Il contenuto di questo plugin è cambiato da quando l\'hai approvato.');
+    assert.equal(cambiato.frase, 'The content of this plugin has changed since you approved it.');
+    assert.equal(cambiato.fraseChiave, 'server.plugin.trust.contentChanged');
     assert.notEqual(cambiato.frase, vecchio.frase, 'le due frasi devono essere DIVERSE, è tutto il punto');
   } finally {
     rimuoviCartellaDiProva(cartella);
@@ -322,7 +324,7 @@ test('⛔ CLI-REQ-02 AL CONTRARIO — un archivio di fiducia illeggibile non aut
   try {
     writeFileSync(join(cartellaTrust, 'demo.json'), '{ non e json', 'utf8');
     const stato = await statoTrustPlugin({ cartellaTrust, pluginId: 'demo', hash: 'a'.repeat(64) });
-    assert.deepEqual(stato, { fidato: false, motivo: 'mai-approvato', frase: null });
+    assert.deepEqual(stato, { fidato: false, motivo: 'mai-approvato', frase: null, fraseChiave: null });
   } finally {
     rimuoviCartellaDiProva(cartellaTrust);
   }
@@ -370,8 +372,9 @@ test('⛔⛔⛔ A1 — un manifesto che NOMINA un file fuori dal pacchetto è RI
     assert.deepEqual(plugin.map((p) => p.id), [], 'un pacchetto che esce da sé non si offre');
     assert.equal(falliti.length, 1, 'e non sparisce in silenzio: compare fra i falliti');
     assert.equal(falliti[0].pluginId, 'demo');
+    assert.equal(falliti[0].fraseChiave, 'server.plugin.fault.outsideFolder');
     assert.equal(falliti[0].codice, 'PLUGIN_COMANDO_FUORI_DAL_PACCHETTO');
-    assert.match(falliti[0].frase, /fuori dalla sua cartella/i);
+    assert.match(falliti[0].frase, /outside its folder/i);
     assert.doesNotMatch(falliti[0].frase, /sha256|hash|PLUGIN_[A-Z_]+/, 'niente nomi tecnici nella frase');
   } finally {
     rimuoviCartellaDiProva(cartella);
@@ -564,7 +567,7 @@ test('⛔⛔⛔ A-1 — un comando che VALUTA codice inline è rifiutato al cari
     const { plugin, falliti } = await caricaPlugin({ cartella });
     assert.deepEqual(plugin, []);
     assert.equal(falliti[0].codice, 'PLUGIN_COMANDO_ESEGUE_CODICE');
-    assert.match(falliti[0].frase, /istruzioni scritte dentro la sua scheda/i);
+    assert.match(falliti[0].frase, /instructions written inside its manifest/i);
     assert.doesNotMatch(falliti[0].frase, /PLUGIN_[A-Z_]+|--eval|-e\b/, 'niente nomi tecnici nella frase');
   } finally {
     rimuoviCartellaDiProva(cartella);
@@ -666,7 +669,7 @@ test('⛔⛔⛔ A-3 — un id di plugin che contiene «__» è rifiutato con una
     const { plugin, falliti } = await caricaPlugin({ cartella });
     assert.deepEqual(plugin.map((p) => p.id), ['a'], 'il gemello sano resta, gli ambigui no');
     assert.deepEqual(falliti.map((f) => f.codice).sort(), ['PLUGIN_ID_AMBIGUO', 'PLUGIN_ID_AMBIGUO', 'PLUGIN_ID_AMBIGUO']);
-    assert.match(falliti[0].frase, /Rinominala e riprova/);
+    assert.match(falliti[0].frase, /Rename it and try again/);
   } finally {
     rimuoviCartellaDiProva(cartella);
   }

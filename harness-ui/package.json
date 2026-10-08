@@ -24,6 +24,7 @@
     "@vscode/ripgrep": "1.18.0",
     "ai": "7.0.93",
     "canonicalize": "5.1.0",
+    "croner": "10.0.1",
     "docx": "9.5.1",
     "eventsource-parser": "4.1.0",
     "iconv-lite": "0.7.3",

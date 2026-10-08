@@ -151,7 +151,7 @@ test('CORSIA2-CABLAGGIO — i tre anelli sono attaccati nel monolite, e nell’O
     'app.js non importa la funzione della provenienza',
   );
   assert.ok(
-    MONOLITE.includes('spiegaErrore(evento.message, evento.code, provenienzaDelGiroFinito('),
+    MONOLITE.includes("spiegaErrore(testoDelCampo(evento, 'message'), evento.code, provenienzaDelGiroFinito("),
     'il RunError chiama ancora spiegaErrore con DUE argomenti: la famiglia resta irraggiungibile',
   );
   assert.ok(
@@ -227,7 +227,7 @@ test('CORSIA2-ATTESA-CABLAGGIO — coda consegnata e reindirizzamento applicato 
     const ramo = rami.map(m => m[0]).find(testo => testo.includes('appendUserFollowUp(evento.testo'));
     assert.ok(ramo, `${evento}: manca il percorso del messaggio utente`);
     const nascondi = ramo.indexOf('nascondiAttesaRisposta();');
-    const appendi = ramo.indexOf('appendUserFollowUp(evento.testo, null, evento.immagini);');
+    const appendi = ramo.indexOf('appendUserFollowUp(evento.testo, null, evento.immagini'); // dal 07/10 (650f74fc8) segue `{ rigiocata }`
     const mostra = ramo.indexOf('mostraAttesaRisposta();', appendi);
     assert.ok(nascondi >= 0 && appendi > nascondi && mostra > appendi,
       `${evento}: l'attesa deve seguire il nuovo messaggio utente`);

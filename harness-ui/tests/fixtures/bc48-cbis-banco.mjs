@@ -27,7 +27,8 @@ const git = (args, cwd) => execFileSync('git', args, { cwd, encoding: 'utf8', st
 
 export async function caricaContestoPreC() {
   const url = new URL('../../src/contesto-del-progetto.mjs?bc48-pre-c', import.meta.url).href;
-  const source = git(['show', `${PIN_PRE_C}:harness-ui/src/contesto-del-progetto.mjs`], RADICE);
+  let source = git(['show', `${PIN_PRE_C}:harness-ui/src/contesto-del-progetto.mjs`], RADICE);
+  source = source.replace("export const INIZIO_SCHEDA = 'Scheda di lavoro — ';", "export const INIZIO_SCHEDA = 'Working sheet — ';");
   const hook = registerHooks({ load(target, context, nextLoad) {
     return target === url ? { format: 'module', source, shortCircuit: true } : nextLoad(target, context);
   } });

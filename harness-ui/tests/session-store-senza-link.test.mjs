@@ -56,7 +56,7 @@ for (const code of ['EISDIR', 'EPERM', 'EXDEV']) {
       assert.equal(sessionStore.modalitaPubblicazioneIntestazione(cartellaStore), 'senza-link');
       // Annunciata nel registro del server, senza percorsi.
       assert.equal(logger.righe.length, 1);
-      assert.match(logger.righe[0], /senza collegamenti|senza link/i);
+      assert.match(logger.righe[0], /without links/i);
       assert.doesNotMatch(logger.righe[0], /talos-exfat-/);
       // Il journal resta appendibile dopo la nascita.
       await registraRiga({ cartellaStore, sessionId, record: { type: 'TextMessageContent', delta: 'ciao' } });

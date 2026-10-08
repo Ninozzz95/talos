@@ -277,19 +277,26 @@ test('PAR-03 — destinazioni di chat: il prefisso, il router e la regex dicono 
   assert.equal(nonDirottato.modelloRemoto, 'fornitore-finto:modello-x', 'un prefisso sconosciuto resta parte del nome del modello');
 });
 
-test('PAR-04 — motori locali e SDK nativi: due liste che erano scritte a mano in cinque posti', () => {
+/*
+ * ⛔ 08/10/2026 (bugfixer, prima della beta 0.1.24) — LE DUE `assert.rejects` NON ERANO ATTESE. La prova era sincrona: un rifiuto
+ *   sbagliato arrivava DOPO la sua fine, come `unhandledRejection` sul file intero, e il primo cancello di `release.yml`
+ *   (`node --test harness-ui/tests/*.test.mjs`) si fermava lì. E il testo atteso era quello di prima della fase della lingua:
+ *   dal 0db3f506c il server dice «Native provider not recognized.». Node: `assert.rejects` restituisce una promessa da attendere
+ *   (documentazione di `node:assert`, «assert.rejects… Awaits the asyncFn promise»).
+ */
+test('PAR-04 — motori locali e SDK nativi: due liste che erano scritte a mano in cinque posti', async () => {
   const runtime = createOpenAiCompatibleRuntime({ fetchImpl: async () => new Response('{}') });
   const localiAttesi = ID_FORNITORI.filter((id) => REGISTRO_FORNITORI[id].catalogo.fonte === 'runtime-locale' && REGISTRO_FORNITORI[id].wire === 'openai-chat');
   for (const id of localiAttesi) assert.doesNotThrow(() => runtime.detect(id), `${id}: il runtime locale non lo conosce`);
   assert.ok(localiAttesi.includes('lmstudio'), 'P-C: LM Studio deve essere un motore locale su wire OpenAI');
   /* ⛔ Verso contrario: un motore che il registro non dichiara non esiste per il runtime. */
-  assert.rejects(runtime.listModels('motore-finto'), { code: 'RUNTIME_INVALID' });
+  await assert.rejects(runtime.listModels('motore-finto'), { code: 'RUNTIME_INVALID' });
 
   // P-J — cinque fornitori, sempre tre SDK: entrambe le nuove porte riusano Anthropic.
   stessiId(ID_NATIVI_SDK, ['openai', 'anthropic', 'gemini', 'zai-anthropic', 'minimax-anthropic'], 'ID_NATIVI_SDK');
-  assert.rejects(
+  await assert.rejects(
     nativeProviderResponse({ provider: 'deepseek', model: 'x', apiKey: 'k', body: { messages: [] } }),
-    /Provider nativo non riconosciuto/u,
+    /Native provider not recognized/u,
     'un fornitore non dichiarato nativo non deve poter costruire un client SDK',
   );
 });

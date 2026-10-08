@@ -17,13 +17,13 @@ const serializza = valore => JSON.stringify(ordinato(valore));
 function controlla(contenuto) {
   const { parte, testo, affermazioni, fonti } = contenuto;
   if (!parte || !Number.isSafeInteger(parte.indice) || parte.indice < 1 || parte.indice > MASSIMO_PARTI || typeof parte.ultima !== 'boolean') {
-    return 'La parte richiede un indice intero da 1 a 512 e ultima vero o falso.';
+    return 'Part requires an integer index from 1 to 512 and ultima true or false.';
   }
-  if (typeof testo !== 'string' || !Array.isArray(affermazioni) || !Array.isArray(fonti)) return 'Ogni parte richiede testo e gli elenchi affermazioni e fonti, anche vuoti.';
+  if (typeof testo !== 'string' || !Array.isArray(affermazioni) || !Array.isArray(fonti)) return 'Each part requires text and the claims and sources lists, even if empty.';
   if (affermazioni.some(a => !a || typeof a !== 'object' || Array.isArray(a) || typeof a.testo !== 'string' || !a.testo.trim()
-    || !((typeof a.fonte === 'string' && a.fonte.trim()) || Number.isSafeInteger(a.fonte)))) return 'Ogni affermazione richiede testo e fonte; usa il suo URL completo.';
-  if (fonti.some(f => !f || typeof f.url !== 'string' || !/^https?:\/\//i.test(f.url.trim()))) return 'Ogni fonte richiede un URL HTTP(S) completo.';
-  if (Buffer.byteLength(JSON.stringify(contenuto), 'utf8') > LIMITE_PARTE_RAPPORTO_BYTE) return `La parte supera ${LIMITE_PARTE_RAPPORTO_BYTE} byte: dividila prima di riprovare con lo stesso indice.`;
+    || !((typeof a.fonte === 'string' && a.fonte.trim()) || Number.isSafeInteger(a.fonte)))) return 'Each claim requires text and source; use its full URL.';
+  if (fonti.some(f => !f || typeof f.url !== 'string' || !/^https?:\/\//i.test(f.url.trim()))) return 'Each source requires a full HTTP(S) URL.';
+  if (Buffer.byteLength(JSON.stringify(contenuto), 'utf8') > LIMITE_PARTE_RAPPORTO_BYTE) return `Part exceeds ${LIMITE_PARTE_RAPPORTO_BYTE} bytes: split it before retrying with the same index.`;
   return null;
 }
 
@@ -35,17 +35,17 @@ export function rileggiPartiRapporto(eventi) {
     if (evento?.kind === 'deposit_part') {
       const contenuto = evento.contenuto;
       if (!contenuto || controlla(contenuto) || evento.versione !== 1 || evento.indice !== contenuto.parte.indice
-        || evento.impronta !== impronta(serializza(contenuto))) throw new Error('Integrità delle parti non verificabile: impronta o contenuto del giornale non valido.');
+        || evento.impronta !== impronta(serializza(contenuto))) throw new Error('Part integrity cannot be verified: invalid journal digest or content.');
       const precedente = parti[evento.indice - 1];
       if (precedente) {
-        if (precedente.impronta !== evento.impronta) throw new Error('Integrità del giornale: due contenuti diversi per la stessa parte.');
+        if (precedente.impronta !== evento.impronta) throw new Error('Journal integrity: two different contents for the same part.');
         continue;
       }
-      if (evento.indice !== parti.length + 1 || parti.at(-1)?.contenuto.parte.ultima || conclusione) throw new Error('Integrità del giornale: manca una parte oppure il deposito è già chiuso.');
+      if (evento.indice !== parti.length + 1 || parti.at(-1)?.contenuto.parte.ultima || conclusione) throw new Error('Journal integrity: missing a part or deposit is already closed.');
       parti.push(evento);
     } else if (evento?.kind === 'deposit_finished') {
       if (!parti.at(-1)?.contenuto.parte.ultima || evento.ultimaImpronta !== parti.at(-1).impronta
-        || !/^[a-f0-9]{64}$/.test(evento.impronta ?? '') || !evento.risultato?.ok) throw new Error('Integrità della chiusura del deposito non verificabile.');
+        || !/^[a-f0-9]{64}$/.test(evento.impronta ?? '') || !evento.risultato?.ok) throw new Error('Deposit closure integrity cannot be verified.');
       conclusione = evento;
     }
   }
@@ -67,7 +67,7 @@ export async function depositaParteRapporto(argomenti, { leggiGiornaleFn, accoda
   const motivo = controlla(contenuto);
   if (motivo) return { ok: false, motivo };
   if (byteArgomenti !== undefined && (!Number.isSafeInteger(byteArgomenti) || byteArgomenti > LIMITE_PARTE_RAPPORTO_BYTE)) {
-    return { ok: false, motivo: `Gli argomenti generati superano ${LIMITE_PARTE_RAPPORTO_BYTE} byte. Dividi testo e prove; riprova lo stesso indice.` };
+    return { ok: false, motivo: `Generated arguments exceed ${LIMITE_PARTE_RAPPORTO_BYTE} bytes. Split text and evidence; retry with the same index.` };
   }
   const chiave = `${resolve(cartella)}\0${id}`;
   const precedente = code.get(chiave) ?? Promise.resolve();
@@ -76,9 +76,9 @@ export async function depositaParteRapporto(argomenti, { leggiGiornaleFn, accoda
     const stato = rileggiPartiRapporto(eventi);
     const hash = impronta(serializza(contenuto));
     const registrata = stato.parti[parte.indice - 1];
-    if (registrata && registrata.impronta !== hash) return { ok: false, motivo: `La parte ${parte.indice} è già registrata con un altro contenuto. Non riscriverla; prossima parte: ${stato.prossimaParte}.` };
+    if (registrata && registrata.impronta !== hash) return { ok: false, motivo: `Part ${parte.indice} is already recorded with different content. Do not rewrite it; next part: ${stato.prossimaParte}.` };
     if (!registrata && (parte.indice !== stato.prossimaParte || stato.parti.at(-1)?.contenuto.parte.ultima)) {
-      return { ok: false, motivo: `Ordine non valido: prossima parte ${stato.prossimaParte}. Una chiusura già registrata si ritenta identica.` };
+      return { ok: false, motivo: `Invalid order: next part ${stato.prossimaParte}. An already recorded closure must be retried identically.` };
     }
     const evento = registrata ?? {
       kind: 'deposit_part', versione: 1, at: clock().toISOString(), indice: parte.indice,
@@ -93,12 +93,12 @@ export async function depositaParteRapporto(argomenti, { leggiGiornaleFn, accoda
     if (!registrata) await accodaEventoFn({ cartella, id, evento, separaRiga: true });
     if (!parte.ultima) return {
       ok: true, parziale: true, prossimaParte: tutte.length + 1,
-      messaggio: `Parte ${parte.indice} registrata (${evento.byte} byte). Prossima parte: ${tutte.length + 1}. Attendi questa conferma prima di proseguire; il rapporto sarà pronto soltanto dopo l'ultima parte.`,
+      messaggio: `Part ${parte.indice} recorded (${evento.byte} bytes). Next part: ${tutte.length + 1}. Wait for this confirmation before continuing; the report will be ready only after the final part.`,
       contenutoRegistrato: `\n${JSON.stringify(evento)}\n`, percorsoRegistrato: percorsoGiornale(cartella, id),
     };
     if (stato.conclusione) {
       const documento = await leggiRapportoFn({ cartella, id });
-      if (typeof documento !== 'string' || impronta(documento) !== stato.conclusione.impronta) throw new Error('Il rapporto concluso non coincide con l’impronta nel giornale: ripristinare il file prima di riprovare.');
+      if (typeof documento !== 'string' || impronta(documento) !== stato.conclusione.impronta) throw new Error('Completed report does not match digest in journal: restore file before retrying.');
       return { ...stato.conclusione.risultato, documento, giaScritto: true };
     }
     const composto = await finalizza(unito);
@@ -120,19 +120,19 @@ export async function depositaParteRapporto(argomenti, { leggiGiornaleFn, accoda
 export function consegnaPartiRapporto(eventi = []) {
   const stato = rileggiPartiRapporto(eventi);
   const istruzioni = [
-    'Deposita il rapporto progressivamente con research_deposit dopo ogni ramo del piano, una sezione per volta, senza aspettare la fine della ricerca.',
-    'Aggiungi sempre parte:{indice:1,ultima:false}, poi aumenta indice di uno dopo ogni conferma. Questa istruzione sostituisce eventuali vecchie richieste di deposito unico.',
-    `Ogni chiamata deve contenere al massimo ${LIMITE_PARTE_RAPPORTO_BYTE} byte UTF-8 di argomenti JSON complessivi; punta a 3000 byte, circa 400 parole fra prosa e prove. Una sola chiamata di deposito per risposta: attendi la conferma prima di generare la successiva.`,
-    'testo contiene solo la sezione corrente, con gli a capo necessari: il server concatena i pezzi senza aggiungere separatori. Il primo pezzo porta il titolo; gli ultimi completano conclusioni e fonti.',
-    'Distribuisci anche affermazioni e fonti tra le parti, senza ripetere quelle già inviate; usa URL esatti in fonte. Gli elenchi possono essere vuoti. Non accumulare tutte le prove in una chiamata finale enorme.',
-    'Per chiudere usa ultima:true; se tutto è già registrato, invia testo:"", affermazioni:[], fonti:[] con il prossimo indice e ultima:true. Soltanto allora il server assembla, verifica e pubblica il rapporto.',
-    'Il messaggio finale in chat è solo una breve conferma, mai il rapporto: questa regola sostituisce anche eventuali vecchie istruzioni di scriverlo come ultimo messaggio.',
-    'Non rigenerare i pezzi confermati e non ricopiare l’intero rapporto. In caso di conferma persa, ripeti lo stesso indice con gli stessi contenuti. Scrivi rapporto e messaggi per la persona in italiano, senza nomi tecnici degli attrezzi.',
+    'Deposit the report progressively with research_deposit after each branch of the plan, one section at a time, without waiting for the end of the research.',
+    'Always include parte:{indice:1,ultima:false}, then increment indice by one after each confirmation. This instruction supersedes any previous single deposit requests.',
+    `Each call must contain at most ${LIMITE_PARTE_RAPPORTO_BYTE} UTF-8 bytes of total JSON arguments; aim for 3000 bytes, about 400 words between report text and evidence. Only one deposit call for each response: wait for confirmation before generating the next.`,
+    'testo contains only the current section, with necessary newlines: server concatenates parts without adding separators. The first part includes the title; later parts complete conclusions and sources.',
+    'Also distribute claims and sources across parts, without repeating previously sent ones; use exact URLs in fonte. Lists may be empty. Do not hoard all evidence into a single massive final call.',
+    'To close, set ultima:true; if everything is already recorded, send testo:"", affermazioni:[], fonti:[] with the next index and ultima:true. Only then does the server assemble, verify, and publish the report.',
+    'The final chat message is only a brief confirmation, never the report: this rule supersedes any previous instructions to write it as the last message.',
+    'Do not regenerate confirmed parts and do not copy the full report. If a confirmation was lost, repeat the same index with the same contents. Write the report and messages for the user in Italian, without technical tool names.',
   ];
   if (stato.parti.length) {
-    istruzioni.push(`Parti già registrate: ${stato.parti.length}. ${stato.parti.at(-1).contenuto.parte.ultima ? 'Non aggiungere altre parti.' : `Prossima parte: ${stato.prossimaParte}.`} I contenuti confermati sono nel giornale della ricerca; leggili solo se ti servono per proseguire, senza rispedirli.`);
+    istruzioni.push(`Parts already recorded: ${stato.parti.length}. ${stato.parti.at(-1).contenuto.parte.ultima ? 'Do not add more parts.' : `Next part: ${stato.prossimaParte}.`} Confirmed contents are in the research journal; read them only if needed to continue, without resending them.`);
     if (stato.parti.at(-1).contenuto.parte.ultima) {
-      istruzioni.push('L’ultima parte è già registrata: completa o recupera la consegna ripetendo ESATTAMENTE questa chiamata, senza altra prosa:', JSON.stringify(stato.parti.at(-1).contenuto));
+      istruzioni.push('The final part is already recorded: complete or recover the delivery by repeating EXACTLY this call, without any other prose:', JSON.stringify(stato.parti.at(-1).contenuto));
     }
   }
   return istruzioni.join('\n');

@@ -319,6 +319,185 @@ test('BACKGROUND-MOTION-PERF-03 — lo sfondo non forza ricalcoli stile continui
   expect(recalcStyleSeconds).toBeLessThan(0.04);
 });
 
+/* ⛔ B1 (bugfixer, 08/10/2026): aprendo una chat da 1000 giri la colonna della conversazione cambia figli a ogni evento
+   rigiocato, e lo sfondo rifaceva `prepare` (misura del contenitore + disegno) a ogni cambiamento: 2,7 s dei 5,7 s
+   dell'apertura. Duecento cambiamenti, ciascuno in un compito suo come durante il rigioco: lo sfondo misura il contenitore
+   al più una volta per fotogramma (si contano i fotogrammi passati intanto). Col codice di prima le misure sono ~200. */
+test('BACKGROUND-MOTION-PERF-05 — una raffica di cambiamenti nella chat costa allo sfondo una misura per fotogramma, non una per cambiamento', async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem('talos.harness.desktop.settings.v1', JSON.stringify({
+      version: 1,
+      appearance: { backgroundMotion: true, motionMode: 'adaptive', reducedMotion: false },
+    }));
+    const originale = Element.prototype.getBoundingClientRect;
+    window.__misureChat = 0;
+    Element.prototype.getBoundingClientRect = function misura(...argomenti) {
+      if (this.id === 'schermoChat') window.__misureChat += 1;
+      return originale.apply(this, argomenti);
+    };
+  });
+  await apriChat(page);
+  await page.locator('#talosAvvio').waitFor({ state: 'detached', timeout: 8000 });
+  await expect(page.locator('#schermoChat > canvas.talos-motion-canvas')).toBeVisible();
+  const esito = await page.evaluate(async () => {
+    const colonna = document.querySelector('#conversation');
+    await new Promise((fatto) => requestAnimationFrame(() => requestAnimationFrame(fatto)));
+    let fotogrammi = 0; let attivo = true;
+    const conta = () => { if (!attivo) return; fotogrammi += 1; requestAnimationFrame(conta); };
+    requestAnimationFrame(conta);
+    window.__misureChat = 0;
+    const aggiunti = [];
+    for (let i = 0; i < 200; i += 1) {
+      const nodo = document.createElement('div');
+      nodo.dataset.provaSfondo = String(i);
+      colonna.append(nodo);
+      aggiunti.push(nodo);
+      await new Promise((fatto) => setTimeout(fatto, 0));
+    }
+    await new Promise((fatto) => requestAnimationFrame(() => requestAnimationFrame(fatto)));
+    attivo = false;
+    const misure = window.__misureChat;
+    // e dopo la raffica lo sfondo continua a rispondere: un cambiamento in più, una misura in più
+    window.__misureChat = 0;
+    aggiunti.at(-1).remove();
+    await new Promise((fatto) => requestAnimationFrame(() => requestAnimationFrame(fatto)));
+    const misureDopo = window.__misureChat;
+    for (const nodo of aggiunti) nodo.remove();
+    return { misure, fotogrammi, misureDopo };
+  });
+  expect(esito.misure, `200 cambiamenti in ${esito.fotogrammi} fotogrammi: lo sfondo ha misurato la chat ${esito.misure} volte`).toBeGreaterThan(0);
+  expect(esito.misureDopo, 'finita la raffica, un cambiamento nella chat si fa ancora sentire dallo sfondo').toBeGreaterThan(0);
+  expect(esito.misure, `200 cambiamenti in ${esito.fotogrammi} fotogrammi: lo sfondo ha misurato la chat ${esito.misure} volte`).toBeLessThanOrEqual(esito.fotogrammi + 2);
+});
+
+/* ⛔ B1 (bugfixer, 08/10/2026): aprendo una chat da 1000 giri il compositore e il piede si riscrivevano a ogni evento
+   rigiocato (124.550 mutazioni nella pagina, 103.000 fuori dalla chat). Durante la rigiocata ora si aggiornano una volta
+   per fotogramma; fuori restano immediati. Si legge con `takeRecords()` subito dopo la chiamata: niente rinvio da indovinare. */
+test('B1-INTERFACCIA-RIGIOCATA-06 — durante la storia il compositore si aggiorna una volta per fotogramma, fuori subito', async ({ page }) => {
+  await apriChat(page);
+  await page.waitForFunction(() => window.__talosHarnessUiRuntime);
+  await page.locator('#talosAvvio').waitFor({ state: 'detached', timeout: 8000 });
+  const esito = await page.evaluate(async () => {
+    const runtime = window.__talosHarnessUiRuntime;
+    const sessione = runtime.realSessionState;
+    const bersagli = [document.querySelector('#composerForm'), document.querySelector('#schermoChat .talos-chat-foot')].filter(Boolean);
+    let richiamate = 0;
+    const osservatore = new MutationObserver(() => { richiamate += 1; });
+    for (const nodo of bersagli) osservatore.observe(nodo, { subtree: true, childList: true, attributes: true, characterData: true });
+    const prima = sessione.inRigiocata;
+    try {
+      sessione.inRigiocata = true;
+      runtime.syncRunComposerState();
+      const subitoInStoria = osservatore.takeRecords().length;
+      await new Promise((fatto) => requestAnimationFrame(() => requestAnimationFrame(fatto)));
+      let fotogrammi = 0; let attivo = true;
+      const conta = () => { if (!attivo) return; fotogrammi += 1; requestAnimationFrame(conta); };
+      requestAnimationFrame(conta);
+      osservatore.takeRecords(); richiamate = 0;
+      for (let i = 0; i < 200; i += 1) { runtime.syncRunComposerState(); await new Promise((fatto) => setTimeout(fatto, 0)); }
+      await new Promise((fatto) => requestAnimationFrame(() => requestAnimationFrame(fatto)));
+      attivo = false;
+      const raffica = richiamate;
+      // un aggiornamento lasciato in attesa dalla storia, poi la storia finisce: la chiamata immediata lo cancella
+      runtime.syncRunComposerState();
+      sessione.inRigiocata = false;
+      runtime.syncRunComposerState();
+      const subitoFuori = osservatore.takeRecords().length;
+      await new Promise((fatto) => requestAnimationFrame(() => requestAnimationFrame(fatto)));
+      const ritardatari = osservatore.takeRecords().length;
+      // e un lavoro che PORTA un valore (il contesto del giro): quello rimasto in attesa dalla storia non sovrascrive il nuovo
+      const contesto = (nome) => ({ progetto: nome, cartella: `C:\\prove\\${nome}`, branch: nome, worktree: null });
+      sessione.inRigiocata = true;
+      runtime.handleRealEvent({ type: 'RunStarted', threadId: 'b1-thread', runId: 'b1-run-a', contesto: contesto('progetto-storia'), _sequenza: 96001 }, sessione.generation);
+      const ambienteInStoria = document.querySelector('#envWorkspace')?.textContent ?? null;
+      sessione.inRigiocata = false;
+      runtime.handleRealEvent({ type: 'RunStarted', threadId: 'b1-thread', runId: 'b1-run-b', contesto: contesto('progetto-diretta'), _sequenza: 96002 }, sessione.generation);
+      const ambienteSubito = document.querySelector('#envWorkspace')?.textContent ?? null;
+      await new Promise((fatto) => requestAnimationFrame(() => requestAnimationFrame(fatto)));
+      const ambienteDopo = document.querySelector('#envWorkspace')?.textContent ?? null;
+      // review della sessione desktop: un contesto in attesa dalla storia della sessione A, poi si passa a un'altra sessione
+      // (una generazione nuova, come fa `passaASessione`): nel fotogramma quel lavoro non vale più e il pannello non mostra A
+      const generazioneDiA = sessione.generation;
+      sessione.inRigiocata = true;
+      runtime.handleRealEvent({ type: 'RunStarted', threadId: 'b1-thread', runId: 'b1-run-c', contesto: contesto('progetto-di-un-altra-sessione'), _sequenza: 96003 }, generazioneDiA);
+      sessione.generation = generazioneDiA + 1;
+      await new Promise((fatto) => requestAnimationFrame(() => requestAnimationFrame(fatto)));
+      const ambienteDopoCambio = document.querySelector('#envWorkspace')?.textContent ?? null;
+      sessione.generation = generazioneDiA;
+      return { subitoInStoria, raffica, fotogrammi, subitoFuori, ritardatari, ambienteInStoria, ambienteSubito, ambienteDopo, ambienteDopoCambio, bersagli: bersagli.length };
+    } finally {
+      sessione.inRigiocata = prima;
+      osservatore.disconnect();
+    }
+  });
+  expect(esito.bersagli, 'compositore e piede ci sono').toBe(2);
+  expect(esito.subitoInStoria, 'durante la storia la chiamata non scrive subito').toBe(0);
+  expect(esito.raffica, `200 chiamate in ${esito.fotogrammi} fotogrammi: ${esito.raffica} aggiornamenti`).toBeGreaterThan(0);
+  expect(esito.raffica, `200 chiamate in ${esito.fotogrammi} fotogrammi: ${esito.raffica} aggiornamenti`).toBeLessThanOrEqual(esito.fotogrammi + 2);
+  expect(esito.subitoFuori, 'finita la storia la chiamata scrive subito, come prima').toBeGreaterThan(0);
+  expect(esito.ritardatari, 'l\'aggiornamento rimasto in attesa dalla storia non torna dopo a riscrivere').toBe(0);
+  expect(esito.ambienteInStoria, 'durante la storia il pannello Ambiente aspetta il fotogramma').not.toBe('progetto-storia');
+  expect(esito.ambienteSubito, 'finita la storia il pannello Ambiente si aggiorna subito').toBe('progetto-diretta');
+  expect(esito.ambienteDopo, 'il contesto rimasto in attesa dalla storia non sovrascrive quello nuovo').toBe('progetto-diretta');
+  expect(esito.ambienteDopoCambio, 'il contesto in attesa di un\'altra sessione non si dipinge in questa').not.toBe('progetto-di-un-altra-sessione');
+});
+
+/* ⛔ B2 (bugfixer, 08/10/2026): in una risposta lunga dentro una chat da 1000 giri il segnavia si ricalcolava ~45 volte al
+   secondo e riscriveva su ogni voce indice, lato, tono, etichetta e tab-stop identici: 273.600 mutazioni in 38 s. Un
+   ricalcolo con voci identiche non deve toccare nessun attributo dei bottoni. Col codice di prima: tutti riscritti. */
+test('B2-SEGNAVIA-07 — un ricalcolo del segnavia con le stesse voci non riscrive nessun attributo', async ({ page }) => {
+  await apriChat(page);
+  await page.waitForFunction(() => window.__talosHarnessUiRuntime);
+  await page.locator('#talosAvvio').waitFor({ state: 'detached', timeout: 8000 });
+  await page.evaluate(() => {
+    const r = window.__talosHarnessUiRuntime;
+    for (const e of [
+      { type: 'RunStarted', input: { consegna: 'Primo messaggio per il segnavia.' }, _sequenza: 98001 },
+      { type: 'TextMessageContent', messageId: 'b2-t1', delta: 'Prima risposta.', _sequenza: 98002 },
+      { type: 'TextMessageEnd', messageId: 'b2-t1', _sequenza: 98003 },
+      { type: 'RunFinished', _sequenza: 98004 },
+      { type: 'RunStarted', input: { consegna: 'Secondo messaggio per il segnavia.', seguito: true }, _sequenza: 98005 },
+      { type: 'TextMessageContent', messageId: 'b2-t2', delta: 'Seconda risposta.', _sequenza: 98006 },
+      { type: 'TextMessageEnd', messageId: 'b2-t2', _sequenza: 98007 },
+      { type: 'RunFinished', _sequenza: 98008 },
+    ]) r.handleRealEvent(e, r.realSessionState.generation);
+  });
+  const voci = page.locator('.talos-cronologia__voce');
+  await expect.poll(() => voci.count(), { message: 'premessa: il segnavia ha almeno due voci' }).toBeGreaterThanOrEqual(2);
+  const esito = await page.evaluate(async () => {
+    const due = () => new Promise((fatto) => requestAnimationFrame(() => requestAnimationFrame(fatto)));
+    await due();
+    const nav = document.querySelector('.talos-cronologia__voce').closest('nav') || document.querySelector('.talos-cronologia');
+    // sotto carico la voce attiva può ancora spostarsi (scorrimento in coda): quello è un cambiamento VERO. Si aspetta
+    // che il segnavia stia fermo per 10 fotogrammi di fila (al massimo 4 s) prima di misurare la riscrittura a vuoto.
+    let ultimo = performance.now();
+    const quiete = new MutationObserver(() => { ultimo = performance.now(); });
+    quiete.observe(nav, { subtree: true, attributes: true });
+    const inizio = performance.now();
+    let fermi = 0;
+    while (fermi < 10 && performance.now() - inizio < 4000) {
+      const prima = ultimo;
+      await new Promise((fatto) => requestAnimationFrame(fatto));
+      fermi = ultimo === prima ? fermi + 1 : 0;
+    }
+    quiete.disconnect();
+    const record = [];
+    const oss = new MutationObserver((lista) => { for (const r of lista) if (r.type === 'attributes') record.push(`${r.attributeName}`); });
+    oss.observe(nav, { subtree: true, attributes: true });
+    // un nodo che NON è un turno: il segnavia si ricalcola (osserva la conversazione) con le stesse voci
+    const intruso = document.createElement('div');
+    document.querySelector('#conversation').append(intruso);
+    await due();
+    const conRicalcolo = record.length;
+    intruso.remove();
+    await due();
+    oss.disconnect();
+    return { conRicalcolo, voci: document.querySelectorAll('.talos-cronologia__voce').length, attributi: [...new Set(record)] };
+  });
+  expect(esito.voci).toBeGreaterThanOrEqual(2);
+  expect(esito.conRicalcolo, `attributi riscritti senza un cambiamento: ${esito.attributi.join(', ')}`).toBe(0);
+});
+
 test('BACKGROUND-MOTION-PAUSE-04 — static e visibility usano uno stato di pausa esplicito', async ({ page }) => {
   await page.addInitScript(() => {
     localStorage.setItem('talos.harness.desktop.settings.v1', JSON.stringify({
@@ -623,10 +802,44 @@ test('LAG-REPLAY-TEXT-32 — molti delta storici fanno un solo commit visuale fi
     session.messageElements.clear();
     session.testoGrezzoMessaggi.clear();
     session.sequenzeViste.clear();
+    /*
+     * ⛔ A1-R1 (07/10/2026, bugfixer) — UNA GARA NELLA PROVA, NON LAVORO SUL TESTO. L'entrata di un messaggio dura 90 ms
+     *   (`--talos-motion-duration-message-insert`) e parte a 25-29 ms; su `animationend` `markMotionEnter` (app.js) toglie
+     *   `motion-enter` da turno e copia. La finestra qui sotto chiude a 104-106 ms: quando l'entrata parte presto, quei due
+     *   record `class` cadono dentro e il conto passa da 12 a 14 (misura: `bugfixer/LAG32-SONDA*.log`, ~1 corsa su 10).
+     *   La persona non vede niente: l'animazione è già finita, il testo non si ridisegna. ⇒ Non si conta SOLO il record
+     *   che toglie `motion-enter` e nient'altro (token esatti di `oldValue` contro la classe attuale); l'AGGIUNTA conta,
+     *   e conta ogni altro cambio. Il tetto resta 12, e il commit del testo si conta a parte: deve essere uno.
+     * ⛔ Il confronto è con la classe al momento della RICHIAMATA dell'osservatore, non con quella subito dopo quel record: se in
+     *   un lotto ci sono due cambi di classe sullo stesso nodo, la classe attuale non corrisponde e il record si CONTA. L'errore va
+     *   nel verso prudente (si conta di più, mai di meno).
+     */
+    const tokens = (valore) => new Set(String(valore ?? '').split(/\s+/).filter(Boolean));
+    const soloFineEntrata = (record, classeAttuale) => {
+      if (record.type !== 'attributes' || record.attributeName !== 'class') return false;
+      const prima = tokens(record.oldValue);
+      const dopo = tokens(classeAttuale);
+      if (!prima.has('motion-enter') || dopo.has('motion-enter')) return false;
+      prima.delete('motion-enter');
+      return prima.size === dopo.size && [...prima].every((classe) => dopo.has(classe));
+    };
+    // il filtro stesso, sui tre casi che deve distinguere
+    const filtro = {
+      soloRimozione: soloFineEntrata({ type: 'attributes', attributeName: 'class', oldValue: 'talos-turn motion-enter' }, 'talos-turn'),
+      rimozioneEAltro: soloFineEntrata({ type: 'attributes', attributeName: 'class', oldValue: 'talos-turn motion-enter' }, 'talos-turn is-current'),
+      aggiunta: soloFineEntrata({ type: 'attributes', attributeName: 'class', oldValue: 'talos-turn' }, 'talos-turn motion-enter'),
+    };
     let mutations = 0;
+    let commitTesto = 0;
     const conversation = document.querySelector('#conversation');
-    const observer = new MutationObserver((records) => { mutations += records.length; });
-    observer.observe(conversation, { childList: true, subtree: true, characterData: true, attributes: true });
+    const observer = new MutationObserver((records) => {
+      for (const record of records) {
+        if (soloFineEntrata(record, record.target.getAttribute?.('class'))) continue;
+        mutations += 1;
+        if (record.type === 'childList' && record.target.classList?.contains('assistant-copy') && record.addedNodes.length > 0) commitTesto += 1;
+      }
+    });
+    observer.observe(conversation, { childList: true, subtree: true, characterData: true, attributes: true, attributeOldValue: true });
     for (let index = 0; index < 250; index += 1) {
       runtime.handleRealEvent({ type: 'TextMessageContent', messageId: 'history-message', delta: 'a', _sequenza: 20000 + index }, session.generation);
     }
@@ -635,12 +848,16 @@ test('LAG-REPLAY-TEXT-32 — molti delta storici fanno un solo commit visuale fi
     observer.disconnect();
     return {
       mutations,
+      commitTesto,
+      filtro,
       text: conversation.querySelector('.assistant-copy')?.textContent || '',
       messages: conversation.querySelectorAll('.talos-message[data-c="Message"]').length,
     };
   });
+  expect(result.filtro).toEqual({ soloRimozione: true, rimozioneEAltro: false, aggiunta: false });
   expect(result.text).toBe('a'.repeat(250));
   expect(result.messages).toBe(1);
+  expect(result.commitTesto).toBe(1);
   expect(result.mutations).toBeLessThanOrEqual(12);
 });
 
@@ -955,8 +1172,12 @@ test('SESSION-MODEL-CHANGE-RELOAD-02 — la pillola cambia solo dopo il salvatag
     status: 200, contentType: 'application/json',
     body: JSON.stringify({ ok: true, data: { items: [sessione] }, meta: { schema: 'talos.harness-ui.api.v1' } }),
   }));
+  /* VELO-SPEC-2 (08/10/2026, bugfixer): il confine che il server manda sempre (anche a storia vuota). Con `body: ''` la foto in fondo
+     prendeva il foglio del modello sopra una chat velata. Il `retry` lungo non serve a farla passare oggi (misurato): tiene chiuso il
+     flusso, perché ogni riapertura (~3 s) rimette il velo per ~400 ms, e la guardia prima della foto lo renderebbe un rosso a caso. */
   await page.route('**/api/v1/sessions/session-model-change/events', async (route) => route.fulfill({
-    status: 200, contentType: 'text/event-stream', body: '',
+    status: 200, contentType: 'text/event-stream',
+    body: `retry: 3600000\ndata: ${JSON.stringify({ type: 'CUSTOM', name: 'talos.fine-rigiocata', value: null })}\n\n`,
   }));
   await page.route('**/api/v1/models', async (route) => route.fulfill({
     status: 200, contentType: 'application/json',
@@ -1008,6 +1229,8 @@ test('SESSION-MODEL-CHANGE-RELOAD-02 — la pillola cambia solo dopo il salvatag
   await expect(page.locator('.effort-picker-selected')).toHaveText('Medio');
   const visualDir = resolve(process.cwd(), 'artifacts', 'visual-audit-2026-09-01');
   await mkdir(visualDir, { recursive: true });
+  // VELO-SPEC-2: il foglio si fotografa sopra la chat vera, non sopra una chat sotto il velo (`visibility:hidden`)
+  await expect(page.locator('#conversation')).not.toHaveClass(/\bis-restoring\b/);
   await page.screenshot({ path: resolve(visualDir, 'model-switch-reasoning-1440x900.png'), fullPage: true });
 });
 
@@ -1258,7 +1481,9 @@ test('Doctor mostra la prontezza reale del runtime agente', async ({ page }) => 
   await expect(page.locator('#sheetBody [data-doctor-status]')).not.toHaveText('Healthy');
 });
 
-test('Nuova automazione comunica in linguaggio naturale quando non ci sono attività', async ({ page }) => {
+/* Automazioni a due porte (owner 08/10/2026 notte): il foglio non dipende più dal catalogo delle attività (istruzioni libere,
+   come Claude e Codex). Senza attività nel catalogo si apre lo stesso, coi campi v2 — la frase di prima non deve tornare. */
+test('Nuova automazione si apre con le istruzioni libere anche quando il catalogo delle attività è vuoto', async ({ page }) => {
   await page.route('**/api/v1/tasks', async (route) => route.fulfill({
     status: 200,
     contentType: 'application/json',
@@ -1273,7 +1498,9 @@ test('Nuova automazione comunica in linguaggio naturale quando non ci sono attiv
   const nuova = page.locator('#schermoAutomazioni [data-automation-action="new"]');
   await expect(nuova).toBeEnabled();
   await nuova.click();
-  await expect(page.locator('#sheetBody')).toContainText('Non ci sono ancora attività pronte');
+  await expect(page.locator('#sheetBody [data-auto-foglio-istruzioni]')).toBeVisible();
+  await expect(page.locator('#sheetBody [data-auto-foglio-nome]')).toBeFocused();
+  await expect(page.locator('#sheetBody')).not.toContainText('Non ci sono ancora attività pronte');
   await expect(page.locator('#sheetBody')).not.toContainText('TASK_NOT_AVAILABLE');
 });
 
@@ -1460,7 +1687,7 @@ test('long response content owns overflow locally without widening the page', as
  *   non sparisce, si COMPRIME; di serie resta sempre compresso; l'interruttore dice se aprirlo mentre il
  *   modello scrive. Riscritta per dire la regola nuova, non allentata per far passare quella vecchia.
  */
-test('RAGIONAMENTO-COMPRESSO — si comprime invece di sparire: riga chiusa di serie, aperta mentre scrive solo se lo chiedi', async ({ page }) => {
+test('RAGIONAMENTO-COMPRESSO — riga chiusa di serie che si apre col clic; «Mostra ragionamento» spento lascia solo il tempo (A14)', async ({ page }) => {
   /* ⛔ Il clic sul foglio «Modello» veniva intercettato prima dal velo d'avvio e poi dalla finestra del primo avvio: si salta l'introduzione e si aspetta che il velo sia rimosso. */
   await apriChat(page);
   await page.waitForFunction(() => window.__talosHarnessUiRuntime);
@@ -1489,23 +1716,124 @@ test('RAGIONAMENTO-COMPRESSO — si comprime invece di sparire: riga chiusa di s
   await expect(testa).toContainText('Ha ragionato');
   await expect(testa, 'un ragionamento finito non dice più che sta ragionando').not.toContainText('Sta ragionando');
 
+  /*
+   * ⛔ A14 (owner 08/10/2026 sera) — «Mostra ragionamento». Di serie ACCESO: la riga è chiusa e si apre col clic, mai da sola
+   *   mentre scrive (l'apertura automatica di prima non esiste più). SPENTO: resta la riga col solo tempo, senza freccia né
+   *   corpo, e il clic non la apre; una scheda aperta si richiude. Riaccendendo torna apribile.
+   */
   await page.locator('[data-open-sheet="model"]').click();
   const toggle = page.locator('#showReasoningToggle');
   await expect(toggle).toBeVisible();
-  await expect(toggle).not.toBeChecked();
-  await expect(toggle).toHaveAttribute('aria-label', 'Apri il ragionamento mentre scrive');
-  await toggle.check();
-  await expect(nota, 'accendere l’interruttore non fa sparire né riaprire un ragionamento già finito').toBeVisible();
-  await expect(testa).toHaveAttribute('aria-expanded', 'false');
+  await expect(toggle, 'A14: di serie acceso').toBeChecked();
+  await expect(toggle).toHaveAttribute('aria-label', 'Mostra ragionamento');
+  await page.keyboard.press('Escape');
+  await testa.click();
+  await expect(testa, 'acceso: si apre col clic').toHaveAttribute('aria-expanded', 'true');
+  await expect(nota.locator(':scope > .talos-activity__body')).toBeVisible();
+
+  await page.locator('[data-open-sheet="model"]').click();
+  await toggle.uncheck();
+  await page.keyboard.press('Escape');
+  await expect(page.locator('html')).toHaveAttribute('data-mostra-ragionamento', 'no');
+  await expect(testa, 'spegnendo, la scheda aperta si richiude').toHaveAttribute('aria-expanded', 'false');
+  await expect(nota, 'spento, la riga col tempo resta').toBeVisible();
+  await expect(testa).toContainText('Ha ragionato');
+  await expect(testa.locator('.talos-activity__chev'), 'spento, niente freccia').toBeHidden();
+  await expect(testa, 'spento, la testa si dichiara disattivata').toHaveAttribute('aria-disabled', 'true');
+  // `force`: Playwright non clicca un elemento con aria-disabled, ma la persona sì — e il clic non deve aprire niente
+  await testa.click({ force: true });
+  await expect(testa, 'spento, il clic non la apre').toHaveAttribute('aria-expanded', 'false');
+  await expect(nota.locator(':scope > .talos-activity__body')).toBeHidden();
 
   await pulisci();
   await eventi([
     { type: 'ReasoningMessageStart', messageId: 'reasoning-live', _sequenza: 90011 },
     { type: 'ReasoningMessageContent', messageId: 'reasoning-live', delta: 'Leggo i file', _sequenza: 90012 },
   ]);
-  await expect(testa, 'con l’interruttore acceso si apre mentre scrive').toHaveAttribute('aria-expanded', 'true');
+  await expect(testa, 'spento, mentre ragiona dice solo che sta ragionando').toContainText('Sta ragionando…');
+  await expect(testa).toHaveAttribute('aria-expanded', 'false');
   await eventi([{ type: 'ReasoningMessageEnd', messageId: 'reasoning-live', _sequenza: 90013 }]);
-  await expect(testa, 'e si richiude da sola quando ha finito').toHaveAttribute('aria-expanded', 'false');
+  await expect(page.locator('#conversation'), 'spento, il testo del ragionamento non è a schermo').not.toContainText('Leggo i file', { useInnerText: true });
+
+  await page.locator('[data-open-sheet="model"]').click();
+  await toggle.check();
+  await page.keyboard.press('Escape');
+  await expect(page.locator('html')).toHaveAttribute('data-mostra-ragionamento', 'si');
+  await expect(testa, 'riacceso, la testa torna un comando').not.toHaveAttribute('aria-disabled', /.*/);
+  await testa.click();
+  await expect(testa, 'riacceso, torna apribile').toHaveAttribute('aria-expanded', 'true');
+  await expect(nota.locator(':scope > .talos-activity__body')).toContainText('Leggo i file');
+});
+
+/* A14-R1 (review della sessione desktop, 08/10/2026 notte): il foglio di scelta della cartella ha un suo «Mostra ragionamento».
+   Spento e avviato, la preferenza si salvava ma la radice restava «si» fino al ricaricamento: freccia e corpo disegnati, clic
+   bloccato. Sonda della review adottata così com'è: ogni scrittura si ferma e si conta, la cartella è finta. */
+test('RAGIONAMENTO-SCELTA-CARTELLA — spento nel foglio della cartella e avviato, la radice dice «no» subito (A14-R1)', async ({ page }) => {
+  const scritture = [];
+  await page.route('**/api/**', (rotta) => {
+    if (rotta.request().method() === 'GET') return rotta.fallback();
+    scritture.push(`${rotta.request().method()} ${new URL(rotta.request().url()).pathname}`);
+    return rotta.abort();
+  });
+  await page.route('**/api/v1/workspace-browser**', (route) => route.fulfill({ contentType: 'application/json', body: JSON.stringify({ ok: true, data: {
+    root: 'C:\\', path: 'C:\\', parent: null, items: [],
+    recommended: [{ label: 'progetto-a14', path: 'C:\\progetti\\progetto-a14', kind: 'project', projectId: 'default' }],
+  } }) }));
+  await page.setViewportSize({ width: 1920, height: 1080 });
+  await page.goto('/');
+  await page.locator('#talosAvvio').waitFor({ state: 'detached', timeout: 15_000 });
+  await expect(page.locator('html')).toHaveAttribute('data-mostra-ragionamento', 'si');
+  await page.locator('#newSessionBtn').click();
+  await expect(page.locator('#workspaceChooserSubmit')).toBeEnabled();
+  const interruttore = page.getByRole('switch', { name: 'Mostra ragionamento' });
+  await expect(interruttore).toBeChecked();
+  await interruttore.uncheck();
+  await page.locator('#workspaceChooserSubmit').click();
+  await expect(page.locator('#conversation .talos-empty__title')).toHaveText('Cosa costruiamo in progetto-a14?');
+  const salvato = await page.evaluate(() => JSON.parse(localStorage.getItem('talos.harness.desktop.settings.v1') || '{}')?.chat?.mostraRagionamento);
+  expect(salvato).toBe(false);
+  await expect(page.locator('html'), 'spento dal foglio della cartella: la radice deve dirlo subito').toHaveAttribute('data-mostra-ragionamento', 'no');
+});
+
+/* ⛔ A11 (bugfixer, 08/10/2026): glm-5.3-flash apre ogni chiamata col ragionamento con UN testo di soli spazi, e solo dopo
+   ragiona (giornale vero del 4174: `TextMessageContent(" ")` → `ReasoningMessageStart` → … → il testo). Quello spazio creava il
+   messaggio di testo per primo e il ragionamento finiva SOTTO la risposta. Ordine cronologico di ciò che si VEDE: il ragionamento
+   sta sopra. E il controllo al contrario: un testo VERO arrivato prima del ragionamento resta sopra — non è «ragionamento primo». */
+test('A11-ORDINE-SPAZIO-PRIMA — un testo di soli spazi non scavalca il ragionamento; un testo vero sì', async ({ page }) => {
+  await apriChat(page);
+  await page.waitForFunction(() => window.__talosHarnessUiRuntime);
+  await page.locator('#talosAvvio').waitFor({ state: 'detached', timeout: 8000 });
+  const ordine = (eventi, ragionamentoId, testo) => page.evaluate(({ eventi, ragionamentoId, testo }) => {
+    const runtime = window.__talosHarnessUiRuntime;
+    const sessione = runtime.realSessionState;
+    document.querySelector('#conversation')?.replaceChildren();
+    sessione.sequenzeViste.clear();
+    sessione.ragionamentoBubble.clear();
+    for (const evento of eventi) runtime.handleRealEvent(evento, sessione.generation);
+    const nota = document.querySelector(`#conversation .real-reasoning-note[data-ragionamento-id="${ragionamentoId}"]`);
+    const copia = [...document.querySelectorAll('#conversation .assistant-copy')].find((nodo) => nodo.textContent.includes(testo));
+    if (!nota || !copia) return { nota: Boolean(nota), copia: Boolean(copia), ordine: null };
+    return { nota: true, copia: true, ordine: (nota.compareDocumentPosition(copia) & Node.DOCUMENT_POSITION_FOLLOWING) ? 'ragionamento-poi-testo' : 'testo-poi-ragionamento' };
+  }, { eventi, ragionamentoId, testo });
+  const spazioPrima = await ordine([
+    { type: 'TextMessageStart', messageId: 'a11-testo-1', role: 'assistant', _sequenza: 97001 },
+    { type: 'TextMessageContent', messageId: 'a11-testo-1', delta: ' ', _sequenza: 97002 },
+    { type: 'ReasoningMessageStart', messageId: 'a11-pensiero-1', _sequenza: 97003 },
+    { type: 'ReasoningMessageContent', messageId: 'a11-pensiero-1', delta: 'Controllo il file prima di rispondere.', _sequenza: 97004 },
+    { type: 'TextMessageContent', messageId: 'a11-testo-1', delta: 'La risposta A11 arriva dopo il ragionamento.', _sequenza: 97005 },
+    { type: 'TextMessageEnd', messageId: 'a11-testo-1', _sequenza: 97006 },
+    { type: 'ReasoningMessageEnd', messageId: 'a11-pensiero-1', _sequenza: 97007 },
+  ], 'a11-pensiero-1', 'La risposta A11 arriva dopo');
+  expect(spazioPrima, 'uno spazio iniziale: il ragionamento sta sopra la risposta').toEqual({ nota: true, copia: true, ordine: 'ragionamento-poi-testo' });
+  const testoPrima = await ordine([
+    { type: 'TextMessageStart', messageId: 'a11-testo-2', role: 'assistant', _sequenza: 97101 },
+    { type: 'TextMessageContent', messageId: 'a11-testo-2', delta: 'Prima scrivo questa riga A11.', _sequenza: 97102 },
+    { type: 'ReasoningMessageStart', messageId: 'a11-pensiero-2', _sequenza: 97103 },
+    { type: 'ReasoningMessageContent', messageId: 'a11-pensiero-2', delta: 'Poi ci ragiono sopra.', _sequenza: 97104 },
+    { type: 'ReasoningMessageEnd', messageId: 'a11-pensiero-2', _sequenza: 97105 },
+    { type: 'TextMessageEnd', messageId: 'a11-testo-2', _sequenza: 97106 },
+  ], 'a11-pensiero-2', 'Prima scrivo questa riga A11.');
+  expect(testoPrima, 'un testo vero arrivato prima: resta sopra il ragionamento').toEqual({ nota: true, copia: true, ordine: 'testo-poi-ragionamento' });
 });
 
 test('REASONING-INDICATOR-01 — il ragionamento nascosto mantiene un indicatore visibile e annunciato', async ({ page }) => {
@@ -2586,11 +2914,14 @@ test('DESKTOP-SETTINGS-PERSISTENCE-01 — i controlli di aspetto producono stato
  * controllo sul solo textContent.
  */
 test('LAG-LIVE-INCREMENTAL-40 — i blocchi già chiusi non vengono ricreati a ogni delta, la coda sì e il testo finale è completo', async ({ page }) => {
-  await page.route('**/api/v1/sessions/lag-live-incremental/events', async (route) => route.fulfill({ status: 200, contentType: 'text/event-stream', body: '' }));
+  // VELO-SPEC (08/10/2026): stream aperto e muto — un corpo che si chiude fa riaprire lo stream, e ogni onopen rimette la chat nella storia
+  await page.route('**/api/v1/sessions/lag-live-incremental/events', () => { /* resta pending */ });
   await apriChat(page);
   const result = await page.evaluate(async () => {
     const runtime = window.__talosHarnessUiRuntime;
     runtime.passaASessione('lag-live-incremental', 'workspace', 'Live', 'qwen/qwen3.8-flash', { conclusa: false, modello: 'qwen/qwen3.8-flash' });
+    // VELO-SPEC: da A1-R3 una sessione aperta resta velata fino al confine, che il server manda SEMPRE (anche a storia vuota): gli eventi qui sotto sono dal vivo
+    runtime.handleRealEvent({ type: 'CUSTOM', name: 'talos.fine-rigiocata', value: null }, runtime.realSessionState.generation);
     const generation = runtime.realSessionState.generation;
     const frame = () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
     const mid = 'inc-1';
@@ -2784,7 +3115,7 @@ test('RIPRESA-ASPETTO-RESET — reset completo visuale, altre preferenze conserv
   await page.addInitScript(() => {
     if (sessionStorage.getItem('ripresaResetSeed')) return;
     sessionStorage.setItem('ripresaResetSeed','1');
-    localStorage.setItem('talos.harness.desktop.settings.v1',JSON.stringify({version:1,appearance:{chatFullWidth:true,colorMode:'light',uiDensity:'compatta',backgroundMotion:true,backgroundMotionVersione:2},chat:{showReasoning:true},workspaces:{prova:{expandedPaths:['src'],filter:'test'}}}));
+    localStorage.setItem('talos.harness.desktop.settings.v1',JSON.stringify({version:1,appearance:{chatFullWidth:true,colorMode:'light',uiDensity:'compatta',backgroundMotion:true,backgroundMotionVersione:2},chat:{mostraRagionamento:false},workspaces:{prova:{expandedPaths:['src'],filter:'test'}}}));
     localStorage.setItem('talos-harness-composer-size-v1',JSON.stringify({width:500,height:250}));
   });
   await apriChat(page);
@@ -2798,7 +3129,7 @@ test('RIPRESA-ASPETTO-RESET — reset completo visuale, altre preferenze conserv
   await expect(reset).toBeVisible(); await reset.click();
   await expect(page.locator('html')).not.toHaveClass(/chat-full-width/);
   const saved=await page.evaluate(()=>({doc:JSON.parse(localStorage.getItem('talos.harness.desktop.settings.v1')),size:localStorage.getItem('talos-harness-composer-size-v1')}));
-  expect(saved.doc.appearance).toEqual({}); expect(saved.doc.chat.showReasoning).toBe(true); expect(saved.doc.workspaces.prova).toEqual({expandedPaths:['src'],filter:'test'}); expect(saved.size).toBeNull();
+  expect(saved.doc.appearance).toEqual({}); expect(saved.doc.chat.mostraRagionamento, 'A14: il reset dell\'aspetto ha toccato «Mostra ragionamento» (seme false, di serie true)').toBe(false); expect(saved.doc.workspaces.prova).toEqual({expandedPaths:['src'],filter:'test'}); expect(saved.size).toBeNull();
   await expect(page.locator('html')).not.toHaveAttribute('data-density','compact');
   await expect(page.locator('html')).not.toHaveAttribute('data-densita','compatta');
   await expect(page.locator('html')).toHaveAttribute('data-talos-color-mode','system');

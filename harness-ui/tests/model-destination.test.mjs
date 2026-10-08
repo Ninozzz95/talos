@@ -81,7 +81,7 @@ test('MODEL-DEST-04 — AL CONTRARIO: motore locale spento ⇒ si dice, non si t
    */
   assert.throws(
     () => risolviDestinazioneModello('local:x', { ...DEPS, localePronto: () => false }),
-    (e) => e instanceof ModelDestinationError && e.code === 'LOCAL_RUNTIME_NOT_READY' && /Laboratorio modelli/u.test(e.message),
+    (e) => e instanceof ModelDestinationError && e.code === 'LOCAL_RUNTIME_NOT_READY' && /Model Lab/u.test(e.message),
   );
 });
 

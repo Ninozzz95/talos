@@ -35,24 +35,24 @@ function dentroRadice(radice, candidato) {
  */
 export function createWorkspaceDisk({ rootDir, root = rootDir, fsImpl = {}, readdirFn = fsImpl.readdir ?? readdir } = {}) {
   if (typeof root !== 'string' || root.length === 0 || root.includes('\0') || !isAbsolute(root)) {
-    throw new WorkspaceDiskError('Cartella workspace non valida', 'QUERY_INVALID');
+    throw new WorkspaceDiskError('Invalid workspace folder', 'QUERY_INVALID');
   }
 
   const radice = resolve(root);
   return {
     async elenca(percorso = '') {
       if (!percorsoRelativoValido(percorso)) {
-        throw new WorkspaceDiskError('Percorso non valido', 'QUERY_INVALID');
+        throw new WorkspaceDiskError('Invalid path', 'QUERY_INVALID');
       }
       const candidato = resolve(radice, percorso);
       if (!dentroRadice(radice, candidato)) {
-        throw new WorkspaceDiskError('Percorso fuori dalla cartella della sessione', 'QUERY_INVALID');
+        throw new WorkspaceDiskError('Path outside session folder', 'QUERY_INVALID');
       }
       let voci;
       try {
         voci = await readdirFn(candidato, { withFileTypes: true });
       } catch {
-        throw new WorkspaceDiskError('Cartella non leggibile');
+        throw new WorkspaceDiskError('Folder not readable');
       }
       return voci
         .map((voce) => ({ nome: voce.name, cartella: voce.isDirectory() }))

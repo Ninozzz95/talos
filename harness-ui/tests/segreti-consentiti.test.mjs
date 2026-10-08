@@ -11,9 +11,11 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+
+import { rimuoviCartellaDiProva } from './aiuto/rimuovi-cartella-di-prova.mjs';
 import { verificaPermessoScrittura } from '../src/kernel/talosHarness.mjs';
 
 const CART = mkdtempSync(join(tmpdir(), 'segreti-consentiti-'));
@@ -62,4 +64,4 @@ test('BUG-A KERNEL-3: senza consensiSessione non cambia niente (BANCO/CLI)', asy
   assert.equal(domande.length, 1);
 });
 
-test.after?.(() => { try { rmSync(CART, { recursive: true, force: true }); } catch { /* TEMP */ } });
+test.after?.(() => rimuoviCartellaDiProva(CART));

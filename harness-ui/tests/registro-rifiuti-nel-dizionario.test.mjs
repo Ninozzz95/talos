@@ -58,6 +58,11 @@ const TABELLA = [
   ['WORKFLOW_ROOT_SESSION_NOT_FOUND', 'workflow-root-session-gone', 'La sessione che ha proposto il Workflow non esiste più', 'The session that proposed the Workflow no longer exists'],
   ['SESSION_NOT_READY', 'settings-being-saved', 'Le impostazioni dei comandi stanno venendo salvate: riprova fra un momento.', 'The command settings are being saved: try again in a moment.'],
   ['INTERNAL_ERROR', 'workflow-step-not-started', 'Il passo non è partito', 'The step did not start'],
+  // automazioni a due porte (08/10/2026): voci nuove, dichiarate in `NUOVE`
+  ['SESSION_STORE_UNAVAILABLE', 'automation-run-needs-store', 'Un giro di automazione ha bisogno del registro delle sessioni su disco', 'An automation run needs the session registry on disk'],
+  ['QUERY_INVALID', 'automation-run-link-invalid', 'Il legame del giro di automazione non è valido', 'The automation run link is not valid'],
+  ['INTERNAL_ERROR', 'automation-run-not-started', 'Il giro dell\'automazione non è partito', 'The automation run did not start'],
+  ['QUERY_INVALID', 'permission-request-not-automation', 'Questa richiesta non è una bozza di automazione da modificare', 'This request is not an automation draft that can be edited'],
   ['NOT_FOUND', 'source-session-not-found', 'Sessione origine non trovata', 'Source session not found'],
   ['SESSION_NOT_READY', 'closing-turn-history-pending', 'La sessione sta chiudendo il giro: la sua cronologia non è ancora pronta. Riprova appena il giro è concluso.', 'The session is closing its turn: its history is not ready yet. Try again as soon as the turn is over.'],
   ['SESSION_NOT_READY', 'source-running', 'La sessione origine è ancora in corso: aspetta che concluda prima di forkarla', 'The source session is still running: wait for it to finish before forking it'],
@@ -110,6 +115,7 @@ const TABELLA = [
   ['SCELTA_NON_VALIDA', 'boolean-choice-invalid', 'Scelta non valida: atteso true o false.', 'Invalid choice: expected true or false.'],
   ['SESSION_NOT_READY', 'interrupted-by-restart-direct-command', 'Questa sessione è stata interrotta da un riavvio del server: un comando diretto qui richiederebbe scrivere sopra una cronologia che non concluderà mai. Avvia una sessione nuova.', 'This session was interrupted by a server restart: a direct command here would require writing over a history that will never conclude. Start a new session.'],
   ['APPROVAL_NOT_PENDING', 'permission-request-expired', 'Questa richiesta di permesso non è più in attesa', 'This permission request is no longer pending'],
+  ['APPROVAL_ANSWER_FORBIDDEN', 'permission-answer-outside-chain', 'Solo la sessione che ha chiesto, o una che l’ha avviata, può rispondere a questa richiesta di permesso', 'Only the session that asked, or one that started it, can answer this permission request'],
   ['QUERY_INVALID', 'permission-request-no-folder', 'Questa richiesta non ha una cartella da consentire per la sessione', 'This request has no folder to allow for the session'],
   ['QUESTION_NOT_PENDING', 'question-expired', 'Questa domanda non è più in attesa', 'This question is no longer pending'],
   ['QUESTION_ANSWER_NOT_SAVED', 'answer-not-saved-question-open', 'La risposta non è stata salvata: la domanda resta aperta, puoi riprovare.', 'The answer was not saved: the question stays open, you can try again.'],
@@ -141,7 +147,9 @@ const TABELLA = [
   ['SESSION_INTERRUPTED', 'redirect-interrupted-by-restart', 'Il server è stato riavviato prima che il reindirizzamento potesse concludersi.', 'The server was restarted before the redirect could finish.'],
   ['SESSION_STORE_WRITE_FAILED', 'compaction-cancel-not-saved', 'L’annullamento non è stato salvato su disco: la compattazione resta attiva.', 'The cancellation was not saved to disk: the compaction stays active.'],
 ];
-const NUOVE = new Set(['fork-not-saved', 'fork-point-compacted', 'fork-point-not-found']);
+const NUOVE = new Set(['fork-not-saved', 'fork-point-compacted', 'fork-point-not-found', 'permission-answer-outside-chain',
+  // automazioni a due porte (08/10/2026): nate in inglese, senza un italiano «di prima»
+  'automation-run-needs-store', 'automation-run-link-invalid', 'automation-run-not-started', 'permission-request-not-automation']);
 const chiaveDizionario = (code, reason) => `${code}.${reason.replace(/-/gu, '_')}`;
 const voce = (chiave, lingua) => AREE.errori[lingua][chiave];
 
@@ -152,6 +160,7 @@ const CODICI_DI_RIPIEGO = {
   'provider-key-missing-named': ['CONFIG_INVALID'],
   'folder-link-unavailable': ['WORKSPACE_LAUNCH_NOT_AVAILABLE', 'WORKSPACE_NOT_AVAILABLE'],
   'workflow-step-not-started': ['INTERNAL_ERROR'],
+  'automation-run-not-started': ['INTERNAL_ERROR'],
 };
 function rifiutiDelSorgente() {
   const sorgente = readFileSync(new URL('../src/session-registry.mjs', import.meta.url), 'utf8');

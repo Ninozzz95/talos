@@ -1,4 +1,5 @@
 import { t, tn } from './lingua.js';
+import { testoDelCampo } from './testo-server.js'; // K4b: la frase del server nella lingua dell'interfaccia
 /** Inventari per progetto: forma canonica, fiducia distinta da esecuzione. Ricerca 05/09/2026 nel ledger B4.2. */
 const EVENTI={get pre_tool_call(){return t('modelli.extensions.beforeTool');},get post_tool_call(){return t('modelli.extensions.afterTool');},get session_start(){return t('modelli.extensions.sessionStart');},get session_end(){return t('modelli.extensions.sessionEnd');}};
 const ORIGINI={skills:'.harness-ui-skills/',mcp:'.harness-ui-mcp.json',plugins:'.harness-ui-plugins/',hooks:'.harness-ui-hooks.json'};
@@ -16,7 +17,7 @@ export function datiEstensione(tipo,v){
   * ⛔ A schermo va `frase`, MAI `motivo`: il motivo è un nome tecnico (regola dell'owner 04/09).
   * ⛔ Se la frase non c'è non si inventa: il pannello resta com'era, senza una riga vuota.
   */
- const r={id:v.id,titolo:v.name||v.nome||v.id,descrizione:v.description||v.descrizione||(tipo==='mcp'?t('modelli.extensions.mcpDeclared'):eventi(v.eventi)),stato,fidabile:!skill&&v.fidato===false,frase:typeof v.frase==='string'&&v.frase.trim()?v.frase.trim():null,origine:ORIGINI[tipo]||t('modelli.extensions.originUnobserved'),righe:[],avvisi:Array.isArray(v.avvisi)?v.avvisi:[]};
+ const r={id:v.id,titolo:v.name||v.nome||v.id,descrizione:v.description||v.descrizione||(tipo==='mcp'?t('modelli.extensions.mcpDeclared'):eventi(v.eventi)),stato,fidabile:!skill&&v.fidato===false,frase:typeof v.frase==='string'&&v.frase.trim()?String(testoDelCampo(v,'frase')).trim():null,origine:ORIGINI[tipo]||t('modelli.extensions.originUnobserved'),righe:[],avvisi:Array.isArray(v.avvisi)?v.avvisi:[]};
  if(tipo==='mcp')r.righe=[[t('modelli.extensions.command'),v.comando],[t('modelli.extensions.arguments'),v.argomenti?.length?v.argomenti.join(' · '):t('modelli.extensions.none')],[t('modelli.extensions.allowedTools'),v.allowlist?.length?v.allowlist.join(' · '):t('modelli.extensions.unobserved')],[t('modelli.extensions.connection'),t('modelli.extensions.connectionUnobserved')]];
  if(tipo==='plugins'){r.righe=[[t('modelli.extensions.tools'),String(v.tools?.length??0)],[t('modelli.extensions.hook'),String(v.hooks?.length??0)]];for(const strumento of v.tools||[])r.righe.push([strumento.nome,strumento.descrizione+' · '+strumento.comando]);for(const h of v.hooks||[])r.righe.push([h.id,eventi(h.eventi)+' · '+h.comando]);}
  if(tipo==='hooks')r.righe=[[t('modelli.extensions.when'),eventi(v.eventi)],[t('modelli.extensions.command'),t('modelli.extensions.commandHidden')]];
@@ -60,7 +61,7 @@ function render(panel,p){
   const falliti=Array.isArray(o.falliti)?o.falliti:[];
   nodoFalliti.replaceChildren(...falliti.map(f=>{
    const li=el(doc,'li','talos-trust-fallito');
-   li.append(el(doc,'b','',f.nome||f.id||t('modelli.extensions.unnamedPackage')),el(doc,'span','talos-muted',f.frase||t('modelli.extensions.noFailureReason')));
+   li.append(el(doc,'b','',f.nome||f.id||t('modelli.extensions.unnamedPackage')),el(doc,'span','talos-muted',testoDelCampo(f,'frase')||t('modelli.extensions.noFailureReason')));
    return li;
   }));
   const blocco=panel.querySelector('[data-ext-falliti-blocco]');

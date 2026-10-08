@@ -15,12 +15,14 @@
 import { execFileSync, spawn } from 'node:child_process';
 import { existsSync, mkdirSync, openSync } from 'node:fs';
 import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 
 const ARGV = process.argv.slice(2);
 const arg = (nome, pre) => ARGV.find((a) => a.startsWith(`--${nome}=`))?.slice(nome.length + 3) ?? pre;
 export const PORTA_CDP_HERMES = Number(arg('porta', process.env.TALOS_CONFRONTO_HERMES_CDP || '9705'));
-const RADICE = arg('radice', process.env.TALOS_CONFRONTO_HERMES_ROOT
-  || join(process.env.LOCALAPPDATA || '', 'Temp/claude/C--Users-Antonino-Desktop-projects-AVM-harness-desktop/af5c3844-a5da-4bb5-a142-7740e39b623d/scratchpad/confronto/hermes-root'));
+/* la radice di Hermes: dall'argomento, dalla variabile, o una cartella temporanea di chi lancia — mai un percorso scritto a
+   mano (08/10/2026: qui c'era la cartella di lavoro di una sessione, col nome dell'owner, ed era nel repo pubblico) */
+const RADICE = arg('radice', process.env.TALOS_CONFRONTO_HERMES_ROOT || join(tmpdir(), 'talos-confronto', 'hermes-root'));
 const ELECTRON = join(RADICE, 'node_modules/electron/dist/electron.exe');
 const APP = join(RADICE, 'apps/desktop');
 const LOG_DIR = join(process.cwd(), 'artifacts/confronto');

@@ -179,21 +179,27 @@ test('BUG8-ELIMINA-RIFIUTA-VIVA: una sessione in attesa non si elimina, e il rig
    numero di timer vivi nel processo. Domanda aperta → esattamente UN timer in più (l'osservatore);
    reindirizza → torna alla base: il timer NON esiste più (sotto il mutante che toglie
    `pendente.fermaOsservatore?.()` il conto resta +1 e questo test va rosso). */
-test('BUG8-OSSERVATORE-FERMO: fermata la domanda (reindirizza) il timer del rigioco è davvero cancellato', async () => {
-  const { giri, registro, sessionId, visti, disiscrivi } = registroConDomandaAperta({ prima: 5_000, ripeti: 5_000 });
+test('BUG8-OSSERVATORE-FERMO: fermata la domanda (reindirizza) il rigioco tace davvero — e la domanda risolve false', async () => {
+  /* ⛔ REG-FUORI-03B (06/10): con la cura unref i timer dell'osservatore NON compaiono più in
+     process.getActiveResourcesInfo() (lì si vedono solo le risorse che tengono vivo il loop) — il vecchio
+     conteggio «1 timer aperto → 0 dopo» non osserva più nulla. La garanzia si prova COMPORTAMENTALMENTE:
+     con attese brevi (40/40ms) i colpi di silenzio parlano finché la domanda è viva; dopo il reindirizza
+     NESSUN colpo e NESSUN evento nuovo (il timer è cancellato, non lasciato «sordo»), e restano le prove
+     nero-scatola del processo in tests/session-registry.test.mjs (REG-FUORI-03B + R1/R2). */
+  const { registro, sessionId, visti, disiscrivi, domanda } = registroConDomandaAperta({ prima: 40, ripeti: 40 });
   try {
-    await attendi(20);
-    const contaTimer = () => process.getActiveResourcesInfo().filter((r) => r === 'Timeout').length;
-    const base = contaTimer();
-    const domanda = giri.giro(0).input.chiediApprovazioneFn({ tipo: 'shell', comando: 'npm test' });
-    assert.equal(contaTimer() - base, 1, 'la domanda aperta arma ESATTAMENTE il timer dell\'osservatore');
+    await attendi(150); // oltre tre tick: l'osservatore parla finché la domanda è viva
+    assert.equal(colpiSilenzio(visti).length >= 1, true, 'con la domanda aperta il rigioco parla (l\'osservatore è armato)');
     const esito = registro.reindirizza(sessionId, 'nuova direzione: il giro muore, la domanda pure');
     assert.deepEqual(esito.ok, true);
-    assert.equal(contaTimer() - base, 0, 'reindirizza deve CANCELLARE il timer del rigioco, non lasciarlo in piedi (sordo)');
+    const colpiAlReindirizza = colpiSilenzio(visti).length;
     const vistiAlReindirizza = visti.length;
-    await attendi(60); // nessun fuoco possibile: il timer non c'è più (prima=5s sotto il solo mutante)
+    await attendi(150); // oltre tre tick di un timer sopravvissuto: se non fosse cancellato, parlerebbe ancora
     assert.equal(visti.length, vistiAlReindirizza, 'dopo il reindirizza nessun evento nuovo');
-    assert.equal(domandeViste(visti).some((e) => e.rigiocoAttesa === true), false, 'mai un rigioco per la domanda chiusa dal reindirizzamento');
+    assert.equal(colpiSilenzio(visti).length, colpiAlReindirizza, 'dopo il reindirizza nessun colpo di silenzio nuovo (timer cancellato, non sordo)');
+    assert.equal(domandeViste(visti).filter((e) => e.rigiocoAttesa === true).length,
+      domandeViste(visti.slice(0, vistiAlReindirizza)).filter((e) => e.rigiocoAttesa === true).length,
+      'dopo il reindirizza nessun rigioco nuovo per la domanda chiusa');
     assert.equal(await domanda, false, 'la domanda chiusa dal reindirizzamento risolve false al modello');
   } finally { chiudiUltimaDomanda(registro, sessionId, visti); disiscrivi(); }
 });

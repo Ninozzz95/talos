@@ -100,7 +100,7 @@ export async function indicizzaAssistenza({ cartella = CARTELLA_ASSISTENZA_PREDE
 export async function cercaAssistenza({ domanda, cartella = CARTELLA_ASSISTENZA_PREDEFINITA } = {}) {
   const normalizzata = normalizzaDomandaAssistenza(domanda);
   const parole = [...new Set(normalizzata.split(' ').filter((parola) => parola.length >= 3 && !PAROLE_VUOTE.has(parola)))];
-  if (!normalizzata || normalizzata.length > MAX_DOMANDA_ASSISTENZA || parole.length === 0) return { risposta: 'non lo so', fonti: [] };
+  if (!normalizzata || normalizzata.length > MAX_DOMANDA_ASSISTENZA || parole.length === 0) return { risposta: 'I do not know', fonti: [] };
   const candidati = (await indicizzaAssistenza({ cartella })).map((voce) => {
     const titolo = normalizzaDomandaAssistenza(voce.titolo);
     const sezione = normalizzaDomandaAssistenza(voce.sezione);
@@ -112,7 +112,7 @@ export async function cercaAssistenza({ domanda, cartella = CARTELLA_ASSISTENZA_
   }).filter((voce) => voce.punteggio >= 4 && voce.trovate >= Math.ceil(parole.length / 2))
     .sort((a, b) => b.punteggio - a.punteggio || a.nomeFile.localeCompare(b.nomeFile, 'it'));
   const migliore = candidati[0];
-  if (!migliore) return { risposta: 'non lo so', fonti: [] };
+  if (!migliore) return { risposta: 'I do not know', fonti: [] };
   const intestazione = `${migliore.titolo} — ${migliore.sezione}`;
   const corpo = estrattoRilevante(migliore.testo, parole, MAX_RISPOSTA - intestazione.length - 2);
   const risposta = `${intestazione}\n\n${corpo}`.slice(0, MAX_RISPOSTA).trim();

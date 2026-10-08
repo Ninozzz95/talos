@@ -357,8 +357,9 @@ test.describe('guardie del laboratorio', () => {
         expect(await a.locator(`${comp.selettore} use`).evaluateAll((ns) => ns.every((n) => document.querySelector(n.getAttribute('href')))), 'EXT-ICONA-ESISTENTE').toBe(true);
       }
       if (comp.nome === 'AutomationRow') {
-        await expect(a.locator('[data-auto-stato]').first(), 'AUT-FILTRO-STILE-CANONICO').toHaveClass(/\btalos-tabs__tab\b/);
-        expect(await a.locator('#schermoAutomazioni [role="switch"]').last().evaluate((n) => n.getBoundingClientRect().bottom <= innerHeight), 'AUT-DENSITA-COMANDI').toBe(true);
+        // 08/10/2026 (owner, «stesso linguaggio di Libreria e Note»): i filtri e le schede sono quelli dell'impianto `td-*`
+        await expect(a.locator('#schermoAutomazioni .td-filters .td-filter').first(), 'AUT-FILTRO-STILE-CANONICO').toBeVisible();
+        expect(await a.locator('#schermoAutomazioni .td-card').last().evaluate((n) => n.getBoundingClientRect().bottom <= innerHeight), 'AUT-DENSITA-COMANDI').toBe(true);
       }
       if (comp.nome === 'TaskRow') {
         // ATTIVITA-CAMPO-COERENTE: il campo delle Attività ha lo stile canonico — oggi quello dell'Atlas con la lente (38).

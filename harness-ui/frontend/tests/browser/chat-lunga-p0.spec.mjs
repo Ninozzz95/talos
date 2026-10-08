@@ -95,7 +95,7 @@ test.beforeEach(async ({ page }) => {
       } catch { /* un browser senza LoAF non fa fallire la prova: il campo resta vuoto e si dichiara */ }
     }
   });
-  await page.route('**/api/v1/sessions/chat-lunga-*/events', (route) => route.fulfill({ contentType: 'text/event-stream', body: '' }));
+  await page.route('**/api/v1/sessions/chat-lunga-*/events', () => { /* VELO-SPEC (08/10/2026): aperto e muto — un corpo che si chiude fa riaprire lo stream, e ogni onopen rimette la chat nella storia */ });
   await page.goto('/');
   await page.waitForFunction(() => window.__talosHarnessUiRuntime);
   await page.locator('#talosAvvio').waitFor({ state: 'detached', timeout: 8000 }).catch(() => {});
@@ -104,6 +104,7 @@ test.beforeEach(async ({ page }) => {
 async function apri(page, id) {
   await page.evaluate((id) => {
     window.__talosHarnessUiRuntime.passaASessione(`chat-lunga-${id}`, 'workspace', 'Cronologia lunga', 'local:prova', { conclusa: false, modello: 'local:prova' });
+    window.__talosHarnessUiRuntime.handleRealEvent({ type: 'CUSTOM', name: 'talos.fine-rigiocata', value: null }, window.__talosHarnessUiRuntime.realSessionState.generation); // VELO-SPEC: da A1-R3 una sessione aperta resta velata fino al confine, che il server manda SEMPRE (anche a storia vuota)
   }, id);
 }
 

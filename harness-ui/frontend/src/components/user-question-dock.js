@@ -112,8 +112,13 @@ function ogniSecondoPredefinito(fn) {
   return () => clearInterval(id);
 }
 
+/*
+ * C2-Q (08/10/2026): `chiChiede` = la riga «L’agente «…» chiede» quando la domanda è di una FIGLIA e la carta si disegna nella
+ *   conversazione del padre. È la stessa riga della carta di permesso della figlia (C2), costruita da chi monta la carta; qui
+ *   si mette in testa e basta. Senza, la carta è quella di sempre.
+ */
 export function mountUserQuestionDock({ root, composer, question, onSubmit, annuncia = false, pianifica,
-  scadenzaMs = 0, adesso = () => Date.now(), ogniSecondo = ogniSecondoPredefinito }) {
+  scadenzaMs = 0, adesso = () => Date.now(), ogniSecondo = ogniSecondoPredefinito, chiChiede = null }) {
   if (!root?.ownerDocument || !composer || !question?.requestId || !Array.isArray(question.questions)
     || typeof onSubmit !== 'function') throw new TypeError('Ask dock requires a real request and submit handler');
   const doc = root.ownerDocument;
@@ -137,11 +142,14 @@ export function mountUserQuestionDock({ root, composer, question, onSubmit, annu
   card.dataset.requestId = question.requestId;
   card.setAttribute('aria-label', t('chat.question.cardLabel'));
   const head = make('div', 'talos-approval__head');
-  const badge = make('span', 'talos-badge talos-badge--accent', t('chat.question.badge'));
+  /* C2-Q (08/10, visto nella foto): con la riga «L’agente «…» chiede» il badge non può dire anche «TALOS chiede» — due «chiede»
+     in fila, e il secondo attribuisce a TALOS la domanda della figlia. Per una figlia dice solo che cos'è. */
+  const badge = make('span', 'talos-badge talos-badge--accent', t(chiChiede ? 'chat.question.badgeFromAgent' : 'chat.question.badge'));
   const progresso = make('span', 'talos-muted talos-grow');
   const conto = make('span', 'talos-question-card__timer');
   conto.hidden = true;
   head.append(badge, progresso, conto);
+  if (chiChiede) head.prepend(chiChiede);
   const answerPane = make('div', 'talos-question-card__questions');
   const reviewPane = make('div', 'talos-question-card__review');
   const reviewTitle = make('h3', 'talos-question-card__review-title', t('chat.question.review.title'));
