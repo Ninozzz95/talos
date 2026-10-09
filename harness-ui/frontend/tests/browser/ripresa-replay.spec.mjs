@@ -1,14 +1,21 @@
 import { test, expect } from '@playwright/test';
+import { attendiFineStoria, flussoConConfine } from './aiuto-confine.mjs';
 import { createServer } from 'node:http';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { fileURLToPath } from 'node:url';
 import { createSessionRegistry } from '../../../src/session-registry.mjs';
 import { registraRiga } from '../../../src/session-store.mjs';
 import { createHttpApp } from '../../../src/http-app.mjs';
 import { createStaticHandler } from '../../../src/static-files.mjs';
 
 const start=Date.parse('2026-09-19T12:00:00Z');
+/* ⛔ 08/10/2026 (bugfixer) — RIPRESA-REPLAY-HTTP-UI nasce per `scripts/ripresa-run.mjs`, che imposta TALOS_RIPRESA_BUNDLE. Nella
+   suite normale la variabile non c'è: `createStaticHandler(undefined)` non serviva niente, la pagina restava vuota e la prova
+   scadeva a 45 s (misurato: nessuna riga `[data-real-session-id]`, barra vuota). Senza la variabile si serve la build che
+   `playwright.config.mjs` ha già verificato (`verificaBuildBrowser`, DIST_CORRENTE) e che serve al server di prova. */
+const BUNDLE=process.env.TALOS_RIPRESA_BUNDLE||fileURLToPath(new URL('../../dist/',import.meta.url));
 function history() {
  const root={sessionId:'replay-root',taskCorto:'Coordinamento',conclusa:false,avviataAlle:new Date(start).toISOString(),attivita:{chiamate:0,file:[],passi:[]}};
  const child={...root,sessionId:'replay-child',padreId:'replay-root',taskCorto:'Verifica file',attivita:{chiamate:1,file:[],passi:[]}};
@@ -18,7 +25,8 @@ async function scene(page,{width=1440,theme='dark'}={}) {
  await page.setViewportSize({width,height:width===1024?800:900});
  await page.addInitScript(theme=>localStorage.setItem('talos.harness.desktop.settings.v1',JSON.stringify({version:1,appearance:{colorMode:theme,interfaceMotion:false}})),theme);
  const records=history(); const control={records,fail:false,calls:0};
- await page.route('**/api/v1/sessions/replay-*/events*',r=>r.fulfill({contentType:'text/event-stream',body:'retry: 600000\n\n'}));
+ // ⛔ 08/10/2026: il flusso finto porta il confine fra storia e presente (aiuto-confine.mjs): senza, la chat restava velata
+ await page.route('**/api/v1/sessions/replay-*/events*',flussoConConfine);
  await page.route('**/api/v1/sessions/replay-*/children',r=>r.fulfill({json:{ok:true,data:{figli:r.request().url().includes('replay-root')?[records[2].node]:[]}}}));
  await page.route('**/api/v1/sessions/replay-root/agent-timeline*',r=>{
   control.calls++;if(control.fail)return r.fulfill({status:503,json:{ok:false,error:{message:'Cronologia temporaneamente non disponibile'}}});
@@ -29,6 +37,7 @@ async function scene(page,{width=1440,theme='dark'}={}) {
  await page.goto('/');await page.waitForFunction(()=>window.__talosHarnessUiRuntime);
  const open=async()=>{
   await page.evaluate(()=>window.__talosHarnessUiRuntime.passaASessione('replay-root','workspace','Coordinamento','m',{conclusa:false}));
+  await attendiFineStoria(page);
   if(await page.locator('[data-c="GrafoAgenti"]').isVisible()) return;
   if(!await page.locator('#railTabs').isVisible())await page.locator('.talos-screen:not([hidden]) [data-azione="dettagli"]').first().click();
   await page.locator('#railTabs [data-rail="agenti"]').click();
@@ -71,7 +80,7 @@ test('RIPRESA-REPLAY-HTTP-UI: registro reale, apertura tardiva e riavvio senza f
   avviaSessioneFn:input=>new Promise(resolve=>{runs.push({input,resolve});input.onEvento({type:'RunStarted',input:{consegna:'Controlla il progetto'}});})};
  let registry=createSessionRegistry(options),server;
  const listen=async(port=0)=>{
-  server=createServer(createHttpApp({sessionRegistry:registry,staticHandler:createStaticHandler(process.env.TALOS_RIPRESA_BUNDLE)}));
+  server=createServer(createHttpApp({sessionRegistry:registry,staticHandler:createStaticHandler(BUNDLE)}));
   await new Promise(resolve=>server.listen(port,'127.0.0.1',resolve));return server.address().port;
  };
  const close=async()=>{const promise=new Promise(resolve=>server.close(resolve));server.closeAllConnections();await promise;};

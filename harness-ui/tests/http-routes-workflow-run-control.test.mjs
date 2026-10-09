@@ -148,7 +148,16 @@ test('WF-HTTP-RUN-CONTROL: pause, resume and cancel over HTTP — owner session 
 
   assert.equal((await b.controllo(runId, 'pause', randomUUID(), altraSessione)).status, 404, 'another session cannot see or command it');
   assert.equal((await b.controllo(randomUUID(), 'pause')).status, 404, 'unknown run');
-  const straniera = await b.controllo(runId, 'pause', randomUUID(), sessionId, { Origin: 'http://evil.example' });
+  /* 0.1.25: a foreign Origin, or a loopback one on ANOTHER port (another local server), is stopped earlier by the server-wide
+     guard (ORIGIN_FORBIDDEN). The Workflow guard is still exercised by the exact TALOS Origin with Sec-Fetch-Site cross-site,
+     which the server-wide guard lets through and the Workflow guard refuses. */
+  const porta = Number(new URL(b.base).port);
+  for (const Origin of ['http://evil.example', `http://127.0.0.1:${porta === 65535 ? 65534 : porta + 1}`]) {
+    const globale = await b.controllo(runId, 'pause', randomUUID(), sessionId, { Origin });
+    assert.equal(globale.status, 403, Origin);
+    assert.equal((await globale.json()).error.code, 'ORIGIN_FORBIDDEN', Origin);
+  }
+  const straniera = await b.controllo(runId, 'pause', randomUUID(), sessionId, { Origin: b.base, 'Sec-Fetch-Site': 'cross-site' });
   assert.equal(straniera.status, 403);
   assert.equal((await straniera.json()).error.code, 'WORKFLOW_COMMAND_ORIGIN_FORBIDDEN');
 

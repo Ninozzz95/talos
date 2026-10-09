@@ -253,10 +253,16 @@ test('SIC-08 — la rotta POST /automations/:id/runs/:runId/proposta {decisione}
     [`/api/v1/automations/${altroGiro.id}/elimina`, {}],
     ['/api/v1/automations', { ...CREA, cartella: dati, fusoOrario: 'Europe/Rome' }],
   ]) {
-    for (const intestazioni of [{}, { origin: 'http://evil.example' }, { 'sec-fetch-site': 'cross-site' }]) {
+    // 0.1.25: un altro sito, o un altro server locale su un'ALTRA porta, lo ferma prima la guardia di tutto il server
+    // (ORIGIN_FORBIDDEN); la guardia delle automazioni resta provata da un client senza intestazioni e dalla finestra esatta con
+    // Sec-Fetch-Site cross-site, che la guardia globale lascia passare
+    const altraPorta = `http://127.0.0.1:${Number(new URL(base).port) === 65535 ? 65534 : Number(new URL(base).port) + 1}`
+    for (const [intestazioni, codice] of [[{}, 'AUTOMATION_ORIGIN_FORBIDDEN'], [{ origin: base, 'sec-fetch-site': 'cross-site' }, 'AUTOMATION_ORIGIN_FORBIDDEN'],
+      [{ origin: altraPorta, 'sec-fetch-site': 'same-site' }, 'ORIGIN_FORBIDDEN'],
+      [{ origin: 'http://evil.example' }, 'ORIGIN_FORBIDDEN'], [{ 'sec-fetch-site': 'cross-site' }, 'ORIGIN_FORBIDDEN']]) {
       const no = await post(percorso, corpo, intestazioni)
       assert.equal(no.status, 403, `${percorso} ${JSON.stringify(intestazioni)}`)
-      assert.equal(no.corpo.error.code, 'AUTOMATION_ORIGIN_FORBIDDEN')
+      assert.equal(no.corpo.error.code, codice, `${percorso} ${JSON.stringify(intestazioni)}`)
     }
   }
   assert.equal((await store.leggi(altroGiro.id)).istruzioni, CREA.istruzioni, 'niente è stato scritto')

@@ -1,5 +1,7 @@
 import { expect, test } from '@playwright/test';
 
+import { CONFINE, attendiFineStoria, flussoConConfine } from './aiuto-confine.mjs';
+
 /*
  * ⭐⭐⭐ 17/09/2026 — LE DUE COSE CHE MANCAVANO SOTTO LA RISPOSTA E SOPRA DI ESSA.
  *
@@ -22,27 +24,34 @@ async function apriApp(page, { tema = 'dark', larghezza = 1440, altezza = 900 } 
     try { localStorage.setItem('talos.harness.desktop.settings.v1', JSON.stringify({ version: 1, appearance: { colorMode }, chat: { model: 'qwen/qwen3.8-flash' } })); }
     catch { /* finestra privata: la app parte lo stesso */ }
   }, { colorMode: tema === 'light' ? 'light' : 'dark' });
-  await page.route('**/api/v1/sessions/bc75-*/events*', (rotta) => rotta.fulfill({ contentType: 'text/event-stream', body: '' }));
+  /* ⛔ 08/10/2026 (bugfixer) — il flusso finto porta il confine fra storia e presente (aiuto-confine.mjs) e la sessione si apre
+     QUI, a storia finita: da A1-R3 una sessione in corso si riapre dietro il velo, e senza confine la carta restava da disegnare. */
+  await page.route('**/api/v1/sessions/bc75-*/events*', flussoConConfine);
   await page.goto('/');
   await page.locator('#talosAvvio').waitFor({ state: 'detached', timeout: 8000 });
   await page.waitForFunction(() => window.__talosHarnessUiRuntime);
+  await page.evaluate(() => window.__talosHarnessUiRuntime.passaASessione('bc75-uno', 'workspace', 'BC-75', 'qwen/qwen3.8-flash', { conclusa: false, modello: 'qwen/qwen3.8-flash' }));
+  await attendiFineStoria(page);
+}
+
+/** Gli eventi di un giro: gli stessi dal vivo (`unGiro`) e nella storia rigiocata dal flusso (BC75-03). */
+function eventiDelGiro({ consegna = 'Scrivi le note', scritture = [], sequenza = 1 } = {}) {
+  return [
+    { type: 'RunStarted', _sequenza: sequenza, input: { consegna, seguito: sequenza > 1 }, contesto: { cartella: CARTELLA, modello: 'qwen/qwen3.8-flash' } },
+    { type: 'TextMessageStart', messageId: `m${sequenza}` },
+    { type: 'TextMessageContent', messageId: `m${sequenza}`, delta: `Risposta del giro ${sequenza}.` },
+    { type: 'TextMessageEnd', messageId: `m${sequenza}` },
+    ...scritture.map((percorso) => ({ type: 'StateDelta', delta: [{ op: 'add', path: `/file/${percorso}`, value: { op: 'add', dopo: 'riga uno\nriga due\n' } }] })),
+    { type: 'RunFinished' },
+  ];
 }
 
 /** Un giro vero: domanda, risposta, e `scritture` file scritti prima di `RunFinished`. */
-async function unGiro(page, { consegna = 'Scrivi le note', scritture = [], sequenza = 1 } = {}) {
-  await page.evaluate(({ consegna: testo, scritture: file, sequenza: seq, cartella }) => {
+async function unGiro(page, giro = {}) {
+  await page.evaluate((eventi) => {
     const r = window.__talosHarnessUiRuntime;
-    if (!r.realSessionState.id) r.passaASessione('bc75-uno', 'workspace', 'BC-75', 'qwen/qwen3.8-flash', { conclusa: false, modello: 'qwen/qwen3.8-flash' });
-    const g = r.realSessionState.generation;
-    r.handleRealEvent({ type: 'RunStarted', _sequenza: seq, input: { consegna: testo, seguito: seq > 1 }, contesto: { cartella, modello: 'qwen/qwen3.8-flash' } }, g);
-    r.handleRealEvent({ type: 'TextMessageStart', messageId: `m${seq}` }, g);
-    r.handleRealEvent({ type: 'TextMessageContent', messageId: `m${seq}`, delta: `Risposta del giro ${seq}.` }, g);
-    r.handleRealEvent({ type: 'TextMessageEnd', messageId: `m${seq}` }, g);
-    for (const percorso of file) {
-      r.handleRealEvent({ type: 'StateDelta', delta: [{ op: 'add', path: `/file/${percorso}`, value: { op: 'add', dopo: 'riga uno\nriga due\n' } }] }, g);
-    }
-    r.handleRealEvent({ type: 'RunFinished' }, g);
-  }, { consegna, scritture, sequenza, cartella: CARTELLA });
+    for (const evento of eventi) r.handleRealEvent(evento, r.realSessionState.generation);
+  }, eventiDelGiro(giro));
 }
 
 const carte = (page) => page.locator('#conversation [data-c="TouchedFiles"]');
@@ -151,15 +160,15 @@ test('BC75-03 — la carta si ricostruisce dal REPLAY: riaprendo la sessione tor
    * ⛔ Il replay VERO: si passa a un'altra sessione e si torna — la chat si ricostruisce dagli
    *   eventi, che è il modo in cui il difetto «la carta sparisce alla ricarica» si vedrebbe.
    */
-  await page.evaluate(() => {
-    const r = window.__talosHarnessUiRuntime;
-    r.passaASessione('bc75-altra', 'workspace', 'Altra', 'qwen/qwen3.8-flash', { conclusa: true, modello: 'qwen/qwen3.8-flash' });
-  });
+  /* ⛔ 08/10/2026 (bugfixer): al ritorno la storia la rigioca il FLUSSO — gli stessi eventi del giro, poi il confine — come il
+     server vero; prima la prova li iniettava a mano dopo il ritorno, e non passava mai dalla porta del replay. */
+  const storia = [...eventiDelGiro({ scritture: ['src/replay.mjs'] }), CONFINE];
+  await page.route('**/api/v1/sessions/bc75-uno/events*', (rotta) => rotta.fulfill({ status: 200, contentType: 'text/event-stream',
+    body: `retry: 3600000\n${storia.map((evento) => `data: ${JSON.stringify(evento)}\n\n`).join('')}` }));
+  await page.evaluate(() => window.__talosHarnessUiRuntime.passaASessione('bc75-altra', 'workspace', 'Altra', 'qwen/qwen3.8-flash', { conclusa: true, modello: 'qwen/qwen3.8-flash' }));
+  await attendiFineStoria(page);
   await expect(carte(page)).toHaveCount(0);
-  await page.evaluate(() => {
-    const r = window.__talosHarnessUiRuntime;
-    r.passaASessione('bc75-uno', 'workspace', 'BC-75', 'qwen/qwen3.8-flash', { conclusa: true, modello: 'qwen/qwen3.8-flash' });
-  });
-  await unGiro(page, { scritture: ['src/replay.mjs'] });
+  await page.evaluate(() => window.__talosHarnessUiRuntime.passaASessione('bc75-uno', 'workspace', 'BC-75', 'qwen/qwen3.8-flash', { conclusa: true, modello: 'qwen/qwen3.8-flash' }));
+  await attendiFineStoria(page);
   await expect(carte(page)).toHaveCount(1, 'rigiocando la storia la carta si ricostruisce, non si perde');
 });

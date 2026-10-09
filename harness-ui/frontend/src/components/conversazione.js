@@ -1047,7 +1047,8 @@ export function segnaEsitoApprovazione(scheda, { approvato = false, altrove = fa
      rispondere (automazioni, passi dei Workflow) — si dicono per quello che sono, non come un «Negato» qualunque. */
   /* Automazioni a due porte (08/10/2026): sulla carta di un'automazione il no è «Annullata», e «Modifica» non è un no — la
      persona ha corretto la bozza e l'ha salvata lei (`modificata-dalla-persona`, dal server). */
-  const cartaAutomazione = Boolean(scheda.dataset?.cartaAutomazione);
+  /* 0.1.25 (review del bugfixer, 09/10): anche la carta dei fornitori esclusi ha «Annulla», e l'esito dice la stessa parola */
+  const cartaAutomazione = Boolean(scheda.dataset?.cartaAutomazione || scheda.dataset?.cartaFornitori);
   const modificata = !approvato && motivo === 'modificata-dalla-persona';
   const esito = approvato
     ? (ambito === 'cartella' ? t('chat.approval.allowedInFolder') : t('chat.common.approved'))

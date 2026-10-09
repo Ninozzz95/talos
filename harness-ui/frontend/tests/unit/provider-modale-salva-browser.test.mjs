@@ -168,6 +168,18 @@ test('MS-09: nella modale il menu «⋯» non offre un secondo salvataggio; se n
   assert.deepEqual(await altra.page.evaluate(() => window.voci), ['save-runtime', 'reset-runtime']);
 });
 
+// 08/10 (bugfixer): con l'indirizzo DI SERIE salvato non c'è niente da ripristinare (egui `reset_button`, Zed settings_ui #40135).
+test('MS-11: indirizzo salvato ma uguale al predefinito ⇒ niente «Ripristina indirizzo»; AL CONTRARIO, uno diverso lo offre', async (t) => {
+  const serie = await pagina(t, { row: { ...OPENROUTER, endpoint: 'https://openrouter.ai/api/v1', endpointConfigured: true, endpointPredefinito: true } });
+  await serie.modale.getByRole('button', { name: 'Annulla', exact: true }).click();
+  await serie.page.evaluate(() => document.querySelector('[data-provider-id="openrouter"] [data-provider-altre-azioni]').click());
+  assert.deepEqual(await serie.page.evaluate(() => window.voci), ['save-runtime']);
+  const diverso = await pagina(t, { row: { ...OPENROUTER, endpoint: 'https://proxy.esempio.test/v1', endpointConfigured: true, endpointPredefinito: false } });
+  await diverso.modale.getByRole('button', { name: 'Annulla', exact: true }).click();
+  await diverso.page.evaluate(() => document.querySelector('[data-provider-id="openrouter"] [data-provider-altre-azioni]').click());
+  assert.deepEqual(await diverso.page.evaluate(() => window.voci), ['save-runtime', 'reset-runtime']);
+});
+
 test('MS-10: chiave + indirizzo, e fallisce solo il secondo: la modale dice che la chiave È salvata e non la rimanda', async (t) => {
   const { page, modale } = await pagina(t, { fallisce: { fase: 'collegamento', solo: 'collegamento', motivo: 'Indirizzo non valido.' } });
   await modale.locator('[data-provider-key]').fill('sk-or-v1-finta-di-prova');

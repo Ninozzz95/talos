@@ -60,9 +60,11 @@ test.before(async () => {
         const corpo = JSON.parse(r.postData() || 'null');
         inviati.push(corpo);
         if (rispondi === 'errore') return route.fulfill({ status: 400, contentType: 'application/json', body: JSON.stringify({ ok: false, error: { code: 'QUERY_INVALID', message: 'no' } }) });
-        return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, data: { esclusi: corpo.esclusi } }) });
+        // 0.1.25: la lista e le voci di serie viaggiano nella STESSA richiesta ({esclusi?, diSerie?}); la rotta per voce non si usa più
+        return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, data: { esclusi: corpo.esclusi ?? ['chutes'],
+          esclusiDiSerie: (corpo.diSerie ?? []).map((v) => ({ ...v, perche: 'x' })) } }) });
       }
-      return route.abort();
+      return route.abort(); // ⛔ anche `/esclusi/di-serie`: una richiesta per voce sarebbe di nuovo un salvataggio a metà
     });
     /* la card sta dentro `#schermoImpostazioni`, come nel prodotto: le regole delle Impostazioni (es. `#schermoImpostazioni li`, le
        RIGHE) la toccano davvero, e un banco senza quel contenitore non vedrebbe i difetti che fanno a schermo (misurato sul 4177) */
@@ -275,4 +277,62 @@ test('ESC-12: AL CONTRARIO — una risposta senza fornitore a valle non ha l eti
     return { via: m.querySelectorAll('.talos-message__via').length, nomi: fe.fornitoriAValleDi(m), ritorno: fe.segnaFornitoreAValle(m, null) };
   });
   assert.deepEqual(esito, { via: 0, nomi: [], ritorno: [] });
+});
+
+/* ⭐ 0.1.25 (owner 09/10/2026, «visibile e togliibile») — gli esclusi DI SERIE: sotto la lista della persona, stessa pastiglia,
+   tolti diventano una riga con «Escludi di nuovo»; in bozza finché non si preme il «Salva» unico, che manda solo ciò che è cambiato. */
+const DI_SERIE = { ...OPENROUTER, esclusiDiSerie: [{ modello: 'z-ai/glm-5.3-flash', slug: 'open-inference', perche: 'x', attivo: true }] };
+
+test('ESC-SERIE-01: la voce di serie si vede col suo modello e il perché; la × la toglie; «Salva» manda solo quella', async (t) => {
+  const { page, modale, inviati } = await pagina(t, { row: DI_SERIE });
+  const voce = modale.locator('[data-escluso-di-serie="z-ai/glm-5.3-flash#open-inference"]');
+  await voce.waitFor();
+  assert.match(await voce.innerText(), /open-inference[\s\S]*per glm-5\.3-flash: non chiama gli attrezzi/u);
+  assert.doesNotMatch(await voce.innerText(), /z-ai\//u, 'il modello col nome umano, mai l id');
+  assert.equal(await modale.getByText('Esclusi di serie', { exact: true }).isVisible(), true, 'un titoletto suo, staccato dalla lista della persona');
+  assert.match(await page.locator('#card').innerText(), /Fornitori esclusi\s*2 fornitori/u, 'il riepilogo conta anche il di-serie attivo (chutes + open-inference)');
+  assert.deepEqual(await pastiglie(modale), ['chutes'], 'la lista della persona resta sua: la voce di serie non ci si mescola');
+  await modale.getByRole('button', { name: 'Riammetti open-inference per glm-5.3-flash', exact: true }).click();
+  assert.equal(await voce.getAttribute('data-attivo'), 'false');
+  assert.match(await voce.innerText(), /open-inference di nuovo ammesso per glm-5\.3-flash/u);
+  assert.equal(await modale.getByRole('button', { name: 'Escludi di nuovo open-inference per glm-5.3-flash', exact: true }).evaluate((b) => b === document.activeElement), true, 'il fuoco va al pulsante che rimette');
+  assert.deepEqual(inviati, [], 'in bozza');
+  await modale.getByRole('button', { name: 'Salva', exact: true }).click();
+  await chiusa(page);
+  assert.deepEqual(inviati, [{ diSerie: [{ modello: 'z-ai/glm-5.3-flash', slug: 'open-inference', attivo: false }] }], 'solo la voce cambiata, non la lista della persona');
+});
+
+test('ESC-SERIE-03: lista e voce di serie cambiate insieme: UNA richiesta con tutte e due (o tutto o niente sul server)', async (t) => {
+  const { page, modale, inviati } = await pagina(t, { row: DI_SERIE });
+  await modale.getByRole('button', { name: 'Riammetti open-inference per glm-5.3-flash', exact: true }).click();
+  await modale.locator('[data-provider-escluso="chutes"]').click();
+  await modale.getByRole('button', { name: 'Salva', exact: true }).click();
+  await chiusa(page);
+  assert.deepEqual(inviati, [{ esclusi: [], diSerie: [{ modello: 'z-ai/glm-5.3-flash', slug: 'open-inference', attivo: false }] }]);
+});
+
+test('ESC-SERIE-04 AL CONTRARIO: il server rifiuta la richiesta unica: la modale resta aperta e la bozza di tutte e due non si perde', async (t) => {
+  const { modale, inviati } = await pagina(t, { row: DI_SERIE, rispondi: 'errore' });
+  await modale.getByRole('button', { name: 'Riammetti open-inference per glm-5.3-flash', exact: true }).click();
+  await modale.locator('[data-provider-escluso="chutes"]').click();
+  await modale.getByRole('button', { name: 'Salva', exact: true }).click();
+  await modale.locator('[data-provider-escluso-di-serie], [data-provider-rimetti-di-serie]').first().waitFor();
+  assert.equal(inviati.length, 1, 'una richiesta sola, anche quando fallisce');
+  assert.equal(await modale.locator('[data-escluso-di-serie="z-ai/glm-5.3-flash#open-inference"]').getAttribute('data-attivo'), 'false', 'la bozza della voce resta');
+  assert.deepEqual(await pastiglie(modale), [], 'la bozza della lista resta');
+});
+
+test('ESC-SERIE-02 AL CONTRARIO: togliere e rimettere prima del Salva non manda niente; una voce già tolta si rimette', async (t) => {
+  const { page, modale, inviati } = await pagina(t, { row: DI_SERIE });
+  await modale.getByRole('button', { name: 'Riammetti open-inference per glm-5.3-flash', exact: true }).click();
+  await modale.getByRole('button', { name: 'Escludi di nuovo open-inference per glm-5.3-flash', exact: true }).click();
+  await modale.getByRole('button', { name: 'Salva', exact: true }).click();
+  assert.deepEqual(inviati, [], 'tornata com era: niente da salvare');
+  const tolta = { ...OPENROUTER, esclusiDiSerie: [{ ...DI_SERIE.esclusiDiSerie[0], attivo: false }] };
+  const altra = await pagina(t, { row: tolta });
+  await altra.modale.getByRole('button', { name: 'Escludi di nuovo open-inference per glm-5.3-flash', exact: true }).click();
+  await altra.modale.getByRole('button', { name: 'Salva', exact: true }).click();
+  await chiusa(altra.page);
+  assert.deepEqual(altra.inviati, [{ diSerie: [{ modello: 'z-ai/glm-5.3-flash', slug: 'open-inference', attivo: true }] }]);
+  void page;
 });

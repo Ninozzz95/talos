@@ -295,15 +295,37 @@ export function mountCalmControls(root = globalThis.document, { scope = null } =
   const reposition = () => { if (openRecord && !positionFrame) positionFrame = win.requestAnimationFrame(() => { positionFrame = 0; position(); }); };
   listen(win, 'resize', reposition); listen(doc, 'scroll', reposition, { capture: true, passive: true });
   // Ignore transcript/canvas paint. Only mutations that can affect this owner matter.
-  function relevant(m) {
+  /*
+   * ⛔ B3 (09/10/2026, profilo CPU dell'apertura di una chat da 1000 giri sulla 4176) — la STESSA regola di prima, in un
+   *   ordine diverso. `relevant` costava ancora ~150 ms all'apertura (93 di tempo proprio): per OGNI mutazione della chat —
+   *   anche un `style` o un testo che cresce — risaliva l'albero due o tre volte (`closest` dell'interfaccia calm,
+   *   dell'ambito, di label/select) e ricreava tre funzioni e due array. Ora prima le condizioni che costano poco (il nome
+   *   dell'attributo, `records.has`, `matches` sul nodo stesso), la risalita solo se la mutazione può ancora contare, e
+   *   «dentro l'interfaccia calm» solo quando si sta per dire sì. «Staccato un controllo» si calcola UNA volta per lotto.
+   *   Un osservatore su un albero grande scarta presto, senza interrogare il DOM per ogni record (README di
+   *   MutationObserver-shim; Frontend Masters, «Front-End System Design: MutationObserver», letti il 09/10/2026).
+   */
+  const SORGENTI_O_MARCATE = `${sources},[data-calm-source]`;
+  const ATTRIBUTI_DI_STATO = new Set(['hidden', 'disabled', 'inert']);
+  const nellaUiCalm = target => Boolean(target?.closest('[data-calm-ui],[data-calm-popup]'));
+  const portaControlli = n => n.nodeType === 1 && (n.matches(SORGENTI_O_MARCATE) || n.querySelector(SORGENTI_O_MARCATE) !== null);
+  const portaUnAmbito = n => n.nodeType === 1 && Boolean(scope) && (n.matches(scope) || n.querySelector(scope) !== null);
+  function relevant(m, lotto) {
     const target = m.target.nodeType === 1 ? m.target : m.target.parentElement;
-    if (target?.closest('[data-calm-ui],[data-calm-popup]')) return false;
-    const inScope = !scope || target?.closest(scope);
     if (m.type === 'attributes') {
-      if (inScope && (records.has(target) || target?.matches('option,optgroup,label'))) return true;
-      return ['hidden', 'disabled', 'inert'].includes(m.attributeName) && [...records.keys()].some(s => target?.contains(s));
+      if (!target) return false;
+      const diControllo = records.has(target) || target.matches('option,optgroup,label');
+      const diStato = ATTRIBUTI_DI_STATO.has(m.attributeName);
+      if (!diControllo && !diStato) return false; // il caso della chat: `style`, `aria-label`… su nodi che non sono controlli
+      if (nellaUiCalm(target)) return false;
+      if (diControllo && (!scope || target.closest(scope))) return true;
+      if (!diStato) return false;
+      for (const s of records.keys()) if (target.contains(s)) return true;
+      return false;
     }
-    if (inScope && target?.closest('label,select,option,optgroup')) return true;
+    const nelloScope = !scope || Boolean(target?.closest(scope));
+    if (nelloScope && target?.closest('label,select,option,optgroup')) return !nellaUiCalm(target);
+    if (m.type !== 'childList') return false;
     /*
      * ⛔ B1 (07/10/2026, profilo CPU sul 4174) — fuori dall'ambito una sorgente non si migliora mai (`eligible`): un nodo
      *   AGGIUNTO fuori conta solo se porta dentro un ambito intero (una schermata montata); un nodo TOLTO conta solo se
@@ -311,18 +333,21 @@ export function mountCalmControls(root = globalThis.document, { scope = null } =
      *   dell'ispettore con una checkbox faceva ripartire `refresh` — che rilegge e rinomina tutti i controlli — a ogni
      *   evento del replay: 6,4 s su 25,6 s all'apertura di una sessione da 1286 giri.
      */
-    if (m.type === 'childList') {
-      const conta = n => n.nodeType === 1 && (n.matches(sources) || n.querySelector(sources) ||
-        n.matches('[data-calm-source]') || n.querySelector('[data-calm-source]'));
-      const portaUnAmbito = n => n.nodeType === 1 && Boolean(scope) && (n.matches(scope) || Boolean(n.querySelector(scope)));
-      /* Un nodo tolto conta solo se ha staccato un controllo migliorato: si chiede ai record (poche decine), non al
-         sottoalbero tolto (migliaia di nodi quando la finestra di replay smonta un turno: `contains` costava 0,6 s). */
-      const staccatoUnControllo = () => m.removedNodes.length > 0 && [...records.keys()].some(s => !s.isConnected);
-      return [...m.addedNodes].some(n => (inScope ? conta(n) : portaUnAmbito(n))) || staccatoUnControllo();
+    let conta = false;
+    for (const n of m.addedNodes) if (nelloScope ? portaControlli(n) : portaUnAmbito(n)) { conta = true; break; }
+    /* Un nodo tolto conta solo se ha staccato un controllo migliorato: si chiede ai record (poche decine), non al
+       sottoalbero tolto (migliaia di nodi quando la finestra di replay smonta un turno: `contains` costava 0,6 s). Una
+       volta per lotto: fra due record dello stesso lotto la risposta non cambia. */
+    if (!conta && m.removedNodes.length > 0) {
+      if (lotto.staccato === undefined) { lotto.staccato = false; for (const s of records.keys()) if (!s.isConnected) { lotto.staccato = true; break; } }
+      conta = lotto.staccato;
     }
-    return false;
+    return conta && !nellaUiCalm(target);
   }
-  const observer = new win.MutationObserver(mutations => { if (mutations.some(relevant)) schedule(); });
+  const observer = new win.MutationObserver(mutations => {
+    const lotto = {};
+    for (const m of mutations) if (relevant(m, lotto)) { schedule(); return; }
+  });
   observer.observe(root.documentElement || root, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['disabled','hidden','selected','checked','value','min','max','step','label','lang','style','data-theme','data-talos-theme','data-talos-color-mode','aria-label','aria-labelledby','aria-describedby','aria-invalid','aria-required','required','inert','readonly'] });
   const api = { refresh, dispose() { if (disposed) return; disposed = true; close(); live?.remove(); abort.abort(); observer.disconnect(); win.cancelAnimationFrame(positionFrame); for (const r of [...records.values()]) remove(r); instances.delete(root); } };
   instances.set(root, api); refresh(); return api;

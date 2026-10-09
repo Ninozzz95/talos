@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { attendiFineStoria, flussoConConfine } from './aiuto-confine.mjs';
 
 /*
  * ⭐⭐⭐ BC-80, 17/09/2026 — IL RIASSUNTO DELLA REVISIONE SI DEVE LEGGERE.
@@ -25,13 +26,14 @@ async function apriConFile(page, { larghezza, altezza, tema, quantiFile }) {
     try { localStorage.setItem('talos.harness.desktop.settings.v1', JSON.stringify({ version: 1, appearance: { colorMode, uiLanguage: 'it' }, chat: { model: 'qwen/qwen3.8-flash' } })); }
     catch { /* finestra privata: la app parte lo stesso */ }
   }, { colorMode: tema });
-  await page.route('**/api/v1/sessions/bc80-*/events*', (r) => r.fulfill({ contentType: 'text/event-stream', body: '' }));
+  await page.route('**/api/v1/sessions/bc80-*/events*', flussoConConfine);
   await page.goto('/');
   await page.locator('#talosAvvio').waitFor({ state: 'detached', timeout: 8000 });
   await page.waitForFunction(() => window.__talosHarnessUiRuntime);
+  await page.evaluate(() => window.__talosHarnessUiRuntime.passaASessione('bc80-uno', 'workspace', 'BC80', 'qwen/qwen3.8-flash', { conclusa: false, modello: 'qwen/qwen3.8-flash' }));
+  await attendiFineStoria(page); // ⛔ 08/10/2026: la storia finisce al confine (aiuto-confine.mjs); la scena arriva dal vivo
   await page.evaluate(async (quanti) => {
     const r = window.__talosHarnessUiRuntime;
-    r.passaASessione('bc80-uno', 'workspace', 'BC80', 'qwen/qwen3.8-flash', { conclusa: false, modello: 'qwen/qwen3.8-flash' });
     const g = r.realSessionState.generation;
     let seq = 8000;
     r.handleRealEvent({ type: 'RunStarted', _sequenza: seq += 1, input: { consegna: 'Scrivi qualche file' }, contesto: { cartella: 'C:\\progetti\\AVM', modello: 'glm-5.3-flash' } }, g);
@@ -102,9 +104,10 @@ test('BC80 — si aggiorna al terzo file senza ricaricare, e sparisce quando non
   expect(tre.testo, 'e le righe aggiunte crescono con lui').not.toBe(due.testo);
 
   /* AL CONTRARIO: una sessione senza scritture non lascia appeso il riassunto di quella prima. */
+  await page.evaluate(() => window.__talosHarnessUiRuntime.passaASessione('bc80-vuota', 'workspace', 'Senza scritture', 'qwen/qwen3.8-flash', { conclusa: true, modello: 'qwen/qwen3.8-flash' }));
+  await attendiFineStoria(page); // ⛔ 08/10/2026: la storia finisce al confine (aiuto-confine.mjs); la scena arriva dal vivo
   await page.evaluate(async () => {
     const r = window.__talosHarnessUiRuntime;
-    r.passaASessione('bc80-vuota', 'workspace', 'Senza scritture', 'qwen/qwen3.8-flash', { conclusa: true, modello: 'qwen/qwen3.8-flash' });
     r.executeCommand('review');
     await new Promise((x) => requestAnimationFrame(x));
   });

@@ -38,10 +38,11 @@ async function portaLibera() {
 }
 
 /** Avvia `server.mjs` in un figlio con una sessione conclusa già nel journal; torna quando risponde. */
-async function avviaServerFiglio(t, prefisso) {
-  const cartella = await mkdtemp(join(tmpdir(), prefisso));
+/* `cartellaCondivisa`: due server sulla STESSA cartella dati, come il 4174 e l'app installata dal 07/10 (`%APPDATA%\TALOS\sessions`). */
+async function avviaServerFiglio(t, prefisso, { cartellaCondivisa = null } = {}) {
+  const cartella = cartellaCondivisa ?? await mkdtemp(join(tmpdir(), prefisso));
   const workspace = join(cartella, 'workspace');
-  await mkdir(workspace);
+  await mkdir(workspace, { recursive: true });
   const porta = await portaLibera();
   const token = randomBytes(24).toString('hex');
   const sessionId = 'sessione-conclusa';
@@ -66,7 +67,7 @@ async function avviaServerFiglio(t, prefisso) {
   figlio.stderr.on('data', (d) => { stato.log += d; });
   t.after(async () => {
     if (stato.uscito === null) { figlio.kill(); await uscita; }
-    await rimuoviCartellaDiProvaAttesa(cartella); // BC-09: coi ritentativi che Windows vuole, DOPO l'uscita del server figlio
+    if (!cartellaCondivisa) await rimuoviCartellaDiProvaAttesa(cartella); // BC-09: coi ritentativi che Windows vuole, DOPO l'uscita del server figlio (la condivisa la toglie chi l'ha creata)
   });
   let pronto = false;
   for (let i = 0; i < 200 && !pronto; i += 1) {
@@ -74,11 +75,13 @@ async function avviaServerFiglio(t, prefisso) {
     try { pronto = (await fetch(`${origine}/api/v1/health`, { headers, signal: AbortSignal.timeout(500) })).ok; } catch { await attendi(100); }
   }
   assert.ok(pronto, `il server figlio non è diventato pronto:\n${stato.log.slice(-2000)}`);
-  return { cartella, origine, headers, sessionId, uscita, stato };
+  /* `ferma`: per chi deve fermare i server PRIMA di togliere una cartella condivisa (su Windows un file aperto non si cancella). */
+  const ferma = async () => { if (stato.uscito === null) { figlio.kill(); await uscita; } };
+  return { cartella, porta, origine, headers, sessionId, uscita, stato, ferma };
 }
 
 test('SERVER-SHUTDOWN-WITH-OPEN-SSE — lo stop gentile col gettone fa USCIRE il processo anche con un flusso di eventi aperto', { timeout: 60_000 }, async (t) => {
-  const { cartella, origine, headers, sessionId, uscita, stato } = await avviaServerFiglio(t, 'tspg-');
+  const { cartella, porta, origine, headers, sessionId, uscita, stato } = await avviaServerFiglio(t, 'tspg-');
 
   // il flusso resta APERTO: si legge il primo pezzo e non si chiude
   const flusso = await fetch(`${origine}/api/v1/sessions/${sessionId}/events`, { headers });
@@ -89,13 +92,55 @@ test('SERVER-SHUTDOWN-WITH-OPEN-SSE — lo stop gentile col gettone fa USCIRE il
   assert.equal(primo.done, false, 'il flusso consegna il ripasso e resta aperto');
   t.after(() => lettore.cancel().catch(() => {}));
 
-  const gettone = (await readFile(join(cartella, '.spegnimento-gettone'), 'utf8')).trim();
+  const gettone = (await readFile(join(cartella, `.spegnimento-gettone-${porta}`), 'utf8')).trim(); // 09/10: un file per porta
   const risposta = await fetch(`${origine}/api/v1/admin/shutdown`, { method: 'POST', headers: { ...headers, 'x-talos-shutdown-token': gettone } });
   assert.equal(risposta.status, 202, 'lo stop gentile è accettato');
 
   const esito = await Promise.race([uscita, attendi(6_000).then(() => 'appeso')]);
   assert.notEqual(esito, 'appeso', `con un flusso SSE aperto il processo non è uscito entro 6 s (server.close aspetta una risposta che non finisce):\n${stato.log.slice(-1500)}`);
   assert.equal(esito.code, 0, `uscita pulita attesa, avuto ${JSON.stringify(esito)}:\n${stato.log.slice(-1500)}`);
+});
+
+/*
+ * ⛔⛔ 09/10/2026 (bugfixer) — DUE SERVER SULLA STESSA CARTELLA, come il 4174 e l'app installata dal 07/10. Col nome unico il
+ *   secondo sovrascriveva il gettone del primo: riprodotto su questa porta di prova prima della cura (file cambiato, stop
+ *   gentile verso il primo = 401), e visto dal vivo sul 4174 il 09/10 alle 00:22, finito con `-Force`.
+ *   Ora ognuno ha il SUO file (`.spegnimento-gettone-<porta>`): il gettone del primo ferma il primo e il secondo resta vivo;
+ *   AL CONTRARIO, il gettone dell'altro viene rifiutato.
+ */
+test('SERVER-SHUTDOWN-GETTONE-PER-PORTA — due server sulla stessa cartella non si rubano il gettone', { timeout: 120_000 }, async (t) => {
+  const condivisa = await mkdtemp(join(tmpdir(), 'tgpp-'));
+  try {
+    const a = await avviaServerFiglio(t, 'tgpp-', { cartellaCondivisa: condivisa });
+    const b = await avviaServerFiglio(t, 'tgpp-', { cartellaCondivisa: condivisa });
+    try {
+      const gettoneDi = async (x) => (await readFile(join(condivisa, `.spegnimento-gettone-${x.porta}`), 'utf8')).trim();
+      const [ga, gb] = [await gettoneDi(a), await gettoneDi(b)];
+      assert.notEqual(ga, gb, 'due server, due gettoni');
+      const spegni = (x, gettone) => fetch(`${x.origine}/api/v1/admin/shutdown`, { method: 'POST', headers: { ...x.headers, 'x-talos-shutdown-token': gettone } });
+      assert.equal((await spegni(a, gb)).status, 401, 'AL CONTRARIO: il gettone dell\'altro server è rifiutato');
+      assert.equal((await spegni(a, ga)).status, 202, 'il gettone del PRIMO, letto dopo l\'avvio del secondo, ferma il primo');
+      const esito = await Promise.race([a.uscita, attendi(6_000).then(() => 'appeso')]);
+      assert.notEqual(esito, 'appeso', `il primo non è uscito:\n${a.stato.log.slice(-1500)}`);
+      assert.equal(esito.code, 0);
+      assert.ok((await fetch(`${b.origine}/api/v1/health`, { headers: b.headers })).ok, 'il secondo resta vivo');
+      /* Seguito del 09/10 (review di «talos desktop»): chi si spegne gentile toglie il SUO file, come Jupyter il suo
+         `jpserver-<pid>.json` — e solo il suo. */
+      const esiste = (x) => readFile(join(condivisa, `.spegnimento-gettone-${x.porta}`), 'utf8').then((s) => s, () => null);
+      assert.equal(await esiste(a), null, 'spento gentile, il primo ha tolto il suo file');
+      assert.equal(await esiste(b), gb, 'il file del secondo resta, col suo gettone');
+      /* AL CONTRARIO: se il file della porta porta un gettone che NON è il suo (un altro server, dopo), non lo tocca. */
+      await writeFile(join(condivisa, `.spegnimento-gettone-${b.porta}`), 'di-un-altro-server', 'utf8');
+      assert.equal((await spegni(b, gb)).status, 202, 'e il suo gettone è ancora il suo');
+      await Promise.race([b.uscita, attendi(6_000)]);
+      assert.equal(await esiste(b), 'di-un-altro-server', 'un file che non porta il suo gettone resta dov\'è');
+    } finally {
+      await b.ferma();
+      await a.ferma();
+    }
+  } finally {
+    await rimuoviCartellaDiProvaAttesa(condivisa); // dopo l'uscita di ENTRAMBI: su Windows un file aperto non si cancella
+  }
 });
 
 test('SERVER-DOCTOR-SESSION-STORE — il Doctor del server vero dice come il negozio pubblica l’intestazione, e in quale cartella', { timeout: 90_000 }, async (t) => {

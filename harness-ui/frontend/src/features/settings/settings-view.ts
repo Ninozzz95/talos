@@ -22,6 +22,19 @@ interface SettingsViewOptions {
 const SPRITE_SEZIONE: Record<string, string> = {
   chat: 'send', sliders: 'settings', cpu: 'command', key: 'link', chart: 'bolt', activity: 'user',
 };
+/*
+ * ⛔ B3 (09/10/2026, streaming di una risposta dopo 200 giri, 4176) — `:root:has(dialog.settings-palette[open]:modal)` e il gemello
+ *   di `settings-add-dialog` costavano ~350 ms di ricalcolo degli stili ogni 11 s di streaming: un `:has()` sulla radice si
+ *   rivaluta percorrendo il documento intero, e il documento cresce con la conversazione. Stesso effetto, senza `:has()`: la
+ *   classe sulla radice la mettono e la tolgono le due finestre, dopo `showModal()` e a ogni `close` (anche Esc), chiedendo
+ *   ogni volta al DOM se una delle due è davvero aperta e modale. Il CSS di `settings.css` resta quello del mockup.
+ */
+export const CLASSE_MODALE_IMPOSTAZIONI = 'talos-impostazioni-modale-aperta';
+export function segnaModaleImpostazioni(doc: Document | null) {
+  if (!doc) return;
+  doc.documentElement.classList.toggle(CLASSE_MODALE_IMPOSTAZIONI,
+    doc.querySelector('dialog.settings-palette[open]:modal, dialog.settings-add-dialog[open]:modal') !== null);
+}
 /** Un segno del progetto, per nome di sprite: nessun disegno nuovo, una sola fabbrica. */
 function iconaSprite(sprite: string, className: string): SVGElement {
   const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -502,7 +515,8 @@ export function createSettingsView(screen: HTMLElement, options: SettingsViewOpt
    */
   const modale = q<HTMLDialogElement>('#settingsAddModel');
   if (modale) {
-    aggiungi.addEventListener('click', () => { if (!modale.open) modale.showModal(); }, { signal });
+    aggiungi.addEventListener('click', () => { if (!modale.open) modale.showModal(); segnaModaleImpostazioni(modale.ownerDocument); }, { signal });
+    modale.addEventListener('close', () => segnaModaleImpostazioni(modale.ownerDocument), { signal });
     modale.querySelector('[data-settings-add-close]')?.addEventListener('click', () => modale.close(), { signal });
     modale.addEventListener('click', event => { if (event.target === modale) modale.close(); }, { signal });
     for (const strada of modale.querySelectorAll<HTMLElement>('[data-settings-road]')) {
@@ -638,22 +652,28 @@ export function createSettingsView(screen: HTMLElement, options: SettingsViewOpt
   const risultati = (termine: string) => searchSettings(buildSettingsIndex(options.fields, options.studioIds, options.language(), options.translate), termine);
 
   function disegnaPalette() {
-    const matches = risultati(paletteQuery.value);
-    paletteStatus.textContent = options.language() === 'en' ? `${matches.length} ${matches.length === 1 ? 'result' : 'results'}` : `${matches.length} ${matches.length === 1 ? 'risultato' : 'risultati'}`;
-    paletteEmpty.hidden = matches.length > 0;
+    /* ⛔ 09/10/2026 (bugfixer, foto del 4174) — a campo VUOTO la palette diceva «0 risultati · Nessuna impostazione trovata»
+       prima che la persona scrivesse una lettera: un fallimento dichiarato su una ricerca mai fatta. Come Hermes, che dice
+       «nessun risultato» solo quando c'è una ricerca (`apps/desktop/src/app/command-center/index.tsx:411`,
+       `debouncedQuery ? cc.noResults : cc.noSessions`, clone 2026-10-07): a campo vuoto niente conteggio e niente «vuoto». */
+    const cercato = paletteQuery.value.trim() !== '';
+    const matches = cercato ? risultati(paletteQuery.value) : [];
+    paletteStatus.textContent = !cercato ? '' : options.language() === 'en' ? `${matches.length} ${matches.length === 1 ? 'result' : 'results'}` : `${matches.length} ${matches.length === 1 ? 'risultato' : 'risultati'}`;
+    paletteEmpty.hidden = !cercato || matches.length > 0;
     paletteList.replaceChildren(...matches.map(entry => { const li = node('li'); li.append(bottoneRisultato(entry, true)); return li; }));
   }
   function apriPalette() {
     if (palette.open) return;
     disegnaPalette();
     palette.showModal();
+    segnaModaleImpostazioni(palette.ownerDocument);
     // ⛔ Il fuoco si mette a mano: `autofocus` non è affidabile su tutti i browser desktop.
     paletteQuery.select(); paletteQuery.focus({ preventScroll: true });
   }
   paletteClose.addEventListener('click', () => palette.close(), { signal });
   paletteQuery.addEventListener('input', disegnaPalette, { signal });
   palette.addEventListener('click', event => { if (event.target === palette) palette.close(); }, { signal });
-  palette.addEventListener('close', () => { paletteQuery.value = ''; }, { signal });
+  palette.addEventListener('close', () => { paletteQuery.value = ''; segnaModaleImpostazioni(palette.ownerDocument); }, { signal });
 
   const cercaBottone = node('button', 'settings-nav__search talos-nav-item'); cercaBottone.type = 'button'; cercaBottone.dataset.settingsOpenSearch = '';
   const cercaEtichetta = node('span', 'talos-nav-item__label');
@@ -948,6 +968,14 @@ export function createSettingsView(screen: HTMLElement, options: SettingsViewOpt
     select, refresh,
     dispose: () => {
       osservaTema.disconnect(); osservaFatti.disconnect(); controller.abort();
+      /* ⛔ B3 (09/10/2026, review di «talos desktop») — la classe della modale la toglie il `close` delle due finestre, ma quegli
+         ascoltatori muoiono con `controller.abort()`: smontata la vista con una finestra aperta, la radice restava
+         `overflow: hidden` per sempre (la vecchia regola `:has()` non poteva incastrarsi). Le finestre di QUESTA vista si
+         chiudono qui, e la classe si ricalcola dal DOM. */
+      if (palette.open) palette.close();
+      const aggiuntaAperta = q<HTMLDialogElement>('#settingsAddModel');
+      if (aggiuntaAperta?.open) aggiuntaAperta.close();
+      segnaModaleImpostazioni(doc);
       /*
        * ⛔⛔ 20/09/2026 — E L'ANTEPRIMA VA FERMATA, non solo gli osservatori.
        *

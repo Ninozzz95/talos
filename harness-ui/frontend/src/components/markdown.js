@@ -179,9 +179,13 @@ export function renderizzaMarkdown(testoGrezzo, opzioni = {}) {
   const PARTI_INLINE = [
     ...(conConversazioni ? [String.raw`(?<!!)\[([^\]]+)\]\(talos:\/\/conversazione\/([A-Za-z0-9._-]{1,120})\)`] : []),
     ...(conLink ? [String.raw`(?<!!)\[([^\]]+)\]\(([^)\s]+)\)`] : []),
-    String.raw`\*\*([^*]+)\*\*`, '`([^`]+)`', String.raw`\*([^*]+)\*`, '_([^_]+)_',
+    String.raw`\*\*([^*]+)\*\*`, '`([^`]+)`', String.raw`\*([^*]+)\*`,
+    /* `_x_`: mai DENTRO una parola (CommonMark 0.31.2 §6.2, regole 2 e 4, esempio 374: «Intraword emphasis is disallowed for
+       `_`», letta l'08/10/2026). Prima `call_shell_1.log` usciva «call*shell*1.log». Non aperto dopo una lettera/cifra/`_`, non
+       chiuso prima di una lettera/cifra/`_`, e niente spazio subito dentro i due trattini. */
+    String.raw`(?<![\p{L}\p{N}_])_(?![\s_])([^_]+)(?<!\s)_(?![\p{L}\p{N}_])`,
   ];
-  const PATTERN_INLINE = new RegExp(PARTI_INLINE.join('|'), 'g');
+  const PATTERN_INLINE = new RegExp(PARTI_INLINE.join('|'), 'gu'); // `u`: le classi \p{L}/\p{N} delle lettere di ogni lingua
   // Ogni alternativa accesa davanti sposta di due i gruppi che seguono: la mappa dice dove sta cosa, invece di lasciare gli
   // indici sparsi nel corpo.
   const GRUPPI = { conv: -1, convId: -1, link: -1, linkUrl: -1 };
@@ -192,7 +196,7 @@ export function renderizzaMarkdown(testoGrezzo, opzioni = {}) {
   function applicaInline(contenitore, segmento) {
     // grassetto **x**, corsivo *x*/_x_, codice inline `x`, ed eventualmente link [x](y) — un solo
     // giro, nessuna combinazione annidata (le "basi", non un parser a stati).
-    const pattern = new RegExp(PATTERN_INLINE.source, 'g');
+    const pattern = new RegExp(PATTERN_INLINE.source, PATTERN_INLINE.flags);
     let ultimo = 0;
     let match;
     while ((match = pattern.exec(segmento))) {

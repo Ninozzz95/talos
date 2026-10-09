@@ -18,6 +18,7 @@ import { statSync } from 'node:fs';
 
 import { WebSocketServer } from 'ws';
 
+import { hostAmmesso } from './guardia-origine.mjs';
 import { codificaFrame, decodificaFrame, TIPO_FRAME_CONTROLLO, TIPO_FRAME_DATI } from './pty-terminal.mjs';
 
 const PERCORSO_WS = '/api/v1/terminal/ws';
@@ -70,6 +71,13 @@ export function creaGestoreTerminaleWs({ registro, originiConsentite, risolviSch
       return;
     }
     if (url.pathname !== PERCORSO_WS) {
+      socket.destroy();
+      return;
+    }
+    // 0.1.25 (owner 09/10/2026) — la stessa guardia dell'Host di `handle()`: l'upgrade non passa da lì, e il DNS rebinding porta
+    // il nome dell'attaccante anche qui (Hermes `host_header_middleware`, GHSA-ppp5-vxwm-4cf7)
+    if (!hostAmmesso(req.headers.host)) {
+      socket.write('HTTP/1.1 400 Bad Request\r\n\r\n');
       socket.destroy();
       return;
     }

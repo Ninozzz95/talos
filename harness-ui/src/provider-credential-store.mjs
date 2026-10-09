@@ -16,6 +16,7 @@ import { ID_CON_CREDENZIALE, REGISTRO_FORNITORI } from './provider-registry.mjs'
 import { normalizzaRuntimeCloud } from './provider-auth-cloud.mjs';
 // P-K-bis/P-L-bis: preferenze pubbliche, separate dall'universo del portachiavi.
 import { validaRuntimeAgenteEsterno } from './acp-agent.mjs';
+import { ESCLUSI_DI_SERIE, chiaveDiSerie, modelloBase, normalizzaTolti, vociDiSerie } from './esclusi-di-serie.mjs';
 
 /*
  * ⛔⛔ 12/09 — P-A: QUESTE DUE COSTANTI ERANO IL PRIMO DEI TREDICI ELENCHI PARALLELI.
@@ -178,6 +179,21 @@ export function normalizeProviderEndpoint(provider, rawEndpoint) {
   return parsed.toString().replace(/\/$/u, '');
 }
 
+/*
+ * L'indirizzo salvato COINCIDE col predefinito del fornitore? Confrontati dopo la stessa normalizzazione (barra finale, maiuscole
+ * dell'host). Serve all'etichetta della scheda, non a «configurato»: per un fornitore locale `endpointConfigured` vuol
+ * dire «la persona l'ha scelto» e decide se TALOS è pronto (setup-stato.mjs:31, come Hermes `actual_local_noauth`), anche quando
+ * l'indirizzo è quello di serie. Bugfixer, 08/10/2026: OpenRouter diceva «Indirizzo personalizzato» con https://openrouter.ai/api/v1,
+ * perché il modulo della scheda manda sempre il campo, già riempito col predefinito. Il segno «modificato» e il «Ripristina»
+ * seguono il VALORE confrontato col predefinito (egui `reset_button`: spento quando il valore è quello di serie; Zed settings_ui
+ * #40135), non il fatto che sia stato salvato. Un predefinito che non si normalizza ⇒ false.
+ */
+function eIndirizzoPredefinito(provider, endpoint) {
+  const predefinito = PROVIDER_DEFINITIONS[provider]?.defaultEndpoint;
+  if (typeof endpoint !== 'string' || endpoint === '' || typeof predefinito !== 'string' || predefinito === '') return false;
+  try { return normalizeProviderEndpoint(provider, predefinito) === normalizeProviderEndpoint(provider, endpoint); } catch { return false; }
+}
+
 function normalizeTimeout(value) {
   if (!Number.isInteger(value) || value < MIN_TIMEOUT_SECONDS || value > MAX_TIMEOUT_SECONDS) {
     throw new ProviderCredentialError('PROVIDER_RUNTIME_INVALID');
@@ -284,7 +300,9 @@ function readRuntimePreferences(runtimeFile, runtimes, logger, env, segreti) {
     try {
       const timeout = normalizeTimeout(row.timeoutSeconds ?? DEFAULT_TIMEOUT_SECONDS);
       const extra = { ...(Object.hasOwn(row, 'modelli') ? { modelli: normalizzaModelli(provider, row.modelli, segreti) } : {}),
-        ...(Object.hasOwn(row, 'esclusi') ? ((e) => (e?.length ? { esclusi: e } : {}))(esclusiDalDisco(provider, row.esclusi, (m) => noSecretLogger(logger, m))) : {}) };
+        ...(Object.hasOwn(row, 'esclusi') ? ((e) => (e?.length ? { esclusi: e } : {}))(esclusiDalDisco(provider, row.esclusi, (m) => noSecretLogger(logger, m))) : {}),
+        // 0.1.25 (owner 09/10): le voci DI SERIE che la persona ha tolto; dal disco tollerante, come gli esclusi
+        ...(provider === 'openrouter' && Object.hasOwn(row, 'esclusiDiSerieTolti') ? ((v) => (v.length ? { esclusiDiSerieTolti: v } : {}))(normalizzaTolti(row.esclusiDiSerieTolti)) : {}) };
       if (!definition.supportsEndpoint || row.endpointConfigured === false) {
         runtimes.set(provider, { endpoint: null, endpointConfigured: false, timeoutSeconds: timeout, ...extra });
         continue;
@@ -310,6 +328,7 @@ function writeRuntimePreferences(runtimeFile, runtimes) {
       timeoutSeconds: value.timeoutSeconds,
       ...(value.modelli ? { modelli: value.modelli } : {}),
       ...(value.esclusi ? { esclusi: value.esclusi } : {}),
+      ...(value.esclusiDiSerieTolti?.length ? { esclusiDiSerieTolti: value.esclusiDiSerieTolti } : {}),
     };
   }
   const temporary = `${runtimeFile}.tmp`;
@@ -537,8 +556,29 @@ export function createProviderCredentialStore({ env = process.env, keyring = nul
     const cloud = REGISTRO_FORNITORI[provider].cloud && endpoint ? normalizzaRuntimeCloud(provider, { endpoint }) : null;
     return { provider, endpoint, endpointConfigured: saved?.endpointConfigured === true, timeoutSeconds: saved?.timeoutSeconds ?? DEFAULT_TIMEOUT_SECONDS, ...(cloud ?? {}),
       ...(REGISTRO_FORNITORI[provider].cloud ? { modelli: structuredClone(saved?.modelli ?? []) } : {}),
-      ...(provider === 'openrouter' ? { esclusi: [...(saved?.esclusi ?? [])] } : {}) }; // decisione 14
+      ...(provider === 'openrouter' ? { esclusi: [...(saved?.esclusi ?? [])], esclusiDiSerieTolti: [...(saved?.esclusiDiSerieTolti ?? [])] } : {}) }; // decisione 14 + 0.1.25
     // P-K — fine
+  }
+  /**
+   * 0.1.25 (owner 09/10/2026: «visibile e togliibile») — toglie (`attivo:false`) o rimette (`attivo:true`) UNA voce degli esclusi
+   * di serie (`esclusi-di-serie.mjs`). Solo una voce che esiste nella tabella; tolta resta tolta finché la persona non la rimette.
+   * Tutto il resto della riga (esclusi della persona, indirizzo, tempo) resta com'è. Scrittura atomica col ritorno indietro.
+   */
+  function impostaDiSerie(provider, modello, slug, attivo) {
+    requireProvider(provider);
+    const voci = ESCLUSI_DI_SERIE[modelloBase(modello)];
+    if (provider !== 'openrouter' || typeof attivo !== 'boolean' || !voci?.some((v) => v.slug === slug)) {
+      throw new ProviderCredentialError('PROVIDER_RUNTIME_INVALID');
+    }
+    const chiave = chiaveDiSerie(modello, slug);
+    const previous = runtimes.get(provider);
+    const base = previous ?? { endpoint: null, endpointConfigured: false, timeoutSeconds: DEFAULT_TIMEOUT_SECONDS };
+    const { esclusiDiSerieTolti: prima = [], ...senza } = base;
+    const tolti = attivo ? prima.filter((k) => k !== chiave) : [...new Set([...prima, chiave])];
+    runtimes.set(provider, tolti.length ? { ...senza, esclusiDiSerieTolti: tolti } : senza);
+    try { writeRuntimePreferences(runtimeFile, runtimes); }
+    catch (error) { if (previous) runtimes.set(provider, previous); else runtimes.delete(provider); throw error; }
+    return getRuntime(provider);
   }
   /**
    * Decisione 14 (owner 08/10/2026 sera): l'elenco INTERO dei fornitori a valle da escludere su OpenRouter, e nient'altro —
@@ -551,6 +591,33 @@ export function createProviderCredentialStore({ env = process.env, keyring = nul
     const base = previous ?? { endpoint: null, endpointConfigured: false, timeoutSeconds: DEFAULT_TIMEOUT_SECONDS };
     const { esclusi: _vecchi, ...senza } = base;
     runtimes.set(provider, esclusi.length ? { ...senza, esclusi } : senza);
+    try { writeRuntimePreferences(runtimeFile, runtimes); }
+    catch (error) { if (previous) runtimes.set(provider, previous); else runtimes.delete(provider); throw error; }
+    return getRuntime(provider);
+  }
+  /**
+   * 0.1.25, seguito della review del bugfixer su FORNITORI — i cambi di UNA carta del modello (la lista della persona e/o le voci
+   * di serie) in UNA scrittura sola: o tutti o nessuno. Con due scritture di fila, la seconda che fallisce lasciava la prima fatta e
+   * il modello riceveva un rifiuto che non lo diceva. Tutto si valida PRIMA di toccare la mappa; `esclusi` assente = lista invariata.
+   */
+  function impostaEsclusioni(provider, { esclusi, diSerie = [] } = {}) {
+    requireProvider(provider);
+    if (provider !== 'openrouter' || !Array.isArray(diSerie)) throw new ProviderCredentialError('PROVIDER_RUNTIME_INVALID');
+    const lista = esclusi === undefined ? undefined : normalizzaEsclusi(provider, esclusi);
+    for (const d of diSerie) {
+      if (!isRecord(d) || typeof d.attivo !== 'boolean' || typeof d.modello !== 'string' || typeof d.slug !== 'string'
+        || !ESCLUSI_DI_SERIE[modelloBase(d.modello)]?.some((v) => v.slug === d.slug)) throw new ProviderCredentialError('PROVIDER_RUNTIME_INVALID');
+    }
+    const previous = runtimes.get(provider);
+    const base = previous ?? { endpoint: null, endpointConfigured: false, timeoutSeconds: DEFAULT_TIMEOUT_SECONDS };
+    const { esclusi: vecchi = [], esclusiDiSerieTolti: prima = [], ...senza } = base;
+    const nuovi = lista ?? vecchi;
+    let tolti = prima;
+    for (const d of diSerie) {
+      const chiave = chiaveDiSerie(d.modello, d.slug);
+      tolti = d.attivo ? tolti.filter((k) => k !== chiave) : [...new Set([...tolti, chiave])];
+    }
+    runtimes.set(provider, { ...senza, ...(nuovi.length ? { esclusi: nuovi } : {}), ...(tolti.length ? { esclusiDiSerieTolti: tolti } : {}) });
     try { writeRuntimePreferences(runtimeFile, runtimes); }
     catch (error) { if (previous) runtimes.set(provider, previous); else runtimes.delete(provider); throw error; }
     return getRuntime(provider);
@@ -574,10 +641,12 @@ export function createProviderCredentialStore({ env = process.env, keyring = nul
     const previous = runtimes.get(provider);
     const extra = { ...(Object.hasOwn(value, 'modelli') ? { modelli: normalizzaModelli(provider, value.modelli, segretiRuntime()) }
       : previous?.modelli ? { modelli: previous.modelli } : {}),
-      ...(previous?.esclusi ? { esclusi: previous.esclusi } : {}) }; // decisione 14: si cambiano solo con `impostaEsclusi`
+      ...(previous?.esclusi ? { esclusi: previous.esclusi } : {}), // decisione 14: si cambiano solo con `impostaEsclusi`
+      ...(previous?.esclusiDiSerieTolti ? { esclusiDiSerieTolti: previous.esclusiDiSerieTolti } : {}) }; // 0.1.25: solo con `impostaDiSerie`
     if (!definition.supportsEndpoint) {
       if (!definition.supportsTimeout) throw new ProviderCredentialError('PROVIDER_RUNTIME_INVALID');
-      runtimes.set(provider, { endpoint: null, endpointConfigured: false, timeoutSeconds: timeout, ...(previous?.esclusi ? { esclusi: previous.esclusi } : {}) });
+      runtimes.set(provider, { endpoint: null, endpointConfigured: false, timeoutSeconds: timeout, ...(previous?.esclusi ? { esclusi: previous.esclusi } : {}),
+        ...(previous?.esclusiDiSerieTolti ? { esclusiDiSerieTolti: previous.esclusiDiSerieTolti } : {}) });
       try { writeRuntimePreferences(runtimeFile, runtimes); }
       catch (error) { if (previous) runtimes.set(provider, previous); else runtimes.delete(provider); throw error; }
       return getRuntime(provider);
@@ -612,6 +681,7 @@ export function createProviderCredentialStore({ env = process.env, keyring = nul
         supportsEndpoint: definition.supportsEndpoint,
         endpoint: runtime.endpoint,
         endpointConfigured: runtime.endpointConfigured,
+        endpointPredefinito: definition.supportsEndpoint ? eIndirizzoPredefinito(provider, runtime.endpoint) : false, // l'etichetta, vedi `eIndirizzoPredefinito`
         timeoutSeconds: runtime.timeoutSeconds,
         // P-K — schema e aiuto per i soli campi pubblici del pannello.
         ...(REGISTRO_FORNITORI[provider].cloud ? { cloud: REGISTRO_FORNITORI[provider].cloud,
@@ -620,6 +690,8 @@ export function createProviderCredentialStore({ env = process.env, keyring = nul
           endpointRisorsa: runtime.endpointRisorsa ?? null, versioneApi: runtime.versioneApi ?? 'v1' } : {}),
         // P-K — fine
         ...(provider === 'openrouter' ? { esclusi: runtime.esclusi } : {}), // decisione 14: i fornitori a valle saltati
+        // 0.1.25 (owner 09/10): le voci DI SERIE, ognuna col suo stato — le Impostazioni le mostrano togliibili
+        ...(provider === 'openrouter' ? { esclusiDiSerie: vociDiSerie(runtime.esclusiDiSerieTolti) } : {}),
         execution: definition.execution,
         /*
          * ⛔ PO-01 (10/09) — la guardia della UI: il pulsante «Accedi con …» compare solo dove il
@@ -641,6 +713,6 @@ export function createProviderCredentialStore({ env = process.env, keyring = nul
       agente: getRuntime('esterno').agente });
   }
 
-  return Object.freeze({ getKey, getKeySync: getKey, hasKey, setKey, clearKey, loadFromKeyring, getRuntime, setRuntime, impostaEsclusi, resetEndpoint, listPublic,
+  return Object.freeze({ getKey, getKeySync: getKey, hasKey, setKey, clearKey, loadFromKeyring, getRuntime, setRuntime, impostaEsclusi, impostaDiSerie, impostaEsclusioni, resetEndpoint, listPublic,
     aggiungiChiave, rimuoviChiave, elencaPool, scegliChiave, mettiInPanchina, esportaPool, tracciaInCustodia });
 }

@@ -152,9 +152,16 @@ async function scegliCalm(page, selettore, valore) {
   const option = sorgente.locator(`option[value="${valore}"]`);
   const testo = (await option.textContent())?.trim();
   if (!testo) throw new Error(`Opzione ${valore} assente da ${selettore}`);
-  const index = await option.evaluate((node) => node.index);
   await page.locator(`${selettore}--calm`).click();
-  const visibile = page.locator(`${selettore}--calm--listbox [role="option"][data-index="${index}"]`);
+  /* ⛔ 09/10/2026 (bugfixer): l'indice si legge A TENDINA APERTA e si confronta con quello di ADESSO della sorgente. Prima si
+     leggeva prima del clic: le faccette si ricostruiscono quando arrivano i risultati dell'ultimo ordinamento, e se arrivavano
+     in mezzo l'indice era vecchio e puntava a «Qualsiasi» (misurato: 1 rosso su 3, su r4 e su B3, codice uguale). La tendina
+     era giusta per le opzioni di quel momento; se mostrasse opzioni VECCHIE, questo confronto resterebbe rosso. */
+  const visibile = page.locator(`${selettore}--calm--listbox [role="option"]`).filter({ hasText: testo }).first();
+  await expect.poll(async () => {
+    const [mostrato, sorgenteOra] = await Promise.all([visibile.getAttribute('data-index'), option.evaluate((node) => String(node.index))]);
+    return mostrato === sorgenteOra;
+  }, { message: `l'opzione «${testo}» della tendina corrisponde a quella della sorgente` }).toBe(true);
   await expect(visibile).toContainText(testo);
   await expect(visibile).toHaveAttribute('aria-disabled', 'false');
   await visibile.click();

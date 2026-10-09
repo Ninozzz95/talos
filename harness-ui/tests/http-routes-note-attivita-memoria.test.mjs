@@ -308,10 +308,10 @@ test('⛔⛔⛔ IL 405 DICE IL VERO — l’Allow di ogni rotta nuova, uno per u
 
 test('⭐⭐ il preflight CORS di una VOCE annuncia PATCH e DELETE (senza, il mobile non potrebbe modificare né cancellare)', async (t) => {
   const { base } = await listen(t);
-  const preflight = await fetch(`${base}${perSessione('/notes/abc')}`, { method: 'OPTIONS', headers: { Origin: 'http://localhost' } });
+  const preflight = await fetch(`${base}${perSessione('/notes/abc')}`, { method: 'OPTIONS', headers: { Origin: 'https://localhost' } }); // il WebView del mobile (androidScheme 'https')
   assert.equal(preflight.status, 204);
   assert.equal(preflight.headers.get('access-control-allow-methods'), 'GET, HEAD, POST, PATCH, DELETE');
   /* AL CONTRARIO — una rotta che quei verbi non li ha resta com'era. */
-  const collezione = await fetch(`${base}${perSessione('/notes')}`, { method: 'OPTIONS', headers: { Origin: 'http://localhost' } });
+  const collezione = await fetch(`${base}${perSessione('/notes')}`, { method: 'OPTIONS', headers: { Origin: 'https://localhost' } }); // il WebView del mobile (androidScheme 'https')
   assert.equal(collezione.headers.get('access-control-allow-methods'), 'GET, HEAD, POST');
 });

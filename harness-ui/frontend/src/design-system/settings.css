@@ -154,7 +154,9 @@
 .settings-palette__results .settings-result strong { font-size: .875rem; font-weight: 550; }
 .settings-palette__results .settings-result__help { color: var(--talos-muted); font-size: .75rem; }
 .settings-palette__empty { margin: 0; padding: 12px 4px; color: var(--talos-muted); font-size: .8125rem; }
-:root:has(dialog.settings-palette[open]:modal) { overflow: hidden; scrollbar-gutter: stable; }
+/* B3 09/10/2026: era `:root:has(dialog.settings-palette[open]:modal)` — stesso effetto, la classe la mette `segnaModaleImpostazioni`
+   (settings-view.ts): un `:has()` sulla radice si rivalutava sul documento intero durante lo streaming (~350 ms ogni 11 s). */
+:root.talos-impostazioni-modale-aperta { overflow: hidden; scrollbar-gutter: stable; }
 
 /* Il bottone in sidebar: la voce del mockup (`#open-settings-search`) con la sua scorciatoia. */
 .settings-nav__search { justify-content: flex-start; }
@@ -494,7 +496,7 @@
    e la nostra 54, e il brief ha già accettato quella differenza. Un bottone a 12px dentro una
    schermata a 14px sarebbe l'unica cosa fuori posto, e non è questa la corsia che rifà i bottoni. */
 .settings-add-dialog__row > .talos-button { flex: none; }
-:root:has(dialog.settings-add-dialog[open]:modal) { overflow: hidden; scrollbar-gutter: stable; }
+/* B3 09/10/2026: la regola gemella vive sopra, con la palette: la classe vale per tutte e due le finestre. */
 
 @container settings (max-width: 950px) {
   /* Mockup `@media (max-width: 1250px)`: `.settings-layout { grid-template-columns: 250px 24px }`.

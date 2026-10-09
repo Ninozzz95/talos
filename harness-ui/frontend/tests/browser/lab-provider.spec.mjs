@@ -195,7 +195,12 @@ async function apriProvider(page, { colorMode = 'dark', test = false } = {}) {
       const provider = new URL(route.request().url()).pathname.split('/')[4];
       const corpo = route.request().postDataJSON();
       documento.data.items = documento.data.items.map(row => row.id === provider
-        ? { ...row, endpoint: corpo.endpoint, timeoutSeconds: corpo.timeoutSeconds, endpointConfigured: true } : row);
+        /* ⛔ 09/10/2026 (bugfixer) — `endpointPredefinito` si RICALCOLA come fa il server (`eIndirizzoPredefinito`,
+           provider-credential-store.mjs:190: lo stesso indirizzo di serie resta di serie, uno diverso no). La lista finta viene
+           dal server vero, dove l'indirizzo di serie ha `true`: copiarlo dopo un salvataggio diverso diceva «predefinito» per
+           https://esempio.test/v1. Rosso nato con INDIRIZZO-PREDEFINITO (39c1840fc), che questa prova non aveva fatto girare. */
+        ? { ...row, endpoint: corpo.endpoint, timeoutSeconds: corpo.timeoutSeconds, endpointConfigured: true,
+          endpointPredefinito: row.endpointPredefinito === true && corpo.endpoint === row.endpoint } : row);
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, data: {} }) });
     });
   }

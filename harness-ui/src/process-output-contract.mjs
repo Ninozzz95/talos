@@ -56,7 +56,8 @@ export function normalizzaRichiestaOutput(method, args = {}) {
     return {...result, stream: stream(args.stream), bytes: Uint8Array.from(args.bytes), ...(args.metadata === undefined ? {} : {metadata: normalizzaMetadatiCattura(args.metadata)})};
   }
   if (method === 'finish') {
-    if (!['exited', 'cancelled', 'timeout', 'spawn-error'].includes(args.termination)) invalid();
+    // 'background' (08/10/2026): il comando è passato in sottofondo VIVO; ciò che aveva scritto fino a lì è conservato e completo.
+    if (!['exited', 'cancelled', 'timeout', 'spawn-error', 'background'].includes(args.termination)) invalid();
     let controlFooter;
     if (args.controlFooter !== undefined) {
       const f = args.controlFooter;

@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { attendiFineStoria, flussoConConfine } from './aiuto-confine.mjs';
 
 /*
  * ⭐⭐⭐ BC-68, 17/09/2026 — LE SCHEDE DEL BROWSER ENTRANO NEL COMPONENTE CONDIVISO, E LE TRE
@@ -30,13 +31,14 @@ async function scena(page, { larghezza = 1024, altezza = 800, tema = 'dark', qua
     try { localStorage.setItem('talos.harness.desktop.settings.v1', JSON.stringify({ version: 1, appearance: { colorMode, uiLanguage: 'it' }, chat: { model: 'qwen/qwen3.8-flash' } })); }
     catch { /* finestra privata: la app parte lo stesso */ }
   }, { colorMode: tema });
-  await page.route('**/api/v1/sessions/bc68-*/events*', (r) => r.fulfill({ contentType: 'text/event-stream', body: '' }));
+  await page.route('**/api/v1/sessions/bc68-*/events*', flussoConConfine);
   await page.goto('/');
   await page.locator('#talosAvvio').waitFor({ state: 'detached', timeout: 8000 });
   await page.waitForFunction(() => window.__talosHarnessUiRuntime);
+  await page.evaluate(() => window.__talosHarnessUiRuntime.passaASessione('bc68-uno', 'workspace', 'BC68', 'qwen/qwen3.8-flash', { conclusa: false, modello: 'qwen/qwen3.8-flash' }));
+  await attendiFineStoria(page); // ⛔ 08/10/2026: la storia finisce al confine (aiuto-confine.mjs); la scena arriva dal vivo
   await page.evaluate(async (quante) => {
     const r = window.__talosHarnessUiRuntime;
-    r.passaASessione('bc68-uno', 'workspace', 'BC68', 'qwen/qwen3.8-flash', { conclusa: false, modello: 'qwen/qwen3.8-flash' });
     const g = r.realSessionState.generation;
     let seq = 7000;
     r.handleRealEvent({ type: 'RunStarted', _sequenza: seq += 1, input: { consegna: 'Leggi tre pagine' }, contesto: { cartella: 'C:\\progetti\\AVM', modello: 'glm-5.3-flash' } }, g);

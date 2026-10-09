@@ -434,12 +434,16 @@ body.background-motion-paused #schermoChat::after { animation-play-state: paused
  *   cioè un'altra `markMotionEnter` che nessuno richiama. Il bersaglio è `#conversation > *`, i
  *   figli DIRETTI della colonna (i giri), non un discendente qualunque: l'invalidazione resta sul
  *   primo livello.
- * ⛔ `animation: none` e non `paused`: solo togliere l'animazione toglie il layer, ed è il layer il
- *   problema. Il salto alla posizione di partenza vale al massimo `--talos-background-shift-x`
- *   (16 px di serie) su una macchia sfocata all'8% — misurato sotto la soglia della vista.
+ * ⛔⛔ B3 (09/10/2026, misurato) — NON restava sul primo livello: il combinatore DISCENDENTE prima di `#conversation`
+ *   (`#schermoChat:has(#conversation > *)`) faceva cercare `#conversation` in tutto il sottoalbero della chat, e durante lo
+ *   streaming di una risposta dopo 200 giri questa regola valeva ~380 ms di ricalcolo degli stili ogni 11 s (tolta da una
+ *   copia del foglio: 1.866 → 1.481 ms). La condizione è la stessa, scritta con soli figli DIRETTI, sulla struttura vera
+ *   (`#schermoChat > .talos-conversation > #conversation`, misurata nel DOM VIVO risalendo `parentElement`: la colonna ci
+ *   arriva a runtime, non dal modello della pagina): la ricerca ha una profondità fissa. La prova è
+ *   `tests/browser/b3-has-figli-diretti.spec.mjs`, che fallisce se la catena cambia.
  */
-#schermoChat:has(#conversation > *)::before,
-#schermoChat:has(#conversation > *)::after { animation: none; will-change: auto; }
+#schermoChat:has(> .talos-conversation > #conversation > *)::before,
+#schermoChat:has(> .talos-conversation > #conversation > *)::after { animation: none; will-change: auto; }
 
 /* `motionQuality`: quanto costa la scena. Basso = un solo strato e nessuna luce.
  *

@@ -66,13 +66,17 @@ test('PLAN-HTTP-CONTENT-TYPE: senza application/json la scelta non arriva al reg
 
 test('PLAN-HTTP-ORIGIN-HALF: un Origin estraneo è rifiutato anche con Sec-Fetch-Site same-origin', async (t) => {
   const { port, post, ricevute } = await setup(t);
-  for (const origin of [`http://127.0.0.1:${port === 65535 ? port - 1 : port + 1}`, 'null', `http://evil.example:${port}`]) {
+  // 0.1.25: un'origine che non è la finestra (un altro sito, un altro server locale su un'altra porta, l'origine opaca) la ferma
+  // prima la guardia di tutto il server (ORIGIN_FORBIDDEN); quella del piano resta provata in PLAN-HTTP-FETCH-SITE-HALF
+  for (const [origin, codice] of [[`http://127.0.0.1:${port === 65535 ? port - 1 : port + 1}`, 'ORIGIN_FORBIDDEN'],
+    ['null', 'ORIGIN_FORBIDDEN'], [`http://evil.example:${port}`, 'ORIGIN_FORBIDDEN']]) {
     const out = await post({ Origin: origin, 'Sec-Fetch-Site': 'same-origin' });
     assert.equal(out.status, 403, origin);
-    assert.equal(out.body.error.code, 'PLAN_APPROVAL_ORIGIN_FORBIDDEN');
+    assert.equal(out.body.error.code, codice, origin);
   }
   const rebinding = await post({ Host: `attacker.example:${port}`, Origin: `http://attacker.example:${port}`, 'Sec-Fetch-Site': 'same-origin' });
-  assert.equal(rebinding.status, 403, 'Host e Origin falsi ma coerenti (DNS rebinding)');
+  assert.equal(rebinding.status, 400, 'Host e Origin falsi ma coerenti (DNS rebinding): la guardia dell\'Host, prima di ogni rotta');
+  assert.equal(rebinding.body.error.code, 'HOST_FORBIDDEN');
   assert.equal(ricevute.length, 0, 'nessuna scelta rifiutata arriva al registro');
 });
 

@@ -587,7 +587,9 @@ test('P0-CHAT-JITTER-REASONING-04 — ragionamento aperto cresce a pezzi senza p
         rows.push({ t: performance.now(), top: scroller.scrollTop,
           bodyChars: body.textContent.length, bodyBottom: body.getBoundingClientRect().bottom,
           cardBottom: card.getBoundingClientRect().bottom,
-          middle: rect.top + rect.height / 2 });
+          middle: rect.top + rect.height / 2,
+          // quanto manca alla coda DENTRO il riquadro del ragionamento (max-height 240, scorre da sé)
+          bodyTail: body.scrollHeight - body.scrollTop - body.clientHeight });
         requestAnimationFrame(sample);
       }, 0);
     };
@@ -603,7 +605,8 @@ test('P0-CHAT-JITTER-REASONING-04 — ragionamento aperto cresce a pezzi senza p
     const growing = rows.filter((r) => r.bodyChars > 4000);
     return { rows, allMounted: body.textContent.includes('FINE-RAGIONAMENTO-LUNGO'),
       growingFrames: growing.length,
-      maxMidError: Math.max(0, ...growing.map((r) => Math.abs(r.cardBottom - r.middle))) };
+      maxMidError: Math.max(0, ...growing.map((r) => Math.abs(r.cardBottom - r.middle))),
+      maxBodyTail: Math.max(0, ...growing.map((r) => r.bodyTail)) };
   });
   await testInfo.attach('p0-chat-long-reasoning-frames.json', {
     body: Buffer.from(JSON.stringify(misure)), contentType: 'application/json',
@@ -611,6 +614,84 @@ test('P0-CHAT-JITTER-REASONING-04 — ragionamento aperto cresce a pezzi senza p
   expect(misure.allMounted, 'il contenuto non deve sparire per seguire la viewport').toBe(true);
   expect(misure.growingFrames, 'servono più paint di montaggio, non una card già finita').toBeGreaterThan(2);
   expect(misure.maxMidError, 'ogni pezzo visibile deve conservare la coda vicino a metà viewport').toBeLessThan(36);
+  /* ⛔ 09/10/2026 (bugfixer, misurato) — e DENTRO la scheda: il corpo del ragionamento ha `max-height:240px; overflow:auto`
+     (index.css:841), e mentre cresceva restava a `scrollTop` 0 su 25.018 px — chi l'aveva aperto per seguirlo vedeva le prime
+     righe. La coda del riquadro dal vivo resta in vista a ogni pezzo, come in Hermes (message-parts.tsx:240-283). */
+  expect(misure.maxBodyTail, 'a ogni pezzo la coda del ragionamento dal vivo resta in vista nel suo riquadro').toBeLessThan(24);
+});
+
+test('P0-CHAT-REASONING-04c AL CONTRARIO — chi sale nel riquadro MENTRE i pezzi si montano non viene riportato in fondo (review di «talos desktop»)', async ({ page }) => {
+  await apri(page, 'jitter-reasoning-durante');
+  await riempi(page, 1);
+  await eventi(page, [
+    avvio('Ragiona mentre salgo', 10000),
+    { type: 'ReasoningMessageStart', messageId: 'dur-live', _sequenza: 10001 },
+    { type: 'ReasoningMessageContent', messageId: 'dur-live', delta: 'Inizio.\n\n', _sequenza: 10002 },
+  ]);
+  const nota = page.locator('#conversation .real-reasoning-note').last();
+  await nota.locator(':scope > .talos-activity__head').click();
+  await expect(nota.locator('.tool-note-detail')).toBeVisible();
+  /* ⛔ La salita deve cadere a montaggio IN CORSO, e una rotella di Playwright arriva troppo tardi (misurato: tre corse su tre il
+     ragionamento era già tutto montato). Si fa dentro la pagina, a tempo: il delta grande si monta un pezzo per fotogramma; dopo
+     tre fotogrammi la persona risale (`scrollTop` portato in alto, che per il listener del riquadro è uno `scroll` come quello
+     della rotella: l'evento arriva al fotogramma dopo, PRIMA dei callback rAF, come nel caso vero). */
+  const lungo = Array.from({ length: 1200 }, (_, i) => `Passo ${i + 1}: il ragionamento continua mentre la persona risale a rileggere.\n\n`).join('') + 'FINE-DURANTE';
+  const esito = await page.evaluate(async (testo) => {
+    const runtime = window.__talosHarnessUiRuntime;
+    const corpo = [...document.querySelectorAll('#conversation .real-reasoning-note')].at(-1).querySelector('.tool-note-detail');
+    const fotogramma = () => new Promise((ok) => requestAnimationFrame(ok));
+    runtime.handleRealEvent({ type: 'ReasoningMessageContent', messageId: 'dur-live', delta: testo, _sequenza: 10003 }, runtime.realSessionState.generation);
+    for (let i = 0; i < 3; i += 1) await fotogramma();
+    const alloStacco = { chars: corpo.textContent.length, finito: corpo.textContent.includes('FINE-DURANTE') };
+    corpo.scrollTop = 0; // la persona risale a rileggere l'inizio
+    const letto = corpo.scrollTop;
+    for (let i = 0; i < 600 && !corpo.textContent.includes('FINE-DURANTE'); i += 1) await fotogramma();
+    await fotogramma(); await fotogramma();
+    return { alloStacco, letto, montatoTutto: corpo.textContent.includes('FINE-DURANTE'), top: corpo.scrollTop,
+      coda: corpo.scrollHeight - corpo.scrollTop - corpo.clientHeight };
+  }, lungo);
+  expect(esito.alloStacco.finito, 'PRECONDIZIONE: la salita cade a montaggio in corso, non a ragionamento già tutto montato').toBe(false);
+  expect(esito.montatoTutto, 'e poi il montaggio arriva in fondo').toBe(true);
+  expect(esito.top, `AL CONTRARIO: salita a ${esito.alloStacco.chars} caratteri montati, nessun pezzo dopo la riporta giù`).toBeLessThanOrEqual(esito.letto + 2);
+  expect(esito.coda, 'e la coda resta lontana: sta rileggendo').toBeGreaterThan(100);
+});
+
+test('P0-CHAT-REASONING-04b AL CONTRARIO — chi scorre in su nel riquadro rilegge in pace; un ragionamento finito si apre dall’inizio', async ({ page }) => {
+  await apri(page, 'jitter-reasoning-manuale');
+  await riempi(page, 1);
+  await eventi(page, [
+    avvio('Ragiona mentre rileggo', 8000),
+    { type: 'ReasoningMessageStart', messageId: 'man-live', _sequenza: 8001 },
+    { type: 'ReasoningMessageContent', messageId: 'man-live', delta: 'Inizio.\n\n', _sequenza: 8002 },
+  ]);
+  const nota = page.locator('#conversation .real-reasoning-note').last();
+  await nota.locator(':scope > .talos-activity__head').click();
+  const corpo = nota.locator('.tool-note-detail');
+  const pezzo = (da, n) => Array.from({ length: n }, (_, i) => `Riga ${da + i}: il ragionamento continua con un altro passo da verificare.\n\n`).join('');
+  await eventi(page, [{ type: 'ReasoningMessageContent', messageId: 'man-live', delta: pezzo(1, 60), _sequenza: 8003 }]);
+  await expect.poll(() => corpo.evaluate((el) => el.scrollHeight - el.scrollTop - el.clientHeight), { message: 'dal vivo segue la coda' }).toBeLessThan(24);
+  // la persona sale a rileggere: scroll VERO nel riquadro
+  await corpo.hover();
+  await page.mouse.wheel(0, -400);
+  await expect.poll(() => corpo.evaluate((el) => el.scrollHeight - el.scrollTop - el.clientHeight)).toBeGreaterThan(100);
+  const letto = await corpo.evaluate((el) => el.scrollTop);
+  await eventi(page, [{ type: 'ReasoningMessageContent', messageId: 'man-live', delta: pezzo(61, 60), _sequenza: 8004 }]);
+  await expect.poll(() => corpo.evaluate((el) => el.textContent.includes('Riga 120'))).toBe(true);
+  expect(await corpo.evaluate((el) => el.scrollTop), 'AL CONTRARIO: chi rilegge non viene trascinato in fondo').toBeLessThanOrEqual(letto + 2);
+  // un'altra sessione con un ragionamento GIÀ finito, mai aperto: aprendolo si legge dall'inizio
+  await apri(page, 'jitter-reasoning-finito');
+  await riempi(page, 1);
+  await eventi(page, [
+    avvio('Ragionamento già finito', 9000),
+    { type: 'ReasoningMessageStart', messageId: 'fin', _sequenza: 9001 },
+    { type: 'ReasoningMessageContent', messageId: 'fin', delta: pezzo(1, 60), _sequenza: 9002 },
+    { type: 'ReasoningMessageEnd', messageId: 'fin', _sequenza: 9003 },
+  ]);
+  const chiuso = page.locator('#conversation .real-reasoning-note').last();
+  await chiuso.locator(':scope > .talos-activity__head').click();
+  const corpoFinito = chiuso.locator('.tool-note-detail');
+  await expect.poll(() => corpoFinito.evaluate((el) => el.textContent.includes('Riga 60'))).toBe(true);
+  expect(await corpoFinito.evaluate((el) => el.scrollTop), 'AL CONTRARIO: un ragionamento finito si legge dall’inizio').toBe(0);
 });
 
 test('P0-CHAT-JITTER-RETURN-05 — clic Torna in fondo e delta immediato non perdono il follow', async ({ page }, testInfo) => {

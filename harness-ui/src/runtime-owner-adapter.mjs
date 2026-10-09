@@ -618,6 +618,25 @@ export function unisciEsclusi(provider, esclusi) {
 }
 
 /**
+ * Instradamento per modello (CLI, owner 08/10/2026): i campi del `provider` di OpenRouter scelti per QUEL modello (only, ignore, order, quantizations,
+ * require_parameters, allow_fallbacks, sort) uniti a quelli che la richiesta portava già: `ignore` è un'unione, gli altri campi del modello vincono.
+ * Lo STESSO valore se non c'è niente da unire (come `unisciEsclusi`). Gli esclusi della decisione 14 si uniscono DOPO, sempre su `ignore`.
+ * Misura che l'ha fatto nascere (08/10/2026, 0.5.0 pubblicata, richieste identiche con 56 attrezzi): `z-ai/glm-5.3-flash` instradato di serie a
+ * OpenInference (fp4) non chiamava gli attrezzi (0/2 fissato, 0/2 libero), Z.AI fp8 3/3, DeepInfra fp4 2/2. Hermes (`_provider_preferences_for_agent`,
+ * agent/chat_completion_helpers.py:469-487) e Pi (`compat.openRouterRouting`) mettono lo stesso oggetto nella richiesta, per modello.
+ */
+export function unisciInstradamento(provider, instradamento) {
+  if (!instradamento || typeof instradamento !== 'object' || Array.isArray(instradamento) || !Object.keys(instradamento).length) return provider;
+  const base = provider && typeof provider === 'object' && !Array.isArray(provider) ? provider : {};
+  const unito = { ...base, ...instradamento };
+  if (Array.isArray(instradamento.ignore)) {
+    const gia = Array.isArray(base.ignore) ? base.ignore.filter((s) => typeof s === 'string') : [];
+    unito.ignore = [...new Set([...gia, ...instradamento.ignore.filter((s) => typeof s === 'string' && s)])];
+  }
+  return unito;
+}
+
+/**
  * Trasporto OpenRouter desktop: sostituisce il timeout totale hard-coded del
  * runtime owner con un limite di inattività osservabile sullo stream SSE.
  * Il fetch resta provider-specifico e confinato in questo adapter.
@@ -640,6 +659,8 @@ export function creaFetchOpenRouterResiliente(fetchDiRete = fetch, {
    *   ogni richiesta: un'esclusione appena aggiunta vale dalla chiamata dopo, senza riavviare niente.
    */
   esclusiFn = async () => [],
+  /* Instradamento per modello (CLI, 08/10/2026): `(modello) => campi del provider | null`, letto a ogni richiesta. Assente = il corpo di sempre. */
+  instradamentoFn = async () => null,
 } = {}) {
   if (typeof fetchDiRete !== 'function') throw new TypeError('fetchDiRete must be a function.');
   return async (url, init = undefined) => {
@@ -661,7 +682,8 @@ export function creaFetchOpenRouterResiliente(fetchDiRete = fetch, {
           : null;
         const reasoning = normalizzaReasoningPerModello(body?.reasoning, capability);
         const esclusi = await Promise.resolve(esclusiFn()).catch(() => []);
-        const provider = unisciEsclusi(body?.provider, esclusi);
+        const instradamento = await Promise.resolve(instradamentoFn(body?.model)).catch(() => null);
+        const provider = unisciEsclusi(unisciInstradamento(body?.provider, instradamento), esclusi);
         if (reasoning !== body?.reasoning || provider !== body?.provider) {
           nextInit = { ...init, body: JSON.stringify({ ...body, reasoning, ...(provider ? { provider } : {}) }) };
         }
@@ -1560,6 +1582,8 @@ export function createOwnerRuntimeAdapter({
   destinazioneModelloDeps = null,
   providerStore = null,
   resolveImagesFn = null,
+  /* Instradamento per modello su OpenRouter (CLI, 08/10/2026): `(modello) => campi del provider | null`. Assente = il comportamento di sempre. */
+  openRouterRoutingFn = null,
 } = {}) {
   const specifier = normalizzaModuloPath(modulePath);
   let moduloPromise = null;
@@ -1713,6 +1737,7 @@ export function createOwnerRuntimeAdapter({
           const runtime = await Promise.resolve(openRouterRuntimeFn()).catch(() => null);
           return Array.isArray(runtime?.esclusi) ? runtime.esclusi : [];
         },
+        ...(typeof openRouterRoutingFn === 'function' ? { instradamentoFn: openRouterRoutingFn } : {}), // instradamento per modello (CLI, 08/10/2026)
       });
       /*
        * ⛔ L'ORDINE conta: il multi-provider sta PIÙ ESTERNO della resilienza

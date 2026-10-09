@@ -6,6 +6,43 @@ Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/). Versions
 
 ## Unreleased
 
+## desktop-v0.1.25 — 2026-10-09
+
+The first regular release after the 0.1.24 beta: installs of 0.1.21 and later receive it automatically (automatic updates
+started with 0.1.21; the 0.1.22 and 0.1.24 betas were skipped by the updater on purpose). It hardens the local server
+against other web pages and other local servers, lets you and the model decide which OpenRouter providers serve a model,
+and makes long sessions, the sidebar and the terminal faster.
+
+### Added
+- OpenRouter: some providers are excluded by default for a model when they are known not to work with it (today:
+  OpenInference for glm-5.3-flash, which does not call tools). The default exclusions are shown in OpenRouter's
+  settings, can be removed with ×, and put back with "Exclude again".
+- The model can list, exclude and allow OpenRouter providers from the chat; excluding or allowing asks you first with a
+  card. An automation run cannot change them.
+- Notes, tasks and memories are listed and written even with no session open.
+
+### Changed
+- The local server accepts changes only from the TALOS window (the same address and port) or the phone app, and answers
+  only requests addressed to localhost: other web pages and other servers on the same computer (a project's dev server,
+  for example) can no longer read or change anything, even on a server without the TALOS token.
+- Saving OpenRouter's settings writes the provider list and the default exclusions together: all of it or nothing. A
+  change the model makes with a card is saved the same way.
+- One context measure everywhere: the size of the last call's prompt, like Hermes.
+- A command moved to the background is shown as "in background", not as a failed retention.
+
+### Fixed
+- Switching terminal tabs no longer freezes the page for seconds.
+- A session that ends elsewhere stops saying "running" in the sidebar within 2 seconds.
+- Reopening a session saves the work mode once, not once per replayed turn; the chat no longer re-scans the conversation
+  while it streams.
+- A saved address equal to the default no longer says "Custom address".
+- Two TALOS servers sharing the same data folder (for example a development server and the installed app) no longer take
+  each other's shutdown token; a graceful shutdown removes its own file.
+- Scrolling back to the bottom of a conversation resumes following the answer, even with reduced motion or a fast wheel.
+- An open reasoning box keeps showing its latest lines while the model thinks, until you scroll up inside it.
+- An underscore inside a word is no longer emphasis.
+- The search palette no longer says "0 results" before anything is typed.
+
 ## desktop-v0.1.24 — 2026-10-08 (beta)
 
 A beta: installs of 0.1.22 do not receive it automatically. It carries everything listed under 0.1.23 below (never

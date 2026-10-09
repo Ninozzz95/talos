@@ -2,6 +2,8 @@ import { test, expect } from '@playwright/test';
 import { mkdirSync } from 'node:fs';
 import { resolve, join } from 'node:path';
 
+import { attendiFineStoria } from './aiuto-confine.mjs';
+
 const sessionId = 'retry05-ui';
 const evidence = resolve(process.cwd(), '..', '..', 'artifacts', 'retry05-ui');
 const partial = 'Ho letto i file del progetto. La verifica è ancora da completare.';
@@ -18,7 +20,10 @@ async function openSession(page) {
   await page.waitForFunction(() => window.__talosHarnessUiRuntime);
   await page.locator('#talosAvvio').waitFor({ state: 'detached' });
   await page.evaluate((id) => window.__talosHarnessUiRuntime.passaASessione(id, 'workspace', 'Verifica interrotta', 'test/model', { conclusa: true, modello: 'test/model' }), sessionId);
-  await page.waitForFunction(() => window.__talosHarnessUiRuntime.realSessionState.inRigiocata === false);
+  /* ⛔ 09/10/2026 (bugfixer): non basta `inRigiocata === false` — il velo lo toglie un intervallo da 200 ms DOPO (app.js,
+     `fermaSeFinito`), e sotto `visibility:hidden` `summary.focus()` non prende il fuoco (misurato: nessun `focusin`,
+     `activeElement` BODY) e Invio non apriva il dettaglio. `attendiFineStoria` aspetta anche che il velo se ne vada. */
+  await attendiFineStoria(page);
 }
 
 for (const theme of ['dark', 'light']) {

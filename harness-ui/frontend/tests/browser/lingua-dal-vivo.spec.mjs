@@ -28,7 +28,7 @@ async function apri(page, sessione, storie, { conclusa }) {
   await page.addInitScript(() => {
     localStorage.setItem('talos.harness.desktop.settings.v1', JSON.stringify({ version: 1, appearance: { uiLanguage: 'it' } }));
   });
-  await page.route('**/api/v1/**', (route) => {
+  await page.route('**/api/v1/**', async (route) => {
     const req = route.request();
     if (req.method() !== 'GET') { conti.nonGet += 1; return route.abort(); }
     const url = new URL(req.url());
@@ -37,6 +37,18 @@ async function apri(page, sessione, storie, { conclusa }) {
       conti.letture += 1;
       const corpo = [...storia, { type: 'CUSTOM', name: 'talos.fine-rigiocata', value: null }];
       return route.fulfill({ contentType: 'text/event-stream', body: `retry: 3600000\n${corpo.map((e) => `data: ${JSON.stringify(e)}\n\n`).join('')}` });
+    }
+    /* ⛔ 09/10/2026 (bugfixer) — la barra delle sessioni contava sulle sessioni VERE del 4174: sul server di prova l'archivio è
+       vuoto («Sessions 0») e non c'era nessun «done» da tradurre. L'elenco vero si legge e ci si aggiunge la sessione della
+       prova col SUO stato, nella forma di una riga di `GET /api/v1/sessions` (letta dal 4174 il 09/10). */
+    if (url.pathname === '/api/v1/sessions') {
+      const vera = await (await route.fetch()).json();
+      const righe = Array.isArray(vera?.data?.items) ? vera.data.items : [];
+      if (!righe.some((r) => r.sessionId === sessione)) {
+        righe.unshift({ sessionId: sessione, taskId: 'lingua-dal-vivo', progetto: null, nome: 'Lingua dal vivo', avviataAlle: '2026-10-03T09:00:00.000Z',
+          conclusa, interrotta: false, modello: 'z-ai/glm-5.3-flash', padreId: null, profonditaDelega: 0 });
+      }
+      return route.fulfill({ json: { ...vera, data: { ...vera.data, items: righe } } });
     }
     if (url.pathname === `/api/v1/sessions/${sessione}/children`) return route.fulfill({ json: { ok: true, data: { figli: [] } } });
     if (url.pathname.startsWith(`/api/v1/sessions/${sessione}/tree`)) return route.fulfill({ json: { ok: true, data: { voci: [] } } });
@@ -65,7 +77,10 @@ test('LINGUA-DAL-VIVO — una conversazione ferma si rilegge subito nella lingua
   expect(await page.evaluate(() => window.__nessunaRicarica), 'la pagina non si è ricaricata').toBe(true);
   expect(conti.letture, 'la storia si è riletta dal server').toBe(2);
   /* la barra delle sessioni (le sessioni vere del 4174, tutte concluse) parla la lingua nuova */
-  await expect(page.locator('#sessionList')).toContainText(/\bdone\b/u);
+  /* «done ·» e non `\bdone\b`: nel testo della riga il titolo e lo stato stanno in due elementi senza spazio fra loro
+     («Lingua dal vivodone · …»), e il confine di parola non c'è. In italiano sarebbe «conclusa ·». */
+  await expect(page.locator('#sessionList')).toContainText('done ·');
+  await expect(page.locator('#sessionList')).not.toContainText('conclusa ·');
   expect(conti.nonGet).toBe(0);
 });
 

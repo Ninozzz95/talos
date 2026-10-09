@@ -336,10 +336,11 @@ test('OR-HTTP-14 — un Host che non è di loopback ricade sulla modalità a sch
     richiesta.on('error', reject);
     richiesta.end('{}');
   });
-  assert.equal(risposta.status, 200);
+  /* ⛔ 0.1.25 (owner 09/10/2026, guardia dell'Host su OGNI richiesta, `guardia-origine.mjs`): un Host che non è di loopback non
+     arriva più alla rotta — 400 HOST_FORBIDDEN prima di tutto, quindi nessun rientro promesso, a maggior ragione. La ricaduta
+     sulla modalità a schermo dentro la rotta resta come seconda linea. */
+  assert.equal(risposta.status, 400);
+  assert.match(risposta.testo, /HOST_FORBIDDEN/u);
   assert.doesNotMatch(risposta.testo, /QUESTA-NON-DEVE-USCIRE-MAI/u);
-  const dati = JSON.parse(risposta.testo).data;
-  assert.equal(dati.modo, 'schermo', 'un Host che non è di loopback non può produrre un rientro raggiungibile');
-  assert.equal(new URL(dati.indirizzo).searchParams.get('callback_url'), null);
-  assert.equal(new URL(dati.indirizzo).searchParams.get('key_label'), 'TALOS Harness Desktop');
+  assert.doesNotMatch(risposta.testo, /callback_url/u, 'un Host che non è di loopback non può produrre un rientro raggiungibile');
 });

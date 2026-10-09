@@ -13208,8 +13208,8 @@ body.background-motion-paused #schermoChat::before,
 body.background-motion-paused #schermoChat::after {
   animation-play-state: paused;
 }
-#schermoChat:has(#conversation > *)::before,
-#schermoChat:has(#conversation > *)::after {
+#schermoChat:has(> .talos-conversation > #conversation > *)::before,
+#schermoChat:has(> .talos-conversation > #conversation > *)::after {
   animation: none;
   will-change: auto;
 }
@@ -19759,7 +19759,7 @@ body.reduce-motion {
   color: var(--talos-muted);
   font-size: .8125rem;
 }
-:root:has(dialog.settings-palette[open]:modal) {
+:root.talos-impostazioni-modale-aperta {
   overflow: hidden;
   scrollbar-gutter: stable;
 }
@@ -20260,10 +20260,6 @@ body.reduce-motion {
 }
 .settings-add-dialog__row > .talos-button {
   flex: none;
-}
-:root:has(dialog.settings-add-dialog[open]:modal) {
-  overflow: hidden;
-  scrollbar-gutter: stable;
 }
 @container settings (max-width: 950px) {
   .settings-layout {

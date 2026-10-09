@@ -360,12 +360,16 @@ export function paroleErroreRete(codice, schema, { azione = traduci('varie.voice
  *   `rete` sono le funzioni della app (`apiPost`/`apiPatch`/`apiDelete`/`apiGet`), che aprono già
  *   la busta `{ok, data}` e lanciano un `Error` con `.code`. Chi non le passa (un test, il
  *   laboratorio) passa le sue e vince — stessa iniezione di `lettoreFileLibreria`.
- * ⛔ Senza sessione o senza rete torna `null`, e le sezioni non disegnano nemmeno il pulsante:
- *   un comando che non può funzionare non si mostra (la regola della riga di Libreria del 10/09).
+ * ⛔ Senza rete torna `null`, e le sezioni non disegnano nemmeno il pulsante: un comando che non può funzionare non si mostra
+ *   (la regola della riga di Libreria del 10/09).
+ * ⭐ Owner, 08/10/2026 notte («elenco vero, e si scrivono»): Note, Attività e Memoria sono della PERSONA, non di una sessione
+ *   (gli archivi sono globali). Senza una sessione aperta le porte sono quelle personali, `/api/v1/me/<risorsa>`; con una
+ *   sessione restano quelle di sempre, che toccano lo stesso archivio. Prima, senza sessione, il servizio non esisteva e la
+ *   pagina diceva «nessuna nota» con cinque note salvate.
  */
 export function servizioVoci({ schema, sessionId, rete } = {}) {
-  if (!schema || !sessionId || typeof rete?.post !== 'function' || typeof rete?.patch !== 'function' || typeof rete?.elimina !== 'function') return null;
-  const base = `/api/v1/sessions/${encodeURIComponent(sessionId)}/${schema.risorsa}`;
+  if (!schema || typeof rete?.post !== 'function' || typeof rete?.patch !== 'function' || typeof rete?.elimina !== 'function') return null;
+  const base = sessionId ? `/api/v1/sessions/${encodeURIComponent(sessionId)}/${schema.risorsa}` : `/api/v1/me/${schema.risorsa}`;
   const voceUrl = (id) => `${base}/${encodeURIComponent(String(id ?? ''))}`;
   return {
     schema,

@@ -134,18 +134,20 @@ test('api rejects POST PUT PATCH DELETE with 405 and no CORS when Origin is abse
 test('OPTIONS answers a CORS preflight, and Access-Control-Allow-Origin reflects Origin only when present', async (t) => {
   const { base } = await listen(t);
 
+  // 0.1.25: il WebView di Capacitor è `https://localhost` (androidScheme 'https'); `http://localhost` senza porta è la porta 80,
+  // cioè qualunque server http locale, e non è più ammesso (guardia-origine.mjs, review del bugfixer 09/10)
   const preflight = await fetch(`${base}/api/v1/sessions`, {
     method: 'OPTIONS',
-    headers: { Origin: 'http://localhost', 'Access-Control-Request-Method': 'POST' },
+    headers: { Origin: 'https://localhost', 'Access-Control-Request-Method': 'POST' },
   });
   assert.equal(preflight.status, 204);
-  assert.equal(preflight.headers.get('access-control-allow-origin'), 'http://localhost');
+  assert.equal(preflight.headers.get('access-control-allow-origin'), 'https://localhost');
   assert.equal(preflight.headers.get('access-control-allow-methods'), 'GET, HEAD, POST');
   assert.equal(preflight.headers.get('access-control-allow-headers'), 'Content-Type');
   assert.equal(await preflight.text(), '');
 
-  const withOrigin = await fetch(`${base}/api/v1/health`, { headers: { Origin: 'http://localhost' } });
-  assert.equal(withOrigin.headers.get('access-control-allow-origin'), 'http://localhost');
+  const withOrigin = await fetch(`${base}/api/v1/health`, { headers: { Origin: 'https://localhost' } });
+  assert.equal(withOrigin.headers.get('access-control-allow-origin'), 'https://localhost');
   assert.equal(withOrigin.headers.get('vary'), 'Origin');
 
   const withoutOrigin = await fetch(`${base}/api/v1/health`);
